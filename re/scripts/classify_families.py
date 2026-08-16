@@ -40,7 +40,12 @@ CORE = ["SIMRCI.DLL", "SIMMISC.DLL", "SIMUTIL.DLL", "SimTransit.dll", "SIMECO.DL
         "SIMVARIABLES.DLL"]
 
 CALL = re.compile(r"\b(FUN_[0-9a-f]{8}|operator_new|operator_delete|__\w+)\s*\(")
-VCALL = re.compile(r"\(\*\*\(code \*\*\)\(\*[^)]*\+\s*(0x[0-9a-f]+)\)\)\s*\(")
+# `[^)]*` could not cross a nested `)`, so this missed the very common
+#     (**(code **)(**(int **)(param_1 + 4) + 0x94))(param_1);
+# form -- a vcall through a member object. Those functions then counted ZERO calls, fell into
+# the no-call branch, and were filed as `stub` = "empty body, returns immediately", which is
+# the opposite of true. 132 such rows were merged before a wider validation run caught it.
+VCALL = re.compile(r"\(\*\*\(code \*\*\)\(.*?\+\s*(0x[0-9a-f]+)\)\)\s*\(")
 VCALL0 = re.compile(r"\(\*\*\(code \*\*\)\*[a-z_0-9]+\)\s*\(")
 # A vtable install must target the OBJECT, not a local.
 #
@@ -121,7 +126,14 @@ def classify(text):
             slots = [m.group(2) for m in PTRSTORE.finditer(text)]
             return ("vtable_install", "installs %d vtable pointer(s): %s"
                     % (len(slots), ", ".join(sorted(set(slots))[:3])))
-        if len(lines) <= 3 and any(l == "return;" for l in lines):
+        # `stub` must mean EMPTY: exactly one statement, and that statement is `return;`.
+        #
+        # The earlier test ("<= 3 lines and a return somewhere") relied on the call count
+        # being zero, but CALL only knows FUN_*/operator_new/operator_delete/__*, so any tiny
+        # function calling a CRT routine by name slipped through -- `free(param_1); return;`
+        # (which is operator delete, 11 modules of it) and `Sleep(n); return;` were both filed
+        # as "empty body, returns immediately". Precision on the wider run was 0/12.
+        if n_stmt == 1 and any(l == "return;" for l in lines):
             return ("stub", "empty body, returns immediately")
         # n_stmt must be EXACTLY 1 -- the return and nothing else. At `<= 2` this family
         # swallowed FUN_10010bc7, which is
@@ -133,14 +145,16 @@ def classify(text):
         m = GET_BOOL.search(text)
         if m and n_stmt == 1:
             return ("field_getter", "returns whether field +%s is set" % m.group(1))
+        # FIELD0 (the offset-0 spelling, `*(int *)this`) is non-capturing, so these patterns
+        # have exactly ONE group and a group(2) lookup is an IndexError. It never fired in the
+        # core-sim run because group(1) was always set there and `or` short-circuits; the first
+        # offset-0 getter outside that set crashed the tool.
         m = GET_RET.search(text)
         if m and n_stmt == 1:
-            off = m.group(1) or m.group(2) or "0x0"
-            return ("field_getter", "returns the field at +%s" % off)
+            return ("field_getter", "returns the field at +%s" % (m.group(1) or "0x0"))
         m = SET_ONLY.search(text)
         if m and n_stmt <= 2:
-            off = m.group(1) or m.group(2) or "0x0"
-            return ("field_setter", "stores a parameter into +%s" % off)
+            return ("field_setter", "stores a parameter into +%s" % (m.group(1) or "0x0"))
         m = GET_GUARDED.search(text)
         if m and n_stmt <= 6:
             # Report the actual comparison, not "is set". The guard is frequently a discriminant
@@ -227,14 +241,25 @@ def main(argv):
     max_size = int(argv[argv.index("--max-size") + 1]) if "--max-size" in argv else 100
     only = argv[argv.index("--module") + 1].upper() if "--module" in argv else None
 
+    # The P1 gate only asks about the core-sim set, so that is the default scope. --all-modules
+    # widens to all 31 binaries: the extra rows do not move the gate (it is measured over CORE
+    # only) but they are free coverage for anyone who later opens a UI or framework module.
+    all_mods = "--all-modules" in argv
+
     def wanted(r, classified):
-        if r["module"] not in CORE:
+        if not all_mods and r["module"] not in CORE:
+            return False
+        if r["kind"] in ("lib", "thunk"):
             return False
         if only and not r["module"].upper().startswith(only):
             return False
         if not r["size"].isdigit() or int(r["size"]) >= max_size:
             return False
-        is_c0 = r["confidence"] == "C0"
+        mine = r["notes"].startswith("[classify_families]")
+        # The tool owns its own rows and must be able to REVISE them. When a pattern bug is
+        # found (and three have been), re-running has to re-examine what it previously wrote,
+        # not just the untouched C0 rows -- otherwise a bad label is frozen in place forever.
+        is_c0 = r["confidence"] == "C0" or mine
         if classified:
             # CRITICAL: exclude this tool's OWN rows. After the first --merge the validation
             # set silently filled up with 1,000 rows the classifier had labelled itself, and
@@ -312,6 +337,22 @@ def main(argv):
     if "--merge" in argv:
         fields = list(rows[0].keys())
         idx = {(r["module"], r["rva"]): r for r in rows}
+        # REVERT first. A re-run after a pattern fix must undo its own previous verdicts, not
+        # merely decline to repeat them. When `stub` was tightened, 115 rows stopped qualifying;
+        # without this they would have kept a C1 label reading "empty body, returns immediately"
+        # on functions that are nothing of the kind, and no future run would ever revisit them.
+        kept = {(r["module"], r["rva"]) for r, _f, _n in keep}
+        reverted = 0
+        for r in rows:
+            if r["notes"].startswith("[classify_families]") and \
+                    (r["module"], r["rva"]) not in kept:
+                r["confidence"] = "C0"
+                if r["subsystem"].startswith("family:"):
+                    r["subsystem"] = ""
+                r["notes"] = ""
+                reverted += 1
+        if reverted:
+            print("reverted %d stale rows to C0 (previous verdict no longer holds)" % reverted)
         for r, fam, note in keep:
             t = idx[(r["module"], r["rva"])]
             t["confidence"] = "C1"

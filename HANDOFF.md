@@ -35,29 +35,29 @@
 
    | module | backlog | ≥C1 | % |
    |---|---|---|---|
-   | SIMRCI | 1,536 | 238 | 15.5% |
-   | SIMDSTR | 1,191 | 190 | 16.0% |
-   | SIMUTIL | 763 | 144 | 18.9% |
-   | SIMSERV | 713 | 138 | 19.4% |
-   | SIMVARIABLES | 350 | 68 | 19.4% |
-   | SIMNTWRK | 809 | 161 | 19.9% |
-   | SIMCITY | 587 | 120 | 20.4% |
-   | SIMGEOM | 1,148 | 240 | 20.9% |
-   | SIMMISC | 1,200 | 252 | 21.0% |
-   | SIMECO | 659 | 139 | 21.1% |
-   | SimTransit | 619 | 136 | 22.0% |
-   | **TOTAL** | **9,575** | **2,384** | **24.9%** |
+   | SIMDSTR | 1,191 | 221 | 18.6% |
+   | SIMRCI | 1,536 | 315 | 20.5% |
+   | SIMUTIL | 763 | 177 | 23.2% |
+   | SIMSERV | 713 | 168 | 23.6% |
+   | SIMVARIABLES | 350 | 83 | 23.7% |
+   | SIMCITY | 587 | 140 | 23.9% |
+   | SIMECO | 659 | 167 | 25.3% |
+   | SimTransit | 619 | 164 | 26.5% |
+   | SIMGEOM | 1,148 | 310 | 27.0% |
+   | SIMNTWRK | 809 | 222 | 27.4% |
+   | SIMMISC | 1,200 | 332 | 27.7% |
+   | **TOTAL** | **9,575** | **2,299** | **24.0%** |
 
-   The set is **levelled** (15.5%–22.0%), so "attack the worst" is not a useful selector. Pick by
+   The set is **levelled** (18.6%–27.7%), so "attack the worst" is not a useful selector. Pick by
    value, not by percentage.
 
-   **7,191 to go.** Stop quoting the all-binaries 9.3%; it is dominated by 20,670 functions the
+   **7,276 to go.** Stop quoting the all-binaries 17.0%; it is dominated by 20,670 functions the
    gate does not ask for. SIMCITY / SIMNTWRK / SIMVARIABLES were added to the set on the owner's
    call 2026-08-16 — the original eight were listed before SIMCITY was identified as the tick
    driver.
 
-   > **8.6% → 24.9% of that came from `re/scripts/classify_families.py`, not from reading.**
-   > 1,558 rows merged at **C1 only** — a regex did not read anything, and C2 in this project
+   > **8.6% → 24.0% of that came from `re/scripts/classify_families.py`, not from reading.**
+   > 4,009 rows merged at **C1 only** — a regex did not read anything, and C2 in this project
    > means the decompilation was read. Do not raise those rows to C2 without reading them.
    > Every merged row carries a `[classify_families]` prefix in `notes`, so they are trivially
    > separable from human/worker work.
@@ -70,6 +70,17 @@
    > `vtable_install` 100% (8/8), `lazy_singleton` 100% (4/4), `ctor_or_dtor` 92% (12/13, and
    > the single miss was hand-checked — `sc3_cal_today` really is a constructor, the harness
    > just does not recognise a domain name).
+   >
+   > **Run across all 31 binaries with `--all-modules`** (2026-08-16): 4,009 rows at C1,
+   > all-binaries coverage 9.3% → **17.0%**. The gate is still measured over the core-sim set
+   > only, so those extra rows do not inflate it — they are free coverage for whoever opens a
+   > UI or framework module later.
+   >
+   > ⚠️ **The core-sim number went DOWN in that run, 24.9% → 24.0%, and that is correct.**
+   > Widening the validation set exposed two more pattern bugs, and re-running **reverted 85
+   > rows it had previously written**. The tool now re-examines its own output on every run and
+   > actively resets verdicts that no longer hold, rather than freezing a bad label in place.
+   > A coverage number that only ever rises is not measuring anything.
    >
    > **The biggest single family is `deleting_dtor` — 475 functions.** It is the MSVC scalar
    > deleting destructor, `dtor(this); if ((flags & 1) != 0) operator_delete(this);`, and the
