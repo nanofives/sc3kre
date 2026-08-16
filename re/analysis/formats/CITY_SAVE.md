@@ -160,13 +160,47 @@ Field write order in the saver, i.e. the on-disk order: `this+0x10`, `this+0x14`
 | 16 | 4 | `0x82D4A0EB` |
 | 18 | 4 | `0x82361BE5` |
 
-The twelve 4-byte sections hold values that are **byte-identical across all 59 shipped files**,
-so they are **not city data** — they are ids (note `0x619FF3CE` shares its middle digits with
-`SC3ZoneLayer` `0x409FF3BA`). `[UNCERTAIN]` what they identify: none of the six values occurs
+### The stride-8 loop explains the instances `[CONFIRMED @0x100320e7:120-148]`
+
+```c
+while (true) {
+  if (0x16 < bVar1) break;                                    // 23 slots, index 0..0x16
+  uVar5 = bVar1;
+  if (*(int *)((int)this + uVar5*8 + 0x188) != 0) {           // skip NULL slots
+    local_20 = uVar5 + 1;                                     // INSTANCE = index + 1
+    (**(code **)(*param_2 + 0x30))(&local_28,&local_14);      // OpenSection(key)
+    (**(code **)*local_14)(0x199627,&local_8);                // QueryInterface(IID 0x199627) -> stream
+    (**(code **)(*local_8 + 0x88))(*(u32 *)((int)this + uVar5*8 + 0x18c));   // write the slot's id
+    (**(code **)(**(int **)((int)this + uVar5*8 + 0x188) + 0x24))(...);      // sub-object writes itself
+  }
+  bVar1 = bVar1 + 1;
+}
+```
+
+This resolves three things at once:
+
+1. **`this+0x188` is a 23-slot table of 8-byte records** `{void* obj at +0x188+i*8, u32 id at
+   +0x18c+i*8}` — the same **23-slot zone-developer table** already documented in `SIMRCI.md`,
+   now tied to the save format.
+2. **The section `instance` is the slot index + 1.** Observed instances 2,3,4,6,7,8,10,11,12,
+   15,16,18 are slots 1,2,3,5,6,7,9,10,11,14,15,17 — and the previously unexplained **skips
+   (1,5,9,13,14,17) are simply NULL slots** (indices 0,4,8,12,13,16). Mystery closed.
+3. **Instance 0** is the main section written earlier in the function, not part of this loop.
+
+Also pinned: **IID `0x199627` is the write-stream interface** — a section object is QI'd for it
+to obtain the stream that `vt+0x88` writes to.
+
+The twelve 4-byte sections are therefore each a slot's `u32 id` at `this + i*8 + 0x18c`. They are
+**byte-identical across all 59 shipped files**, so they are **not city data** — they are ids
+(note `0x619FF3CE` shares its middle digits with `SC3ZoneLayer` `0x409FF3BA`). The counts
+`0x619FF3CE`×3, `0x41A00001`×3, `0xE1A00030`×3 form three groups of three; `[UNCERTAIN]` whether
+that is R/C/I × three density tiers — the shape fits but nothing confirms it.
+`[UNCERTAIN]` what they identify: none of the six values occurs
 anywhere in any binary's decompiled text, which matches the U-006 pattern of ids that exist only
 in data and are resolved at runtime. Only instance 0 varies per city.
 
-`[UNCERTAIN]` the instance numbers skip 1, 5, 9, 13, 14 and 17. Not explained.
+~~`[UNCERTAIN]` the instance numbers skip 1, 5, 9, 13, 14 and 17.~~ **RESOLVED below** — they
+are NULL slots in the 23-slot table.
 
 ### Instance 0 — the bulk zone data
 
@@ -250,6 +284,30 @@ straight onto the running sim's fields:
 | `0xa106cf3d` | `0xa106cf30` | `+0xec` | 59 | |
 | `0x02619041` | `0x82619039` | `+0x120` | 59 | |
 | `0x422e28e8` | `0x022e288e` | `+0x104` | 49 | |
+
+### The 7 unnamed persisted CLSIDs — registrations found, names NOT determined
+
+Each of the 7 unnamed entries occurs **exactly once in SIMCITY** (the roster) and **three times
+in its home module** — register + save + load, the established shape. Home modules and factories
+`[CONFIRMED]`:
+
+| CLSID | module | registration | factory | alloc |
+|---|---|---|---|---|
+| `0x20a7ae7f` | SIMSERV | `0x10010426` | `FUN_100104e3` | `0xe0` (224 B) |
+| `0x00abf2ec` | SIMSERV | `0x10010426` | `FUN_1001055c` | `0xf0` (240 B) |
+| `0xa0f42214` | SIMSERV | `0x10010426` | `FUN_1001059a` | `0xe0` (224 B) |
+| `0x20ec9849` | SIMRCI | `0x10036382` | `FUN_1003669e` | `0x20` (32 B) |
+| `0xa106cf3d` | SIMRCI | `0x10036382` | `FUN_100366d0` | `0x24` (36 B) |
+| `0x02619041` | SIMADV | `0x1000102b` | `FUN_100012ac` | `0x150` (336 B) |
+| `0x422e28e8` | SIMADV | `0x1000126e`'s registrar | `FUN_1000126e` | `0x1f0` (496 B) |
+
+**Their human names are NOT determined.** No name string in any module is tied to these ids.
+SIMSERV's only class-name string is `\Sys\SC3FireLayer.INI`; SIMRCI has `SC3ComLayer.ini`,
+`SC3IndLayer.ini`, `SC3ResLayer.ini`, `SC3ValveLayer.ini`, `\Sys\SC3ZoneLayer.INI`; SIMADV has
+none at all. Adjacency to a string is not evidence of identity, so nothing is assigned here —
+note in particular that the two SIMRCI ids allocate only **32 and 36 bytes**, which is far too
+small for the Res/Com/Ind layers those INI names suggest, so the tempting mapping is very likely
+wrong. Resolving these needs the INI-loading call sites (which file name each ctor opens).
 
 The other 23 roster entries are layers/services that are **not persisted** (or are persisted
 under a different id). Note `TrafficLayer` `0x029ca806` is in the roster at `+0xac` but the save
