@@ -121,6 +121,53 @@ be a sentinel. Unresolved, and it does not affect section sizing (derived from d
 i.e. a **256 x 256 byte grid** plus a 16-byte header. `[UNCERTAIN]` — one section, not yet
 generalised across files, and no consuming code read.
 
+## Worked example: SC3ZoneLayer — the loop closed `[CONFIRMED]`
+
+`SC3ZoneLayer` (GZCLSID `0x409ff3ba`, SIMRCI) is registered at `0x10036382` with factory
+`FUN_10036660` — `operator_new(0x2d0)` (720 B), ctor `FUN_100310f5`, returns object+0x10.
+
+Its **saver is `FUN_100320e7`** and its loader `FUN_10031c85` (both hold the literal
+`0x409ff3ba`). The saver *writes the section-table key itself*, which closes the loop between
+the file layout and the code `[CONFIRMED @0x100320e7:23-25]`:
+
+```c
+local_28 = 0x206c6e7c;                                  // section TYPE
+local_24 = 0x409ff3ba;                                  // group = the CLASS id
+uVar4 = (**(code **)(*param_2 + 0x30))(&local_28, &local_14);   // archive->OpenSection(key, &stream)
+...
+cVar2 = (**(code **)(*local_8 + 0x88))(*(undefined4 *)((int)this + 0x260));  // stream->Write(field)
+```
+
+So: **archive `vt+0x30` = open-section-by-{type,group}; stream `vt+0x88` = write a field.**
+That is where the 16-byte section entries come from, and it confirms `type 0x206c6e7c` as the
+generic "serialised object section" type — which is why it is the most common type in the table
+(2,095 of 3,451 sections).
+
+Field write order in the saver, i.e. the on-disk order: `this+0x10`, `this+0x14`, then
+`+0x260`, `+0x264`, `+0x15c`, `+0x158`, `+0x154`, `+0x150`, then a **loop** writing
+`this + i*8 + 0x18c` (a stride-8 array) in a second section opened the same way
+`[CONFIRMED @0x100320e7:131-135]`.
+
+### What the 13 SC3ZoneLayer sections are
+
+| instance | size | content |
+|---|---|---|
+| 0 | 50,274–198,060 (varies per city) | the bulk zone data |
+| 2, 3, 4 | 4 | `0x619FF3CE` |
+| 6, 7, 8 | 4 | `0x41A00001` |
+| 10, 11, 12 | 4 | `0xE1A00030` |
+| 15 | 4 | `0xC1F5C0BE` |
+| 16 | 4 | `0x82D4A0EB` |
+| 18 | 4 | `0x82361BE5` |
+
+The twelve 4-byte sections hold values that are **byte-identical across all 59 shipped files**,
+so they are **not city data** — they are ids (note `0x619FF3CE` shares its middle digits with
+`SC3ZoneLayer` `0x409FF3BA`). `[UNCERTAIN]` what they identify: none of the six values occurs
+anywhere in any binary's decompiled text, which matches the U-006 pattern of ids that exist only
+in data and are resolved at runtime. Only instance 0 varies per city.
+
+`[UNCERTAIN]` the instance numbers skip 1, 5, 9, 13, 14 and 17. Not explained.
+
 ## What is still open
 
 1. **Per-section record structure.** The archive is solved; what is inside each section is not.
