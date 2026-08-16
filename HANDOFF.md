@@ -35,8 +35,6 @@
 
    | module | backlog | ≥C1 | % |
    |---|---|---|---|
-   | SIMNTWRK | 809 | 24 | 3.0% |
-   | SIMGEOM | 1,148 | 59 | 5.1% |
    | SimTransit | 619 | 35 | 5.7% |
    | SIMDSTR | 1,191 | 68 | 5.7% |
    | SIMRCI | 1,536 | 107 | 7.0% |
@@ -45,10 +43,12 @@
    | SIMMISC | 1,200 | 98 | 8.2% |
    | SIMECO | 659 | 55 | 8.3% |
    | SIMVARIABLES | 350 | 31 | 8.9% |
+   | SIMNTWRK | 809 | 74 | 9.1% |
+   | SIMGEOM | 1,148 | 109 | 9.5% |
    | SIMCITY | 587 | 71 | 12.1% |
-   | **TOTAL** | **9,575** | **668** | **7.0%** |
+   | **TOTAL** | **9,575** | **768** | **8.0%** |
 
-   **8,907 to go.** Stop quoting the all-binaries 4.0%; it is dominated by 20,670 functions the
+   **8,807 to go.** Stop quoting the all-binaries 4.3%; it is dominated by 20,670 functions the
    gate does not ask for. SIMCITY / SIMNTWRK / SIMVARIABLES were added to the set on the owner's
    call 2026-08-16 — the original eight were listed before SIMCITY was identified as the tick
    driver.

@@ -55,8 +55,37 @@ Each slot is 16 bytes = a lazy resource-key record `{+0x00 u32 cachedResolvedId,
 data resolved with registry type 0x6100}` (proven for `+0x84`/`+0x94` in `FUN_10022749`; `+0x34`
 is the same record shape at a lower offset). They are **not walked by a numeric index** —
 `FUN_10022749` selects among `+0x34`/`+0x84`/`+0x94` with a discrete purpose bitmask (bit0/1/2),
-so they are named resource-variant slots, not an indexed array. `+0xa4`..`+0xe4` share the layout
-but have no proven consumer.
+so they are named resource-variant slots, not an indexed array.
+
+> **UPDATE 2026-08-16 — `+0xa4`..`+0xe4` now HAVE a proven consumer `[CONFIRMED @0x100224ed]`.**
+> The occupant **destructor** `FUN_100224ed` (329 bytes) is the reader. It makes exactly **11**
+> `vt+8` (Release) calls, on `param_1[0x12] 0x16 0x17 0x26 0x2a 0x2e 0x32 0x36 0x3a 0x3e 0x4d`
+> — verified by direct count, not inference. Destructor indices are on the **full** object and
+> the occupant base is full+0x14, so `base offset = index*4 − 0x14`:
+>
+> | dtor index | base offset | property |
+> |---|---|---|
+> | `[0x12]` | `+0x34` | `0x67` |
+> | `[0x16]` | `+0x44` | (the `0x6b` resolve key) |
+> | `[0x17]` | `+0x48` | `0x6b` |
+> | `[0x26]` | `+0x84` | `0x74` |
+> | `[0x2a]` | `+0x94` | `0x75` |
+> | `[0x2e]` | `+0xa4` | **`0x76`** |
+> | `[0x32]` | `+0xb4` | **`0x77`** |
+> | `[0x36]` | `+0xc4` | **`0x78`** |
+> | `[0x3a]` | `+0xd4` | **`0x79`** |
+> | `[0x3e]` | `+0xe4` | **`0x7a`** |
+> | `[0x4d]` | `+0x120` | `0x71` delegate |
+>
+> **What this closes:** the `+0x00` word of every one of those slots is a **refcounted COM
+> interface pointer** — the resolved resource object — not a plain cached id. All seven
+> `+0x84`..`+0xe4` slots are now proven to be the same kind of thing by a *reader*, not by
+> layout. It also proves `+0x48` (`0x6b`) and `+0x120` (`0x71`) hold COM objects.
+>
+> **What it does NOT close:** which visual/model purpose each of `0x76`–`0x7a` selects.
+> `FUN_10022749` still maps purpose bits 1/2/4 only to `+0x34`/`+0x84`/`+0x94`, and no code
+> found so far reads `+0xa4`..`+0xe4` via a purpose bit. **Missing evidence is unchanged: an
+> external caller passing a purpose bit ≥ 8.** The occupant vtable is `PTR_FUN_1002b658`.
 
 ## Functions classified — for the `functions.csv` merge
 

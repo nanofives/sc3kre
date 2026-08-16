@@ -126,6 +126,85 @@ bytes. Its loader is `FUN_10004a00`. Note the payload is delimited by the litera
 stream slots `vt+0xa4` (write string) / `vt+0x64` (write row) — **not** the `vt+0x38`/`vt+0x88`
 mirror pair. So section grammars are per-class, and the mirror-pair test does not find them all.
 
+## Section GROUP → producing code: 30 of 44 located by sweep `[CONFIRMED]`
+
+Tool: `re/scripts/find_section_producers.py` (added 2026-08-16). The section key is written as
+two adjacent stack stores, so it is **greppable**:
+
+```c
+local_28 = 0x206c6e7c;      // the generic section TYPE
+local_24 = 0x409ff3ba;      // group == the GZCOM class id
+```
+
+Sweeping every module's export and intersecting with the groups actually present in the 59
+shipped files locates the **home module and the serialiser RVAs** for 30 of the 44 groups — the
+decode route this document calls the practical key to the format. At the start of 2026-08-16
+only **2** were known this way.
+
+> ⚠️ **A first version of the sweep found only 16, and the bug is worth remembering.** It
+> matched a section TYPE assignment and then took the literal on the *next* line. `SIMNTWRK`
+> `0x10012dff` writes four keys at once and stores **every group before any type**, so the
+> second-largest group in the whole save (`0x2147c2dd`, 148 sections) was silently missed. It
+> was caught only because a worker found it independently. **Do not assume store order in
+> decompiled output.** The tool now collects all literals per function and filters by "is this
+> group actually in a shipped file", which is what keeps precision up.
+
+| group | sections | class | serialiser sites |
+|---|---|---|---|
+| `0x409ff3ba` | 767 | **SC3ZoneLayer** | SIMRCI `0x10031c85`, `0x100320e7` |
+| `0x2147c2dd` | 148 | **SIMNTWRK network layer** | SIMNTWRK `0x10012dff` |
+| `0xa0ab89f0` | 118 | SIMGEOM occupant collection | SIMGEOM `0x100032ca` |
+| `0xc28d0b6e` | 118 | | SIMADV `0x100073b3` |
+| `0x20a7ae7f` | 59 | | SIMSERV `0x100071d5`, `0x100073b0` |
+| `0x20ec9849` | 59 | | SIMRCI `0x1000e9e4`, `0x1000ebca` |
+| `0x21737de5` | 59 | SIMDIRT terrain ("DirtBag") | SIMDIRT `0x10004d90` |
+| `0x21f6abca` | 59 | | SIMDSTR `0x100089c3`, `0x10008de8` |
+| `0x4296380e` | 59 | | SIMDSTR `0x1000d777` |
+| `0x61448030` | 59 | | SIMSERV `0x1000c7b3`, `0x1000c8be` |
+| `0x621cda33` | 59 | | SIMDSTR `0x10005917` |
+| `0x80ab8ab0` | 59 | SIMGEOM tile grid | SIMGEOM `0x1000beec` |
+| `0x80f1e6d3` | 59 | | SIMRCI `0x1002eb82` |
+| `0x82937b60` | 59 | | SIMMISC `0x10014ae3`, `0x10015378` |
+| `0xa0f42214` | 59 | | SIMSERV `0x1000a479`, `0x1000a619` |
+| `0xa106cf3d` | 59 | | SIMRCI `0x10015b1b`, `0x10015c80` |
+| `0xa11bcc54` | 59 | SIMMISC budget layer | SIMMISC `0x10006fb0`, `0x10007519` |
+| `0xc0a81498` | 59 | SIMECO pollution layer | SIMECO `0x100062b4`, `0x10006abb` |
+| `0xc0ab8a88` | 59 | | SIMRCI `0x1001ce51`, `0x1001cfb8` |
+| `0xc106c4f5` | 59 | SIMRCI demand layer | SIMRCI `0x10021cf3`, `0x10022169` |
+| `0xc259c02d` | 59 | | SIMMISC `0x10002784`, `0x100028f1` |
+| `0xc336f77c` | 59 | | SIMDSTR `0x10001dea` |
+| `0xe0afdf68` | 59 | | SIMUTIL `0x10003f4d`, `0x100045ec` |
+| `0xe1193c2a` | 59 | | SIMMISC `0x10019c53`, `0x10019d5a` |
+| `0xe11bddf6` | 59 | **SC3WorldLayer** | SIMMISC `0x10027563`, `0x1002776c` |
+| `0x22963800` | 49 | | SIMDSTR `0x10015403` |
+| `0x24889f78` | 49 | | SIMDSTR `0x10011158` |
+| `0x45326359` | 49 | | SIMDSTR `0x1000b4ed` |
+| `0xc446f87c` | 49 | | SIMDSTR `0x1001c53f` |
+| `0xc4c90997` | 49 | | SIMDSTR `0x1001f7e9`, `0x1002027f` |
+
+**Independent corroboration of the frame class.** SIMGEOM `FUN_1001f360` is a second, unrelated
+copy of the SIMCITY frame reader — three `vt+0x260` key reads, then `vt+0x28` u16, `vt+0x18` u8,
+then the `0xDEADBEEF` check `[CONFIRMED @0x1001f360]`. Found by a worker with no knowledge of the
+SIMCITY result. So the frame is a per-module copy of a shared helper, and the base-0 correction
+rests on two independent witnesses.
+
+**This unblocks four of the seven previously unnamed persisted CLSIDs.** `0x20a7ae7f`,
+`0xa0f42214` (SIMSERV) and `0x20ec9849`, `0xa106cf3d` (SIMRCI) had registration + factory but
+no located serialiser; they now have both halves of the pair. Their *human names* are still not
+determined — the sweep gives the decode route, not the name.
+
+`[UNCERTAIN]` the sweep does **not** determine which of a pair is save and which is load. Use
+the slot test: writes go through `vt+0x64/0x68/0x84/0x88`, reads through `vt+0x14/0x18/0x34/0x38`.
+
+**28 groups still have no literal pair**, including `0x2147c2dd` (148 sections), `0xa0ab89f0`
+(118) and `0x00abf2ec`. Their savers either build the key indirectly (a helper takes it by
+pointer, as `SC3WorldLayer`'s `FUN_10027897` does) or use a non-`0x206c6e7c` type — note
+`0x422e28e8`, `0x028d0fc5`, `0x828d04eb` and friends carry type `0x013dee82`, and `0x80ab8ab0`
+carries `0x406b1196`. Extending the sweep to those types is the obvious next step.
+
+One literal pair, `0xc3de4d66` (SCENARIO `0x10009c3d`), appears in **no** shipped file — a
+section written only for scenario state that none of the 13 shipped `.snr` files exercises.
+
 ### Group `0xc106c4f5` = the SIMRCI demand layer `[CONFIRMED]`
 
 Found 2026-08-16 from the SIMRCI C0 cluster. `SIMRCI.DLL` holds a full mirror pair keyed on it —
