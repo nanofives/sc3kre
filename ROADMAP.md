@@ -113,6 +113,21 @@ verify against real bytes.
 **Exit:** parsers validate real game files; format docs with byte-offset tables in
 `re/analysis/formats/`.
 
+> **LEAD ON THE CITY SAVE FORMAT (2026-08-16)** — the one format still missing.
+> SIMGEOM has a confirmed **serialiser mirror pair**: `FUN_1001e516` = LOAD, `FUN_1001e226` =
+> SAVE, over the identical field set `[CONFIRMED @0x1001e516, 0x1001e226]`. LOAD calls the
+> stream's `vt+0x38` on field **addresses**; SAVE calls `vt+0x88` on field **values**; both walk
+> `+0x04`, `+0x08`, `+0x0c`, `+0x18`, … in the same order.
+> **So `vt+0x38` / `vt+0x88` are the GZCOM stream read/write primitives.** The field order in
+> each serialiser *is* the on-disk record layout, which is the way into the city save.
+>
+> A grep for `vt+0x88` call sites hits **285 files across 22 modules** (SIMRCI 26, SIMUI 33,
+> SIMDSTR 22, SIMMISC 20 …). `[UNCERTAIN]` — that is a **candidate count, not 285 confirmed
+> serialisers**: any vtable whose slot 0x22 is called matches the same pattern. To qualify a
+> candidate, require the **pair** (a `+0x38` reader over the same field offsets in mirror order)
+> and check the object is a GZCOM stream. Next step: script that pairing test rather than
+> trusting the raw grep.
+
 ### P3 — Boot & main loop
 Map entry → subsystem init → main message/sim loop → shutdown end-to-end; locate and
 name the master game state and the per-tick update dispatch.

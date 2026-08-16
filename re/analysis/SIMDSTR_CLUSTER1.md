@@ -1,0 +1,68 @@
+# SIMDSTR.DLL — C0 cluster (25 largest), classified
+
+Building on `re/analysis/SIMDSTR.md`. All addresses are Ghidra VAs in `re/ghidra_export_simdstr/`. Every function below was body-read, mechanically described, callees identified, and named → **C2**. No C3/C4 claimed (no runtime/second witness).
+
+## 1. Classification table
+
+```csv
+rva,subsystem,confidence,new_name,evidence
+0x100029fe,disaster-sim-tick,C2,sc3_dstr_disaster_tick_fsm,"per-tick FSM on state DAT+0x28b0 (1..6); ticks +0x28b4 vs durations +0x10/14/18/1c; severity +0x3c picks DAT_10039560/564/568,56c/570/574,578/57c/580,584/588,a6ac; sound via +0x288c/+0x44 slot0x14 (0xda,0x3d,phase); state6 calls FUN_10002ee6/10003aa8/10002217/10002d33/100015ec"
+0x10020e7e,disaster-parade,C2,sc3_dstr_parade_tick_schedule,"parade scheduler; caps vs DAT_1003a268; rand%100<=DAT_1003a29c(EventProbability); funds vs DAT_1003a280/284(ParadeCost i64), pop>=DAT_1003a288, comm>=DAT_1003a28c, aura>=DAT_1003a290, timing DAT_1003a278/298; posts msg 0xa4c68296/0x12d via FUN_10022eeb+0xc; reads FUN_1002a807 date/budget/pop/comm layers"
+0x1000857d,disaster-layer,C2,sc3_dstr_layer_init_city,"binds city ptr to this+0x30; w/h->+0x34/38; allocs 4 listeners(PTR_LAB_10032728/700/6d8/6b0); acquires services 0xc0f42262/0xa0f42240->+0x6c,0x80abf2be/0xabf2d9->+0x70,0xc144aca9/0x2144802b->+0x80,FUN_1002a89d->+0x28; subscribes ids 0x220fbd5b,0x6373d4e2,0x373d622,0x4373d6a0,0x45356db9,0x8373d754,0x373d8ce via FUN_10022eeb+0x14; timer regs {0x25f0a92,0x1000a001/a003/a004/a006}"
+0x10019cf6,disaster-target,C2,sc3_dstr_select_target_buildings,"builds footprint FUN_1001a26b; iterates tiles FUN_1001a3fb; queries bldg layer this+0x10/+0x40 slot0x7c; classifies via FUN_10019c66 into 5 buckets; per-class caps DAT_10039ec4/ec8/ecc/ed0/ed4; total cap DAT_10039ed8; writes (x,y)+halfsize into param_1[count*8]"
+0x1001a560,disaster-target,C2,sc3_dstr_select_open_sites,"area iter FUN_1001a93e/969/994; candidate test FUN_1001a4a8; 4x4-clear test FUN_1001a52c; bitmask dedup FUN_1001a9de/aa98; cap DAT_10039ec0 out, stride cap DAT_10039ecc; writes coords param_1[count*8]"
+0x1001f239,disaster-parade,C2,sc3_dstr_parade_find_route,"finds straight road run for parade; aura vs DAT_1003a290; run length >= DAT_1003a274(RoadTilesRequired); counts adjacent road tiles(val==6)>=3; service 0x259c03f/0x4259c018, orient 0x41658d28; writes route ends this+0x6c/70/74/78/80/84, dir *param_2 (0/8/0x10/0x18) & this+0x88"
+0x10011e52,disaster-fire,C2,sc3_dstr_fire_spread_step,"fire propagation at (param_1,param_2); base chance DAT_10039ab4/ab8 adjusted by age this+0x6c; rand%100 via +0x50; msg 0xf3(ignite)/0xf4/0xfa/0xc8 via +0x44; intensity=(rand-thr)/(range*_DAT_10032280) vs _DAT_10033004; calls FUN_10012330/122b5/1063f/100123ff/10010674/1001224a; type 0x425ec00b special"
+0x100123ff,disaster-fire,C2,sc3_dstr_fire_draw_burn_pattern,"draws fire damage tiles; tile layer this+0x60/+0x24 (+0xb8/bc/60 palette); origin FUN_10012330; size branch vs _DAT_10033010/1003300c/10032328; fills (dx,dy,shape) template arrays; rng FUN_10022c1c; places via FUN_10012760"
+0x10011ba1,disaster-fire,C2,sc3_dstr_fire_tally_tile,"tallies destruction at tile across 3 sublayers this+0x60/+0x38/3c/40 (slot0x60 active,0x7c get); accum count this+0x70, cost this+0x74; geometry FUN_10004341/1000411d/10004136/1000435a"
+0x10003e56,disaster-damage,C2,sc3_dstr_tally_tile_destruction,"same shape as 0x10011ba1 but bundle this+0x288c/+0x38/3c/40; accum count this+0x289c, cost this+0x28a0; finance/query layers +0x1c/+0x20/+0x28"
+0x10002ee6,disaster-render,C2,sc3_dstr_render_track_swath,"renders disaster track along path this+0x74/78 (stride8); w/h from +0x288c/+0x34 (0xcc/0xd0); severity +0x3c picks width DAT_100395a4/a8/ac & DAT_100395b0/b4/b8; pixel get/set via tile layer +0x24 (+0x4c/84/88); draws lines; sends tag 0xc171b663 + msg 0xe2e6c48e"
+0x10001704,disaster-tunables,C2,sc3_dstr_load_track_disaster_tunables,"property-provider loader (FUN_1002a8d6, slot0x14 by id); ~46 prop ids prefix 0x*4237*; writes DAT_10039520..DAT_100395b8 (+DAT_1003a6ac/6b0) consumed by FSM 0x100029fe and renderer 0x10002ee6"
+0x1001da8f,disaster-render,C2,sc3_dstr_render_path_effects,"builds path FUN_1001d7c8 (pts stride8); places animated effect sprites; effect classes 0x44bec831/0x3123be6c, sprite anim DAT_1003a24c; sprite ids 0x48640000/0x2d490000 by rng mode; msg (1,0xef,..) via this+0x60/+0x44; tile coords via +0x24 slot0x48"
+0x10026850,disaster-graphics,C2,sc3_dstr_resample_field_2d,"generic separable 2D resampler; ceil(dim*scale); Hermite/cubic weight ((2t-3)t^2+1) consts _DAT_10032c5c/10032ffc; mirror-edge index (2w-i-1); pixel unpack/pack via fn-ptrs DAT_1003accc/acc8 (from param_1 vtable+0x1a4/+0x1a0); operator_new work buffers"
+0x1001e2ab,disaster-placement,C2,sc3_dstr_find_open_rectangles,"largest-empty-rect scan over 256x256 stack bitmap; cell-free test param_1 vtable+0x5c; map w/h +0xa8/+0xac; min dims param_3/param_4; appends found rect via FUN_1000c8e2(param_2,&rect)"
+0x1002b390,disaster-text,C2,sc3_dstr_expand_macro_token,"token-substitution text expander; token type FUN_100259e4; matches keyword globals DAT_1003adcc/adb4/ad9c/ad84/ad6c/ad54/ad3c/ad24; day/index switch (6,0x11,0x13,0x1f,0x20,0x2d,0x2e,0x31,0x36) -> res strings 0x259..0x260 (grp 0x41f2625); appends via FUN_1002bff8; EH-guarded"
+0x10027b10,disaster-serialize,C2,sc3_dstr_ini_rewrite_entry,"rewrites INI key/section in a stream; fmt strings s___s__(1003a4f0/4d8), s__s____s_(1003a4e4); section '[' + comment ';' detection; stream vtable +0x18/1c/28/30/38/40/44/48; map lookup FUN_10029272/2917e"
+0x10023211,disaster-serialize,C2,sc3_dstr_apply_typed_property,"typed-property dispatch; type via param_1 vtable+0xc; tags 0..0xc read u8/u16/i32/i32x2/... (slots 0x94..0xc0) -> FUN_10023cdf..f9d; 0x7fff nested->FUN_10024033; 0x8000..0x800f array-copy (param_1 slot -> this slot pairs)"
+0x1002c372,disaster-ini,C2,sc3_dstr_ini_read_value,"(group,key)->value; mode this+0xb4 (1->FUN_10028472); mode2 scans stream this+0x78 (+0x30/38) for '['+grp+']' (DAT_1003a600/5fc), splits on '=' (DAT_1003a4d4); returns into param_3+4"
+0x1002c669,disaster-ini,C2,sc3_dstr_ini_enum_group,"enumerate group entries; mode1->FUN_1002870f; mode2 scans '['+grp+']', per key calls (*param_2)(&val,&key,param_3) until next '['; DAT_1003a600/5fc/4d4"
+0x1002870f,disaster-ini,C2,sc3_dstr_ini_enum_group_cached,"cached variant of 0x1002c669; group looked up in map this+0x1c via FUN_10029272; builds (key,val) recs stride0x28; per-entry (*param_2)(rec,rec+0x14,param_3)"
+0x10028472,disaster-ini,C2,sc3_dstr_ini_read_value_cached,"cached variant of 0x1002c372; group via map this+0x1c/FUN_10029272; line split '=' DAT_1003a4d4; key match FUN_100223ac vs param_2; value->param_3"
+0x1001fa88,disaster-parade,C2,sc3_dstr_parade_parse_config,"ParadeEventParadeConfigs callback; keys via FUN_10025684(&x,out,DAT_1003a2a8); writes 0x30-byte record in global table DAT_1003ab70 at (len/0x30-1)*0x30; packs day*0x1f-0x20+type at +0, remap type<4, ints +4/+8, appends vectors +0xc/+0x18/+0x24 via FUN_100219ab; DAT_1003abe8/abec"
+0x1002d2a8,disaster-message,C2,sc3_dstr_post_status_message,"picks status string by state flags (this-8)+0x54 masks 0x100/2/4/8/0x10; res ids 0xc6/c5/c4/c7/0x30 grp 0x82e0074c; formats via FUN_1002afc8/1002b000; posts via param_2+0x34 and FUN_10022f43+0x14(0xf,..)->+0x98; FUN_1000a0da"
+0x1002d6a9,disaster-message,C2,sc3_dstr_build_relief_offer_message,"emergency-relief cost dialog; flags (this-8)+0x54 masks 8/0x10; cost=rate(FUN_1002a807+0x15c,+0x58 grp7)*(this+0xd8&0xff)*(this+0xd4&0xff); res ids 0x31/0x32 grp 0x82e0074c; formats amount local_18+0x3c; posts param_2+0x4c(strA,strB,0x10,0); tail FUN_1002eb45"
+```
+
+## 2. Notable findings (structural)
+
+**Per-tick simulation entry points (highest value):**
+- **`0x100029fe` `sc3_dstr_disaster_tick_fsm`** — a 6-state lifecycle FSM advanced once per tick. State at `instance+0x28b0`, tick counter `+0x28b4` compared to phase durations `+0x10/+0x14/+0x18/+0x1c`. Severity byte `+0x3c` (1/2/3) selects tunables from the `DAT_10039520–5b8` block. State 6 runs the destruction pass (`FUN_10002ee6` render, `FUN_10003aa8`, `FUN_10002217`, `FUN_10002d33`, `FUN_100015ec`). Sounds via layer `+0x288c`/`+0x44` slot `0x14` with `(0xda, 0x3d, phase)`. This is the tick driver of one disaster whose tunables were **not previously catalogued** (see §3).
+- **`0x10020e7e` `sc3_dstr_parade_tick_schedule`** — the Parade event scheduler/trigger. Gates on every Parade tunable and, when all pass, posts petition message `0xa4c68296` (subtype `0x12d`) via `FUN_10022eeb+0xc` and sets state `+0x6c=0xd`. Confirms the Parade tunable→global map from `SIMDSTR.md §3.9`: `DAT_1003a268`(max), `a274`(RoadTilesRequired), `a278`(MinMonthsBetweenEvents), `a280/284`(ParadeCost i64), `a288`(MinPop), `a28c`(MinComm), `a290`(MinAura), `a298`(PetitionerTiming), `a29c`(EventProbability), and parade config table `DAT_1003ab70/ab74` (0x30-byte records).
+
+**Layer init + message-subscription table (closes an OPEN item in §7):**
+- **`0x1000857d` `sc3_dstr_layer_init_city`** — `SC3DisasterLayer` bind-to-city. Subscribes to broadcast ids **`0x220fbd5b, 0x6373d4e2, 0x373d622, 0x4373d6a0, 0x45356db9, 0x8373d754, 0x373d8ce`** (via `FUN_10022eeb+0x14`) and registers timers `{0x25f0a92, 0x1000a001/a003/a004/a006}` (via `+0x10`). Acquires services `0xc0f42262/0xa0f42240`, `0x80abf2be/0xabf2d9`, `0xc144aca9/0x2144802b`, `0xc3629afa`. This is the message wiring the map noted as "not determined."
+
+**Disaster targeting / spread models:**
+- **`0x10019cf6` `sc3_dstr_select_target_buildings`** — classifies candidate buildings (`FUN_10019c66`) into 5 buckets and selects up to per-class caps `DAT_10039ec4/ec8/ecc/ed0/ed4`, total `DAT_10039ed8`. These map onto the UFO `Max{Power,HighTech,LowTech,Spaceport,Landmark}BuildingsDestroyedPerAttack` + `MaxTotalBuildingsToDestroy` keys catalogued in `SIMDSTR.md §4`. Query id `0xe0faadc7`.
+- **`0x1001a560` `sc3_dstr_select_open_sites`** — selects open 4×4 sites (footprint-clear test `FUN_1001a52c`, bitmask dedup), capped by `DAT_10039ec0`.
+- **`0x1001e2ab` `sc3_dstr_find_open_rectangles`** — largest-empty-rectangle finder over a 256×256 stack bitmap (matches the SC3 tile grid), min-dims parameterised.
+- **`0x1001f239` `sc3_dstr_parade_find_route`** — straight-road route finder for the parade (adjacent road tiles value `6`, run length ≥ `RoadTilesRequired`, aura ≥ `MinAura`).
+
+**Fire subsystem (self-contained cluster on `this+0x60`):**
+- `0x10011e52` spread step (chance `DAT_10039ab4/ab8`, msgs `0xf3` ignite / `0xf4` / `0xfa` / `0xc8`) → `0x100123ff` burn-pattern draw → `0x10011ba1` per-tile destruction tally (`this+0x70` count, `+0x74` cost).
+
+**Serialization / config I/O:**
+- `0x10023211` `sc3_dstr_apply_typed_property` — a typed-property dispatch (tags `0..0xc`, `0x7fff` nested, `0x8000..0x800f` collection copy) — the property read/apply path used for load or message params.
+- `0x10027b10` INI section rewrite; `0x1002c372`/`0x1002c669`/`0x1002870f`/`0x10028472` are the four INI read/enumerate primitives (live-stream vs cached-map variants), confirming and extending the Pattern-B helpers in `§3`. Section/comment/delimiter literals: `[`=`DAT_1003a600`, `]`=`DAT_1003a5fc`, `=`=`DAT_1003a4d4`.
+
+**Text / messaging:**
+- `0x1002b390` macro-token expander (matches the `%MAYOR%`/`%CITYNAME%` token globals `DAT_1003ad24..adcc`, res strings `0x259..0x260`, group `0x41f2625`).
+- `0x1002d2a8` and `0x1002d6a9` build disaster status / emergency-relief-offer messages (resource group `0x82e0074c`; relief cost = `taxRate(grp7) * areaW * areaH`).
+
+## 3. Not determined / uncertain
+
+- **Disaster type of the `0x10001704`/`0x100029fe`/`0x10002ee6` cluster.** This is a fully self-contained disaster (tunable loader + 6-state tick FSM + moving-swath renderer with 3 severity widths) but its tunable group `DAT_10039520–5b8` and property-id prefix `0x*4237*` do **not** match any loader catalogued in `SIMDSTR.md §3–4` (Fire/Riot/Tornado/ToxicCloud/UFO/Locust/Parade/Misc). A moving swath with severity-scaled width is consistent with a tornado `[iOS-HINT]`, but SC3U's `TornadoDisaster` tunables live at a different block (`DAT_10039ad8`, id prefix `0x*4838*`, `FUN_1001367e`), so this is a **distinct, previously-uncatalogued group**. Type is **[UNCERTAIN]** — missing: the INI group *string* for prefix `0x*4237*` (it is read by 32-bit property id, not by name, so no group literal appears in these bodies) and which class ctor/vtable installs `FUN_100029fe` as its tick method.
+- **Which disaster owns `0x1001da8f` `sc3_dstr_render_path_effects`.** Uses the `this+0x60` layer-bundle layout shared with the fire class, but places effect sprites via effect factory classes `0x44bec831`/`0x3123be6c` and anim `DAT_1003a24c` rather than fire tiles. **[UNCERTAIN]** whether it belongs to fire or another disaster — missing: the vtable slot that calls it.
+- **Semantics of `sc3_dstr_resample_field_2d` (`0x10026850`) within SIMDSTR.** Mechanically a generic separable bicubic/Hermite 2D resampler with caller-supplied pixel get/set callbacks (`DAT_1003accc/acc8`); what field it scales (damage map, density, sprite) is not shown in the body — the callbacks are installed by the caller via `param_1` vtable `+0x1a4`/`+0x1a0`. **[UNCERTAIN]** — missing: the caller and what buffer it passes.
+- **Shipped numeric tunable defaults** remain in `\Sys\SC3DisasterLayer.INI` inside `SYS.PAK` (data extraction, not decompilation), as already noted in `§7`.
+(raw JSON: C:\Users\maria\AppData\Local\Temp\fleet-delegate-44d46a77fceb42879d05f9e422c7e074.json)

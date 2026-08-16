@@ -1494,6 +1494,68 @@ solved by a wrapper, nothing else here is missing.
 
 ---
 
+## 10l. RETRACTION — the draw path IS active in windowed mode `[CONFIRMED 2026-08-16]`
+
+**§10j's conclusion ("in windowed mode the engine's draw path is itself inactive") is WRONG
+and is retracted.** It rested on sampling one guessed surface. Instrumenting the actual draw
+functions shows the renderer running at full rate.
+
+Method: the per-function tracer extended to `GZGraphicD` (`sc3launch -gzlog`), 30 draw-path
+functions, 20 s runs, fullscreen vs windowed:
+
+| Function | Fullscreen | Windowed |
+|---|---|---|
+| `blt_disp_1` `FUN_10014894` | 14,697 | **34,764** |
+| `getpixel_a` `FUN_100155b6` | 40,295 | **40,252** |
+| `blt_convert` `FUN_10014c05` | 750 | 534 |
+| `dev_init_w_h_mode_bpp` `FUN_10009efb` | 56 | 48 |
+| `transparency_test` `FUN_10015785` | 43 | 0 |
+| `restyle_fullscreen` `FUN_1001850e` | 1 | 0 |
+| `window_create` / `window_style` / `window_center` | 1 / 1 / 1 | 1 / 1 / 1 |
+
+Pixel traffic is essentially identical, and windowed actually blits **more**. The engine draws.
+
+### What the blit destination actually is
+
+`FUN_10014894`'s `this` (captured live) is **not** a surface wrapper — `+4` holds a vtable
+(`GZGraphicD+0x1F314`, i.e. `.rdata`), not a surface. It is the **software render device**:
+
+```
+DRAW OBJ: 0x00588358   bpp(+0x10)=32   w(+0x24)=800   h(+0x28)=600
+```
+
+matching `FUN_10009efb`'s field map (`+0x10` bpp, `+0x24` width, `+0x28` height). Scanning its
+first 48 fields for any pointer whose own vtable lives in `DDRAW.dll`/`apphelp.dll` found
+**none** — the device holds no DirectDraw surface at all.
+
+**So the engine renders into a plain memory buffer**, and the missing step in windowed mode is
+whatever carries that buffer into a DirectDraw surface. That is consistent with everything
+else: the `FUN_10019273` surface stays `0/7500` lit because the engine never renders *into*
+it directly, and forcing a Blt from it presents an empty surface.
+
+### Where this leaves the chase
+
+Still unsolved, but the target is now specific and much narrower than before:
+
+- The frame data exists, in a software buffer owned by device object `+0x10/+0x24/+0x28`.
+- Find the pixel-buffer pointer in that object (offset unknown; not in the first 48 fields as
+  a COM pointer, so it is likely a raw `void*` to locked surface bits or a private allocation).
+- Find what normally moves it to DirectDraw in fullscreen, and why that step is skipped windowed.
+
+Two earlier interventions also produced diagnostic errors worth keeping:
+`DDERR_INVALIDRECT (0x88760096)` when blitting screen coordinates into an 800x600 surface, and
+`DDERR_SURFACELOST (0x887601C2)` when blitting from a bogus pointer — the latter is the exact
+code `FUN_10019a77`/`FUN_10019be8` retry on.
+
+### Probe bug found and fixed
+
+`GetEnvironmentVariableA` was being read into a `char[32]` while the value was 62 chars. On
+overflow the API leaves the buffer **undefined** and returns the required size, so the table
+loaded in one run and was silently skipped in the next — which produced an all-zero fullscreen
+column and nearly caused a false conclusion. Now queried straight into `MAX_PATH`.
+
+---
+
 ## 11. Gaps in the export tooling this work exposed
 
 `ExportAllDecomp.java` emits function bodies and symbol/string/global CSVs, but **not**:
