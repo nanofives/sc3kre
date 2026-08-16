@@ -42,9 +42,9 @@ assessment below recommended.** The old text is preserved further down as the re
 
 1. **Every `FUN_*` in all 31 binaries enumerated in `functions.csv`.** ✅ **MET** — 31,991 rows,
    done by `re/scripts/enumerate_functions.py`.
-2. **≥ C1 for every function in the core-sim modules.** ❌ **NOT MET — 442 of 7,829 = 5.6%.**
-3. UI / audio / tooling / framework modules: **"enumerated, unclassified" is acceptable** — 19
-   modules, 22,416 functions, no per-function requirement.
+2. **≥ C1 for every function in the core-sim modules.** ❌ **NOT MET — 568 of 9,575 = 5.9%.**
+3. UI / audio / tooling / framework modules: **"enumerated, unclassified" is acceptable** — 16
+   modules, 20,670 functions, no per-function requirement.
 4. Subsystem map committed to `re/analysis/SUBSYSTEMS.md`. ✅ MET.
 5. **End-state decision (port vs toolkit) taken.** ❌ **STILL OPEN** — the owner's call. The
    evidence is assembled below and has not changed.
@@ -61,21 +61,21 @@ assessment below recommended.** The old text is preserved further down as the re
 | SIMGEOM | 1,148 | 59 | 5.1% | 1,089 |
 | SIMSERV | 713 | 58 | 8.1% | 655 |
 | SIMDSTR | 1,191 | 68 | 5.7% | 1,123 |
-| **TOTAL** | **7,829** | **442** | **5.6%** | **7,387** |
+| SIMCITY | 587 | 71 | 12.1% | 516 |
+| SIMNTWRK | 809 | 24 | 3.0% | 785 |
+| SIMVARIABLES | 350 | 31 | 8.9% | 319 |
+| **TOTAL** | **9,575** | **568** | **5.9%** | **9,007** |
 
-That is the honest cost of the gate: **7,387 functions**, roughly 295 more `delegate_cluster.ps1`
-runs at 25 each. Large, but a quarter of the un-scoped number and finite.
+**The set is 11 modules.** SIMCITY, SIMNTWRK and SIMVARIABLES were added on the owner's call
+2026-08-16: the original eight were listed before `SIMCITY.DLL` was identified as the city
+simulator / tick driver, so their absence was an accident of timing, not a judgement.
 
-> `[UNCERTAIN]` **three modules are arguably core-sim and are NOT in the set** — the list was
-> written before `SIMCITY.DLL` was identified as the city simulator / tick driver. Pending an
-> owner call, they stay out; adding all three would move the denominator to 9,575 and the
-> numerator to 568 (5.9%).
->
-> | candidate | backlog | ≥C1 | why it might belong |
-> |---|---|---|---|
-> | SIMCITY | 587 | 71 | the per-tick dispatch and the layer roster live here |
-> | SIMNTWRK | 809 | 24 | road/rail network layer |
-> | SIMVARIABLES | 350 | 31 | the tunables store every sim constant resolves through |
+- **SIMCITY** — the per-tick dispatch and the 33-entry layer roster live here.
+- **SIMNTWRK** — the road/rail network layer.
+- **SIMVARIABLES** — the tunables store every sim constant resolves through.
+
+That is the honest cost of the gate: **9,007 functions**, roughly 360 more `delegate_cluster.ps1`
+runs at 25 each. Large, but under a third of the un-scoped number and finite.
 
 **Progress metric:** classified functions in the core-sim set, not dates and not the
 all-binaries percentage (which is dominated by 22,416 UI/framework functions the gate does not
@@ -163,7 +163,7 @@ imports; build the subsystem inventory and skeleton call graph from the entry po
 - Locate: WinMain/entry, the message loop, the per-tick sim update, the save/load path.
 
 **Exit:** see **"P1 — THE GATE, RE-SCOPED"** at the top of this file. In short: everything
-enumerated (met), **≥ C1 across the eight core-sim modules** (5.6%, the open item), UI/audio/
+enumerated (met), **≥ C1 across the eleven core-sim modules** (5.9%, the open item), UI/audio/
 tooling left unclassified by design, subsystem map committed (met), end-state decision taken
 (open). The literal "100% of `FUN_*` at ≥ C1" wording is **retired** — do not measure against it.
 

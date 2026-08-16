@@ -27,16 +27,31 @@
    3.6%** classified (C1 6 · C2 1,134 · C3 20 · C4 7). The C1 tier is no longer empty.
 6. **⭐ THE P1 GATE IS RE-SCOPED** (owner call, 2026-08-16). *"100% of `FUN_*` at ≥ C1"* is
    **retired** — do not measure against it. The gate is now: everything **enumerated** (met,
-   31,991 rows) + **≥ C1 across the eight core-sim modules** (SIMRCI, SIMMISC, SIMUTIL,
-   SimTransit, SIMECO, SIMGEOM, SIMSERV, SIMDSTR) + subsystem map (met) + the end-state
-   decision (**still open**). UI / audio / tooling / framework modules stay "enumerated,
-   unclassified" **by design**.
-   **The number that matters is now 442 of 7,829 = 5.6% — 7,387 core-sim functions to go**,
-   about 295 `delegate_cluster.ps1` runs. Stop quoting the all-binaries 3.6%; it is dominated
-   by 22,416 functions the gate does not ask for.
-   `[UNCERTAIN]` SIMCITY (587), SIMNTWRK (809) and SIMVARIABLES (350) are arguably core-sim and
-   are deliberately **not** in the set — the list predates SIMCITY being identified as the tick
-   driver. Adding all three makes it 568 of 9,575. Needs an owner call.
+   31,991 rows) + **≥ C1 across the eleven core-sim modules** + subsystem map (met) + the
+   end-state decision (**still open**). UI / audio / tooling / framework modules stay
+   "enumerated, unclassified" **by design**.
+
+   **The core-sim set (11 modules), and the only progress number that counts:**
+
+   | module | backlog | ≥C1 | % |
+   |---|---|---|---|
+   | SIMNTWRK | 809 | 24 | 3.0% |
+   | SIMRCI | 1,536 | 57 | 3.7% |
+   | SIMMISC | 1,200 | 48 | 4.0% |
+   | SIMGEOM | 1,148 | 59 | 5.1% |
+   | SimTransit | 619 | 35 | 5.7% |
+   | SIMDSTR | 1,191 | 68 | 5.7% |
+   | SIMUTIL | 763 | 62 | 8.1% |
+   | SIMSERV | 713 | 58 | 8.1% |
+   | SIMECO | 659 | 55 | 8.3% |
+   | SIMVARIABLES | 350 | 31 | 8.9% |
+   | SIMCITY | 587 | 71 | 12.1% |
+   | **TOTAL** | **9,575** | **568** | **5.9%** |
+
+   **9,007 to go**, about 360 `delegate_cluster.ps1` runs. Stop quoting the all-binaries 3.6%;
+   it is dominated by 20,670 functions the gate does not ask for. SIMCITY / SIMNTWRK /
+   SIMVARIABLES were added to the set on the owner's call 2026-08-16 — the original eight were
+   listed before SIMCITY was identified as the tick driver.
 
 ---
 
