@@ -322,14 +322,51 @@ candidate, `PTR 0x1001d5c8` (installed by `FUN_1000eb7e` / `FUN_1000ec31`), with
 > different interface or the same one at a 4-byte slot shift. **Not the zone saver's stream**,
 > and not usable to decode the grammar.
 
-Next attempt should identify the stream by **construction, not search**: follow the section
-object returned by archive `vt+0x30`, then its `QueryInterface(0x199627)` implementation, to the
-concrete class — rather than pattern-matching vtables by slot occupancy. The arity table above is
-the acceptance test any candidate must pass.
+### The stream primitives — RESOLVED by construction `[CONFIRMED]`
 
-`[UNCERTAIN]` the grid therefore still does not close numerically. Everything structural around
-it is confirmed (offset base, section tiling, the row-pointer writer, the counted lists); only
-the stream slot semantics are missing.
+Identifying by construction rather than by vtable search worked immediately:
+
+1. `FUN_1000b88a` (GZResourceD) is the **QueryInterface that answers** the IID
+   `[CONFIRMED @0x1000b88a]`: `if (param_1 == 0x199627) { *param_2 = this; AddRef; }`. The
+   stream is returned as **`this` at offset 0**, so the stream vtable *is* that class's vtable.
+2. `VtableProbe` on it gives **three** vtables holding it at slot 0 —
+   `PTR_FUN_1001cb34`, `PTR_FUN_1001cef0`, `PTR_FUN_1001d130` (three stream flavours).
+3. All three share the **same** functions at the four slots of interest, i.e. a common base.
+   Three were uncarved; `MakeFunctions.java` created them.
+
+Every one forwards to `vt+0xac`, the underlying `Write(ptr, len)` `[CONFIRMED]`:
+
+| slot | implementation | code | meaning |
+|---|---|---|---|
+| `+0x64` | `0x1000c169` | `PUSH [ESP+8]; PUSH [ESP+8]` → `RET 8` | **Write(ptr, len)** — raw block |
+| `+0x68` | `0x1000c157` | `LEA EDX,[ESP+4]; PUSH 1; PUSH EDX` → `RET 4` | **Write(&arg, 1)** — u8 |
+| `+0x84` | `0x1000c1ad` | `MOV EDX,[ESP+8]; PUSH EDX; PUSH [ESP+8]` → `RET 8` | **Write(ptr, len)** — raw block |
+| `+0x88` | `0x1000c1d6` | `PUSH 4; PUSH &local` → `RET 4` | **Write(&value, 4)** — u32 |
+
+**This vindicates the original grammar assumptions**: `vt+0x84` *is* a raw `(ptr, len)` write, so
+the two `0x17` blocks *are* 23 bytes each, and `vt+0x68` *is* one byte. Attempt 1 modelled all of
+this correctly.
+
+It also confirms the earlier candidate `PTR 0x1001d5c8` was rightly rejected — it is a different
+class entirely.
+
+**These four primitives apply to every GZCOM serialiser in the project**, not just the zone
+layer, which makes them the most reusable part of this investigation.
+
+### So why does the grid still not fit?
+
+The primitives are no longer a suspect, and neither is the section boundary. Remaining
+candidates, none tested:
+- the `if (cVar != '\0')` guards threaded through the saver may skip writes in ways the flat
+  grammar does not model;
+- `FUN_10010ae4` is the list-node iterator — if those containers are maps rather than lists, the
+  per-node field offsets (`+0x10`, `+0x14`, `+0x18`) would differ;
+- the base-class row write has **no count and no dimensions** in the stream, so `rowCount` and
+  `rowBytes` must come from elsewhere entirely (probably the world layer) — if a *reader* needs
+  external dimensions, a self-describing parse of this section may simply not be possible.
+
+That last point is the important one: it may be that this section **cannot** be parsed
+standalone, and decoding it requires the city dimensions from `SC3WorldLayer` first.
 
 ## Second worked example: SC3WorldLayer — the city header `[CONFIRMED]`
 

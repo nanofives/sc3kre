@@ -29,6 +29,10 @@ GZDllGetGZCOMDirector  (PE export)
 Registration counts: SIMUI 40 · SIMSPR 40 · SIMRCI 37 · SIMMISC 36 · SIMUTIL 15 · SIMGEOM 14 ·
 SimTransit 5 · SIMBABLD 2.
 
+> **GZResourceD's DB was also mutated 2026-08-16**: 3 stream-primitive functions carved (`0x1000c157/69/ad`); export 1,458 -> 1,461, +3 / 0 removed / 1,461 ok / 0 fail.
+>
+> ⭐ **THE GZCOM STREAM WRITE PRIMITIVES ARE PINNED** (`re/analysis/formats/CITY_SAVE.md`) and they apply to EVERY serialiser in the project, not just the city save: stream `vt+0x64` and `vt+0x84` = `Write(ptr,len)` raw block, `vt+0x68` = write u8, `vt+0x88` = write u32, all forwarding to `vt+0xac`. The stream is IID `0x199627`, QI'd in 18 of the 31 modules; its QueryInterface is GZResourceD `0x1000b88a` and returns `this` at offset 0.
+>
 > **SIMRCI's Ghidra DB was MUTATED 2026-08-16** and re-exported. `MakeFunctions.java` force-created
 > 4 functions Ghidra's auto-analysis had left uncarved: `0x1000e837`, `0x1001599d`, `0x1002115d`
 > (8-byte `CALL <ini loader>; RET 4` stubs) and `0x10030369` (the SC3ZoneLayer base-class write
@@ -199,3 +203,4 @@ open lists at the foot of each analysis doc.
 > (`re/analysis/SIMGEOM.md`) to name each field.
 >
 > Commit at boundaries; keep `.happy/project-info.json` current. Confirm your plan before large runs.
+
