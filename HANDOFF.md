@@ -174,33 +174,64 @@ open lists at the foot of each analysis doc.
 
 ---
 
+
+---
+
 ## READY-TO-PASTE KICKOFF PROMPT (new orchestrator session, in the Simcity folder)
 
 > You are the parent orchestrator for the SimCity 3000 RE project (understand-first). Read, in
-> order: `HANDOFF.md`, `CLAUDE.md`, `COORDINATION.md`, `re/analysis/MODULE_MAP.md`,
-> `re/analysis/MODULE_INVENTORY.md`, `UNCERTAINTIES.md`. We are in **P1 (surface map)**.
+> order: `HANDOFF.md`, `CLAUDE.md`, `COORDINATION.md`, `ROADMAP.md` (the **P1 exit-gate
+> assessment** at the top), `re/analysis/formats/CITY_SAVE.md`, `UNCERTAINTIES.md`.
 >
-> Key facts: the sim is NOT in `SC3U.exe` — it is 29 GZCOM director DLLs in `Apps\`, all already
-> imported and exported to `re/ghidra_export_<module>/`. `functions.csv` has a `module` column and
-> stands at C0 4,843 / C1 44 / C2 319 / C3 8, 340 named. The GZCOM module recipe, the pinned
-> GZCLSIDs, the cracked formats (`.IXF`, QFS) and the tooling are all summarised in `HANDOFF.md`.
+> **State.** The sim is not in `SC3U.exe` — it is 29 GZCOM director DLLs in `Apps\`, all imported
+> and exported to `re/ghidra_export_<module>/`. `functions.csv` enumerates **all 31 binaries**:
+> **31,991 real `FUN_*`, 1,034 classified (3.2%), C1 tier empty, 7 C4 rows.** Do NOT quote the raw
+> 56,754 export count — 22,495 of those files are `Unwind_*` fragments.
 >
-> Rules: you are the **single writer** of `functions.csv`/`STUBS.md`/`UNCERTAINTIES.md`/`DEFERRED.md`;
-> delegate read-only analysis to a **headless read-only worker**
-> (a delegation helper that runs Claude read-only over this repo; not included here)
-> and merge their `rva,subsystem,confidence,evidence` tables; keep Ghidra runs/edits local; do NOT
-> report worker $ cost. Tell workers the export directory EXISTS with its file count and to grep
-> for addresses rather than trust directory listings (one worker wrongly returned NEEDS_EXECUTION
-> claiming the exports were absent). Verify worker claims that contradict what is on disk, and
-> use `re/tools/pe_read.py` when an answer is a `.rdata` constant and `re/scripts/VtableDump.java`
-> when it is behind a vtable slot.
+> **P1's gate is NOT met and `ROADMAP.md` says so.** Do not advance phases. It also recommends
+> re-scoping the gate, since "100% at ≥C1" over 31,991 functions is not realistic by hand.
 >
-> **First task: build `re/tools/qfs.py`** to the spec in `re/analysis/formats/QFS.md` and decode
-> the sprite archives (`ixf_parse.py` already reads them; 253,838 records, type 0 = pixels,
-> type 1 = anchor). Validate by checking each stream's declared uncompressed size. Then chase the
-> post-decompression pixel encoding (`FUN_1001e086`, bitmap `+0xc8` colour key) so a sprite can be
-> written out as an image. In parallel, fan a worker at the building property ids `0x65`–`0x7c`
-> (`re/analysis/SIMGEOM.md`) to name each field.
+> **Formats are done except one thing.** SYS.PAK, `.IXF`, QFS (63,691/63,691), the sprite pixel +
+> anchor formats (62,552/62,552 **byte-identical re-encode**), and the whole **city save family**
+> (`.sc3`/`.sct`/`.snr`/`.st3`, 59/59, `re/tools/city_parse.py`) all parse. The GZCOM **stream
+> primitives are pinned** and apply to every serialiser: read `vt+0x14`/`0x34` raw, `0x18` u8,
+> `0x38` u32; write `vt+0x64`/`0x84` raw, `0x68` u8, `0x88` u32; archive `vt+0x20`/`0x30` =
+> open-section-by-`{type,group}`.
+>
+> **The one open format item — read `CITY_SAVE.md` before touching it.** The zone section's
+> internal grammar is confirmed from BOTH the saver (`0x100320e7`) and the loader (`0x10031c85`)
+> and still does not fit the bytes. **Six sweeps have failed; do not attempt a seventh.** The
+> untested assumption is *above* the grammar: `OpenSection` (archive `vt+0x30`) may frame each
+> section with a header inside its byte range. Read the **archive class**, which nobody has
+> looked at — every finding so far came from its callers.
+>
+> **Rules.** You are the single writer of `functions.csv`/`STUBS.md`/`UNCERTAINTIES.md`/
+> `DEFERRED.md`. Delegate read-only analysis to your read-only worker (see the workspace CLAUDE.md, which is not in this repo) — use
+> `re/scripts/delegate_cluster.ps1 -Module <M> -Top 25` for C0 work (pass 2 is obsolete: the C1
+> tier is empty), then `re/scripts/merge_worker_module.py <out> <M> --suffix CLUSTER<N> --merge`.
+> **Set `$env:REPO_FLEET_DELEGATE`** or those scripts throw. Keep Ghidra runs and all writes local.
+> Do not report worker $ cost.
+>
+> **Hard-won rules, all of which cost real time this session:**
+> - **Verify worker claims against the binary.** Several were wrong: a sprite row-record field
+>   split contradicted a C4 result, and two SIMUI names encoded guesses the code did not support.
+> - **Check the denominator.** `functions.csv` enumerated only SC3U for weeks, so every
+>   percentage was ~5x flattering. `re/scripts/enumerate_functions.py` fixed it.
+> - **Read the shipped bytes before naming a format after code that reads *a* format.** A
+>   `FORM/ALTM/XTER` chunk reader in SIMINIT is a SimCity 2000 importer, not the SC3 save.
+> - **Near-miss ids are different ids.** `0x029ca804` is not `TrafficLayer` `0x029ca806`.
+> - **After any `MakeFunctions.java` run, re-export that module** — workers grep the text export,
+>   and a stale export makes a carved function look absent.
+> - **Identify classes by construction, not by vtable pattern-matching.** Searching vtables by
+>   slot occupancy produced a false stream candidate; following QueryInterface found it at once.
+> - The repo `github.com/nanofives/sc3kre` is **public**: tools + notes only, never assets. The
+>   `.gitignore` is deny-by-default and its `re/analysis` rule must stay per-directory — the
+>   `**/*.md` form leaks. Verify with `git ls-files`, never by eye.
+>
+> **Suggested next moves, highest value first:** (1) the archive class / per-section framing
+> above; (2) C0 clusters on the untouched modules — SIMSPR, GZWinD, AUDIO, SIMDIRT, GZWWWD have
+> had none; (3) name the 7 unnamed persisted CLSIDs (`CITY_SAVE.md` lists exactly what was tried
+> and why each attempt failed); (4) `U-001` (HTML consumer) now has a live lead — SIMUI
+> `0x1009499e` is an IRC numeric-reply dispatch, i.e. the CityExchange chat client.
 >
 > Commit at boundaries; keep `.happy/project-info.json` current. Confirm your plan before large runs.
-
