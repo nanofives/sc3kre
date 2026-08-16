@@ -60,7 +60,7 @@ labels inside functions and will corrupt the databases.
 | **plain-bitmap sprite** | 1,139 effect/UI records | `re/tools/sprite_render.py` — **C4**, 8bpp 5-bit coverage mask |
 | **span sprite** | 62,552 records = the main art | `sprite_render.py` + `sprite_encode.py` — **C4, 62,552/62,552 re-encode BYTE-IDENTICAL** |
 | **sprite anchor** (type-1) | 62,387 records | `sprite_render.parse_anchor` — **C4**, 4×i16 `{spanL,spanT,spanR,spanB}`, witnessed by `.SII` |
-| ⭐ **city save family** | `.sc3`/`.sct`/`.snr`/`.st3` — **59/59 files, 992 records** | `ixf_parse.py` **unchanged** — see `formats/CITY_SAVE.md` (container only; payloads open) |
+| ⭐ **city save family** | `.sc3`/`.sct`/`.snr`/`.st3` — **59/59 files** | `re/tools/city_parse.py` — IXF container + 24-byte header + **QFS payload**, 59/59 decode, 21.9 MB -> 92.7 MB. See `formats/CITY_SAVE.md` |
 | FEZC / GVF | iOS assets | `fez_extract.py`, `gvf_dump.py` |
 
 The sprite block's producer is **`GZGraphicD.dll`'s image class** (GZCLSID `0xa487535d`,

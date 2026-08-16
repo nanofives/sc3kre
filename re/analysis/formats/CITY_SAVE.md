@@ -52,20 +52,63 @@ files are `.IXF` and contain no `FORM` header.
 > format, and only checking the first bytes of a real `.sc3` file showed the container was
 > `.IXF`. **Read the shipped bytes before naming a format after the code that reads *a* format.**
 
+## The payload is QFS-compressed `[CONFIRMED, 59/59]`
+
+The bulk record (`type == group == 0x035f62a4`) is a **24-byte header + a QFS stream** — the same
+QFS used for sprites, so `re/tools/qfs.py` decodes it **unchanged**.
+
+```
++0x00  u32   0x67 (103)          constant in all 59 shipped files
++0x04  u32   4                   constant in all 59
++0x08  char4 "0.90"              ASCII version; "0.90" in all 59
++0x0c  u32   compressedLength    == len(record) - 20
++0x10  u32   uncompressedLength  == the QFS stream's own declared size
++0x14  u32   compressedLength    (repeated)
++0x18        QFS stream (magic 0x10FB)
+```
+
+What pins the layout: the QFS stream's 3-byte big-endian declared size **equals the u32 at
+`+0x10`** in every file, and the stream consumes exactly to the end of the record.
+
+> **59 of 59 city-family files decode. Zero failures.**
+> 21,901,812 compressed → 92,718,078 decompressed (4.23x).
+> Tool: `re/tools/city_parse.py`.
+
+Example — `Berlin, Germany.sc3`: record 743,406 bytes → 743,382 compressed → **2,153,415** out.
+
+## Inside the decompressed body
+
+```
++0x00  u32   e.g. 0x3d
++0x04  u32   e.g. 0x20d7f7      slightly less than the total — a section length?
++0x08  u32   e.g. 0x00020003
++0x0c  u32   0xDEADBEEF          [CONFIRMED] present in ALL 59 files
++0x10  u32   e.g. 0x40510625
++0x14  ...   byte data in the 0x16..0x20 range
+```
+
+`[UNCERTAIN]` the byte run at `+0x14` is *consistent with* a terrain height map (values 22–32,
+smoothly varying), but **no code that consumes it has been read**, so that is not asserted. Note
+the `.sct` terrain files all decompress to ~1,521,4xx bytes — near-identical sizes across
+different terrains, which is what a fixed-dimension grid would do.
+
 ## What is still open
 
-The **record payloads**. The container is solved; the contents are not. Priorities:
-
-1. **The 743 KB blob** (`type == group == 0x035f62a4`, instance 1) — almost certainly the tile
-   grids. `[UNCERTAIN]` its internal layout; nothing has been read yet.
-2. Map `type`/`group` ids to meaning. The ids repeat across files, so a cross-file diff of the
-   small records (24-94 bytes) against known city properties should name several cheaply.
+1. **The decompressed body layout.** The container and compression are solved; the record
+   structure inside is not.
+2. Map the other `type`/`group` ids (the 24–94 byte records) to meaning. They repeat across
+   files, so a cross-file diff against known city properties should name several cheaply.
 3. **The decoding route is already identified:** GZCOM serialisers are **mirror pairs** — a
    reader calling stream `vt+0x38` on field *addresses* and a writer calling `vt+0x88` on field
-   *values*, over the same offsets in the same order (see `ROADMAP.md` P2 note, first proven on
-   the SIMGEOM pair `0x1001e516` / `0x1001e226`). **A serialiser's field order IS the on-disk
-   record layout.** Find the serialiser that handles type `0x035f62a4` and the blob is decoded.
+   *values*, over the same offsets in the same order (first proven on the SIMGEOM pair
+   `0x1001e516` / `0x1001e226`). **A serialiser's field order IS the on-disk layout.**
+   Note the type id `0x035f62a4` appears in exactly one place in any binary —
+   `GZResourceD.dll FUN_1000f5c4` — so the *sim-side* serialisers are keyed by something else and
+   must be found via the `vt+0x38`/`vt+0x88` pairing test, not by grepping the id.
 
 ## Tooling
 
-No new parser needed for the container: `py -3.12 re/tools/ixf_parse.py "Cities\<file>.sc3"`.
+```
+py -3.12 re/tools/city_parse.py "Cities"                    # validate every city file
+py -3.12 re/tools/city_parse.py "Cities\X.sc3" --extract out\   # dump decompressed payloads
+```

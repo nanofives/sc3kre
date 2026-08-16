@@ -78,8 +78,11 @@ SIMGEOM, SIMSERV, SIMDSTR), leaving UI/audio/tooling modules at "enumerated, unc
 **P2 overtook P1.** Formats were supposed to be the *next* phase, but the highest-value work kept
 being format work, and P2's exit ("parsers validate real game files") is now effectively met:
 `SYS.PAK`, `.IXF` (C4 round-trip), QFS/RefPack (63,691/63,691), the sprite pixel + anchor formats
-(62,552/62,552 **byte-identical re-encode**), FEZC/GVF. **The city save format is the notable
-gap** — and it is the single biggest remaining modding unlock.
+(62,552/62,552 **byte-identical re-encode**), FEZC/GVF, and — as of 2026-08-16 — **the city save
+family** (`.sc3`/`.sct`/`.snr`/`.st3`, 59/59 files, container + QFS payload, `city_parse.py`).
+**P2's exit is now met at the container/compression level for every shipped format.** What
+remains is *record-level* structure inside the city payload, which is P4-shaped work (it needs
+the sim-side serialisers), not another container to crack.
 
 **End-state decision (port vs toolkit) — evidence, not a verdict.** This is the owner's call.
 What the mapped surface now says:
@@ -116,7 +119,7 @@ verify against real bytes.
 > ⭐ **CITY SAVE CONTAINER SOLVED (2026-08-16) — see `formats/CITY_SAVE.md`.**
 > `.sc3` / `.sct` / `.snr` / `.st3` are **`.IXF` containers**. **59 of 59 shipped city-family
 > files parse with the EXISTING `re/tools/ixf_parse.py`, no changes** (992 records).
-> Still open: the record **payloads**, chiefly a 743 KB blob (`type == group == 0x035f62a4`).
+> **PAYLOAD ALSO SOLVED:** the bulk record is a 24-byte header + a **QFS** stream (same QFS as the sprites), so `qfs.py` decodes it unchanged. **59/59 files, 21.9 MB -> 92.7 MB.** Tool: `re/tools/city_parse.py`. Body carries a `0xDEADBEEF` marker at +0x0c in all 59. Still open: the layout INSIDE the decompressed body.
 > ⚠️ Nearly recorded backwards: `SIMINIT` `0x10001ada` reads an IFF chunk format with tags
 > `XZON XBLD XTER ALTM MISC SCDH FORM` — those are **SimCity 2000 `.sc2`** tags, i.e. a legacy
 > importer, NOT the SC3 format. Checking the first bytes of a real `.sc3` is what caught it.

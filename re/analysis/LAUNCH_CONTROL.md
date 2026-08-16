@@ -1556,6 +1556,79 @@ column and nearly caused a false conclusion. Now queried straight into `MAX_PATH
 
 ---
 
+## 10m. The device object dissected — render/present raster aliasing `[CONFIRMED 2026-08-16]`
+
+Following §10l (the draw path is active), the blit destination was dissected field by field.
+All of this is in-process memory reading; no screen capture is involved, so window z-order and
+focus cannot corrupt it.
+
+### The hot blit, decompiled
+
+`FUN_10014894` @ `0x10014894` (34,764 calls in a 20 s windowed run):
+
+```c
+iVar2 = (**(code **)(*param_1 + 0x50))(local_c);          // source format; [+4] = bpp
+if (*(int *)((int)this + 0x10) == *(int *)(iVar2 + 4))    // device bpp == source bpp?
+    (**(code **)(**(int **)((int)this + 0x44) + 0x2c))(param_1[0x11], &dst, &src);
+else
+    (**(code **)(*(int *)this + 0x1d4))(param_1, &dst, &src, 0);   // format-converting path
+```
+
+So **`device+0x44` is the render raster object** and its vtable slot `+0x2c` is the rasterizer;
+`param_1[0x11]` is the source's raster at the same offset. `device+0x10` is the device bpp.
+
+### The device object, side by side
+
+| Field | Fullscreen | Windowed |
+|---|---|---|
+| `+0x0C` | `0x07` | `0x0E` |
+| `+0x10` bpp | **`0x10` (16)** | **`0x20` (32)** |
+| `+0x24/+0x28` w/h | `0x320`/`0x258` (800x600) | same |
+| `+0x3C` | `1` | `3` |
+| `+0x44` render raster | `005AEA18` | `0056BCE0` |
+| `+0x64..+0x70` | zeros | `270,107,590,35F` = **624,263-1424,863**, the window rect |
+| `+0x80`, `+0x8C` | `0x101` | `0x001` |
+| `+0xAC` | **`0`** | `0056BBD8` |
+| **`+0xB0`** | **`005AEA18` — aliased to `+0x44`** | `0056BBD8` — **not** `+0x44` |
+
+### The decisive measurement
+
+Sampling the pixel buffers inside those raster objects:
+
+```
+FULLSCREEN   RENDER(+0x44)  bits at raster+0x04 = 0x0BECA6A8 : 5270/7500 LIT
+             PRESENT(+0xB0) bits at raster+0x04 = 0x0BECA6A8 : 5270/7500 LIT   (same buffer)
+
+WINDOWED     RENDER(+0x44)  bits at raster+0x30 = 0x05C47000 : 0/7500 LIT
+             PRESENT(+0xB0) : no pixel buffer found
+             ALT(+0xAC)     : no pixel buffer found
+```
+
+**Fullscreen has one raster, holding the live frame, serving as both render target and present
+source.** Windowed has a render raster of a *different class* (its bits live at a different
+field offset), which is **empty**, and a present raster with **no pixel buffer at all**.
+
+### Reading
+
+The windowed device is constructed with raster objects that have no usable backing store, so
+the 34,764 blits per run have nowhere to land. This is a deeper structural difference than the
+present call (§10h) or the pixel format (§10k) — those were symptoms of the same thing:
+`FUN_1001611b` builds a windowed device whose raster chain was never completed.
+
+`[UNCERTAIN]` — why the windowed raster class differs and whether it can be substituted.
+The device bpp difference (16 vs 32) is entangled with it, since `-bpp 32` is required for
+windowed to survive Init (§10c) and the fullscreen device is 16bpp.
+
+### Cost note
+
+Windowed mode has now consumed the majority of this session across ~10 rounds, with four
+falsified hypotheses (present gate, clipper, blit geometry, window origin) and three retracted
+conclusions (§10d, §10j, plus the §10.1/§10.2 measurement errors). The knowledge gained is
+real and documented; the feature is not delivered. Anyone resuming this should read §10h,
+§10k, §10l and §10m together before touching code.
+
+---
+
 ## 11. Gaps in the export tooling this work exposed
 
 `ExportAllDecomp.java` emits function bodies and symbol/string/global CSVs, but **not**:
