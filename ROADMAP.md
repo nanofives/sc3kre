@@ -31,7 +31,63 @@ Scaffold, SHA-256 anchor, own Ghidra 12.1.2 install, headless no-MCP driver + qu
 helpers, first auto-analysis (9,730 functions), `functions.csv` seeded (4,932 C0 backlog).
 **Exit:** ✅ `re/ghidra_export/` greppable; tracker seeded; docs in place.
 
-### P1 — EXIT-GATE ASSESSMENT (2026-08-15) — ❌ **GATE NOT MET. DO NOT ADVANCE.**
+### P1 — THE GATE, RE-SCOPED (owner decision, 2026-08-16)
+
+The original exit — *"100% of `FUN_*` at ≥ C1"* — was written when the target was one
+9,730-function exe. The real target is **31,991 `FUN_*` across 31 binaries**, ~6.5x larger, and
+that gate is not reachable by hand. **Re-scoped on the owner's call to the two-tier form the
+assessment below recommended.** The old text is preserved further down as the record of why.
+
+**P1 exit (current, binding):**
+
+1. **Every `FUN_*` in all 31 binaries enumerated in `functions.csv`.** ✅ **MET** — 31,991 rows,
+   done by `re/scripts/enumerate_functions.py`.
+2. **≥ C1 for every function in the core-sim modules.** ❌ **NOT MET — 442 of 7,829 = 5.6%.**
+3. UI / audio / tooling / framework modules: **"enumerated, unclassified" is acceptable** — 19
+   modules, 22,416 functions, no per-function requirement.
+4. Subsystem map committed to `re/analysis/SUBSYSTEMS.md`. ✅ MET.
+5. **End-state decision (port vs toolkit) taken.** ❌ **STILL OPEN** — the owner's call. The
+   evidence is assembled below and has not changed.
+
+**The core-sim set and where it stands** (measured 2026-08-16 from `functions.csv`):
+
+| module | backlog | ≥C1 | % | remaining |
+|---|---|---|---|---|
+| SIMRCI | 1,536 | 57 | 3.7% | 1,479 |
+| SIMMISC | 1,200 | 48 | 4.0% | 1,152 |
+| SIMUTIL | 763 | 62 | 8.1% | 701 |
+| SimTransit | 619 | 35 | 5.7% | 584 |
+| SIMECO | 659 | 55 | 8.3% | 604 |
+| SIMGEOM | 1,148 | 59 | 5.1% | 1,089 |
+| SIMSERV | 713 | 58 | 8.1% | 655 |
+| SIMDSTR | 1,191 | 68 | 5.7% | 1,123 |
+| **TOTAL** | **7,829** | **442** | **5.6%** | **7,387** |
+
+That is the honest cost of the gate: **7,387 functions**, roughly 295 more `delegate_cluster.ps1`
+runs at 25 each. Large, but a quarter of the un-scoped number and finite.
+
+> `[UNCERTAIN]` **three modules are arguably core-sim and are NOT in the set** — the list was
+> written before `SIMCITY.DLL` was identified as the city simulator / tick driver. Pending an
+> owner call, they stay out; adding all three would move the denominator to 9,575 and the
+> numerator to 568 (5.9%).
+>
+> | candidate | backlog | ≥C1 | why it might belong |
+> |---|---|---|---|
+> | SIMCITY | 587 | 71 | the per-tick dispatch and the layer roster live here |
+> | SIMNTWRK | 809 | 24 | road/rail network layer |
+> | SIMVARIABLES | 350 | 31 | the tunables store every sim constant resolves through |
+
+**Progress metric:** classified functions in the core-sim set, not dates and not the
+all-binaries percentage (which is dominated by 22,416 UI/framework functions the gate does not
+ask for).
+
+---
+
+### P1 — EXIT-GATE ASSESSMENT (2026-08-15) — the assessment that produced the re-scope above
+
+> **HISTORICAL — kept for the reasoning, not the numbers.** The counts in this section are the
+> 2026-08-15 snapshot (674 classified, 31,963 backlog) and are superseded by the re-scoped gate
+> above (1,167 classified, 31,991 backlog). Its recommendation was adopted 2026-08-16.
 
 The stated exit is *"100% of `FUN_*` at ≥ C1"*. Measured honestly, that is **not close**, and
 the headline tracker numbers have been flattering because **the denominator is wrong**.
@@ -105,8 +161,11 @@ imports; build the subsystem inventory and skeleton call graph from the entry po
 - Import table + `strings.csv` triage → seed subsystem guesses.
 - Cluster by call graph; label the big functions (the 15 KB / 9 KB / 3 KB+ ones first).
 - Locate: WinMain/entry, the message loop, the per-tick sim update, the save/load path.
-**Exit:** 100% of `FUN_*` at ≥ C1 (subsystem + one-line purpose); subsystem map committed
-to `re/analysis/SUBSYSTEMS.md`; **end-state decision gate** (port vs toolkit) taken.
+
+**Exit:** see **"P1 — THE GATE, RE-SCOPED"** at the top of this file. In short: everything
+enumerated (met), **≥ C1 across the eight core-sim modules** (5.6%, the open item), UI/audio/
+tooling left unclassified by design, subsystem map committed (met), end-state decision taken
+(open). The literal "100% of `FUN_*` at ≥ C1" wording is **retired** — do not measure against it.
 
 ### P2 — Asset & data formats
 Reverse the on-disk formats with round-trip parsers: city save format, the `.dat`/library

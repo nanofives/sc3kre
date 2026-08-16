@@ -25,6 +25,18 @@
 5. **C0 clusters merged** for the five modules that had never had one: SIMSPR, GZWinD, GZWWWD,
    SIMDIRT, AUDIO (`re/analysis/<M>_CLUSTER1.md`, 124 rows). Tracker now **1,167 of 31,991 =
    3.6%** classified (C1 6 · C2 1,134 · C3 20 · C4 7). The C1 tier is no longer empty.
+6. **⭐ THE P1 GATE IS RE-SCOPED** (owner call, 2026-08-16). *"100% of `FUN_*` at ≥ C1"* is
+   **retired** — do not measure against it. The gate is now: everything **enumerated** (met,
+   31,991 rows) + **≥ C1 across the eight core-sim modules** (SIMRCI, SIMMISC, SIMUTIL,
+   SimTransit, SIMECO, SIMGEOM, SIMSERV, SIMDSTR) + subsystem map (met) + the end-state
+   decision (**still open**). UI / audio / tooling / framework modules stay "enumerated,
+   unclassified" **by design**.
+   **The number that matters is now 442 of 7,829 = 5.6% — 7,387 core-sim functions to go**,
+   about 295 `delegate_cluster.ps1` runs. Stop quoting the all-binaries 3.6%; it is dominated
+   by 22,416 functions the gate does not ask for.
+   `[UNCERTAIN]` SIMCITY (587), SIMNTWRK (809) and SIMVARIABLES (350) are arguably core-sim and
+   are deliberately **not** in the set — the list predates SIMCITY being identified as the tick
+   driver. Adding all three makes it 568 of 9,575. Needs an owner call.
 
 ---
 
