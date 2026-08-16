@@ -267,8 +267,42 @@ consistent with the saver's *first* call being the base class's `vt+0x28` write.
 write is therefore not a small prefix but the **bulk of the section**, and it is opaque here:
 `this-0x14` is the base subobject and its `vt+0x28` was never read.
 
-**Next step is now unambiguous:** read the base class's `vt+0x28` writer, not the derived
-saver. Everything after it (the counted lists) is already known and correct.
+### The base-class writer — found, and it is a row-pointer array `[CONFIRMED]`
+
+Chased through three hops, each invisible to the text export:
+
+1. The saver calls `(*(this-0x14))->vt+0x28`. `this` is object+0x14, so `this-0x14` is the base
+   subobject at object+0, whose vtable is `PTR_FUN_1004d274` (installed by the SC3ZoneLayer ctor
+   `FUN_100310f5`).
+2. `VtableDump` slot 10 (`+0x28`) = `0x10030369`, which **Ghidra never carved** — force-created
+   with `MakeFunctions.java` (15 bytes). It is a delegating stub `[CONFIRMED @0x10030369]`:
+   ```
+   PUSH dword ptr [ESP + 0x4]     ; the stream
+   MOV  ECX, dword ptr [ECX+0xc]  ; this = this->member_0x0c
+   CALL 0x1001b4e9
+   RET  0x4
+   ```
+3. `FUN_1001b4e9` (53 bytes) is the real writer `[CONFIRMED @0x1001b4e9]`:
+   ```c
+   n = *(int *)(this + 4);                        // ROW COUNT
+   while (--n >= 0)
+       stream->vt[+0x64]( *(u32 *)(*(int *)(this + 0xc) + n*4),   // pointer to row n
+                          *(u32 *)(this + 8) );                   // BYTES PER ROW
+   ```
+
+So the bulk of the section is a **2D array serialised as `rowCount` raw blocks of `rowBytes`
+each**, through a *new* stream slot **`vt+0x64` = write-raw-block(ptr, len)** — and the rows are
+written **in reverse order** (`n-1` down to `0`).
+
+The owning struct is therefore `{ +0x04 rowCount, +0x08 rowBytes, +0x0c rowPointerArray }`,
+reached from the layer via `member_0x0c`.
+
+`[UNCERTAIN]` the grid still does not close numerically: the grammar sweep already covered every
+possible prefix length, so a leading `rowCount * rowBytes` block plus the known counted lists
+should have fitted at *some* start offset and did not. The remaining suspect is now **`vt+0x84`**
+(used for the two `0x17` blocks in the derived saver) — it is a *different slot* from the
+`vt+0x64` used here, so the assumption that it writes `(ptr, len)` raw bytes is unfounded.
+Resolve `vt+0x84` and `vt+0x68` against the same stream vtable before sweeping again.
 
 ## Second worked example: SC3WorldLayer — the city header `[CONFIRMED]`
 
