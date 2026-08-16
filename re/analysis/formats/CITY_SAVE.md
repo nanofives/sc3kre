@@ -126,7 +126,7 @@ bytes. Its loader is `FUN_10004a00`. Note the payload is delimited by the litera
 stream slots `vt+0xa4` (write string) / `vt+0x64` (write row) — **not** the `vt+0x38`/`vt+0x88`
 mirror pair. So section grammars are per-class, and the mirror-pair test does not find them all.
 
-## Section GROUP → producing code: 30 of 44 located by sweep `[CONFIRMED]`
+## Section GROUP → producing code: 40 of 44 located by sweep `[CONFIRMED]`
 
 Tool: `re/scripts/find_section_producers.py` (added 2026-08-16). The section key is written as
 two adjacent stack stores, so it is **greppable**:
@@ -137,17 +137,25 @@ local_24 = 0x409ff3ba;      // group == the GZCOM class id
 ```
 
 Sweeping every module's export and intersecting with the groups actually present in the 59
-shipped files locates the **home module and the serialiser RVAs** for 30 of the 44 groups — the
+shipped files locates the **home module and the serialiser RVAs** for 40 of the 44 groups — the
 decode route this document calls the practical key to the format. At the start of 2026-08-16
 only **2** were known this way.
 
-> ⚠️ **A first version of the sweep found only 16, and the bug is worth remembering.** It
-> matched a section TYPE assignment and then took the literal on the *next* line. `SIMNTWRK`
-> `0x10012dff` writes four keys at once and stores **every group before any type**, so the
-> second-largest group in the whole save (`0x2147c2dd`, 148 sections) was silently missed. It
-> was caught only because a worker found it independently. **Do not assume store order in
-> decompiled output.** The tool now collects all literals per function and filters by "is this
-> group actually in a shipped file", which is what keeps precision up.
+> ⚠️ **The sweep was wrong twice before it was right, and both bugs were silent.** Neither
+> produced an error; each just reported fewer hits, with nothing to show the tool was the limit.
+>
+> 1. **Store order (found 16).** The first version matched a section TYPE assignment and took
+>    the literal on the *next* line. `SIMNTWRK 0x10012dff` writes four keys at once and stores
+>    **every group before any type**, so `0x2147c2dd` — the second-largest group in the save,
+>    148 sections — was missed. Caught only because a worker reported it independently.
+>    **Do not assume store order in decompiled output.**
+> 2. **Leading zeros (found 30).** The literal pattern required 8 hex digits. **Ghidra prints
+>    hex without leading zeros**, so `0x029ca804` appears as `0x29ca804` and `0x00abf2ec` as
+>    `0xabf2ec`. That silently skipped **every group whose top nibble is zero — 9 of the 44**.
+>    Caught only because the SimTransit worker reported `0x29ca804` and the sweep disagreed.
+>
+> Both were found by a *disagreement between two methods*, not by inspection. When a tool and a
+> reader disagree, the tool is the thing to check first.
 
 | group | sections | class | serialiser sites |
 |---|---|---|---|
@@ -188,22 +196,108 @@ then the `0xDEADBEEF` check `[CONFIRMED @0x1001f360]`. Found by a worker with no
 SIMCITY result. So the frame is a per-module copy of a shared helper, and the base-0 correction
 rests on two independent witnesses.
 
-**This unblocks four of the seven previously unnamed persisted CLSIDs.** `0x20a7ae7f`,
-`0xa0f42214` (SIMSERV) and `0x20ec9849`, `0xa106cf3d` (SIMRCI) had registration + factory but
-no located serialiser; they now have both halves of the pair. Their *human names* are still not
-determined — the sweep gives the decode route, not the name.
+### ⭐ ALL SEVEN previously unnamed persisted CLSIDs now have located serialisers
 
-`[UNCERTAIN]` the sweep does **not** determine which of a pair is save and which is load. Use
-the slot test: writes go through `vt+0x64/0x68/0x84/0x88`, reads through `vt+0x14/0x18/0x34/0x38`.
+The section further down records a careful, failed attempt to name these seven by adjacency,
+which correctly refused to guess. The sweep does not name them either — but it supplies the
+thing that was actually missing, the code that reads and writes each one:
 
-**28 groups still have no literal pair**, including `0x2147c2dd` (148 sections), `0xa0ab89f0`
-(118) and `0x00abf2ec`. Their savers either build the key indirectly (a helper takes it by
-pointer, as `SC3WorldLayer`'s `FUN_10027897` does) or use a non-`0x206c6e7c` type — note
-`0x422e28e8`, `0x028d0fc5`, `0x828d04eb` and friends carry type `0x013dee82`, and `0x80ab8ab0`
-carries `0x406b1196`. Extending the sweep to those types is the obvious next step.
+| CLSID | module (from registration) | serialiser sites (from the sweep) |
+|---|---|---|
+| `0x20a7ae7f` | SIMSERV | `0x100071d5`, `0x100073b0` |
+| `0x00abf2ec` | SIMSERV | `0x1000e3e0`, `0x1000e581` |
+| `0xa0f42214` | SIMSERV | `0x1000a479`, `0x1000a619` |
+| `0x20ec9849` | SIMRCI | `0x1000e9e4`, `0x1000ebca` |
+| `0xa106cf3d` | SIMRCI | `0x10015b1b`, `0x10015c80` |
+| `0x02619041` | SIMADV | `0x1001e98d` |
+| `0x422e28e8` | SIMADV | `0x10018560`, `0x1001862c` |
+
+**The home modules match exactly** what was independently derived from the registration and
+factory addresses — SIMSERV ×3, SIMRCI ×2, SIMADV ×2. Two unrelated methods agreeing on all
+seven is a strong check on both. Their *human names* remain **not determined**; the route is
+now open, the name is not.
+
+### The `0x029ca804` near-miss is resolved: it is SimTransit `[CONFIRMED]`
+
+This document has warned since the container was cracked that `0x029ca804` sits 2 below the
+pinned `TrafficLayer` id `0x029ca806` and must not be treated as a typo. **That caution was
+right.** It is SimTransit's own layer: `SIMTRANSIT 0x100048ee` (load) and `0x10004c8d` (save)
+both hold the literal `0x29ca804` alongside the type `[CONFIRMED @0x10004c8d, 0x100048ee]`,
+serialising the byte cost grids at `+0x60..+0x74` and the `0x14`-stride grids at `+0x7c/+0x80`.
+Two distinct ids in the same family, exactly as suspected — and this is SimTransit's **first**
+known save section.
+
+### Save vs load, resolved for 15 of the pairs — `--direction` `[CONFIRMED]`
+
+`find_section_producers.py --direction` counts pinned stream slots per site: writes
+`vt+0x64/0x68/0x84/0x88`, reads `vt+0x14/0x18/0x34/0x38`. It reports the counts, not a bare
+verdict, and only calls it when one side wins by more than 2x with at least 3 calls.
+
+**The heuristic reproduces three independently-established ground truths**, which is why it is
+trusted here:
+
+| group | site | verdict | w/r | independently known from |
+|---|---|---|---|---|
+| `0x409ff3ba` | `0x100320e7` | SAVE | 21/0 | read by hand, this document |
+| `0x409ff3ba` | `0x10031c85` | LOAD | 0/22 | read by hand, this document |
+| `0xa11bcc54` | `0x10007519` | SAVE | 16/0 | SIMMISC cluster 2 |
+| `0xa11bcc54` | `0x10006fb0` | LOAD | 1/20 | SIMMISC cluster 1 |
+| `0xe11bddf6` | `0x1002776c` | SAVE | 6/0 | read by hand, this document |
+
+**15 groups now have a fully directed pair:** `0x409ff3ba` `0x20a7ae7f` `0x20ec9849`
+`0x21f6abca` `0x61448030` `0x82937b60` `0xa0f42214` `0xa106cf3d` `0xa11bcc54` `0xc0a81498`
+`0xc0ab8a88` `0xc106c4f5` `0xc259c02d` `0xe1193c2a` `0xc4c90997`. Six more have a directed SAVE
+with no located loader (`0x2147c2dd` `0xc28d0b6e` `0x4296380e` `0x621cda33` `0x80f1e6d3`
+`0x22963800`).
+
+Two honest limits:
+
+- **`0x21737de5` (SIMDIRT) only resolves to `save?`**, on the inferred slots `vt+0xa0`/`vt+0xa4`
+  rather than the pinned four. Its writes are strings (`DirtBag_Start`), which go through a slot
+  that was never pinned from an implementation. Independently known to be the saver anyway.
+- **Sites that delegate stay ambiguous, correctly.** `SIMGEOM 0x100032ca` scores 2/1 because it
+  opens the section and then drives the pinned occupant saver `FUN_1001e226` per item — the
+  writes are in the callee. Same for `SIMGEOM 0x1000beec`, `SIMUTIL 0x10003f4d`/`0x100045ec` and
+  three SIMDSTR sites. A slot count cannot see through a call, and it should not pretend to.
+- **`SIMMISC 0x10027563` scores 5/9 and stays `?`** — consistent with the note above that
+  Ghidra's decompilation of that function is **degraded**, so the call sites are unreliable.
+  That the heuristic fails exactly where the decompile is known bad is a good sign, not a bad one.
+
+**Four groups still have no literal pair: `0x022e288e`, `0x828d04eb`, `0x828d0a2f`,
+`0xc28d0f40`** (59 sections each).
+
+`0x022e288e` is a **self-inflicted miss**: it is both a section TYPE (for group `0x422e28e8`)
+and a GROUP in its own right, so the sweep filters it out as a type before it can match. The
+other three share the `28d0` middle digits with `0x028d0fc5` (SIMUI `0x1000690a`) and
+`0xc28d0b6e` (SIMADV) — a family, so their producer is likely one of those two modules building
+the key indirectly. `SC3WorldLayer`'s `FUN_10027897` is the known precedent for a helper that
+takes the key by pointer, which no literal sweep can see.
 
 One literal pair, `0xc3de4d66` (SCENARIO `0x10009c3d`), appears in **no** shipped file — a
 section written only for scenario state that none of the 13 shipped `.snr` files exercises.
+
+### SIMDSTR's eight sections — field-order layouts `[CONFIRMED]`
+
+SIMDSTR owns more save sections than any other module. `re/analysis/SIMDSTR_CLUSTER2.md` gives
+the field order for each; the shape is uniform. The `SC3DisasterLayer` manager (CLSID
+`0x61f6abf5`, `[CONFIRMED @0x1002269e]`) owns a GZ persistent-object collection at `manager+0x10`;
+every **list** section walks that collection keeping only nodes whose type-id equals the section's
+own group, and the **fixed-array** sections stream an in-place vector.
+
+Spot-checked against the binary: `0x10008de8` writes in the exact claimed slot order
+(`vt+0x98`, then four `vt+0x88`) `[CONFIRMED @0x10008de8]`, and `0x10001dea` uses a `0x24`-byte
+(36) element stride with a `0xc351` (50,001) bound — i.e. a cap of 50,000 — writing raw blocks
+through `vt+0xac` `[CONFIRMED @0x10001dea]`.
+
+> An anomaly the worker reported rather than smoothed over, and it is preserved here: in the
+> master record `0x21f6abca`, **SAVE writes `this+0xa0` and `this+0xb4` but LOAD restores into
+> `this+0xd0` and `this+0xd4`.** Not reconciled. Either the fields are aliased through a union
+> or one side was misread; it needs a second look before anyone writes a parser against it.
+
+Two stream slots turn up here that were not in the pinned set: **`vt+0x98`** (a write, seen in a
+proven saver) and **`vt+0xac`**, which is the underlying `Write(ptr, len)` already pinned in the
+primitives table. `vt+0xac` has been promoted into the direction test's confirmed write set;
+`vt+0x98` sits in its inferred tier.
 
 ### Group `0xc106c4f5` = the SIMRCI demand layer `[CONFIRMED]`
 

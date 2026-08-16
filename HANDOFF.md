@@ -35,20 +35,23 @@
 
    | module | backlog | ≥C1 | % |
    |---|---|---|---|
-   | SimTransit | 619 | 35 | 5.7% |
-   | SIMDSTR | 1,191 | 68 | 5.7% |
    | SIMRCI | 1,536 | 107 | 7.0% |
    | SIMSERV | 713 | 58 | 8.1% |
    | SIMUTIL | 763 | 62 | 8.1% |
    | SIMMISC | 1,200 | 98 | 8.2% |
    | SIMECO | 659 | 55 | 8.3% |
+   | SIMDSTR | 1,191 | 101 | 8.5% |
    | SIMVARIABLES | 350 | 31 | 8.9% |
    | SIMNTWRK | 809 | 74 | 9.1% |
    | SIMGEOM | 1,148 | 109 | 9.5% |
+   | SimTransit | 619 | 60 | 9.7% |
    | SIMCITY | 587 | 71 | 12.1% |
-   | **TOTAL** | **9,575** | **768** | **8.0%** |
+   | **TOTAL** | **9,575** | **826** | **8.6%** |
 
-   **8,807 to go.** Stop quoting the all-binaries 4.3%; it is dominated by 20,670 functions the
+   The set is **levelled**: every module is now between 7.0% and 12.1%, so "attack the worst two"
+   has stopped being a useful selector. Pick by value, not by percentage.
+
+   **8,749 to go.** Stop quoting the all-binaries 4.5%; it is dominated by 20,670 functions the
    gate does not ask for. SIMCITY / SIMNTWRK / SIMVARIABLES were added to the set on the owner's
    call 2026-08-16 — the original eight were listed before SIMCITY was identified as the tick
    driver.
