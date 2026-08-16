@@ -10,7 +10,7 @@ all [CONFIRMED @0x100320e7, and 39 more sites]:
 Method: take every exported function that mentions any known section TYPE, collect all of its
 32-bit literals, and keep the ones that are a group actually present in one of the 59 shipped
 city-family files. Each hit gives that section's HOME MODULE and its serialiser RVAs, which is
-the decode route CITY_SAVE.md calls the practical key to the format. Currently 40 of 44.
+the decode route CITY_SAVE.md calls the practical key to the format. Currently 41 of 44; the other 3 belong to the type-0x013dee82 family, whose writer takes the group from a virtual call and so cannot be found by any literal sweep (see CITY_SAVE.md).
 
 Intersecting against groups that really occur is what keeps precision up: a bare "two literals
 near each other" match would fire on any pair of constants.
@@ -73,6 +73,19 @@ def groups_in_shipped_files(cities):
     return present
 
 
+# Stream vtable slots PINNED in CITY_SAVE.md from GZResourceD's own implementations.
+WRITE_SLOTS = {"0x64", "0x68", "0x84", "0x88", "0xac"}
+READ_SLOTS = {"0x14", "0x18", "0x34", "0x38"}
+# Slots that are only INFERRED to be writes/reads, from observing proven serialisers:
+# SIMMISC 0x10007519 (a proven save) calls +0xa0 23 times, and SIMDIRT 0x10004d90 (proven
+# save, it writes the DirtBag_Start/_End literals) calls +0xa4 for strings. Used only as a
+# tie-break, and flagged in the output, because they are not pinned from an implementation.
+EXTRA_WRITE = {"0xa0", "0xa4", "0x78", "0x8c", "0x98"}
+EXTRA_READ = {"0x28", "0x3c", "0x40", "0x54"}
+# The decompiler renders a virtual call as: (**(code **)(*local_8 + 0x88))(...)
+VCALL = re.compile(r"\+\s*(0x[0-9a-f]{2})\)\)\s*\(", re.I)
+
+
 def literal_pairs(re_dir, present):
     """-> {group: [(module, rva), ...]}.
 
@@ -106,24 +119,27 @@ def literal_pairs(re_dir, present):
             lits = {"0x%08x" % int(m.group(1), 16) for m in LITERAL.finditer(body)}
             if not (lits & types):
                 continue
-            for lit in lits - types:
+            # KNOWN FALSE POSITIVE, deliberately NOT filtered out: SIMUI 0x1000690a is an
+            # if/else-if CLASS-ID SELECTOR (tag 1 -> 0x022e288e, 2 -> 0x628d0c45,
+            # 3 -> 0xc28d0b6e ...), not a serialiser. It matches only because 0x022e288e is
+            # itself a section type.
+            #
+            # A guard requiring "calls at least one pinned stream slot" removes it -- and also
+            # removes SIMGEOM 0x100116e9 / 0x1001176e, which genuinely DO write
+            # {0x206c6e7c, 0x01fd7a8c} but reach the stream through slots 0x24/0x28 that are
+            # not in the pinned set. That trade is bad: a silent false negative is worse than a
+            # documented false positive, because only the first one is invisible. So the hit is
+            # left in and called out in CITY_SAVE.md instead. Hand-check new hits.
+            # Candidates are every literal that is a REAL group, NOT "every literal except the
+            # types". 0x022e288e is both: it is the TYPE of group 0x422e28e8, and it is itself
+            # a GROUP under type 0x013dee82. Subtracting the type set discarded it and left it
+            # permanently unfindable. Filtering on `present` is the correct gate on its own --
+            # no section TYPE is also a group, except that one, so nothing else changes.
+            for lit in lits:
                 group = int(lit, 16)
                 if group in present:
                     found[group].append((module, "0x" + fn.split("_")[0]))
     return found
-
-
-# Stream vtable slots PINNED in CITY_SAVE.md from GZResourceD's own implementations.
-WRITE_SLOTS = {"0x64", "0x68", "0x84", "0x88", "0xac"}
-READ_SLOTS = {"0x14", "0x18", "0x34", "0x38"}
-# Slots that are only INFERRED to be writes/reads, from observing proven serialisers:
-# SIMMISC 0x10007519 (a proven save) calls +0xa0 23 times, and SIMDIRT 0x10004d90 (proven
-# save, it writes the DirtBag_Start/_End literals) calls +0xa4 for strings. Used only as a
-# tie-break, and flagged in the output, because they are not pinned from an implementation.
-EXTRA_WRITE = {"0xa0", "0xa4", "0x78", "0x8c", "0x98"}
-EXTRA_READ = {"0x28", "0x3c", "0x40", "0x54"}
-# The decompiler renders a virtual call as: (**(code **)(*local_8 + 0x88))(...)
-VCALL = re.compile(r"\+\s*(0x[0-9a-f]{2})\)\)\s*\(", re.I)
 
 
 def direction(module, rva):

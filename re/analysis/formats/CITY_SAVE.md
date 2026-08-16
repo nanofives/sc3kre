@@ -126,7 +126,7 @@ bytes. Its loader is `FUN_10004a00`. Note the payload is delimited by the litera
 stream slots `vt+0xa4` (write string) / `vt+0x64` (write row) — **not** the `vt+0x38`/`vt+0x88`
 mirror pair. So section grammars are per-class, and the mirror-pair test does not find them all.
 
-## Section GROUP → producing code: 40 of 44 located by sweep `[CONFIRMED]`
+## Section GROUP → producing code: ALL 44 accounted for `[CONFIRMED]`
 
 Tool: `re/scripts/find_section_producers.py` (added 2026-08-16). The section key is written as
 two adjacent stack stores, so it is **greppable**:
@@ -137,7 +137,7 @@ local_24 = 0x409ff3ba;      // group == the GZCOM class id
 ```
 
 Sweeping every module's export and intersecting with the groups actually present in the 59
-shipped files locates the **home module and the serialiser RVAs** for 40 of the 44 groups — the
+shipped files locates the **home module and the serialiser RVAs** for 41 of the 44 groups — the
 decode route this document calls the practical key to the format. At the start of 2026-08-16
 only **2** were known this way.
 
@@ -266,12 +266,43 @@ Two honest limits:
 **Four groups still have no literal pair: `0x022e288e`, `0x828d04eb`, `0x828d0a2f`,
 `0xc28d0f40`** (59 sections each).
 
-`0x022e288e` is a **self-inflicted miss**: it is both a section TYPE (for group `0x422e28e8`)
-and a GROUP in its own right, so the sweep filters it out as a type before it can match. The
-other three share the `28d0` middle digits with `0x028d0fc5` (SIMUI `0x1000690a`) and
-`0xc28d0b6e` (SIMADV) — a family, so their producer is likely one of those two modules building
-the key indirectly. `SC3WorldLayer`'s `FUN_10027897` is the known precedent for a helper that
-takes the key by pointer, which no literal sweep can see.
+**RESOLVED — all 44 are now accounted for.** `0x022e288e` was a self-inflicted miss: it is both
+a section TYPE (for group `0x422e28e8`) and a GROUP in its own right, and the sweep was
+subtracting the type set before matching. Fixed by filtering on "is a real group" alone.
+
+### ⭐ The type-`0x013dee82` family: ONE writer for all seven `[CONFIRMED]`
+
+The last three were not three separate mysteries. **Every section of type `0x013dee82` is
+written by a single generic function**, SIMADV `FUN_1001d310` `[CONFIRMED @0x1001d310]`:
+
+```c
+local_20 = 0x13dee82;                                    // TYPE     -- a literal
+local_1c = (**(code **)(*(int *)((int)this + -0x10) + 0x4c))();   // GROUP -- a VIRTUAL CALL
+local_18 = 0xb;                                          // INSTANCE -- a literal, 11
+FUN_10007584(auStack_60, &local_20);                     // open the section with that key
+```
+
+**The group is never a literal at the write site** — it is `vt+0x4c` on the base subobject,
+i.e. "tell me my own class id". No literal sweep can attribute these, by construction. That is
+a structural limit of the method, not a defect in it.
+
+The shipped bytes confirm it exactly: **413 sections of type `0x013dee82` = 7 groups × 59 files,
+and every one is instance 11**, matching the literal `0xb`. The seven are `0x022e288e`
+`0x028d0fc5` `0x628d0c45` `0x828d04eb` `0x828d0a2f` `0xc28d0b6e` `0xc28d0f40` — one advisor/news
+subclass each. `FUN_1001d401` is the type dispatcher (`if (param_1 == 0x13dee82)`).
+
+`0xc28d0b6e` appears in both this family *and* the literal table because it has **two** sections
+per file: `0x206c6e7c` instance 0 (SIMADV `0x100073b3`, a genuine literal write) and
+`0x013dee82` instance 11 (this family). That is why its count is 118, not 59.
+
+> ⚠️ **One known FALSE POSITIVE in the sweep output, left in deliberately.** SIMUI `0x1000690a`
+> is an if/else-if **class-id selector** (tag 1 → `0x022e288e`, 2 → `0x628d0c45`, 3 →
+> `0xc28d0b6e`), not a serialiser; it matches only because `0x022e288e` is itself a section type.
+> A guard requiring "calls a pinned stream slot" removes it — but it also removes SIMGEOM
+> `0x100116e9`/`0x1001176e`, which genuinely write `{0x206c6e7c, 0x01fd7a8c}` while reaching the
+> stream through unpinned slots `0x24`/`0x28`. **A silent false negative is worse than a
+> documented false positive**, because only the first one is invisible. So the hit stays in and
+> is named here instead. Hand-check new hits.
 
 One literal pair, `0xc3de4d66` (SCENARIO `0x10009c3d`), appears in **no** shipped file — a
 section written only for scenario state that none of the 13 shipped `.snr` files exercises.
