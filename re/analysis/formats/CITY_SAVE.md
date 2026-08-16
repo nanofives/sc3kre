@@ -168,6 +168,65 @@ in data and are resolved at runtime. Only instance 0 varies per city.
 
 `[UNCERTAIN]` the instance numbers skip 1, 5, 9, 13, 14 and 17. Not explained.
 
+### Instance 0 — the bulk zone data
+
+198,000 bytes in Berlin. **It is not a fixed-dimension grid.** Sizes vary per city *within* a
+size class (197,634 / 197,916 / 198,000 / 198,060 …), which rules out a plain `w*h` raster, and
+they fall into two clusters — ~111,8xx and ~197,9xx — consistent with two city map sizes.
+
+Content starts `00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 0f 0f 0f 00 0a 0a 0a …`: all 256
+byte values occur, but the distribution is heavily skewed (0x00 ×42,470 of 198,000; then 0x02,
+0x16, 0x03, 0x06, 0x09). Runs of a repeated small value are common.
+
+`[UNCERTAIN]` the encoding. The variable length plus long runs of one value is what a
+**run-length or per-tile variable-length record** stream looks like, but nothing is confirmed —
+`198000` is not a clean multiple of 65,536 (×3.021) and `sqrt(198000) = 445.0` is close to but
+not exactly 445² = 198,025, so neither a square grid nor a simple power-of-two raster fits.
+**Do not assume a raster.** The saver's stride-8 loop over `this+0x18c` (`0x100320e7:131-135`)
+is the next thing to read — an 8-byte record stride would be the natural explanation.
+
+## Second worked example: SC3WorldLayer — the city header `[CONFIRMED]`
+
+`SC3WorldLayer` (GZCLSID `0xe11bddf6`, **SIMMISC**) is registered at `0x1002a204` with factory
+`FUN_1002a606`. Its serialiser pair is `FUN_1002776c` (**SAVE**, 6 × `vt+0x88`, 0 reads) and
+`FUN_10027563` (**LOAD**, 4 × `vt+0x38`, 0 writes) — the mirror-pair test picks them out cleanly.
+
+**The section-key pattern generalises** `[CONFIRMED @0x1002776c]`:
+
+```c
+local_20 = 0x206c6e7c;      // the same generic section TYPE
+local_1c = 0xe11bddf6;      // group = SC3WorldLayer
+FUN_10027897(auStack_60, &local_20);   // open the section with that key
+```
+
+So a second, unrelated class in a different module uses the identical `{0x206c6e7c, classId}`
+convention. The saver then writes via sub-objects at `this+0x28`, `+0x58`, `+0x70`, `+0x88`,
+`+0x40`. `[UNCERTAIN]` the exact field list — Ghidra's decompilation of this function is
+**degraded** (call arguments dropped, visible as `uStack_58 = <return address>` assignments), so
+only the sub-object offsets are legible, not what each writes.
+
+### The section content
+
+**725 bytes, instance 0, exactly one per city, in all 59 files.**
+
+```
++0x00  u32  0x00020002        version/flags, identical in all 59
++0x04  u32  0xDEADBEEF        the marker again, per-section this time
++0x08  u32  varies per city   e.g. Berlin 514,166 · Europolis 1,422,548 · Farmsville 23,396
++0x0c  u32  varies per city   e.g. Berlin 425,561 · Europolis 1,231,165 · Farmsville 20,789
++0x10  u32  0x96 (150)        identical in all 59
++0x14  ...  zeros, then 0xfffff830-style negative-looking dwords
+```
+
+`[UNCERTAIN]` **the two varying u32s are probably population-like counters** — the magnitudes are
+city-sized, they differ per city, `+0x0c` is consistently ~83-89% of `+0x08`, and both track the
+size of that city's zone blob (Farmsville smallest on all three, Europolis largest). **This is
+NOT confirmed**: no code that produces or consumes them has been read, and the in-game values
+have not been checked. Treat as a lead, not a fact.
+
+Only 23 of the 59 files have distinct leading-40-byte patterns, so many terrains/starter towns
+share identical headers — consistent with unplayed maps.
+
 ## What is still open
 
 1. **Per-section record structure.** The archive is solved; what is inside each section is not.
