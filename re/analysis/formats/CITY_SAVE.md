@@ -212,12 +212,43 @@ Content starts `00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 0f 0f 0f 00 0a 0a 0
 byte values occur, but the distribution is heavily skewed (0x00 ×42,470 of 198,000; then 0x02,
 0x16, 0x03, 0x06, 0x09). Runs of a repeated small value are common.
 
-`[UNCERTAIN]` the encoding. The variable length plus long runs of one value is what a
-**run-length or per-tile variable-length record** stream looks like, but nothing is confirmed —
-`198000` is not a clean multiple of 65,536 (×3.021) and `sqrt(198000) = 445.0` is close to but
-not exactly 445² = 198,025, so neither a square grid nor a simple power-of-two raster fits.
-**Do not assume a raster.** The saver's stride-8 loop over `this+0x18c` (`0x100320e7:131-135`)
-is the next thing to read — an 8-byte record stride would be the natural explanation.
+`[UNCERTAIN]` the encoding. `198000` is not a clean multiple of 65,536 (×3.021) and
+`sqrt(198000) = 445.0` is close to but not exactly 445² = 198,025, so neither a square grid nor a
+simple power-of-two raster fits. **Do not assume a raster.**
+
+### The saver's grammar for instance 0 — derived, and it does NOT fit the data
+
+Reading `0x100320e7:25-104` gives the stream vtable and the write order
+`[CONFIRMED @0x100320e7]`:
+
+| stream slot | operation |
+|---|---|
+| `vt+0x88` | write u32 |
+| `vt+0x68` | write u8 |
+| `vt+0x84` | write raw block `(ptr, len)` |
+| `vt+0x38` | read u32 (the loader's counterpart) |
+
+```
+(*(this-0x14))->vt+0x28(stream)        // base class writes FIRST, length unknown
+u32 count1;  count1 x { u32 node+0x10, u32 node+0x14 }     // walks a list at *(this+0x2a4)
+vt+0x84(this+0xf4, 0x17);  vt+0x84(this+0x98, 0x17)        // two raw blocks
+u32 count2;  count2 x { u8 node+0x10, u8 node+0x14, u32 node+0x18 }   // list at *(this+0x160)
+u32 count3;  count3 x { u8, u8, u32 }                                 // list at *(this+0x16c)
+```
+
+**Tested against Berlin's 198,000-byte section and it does not fit.** Scanning *every* possible
+start offset (0 … N-60) and requiring the grammar to consume exactly to the end gives **zero**
+exact fits; allowing ±64 bytes of slack over prefixes 0-199 also gives none.
+
+So one of these is wrong, and this is the next thing to resolve:
+- `vt+0x84(ptr, 0x17)` — `0x17` may be an **element count**, not a byte length;
+- `vt+0x68` may not write exactly one byte;
+- the base-class `vt+0x28` write may not be a simple opaque prefix;
+- or the section's **end** is misplaced, since sizes are derived as offset deltas and the
+  `offset` base is itself `[UNCERTAIN]` (see above).
+
+Recording the failure explicitly so the next attempt starts from the grammar and the four
+suspects rather than re-deriving them.
 
 ## Second worked example: SC3WorldLayer — the city header `[CONFIRMED]`
 
@@ -301,7 +332,23 @@ in its home module** — register + save + load, the established shape. Home mod
 | `0x02619041` | SIMADV | `0x1000102b` | `FUN_100012ac` | `0x150` (336 B) |
 | `0x422e28e8` | SIMADV | `0x1000126e`'s registrar | `FUN_1000126e` | `0x1f0` (496 B) |
 
-**Their human names are NOT determined.** No name string in any module is tied to these ids.
+**Their human names are NOT determined** — and this was attempted properly, not skipped.
+
+What was tried for the two SIMRCI ids, and why each attempt failed to prove anything:
+
+| attempt | result |
+|---|---|
+| name strings in the module | SIMRCI has 5 `SC3*Layer` INI names; none is tied to these ids |
+| code locality | ctor `FUN_1000e772` (`0x20ec9849`) sits ~1.4 KB from the `SC3ComLayer.ini` loader `FUN_1000eccd`; ctor `FUN_100158d3` (`0xa106cf3d`) sits beside the `SC3IndLayer.ini` loader `FUN_10015dc0`. **Suggestive, not proof** |
+| do the ctors call the INI loaders? | **No.** Both ctors are 65/68 bytes: they call `FUN_10036ee3` and install a vtable. They never touch the loaders |
+| are the loaders in the ctors' vtables? | **No.** `VtableDump` on `PTR_FUN_1004c208` (210 slots) and `PTR_FUN_1004c4a4` (43 slots) does not contain `FUN_1000eccd` or `FUN_10015dc0` |
+
+So `0x20ec9849`→SC3ComLayer and `0xa106cf3d`→SC3IndLayer is an **attractive mapping with zero
+supporting evidence**, and the 32/36-byte allocations argue against it outright — far too small
+for a layer that owns a tuning INI. Not asserted. The INI loaders are almost certainly methods of
+the *layer* classes, and these small objects are something else that merely lives nearby.
+
+Still-viable route: find what calls each INI loader, and work back to the class that owns it.
 SIMSERV's only class-name string is `\Sys\SC3FireLayer.INI`; SIMRCI has `SC3ComLayer.ini`,
 `SC3IndLayer.ini`, `SC3ResLayer.ini`, `SC3ValveLayer.ini`, `\Sys\SC3ZoneLayer.INI`; SIMADV has
 none at all. Adjacency to a string is not evidence of identity, so nothing is assigned here —
