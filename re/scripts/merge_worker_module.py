@@ -150,9 +150,16 @@ def main(argv):
         print(__doc__)
         return 2
     path, module = argv[1], argv[2].upper().replace(".DLL", "")
-    # Pass 2 is a SUPPLEMENT to the pass-1 doc, not a replacement -- writing it to <MODULE>.md
-    # would destroy the module map. Give it its own file.
-    suffix = "_PASS2" if "--pass2" in argv else ""
+    # Follow-up passes are SUPPLEMENTS to the pass-1 doc, not replacements -- writing one to
+    # <MODULE>.md would destroy the module map. Each gets its own file.
+    #   --pass2            -> <MODULE>_PASS2.md
+    #   --suffix _CLUSTER1 -> <MODULE>_CLUSTER1.md
+    if "--suffix" in argv:
+        suffix = argv[argv.index("--suffix") + 1]
+        if not suffix.startswith("_"):
+            suffix = "_" + suffix
+    else:
+        suffix = "_PASS2" if "--pass2" in argv else ""
     raw = open(path, encoding="utf-8", errors="replace").read()
     md = extract_markdown(raw)
     if not md:
