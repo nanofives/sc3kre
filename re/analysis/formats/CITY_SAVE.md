@@ -818,6 +818,48 @@ The section's last bytes are a clean run of small `u32`s in every file (Berlin
 saver's six trailing `u32` writes `[CONFIRMED @0x100320e7:109-118]` — but the records that should
 precede them do not parse, so the six are not asserted as located.
 
+### ⭐ THE MAP DIMENSION IS IN THE FILE AFTER ALL `[CONFIRMED, 59/59]`
+
+Found 2026-08-16 while building `re/tools/city_sections.py`. This document concluded that the
+zone section "may simply not be parsable standalone" because its reader takes `rowCount` and
+`rowBytes` from the object, and then **falsified** `SC3WorldLayer` as the source of the
+dimensions. Both of those stand. The source is a **different section**:
+
+```
+{type 0x406b1196, group 0x80ab8ab0}   =   frame(8) + N*N bytes + 8-byte trailer
+                                          so  N = isqrt(size - 16)
+```
+
+That is the SIMGEOM tile grid (saver `0x1000beec`). **N is 128, 192 or 256 — the three map
+sizes — and it is readable directly from the section size in all 59 files.**
+
+**Two independent derivations agree in 59 of 59 files**, neither built from the other:
+
+| source | relation |
+|---|---|
+| the tile-grid section | `size - 16 == N*N` |
+| the zone blob | `size == 3*N*N + tail`, `tail == 900 + 6k` |
+
+So the grid section supplies the dimension the zone section lacks, *and* corroborates the
+`3 planes of N*N` reading of the zone blob that was previously only size arithmetic.
+
+**A stride test confirms both are real rasters, independently of the arithmetic.** Vertical
+coherence (fraction of vertically adjacent bytes that are equal) peaks exactly at `N`:
+
+| file | section | N-2 | N-1 | **N** | N+1 | N+2 |
+|---|---|---|---|---|---|---|
+| Berlin (N=256) | zone plane 0 | .593 | .673 | **.796** | .673 | .596 |
+| Berlin (N=256) | tile grid | .829 | .839 | **.859** | .843 | .832 |
+| Farmsville (N=192) | zone plane 0 | .944 | .955 | **.973** | .955 | .944 |
+| Farmsville (N=192) | tile grid | .817 | .823 | **.837** | .816 | .815 |
+
+Read at a wrong stride a raster shears and coherence drops; it peaks at the claimed `N` in
+every case. `[CONFIRMED]` the first `N*N` bytes of the zone blob are a **1-byte-per-tile
+raster** and the grid section is an `N*N` byte raster.
+
+`[UNCERTAIN]` what either raster's byte values mean. Berlin's zone plane has 14 distinct values
+and its tile grid 18; no consuming code has been read for either.
+
 ### Where that leaves it
 
 The archive question is **answered**: sections are framed, the frame is `{u16 version, u8 flags,
