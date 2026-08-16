@@ -1424,6 +1424,76 @@ found both instantly, exactly as §7a predicted.
 
 ---
 
+## 10k. ROOT CAUSE, FINAL — windowed mode needs a 16bpp display mode `[CONFIRMED 2026-08-15]`
+
+### The measurement that cracked it
+
+Same engine surface (`FUN_10019273`, matching the requested mode), sampled from the watcher
+thread in both modes:
+
+| | Fullscreen (renders) | Windowed (black) |
+|---|---|---|
+| engine frame buffer | 800x600 **16bpp** — **7500/7500 LIT** | 800x600 **32bpp** — **0/7500 LIT** |
+
+Fully drawn in one mode, completely empty in the other, and the only difference is depth.
+
+### Why the depth differs
+
+`FUN_10019273` writes an explicit `DDPIXELFORMAT` **only for 32bpp and 8bpp** (§10h). At 16bpp
+it writes none, so the surface **inherits the current display mode**:
+
+- **Fullscreen** changes the display mode to 16bpp → surfaces are created 16bpp.
+- **Windowed** never changes the display mode → on a 32bpp desktop, surfaces are 32bpp.
+
+And `GZGraphicD`'s software blitter is **16bpp-first**: `FUN_1000ce4c` / `FUN_1000cf31` /
+`FUN_1000d054` gate on `this+0x10 != 0x10`, and `FUN_10014c05` provides 8→16 and 32→16
+converters but no 32bpp draw path. On a 32bpp surface the drawing simply does not happen.
+
+So the `-bpp 32` workaround from §10c — which windowed *required* to survive Init — was itself
+silently disabling all rendering. Two patches that each looked necessary were mutually exclusive.
+
+### The confirming experiment
+
+Neutralised the Init re-force (`0x100117d6  C6 43 48 01  mov byte [ebx+0x48],1` → 4×`nop`) so
+16bpp could stay, then patched `FUN_10019273` to request an explicit 16bpp 5-6-5 format instead
+of inheriting:
+
+```
+100192fb  74 4C  je 0x10019349        ->  74 1F  je 0x1001931c   (into the explicit branch)
+1001931c  83 4E 58 41                 ->  83 4E 58 40            (DDPF_RGB, no alpha)
+1001932a  31 bytes of 32bpp constants ->  RGBBitCount=0x10 + 5-6-5 masks + nops
+```
+
+**Result: the game aborts ~2.4 s in**, with no crash dump — i.e. the graceful
+`cGZFrameWorkW95::AbortiveQuit(): Calling _exit()` path (string @ `0x100240bc`), not a fault.
+DirectDraw will not give a 16bpp surface on a 32bpp display, so surface creation fails and the
+engine gives up.
+
+### Final verdict
+
+```
+windowed  =>  no display-mode change
+          =>  desktop stays 32bpp
+          =>  engine surfaces are 32bpp (they inherit the mode)
+          =>  the 16bpp-only software blitter draws nothing
+and forcing 16bpp surfaces directly  =>  DirectDraw refuses  =>  the game aborts
+```
+
+**Windowed mode is not achievable by patching on a 32bpp desktop.** It is not an unfinished
+branch so much as an *obsolete* one: in 2000, 16bpp desktops were common, and on a 16bpp
+desktop this path would have worked, because the inherited surface format would have matched.
+The dependency is on an environment that no longer exists.
+
+Making it work today requires a pixel-format conversion layer — render 16bpp offscreen, convert
+to 32bpp, present — which is precisely what a DirectDraw wrapper (DDrawCompat, dgVoodoo2)
+already implements. **That is the recommended route**, with the same fidelity caveat as U-020.
+
+What is genuinely reusable from this line of work: the present pipeline (§10j) is proven — a
+test surface reached the window at the correct position and size — so if the format problem is
+solved by a wrapper, nothing else here is missing.
+
+---
+
 ## 11. Gaps in the export tooling this work exposed
 
 `ExportAllDecomp.java` emits function bodies and symbol/string/global CSVs, but **not**:

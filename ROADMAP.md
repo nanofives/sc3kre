@@ -31,6 +31,65 @@ Scaffold, SHA-256 anchor, own Ghidra 12.1.2 install, headless no-MCP driver + qu
 helpers, first auto-analysis (9,730 functions), `functions.csv` seeded (4,932 C0 backlog).
 **Exit:** ✅ `re/ghidra_export/` greppable; tracker seeded; docs in place.
 
+### P1 — EXIT-GATE ASSESSMENT (2026-08-15) — ❌ **GATE NOT MET. DO NOT ADVANCE.**
+
+The stated exit is *"100% of `FUN_*` at ≥ C1"*. Measured honestly, that is **not close**, and
+the headline tracker numbers have been flattering because **the denominator is wrong**.
+
+| measure | value |
+|---|---|
+| rows in `functions.csv` | 10,315 |
+| of which real backlog (not `lib`/`thunk`) | 5,517 |
+| classified ≥ C1 **within the tracker** | 674 = **12.2%** |
+| exported bodies across the 31 target binaries | 56,754 |
+| — of which `Unwind_*` stubs / `Catch_*` / thunks / library-named | 24,791 (**not functions**) |
+| **real `FUN_*` backlog across all 31 binaries** | **31,963** |
+| classified ≥ C1 **against the real surface** | 674 = **2.1%** |
+
+> The 56,754 figure is the raw export count and is **misleading** — 22,495 of those files are
+> `Unwind_*` exception fragments, plus 1,118 `Catch_*`, 516 thunks and 662 library-named. The
+> honest backlog denominator is **31,963 `FUN_*`**. (SC3U alone contributes 4,929 of them, which
+> matches the long-standing 4,932 figure.)
+
+**The core problem: `functions.csv` fully enumerates only `SC3U.exe` (9,730 rows).** For the
+other 30 binaries it holds just the rows we hand-added while analysing them — SIMUI has 109 rows
+against **3,109** `FUN_*`, SIMRCI 21 against **1,530**, SIMBABLD 12 against **1,871**, and
+SIMINIT / GZWinD / AUDIO have **zero** rows against 1,150 / 1,171 / ~900.
+
+So "C1 tier cleared, C2 657" is true but measures a set covering ~18% of the binaries. Against
+the actual surface it is **2.1%** classified. **This must be corrected before P1 can be judged**,
+otherwise the gate is measuring the wrong thing. First action of the next phase of work:
+enumerate all 31,963 FUN_ into the tracker so progress has an honest denominator.
+
+**What P1 *did* achieve** (substantial, and none of it is invalidated):
+- 🔴 The structural discovery that reframed the project: the sim is **not** in `SC3U.exe`, it is
+  29 GZCOM director DLLs. All 31 binaries imported, analysed and exported.
+- The GZCOM module recipe, and 20+ classes pinned to real GZCLSIDs.
+- Sim models reversed: power grid, RCI/zoning valves, traffic, budget/ordinances, buildings.
+- 18 modules with analysis docs; **every function anyone has read is ≥ C2** (C1 tier empty).
+
+**Scope change to acknowledge:** the gate was written when the target was one 9,730-function
+exe. The real target turned out to be 31,963 FUN_ across 31 binaries — ~6.5x larger. The
+gate text below is preserved, but "100% at >=C1" over 31,963 functions is not a realistic gate for
+a hand-analysis project. **Recommend re-scoping it** to: *100% enumerated in the tracker, plus
+≥C1 for every function in the core-sim modules* (SIMRCI, SIMMISC, SIMUTIL, SimTransit, SIMECO,
+SIMGEOM, SIMSERV, SIMDSTR), leaving UI/audio/tooling modules at "enumerated, unclassified".
+
+**P2 overtook P1.** Formats were supposed to be the *next* phase, but the highest-value work kept
+being format work, and P2's exit ("parsers validate real game files") is now effectively met:
+`SYS.PAK`, `.IXF` (C4 round-trip), QFS/RefPack (63,691/63,691), the sprite pixel + anchor formats
+(62,552/62,552 **byte-identical re-encode**), FEZC/GVF. **The city save format is the notable
+gap** — and it is the single biggest remaining modding unlock.
+
+**End-state decision (port vs toolkit) — evidence, not a verdict.** This is the owner's call.
+What the mapped surface now says:
+- *Against a source port:* 31,963 functions across 31 interdependent GZCOM binaries, with the sim
+  spread over ~10 of them. That is an order of magnitude beyond a one-person reimplementation.
+- *For a toolkit:* the format layer is already **C4-verified with working parsers**, the data is
+  overwhelmingly data-driven (`SYS.PAK`/`CitySim.ini` drives the entire building taxonomy —
+  U-006 proved there are no per-building classes in code), and 63,691 sprites already decode and
+  re-encode byte-identically. A modding/asset toolkit is reachable *now*; a port is not.
+
 ### P1 — Surface map  ◀ ACTIVE (taxonomy built 2026-08-14 → `re/analysis/SUBSYSTEMS.md`)
 **Done:** 18-subsystem taxonomy (S1–S18) from the iOS named classes + SC3U string anchors +
 25-largest-`FUN_*` priority list + classification methodology. Power subsystem cross-RE
