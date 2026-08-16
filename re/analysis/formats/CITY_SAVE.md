@@ -227,6 +227,39 @@ have not been checked. Treat as a lead, not a fact.
 Only 23 of the 59 files have distinct leading-40-byte patterns, so many terrains/starter towns
 share identical headers — consistent with unplayed maps.
 
+## The layer roster: save sections ↔ city-sim fields `[CONFIRMED]`
+
+`SIMCITY.DLL FUN_10005e3e` is the city simulator's **layer-acquisition function**. It makes 33
+calls of the form `FUN_10006655(CLSID, &tmp, IID, &citySim->field)`, wiring every layer/service
+into a fixed offset on the city-sim object `[CONFIRMED @0x10005e3e]`. (Arg 1 is the CLSID — it
+matches the pinned class ids — and arg 3 is the sibling IID, e.g. `SC3WorldLayer` `0xe11bddf6`
+with IID `0x811bdde9`, sharing the `1BDD` middle.)
+
+**10 of those 33 CLSIDs appear as `group` in the save-file section table**, which maps saved data
+straight onto the running sim's fields:
+
+| CLSID | IID | city-sim field | sections | class |
+|---|---|---|---|---|
+| `0x409ff3ba` | `0x80902c70` | `+0xb4` | 767 | **SC3ZoneLayer** |
+| `0xe11bddf6` | `0x811bdde9` | `+0xc8` | 59 | **SC3WorldLayer** |
+| `0xc0a81498` | `0x80a814ac` | `+0xd4` | 59 | SIMECO pollution layer (factory `0x1000e5c8`) |
+| `0x20a7ae7f` | `0x80a24318` | `+0xd8` | 59 | |
+| `0x00abf2ec` | `0x00abf2d9` | `+0xdc` | 59 | |
+| `0xa0f42214` | `0xa0f42240` | `+0xe0` | 59 | |
+| `0x20ec9849` | `0x80ec9834` | `+0xe8` | 59 | |
+| `0xa106cf3d` | `0xa106cf30` | `+0xec` | 59 | |
+| `0x02619041` | `0x82619039` | `+0x120` | 59 | |
+| `0x422e28e8` | `0x022e288e` | `+0x104` | 49 | |
+
+The other 23 roster entries are layers/services that are **not persisted** (or are persisted
+under a different id). Note `TrafficLayer` `0x029ca806` is in the roster at `+0xac` but the save
+uses `0x029ca804` — which is why the near-miss was not treated as a match earlier; they are
+distinct ids in the same family.
+
+**This is the practical key to the format:** for any of the 10, the decode route is
+CLSID → its module's serialiser (find via the `vt+0x38`/`vt+0x88` mirror-pair test) → its field
+write order → that section's layout.
+
 ## What is still open
 
 1. **Per-section record structure.** The archive is solved; what is inside each section is not.
