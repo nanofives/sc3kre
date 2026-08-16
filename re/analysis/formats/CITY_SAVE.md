@@ -76,35 +76,63 @@ What pins the layout: the QFS stream's 3-byte big-endian declared size **equals 
 
 Example — `Berlin, Germany.sc3`: record 743,406 bytes → 743,382 compressed → **2,153,415** out.
 
-## Inside the decompressed body
+## The decompressed body is a SECTION ARCHIVE `[CONFIRMED, 59/59]`
 
 ```
-+0x00  u32   e.g. 0x3d
-+0x04  u32   e.g. 0x20d7f7      slightly less than the total — a section length?
-+0x08  u32   e.g. 0x00020003
-+0x0c  u32   0xDEADBEEF          [CONFIRMED] present in ALL 59 files
-+0x10  u32   e.g. 0x40510625
-+0x14  ...   byte data in the 0x16..0x20 range
++0x00  u32   sectionCount
++0x04  u32   sectionTableOffset      == len(body) - sectionCount*16   (all 59 files)
++0x08  u32   0x00020003 (.sc3/.snr)  |  0x00030003 (.sct/.st3)
++0x0c  u32   0xDEADBEEF               literal marker, all 59
++0x10  u32   0x40510625 (.sc3/.snr)  |  0x0000000d (.sct/.st3)
++0x14  ...   section payloads, laid out contiguously
+@table       sectionCount x 16-byte entries:
+               +0  u32 type
+               +4  u32 group      <- a GZCOM CLASS id
+               +8  u32 instance   (small ints, 0..18)
+               +12 u32 offset
 ```
 
-`[UNCERTAIN]` the byte run at `+0x14` is *consistent with* a terrain height map (values 22–32,
-smoothly varying), but **no code that consumes it has been read**, so that is not asserted. Note
-the `.sct` terrain files all decompress to ~1,521,4xx bytes — near-identical sizes across
-different terrains, which is what a fixed-dimension grid would do.
+`sectionCount*16 + sectionTableOffset == len(body)` holds in **all 59 files**;
+**3,451 sections** total. Offsets are unique, strictly increasing when sorted, always below the
+table, and the sections **tile contiguously** — e.g. Berlin section 0 is at offset 8 with the
+next at 140,311, and `8 + 140,303 = 140,311` exactly. There is **no size field**: a section's
+size is the delta to the next offset.
+
+**The `group` column is a GZCOM class id**, which makes this the city's *saved-layer directory*.
+Exact matches against the independently pinned GZCLSIDs:
+
+| group | class | occurrences |
+|---|---|---|
+| `0x409ff3ba` | **SC3ZoneLayer** | 767 (13 per city) |
+| `0xe11bddf6` | **SC3WorldLayer** | 59 (exactly one per file) |
+
+Several other ids occur exactly 59 times — once per file — so they are per-city singletons:
+types `0x406b1196`, `0xc2910e7d`, `0x20631788`, `0xe0faadc7`, `0xe11bcc69`.
+
+`[UNCERTAIN]` group `0x029ca804` occurs once per file and sits **2 below** the pinned
+`TrafficLayer` id `0x029ca806`. It is *not* treated as a match — a near-miss id is a different
+class, not a typo.
+
+`[UNCERTAIN]` what the `offset` field is relative to. The smallest observed is 8, which falls
+inside the 0x14 header if the base is 0, so it may be relative to `+0x14` or the first entry may
+be a sentinel. Unresolved, and it does not affect section sizing (derived from deltas).
+
+**Grid-size lead:** Berlin's section `406b1196:80ab8ab0:0` is **65,552 bytes = 65,536 + 16**,
+i.e. a **256 x 256 byte grid** plus a 16-byte header. `[UNCERTAIN]` — one section, not yet
+generalised across files, and no consuming code read.
 
 ## What is still open
 
-1. **The decompressed body layout.** The container and compression are solved; the record
-   structure inside is not.
-2. Map the other `type`/`group` ids (the 24–94 byte records) to meaning. They repeat across
-   files, so a cross-file diff against known city properties should name several cheaply.
-3. **The decoding route is already identified:** GZCOM serialisers are **mirror pairs** — a
-   reader calling stream `vt+0x38` on field *addresses* and a writer calling `vt+0x88` on field
-   *values*, over the same offsets in the same order (first proven on the SIMGEOM pair
-   `0x1001e516` / `0x1001e226`). **A serialiser's field order IS the on-disk layout.**
-   Note the type id `0x035f62a4` appears in exactly one place in any binary —
-   `GZResourceD.dll FUN_1000f5c4` — so the *sim-side* serialisers are keyed by something else and
-   must be found via the `vt+0x38`/`vt+0x88` pairing test, not by grepping the id.
+1. **Per-section record structure.** The archive is solved; what is inside each section is not.
+2. Name the remaining `type`/`group` ids. Two are already pinned from the class list, and the
+   once-per-file ids are the obvious next targets.
+3. **The decoding route:** GZCOM serialisers are **mirror pairs** — a reader calling stream
+   `vt+0x38` on field *addresses* and a writer calling `vt+0x88` on field *values*, same offsets,
+   same order (first proven on the SIMGEOM pair `0x1001e516` / `0x1001e226`). **A serialiser's
+   field order IS the on-disk layout.** Now that section groups are known to be **class ids**,
+   the mapping is direct: find the class's serialiser, read its field order, decode its section.
+   Note `0x035f62a4` itself appears in exactly one place in any binary
+   (`GZResourceD.dll FUN_1000f5c4`), so go via the class ids, not that id.
 
 ## Tooling
 

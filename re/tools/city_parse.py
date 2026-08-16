@@ -20,19 +20,38 @@ PAYLOAD RECORD LAYOUT [CONFIRMED against all 59 shipped city-family files]
 The QFS stream's 3-byte big-endian declared size agrees with the u32 at +0x10 in all 59 files,
 which is what pins the header layout.
 
-DECOMPRESSED BODY (first bytes; layout NOT yet fully decoded)
-    +0x00  u32   e.g. 0x3d
-    +0x04  u32   e.g. 0x20d7f7      (slightly less than the total -- a section length?)
-    +0x08  u32   e.g. 0x00020003
-    +0x0c  u32   0xDEADBEEF          [CONFIRMED] a literal marker in every file
-    +0x10  u32   e.g. 0x40510625
-    +0x14  ...   byte data in the 0x16..0x20 range -- consistent with a terrain height map,
-                 but [UNCERTAIN]: no code has been read that consumes this yet.
+DECOMPRESSED BODY [CONFIRMED against all 59 shipped files]
+
+    +0x00  u32   sectionCount
+    +0x04  u32   sectionTableOffset      == len(body) - sectionCount*16, in all 59 files
+    +0x08  u32   0x00020003 (.sc3/.snr) or 0x00030003 (.sct/.st3)
+    +0x0c  u32   0xDEADBEEF              a literal marker, present in all 59
+    +0x10  u32   0x40510625 (.sc3/.snr) or 0x0000000d (.sct/.st3)
+    +0x14  ...   section payloads
+    @tableOffset  sectionCount x 16-byte SECTION ENTRIES:
+                    +0  u32 type
+                    +4  u32 group      <- a GZCOM CLASS id: SC3ZoneLayer 0x409ff3ba and
+                                          SC3WorldLayer 0xe11bddf6 appear here EXACTLY
+                    +8  u32 instance   (small ints, 0..18)
+                    +12 u32 offset     (strictly increasing when sorted; all < tableOffset)
+
+    So the table is the city's SAVED-LAYER DIRECTORY: a GZCOM {type, group, instance} key
+    per section plus its offset. 3,451 sections across the 59 files.
+
+    [UNCERTAIN] the base the `offset` field is relative to. Sorted offsets are strictly
+    increasing and always below tableOffset, but the smallest observed is 8, which is inside
+    the 0x14 header if the base is 0 -- so it may be relative to +0x14, or the first entry may
+    be a sentinel. Not resolved; section SIZES are therefore derived as the delta to the next
+    sorted offset rather than read from the table (there is no size field).
+
+    [UNCERTAIN] group `0x029ca804` occurs once per file and sits 2 below the pinned
+    TrafficLayer id `0x029ca806`. Near-miss ids are NOT treated as matches here.
 
 Usage:
-  py -3.12 re/tools/city_parse.py <file.sc3>                 # index + payload summary
-  py -3.12 re/tools/city_parse.py <dir>                      # walk a tree, validate all
-  py -3.12 re/tools/city_parse.py <file.sc3> --extract out\  # write decompressed payloads
+  py -3.12 re/tools/city_parse.py <file.sc3>                  # index + payload summary
+  py -3.12 re/tools/city_parse.py <file.sc3> --sections       # + the full section table
+  py -3.12 re/tools/city_parse.py <dir>                       # walk a tree, validate all
+  py -3.12 re/tools/city_parse.py <file.sc3> --extract out/   # write decompressed payloads
 """
 import os
 import struct
@@ -72,6 +91,37 @@ def parse_payload(body):
             "clen2": clen2, "consumed": consumed,
             "deadbeef": len(out) >= 16 and struct.unpack_from("<I", out, 12)[0] == DEADBEEF}
     return out, info
+
+
+# GZCOM class ids pinned elsewhere in the project (re/analysis/MODULE_MAP.md, HANDOFF.md).
+# Only EXACT matches are labelled -- a near-miss id is a different class, not a typo.
+KNOWN_CLASS = {
+    0x20AFDF44: "SC3PowerLayer", 0x82BF0042: "SC3WaterLayer", 0x60A42F32: "SC3ValveLayer",
+    0x409FF3BA: "SC3ZoneLayer", 0x029CA806: "TrafficLayer", 0xE150E7BB: "SC3BuildingLayer",
+    0xC11BCC75: "SC3BudgetLayer", 0xE11BDDF6: "SC3WorldLayer", 0xA411112F: "SpriteManager",
+}
+
+
+def parse_sections(body):
+    """-> (info, [entries]). Each entry: {type, group, instance, offset, size, cls}."""
+    count, table = struct.unpack_from("<2I", body, 0)
+    flavour, beef, tag = struct.unpack_from("<3I", body, 8)
+    if table + count * 16 != len(body):
+        raise CityError("count*16 + tableOffset (%d) != body length (%d)"
+                        % (table + count * 16, len(body)))
+    ents = []
+    for i in range(count):
+        t, g, inst, off = struct.unpack_from("<4I", body, table + i * 16)
+        ents.append({"type": t, "group": g, "instance": inst, "offset": off,
+                     "cls": KNOWN_CLASS.get(g)})
+    # No size field exists; derive it from the next section in offset order.
+    order = sorted(ents, key=lambda e: e["offset"])
+    for a, b in zip(order, order[1:]):
+        a["size"] = b["offset"] - a["offset"]
+    if order:
+        order[-1]["size"] = table - order[-1]["offset"]
+    return {"count": count, "table": table, "flavour": flavour,
+            "deadbeef": beef == DEADBEEF, "tag": tag}, ents
 
 
 def walk(target):
@@ -125,6 +175,21 @@ def main(argv):
             print("    rec %-3d type 0x%08x  v%s  %s -> %s bytes  DEADBEEF=%s"
                   % (idx, r["type"], info["version"], "{:,}".format(info["clen"]),
                      "{:,}".format(len(out)), info["deadbeef"]))
+            try:
+                sinfo, ents = parse_sections(out)
+                named = [e for e in ents if e["cls"]]
+                print("      %d sections, flavour 0x%05x%s"
+                      % (sinfo["count"], sinfo["flavour"],
+                         "" if not named else "; named classes: "
+                         + ", ".join(sorted({"%s x%d" % (c, sum(1 for e in named if e["cls"] == c))
+                                             for c in {e["cls"] for e in named}}))))
+                if "--sections" in argv:
+                    for e in sorted(ents, key=lambda x: x["offset"]):
+                        print("        %08x:%08x:%-3d  off %-9d size %-9d %s"
+                              % (e["type"], e["group"], e["instance"], e["offset"],
+                                 e.get("size", 0), e["cls"] or ""))
+            except (CityError, struct.error) as e:
+                print("      section table: %s" % e)
             if extract:
                 name = "%s_%d_%08x.bin" % (os.path.splitext(os.path.basename(path))[0],
                                            idx, r["type"])
