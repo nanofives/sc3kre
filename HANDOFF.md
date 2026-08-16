@@ -12,7 +12,7 @@ not from any prior transcript.
 - **Tracker `functions.csv`** now has a **`module` column** (first field).
   ⚠️ **THE DENOMINATOR WAS WRONG UNTIL 2026-08-16.** The tracker enumerated only `SC3U.exe`, so
   every percentage measured ~18% of the binaries. `re/scripts/enumerate_functions.py` fixed it.
-  **Real backlog: 31,983 `FUN_*` across all 31 binaries. Classified: 1,016 = 3.2%.**
+  **Real backlog: 31,990 `FUN_*` across all 31 binaries. Classified: 1,032 = 3.2%.**
   (C1 tier is EMPTY — everything anyone has read is ≥ C2.)
   Note the raw export count of 56,754 is **misleading**: 22,495 of those files are `Unwind_*`
   exception fragments, plus 1,118 `Catch_*`, 516 thunks, 662 library-named. Do not quote it.
