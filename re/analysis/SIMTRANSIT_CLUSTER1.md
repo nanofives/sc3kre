@@ -64,4 +64,3 @@ rva,subsystem,confidence,new_name,evidence
 - Confidence for all 25 is **C2** (body read, callees identified, named); none is claimed C3/C4 — no runtime or second witness was used, per the rules.
 
 All 25 slice functions were read and classified; none was left unread.
-(raw JSON: C:\Users\maria\AppData\Local\Temp\fleet-delegate-5d1e404e4fa0423798b02e92846551a3.json)

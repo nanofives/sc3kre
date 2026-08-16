@@ -135,4 +135,3 @@ The remaining three characters — **Mortimer (`DAT_100388d8`), Constance (`DAT_
 ```
 
 RESOLVED and removed from OPEN: the six-ctors item, and the AdvisorMoods/TopicGfxIDs-loader item (loaders are `FUN_100018f9` and `FUN_10002138`).
-(raw JSON: C:\Users\maria\AppData\Local\Temp\fleet-delegate-67ccf5102bb44dabaf7422577eda6899.json)

@@ -157,4 +157,3 @@ NEW, opened by this pass:
 ```
 
 **Notes for the merge step:** every promoted row is C2 (behaviour read + callees + name); none is C3/C4 (no runtime/second witness produced here). `sc3_debug_window_create 0x0045f994`, `sc3_net_create_socket_window 0x0049c1ec`, and `sc3_ui_init_html_window 0x004a3f0c` are static confirmations of facts LAUNCH_CONTROL/RESOURCE_KEYS already asserted, so they may already sit in `functions.csv` — reconcile rather than duplicate.
-(raw JSON: C:\Users\maria\AppData\Local\Temp\fleet-delegate-fdad397ac5ec4211b0c181aeb6b9c709.json)

@@ -110,4 +110,3 @@ Calls `timeGetTime()`, stores it at `param_1[0x1f6]`, computes `dt = now - param
 - No genuine per-*simulation* tick (city sim) exists here — as expected, SIMBABLD is an editor/authoring module; `1202f346` is a UI/animation tick, not a `goCitySimulator` step. No `[iOS-HINT]` cross-refs were needed or asserted (this authoring UI has no clean iOS twin).
 
 All 25 functions were read in full and are rated **C2** (body read, callees identified, struct offsets/constants cited, named). None are claimed C3/C4.
-(raw JSON: C:\Users\maria\AppData\Local\Temp\fleet-delegate-3a4e34afde1a479d9d9205437ce7d8f0.json)

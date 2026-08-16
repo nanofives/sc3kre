@@ -47,6 +47,23 @@ def extract_markdown(raw):
     return None
 
 
+# The delegation helper appends a footer naming the raw-output file under the caller's
+# %TEMP%, i.e. an absolute path containing the local Windows USERNAME. This repo is public
+# (github.com/nanofives/sc3kre), and 17 already-committed analysis docs carried that line
+# before it was noticed on 2026-08-16. Strip it here so it can never land again.
+FOOTER = re.compile(r"(?m)^\(raw JSON: .*\)\r?\n?")
+
+
+def scrub(md):
+    md = FOOTER.sub("", md)
+    leaks = re.findall(r"[A-Za-z]:\\Users\\[^\s`)\"']+", md)
+    if leaks:
+        print("  ! refusing to write: %d absolute user path(s) remain, e.g. %s"
+              % (len(leaks), leaks[0]))
+        return None
+    return md
+
+
 def extract_rows(md, module):
     """Pull rva,subsystem,confidence,new_name,evidence rows out of the markdown."""
     rows = []
@@ -164,6 +181,9 @@ def main(argv):
     md = extract_markdown(raw)
     if not md:
         print("no fenced markdown block found in %s" % path)
+        return 1
+    md = scrub(md)
+    if md is None:
         return 1
     out = os.path.join(ROOT, "re", "analysis", "%s%s.md" % (module, suffix))
     with open(out, "w", encoding="utf-8") as fh:

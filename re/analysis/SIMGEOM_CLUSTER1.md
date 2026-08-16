@@ -65,4 +65,3 @@ rva,subsystem,confidence,new_name,evidence
 - **iOS cross-check**: not used. Per `SIMGEOM_PROPERTIES.md`, the named iOS `Occupant` symbols are the population/disaster occupant, not the building-model occupant; struct offsets do not transfer (proven 0/5 for goPowerPlant). No `[iOS-HINT]` applied.
 
 All 25 functions in the slice were read and are named/classified C2 (body read, callees identified, mechanically described). None reach C3/C4 — that needs runtime or a second witness not producible read-only.
-(raw JSON: C:\Users\maria\AppData\Local\Temp\fleet-delegate-1f09897135774c23859672976306dd3f.json)

@@ -101,4 +101,3 @@ Verdict: the statistics/graph provider is reached through **CLSID `0xe41d8fee` /
 ```
 
 Note on iOS oracle: I did not lean on `ghidra_export_ios` for these — every claim above is SC3U/SIMUI-side decompilation, so no `[iOS-HINT]` tags were needed. The struct offsets here (e.g. `[0x73]=3000`, tag at `+0xb0`) are SIMUI-native and would not transfer to the ARM build per the established offset-divergence rule.
-(raw JSON: C:\Users\maria\AppData\Local\Temp\fleet-delegate-2c54adba68244abcbd96d5157a8685df.json)

@@ -77,4 +77,3 @@ The single most valuable find. It walks the layer's building lists (`param_1[0x1
 - **`FUN_10009eed` / `FUN_10004c2a` subsystem edge.** Named education (School/College config) with confidence from the section strings and `EQEffect`/`AgeServed` keys, but whether these objects live in SIMRCI's own layer set or are proxies for an education module is not determinable from these bodies. Mechanically they are self-contained config ctors, so the C2 rating holds regardless.
 
 - **`[iOS-HINT]` not asserted.** The R/C/I evaluator + `EndOfMonth`-style `FUN_10024347` shapes are consistent with iOS `goZoneDeveloper`/`goCitySimulator`, but per project rules struct offsets do not transfer and I did not cross-read the iOS export for this slice, so no iOS claim is made.
-(raw JSON: C:\Users\maria\AppData\Local\Temp\fleet-delegate-1e0a3f0f6fa04aeab2b1b9c4eb44774d.json)

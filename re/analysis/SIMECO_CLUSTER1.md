@@ -65,4 +65,3 @@ rva,subsystem,confidence,new_name,evidence
 - **`0x1000f4d4` exact format-string contents** (`s___s__10020534`, `s__s____s_10020528`, `s___s__1002051c`) — the literal `[%s]` / `%s = %s` text is a string-table RVA not expanded in the C export; the mechanical read (section-write with `[`/`;` handling) is confirmed but the precise delimiter/format bytes are not.
 
 Everything in the slice was classified; nothing was left unread.
-(raw JSON: C:\Users\maria\AppData\Local\Temp\fleet-delegate-a79a9ca643924b04ab113e09a42d3561.json)

@@ -235,4 +235,3 @@ rva,subsystem,confidence,new_name,evidence
 
 Note: I could not verify anything at C3+ (needs runtime or a second witness). All rows above are
 static-decompilation reads only.
-(raw JSON: C:\Users\maria\AppData\Local\Temp\fleet-delegate-5a285fa9ec4f44f6b37b77ca134eb3b8.json)

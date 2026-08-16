@@ -262,4 +262,3 @@ rva,subsystem,confidence,new_name,evidence
 Note: `re/ghidra_export_simeco/` contains only the `functions/` tree in this export (no
 `symbols.csv` / `globals.csv` / `EXPORT_INFO.txt`), which is why the float constant values in §4
 and §7 could not be resolved read-only.
-(raw JSON: produced by a delegated read-only analysis run; artifact not included in this repo)

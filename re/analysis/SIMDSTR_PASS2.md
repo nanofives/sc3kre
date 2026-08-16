@@ -122,4 +122,3 @@ In-code clamps/defaults are all that is visible (ToxicCloud min-clouds≥1, `Min
 ```
 
 **One tool run — `VtableDump.java` over the twelve class vtables (or `pe_read.py` scanning `.rdata`/`.data` for the 8 loader addresses) — closes 2a (the last 4 classes), 2b (loader invokers), and 2d (message dispatch) together.**
-(raw JSON: C:\Users\maria\AppData\Local\Temp\fleet-delegate-31f8492a22af4691b46b968ce6ad0353.json)

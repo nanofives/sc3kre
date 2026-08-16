@@ -56,4 +56,3 @@ rva,subsystem,confidence,new_name,evidence
 - **Text-group ids not resolvable to strings here.** `0x82e0074c` and `0x29541f4` are localized-string group GUIDs passed to `FUN_100176bb(buf, id, group)`; the string bodies live in the game data (candidate `re/data/ixf_text.csv`), not in SIMSERV. String *ids* (0x1b–0xa6, 0xc4–0xc7, 0x30–0x32) are confirmed; their text is not in this binary.
 
 - **`0x10008d2f` is library code** (STL red-black-tree erase), not game logic — described mechanically and named, but it should be treated as `lib`, not part of the RE backlog signal.
-(raw JSON: C:\Users\maria\AppData\Local\Temp\fleet-delegate-9d681fe2aa304a8993ad93ccce57757b.json)

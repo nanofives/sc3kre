@@ -61,4 +61,3 @@ rva,subsystem,confidence,new_name,evidence
 - No numeric values were recoverable for the `_DAT_*` float literals (`_DAT_1003ec18/ec08/ec00/ebf8/ddf4/ddf0/c468/c648`) — they are `.rdata` constants absent from the text export (consistent with the module map's existing open item on `_DAT_1003c644`).
 
 All 25 functions in the slice were read and are classified **C2** (body read, mechanically described, callees identified, named). None left at C0/C1.
-(raw JSON: C:\Users\maria\AppData\Local\Temp\fleet-delegate-de162b0ef115442b9fce4a36d9fabeba.json)

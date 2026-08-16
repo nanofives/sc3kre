@@ -72,4 +72,3 @@ rva,subsystem,confidence,new_name,evidence
 - **iOS cross-check not performed on this slice.** Several patterns (variant dispatch, chunk loader) plausibly map to `cIGZVariant`/`cGZPersistDBRecord`-style code in the unstripped iOS binary, but per project rules struct offsets do not transfer and I did not open `ghidra_export_ios`; I am not asserting any `[iOS-HINT]` name without a second witness.
 
 All 25 functions in the slice were read and classified at C2 (body read, callees identified, mechanically described, named). None are rated C3/C4 — that requires runtime or a second witness, which this read-only pass cannot produce.
-(raw JSON: C:\Users\maria\AppData\Local\Temp\fleet-delegate-b740a9f54e1048ab8e082335cc6c156c.json)

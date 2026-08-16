@@ -101,4 +101,3 @@ Every factory is the same 3-step shape (`operator_new(size)` → `ctor(this)` �
 3. **The remaining 30 unclassified GZCLSIDs** (factories #2-4,7-8,11-37) — read each ctor's installed vtable + subobject init to classify (the `0x48`-byte cluster #14-35 with sequential `0x?22c9d??` ids looks like one record family; needs bodies read).
 4. **Resolve the new class-id string text** for `0x2108580c` / `0xa1f3e1db` / `0xa1f592f9` and the field-name globals `DAT_100574c4` / `DAT_10057624` (`pe_read.py` over `.rdata`).
 5. **Zone `goZoneDeveloper` `[iOS-HINT]`** — still unproven; needs the developer struct's field map (the `+0x58`/`+0x14c` slots written by `FUN_10030c5b`) read against the iOS `goZoneDeveloper` layout.
-(raw JSON: C:\Users\maria\AppData\Local\Temp\fleet-delegate-8630cdeb1d8b4268b393824fe8450523.json)
