@@ -65,6 +65,7 @@ labels inside functions and will corrupt the databases.
 The sprite block's producer is **`GZGraphicD.dll`'s image class** (GZCLSID `0xa487535d`,
 IID `0x0487534f`), not SIMSPR: encoder `0x100017de`, consumer `0x10001700`. See `formats/QFS.md`
 and `formats/SPRITE_SII.md`.
+| **city save family** | `.sc3`/`.sct`/`.snr`/`.st3` — 59/59 files, 992 records | `re/tools/ixf_parse.py` unchanged (see `formats/CITY_SAVE.md`) |
 | FEZC / GVF | iOS assets | `fez_extract.py`, `gvf_dump.py` |
 
 `.IXF`: magic `0x80C381D7`, 20-byte index `{group, instance, type, offset, size}`, end = key

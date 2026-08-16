@@ -113,7 +113,15 @@ verify against real bytes.
 **Exit:** parsers validate real game files; format docs with byte-offset tables in
 `re/analysis/formats/`.
 
-> **LEAD ON THE CITY SAVE FORMAT (2026-08-16)** — the one format still missing.
+> ⭐ **CITY SAVE CONTAINER SOLVED (2026-08-16) — see `formats/CITY_SAVE.md`.**
+> `.sc3` / `.sct` / `.snr` / `.st3` are **`.IXF` containers**. **59 of 59 shipped city-family
+> files parse with the EXISTING `re/tools/ixf_parse.py`, no changes** (992 records).
+> Still open: the record **payloads**, chiefly a 743 KB blob (`type == group == 0x035f62a4`).
+> ⚠️ Nearly recorded backwards: `SIMINIT` `0x10001ada` reads an IFF chunk format with tags
+> `XZON XBLD XTER ALTM MISC SCDH FORM` — those are **SimCity 2000 `.sc2`** tags, i.e. a legacy
+> importer, NOT the SC3 format. Checking the first bytes of a real `.sc3` is what caught it.
+>
+> **LEAD ON THE PAYLOADS** — the serialiser route:
 > SIMGEOM has a confirmed **serialiser mirror pair**: `FUN_1001e516` = LOAD, `FUN_1001e226` =
 > SAVE, over the identical field set `[CONFIRMED @0x1001e516, 0x1001e226]`. LOAD calls the
 > stream's `vt+0x38` on field **addresses**; SAVE calls `vt+0x88` on field **values**; both walk
