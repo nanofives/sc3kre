@@ -194,7 +194,27 @@ Both keys decode to the *same colour* (magenta) under their own layout — that 
 layout to the key rather than to a guess. `b` correlates perfectly with the key across all
 62,552 records.
 
-### Validation `[CONFIRMED, C4]`
+### Round-trip: byte-identical re-encoding `[CONFIRMED, C4 — the strongest result here]`
+
+`re/tools/sprite_encode.py` transcribes the shipped encoder `FUN_100017de` (16bpp branch). For
+every shipped record it: decodes the block to a full pixel surface, re-runs the encoder over that
+surface, and compares the output **byte for byte** against the original block.
+
+> **62,552 of 62,552 format-1 records re-encode BYTE-IDENTICAL. Zero mismatches.**
+
+This is much stronger than "the images look correct". Producing identical bytes requires every
+one of the encoder's decisions to be reproduced exactly:
+
+- the leading and trailing colour-key scan boundaries (so `x` and the span length match),
+- the `0x8000` opaque flag on every single row,
+- the empty-row case (`x = width`, span 0, flag set) — reached only when a row is entirely key,
+- the running pixel-offset accumulation across all rows,
+- every header field, including the literal `4` at `+0x08` and the pixel-format id at `+0x0a`.
+
+A misunderstanding of any of them diverges the bytes. This meets the project's C4 bar
+("a parser round-trips") in its literal sense.
+
+### Structural validation `[CONFIRMED, C4]`
 
 Seven independent predictions were checked against **all 62,552** shipped format-1 records:
 inner total == block length; inner `w,h` == record `dword2,dword3`; the row table fits; spans

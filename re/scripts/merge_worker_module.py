@@ -38,9 +38,10 @@ def extract_markdown(raw):
         if end > start:
             return raw[start:end]
         return raw[start:]
-    # No explicit markdown fence: strip the delegate banner and take the body from the
-    # first markdown heading onward.
-    h = re.search(r"^#\s+\S", raw, re.M)
+    # No explicit markdown fence: strip the delegate banner and take the body from the first
+    # markdown heading onward. Accept h1-h3 -- workers legitimately start at "## 1. Promoted
+    # rows" with no h1, and requiring "^# " silently rejected a perfectly good 11 KB report.
+    h = re.search(r"^#{1,3}\s+\S", raw, re.M)
     if h:
         return raw[h.start():]
     return None
@@ -80,9 +81,22 @@ def extract_rows(md, module):
     return rows
 
 
-def merge(rows, module):
+def module_paths(module):
+    """-> (functions.csv module value, export functions dir).
+
+    SC3U is the odd one out: it is the EXE, its functions.csv value is "SC3U.exe" (not
+    "SC3U.DLL") and its export dir is plain `ghidra_export` with no module suffix. Getting
+    this wrong makes every lookup miss, which then looks like 'these are all new rows'.
+    """
     stem = module.lower()
-    export = os.path.join(ROOT, "re", "ghidra_export_%s" % stem, "functions")
+    if stem == "sc3u":
+        return "SC3U.exe", os.path.join(ROOT, "re", "ghidra_export", "functions")
+    modname = module if stem.endswith(".dll") else module + ".DLL"
+    return modname, os.path.join(ROOT, "re", "ghidra_export_%s" % stem, "functions")
+
+
+def merge(rows, module):
+    modname, export = module_paths(module)
     meta = {}
     if os.path.isdir(export):
         for fn in os.listdir(export):
@@ -93,7 +107,6 @@ def merge(rows, module):
     with open(CSVP, newline="", encoding="utf-8") as fh:
         all_rows = list(csv.DictReader(fh))
     fields = list(all_rows[0].keys())
-    modname = module if module.lower().endswith(".dll") else module + ".DLL"
     idx = {(r["module"].lower(), r["rva"].lower()): r for r in all_rows}
 
     up = add = skip = 0

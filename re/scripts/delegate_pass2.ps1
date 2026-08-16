@@ -15,17 +15,27 @@
 #>
 param(
   [Parameter(Mandatory = $true)][string]$Module,
+  # Which existing analysis doc(s) the worker should read first. Defaults to <MODULE>.md.
+  # SC3U has no single doc -- its findings are spread over SUBSYSTEMS/LAUNCH_CONTROL/etc.
+  [string[]]$Doc,
   [switch]$DryRun
 )
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $stem = $Module.ToLower()
-$dir = "ghidra_export_$stem"
+
+# SC3U is the odd one out: it is the EXE, its export dir is plain `ghidra_export` (no suffix)
+# and its functions.csv module value is "SC3U.exe", not "SC3U.DLL".
+if ($stem -eq "sc3u") {
+  $dir = "ghidra_export"
+  $modName = "SC3U.exe"
+} else {
+  $dir = "ghidra_export_$stem"
+  $modName = if ($Module -like "*.dll") { $Module } else { "$Module.DLL" }
+}
 $fnDir = Join-Path $Root "re\$dir\functions"
 if (-not (Test-Path $fnDir)) { throw "export dir missing: $fnDir" }
 $count = (Get-ChildItem $fnDir -File).Count
-
-$modName = if ($Module -like "*.dll") { $Module } else { "$Module.DLL" }
 $rows = Import-Csv (Join-Path $Root "functions.csv") |
         Where-Object { $_.module -eq $modName -and $_.confidence -eq "C1" }
 if (-not $rows) { Write-Host "$modName has no C1 rows; pass 2 will chase the OPEN list only" -ForegroundColor Yellow }
@@ -33,18 +43,31 @@ if (-not $rows) { Write-Host "$modName has no C1 rows; pass 2 will chase the OPE
 $c1 = ($rows | ForEach-Object { "  $($_.rva)  $($_.ghidra_name)  $($_.size) bytes  — currently: $($_.new_name)" }) -join "`n"
 if (-not $c1) { $c1 = "  (none — this module is already all C2)" }
 
-# The OPEN section of the existing doc, verbatim, so the worker attacks what is actually left.
-$docPath = Join-Path $Root "re\analysis\$($Module.ToUpper()).md"
+# The OPEN section(s) of the existing doc(s), verbatim, so the worker attacks what is left.
+if (-not $Doc) { $Doc = @("$($Module.ToUpper()).md") }
+# pwsh -File passes an array parameter as ONE comma-joined string, so split it back out.
+$Doc = @($Doc | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+$docList = @()
 $open = ""
-if (Test-Path $docPath) {
+foreach ($dn in $Doc) {
+  $docPath = Join-Path $Root "re\analysis\$dn"
+  if (-not (Test-Path $docPath)) {
+    Write-Host "note: $dn does not exist, skipping" -ForegroundColor Yellow
+    continue
+  }
+  $docList += "re/analysis/$dn"
   $lines = Get-Content $docPath
   $i = ($lines | Select-String -Pattern '^#+\s*.*OPEN' | Select-Object -First 1).LineNumber
-  if ($i) { $open = ($lines[($i - 1)..([Math]::Min($i + 60, $lines.Count - 1))]) -join "`n" }
+  if ($i) {
+    $open += "`n### from $dn`n" + (($lines[($i - 1)..([Math]::Min($i + 50, $lines.Count - 1))]) -join "`n")
+  }
 }
-if (-not $open) { $open = "(no OPEN section found in $docPath)" }
+if (-not $docList) { throw "none of the named docs exist under re\analysis: $($Doc -join ', ')" }
+if (-not $open) { $open = "(no OPEN section found in: $($docList -join ', '))" }
+$docRef = $docList -join ", "
 
 $prompt = @"
-SimCity 3000 Unlimited reverse-engineering — SECOND PASS on $modName. A first-pass analysis already exists at ``re/analysis/$($Module.ToUpper()).md``. READ IT FIRST, then go deeper. Do not re-derive what it already establishes.
+SimCity 3000 Unlimited reverse-engineering — SECOND PASS on $modName. Prior analysis already exists in: $docRef. READ THOSE FIRST, then go deeper. Do not re-derive what it already establishes.
 
 CRITICAL SETUP FACTS:
 - ``re/$dir/functions/`` EXISTS with $count decompiled ``0x<addr>_<Name>.c`` files. Grep it directly; do NOT trust directory listings, and do NOT report the exports as missing.
@@ -60,7 +83,7 @@ $c1
 
 ## JOB 2 — chase the OPEN list already on disk
 
-Verbatim from ``re/analysis/$($Module.ToUpper()).md``:
+Verbatim from the existing doc(s):
 
 $open
 

@@ -1362,6 +1362,68 @@ and shows the show-setter is not called on any normal startup path.
 
 ---
 
+## 10j. Windowed present pipeline built and proven — engine still not drawing `[2026-08-15]`
+
+### Surface layouts, measured via `GetSurfaceDesc` (call-only, no patching)
+
+| Slot | Fullscreen | Windowed |
+|---|---|---|
+| `+4` | 800x600, 16bpp, `FLIP\|COMPLEX\|VIDMEM`, backbuf=0 → **back buffer (render target)** | **2560x1440**, 32bpp, `PRIMARY\|COMPLEX\|VIDMEM` → the desktop primary |
+| `+8` | 800x600, `PRIMARY\|FLIP\|COMPLEX\|VIDMEM`, backbuf=1 → **primary (front)** | **NULL** |
+
+So fullscreen renders into `+4` and flips `+8`. **Windowed has the primary in the render-target
+slot and no back buffer at all** — and my earlier Blt attempt (§10h, direction 0 = dest `+4`,
+src `+8`) was therefore both sourceless *and* backwards.
+
+### The present pipeline works — proven with a magenta test surface
+
+Created an 800x600 offscreen surface, installed it at `+4`, moved the primary to `+8`, and
+presented with the game's own `FUN_10019be8` (direction 1 = dest `+8`, src `+4`).
+
+**Result: the window filled 99.9% with our test colour, at the correct position and size.**
+A windowed present is therefore mechanically achievable — surface, clipper, rect and blit all
+work end-to-end.
+
+Two bugs found and fixed along the way, both worth recording:
+
+- **`non-black` is not a content test.** A fresh VRAM surface is full of stale desktop imagery,
+  which fooled an earlier check into "the engine is rendering". Pre-filling with magenta and
+  measuring retention is the reliable test.
+- **DPI double-scaling.** `ClientToScreen` inside this DPI-virtualised process returns logical
+  coordinates, and the shimmed DirectDraw *already* maps them onto the physical primary.
+  Scaling by 1.25 ourselves put the blit 25% too far right and down. Do not correct it.
+
+### But the engine does not draw into it `[CONFIRMED]`
+
+Magenta retention at present **#3** and **#60**: `57600/57600 STILL MAGENTA`. Installing a
+surface at `+4` does not redirect the engine's rendering.
+
+Nor is there any other candidate. `FUN_10019273` creates exactly one offscreen surface matching
+the requested mode (800x600), and it is **`0/7500` non-black on every sample, for the whole
+run**. Nothing anywhere holds a rendered frame.
+
+**Conclusion: in windowed mode the engine's draw path is itself inactive, not merely its
+present.** This strengthens §10h rather than replacing it: windowed mode is unfinished at more
+than one layer. Completing it means finding and enabling the draw path too, which is engine
+work of unknown depth.
+
+### Bonus: the crash logger validated in anger
+
+Two runs crashed, **both from my own probe code**, and `SC3U_stkdmp.txt` (§7a) diagnosed both:
+
+```
+Exception code: C0000005 ACCESS_VIOLATION
+Fault address:  02809C0C  01:00018C0C  GZGraphicD.dll     -> VA 0x10019C0C, inside FUN_10019be8
+EAX:00000000  EDX:00000000
+```
+
+That is `FUN_10019be8` dereferencing a NULL surface: **the game's Blt wrapper does not
+null-check `this+4`/`this+8`** — useful to know for any future patching. The second crash was
+in `sc3probe.dll` itself (the candidate-scanning lock loop). The always-armed crash logger
+found both instantly, exactly as §7a predicted.
+
+---
+
 ## 11. Gaps in the export tooling this work exposed
 
 `ExportAllDecomp.java` emits function bodies and symbol/string/global CSVs, but **not**:
