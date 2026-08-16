@@ -368,6 +368,36 @@ candidates, none tested:
 That last point is the important one: it may be that this section **cannot** be parsed
 standalone, and decoding it requires the city dimensions from `SC3WorldLayer` first.
 
+### Dimensions are NOT in SC3WorldLayer `[FALSIFIED]`
+
+Checked directly: the 725-byte `SC3WorldLayer` section's only u32 values in the 1..1024 range are
+**150 (at +0x04) and 255 (at +0x18)**, and both are **identical across cities** — Berlin
+(zone blob 198,000), Europolis (197,634) and Farmsville (111,726) carry the same two numbers.
+Per-city grid dimensions are therefore **not** in the world layer section. Hypothesis dead.
+
+What the blob sizes do show: two clusters, ~197.6-198.1 KB and ~111.7-111.9 KB, i.e. **two map
+sizes**, with small within-cluster variation (a few hundred bytes) that must come from the
+variable-length lists.
+
+### Attempt 5: the missing trailing writes — also no fit
+
+Re-reading the saver's tail exposed an omission in every earlier grammar: after the two
+`{u8,u8,u32}` lists there are **six more u32 writes** (`this+0x260`, `+0x264`, `+0x15c`,
+`+0x158`, `+0x154`, `+0x150`) `[CONFIRMED @0x100320e7:109-118]` that the grammar never included —
+24 bytes. Re-swept with and without that 24-byte tail. **Still zero exact fits.**
+
+### Stop sweeping the saver; read the LOADER
+
+Five attempts have now failed, all built from the **saver**. That is the wrong source: the saver
+is threaded with `if (cVar != '\0')` guards, writes through two different raw-block slots, and
+delegates its bulk to a base class — so reconstructing a linear grammar from it is error-prone,
+as five failures demonstrate.
+
+**`sc3_zonelayer_load` `0x10031c85` is the authoritative parser.** Its read order *is* the file
+layout, with no guard ambiguity and no base-class indirection to reason around, and the stream
+read primitives are the mirror of the four now-confirmed write primitives. Read that function
+before attempting the grammar again.
+
 ## Second worked example: SC3WorldLayer — the city header `[CONFIRMED]`
 
 `SC3WorldLayer` (GZCLSID `0xe11bddf6`, **SIMMISC**) is registered at `0x1002a204` with factory
