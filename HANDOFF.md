@@ -46,18 +46,18 @@
    | SIMMISC | 1,200 | 252 | 21.0% |
    | SIMECO | 659 | 139 | 21.1% |
    | SimTransit | 619 | 136 | 22.0% |
-   | **TOTAL** | **9,575** | **1,909** | **19.9%** |
+   | **TOTAL** | **9,575** | **2,384** | **24.9%** |
 
    The set is **levelled** (15.5%–22.0%), so "attack the worst" is not a useful selector. Pick by
    value, not by percentage.
 
-   **7,666 to go.** Stop quoting the all-binaries 7.6%; it is dominated by 20,670 functions the
+   **7,191 to go.** Stop quoting the all-binaries 9.3%; it is dominated by 20,670 functions the
    gate does not ask for. SIMCITY / SIMNTWRK / SIMVARIABLES were added to the set on the owner's
    call 2026-08-16 — the original eight were listed before SIMCITY was identified as the tick
    driver.
 
-   > **8.6% → 19.1% of that came from `re/scripts/classify_families.py`, not from reading.**
-   > 1,000 rows merged at **C1 only** — a regex did not read anything, and C2 in this project
+   > **8.6% → 24.9% of that came from `re/scripts/classify_families.py`, not from reading.**
+   > 1,558 rows merged at **C1 only** — a regex did not read anything, and C2 in this project
    > means the decompilation was read. Do not raise those rows to C2 without reading them.
    > Every merged row carries a `[classify_families]` prefix in `notes`, so they are trivially
    > separable from human/worker work.
@@ -70,6 +70,15 @@
    > `vtable_install` 100% (8/8), `lazy_singleton` 100% (4/4), `ctor_or_dtor` 92% (12/13, and
    > the single miss was hand-checked — `sc3_cal_today` really is a constructor, the harness
    > just does not recognise a domain name).
+   >
+   > **The biggest single family is `deleting_dtor` — 475 functions.** It is the MSVC scalar
+   > deleting destructor, `dtor(this); if ((flags & 1) != 0) operator_delete(this);`, and the
+   > `& 1` guard is the compiler's own signature, so this is an identification rather than a
+   > heuristic. It came with a free result: in **all 11 modules the guarded call resolves to
+   > exactly ONE target, 100% share** — that target is the module's `operator delete`, an
+   > 11-byte `free(param_1)`. All 11 are now named at **C2** (`sc3_<module>_operator_delete`).
+   > The 1-target/100% convergence is also the strongest available check on the family: a
+   > sloppy pattern would have produced scattered targets.
    >
    > **`forwarder` (35%) and `vcall_wrapper` (0%) are deliberately NOT merged.** They are
    > structurally true and semantically empty: `sc3_powerplant_tick` genuinely is a forwarder,

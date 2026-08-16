@@ -67,6 +67,9 @@ SET_ONLY = re.compile(r"^\s*(?:" + FIELD + r"|" + FIELD0 + r")\s*=\s*param_\d+\s
 GET_GUARDED = re.compile(
     r"=\s*" + FIELD + r"\s*([!=]=)\s*(\d+)\s*;[\s\S]{0,80}?\*param_\d+\s*=\s*" + FIELD + r"\s*;")
 LOCK = re.compile(r"\b(EnterCriticalSection|LeaveCriticalSection)\b")
+# MSVC's scalar deleting destructor guard. The compiler emits `flags & 1` to decide whether the
+# object was heap-allocated and must be freed, so this is the compiler's own signature.
+DELETING_DTOR = re.compile(r"if \(\((param_\d+) & 1\) != 0\)")
 
 
 def body_lines(text):
@@ -147,6 +150,20 @@ def classify(text):
                     % (m.group(4), m.group(1), m.group(2), m.group(3)))
         return (None, "no calls but no single-statement shape")
 
+    # The MSVC scalar deleting destructor, and by a wide margin the single commonest shape in
+    # the whole small-function tail (442 of the 3,195 that previously matched nothing):
+    #     dtor(this);  if ((flags & 1) != 0) { operator_delete(this); }  return this;
+    # The `& 1` guard is the compiler's own signature for it, so this is an identification
+    # rather than a heuristic -- and unlike `forwarder`, the label IS the purpose.
+    m = DELETING_DTOR.search(text)
+    if m:
+        adj = re.search(r"\(\(int\)this \+ -(0x[0-9a-f]+|\d+)\)", text)
+        return ("deleting_dtor",
+                "MSVC scalar deleting destructor: runs the destructor, then frees only when "
+                "the low bit of %s is set%s"
+                % (m.group(1), "; operates on the base subobject at this-%s" % adj.group(1)
+                   if adj else ""))
+
     if PTRSTORE.search(text):
         slots = [m.group(2) for m in PTRSTORE.finditer(text)]
         return ("ctor_or_dtor", "installs %d vtable pointer(s) and makes %d call(s)"
@@ -190,7 +207,7 @@ def body_for(module, rva):
 # Families whose structural label IS the semantic purpose. Only these are merged; the rest are
 # reported and left C0. See the note printed by --validate.
 MERGEABLE = {"field_getter", "field_setter", "stub", "vtable_install", "lazy_singleton",
-             "refcount", "ctor_or_dtor"}
+             "refcount", "ctor_or_dtor", "deleting_dtor"}
 
 # A family is CONSISTENT with an existing human/worker name if the name says the same thing.
 CONSISTENT = {
@@ -201,6 +218,7 @@ CONSISTENT = {
     "forwarder": ("thunk", "wrap", "forward", "vt_", "stub"),
     "refcount": ("release", "addref", "ref", "free"),
     "lazy_singleton": ("singleton", "instance", "get"),
+    "deleting_dtor": ("dtor", "destroy", "delete", "free", "release", "dealloc", "~"),
 }
 
 
