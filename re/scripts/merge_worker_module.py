@@ -137,12 +137,15 @@ def main(argv):
         print(__doc__)
         return 2
     path, module = argv[1], argv[2].upper().replace(".DLL", "")
+    # Pass 2 is a SUPPLEMENT to the pass-1 doc, not a replacement -- writing it to <MODULE>.md
+    # would destroy the module map. Give it its own file.
+    suffix = "_PASS2" if "--pass2" in argv else ""
     raw = open(path, encoding="utf-8", errors="replace").read()
     md = extract_markdown(raw)
     if not md:
         print("no fenced markdown block found in %s" % path)
         return 1
-    out = os.path.join(ROOT, "re", "analysis", "%s.md" % module)
+    out = os.path.join(ROOT, "re", "analysis", "%s%s.md" % (module, suffix))
     with open(out, "w", encoding="utf-8") as fh:
         fh.write(md.rstrip() + "\n")
     print("wrote %s (%d bytes)" % (out, len(md)))

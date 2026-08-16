@@ -222,7 +222,54 @@ Raw disassembly of `0x1001de49`'s tail (via the new `re/scripts/DumpDisasm.java`
 1001df74  CALL [EAX + 0xc]        ; iface->vtable slot 3 (block, 1)    = the consumer
 ```
 
-`[UNCERTAIN]` the class implementing IID `0x0487534f`. No module's decompiled text contains a
-comparison against that constant (grepped across all 31 exports), so its QueryInterface is
-table-driven or otherwise non-textual. Not needed for decoding — the format above was confirmed
-from the data — but it is required to close the meaning of `a`, `b` and flags bit `0x8000`.
+### The class behind IID `0x0487534f` — RESOLVED `[CONFIRMED]`
+
+Found by byte-scanning the module binaries for the IID immediate (the decompiler drops these
+pushes, and Ghidra never carved the relevant functions, so grep over the text export finds
+nothing — including the decimal form).
+
+`FUN_1001daf5` (SIMSPR slot 7, `0x1001dc67`-`0x1001dc7e`) shows the creation, not just a QI:
+
+```
+1001dc67  CALL 0x1004f6e0        ; get the GZCOM class factory
+1001dc71  PUSH ECX               ; &out
+1001dc72  PUSH 0x487534f         ; IID
+1001dc77  PUSH 0xa487535d        ; CLSID
+1001dc7e  CALL [EDX + 0xc]       ; factory->CreateInstance(clsid, iid, &out)
+```
+
+So `0x0487534f` is an **IID** and the implementing class is **GZCLSID `0xa487535d`**, which lives
+in **`GZGraphicD.dll`**, not SIMSPR:
+
+| | |
+|---|---|
+| registered by | `FUN_100011ef` (GZGraphicD director) `[CONFIRMED @0x100011ef]` |
+| factory | `FUN_100012b5` — `operator_new(0x38)` (56 B), returns **object+4** |
+| ctor | `FUN_10001484` — installs `PTR_LAB_1001e3c8` at +0, **`PTR_LAB_1001e328` at +4** |
+| the IID-`0x0487534f` vtable | **`PTR_LAB_1001e328`** (because the factory returns +4) |
+| slot 3 (`+0xc`) = the consumer | `FUN_10001700` — adopt/copy the block |
+| slot 5 (`+0x14`) = the **encoder** | `FUN_100017de` — builds the block from a 16bpp surface |
+
+`FUN_10001700` `[CONFIRMED @0x10001700]` independently confirms the header from *code*: it does
+`operator_new(*block)` + `memcpy(_Dst, block, *block)` when the second arg is 0 (so `+0x00` is the
+total size; SIMSPR passes 1, meaning adopt-without-copy), then calls the owner's `vt+0xc8` with
+the **u16 at `block+0x0c`**, and reads width from `+0x04` and height from `+0x06`.
+
+> **`vt+0xc8` IS the colour-key setter after all.** An earlier note here doubted that because the
+> `+0xc8` call at SIMSPR `0x10012e20` passes `DAT_1007276c`, a global with zero writers. That is a
+> different (default/reset) call site. The real per-sprite key is set here from `block+0x0c`.
+> U-024 is resolved as "the original premise was right".
+
+### `a`, `b` and flags bit `0x8000` — RESOLVED `[CONFIRMED @0x100017de]`
+
+The encoder `FUN_100017de` writes every header field, which names them:
+
+| field | encoder line | meaning |
+|---|---|---|
+| `+0x08` (`a`) | `*(u16*)(buf+8) = 4` | a **hardcoded literal 4**. Not derived from anything — a format/version tag. That is why it never varies. |
+| `+0x0a` (`b`) | `*(u16*)(buf+10) = *(u16*)vt0x50_result` | the **pixel-format id**, read from the surface's pixel-format descriptor (`vt+0x50`). The same descriptor's `+4` is the bit depth, tested `== 0x10` (16bpp) at the top of the encoder. Hence 7 = RGB565, 5 = RGB555. |
+| flags bit `0x8000` | `*(u16*)(rec+6) = -(u16)bVar1 & 0x8000 \| (u16)len` | **"this span is fully opaque"**. The encoder scans the span and clears `bVar1` the moment any pixel equals the colour key. Set = no key pixels inside = the blit fast path. |
+
+The encoder also re-confirms the geometry independently: it allocates
+`(width+1)*height*2 + 0x10` (16-byte header, 2 bytes per pixel) and walks the row table with
+`local_2c = 0x10` incremented by `8` per row.

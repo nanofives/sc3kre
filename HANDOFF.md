@@ -10,7 +10,7 @@ not from any prior transcript.
   shell. The game is **29 GZCOM director DLLs** in `Apps\` (6.2 MB). All are imported and
   exported. See `re/analysis/MODULE_MAP.md` + `MODULE_INVENTORY.md`.
 - **Tracker `functions.csv`** now has a **`module` column** (first field).
-  **C0 4,843 · C1 108 · C2 543 · C3 10 · C4 5 · 635 named**
+  **C0 4,843 · C1 46 · C2 611 · C3 12 · C4 5 · 643 named**
   (2026-08-15: +16 SIMGEOM occupant-property, +8 SIMSPR QFS/sprite incl. the first C4 rows,
   +275 across the 7 previously unanalysed sim modules).
   Rows by module: SC3U 9,730 · SIMUI 109 · **SCENARIO 66** · SIMUTIL 62 · **SIMDSTR 43** ·
@@ -136,8 +136,14 @@ open lists at the foot of each analysis doc.
 > Spot-checked against the binary: SIMNTWRK's 2 GZCLSIDs + TilingRules strings, SIMECO's
 > pollution-layer factory (`new(0x4d0)`, returns `+0x1c`, CLSID `0xc0a81498`) — all correct.
 
-1. **Second pass on the 7 new modules** — promote C1→C2 and chase each doc's OPEN list.
-   The docs name the layer classes (`SC3FireLayer` in SIMSERV, `SC3DisasterLayer` in SIMDSTR).
+> **ALSO DONE 2026-08-15 (later):** pass 2 on SCENARIO / SIMADV / SIMECO / SIMDSTR via
+> `re/scripts/delegate_pass2.ps1` → `re/analysis/<MODULE>_PASS2.md` (a SUPPLEMENT; the pass-1
+> doc is not overwritten). **C1 108 → 46.** And **U-023 + U-024 are resolved** — the sprite
+> block's producer is `GZGraphicD.dll`'s image class, and every header field is now named.
+> Backups: `re/scripts/backup.ps1` mirrors ~1.2 GB to `D:\Backups\Simcity-RE`.
+
+1. **Remaining C1 (46)**: SC3U 26, SIMUI 13, SIMUTIL 4, GZResourceD/SIMNTWRK/STRTSIM 1 each.
+   SC3U and SIMUI are the two big un-passed surfaces.
 2. **U-023** — the class behind IID `0x0487534f` (sprite-block consumer). Names the last
    unexplained span-sprite header fields. Needs `VtableProbe.java`, not grep.
 3. **SIMGEOM `0x76`–`0x7a`** — 5 of the 7 resource-variant slots have no proven consumer, and

@@ -88,13 +88,22 @@ def parse_span_block(block):
         +0x00 u32  total size            == len(block)
         +0x04 u16  width                 == record dword2
         +0x06 u16  height                == record dword3
-        +0x08 u16  a                     (4 in every shipped record)
-        +0x0a u16  b                     (7 in every shipped record)
-        +0x0c u16  colour key            (0xF81F in every shipped record)
+        +0x08 u16  format/version tag    a hardcoded literal 4 [CONFIRMED @0x100017de]
+        +0x0a u16  pixel-format id       from the surface descriptor at vt+0x50; 7 = RGB565,
+                                         5 = RGB555 (that descriptor's +4 is the bit depth,
+                                         tested == 0x10) [CONFIRMED @0x100017de]
+        +0x0c u16  colour key            passed to the image's vt+0xc8 [CONFIRMED @0x10001700]
         +0x0e u16  pad                   (0 in every shipped record)
         +0x10      height x { u32 pixelOffset, u16 x, u16 flags }
                    span length n = flags & 0x7FFF
-        then       pixel data, ONE u16 PER PIXEL
+                   flags & 0x8000 = "this span contains NO colour-key pixel" (fully opaque
+                   fast path). The encoder clears it the moment a key pixel is found inside
+                   the span [CONFIRMED @0x100017de]. It is an optimisation hint only —
+                   rendering is identical either way, so this decoder ignores it and tests
+                   every pixel against the key.
+
+    The producer of this layout is GZGraphicD.dll's image class (GZCLSID 0xa487535d,
+    IID 0x0487534f), NOT SIMSPR: encoder slot 5 = 0x100017de, consumer slot 3 = 0x10001700.
 
     The spans chain exactly: row[i].off + n(i) == row[i+1].off, and the last span ends
     precisely at the end of the data section. Pixels outside a row's span are not stored
