@@ -29,6 +29,15 @@ GZDllGetGZCOMDirector  (PE export)
 Registration counts: SIMUI 40 · SIMSPR 40 · SIMRCI 37 · SIMMISC 36 · SIMUTIL 15 · SIMGEOM 14 ·
 SimTransit 5 · SIMBABLD 2.
 
+> **SIMRCI's Ghidra DB was MUTATED 2026-08-16** and re-exported. `MakeFunctions.java` force-created
+> 4 functions Ghidra's auto-analysis had left uncarved: `0x1000e837`, `0x1001599d`, `0x1002115d`
+> (8-byte `CALL <ini loader>; RET 4` stubs) and `0x10030369` (the SC3ZoneLayer base-class write
+> thunk, slot 10 of `PTR_FUN_1004d274`). **`re/ghidra_export_simrci/` is now 3,267 files (was
+> 3,263)**, verified as +4 added / 0 removed / 3,267 ok / 0 fail.
+> Lesson: after any `MakeFunctions` run, **re-export that module** — workers grep the text export,
+> and a stale export makes a newly-carved function look absent, which reads as "this vtable slot
+> leads nowhere" rather than "the export is out of date".
+
 **Trap:** factory stubs are reached only via the registration table (a DATA ref), so Ghidra often
 leaves them as bare `LAB_*` with **no exported body**. Recovered 12 in SIMUI + **51 across 17
 modules** with `re/scripts/MakeFunctions.java`. Detect with `re/scripts/find_stub_gaps.py`, but
