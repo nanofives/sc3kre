@@ -35,27 +35,58 @@
 
    | module | backlog | ≥C1 | % |
    |---|---|---|---|
-   | SIMRCI | 1,536 | 107 | 7.0% |
-   | SIMSERV | 713 | 58 | 8.1% |
-   | SIMUTIL | 763 | 62 | 8.1% |
-   | SIMMISC | 1,200 | 98 | 8.2% |
-   | SIMECO | 659 | 55 | 8.3% |
-   | SIMDSTR | 1,191 | 101 | 8.5% |
-   | SIMVARIABLES | 350 | 31 | 8.9% |
-   | SIMNTWRK | 809 | 74 | 9.1% |
-   | SIMGEOM | 1,148 | 109 | 9.5% |
-   | SimTransit | 619 | 60 | 9.7% |
-   | SIMCITY | 587 | 71 | 12.1% |
-   | **TOTAL** | **9,575** | **826** | **8.6%** |
+   | SIMRCI | 1,536 | 238 | 15.5% |
+   | SIMDSTR | 1,191 | 190 | 16.0% |
+   | SIMUTIL | 763 | 144 | 18.9% |
+   | SIMSERV | 713 | 138 | 19.4% |
+   | SIMVARIABLES | 350 | 68 | 19.4% |
+   | SIMNTWRK | 809 | 161 | 19.9% |
+   | SIMCITY | 587 | 120 | 20.4% |
+   | SIMGEOM | 1,148 | 240 | 20.9% |
+   | SIMMISC | 1,200 | 252 | 21.0% |
+   | SIMECO | 659 | 139 | 21.1% |
+   | SimTransit | 619 | 136 | 22.0% |
+   | **TOTAL** | **9,575** | **1,826** | **19.1%** |
 
-   The set is **levelled**: every module is now between 7.0% and 12.1%, so "attack the worst two"
-   has stopped being a useful selector. Pick by value, not by percentage.
+   The set is **levelled** (15.5%–22.0%), so "attack the worst" is not a useful selector. Pick by
+   value, not by percentage.
 
-   **8,749 to go.** Stop quoting the all-binaries 4.5%; it is dominated by 20,670 functions the
+   **7,749 to go.** Stop quoting the all-binaries 7.6%; it is dominated by 20,670 functions the
    gate does not ask for. SIMCITY / SIMNTWRK / SIMVARIABLES were added to the set on the owner's
    call 2026-08-16 — the original eight were listed before SIMCITY was identified as the tick
    driver.
 
+   > **8.6% → 19.1% of that came from `re/scripts/classify_families.py`, not from reading.**
+   > 1,000 rows merged at **C1 only** — a regex did not read anything, and C2 in this project
+   > means the decompilation was read. Do not raise those rows to C2 without reading them.
+   > Every merged row carries a `[classify_families]` prefix in `notes`, so they are trivially
+   > separable from human/worker work.
+
+   > ### The tail now has a tool: `re/scripts/classify_families.py`
+   >
+   > Bulk-classifies small functions by structural family. **`--validate` first, always** — it
+   > scores the classifier against functions humans and workers already labelled, per family,
+   > and that number is the only reason to trust the rest of the output. Measured precision:
+   > `vtable_install` 100% (8/8), `lazy_singleton` 100% (4/4), `ctor_or_dtor` 92% (12/13, and
+   > the single miss was hand-checked — `sc3_cal_today` really is a constructor, the harness
+   > just does not recognise a domain name).
+   >
+   > **`forwarder` (35%) and `vcall_wrapper` (0%) are deliberately NOT merged.** They are
+   > structurally true and semantically empty: `sc3_powerplant_tick` genuinely is a forwarder,
+   > and calling it one tells a reader nothing. Those 990 functions stay C0 so somebody picks
+   > them up properly later. Merging them would have bought ~10 more points of "coverage" and
+   > destroyed the signal about what still needs reading.
+   >
+   > **Three bugs in this tool were caught by sampling its output, not by reading the code**, and
+   > all three produced plausible-looking numbers while being wrong:
+   > 1. the function's own name in the signature line counted as a call, so the zero-call branch
+   >    never ran and getters/setters/stubs scored a flat zero;
+   > 2. `puStack_c = &LAB_...` (the SEH handler, present in every EH function) was read as a
+   >    vtable install;
+   > 3. `stub` was tested before the vtable check, so 45 vtable installers were filed as empty.
+   >
+   > If you extend it: run `--validate`, then hand-read ten random hits per new family.
+   >
    > ⚠️ **The size heuristic behind `delegate_cluster.ps1` is nearly exhausted in these two
    > modules, and the "~360 runs" estimate is misleading.** Measured after cluster 3:
    >
