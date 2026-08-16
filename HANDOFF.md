@@ -36,22 +36,37 @@
    | module | backlog | ≥C1 | % |
    |---|---|---|---|
    | SIMNTWRK | 809 | 24 | 3.0% |
-   | SIMRCI | 1,536 | 57 | 3.7% |
-   | SIMMISC | 1,200 | 48 | 4.0% |
    | SIMGEOM | 1,148 | 59 | 5.1% |
    | SimTransit | 619 | 35 | 5.7% |
    | SIMDSTR | 1,191 | 68 | 5.7% |
-   | SIMUTIL | 763 | 62 | 8.1% |
+   | SIMRCI | 1,536 | 107 | 7.0% |
    | SIMSERV | 713 | 58 | 8.1% |
+   | SIMUTIL | 763 | 62 | 8.1% |
+   | SIMMISC | 1,200 | 98 | 8.2% |
    | SIMECO | 659 | 55 | 8.3% |
    | SIMVARIABLES | 350 | 31 | 8.9% |
    | SIMCITY | 587 | 71 | 12.1% |
-   | **TOTAL** | **9,575** | **568** | **5.9%** |
+   | **TOTAL** | **9,575** | **668** | **7.0%** |
 
-   **9,007 to go**, about 360 `delegate_cluster.ps1` runs. Stop quoting the all-binaries 3.6%;
-   it is dominated by 20,670 functions the gate does not ask for. SIMCITY / SIMNTWRK /
-   SIMVARIABLES were added to the set on the owner's call 2026-08-16 — the original eight were
-   listed before SIMCITY was identified as the tick driver.
+   **8,907 to go.** Stop quoting the all-binaries 4.0%; it is dominated by 20,670 functions the
+   gate does not ask for. SIMCITY / SIMNTWRK / SIMVARIABLES were added to the set on the owner's
+   call 2026-08-16 — the original eight were listed before SIMCITY was identified as the tick
+   driver.
+
+   > ⚠️ **The size heuristic behind `delegate_cluster.ps1` is nearly exhausted in these two
+   > modules, and the "~360 runs" estimate is misleading.** Measured after cluster 3:
+   >
+   > | | SIMRCI (1,429 C0 left) | SIMMISC (1,102 C0 left) |
+   > |---|---|---|
+   > | ≥ 500 bytes | ~46 | ~25 |
+   > | ≥ 200 bytes | ~212 | ~120 |
+   > | **under 100 bytes** | **~70%** | **~74%** |
+   >
+   > Cluster 1 read 1447-814 byte functions, cluster 2 ~800-700, cluster 3 ~700-500. By cluster
+   > 5 a run is deep-reading 300-byte helpers, and the last ~70% are sub-100-byte accessors and
+   > forwarding stubs. **Grinding those 25-at-a-time is the wrong tool.** What they need is a
+   > bulk classifier that groups by vtable slot / single-caller / size signature and labels whole
+   > families at once. Design that before spending another 300 cluster runs.
 
 ---
 

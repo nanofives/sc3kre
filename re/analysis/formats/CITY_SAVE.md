@@ -126,6 +126,18 @@ bytes. Its loader is `FUN_10004a00`. Note the payload is delimited by the litera
 stream slots `vt+0xa4` (write string) / `vt+0x64` (write row) — **not** the `vt+0x38`/`vt+0x88`
 mirror pair. So section grammars are per-class, and the mirror-pair test does not find them all.
 
+### Group `0xc106c4f5` = the SIMRCI demand layer `[CONFIRMED]`
+
+Found 2026-08-16 from the SIMRCI C0 cluster. `SIMRCI.DLL` holds a full mirror pair keyed on it —
+`FUN_10022169` (save) and `FUN_10021cf3` (load), both writing the literal
+`{0x206c6e7c, 0xc106c4f5}` `[CONFIRMED @0x10022169, 0x10021cf3]`. Berlin's matching section is
+`206c6e7c:c106c4f5:0`, 1,994 bytes.
+
+The pair agrees on the field set, which is the on-disk shape of the RCI demand layer: bools at
+`this+0x640/0x641/0x642`, four sub-objects at `this+0x74/0x1dc/0x344/0x4ac` (stride `0x168` =
+360), accumulators `this+0x644..0x67c`, and the three demand gauges `this+0x680/0x684/0x688`.
+Array writes go through `vt+0x8c` with capacity `0x5a` (90).
+
 `[UNCERTAIN]` group `0x029ca804` occurs once per file and sits **2 below** the pinned
 `TrafficLayer` id `0x029ca806`. It is *not* treated as a match — a near-miss id is a different
 class, not a typo.
