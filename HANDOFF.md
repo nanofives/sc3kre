@@ -70,9 +70,37 @@ Extraction: **537 files, 71,924 text records** → `re/data/ixf_text.csv`; sprit
 ⚠️ A previous figure of "72 archives / 253,838 records" was **double-counted** (exactly 2x over the
 36 `.DAT` files, missing the 4 `.IXF`); corrected 2026-08-15 by the full `qfs.py` sweep.
 
+## Public repo
+
+Tools + notes are published to **https://github.com/nanofives/sc3kre** (public, MIT for our code).
+The repo is a **subset** of this working tree, not a mirror: `re/tools/*.py`,
+`re/scripts/*.{py,ps1,java}`, `re/analysis/**/*.md`, the root trackers and `functions.csv` — 61
+files, ~1.4 MB. **No game binaries, no `re/ghidra_export*`, no `re/data/`, no extracted assets.**
+`.gitignore` is deny-by-default (`/*` then an explicit allowlist), with a per-directory deny for
+each `re/analysis` subdirectory so a NEW subdir fails safe.
+
+> ⚠️ Do NOT "fix" that `.gitignore` into the tidier `!/re/analysis/**/*.md` form. It was tried and
+> it **leaks**: git's `**/` directory re-include exposes the subdirectory's non-md contents, which
+> let `re/analysis/formats/gvf_keys.csv` (961 KB of extracted iOS game data) become tracked.
+> Verify any change with `git check-ignore -v` and `git ls-files`, never by eye.
+
+> ⚠️ `re/scripts/delegate_module.ps1` no longer hardcodes the worker path (it was scrubbed for
+> publication). It **throws unless `$env:REPO_FLEET_DELEGATE` is set** — point it at your
+> read-only delegation helper, i.e. the workspace's
+> `.claude\skills\repo-fleet\scripts\delegate.ps1` (path is machine-local; see the workspace
+> `CLAUDE.md`, which is deliberately not in this repo).
+
+**Not backed up anywhere:** `re/data/` (63,691 rendered sprites), `re/ghidra_export*/` (31 dirs)
+and the Ghidra projects are local-only and unversioned.
+
 ## Tooling added this session
 ```
 re\scripts\ghidra_headless.ps1 -Module <NAME.DLL> -Import|-Export   # per-module projects
+re\scripts\delegate_module.ps1           # fan one module analysis at a read-only worker
+re\scripts\merge_worker_module.py        # land a worker's markdown + merge its rows
+re\scripts\DumpDisasm.java               # raw instruction listing (when decomp fails)
+re\tools\qfs.py                          # QFS/RefPack decompressor
+re\tools\sprite_render.py                # sprite -> PNG (both pixel classes + anchors)
 re\scripts\import_all_modules.ps1        # bulk import, resumable
 re\scripts\recover_all_stubs.ps1         # + find_stub_gaps.py + MakeFunctions.java
 re\scripts\VtableProbe.java              # method -> vtable slot -> installing ctor

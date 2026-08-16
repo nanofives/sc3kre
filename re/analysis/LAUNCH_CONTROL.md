@@ -1312,19 +1312,53 @@ arguments, throttled to 5 hits per function then counted.
 | **`crashlog_install`** | **1** | the crash logger really is armed (§7a) |
 | `scan_cmdline_plugins` | 1 | |
 
-**Known limitation: 14 of 33 entries were skipped** with `UNRECOGNISED prologue`. Only four
-patterns are currently accepted, each verified before patching:
+### Length decoder — 33/33 instrumented `[CONFIRMED]`
 
-| Pattern | Bytes | Steal |
+The first build used four hardcoded prologue patterns and skipped 14 of 33 entries. Inspecting
+those showed the pattern approach could not work in general: `reskey_resolve_string`
+@ `0x004862e1` begins `56 57 8B F1 E8 ...`, i.e. only **4** bytes before a **relative `call`**.
+Any 5-byte steal necessarily captures a rel32, which is position-dependent.
+
+Replaced with a small x86 length decoder (`insn_len` + `modrm_len`) that walks whole
+instructions until at least 5 bytes are covered, and records the offset of any `E8`/`E9`
+encountered. The trampoline builder then **rewrites those displacements**:
+
+```c
+DWORD abs_target = (DWORD)(t + o + 5) + *(DWORD *)(t + o + 1);
+*(DWORD *)(tr + o + 1) = abs_target - (DWORD)(tr + o + 5);
+```
+
+Result:
+
+```
+FN  reskey_resolve_string: relocated rel32 at +4 -> 0x0048440B
+--- FNLOG: 33/33 functions instrumented ---
+```
+
+Anything the decoder does not understand still returns 0 and the function is skipped and
+reported, rather than guessed at.
+
+**Non-destructive: verified the game still renders its main menu with all 33 detours active.**
+
+### What the full table showed
+
+| Function | Hits (20 s) | What it confirms |
 |---|---|---|
-| A | `B8 <imm32>` (`mov eax, imm32`, MSVC SEH idiom) | 5 |
-| B | `55 8B EC 83 EC ??` (`push ebp; mov ebp,esp; sub esp,imm8`) | 6 |
-| C | `56 8B F1 33 C0` (`push esi; mov esi,ecx; xor eax,eax`) | 5 |
-| D | `8B C1 56 33 C9` (`mov eax,ecx; push esi; xor ecx,ecx`) | 5 |
+| `load_gzcom_plugin_dll` | **34** | 34 GZCOM plugin DLLs loaded at startup — matches `MODULE_MAP.md` |
+| `get_graphics_service` | 62 | graphics service is the hottest of the four |
+| `get_music_service` / `get_city_region_service` / `get_audio_service` | 19 / 10 / 4 | |
+| `reskey_resolve_string` / `reskey_ctor` / `reskey_get_triple` | 39 / 31 / 8 | localized-string traffic, consistent with `RESOURCE_KEYS.md` |
+| `cmdline_find_char_switch` / `cmdline_find_named_switch` | 9 / 11 | matches the call-site counts of §3a / §3b exactly |
+| `apply_cmdline_options` | 1 | independent runtime re-confirmation of U-013 |
+| `crashlog_install` / `crashlog_setup_filter` | 1 / 1 | the crash logger is armed at startup (§7a) |
+| `crashlog_printf` | **0** | and it is crash-only, as documented — never fires in a clean run |
+| `get_debug_stream` | 1 | the Gonzo console object **is** constructed (§7b) |
+| **`debug_window_create` / `debug_window_show` / `debug_console_dispatch`** | **0 / 0 / 0** | **the console window is never created and never shown during startup** — runtime support for U-015 |
+| `app_dtor` | 0 | run was killed, never reached shutdown |
 
-Skipped functions are reported by name with their first five bytes, so extending coverage is
-mechanical: add the pattern to `prologue_len()`. A proper length-disassembler would remove the
-limit entirely and is the obvious upgrade if the table grows.
+The `get_debug_stream = 1` with `debug_window_create = 0` pair is the useful one: it confirms
+§7b's static reading that the stream is constructed unconditionally while its window is not,
+and shows the show-setter is not called on any normal startup path.
 
 ---
 
