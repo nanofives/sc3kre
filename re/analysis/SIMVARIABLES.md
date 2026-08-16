@@ -235,3 +235,47 @@ rva,subsystem,confidence,new_name,evidence
 
 Note: I could not verify anything at C3+ (needs runtime or a second witness). All rows above are
 static-decompilation reads only.
+
+---
+
+## The GZCOM variant: tag at +8, payload at +0x10 `[CONFIRMED]`
+
+Found 2026-08-16 as a by-product of `re/scripts/classify_families.py` (the guarded-out-parameter
+getter family). The tunables store hands values back through a small **tagged union**, and the
+same class is compiled into at least four modules.
+
+Each module carries **six** typed accessors of the identical shape `[CONFIRMED @0x100047d5]`:
+
+```c
+bool __thiscall FUN_100047d5(void *this, undefined8 *param_1)
+{
+  bVar1 = *(int *)((int)this + 8) == 10;     // the TAG
+  if (bVar1) { *param_1 = *(undefined8 *)((int)this + 0x10); }   // the PAYLOAD
+  return bVar1;                              // false = wrong type, out-param untouched
+}
+```
+
+So: **tag at `+0x08`, payload at `+0x10`**, and a typed read fails cleanly rather than coercing.
+
+Measured tags and payload widths (SIMVARIABLES; read individually, not inferred from size):
+
+| tag | payload width | accessor |
+|---|---|---|
+| 1 | 1 byte | `0x10004591` |
+| 4 | 4 bytes | `0x10004649` |
+| 5 | 1 byte | `0x10004693` |
+| 8 | 4 bytes | `0x1000474e` |
+| 9 | 4 bytes | `0x10004798` |
+| 10 | 8 bytes | `0x100047d5` |
+
+`[UNCERTAIN]` **what each tag MEANS** — nothing here shows whether tag 1 is a bool and 5 a char,
+or which of 4/8/9 is signed, unsigned or float. Only the widths are evidence. Do not map these to
+type names without a producer that sets the tag from a known literal.
+
+The identical six-accessor set, with the same tags and widths, also appears in **SIMCITY**
+(`0x1000b99c`…`0x1000bbe0`), **SIMDSTR** (`0x10023cc7`…`0x10023f0b`) and **SIMGEOM**
+(`0x1001a8aa`…`0x1001aaee`) — the same class inlined into each module, not four separate designs.
+
+> A size-based shortcut was wrong here and is worth recording: the 30-byte accessors looked like
+> the 64-bit ones, but tag 4 is 30 bytes with a **4-byte** payload while tag 10 is 24 bytes with
+> an **8-byte** payload. The widths were read from each body.

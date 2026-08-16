@@ -52,9 +52,21 @@ VCALL0 = re.compile(r"\(\*\*\(code \*\*\)\*[a-z_0-9]+\)\s*\(")
 PTRSTORE = re.compile(
     r"(\*\(undefined \*\*\*\)(?:\(int\))?this|\*\(\w+ \*\*+\)\(\(int\)this \+ [^)]+\)"
     r"|\*param_\d+|param_\d+\[-?\d+\])\s*=\s*&((?:PTR_|LAB_)\w+)")
-FIELD = r"\*\(\w+ \*\*?\)\(\(int\)this \+ (0x[0-9a-f]+|\d+)\)"
-GET_RET = re.compile(r"^\s*return\s+" + FIELD + r"\s*;", re.M)
-SET_ONLY = re.compile(r"^\s*" + FIELD + r"\s*=\s*param_\d+\s*;", re.M)
+# A field reference. The FIRST version only accepted `(int)this + N`, which is why
+# field_getter scored ZERO on 6,610 candidates: Ghidra names the object `param_1` whenever the
+# calling convention is not __thiscall, and `return *(undefined4 *)(param_1 + 0x14);` is by far
+# the commonest accessor shape in this binary (47 of the top declined shapes, vs 0 using
+# `this`). Accept both spellings, and offset 0, which is written without any `+ N` at all.
+OBJ = r"(?:\(int\))?(?:this|param_\d+)"
+FIELD = r"\*\(\w+ \*+\)\(" + OBJ + r" \+ (0x[0-9a-f]+|\d+)\)"
+FIELD0 = r"\*\(\w+ \*+\)" + OBJ
+GET_RET = re.compile(r"^\s*return\s+(?:" + FIELD + r"|" + FIELD0 + r")\s*;", re.M)
+GET_BOOL = re.compile(r"^\s*return\s+" + FIELD + r"\s*(?:!=|==)\s*(?:0|\(\w+ \*\)0x0)\s*;", re.M)
+SET_ONLY = re.compile(r"^\s*(?:" + FIELD + r"|" + FIELD0 + r")\s*=\s*param_\d+\s*;", re.M)
+# `uVar1 = *(int *)((int)this + 8) == 0;  if (uVar1) { *param_2 = *(int *)((int)this + 4); }`
+GET_GUARDED = re.compile(
+    r"=\s*" + FIELD + r"\s*([!=]=)\s*(\d+)\s*;[\s\S]{0,80}?\*param_\d+\s*=\s*" + FIELD + r"\s*;")
+LOCK = re.compile(r"\b(EnterCriticalSection|LeaveCriticalSection)\b")
 
 
 def body_lines(text):
@@ -108,12 +120,31 @@ def classify(text):
                     % (len(slots), ", ".join(sorted(set(slots))[:3])))
         if len(lines) <= 3 and any(l == "return;" for l in lines):
             return ("stub", "empty body, returns immediately")
+        # n_stmt must be EXACTLY 1 -- the return and nothing else. At `<= 2` this family
+        # swallowed FUN_10010bc7, which is
+        #     *(int *)(param_1 + 0x1c) = *(int *)(param_1 + 0x1c) + 1;
+        #     return *(undefined4 *)(param_1 + 0x1c);
+        # i.e. a post-increment counter. Calling that "returns the field at +0x1c" hides a
+        # SIDE EFFECT, which is worse than leaving it C0: a later reader would trust the label.
+        # Caught by hand-reading 10 random hits; 9 were clean and this one was not.
+        m = GET_BOOL.search(text)
+        if m and n_stmt == 1:
+            return ("field_getter", "returns whether field +%s is set" % m.group(1))
         m = GET_RET.search(text)
-        if m and n_stmt <= 2:
-            return ("field_getter", "returns this+%s" % m.group(1))
+        if m and n_stmt == 1:
+            off = m.group(1) or m.group(2) or "0x0"
+            return ("field_getter", "returns the field at +%s" % off)
         m = SET_ONLY.search(text)
         if m and n_stmt <= 2:
-            return ("field_setter", "stores a parameter into this+%s" % m.group(1))
+            off = m.group(1) or m.group(2) or "0x0"
+            return ("field_setter", "stores a parameter into +%s" % off)
+        m = GET_GUARDED.search(text)
+        if m and n_stmt <= 6:
+            # Report the actual comparison, not "is set". The guard is frequently a discriminant
+            # test such as `== 10`, and paraphrasing it as a truthiness check would be wrong.
+            return ("field_getter",
+                    "guarded out-parameter read of +%s, written only when +%s %s %s"
+                    % (m.group(4), m.group(1), m.group(2), m.group(3)))
         return (None, "no calls but no single-statement shape")
 
     if PTRSTORE.search(text):
@@ -186,7 +217,14 @@ def main(argv):
         if not r["size"].isdigit() or int(r["size"]) >= max_size:
             return False
         is_c0 = r["confidence"] == "C0"
-        return (not is_c0) if classified else is_c0
+        if classified:
+            # CRITICAL: exclude this tool's OWN rows. After the first --merge the validation
+            # set silently filled up with 1,000 rows the classifier had labelled itself, and
+            # it started scoring its own output -- ctor_or_dtor "improved" from 12/13 to 626/627
+            # purely by grading its own homework. Ground truth means a HUMAN or a WORKER
+            # labelled it, which is exactly what the notes prefix records.
+            return (not is_c0) and not r["notes"].startswith("[classify_families]")
+        return is_c0
 
     if "--validate" in argv:
         per = collections.defaultdict(lambda: [0, 0])   # family -> [agree, disagree]

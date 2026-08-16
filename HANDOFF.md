@@ -46,12 +46,12 @@
    | SIMMISC | 1,200 | 252 | 21.0% |
    | SIMECO | 659 | 139 | 21.1% |
    | SimTransit | 619 | 136 | 22.0% |
-   | **TOTAL** | **9,575** | **1,826** | **19.1%** |
+   | **TOTAL** | **9,575** | **1,909** | **19.9%** |
 
    The set is **levelled** (15.5%–22.0%), so "attack the worst" is not a useful selector. Pick by
    value, not by percentage.
 
-   **7,749 to go.** Stop quoting the all-binaries 7.6%; it is dominated by 20,670 functions the
+   **7,666 to go.** Stop quoting the all-binaries 7.6%; it is dominated by 20,670 functions the
    gate does not ask for. SIMCITY / SIMNTWRK / SIMVARIABLES were added to the set on the owner's
    call 2026-08-16 — the original eight were listed before SIMCITY was identified as the tick
    driver.
