@@ -214,6 +214,22 @@ one of the encoder's decisions to be reproduced exactly:
 A misunderstanding of any of them diverges the bytes. This meets the project's C4 bar
 ("a parser round-trips") in its literal sense.
 
+### Independent second witness: SIMBABLD `[CONFIRMED @0x1204bcf7]`
+
+The BAT authoring tool (`SIMBABLD.DLL`, image base `0x12000000`) consumes the **same** layout,
+which corroborates it from a different module entirely. Its blitters
+(`0x1204bcf7`, `0x1204d120`, `0x12049d83`, `0x1204a96c`) do:
+
+```c
+iVar10   = *(int *)((int)this + 4);                     // the block
+local_2c = iVar10 + 0x10 + (u16 at iVar10+6) * 8;       // data start = +0x10 + height*8
+local_10 = (int *)(iVar10 + 0x10 + uVar13 * 8);         // row entry, stride 8
+uVar7    = (uint)*(ushort *)((int)local_10 + 6);        // flags at row+6
+```
+
+16-byte header, height at `+6`, row table at `+0x10` with stride 8, flags at row `+6` — the same
+structure the round-trip proves. Transparent colour is held at the blitter object's `+0x1c`.
+
 ### Structural validation `[CONFIRMED, C4]`
 
 Seven independent predictions were checked against **all 62,552** shipped format-1 records:
