@@ -393,10 +393,60 @@ is threaded with `if (cVar != '\0')` guards, writes through two different raw-bl
 delegates its bulk to a base class — so reconstructing a linear grammar from it is error-prone,
 as five failures demonstrate.
 
-**`sc3_zonelayer_load` `0x10031c85` is the authoritative parser.** Its read order *is* the file
-layout, with no guard ambiguity and no base-class indirection to reason around, and the stream
-read primitives are the mirror of the four now-confirmed write primitives. Read that function
-before attempting the grammar again.
+**`sc3_zonelayer_load` `0x10031c85` is the authoritative parser** — and it was read. It confirms
+the grammar exactly, gives the read primitives, and supplies validation bounds. It still does not
+fit. See below.
+
+### The loader, read in full `[CONFIRMED @0x10031c85]`
+
+Read primitives, the exact mirror of the four write primitives:
+
+| read slot | write slot | meaning |
+|---|---|---|
+| archive `vt+0x20` | archive `vt+0x30` | open section by `{type, group}` |
+| `vt+0x14` | `vt+0x64` | read/write raw block `(ptr, len)` |
+| `vt+0x18` | `vt+0x68` | read/write u8 |
+| `vt+0x34` | `vt+0x84` | read/write raw block `(ptr, len)` |
+| `vt+0x38` | `vt+0x88` | read/write u32 |
+| base `vt+0x24` | base `vt+0x28` | the bulk row array |
+
+Read order: base bulk → `u32 c1` → `c1 × {u32, u32}` (into the map at `this+0x2a4`) →
+`raw(this+0xf4, 0x17)` → `raw(this+0x98, 0x17)` → `u32 c2` → `c2 × {u8, u8, u32}` →
+`u32 c3` → `c3 × {u8, u8, u32}`. **Identical to the grammar derived from the saver.**
+
+**The base reader `0x1001b4b4`** (reached via the carved thunk `0x1003035a`) is the mirror of the
+writer and settles the dimensions question outright:
+
+```c
+n = *(int *)(this + 4);                                  // rowCount  — from the OBJECT
+while (--n >= 0)
+    stream->vt[+0x14]( *(u32*)(*(int*)(this+0xc) + n*4),
+                       *(u32 *)(this + 8) );             // rowBytes  — from the OBJECT
+```
+
+**Neither dimension is ever in the stream.** The reader already knows them, so the section is
+genuinely **not self-describing** — confirming the earlier suspicion as fact, not hypothesis.
+
+**Validation bounds the loader enforces** (useful as parse filters): both list counts `< 0x1b6`
+(438); each record's first `u8 < 0x13` (19) and second `u8 < 0x17` (23).
+
+### Attempt 6 — with the loader's own bounds — also zero fits
+
+Re-swept every start offset applying `c2, c3 < 438`, per-record `u8 < 19` and `u8 < 23`, with and
+without the 24-byte trailing-u32 block. **Zero exact fits.**
+
+### Where that leaves it
+
+The grammar is now confirmed from **both** directions and still does not match the bytes, so the
+wrong assumption is at a **higher level than the grammar**. The untested candidate:
+
+> **The archive layer may frame each section** — a per-section header or length prefix written by
+> `OpenSection` (archive `vt+0x30`) that sits *inside* the section's byte range. Nothing has been
+> read of the archive class itself; every finding so far comes from its *callers*.
+
+That is the next thing to read: the archive class behind `vt+0x30`/`vt+0x20`, not the layer.
+Do not attempt a seventh grammar sweep first — six have failed, and the grammar is not the
+variable in question.
 
 ## Second worked example: SC3WorldLayer — the city header `[CONFIRMED]`
 

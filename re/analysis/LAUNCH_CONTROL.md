@@ -1643,20 +1643,33 @@ real and documented; the feature is not delivered. Anyone resuming this should r
 
 ---
 
-## 12. Windowed mode: RENDERS. Constraint found (2026-08-16)
+## 12. Windowed mode: the intro VIDEO renders; the game still does not (2026-08-16)
 
-Supersedes the §10 conclusion that windowed mode was undelivered. It renders. What was
-missing was never a present mechanism - it was a placement constraint.
+**AMENDED. The first version of this section claimed windowed mode worked and retracted the
+§10h root cause. That was wrong and is withdrawn.** What renders in windowed mode is the
+intro movie, which blits itself to the primary surface. The game's frame loop presents via
+Flip on a device whose `this+8` (render target) is NULL, so after the video ends the client
+area goes black and the menu never appears. Confirmed by the user: "video still half width,
+video played, then black".
 
-### 12.1 Working invocation
+**The error, recorded because it is the reusable lesson:** I saw the video appear in the
+client area and concluded the present path worked. Video rendering is not evidence that the
+game renders - they are different paths. A correct conclusion (§10h, U-023/U-024) was
+retracted on the strength of one screenshot. Before treating any visual as proof that a
+subsystem works, establish WHICH path drew it.
+
+What survives is the placement constraint in §12.2, which is independently established and
+was measured across four placements.
+
+### 12.1 Invocation that shows the video
 
 ```
 re\harness\bin\sc3launch.exe -nocom -windowed -origin
 ```
 
-Visually confirmed by the user: a real top-level window titled "SimCity 3000" with a normal
-caption and border, intro video playing inside the client area in correct colour. This is
-native windowed output - no ddraw wrapper, no DDrawCompat, no dgVoodoo.
+Produces a real top-level window titled "SimCity 3000" with a normal caption and border, and
+the intro video plays inside the client area. The GAME does not render - black after the
+video. Useful as a test vehicle, not as working windowed mode.
 
 `-nocom` remains mandatory (§10e): any IDirectDraw vtable patching breaks rendering, because
 the `DWM8And16BitMitigation` shim owns that dispatch.
@@ -1674,7 +1687,7 @@ MONITOR 3: -2560,-1    2048x1152
 
 | Window pos | Inside primary? | Result |
 |---|---|---|
-| `0,0` (`-origin`) | yes | **renders** - video visible in the client |
+| `0,0` (`-origin`) | yes | **video visible in the client** (game still black afterwards) |
 | `-3,-26` (client aligned to 0,0) | no, negative | black, every run |
 | `-2560,-1` (monitor 3) | no | black |
 | `2560,155` (monitor 2) | no | black - sound plays, in-game cursor draws, zero pixels |
@@ -1702,11 +1715,15 @@ otherwise correct. Half width with correct colour is the signature of a bytes-pe
 mismatch: a row's byte count computed at 16bpp (640 px x 2 = 1280 B) written into a 32bpp
 surface fills only 320 px, leaving the rest untouched.
 
-Forcing the SC3U-side request to 32bpp does **not** change it: `-bpp 32` patches all 4 sites
-and `GetDeviceCaps(BITSPIXEL)` returns 32, picture unchanged. So the mismatch is not in the
-SC3U mode request; it lives on the GZGraphicD side (device bpp field `this+0x10`, set by
-`FUN_10009efb`). `[UNCERTAIN]` - missing evidence: a live read of `device+0x10` and of the
-actual destination surface's `ddpfPixelFormat.dwRGBBitCount` in the same frame. See U-025.
+Measured since: device init `FUN_10009efb` receives `[800, 600, 4, 16]` - **bpp 16**
+`[CONFIRMED @0x10009efb]` - and it is 16 in fullscreen too, so 16bpp is the game's normal
+configuration, not a windowed anomaly.
+
+**`-bpp 32` never reached this call.** The GZGraphicD call site at `0x1001626B` (inside
+`FUN_1001611b`) receives 16 with and without the switch, because the value arrives via
+`param_1[4]` rather than a literal. Every §10b conclusion drawn from `-bpp 32` was therefore
+testing nothing. The causal link between bpp and the half width is NOT established. See
+U-025-AMENDED; parked as cosmetic next to the missing render target.
 
 ### 12.4 Framebuffer memory-diff hunt: closed, negative
 
