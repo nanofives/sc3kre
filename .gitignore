@@ -1,0 +1,55 @@
+# =============================================================================
+# DENY-BY-DEFAULT allowlist.
+#
+# This working tree is a live retail SimCity 3000 install with RE work layered
+# on top. The vast majority of it (game binaries, a decrypted iOS app, 63k+
+# extracted sprites, the full Ghidra decompilation of EA/Maxis code) MUST NEVER
+# be published. This repo ships only our own original work: tools + notes.
+#
+# The rule below ignores EVERYTHING, then re-includes an explicit allowlist.
+# A careless `git add -A` therefore cannot leak assets: anything not named here
+# stays ignored. Verify with `git ls-files` before every push.
+# =============================================================================
+
+# 1) Ignore everything at the repo root.
+/*
+
+# 2) Root files we publish (our own work).
+!/.gitignore
+!/README.md
+!/LICENSE
+!/HANDOFF.md
+!/ROADMAP.md
+!/UNCERTAINTIES.md
+!/STUBS.md
+!/DEFERRED.md
+!/functions.csv
+
+# 3) Re-include the re/ tree, then re-ignore everything inside it.
+!/re/
+/re/*
+
+# 4) re/tools — Python tools only.
+!/re/tools/
+/re/tools/*
+!/re/tools/*.py
+
+# 5) re/scripts — .py / .ps1 / .java only.
+#    Explicitly NOT the .log / .txt Ghidra run artifacts (absolute-path leaks)
+#    and NOT the stubs/ output directories.
+!/re/scripts/
+/re/scripts/*
+!/re/scripts/*.py
+!/re/scripts/*.ps1
+!/re/scripts/*.java
+
+# 6) re/analysis — Markdown only. Excludes the stray *.csv data dumps
+#    (functions_raw_1203.csv at top level, formats/gvf_keys.csv one level down).
+#    Each directory level is denied explicitly, then only its *.md re-included.
+#    A NEW subdirectory added later is denied by default (safe failure mode).
+!/re/analysis/
+/re/analysis/*
+!/re/analysis/*.md
+!/re/analysis/formats/
+/re/analysis/formats/*
+!/re/analysis/formats/*.md
