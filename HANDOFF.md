@@ -10,7 +10,9 @@ not from any prior transcript.
   shell. The game is **29 GZCOM director DLLs** in `Apps\` (6.2 MB). All are imported and
   exported. See `re/analysis/MODULE_MAP.md` + `MODULE_INVENTORY.md`.
 - **Tracker `functions.csv`** now has a **`module` column** (first field).
-  **C0 4,843 · C1 11 · C2 646 · C3 10 · C4 7 · 664 named**
+  **C0 4,843 · C1 0 · C2 657 · C3 10 · C4 7 · 667 named** — ⭐ **the C1 tier is EMPTY.**
+  Every function anyone has looked at is now at least mechanically described. The backlog is
+  the untouched **C0 4,843**, not a queue of half-done triage.
   (2026-08-15: +16 SIMGEOM occupant-property, +8 SIMSPR QFS/sprite incl. the first C4 rows,
   +275 across the 7 previously unanalysed sim modules).
   Rows by module: SC3U 9,730 · SIMUI 109 · **SCENARIO 66** · SIMUTIL 62 · **SIMDSTR 43** ·
