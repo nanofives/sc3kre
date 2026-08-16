@@ -250,6 +250,14 @@ So one of these is wrong, and this is the next thing to resolve:
 Recording the failure explicitly so the next attempt starts from the grammar and the four
 suspects rather than re-deriving them.
 
+**Second attempt also failed.** Re-ran with `0x17` treated as an **element count** rather than a
+byte length, sweeping element sizes 1/2/4/8 bytes and `vt+0x68` widths of 1/2/4 bytes — 12
+parameter combinations, every start offset in the first 4 KB, requiring exact consumption to the
+section end. **Zero fits.** Combined with the first attempt's full-range scan, that makes the
+most likely culprit the **section boundary**, not the grammar: section sizes here are derived
+from offset deltas because the table has no size field, and the `offset` field's base is still
+`[UNCERTAIN]`. Pin the offset base first; re-testing the grammar before that is wasted effort.
+
 ## Second worked example: SC3WorldLayer — the city header `[CONFIRMED]`
 
 `SC3WorldLayer` (GZCLSID `0xe11bddf6`, **SIMMISC**) is registered at `0x1002a204` with factory
@@ -348,7 +356,31 @@ supporting evidence**, and the 32/36-byte allocations argue against it outright 
 for a layer that owns a tuning INI. Not asserted. The INI loaders are almost certainly methods of
 the *layer* classes, and these small objects are something else that merely lives nearby.
 
-Still-viable route: find what calls each INI loader, and work back to the class that owns it.
+### Following the INI loaders' callers — closer, still not proof
+
+`XrefProbe` gives each loader **exactly one** reference, an `UNCONDITIONAL_CALL` from a region
+Ghidra never carved into a function `[CONFIRMED]`:
+
+| INI loader | its single caller | ctor of the unnamed CLSID | that ctor's extent |
+|---|---|---|---|
+| `SC3ComLayer.ini` `0x1000eccd` | `0x1000e837` | `0x20ec9849` → `FUN_1000e772`; same vtable also installed by `FUN_1000e7e4` | `0x1000e7e4`–`0x1000e833` |
+| `SC3IndLayer.ini` `0x10015dc0` | `0x1001599d` | `0xa106cf3d` → `FUN_100158d3`; same vtable also installed by `FUN_1001594a` | `0x1001594a`–`0x10015999` |
+
+> ⚠️ **A wrong conclusion was nearly recorded here.** Both callers are `+0x53` from the second
+> installer's start, which looked like "the call is inside the ctor that installs the vtable" —
+> and that would have named both classes. **It is false.** Both installers are **80 bytes**, so
+> they end at `0x1000e833` and `0x10015999`; the callers at `0x1000e837` and `0x1001599d` are
+> **4 bytes past the end**. `VtableProbe` independently reports the loaders are *not* in any
+> vtable slot at all.
+
+What is true: each INI loader is called from **uncarved code immediately following** the second
+ctor of the unnamed class, at an identical `+4`-past-the-end offset in both cases. That is strong
+circumstantial linkage — but adjacency is not containment, and this file already records one
+near-miss id (`0x029ca804` vs `0x029ca806`) that punished exactly that kind of reasoning.
+
+**Names remain NOT determined.** Next step, and it is a small one: force-carve functions at
+`0x1000e837`, `0x1001599d` and `0x1002115d` with `re/scripts/MakeFunctions.java`, then read them.
+If those turn out to be methods of the same class, the mapping is proven.
 SIMSERV's only class-name string is `\Sys\SC3FireLayer.INI`; SIMRCI has `SC3ComLayer.ini`,
 `SC3IndLayer.ini`, `SC3ResLayer.ini`, `SC3ValveLayer.ini`, `\Sys\SC3ZoneLayer.INI`; SIMADV has
 none at all. Adjacency to a string is not evidence of identity, so nothing is assigned here —
