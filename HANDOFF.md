@@ -10,15 +10,14 @@ not from any prior transcript.
   shell. The game is **29 GZCOM director DLLs** in `Apps\` (6.2 MB). All are imported and
   exported. See `re/analysis/MODULE_MAP.md` + `MODULE_INVENTORY.md`.
 - **Tracker `functions.csv`** now has a **`module` column** (first field).
-  **C0 4,843 · C1 0 · C2 657 · C3 10 · C4 7 · 667 named** — ⭐ **the C1 tier is EMPTY.**
-  Every function anyone has looked at is now at least mechanically described. The backlog is
-  the untouched **C0 4,843**, not a queue of half-done triage.
-  (2026-08-15: +16 SIMGEOM occupant-property, +8 SIMSPR QFS/sprite incl. the first C4 rows,
-  +275 across the 7 previously unanalysed sim modules).
-  Rows by module: SC3U 9,730 · SIMUI 109 · **SCENARIO 66** · SIMUTIL 62 · **SIMDSTR 43** ·
-  **STRTSIM 43** · **SIMADV 36** · SIMGEOM 34 · **SIMSERV 33** · **SIMECO 30** ·
-  **SIMNTWRK 24** · SIMSPR 23 · SIMMISC 21 · SIMRCI 21 · SIMBABLD 12 · GZResourceD 10 ·
-  SimTransit 10 · GZGraphicD 6.
+  ⚠️ **THE DENOMINATOR WAS WRONG UNTIL 2026-08-16.** The tracker enumerated only `SC3U.exe`, so
+  every percentage measured ~18% of the binaries. `re/scripts/enumerate_functions.py` fixed it.
+  **Real backlog: 31,983 `FUN_*` across all 31 binaries. Classified: 991 = 3.1%.**
+  (C1 tier is EMPTY — everything anyone has read is ≥ C2.)
+  Note the raw export count of 56,754 is **misleading**: 22,495 of those files are `Unwind_*`
+  exception fragments, plus 1,118 `Catch_*`, 516 thunks, 662 library-named. Do not quote it.
+  Per-module coverage: SIMCITY 10.2% · SIMDSTR 5.7% · SIMGEOM 5.1% · SIMUI 4.3% · SIMMISC 3.8% ·
+  SIMRCI 3.1% · SIMBABLD 1.9%. See the P1 exit-gate assessment in `ROADMAP.md`.
 
 ## The GZCOM module recipe (holds for every module)
 ```
@@ -61,12 +60,12 @@ labels inside functions and will corrupt the databases.
 | **plain-bitmap sprite** | 1,139 effect/UI records | `re/tools/sprite_render.py` — **C4**, 8bpp 5-bit coverage mask |
 | **span sprite** | 62,552 records = the main art | `sprite_render.py` + `sprite_encode.py` — **C4, 62,552/62,552 re-encode BYTE-IDENTICAL** |
 | **sprite anchor** (type-1) | 62,387 records | `sprite_render.parse_anchor` — **C4**, 4×i16 `{spanL,spanT,spanR,spanB}`, witnessed by `.SII` |
+| ⭐ **city save family** | `.sc3`/`.sct`/`.snr`/`.st3` — **59/59 files, 992 records** | `ixf_parse.py` **unchanged** — see `formats/CITY_SAVE.md` (container only; payloads open) |
+| FEZC / GVF | iOS assets | `fez_extract.py`, `gvf_dump.py` |
 
 The sprite block's producer is **`GZGraphicD.dll`'s image class** (GZCLSID `0xa487535d`,
 IID `0x0487534f`), not SIMSPR: encoder `0x100017de`, consumer `0x10001700`. See `formats/QFS.md`
 and `formats/SPRITE_SII.md`.
-| **city save family** | `.sc3`/`.sct`/`.snr`/`.st3` — 59/59 files, 992 records | `re/tools/ixf_parse.py` unchanged (see `formats/CITY_SAVE.md`) |
-| FEZC / GVF | iOS assets | `fez_extract.py`, `gvf_dump.py` |
 
 `.IXF`: magic `0x80C381D7`, 20-byte index `{group, instance, type, offset, size}`, end = key
 triple zero, tombstone = `offset`/`size` == `-1`. Reader (GZResourceD `0x1000ca78`) **and** two
