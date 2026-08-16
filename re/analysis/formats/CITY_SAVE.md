@@ -297,12 +297,39 @@ written **in reverse order** (`n-1` down to `0`).
 The owning struct is therefore `{ +0x04 rowCount, +0x08 rowBytes, +0x0c rowPointerArray }`,
 reached from the layer via `member_0x0c`.
 
-`[UNCERTAIN]` the grid still does not close numerically: the grammar sweep already covered every
-possible prefix length, so a leading `rowCount * rowBytes` block plus the known counted lists
-should have fitted at *some* start offset and did not. The remaining suspect is now **`vt+0x84`**
-(used for the two `0x17` blocks in the derived saver) — it is a *different slot* from the
-`vt+0x64` used here, so the assumption that it writes `(ptr, len)` raw bytes is unfounded.
-Resolve `vt+0x84` and `vt+0x68` against the same stream vtable before sweeping again.
+### The stream vtable — required signatures, and one candidate REJECTED
+
+The zone save path pins the *arity* of four stream slots, which is enough to identify the right
+vtable `[CONFIRMED from the call sites]`:
+
+| slot | args | from |
+|---|---|---|
+| `+0x64` | **2** — `(ptr, len)` | the base writer `0x1001b4e9` |
+| `+0x68` | **1** — a byte value | the saver's `{u8,u8,u32}` list loops |
+| `+0x84` | **2** — `(ptr, 0x17)` | the two fixed blocks |
+| `+0x88` | **1** — a u32 value | everywhere |
+
+IID `0x199627` is the stream interface — QI'd for it in **18 of the 31 modules**, so it is the
+universal GZCOM stream. Its implementation should be in `GZResourceD.dll`.
+
+`FindVtables` there (>=35 slots, requiring `+0x64/+0x68/+0x84/+0x88` to resolve) gives one strong
+candidate, `PTR 0x1001d5c8` (installed by `FUN_1000eb7e` / `FUN_1000ec31`), with
+`+0x64 = FUN_1000b5b5`, `+0x68 = FUN_1000b614`, `+0x84 = FUN_1000f33a`.
+
+> ⚠️ **REJECTED.** The arities are **inverted** versus the requirement: `FUN_1000b5b5` (`+0x64`)
+> is `__thiscall(this, param_1)` — **one** argument, where the base writer passes **two**; and
+> `FUN_1000b614` (`+0x68`) takes **two**, where the saver passes **one**. So this is either a
+> different interface or the same one at a 4-byte slot shift. **Not the zone saver's stream**,
+> and not usable to decode the grammar.
+
+Next attempt should identify the stream by **construction, not search**: follow the section
+object returned by archive `vt+0x30`, then its `QueryInterface(0x199627)` implementation, to the
+concrete class — rather than pattern-matching vtables by slot occupancy. The arity table above is
+the acceptance test any candidate must pass.
+
+`[UNCERTAIN]` the grid therefore still does not close numerically. Everything structural around
+it is confirmed (offset base, section tiling, the row-pointer writer, the counted lists); only
+the stream slot semantics are missing.
 
 ## Second worked example: SC3WorldLayer — the city header `[CONFIRMED]`
 

@@ -1640,3 +1640,92 @@ real and documented; the feature is not delivered. Anyone resuming this should r
    invisible in `strings.csv` because Ghidra never created data there; both were resolved by
    reading `original\SC3U.exe` directly. A raw-bytes fallback for `DAT_`/`PTR_DAT_` targets
    referenced by decompiled code would close this class of gap.
+
+---
+
+## 12. Windowed mode: RENDERS. Constraint found (2026-08-16)
+
+Supersedes the §10 conclusion that windowed mode was undelivered. It renders. What was
+missing was never a present mechanism - it was a placement constraint.
+
+### 12.1 Working invocation
+
+```
+re\harness\bin\sc3launch.exe -nocom -windowed -origin
+```
+
+Visually confirmed by the user: a real top-level window titled "SimCity 3000" with a normal
+caption and border, intro video playing inside the client area in correct colour. This is
+native windowed output - no ddraw wrapper, no DDrawCompat, no dgVoodoo.
+
+`-nocom` remains mandatory (§10e): any IDirectDraw vtable patching breaks rendering, because
+the `DWM8And16BitMitigation` shim owns that dispatch.
+
+### 12.2 The constraint: the window must lie inside the PRIMARY display
+
+Four placements tested, same build, same switches otherwise. Monitor layout as the game
+process sees it (logged by `log_monitors()`, DPI-virtualised space):
+
+```
+MONITOR 1:     0,0     2048x1152   (primary)
+MONITOR 2:  2560,155   1920x1080
+MONITOR 3: -2560,-1    2048x1152
+```
+
+| Window pos | Inside primary? | Result |
+|---|---|---|
+| `0,0` (`-origin`) | yes | **renders** - video visible in the client |
+| `-3,-26` (client aligned to 0,0) | no, negative | black, every run |
+| `-2560,-1` (monitor 3) | no | black |
+| `2560,155` (monitor 2) | no | black - sound plays, in-game cursor draws, zero pixels |
+
+Positive coordinates are NOT sufficient: `2560,155` is positive and still black. The
+discriminator is containment in the primary display. This is consistent with the destination
+being the DirectDraw **primary surface**, which spans only the primary monitor; a destination
+rect outside it is discarded rather than clipped.
+
+`[CONFIRMED - empirical, 4 placements]`
+
+Two corollaries, both counter-intuitive enough to be worth stating:
+
+- The game's own `CreateWindowExA(pos=-3,-26)` puts its CLIENT at 0,0 - but "correcting" the
+  placement to preserve that (window at `-3,-26`) renders black. The engine anchors to the
+  WINDOW rect, not the client rect. Do not re-apply the client-alignment "fix"; there is a
+  do-not-fix-again comment at `h_MoveWindow` in `sc3probe.c`.
+- The game centres itself via `MoveWindow(621,237)` immediately after creation. That position
+  is inside the primary, so the stock centring is fine; it was my repositioning that broke it.
+
+### 12.3 Remaining defect: video draws at half width
+
+The intro video occupies 320x480 logical of the client, right-hand half black, colours
+otherwise correct. Half width with correct colour is the signature of a bytes-per-pixel
+mismatch: a row's byte count computed at 16bpp (640 px x 2 = 1280 B) written into a 32bpp
+surface fills only 320 px, leaving the rest untouched.
+
+Forcing the SC3U-side request to 32bpp does **not** change it: `-bpp 32` patches all 4 sites
+and `GetDeviceCaps(BITSPIXEL)` returns 32, picture unchanged. So the mismatch is not in the
+SC3U mode request; it lives on the GZGraphicD side (device bpp field `this+0x10`, set by
+`FUN_10009efb`). `[UNCERTAIN]` - missing evidence: a live read of `device+0x10` and of the
+actual destination surface's `ddpfPixelFormat.dwRGBBitCount` in the same frame. See U-025.
+
+### 12.4 Framebuffer memory-diff hunt: closed, negative
+
+The §10-era hunt dumped changed regions at an ASSUMED pitch (800*bpp/8). A wrong stride makes
+a real framebuffer look like horizontal-striped noise, so "noise" was not conclusive. Replaced
+the assumption with measurement: `lag_mad()` scores mean |p[i]-p[i+lag]| over lags 512..6144,
+and scanline data must produce a deep narrow minimum at the true pitch.
+
+Result across every changed region: best candidate 53% of baseline, most 99%. No sharp
+minimum anywhere. These regions are not scanline images. The hunt is closed with evidence
+rather than with exhaustion, and `fb_scan()` remains as a reusable negative test.
+
+### 12.5 New switches
+
+| Switch | Effect |
+|---|---|
+| `-origin` | move the game WINDOW to 0,0 (window origin, deliberately not client origin) |
+| `-at X,Y` | force the window to explicit coordinates, applied inside the centring `MoveWindow` |
+
+`-at` replaced an earlier `-monitor N`: `EnumDisplayMonitors` index order need not match what
+a user calls "monitor 2", and a wrong guess costs a full run. The probe now logs the monitor
+layout on every start, so `-at` values can be read straight from the log.
