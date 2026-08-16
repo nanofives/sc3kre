@@ -118,6 +118,19 @@ Map entry → subsystem init → main message/sim loop → shutdown end-to-end; 
 name the master game state and the per-tick update dispatch.
 **Exit:** boot/tick call-graph documented; key global state located and named.
 
+> **PARTIAL, ahead of schedule (2026-08-16) — the per-tick dispatch is FOUND.**
+> `SIMCITY.DLL` is the city simulator / tick driver (`re/analysis/SIMCITY.md`, 60 functions).
+> Layer modules **register periodic-update callbacks into buckets**, and the driver walks the
+> buckets in order per day: bucket1 (sub-tick) → bucket2 → bucket3 (daily) → …
+> Tick tiers: `FUN_1000a915` (tier 1, fastest) → `FUN_1000a9b1` (tier 2) → `FUN_1000aa4d`.
+> Clock `[CONFIRMED @0x10009b35]`: speed = **ticks-per-day, default `0x5a0` = 1440**
+> (`param_1[0x14] = 0x5a0`), and **ms-per-tick = `86400000 / speed`** with derived sleep
+> thresholds at `/24` and `/60`. So one sim day = 1440 ticks = one tick per simulated minute.
+> Also found: `SIMVARIABLES.DLL` is the **tunables store** — it reads `SYS.PAK [Tunables]` and
+> `SimTune.INI [tuneup]`, hashes each key name to a 32-bit id, and holds id→value pairs
+> (`re/analysis/SIMVARIABLES.md`). That is the lookup path for every tunable constant.
+> Still needed for the P3 exit: boot/entry → init ordering, and shutdown.
+
 ### P4 — Core simulation (the heart)
 RCI demand model, budget/tax/ordinances, power/water networks, traffic/transport,
 pollution, crime, land value, growth. Each: named, mechanically described, constants
