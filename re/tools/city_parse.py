@@ -24,10 +24,7 @@ DECOMPRESSED BODY [CONFIRMED against all 59 shipped files]
 
     +0x00  u32   sectionCount
     +0x04  u32   sectionTableOffset      == len(body) - sectionCount*16, in all 59 files
-    +0x08  u32   0x00020003 (.sc3/.snr) or 0x00030003 (.sct/.st3)
-    +0x0c  u32   0xDEADBEEF              a literal marker, present in all 59
-    +0x10  u32   0x40510625 (.sc3/.snr) or 0x0000000d (.sct/.st3)
-    +0x14  ...   section payloads
+    +0x08  ...   section payloads (the FIRST section starts here, at offset 8, in all 59)
     @tableOffset  sectionCount x 16-byte SECTION ENTRIES:
                     +0  u32 type
                     +4  u32 group      <- a GZCOM CLASS id: SC3ZoneLayer 0x409ff3ba and
@@ -38,13 +35,23 @@ DECOMPRESSED BODY [CONFIRMED against all 59 shipped files]
     So the table is the city's SAVED-LAYER DIRECTORY: a GZCOM {type, group, instance} key
     per section plus its offset. 3,451 sections across the 59 files.
 
-    SECTION OFFSET BASE = +0x0C [CONFIRMED, 59/59]
-    The `offset` field is relative to body+12, i.e. absolute = 12 + offset. Proof: the smallest
-    offset is 8 in ALL 59 files, and 12 + 8 = 20 = 0x14 = exactly the end of the header, so the
-    sections tile the data region [0x14, tableOffset) with no gap. +0x0C is also where the
-    0xDEADBEEF marker sits, which is a sensible thing for the writer to anchor on.
-    Section SIZES are still derived as the delta to the next sorted offset (the table has no
-    size field); the last section runs to tableOffset.
+    SECTION OFFSET BASE = 0 [CONFIRMED, 59/59 -- an earlier "+0x0C" reading is FALSIFIED]
+    The `offset` field is absolute in the body. The body header is 8 bytes, not 20: what used
+    to be read as header fields at +0x08 / +0x0c / +0x10 is the FIRST SECTION's own content.
+
+    Proof: many savers wrap their section in an 8-byte object frame written by SIMCITY's frame
+    class (ctor 0x10010315 read / 0x10010531 write):
+
+        u16 version ; u8 flags ; u8 extra (read iff flags & 2) ; u32 0xDEADBEEF
+
+    With base 0 that frame sits exactly at a section start for 2,330 of the 3,451 sections --
+    and 2,330 is ALSO the total number of 0xDEADBEEF occurrences in all 59 decompressed
+    bodies. Every marker in every file is accounted for, none is left over, and no marker
+    lands anywhere but a section start. With base 12 only 319 sections line up. The remaining
+    1,121 sections belong to classes that serialise without the frame.
+
+    Section SIZES are the delta to the next sorted offset (the table has no size field); the
+    last section runs to tableOffset.
 
     [UNCERTAIN] group `0x029ca804` occurs once per file and sits 2 below the pinned
     TrafficLayer id `0x029ca806`. Near-miss ids are NOT treated as matches here.
@@ -66,7 +73,7 @@ import qfs
 HDR = 0x18
 QFS_MAGIC = 0x10FB
 DEADBEEF = 0xDEADBEEF
-OFFSET_BASE = 12   # [CONFIRMED 59/59] section offsets are relative to body+0x0C
+OFFSET_BASE = 0    # [CONFIRMED 59/59] section offsets are absolute; body header is 8 bytes
 
 
 class CityError(Exception):
@@ -105,10 +112,34 @@ KNOWN_CLASS = {
 }
 
 
+def read_frame(body, pos):
+    """The SIMCITY object frame, if one starts at `pos`.
+
+    From SIMCITY.DLL FUN_10010315 (read ctor) / FUN_10010531 (write ctor):
+        u16 version           [CONFIRMED @0x10010315]
+        u8  flags
+        u8  extra   -- read only if flags & 2
+        u32 0xDEADBEEF        -- the ctor rejects the object if this does not match
+    Returns {"len", "version", "flags", "extra"} or None.
+    """
+    if pos + 7 > len(body):
+        return None
+    version, flags = struct.unpack_from("<HB", body, pos)
+    p = pos + 3
+    extra = None
+    if flags & 2:
+        if p >= len(body):
+            return None
+        extra = body[p]
+        p += 1
+    if p + 4 > len(body) or struct.unpack_from("<I", body, p)[0] != DEADBEEF:
+        return None
+    return {"len": p + 4 - pos, "version": version, "flags": flags, "extra": extra}
+
+
 def parse_sections(body):
-    """-> (info, [entries]). Each entry: {type, group, instance, offset, size, cls}."""
+    """-> (info, [entries]). Each entry: {type, group, instance, offset, size, cls, frame}."""
     count, table = struct.unpack_from("<2I", body, 0)
-    flavour, beef, tag = struct.unpack_from("<3I", body, 8)
     if table + count * 16 != len(body):
         raise CityError("count*16 + tableOffset (%d) != body length (%d)"
                         % (table + count * 16, len(body)))
@@ -118,15 +149,16 @@ def parse_sections(body):
         ents.append({"type": t, "group": g, "instance": inst,
                      "offset": off,               # as stored
                      "abs": OFFSET_BASE + off,    # absolute in the body
-                     "cls": KNOWN_CLASS.get(g)})
+                     "cls": KNOWN_CLASS.get(g),
+                     "frame": read_frame(body, OFFSET_BASE + off)})
     # No size field exists; derive it from the next section in offset order.
     order = sorted(ents, key=lambda e: e["offset"])
     for a, b in zip(order, order[1:]):
         a["size"] = b["offset"] - a["offset"]
     if order:
         order[-1]["size"] = table - order[-1]["abs"]
-    return {"count": count, "table": table, "flavour": flavour,
-            "deadbeef": beef == DEADBEEF, "tag": tag}, ents
+    return {"count": count, "table": table,
+            "framed": sum(1 for e in ents if e["frame"])}, ents
 
 
 def walk(target):
@@ -183,16 +215,18 @@ def main(argv):
             try:
                 sinfo, ents = parse_sections(out)
                 named = [e for e in ents if e["cls"]]
-                print("      %d sections, flavour 0x%05x%s"
-                      % (sinfo["count"], sinfo["flavour"],
+                print("      %d sections, %d framed%s"
+                      % (sinfo["count"], sinfo["framed"],
                          "" if not named else "; named classes: "
                          + ", ".join(sorted({"%s x%d" % (c, sum(1 for e in named if e["cls"] == c))
                                              for c in {e["cls"] for e in named}}))))
                 if "--sections" in argv:
                     for e in sorted(ents, key=lambda x: x["offset"]):
-                        print("        %08x:%08x:%-3d  off %-9d size %-9d %s"
+                        f = e["frame"]
+                        print("        %08x:%08x:%-3d  off %-9d size %-9d %-13s %s"
                               % (e["type"], e["group"], e["instance"], e["offset"],
-                                 e.get("size", 0), e["cls"] or ""))
+                                 e.get("size", 0), e["cls"] or "",
+                                 "" if not f else "frame v%d f%d" % (f["version"], f["flags"])))
             except (CityError, struct.error) as e:
                 print("      section table: %s" % e)
             if extract:

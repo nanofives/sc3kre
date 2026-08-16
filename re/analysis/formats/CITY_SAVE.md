@@ -81,10 +81,7 @@ Example — `Berlin, Germany.sc3`: record 743,406 bytes → 743,382 compressed �
 ```
 +0x00  u32   sectionCount
 +0x04  u32   sectionTableOffset      == len(body) - sectionCount*16   (all 59 files)
-+0x08  u32   0x00020003 (.sc3/.snr)  |  0x00030003 (.sct/.st3)
-+0x0c  u32   0xDEADBEEF               literal marker, all 59
-+0x10  u32   0x40510625 (.sc3/.snr)  |  0x0000000d (.sct/.st3)
-+0x14  ...   section payloads, laid out contiguously
++0x08  ...   section payloads, laid out contiguously; the FIRST section starts here
 @table       sectionCount x 16-byte entries:
                +0  u32 type
                +4  u32 group      <- a GZCOM CLASS id
@@ -109,20 +106,132 @@ Exact matches against the independently pinned GZCLSIDs:
 Several other ids occur exactly 59 times — once per file — so they are per-city singletons:
 types `0x406b1196`, `0xc2910e7d`, `0x20631788`, `0xe0faadc7`, `0xe11bcc69`.
 
+### Group `0x21737de5` = the SIMDIRT terrain layer ("DirtBag") `[CONFIRMED]`
+
+Found 2026-08-16 from the SIMDIRT C0 cluster and cross-checked against the bytes from both
+directions.
+
+`SIMDIRT.DLL FUN_10004d90` writes the section key literally `[CONFIRMED @0x10004d90]`:
+
+```c
+uStack_4c = 0x206c6e7c;      // the generic section TYPE
+uStack_48 = 0x21737de5;      // group
+... FUN_10010560(auStack_3c, s_DirtBag_Start_100240f4, ...);   // stream vt+0xa4 = write string
+... FUN_10010560(auStack_3c, s_DirtBag_End_10024104,   ...);
+```
+
+That key is the **first section of every city file** — Berlin `206c6e7c:21737de5:0`, 140,303
+bytes. Its loader is `FUN_10004a00`. Note the payload is delimited by the literal ASCII keys
+`DirtBag_Start` / `DirtBag_End` (`0x100240f4` / `0x10024104`) rather than by counts, and it uses
+stream slots `vt+0xa4` (write string) / `vt+0x64` (write row) — **not** the `vt+0x38`/`vt+0x88`
+mirror pair. So section grammars are per-class, and the mirror-pair test does not find them all.
+
 `[UNCERTAIN]` group `0x029ca804` occurs once per file and sits **2 below** the pinned
 `TrafficLayer` id `0x029ca806`. It is *not* treated as a match — a near-miss id is a different
 class, not a typo.
 
-**SECTION OFFSET BASE = `+0x0C` `[CONFIRMED, 59/59]`** — resolved 2026-08-16. The `offset` field
-is relative to `body + 12`, so `absolute = 12 + offset`. Proof: the smallest offset is **8 in all
-59 files**, and `12 + 8 = 20 = 0x14` = exactly the end of the header. With that base the sections
-**tile `[0x14, tableOffset)` exactly — 59 files, 0 exceptions**, every section's
-`abs + size == next.abs` and the last ending precisely at `tableOffset`. `+0x0C` is also where
-the `0xDEADBEEF` marker sits, a sensible anchor for the writer.
+### ⚠️ SECTION OFFSET BASE = **0** `[CONFIRMED, 59/59]` — the `+0x0C` reading is **FALSIFIED**
 
-**Grid-size lead:** Berlin's section `406b1196:80ab8ab0:0` is **65,552 bytes = 65,536 + 16**,
-i.e. a **256 x 256 byte grid** plus a 16-byte header. `[UNCERTAIN]` — one section, not yet
-generalised across files, and no consuming code read.
+Corrected 2026-08-16 (later). The `offset` field is **absolute in the body**; the body header is
+**8 bytes**, not 20. What was read as header fields at `+0x08` / `+0x0c` / `+0x10` is the **first
+section's own content**.
+
+The earlier `+0x0C` proof was circular: it assumed a 20-byte header, then observed that
+`12 + 8 = 20` reached its end. Both bases tile `[first, tableOffset)` exactly and produce
+identical section *sizes*, so tiling cannot distinguish them — only content can. See the frame
+test below, which does.
+
+**Consequence: attempts 3, 4, 5 and 6 at the zone grammar all ran on a window shifted 12 bytes
+too late.** Attempts 1-2 used base 0 but an incomplete grammar. Every recorded byte-level
+observation taken at base 12 (notably the twelve 4-byte SC3ZoneLayer id values) is off by three
+slots and has been re-measured below.
+
+**Grid-size lead, now clean:** Berlin's section `406b1196:80ab8ab0:0` is **65,552 bytes**, and at
+base 0 it opens with an 8-byte object frame, leaving `65,544 = 65,536 + 8` — a **256 x 256 byte
+grid** plus 8 bytes. `[UNCERTAIN]` — no consuming code read.
+
+## THE ARCHIVE DOES FRAME SECTIONS — the frame class `[CONFIRMED]`
+
+The archive class was the untested assumption above the grammar, and reading it settled the
+offset base. The frame is written by a small **SIMCITY.DLL** class, vtable `PTR_FUN_10013fc0`:
+
+| function | role | evidence |
+|---|---|---|
+| `0x10010315` | **read** ctor (open-for-load, validates) | `[CONFIRMED @0x10010315]` |
+| `0x10010531` | **write** ctor (open-for-save, emits) | `[CONFIRMED @0x10010531]` |
+| `0x1001066c` | dtor | `[CONFIRMED @0x1001066c]` |
+| `0x100106ab` | accessor: returns the framed stream, or NULL | used by every caller |
+
+The read ctor's sequence `[CONFIRMED @0x10010315]`:
+
+```c
+uVar3 = (**(code **)(*param_1 + 0x260))();   x3   // three u32s -> this+0x14/0x18/0x1c
+piVar5 = FUN_1000e9f4(this->sub);            // sub->member_0x10 == the stream
+(**(code **)(*piVar5 + 0x28))();             // u16  -> this+0x04   version
+(**(code **)(*piVar5 + 0x18))();             // u8   -> this+0x06   flags; bit0->+6, bit1->+7
+  if (flags bit1)  (**(code **)(*piVar5 + 0x18))();   // u8   -> the extra byte
+(**(code **)(*piVar5 + 0x38))();             // u32  -> this+0x08
+*(bool *)((int)this + 0x10) = *(int *)((int)this + 8) == -0x21524111;   // == 0xDEADBEEF
+```
+
+`0x10010531` is its exact mirror on the write slots (`vt+0x78` twice, then `vt+0x88`), and takes
+the version `u16` and the flags `u8` as arguments.
+
+So the on-disk frame is:
+
+```
++0x00  u16   version
++0x02  u8    flags
++0x03  u8    extra        <- present iff (flags & 2)
++0x04  u32   0xDEADBEEF   <- the ctor refuses the object if this does not match
+```
+
+### The test that pins base 0 `[CONFIRMED, 59/59]`
+
+| base | sections whose first bytes are a valid frame |
+|---|---|
+| 12 (old) | 319 of 3,451 = 9.2% |
+| **0** | **2,330 of 3,451 = 67.5%** |
+
+And **2,330 is also the total number of `0xDEADBEEF` byte sequences in all 59 decompressed
+bodies.** Every marker in every file is a section-start frame; none is left over; none lands
+anywhere else. That is not reachable by coincidence, and base 12 cannot produce it.
+
+Observed frame variants (all 8 bytes long, so `flags & 2` holds everywhere):
+
+| version | flags | count |
+|---|---|---|
+| 1 | 2 | 1,341 |
+| 2 | 2 | 362 |
+| 4 | 2 | 207 |
+| 3 | 2 | 170 |
+| 3 | 3 | 66 |
+| 505 | 2 | 59 |
+| 9 | 2 | 59 |
+| 2 | 3 | 44 |
+| 1 | 3 | 22 |
+
+The frame is **opt-in per class**, not imposed by the archive on every section: the other 1,121
+sections start with payload. `SC3ZoneLayer` is one of the classes that does **not** use it —
+all 767 of its sections are unframed.
+
+### The city LOAD driver, and where the frame is used `[CONFIRMED @0x1000351e]`
+
+`SIMCITY.DLL FUN_1000351e` (1,645 bytes) is the **city load driver**: `this` = the city
+simulator, `param_1` = the archive.
+
+```c
+FUN_10010315(&local_100, this, param_1);        // open the framed city header
+piVar6 = (int *)FUN_100106ab((int)&local_100);  // the stream, or NULL
+...   vt+0x48 x4 -> this+0x180/0x184/0x188 ;  vt+0x38 x8 ;  vt+0x54 x4 (strings) ; vt+0x18 x3
+FUN_1001066c(&local_100);                       // close the frame
+...
+(**(code **)(**(int **)(*(int *)((int)this + 0x94) + uVar7 * 4) + 0x1c))(this, param_1);
+                                                // then EACH layer's load, (citySim, archive)
+```
+
+So the layer array lives at `citySim+0x94 .. +0x98` and each layer's **load is vtable slot
+`+0x1c`**, taking `(citySim, archive)`. `FUN_10004b85` is the sibling that also opens a frame.
 
 ## Worked example: SC3ZoneLayer — the loop closed `[CONFIRMED]`
 
@@ -153,15 +262,18 @@ Field write order in the saver, i.e. the on-disk order: `this+0x10`, `this+0x14`
 
 ### What the 13 SC3ZoneLayer sections are
 
+Re-measured at **base 0** (the values previously recorded here were read 12 bytes late, i.e.
+three slots off, and are withdrawn). Each value is identical in all 59 files:
+
 | instance | size | content |
 |---|---|---|
 | 0 | 50,274–198,060 (varies per city) | the bulk zone data |
-| 2, 3, 4 | 4 | `0x619FF3CE` |
-| 6, 7, 8 | 4 | `0x41A00001` |
-| 10, 11, 12 | 4 | `0xE1A00030` |
-| 15 | 4 | `0xC1F5C0BE` |
-| 16 | 4 | `0x82D4A0EB` |
-| 18 | 4 | `0x82361BE5` |
+| 2, 3, 4 | 4 | `0x619BA64E` |
+| 6, 7, 8 | 4 | `0x41A3ADC1` |
+| 10, 11, 12 | 4 | `0xE1A53B30` |
+| 15 | 4 | `0xC1F81E7E` |
+| 16 | 4 | `0x82D2D72B` |
+| 18 | 4 | `0x82348DE5` |
 
 ### The stride-8 loop explains the instances `[CONFIRMED @0x100320e7:120-148]`
 
@@ -435,18 +547,72 @@ genuinely **not self-describing** — confirming the earlier suspicion as fact, 
 Re-swept every start offset applying `c2, c3 < 438`, per-record `u8 < 19` and `u8 < 23`, with and
 without the 24-byte trailing-u32 block. **Zero exact fits.**
 
+### Attempt 7 — corrected window, forward AND backward — still zero fits
+
+The archive class was read (above) and it **does** frame sections, so the one authorised re-test
+was run. Two things changed versus attempts 3-6: the window moved back 12 bytes (base 0), and the
+parse was also run **backwards** from the section end, which removes the unknown bulk length `G`
+from the search entirely — the end is known exactly, and the tail grammar is rigid.
+
+| run | result |
+|---|---|
+| forward, every start, ±24-byte tail, loader bounds | **0 fits, 59/59 files** |
+| backward from the end, solving each count in turn | **0 fits, 59/59 files** |
+
+The backward parse is the stronger of the two and it is conclusive: **the tail
+`u32 c2 ; c2 x {u8,u8,u32} ; u32 c3 ; c3 x {u8,u8,u32}` is not present at the end of this
+section**, with or without the six trailing `u32`s, under the loader's own bounds. Stop treating
+the flat grammar as the description of instance 0.
+
+### But the section's SHAPE is now measured `[CONFIRMED, 59/59]`
+
+Two independent measurements agree on the layout, which is the first real progress here:
+
+**1. The size formula.** For every one of the 59 files there is exactly one
+`N ∈ {128, 192, 256}` with `size − 3·N² ∈ (0, 4096)`:
+
+```
+size(zone instance 0)  =  3·N²  +  tail        N = 128 | 192 | 256   (the three map sizes)
+```
+
+`tail` is **900 in 34 of the 59 files** — every unplayed terrain and starter town, at *both*
+N=192 and N=256 — and larger only in played cities. **Every tail is a multiple of 6**
+(900, 1026, 1086, 1122, 1134, 1200, 1206, 1236, … 1452). A constant 900-byte floor plus a
+6-byte-per-element variable part is exactly the shape of a fixed header followed by the
+`{u8, u8, u32}` records the loader reads.
+
+**2. The first N² bytes are a low-entropy raster.** Measured per plane:
+
+| file | N | plane 0 = `[0, N²)` | plane 1 | plane 2 |
+|---|---|---|---|---|
+| Berlin | 256 | **H = 2.13, 14 distinct byte values** | H = 7.95 | H = 7.98 |
+| Farmsville | 192 | **H = 0.58, 9 distinct byte values** | H = 7.55 | H = 7.58 |
+
+Exactly `N²` bytes containing only 9-14 distinct values, followed by a hard entropy jump. That is
+a **one-byte-per-tile zone raster** at the head of the section, and it pins `N` independently of
+the size arithmetic.
+
+`[UNCERTAIN]` what the remaining `2·N²` bytes are. They are not uniform noise: the byte at `N²`
+begins a structured `u32` run — Berlin `3, 3000, 1027, 5000`, Farmsville `3, 3000, -397, 5000`
+(same first, second and fourth value, city-specific third) — after which entropy rises. No code
+has been read for that region, and "2 bytes per tile" is arithmetic, not evidence.
+
+The section's last bytes are a clean run of small `u32`s in every file (Berlin
+`… 0, 1, 132, 74, 54, 58, 50, 82`; Farmsville `… 1, 90, 170, 0, 0, 0, 3`), consistent with the
+saver's six trailing `u32` writes `[CONFIRMED @0x100320e7:109-118]` — but the records that should
+precede them do not parse, so the six are not asserted as located.
+
 ### Where that leaves it
 
-The grammar is now confirmed from **both** directions and still does not match the bytes, so the
-wrong assumption is at a **higher level than the grammar**. The untested candidate:
+The archive question is **answered**: sections are framed, the frame is `{u16 version, u8 flags,
+u8 extra, u32 0xDEADBEEF}`, it is opt-in per class, and `SC3ZoneLayer` does not use it. The real
+payoff was the offset base: 12 -> 0.
 
-> **The archive layer may frame each section** — a per-section header or length prefix written by
-> `OpenSection` (archive `vt+0x30`) that sits *inside* the section's byte range. Nothing has been
-> read of the archive class itself; every finding so far comes from its *callers*.
-
-That is the next thing to read: the archive class behind `vt+0x30`/`vt+0x20`, not the layer.
-Do not attempt a seventh grammar sweep first — six have failed, and the grammar is not the
-variable in question.
+The zone grammar remains unsolved after seven attempts, but the failure has moved. It is no
+longer "the bytes are opaque" — the section is `N²` raster + `2·N²` + a 900+6k tail, and the flat
+`{u8,u8,u32}` list grammar provably is not at the end of it. **Do not sweep the grammar again.**
+The next evidence has to come from the `if (cVar != '\0')` guards in the saver (which can skip
+whole writes) or from a debugger, not from more byte fitting.
 
 ## Second worked example: SC3WorldLayer — the city header `[CONFIRMED]`
 

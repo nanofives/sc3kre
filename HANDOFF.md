@@ -1,3 +1,33 @@
+# HANDOFF.md — SimCity 3000 RE (state @ 2026-08-16)
+
+## 🔴 READ THIS FIRST — two corrections landed 2026-08-16 (late)
+
+1. **The city-save section offset base is `0`, not `+0x0C`.** The `[CONFIRMED, 59/59]` claim for
+   `+0x0C` was circular and is **FALSIFIED**. The body header is **8 bytes**; what was read as
+   header fields at `+0x08`/`+0x0c`/`+0x10` is the first section's own content. Proof: the
+   SIMCITY object frame `{u16 version, u8 flags, u8 extra, u32 0xDEADBEEF}` lands exactly on a
+   section start for **2,330 of 3,451 sections at base 0** — and 2,330 is the **total** number of
+   `0xDEADBEEF` occurrences in all 59 bodies. At base 12 only 319 line up.
+   **Every byte-level observation previously recorded at base 12 is off by 12** and the ones in
+   `CITY_SAVE.md` have been re-measured. `re/tools/city_parse.py` is fixed; 59/59 still parse.
+2. **The archive DOES frame sections** — frame class `SIMCITY.DLL` `0x10010315` (read) /
+   `0x10010531` (write) / `0x1001066c` (dtor) / `0x100106ab` (accessor), vtable
+   `PTR_FUN_10013fc0`. It is **opt-in per class**; `SC3ZoneLayer` does not use it.
+   Also found: `SIMCITY.DLL FUN_1000351e` is the **city load driver** — layer array at
+   `citySim+0x94..+0x98`, each layer's load is **vtable slot `+0x1c`**, called `(citySim, archive)`.
+3. **Zone grammar: attempt 7 failed too, forward AND backward from the known end.** Do not
+   attempt an eighth. But the section's shape is now measured: `3·N²` + a `900 + 6k` tail, with
+   the first `N²` bytes a 1-byte-per-tile raster and `N ∈ {128, 192, 256}`. See `U-029`.
+4. **Group `0x21737de5` is named**: the SIMDIRT terrain layer, saver `0x10004d90`, loader
+   `0x10004a00`, payload delimited by literal `DirtBag_Start` / `DirtBag_End`. It is the **first
+   section of every city file**. Its grammar is chunk-keyed, not the `vt+0x38`/`vt+0x88` mirror
+   pair — so the mirror-pair test does **not** find every serialiser.
+5. **C0 clusters merged** for the five modules that had never had one: SIMSPR, GZWinD, GZWWWD,
+   SIMDIRT, AUDIO (`re/analysis/<M>_CLUSTER1.md`, 124 rows). Tracker now **1,167 of 31,991 =
+   3.6%** classified (C1 6 · C2 1,134 · C3 20 · C4 7). The C1 tier is no longer empty.
+
+---
+
 # HANDOFF.md — SimCity 3000 RE (state @ 2026-08-15)
 
 Snapshot for a fresh orchestrator session. Everything below is on disk; boot from the docs,
