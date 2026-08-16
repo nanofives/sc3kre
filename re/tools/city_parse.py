@@ -38,11 +38,13 @@ DECOMPRESSED BODY [CONFIRMED against all 59 shipped files]
     So the table is the city's SAVED-LAYER DIRECTORY: a GZCOM {type, group, instance} key
     per section plus its offset. 3,451 sections across the 59 files.
 
-    [UNCERTAIN] the base the `offset` field is relative to. Sorted offsets are strictly
-    increasing and always below tableOffset, but the smallest observed is 8, which is inside
-    the 0x14 header if the base is 0 -- so it may be relative to +0x14, or the first entry may
-    be a sentinel. Not resolved; section SIZES are therefore derived as the delta to the next
-    sorted offset rather than read from the table (there is no size field).
+    SECTION OFFSET BASE = +0x0C [CONFIRMED, 59/59]
+    The `offset` field is relative to body+12, i.e. absolute = 12 + offset. Proof: the smallest
+    offset is 8 in ALL 59 files, and 12 + 8 = 20 = 0x14 = exactly the end of the header, so the
+    sections tile the data region [0x14, tableOffset) with no gap. +0x0C is also where the
+    0xDEADBEEF marker sits, which is a sensible thing for the writer to anchor on.
+    Section SIZES are still derived as the delta to the next sorted offset (the table has no
+    size field); the last section runs to tableOffset.
 
     [UNCERTAIN] group `0x029ca804` occurs once per file and sits 2 below the pinned
     TrafficLayer id `0x029ca806`. Near-miss ids are NOT treated as matches here.
@@ -64,6 +66,7 @@ import qfs
 HDR = 0x18
 QFS_MAGIC = 0x10FB
 DEADBEEF = 0xDEADBEEF
+OFFSET_BASE = 12   # [CONFIRMED 59/59] section offsets are relative to body+0x0C
 
 
 class CityError(Exception):
@@ -112,14 +115,16 @@ def parse_sections(body):
     ents = []
     for i in range(count):
         t, g, inst, off = struct.unpack_from("<4I", body, table + i * 16)
-        ents.append({"type": t, "group": g, "instance": inst, "offset": off,
+        ents.append({"type": t, "group": g, "instance": inst,
+                     "offset": off,               # as stored
+                     "abs": OFFSET_BASE + off,    # absolute in the body
                      "cls": KNOWN_CLASS.get(g)})
     # No size field exists; derive it from the next section in offset order.
     order = sorted(ents, key=lambda e: e["offset"])
     for a, b in zip(order, order[1:]):
         a["size"] = b["offset"] - a["offset"]
     if order:
-        order[-1]["size"] = table - order[-1]["offset"]
+        order[-1]["size"] = table - order[-1]["abs"]
     return {"count": count, "table": table, "flavour": flavour,
             "deadbeef": beef == DEADBEEF, "tag": tag}, ents
 

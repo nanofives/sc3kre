@@ -113,9 +113,12 @@ types `0x406b1196`, `0xc2910e7d`, `0x20631788`, `0xe0faadc7`, `0xe11bcc69`.
 `TrafficLayer` id `0x029ca806`. It is *not* treated as a match — a near-miss id is a different
 class, not a typo.
 
-`[UNCERTAIN]` what the `offset` field is relative to. The smallest observed is 8, which falls
-inside the 0x14 header if the base is 0, so it may be relative to `+0x14` or the first entry may
-be a sentinel. Unresolved, and it does not affect section sizing (derived from deltas).
+**SECTION OFFSET BASE = `+0x0C` `[CONFIRMED, 59/59]`** — resolved 2026-08-16. The `offset` field
+is relative to `body + 12`, so `absolute = 12 + offset`. Proof: the smallest offset is **8 in all
+59 files**, and `12 + 8 = 20 = 0x14` = exactly the end of the header. With that base the sections
+**tile `[0x14, tableOffset)` exactly — 59 files, 0 exceptions**, every section's
+`abs + size == next.abs` and the last ending precisely at `tableOffset`. `+0x0C` is also where
+the `0xDEADBEEF` marker sits, a sensible anchor for the writer.
 
 **Grid-size lead:** Berlin's section `406b1196:80ab8ab0:0` is **65,552 bytes = 65,536 + 16**,
 i.e. a **256 x 256 byte grid** plus a 16-byte header. `[UNCERTAIN]` — one section, not yet
@@ -250,13 +253,22 @@ So one of these is wrong, and this is the next thing to resolve:
 Recording the failure explicitly so the next attempt starts from the grammar and the four
 suspects rather than re-deriving them.
 
-**Second attempt also failed.** Re-ran with `0x17` treated as an **element count** rather than a
-byte length, sweeping element sizes 1/2/4/8 bytes and `vt+0x68` widths of 1/2/4 bytes — 12
-parameter combinations, every start offset in the first 4 KB, requiring exact consumption to the
-section end. **Zero fits.** Combined with the first attempt's full-range scan, that makes the
-most likely culprit the **section boundary**, not the grammar: section sizes here are derived
-from offset deltas because the table has no size field, and the `offset` field's base is still
-`[UNCERTAIN]`. Pin the offset base first; re-testing the grammar before that is wasted effort.
+**Attempts 2 and 3 also failed, and the boundary excuse is now gone.**
+
+- *Attempt 2*: `0x17` as an **element count**, sweeping element sizes 1/2/4/8 and `vt+0x68`
+  widths 1/2/4 — 12 combinations, every start in the first 4 KB. **Zero fits.**
+- *Attempt 3*: after the offset base was pinned to `+0x0C` (above), the section window shifted by
+  12 bytes at **both** ends — the exact boundary error suspected. Re-ran the full sweep on the
+  corrected window. **Still zero fits.**
+
+So the boundary is now proven correct and the **grammar is what is wrong**. The corrected
+section begins `00 00 00 0f 0f 0f 00 0a 0a 0a …` — byte data, not a `u32` count, which is
+consistent with the saver's *first* call being the base class's `vt+0x28` write. That base-class
+write is therefore not a small prefix but the **bulk of the section**, and it is opaque here:
+`this-0x14` is the base subobject and its `vt+0x28` was never read.
+
+**Next step is now unambiguous:** read the base class's `vt+0x28` writer, not the derived
+saver. Everything after it (the counted lists) is already known and correct.
 
 ## Second worked example: SC3WorldLayer — the city header `[CONFIRMED]`
 
@@ -378,9 +390,38 @@ ctor of the unnamed class, at an identical `+4`-past-the-end offset in both case
 circumstantial linkage — but adjacency is not containment, and this file already records one
 near-miss id (`0x029ca804` vs `0x029ca806`) that punished exactly that kind of reasoning.
 
-**Names remain NOT determined.** Next step, and it is a small one: force-carve functions at
-`0x1000e837`, `0x1001599d` and `0x1002115d` with `re/scripts/MakeFunctions.java`, then read them.
-If those turn out to be methods of the same class, the mapping is proven.
+**Names remain NOT determined**, and the carve was done — it did not close the gap:
+
+`MakeFunctions.java` created all three callers (each **8 bytes**), and they are bare forwarding
+stubs `[CONFIRMED]`:
+
+```
+1000e837  CALL 0x1000eccd   (SC3ComLayer.ini loader)   ;  1000e83c  RET 0x4
+1001599d  CALL 0x10015dc0   (SC3IndLayer.ini loader)   ;  100159a2  RET 0x4
+1002115d  CALL 0x10022ac6   (SC3ResLayer.ini loader)   ;  10021162  RET 0x4
+```
+
+8 bytes is the size of an MSVC adjustor thunk, so the obvious next guess was that a *secondary*
+vtable holds the **stub** (which would explain why probing the *loader* found nothing). It does
+not: `VtableProbe` on all three stubs returns **no vtable slot**, and `XrefProbe` on them returns
+**zero references of any kind**.
+
+So the chain is: INI loader ← exactly one stub ← *nothing statically reachable*. These stubs are
+dispatched through a table Ghidra has not typed as data. **Read-only probing is exhausted here.**
+
+A byte-scan of the whole module for the three stub addresses finds **zero occurrences** — they
+are in no data table either.
+
+> ⚠️ **Do not conclude "unreachable" from that scan.** An x86 `CALL rel32` encodes a
+> *displacement*, not the target address, so a byte-scan for an absolute address **cannot find
+> call sites by construction**. The scan only rules out *data* references. Combined with
+> XrefProbe returning nothing, the real explanation is that the calling code **was never
+> disassembled** — the same uncarved-region problem that hid the stubs themselves.
+
+Remaining routes, in order of cost: (a) force-disassemble the whole region around
+`0x1000e7e4`–`0x1000e900` (and the SIMRCI equivalents) so the callers become visible to
+XrefProbe; (b) run the game under a debugger and breakpoint the loader. Until one lands,
+`0x20ec9849` and `0xa106cf3d` stay unnamed.
 SIMSERV's only class-name string is `\Sys\SC3FireLayer.INI`; SIMRCI has `SC3ComLayer.ini`,
 `SC3IndLayer.ini`, `SC3ResLayer.ini`, `SC3ValveLayer.ini`, `\Sys\SC3ZoneLayer.INI`; SIMADV has
 none at all. Adjacency to a string is not evidence of identity, so nothing is assigned here —
