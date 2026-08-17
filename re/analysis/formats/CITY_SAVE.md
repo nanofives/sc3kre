@@ -1139,7 +1139,39 @@ bytes** if `vt+0x98` is a scalar. It is not: something in there is writing ~1,00
 >
 > **The gap was then closed by testing the remaining suspect — and the suspect was right.**
 
-### ⭐ The `0x17` blocks are 23 ELEMENTS of 4 bytes, not 23 bytes `[CONFIRMED, 59/59]`
+### ⚠️ The "23 elements of 4 bytes" reading is FALSIFIED — the blocks ARE 23 bytes
+
+**Read this before the section below, which is left in place as the record of a wrong turn.**
+
+`VtableDump` on the other two stream flavours shows **all three share `+0x84 = FUN_1000c1ad`**,
+so "a different flavour scales the length" is dead. And the disassembly of the call site is
+unambiguous `[CONFIRMED @0x100321bb]`:
+
+```
+100321b5  LEA  EDX,[ESI + 0xf4]
+100321bb  PUSH 0x17                     ; length = 23, literally
+100321bd  PUSH EDX
+100321c0  CALL dword ptr [EAX + 0x84]   ; Write(ptr, len) in BYTES
+```
+
+**So each block is 23 bytes and the pair is 46.** What the `S=4` sweep below actually
+established is narrower than what it was written up as: with **184** bytes attributed to the
+"block" term the distance to the `u16` count is constant in all 59 files, whereas the true
+blocks account for only 46. That is still a real result — **there are ~138 CONSTANT bytes
+between the two blocks and the `c2` count that nothing in the decompiled saver accounts for** —
+but attributing them to the block size was fitting a parameter, not identifying a structure.
+
+This is the **second** wrong inference in a row on this same gap (the first was `vt+0x98`). Both
+came from the same move: taking a number that made the arithmetic close and calling it a cause.
+The gap remains open. What is now pinned about it: it is ~138 bytes, it is constant across all
+59 files, and it sits between the two 23-byte blocks and the `c2` count.
+
+The end-to-end layout below is therefore **not** confirmed as written; everything from the
+blocks to the `u16` count needs re-deriving with 46-byte blocks.
+
+---
+
+### The `S=4` sweep — kept as the record, but see the falsification above
 
 Solving for the block element size instead of assuming it: parse from `N*N` with the blocks at
 `2 * 0x17 * S` bytes, for every `S`, and ask which `S` makes the distance from the grammar's end
