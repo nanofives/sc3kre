@@ -1,6 +1,40 @@
-# HANDOFF.md — SimCity 3000 RE (state @ 2026-08-16)
+# HANDOFF.md — SimCity 3000 RE (state @ 2026-08-17)
 
-## 🔴 READ THIS FIRST — two corrections landed 2026-08-16 (late)
+## ⭐ WHERE THE PROJECT IS
+
+**End-state: a MODDING / FORMAT TOOLKIT.** Decided 2026-08-17; the source-port option is
+**closed** (`ROADMAP.md`, P1 gate). **P1's gate is met except criterion 2** — ≥C1 across the
+eleven core-sim modules, currently **2,299 / 9,575 = 24.0%** — and that criterion should itself
+be re-examined now that the end-state is a toolkit.
+
+**Next deliverable, deliberately falsifiable: a city-save WRITER that round-trips a shipped
+`.sc3` byte-identically.** Reading 59/59 is not writing. Match the sprite bar (62,552/62,552).
+
+**The city save is READ-solved.** Container, 24-byte header, QFS, section archive, per-section
+frame, **all 44 section groups traced to their serialisers**, map dimension `N` readable, zone
+layer decoded to per-tile developer slots with R/C/I/Landfill named. Tools: `re/tools/city_parse.py`,
+`re/tools/city_sections.py`, `re/scripts/find_section_producers.py`.
+
+### Method lessons from 2026-08-16/17 — these cost real time, read them
+
+1. **Silent tool failures were the dominant time sink — four in one session.** Every one
+   produced plausible output with no error: a regex needing 8 hex digits when Ghidra strips
+   leading zeros; an assumed store order; a call-listing regex that skipped slot-0 calls
+   entirely; a classifier counting a function's own name as a call. **Every one was caught by a
+   disagreement between two methods, never by re-reading the code.** Cross-check tools against
+   readers, and hand-sample output.
+2. **Don't reason backwards from a discrepancy to a cause.** Four inferences about one ~138-byte
+   gap were all wrong (`vt+0x98` non-scalar; blocks as 4-byte elements; saver/loader asymmetry;
+   the alignment contradiction). Each made the arithmetic close and each was falsified by
+   reading. Measure the cause.
+3. **Re-read the function, not the summary of it.** `CITY_SAVE.md`'s grammar was derived from
+   the saver twice and the loader once and was still missing two writes.
+4. **A validation harness can go circular.** After the classifier's first merge it began scoring
+   its own rows and "improved" from 12/13 to 626/627. Ground truth must exclude your own output.
+5. **A coverage number that only ever rises is not measuring anything.** The classifier reverted
+   85 of its own rows on re-run; core-sim went 24.9% → 24.0% and that was correct.
+
+## 🔴 What landed 2026-08-16 (still current unless corrected above)
 
 1. **The city-save section offset base is `0`, not `+0x0C`.** The `[CONFIRMED, 59/59]` claim for
    `+0x0C` was circular and is **FALSIFIED**. The body header is **8 bytes**; what was read as
@@ -15,16 +49,21 @@
    `PTR_FUN_10013fc0`. It is **opt-in per class**; `SC3ZoneLayer` does not use it.
    Also found: `SIMCITY.DLL FUN_1000351e` is the **city load driver** — layer array at
    `citySim+0x94..+0x98`, each layer's load is **vtable slot `+0x1c`**, called `(citySim, archive)`.
-3. **Zone grammar: attempt 7 failed too, forward AND backward from the known end.** Do not
-   attempt an eighth. But the section's shape is now measured: `3·N²` + a `900 + 6k` tail, with
-   the first `N²` bytes a 1-byte-per-tile raster and `N ∈ {128, 192, 256}`. See `U-029`.
+3. ~~**Zone grammar: attempt 7 failed. Do not attempt an eighth.**~~ **SUPERSEDED 2026-08-17 —
+   the zone section is now decoded.** The grammar starts at `N*N` and parses in 59/59; all eight
+   earlier sweeps failed for one reason, they required it to consume to the section end and it
+   never does. The `3·N²` reading was also wrong: only the first `N*N` is a raster, the rest is
+   a `u16`-per-tile permutation written by a sub-object at `this+0x268` (slot 1 writes, slot 0
+   reads), and the loader's second arm is a **failure fallback** that recomputes a histogram,
+   not a format variant. `N` is readable from the SIMGEOM tile-grid section. See `CITY_SAVE.md`
+   and `U-029`; open items there are semantic (the permutation's purpose, the `3000/5000/8000`
+   keys, a `this+0x3c` 23-vs-92-byte mismatch).
 4. **Group `0x21737de5` is named**: the SIMDIRT terrain layer, saver `0x10004d90`, loader
    `0x10004a00`, payload delimited by literal `DirtBag_Start` / `DirtBag_End`. It is the **first
    section of every city file**. Its grammar is chunk-keyed, not the `vt+0x38`/`vt+0x88` mirror
    pair — so the mirror-pair test does **not** find every serialiser.
 5. **C0 clusters merged** for the five modules that had never had one: SIMSPR, GZWinD, GZWWWD,
-   SIMDIRT, AUDIO (`re/analysis/<M>_CLUSTER1.md`, 124 rows). Tracker now **1,167 of 31,991 =
-   3.6%** classified (C1 6 · C2 1,134 · C3 20 · C4 7). The C1 tier is no longer empty.
+   SIMDIRT, AUDIO (`re/analysis/<M>_CLUSTER1.md`, 124 rows). (tracker figures superseded — see the gate table below).
 6. **⭐ THE P1 GATE IS RE-SCOPED** (owner call, 2026-08-16). *"100% of `FUN_*` at ≥ C1"* is
    **retired** — do not measure against it. The gate is now: everything **enumerated** (met,
    31,991 rows) + **≥ C1 across the eleven core-sim modules** + subsystem map (met) + the
@@ -137,6 +176,15 @@
    The bar to match is the sprite work: 62,552/62,552 byte-identical re-encode.
 ---
 
+> ⚠️ **EVERYTHING BELOW THIS LINE IS THE 2026-08-15 SNAPSHOT AND IS PARTLY SUPERSEDED.**
+> Kept for the parts that are still the best record (module recipe, pinned classes, sim models,
+> cross-RE rule, tooling). Do **not** trust these specifically:
+> * the **`3.2% classified`** figure and any per-module percentage — see the gate table above;
+> * **"C1 tier is EMPTY"** — it is now the largest tier (4,015 rows, mostly `classify_families`);
+> * anything about the **city save** — the container section base was `+0x0C` and is **0**, and
+>   the zone section is decoded; `CITY_SAVE.md` is the only current source;
+> * **"the grammar is confirmed from BOTH the saver and the loader"** — true only up to block C;
+> * the **next-moves list** at the foot — superseded by the toolkit decision in `ROADMAP.md`.
 # HANDOFF.md — SimCity 3000 RE (state @ 2026-08-15)
 
 Snapshot for a fresh orchestrator session. Everything below is on disk; boot from the docs,
