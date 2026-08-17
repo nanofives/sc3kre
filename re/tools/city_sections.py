@@ -94,10 +94,15 @@ def decode_tile_grid(body, e, n):
 def decode_zone_bulk(body, e, n):
     """The zone blob: plane 0 is a 1-byte-per-tile raster of N*N.
 
-    Only plane 0 is a raster [CONFIRMED by stride coherence]. The remaining 2*N*N is NOT --
-    it is high-entropy packed data, falsified as a plane. It and the 900+6k tail are undecoded --
-    the grammar for them is confirmed from both the saver and the loader and still does not
-    match the bytes after seven attempts (U-029). Reporting them raw is the honest option.
+    Only plane 0 is a raster [CONFIRMED by stride coherence]. The 2*N*N that follows is NOT --
+    it is high-entropy packed data, falsified as a plane.
+
+    The GRAMMAR does start immediately after plane 0, at N*N, and parses cleanly in all 59
+    shipped files: `u32 c1; c1 x {u32,u32}` (keys always 3000/5000/8000), two 23-byte blocks,
+    then `u32 c2` and `u32 c3` which are ZERO in every shipped file. It consumes 58 bytes when
+    c1 == 0 and 82 when c1 == 3, and then STOPS -- roughly 2*N*N bytes follow that it does not
+    describe. Eight earlier attempts missed it solely because they required the grammar to
+    consume to the section end. See CITY_SAVE.md and U-029.
     """
     s = e["abs"]
     plane = body[s:s + n * n]
@@ -108,6 +113,25 @@ def decode_zone_bulk(body, e, n):
     # 0 == unzoned (all 21 .sct terrains are 100% zero), and every other value is one of the
     # slots that file declares via its 4-byte id sections -- with the single exception of
     # 0x16, which is in range but never declared. See CITY_SAVE.md.
+    # The grammar starts at N*N and fits in 58 or 82 bytes [CONFIRMED 59/59]. Decode it.
+    g = {}
+    q = s + n * n
+    try:
+        c1 = struct.unpack_from("<I", body, q)[0]
+        if c1 <= 64:
+            g["c1"] = [struct.unpack_from("<2i", body, q + 4 + 8 * i) for i in range(c1)]
+            q += 4 + c1 * 8
+            g["block_a"] = body[q:q + 0x17]
+            g["block_b"] = body[q + 0x17:q + 0x2e]
+            q += 0x2e
+            g["c2"] = struct.unpack_from("<I", body, q)[0]
+            q += 4 + g["c2"] * 6
+            g["c3"] = struct.unpack_from("<I", body, q)[0]
+            q += 4 + g["c3"] * 6
+            g["grammar_bytes"] = q - (s + n * n)
+            g["after_grammar"] = e["size"] - (q - s)
+    except struct.error:
+        g = {}
     hist = {}
     for b in plane:
         hist[b] = hist.get(b, 0) + 1
@@ -115,7 +139,7 @@ def decode_zone_bulk(body, e, n):
             "unzoned": hist.get(0, 0), "slots": sorted(k for k in hist if k),
             "by_class": {c: sum(hist.get(v, 0) for v in vs)
                          for c, vs in ZONE_CLASS.items()},
-            "undecoded_middle": 2 * n * n, "tail": rest}
+            "grammar": g, "undecoded_middle": 2 * n * n, "tail": rest}
 
 
 def decode_zone_id(body, e):
@@ -207,8 +231,14 @@ def main(argv):
                     print("                   by class: %s"
                           % ", ".join("%s %.1f%%" % (c, 100.0 * v / (dec["n"] * dec["n"]))
                                       for c, v in dec["by_class"].items() if v))
-                    print("                   %d bytes undecoded + %d tail (U-029)"
-                          % (dec["undecoded_middle"], dec["tail"]))
+                    g = dec.get("grammar") or {}
+                    if g:
+                        print("                   grammar at N*N: %d bytes, c1=%s c2=%d c3=%d"
+                              % (g["grammar_bytes"], g["c1"], g["c2"], g["c3"]))
+                        print("                   %d bytes after the grammar UNDECODED (U-029)"
+                              % g["after_grammar"])
+                    else:
+                        print("                   grammar did not parse at N*N")
                 elif dec["kind"] == "zone_slot_id" and dec["slot"] in (1, 5, 9):
                     print("    zone slot %-2d   id 0x%08x" % (dec["slot"], dec["id"]))
                 if pgm and dec["kind"] in ("tile_grid", "zone_bulk"):

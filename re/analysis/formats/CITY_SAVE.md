@@ -1001,8 +1001,53 @@ stand — they rest on separate evidence. What dies is the inference that the si
 implied three planes. **The size relation was never evidence about content**, and treating it as
 such is the mistake this attempt caught.
 
-**Still do not sweep the grammar.** Eight attempts; the flat `{u8,u8,u32}` list grammar remains
-unlocated, and the region it would have to live in is now known to be high-entropy.
+### ⭐⭐ THE GRAMMAR IS FOUND. It starts at `N*N` and it fits `[CONFIRMED, 59/59]`
+
+Reading the middle's *start* rather than sweeping for it found it immediately. At offset `N*N`
+the bytes are not noise — they are the grammar's first list:
+
+```
+Berlin      3 | (3000, 1027) (5000, -1823) (8000, -2189)
+Farmsville  3 | (3000, -397) (5000,    18) (8000,     0)
+Europolis   3 | (3000,    0) (5000,  -158) (8000, -1040)
+```
+
+`u32 count` then `count x {u32, u32}` — exactly the c1 list the loader reads from the map at
+`this+0x2a4`. **The keys are always 3000, 5000, 8000** and never anything else; only the values
+vary per city.
+
+Parsing the full grammar forward from `N*N` in every shipped file:
+
+| result | files |
+|---|---|
+| parses cleanly (`c1` list, two 23-byte blocks, `c2` list, `c3` list) | **59 / 59** |
+| `c1 = 3`, consumes **82** bytes | 25 |
+| `c1 = 0`, consumes **58** bytes | 34 |
+| `c2` and `c3` | **0 in every file** |
+
+`82 = 4 + 3*8 + 23 + 23 + 4 + 4` and `58 = 4 + 0 + 23 + 23 + 4 + 4`. Both exact.
+
+### Why eight attempts failed
+
+**Every one of them required the grammar to consume exactly to the section end.** It never does.
+The grammar occupies 58 or 82 bytes starting at `N*N`, and roughly `2*N*N` bytes follow it that
+it does not describe. That single constraint rejected the correct parse at the correct offset in
+all 59 files, in every sweep, forwards and backwards.
+
+Two further consequences worth recording:
+
+- **`c2` and `c3` are empty in all 59 shipped files.** The loader's per-record bounds
+  (`u8 < 0x13`, `u8 < 0x17`) could therefore never be validated against bytes, because there
+  are no records anywhere. Sweeps were filtering on constraints with nothing to constrain.
+- The base row array is **one** `N*N` plane, not three. `rowCount * rowBytes == N*N`, which is
+  consistent with the falsification above and with plane 0 being the only coherent raster.
+
+`[UNCERTAIN]` **what the ~`2*N*N` after the grammar is.** It is the high-entropy region
+characterised above. The loader as read does not account for it, so either the saver writes more
+than that loader reads, or the base write is larger than one plane and the grammar sits inside
+it. That is the next thing to settle, and it is a *code* question, not a byte-fitting one.
+
+`[UNCERTAIN]` what the keys 3000 / 5000 / 8000 index.
 
 ### Where that leaves it
 
