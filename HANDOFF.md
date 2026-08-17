@@ -362,189 +362,80 @@ open lists at the foot of each analysis doc.
 ---
 
 
+
 ---
 
 ## READY-TO-PASTE KICKOFF PROMPT (new orchestrator session, in the Simcity folder)
 
-> You are the parent orchestrator for the SimCity 3000 RE project (understand-first). Read, in
-> order: `HANDOFF.md`, `CLAUDE.md`, `COORDINATION.md`, `ROADMAP.md` (the **P1 exit-gate
-> assessment** at the top), `re/analysis/formats/CITY_SAVE.md`, `UNCERTAINTIES.md`.
+> You are the parent orchestrator for the SimCity 3000 RE project. Read first, in order:
+> `HANDOFF.md` (the head — "WHERE THE PROJECT IS" — is current; everything under the
+> ⚠️ banner is a 2026-08-15 snapshot and partly dead), `ROADMAP.md` (the P1 gate and the
+> **END-STATE DECIDED** block), `re/analysis/formats/CITY_SAVE.md`, and `U-029` in
+> `UNCERTAINTIES.md`. Boot from those, not from any transcript.
 >
-> **State.** The sim is not in `SC3U.exe` — it is 29 GZCOM director DLLs in `Apps\`, all imported
-> and exported to `re/ghidra_export_<module>/`. `functions.csv` enumerates **all 31 binaries**:
-> **31,991 real `FUN_*`, 1,034 classified (3.2%), C1 tier empty, 7 C4 rows.** Do NOT quote the raw
-> 56,754 export count — 22,495 of those files are `Unwind_*` fragments.
+> **STATE.** End-state is a **modding / format toolkit**; the source-port option is **closed**
+> (owner call 2026-08-17). P1's gate is met except criterion 2 — ≥C1 across the eleven core-sim
+> modules, **2,299 / 9,575 = 24.0%** — and that criterion should itself be re-examined now that
+> the end-state is a toolkit, since a toolkit likely does not need all 9,575.
 >
-> **P1's gate is NOT met and `ROADMAP.md` says so.** Do not advance phases. It also recommends
-> re-scoping the gate, since "100% at ≥C1" over 31,991 functions is not realistic by hand.
+> **THIS SESSION'S GOAL: the first toolkit deliverable — a city-save WRITER that round-trips a
+> shipped `.sc3` BYTE-IDENTICALLY.** Reading 59/59 is not writing. The bar to match is the sprite
+> work (62,552/62,552 byte-identical re-encode). Until that passes, "the city save is solved"
+> means solved for reading. Start by re-emitting an unmodified file through
+> container → 24-byte header → QFS → section archive → per-section frame, and diff. Expect QFS
+> re-compression to be the hard part; `re/tools/qfs.py` decompresses but a byte-identical
+> *compressor* has never been demonstrated. If it cannot be bit-exact, say so early and define
+> the weaker bar (game accepts the file) explicitly rather than sliding into it.
 >
-> **Formats are done except one thing.** SYS.PAK, `.IXF`, QFS (63,691/63,691), the sprite pixel +
-> anchor formats (62,552/62,552 **byte-identical re-encode**), and the whole **city save family**
-> (`.sc3`/`.sct`/`.snr`/`.st3`, 59/59, `re/tools/city_parse.py`) all parse. The GZCOM **stream
-> primitives are pinned** and apply to every serialiser: read `vt+0x14`/`0x34` raw, `0x18` u8,
-> `0x38` u32; write `vt+0x64`/`0x84` raw, `0x68` u8, `0x88` u32; archive `vt+0x20`/`0x30` =
-> open-section-by-`{type,group}`.
+> **WHAT IS ALREADY DONE — do not redo it.** City save: container, header, QFS, section archive,
+> per-section frame, **all 44 section groups traced to their serialisers**, map dimension `N`
+> readable from the SIMGEOM tile-grid section, zone layer decoded to per-tile developer slot
+> indices with **Residential / Commercial / Industrial / Landfill named from their `SC3Tune.INI`
+> sections**. Tools: `re/tools/city_parse.py`, `re/tools/city_sections.py`,
+> `re/scripts/find_section_producers.py`. Also settled: the `+0x188`/`+0x18c` conflict was
+> multiple inheritance (both readings correct), and the loader's second arm is a **failure
+> fallback**, not a format variant.
 >
-> **The one open format item — read `CITY_SAVE.md` before touching it.** The zone section's
-> internal grammar is confirmed from BOTH the saver (`0x100320e7`) and the loader (`0x10031c85`)
-> and still does not fit the bytes. **Six sweeps have failed; do not attempt a seventh.** The
-> untested assumption is *above* the grammar: `OpenSection` (archive `vt+0x30`) may frame each
-> section with a header inside its byte range. Read the **archive class**, which nobody has
-> looked at — every finding so far came from its callers.
+> **DEAD ENDS — do not reopen without new evidence.** The eight zone-grammar sweeps (the grammar
+> is at `N*N`; they all failed because they required it to consume to the section end). The
+> `3·N²` three-plane reading (only the first `N*N` is a raster). The `+0x0C` section base (it is
+> **0**). `U-006` (no `0x41F836xx` GZCLSID exists in any shipped binary). "Dimensions are in
+> SC3WorldLayer" (they are not; they are in the tile-grid section).
 >
-> **Rules.** You are the single writer of `functions.csv`/`STUBS.md`/`UNCERTAINTIES.md`/
-> `DEFERRED.md`. Delegate read-only analysis to your read-only worker (see the workspace CLAUDE.md, which is not in this repo) — use
-> `re/scripts/delegate_cluster.ps1 -Module <M> -Top 25` for C0 work (pass 2 is obsolete: the C1
-> tier is empty), then `re/scripts/merge_worker_module.py <out> <M> --suffix CLUSTER<N> --merge`.
-> **Set `$env:REPO_FLEET_DELEGATE`** or those scripts throw. Keep Ghidra runs and all writes local.
-> Do not report worker $ cost.
+> **METHOD RULES — these cost the most time in the last session, all five are in `HANDOFF.md`.**
+> (1) **Silent tool failures were the dominant time sink — four in one session**, every one
+> plausible-looking with no error, every one caught by a *disagreement between two methods* and
+> never by re-reading code. Cross-check tools against readers and hand-sample output.
+> (2) **Never reason backwards from a discrepancy to a cause** — four inferences about one
+> 138-byte gap were all wrong. Measure the cause. (3) **Re-read the function, not the summary of
+> it** — `CITY_SAVE.md`'s grammar was derived three times and still missed two writes.
+> (4) A validation harness can go **circular** once it scores its own output. (5) A coverage
+> number that only ever rises is not measuring anything.
 >
-> **Hard-won rules, all of which cost real time this session:**
-> - **Verify worker claims against the binary.** Several were wrong: a sprite row-record field
->   split contradicted a C4 result, and two SIMUI names encoded guesses the code did not support.
-> - **Check the denominator.** `functions.csv` enumerated only SC3U for weeks, so every
->   percentage was ~5x flattering. `re/scripts/enumerate_functions.py` fixed it.
-> - **Read the shipped bytes before naming a format after code that reads *a* format.** A
->   `FORM/ALTM/XTER` chunk reader in SIMINIT is a SimCity 2000 importer, not the SC3 save.
-> - **Near-miss ids are different ids.** `0x029ca804` is not `TrafficLayer` `0x029ca806`.
-> - **After any `MakeFunctions.java` run, re-export that module** — workers grep the text export,
->   and a stale export makes a carved function look absent.
-> - **Identify classes by construction, not by vtable pattern-matching.** Searching vtables by
->   slot occupancy produced a false stream candidate; following QueryInterface found it at once.
-> - The repo `github.com/nanofives/sc3kre` is **public**: tools + notes only, never assets. The
->   `.gitignore` is deny-by-default and its `re/analysis` rule must stay per-directory — the
->   `**/*.md` form leaks. Verify with `git ls-files`, never by eye.
+> **PROJECT RULES.** You are the single writer of `functions.csv` / `STUBS.md` /
+> `UNCERTAINTIES.md` / `DEFERRED.md`. Delegate read-only analysis to the account2 worker
+> (`re/scripts/delegate_cluster.ps1 -Module <M> -Top 25`, then
+> `re/scripts/merge_worker_module.py <out> <M> --suffix CLUSTER<N> --merge`); **set
+> `$env:REPO_FLEET_DELEGATE`** or those scripts throw. Keep Ghidra runs and all writes local. Do
+> not report worker $ cost. **VERIFY worker claims against the binary before merging** — several
+> were wrong. `re/scripts/classify_families.py` bulk-labels the small-function tail at **C1
+> only**; run `--validate` first and never promote its rows to C2 without reading them.
 >
-> **Suggested next moves, highest value first:** (1) the archive class / per-section framing
-> above; (2) C0 clusters on the untouched modules — SIMSPR, GZWinD, AUDIO, SIMDIRT, GZWWWD have
-> had none; (3) name the 7 unnamed persisted CLSIDs (`CITY_SAVE.md` lists exactly what was tried
-> and why each attempt failed); (4) `U-001` (HTML consumer) now has a live lead — SIMUI
-> `0x1009499e` is an IRC numeric-reply dispatch, i.e. the CityExchange chat client.
+> **PUBLIC REPO.** `github.com/nanofives/sc3kre` is public: tools and notes only, never assets.
+> `.gitignore` is deny-by-default and its `re/analysis` rule must stay per-directory (the
+> `**/*.md` form leaks). Grep every diff for `C:\Users\`, the worker account name and the owner's
+> email before committing. ⚠️ **Known unresolved:** the local Windows username is already in the
+> repo's *history* from a delegation footer; scrubbed going forward, a history rewrite is the
+> owner's call.
 >
-> Commit at boundaries; keep `.happy/project-info.json` current. Confirm your plan before large runs.
-
----
-
-## 🟢 2026-08-16 (late) — BLACK WINDOWED CLIENT: ROOT CAUSE FOUND
-
-**Every engine blit fails with `E_NOTIMPL` because it asks for `DDBLT_KEYSRCOVERRIDE`, which
-modern Windows DDRAW does not implement.** `raster_blit_hw` 3935 / `rasthw_throw` 3935 =
-**100.0%**, `dwFlags = 0x01010000`, `srcCK = 0..0`, `rasthw_surfacelost = 0`
-`[CONFIRMED @0x10018CDD]`. The engine draws into the right surface (`engine_dest =
-present_src`, pointer-identical) and the present copies it to the primary 250-550x/s with
-`DD_OK` — it is faithfully copying a surface nothing ever wrote to.
-
-This retires the whole "which surface / is the present working" line of inquiry, and explains
-every "0/N LIT" reading in §15 without any of §15's retracted machinery.
-
-Detail: `LAUNCH_CONTROL.md` §18. Trackers: `U-034-RESOLVED`, plus `U-035` (why fullscreen
-works — NOT measured, currently a hypothesis) and `U-036` (the fix, not yet attempted).
-
-**Next step is `U-036`:** detour `FUN_10018c58` to clear bit `0x00010000` before the Blt and
-re-run the same counters. Success = `rasthw_throw` -> ~0 **and** a visual check. Note it
-changes transparency semantics (black stops being transparent), so a picture that appears with
-wrong transparency still counts as confirming the diagnosis.
-
----
-
-## ✅ 2026-08-16 (late) — U-032 CLEARED, WINDOWED WORK UNBLOCKED
-
-**`U-032` is transient and has cleared. No reboot was needed.** 3/3 runs
-(`re/harness/recover_A|B|C.log`) show `SUSPEND +1` (`SC3U 0x2A298`) followed by `SUSPEND -1`
-(`SC3U 0x2A35F`), counter back to 0, and `blt_disp_1` = 23,911 / 32,578 / 37,903. Same probe
-build, same switches, **same boot session** as the 16+ failing runs — the prescribed reboot was
-never performed, and the `iso3` vs `recover_A` probe banners are line-for-line identical.
-The transient variable is NOT identified and cannot be bisected after the fact. Full table and
-caveats: `LAUNCH_CONTROL.md` §16; tracker rows `U-032-RESOLVED`, `U-033`.
-
-**Two things this does NOT establish:** what the variable was, and whether the picture is
-correct. `blt_disp_1` rising is drawing activity, not a rendered frame — the probe still cannot
-see the screen, so the next step needs a human look.
-
-**Harness bug found in the process (`U-033`): the command in the section below cannot produce a
-measurement.** `sc3launch` launches the game with cwd `<root>\Apps` and passes `-log` / `-gzlog`
-through verbatim, so relative paths resolve against `Apps\` and fail — the log is never written
-(while the launcher still prints `log written`), and a failed `-gzlog` makes every fnlog
-counter *absent* rather than zero. **Pass absolute paths.** `-gzlog` is an INPUT trace table;
-do not rename or delete `re\harness\gz_draw.txt`.
-
-Everything below is kept as the record of the blocked state. Its method rules still stand;
-its verdict on windowed mode is superseded.
-
----
-
-## 🔴 2026-08-16 (evening) — LAUNCH HARNESS / WINDOWED MODE
-
-### Read before touching windowed mode
-
-**Windowed mode is NOT working and is currently BLOCKED by a regression nobody has explained
-(`U-032`).** For 16+ consecutive runs the intro movie starts, suspends the renderer, and never
-stops, so `Resume(-1)` never fires and the engine draws nothing (`blt_disp_1 = 0`). The same
-build family worked three times earlier the same day (`draw_dest.log`, `writer_win.log`,
-`win_blt7.log`, tens of thousands of blits).
-
-**Everything under our control has been eliminated as the cause:** `Apps\SC3U.exe` SHA-256
-still matches the anchor exactly; `GZGraphicD.dll` untouched; no Maxis/EA registry keys; no
-SimCity AppData; no game config modified; display mode identical in working and failing runs;
-the intro asset present and untouched; and every probe addition made that day gated off
-(`-sample`, default off) with no change. **Try a reboot first.** If it recovers on its own the
-variable was system-level (DirectDraw/DWM state after ~40 `TerminateProcess` kills) and is not
-reproducible from the repo.
-
-### What is solid (all measured BEFORE the regression)
-
-- **Placement constraint:** the game window must lie inside the **primary display** or nothing
-  renders. 4 placements tested. Positive coordinates are not sufficient - a second monitor at
-  `2560,155` gives sound and cursor and zero pixels. (`LAUNCH_CONTROL.md` §12.2)
-- **Two present gates, not one.** `0x10016BF1`: guard `+0x1C` (`jne` at `0x10016BF9`) tested
-  FIRST, then gate `+0x15` (`je` at `0x10016BFE`). `-present` only ever patched the second, so
-  every §10f-§10i conclusion about "forcing the present" was clearing a branch the code never
-  reached. (§13.2)
-- **`+0x1C` is a SUSPEND COUNTER, not a lock** (`0x10016BDE`: `add [ecx+0x1C],eax` with a clamp).
-  **Do not nop that branch** - it forces presents during a legitimately suspended state and
-  hangs the game at ~1.15 s. (§13.3, §14.1)
-- **`-bpp 32` never reached GZGraphicD.** The call site at `0x1001626B` receives 16 with and
-  without the switch. Every §10b conclusion drawn from it was testing nothing. (§12.3)
-- **Framebuffer memory-diff hunt is closed, negatively, with evidence** - a pitch autocorrelation
-  scan finds no scanline structure in any changed region. (§12.4)
-- **The present pipeline works**: gate open -> present reaches slot 14 -> Blt from the engine's
-  own render-raster backing surface to the client rect with DPI correction, `DD_OK` every frame.
-  (§15.2)
-
-### What is NOT safe
-
-**`LAUNCH_CONTROL.md` §15.3 onward is marked unsafe.** Those measurements come from a state that
-cannot currently be reproduced. In particular "the blit source and destination surfaces are
-empty" is NOT established.
-
-Seven claims were retracted that day; each retraction is recorded next to the claim with what
-falsified it. The two most expensive: `g_render_obj` was **declared and read but never
-assigned**, so §10i's "windowed present via Blt" was dead code and its failure verdict meant
-nothing; and `movie_tick`'s detour **never installed** (`UNDECODABLE prologue 56 8B F1 0F B7`),
-so the "movie is never ticked" anomaly was never measured.
-
-### Method rules earned the hard way
-
-1. **A zero hit count is not evidence until you have confirmed the detour installed.** Check for
-   `UNDECODABLE prologue` / `N/M instrumented` in the log every time.
-2. **A single run is not evidence.** Repeat, and classify runs by whether `Resume(-1)` fired.
-3. **`install_tracer` is now idempotent** - it used to run twice (because `-winpresent` implies
-   `-present`), re-scan its own JMPs and print `0/15 detours installed` for a live run.
-4. Do not patch COM vtables (`-nocom` is mandatory); the apphelp shim owns that dispatch.
-5. The probe cannot see the screen: screen BitBlt captures whatever is on top, `PrintWindow`
-   with `PW_RENDERFULLCONTENT` returns blank for this game, and locking the DirectDraw primary
-   returns desktop content. Visual checks cost the user a look - budget them.
-
-### Harness state
-
-`re/harness/` builds `sc3launch.exe` + `sc3probe.dll` via `build.ps1`. **`re/harness/src` is
-gitignored (`/re/*`), so there is NO committed revision of the probe - you cannot `git revert`
-it.** Switches: `-windowed -origin -at X,Y -winpresent -present -guard -resume -sample
--locktest -trace -fnlog <t> -gzlog <t> -nocom -minimized -bpp N -kill N -log <f>`.
-`-guard`, `-sample` and `-locktest` are opt-in because each destabilises the game.
-
-Delivered and working from earlier sessions: resolution, sound switches, fullscreen, colour
-depth (no work needed), **minimised**, **per-function logging**.
-
-`Apps\` was cleaned of the DDrawCompat leftovers - they are in
-`re/harness/ddrawcompat_removed/` (moved, not deleted).
+> **OPEN ITEMS, ranked.** (1) the save writer above; (2) `U-029` semantics — what the `u16`
+> per-tile permutation is for, what the `c1` keys `3000/5000/8000` index, and a `this+0x3c`
+> 23-byte-vs-92-byte mismatch; (3) re-scope core-sim ≥C1 against the toolkit decision;
+> (4) `re/analysis/LAUNCH_CONTROL.md` has an uncommitted edit predating the last two sessions —
+> ask before touching it.
+>
+> **ASK ME** rather than deciding: whether to exclude `re/harness` (1.2 GB of regenerable
+> framebuffer BMPs) from `backup.ps1`, and whether to rewrite the public repo's history.
+>
+> Commit at boundaries; keep `.happy/project-info.json` current; confirm before large delegation
+> runs.
