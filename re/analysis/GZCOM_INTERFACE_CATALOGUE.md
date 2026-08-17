@@ -1778,3 +1778,64 @@ Whoever runs this must use `harness_run.ps1` with `-Runs 3` or more. §T1 in `PO
 that FAILED and a control that PASSED back to back, which reads as "the game rejects our file" and is **wrong**
 — repeating gave 3/3 PASS and the FAIL was a U-032 transient. A single run is not evidence, and this is the
 domain where that rule has already produced one false negative in one afternoon.
+
+---
+
+## 20. cSC3CitySpriteCellMap — 104 of 104, zero mismatches
+
+`SIMSPR.DLL` `.rdata` **`0x1006250c`**, located by §18's bulk pass as a unique hit project-wide. Re-checked
+here slot by slot with the size-bounded extractor: **104 of 104 arity-matched, 0 mismatches.** The largest
+class after `cISC3City`, and the cleanest match in the catalogue.
+
+This is the isometric city view's sprite grid — what turns the cell world into screen pixels.
+
+### 20a. The two decisive slots
+
+**Slot 3 `Init`, `ret 0x24` = nine arguments.** The header declares exactly nine
+(`cellCountX, cellCountZ, screenWidth, screenHeight, u5, u6, zoom, rotation, u9`). A 9-argument arity match is
+the single most distinctive slot in any class walked this session — there is no plausible way for a wrong
+identification to land on it.
+
+**A four-dword projection block.** Slots 17/21/22/23 are 4-byte field getters on consecutive dwords:
+
+| slot | method | field |
+|---:|---|---|
+| 17 | `GetRotate` | `+0x2c` |
+| 21 | `ScreenCellSizeX` | `+0x30` |
+| 22 | `ScreenCellAdjustmentY` | `+0x34` |
+| 23 | `ScreenCellSizeZ` | `+0x38` |
+
+Slots 21-23 are the **isometric projection constants** — cell width, vertical adjustment, cell depth in screen
+pixels. Those three plus the rotation at `+0x2c` are the whole screen-space parameterisation of the view.
+
+> **Worth noting against a temptation.** Slot 23's implementation sits at `0x100550a1`, nowhere near its three
+> siblings at `0x100056e7`/`eb`/`ef`. Address proximity did **not** identify these — slot position and the +4
+> field stride did. §10's negative result (never use address order as an ordering witness) applies to
+> *grouping* as well as ordering.
+
+### 20b. The structure of the class
+
+`RotateLeft` (19) and `RotateRight` (20) are identical 40-byte siblings, both opening `mov eax,[ecx+0x2c]`, and
+both wrap slot 18 `SetRotate` (430 bytes) — the real implementation. `StartChangeSpriteBatch`/
+`EndChangeSpriteBatch` (28/29) are the sprite-mutation batch guard, the same idiom as `DirtBag::LockUpdates`
+in §14.
+
+**`DoPick` (slot 32) is 2933 bytes, the largest method on the class** — screen-to-cell hit testing, i.e. what
+turns a mouse position into a tile. For a modding toolkit that is the interesting one: it encodes the exact
+inverse of the isometric projection the three constants above define.
+
+### 20c. No overload pairs, so no rule test
+
+Unlike every other class walked, `cISC3CitySpriteCellMap` has **no same-name overload pairs**, so it neither
+confirms nor challenges the 12-of-12 reversal rule. Stated explicitly because "0 mismatches" could otherwise be
+read as a thirteenth confirmation, and it is not one.
+
+### Committed
+
+14 rows at **C3**: `Init`, the four projection/rotation getters, `SetRotate` and both rotate wrappers,
+`ZoomOut`, the batch-end guard, `ChangeSprite`, `GetCellsForViewCornersUnclipped`, `IsSpriteVisible`, and
+`DoPick`. `verify_worker_rows.py`: **0 of 14 flagged**. Project C3 count 176 → 190.
+
+**Scope, stated plainly:** all 104 slots are *validated* by arity, but only these 14 are *named*. The other 90
+are identified by slot position and can be named mechanically from the header whenever they are needed — the
+map is in this section, the work is not done.
