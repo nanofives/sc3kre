@@ -1988,3 +1988,58 @@ reading of the `[iOS-HINT]` name list rather than a confirmation of it.
 Ghidra lost register tracking inside `0x10010220` (`unaff_ESI` / `unaff_EDI`), so the coordinate
 operands are not legible, and "behaves like empty" is an inference from four consumers rather than
 a statement any single one of them makes.
+
+---
+
+## ⭐ The section TYPE column is NAMED: `0x206c6e7c` = `GZIID_cISC3CityLayer`
+
+Found by the gzcom session (2026-08-17, `2c3a96d`), and **corroborated here from the shipped bytes
+by a different method** before being adopted. Their evidence is structural: a class has a
+`cISC3CityLayer` base subobject iff an adjustor thunk (`sub ecx,N ; jmp <primary QueryInterface>`)
+is slot 0 of a second vtable whose slot 15 is `mov eax,imm32 ; ret` (`GetLayerType`). Across seven
+classes plus a control, accepting IID `0x206c6e7c` correlates perfectly with having one.
+
+**The independent check, from the section table rather than from vtables.** If the type column is
+the IID of the *interface* a section is serialised through, then the groups paired with
+`0x206c6e7c` should be exactly the classes we already believe are city layers, and things that are
+not layers should use a different type. They do:
+
+| group | what we already called it | uses type `0x206c6e7c`? |
+|---|---|---|
+| `0x409ff3ba` | SC3ZoneLayer | **yes** |
+| `0xe11bddf6` | SC3WorldLayer | **yes** |
+| `0xc0a81498` | SIMECO pollution layer | **yes** |
+| `0xc106c4f5` | SIMRCI demand layer | **yes** |
+| `0x2147c2dd` | SIMNTWRK network layer | **yes** |
+| `0x21737de5` | SIMDIRT terrain layer | **yes** |
+| `0x029ca804` | SimTransit layer | **yes** |
+| `0x80ab8ab0` | SIMGEOM **tile grid** — a cell map, *not* a layer | **no**, uses `0x406b1196` |
+
+**Seven of seven named layers use it, and the one named non-layer does not.** Two unrelated methods
+agreeing, which is the standard this project holds itself to.
+
+So the section key is now fully readable:
+
+```
+{ type, group, instance } = { the INTERFACE IID being serialised,
+                              the CLASS id (CLSID) implementing it,
+                              a per-class ordinal }
+```
+
+That explains the type distribution at a glance: `0x206c6e7c` covers 2,095 of 3,451 sections
+because most saved objects are city layers, and each remaining type is a different interface.
+`0x406b1196` is the tile grid's interface, and the once-per-file types (`0xc2910e7d`,
+`0x20631788`, `0xe0faadc7`, `0xe11bcc69`, `0x41193c3a`) are five further interfaces with one
+implementing class each.
+
+`[UNCERTAIN]` the names of the other type ids. `0x81c0cb7c`, which the same investigation found
+alongside, is implemented by 16 classes and is **not** in the SDK headers.
+
+> **A counting scare, recorded because the resolution is the useful part.** An ad-hoc script here
+> once reported 3,511 sections and 2,131 of type `0x206c6e7c`, against the 3,451 / 2,095 this
+> document has always carried. A clean re-measurement reproduces **3,451 sections and 2,330
+> `0xDEADBEEF` markers exactly**, matching the committed figures. I proposed a mechanism for the
+> difference — that a test city had briefly been copied into `Cities\`, which would have added
+> exactly 60 sections — and then **falsified it**: every file in `Cities\` still carries its
+> original install timestamp. The discrepancy is unexplained and the ad-hoc script is not
+> reproducible; the committed numbers stand because they are the ones that reproduce.
