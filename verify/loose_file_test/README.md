@@ -87,12 +87,38 @@ scroll at the shipped rate. **If the credits scroll ~3x faster, the code reading
 and that is the interesting result.** Either way it is worth the ten minutes: a confirmed
 prediction closes T3's scoping question, and a falsified one means a re-read.
 
-### Arm 2, NOT set up — it needs a decision first
+### ⭐ ARM 2 IS NOW STAGED (owner's call, 2026-08-17)
 
-The same evidence says the fallback is reachable: **rename or remove `SYS.PAK`** and every `\Sys\`
-INI should load from loose files. That is a bigger change to the install than adding one file, so
-it is deliberately not staged here. It also happens to be a **complete modding route that needs no
-PAK writer at all**: extract all 51 members, drop them in `Apps\Sys\`, move the archive aside.
+`Apps\Sys\` currently holds **51 loose `.ini` files extracted from the archive**, plus
+`SYS.PAK.disabled`. The archive itself is **byte-unchanged** (sha256 `172c02d9…`, verified before
+and after); it is only renamed, and the loader matches the literal `\Sys\SYS.PAK`, so its
+`GetFileAttributesA` check now fails and the documented loose fallback is the only path left.
+
+The `SC3Tune.ini` marker was re-applied after extraction, so **arm 2 is the observable half**:
+
+| arm | install state | prediction |
+|---|---|---|
+| 1 | `SYS.PAK` present + one loose `SC3Tune.ini` | **no effect** — the archive wins, the loose file is ignored |
+| **2** | `SYS.PAK.disabled` + all 51 loose | **the marker takes effect** — credits scroll at 4242, ~3x the shipped 1500 |
+
+Arm 1 has already been overwritten by arm 2 on disk. To test arm 1, put the archive back first
+(step 1 of the undo) and leave the loose files in place.
+
+**If arm 2 shows no effect either**, then loose files are never read for these names and the
+fallback reading is wrong — which would make route A (a `SYS.PAK` writer) the only way to mod a
+tunable, and would be the more valuable result of the two.
+
+### UNDO for arm 2
+
+```
+move "Apps\Sys\SYS.PAK.disabled" "Apps\Sys\SYS.PAK"
+```
+then delete the 51 extracted `.ini` files. Every filename, size and sha256 is in
+`ARM2_MANIFEST.txt` next to this README. Nothing else in the install was touched.
+
+Line endings: the extracted files use **CRLF**, chosen because every loose config the game ships
+(`Apps\SC3U.ini`, `Apps\SC3.cfg`, `Apps\SC3Net.cfg`) is CRLF. The archive stores records
+line-framed with no terminators, so a convention had to be picked and this is the shipped one.
 
 ## What this cannot tell you
 
