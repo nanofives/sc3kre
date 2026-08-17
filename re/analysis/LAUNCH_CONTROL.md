@@ -1746,3 +1746,1168 @@ rather than with exhaustion, and `fb_scan()` remains as a reusable negative test
 `-at` replaced an earlier `-monitor N`: `EnumDisplayMonitors` index order need not match what
 a user calls "monitor 2", and a wrong guess costs a full run. The probe now logs the monitor
 layout on every start, so `-at` values can be read straight from the log.
+
+---
+
+## 13. The present function fully decoded; the guard is a lock (2026-08-16)
+
+### 13.1 Instrument fixed first
+
+`-winpresent` implies `-present`, and `install_tracer` had a guard on only one of its two
+call sites, so it ran twice. The second pass re-scanned functions already carrying our own
+5-byte JMP, reported every one as `UNRECOGNISED prologue E9 ...`, and printed
+**`0/15 detours installed` for a run whose detours were in fact live**. Any conclusion drawn
+from that log about call counts is void. `install_tracer` is now idempotent; the same run now
+reports 13-14/15.
+
+Also void: an earlier claim that the present "runs 3 times then stops". That was the probe's
+own `n <= 3` log throttle, not the game.
+
+### 13.2 The present, byte-exact
+
+`0x10016BF1` has NO direct callers anywhere in GZGraphicD. It is reached only through a vtable
+pointer at `0x1001F2C0` (sibling `0x10016BDE` at `0x1001F2C8`); those are the only two
+references to that address range in the whole image `[CONFIRMED - byte scan of the DLL]`.
+
+```
+0x10016BF1  8B C1        mov  eax, ecx
+0x10016BF3  56           push esi
+0x10016BF4  33 C9        xor  ecx, ecx
+0x10016BF6  39 48 1C     cmp  [eax+0x1C], ecx    ; GUARD
+0x10016BF9  75 44        jne  +0x44              ; guard != 0 -> skip everything
+0x10016BFB  38 48 15     cmp  [eax+0x15], cl     ; GATE
+0x10016BFE  74 0C        je   +0x0C              ; gate == 0 -> skip present
+0x10016C00  8B 40 44     mov  eax, [eax+0x44]
+            ...          call [edx+0x38]         ; slot 14 = FUN_10018dd9
+```
+
+Prologue is exactly 5 bytes on an instruction boundary, so the detour placement was correct
+all along.
+
+**There are TWO gates, and `-present` only ever patched the second one.** The guard at
+`+0x1C` is tested first, and the trace shows it becoming 1. That is why every `-present` run
+turned the client white but produced no frame: it was clearing a branch the code never
+reached.
+
+### 13.3 The guard is a lock - bypassing it hangs the game
+
+Patching `0x10016BF9 75 44 -> 90 90` as well: the game **hangs** at ~1.15 s. The probe log
+stops dead at 1151 ms with no further periodic reports, and the on-screen image freezes while
+sound keeps playing. `[CONFIRMED - empirical]`
+
+So `this+0x1C` is a busy/re-entrancy lock, not a windowed-mode flag. Bypassing it re-enters
+the present and deadlocks. **Do not patch it.** The patch remains in `patch_present_gate` but
+this note is the reason it must not be treated as a fix.
+
+### 13.4 The present's caller is the intro movie player
+
+Trace: `PresentFn hit#1 ret=0x0042A207`, `hit#2 ret=0x0042A232` - **SC3U.exe addresses**, both
+inside `FUN_00429f95`, which loads `Res/UI/Shared/Movies/Intro.tgq`. That function sets the
+movie size explicitly:
+
+```c
+(**(code **)(**(int **)((int)param_1 + 0xa8) + 0x44))(0x280, 0x1e0);   // 640 x 480
+```
+
+`[CONFIRMED @0x00429f95]`
+
+This is a hard anchor for U-025: the movie source is **640x480** and it displays **320** wide -
+a factor of exactly 2, not an eyeballed estimate from a screenshot. It also explains why the
+video appears while the game does not: both use the same device vtable, and the movie player
+drives the present itself.
+
+Runtime vtable dump confirms the dispatch: `obj(+0x44)` slot 14 (+0x38) = `GZGraphicD+0x18DD9`
+= `FUN_10018dd9`.
+
+### 13.5 Where U-024 now stands
+
+Unchanged in substance: the windowed device still has no render target. What is new is that
+the two gates are understood, one of them must not be touched, and the present's only driver
+found so far is the movie player. The open question is what drives the present after the movie
+ends - in fullscreen something calls it ~105x/s, and that caller has not been identified.
+
+---
+
+## 14. The renderer is SUSPENDED by the intro movie and never resumed (2026-08-16)
+
+### 14.1 The suspend counter
+
+`0x10016BDE`, the vtable slot next to the present (`0x1001F2C8` vs `0x1001F2C0`), decodes to:
+
+```
+8B 44 24 04    mov  eax, [esp+4]
+01 41 1C       add  [ecx+0x1C], eax      ; delta
+79 04          jns  +4
+83 61 1C 00    and  [ecx+0x1C], 0        ; clamp at zero
+8B 41 1C       mov  eax, [ecx+0x1C]
+C2 04 00       ret  4
+```
+
+`this+0x1C` is a **suspend counter** - `Suspend(+1)` / `Resume(-1)` with a clamp - not a lock.
+The present at `0x10016BF1` tests it FIRST (`jne` at `0x10016BF9`) and skips the whole frame
+while it is non-zero.
+
+This also explains §13.3: nopping that branch forces presents during a suspended state, which
+is why the game hung. **The counter must be respected, not bypassed.**
+
+### 14.2 One increment, zero decrements
+
+Detoured at `0x10016BDE` (prologue is 4+3 = 7 bytes; a 5-byte steal splits the `add`, which is
+why it was skipped as "UNRECOGNISED prologue" until `prologue_len` learned the pattern).
+
+Whole 40 s windowed run:
+
+```
+SUSPEND #1  delta=+1  count(before)=0  this=0x00549D5C  ret=SC3U 0x2A298
+SuspendCnt  sub_10016bde   total hits: 1
+```
+
+**Exactly one call. One increment. No decrement, ever.** `[CONFIRMED @0x10016BDE]`
+
+`0x0042A298` is inside `FUN_00429f95`, the intro movie player, and matches:
+
+```c
+if (local_11 != '\0') {
+    *(undefined4 *)((int)param_1 + 0xac) = 1;
+    (**(code **)(**(int **)((int)param_1 + 0xb4) + 0x38))(1);   // Suspend(+1)
+```
+
+So the movie player suspends the renderer while the movie plays - correct behaviour - and the
+matching `Resume(-1)` never runs. That accounts for every symptom: the video draws (the movie
+player renders itself), then the client is black forever, sound keeps playing, game logic stays
+alive, and the present is polled ~3M/s while exiting at the guard every time.
+
+### 14.3 Status of the intervention: BUILT, NOT YET VERIFIED
+
+`-resume` clears the counter from the watcher thread once past the intro. Writing 0 is a valid
+resume because the field is a plain int clamped at zero, so no synthetic `__thiscall` is needed
+and nothing is bypassed - the present still honours its gate.
+
+**It has never actually run.** The `SC3PROBE_RESUME` / `SC3PROBE_GUARD` environment reads were
+missing from the probe, so `g_resume` was 0 in every run so far; any run labelled `-resume`
+before this fix was a plain windowed run. Do not read those runs as evidence either way.
+
+### 14.4 Open: the second gate
+
+Even with the suspend cleared, `gate(+0x15)` is independently 0 in windowed mode (§10h: no flip
+chain -> flipping flag 0). Both blockers are real and may both need addressing. Whether clearing
+the suspend alone is enough is exactly what the unverified `-resume` run would answer.
+
+### 14.5 RETRACTION of 14.2 - the renderer IS resumed
+
+**§14.2's claim "one increment, zero decrements, the renderer is never resumed" is WRONG.**
+
+Re-run with the tracer AND the movie trace table loaded together:
+
+```
+SUSPEND #1  delta=+1  count(before)=0  this=0x00588DD4  ret=SC3U 0x2A298   (movie start)
+SUSPEND #2  delta=-1  count(before)=1  this=0x00588DD4  ret=SC3U 0x2A35F   (movie stop)
+```
+
+`0x0042A35F` is inside `FUN_0042a31a`. The counter returns to 0. Suspend and resume are
+correctly paired `[CONFIRMED @0x10016BDE]`.
+
+The earlier "1 hit" reading came from a single run whose intro movie ended outside the window
+I was looking at; I generalised one observation into a root cause. Same failure mode as the
+§12 retraction: treating one run as proof.
+
+**What the same log shows instead:** `gate(+0x15)=0` on every present sample, before and after
+the movie. The persistent blocker is the flipping flag, exactly as §10h said - not the suspend
+counter. `FUN_0042a31a` and the whole movie state machine are working correctly.
+
+Still standing from §14: `this+0x1C` is genuinely a suspend counter and not a lock, so §13.3's
+"do not nop that branch" holds - nopping it forces presents during a legitimately suspended
+state, which is why it hung.
+
+Also measured: `movie_tick` = **0 hits** while `movie_state_dispatch` = 11,468,424. The movie
+goes start -> stop without a single tick, i.e. the first frame draw returns false and it takes
+the failure path that posts message `(5, 0x1B)`. That is a real anomaly and is NOT explained.
+
+---
+
+## 15. Windowed present pipeline now WORKS; the source surface is empty (2026-08-16)
+
+### 15.1 A harness bug invalidated §10i
+
+`g_render_obj` - the variable `present_hook` reads to find its Blt source - was **declared and
+read but NEVER ASSIGNED**. The entire "windowed present via Blt" path from §10i was dead code:
+every frame fell straight through to the failing Flip. **§10i's failure verdict was never a
+test of the idea.** Now populated from the first `FUN_10019273` surface matching the requested
+mode.
+
+Two further harness defects fixed in the same pass:
+- the reshape block was left disabled (`if (0)`) after the §10i crash, and it was the only
+  thing that set `g_primary_w`, so the DPI correction silently never applied;
+- the `src` sampling dereferenced `this+8` which is NULL windowed.
+
+### 15.2 The pipeline is now correct end to end
+
+With the gate forced open (`-present`, implied by `-winpresent`):
+
+```
+Flip FUN_10018dd9                                    16208 hits   (present reaches slot 14)
+WINPRESENT: primary is 2560 px wide (physical)
+DPI scale 1.250 (primary 2560 / logical 2048)
+engine-fb Blt: src=0x03B46050 -> dest 3,32-1003,782  hr=0x00000000 [DD_OK]
+```
+
+Destination `3,32-1003,782` = 1000x750 physical = exactly 800x600 logical, i.e. the client
+rect. The Blt succeeds every frame. `[CONFIRMED - empirical]`
+
+This is the first time the windowed present has had a valid source, a valid destination and a
+succeeding blit simultaneously.
+
+### 15.3 But the source has no content
+
+```
+BLT SOURCE #3:   800x600 32bpp pitch=3200   0/7500 lit
+BLT SOURCE #200: 800x600 32bpp pitch=3200   0/7500 lit
+```
+
+Screen result: intro video plays, then black - unchanged.
+
+So the remaining problem is NOT presentation. It is that **the engine does not draw into the
+surface we adopted**. Candidate selection is a guess: we take the first `FUN_10019273` surface
+whose dimensions match the requested mode, and a second 800x600 candidate appears later
+(`0x0F1F4F90`), so dimension-matching does not identify the frame buffer.
+
+This lands back on the same question §10-§11 failed to answer: WHERE does the engine draw?
+The difference is that everything downstream of that surface is now known-good, so the
+question is finally isolated - find the surface with content and the picture appears.
+
+Next: sample every candidate's lit-pixel count and adopt whichever has content, rather than
+adopting by dimensions. The blit dispatcher `FUN_10014894` runs ~34k times per windowed run,
+so the engine IS drawing somewhere.
+
+### 15.4 The render raster's backing surface is also empty
+
+Pointed the present at the blit dispatcher's real destination: `device+0x44` (render raster),
+whose `+0x04` is the backing surface.
+
+```
+DRAW OBJ 0x005486D8   bpp(+0x10)=32  w=800 h=600
+  RENDER(+0x44)  obj=0x00568CB0  vt=GZGraphicD+0x1F0AC  bits=0x03B3C080  800x600 pitch=3200
+  PRESENT(+0xB0) obj=0x00568BA8  vt=GZGraphicD+0x1F628  bits=0x03B3C060  0x0 pitch=0  EMPTY
+```
+
+Note `bpp(+0x10) = 32` on this device - NOT the 16 seen at `FUN_10009efb` init. Different
+object; this is why the 16bpp theory never fitted.
+
+No "switched" line was logged, i.e. the raster backing and the dimension-matched candidate are
+the SAME surface. And it stays empty at every sample point:
+
+```
+BLT SOURCE #3 / #200 / #1000 / #3000 / #8000:  800x600 32bpp pitch=3200   0/7500 lit
+```
+
+while the engine is demonstrably blitting:
+
+```
+blt_disp_1    158931
+blt_convert      882
+setpixel_a         0
+```
+
+**158,931 blits and the destination surface reads all zeros.** So the engine's blits do not
+land in the surface at `raster+0x04`, or a Lock on it does not observe what they write. That
+is the single remaining unknown; everything downstream (gate, present, source selection,
+destination rect, DPI, Blt) is now measured and correct.
+
+`PRESENT(+0xB0)` being 0x0 with pitch 0 remains true and matches §10m: windowed builds two
+rasters and leaves the present one unsized.
+
+Next candidate lines of attack, in order of cost:
+1. Determine which branch of `FUN_10014894` runs (hardware `raster->vt[0x2c]` vs converting
+   `device->vt[0x1d4]`), and for the hardware branch dump what `raster->vt[0x2c]` does with
+   `param_1[0x11]` - that is the actual pixel writer.
+2. Log the `dst` rect and destination pointer passed to those calls; the engine may be
+   drawing into a scratch surface that is later composited.
+3. Compare all of the above against a fullscreen run, where the same dispatcher feeds a
+   surface that demonstrably ends up on screen.
+
+### 15.5 The pixel writer is a DirectDraw Blt - and its result is unmeasured
+
+`FUN_10014894` takes the HARDWARE branch: `raster->vt[0x2c]` = `FUN_10018C58`, the same
+function in BOTH raster classes (`0x1001F0AC` windowed and `0x1001F5C0` fullscreen share
+slots `+0x2C/+0x30/+0x34`).
+
+```
+blt_disp_1        34223
+raster_blit_hw    33342      <- the hardware path does the work
+raster_slot30         0
+raster_slot34         0
+blt_convert         882
+```
+
+`FUN_10018C58` @`0x10018c58`:
+
+```c
+iVar1 = (**(code **)(**(int **)((int)this + 4) + 0x14))     // this+4 = dest surface, slot 5 = Blt
+          (dstSurface, param_3 /*destRect*/, param_1[1] /*srcSurface*/,
+           param_2 /*srcRect*/, param_1[0x37] /*flags*/, param_1 + 0x1e /*fx*/);
+if (iVar1 == -0x7789fe3e) {          // 0x887601C2 = DDERR_SURFACELOST
+    ... vt+0x60 (restore) then retry the same Blt once ...
+}
+if (iVar1 == 0) return 1;            // success
+... failure path via PTR_FUN_1001f058 / PTR_FUN_1001f064 ...
+```
+
+So the engine blits sprite surfaces into `raster+0x04` - **exactly the surface we sample** -
+33,342 times, and that surface reads `0/7500 lit`.
+
+**Critical caveat on the evidence: the tracer counts CALLS, not successes.** 33,342 hits is
+equally consistent with 33,342 failed Blts. The function has an explicit `DDERR_SURFACELOST`
+branch, so wholesale failure is an anticipated state, and nothing measured so far distinguishes
+"blits succeed but we sample the wrong buffer" from "blits all fail". Do not assume the former
+as §10d once did.
+
+Next step, and it is a single measurement: capture the Blt's HRESULT. The entry-only tracer
+cannot do it, so either detour the return, or from the watcher call `IsLost` (surface vtable
+slot 24, `+0x60`) on `raster+0x04` and log it. If the surface is lost, that is the whole
+answer and it is also a plausible consequence of the windowed cooperative level.
+
+### 15.6 Surfaces are healthy, the sampling is valid, the engine's blits produce nothing
+
+Three measurements, in order, each closing a hypothesis:
+
+**1. The surfaces are not lost.**
+```
+SURFACE STATE #3/#200/#1000/#3000/#8000:
+    dest IsLost=0x00000000 [DD_OK]   primary IsLost=0x00000000 [DD_OK]
+```
+`IsLost` is surface vtable slot 24 (`+0x60`) - the same slot `FUN_10018C58` calls in its
+`DDERR_SURFACELOST` retry, which confirms the index. DDERR_SURFACELOST is NOT the cause.
+
+**2. It is not the wrong surface.** Census of every DISTINCT `this` at the blit dispatcher
+(the first is not necessarily the frame buffer - the engine makes 49 offscreen surfaces):
+```
+DEST[0] dev=0x00589258 surf=0x03B54480  800x600 32bpp  0/7500 lit   <- presented
+DEST[1] ...  147x29 32bpp  0/76 lit
+DEST[2] ...  150x29 32bpp  0/76 lit
+DEST[3] ...  146x29 32bpp  0/76 lit
+DEST[4] ...  130x29 32bpp  0/68 lit
+DEST[5] ...  160x29 32bpp  0/80 lit
+DEST[6] ...  234x29 32bpp  0/120 lit
+DEST[7] ...   49x29 32bpp  0/28 lit
+```
+The 29-pixel-tall surfaces are UI text/button targets. **Every** destination is empty, so this
+is not a selection error.
+
+**3. The sampling method is valid.** Colour-fill the destination ourselves via
+`Blt(DDBLT_COLORFILL|DDBLT_WAIT)` and read it back:
+```
+ROUND-TRIP: our ColorFill hr=0x00000000 [DD_OK] -> 7500/7500 magenta read back
+```
+`Lock` DOES observe `Blt` writes. The surface is real, writable, and correctly sampled.
+
+**Conclusion:** the engine calls `FUN_10018C58` 33,342 times, the surfaces are healthy, our own
+blits to the same surface work - and the engine's blits deposit nothing. The tracer counts
+calls, not results, so the outstanding measurement is the HRESULT the engine's `Blt` returns
+(or whether its SOURCE surfaces are themselves empty, in which case the blits succeed and
+faithfully copy black).
+
+Two candidates, both cheap:
+1. Sample the SOURCE surface of the engine's blits (`param_1[1]` in `FUN_10018C58`) the same
+   way we sampled destinations. If sources are empty, the failure is upstream of blitting
+   entirely and nothing about DirectDraw is at fault.
+2. Capture the engine Blt's return value - needs a return-capturing detour, which the
+   entry-only tracer cannot do.
+
+Do (1) first: it reuses the census machinery and needs no new detour mechanics.
+
+### 15.7 The SOURCES are empty too - the failure is upstream of presentation
+
+Sampled the source surface of every engine blit (`param_1[1]` in `FUN_10018C58`):
+
+```
+SRC[0] surf=0x0C0288C0  147x29 32bpp  0/296 lit
+SRC[1] surf=0x0C028960  150x29 32bpp  0/304 lit
+SRC[2] surf=0x0C028A20  146x29 32bpp  0/296 lit
+SRC[3] surf=0x0C028BA0  130x29 32bpp  0/264 lit
+SRC[4] surf=0x0C028BC0  160x29 32bpp  0/320 lit
+SRC[5] surf=0x0C028C00  234x29 32bpp  0/472 lit
+SRC[6] surf=0x0C028C20   49x29 32bpp  0/104 lit
+```
+
+Their dimensions match the destinations exactly, and they are menu button captions.
+**Every source is blank.** The engine is blitting empty surfaces onto empty surfaces.
+
+So DirectDraw is behaving correctly throughout: healthy surfaces, working blits (our own
+ColorFill round-trips), and faithful copying of nothing. **The windowed failure is upstream of
+presentation entirely - whatever rasterises content into those surfaces produces no pixels.**
+Note also that no 800x600 surface appears as a blit SOURCE, so the main frame buffer is never
+a source; only UI element surfaces are.
+
+This re-frames the whole of §10-§15. The chain gate -> present -> blit -> surface is now fully
+measured and correct; the missing step is earlier, where glyphs/sprites should be drawn into
+those small surfaces and never are.
+
+Likely connection, NOT yet evidence: §10m established that fullscreen uses raster class
+`0x1001F5C0` (memory-backed) and windowed uses `0x1001F0AC` (DirectDraw-surface-backed). If
+the software drawing routines write through a memory pointer at `raster+0x04`, that field
+holds a COM surface pointer in the windowed class, so drawing has nowhere valid to go.
+`setpixel_a` trace = **0 hits** in windowed, which is consistent with the drawing routines
+never running at all - but 0 hits is equally consistent with the game simply using a different
+routine, so this must be tested, not assumed.
+
+Next: trace the drawing entry points on both raster classes (`0x1001F0AC` vs `0x1001F5C0` slot
+by slot) and compare hit counts windowed vs fullscreen. The fullscreen run is the control that
+has been missing from every comparison in this section.
+
+### 15.8 Fullscreen control: the traced path is WINDOWED-ONLY
+
+Same instrumentation, fullscreen, 40 s:
+
+```
+blt_disp_1..8        0      blt_convert          0
+raster_blit_hw       0      setpixel_a/b         0
+getpixel_a           7      gate16_a/b/c         0
+size_arith           0      vidmem_calc          0
+window_create        1      restyle_fullscreen   1   restyle_windowed  0
+```
+
+Fullscreen renders perfectly while **every** drawing function in `gz_draw.txt` sits at zero.
+So `FUN_10014894`'s dispatcher family and `FUN_10018C58` are a **windowed-only code path**;
+fullscreen renders through a mechanism this table never touches. `size_arith` = 0 confirms it
+(that is the windowed device builder).
+
+Consequence for method: there is NO working baseline for these functions. They run only in the
+mode that fails, so "compare windowed against fullscreen" - the approach assumed throughout
+§10-§15 - cannot validate them. Every hit count collected for them is unopposed.
+
+### 15.9 Where this actually lands
+
+Measured and correct in windowed mode: window creation and style, placement (must be inside
+the primary display), the suspend/resume pairing, the present gate, the present call reaching
+slot 14, the render-target selection, the destination rect with DPI correction, and the final
+Blt returning DD_OK. Our own ColorFill into the engine's own destination surface round-trips
+perfectly.
+
+Measured and empty: every blit destination, and every blit source. The engine runs a windowed
+compositing path 33,342 times per run that moves blank surfaces onto blank surfaces.
+
+Taken together this is renewed - and much better evidenced - support for the ORIGINAL §10f
+verdict: **SC3U's windowed path exists, executes, and was never finished.** The difference is
+that the earlier verdict rested on "the present is never called", which turned out to be a
+half-patched gate; this one rests on the content pipeline itself producing no pixels while
+every downstream stage is proven functional.
+
+That is a claim about a shipped code path, so it should be held provisionally until someone
+finds where those small UI surfaces are supposed to be filled and shows that it does not run.
+
+### 15.10 The UI labels are not drawn with GDI
+
+Traced windowed, 45 s:
+
+```
+text_TextOutA      0        (SC3U FUN_0045fcd4, the only TextOutA call site)
+text_CreateFontA   0        (SC3U FUN_0045fb17, the only CreateFontA call site)
+getdc_a/b/d        1 each
+getdc_c           74        <- FUN_10017e2f
+```
+
+SC3U does contain a GDI text renderer (`FUN_0045fcd4` / `FUN_0045fb17`) but it **never runs**,
+so it is not what fills the 29-pixel-tall label surfaces.
+
+`FUN_10017e2f`, the only busy `GetDC` site, is the **window procedure** - it dispatches
+`WM_CHAR` (0x102), `WM_LBUTTONUP` (0x202), `WM_MOUSEWHEEL` (0x20a) and uses `PAINTSTRUCT`. Its
+74 hits are window messages, not drawing. None of the four `GetDC` sites render text.
+
+So the UI labels must be filled by the engine's own glyph/sprite blitter (bitmap fonts from
+`Res/`), which has not been located. That is the next thread: `SIMSPR`/`GZGraphicD` sprite
+draw entry points, traced windowed, to find which one should be writing into a 147x29 surface
+and is not.
+
+### 15.11 Housekeeping still outstanding
+
+`Apps\DDrawCompat.ini`, `Apps\DDrawCompat-SC3U.log` and `Apps\ddraw.dll.off` are left over from
+the DDrawCompat experiment. `Apps\` is GAME content and must not hold RE artifacts (CLAUDE.md).
+They are inert (`ddraw.dll` is renamed `.off`, so it does not load) but they should be removed.
+
+### 15.12 The engine locks the label surfaces, writes, unlocks - and they stay empty
+
+Full sweep of the windowed raster vtable `0x1001F0AC` (22 slots), traced windowed 45 s:
+
+```
+slot  1  0x10019470   13      slot  3  0x10018A82   39   <- Lock
+slot  4  0x10018B53   39      <- Unlock                  slot  5  0x100194EC   52
+slot  6  0x100197D9    4      slot 11  0x10018C58  33342 <- hardware Blt
+slot 21  0x100195CC   23
+slots 2, 7, 8, 9, 10, 17, 18, 19: 0 hits
+```
+
+`FUN_10018A82` locks with flags `0x801` (`DDLOCK_NOSYSLOCK|DDLOCK_WAIT`); `FUN_10018B53`
+calls surface `vt+0x80` (index 32 = `Unlock`) and maintains a lock count at `+0xE4`. They are
+an exactly matched Lock/Unlock pair, 39 and 39.
+
+39 pairs in 45 s is not per-frame drawing - it is once per UI element at construction, which
+fits 7+ label surfaces plus other elements.
+
+**So the engine DOES lock each label surface, write through the returned pointer, and unlock -
+and the surface still reads 0 lit afterwards.** Combined with §15.6 (our own ColorFill into the
+same surface round-trips perfectly) this narrows the fault to the locked-pointer write path
+specifically, not to DirectDraw generally.
+
+One hypothesis this raises, explicitly NOT yet evidence: if `Lock` returns a system-memory
+shadow for a video-memory surface and the contents are not propagated on `Unlock`, the engine's
+writes would vanish exactly like this, and it would be a fault in the DirectDraw emulation
+layer (the `DWM8And16BitMitigation` shim) rather than in SC3U. That would also explain why the
+identical drawing code is untroubled in fullscreen, which §15.8 showed uses a different path
+entirely.
+
+Testing it is a single measurement and does not need the game: lock one of these surfaces
+ourselves, write a known pattern through the returned pointer, unlock, then re-lock and read
+back. If our own write survives, the shim is exonerated and the fault is in what the engine
+writes. If it does not survive, the emulation layer is the answer and no amount of SC3U-side
+work will fix windowed mode.
+
+### 15.13 RECONCILIATION: the suspend/resume is NON-DETERMINISTIC
+
+§14.2 measured `+1` with no `-1` ("never resumed"). §14.5 retracted it after measuring `+1`
+then `-1`. **Both measurements were correct. The behaviour varies between runs of the same
+build.**
+
+Recent runs (`sanity2.log`): `SUSPEND #1 delta=+1` at 1143 ms, no matching `-1`, and
+`blt_disp_1 = 0` for the whole session - the engine never draws anything.
+Earlier run (`movie_win2.log`): `+1` at 1770 ms, `-1` at 3778 ms, counter back to 0, and
+`blt_disp_1` in the tens of thousands.
+
+So there are two distinct windowed outcomes:
+
+| Outcome | Resume | blt_disp_1 | What is on screen |
+|---|---|---|---|
+| A | happens | ~34k-159k | video, then black (blits run, surfaces empty) |
+| B | does NOT happen | 0 | video, then black (nothing draws at all) |
+
+They look identical on screen, which is why they were never separated. **Every measurement in
+sections 14 and 15 must be re-read with this in mind: a run showing 0 hits for a drawing
+function may be outcome B, where nothing draws at all, rather than evidence about that
+function.** In particular the fullscreen control (§15.8) and the raster slot sweep (§15.12)
+were single runs and are not safe until repeated.
+
+Methodological correction for this whole investigation: single-run measurements are not
+evidence here. Anything load-bearing needs N runs with the outcome classified by whether the
+resume fired.
+
+This also makes `-resume` (§14.3) worth testing after all - it targets outcome B specifically,
+and it has still never actually executed.
+
+### 15.14 CORRECTION to 15.13: not non-determinism - THE PROBE PERTURBS THE GAME
+
+§15.13 called the suspend/resume "non-deterministic". That is wrong. The outcome correlates
+perfectly with whether the surface-sampling code was present in the build:
+
+| run | +1 | -1 | blt_disp_1 | sampling code |
+|---|---|---|---|---|
+| `draw_dest.log`  | 1 | 1 | 16504  | no |
+| `win_blt7.log`   | 1 | 1 | 158931 | no |
+| `movie_win2.log` | 1 | 1 | -      | no |
+| `wp1..3.log`     | 1 | 0 | 0      | YES |
+| `rep1..6.log`    | 1 | 0 | 0      | YES |
+
+9 of 9 runs WITH the sampling code: no resume, zero drawing. Every run WITHOUT it: resume
+fires, tens of thousands of blits. The resume is the discriminator and the sampling is the
+cause.
+
+Mechanism: the probe calls `Lock` / `IsLost` on the engine's own surfaces from the watcher and
+present threads while the engine locks them itself with `DDLOCK_NOSYSLOCK`. Contending for
+those locks makes the engine's own operations fail, the intro movie never completes normally,
+`Resume(-1)` never runs, and nothing draws.
+
+**Consequences - these invalidate measurements in this document:**
+
+1. Every `0/7500 lit` and `0/296 lit` reading in §15.3, §15.5, §15.7 was taken by code that
+   also suppressed the drawing. **"The surfaces are empty" is not established.** They may be
+   empty *because we were sampling them*.
+2. The fullscreen control (§15.8) and the raster slot sweep (§15.12) ran with sampling active
+   and must be repeated without it.
+3. §15.9's conclusion - "the windowed path executes but was never finished" - loses its main
+   support and is **withdrawn** pending re-measurement.
+
+What survives, because it was measured before the sampling code existed: the placement
+constraint (§12.2), the two present gates and the guard being a counter (§13), `-bpp 32` never
+reaching GZGraphicD (§12.3), the framebuffer pitch scan (§12.4), and the present pipeline
+reaching a succeeding Blt with correct geometry (§15.2).
+
+**Method rule for anyone continuing: do not Lock or query engine-owned DirectDraw surfaces
+from a probe thread while the game is running.** Read pixel data only from memory the engine
+is not concurrently locking, or accept that the act of measuring changes the result.
+
+### 15.15 §15.14 IS ALSO WRONG - cause unknown, baseline not reproducible
+
+Gated every surface Lock/IsLost behind `-sample` (default off) and re-ran 4x:
+
+```
+run 1..4:  +1 = 1,  -1 = 0,  blt_disp_1 = 0
+```
+
+Identical to the runs WITH sampling. **So the sampling was not the cause either, and §15.14's
+correlation was coincidence** - every "no sampling" run in that table predated a batch of other
+probe changes, so the two variables were confounded and I attributed it to the wrong one.
+
+Current state: the working baseline (resume fires, tens of thousands of blits) **cannot be
+reproduced**. It was present in `draw_dest.log`, `win_blt7.log` and `movie_win2.log` earlier
+today and has been absent in 13 consecutive runs since, across several probe builds and flag
+combinations, including builds with the added code disabled.
+
+Not yet checked, and the obvious next candidates:
+- game state held OUTSIDE the repo (registry keys, `%USERPROFILE%`/AppData settings) written
+  during a session where the game was terminated ~40 times with `TerminateProcess`;
+- `Apps\SC3U_stkdmp.txt` (14:43) shows the game crashed at least once today - it may have
+  persisted a "safe mode" or damaged setting;
+- a probe change outside the sampling block that has not been isolated (the `g_drawobjs` /
+  `g_srcsurf` collection in `fnlog_enter`, or the `GetSurfaceDesc` on the primary in
+  `present_hook`).
+
+**Status of section 15: unsafe.** Its measurements were taken in a state that cannot currently
+be reproduced, and two successive explanations for that (§15.13 non-determinism, §15.14 probe
+perturbation) have each been falsified by the next measurement. Treat everything from §15.3
+onward as unverified until the baseline is recovered.
+
+The reliable way to recover it: `git stash` the probe source, rebuild from the revision that
+produced `win_blt7.log`, and confirm the resume fires. If it does NOT, the cause is external
+game state, not the probe, and that is where to look.
+
+## 16. U-032 does NOT reproduce, and no reboot was needed (2026-08-16, late)
+
+### 16.1 The result
+
+Three consecutive runs of the prescribed command recovered. Same probe build
+(`sc3launch.exe` / `sc3probe.dll`, both 21:58), same switches, same machine, **same boot
+session** as the 16+ failing runs (last boot `2026-08-15 12:59:43`, uptime 1 d 10 h at the
+time of the test - **the reboot prescribed as the first step was never performed**).
+
+| run | log | instrumented | SUSPEND | `blt_disp_1` | `raster_blit_hw` |
+|-----|-----|--------------|---------|--------------|------------------|
+| iso1 | 21:59:04 | 33/33 | `+1` only | **0** | - |
+| iso2 | 21:59:44 | 33/33 | `+1` only | **0** | - |
+| iso3 | 22:00:25 | 33/33 | `+1` only | **0** | - |
+| A | 22:54:06 | 33/33 | `+1` then **`-1`** | **23,911** | 23,030 |
+| B | 22:57 | 33/33 | `+1` then **`-1`** | **32,578** | 31,698 |
+| C | 22:58 | 33/33 | `+1` then **`-1`** | **37,903** | 37,023 |
+
+Resume is `ret=SC3U 0x2A35F`, `args=[FFFFFFFF ...]`, `count(before)=1` -> back to 0
+`[CONFIRMED @0x10016bde]`. Rule 1 is satisfied in every row: `33/33 instrumented`, no
+`UNDECODABLE`/`UNRECOGNISED` line for any counted function. Rule 2 is satisfied: 3 runs, all
+the same class.
+
+The probe banners of `iso3` and `recover_A` are line-for-line identical - same two WINDOWED
+patches, same PRESENT-GATE nop, PRESENT-GUARD not patched, same WINPRESENT detour, same three
+monitors, same `2560x1440 @ 32 bpp, freq=165`. **Nothing under our control differs between the
+failing class and the recovered class.** What differs is ~55 minutes of wall clock.
+
+### 16.2 What this settles and what it does not
+
+- **Settles:** U-032 is not a repo-side regression, and it is not persistent. It cleared
+  without a reboot, a rebuild, or a revert.
+- **Settles:** the suspend/resume pair is correct in windowed mode (this re-confirms
+  U-028-RETRACTED and closes the "never resumed" reading for good).
+- **Does NOT settle:** what the transient variable was. Nothing here identifies it, and
+  because it cleared on its own it cannot be bisected after the fact. A run that shows `+1`
+  with no `-1` should now be classified as **this transient**, not as a new defect, and
+  re-run before anything is concluded from it.
+- **Does NOT settle:** whether the game is visually correct. `blt_disp_1` rising is drawing
+  activity, not a picture. The probe still cannot see the screen (§12/§15 rule 5), and
+  `WINDUMP` still reports `[UNIFORM - capture produced no content]`, which is expected and
+  means nothing either way.
+
+### 16.3 Harness defect found while testing: relative log paths silently do nothing
+
+`sc3launch` passes `-log` / `-gzlog` **verbatim** into `SC3PROBE_LOG` / `SC3PROBE_GZLOG`
+(`sc3launch.c:155`, `:80`), and launches the game with its working directory set to
+`<root>\Apps` (`sc3launch.c:144`, `:167`). The probe runs in-process, so a relative path
+resolves against `Apps\`, where `re\harness\` does not exist. The result:
+
+- `-log re\harness\recover.log` writes **nothing**, and `sc3launch.c:214` still prints
+  `[*] log written: ...` unconditionally, without checking.
+- `-gzlog re\harness\gz_draw.txt` cannot be opened, the probe logs
+  `--- FNLOG: cannot open ... (err 2) ---`, and **every fnlog counter is then absent from the
+  log** - including `blt_disp_1`.
+
+**The command written in `HANDOFF.md` and used in this section's test therefore cannot produce
+a measurement.** Always pass absolute paths. This is also a rule-1 trap of a new kind: not a
+detour that failed to install, but a whole counter table that never loaded, which reads as
+"the line is missing" rather than as an error.
+
+Note `-gzlog` is an **input** trace table, not an output log. Do not rename or delete
+`re\harness\gz_draw.txt`.
+
+## 17. The present is NOT the problem: it blits, it succeeds, the source is empty (2026-08-16, late)
+
+### 17.1 The counters that were missing
+
+`g_blt_ok` / `g_blt_fail` were incremented at `sc3probe.c:2321-2322` and **never printed**, and
+the `engine-fb Blt:` log line is capped at `if (n <= 3)`. So every previous reading of "3 blits"
+was a log cap, not a count, and the true number of windowed presents had never been measured.
+A `WINPRESENT` line was added to the 5 s summary. Measured, windowed, movie skipped by hand:
+
+| run | t | `present_calls` | `blt_ok` | `blt_fail` | `blt_disp_1` | `raster_blit_hw` |
+|-----|---|-----------------|----------|------------|--------------|------------------|
+| D | +5 s | 1263 | 1263 | **0** | - | - |
+| E | +5 s | 474 | 474 | **0** | - | - |
+| E | +10 s | 3193 | 3193 (+2719) | **0** | 23,163 | 22,283 |
+
+`33/33 instrumented` in both, suspend `+1`/`-1` paired in both.
+
+### 17.2 What this rules out
+
+**The windowed present path works and is not the blocker.** It runs 250-550 times a second,
+every call returns `DD_OK`, and not one fails. Destination is `dest 3,32-1003,782` on the
+primary. Simultaneously the engine is drawing hard: `blt_disp_1` 23,163 with
+`raster_blit_hw` 22,283 tracking it.
+
+So the engine renders ~23,000 times and the present blits ~3,200 times successfully, and the
+client area is black (confirmed visually by the user: intro video plays, black after skipping).
+
+### 17.3 What that leaves
+
+The blit source is empty. `CANDIDATES (t+6s)` in run D:
+`#1 obj=0x005A7B50 surf=0x03B36110 800x600 32bpp **0/7500 LIT**`. §15 asserted this on a
+baseline that could not be reproduced; it is now re-established on a clean one (U-032 cleared,
+33/33 instrumented, repeated runs).
+
+**The open question is therefore a memory-identity question, not a present question: does
+`raster_blit_hw` write into the surface that the present reads?** 23,163 engine blits and a
+0/7500-lit source surface cannot both describe the same buffer. Next measurement: capture the
+destination pointer of `raster_blit_hw` (`FUN_10018c58`) and compare it against the present's
+`src` (`0x03B64F60` in run A, `0x03B36110` in run D - it is re-allocated per run, so compare
+within a single run, never across runs).
+
+Note `FBHUNT` in run E finds changed regions with plausible lit ratios
+(`2354/4100`, `3155/7500`) - the engine's output exists in memory somewhere. §12.4 closed the
+pitch-scan hunt negatively; this is a different question (identity of a known pointer), not a
+re-opening of that scan.
+
+## 18. ROOT CAUSE: every engine blit is DDBLT_KEYSRCOVERRIDE and ddraw returns E_NOTIMPL (2026-08-16)
+
+### 18.1 The measurement
+
+```
+raster_blit_hw       3935        FUN_10018c58 entered
+rasthw_throw         3935        error path @0x10018CDD taken -> 100.0%
+rasthw_surfacelost      0        not DDERR_SURFACELOST
+hr                   0x80004001  E_NOTIMPL  (one distinct code, all runs)
+dwFlags              0x01010000  DDBLT_KEYSRCOVERRIDE | DDBLT_WAIT
+DDBLTFX              dwSize=100  dwDDFX=0  dwROP=0  destCK=0..0  srcCK=0..0
+engine_dest = present_src = 0x009F4840      SAME SURFACE
+dest vtable          DDRAW.dll+0x7D120, slot5(+0x14) = DDRAW.dll+0x49C80
+```
+
+`35/35 instrumented`, no `UNDECODABLE`/`UNRECOGNISED` for any counted function.
+
+### 18.2 How it was established
+
+The two probe addresses come from a **real disassembly** of `FUN_10018c58` (capstone, over
+`original\modules\GZGraphicD.dll`), not from the decompiled C:
+
+```
+0x10018C86  call dword ptr [ecx+0x14]     IDirectDrawSurface::Blt (index 5), result in eax
+0x10018C89  cmp eax, 0x887601C2           DDERR_SURFACELOST -> retry path at 0x10018C90
+0x10018CD9  test eax, eax / je 0x10018D0A success, al=1
+0x10018CDD  (fallthrough)                 error path
+```
+
+`0x10018C90` and `0x10018CDD` are fallthrough-only - every branch target in the function is
+`0x10018CA8`, `0x10018CC0`, `0x10018CD9`, `0x10018D06`, `0x10018D0A`, `0x10018D0C` - and both
+have >=5 stealable bytes (6 and 7). At `0x10018CDD` the Blt's HRESULT is still in `eax`, which
+is `f[8]` in the probe's `pushad`+`pushfd` frame.
+
+The argument layout is confirmed at `0x10018C74-0x10018C86`: `lea ebx,[esi+0x78]` gives
+`lpDDBltFx = param_1 + 0x1E` and `push [esi+0xdc]` gives `dwFlags = param_1[0x37]`.
+
+### 18.3 What it means
+
+The chain is now fully accounted for, and every earlier suspect is cleared:
+
+1. the renderer resumes correctly (§16);
+2. the engine composites into a surface, ~4-23k blits per run;
+3. **every one of those blits fails with `E_NOTIMPL`, so the surface stays empty**;
+4. the windowed present reads *that same surface* (pointer-identical) and Blts it to the
+   primary 250-550 times a second, `DD_OK` every time (§17);
+5. the client is black.
+
+`E_NOTIMPL` is a flags complaint, not a surface or resource one: modern Windows DDRAW does not
+implement `DDBLT_KEYSRCOVERRIDE`. The engine passes it on every blit with an override key of
+`0..0`, i.e. treat black as transparent.
+
+**This also explains the earlier "0/7500 LIT" source-surface readings (§15, §17.3) without
+needing any of §15's retracted machinery: the surface is empty because nothing ever
+successfully wrote to it.**
+
+### 18.4 What is NOT established
+
+- **Why fullscreen works.** Not measured. `blt_disp_1` (`FUN_10014894`) branches on
+  `this+0x10 == srcfmt+4`, so fullscreen may take the software path and never reach
+  `FUN_10018c58` at all. That is a hypothesis; the same counters run fullscreen would settle it
+  and that run has not been done.
+- **Whether removing the flag fixes it.** Two candidate directions, both untested: drop
+  `DDBLT_KEYSRCOVERRIDE` (changes transparency semantics - black would stop being transparent),
+  or force the software blit path. Neither should be called a fix until measured.
+- `[UNCERTAIN]` whether the colour key `0..0` is meaningful or a zero-initialised DDBLTFX that
+  the engine never fills because it expects the override flag to be honoured.
+
+## 19. The E_NOTIMPL fix is real, necessary, and NOT sufficient (2026-08-16)
+
+### 19.1 `-nokeysrc` works, measurably
+
+Clearing bit `0x00010000` (`DDBLT_KEYSRCOVERRIDE`) in `param_1[0x37]` on entry to
+`FUN_10018c58`, opt-in via `-nokeysrc`:
+
+| counter | without | with `-nokeysrc` |
+|---|---|---|
+| `raster_blit_hw` | 3,935 | **473,220** |
+| `rasthw_throw` | 3,935 (**100%**) | **1** |
+| present `blt_ok` / `blt_fail` | 72 / 0 | 203,306 / **0** |
+| captured `dwFlags` | `0x01010000` | `0x01000000` (DDBLT_WAIT only) |
+
+The flag is cleared only **7 times** in a 60 s run - it lives on the raster object, not on
+each blit. §18's diagnosis is therefore confirmed: `DDBLT_KEYSRCOVERRIDE` was failing every
+blit, and removing it makes them succeed.
+
+### 19.2 And the client is still black
+
+Confirmed visually by the user: black for the whole run. With `-sample`, after 59,003
+successful blits:
+
+```
+#1 obj=0x005A7F98  surf=0x03B4B628  800x600 32bpp   0/7500 LIT     <- the render target
+#2 obj=0x0F2BBB80  surf=0x0C015188  147x29  32bpp   0/76   LIT     <- a blit SOURCE
+```
+
+`surf=0x03B4B628` is pointer-identical to the captured `dest_surface`, so this is the right
+surface, sampled after tens of thousands of successful writes into it. **The blits succeed and
+copy nothing, because the sources are empty too.**
+
+So the failure has moved one level upstream: whatever is supposed to fill those source rasters
+(e.g. the 147x29 one, a UI-sized element) is not doing so. `blt_convert` runs 882 times in
+every run, which is the only other populated path in the table.
+
+Meanwhile `FBHUNT` in the same run reports changed regions that look like real raster content:
+`2686/4100`, `1836/4100`, `2407/7500` lit interpreted as 800x600x32. So the process does
+contain drawn pixels somewhere - they are just not in these DirectDraw surfaces.
+
+### 19.3 Status and cautions
+
+- §18's root cause **stands** and `-nokeysrc` should stay on for all further windowed work: it
+  converts a 100% blit failure into ~0%.
+- The black client is now a **separate, upstream** defect: empty source rasters.
+- `[UNCERTAIN]` the `0/N LIT` readings are Lock-based samples of every 8th pixel, counting
+  `px & 0x00FFFFFF`. They would also read 0 for genuinely black content. Given `#2` is a
+  147x29 UI element, black-on-black is implausible, but it has not been excluded.
+- Unexplained: two `-nokeysrc` runs exited cleanly on their own (`code = 0`) at ~10.5 s and
+  ~12.7 s, while a third ran the full 60 s. Not diagnosed, and NOT established as caused by the
+  flag clear. Treat an early clean exit as this, and re-run.
+
+## 20. The empty sources are real, not a sampling artifact — and they are UI sprites (2026-08-16)
+
+### 20.1 Game-thread measurement
+
+`sample_candidates` locks surfaces on a SEPARATE thread at t+6s, so an empty reading could be
+an inter-frame clear. `probe_count_lit` (new) locks on the CALLING thread, inside the
+`FUN_10018c58` detour, synchronous with the blit. First 6 blits, `-nokeysrc` on:
+
+```
+blit#1: SRC 0x0C040C28 147x29 32bpp lit=0   DST 0x0386CE10 800x600 32bpp lit=0
+blit#2: SRC 0x0C040B28 150x29 32bpp lit=0   DST 0x0386CE10 800x600 32bpp lit=0
+blit#3: SRC 0x0C040A08 146x29 32bpp lit=0   DST 0x0386CE10 800x600 32bpp lit=0
+blit#4: SRC 0x0C040C48 130x29 32bpp lit=0   DST 0x0386CE10 800x600 32bpp lit=0
+blit#5: SRC 0x0C040AA8 160x29 32bpp lit=0   DST 0x0386CE10 800x600 32bpp lit=0
+blit#6: SRC 0x0C040A48 234x29 32bpp lit=0   DST 0x0386CE10 800x600 32bpp lit=0
+```
+
+The `147x29` matches `sample_candidates`'s independent reading exactly, so `probe_count_lit` is
+locking the right surface and reading real bits. **The sources are empty at the instant they
+are blitted. The inter-frame-clear confound is eliminated.**
+
+### 20.2 What the sources are
+
+Every source is ~29 px tall, 130-234 wide, 32bpp - the shape of **UI text-label sprites**, a
+menu's worth of small strips. The dest is the 800x600 render target, also empty. The chain is
+empty end to end: empty label sprites -> empty composite -> black present.
+
+Meanwhile FBHUNT still finds real content in unrelated system buffers (`0x0EF30000`:
+5712/7500). So the engine draws SOMETHING, somewhere, but not into the DirectDraw surfaces this
+blit path uses.
+
+### 20.3 The open question, sharpened
+
+**What should fill a 147x29 32bpp UI sprite surface, and is that fill windowed-only-broken?**
+Two ways to attack it, in order of cost:
+
+1. **Fullscreen contrast (U-035).** Run the same `probe_count_lit` on the blits in a fullscreen
+   run. If fullscreen sources are lit and windowed are empty, the fill step is
+   windowed-specific. If fullscreen sources are ALSO empty, this DirectDraw blit path is a
+   red herring in both modes and the real present path is elsewhere (follow the FBHUNT
+   regions / `blt_convert`, 882 hits, instead).
+2. **Trace the sprite fill.** The 32bpp sprite is likely converted from an 8bpp resource by
+   `blt_convert` (`FUN_10014c05`); instrument it and see whether its output surface is ever one
+   of these `0x0C04xxxx` sources.
+
+`[UNCERTAIN]` a pixel counted lit requires `px & 0x00FFFFFF != 0`; a sprite drawn entirely in
+pure black would read 0. Implausible for text labels but not excluded.
+
+## 21. ROOT CAUSE: windowed surfaces are 32bpp, the engine renders 16bpp (2026-08-16)
+
+### 21.1 The fullscreen/windowed contrast
+
+Same `probe_count_lit`, same blit function, first 6 blits:
+
+| | fullscreen (`u035_fs.log`) | windowed (`u037_A.log`) |
+|---|---|---|
+| source dimensions | 640x480, 800x600, 1124x406 | 147x29, 150x29, 146x29 ... |
+| source **bpp** | **16** | **32** |
+| source lit | **19,185 / 30,000 / 28,662** | **0** |
+| dest bpp | **16** | **32** |
+| dest lit | 0 -> 19,196 -> **30,000** | **0** |
+
+Fullscreen: `raster_blit_hw` blits full-frame 16bpp rasters full of content, and the dest
+composites correctly - `0 -> 19,196 -> 30,000` lit, layer by layer. The blit mechanism is
+sound and shared by both modes.
+
+### 21.2 The root cause
+
+The device renders at **16bpp** (`[CONFIRMED @0x10009efb]`, U-025). Fullscreen surfaces are
+16bpp and carry content; the FBHUNT system rasters that hold real content are 16bpp too.
+**Windowed surfaces come out 32bpp** - matching the desktop mode (2560x1440 @ 32bpp), NOT the
+engine. Content rendered at 16bpp never lands in a 32bpp surface, so every windowed source and
+the windowed dest are freshly-allocated and empty.
+
+This is one defect, not several:
+- U-024 (black windowed client): the presented 32bpp surfaces are empty because the 16bpp
+  engine output never reaches them.
+- U-025 (intro movie draws exactly half width): 16bpp row bytes (640 px x 2 = 1280 B) written
+  into a 32bpp surface fill 320 px. Same bpp mismatch, on the movie path. The "factor of
+  exactly 2" is now explained.
+- U-037 (empty sources): the sources are 32bpp; the engine never renders 32bpp.
+
+### 21.3 Why the surfaces are 32bpp - the next question
+
+The WINDOWED patch already nops `GZGraphicD+0x117D6 'mov [ebx+0x48],1'` ("16bpp can stay"), so
+the DEVICE keeps 16bpp. But surface CREATION in windowed mode still adopts 32bpp. DirectDraw
+windowed surfaces on the primary inherit the desktop's pixel format unless an explicit
+`ddpfPixelFormat` is supplied. The fix path is one of:
+
+1. supply an explicit 16bpp `ddpfPixelFormat` when the windowed offscreen surfaces are created
+   (find the `CreateSurface` call site in GZGraphicD and force `dwRGBBitCount=16` + the 5-6-5
+   masks), or
+2. run the whole windowed device at 32bpp (force the engine's render rasters to 32bpp - larger
+   change, touches the 16bpp fast-path gates `gate16_a/b/c`), or
+3. change the desktop to 16bpp before launch (test-only, confirms the diagnosis: if a 16bpp
+   desktop makes windowed render, the mismatch is proven and option 1 is the real fix).
+
+Option 3 is the cheapest confirmation and needs no code. Options 1/2 are the actual fix.
+
+`[UNCERTAIN]` not yet read: the exact `CreateSurface`/`CreateSurface`-caller in GZGraphicD that
+allocates these offscreen surfaces, and whether it passes a pixel format or inherits the
+primary's. That call site is the fix location.
+
+## 22. FIX LOCATION CONFIRMED: the missing 16bpp branch in FUN_10019273 (2026-08-16)
+
+### 22.1 The call site
+
+`FUN_10019273` @ `0x10019273` (our `OffscreenSurf`) is the ONLY color offscreen-surface
+creator in GZGraphicD. It calls `IDirectDraw::CreateSurface` (interface via
+`*DAT_1006ce28 -> +0x1c`, then vtable `+0x18` = index 6) twice - line 75 (video-memory
+attempt) and line 88 (system-memory fallback) - both from a DDSURFACEDESC embedded at
+`this+0xc`. The vtable is pinned by `FUN_1001250d` (SetCoopLevel) calling `+0x50`
+(SetCooperativeLevel) with `8`=DDSCL_NORMAL windowed vs `0x11`=EXCLUSIVE|FULLSCREEN, which
+fixes `+0x18`=CreateSurface. `[CONFIRMED @0x10019273, read directly]`
+
+DDSURFACEDESC field map (desc base = `this+0xc`): `this+0x10`=dwFlags, `this+0x18`=dwWidth,
+`this+0x14`=dwHeight, ppf at `this+0x54`: `+0x54`=ppf.dwSize, `+0x58`=ppf.dwFlags,
+`+0x60`=dwRGBBitCount, `+0x64`=R mask, `+0x68`=G mask, `+0x6c`=B mask, `+0x70`=A mask.
+
+### 22.2 The defect
+
+```
+line 40:  this+0x10 (dwFlags) = 7                      // CAPS|HEIGHT|WIDTH, no PIXELFORMAT
+line 43:  if (*(param_3+4) == 0x20) {                  // 32bpp -> sets dwFlags=0x1007 + ARGB8888
+line 53:  } else if (*(param_3+4) != 0x10) {           // 8bpp/other -> sets dwFlags=0x1007 + fmt
+line 61:  }                                            // 16bpp (==0x10): NEITHER branch runs
+```
+
+For a 16bpp request `dwFlags` stays `7`, DDSD_PIXELFORMAT (`0x1000`) is never set, and no
+`dwRGBBitCount`/masks are written. `CreateSurface` with no pixel format inherits the primary
+surface's format. `param_3+4` is the requested source depth; the engine renders 16bpp, so this
+is the path taken for every game surface. `[CONFIRMED @0x10019273]`
+
+Fullscreen: primary is 16bpp (SetDisplayMode + DDSCL_EXCLUSIVE), so the inherited format is
+16bpp and matches. Windowed (DDSCL_NORMAL): primary = 32bpp desktop, so the offscreen is 32bpp
+and the 16bpp engine output never lands. This is the sole defect behind U-024/U-025/U-037/U-039.
+
+### 22.3 The fix spec
+
+Add the missing 16bpp arm (5-6-5), i.e. make the 16bpp case set the same fields the other two
+arms set, with 16bpp values:
+
+```
+this+0x10 (dwFlags)        = 0x1007        // add DDSD_PIXELFORMAT
+this+0x54 (ppf.dwSize)     = 0x20
+this+0x58 (ppf.dwFlags)   |= 0x40          // DDPF_RGB
+this+0x60 (dwRGBBitCount)  = 0x10          // 16
+this+0x64 (R mask)         = 0xF800
+this+0x68 (G mask)         = 0x07E0
+this+0x6c (B mask)         = 0x001F
+```
+
+`[UNCERTAIN]` 5-6-5 vs 5-5-5: the engine's 16bpp getpixel/setpixel format has not been read;
+if the software renderer packs 5-5-5, the masks must be `0x7C00/0x03E0/0x001F` and the primary
+would need matching. Read `getpixel_a`/`setpixel_a` (`FUN_100155b6`/`0x10015614`) to confirm
+the 16bpp bit layout before committing masks.
+
+Two ways to apply it:
+1. **Harness detour** (reversible, no binary edit): we already detour `FUN_10019273`
+   (`OffscreenSurf`). A mid-function hook just before the CreateSurface call (or a re-write of
+   the desc when `dwFlags==7` && depth==0x10) forces the 16bpp pixel format. Preferred for
+   testing.
+2. **Static byte patch** of the DLL: add the branch. Larger, and GZGraphicD is a game asset -
+   out of scope for the public repo. Keep any patched DLL local.
+
+## 23. WINDOWED MODE RENDERS — the 16bpp fix confirmed visually (2026-08-16)
+
+### 23.1 The fix works
+
+`-fix16` (patch_surfacefmt) injects the missing 16bpp branch into FUN_10019273 at 0x19349 via
+a mid-function inline hook (steals `neg bl; sbb ebx,ebx; and ebx,0xfc0`, writes a 5-6-5
+ddpfPixelFormat when `[esi+0x10]==7`, replays, returns). With it on, windowed reproduces the
+fullscreen blit pattern exactly:
+
+```
+blit#1: SRC 640x480  16bpp lit=19185   DST 800x600 16bpp lit=0
+blit#2: SRC 640x480  16bpp lit=19185   DST 800x600 16bpp lit=19185
+blit#5: SRC 800x600  16bpp lit=30000   DST 800x600 16bpp lit=19185
+blit#6: SRC 1124x406 16bpp lit=28662   DST 800x600 16bpp lit=30000
+```
+
+Sources are 16bpp (were 32bpp) and full; the dest composites 0 -> 19185 -> 30000. **Confirmed
+visually by the user: the game renders in the window** - U-024/U-039 fixed. This is the first
+time the windowed client has shown the game.
+
+### 23.2 -nokeysrc is now obsolete (color keying works at 16bpp)
+
+`-fix16` WITHOUT `-nokeysrc`: `raster_blit_hw` 289,451, `rasthw_throw` **0**, and the user
+confirms transparency is correct (violet gone). So the DDBLT_KEYSRCOVERRIDE E_NOTIMPL of §18
+was a SYMPTOM of the 32bpp mismatch, not an independent defect - a color-key blit against a
+32bpp surface whose format the emulation could not key failed; against a proper 16bpp surface
+it succeeds. **`-nokeysrc` is retired.** §18/§19's "100% blit failure" was real but its cause
+was U-040 all along.
+
+### 23.3 One secondary defect remains: the menu is clipped right and bottom
+
+The render is 800x600 (device init `[800,600,...]`); the client is larger. `present_calls`
+dropped to 2 with `-fix16` (was thousands), so the game's OWN present path is active now and
+the forced `-winpresent` Blt is essentially unused - the clip comes from the game's own
+windowed present sizing, not our hook. This is a window/client sizing issue, not a format one,
+and is the only remaining windowed defect. `-winpresent` may itself now be removable; re-test.
+
+### 23.4 The switch set that renders
+
+`-nocom -windowed -origin -fix16` + `-gzlog <abs>`. `-fix16` is the one essential new switch.
+`-nokeysrc` retired; `-winpresent` now likely redundant (re-test). This is the first fully
+rendering windowed configuration.
+
+## 24. WINDOWED MODE COMPLETE - clipping was -winpresent, fixed by dropping it (2026-08-16)
+
+**Final working config, user-confirmed: `-nocom -windowed -origin -fix16 -fitclient`** (NO
+`-winpresent`, NO `-nokeysrc`). Renders, correct transparency, no clipping.
+
+The right/bottom clip (U-041) was NOT a window-size problem - `-fitclient` confirmed the client
+was already exactly 800x600 (`AdjustWindowRectEx` agreed with the game's own 806x629/806x635
+outer calc, GetClientRect = 800x600). Two things fixed it together:
+
+1. **`-fitclient` -> `SetProcessDPIAware` in DllMain.** The game is DPI-unaware; on a 125%
+   desktop (physical 2560x1440, logical 2048x1152) its windowed present blitted 800x600 logical
+   into an 800x600 PHYSICAL region of a DWM-scaled client. Making the process DPI-aware
+   (logical==physical) removed the scaling mismatch. Also fixes the caption-height metric so an
+   800x600 client needs an 806x635 outer, which `-fitclient` now enforces.
+2. **Dropping `-winpresent`.** With `-fix16`, the game's OWN windowed present works (the flip /
+   present path was fine once the surfaces were valid 16bpp - the original §10h "NULL flip
+   chain" was another symptom of the format defect). `-winpresent`'s hook fired only ~3x then
+   the game's native present took over, and the two disagreed on the dest rect - the hook's
+   DPI-corrected 1000x750 rect (pre-DPI-aware) or its screen-absolute 3,32 origin fought the
+   game's own present. Removing the hook lets the game present natively and correctly.
+
+So `-winpresent` and `-nokeysrc`, both built this session's-worth of effort to work around the
+black screen, were BOTH symptoms of U-040. With the real fix they are obsolete. The minimal
+render path is the game's own, plus one injected pixel-format branch and DPI awareness.
+
+### 24.1 What windowed mode needs, minimal and final
+
+| switch | why |
+|---|---|
+| `-nocom` | mandatory; apphelp shim owns the COM dispatch |
+| `-windowed` | the two GZGraphicD windowed patches (0x6CDAC flag, 0x117D6 nop) |
+| `-origin` | keep the window on the primary display (placement constraint, §12) |
+| `-fix16` | inject the missing 16bpp pixel-format branch in FUN_10019273 (U-040) |
+| `-fitclient` | SetProcessDPIAware + size the client to exactly 800x600 (U-041) |
+
+`-gzlog <abs>` only needed for measurement. `-winpresent`, `-nokeysrc`, `-present`, `-guard`,
+`-sample`, `-resume` are all obsolete for a normal windowed run.
+
+## 25. Intro movie half-width: structurally different from U-040, not the same fix (2026-08-16)
+
+### 25.1 Where the movie draws
+
+The intro player (SC3U `FUN_00429f95`) draws frames via the codec's `vt+0x10`
+(`FUN_0043f834`) into the surface at `movie+0x5c`. That surface is resolved by
+`FUN_004414c9` (player slot 0x15c) from the **cIGZWinMgr** window manager
+(`FUN_004703a7` -> service `0xa417445e` = `GZSERVID_cIGZWinMgr`, `vt+0x18` active window,
+`vt+0x4c` its surface). It is the **PRIMARY** surface, created by GZGraphicD
+**`FUN_100199c0`** with `dwFlags=1` (DDSD_CAPS only) and caps `0x2200`
+(DDSCAPS_PRIMARYSURFACE|LOCALVIDMEM), **no DDSD_PIXELFORMAT** `[CONFIRMED @0x100199c0, read]`.
+So it inherits the display-mode format: 16bpp fullscreen, 32bpp windowed.
+
+The codec's draw-frame does NO stride math itself (`FUN_0043f834`): state 2 Locks the dest
+(`vt+0x1c`), copies the uV frame buffer via `vt+0x74`, Unlocks (`vt+0x20`). The 16bpp row
+width lives in the **external `uV` video DLL** (`uV_Play_FromHandle`/`uV_Open` thunks at
+`0x0043f93e` / `FUN_0043f1fd`), which is NOT in any Ghidra export.
+
+### 25.2 Why -fix16 does not and cannot fix it
+
+`-fix16` forces 16bpp on the OFFSCREEN surfaces (`FUN_10019273`), which are format-free to
+create. The movie uses the PRIMARY (`FUN_100199c0`). **A windowed DirectDraw primary must
+match the desktop pixel format**; forcing DDSD_PIXELFORMAT=16bpp on a PRIMARYSURFACE while the
+desktop is 32bpp is rejected by DDraw (DDERR_INVALIDPIXELFORMAT). So the U-040 patch is not
+applicable - it would fail CreateSurface. The uV codec emits 16bpp to match a 16bpp fullscreen
+primary; windowed's 32bpp primary is the mismatch, and the codec is external and fixed.
+
+### 25.3 The tractable fix, if pursued
+
+The only in-our-control conversion point is the copy `dest->vt[0x74](uvBuffer, 0)` inside
+`FUN_0043f834` state 2. `vt+0x74` is a method on the cIGZWinMgr window-surface class (vtable
+not yet identified). If it is a GZGraphicD blit that reads the uV 16bpp buffer and writes the
+locked primary WITHOUT format conversion, making it convert 16->32 would fix the movie. That
+needs: identify the cIGZWinMgr surface class vtable, read `vt+0x74`, and confirm whether it is
+format-aware. Alternative (larger): redirect `movie+0x5c` to a 16bpp offscreen and blit-convert
+to the primary each frame.
+
+### 25.4 Recommendation
+
+The intro is cosmetic and skippable, and the game itself renders fully. This is understood, not
+mysterious. Either interpose a converting copy at `vt+0x74` (a real piece of work on the movie
+path) or leave it documented. Not worth blocking on.
+
+## 26. Intro skipped via the game's own advance path (-nointro) (2026-08-16)
+
+Rather than fix the 16bpp-on-a-32bpp-primary movie (§25, structurally hard), skip it. The boot
+state machine SC3U `FUN_00429f54` already has the exit: for movie-state 0 it calls the start
+`FUN_00429f95`, and **if that returns al==0 (movie did not start) it posts message (5,0x1b)**
+= "movie done, advance to menu". So neutralising the start call makes the game boot straight to
+the menu using its own logic.
+
+`-nointro` (patch_nointro) replaces the 5-byte `call FUN_00429f95` at SC3U `0x429F78`
+(`E8 18 00 00 00`) with `xor al,al` + 3 nops (`32 C0 90 90 90`). In-memory patch of SC3U
+(base 0x400000), verified against the original bytes first. Result, user-confirmed: **boots
+straight to the menu, no intro, menu correct, and NO renderer SUSPEND at all** (the movie never
+runs, so the +0x1C suspend/resume of §13/§14/U-028 never happens). This sidesteps U-025 and
+U-032's whole surface entirely.
+
+### 26.1 The complete windowed command
+
+```
+sc3launch.exe -nocom -windowed -origin -fix16 -fitclient -nointro
+```
+
+Renders, correct transparency, correct client size, no intro. This is the finished windowed
+mode. `-gzlog <abs>` only for measurement; all of `-winpresent -nokeysrc -present -guard
+-sample -resume -bpp` are obsolete.
