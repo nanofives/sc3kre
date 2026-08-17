@@ -43,6 +43,20 @@ ZONE_GROUP = 0x409FF3BA      # SC3ZoneLayer, saver 0x100320e7 / loader 0x10031c8
 WORLD_GROUP = 0xE11BDDF6     # SC3WorldLayer, save 0x1002776c / load 0x10027563
 DIRT_GROUP = 0x21737DE5      # SIMDIRT terrain, saver 0x10004d90 ("DirtBag")
 
+# Zone-raster value -> developer class. The three groups come from the reader FUN_1001deca,
+# which partitions the value exactly this way; the class NAMES come from the SC3Tune.INI
+# section each developer's constructor loads (ResidentialZoneDeveloper at 0x10028198,
+# CommercialZoneDeveloper at 0x1000f022, IndustrialZoneDeveloper at 0x10016290,
+# LandfillZoneDeveloper at 0x100194cf). Two independent lines of evidence, same grouping.
+# [CONFIRMED @0x10036382, 0x1001deca] -- see CITY_SAVE.md.
+ZONE_CLASS = {
+    "residential": (1, 2, 3),
+    "commercial": (5, 6, 7, 0x0E, 0x16),   # 0x16 is grouped here by the reader but is not a
+                                           # declared developer slot in any file
+    "industrial": (9, 10, 11, 0x0F),
+    "landfill": (17,),
+}
+
 
 class SectionError(Exception):
     pass
@@ -94,6 +108,8 @@ def decode_zone_bulk(body, e, n):
         hist[b] = hist.get(b, 0) + 1
     return {"kind": "zone_bulk", "n": n, "grid": plane, "distinct": len(set(plane)),
             "unzoned": hist.get(0, 0), "slots": sorted(k for k in hist if k),
+            "by_class": {c: sum(hist.get(v, 0) for v in vs)
+                         for c, vs in ZONE_CLASS.items()},
             "undecoded_middle": 2 * n * n, "tail": rest}
 
 
@@ -183,6 +199,9 @@ def main(argv):
                           % (dec["n"], dec["n"],
                              100.0 * dec["unzoned"] / (dec["n"] * dec["n"]),
                              dec["slots"]))
+                    print("                   by class: %s"
+                          % ", ".join("%s %.1f%%" % (c, 100.0 * v / (dec["n"] * dec["n"]))
+                                      for c, v in dec["by_class"].items() if v))
                     print("                   %d bytes undecoded + %d tail (U-029)"
                           % (dec["undecoded_middle"], dec["tail"]))
                 elif dec["kind"] == "zone_slot_id" and dec["slot"] in (1, 5, 9):

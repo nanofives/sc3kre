@@ -853,15 +853,70 @@ the 23-slot table are one mechanism. The three-groups-of-three id pattern (slots
 `0x619ba64e`, 5-7 → `0x41a3adc1`, 9-11 → `0xe1a53b30`) is therefore three developer classes at
 three density tiers, though **which class is R, C or I is still not determined**.
 
-`[UNCERTAIN]` **`0x16` (22).** It occurs in 37 files, 3.3% of `.sc3` tiles, and is inside the
-table's index range (0..0x16) — but **no file ever declares a slot-22 section**, so it is not a
-developer index in the way the others are. Missing evidence: a reader that special-cases 22.
+### ⭐ The developers are NAMED: R, C, I and Landfill `[CONFIRMED]`
 
-> ⚠️ An offset discrepancy is left standing rather than resolved: the saver loop reads the slot
-> record at `this + i*8 + 0x188` (object) and `+0x18c` (id), while the registrar `0x10032694`
-> writes `+0x18c` (pointer) and `+0x190` (value) — a consistent 4-byte shift. Either the two
-> `this` pointers differ by 4 or one reading is off. Do not build a parser on either offset
-> until that is settled.
+All six slot ids are registered as GZCOM classes in the SIMRCI registration `FUN_10036382`
+`[CONFIRMED @0x10036382]`, each with a factory, each factory with a constructor — and **each
+constructor loads its own named `SC3Tune.INI` section**. That is the identification, from
+literal strings in the code, not from address locality:
+
+| slots | id | factory | ctor | `SC3Tune.INI` section in the ctor |
+|---|---|---|---|---|
+| 1, 2, 3 | `0x619ba64e` | `0x100367d9` | `0x10028198` | **`ResidentialZoneDeveloper`** |
+| 5, 6, 7 | `0x41a3adc1` | `0x1003680e` | `0x1000f022` | **`CommercialZoneDeveloper`** |
+| 9, 10, 11 | `0xe1a53b30` | `0x10036843` | `0x10016290` | **`IndustrialZoneDeveloper`** |
+| 17 | `0x82348de5` | `0x100368dc` | `0x100194cf` | **`LandfillZoneDeveloper`** |
+| 15 | `0x82d2d72b` | `0x10036878` | `0x1002c73f` | none — no strings in the ctor |
+| 14 | `0xc1f81e7e` | `0x100368aa` | `0x10004447` | none — no strings in the ctor |
+
+So the R/C/I × three-density-tier reading is **confirmed**: three slots per class, one shared
+class id each, the density distinguishing the three instances. `[UNCERTAIN]` which of the three
+slots in a group is low/medium/high — the counts are not monotonic (Berlin runs 2 > 3 > 1), so
+do not assume slot order is density order.
+
+> Address locality would have produced the same R/C/I answer here, and it is still not
+> evidence — this document records a near-miss that punished exactly that reasoning. The INI
+> section names are what settle it.
+>
+> Note also that this document previously stated the six ids "occur nowhere in any binary's
+> decompiled text". That was true of the **base-12** values, which were wrong. All six correct
+> values are in one function.
+
+### `0x16` resolved: the raster reader classes it as COMMERCIAL `[CONFIRMED @0x1001deca]`
+
+`FUN_1001deca` reads a raster value into `local_d` and partitions it three ways:
+
+```c
+if (((local_d == 1) || (local_d == 2)) || (local_d == 3))            { ... }   // Residential
+else if (((local_d == 5) || (local_d == 6)) ||
+         ((local_d == 7 || ((local_d == 0xe || (local_d == 0x16)))))) { ... }   // Commercial
+else if ((((local_d == 9) || (local_d == 10)) || (local_d == 0xb)) ||
+         (local_d == 0xf))                                           { ... }   // Industrial
+```
+
+That answers three things at once:
+
+- **`0x16` (22) is handled as commercial by this reader.** It is not a developer slot — no file
+  declares one — but the branch groups it with 5/6/7. `[UNCERTAIN]` what it actually is. Note
+  the grouping is one reader's behaviour, not necessarily the tile's identity: counting `0x16`
+  as commercial flips residential-above-commercial from 14 of 15 saved cities to 12 of 15,
+  which is a hint that it is not simply another commercial zone. That is weak and nothing is
+  concluded from it; it is recorded so the next reader does not treat "commercial" as settled.
+- **Slot 14** (`0xc1f81e7e`, the ctor with no INI strings) is also **commercial-side**.
+- **Slot 15** (`0x82d2d72b`, likewise no strings) is **industrial-side**.
+
+The three groups the reader uses match the three INI-named developers exactly, which is an
+independent confirmation of the naming above: the class names and the reader's partition were
+derived from different evidence and agree.
+
+> ⚠️ **The `+0x188` vs `+0x18c` offset discrepancy is NOT settled.** The saver reads the slot
+> record at `this + i*8 + 0x188` (object) / `+0x18c` (id); the registrar `FUN_10032694` writes
+> `+0x18c` (pointer) / `+0x190` (value). The two are perfectly consistent under a **4-byte
+> difference in `this`**, which the class's layout makes plausible — the factory returns
+> `object+0x10` while the saver's base-class call implies `object+0x14`. But `FUN_10032694` has
+> **zero static callers** (it is vtable-dispatched), so the text export cannot say which `this`
+> it receives. Resolution needs `VtableProbe.java` on live Ghidra. Until then, do not build a
+> parser on either offset.
 
 ### ⭐ THE MAP DIMENSION IS IN THE FILE AFTER ALL `[CONFIRMED, 59/59]`
 
