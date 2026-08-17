@@ -28,6 +28,18 @@
 !/SESSIONS.md
 !/functions.csv
 
+# 2b) verify/ — the experiment PROTOCOLS only, never their artifacts.
+#     The READMEs describe how a test is built and what each outcome means, which is the part
+#     worth publishing. The artifacts next to them are derived GAME DATA (copies of shipped
+#     cities, an extracted .ini) and must never reach a public repo.
+#     Same per-directory shape as re/analysis below: every level denied, then one filename
+#     re-included, so a NEW subdirectory added later is denied by default.
+!/verify/
+/verify/*
+!/verify/*/
+/verify/*/*
+!/verify/*/README.md
+
 # 3) Re-include the re/ tree, then re-ignore everything inside it.
 !/re/
 /re/*

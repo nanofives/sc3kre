@@ -428,16 +428,19 @@ shipped corpus and reports `N/N`.**
 |---|---|---|
 | `.IXF` container | `ixf_parse.py` — `layout()` / `build()` / `roundtrip()` | **657/657** containers, whole install, 8 extensions |
 | city save family | `city_write.py` (`City.load` / `zone_set` / `save`) | **59/59** no-edit identity; `city_roundtrip.py` 5 layers |
-| QFS / RefPack | `qfs.py` read, `qfs_encode.py` write | **60/60** city payloads, **3,000/3,000** sampled sprite streams |
+| QFS / RefPack | `qfs.py` read, `qfs_encode.py` write | **60/60** city payloads, **63,931/63,931** sprite streams |
 | sprite blocks | `sprite_encode.py` — `encode()` / `roundtrip()` | **62,552/62,552** |
 
 The stated debt is paid: the `.IXF` writer no longer lives inside `city_roundtrip.py`, and that
 harness now delegates to the library, so there is one implementation instead of two that drift.
 
-**Two honest limits on the numbers above.** The sprite QFS figure is a **3,000-stream sample, not
-the full corpus** — re-compressing all ~63,000 takes about two hours of Python, and `--limit`
-exists so the sampling is stated rather than implied. And `SYS.PAK` still has no writer; it is not
-in the table because it has no *proven* write path to expose, which is a T3 question.
+**One honest limit.** `SYS.PAK` still has no writer, so it is absent from the table rather than
+failing in it: there is no *proven* write path to expose. Whether it needs one is the T3 scoping
+question — see `verify/loose_file_test/`.
+
+> The sprite QFS figure was first recorded as a 3,000-stream sample because the full run looked
+> like ~2 hours of Python. **It finished: 63,931/63,931.** The estimate was wrong and the real
+> number is better, so the sample caveat is withdrawn rather than left standing.
 
 ### T3 — DEMONSTRATE A MOD END TO END
 
