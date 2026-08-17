@@ -1095,9 +1095,29 @@ vector, three `u32`s (`vt+0x98`) and then the saver's six trailing `u32`s — 36
 count must sit at `end - 36 - 2*N*N - 4`. **The `u32` there equals `N*N` in 59 of 59 files.**
 That is a single predicted offset, not a search.
 
-`[UNCERTAIN]` what the `u16` values mean, and the widths of `vt+0x70`, `vt+0x78` and `vt+0x98`
-are inferred from their arguments (byte / `u16` / `u32`) rather than pinned from GZResourceD
-implementations.
+### ⭐ The `u16` plane is a PERMUTATION, not per-tile game data `[CONFIRMED]`
+
+Extracting the vector and comparing it to the zone raster answers what it is:
+
+- **In all 59 files the `N*N` values are pairwise DISTINCT** — no value repeats.
+- In the 47 files with N=256 the vector is **exactly the permutation of `0 .. 65535`**, i.e.
+  every 16-bit value once. (For N < 256 the values are still all distinct but are not the range
+  `0 .. N*N-1`; `[UNCERTAIN]` what range they cover.)
+
+A sequence of `N*N` distinct indices is a **traversal order**, not map content. That explains
+every statistical property measured earlier at a stroke: perfectly uniform byte histogram, no
+spatial coherence at any stride, ~1.1% zeros — all forced by it being a permutation.
+
+It is consistent with the zone developers shuffling tile visit order to avoid directional bias
+(they do carry RNG state), but **nothing here proves what consumes it**, so that is a lead and
+not a finding.
+
+The practical consequence for a toolkit: **this region is not worth decoding as content.** It is
+2 bytes per tile of scheduling state.
+
+`[UNCERTAIN]` the widths of `vt+0x70` and `vt+0x78` are still inferred from their arguments
+(byte / `u16`) rather than pinned from a GZResourceD implementation. `vt+0x98` WAS pinned — see
+the correction below.
 
 ### The gap before the `u16` vector — measured, and it points at `vt+0x98`
 
@@ -1110,11 +1130,19 @@ own header**.
 That header, as written by `FUN_1004361d`, is `u8 + u32 + bool + 5 x vt+0x98` — about **26
 bytes** if `vt+0x98` is a scalar. It is not: something in there is writing ~1,000 bytes more.
 
-> **`vt+0x98` is therefore NOT a scalar write.** It is the only candidate with enough calls, and
-> five variable-length writes at roughly 200 bytes each would account for the gap. `vt+0x98` has
-> never been pinned from a GZResourceD implementation — unlike `+0x64/0x68/0x84/0x88/0xac`. That
-> is the concrete next step: pin `vt+0x98` the same way the others were, by reading the stream
-> class rather than inferring from call sites.
+> ~~**`vt+0x98` is therefore NOT a scalar write.**~~ **`[FALSIFIED]` — I pinned it and I was
+> wrong.** `VtableDump` on the stream vtable `PTR_FUN_1001cb34` gives **slot 38 (`+0x98`) =
+> `FUN_1000c1d6`, which is the SAME function as slot 34 (`+0x88`)** — the already-pinned
+> `Write(&value, 4)`. So `vt+0x98` is a plain u32 write, the sub-object header really is ~26
+> bytes, and my inference from "it must be the only thing big enough" was reasoning backwards
+> from the gap to a cause instead of measuring the cause.
+>
+> **So the gap is UNEXPLAINED again**, and larger than before: with a 26-byte header the count
+> should sit 49 bytes after the grammar's end, and in Berlin it sits **1,221 bytes** later.
+> Do not fill this in with another inference. The saver's tail has been read in full and the
+> sub-object writer has been read in full; the discrepancy is between the code as read and the
+> bytes, which means one of the two readings is still incomplete. The `0x17` block sizes are
+> the obvious remaining suspect — they have never been independently confirmed as 23 *bytes*.
 
 One structural detail *is* readable at the end of that header. The bytes immediately before the
 count contain **`N-1` twice** — `0xff` for N=256, `0xbf` for N=192, `0x7f` for N=128
