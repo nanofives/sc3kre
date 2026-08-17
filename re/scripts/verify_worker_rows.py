@@ -61,7 +61,24 @@ PINNED_SLOTS = (0x14, 0x18, 0x34, 0x38, 0x64, 0x68, 0x84, 0x88, 0x8C, 0x98, 0xAC
 SLOT_CALL = re.compile(r"\+\s*0x([0-9a-f]{2})\s*\)\s*\)\s*\(", re.I)
 HEX = re.compile(r"0x([0-9a-f]+)", re.I)
 DECIMAL = re.compile(r"\b(\d{1,10})\b")
-ADDR_REF = re.compile(r"(?:FUN|LAB|DAT|PTR|SUB)_([0-9a-f]{6,8})", re.I)
+# NEGATIVE literals, and this one matters more than it looks. Ghidra prints a u32 whose top bit
+# is set as a NEGATIVE hex constant, so GZCOM IID 0x817AB319 appears in the body as
+# `param_1 == -0x7e854ce7` (and 0xA0ACE0FB as -0x5f531f05). Reading the digits without the sign
+# makes a CORRECT IID citation look fabricated -- which is exactly what this checker did to two
+# rows before this line existed. Two's complement, always.
+NEG_HEX = re.compile(r"-\s*0x([0-9a-f]+)", re.I)
+NEG_DEC = re.compile(r"-\s*(\d{1,10})\b")
+U32 = 1 << 32
+# `s_` (string) must be in this list. Dropping it made every citation of a string address --
+# e.g. `\Sys\SC3ValveLayer.ini` at `s__Sys_SC3ValveLayer_ini_100580a4` -- look unresolvable, and
+# flagged four correct StaticInit rows. The `s_` form also carries a name before the address,
+# hence the greedy prefix.
+ADDR_REF = re.compile(r"\b(?:FUN|LAB|DAT|PTR|SUB|s|u)_[A-Za-z0-9_]*?([0-9a-f]{6,8})\b", re.I)
+# The module image range. An address in it that the text export cannot resolve is usually an
+# INTERIOR code address (`0x1002ebaf` is a line inside a function, not a function start) or a
+# data address Ghidra typed as raw bytes. Those are not verifiable from a text export at all, so
+# they are reported as unverifiable rather than as fabricated.
+IMAGE_LO, IMAGE_HI = 0x10000000, 0x10100000
 # C CHARACTER ESCAPES. Ghidra emits small byte comparisons as chars, so the zone-raster value
 # 22 appears as `if (local_5 == '\x16')` -- neither a hex literal nor a decimal. Omitting this
 # made the checker report a CORRECT claim as a fabricated constant, which is the worst failure
@@ -83,6 +100,7 @@ def selftest():
         ("SLOT_CALL", SLOT_CALL, "(**(code **)(*piVar5 + 0x88))(x);", ["88"]),
         ("SLOT_CALL wrap", SLOT_CALL, "(**(code **)(*p + 0x68))\n      (y);", ["68"]),
         ("HEDGE", HEDGE, "this probably writes the grid", ["probably"]),
+        ("NEG_HEX", NEG_HEX, "if (param_1 == -0x7e854ce7) {", ["7e854ce7"]),
     ]
     ok = True
     for label, rx, s, want in cases:
@@ -91,6 +109,10 @@ def selftest():
             ok = False
         print("  %s %-15s %r -> %r (want %r)" % ("ok  " if got == want else "FAIL",
                                                  label, s[:38], got, want))
+    # The two's-complement path, checked end to end on the real GZCOM IID that exposed it.
+    tc = 0x817AB319 in values_in("if (param_1 == -0x7e854ce7) {")
+    print("  %s two's complement: -0x7e854ce7 -> 0x817AB319" % ("ok  " if tc else "FAIL"))
+    ok = ok and tc
     n_ok = NAME_OK.match("sc3_zonedev_check_road") and not NAME_OK.match("ZoneDevCheck")
     print("  %s NAME_OK" % ("ok  " if n_ok else "FAIL"))
     return 0 if (ok and n_ok) else 1
@@ -125,25 +147,73 @@ def values_in(txt):
         vals.add(int(m, 16))
     for m in CHAR_LIT.findall(txt):
         vals.add(ord(m))
+    for m in NEG_HEX.findall(txt):
+        vals.add((U32 - int(m, 16)) & 0xFFFFFFFF)
+    for m in NEG_DEC.findall(txt):
+        vals.add((U32 - int(m)) & 0xFFFFFFFF)
     return vals
+
+
+def module_values(fn_dir, index):
+    """Every integer value that appears ANYWHERE in this module's export.
+
+    Needed because good evidence legitimately cites things that are not in the function's own
+    body: the vtable it is installed in (`PTR_LAB_1004d1e0`), a CLSID (`0xc0ab8a56`), a module
+    global (`DAT_10058720`), or the registrar that installs it. Resolving only against the body
+    flagged 28 of 34 rows whose citations were class-level context -- the same over-accusation
+    the character-escape gap produced. Two tiers now: absent from the body but present in the
+    module is INFO, absent from the module entirely is a FLAG.
+    """
+    vals = set(index)
+    for p in index.values():
+        with open(p, encoding="utf-8", errors="replace") as fh:
+            vals |= values_in(fh.read())
+    return vals
+
+
+def ios_functions():
+    """Function addresses in the iOS named sibling's export, or an empty set.
+
+    Evidence legitimately cites the iOS twin (`CROSS_RE_iOS.md`): "iOS twin 308 B @0x0026516c".
+    Those addresses are in a DIFFERENT binary, so resolving them against SIMRCI reported a
+    correctly-labelled cross-reference as fabricated -- the sixth such blind spot in this
+    checker, and the third time it accused correct work.
+    """
+    d = os.path.join(ROOT, "re", "ghidra_export_ios", "functions")
+    if not os.path.isdir(d):
+        return set()
+    out = set()
+    for fn in os.listdir(d):
+        if fn.endswith(".c"):
+            try:
+                out.add(int(fn.split("_", 1)[0], 16))
+            except ValueError:
+                continue
+    return out
 
 
 def check(path, module, strict=False):
     raw = open(path, encoding="utf-8", errors="replace").read()
-    md = M.extract_markdown(raw)
+    # extract_markdown unwraps the delegate envelope and returns None for anything else, so
+    # fall back to the raw text. That lets this run over rows pulled straight out of
+    # functions.csv, which is how the concurrent session's C3 claims were audited.
+    md = M.extract_markdown(raw) or raw
     rows = M.extract_rows(md, module)
     _modname, fn_dir = M.module_paths(module)
     if not os.path.isdir(fn_dir):
         print("export dir missing: %s" % fn_dir)
         return 2
     index = body_index(fn_dir)
+    modvals = module_values(fn_dir, index)
+    iosfns = ios_functions()
 
-    print("%d claimed rows, %d exported bodies in %s" % (len(rows), len(index), module))
+    print("%d claimed rows, %d exported bodies in %s (%d distinct values module-wide)"
+          % (len(rows), len(index), module, len(modvals)))
     print()
     flagged = []
     for r in rows:
         rva = int(r["rva"], 16)
-        notes = []
+        notes, info = [], []
         p = index.get(rva)
         if p is None:
             notes.append("NO BODY at %s in this module" % r["rva"])
@@ -151,11 +221,30 @@ def check(path, module, strict=False):
             txt = open(p, encoding="utf-8", errors="replace").read()
             vals = values_in(txt) | {rva} | set(index)
             cited = {int(h, 16) for h in HEX.findall(r["evidence"])}
-            missing = sorted(c for c in cited if c not in vals)
+            not_in_body = sorted(c for c in cited if c not in vals)
+            unresolved = [c for c in not_in_body if c not in modvals]
+            elsewhere = [c for c in not_in_body if c in modvals]
+            # An in-image address that the export cannot resolve is unverifiable, not false.
+            interior = [c for c in unresolved if IMAGE_LO <= c < IMAGE_HI]
+            ios = [c for c in unresolved if c in iosfns and not (IMAGE_LO <= c < IMAGE_HI)]
+            missing = [c for c in unresolved
+                       if not (IMAGE_LO <= c < IMAGE_HI) and c not in iosfns]
             if missing:
-                notes.append("evidence cites %s -- resolves to nothing in the body and is not a"
-                             " function address in this module"
+                notes.append("evidence cites %s -- resolves NOWHERE in this module, and is not"
+                             " an address in the module image"
                              % ", ".join("0x%x" % m for m in missing[:5]))
+            if ios:
+                info.append("cites %s: a function in the iOS named sibling, not this binary"
+                            " (an [iOS-HINT] cross-reference, per CROSS_RE_iOS.md)"
+                            % ", ".join("0x%x" % m for m in ios[:4]))
+            if interior:
+                info.append("cites %s: inside the module image but not resolvable from the text"
+                            " export (interior code address or untyped data) -- UNVERIFIABLE here"
+                            % ", ".join("0x%x" % m for m in interior[:4]))
+            if elsewhere:
+                info.append("cites %s: not in this body, but present elsewhere in the module"
+                            " (class-level context -- vtable / CLSID / global)"
+                            % ", ".join("0x%x" % m for m in elsewhere[:4]))
             n_slot = sum(1 for s in SLOT_CALL.findall(txt) if int(s, 16) in PINNED_SLOTS)
             # An INI-loading ctor legitimately "loads" without touching a GZCOM stream -- the
             # tuning data comes through the config API. Two correct rows were flagged this way
@@ -175,10 +264,12 @@ def check(path, module, strict=False):
         if notes:
             flagged.append((r, notes))
             print("FLAG %s %-36s %s" % (r["rva"], r["new_name"][:36], r["confidence"]))
-            for n in notes:
-                print("       - %s" % n)
         else:
             print("ok   %s %-36s %s" % (r["rva"], r["new_name"][:36], r["confidence"]))
+        for n in notes:
+            print("       - %s" % n)
+        for n in info:
+            print("       i %s" % n)
 
     print()
     print("%d of %d rows carry a flag." % (len(flagged), len(rows)))
