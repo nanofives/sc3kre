@@ -1042,12 +1042,41 @@ Two further consequences worth recording:
 - The base row array is **one** `N*N` plane, not three. `rowCount * rowBytes == N*N`, which is
   consistent with the falsification above and with plane 0 being the only coherent raster.
 
-`[UNCERTAIN]` **what the ~`2*N*N` after the grammar is.** It is the high-entropy region
-characterised above. The loader as read does not account for it, so either the saver writes more
-than that loader reads, or the base write is larger than one plane and the grammar sits inside
-it. That is the next thing to settle, and it is a *code* question, not a byte-fitting one.
-
 `[UNCERTAIN]` what the keys 3000 / 5000 / 8000 index.
+
+### ⭐ The `2*N*N` is a DELEGATED WRITE — the recorded grammar was incomplete `[CONFIRMED]`
+
+Reading `FUN_100320e7` end to end, instead of trusting this document's summary of it, found
+**two writes after the `c3` list that were never recorded** `[CONFIRMED @0x100320e7:107-108]`:
+
+```c
+vt+0x84((int)this + 0x3c, 0x17);                                    // a THIRD 23-byte block
+(**(code **)(*(int *)((int)this + 0x268) + 4))(param_1, local_8);   // DELEGATED WRITE
+```
+
+then the six trailing `u32`s. So the true section layout is:
+
+```
+[ N*N raster ][ c1 list ][ 23 ][ 23 ][ c2 ][ c3 ][ 23 ][ sub-object at this+0x268 ][ 6 x u32 ]
+```
+
+**Verified against the bytes:** the last 24 bytes parse as six small `u32`s in **59 of 59**
+files. Working inwards from there, the delegated write occupies `2*N*N + 795..1323` bytes — so
+**the entire high-entropy region is one sub-object serialising itself**, roughly two bytes per
+tile plus its own header. That is why it shows no raster coherence at stride `N`: it is not the
+zone layer's data and is not laid out like it.
+
+The sub-object sits at **object+0x27c**, vtable **`PTR_FUN_1004d2bc`**, installed by the
+SC3ZoneLayer ctor (`param_1[0x9f]`), fields initialised by `FUN_10031267`
+`[CONFIRMED @0x100310f5, 0x10031267]`. Its writer is **slot 1 (`vt+4`)** of that vtable.
+
+> **This is where the text export runs out.** Vtables are DATA and ungreppable, so resolving
+> `PTR_FUN_1004d2bc` slot 1 needs `VtableDump.java` on live Ghidra. That one lookup should name
+> the class owning 2 bytes per tile of the zone section.
+>
+> The general lesson is worth more than the finding: this document's grammar was derived from
+> the saver twice and the loader once, and was **still missing two writes**. Eight attempts
+> trusted the summary instead of re-reading the function.
 
 ### Where that leaves it
 
