@@ -26,6 +26,14 @@ none.
    edited criterion 2 to 530/562 and an independent `scope_toolkit.py` run agreed exactly.
 3. **Do not touch another session's uncommitted files.** If `git status` shows something modified
    that you did not modify, leave it. Say so in your report instead.
+3b. **COMMIT BY PATH, NEVER `git add -A` / `git commit -a`.** This one has already bitten:
+   on 2026-08-17 the gzcom session's commits `e1b3a89` and `ad69456` swept up the city-save
+   session's **in-flight** `re/tools/ixf_parse.py` and `re/tools/city_roundtrip.py` into commits
+   about `cSC3City` and `cSC3DirtBag`. No work was lost and the committed state happened to be the
+   finished one — verified afterwards, 478/478 and 657/657 still pass — but it was luck: the same
+   sweep ten minutes earlier would have committed a writer that failed 472 of 478 containers,
+   under a message describing something else entirely. Two costs even when it works: the history
+   stops explaining the code, and a bisect lands on an unrelated message. `git add <paths>` only.
 4. **The repo is PUBLIC** (`github.com/nanofives/sc3kre`). Before committing anything new, grep the
    diff for the local Windows username, the worker account name and the owner's email. Tools and
    notes only, never game assets or bulk decompiled output.

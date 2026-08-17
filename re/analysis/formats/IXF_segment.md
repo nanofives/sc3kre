@@ -114,3 +114,68 @@ Each record payload is `u32 length` followed by `length` bytes, NOT NUL-terminat
 > **Localisation quirk (observed, not inferred):** the directory named `ENGLISH` contains
 > **Spanish** text; the actual English strings live in `English-UK`. Verified on
 > `BAMBEStringsMain.IXF` across ENGLISH / English-UK / GERMAN / FRENCH.
+
+---
+
+# ⭐ THE WRITER (roadmap gate T2, 2026-08-17): 657/657 containers rebuild byte-identically
+
+`re/tools/ixf_parse.py` now reads **and writes**. `layout()` describes a container completely
+enough to rebuild it, `build()` re-emits it, `roundtrip()` checks the result against the original,
+and `--selftest` runs that over a tree.
+
+```
+py -3.12 re/tools/ixf_parse.py . --selftest
+IXF container round-trip: 657/657 byte-identical
+```
+
+**The corpus is the whole install, selected by MAGIC rather than by extension** — which matters,
+because the same container ships under eight different names:
+
+| extension | files | bytes | what |
+|---|---|---|---|
+| `.IXF` | 537 | 30,933,438 | localized text |
+| `.DAT` | 37 | 243,704,818 | sprite archives |
+| `.SCT` `.SC3` `.SNR` `.ST3` | 64 | 26,247,307 | the city save family |
+| **`.BLD`** | 17 | 1,681,087 | **also IXF containers** — not previously recorded here |
+| `.CFG` | 2 | 44,339 | also IXF containers |
+
+An extension filter would have tested a fraction of that and reported a clean `N/N`.
+
+## Two findings that only appeared because the corpus was widened
+
+### 1. String records use TWO size conventions `[CONFIRMED]`
+
+A string record (type `0x2026960B`) is `u32 length + chars`, and **`size` does not always count
+the same thing**:
+
+| family | `size` means | payload occupies | how to tell |
+|---|---|---|---|
+| city `.SNR` | the string length, prefix **excluded** | `4 + size` | the `u32` at the payload start `== size` |
+| localized `Apps\Res\Text\**` | the whole payload, prefix **included** | `size` | that `u32 == size - 4` |
+
+So the extent cannot be decided from the record type. `payload_extent()` reads the length prefix
+and lets the data say which convention the file uses.
+
+> This started as an unconditional `size + 4`, generalised from 110 records across the 13 city
+> `.SNR` files, and it round-tripped **59/59** of them. Against the localized-text corpus it failed
+> **472 of 478**, every one off by exactly four bytes. **A rule confirmed on one family is not a
+> rule about the format** — and 59/59 was a real number that licensed a wrong generalisation.
+
+### 2. Orphaned payloads: data no index slot points at `[CONFIRMED]`
+
+**58 of the 478 localized-text containers carry an orphaned string payload mid-file.** In
+`SWEDISH\TransportationTutorial.IXF` it is 159 bytes at offset 22,589 that decode as a perfectly
+normal record (`u32 155` then `"Vilken typ a…"`), with no slot referencing it. This is the same
+phenomenon as `U-039`'s unreferenced `.SNR` tails, but in the middle of the file rather than after
+the last payload.
+
+The writer therefore preserves the **bytes** of every region between payloads instead of
+zero-filling. Both cases look like in-place editing by Maxis' own tools that left the previous
+payload behind.
+
+## Consequence for the toolkit
+
+The container writer no longer lives inside `city_roundtrip.py`, a test harness — that file now
+delegates to this library, so there is one implementation rather than two that can drift. The
+promotion paid for itself immediately: the harness copy carried the `size + 4` bug and would have
+destroyed a string payload in 472 containers the first time anyone wrote one.
