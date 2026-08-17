@@ -1099,6 +1099,28 @@ That is a single predicted offset, not a search.
 are inferred from their arguments (byte / `u16` / `u32`) rather than pinned from GZResourceD
 implementations.
 
+### The gap before the `u16` vector — measured, and it points at `vt+0x98`
+
+Between the grammar's end and the `u16` count there is a gap of **1,000–1,270 bytes**, and it is
+**not constant**: Mount Herrang (N=128) 1,000, Farmsville (N=192) 1,012, Berlin (N=256) 1,270.
+The saver's tail was re-read in full and contains no writes beyond the 23-byte block at
+`this+0x3c`, the delegated call, and the six `u32`s — so the gap is **inside the sub-object's
+own header**.
+
+That header, as written by `FUN_1004361d`, is `u8 + u32 + bool + 5 x vt+0x98` — about **26
+bytes** if `vt+0x98` is a scalar. It is not: something in there is writing ~1,000 bytes more.
+
+> **`vt+0x98` is therefore NOT a scalar write.** It is the only candidate with enough calls, and
+> five variable-length writes at roughly 200 bytes each would account for the gap. `vt+0x98` has
+> never been pinned from a GZResourceD implementation — unlike `+0x64/0x68/0x84/0x88/0xac`. That
+> is the concrete next step: pin `vt+0x98` the same way the others were, by reading the stream
+> class rather than inferring from call sites.
+
+One structural detail *is* readable at the end of that header. The bytes immediately before the
+count contain **`N-1` twice** — `0xff` for N=256, `0xbf` for N=192, `0x7f` for N=128
+`[CONFIRMED, 3 files]` — i.e. grid extents in the form `0 .. N-1`. So the sub-object is
+grid-shaped and knows its own dimensions, which is consistent with it holding one `u16` per tile.
+
 ### ⭐ The `+0x188` vs `+0x18c` discrepancy is SETTLED `[CONFIRMED]`
 
 `VtableProbe` on both functions shows they belong to the same class but **different subobjects**:
