@@ -1467,3 +1467,77 @@ incinerated, converted to energy, landfilled — not as a per-tile pressure fiel
 24 rows at **C3**: the 14 garbage totals plus the two predicates, three value readers and five capacity
 getters. `verify_worker_rows.py` over all 49 `sc3_pollution_*` rows in SIMECO: **0 of 49 flagged**. Project C3
 count 144 → 168.
+
+---
+
+## 16. Two uncertainties closed, and a misread reframed
+
+### 16a. U-049 resolved — `ValveLayer this+0x10` is the NEIGHBOURS layer, and §7 gets better for it
+
+§13 showed that §7's label "the city object" for `[this+0x10]` in `ValveLayer::EndOfMonth` could not be right,
+because the offsets it called (`+0xd8`/`+0xdc`/`+0xec`/`+0xf0`) are `cISC3City` dimension getters. The write is
+in `sc3_valvelayer_init_city_dbsegment` `0x1002e887`:
+
+```c
+piVar1 = (**(code **)(**(int **)((int)this + 8) + 0x18c))();   /* city->vtable[0x18c] */
+*(int **)((int)this + 0xc) = piVar1;                            /* = primary+0x10 */
+piVar1 = (**(code **)(**(int **)((int)this + 8) + 0x158))();   /* city->vtable[0x158] */
+*(int **)((int)this + 0x10) = piVar1;                           /* = primary+0x14 */
+```
+
+**The +4 thunk shift is what made this confusing.** That function is slot 9 of the *secondary*
+`cISC3CityLayer` vtable, entered through `sub ecx, 4`, so its `this` is primary+4 and every offset inside it
+reads 4 lower than the primary view. Under that correction:
+
+| primary field | source | resolves to |
+|---|---|---|
+| `+0x0c` | `Init(cISC3City*)` writes `*(this+8)` | **the city** — and this is what `CreateNewValve` reads |
+| `+0x10` | city vtable `+0x18c` → slot 99 | **`NeighborsLayer`** |
+| `+0x14` | city vtable `+0x158` → slot 86 | **`OrdinanceLayer`** |
+
+So `EndOfMonth`'s four per-agent-class scalars come from the **neighbours layer** — they are
+**neighbour-city demand**, which is exactly why they were never going to be dimension getters. And
+`[this+0x14]->vtable[0xc]` is `cISC3OrdinanceLayer::QueryOrdinanceOn(uint32)` (slot 3), gating the
+economy-modifier pass: **ordinances modulate RCI demand**.
+
+The corrected model of the RCI regulator is therefore: neighbour demand per agent class → per-valve
+supply/demand accumulation → an ordinance-gated economy-modifier pass → per-valve `EndOfMonth` → monthly
+taxable-density snapshot. §7's mechanical description (which valve slots are called, what is published where)
+is unaffected and stands.
+
+No SDK header exists for the neighbours layer — `cISC3City` declares it as untyped `intptr_t
+NeighborsLayer(void)` — so those four offsets stay unnamed.
+
+### 16b. U-044: my 8/8/2 split was the wrong model
+
+The earlier probe found 8 QI functions accepting `0x81c0cb7c` without `0x206c6e7c`, and I read that as *eight
+different classes implementing a shared interface B*. That model is wrong.
+
+Comparing the six B-implementors' primary vtables slot by slot:
+
+```
+SIMRCI    0x1004d9d0    0x8 0x0 0x0 0x4 0x8 0x8 0x4 0x4 0x0 0x8 0x0 0x4 ...
+SIMECO    0x1001c91c    0x8 0x0 0x0 0x4 0x8 0x8 0x4 0x4 0x0 0x8 0x0 0x4 ...
+SIMGEOM   0x1002b058    (identical)
+SIMUTIL   0x10023e38    (identical)
+SIMDSTR   0x10034270    (identical)
+SimTransit 0x1001b884   (identical)
+
+common arity prefix: 82 slots; the "divergence" at slot 82 is 5 of 6 unmeasurable, not a difference
+```
+
+**Byte-for-byte identical for at least 82 slots across six modules.** That is not six classes sharing an
+interface — it is **one class of ≥79 methods statically replicated into each sim module**. Which also explains
+why "8 accept B without A" looked like a population: it was one class counted eight times.
+
+It is definitely not a `cISC3CityLayer` — zero adjustor thunks and no constant-returning `GetLayerType` slot
+(§12c's probe). And no SDK header describes a ≥79-method non-layer class, so `0x81c0cb7c` stays unnamed.
+
+Recorded resolution path: point the §13/§15 fingerprint scanner at **all 65 headers in bulk** and match this
+82-slot arity vector, rather than guessing. The scanner already does exactly this for one header at a time.
+
+> **The lesson, since it is the fourth of its kind today.** "Eight classes accept B" was a count over QI
+> functions that I treated as a count over *classes*. Identical replicated code inflates any per-module tally.
+> Same family as the `Unwind_*` miscount (§11e), the `thunk_FUN_` miscount, and the `functions.csv`-vs-`symbols.csv`
+> convergence miscount: **check whether the things you are counting are distinct before reporting how many there
+> are.**

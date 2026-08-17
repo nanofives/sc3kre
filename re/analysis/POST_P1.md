@@ -35,8 +35,8 @@ measuring against a gate that was retired for good reasons (`GATE_RESCOPE.md`).
 |---|---|---|---|
 | QFS / RefPack | ✅ | ✅ **byte-identical** | compressor transcribed from GZResourceD `FUN_1001694d`; 59/59 city streams re-encode exactly |
 | city save family | ✅ 59/59 | ✅ **byte-identical**, 5 layers | `city_roundtrip.py`; plus an editing API, `city_write.py` |
-| sprites | ✅ | ✅ **byte-identical** | 62,552/62,552 re-encode |
-| `.IXF` container | ✅ | ⚠️ **writer exists but is not exposed** | the container writer lives inside `city_roundtrip.py`, a test harness, not in `ixf_parse.py` |
+| sprites | ✅ | ✅ **byte-identical** | `sprite_encode.py --selftest` = **62,552/62,552**, reproduced in one command 2026-08-17 |
+| `.IXF` container | ✅ | ✅ **byte-identical, exposed** | `ixf_parse.py` `layout()`/`build()`/`roundtrip()`; `--selftest` = **657/657** containers across the whole install, 8 extensions, selected by MAGIC not extension |
 | `SYS.PAK` | ✅ 51 ini files | ❌ none | `syspak_parse.py` is read-only |
 | FEZC / GVF (iOS) | ✅ | ❌ none | cross-reference only, not a modding target |
 

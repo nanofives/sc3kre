@@ -25,6 +25,7 @@ The game writes .sc3 files, so a compressor had to exist; looking for it beat in
 Usage:
   py -3.12 re/tools/qfs_encode.py <file.sc3> --tokens [--limit N]
   py -3.12 re/tools/qfs_encode.py <file.sc3> --probe [--limit N] [--verify N]
+  py -3.12 re/tools/qfs_encode.py <dir> --selftest [--limit N]   # city AND sprite streams
   py -3.12 re/tools/qfs_encode.py <file-or-dir> --compress
 """
 import os
@@ -383,6 +384,78 @@ def cmd_compress(path, quick=1):
     return 1 if bad else 0
 
 
+def cmd_selftest(target, limit=None, quick=1):
+    """Re-encode every QFS stream under `target` and diff against the shipped bytes.
+
+    Roadmap gate T2 asks each proven-write format for a `--selftest` that round-trips the shipped
+    corpus and reports `N/N`. For QFS that corpus is TWO populations, and only one of them had
+    ever been tested:
+
+      - **city payloads** — 59 streams, already known byte-identical at `quick = 1`
+      - **sprite records** — tens of thousands of streams inside the `.DAT` archives, which this
+        project had only ever DECOMPRESSED
+
+    They are reported separately on purpose. If the sprite streams disagree, that is a real
+    finding about the shipped data (a different encoder mode, or a different tool) and not a bug
+    to average away into one number.
+    """
+    import city_parse                                        # noqa: PLC0415 - CLI path only
+    tot = {"city_ok": 0, "city_bad": 0, "spr_ok": 0, "spr_bad": 0}
+    diffs = []
+
+    for p in city_parse.walk(os.path.join(target, "Cities") if os.path.isdir(
+            os.path.join(target, "Cities")) else target):
+        try:
+            stream, plain = city_stream(p)
+        except SystemExit:
+            continue
+        got = compress_stream(plain, quick)
+        if got == stream:
+            tot["city_ok"] += 1
+        else:
+            tot["city_bad"] += 1
+            diffs.append(("city", os.path.basename(p), len(got), len(stream)))
+
+    for path in qfs.archives(target):
+        try:
+            records, d = ixf_parse.parse(path)
+        except ixf_parse.IxfError:
+            continue
+        for idx, r in enumerate(records):
+            if r["type"] != qfs.TYPE_PIXELS:
+                continue
+            if limit is not None and tot["spr_ok"] + tot["spr_bad"] >= limit:
+                break
+            pay = d[r["offset"]:r["offset"] + r["size"]]
+            try:
+                kind, out, info = qfs.decode_record(pay)
+            except Exception:                                # noqa: BLE001 - skip, not mask
+                continue
+            if kind != "qfs" or out is None:
+                continue
+            orig = pay[info["stream_at"]:info["stream_at"] + info["consumed"]]
+            got = compress_stream(out, quick)
+            if got == orig:
+                tot["spr_ok"] += 1
+            else:
+                tot["spr_bad"] += 1
+                if len(diffs) < 12:
+                    diffs.append(("sprite", "%s rec %d" % (os.path.basename(path), idx),
+                                  len(got), len(orig)))
+
+    print("QFS re-encode selftest (quick=%d)" % quick)
+    print("  city payloads : %d/%d byte-identical"
+          % (tot["city_ok"], tot["city_ok"] + tot["city_bad"]))
+    print("  sprite streams: %d/%d byte-identical"
+          % (tot["spr_ok"], tot["spr_ok"] + tot["spr_bad"]))
+    if diffs:
+        print()
+        print("  first differences (kind, where, ours vs shipped bytes):")
+        for k, w, a, b in diffs[:12]:
+            print("    %-7s %-44s %d vs %d" % (k, w[:44], a, b))
+    return 1 if (tot["city_bad"] or tot["spr_bad"]) else 0
+
+
 def main(argv):
     if len(argv) < 2:
         print(__doc__)
@@ -390,6 +463,9 @@ def main(argv):
     path = argv[1]
     limit = int(argv[argv.index("--limit") + 1]) if "--limit" in argv else 40
     verify = int(argv[argv.index("--verify") + 1]) if "--verify" in argv else 0
+    if "--selftest" in argv:
+        lim = int(argv[argv.index("--limit") + 1]) if "--limit" in argv else None
+        return cmd_selftest(path, lim, 0 if "--full" in argv else 1)
     if "--compress" in argv:
         return cmd_compress(path, 0 if "--full" in argv else 1)
     if "--probe" in argv:
