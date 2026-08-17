@@ -102,3 +102,60 @@ None of these prevents T1, T2 or T3. Recording that explicitly so they are not t
 **T1 now**, because it is minutes of work, it is the only claim in the project resting on nothing,
 and its outcome changes what T2 and T3 should look like. T2 next as pure packaging. T3 last, since
 it is the one with a genuine unknown in it (`SYS.PAK` write, or loose-file shadowing).
+
+---
+
+## T1, first empirical attempt (gzcom session, 2026-08-17) — a precondition cleared, T1 itself still open
+
+**T1 is NOT met. What follows removed one risk and produced one methodological result; it did not put a
+written file in front of the game's loader.**
+
+### What was done
+
+1. `Cities\` snapshotted hash-for-hash first: 59 files, 24.3 MB.
+2. `re/tools/city_write.py Cities --selftest` re-run unmodified as a precondition: **59/59 byte-identical**.
+3. A shipped save copied to a scratchpad (never edited in place) and given the narrowest documented edit:
+   `Berlin, Germany.sc3`, N=256, tile **(0,135)** zone slot **2 → 0** (unzoned).
+4. Verified through their loader: exactly **1 tile** differs across the whole 256×256 raster.
+   File size **781807 → 781808**, i.e. **+1 byte** — the writer re-compresses QFS rather than patching in
+   place, so the container length fields were recomputed. That is a stronger statement about the writer than
+   the no-edit round-trip gives.
+5. Placed in `Cities\` as `ZZ_T1_TEST.sc3` — a **new** filename, nothing shipped overwritten.
+6. Ran `harness_run.ps1 -Scenario windowed-nointro`.
+
+### The result, and the trap it walked into
+
+The first run **FAILED** (`no render evidence`). A control run with the file removed **PASSED**, same switches,
+same `-Kill 30`, back to back. That pairing reads as "the game rejects our written file", and it is **wrong**.
+
+Repeating with the file present: **3/3 PASS**. The initial FAIL was a transient of the U-032/U-034 family.
+
+`harness_run.ps1`'s own docstring says *"a single run is not evidence. Every scenario is repeated and its runs
+are classified by verdict, so a transient shows up as a mixed batch instead of a false conclusion."* That rule
+is what stopped a false negative from being reported here, on the first occasion it was tested by a different
+session. Worth keeping.
+
+### What this does and does not establish
+
+**Does:** the game starts and renders normally with a `city_write.py` output present in `Cities\` (3/3), so
+there is no startup-time or enumeration-time rejection of the file. And placing/removing such an artifact is
+safe and fully reversible — `Cities\` verified byte-for-byte identical afterwards, `original\SC3U.exe` still
+matches the anchor.
+
+**Does not:** prove the game can LOAD it. Reaching the load dialog needs a UI click, and no harness scenario
+does that — `sc3launch` has no `-city` switch and `windowed-movie` is explicitly marked INTERACTIVE for the
+same reason. The 3/3 runs reached the main menu and no further, so the loader was never invoked on the file.
+
+### What T1 actually needs
+
+One of:
+
+- **An interactive run.** A human launches `-nocom -windowed -origin -fix16 -fitclient -nointro`, clicks Load
+  City, picks `ZZ_T1_TEST`, and reports whether it loads and whether tile (0,135) is unzoned. The file recipe
+  above is deterministic, so this is a five-minute check for whoever is at the machine.
+- **Or automation of the load path.** Either synthetic input to the dialog, or a trace-table entry on the
+  city-load/parse functions so an unattended run can show the loader accepting or rejecting the file. The
+  second is the better investment and belongs with whoever owns `re/harness/`.
+
+Until one of those happens, T1 remains what the city-save session called it: the only claim in the project
+resting on nothing.
