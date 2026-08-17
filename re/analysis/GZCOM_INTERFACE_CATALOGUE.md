@@ -1764,7 +1764,10 @@ session, so each already has a `functions.csv` row:
 0x100314f0  zonelayer_init_attach       # the zone layer's load path (section 8)
 0x100320e7  zonelayer_save
 # SIMDIRT.DLL  base 0x10000000
-0x1002046c  <vtable>                    # cSC3DirtBag, slot 9 = Init(City*,DBSegment*) (section 14)
+0x1002046c  <vtable>                    # cSC3DirtBag. CORRECTED in section 21: the DBSegment Init is
+#                                       # slot 7 OR 8, NOT slot 9 -- slot 9 is the 1-arg Init(cISC3City*).
+#                                       # Both 2-arg forms are ret 8 so arity cannot separate them; read
+#                                       # the bodies before trusting either for a load trace.
 ```
 
 **The read to make:** with the edited file loaded, `city_init_dbsegment` and every per-layer
@@ -1929,3 +1932,79 @@ So both names stand and `+0x38` is genuinely read by two accessors. **What is no
 quantities coincide — whether a flat sprite's height equals the isometric cell depth for a semantic reason, or
 whether this is an implementation shortcut. Neither name depends on the answer, so it is left unresolved rather
 than guessed.
+
+---
+
+## 21. The §18 false negative diagnosed — a threshold, not a bug, and a correction it exposed
+
+§18c flagged `cISC3DirtBag` as a genuine false negative: located by hand at `SIMDIRT.DLL` `0x1002046c` with
+91.8%, yet reported 0/0 by the bulk pass. Diagnosed stage by stage against the known-good address.
+
+### 21a. Root cause: the two passes used different arity extractors
+
+| stage | result |
+|---|---|
+| header parse | 88 chained methods — correct |
+| `functions.csv` rows for SIMDIRT | 789 — fine |
+| window test (slots 3..90 all `.text` pointers) | **True** — the vtable was found |
+| **arity, STRICT** (bulk.py, size-bounded, all `ret N` in body) | **75/85 = 88.2%** → below the 0.90 bar → **filtered out** |
+| **arity, LOOSE** (dirt.py, first `ret` within 700 bytes) | 67/73 = 91.8% → above 0.90 → passed |
+
+**Not a logic bug — a miscalibrated threshold.** The scanner located the vtable on every pass. The strict
+extractor introduced in §14d correctly detects *more* mismatches, and a class carrying four reversed overload
+pairs plus the `Init` triple below has enough of them to sink it under 0.90.
+
+The irony is worth stating plainly: **the better measurement caused the miss.** §18c's "undiagnosed failure
+mode" was a 0.90 bar inherited from an era when the extractor was looser and therefore flattered every class.
+
+### 21b. Recalibrated to 0.80 — DirtBag returns as a *unique* hit
+
+```
+cISC3DirtBag              88   cands 1   88.2%   75/85   SIMDIRT.DLL 0x1002046c
+```
+
+Exactly the ground-truth address, single candidate. Two more classes also surfaced:
+
+| class | module | vtable | m/c |
+|---|---|---|---|
+| `cISC3BuildingLayer` | SIMGEOM | `0x100292c0` | 22/26 = 84.6% |
+| `cISC3OccupantAttribCache` | SIMINIT | `0x1002fb44` | 13/15 = 86.7% |
+
+**The cost, stated so §18b is not over-trusted.** A lower bar inflates candidate counts on small classes:
+`cISC3OccAttribOverRide` 61 → 420, `cISC3CityAgentType` 19 → 80, `cISC3WinMain` → 136. The usable rule:
+
+> **Trust a location when the candidate count is small AND the method count is large.** Twelve classes now have
+> a *unique* hit — CitySpriteCellMap, CityView, CityViewIso, DisasterLayer, PollutionLayer, ResidentialLayer,
+> City, CitySchemeMgr, WinCityView, ZoneLayer, DirtBag, BuildingLayer. A row with 80+ candidates on a 12-20
+> method class is noise, not a result.
+
+Five classes remain NOT FOUND with 0/0 comparable — `AuraLayer`, `CityCellMap`, `CitySpriteManager`,
+`CrimeLayer`, `LandValueLayer` — for the cause already diagnosed in §18c: their vtables are dominated by 8-byte
+adjustor thunks with no `ret`. No threshold can help a class with nothing measurable.
+
+### 21c. ⚠ It exposed an error of mine in §19's T1 spec
+
+The strict extractor flagged slots **7 and 9**, which the loose one had marked unmeasurable. Those are
+`cISC3DirtBag`'s three-way `Init`:
+
+| slot | header says | actual | |
+|---:|---|---|---|
+| 7 | `Init(cISC3City*)` — 1 arg | `ret 8` = **2 args**, 901 B | mismatch |
+| 8 | `Init(cISC3City*, cISC2Importer*)` — 2 args | `ret 8`, 1403 B | ok |
+| 9 | `Init(cISC3City*, cIGZDBSegment*)` — 2 args | `ret 4` = **1 arg**, 1481 B | mismatch |
+
+**So slot 9 is the 1-argument `Init(cISC3City*)`, not the DBSegment loader.** §19's trace table for T1 listed
+"DirtBag `0x1002046c` slot 9 = `Init(City*,DBSegment*)`". That is **wrong**, and it is exactly the kind of error
+that propagates, because another session was told to build a city-load trace from that table. §19 is corrected
+in place. The DBSegment `Init` is at slot 7 or 8; both are `ret 8`, so arity cannot separate them and the bodies
+must be read before either is used as a load-path trace point.
+
+### 21d. The overload rule extends from pairs to groups
+
+Twelve of twelve *pairs* were reversed (§14d, §17). This `Init` **triple** is the first group larger than two,
+and it is permuted the same way: the narrower member (1 arg) sits at the **later** slot, the wider ones earlier.
+U-042's rule statement is updated from "pair" to "group".
+
+That also explains why §14 missed it: §14 used the loose extractor, which marked slots 7 and 9 unmeasurable, so
+the triple never registered as a mismatch. §14 committed no rows for those slots, so **no tracker row is wrong**
+— only the §19 prose was.
