@@ -1202,3 +1202,118 @@ the QI" as the vtable length and tested *that* vtable's slot 15. It reported 94 
 vtable is 15 — `.rdata` packs vtables adjacently, so a run-length walk sails straight through the boundary. And
 the `cISC3CityLayer` vtable is a *secondary* vtable, never the one starting at the primary QI. The adjustor
 thunk is the only reliable way in.
+
+---
+
+## 13. cSC3City — the god-object, 162 slots, found by fingerprint and validated from three other modules
+
+`cISC3City` is the largest interface in the SDK (159 methods) and the object every layer reaches through.
+It is also the best-anchored target available, because three earlier layer walks had already pinned real
+city-vtable offsets **before** this class was looked at.
+
+### 13a. Located: `SIMCITY.DLL` `.rdata` `0x10013260`
+
+The arity fingerprint was generated *from the header* rather than by hand — parse each
+`virtual R Name(params) = 0;`, sum 4 bytes per parameter and 8 for a by-value `int64_t`/`double`, and you
+get a 159-entry expected `ret N` vector. Scanning every dword-aligned `.text` pointer in every data section
+of all 30 binaries for a 159-slot window:
+
+```
+candidates (>=60 comparable, >=80% match): 1
+   96.9%  126/130   SIMCITY.DLL  vtable 0x10013260
+```
+
+**One candidate, project-wide.** 130 measurable slots, 126 matching.
+
+### 13b. Validated against offsets confirmed before this class was opened
+
+These twelve came out of the ValveLayer, ZoneLayer and BudgetLayer walks (§7, §9, §11d), in other modules,
+without any knowledge of `cISC3City`'s layout:
+
+| offset seen earlier | slot | header method | implementation |
+|---|---:|---|---|
+| `+0xcc`, `+0xd0` — "map dimensions" | 51, 52 | `CellCountX`, `CellCountZ` | `mov eax,[ecx+0x3c]` / `[ecx+0x40]` |
+| `+0x11c` — the query PlaceZone requires to HIT | 71 | `SurfaceOccupantManager` | `mov eax,[ecx+0x84]` |
+| `+0x120`, `+0x124` — the two that must MISS | 72, 73 | Underground managers L1, L2 | `[ecx+0x88]`, `[ecx+0x8c]` |
+| `+0x138` | 78 | `BuildingLayer` | `[ecx+0xa0]` |
+| `+0x150` | 84 | `PowerLayer` | `[ecx+0xb8]` |
+| **`+0x15c` — proven to return the budget layer** | **87** | **`BudgetLayer`** | `[ecx+0xc4]` |
+| `+0x188` | 98 | `LandValueLayer` | `[ecx+0xf0]` |
+| `+0x194` | 101 | `DemolitionLayer` | `[ecx+0xfc]` |
+| `+0x1b8` | 110 | `GetSpecificLayer(uint32)` | not a getter ✓ takes an argument |
+
+`+0x15c` is the strongest: §11c established from *SIMRCI* that the object at city vtable `+0x15c` is a
+`cISC3BudgetLayer`, because `PlaceZone` calls `GetCost` and `WithdrawFunds` on it. `0x15c / 4 = 87`, and the
+header's slot 87 is `BudgetLayer`. Two modules, two methods, one answer.
+
+**A semantic upgrade this produced.** §9 called `+0x13c` "the zone cell map". Slot 79 is **`DirtBag`** — SC3's
+terrain layer. So `PlaceZone` sampling four values through it and comparing them is a **corner-height / slope
+check**, not a zone-value read. That reading is now recorded as the correction it is.
+
+**A correction it forces.** §7 described `[this+0x10]` in `ValveLayer::EndOfMonth` as "the city object", with
+`+0xdc/+0xd8/+0xec/+0xf0` as per-agent-class scalars. Those offsets are slots 55/54/59/60 =
+`AnimCellCountZ`/`AnimCellCountX`/`CellSizeInAnimUnitsY`/`GetTileSize` — dimension getters, not agent scalars.
+And `CreateNewValve` passes `this+0xc` as the city. **So `this+0x10` is not the city and §7's label was wrong.**
+Logged as U-049; the mechanical description of EndOfMonth (which valve slots it calls, what it publishes) is
+unaffected.
+
+### 13c. The subsystem-pointer block — 28 slot-order confirmations at once
+
+Slots 71–101 are trivial accessors, and their field offsets are perfectly linear:
+
+```
+field = 0x84 + (slot - 71) * 4        holds for all 28 getters, 0 exceptions
+```
+
+| slots | subsystem pointers |
+|---|---|
+| 71–74 | surface / underground L1 / underground L2 / anim occupant managers → `+0x84`…`+0x90` |
+| 78–101 | Building, DirtBag, Transit, Traffic, Flora, Zone, Power, Plumbing, Ordinance, **Budget**, World, StrtSim, Disaster, Pollution, Crime, Police, Fire, Residential, Commercial, Industrial, LandValue, Neighbors, Weather, Demolition → `+0xa0`…`+0xfc` |
+
+So the city holds a **contiguous array of 31 subsystem pointers at `+0x84`…`+0xfc`**, and the vtable exposes
+them in declaration order. Slots 75/76/77 sit inside that run but are `CreateOccupant` ×2 and
+`RemoveAllOccupants` instead of getters, so `+0x94`/`+0x98`/`+0x9c` are three pointers this interface does not
+expose.
+
+Twenty-eight getters landing on twenty-eight consecutive predicted offsets is the single strongest piece of
+slot-order evidence in this document — no permutation of the declaration order could produce it.
+
+### 13d. The advisor block is permuted — and that is a struct fact, not a slot error
+
+Slots 102–109 break the linear formula. All eight still land inside a contiguous advisor block, but in a
+different order:
+
+| field | `+0x104` | `+0x108` | `+0x10c` | `+0x110` | `+0x114` | `+0x118` | `+0x11c` | `+0x120` |
+|---|---|---|---|---|---|---|---|---|
+| getter | Utility | **Budget** | CityPlanning | Environment | Demographics | PublicSafety | Transportation | Petitioner |
+| slot | 102 | 108 | 106 | 105 | 103 | 104 | 107 | 109 |
+
+Eight distinct fields, eight consecutive dwords, no duplicates. **This is not a slot-order failure** — each
+named getter reads one field and the getters remain in header order. The *struct* simply stores advisors in a
+different order than the interface declares them. Same lesson as §10's system ratings: accessor order and field
+order are independent, and only the former is what the header claims.
+
+### 13e. 6 of 6 — the overload rule now predicts
+
+The **only 4 arity mismatches in 130 measurable slots** are two overload pairs, and both are reversed:
+
+| slot | header says | actual `ret` | is really |
+|---:|---|---|---|
+| 121 | `GetDate(dayOfYear, year)` — 2 args | `0xc` | the **3-arg** `(month, day, year)` |
+| 122 | `GetDate(month, day, year)` — 3 args | `0x8` | the **2-arg** `(dayOfYear, year)` |
+| 123 | `SetDate(dayOfYear, year)` — 2 args | `0xc` | the **3-arg** form |
+| 124 | `SetDate(month, day, year)` — 3 args | `0x8` | the **2-arg** form |
+
+§12a promoted overload-reversal to a working rule at 4 of 4 pairs. This class was **not** used to derive it,
+and it supplies two more — **6 of 6**. More usefully, the rule is now *predictive*: every mismatch on a
+162-slot class was an overload pair, and inverting each pair resolved all four. Non-overload slots mismatched
+zero times.
+
+### Committed
+
+32 rows at **C3**: the 28 `sc3_city_get_*` subsystem accessors plus the 4 date overloads under their corrected
+signatures. `verify_worker_rows.py` on the batch: **0 of 32 flagged**. Project C3 count 99 → 131.
+
+29 of the 159 slots are unmeasurable by arity (their first control transfer is a `jmp`), so they are confirmed
+by position only. The header's own uncertainty markers remain worth heeding — §12b already found one wrong
+return type where the author had flagged their own doubt.

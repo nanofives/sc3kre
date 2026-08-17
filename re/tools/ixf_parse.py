@@ -80,6 +80,122 @@ def parse(path):
     return records, d
 
 
+# --- WRITE SIDE -----------------------------------------------------------------------
+#
+# Promoted here 2026-08-17 (roadmap gate T2). This code proved itself inside
+# re/tools/city_roundtrip.py, a TEST HARNESS, which meant the only .IXF writer in the project
+# was not usable as a library. It is the same implementation, moved and documented; the
+# harness now calls it rather than carrying its own copy.
+#
+# Everything below exists to reproduce a shipped container BYTE FOR BYTE, which is a stricter
+# bar than "the game accepts it" and is the only bar testable offline.
+
+TYPE_STRING_PAYLOAD = 0x2026960B
+
+
+def payload_extent(rtype, size):
+    """On-disk byte length of a record payload, which is NOT always the index `size`.
+
+    [CONFIRMED, 59/59 city files] For type 0x2026960B (localized string) the index `size` is the
+    STRING length and the payload is `u32 length + chars`, so it occupies `4 + size` bytes.
+    Measured on 110 such records: the u32 at the payload start equals `size` in every one, and
+    `offset + 4 + size` is exactly the next record's offset. Reading only `size` truncates the
+    last four characters of every string ("Maxis" -> "M").
+
+    Every other type observed stores exactly `size` bytes.
+    """
+    return size + 4 if rtype == TYPE_STRING_PAYLOAD else size
+
+
+def read_index_slots(d):
+    """Every 20-byte index slot up to AND INCLUDING the terminator, as raw 5-tuples.
+
+    `parse()` filters deleted slots and stops at the terminator, which is right for reading.
+    A writer must reproduce the index exactly -- deleted slots (offset/size 0xFFFFFFFF) and all
+    -- so this returns them untouched.
+    """
+    slots, n = [], 0
+    while 4 + (n + 1) * REC <= len(d):
+        slot = struct.unpack_from("<5I", d, 4 + n * REC)
+        slots.append(slot)
+        n += 1
+        if slot[:3] == (0, 0, 0):
+            break
+    return slots
+
+
+def layout(d):
+    """Describe a container completely enough to rebuild it: -> dict.
+
+    Keys: `slots` (raw index slots), `pad` (reserved bytes between the index and the first
+    payload), `payloads` [(offset, bytes)], `free` [(offset, length)] for regions covered by
+    neither index nor payload, and `tail` (bytes after the last payload).
+
+    `free` and `tail` are not padding to be assumed away. In the shipped corpus the free regions
+    are all-zero container slack, but **7 of the 13 `.SNR` files carry 51-63,586 bytes of
+    non-zero data past the last indexed payload** that no slot points at (`U-039`). A writer that
+    drops it produces a file the game would probably still read, but not the same file.
+    """
+    slots = read_index_slots(d)
+    index_end = 4 + len(slots) * REC
+    live = [s for s in slots
+            if s[3] != 0xFFFFFFFF and s[4] != 0xFFFFFFFF and s[:3] != (0, 0, 0)]
+    first_data = min((s[3] for s in live), default=len(d))
+    payloads = [(s[3], d[s[3]:s[3] + payload_extent(s[2], s[4])]) for s in live]
+
+    free, cursor = [], first_data
+    for off, data in sorted(payloads):
+        if off > cursor:
+            free.append((cursor, off - cursor))
+        cursor = max(cursor, off + len(data))
+    return {"slots": slots,
+            "pad": d[index_end:first_data],
+            "payloads": payloads,
+            "free": free,
+            "tail": d[cursor:]}
+
+
+def build(lay):
+    """Rebuild a container from a `layout()` dict -> bytes.
+
+    Payloads are written at their recorded absolute offsets; any gap is zero-filled, which is
+    correct for the shipped corpus (every `free` region there is all-zero) and is why `layout()`
+    reports `free` separately -- so a caller can check rather than trust.
+    """
+    out = bytearray(struct.pack("<I", MAGIC))
+    for s in lay["slots"]:
+        out += struct.pack("<5I", *s)
+    out += lay["pad"]
+    for off, data in sorted(lay["payloads"]):
+        if off < len(out):
+            raise IxfError("payload at %d overlaps %d bytes already emitted" % (off, len(out)))
+        out += b"\x00" * (off - len(out))
+        out += data
+    out += lay["tail"]
+    return bytes(out)
+
+
+def roundtrip(path):
+    """-> (ok, detail). Read a container, rebuild it from structure, compare byte for byte."""
+    with open(path, "rb") as fh:
+        d = fh.read()
+    if len(d) < 4 or struct.unpack_from("<I", d, 0)[0] != MAGIC:
+        return None, "not an .IXF container"
+    try:
+        lay = layout(d)
+        rebuilt = build(lay)
+    except (IxfError, struct.error) as e:
+        return False, "%s: %s" % (type(e).__name__, e)
+    if rebuilt == d:
+        return True, "%d slots, %d payloads, %d free region(s), %d tail bytes" % (
+            len(lay["slots"]), len(lay["payloads"]), len(lay["free"]), len(lay["tail"]))
+    for i in range(min(len(rebuilt), len(d))):
+        if rebuilt[i] != d[i]:
+            return False, "first difference at byte %d (rebuilt %d bytes, original %d)" % (
+                i, len(rebuilt), len(d))
+    return False, "length differs: rebuilt %d, original %d" % (len(rebuilt), len(d))
+
+
 def payload_text(rec, d):
     """Decode a record payload: u32 length + bytes. Returns (text, note)."""
     off, size = rec["offset"], rec["size"]
