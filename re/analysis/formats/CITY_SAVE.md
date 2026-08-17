@@ -1070,9 +1070,57 @@ The sub-object sits at **object+0x27c**, vtable **`PTR_FUN_1004d2bc`**, installe
 SC3ZoneLayer ctor (`param_1[0x9f]`), fields initialised by `FUN_10031267`
 `[CONFIRMED @0x100310f5, 0x10031267]`. Its writer is **slot 1 (`vt+4`)** of that vtable.
 
-> **This is where the text export runs out.** Vtables are DATA and ungreppable, so resolving
-> `PTR_FUN_1004d2bc` slot 1 needs `VtableDump.java` on live Ghidra. That one lookup should name
-> the class owning 2 bytes per tile of the zone section.
+### ⭐ Resolved on live Ghidra: the `2*N*N` is a `u16`-per-tile vector `[CONFIRMED, 59/59]`
+
+`VtableDump` on `PTR_FUN_1004d2bc` gives **slot 1 = `FUN_1004361d`** (260 bytes), and confirms
+the vtable is installed by the SC3ZoneLayer ctor `FUN_100310f5`. Reading it
+`[CONFIRMED @0x1004361d]`:
+
+```c
+vt+0x70(u8  this+0x04);   vt+0x88(u32 this+0x08);   vt+0x68(bool this+0x0c);
+vt+0x98(this+0x10); vt+0x98(this+0x18); vt+0x98(this+0x14);
+vt+0x98(this+0x1c); vt+0x98(this+0x20);
+count = (*(this+0x28) - *(this+0x24)) >> 1;          // a vector of 2-BYTE elements
+vt+0x88(count);
+while (count--) vt+0x78( *(u16 *)(*(this+0x24) + count*2) );   // each u16, in REVERSE
+vt+0x98(this+0x30); vt+0x98(this+0x34); vt+0x98(this+0x38);
+```
+
+So the high-entropy region is **`N*N` 16-bit values, one per tile**, written individually and in
+reverse order — a second per-tile plane at `u16` width, which is why it is `2*N*N` bytes and why
+it never looked like a byte raster.
+
+**Verified against the bytes at an exactly predicted position:** the writer emits, after the
+vector, three `u32`s (`vt+0x98`) and then the saver's six trailing `u32`s — 36 bytes. So the
+count must sit at `end - 36 - 2*N*N - 4`. **The `u32` there equals `N*N` in 59 of 59 files.**
+That is a single predicted offset, not a search.
+
+`[UNCERTAIN]` what the `u16` values mean, and the widths of `vt+0x70`, `vt+0x78` and `vt+0x98`
+are inferred from their arguments (byte / `u16` / `u32`) rather than pinned from GZResourceD
+implementations.
+
+### ⭐ The `+0x188` vs `+0x18c` discrepancy is SETTLED `[CONFIRMED]`
+
+`VtableProbe` on both functions shows they belong to the same class but **different subobjects**:
+
+| function | vtable | slot | installed at |
+|---|---|---|---|
+| saver `FUN_100320e7` | `PTR_LAB_1004d198` | 10 (`+0x28`) | `param_1[5]` = **object+0x14** |
+| registrar `FUN_10032694` | `PTR_LAB_1004d1e0` | 22 (`+0x58`) | `param_1[4]` = **object+0x10** |
+
+Both installed by `FUN_100310f5` and `FUN_10031357` — multiple inheritance, two subobjects
+**exactly 4 bytes apart**. So:
+
+```
+saver     this+0x188  =  object + 0x14 + 0x188  =  object+0x19c
+registrar this+0x18c  =  object + 0x10 + 0x18c  =  object+0x19c    <- the same field
+saver     this+0x18c  =  object+0x1a0  ==  registrar this+0x190    <- the same field
+```
+
+**Neither reading was wrong.** The slot record is
+`{ void* developer at object+0x19c + i*8, u32 id at object+0x1a0 + i*8 }`, and the two functions
+simply address it through `this` pointers 4 bytes apart. This also independently confirms the
+saver's `this = object+0x14`, which had only been inferred from its `this-0x14` base call.
 >
 > The general lesson is worth more than the finding: this document's grammar was derived from
 > the saver twice and the loader once, and was **still missing two writes**. Eight attempts
