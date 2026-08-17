@@ -2911,3 +2911,51 @@ sc3launch.exe -nocom -windowed -origin -fix16 -fitclient -nointro
 Renders, correct transparency, correct client size, no intro. This is the finished windowed
 mode. `-gzlog <abs>` only for measurement; all of `-winpresent -nokeysrc -present -guard
 -sample -resume -bpp` are obsolete.
+
+## 27. Launch-harness test suite (2026-08-17)
+
+Built after this session showed that nearly every dead end was a broken MEASUREMENT
+reading as a real result, not the game misbehaving. Three committed scripts in `re/scripts/`
+(the probe source stays gitignored; these are tracked tools):
+
+- **`harness_patches.py`** - a versioned manifest of every in-memory patch the probe applies
+  (RVA + expected pre-patch bytes + which switch) and a DRY-RUN verifier that checks each site
+  against the on-disk Apps\ binaries WITHOUT launching the game, plus the SC3U anchor SHA. Exit
+  non-zero on any drift. This is the committed baseline the gitignored probe source lacked.
+- **`harness_check.py`** - turns one run log into a single verdict with three distinct exit
+  codes: `PASS` (rendered + integrity held), `FAIL` (trustworthy measurement, game did not
+  render), `HARNESS-FAIL` (the measurement itself is broken - a zero here means nothing). The
+  FAIL vs HARNESS-FAIL split is the whole point: a trace table that never opened, a detour that
+  never installed, a missing log all become HARNESS-FAIL instead of a false "drew nothing".
+  Auto-detects fix16/fitclient/nointro/windowed from the probe banners so one grader fits every
+  scenario.
+- **`harness_run.ps1`** - runs a scenario K times at a FIXED duration (never waiting on a human
+  to close the window), grades each with harness_check.py, classifies the batch. Pre-flights
+  harness_patches.py so a drifted binary aborts before any run is spent. `-List` shows scenarios.
+
+### 27.1 What the suite taught while being built
+
+- **The plain windowed path is not automatable.** Without `-nointro` the intro movie plays and
+  suspends the renderer, and unattended nobody skips it, so `blt_disp_1` stays 0 for the whole
+  run (the primary shows the movie, not the menu). The automatable render scenario is
+  `windowed-nointro`; `windowed-movie` is kept opt-in and INTERACTIVE.
+- **A surface signature for golden pixel comparison (item 5) was tried and REMOVED.** Sampling
+  the render target with a Lock on the watcher thread returns a stale/shadow buffer (rule 5):
+  the signature was identical (`all-4`) for a rendered menu AND a black no-fix16 run, so it
+  could not tell pass from fail. Shipping it would have been false confidence - the exact
+  failure the suite exists to prevent. The reliable pixel witness is the GAME-THREAD lit-count
+  in `fnlog_enter` (U-037), which discriminates 0 vs ~30000 and is already a render check in
+  harness_check.py. A finer content signature needs a game-thread present-time hook; deferred.
+
+### 27.2 Usage
+
+```
+py -3 re/scripts/harness_patches.py            # verify patch sites (no game run)
+py -3 re/scripts/harness_check.py <run.log>    # grade one log
+pwsh re/scripts/harness_run.ps1                # windowed-nointro, 3x, graded
+pwsh re/scripts/harness_run.ps1 -List
+```
+
+Validated: `harness_check.py` grades `recover_run18_nogztable.log` HARNESS-FAIL (trace table
+never opened), `iso3.log` FAIL (integrity fine, blt_disp_1=0 black run), rendering runs PASS;
+`harness_run.ps1` windowed-nointro 3/3 PASS.
