@@ -1191,11 +1191,44 @@ Three things follow:
    **bytes** from it. `[UNCERTAIN]` — that mismatch is unexplained and may be the same thread as
    the missing ~138 bytes.
 
-`[UNCERTAIN]` how the loader's stream position stays aligned for the six trailing `u32` reads if
-it never consumes the sub-object region. Either something upstream consumes it or the region is
-skipped by a mechanism not yet read. **That is the single question to answer next**, and it
-should be answered by reading, not by arithmetic — the last three attempts at this gap were all
-inference and all wrong.
+### 🔴 A CONTRADICTION, stated rather than resolved
+
+The base reader `FUN_1001b4b4` consumes exactly `rowCount * rowBytes` `[CONFIRMED @0x1001b4b4]`
+— `this+4` rows of `this+8` bytes, no more. Combined with everything else now pinned, the two
+sides do not add up:
+
+| | saver | loader |
+|---|---|---|
+| base | `N*N` | `N*N` |
+| grammar | 58 / 82 | 58 / 82 |
+| block C | 23 | 23 |
+| sub-object | **~132,335 (Berlin)** | **nothing** |
+| six `u32`s | 24 | 24 |
+| **total** | **= section size** ✓ | **≈ `N*N` + 129** ✗ |
+
+So the loader would read its six trailing `u32`s at `N*N + 105`, which lands **inside** the
+sub-object region — the wrong bytes. The game loads cities correctly, so **at least one fact
+recorded in this document is still wrong.**
+
+Candidates, none tested:
+
+1. The base read is **not** `N*N`. But it cannot be `3*N*N` either: the `u16` permutation sits at
+   the *end* of the section, so `3*N*N` lands inside it.
+2. The `c1` list at `N*N` is a coincidence. Against that: the keys are `3000/5000/8000` in all
+   25 developed files and the parse is exact.
+3. The loader's six `u32` reads are not the mirror of the saver's six `u32` writes — plausible,
+   given the tail is already proven asymmetric.
+4. The sub-object region *is* consumed, by something between block C and the `u32` reads that
+   the decompilation does not show.
+
+**Do not resolve this by arithmetic.** Four inference attempts at this gap have now failed
+(`vt+0x98`, the block size, the mirror assumption, and this). The next step is to read the
+loader's stream object across the whole function and track its position, or to breakpoint the
+loader under a debugger — the byte-fitting approach is exhausted.
+
+What is unaffected, because it rests on separate evidence: the `N*N` zone raster and its
+slot-index meaning, the R/C/I/Landfill developer names, the `u16` permutation, the map dimension
+`N`, and the section frame.
 
 ### ⚠️ The "23 elements of 4 bytes" reading is FALSIFIED — the blocks ARE 23 bytes
 
