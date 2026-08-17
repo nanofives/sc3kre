@@ -53,61 +53,29 @@ def read_index_slots(d):
     return slots
 
 
-TYPE_STRING = 0x2026960B
+# The container reader/writer used to live here. It was promoted to re/tools/ixf_parse.py on
+# 2026-08-17 (roadmap gate T2) so it is a library rather than something buried in a test
+# harness, and these are thin adapters onto it. Keeping two copies would guarantee they drift.
+#
+# Promoting it immediately paid for itself: against the 478 localized-text containers the
+# harness copy failed 472, because its `size + 4` rule for string payloads was generalised from
+# the 13 city .SNR files alone. See ixf_parse.payload_extent.
 
-
-def payload_extent(rtype, size):
-    """On-disk byte length of a record payload, which is NOT always the index `size`.
-
-    [CONFIRMED, 59/59] For type 0x2026960B (localized string) the index `size` is the
-    STRING length and the payload is `u32 length + chars`, so it occupies `4 + size`
-    bytes. Measured on 110 such records across the 13 .SNR files: in every one the u32 at
-    the payload start equals `size` exactly, and `offset + 4 + size` is exactly the next
-    record's offset. Reading only `size` bytes truncates the last four characters of every
-    string ("Maxis" -> "M", "Blazej Stompel" -> "Blazej Stom").
-
-    Every other type in the 59 files stores its payload at exactly `size` bytes.
-    """
-    return size + 4 if rtype == TYPE_STRING else size
+payload_extent = ixf_parse.payload_extent
+read_index_slots = ixf_parse.read_index_slots
 
 
 def container_layout(d):
-    """-> (slots, pad_len, payloads, free, tail_len). Measures, never assumes.
-
-    `free` is [(offset, length)] for regions covered by neither the index nor a payload.
-    One per .SNR file (20,200 bytes after the 0x23dfae5f record) and all-zero in all 59
-    files, so it is container slack rather than data -- but it is emitted explicitly, so a
-    writer that reuses the layout does not have to guess.
-    """
-    slots = read_index_slots(d)
-    index_end = 4 + len(slots) * REC
-    live = [s for s in slots if s[3] != 0xFFFFFFFF and s[4] != 0xFFFFFFFF and s[:3] != (0, 0, 0)]
-    first_data = min((s[3] for s in live), default=len(d))
-    pad_len = first_data - index_end
-    payloads = [(s[3], d[s[3]:s[3] + payload_extent(s[2], s[4])]) for s in live]
-
-    free, cursor = [], first_data
-    for off, data in sorted(payloads):
-        if off > cursor:
-            free.append((cursor, off - cursor))
-        cursor = max(cursor, off + len(data))
-    return slots, pad_len, payloads, free, len(d) - cursor
+    """-> (slots, pad_len, payloads, free, tail_len), the shape this harness already used."""
+    lay = ixf_parse.layout(d)
+    return (lay["slots"], len(lay["pad"]), lay["payloads"],
+            [(o, len(b)) for o, b in lay["free"]], len(lay["tail"]))
 
 
-def build_container(slots, pad, payloads, tail):
-    """Re-emit the .IXF from structure. `payloads` is [(abs_offset, bytes)]."""
-    out = bytearray()
-    out += struct.pack("<I", MAGIC)
-    for s in slots:
-        out += struct.pack("<5I", *s)
-    out += pad
-    for off, data in sorted(payloads):
-        if off < len(out):
-            raise ValueError("payload at %d overlaps emitted %d bytes" % (off, len(out)))
-        out += b"\x00" * (off - len(out))
-        out += data
-    out += tail
-    return bytes(out)
+def build_container(slots, pad, payloads, tail, free=None):
+    """Re-emit the .IXF. Delegates to ixf_parse.build."""
+    return ixf_parse.build({"slots": slots, "pad": pad, "payloads": payloads,
+                            "free": free or [], "tail": tail})
 
 
 # --- L1: the payload record (24-byte header + QFS stream) -----------------------------

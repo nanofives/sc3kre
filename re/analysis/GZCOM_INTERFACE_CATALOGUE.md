@@ -1317,3 +1317,81 @@ signatures. `verify_worker_rows.py` on the batch: **0 of 32 flagged**. Project C
 29 of the 159 slots are unmeasurable by arity (their first control transfer is a `jmp`), so they are confirmed
 by position only. The header's own uncertainty markers remain worth heeding — §12b already found one wrong
 return type where the author had flagged their own doubt.
+
+---
+
+## 14. cSC3DirtBag — the terrain layer, and PlaceZone's real preconditions
+
+§13 identified city vtable slot 79 as `DirtBag`, which meant §9's reading of `PlaceZone` was wrong about what
+it was talking to. Walking `cISC3DirtBag` settles it and turns four unlabelled offsets into game rules.
+
+### 14a. Located: `SIMDIRT.DLL` `.rdata` `0x1002046c`, 91 slots
+
+88 methods + 3 `cIGZUnknown`. Same method as §13 — arity fingerprint generated from the header, scanned across
+every data-section code pointer in all 30 binaries. **One candidate project-wide: 67/73 = 91.8%.**
+
+Structural note: **slots 3–17 are the `cISC3CityLayer` contract verbatim** (`DoMessage`, `DoQueryInfo`,
+`StaticInit`, `StaticShutdown`, `Init` ×3, `Save`, `SimulationBegin`, `SimulationEnd`, `Shutdown`,
+`GetManipulator`, `GetLayerType`, `DebugClassTag`, `DebugTypeTag`). So unlike `cSC3ValveLayer`, which carries
+`cISC3CityLayer` as a secondary base with adjustor thunks (§7), `cISC3DirtBag` **flattens the layer contract
+into its own vtable**. Both shapes occur; the adjustor-thunk probe from §12c only finds the first kind.
+
+New LayerType constant, from slot 15: **`0x21737de5`** (`mov eax,0x21737de5 ; ret`).
+
+### 14b. Five anchors, all derived before this class was opened
+
+Every offset `PlaceZone` used on the object at city `+0x13c` was recorded in §9 with a guessed label. All five
+now resolve, and **all five match their expected arity exactly**:
+
+| offset | slot | header method | expected / actual `ret` | what §9 called it |
+|---|---:|---|---|---|
+| `+0x03c` | 15 | `GetLayerType` | `0` / `0` ✓ | — |
+| `+0x04c` | 19 | `GetVertexAltitudeDirt(u32,u32,u8&)` | `0xc` / `0xc` ✓ | "cell-map value read" |
+| `+0x054` | 21 | `IsWater(u32,u32)` | `0x8` / `0x8` ✓ | "a test" |
+| `+0x134` | 77 | `SetupZone(bounds&,u32&,bool,bool)` | `0x10` / `0x10` ✓ | "batch begin" |
+| `+0x148` | 82 | `LockUpdates(bool)` | `0x4` / `0x4` ✓ | "batch end" |
+
+### 14c. What PlaceZone actually does — three corrections to §9
+
+**The four-value read is a slope check.** `PlaceZone` calls `+0x4c` = `GetVertexAltitudeDirt` four times, at
+`(x,z)`, `(x+1,z)`, `(x,z+1)`, `(x+1,z+1)`, into four **byte** locals, then tests them for equality. Those are
+the four **corner vertex altitudes** of the tile. §9 called this "samples the four corner values via `+0x4c`"
+without knowing what the values were; they are terrain heights, and unequal corners mean a sloped tile.
+
+**A tile cannot be zoned on water.** `+0x54` is `IsWater(x,z)`, and `PlaceZone` clears its per-cell ok flag when
+it returns true. §9 recorded this only as "`+0x54` (a test)".
+
+**Zoning terraforms first.** `+0x134` is `SetupZone(bounds, &cost, bool, bool)`, called **once over the whole
+rect before the per-cell loop** — not a "batch begin" as §9 assumed. The batch guard is the *other* call:
+`+0x148` = `LockUpdates(bool)`, invoked with 1 before the apply loop and again at the end.
+
+So the corrected precondition chain for zoning a tile is: `CanZone` (slot 33 of the zone layer) → `SetupZone`
+terraform over the rect → `LockUpdates(true)` → per cell: corner-altitude slope check, `IsWater` rejection,
+buildability gate, occupant/demolition handling → `LockUpdates(false)`.
+
+### 14d. 10 of 10 — four more reversed pairs
+
+All **six** arity mismatches on this class are **four overload pairs, every one reversed**:
+
+| pair | header order | actual `ret` | verdict |
+|---|---|---|---|
+| `SetVertexAltitude` 32/33 | 3-arg point, 5-arg rect | `0x14`, `0xc` | reversed |
+| `SetWaterTable` 34/35 | 4-arg, 5-arg rect | `0x14`, `0x10` | reversed |
+| `InCellBounds` 51/52 | 2-arg point, 4-arg rect | `0x10`, `0x8` | reversed |
+| `InVertexBounds` 53/54 | 2-arg point, 4-arg rect | `0x10`, `0x8` | reversed |
+
+Running total across five classes: **10 of 10 overload pairs reversed**, and **zero non-overload slots have
+ever mismatched**. In each pair the **rect / wider form is the earlier slot** and the point / narrower form the
+later — consistent with §12a's "the narrower member is the later slot".
+
+> **A method fix worth recording.** The first pass reported only 6 mismatches and missed that slots 33 and 35
+> were also wrong, because the arity extractor bails with `'jmp'` when a function's first control transfer is a
+> branch, and treats that slot as unmeasurable. Bounding the disassembly by each function's **tracked size**
+> from `functions.csv` and collecting *all* `ret N` in the body gives an unambiguous answer — and confirmed the
+> extractor was not overrunning, which was my first suspicion. Prefer size-bounded extraction over a fixed
+> byte window.
+
+### Committed
+
+13 rows at **C3**: the 5 anchors plus all 8 members of the 4 reversed pairs, each named with its real form
+(`_rect` / `_point`). `verify_worker_rows.py`: **0 of 13 flagged**. Project C3 count 131 → 144.

@@ -26,7 +26,12 @@ NOTE ON LANGUAGES (observed, not inferred): the directory named ENGLISH contains
 the actual English strings are in English-UK. Verified on BAMBEStringsMain.IXF across
 ENGLISH / English-UK / GERMAN / FRENCH.
 
+READ and WRITE. `parse()` reads; `layout()` + `build()` rebuild a container byte for byte, and
+`roundtrip()` checks that on a real file. The writer lived inside re/tools/city_roundtrip.py (a
+test harness) until 2026-08-17; it is here now so it is usable as a library.
+
 Usage:
+  py -3.12 re/tools/ixf_parse.py <dir> --selftest          # round-trip every container, N/N
   py -3.12 re/tools/ixf_parse.py <file.IXF>                # list records + validation
   py -3.12 re/tools/ixf_parse.py <file.IXF> --dump         # print every string
   py -3.12 re/tools/ixf_parse.py <dir> --csv <out.csv>     # walk a tree -> one CSV
@@ -93,18 +98,34 @@ def parse(path):
 TYPE_STRING_PAYLOAD = 0x2026960B
 
 
-def payload_extent(rtype, size):
+def payload_extent(rtype, size, d=None, offset=0):
     """On-disk byte length of a record payload, which is NOT always the index `size`.
 
-    [CONFIRMED, 59/59 city files] For type 0x2026960B (localized string) the index `size` is the
-    STRING length and the payload is `u32 length + chars`, so it occupies `4 + size` bytes.
-    Measured on 110 such records: the u32 at the payload start equals `size` in every one, and
-    `offset + 4 + size` is exactly the next record's offset. Reading only `size` truncates the
-    last four characters of every string ("Maxis" -> "M").
+    A string record (type 0x2026960B) is `u32 length + chars`, and **the corpus uses TWO
+    conventions for what `size` counts** `[CONFIRMED]`:
 
-    Every other type observed stores exactly `size` bytes.
+    | family | `size` means | payload occupies | check |
+    |---|---|---|---|
+    | city `.SNR` | the STRING length, prefix excluded | `4 + size` | the u32 at the payload start `== size` |
+    | localized `Apps\\Res\\Text\\**.IXF` | the WHOLE payload, prefix included | `size` | that u32 `== size - 4` |
+
+    So the extent cannot be decided from the type alone. This reads the length prefix and lets
+    the data say which convention the file uses; it falls back to `size` when neither matches.
+
+    > This was first written as an unconditional `size + 4`, generalised from 110 records in the
+    > 13 city `.SNR` files, and it round-tripped 59/59 of them. Against the localized-text
+    > corpus it failed **472 of 478** containers, every one off by exactly 4. A rule confirmed on
+    > one family is not a rule about the format.
     """
-    return size + 4 if rtype == TYPE_STRING_PAYLOAD else size
+    if rtype != TYPE_STRING_PAYLOAD:
+        return size
+    if d is not None and offset + 4 <= len(d):
+        prefix, = struct.unpack_from("<I", d, offset)
+        if prefix == size:
+            return size + 4
+        if prefix == size - 4:
+            return size
+    return size
 
 
 def read_index_slots(d):
@@ -125,28 +146,36 @@ def read_index_slots(d):
 
 
 def layout(d):
-    """Describe a container completely enough to rebuild it: -> dict.
+    r"""Describe a container completely enough to rebuild it: -> dict.
 
     Keys: `slots` (raw index slots), `pad` (reserved bytes between the index and the first
     payload), `payloads` [(offset, bytes)], `free` [(offset, length)] for regions covered by
     neither index nor payload, and `tail` (bytes after the last payload).
 
-    `free` and `tail` are not padding to be assumed away. In the shipped corpus the free regions
-    are all-zero container slack, but **7 of the 13 `.SNR` files carry 51-63,586 bytes of
-    non-zero data past the last indexed payload** that no slot points at (`U-039`). A writer that
-    drops it produces a file the game would probably still read, but not the same file.
+    `free` regions carry their BYTES, not just their length, because in this corpus they are not
+    empty. Two independent cases of data that no index slot references:
+
+      - **7 of the 13 city `.SNR` files** carry 51-63,586 non-zero bytes past the last indexed
+        payload (`U-039`).
+      - **58 of the 478 localized-text containers** carry an ORPHANED STRING PAYLOAD mid-file --
+        e.g. `SWEDISH\TransportationTutorial.IXF` has 159 bytes at offset 22,589 that decode as
+        a normal `u32 length + chars` record (`"Vilken typ a..."`) with no slot pointing at it.
+
+    Both look like in-place editing that left the old payload behind. Zero-filling those regions
+    produces a file the game would probably still read, but not the same file -- and this writer's
+    only testable bar is byte-identical.
     """
     slots = read_index_slots(d)
     index_end = 4 + len(slots) * REC
     live = [s for s in slots
             if s[3] != 0xFFFFFFFF and s[4] != 0xFFFFFFFF and s[:3] != (0, 0, 0)]
     first_data = min((s[3] for s in live), default=len(d))
-    payloads = [(s[3], d[s[3]:s[3] + payload_extent(s[2], s[4])]) for s in live]
+    payloads = [(s[3], d[s[3]:s[3] + payload_extent(s[2], s[4], d, s[3])]) for s in live]
 
     free, cursor = [], first_data
     for off, data in sorted(payloads):
         if off > cursor:
-            free.append((cursor, off - cursor))
+            free.append((cursor, d[cursor:off]))          # the BYTES, not just the gap length
         cursor = max(cursor, off + len(data))
     return {"slots": slots,
             "pad": d[index_end:first_data],
@@ -166,10 +195,16 @@ def build(lay):
     for s in lay["slots"]:
         out += struct.pack("<5I", *s)
     out += lay["pad"]
+    freemap = dict(lay.get("free", []))
     for off, data in sorted(lay["payloads"]):
         if off < len(out):
             raise IxfError("payload at %d overlaps %d bytes already emitted" % (off, len(out)))
-        out += b"\x00" * (off - len(out))
+        while len(out) < off:
+            chunk = freemap.get(len(out))
+            if chunk is None:
+                out += b"\x00" * (off - len(out))
+            else:
+                out += chunk
         out += data
     out += lay["tail"]
     return bytes(out)
@@ -276,6 +311,53 @@ def cmd_find(target, group, instance):
               % (group, "" if instance is None else " instance %d" % instance))
 
 
+def iter_containers(target):
+    """Every file under `target` whose first four bytes are the .IXF magic.
+
+    Selects by MAGIC, not by extension, on purpose: the same container ships as `.IXF`, as the
+    sprite `.DAT` archives, and as the whole `.sc3` / `.sct` / `.snr` / `.st3` city family. An
+    extension filter would quietly test a fraction of the corpus and report a clean N/N.
+    """
+    if os.path.isfile(target):
+        yield target
+        return
+    for root, dirs, files in os.walk(target):
+        dirs[:] = [x for x in dirs if x not in (".git", "ghidra", "harness", "node_modules")]
+        for f in sorted(files):
+            p = os.path.join(root, f)
+            try:
+                with open(p, "rb") as fh:
+                    head = fh.read(4)
+            except OSError:
+                continue
+            if len(head) == 4 and struct.unpack("<I", head)[0] == MAGIC:
+                yield p
+
+
+def cmd_selftest(target, verbose=False):
+    """Round-trip every container under `target` and report N/N."""
+    ok = bad = 0
+    failures = []
+    for p in iter_containers(target):
+        good, detail = roundtrip(p)
+        if good is None:
+            continue
+        if good:
+            ok += 1
+            if verbose:
+                print("ok    %-52s %s" % (os.path.relpath(p)[:52], detail))
+        else:
+            bad += 1
+            failures.append((p, detail))
+            print("FAIL  %-52s %s" % (os.path.relpath(p)[:52], detail))
+    print()
+    print("IXF container round-trip: %d/%d byte-identical" % (ok, ok + bad))
+    if failures:
+        print("%d failure(s); a container that does not rebuild exactly is a writer bug, not a"
+              " tolerable difference." % len(failures))
+    return 1 if bad else 0
+
+
 def main(argv):
     if len(argv) < 2:
         print(__doc__)
@@ -283,6 +365,8 @@ def main(argv):
     target = argv[1]
     args = argv[2:]
 
+    if "--selftest" in args:
+        return cmd_selftest(target, "--verbose" in args)
     if "--csv" in args:
         return cmd_csv(target, args[args.index("--csv") + 1])
     if "--find" in args:
