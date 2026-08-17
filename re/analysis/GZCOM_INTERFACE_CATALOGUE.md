@@ -1611,3 +1611,86 @@ arguments**, which sat oddly against a header that says slot 40 takes a `uint32`
 8 rows at **C3** against one representative implementor (SimTransit `0x1001b6a0`), each note stating explicitly
 that it describes one of many implementors and that the slot map is the transferable part.
 `verify_worker_rows.py`: **0 of 8 flagged**. Project C3 count 168 → 176.
+
+---
+
+## 18. Bulk vtable location — 31 of 39 classes placed in one pass
+
+The per-class walks (§7-§17) each cost a session slice. This generalises them: parse every header, build
+each class's **full inheritance chain**, turn it into an expected `ret N` vector, and fingerprint-scan all 30
+binaries for all classes at once.
+
+`106 classes parsed; 39 with >=12 chained methods; 30 modules indexed`
+
+### 18a. It re-found every hand walk, at the same address
+
+The scan was not given any prior result. It independently reproduced all six:
+
+| class | hand-walked in | bulk scan says | agree |
+|---|---|---|---|
+| `cISC3BudgetLayer` | §11d SIMMISC `0x1003c550` | SIMMISC `0x1003c550` | ✓ |
+| `cISC3PollutionLayer` | §15 SIMECO `0x1001b984` | SIMECO `0x1001b984` | ✓ |
+| `cISC3ResidentialLayer` | §10 SIMRCI `0x1004c99c` | SIMRCI `0x1004c99c` | ✓ |
+| `cISC3City` | §13 SIMCITY `0x10013260` | SIMCITY `0x10013260` | ✓ |
+| `cISC3ZoneLayer` | §8 SIMRCI `0x1004d1e0` | SIMRCI `0x1004d1e0` | ✓ |
+| `cISC3Occupant` | §17 SimTransit `0x1001b6a0`, 156 cands | same, 156 cands | ✓ |
+
+Six for six, including reproducing §17's large candidate set rather than collapsing it.
+
+### 18b. Twenty classes at 100%, and the one §17 was waiting for
+
+**`cISC3CitySpriteCellMap` → `SIMSPR.DLL` `0x1006250c`, 104 of 104 slots, single candidate.** A complete arity
+match on the largest class after `cISC3City`, with no ambiguity.
+
+Other 100% single- or few-candidate locations now available without further work:
+
+| class | module | vtable | m/c |
+|---|---|---|---|
+| `cISC3AppPreferences` | SC3U.exe | `0x004cfdac` | 34/34 |
+| `cISC3OccupantManagerAnim` | SC3U.exe | `0x004d1088` | 41/41 |
+| `cISC3App` | SC3U.exe | `0x004cf59c` | 32/32 |
+| `cISC3Internet` | SC3U.exe | `0x004d0974` | 25/25 |
+| `cISC3OccupantManager` | SIMGEOM | `0x10029e24` | 32/32 |
+| `cISC3Valve` | SIMRCI | `0x1004cc14` | 31/31 |
+| `cISC3BaseAdvisor` | SIMADV | `0x10030e64` | 34/34 |
+| `cISC3CityAgentType` | SIMCITY | `0x10013d8c` | 20/20 |
+| `cISC3OrdinanceLayer` | SIMMISC | `0x10040f3c` | 12/12 |
+| `cISC3DisasterLayer` | SIMDSTR | `0x100325a0` | 15/15 |
+| `cISC3CitySpriteCellMap` | SIMSPR | `0x1006250c` | **104/104** |
+| `cISC3CityView` / `cISC3CityViewIso` | SIMSPR | `0x10063390` | 31/31, 35/35 |
+| `cISC3WinCityViewCellCursor` | SIMSPR | `0x10067a5c` | 19/19 |
+| `cISC3CitySchemeMgr` | SIMINIT | `0x1002f528` | 43/45 |
+| `cISC3WeatherLayer` | SIMMISC | `0x10041000` | 30/32 |
+| `cISSStrtSimLayer` | STRTSIM | `0x1002c600` | 24/26 |
+
+`cISC3Valve` at SIMRCI `0x1004cc14` is worth noting: §7 walked `cSC3ValveLayer` and inferred five `cISC3Valve`
+vtable offsets from its call sites. That class's own vtable is now located, so those five inferences are
+directly checkable.
+
+`cISC3CityView` and `cISC3CityViewIso` resolving to the *same* address `0x10063390` is consistent — the Iso
+view derives from `cISC3CityView`, so one concrete class satisfies both chains.
+
+### 18c. Eight NOT FOUND, and the honest reason
+
+`cISC3AuraLayer`, `cISC3BuildingLayer`, `cISC3CityCellMap`, `cISC3CitySpriteManager`, `cISC3CrimeLayer`,
+`cISC3DirtBag`, `cISC3LandValueLayer`, `cISC3OccupantAttribCache` all returned **0 candidates with 0
+comparable slots**.
+
+For the cell-map-derived ones (`Aura`, `Crime`, `LandValue`, `CityCellMap` itself) the cause is diagnosed and is
+the same as §15b: their inherited slots are **8-byte adjustor thunks with no `ret`**, so arity is unmeasurable,
+and for a 15-method class most of the chain is thunked. There is nothing left to fingerprint.
+
+**`cISC3DirtBag` is a genuine false negative and I am flagging it as one.** §14 located it by hand at
+`SIMDIRT.DLL` `0x1002046c` with 67/73 = 91.8%, above this scan's 90% bar — yet the bulk pass reports 0/0
+comparable for it. So the scanner has a failure mode I have not diagnosed, and `cISC3DirtBag` is the
+known-answer test it fails. Treat 18b as a set of leads that each still want the §13/§15 validation
+treatment, not as 20 finished results.
+
+That is also the value of having done six walks by hand first: without ground truth, this scan would have
+looked like an unqualified success.
+
+### 18d. `0x81c0cb7c` still not named
+
+The bulk scan was expected to name U-044's remaining IID by matching the ≥82-slot arity vector of the class
+replicated across six modules (§16b). It did not: no target class produced a hit in those six vtables. Combined
+with 18c's false-negative, that is weak evidence rather than a negative result, so U-044 stays `narrowed`.
