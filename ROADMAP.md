@@ -63,7 +63,14 @@ assessment below recommended.** The old text is preserved further down as the re
    > one was mine.** Same failure family as the rest of the day: a filter that matched more than
    > it was asked to.
 2. **⭐ RE-SCOPED 2026-08-17 (owner's call): ≥ C2 across the TOOLKIT-NECESSARY set.**
-   ⚠️ **RE-OPENED 2026-08-17, later the same day — 530 of 562 = 94.3%, 32 left to read.**
+   ✅ **RE-CLOSED 2026-08-17 — 562 of 562 = 100%.** The 32 that the carve added were read: 28 by
+   delegated cluster (SIMDSTR 10, SIMGEOM 9, SIMNTWRK 3, SIMUTIL 5, SimTransit 1, every batch
+   verified against the binary before merging) and 4 by hand, because the gzcom session flagged
+   them as the ones most likely to bear on `city_write.py`. **None of those four is a serialiser**
+   — see the S1 precision note in `GATE_RESCOPE.md`. Re-measure with `scope_toolkit.py`; do not
+   quote 562.
+
+   *Previous reading, kept for the trail:* RE-OPENED at 530 of 562 = 94.3%, 32 left to read.
 
    > **The warning below fired.** A vtable-seeded re-analysis pass added 12,529 previously
    > invisible `FUN_*` bodies across all 28 non-exe binaries (catalogue §11f). Re-running

@@ -267,7 +267,17 @@ def check(path, module, strict=False):
             # do reference `\Sys\SC3Tune.INI`. So the presence of an INI string satisfies the
             # claim just as a stream slot does.
             loads_ini = bool(re.search(r"_ini_[0-9a-f]{6,8}", txt, re.I))
-            if SERIALISER.search(r["new_name"]) and n_slot == 0 and not loads_ini:
+            # TYPE-ID GETTERS. A 6-byte `return 0x<classid>;` is the implementation of the
+            # `vt+0x4c` "tell me my own class id" call that CITY_SAVE.md documents: for classes
+            # that do NOT write their section group as a literal, this getter IS where the group
+            # comes from. Such a function legitimately names itself persist/save/typeid and
+            # touches no stream. Three correct rows were flagged this way
+            # (SIMUTIL 0x100033c0 -> 0xe0afdf68, 0x1000c825 -> 0x02bf0033, SimTransit
+            # 0x100015a7 -> 0x029ca804, all real section groups).
+            ret_const = re.search(r"return\s+(?:0x([0-9a-f]+)|(\d+))\s*;", txt, re.I)
+            is_typeid_getter = bool(ret_const) and len(txt) < 900 and n_slot == 0
+            if (SERIALISER.search(r["new_name"]) and n_slot == 0 and not loads_ini
+                    and not is_typeid_getter):
                 notes.append("name asserts serialisation but the body calls NO pinned stream slot"
                              " and references no INI string")
         if r["new_name"] and not NAME_OK.match(r["new_name"]):

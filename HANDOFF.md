@@ -5,34 +5,34 @@
 **End-state: a MODDING / FORMAT TOOLKIT.** Decided 2026-08-17; the source-port option is
 **closed** (`ROADMAP.md`, P1 gate).
 
-**⭐⭐ P1 CRITERION 2 IS MET (2026-08-17): 530 / 530 = 100% of the toolkit-necessary set at
-≥ C2.** Re-scoped on the owner's call the same day (from ≥C1 across all 9,575 core-sim
-functions) and then finished: 301 functions read in 17 delegated clusters over two rounds, every
-one verified against the binary before merging. The old form (≥C1
-across all 9,575 core-sim functions, 24.1%) is **retired — stop quoting it.** P1 is met except
-this one criterion.
+**⭐⭐ P1 CRITERION 2 IS MET (2026-08-17): 562 / 562 = 100% of the toolkit-necessary set at
+≥ C2.** Re-scoped on the owner's call that morning (from ≥C1 across all core-sim functions), closed
+at 530/530, RE-OPENED at 530/562 when a concurrent session's vtable carve grew the set, and closed
+again. 333 functions read in 22 delegated clusters plus 4 read by hand, every batch verified
+against the binary before merging.
 
 The set is derived from the binary, not chosen: pinned GZCOM stream-slot users, section-TYPE
 literal writers, functions naming a class id that occurs as a section `group`, and `.INI`
-loaders. 513 = 5.4% of the core-sim set, **recall 50/50 = 100%** against the unrelated
-`find_section_producers.py`, and threshold-insensitive (119–427 to read across a 6x range).
+loaders. 562 of 14,671 core-sim functions = 3.8%, **recall 50/50 = 100%** against the unrelated
+`find_section_producers.py`, and threshold-insensitive across a 6x range of its one threshold.
 Re-measure, never quote: `py -3.12 re/scripts/scope_toolkit.py [--validate|--todo <MODULE>]`.
 Analysis and the four options considered: `re/analysis/GATE_RESCOPE.md`.
 
 **Criterion 1 is MET again too (38,092 rows), so the whole P1 gate now holds.** It went stale
 mid-session when the exports were regenerated; `enumerate_functions.py` added the **129** missing
 `FUN_` rows (SIMRCI 90, SIMMISC 39) and a direct check finds **0 unenumerated `FUN_` bodies across
-all 30 binaries**. Criterion 2 was unaffected — none of the 129 is a toolkit-set member, and the
-set still reads 530/530.
+all 30 binaries**. Criterion 2 was unaffected — none of the 129 is a toolkit-set member.
 
 > ⚠️ **I first reported that gap as 271 and it was wrong.** My check matched `'_FUN_' in
 > filename`, which also matches `thunk_FUN_*`; 142 were thunks, which the criterion excludes.
 > `enumerate_functions.py --dry-run` said 129, my grep said 271, and **the loose instrument was
 > mine.** The earlier commit message carries the 271 figure uncorrected — this is the correction.
 
-⚠️ **"Met" means met AT THAT MEASUREMENT.** The toolkit set is derived from the export and grew
-513 → 530 while the reading ran, because the exports were regenerated mid-session. A re-export
-can add members, so re-run `scope_toolkit.py` rather than quoting 530. Why C2 rather than C1: 1,473 of the old count were
+⚠️ **"Met" means met AT THAT MEASUREMENT, and it has already been proved twice today.** The set is
+derived from the export and moved **513 → 530 → 562** in one day as exports were regenerated and a
+vtable carve landed. Criterion 2 was closed at 530/530, re-opened at 530/562, and closed again. A
+re-export can add members, so **re-run `scope_toolkit.py` rather than quoting 562**.
+Why C2 rather than C1: 1,473 of the old count were
 `classify_families.py` regex labels with nothing read, and only **839** core-sim functions had
 ever actually been read. The set shrank 19x and the bar went up a notch.
 
@@ -44,13 +44,11 @@ pwsh -NoProfile -File re\scripts\delegate_cluster.ps1 -Module SIMRCI -RvaFile sl
 `-RvaFile` is new; the size heuristic is no longer the only selector, and the gate no longer asks
 for the sub-100-byte tail that heuristic was down to.
 
-**Cluster 4 (SIMRCI, 25 rows) is merged and it is the template for the remaining ~9 runs:**
-delegate → `re/scripts/verify_worker_rows.py <out> <MODULE>` → merge only what survives →
-hand-read every flag. All 25 rows passed; three produced findings recorded in `CITY_SAVE.md`
-(a mechanical witness on the `0x16` tile value, a THIRD independent copy of the frame reader at
-SIMRCI `0x1003fb73`, and field-for-field confirmation of the `u16`-permutation reader
-`0x1004350e`). Two rows collided with the concurrent session's unverified C3 rows and the merge
-kept C3 — so two toolkit-set functions now count as done on evidence nobody has checked.
+**The loop that closed the gate, and the one to reuse:** `scope_toolkit.py --todo <M>` →
+`delegate_cluster.ps1 -RvaFile` → `verify_worker_rows.py` → merge **only at zero flags** →
+hand-read every flag. 22 clusters, 333 functions. Three batches were held back on flags and
+re-read or hand-checked rather than merged, and that is the part that matters: one batch had
+placeholder names (`sc3_dstr_classA_shutdown`) and came back correct on the re-read.
 
 **`verify_worker_rows.py` is new and it is not optional.** `merge_worker_module.py` scrubs leaks
 and caps C3+, but checks no claim. The verifier resolves every cited constant against the body
@@ -58,12 +56,11 @@ and caps C3+, but checks no claim. The verifier resolves every cited constant ag
 serialisation name to be backed by a stream slot or an INI string, and rejects hedging words.
 Calibrate before trusting it: on the already-merged `SIMRCI_CLUSTER3.md` it flags 4 of 25.
 
-> ⚠️ **A CONCURRENT SESSION IS WRITING `functions.csv`.** During 2026-08-17 it added 127
-> `[GZ-IID]` annotation rows and then **17 rows at C3**, and that shifted a gate number between
-> two runs of the same script (SIMRCI 57 → 55 to read). Nothing was lost — row count is
-> unchanged at 36,790 and my merges preserved its notes — but this file is supposed to have a
-> single writer, and **C3 means behaviour confirmed by runtime, a second witness or data-file
-> validation**, so those 17 rows should be checked against the binary before they are trusted.
+> ⚠️ **THREE SESSIONS SHARE THIS WORKING COPY. Read `SESSIONS.md` before writing a tracker.**
+> It records who owns what and seven rules agreed between them. The C3 rows the gzcom session
+> wrote were **audited and are sound** — two `VtableDump` runs confirmed the slot mappings
+> exactly, so no downgrade. `functions.csv` grew 36,790 → 50,621 rows during the day from that
+> session's carve and enumeration, with 0 rows lost and 0 downgraded (checked at every merge).
 
 **⭐ DONE 2026-08-17 — the city-save WRITER round-trips shipped `.sc3` files BYTE-IDENTICALLY,
 59/59 at every layer.** The toolkit branch's first deliverable, and it passed the sprite bar.
