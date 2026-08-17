@@ -1191,7 +1191,41 @@ Three things follow:
    **bytes** from it. `[UNCERTAIN]` — that mismatch is unexplained and may be the same thread as
    the missing ~138 bytes.
 
-### 🔴 A CONTRADICTION, stated rather than resolved
+### ✅ CONTRADICTION RESOLVED — and it was my own reading error `[CONFIRMED @0x10031c85:166]`
+
+The loader **does** read the sub-object. It is an `if/else`, and I only listed one arm:
+
+```c
+else {
+  cVar4 = (*(code *)**(undefined4 **)((int)this + 0x268))(param_1, local_c);   // SLOT 0
+  if (cVar4 != '\0') cVar3 = (**(code **)(*local_c + 0x38))((int)this + 0x260);
+}
+```
+
+`(*(code *)**(undefined4 **)(this + 0x268))` is **slot 0** of the object at `this+0x268` — and
+`VtableDump` on `PTR_FUN_1004d2bc` already showed **slot 0 = `FUN_1004350e` (271 bytes)**
+alongside **slot 1 = `FUN_1004361d` (260 bytes)**. Slot 0 reads, slot 1 writes. They are a
+mirror pair after all.
+
+**Why I missed it:** my call-listing regex matched `(**(code **)(*x + 0xNN))(` — the form with an
+explicit slot offset. A slot-0 call has no `+ 0xNN` and is written `(*(code *)**(...))(`, so it
+never appeared in the list I compared against the saver. **The asymmetry I reported was an
+artefact of how I extracted the calls, not a property of the code.**
+
+Three claims made earlier today are therefore **withdrawn**:
+
+- ~~"The saver and loader are NOT mirrors at the tail."~~ They are, via slot 0 / slot 1.
+- ~~"The `u16` permutation is written but never read back."~~ It is read back.
+- ~~"Regenerable scheduling state a toolkit does not need."~~ Unsupported — it is loaded.
+
+The `u16` data being a permutation still stands; that came from the bytes, not from this.
+
+What is genuinely new and survives: the tail is a **conditional**. One arm reads the sub-object
+from the stream; the other (the arm I had read) **recomputes** the 23-entry slot histogram at
+`this+0x3c` by walking the loaded grid. `[UNCERTAIN]` what selects between them — most likely a
+version or presence flag, and that is the thing to read next.
+
+### 🔴 The contradiction as it stood before the resolution above
 
 The base reader `FUN_1001b4b4` consumes exactly `rowCount * rowBytes` `[CONFIRMED @0x1001b4b4]`
 — `this+4` rows of `this+8` bytes, no more. Combined with everything else now pinned, the two
