@@ -1725,3 +1725,65 @@ Also merged, and relevant to the section directory: `0x1003dd02` / `0x1003db69` 
 **save/load mirror pair** on stream slots `+0x88/+0x68/+0x78` against `+0x38/+0x18/+0x28`, and
 `0x100194cf` is confirmed as the **LandfillZoneDeveloper ctor reading `\Sys\SC3Tune.INI`** — the
 same identification this document derived from the registration table, reached independently.
+
+---
+
+# ⭐ THE EDITING API: `re/tools/city_write.py`
+
+Added 2026-08-17, the layer above the writer. `city_roundtrip.py` proved the pipeline is
+reversible; this turns that into an API that changes something decoded and emits a valid file.
+
+```python
+from city_write import City
+c = City.load("Cities/Berlin, Germany.sc3")
+c.n                     # 256 -- from the SIMGEOM tile-grid section, isqrt(size - 16)
+c.declared_slots()      # {1,2,3,5,6,7,9,10,11,14,15,17} -- this city's own developer slots
+c.zone_get(10, 20)      # the tile's zone-developer slot index
+c.zone_set(10, 20, 17)  # Landfill
+c.save("out.sc3")
+```
+
+## What it proves, measured
+
+| check | result |
+|---|---|
+| `--selftest`: load → save with **no edits**, all 59 shipped files | **59/59 byte-identical** |
+| offsets **recomputed** from scratch rather than reused | still 59/59 — the shipped sections really do tile contiguously from offset 8 |
+| a two-tile edit on Berlin, re-read from the written file by a fresh parse | both tiles read back as set; **exactly 2 raster bytes differ**; **one section's bytes changed**, the zone layer |
+| the edited file through the independent `city_roundtrip.py` | **L0–L4 all PASS** — it is well-formed by every offline check |
+
+Offset recomputation is what makes editing possible: a section that changes length shifts every
+later one, and the section table has to be rebuilt. That it still reproduces all 59 shipped files
+exactly is the check on it, not an assumption. The edited Berlin came out 781,814 bytes against
+781,807 — QFS compresses the changed body slightly differently, and both header length fields are
+recomputed from what was actually emitted.
+
+## Only the zone raster is editable, on purpose
+
+`zone_set` refuses anything the evidence does not support:
+
+- the loader's own bound, tile values `< 0x17` `[CONFIRMED @0x10031c85:144-163]`;
+- **and** slots this city actually declares — each non-NULL slot of the 23-slot table has its own
+  4-byte section with `instance == slot + 1`, so the file states its own occupied set. A raster
+  byte is an index into that table, so an undeclared slot has no developer behind it.
+
+Everything else is exposed as raw section bytes, because nothing else has a decoded per-field
+meaning yet.
+
+## The limits, stated because a working writer invites over-claiming
+
+1. **No modified city file has ever been loaded by the game.** 59/59 byte-identical round-trip is
+   a statement about the container, not about whether the sim accepts edited contents. Every claim
+   above is an offline structural one.
+2. **No checksum is known — which is not the same as there being none.** The 24-byte header holds
+   two length fields and no checksum, and the archive has none. A validity check inside a section
+   would be invisible to this tool.
+3. **The `u16` permutation is left alone.** Editing the raster does not touch the `N*N` distinct
+   `u16`s in the zone section's tail, and whether the two must agree is `[UNCERTAIN]` (`U-029`).
+4. **Derived state is not recomputed.** The loader can rebuild the 23-entry slot histogram itself
+   (that is its failure path), but RCI demand, land value and everything else downstream of zoning
+   are untouched.
+
+> Berlin's raster carries **4,921 tiles of value `0x16`** — the value no file declares as a slot
+> and that `FUN_10032ca9` clears to 0. So it is not rare, which makes "transient marker state"
+> more interesting rather than less. `zone_set` will not write it.
