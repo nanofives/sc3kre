@@ -139,3 +139,45 @@ weaker than the current gate in the only dimension a format cares about. C keeps
 
 If A is adopted, the follow-on is mechanical: `scope_toolkit.py --list <MODULE>` emits the RVAs,
 which is exactly the input `delegate_cluster.ps1` takes.
+
+---
+
+## ⚠️ S1's precision is now MEASURED on a sample, and it is not 100%
+
+This document has always said the set's precision was unmeasured and that the true set is
+therefore likely **smaller** than the headline number. On 2026-08-17 that stopped being a caveat
+and became a measurement, because four members were read by hand.
+
+The gzcom session flagged four of the post-carve additions as "S1 serialisers" most likely to bear
+on the city-save writer: SIMGEOM `0x1000d290`, `0x1000d950`, `0x1000fc80`, `0x10010220`. The
+orchestrator read three of them in full rather than delegating, precisely because they were said to
+touch the writer. **None of the three is a serialiser:**
+
+| RVA | what it actually is | why S1 fired |
+|---|---|---|
+| `0x1000fc80` | **grid-iterator region setup** — clamps a rect to the grid and installs an iteration-state object `[CONFIRMED @0x1000fc80]` | its `param_1[2]` grid exposes **extent accessors** at `vt+0x14` / `vt+0x18`, the same offsets as the pinned stream read slots |
+| `0x1000d950` | **GZCOM message dispatcher** on two ids (`0xC35EE786`, `0xA36CF3D1`), setting two flag bytes `[CONFIRMED @0x1000d950]` | `vt+0x38` on a service, colliding with the pinned stream `read u32` slot |
+| `0x10010220` | reads **one grid cell** via the cell-map getter and gates on `{0, 0x16}` `[CONFIRMED @0x10010220]` | `vt+0x34` is the cell-map getter here, not a stream raw-block read |
+
+`0x1000d290` (1,427 bytes) was **not** read and is deliberately left C0 rather than labelled from
+its slot histogram.
+
+**What this does and does not change.**
+
+- It does **not** invalidate the gate. S1 was always a *candidate* filter with 100% recall against
+  an independent method, and the gate asks for those candidates to be **read** — which is exactly
+  what happened here. Reading a function and finding it is not a serialiser is the criterion
+  working, not failing.
+- It does mean the honest statement is now stronger than "precision unmeasured": **three of three
+  hand-read S1-only members from the post-carve batch were false positives for "serialiser"**, and
+  all three for the same reason — vtable slot offsets are not unique to the stream interface. The
+  grid/cell-map interface shares `+0x14`, `+0x18`, `+0x34` and `+0x38` with it.
+- The sample is biased and that is worth saying: these four were newly carved by a vtable sweep, so
+  they skew toward small helpers reached only through vtables. The 530 read earlier were selected by
+  size within the same criteria and included the genuine serialiser pairs
+  (`--validate` recall 50/50 = 100% still holds).
+
+**If S1 is ever tightened**, the fix is visible from these three: require the object whose slot is
+called to be one that was QI'd for the stream IID `0x199627`, rather than trusting the offset. That
+is more work than a text sweep supports, which is why the current form is a candidate filter and
+why the gate says "read them" instead of "trust them".

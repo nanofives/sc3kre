@@ -1956,3 +1956,35 @@ having no INI name, unlike R/C/I/Landfill).
 One worker reading is recorded as theirs, not verified here: that the recurring
 `local_8._0_1_ = 0x16` in the INI loaders is a **C++ exception-unwind scope byte**. It is
 certainly not a grid write (those functions call no setter), which is the part that matters.
+
+### A THIRD consumer of `0x16`, and it is outside SIMRCI `[CONFIRMED @0x10010220]`
+
+Found while hand-reading the post-carve additions to the toolkit set. **SIMGEOM** `FUN_10010220`
+reads a single grid cell through the cell-map getter and gates on it:
+
+```c
+(**(code **)(**(int **)(param_1 + 0x10) + 0x34))(x, y, apiStack_c);   // cell-map GET
+if ((cVar1 != '\0') && (cVar1 != '\x16')) { ... }                      // {0, 22} treated alike
+```
+
+So a second module tests the raster value 22, and it pairs it with **0** rather than with the
+commercial slots. That is now the third independent consumer and the pattern across all of them is
+consistent:
+
+| site | what it does with 22 |
+|---|---|
+| SIMRCI `0x10032ca9` | **clears** it to 0 over the whole grid, in mode 1 |
+| SIMRCI `0x100015ab` | accepts it alongside `{0, 1, 5, 9}` — zero plus each class's first slot |
+| SIMRCI `0x1003547c` | gives it the **same display colour** as 16, another undeclared value |
+| SIMGEOM `0x10010220` | treats `{0, 22}` as the pair to skip |
+
+**`22` keeps behaving like a second kind of "empty".** Normalised to 0 by one path, grouped with 0
+by another, coloured like another undeclared value by a third, and covering large contiguous
+regions bordered by unzoned land (the neighbour analysis above). That is a *better* fit for
+"reserved / vacant / not-yet-developed" than for a seaport or airport, and it is now a competing
+reading of the `[iOS-HINT]` name list rather than a confirmation of it.
+
+`[UNCERTAIN]` still — no producer has been found, and nothing names it. Two limits on the above:
+Ghidra lost register tracking inside `0x10010220` (`unaff_ESI` / `unaff_EDI`), so the coordinate
+operands are not legible, and "behaves like empty" is an inference from four consumers rather than
+a statement any single one of them makes.
