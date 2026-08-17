@@ -46,8 +46,54 @@ assessment below recommended.** The old text is preserved further down as the re
 3. UI / audio / tooling / framework modules: **"enumerated, unclassified" is acceptable** — 16
    modules, 20,670 functions, no per-function requirement.
 4. Subsystem map committed to `re/analysis/SUBSYSTEMS.md`. ✅ MET.
-5. **End-state decision (port vs toolkit) taken.** ❌ **STILL OPEN** — the owner's call. The
-   evidence is assembled below and has not changed.
+5. **End-state decision (port vs toolkit) taken.** ✅ **MET — 2026-08-17. The end-state is a
+   MODDING / FORMAT TOOLKIT.** Owner's call. See below.
+
+### ⭐ END-STATE DECIDED: modding / format toolkit (2026-08-17)
+
+**The source-port option is closed.** Not deferred — closed. Anyone reopening it should have to
+argue against the evidence here, not merely prefer it.
+
+*Why not a port:* 31,991 functions across 31 interdependent GZCOM binaries, with the simulation
+spread over eleven of them. At the honest current rate that surface is not reimplementable by
+one person, and nothing found since has changed that arithmetic.
+
+*Why a toolkit is reachable now:* the format layer is not a plan, it is working code.
+
+| format | status |
+|---|---|
+| QFS / RefPack | **C4**, 63,691/63,691 streams round-trip |
+| sprite pixel + anchor | **C4**, 62,552/62,552 re-encode **byte-identical** |
+| `.IXF` GZ segment | **C4** round-trip |
+| `SYS.PAK` | parsed, 51 ini files |
+| **city save family** | **59/59** — container, 24-byte header, QFS, section archive, per-section frame, **all 44 section groups traced to their serialisers**, zone layer decoded to tile level |
+| FEZC / GVF (iOS) | parsed |
+
+The content is also overwhelmingly **data-driven** — `U-006` proved there are no per-building
+classes in code, and `SC3Tune.INI` / `SYS.PAK` drive the taxonomy — so a toolkit reaches real
+modding capability without reimplementing the sim.
+
+**What this changes about the remaining RE work.** The annotate-first goal stands, but the
+*purpose* of further function analysis is now narrower: read what a toolkit needs, not
+everything. Concretely, deprioritise anything that only matters to a reimplementation
+(per-tick sim math, render internals, UI behaviour) unless it blocks a format.
+
+**P1's gate criterion 2 (≥C1 across the eleven core-sim modules, currently 24.0%) should be
+re-examined against this decision** — a toolkit does not obviously need all 9,575. That is a
+follow-on scoping question, not a reason to hold the gate open.
+
+**Toolkit scope, as the evidence currently supports it:**
+
+1. **Read/inspect** every shipped format — done, `re/tools/`.
+2. **Round-trip write** for the formats already proven reversible (QFS, sprites, `.IXF`).
+3. **City-save editing** — the reachable new capability: the section directory is fully mapped
+   and the zone layer decodes to per-tile developer slots.
+4. **Asset extraction/replacement** — 63,691 sprites already decode and re-encode identically.
+
+`[UNCERTAIN]` city-save **writing** is not yet demonstrated. Reading 59/59 is not the same as
+producing a file the game accepts, and the zone section still has semantic unknowns (the `u16`
+permutation's purpose, the `3000/5000/8000` keys). A save-writer round-trip is the first thing
+the toolkit phase should prove.
 
 **The core-sim set and where it stands** (measured 2026-08-16 from `functions.csv`):
 
@@ -227,8 +273,15 @@ Isometric renderer, tool & menu UI, the news/advisor event system, audio.
 **Exit:** S-DoD per subsystem.
 
 ### P6 — Close (annotate-first) / branch to chosen end-state
-Either declare P-DoD (annotation complete) or, if the P1 gate chose it, open a
-source-port / toolkit sub-roadmap seeded by the mapped surface.
+**Branch chosen 2026-08-17: the modding / format TOOLKIT.** The source-port option is closed
+(see the P1 gate). P6 is now: declare P-DoD for the annotation that a toolkit needs, and open a
+toolkit sub-roadmap.
+
+**First deliverable of the toolkit branch, and it is a falsifiable one:** a **city-save
+writer** that round-trips a shipped `.sc3` byte-identically. Everything else in the toolkit
+rests on that; until it passes, "the city save is solved" means solved for *reading* only.
+The precedent to match is the sprite work — 62,552/62,552 byte-identical re-encode is what
+"solved" looked like there.
 
 ## Sizing reality check
 4,932 C0 functions; the game-logic core is a subset. No prior exe RE exists for SC3, so
