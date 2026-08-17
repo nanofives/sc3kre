@@ -1220,10 +1220,30 @@ Three claims made earlier today are therefore **withdrawn**:
 
 The `u16` data being a permutation still stands; that came from the bytes, not from this.
 
-What is genuinely new and survives: the tail is a **conditional**. One arm reads the sub-object
-from the stream; the other (the arm I had read) **recomputes** the 23-entry slot histogram at
-`this+0x3c` by walking the loaded grid. `[UNCERTAIN]` what selects between them — most likely a
-version or presence flag, and that is the thing to read next.
+#### What selects the two arms: it is a FAILURE FALLBACK, not a version flag `[CONFIRMED @0x10031c85:139-140]`
+
+```c
+if ((cVar4 == '\0') ||                                            // any earlier read failed
+    (cVar3 = (**(code **)(*local_c + 0x34))((int)this + 0x3c, 0x17), cVar3 == '\0')) {
+    ... recompute the 23-entry histogram by walking the loaded grid ...
+} else {
+    ... (*(code *)**(this + 0x268))(param_1, stream)   // read the sub-object
+}
+```
+
+`cVar4` is the running success flag threaded through every preceding read, and the block C read
+is performed **inside the condition itself**. So:
+
+- **Normal path:** block C (23 bytes) is consumed, then the sub-object is read, then the six
+  `u32`s — exactly the saver's order, fully mirrored.
+- **Failure path:** if any earlier read failed, or block C fails, the loader **rebuilds the slot
+  histogram from the already-loaded grid** rather than trusting the file.
+
+So the recount is **graceful degradation**, not a format variant. The histogram at `this+0x3c`
+is derived data the loader can always reconstruct, which is why it is safe to fall back on.
+
+That closes the tail: the serialiser **is** a mirror pair on the normal path, and the earlier
+"asymmetry" was entirely an artefact of my call extraction plus reading only the fallback arm.
 
 ### 🔴 The contradiction as it stood before the resolution above
 
