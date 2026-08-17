@@ -315,6 +315,12 @@ enumerated (met), **≥ C1 across the eleven core-sim modules** (5.9%, the open 
 tooling left unclassified by design, subsystem map committed (met), end-state decision taken
 (open). The literal "100% of `FUN_*` at ≥ C1" wording is **retired** — do not measure against it.
 
+> ⚠️ **P2 – P5 BELOW ARE SUPERSEDED (2026-08-17).** They were written for annotate-first with a
+> possible source port. The port is closed and P1 is exited, so the binding roadmap is **T1 – T3**
+> at the end of this file. These four sections are kept for the format/subsystem detail inside
+> them, which is still accurate, and for the record of how the scope was reached. **Do not treat
+> their exit criteria as gates.**
+
 ### P2 — Asset & data formats
 Reverse the on-disk formats with round-trip parsers: city save format, the `.dat`/library
 archives, graphics/sprite format, audio, and the `Scripts\`/`Apps\`/`Buildings\` data.
@@ -389,7 +395,60 @@ round-trips shipped `.sc3` files **byte-identically, 59/59 at all five layers** 
 Scope limit on record: section payloads are re-emitted verbatim, so this is an
 **edit-and-rewrite** pipeline, not city authoring from scratch.
 
-**Next in the toolkit branch, unranked until the owner calls it:**
+---
+
+## ⭐⭐ THE BINDING ROADMAP AFTER P1: T1 → T2 → T3 (adopted 2026-08-17)
+
+Owner's call, from the analysis in `re/analysis/POST_P1.md`. P1 is exited; these three gates
+replace P2 – P5. They are in **dependency order** and each has a measurable exit.
+
+### T1 — PROVE THE WRITE PATH  ◀ ACTIVE, and blocked on nobody having tried it
+
+**Exit: the game loads a file this project wrote, and shows the edit.**
+
+Everything the toolkit claims about writing is structural: 59/59 byte-identical round-trip, an
+edit landing exactly where intended, all five layers verified. **No file we produced has ever
+been in front of the game.** That single untested claim sits under every other toolkit result.
+
+The test is built and waiting: `verify/city_load_test/`, four files, one variable each
+(untouched copy, byte-identical rewrite, same-content-different-bytes recompression, one tile
+changed), with the meaning of every outcome committed to in the README **before** the run. Costs
+minutes from whoever runs the game. The harness session has been asked.
+
+*If T3 of that ladder fails*, the editing API needs a checksum or derived-state fix, and T2/T3
+below change shape — which is exactly why this gate is first.
+
+### T2 — EXPOSE THE FORMATS AS A LIBRARY
+
+**Exit, measurable: every format with a proven write path has (a) a documented read AND write
+entry point in `re/tools/`, outside any test harness, and (b) a `--selftest` that round-trips the
+shipped corpus and reports `N/N`.**
+
+The concrete debt: the `.IXF` container writer currently lives inside `city_roundtrip.py`, a test
+harness, rather than in `ixf_parse.py`. `qfs_encode`, `sprite_encode` and `city_write` need a
+consistent surface. This is packaging, not discovery — the hard parts are done and proven.
+
+### T3 — DEMONSTRATE A MOD END TO END
+
+**Exit: one change, made with these tools, visible in the running game.**
+
+`U-006` established the content is data-driven (no per-building classes in code; `SC3Tune.INI` and
+`SYS.PAK` drive the taxonomy), so the highest-value target is a tunable or an asset rather than a
+save edit. `[UNCERTAIN]` whether `SYS.PAK` needs a writer at all, or whether the game reads loose
+files that shadow the archive — untested, and the only genuine unknown left in the three gates.
+
+### Not on the roadmap, deliberately
+
+- **Reading more functions.** Criterion 2 defined what a toolkit needs and it is met at 562/562.
+  The next function read should be one a *specific* task demands, not a coverage number. The 78%
+  of `functions.csv` still at C0 is the design, not debt — see `POST_P1.md`.
+- **`0x16`.** The most interesting open question in the city-save format, and it blocks nothing:
+  `city_write.py` refuses to write it and every shipped file round-trips with it intact.
+- **`U-029`, `U-039`.** Both preserved verbatim by the writer. Neither gates T1, T2 or T3.
+
+---
+
+**Earlier notes from the toolkit branch, superseded by T1 – T3 above:**
 1. An editing API over the writer (`re/tools/city_write.py`): mutate a decoded field — the zone
    raster is the obvious first target, one byte per tile — and emit a file the game loads. The
    round-trip proves the container survives; **that a MODIFIED file loads is a separate claim and

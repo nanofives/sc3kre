@@ -1,7 +1,12 @@
 # POST_P1.md — P1 is exited. What the next gate should be.
 
-**Status: PROPOSAL, awaiting the owner's call.** `ROADMAP.md` records that P1's five criteria hold;
-nothing below has been adopted. Measured 2026-08-17.
+**Status: ⭐ ADOPTED 2026-08-17 (owner's call).** T1 → T2 → T3 are now the binding roadmap after
+P1 and are recorded as such in `ROADMAP.md`, which also marks the old P2 – P5 annotate-first phases
+superseded. This file remains the analysis behind that decision. Measured 2026-08-17.
+
+**T1 is ACTIVE and is blocked on one thing: nobody has put a file we wrote in front of the game.**
+`verify/city_load_test/` is built and waiting; the harness session (the only one running the game)
+has been asked.
 
 ## P1 exit: all five criteria hold, verified now rather than quoted
 
@@ -39,7 +44,7 @@ measuring against a gate that was retired for good reasons (`GATE_RESCOPE.md`).
 by the game.** Everything above is a structural result. `verify/city_load_test/` holds a four-file
 ladder built to settle it, and it needs someone running the game.
 
-## The proposal: three gates, in dependency order
+## The three gates, in dependency order (ADOPTED)
 
 ### T1 — PROVE THE WRITE PATH (the falsifiable one)
 

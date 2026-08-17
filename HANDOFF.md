@@ -5,6 +5,37 @@
 **End-state: a MODDING / FORMAT TOOLKIT.** Decided 2026-08-17; the source-port option is
 **closed** (`ROADMAP.md`, P1 gate).
 
+## ⭐⭐ P1 IS EXITED. THE ROADMAP IS NOW T1 → T2 → T3 (adopted 2026-08-17)
+
+All five P1 criteria hold, each re-measured on the day: 0 unenumerated `FUN_` bodies across 30
+binaries, **562/562 = 100%** of the toolkit-necessary set at ≥ C2, UI/framework
+enumerated-unclassified by design, subsystem map committed, end-state decided. The old
+annotate-first phases **P2 – P5 are superseded**. Analysis: `re/analysis/POST_P1.md`.
+
+**T1 — PROVE THE WRITE PATH. ◀ ACTIVE, and it is the first thing to do.**
+Exit: *the game loads a file this project wrote, and shows the edit.* Everything the toolkit
+claims about writing is structural — 59/59 byte-identical round-trip, an edit landing exactly
+where intended — and **no file we produced has ever been in front of the game.** That one
+untested claim sits under every other toolkit result.
+The test is built: `verify/city_load_test/`, four files, one variable each, with every outcome's
+meaning committed to in the README **before** the run. Minutes of work for whoever runs the game.
+The harness session has been asked and has not answered yet.
+
+**T2 — EXPOSE THE FORMATS AS A LIBRARY.** Exit: every proven-write format has a documented
+read+write entry point outside a test harness, plus a `--selftest` reporting `N/N` over the
+shipped corpus. Concrete debt: the `.IXF` container writer lives inside `city_roundtrip.py`.
+Packaging, not discovery.
+
+**T3 — DEMONSTRATE A MOD END TO END.** Exit: one change made with these tools, visible in the
+running game. Target a tunable or an asset (`U-006`: the content is data-driven).
+`[UNCERTAIN]` whether `SYS.PAK` needs a writer or whether loose files shadow it — the only real
+unknown left in the three gates.
+
+> **`functions.csv` is 78% C0 and that is the DESIGN, not debt.** Criterion 3 keeps whole module
+> families unclassified deliberately, and criterion 2 replaced "read everything" with "read what
+> touches a shipped byte" — 562 functions did that. Do not re-derive the 78% as a backlog against
+> a gate that was retired for good reasons (`GATE_RESCOPE.md`).
+
 **⭐⭐ P1 CRITERION 2 IS MET (2026-08-17): 562 / 562 = 100% of the toolkit-necessary set at
 ≥ C2.** Re-scoped on the owner's call that morning (from ≥C1 across all core-sim functions), closed
 at 530/530, RE-OPENED at 530/562 when a concurrent session's vtable carve grew the set, and closed
