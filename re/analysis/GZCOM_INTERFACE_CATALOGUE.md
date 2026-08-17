@@ -1694,3 +1694,87 @@ looked like an unqualified success.
 The bulk scan was expected to name U-044's remaining IID by matching the ≥82-slot arity vector of the class
 replicated across six modules (§16b). It did not: no target class produced a hit in those six vtables. Combined
 with 18c's false-negative, that is weak evidence rather than a negative result, so U-044 stays `narrowed`.
+
+---
+
+## 19. Making T1 testable unattended — a spec, not a change
+
+T1 (does the game load a file we wrote?) is currently blocked on needing a human click. This section supplies
+the RVAs and the exact harness changes required, and deliberately stops short of making them: `re/harness/src/`
+belongs to the windowed-mode session, and any edit there means rebuilding `re/harness/bin/sc3launch.exe`, a
+binary all three sessions depend on. `re/harness/` is also gitignored (`.gitignore:45 /re/*`), so a trace table
+dropped in it could not be committed anyway.
+
+### 19a. Why the existing tables cannot do it
+
+`sc3probe.c` rebases each table against a fixed module:
+
+```
+-fnlog   -> fnlog_load(path, GetModuleHandleA(NULL), 0x400000, "SC3U")   line 3395
+-gzlog   -> GetModuleHandleA("GZGraphicD.dll")                            line 3268
+```
+
+The city-load path is in **SIMCITY.DLL**, so neither table can rebase it. That is the blocker, not a missing
+address.
+
+### 19b. Change 1 — one line, gives "was our file opened at all"
+
+`-filetrace` already IAT-hooks `CreateFileA` **and** `GetFileAttributesA` on SC3U.exe. Its filter
+(`sc3probe.c` line 414) is:
+
+```c
+return n && (ci_contains(n, "SC3Tune") || ci_contains(n, ".PAK") || ci_contains(n, "\Sys\\"));
+```
+
+Adding the city-save extensions makes every open of a city file visible, with the returned handle logged:
+
+```c
+return n && (ci_contains(n, "SC3Tune") || ci_contains(n, ".PAK") || ci_contains(n, "\Sys\\")
+          || ci_contains(n, ".sc3") || ci_contains(n, ".sct")
+          || ci_contains(n, ".snr") || ci_contains(n, ".st3"));
+```
+
+This alone is worth having: if the load dialog header-reads each city to display its name, then merely
+*opening* the dialog exercises our file's container parse, and the trace shows whether the open succeeded.
+
+### 19c. Change 2 — a per-module table, gives unattended accept/reject
+
+Generalise the table loader to take a module name, e.g. `-modlog SIMCITY.DLL <table>` calling
+`fnlog_load(path, GetModuleHandleA("SIMCITY.DLL"), 0x10000000, "SIMCITY")`. Then this table answers T1 without
+any UI interaction, because a load either reaches these functions and returns true or it does not:
+
+```
+# cSC3City load/save path -- SIMCITY.DLL, image base 0x10000000
+# vtable 0x10013260, slot numbers from GZCOM_INTERFACE_CATALOGUE.md section 13
+0x10003b8b  city_init_dbsegment      # slot   7  Init(cIGZDBSegment*)  <-- THE LOAD ENTRY
+0x1000429d  city_save_dbsegment      # slot   8  Save(cIGZDBSegment*)
+0x10007b28  city_do_load_city        # slot  48  DoLoadCity(bool)      <-- user-initiated load
+0x10007a6d  city_do_new_city         # slot  47  DoNewCity(bool)       # control: distinguishes load from new
+0x1000ebe6  city_do_save_city        # slot  49  DoSaveCity(bool)
+0x10004e30  city_shutdown            # slot   9  Shutdown
+0x10008d90  city_can_city_save       # slot 148  CanCitySave
+```
+
+And the per-layer deserialisers, which is where a bad payload would actually be rejected. All named by this
+session, so each already has a `functions.csv` row:
+
+```
+# SIMRCI.DLL   base 0x10000000
+0x1002e887  valvelayer_init_dbsegment   # cISC3CityLayer slot 9 on cSC3ValveLayer (section 7)
+0x100314f0  zonelayer_init_attach       # the zone layer's load path (section 8)
+0x100320e7  zonelayer_save
+# SIMDIRT.DLL  base 0x10000000
+0x1002046c  <vtable>                    # cSC3DirtBag, slot 9 = Init(City*,DBSegment*) (section 14)
+```
+
+**The read to make:** with the edited file loaded, `city_init_dbsegment` and every per-layer
+`*_init_dbsegment` should hit once and the run should reach `SimulationBegin`. A file the loader rejects will
+show `city_do_load_city` hit with `city_init_dbsegment` either absent or followed immediately by
+`city_shutdown`.
+
+### 19d. Do not repeat the mistake this session nearly made
+
+Whoever runs this must use `harness_run.ps1` with `-Runs 3` or more. §T1 in `POST_P1.md` records a first run
+that FAILED and a control that PASSED back to back, which reads as "the game rejects our file" and is **wrong**
+— repeating gave 3/3 PASS and the FAIL was a U-032 transient. A single run is not evidence, and this is the
+domain where that rule has already produced one false negative in one afternoon.
