@@ -42,7 +42,10 @@ assessment below recommended.** The old text is preserved further down as the re
 
 1. **Every `FUN_*` in all 31 binaries enumerated in `functions.csv`.** ✅ **MET** — 31,991 rows,
    done by `re/scripts/enumerate_functions.py`.
-2. **≥ C1 for every function in the core-sim modules.** ❌ **NOT MET — 568 of 9,575 = 5.9%.**
+2. **≥ C1 for every function in the core-sim modules.** ❌ **NOT MET — 2,299 of 9,575 = 24.0%**
+   (this line read "568 / 5.9%" until 2026-08-17; that figure predated the `classify_families.py`
+   merges and the per-module table in `HANDOFF.md` is the current one). **This criterion is due a
+   re-scope against the toolkit end-state** — see the note below the END-STATE block.
 3. UI / audio / tooling / framework modules: **"enumerated, unclassified" is acceptable** — 16
    modules, 20,670 functions, no per-function requirement.
 4. Subsystem map committed to `re/analysis/SUBSYSTEMS.md`. ✅ MET.
@@ -85,17 +88,24 @@ follow-on scoping question, not a reason to hold the gate open.
 **Toolkit scope, as the evidence currently supports it:**
 
 1. **Read/inspect** every shipped format — done, `re/tools/`.
-2. **Round-trip write** for the formats already proven reversible (QFS, sprites, `.IXF`).
+2. **Round-trip write** for the formats proven reversible: QFS (**both directions now**, the
+   compressor transcribed from GZResourceD `FUN_1001694d`), sprites, `.IXF`, and the **city save
+   family — 59/59 byte-identical end to end** (2026-08-17).
 3. **City-save editing** — the reachable new capability: the section directory is fully mapped
    and the zone layer decodes to per-tile developer slots.
 4. **Asset extraction/replacement** — 63,691 sprites already decode and re-encode identically.
 
-`[UNCERTAIN]` city-save **writing** is not yet demonstrated. Reading 59/59 is not the same as
-producing a file the game accepts, and the zone section still has semantic unknowns (the `u16`
-permutation's purpose, the `3000/5000/8000` keys). A save-writer round-trip is the first thing
-the toolkit phase should prove.
+~~`[UNCERTAIN]` city-save **writing** is not yet demonstrated.~~ **DEMONSTRATED 2026-08-17: the
+writer round-trips all 59 shipped city-family files byte-identically at every layer**
+(`re/tools/city_roundtrip.py`, and the QFS compressor transcribed from GZResourceD
+`FUN_1001694d`). Two things that claim does NOT cover, kept explicit: a **modified** file has not
+been fed to the game, and the zone section still has semantic unknowns (the `u16` permutation's
+purpose, the `3000/5000/8000` keys — `U-029`).
 
-**The core-sim set and where it stands** (measured 2026-08-16 from `functions.csv`):
+**The core-sim set and where it stands.** ⚠️ **THE TABLE BELOW IS SUPERSEDED** — it is the
+early-2026-08-16 snapshot (568 / 5.9%), taken before the `classify_families.py` merges. The
+current per-module figures are **2,299 / 9,575 = 24.0%** in `HANDOFF.md`; use that one. Kept here
+only so the "9,007 remaining / ~360 runs" reasoning below stays readable.
 
 | module | backlog | ≥C1 | % | remaining |
 |---|---|---|---|---|
@@ -277,11 +287,24 @@ Isometric renderer, tool & menu UI, the news/advisor event system, audio.
 (see the P1 gate). P6 is now: declare P-DoD for the annotation that a toolkit needs, and open a
 toolkit sub-roadmap.
 
-**First deliverable of the toolkit branch, and it is a falsifiable one:** a **city-save
-writer** that round-trips a shipped `.sc3` byte-identically. Everything else in the toolkit
-rests on that; until it passes, "the city save is solved" means solved for *reading* only.
-The precedent to match is the sprite work — 62,552/62,552 byte-identical re-encode is what
-"solved" looked like there.
+**First deliverable of the toolkit branch — ✅ MET 2026-08-17.** The **city-save writer**
+round-trips shipped `.sc3` files **byte-identically, 59/59 at all five layers** (container,
+24-byte record header, section archive, QFS, whole file with lengths recomputed):
+`re/tools/city_roundtrip.py`. The QFS compressor turned out to be *in the game* — GZResourceD
+`FUN_1001694d` — so it was transcribed rather than inferred (`re/tools/qfs_encode.py`,
+`formats/QFS.md`). That matches the sprite precedent (62,552/62,552).
+
+Scope limit on record: section payloads are re-emitted verbatim, so this is an
+**edit-and-rewrite** pipeline, not city authoring from scratch.
+
+**Next in the toolkit branch, unranked until the owner calls it:**
+1. An editing API over the writer (`re/tools/city_write.py`): mutate a decoded field — the zone
+   raster is the obvious first target, one byte per tile — and emit a file the game loads. The
+   round-trip proves the container survives; **that a MODIFIED file loads is a separate claim and
+   has not been tested.**
+2. Apply the same layered round-trip to the other write-capable formats (`.IXF`, `SYS.PAK`).
+3. `U-029` semantics (the `u16` permutation's purpose, the `3000/5000/8000` keys, the
+   `this+0x3c` 23-vs-92-byte mismatch).
 
 ## Sizing reality check
 4,932 C0 functions; the game-logic core is a subset. No prior exe RE exists for SC3, so

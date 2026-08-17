@@ -309,3 +309,67 @@ The encoder `FUN_100017de` writes every header field, which names them:
 The encoder also re-confirms the geometry independently: it allocates
 `(width+1)*height*2 + 0x10` (16-byte header, 2 bytes per pixel) and walks the row table with
 `local_2c = 0x10` incremented by `8` per row.
+
+---
+
+## ⭐ THE COMPRESSOR IS IN THE GAME — and it re-encodes shipped streams byte-identically
+
+Found 2026-08-17 while building the city-save writer. This document (and `qfs.py`) had only ever
+covered the **decompressor**. The encoder is in **GZResourceD.dll** and a straight transcription
+of it reproduces **59 of 59 shipped city-family QFS streams byte for byte**.
+
+| function | size | role | evidence |
+|---|---|---|---|
+| `0x100168cb` | 82 B | header + dispatch: writes `0x10FB` (2 B, big-endian) then the uncompressed size (3 B), calls the encoder with window `0x20000`, returns `len + 5` | `[CONFIRMED @0x100168cb]` |
+| `0x1001694d` | 906 B | **the encoder** | `[CONFIRMED @0x1001694d]` |
+| `0x10016cd7` | 40 B | match length: plain byte-by-byte compare, capped | `[CONFIRMED @0x10016cd7]` |
+| `0x1001691d` | 48 B | store an `n`-byte big-endian integer | `[CONFIRMED @0x1001691d]` |
+| `0x100161fa` / `0x10015e6c` | 91 / 910 B | a **second copy** of the same pair (same `0x40000`/`0x80000` allocations, same `0x1ffff` window, same `0x404`/`0x403`/`0x43`/`0x3fff` caps), with the quality flag hardcoded to 1. Not diffed line by line | `[CONFIRMED @0x10015e6c]` |
+
+### The encoder, as transcribed `[CONFIRMED @0x1001694d]`
+
+```
+hash table   malloc(0x40000)  = 65,536 u32 slots, all 0xFFFFFFFF
+chain        malloc(0x80000)  = 131,072 u32 slots, indexed by  position & 0x1FFFF
+hash(p)      (p[1] << 4) ^ ((p[0] << 8) | p[2])      -- 3 bytes; naturally < 0x10000
+window       positions >= pos - 0x1FFFF
+match cap    min(0x404, bytesRemaining)              -- 1028
+```
+
+**Selection is by NET GAIN, not by match length.** A candidate replaces the incumbent only when
+
+```
+matchLen - tokenCost  >  bestLen - bestCost          starting from bestLen = bestCost = 2
+tokenCost = 2 if (off-1 < 0x400 and len < 0x0B)      -- the 2-byte form
+            3 if (off-1 <= 0x3FFF and len <= 0x43)   -- the 3-byte form
+            4 otherwise                              -- the 4-byte form
+```
+
+so a **shorter match in a cheaper token legitimately wins**. The chain is walked to the window
+edge with **no depth limit**, and the search breaks early only after accepting a match longer
+than `0x403`. A match is emitted only if `bestLen > bestCost`; otherwise the byte is a literal.
+
+The `quick` flag (the encoder's `param_5`, set by `0x100168cb` from its `param_4`):
+
+| value | chain insertion | result on Berlin |
+|---|---|---|
+| **1** | only the match's first position | **743,382 bytes = the shipped stream exactly** |
+| 0 | every position the match covers | 708,199 bytes — smaller, and NOT what shipped |
+
+**So the shipped city files were written with `quick = 1`**, and that is a measurement, not a
+preference: `quick = 0` compresses 4.7% better and diverges at byte 50.
+
+> ⚠️ **This was nearly written up as "byte-identical QFS is unattainable".** A probe of the
+> shipped streams (`qfs_encode.py --probe`) showed the encoder choosing the longest available
+> match only **82.0%** of the time and the nearest such offset **67.8%** — which reads exactly
+> like an unreproducible search heuristic, and that conclusion was one step away from being
+> recorded. It was wrong: the deviation was **the probe having no cost model**, not the encoder
+> being unknowable. What broke the deadlock was a question, not a measurement — *the game writes
+> `.sc3` files, so where is its compressor?* Looking for the code beat inferring the behaviour.
+
+Tool: `re/tools/qfs_encode.py` — `--tokens` (disassemble a stream), `--probe` (measure the
+original's choices), `--compress` (re-encode and diff).
+
+```
+py -3.12 re/tools/qfs_encode.py "Cities" --compress     ->  59/59 byte-identical
+```

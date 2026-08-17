@@ -7,8 +7,35 @@
 eleven core-sim modules, currently **2,299 / 9,575 = 24.0%** — and that criterion should itself
 be re-examined now that the end-state is a toolkit.
 
-**Next deliverable, deliberately falsifiable: a city-save WRITER that round-trips a shipped
-`.sc3` byte-identically.** Reading 59/59 is not writing. Match the sprite bar (62,552/62,552).
+**⭐ DONE 2026-08-17 — the city-save WRITER round-trips shipped `.sc3` files BYTE-IDENTICALLY,
+59/59 at every layer.** The toolkit branch's first deliverable, and it passed the sprite bar.
+
+```
+py -3.12 re/tools/city_roundtrip.py "Cities"
+L0 container 59/59 · L1 record 59/59 · L2 archive 59/59 · L3 QFS 59/59 · L4 whole file 59/59
+```
+
+Every layer is re-emitted **from parsed structure**, nothing copied through, and L4 recomputes
+both length fields from the bytes it emitted. Full write-up: `formats/CITY_SAVE.md` ("THE WRITER")
+and `formats/QFS.md`.
+
+**The expected blocker was not one. The QFS COMPRESSOR is in the game** — GZResourceD
+`FUN_1001694d` via `FUN_100168cb` `[CONFIRMED]`, transcribed in `re/tools/qfs_encode.py`, and it
+reproduces all 59 shipped streams exactly. It selects matches by **net gain**
+(`matchLen - tokenCost`), not by length, and the shipped files used its `quick = 1` mode
+(`quick = 0` compresses 4.7% better and is therefore provably not what shipped).
+
+> **The method lesson is the transferable part.** A probe of the shipped streams measured the
+> encoder taking the longest available match only 82.0% of the time and the nearest such offset
+> 67.8% — which looks precisely like an unreproducible heuristic, and "byte-identical QFS is
+> unattainable, here is the weaker bar" was one step from being written down. It was wrong: the
+> probe had no cost model. What broke it was a question rather than a measurement — *the game
+> writes `.sc3` files, so where is its compressor?* **Before concluding a behaviour cannot be
+> reproduced, check whether the code that produces it shipped.**
+
+**Scope limit, stated plainly:** section payload bytes are re-emitted verbatim, so this is an
+**edit-and-rewrite** pipeline (parse, change bytes at a decoded offset, emit a valid file), not
+authoring a city from scratch — that would mean reimplementing the layer savers.
 
 **The city save is READ-solved.** Container, 24-byte header, QFS, section archive, per-section
 frame, **all 44 section groups traced to their serialisers**, map dimension `N` readable, zone
@@ -431,8 +458,12 @@ open lists at the foot of each analysis doc.
 > **OPEN ITEMS, ranked.** (1) the save writer above; (2) `U-029` semantics — what the `u16`
 > per-tile permutation is for, what the `c1` keys `3000/5000/8000` index, and a `this+0x3c`
 > 23-byte-vs-92-byte mismatch; (3) re-scope core-sim ≥C1 against the toolkit decision;
-> (4) `re/analysis/LAUNCH_CONTROL.md` has an uncommitted edit predating the last two sessions —
-> ask before touching it.
+> (4) **windowed mode — ROOT CAUSE now found** (`LAUNCH_CONTROL.md` §16-§21, `U-039`): windowed
+> surfaces are created 32bpp while the engine renders 16bpp, so 16bpp output never lands in the
+> presented surfaces (black client). One defect also explains U-024 and U-025. Two fixes landed
+> in the harness (`-nokeysrc` clears a 100%-failing `DDBLT_KEYSRCOVERRIDE`; U-033 path bug), but
+> both are in `re/harness/src`, which is gitignored. Cheap confirmation pending: set the desktop
+> to 16bpp and launch windowed. LAUNCH_CONTROL.md is uncommitted (§16-§21 added this session).
 >
 > **ASK ME** rather than deciding: whether to exclude `re/harness` (1.2 GB of regenerable
 > framebuffer BMPs) from `backup.ps1`, and whether to rewrite the public repo's history.

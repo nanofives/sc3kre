@@ -1585,3 +1585,74 @@ write order → that section's layout.
 py -3.12 re/tools/city_parse.py "Cities"                    # validate every city file
 py -3.12 re/tools/city_parse.py "Cities\X.sc3" --extract out\   # dump decompressed payloads
 ```
+
+---
+
+# ⭐⭐ THE WRITER: a shipped `.sc3` round-trips BYTE-IDENTICALLY, 59/59
+
+Landed 2026-08-17. This was the toolkit branch's first deliverable and the bar was deliberately
+falsifiable: reading 59/59 is not writing, and the precedent to match was the sprite work
+(62,552/62,552 byte-identical re-encode). **It passes at every layer.**
+
+Tool: `re/tools/city_roundtrip.py`. Each layer is re-emitted **from parsed structure** — no layer
+is allowed to copy its own input through — and diffed against the shipped bytes:
+
+| layer | what is rebuilt | result |
+|---|---|---|
+| **L0** container | `.IXF` magic + every index slot + payloads at their offsets | **59/59** |
+| **L1** record | the 24-byte payload header from its parsed fields | **59/59** |
+| **L2** archive | the body from the section table: count, table offset, payloads, 16-byte entries | **59/59** |
+| **L3** QFS | the compressed stream, re-encoded by the transcribed GZResourceD encoder | **59/59** |
+| **L4** whole file | sections -> body -> QFS -> header -> record -> container, lengths **recomputed** | **59/59** |
+
+```
+py -3.12 re/tools/city_roundtrip.py "Cities"
+L0 59/59  L1 59/59  L2 59/59  L3 59/59  L4 59/59   byte-identical
+```
+
+**L4 is the claim that matters.** It recomputes `compressedLength` (both copies of it) and
+`uncompressedLength` from the bytes it actually emitted rather than echoing the parsed header, so
+the header, the compressor and the archive layout are all being tested at once against 59 files.
+
+## The QFS compressor was the expected blocker and it is not one
+
+`re/tools/qfs.py` decompressed but no byte-identical compressor had ever been demonstrated, and
+the expectation going in was that one might be unreachable. **It is in the game**: GZResourceD
+`FUN_1001694d`, reached through `FUN_100168cb`, transcribed in `re/tools/qfs_encode.py`. Full
+detail — the hash/chain structures, the net-gain selection rule and the `quick = 1` finding — is
+in `formats/QFS.md`. The short version: the game writes `.sc3` files, so a compressor had to
+exist, and finding it beat inferring it.
+
+## Two container facts the writer needed, both measured
+
+**1. Type `0x2026960B` payloads are `4 + size` bytes, not `size`** `[CONFIRMED, 59/59]`. For
+localized-string records the index `size` field is the **string length**, and the payload on disk
+is `u32 length + chars`. Measured on 110 such records across the 13 `.SNR` files: the `u32` at the
+payload start equals `size` in every one, and `offset + 4 + size` is exactly the next record's
+offset. Reading only `size` bytes truncates the last four characters of every string — `"Maxis"`
+becomes `"M"`, `"Blazej Stompel"` becomes `"Blazej Stom"`. Every other type stores exactly `size`.
+
+> This surfaced as 13 files failing L0 at a "4-byte gap between payloads", and the gap bytes were
+> ASCII (`axis`, `mpel`) — the tails of the strings. Worth noting how it was nearly misread: the
+> driver's output column was too narrow, so `FAIL @941` printed as `FAIL @94`, which pointed into
+> the index instead of into the payload region. The column is now wide enough to never clip a
+> verdict. **A truncated diagnostic is a wrong diagnostic.**
+
+**2. Container slack, and unreferenced tail data** `[CONFIRMED, 59/59]`:
+
+- **Reserved index slots**: 0 or 20,200–20,280 bytes of zeros, all-zero in all 59 files.
+- **Mid-file slack**: one all-zero region per `.SNR` (20,200 bytes, after the `0x23dfae5f` record).
+- **Unreferenced tail**: **7 of the 13 `.SNR` files carry 51–63,586 bytes past the last indexed
+  payload, ~96–98% non-zero**, with **no** deleted (`0xFFFFFFFF`) slots pointing at it. The index
+  does not reference it, so the game never reads it, but a byte-identical writer must preserve it.
+  `[UNCERTAIN]` what it is — the shape fits stale bytes from an earlier, larger version of the
+  file left behind by an in-place rewrite, but no code has been read for it. See `U-039`.
+
+## The honest scope limit
+
+`build_body` re-emits the section archive from the parsed table with **each section's payload bytes
+verbatim**. It does not re-serialise a section's contents from decoded sim state, and it could not:
+that would mean reimplementing the layer savers. So what is demonstrated is an
+**edit-and-rewrite pipeline** — parse a city, change bytes at a decoded offset, emit a valid file —
+in which everything untouched reproduces exactly. That is what a modding toolkit needs. It is not
+a claim that a city can be authored from scratch.
