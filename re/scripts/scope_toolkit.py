@@ -189,6 +189,23 @@ def main(argv):
             print("  -> the instrument is incomplete; do not quote the sizes below it.")
         return 1 if miss else 0
 
+    if "--todo" in argv:
+        # The gate's actual work list: toolkit-set members still C0. Format is one RVA per line
+        # with a trailing comment, which delegate_cluster.ps1 -RvaFile consumes directly.
+        i = argv.index("--todo")
+        mods = [argv[i + 1]] if len(argv) > i + 1 and not argv[i + 1].startswith("-") else sorted(CORE)
+        n = 0
+        for mod in mods:
+            todo = sorted(r for r in sets[mod] if conf.get((mod, r), "C0") == "C0")
+            if not todo:
+                continue
+            print("# %s -- %d toolkit-set functions still C0" % (mod, len(todo)))
+            for rva in todo:
+                print("%s  # %s" % (rva, ",".join(sorted(sets[mod][rva]))))
+            n += len(todo)
+        print("# total: %d" % n)
+        return 0
+
     if "--list" in argv:
         mod = argv[argv.index("--list") + 1]
         for rva, tags in sorted(sets[mod].items()):

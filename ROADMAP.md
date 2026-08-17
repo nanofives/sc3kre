@@ -42,10 +42,33 @@ assessment below recommended.** The old text is preserved further down as the re
 
 1. **Every `FUN_*` in all 31 binaries enumerated in `functions.csv`.** ✅ **MET** — 31,991 rows,
    done by `re/scripts/enumerate_functions.py`.
-2. **≥ C1 for every function in the core-sim modules.** ❌ **NOT MET — 2,299 of 9,575 = 24.0%**
-   (this line read "568 / 5.9%" until 2026-08-17; that figure predated the `classify_families.py`
-   merges and the per-module table in `HANDOFF.md` is the current one). **This criterion is due a
-   re-scope against the toolkit end-state** — see the note below the END-STATE block.
+2. **⭐ RE-SCOPED 2026-08-17 (owner's call): ≥ C2 across the TOOLKIT-NECESSARY set — 513
+   functions, not 9,575.** ❌ **NOT MET — 251 of 513 = 48.9%, 262 left to read.**
+
+   The old form of this criterion (*"≥ C1 for every function in the eleven core-sim modules"*,
+   2,312 / 9,575 = 24.1%) is **retired** — do not measure against it. It was written while the
+   end-state was undecided; the end-state is a toolkit, and a toolkit does not need the 7,263
+   remaining functions, 71% of which are sub-100-byte accessors.
+
+   **The set is defined by measurement, not by judgement**, and is re-derivable at any time:
+   `re/scripts/scope_toolkit.py`. Four criteria — pinned GZCOM stream-slot users (349), section
+   TYPE literal writers (138), functions naming a class id that occurs as a section `group` (95),
+   `.INI` loaders (71). Union 513 = 5.4% of the core-sim set. **Recall against
+   `find_section_producers.py`, an unrelated method: 50/50 = 100%**, and the answer holds across
+   a 6x range of the one threshold it has (119–427 to read at min-slot-calls 2..12).
+
+   **Why C2 and not C1:** C1 can be a regex label — 1,473 of the old count were exactly that,
+   written by `classify_families.py` with nothing read. A format needs the decompilation read, so
+   the set shrank 19x and the bar went up one notch. Only 839 core-sim functions had ever been
+   read at all.
+
+   Full analysis, the four options considered and their costs: `re/analysis/GATE_RESCOPE.md`.
+   Work list: `scope_toolkit.py --todo <MODULE>` feeds `delegate_cluster.ps1 -RvaFile`.
+
+   > The **513** is binary-derived and stable. The **262 to read** is tracker-derived and moves as
+   > functions are classified — re-measure it with the script rather than quoting this line.
+   > Precision of the set is explicitly NOT measured (a slot offset only means "stream" if the
+   > object is one), so the true set is likely smaller than 513, never larger.
 3. UI / audio / tooling / framework modules: **"enumerated, unclassified" is acceptable** — 16
    modules, 20,670 functions, no per-function requirement.
 4. Subsystem map committed to `re/analysis/SUBSYSTEMS.md`. ✅ MET.

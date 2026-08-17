@@ -10,14 +10,26 @@
 
   Requires $env:REPO_FLEET_DELEGATE (a headless read-only Claude runner); see HANDOFF.md.
 
+  SIZE IS NO LONGER THE ONLY SELECTOR. P1 gate criterion 2 was re-scoped on the owner's call
+  (2026-08-17) to ">= C2 across the 513-function TOOLKIT-NECESSARY set" -- see
+  re/analysis/GATE_RESCOPE.md. Use -RvaFile to drive a slice from that set instead of by size:
+
+    py -3.12 re\scripts\scope_toolkit.py --todo SIMRCI > slice.txt
+    pwsh -NoProfile -File re\scripts\delegate_cluster.ps1 -Module SIMRCI -RvaFile slice.txt
+
+  The size heuristic is nearly exhausted anyway (HANDOFF.md: ~71% of the remaining C0 rows are
+  under 100 bytes), and the gate no longer asks for those.
+
   Usage:
     pwsh -NoProfile -File re\scripts\delegate_cluster.ps1 -Module SIMRCI -Top 25
     pwsh -NoProfile -File re\scripts\delegate_cluster.ps1 -Module SIMMISC -Top 20 -DryRun
+    pwsh -NoProfile -File re\scripts\delegate_cluster.ps1 -Module SIMRCI -RvaFile slice.txt
 #>
 param(
   [Parameter(Mandatory = $true)][string]$Module,
   [int]$Top = 25,
   [string]$Hint = "",
+  [string]$RvaFile = "",
   [switch]$DryRun
 )
 $ErrorActionPreference = "Stop"
@@ -37,9 +49,29 @@ $all = Import-Csv (Join-Path $Root "functions.csv")
 # Match the module case-insensitively -- the tracker mixes SIMRCI.DLL / SimTransit.dll styles.
 $mine = $all | Where-Object { $_.module -ieq $modName }
 if (-not $mine) { throw "no rows for module '$modName' in functions.csv" }
-$c0 = $mine | Where-Object { $_.confidence -eq "C0" -and $_.size -match '^\d+$' } |
-      Sort-Object { [int]$_.size } -Descending | Select-Object -First $Top
-if (-not $c0) { throw "$modName has no sized C0 rows left" }
+$c0all = $mine | Where-Object { $_.confidence -eq "C0" -and $_.size -match '^\d+$' }
+if ($RvaFile) {
+  if (-not (Test-Path $RvaFile)) { throw "RvaFile not found: $RvaFile" }
+  # One RVA per line (0x...); blank lines and #-comments ignored, so scope_toolkit.py --todo
+  # output can be piped straight in.
+  $want = @{}
+  Get-Content $RvaFile | ForEach-Object {
+    $t = $_.Trim()
+    if ($t -and -not $t.StartsWith("#")) { $want[($t -split '\s+')[0].ToLower()] = $true }
+  }
+  if ($want.Count -eq 0) { throw "RvaFile '$RvaFile' contained no RVAs" }
+  $c0 = $c0all | Where-Object { $want.ContainsKey($_.rva.ToLower()) } |
+        Sort-Object { [int]$_.size } -Descending | Select-Object -First $Top
+  # Report the shortfall rather than silently sending a short slice: an RVA in the file that is
+  # not a C0 row here is either already read or not in this module, and both are worth seeing.
+  $matched = ($c0 | Measure-Object).Count
+  Write-Host "RvaFile: $($want.Count) RVAs requested, $matched are C0 rows in $modName (slice capped at $Top)."
+  $selector = "the $matched functions from the toolkit-necessary set (P1 gate criterion 2, re-scoped)"
+} else {
+  $c0 = $c0all | Sort-Object { [int]$_.size } -Descending | Select-Object -First $Top
+  $selector = "the $Top largest C0 functions in this module"
+}
+if (-not $c0) { throw "$modName has no sized C0 rows left matching the selection" }
 
 $done = ($mine | Where-Object { $_.confidence -ne "C0" }).Count
 $left = ($mine | Where-Object { $_.confidence -eq "C0" }).Count
@@ -58,11 +90,11 @@ $ctx
 CRITICAL SETUP FACTS:
 - ``re/$dir/functions/`` EXISTS with $count exported bodies. Grep it directly; do NOT trust directory listings and do NOT report the exports as missing.
 - YOU CANNOT WRITE FILES (Read/Grep/Glob only). Do NOT return NEEDS_EXECUTION. Return everything as MARKDOWN INLINE in your final message.
-- Module status: $done functions classified, **$left still C0**. This task covers the $Top largest of those C0 functions ($('{0:N0}' -f $bytes) bytes of code).
+- Module status: $done functions classified, **$left still C0**. This task covers $selector ($('{0:N0}' -f $bytes) bytes of code).
 
 RULES (non-negotiable): NO-GUESSING. Only what the decompilation literally shows. Never "probably/likely/seems/appears". Cite [CONFIRMED @ 0xADDR] for every constant, offset and formula. Unknown meaning -> give the raw hex. Unknown purpose -> describe mechanically (reads X, calls Y, writes Z). Uncertain -> [UNCERTAIN] + exactly what evidence is missing. An honest "not determined" beats a plausible guess; claims are checked against the binary.
 
-## THE SLICE — the $Top largest C0 functions in this module
+## THE SLICE — $selector
 
 $list
 

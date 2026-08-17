@@ -1,7 +1,17 @@
 # GATE_RESCOPE.md — re-scoping P1 criterion 2 against the toolkit end-state
 
-**Status: PROPOSAL, awaiting the owner's call.** Nothing in `ROADMAP.md` has been changed on the
-strength of this document. Measured 2026-08-17 by `re/scripts/scope_toolkit.py`.
+**Status: ⭐ ADOPTED 2026-08-17 (owner's call) — OPTION A is now P1 gate criterion 2.**
+`ROADMAP.md` has been updated: the gate is **≥ C2 across the 513-function toolkit-necessary set**,
+currently 251/513 = 48.9%, 262 left to read. The old form (≥ C1 across all 9,575) is retired.
+Measured by `re/scripts/scope_toolkit.py`.
+
+> ⚠️ **The tracker moved while these numbers were being taken.** A concurrent session wrote 17 new
+> **C3** rows into `functions.csv` mid-measurement, which shifted SIMRCI's remaining count from 57
+> to 55 between two runs of the same script. The **513** is binary-derived and stable; every count
+> derived from `functions.csv` is a snapshot. Re-run the script rather than quoting a figure here.
+> Those 17 C3 rows are also worth a look on their own: C3 in this project means behaviour
+> confirmed by runtime observation, a second witness or data-file validation, and the project rule
+> is to verify worker claims against the binary before trusting them.
 
 ## The question
 
@@ -108,7 +118,7 @@ across lines and the script's `\s` spans newlines. The narrow instrument was the
 
 | | gate | cost | what it guarantees |
 |---|---|---|---|
-| **A** | **≥ C2 across the 513-function toolkit set**; the rest of core-sim drops to "enumerated" like the UI/framework tier | **262 reads** (~11 cluster runs of 25) | every function that touches a shipped byte or names a section has been *read*. Directly underwrites the toolkit end-state |
+| **A** ⭐ **ADOPTED** | **≥ C2 across the 513-function toolkit set**; the rest of core-sim drops to "enumerated" like the UI/framework tier | **262 reads** (~11 cluster runs of 25) | every function that touches a shipped byte or names a section has been *read*. Directly underwrites the toolkit end-state |
 | B | ≥ C1 across the toolkit set only | 262 rows, but C1 accepts a regex label | cheapest, and weakest — C1 does not mean anyone read it, which is exactly what a format needs |
 | C | leave criterion 2 as written | 7,263 | completeness over the core-sim set, most of it sub-100-byte accessors irrelevant to a toolkit |
 | D | A as the binding gate, plus "≥ C1 across all core-sim" kept as a non-blocking stretch | 262 to pass, 7,263 to finish | passes the gate on capability without discarding the wider goal |

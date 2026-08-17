@@ -3,9 +3,39 @@
 ## ⭐ WHERE THE PROJECT IS
 
 **End-state: a MODDING / FORMAT TOOLKIT.** Decided 2026-08-17; the source-port option is
-**closed** (`ROADMAP.md`, P1 gate). **P1's gate is met except criterion 2** — ≥C1 across the
-eleven core-sim modules, currently **2,299 / 9,575 = 24.0%** — and that criterion should itself
-be re-examined now that the end-state is a toolkit.
+**closed** (`ROADMAP.md`, P1 gate).
+
+**⭐ P1 criterion 2 was RE-SCOPED 2026-08-17 (owner's call). The gate is now ≥ C2 across the
+513-function TOOLKIT-NECESSARY set — 251/513 = 48.9%, 262 left to READ.** The old form (≥C1
+across all 9,575 core-sim functions, 24.1%) is **retired — stop quoting it.** P1 is met except
+this one criterion.
+
+The set is derived from the binary, not chosen: pinned GZCOM stream-slot users, section-TYPE
+literal writers, functions naming a class id that occurs as a section `group`, and `.INI`
+loaders. 513 = 5.4% of the core-sim set, **recall 50/50 = 100%** against the unrelated
+`find_section_producers.py`, and threshold-insensitive (119–427 to read across a 6x range).
+Re-measure, never quote: `py -3.12 re/scripts/scope_toolkit.py [--validate|--todo <MODULE>]`.
+Analysis and the four options considered: `re/analysis/GATE_RESCOPE.md`.
+
+Two numbers behave differently and it matters: **513 is stable** (binary-derived); **262 is a
+snapshot** (tracker-derived). Why C2 rather than C1: 1,473 of the old count were
+`classify_families.py` regex labels with nothing read, and only **839** core-sim functions had
+ever actually been read. The set shrank 19x and the bar went up a notch.
+
+The work list feeds the existing delegation path directly:
+```
+py -3.12 re\scripts\scope_toolkit.py --todo SIMRCI > slice.txt
+pwsh -NoProfile -File re\scripts\delegate_cluster.ps1 -Module SIMRCI -RvaFile slice.txt
+```
+`-RvaFile` is new; the size heuristic is no longer the only selector, and the gate no longer asks
+for the sub-100-byte tail that heuristic was down to.
+
+> ⚠️ **A CONCURRENT SESSION IS WRITING `functions.csv`.** During 2026-08-17 it added 127
+> `[GZ-IID]` annotation rows and then **17 rows at C3**, and that shifted a gate number between
+> two runs of the same script (SIMRCI 57 → 55 to read). Nothing was lost — row count is
+> unchanged at 36,790 and my merges preserved its notes — but this file is supposed to have a
+> single writer, and **C3 means behaviour confirmed by runtime, a second witness or data-file
+> validation**, so those 17 rows should be checked against the binary before they are trusted.
 
 **⭐ DONE 2026-08-17 — the city-save WRITER round-trips shipped `.sc3` files BYTE-IDENTICALLY,
 59/59 at every layer.** The toolkit branch's first deliverable, and it passed the sprite bar.
