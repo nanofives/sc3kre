@@ -461,11 +461,20 @@ That leaves **two routes to T3, and only one of them is new format work:**
 
 | route | what it needs | cost |
 |---|---|---|
-| **A — write the archive** | a `SYS.PAK` writer; `syspak_parse.py` is read-only today | a new format to prove byte-identically, the same bar the others met |
+| **A — write the archive** ✅ **BUILT 2026-08-17** | done: `syspak_parse.py` `build()` / `replace_member()` / `roundtrip()`, `--selftest` **byte-identical, 51 members, 272,507 bytes** | the bar the other formats met, now met here too |
 | **B — use the documented fallback** | extract all 51 members to `Apps\Sys\`, move `SYS.PAK` aside | **no new format work at all** — it is the shipped code path |
 
 Route B is not a trick; it is the loader's own behaviour. It is also the honest first thing to try,
 because it tests the fallback claim above with a modification the game itself supports.
+
+**Route A is now built, so T3 no longer depends on which answer the runs give.** The writer
+rebuilds the shipped archive byte-identically, and `replace_member()` was checked the same way a
+city edit was: swapping one value in `SC3Tune.ini` produces an archive of **identical length**
+that re-parses to 51 members, with **exactly one member's content changed** and every other member
+byte-identical. A ready-to-stage modified archive sits in `verify/loose_file_test/SYS.PAK.modified`.
+
+What remains for T3 is unchanged and is not a format problem: **one change, made with these tools,
+observed in the running game.**
 
 ### Not on the roadmap, deliberately
 
