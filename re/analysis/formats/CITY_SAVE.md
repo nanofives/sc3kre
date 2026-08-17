@@ -1787,3 +1787,172 @@ meaning yet.
 > Berlin's raster carries **4,921 tiles of value `0x16`** — the value no file declares as a slot
 > and that `FUN_10032ca9` clears to 0. So it is not rare, which makes "transient marker state"
 > more interesting rather than less. `zone_set` will not write it.
+
+---
+
+# ⭐ Chasing the `0x16` producer (2026-08-17): six new facts, and one reading FALSIFIED
+
+`0x16` (22) has been the raster's open question since the layer was decoded: present in the
+raster, grouped with commercial by the reader `0x1001deca`, declared as a slot by no shipped
+file. It is not a rounding artefact — **Berlin carries 4,921 of them**, so it was worth chasing.
+
+The producer was **not** found. What was found is a much tighter box around it, plus a
+falsification.
+
+## 1. Nothing in any shipped binary writes the literal 22 into the raster `[CONFIRMED, exhaustive]`
+
+The cell-map setter's call shape is known from `FUN_10032ca9`: a local is assigned, then passed
+**by address** as the third argument of vtable slot `+0x3c`:
+
+```c
+local_6 = 0;
+(**(code **)(*(int *)this + 0x3c))(row, col, &local_6);
+```
+
+Sweeping **all 30 binaries** for a local assigned 22 — in all three spellings Ghidra uses,
+`'\x16'` / `0x16` / decimal `22` — and then passed by address to a `+0x3c` call gives **zero
+hits**. So the value is not written as a literal through that path anywhere. It is computed, or
+it arrives by a route this shape does not cover (a bulk row write, or an authoring tool).
+
+## 2. It exists only where there is zoning `[CONFIRMED, 59/59]`
+
+| family | files | files with `0x16` | total `0x16` tiles |
+|---|---|---|---|
+| `.sct` terrain | 21 | **0** | **0** |
+| `.sc3` saved city | 15 | 14 | 27,222 |
+| `.snr` scenario | 13 | 13 | 20,498 |
+| `.st3` starter town | 10 | 10 | 965 |
+
+**Every one of the 21 bare terrains has none.** In developed cities it is **8–20% of all
+non-zero raster tiles** (Berlin 4,921 of 24,555 = 20.0%). A useful consistency check fell out:
+`Fall of the Wall.SNR` and `Berlin, Germany.sc3` report *identical* counts (4,921 / 24,555), as
+do `Rags To Riches.SNR` and `Madrid, Spain.sc3` — the scenarios are built from those cities.
+
+## 3. ⚠️ It is NOT another commercial zone — the spatial evidence contradicts that `[FALSIFIED]`
+
+This document has carried the reader's grouping (`0x1001deca` puts `0x16` in the same branch as
+5/6/7/0xe) with a warning that "the grouping is one reader's behaviour, not necessarily the
+tile's identity". That caution was right. Neighbour analysis on Berlin, 19,668 neighbour samples:
+
+| class | share of all tiles | share of `0x16`'s neighbours | enrichment |
+|---|---|---|---|
+| **`0x16`** | 7.51% | **64.34%** | **8.57x** |
+| unzoned | 62.53% | 29.13% | 0.47x |
+| Residential | 13.71% | 3.43% | 0.25x |
+| Commercial | 8.10% | 1.95% | **0.24x** |
+| Industrial | 6.11% | 0.97% | 0.16x |
+| Landfill | 1.10% | 0.14% | 0.13x |
+
+`0x16` is **8.57x enriched next to itself** and **depleted next to every declared zone class**,
+commercial included. Horizontal runs: 1,746 of them, mean 2.82, **max 36**. So it forms its own
+large contiguous regions bordered mostly by empty land — which is not how a commercial density
+variant would be laid out (that would interleave with 5/6/7). **The "another commercial zone"
+reading is dead**; what survives is only that one reader dispatches it down the commercial branch.
+
+## 4. The slot table is SIX GROUPS OF FOUR, and `0x16` is in the one nobody registers
+
+Laying the 23 slots out in fours explains the NULL pattern exactly:
+
+| group | slots | declared |
+|---|---|---|
+| 0 | 0,1,2,3 | 1,2,3 = **Residential** ×3 densities |
+| 4 | 4,5,6,7 | 5,6,7 = **Commercial** |
+| 8 | 8,9,10,11 | 9,10,11 = **Industrial** |
+| 12 | 12,13,14,15 | 14,15 (no INI name; commercial-side / industrial-side) |
+| 16 | 16,17,18,19 | 17 = **Landfill** |
+| **20** | 20,21,22,23 | **none, in any of the 59 files** |
+
+Every group is one gap followed by up to three slots, and the observed NULL slots
+(0,4,8,12,16 + 13) are exactly those gaps. **`0x16` = 22 sits in the sixth group, for which no
+city registers a developer at all.** So the raster holds an index into an unpopulated group.
+
+## 5. `0x16` is the hard ceiling of a tunable range `[CONFIRMED @0x10001020]`
+
+`FUN_10001020` (`sc3_zone_ctor_load_devrules`) reads INI section **`ZoneDeveloperRules`** and
+parses four integers with `sscanf("%d %d %d %d")`, then clamps:
+
+```c
+if (DAT_100571d0 < 4)              DAT_100571d0 = 4;       // floor 4
+if (DAT_100571d4 < DAT_100571d0)   DAT_100571d4 = DAT_100571d0;
+if (0x16 < DAT_100571d4)           DAT_100571d4 = 0x16;    // CEILING 22
+if (0x16 < DAT_100571d0)           DAT_100571d0 = 0x16;    // CEILING 22
+```
+
+So a tunable min/max pair is bounded to **[4, 22]** — the range of slot indices excluding the
+Residential group. The only other reader of those two globals is `FUN_100015ab`, which gates on
+them and tests a tile byte against the set **{0, 1, 5, 9, 22}** `[CONFIRMED @0x100015ab]` —
+zero plus the *first* slot of the R, C and I groups, with 22 alongside them.
+
+## Where that leaves it
+
+`[UNCERTAIN]` what `0x16` marks. But the box is much tighter, and two candidate readings are now
+excluded rather than merely doubted:
+
+- **not** a commercial zone variant (fact 3);
+- **not** written as a literal by any shipped code (fact 1);
+- it is runtime/authoring state that only exists once a map is zoned (fact 2), covering large
+  contiguous regions (fact 3), indexing a developer group no city populates (fact 4), and sitting
+  exactly on the ceiling of a tunable slot range (fact 5).
+
+The next evidence has to come from the write side: either the `vt+0x38`-style bulk row writer on
+the cell map, or a debugger breakpoint on the setter while zoning in-game. A literal sweep is
+exhausted — that is now measured, not assumed.
+
+> Instrument note, because it nearly cost the negative result in fact 1: the first version of that
+> sweep matched `'&' + varname` as a **substring**, so `&local_84` satisfied a search for
+> `&local_8` and it reported 6 hits. With a word boundary the honest answer is 0. A sweep that
+> finds something is not automatically better than one that finds nothing.
+
+## A worker attacked the same question independently — three additions, verified here
+
+Delegated in parallel with the sweep above, with no knowledge of its results. It reached the
+**same negative** (no literal 22 is written through the cell-map setter anywhere in SIMRCI) and
+added three things. Each was re-checked against the binary before being recorded:
+
+**1. `0x10` and `0x16` are a COLOUR-PAIRED set** `[CONFIRMED @0x1003547c, re-read here]`.
+`FUN_1003547c` reads the tile through the cell-map getter (`(this-0x10) vt+0x34`) and maps it to a
+display colour index:
+
+```c
+if (uVar1 != 0x10) {
+    if (uVar1 == 0x11) { *param_4 = 0x20; goto done; }   // 17 Landfill -> colour 0x20
+    if (uVar1 != 0x16) goto default;                     // not 22 -> default
+}
+*param_4 = 0x22;                                          // BOTH 16 and 22 -> colour 0x22
+```
+
+So tile values **16 and 22 render identically**, while Landfill (17) has its own colour. The rest
+of the map: `10 -> 0x16`, `0xb -> 0x15`, `0xd -> 0x21`, `0xe -> 0x1e`, `0xf -> 0x1f`. Note 16 is
+itself a **group-start gap** slot (group `{16,17,18,19}`) that no file declares — so the two
+values sharing a colour are both undeclared ones.
+
+**2. The clear path has two entry points, and they are a keep/clear pair**
+`[CONFIRMED @0x10032dd5, 0x10032de6, re-read here]`:
+
+```c
+FUN_10032dd5(this, x, p)  ->  FUN_10032ca9(this - 0x38, 0, p)   // mode 0: keep
+FUN_10032de6(this, x, p)  ->  FUN_10032ca9(this - 0x38, 1, p)   // mode 1: clear the 0x16 cells
+```
+
+and the same pass adjusts an accumulator on the object QI'd for `0xe0faadc7`, negating the
+per-tile contribution when it clears. So `0x16` tiles carry an ongoing effect that a caller can
+toggle off wholesale.
+
+**3. `[iOS-HINT]` the sibling's `e_ZoneType` has non-RCI members, and one of them is pinned.**
+The iOS oracle names `kMilitary`, `kAirport`, `kSeaport`, `kLandfill`, `kPloppedBuilding`, with
+**`kLandfill` at `0x11` = 17 — exactly the x86 slot whose ctor loads `LandfillZoneDeveloper`**.
+That is a real cross-check on the mapping's alignment. It does **not** name 22: the value↔name
+table is a data-driven static initialiser present as readable code in neither export, and the x86
+binary carries **no string** for Seaport / Airport / Military / Plopped (consistent with slot 22
+having no INI name, unlike R/C/I/Landfill).
+
+> **The tempting inference, and why it stays a lead.** Large contiguous blobs bordered by empty
+> land, 8–20% of zoned tiles, commercial-grouped, no INI name, budget-linked, sharing a colour
+> with another undeclared value — that shape fits `kSeaport` / `kAirport` / `kPloppedBuilding`
+> from the iOS list. **Nothing binds 22 to any of those names**, and this document already
+> records a near-miss (`0x029ca804` vs `0x029ca806`) that punished exactly this kind of
+> reasoning. `[UNCERTAIN]`, and the missing evidence is named: the `e_ZoneType` value→name table.
+
+One worker reading is recorded as theirs, not verified here: that the recurring
+`local_8._0_1_ = 0x16` in the INI loaders is a **C++ exception-unwind scope byte**. It is
+certainly not a grid write (those functions call no setter), which is the part that matters.
