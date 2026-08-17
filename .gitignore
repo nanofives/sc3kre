@@ -23,6 +23,9 @@
 !/UNCERTAINTIES.md
 !/STUBS.md
 !/DEFERRED.md
+# Who is working in this repo concurrently, and the rules for sharing the trackers.
+# Added 2026-08-17 when three sessions were writing functions.csv at once.
+!/SESSIONS.md
 !/functions.csv
 
 # 3) Re-include the re/ tree, then re-ignore everything inside it.
