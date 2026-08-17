@@ -6,7 +6,8 @@
 **closed** (`ROADMAP.md`, P1 gate).
 
 **⭐ P1 criterion 2 was RE-SCOPED 2026-08-17 (owner's call). The gate is now ≥ C2 across the
-513-function TOOLKIT-NECESSARY set — 251/513 = 48.9%, 262 left to READ.** The old form (≥C1
+513-function TOOLKIT-NECESSARY set — 279/513 = 54.4%, 234 left to READ** (was 251/513 when
+the gate was adopted; SIMRCI cluster 4 read 25 of them). The old form (≥C1
 across all 9,575 core-sim functions, 24.1%) is **retired — stop quoting it.** P1 is met except
 this one criterion.
 
@@ -17,8 +18,8 @@ loaders. 513 = 5.4% of the core-sim set, **recall 50/50 = 100%** against the unr
 Re-measure, never quote: `py -3.12 re/scripts/scope_toolkit.py [--validate|--todo <MODULE>]`.
 Analysis and the four options considered: `re/analysis/GATE_RESCOPE.md`.
 
-Two numbers behave differently and it matters: **513 is stable** (binary-derived); **262 is a
-snapshot** (tracker-derived). Why C2 rather than C1: 1,473 of the old count were
+Two numbers behave differently and it matters: **513 is stable** (binary-derived); **the
+remaining count is a snapshot** (tracker-derived) — it was 262 at adoption and is 234 now. Why C2 rather than C1: 1,473 of the old count were
 `classify_families.py` regex labels with nothing read, and only **839** core-sim functions had
 ever actually been read. The set shrank 19x and the bar went up a notch.
 
@@ -29,6 +30,20 @@ pwsh -NoProfile -File re\scripts\delegate_cluster.ps1 -Module SIMRCI -RvaFile sl
 ```
 `-RvaFile` is new; the size heuristic is no longer the only selector, and the gate no longer asks
 for the sub-100-byte tail that heuristic was down to.
+
+**Cluster 4 (SIMRCI, 25 rows) is merged and it is the template for the remaining ~9 runs:**
+delegate → `re/scripts/verify_worker_rows.py <out> <MODULE>` → merge only what survives →
+hand-read every flag. All 25 rows passed; three produced findings recorded in `CITY_SAVE.md`
+(a mechanical witness on the `0x16` tile value, a THIRD independent copy of the frame reader at
+SIMRCI `0x1003fb73`, and field-for-field confirmation of the `u16`-permutation reader
+`0x1004350e`). Two rows collided with the concurrent session's unverified C3 rows and the merge
+kept C3 — so two toolkit-set functions now count as done on evidence nobody has checked.
+
+**`verify_worker_rows.py` is new and it is not optional.** `merge_worker_module.py` scrubs leaks
+and caps C3+, but checks no claim. The verifier resolves every cited constant against the body
+(as integer values, across hex / decimal / `FUN_` symbols / **C character escapes**), requires a
+serialisation name to be backed by a stream slot or an INI string, and rejects hedging words.
+Calibrate before trusting it: on the already-merged `SIMRCI_CLUSTER3.md` it flags 4 of 25.
 
 > ⚠️ **A CONCURRENT SESSION IS WRITING `functions.csv`.** During 2026-08-17 it added 127
 > `[GZ-IID]` annotation rows and then **17 rows at C3**, and that shifted a gate number between
@@ -90,6 +105,16 @@ layer decoded to per-tile developer slots with R/C/I/Landfill named. Tools: `re/
    its own rows and "improved" from 12/13 to 626/627. Ground truth must exclude your own output.
 5. **A coverage number that only ever rises is not measuring anything.** The classifier reverted
    85 of its own rows on re-run; core-sim went 24.9% → 24.0% and that was correct.
+6. **2026-08-17 added FOUR more silent zero-match regexes, so treat this as the default failure
+   mode, not an anomaly.** (a) `\.ini` matched nothing because Ghidra renames dots to underscores
+   (`s_Sys_SC3ComLayer_ini_...`) — reported 0 INI loaders across 11 modules; (b) a gate-cost line
+   compared two different denominators and printed 9,388 where an independent count said 7,263;
+   (c) writing a regex through a bash heredoc turned `\b` into literal BACKSPACE bytes, and
+   `print(pattern)` rendered them invisibly, so the pattern LOOKED right while matching nothing;
+   (d) the row verifier had no case for **C character escapes**, so a correct claim citing `0x16`
+   — present in the body as `'\x16'` — was reported as a fabricated constant. **(d) is the one to
+   remember: when a checker accuses a claim, check the checker first.** Edit regex code with a
+   real editor, and give every checker a `--selftest` against strings whose answers you know.
 
 ## 🔴 What landed 2026-08-16 (still current unless corrected above)
 

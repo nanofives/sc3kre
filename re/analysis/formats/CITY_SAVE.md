@@ -1656,3 +1656,72 @@ that would mean reimplementing the layer savers. So what is demonstrated is an
 **edit-and-rewrite pipeline** — parse a city, change bytes at a decoded offset, emit a valid file —
 in which everything untouched reproduces exactly. That is what a modding toolkit needs. It is not
 a claim that a city can be authored from scratch.
+
+---
+
+## What SIMRCI cluster 4 added (2026-08-17) — the first gate-A slice
+
+The first cluster driven by the re-scoped P1 criterion 2 (`scope_toolkit.py --todo` →
+`delegate_cluster.ps1 -RvaFile`, 25 of SIMRCI's 55 toolkit-set functions). All 25 rows were
+checked against the binary with `re/scripts/verify_worker_rows.py` before merging. Three results
+bear on this document.
+
+### 1. `0x16` gets its first mechanical witness: something CLEARS it `[CONFIRMED @0x10032ca9]`
+
+`SIMRCI FUN_10032ca9` (300 B) walks the tile grid and, for `param_1 == 1` only:
+
+```c
+(**(code **)(*(int *)this + 0x34))(x, y, &local_5);      // grid GET  (row, col, &value)
+if (local_5 == '\x16') {                                  // the value 22
+  local_6 = 0;
+  (**(code **)(*(int *)this + 0x3c))(x, y, &local_6);     // grid SET  -> 0
+}
+```
+
+So `0x16` is a tile value that a **normal code path resets to 0 (unzoned)**, over the whole grid,
+under a mode flag. This document had `0x16` as `[UNCERTAIN]` — present in the raster, grouped with
+commercial by the reader `0x1001deca`, but declared by no developer slot in any file. "A value
+something sweeps away" is consistent with it being **transient/marker state rather than a zone
+type**, which also fits the earlier observation that counting it as commercial makes
+residential-above-commercial worse (14/15 → 12/15). **Still `[UNCERTAIN]` what it marks** — no
+producer has been read, only this consumer. It is the first real handle on it.
+
+> ⚠️ **My verifier nearly destroyed this finding.** It reported the row as citing `0x16` with the
+> value "absent from the body", i.e. a fabricated constant. The value IS in the body — as a **C
+> character escape, `'\x16'`** — which neither the hex nor the decimal pattern matched. That was
+> the fourth silent zero-match regex of the session and the only one that would have thrown away
+> correct evidence and blamed the reader for it. When a checker accuses a claim, check the checker.
+
+### 2. A THIRD independent copy of the frame reader `[CONFIRMED @0x1003fb73]`
+
+`SIMRCI FUN_1003fb73` has the SIMCITY frame read-ctor layout exactly: three `param_1 vt+0x260`
+reads into `this+0x14/0x18/0x1c`, then `*(int *)(this + 8) == -0x21524111` (`0xDEADBEEF`) with the
+result stored as the bool at `this+0x10` — plus a reset-and-retry-once around the sentinel.
+
+The base-0 correction rested on two witnesses (SIMCITY `0x10010315`, SIMGEOM `0x1001f360`). This is
+a **third, in a third module**, found by a worker with no knowledge of either. The frame really is a
+per-module copy of a shared helper. Tracker name corrected to `sc3_zonedev_frame_read_ctor`; the
+worker had it as a "cursor ctor", which understates what it is.
+
+### 3. The `u16` permutation READER is confirmed field-for-field `[CONFIRMED @0x1004350e]`
+
+`FUN_1004350e` is slot 0 of `PTR_FUN_1004d2bc`, the mirror of the writer `FUN_1004361d` this
+document reads above. The worker's field list matches the writer's, slot for slot, and supplies the
+**read-side slot mirrors** that were missing:
+
+| write (`0x1004361d`) | read (`0x1004350e`) | field |
+|---|---|---|
+| `vt+0x70` u8 | `vt+0x20` | `this+0x04` |
+| `vt+0x88` u32 | `vt+0x38` | `this+0x08` = the count |
+| `vt+0x68` bool | `vt+0x18` | `this+0x0c` |
+| `vt+0x98` ×5 | `vt+0x48` ×5 | `this+0x10 .. 0x20` |
+| `vt+0x78` u16 ×count | `vt+0x28` ×count | the vector at `this+0x24` — read into a **short array**, matching the `>> 1` element stride on the write side |
+
+Two things follow. The `u16` vector really is **2-byte elements** (a `short` array on the read
+side, independently of the writer's `>> 1`), and the earlier withdrawn-then-reinstated claim that
+the loader does read the sub-object is now confirmed from the sub-object's own side.
+
+Also merged, and relevant to the section directory: `0x1003dd02` / `0x1003db69` are a
+**save/load mirror pair** on stream slots `+0x88/+0x68/+0x78` against `+0x38/+0x18/+0x28`, and
+`0x100194cf` is confirmed as the **LandfillZoneDeveloper ctor reading `\Sys\SC3Tune.INI`** — the
+same identification this document derived from the registration table, reached independently.
