@@ -19,12 +19,20 @@ loaders. 513 = 5.4% of the core-sim set, **recall 50/50 = 100%** against the unr
 Re-measure, never quote: `py -3.12 re/scripts/scope_toolkit.py [--validate|--todo <MODULE>]`.
 Analysis and the four options considered: `re/analysis/GATE_RESCOPE.md`.
 
-⚠️ **"Met" means met AT THAT MEASUREMENT, and one criterion regressed.** The set is derived from
-the export, and the export was regenerated mid-session: the set grew 513 → 530 while the reading
-ran. More importantly **criterion 1 is now STALE — 271 `FUN_` bodies in the core-sim exports have
-no row in `functions.csv`** (SIMRCI 111, SIMMISC 50, SIMGEOM 34, SIMDSTR 17, rest single digits).
-`re/scripts/enumerate_functions.py` needs a re-run. So P1 is **not** fully met: criterion 2 is,
-criterion 1 went backwards while criterion 2 was being closed. Why C2 rather than C1: 1,473 of the old count were
+**Criterion 1 is MET again too (38,092 rows), so the whole P1 gate now holds.** It went stale
+mid-session when the exports were regenerated; `enumerate_functions.py` added the **129** missing
+`FUN_` rows (SIMRCI 90, SIMMISC 39) and a direct check finds **0 unenumerated `FUN_` bodies across
+all 30 binaries**. Criterion 2 was unaffected — none of the 129 is a toolkit-set member, and the
+set still reads 530/530.
+
+> ⚠️ **I first reported that gap as 271 and it was wrong.** My check matched `'_FUN_' in
+> filename`, which also matches `thunk_FUN_*`; 142 were thunks, which the criterion excludes.
+> `enumerate_functions.py --dry-run` said 129, my grep said 271, and **the loose instrument was
+> mine.** The earlier commit message carries the 271 figure uncorrected — this is the correction.
+
+⚠️ **"Met" means met AT THAT MEASUREMENT.** The toolkit set is derived from the export and grew
+513 → 530 while the reading ran, because the exports were regenerated mid-session. A re-export
+can add members, so re-run `scope_toolkit.py` rather than quoting 530. Why C2 rather than C1: 1,473 of the old count were
 `classify_families.py` regex labels with nothing read, and only **839** core-sim functions had
 ever actually been read. The set shrank 19x and the bar went up a notch.
 

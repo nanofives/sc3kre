@@ -6,10 +6,12 @@ clusters over two rounds. **Final: 530 / 530 = 100%.** The set grew 513 → 530 
 because the exports were regenerated mid-flight, so the number to quote is whatever
 `re/scripts/scope_toolkit.py` reports, not this figure.
 
-⚠️ **P1 is still not fully met: criterion 1 REGRESSED while criterion 2 was being closed.** The
-re-export left **271 `FUN_` bodies in the core-sim exports with no row in `functions.csv`**
-(SIMRCI 111, SIMMISC 50, SIMGEOM 34, SIMDSTR 17, rest single digits).
-`re/scripts/enumerate_functions.py` needs a re-run.
+**P1 now holds in full.** Criterion 1 regressed while criterion 2 was being closed (the mid-session
+re-export left `FUN_` bodies with no tracker row) and was re-closed the same day:
+`enumerate_functions.py` added **129** rows, and a direct check finds 0 unenumerated `FUN_` bodies
+across all 30 binaries. That gap was first reported as 271 — wrong, and mine: the check matched
+`'_FUN_' in filename`, which also catches the 142 `thunk_FUN_*` import stubs the criterion
+excludes.
 
 > ⚠️ **The tracker moved while these numbers were being taken.** A concurrent session wrote 17 new
 > **C3** rows into `functions.csv` mid-measurement, which shifted SIMRCI's remaining count from 57

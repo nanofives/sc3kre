@@ -40,13 +40,19 @@ assessment below recommended.** The old text is preserved further down as the re
 
 **P1 exit (current, binding):**
 
-1. **Every `FUN_*` in all 31 binaries enumerated in `functions.csv`.** ⚠️ **WAS MET, NOW STALE
-   (2026-08-17).** The tracker holds 37,963 rows, but the Ghidra exports were regenerated during
-   2026-08-17 and **271 `FUN_` bodies in the eleven core-sim exports alone have no tracker row**
-   (SIMRCI 111, SIMMISC 50, SIMGEOM 34, SIMDSTR 17, the rest single digits). Re-run
-   `re/scripts/enumerate_functions.py` and re-measure before calling this met again. It does not
-   affect criterion 2: the toolkit set is computed from the EXPORT, so those bodies were already
-   in scope, and none of the 530 set members lacks a row.
+1. **Every `FUN_*` in all 31 binaries enumerated in `functions.csv`.** ✅ **MET — re-closed
+   2026-08-17, 38,092 rows.** It went stale earlier the same day when the Ghidra exports were
+   regenerated mid-session; `re/scripts/enumerate_functions.py` added the **129** `FUN_` bodies
+   that had no row (SIMRCI 90, SIMMISC 39) and a direct check now finds **0 `FUN_` bodies without
+   a tracker row across all 30 binaries**. The script is additive by construction — it appends
+   missing rows and never touches an existing one — so no analysis work was at risk.
+
+   > ⚠️ **The gap was first reported here as 271, and that figure was WRONG — mine, not the
+   > tool's.** My check matched `'_FUN_' in filename`, which also matches `thunk_FUN_*`; 142 of
+   > the 271 were import/jump thunks, which this criterion deliberately excludes. Two methods
+   > disagreed (my grep said 271, `enumerate_functions.py --dry-run` said 129) and **the loose
+   > one was mine.** Same failure family as the rest of the day: a filter that matched more than
+   > it was asked to.
 2. **⭐ RE-SCOPED 2026-08-17 (owner's call): ≥ C2 across the TOOLKIT-NECESSARY set.**
    ✅ **MET 2026-08-17 — 530 of 530 = 100%, nothing left to read.**
 
