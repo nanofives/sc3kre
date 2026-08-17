@@ -33,6 +33,27 @@ none.
    12,529 previously invisible `FUN_` bodies, which grew the toolkit-necessary set 530 → 562 and
    re-opened a gate criterion that had just been closed. That is fine and the work was good, but a
    session reading functions one at a time needs to know the export is about to move under it.
+   **This worked**: the gzcom session recorded "carve DONE, export settled" in this file rather
+   than leaving it to be inferred from mtimes, which is what unblocked the criterion-2 reading.
+6. **A count over the exports must state its filter and be cross-checked by a second method
+   before it goes in a tracker.** Proposed by the gzcom session, **adopted**. Three loose-filter
+   errors happened in this repo on 2026-08-17 alone, each plausible-looking and each caught only
+   by a disagreement between two methods:
+
+   | claimed | actual | the loose filter |
+   |---|---|---|
+   | 271 unenumerated `FUN_` bodies | **129** | `'_FUN_' in filename` also matches `thunk_FUN_*` |
+   | 20,100 rows to add | **129** | counted `Unwind_*` / `Catch_*` as backlog |
+   | 1,914 uncarved vtable targets | **1** | compared against `functions.csv`, which excludes thunks by policy |
+
+   The pattern is one thing: **a filter that matched more than it was asked to, and looked right
+   doing it.** State the filter, then check the number a second way.
+7. **Whoever breaks a criterion records the new measurement; the criterion's owner adjudicates.**
+   Proposed by the gzcom session, **adopted**. Its edit of criterion 2's status text (530/530 →
+   530/562) after its own carve caused the change is exactly right, and is **accepted as
+   written** — the city-save session re-measured independently with `scope_toolkit.py` and got
+   the same 562/530/32. Recording a number you caused is not stepping on the owner; silently
+   leaving it stale would be.
 
 ## Why rule 5 has teeth
 

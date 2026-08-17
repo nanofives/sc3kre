@@ -80,6 +80,8 @@ chain* (see §2), where the surrounding shape disambiguates them.
 | `GZIID_cIS3DValve` | `0xf1ec30` | low-entropy |
 | `GIID_cIGZWinMgr` | `0x5a4` | low-entropy |
 | `GZIID_cIGZResourceKeyList` | `0x199656` | low-entropy |
+| **GZIID_cISC3CityLayer** | **`0x206c6e7c`** | **NOT in the SDK headers — named by us in §12c** |
+| ? unnamed | `0x81c0cb7c` | not in the headers; 16 implementors, 8 not city layers (U-044) |
 
 ---
 
@@ -1113,3 +1115,90 @@ It **cost** a met gate: criterion 2 went 530/530 → 530/562. It **bought** 12,5
 invisible to every previous measurement, including 32 that the project's own toolkit definition says are
 needed. A gate computed over a set that was missing 38% of the binary was measuring the wrong thing; 94.3% of
 the right set is a better number than 100% of the wrong one.
+
+---
+
+## 12. Overload order becomes a rule, and `GZIID_cISC3CityLayer` is named
+
+Two cheap follow-ups that each closed a marker, plus a correction to the SDK headers themselves.
+
+### 12a. 4 of 4 overload pairs are reversed — promoted from caveat to working rule
+
+§8 found one reversed pair and §9 a second. Two more on `cISC3BudgetLayer` complete the set.
+
+**`GetFunding`, slots 17/18** `[CONFIRMED @ 0x10008710]`. Slot 18 (36 bytes) is a forwarder:
+
+```c
+if (param_1 == (int *)0x0) { uVar2 = 0; }
+else {
+  iVar1 = *(int *)this;
+  uVar2 = (**(code **)(*param_1 + 0xc))();     /* pull an id out of the department object */
+  uVar2 = (**(code **)(iVar1 + 0x44))(uVar2);  /* 0x44/4 = 17  -> forwards to slot 17 */
+}
+```
+
+A forwarder that converts an *object* into an *id* has to be the object overload. So slot 18 takes the
+`cISC3DepartmentBudget*` and slot 17 takes the `uint32` — the reverse of the header.
+
+**`GetCost`, slots 21/22.** Slot 22 (30 bytes) is `cmp byte [ecx+0x11],0` then a direct table lookup
+`FUN_10009847(&DAT_10049dc0, arg)`. Slot 21 (233 bytes) is a bounded nearest-match search with an initial
+bound of 50000 and a per-key cache. A 30-byte table lookup is the small-enum overload, and SIMRCI's
+`PlaceZone` passes exactly a 0..6 selector to slot 22 via `+0x58`. The header attributes the
+`tDevelopmentCostID` parameter to slot 21. Reversed.
+
+**The rule.** For a same-name overload pair, **invert the header order, then confirm by body shape** — the
+forwarder / narrower / table-lookup member is the *later* slot. The mechanism is why: mangled names differ only
+in parameter encoding, so nothing in them fixes intra-name order during reconstruction.
+
+Honest scope: 4 pairs across 3 classes in one SDK. A strong prior, not a licence to skip the check.
+
+### 12b. A correction *to* the SDK header
+
+`cISC3BudgetLayer.h` declares `uint32_t GetFunding(...)` and the author appended
+`// Verify that this is the correct return type.` That doubt is now resolved, and they were right to have it:
+slot 17 returns a **64-bit** value. The body ends in an `__allmul` / `__alldiv` pair computing
+`(pct & 0xff) * amount / 100` and returns it as `undefined8` in `EDX:EAX`.
+
+So the oracle is not only reversible on overload order, it has at least one wrong return type — and it labels
+its own weak spots. Worth trusting those labels.
+
+### 12c. `0x206c6e7c` = `GZIID_cISC3CityLayer` `[CONFIRMED]`
+
+U-044 had two unnamed IIDs accepted at `cSC3ValveLayer`'s `this+4` subobject, split 8/8/2 across the module's
+QI functions and known to be independent interfaces.
+
+**The probe.** A class has a `cISC3CityLayer` base subobject iff an adjustor thunk
+`sub ecx, N ; jmp <that class's primary QueryInterface>` sits at slot 0 of a *second* vtable whose slot 15 is
+`mov eax, imm32 ; ret` — i.e. `GetLayerType`. This is exactly the shape §7 found on `cSC3ValveLayer`, used here
+as a test rather than an observation.
+
+| class | group | `cISC3CityLayer` subobject? |
+|---|---|---|
+| SIMRCI `0x1002ef6b` (ValveLayer) | A+B+M — control | **yes**, vtable `0x1004ce9c`, LayerType `0x80f1e6d3` |
+| SIMSERV `0x1000ef24` | A-only | **yes**, vtable `0x1001f424`, LayerType `0x80abf2be` |
+| SCENARIO `0x10008e0b` | A-only | **yes**, vtable `0x1001a604`, LayerType `0xc3de4d66` |
+| SIMRCI `0x1003d154` | B-without-A | no — 0 adjustor thunks |
+| SIMECO `0x10014838` | B-without-A | no — 0 |
+| SIMGEOM `0x1001ca50` | B-without-A | no — 0 |
+| SIMUTIL `0x10019670` | B-without-A | no — 0 |
+
+Accepting **A** correlates perfectly with being a city layer (3/3 yes, 4/4 no). Accepting **B** does not.
+Therefore **`0x206c6e7c` = `GZIID_cISC3CityLayer`**, a constant the SDK headers do not carry.
+
+Two new LayerType constants fell out for free: **`0x80abf2be`** (SIMSERV) and **`0xc3de4d66`** (SCENARIO,
+presumably `cISCNScenarioLayer`). Also noted: SIMSERV `0x1000ef24` has **five** adjustor thunks
+(`sub ecx` 0x1c/0x20/0x24/0x28/0x2c), so it is a five-base multiple-inheritance class — the richest seen so far.
+
+**`0x81c0cb7c` is still unnamed**, and deliberately so. It is implemented by 16 classes, 8 of which are not city
+layers, and is accepted at the same subobject as `GZIID_cIGZMessageTarget` `0x58d`, so it is a base that
+`cISC3CityLayer` also inherits. U-044 stays `narrowed` with the next step recorded: the four B-implementing
+classes share an identical primary slot-15 shape (`mov eax,[ecx] ; call [eax+0x48]`), so diffing the common
+vtable prefix of two otherwise-unrelated ones should yield B's method count.
+
+### A method note
+
+The first version of the 12c probe was wrong and worth recording. It measured "consecutive code pointers from
+the QI" as the vtable length and tested *that* vtable's slot 15. It reported 94 slots for the ValveLayer, whose
+vtable is 15 — `.rdata` packs vtables adjacently, so a run-length walk sails straight through the boundary. And
+the `cISC3CityLayer` vtable is a *secondary* vtable, never the one starting at the primary QI. The adjustor
+thunk is the only reliable way in.
