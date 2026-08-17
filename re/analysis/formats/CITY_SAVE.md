@@ -1139,6 +1139,32 @@ bytes** if `vt+0x98` is a scalar. It is not: something in there is writing ~1,00
 >
 > **The gap was then closed by testing the remaining suspect — and the suspect was right.**
 
+### ⭐ The saver and loader are NOT mirrors at the tail `[CONFIRMED]`
+
+Listing both call sequences in order and comparing them head to tail — which had never been
+done, despite both functions having been "read" several times — shows they agree exactly up to
+the third 23-byte block and then **diverge**:
+
+| | saver `0x100320e7` | loader `0x10031c85` |
+|---|---|---|
+| block C | `vt+0x84(this+0x3c, 0x17)` | `vt+0x34(this+0x3c, 0x17)` ✓ mirror |
+| next | **`(*(this+0x268))->vt+4(param_1, stream)`** | **`(*(this-0x14))->vt+0xc()`** then `piVar1->vt+0x10()`, `piVar1->vt+0x34(local_18, local_14, &local_6)`, `vt+0x10()`, `vt+0xc()` |
+| then | 6 × `vt+0x88` | 6 × `vt+0x38` ✓ mirror |
+
+**The loader never calls the object at `this+0x268`.** It reaches the same region of the stream
+through the *base* subobject (`this-0x14`) and an object `piVar1` obtained from it. So the two
+sides are genuinely asymmetric exactly where the unexplained ~138 bytes and the `u16` region sit.
+
+**This matters beyond the byte count.** The mirror-pair assumption is what this document has
+leaned on throughout — "the grammar is confirmed from BOTH the saver and the loader" was the
+headline claim that made eight failed sweeps so confusing. It is now clear the two functions
+**do not describe the same byte sequence at the tail**, so cross-confirming them there proves
+nothing. The agreement up to block C is real; past it, each must be read on its own terms.
+
+Next: read `piVar1`'s class (via `(this-0x14)->vt+0xc`) and the two container helpers
+`FUN_100339e7` / `FUN_10033920` that the loader uses for the `c1` and `c2`/`c3` lists — the
+saver walks those containers with `FUN_10010ae4` instead, another asymmetry.
+
 ### ⚠️ The "23 elements of 4 bytes" reading is FALSIFIED — the blocks ARE 23 bytes
 
 **Read this before the section below, which is left in place as the record of a wrong turn.**
