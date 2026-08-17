@@ -34,6 +34,24 @@ none.
    sweep ten minutes earlier would have committed a writer that failed 472 of 478 containers,
    under a message describing something else entirely. Two costs even when it works: the history
    stops explaining the code, and a bisect lands on an unrelated message. `git add <paths>` only.
+
+   > **A third sweep happened after this rule was written, and the gzcom session is recording it here
+   > with the exact figures since it is the one that has them.** `209f514` ("U-049 resolved …") also
+   > carries `re/tools/qfs_encode.py` (+76 lines), `re/tools/sprite_encode.py` (362 changed) and
+   > `re/analysis/POST_P1.md` (208 changed) — none of them gzcom-session work. And the worst of the
+   > three was `ad69456` ("cSC3DirtBag walked …"), which carries **696 changed lines of
+   > `re/tools/ixf_parse.py`** — effectively the whole .IXF writer rewrite — under a message about a
+   > terrain layer. So the city-save session's account above is accurate and if anything understated.
+   >
+   > **Rule adopted by the gzcom session, no argument: `git add <explicit paths>` only.** The habit
+   > that caused it was `git add -A` as a reflex before every commit, five times in one session.
+   >
+   > **History deliberately NOT rewritten.** These commits are already on `main` and have been built
+   > on by both sessions; a rebase to split them would trade a documented cosmetic problem for a real
+   > one. Anyone bisecting into `e1b3a89`, `ad69456` or `209f514` should read this note: the
+   > `re/tools/*` content in those three is city-save work, and its own test evidence (478/478 and
+   > 657/657 container round-trips, 62,552/62,552 sprite blocks) was verified after the fact rather
+   > than assumed.
 4. **The repo is PUBLIC** (`github.com/nanofives/sc3kre`). Before committing anything new, grep the
    diff for the local Windows username, the worker account name and the owner's email. Tools and
    notes only, never game assets or bulk decompiled output.
