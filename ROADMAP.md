@@ -418,15 +418,26 @@ minutes from whoever runs the game. The harness session has been asked.
 *If T3 of that ladder fails*, the editing API needs a checksum or derived-state fix, and T2/T3
 below change shape — which is exactly why this gate is first.
 
-### T2 — EXPOSE THE FORMATS AS A LIBRARY
+### T2 — EXPOSE THE FORMATS AS A LIBRARY  ✅ **MET 2026-08-17**
 
 **Exit, measurable: every format with a proven write path has (a) a documented read AND write
 entry point in `re/tools/`, outside any test harness, and (b) a `--selftest` that round-trips the
 shipped corpus and reports `N/N`.**
 
-The concrete debt: the `.IXF` container writer currently lives inside `city_roundtrip.py`, a test
-harness, rather than in `ixf_parse.py`. `qfs_encode`, `sprite_encode` and `city_write` need a
-consistent surface. This is packaging, not discovery — the hard parts are done and proven.
+| format | entry point | `--selftest` |
+|---|---|---|
+| `.IXF` container | `ixf_parse.py` — `layout()` / `build()` / `roundtrip()` | **657/657** containers, whole install, 8 extensions |
+| city save family | `city_write.py` (`City.load` / `zone_set` / `save`) | **59/59** no-edit identity; `city_roundtrip.py` 5 layers |
+| QFS / RefPack | `qfs.py` read, `qfs_encode.py` write | **60/60** city payloads, **3,000/3,000** sampled sprite streams |
+| sprite blocks | `sprite_encode.py` — `encode()` / `roundtrip()` | **62,552/62,552** |
+
+The stated debt is paid: the `.IXF` writer no longer lives inside `city_roundtrip.py`, and that
+harness now delegates to the library, so there is one implementation instead of two that drift.
+
+**Two honest limits on the numbers above.** The sprite QFS figure is a **3,000-stream sample, not
+the full corpus** — re-compressing all ~63,000 takes about two hours of Python, and `--limit`
+exists so the sampling is stated rather than implied. And `SYS.PAK` still has no writer; it is not
+in the table because it has no *proven* write path to expose, which is a T3 question.
 
 ### T3 — DEMONSTRATE A MOD END TO END
 

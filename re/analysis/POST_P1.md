@@ -33,7 +33,7 @@ measuring against a gate that was retired for good reasons (`GATE_RESCOPE.md`).
 
 | format | read | write | evidence |
 |---|---|---|---|
-| QFS / RefPack | ✅ | ✅ **byte-identical** | compressor transcribed from GZResourceD `FUN_1001694d`; 59/59 city streams re-encode exactly |
+| QFS / RefPack | ✅ | ✅ **byte-identical** | compressor transcribed from GZResourceD `FUN_1001694d`. `qfs_encode.py --selftest`: **60/60 city payloads** and **3,000/3,000 sampled sprite streams**. The sprite streams had only ever been DECOMPRESSED before 2026-08-17 |
 | city save family | ✅ 59/59 | ✅ **byte-identical**, 5 layers | `city_roundtrip.py`; plus an editing API, `city_write.py` |
 | sprites | ✅ | ✅ **byte-identical** | `sprite_encode.py --selftest` = **62,552/62,552**, reproduced in one command 2026-08-17 |
 | `.IXF` container | ✅ | ✅ **byte-identical, exposed** | `ixf_parse.py` `layout()`/`build()`/`roundtrip()`; `--selftest` = **657/657** containers across the whole install, 8 extensions, selected by MAGIC not extension |
