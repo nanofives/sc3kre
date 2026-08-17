@@ -1839,3 +1839,48 @@ read as a thirteenth confirmation, and it is not one.
 **Scope, stated plainly:** all 104 slots are *validated* by arity, but only these 14 are *named*. The other 90
 are identified by slot position and can be named mechanically from the header whenever they are needed — the
 map is in this section, the work is not done.
+
+### 20d. All 104 slots named — 14 read, 90 mechanical
+
+The remaining 90 slots are now named from the header by slot position. **Confidence C1, not C2**, and the
+distinction is deliberate: C2 in this project means the decompilation was read, and these bodies were not. Each
+note says so explicitly (*"the slot is confirmed, the body has NOT been read"*). Marking 90 unread functions C2
+would also have inflated the `>=C2` gate metric — SIMSPR is outside the eleven core-sim modules so the gate is
+untouched here, but the principle is why C1 was chosen.
+
+Audited before generating, because mechanical naming is exactly where a silent collision would hide:
+
+```
+duplicate METHOD NAMES in the header        : none
+implementations shared by >1 slot           : 0
+slots whose impl has no functions.csv row   : 0
+duplicate generated names                   : none
+resulting rows                              : 104 total, 104 unique names
+```
+
+**A convention fix on my own earlier work.** The 14 hand-named rows from §20 used compressed lowercase
+(`sc3_spritecellmap_dopick`, `_getrotate`) while the mechanical pass produced snake_case (`_do_pick`,
+`_get_rotate`). `CLAUDE.md` specifies `sc3_<subsystem>_<verb>_<noun>`, so the mechanical form is the correct one
+and my hand-written 13 were not. Renamed, with the old name recorded in each note. 104 of 104 now match
+`sc3_spritecellmap_[a-z0-9_]+`.
+
+**The mechanical pass found more structure than the hand pass did.** The view-state field block is larger than
+§20a reported:
+
+| field | accessor |
+|---|---|
+| `+0x14` / `+0x18` | `GetActualGridSizeX` / `GetActualGridSizeZ` |
+| `+0x1c` / `+0x20` | `GetDrawGridSizeX` / `GetDrawGridSizeZ` |
+| `+0x28` | `GetZoom` |
+| `+0x2c` | `GetRotate` |
+| `+0x30` / `+0x34` / `+0x38` | `ScreenCellSizeX` / `ScreenCellAdjustmentY` / `ScreenCellSizeZ` |
+| `+0x74` | `GetCityBufferPtr` |
+| `+0x114` | `GetUnusedCellCount` |
+
+So the class keeps **two grid sizes** — an *actual* grid and a *draw* grid — which is consistent with slot 41
+`ActualGridToDrawGridMicroVirtual` converting between them. That pair was invisible until all 104 were named.
+
+**One irregularity, logged as U-050 rather than smoothed over.** Two distinct slots return `+0x38`: slot 23
+`ScreenCellSizeZ` (`ret`, 0 args) and slot 57 `GetLowestSpriteHeight` (`ret 4`, 1 arg — and it **ignores** the
+argument). Both fit their slot's arity and the class scored 104/104, so the arity evidence cannot separate them.
+Every other member of the block has exactly one accessor, which makes `+0x38` the sole anomaly.
