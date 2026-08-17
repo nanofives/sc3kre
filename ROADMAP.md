@@ -38,6 +38,21 @@ The original exit — *"100% of `FUN_*` at ≥ C1"* — was written when the tar
 that gate is not reachable by hand. **Re-scoped on the owner's call to the two-tier form the
 assessment below recommended.** The old text is preserved further down as the record of why.
 
+> ## ⭐⭐ P1 IS EXITED (2026-08-17)
+>
+> All five criteria hold, each re-measured on the day rather than quoted: 0 unenumerated `FUN_`
+> bodies across 30 binaries, 562/562 of the toolkit-necessary set at ≥ C2, UI/framework
+> enumerated-unclassified by design, the subsystem map committed, and the end-state decided.
+>
+> **What comes next is a PROPOSAL, not yet adopted: `re/analysis/POST_P1.md`.** Three gates in
+> dependency order — T1 prove the write path (the game loads a file we wrote, currently resting on
+> nothing), T2 expose the formats as a library, T3 demonstrate a mod end to end.
+>
+> One number in this file will look alarming and is not: `functions.csv` is 78% C0. Under the
+> retired gate that would be debt. Under the toolkit end-state it is the design — criterion 3 keeps
+> UI/audio/tooling/framework unclassified deliberately, and criterion 2 replaced "read everything"
+> with "read what touches a shipped byte".
+
 **P1 exit (current, binding):**
 
 1. **Every `FUN_*` in all 31 binaries enumerated in `functions.csv`.** ✅ **MET — re-closed
