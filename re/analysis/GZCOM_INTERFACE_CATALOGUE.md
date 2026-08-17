@@ -1,0 +1,1115 @@
+# GZCOM_INTERFACE_CATALOGUE.md — named C++ interfaces for SC3K, and the dword anchors they gave us
+
+**Source:** [`0xC0000054/sc3k-gzcom-dll`](https://github.com/0xC0000054/sc3k-gzcom-dll) (LGPL-2.1-or-later,
+Nicholas Hayes, 2025). A GZCOM plugin SDK for SimCity 3000. Its 111 headers were **derived from the
+SimCity 3000 Unlimited _Linux_ build, which shipped with debug symbols enabled** — the author
+un-decorated the GCC-mangled C++ method names into interface declarations.
+
+**Why this matters for us:** a third oracle, and the strongest one yet.
+
+| Oracle | Arch | Version relation to SC3U.exe | Names |
+|---|---|---|---|
+| `re/ghidra_export_ios/` (SimCity Deluxe 2011) | ARMv7 | partial re-engineer, 11 yrs later | `goZoneLayer`, `cSC3…` |
+| **sc3k-gzcom-dll headers** | **x86** | **same product (SC3KU), same source tree, GCC vs MSVC** | **`cISC3ZoneLayer`, full signatures** |
+
+Per the calibrated rule in `SIM_LAYERS_XREF.md` (iOS algorithms transfer, iOS struct layouts do not),
+this oracle is held to the same bar: header names are `[GZ-HINT]` until an SC3U-side witness confirms
+them. **The headers happen to carry witnesses**, which is the substance of this document.
+
+> **License note.** The repo is LGPL-2.1-or-later and is NOT vendored into this tree (it was cloned to
+> a scratchpad). What is recorded here are *facts read from it* (interface names, IID values) plus our
+> own SC3U-side evidence. `sc3kre` stays free of third-party LGPL source.
+
+---
+
+## 1. The breakthrough: interface IDs DO exist as dwords in the shipped binaries
+
+`MODULE_MAP.md` claim 3 stated: *"No `0x41F836xx` GZCLSID dword occurs in ANY shipped binary … Class ids
+exist only as ASCII in `SYS.PAK` / `CitySim.ini` and are parsed at runtime."*
+
+That finding is **correct but was over-generalised**. It tested *class* ids (GZCLSID) with an assumed
+`0x41F836xx` prefix. The headers hand us the **interface** ids (GZIID) and **layer type** ids, and those
+are present as immediates in `.text` in abundance.
+
+Method: extracted all 25 `static const uint32_t` constants from the headers, byte-scanned all 36 shipped
+binaries plus `original\SC3U.exe` for each as a little-endian dword, converted file offsets to RVAs via
+each PE's section table, resolved the containing function from `functions.csv`, then **re-verified every
+hit by grepping the constant literal out of that function's exported decompilation**.
+
+```
+853 raw dword hits across 36 binaries
+611 in .text
+260 high-entropy AND inside a function we already track
+243 of those 260 confirmed present in the decompiled text   <-- the usable anchors
+150 distinct functions
+```
+
+**Entropy caveat (important).** Four constants are small values and their hits are mostly arithmetic
+noise, not IID references: `GZIID_cIGZSystemService=0x6c` (315 hits), `GZIID_cISC3App=0xfa2` (110),
+`GZIID_cIGZMessageTarget=0x58d` (65), `GIID_cIGZWinMgr=0x5a4` (26), `GZIID_cIGZResourceKeyList=0x199656`,
+`GZIID_cIS3DValve=0xf1ec30`, `GZIID_cISC3BaseAdvisor=0x13dee82`. Only hits `>= 0x01000000` were treated as
+evidence. Small-value constants are only trusted when they appear *inside a confirmed QueryInterface
+chain* (see §2), where the surrounding shape disambiguates them.
+
+### The constant table (verbatim from the headers)
+
+| Constant | Value | Hit modules (high-entropy only) |
+|---|---|---|
+| `GZIID_cISC3ValveLayer` | `0x40a42f1c` | SIMRCI, SIMMISC, SIMADV, SIMECO, SIMUI, SIMSPR, SimTransit, AUDIO |
+| `LayerType_cISC3ValveLayer` | `0x80f1e6d3` | (same 8) |
+| `GZIID_cISC3AuraLayer` | `0x4259c018` | SIMMISC, SIMRCI, SIMDSTR, SIMADV, SIMSERV, SIMSPR, SCENARIO, AUDIO |
+| `LayerType_cISC3AuraLayer` | `0x0259c03f` | (same 8) |
+| `GZIID_cISC3CityCellMapBase` | `0x817ab319` | SIMECO, SIMSERV, SIMRCI, SIMMISC, SIMGEOM, SIMSPR, SIMUTIL |
+| `GZIID_cISC3CityCellMap_Sint8` | `0x40ace11f` | SIMMISC |
+| `GZIID_cISC3CityCellMap_Sint16` | `0xa0ace0fb` | SIMECO, SIMMISC, SIMRCI, SIMSERV |
+| `GZIID_cISC3CityCellMap_Sint32` | `0x40ace0d5` | SIMECO, SIMSERV |
+| `GZIID_cISC3CityCellMap_Uint8` | `0xa0ace10a` | SIMGEOM, SIMRCI, SIMSERV, SIMSPR, AUDIO |
+| `GZIID_cISC3CityChangeReceiver` | `0x215b29c5` | SIMECO, SIMGEOM, SIMMISC, SIMRCI, SIMSERV |
+| `GZIID_cISC3OccManIterator` | `0x41bdf76b` | (no high-entropy in-function hit) |
+| `GZIID_cISC3OccManIteratorTest` | `0xa1c085db` | SIMNTWRK, SIMSPR |
+| `GZIID_cIGZWin` | `0x22ba0121` | GZWIND, SIMUI, SIMSPR, SIMBABLD, SIMINIT, SC3U.exe |
+| `GZIID_cIGZDBSegment` | `0xc019963e` | GZResourceD, SC3U.exe, SIMBABLD, SIMSPR, SIMINIT |
+| `GZIID_cIGZDBRecord` | `0x4019960a` | GZResourceD, SC3U.exe, SIMBABLD, SIMSPR |
+| `GZSERVID_cIGZWinMgr` | `0xa417445e` | 17 modules |
+| `GZCLSID_cIGZResourceKeyList` | `0x801ed267` | GZResourceD, SIMINIT, Baapp.exe |
+| `kGZMessageWndProcHook` | `0x5a4fc3d5` | SC3U.exe, GZGraphicD, SIMBABLD |
+| `GZIID_cIGZMessageTarget` | `0x58d` | low-entropy — trusted only inside QI chains |
+| `GZIID_cIGZSystemService` | `0x6c` | low-entropy |
+| `GZIID_cISC3App` | `0xfa2` | low-entropy |
+| `GZIID_cISC3BaseAdvisor` | `0x13dee82` | low-entropy, but SIMADV + SIMCITY only, and one QI chain |
+| `GZIID_cIS3DValve` | `0xf1ec30` | low-entropy |
+| `GIID_cIGZWinMgr` | `0x5a4` | low-entropy |
+| `GZIID_cIGZResourceKeyList` | `0x199656` | low-entropy |
+
+---
+
+## 2. Classes pinned by their QueryInterface — 23 functions, C3
+
+A `QueryInterface` implementation enumerates exactly the interfaces its class implements, so a function
+that tests a known GZIID *identifies the class*. 23 such functions were found and committed to
+`functions.csv` at **C3** (two independent witnesses: the SDK header constant + the decompiled shape).
+
+The witness pattern, `SIMECO.DLL` `0x1000462e` (47 bytes) `[CONFIRMED @ 0x1000462e]`:
+
+```c
+if (((param_1 == 1) || (param_1 == 0x40ace0d5)) || (param_1 == -0x7e854ce7)) {
+    *param_2 = this;
+    uVar2 = (**(code **)(*(int *)this + 4))();     /* AddRef */
+    uVar1 = CONCAT31((int3)((uint)uVar2 >> 8),1);
+}
+```
+
+`1` = `cIGZUnknown`, `0x40ace0d5` = `GZIID_cISC3CityCellMap_Sint32`, `-0x7e854ce7` = `0x817ab319` =
+`GZIID_cISC3CityCellMapBase`. The accepted set is exactly the header's declared hierarchy
+(`cISC3CityCellMap<T> : cISC3CityCellMapBase : cIGZUnknown`). This is `cISC3CityCellMap<int32_t>::QueryInterface`.
+
+| Module | RVA | committed name | identifying IID |
+|---|---|---|---|
+| SIMECO | `0x1000462e` | `sc3_citycellmap_sint32_queryinterface` | `_Sint32` + Base |
+| SIMECO | `0x1000465d` | `sc3_citycellmap_sint16_queryinterface` | `_Sint16` + Base |
+| SIMECO | `0x1000468c` | `sc3_citycellmap_sint32_queryinterface` | `_Sint32` + Base |
+| SIMGEOM | `0x10011525` | `sc3_citycellmap_uint8_queryinterface` | `_Uint8` + Base |
+| SIMMISC | `0x100012dc` | `sc3_citycellmap_sint8_queryinterface` | `_Sint8` + Base |
+| SIMMISC | `0x1000130b` | `sc3_citycellmap_sint16_queryinterface` | `_Sint16` + Base |
+| SIMRCI | `0x1001b51e` | `sc3_citycellmap_sint16_queryinterface` | `_Sint16` + Base |
+| SIMRCI | `0x1002e9ab` | `sc3_citycellmap_uint8_queryinterface` | `_Uint8` + Base |
+| SIMSERV | `0x10006251` | `sc3_citycellmap_uint8_queryinterface` | `_Uint8` + Base |
+| SIMSERV | `0x10006280` | `sc3_citycellmap_sint16_queryinterface` | `_Sint16` + Base |
+| SIMSERV | `0x10009ca2` | `sc3_citycellmap_sint32_queryinterface` | `_Sint32` + Base |
+| SIMSPR | `0x1004ba87` | `sc3_citycellmap_uint8_queryinterface` | `_Uint8` + Base |
+| SIMUTIL | `0x10003391` | `sc3_citycellmapbase_queryinterface` | Base |
+| **SIMRCI** | **`0x1002ef6b`** | **`sc3_valvelayer_queryinterface`** | **`GZIID_cISC3ValveLayer`** |
+| SIMADV | `0x1001d401` | `sc3_baseadvisor_queryinterface` | `GZIID_cISC3BaseAdvisor` |
+| GZResourceD | `0x1000b434` | `gz_dbsegment_queryinterface` | `GZIID_cIGZDBSegment` |
+| GZResourceD | `0x1000b79b` | `gz_dbrecord_queryinterface` | `GZIID_cIGZDBRecord` |
+| SC3U.exe | `0x004660d7` | `gz_dbsegment_queryinterface` | `GZIID_cIGZDBSegment` |
+| SC3U.exe | `0x0046643e` | `gz_dbrecord_queryinterface` | `GZIID_cIGZDBRecord` |
+| SIMBABLD | `0x120505e1` | `gz_dbsegment_queryinterface` | `GZIID_cIGZDBSegment` |
+| SIMBABLD | `0x1205091e` | `gz_dbrecord_queryinterface` | `GZIID_cIGZDBRecord` |
+| SIMSPR | `0x100594c8` | `gz_dbsegment_queryinterface` | `GZIID_cIGZDBSegment` |
+| SIMSPR | `0x10059805` | `gz_dbrecord_queryinterface` | `GZIID_cIGZDBRecord` |
+
+### The RCI demand engine class is now located
+
+`SIMRCI.DLL` `0x1002ef6b` (77 bytes) `[CONFIRMED @ 0x1002ef6b]`:
+
+```c
+if (param_1 == 1) { *param_2 = (uint)this; }
+else {
+  if ((param_1 != 0x58d) && (param_1 != 0x206c6e7c)) {
+    if (param_1 == 0x40a42f1c) { *param_2 = (uint)this; }        /* GZIID_cISC3ValveLayer */
+    if (param_1 != -0x7e3f3484) { return param_1 & 0xffffff00; }
+  }
+  *param_2 = -(uint)(this != (void *)0x0) & (int)this + 4U;      /* second base at +4 */
+}
+```
+
+Mechanical reading: the object answers to `cIGZUnknown` and `GZIID_cISC3ValveLayer` **at offset 0**, and to
+`0x58d` (`GZIID_cIGZMessageTarget`), `0x206c6e7c` and `0x81c0cb7c` at **`this+4`**. So `cSC3ValveLayer`
+multiply-inherits, with a message-target base subobject at `+4`. `0x58d` is low-entropy on its own but is
+unambiguous here — it sits in a QI chain alongside a confirmed high-entropy IID.
+
+This is the class behind `SC3ValveLayer` / `Sys\SC3ValveLayer.ini` and the `goValveLayer` the iOS oracle
+models in `SIM_LAYERS_XREF.md` §S5. Its vtable is `*(int *)this` and the header gives the 11 declared
+methods to walk it with: `EndOfMonth`, `CreateNewValve`, `GetValvePointer`, `AddValveToLayer`,
+`GetAgentSupplyEffect`, `GetAgentDemandEffect`, `GetDensity`, `GetTaxableResidentialDensity`,
+`GetTaxableCommercialDensity`, `GetTaxableIndustrialDensity`, `DebugSetValve`.
+
+`0x206c6e7c` and `0x81c0cb7c` are **unknown IIDs** not present in the SDK headers → logged in
+`UNCERTAINTIES.md`.
+
+---
+
+## 3. Layer acquisition sites — 127 functions annotated `[GZ-IID]`
+
+The remaining 206 verified hits sit in 127 functions that *consume* a layer rather than implement it. The
+recurring idiom is a `LayerType_X` immediate followed ~0x18 bytes later by the matching `GZIID_X`: fetch
+the layer by its type id, then `QueryInterface` it for the typed pointer.
+
+`functions.csv` notes for these rows now carry `[GZ-IID] literal interface ids present: <const>=<value> @<rva>`.
+Confidence was **not** raised — knowing which layer a function acquires is not the same as knowing what it
+does with it.
+
+The distribution independently corroborates existing subsystem assignments:
+
+| Evidence | Corroborates |
+|---|---|
+| `GZIID_cISC3BaseAdvisor` occurs in **SIMADV + SIMCITY only** | SIMADV = the advisor subsystem |
+| all 7 `cISC3AdvisorFor*` advisors in SIMADV acquire ValveLayer + AuraLayer (`sc3_advisor_*` @ `0x1000ce3b`, `0x1001215d`, `0x1001588a`, `0x1001816b`) | advisors read RCI demand + aura, per `SIMADV.md` |
+| `LayerType_cISC3AuraLayer` concentrated in SIMMISC's `sc3_query_bu*` cluster (7 sites) | `MODULE_MAP.md`: SIMMISC = S12 aura |
+| `GZIID_cISC3ValveLayer` in `sc3_budget_l*` `0x100067c7` + `sc3_financeg*` `0x10026795` | S10 budget reads RCI demand |
+| `GZIID_cISC3ValveLayer` in `SimTransit` `sc3_transit_*` `0x10003d93` | S6 traffic reads demand |
+| `GZIID_cISC3ValveLayer` in SIMECO `sc3_pollutio*` `0x10005844` | S? pollution reads demand |
+| `GZIID_cISC3OccManIteratorTest` ×18 across 6 `sc3_ntwrk_re*` registration functions in SIMNTWRK | occupant-iterator predicates registered at init |
+
+---
+
+## 4. Interface inventory — 65 SC3 interfaces, 1,379 virtual methods
+
+Full signatures are in the upstream repo. Method counts are declared-virtuals per header (not
+vtable slot counts, which include inherited entries).
+
+**Layers** — cross-referenced to our module map and subsystem codes:
+
+| Interface | methods | base | module (per `MODULE_MAP.md`) | our subsystem |
+|---|---:|---|---|---|
+| `cISC3PollutionLayer` | 51 | `cISC3CityCellMap<uint32_t>` | SIMECO | pollution-layer |
+| `cISC3ResidentialLayer` | 38 | `cIGZUnknown` | SIMRCI | S4/S5 |
+| `cISC3WeatherLayer` | 32 | `cIGZUnknown` | — `[UNMAPPED]` | — |
+| `cISC3BuildingLayer` | 26 | `cIGZUnknown` | SIMGEOM | S3 |
+| `cISC3BudgetLayer` | 25 | `cIGZUnknown` | SIMMISC | S10 |
+| `cISC3ZoneLayer` | 20 | `cISC3CityCellMap<uint8_t>` | SIMRCI | S4 |
+| `cISC3CityLayer` | 15 | `cIGZUnknown` | — (the layer contract) | — |
+| `cISC3DisasterLayer` | 15 | `cIGZUnknown` | SIMDSTR | S11 |
+| `cISC3PoliceLayer` | 14 | `cISC3CityCellMap<uint8_t>` | SIMSERV | S9 |
+| `cISC3OrdinanceLayer` | 12 | `cIGZUnknown` | SIMMISC | S14 |
+| `cISC3FireLayer` | 11 | `cISC3CityCellMap<uint8_t>` | SIMSERV | S9 |
+| **`cISC3ValveLayer`** | **11** | `cIGZUnknown` | **SIMRCI (class @ `0x1002ef6b`)** | **S5** |
+| `cISC3WorldLayer` | 5 | `cIGZUnknown` | SIMMISC | S1 |
+| `cISC3LandValueLayer` | 1 | `cISC3CityCellMap<uint8_t>` | — `[UNMAPPED]` | — |
+| `cISC3AuraLayer` | 1 | `cISC3CityCellMap<int8_t>` | SIMMISC | S12 |
+| `cISC3CrimeLayer` | 1 | `cISC3CityCellMap<uint8_t>` | SIMSERV | S9 |
+| `cISC3CommercialLayer` | 1 | `cIGZUnknown` | SIMRCI | S4/S5 |
+| `cISC3IndustrialLayer` | 1 | `cIGZUnknown` | SIMRCI | S4/S5 |
+| `cISCNScenarioLayer` | — | — | SCENARIO | scenario |
+| `cISSStrtSimLayer` | — | — | STRTSIM | startup sim |
+
+Note the layer classes are **cell maps**: `cISC3CityCellMap<T>` is the per-tile raster base, `T` being the
+per-cell type (`uint8_t` zones/police/crime/landvalue, `int8_t` aura, `uint32_t` pollution). That is why the
+`CityCellMap` QueryInterface functions turn up in seven different modules — each layer module instantiates
+the template.
+
+`SIM_LAYERS_XREF.md` lists no `cISC3PowerLayer` / `cISC3TrafficLayer` header, and none exists upstream —
+those are `[UNMAPPED]` in the SDK. Power stays anchored the way `POWER_GRID.md` did it (the `0x258` cap).
+
+**Non-layer interfaces of note:**
+
+| Interface | methods | what it is |
+|---|---:|---|
+| `cISC3City` | **159** | the city god-object |
+| `cISC3CitySpriteCellMap` | 104 | sprite grid |
+| `cISC3DirtBag` | 88 | SIMDIRT — the "dirt" system |
+| `cISC3Occupant` | 69 | the occupant base (S3) |
+| `cISC3CitySchemeMgr` | 45 | colour/scheme manager |
+| `cISC3OccupantManagerAnim` | 41 | matches the `OccManAnim::` asserts already seen in SC3U strings |
+| `cISC3OccupantAttrib` | 41 | occupant attributes |
+| `cISC3WinCityView` | 38 | main city window |
+| `cISC3BaseAdvisor` | 35 | advisor base (SIMADV, QI @ `0x1001d401`) |
+| `cISC3App` | 34 | app object |
+| `cISC3AppPreferences` | 34 | preferences |
+| `cISC3Valve` | 31 | a single supply/demand valve |
+| `cISC3Internet` | 26 | in-game internet |
+| `cISC3PetitionerManager` | 9 | petitioners (matches `sc3_petition*` @ `0x1001e6af`) |
+| `cISC3DepartmentBudget` | 9 | per-department budget |
+| `cISC3AgentTypeTree` | 9 | **the agent-type hierarchy** `SIM_LAYERS_XREF.md` identified as the layer registry |
+
+Header file counts: **111 total** = 32 `cIGZ*` framework + 67 `cISC3*`/`cISCN*`/`cISS*` game (65 of which
+parse to a class declaration with a method list) + 12 utility (`cRZBaseString`, `cRZCOMDllDirector`,
+`GZServPtrs`, …).
+
+The 32 `cIGZ*` framework headers (`cIGZCOM`, `cIGZMessageServer`, `cIGZDBSegment`, `cIGZFileSystem`,
+`cIGZResourceManager`, `cIGZLanguageManager`, `cIGZCheatCodeManager`, …) confirm SC3K and SC4 share the GZ
+framework, so SC4-community knowledge of GZCOM/DBPF partly transfers.
+
+---
+
+## 5. Reproducing this
+
+Scripts used live in the session scratchpad, not the repo (they depend on a scratchpad clone). The
+sequence:
+
+1. `git clone --depth 1 https://github.com/0xC0000054/sc3k-gzcom-dll` into a scratchpad (do NOT vendor).
+2. Regex the headers for `static const uint32_t (\w+) = (0x[0-9a-fA-F]+);`.
+3. Byte-scan every `Apps\*.dll|exe` + `original\SC3U.exe` for each value as a little-endian dword.
+4. Convert file offset → RVA via the PE section table (`ImageBase + VirtualAddress + (off - PointerToRawData)`).
+5. Resolve the containing function against `functions.csv` (`rva <= X < rva+size`).
+6. **Re-verify** by grepping the constant (both `0x…` and Ghidra's signed `-0x…` form) out of
+   `re/ghidra_export_<module>/functions/<rva>_*.c`. A hit that fails this step is discarded.
+
+Step 6 is what makes these `[CONFIRMED]` rather than `[GZ-HINT]`.
+
+## 6. What this does not give us
+
+- **No class ids (GZCLSID).** The headers carry interface ids, not the per-class factory ids. `MODULE_MAP.md`
+  claim 3 stands for GZCLSID: those are still ASCII in `SYS.PAK` / `CitySim.ini`, parsed at runtime.
+- ~~**No vtable slot order.**~~ **REFUTED 2026-08-17 — see §7.** Declaration order IS vtable order, proven
+  on three classes across 29 slots with zero mismatches.
+- **No struct field offsets.** Same rule as the iOS oracle: layouts do not transfer.
+- **Incomplete coverage.** Upstream says only a small number of interfaces are decoded and the message
+  system values are mostly unknown. 65 SC3 interfaces here vs. the full engine.
+
+---
+
+## 7. The cSC3ValveLayer vtable walk — declaration order IS vtable order (U-042 resolved)
+
+`SIMRCI.DLL`. Two vtables, **29 slots, zero mismatches** against the SDK headers. This both resolves U-042
+and opens the S5 RCI demand engine.
+
+Finding them: scan `.rdata` for a dword-aligned pointer to the known `QueryInterface` `0x1002ef6b` → one hit
+at `0x1004cee4`, which is therefore slot 0 of the primary vtable. The secondary vtable was found from
+`0x1002df6a` (`mov eax,0x80f1e6d3; ret`, a function returning `LayerType_cISC3ValveLayer`), which the header
+places at `cISC3CityLayer` slot 15, giving base `0x1004ced8 - 0x3c = 0x1004ce9c`. The two vtables are
+adjacent: `0x1004ce9c + 18*4 = 0x1004cee4`.
+
+### `cISC3ValveLayer` vtable @ `.rdata` `0x1004cee4`
+
+| slot | RVA | size | header method | mechanical evidence |
+|---:|---|---:|---|---|
+| 0 | `0x1002ef6b` | 77 | `QueryInterface` | accepts `GZIID_cISC3ValveLayer` |
+| 1 | `0x1004312b` | 23 | `AddRef` | increments `this+8` |
+| 2 | `0x1002efb8` | 48 | `Release` | tests `this+8` |
+| **3** | **`0x1002efe8`** | **560** | **`EndOfMonth(void)->bool`** | **the demand regulator, see below** |
+| 4 | `0x1002edbe` | 138 | `CreateNewValve(u32,u32,void**)` | `QueryInterface(clsid 0xc0f1ec40, iid 0xf1ec30 = GZIID_cIS3DValve)` then `cISC3Valve+0xc` (`Init`) |
+| 5 | `0x1002eeac` | 53 | `GetValvePointer(u32,u32,void**)` | 3 args, map lookup at `this+0x18` |
+| 6 | `0x1002ee48` | 100 | `AddValveToLayer(cISC3Valve*)` | 1 ptr arg, keys on `cISC3Valve+0x20` (`GetId`), Releases old + AddRefs new |
+| 7 | `0x1002eee1` | 69 | `GetAgentSupplyEffect(u32,u32)->i16` | returns `int16` at record `+0xc` |
+| 8 | `0x1002ef26` | 69 | `GetAgentDemandEffect(u32,u32)->i16` | identical body, returns `int16` at record `+0xe` |
+| 9 | `0x1002e9da` | — | `GetDensity(u32,u32,u8&)` | `ret 0xc` (3 args), forwards all three to `[this+0x38]` vtable `+0x34` |
+| 10 | `0x1002df70` | 4 | `GetTaxableResidentialDensity(void)` | `mov eax,[ecx+0x40]; ret` |
+| 11 | `0x1002df74` | 4 | `GetTaxableCommercialDensity(void)` | `mov eax,[ecx+0x44]; ret` |
+| 12 | `0x1002df78` | 4 | `GetTaxableIndustrialDensity(void)` | `mov eax,[ecx+0x48]; ret` |
+| 13 | `0x1002de20` | 3 | `DebugSetValve(str*,str*,str*)` | `ret 0xc` (3 args) — **stubbed out in retail** |
+| 14 | `0x1002df7c` | 28 | *(scalar deleting dtor)* | not in the header, as expected |
+
+Slots 15-28 are 14 copies of `0x10044c20` = `jmp [0x1004b120]` (an import thunk, `__purecall` shape) and
+belong to a different, abstract vtable. Our vtable ends at slot 14.
+
+### `cISC3CityLayer` vtable @ `.rdata` `0x1004ce9c` — the `this+4` base subobject
+
+Slots 0-2 are **MSVC adjustor thunks** — `sub ecx, 4 ; jmp <primary>` — the compiler's signature for a
+secondary base at object offset +4. That alone proves what `this+4` is.
+
+| slot | RVA | header method | mechanical evidence |
+|---:|---|---|---|
+| 0-2 | `0x100308a6/ae/b6` | `QueryInterface`/`AddRef`/`Release` | `sub ecx,4 ; jmp` to each primary |
+| 3 | `0x100312a2` | `DoMessage(cGZMessage&)` | `xor al,al; ret 4` → 1 arg, returns false |
+| 4 | `0x100308be` | `DoQueryInfo(cGZMessage&,cIGZUnknown*)` | 2 args, dispatches on `*edx == 0x2dc6d7f` |
+| 5 | `0x1002dff3` | `StaticInit(cISC3CityDefinition*)` | our `sc3_valve_load_tuning`, loads `Sys\SC3ValveLayer.ini` |
+| 6 | `0x1002e7e6` | `StaticShutdown(void)` | our `sc3_valve_clear_tables` |
+| 7 | `0x1002e9f6` | `Init(cISC3City*)` | 396 B |
+| 8 | `0x1002e9f1` | `Init(cISC3City*,cISC2Importer*)` | `mov al,1; ret 8` → **2 args, stubbed**: no SC2 import for this layer |
+| 9 | `0x1002e887` | `Init(cISC3City*,cIGZDBSegment*)` | 292 B — the **load** path |
+| 10 | `0x1002eb82` | `Save(cISC3City*,cIGZDBSegment*)` | 263 B — the **save** path |
+| 11 | `0x1002ec89` | `SimulationBegin(void)` | 51 B |
+| 12 | `0x1000e7b3` | `SimulationEnd(void)` | `mov al,1; ret` → **0 args**, stubbed |
+| 13 | `0x1002ecbc` | `Shutdown(void)` | 258 B |
+| 14 | `0x1002f218` | `GetManipulator(...)` | our `sc3_valve_get_or_create` |
+| 15 | `0x1002df6a` | `GetLayerType(void)->u32` | `mov eax,0x80f1e6d3; ret` = `LayerType_cISC3ValveLayer` |
+| 16 | `0x1003d791` | `DebugClassTag(cIGZString&)` | `xor al,al; ret 4` → 1 arg, stubbed |
+| 17 | `0x1003d791` | `DebugTypeTag(cIGZString&)` | same function, stubbed |
+
+`Init(City*,DBSegment*)` at slot 9 and `Save` at slot 10 are the layer's **serialisation pair** — directly
+relevant to the city-save writer, since these read and write the valve layer's section.
+
+### Why this is proof, not coincidence
+
+Each of these was predicted from a header *before* being looked up:
+
+1. **Argument counts from `ret N`.** `ret 8` = 2 args at slot 8, `ret 0` = 0 args at slot 12, `ret 0xc` = 3
+   args at slots 9 and 13, `ret 4` = 1 arg at slots 3/16/17. Five independent arity checks, all correct.
+2. **A constant-returning slot.** Slot 15 returns exactly `LayerType_cISC3ValveLayer` `0x80f1e6d3`.
+3. **Three consecutive getters, in R/C/I order.** Slots 10/11/12 read `[ecx+0x40]`, `[ecx+0x44]`, `[ecx+0x48]`,
+   and `EndOfMonth`'s tail publishes `this+0x4c/0x50/0x54` into exactly those three fields then zeroes the
+   accumulators. The R/C/I ordering is confirmed by the write side, not assumed from the header.
+4. **`cISC3Valve`'s own header predicted five vtable offsets used from inside the layer, all correct:**
+   `+0xc`=`Init`(slot 3), `+0x20`=`GetId`(8), `+0x2c`=`QueryDemandValue`(11),
+   `+0x40`/`+0x44`=`AddToSupplyValue`/`AddToDemandValue`(16/17), `+0x78`=`EndOfMonth`(30).
+
+Point 4 is the strongest: a **second** header (`cISC3Valve.h`, 31 methods) correctly predicted five offsets in
+a **different** class's call sites. Two classes agreeing by chance is not credible.
+
+**Scope of the claim:** proven for `cISC3ValveLayer`, `cISC3CityLayer` and `cISC3Valve`. NOT asserted for all
+65 interfaces. Cheap per-class re-verification: arg counts from `ret N`, plus any constant-returning slot.
+
+### `cISC3ValveLayer::EndOfMonth` — the RCI demand regulator `[CONFIRMED @ 0x1002efe8]`
+
+560 bytes at `0x1002efe8`. Mechanically:
+
+1. Loops `i = 0..3` (the four agent classes), pulling a per-class scalar from the city object
+   `[this+0x10]` vtable at `+0xdc`, `+0xd8`, `+0xec`, `+0xf0`.
+2. For each agent record in that class's list, multiplies the record's `int16` supply field (`+0xc`) and
+   demand field (`+0xe`) by that scalar and calls `cISC3Valve+0x40` (`AddToSupplyValue`) and `+0x44`
+   (`AddToDemandValue`) on the matching valve, found via the map at `this+0x18`.
+   *These are the same two fields slots 7 and 8 expose as `GetAgentSupplyEffect` / `GetAgentDemandEffect`.*
+3. Walks a second table (`DAT_10058700`), gated by `[this+0x14]` vtable `+0xc`, reading `cISC3Valve+0x2c`
+   (`QueryDemandValue`), scaling by a float from `_DAT_1004b538`, sign-correcting on `value < 1`, and feeding
+   the result back through `AddToDemandValue` — the **economy-modifier** pass.
+4. Calls `cISC3Valve+0x78` (`EndOfMonth`) on **every** valve and ANDs the results into the return value.
+5. Iterates the 2D cell grid (`[this+0x38]` vtable `+0xc`/`+0x10` = extents) calling `+0x34` then `+0x3c`
+   per cell — the per-tile density writeback.
+6. Publishes `this+0x4c/0x50/0x54` into `this+0x40/0x44/0x48` (taxable R/C/I densities) and zeroes the
+   accumulators.
+
+So SC3000's RCI demand is: **per-agent-class supply/demand deltas → per-valve accumulation → economy
+modifier → per-valve `EndOfMonth` → monthly taxable-density snapshot.** This matches the iOS oracle's
+`goValveLayer::EndOfMonth` (580 B) in `SIM_LAYERS_XREF.md` §S5, and the size agreement (560 vs 580 B, both the
+largest method on the class) is a third witness.
+
+### Committed
+
+17 rows in `functions.csv` promoted to **C3** with `sc3_valvelayer_*` names (`endofmonth`, `createnewvalve`,
+`getvalvepointer`, `addvalvetolayer`, `getagentsupplyeffect`, `getagentdemandeffect`, `staticinit`,
+`staticshutdown`, `init_city`, `init_city_dbsegment`, `save`, `simulationbegin`, `shutdown`,
+`getmanipulator`, `addref`, `release`, `scalar_deleting_dtor`). Project C3 count 43 → 60.
+
+**Five slots Ghidra never carved into functions** (`0x1002e9da`, `0x1002df70/74/78`, `0x1002de20`) so they have
+no `functions.csv` row. They are documented in the table above from hand disassembly. Worth a Ghidra
+re-analysis pass that seeds function starts from vtable entries.
+
+---
+
+## 8. cSC3ZoneLayer — S4 zoning, and a limit on §7's result
+
+`SIMRCI.DLL`. Expected layout from the header chain
+`cISC3ZoneLayer : cISC3CityCellMap<uint8_t> : cISC3CityCellMapBase : cIGZUnknown`
+= 3 + 8 + 6 + 20 = **37 slots**.
+
+### Finding it without an IID
+
+`cISC3ZoneLayer.h` declares **no** GZIID constant, so §1's dword-scan route does not apply. What worked
+instead was a `GetLayerType` sweep, generalised from §7:
+
+1. Scan `.text` for `b8 <imm32> c3` (`mov eax, imm32 ; ret`) — every `cISC3CityLayer::GetLayerType`
+   implementation has this exact shape. SIMRCI yields 9 candidates with `imm >= 0x01000000`.
+2. For each, find a dword-aligned `.rdata` pointer to it and assume it is **slot 15** (the header's
+   position for `GetLayerType`), giving vtable base `ptr - 0x3c`.
+3. Verify slots 0..17 are all `.text` pointers, then read slots 5/9/10 (`StaticInit`, `Init(City*,DBSegment*)`,
+   `Save`) — those identify the layer.
+4. The layer's own primary vtable is adjacent at `base + 18*4`.
+
+This recovered the ValveLayer's `0x80f1e6d3` as a control (it matched §7 exactly) plus **five previously
+unknown SIMRCI layer-type ids**:
+
+| LayerType | `cISC3CityLayer` vtable | primary vtable | identified by |
+|---|---|---|---|
+| `0x80f1e6d3` | `0x1004ce9c` | `0x1004cee4` | `sc3_valvelayer_*` (§7) — control |
+| **`0xc0ab8a56`** | **`0x1004d198`** | **`0x1004d1e0`** | **slot 9 = `sc3_zonelayer_init_attach`, slot 10 = `sc3_zonelayer_save`** |
+| `0xc0ab8a88` | `0x1004c5dc` | `0x1004c624` | slot 5 = `sc3_landvalue_load_tuning`, slot 9 = `sc3_rci_init_history_graph` |
+| `0xc106c4f5` | `0x1004c918` | `0x1004c960` | slot 9 = `sc3_rci_layer_init`, slot 10 = `sc3_rci_layer_serialize` |
+| `0x4106cf1f` | `0x1004c45c` | `0x1004c4a4` | **SC3IndLayer** — StaticInit `0x1001599a` calls `sc3_ind_load_tuning` `0x10015dc0` |
+| `0x60f1e6fb` | `0x1004c1c0` | `0x1004c208` | **SC3ComLayer** — StaticInit `0x1000e834` calls `sc3_com_load_tuning` `0x1000eccd` |
+
+All six were attributed by the same rule: disassemble `cISC3CityLayer` slot 5 (`StaticInit`) and read its
+direct callees — each calls exactly one of the `Sys\SC3*Layer.ini` tuning loaders we had already named from
+its INI string, which names the layer without any inference. Refining the table above:
+`0xc106c4f5` StaticInit `0x1002115a` → `sc3_res_load_tuning` `0x10022ac6` = **SC3ResLayer**;
+`0xc0ab8a88` StaticInit **is** `sc3_landvalue_load_tuning` `0x1001b54d` = the **land-value** layer.
+
+> **Correction to `MODULE_MAP.md`.** Its SIMRCI row lists five layers (`SC3ValveLayer`, `SC3ZoneLayer`,
+> `SC3ResLayer`, `SC3ComLayer`, `SC3IndLayer`). There are **six** — SIMRCI also hosts the **land-value**
+> layer (`cISC3LandValueLayer` is in the SDK, deriving from `cISC3CityCellMap<uint8_t>`). The INI-string scan
+> that built that row missed it because its tuning loader does not reference an `SC3LandValueLayer.ini` path.
+
+The zone layer was identified by **our own prior names landing in the header's predicted slots**, which is an
+independent confirmation: nothing about `sc3_zonelayer_save` was derived from the SDK.
+
+### The size ranking agrees with the iOS oracle
+
+Before dumping, `SIM_LAYERS_XREF.md` §S4 gave iOS sizes: `PlaceZone` 2732 B > `CanZone` 2128 B >
+`PlaceBuilding` 2080 B. The three biggest slots in the SC3U vtable are **34 > 33 > 26** — exactly the header
+positions of `PlaceZone`, `CanZone`, `PlaceBuilding`. Ranking predicted, ranking observed.
+
+### `cISC3ZoneLayer` vtable @ `.rdata` `0x1004d1e0`
+
+Slots 0-16 (the inherited cell-map interface) are all **adjustor thunks** `sub ecx, 0x10 ; jmp <impl>`, so the
+cell-map base subobject sits at **object offset +0x10**. Slots 17-36 (the zone-specific methods) are direct
+implementations on the primary object.
+
+| slot | RVA | size | header method | evidence |
+|---:|---|---:|---|---|
+| 0-16 | `0x100342ca`+8n | 8 | *(inherited cell-map)* | `sub ecx,0x10 ; jmp` adjustor thunks |
+| 17 | `0x10032c44` | 23 | `GetZoneCount(u8)` | `cmp byte[esp+4],0x17; jb; xor eax,eax; movzx; mov eax,[ecx+eax*4+0x40]; ret 4` |
+| 18 | `0x10032c5b` | 26 | `GetUndevelopedTileCount(u8)` ⚠ | same shape, array at `+0x9c`, `ret 4` = **1 arg** |
+| 19 | `0x100312a7` | 7 | `GetUndevelopedTileCount(void)` ⚠ | `mov eax,[ecx+0x154]; ret` = **0 args** |
+| 20 | `0x10032c75` | 52 | `GetDevelopmentFailureCount(u8,i32)` | position |
+| 21 | `0x100312ae` | 7 | `GetAbandonedTileCount(void)` | `mov eax,[ecx+0x15c]; ret` — 0 args ✓ |
+| 22 | `0x10032694` | 66 | `RegisterZoneDeveloper(u8,dev*,u32)` | `ret 0xc` = 3 args ✓ |
+| 23 | `0x100326d6` | — | `UnregisterZoneDeveloper(u8)` | `ret 4` = 1 arg ✓ |
+| 24 | `0x1003270a` | — | `GetZoneDeveloper(u8)` | `ret 4` = 1 arg ✓ |
+| 25 | `0x1003306d` | 74 | `PlaceBuilding(attrib*,…)` ⚠ | `ret 0x14` = 5 args ✓ |
+| 26 | `0x10032dfc` | 625 | `PlaceBuilding(reskey&,…)` ⚠ | iOS twin 2080 B |
+| **27** | **`0x100330b7`** | **234** | **`IsNearTransport(pt&,u32)`** | **the RCI development gate**; iOS twin 308 B |
+| 28 | `0x100331a1` | 323 | `GetRoadCount(pt&,pt&)` | pairs with slot 27 |
+| 29 | `0x100332e4` | 132 | `FindBuildableRect(rect&,u32,u32,u32,u8,u32,bool)` | **`ret 0x1c` = 7 args** ✓ |
+| 30 | `0x100336fc` | — | `GetFilledDemand(u32)` | `ret 4` ✓ |
+| 31 | `0x10033711` | — | `AddToFilledDemand(u32,i32)` | `ret 8` ✓ |
+| 32 | `0x1003547c` | 251 | `GetZoneColor(u32,u32,u8&,u16&)` | position |
+| 33 | `0x1003559f` | 896 | `CanZone(i32,bounds&,i32&)` | iOS twin 2128 B |
+| **34** | **`0x1003591f`** | **1742** | **`PlaceZone(i32,bounds&,i32&,bool)`** | **largest on the class**; iOS twin 2732 B, also largest |
+| 35 | `0x100312b5` | 7 | `NerdsRule(void)->bool` | `mov al, byte[ecx+0x2bc]; ret` — returns a **byte** (bool), 0 args ✓ |
+| 36 | `0x1003250f` | 389 | `ReadZoneDeveloperDescriptions(bool)` | `ret 4` = 1 arg ✓ |
+
+**10 independent arity matches, 0 hard mismatches** across distinctly-named methods. `FindBuildableRect` at
+`ret 0x1c` (7 arguments) and `NerdsRule` returning a byte from a bool field are the two that could not
+plausibly be coincidence.
+
+### Field map recovered `[CONFIRMED @ 0x10032c44, 0x10032c5b, 0x100312a7, 0x100312ae, 0x100312b5]`
+
+| offset | type | meaning |
+|---|---|---|
+| `this+0x10` | subobject | the `cISC3CityCellMap<uint8_t>` base (per the adjustor thunks) |
+| `this+0x40` | `u32[23]` | zone count per zone type |
+| `this+0x9c` | `u32[23]` | undeveloped tile count per zone type |
+| `this+0x154` | `u32` | total undeveloped tile count |
+| `this+0x15c` | `u32` | abandoned tile count |
+| `this+0x2bc` | `bool` | the `NerdsRule` flag |
+
+**There are 23 (`0x17`) zone types.** Both array accessors bounds-check `zoneType < 0x17` and return 0 above
+it. Internal consistency check: `0x40 + 23*4 = 0x9c` — the two arrays are exactly adjacent and exactly 23
+entries each. That was not assumed; it falls out of two independently disassembled accessors.
+
+### ⚠ Correction to §7: overload order is NOT preserved
+
+Slots 18/19 are the `GetUndevelopedTileCount` overload pair. The header declares `(void)` first, then `(u8)`.
+The binary has them **the other way round** — slot 18 takes an argument (`ret 4`, indexes the `+0x9c` array),
+slot 19 takes none (`ret 0`, reads the `+0x154` scalar).
+
+So §7's "declaration order is vtable order" holds **between distinctly-named methods** but **not between
+overloads sharing a name**. That is exactly where reconstruction from mangled names is weakest: the mangled
+names differ only in their parameter encoding, and nothing in them fixes the relative order.
+
+Consequences, applied:
+- Slots 18/19 are committed **swapped relative to the header**, per the disassembly.
+- Slots **25/26** (`PlaceBuilding`) both take 5 arguments, so arity cannot separate them. Both rows carry
+  `[UNCERTAIN]` on the overload assignment. Resolving it needs the *type* of the first argument
+  (`cISC3BuildingAttrib*` vs `cGZResourceKey const&`) read out of the bodies.
+- The inherited cell-map pairs `InBounds(2)/InBounds(4)` and `SetValue(3)/SetValue(5)` are subject to the same
+  doubt and were not committed.
+- Logged as U-045.
+
+### Committed
+
+11 rows to **C3** with `sc3_zonelayer_*` names (`getdevelopmentfailurecount`, `registerzonedeveloper`,
+`placebuilding_attrib`, `placebuilding_reskey`, `isneartransport`, `getroadcount`, `findbuildablerect`,
+`getzonecolor`, `canzone`, `placezone`, `readzonedeveloperdescriptions`). Project C3 count 60 → 71.
+
+Nine of the 37 slots are uncarved by Ghidra (`0x100312a7/ae/b5`, `0x100326d6`, `0x1003270a`, `0x100336fc`,
+`0x10033711`, `0x10032c44`, `0x10032c5b`) and so have no `functions.csv` row; they are documented in the table
+above from hand disassembly. This is now the second class where vtable-derived function starts would pay for a
+Ghidra re-analysis pass.
+
+---
+
+## 9. The zoning rules decoded — PlaceZone, IsNearTransport, and U-045 closed
+
+### U-045 closed: the `PlaceBuilding` overloads are swapped, 2-for-2
+
+**Slot 25** `0x1003306d` (74 B) is a **forwarder**, not an implementation `[CONFIRMED @ 0x1003306d]`:
+
+```c
+cVar1 = (**(code **)(*DAT_1005874c + 0x24))(param_1, 0x21183b00, &param_1);  /* resolve */
+uVar2 = 0;
+if (cVar1 != '\0') {
+  uVar2 = (**(code **)(*(int *)this + 0x68))(param_1, param_2, param_3, param_4, param_5);
+  (**(code **)(*param_1 + 8))();                                              /* Release */
+}
+```
+
+`0x68 / 4 = 26`. It resolves its first argument through a global service (`DAT_1005874c` vtable `+0x24`, with
+`0x21183b00` as the type/interface id) into a refcounted object, forwards to **slot 26**, then releases.
+
+**Slot 26** `0x10032dfc` (625 B) dereferences its first argument as a vtable object `[CONFIRMED @ 0x10032dfc]`:
+
+| call | meaning |
+|---|---|
+| `(**(code **)(*param_1 + 0x14))()` | returns a pointer to 3 dwords = a `{type, group, instance}` resource key |
+| `(**(code **)(*param_1 + 0x40))()` | footprint **width** |
+| `(**(code **)(*param_1 + 0x44))()` | footprint **depth** |
+
+An object that *reports* a resource key and a footprint is a `cISC3BuildingAttrib*`. A `cGZResourceKey const&`
+would be read as three dwords directly, with no vtable.
+
+**Therefore: slot 25 = `PlaceBuilding(cGZResourceKey const&, …)`, slot 26 = `PlaceBuilding(cISC3BuildingAttrib*, …)`
+— the reverse of the header.** Combined with the slot 18/19 `GetUndevelopedTileCount` pair, that is **two
+overload pairs examined and two found reversed**. The pattern so far is consistent reversal, but with n=2 it
+stays a caveat, not a rule: keep checking overload pairs individually.
+
+Byproducts: the 5th argument is confirmed to be the `bool` (Ghidra types it `int*` but tests `(char)param_5`),
+and `this+0x248` is a cell map with `+0xa8` = `CellCountX`, `+0xac` = `CellCountZ`, `+0x48` = `GetValue(x,z,&out)`.
+When the bool is set, slot 26 runs a **footprint uniformity check**: sample the zone value at the anchor tile,
+then walk the whole width × depth rect (clamped to the cell counts) and bail if any tile differs.
+
+### `IsNearTransport` — the RCI development gate `[CONFIRMED @ 0x100330b7]`
+
+`IsNearTransport(sIGZPointXZUint32 const& pt, uint32 radius) -> bool`, 234 B. `this+0x244` is the queryable
+layer (`+0x14` extent X, `+0x18` extent Z, `+0x74` rect query).
+
+1. Return **false** immediately if `pt.x >= extentX` or `pt.z >= extentZ`.
+2. Build a square around the tile, clamped to the map:
+   `x0 = max(0, x - radius - 1)`, `z0 = max(0, z - radius - 1)`,
+   `x1 = min(extentX - 1, x + radius + 1)`, `z1 = min(extentZ - 1, z + radius + 1)`.
+   Side length is therefore **2·radius + 3** cells — the radius is inflated by one on each side.
+3. **Shift all four bounds left by 8.** Cell coordinates become 8.8 fixed point, `0x100` units per tile.
+4. Call `this+0x244` vtable `+0x74` with `(&out, &rect, *(this+0x2b4))`, where `this+0x2b4` is a filter/predicate
+   object the layer holds.
+5. On success read `out->vtable[0x18]`, return `(result != 0)`, then `Release` via `out->vtable[8]`.
+
+So an RCI zone develops only when a rect query over its neighbourhood, filtered by the transport predicate,
+returns a non-zero result. This is the SC3U counterpart of the iOS `IsNearTransport` (308 B @ `0x0026516c`).
+
+### `PlaceZone` — the zoning apply path `[CONFIRMED @ 0x1003591f]`
+
+1742 B, the largest method on the class. `PlaceZone(int32 zoneType, cSC3CityBounds const&, int32& outCost, bool)`.
+
+**Gate.** The first call is `this->vtable[0x84]`. `0x84 / 4 = 33` = **`CanZone`**. If it returns false,
+`PlaceZone` returns 0 immediately. This cross-confirms slots 33 and 34 from the call graph, independently of
+§8's arity and size arguments.
+
+**Subsystems**, all fetched from the city object at `this+0x34`:
+
+| city vtable | role |
+|---|---|
+| `+0x15c` | cost / tunables provider (`+0x58` = a per-tile cost, `+0x14` = a finaliser) |
+| `+0x13c` | the zone cell map (`+0x4c` read, `+0x54` test, `+0x134`/`+0x148` batch begin/end) |
+| `+0x11c`, `+0x120`, `+0x124` | three occupant queries (`+0x7c` = query at cell) |
+
+**Bounds are 8.8 fixed point.** The max corner is bumped by `+0x100` (exactly one tile) and all four bounds are
+then `>> 8` into cell coordinates. Same convention as `IsNearTransport`.
+
+**Pass 1 — validation.** Per cell: query `+0x11c` `+0x7c`; if an occupant is present it must pass `+0x74` and a
+chain of `+0x3c` predicates. Separately the `+0x120` and `+0x124` queries must **miss**. Any failure clears the
+ok flag and aborts the sweep. Every queried occupant is released.
+
+**Pass 2 — apply**, bracketed by cell-map `+0x134` … `+0x148` (batch begin/end). Per cell:
+
+- sample the **four corner values** via `+0x4c` × 4; if they are not all equal, write through the cell map
+  (`[this-0x10]` `+0x3c` — negative because these methods run with `this` = the cell-map subobject, matching
+  §8's `sub ecx, 0x10` thunks);
+- gate on `this+0x248` vtable `+0x144(x, z)` (buildability);
+- on a hit, run the **demolition path**: occupant `+0x80` (attrib), `+0xb8`, `+0xa0` then `+0x1c`, and an
+  indirect call at `local_44[0x2d]`, accumulating a demolished bounding box from a `0x7fffffff` sentinel via a
+  rect-union; add the per-tile cost each time;
+- count tiles actually zoned, and write the zone value through the cell map.
+
+Afterwards, if anything was demolished, a global service (`+0x140` then `+0xb0`) is notified — a region
+refresh.
+
+**The cost formula.** *(⚠ SUPERSEDED by §11c — the whitelist reading below is wrong; the tail is a zoneType→cost-ID map and it also charges the player. Kept for the audit trail.)*
+
+```
+outCost = perTileCost * tilesZoned + accumulatedDemolitionCost
+```
+
+where `perTileCost = tunables->vtable[0x58]()` **only for**
+
+```
+zoneType ∈ {0, 1, 2, 3, 5, 6, 7, 9, 10, 11, 14, 15, 17}
+```
+
+and `0` for every other type. That is **13 chargeable types out of the 23** established in §8. The whitelist is
+literal in the decompilation as two comparison chains (`zoneType < 8` handling `{0,1,2,3,5,6,7}`, else
+`{9,10,11,14,15,17}`), so types `{4, 8, 12, 13, 16, 18…22}` are free.
+
+**`[UNCERTAIN]`, logged as U-047:** the `zoneType == 0` semantics and the role of the 4th `bool`. Much of pass 2
+is guarded by `zoneType != 0`, which reads like *0 = de-zone*, yet 0 is in the chargeable whitelist. Ghidra also
+aliases a stack flag onto `param_2`'s high byte (`param_2 = CONCAT13(1, param_2._0_3_)`), which corrupts the
+argument model. Re-read with a corrected 4-argument signature before trusting either point.
+
+### Committed
+
+5 rows enriched at C3, and **the two `PlaceBuilding` names swapped** to match the evidence:
+`0x1003306d` → `sc3_zonelayer_placebuilding_reskey`, `0x10032dfc` → `sc3_zonelayer_placebuilding_attrib`.
+
+---
+
+## 10. cSC3ResidentialLayer — 38 methods, and a general method for finding a vtable
+
+`SIMRCI.DLL`, LayerType `0xc106c4f5`. `cISC3ResidentialLayer : cIGZUnknown`, so 3 + 38 = **41 slots**.
+This is the health/education/population half of the RCI model.
+
+### §8's adjacency shortcut failed, and a fingerprint scan replaced it
+
+For the valve and zone layers the class's own vtable sat at `cISC3CityLayer vtable + 18*4`. **That adjacency
+is a layout coincidence, not a rule.** Applying it here gave `0x1004c960`, which scored 18 OK / 12 mismatch —
+and had slots 5 and 9 pointing at the *same* function, which no valid vtable does. Rejected.
+
+The replacement is general and worth reusing. `cISC3ResidentialLayer` has a distinctive **arity fingerprint**
+across its 38 slots: mostly 0-argument, with `ret 0xc` at slots 9-11, `ret 8` at 32/34/36, and `ret 4` at
+39/40. So:
+
+1. Enumerate every dword-aligned `.text` pointer in every non-`.text` section.
+2. For each as a candidate slot 0, require slots 3..40 all be `.text` pointers.
+3. Read each slot's terminating `ret N` for its argument byte count, skipping any slot whose first
+   control transfer is a `jmp` (unmeasurable).
+4. Score matches against the header-predicted arities; require at least 22 measurable slots.
+
+926 candidates qualified. The winner was unambiguous:
+
+| score | vtable base |
+|---|---|
+| **100.0% (29/29)** | **`0x1004c99c`** |
+| 86.2% (25/29) | `0x1004c994` |
+| 85.2% (23/27) | `0x1004c9a4` |
+
+The runners-up are the same vtable read off by one or two slots, which is the expected shape of a true hit.
+A full dump at `0x1004c99c` gives **29 OK, 0 MISMATCH, 9 unmeasurable**.
+
+> **Honesty check on that 100%.** 26 of the 29 matches are `ret 0`, the commonest value, so a run of trivial
+> getters would score well by luck. The fingerprint alone is suggestive, not conclusive. What makes this
+> class certain is the field and call-graph evidence below, all of which was predicted from the header
+> before being looked up.
+
+### Witness 1 — three consecutive strike flags, in declared order
+
+Slots 9/10/11 are three 170-byte sibling functions, each gated on a different byte:
+
+```
+slot  9  0x1002555b   cmp byte ptr [esi + 0x650], 0     GetStrikingSchoolBuildings
+slot 10  0x10025605   cmp byte ptr [esi + 0x651], 0     GetStrikingCollegeBuildings
+slot 11  0x100256af   cmp byte ptr [esi + 0x652], 0     GetStrikingHealthBuildings
+```
+
+School, College, Health at `+0x650`, `+0x651`, `+0x652` — the header's order mapped onto three adjacent
+bytes. The `Is*OnStrike` triple (slots 3/4/5) reads the same three bytes in the same order, and the
+`End*Strike` triple (slots 12/13/14) takes their addresses and additionally touches a dword at `0x654 + 4i`:
+
+```
+slot 12  0x10024157   lea eax,[ecx+0x650] ; mov eax,[ecx+0x654]
+slot 13  0x10024196   lea eax,[ecx+0x651] ; mov eax,[ecx+0x658]
+slot 14  0x100241d5   lea eax,[ecx+0x652] ; mov eax,[ecx+0x65c]
+```
+
+So each of the three systems has a **byte flag at `0x650+i` and a dword at `0x654+4i`**. Four separate method
+triples agree on the same School/College/Health ordering.
+
+### Witness 2 — the workforce getters call the AgeCohort slots the header pairs them with
+
+```
+slot 31 GetWorkforcePopPct  0x100251a8   mov eax,[ecx]; push 0x41; push 0x14; call [eax+0x80]   -> slot 32
+slot 33 GetWorkforceEQ      0x100251f6   mov eax,[ecx]; push 0x41; push 0x14; call [eax+0x88]   -> slot 34
+slot 35 GetWorkforceLE      0x10025292   mov eax,[ecx]; push 0x41; push 0x14; call [eax+0x90]   -> slot 36
+```
+
+`0x80/4 = 32`, `0x88/4 = 34`, `0x90/4 = 36`. **Three vtable indices predicted from the header, three hits.**
+Each `GetWorkforceX` is literally `GetAgeCohortX(0x14, 0x41)`.
+
+**Game rule, confirmed:** the *workforce* is the age cohort **20 to 65** inclusive.
+
+### Witness 3 — the age-cohort table `[CONFIRMED @ 0x100251b5]`
+
+`GetAgeCohortPopPct(uint8 lo, uint8 hi)` reads two byte arguments, clamps `hi` to **`0x59` (89)**, returns
+`0.0` if `lo > hi`, and otherwise sums `hi - lo + 1` floats starting at `[esi + lo*4 + 0x354]`.
+
+So there is a **per-age float array at `this+0x354`, ages 0..89** (90 entries × 4 bytes = `0x168`, spanning
+`+0x354`..`+0x4bb`). Maximum modelled age is 89.
+
+### Field map `[CONFIRMED]` — from the trivial getters
+
+| offset | type | accessor (slot) |
+|---|---|---|
+| `+0x354` | `float[90]` | per-age population pct, ages 0..89 |
+| `+0x628` | `i32` | `GetTotalCityEducationUpkeep` (37) |
+| `+0x640` | `i32` | `GetTotalCityHealthUpkeep` (38) |
+| `+0x650/1/2` | `u8` ×3 | school / college / health strike flags (3,4,5 and 9,10,11) |
+| `+0x654/8/c` | `i32` ×3 | per-system strike dword (12,13,14) |
+| `+0x660` | `u8` | `GetSchoolSystemRating` (16) |
+| `+0x661` | `u8` | `GetCollegeSystemRating` (17) |
+| `+0x662` | `u8` | `GetHealthSystemRating` (15) |
+| `+0x664` | `i32` | `GetPatientCount` (18) |
+| `+0x668` | `i32` | `GetHealthSystemCapacity` (24) |
+| `+0x66c` | `i32` | `GetSchoolStudentCount` (20) |
+| `+0x670` | `i32` | `GetSchoolSystemCapacity` (25) |
+| `+0x674` | `i32` | `GetCollegeStudentCount` (22) |
+| `+0x678` | `i32` | `GetCollegeSystemCapacity` (26) |
+| `+0x67c` | `i32` | `GetLibrarySystemCapacity` (27) |
+| `+0x680` | `i32` | `GetMuseumSystemCapacity` (28) |
+| `+0x684` | `i32` | `GetTeacherCount` (21) |
+| `+0x688` | `i32` | `GetProfessorCount` (23) |
+| `+0x68c` | `i32` | `GetDoctorCount` (19) |
+
+Note the struct is laid out as **demand/capacity pairs per system** — patients `+0x664` / health capacity
+`+0x668`, school students `+0x66c` / school capacity `+0x670`, college students `+0x674` / college capacity
+`+0x678` — with the three staff counts grouped afterwards at `+0x684`/`+0x688`/`+0x68c`.
+
+This is worth dwelling on as evidence. The header's *accessor* order (patient, doctor, school student,
+teacher, college student, professor) is **not** the field order. The ratings are the same: the accessors run
+Health, School, College (slots 15/16/17) while the fields run School `+0x660`, College `+0x661`, Health
+`+0x662`. Two different orderings, each matching its own source. Had the slot assignment been wrong, the
+accessors would not have landed on a coherent paired struct at all.
+
+### A negative result: address order is NOT an ordering witness
+
+The `ChanceOf*Strike` triple (slots 6/7/8) sits at `0x10024046`, `0x100240fc`, `0x100240a1` — slot 7 at a
+*higher* address than slot 8, unlike every other sibling triple on this class, which ascend. That looked like
+an overload-style reversal.
+
+It is not. Disassembling each for the flag it tests:
+
+```
+0x10024046   cmp byte ptr [ecx + 0x650], 0    -> School  = slot 6
+0x100240fc   cmp byte ptr [ecx + 0x651], 0    -> College = slot 7
+0x100240a1   cmp byte ptr [ecx + 0x652], 0    -> Health  = slot 8
+```
+
+The header order is **correct**; the compiler simply emitted these three out of source order. Recorded because
+the tempting move was to "fix" the slot assignment from address order, which would have introduced an error.
+**Use field/call evidence, never address order.**
+
+### Committed
+
+10 rows to **C3** with `sc3_reslayer_*` names (`getstrikingschoolbuildings`, `getstrikingcollegebuildings`,
+`getstrikinghealthbuildings`, `endschoolstrike`, `endcollegestrike`, `endhealthstrike`, `getagecohorteq`,
+`getagecohortle`, `seteducationfundingpercentage`, `sethealthfundingpercentage`).
+
+**28 of the 41 slots are uncarved by Ghidra** — this class is almost entirely 7-byte field getters that
+auto-analysis never turned into functions, which is why so much of it lives only in the table above. Third
+class running where vtable-seeded re-analysis would pay off; that job is now clearly worth doing before
+walking any more classes.
+
+---
+
+## 11. Vtable-seeded re-analysis, U-047, and cSC3BudgetLayer
+
+Three pieces of work that turned out to be one story: the Ghidra pass unblocked the rest, U-047's answer
+corrected §9, and the correction pre-validated the budget layer before it was dumped.
+
+### 11a. Vtable-seeded re-analysis — 1,170 new functions
+
+Sections 7, 8 and 10 each ended with the same complaint: many vtable slots point at code Ghidra's
+auto-analysis never turned into a function, so they have no `functions.csv` row and no decompilation. Most are
+7-byte field getters, only ever reached through a virtual call, i.e. only through a **data** reference.
+
+Fix, using the pre-existing `re/scripts/MakeFunctions.java` (which already accepts `@file` of addresses):
+
+1. For each module, scan every non-`.text` section for dword-aligned pointers into `.text`.
+2. Keep runs of **≥ 8 consecutive** such pointers (vtable-shaped).
+3. Collect the distinct targets; subtract those already present in `functions.csv`.
+4. Feed the remainder to `MakeFunctions.java` **without `-readOnly`**, then re-export.
+
+| module | vtable runs | distinct targets | already functions | seeded | created | failed |
+|---|---:|---:|---:|---:|---:|---:|
+| `SIMRCI.DLL` | 22 | 1,161 | 479 | 682 | **681** | 0 |
+| `SIMMISC.DLL` | 34 | 940 | 448 | 492 | **489** | 0 |
+
+**1,170 functions created, zero failures.** Decompilation exports grew from 3,268 → **4,040** files (SIMRCI) and
+2,603 → **3,132** (SIMMISC). The estimate going in was "~42 slots across three classes"; the real number was
+28× that, because the same blind spot applies to every class in these modules, not just the three walked.
+
+> **Tracker consistency warning** *(RESOLVED for the seeded set in §11e; the wider gap it exposed is open as U-048)*. These 1,170 functions exist in the Ghidra projects and in the text exports
+> but have **no rows in `functions.csv`**, which `CLAUDE.md` designates the single source of truth for status.
+> The tracker is now behind the analysis by ~1,170 C0 rows and needs a mechanical sync from the refreshed
+> `symbols.csv`. Not done here: `functions.csv` has concurrent writers (another session is actively verifying
+> rows), and a 1,170-row insert is exactly the kind of change that should not race.
+
+Both Ghidra projects were **mutated** (function creation, plus the U-047 signature override). Reversible with
+`ghidra_headless.ps1 -Module <NAME> -Import`, which re-imports and re-analyses from the anchored copy.
+
+### 11b. U-047 resolved — and my premise was wrong
+
+New tool: `re/scripts/ForceSignature.java`, which overrides a function's prototype and prints the resulting
+decompilation.
+
+```
+analyzeHeadless <proj> SC3_SIMRCI -process SIMRCI.DLL -noanalysis \
+  -scriptPath re\scripts -postScript ForceSignature.java 0x1003591f __thiscall bool int ptr ptr bool
+```
+
+Storage came out `this=ECX`, `a1=Stack[0x4]`, `a2=Stack[0x8]`, `a3=Stack[0xc]`, `a4=Stack[0x10]`.
+
+**The 4th bool argument is dead.** Zero accesses to `ebp+0x14` across all 1742 bytes. The callee pops it
+(`ret 0x10`) and never reads it.
+
+**The `CONCAT13` was Ghidra being faithful, not broken.** U-047 was filed on the premise that Ghidra's
+argument model was wrong. It wasn't. `ebp+0xf` is the high byte of the `a2` argument slot and is genuinely
+reused as a local boolean — 16 accesses, first written at `0x10035ba1`, which is *after* `a2`'s last read at
+`0x10035a0c`. Deliberate, safe MSVC argument-slot reuse. Forcing the signature did not remove the aliasing and
+should not have. Recorded because the lesson generalises: **an ugly decompilation is not automatically a wrong
+one.**
+
+**`zoneType == 0`** skips the corner-sample / buildability / demolition-cost block but still reads, tests and
+writes the cell — de-zone.
+
+### 11c. ⚠ Correction to §9's cost formula
+
+§9 claimed a "13-type chargeable whitelist at one per-tile cost". **That was wrong.** Raw disassembly of the
+tail shows a **zoneType → development-cost-ID map**, not a whitelist:
+
+```
+0x10035f6c  mov  eax, [ebp+8]          ; zoneType
+            ...comparison chain...
+0x10035fae  push 6      0x10035fca  push 3      0x10035fce  push 5
+0x10035fd2  push 4      0x10035fd6  push 2      0x10035fda  push 1
+0x10035fde  xor  eax,eax               ; id 0
+0x10035f8a  xor  eax,eax               ; unmatched -> multiplier 0
+0x10035fe8  call [edx+0x58]            ; GetCost(costId)      <- budget slot 22
+0x10035f8f  imul eax, [ebp-0x34]       ; * zoned tile count
+0x10035f96  add  eax, ecx              ; + demolition cost
+0x10035f9c  mov  [ecx], eax            ; *a3 = total
+0x10035fa2  call [edx+0x14]            ; WithdrawFunds(total) <- budget slot 5
+```
+
+So the 13 types map onto **seven different cost IDs (0-6)**, each priced by `GetCost`; unmatched types get a
+zero multiplier and pay only demolition. And `PlaceZone` does not merely *report* a cost — it **charges the
+player** via `WithdrawFunds`.
+
+That identifies the object from city vtable `+0x15c`: `+0x14` = slot 5 and `+0x58` = slot 22 are
+`WithdrawFunds` and `GetCost` in `cISC3BudgetLayer.h`. **City vtable `+0x15c` returns the cISC3BudgetLayer** —
+established from SIMRCI, before SIMMISC was even opened.
+
+### 11d. cSC3BudgetLayer @ `.rdata` `0x1003c550` (SIMMISC) — 17/17, 0 mismatches
+
+`cISC3BudgetLayer : cIGZUnknown`, 25 methods → 28 slots. Found by the §10 fingerprint method
+(`[8,0,4,4,4,0,0,0,0,4,4,8,4,4,4,4,4,4,4,4,4,0,0,4,0]`); the winner scored **100% (17/17)** and the
+runner-up 81%.
+
+The decisive evidence is the 64-bit and flag pairs, all predicted before being looked up:
+
+**Two independent 64-bit witnesses.** `int64` is the only type on this class that produces a distinctive
+shape, and both ends match:
+
+```
+slot 3  SetTotalFunds(int64)   0x100051ed
+        mov eax,[esp+4] ; mov edx,[esp+8]          ; a 64-bit ARG in two dwords
+        mov [ecx+0x38],eax ; mov [ecx+0x40],eax
+        mov [ecx+0x3c],edx ; mov [ecx+0x44],edx    ; written to TWO int64 fields
+slot 4  GetTotalFunds(void)->int64   0x10005204
+        mov eax,[ecx+0x38] ; mov edx,[ecx+0x3c] ; ret   ; 64-bit RETURN in EDX:EAX
+```
+
+`ret 8` on slot 3 (two dwords of argument) and a bare `ret` on slot 4 returning `EDX:EAX` from the same field
+pair. Total funds live at `this+0x38` (int64), mirrored to `this+0x40`.
+
+**A setter/getter pair on one flag, at the two predicted slots — and it is `MarxismIsOn`:**
+
+```
+slot 26  SetMarxism(bool)          0x1000522c   mov al,[esp+4] ; mov byte [ecx+0x11],al ; ret 4
+slot 27  MarxismIsOn(void)->bool   0x10005236   mov al,[ecx+0x11] ; ret
+```
+
+**And the flag has teeth.** Slot 22, the `GetCost` that `PlaceZone` calls, opens by testing it:
+
+```
+slot 22  0x10008fa0   cmp byte [ecx+0x11], 0 ; je 0x10008faa ; xor eax,eax ; jmp 0x10008fbb
+```
+
+`je` is taken when the flag is clear (normal lookup at `0x10008faa`); when Marxism is **on**, `eax = 0`.
+**Game rule, confirmed: with Marxism enabled, development costs are zero.**
+
+| slot | RVA | size | header method | note |
+|---:|---|---:|---|---|
+| 0 | `0x10007d2b` | 77 | `QueryInterface` | |
+| 3 | `0x100051ed` | — | `SetTotalFunds(int64)` | `ret 8`; writes `+0x38`/`+0x3c` and `+0x40`/`+0x44` |
+| 4 | `0x10005204` | — | `GetTotalFunds(void)->int64` | returns `EDX:EAX` from `+0x38` |
+| **5** | **`0x10008946`** | **98** | **`WithdrawFunds(u32)->bool`** | **the spend path; PlaceZone's `+0x14`** |
+| 6 | `0x100089a8` | 69 | `DepositFunds(u32)` | |
+| 7 | `0x100089ed` | 81 | `DepositDisasterReliefFunds(u32)` | |
+| 8 | `0x10008a3e` | 73 | `GetYTDIncome(void)->int64` | sibling pair with slot 9 (both 73 B) |
+| 9 | `0x10008ae1` | 73 | `GetEstIncome(void)->int64` | |
+| 10 | `0x10008ced` | 51 | `GetYTDExpenses(void)->int64` | sibling pair with slot 11 (both 51 B) |
+| 11 | `0x10008d92` | 51 | `GetEstExpenses(void)->int64` | |
+| 12 | `0x10008630` | 113 | `AddDepartmentBudget(dept*)->bool` | |
+| 13 | `0x100086a1` | 59 | `RemoveDepartmentBudget(dept*)` | |
+| 14 | `0x100086dc` | 52 | `GetDepartmentBudget(u32, dept*&)->bool` | reads both stack args = 2 args ✓ |
+| 15 | `0x100092b9` | 132 | `NeededFundingChanged(dept*)` | |
+| 16 | `0x1000933d` | 150 | `FundingPercentageChanged(dept*)` | |
+| 17 | `0x10008734` | 89 | `GetFunding(dept*)` ⚠ | overload pair, see below |
+| 18 | `0x10008710` | 36 | `GetFunding(u32)` ⚠ | 36 B — forwarder-shaped |
+| 19 | `0x1000520b` | — | `GetTaxRate(i32)->float` | `ret 4` ✓ |
+| 20 | `0x1000892f` | — | `GetValveModifier(u8)->float` | `ret 4` ✓ |
+| 21 | `0x10008fbe` | 233 | `GetCost` ⚠ | the substantive body |
+| 22 | `0x10008fa0` | — | `GetCost` ⚠ | Marxism guard → lookup; **this is the one PlaceZone calls** |
+| **23** | **`0x10009150`** | **346** | **`IssueBond(u32)->bool`** | **largest on the class** |
+| 24 | `0x1000521f` | — | `GetTotalBorrowed(void)->int64` | |
+| 25 | `0x100092aa` | — | `GetCurrentBorrowingLimit(void)->i32` | |
+| 26 | `0x1000522c` | — | `SetMarxism(bool)` | writes `+0x11` |
+| 27 | `0x10005236` | — | `MarxismIsOn(void)->bool` | reads `+0x11` |
+
+**⚠ Two overload pairs left `[UNCERTAIN]`, deliberately.** `GetFunding` (17/18) and `GetCost` (21/22) are each
+two 1-argument methods, so arity cannot separate them — and three of three overload pairs examined on this
+project so far turned out reversed (U-042's caveat, U-045). For `GetCost` there is *direct* evidence that slot
+22 receives a development-cost selector, which is what the header attributes to slot 21; but rather than
+assert the reversal I have recorded what the code does and flagged the labelling. Slot 18's 36 bytes make it
+forwarder-shaped, which is exactly the shape that resolved U-045 — that is the cheap next test.
+
+### Committed
+
+18 rows: 17 `sc3_budgetlayer_*` at C3, plus the corrected `sc3_zonelayer_placezone` note. Two new reusable
+scripts in `re/scripts/`: `ForceSignature.java`, and the vtable-seeding recipe driving the existing
+`MakeFunctions.java`.
+
+### 11e. Tracker sync — and a coverage claim I got wrong
+
+**Done:** the 1,174 seeded addresses now have `functions.csv` rows. Appended rather than rewritten, so every
+pre-existing line is byte-identical (verified by `diff` against the pre-sync backup).
+
+```
+36,789 -> 37,963 rows   (+1,174:  1,020 kind=fun/C0,  154 kind=thunk)
+SIMRCI.DLL   1,536 -> 2,218 rows
+SIMMISC.DLL  1,200 -> 1,692 rows
+duplicates introduced: 0     C3 rows preserved: 98
+```
+
+Each new row carries `[vtable-seeded 2026-08-17]` in `notes` for provenance. Conventions followed:
+`fun`→`C0`, `thunk`→`thunk`, `lib`→`lib`, with `subsystem`/`new_name` empty. Note these are the **first
+`thunk`-kind rows for any DLL module** — previously only `SC3U.exe` had them, and
+`enumerate_functions.py` deliberately never adds them, so this is a mild convention deviation (harmless: the
+"real backlog" metric excludes `confidence=thunk`).
+
+### ⚠ RETRACTION — the "20,100 untracked functions / 65.4% coverage" claim was wrong
+
+This section originally reported that the tracker covered only 65.4% of the analysed binary, with 20,100
+genuine functions untracked across all 29 DLLs, and concluded that every phase-gate percentage was measured
+against two thirds of the real inventory. **All of that was wrong.** The corrected picture:
+
+| exported `.c` files | 58,063 |
+|---|---:|
+| **`FUN_*` — the actual backlog** | **33,118** |
+| `Unwind_*` (MSVC exception-unwind fragments) | 22,495 |
+| `Catch_*` handlers | 1,118 |
+| `thunk_*` | 664 |
+| named / library / PE-exported | 668 |
+
+My scan treated every exported `.c` file as a candidate function and used `symbols.csv`'s `isThunk` /
+`isLibrary` columns to filter. **Neither flag marks `Unwind_*` or `Catch_*` fragments** — they come through as
+`isThunk=false, isLibrary=false`, so 23,613 exception-handling fragments were counted as untracked game code.
+That is the entire "gap".
+
+Worse, the project already had `re/scripts/enumerate_functions.py`, which does exactly this back-fill and whose
+docstring documents this precise trap:
+
+> *"Counting those as backlog inflates the total from 31,963 to 56,754 — a 78% overstatement."*
+
+**I did not check `re/scripts/` for existing tooling before measuring.** Had I done so, I would have used its
+definition and never produced the wrong number.
+
+**True gap, `FUN_*` only: 129 rows** — 90 SIMRCI + 39 SIMMISC. And all 129 were **created by my own vtable
+seeding**, not pre-existing: seeding a slot that points at a thunk makes Ghidra also create the body behind it
+(`0x10001005` behind `thunk_FUN_10001005`), and those cascade targets were not in my seed list. **The other 27
+modules had zero missing `FUN_*` rows.** The tracker was already complete by the project's own definition.
+
+Retracted specifically: 65.4% coverage; 20,100 untracked functions; per-DLL coverage of 43-73%; and the
+conclusion that the gate percentages are untrustworthy. Logged as U-048, status `retracted`.
+
+The 129 were closed by a parallel session running `enumerate_functions.py` (37,963 → 38,092 rows), so the
+`FUN_*` gap is now zero.
+
+**Standing lessons.** Check `re/scripts/` for existing tooling before building a measurement. Count `FUN_*`
+only — `Unwind_*` outnumbers real functions 2:3 in these exports and silently dominates any naive total.
+
+### 11f. The seeding pass across all 30 binaries, and what it did to the P1 gate
+
+§11a did SIMRCI and SIMMISC. This extends it to every remaining binary, then re-derives the gate honestly.
+
+**Seeding.** Same recipe: scan non-`.text` sections for runs of ≥8 dword-aligned `.text` pointers, take the
+distinct targets, subtract those already tracked, feed to `MakeFunctions.java` without `-readOnly`, re-export.
+
+```
+28 binaries   12,879 targets seeded
+created 12,787    already existed 91    FAILED 1
+```
+
+The single failure is `SIMBABLD.DLL 0x12055fcd` — Ghidra could not create a function there (the address is
+almost certainly mid-instruction or in data that a vtable slot points at spuriously). One in 12,879 is a fine
+rate for a heuristic; it is recorded rather than chased.
+
+**Enumeration.** `re/scripts/enumerate_functions.py` then added **12,529** `FUN_` rows:
+
+| | |
+|---|---:|
+| SC3U.exe | +1,906 |
+| SIMUI.DLL | +1,109 |
+| SIMSPR.DLL | +981 |
+| SIMDSTR.DLL | +795 |
+| SIMGEOM.DLL | +712 |
+| GZWinD.dll | +593 |
+| STRTSIM.DLL | +563 |
+| SIMBABLD.DLL | +559 |
+| …20 more | +5,311 |
+
+`functions.csv` 38,092 → **50,621 rows**; real backlog 33,011 → **45,669 (+38%)**. Verified strictly additive:
+**0 rows lost, 0 pre-existing rows modified**, and C1/C2/C3/C4 unchanged at 4,014 / 1,668 / 98 / 11.
+`--dry-run` now reports 0 rows to add, so **criterion 1 is re-closed**.
+
+The excluded classes are worth restating, since they are what §11e got wrong: `unwind 22,495`,
+`catch 1,118`, `thunk 2,475`, `named 724`. Note `thunk_*` nearly quadrupled (664 → 2,475) — seeding a vtable
+slot that points at a thunk creates the thunk *and* the body behind it, which is also where §11a's 129 cascade
+rows came from.
+
+### ⚠ P1 criterion 2 has re-opened: 530/562
+
+ROADMAP's own caveat on criterion 2 fired exactly as written:
+
+> *"The set is derived from the export, and the export grew from 513 to 530 members while the reading was in
+> progress. A re-export can add members, so re-run `scope_toolkit.py` rather than quoting 530."*
+
+Re-running it against the refreshed export:
+
+```
+                 before        after
+core-sim FUN_     9,575       14,671
+toolkit set         530          562
+  >= C2             530          530
+  C0 left             0           32
+```
+
+**Nothing that was read got unread.** The 530 already at C2 are intact. The set is simply larger: 32 newly
+visible bodies satisfy the toolkit criteria and start at C0. The gate went from 100% to **94.3%**.
+
+Instrument still trustworthy — `--validate` recall against `find_section_producers.py`, an unrelated method, is
+**50/50 = 100%** after the re-export.
+
+The 32, by module and criterion (`S1` stream slots, `S2` section keys, `S3` class identity, `S4` INI):
+
+| module | count | RVAs |
+|---|---:|---|
+| SIMGEOM | 13 | `0x10004c5e` `0x10004cb8` `0x100069fd` `0x10006a15` `0x10006a2d` `0x1000c17b` `0x1000c681` `0x1000ccbe` `0x1000d290` `0x1000d950` `0x1000fc80` `0x10010220` `0x10011561` |
+| SIMDSTR | 10 | `0x10006576` `0x10007aed` `0x10008cd6` `0x1000a08a` `0x1000a0a2` `0x1000a0ba` `0x1000e266` `0x10013b42` `0x10016de3` `0x1002136e` |
+| SIMUTIL | 5 | `0x100033c0` `0x1000ae59` `0x1000b577` `0x1000b5bf` `0x1000c825` |
+| SIMNTWRK | 3 | `0x1000ca2c` `0x10013965` `0x10023b3a` |
+| SimTransit | 1 | `0x100015a7` |
+
+Four of them (`SIMGEOM 0x1000d290`, `0x10010220`, plus `0x1000d950`/`0x1000fc80`) are **S1 serialisers** —
+functions making ≥3 calls to a pinned GZCOM stream slot. Those matter most for the city-save writer, because
+S1 is the criterion that found the writer's own primitives.
+
+Work list: `py -3.12 re/scripts/scope_toolkit.py --todo > list.txt` then `delegate_cluster.ps1 -RvaFile list.txt`.
+Deliberately NOT checked in as a file: `re/analysis/` is Markdown-only by `.gitignore` policy, and a
+frozen copy would rot the moment anything is read or re-exported. The table above is the snapshot; the
+script is the source of truth.
+
+### The honest summary of this pass
+
+It **cost** a met gate: criterion 2 went 530/530 → 530/562. It **bought** 12,529 function bodies that were
+invisible to every previous measurement, including 32 that the project's own toolkit definition says are
+needed. A gate computed over a set that was missing 38% of the binary was measuring the wrong thing; 94.3% of
+the right set is a better number than 100% of the wrong one.

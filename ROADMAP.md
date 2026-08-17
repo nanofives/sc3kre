@@ -41,10 +41,19 @@ assessment below recommended.** The old text is preserved further down as the re
 **P1 exit (current, binding):**
 
 1. **Every `FUN_*` in all 31 binaries enumerated in `functions.csv`.** ✅ **MET — re-closed
-   2026-08-17, 38,092 rows.** It went stale earlier the same day when the Ghidra exports were
-   regenerated mid-session; `re/scripts/enumerate_functions.py` added the **129** `FUN_` bodies
-   that had no row (SIMRCI 90, SIMMISC 39) and a direct check now finds **0 `FUN_` bodies without
-   a tracker row across all 30 binaries**. The script is additive by construction — it appends
+   again 2026-08-17, now 50,621 rows / real backlog 45,669.** It went stale a *second* time the
+   same day: a vtable-seeded re-analysis pass created 12,787 function starts across the 28
+   non-exe binaries, and `enumerate_functions.py` then added **12,529** `FUN_` rows (SC3U.exe
+   +1,906, SIMUI +1,109, SIMSPR +981, SIMDSTR +795, SIMGEOM +712, …). `--dry-run` now reports
+   **0 rows to add**. Verified additive: 0 pre-existing rows lost and 0 modified, with C1/C2/C3/C4
+   counts unchanged at 4,014 / 1,668 / 98 / 11.
+
+   > **The real backlog grew 33,011 → 45,669 (+38%), and that is the honest inventory, not a
+   > regression.** These bodies were always in the binary; auto-analysis never carved them because
+   > vtable slots are reached only through *data* references. See catalogue §11a/§11f.
+
+   *Earlier the same day (superseded):* MET at 38,092 rows after adding the **129** `FUN_` bodies
+   that had no row (SIMRCI 90, SIMMISC 39). The script is additive by construction — it appends
    missing rows and never touches an existing one — so no analysis work was at risk.
 
    > ⚠️ **The gap was first reported here as 271, and that figure was WRONG — mine, not the
@@ -54,7 +63,22 @@ assessment below recommended.** The old text is preserved further down as the re
    > one was mine.** Same failure family as the rest of the day: a filter that matched more than
    > it was asked to.
 2. **⭐ RE-SCOPED 2026-08-17 (owner's call): ≥ C2 across the TOOLKIT-NECESSARY set.**
-   ✅ **MET 2026-08-17 — 530 of 530 = 100%, nothing left to read.**
+   ⚠️ **RE-OPENED 2026-08-17, later the same day — 530 of 562 = 94.3%, 32 left to read.**
+
+   > **The warning below fired.** A vtable-seeded re-analysis pass added 12,529 previously
+   > invisible `FUN_*` bodies across all 28 non-exe binaries (catalogue §11f). Re-running
+   > `scope_toolkit.py` against the refreshed export grew the toolkit-necessary set from **530 to
+   > 562**, and the 32 new members are all C0. Nothing that was read got unread — the 530 are
+   > intact — but the set is larger, so the gate is no longer clear.
+   >
+   > Instrument still trustworthy: `--validate` recall is **50/50 = 100%** against
+   > `find_section_producers.py` after the re-export.
+   >
+   > The 32: SIMGEOM 13, SIMDSTR 10, SIMUTIL 5, SIMNTWRK 3, SimTransit 1.
+   > Work list: `py -3.12 re/scripts/scope_toolkit.py --todo` → `delegate_cluster.ps1 -RvaFile` (regenerate it;
+   > `re/analysis/` is Markdown-only so a frozen list cannot be checked in, and would rot anyway).
+
+   *Superseded reading (kept for the audit trail):* ✅ MET 2026-08-17 — 530 of 530 = 100%.
 
    Read in 17 delegated clusters across two rounds (301 functions on the day the gate was
    adopted, from 251/513 = 48.9%). Every cluster was checked by
@@ -86,8 +110,11 @@ assessment below recommended.** The old text is preserved further down as the re
    Work list: `scope_toolkit.py --todo <MODULE>` feeds `delegate_cluster.ps1 -RvaFile`.
 
    > Precision of the set is explicitly NOT measured (a slot offset only means "stream" if the
-   > object is one), so the true set is likely smaller than 530, never larger. That cuts the
-   > right way for a met gate: the functions read are a superset of the ones strictly needed.
+   > object is one), so the true set is likely smaller than the computed **562**, never larger.
+   > That cuts the right way: the 530 already read are a superset of the ones strictly needed, and
+   > some of the outstanding 32 may turn out not to be needed either. Precision is about the
+   > computed set being too generous; it says nothing about set GROWTH, which comes from new
+   > bodies appearing in the export and is what re-opened this criterion.
 3. UI / audio / tooling / framework modules: **"enumerated, unclassified" is acceptable** — 16
    modules, 20,670 functions, no per-function requirement.
 4. Subsystem map committed to `re/analysis/SUBSYSTEMS.md`. ✅ MET.
@@ -124,7 +151,8 @@ everything. Concretely, deprioritise anything that only matters to a reimplement
 (per-tick sim math, render internals, UI behaviour) unless it blocks a format.
 
 ~~**P1's gate criterion 2 should be re-examined against this decision.**~~ **DONE — re-scoped on
-the owner's call 2026-08-17 and then MET the same day, 530/530.** See criterion 2 above and
+the owner's call 2026-08-17, MET the same day at 530/530, then RE-OPENED at 530/562 when a
+vtable-seeded re-analysis grew the computed set by 32 members.** See criterion 2 above and
 `re/analysis/GATE_RESCOPE.md`.
 
 **Toolkit scope, as the evidence currently supports it:**

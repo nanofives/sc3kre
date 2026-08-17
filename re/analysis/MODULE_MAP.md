@@ -22,11 +22,21 @@ been imported into Ghidra or exported.
    every `Apps\*.exe` / `*.dll`, and of `original\SC3U.exe`). Class ids exist only as ASCII in
    `SYS.PAK` / `CitySim.ini` and are parsed at runtime. U-006 is falsified project-wide.
 
+   **NARROWED 2026-08-17 (`GZCOM_INTERFACE_CATALOGUE.md`).** This holds for **GZCLSID (class ids)
+   only**. It does NOT hold for **GZIID (interface ids)** or **layer type ids**: those ARE present as
+   little-endian dword immediates in `.text`, in quantity. Using the interface-id constants from the
+   `sc3k-gzcom-dll` SDK headers (derived from the SC3KU **Linux debug-symbol build**), a byte-scan found
+   853 dword hits, of which **243 were re-confirmed in the decompiled text across 150 functions**. That
+   pinned **23 classes by their `QueryInterface`** — including `cSC3ValveLayer` at `SIMRCI.DLL`
+   `0x1002ef6b` `[CONFIRMED]`, the S5 RCI demand engine class. So layers are findable in the DLLs not
+   only by INI-path string (item 2) but by **interface-id immediate**, which lands on the class itself
+   rather than on its config loader.
+
 ## Layer → module map `[CONFIRMED — class-name strings present in the module]`
 
 | Module | size | `*Layer` name strings found | subsystem |
 |---|---:|---|---|
-| `SIMRCI.DLL` | 393,216 | `SC3ValveLayer`, `SC3ZoneLayer`, `SC3ResLayer`, `SC3ComLayer`, `SC3IndLayer` | S4 zoning + S5 RCI demand |
+| `SIMRCI.DLL` | 393,216 | `SC3ValveLayer`, `SC3ZoneLayer`, `SC3ResLayer`, `SC3ComLayer`, `SC3IndLayer`, **+ land-value (6th, no INI string)** | S4 zoning + S5 RCI demand |
 | `SIMMISC.DLL` | 331,776 | `SC3BudgetLayer`, `SC3WorldLayer`, `WorldLayer` | **S10** budget/finance + S1 world + S14 ordinances + S12 aura |
 | `SIMDSTR.DLL` | 266,240 | `SC3DisasterLayer` | S11 disasters |
 | `STRTSIM.DLL` | 233,472 | `SC3StrtSimLayer` | startup/scenario sim |
