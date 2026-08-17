@@ -85,7 +85,15 @@ def decode_zone_bulk(body, e, n):
     if len(plane) != n * n:
         raise SectionError("short zone plane")
     rest = e["size"] - 3 * n * n
+    # Each byte is a ZONE-DEVELOPER SLOT INDEX into the 23-slot table [CONFIRMED 59/59]:
+    # 0 == unzoned (all 21 .sct terrains are 100% zero), and every other value is one of the
+    # slots that file declares via its 4-byte id sections -- with the single exception of
+    # 0x16, which is in range but never declared. See CITY_SAVE.md.
+    hist = {}
+    for b in plane:
+        hist[b] = hist.get(b, 0) + 1
     return {"kind": "zone_bulk", "n": n, "grid": plane, "distinct": len(set(plane)),
+            "unzoned": hist.get(0, 0), "slots": sorted(k for k in hist if k),
             "undecoded_middle": 2 * n * n, "tail": rest}
 
 
@@ -171,9 +179,12 @@ def main(argv):
                     print("    tile grid      %dx%d, %d distinct byte values, trailer %s"
                           % (dec["n"], dec["n"], dec["distinct"], dec["trailer"].hex(" ")))
                 elif dec["kind"] == "zone_bulk":
-                    print("    zone plane 0   %dx%d, %d distinct; %d bytes undecoded + %d tail"
-                          % (dec["n"], dec["n"], dec["distinct"],
-                             dec["undecoded_middle"], dec["tail"]))
+                    print("    zone plane 0   %dx%d, %.1f%% unzoned, developer slots %s"
+                          % (dec["n"], dec["n"],
+                             100.0 * dec["unzoned"] / (dec["n"] * dec["n"]),
+                             dec["slots"]))
+                    print("                   %d bytes undecoded + %d tail (U-029)"
+                          % (dec["undecoded_middle"], dec["tail"]))
                 elif dec["kind"] == "zone_slot_id" and dec["slot"] in (1, 5, 9):
                     print("    zone slot %-2d   id 0x%08x" % (dec["slot"], dec["id"]))
                 if pgm and dec["kind"] in ("tile_grid", "zone_bulk"):

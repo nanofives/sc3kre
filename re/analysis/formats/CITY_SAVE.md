@@ -818,6 +818,51 @@ The section's last bytes are a clean run of small `u32`s in every file (Berlin
 saver's six trailing `u32` writes `[CONFIRMED @0x100320e7:109-118]` — but the records that should
 precede them do not parse, so the six are not asserted as located.
 
+### ⭐ Zone plane 0 decoded: each byte is a ZONE-DEVELOPER SLOT INDEX `[CONFIRMED, 59/59]`
+
+Resolved 2026-08-16. The `N*N` raster at the head of the zone blob is **one byte per tile, and
+that byte is an index into the 23-slot zone-developer table** — the same table whose non-NULL
+slots each get a 4-byte id section.
+
+**Evidence 1 — `0x00` is "unzoned".** All **21 `.sct` terrain files are 100% `0x00`**, with no
+other value anywhere in them. Developed saves are 67.7% zero, starter towns 97.6%. Bare land
+has exactly one value and it is zero.
+
+**Evidence 2 — every other value is a declared slot, in all 59 files.** Each file states its own
+occupied-slot set (one 4-byte section per non-NULL slot, `instance == slot + 1`). Comparing that
+per file against the set of non-zero raster bytes:
+
+| result | files |
+|---|---|
+| raster values are a strict **subset** of the declared slots | 22 |
+| raster values ⊄ slots, and the **only** outlier is `0x16` | 37 |
+| any other outlier | **0** |
+
+A subset is expected — a city need not use every zone type. Across all 59 files **no value other
+than `0x16` ever falls outside that file's own declared slot set.** The observed value set
+`{1,2,3,5,6,7,9,10,11,14,15,17}` is exactly the set of occupied slots, and the gaps
+(`0,4,8,12,13,16`) are exactly the NULL slots.
+
+**Evidence 3 — the index is a byte in code.** The slot registrar `FUN_10032694` masks its index
+argument to a byte before using it: `uVar2 = param_1 & 0xff;` then writes
+`this + uVar2*8 + 0x18c` and `this + uVar2*8 + 400` `[CONFIRMED @0x10032694]`. A byte-wide slot
+index is exactly what a one-byte-per-tile raster supplies.
+
+This ties three previously separate things together: the raster, the twelve 4-byte sections, and
+the 23-slot table are one mechanism. The three-groups-of-three id pattern (slots 1-3 →
+`0x619ba64e`, 5-7 → `0x41a3adc1`, 9-11 → `0xe1a53b30`) is therefore three developer classes at
+three density tiers, though **which class is R, C or I is still not determined**.
+
+`[UNCERTAIN]` **`0x16` (22).** It occurs in 37 files, 3.3% of `.sc3` tiles, and is inside the
+table's index range (0..0x16) — but **no file ever declares a slot-22 section**, so it is not a
+developer index in the way the others are. Missing evidence: a reader that special-cases 22.
+
+> ⚠️ An offset discrepancy is left standing rather than resolved: the saver loop reads the slot
+> record at `this + i*8 + 0x188` (object) and `+0x18c` (id), while the registrar `0x10032694`
+> writes `+0x18c` (pointer) and `+0x190` (value) — a consistent 4-byte shift. Either the two
+> `this` pointers differ by 4 or one reading is off. Do not build a parser on either offset
+> until that is settled.
+
 ### ⭐ THE MAP DIMENSION IS IN THE FILE AFTER ALL `[CONFIRMED, 59/59]`
 
 Found 2026-08-16 while building `re/tools/city_sections.py`. This document concluded that the
