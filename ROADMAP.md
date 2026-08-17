@@ -448,8 +448,24 @@ question — see `verify/loose_file_test/`.
 
 `U-006` established the content is data-driven (no per-building classes in code; `SC3Tune.INI` and
 `SYS.PAK` drive the taxonomy), so the highest-value target is a tunable or an asset rather than a
-save edit. `[UNCERTAIN]` whether `SYS.PAK` needs a writer at all, or whether the game reads loose
-files that shadow the archive — untested, and the only genuine unknown left in the three gates.
+save edit.
+
+**⭐ The scoping unknown is ANSWERED: a loose file does NOT shadow the archive** `[CONFIRMED
+@0x004872e8, verified by re-reading the resolver and by a live vtable dump]`. `FUN_004872e8`
+checks `SYS.PAK` exists, opens it **read-only** (`GENERIC_READ / OPEN_EXISTING / FILE_SHARE_READ`,
+via `PTR_FUN_004d87ec` slot 3 = `FUN_0047b437`), scans its directory for the member name, and on a
+match marks the source as in-PAK and returns. Loose files are the **fallback**, reached only when
+the archive is missing or has no such entry.
+
+That leaves **two routes to T3, and only one of them is new format work:**
+
+| route | what it needs | cost |
+|---|---|---|
+| **A — write the archive** | a `SYS.PAK` writer; `syspak_parse.py` is read-only today | a new format to prove byte-identically, the same bar the others met |
+| **B — use the documented fallback** | extract all 51 members to `Apps\Sys\`, move `SYS.PAK` aside | **no new format work at all** — it is the shipped code path |
+
+Route B is not a trick; it is the loader's own behaviour. It is also the honest first thing to try,
+because it tests the fallback claim above with a modification the game itself supports.
 
 ### Not on the roadmap, deliberately
 

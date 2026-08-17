@@ -59,6 +59,41 @@ the credits scroll faster. A file-open trace answers it in one run with no inter
 Fallback if no trace is available: watch the credits. `4242` against `1500` is nearly 3x, so the
 difference is obvious without timing anything.
 
+## ⭐ THE CODE ANSWERED FIRST, so this test now has a PREDICTION
+
+Recorded **before** the run, which is the only way a prediction is worth anything.
+
+**The archive wins. A loose file does NOT shadow `SYS.PAK`.** `[CONFIRMED @0x004872e8]`
+
+The resolver `FUN_004872e8` runs once (`if (*(this+0xb4) == 0)`) and, in order: checks the archive
+path object is non-empty, checks **`SYS.PAK` exists on disk** (`FUN_0047b98f` →
+`GetFileAttributesA`), opens it, then scans the PAK directory for an entry matching the key built
+from the loose path at `this+0x04`. **On a match it sets `this+0xc0` = the member length,
+`this+0xb4` = 2, and returns** (lines 69-82). Only if the PAK is absent, will not open, or has no
+matching entry does it fall through to `this+0xb4` = **1** (line 99). The consumer `FUN_00486f55`
+then switches on that field: `1` opens the loose file at `this+0x04`, `2` reads from the
+already-open PAK stream.
+
+Verified here rather than taken on trust: the resolver was re-read line by line, and the
+read-only claim was settled with a **live vtable dump** — `PTR_FUN_004d87ec` slot 3 (`+0x0c`) is
+`FUN_0047b437`, which maps `param_1 & 1` → `GENERIC_READ` and `& 2` → `GENERIC_WRITE`. The call
+site passes `(1, 2, 1)`, so the archive is opened **`GENERIC_READ` / `OPEN_EXISTING` /
+`FILE_SHARE_READ`** — no write access.
+
+### So this test should show NOTHING
+
+`SYS.PAK` contains `SC3Tune.ini`, so the loose copy should be ignored and the credits should
+scroll at the shipped rate. **If the credits scroll ~3x faster, the code reading above is wrong
+and that is the interesting result.** Either way it is worth the ten minutes: a confirmed
+prediction closes T3's scoping question, and a falsified one means a re-read.
+
+### Arm 2, NOT set up — it needs a decision first
+
+The same evidence says the fallback is reachable: **rename or remove `SYS.PAK`** and every `\Sys\`
+INI should load from loose files. That is a bigger change to the install than adding one file, so
+it is deliberately not staged here. It also happens to be a **complete modding route that needs no
+PAK writer at all**: extract all 51 members, drop them in `Apps\Sys\`, move the archive aside.
+
 ## What this cannot tell you
 
 Opening a file is not the same as *preferring* it. If the trace shows both paths opened, the
