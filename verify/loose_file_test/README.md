@@ -87,7 +87,34 @@ scroll at the shipped rate. **If the credits scroll ~3x faster, the code reading
 and that is the interesting result.** Either way it is worth the ten minutes: a confirmed
 prediction closes T3's scoping question, and a falsified one means a re-read.
 
-### ⭐ ARM 2 IS NOW STAGED (owner's call, 2026-08-17)
+### ⭐⭐ ARM 3 IS WHAT IS STAGED NOW (owner's call) — testing ROUTE A, the writer
+
+**This supersedes arm 2 on disk.** The install now looks exactly like a shipped one, with a
+single difference: `Apps\Sys\SYS.PAK` is **the archive our own writer produced**.
+
+```
+Apps\Sys\SYS.PAK           our writer's output   sha256 c224e8bf…   272,507 bytes
+Apps\Sys\SYS.PAK.original  the shipped archive   sha256 172c02d9…   272,507 bytes
+```
+
+Identical length. The only difference between them is one value inside `SC3Tune.ini`
+(`ScrollRateInPixelsPerMinute` 1500 → 4242); every other member is byte-identical, verified by
+re-parsing both. **No loose `.ini` files remain**, so nothing observed can be attributed to the
+fallback path — this tests the writer and only the writer.
+
+**Prediction: the credits scroll at ~3x the shipped speed.** If they do, `SYS.PAK` writing works
+end to end and T3's format work is validated in the game rather than only against itself.
+If they scroll normally, our archive is subtly malformed in a way that byte-identical round-trip
+and a clean re-parse both miss — which would be a genuinely surprising and valuable result.
+
+**UNDO for arm 3:**
+```
+del "Apps\Sys\SYS.PAK"
+move "Apps\Sys\SYS.PAK.original" "Apps\Sys\SYS.PAK"
+```
+Details and the list of removed files: `ARM3_MANIFEST.txt`.
+
+### Arm 2, superseded (kept for the record)
 
 `Apps\Sys\` currently holds **51 loose `.ini` files extracted from the archive**, plus
 `SYS.PAK.disabled`. The archive itself is **byte-unchanged** (sha256 `172c02d9…`, verified before
