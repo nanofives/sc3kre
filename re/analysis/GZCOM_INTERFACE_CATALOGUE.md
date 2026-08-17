@@ -1395,3 +1395,75 @@ later — consistent with §12a's "the narrower member is the later slot".
 
 13 rows at **C3**: the 5 anchors plus all 8 members of the 4 reversed pairs, each named with its real form
 (`_rect` / `_point`). `verify_worker_rows.py`: **0 of 13 flagged**. Project C3 count 131 → 144.
+
+---
+
+## 15. cSC3PollutionLayer — the cleanest walk yet, and a counterexample checked
+
+`cISC3PollutionLayer : cISC3CityCellMap<uint32_t>`, so the expected chain is 3 (`cIGZUnknown`) + 8
+(`cISC3CityCellMapBase`) + 6 (`cISC3CityCellMap<T>`) + 51 = **68 slots**.
+
+### 15a. Located: `SIMECO.DLL` `.rdata` `0x1001b984` — 50/50, zero mismatches
+
+**One candidate project-wide, 100.0%.** The best result of the six walks. The expected arity vector was
+assembled from three headers chained in inheritance order, and the extractor used §14d's lesson: bound the
+disassembly by each function's tracked size and collect *every* `ret N` in the body, accepting the slot only
+when the set is a singleton.
+
+### 15b. Two regular structures, each independently confirming slot order
+
+**Seven int64 running totals as direct field reads, slots 46–52:**
+
+```
+field = 0x154 + (slot - 46) * 8          stride 8 = sizeof(int64), zero exceptions
+mov eax,[ecx+0x154] ; mov edx,[ecx+0x158]     slot 46  GetTotalGarbageProduced
+mov eax,[ecx+0x15c] ; mov edx,[ecx+0x160]     slot 47  GetTotalGarbageImported
+... 0x164 Exported, 0x16c Recycled, 0x174 Incinerated, 0x17c ConvertedToEnergy, 0x184 Landfilled
+```
+
+Seven consecutive `int64` fields spanning `+0x154`…`+0x18b`, in exactly the header's declared order, each read
+as an `EDX:EAX` pair.
+
+**Seven computed "LastMonth" siblings, slots 53–59:** not field reads but real functions, at `0x100091a5`,
+`0x100091ec`, `0x10009233`, `0x1000927a`, `0x100092c1`, `0x10009308`, `0x1000934f` — **identical 71-byte
+bodies spaced exactly `0x47` apart**, in the same Produced/Imported/Exported/Recycled/Incinerated/
+ConvertedToEnergy/Landfilled order as the running totals above.
+
+Fourteen slots, two independent regularities, one ordering. That is the same class of evidence as §13c's
+28-getter block.
+
+### 15c. A potential counterexample, checked rather than assumed
+
+Zero mismatches is a suspicious result when the inherited chain contains **two overload pairs** —
+`cISC3CityCellMapBase::InBounds` (slots 6/7) and `cISC3CityCellMap<T>::SetValue` (slots 14/16). If either had
+*matched* the header order, it would contradict §14d's 10-of-10 reversal rule.
+
+Neither did, and neither refutes it. Size-bounded inspection shows **slots 5–16 are all 8-byte bodies with no
+`ret` at all** — adjustor thunks (`sub ecx, N ; jmp`) into a cell-map subobject, the same shape as
+`cSC3ZoneLayer`'s slots 0–16 in §8. They are unmeasurable by arity, which is precisely why the mismatch list
+came back empty. Controls in the same pass (slot 20 `ret 8`, slot 22 `ret 0xc`, slot 60 `ret 4`) confirm the
+extractor was working.
+
+So the rule stands at 10 of 10 with **no counterexample**, and the reason this class produced none is
+structural, not lucky.
+
+**Incidental finding:** slots 5 and 13 point at the *same* function `0x1000c41e` —
+`cISC3CityCellMapBase::GetValueSint32` and `cISC3CityCellMap<uint32_t>::GetValue` share one implementation,
+which is correct when `T` is a 4-byte type: both are the same fetch.
+
+### 15d. What the class says about the garbage model
+
+The interface is far more about **garbage** than about air or water. Air and water get one value reader, one
+predicate, one average and one maximum each; garbage gets the seven-way running-total ledger above, the
+matching seven monthly deltas, landfill capacity (total and available), daily incinerator capacity, daily
+waste-to-energy capacity, a recycling-centre effect, a per-building capacity query, an aging count for water
+treatment / incinerators / recycling centres, a scaling factor, and per-cell active-landfill get/set.
+
+Garbage in SC3000 is tracked as a **mass-balance ledger** — produced, imported, exported, recycled,
+incinerated, converted to energy, landfilled — not as a per-tile pressure field like air and water pollution.
+
+### Committed
+
+24 rows at **C3**: the 14 garbage totals plus the two predicates, three value readers and five capacity
+getters. `verify_worker_rows.py` over all 49 `sc3_pollution_*` rows in SIMECO: **0 of 49 flagged**. Project C3
+count 144 → 168.
