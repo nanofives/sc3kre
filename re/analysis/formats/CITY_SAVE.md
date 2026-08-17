@@ -1161,9 +1161,41 @@ headline claim that made eight failed sweeps so confusing. It is now clear the t
 **do not describe the same byte sequence at the tail**, so cross-confirming them there proves
 nothing. The agreement up to block C is real; past it, each must be read on its own terms.
 
-Next: read `piVar1`'s class (via `(this-0x14)->vt+0xc`) and the two container helpers
-`FUN_100339e7` / `FUN_10033920` that the loader uses for the `c1` and `c2`/`c3` lists — the
-saver walks those containers with `FUN_10010ae4` instead, another asymmetry.
+#### `piVar1` is not a stream — the loader's divergent block is a POST-LOAD RECOUNT `[CONFIRMED @0x10031c85:144-163]`
+
+```c
+piVar1 = (int *)((int)this + -0x14);              // the BASE subobject, i.e. the grid itself
+for (y = 0; y < piVar1->vt+0xc();  y++)           // vt+0xc  = row count
+  for (x = 0; x < piVar1->vt+0x10(); x++) {       // vt+0x10 = column count
+    piVar1->vt+0x34(y, x, &local_6);              // fetch the tile value at (y, x)
+    if (local_6 < 0x17)                           // < 23 -- a zone-developer SLOT INDEX
+      *(int *)((int)this + local_6 * 4 + 0x3c) += 1;   // histogram it
+  }
+```
+
+**It reads nothing from the stream.** It walks the grid that was already loaded and rebuilds a
+**23-entry `u32` histogram of zone-developer slot usage** at `this+0x3c` — derived state,
+recomputed rather than trusted.
+
+Three things follow:
+
+1. **The saver's delegated write to `this+0x268` has no counterpart in the loader at all.** The
+   `u16` permutation and its ~138-byte header are **written but never read back** by this
+   loader. Consistent with the permutation being regenerable scheduling state — and it means a
+   toolkit does not need them to reconstruct a city.
+2. **Independent confirmation of the zone-raster decode.** The guard `local_6 < 0x17` says tile
+   values are slot indices `0..22` — arrived at from the loader, entirely separately from the
+   file-side evidence (terrains all-zero, values ⊆ declared slots). It also confirms `0x16` (22)
+   is an in-range tile value, not corruption.
+3. `this+0x3c` is a **23-entry `u32` array (92 bytes)**, yet the saver writes only `0x17` = 23
+   **bytes** from it. `[UNCERTAIN]` — that mismatch is unexplained and may be the same thread as
+   the missing ~138 bytes.
+
+`[UNCERTAIN]` how the loader's stream position stays aligned for the six trailing `u32` reads if
+it never consumes the sub-object region. Either something upstream consumes it or the region is
+skipped by a mechanism not yet read. **That is the single question to answer next**, and it
+should be answered by reading, not by arithmetic — the last three attempts at this gap were all
+inference and all wrong.
 
 ### ⚠️ The "23 elements of 4 bytes" reading is FALSIFIED — the blocks ARE 23 bytes
 
