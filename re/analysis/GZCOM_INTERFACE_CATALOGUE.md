@@ -1884,3 +1884,48 @@ So the class keeps **two grid sizes** — an *actual* grid and a *draw* grid —
 `ScreenCellSizeZ` (`ret`, 0 args) and slot 57 `GetLowestSpriteHeight` (`ret 4`, 1 arg — and it **ignores** the
 argument). Both fit their slot's arity and the class scored 104/104, so the arity evidence cannot separate them.
 Every other member of the block has exactly one accessor, which makes `+0x38` the sole anomaly.
+
+### 20e. U-050 resolved — the shared `+0x38` is real, and the header is right
+
+§20d flagged two slots returning the same field. Reading slot 57's callers was the recorded plan and it went
+nowhere useful: the two `+0xe4` virtual call sites in SIMSPR both pass **two** arguments, while slot 57 is
+`ret 4` = one, so those sites dispatch on a different class that happens to have something else at `+0xe4`.
+`+0xe4` is a common offset and matching on it alone is the same loose-filter mistake as the rest of this
+document. Slot 57 has **no** identified caller.
+
+Three other checks settle it instead:
+
+**1. The neighbourhood is saturated.** Slots 52-62 are eleven consecutive arity matches with no mismatch:
+
+| slot | method | want | got |
+|---:|---|---|---|
+| 52 | `GetPixelSizeOfSprite` | `0x10` | `0x10` |
+| 53 | `SpritePixelToMicroActualGrid` | `0x1c` | `0x1c` |
+| 54 | `GetEntireCityBaseRect` | `0x8` | `0x8` |
+| 55 | `GetLowestTerrainAltitude` | `0x4` | `0x4` |
+| 56 | `GetHighestTerrainAltitude` | `0x4` | `0x4` |
+| **57** | **`GetLowestSpriteHeight`** | `0x4` | `0x4` |
+| 58 | `GetHighestSpriteHeight` | `0x4` | `0x4` |
+| 59 | `GetHeightOfSprite` | `0xc` | `0xc` |
+| 60 | `Position3DToWindowPixel` | `0x14` | `0x14` |
+| 61 | `IsPointWithinCityOutline` | `0xc` | `0xc` |
+| 62 | `GetUnusedCellCount` | `0x0` | `0x0` |
+
+Slot 57 cannot be shifted without breaking ten other slots, including the highly distinctive `0x1c` and `0x14`.
+
+**2. The block is coherent.** Slots 55/56 are an identical-shape 20-byte Lowest/Highest **terrain** pair, both
+opening `cmp byte [esp+4],0 ; movzx eax, byte [ecx..]`. Slots 57/58 are the matching Lowest/Highest **sprite**
+pair. That is a 2×2 Lowest/Highest × Terrain/Sprite block, and slot 57 sits exactly where it belongs in it.
+
+**3. No sharing.** `0x1000b2a7` occupies exactly **one** data slot in the entire module — `0x100625f0`, which is
+vtable base + 57×4. It is used only as slot 57 of this one vtable.
+
+Note the asymmetry inside the pair: slot 57 is **6 bytes** (a stored constant) while slot 58
+`GetHighestSpriteHeight` is **55 bytes** (computed). That is what you would expect if the *lowest* sprite height
+is fixed while the *highest* must be searched for. Slot 57 ignoring its argument is then an implementation that
+returns that constant regardless of which sprite is asked about.
+
+So both names stand and `+0x38` is genuinely read by two accessors. **What is not established** is *why* the two
+quantities coincide — whether a flat sprite's height equals the isometric cell depth for a semantic reason, or
+whether this is an implementation shortcut. Neither name depends on the answer, so it is left unresolved rather
+than guessed.
