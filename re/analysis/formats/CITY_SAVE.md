@@ -940,8 +940,13 @@ sizes — and it is readable directly from the section size in all 59 files.**
 | the tile-grid section | `size - 16 == N*N` |
 | the zone blob | `size == 3*N*N + tail`, `tail == 900 + 6k` |
 
-So the grid section supplies the dimension the zone section lacks, *and* corroborates the
-`3 planes of N*N` reading of the zone blob that was previously only size arithmetic.
+So the grid section supplies the dimension the zone section lacks.
+
+> ⚠️ **Correction (same day).** This paragraph first also claimed the agreement "corroborates
+> the 3 planes of N*N reading". **It does not, and that reading is now FALSIFIED** — see
+> attempt 8 below. What the two derivations agree on is **N**, and therefore the *arithmetic*
+> decomposition `size = 3*N*N + tail`. Only the FIRST `N*N` is a plane. Agreeing on a size
+> relation is not evidence about what fills it.
 
 **A stride test confirms both are real rasters, independently of the arithmetic.** Vertical
 coherence (fraction of vertically adjacent bytes that are equal) peaks exactly at `N`:
@@ -959,6 +964,45 @@ raster** and the grid section is an `N*N` byte raster.
 
 `[UNCERTAIN]` what either raster's byte values mean. Berlin's zone plane has 14 distinct values
 and its tile grid 18; no consuming code has been read for either.
+
+### Attempt 8 — NOT a grammar sweep, and it falsifies the three-plane reading
+
+Attempts 1-7 all searched for a grammar fit. Attempt 8 asked a **decidable** question instead,
+using information those attempts did not have (N is now known per file, and plane 0 is a proven
+raster): **is the middle `2*N*N` raster data at all?**
+
+The instrument is the same stride-coherence test that confirmed plane 0. Result:
+
+| region | coherence at N-1 / **N** / N+1 | distinct byte values |
+|---|---|---|
+| plane 0 (Berlin) | .673 / **.796** / .673 | 14 |
+| plane 1 (Berlin) | .011 / **.013** / .012 | **256** |
+| plane 2 (Berlin) | .004 / **.005** / .004 | **256** |
+| middle as u16 (stride 2N) | .008 / .007 / .008 | — |
+
+**No peak at any stride, and coherence two orders of magnitude below plane 0.** Farmsville and
+Europolis behave identically. So:
+
+> **`[FALSIFIED]` the zone blob is NOT three N*N planes.** Only the first `N*N` is a raster.
+> The following `2*N*N` is not spatially coherent at stride `N`, `2N`, or anything near them.
+
+Statistics of the middle (Berlin, 131,072 bytes): all 256 byte values present, chi-square
+against uniform 1,781 on 255 df, byte-repeat rate ~0.009 at every lag tried (1, 2, 3, 4, N, 2N)
+against 0.0039 for pure random. Only 1.1% zero bytes, where plane 0 is 62.5% zero. That is
+high-entropy packed data — **not a map layer, not per-tile 16-bit fields with any regularity,
+and not QFS** (a `0x10FB` byte pair does occur, but ~2 occurrences are expected by chance in
+128 KB and it does not decode).
+
+`[UNCERTAIN]` what the middle is. It is consistent with a densely packed or hashed structure;
+nothing here identifies it.
+
+**What this does NOT change:** `N`, plane 0, the slot-index meaning, and the developer names all
+stand — they rest on separate evidence. What dies is the inference that the size arithmetic
+implied three planes. **The size relation was never evidence about content**, and treating it as
+such is the mistake this attempt caught.
+
+**Still do not sweep the grammar.** Eight attempts; the flat `{u8,u8,u32}` list grammar remains
+unlocated, and the region it would have to live in is now known to be high-entropy.
 
 ### Where that leaves it
 

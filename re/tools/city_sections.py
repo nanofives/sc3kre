@@ -21,8 +21,12 @@ so `N = isqrt(size - 16)`. Two independent derivations agree in all 59 shipped f
   * this section:      size - 16 == N*N
   * the zone blob:     size == 3*N*N + tail,  tail == 900 + 6k
 
-N is 128, 192 or 256 -- the three map sizes. Neither derivation was used to build the other,
-so they corroborate each other AND the "3 planes of N*N" reading of the zone section.
+N is 128, 192 or 256 -- the three map sizes. Neither derivation was used to build the other.
+
+They agree on N, and therefore on the size DECOMPOSITION. They say nothing about what fills
+it: the "3 planes of N*N" reading is FALSIFIED. Only the first N*N is a raster; the following
+2*N*N has no spatial coherence at any stride and uses all 256 byte values. See CITY_SAVE.md,
+"Attempt 8".
 
 Usage:
   py -3.12 re/tools/city_sections.py <file.sc3>            # decode one file
@@ -90,7 +94,8 @@ def decode_tile_grid(body, e, n):
 def decode_zone_bulk(body, e, n):
     """The zone blob: plane 0 is a 1-byte-per-tile raster of N*N.
 
-    Only plane 0 is decoded. The remaining 2*N*N bytes and the 900+6k tail are NOT decoded --
+    Only plane 0 is a raster [CONFIRMED by stride coherence]. The remaining 2*N*N is NOT --
+    it is high-entropy packed data, falsified as a plane. It and the 900+6k tail are undecoded --
     the grammar for them is confirmed from both the saver and the loader and still does not
     match the bytes after seven attempts (U-029). Reporting them raw is the honest option.
     """
