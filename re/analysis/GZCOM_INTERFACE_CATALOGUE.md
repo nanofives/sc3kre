@@ -1541,3 +1541,73 @@ Recorded resolution path: point the §13/§15 fingerprint scanner at **all 65 he
 > Same family as the `Unwind_*` miscount (§11e), the `thunk_FUN_` miscount, and the `functions.csv`-vs-`symbols.csv`
 > convergence miscount: **check whether the things you are counting are distinct before reporting how many there
 > are.**
+
+---
+
+## 17. cISC3Occupant — the first interface with no unique implementor, and 12 of 12
+
+`cISC3Occupant : cIGZUnknown`, 69 methods → **72 slots**. This is what `PlaceBuilding` places and what all
+three occupant managers (city slots 71–73, §13) hand out.
+
+### 17a. 156 candidates, not one — and that is the correct answer
+
+Every previous walk produced exactly **one** vtable project-wide. This one produces **156 at ≥75%**, with
+**6 in a 93.3% (56/60) top tier** spread across SimTransit (4 of them), STRTSIM and SIMUTIL.
+
+That is not a failure of the method, it is the method reporting a different kind of class. `cISC3City`,
+`cISC3DirtBag` and `cISC3PollutionLayer` are **singletons** — one city, one terrain layer, one pollution layer,
+each implemented once. `cISC3Occupant` is an **interface implemented by every placeable thing in the game**:
+roads and rails in SimTransit, flora, buildings, network pieces. Each concrete occupant class has its own
+vtable with the same 72-slot layout.
+
+**Consequence for the method, worth stating before it misleads someone:** a unique hit means "singleton
+class"; a large candidate set means "widely implemented interface". Neither is evidence of a wrong
+fingerprint. What generalises from this walk is the **slot map**, not any one address.
+
+### 17b. Five anchors from PlaceZone, all resolved
+
+§9 described `PlaceZone`'s occupant handling in terms of raw offsets. All five now have names, and four match
+their expected arity directly:
+
+| offset | slot | header method | §9's description |
+|---|---:|---|---|
+| `+0x3c` | 15 | `IsGeomFlag(uint32)` | "a chain of `+0x3c` predicate calls" |
+| `+0x74` | 29 | **`CanUserRemove(void)`** | "must pass `+0x74`" |
+| `+0x80` | 32 | `GetAttribData(void)` | "occupant `+0x80` (attrib)" — guessed right |
+| `+0xa0` | 40 | `GetSpriteInst(void)` | "`+0xa0` then `+0x1c`" |
+| `+0xb8` | 46 | **`GetLocation(cSC3CityCoord&)`** | "`+0xb8`" then a bounding-box union |
+
+**The zoning rule this settles:** a tile can only be zoned over an existing occupant when
+`CanUserRemove()` is true. Combined with §14c, `PlaceZone`'s per-cell gate is now fully named — corner-altitude
+slope check, `IsWater` rejection, buildability, and `CanUserRemove` plus an `IsGeomFlag` mask chain on any
+occupant present. `GetLocation` feeds the demolished-region bounding box.
+
+`IsGeomFlag` is a nice miniature: `mov eax,[ecx] ; call [eax+0x48] ; and eax,[esp+4]` — it fetches the flag
+word through its own vtable slot 18 (`GetGeomFlag`, `0x48/4 = 18`) and masks with the argument. A one-line
+method that confirms two slots at once.
+
+### 17c. 12 of 12, and this time the test is unambiguous
+
+The **only 4 arity mismatches** are the class's two overload pairs, both reversed:
+
+| slot | header says | actual `ret` | is really |
+|---:|---|---|---|
+| 38 | `GetSpriteAttrib(uint32)` | `0` | the **void** form |
+| 39 | `GetSpriteAttrib(void)` | `4` | the **uint32** form |
+| 40 | `GetSpriteInst(uint32)` | `0` | the **void** form |
+| 41 | `GetSpriteInst(void)` | `4` | the **uint32** form |
+
+Every earlier pair had **identical** arities on both members (`GetFunding`, `GetCost`, `PlaceBuilding`) or was
+resolved by body shape. These two differ, `0` versus `4`, so arity alone decides them — no forwarder argument,
+no table-lookup heuristic. **The cleanest confirmation of the rule so far**, taking it to **12 of 12 pairs
+reversed across seven classes**, with zero non-overload slots ever mismatching.
+
+It also retro-explains a §9 detail: that section recorded occupant `+0xa0` as called with **no visible
+arguments**, which sat oddly against a header that says slot 40 takes a `uint32`. Under the reversal, slot 40
+*is* the void form. The decompiler was right and the header ordering was the problem.
+
+### Committed
+
+8 rows at **C3** against one representative implementor (SimTransit `0x1001b6a0`), each note stating explicitly
+that it describes one of many implementors and that the slot map is the transferable part.
+`verify_worker_rows.py`: **0 of 8 flagged**. Project C3 count 168 → 176.
