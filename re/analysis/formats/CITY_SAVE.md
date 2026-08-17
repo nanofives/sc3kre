@@ -1137,12 +1137,45 @@ bytes** if `vt+0x98` is a scalar. It is not: something in there is writing ~1,00
 > bytes, and my inference from "it must be the only thing big enough" was reasoning backwards
 > from the gap to a cause instead of measuring the cause.
 >
-> **So the gap is UNEXPLAINED again**, and larger than before: with a 26-byte header the count
-> should sit 49 bytes after the grammar's end, and in Berlin it sits **1,221 bytes** later.
-> Do not fill this in with another inference. The saver's tail has been read in full and the
-> sub-object writer has been read in full; the discrepancy is between the code as read and the
-> bytes, which means one of the two readings is still incomplete. The `0x17` block sizes are
-> the obvious remaining suspect — they have never been independently confirmed as 23 *bytes*.
+> **The gap was then closed by testing the remaining suspect — and the suspect was right.**
+
+### ⭐ The `0x17` blocks are 23 ELEMENTS of 4 bytes, not 23 bytes `[CONFIRMED, 59/59]`
+
+Solving for the block element size instead of assuming it: parse from `N*N` with the blocks at
+`2 * 0x17 * S` bytes, for every `S`, and ask which `S` makes the distance from the grammar's end
+to the (independently known) `u16` count **constant across files**.
+
+| S | files parsing | distance to count | files agreeing |
+|---|---|---|---|
+| **4** | 59 | **118** | **59** |
+| 3 | 59 | 710 | 34 |
+| 2 | 59 | 756 | 34 |
+| 1 (the old assumption) | 59 | 802 | 34 |
+
+`S = 4` is unambiguous: **all 59 files**, one constant. And that constant decomposes exactly:
+
+```
+118  =  92  (block C at this+0x3c, also 23 x 4)  +  26  (the sub-object header)
+ 26  =  u8(1) + u32(4) + bool(1) + 5 x u32(20)              <- exactly as FUN_1004361d writes it
+```
+
+**The zone section is now accounted for end to end with no unexplained bytes:**
+
+```
+[ N*N u8 zone raster ]
+[ u32 c1 ][ c1 x {u32,u32} ][ 92 ][ 92 ][ u32 c2 ][ c2 x 6 ][ u32 c3 ][ c3 x 6 ]
+[ 92 ][ u8 u32 bool 5xu32 ][ u32 N*N ][ N*N x u16 permutation ][ 3 x u32 ][ 6 x u32 ]
+```
+
+`c2` and `c3` are **not** zero under the corrected block size — the earlier "always 0" reading
+was an artefact of parsing 46 bytes where 184 belong, and their variation is what made the gap
+scale with city size.
+
+> ⚠️ **One code-side loose end.** `vt+0x84` is pinned as `FUN_1000c1ad` = `Write(ptr, len)` with
+> `len` in **bytes**, yet these call sites pass `0x17` and the bytes say 92. So either the
+> decompiler dropped a scale at this call site, or the zone saver holds a different one of the
+> three stream flavours (`PTR_FUN_1001cb34` / `1001cef0` / `1001d130`) whose `+0x84` differs.
+> The byte evidence is 59/59 and stands; the reconciliation does not, and is the next read.
 
 One structural detail *is* readable at the end of that header. The bytes immediately before the
 count contain **`N-1` twice** — `0xff` for N=256, `0xbf` for N=192, `0x7f` for N=128
