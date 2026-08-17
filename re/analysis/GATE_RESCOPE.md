@@ -1,9 +1,15 @@
 # GATE_RESCOPE.md — re-scoping P1 criterion 2 against the toolkit end-state
 
-**Status: ⭐ ADOPTED 2026-08-17 (owner's call) — OPTION A is now P1 gate criterion 2.**
-`ROADMAP.md` has been updated: the gate is **≥ C2 across the 513-function toolkit-necessary set**,
-currently 251/513 = 48.9%, 262 left to read. The old form (≥ C1 across all 9,575) is retired.
-Measured by `re/scripts/scope_toolkit.py`.
+**Status: ⭐ ADOPTED and then MET, both 2026-08-17.** Option A became P1 gate criterion 2 on the
+owner's call at 251/513 = 48.9%, and the remaining 279 were read the same day in 17 delegated
+clusters over two rounds. **Final: 530 / 530 = 100%.** The set grew 513 → 530 during the reading
+because the exports were regenerated mid-flight, so the number to quote is whatever
+`re/scripts/scope_toolkit.py` reports, not this figure.
+
+⚠️ **P1 is still not fully met: criterion 1 REGRESSED while criterion 2 was being closed.** The
+re-export left **271 `FUN_` bodies in the core-sim exports with no row in `functions.csv`**
+(SIMRCI 111, SIMMISC 50, SIMGEOM 34, SIMDSTR 17, rest single digits).
+`re/scripts/enumerate_functions.py` needs a re-run.
 
 > ⚠️ **The tracker moved while these numbers were being taken.** A concurrent session wrote 17 new
 > **C3** rows into `functions.csv` mid-measurement, which shifted SIMRCI's remaining count from 57

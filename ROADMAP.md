@@ -40,10 +40,24 @@ assessment below recommended.** The old text is preserved further down as the re
 
 **P1 exit (current, binding):**
 
-1. **Every `FUN_*` in all 31 binaries enumerated in `functions.csv`.** ✅ **MET** — 31,991 rows,
-   done by `re/scripts/enumerate_functions.py`.
-2. **⭐ RE-SCOPED 2026-08-17 (owner's call): ≥ C2 across the TOOLKIT-NECESSARY set — 513
-   functions, not 9,575.** ❌ **NOT MET — 251 of 513 = 48.9%, 262 left to read.**
+1. **Every `FUN_*` in all 31 binaries enumerated in `functions.csv`.** ⚠️ **WAS MET, NOW STALE
+   (2026-08-17).** The tracker holds 37,963 rows, but the Ghidra exports were regenerated during
+   2026-08-17 and **271 `FUN_` bodies in the eleven core-sim exports alone have no tracker row**
+   (SIMRCI 111, SIMMISC 50, SIMGEOM 34, SIMDSTR 17, the rest single digits). Re-run
+   `re/scripts/enumerate_functions.py` and re-measure before calling this met again. It does not
+   affect criterion 2: the toolkit set is computed from the EXPORT, so those bodies were already
+   in scope, and none of the 530 set members lacks a row.
+2. **⭐ RE-SCOPED 2026-08-17 (owner's call): ≥ C2 across the TOOLKIT-NECESSARY set.**
+   ✅ **MET 2026-08-17 — 530 of 530 = 100%, nothing left to read.**
+
+   Read in 17 delegated clusters across two rounds (301 functions on the day the gate was
+   adopted, from 251/513 = 48.9%). Every cluster was checked by
+   `re/scripts/verify_worker_rows.py` against the binary before merging; two batches were held
+   back on flags and re-read rather than merged.
+
+   > **"Met" means met AT THIS MEASUREMENT.** The set is derived from the export, and the export
+   > grew from 513 to 530 members while the reading was in progress. A re-export can add
+   > members, so re-run `scope_toolkit.py` rather than quoting 530.
 
    The old form of this criterion (*"≥ C1 for every function in the eleven core-sim modules"*,
    2,312 / 9,575 = 24.1%) is **retired** — do not measure against it. It was written while the
@@ -65,10 +79,9 @@ assessment below recommended.** The old text is preserved further down as the re
    Full analysis, the four options considered and their costs: `re/analysis/GATE_RESCOPE.md`.
    Work list: `scope_toolkit.py --todo <MODULE>` feeds `delegate_cluster.ps1 -RvaFile`.
 
-   > The **513** is binary-derived and stable. The **262 to read** is tracker-derived and moves as
-   > functions are classified — re-measure it with the script rather than quoting this line.
    > Precision of the set is explicitly NOT measured (a slot offset only means "stream" if the
-   > object is one), so the true set is likely smaller than 513, never larger.
+   > object is one), so the true set is likely smaller than 530, never larger. That cuts the
+   > right way for a met gate: the functions read are a superset of the ones strictly needed.
 3. UI / audio / tooling / framework modules: **"enumerated, unclassified" is acceptable** — 16
    modules, 20,670 functions, no per-function requirement.
 4. Subsystem map committed to `re/analysis/SUBSYSTEMS.md`. ✅ MET.
@@ -104,9 +117,9 @@ modding capability without reimplementing the sim.
 everything. Concretely, deprioritise anything that only matters to a reimplementation
 (per-tick sim math, render internals, UI behaviour) unless it blocks a format.
 
-**P1's gate criterion 2 (≥C1 across the eleven core-sim modules, currently 24.0%) should be
-re-examined against this decision** — a toolkit does not obviously need all 9,575. That is a
-follow-on scoping question, not a reason to hold the gate open.
+~~**P1's gate criterion 2 should be re-examined against this decision.**~~ **DONE — re-scoped on
+the owner's call 2026-08-17 and then MET the same day, 530/530.** See criterion 2 above and
+`re/analysis/GATE_RESCOPE.md`.
 
 **Toolkit scope, as the evidence currently supports it:**
 

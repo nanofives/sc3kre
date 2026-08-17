@@ -5,9 +5,10 @@
 **End-state: a MODDING / FORMAT TOOLKIT.** Decided 2026-08-17; the source-port option is
 **closed** (`ROADMAP.md`, P1 gate).
 
-**⭐ P1 criterion 2 was RE-SCOPED 2026-08-17 (owner's call). The gate is now ≥ C2 across the
-513-function TOOLKIT-NECESSARY set — 279/513 = 54.4%, 234 left to READ** (was 251/513 when
-the gate was adopted; SIMRCI cluster 4 read 25 of them). The old form (≥C1
+**⭐⭐ P1 CRITERION 2 IS MET (2026-08-17): 530 / 530 = 100% of the toolkit-necessary set at
+≥ C2.** Re-scoped on the owner's call the same day (from ≥C1 across all 9,575 core-sim
+functions) and then finished: 301 functions read in 17 delegated clusters over two rounds, every
+one verified against the binary before merging. The old form (≥C1
 across all 9,575 core-sim functions, 24.1%) is **retired — stop quoting it.** P1 is met except
 this one criterion.
 
@@ -18,8 +19,12 @@ loaders. 513 = 5.4% of the core-sim set, **recall 50/50 = 100%** against the unr
 Re-measure, never quote: `py -3.12 re/scripts/scope_toolkit.py [--validate|--todo <MODULE>]`.
 Analysis and the four options considered: `re/analysis/GATE_RESCOPE.md`.
 
-Two numbers behave differently and it matters: **513 is stable** (binary-derived); **the
-remaining count is a snapshot** (tracker-derived) — it was 262 at adoption and is 234 now. Why C2 rather than C1: 1,473 of the old count were
+⚠️ **"Met" means met AT THAT MEASUREMENT, and one criterion regressed.** The set is derived from
+the export, and the export was regenerated mid-session: the set grew 513 → 530 while the reading
+ran. More importantly **criterion 1 is now STALE — 271 `FUN_` bodies in the core-sim exports have
+no row in `functions.csv`** (SIMRCI 111, SIMMISC 50, SIMGEOM 34, SIMDSTR 17, rest single digits).
+`re/scripts/enumerate_functions.py` needs a re-run. So P1 is **not** fully met: criterion 2 is,
+criterion 1 went backwards while criterion 2 was being closed. Why C2 rather than C1: 1,473 of the old count were
 `classify_families.py` regex labels with nothing read, and only **839** core-sim functions had
 ever actually been read. The set shrank 19x and the bar went up a notch.
 
