@@ -206,6 +206,7 @@ def check(path, module, strict=False):
     index = body_index(fn_dir)
     modvals = module_values(fn_dir, index)
     iosfns = ios_functions()
+    modhex = {"%x" % a for a in index}
 
     print("%d claimed rows, %d exported bodies in %s (%d distinct values module-wide)"
           % (len(rows), len(index), module, len(modvals)))
@@ -220,7 +221,15 @@ def check(path, module, strict=False):
         else:
             txt = open(p, encoding="utf-8", errors="replace").read()
             vals = values_in(txt) | {rva} | set(index)
-            cited = {int(h, 16) for h in HEX.findall(r["evidence"])}
+            cited_hex = HEX.findall(r["evidence"])
+            cited = {int(h, 16) for h in cited_hex}
+            # ABBREVIATED ADDRESS PREFIXES. Evidence legitimately writes "In tornado
+            # 0x10010/0x10011 block" to mean a neighbourhood of addresses, not an exact value.
+            # `0x1000d` is a 5-digit prefix of the real `0x1000d42f`. Flagging those as
+            # fabricated constants was the seventh over-accusation by this checker.
+            prefixes = {int(h, 16) for h in cited_hex
+                        if 4 <= len(h) <= 6 and any(a.startswith(h.lower())
+                                                    for a in modhex)}
             not_in_body = sorted(c for c in cited if c not in vals)
             unresolved = [c for c in not_in_body if c not in modvals]
             elsewhere = [c for c in not_in_body if c in modvals]
@@ -228,7 +237,9 @@ def check(path, module, strict=False):
             interior = [c for c in unresolved if IMAGE_LO <= c < IMAGE_HI]
             ios = [c for c in unresolved if c in iosfns and not (IMAGE_LO <= c < IMAGE_HI)]
             missing = [c for c in unresolved
-                       if not (IMAGE_LO <= c < IMAGE_HI) and c not in iosfns]
+                       if not (IMAGE_LO <= c < IMAGE_HI) and c not in iosfns
+                       and c not in prefixes]
+            pfx = [c for c in unresolved if c in prefixes]
             if missing:
                 notes.append("evidence cites %s -- resolves NOWHERE in this module, and is not"
                              " an address in the module image"
@@ -237,6 +248,10 @@ def check(path, module, strict=False):
                 info.append("cites %s: a function in the iOS named sibling, not this binary"
                             " (an [iOS-HINT] cross-reference, per CROSS_RE_iOS.md)"
                             % ", ".join("0x%x" % m for m in ios[:4]))
+            if pfx:
+                info.append("cites %s: an abbreviated ADDRESS PREFIX of a real function in this"
+                            " module (evidence prose, not an exact constant)"
+                            % ", ".join("0x%x" % m for m in pfx[:4]))
             if interior:
                 info.append("cites %s: inside the module image but not resolvable from the text"
                             " export (interior code address or untyped data) -- UNVERIFIABLE here"
