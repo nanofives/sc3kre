@@ -2959,3 +2959,44 @@ pwsh re/scripts/harness_run.ps1 -List
 Validated: `harness_check.py` grades `recover_run18_nogztable.log` HARNESS-FAIL (trace table
 never opened), `iso3.log` FAIL (integrity fine, blt_disp_1=0 black run), rendering runs PASS;
 `harness_run.ps1` windowed-nointro 3/3 PASS.
+
+## 28. Standalone portable build: version.dll proxy, no injector (2026-08-17)
+
+The windowed fixes previously needed `sc3launch` to inject `sc3probe.dll`. They now run from a
+**proxy DLL the game auto-loads**, so the user just runs `SC3U.exe` from the folder - no
+launcher, no injection.
+
+**Vehicle:** SC3U.exe statically imports `VERSION.dll` (only `VerQueryValueA`,
+`GetFileVersionInfoA`, `GetFileVersionInfoSizeA`). VERSION.dll is not a KnownDLL, so a copy in
+the game folder loads in preference to the system one, and its `DllMain` runs at process init -
+before the exe entry, the window, and any registry read `[CONFIRMED by live run]`.
+
+**`re/harness/src/proxy_version.c` -> `version.dll`** does two things:
+1. reads `[Launch]` toggles from `<exedir>\SC3Portable.ini` (each defaulting to the proven
+   windowed set - `NoCom, Windowed, Origin, Fix16, FitClient, NoIntro, NoReg`), publishes them
+   as the `SC3PROBE_*` env vars the probe already reads, and `LoadLibrary`s `sc3probe.dll`. The
+   probe then applies exactly the same patches it applies under injection - zero probe changes.
+2. forwards its three exports to the real `%WINDIR%\System32\version.dll` (loaded by full path,
+   no recursion) so SC3U's imports resolve.
+
+**The whole standalone build is two files next to SC3U.exe: `version.dll` + `sc3probe.dll`.**
+No trace table is needed (that is measurement only); the shim does not set `SC3PROBE_GZLOG`, and
+logs to `<exedir>\SC3Portable.log`.
+
+**Verified 2026-08-17:** launching `Apps\SC3U.exe` directly (no sc3launch) brought up NOINTRO,
+NOREG (4/4 advapi32 redirected), SetProcessDPIAware, the GZGraphicD windowed + FIX16 patches,
+FITCLIENT (client forced to 800x600), and registry served from the INI. Graded PASS by
+`harness_check.py` (fix16 dest lit 230400, source lit 19185, no renderer suspend, 35/35
+instrumented).
+
+### 28.1 Caveats
+
+- Dropping `version.dll` in the folder makes EVERY launch of SC3U.exe windowed+patched (delete
+  `version.dll` to revert to stock). `[Launch] <key>=0` in `SC3Portable.ini` disables any one
+  fix (e.g. `Windowed=0` for stock fullscreen).
+- Still two DLLs, not a single patched exe. A truly single-file exe would need the fixes baked
+  into SC3U.exe / GZGraphicD.dll as static byte patches plus an embedded DPI manifest, and the
+  runtime-set windowed flag and fitclient window-resize (both currently runtime code) reworked
+  as code patches. Not done - the proxy is simpler, reversible, and touches no game binary.
+- `version.dll` + `sc3probe.dll` are our own code (publishable as tools); the probe SOURCE is
+  gitignored. The build is `re/harness/build.ps1`.
