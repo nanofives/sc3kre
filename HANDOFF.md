@@ -5,6 +5,39 @@
 **End-state: a MODDING / FORMAT TOOLKIT.** Decided 2026-08-17; the source-port option is
 **closed** (`ROADMAP.md`, P1 gate).
 
+> # 🔴 THE GAME INSTALL IS CURRENTLY MODIFIED — read this before anything else
+>
+> `Apps\Sys\SYS.PAK` is **not the shipped archive**. It is one this project's writer produced,
+> staged as a live test (roadmap gate T3, "arm 3"):
+>
+> ```
+> Apps\Sys\SYS.PAK           ours      sha256 c224e8bf…   272,507 bytes
+> Apps\Sys\SYS.PAK.original  shipped   sha256 172c02d9…   272,507 bytes
+> ```
+>
+> Same length; the only difference is one value inside `SC3Tune.ini`
+> (`ScrollRateInPixelsPerMinute` 1500 → 4242), verified by re-parsing both. **RESTORE WITH:**
+>
+> ```
+> del  "Apps\Sys\SYS.PAK"
+> move "Apps\Sys\SYS.PAK.original" "Apps\Sys\SYS.PAK"
+> ```
+>
+> `verify/city_load_test/` also holds four `.sc3` files staged for gate T1, but those are **not**
+> in the game folder and affect nothing. Manifests, predictions and undo steps for every staged
+> test live in `verify/*/README.md` and the `*_MANIFEST.txt` beside them.
+>
+> **Nothing was overwritten and nothing is lost**: the shipped archive is byte-unchanged next to
+> the modified one, and every extracted file is recoverable from it.
+
+> ## ⚠️ THREE SESSIONS SHARE THIS WORKING COPY — read `SESSIONS.md` before writing a tracker
+>
+> It records who owns which files and seven agreed rules. The two that cost real time today:
+> **commit by path, never `git add -A`** (three of another session's commits swept up this
+> session's in-flight files), and **any count over the exports must state its filter and be
+> cross-checked** (three loose-filter errors in one day, each plausible and each caught only by a
+> disagreement between two methods).
+
 ## ⭐⭐ P1 IS EXITED. THE ROADMAP IS NOW T1 → T2 → T3 (adopted 2026-08-17)
 
 All five P1 criteria hold, each re-measured on the day: 0 unenumerated `FUN_` bodies across 30
@@ -12,24 +45,47 @@ binaries, **562/562 = 100%** of the toolkit-necessary set at ≥ C2, UI/framewor
 enumerated-unclassified by design, subsystem map committed, end-state decided. The old
 annotate-first phases **P2 – P5 are superseded**. Analysis: `re/analysis/POST_P1.md`.
 
-**T1 — PROVE THE WRITE PATH. ◀ ACTIVE, and it is the first thing to do.**
-Exit: *the game loads a file this project wrote, and shows the edit.* Everything the toolkit
-claims about writing is structural — 59/59 byte-identical round-trip, an edit landing exactly
-where intended — and **no file we produced has ever been in front of the game.** That one
-untested claim sits under every other toolkit result.
-The test is built: `verify/city_load_test/`, four files, one variable each, with every outcome's
-meaning committed to in the README **before** the run. Minutes of work for whoever runs the game.
-The harness session has been asked and has not answered yet.
+### ⭐ THE ONE SENTENCE THAT MATTERS
 
-**T2 — EXPOSE THE FORMATS AS A LIBRARY.** Exit: every proven-write format has a documented
-read+write entry point outside a test harness, plus a `--selftest` reporting `N/N` over the
-shipped corpus. Concrete debt: the `.IXF` container writer lives inside `city_roundtrip.py`.
-Packaging, not discovery.
+**Every shipped format now has a byte-identical writer, every one is verified against itself, and
+NOT ONE has ever been verified against the game.** The format work is done and internally
+rigorous; the entire external-validation surface is two runs nobody has performed.
 
-**T3 — DEMONSTRATE A MOD END TO END.** Exit: one change made with these tools, visible in the
-running game. Target a tunable or an asset (`U-006`: the content is data-driven).
-`[UNCERTAIN]` whether `SYS.PAK` needs a writer or whether loose files shadow it — the only real
-unknown left in the three gates.
+| format | writer selftest | command |
+|---|---|---|
+| `.IXF` container | **657/657** containers, whole install, 8 extensions | `ixf_parse.py . --selftest` |
+| city save family | **59/59** no-edit identity, 5 layers | `city_write.py Cities --selftest` |
+| QFS / RefPack | **60/60** city + **63,931/63,931** sprite streams | `qfs_encode.py . --selftest` |
+| sprite blocks | **62,552/62,552** | `sprite_encode.py Apps/Res --selftest` |
+| `SYS.PAK` | **byte-identical, 51 members** | `syspak_parse.py <pak> --selftest` |
+
+**T1 — PROVE THE WRITE PATH. ◀ ACTIVE and blocked on a human, not on analysis.**
+Exit: *the game loads a file this project wrote, and shows the edit.* Built and waiting:
+`verify/city_load_test/`, four `.sc3` files (untouched copy → byte-identical rewrite →
+same-content-different-bytes → one tile changed), each isolating one variable, with every
+outcome's meaning committed to in the README **before** the run. The harness session has been
+asked three times and has not answered. **If nobody will run the game, say so and close T1 as
+"cannot be tested here" rather than leaving it open forever.**
+
+**T2 — EXPOSE THE FORMATS AS A LIBRARY. ✅ MET 2026-08-17.** See the table above. The stated debt
+is paid: the `.IXF` writer moved out of `city_roundtrip.py` into `ixf_parse.py`, and the harness
+now delegates to it. Promoting it paid for itself immediately — the harness copy carried a
+`size + 4` rule generalised from 13 city files that failed **472 of 478** localized-text
+containers.
+
+**T3 — DEMONSTRATE A MOD END TO END. Scoping ANSWERED, both routes BUILT, one observation left.**
+`[CONFIRMED @0x004872e8]` **the archive WINS over loose files**: the resolver checks `SYS.PAK`
+exists, opens it **read-only** (verified by a live vtable dump: `PTR_FUN_004d87ec` slot 3 =
+`FUN_0047b437`, and the call passes `GENERIC_READ / OPEN_EXISTING / FILE_SHARE_READ`), scans its
+directory for the member, and only falls back to a loose file when the archive is missing or
+lacks that entry.
+
+- **Route A — rewrite the archive.** ✅ Built: `syspak_parse.py` `build()` / `replace_member()`.
+  Staged live in the install right now (see the banner above).
+- **Route B — use the loader's own fallback.** Extract all 51 members to `Apps\Sys\` and move the
+  archive aside. No new format work; it is the shipped code path.
+
+What remains is **not a format problem**: one change, made with these tools, observed running.
 
 > **`functions.csv` is 78% C0 and that is the DESIGN, not debt.** Criterion 3 keeps whole module
 > families unclassified deliberately, and criterion 2 replaced "read everything" with "read what
@@ -146,8 +202,8 @@ layer decoded to per-tile developer slots with R/C/I/Landfill named. Tools: `re/
    its own rows and "improved" from 12/13 to 626/627. Ground truth must exclude your own output.
 5. **A coverage number that only ever rises is not measuring anything.** The classifier reverted
    85 of its own rows on re-run; core-sim went 24.9% → 24.0% and that was correct.
-6. **2026-08-17 added FOUR more silent zero-match regexes, so treat this as the default failure
-   mode, not an anomaly.** (a) `\.ini` matched nothing because Ghidra renames dots to underscores
+6. **2026-08-17 added FOUR more silent zero-match regexes, plus more since, so treat this as the
+   default failure mode rather than an anomaly.** (a) `\.ini` matched nothing because Ghidra renames dots to underscores
    (`s_Sys_SC3ComLayer_ini_...`) — reported 0 INI loaders across 11 modules; (b) a gate-cost line
    compared two different denominators and printed 9,388 where an independent count said 7,263;
    (c) writing a regex through a bash heredoc turned `\b` into literal BACKSPACE bytes, and
@@ -156,6 +212,21 @@ layer decoded to per-tile developer slots with R/C/I/Landfill named. Tools: `re/
    — present in the body as `'\x16'` — was reported as a fabricated constant. **(d) is the one to
    remember: when a checker accuses a claim, check the checker first.** Edit regex code with a
    real editor, and give every checker a `--selftest` against strings whose answers you know.
+7. **A rule confirmed on one family is not a rule about the format.** The `.IXF` string-payload
+   extent was generalised from 110 records across 13 city `.SNR` files and round-tripped **59/59**
+   of them — then failed **472 of 478** localized-text containers, every one off by exactly four
+   bytes. 59/59 was a real number that licensed a wrong generalisation. Widen the corpus before
+   believing a rule, and select it by MAGIC rather than by extension: the same container ships as
+   `.IXF`, `.DAT`, `.SC3`, `.SCT`, `.SNR`, `.ST3`, `.BLD` and `.CFG`.
+8. **Stop writing code through shell heredocs.** Five separate escaping failures this session,
+   including one that put literal `0x08` and `0x16` BYTES into `HANDOFF.md` — in the sentence
+   documenting that exact bug — and one that produced a regex requiring invisible control
+   characters, which `print()` rendered as if it were correct. Use a real editor for code.
+9. **When two methods disagree, one of them is yours.** Every count dispute today resolved
+   against the looser instrument, and about half the time that was mine: `'_FUN_' in filename`
+   also matches `thunk_FUN_*` (271 vs 129), `'&' + var` matched `&local_84` as a substring
+   (6 hits vs 0), and a checker with no two's-complement path called a correct GZCOM IID
+   citation fabricated.
 
 ## 🔴 What landed 2026-08-16 (still current unless corrected above)
 
