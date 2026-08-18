@@ -2043,3 +2043,356 @@ alongside, is implemented by 16 classes and is **not** in the SDK headers.
 > exactly 60 sections — and then **falsified it**: every file in `Cities\` still carries its
 > original install timestamp. The discrepancy is unexplained and the ad-hoc script is not
 > reproducible; the committed numbers stand because they are the ones that reproduce.
+
+---
+
+# 🔴 The `0x16` hunt, 2026-08-18: the QUESTION was malformed
+
+The producer of `0x16` was **not** found. What was found is better than another lead: **two of the
+five facts this document rested the mystery on do not survive checking**, and one of them was the
+entire reason `0x16` looked special. Net result — `0x16` is *less* anomalous than recorded, the
+remaining anomaly is sharply localised, and one project-wide instrument is proven to lie.
+
+Tools added, both with `--selftest`: `re/scripts/find_zone_writes.py`, `re/tools/city_planes.py`.
+
+## 1. ⚠️⚠️ THE HARNESS `Grep` TOOL SILENTLY RETURNS ZERO OVER THE WHOLE DECOMPILATION
+
+**Read this before trusting any "0 hits" in any tracker in this project.** `CLAUDE.md` instructs
+every session to "grep the export before ever opening live Ghidra". The default tool for doing
+that **cannot see the export at all**, and it reports that as *no matches* rather than as an
+error:
+
+```
+Grep  '\+ 0x3c\)\)\('   path = re                                 ->  0 matches, 0 files
+Grep  '\+ 0x3c\)\)\('   path = re/ghidra_export_simrci/functions   ->  77 matches, 44 files
+```
+
+Same pattern, same corpus, two answers. The cause is this repo's own publication safety net:
+`.gitignore` is deny-by-default, so `re/ghidra_export*/` is ignored (correctly — the
+decompilation must never be published), and **ripgrep honours `.gitignore`**. Confirmed directly:
+
+```
+git check-ignore -q re                        -> not ignored
+git check-ignore -q re/ghidra_export_simrci   -> IGNORED
+```
+
+Searching *at or above* `re/` makes ripgrep skip the ignored subtree. Searching with the path
+*inside* the ignored subtree works, because the search root itself is never re-tested against the
+ignore rules. So whether the primary RE instrument works depends on how deep you point it, and
+the failure mode is a clean, confident zero.
+
+**Consequences.** Any exhaustive-negative claim in this project produced with that tool at or
+above `re/` is a **false negative and must be re-run**. Use raw `grep`/`os.walk`, or pass a
+specific module's `functions/` directory. This is the fifth silent zero-match recorded here and
+the first that is a property of the *harness* rather than of a regex.
+
+## 2. `[FALSIFIED]` "No literal 22 is written anywhere" — TRUE, AND IT MEANS NOTHING
+
+This document's fact 1 (2026-08-17) reported, as an exhaustive confirmed negative, that no shipped
+binary writes the literal 22 into the raster, and drew the inference that the value must therefore
+be "computed, derived, or copied". **The negative reproduces. The inference does not.**
+
+`find_zone_writes.py` re-runs it with three corrections: a gitignore-blind file walk (§1), all
+**three** cell-map write slots instead of only one, and a `--selftest` (11 checks) that covers the
+two traps this document already paid for. The write interface is pinned by a contiguous block of
+8-byte adjustor thunks in SIMRCI at a uniform 8-byte stride, and **both previously-known anchors
+fall out of it**, which is what makes the other two derived rather than guessed
+`[CONFIRMED, read here]`:
+
+| thunk | slot | target | shape |
+|---|---|---|---|
+| `0x10034332` | `vt+0x34` | inline | `GET(row, col, &u8)` — the known anchor |
+| `0x1003433a` | `vt+0x38` | `FUN_10032afa` | `SET_RECT(x1, z1, x2, z2, &u8)`, per-row `memset` |
+| `0x10034342` | `vt+0x3c` | inline | `SET(row, col, &u8)` — the known anchor |
+| `0x1003434a` | `vt+0x40` | `FUN_10032be0` | `SET_ALL(&u8)` |
+
+Then the sweep is run **per zone value**, which nobody had done. That is the whole result:
+
+| zone value | what it is | strong hits |
+|---|---|---|
+| 3 | Residential HD | **0** |
+| 5, 6, 7 | **Commercial ×3** | **0** |
+| 9, 10, 11 | Industrial ×3 | **0** |
+| 14, 15 | the two unnamed | **0** |
+| 17 | **Landfill** | 1, hand-checked → **false positive** |
+| **22** | the mystery | **0** |
+| 0, 1, 2 | — | 237 / 16 / 4, all on unrelated classes' `+0x38/0x3c/0x40` slots |
+
+**Commercial 6 is a zone the player creates with a mouse drag, and it has exactly as many literal
+producers as 22: none.** So does every other real zone type. The literal sweep was never capable
+of finding a producer for *any* zone value, because the zone type is passed as a **variable** from
+UI state, not baked in at a call site.
+
+> **`0x16` was never special in this respect.** "No literal 22 anywhere in 30 binaries" is a true
+> statement about the *method*, not about the *value*. The 2026-08-17 write-up promoted it to the
+> shape of the problem — "a value that is spatially clustered, common, and never written as a
+> literal" — and half of that shape was an artefact. The sweep should have been run against a
+> known-good control on day one; it takes one command.
+
+The single value-17 hit (`scenario 0x100044c7`) is a false positive **of my own tool**, hand-checked
+and reported rather than quietly dropped: `local_7c` is declared `undefined4` (4 bytes, not a tile
+byte), is assigned `0x11` at line 296, and is **reassigned to 0 at line 372** before the
+`vt+0x40` call at line 386. `find_zone_writes.py` is not flow-sensitive. That is the right way
+round for this use — its **zeros** are sound (no such assignment-and-pass pair exists in the text
+at all), its **hits** are an over-count needing a hand-check. Its docstring says so.
+
+## 3. `[FALSIFIED]` "`0x16` is the hard ceiling of a tunable range" — it is a ROW STRIDE
+
+Fact 5 of the 2026-08-17 write-up read `FUN_10001020`'s clamp of `DAT_100571d0`/`DAT_100571d4` to
+`[4, 22]` as "the range of slot indices excluding the Residential group", and listed it as one of
+the five things boxing `0x16` in. **The consumer says otherwise** `[CONFIRMED @0x100015ab]`:
+
+```c
+char local_23c [484];                                    // 484 == 22 * 22
+...
+param_2 = param_2 + 0x16;                                // walking rows of it
+local_10 = local_8 + (int)(local_23c +
+           (((int)local_c - (int)local_28) * 0x16 - (int)local_24));   // and indexing it
+```
+
+Every one of the nine uses of `0x16` in that function is a **row pitch into a fixed 484-byte
+scratch bitmap** (lines 231, 246, 355-359, 396-400, 418, 428, 440, 466). `DAT_100571d0`/`d4` are
+used exclusively as **rectangle extents** — the width/height gate at line 62 and the clamp at
+lines 198-216 — so they are a min/max **lot edge length in tiles**, and the ceiling is 22 because
+that is what fits the buffer. The INI section is `ZoneDeveloperRules`; a lot dimension is exactly
+what belongs there.
+
+> **Two unrelated meanings of the number 22 in one function were read as one.** A `[4,22]` clamp
+> and a set of slot indices ending at 22 are a coincidence of value, and this document turned the
+> coincidence into evidence. Sign-sensitive values get reported both ways here as a matter of
+> policy; *dimension-versus-index* deserves the same suspicion.
+
+**What survives from that function, and it is unchanged:** the `{0, 1, 5, 9, 22}` test is real. It
+appears four times (lines 68, 80, 93, 105), once per side, and each loop walks the **perimeter ring
+one tile outside** the candidate rect (`local_24 - 1` above, `local_28 - 1` left, `local_20 + 1`
+right, `local_1c + 1` below). If any bordering tile is outside that set the function bails. So it
+is a **"this border tile is acceptable to build against" whitelist** — unzoned, plus the first slot
+of each of R/C/I, plus 22 — and it is a read-side predicate that writes nothing.
+
+## 4. `[NEGATIVE, 59/59]` `0x16` is not identifiable from the second per-tile plane
+
+Every previous attempt asked the code where 22 comes from. This asks the corpus what a 22 tile
+*is*. Two `N*N` one-byte-per-tile planes sit in every shipped file and had never been compared —
+the zone raster, and the SIMGEOM tile grid, whose 65,536 payload bytes `City.n` reads the *length*
+of and then discards.
+
+`city_planes.py` cross-tabulates them. It does not assume the two planes agree on row order (the
+zone plane's base writer emits rows in reverse, `0x1001b4e9`; the tile grid is written by unrelated
+code in another module), so it reports all four orientations. It does not assume the grid's payload
+offset either: the 8-byte section frame's `0xDEADBEEF` marker is **validated** before the plane is
+read, so a wrong offset fails loudly instead of shifting the whole table.
+
+| filter | files | with 22 | 22 tiles | 22 / zoned |
+|---|---|---|---|---|
+| `Cities\*.sc3` | 15 | 14 | 27,222 | 0.1030 |
+| `Cities\Terrains\*.sct` | 21 | **0** | **0** | — |
+| `Cities\Scenarios\*.SNR` | 13 | 13 | 20,498 | 0.1123 |
+| `Cities\StarterTowns\*.st3` | 10 | 10 | 965 | 0.0669 |
+
+**All four totals reproduce the figures this document recorded on 2026-08-17 exactly** (27,222 / 0
+/ 20,498 / 965), by a different tool on a different code path — the second-method check, passed.
+
+The cross-tab itself is a clean negative. `conc` = `max_g P(grid = g | zone = 22)`; `ctrl-max` = the
+same statistic for the sharpest *other* zone value in that file, which is the control that stops a
+grid dominated by one value (Berlin's is 87.7% zero) from manufacturing a result:
+
+| family | orientation spread of `conc` | mean `conc` | mean `ctrl-max` |
+|---|---|---|---|
+| `.sc3` (15) | 0.831 – 0.844 | 0.837 | **0.985** |
+| `.snr` (13) | 0.894 – 0.923 | 0.905 | **0.986** |
+| `.st3` (10) | 0.930 – 0.966 | 0.943 | **0.990** |
+
+**In every family and every orientation `0x16` is LESS tightly tied to the tile grid than the
+sharpest other zone value is.** Berlin's per-value enrichments are all within noise of 1.0 (grid
+`0x00` 0.95, `0x26` 1.42, `0x21` 0.99, `0x22` 1.38). And the four orientations agree to within
+±0.02, which is itself informative: a real alignment would make one orientation stand out.
+
+> **`[FALSIFIED]` `0x16` is water, terrain class, or anything else the SIMGEOM tile grid records.**
+> Both candidate identities that motivated the test — undevelopable terrain, and plopped-building
+> footprints if the grid marks occupancy — are excluded by this, in 59 of 59 files. What the test
+> cannot exclude is an identity recorded in a plane nobody has decoded, the SIMDIRT terrain
+> section (`{0x206c6e7c, 0x21737de5}`, 140,303 bytes in Berlin) being the obvious one.
+
+## Where the producer actually is, and why five sweeps could not reach it
+
+The three functions that write the zone raster while maintaining its invariants are named. Read
+here rather than inferred `[CONFIRMED @0x10034342]`:
+
+```c
+bVar2 = *(byte *)(*(int *)(*(int *)(*(int *)(param_1 + -4) + 0xc) + param_2 * 4) + param_3);
+if (bVar2 != *param_4) {                                  // NO-OP if unchanged
+  if (bVar2 < 0x17)      { ... param_1 + 0x40 + bVar2*4   -= 1; }   // 23-entry u32 count array
+  if (*param_4 < 0x17)   { ... param_1 + 0x40 + *param_4*4 += 1; }
+  *(byte *)(...) = *param_4;                                        // the raster store
+  (**(code **)(*(int *)(param_1 + 8) + 0x2c))(param_2,param_3);     // post a cell-changed notify
+}
+```
+
+| RVA | role |
+|---|---|
+| `0x10032a96` / `0x10034342` | `SetValue(row, col, &u8)` on the two subobjects |
+| `0x10032afa` | `SetValue` over a rect, per-row `memset` + rect notify `vt+0x28` |
+| `0x10032be0` | `SetAllCells`, zeroes all 23 counts then sets one to `rows*cols` |
+| `0x1003270a` | `GetZoneDeveloper` — `*(param_1 + 0x18c + param_2 * 8)`, **the raw byte, no arithmetic** |
+
+**And none of them has a caller in the export.** Measured: `FUN_10032afa` and `FUN_10032be0` are
+referenced only by their own thunks `0x1003433a` / `0x1003434a`; `FUN_10032a96`, `FUN_10034342`
+and both thunks have **zero** references of any kind. That is expected for vtable dispatch — and
+`re/ghidra_export_simrci/globals.csv` contains exactly **one** `vftable` line, i.e. **the export
+holds no vtable contents**, so the text export structurally cannot show who dispatches into them.
+
+> **This is the real answer to "why has the `0x16` producer never been found".** It is not that
+> `0x16` is elusive. **No zone value's producer is visible in this export** — not Commercial, not
+> Residential, not Landfill. The zoning write path is reached through vtables the text export does
+> not carry, from callers in regions Ghidra never carved: the same uncarved-code problem that hid
+> the three INI-loader stubs and that a 2026-08-17 re-carve fixed for 12,529 other bodies.
+>
+> So the next step is **not** another sweep, and not a debugger either. It is `VtableProbe` /
+> `XrefProbe` on live Ghidra against `0x10032a96`, `0x10032afa` and `0x10032be0` to find which
+> vtable slots hold them and who dispatches through those slots — the route that has already
+> worked three times in this document (`0x10030369`, `PTR_FUN_1004d2bc` slot 1, the `+0x188`
+> vs `+0x18c` settlement).
+
+## What `0x16` still is, after all this
+
+Unchanged and still `[UNCERTAIN]`: it is an in-range slot index (`< 0x17`) that **no shipped file
+declares a developer for**, occupying 6.7-11.2% of zoned tiles, absent from all 21 bare terrains,
+clustered 8.57x next to itself, and treated as a second kind of "empty" by four independent
+consumers. Excluded now: another commercial zone (2026-08-17), a tunable-range ceiling (§3), and
+anything the tile grid records (§4).
+
+The missing evidence, named: **which vtable slot dispatches to `0x10032afa`, and from where.**
+
+---
+
+# ⭐⭐ `0x16` IS NAMED, FROM THE X86 BINARY: it is a PLOPPED BUILDING
+
+Landed later on 2026-08-18, and it resolves the section above. The name comes from the iOS oracle,
+but **the enum is named by SC3U's own code** and that is what settles it — every binding below was
+re-read here before being adopted.
+
+## The x86 binary names the zone enum: SIMRCI `0x10034716` `[CONFIRMED @0x10034716]`
+
+The query tool's zone-name switch dispatches on the raster byte and looks up a localized string in
+LTEXT group `0x82e0074c`, or emits a hardcoded `*BUG*` string for a zone type the game refuses:
+
+```c
+switch((uint)param_5 >> 0x18) {
+case 1:    FUN_1003f052(local_27c,0xf, 0x82e0074c);      // instance 15
+...
+case 0xd:  FUN_1000628b(local_14c,s__BUG__No_military_zones_allowed__100581dc);
+case 0xe:  FUN_1003f052(local_2f4,0x19,0x82e0074c);      // instance 25
+case 0xf:  FUN_1003f052(local_31c,0x18,0x82e0074c);      // instance 24
+case 0x10: FUN_1000628b(local_110,s__BUG__No_spaceport_zones_allowed_100581b8);
+case 0x11: FUN_1003f052(local_344,0x1a,0x82e0074c);      // instance 26
+default:   FUN_1003f052(local_36c,0x195,0x82e0074c);     // instance 405
+```
+
+Resolving those instances in `re/data/ixf_text.csv` (`SC3StringsQuery.IXF`):
+
+| raster value | case | LTEXT | string | name |
+|---|---|---|---|---|
+| 1, 2, 3 | 1, 2, 3 | 15, 16, 17 | `Residencial` / ` Media` / ` densa` | **Residential** ×3 |
+| 5, 6, 7 | 5, 6, 7 | 18, 19, 20 | `Comercial` / ` Media` / ` densa` | **Commercial** ×3 |
+| 9, 10, 11 | 9, 10, 0xb | 21, 22, 23 | `Industrial` / ` Media` / ` densa` | **Industrial** ×3 |
+| **13** | 0xd | — | `*BUG* No military zones allowed!` | **Military** (refused) |
+| **14** | 0xe | 25 | `Aeropuerto` | **Airport** |
+| **15** | 0xf | 24 | `Puerto` | **Seaport** |
+| **16** | 0x10 | — | `*BUG* No spaceport zones allowed` | **Spaceport** (refused) |
+| 17 | 0x11 | 26 | `Vertedero` | **Landfill** |
+| **22** | *no case* | 405 | `Zona no delimitada` | falls through → **reported as "Unzoned"** |
+
+> Curiosity, recorded because it could mislead the next reader: the language column labelled
+> `ENGLISH` in this install carries **Spanish** text (`English-UK` is the English one). It does not
+> affect the mapping, and arguably strengthens it: the meaning survives translation.
+
+## Independently corroborated by unrelated x86 code: the SC2 importer `[CONFIRMED @0x10031bcc]`
+
+`SIMRCI FUN_10031bcc` is the zone layer's SimCity 2000 import method. It builds a 10-entry
+translation table from SC2 `XZON` nibbles to SC3 raster values and writes each cell through the
+cell-map setter with the table entry passed **by address**:
+
+```c
+local_1c[0] = 0;    local_1c[1] = 1;  local_1c[2] = 3;   local_1c[3] = 5;   local_1c[4] = 7;
+local_1c[5] = 9;    local_1c[6] = 0xb; local_1c[7] = 0;  local_1c[8] = 0xe; local_1c[9] = 0xf;
+...
+if (9 < param_2._3_1_) { param_2 = (int *)((uint)param_2 & 0xffffff); }        // >9 -> 0
+iVar6 = (**(code **)(*piVar7 + 0x3c))(iVar5,local_8,local_1c + ((uint)param_2 >> 0x18));
+```
+
+SC2's documented `XZON` low nibble is `1` light-res, `2` dense-res, `3` light-com, `4` dense-com,
+`5` light-ind, `6` dense-ind, `7` military, `8` airport, `9` seaport. Against the table:
+
+| SC2 nibble | 1 | 2 | 3 | 4 | 5 | 6 | **7** | **8** | **9** |
+|---|---|---|---|---|---|---|---|---|---|
+| → SC3 | 1 | 3 | 5 | 7 | 9 | 11 | **0** | **14** | **15** |
+| meaning | R-lo | R-hi | C-lo | C-hi | I-lo | I-hi | military **dropped** | **airport** | **seaport** |
+
+**Airport → 14 and seaport → 15 in exactly the positions the query switch names them, and military
+is dropped to 0 in exactly the position that emits `*BUG* No military zones allowed!`.** That is an
+order-preserving agreement at ten points between two functions with nothing to do with each other.
+
+**Hypothesis "the SC2 importer produced the 22s" is `[FALSIFIED]` by the same code**: the table's
+maximum output is `0xf` = 15, and out-of-range nibbles are forced to 0. It arithmetically cannot
+emit 22. (Note in passing that this IS a genuine table-driven producer of zone values through
+`vt+0x3c` — the "written through a table" framing was correct in general and wrong for 22.)
+
+## Three corrections to this document
+
+| this document said | it is actually |
+|---|---|
+| slot 14 = "(commercial-side, unnamed)" | **Airport** |
+| slot 15 = "(industrial-side, unnamed)" | **Seaport** |
+| slots 13 and 16 unremarked | **Military** and **Spaceport**, both refused with `*BUG*` strings |
+
+The commercial/industrial-side grouping in the reader `0x1001deca` was **right and is now
+explained**: Airport (14) dispatches commercial-side, Seaport (15) industrial-side. And the long
+-standing oddity that **`0x10` and `0x16` share display colour `0x22`** `[@0x1003547c]` resolves at
+a stroke — Spaceport and PloppedBuilding are the two values that are *not* developer-built zones.
+
+## `[iOS-HINT]` the name, and `[CONFIRMED]` the x86 negative
+
+The iOS sibling's `e_ZoneType` name block is 16 contiguous strings ending
+`kLandfill` (`0x004af148`), `kPloppedBuilding` (`0x004af154`), and its `GetZoneColor`
+(`0x00264768`) is a jump table over `0` to `0x16` whose populated-case set and colour values are
+**byte-for-byte identical to x86 `0x1003547c`**, `{0x10, 0x16} → 0x22` pair included. With 11
+x86-side positions independently pinned above, `kPloppedBuilding = 22` is the only remaining
+assignment.
+
+**And the iOS build contains the producer this document has hunted for four sessions**
+`[iOS-HINT @0x001fe2a8:608]` — `SimCity::goBuildingLayer::PlaceBuilding`:
+
+```c
+local_21 = 0x16;
+(**(code **)(**(int **)(*(int *)(this + 0x7c) + 0x274) + 0x11c))
+          (..., iVar10 >> 8, iVar8 >> 8, iVar9 >> 8, iVar12 >> 8, &local_21);
+```
+
+`city+0x274` is the zone layer (typed call sites in the same export), and `+0x11c` is its
+**SetCellRect** — the same slot as x86 `vt+0x38`. So **placing a building stamps its whole
+footprint rect with 22.** Two sibling writers use the identical shape with value `0`:
+`goPowerLayer::onOccupantInserted` (`0x00259b50`) and `goTransitLayer::ForcePlaceTile`
+(`0x00294a6c`) — networks *dezone* the tiles they take, buildings *mark* them.
+
+**The x86 side of that is the measured negative from §"Where the producer actually is":
+`FUN_10032afa`, the rect fill, has zero callers in all 30 modules.** So SC3U reads, counts, saves,
+loads and colours a mark that no shipped x86 code produces. `[UNCERTAIN]` whether the retail x86
+writer was removed or merely lives in uncarved code — the vtable-contents gap makes the export
+unable to answer, and the honest reading is that this is not yet decided.
+
+## Why this reconciles every earlier observation
+
+| observation | under `kPloppedBuilding` |
+|---|---|
+| absent from all 21 bare terrains | no buildings have been placed |
+| large contiguous blobs, runs to 36, 8.57x self-adjacent | building footprints, stamped as rects |
+| depleted next to every declared zone class | a footprint's interior neighbours are its own tiles |
+| no file declares slot 22 | correct: **no developer builds it**, the player places it |
+| four consumers treat it as a second kind of "empty" | the query tool literally reports it as **"Unzoned"** (LTEXT 405, the default arm) |
+| `0x10032ca9` clears it to 0 when an occupant's rect is processed | the building was removed, so the mark goes |
+| shares colour `0x22` with `0x10` | both are non-developer marks (Spaceport, PloppedBuilding) |
+| **not** correlated with the SIMGEOM tile grid (§4 above) | consistent: that grid is not an occupancy map |
+
+Confidence: **C3** — behaviour confirmed against a second witness (the iOS sibling) with the x86
+naming pinned at eleven independent points by two unrelated x86 functions. Not C4: no runtime
+observation, and the x86 producer's absence is measured but not explained.

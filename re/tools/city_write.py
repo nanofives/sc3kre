@@ -57,18 +57,26 @@ ZONE_GROUP = 0x409FF3BA          # SC3ZoneLayer, SIMRCI
 GRID_GROUP = 0x80AB8AB0          # SIMGEOM tile grid: frame(8) + N*N + 8 -> N = isqrt(size-16)
 SECTION_TYPE = 0x206C6E7C
 
-# The named zone developers, from the SC3Tune.INI section each constructor loads
-# [CONFIRMED @0x10036382 and the four ctors]. Slots 14/15 have no INI name; the raster reader
-# 0x1001deca groups 14 with commercial and 15 with industrial.
+# The zone types. R/C/I/Landfill are named from the SC3Tune.INI section each constructor loads
+# [CONFIRMED @0x10036382 and the four ctors]. The REST are named from the query tool's own
+# zone-name switch, SIMRCI 0x10034716, which dispatches the raster byte either to a localized
+# string in LTEXT group 0x82e0074c or to a hardcoded `*BUG*` string for a type the game refuses
+# [CONFIRMED @0x10034716]. Corroborated at ten order-preserving points by the SimCity 2000
+# importer's nibble table [CONFIRMED @0x10031bcc]. See formats/CITY_SAVE.md.
 SLOT_NAMES = {
     0: "unzoned",
     1: "Residential", 2: "Residential", 3: "Residential",
     5: "Commercial", 6: "Commercial", 7: "Commercial",
     9: "Industrial", 10: "Industrial", 11: "Industrial",
-    14: "(commercial-side, unnamed)", 15: "(industrial-side, unnamed)",
-    17: "Landfill",
-    22: "0x16 -- in-range but not a declared slot; a normal path CLEARS it "
-        "[CONFIRMED @0x10032ca9]",
+    13: "Military -- REFUSED by the game (`*BUG* No military zones allowed!` @0x100581dc)",
+    14: "Airport",                        # case 0xe -> LTEXT 25 `Aeropuerto`
+    15: "Seaport",                        # case 0xf -> LTEXT 24 `Puerto`
+    16: "Spaceport -- REFUSED by the game (`*BUG* No spaceport zones allowed` @0x100581b8)",
+    17: "Landfill",                       # case 0x11 -> LTEXT 26 `Vertedero`
+    22: "kPloppedBuilding -- a tile owned by a directly-placed building, NOT a zone developer. "
+        "No case in the name switch, so the query tool reports it as `Unzoned` (LTEXT 405). "
+        "No shipped x86 code writes it; the iOS sibling's PlaceBuilding stamps it over the "
+        "footprint rect [iOS-HINT @0x001fe2a8]",
 }
 
 
@@ -198,6 +206,13 @@ class City:
             raise CityError("(%d,%d) outside 0..%d" % (x, y, n - 1))
         if not 0 <= slot < 0x17:
             raise CityError("slot %d outside the loader's own bound 0..22" % slot)
+        if slot == 22:
+            raise CityError(
+                "22 (0x16) is kPloppedBuilding: the mark for a tile owned by a directly-placed "
+                "BUILDING, not a zone developer [CONFIRMED @0x10034716, formats/CITY_SAVE.md]. "
+                "Writing it would claim a building footprint with no occupant behind it, and the "
+                "game's own path CLEARS it when an occupant's rect is processed "
+                "[CONFIRMED @0x10032ca9]. Refused deliberately, not for lack of knowledge.")
         if slot and slot not in self.declared_slots():
             raise CityError("slot %d is not declared by this city (declared: %s); a raster byte "
                             "indexes the developer table, so an undeclared slot has no developer"

@@ -52,6 +52,16 @@ none.
    > `re/tools/*` content in those three is city-save work, and its own test evidence (478/478 and
    > 657/657 container round-trips, 62,552/62,552 sprite blocks) was verified after the fact rather
    > than assumed.
+   >
+   > **FOURTH INSTANCE, 2026-08-18, recorded by the session it happened to.** Commit `8b96efa`
+   > ("Section 22 closed, U-054 closed, and a misread of my own corrected") also carries
+   > **`UNCERTAINTIES.md` rows `U-056` and `U-057`** — city-save-session work written minutes
+   > earlier, with nothing to do with section 22 or U-054. **Nothing was lost**: both rows are
+   > intact and were already complete when swept, verified after the fact. The cost is the
+   > documented one. `U-056` is the warning that the harness `Grep` tool **silently returns zero
+   > over the entire decompilation** (deny-by-default `.gitignore` + ripgrep honouring it), which is
+   > a caveat every future session needs; anyone who goes looking for where that was found will
+   > find it in a commit about DirtBag vtable slots. The rule above is now four for four.
 4. **The repo is PUBLIC** (`github.com/nanofives/sc3kre`). Before committing anything new, grep the
    diff for the local Windows username, the worker account name and the owner's email. Tools and
    notes only, never game assets or bulk decompiled output.
