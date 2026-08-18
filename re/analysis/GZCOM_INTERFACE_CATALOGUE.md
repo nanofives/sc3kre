@@ -2638,3 +2638,104 @@ and the four-character tag `0x006c6f42` (`"Bol"`) at `this+4`, and **delegates e
 So `0x1001b6a0` is the occupant-base view inside a derived class that keeps its occupant subobject
 at `this+8`. §17's rows describe occupant slots and its own caveat — that it documents one of many
 implementors and the slot map is the transferable part — is exactly right. **No row changes.**
+
+---
+
+## 28. U-052 — 20 overload slots named, and the reversal rule gets its first counterexample
+
+§26 refused 52 slots in what it called 24 same-name groups. Working them properly changes both
+numbers and, more importantly, qualifies §25d.
+
+### 28a. One of the 24 was never an overload group
+
+Grouping by method name alone is a loose filter, and it caught one thing it was not asked to.
+Tracking which class in the chain *declares* each method separates them:
+
+> `cISC3PollutionLayer::Init` slots 11 and 17 are **not** an overload pair. Slot 11 is
+> `cISC3CityCellMap::Init(cISC3City*, T const&)` and slot 17 is
+> `cISC3PollutionLayer::Init(cISC3City*)` — two different classes in the chain that happen to
+> share a name. C++ orders those base-then-derived, so no intra-class permutation applies, and
+> indeed **both sit exactly where declared** (`ret 8` and `ret 4` respectively).
+
+So the correct count is **23 true intra-class overload groups plus one cross-class name reuse**.
+Of the 52 slots, **21 were already named** by §8, §9, §13e, §14d and U-045; 31 were not.
+
+### 28b. An adjustor thunk's arity is measurable one hop down
+
+§18c and §21b both concluded that cell-map-derived classes have "nothing left to fingerprint"
+because their inherited slots are 8-byte adjustor thunks with no `ret`. That is true of the thunk
+and false of the method. Following `sub ecx,N ; jmp <impl>` to the target and measuring *there*
+turns those slots from unmeasurable into arity-decided:
+
+| class | slot | thunk | target | header wants | target rets | verdict |
+|---|---:|---|---|---|---|---|
+| `cISC3PollutionLayer` | 6 | `0x1000c3e6` | `0x1000b08c` | `0x8` | **`0x10`** | rect, reversed |
+| `cISC3PollutionLayer` | 7 | `0x1000c3ee` | `0x1000b6e9` | `0x10` | **`0x8`** | point, reversed |
+| `cISC3PollutionLayer` | 14 | `0x1000c426` | `0x1000a8be` | `0xc` | **`0x14`** | rect, reversed |
+| `cISC3ZoneLayer` | 6 | `0x100342fa` | `0x1001ecbc` | `0x8` | **`0x10`** | rect, reversed |
+| `cISC3ZoneLayer` | 7 | `0x10034302` | `0x1001ee7c` | `0x10` | **`0x8`** | point, reversed |
+| `cISC3ZoneLayer` | 14 | `0x1003433a` | `0x10032afa` | `0xc` | **`0x14`** | rect, reversed |
+
+This is worth keeping: it is a fourth discriminator, and it is cheaper than every other one.
+
+### 28c. What the evidence decided — 20 rows at C3
+
+| class | group | how it was decided |
+|---|---|---|
+| `cISC3PollutionLayer` | `InBounds`, `SetValue` | thunk-target arity (28b) |
+| `cISC3ZoneLayer` | `InBounds`, `SetValue` | thunk-target arity |
+| `cISC3ZoneLayer` | `GetUndevelopedTileCount` | arity — `ret 4` indexes the per-type array at `+0x9c`, `ret 0` reads the total at `+0x154`. §8 found this pair reversed; it is now named |
+| `cISC3CitySchemeMgr` | `GetBATBuildings` | arity — `ret 0` vs `ret 8` |
+| `cISC3WinCityView` | `Init` | arity — `ret 8` vs `ret 0` |
+| `cISC3BuildingLayer` | `CreateBuilding`, `DoPlaceBuildingTool` | arity isolates the 4-argument member (`ret 0x10`); body shape then splits the two 3-argument ones — a virtual call on argument 1 means the `cISC3OccupantAttrib*` form, its absence the `cGZResourceKey const&` form |
+| `cISC3City` | `Init` (triple) | callee offsets, see below |
+| `cISC3CityView` | `Init` | callee offsets, see below |
+
+**`cISC3City::Init`, all three members `ret 4`.** Slot 7 calls its argument at **twelve** distinct
+offsets, `0x44` through `0x74`. `cIGZDBSegment` declares 12 methods, so its vtable ends at `+0x38`
+and cannot supply any of them — slot 7 is therefore **not** a segment, which leaves the importer.
+Slot 5 makes **no** virtual call on its argument at all and reads it directly, which is a value
+type, i.e. `cISC3NewCityInfo&`. Slot 6 calls `+0x10`, inside `cIGZDBSegment`'s range, and is what
+remains. So slots 6 and 7 are swapped and slot 5 stays put.
+
+**`cISC3CityView::Init`, both members `ret 8`.** Slot 4 calls its first argument at `+0x50` and
+`+0xb4`. `cISC3App` chains 34 methods and its vtable ends at `+0x90`, so `+0xb4` cannot be an App
+call; `cISC3City` has 162 slots and reaches it comfortably. Argument 1 is the city, making slot 4
+the `(cISC3City*, cIGZDBSegment*)` form — **exactly where the header puts it**.
+
+`verify_worker_rows.py --strict` over all 20 rows in six modules: **0 flagged, exit 0.** Tracker
+diff: 50,621 rows before and after, 20 rows C0 → C3, 0 names lost, 0 pre-existing names changed.
+
+### 28d. The reversal rule is not universal, and the shape of the exception matters
+
+§25d said 15 of 15 groups were permuted and no non-overload slot had ever mismatched. The second
+half still holds everywhere. The first half now has counterexamples:
+
+- **`cISC3CityView::Init` is NOT permuted.** Both members sit where declared.
+- **`cISC3PollutionLayer`'s `Init` "pair" is not permuted either** — because it is not a pair
+  (28a).
+- **`cISC3City::Init` is only partly permuted**: the last two members swap, the first stays.
+
+And where three-member groups *are* fully reversed, the middle member necessarily stays put, which
+is why `cISC3BuildingLayer`'s `CreateBuilding` and `DoPlaceBuildingTool` each show slot 7 / slot 20
+matching the header while their outer members swap. §21d's `cISC3DirtBag` `Init` triple fits the
+same shape.
+
+**Revised statement, replacing "invert the header order":** for a same-name overload group, the
+header order is *unreliable*, not *inverted*. Inversion is the commonest outcome and a reasonable
+first hypothesis, but it must be confirmed per group by arity, thunk-target arity, body shape or
+callee offsets — and it will sometimes be wrong. A rule that predicted inversion unconditionally
+would have mis-assigned `cISC3CityView::Init` and both members of the pollution `Init` pair.
+
+### 28e. Eleven slots still unnamed, and exactly what each needs
+
+| class | group | why the evidence does not decide |
+|---|---|---|
+| `cISC3City` | `CreateOccupant` (75, 76) | both `ret 0xc`, both **141 bytes**, neither dereferences argument 1 in the decompilation. Needs the raw disassembly of the argument's use |
+| `cISC3DirtBag` | `CanPlaceWater` (67, 68) | both `ret 0xc`; both make the *same* four virtual calls (`+0x4c`, `+0x50`, `+0x13c`, `+0x170`) on the argument Ghidra models, so that argument is not the one that differs |
+| `cISC3DirtBag` | `PlaceWater` (75, 76) | same shape as above, calls `+0x4c`, `+0x50`, `+0x88`, `+0xb0`, `+0xb4` |
+| `cISC3CitySchemeMgr` | `MakeBATReplacement` (41, 42) | the members differ in argument **2**, not argument 1, so the argument-1 test cannot separate them. 151 B vs 73 B makes the shorter a forwarder candidate, which is a hypothesis, not a finding |
+| `cISC3DirtBag` | `Init` (7, 8) | §22, and out of scope here — both `ret 8` |
+| `cISC3PollutionLayer` / `cISC3ZoneLayer` | `SetValue` second member (slot 16) | the thunk target rets `0x4`, which matches **neither** declared form (`0xc` or `0x14`). The target is 15 bytes for pollution and 100 for zone; something forwards again and the chain was not followed |
+
+These stay in U-052.
