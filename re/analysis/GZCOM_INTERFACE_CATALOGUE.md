@@ -2118,3 +2118,64 @@ projection.
 **A note on the fingerprint method, since this is its first false-alarm-shaped result:** two classes resolving to
 one address means *prefix inheritance* (correct) or *shared implementation* (an error). Distinguish them by
 checking the header for a derivation. Only the second case needs fixing.
+
+---
+
+## 24. cSC3OccupantManager — 32/32 with nothing unmeasurable, and the demolition path closes
+
+`SIMGEOM.DLL` `.rdata` **`0x10029e24`**, 35 slots (3 + 32). City vtable slots 71/72/73 hand out three instances
+of this class: surface, underground level one, underground level two (§13b).
+
+**32 of 32 arity-matched, 0 mismatches, 0 unmeasurable.** The first class walked where *every* slot yielded a
+singleton `ret N` — no adjustor thunks, no multi-return bodies, nothing to hedge. `Init` at `ret 0x18` = **six
+arguments** exactly as declared is the distinctive anchor within the class itself.
+
+### 24a. Both PlaceZone anchors resolve, and the zoning demolition path is now named end to end
+
+§9 recorded two unnamed offsets on the object the zone layer got from city `+0x11c`:
+
+| offset | slot | method | size |
+|---|---:|---|---:|
+| `+0x7c` | 31 | `GetOccupantAtCell(uint32 x, uint32 z, cISC3Occupant** out)` | 232 B |
+| `+0x4c` | 19 | `RemoveOccupantAtCell(uint32 x, uint32 z)` | 634 B |
+
+Combining with §13b, §14c and §17b, `PlaceZone`'s per-cell behaviour is now fully named from four different
+classes:
+
+1. `cISC3DirtBag::GetVertexAltitudeDirt` ×4 — the tile's corner altitudes, a **slope check** (§14c)
+2. `cISC3DirtBag::IsWater` — a tile cannot be zoned on water (§14c)
+3. `cISC3OccupantManager::GetOccupantAtCell` on the **surface** manager — is something there?
+4. the same call on **both underground** managers, where a hit must **miss** (§13b)
+5. `cISC3Occupant::CanUserRemove` and an `IsGeomFlag` mask chain — may it be removed? (§17b)
+6. `cISC3OccupantManager::RemoveOccupantAtCell` — remove it
+7. `cISC3Occupant::GetLocation` — accumulate the demolished bounding box (§17b)
+8. `cISC3BudgetLayer::GetCost` × tiles + demolition, then `WithdrawFunds` (§11c)
+
+That chain was eight unnamed vtable offsets across four modules at the start of this session.
+
+### 24b. The class's shape
+
+Slots 5/6/7 (`GetCellsInX/Z/Y`) are 8-byte accessors and 8/9 (`GetSenderId`, `GetOccLayer`) are 7-byte
+accessors, so the manager's own dimensions and identity are plain fields. The substantial methods are
+`Init` (1427 B), `GetNeighborsOfOccupant` (1398 B), `InsertOccupantAtCell` (802 B),
+`GetOccupantsInCell` (798 B) and `RemoveOccupantAtCell` (634 B) — insertion, removal and neighbour queries carry
+the weight, which is what an occupant index would look like.
+
+Note the iterator family: `GetIterator` (28), `GetOccupants` (29), `GetNeighbors` (32) are all small (145/32/194
+bytes) and hand back a `cISC3OccManIterator**`, while the bulk-copy forms `GetOccupantsInCell` (33) and
+`GetNeighborsOfOccupant` (34) take a `bool (*)(cISC3Occupant*)` filter and are ~800/1400 bytes. Two access
+styles, iterator and filtered-array.
+
+### 24c. Three overload pairs deliberately left unnamed
+
+`PostOccupantAll` (13/14), `RemoveOccupant` (17/18) and `IsInBounds` (25/26) are each two 1-argument methods —
+**expected arities `0x4` and `0x4`**. Arity cannot order them, and U-042's rule says the header order is not
+to be trusted for same-name groups. Rather than commit a coin-flip, these six slots carry no name. Resolving
+them needs the argument *type* read out of each body: a `cSC3CityCoord const&` / `cSC3CityBounds const&` is
+dereferenced as a struct, a `cISC3Occupant*` / `cIGZMessageTarget&` as a vtable call.
+
+### Committed
+
+26 rows: **3 at C3** (`Init`, plus the two anchored calls whose evidence comes from a different module) and
+**23 at C1** (named by slot position, arity-confirmed, bodies unread — same standard as §20d).
+`verify_worker_rows.py`: **0 of 26 flagged**. Project C3 194 → 197, C1 4104 → 4127.
