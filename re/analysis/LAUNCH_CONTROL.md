@@ -3000,3 +3000,54 @@ instrumented).
   as code patches. Not done - the proxy is simpler, reversible, and touches no game binary.
 - `version.dll` + `sc3probe.dll` are our own code (publishable as tools); the probe SOURCE is
   gitignored. The build is `re/harness/build.ps1`.
+
+## 29. Corrections + new harness flags + the -l city-load mechanism (2026-08-17)
+
+### 29.1 fitclient: DPI-aware only, NO window resize (corrects §24)
+
+§24 said `-fitclient` recomputes the window's outer size to force an 800x600 client. That
+resize is WRONG and was harmful. Because `SetProcessDPIAware` runs in DllMain BEFORE the game
+sizes its window, the game's OWN `AdjustWindowRect` already produces the correct outer for its
+intended client at true DPI (e.g. 1030x803 for a 1024x768 client). Forcing the client to a
+hardcoded 800x600 SHRANK the window and clipped the game's larger view - the "clip is back"
+regression. **`-fitclient` now does `SetProcessDPIAware` only and leaves the game's own sizing
+alone.** The game runs at whatever resolution it is configured for (1024x768 was the observed
+default), unclipped. `[CONFIRMED - user-verified unclipped at 1024x768]`
+
+Also: forcing resolution with `-r800x600` (game char switch, §3a) CRASHED the game
+(`0xC0000409`). Do not force a resolution to work around sizing; fix DPI instead.
+
+### 29.2 New flags: -quiet, -filetrace
+
+- **`-quiet`** skips the probe's framebuffer sampling (`snap_regions`/`diff_regions`/
+  `sample_candidates`/`dump_window_bmp`). Those lock and dump DirectDraw surfaces and are a
+  plausible source of instability during a play/verify session - a T3 city-load run hard-crashed
+  at ~35 s during a `WINDUMP` at tick 350, and `-quiet` made the same run stable. Use `-quiet`
+  for any interactive/verify run; leave it off only when you need the FBHUNT data.
+- **`-filetrace`** IAT-hooks `CreateFileA` + `GetFileAttributesA` on SC3U.exe and logs opens of
+  `SC3Tune` / `.PAK` / `\Sys\` paths with a sequence number. Answers "loose file vs archive, and
+  in what order" with zero interpretation. Confirmed empirically: with `SYS.PAK` present the game
+  checks a loose `\Sys\<name>` (GetFileAttributes MISSING) then reads the PAK; with `SYS.PAK`
+  renamed away it opens the loose files instead. PAK-first, loose-fallback.
+
+### 29.3 The -l city-load switch: a catalog lookup, NOT a path (for "launch into a city")
+
+`-l<value>` (char switch, handler `FUN_004077b5` +77, §3) does NOT take a file path. It resolves
+`<value>` through a service (`FUN_0047048f`): `vf+0x44(value,&id)` then a `vf+0x48` fallback, and
+only on a hit does it `FUN_004845fe()->vf+0x78(id)` to load. A full absolute path fails both
+lookups and pops "el archivo especificado en la linea de ordenes no es valido o no se ha
+encontrado", then the game continues to the menu. So a working `-l` needs the catalog KEY the
+service recognises (a city name/id), not `Cities\<name>.sc3`. `[CONFIRMED @0x004077b5, dialog
+observed]` The catalog key format is the open question for launching directly into a city.
+
+**Menu-driven load works** and is how the cross-session `.sc3` tests were run: place ONE file in
+`Cities\` (a duplicate INTERNAL city name crashes the loader - use a unique name or replace the
+target), boot with `-nointro`, load via the in-game menu.
+
+### 29.4 Standalone caveat: version.dll loader is flaky
+
+The `version.dll` proxy (§28) intermittently white-screens (loads the probe via LoadLibrary under
+loader lock in DllMain - worked once, failed once). For reliable interactive runs use
+`sc3launch` injection instead (a `PlayWindowed.bat` wrapper, no `-kill`, lets a human drive). The
+loader-lock LoadLibrary should be reworked (defer to a thread, or merge the probe into version.dll)
+before the standalone is dependable.
