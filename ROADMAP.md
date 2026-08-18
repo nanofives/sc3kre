@@ -402,7 +402,21 @@ Scope limit on record: section payloads are re-emitted verbatim, so this is an
 Owner's call, from the analysis in `re/analysis/POST_P1.md`. P1 is exited; these three gates
 replace P2 – P5. They are in **dependency order** and each has a measurable exit.
 
-### T1 — PROVE THE WRITE PATH  ◀ ACTIVE, and blocked on nobody having tried it
+### T1 — PROVE THE WRITE PATH  ✅ **MET 2026-08-17**
+
+**The game loads files this project wrote.** All four rungs of `verify/city_load_test/` load,
+including T2 (our QFS compressor's output, bytes no shipped file contains) and T3 (a one-tile zone
+edit). Run and visually confirmed by the session driving the game; record in
+`verify/city_load_test/RESULTS.md`. Per the README's pre-registered outcomes this is the success
+case, so **the toolkit's central claim is no longer structural-only.**
+
+Not settled, and recorded rather than glossed: tile (28,0) was never visually confirmed as
+Landfill; that run crashed ~35 s after load during the probe's own framebuffer sampling (best
+reading: instrumentation, not proven); and a **name-collision crash** was found — a written city
+placed beside another with the same *internal* name crashes the load. That last one is a real
+finding for toolkit users and belongs in any published documentation.
+
+### T1 — the original framing, kept for the record
 
 **Exit: the game loads a file this project wrote, and shows the edit.**
 
@@ -473,8 +487,16 @@ city edit was: swapping one value in `SC3Tune.ini` produces an archive of **iden
 that re-parses to 51 members, with **exactly one member's content changed** and every other member
 byte-identical. A ready-to-stage modified archive sits in `verify/loose_file_test/SYS.PAK.modified`.
 
-What remains for T3 is unchanged and is not a format problem: **one change, made with these tools,
-observed in the running game.**
+**The writer is now validated GAME-SIDE** (2026-08-17): the game opens our written archive and
+boots on it, with `FILETRACE` showing `CreateFileA` on it and every boot resource coming from PAK
+members. Record: `verify/loose_file_test/ARM3_RESULTS.md`.
+
+What remains for T3 is **one visible change**, and the first attempt taught something worth
+keeping: the chosen marker (`[CreditsTunables] ScrollRateInPixelsPerMinute` 1500 → 4242) produced
+**no visible effect**, and a full byte diff proved the archive was correct — exactly 4 contiguous
+bytes differ, the digits themselves. So that tunable does not drive the credit scroll, and the
+next attempt needs a tunable whose effect is *known* to be observable, not merely plausible.
+`[UNCERTAIN]` what `ScrollRateInPixelsPerMinute` actually controls.
 
 ### Not on the roadmap, deliberately
 

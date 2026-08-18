@@ -5,7 +5,35 @@
 **End-state: a MODDING / FORMAT TOOLKIT.** Decided 2026-08-17; the source-port option is
 **closed** (`ROADMAP.md`, P1 gate).
 
-> # 🔴 THE GAME INSTALL IS CURRENTLY MODIFIED — read this before anything else
+> # ✅ THE INSTALL IS RESTORED, AND BOTH TESTS WERE RUN (2026-08-17, late)
+>
+> The harness session ran both staged tests and restored `Apps\Sys\SYS.PAK` to the shipped
+> archive (sha `172c02d9…`, verified). **Nothing is staged in the install any more.**
+>
+> **T1 — the game LOADS files this project wrote.** All four rungs of
+> `verify/city_load_test/` load, including T2 (our QFS compressor's output) and T3 (a one-tile
+> zone edit). Full record: `verify/city_load_test/RESULTS.md`. The central toolkit claim is no
+> longer structural-only.
+>
+> **T3 — the SYS.PAK writer is validated GAME-SIDE.** The game opens our written archive and
+> boots on it (`FILETRACE` confirms `CreateFileA` + a normal menu render, and every boot
+> resource comes from PAK members). Record: `verify/loose_file_test/ARM3_RESULTS.md`.
+>
+> **My pre-registered prediction was WRONG and was falsified properly.** I predicted the credits
+> would scroll ~3x from `ScrollRateInPixelsPerMinute=4242`; they scrolled normally. That would
+> have implicated the writer, except a full byte diff shows our archive differs from shipped by
+> **exactly 4 contiguous bytes** — the `1500`→`4242` digits — so the game read it exactly as it
+> would a hex-edited shipped archive. The premise was wrong, not the writer: that tunable does
+> not drive the credit scroll. **This is the model outcome — a falsified prediction settled by
+> measurement rather than argued away.**
+>
+> Still open from those runs, all small and all recorded in the two RESULTS files: T3's tile
+> (28,0) was never visually confirmed as Landfill; that run hard-crashed ~35 s after load during
+> the probe's own framebuffer sampling (best reading: instrumentation, NOT proven); and a
+> name-collision crash was found — **do not place a written city beside another with the same
+> internal name** (actionable for toolkit users).
+
+> # 🔴 SUPERSEDED — the install WAS modified while the tests were staged
 >
 > `Apps\Sys\SYS.PAK` is **not the shipped archive**. It is one this project's writer produced,
 > staged as a live test (roadmap gate T3, "arm 3"):
