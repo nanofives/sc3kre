@@ -2480,3 +2480,32 @@ naming at C1 is what keeps the `>=C2` gate metric honest, and this pass moves it
 **Scope, stated plainly.** These 381 slots are *confirmed by position and arity*; the bodies were
 **not** read. Every note says so. The remaining work on these ten classes is the 52 refused
 overload slots (U-052), the 11 folded slots above, and the bodies themselves.
+
+### 26h. The naming drift closed — 72 rows, spelling only
+
+§20d ruled that the mechanical snake_case form is the one `CLAUDE.md` specifies and that the
+hand-written compressed form (`sc3_spritecellmap_dopick`) was not, and renamed its own 13. The
+same drift was still present on every class walked before the §26 pass. **72 rows renamed**, e.g.
+`sc3_valvelayer_getagentsupplyeffect` → `_get_agent_supply_effect`,
+`sc3_zonelayer_readzonedeveloperdescriptions` → `_read_zone_developer_descriptions`,
+`sc3_dirtbag_setvertexaltitude_rect` → `_set_vertex_altitude_rect`.
+
+**The filter, stated because a loose one here would silently rewrite meaning.** A row is renamed
+only when stripping every underscore from the existing name and from the header-derived name
+yields the *same string*, optionally allowing a trailing overload disambiguator (`_rect`,
+`_point`, `_reskey`, …) that is carried over verbatim. Any difference of an actual word is left
+alone. Cross-checked by listing what the filter rejected — **42 rows**, and all 42 should be
+rejected:
+
+- the **4 U-054 semantic disagreements** (`sc3_pollution_mark_cell` vs the header's
+  `SetIsActiveLandfill`, and three more), which are an open question and not a spelling one;
+- **32 `cISC3City` accessors** where the committed name adds `get_` to a header method declared
+  bare (`BuildingLayer()` → `sc3_city_get_building_layer`). That prefix *supplies* the verb the
+  `sc3_<subsystem>_<verb>_<noun>` convention asks for, so the committed name is the better one
+  and the header-derived name is the worse one. Left as they are;
+- **6 overload rows** on `cISC3City` and `cISC3OccupantManager` that already carry their
+  disambiguator (`sc3_occmgr_remove_occupant_coord`).
+
+Every renamed row keeps its confidence, its evidence and its note, with `(was <old name>)`
+appended. Tracker diff: 50,621 rows before and after, 72 names changed, **0 names lost, 0
+confidence changes**.
