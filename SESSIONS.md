@@ -81,6 +81,16 @@ none.
    the same 562/530/32. Recording a number you caused is not stepping on the owner; silently
    leaving it stale would be.
 
+## A fourth session is live and writing `functions.csv` (observed 2026-08-18)
+
+The T3 session started with a clean tree and finished with `functions.csv` (381 rows changed) and
+`re/analysis/GZCOM_INTERFACE_CATALOGUE.md` (+216) modified by **somebody else**, mid-session. The
+work is `SIMCITY.DLL` rows moving C0 → C1 with `cISC3City` vtable-slot names and `simcity-god` as
+the subsystem — legitimate, in-flight, and **left untouched** per rule 3. It is flagged only
+because the T3 session was briefed as the *single writer* of `functions.csv`, and that is no
+longer true in practice. Whoever is doing the `cISC3City` walk: you own those rows, commit them
+by path.
+
 ## Two files were published that this session does not own (T3 session, 2026-08-18)
 
 Recorded here because rule 3 says leave other sessions' uncommitted files alone, and this is an

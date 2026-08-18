@@ -107,6 +107,47 @@ rationalised after the fact.
 **last band: Hazardous / Peligrosa**. A tile reading **None** stays **None**, because the `== 0`
 branch is tested before any threshold and does not depend on `max`.
 
+> ### AMENDMENT, 2026-08-18 — added BEFORE any run, and it prevents a false failure
+>
+> Recorded as an amendment rather than edited into the text above, because the point of a
+> pre-registration is that you can see what changed and when. **No prediction is altered.**
+>
+> **A SECOND line on the same panel will also move, and that is expected.** An offline re-read of
+> `0x1000c95c` found that its `param_5 == 0` branch — pushed to the same panel by
+> `FUN_1000c763:40-43` with flag `0x4000` — computes `param_2 = DAT_1002025c + DAT_10020260`
+> (line 283), i.e. **air max + water max combined**, and bands against `param_2/5`, `*5`, `*10`,
+> `*50` (lines 309 / 332 / 355 / 378). That is the **"Pollution Generated:"** line — label
+> instance `0x29` = 41, bands `0x2a`–`0x2f` = 42–47 (None / Low / Medium / High / Very High /
+> Hazardous), all verified in `re/data/ixf_text.csv`.
+>
+> Shipped: `param_2` = 11000 + 11000 = 22,000 → thresholds 4,400 / 110,000 / 220,000 / 1,100,000.
+> With M1: `param_2` = 8 + 11000 = 11,008 → thresholds 2,201 / 55,040 / 110,080 / 550,400.
+> Roughly halved, so this line may climb **one** band. A dramatic jump is not expected here; the
+> air line is the one that goes to the top.
+>
+> **So do NOT read "another line changed" as a failure.** The negative control is the **water**
+> line (`MaxWaterPolluteForUI` → `DAT_10020260`, written once at `0x100046bb:394`; the water
+> branch at lines 772–885 references *only* that global). "Pollution Generated" is not a control
+> and never was.
+>
+> **Two further things settled offline, both de-risking this run:**
+>
+> - **`DAT_1002025c` is written in exactly ONE place** — `0x100046bb:414`, the loader. Exhaustive
+>   grep over the SIMECO export: 10 occurrences, 1 write, 9 reads. So the outcome below that reads
+>   "`DAT_1002025c` is overwritten after load" **cannot happen**. The loader has no one-shot guard
+>   so it may re-run per city load, but it re-reads the same INI and would only rewrite `8` — it
+>   can never restore `11000`.
+> - **The edit targets the only file that could work.** `Apps\Sys\` contains *only* `SYS.PAK`;
+>   there is no loose `SC3Pollution.INI`. SIMECO's own resolver `FUN_10016012` tries the archive
+>   first and falls back to a plain file only if the entry is missing, so a loose-file variant of
+>   this test would have silently no-op'd.
+>
+> **What is still NOT closed statically:** the link from the player's *click* to the broadcast that
+> reaches `0x1000c95c`. The message id `0xC2DCC228` is compared in 13 modules and **assigned
+> nowhere in the export** — the registrars take it from an object field (`SIMUI 0x10064136:20`),
+> so it is data-driven at runtime. Broadcast → air band → panel push is proven; click → broadcast
+> is not. `[UNCERTAIN]`, and it is why this still needs a run.
+
 - **A tile that read a middle band now reads the last band → T3 IS MET.** One change, made with
   these tools, visible in the running game. Close the gate. This also promotes `0x100046bb` and
   `0x1000c95c` to a confirmed behavioural witness (C3 evidence).

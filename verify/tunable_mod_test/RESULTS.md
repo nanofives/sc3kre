@@ -65,8 +65,17 @@ Band reference — record the word, then map it here:
 | 5th | Very High | Muy Alta |
 | 6th | **Hazardous** | **Peligrosa** |
 
-- Water-pollution line on the same tile (untouched by this edit, so a **negative control**):
-  `____`
+### 2d. The other two lines on the same panel
+
+| line | expectation | what it said |
+|---|---|---|
+| **Water Pollution** — the **negative control** | must NOT change (`DAT_10020260`, independent global) | `____` |
+| **Pollution Generated** — **expected to move, NOT a control** | thresholds halve (22,000 → 11,008), so it may climb **one** band | `____` |
+
+> `Pollution Generated` shares `DAT_1002025c` via `param_2 = DAT_1002025c + DAT_10020260`
+> (`0x1000c95c:283`). It moving is **correct behaviour**, not a failure — see the AMENDMENT in
+> `README.md`. Only the *water* line is the control.
+
 - Anything else that looked different: `____`
 - Crashes, hangs, visual corruption: `____`
 

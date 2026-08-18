@@ -1,4 +1,75 @@
-# HANDOFF.md — SimCity 3000 RE (state @ 2026-08-17)
+# HANDOFF.md — SimCity 3000 RE (state @ 2026-08-18)
+
+> # 🟡 T3 IS BUILT AND BLOCKED ON ONE OBSERVATION NOBODY HERE CAN MAKE (2026-08-18)
+>
+> **The install is CLEAN** — `Apps\Sys\SYS.PAK` is the shipped `172c02d9…`, 272,507 B, no
+> `SYS.PAK.original`, 0 loose `.ini`. **Nothing is staged.** Verified at the end of the session.
+>
+> **T3's remaining work is not analysis. It is four archives, two protocols and two fill-in
+> templates, all committed, waiting on somebody who can run the game.** The session that built
+> them could not. Do not rebuild any of it; read `verify/tunable_mod_test/README.md` and run it.
+>
+> | ready to stage | value | length | diff vs shipped |
+> |---|---|---|---|
+> | `tunable_mod_test/SYS.PAK.m1_samelen` | `MaxAirPolluteForUI=00008` | 272,507 (**+0**) | **2 runs, 3 bytes** |
+> | `tunable_mod_test/SYS.PAK.m2_shorter` | `=8` | 272,503 (−4) | 9,324 runs |
+> | `credits_discriminator/SYS.PAK.c1_9999` | `ScrollRate…=9999` | 272,507 (**+0**) | **1 run, 4 bytes** |
+> | `credits_discriminator/SYS.PAK.c2_90000` | `=90000` | 272,508 (+1) | 1,867 runs |
+>
+> **Why the marker changed.** The failed 2026-08-17 attempt used a tunable chosen for
+> plausibility. This one is chosen for traceability: `SC3Pollution.ini MaxAirPolluteForUI` →
+> `DAT_1002025c` (loader `0x100046bb:414`) → the six-way band in `0x1000c95c` → IXF group
+> `0x82e0074c` instances 392-397. Six code branches, six shipped strings, in order. Setting it
+> to 8 collapses the thresholds to 1/2/4/6, so a polluted tile reads **Hazardous**. The
+> observable is a **word on a panel**, not a speed judged by eye.
+>
+> **De-risked offline so the run cannot waste itself:** `DAT_1002025c` has exactly ONE writer
+> (10 occurrences in the SIMECO export, 1 write, 9 reads), so "overwritten after load" is
+> impossible; `Apps\Sys\` has no loose `SC3Pollution.INI`, so editing inside the archive was the
+> only thing that could work; and a **second** panel line ("Pollution Generated", `0x1000c95c:283`
+> uses `air max + water max`) will also move — recorded as an AMENDMENT in the README so nobody
+> reads it as a failure. The **water** line is the control. `[UNCERTAIN]` and the reason a run is
+> still needed: click → broadcast is not statically provable, since `0xC2DCC228` is compared in 13
+> modules and assigned nowhere.
+>
+> ## 🔴 THE CREDITS STORY IN THE BANNER BELOW IS WRONG — corrected here
+>
+> The 2026-08-17 record says "that tunable does not drive the credit scroll". **The code does not
+> say that.** `0x004293fd` scrolls `ftol(elapsed × [0x4c])` px per frame with a sub-pixel carry,
+> ceiled at `[0x4e]` = 4 (ctor `0x004286d7`; `MaxPixelsToScrollPerFrame` is absent from the
+> shipped INI). But 4 px/frame at ~60 fps is **14,400 px/min**, so neither 1500 nor 4242 was
+> clamped and 4242 should have run **~2.83x faster**. A worker analysis that claimed the clamp
+> explained the null was checked and **refuted by that arithmetic** — do not re-adopt it.
+>
+> **H2 ("the config read fails silently") is now structurally REFUTED, without the game**
+> (`U-051`): the mode field can never stay 0 (`FUN_004872e8` falls through to 1
+> unconditionally), the member match `_strupr`s both sides, the section string is stored in the
+> archive as **exactly 17 bytes** with no CR or padding (measured), and `FUN_00486f55` shares the
+> whole mechanism and is boot-critical. So **H1 is the only surviving reading and the null was an
+> observational problem** — a human judging 2.83x by eye with no reference. That is an inference,
+> not a measurement; `verify/credits_discriminator/` measures it, and its observable is a
+> **stopwatch duration**, not a speed.
+>
+> **The standing lesson, and it now has two independent confirmations:** never use a judged rate
+> as a marker.
+>
+> ## What changed in the repo
+>
+> - `re/tools/syspak_mod.py` — the editing layer, promoted out of a one-off test script.
+>   `--get / --set / --diff / --selftest` (17 checks). Section-aware; refuses silent no-ops;
+>   `--pad` keeps an edit same-length, which is safe because `FUN_10012ad7` is a radix chooser
+>   that never uses radix 8. Verified byte-identical against the script it replaced.
+> - `.gitignore` now allowlists `verify/*/RESULTS.md`. Until 2026-08-18 the public repo held every
+>   protocol and **not one outcome**, while `ROADMAP.md` and `HANDOFF.md` cited two RESULTS files
+>   as the evidence for T1 and the SYS.PAK writer. Two of those files belong to the launch-harness
+>   session — exception recorded in `SESSIONS.md` with a one-line revert.
+> - `ROADMAP.md` T2: the stale "SYS.PAK still has no writer" line is corrected; it has one, it
+>   round-trips 51 members byte-identically, and it is the only writer in that table validated
+>   game-side.
+>
+> **If nobody can ever run the game here, say so and close T3 as "cannot be tested in this
+> environment"** with the artifacts as the deliverable — the same call the roadmap already made
+> available for T1. Leaving it open forever is the worse outcome.
 
 ## ⭐ WHERE THE PROJECT IS
 
