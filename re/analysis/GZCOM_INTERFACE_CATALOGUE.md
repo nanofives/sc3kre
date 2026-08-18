@@ -2509,3 +2509,132 @@ rejected:
 Every renamed row keeps its confidence, its evidence and its note, with `(was <old name>)`
 appended. Tracker diff: 50,621 rows before and after, 72 names changed, **0 names lost, 0
 confidence changes**.
+
+---
+
+## 27. U-053 and U-044 — a mislabelled layer, and the replicated class identified
+
+### 27a. U-053: the four SIMUTIL `sc3_pollution_*` rows are the WATER layer
+
+§26 flagged four `sc3_pollution_*` rows sitting in SIMUTIL when the pollution layer's vtable is in
+SIMECO, and refused to rename either side on the coincidence. Reading them settles it.
+
+**SIMUTIL hosts no pollution layer.** Its string table carries exactly two layer INIs:
+`\Sys\SC3PowerLayer.INI` `0x100283b4` and `\Sys\SC3WaterLayer.INI` `0x10028694`.
+
+Applying the U-046 route to the water one: `\Sys\SC3WaterLayer.INI` is referenced by exactly **one**
+function in the module, `0x1000c8e2`, and that function is **slot 5 (`StaticInit`) of the
+`cISC3CityLayer` vtable at `0x10022944`**, whose slot 15 is `mov eax,0x02bf0033 ; ret`. Three of
+the four rows are slots of that vtable:
+
+| slot | RVA | old name | what it is |
+|---:|---|---|---|
+| 7 | `0x1000d86a` | `sc3_pollution_load_state` | `Init(cISC3City*, cIGZDBSegment*)`, `ret 8`, 386 B — opens a **reader** keyed on `0x206c6e7c` + `0x2bf0033` |
+| 9 | `0x1000d262` | `sc3_pollution_init_layer` | `Init(cISC3City*)`, `ret 4`, 1544 B — allocates the arrays, acquires seven layer interfaces |
+| 10 | `0x1000d9ec` | `sc3_pollution_save_state` | `Save(cISC3City*, cIGZDBSegment*)`, 506 B — **writer** on the same tag pair |
+
+`0x2bf0033` was already sitting in those rows' own notes as an unexplained tag. It is this layer's
+`LayerType`.
+
+**The data shape was the tell all along.** `Init` allocates **four bit-per-cell arrays** of
+`dim*dim/0x20` dwords at `this+0x40/0x68/0x6c/0x70` — one bit per tile. `cISC3PollutionLayer` is a
+`cISC3CityCellMap<uint32_t>`, thirty-two times wider. A boolean-per-tile raster is what a water
+supply map looks like, not a pollution level.
+
+Renamed to `sc3_waterlayer_init_city_dbsegment`, `sc3_waterlayer_init_city` and
+`sc3_waterlayer_save` at **C3**. The 49 SIMECO `sc3_pollution_*` rows are untouched and unaffected.
+
+**The fourth row was NOT renamed to a water name.** `0x1000f771` is not a slot of either located
+SIMUTIL vtable, and its caller chain (`0x1000e8c4` → `0x1000de9a`) reaches neither. The obvious
+discriminator fails: `this+0x74`, the list it walks, is written by the `Init(cISC3City*)` of the
+water layer **and** of the power layer. So it is renamed only as far as the evidence goes, to
+`sc3_simutil_layer_tick_update` at C2, with the open question recorded. Its old
+`sc3_pollution_` prefix was removed because that much *is* established.
+
+**Two layer vtables located as a byproduct**, both without an SDK header, which is what U-043 said
+was impossible from the oracle alone:
+
+| layer | `cISC3CityLayer` vtable | `StaticInit` | LayerType |
+|---|---|---|---|
+| **water / plumbing** | `0x10022944` | `0x1000c8e2` | `0x02bf0033` |
+| **power** | `0x100205c0` | `0x10004979` | `0xe0afdf68` |
+
+The power layer is `cISC3City` slot 84 and the water layer slot 85 (`PlumbingLayer`). U-043 stands
+for *names and signatures* — there is still no header — but the layers themselves are now located.
+
+### 27b. U-044: the replicated ≥82-slot class is `cISC3Occupant`
+
+The recorded next step was to point the fingerprint scan at all 65 headers against the six vtables
+that accept `0x81c0cb7c`. Done, and it hits.
+
+First the vtables, found from the six known QueryInterface addresses rather than assumed:
+
+```
+SIMRCI     QI 0x1003d154 -> vtable 0x1004d9d0        SIMDSTR     QI 0x1002dc65 -> vtable 0x10034270
+SIMECO     QI 0x10014838 -> vtable 0x1001c91c        SIMUTIL     QI 0x10019670 -> vtable 0x10023e38
+SIMGEOM    QI 0x1001ca50 -> vtable 0x1002b058        SimTransit  QI 0x10015ac0 -> vtable 0x1001b884
+```
+
+81 of 82 arities identical across all six, reproducing U-044's own measurement.
+
+**`cISC3Occupant` scores 63/69 = 91.3% against every one of the six, at the same address the
+QueryInterface pins.** No other SDK class comes near. And the six misses are not misses:
+
+| slot | method | group |
+|---:|---|---|
+| 5, 7 | `Init` | the triple |
+| 38, 39 | `GetSpriteAttrib` | pair, §17c |
+| 40, 41 | `GetSpriteInst` | pair, §17c |
+
+All six are members of the three overload groups §17c already documented, so on non-overload slots
+this is **63 of 63 with zero mismatches**, six times over. The §25d rule holds again.
+
+So the "one class of ≥79 methods statically replicated into each sim module" is each module's own
+**occupant base class**, which is exactly what one would expect to be linked into every module that
+puts objects on the map.
+
+### 27c. `GZIID_cISC3Occupant` = `0xc14f8955`, and what `0x81c0cb7c` actually is
+
+The six QueryInterface bodies are byte-identical in what they accept, all at offset 0
+`[CONFIRMED @ 0x1003d154, 0x1001ca50]`:
+
+```c
+if (param_1 == 1 || param_1 == 0x58d || param_1 == -0x7e3f3484 || param_1 == -0x3eb076ab)
+```
+
+`1` = `cIGZUnknown`, `0x58d` = `GZIID_cIGZMessageTarget`, `-0x7e3f3484` = `0x81c0cb7c`, and
+`-0x3eb076ab` = **`0xc14f8955`**, a fourth id not previously seen.
+
+**`0xc14f8955` is `GZIID_cISC3Occupant`.** It occurs in 52 functions across 11 modules and is
+present in all six occupant QueryInterfaces — and **absent from every city-layer QueryInterface**,
+including `cSC3BuildingLayer` `0x10004cb8`, `cSC3ValveLayer` `0x1002ef6b` and the water layer
+`0x1000c82b`, and absent from SIMDIRT entirely. Occupant-specific, on a vtable independently
+identified as an occupant by arity.
+
+**`0x81c0cb7c` stays unnamed, but is now pinned much harder than "narrowed".** Measured over every
+module's export:
+
+- **44 of 44** functions that reference `0x81c0cb7c` also reference `0x58d`, always resolving to
+  the same subobject. Not 43. The containment is total.
+- but only **17 of 23** QueryInterface-shaped functions that test `0x58d` also test `0x81c0cb7c`.
+
+So it is an interface **strictly narrower than `cIGZMessageTarget` and implemented only by message
+targets** — held in common by advisors (`0x1001d401`), city layers (`0x1002ef6b`, `0x10004cb8`) and
+occupants (`0x1003d154`) alike. No SDK header declares it, and nothing in the binaries names it, so
+it stays a raw constant. U-044 moves from `narrowed` to **partially resolved**: the class that
+carries it is identified, its companion id is named, and its own scope is now measured rather than
+guessed.
+
+### 27d. A correction to §17's choice of representative, which does not change its rows
+
+§17 walked `SimTransit` `0x1001b6a0`. That vtable's slot 0 is an **8-byte adjustor thunk**
+(`sub ecx,8 ; jmp 0x10014c9e`), so it is a secondary vtable, not a primary one — which §18a's
+"156 candidates" already hinted at without explaining.
+
+The primary `QueryInterface` behind it, `0x10014c9e` `[CONFIRMED]`, accepts `0xe0faadc7` at offset 0
+and the four-character tag `0x006c6f42` (`"Bol"`) at `this+4`, and **delegates everything else to
+`0x10015ac0(this+8, …)`** — which is slot 0 of `0x1001b884`, the U-044 occupant vtable above.
+
+So `0x1001b6a0` is the occupant-base view inside a derived class that keeps its occupant subobject
+at `this+8`. §17's rows describe occupant slots and its own caveat — that it documents one of many
+implementors and the slot map is the transferable part — is exactly right. **No row changes.**
