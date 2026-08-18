@@ -74,10 +74,23 @@ With `max = 8` the thresholds collapse from `1375 / 2750 / 5500 / 8800` to **`1 
 
 ## Provenance and integrity
 
-Both archives were built by `build_mod.py` from `Apps\Sys\SYS.PAK` on 2026-08-18, verified at the
-shipped anchor `172c02d9…` first. Nothing under `Apps\` was modified to produce them. Hashes,
-exact diff offsets and the full assertion list are in `MANIFEST.txt`; hash every file before you
-load it rather than trusting a filename.
+Both archives were built from `Apps\Sys\SYS.PAK` on 2026-08-18, verified at the shipped anchor
+`172c02d9…` first. Nothing under `Apps\` was modified to produce them. Hashes, exact diff offsets
+and the full assertion list are in `MANIFEST.txt`; hash every file before you load it rather than
+trusting a filename.
+
+They were originally produced by a one-off `build_mod.py` in this directory. That script has been
+**promoted into the library** as `re/tools/syspak_mod.py`, so there is one implementation instead
+of a copy per experiment — the same debt `.IXF` had before `ixf_parse.py` absorbed its writer. The
+move was checked rather than assumed: the tool regenerates both archives **byte-identically**
+(`e9709032…` and `2b89839c…`). Reproduce them with
+
+```
+py -3.12 re/tools/syspak_mod.py Apps/Sys/SYS.PAK --set "SC3Pollution.ini:TuningParameters:MaxAirPolluteForUI=8" --pad --out verify/tunable_mod_test/SYS.PAK.m1_samelen
+py -3.12 re/tools/syspak_mod.py Apps/Sys/SYS.PAK --set "SC3Pollution.ini:TuningParameters:MaxAirPolluteForUI=8"       --out verify/tunable_mod_test/SYS.PAK.m2_shorter
+```
+
+`--pad` is what makes M1 same-length: it left-pads `8` to `00008`.
 
 Offline assertions that passed for both: `build()` and `replace_member()` agree byte for byte on
 the same edit; re-parse gives 51 members with names and order unchanged; **exactly one** member's
@@ -167,6 +180,33 @@ Do **not** add `-r800x600` (§29.1 — crashes with `0xC0000409`).
    first band (None / Nula).
 
 Record what was seen **before** interpreting it, in `RESULTS.md`.
+
+### Then M2, as a second staged run
+
+Restore first (below), then repeat the whole stage/launch/observe cycle with
+`SYS.PAK.m2_shorter` in place of `SYS.PAK.m1_samelen`. **One rung at a time — never both.**
+
+M2 carries the *same* tunable edit, so its pollution-band prediction is identical to M1's. What
+it adds is a second, independent claim: **the game boots and runs on an archive whose layout our
+`build()` recomputed.** M2 is 4 bytes shorter than shipped, which shifts every subsequent record
+and every TOC offset by `-4` (verified offline: 9,324 diff runs, and the spot-checked offsets
+each moved by exactly 4).
+
+Pre-registered, before the run:
+
+- **M2 boots and the panel matches M1 → `build()`'s relayout is validated game-side.** That is a
+  claim nothing has tested: ARM3 only ever exercised a same-length edit, so every archive the
+  game has accepted from us so far had shipped-identical offsets.
+- **M1 booted but M2 does not → a real defect in `build()`'s offset table**, isolated to the
+  relayout path, since the two archives differ in nothing else. This is the informative failure
+  and it would matter well beyond this test: every future multi-key or key-adding edit goes
+  through the same path.
+- **M2 boots but the panel differs from M1's** → the two archives disagree despite carrying the
+  same edit, which would point at the relayout corrupting a *different* member. Re-parse both and
+  diff member by member.
+
+A companion test, `verify/credits_discriminator/`, exercises the opposite direction (an archive
+one byte **longer** than shipped). Between them, both signs of relayout get covered.
 
 ### UNDO
 

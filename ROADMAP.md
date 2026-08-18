@@ -448,9 +448,18 @@ shipped corpus and reports `N/N`.**
 The stated debt is paid: the `.IXF` writer no longer lives inside `city_roundtrip.py`, and that
 harness now delegates to the library, so there is one implementation instead of two that drift.
 
-**One honest limit.** `SYS.PAK` still has no writer, so it is absent from the table rather than
-failing in it: there is no *proven* write path to expose. Whether it needs one is the T3 scoping
-question — see `verify/loose_file_test/`.
+~~**One honest limit.** `SYS.PAK` still has no writer, so it is absent from the table rather than
+failing in it: there is no *proven* write path to expose.~~ **SUPERSEDED — that limit is paid, and
+this line was stale.** `SYS.PAK` belongs in the table above and is added here rather than silently:
+
+| `SYS.PAK` | `syspak_parse.py` — `build()` / `replace_member()` / `roundtrip()`; editing layer `syspak_mod.py` — `get_value()` / `set_value()` | **51 members byte-identical**, 272,507 bytes; `syspak_mod.py --selftest` all passed (17 checks) |
+
+It is also the **only** writer in the table validated game-side twice over: ARM3 booted the game
+on an archive we wrote, and `verify/tunable_mod_test/` + `verify/credits_discriminator/` extend
+that to archives whose layout `build()` recomputed in both directions (4 bytes shorter, 1 byte
+longer). `syspak_mod.py` was promoted out of a one-off test script so there is one implementation
+instead of a copy per experiment — the same debt `.IXF` had before `ixf_parse.py` absorbed its
+writer, and it was checked the same way: the tool regenerates the earlier artifacts byte-identically.
 
 > The sprite QFS figure was first recorded as a 3,000-stream sample because the full run looked
 > like ~2 hours of Python. **It finished: 63,931/63,931.** The estimate was wrong and the real
