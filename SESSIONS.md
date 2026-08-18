@@ -156,3 +156,50 @@ One item that belongs to the city-save session under the split but was edited by
 `ROADMAP.md` criterion 2's **status text** (530/530 → 530/562). Done because this session caused the
 change; flagged for review rather than assumed. Proposed standing rule: whoever breaks a criterion
 records the new measurement, the owner of that criterion adjudicates.
+
+### 3c. Watch line endings — a phantom-diff trap that has already bitten three commits
+
+Added by the gzcom session 2026-08-17 after auditing its own commits.
+
+**The trap.** Writing a text file from Python with `io.open(path, 'w')` on Windows translates `\n` to `\r\n`,
+so editing one line of an LF file rewrites **every** line. Appending with a bash heredoc does the reverse — it
+adds LF lines to a CRLF file and leaves it mixed. Either way git reports the whole file as changed and the
+commit stops explaining itself, which is the same damage as rule 3b's `git add -A` sweeps.
+
+**Audit result.** Comparing `git show --numstat` against `git show --numstat -w` for every gzcom-session commit:
+
+| commit | file | raw lines | real | |
+|---|---|---:|---:|---|
+| `c174ad3` | `ROADMAP.md` | 736 | 44 | phantom |
+| `ad69456` | `re/tools/ixf_parse.py` | 696 | 114 | phantom, and a swept file |
+| `209f514` | `re/analysis/POST_P1.md` | 208 | 4 | phantom, and a swept file |
+| `209f514` | `re/tools/sprite_encode.py` | 362 | 6 | phantom, and a swept file |
+
+Three of the four are on files that rule 3b's sweeps had already captured, so the two faults compound: a
+foreign file, committed under an unrelated message, with every line marked changed.
+
+**Fixed, and not fixed.**
+
+- `GZCOM_INTERFACE_CATALOGUE.md` was normalised to LF and the tip commit amended before anything was pushed —
+  its diff went 3,885 → 81 lines.
+- `POST_P1.md` was left **mixed** (104 CRLF / 57 LF) by the gzcom session's T1 append in `88a4c55`, which added
+  exactly the 57 LF lines. Normalised back to CRLF, the file's original ending. Pure EOL change: 57/57 raw,
+  **zero** real.
+- **History was deliberately NOT rewritten.** Those commits are ~76 deep and both other sessions have built on
+  them. Rebasing to fix cosmetic line endings would trade a documented cosmetic problem for a real one — the
+  same reasoning as rule 3b's note.
+
+**How to avoid it.**
+
+- From Python, write text with `io.open(path, 'w', newline='')` or write bytes. The CSV writers in this repo
+  already pass `newline=''`, which is why `functions.csv` never drifted.
+- From PowerShell, `Add-Content` appends the host's ending; check the target file first.
+- Before committing a doc edit, run `git diff --numstat` and `git diff --numstat -w` and compare. If they
+  disagree, fix the endings before staging, not after.
+
+**Not done unilaterally:** a repo-level `.gitattributes` (`* text=auto`, or per-extension rules) would prevent
+this for everyone, but adding one triggers a one-time renormalisation that could produce large diffs in whatever
+the other two sessions have in flight. That is an owner call, not a side effect. **Note the repo has no single
+convention today** — `ROADMAP.md`, `SESSIONS.md`, `MODULE_MAP.md` and the catalogue are LF, while
+`UNCERTAINTIES.md`, `POST_P1.md` and `functions.csv` are CRLF — so any `.gitattributes` should be introduced
+deliberately with a single normalising commit, not left to drift.
