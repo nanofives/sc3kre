@@ -3051,3 +3051,71 @@ loader lock in DllMain - worked once, failed once). For reliable interactive run
 `sc3launch` injection instead (a `PlayWindowed.bat` wrapper, no `-kill`, lets a human drive). The
 loader-lock LoadLibrary should be reworked (defer to a thread, or merge the probe into version.dll)
 before the standalone is dependable.
+
+## 30. Headless screenshots + the menu-click investigation (2026-08-18)
+
+Built so the game can be observed remotely, with no physical display and no un-occluding the
+window. All of this is probe/harness code in gitignored `re/harness/`; this section is the
+committed record.
+
+### 30.1 Headless screenshots WORK - composite reconstruction (`-shot`, `capture.ps1`)
+
+The obstacle (HANDOFF rule 5): this DirectDraw game composites the frame in a video-memory
+surface whose Lock returns a magenta color-key shadow, and the on-screen window is occluded /
+the remote machine has only a tiny virtual display - so screen BitBlt, PrintWindow, and locking
+the render target ALL come back blank/wrong.
+
+The fix, and it is fully reliable: every sprite blit's SOURCE surface is SYSTEM memory and locks
+fine (U-037: 19,185 lit). So the probe MIRRORS each frame-buffer-targeted `raster_blit_hw`
+(`FUN_10018c58`) source into its OWN system-memory buffer at the same dest rect, colour-keying
+magenta - reconstructing the exact composite in a buffer it can always read
+(`sc3probe.c` `fb_mirror`/`fb_dump`, `-shot`). `re/harness/capture.ps1` launches, lets it
+reconstruct, dumps to BMP, converts to PNG in the Happy share, and auto-closes:
+
+```
+pwsh re/harness/capture.ps1 -Name menu
+pwsh re/harness/capture.ps1 -Name x -GameArgs "-lFarmsville" -AtSec 10
+```
+
+Verified: pixel-exact 1024x768 main-menu capture, headless. This is the way to see the game.
+
+### 30.2 The menu-click model - mapped, NOT yet drivable headlessly
+
+The game IGNORES posted `WM_LBUTTON` for the action (a GZWinD coalescer `FUN_10020f9a` strips
+posted button-downs; the button is not read via GetAsyncKeyState/GetKeyState either - those are
+Shift/Ctrl/Alt only). Mouse POSITION comes from `WM_MOUSEMOVE` (so a posted move DOES drive the
+hover/highlight, confirmed by screenshot). The click path, fully traced:
+
+- Gonzo WndProc = GZGraphicD `FUN_10017e2f`; pre-filter `FUN_10018871` does NOT swallow mouse.
+  It builds a GZ event (`FUN_100178a6`: type 7=Ldown, 9=Lup, 0xb=move; coords from the message
+  lParam) and dispatches to the UI sink `*(gfxwin+0x30)` slot 0x64.
+- Sink routes down the window tree (`FUN_10020818` / `FUN_1001ec22`), hit-testing the event's
+  lParam coords. The menu screen is a SIMUI resizable FRAME (vtable `SIMUI.DLL+0xA4D64`); its
+  tiles are CHILD widgets (a separate subclass, ~5-7 sharing one vtable).
+- A tile arms on DOWN and fires on UP via a flag: SIMUI `FUN_1002cf27` (arm, sets `this+0xac` if
+  the tile's hit-test passes, takes SIMUI-level capture `FUN_1006df61`) and `FUN_1002cf67`
+  (fire: if `this+0xac`, clear it and call `FUN_1006df81` = the command). `FUN_1006cf15`
+  switch: down->`vt+0x1bc`, up->`vt+0x1c4`.
+
+**Status:** `SendMessage(WM_MOUSEMOVE, WM_LBUTTONDOWN[MK_LBUTTON], held-move, WM_LBUTTONUP)` with
+correct 1024x768 client coords reaches the frame but does NOT fire the command. The remaining
+unknown is the TILE subclass's own arm/fire (`this+0xac` is on the tile's class, not the frame's
+`FUN_1002cf27`/`FUN_1002d6f2`, which are a resize-border hit-test). Cracking it needs identifying
+the tile child class, its `vt+0x1bc/0x1c4`, and its armed-flag offset - an open-ended widget-tree
+RE. Deferred as beyond its value; hover + screenshots already give remote observation.
+
+`-clicks "x,y@sec;..."` (client coords) is the driver; it correctly sets hover but not the click.
+
+### 30.3 Session open items (handoff)
+
+1. Headless CLICK / auto-load into a city - blocked as above (30.2). The `-l` switch cannot do
+   it cold: the city catalog is empty at command-line time (no `Cities\` scan at boot), so `-l`
+   silently no-ops regardless of key (`-filetrace` confirmed). Direct-load-function-call from the
+   probe is the untried alternative.
+2. `version.dll` standalone loader is FLAKY (intermittent white-screen: loader-lock LoadLibrary
+   in DllMain). Use `sc3launch` injection for reliable runs. Rework: defer the probe load to a
+   thread or merge the probe into version.dll.
+3. Intermittent early clean-exit (~7-15 s, code 0) - not diagnosed; re-run past it.
+4. Intro movie half-width (U-025): the movie draws to the 32bpp windowed PRIMARY (can't be forced
+   16bpp), so `-fix16` can't reach it; skip it with `-nointro`. A converting copy at the codec's
+   `vt+0x74` is the deferred real fix.
