@@ -2008,3 +2008,52 @@ U-042's rule statement is updated from "pair" to "group".
 That also explains why §14 missed it: §14 used the loose extractor, which marked slots 7 and 9 unmeasurable, so
 the triple never registered as a mismatch. §14 committed no rows for those slots, so **no tracker row is wrong**
 — only the §19 prose was.
+
+---
+
+## 22. DirtBag slots 7 vs 8 — narrowed, not closed
+
+§21c established that `cISC3DirtBag` slot 9 is the 1-argument `Init(cISC3City*)`, so §19's T1 trace table was
+wrong to call slot 9 the DBSegment loader. The loader is slot 7 or slot 8, both `ret 8`. This section tried to
+settle which and **did not fully succeed**; recorded here so the next attempt does not repeat the dead ends.
+
+### 22a. Two discriminators that failed
+
+**Vtable-call fingerprint against the known `Save`.** `Save` (slot 10) is a known `(City*, DBSegment*)` method
+and calls `+0xcc`/`+0xd0` twice each; slot 7 does the same and slot 8 does not. That looked decisive and is
+worthless: **slot 9 — the 1-argument `Init`, which receives no segment at all — calls that pair sixteen times.**
+`+0xcc`/`+0xd0` is something ubiquitous on the receiver, not a DB-segment signature. Another filter that matched
+more than it was asked to.
+
+**Hard constants.** Neither candidate, nor `Save`, references `GZIID_cIGZDBSegment` `0xc019963e` or
+`GZIID_cIGZDBRecord` `0x4019960a` — they take the segment as a parameter, so no `QueryInterface` is needed. And
+SIMDIRT contains no `.sc2` or importer strings at all, so the SC2 side offers no anchor either.
+
+### 22b. What the caller side gives
+
+`cISC3City` has the same `Init` triple. Checking which DirtBag offset each city entry point calls
+(slot 7 = `+0x1c`, slot 8 = `+0x20`):
+
+| city method | calls `+0x1c` | calls `+0x20` |
+|---|---:|---:|
+| `cISC3City::Init(cIGZDBSegment*)` — SIMCITY `0x10003b8b` | 0 | 0 |
+| `cISC3City::Init(cISC2Importer*)` — SIMCITY `0x10003178` | 0 | **1** |
+
+The SC2-import entry point calls layer `+0x20` and the DB-segment entry point calls neither. Since
+`cISC3CityLayer`'s contract places `Init(City*, Importer*)` at slot 8 = `+0x20`, and `cISC3DirtBag` flattens
+that contract into its own vtable at the same slots (§14a), the reading is: **slot 8 is the Importer form,
+therefore slot 7 is the DBSegment form.** That would make the permutation 7↔9 with slot 8 unmoved, which is
+also consistent with §21d's "narrower member at the later slot".
+
+### 22c. `[UNCERTAIN]` — why this is not called closed
+
+The `+0x20` call site was **not verified to have a DirtBag as its receiver**. It is one call in a function that
+touches many layers, and the argument that it must be a layer rests on the contract's slot numbering rather than
+on the decompilation naming the object. One unverified receiver is not the standard the rest of this catalogue
+has been held to.
+
+**Net position for the T1 spec:** slot 9 is definitively excluded (`ret 4`, 1 argument). Between 7 and 8, slot 7
+is the better-supported candidate. §19's table already carries the correction and the warning to read the bodies
+before trusting either as a load-trace point; that warning stands. Anyone building the trace should simply
+instrument **both** `0x10004a00` (slot 7) and `0x10004420` (slot 8) — the run itself will then say which one
+fires on a city load, which is cheaper and more conclusive than any amount of static argument.
