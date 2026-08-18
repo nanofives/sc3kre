@@ -2179,3 +2179,88 @@ dereferenced as a struct, a `cISC3Occupant*` / `cIGZMessageTarget&` as a vtable 
 26 rows: **3 at C3** (`Init`, plus the two anchored calls whose evidence comes from a different module) and
 **23 at C1** (named by slot position, arity-confirmed, bodies unread — same standard as §20d).
 `verify_worker_rows.py`: **0 of 26 flagged**. Project C3 194 → 197, C1 4104 → 4127.
+
+---
+
+## 25. The six deferred overloads resolved — 15 of 15 groups permuted
+
+§24c left `cISC3OccupantManager`'s three overload pairs unnamed because both members of each have the same
+declared arity (`0x4`), so the §12a arity test could not order them. Resolved by reading **what each body does
+with its first argument** — a struct read means a value type, a vtable call means an object.
+
+### 25a. `RemoveOccupant`, slots 17/18 — the cleanest case in the catalogue
+
+```c
+slot 17  0x1000e2f0   (**(code **)(*param_1 + 0x4c))(*param_2 >> 8, param_2[1] >> 8);
+slot 18  0x1000e2c0   (**(code **)(*param_2 + 0xd0))(auStack_10);
+                      (**(code **)(*param_1 + 0x4c))(unaff_ESI, auStack_10[0]);
+```
+
+Slot 17 reads `param_2[0]` and `param_2[1]` as **struct fields** and shifts each right by 8 — the 8.8
+fixed-point convention established in §9 and §14c — then forwards to `+0x4c` = slot 19 `RemoveOccupantAtCell`.
+A struct read means a **coordinate**.
+
+Slot 18 makes a **vtable call on its argument**, `(*param_2 + 0xd0)`, filling a 4-dword local before forwarding
+to the same slot 19. A vtable call means an **object**. Semantically: ask the occupant where it is, then remove
+at that cell.
+
+→ **slot 17 = `RemoveOccupant(cSC3CityCoord const&)`, slot 18 = `RemoveOccupant(cISC3Occupant*)`. Reversed.**
+
+### 25b. `IsInBounds`, slots 25/26 — counted by corners
+
+Slot 25 reads `param_2[0]`, `param_2[1]` **and `param_2[4]`** — five dwords or more — and calls `+0x6c`
+(= slot 27 `IsInBoundsCell`) **four times**, once per corner pair, returning 1 only if all four pass. Four
+corner tests means a **rectangle**.
+
+Slot 26 is one instruction: two dwords read, a single `+0x6c` call. Two fields and one test means a **point**.
+
+→ **slot 25 = `IsInBounds(cSC3CityBounds const&)`, slot 26 = `IsInBounds(cSC3CityCoord const&)`. Reversed.**
+
+### 25c. `PostOccupantAll`, slots 13/14 — settled from the callee's own header
+
+Both bodies decompiled poorly (`unaff_ESI`, `iRam00000000` — Ghidra lost the `__fastcall` argument), so the
+argument type could not be read directly. It was settled from the **arity of the call each makes on that
+argument**, using the two candidate interfaces' own slot 3:
+
+| interface | slot 3 (`+0xc`) | arguments |
+|---|---|---:|
+| `cISC3CityChangeReceiver` | `OccupantInserted(uint32_t, cISC3Occupant*)` | **2** |
+| `cIGZMessageTarget` | `DoMessage(cGZMessage&)` | **1** |
+
+Slot 13 builds a small local struct and calls the argument's `+0xc` with **one** parameter — a pointer to that
+struct. That is `DoMessage(cGZMessage&)`, and the local struct is the constructed message.
+
+Slot 14 calls the argument's `+0xc` with **two** parameters, `(param_1[0x2c], occupant)`. That is
+`OccupantInserted(uint32, cISC3Occupant*)`.
+
+→ **slot 13 = `PostOccupantAll(cIGZMessageTarget&)`, slot 14 = `PostOccupantAll(cISC3CityChangeReceiver*)`.
+Reversed.**
+
+This is a technique worth keeping: when the argument's own type is unreadable, the **arity of the virtual call
+made on it** identifies the interface, because each candidate's slot 3 has a different signature.
+
+### 25d. The running tally
+
+| section | group | kind |
+|---|---|---|
+| §8 | `GetUndevelopedTileCount` | pair |
+| U-045 | `PlaceBuilding` | pair |
+| §12a | `GetFunding`, `GetCost` | 2 pairs |
+| §13e | `GetDate`, `SetDate` | 2 pairs |
+| §14d | `SetVertexAltitude`, `SetWaterTable`, `InCellBounds`, `InVertexBounds` | 4 pairs |
+| §17c | `GetSpriteAttrib`, `GetSpriteInst` | 2 pairs |
+| §21d | `Init` | **triple** |
+| §25 | `PostOccupantAll`, `RemoveOccupant`, `IsInBounds` | 3 pairs |
+
+**15 overload groups across 7 classes — 14 pairs and 1 triple — every one permuted, and no non-overload slot
+has ever mismatched.** In every case the narrower / value-typed / forwarding member sits at the **later** slot.
+
+Three independent discriminators now exist, in order of preference: **arity** when the members differ (§12a),
+**body shape** when they do not — struct read versus vtable call (§25a), and **callee arity** when the argument
+itself is unreadable (§25c).
+
+### Committed
+
+6 rows at **C3**, each citing the specific instruction that settled it. `verify_worker_rows.py` over all 32
+`sc3_occmgr_*` rows: **0 of 32 flagged**. Project C3 197 → 203; `cISC3OccupantManager` is now fully named,
+32 of 32 slots.
