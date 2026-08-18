@@ -2264,3 +2264,219 @@ itself is unreadable (§25c).
 6 rows at **C3**, each citing the specific instruction that settled it. `verify_worker_rows.py` over all 32
 `sc3_occmgr_*` rows: **0 of 32 flagged**. Project C3 197 → 203; `cISC3OccupantManager` is now fully named,
 32 of 32 slots.
+
+---
+
+## 26. The recalibrated scan's twelve classes, all named — 381 rows, one script instead of eleven
+
+§21b left twelve classes with a *unique* fingerprint hit. Two were already finished
+(`cISC3CitySpriteCellMap` §20d, `cISC3OccupantManager` §24-§25). This section converts the
+remaining **ten**, and replaces the per-class scratchpad scripts with one committed tool.
+
+### 26a. `re/scripts/walk_vtable_class.py` — and the four disagreements it settles
+
+The eleven one-off scripts behind §7-§25 had drifted apart, and §21a already showed that was not
+cosmetic: two coexisting arity extractors are what made `cISC3DirtBag` a false negative. The new
+script takes class, module, vtable, prefix and subsystem on the command line and fixes one
+behaviour per disagreement:
+
+| disagreement | scripts affected | resolved to |
+|---|---|---|
+| arity extractor | `city.py`/`dirt.py` (700 B window), `fingerprint.py` (1200 B) vs the rest | **STRICT / size-bounded only** — every `ret` in the tracked body, singleton required |
+| argument width | `occmgr.py` flat 4 bytes | **4 per parameter, 8 for a by-value 64-bit scalar** |
+| collision audit | complete only in `spr_all.py`; absent from three appliers | **present and BLOCKING** |
+| overload groups | named by header order in early passes | **refused**, listed for a body-read pass |
+
+It also carries the SDK headers as an argument rather than a hardcoded path, so the LGPL clone
+stays outside the tree per §5.
+
+**The snake_case transform was corrected.** The old rule inserted an underscore before every
+capital, which turns `GetAgeCohortEQ` into `get_age_cohort_e_q`. Splitting only at
+lower/digit→upper and upper→upper+lower boundaries gives `get_age_cohort_eq`. Checked before
+adopting: **zero** of the 104 names already committed for `cISC3CitySpriteCellMap` change under
+the new rule, so it is a strict improvement rather than a churn.
+
+### 26b. The regression gate — a script is a measurement, so a second method must agree
+
+Before touching an unnamed class, the new script was pointed at `cISC3CitySpriteCellMap`, whose
+104 slots `spr_all.py` had already named:
+
+```
+arity (STRICT, size-bounded): 104 OK, 0 MISMATCH, 0 unmeasurable -> 104/104 = 100.0%
+existing rows under sc3_spritecellmap_*: 104 agree with the header-derived name, 0 disagree
+plan: 0 new rows
+```
+
+104 of 104 reproduced, zero planned changes. That is SESSIONS.md rule 6 applied to a tool rather
+than a count, and it is the reason the ten runs below can be trusted without re-deriving each.
+
+### 26c. The ten classes
+
+| class | module | vtable | slots | arity (strict) | new rows |
+|---|---|---|---:|---|---:|
+| `cISC3City` | SIMCITY | `0x10013260` | 162 | 150 OK / 4 mis / 5 unmeas | 109 |
+| `cISC3DirtBag` | SIMDIRT | `0x1002046c` | 91 | 75 / 10 / 3 | 62 |
+| `cISC3PollutionLayer` | SIMECO | `0x1001b984` | 68 | 50 / 0 / 15 | 28 |
+| `cISC3CitySchemeMgr` | SIMINIT | `0x1002f528` | 48 | 43 / 2 / 0 | 40 |
+| `cISC3CityViewIso` | SIMSPR | `0x10063390` | 41 | 35 / 0 / 3 | 32 |
+| `cISC3WinCityView` | SIMSPR | **`0x10067894`** | 41 | 35 / 2 / 1 | 34 |
+| `cISC3ResidentialLayer` | SIMRCI | `0x1004c99c` | 41 | 37 / 0 / 1 | 28 |
+| `cISC3ZoneLayer` | SIMRCI | `0x1004d1e0` | 37 | 18 / 2 / 14 | 17 |
+| `cISC3BuildingLayer` | SIMGEOM | `0x100292c0` | 29 | 22 / 4 / 0 | 19 |
+| `cISC3DisasterLayer` | SIMDSTR | `0x100325a0` | 18 | 15 / 0 / 0 | 12 |
+
+Every arity figure reproduces `bulk_result.json` exactly — `cISC3City` 150/154 = 97.4%,
+`cISC3DirtBag` 75/85 = 88.2%, `cISC3ZoneLayer` 18/20 = 90.0%. A second implementation of the
+extractor agreeing to the slot is what makes these locations usable.
+
+**`cISC3WinCityView` is at `0x10067894`, not `0x10063390`.** §18b never printed its address and
+it is a *different* class from `cISC3CityViewIso`; the address comes from the scan's JSON.
+
+### 26d. 24 of 24 mismatches are overloads — the §25d rule holds across 504 slots
+
+Across the ten classes there are **504 comparable slots, 480 matching and 24 mismatched**. Every
+one of the 24 sits inside a same-name overload group:
+
+| class | mismatched pairs |
+|---|---|
+| `cISC3City` | `GetDate`, `SetDate` |
+| `cISC3DirtBag` | `Init` (the 7/9 pair of the triple), `SetVertexAltitude`, `SetWaterTable`, `InCellBounds`, `InVertexBounds` |
+| `cISC3BuildingLayer` | `CreateBuilding`, `DoPlaceBuildingTool` |
+| `cISC3CitySchemeMgr` | `GetBATBuildings` |
+| `cISC3WinCityView` | `Init` |
+| `cISC3ZoneLayer` | `GetUndevelopedTileCount` |
+
+**Zero non-overload slots mismatched, on any of the ten.** §25d claimed this over 7 classes and
+15 groups; it now holds over 17 classes with a third, independent implementation of the arity
+extractor. `cISC3DirtBag`'s ten mismatches being *exactly* the five groups §14d and §21c
+documented, and nothing else, is the sharpest form of the result.
+
+**24 overload groups covering 52 slots were refused**, not guessed. They need the §25
+discriminators — arity, then struct-read versus vtable-call, then callee arity — and are logged
+as U-052.
+
+### 26e. Three classes validated before naming, and three IIDs the SDK does not carry
+
+`cISC3BuildingLayer`, `cISC3WinCityView` and `cISC3CitySchemeMgr` had never been checked against
+anything but their own fingerprint, so each was validated first.
+
+**`cISC3BuildingLayer` — SIMGEOM `0x100292c0`.** Slot 0 is the class's `QueryInterface`
+`[CONFIRMED @ 0x10004cb8]`, and it enumerates the class the way §2's do:
+
+```
+param_2 == 1          -> this          cIGZUnknown
+param_2 == 0x20631788 -> this          the class's own IID
+param_2 == 0x58d      -> this+4        GZIID_cIGZMessageTarget
+param_2 == 0x206c6e7c -> this+4        GZIID_cISC3CityLayer   [CONFIRMED, section 12c]
+param_2 == 0x81c0cb7c -> this+4        the still-unnamed IID of U-044
+param_2 == 0x215b29c5 -> this+8        GZIID_cISC3CityChangeReceiver  [SDK header]
+```
+
+Two independently known IIDs at the offsets the ValveLayer shape predicts. Note the SDK declares
+`cISC3BuildingLayer : cIGZUnknown`, but the concrete class multiply-inherits `cISC3CityLayer` at
+`+4` and `cISC3CityChangeReceiver` at `+8` — a place the header under-describes the binary.
+
+**`cISC3WinCityView` — SIMSPR `0x10067894`.** Slot 0 accepts `0xa1634f05` at offset 0 and
+otherwise delegates to a base subobject at `this+4`; that base's own `QueryInterface`
+`[CONFIRMED @ 0x1004d2ff]` accepts `0x22ba0121` = **`GZIID_cIGZWin`**. The header's slot 3 is
+`cIGZWin* AsIGZWin()`, and its implementation `[CONFIRMED @ 0x10044465]` is:
+
+```asm
+mov eax, ecx ; lea ecx,[eax+4] ; neg eax ; sbb eax,eax ; and eax,ecx ; ret
+```
+
+`return this ? this+4 : nullptr` — it hands back exactly the subobject the `QueryInterface`
+independently identified as the window base. Predicted from the header before being looked up.
+
+**`cISC3CitySchemeMgr` — SIMINIT `0x1002f528`.** Named by the INI-string route that U-046 used
+for the SIMRCI layers. SIMINIT carries `"\Sys\SC3CityScheme.ini"` `0x100373c0`, `"LandScapes"`
+`0x100373a4`, `"FloraSets"` `0x10037398`, `"BuildingSets"` `0x10037388` and `"BAT.dat"`
+`0x10037360` — the exact concept groups the header declares. **Slot 6 `SetCityScheme`
+`0x10006589` calls the two helpers that reference them** (`0x1000641b`, `0x100068a7`), and slot 3
+`Init` `0x1000583e` calls a third (`0x10005cd0`). The vtable slot the header predicts is the one
+that reads the class's own INI.
+
+**Three IIDs recovered that are absent from the SDK headers**, checked against all 111:
+
+| IID | class | witness |
+|---|---|---|
+| `0x20631788` | `cISC3BuildingLayer` | QI `0x10004cb8`, alongside two known IIDs |
+| `0xa1634f05` | `cISC3WinCityView` | QI `0x100489cc`, base at `+4` is `cIGZWin` |
+| `0x43d9722c` | `cISC3CitySchemeMgr` | QI `0x10005cae`, single-IID |
+
+`0x20631788` is the strongest of the three: it sits in a chain with `GZIID_cISC3CityLayer` and
+`GZIID_cISC3CityChangeReceiver`, both already confirmed. The other two are that class's IID as a
+mechanical fact; the *name* attached to each rests on its unique fingerprint plus the validation
+above.
+
+### 26f. Eleven slots share an implementation, and none of them is an error
+
+The audit's check 2 fired five times. Every case is MSVC folding identical bodies, and each was
+inspected rather than assumed:
+
+| class | slots | methods |
+|---|---|---|
+| `cISC3City` | 57/58/59 | `CellSizeInAnimUnitsX` / `Z` / `Y` |
+| `cISC3City` | 61/62 | `CellSizeInWorldUnitsX` / `Z` |
+| `cISC3DirtBag` | 16/17 | `DebugClassTag` / `DebugTypeTag` |
+| `cISC3PollutionLayer` | 5/13 | `GetValueSint32` / `GetValue` |
+| `cISC3DisasterLayer` | 5/7 | `DeleteActiveDisasterIterator` / `DeleteDisasterListIterator` |
+
+`DebugClassTag`/`DebugTypeTag` folding to one stub is the same thing §7 recorded on
+`cSC3ValveLayer` slots 16/17, which is why the pattern was recognisable. All eleven slots are
+left **unnamed**: a folded body cannot carry two names, and picking one would assert a
+distinction the binary does not make.
+
+The audit's check 4 also confirmed §23 mechanically. `cISC3CityViewIso` reports
+`cISC3CityView` as a chain prefix and `cISC3ZoneLayer`/`cISC3PollutionLayer` report
+`cISC3CityCellMap` and `cISC3CityCellMapBase` — expected shared vtables by inheritance, which the
+script distinguishes from a genuine shared implementation.
+
+### 26g. `verify_worker_rows.py` flagged 14 rows, and all 14 are false positives
+
+Reported rather than silenced, because the script's own docstring records seven prior
+over-accusation bugs and this is an eighth pattern. `--selftest` passed first (exit 0).
+
+**Four are the forwarder-versus-implementation gap.** `sc3_zonelayer_serial_read` /
+`_serial_write` and `sc3_pollution_serial_read` / `_serial_write` are 8-byte thunks that step
+back to `this-4` and tail-call the real body. Check 3 looks for a pinned stream slot *in the
+flagged body*, and an 8-byte forwarder has none. The implementation behind
+`sc3_zonelayer_serial_read` is `0x1001b4b4` (53 B) `[CONFIRMED @ 0x1001b4b4]`:
+
+```c
+cVar2 = (**(code **)(*param_1 + 0x14))(*(undefined4 *)(*(int *)((int)this + 0xc) + iVar1 * 4),
+                                       *(undefined4 *)((int)this + 8));
+```
+
+`+0x14` is the **first entry in the checker's own `PINNED_SLOTS` list**. The name is right and the
+check was reading the wrong body.
+
+**Ten are `SERIALISER` token collisions.** That regex is
+`/serial|_save|_load|persist|_stream|section/i`, and header-derived names hit it far more often
+than hand-written ones do. Each was read and is a plain field accessor:
+
+| row | body |
+|---|---|
+| `sc3_city_can_player_load_save` | `return *(byte *)(this + 0x156)` |
+| `sc3_city_set_serial_number` | `*(this + 0x10) = arg` |
+| `sc3_city_get_critical_section` | `return this + 0x1a8` |
+| `sc3_city_is_write_city_save_file_debug*` / `_read_*` | debug flag getters |
+| `sc3_schememgr_load_bat_segment` | 179 B, calls `+0x1c` and `+0x50`; a `cIGZDBSegment` load, no stream slot |
+
+**No name was changed to satisfy the checker**, and no check was weakened. The finding is that
+check 3 needs to follow a one-instruction forwarder, and that its token list over-triggers on
+mechanically derived names.
+
+### Committed
+
+**381 rows at C1**, across eight modules: SIMCITY 109, SIMSPR 66, SIMDIRT 62, SIMRCI 45, SIMINIT
+40, SIMECO 28, SIMGEOM 19, SIMDSTR 12.
+
+Tracker integrity, diffed against a pre-pass snapshot: **50,621 rows before and after, 0 added,
+0 removed, 0 names lost, 0 names changed on a pre-existing row, 0 confidence downgrades.**
+Project C0 39,634 → 39,253; C1 4,127 → 4,508. **C2 1,694, C3 203 and C4 11 are untouched** —
+naming at C1 is what keeps the `>=C2` gate metric honest, and this pass moves it by zero.
+
+**Scope, stated plainly.** These 381 slots are *confirmed by position and arity*; the bodies were
+**not** read. Every note says so. The remaining work on these ten classes is the 52 refused
+overload slots (U-052), the 11 folded slots above, and the bodies themselves.
