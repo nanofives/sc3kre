@@ -2739,3 +2739,150 @@ would have mis-assigned `cISC3CityView::Init` and both members of the pollution 
 | `cISC3PollutionLayer` / `cISC3ZoneLayer` | `SetValue` second member (slot 16) | the thunk target rets `0x4`, which matches **neither** declared form (`0xc` or `0x14`). The target is 15 bytes for pollution and 100 for zone; something forwards again and the chain was not followed |
 
 These stay in U-052.
+
+### 28f. A correction to 28b, caught by following the chain one slot further
+
+§28b read slots 14 and 16 as a reversed `SetValue` pair. Dumping the **whole** inherited block
+instead of only the two slots the group named shows that is wrong:
+
+| slot | header declares | header wants | actual |
+|---:|---|---|---|
+| 14 | `SetValue(u32,u32,T const&)` | `0xc` | **`0x14`** |
+| 15 | `SetAllCells(T const&)` | `0x4` | **`0xc`** |
+| 16 | `SetValue(u32,u32,u32,u32,T const&)` | `0x14` | **`0x4`** |
+
+Same multiset, shifted by one: the binary holds 5, 3, 1 arguments where the header declares 3, 1, 5.
+So slots 14/15/16 are a **rotation of three consecutive slots**, and `SetAllCells` -- a *distinctly
+named* method -- is displaced along with the overload pair. Slot 16 is not a `SetValue` member at all.
+
+Two consequences. The names committed in §28c survive untouched, because `ret 0x14` = 5 arguments
+identifies the rect form on its own regardless of any ordering theory. But the *reasoning* attached
+to them said "reversed pair", and that has been corrected in the notes. And U-052's open item -- "the
+second `SetValue` member, whose thunk target rets `0x4` and matches neither declared form" --
+dissolves: it rets `0x4` because it is `SetAllCells`, which takes one argument. **Four more slots
+named**, `set_value_point` and `set_all_cells` on both cell-map layers.
+
+The lesson is one this document keeps relearning: a group-shaped question answered by looking only at
+the group's own slots is a filter that matched less than it needed to.
+
+---
+
+## 29. Section 22 closed, U-054 closed, and what forcing a signature unlocked
+
+### 29a. The tool that unlocked all three
+
+Every remaining question in §28e had one cause: **Ghidra models none of these functions' second
+argument.** `cISC3DirtBag::Init` slots 7 and 8, `cISC3City::CreateOccupant` and
+`cISC3CitySchemeMgr::MakeBATReplacement` all decompile as one-argument `__thiscall` despite `ret 8`,
+so every discriminator that reads "what does it do with argument 2" had nothing to read.
+
+`re/scripts/ForceSignature.java`, written for U-047, fixes exactly that. Worth recording: the repo's
+own driver cannot run it. `ghidra_headless.ps1 -Script` hardcodes `-readOnly` and this script mutates
+the program, so it must be invoked against `analyzeHeadless` directly.
+
+### 29b. Section 22 closed -- DirtBag slot 7 is `Init(cISC3City*, cIGZDBSegment*)`
+
+§22 recorded two failed discriminators. §26 added a third that looked good and then collapsed: slot 7
+shares four callees with `Save` while slots 8 and 9 share none, but reading those four shows they are
+generic container and allocator helpers -- an `operator new` wrapper, a refcount release, an
+exception-guarded constructor. Ubiquitous on the receiver, exactly the `+0xcc`/`+0xd0` mistake again.
+Three discriminators, three failures.
+
+The witness that works is method-specific and positive. With the signature forced, `Save` (slot 10,
+known `(cISC3City*, cIGZDBSegment*)`) reads:
+
+```c
+FUN_1001d397(&uStack_2c, a1, a2);
+```
+
+`FUN_1001d397` constructs a **DB-record wrapper**: it writes `&PTR_FUN_100210e0` as the object's
+vtable, fills `+0xc/+0x10/+0x14/+0x18/+0x1c`, and opens a record on `a2`. Slot 7 constructs the
+**same class** through a different constructor, `FUN_1001d17b` -- identical vtable pointer, identical
+field layout. Slot 8 calls neither.
+
+And the two constructors differ in exactly the way a reader and a writer should:
+
+| caller | constructor | keys the record from | city slot |
+|---|---|---|---|
+| `Save`, slot 10 | `FUN_1001d397` | city vtable `+0x25c` x3 | 151 = `GetVersionComponent` |
+| **slot 7** | `FUN_1001d17b` | city vtable `+0x260` x3 | 152 = **`GetVersionComponentFromSaveFile`** |
+
+The writer stamps the **current** version; the reader keys off the version **recorded in the file
+being loaded**. That asymmetry is not something a wrong identification lands on.
+
+**`cISC3DirtBag` slot 7 = `Init(cISC3City*, cIGZDBSegment*)`, slot 8 = `Init(cISC3City*,
+cISC2Importer*)`, slot 9 = `Init(cISC3City*)`.** All three named at C3.
+
+It also explains why DirtBag looked odd against its siblings. `cSC3ValveLayer`, the water layer and
+the power layer all stub slot 8 with a 5-byte `mov al,1 ; ret 8` -- water and power literally share
+one stub function, SIMUTIL `0x10010593` -- whereas DirtBag's is a real 1403-byte implementation.
+Terrain is the one thing a SimCity 2000 file actually carries, so the terrain layer is the layer that
+implements the importer.
+
+**§19's T1 trace table is correct for the first time.** §21c established that its "slot 9 =
+`Init(City*,DBSegment*)`" was wrong; the answer is **slot 7, `0x10004a00`**.
+
+### 29c. U-054 closed -- none of the four was a contradiction
+
+All four `cSC3PollutionLayer` disagreements resolve the same way: the header supplies the declared
+identity and the earlier name described the same mechanic less precisely. No name was *wrong*, and the
+class location was never in doubt.
+
+| slot | was | now | the body |
+|---:|---|---|---|
+| 27 | `is_garbage_polluted` | `is_garbage_accumulated` | calls `this->vtable[0x60](x,z,&out)`, returns `out >= DAT_1002026c` -- a value against one global threshold |
+| 66 | `mark_cell` | `set_is_active_landfill` | ORs `0x8000` into the cell and increments `this+0x468`, or ANDs `0x7fff` and decrements it |
+| 18 | `apply_pending_changes` | `simulation_begin` | acquires city `+0x11c` (slot 71, `SurfaceOccupantManager`), walks four occupant lists through that manager's `+0x7c` (slot 31, `GetOccupantAtCell`), resets three subsystems, then sweeps the whole cell grid |
+| 17 | `pollution_layer_init` | *(unchanged)* | never a conflict -- `Init(cISC3City*)` and `layer_init` say the same thing |
+
+Slot 18 is the only one where the old name was actively misleading: "apply pending changes" implies a
+per-tick delta, and this touches every cell and every occupant, which is what `SimulationBegin` does
+at the start of a run.
+
+**Field map recovered on the way:** bit **`0x8000`** of the pollution cell value is the ACTIVE
+LANDFILL flag, and **`this+0x468`** is the count of active landfill cells.
+
+### 29d. `MakeBATReplacement` -- the forwarder shape again
+
+Both members `ret 8` and differ only in argument **2**, so §28's argument-1 test was structurally
+unable to separate them. With the signature forced, slot 42 (73 bytes) reads:
+
+```c
+cVar1 = (**(code **)(**(int **)((int)this + 8) + 0x14))(a2, 0x656cd1dd, &a2);
+uVar2 = (**(code **)(*(int *)this + 0xa4))(a1, a2);   /* 0xa4 / 4 = 41 */
+if (a2 != 0) (**(code **)(*(int *)a2 + 8))();         /* Release */
+```
+
+It resolves argument 2 through a service into a refcounted object, tail-calls **slot 41**, then
+releases. A member that converts its argument *into* what the other member takes is the one declared
+with the raw key. **Slot 41 = `(cGZResourceKey const&, cISC3OccAttribOverRide*)`, slot 42 =
+`(cGZResourceKey const&, cGZResourceKey const&)`. Reversed.** The same discriminator that closed
+U-045.
+
+### 29e. `cISC3City::CreateOccupant` -- narrowed hard, still open
+
+Forcing the signature shows why nothing separated these two: they are **structurally identical**.
+Each iterates the registry between `this+0x94` and `this+0x98`, calls `QueryInterface(0x6182ea06, 0)`
+on every entry, and on success forwards `(a1, a2, a3)` unchanged. They differ in exactly one thing --
+slot 75 calls the factory's `+0xc`, slot 76 its `+0x10`.
+
+`0x6182ea06` is an occupant-factory interface id **absent from the SDK headers**, the fifth new id
+this session. Its implementors' primary vtables are not the factory vtable -- the city itself accepts
+the id and its own slots 3/4 are `Init` overloads -- so the factory is a secondary subobject and has
+to be reached the §12c way, through an adjustor thunk.
+
+**What would close it:** locate the `0x6182ea06` subobject vtable and read its slots 3 and 4. One
+takes a `cGZResourceKey const&` and one a `cISC3OccupantAttrib*`, and whichever order they sit in
+transfers straight to slots 75 and 76. Recorded in U-052.
+
+### Committed
+
+**13 rows**: the 4 from §28f (`set_value_point` and `set_all_cells` on both cell-map layers), 3
+`sc3_dirtbag_init_*` (§22), 3 `sc3_pollution_*` renames (U-054) and 2
+`sc3_schememgr_make_bat_replacement_*`, plus corrected reasoning on the 2 §28c `set_value_rect` rows.
+Project C3 226 -> 238.
+
+**Still open on these classes:** `cISC3City::CreateOccupant` (2 slots) and `cISC3DirtBag`'s
+`CanPlaceWater` / `PlaceWater` (4 slots), where both members make the *same* virtual calls on the
+argument Ghidra does model, so the deciding argument is once again the invisible one. Forcing those
+two signatures is the obvious next step and was not done here.
