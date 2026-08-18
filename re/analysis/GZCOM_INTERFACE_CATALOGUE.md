@@ -2886,3 +2886,108 @@ Project C3 226 -> 238.
 `CanPlaceWater` / `PlaceWater` (4 slots), where both members make the *same* virtual calls on the
 argument Ghidra does model, so the deciding argument is once again the invisible one. Forcing those
 two signatures is the obvious next step and was not done here.
+
+---
+
+## 30. U-052 closed at 52 of 52, and the two headerless layers walked
+
+### 30a. The last six slots, all by forced signature
+
+§29 left six slots open on two classes, both blocked by the same thing: the argument that decides
+them is the one Ghidra does not model. Forcing the signature settles all six, and both `cISC3DirtBag`
+pairs split the same clean way.
+
+| class | slot | first argument, as the body uses it | verdict |
+|---|---:|---|---|
+| `cISC3DirtBag::CanPlaceWater` | 67 | `+0x4` and `+0x8` on it -- **AddRef and Release** -- plus `+0x14`, `+0xc` | refcounted object -> `cISC3EnumCityViewSelection*` |
+| | 68 | struct reads at `+0x0/+0x4/+0xc/+0x10`, several `>> 8` | value type -> `cSC3CityBounds const&` |
+| `cISC3DirtBag::PlaceWater` | 75 | AddRef, Release, `+0x14`, `+0xc` | `cISC3EnumCityViewSelection*` |
+| | 76 | struct reads with `>> 8`, and writes back through the pointer | `cSC3CityBounds const&` |
+
+The `>> 8` is the 8.8 fixed-point city-coordinate convention §9 and §14c established, so the struct
+side is not merely "not an object" -- it is positively a city bounds. **Both pairs reversed.**
+
+### 30b. `cISC3City::CreateOccupant` -- resolved through the factory, not the caller
+
+§29e established that the two members are structurally identical and differ only in calling the
+occupant factory's `+0xc` versus `+0x10`, and that `0x6182ea06` is a factory IID the SDK does not
+declare. Nothing in either body can separate them, so the answer had to come from the *callee*.
+
+Locating the factory subobject vtable used §12c's probe: scan `.text` for `sub ecx, N ; jmp <QI>`
+where the target is one of the three QueryInterface implementations that accept `0x6182ea06`, then
+find the `.rdata` pointer to that thunk. Two hits, and the useful one is an independent implementor:
+
+```
+SIMCITY   0x1001324c   slot 3 -> 0x10006b24, slot 4 -> 0x10006a97   (the city delegating to itself)
+SIMNTWRK  0x1002c790   slot 3 -> 0x10013744, slot 4 -> 0x1001372a   both ret 0xc  <-- usable
+```
+
+The SIMCITY one is circular: the city implements the factory interface by forwarding to its own
+`CreateOccupant` pair, which is the question restated. SIMNTWRK is a different class implementing the
+same interface, and its two creators are readable:
+
+- **factory slot 3** `0x10013744` (45 B): `(**(code **)(*param_1 + 0x14))()` then reads `[result+8]`
+  -- a **virtual call on the argument**, and `+0x14` returning a resource key is the exact
+  `cISC3OccupantAttrib` idiom §9 identified inside `PlaceBuilding`. An object.
+- **factory slot 4** `0x1001372a` (26 B): reads `*(arg + 8)` **directly, with no virtual call** --
+  the third dword of a `{type, group, instance}` key. A value type.
+
+Both then converge on the same `this->vtable[0x48]` call with the same argument shape, differing only
+in how they obtain that third value. So factory slot 3 takes the attrib and slot 4 takes the key,
+and that transfers straight through the dispatch:
+
+> **`cISC3City` slot 75 (calls factory `+0xc`) = `CreateOccupant(cISC3OccupantAttrib*, uint32,
+> void**)`; slot 76 (calls `+0x10`) = `CreateOccupant(cGZResourceKey const&, uint32, void**)`.
+> Reversed against the header.**
+
+**U-052 is now closed at 52 of 52 slots.**
+
+### 30c. The water and power layers, walked without a header
+
+U-043 stands: the SDK declares no power or water layer, so their *own* methods have no names. But
+both are `cISC3CityLayer` implementations and **that** base interface is in the SDK, so its 18 slots
+can be walked on classes the oracle never covered.
+
+| | water | power |
+|---|---|---|
+| `cISC3CityLayer` vtable | `0x10022944` | `0x100205c0` |
+| slot 0 | **is** the primary `QueryInterface` `0x1000c82b` | adjustor thunk `sub ecx,0x10` -> primary QI `0x100044dd` |
+| primary vtable | the same `0x10022944` | **`0x10020608`** |
+| `LayerType` (slot 15) | `0x02bf0033` | `0xe0afdf68` |
+| `StaticInit` (slot 5) | `0x1000c8e2` -> `\Sys\SC3WaterLayer.INI` | `0x10004979` -> `\Sys\SC3PowerLayer.INI` |
+| city slot | 85 `PlumbingLayer` | 84 `PowerLayer` |
+
+The structural difference is worth noting: the water layer's `cISC3CityLayer` vtable **is** its
+primary vtable, so it inherits the layer interface singly, while the power layer keeps a
+`cISC3CityLayer` subobject at `this+0x10` and has a separate primary vtable at `0x10020608`.
+
+**An independent corroboration of §29b falls out of this.** The power layer's rows were named by an
+earlier pass, from bodies, without reference to any header: slot 7 `sc3_power_layer_read`, slot 9
+`sc3_power_layer_init`, slot 10 `sc3_power_layer_write`. That is exactly the assignment §29b derived
+for `cISC3DirtBag` -- slot 7 is the DBSegment loader, slot 9 the one-argument `Init`, slot 10 `Save`
+-- reached by a completely different route on a different class. Four classes now agree on the
+`Init`-triple permutation.
+
+**Eight rows named at C3**, four per layer, all on the base interface: `DoMessage`, `DoQueryInfo`,
+`Shutdown`, `GetManipulator` for water; `DoMessage`, `StaticShutdown`, `Shutdown` (an 8-byte adjustor
+thunk, flagged as such in its note) and `GetManipulator` for power. Every arity matches the
+declaration.
+
+**Four implementations are shared and were left unnamed**, per the §26f rule:
+
+| implementation | used as |
+|---|---|
+| `0x100103c0` | `DebugClassTag` **and** `DebugTypeTag` on **both** layers -- four slots, one 5-byte stub |
+| `0x10010593` | slot 8 `Init(cISC3City*, cISC2Importer*)` on both -- the same `mov al,1 ; ret 8` stub §29b used as evidence |
+| `0x10011df8` | `SimulationEnd` on both |
+| `0x100194f8` | water's `StaticShutdown` **and** power's `SimulationBegin` |
+
+That last one is the most interesting folding seen so far: a 3-byte stub serving two *differently
+named* methods on two *different* classes. It is a reminder that a shared implementation carries no
+information about what the slot means, which is exactly why these are refused a name.
+
+**Naming families, stated so the next pass does not treat it as drift.** The vtable-slot rows use the
+class token (`sc3_waterlayer_*`, `sc3_powerlayer_*`) like every other walked class in this document,
+while the pre-existing `sc3_water_*` and `sc3_power_*` rows cover module internals that are not
+vtable slots. This is the same deliberate split as `sc3_dirtbag_*` versus `sc3_dirt_*` recorded in
+§26, not an inconsistency to be "fixed".
