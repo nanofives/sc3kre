@@ -28,17 +28,27 @@
 !/SESSIONS.md
 !/functions.csv
 
-# 2b) verify/ — the experiment PROTOCOLS only, never their artifacts.
-#     The READMEs describe how a test is built and what each outcome means, which is the part
-#     worth publishing. The artifacts next to them are derived GAME DATA (copies of shipped
-#     cities, an extracted .ini) and must never reach a public repo.
-#     Same per-directory shape as re/analysis below: every level denied, then one filename
-#     re-included, so a NEW subdirectory added later is denied by default.
+# 2b) verify/ — the experiment PROTOCOLS and their OUTCOMES, never their artifacts.
+#     The READMEs describe how a test is built and what each outcome means. The RESULTS files
+#     record what actually happened. Both are prose written by us; the artifacts next to them
+#     are derived GAME DATA (copies of shipped cities, an extracted .ini) and must never reach
+#     a public repo.
+#     Same per-directory shape as re/analysis below: every level denied, then specific
+#     filenames re-included, so a NEW subdirectory added later is denied by default.
+#
+#     RESULTS.md added 2026-08-18. Until then only the READMEs were published, which meant
+#     ROADMAP.md and HANDOFF.md both cited verify/city_load_test/RESULTS.md and
+#     verify/loose_file_test/ARM3_RESULTS.md as the evidence for T1 and the SYS.PAK writer
+#     while neither file was in the repo — the protocols were public and every outcome was
+#     local-only. The second pattern catches the ARM3_RESULTS.md style prefix.
+#     These are markdown notes and contain no game bytes: hashes, offsets and observations only.
 !/verify/
 /verify/*
 !/verify/*/
 /verify/*/*
 !/verify/*/README.md
+!/verify/*/RESULTS.md
+!/verify/*/*RESULTS.md
 
 # 3) Re-include the re/ tree, then re-ignore everything inside it.
 !/re/

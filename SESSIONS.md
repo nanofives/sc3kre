@@ -81,6 +81,32 @@ none.
    the same 562/530/32. Recording a number you caused is not stepping on the owner; silently
    leaving it stale would be.
 
+## Two files were published that this session does not own (T3 session, 2026-08-18)
+
+Recorded here because rule 3 says leave other sessions' uncommitted files alone, and this is an
+exception taken **on the owner's explicit instruction**, not a judgement call.
+
+`.gitignore` allowlisted `verify/*/RESULTS.md` (and the `*RESULTS.md` prefix form). That change
+retroactively published two files this session did not write:
+
+| file | owning session |
+|---|---|
+| `verify/city_load_test/RESULTS.md` | windowed mode / launch harness |
+| `verify/loose_file_test/ARM3_RESULTS.md` | windowed mode / launch harness |
+
+**Neither file's contents were edited** — only their publication status changed. Both were
+scrubbed per rule 4 first (username, account name, email, absolute paths: 0 hits each).
+
+**Why it was worth doing.** `ROADMAP.md` and `HANDOFF.md` both cite these two files as *the
+record* for T1 and for the SYS.PAK writer's game-side validation, and neither was in the repo.
+The public repo carried the protocols (`README.md`) and not one outcome, so every result the
+project claims was unverifiable by a reader. That is a documentation defect, not a policy the
+`.gitignore` intended: its own comment says the READMEs are published because they describe
+"what each outcome means", which reads as an argument for publishing the outcomes too.
+
+If the launch-harness session disagrees, revert the two `!/verify/*/*RESULTS.md` lines — no file
+content has to change.
+
 ## Why rule 5 has teeth
 
 The export is the denominator for every metric in this project. On 2026-08-17 the toolkit-necessary
