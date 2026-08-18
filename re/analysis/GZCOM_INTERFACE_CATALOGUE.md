@@ -2057,3 +2057,64 @@ is the better-supported candidate. §19's table already carries the correction a
 before trusting either as a load-trace point; that warning stands. Anyone building the trace should simply
 instrument **both** `0x10004a00` (slot 7) and `0x10004420` (slot 8) — the run itself will then say which one
 fires on a city load, which is cheaper and more conclusive than any amount of static argument.
+
+---
+
+## 23. CityView / CityViewIso share a vtable — checked, and that is correct
+
+§18b listed `cISC3CityView` and `cISC3CityViewIso` both resolving to `SIMSPR.DLL` `0x10063390`, which reads
+like one identification must be wrong. It was worth checking rather than assuming either way. **Both are right,
+and the shared address is what the inheritance requires.**
+
+### 23a. Why one vtable satisfies both chains
+
+```
+class cISC3CityView    : public cIGZUnknown      34 methods -> slots 3..36  (37 total)
+class cISC3CityViewIso : public cISC3CityView     4 methods -> slots 3..40  (41 total)
+```
+
+`cISC3CityViewIso` **derives from** `cISC3CityView`, so the CityView expected-arity vector is a strict **prefix**
+of the Iso one. A concrete class implementing Iso necessarily satisfies the CityView fingerprint over its first
+37 slots. The fingerprint method reporting both is correct behaviour, not a collision — and it is a different
+situation from §20d's *shared implementation* case, which genuinely would be an error.
+
+The vtable at `0x10063390` runs **92 consecutive code slots**, comfortably past the 41 the Iso chain needs.
+
+### 23b. The Iso extension is present, and two of its slots confirm each other
+
+| slot | header method | want | got | body |
+|---:|---|---|---|---|
+| 37 | `GetCitySpriteManager()` | `0` | `0` | `mov eax,[ecx+0x154] ; ret` |
+| 38 | `GetCitySpriteCellMap()` | `0` | `0` | `mov eax,[ecx+0x158] ; ret` |
+| 39 | `DoScreenShake(i32,i32,i32,i32,bool,i32)` | `0x18` | `0x18` | `cmp byte ptr [ecx+0xd0], 0` … |
+| 40 | `IsScreenShaking()` | `0` | `0` | `mov al, byte ptr [ecx+0xd0] ; ret` |
+
+`DoScreenShake` at **`ret 0x18` = six arguments** is the distinctive one; six is rare enough that no wrong
+identification lands on it. And slots 39/40 form a pair on a single byte: `DoScreenShake` gates on
+`byte [ecx+0xd0]` and `IsScreenShaking` returns it — the same actor/predicate idiom as
+`cISC3BudgetLayer::SetMarxism` / `MarxismIsOn` (§11d).
+
+Slots 37/38 are adjacent subsystem pointers at `+0x154` and `+0x158`. **Slot 38 is the isometric view's handle
+on the class walked in §20** — `cSC3CitySpriteCellMap`, vtable `0x1006250c` — so the view and the sprite grid are
+now linked in both directions: the cell map defines the projection constants (§20a) and the view holds the cell
+map here.
+
+### 23c. The labelling should be sharpened, though
+
+§18b's phrasing is imprecise even though its addresses are right. The accurate statement:
+
+> `0x10063390` is the vtable of a concrete class that implements **`cISC3CityViewIso`**. It satisfies
+> `cISC3CityView` because Iso *is-a* CityView, not because there is a separate plain-CityView class.
+
+And there is no separate one: the recalibrated scan gives **one candidate each** for both interfaces, both this
+address. So in this build **every city view is an isometric view** — consistent with SC3000 having no other
+projection.
+
+### Committed
+
+4 rows at **C3** (`sc3_cityviewiso_*`): the two subsystem getters, `DoScreenShake` and `IsScreenShaking`.
+`verify_worker_rows.py`: **0 of 4 flagged**. Project C3 190 → 194.
+
+**A note on the fingerprint method, since this is its first false-alarm-shaped result:** two classes resolving to
+one address means *prefix inheritance* (correct) or *shared implementation* (an error). Distinguish them by
+checking the header for a derivation. Only the second case needs fixing.
