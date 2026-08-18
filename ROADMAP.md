@@ -496,7 +496,7 @@ keeping: the chosen marker (`[CreditsTunables] ScrollRateInPixelsPerMinute` 1500
 **no visible effect**, and a full byte diff proved the archive was correct — exactly 4 contiguous
 bytes differ, the digits themselves. So that tunable does not drive the credit scroll, and the
 next attempt needs a tunable whose effect is *known* to be observable, not merely plausible.
-`[UNCERTAIN]` what `ScrollRateInPixelsPerMinute` actually controls.
+`[UNCERTAIN]` what `ScrollRateInPixelsPerMinute` actually controls — **now `U-051`, with the mechanism read and the tidy explanation falsified.** Correction to the sentence above: the code does NOT say "that tunable does not drive the credit scroll". `0x004293fd` scrolls `ftol(elapsed * [0x4c])` px per frame with a sub-pixel carry, ceiled at `[0x4e]`, and `[0x4e]` keeps its ctor default of 4 because `MaxPixelsToScrollPerFrame` is absent from the shipped INI — but 4 px/frame at ~60 fps is 14,400 px/min, so neither 1500 nor 4242 is clamped and 4242 should have been ~2.83x faster. The null is UNEXPLAINED. Worse, `0x3ccccccd` = `0.025f` = `1500/60000` means the ctor default already equals the shipped value, so a silently-failing config read is indistinguishable from a successful one — the credits cannot serve as a pass/fail marker at all. See `U-051` for the two tests that would discriminate.
 
 ### Not on the roadmap, deliberately
 
