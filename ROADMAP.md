@@ -512,8 +512,16 @@ next attempt needs a tunable whose effect is *known* to be observable, not merel
 - **Reading more functions.** Criterion 2 defined what a toolkit needs and it is met at 562/562.
   The next function read should be one a *specific* task demands, not a coverage number. The 78%
   of `functions.csv` still at C0 is the design, not debt — see `POST_P1.md`.
-- **`0x16`.** The most interesting open question in the city-save format, and it blocks nothing:
-  `city_write.py` refuses to write it and every shipped file round-trips with it intact.
+- **`0x16`.** ~~The most interesting open question in the city-save format.~~ **RESOLVED
+  2026-08-18 (`U-057`, C3): it is `e_ZoneType::kPloppedBuilding`** — a tile owned by a
+  directly-placed building rather than a zone developer. Named from the x86 binary at
+  `0x10034716`, where 22 is the one value with no case in the query tool's zone-name switch and so
+  falls through to LTEXT 405 `Unzoned`; corroborated at ten order-preserving points by the SC2
+  importer's nibble table `0x10031bcc`. `city_write.py` still refuses to write it, now for a stated
+  reason rather than for lack of knowledge. **The remaining fragment stays off the roadmap because
+  it still blocks nothing:** no shipped x86 code writes 22 (`FUN_10032afa` has zero callers in all
+  30 modules), and settling whether retail dropped the writer or it sits in uncarved code needs
+  `VtableProbe` on live Ghidra, not another sweep.
 - **`U-029`, `U-039`.** Both preserved verbatim by the writer. Neither gates T1, T2 or T3.
 
 ---
