@@ -2396,3 +2396,550 @@ unable to answer, and the honest reading is that this is not yet decided.
 Confidence: **C3** — behaviour confirmed against a second witness (the iOS sibling) with the x86
 naming pinned at eleven independent points by two unrelated x86 functions. Not C4: no runtime
 observation, and the x86 producer's absence is measured but not explained.
+
+---
+
+# The zone-raster WRITE PATH, found — 2026-08-18
+
+**Verdict: the interactive zone writer is not missing. It is SIMRCI `0x1003591f`, it was already
+named at C3 in `functions.csv`, and five sweeps could not see it because every one of them filtered
+on a literal zone value that is FIVE CALL FRAMES away from the write.** The full chain is below,
+confirmed end to end.
+
+This chapter also `[FALSIFIES]` the premise the hunt was built on — "the text export carries no
+vtable contents, so only live Ghidra can answer who dispatches into a vtable slot". That was true
+of the export and false as a claim about what is knowable: the shipped DLL is in
+`original\modules\`, a vtable is a run of dwords in `.rdata`, and `re/scripts/read_vtables.py` now
+reads them offline. No re-carve was needed and none was run.
+
+## The chain, top to bottom
+
+| # | RVA | what it does | how the zone value is carried |
+|---|---|---|---|
+| 1 | `0x1000bb73` | GZCOM factory, 13 arms on a CLSID | **the literal**, e.g. `uVar4 = 6;` |
+| 2 | `0x1000ba68` | tool constructor (121 B) | `*(this+0x124) = param_2` — baked into the object |
+| 3 | `0x1000b7d0` | tool apply-over-bounds, slot 18 of vtable `0x1004c06c` | passes `*(this+0x124)` — now a **variable** |
+| 4 | `0x1003591f` | `PlaceZone(zoneType, bounds, &cost, bool)`, slot 34 | still a variable, arrives as `[ebp+8]` |
+| 5 | `0x10032a96` | `SetValue(row, col, &value)` — the cell write | `mov al,[ebp+8]` staged to a stack byte, passed by address |
+
+No literal appears within a hundred instructions of the write. That is the whole explanation for
+`find_zone_writes.py` reporting **0 producers for 3, 5, 6, 7, 9, 10, 11, 14, 15 and 22** — a sound
+negative about literals that was read as a negative about producers.
+
+## Step 5, the write itself `[CONFIRMED @0x10035f17, instruction bytes]`
+
+`PlaceZone` contains two cell-map writes, and **they write different things**:
+
+```c
+/* @0x10035c1f — corner-disagreement clear */
+a2 = (void *)((uint)a2 & 0xffffff);                                  /* high byte := 0     */
+(**(code **)(*(int *)((int)this + -0x10) + 0x3c))(local_c,uVar7,(int)&a2 + 3);
+
+/* @0x10035f17 — THE PLAYER'S ZONE VALUE */
+if (a2._3_1_ != '\0') {                                              /* per-tile ok flag   */
+  a2 = (void *)CONCAT13((undefined1)a1,a2._0_3_);                    /* high byte := a1    */
+  (**(code **)(*(int *)((int)this + -0x10) + 0x3c))();               /* Ghidra: NO ARGS    */
+  local_38 = local_38 + 1;                                           /* tiles zoned        */
+}
+```
+
+**Ghidra prints the load-bearing call with zero arguments.** It survives no arity filter and no
+value filter. It was recovered from the instruction bytes:
+
+```
+0x10035f17  83 65 fc 00     and  dword [ebp-0x04], 0
+            80 7d 0f 00     cmp  byte  [ebp+0x0f], 0     ; the per-tile ok flag
+            74 19           je   skip
+            8a 45 08        mov  al, [ebp+0x08]          ; <-- PlaceZone arg 1 = zoneType
+            8d 55 0f        lea  edx, [ebp+0x0f]         ; &value
+            8d 4b f0        lea  ecx, [ebx-0x10]         ; this = cell-map subobject
+            52              push edx                     ; arg3 &value
+            57              push edi                     ; arg2 z
+            88 45 0f        mov  [ebp+0x0f], al          ; <-- stage zoneType's low byte
+            8b 01           mov  eax, [ecx]
+            ff 75 f8        push [ebp-0x08]              ; arg1 x
+            ff 50 3c        call [eax+0x3c]              ; SetValue(x, z, &value)
+```
+
+`__thiscall`, so `[ebp+8]` is the first stack argument: **the byte written is the low byte of
+`PlaceZone`'s `zoneType`.** This is the single most basic write in the game, and it is here.
+
+## Why `this-0x10`, and which function `+0x3c` reaches `[CONFIRMED, PE bytes]`
+
+Measured with `re/scripts/read_vtables.py`, not inferred from thunk-block stride (that stride
+assumption is circular when its output is then cited as the evidence — it happened to be right
+here, but it was never measured until now). The constructor at `0x100311b8` stores:
+
+```
+c7 06       74 d2 04 10    mov [esi+0x00], 0x1004d274
+c7 46 10    e0 d1 04 10    mov [esi+0x10], 0x1004d1e0
+```
+
+So the object carries **two vtables that expose the same cell-map ABI at the same offsets**:
+
+| offset | vtable `0x1004d274` (object+0) | vtable `0x1004d1e0` (object+0x10) |
+|---|---|---|
+| `+0x34` GetValue | `0x100312ee` | `0x10034332` → thunk |
+| `+0x38` SetValue rect | **`0x10032afa`** | `0x1003433a` → thunk |
+| `+0x3c` SetValue point | **`0x10032a96`** | `0x10034342` → thunk |
+| `+0x40` SetAllCells | **`0x10032be0`** | `0x1003434a` → thunk |
+
+`PlaceZone` lives at `0x1004d268` = slot 34 of `0x1004d1e0`, the vtable stored at object+0x10, so
+its `this` is object+0x10 and `this-0x10` is object+0 — whose `+0x3c` is `0x10032a96` **directly,
+with no thunk**. The adjustor thunks (`sub ecx,0x10; jmp …`, hand-decoded) exist for callers coming
+in through the other interface. Everything closes.
+
+Corroboration from the same vtable's neighbourhood, all three already independently recorded:
+
+| slot | offset | RVA | already known as |
+|---|---|---|---|
+| 32 | `+0x80` | `0x1003547c` | `GetZoneColor` — the colour table this document cites |
+| 33 | `+0x84` | `0x1003559f` | `CanZone` — `PlaceZone`'s precondition gate |
+| 34 | `+0x88` | `0x1003591f` | `PlaceZone` |
+
+## Step 3, the tool `[CONFIRMED @0x1000b7d0]`
+
+353 B, slot 18 (`+0x48`) of tool vtable `0x1004c06c`. A textbook commit:
+
+1. `layer(+0x84)` = **CanZone**`(zoneType, bounds, &cost)`; on false set the failure flag `this+0x38`;
+2. store the cost to `this+0x34`;
+3. bracket the write with a global's `+0x21c` … `+0x220` (batch/undo);
+4. `layer(+0x88)` = **PlaceZone**`(*(this+0x124), bounds, &cost, 0)`;
+5. resolve message resource `0xfa2` and play one of three sounds — `*(this+0x12a)` on success,
+   `0x20`, or `0x1e` when CanZone refused.
+
+`this+0x11c` is the zone layer, `this+0x124` is the zone type. **`functions.csv` currently files
+this row as `sc3_notify_send_status`, subsystem `notify`, C2.** Its note describes the mechanics
+correctly but reads the function as a notifier because the sound/message tail dominates the body.
+It is the zoning tool's apply path. **Not corrected here** — that row belongs to the session that
+owns `functions.csv` promotions; flagged for it, with the evidence above.
+
+## Step 1–2, where the literals actually live `[CONFIRMED @0x1000bb73]`
+
+The zone type is a **constructor argument**, not a mutable selection: there is one tool object per
+zone type, 300 bytes each, and `0x1000bb73` is the GZCOM factory that picks by CLSID.
+
+| CLSID | zoneType | `+0x128` | sound `+0x12a` |
+|---|---|---|---|
+| `0x82e88c9c` | **0** (dezone) | `0x23` | `0x2c` |
+| `0x42e88586` | 1 | `0x1a` | `0x26` |
+| `0x02e88915` | 2 | `0x19` | `0x26` |
+| `0xa2e8893b` | 3 | `0x18` | `0x26` |
+| `0x02e88949` | 5 | `0x1d` | `0x26` |
+| `0xa2e8895a` | **6** (Commercial) | `0x1c` | `0x26` |
+| `0x02e88968` | 7 | `0x1b` | `0x26` |
+| `0xc2e8898f` | 9 | `0x17` | `0x26` |
+| `0xa2e8899d` | 10 | `0x16` | `0x26` |
+| `0x02e889aa` | 11 | `0x15` | `0x26` |
+| `0xe2e889d4` | **14** (Airport) | `0x1e` | `0x26` |
+| `0x02e889c4` | **15** (Seaport) | `0x1f` | `0x26` |
+| `0xc2e889b6` | **17** (Landfill) | `0x20` | `0x26` |
+
+**13 tools, zone types `{0,1,2,3,5,6,7,9,10,11,14,15,17}`.** Commercial 6 — the value that made the
+literal sweeps look most damning, because it is dragged with a mouse — is right there at
+`0xa2e8895a`.
+
+> ⚠️ **Coincidence trap, flagged deliberately.** `+0x128` for the zoneType-10 tool is `0x16`. That
+> is an icon/cursor id from a contiguous `0x15`–`0x20` block, and it has **nothing** to do with the
+> zone-raster value 22. This document has already conflated two unrelated meanings of 22 once (the
+> `22 x 22` row stride in `FUN_100015ab`). Do not make it three.
+
+**A cross-check that was not designed in.** The 13 constructible types are exactly the complement
+of the types the game refuses or never declares: `0x10034716`'s name switch emits `*BUG*` for
+**13 = Military** and **16 = Spaceport**, and the chargeable-type analysis lists
+`{4, 8, 12, 13, 16, 18…22}` as the non-chargeable set. **No tool exists for any of them.** Two
+unrelated functions, one built from CLSIDs and one from a string switch, agree on which zone types
+the player can place.
+
+## What is STILL open, stated narrowly
+
+**The rect writer `0x10032afa` (`vt+0x38`) still has no identified caller, so `0x16` =
+`kPloppedBuilding` still has no x86 producer.** This chapter found the *zone* writer, not the *22*
+writer, and they are different functions:
+
+- `PlaceZone` writes per-cell through `+0x3c`, never through `+0x38`, and can only write one of the
+  13 tool types — 22 is not among them.
+- `PlaceBuilding` slot 26 (`0x10032dfc`) does **not** write the zone raster: its `+0x40` is on an
+  unrelated object and its `+0x3c` is a flag test `(0x800)` on an occupant `[CONFIRMED @0x10032dfc]`.
+  Its zone-raster contact is read-only, the footprint uniformity check.
+- The `vt+0x38`/5-arg sweep returns 49 call sites across 30 modules and **none** has a `this-0x10`
+  receiver. The nearest shapes are `this-0x20` (SIMRCI `0x1001cd8f`, SIMSERV `0x10007132`) and
+  SIMUTIL `0x100041ce` (`this-0x1c`) — different subobject offsets, therefore different classes.
+  SIMRCI `0x1001cd8f` is a 2x-upsampling importer that scales a byte by `1000/2500`, not a zone tool.
+
+`[UNCERTAIN]` and now sharply scoped: **who calls `0x10032afa`.** The evidence still missing is a
+call site, and the honest caveat is that an arity-filtered sweep is a **lower bound** — `PlaceZone`
+itself proves Ghidra will print the decisive call with zero arguments. So "49 sites, none matching"
+is not an exhaustive negative. The next move is to resolve those 49 receivers in the bytes, the way
+step 5 was resolved, rather than to run a sixth filtered sweep.
+
+Confidence on the chain above: **C3** — five steps, each read in the decompilation, with the write
+itself and the vtable layout confirmed in the shipped bytes, and the tool table cross-checked
+against an unrelated function. Not C4: no runtime observation.
+
+---
+
+# The rect writer `0x10032afa`: the hunt, and why the question was mis-posed — 2026-08-19
+
+**Verdict: no call site found, but the negative that framed this question does not survive
+checking, and neither does the conclusion people were reaching from it.** Two independent results
+below, either of which alone would block the inference "no caller ⇒ the feature was removed".
+
+## Result 1 — the `22 has no producer` zero is NOT statistically significant
+
+Every sweep in this family conditions on the literal appearing in a body. Nobody had measured how
+often that even happens. Measured over **72,459 function bodies** (`re/scripts/find_value_byaddr.py
+--baserate`, 7 selftest checks), with the slot filter **dropped entirely** — any vtable offset
+counts, not just the `+0x38/0x3c/0x40` quartet:
+
+| value | bodies staging it as a byte | of those, ≥1 passed by address | rate |
+|---|---|---|---|
+| 0 | 14,025 | 929 | 6.62% |
+| 1 | 5,474 | 54 | 0.99% |
+| 2 | 2,009 | 9 | 0.45% |
+| 3 | 1,393 | 3 | 0.22% |
+| 5 | 965 | 8 | 0.83% |
+| 6 | 896 | 7 | 0.78% |
+| 7 | 629 | 8 | 1.27% |
+| 9 | 501 | 8 | 1.60% |
+| 10 | 454 | 2 | 0.44% |
+| 11 | 383 | 19 | 4.96% |
+| 14 | 268 | 1 | 0.37% |
+| 15 | 246 | 8 | 3.25% |
+| 17 | 218 | 4 | 1.83% |
+| **22** | **151** | **0** | **0.00%** |
+
+**22 has the lowest base rate of any zone value** — it is staged as a byte in 151 bodies, against
+896 for Commercial 6 and 5,474 for 1. At the median non-zero rate (0.99%) those 151 bodies predict
+**1.49 hits**, so **P(observing 0) ≈ 0.23**; at the mean rate, ≈ 0.12.
+
+**One time in five, a zero here means nothing at all.** The sweep family was underpowered for 22
+specifically, and it was underpowered *because* 22 is rare — the same property that made it
+interesting. That is a third, independent defect on top of the two already recorded (the literal
+lives frames away from the write; Ghidra drops the arguments on the decisive call). None of the
+five sweeps could ever have settled this question.
+
+**Rule this earns:** a sweep that finds nothing is worthless until its base rate is measured. Do
+not quote a zero from this family without `--baserate` beside it.
+
+## Result 2 — "no caller" is the EXPECTED state for an unused virtual method
+
+`0x10032afa` and `0x10032be0` are **virtual** methods. A virtual function is emitted and placed in
+its vtable whether or not any call site exists — that is what makes it dispatchable. So
+"`0x10032afa` has zero direct references, only its adjustor thunk" is not evidence that a feature
+was removed. **It is the default state of any interface method the shipped build happens not to
+use**, and the cell-map interface has plainly unused members.
+
+Measured, across all 4,040 SIMRCI bodies: the cell-map subobject (`this-0x10`) is touched by
+**exactly three functions**, all read-or-point-write, and the class never uses the rect or
+whole-map forms at all.
+
+| caller | slot | what |
+|---|---|---|
+| `0x1003547c` GetZoneColor | `+0x34` | read |
+| `0x1003559f` CanZone | `+0x34` ×2 | read |
+| `0x1003591f` PlaceZone | `+0x34`, **`+0x3c` ×2** | read, point-write |
+| — | `+0x38` rect | **never used** |
+| — | `+0x40` SetAllCells | **never used** |
+
+So SC3U ships a `cISC3CityCellMap<uint8>` whose rect-fill and fill-all members are simply not
+called. That is unremarkable for a template interface, and it is the whole of what the four-session
+"the writer is missing" observation actually established.
+
+## Two side results, both negative, both worth not re-deriving
+
+**`city+0x13c` is the terrain heightfield, not a second zone map.** `PlaceZone` fetches it at
+`0x1003591f:60` and samples `+0x4c` four times per tile — the tile's four corners. If they are not
+all equal the tile is **sloped**, and the zone is cleared to 0 `[CONFIRMED @0x10035c1f]`. That is
+the "you cannot zone a slope" rule, and it explains the only other raster write in `PlaceZone`.
+
+**Who acquires the zone layer at all.** `city` vtable `+0x1b8` = `GetCityLayer(LayerType)`, and the
+zone layer's type is `0xc0ab8a56` `[@0x100312bc]`. Two methods, agreeing:
+
+- byte scan of all 30 shipped binaries for the constant — **AUDIO ×1, SIMADV ×1, SIMRCI ×2,
+  SIMSPR ×1**, 5 total (a 4-byte pattern at this corpus size is ~0.005 expected by chance, so these
+  are real);
+- the decompiled text — AUDIO `0x100112a5`, SIMADV `0x10006c7f`.
+
+Both text sites are **pure acquisition**: `GetCityLayer(0xc0ab8a56)` → `QueryInterface` → store the
+pointer in a field. Neither writes. The two SIMRCI occurrences are the layer's own
+`GetLayerType` `0x100312bc` and its registration `0x100310f5`, so 2 occurrences ↔ 2 functions and
+the two methods agree exactly on three of the four modules.
+
+**SIMSPR was the one disagreement — 1 occurrence in the bytes, 0 in the text — and resolving it
+produced the most consequential result in this chapter.** My first guess, written here and
+immediately falsified, was "a data table rather than a code path". It is neither. The constant is
+at `0x10016de4` **inside `.text`**, as the immediate of a field initializer:
+
+```
+c7 80 c4 00 00 00  c9 8f 7c a1     mov dword ptr [eax+0xc4], 0xa17c8fc9
+c7 80 c8 00 00 00  56 8a ab c0     mov dword ptr [eax+0xc8], 0xc0ab8a56   <-- the zone LayerType
+89 88 cc 00 00 00                  mov dword ptr [eax+0xcc], ecx
+```
+
+It is invisible to every text sweep because **it is in UNCARVED code**: the nearest preceding
+exported body is `0x10016cc8`, all of 11 bytes, ending at `0x10016cd3`, and the next starts at
+`0x10016e89`. The constant sits 273 bytes into a **438-byte gap that Ghidra never turned into a
+function.**
+
+### The export does not cover `.text`, and that is the real limit on every negative here
+
+Measured (union of carved body extents vs `.text` virtual size):
+
+| module | `.text` | bodies | carved | **uncarved** |
+|---|---|---|---|---|
+| SIMRCI | 299,362 B | 4,040 | 97.6% | **7,152 B** |
+| SIMSPR | 394,394 B | 4,515 | 97.8% | **8,780 B** |
+| SIMUTIL | 125,642 B | 2,120 | 97.9% | **2,675 B** |
+| SIMDIRT | 123,698 B | 1,039 | 96.2% | **4,736 B** |
+
+**So a caller of `0x10032afa` could sit in SIMRCI's 7,152 uncarved bytes and no sweep over the
+export — mine or anyone's — would ever see it.** The SIMSPR find is the existence proof that real,
+referenced, meaningful instructions do live in those gaps. This is a fourth independent reason the
+"no producer" negative cannot carry a conclusion, and unlike the other three it is not a defect in
+the tooling: it is a property of the corpus. `[UNCERTAIN]` resolved as to SIMSPR; the coverage hole
+is measured, not closed.
+
+## Where this leaves `0x16`
+
+`[UNCERTAIN]`, and now for a stated reason rather than a mystery: **no call site for `0x10032afa`
+has been found, the search is not exhaustive, and the negative is too weak to convert into a
+claim.** Specifically, do **not** write "SC3U cannot produce 22" or "the feature was removed"
+anywhere. Neither is supported.
+
+The static route is close to exhausted and its remaining moves are expensive — and the coverage
+measurement above means the cheapest honest static move left is **a re-carve of the uncarved
+gaps**, not another sweep over what is already carved. That is a decision for the project owner
+(the 2026-08-17 vtable-seeded re-carve added 12,529 bodies and re-opened a closed gate criterion),
+so it is proposed here, not done.
+
+The decisive experiment is cheap and belongs to the harness: **plop one multi-tile building on a bare terrain,
+save, and read the raster over its footprint** (22 is absent from all 21 bare terrains, so the
+baseline is a clean zero). Footprint reads 22 → the producer exists and only its call site is
+unlocated, which re-poses the problem properly. Footprint does not → the retail build genuinely
+does not mark plopped buildings, and the 22s in shipped cities came from something other than
+gameplay. Handed to the harness session 2026-08-19 with that protocol.
+
+## Addendum, same day: the coverage hole was bounded, and the re-carve retired
+
+The section above proposed re-carving the uncarved gaps as the cheapest remaining static move. It
+was answered instead **without mutating anything**, and the proposal is withdrawn.
+
+A vtable dispatch has one fixed encoding family — `FF /2 disp8`, i.e. `call dword ptr [reg+disp8]`,
+`FF 50..57 <disp8>` — so it can be located in raw bytes with no notion of where functions begin.
+That searches **100% of `.text`**, not the carved 97.6%, and needs no Ghidra, no lock, and no
+re-analysis of a project two other live sessions are working in.
+
+`re/scripts/find_vcall_encoded.py` (capstone-verified, 6 selftest checks). False positives are
+filtered rather than ignored: every candidate must be reachable as an instruction boundary when a
+window ending on it is disassembled. The filter's own negative control is a crafted case —
+`b8 ff 50 3c 00` is `mov eax, 0x3c50ff`, which *contains* `ff 50 3c` without a boundary there, and
+must be rejected. The positive control is `PlaceZone`'s two known writes.
+
+Result for disp `0x38 / 0x3c / 0x40` across all 30 shipped modules:
+
+| | |
+|---|---|
+| dispatches in **uncarved** code, all modules | **12** |
+| of those, one byte-identical duplicated helper | **8** (GZGRAPHICD, SIMBABLD, SIMDSTR, SIMUI) |
+| **dispatches in SIMRCI's 7,152 uncarved bytes** | **0** (299 verified hits, all in carved bodies) |
+
+The 8 are the same statically-linked routine compiled into four DLLs — same `0x44` spacing between
+the pair, and the surrounding 160-byte images compare byte-identical. It is FPU code (`db 44 24 2c`
+fild, `da 74 24 2c` fidiv) and has nothing to do with zones.
+
+**So U-065's coverage hole is real but does not hide this answer. Re-carving SIMRCI would not have
+found the rect writer's caller.** That makes the negative on `0x10032afa` *stronger* than it was: it
+now survives an encoding-level scan of all of `.text`, where before it was a text scan of 97.6% of
+it.
+
+**What this still does not establish**, and the distinction matters: the scan finds dispatch
+*instructions*, not *receivers*. It cannot say which register held the zone cell map. SIMRCI's 299
+carved dispatches are all visible in the export and were already surveyed by receiver shape, so
+nothing new hides there either — but "no caller has been identified" remains the honest statement,
+not "no caller exists". The four reasons in U-063/064/065 for not converting that into a claim are
+unchanged; what has changed is that the fourth one (coverage) is now bounded rather than open.
+
+The decisive experiment is still the harness's building-plop test.
+
+---
+
+# RESOLVED EMPIRICALLY: the chain is C4, and the 22 producer EXISTS — 2026-08-19
+
+Both experiments handed to the harness session were run. **Both answered.** Full results and
+protocol at `re/analysis/LAUNCH_CONTROL.md` §"TEST 1"/"TEST 2"; recorded here because they settle
+two questions this document has carried for five sessions.
+
+## TEST 1 — the write chain is now **C4**
+
+Drag-zoned with **Com Medium Density** (`0x10003202`, zone byte 6), saved, reloaded with
+`re/tools/city_write.City`:
+
+| run | changed tiles | transition | bbox | other values |
+|---|---|---|---|---|
+| small drag | 2 | all `0 → 6` | 2x1 | none |
+| larger drag | 10 | all `0 → 6` | 5x2 | none; 22 unchanged at 4,921 |
+
+Histogram delta exactly `{0: −10, 6: +10}`. Every legally-zoned tile reads the tool's byte and
+nothing else in the raster moved — which is the prediction this document made, unchanged.
+
+**`0x1000bb73` → `0x1000ba68` → `0x1000b7d0` → `0x1003591f` → `0x10032a96` is C4, observed end to
+end.** Promoted from C3: the static read is now confirmed by runtime observation.
+
+## TEST 2 — **OUTCOME A. The retail x86 producer of 22 exists, and it is a rect fill**
+
+Plopping a **Hospital** (`0x10006401`) into open ground:
+
+```
+deltas: {0: -9, 22: +9}      22: 4921 -> 4930
+9 changed tiles, all 0 -> 22
+bbox x 99..101, y 180..182  =  3x3 CONTIGUOUS
+cost $500, funds -$515
+```
+
+Reproduced twice, including as a single-plop run with no other action, identical bbox and delta
+both times. **A contiguous 3x3 rect, not nine point writes** — the shape of the rect writer
+`0x10032afa` (`vt+0x38`), and the same behaviour as the iOS sibling's
+`goBuildingLayer::PlaceBuilding`.
+
+### What this retires, and what it vindicates
+
+**Retired.** "No shipped x86 code writes 22" is **`[FALSIFIED]`**. So is the framing that the
+retail writer might have been removed. The question is now **"the producer exists, its call site is
+unlocated"** — a much better-posed problem.
+
+> ⚠️ **`ROADMAP.md` line 521-524 rests on the falsified half.** It reads: "**The remaining fragment
+> stays off the roadmap because it still blocks nothing:** no shipped x86 code writes 22
+> (`FUN_10032afa` has zero callers in all 30 modules), and settling whether retail dropped the
+> writer or it sits in uncarved code needs `VtableProbe` on live Ghidra, not another sweep."
+> **Both clauses are now false**: the game demonstrably writes 22, and settling it needed neither
+> `VtableProbe` nor live Ghidra — a plop test settled the existence question and an encoding scan
+> settled the uncarved-code question. Flagged, not edited: `ROADMAP.md` is not this session's file.
+
+**Vindicated.** `U-064` forbade writing "SC3U cannot produce 22" or "the retail writer was removed"
+anywhere, on the grounds that the negative was too weak to carry a claim. Had that been written
+down as a finding, it would now be a documented error. The restraint was correct.
+
+`re/tools/city_write.py` needs **no change**. Its refusal to write 22 never rested on "no code
+writes it"; it rests on 22 meaning *a tile owned by a directly-placed building*, so writing it
+would claim a footprint with no occupant behind it. The plop test **corroborates that reading
+exactly** — 22 arrives as a building's footprint rect, with a real occupant and a $500 charge.
+
+## The hunt narrows: the caller is in CARVED code
+
+Two measurements now combine into a deduction:
+
+1. the producer **exists** (TEST 2, runtime);
+2. SIMRCI's 7,152 uncarved bytes contain **zero** `+0x38/0x3c/0x40` dispatches (encoding scan over
+   100% of `.text`).
+
+**Therefore the call site is in carved code and is visible in the export.** It is not hiding in a
+gap. That eliminates the re-carve permanently for this question and means the remaining work is to
+identify a *receiver*, not to find more code.
+
+### Lead: SIMGEOM `0x1000970f` is the building-plop tool `[CONFIRMED @0x1000970f]`, C2
+
+It is the **structural twin of the zone tool** `0x1000b7d0`, field for field:
+
+| | zone tool `0x1000b7d0` | plop tool `0x1000970f` |
+|---|---|---|
+| query/cost call | `layer(+0x84)` CanZone | `mgr(+0x24)` (4 args, `&cost`) |
+| cost stored | `*(this+0x34) = cost` | `*(this+0x34) = cost` |
+| failure flag | `*(this+0x38)` | `*(this+0x38)` |
+| second flag | `*(this+0x39)` | `*(this+0x39)` |
+| notify helper | `FUN_1003f621(this)` | `FUN_100214b8(this)` |
+| **commit call** | `layer(+0x88)` **PlaceZone** | `mgr(+0x38)` **(5 args, trailing byte `*(this+0x114)`)** |
+| sound resource | `0xfa2` | `0xfa2` |
+
+The commit passes tile coordinates that are shifted `>> 8` for the sound call — the same 8.8 fixed
+point convention as `PlaceZone` and `IsNearTransport`.
+
+> ⚠️ **TRAP, and it is one my own sweep walked into.** `mgr(+0x38)` here is **NOT** the cell-map
+> rect setter. `this+0x104` is a different interface, and `+0x38` on it is that interface's place
+> method. My `vt+0x38`/5-arg sweep matched this site purely by coincidence of offset. **An
+> offset-plus-arity match is not an interface match** — the receiver must be identified before any
+> such hit means anything. This is the same lesson as the `+0x128 = 0x16` icon-id coincidence.
+
+`[UNCERTAIN]`, and the next concrete step: **what class is `this+0x104`?** No direct assignment to
+it exists anywhere in SIMGEOM's carved code — only `= 0` in three constructors — so it is filled by
+a `QueryInterface(IID, &this+0x104)`, and that call is not in the carved text either. It is
+plausibly in SIMGEOM's own uncarved bytes. Resolve it by finding the IID, not by another sweep.
+
+## Chasing `this+0x104`: the QueryInterface hypothesis is `[FALSIFIED]` — 2026-08-19
+
+The previous section said `this+0x104` (the plop tool's manager pointer) "is filled by a
+`QueryInterface(IID, &this+0x104)`, and that call is not in the carved text either. It is plausibly
+in SIMGEOM's own uncarved bytes. **Resolve it by finding the IID.**"
+
+**There is no IID. There is no QueryInterface.** Two encoding scans over 100% of SIMGEOM's `.text`
+settled it without a re-carve.
+
+### Scan 1 — the `lea` sites are destructors, not QI
+
+A `QueryInterface(iid, (void**)&field)` needs the field's ADDRESS, so it must appear as
+`lea reg,[this+0x104]` (disp32; 0x104 is too large for disp8). Scanning `8D` + modrm `0x80..0xBF`
++ disp32 `0x104` across all of `.text` gives **exactly 3 sites**, and all three are the same
+release-and-null idiom, not a QI:
+
+```
+mov  ecx, [esi+0x104]        ; the held pointer
+lea  edi, [esi+0x104]        ; &field
+test ecx, ecx
+je   skip
+mov  eax, [ecx]
+call dword ptr [eax + 8]     ; GZCOM slot 8 = cIGZUnknown::Release
+and  dword ptr [edi], 0      ; field = nullptr
+```
+
+The identical shape appears at SIMRCI `0x1000bb2c` for the zone tool's `this+0x11c`, which is the
+known-good analogue — so the two tool classes agree, which is what a sound method should produce.
+
+### Scan 2 — the field is never stored to, except zero
+
+Scanning `89` + modrm `0x80..0xBF` + disp32 `0x104` (i.e. `mov [reg+0x104], r32`) over all of
+`.text` gives **3 stores, all `ebx` after `xor ebx,ebx`** — the constructor zeroing already visible
+in the carved text at `0x10009443`, `0x1000a2a9`, `0x1002286f`. **No non-zero store to `+0x104`
+exists anywhere in the module**, carved or uncarved.
+
+### What actually fills it: a PROPERTY, `[CONFIRMED @0x1002286f]`
+
+`0x1002286f` is a property-driven initialiser. It runs a series of
+
+```c
+cVar1 = (**(code **)(*param_1 + 0x4c))(&DAT_1002b5xx, (int)this + FIELD, 0);
+if (cVar1 == '\0') { /* default */ }
+```
+
+where each `DAT_1002b5xx` is **not a string** — it is a 2-dword `{propertyID, typeCode}` pair in a
+table at `0x1002b500`, ids `0x6b`–`0x7c` (107-124) with type codes `0x00010008`, `0x00010001`,
+`0x00010003`, `0x00020003`. So `param_1` is a property source and `+0x4c` is
+`GetProperty(pair, out, default)`.
+
+**The one that governs `+0x104` is property `0x7b` (123)**: `GetProperty(&{0x7b,0x00010008},
+this+0xfc, 0)`, and on failure the code sets `*(this+0x104) = 0`.
+
+Worth recording because it lands next door: the neighbouring property `0x6d` (109) defaults, on
+failure, to `*(this+0xf4) = 0xa1096a4f`, `*(this+0xf8) = 0xffffffff`, `*(this+0x108) = 0x2026960b`
+— a `{type, group, instance}`-shaped triple, and **`this+0x108` is exactly the field the plop tool
+passes as argument 2** to both `mgr(+0x24)` and `mgr(+0x38)`.
+
+### Honest limits on this
+
+`[UNCERTAIN]` **whether `0x1002286f`'s object is the same class as `0x1000970f`'s.** They share
+`+0x104` and `+0x114`, which is suggestive, and the init lacks `+0x34`/`+0x39` exactly as an init
+should (those are commit-time cost and flag fields). But an offset match is not a class match —
+that is the trap flagged in the previous section, and it is not resolved here. Confirm by finding
+the constructor that installs the plop tool's vtable and checking it calls `0x1002286f`.
+
+> ⚠️ A counting slip in my own check, recorded so the numbers above are not over-read: I compared
+> field usage between the two functions with a `grep -c "+ 0x108)"`, which returns 0 for the plop
+> tool even though it uses `(int)this + 0x108,` — the argument is followed by a comma, not a paren.
+> **Do not read those per-field counts as evidence.** The shared use of `+0x104` and `+0x114` was
+> verified by reading the bodies, not by that count.
+
+### The standing lesson
+
+The previous section named the wrong next step with confidence ("resolve it by finding the IID").
+The correction cost two scans and no re-carve, because an encoding scan can refute a hypothesis
+about *what construct is present*, not merely find a known one. **When a field has no visible
+producer, scan for the store before assuming the framework idiom.**
