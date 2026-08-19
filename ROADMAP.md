@@ -519,7 +519,10 @@ next attempt needs a tunable whose effect is *known* to be observable, not merel
   falls through to LTEXT 405 `Unzoned`; corroborated at ten order-preserving points by the SC2
   importer's nibble table `0x10031bcc`. `city_write.py` still refuses to write it, now for a stated
   reason rather than for lack of knowledge. **The remaining fragment stays off the roadmap because
-  it still blocks nothing:** no shipped x86 code writes 22 (`FUN_10032afa` has zero callers in all
+  it still blocks nothing:** [BOTH CLAUSES FALSIFIED 2026-08-19 - the producer is SIMGEOM
+`0x10007D1B` inside `FUN_10007760`, found by hooking the writer at runtime during a Hospital
+plop; it needed neither VtableProbe nor live Ghidra. See `LAUNCH_CONTROL.md` §31.9.1.] The
+original text read: no shipped x86 code writes 22 (`FUN_10032afa` has zero callers in all
   30 modules), and settling whether retail dropped the writer or it sits in uncarved code needs
   `VtableProbe` on live Ghidra, not another sweep.
 - **`U-029`, `U-039`.** Both preserved verbatim by the writer. Neither gates T1, T2 or T3.

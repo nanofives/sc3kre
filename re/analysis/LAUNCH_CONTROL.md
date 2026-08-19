@@ -622,7 +622,11 @@ Every writer, in order:
 | `FUN_10011F73` @ `0x10011f73` line 55 | `= (char)param_1` (the transition method) |
 
 **Line 62 is the killer.** `DAT_1006cdac` has **exactly one reference in the entire DLL — that
-read.** Verified independently by grep: zero writers. It is zero-init BSS, so the expression is
+read.** [FALSIFIED 2026-08-19 - see §32. There are TWO references and one is a WRITE:
+`0x10010EF7` is the imm32 of `A2` (mov [imm32],al) inside the 12-byte setter `FUN_10010ef2`,
+which occupies two vtable slots. And the game CALLS it with al=1 during startup, so the byte
+is 1 at Init time with or without our poke.] The original text read: zero writers, zero-init
+BSS, so the expression is
 `0 == 0` → **fullscreen is unconditionally re-asserted at Init**, discarding whatever `-w` set.
 
 Line 146 then re-forces fullscreen whenever the requested mode does not already match the
@@ -777,7 +781,10 @@ Two in-memory patches, both required. Neither works alone.
 **1. Defeat the Init override** — `GZGraphicD.dll + 0x6CDAC` (VA `0x1006cdac`), `0 -> 1`.
 
 `FUN_100114b8` line 62 is `*(bool *)(param_1 + 0x12) = DAT_1006cdac == '\0';`. That global has
-exactly one reference in the DLL (the read), zero writers, zero-init BSS — so the expression is
+[FALSIFIED - see §32: two references, one of them a WRITE, and the game itself calls the
+setter with al=1 before Init reads. This poke is REDUNDANT; the operative half of `-windowed`
+is the `0x117D6` nop.] The original text read: exactly one reference in the DLL (the read),
+zero writers, zero-init BSS - so the expression is
 always true and fullscreen is unconditionally re-asserted, discarding `-w` (§10a). Writing 1
 inverts it. Applied by the probe as soon as `GZGraphicD.dll` appears (~27 ms), well before Init
 (~250 ms).
@@ -3579,7 +3586,72 @@ contain this one.
 (`local_8 = 0xffffffff` at entry, then `local_8._0_1_ = 1,2,...,0x18`). I initially dismissed all
 three on that basis and was wrong about the third. Only the runtime hook separated them.
 
-#### 31.9.2 The other caller of the rect writer, and the one that is NOT it
+#### 31.9.2 `FUN_10007760` named: `cISC3BuildingLayer::commit_placement`
+
+The 22-writer is the building layer's placement-commit. Signature recovered from bytes
+(Ghidra's decompile is wrong here - it lost the stack model and shows a 3-arg call with zero args
+at the write site):
+
+```c
+// SIMGEOM 0x10007760, __thiscall, ret 0x1C (7 stack args), bool in al
+bool commit_placement(cISC3BuildingLayer *this,
+                      Box6  *region,        // [ebp+08] {x0,y0,z0,x1,y1,z1}, 8.8 fixed city coords
+                      Vec   *occupants,     // [ebp+0C] std::vector<cISC3Occupant*>
+                      u32    a2,            // [ebp+10] forwarded to terrain vt+0x120, then scratch
+                      i32    cost,          // [ebp+14] withdrawn unless freeOfCharge
+                      u32    a4,            // [ebp+18] in/out of the terrain feasibility call
+                      bool   freeOfCharge,  // [ebp+1C] Ghidra's in_stack_00000018
+                      i32    mode);         // [ebp+20] Ghidra's in_stack_0000001c, 0/1/2/3
+```
+
+The `mov byte [ebp+0x23],0x16` at `0x10007D11` writes into **byte 3 of the `mode` argument slot**,
+reused as dead scratch after `mode`'s last compare - which is why 22 never appears as a named
+local. The stamp is `this->zoneLayer(+0x24)->vt[0x38](x0>>8, y0>>8, x1>>8, y1>>8, &22)`.
+
+**`this` is `cISC3BuildingLayer`** (SIMGEOM), ctor `0x10004BDA`, size 0x84, four vtables; primary
+`0x100292C0`. `QueryInterface 0x10004CB8` maps IID `0x20631788`
+(`GZIID_cISC3BuildingLayer`, `GZCOM_INTERFACE_CATALOGUE.md:2403`) to offset 0. Its fields are bound
+in `Init 0x100023E8` from the `cISC3City` at `this+0x38`:
+
+| field | from city slot | used as |
+|---|---|---|
+| +0x18 / +0x1C / +0x20 | city vt+0x120 / +0x124 / +0x14C | three occupant managers (surface / L1 / L2) |
+| **+0x24** | city vt+0x13C | **the zone raster layer** - its vt+0x38 is the 22 stamp |
+| +0x28 | city vt+0x140 | terrain layer (altitude/IsWater/tile-type) |
+| +0x2C | city vt+0x15C | region change/redraw sink |
+| +0x30 | city vt+0x194 | budget layer (vt+0x10 funds, vt+0x14 withdraw, vt+0x58 cost) |
+| +0x34 | city vt+0x18C | neighbors layer |
+| +0x38 | Init arg | the `cISC3City` |
+
+The **modes**: mode 1 is the on-water variant (per-tile `terrain->vt[0x15C]`; the feasibility
+sibling `FUN_100072F6` requires tile-type 4 and level corners for mode 1, IsWater==false for the
+others); modes 2 and 3 do an extra demolish-sweep over the L1 / L2 occupant managers respectively.
+All modes: demolish conflicting occupants, insert the new ones via own `vt+0x58` with reverse
+rollback via `vt+0x5C`, stamp 22, then withdraw `cost` unless `freeOfCharge`.
+
+**The call chain.** `FUN_10007760` is in **no vtable**; it is reached by direct call from two
+functions, each the tail of a family of ten consecutive vtable slots (`0x100292C0` +0x24..+0x48):
+
+| function | proposed name | conf | role |
+|---|---|---|---|
+| `0x10006BA6` | `sc3_bldglayer_place_building` | C2 | resolve one exemplar (IID `0xE075EF51`), build footprint, run feasibility, check funds, create occupant (own `vt+0x20`), commit |
+| `0x10006DF6` | `sc3_bldglayer_place_building_composite` | C2 | same, but four exemplar ids combined into one footprint |
+| `0x10007760` | `sc3_bldglayer_commit_placement` | C2 | the body above |
+| `0x10008599` | `sc3_geom_post_newsticker_for_building` | C2 | called for occupant[0] only; maps type id -> news headline (group `0x42C1ED2D` = `SC3StringsNewstickerTriggered.IXF`) |
+
+The ten wrappers are a 2x(4+1) matrix: `commit=0` slots are dry-run "can-place" queries (the
+`FUN_10007760` block is skipped), `commit=1` slots actually place; four `mode` values plus one
+composite. So placing a building is a virtual call `buildinglayer->vt[9..18](...)`, and the visible
+side effect on the zone raster - a footprint of 22 - is one instruction inside it.
+
+**`[UNCERTAIN]`, do not propagate.** The agent's field map implies city vtable
+slot +0x13C = zone layer, +0x140 = terrain, +0x15C = change-sink, +0x194 = budget. That
+**conflicts** with `GZCOM_INTERFACE_CATALOGUE.md:1240/1249` (which has +0x15C = BudgetLayer,
++0x194 = DemolitionLayer, +0x13C = DirtBag). SIMGEOM's bytes and the catalogue disagree on these
+slots; resolving it needs the `cISC3City` vtable read directly from SIMCITY.DLL. No catalogue slot
+was renamed on the strength of SIMGEOM alone.
+
+#### 31.9.3 The other caller of the rect writer, and the one that is NOT it
 
 - **`SIMUTIL.DLL+0x42C1`** = `FUN_100041ce`, 29 of the 30 observed calls, all during city load.
   It gets an occupant's bounding rect (`param_2->vt[0xd0](&local_34)`) and stamps it, but the
@@ -3592,7 +3664,7 @@ three on that basis and was wrong about the third. Only the runtime hook separat
   upscale. It independently corroborates the standing finding that the SC2 importer cannot emit
   22.
 
-#### 31.9.3 New harness capability: `-modlog MODULE:VA[,VA...]`
+#### 31.9.4 New harness capability: `-modlog MODULE:VA[,VA...]`
 
 The `-gzlog`/`-fnlog` tables are bound to one module at DllMain, so they cannot reach the sim DLLs
 (SIMRCI, SIMGEOM, SIMBABLD) which load much later. `-modlog` registers the requests, the watcher
@@ -3618,7 +3690,7 @@ per-variant thunks. Its `this` holds the zone layer at `+0x24` and three more su
 `+0x28` (`vt+0x15c`), `+0x2c` (`vt+0xb0`) and `+0x30` (`vt+0x14`), and it switches on a mode value
 of 1/2/3. Naming it is the natural next step and is left to the U-063 session.
 
-#### 31.9.4 The special zone bytes 14 / 15 / 17 all take the ORDINARY zone path
+#### 31.9.5 The special zone bytes 14 / 15 / 17 all take the ORDINARY zone path
 
 Airport (14), Seaport (15) and Landfill (17) look special in the raster and in the query tool, but
 mechanically they are plain zone tools. Each was selected by command and dragged, with
@@ -3635,7 +3707,7 @@ city was saved and the raster diffed.
 **All four dispatch from the same site**, `SIMRCI.DLL+0xB8D2` - inside `FUN_1000b7d0`, the
 tool-apply the U-063 chain names - and none of them touches the rect writer `vt+0x38`. So the
 per-cell `vt+0x3c` path is the whole story for player zoning, and the rect writer is used only by
-the two callers in §31.9.1/.2 (the building stamp of 22, and the SIMUTIL dezone-on-insert).
+the two callers in §31.9.1/.3 (the building stamp of 22, and the SIMUTIL dezone-on-insert).
 
 The chain is now observed end to end for **four** of the 13 zone bytes (6, 14, 15, 17), and the
 tool-apply's own caller is `SIMRCI.DLL+0x3F8D1`.
@@ -3655,7 +3727,7 @@ are all untested. Nothing was read to decide it, and the earlier guess is withdr
 Byproduct: the terrain tool **Place Water** (`0x10002002`) works from the harness (funds -$350, a
 visible water body) and, as expected, changes **no** zone-raster byte.
 
-#### 31.9.5 ALL 13 ZONE BYTES OBSERVED - the write path is closed at C4
+#### 31.9.6 ALL 13 ZONE BYTES OBSERVED - the write path is closed at C4
 
 Every zone tool was selected by command and dragged, with `SIMRCI 0x1003591f` (PlaceZone) and
 `0x10032afa` (the rect writer) hooked via `-modlog`; the city was then saved and the raster
@@ -3685,7 +3757,7 @@ end to end**, and every one of them behaves identically.
 - `PlaceZone`'s first argument is the zone byte itself, matching the CLSID baked into the tool at
   construction (`0x1000bb73` factory -> `0x1000ba68` ctor `this+0x124`).
 - **The rect writer `vt+0x38` is never called by any of them.** Player zoning is exclusively the
-  per-cell `vt+0x3c` path. The rect writer has exactly two observed callers, both in §31.9.1/.2:
+  per-cell `vt+0x3c` path. The rect writer has exactly two observed callers, both in §31.9.1/.3:
   the building stamp of 22 (SIMGEOM) and the SIMUTIL dezone-on-insert of 0.
 - 22 (`kPloppedBuilding`) is therefore the **only** raster value with a non-`PlaceZone` producer,
   which is consistent with it having no tool, no `MenuItem.INI` command and no factory arm.
@@ -3696,10 +3768,10 @@ and then dezoning a sub-rect of it in the same run: `PlaceZone(0x0B)` then `Plac
 the file showing the un-dezoned remainder at 11 and the dezoned part back at 0.
 
 **DeZone is refused on developed land**: a dezone drag over built-up Berlin produced no
-`PlaceZone` call at all, the same `CanZone` (+0x84) gate as §31.9.4. `[UNCERTAIN]` whether the
+`PlaceZone` call at all, the same `CanZone` (+0x84) gate as §31.9.5. `[UNCERTAIN]` whether the
 blocker is the buildings, the zone type or something else - not investigated.
 
-#### 31.9.6 `CanZone` decoded: what actually rejects a placement, and where the price comes from
+#### 31.9.7 `CanZone` decoded: what actually rejects a placement, and where the price comes from
 
 `CanZone` is the zone layer's **`vt+0x84` = SIMRCI `FUN_1003559f`** (896 B), sitting directly above
 `PlaceZone` at `vt+0x88`. Slot numbers verified with `re/scripts/read_vtables.py`: `PlaceZone`
@@ -3751,7 +3823,7 @@ price (`budget` = `this+0x34 vt+0x15c`):
 That is the complete answer to "what does `+0x84` reject": no zonable tile, or not affordable.
 
 **Which branch caused THIS session's refusals is not isolated.** The seaport and dezone failures
-(§31.9.4/.5) each produced a `FUN_1000b7d0` call with no following `PlaceZone`, so `CanZone`
+(§31.9.5/.6) each produced a `FUN_1000b7d0` call with no following `PlaceZone`, so `CanZone`
 returned false, but the hook logs entry arguments only and cannot see the return or the written
 `outCost`. Affordability is implausible on its face - Berlin held $117,006 and the successful
 seaport covered 8 tiles - which points at tests 2/5/6 (occupant present and not demolishable),
@@ -3772,3 +3844,93 @@ call, which was not built.
 - `version.dll` standalone loader flakiness (§30.3 item 2) - unchanged.
 - Intermittent early clean-exit (§30.3 item 3) - unchanged.
 - Intro movie half-width, U-025 (§30.3 item 4) - unchanged.
+
+## 32. The `-windowed` flag warrant was FALSE - the game writes it itself (2026-08-19)
+
+Handed off from the zone-raster session, verified here. The long-standing claim that the
+windowed-mode byte `GZGraphicD.dll+0x6CDAC` (`DAT_1006cdac`) has "exactly one reference in the
+whole DLL, zero writers" is **falsified**, and the runtime consequence is bigger than the
+bookkeeping error: the game sets that byte to 1 by itself during startup, so the probe's poke of
+it is **redundant**.
+
+### 32.1 The static facts, verified in the image bytes
+
+`DAT_1006cdac` has exactly **two** references in `GZGraphicD.dll`, and one is a **write**:
+
+```
+0x10010EF6  A2 AC CD 06 10        mov  byte ptr [0x1006CDAC], al     <-- WRITER
+0x10011537  80 3D AC CD 06 10 00  cmp  byte ptr [0x1006CDAC], 0      <-- the known read
+```
+
+Independently confirmed by scanning the whole image for the literal address `0x1006CDAC`: two
+hits, at `0x10010EF7` (the imm32 of the `A2` store) and `0x10011539` (the imm32 of the `80 3D`
+compare), and nothing else. The write sits in a 12-byte `__stdcall` setter:
+
+```
+0x10010EF2  8A 44 24 04   mov al,[esp+4] / A2 AC CD 06 10  mov [0x1006CDAC],al / C2 04 00  ret 4
+```
+
+and that setter is **dispatchable** - `0x10010EF2` occupies two aligned `.rdata` vtable slots,
+`0x1001EDC4` and `0x1001EFA0`. So it is a normal `Set<flag>(bool)` reachable through a vtable,
+which is exactly why an xref/grep over the decompilation export missed it (the same U-057/U-063
+lesson: vtable dispatch is invisible to a static caller search). The original "zero writers" came
+from grepping the export, which does not carry the write.
+
+### 32.2 The runtime measurement, and why the first attempt was worthless
+
+Hooking the setter `0x10010EF2` and the Init reader `0x100114B8` with `-modlog`, run into a city
+windowed:
+
+- **First attempt: the detour did not install.** The log said
+  `UNDECODABLE prologue 8A 44 24 04 A2 - skipped`. The probe's length-disassembler was missing the
+  `A0..A3` opcode class (`mov AL/eAX <-> moffs32`, 5 bytes, absolute operand). A "0 hits" reading
+  from that run would have been a pure U-033 artifact - absent, not zero. **Fixed** by adding the
+  class; those instructions are position-independent so they copy into the trampoline verbatim.
+- **Second attempt: still 0 hits, but for a different reason.** The `-modlog` install ran on the
+  100 ms watcher tick, and GZGraphicD Init had already executed at ~t+33 ms. The hook was simply
+  too late. **Fixed** by installing `-modlog` detours at the module-ready point (where the
+  GZGraphicD patches already go in) instead of on the tick.
+- **Third attempt, valid:** setter **1 hit**, reader **1 hit**, ordering:
+
+  ```
+  t+22.0 ms  our patch writes 0x6CDAC = 1
+  t+40.8 ms  SC3U.exe+0x5D32 calls the setter with al=1
+  t+40.9 ms  FUN_100114b8 (Init) reads it -> windowed
+  ```
+
+The setter's `al` is the low byte of arg1: `a1=0x00562F01` -> `al=1`.
+
+### 32.3 The control run, and the conclusion
+
+**With no `-windowed` patch at all**, the game *still* calls the setter with `al=1` from the same
+`SC3U.exe+0x5D32` (`a1=0x005A4401`) at t+44 ms, and Init reads it 0.1 ms later. So the byte is 1
+at Init time in both configurations - **the game writes it itself.**
+
+Directly tested with a new `-nowinflag` switch (apply only the `0x117D6` nop, skip the `0x6CDAC`
+poke): **windowed mode works, full city load and render, reproduced twice.** A `wflag_check`
+heartbeat confirms the byte, left at 0 by us, reads **1** through the whole run - the game set it.
+
+**Consequence.** The operative half of `-windowed` is the `0x117D6` nop (which stops Init line 146
+re-forcing fullscreen on the `bpp != desktop` clause). The `0x6CDAC` poke is redundant on this
+build: it writes a value the game writes anyway, ~19 ms later. The patch was never *broken* - it
+works - but its stated warrant ("nothing writes this byte, so poking it is safe and necessary")
+was false on both counts. The honest statement is: **one writer exists and is called every
+startup with al=1; our poke duplicates its effect and could be dropped.**
+
+`[UNCERTAIN]` what `SC3U.exe+0x5D32`'s enclosing function decides the flag *from* - it is passed
+`al` from arg1, so some caller computes windowed-vs-fullscreen and this is just the store. Whether
+a configuration exists where it passes `al=0` after Init (which would matter for a build that
+relied on the poke) was not traced. The `wflag_check` monitor now catches any such late write for
+free on any run.
+
+### 32.4 New harness switches
+
+- `-modlog MODULE:VA[,VA...]` now installs at module-ready, not on the watcher tick, so a hook on
+  an early-Init function is not missed. It also logs `MODLOG[i]: will hook...` at parse time and
+  `MODLOG: <mod> loaded... -> hooking...` at install, so "did the detour install" is answerable
+  before trusting any hit count (U-033).
+- `-nowinflag`: apply the `0x117D6` nop but skip the `0x6CDAC` poke. Built to run the isolation
+  above; keep it as the reproducer.
+- The probe's length-disassembler now decodes `A0..A3`. Any earlier `-modlog`/`-fnlog` target
+  whose prologue began with one of those (a `mov al,[moffs32]` accessor) would have been silently
+  skipped before this fix.
