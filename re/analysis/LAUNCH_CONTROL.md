@@ -210,7 +210,7 @@ RVA map and survives changes to it.
 |---|---|---|---|
 | Graphics | `FUN_00470323` → `FUN_0047060d` | `0xC416025C` | `0x0073283C` |
 | Audio | `FUN_004703d3` → `FUN_0047070f` | `0x23CECBA0` | `0x106077D2` |
-| City/region | `FUN_0047048f` → `FUN_00470867` | `0x441E5070` | `0x0054B7D5` |
+| **Language/country (locale)** — NOT city/region, see §31.5 | `FUN_0047048f` → `FUN_00470867` | `0x441E5070` | `0x0054B7D5` |
 | Music/path | `FUN_00470463` → `FUN_00470811` | `0x2073215D` | `0xE0203660` |
 | Debug stream | `FUN_00405f1f` | `0xC07320D3` | `0xC51B11CB` |
 
@@ -3003,6 +3003,10 @@ instrumented).
 
 ## 29. Corrections + new harness flags + the -l city-load mechanism (2026-08-17)
 
+> ⚠️ **§29.3 IS FALSIFIED — see §31.5.** `-l` is `-language`, not load-city: service
+> `0x441E5070` is the locale manager and `FUN_004845fe()->vf+0x78(id)` is `SetLanguageId`.
+> Read §31 for the mechanism that actually loads a city.
+
 ### 29.1 fitclient: DPI-aware only, NO window resize (corrects §24)
 
 §24 said `-fitclient` recomputes the window's outer size to force an 800x600 client. That
@@ -3053,6 +3057,13 @@ loader-lock LoadLibrary should be reworked (defer to a thread, or merge the prob
 before the standalone is dependable.
 
 ## 30. Headless screenshots + the menu-click investigation (2026-08-18)
+
+> ⚠️ **§30.2 IS PARTLY RETRACTED and §30.3 item 1 IS CLOSED — see §31.** Headless clicking and
+> auto-load into a city now WORK. Retracted from §30.2: `FUN_1006df81` is `ReleaseCapture`, not
+> the command; there is no `+0xac` armed flag (armed = winmgr capture, taken by the *mousemove*
+> handler); `FUN_10020f9a` is not what blocked the injected click; and the menu tiles are
+> SC3U.exe classes, not SIMUI button classes. The "open-ended widget-tree RE" it deferred was
+> unnecessary — the engine exposes its event dispatch as public `cIGZWinMgr` vtable slots.
 
 Built so the game can be observed remotely, with no physical display and no un-occluding the
 window. All of this is probe/harness code in gitignored `re/harness/`; this section is the
@@ -3119,3 +3130,645 @@ RE. Deferred as beyond its value; hover + screenshots already give remote observ
 4. Intro movie half-width (U-025): the movie draws to the 32bpp windowed PRIMARY (can't be forced
    16bpp), so `-fix16` can't reach it; skip it with `-nointro`. A converting copy at the codec's
    `vt+0x74` is the deferred real fix.
+
+## 31. HEADLESS CLICK + AUTO-LOAD INTO A CITY - WORKING (2026-08-18)
+
+**The §30.3 item 1 blocker is closed.** The harness can now boot the game, open Load City,
+pick a city and land in a rendered, running city view - with **no Win32 input at all**: no
+`SendMessage`, no `SendInput`, no cursor, no window focus, no interactive session. One command:
+
+```powershell
+pwsh re/harness/capture.ps1 -Name city -GzSeq "0x712BF5BF@9;0x02DFDD6A@14" -AtSec 32
+```
+
+Verified visually: `Berlin, Pob: 794,278, $117,006, 2/9/2067`, full city view with toolbar,
+RCI indicator and minimap.
+
+### 31.1 The mechanism - drive the engine's OWN event API, not the message queue
+
+§30.2 tried to reach the UI through Win32 messages. The right entry point is one level in:
+`cIGZWinMgr` exposes the event dispatch as public vtable slots, so an injected probe can post
+GZ events directly.
+
+| what | where | note |
+|---|---|---|
+| `cIGZWinMgr*` | `SC3U.exe FUN_004703a7()` | no args, returns the cached pointer (`DAT_004FAC90`) |
+| `GetRootWin()` | winmgr `vt+0x0c` | |
+| `ProcessMouseEvent(GZEvent*)` | winmgr `vt+0x64` | resolves live to `GZWIND+0x20818` `[CONFIRMED]` |
+| `GetCaptureWin()` | winmgr `vt+0x70` | the pass/fail oracle for a click |
+| `cGZWin::DoEvent(GZEvent*)` | window `vt+0x0c` | what `FUN_1006e18b` dispatches |
+
+`GZEvent` is a plain 16-byte POD `{u32 type; i32 d1; i32 d2; u32 d3}`; `7` = Lbutton down,
+`9` = Lbutton up, `0xb` = move, `d3` bit `0x10` = left button held.
+
+**MSVC has no `__thiscall` in C**, only in C++. `__fastcall` with an explicit second (EDX)
+parameter is a byte-identical ABI: arg1 to ECX, arg2 to EDX, the rest on the stack, callee
+cleans. That is how the probe declares every engine method.
+
+### 31.2 Window tree walking - the child list is at `+0x34` `[CONFIRMED @0x1006c2f7]`
+
+`FUN_1006c2f7` (cGZWin base ctor) allocates 0xC bytes at `param_1[0xd]` (= `+0x34`) and
+self-links both pointers: it is an MSVC `std::list` sentinel. Node layout `+0x00 next`,
+`+0x04 prev`, `+0x08 child*`. Walk until `node == sentinel`.
+
+The same ctor does `FUN_10001b80(this, FUN_10085091())`, so **`win+0x04` is the window manager**
+on every window. Other proven fields: `+0x10` id, `+0x80..0x8c` rect L,T,R,B.
+
+**A window's rect is in its PARENT's coordinate space.** Absolute position is the running sum of
+the ancestors' rect origins. Verified end to end: root `0,0,1024,768` -> menu screen
+`192,144,832,624` -> Load City tile `333,156,606,374` => centre `(661,409)`, and a move event
+there took capture on exactly `id=0x712BF5BF`.
+
+### 31.3 The main-menu window ids (they ARE the menu switch codes)
+
+The tile ids match the `FUN_0043e9d8` menu-result switch one for one, so no pixel hunting is
+needed - address a tile by id and let the probe resolve its centre from the live tree.
+
+| id | tile | id | tile |
+|---|---|---|---|
+| `0x712BF5BE` | New City | `0x712BF5C4` | Exit |
+| `0x712BF5BF` | **Load City** | `0x712BF5C5` | Load Scenario |
+| `0x712BF5C0` | Load Terrain | `0x712BF5C1` | Load Starter Town |
+
+Load City dialog (frame `0x02DFDD67`, vtable `SIMUI+0xA4D64` - the §30.2 frame):
+city list `0x02DFDD6F`, **confirm checkmark `0x02DFDD6A`** (local `425,310,467,342`),
+title bar `0x42B7C351`, close box `0x42B7C353`.
+
+The menu tiles are **NOT** SIMUI button classes - their vtables `0x004D2A20` / `0x004D2824` are
+in **SC3U.exe**. Their button-up handler `FUN_00439f5a` is literally `mov al,1; ret 0xC`; the
+action is on **DOWN**, `FUN_00439ed1` (`ret 0xC`, `__thiscall(this,x,y,flags)`), which notifies
+the parent via `FUN_004423e4(this, parent, 3, 1|0x11, cmdid, 0)`. Its two gates, both measured
+open on the live Load City tile: `FUN_0043a029(this,1)` = `(this+0xd0 & 1)` (observed `0x14`,
+so 0 -> else-branch) and `vf+0xf0(0x10000000)` (observed 0).
+
+### 31.4 THE TRAP THAT COST THIS SESSION - a stale screenshot reads as "nothing happened"
+
+`-shot` arms the composite mirror for a fixed number of blits and only writes the BMP when that
+count drains. At the static main menu that took ~6 s, so `capture.ps1`'s "newest `shot_*.bmp`"
+was dumped at **t=6400 ms** while the click fired at **t=8990 ms**. Three consecutive
+experiments were scored as failures against an image taken 2.6 s BEFORE the action. The click
+had been working the whole time.
+
+**Rule: never score a UI action against a shot you have not proved is newer than the action.**
+The probe now re-arms a short (400-blit) shot immediately after every `-gz*` action, and the
+log prints `SHOT #n` with its timestamp so the ordering is checkable in one grep.
+
+### 31.5 Corrections and retractions to §29/§30
+
+1. **`-l` is `-language`, NOT load-city.** Service `0x441E5070` is the locale manager (name
+   tables in `GZSERVICED.DLL`: `"english-us"`, `"french"`, `"german"`, ...), `-c` is country,
+   and `FUN_004845fe()->vf+0x78(id)` is **SetLanguageId**. §29.3 is falsified in full, and the
+   `0x441E5070` = "City/region" row earlier in this file is wrong. The "empty catalog at boot"
+   explanation was never needed: the key simply was not a language name.
+2. **`FUN_1006df81` is not the command.** It is `mgr->ReleaseCapture(this)`; `FUN_1006df61` is
+   `SetCapture`. §30.2's "`FUN_1006df81` = the command" is retracted.
+3. **There is no `+0xac` armed flag** on the clickable classes. "Armed" is window-manager capture
+   ownership, and it is taken by the **mousemove** handler (`vt+0x1cc`), never by button-down.
+4. **`FUN_10020f9a` is not what broke the injected click.** It is a `PeekMessageA(PM_REMOVE)`
+   drain over 0x100-0x108 / 0x200-0x209 / 0x20a that discards `WM_LBUTTONDOWN` unconditionally,
+   discards `WM_LBUTTONUP` if a down was in the same batch, discards `WM_MOUSEMOVE`, re-posts the
+   survivors and returns the discarded count. It has no callers inside GZWinD and `GZWIND.DLL`
+   exports exactly **1** symbol, so it is a vtable method; and since it would eat real clicks
+   identically while the game is playable, it cannot be the per-frame input path. Shape fits an
+   any-input-to-abort/skip flush. `SendMessage` never went through it anyway.
+5. **DirectInput is not an input path.** `GZGraphicD.dll` imports `DirectInputCreateA`, but its
+   only xref `FUN_10012bd6` is a DirectX **version probe**: LoadLibrary DINPUT.DLL,
+   GetProcAddress, FreeLibrary, create-and-release, writing a capability level
+   (`0x100`/`0x200`/`0x300`/`0x500`/`0x600`/`0x601`). No device retained, no state polled.
+6. `GZWinD FUN_10020260` reads the **real cursor**: `GetCursorPos` -> service `0xe46397db` ->
+   `ScreenToClient`. `FUN_10025790` is a thin `GetAsyncKeyState(vk) >> 15`.
+
+### 31.6 New harness switches (probe/harness code stays gitignored)
+
+`-gzdump` walk the window tree; `-gzclick "x,y"` GZ-event click at client coords;
+`-gzclickid <id>` resolve the centre from the live tree then click; `-gzdirect <id>` call the
+window's `vt+0x1bc` directly (bypasses routing, for isolating handler vs routing);
+`-gzfire <cmdid>` call SIMUI `FUN_1004c209` on a SIMUI button (unused by the menu, which is
+exe-side); `-gzseq "<id|dump>@sec;..."` scripted multi-step driving; `-gzat <sec>`.
+`capture.ps1` exposes these as `-GzDump/-GzClick/-GzClickId/-GzDirect/-GzFire/-GzSeq/-GzAtSec`
+and now takes `-Share` (the Happy share folder was hardcoded to a dead session id).
+
+### 31.7 The IN-CITY UI tree, and driving gameplay (2026-08-18)
+
+With a city loaded the tree is **165 windows, 109 of them buttons carrying a command id**. Dump it
+with a sequence that loads first, then walks:
+
+```powershell
+pwsh re/harness/capture.ps1 -Name incity -GzSeq "0x712BF5BF@9;0x02DFDD6A@14;dump@28" -AtSec 34
+```
+
+**Two ways to drive, and which one applies is decided by the widget's rect.**
+
+1. **Visible widgets -> click by id.** Confirmed in-city: the startup tip dialog is frame
+   `0xC2FA5860` (`SIMUI+0xA4D64`) with `0xE2FA5BC2` = the confirm checkmark and `0xE2FBA4B4` =
+   "next tip". Clicking `0xE2FA5BC2` dismisses it and the city runs on (verified visually: the
+   dialog is gone, smoke plumes and traffic animate).
+2. **Hidden widgets -> fire the command.** The twelve build palettes are `SIMUI+0xA9CC8`
+   containers at `0,0,96,610` whose buttons all have rect **`0,0,0,0`** — a collapsed palette.
+   They cannot be reached by any coordinate, by real mouse or synthetic. But they are SIMUI
+   button classes, so `FUN_1004c209` takes them directly. **Verified:** `fire:0x10006602`
+   selected a tool and the `$1,000` cost readout appeared in the status bar. Nothing was placed —
+   selecting a tool does not apply it, that needs a separate map click.
+
+**Do NOT compute the command id from the window id — read it** from the live button's
+`vt+0x214`, which is what the dump prints. `cmdID = 0x10000000 | winID` looks like a rule and is
+not: it breaks on 20 of the 109 live buttons. Detail and counter-examples in §31.8.3.
+
+Button-class census in-city (the three clickable SIMUI classes of §31.3):
+`cls 0` (`SIMUI+0xA8F60`) x9, `cls 1` (`+0xA917C`) x54, `cls 2` (`+0xA9398`) x46 — the palettes
+are all cls 2.
+
+**`-gzseq` grammar is now three verbs**, each `@<sec>`:
+`<winid>` click it, `dump` walk the tree, `fire:<cmdid>` post the command. Example that boots,
+loads Berlin, dismisses the tip and selects a tool:
+
+```
+-GzSeq "0x712BF5BF@9;0x02DFDD6A@14;0xE2FA5BC2@27;fire:0x10006602@31"
+```
+
+**The dump now prints `MODULE+RVA`, not raw pointers.** Vtable addresses are ASLR-varying and
+were useless across runs; `MODULE+RVA` is stable and is what these docs cite. It also prints
+`abs_centre`, the root-space centre (the running sum of ancestor rect origins, §31.2), which is
+what `-gzclick` wants. Walk caps raised to 3000 windows / depth 16 / 500 siblings for the
+in-city tree, which overflowed the previous 400/12/200.
+
+**The command ids are now all named** — see `re/analysis/formats/MENUITEM_INI.md`. They did not
+need any RE: `MenuItem.INI`, a member of `Apps/Sys/SYS.PAK`, is the shipped command table and
+carries the developers' own English name for each id as a trailing comment:
+
+```
+0x10006602=1,0x225872FE,0x00000034,0x225872FE,0x00000034,COMM,0x22ff0548,0,0,0,END  ; Big Park
+```
+
+`re/tools/menuitem_parse.py` (built on the validated `syspak_parse.py`, `--selftest` green)
+extracts 90 command records. **All 89 distinct ids seen on live in-city buttons are in it —
+100%.** So the window walk plus this table gives a fully named, machine-readable command surface:
+zones (`Res/Com/Ind Low/Medium/High Density`), transport (`Roads`, `Lay Rail`, `Highway`,
+`Onramps`, `Bus Stop`, `Subway Station`), utilities (`Wires`, `Pipes`, `Power Plants`), civic
+(`Police Station`, `Hospital`, `School`, `Library`), parks (`Small Park`, `Big Park`, `Zoo`,
+`Marina`), views (`Budget`, `Ordinances`, `Map View`), file (`Save`, `Save As ...`, `Quit`,
+`Load Saved City`), and the disaster set (`Fire`, `Tornado`, `Earthquake`, `Riot`, `UFO`,
+`Toxic cloud`, `Whirlpool`, `Locusts`, `SpaceDebris`).
+
+**Independent corroboration of the whole chain:** `fire:0x10006602` was fired blind into a loaded
+city and produced a `$1,000` cost readout *before* the table was parsed; the table then named
+that id `Big Park`, which costs $1,000. Two unrelated routes agreeing on one id.
+
+83 records are `COMM` (dispatch a command) and 7 are `PMSG` (post a message) — a driver must not
+assume `COMM`. The `SC3MII` / `SC3MDESC` / `SC3MSET` / `SC3MBTNDEFS` resource types registered by
+`SIMUI FUN_10014db6` were NOT needed for this and remain unexamined.
+
+### 31.8 Driving the MAP: the harness can build (2026-08-18)
+
+Selecting a tool is not building. Building needs a second event stream aimed at the city view,
+which is `id=0x6104489A` (`SC3U.exe+0xD32D0`, `0,0,1024,768`) - a full-screen window present in
+both the menu and in-city trees. Two new `-gzseq` verbs aim there:
+
+| verb | form | what it is for |
+|---|---|---|
+| `at:` | `at:x,y@sec` | click at raw root coords - plops (parks, buildings) |
+| `drag:` | `drag:x1,y1,x2,y2@sec` | press, sweep, release - zoning rectangles and road/rail runs |
+
+A drag is `move-to-start -> down -> 6 interpolated moves with the button HELD (`d3 |= 0x10`) ->
+up`, one event per frame. **The intermediate moves are not decoration:** the tool tracks its
+current end-point from them, so a press/release with nothing between draws only the start tile.
+
+### 31.8.1 Verified end to end, with a numeric oracle
+
+The city funds readout is the check that beats "the screenshot looks different": the sim is
+PAUSED and the date never advances (`2/9/2067`), so nothing except a placement can move it.
+Baseline in every run below is Berlin at **$117,006**.
+
+| what | sequence | result |
+|---|---|---|
+| plop a park | `fire:0x10006601` then `at:300,200` | **-$105**, `$100` cost readout at the click point |
+| lay road | `fire:0x10004001` then `drag:180,120,330,120` | **-$50** |
+| zone residential | `fire:0x10003101` then `drag:280,170,360,215` | **-$30**, zoned rectangle visible in the open field |
+
+Full working example (boot -> load Berlin -> dismiss the tip -> select -> build -> screenshot):
+
+```powershell
+pwsh re/harness/capture.ps1 -Name build `
+  -GzSeq "0x712BF5BF;0x02DFDD6A;0xE2FA5BC2;fire:0x10003101;drag:280,170,360,215"
+```
+
+### 31.8.2 Two negatives worth keeping
+
+Both were real experiments that placed nothing, and both are about the TARGET, not the mechanism:
+
+- `drag:120,430,260,500` (zone) left funds **exactly unchanged** - that area is already built up,
+  so zoning it is a no-op. A zero-delta is the signature of "the ground refused", not "the events
+  did not arrive".
+- `drag:180,120,330,120` (road) charged $50 but tinted a large existing building **red** - the
+  game's cannot-build-here overlay, because the run crossed existing structures.
+
+So a driver must pick open ground, and should treat the funds delta as its success signal.
+**A screenshot alone cannot distinguish "placed nothing" from "placed something invisible at this
+zoom".**
+
+### 31.8.3 CORRECTION: `cmdID = 0x10000000 | winID` is a pattern, not a rule
+
+Stated as a rule in an earlier draft of §31.7 and **wrong**. Measured over the 109 live buttons:
+holds for **89**, breaks for **20**, in two ways - palette-owning buttons carry their FIRST
+CHILD's command (`0x00004002 -> 0x10004301`, `0x00006002 -> 0x10006201`,
+`0x00009003 -> 0x10009301`, `0x0000A005 -> 0x1000A101`, the three zone roots
+`0x00003001/2/3 -> 0x10003101/201/301`, ...), and the nine top-level menu buttons
+`0x00001003`..`0x00001009` have **`cmdID = 0`** and no SC3MII record at all (their caption comes
+from the SC3MDESC group name). The authority is the `[SC3MenuBtnDefs]` table, or simply the live
+button's `vt+0x214`. Never compute it.
+
+### 31.8.4 A cheaper naming route exists, and is not yet used
+
+Independently of `MenuItem.INI`, **every button carries its display text live**: `win+0x44` is a
+`cRZString` caption (also reachable as `vt+0x108` `GetCaption`, `FUN_1006dfc9`, literally
+`return this+0x44`) and `win+0xC0` is the tooltip/description. Both are filled at button init by
+`FUN_1004b5bf` from the SC3MII record, and `win+0xB0` is that `SC3MII*` with its command id at
+`+0x04`. `cRZString` is `{vtable, begin, end, cap, n}` and is **not NUL-terminated** - use
+`end - begin`. Reading those two fields would give LOCALIZED names (Spanish in this install)
+with zero calls and no INI parsing. Not implemented; `MenuItem.INI` already answered the question
+in English, which is the better annotation language.
+
+### 31.8.5 The scheduler WAITS FOR ITS TARGET, it does not wait on the clock
+
+Earlier sequences carried wall-clock step times (`@9`, `@14`, `@27`, ...). Those were guesses at
+how long a load takes, and guessing is the wrong mechanism in both directions: too short and the
+step fires before its target exists and **silently does nothing** (which is indistinguishable
+from a broken click - see §31.4 for how expensive that confusion already was), too long and every
+run burns seconds it did not need.
+
+Each step now blocks until **its own target is present in the live window tree**, polled from the
+game-thread hook at 50 ms:
+
+| step | ready when |
+|---|---|
+| `<winid>` | that window exists in the tree (and its centre is taken from the tree at that moment) |
+| `fire:<cmdid>` | a button carrying that command exists - which is *also* the natural "the city has finished loading" signal, since the build palettes only exist in-city |
+| `at:` / `drag:` / `dump` | no target to wait for: a 400 ms settle after the previous step |
+
+**`@N` changed meaning: it is now an optional TIMEOUT in seconds, not a start time.** If a target
+never appears the step is skipped with a loud log line instead of the run hanging or, worse,
+firing into nothing. Default timeout 90 s.
+
+Measured on the same build sequence, same machine:
+
+```
+-GzSeq "0x712BF5BF;0x02DFDD6A;0xE2FA5BC2;fire:0x10003101;drag:280,170,360,215"
+```
+
+| step | waited |
+|---|---|
+| 0 Load City tile | 1,031 ms (menu still coming up) |
+| 1 dialog confirm | **0 ms** |
+| 2 dismiss the tip | 3,281 ms (the city load) |
+| 3 select the zone tool | **0 ms** |
+| 4 the drag | 453 ms settle |
+
+Sequence complete at **t+10.0 s**; whole run **11.5 s wall clock, against 46 s** for the
+hardcoded-time version, with an identical result (-$30 and the zoned rectangle). The waits are
+now where the work actually is, and the same script is correct on a slower machine.
+
+`capture.ps1` follows the same principle: it polls for the probe's `### GZSEQ: COMPLETE` marker
+instead of sleeping, and `-AtSec` became a timeout (auto: 90 s with `-GzSeq`, else 10 s).
+
+**Two stale-artifact traps had to be closed to make that safe**, both the same shape as §31.4:
+
+1. The log is reused across runs, so a leftover `GZSEQ: COMPLETE` from the *previous* run would
+   satisfy the wait instantly and capture the wrong frame. `capture.ps1` now **deletes the log**
+   before launching rather than trusting its contents.
+2. Waiting for the shot *file* to appear races the writer and yields a truncated BMP (observed:
+   `Image.FromFile` threw "invalid input"). The probe emits its `### SHOT #n` log line only
+   **after** `CloseHandle`, so that line - not the file timestamp - is the completion signal.
+
+### 31.9 Runtime verification of the zone write path (handoff from the U-063 session)
+
+Two runtime checks the static session could not run. **Both scored on the SAVED FILE, never on
+pixels** - deliberately, to sidestep U-062 entirely. Screenshots were used only to read the funds
+counter, and `capture.ps1` now waits for `GZSEQ: COMPLETE` and then a `SHOT #n` line after it, so
+every image used is provably post-action by construction.
+
+**Install integrity: `Cities\` was SHA-256 baselined (59 files) before the first run and verified
+byte-identical after every single run.** The method: back up the target `.sc3`, let the game's own
+Save overwrite it, copy the result to scratch, restore the backup and its original mtime, then
+re-hash all 59. No harness artifact was left in the game install at any point.
+
+#### Cross-check that fell out for free: the 13 zone tools, confirmed from a second source
+
+Every one of the 13 zone-tool CLSIDs in the U-063 factory table is the `guid` field of a
+`MenuItem.INI` command record (§31.7), **13 of 13**, and the zone byte lines up with the command's
+own name in every case:
+
+| cmd | name | guid (= factory CLSID) | zone byte |
+|---|---|---|---|
+| `0x10003007` | DeZone | `0x82e88c9c` | 0 |
+| `0x10003101/2/3` | Res Low / Medium / High | `0x42e88586` / `0x02e88915` / `0xa2e8893b` | 1 / 2 / 3 |
+| `0x10003201/2/3` | Com Low / Medium / High | `0x02e88949` / `0xa2e8895a` / `0x02e88968` | 5 / 6 / 7 |
+| `0x10003301/2/3` | Ind Low / Medium / High | `0xc2e8898f` / `0xa2e8899d` / `0x02e889aa` | 9 / 10 / 11 |
+| `0x10003006` / `0x10003005` / `0x10003004` | Airport / Seaport / Landfill | `0xe2e889d4` / `0x02e889c4` / `0xc2e889b6` | 14 / 15 / 17 |
+
+Note zone byte **6 is Com MEDIUM Density**, not "Commercial" generically.
+
+#### TEST 1 - the zone chain is now C4. PREDICTION CONFIRMED.
+
+Berlin (256x256), baseline histogram `{0:40981, 1:64, 2:5246, 3:3672, 5:1538, 6:2392, 7:1381,
+9:2210, 10:1243, 11:550, 14:453, 15:166, 17:719, 22:4921}`.
+
+Drag-zoned with **Com Medium Density (`0x10003202`, zone byte 6)**, saved, reloaded with
+`re/tools/city_write.City`:
+
+| run | changed tiles | transition | bbox | other values |
+|---|---|---|---|---|
+| small drag | 2 | all `0 -> 6` | 2x1 | none |
+| larger drag | **10** | **all `0 -> 6`** | 5x2 | **none, and 22 unchanged at 4921** |
+
+Histogram delta was exactly `{0: -10, 6: +10}`. Every legally-zoned tile reads exactly the tool's
+byte and nothing else in the raster moved. **The chain `0x1000bb73 -> 0x1000ba68 -> 0x1000b7d0 ->
+0x1003591f -> 0x10032a96` is now C4 for zone byte 6, observed end to end.**
+
+#### TEST 2 - **OUTCOME A**, and it is a RECT FILL.
+
+Plopping a **Hospital (`0x10006401`)** into open ground writes **22 over its whole footprint**:
+
+```
+deltas: {0: -9, 22: +9}          22: 4921 -> 4930
+9 changed tiles, all 0 -> 22
+bbox x 99..101, y 180..182  =  3x3 CONTIGUOUS
+cost readout $500, funds -$515
+```
+
+Reproduced twice: once inside a three-plop run and once as a **single-plop run with no other
+action**, both giving the identical bbox and delta. The write is a **contiguous 3x3 rect, not a
+point write**, which is exactly the shape of the rect writer `0x10032afa` (vt+0x38) and matches
+the iOS sibling's `goBuildingLayer::PlaceBuilding` stamping 22 over a footprint.
+
+**So the retail x86 producer of 22 EXISTS and is reached from a call site not yet located.** The
+problem is now "producer exists, call site unlocated", not "no producer in the binary", and the
+rect writer is live - the 49 candidate call sites are worth hunting.
+
+#### Negative controls, and why they matter
+
+Two plops placed nothing, and both are recorded because they are what makes the positive result
+trustworthy:
+
+- **Police Station (`0x10006201`) at (300,200)**: funds unchanged at $117,006, zero raster change.
+- **Big Park (`0x10006602`) at (300,200)**: funds unchanged, zero raster change.
+
+The first TEST 2 attempt was exactly this case and I nearly reported it as OUTCOME B. **It was not
+evidence of anything** - the building was never placed. Zero-delta and zero-funds-change co-occur
+perfectly across all runs, so the funds counter is the gate: *do not read a raster delta from a
+run whose funds did not move.* A re-save alone changes the file (`test1b` shrank by 316 bytes
+while adding 10 tiles), so file size and hash are useless as placement evidence.
+
+**Not established:** why those two plops were refused at a coordinate where a Small Park succeeded
+earlier. Footprint fit and terrain slope are candidates; nothing was read to decide it.
+
+#### 31.9.1 THE 22 PRODUCER IS FOUND: `SIMGEOM.DLL` `FUN_10007760+0x5BB`
+
+U-057's last open item ("no shipped x86 code writes 22") is **closed, positively**. The producer
+was located by hooking the rect writer at runtime and reading back its caller, then confirming in
+the instruction bytes.
+
+**The call site.** `SIMGEOM.DLL 0x10007D1B`, inside `FUN_10007760`
+(`__thiscall(this, int *param_1, int *param_2)`, 1531 B, starts `0x10007760`):
+
+```
+10007CF3  8D 55 23        lea  edx,[ebp+0x23]        ; &value  (pushed first => last arg)
+10007CF6  8B 4B 24        mov  ecx,[ebx+0x24]        ; this+0x24 -> holds the zone layer
+10007CF9  52              push edx
+10007CFA  8B 57 10 C1 FA 08 52   push param_1[4] >> 8
+10007D01  8B 57 0C C1 FA 08 52   push param_1[3] >> 8
+10007D08  8B 57 04 C1 FA 08 52   push param_1[1] >> 8
+10007D11  C6 45 23 16     mov  byte ptr [ebp+0x23],0x16    ; <<<< THE LITERAL 22
+10007D15  8B 01           mov  eax,[ecx]
+10007D17  C1 FA 08 52            push param_1[0] >> 8
+10007D1B  FF 50 38        call dword ptr [eax+0x38]        ; <<<< SIMRCI FUN_10032afa, the rect writer
+10007D1E                  (return address; this is what the runtime hook reported)
+```
+
+So the call is
+`zoneLayer->vt[0x38](param_1[0]>>8, param_1[1]>>8, param_1[3]>>8, param_1[4]>>8, &(byte)0x16)`.
+`param_1` is a rect in the **8.8 fixed-point city-coordinate convention** (the `sar edx,8`).
+
+**Three independent confirmations that this is the producer:**
+
+1. **Runtime.** With `SIMRCI+0x32afa` hooked (`-modlog`), plopping a Hospital produced 30 rect
+   writes in the whole run. 29 came from `SIMUTIL.DLL+0x42C1`, all during city LOAD. Exactly
+   **one** came from `SIMGEOM.DLL+0x7D1E`, at t+10,971 ms - the plop click was t+10,464 ms.
+2. **The rect matches the file.** That single call passed `a1=0x49, a2=0x63, a3=0x4B, a4=0x65`
+   = rows 73..75, cols 99..101. The saved city showed the 9 new 22s at x 99..101, y 180..182.
+   `255-75 = 180` and `255-73 = 182`: the same 3x3, under the known row-reversal of the zone
+   plane. The measured write and the measured file agree tile for tile.
+3. **The bytes.** `mov byte ptr [ebp+0x23],0x16` sits 10 bytes before the call, and `[ebp+0x23]`
+   is the address `lea`'d as the writer's 5th argument. The literal is there in the shipped DLL.
+
+**Why five sweeps missed it, and it is not anyone's fault.** Ghidra renders this call with **zero
+arguments**:
+
+```c
+(**(code **)(**(int **)((int)this + 0x24) + 0x38))();      /* line 245 of FUN_10007760 */
+```
+
+The surrounding decompilation is full of `in_stack_0000001c` / `puStack00000014` - the stack model
+is lost, so neither the arguments nor the `0x16` appear in the C at all. This is exactly the trap
+`re/scripts/find_vslot_calls.py` documents in its own docstring ("an arity-filtered sweep is a
+LOWER BOUND, never an exhaustive negative"). An `0x38:5` sweep returned 49 hits and **could not**
+contain this one.
+
+**A byte sweep alone would also have failed.** Searching for `mov byte [ebp+d8],0x16` near a
+`call [reg+0x38]` gives 3 hits across all modules, and 2 of the 3 are false positives: in
+`SIMBABLD FUN_1202e2fa` and `SIMUI FUN_1004a9ca` the `0x16` is the **MSVC SEH try-level**
+(`local_8 = 0xffffffff` at entry, then `local_8._0_1_ = 1,2,...,0x18`). I initially dismissed all
+three on that basis and was wrong about the third. Only the runtime hook separated them.
+
+#### 31.9.2 The other caller of the rect writer, and the one that is NOT it
+
+- **`SIMUTIL.DLL+0x42C1`** = `FUN_100041ce`, 29 of the 30 observed calls, all during city load.
+  It gets an occupant's bounding rect (`param_2->vt[0xd0](&local_34)`) and stamps it, but the
+  value is forced to **zero** first: `param_2 = (int *)((uint)param_2 & 0xffffff);` then
+  `&param_2 + 3`. This is the "networks dezone on occupant insert" path the iOS sibling shows,
+  not a 22 producer.
+- **`SIMRCI FUN_1001cd8f`** matched the arity-5 filter and is the **SC2 importer**: it reads a
+  source grid via `piVar2->vt[0x18](0x100, ...)` and writes **2x2 blocks**
+  (`iVar1*2, local_c, iVar1*2+1, local_c+1`) with a `*1000/2500` value rescale - the 128->256
+  upscale. It independently corroborates the standing finding that the SC2 importer cannot emit
+  22.
+
+#### 31.9.3 New harness capability: `-modlog MODULE:VA[,VA...]`
+
+The `-gzlog`/`-fnlog` tables are bound to one module at DllMain, so they cannot reach the sim DLLs
+(SIMRCI, SIMGEOM, SIMBABLD) which load much later. `-modlog` registers the requests, the watcher
+polls for the module, and installs the existing fnlog trampoline on arrival.
+
+Each `-modlog` hook logs **its caller**: in the fnlog stub frame (`pushad` 32 + `pushfd` 4), the
+entry `esp` sits at `f[9]`, which holds the return address, and `gz_modstr` resolves it to
+`MODULE+RVA`. It also prints `ecx` and the first five stack args. That turns "who dispatches into
+this slot" from an unbounded static sweep into one observation:
+
+```powershell
+$sw = '-nocom -windowed -origin -fix16 -fitclient -nointro -quiet -modlog SIMRCI.DLL:0x10032afa'
+& re/harness/capture.ps1 -Name trace -Switches $sw -GzSeq '...;fire:0x10006401;at:360,150;wait:3000'
+```
+
+Note `pwsh -File` mis-parses a parameter value that begins with `-`; invoke `capture.ps1` with `&`
+in the current session instead.
+
+**Still open:** what `FUN_10007760` is. It is reached via `FUN_10006ba6` / `FUN_10006df6`, each
+fronted by a family of small wrappers (`0x10006a65`, `0x10006a82`, `0x10006aa0`, `0x10006abe`,
+`0x10006b02`, `0x10006b21`, `0x10006b40`, `0x10006b5f`, `0x10006adc`, `0x10006b7e`) that look like
+per-variant thunks. Its `this` holds the zone layer at `+0x24` and three more subsystems at
+`+0x28` (`vt+0x15c`), `+0x2c` (`vt+0xb0`) and `+0x30` (`vt+0x14`), and it switches on a mode value
+of 1/2/3. Naming it is the natural next step and is left to the U-063 session.
+
+#### 31.9.4 The special zone bytes 14 / 15 / 17 all take the ORDINARY zone path
+
+Airport (14), Seaport (15) and Landfill (17) look special in the raster and in the query tool, but
+mechanically they are plain zone tools. Each was selected by command and dragged, with
+`SIMRCI 0x1003591f` (PlaceZone) and `0x10032afa` (the rect writer) hooked via `-modlog`, then the
+city was saved and the raster diffed.
+
+| tool | command | `PlaceZone` arg 1 | raster result | rect writer |
+|---|---|---|---|---|
+| Landfill | `0x10003004` | **`0x11` = 17** | 2 tiles, all `0 -> 17` | not called |
+| Airport | `0x10003006` | **`0x0E` = 14** | 3 tiles, all `0 -> 14` | not called |
+| Seaport | `0x10003005` | **`0x0F` = 15** | 8 tiles, all `0 -> 15` | not called |
+| Com Medium (§31.9) | `0x10003202` | `0x06` = 6 | 10 tiles, all `0 -> 6` | not called |
+
+**All four dispatch from the same site**, `SIMRCI.DLL+0xB8D2` - inside `FUN_1000b7d0`, the
+tool-apply the U-063 chain names - and none of them touches the rect writer `vt+0x38`. So the
+per-cell `vt+0x3c` path is the whole story for player zoning, and the rect writer is used only by
+the two callers in §31.9.1/.2 (the building stamp of 22, and the SIMUTIL dezone-on-insert).
+
+The chain is now observed end to end for **four** of the 13 zone bytes (6, 14, 15, 17), and the
+tool-apply's own caller is `SIMRCI.DLL+0x3F8D1`.
+
+**A refusal happens before `PlaceZone`, not inside it.** Two seaport drags at other coordinates
+produced **no `PlaceZone` call at all** and zero raster change, while `FUN_1000b7d0` still ran -
+so the tool fired and the `CanZone` gate (layer `+0x84`) rejected the site. `PlaceZone` is never
+reached on a refused placement, which makes "was `0x1003591f` called?" a clean yes/no test for
+site validity, independent of the funds counter.
+
+**A caution about my own first two seaport attempts.** I concluded "seaports need water adjacency"
+after two failures, then the *same* drag rectangle succeeded in a later run with no water nearby.
+The failures were location-specific, not a property of the tool. `[UNCERTAIN]` what actually
+distinguishes the accepted site from the rejected ones - slope, existing occupancy and adjacency
+are all untested. Nothing was read to decide it, and the earlier guess is withdrawn.
+
+Byproduct: the terrain tool **Place Water** (`0x10002002`) works from the harness (funds -$350, a
+visible water body) and, as expected, changes **no** zone-raster byte.
+
+#### 31.9.5 ALL 13 ZONE BYTES OBSERVED - the write path is closed at C4
+
+Every zone tool was selected by command and dragged, with `SIMRCI 0x1003591f` (PlaceZone) and
+`0x10032afa` (the rect writer) hooked via `-modlog`; the city was then saved and the raster
+diffed against pristine Berlin. **All 13 zone types in the U-063 factory table are now observed
+end to end**, and every one of them behaves identically.
+
+| zone byte | tool | command | `PlaceZone` arg 1 | raster confirmation |
+|---|---|---|---|---|
+| 0 | DeZone | `0x10003007` | `0x00000000` | reverted a freshly-zoned patch back to 0 |
+| 1 | Res Low | `0x10003101` | `0x00000001` | 2 tiles `0 -> 1` |
+| 2 | Res Medium | `0x10003102` | `0x00000002` | 2 tiles `0 -> 2` |
+| 3 | Res High | `0x10003103` | `0x00000003` | 2 tiles `0 -> 3` |
+| 5 | Com Low | `0x10003201` | `0x00000005` | 2 tiles `0 -> 5` |
+| 6 | Com Medium | `0x10003202` | `0x00000006` | 10 tiles `0 -> 6` (§31.9) |
+| 7 | Com High | `0x10003203` | `0x00000007` | 2 tiles `0 -> 7` |
+| 9 | Ind Low | `0x10003301` | `0x00000009` | 2 tiles `0 -> 9` |
+| 10 | Ind Medium | `0x10003302` | `0x0000000A` | 2 tiles `0 -> 10` |
+| 11 | Ind High | `0x10003303` | `0x0000000B` | 3 tiles `0 -> 11` |
+| 14 | Airport | `0x10003006` | `0x0000000E` | 3 tiles `0 -> 14` |
+| 15 | Seaport | `0x10003005` | `0x0000000F` | 8 tiles `0 -> 15` |
+| 17 | Landfill | `0x10003004` | `0x00000011` | 2 tiles `0 -> 17` |
+
+**Uniform findings across all 13:**
+
+- Every call dispatches from **`SIMRCI.DLL+0xB8D2`**, inside `FUN_1000b7d0` (the tool-apply), whose
+  own caller is `SIMRCI.DLL+0x3F8D1`.
+- `PlaceZone`'s first argument is the zone byte itself, matching the CLSID baked into the tool at
+  construction (`0x1000bb73` factory -> `0x1000ba68` ctor `this+0x124`).
+- **The rect writer `vt+0x38` is never called by any of them.** Player zoning is exclusively the
+  per-cell `vt+0x3c` path. The rect writer has exactly two observed callers, both in §31.9.1/.2:
+  the building stamp of 22 (SIMGEOM) and the SIMUTIL dezone-on-insert of 0.
+- 22 (`kPloppedBuilding`) is therefore the **only** raster value with a non-`PlaceZone` producer,
+  which is consistent with it having no tool, no `MenuItem.INI` command and no factory arm.
+
+**Method note on byte 0.** A `-> 0` transition cannot be shown against pristine Berlin by dezoning
+virgin land, because those tiles are already 0. It was shown instead by zoning a patch Ind High
+and then dezoning a sub-rect of it in the same run: `PlaceZone(0x0B)` then `PlaceZone(0x00)`, with
+the file showing the un-dezoned remainder at 11 and the dezoned part back at 0.
+
+**DeZone is refused on developed land**: a dezone drag over built-up Berlin produced no
+`PlaceZone` call at all, the same `CanZone` (+0x84) gate as §31.9.4. `[UNCERTAIN]` whether the
+blocker is the buildings, the zone type or something else - not investigated.
+
+#### 31.9.6 `CanZone` decoded: what actually rejects a placement, and where the price comes from
+
+`CanZone` is the zone layer's **`vt+0x84` = SIMRCI `FUN_1003559f`** (896 B), sitting directly above
+`PlaceZone` at `vt+0x88`. Slot numbers verified with `re/scripts/read_vtables.py`: `PlaceZone`
+`0x1003591f` lives at `.rdata 0x1004d268`, and `--starts` proves the vtable begins at `0x1004d1e0`
+(loaded as an immediate from constructors `0x100311bf` / `0x10031376`), so
+`0x1004d268 - 0x1004d1e0 = 0x88` and `CanZone` is the dword at `0x1004d264` = `0x1003559f`.
+
+**Signature:** `bool __thiscall CanZone(uint zoneType, cSC3Rect *area, uint *outCost)`.
+It is not just a predicate - **it prices the operation and returns the total in `outCost`.**
+
+**Per-tile rejection, in evaluation order:**
+
+| # | test | effect |
+|---|---|---|
+| 1 | `(this-0x10)->vt[0x34](x,z,&cur)`; `cur == zoneType` | tile **skipped** - not counted, not charged. Re-zoning to the same type is a no-op, not a failure |
+| 2 | `occupantMgr->vt[0x7c](x,z,&occ)` finds an occupant, then `occ->vt[0x74]()` is false | tile **rejected** |
+| 3 | occupant flags via `occ->vt[0x3c](f)`: `0x400000` **and** `0x800` both set | tile allowed, and a **demolition surcharge** is added (`local_20 += local_28`) |
+| 4 | else `0x400` set | tile allowed, no surcharge |
+| 5 | else | tile **rejected** |
+| 6 | `layer2->vt[0x54](x,z)` returns true (`layer2` = `this+0x34 vt+0x13c`) | tile **rejected** |
+| 7 | **1x1 placements only:** the four corner altitudes at (x,z), (x+1,z), (x+1,z+1), (x,z+1) via `vt[0x4c]` must be **ALL EQUAL** | otherwise **rejected** |
+
+**Test 7 is the notable one: the flatness requirement is applied ONLY to a single-tile placement.**
+The multi-tile branch (`else`, the row/column loop) never performs the corner-altitude comparison
+at all. So a 1x1 zone demands level ground and a dragged rectangle does not. `[UNCERTAIN]` whether
+slope is enforced elsewhere for rectangles - nothing was read to decide it.
+
+**Pricing.** `zoneType` maps to a price CATEGORY, then `budget->vt[0x58](category)` gives the unit
+price (`budget` = `this+0x34 vt+0x15c`):
+
+| category | zone types |
+|---|---|
+| 0 | 1, 5, 9 (all LOW density) |
+| 1 | 2, 6, 10 (all MEDIUM) |
+| 2 | 3, 7, 11 (all HIGH) |
+| 3 | 17 Landfill |
+| 4 | 14 Airport |
+| 5 | 15 Seaport |
+| 6 | 0 DeZone |
+| - | anything else -> unit price 0 |
+
+`*outCost = unitPrice * zonableTileCount + demolitionSurcharge`.
+
+**Whole-call rejection** (the `bool` return) is then just two conditions:
+
+1. `zonableTileCount == 0` - every tile in the rect was skipped or rejected, **or**
+2. `cost != 0` and `funds < cost`, where funds is `budget->vt[0x10]()` returned as a **longlong**.
+
+That is the complete answer to "what does `+0x84` reject": no zonable tile, or not affordable.
+
+**Which branch caused THIS session's refusals is not isolated.** The seaport and dezone failures
+(§31.9.4/.5) each produced a `FUN_1000b7d0` call with no following `PlaceZone`, so `CanZone`
+returned false, but the hook logs entry arguments only and cannot see the return or the written
+`outCost`. Affordability is implausible on its face - Berlin held $117,006 and the successful
+seaport covered 8 tiles - which points at tests 2/5/6 (occupant present and not demolishable),
+consistent with the red cannot-build overlay observed over existing buildings. **That is reasoning,
+not measurement**; isolating it needs a hook that reads `outCost` and the return value after the
+call, which was not built.
+
+### 31.10 Still open
+
+- **Route alpha, not yet built:** `SIMINIT.DLL+0x8bf8` is
+  `__thiscall bool(cIGZString* path, cISC3NewCityInfo*)` (`ret 8`, bool in **AL only**) - a
+  direct path->load that skips the picker entirely. `cRZString` ctor-from-`char*` is
+  `SIMINIT+0x1284` (`__thiscall`, `ret 4`, object 0x14 bytes, vtable `SIMINIT+0x2F230`), dtor
+  `SIMINIT+0x21757`. The only virtuals the loader calls on the string are `vt+0x1c` (length) and
+  `vt+0x18` (data). Must run on the game thread; fails **modal** if the sim manager
+  (`app_iface+0x18`) is NULL, so pre-check it. Now redundant for "get into a city" but still the
+  cheapest way to load an ARBITRARY path.
+- `version.dll` standalone loader flakiness (§30.3 item 2) - unchanged.
+- Intermittent early clean-exit (§30.3 item 3) - unchanged.
+- Intro movie half-width, U-025 (§30.3 item 4) - unchanged.
