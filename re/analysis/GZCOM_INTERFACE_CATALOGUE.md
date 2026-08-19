@@ -2991,3 +2991,92 @@ class token (`sc3_waterlayer_*`, `sc3_powerlayer_*`) like every other walked cla
 while the pre-existing `sc3_water_*` and `sc3_power_*` rows cover module internals that are not
 vtable slots. This is the same deliberate split as `sc3_dirtbag_*` versus `sc3_dirt_*` recorded in
 §26, not an inconsistency to be "fixed".
+
+---
+
+## 31. The two headerless layers' QueryInterface decoded, and two new interface ids
+
+§30c walked the water and power layers' inherited `cISC3CityLayer` slots but left their own
+interfaces `[UNMAPPED]` under U-043. Reading the two `QueryInterface` implementations does not
+produce those method names -- no header can -- but it does pin each class's **inheritance topology**
+and hand over each layer's own interface id, which the SDK never carried.
+
+### 31a. The water layer is single inheritance
+
+`cSC3WaterLayer::QueryInterface` `0x1000c82b` (59 bytes) `[CONFIRMED]` accepts five ids, **all at
+offset 0**, and fails everything else with no delegation:
+
+```c
+if (riid == 1 || riid == 0x58d || riid == 0x206c6e7c || riid == -0x7e3f3484 || riid == -0x3d40ffc7)
+```
+
+`1` = `cIGZUnknown`, `0x58d` = `cIGZMessageTarget`, `0x206c6e7c` = `cISC3CityLayer`,
+`0x81c0cb7c` = the still-unnamed base of §12c/U-044, and **`-0x3d40ffc7` = `0xC2BF0039`** -- the
+water layer's own interface id. There is no cell-map base: unknown ids are refused, not forwarded.
+Note `0xC2BF0039`'s low word mirrors the water `LayerType 0x02bf0033` from §27a.
+
+### 31b. The power layer is a four-base multiple-inheritance class
+
+`cSC3PowerLayer::QueryInterface` `0x100044dd` (93 bytes) `[CONFIRMED]` is a different shape -- it
+routes ids to four different subobject offsets and **delegates the default case to the cell-map
+base**:
+
+| accepted id | resolves to | meaning |
+|---|---|---|
+| `0x58d`, `0x206c6e7c`, `0x81c0cb7c` | `this+0x10` | the `cISC3CityLayer` subobject (matches §30c's `sub ecx,0x10` thunk) |
+| `-0x5f5020a3` = **`0xA0AFDF5D`** | `this+0x14` | the layer's **own interface** |
+| `0x5e4` | `this+0x18` | a fourth subobject |
+| *(default)* | `cISC3CityCellMapBase::QueryInterface` `0x10003391` at `this+0` | so `cISC3CityCellMap<T>` is the **primary** base |
+
+So the concrete class is, in effect, `cSC3PowerLayer : cISC3CityCellMap<T>, cISC3CityLayer, <0x5e4
+base>` with its own `0xA0AFDF5D` interface, and its primary vtable is `PTR_FUN_10020608` -- the same
+vtable `POWER_GRID.md` reached through the field `+0x2d8` dispatcher. That the power grid is stored
+as a `cISC3CityCellMap` while the water layer is not is a real structural difference between the two
+utility layers, not an artefact of the walk.
+
+**Both `0xC2BF0039` and `0xA0AFDF5D` are interface ids absent from all 111 SDK headers**, which is
+exactly what U-043 predicts: the Linux debug build the oracle was reconstructed from did not export
+power or water layer symbols, so these ids exist only in the shipped binaries. They are recorded
+here as raw constants, not as guessed names.
+
+### 31c. Field-map additions, and where they meet POWER_GRID.md
+
+The power layer's own-interface subobject (reached from a `sub ecx,0x14` adjustor thunk at
+`0x10005dd9`) carries a run of trivial accessors. Three of them read fields `POWER_GRID.md` already
+proved, so they are named at C3 as a second witness to that field map:
+
+| accessor | reads | POWER_GRID.md calls it |
+|---|---|---|
+| `0x100033c6` `sc3_powerlayer_get_mask_raster` | `+0x5c` | mask raster (1 bit/tile, conductive tiles) |
+| `0x100033ca` `sc3_powerlayer_get_demand_raster` | `+0x2dc` | demand byte raster (1 byte/tile) |
+| `0x100038fd` `sc3_powerlayer_get_message_dispatcher` | `+0x2d8` | message dispatcher |
+
+The mask-raster getter is the small step `POWER_GRID.md`'s open item asked for -- "who touches
+`+0x5c`" now has at least its public reader named, though the *writer* (the line-rasteriser) is still
+unread.
+
+Three more accessors in the same run read fields **not** in `POWER_GRID.md`'s map, and are recorded
+mechanically rather than named, because their purpose is not established:
+
+- `0x1000380f` (`ret 4`) indexes an array at `this+0x29c`: `mov eax,[ecx + arg*4 + 0x29c]`;
+- `0x100038e9` sums exactly **ten** dwords from `this+0x29c` (a `push 0xa` counted loop), so that
+  array has 10 entries;
+- `0x100038a9` / `0x100038b0` / `0x100033d1` read the consecutive scalars `+0x2d0` / `+0x2d4` /
+  `+0x2e0`.
+
+A 10-entry array at `+0x29c` sitting just below the `+0x2b0` "10-entry running totals" `POWER_GRID.md`
+recorded is suggestive, but nothing read here says what the ten are, so they stay `[UNCERTAIN]`
+under U-059.
+
+### Committed
+
+**5 rows**: the two `QueryInterface` implementations renamed from generic `sc3_gzcom_query_interface_*`
+to `sc3_powerlayer_query_interface` / `sc3_waterlayer_query_interface` and promoted to C3, and three
+`sc3_powerlayer_get_*_raster` / `_dispatcher` accessors named at C3. `verify_worker_rows.py --strict`:
+0 flagged. Project C3 252 -> 257.
+
+**What U-059 still holds:** the layer-specific *method names* -- everything on the `0xA0AFDF5D` and
+`0xC2BF0039` interfaces beyond what a body mechanically reveals -- because no header exists to supply
+them (U-043). The mechanics of the power grid itself are already decoded in `POWER_GRID.md` and
+`POWER_SUBSYSTEM.md`; this section adds the class identity, the two interface ids, and the reader side
+of three fields.
