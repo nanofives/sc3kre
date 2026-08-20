@@ -1,9 +1,37 @@
-# HANDOFF.md — SimCity 3000 RE (state @ 2026-08-18)
+# HANDOFF.md — SimCity 3000 RE (state @ 2026-08-19)
 
-> # 🟡 T3 IS BUILT AND BLOCKED ON ONE OBSERVATION NOBODY HERE CAN MAKE (2026-08-18)
+> # ⭐⭐ T3 IS MET (2026-08-19). THE OBSERVATION WAS MADE, HEADLESSLY.
 >
-> **The install is CLEAN** — `Apps\Sys\SYS.PAK` is the shipped `172c02d9…`, 272,507 B, no
-> `SYS.PAK.original`, 0 loose `.ini`. **Nothing is staged.** Verified at the end of the session.
+> **The install is CLEAN** — `Apps\Sys\SYS.PAK` at the shipped `172c02d9…` (272,507 B) and
+> `Apps\Res\Sprites\00000005_Roads.DAT` at `29b2d4dd…` (15,172,185 B), no `.original` files left
+> behind, 0 loose `.ini`. **Nothing is staged.** Verified by hash after every rung.
+>
+> **The banner below said this needed "somebody who can run the game". It did not.** The §31
+> harness ran it: seven scripted runs, no Win32 input, no human at the keyboard. Records:
+> `verify/tunable_mod_test/RESULTS.md` and `verify/sprite_mod_test/RESULTS.md`.
+>
+> | rung | edit | observed |
+> |---|---|---|
+> | **M1** | `MaxAirPolluteForUI` 11000 → 00008, 3 bytes, same length | two industrial tiles read **`Peligrosa`** (red) where the shipped archive read `Alta`; **water-pollution control held on both**; every other panel line unchanged; `CreateFileA` on our archive in `-filetrace` |
+> | **M2** | same edit, `=8`, 272,503 B (−4), every offset shifted | boots, panel **identical to M1** → **`build()`'s relayout validated game-side** |
+> | **sprite** | all 6,676 pixel records of `00000005_Roads.DAT` repainted `0xF800` | container 15,172,185 → 2,525,526 B; the **whole road network renders red**, geometry intact; buildings, terrain, vehicles, smoke, the adjacent elevated rail and the UI all unchanged |
+>
+> **How the query panel is opened** (new harness knowledge, needed to reproduce): click window
+> **`0x52FB5FEB`** — the green "?" in the status bar — then `at:x,y` on the city view. The
+> `Indagar` dialog raises the in-city window count 152 → 164. It carries **no command id**, so it
+> must be clicked by id, not fired. Beware **`0x000007D1`**, the icon left of the minimap: that is
+> `Visitar Bolsa de SimCity` and it opens a browser-launch modal.
+>
+> **What T3 does NOT cover, kept explicit:** the tunable is a display band, not proof the
+> *simulation* reads it; the sprite result is a **recolour at unchanged dimensions** (no RGB565
+> quantizer, no PNG import, so authoring new art is still unbuilt); `-filetrace` does **not**
+> observe `Apps\Res\Sprites\`, so the sprite run had no file-access gate; and the pre-registered
+> **undeveloped-tile control was not obtained** (two attempts hit a road and a water tower).
+> **`U-051` is untouched and `credits_discriminator/` is still unrun** — T3 did not need it.
+>
+> ---
+>
+> ## The pre-run banner, kept for the record (2026-08-18)
 >
 > **T3's remaining work is not analysis. It is four archives, two protocols and two fill-in
 > templates, all committed, waiting on somebody who can run the game.** The session that built

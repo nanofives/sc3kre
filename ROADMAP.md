@@ -444,6 +444,8 @@ shipped corpus and reports `N/N`.**
 | city save family | `city_write.py` (`City.load` / `zone_set` / `save`) | **59/59** no-edit identity; `city_roundtrip.py` 5 layers |
 | QFS / RefPack | `qfs.py` read, `qfs_encode.py` write | **60/60** city payloads, **63,931/63,931** sprite streams |
 | sprite blocks | `sprite_encode.py` — `encode()` / `roundtrip()` | **62,552/62,552** |
+| **sprite archives** (the container write path) | `sprite_patch.py` — `pack_payload()` / `repack()` / `recolor_record()` / `roundtrip()` | **40/40** containers byte-identical on identity repack; **validated game-side** 2026-08-19 on 6,676 records (`verify/sprite_mod_test/`) |
+| **sprite art from PNG** (author new pixels) | `sprite_patch.py` — `export_png()` / `replace_from_png()` / `quantize565()` / `png_roundtrip()`; CLI `--export` / `--import-png` | `--pngtest` **62,552/62,552** records byte-identical on export→import; **validated game-side** 2026-08-19 (authored pattern imported from PNG files on disk). Procedure: `formats/SPRITE_MODDING.md` |
 
 The stated debt is paid: the `.IXF` writer no longer lives inside `city_roundtrip.py`, and that
 harness now delegates to the library, so there is one implementation instead of two that drift.
@@ -465,9 +467,35 @@ writer, and it was checked the same way: the tool regenerates the earlier artifa
 > like ~2 hours of Python. **It finished: 63,931/63,931.** The estimate was wrong and the real
 > number is better, so the sample caveat is withdrawn rather than left standing.
 
-### T3 — DEMONSTRATE A MOD END TO END
+### T3 — DEMONSTRATE A MOD END TO END  ✅ **MET 2026-08-19**
 
-**Exit: one change, made with these tools, visible in the running game.**
+**Exit: one change, made with these tools, visible in the running game.** Met **twice**, by two
+independent formats, both run headlessly through the §31 harness with no human at the keyboard.
+
+1. **A tunable** (`verify/tunable_mod_test/RESULTS.md`). `MaxAirPolluteForUI` 11000 → 8, written by
+   `syspak_mod.py`, 3 bytes changed at identical archive length. Two industrial tiles that read
+   `Alta` on the shipped archive read **`Peligrosa`**, in red, on ours; the water-pollution
+   **negative control held on both tiles**; every other line on the panel was unchanged;
+   `CreateFileA` on our archive confirmed by `-filetrace`. The **M2 rung also passed**, so
+   `build()`'s offset relayout (−4 bytes, every subsequent record and TOC offset shifted) is
+   validated game-side — a claim nothing had tested. Promotes `0x100046bb` and `0x1000c95c` to C3.
+2. **A sprite** (`verify/sprite_mod_test/RESULTS.md`). All 6,676 pixel records of
+   `00000005_Roads.DAT` repainted flat red `0xF800` by the new `re/tools/sprite_patch.py`; the game
+   loaded a container that shrank 15,172,185 → 2,525,526 bytes and **drew the entire road network
+   red with the geometry unchanged**, while buildings, terrain, vehicles, smoke, the adjacent
+   elevated rail line and the UI all stayed normal.
+
+> The earlier attempt's lesson held up: the credits marker failed because it was a *judged rate*
+> whose ctor default already equalled the shipped value. Both markers here are read-offs — a word on
+> a panel, and the colour of every road. `U-051` is **still open** and untouched;
+> `verify/credits_discriminator/` is still unrun. T3 did not need it.
+
+**Two limits on record.** The tunable is a display band, not proof the *simulation* reads it. The
+sprite result is a **recolour** at unchanged dimensions: there is still no RGB→RGB565 quantizer or
+PNG import in `re/tools/`, so authoring new art is not yet demonstrated. Also, `-filetrace` does
+**not** observe `Apps\Res\Sprites\`, so the sprite run had no file-access gate.
+
+### T3 — the original framing, kept for the record
 
 `U-006` established the content is data-driven (no per-building classes in code; `SC3Tune.INI` and
 `SYS.PAK` drive the taxonomy), so the highest-value target is a tunable or an asset rather than a
