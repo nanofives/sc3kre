@@ -72,6 +72,16 @@ foreach ($s in $selected) {
   if (-not $scenarios.Contains($s)) { Write-Error "unknown scenario '$s' (see -List)"; exit 3 }
 }
 
+# Serialize against other sessions. SC3U is single-instance, so runs launched over another
+# session's game hit the FUN_0040496d mutex, exit at ~840 ms, and grade as all-FAIL garbage. Take
+# the game lease (blocks in a FIFO queue until it is our turn) before spending any runs; release
+# in the finally below. See re/harness/GAME_PROTOCOL.md.
+$Owner = if ($env:SC3_SESSION) { $env:SC3_SESSION } else { "harness_run-$PID" }
+$lock  = Join-Path $repo "re\harness\game_lock.ps1"
+& pwsh -NoProfile -File $lock -Acquire -Wait -Owner $Owner -TimeoutSec 1800 -Minutes 60 -Note "harness_run $Scenario"
+if ($LASTEXITCODE -ne 0) { Write-Error "could not acquire the game lease (exit $LASTEXITCODE) - not launching."; exit 4 }
+
+try {
 $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $grand = 0
 $summary = @()
@@ -109,3 +119,7 @@ $summary | ForEach-Object {
 }
 Write-Host ("`nlogs: {0}" -f $outdir)
 exit $grand
+}
+finally {
+  & pwsh -NoProfile -File $lock -Release -Owner $Owner | Out-Null
+}
