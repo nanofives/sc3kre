@@ -123,7 +123,7 @@ The comparison target at `0x004f4c34` was undefined in the export; raw bytes are
 | `-d<name>` | `0x004077b5` +58 | value truncated to 31 chars → gfx `vf+0xEC(name)` (device/driver) |
 | `-f` | `0x004077b5` +69 | gfx `vf+0xE4(0)` = fullscreen. **Presence-only**, value discarded |
 | `-w` | `0x004077b5` +73 | gfx `vf+0xE4(1)` = windowed. Presence-only |
-| `-l<value>` | `0x004077b5` +77 | → svc `0x441E5070` `vf+0x44`/`vf+0x48` lookup, `vf+0x28`/`vf+0x24`, then `FUN_004845fe()->vf+0x78` |
+| `-l<value>` | `0x004077b5` +77 | → svc `0x441E5070` `vf+0x44`/`vf+0x48` lookup, `vf+0x28`/`vf+0x24`, then `FUN_004845fe()->vf+0x78`. ⚠️ **Does not load a city in practice — measured 2026-08-21, see §"Loading a city at launch" below.** Use a bare path instead |
 | `-c<value>` | `0x004077b5` +94 | → svc `0x441E5070` `vf+0x8C`/`vf+0x90`, `vf+0x80`, `FUN_004845fe()->vf+0x80`, `vf+0x70` |
 | `-x<value>` | `0x004077b5` +111 | value fetched, **return discarded** — no effect in this function |
 | `-p<a b c d>` | `0x004077b5` +123 | `sscanf(value, "%u %u %u %u")` (fmt @ `0x004f4ef8`), clamped (100..1000, ≥0x10, 5..10, ≥4) → `app+0xfc/0xfe/0x100/0x101` |
@@ -394,7 +394,34 @@ name queried by `FUN_0047a858` via `VerQueryValueA`. `"TRACE"` @ `0x004f8638` is
 Bonus controls useful for a test harness, all already shipping:
 
 - `-restart:on` — bypasses the `FindWindowExA` single-instance check → concurrent instances
-- `-l<value>` / `-c<value>` — load a city/region directly at launch → reproducible fixtures
+- ~~`-l<value>` / `-c<value>` — load a city/region directly at launch~~ → **corrected 2026-08-21:
+  `-l` does NOT load a city. Pass a bare absolute `.sc3` path with no switch. See "Loading a city
+  at launch" below.**
+
+### Loading a city at launch — measured, not inferred (2026-08-21)
+
+Three forms tried against this build, observed with the multi-module `-filetrace`
+(`verify/tilingrules_read_test/RESULTS.md`):
+
+| argument passed to `SC3U.exe` | observed |
+|---|---|
+| `-lFarmsville` | **no file access at all.** No `Cities` open, no `FindFirstFileA`, nothing. The `-l` path never reached a file. |
+| `-lC:\…\Cities\Farmsville.sc3` | `CreateFileA "-lC:\…\Farmsville.sc3"` → **FAIL**. The `-l` prefix was **not stripped**; the whole token was used as the path. |
+| `C:\…\Cities\Farmsville.sc3` (**bare absolute path, no switch**) | **`-> ok`, the city loads.** First open at 1,383 ms, reload at 2,533 ms. |
+
+**Use the bare absolute path.** Reproducible; this is how `verify/tilingrules_read_test/` loads a
+fixture.
+
+`[UNCERTAIN]` why `-l` fails, given the handler at `0x004077b5` +77 demonstrably exists. The two
+failing attempts carried a **leading space** in the argument (needed to stop PowerShell binding
+`-lC:` as a parameter name), which may have shifted tokenisation in the game's
+`GetCommandLineA()` re-parse. Not chased further, because the bare path works.
+
+Two `capture.ps1` gotchas found alongside:
+
+- The reconstructed shot fires at **~44 s**, so `-AtSec 40` kills the run before it lands. Use 60+.
+- `-GameArgs "-lC:\…"` is rejected by PowerShell as a parameter (the colon). Use
+  `-GameArgs:" <value>"` with a leading space.
 - `-cheats:<x>`, `-d<device>`, `-p<a b c d>`
 
 **Design consequence:** the two display gaps live in `GZGraphicD.dll`, so the harness should
@@ -3934,3 +3961,201 @@ free on any run.
 - The probe's length-disassembler now decodes `A0..A3`. Any earlier `-modlog`/`-fnlog` target
   whose prologue began with one of those (a `mov al,[moffs32]` accessor) would have been silently
   skipped before this fix.
+
+## 33. RESIZABLE WINDOW: menu path working, in-city six defects deep (2026-08-21/22)
+
+Goal: a user-resizable game window. Verdict: **the menu path works and is verified on a stock
+install; in-city, six defects were found, five fixed and verified, the sixth diagnosed.** All
+in-city measurements were taken on Berlin, with `map(+0xec,+0xf0)=256x256` logged every run.
+
+> ⚠️ **Provenance caveat.** This work ran on a shared install alongside three other sessions.
+> Anything here NOT explicitly marked re-verified was captured inside a window (2026-08-20 10:43
+> onward) when `Apps\SIMUI.DLL` / `SIMINIT.DLL` / `SIMDIRT.DLL` were intermittently patched by the
+> bigger-cities session. mtime checks CANNOT detect this (`shutil.copy2` preserves mtime on
+> restore). The honest method is a runtime hash recorded with the result: `game_lock.ps1`.
+> The in-city results are argued clean because the SIMDIRT **stride was never patched**, so all
+> three states that existed on disk are behaviourally identical at N=256 (see 33.7).
+
+### 33.1 What works: the menu path [CONFIRMED, re-verified on a stock install 2026-08-22]
+
+`sc3launch -nocom -windowed -origin -fix16 -fitclient -nointro -resizeto <W>x<H>`
+
+1. **Sizing border.** `FUN_100181d0` @ `0x100181d0` builds the style from the flag word at
+   `window+0x10`, which `FUN_10017c83` hardcodes to `0x1b` giving `0x80CA0000`. **No bit in that
+   decode can produce `WS_THICKFRAME`**, so it is added from outside with `SetWindowLongA`. Observed
+   style is `0x94CA0000`, i.e. USER32 adds `WS_VISIBLE|WS_CLIPSIBLINGS` - this closes the
+   long-standing `[UNCERTAIN]` about where `WS_CLIPSIBLINGS` came from.
+2. **Device rebuild.** `FUN_1001673b` @ `0x1001673b` (device vt `+0x20c`) releases every surface,
+   then `FUN_10015e3d` @ `0x10015e3d` (sub-object vt `0x1001f290` slot 4) rewrites the device rect
+   and rebuilds. **1.8 ms, no crash.** Do NOT use `FUN_100169d3` (vt `+0x10`): it also releases
+   `device+0xa8`, the GZ DirectDraw wrapper the rebuild needs. Call `+0x20c` directly and zero
+   `device+0x08` and `device+0x80` by hand. `device+0x88` is the present re-entrancy lock - read
+   only, never force it (section 13.3 hangs the game).
+3. **Window rect.** `FUN_10018691` @ `0x10018691` (window vt `+0x1c`) is the only writer of
+   `+0x38..+0x44`, and **it propagates into the GZ widget tree by itself** via `sink->vt+0xc` then
+   `vt+0xC8`: the root cGZWin already read `0,0,1280,1024` before any explicit call. That is the
+   confirmed link between the Win32 window and the widget tree.
+4. **UI reflow.** The root resize does NOT resize its children (GZWinD has no anchor system).
+   Applied externally: children exactly the old screen size are stretched, others keep their size
+   and shift by half the delta. Menu panel `192,144,832,624` becomes `320,272,960,752`, i.e.
+   `abs_centre=640,512`, the exact centre of 1280x1024.
+5. **Backdrop.** Geometry is CACHED at `this+0xc8..+0xd4` behind a load-once guard
+   (`0x0043e071 cmp [esi+0x10],0 / jne`). Re-derive it with the game's own pair on the second base
+   at `backdrop+0xa4`: `+0x20` = `FUN_0043e48e` (release raster, clears the guard) then `+0x24` =
+   `FUN_0043e9b4` (re-prepare + invalidate). Measured `dst` `112,84,912,684` becomes
+   `240,212,1040,812`, which is 800x600 art centred in 1280x1024, exactly as predicted.
+
+Art note: the menu backdrop is a **fixed 800x600** asset (`Apps\Res\UI\Shared\MAIN.IXF`,
+`{T=0x62b9da24, G=0x82b9b75c, I=0x22729921}`, header `w=0x320 h=0x258`), and the four rects at
+`this+0xd8/+0xe8/+0xf8/+0x108` are **colour fills** (device `+0x7c`, colour 0) forming a deliberate
+black frame. So the game already letterboxed it at 1024x768. Registry override for a replacement:
+`HKLM\...\SimCity 3000 Unlimited\SKU\WINSC3BMP = "<group>,<instance>"`.
+
+**Bonus finding: the game accepts FIVE resolutions, not three.** `FUN_00407684` @ `0x00407684`
+snaps to 640x480, 800x600, 1024x768, **1152x864, 1280x1024**; anything else snaps by area, and
+`-r1600x1200` lands on 800x600. Ghidra reports zero xrefs; resolved by byte scan to vtable
+`0x004cf59c + 0x68`, called from `FUN_004077b5:52` (the `-r` path) and `FUN_0040586a:207`. Above
+width 800 `FUN_100270e5` reuses the 1024x768 widget table, so 1152x864 and 1280x1024 run with
+1024x768 widget coordinates.
+
+### 33.2 In-city: the six defects
+
+Re-entering the SIMSPR iso view's Init (`FUN_10005b42` @ `0x10005b42`, vt `+0xc`) at a new pixel
+size hits six stale-state problems. Every one is the same shape: **Init reallocates or resets
+something a sibling subsystem still references.**
+
+| # | Defect | Fix | Status |
+|---|---|---|---|
+| 1 | tile cache `iso+0x24` reallocated **empty** (old one leaked) | refill via `FUN_10018cdf` @ `0x10018cdf` on the occupant bridge | **verified**, row 0 54/64 to 0/64 to 54/64 |
+| 2 | camera origin reset to world `0,0` | save `+0x54..+0x60`, restore after Init keeping the NEW span | **verified**, `512,2352,1792,3376` |
+| 3 | zoom/rotation are Init's `param_7`/`param_8` | pass the CURRENT values so both setters early-out | **verified**, zoom 3 / tilew 64 (was collapsing to 0 / 8) |
+| 4 | stale flag-change queue at `iso+0x448`/`+0x44c` drained against the zeroed cache | discard the vector (`end = begin`) | **verified**, 20 stale entries |
+| 5 | `FUN_1000dc17` called with **no args** so `param_1` (surface lock flag) = 0 | drop it, use vt `+0x14c` = `FUN_1000b4b3` | **verified**, crash gone |
+| 6 | `dev->vf0c(w,h)` **fails** and Init ignores the return, so the render target has no backing store | not fixed | **diagnosed** |
+
+**Defect 5 was OUR bug, not the engine's.** `FUN_1000dc17` is `__thiscall(this, param_1, param_2)`
+and `param_1` is the surface lock flag: `0x1000dd2f cmp byte [ebp+8],0 / je` skips
+`device->vf1c(0x40)`, `0x1000dfd4` skips the matching `vf20(0x40)`. With the lock skipped,
+`device->vf1a8()` (valid only while locked) returns null and SIMDIRT's span rasterizer
+`FUN_10013556` stores at `0x10013A8F` (`mov word ptr [ecx],ax`) with **ECX = 0xBC** = 94 px times 2.
+Every game call site passes `1`. Use `+0x14c` instead, which runs `FUN_1000e248` (clears the
+dirty-rect queue at `+0x4b8`/`+0x4bc`, clears all three display lists, memsets the grid at the NEW
+dims), clears `+0x32c`, enqueues 64 rects tiling the visible rect, then calls `vf148(1,1)`.
+
+**Defect 6, the open one.** With the lock correctly taken:
+
+```
+device probe: dev=0x14C724A0 vt=GZGraphicD+0x1E894  lock(0x40)=1
+  vf1a8(bits)=0x00000028  vf1ac(pitch)=0  vf38(w)=0  vf3c(h)=0
+surface was 0x0 - dev->vf0c(1280,1024) -> 0
+  after vf0c: lock=1 bits=0x28 pitch=0 w=0 h=0
+```
+
+The lock **succeeds** and the surface is still dead, and driving the device's own in-place resize
+(`dev->vf0c`, the call Init makes at about `0x10005b7c`) returns **0**. So it FAILS and Init ignores
+the return - it does not "silently no-op". Consequence: `iso+0x524` (display-list item count) stays
+0, and `FUN_1000dc17` does nothing when that is 0, so nothing draws. Next step is the DirectDraw
+teardown/rebuild ordering, not SIMSPR.
+
+### 33.3 Two bugs in shipped SC3K code
+
+1. **`FUN_10005fd0` (iso teardown, vt `+0x10`) has a self-inflicted NULL dereference.** Its first
+   block frees and NULLs the five sprite caches at `iso+0x490`; its second tile loop then
+   dispatches `this->vt+0x68`, whose callee reads those very slots at `0x10007ea9`
+   (`mov ecx,[esi+eax*4+0x48c]`) and faults at `0x10007eb3`. Reproduced twice, byte-identical,
+   with and without a prior DirectDraw teardown. Workaround: clear the `iso+4` guard so Init skips
+   its teardown (the teardown itself ends with `*(byte*)(param_1+1) = 0`).
+2. **`iso+0x3c8` is never cleared by anything.** It means "the five caches have been constructed",
+   Init sets it, and the teardown frees the caches **without** clearing it - so one teardown
+   permanently falsifies the invariant.
+
+### 33.4 iso+0x3c8 vs iso+0x3c9, and the sprite caches
+
+- `+0x3c9` = **async/deferred sprite loading enabled**. Sole writer `FUN_10008203` @ `0x10008203`
+  (vt `+0x160`), getter `+0x15c`. Refuses to enable when `+0x3c8 == 0`; clearing it only writes the
+  byte when its drain argument is non-zero.
+- **DO NOT clear `+0x3c8` to force a cache rebuild.** Measured: Init then builds five fresh caches
+  with all refcounts 0 and all per-zoom surfaces NULL (`0000C8CE` to 0, `128AE5C8` to NULL), and the
+  display-list builders (`FUN_1000be25:147`, `FUN_1000d0f5:244`, `FUN_1000b352:35`) read those slots
+  **ungated**, giving an instant `0xC0000409`.
+- The caches are keyed by **(footprint size 1..5, zoom 0..4)**, resource id
+  `0x1b870000 + (slot*0x4000 + min(zoom,3))*4`, sized from resource headers. **Resolution-
+  independent and size-independent** - no map-dimension term anywhere. They need no rebuild on a
+  resize. Confirmed jointly with the bigger-cities session for its N=512 case too.
+
+### 33.5 Corrections to committed analysis
+
+- **The flip-chain fields were recorded backwards.** `FUN_10019cc7` puts the *primary* in `this+8`
+  and the *back buffer* in `this+4`; windowed `FUN_100199c0` puts its plain primary in `this+4`. So
+  `this+4` is always "the surface everything uses". Section 10h's statement is true but means
+  something different than recorded. `this+8` has **no Release site anywhere** in 1093 functions.
+- **`FUN_0044160a` (`+0x168`) is NOT a cascaded repaint.** It is RecomputeAbsoluteRectTree - pure
+  translation, no clamp. The real paint is `+0x148` = `FUN_004413ef` @ `0x004413ef`.
+- **`FUN_100059fb` returns block COUNTS, not sizes.** Pixel size is `span/count` in `FUN_1000e2c0`.
+  1280 gives 40; 1024 as a *height* gives 64 but as a *width* gives 32.
+- **`FUN_10006226` is vt `+0x2c`, not `+0x98`** (`+0x98` is `FUN_10008eee`).
+- **The root cGZWin's SetArea is `GZWIND+0x1F603`, not `SC3U+0x41d4c`.** The root is a plain
+  GZWinD cGZWin; `FUN_00441d4c` is a different SC3U-side class's copy.
+- **`iso+0x54..+0x60` is a full `{l,t,r,b}` rect in WORLD PIXEL space**, not a screen viewport and
+  not just an origin. Init writes it as `(param_5, param_6, param_3, param_4)`, i.e. it assumes an
+  origin of 0,0 - which is also why `param_3`/`param_4` double as the pixel size feeding
+  `FUN_100059fb`. So the real origin cannot be passed as `param_5`/`param_6` without corrupting the
+  grid lookup; restore it after Init instead.
+- **`iso+0x1c`/`+0x20` are NOT the stored window size.** Measured `0,0` while the rect read
+  `0,0,1024,768`; they are last-mouse-x/y. Window `vt+0x30` is `FUN_100185f5`, confirmed at runtime.
+- **`-l` is `-language`, not load-city** (already flagged in 29.3 by 31.5; re-confirmed the hard
+  way - two runs sat at the menu). The working auto-load is
+  `-gzseq "0x712BF5BF@12;0x02DFDD6A@28"`.
+
+### 33.6 Two queues, not one
+
+Do not conflate them:
+
+- `iso+0x448`/`+0x44c` - **flag-change** queue, 4-byte records `{opcode, x, y, zoomIdx}`, drained by
+  `FUN_10008dd4` @ `0x10008dd4`. This is the resize landmine (defect 4): Init reallocates the tile
+  cache **zeroed**, so every record's footprint byte at `+0x0a` reads 0 and `FUN_100080a9` computes
+  `this + 0*4 + 0x48c` - one slot BEFORE the cache array at `+0x490` - and dereferences it.
+- `iso+0x4b8`/`+0x4bc` - **dirty-rect** queue, `0x14`-byte records, drained by `FUN_1000dc17` and
+  cleared by `FUN_1000e248`.
+
+The landmine is specific to **re-entering Init on a live view**. On a fresh city the view is newly
+constructed (`FUN_1001c4a1` @ `0x1001c4a1`: `operator_new(0x528)` then `vt+0xc`), so the vectors are
+empty - confirmed jointly with the bigger-cities session from its crash stack.
+
+### 33.7 Multi-session hazards, measured
+
+Four sessions shared one install, one `sc3probe.dll` and one process namespace. Each of these cost
+hours and all are now covered by `re/harness/GAME_PROTOCOL.md` plus `game_lock.ps1`:
+
+- **Cross-session process kills.** `Stop-Process -Force` matched on process NAME kills other
+  sessions' live runs. Match on your own `sc3launch` PID and the `SC3U` whose parent it is.
+- **The single-instance handoff is silent.** With an SC3U already running, a new launch takes
+  `FUN_0040496d` (mutex plus `FindWindowExA "Gonzo"/"SimCity 3000"`), exits `0xFFFFFFFF` at about
+  840 ms and writes **no crash dump**. An early exit with no dump usually means this, not a crash.
+- **mtime cannot detect historical patching.** `shutil.copy2` preserves mtime on restore, so a
+  patched-then-restored install looks pristine. Hash at run time and record it with the result.
+- **`find_game_window` must filter by PID.** Unfiltered it can return a FOREIGN process's `Gonzo`
+  window; subclassing that would drive a device teardown against a game you do not own. Fixed by
+  the queue session.
+- **Harness bug worth remembering:** subclassing before the graphics window object exists makes
+  `SetWindowLongA(GWL_WNDPROC)` return 0, after which `CallWindowProcA(NULL, ...)` swallows every
+  message and startup dies at about 840 ms with no dump. Gate on `GZGraphicD+0x6CDB8` being
+  non-NULL.
+
+### 33.8 Testing gaps
+
+- **Downward resize is completely unexercised.** Every run grew 1024x768 to 1280x1024. The
+  bigger-cities session confirmed a stale-bounds hazard for exactly this case: `iso+0x420`/`+0x424`
+  (mirrored at `+0x3f8..+0x404`) are set once, inside the `+0x3c9 != 0 && +0x3c8 == 0` block, to
+  `cols-1`/`rows-1`, and **never refreshed**. Harmless growing, dangerous shrinking. So read 33.1
+  and 33.2 as "resize UPWARD works".
+- Only 1280x1024 was tested. 1152x864 and non-snapped sizes are untried.
+- The tile-cache realloc **leaks**: `cols*4 + cols*(rows*0x14)` per Init, about 1.31 MB at N=256 and
+  about 5.24 MB at N=512, in a 32-bit process.
+
+### 33.9 New harness switches
+
+`-resize` (sizing border plus rebuild on `WM_EXITSIZEMOVE`), `-resizeto <W>x<H>`, `-resizeat <sec>`,
+and `SC3PROBE_RESIZE_NOPAINT=1` (skip our paint, leave it to the game's frame loop). The auto-resize
+holds until the occupant bridge exists with a 20 s fallback, so **`-kill` must be at least
+`resizeat` + 22** or the run is cut off mid-gate.
