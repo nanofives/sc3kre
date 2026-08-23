@@ -355,6 +355,45 @@ layer decoded to per-tile developer slots with R/C/I/Landfill named. Tools: `re/
    (6 hits vs 0), and a checker with no two's-complement path called a correct GZCOM IID
    citation fabricated.
 
+10. **`functions.csv` IS NOT KEYED BY RVA — and 9.9% of its rows collide (2026-08-23).**
+    Every SC3 DLL is based at `0x10000000`, so one RVA names several different functions:
+    `0x1001746e` exists in `SIMNTWRK.DLL`, `GZResourceD.dll` **and** `SIMUTIL.DLL`. The key is
+    **`(module, rva)`**. Measured over 50,682 rows: **2,384 RVAs collide across 5,040 rows**, up
+    to **20 rows on one RVA**, and **401 of the colliding RVAs already have a named row** — exactly
+    the set where a wrong-keyed read returns a plausible answer for the wrong function. It fails
+    silently in BOTH directions, and did: a read keyed on `rva` alone (a dict comprehension, so
+    last-wins) reported `0x1001547b` as unnamed `C0` when SIMNTWRK's row was already `C2`-named —
+    it had handed back `GZResourceD`'s row, and **that reached a status report as a finding**; then
+    a bulk write on the same key updated **21 rows when 15 were intended**, silently overwriting
+    other modules' `new_name`/`confidence`/`notes`. **Filter on `module` first**, and after any
+    bulk tracker write check the blast radius (`diff | grep -c '^<'` must equal the number of rows
+    you meant to touch) and restore from a backup rather than hand-patching if it does not. Write
+    with `newline=''` / explicit CRLF: the file is CRLF with 61 bare LFs inside quoted `notes`
+    fields, so a naive full CSV rewrite re-quotes everything (lesson 8's cousin).
+    Same class as `U-056`: a tool that answers confidently instead of erroring.
+
+11. **An instrument that is STRUCTURALLY INCAPABLE of a positive will hand you a confident
+    negative (2026-08-23).** The probe's `-filetrace` hooked **only `SC3U.exe`'s IAT**. The question
+    asked of it was "does the game read `Apps\Res\TilingRules\*.txt`", and that loader lives in
+    `SIMNTWRK.DLL`, which imports `CreateFileA`/`GetFileAttributesA` **itself** and loads long after
+    the probe attaches — so its opens never touch the exe's IAT. Run as shipped it would have
+    produced an **empty log**, which reads exactly like "those files are never opened", and the
+    conclusion would have been that the whole tiling surface is dead. It is not: 48 files are
+    opened, every one `-> ok`. Fixed by walking every loaded module and re-arming every 100 ms
+    (`ft_hook_all`), with the originals bound by `GetProcAddress` rather than lifted from an IAT
+    slot, since re-hooking would otherwise store our own hook as "the original".
+    **This is the same class as `U-056` (harness `Grep` cannot see the gitignored export and calls
+    it "0 matches") and as the `n in (128,192,256)` filter that could never match 512.** The
+    generalisable check, and the one to actually apply: **before believing a negative, ask what a
+    POSITIVE would have to travel through to reach your instrument.** For a file-open question that
+    means asking which module issues the call, not just which process. A negative from an
+    unexercised instrument is not evidence.
+    Corollary that also paid off the same day: when the instrument DOES fire, verify its
+    granularity before trusting the number — `0x1001746e` looked like a per-record counter and is
+    per-**file** (7 unrolled call sites, `strtok` loop inside), so it was content-insensitive.
+    Checking call-site multiplicity, and that the body has no internal loop, is what makes a hit
+    count mean what you think.
+
 ## 🔴 What landed 2026-08-16 (still current unless corrected above)
 
 1. **The city-save section offset base is `0`, not `+0x0C`.** The `[CONFIRMED, 59/59]` claim for
