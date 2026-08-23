@@ -352,8 +352,10 @@ cheap and both were necessary.
 
 `NETWORK_TYPES.md` §6 item 3 was ranked highest-leverage but gated on this question. **The gate
 is passed.** The tiling surface is 48 plain-text files, read loose from disk at city load, with no
-archive, no compression, and no repack step. It remains untooled and its rule-opcode grammar is
-still undocumented, but it is no longer speculative.
+archive, no compression, and no repack step. It is now **tooled** (`re/tools/tilingrules.py`, 68/68 byte-identical round-trip with a
+writer) and its **rule-opcode grammar is documented** (`re/analysis/formats/TILINGRULES.md`,
+and all three field encodings decoded in `re/analysis/NETWORK_RULE_ENGINE.md` §4). Both landed
+the same day as this test, so the "untooled/undocumented" caveat above is superseded.
 
 The verdict on the original question is unchanged: this is retuning an existing network, not
 adding one. A 7th network still needs the four code patches in `NETWORK_TYPES.md` §2.
