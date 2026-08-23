@@ -1,19 +1,47 @@
 # SESSIONS.md — who is working in this repo right now
 
-Three Claude sessions were live in this working copy on **2026-08-17**, all writing the same
-trackers. Nothing was lost, and that was checked rather than assumed — but it was luck as much as
-design, so this file exists to make the split explicit. **Read it before writing a tracker.**
+**Read this before writing a tracker.** Multiple Claude sessions share this working copy and all of
+them write the same four files. Nothing has been lost so far, and that has been checked rather than
+assumed each time, but it has been luck as much as design.
 
 Delete or update this file when the sessions are done. A stale coordination file is worse than
-none.
+none. **This file was itself five days stale on 2026-08-23** — it described three sessions that had
+all ended and knew nothing about the four that were actually live. That is the failure mode it
+exists to prevent, so treat the date below as load-bearing.
 
-## The sessions
+## Current sessions (2026-08-23)
 
-| session | scope | files it owns |
-|---|---|---|
-| **city-save format** (wrote this file) | the `.sc3` family, the writer/editing API, P1 gate criterion 2 | `re/tools/city_*.py`, `re/tools/qfs_encode.py`, `re/scripts/scope_toolkit.py`, `re/scripts/verify_worker_rows.py`, `formats/CITY_SAVE.md`, `formats/QFS.md`, `GATE_RESCOPE.md` |
-| **sc3k-gzcom-dll evaluation** | enumeration, carving, GZCOM interfaces and IIDs, criterion 1 | `GZCOM_INTERFACE_CATALOGUE.md`, `MODULE_MAP.md`, `re/scripts/ForceSignature.java`, `enumerate_functions.py` runs |
-| **windowed mode / launch harness** | getting the game to render, the probe harness | `LAUNCH_CONTROL.md`, `re/harness/`, the launch-harness suite |
+Four mod-feasibility workstreams plus a master orchestrator. Each keeps a live checkpoint at
+`re/sessions/STATUS_<name>.md` (**untracked by design** — `.gitignore` is deny-by-default and
+`re/sessions/` has no whitelist; `git add` there silently adds nothing).
+
+| session | question | verdict | files it owns |
+|---|---|---|---|
+| **bigger-cities** | can cities exceed 256 tiles | **POSSIBLE, 4 bytes**, game-proven 6/6 at N=512 | `re/tools/patch_dirtbuf.py` + `patch_citysize.py` + `patch_vertical.py` + `patch_surface.py`, `verify/citysize_mod_test/`, `re/tools/city_sections.py`, `GAME_PROTOCOL.md` rule 6 |
+| **camera-scroll** | is scroll sensitivity moddable | **POSSIBLE, 1 byte**, proven game-side | `re/tools/pe_patch.py`, `re/analysis/PREFS_UI.md`, `verify/scroll_patch_test/`, harness `-pref` / `-gzseq key:` / `cam` |
+| **road-type** | can a new road type be added | **IMPOSSIBLE without patching code** | `re/analysis/NETWORK_TYPES.md` + `NETWORK_RULE_ENGINE.md`, `formats/TILINGRULES.md`, `re/tools/tilingrules.py`, `re/scripts/harness_claim.ps1`, `verify/tilingrules_read_test/` |
+| **resizable-window** | can the window be made resizable | **POSSIBLE**, menu path verified, in-city 5 of 7 defects fixed | `LAUNCH_CONTROL.md` §33, `UNCERTAINTIES.md` U-068/069/070, harness `rz_*` / `-resize*` |
+| **orchestrator** | coordination | — | this file, `re/sessions/`, integration commits |
+
+**The critical path is `U-068`** and it is shared: what drives the grid-B insert `FUN_1000ef50`
+(callers `0x1000f103`, `0x1000f9ee`) during a normal city load. It blocks resizable-window's in-city
+render **and** road-type's visual test, and it needs no game runs. resizable-window integrates;
+the other three feed it from separate angles via `re/sessions/U068_<name>.md`.
+
+**Two ended sessions left uncommitted work**, both landed 2026-08-23 rather than discarded: the
+queue/coordination session (`harness_run.ps1`'s FIFO lease wrapper, `game_lock.ps1`,
+`GAME_PROTOCOL.md`) and the `cISC3City` walker. If you find an uncommitted change nobody claims,
+commit it in its own labelled commit rather than sweeping it into yours or leaving it to be lost.
+
+### Historical — the 2026-08-17 trio, all ended
+
+Kept because the rules below were negotiated between them and the incidents are cited by number.
+
+| session | scope |
+|---|---|
+| **city-save format** (wrote this file) | the `.sc3` family, the writer/editing API, P1 gate criterion 2 |
+| **sc3k-gzcom-dll evaluation** | enumeration, carving, GZCOM interfaces and IIDs, criterion 1 |
+| **windowed mode / launch harness** | getting the game to render, the probe harness |
 
 ## The rules we are working to
 
@@ -249,3 +277,39 @@ the other two sessions have in flight. That is an owner call, not a side effect.
 convention today** — `ROADMAP.md`, `SESSIONS.md`, `MODULE_MAP.md` and the catalogue are LF, while
 `UNCERTAINTIES.md`, `POST_P1.md` and `functions.csv` are CRLF — so any `.gitattributes` should be introduced
 deliberately with a single normalising commit, not left to drift.
+
+### 3d. The phantom diff does not just hide work — it can INVENT work that does not exist
+
+Added by the orchestrator session 2026-08-23. Fifth instance of rule 3c, and the first where the
+damage ran the other way.
+
+A session reported `re/analysis/LAUNCH_CONTROL.md` as **+503/-278** and concluded, reasonably, that
+since its own contribution was ~197 lines, the remaining ~306 insertions and **all 278 deletions**
+must be another session's unfinished in-place rewrite of sections 25-28. That went into a status
+report as "this file carries an ended session's unsaved work, do not commit it by path", and it
+nearly caused a real deliverable to be held back.
+
+`git diff -w` reports **+227/-2**.
+
+The two real deletions are a single table row, edited by a second live session. The +227 is the
+first session's §33 plus the second's new subsection. **The other 276 deletions are a whitespace
+reflow.** There was no third author, no orphan, and nothing to hold back.
+
+| instrument | says | reality |
+|---|---|---|
+| `git diff --numstat` | +503 / -278 | — |
+| `git diff --numstat -w` | +227 / -2 | correct |
+
+**The lesson is not "use `-w`".** It is that rule 3c's check has a second purpose nobody had used
+it for: it does not only stop you committing a phantom diff, it stops you **believing a story about
+who wrote what**. A raw numstat on a reflowed file will manufacture a plausible phantom collaborator,
+and in a repo where four sessions genuinely do share files, that phantom is completely credible.
+
+Same family as `U-056`, `HANDOFF.md` lesson 10, and the three instrument failures the mod sessions
+hit this week (`n in (128,192,256)` that cannot see 512; `-filetrace` hooking only the EXE's IAT so a
+DLL-side loader reads as "never opened"; a per-file counter mistaken for a per-id counter). Every one
+was **a tool answering confidently instead of erroring**, and every one was caught by a disagreement
+between two instruments rather than by re-reading anything.
+
+**Before you attribute a diff to somebody, run both numstats.** Before you trust a negative, ask
+whether the instrument could have produced a positive.
