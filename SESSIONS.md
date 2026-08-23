@@ -9,24 +9,64 @@ none. **This file was itself five days stale on 2026-08-23** — it described th
 all ended and knew nothing about the four that were actually live. That is the failure mode it
 exists to prevent, so treat the date below as load-bearing.
 
-## Current sessions (2026-08-23)
+## Current sessions (2026-08-23, late — three CLOSED, one open)
 
-Four mod-feasibility workstreams plus a master orchestrator. Each keeps a live checkpoint at
-`re/sessions/STATUS_<name>.md` (**untracked by design** — `.gitignore` is deny-by-default and
-`re/sessions/` has no whitelist; `git add` there silently adds nothing).
+Four mod-feasibility workstreams ran in parallel plus a master orchestrator. **All four questions
+are answered.** Each session kept a checkpoint at `re/sessions/STATUS_<name>.md` (**untracked by
+design** — `.gitignore` is deny-by-default and `re/sessions/` has no whitelist; `git add` there
+silently adds nothing).
 
-| session | question | verdict | files it owns |
+| session | question | verdict | state |
 |---|---|---|---|
-| **bigger-cities** | can cities exceed 256 tiles | **POSSIBLE, 4 bytes**, game-proven 6/6 at N=512 | `re/tools/patch_dirtbuf.py` + `patch_citysize.py` + `patch_vertical.py` + `patch_surface.py`, `verify/citysize_mod_test/`, `re/tools/city_sections.py`, `GAME_PROTOCOL.md` rule 6 |
-| **camera-scroll** | is scroll sensitivity moddable | **POSSIBLE, 1 byte**, proven game-side | `re/tools/pe_patch.py`, `re/analysis/PREFS_UI.md`, `verify/scroll_patch_test/`, harness `-pref` / `-gzseq key:` / `cam` |
-| **road-type** | can a new road type be added | **IMPOSSIBLE without patching code** | `re/analysis/NETWORK_TYPES.md` + `NETWORK_RULE_ENGINE.md`, `formats/TILINGRULES.md`, `re/tools/tilingrules.py`, `re/scripts/harness_claim.ps1`, `verify/tilingrules_read_test/` |
-| **resizable-window** | can the window be made resizable | **POSSIBLE**, menu path verified, in-city 5 of 7 defects fixed | `LAUNCH_CONTROL.md` §33, `UNCERTAINTIES.md` U-068/069/070, harness `rz_*` / `-resize*` |
+| **bigger-cities** | can cities exceed 256 tiles | **POSSIBLE, 4 bytes**, game-proven 6/6 at N=512 | **CLOSED** |
+| **camera-scroll** | is scroll sensitivity moddable | **POSSIBLE, 1 byte**, proven game-side, plus a working Preferences slider | **CLOSED** |
+| **road-type** | can a new road type be added | **IMPOSSIBLE without patching code** | **CLOSED** |
+| **resizable-window** | can the window be made resizable | **POSSIBLE**, menu path verified, in-city 6 of 7 defects down | **OPEN** — 2 runs to witness U-068 |
 | **orchestrator** | coordination | — | this file, `re/sessions/`, integration commits |
 
-**The critical path is `U-068`** and it is shared: what drives the grid-B insert `FUN_1000ef50`
-(callers `0x1000f103`, `0x1000f9ee`) during a normal city load. It blocks resizable-window's in-city
-render **and** road-type's visual test, and it needs no game runs. resizable-window integrates;
-the other three feed it from separate angles via `re/sessions/U068_<name>.md`.
+Owned paths per workstream are in the commit messages (`9a17589`, `4731e8b`, `fe6d37b`, `fde5583`,
+`8978853`, `edae4b8`, `f9bd2cc`) and in each session's STATUS file.
+
+**resizable-window has the harness exclusively.** No queue, no lease contention. Deferred by
+explicit decision rather than forgotten: bigger-cities' stride measurement (~8 runs, cosmetic),
+camera-scroll's N-anchored camera reading (1 run) and its `.text` recipes, road-type's T1 visual
+rung (2 runs, ready-to-fire in `verify/tilingrules_read_test/README.md` §7), and `U-069` downward
+resize. Escalated to the owner as an environment blocker, not an analysis one: the proxy-DLL
+delivery vehicle needs an elevated `gflags /i SC3U.exe +sls` run.
+
+### The fan-out that closed U-068's root cause, and why it is the pattern to reuse
+
+`U-068` was the critical path for two workstreams while only one session was working it. It was
+split three ways by method rather than by subsystem, so nobody duplicated anyone:
+
+| session | angle | outcome |
+|---|---|---|
+| bigger-cities | upward caller trace from `0x1000f103` / `0x1000f9ee` | Init does not drive the insert |
+| camera-scroll | the iso object, on runtime-verified structure | grid B is a camera-rect-derived bucket grid filled only by registration |
+| road-type | design the differential instrument, run nothing | adopted as designed by the defect's owner |
+
+Two independent methods converged inside 20 minutes. Root cause: Init sizes and zeroes grid B at
+`iso+0x380`; only object registration fills it (`vt+0x100`/`+0x10c`/`+0x110` → `FUN_1000effc`/
+`FUN_1000f80e` → `FUN_1000ef50`); Init's only route to the insert is SetZoom/SetRotation, both of
+which early-out because the host passes zoom = rotation = 0 against an equality guard. **The fix is
+to re-drive registration or to not zero grid B on a re-Init, not to repair the builder.**
+
+**The part worth reusing is what happened next.** The session that owns the defect had a game-side
+result that contradicted both analyses (`iso+0x524 == 0` at forced zoom 2) and it **withdrew its own
+result** rather than weighting a measurement over a reading. The premise it had not checked was that
+`FUN_1000be25` walks only the tile cache. It does both — tile cache at `:101`, grid-B enumeration at
+`:274-276` — so forcing zoom 2 never moved off the broken structure. Its own summary: *"the same
+failure I have now made three times this week, asserting a negative from an instrument that could
+not observe the positive."*
+
+Three transferable rules came out of the fan-out:
+
+1. **Split a shared blocker by METHOD, not by subsystem.** Convergence between two methods is
+   evidence; two sessions reading the same code twice is not.
+2. **Ask for the reply on disk, never in chat.** Sessions end; `re/sessions/*.md` does not.
+3. **Ask every session what it wants from the others.** That single question surfaced a finished
+   harness driver one session had built and another had spent 6 runs and 5 leases failing to
+   reinvent.
 
 **Two ended sessions left uncommitted work**, both landed 2026-08-23 rather than discarded: the
 queue/coordination session (`harness_run.ps1`'s FIFO lease wrapper, `game_lock.ps1`,
