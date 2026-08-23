@@ -66,17 +66,35 @@ class SectionError(Exception):
     pass
 
 
+# The three sizes the shipped game produces. Kept for reporting only -- NOT as an acceptance
+# filter. An earlier version required `n in SHIPPED_SIZES`, which made this function structurally
+# incapable of reading a modded map (it reported N=? for a verified 512x512 save). A check that
+# cannot observe the thing you are testing for is worse than no check, because it reads as
+# evidence of absence. Accept any exact square in a sane range and flag the non-shipped ones.
+SHIPPED_SIZES = (128, 192, 256)
+MIN_N, MAX_N = 32, 4096
+
+
 def map_dimension(ents):
-    """-> N from the tile-grid section, or None. [CONFIRMED 59/59]"""
+    """-> N from the tile-grid section, or None. [CONFIRMED 59/59 on shipped cities]
+
+    Derivation: the tile-grid section is frame + N*N bytes + an 8-byte trailer, so
+    N = isqrt(size - framelen - 8) whenever that is an exact square.
+    """
     for e in ents:
         if e["group"] != GRID_GROUP:
             continue
         flen = e["frame"]["len"] if e["frame"] else 0
         payload = e["size"] - flen - 8          # 8-byte trailer
         n = math.isqrt(payload)
-        if n * n == payload and n in (128, 192, 256):
+        if n * n == payload and MIN_N <= n <= MAX_N:
             return n
     return None
+
+
+def is_shipped_size(n):
+    """False for a modded map size, so callers can label it rather than silently accept it."""
+    return n in SHIPPED_SIZES
 
 
 def decode_tile_grid(body, e, n):
