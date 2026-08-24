@@ -4321,3 +4321,71 @@ Counting a *return value* needs a stub that outlives the callee. A bare `call or
 every argument by 4; the stub re-pushes both args and does the `ret 8` cleanup itself. Callee cleanup
 confirmed from the shipped tail `32 c0 5f 5e 5b c2 08 00` at `0x10008597` `[CONFIRMED]`, consistent
 with `FUN_10008528`'s `mov edx,[esp+8]` entry. No entry detours were used.
+
+## §31.12 — ⭐ U-068 MEASURED IN PIXELS AT LAST: the fix is genuinely insufficient (2026-08-24)
+
+**One run, three shots, a within-run A/B with the fix applied mid-process so city, camera, lighting
+and window state are identical across the comparison.** Outcomes pre-registered before launch.
+
+| shot | when | result |
+|---|---|---|
+| **A** pre-resize, in city — **the instrument control** | t+19.797 s | **Europolis fully rendered**, `Pob: 2,069,432  §364,671  3/22/2088` |
+| **B** post-resize, fix withheld | t+24.620 s | **iso viewport BLACK**; toolbar, status bar and minimap fine, minimap showing a populated city |
+| **C** post-fix (`FUN_1000fa36` re-registration) | t+26.357 s | **still BLACK.** Only difference: the tip dialog finished compositing |
+
+**Verdict: row 3 of the pre-registered table — A good, B black, C black. The fix is genuinely
+insufficient. Repopulating grid B is not sufficient for the iso view.**
+
+Both A and C were viewed directly by the orchestrator before promotion, not accepted on report.
+
+Provenance is clean and was designed to be: exactly three dumps (the 3 s auto-shot suppressed), each
+written after its request, and phase C did not begin until `g_shot_seq` passed B's — the log records
+`PHASE C … shot B is written (seq now 2, B was requested at seq 1)` one millisecond after `SHOT #2`.
+**So B cannot have captured the fixed state.** This is the `U-070` lesson applied in advance rather
+than regretted afterwards.
+
+### It is not a null instrument — the fix ran, and the builder consumed its output
+
+In the same process, one millisecond apart: grid B **0 → 208 type-1 nodes in 39 cells**, insert
+counter **1290 → 1498 (+208)**, `FUN_1000b4b3 redraw → 246`, `FUN_1000e206 present → 1`, and
+`clip_8528` **+208 calls, +208 non-zero, +208 appends**.
+
+> **+208 in, +208 accepted, +208 appended, screen still black.**
+>
+> **The defect is downstream of the display list entirely** — in the rasterisation or blit of the iso
+> view's render target, not in grid B and not in the builder. Every stage this project has
+> instrumented for two days is working.
+
+### ⭐ A separate defect, now on record: the in-city UI does not reflow
+
+Visible in B and C. The window is 1280x1024 but the UI is still laid out for **1024x768**, with
+~256 px black margins right and below: tool palette at x≈930..1023, status bar stopping at 1023,
+minimap at the old corner, and a stray magenta 24x16 widget stranded at ~(1126, 875).
+
+**This contradicts the menu path**, where the resizable-window session measured exact re-centring
+(`192,144,832,624` → `320,272,960,752`). **In-city, that reflow does not happen.** Two different
+behaviours on the same resize, and only the menu one was ever verified.
+
+### Cross-session corroboration
+
+The symptom is stable and reproducible across sessions and cities: the resizable-window session's
+earlier `resize_G_incity_FIXED_1280x1024.png` shows the same black viewport with working UI and
+minimap on **Berlin**, and this run reproduces it on **Europolis**. (That file's `FIXED` refers to
+defect G of their ladder, not to `U-068`.)
+
+### Limits, stated
+
+`[UNCERTAIN]` **The region is black, not garbage.** It is not established whether the iso render
+target holds an image that fails to blit, or holds nothing at all — **those are different defects.**
+Next instrument: a lock-and-dump of `iso+0x74`'s surface against `iso+0x4ec`, the blit destination.
+A read, one run.
+
+### The correction that should survive this section
+
+The 2026-08-24 negative on the grid-B fix **stands** — but its original justification did not. It was
+first adjudicated on `iso+0x524 == 0`, which §31.11 showed is a *drained* value; the pixels now reach
+the same verdict by a sound route. **A right answer reached through a broken instrument is not
+evidence, and it was worth three runs to learn that here rather than in something shipped.**
+
+Images: `re/harness/u068_shots/` (gitignored — they are game screenshots and are **game content**,
+never to be published).

@@ -64,13 +64,19 @@ Session CLOSED. Anyone may pick it up.
 independent angles — Init sizes and zeroes grid B, only object registration fills it, and Init's only
 route early-outs on a zero-equality guard. **The fix is to re-drive registration, not to repair the
 builder.** Two fix candidates written with a pre-registered falsifier.
-**Next: LOOK AT PIXELS.** ⚠️ Two runs on 2026-08-24 established that **`iso+0x524` is not a symptom
-indicator** — it is a *drained* reading taken after the paint consumes the lists. The builder appends
-normally (216 calls → 216 non-zero → 216 appends, self-calibrating against the 216 re-registered
-type-1 nodes) **while `+0x524` reads 0**, and it reads that way during normal rendering too.
-**So "grid B is ruled out" is withdrawn, the re-registration fix may have worked, and nobody has
-looked at the screen.** The next instrument is a frame capture through the probe blit mirror
-(`-shot`), not another counter. `LAUNCH_CONTROL.md` §31.11.
+**Next: dump the render target, not the display list.** ⭐ Measured in pixels 2026-08-24
+(`LAUNCH_CONTROL.md` §31.12): control shot renders Europolis in full, post-resize shot is **black**,
+post-fix shot is **still black** — while grid B went 0 → 208 type-1 nodes and the builder logged
+**+208 calls, +208 non-zero, +208 appends**. Everything this project has instrumented for two days
+works. **The defect is downstream of the display list, in the rasterisation or blit of the iso render
+target.** Next instrument: a lock-and-dump of `iso+0x74`'s surface against `iso+0x4ec`, the blit
+destination — one read run. It answers the open question, **black vs garbage**, which are different
+defects.
+
+> ⭐ **Separate defect found in the same shots: the in-city UI does not reflow.** Window 1280x1024,
+> UI still laid out for 1024x768, ~256 px black margins right and below, a stray magenta widget at
+> ~(1126, 875). This **contradicts the menu path**, where exact re-centring was measured
+> (`192,144,832,624` → `320,272,960,752`). Only the menu behaviour was ever verified.
 
 > ⚠️ **Any instrument on grid B must split nodes by the type byte at `node[2]`.** It holds two
 > classes — `FUN_1000ef50` tags type 1 (drawable), `FUN_1000cedb` tags type 2 — and **both builders
@@ -106,9 +112,9 @@ parent PID, not by image name.
 
 Order:
 
-1. **`U-068`** — **1 run, a frame capture (`-shot`)**, not a counter. Two counter runs proved the
-   counters cannot answer it: `+0x524` is drained, not empty. Still unblocks #2 below. (`U-078` no
-   longer depends on it — closed statically.)
+1. **`U-068`** — **1 run, a surface lock-and-dump** (`iso+0x74` vs `iso+0x4ec`). Pixels have now
+   localised the defect to below the display list; this run settles black-vs-garbage. Still unblocks
+   #2 below. (`U-078` no longer depends on it — closed statically.)
 2. **Road-type T1** — 2 runs. Closes workstream #3.
 3. **Bigger-cities `run_diff.ps1`** — 1 run, then gameplay in a 512 city.
 4. **Credits discriminator** (`U-051`) — 1 run. Cosmetic closure; `verify/credits_discriminator/`
