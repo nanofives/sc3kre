@@ -1273,16 +1273,66 @@ function differently. **Left untouched, recorded rather than resolved by fiat.**
 
 | RVA | existing name | §14's reading | status |
 |---|---|---|---|
-| `SIMNTWRK 0x1000cde8` | `sc3_ntwrk_select_piece_sprite` | packed tile-field decode (`x = f & 0x7ff` vs `+0xcc`, `y = (f >> 0xb) & 0x7ff` vs `+0xd0`) plus a map-edge index | `[UNCERTAIN]` |
+| `SIMNTWRK 0x1000cde8` | ~~`sc3_ntwrk_select_piece_sprite`~~ | packed tile-field decode plus a map-edge index | ✅ **SETTLED §14.10 — BOTH labels wrong.** It builds LTEXT (group `0x82e0074c`) and contains no sprite key at all. Renamed `sc3_ntwrk_query_text_edge_connection`. **The axis fact §14.5 needs is confirmed inside it.** |
 | `SIMDSTR 0x1001f239` | `sc3_dstr_parade_find_route` | drives both axis walks over network side-connectivity | `[UNCERTAIN]` |
 
-`0x1000cde8` matters more than it looks: if the earlier read is right and this function selects a
-**sprite**, that touches §13.7's exemplar-versus-sprite correction. The two readings are not obviously
-incompatible — a sprite selector would plausibly decode the tile field first — but **the axis
-identification in §14.5 leans on the `+0xcc`/`+0xd0` pairing in this function**, so anyone revisiting
-§13.7 should re-read `0x1000cde8` first rather than trusting either label.
+~~`0x1000cde8` matters more than it looks…~~ **RESOLVED the same day — see §14.10.** It was re-read in
+full precisely because §14.5 leans on it. Outcome: it is **not** a sprite selector (no sprite key in the
+body; it builds LTEXT under `0x82e0074c`), so **§13.7's exemplar-versus-sprite correction is not
+threatened** — nothing here selects art. The `+0xcc`/`+0xd0` axis pairing is confirmed in its own code.
 
 `0x1001f239` is likely compatible too (a parade follows the road network, so tracing a connected run is
 what routing it would do), but "parade" is a claim about *purpose* that §14 did not establish and
 "trace network run" is a claim about *mechanism* that the existing note did not. Neither is promoted
 over the other.
+
+### 14.10 `0x1000cde8` re-read — BOTH labels were wrong, and the axis fact survives
+
+Re-read in full (772 bytes) to settle §14.9, because §14.5's axis identification leans on it.
+
+**It is not a sprite selector.** The body contains **no** sprite key — neither `0x625c6226` nor
+`0x825c6289` appears. What it does contain is **`0x82e0074c`**, which `formats/CITY_SAVE.md` already
+pins as an **LTEXT group** (the same one the city-save query tool uses for zone-type names). It builds
+**localized text**, and it tail-calls `FUN_10024749`, a same-shaped LTEXT sibling, on every path.
+
+**And "packed tile-field decode" undersells it** — that is one sub-step, not the function.
+
+Mechanically `[CONFIRMED @ 0x1000cde8, SIMNTWRK.DLL]`:
+
+1. `FUN_10021b24()` then `vt[0x18c]` fetches a global object; returns 0 if null.
+2. An eight-way cascade of `this->vt[0x3c](flag)` over `0x8000, 0x20000, 0x400000, 0x10000, 0x800000,
+   0x40000, 0x100000, 0x200000` classifies the occupant into a **category `1..8`**.
+3. Each arm decodes the packed tile field at `this+0x10`: `x = f & 0x7ff`,
+   `y = (f >> 0xb) & 0x7ff`.
+4. `object->vt[0x58](category, x, y)` — a per-tile predicate. If false, skip to the tail call.
+5. Otherwise compute a **map-edge index** and call `object->vt[0xb0](edge, &out)` — **two arguments**,
+   so a different object from `FUN_1000d73d`'s eight-argument `+0xb0`.
+6. Build an LTEXT string under `0x82e0074c` and append via `param_2->vt[0x4c](str, out, 0x20000, 0)`.
+7. Tail-call `FUN_10024749(this, param_1, param_2)` regardless.
+
+`[UNCERTAIN]` the subject: an edge index feeding a name that is appended to a text sink reads like a
+**neighbour-city connection** line, and SC3 does connect networks at map edges. But
+`FUN_10021b24()->vt[0x18c]` has not been identified, so that is **not** claimed — the row is named for
+what it does, not for what it is probably for.
+
+#### The load-bearing part: §14.5's axis identification is CONFIRMED, in this function
+
+```c
+if ((f & 0x7ff) == 0)                                  local_18 = 0;   // x == 0
+else if (((f >> 0xb) & 0x7ff) == vt[0xd0]() - 1)        local_18 = 3;   // y == ymax-1
+else  local_18 = ((f & 0x7ff) == vt[0xcc]() - 1) + 1;                   // x == xmax-1 -> 2, else 1
+```
+
+**`x` is compared against `+0xcc` and `y` against `+0xd0`, right here.** So the pairing §14.5 used
+holds, and the parity claim — `{0,2}` on the first map axis, `{1,3}` on the second — stands
+independently of what this function is for.
+
+> **A suggestive coincidence, recorded as suggestive and nothing more.** This edge index maps
+> `x==0 → 0`, `y==ymax-1 → 3`, `x==xmax-1 → 2`, else `1`. That is **exactly** the convention of the
+> `0x10032134` delta table: `0 = (-1,0)`, `1 = (0,-1)`, `2 = (+1,0)`, `3 = (0,+1)`. Two index spaces
+> that no code connects nevertheless use the same numbering, which is weak evidence that the engine
+> uses one convention throughout.
+>
+> **This does NOT promote a compass witness and §14.5's disqualification stands**, because this index
+> goes to a two-argument `+0xb0` on a different object, never into `FUN_1000d73d`'s space. Recorded so
+> that a later pass can weigh it, not lean on it.
