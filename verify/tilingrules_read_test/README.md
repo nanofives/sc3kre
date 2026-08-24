@@ -166,8 +166,20 @@ Re-checked empirically **2026-08-22** under the queue, install verified stock: c
 independent observables (their surface probe, this blit-mirror reconstruction) fail at the same
 place.
 
-**Trigger: when `U-068` closes, run this.** No further setup needed; the backup, the edit
-procedure and the outcome table are all above.
+**Trigger: when `U-068` closes, run this.** The outcome commitments are the **T1 table in §4**
+(above) - read them before looking at the images, not after.
+
+**Step 0, and it is not optional on a fresh checkout.** `TilingRules.bak/` is game content and
+therefore gitignored, so a clone will NOT have it. Create and verify it first:
+
+```powershell
+$bak = 'verify\tilingrules_read_test\TilingRules.bak'
+if (-not (Test-Path $bak)) { Copy-Item -Recurse 'Apps\Res\TilingRules' $bak }
+"backup files: $((Get-ChildItem $bak -File).Count) (must be 68)"
+(Get-FileHash "$bak\ROAD_GRND_Set.txt" -Algorithm SHA256).Hash   # must be 9926948A...1358
+```
+
+Substitute your own session label for `-Owner roads` throughout.
 
 ```powershell
 # 1. baseline, stock rules
@@ -194,6 +206,11 @@ Copy-Item "verify\tilingrules_read_test\TilingRules.bak\ROAD_GRND_Set.txt" `
 location into a public repo, and a *relative* path does not work because the game's cwd is
 `Apps\`, so `Cities\Farmsville.sc3` would resolve to `Apps\Cities\...`.
 Building it at run time keeps it absolute, portable and leak-free. Do not "simplify" it back.
+
+**Where the images land:** `capture.ps1` writes the reconstructed frame to
+`.happy-share\<share-id>\<Name>_<HHmmss>.png` and prints the full path as its last line
+(`SHOT: 2560x1440 -> ...`). Take the path from that line rather than guessing; the share-id
+is a `capture.ps1` parameter default and may differ on your machine.
 
 Then diff the two PNGs. Compare **road tiles only** — the T1a run already established the game
 does not crash and the city still loads with a 7-byte Set file, so the difference, if any, is
