@@ -109,7 +109,8 @@ Per node in the work list:
 Per 6-byte record `{u32 id; u8 dir; u8 state}`:
 
 - `id == 0` → **removal.** Fetch occupant, check `+0x74` (removable), then `layer+0x48`.
-- `id != 0` → **creation.** `this->vtable[0x48](&obj, GZCLSID 0xc14f8955, id, state)` — the piece id
+- `id != 0` → **creation.** `this->vtable[0x48](&obj, GZIID_cISC3Occupant 0xc14f8955, id, state)`
+  — ⚠️ **CORRECTED 2026-08-24: `0xc14f8955` is an INTERFACE id, not a GZCLSID.** See §11. The piece id
   and the state byte are the **two constructor arguments**. Read ground height, set position via
   `obj->vtable[0xec]`, insert with `layer->vtable[0x3c]`. If insertion fails and `predB || predC`
   and the incumbent is removable, remove it and retry.
@@ -118,7 +119,11 @@ Per 6-byte record `{u32 id; u8 dir; u8 state}`:
 
 Coordinates are **24.8 fixed point** (`<<8`).
 
-`[UNCERTAIN]` the identity of GZCLSID `0xc14f8955`, the network-piece class. Not in SIMNTWRK.
+~~`[UNCERTAIN]` the identity of GZCLSID `0xc14f8955`, the network-piece class. Not in SIMNTWRK.~~
+**BOTH CLAUSES WRONG — corrected 2026-08-24, see §11.** `0xc14f8955` is `GZIID_cISC3Occupant`, an
+interface id (and `GZCOM_INTERFACE_CATALOGUE.md` §27c had already said so on 2026-08-18, which this
+file was never updated to match). The piece classes **are** in SIMNTWRK, built by the 22-case factory
+`FUN_1000bdcd`.
 
 ## 4. The three decoded fields
 
@@ -341,11 +346,227 @@ three-stage order, first-match-wins, and the flatness and Protected gates are al
 
 - `[UNCERTAIN]` cross-module callers of vtable `+0xac` / `+0xb0` / `+0xf0` — which UI action drives
   which entry.
-- `[UNCERTAIN]` GZCLSID `0xc14f8955`, the network-piece class (outside SIMNTWRK).
-- `[UNCERTAIN]` the class behind IID `0x41658d28` and occupant `vtable[0xa0]`/`+0x1c` — needed for
-  flag bits `0x400`/`0x4000` and for the state-byte facing convention.
-- `[UNCERTAIN]` `*_Protected.txt` → netType binding (§6), settleable by differential.
+- ~~`[UNCERTAIN]` GZCLSID `0xc14f8955`, the network-piece class (outside SIMNTWRK).~~ **CLOSED §11.**
+- ~~`[UNCERTAIN]` the class behind IID `0x41658d28`~~ **CLOSED §11:** `0x41658d28` is the piece
+  object's **primary** interface at offset 0 (QI `FUN_1000cdac`), implemented by the 22 classes
+  `FUN_1000bdcd` builds. `cISC3Occupant` is a subobject at `this+4`. Still open: the `+0x18` flag
+  bits `0x400`/`0x4000` semantics, and the facing convention (narrowed, §11.4).
+- ~~`[UNCERTAIN]` `*_Protected.txt` → netType binding (§6), settleable by differential.~~ **CLOSED
+  statically 2026-08-24 at C3, no run spent — `NETWORK_TYPES.md` §9.**
 - Not read: `FUN_1000abde`, `FUN_100167d4`, `FUN_1001a2c0`, `FUN_1001a056` bodies (call edges only).
 
 Confidence: **C2** for the structural trace; **C3** for the `dir` decode (forward and inverse tables
 agree 25/25) and the selector decode (code plus 4,219 shipped rules, zero exceptions).
+
+---
+
+## 11. ⭐ U-076 CLOSED (2026-08-24) — the piece factory is in SIMNTWRK, and `0xc14f8955` was never a class id
+
+### 11.1 The correction, and how the error propagated
+
+**`0xc14f8955` is `GZIID_cISC3Occupant`, an INTERFACE id.** `vtable[0x48](&obj, 0xc14f8955, id, state)`
+is not `CreateInstance(clsid, …)`; the second argument is the *requested interface*.
+
+The two conclusions built on the misread — "the class is not in SIMNTWRK" and "absent from SIMDIRT"
+(`U-066`) — are artifacts of it. There is no registrar for `0xc14f8955` anywhere because a class id is
+not what it is.
+
+> **This was already known and this file contradicted it.**
+> `GZCOM_INTERFACE_CATALOGUE.md` §27c named `GZIID_cISC3Occupant = 0xc14f8955` on **2026-08-18**.
+> `U-076` was filed on 2026-08-23 from this file's stale label, so an uncertainty was opened against a
+> question the project had already answered. **Two docs disagreed and the tracker followed the wrong
+> one.** When a doc labels a bare constant, grep the catalogue before filing.
+
+The distinguishing test is cheap and is the method note worth keeping: the dword `55 89 4f c1` occurs
+**67 times, all of them in `.text`, in no `.rdata` table**, and eleven of those sites are
+byte-identical 44–52 byte **QueryInterface** bodies, one per module —
+
+`SIMNTWRK 0x10023852`, `SIMGEOM 0x1001ca50`, `SIMSERV 0x10014bd0`, `SIMUTIL 0x10019670`,
+`SIMDSTR 0x1002dc65`, `SIMECO 0x10014838`, `SIMRCI 0x1003d154`, `SIMMISC 0x100356b2`,
+`SimTransit 0x10015ac0`, `SIMSPR 0x1001bbae`, `STRTSIM 0x10016051`
+
+```c
+if ((param_1 == 1) || (param_1 == 0x58d) || (param_1 == -0x7e3f3484) || (param_1 == -0x3eb076ab))
+```
+
+`-0x3eb076ab` = `0xc14f8955`. `[CONFIRMED @ 0x10023852, SIMNTWRK.DLL]`
+
+**A QueryInterface body is what an interface id looks like and what a class id never looks like.**
+Whenever a "GZCLSID" is only ever seen as an argument and never in a `.rdata` table, check for an iid
+first.
+
+### 11.2 The real factory: `FUN_1000bdcd`, 22 kinds, in SIMNTWRK
+
+`FUN_100165d8`'s `this` has vtable **`0x1002c7bc`**, pinned by three slot hits each unique in the
+image: `+0x48` = `0x1001363a`, `+0x11c` = `0x1001a719`, `+0x130` = `0x1001a7d2` (the last two being
+two of the six per-network membership predicates `FUN_1001a5f2` calls at `+0x11c`…`+0x130`).
+
+Slot `+0x48` = **`FUN_1001363a`** `[CONFIRMED @ 0x1001363a, SIMNTWRK.DLL]`:
+
+```c
+kind = FUN_1001a5f2(this, id);           // classify piece id -> 1..0xf
+FUN_1000bdcd(kind, 0x41658d28, &piece);  // <-- the factory; 0x41658d28 is the PRIMARY interface
+piece->vt[0x10](id, state);              // <-- the two construction arguments
+piece->vt[0x00](0xc14f8955, ppOut);      // <-- QI to cISC3Occupant, returned to the caller
+```
+
+The argument order is itself the proof: `0xc14f8955` reaches `vt[0x00]`, QueryInterface. The value
+handed to the factory is `0x41658d28`.
+
+**`FUN_1000bdcd` @ `0x1000bdcd` (1239 bytes) is the registrar** `[CONFIRMED @ 0x1000bdcd]` — a
+`switch` on `(kind & 0xff) - 1` with **22 cases**, each `operator new(0x20)` (`0x1c` for kinds 9, 10
+and 19), a base ctor (`FUN_1000d2da` / `FUN_1000d0fc`), then two vtable stores `*this = vt1`,
+`this[1] = vt2`:
+
+| kind | size | vt1 (primary, `0x41658d28`) | vt2 (`cISC3Occupant` at `this+4`) |
+|---:|---:|---|---|
+| 1 | 0x20 | `0x1002b724` | `0x1002b5dc` |
+| 2 | 0x20 | `0x1002b3cc` | `0x1002b284` |
+| 3 | 0x20 | `0x1002b220` | `0x1002b0d8` |
+| 4 | 0x20 | `0x1002b074` | `0x1002af2c` |
+| 5 | 0x20 | `0x1002ad1c` | `0x1002abd4` |
+| 6 | 0x20 | `0x1002ab70` | `0x1002aa28` |
+| 7 | 0x20 | `0x1002a9c4` | `0x1002a87c` |
+| 8 | 0x20 | `0x1002a818` | `0x1002a6d0` |
+| 9 | 0x1c | `0x1002aec8` | `0x1002ad80` |
+| 10 | 0x1c | `0x1002b578` | `0x1002b430` |
+| 11 | 0x20 | `0x1002a66c` | `0x1002a524` |
+| 12 | 0x20 | `0x1002a4c0` | `0x1002a378` |
+| 13 | 0x20 | `0x1002a314` | `0x1002a1cc` |
+| 14 | 0x20 | `0x1002a168` | `0x1002a020` |
+| 15 | 0x20 | `0x10029fbc` | `0x10029e74` |
+| 16 | 0x20 | `0x10029e10` | `0x10029cc8` |
+| 17 | 0x20 | `0x10029c64` | `0x10029b1c` |
+| 18 | 0x20 | `0x10029ab8` | `0x10029970` |
+| 19 | 0x1c | `0x1002990c` | `0x100297c4` |
+| 20 | 0x20 | `0x10029760` | `0x10029618` |
+| 21 | 0x20 | `0x100295b4` | `0x1002946c` |
+| 22 | 0x20 | `0x10029408` | `0x100292c0` |
+
+`FUN_1001a5f2` @ `0x1001a5f2` only ever yields **1..0xf**, so kinds `0x10`..`0x16` are reached from
+some other caller — `[UNCERTAIN]` which. It selects the kind from six runtime-built id lists at
+`DAT_10032348`, `4c`, `50`, `54`, `58`, `5c` (12-byte entries, id at `+8`), with two id-range special
+cases: `0x3b1a`..`0x3b25` (15130..15141) maps to kind `0xe`/`0xf` instead of `6`/`2`.
+
+`0x41658d28` sits at offset 0 (QI `FUN_1000cdac` `[CONFIRMED @ 0x1000cdac]`), and the `cISC3Occupant`
+subobject is at **`this+4`**, to which `FUN_1000cdac` delegates the other iids via
+`FUN_10023852(this+4, …)`. **That closes `U-077`'s class question.**
+
+### 11.3 The network-piece object, field by field
+
+Slot `+0x10` of the primary interface, called with `(id, state)`, is **`FUN_1000c80b`**
+`[CONFIRMED @ 0x1000c80b, SIMNTWRK.DLL]`:
+
+```c
+key = this->vt[0x60](&tmp, id);        // {0xe223741f, 0xa317745f, id} -- exemplar key, id only
+*(u32*)(this+0x14) = (*(u32*)(this+0x14) & 0x3fffffff) | (state << 0x1e);
+*(u32*)(this+0x18) = (*(u32*)(this+0x18) ^ id) & 0xffff ^ *(u32*)(this+0x18);
+return FUN_10023936(this+4, &key);    // load exemplar into the occupant subobject
+```
+
+| offset | bits | meaning | getter | setter |
+|---|---|---|---|---|
+| `+0x00` | | vt1 (`0x41658d28`) | | |
+| `+0x04` | | vt2 (`cISC3Occupant` subobject) | | |
+| `+0x0c` | 24, 25 | two flags (written `0x1000c86f`, read `0x1000ca2c`) | | |
+| `+0x10` | | resource/handle, `+0x1c` cache (`0x1000d225`) | | |
+| **`+0x14`** | **30–31** | **`state` (orientation)** | `+0x38` = `0x1000cca3` | `+0x3c` = `0x1000ccaa` |
+| `+0x14` | 0–10 / 11–21 / 22–29 | tile x / y / z (`0x1000c86f`, preserves `& 0xc0000000`) | | |
+| `+0x18` | 0–15 | **piece `id`** | `+0x30` = `0x1000cc83` | `+0x34` = `0x1000cc8c` |
+| `+0x18` | 16 | flag (property `0x63559421`) | `+0x18` = `0x1000cbee` | `+0x1c` = `0x1000cbf8` |
+| `+0x18` | 17 | "has extra" (property `0x6355941e`) | `+0x40` = `0x1000ccc1` | |
+| `+0x18` | 18–19 / 20–27 | 2-bit + 8-bit extra (`0x6355941f`, `0x63559420`) | `+0x48` = `0x1000cd01` | `+0x44` = `0x1000ccd3` |
+
+`state` is written `<< 0x1e` with **no mask**, so any value above 3 is silently truncated to 2 bits —
+consistent with the measured `{0,1,2,3}`.
+
+### 11.4 U-078: the rotation is confirmed, the compass zero is NOT
+
+**Confirmed.** `cISC3Occupant` slot `+0xb0` is an orientation getter, byte-identical in nine modules
+(`SIMNTWRK 0x10023ecc`, `SIMGEOM 0x1001d0cb`, `SIMDSTR 0x1002e2c8`, `SIMECO 0x10014eb2`,
+`SIMMISC 0x10035d31`, `SIMRCI 0x1003d7bc`, `SIMSERV 0x1001522f`, `SimTransit 0x1001612a`,
+`SIMUTIL 0x10019ceb`):
+
+```c
+*param_3 = 0; *param_2 = 0;
+switch (*(uint*)(this+0x10) >> 0x1e) {
+  case 0: *param_1 = 0;      break;
+  case 1: *param_1 = 0x3fff; break;
+  case 2: *param_1 = 0x7fff; break;
+  case 3: *param_1 = 0xbfff; break;
+}
+```
+
+`[CONFIRMED @ 0x10023ecc, SIMNTWRK.DLL]`
+
+The **units** are pinned by a consumer: `SIMRCI FUN_100191fe` `[CONFIRMED @ 0x100191fe, SIMRCI.DLL]`
+does `render->vt[0x14](x, y, ((a & 0xffff) * 0x168) / 0xffff, 1)` where `0x168` = **360**. So the field
+is a 16-bit angle over one turn and `0x4000` is exactly 90°. Same shape at `SIMRCI 0x10029a38` and
+`0x1002cd48`.
+
+The **iOS oracle names it**: `SimCity::goOccupant::GetOrientation(u16&, u16&, u16&) const` @
+`0x0020718c`, same four literals (iOS packs the 2 bits at byte `+0x2c` bits 3–4 — a different layout,
+as expected for `[iOS-HINT]` material). Its setter `SetOrientation` @ `0x002077ac` inverts by
+round-to-nearest quarter turn at `0x1fff / 0x5fff / 0x9fff / 0xdfff` (the 45° midpoints). So SC3U slot
+`+0xb0` = `GetOrientation`, `+0xb4` (`0x10023f18`, `*out = field >> 0x1e`) = raw index getter, `+0x10c`
+(`0x1002403f`) = index setter that repaints on change.
+
+Two more SC3U-side witnesses that the byte is an orientation and nothing else:
+
+- `FUN_1000d225` `[CONFIRMED @ 0x1000d225]` builds the graphic key as
+  `{0x625c6226, 0x825c6289, pieceId * 0x100 + state}`. **The state is the low byte of the sprite
+  resource instance id.**
+- `FUN_1000ca2c` `[CONFIRMED @ 0x1000ca2c]` and `FUN_10023b3a` `[CONFIRMED @ 0x10023b3a]` serialise it
+  as `field >> 0x1e` through sink slot `+0x38`, beside x/y/z through `+0x30`. Persisted as a bare
+  2-bit index.
+
+**So `state N` = `N × 90°` about the single non-zero axis, monotone, with `state 0` = no rotation.**
+That kills any non-monotone permutation of the four orthogonals, and it explains why `DAT_1003195c`
+(ROAD) can carry the 90° step in the *id*: the id picks the art, the state picks a quarter turn of it,
+and for pieces whose art exists in both forms the two are interchangeable.
+
+**Still open, and it must not be guessed.** The ctor names no facing — no rotation matrix, no `dx/dy`
+table indexed by `state`, no compass constant on this path. The only geometric consumer is the sprite
+lookup, and it is data-driven: which drawing sits at instance `+0`/`+1`/`+2`/`+3` is a property of the
+shipped art. The iOS sibling is unhelpful here rather than helpful —
+`SimCity::OccupantSprite::setOccupantViewRotation` @ `0x002ac6b8` and `setOccupantBaseRotation` @
+`0x002ac7a0` index by `(base + view) % 4` clamped to `getSubAnimCount`, i.e. the **camera** rotation is
+added before indexing, so sub-frame 0 is tied to no world direction in code at all. Saying
+"state 1 = north" from this evidence would be invention.
+
+> ### ⭐ The A/B is NO LONGER blocked on `U-068`
+> This is the actionable change. Take one **asymmetric** piece id (a T-junction or a one-way stub),
+> extract resource instances `pieceId*0x100 + 0..3` under `{0x625c6226, 0x825c6289}` from the shipped
+> resource files, and render the four. `GetOrientation` already establishes they are in 90° order, so
+> only the zero reference and the sense remain, and two of the four frames settle both. **No game run,
+> no in-city rendering, so the `U-068` block does not apply.**
+
+### 11.5 Residuals
+
+1. `[UNCERTAIN]` the compass zero and the rotation sense of `state`. Route in the box above.
+2. `[UNCERTAIN]` which caller supplies factory kinds `0x10`..`0x16`; `FUN_1001a5f2` yields only `1..0xf`.
+3. `[UNCERTAIN]` **highest-value remaining lead** — the concrete implementation of interface
+   `0x82237425` slot `+0xb0`, called from `FUN_1000cd35` `[CONFIRMED @ 0x1000cd35]` as
+   `vt[0xb0](x, y, z, state, &b0, &b1, &b2, &b3)`, returning four bytes. The declared vtable
+   `0x1002bdcc` (QI `0x1000db84`) is abstract — every slot `+0x98`..`+0xb4` is the stub `0x1002670e`.
+   **Four booleans from a coordinate plus a state is the shape of a per-side connectivity query, which
+   would pin the facing from code alone.**
+4. `[UNCERTAIN]` semantics of `+0x18` bits 18–19 and 20–27 (`0x6355941f`, `0x63559420`) and the two
+   `+0x0c` flags.
+5. `[UNCERTAIN]` `0x81c0cb7c`, unchanged from `U-044`.
+6. Not done: mapping the six piece-id lists `DAT_10032348`..`5c` to the six network types.
+
+### 11.6 Verification done before promotion
+
+Four claims re-read from the export by the orchestrator rather than accepted on report: the
+`0x10023852` QI body (`param_1 == -0x3eb076ab` present), the `0x10023ecc` switch literals, the
+`0x1001363a` call sequence *including the argument order that proves the iid/clsid distinction*, and
+`0x1000c80b`'s unmasked `param_2 << 0x1e`. All four match.
+
+One figure differs harmlessly from the catalogue: §27c says the iid occurs in **52 functions**, this
+pass counts **67 dword occurrences**. Both can hold — occurrences per function are not 1:1 — but do not
+quote them as the same measurement.
+
+Confidence: **C2** for the factory/field trace (decompilation read, callees resolved, named);
+`GetOrientation`'s angle semantics are **C3** (nine byte-identical SC3U implementations, a consumer that
+converts to 360°, and a named iOS witness).
