@@ -64,12 +64,13 @@ Session CLOSED. Anyone may pick it up.
 independent angles — Init sizes and zeroes grid B, only object registration fills it, and Init's only
 route early-outs on a zero-equality guard. **The fix is to re-drive registration, not to repair the
 builder.** Two fix candidates written with a pre-registered falsifier.
-**Next:** ⚠️ **NOT the grid-B fix — that was run 2026-08-24 and produced the pre-registered
-NEGATIVE.** Re-registration worked (grid B repopulated +213 type-1 nodes, counter 1286 → 1499,
-`builder_hi` reached +64 times) and **`iso+0x524` is still 0**, so **grid B is ruled out as the
-blocker**. The live lead is one run: a call-site counter on `FUN_1000a62c` → `FUN_10008528` inside
-the builder, downstream of the type-1 test, whose non-zero return increments `+0x524`.
-`LAUNCH_CONTROL.md` §31.10.
+**Next: LOOK AT PIXELS.** ⚠️ Two runs on 2026-08-24 established that **`iso+0x524` is not a symptom
+indicator** — it is a *drained* reading taken after the paint consumes the lists. The builder appends
+normally (216 calls → 216 non-zero → 216 appends, self-calibrating against the 216 re-registered
+type-1 nodes) **while `+0x524` reads 0**, and it reads that way during normal rendering too.
+**So "grid B is ruled out" is withdrawn, the re-registration fix may have worked, and nobody has
+looked at the screen.** The next instrument is a frame capture through the probe blit mirror
+(`-shot`), not another counter. `LAUNCH_CONTROL.md` §31.11.
 
 > ⚠️ **Any instrument on grid B must split nodes by the type byte at `node[2]`.** It holds two
 > classes — `FUN_1000ef50` tags type 1 (drawable), `FUN_1000cedb` tags type 2 — and **both builders
@@ -105,9 +106,9 @@ parent PID, not by image name.
 
 Order:
 
-1. **`U-068`** — grid B is **ruled out** (2026-08-24). Next is **1 run**: a call-site counter on
-   `FUN_1000a62c` → `FUN_10008528` in the builder. Still unblocks #2 below. (`U-078` no longer
-   depends on it — closed statically.)
+1. **`U-068`** — **1 run, a frame capture (`-shot`)**, not a counter. Two counter runs proved the
+   counters cannot answer it: `+0x524` is drained, not empty. Still unblocks #2 below. (`U-078` no
+   longer depends on it — closed statically.)
 2. **Road-type T1** — 2 runs. Closes workstream #3.
 3. **Bigger-cities `run_diff.ps1`** — 1 run, then gameplay in a 512 city.
 4. **Credits discriminator** (`U-051`) — 1 run. Cosmetic closure; `verify/credits_discriminator/`

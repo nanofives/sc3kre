@@ -4164,6 +4164,11 @@ holds until the occupant bridge exists with a 20 s fallback, so **`-kill` must b
 
 ## §31.10 — U-068 fix attempt: the pre-registered negative, and grid B's two node classes (2026-08-24)
 
+> ⚠️⚠️ **THIS SECTION'S VERDICT IS WITHDRAWN — read §31.11 first.** The negative below was
+> adjudicated with `iso+0x524`, which §31.11 shows is a **drained** reading and not a symptom
+> indicator. **"Grid B is ruled out as the blocker" is NOT established.** The node-class split and
+> the post-Init census survive, because those were read off the structure; the verdict does not.
+
 **The fix was applied, it worked mechanically, and it did not fix the symptom. That is the
 outcome the diagnosis session pre-registered, and it is recorded as such rather than retried
 until it looked positive.**
@@ -4243,3 +4248,76 @@ afterwards; harness claim and game lease both released. The resizable-window ses
 
 Session write-up: `re/sessions/STATUS_u068-fix.md` (untracked by design, like the other
 `re/sessions/*` checkpoints). Logs: `re/harness/u068fix3.log` is the type-split one.
+
+## §31.11 — ⚠️ `iso+0x524` IS NOT A SYMPTOM INDICATOR. §31.10's verdict is withdrawn. (2026-08-24)
+
+**One run, outcome 4 of a pre-registered four, and the agent's own prediction (outcome 3) was
+falsified and reported as such.** Call-site counters, no entry detours.
+
+### The readings
+
+| site | before | after | delta |
+|---|---|---|---|
+| `+0xD313` → `FUN_1000a62c` | 0 | **0** | +0 |
+| `+0xD33A` → `FUN_10008528` calls | 285 | 501 | **+216** |
+| `+0xD33A` **non-zero returns** | 214 | 430 | **+216** |
+| `+0xD355` → `FUN_10010896` append | 214 | 430 | **+216** |
+| `+0xD568` / non-zero / `+0xD581` (2nd path) | 2770 / 2441 / 2441 | 4307 / 3978 / 3978 | **+1537 each** |
+
+Grid B at that moment: **216 type-1** in 39 cells, **1537 type-2**, `items(+0x524)` = **0**.
+
+Both call sites verified against the anchored DLL: `0x1000d313` and `0x1000d33a` are `E8`s resolving
+to `0x1000a62c` and `0x10008528` `[CONFIRMED]`.
+
+### `FUN_10008528` rejects nothing, and the instrument calibrates itself
+
+216 calls, 216 non-zero returns, 216 appends. **+216 = +216 = +216** matches the 216 re-registered
+type-1 nodes exactly, and **+1537 = +1537 = +1537** matches the type-2 count. Every grid-B node of
+both classes reached the overlap test, passed it, and was appended. **Nothing is filtered anywhere.**
+
+`FUN_1000a62c` reads 0 — but it also reads 0 during normal pre-resize gameplay, so it is simply not
+on the live path (`param_2 == 0` always). That ambiguity was **pre-registered as a caveat before the
+run**, and is not claimed as a finding either way.
+
+### ⚠️ What this overturns
+
+**The builder appends, and `+0x524` then reads 0. So `+0x524` is a DRAINED reading taken after the
+paint consumed the lists — not evidence that the builder produced nothing.**
+
+Corroboration from inside the same run: at t+13.8 s, **pre-resize, with the city rendering
+normally**, the counters already stood at 285/214/214 and 2770/2441/2441. Normal rendering produces
+the same shape of traffic, and the post-resize delta (+216) is the same order as normal gameplay's
+214.
+
+> ### `iso+0x524 == 0`, sampled after a redraw, never meant "the display lists are empty".
+> **Every conclusion resting on that reading needs re-reading**, including §31.10's and including the
+> `U-068` framing that predates it.
+
+**§31.10's verdict is WITHDRAWN.** Its falsifier 3 was *"grid B repopulated AND `iso+0x524` still 0 ⇒
+grid B was contributing, not the blocker"* — and the negative half of that test is now known not to
+discriminate. **"Grid B is ruled out as the blocker" is NOT established.** The re-registration fix may
+have worked; nobody looked at pixels.
+
+### What survives, and why
+
+| claim | status | because |
+|---|---|---|
+| type-1 / type-2 node split | **stands** | read off the structure and re-verified in the export |
+| census A: 0 drawable nodes immediately after Init | **stands** | read off the structure, not off `+0x524` |
+| 1285 inserts on load vs 0 after a resize Init | **stands** | insert counters, not `+0x524` |
+| "grid B ruled out as the blocker" (§31.10) | **withdrawn** | adjudicated with an instrument now known to be invalid |
+| "display lists stay empty after a resize Init" (`U-068` as originally framed) | **`[UNCERTAIN]`** | the phrase encodes the `+0x524` reading |
+
+### The honest next instrument is pixels, not another counter
+
+`[UNCERTAIN]` **whether the city actually renders after the resize. Nothing measured so far looks at
+pixels.** `WINDUMP` reporting `[UNIFORM - capture produced no content]` is a headless
+window-capture artifact and is **not evidence either way**. The next step is a frame capture through
+the probe's blit mirror (`-shot`), which is the observable this whole chain has been proxying for.
+
+### Mechanism note worth keeping
+
+Counting a *return value* needs a stub that outlives the callee. A bare `call orig` would have shifted
+every argument by 4; the stub re-pushes both args and does the `ret 8` cleanup itself. Callee cleanup
+confirmed from the shipped tail `32 c0 5f 5e 5b c2 08 00` at `0x10008597` `[CONFIRMED]`, consistent
+with `FUN_10008528`'s `mov edx,[esp+8]` entry. No entry detours were used.
