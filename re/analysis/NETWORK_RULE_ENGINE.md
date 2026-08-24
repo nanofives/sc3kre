@@ -516,9 +516,11 @@ round-to-nearest quarter turn at `0x1fff / 0x5fff / 0x9fff / 0xdfff` (the 45° m
 
 Two more SC3U-side witnesses that the byte is an orientation and nothing else:
 
-- `FUN_1000d225` `[CONFIRMED @ 0x1000d225]` builds the graphic key as
-  `{0x625c6226, 0x825c6289, pieceId * 0x100 + state}`. **The state is the low byte of the sprite
-  resource instance id.**
+- `FUN_1000d225` `[CONFIRMED @ 0x1000d225]` builds the key
+  `{0x625c6226, 0x825c6289, pieceId * 0x100 + state}`. The state is the low byte of the resource
+  instance id. ⚠️ **CORRECTED in §13.7: this is an EXEMPLAR key, not a sprite/graphic key.** All 6,034
+  records in that space live in `Apps\Res\SSimData\<lang>\TrBlkAtt.IXF`; **none** are in
+  `Apps\Res\Sprites\*.DAT`. The exemplar is what in turn names the art.
 - `FUN_1000ca2c` `[CONFIRMED @ 0x1000ca2c]` and `FUN_10023b3a` `[CONFIRMED @ 0x10023b3a]` serialise it
   as `field >> 0x1e` through sink slot `+0x38`, beside x/y/z through `+0x30`. Persisted as a bare
   2-bit index.
@@ -537,12 +539,15 @@ shipped art. The iOS sibling is unhelpful here rather than helpful —
 added before indexing, so sub-frame 0 is tied to no world direction in code at all. Saying
 "state 1 = north" from this evidence would be invention.
 
-> ### ⭐ The A/B is NO LONGER blocked on `U-068`
-> This is the actionable change. Take one **asymmetric** piece id (a T-junction or a one-way stub),
+> ### ⭐ The A/B is NO LONGER blocked on `U-068` — and U-078 IS NOW CLOSED, see §13
+> ~~This is the actionable change. Take one **asymmetric** piece id (a T-junction or a one-way stub),
 > extract resource instances `pieceId*0x100 + 0..3` under `{0x625c6226, 0x825c6289}` from the shipped
-> resource files, and render the four. `GetOrientation` already establishes they are in 90° order, so
-> only the zero reference and the sense remain, and two of the four frames settle both. **No game run,
-> no in-city rendering, so the `U-068` block does not apply.**
+> resource files, and render the four.~~
+>
+> **The conclusion held but this METHOD WAS WRONG — see §13.7.** Those instances are **exemplar**
+> records in `TrBlkAtt.IXF`, not sprites, so there was nothing to render. The claim that no game run
+> was needed was correct; the route that actually worked is **rule geometry plus a code permutation
+> table** (§13.1, §13.2). `U-078` is **closed at C3** with three independent witnesses.
 
 ### 11.5 Residuals
 
@@ -865,3 +870,222 @@ keeps its original name.
 > counts unchanged. `functions.csv` is fully quoted, so a writer must use `QUOTE_ALL`, and records
 > must be matched on the **parsed** `(module, rva)` pair: `0x10002b48` exists in both `SIMADV.DLL`
 > and `SIMCITY.DLL`, so this batch contained a live instance of the 9.9% collision hazard.
+
+---
+
+## 13. ⭐⭐ U-078 CLOSED (2026-08-24) — the rotation sense, and why there is no global compass zero
+
+**Verdict.** `state` is a **rigid quarter turn in the direction of increasing `dir` index**. A piece's
+canonical edge `c` presents at world direction `(c + state) mod 4`, with `dir` being the 5×5 offset
+table at `0x10032134`: `0 = (-1,0)`, `1 = (0,-1)`, `2 = (+1,0)`, `3 = (0,+1)`.
+
+**There is no global compass zero, and looking for one was the wrong question.** `state 0` is the
+identity permutation; the *absolute* facing of `state 0` is **per-piece data carried by the exemplar**,
+not a property of the state byte. The shipped data contains **two** authoring zeros, one quarter turn
+apart (§13.5).
+
+Call the two hypotheses **H+** (`+1` per state, increasing `dir`) and **H−** (`−1` per state). Three
+independent witnesses and two cross-checks all select H+, with **zero counterexamples anywhere**.
+
+### 13.1 Witness 1 (code) — `FUN_1000d73d` and the 16×4 permutation table
+
+This is the geometric consumer §11.4 said was missing, and it is the `0x82237425` slot `+0xb0` that
+§11.5 residual 3 flagged as the highest-value lead. **It is implemented in SIMNTWRK, not elsewhere.**
+
+Found by dumping primary-vtable slot `+0x4c` for all 22 factory kinds: **all 22 share one function**,
+`FUN_1000cd35` `[CONFIRMED @ 0x1000cd35]`, which QIs the exemplar at `this+8` for iid `0x82237425` and
+forwards `state = *(u32*)(this+0x14) >> 0x1e` to that object's slot `+0xb0`.
+
+The concrete vtable is **`0x1002bd04`** (not the abstract `0x1002bdcc` §11.5 recorded): slot `+0x00` is
+`FUN_1000db84`, whose QI accepts `param_2 == -0x7ddc8bdb` = `0x82237425`, and slot `+0xb0` is
+`FUN_1000d73d` `[CONFIRMED @ 0x1000d73d, SIMNTWRK.DLL]`:
+
+```c
+uVar3 = *(uint*)(this + 0x140 + 4*param_1);     // param_1 in {0,1,2}, else 0
+cVar1 = (-(param_2 != 0) & 0xf0) + 0x10;        // 0x00 if param_2 set, else 0x10
+iVar2 = (param_3 + param_4 * 4) * 4;            // param_3 = dir, param_4 = STATE
+*param_5 = (uVar3 & 1 << ((&DAT_1003123c)[iVar2+0] + cVar1 & 0x1f)) != 0;
+*param_6 = (uVar3 & 1 << ((&DAT_1003123c)[iVar2+1] + cVar1 & 0x1f)) != 0;
+*param_7 = (uVar3 & 1 << ((&DAT_1003123c)[iVar2+2] + cVar1 & 0x1f)) != 0;
+*param_8 = (uVar3 & 1 << ((&DAT_1003123c)[iVar2+3] + cVar1 & 0x1f)) != 0;
+```
+
+`DAT_1003123c` @ `0x1003123c`, 16 rows of 4 bytes:
+
+| state | dir 0 `(-1,0)` | dir 1 `(0,-1)` | dir 2 `(+1,0)` | dir 3 `(0,+1)` |
+|---:|---|---|---|---|
+| 0 | 0,1,2,3 | 4,5,6,7 | 8,9,10,11 | 12,13,14,15 |
+| 1 | 15,12,13,14 | 3,0,1,2 | 7,4,5,6 | 11,8,9,10 |
+| 2 | 10,11,8,9 | 14,15,12,13 | 2,3,0,1 | 6,7,4,5 |
+| 3 | 5,6,7,4 | 9,10,11,8 | 13,14,15,12 | 1,2,3,0 |
+
+**Closed form, exact for 16/16 rows:** `row(s,d)[k] = 4*((d-s) mod 4) + ((k-s) mod 4)`.
+
+Reading it: querying world dir `d` on a piece at `state s` consults the piece's own edge
+`(d - s) mod 4`, i.e. **edge `c` presents at world dir `(c + s) mod 4`**. `16/16` rows fit H+;
+**8/16 fit H−**, and those 8 are exactly the `state 0` and `state 2` rows where the two hypotheses
+coincide. **All 8 discriminating rows pick H+.**
+
+Both indices of the 4×4 bit field turn together, which is what makes this a rigid rotation rather
+than a relabelling. Two side facts fall out: the 16-bit field is a **`(from dir, to dir)` matrix**, and
+`param_2` selects between the low and high 16 bits of a 32-bit field held at `+0x140` / `+0x144` /
+`+0x148` (three network kinds).
+
+### 13.2 Witness 2 (data) — the `*_final.txt` stage
+
+The stage-3 selector is an exact 4-bit orthogonal-occupancy mask and every result sits at `dir 255`,
+so each rule reads `(occupied orthogonal set) -> (pieceId, state)`.
+
+**Sample: 95 rules over 6 files, collapsing to 80 distinct `(file, id, state)` observations across 40
+families.** The 15 collapsed rules are degree-4 pieces placed for many masks (`HWAY 15149 s0` results
+from 11 rules covering every mask of degree 1, 2 and 4, because a highway never tapers) and carry no
+facing information.
+
+- **H+ explains 80 of 80, contradicts 0.**
+- **H− explains 70, contradicts 10.**
+- **Sign-discriminating families: 5** (`ROAD 39`, `ROAD 11203`, `ROAD 11225`, `RAIL 54`, `RAIL 16036`),
+  covering 20 observations. **All 20 pick H+.** HWAY contributes 4 non-discriminating observations only.
+
+Cleanest single case, the ROAD dead-end `id 11225`, which appears at all four states with a unique
+selector each:
+
+| state | occupied neighbour | dir |
+|---:|---|---:|
+| 0 | `(0,+1)` | 3 |
+| 1 | `(-1,0)` | 0 |
+| 2 | `(0,-1)` | 1 |
+| 3 | `(+1,0)` | 2 |
+
+`arm(s) = (3 + s) mod 4`, absolute for that piece id.
+
+### 13.3 A contradiction inside this file, resolved
+
+The selector-bit→`dir` binding above is **confirmed 4/4** by the city-edge block of `FUN_10019768`
+`[CONFIRMED @ 0x10019768]`, and that also settles an inconsistency between §2 and §4.2.
+
+**§2's wording is what needs fixing, not §4.2's conclusion.** §2 says "`x==0`→bit 3, `y==0`→bit 0";
+that describes an **intermediate flag word**, not `dirMask`. The loop walks that word from bit 0 with a
+counter starting at 1 and clamps `>3` to `0`, so flag bit `k` sets `dirMask` bit `(k+1) mod 4`:
+
+| off-map edge | flag bit | `dirMask` bit | dir vector |
+|---|---:|---:|---|
+| `y == 0` | 0 | 1 | `(0,-1)` |
+| `x == w-2` | 1 | 2 | `(+1,0)` |
+| `y == h-2` | 2 | 3 | `(0,+1)` |
+| `x == 0` | 3 | 0 | `(-1,0)` |
+
+Each flags exactly the direction that is off-map. §4.2's "bit `b` = dir `b`" is correct.
+
+### 13.4 Witness 3 (independent data) — the slope table
+
+`FUN_1001a1f3` `[CONFIRMED @ 0x1001a1f3]` reads the four terrain corners in perimeter order
+`(x,y) → (x+1,y) → (x+1,y+1) → (x,y+1)` and emits `[0, c1-c0, c2-c0, c3-c0]`. `FUN_1001a2c0`
+`[CONFIRMED @ 0x1001a2c0]` matches that against 8 rows of `DAT_1003193c` and indexes the per-network
+table **index-aligned**, `*(u32*)(local_c + row*4)`.
+
+`DAT_1003193c` rows 0–3: `[0,-1,-1,0]`, `[0,0,-1,-1]`, `[0,1,1,0]`, `[0,0,1,1]`. POWER's table
+`DAT_100319dc` rows 0–3 are `11262/0`, `11262/1`, `11262/2`, `11262/3`.
+
+| row | corners high | downhill | dir | → state |
+|---:|---|---|---:|---:|
+| 0 | `(x,y)`, `(x,y+1)` | `(+1,0)` | 2 | 0 |
+| 1 | `(x,y)`, `(x+1,y)` | `(0,+1)` | 3 | 1 |
+| 2 | `(x+1,y)`, `(x+1,y+1)` | `(-1,0)` | 0 | 2 |
+| 3 | `(x,y+1)`, `(x+1,y+1)` | `(0,-1)` | 1 | 3 |
+
+`downhill(s) = (2 + s) mod 4` — **+1 per state, H+ again**, from a table sharing nothing with either
+previous witness. `FUN_1001a2c0`'s own axis test corroborates the row axes: it probes `(dx=1,dy=0)` for
+even rows and `(dx=0,dy=1)` for odd ones.
+
+### 13.5 The two authoring zeros
+
+Under H+, the state-0 connection set per piece id:
+
+| state-0 set | degree | piece ids |
+|---|---:|---|
+| `{S}` | 1 | PIPE/18012, POWR/10037, RAIL/18000, ROAD/11225, SUBW/18010 |
+| `{W}` | 1 | PIPE/18016, POWR/10036, RAIL/18002, SUBW/18014 |
+| `{W,S}` | 2 | PIPE/11606, POWR/20, RAIL/16036, ROAD/11203, SUBW/11605 |
+| `{W,N}` | 2 | PIPE/11607, POWR/23, SUBW/11613 |
+| `{W,N,S}` | 3 | HWAY/73, PIPE/344, POWR/24, RAIL/54, ROAD/39, SUBW/329 |
+| `{W,N,E}` | 3 | HWAY/15051, PIPE/347, POWR/26, SUBW/332 |
+
+**Every family ships as two ids one quarter turn apart**, so `id2 state s` = `id1 state (s+1)`.
+Variant A is a nested chain adding arms in dir order `3 → 0 → 1 → 2` (`{3} ⊂ {0,3} ⊂ {0,1,3} ⊂ all`);
+variant B is the same chain started at dir 0. **This is the mechanism behind §11.4's remark that the id
+can carry the 90° step (`DAT_1003195c`)** — now with the ids named.
+
+### 13.6 Cross-checks, no counterexamples
+
+- **Stage 1** (`*SIMPLERULES*`, mode 8), 1,660 centre results. There the selector means "a neighbour is
+  present", not "the piece connects there", so the honest invariant is `rot(shape, state) ⊆ orth_mask`.
+  Of the 506 results whose piece has a known shape: **26 satisfied by H+ only, 0 by H− only, 0 by
+  neither.**
+- **`*_Convert.txt` / `*_Complex_Convert.txt`**: **249 of 249** id-pairs with ≥2 states are
+  state-equivariant. Sign-blind, but it proves `state` is the same rotation index on both sides of a
+  substitution.
+- `FUN_1000d1cf` `[CONFIRMED @ 0x1000d1cf]` (primary slot `+0x50`) special-cases `state == 0`, returning
+  a real key only when `(*(byte*)(this+0x17) & 0xc0) == 0` and otherwise a stub instance `0x2b00` with a
+  false status. Consistent with `state 0` being the identity.
+
+### 13.7 ⚠️ CORRECTION — §11.4's "graphic key" is an EXEMPLAR key, and Route A does not exist
+
+**This corrects text written into §11.4 earlier the same day, and a `functions.csv` note written with
+it.** `FUN_1000d225` / `FUN_1000d1cf` build `{0x625c6226, 0x825c6289, pieceId*0x100 + state}`, which
+§11.4 called "the graphic key" and glossed as "the state is the low byte of the **sprite** resource
+instance id". **It is an exemplar key, not a sprite key.**
+
+573 containers under `Apps\Res` were enumerated: the `{0x625c6226, 0x825c6289}` space holds **6,034
+records and none of them are in `Apps\Res\Sprites\*.DAT`**. They are all in
+`Apps\Res\SSimData\<lang>\TrBlkAtt.IXF` as 161–463-byte `BIN\r` property blobs. The exemplar is what in
+turn names the art.
+
+**So the "⭐ the A/B is no longer blocked on U-068" box in §11.4 proposed a route that does not exist** —
+there was nothing to render, and no PNGs were produced. The box's *conclusion* survives (the question
+was settleable without a game run) but its *method* was wrong. The route that actually worked is the
+rule-geometry one, §13.2.
+
+Recorded as **not evidence-grade and supporting nothing**: probing those blobs for a byte stepping by a
+constant multiple of 8 mod 32 (8/32 turn = 90°) finds 25 hits at `+8` and 2 at `−8`. The blob format is
+not parsed, so a fixed offset is not known to name the same field across records of different length,
+and the two `−8` hits sit at offset `0x64` in 281/322-byte records while the `+8` hits at `0x64` are in
+179-byte records.
+
+### 13.8 How to falsify
+
+1. **Cheapest, no game run.** Edit one `*_final.txt` state by `+1` and build the matching
+   neighbourhood. Under H+ the piece rotates one step along `(-1,0) → (0,-1) → (+1,0) → (0,+1)`; under
+   H− the other way. The predictions differ visibly for any state-1 or state-3 case.
+2. **Purely static, and it also closes the remaining hole.** Decode the `BIN\r` property blob and read
+   the 16-bit connection field `FUN_1000d73d` probes. Per the `4*edge + lane` layout it must equal the
+   `*_final.txt`-derived state-0 set for the same id. A mismatch on one piece kills the result.
+3. Find any shipped rule contradicting the fit. None exists in 95 final-stage rules, 1,660 stage-1
+   results or 249 convert pairs.
+
+### 13.9 ⚠️ The caveat that must not be dropped
+
+Everything above is proved in **tile-index `(dx, dy)`** terms. The W/N/E/S labels are §4.1's convention
+and were **not** re-derived here. If that convention is ever wrong, the **rotation sense is unaffected
+but every compass word flips**.
+
+> **Rotation sense and per-piece zero are safe to build a rule editor on. The word "clockwise" is not,
+> until the world-axis convention has its own witness.**
+
+### 13.10 Verification done before promotion
+
+Re-checked by the orchestrator against the anchored `SIMNTWRK.DLL` rather than accepted on report:
+
+- Vtable `0x1002bd04` slot `+0x00` reads `0x1000db84` and slot `+0xb0` reads `0x1000d73d`. Both match.
+- `DAT_1003123c` dumped from raw bytes and tested against the closed form independently:
+  **16/16 rows fit**, including all 8 that discriminate H+ from H−.
+- `FUN_1000db84`'s QI accepts `param_2 == -0x7ddc8bdb`; `-0x7ddc8bdb` is `0x82237425`.
+- `FUN_1000d73d`'s body matches the transcription, including the `+0x140`/`+0x144`/`+0x148` selection.
+- `Apps\Res\SSimData\<lang>\TrBlkAtt.IXF` exists, consistent with the exemplar-container correction.
+
+Artifacts, read-only and re-runnable: `verify/state_facing_test/state_facing.py`,
+`RESULTS.txt` (244 lines), `README.md`.
+
+Confidence: **C3.** Three independent witnesses (a code permutation table, the final-stage rule
+corpus, the slope table), two cross-checks, zero counterexamples in 95 + 1,660 + 249 observations, and
+a pre-stated falsification test. Not C4: no runtime or in-game observation, and the per-piece absolute
+zero still rests on rule geometry rather than on the exemplar blob being decoded.
