@@ -817,3 +817,51 @@ Confidence: **C3** for the `+0xb0` drive path (message dispatch read, six poster
 caller enumerated by two agreeing scan methods) and for the `U-080` LATENT verdict (42/42 vtable
 slots dumped, 25/25 call sites censused). **C2** for the negative results on `+0xac` / `+0xf0`, which
 are measured absences with one un-excluded path each (§12.5).
+
+### 12.7 Three things the tracker knew that the §12 sweep did not (found 2026-08-24 while promoting)
+
+Promoting §11/§12 into `functions.csv` turned up **eleven rows already at C2 or C3**, and three of
+them carry information that corrects or enriches the sweep. Recorded here rather than silently
+overwritten — the promotion pass deliberately left every already-reviewed row untouched.
+
+**1. `0x1001396b`'s accepted-iid set is LARGER than §12.0 states.** §12.0 says slot `+0x00` "accepts
+exactly `{0x4147c2fb, 1, 0x58d}`". The pre-existing C2 note, from an earlier read, records a full
+multi-subobject dispatch: `this` for `1 / 0x58d / 0x4147c2fb / 0x206c6e7c / 0x81c0cb7c`, `this+4` for
+`0x5e4`, `this+8` for `0x6182ea06`, `this+0xc` for `0x81c0cb7b`. **Treat the tracker's version as
+authoritative and §12.0's "exactly" as wrong.** It does not affect the identity argument — the class
+does answer to `0x4147c2fb` — but any claim of the form "only these three iids reach this object" is
+false, and `0x206c6e7c` (`GZIID_cISC3CityLayer`) being in that set matters for the next point.
+
+**2. The `0x2171c021` class IS the city's transit layer, which names it.** `SIMCITY 0x10002b48` is
+already **C3** as `cISC3City::TransitLayer(void)`, "`mov eax,[ecx+0xa8] ; ret`", **vtable slot 80**.
+Slot 80 × 4 bytes = **`0x140`**, exactly the offset §12.0 derived independently from the pointer
+arithmetic. So the two readings agree, and together they give the class a name: the object SIMCITY
+hands out at `city+0xa8` is the **transit layer**, and it is what SIMNTWRK registers as GZCLSID
+`0x2171c021`. That also explains `0x206c6e7c` = `GZIID_cISC3CityLayer` appearing in its QI, and it
+is corroborated a third time by `SIMCITY 0x10005e3e` (C3, `sc3_citysim_acquire_layers`), which wires
+33 layers into the city-sim by `(CLSID, IID, &field)`.
+
+**3. `0x10014807` is not only a build dispatcher.** §12.2 describes it as slot `+0xec`, reached from
+the six per-netType wrappers. The pre-existing C2 note reads it as `sc3_ntwrk_tool_reset_query`:
+`switch(param_2)` mapping `1→ECX[0x78], 2→0x80, 3→0x8c, 4→0x7c, 5→0x88, 6→0x84, 8→0x90`, then
+**filling 1280 triples with the `0x7fffffff` sentinel**. That sentinel is the same one
+`FUN_100151f1` early-outs on (§1). Both readings can hold — a tool reset that then dispatches — but
+the §12.2 label alone loses the sentinel fill, which is the part that connects to the `+0xb0` path.
+`[UNCERTAIN]` which of the two is the function's primary role; **not** resolved here, and the row
+keeps its original name.
+
+> **Method note, and it is the general one.** The first promotion attempt was going to overwrite all
+> eleven of those rows with freshly-written notes. Two of them would have *lost* measured detail and
+> one would have introduced an outright error. **A tracker row at C2+ was written by someone who read
+> the function; a fresh report is not automatically better than it.** The promotion pass was
+> restricted to rows still at `C0` for exactly this reason, and the three conflicts above were
+> written up instead of resolved by fiat.
+>
+> Also on record, because it reproduced the documented incident exactly: the first write parsed and
+> re-serialised the whole CSV. Content was correct (`C0` −23, `C2` +23, row count identical) but
+> `diff | grep -c '^<'` reported **50,668** changed lines instead of 23 — `csv.writer` re-quoted
+> every field and flattened the 61 bare LFs inside quoted `notes` to zero. Restored from backup and
+> redone by replacing only the 23 target records, which lands at **exactly 23**, with CRLF and bare-LF
+> counts unchanged. `functions.csv` is fully quoted, so a writer must use `QUOTE_ALL`, and records
+> must be matched on the **parsed** `(module, rva)` pair: `0x10002b48` exists in both `SIMADV.DLL`
+> and `SIMCITY.DLL`, so this batch contained a live instance of the 9.9% collision hazard.
