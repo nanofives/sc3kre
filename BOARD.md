@@ -96,12 +96,22 @@ round-trips 68/68 byte-identical.
 **Next:** T1, "an edited tiling rule changes the map" — 2 runs, armed and self-contained in
 `verify/tilingrules_read_test/README.md` §7 including a Step 0 backup.
 
-> ⭐ **NOT BLOCKED, and it never was — established 2026-08-24 as a by-product of §31.12.** T1 was held
-> behind `U-068` on the grounds that it "needs a rendered in-city frame". **Shot A is a rendered
-> in-city frame** — Europolis in full at 1024x768, captured through the probe blit mirror, `Pob:
-> 2,069,432`. `U-068` breaks the iso view **only after a resize**, and T1 involves no resize. So the
-> capability T1 was waiting for has been demonstrated, and the dependency is dissolved rather than
-> satisfied. **This is why T1 is now the head of the run queue.**
+> ⭐ **The `U-068` dependency is dissolved — but one instrument question survives, and run 1 answers
+> it.** Corrected 2026-08-24 after re-reading §7; the first version of this note overstated.
+>
+> **What is settled:** §7's premise, *"in-city rendering does not work"*, is **falsified**. Shot A
+> (§31.12) is a rendered in-city frame — Europolis in full at 1024x768, `Pob: 2,069,432`. `U-068`
+> breaks the iso view **only after a resize**, and T1 involves no resize.
+>
+> **What is NOT settled:** §7 also records an empirical re-check on 2026-08-22 where an in-city run
+> through **`capture.ps1`** gave `Blt=0 Flip=0 Lock=0` and **zero SHOT lines**. Shot A came through
+> the u068 probe's own `-shot` path under different switches, so it does **not** directly show
+> `capture.ps1`'s blit-mirror reconstruction works in-city.
+>
+> **Therefore T1's run 1 (baseline, stock rules) is also the instrument control.** If it yields no
+> frame, that is a finding about the capture path — reconcile it against shot A's switches — and
+> **nothing may be concluded about tiling rules.** T1 heads the queue because run 1 is worth spending
+> either way: it returns either the baseline the test needs, or the reason the instrument differs.
 Session CLOSED, test ready to fire.
 
 ### 4. Camera scroll — SHIPPED 2026-08-24
