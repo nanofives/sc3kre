@@ -205,6 +205,36 @@ The game requests **`Road_GRND_Protected.txt`** (mixed case). The shipped file i
 networks use the consistent upper-case form. On a case-sensitive filesystem that open fails and
 road protected-tile rules load empty. Filed as **U-074**.
 
+Now precise about what "load empty" costs: the affected vector is `0x10032394`, which
+`FUN_1001a7f7`'s cascade reads for **netType 1 = ROAD** `[CONFIRMED @ 0x1001a7fb]`. **The full
+`*_Protected.txt` → netType binding was closed statically on 2026-08-24 — the table is in
+`NETWORK_TYPES.md` §9.** Any rule editor that wants
+to touch one network's protected list needs it, and it is **not** the order the filenames or the slot
+addresses suggest: the address order is ROAD, HWAY, RAIL, SUBW, PIPE, POWR, while the netType order
+is ROAD(1) `394`, RAIL(2) `39c`, POWER(3) `3a8`, HIGHWAY(4) `398`, PIPE(5) `3a4`, SUBWAY(6) `3a0`.
+
+## Second known defect: a latent double free that a MOD can make live
+
+`SIMNTWRK`'s public "get rule predicate #n" accessor `FUN_10013771` (vtable slot `+0x54` of the
+`0x2171c021` class) selects one of 42 global singleton predicate handlers by index, then calls
+`handler->QueryInterface(iid, out)`. **If that QI returns false it calls `free()` on the global
+singleton** `[CONFIRMED @ 0x100138c8]` and does not null it, and teardown `FUN_100119e0` then frees
+the same globals a second time. Filed as **U-080**.
+
+**As shipped this cannot fire, so no shipped install is at risk.** All 42 singletons share the same
+slot-0 implementation `FUN_1001a9bb`, which accepts `iid == 1 || iid == 0xA1C085DB`
+`[CONFIRMED @ 0x1001a9bb]`, and a census of all 25 call sites across all 30 binaries found every one
+passing `0xA1C085DB`. Adjudicated **latent**, `NETWORK_RULE_ENGINE.md` §12.4.
+
+> ⚠️ **But it becomes a real double free the moment a mod installs a vtable whose slot 0 rejects
+> `0xA1C085DB`** on any of the 32 globals the switch selects. If you are replacing or wrapping a
+> predicate handler, your slot 0 **must** accept `0xA1C085DB` (and `1`). This is the one place in the
+> network path where a plausible-looking mod turns a dormant shipped bug into a crash, and the crash
+> would land at teardown, far from your change.
+>
+> Also harmless and worth knowing so it is not mistaken for the same thing: an out-of-range index
+> (`> 0x21`) takes the `default:` arm, which writes `*out = 0` and returns false **without** freeing.
+
 ## Tool
 
 ```powershell
