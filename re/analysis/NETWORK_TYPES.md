@@ -236,3 +236,109 @@ session was live at the time of writing. The parent orchestrator should merge:
 before filing.)
 - `functions.csv` — the netType→network names in §1 are promotable evidence for the 7 layer
   registration functions and the 11 dispatch sites.
+
+---
+
+## 9. ⭐ U-079 CLOSED STATICALLY — the rule-file → slot → netType binding (2026-08-24, C3)
+
+**No game run was needed, and the run-based fallback is now redundant.** Everything below is from
+the anchored `original/modules/SIMNTWRK.DLL`, base `0x10000000`, decoded from raw bytes.
+
+### The netType → Protected file table
+
+| netType | network | Protected slot | file |
+|--:|---|---|---|
+| 1 | ROAD | `0x10032394` | `Road_GRND_Protected.txt` |
+| 2 | RAIL | `0x1003239c` | `RAIL_GRND_Protected.txt` |
+| 3 | POWER | `0x100323a8` | `POWR_GRND_Protected.txt` |
+| 4 | HIGHWAY | `0x10032398` | `HWAY_GRND_Protected.txt` |
+| 5 | PIPE | `0x100323a4` | `PIPE_GRND_Protected.txt` |
+| 6 | SUBWAY | `0x100323a0` | `SUBW_GRND_Protected.txt` |
+
+> **The refuted order-based guess was wrong for netTypes 2–6, and now we know why it was
+> tempting:** `ROAD, HWAY, RAIL, SUBW, PIPE, POWR` is the **address order of the slots**, not the
+> netType order. Anyone re-deriving this from load order or slot order will get the same wrong
+> answer. The dispatch cascade is the only authority.
+
+Slot layout, uniform across all four vector blocks (**address order**, i.e.
+ROAD / HWAY / RAIL / SUBW / PIPE / POWR):
+
+```
+Convert          0x10032364 ROAD  368 HWAY  36c RAIL  370 SUBW  374 PIPE  378 POWR
+Complex_Convert  0x1003237c ROAD  380 HWAY  384 RAIL  388 SUBW  38c PIPE  390 POWR
+Protected        0x10032394 ROAD  398 HWAY  39c RAIL  3a0 SUBW  3a4 PIPE  3a8 POWR   (3ac = Collapse)
+Bridges          0x100323b0 ROAD  3b4 HWAY  3b8 RAIL  3bc POWR   (no SUBW, no PIPE)
+```
+
+### Why the earlier trace died: a 4-byte object-base error
+
+`re/sessions/U079_road-type.md` pinned the 11 call sites and 11 filenames but could not join them.
+The cause was **not** the frame size or the EH state it blamed. The block at
+`0x10018b51`–`0x10018d0b` is not a store block — each group is `operator new` plus a
+**one-argument constructor**, and the `lea` feeding that ctor takes the **object base**, not the
+string:
+
+```
+0x10018b6f  8d 8d 2c fe ff ff   lea  ecx, [ebp-0x1d4]   ; -468, the OBJECT BASE
+0x10018b75  51                  push ecx
+0x10018b76  8b c8               mov  ecx, eax           ; this = the new'd block
+0x10018b78  e8 2a 78 00 00      call 0x100203a7         ; ctor(&src)
+0x10018b7d  89 45 e0            mov  [ebp-0x20], eax    ; <- THE EDGE
+```
+`[CONFIRMED @ 0x10018b6f]`
+
+`0x1001b40c` builds the string at `[ebp-0x1d0]`, which is a **member at +4** of the object based at
+`[ebp-0x1d4]`. That 4-byte difference is the whole failure. The base is identifiable mechanically
+because `0x1001815d` = `89 b5 2c fe ff ff` (`mov [ebp-0x1d4], esi`) stores a vtable pointer
+`esi = 0x10029234`, loaded **once** at `0x1001801d` = `be 34 92 02 10` and never reloaded in the
+loader `[CONFIRMED @ 0x1001801d]`.
+
+Ctor store instructions for the 11 edges: `0x10018b51, b7d, ba9, bd5, c01, c59, c2d, c85, cae,
+cda, d06`.
+
+### Three independent witnesses, which is why this is C3 and not C2
+
+The same netType→slot answer falls out of **three different cascades in three different functions
+over three disjoint global blocks**:
+
+1. `0x1001a7fb`–`0x1001a835` (`FUN_1001a7f7`, Protected).
+2. `0x1001a85a` (Complex_Convert): `1→0x1003237c, 2→0x10032384, 3→0x10032390, 4→0x10032380,
+   5→0x1003238c, 6→0x10032388`. Identical shape.
+3. `0x10014d38` (Bridges): `1→0x100323b0` ROAD, `2→0x100323b8` RAIL, `3→0x100323bc` POWR,
+   `4→0x100323b4` HWAY, and **5 and 6 fall through to no vector** `[CONFIRMED @ 0x10014d44]`.
+
+Witness 3 is a **falsifiable prediction that held**: the cascade's two missing arms are exactly the
+two networks that ship no `*_Bridges.txt`. Verified independently in the bytes — `0x10014d38` reads
+`48 74 24 48 74 1a 48 74 10 48 74 06 48 e9 …`, four `dec eax; je` arms then a `dec`/`jmp`
+fall-through, not six arms.
+
+### Also found: the file count is 22, not 11
+
+The prior session's 11 is a **subset**. The `*_Convert.txt` and `*_Complex_Convert.txt` families
+(6 each) load through a **second parser, `FUN_10019600`**, into `0x10032364`–`0x10032390`. Any
+claim of the form "the loader reads 11 rule files" is incomplete.
+
+### Validation the closing pass ran
+
+1. **No reassignment** of any of the 11 small locals between `0x10018d0e` and `0x100191b0`, so each
+   call site pushes exactly what its ctor stored. The EH-state worry is moot: the EH prologue only
+   touches `[ebp-4]`.
+2. **Two independent decode origins** (`0x100188cb` and `0x10017ff5`) converge on the same
+   instruction boundary at `0x10018b38`.
+3. **Partition test:** the 6 Protected files land in exactly the 6 Protected slots and the 4
+   Bridges files in exactly the 4 Bridges slots, none overlapping, none left over.
+
+### One caveat kept explicit
+
+`[ebp-0x10]` is reused as the scratch for the raw `new` pointer in **every** group
+(`mov [ebp-0x10], eax` at `0x10018b0c`, `b38`, `b64`, …) before becoming the real slot for
+`POWR_GRND_Bridges.txt` at `0x10018d06`, the last group. Consistent, but it is the one local where a
+reader must not assume a single meaning.
+
+### Method note
+
+Capstone over `re/tools/pe_read.py` decoded the whole ~4 KB frame in one pass with no Ghidra run.
+The lesson inverts the last one recorded here: hand-decoding `push`/`lea`/`call` was accurate enough
+to find the call sites but **silently wrong about what a `lea` into a constructor means**. An
+instrument that reads structure needs the structure confirmed — here, the single `esi` vtable load —
+not just the opcodes.

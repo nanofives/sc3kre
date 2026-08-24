@@ -97,11 +97,11 @@ Order:
 
 ## Static pool — no lease, runnable in parallel right now
 
-| item | what |
-|---|---|
-| `U-076` | Identity of network-piece class GZCLSID `0xc14f8955`. Read the ctor's 4th arg to settle the 0/1/2/3 facing convention. The cheap path *around* the `U-068` block. |
-| `U-075` | Xref sweep for vtable `+0xac`/`+0xb0`/`+0xf0` on GZCLSID `0x2171c021`. Also decides whether `U-080`'s double free is reachable or latent. |
-| `U-079` | Which `*_Protected.txt` maps to which netType. Re-run the differential that produced 448→340. |
+| item | what | state |
+|---|---|---|
+| `U-076` | Identity of network-piece class GZCLSID `0xc14f8955`. Find the implementing module's registrar, read the ctor, and see whether the `state` byte's facing convention falls out. The cheap path *around* the `U-068` block, since the alternative is a rendered A/B. | **DISPATCHED 2026-08-24**, orchestrator |
+| `U-075` | Cross-module caller sweep for vtable `+0xac`/`+0xb0`/`+0xf0` on GZCLSID `0x2171c021`. Bundled with `U-080` reachability: find callers of slot `+0x54` and what `iid` they pass, which decides live vs latent for the confirmed double free. | **DISPATCHED 2026-08-24**, orchestrator |
+| ~~`U-079`~~ | ✅ **CLOSED 2026-08-24 at C3, no run spent.** Full `*_Protected.txt` → netType binding in `re/analysis/NETWORK_TYPES.md` §9, three independent cascades agreeing. The 1–2 run differential that `UNCERTAINTIES.md` costed is now **redundant — do not spend it.** Two corrections fell out: the loader reads **22** rule files, not 11 (a second parser `FUN_10019600`), and the refuted order-based guess was the slots' **address order**, which is why it kept looking right. | done |
 | `U-077` | Class behind occupant IID `0x41658d28`; label flag bits `0x400`/`0x4000`. Can sit indefinitely. |
 | `U-063` | Who calls the RECT zone writer `0x10032afa`. Gates rect-level zone edits. |
 
