@@ -106,7 +106,7 @@ Order:
 | item | what | state |
 |---|---|---|
 | ~~`U-076`~~ | ✅ **CLOSED 2026-08-24 at C2.** The premise was wrong: `0xc14f8955` is `GZIID_cISC3Occupant`, an **interface** id, and the catalogue §27c had said so since 2026-08-18 — the uncertainty was filed off a stale label in a second doc. Real factory is `FUN_1000bdcd` in SIMNTWRK, 22 piece classes. `NETWORK_RULE_ENGINE.md` §11. Also closed `U-077`'s class half. | done |
-| **`U-078` A/B** | ⭐ **NEWLY UNBLOCKED — was "blocked on U-068", is not.** `state N` = `N × 90°` is now C3 (`GetOrientation`, nine modules, iOS-named). Only the **compass zero and sense** remain, and they fall out of a **static** sprite extraction: pull instances `pieceId*0x100 + 0..3` under `{0x625c6226, 0x825c6289}` for one asymmetric piece and render the four. No game run. | open, ready |
+| **`U-078` A/B** | ⭐ **NEWLY UNBLOCKED — was "blocked on U-068", is not.** `state N` = `N × 90°` is now C3 (`GetOrientation`, nine modules, iOS-named). Only the **compass zero and sense** remain, and they fall out of a **static** sprite extraction: pull instances `pieceId*0x100 + 0..3` under `{0x625c6226, 0x825c6289}` for one asymmetric piece and render the four. No game run. | **DISPATCHED 2026-08-24**, orchestrator — two routes, rule-geometry inference preferred over the render |
 | `0x82237425` `+0xb0` | Highest-value lead behind `U-078`: `FUN_1000cd35` calls `vt[0xb0](x,y,z,state,&b0,&b1,&b2,&b3)` — four booleans from a coordinate plus a state, the shape of a per-side connectivity query. Would pin the facing **from code alone**. Declared vtable `0x1002bdcc` is abstract; find the concrete implementor. | open |
 | ~~`U-075`~~ | ✅ **SWEPT 2026-08-24.** `+0xb0` closed at C3 — the drive path is **GZ message `0x637c0dab`**, six posters plus one SIMRCI direct call; the UI is not a holder at all. `+0xac`/`+0xf0` have **no cross-module caller in any shipped binary** (C2, measured absence). `NETWORK_RULE_ENGINE.md` §12. | done |
 | ~~`U-080`~~ | ✅ **LATENT, not live (C3).** All 42 predicate vtables share slot 0 `FUN_1001a9bb`, which accepts `0xA1C085DB`; 25/25 call sites pass exactly that. ⚠️ **But it turns live for mod authors** who install a slot-0 that rejects it — belongs in published toolkit docs. | done, one doc action |
@@ -126,6 +126,14 @@ Ordered by how much damage it can do silently.
    live session. Either add a per-session `-Out` name or make `build.ps1` refuse without the claim.
    Deferred by decision in `COORDINATION.md`; do it while the harness is quiet.
 4. **`STUBS.md` is still an empty template.** `DEFERRED.md` was too until 2026-08-24.
+5. **Writing `functions.csv` safely — two rules learned the hard way 2026-08-24.** The file is
+   **fully quoted**, so a writer must use `QUOTE_ALL`; a default `csv.writer` re-quotes every field
+   and flattens the 61 bare LFs inside quoted `notes`, which turns a 23-row edit into a
+   **50,668-line diff**. And records must be matched on the **parsed** `(module, rva)` pair, never a
+   raw string prefix. Always check `diff functions.csv.bak functions.csv | grep -c '^<'` equals the
+   number of rows you meant to touch, and restore from the backup rather than hand-patching if it
+   does not. **Never bulk-overwrite rows already at C2+** — they were written by someone who read the
+   function, and a fresh report is not automatically better (`NETWORK_RULE_ENGINE.md` §12.7).
 
 ## Publish hygiene — `github.com/nanofives/sc3kre` is PUBLIC
 
