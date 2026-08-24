@@ -535,8 +535,28 @@ bytes differ, the digits themselves. So that tunable does not drive the credit s
 next attempt needs a tunable whose effect is *known* to be observable, not merely plausible.
 `[UNCERTAIN]` what `ScrollRateInPixelsPerMinute` actually controls — **now `U-051`, with the mechanism read and the tidy explanation falsified.** Correction to the sentence above: the code does NOT say "that tunable does not drive the credit scroll". `0x004293fd` scrolls `ftol(elapsed * [0x4c])` px per frame with a sub-pixel carry, ceiled at `[0x4e]`, and `[0x4e]` keeps its ctor default of 4 because `MaxPixelsToScrollPerFrame` is absent from the shipped INI — but 4 px/frame at ~60 fps is 14,400 px/min, so neither 1500 nor 4242 is clamped and 4242 should have been ~2.83x faster. The null is UNEXPLAINED. Worse, `0x3ccccccd` = `0.025f` = `1500/60000` means the ctor default already equals the shipped value, so a silently-failing config read is indistinguishable from a successful one — the credits cannot serve as a pass/fail marker at all. See `U-051` for the two tests that would discriminate.
 
+### ⭐ CAMERA SCROLL SHIPPED, PROXY-DLL VEHICLE CLOSED (owner's call, 2026-08-24)
+
+**The camera mod ships as a byte patch.** `re/tools/pe_patch.py` (`--selftest` **23/23** on all 36
+PEs in `Apps\`) writes SHA-anchored, `--expect`-guarded, length-preserving patches to
+`Apps\SIMSPR.DLL`, and the game loads the patched module off disk with **no injection**
+(`verify/scroll_patch_test/RESULTS.md`, S1/S2/S3). Procedure:
+`re/analysis/formats/CAMERA_MODDING.md`. This is the same bar `syspak_mod.py` and
+`sprite_patch.py` met, so camera joins the shippable set: **tunables, sprites, city saves, camera.**
+
+**The standalone proxy-DLL delivery vehicle is DROPPED — not deferred.** `DEFERRED.md` **D-001**
+carries the full rationale and everything measured, so it is not re-run: both proxies are mapped and
+correctly bound, neither `DllMain` is ever entered, and the two remaining diagnoses cost either
+elevation or a mutation of the AppCompat state that `U-020` and `U-068` are open on. Consequence on
+record: the working `-pref` in-game slider has no distributable form.
+
+Static-only and now tracked rather than floating: `drag_divisor`, `edge_margin` (**D-002**, one game
+run each) and zoom-4 reachability (**D-003**).
+
 ### Not on the roadmap, deliberately
 
+- **The proxy-DLL vehicle.** Closed 2026-08-24, `DEFERRED.md` D-001. Same standing as the source
+  port: reopening it means arguing against the recorded evidence, not preferring the feature.
 - **Reading more functions.** Criterion 2 defined what a toolkit needs and it is met at 562/562.
   The next function read should be one a *specific* task demands, not a coverage number. The 78%
   of `functions.csv` still at C0 is the design, not debt — see `POST_P1.md`.

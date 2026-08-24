@@ -1,0 +1,158 @@
+# Changing SimCity 3000's camera scroll — the working procedure
+
+**Status: the scroll-speed knob is validated in the running game, 2026-08-20/21**
+(`verify/scroll_patch_test/RESULTS.md`, rungs S1/S2/S3). Two further knobs on this page,
+`drag_divisor` and `edge_margin`, are **derived from the decompilation and have never been run
+game-side** — they are marked as such at each mention and must not be quoted as proven.
+
+Tool: `re/tools/pe_patch.py`. Target: `Apps\SIMSPR.DLL`.
+
+## Why this is a byte patch and not a config file
+
+There is no INI, no registry key and no `SYS.PAK` member for camera scroll. The scroll step is a
+`.rdata` float bank compiled into `SIMSPR.DLL`. Every other tunable this toolkit changes lives in a
+shipped data file (`syspak_mod.py`, `sprite_patch.py`, `city_write.py`); this class of value has no
+such home, so the only mechanism is a same-length overwrite of the module.
+
+`pe_patch.py` makes that safe rather than reckless: every patch declares the bytes it expects to
+replace and **refuses on a mismatch**, each recipe pins the input file's SHA-256, patches are
+length-preserving by construction, and the input is never written to.
+
+Verified before writing this page:
+
+```
+py -3.12 re/tools/pe_patch.py Apps --selftest
+23 passed, 0 failed
+```
+
+That run also re-reads the shipped constants out of the file rather than trusting this document:
+all five zoom steps ship `32.0f`, the drag dead zone `12.0f`, the drag clamp `80.0f`, both drag
+divisors `-2`, and the eight edge displacements `(48, 64, -48, -64, 64, 48, -48, -64)`.
+
+## Delivery: you replace the DLL. There is no loader hook.
+
+**A standalone proxy-DLL vehicle was attempted and is closed — see `DEFERRED.md` D-001.** Both
+`version.dll` and `winmm.dll` proxies are mapped into the process and correctly bound, and neither
+one's `DllMain` or exports are ever entered. The remaining diagnoses needed either elevation or a
+mutation of AppCompat state shared across the whole install, and buy only runtime configurability
+over a mechanism that already works.
+
+So the shipping shape of a camera mod is: **a patched `SIMSPR.DLL`, or the one-line command that
+produces it.** That is how the validated result was obtained — the game loads the patched module
+off disk with no injection involved.
+
+## The knobs
+
+### `scroll_speed` — keyboard and edge-scroll step  ✅ proven game-side
+
+The step bank is five `float32`s at `.rdata` `0x10067690..0x100676a0`, **all shipped `32.0f`**.
+`[CONFIRMED @ 0x100440b1]` copies them into the view object at construction; `+0x1c8` is the
+**active** step, and `[CONFIRMED @ 0x10042d8a]` (ZoomIn) re-selects it by zoom index:
+
+| zoom | `.rdata` slot | object field |
+|---|---|---|
+| 0 | `0x100676a0` | `+0x1dc` |
+| 1 | `0x1006769c` | `+0x1d8` |
+| 2 | `0x10067698` | `+0x1d4` |
+| 3 (and the boot default) | `0x10067694` | `+0x1d0` → `+0x1c8` |
+| 4 | `0x10067690` | `+0x1cc` |
+
+`0x10067694` is both the zoom-3 slot and the construction default, because `0x100440b1` writes it
+into `+0x1c8` unconditionally. The consumer `[CONFIRMED @ 0x10043daf]` reads `+0x1c8` and passes it
+to Translate (vtbl `+0x34`) as ±step on one or both axes, for **both** the arrow keys (VK
+`0x25`–`0x28`) and edge-scroll. One step, no ramp, no acceleration.
+
+```
+# double the scroll speed at every zoom level
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --recipe scroll_speed=64 --out SIMSPR.DLL.fast
+
+# or per zoom level (the shipped binary uses one value for all five, so zoom
+# currently has no effect on scroll speed at all)
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --recipe scroll_speed=z0:16,z3:64 --out SIMSPR.DLL.mine
+```
+
+Larger is faster. Omit `--out` for a dry run: the report prints every staged address, its file
+offset, and the old and new value.
+
+What the game runs showed: the shipped step reads `32.000` at `cSC3WinCityView+0x1c8` and a patched
+one reads the patched value; with an arrow held 2.5 s the shipped build moves the camera origin
+`-6848` world px and the all-zero build moves `0`. S2/S3 confirmed **one byte on disk moves exactly
+one bank slot**, and that the active slot at the default zoom is `0x10067694`, three ways.
+
+### `drag_divisor` — right-drag pan sensitivity  ⚠️ never run game-side
+
+The mouse-drag path is **separate** from the step bank: `0x10043daf`'s `+0x1e6 != 0` branch uses
+`+0x1f4`/`+0x1f8`, computed in `[CONFIRMED @ 0x10043a38]`. Drag velocity is
+`(anchor - mouse) / -N` where `N` is the `imm8` of `push -2` at `0x10043a5e` (X) and `0x10043a68`
+(Y), so a **smaller magnitude is more sensitive**: `-1` doubles it, `-4` halves it.
+
+```
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --recipe drag_divisor=1 --out SIMSPR.DLL.drag
+```
+
+The sign carries the direction and stays negative; `N=0` is refused (division by zero), and `N>128`
+does not fit a signed `imm8`.
+
+> That separation is also a **free negative control** for any step-bank test: if the step is zeroed
+> and right-drag still pans, the game is running and reading input, so "nothing moved" cannot be a
+> frozen client.
+
+### `edge_margin` — the edge-scroll trigger band  ⚠️ never run game-side
+
+Eight signed `lea` displacements build the edge hit rects `[CONFIRMED @ 0x10043989]`, shipped **64
+horizontal, 48 vertical**. All eight move together so every ± pair stays consistent.
+
+```
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --recipe edge_margin=32,24 --out SIMSPR.DLL.edge
+```
+
+Range is 1..127 per axis (signed `imm8`).
+
+### `scroll_zero` / `scroll_default_zero` — discriminators, not mods
+
+`scroll_zero` sets all five slots to `0.0f`; `scroll_default_zero` sets only the zoom-3 slot,
+isolating the selector. These exist to make a test falsifiable and have no use as a mod.
+
+## Staging it into the install
+
+**Move aside, never overwrite** — the same rule as `verify/tunable_mod_test/README.md`. The patcher
+refuses to write over its own input, so the discipline only has to be kept at the copy step.
+
+```powershell
+Copy-Item Apps\SIMSPR.DLL Apps\SIMSPR.DLL.shipped      # once, and keep it
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --recipe scroll_speed=64 --out SIMSPR.DLL.fast
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL.shipped --diff SIMSPR.DLL.fast   # re-check independently
+Copy-Item SIMSPR.DLL.fast Apps\SIMSPR.DLL -Force
+# to undo:
+Copy-Item Apps\SIMSPR.DLL.shipped Apps\SIMSPR.DLL -Force
+```
+
+`--diff` reads two files and compares them without going through the patcher, so a claim of the form
+"this differs from shipped by exactly 5 bytes at these addresses" is checkable independently of the
+code that produced it. **Re-diff the staged file before interpreting any observation** — that became
+a method rule in `verify/tunable_mod_test`.
+
+## Limits, stated
+
+- Every address here is anchored to **one** `SIMSPR.DLL`, SHA-256
+  `eec71500…09e9291d`. A different language build or a later EA release will be **refused**, by
+  design, not silently mispatched.
+- The PE `OptionalHeader` `CheckSum` ships as `0x00000000` in this module and is left alone. `--info`
+  warns if a future target ships a non-zero one.
+- **No code injection.** Operands change in place; instructions are never added. The one camera knob
+  that would need that — the missing `1/sqrt(2)` on diagonal scroll, so diagonal movement is faster
+  than straight — is deliberately absent from the recipe table rather than half-supported.
+- `drag_divisor` and `edge_margin` are static-only. One patched run each would settle them.
+- Zoom level 4's reachability in-game was never established, so the `z4` slot is untested.
+- The `+0x32c` scroll-gate flag ("dirty-rect queue overflow → force full repaint", set at
+  `FUN_1000d725:105`, cleared in `FUN_1000dc17`) is read from the decompilation and not
+  runtime-witnessed. It is not a knob here, but it is on the same path.
+
+## An alternative that needs no patch at all
+
+`re/harness/src/sc3probe.c` `-pref` adds a real **"Camera Scroll Speed" slider** to the game's own
+Preferences window and applies the value live (dragged 21.25 → 128.0 monotonically; shots
+`pref1_202726.png`, `pref3_005306.png`). That is a nicer end-user shape than a patched DLL, and it
+works — but it arrives by injection through the RE harness, which is not a distributable vehicle.
+With the proxy route closed there is no way to ship it today. Recorded here so the option is not
+rediscovered from scratch.
