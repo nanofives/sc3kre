@@ -23,6 +23,12 @@ Two hazards that have already bitten:
 - **The harness `Grep` tool cannot see `re/ghidra_export*/`.** It reports that as "0 matches". Pass a
   module's `functions/` directory explicitly or walk the filesystem. Any exhaustive-negative claim
   made with `Grep` at or above `re/` is a false negative. See `U-056`.
+- **⚠️ The export itself can be incomplete, which is a SECOND and different false-negative source.**
+  Found 2026-08-24: Ghidra rendered **zero** `+0xf0` call sites in SIMNTWRK because it discarded the
+  containing block as unreachable, yet the call is right there in the bytes at `0x1001491c`. So a
+  clean decompiled-text sweep is **not** evidence of absence. **An exhaustive-negative claim about
+  call sites needs an instruction-level scan** (`FF /2` with the slot displacement) over `.text`,
+  then receiver resolution — not the decompilation. `NETWORK_RULE_ENGINE.md` §12.0.
 
 ---
 
@@ -102,7 +108,8 @@ Order:
 | ~~`U-076`~~ | ✅ **CLOSED 2026-08-24 at C2.** The premise was wrong: `0xc14f8955` is `GZIID_cISC3Occupant`, an **interface** id, and the catalogue §27c had said so since 2026-08-18 — the uncertainty was filed off a stale label in a second doc. Real factory is `FUN_1000bdcd` in SIMNTWRK, 22 piece classes. `NETWORK_RULE_ENGINE.md` §11. Also closed `U-077`'s class half. | done |
 | **`U-078` A/B** | ⭐ **NEWLY UNBLOCKED — was "blocked on U-068", is not.** `state N` = `N × 90°` is now C3 (`GetOrientation`, nine modules, iOS-named). Only the **compass zero and sense** remain, and they fall out of a **static** sprite extraction: pull instances `pieceId*0x100 + 0..3` under `{0x625c6226, 0x825c6289}` for one asymmetric piece and render the four. No game run. | open, ready |
 | `0x82237425` `+0xb0` | Highest-value lead behind `U-078`: `FUN_1000cd35` calls `vt[0xb0](x,y,z,state,&b0,&b1,&b2,&b3)` — four booleans from a coordinate plus a state, the shape of a per-side connectivity query. Would pin the facing **from code alone**. Declared vtable `0x1002bdcc` is abstract; find the concrete implementor. | open |
-| `U-075` | Cross-module caller sweep for vtable `+0xac`/`+0xb0`/`+0xf0` on GZCLSID `0x2171c021`. Bundled with `U-080` reachability: find callers of slot `+0x54` and what `iid` they pass, which decides live vs latent for the confirmed double free. | **DISPATCHED 2026-08-24**, orchestrator |
+| ~~`U-075`~~ | ✅ **SWEPT 2026-08-24.** `+0xb0` closed at C3 — the drive path is **GZ message `0x637c0dab`**, six posters plus one SIMRCI direct call; the UI is not a holder at all. `+0xac`/`+0xf0` have **no cross-module caller in any shipped binary** (C2, measured absence). `NETWORK_RULE_ENGINE.md` §12. | done |
+| ~~`U-080`~~ | ✅ **LATENT, not live (C3).** All 42 predicate vtables share slot 0 `FUN_1001a9bb`, which accepts `0xA1C085DB`; 25/25 call sites pass exactly that. ⚠️ **But it turns live for mod authors** who install a slot-0 that rejects it — belongs in published toolkit docs. | done, one doc action |
 | ~~`U-079`~~ | ✅ **CLOSED 2026-08-24 at C3, no run spent.** Full `*_Protected.txt` → netType binding in `re/analysis/NETWORK_TYPES.md` §9, three independent cascades agreeing. The 1–2 run differential that `UNCERTAINTIES.md` costed is now **redundant — do not spend it.** Two corrections fell out: the loader reads **22** rule files, not 11 (a second parser `FUN_10019600`), and the refuted order-based guess was the slots' **address order**, which is why it kept looking right. | done |
 | `U-077` | Class behind occupant IID `0x41658d28`; label flag bits `0x400`/`0x4000`. Can sit indefinitely. |
 | `U-063` | Who calls the RECT zone writer `0x10032afa`. Gates rect-level zone edits. |

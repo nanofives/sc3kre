@@ -28,8 +28,11 @@ the `dir` field, the `1,` selector, and the `state` byte. See §4.
 
 `FUN_1001547b` is **internal** — it has no vtable pointer and three in-module callers, all of which
 *are* vtable slots of the `0x2171c021` class (vtable base `0x1002c7bc`). So evaluation is always
-entered cross-module. `[UNCERTAIN]` which module/UI action drives each of `+0xac`/`+0xb0`/`+0xf0`;
-that needs an xref sweep outside SIMNTWRK.
+entered cross-module. ~~`[UNCERTAIN]` which module/UI action drives each of `+0xac`/`+0xb0`/`+0xf0`;
+that needs an xref sweep outside SIMNTWRK.~~ **SWEEP DONE 2026-08-24 — see §12.** `+0xb0` is driven
+by **GZ message `0x637c0dab`** (six posters in SIMGEOM and SIMUTIL) plus one direct call from SIMRCI.
+`+0xf0` and `+0xac` have **no cross-module caller in any shipped binary**, which is a finding in its
+own right.
 
 ### Entry points
 
@@ -37,7 +40,7 @@ that needs an xref sweep outside SIMNTWRK.
 |---|---|---|
 | `+0xb0` | `FUN_100151f1` | **rectangle invalidate / retile.** `(this, bbox6, netMask)`. Early-outs on the `0x7fffffff` sentinel, then per bit of `netMask`: `bit0\|bit1`→HIGHWAY then ROAD, `bit2`→RAIL, `bit5`→POWER, `bit3`→PIPE, `bit4`→SUBWAY. The shape expected for city load and post-bulldoze refresh. |
 | `+0xf0` | `FUN_10014a23` | **drag/build.** Funds check, then bridge path (netType 1–4 only, path length > 3) or normal path. For HIGHWAY it runs a **second** `FUN_1001547b` pass with netType 1 — highways retile the roads they touch. |
-| `+0xac` | `FUN_1000abde` | reaches `FUN_1001547b`; not read. `[UNCERTAIN]` |
+| `+0xac` | `FUN_1000abde` | reaches `FUN_1001547b`; not read. **No caller found in any of the 30 binaries (§12.3) — an apparently unreferenced virtual.** |
 
 ### Phase 1 — occupancy mask and the "dilation pass"
 
@@ -570,3 +573,247 @@ quote them as the same measurement.
 Confidence: **C2** for the factory/field trace (decompilation read, callees resolved, named);
 `GetOrientation`'s angle semantics are **C3** (nine byte-identical SC3U implementations, a consumer that
 converts to 360°, and a named iOS witness).
+
+---
+
+## 12. ⭐ U-075 SWEPT and U-080 ADJUDICATED (2026-08-24)
+
+### 12.0 How class identity was established, and why that mattered
+
+The `0x2171c021` class has **three** identity keys, and all 29 DLLs plus `SC3U.exe` were scanned at
+raw-byte level for each:
+
+| key | value | proven at |
+|---|---|---|
+| GZCLSID | `0x2171c021` | factory registration `FUN_1001e866(this, 0x2171c021, FUN_10001138, 0)` `[CONFIRMED @ 0x100010f3, SIMNTWRK.DLL]` |
+| ServiceID | `0x2147c2dd` | slot `+0x3c` = `FUN_10013965 { return 0x2147c2dd; }` `[CONFIRMED @ 0x10013965]` |
+| IID | `0x4147c2fb` | slot `+0x00` QI `FUN_1001396b` accepts exactly `{0x4147c2fb, 1, 0x58d}` `[CONFIRMED @ 0x1001396b]` |
+
+Key occurrences, each scan run twice (byte scan of `original/modules/*` + `original/SC3U.exe`, and a
+full `os.walk` over all 31 exports; both agreed):
+
+- `0x2171c021` — **SIMCITY `0x10005ecd`** and **SIMNTWRK `0x100010f3`** only. Not in `SC3U.exe`.
+- `0x2147c2dd` — AUDIO `0x100113ef`, SIMADV `0x10006ef3` + `0x100158bd`, SIMSPR `0x1001758a`,
+  SIMNTWRK (3 sites). Not in `SC3U.exe`.
+- `0x4147c2fb` — AUDIO `0x1001140a`, SIMADV `0x10006f12` + `0x100158db`, SIMCITY `0x10005ec2`,
+  SIMSPR `0x1001759d`, SIMNTWRK `0x10013972`. Not in `SC3U.exe`.
+
+Three acquisition idioms, all confirmed:
+
+1. `GZCOM::GetClassObject(0x2171c021, 0x206c6e7c, &p); p->QI(0x4147c2fb, &out)` — SIMCITY only,
+   `FUN_10005e3e`, stored at **city+0xa8** `[CONFIRMED @ 0x10005ecd]`.
+2. `city->vtbl[+0x1b8](0x2147c2dd)` then `QI(0x4147c2fb, &out)` — AUDIO `FUN_100112a5` → `this+0x34`;
+   SIMADV `FUN_10006c7f` → `this+0x2d8` and `FUN_1001588a` → `this+0x138`; SIMSPR `FUN_100172fe` →
+   `this+0x6c` `[CONFIRMED @ 0x100158d1..0x100158e1]`.
+3. `GetApp()->GetCity()->vtbl[+0x140]()` — the getter is SIMCITY `FUN_10002b48 { return *(this+0xa8); }`,
+   at `+0x140` of city vtable `0x10013260` (its pointer is at `0x100133a0`; `0x100133a0 - 0x10013260 =
+   0x140`). Used by SIMNTWRK `FUN_10021b24`, SIMRCI `FUN_1003cf3b`, SIMMISC `FUN_10032100`.
+
+> **`SIMUI.DLL` holds none of the three keys and never calls `city->+0x140`. The UI does not hold this
+> object.** So "which UI action drives evaluation" was the wrong shape of question: the UI is not a
+> holder, and the drive path is a **message**.
+
+> ### ⚠️ METHOD WARNING — a decompiled-text sweep would have returned a false negative here
+> Ghidra rendered **zero** `+ 0xf0))(` sites in SIMNTWRK because it dropped the containing block as
+> unreachable. The call is in the bytes at `0x1001491c`. The sweep that found it was an
+> **instruction-level scan** (`FF /2` with disp8/disp32 equal to the slot offset) over every `.text`
+> in all 30 binaries, followed by resolving the receiver of each candidate.
+>
+> This is a **different** failure from `U-056` (which is the harness `Grep` tool not seeing the
+> ignored export tree). This one is the *export itself* being incomplete because the decompiler
+> discarded a block. Both produce a confident "0 matches". **An exhaustive-negative claim about call
+> sites needs the disassembly, not the decompilation.**
+
+### 12.1 Slot `+0xb0` → `FUN_100151f1` (rect invalidate / retile) — CLOSED
+
+**The primary entry is a GZ message, not a vtable pointer.** Slot `+0xc` is the class's message
+handler `FUN_10013afe`; on type `0x637c0dab` it unpacks a rect and calls `this->vtbl[+0xb0]`
+`[CONFIRMED @ 0x10013bdb, SIMNTWRK.DLL]`:
+
+```c
+local_24 = (param_1[2] >> 0x10) << 8;   local_20 = (param_1[2] & 0xffff) << 8;
+local_18 = (param_1[3] >> 0x10) << 8;   local_14 = (param_1[3] & 0xffff) << 8;
+(**(code **)(*(int *)this + 0xb0))(&local_24, param_1[1]);
+```
+
+Payload layout: `msg[0]` = type, `msg[1]` = **network bitmask**, `msg[2]` = `(x1<<16)|y1`,
+`msg[3]` = `(x2<<16)|y2`. Coordinates are shifted `<< 8` into the 24.8 fixed point the rest of the
+engine uses (§3). The class subscribes and unsubscribes to `0x637c0dab` plus seven sibling ids in
+`FUN_10013497` / `FUN_10013589`.
+
+**Cross-module posters of `0x637c0dab`** (exhaustive, by byte scan of the immediate):
+
+| module | function | post RVA | bitmask | what the surrounding code does |
+|---|---|---|---|---|
+| SIMGEOM | `FUN_100134fb` | `0x100135f4` | computed | walks an occupant list, mutates cells, posts the union rect of `piVar4[0..4]` |
+| SIMGEOM | `FUN_1001364f` | `0x100138bd` | computed | same shape, nested x/y loop |
+| SIMGEOM | `FUN_1001392a` | `0x10013bbd` | computed | same shape; picks pass count 1 or 2 from mask bits `0x10`/`0x02` |
+| SIMUTIL | `FUN_100017da` | `0x10001979` | **8** | `layerA->+0x48(occ); layerB->+0x48(occ); occ->+0xcc(&bbox)` then post — occupant add/remove, retile the bbox |
+| SIMUTIL | `FUN_10011213` | `0x100113b2` | **8** | byte-identical 528-byte sibling |
+| SIMUTIL | `FUN_100120f8` | `0x10012297` | **8** | byte-identical 528-byte sibling |
+
+**One direct cross-module vtable call**, SIMRCI `FUN_1003591f` at `0x10035f66`
+`[CONFIRMED @ 0x10035f66, SIMRCI.DLL]`:
+
+```
+piVar3 = FUN_1003cf3b();          // GetApp()->GetCity()
+piVar3 = city->vtbl[+0x140]();    // the network manager
+mov edx,[eax]; lea ecx,[ebp-0x80]; push 0x20; push ecx; mov ecx,eax; call [edx+0xb0]
+```
+
+Rect at `[ebp-0x80]`, **bitmask `0x20`**, guarded by `a1 != 0 && piVar3->vtbl[+0x148]() && local_d != 0`
+where `a1` is a zone-type index 0..8.
+
+Bitmask decode in `FUN_100151f1` `[CONFIRMED @ 0x100151f1]`, **with the network names from
+`NETWORK_TYPES.md` §1 applied**:
+
+| mask bit | netType | network |
+|---|---|---|
+| bit0 \| bit1 | 4 then 1 | HIGHWAY then ROAD |
+| bit2 | 2 | RAIL |
+| bit3 (`0x08`) | 5 | PIPE (layer `this+0x40`) |
+| bit4 (`0x10`) | 6 | SUBWAY (layer `this+0x44`) |
+| bit5 (`0x20`) | 3 | POWER |
+
+So the SIMRCI call is **a zone-type-indexed POWER retile**, and the three SIMUTIL posters
+(mask `8`) are **PIPE** retiles on occupant add/remove.
+
+> The reporting sweep listed "which real network each number is" as an open residual. **It is not
+> open** — `NETWORK_TYPES.md` §1 closed the netType→network binding, and §9 re-confirmed it three
+> ways on 2026-08-24. The names above are applied on that authority.
+
+### 12.2 Slot `+0xf0` → `FUN_10014a23` (drag/build) — CLOSED, and it has NO cross-module caller
+
+Exactly **one** call site at offset `0xf0` in SIMNTWRK, the one Ghidra hid:
+
+```
+0x1001491c:  mov ecx,esi ; call [eax+0xf0]     ; eax = [esi], esi = this (from `8b f1` @ 0x10014817)
+```
+`[CONFIRMED @ 0x1001491c, SIMNTWRK.DLL]` — a **self-call** inside `FUN_10014807`, which is itself
+slot `+0xec` of the same vtable.
+
+`FUN_10014807` is reached only from six 29-byte thin wrappers, each a slot of the same vtable, each
+hardcoding a network type (names applied per `NETWORK_TYPES.md` §1):
+
+| slot | function | netType | network |
+|---|---|---|---|
+| `+0x94` | `FUN_100146aa` | 1 | ROAD |
+| `+0x98` | `FUN_100146c7` | 4 | HIGHWAY |
+| `+0x9c` | `FUN_100146e4` | 2 | RAIL |
+| `+0xa0` | `FUN_10014701` | 6 | SUBWAY |
+| `+0xa4` | `FUN_1001473b` | 5 | PIPE |
+| `+0xa8` | `FUN_1001471e` | 3 | POWER |
+
+Every `FF /2 +0x94..+0xa8` site in every holder module (SIMCITY, SIMSPR, AUDIO, SIMADV, SIMRCI,
+SIMMISC, SIMGEOM, SimTransit) was resolved against that module's netmgr-holding field. **Zero hits.**
+
+**So the six public build entries — the obvious "player drags a road" API — have no identified caller
+in any shipped binary.** That is the same shape as `U-057` (no shipped writer for zone value 22) and
+should be treated with the same care: it is a **measured absence**, not an explanation.
+
+### 12.3 Slot `+0xac` → `FUN_1000abde` — no caller found anywhere
+
+Every offset-`0xac` call site in every holder module resolves to a *different* receiver:
+
+- SIMNTWRK `0x1000498a` (`this+0x54`), `0x10008ab4` (`this+0x30`), `0x1000fa7e` (`this+0x110`) — all a
+  dimensions object with `+0xa8`/`+0xac`/`+0xb0`/`+0xb4` width/height getters, **not this class**.
+- SIMCITY `0x1000afea`, SIMGEOM `0x10019ef8` — inside the `case 0x8000/0x8001…` GZWin message-map
+  boilerplate; the receiver is the *message* object.
+- SIMSPR (22 sites), AUDIO (3), SIMADV (2), SIMMISC (6), SIMRCI (3) — none on the module's netmgr field.
+
+Also confirmed: `FUN_1000abde`, `FUN_100151f1`, `FUN_10014a23`, `FUN_10013771` and `FUN_10014807` have
+**no direct (non-vtable) callers** in SIMNTWRK.
+
+`[UNCERTAIN]` the one path not excluded statically: the netmgr pointer being passed as a *function
+argument* into a module that holds none of the three keys. Closing that needs whole-program dataflow.
+
+### 12.4 U-080 — VERDICT: **LATENT**, not live
+
+Mechanism re-confirmed at byte level. `FUN_10013771` is
+`__thiscall bool f(this, void** out, uint32 iid, int index)` (`ret 0xc`; `this` in ECX unused;
+`[ebp+8]=out, [ebp+0xc]=iid, [ebp+0x10]=index`) `[CONFIRMED @ 0x10013771]`. When
+`handler->vtbl[0](iid, out)` returns false:
+
+```
+0x100138c7:  push esi          ; esi = the global singleton
+0x100138c8:  call 0x10026665   ; free()
+0x100138cd:  pop ecx
+             xor al,al ; ret 0xc
+```
+
+The global is **not** nulled, and teardown `FUN_100119e0` frees the same 32 globals again before
+nulling them. The double free is real.
+
+**Why it cannot fire.** All 42 predicate singletons are allocated in `FUN_10010dff`
+(`operator new(8)` + one of 42 distinct vtables). Slot 0 of **all 42** is `FUN_1001a9bb`
+`[CONFIRMED @ 0x1001a9bb]`:
+
+```c
+if ((param_2 == 1) || (param_2 == -0x5e3f7a25)) { *param_3 = param_1; AddRef(); return 1; }
+return 0;
+```
+
+`-0x5e3f7a25` = `0xA1C085DB`. And the 32 distinct globals the `switch` selects are all members of that
+42-element allocated set (set-difference verified empty).
+
+**Complete iid census at slot `+0x54`: 25 call sites across all 30 binaries, every one passes
+`0xA1C085DB`. Zero pass anything else.**
+
+| module | function | indices passed |
+|---|---|---|
+| SIMNTWRK | `FUN_1000e537` | `0x1c, 0x10, 0x16` |
+| SIMNTWRK | `FUN_1000e9e7` | `0x1d, 0x11, 0x17` |
+| SIMNTWRK | `FUN_1000ee4b` | `0x1e, 0x12, 0x18` |
+| SIMNTWRK | `FUN_1000f2c7` | `0x1f, 0x13, 0x19` |
+| SIMNTWRK | `FUN_1000f79c` | `2, 0, 0` |
+| SIMNTWRK | `FUN_1000fc45` | `0x21, 0x15, 0x1b` |
+| SIMNTWRK | `FUN_100100bc` | `0x20, 0x14, 0x1a` |
+| SIMNTWRK | `FUN_10014771` (**slot `+0x114`, self-call**) | `10` |
+| **SIMSPR** | `FUN_10018a22` @ `0x10018abf`, `0x10018ae0`, `0x10018b00` | `2, 4, 1` — receiver `*(this+0x6c)` |
+
+⇒ **Every shipped caller passes an iid the handler accepts, so the `free()` at `0x100138c8` is
+unreachable in the shipped call graph. LATENT.**
+
+> **Correction to the U-080 premise:** "the only entry is slot `+0x54` from another module" is
+> **false**. `FUN_10014771` is itself slot `+0x114` of this vtable and calls
+> `this->vtbl[+0x54](&out, 0xa1c085db, 10)` `[CONFIRMED @ 0x10014789]`. Eight of the nine caller
+> functions are in-module.
+
+Residual risk, stated rather than rounded off:
+
+- The `default:` arm (index > `0x21`) writes `*out = 0` and returns false **without** freeing, so an
+  out-of-range index is harmless.
+- If `operator new` in `FUN_10010dff` fails, the global is 0 and `(**(code **)*puVar3)` null-derefs —
+  a crash *before* the free, not a double free.
+- **Any mod or patch that installs a vtable whose slot 0 rejects `0xA1C085DB` on one of the 32 globals
+  turns this live.** As shipped, no such vtable exists. Worth stating in published toolkit docs.
+
+### 12.5 Residuals
+
+1. **Nothing calls `+0xac`.** To close: whole-program dataflow proving the netmgr pointer is never
+   passed as an argument into a non-holder module. Byte-level offset scan plus receiver resolution in
+   all nine holder modules is negative.
+2. **Nothing calls `+0x94`..`+0xa8`, hence nothing calls `+0xec`, hence nothing calls `+0xf0`** except
+   the in-module self-call chain. Same missing evidence as (1). Offset `+0xec` is too common (SIMUI
+   alone has 138 sites) to resolve by receiver in reasonable time — that is the single missing edge.
+3. **`SC3U.exe` is not fully cleared as a holder.** It contains none of the three identity keys, but
+   its `city->+0x140` call sites were not enumerated (47 sites at `0xac`, 75 at `0xf0`, unresolved).
+4. **No player-action label for the SIMGEOM / SIMUTIL posters.** All six are vtable-only, so naming
+   the action needs the callers of *their* slots. Mechanically: SIMUTIL = occupant added/removed →
+   retile its bbox, mask 8 (PIPE); SIMGEOM = cell set mutated over a rect → retile the union,
+   computed mask.
+5. **`FUN_1000d165` in SIMNTWRK is two functions merged by Ghidra.** The `+0x54` call at `0x1000d19e`
+   belongs to a separate `__cdecl` thunk whose receiver is `[esp+4]`, not `piVar3` as decompiled. It
+   passes iid `0xa1c085db`, index 1. Worth a tracker note independent of `U-080`.
+
+### 12.6 Verification done before promotion
+
+Two load-bearing claims re-read from the export by the orchestrator rather than accepted on report:
+`FUN_1001a9bb`'s accepted-iid test (`param_2 == 1 || param_2 == -0x5e3f7a25`, and `-0x5e3f7a25` is
+`0xA1C085DB` — this single function is what the entire LATENT verdict rests on), and the
+`0x637c0dab` → `vt+0xb0` dispatch with its rect unpack in `FUN_10013afe`. Both match.
+
+Confidence: **C3** for the `+0xb0` drive path (message dispatch read, six posters and one direct
+caller enumerated by two agreeing scan methods) and for the `U-080` LATENT verdict (42/42 vtable
+slots dumped, 25/25 call sites censused). **C2** for the negative results on `+0xac` / `+0xf0`, which
+are measured absences with one un-excluded path each (§12.5).
