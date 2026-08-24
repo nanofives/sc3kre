@@ -4389,3 +4389,85 @@ evidence, and it was worth three runs to learn that here rather than in somethin
 
 Images: `re/harness/u068_shots/` (gitignored — they are game screenshots and are **game content**,
 never to be published).
+
+## §31.13 — the surface dump CRASHED THE GAME. Black-vs-garbage is not settled. (2026-08-24)
+
+**Verdict: row 1 of the pre-registered table — control dump unresolvable, ABORT, nothing
+interpretable.** The control did not merely fail; it took the process with it.
+
+The game **exited on its own at t+19.595 s with `0xC0000005`**. It was not killed (`-kill 50` never
+fired). The last log lines are the control dump starting, pre-resize:
+
+```
+U068SURF> ===== SURFACE DUMP: A_pre_resize_CONTROL =====  iso=0x0EA8EA30
+          render(+0x74)=0x1231BF60 dest(+0x4ec)=0x0058A470
+U068SURF>   wrapper 0x1231BF60 raw: created(+0x08)=1 fmt(+0x0c)=7 bpp(+0x10)=16
+            w(+0x24)=1024 h(+0x28)=768 sub(+0x44)=0x0F1117D0
+```
+
+The next statement — the first candidate probe — never logged. **No BMP written, no post-resize
+dump. `[UNCERTAIN]` black vs garbage remains completely open.**
+
+### The design error, named plainly
+
+The instrument guarded a pointer with `IsBadReadPtr` and then **called vtable slot 22**.
+
+> **`IsBadReadPtr` proves a pointer is READABLE. It does not prove the object is a COM interface.**
+> Both guards passed and the call went through a dword that is not a `GetSurfaceDesc` pointer.
+
+"Let `GetSurfaceDesc` adjudicate" is not adjudication — it is an **unguarded indirect call through
+unknown data inside a live game**. This is the same family as the prologue-stealing hazard that
+killed the load at 6.7 s (§31.10): **an instrument that can destroy the thing it measures.** The
+notes describing it as "self-verifying" were wrong.
+
+The underlying assumption was also wrong: **`iso+0x74` is not a DirectDraw wrapper.** SIMDIRT
+rasterises into bits obtained from the object's **own** vtable (`vf1c` / `vf1a8` / `vf1ac` / `vf20`),
+a path `rz_iso_resize` already uses. The `*(this+4)` convention belongs to the **blit destination**
+(`FUN_10018c58`) and was over-generalised.
+
+### What survived the run
+
+1. **Pre-resize, `iso+0x74` = `0x1231BF60`: `w=1024 h=768 bpp=16 fmt(+0x0c)=7 created=1`.** One
+   dimensions set of the four requested. Pitch and channel masks were to come from the surface
+   descriptor and were never obtained. Note this is the **pre-resize control**, where 1024x768 is the
+   expected value and therefore **not yet diagnostic** — the interesting number, the post-resize one,
+   was not reached.
+2. `iso+0x4ec` = `0x0058A470`, the blit destination.
+
+> ⚠️ **Corroboration downgraded.** The run report called `0x0058A470` "exactly the `draw_obj` the
+> U-034 line reports", framed as two unrelated routes agreeing. It is not: both readings come from
+> **the probe's own instrumentation in the same process**, so it is within-process agreement.
+> `UNCERTAINTIES.md`'s `U-034-RESOLVED` row records a different address entirely
+> (`engine_dest = present_src = 0x009F4840`), from a different run. Heap addresses vary per process,
+> so there is no contradiction — but there is no independent confirmation either.
+
+### A lead, and the reason it is probably NOT the answer
+
+`U-034-RESOLVED` found the black **windowed client** was caused by **100% of engine blits failing**
+(`raster_blit_hw` 3935 / `rasthw_throw` 3935, `hr = 0x80004001` = `E_NOTIMPL`), and `U-035` asks why
+fullscreen works anyway. A blit-failure family is the obvious neighbour of "black region below the
+display list".
+
+**But it probably does not fit this defect, and the reason is in the pixels:** in §31.12's shots the
+**UI, status bar and minimap all draw correctly** and only the iso viewport is black. A global blit
+failure would take the UI with it. So whatever is wrong is **specific to the iso path**, not the
+device's blit capability. Recorded so the next person does not spend a lease re-testing `U-034`.
+
+### Safe redesign, for whoever takes this next
+
+**Never call an unknown vtable slot to identify an object.** Either:
+
+- (a) verify the wrapper's vtable pointer equals a known `MODULE+RVA` **first** — the discipline the
+  existing probe code already applies to `vt+0x0c` / `vt+0x14c` / `vt+0x158` — and only then call
+  `vf1c` / `vf1a8` / `vf1ac` / `vf20`; or
+- (b) use a surface the probe has already seen the engine use (`g_rasthw_dest`, captured from the
+  dispatcher's own arguments).
+
+Either way, wrap the first call per object in `__try/__except`. That was missing from everything
+written for this instrument and is the cheap part.
+
+### Safety state
+
+`SC3PROBE_U068SURF` is **off by default and inert without it**, so the crashing path cannot fire in
+another session's run. ⚠️ **It must not be enabled again as written.** Locks released, install
+verified stock, nothing committed.

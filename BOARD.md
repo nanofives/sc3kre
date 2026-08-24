@@ -94,8 +94,14 @@ Verdict already reached: a 7th network is impossible without patching code (clos
 43rd). Retuning and re-skinning an existing network is possible and partly game-proven. The format
 round-trips 68/68 byte-identical.
 **Next:** T1, "an edited tiling rule changes the map" — 2 runs, armed and self-contained in
-`verify/tilingrules_read_test/README.md` §7 including a Step 0 backup. Blocked only because it needs
-a rendered in-city frame, which is `U-068`.
+`verify/tilingrules_read_test/README.md` §7 including a Step 0 backup.
+
+> ⭐ **NOT BLOCKED, and it never was — established 2026-08-24 as a by-product of §31.12.** T1 was held
+> behind `U-068` on the grounds that it "needs a rendered in-city frame". **Shot A is a rendered
+> in-city frame** — Europolis in full at 1024x768, captured through the probe blit mirror, `Pob:
+> 2,069,432`. `U-068` breaks the iso view **only after a resize**, and T1 involves no resize. So the
+> capability T1 was waiting for has been demonstrated, and the dependency is dissolved rather than
+> satisfied. **This is why T1 is now the head of the run queue.**
 Session CLOSED, test ready to fire.
 
 ### 4. Camera scroll — SHIPPED 2026-08-24
@@ -112,10 +118,14 @@ parent PID, not by image name.
 
 Order:
 
-1. **`U-068`** — **1 run, a surface lock-and-dump** (`iso+0x74` vs `iso+0x4ec`). Pixels have now
-   localised the defect to below the display list; this run settles black-vs-garbage. Still unblocks
-   #2 below. (`U-078` no longer depends on it — closed statically.)
-2. **Road-type T1** — 2 runs. Closes workstream #3.
+1. **Road-type T1** — 2 runs. Converts the day's biggest RE effort into a visible mod. **Promoted to
+   the head of the queue 2026-08-24**, see the note below.
+2. **`U-068`** — **DEMOTED, not abandoned.** Five runs spent; the last one crashed the game inside its
+   own control (§31.13) and settled nothing. What was bought is real: the defect is localised below
+   the display list and specific to the iso path. The next instrument needs a **safe** redesign first
+   (verify a vtable pointer against a known `MODULE+RVA` before calling anything, `__try/__except`
+   around the first call per object) — that is desk work, not lease work. ⚠️ `SC3PROBE_U068SURF` must
+   not be re-enabled as written.
 3. **Bigger-cities `run_diff.ps1`** — 1 run, then gameplay in a 512 city.
 4. **Credits discriminator** (`U-051`) — 1 run. Cosmetic closure; `verify/credits_discriminator/`
    `RESULTS.md` is still an unfilled template.
