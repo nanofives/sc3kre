@@ -4159,3 +4159,87 @@ hours and all are now covered by `re/harness/GAME_PROTOCOL.md` plus `game_lock.p
 and `SC3PROBE_RESIZE_NOPAINT=1` (skip our paint, leave it to the game's frame loop). The auto-resize
 holds until the occupant bridge exists with a 20 s fallback, so **`-kill` must be at least
 `resizeat` + 22** or the run is cut off mid-gate.
+
+---
+
+## §31.10 — U-068 fix attempt: the pre-registered negative, and grid B's two node classes (2026-08-24)
+
+**The fix was applied, it worked mechanically, and it did not fix the symptom. That is the
+outcome the diagnosis session pre-registered, and it is recorded as such rather than retried
+until it looked positive.**
+
+### What was run
+
+Candidate (b), re-drive registration — and **not** a reimplementation. The engine has its own
+bulk re-registration, `FUN_1000fa36` @ `0x1000fa36` (SIMSPR), which walks the object collection at
+`iso+0x3a4` with the same iterator pair `FUN_10013592`/`FUN_10010c4b` that the shipped
+`FUN_1000fb29` uses, doing `FUN_1000e4ce` + `FUN_1000effc` → `FUN_1000ef50` per object. It is
+shipped code on the scroll route (`FUN_1000c9bd:109`). Prologue verified at runtime before calling
+and re-verified here against the anchored DLL: `55 8b ec 83 ec 10 80 7d 0c 00`
+`[CONFIRMED @ 0x1000fa36, SIMSPR.DLL]`.
+
+Called after the Init replay, the camera restore and the tile refill, because `FUN_1000effc` maps
+cells through `iso+0x54`/`+0x58` and `+0x39c`/`+0x3a0`. Gated behind `SC3PROBE_U068FIX=1`.
+
+### The measurement
+
+| point | type-1 (drawable) | type-2 | non-null cells | `FUN_1000ef50` |
+|---|---|---|---|---|
+| immediately after Init | **0** | **0** | 0/64 | 1286 |
+| after camera restore | 0 | 0 | 0/64 | 1286 |
+| after `FUN_10018cdf` refill | **0** | **1537** | 64/64 | 1286 |
+| after the fix | **213 in 37 cells** | 1537 | 64/64 | **1499** |
+| after the redraw | 213 | 1537 | 64/64 | 1499 |
+
+Grid B repopulated (+213 inserts, counter 1286 → 1499), `builder_hi` was reached **+64** times over
+the now-populated grid, and **`iso+0x524` is still 0** with `bg=0 sprites=0`.
+
+> That is **falsifier 3 of the pre-registered set, hit exactly**: *"if grid B is repopulated and
+> `iso+0x524` is still 0, grid B was contributing and not the blocker — my fix failing rather than a
+> new defect."* Grid B was contributing **at most**. The blocker is elsewhere.
+
+### ⭐ The finding that outruns the root cause: grid B holds TWO node classes
+
+`[CONFIRMED]`, re-verified in the export:
+
+| function | writes | meaning |
+|---|---|---|
+| `FUN_1000ef50` @ `0x1000ef50` | `*(undefined1 *)(puVar2 + 2) = 1` | **type 1** |
+| `FUN_1000cedb` @ `0x1000cedb` | `*(undefined1 *)(piVar6 + 2) = 2` | **type 2** — a second, inlined inserter |
+
+And **both** builders gate on type 1:
+
+- `FUN_1000d0f5:111` — `if ((char)local_30[2] == '\x01')`
+- `FUN_1000be25:282` — `if (((*(byte *)((int)puVar16 + 0x29) & 0x80) == 0) && ((char)piVar17[2] == '\x01'))`
+
+Consequences, and they resolve an apparent contradiction in the earlier notes:
+
+1. The census immediately after Init (0 nodes, 0 cells) **confirms the root cause by reading the
+   structure**, not by counting calls. That half of `U-068` stands.
+2. The tile refill puts **1537 nodes back into all 64 cells — every one type 2**, invisible to every
+   builder. So *"nothing re-registers"* and *"the grid is not empty"* are **both true, about
+   different node classes.**
+3. ⚠️ **An undifferentiated node count of grid B measures nothing.** The first census in this run
+   made exactly that mistake and read a 100%-type-2 grid as "populated". It cost a run to catch.
+   Any future instrument on grid B must split by the type byte at `node[2]`.
+
+### Next lead — NOT measured, do not cite as a result
+
+The rejection is **downstream of the type-1 test, inside the builder**: `FUN_1000a62c`, then
+`FUN_10008528(...)`, whose non-zero return is what increments `+0x524`. A call-site counter on that
+`E8` — the same mechanism that worked here, chosen because entry detours on per-tile functions killed
+the load at 6.7 s — is **one run**.
+
+`[UNCERTAIN]` **213 type-1 nodes after the fix versus 1286 inserts at load.** That gap is not
+explained. It may be the difference between per-object and per-object-cell insertion, or the
+collection at `iso+0x3a4` not holding everything a load registers — neither was measured.
+
+### Run hygiene
+
+4 launches, **one void**: the driving shell mangled a log path via a `\u` escape so that run wrote no
+log. **No run crashed or exited early**; all ran the full 50 s to `-kill`. Install verified stock
+afterwards; harness claim and game lease both released. The resizable-window session's
+`find_game_window` / `rz_*` code was checked intact before and after.
+
+Session write-up: `re/sessions/STATUS_u068-fix.md` (untracked by design, like the other
+`re/sessions/*` checkpoints). Logs: `re/harness/u068fix3.log` is the type-split one.

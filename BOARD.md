@@ -64,7 +64,18 @@ Session CLOSED. Anyone may pick it up.
 independent angles — Init sizes and zeroes grid B, only object registration fills it, and Init's only
 route early-outs on a zero-equality guard. **The fix is to re-drive registration, not to repair the
 builder.** Two fix candidates written with a pre-registered falsifier.
-**Next:** 2 to 4 runs of ~60 s (`-kill >= resizeat+22`).
+**Next:** ⚠️ **NOT the grid-B fix — that was run 2026-08-24 and produced the pre-registered
+NEGATIVE.** Re-registration worked (grid B repopulated +213 type-1 nodes, counter 1286 → 1499,
+`builder_hi` reached +64 times) and **`iso+0x524` is still 0**, so **grid B is ruled out as the
+blocker**. The live lead is one run: a call-site counter on `FUN_1000a62c` → `FUN_10008528` inside
+the builder, downstream of the type-1 test, whose non-zero return increments `+0x524`.
+`LAUNCH_CONTROL.md` §31.10.
+
+> ⚠️ **Any instrument on grid B must split nodes by the type byte at `node[2]`.** It holds two
+> classes — `FUN_1000ef50` tags type 1 (drawable), `FUN_1000cedb` tags type 2 — and **both builders
+> gate on type 1**. The tile refill restores 1537 *type-2* nodes into all 64 cells, so an
+> undifferentiated count reads a fully-populated-but-invisible grid as healthy. That mistake cost a
+> run on 2026-08-24.
 **Behind it:** `U-069` — downward resize has never been exercised at all, so read every "resize
 works" claim as "resize *upward* works". Only 1280x1024 has been tested; four unpinned device-vtable
 slots.
@@ -94,7 +105,9 @@ parent PID, not by image name.
 
 Order:
 
-1. **`U-068` fix** — 2 to 4 runs. Unblocks #3 and `U-078`.
+1. **`U-068`** — grid B is **ruled out** (2026-08-24). Next is **1 run**: a call-site counter on
+   `FUN_1000a62c` → `FUN_10008528` in the builder. Still unblocks #2 below. (`U-078` no longer
+   depends on it — closed statically.)
 2. **Road-type T1** — 2 runs. Closes workstream #3.
 3. **Bigger-cities `run_diff.ps1`** — 1 run, then gameplay in a 512 city.
 4. **Credits discriminator** (`U-051`) — 1 run. Cosmetic closure; `verify/credits_discriminator/`
@@ -126,8 +139,11 @@ Ordered by how much damage it can do silently.
 3. **Build→run probe-DLL swap.** `build.ps1` will relink the shared `sc3probe.dll` out from under a
    live session. Either add a per-session `-Out` name or make `build.ps1` refuse without the claim.
    Deferred by decision in `COORDINATION.md`; do it while the harness is quiet.
-4. **`STUBS.md` is still an empty template.** `DEFERRED.md` was too until 2026-08-24.
-5. **Writing `functions.csv` safely — two rules learned the hard way 2026-08-24.** The file is
+4. **Pre-existing brace bug in the resizable-window harness code, flagged not fixed.** In
+   `rz_iso_resize`, `if (redraw != simspr + 0xb4b3) ... else` has no braces, so `FUN_1000b4b3` is
+   called even when the vtable check fails. Benign so far. It is that session's code and its call.
+5. **`STUBS.md` is still an empty template.** `DEFERRED.md` was too until 2026-08-24.
+6. **Writing `functions.csv` safely — two rules learned the hard way 2026-08-24.** The file is
    **fully quoted**, so a writer must use `QUOTE_ALL`; a default `csv.writer` re-quotes every field
    and flattens the 61 bare LFs inside quoted `notes`, which turns a 23-row edit into a
    **50,668-line diff**. And records must be matched on the **parsed** `(module, rva)` pair, never a
