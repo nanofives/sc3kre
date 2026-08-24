@@ -128,8 +128,12 @@ parent PID, not by image name.
 
 Order:
 
-1. **Road-type T1** — 2 runs. Converts the day's biggest RE effort into a visible mod. **Promoted to
-   the head of the queue 2026-08-24**, see the note below.
+1. **Road-type T1** — **attempted 2026-08-24, stopped at the instrument control.** Run 1 produced no
+   frame, so no game content was edited and nothing was concluded about rules (hashes verified
+   unchanged before and after). **It is no longer blocked on `U-068` — it is blocked on
+   `capture.ps1`**, which fails silently (debt item 1). Fix that first; it is desk work. Then 2 runs,
+   and **add `-filetrace`** — without a frame there is no status bar, so run 1 did not even establish
+   that the city loaded.
 2. **`U-068`** — **DEMOTED, not abandoned.** Five runs spent; the last one crashed the game inside its
    own control (§31.13) and settled nothing. What was bought is real: the defect is localised below
    the display list and specific to the iso path. The next instrument needs a **safe** redesign first
@@ -159,8 +163,18 @@ Order:
 
 Ordered by how much damage it can do silently.
 
-1. **`gzseq` target-wait is unreliable and SKIPs silently**, producing a plausible-looking capture.
-   Make a missed target abort loudly. This one manufactures false results.
+1. **⚠️ SILENT-FAILURE INSTRUMENTS — now a pattern, not an incident. Two confirmed.**
+   - **`gzseq` target-wait** SKIPs silently, producing a plausible-looking capture.
+   - **`capture.ps1`'s frame reconstruction** produces *nothing* and says *nothing* (found
+     2026-08-24 by T1 run 1: 71 s, engine drawing hard at `raster_blit_hw` 26,565, **zero
+     `### SHOT #` lines**, exit 1). `sc3probe.c` latches `g_rasthw_dest` from `*(this+4)` on the
+     **first** `raster_blit_hw` hit, and `g_fb` allocation, the mirror match and the arming all hang
+     off it. Two runs latched **different objects from the same code** — `0x00A45AB8` wrote frames,
+     `0x0BEC4A80` produced nothing. **Neither the allocation failure nor the no-match case logs
+     anything.** One log line on the `g_fb` attempt would have caught it.
+
+   Both manufacture confident wrong answers rather than errors. **Any harness instrument must fail
+   loudly**; this is the same class of defect as `+0x524` being read as a symptom (§31.11).
 2. **`capture.ps1` does not take the game lease itself.** Until it does, wrap every call in
    `game_lock.ps1 -Acquire -Wait -Owner … / -Release`.
 3. **Build→run probe-DLL swap.** `build.ps1` will relink the shared `sc3probe.dll` out from under a

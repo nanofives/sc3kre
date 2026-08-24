@@ -359,3 +359,115 @@ the same day as this test, so the "untooled/undocumented" caveat above is supers
 
 The verdict on the original question is unchanged: this is retuning an existing network, not
 adding one. A 7th network still needs the four code patches in `NETWORK_TYPES.md` §2.
+
+---
+
+# T1 attempt, 2026-08-24: NO RESULT ABOUT TILING RULES. The capture path produced no frame.
+
+**Verdict: none of §4's T1 rows applies.** Run 1 is the baseline *and* the instrument control, and
+the control failed. Per the stop rule agreed before launch, run 2 was not performed and
+`ROAD_GRND_Set.txt` was never edited. **Nothing is concluded about whether an edited rule changes
+the map.**
+
+## Game content: untouched, verified twice
+
+| moment | `Apps\Res\TilingRules\ROAD_GRND_Set.txt` | file count |
+|---|---|---|
+| before | `9926948A…1358` | 68 |
+| after | `9926948A…1358` | 68 |
+
+`TilingRules.bak\ROAD_GRND_Set.txt` also `9926948A…1358`, 68 files. Step 0 was already satisfied on
+this machine. The install was `stock (matches original/)` at release, harness claim and game lease
+both taken as `roads` and both released.
+
+## What run 1 did
+
+The §7 baseline invocation, unmodified, against the bare absolute `Cities\Farmsville.sc3` fixture,
+`-AtSec 75`. The game launched, ran the full 71 s and was closed by the harness. It did not crash,
+did not hit the ~840 ms single-instance guard, and was drawing continuously throughout:
+
+- `blt_disp_1` 7,542 by t+5 s, rising past 57,997
+- `raster_blit_hw` **26,565** by t+65 s, with `rasthw_throw = 0` and `rasthw_surfacelost = 0`
+- `FNLOG[GZGraphicD]: 35/35 instrumented`
+
+and **zero `### SHOT #` lines in 71 s.** No BMP was written, so `capture.ps1` exited 1. It correctly
+refused the pre-existing `shot_01..03.bmp` from an earlier session on its mtime filter, so no
+foreign frame was graded.
+
+## `Blt=0 Flip=0 Lock=0` is NOT the symptom, and the earlier note should stop citing it
+
+§7 records the 2026-08-22 in-city attempt as `Blt=0 Flip=0 Lock=0` with zero SHOT lines, reading the
+zero counters as part of the failure.
+
+**The u068 three-shot run reports `Blt=0(+0) BltFast=0 Flip=0(+0) Lock=0(+0)` at t+5 s, t+10 s and
+t+15 s — and then writes a fully rendered 1024x768 city at t+20.786 s.** Those counters are the
+DirectDraw IAT hooks; the engine does not render through them. They are zero in a run that works.
+
+**The only diagnostic observable is the presence or absence of `### SHOT #`.**
+
+## The two instruments differ, and the difference is on the shot path itself
+
+Effective argv, run 1 (`capture.ps1` composes the last three itself):
+
+```
+-nocom -windowed -origin -fix16 -fitclient -nointro -quiet -shot -gzlog gz_draw.txt -log capture.log -- <abs .sc3>
+```
+
+The run that produced a good in-city frame carried the same base switches — the log shows
+`NOINTRO`, `FITCLIENT`, `WINDOWED`, `FIX16` and the same `gz_draw.txt` 35/35 table — **plus** four
+things `capture.ps1` cannot pass:
+
+1. **`-u068shot`.** This replaces the shot trigger entirely. Plain `-shot` requests a dump on a
+   timer (every 3 s) with a 4,000-blit mirror window. `-u068shot` **suppresses that timer** and
+   instead requests each dump explicitly at a chosen instant with a **400-blit** window.
+2. **An auto-resize armed at t+22.0 s** (`RZ> auto-resize armed: 1280x1024 client at t+22.0s`).
+   Shot A is taken at t+19.797 s, *before* it fires, so the resize is not what makes A work — but
+   the `rz_*` machinery that arms it is present in that process and absent from a plain `-shot` run.
+3. **Camera setup: zoom 3.** Run 1 accepted whatever camera the save restored.
+4. **Five capture detours** armed at t+31 ms (`GZGraphicD!0x10015E3D`, `SIMSPR!0x10005B42`,
+   `SIMSPR!0x10016EBA`, `GZGraphicD!0x10009EFB`, `SIMSPR!0x1000EF50`).
+
+So the premise correction that unblocked T1 — that in-city rendering works pre-resize — is sound,
+and **it is a statement about the u068 probe's `-shot` path, not about `capture.ps1`.** Only one of
+the two instruments is known to produce an in-city frame, and T1 was run on the other one.
+
+## A concrete mechanism, and why it fails silently
+
+`sc3probe.c` latches `g_rasthw_dest` from `*(this+4)` on the **first** `raster_blit_hw`
+(`FUN_10018c58`) hit, at ~1.1 s. Everything downstream is gated on that one value:
+
+- `g_fb` is allocated only by locking `g_rasthw_dest` through its vtable slot 25.
+- a blit is mirrored only when `((DWORD*)this)[1] == g_rasthw_dest`.
+- arming is `if (g_shot_req && g_fb)`, so **with `g_fb` NULL the timer request is discarded every
+  3 s and nothing is logged.**
+
+The two runs latched different objects from the same code path:
+
+| run | first `raster_blit_hw` | latched `dest_surface` | frame |
+|---|---|---|---|
+| u068 three-shot | t+1.141 s, `this=0x005A8168` | `0x00A45AB8` | **written, 1024x768** |
+| T1 run 1 | t+1.110 s, `this=0x005A9018`, `ret=0x0043D4F7` | `0x0BEC4A80` | **none in 71 s** |
+
+`0x0BEC4A80` stayed as `engine_dest` for the whole run while 26,565 blits went past. Whether `g_fb`
+failed to allocate or no blit ever matched the latch is **not distinguishable from the log**,
+because neither branch logs anything. `[UNCERTAIN]` — the missing evidence is a single log line on
+the `g_fb` allocation attempt and its result.
+
+**That is the actionable defect: a first-blit latch decides the whole capture, it can latch the
+wrong object, and when it does the instrument reports success-shaped silence.**
+
+## What run 1 does not establish
+
+**It does not establish that Farmsville loaded.** The §7 invocation carries no `-filetrace`, and
+with no frame there is no status bar to read a city name from. `GAME_PROTOCOL.md` rule 6 item 1
+requires confirming the city from the log, and this run cannot. The sustained blit activity proves
+the process was drawing something; it does not name it.
+
+## For the next attempt
+
+1. **Fix the instrument first, on its own run.** Add a log line on the `g_fb` allocation attempt so
+   the two silent failure modes separate, and reconsider latching `g_rasthw_dest` on the first blit.
+2. **Or run T1 through the u068 probe's own shot path** rather than `capture.ps1` — that path has a
+   witnessed in-city frame and `capture.ps1` does not.
+3. **Add `-filetrace` to both T1 runs** so the loaded city is named in the log, per rule 6 item 1.
+4. Keep §4's outcome table frozen. It was never reached.

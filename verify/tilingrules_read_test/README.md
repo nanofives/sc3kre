@@ -153,20 +153,49 @@ would prevent the next occurrence. Owner call, not applied unilaterally.
 `GAME_PROTOCOL.md` rule 5 adopted `harness_claim.ps1` for `sc3probe.dll` rebuilds. T0 was run
 under that protocol.
 
-## 7. T1 is blocked on U-068, and is ready to fire
+## 7. T1: the `U-068` dependency is GONE, the capture instrument is the blocker (updated 2026-08-24)
 
-T0 is done (§RESULTS). T1 needs the map on screen, and **in-city rendering does not work**:
-`LAUNCH_CONTROL.md` §33.2 **defect 6 / `U-068`** — the iso view's graphics device cannot create a
-backing store after a DirectDraw teardown, `dev->vf0c(w,h)` returns 0, `Init` ignores the failure,
-no terrain draws. Their own note: "the ONLY thing between the five verified in-city fixes and a
-rendered city".
+T0 is done (§RESULTS). T1 needs the map on screen.
 
-Re-checked empirically **2026-08-22** under the queue, install verified stock: city loaded,
-70.9 s runtime, `Blt=0 Flip=0 Lock=0` throughout, **zero SHOT lines**. Still blocked. Two
-independent observables (their surface probe, this blit-mirror reconstruction) fail at the same
-place.
+~~and **in-city rendering does not work**: `LAUNCH_CONTROL.md` §33.2 defect 6 / `U-068` — the iso
+view's graphics device cannot create a backing store after a DirectDraw teardown, `dev->vf0c(w,h)`
+returns 0, Init ignores the failure, no terrain draws.~~ **Struck 2026-08-24 — see the correction
+below.** That description is of the **post-resize** state. In-city rendering works normally when no
+resize has occurred, which is the case for T1.
 
-**Trigger: when `U-068` closes, run this.** The outcome commitments are the **T1 table in §4**
+~~Re-checked empirically **2026-08-22** … `Blt=0 Flip=0 Lock=0` throughout, **zero SHOT lines**.
+Still blocked. Two independent observables fail at the same place.~~
+
+> ⚠️ **BOTH HALVES OF THAT CORRECTED 2026-08-24, with evidence.**
+>
+> **(a) The premise "in-city rendering does not work" is FALSE.** `LAUNCH_CONTROL.md` §31.12 shot A
+> is a rendered in-city frame — Europolis in full at 1024x768. `U-068` breaks the iso view **only
+> after a resize**, and T1 performs no resize.
+>
+> **(b) `Blt=0 Flip=0 Lock=0` is NOT the symptom and never was.** Those are DirectDraw IAT counters
+> and **the engine does not render through them.** Measured in `u068shot.log`: they read
+> `Blt=0 Flip=0 Lock=0` at t+5, +10, +15, +20, +25, +30 and +35 s — the entire run — and that same
+> run wrote `### SHOT #1: 1024x768 reconstructed composite` at 20,786 ms. A fully rendered city, with
+> those counters at zero throughout. **The only diagnostic observable is the presence or absence of
+> `### SHOT #`.**
+>
+> So the two "independent observables" were not independent and one of them was not an observable.
+
+**The real blocker is `capture.ps1`'s reconstruction, and it fails SILENTLY.** T1 run 1 was attempted
+2026-08-24 as the instrument control: 71 s, no crash, engine drawing hard (`raster_blit_hw` 26,565,
+`rasthw_throw` 0), and **zero `### SHOT #` lines**, no BMP, exit 1.
+
+Mechanism `[UNCERTAIN]` but localised: `sc3probe.c` latches `g_rasthw_dest` from `*(this+4)` on the
+**first** `raster_blit_hw` hit at ~1.1 s, and the `g_fb` allocation, the mirror match and the arming
+(`if (g_shot_req && g_fb)`) all hang off it. Two runs latched **different objects from the same
+code** — the u068 run got `0x00A45AB8` and wrote frames; this run got `0x0BEC4A80` and produced
+nothing in 71 s. **Neither the allocation failure nor the no-match case logs anything**, so the
+instrument reports success-shaped silence. The missing evidence is one log line on the `g_fb`
+attempt.
+
+**Trigger: when `capture.ps1` can produce an in-city frame, run this.** Add `-filetrace` when you do:
+the §7 invocation omits it, and with no frame there is no status bar, so the 2026-08-24 attempt did
+**not** establish that Farmsville loaded (`GAME_PROTOCOL.md` rule 6 item 1). The outcome commitments are the **T1 table in §4**
 (above) - read them before looking at the images, not after.
 
 **Step 0, and it is not optional on a fresh checkout.** `TilingRules.bak/` is game content and
