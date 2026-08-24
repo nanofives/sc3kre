@@ -20,6 +20,10 @@
 !/LICENSE
 !/HANDOFF.md
 !/ROADMAP.md
+# The live board: open work by mod/feature, plus the serial game-run queue. Added 2026-08-24,
+# same class as ROADMAP/HANDOFF (our own prose, no game bytes). CLAUDE.md stays UNPUBLISHED
+# by design, so its pointer at this file is local-only.
+!/BOARD.md
 !/UNCERTAINTIES.md
 !/STUBS.md
 !/DEFERRED.md
