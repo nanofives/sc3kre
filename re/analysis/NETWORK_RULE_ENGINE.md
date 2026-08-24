@@ -551,14 +551,20 @@ added before indexing, so sub-frame 0 is tied to no world direction in code at a
 
 ### 11.5 Residuals
 
-1. `[UNCERTAIN]` the compass zero and the rotation sense of `state`. Route in the box above.
+1. ~~`[UNCERTAIN]` the compass zero and the rotation sense of `state`.~~ **CLOSED at C3, §13.** The
+   rotation sense is settled; only the *compass labelling* survives (§13.9, §14.5).
 2. `[UNCERTAIN]` which caller supplies factory kinds `0x10`..`0x16`; `FUN_1001a5f2` yields only `1..0xf`.
-3. `[UNCERTAIN]` **highest-value remaining lead** — the concrete implementation of interface
+3. ~~`[UNCERTAIN]` **highest-value remaining lead** — the concrete implementation of interface
    `0x82237425` slot `+0xb0`, called from `FUN_1000cd35` `[CONFIRMED @ 0x1000cd35]` as
    `vt[0xb0](x, y, z, state, &b0, &b1, &b2, &b3)`, returning four bytes. The declared vtable
-   `0x1002bdcc` (QI `0x1000db84`) is abstract — every slot `+0x98`..`+0xb4` is the stub `0x1002670e`.
-   **Four booleans from a coordinate plus a state is the shape of a per-side connectivity query, which
-   would pin the facing from code alone.**
+   `0x1002bdcc` (QI `0x1000db84`) is abstract — every slot `+0x98`..`+0xb4` is the stub `0x1002670e`.~~
+   **CLOSED, §14 — and this text was wrong twice.** (a) There are **no coordinate arguments**: the call
+   is `vt[0xb0](sel, half, from, state, &b0..&b3)`, and `FUN_1000d73d` ends `c2 20 00` = `ret 0x20`
+   (§14.2). (b) "`0x1002bdcc` is abstract" was a **base-address error** — that is the *second
+   subobject's* 16-slot vtable ending at `0x1002be08`, and `+0x98`..`+0xb4` off it lands inside an
+   unrelated purecall filler table that starts at `0x1002be0c`. The primary vtable is `0x1002bd04`, and
+   `+0xb0` there is the concrete `FUN_1000d73d` (§14.3). The interface was never abstract and the
+   implementation was always in SIMNTWRK. The class is GZCLSID **`0xe223741f`**, size `0x150` (§14.4).
 4. `[UNCERTAIN]` semantics of `+0x18` bits 18–19 and 20–27 (`0x6355941f`, `0x63559420`) and the two
    `+0x0c` flags.
 5. `[UNCERTAIN]` `0x81c0cb7c`, unchanged from `U-044`.
@@ -1089,3 +1095,194 @@ Confidence: **C3.** Three independent witnesses (a code permutation table, the f
 corpus, the slope table), two cross-checks, zero counterexamples in 95 + 1,660 + 249 observations, and
 a pre-stated falsification test. Not C4: no runtime or in-game observation, and the per-piece absolute
 zero still rests on rule geometry rather than on the exemplar blob being decoded.
+
+---
+
+## 14. The code-side route, run BLIND against §13 — convergence, three corrections, and one caveat that matters
+
+A second agent was given only §11.5 residual 3 and told to find the concrete implementor of
+`0x82237425`. It did not see §13, did no rule-geometry or sprite work, and did not know `U-078` had
+just been closed. **It independently arrived at the same function, the same table and the same closed
+form.** That convergence is the strongest thing in this document about the piece rotation.
+
+It also corrected three statements and raised one caveat that changes how §13.1 should be weighted.
+
+### 14.1 The convergence
+
+Independently reached: slot `+0xb0` of `0x82237425` is `FUN_1000d73d`; the concrete vtable is
+`0x1002bd04`; the 64-byte table at `0x1003123c` satisfies
+
+```
+DAT_1003123c[4*(from + 4*state) + k] == 4*((from - state) mod 4) + ((k - state) mod 4)
+```
+
+exhaustively over all 64 entries — the same relation §13.1 states as
+`row(s,d)[k] = 4*((d-s) mod 4) + ((k-s) mod 4)`. Two agents, two routes, one formula.
+
+The reading is also the same: the bit index is `4*A + B` with `A, B ∈ 0..3`, so the 16-bit field is an
+**ordered direction-pair matrix**, and incrementing `state` shifts **both** indices by one with the
+**same sense**. That is precisely how a quarter turn acts on an ordered pair, which is what makes this
+a rigid rotation rather than a relabelling.
+
+### 14.2 Correction 1 — the argument shape has NO coordinates
+
+§11.5 recorded the call as `vt[0xb0](x, y, z, state, &b0, &b1, &b2, &b3)`. **Wrong.** It is
+
+```
+vt[0xb0](sel, half, from, state, &b0, &b1, &b2, &b3)
+```
+
+`FUN_1000d73d` ends in `c2 20 00` = **`ret 0x20`**, eight stack arguments, and there is no coordinate
+among them. `sel` picks the mask (`0 → +0x140`, `1 → +0x144`, `2 → +0x148`, else mask 0)
+`[CONFIRMED @ 0x1000d745..0x1000d763]`; `half` picks the bit base (0 when non-zero, `0x10` when zero)
+`[CONFIRMED @ 0x1000d768]`; `from` and `state` index the table. §13.1's `(kind, hiLo, dir, state, …)`
+naming was already right in substance — this fixes §11.5's version, which is where the "four booleans
+from a coordinate plus a state" framing came from.
+
+### 14.3 Correction 2 — "`0x1002bdcc` is abstract" was a base-address error
+
+§11.5 said the declared vtable `0x1002bdcc` is abstract, every slot `+0x98`..`+0xb4` being the stub
+`0x1002670e`. What is actually there, dumped from the anchored DLL:
+
+`0x1002bdcc` is the vtable of the **second subobject** at `this+4`, and it is **16 slots long**,
+running `0x1002bdcc`..`0x1002be08`. At `0x1002be0c` a **separate purecall filler table** begins — 50
+consecutive `0x1002670e` entries. Indexing `+0x98`..`+0xb4` off `0x1002bdcc` lands at
+`0x1002be64`..`0x1002be80`, **inside that filler and past the end of the table**. The vtable that has a
+`+0xb0` is the primary one at `0x1002bd04`, and `0x1002bd04 + 0xb0 = 0x1002bdb4` = `FUN_1000d73d`,
+concrete. Verified slot by slot.
+
+So the interface was never abstract and the implementation was never in another module. **It is in
+SIMNTWRK, and it always was.**
+
+### 14.4 The class, now fully identified
+
+| fact | value | evidence |
+|---|---|---|
+| GZCLSID | **`0xe223741f`** | `push 0; push 0x1000116a; push 0xe223741f; call FUN_1001e866` `[CONFIRMED @ 0x1000110e]` |
+| factory | `FUN_1000116a` | `operator new(0x150); FUN_1000daec(p)` `[CONFIRMED @ 0x1000116a]` |
+| ctor | `FUN_1000daec` | `[CONFIRMED @ 0x1000daec]` |
+| size | `0x150` | |
+| primary vtable | `0x1002bd04` | ctor writes `*this` `[CONFIRMED @ 0x1000db22]` |
+| QI | `FUN_1000db84` | accepts `-0x7ddc8bdb` = `0x82237425`, else delegates to `FUN_10024bc8(this+4, …)` |
+| second vptr (`this+4`) | `0x1002bdcc` | `[CONFIRMED @ 0x1000db04 / 0x1000db69]` |
+
+> **`0xe223741f` is the same group id as the piece exemplar key** `{0xe223741f, 0xa317745f, id}` that
+> `FUN_1000c80b` builds (§11.3). So this class is the **exemplar / property object**, which is exactly
+> consistent with §13.7's finding that those records live in `TrBlkAtt.IXF`.
+
+> **Third time today: the answer was already in the repo.** `re/analysis/SIMNTWRK.md` line 67 already
+> lists this class with `PTR_LAB_1002bd04` and size `0x150`. Same failure mode as `U-076`
+> (`GZCOM_INTERFACE_CATALOGUE.md` §27c) and `U-075` (the netType names). **Grep the existing analysis
+> docs before filing or chasing an uncertainty.**
+
+### 14.5 What the code route fixes about the facing, and what it explicitly does not
+
+**Fixed `[CONFIRMED]`:** direction indices `{0, 2}` are the two ends of the **first** map axis and
+`{1, 3}` the two ends of the second. Established from the four consumer call sites, all in
+**SIMDSTR.DLL** (`0x1001f0dc`, `0x1001f18a`, `0x1001f239` ×2), where the walked coordinates are bounded
+by `vt[0xcc]() - 2` and `vt[0xd0]() - 2` `[CONFIRMED @ 0x1001f239]`, and those same two getters are the
+x-size / y-size against the packed tile field in `FUN_1000cde8`
+(`x = f & 0x7ff` vs `+0xcc`, `y = (f >> 0xb) & 0x7ff` vs `+0xd0`) `[CONFIRMED @ 0x1000cde8]`.
+So index 0 is **not** on the y axis.
+
+A clean internal cross-check falls out: both queries use `sel = 0`, `half = 1`, and their `(from, k)`
+pairs are **opposite** pairs, `(0,2)` and `(3,1)`. Under the table the four states send `(0,2)` to bits
+`2, 13, 8, 7` and `(3,1)` to bits `13, 8, 7, 2` — the same orbit offset by one state, and those four
+bits are exactly `4A+B` for the four ordered opposite pairs. The `(from → to)` reading and the
+"straight-through connection" reading corroborate each other with no free parameters.
+
+**NOT fixed, and not to be filled in by symmetry:** whether index 0 is `-x` or `+x`, and the rotation
+sense on screen. From **code alone the convention space is 8 → 4.** Both SIMDSTR probes walk *both*
+ways along the chosen axis (`local_10 - uVar3` and `local_10 + iVar2`), so no call site distinguishes
+the sign.
+
+Two candidate witnesses were found and **both explicitly disqualified**, which is the right call:
+
+1. The 24-entry neighbourhood table at `0x10032134` — `(-1,0) (0,-1) (1,0) (0,1)` then 4 diagonals then
+   a radius-2 ring, read by `FUN_1002205c` `[CONFIRMED @ 0x1002205c]`. Disqualified because its index
+   comes from byte `+4` of the 6-byte rule records and spans `0..23`, and **no code links that index
+   space to `FUN_1000d73d`'s.**
+2. `FUN_1000cde8`'s map-edge index (`x==0 → 0`, `y==mapY-1 → 3`, `x==mapX-1 → 2`, else `1`)
+   `[CONFIRMED @ 0x1000cde8]` — same parity and sign order, but the result goes to a *different*
+   object's `+0xb0`, never into this direction space.
+
+**Qualification criterion, stated so it can be met later:** one call site that feeds the *same* integer
+both into `FUN_1000d73d`'s `from`/out-slot space **and** into a signed `dx`/`dy` or an explicit
+`x == 0` / `x == max` test.
+
+### 14.6 ⚠️ CAVEAT — as shipped, this function's mask is always zero
+
+Instruction-level displacement scan of SIMNTWRK `.text`:
+
+- `+0x140` — read at `0x1000d761` (here), written at `0x1000d7ea` by the setter `FUN_1000d7e4`
+  (**vtable slot `+0xb4`**, verified present at `0x1002bd04+0xb4`), and zeroed by the ctor at
+  `0x1000db0a`. **Nothing else.**
+- `+0x144`, `+0x148` — written **only** by the ctor (`= 0`). No setter at all, so `sel = 1` and
+  `sel = 2` read permanently-zero fields.
+- The setter has **zero `rel32` callers** and is reachable only as `call [reg+0xb4]`. The interface is
+  obtainable only via `iid 0x82237425`, which occurs **4 times in SIMNTWRK and nowhere else in any
+  binary**; its three call sites are `FUN_1000cd35` (`+0xb0`), `FUN_1000cc13` (`+0xb8`) and
+  `FUN_1000cc4b` (`+0xc0`). **None calls `+0xb4`.**
+
+`[UNCERTAIN]` but measured: **as shipped, all four out-bytes are always 0**, so the SIMDSTR
+`0x1001f239` branch that requires one of them set never fires. Missing evidence: any non-zero write to
+`+0x140`. Per §12.0 this is not claimed exhaustive — a write through a base register pre-loaded with
+`this+0x140` would escape a displacement scan; no such `lea` was found, and the ctor zeroes the fields
+individually rather than by `memset`.
+
+> **This is the third "measured absence" in this subsystem**, after `+0xac`/`+0xf0` having no
+> cross-module caller (§12.2, §12.3) and `0x10032afa` having no caller (`U-057`). The pattern is worth
+> noting in its own right: SIMNTWRK ships a good deal of reachable-but-never-driven machinery.
+
+### 14.7 How this re-weights §13, honestly
+
+§13's verdict **stands at C3**, but the contribution of its three witnesses should be read as follows,
+because the code route independently sharpened the §13.9 caveat:
+
+- **Witness 2 (`*_final.txt`, 80/80) and witness 3 (the slope table) tie `state` to actual
+  `(dx, dy)` deltas**, via the selector-bit binding confirmed 4/4 at `FUN_10019768` and via the corner
+  perimeter order at `FUN_1001a1f3`. **The rotation sense in coordinate-delta terms rests on these two,
+  and they are sound.**
+- **Witness 1 (`FUN_1000d73d`) proves the mechanism is a rigid quarter turn, but NOT the numbering.**
+  Its index space is not proven to share numbering with `0x10032134`'s — that is the code agent's
+  disqualification of candidate 1, and it is correct. And per §14.6 the function's runtime output is
+  degenerate as shipped, so it is a witness about **intent and structure**, not about observed
+  behaviour.
+
+Net effect: nothing in §13 is retracted, and §13.9's caveat is **reinforced by an independent route**
+rather than merely restated. The two agents' verdicts differ in wording only — the code route said
+"`U-078` stays open" because code alone cannot fix the sign, and §13.9 already carves out exactly that
+residue. **Rotation sense and per-piece zero: safe. Compass words: still unwitnessed.**
+
+### 14.8 Residuals added
+
+1. **The sign of index 0 (`-x` vs `+x`) and the on-screen rotation sense** — 4 candidate conventions,
+   2 disqualified candidate witnesses, qualification criterion in §14.5. This is the surviving residue
+   of `U-078` and it is a *labelling* question, not a mechanism question.
+2. **`+0x140` is never written non-zero; `+0x144`/`+0x148` are dead.** Find a caller of slot `+0xb4` on
+   class `0xe223741f`, or prove there is none (§14.6).
+3. **Whether the 6-byte rule records' direction byte (24-entry table at `0x10032134`) shares numbering
+   with `FUN_1000d73d`'s `from`/`k` space.** Closing this would upgrade witness 1 from structural to
+   numbering-bearing.
+4. **Semantics of `half`** (bit base 16..31) — never exercised by any of the four call sites.
+
+### 14.9 Two more tracker rows that disagree with the sweep (found while promoting)
+
+Same pattern as §12.7 — promoting §14 hit five rows already at C2/C3, and two of them read the same
+function differently. **Left untouched, recorded rather than resolved by fiat.**
+
+| RVA | existing name | §14's reading | status |
+|---|---|---|---|
+| `SIMNTWRK 0x1000cde8` | `sc3_ntwrk_select_piece_sprite` | packed tile-field decode (`x = f & 0x7ff` vs `+0xcc`, `y = (f >> 0xb) & 0x7ff` vs `+0xd0`) plus a map-edge index | `[UNCERTAIN]` |
+| `SIMDSTR 0x1001f239` | `sc3_dstr_parade_find_route` | drives both axis walks over network side-connectivity | `[UNCERTAIN]` |
+
+`0x1000cde8` matters more than it looks: if the earlier read is right and this function selects a
+**sprite**, that touches §13.7's exemplar-versus-sprite correction. The two readings are not obviously
+incompatible — a sprite selector would plausibly decode the tile field first — but **the axis
+identification in §14.5 leans on the `+0xcc`/`+0xd0` pairing in this function**, so anyone revisiting
+§13.7 should re-read `0x1000cde8` first rather than trusting either label.
+
+`0x1001f239` is likely compatible too (a parade follows the road network, so tracing a connected run is
+what routing it would do), but "parade" is a claim about *purpose* that §14 did not establish and
+"trace network run" is a claim about *mechanism* that the existing note did not. Neither is promoted
+over the other.
