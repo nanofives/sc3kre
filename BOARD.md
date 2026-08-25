@@ -130,11 +130,12 @@ Order:
 
 1. **Road-type T1** — **attempted 2026-08-24, stopped at the instrument control.** Run 1 produced no
    frame, so no game content was edited and nothing was concluded about rules (hashes verified
-   unchanged before and after). **It is no longer blocked on `U-068` — it is blocked on
-   `capture.ps1`** (debt item 1). Its silence was fixed 2026-08-25, so a retry now either works or
-   reports the reason; the underlying latch is still unproven. Retry is **2 runs**, and **add
-   `-filetrace`** — without a frame there is no status bar, so run 1 did not even establish that the
-   city loaded.
+   unchanged before and after). **The blocker is now identified and fixed** (debt item 1): a
+   mirror-window re-arm loop, not `U-068` and not the latch. **Also established on the 2026-08-25
+   attempt: the fixture works.** `-filetrace` showed `CreateFileA …\Cities\Farmsville.sc3 -> ok`
+   and **111 of 328 filetrace lines naming `TilingRules`** — the right city loaded and the rules were
+   read. Everything except the capture path is now known good. Retry is **2 runs**, keep
+   `-filetrace`.
 2. **`U-068`** — **DEMOTED, not abandoned.** Five runs spent; the last one crashed the game inside its
    own control (§31.13) and settled nothing. What was bought is real: the defect is localised below
    the display list and specific to the iso path. The next instrument needs a **safe** redesign first
@@ -183,10 +184,28 @@ Ordered by how much damage it can do silently.
      failure and no longer asks *"did the game render?"* — that framing presupposed the game was at
      fault and is what sent the 2026-08-22 note to "in-city rendering does not work".
 
-     ⚠️ **SCOPE LIMIT, stated plainly: this makes the failure DIAGNOSABLE, it does not make the
-     latch CORRECT.** Which object should be latched is still unknown, and **the fix is UNVERIFIED**
-     — it compiles and parses, but no run has exercised the new paths. The next T1 attempt either
-     produces a frame or finally says why.
+     ✅ **AND IT IMMEDIATELY PAID OFF — root cause found 2026-08-25, one run, one log line.**
+     The diagnostic printed exactly `SHOT> g_fb READY 1024x768 from latched dest 0x038B6ED8`, which
+     **ruled out the entire allocation family** (dest readable, `Lock` succeeded, dims plausible,
+     `VirtualAlloc` fine) — and then **no `mirror window closed` line at all**. The window opened and
+     never closed in 72 s. So the latch was never the problem and the
+     `0x00A45AB8`-vs-`0x0BEC4A80` hypothesis is **refuted**.
+
+     **The real defect is a re-arm loop, and it is arithmetic.** `g_shot_arm_n = 4000`; the 3 s timer
+     sets `g_shot_req` unconditionally; servicing a request **RESET** `g_shot_arm` to 4000. In-city
+     the engine runs **~391 blits/s ≈ 1,170 per 3 s**, so the countdown was restarted before it could
+     ever reach zero — **at any run length**. It was the reset, not the volume: 26,351 blits
+     accumulated in 72 s, so an un-reset window would have closed around t+12 s.
+
+     **That also closes the instrument comparison.** `-u068shot` does exactly two things that matter:
+     sets `g_shot_arm_n = 400` **and** suppresses the 3 s timer. **The two instruments were the same
+     code separated by one constant and one boolean** — which is the whole reason shot A exists and
+     `capture.ps1` had never made an in-city frame.
+
+     **Fixed 2026-08-25:** a request landing while a window is still open is now **dropped, not
+     honoured** (correct at any blit rate, unlike lowering the constant), and both window open and
+     close now log. Probe rebuilt. ⚠️ Still **unverified by a run**, though the diagnosis is
+     arithmetically established and confirmed in source (lines 211, 1034, 5166, 6970).
 
    Both manufacture confident wrong answers rather than errors. **Any harness instrument must fail
    loudly**; this is the same class of defect as `+0x524` being read as a symptom (§31.11).

@@ -471,3 +471,124 @@ the process was drawing something; it does not name it.
    witnessed in-city frame and `capture.ps1` does not.
 3. **Add `-filetrace` to both T1 runs** so the loaded city is named in the log, per rule 6 item 1.
 4. Keep §4's outcome table frozen. It was never reached.
+
+---
+
+# T1 attempt 2, 2026-08-25: still NO RESULT about tiling rules — but the capture path is now diagnosed, not just observed
+
+**Verdict: none of §4's T1 rows applies.** Run 1 was again the instrument control, it again produced
+no frame, and the stop rule fired. Run 2 was not performed and `ROAD_GRND_Set.txt` was never edited.
+
+**What changed: the failure is no longer a mystery. It is a counter that can never reach zero.**
+
+## Game content: untouched, verified twice again
+
+| moment | `ROAD_GRND_Set.txt` | file count |
+|---|---|---|
+| before | `9926948A…1358` | 68 |
+| after | `9926948A…1358` | 68 |
+
+Backup copy identical, 68 files. `Cities\` still holds **15** `.sc3` (counted case-insensitively).
+Install `stock (matches original/)`. Harness claim and lease taken as `roads`, both released.
+
+## The city DID load — this is what `-filetrace` bought
+
+The previous attempt could not establish it. This one can, per `GAME_PROTOCOL.md` rule 6 item 1:
+
+```
+FILETRACE #45: CreateFileA "…\Cities\Farmsville.sc3" -> ok
+```
+
+first at t+2.455 s, repeating through **`FILETRACE #328`** at t+6.089 s, all `-> ok`. **328 filetrace
+lines total, 111 of them naming `TilingRules`.** So the bare-absolute-path fixture works, the
+correct city loaded, the rules were read on this very run, and the process was well past setup.
+
+**Consequence: every remaining doubt is on the capture path alone.** The game loads Farmsville and
+reads the rule files. It is the picture that does not arrive.
+
+## The new diagnostics fired, and they narrowed it in one run
+
+Exactly one `SHOT>` line, verbatim:
+
+```
+[ 2462.391 ms][tid 2198] SHOT> g_fb READY 1024x768 from latched dest 0x038B6ED8
+```
+
+That single line is worth the rebuild. It rules out, on the record:
+
+- the latched dest was **readable** and **did respond to `Lock` (slot 25)** — no `hr` failure line
+- the dims were plausible and **`VirtualAlloc` succeeded**: `1024x768`
+- **no** `!! shot requested but g_fb is NULL` — so no request was ever dropped for a null buffer
+
+And, decisively, **no `SHOT> mirror window closed: N matched, M aimed elsewhere` line at all.**
+
+> The mirror window was opened and **never closed, not once, in 72 seconds.**
+
+So last attempt's `[UNCERTAIN]` is resolved, and resolved *against* the hypothesis I offered:
+`g_fb` allocation was never the problem, and the latch (`0x038B6ED8` this run) was good enough to
+lock and size. **My `0x00A45AB8` vs `0x0BEC4A80` observation does not explain this failure.**
+
+## Root cause: the 3-second re-arm outruns the in-city blit rate
+
+The plain `-shot` path (`sc3probe.c`):
+
+- `g_shot_arm_n = 4000` — blits to mirror per shot
+- the timer requests a dump **every 3 s**: `if (g_shot && !g_u068_shot && ticks % 30 == 0) g_shot_req = 1`
+- servicing a request **resets the window**: `InterlockedExchange(&g_shot_arm, g_shot_arm_n)`
+- the dump only happens when the window counts down to zero: `if (InterlockedDecrement(&g_shot_arm) == 0) fb_dump()`
+
+Measured in-city blit rate this run, `raster_blit_hw` at each 5 s heartbeat:
+
+| t | total | delta |
+|---|---|---|
+| +15 s | 4,911 | — |
+| +20 s | 7,111 | +2,200 |
+| +25 s | 9,241 | +2,130 |
+| +30 s | 11,301 | +2,060 |
+| +65 s | 26,351 | +2,130 |
+
+Steady state **+2,130 per 5.45 s heartbeat = ~391 blits/s = ~1,170 per 3 seconds.**
+
+> **The window needs 4,000 decrements. It is reset to 4,000 every 3 seconds. At most ~1,170 arrive
+> in that time. `g_shot_arm` never reaches zero, so `fb_dump()` is never called, so no BMP is ever
+> written — no matter how long the run lasts.**
+
+`~1,170` is an upper bound on decrements, since the decrement is gated on `f[7] && ((DWORD*)f)[10]`.
+The true figure is lower, which only widens the gap. And the totals confirm it is the *reset* and
+not the volume: 26,351 blits accumulated, so an un-reset window would have closed at about **t+12 s**.
+
+## Why the u068 path works and this one cannot — same code, two constants
+
+This closes the loop on the instrument comparison from the previous attempt. `-u068shot` does exactly
+two things that matter here:
+
+1. **`InterlockedExchange(&g_shot_arm_n, 400)`** — a 400-blit window, reachable in ~1 s in-city.
+2. **suppresses the 3 s timer entirely** (`!g_u068_shot`), requesting each dump once, explicitly.
+
+**Both changes attack the same defect from opposite ends: shrink the window, and stop resetting it.**
+That is why shot A exists and why `capture.ps1` has never produced an in-city frame. The two
+instruments are the same code separated by one constant and one boolean.
+
+It also predicts where `-shot` *does* work: anywhere the blit rate clears 4,000 per 3 s. Whatever
+that is, an isometric city view at ~391 blits/s is not it.
+
+## The fix this points at (not applied — not my file to change unilaterally)
+
+Either would be sufficient, and the second is strictly better:
+
+1. Lower `g_shot_arm_n` for the plain `-shot` path, as `-u068shot` already does for itself.
+2. **Do not reset a live window.** Make the 3 s timer a no-op while `g_shot_arm > 0`, so a request
+   arriving mid-window is ignored rather than restarting the countdown. This is correct at any blit
+   rate, which the constant is not.
+
+A supporting observation for whoever implements it: the request/arm/decrement sequence has no
+mechanism to notice starvation. A `SHOT>` line when a request lands on a window that is still open
+would have made this visible on the *first* attempt rather than the third.
+
+## Ladder status, unchanged where it counts
+
+**T0 = files are read** (and re-confirmed incidentally this run: 111 `TilingRules` filetrace lines).
+**T1b = contents are consumed.** **T1 = behaviour, still open** — now blocked on the `-shot` re-arm
+defect rather than on `U-068`, which is a smaller and fully specified problem.
+
+§4's outcome table remains frozen and remains unreached.
