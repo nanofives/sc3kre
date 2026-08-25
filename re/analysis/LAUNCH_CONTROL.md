@@ -5045,3 +5045,86 @@ the all-frozen row. Each was caught by the person who wrote it, which is the goo
 Validity: 0 keys, 25 filetrace hits per launch, **0 exceptions in any launch**, 4/4 COMPLETE,
 expect-or-refuse passed in all four — `SIMSPR + 0x6226` now runtime-confirmed in **six** processes.
 `followTarget = 0` on 63/63. `N == 1` on 63/63. `span = 1024x768` **cumulative 418/418**.
+
+### §31.14.15 — the crossed design clears the instrument, kills the warm cache, and leaves nothing standing (2026-08-25)
+
+Six launches, strictly alternating, starting unset, no early stopping.
+
+| # | `CAMCALLER` | baseline | verdict |
+|---|---|---:|---|
+| I1 | unset | 4998 ms | **frozen** |
+| I2 | **SET** | 3825 ms | **frozen** |
+| I3 | unset | 4822 ms | **frozen** |
+| I4 | **SET** | 4868 ms | **frozen** |
+| I5 | unset | 4315 ms | **frozen** |
+| I6 | **SET** | 4704 ms | **frozen** |
+
+**Armed 0/3, unset 0/3 — no split.** Suppression is **not supported**; `CAMCALLER` is exonerated and
+nothing built on the armed runs needs withdrawing. Three unset freezes under a suppression model is
+`p = 0.094` (verified), pointing the same way E2 did for `CAMWATCH`.
+
+#### The warm-cache hypothesis dies, and the run agent killed it on its own evidence
+
+**Baselines did not shorten.** Across all fourteen launches since F1 they oscillate **3789–5760 ms with
+no trend** — first three mean 4566 ms, last three mean 4629 ms, slightly *longer*. On the cleaner
+measure, the `zoom 0→2` load transition: F2 = 5589, H2 = 4740, H3 = 5025, H4 = 5265, I2 = 4776. Noise,
+and the latest launch is slower than two earlier ones.
+
+> **The agent corrected its own evidence: the reported drift was SELECTION.** It had quoted
+> "~5.0–5.8 s in F/G versus ~3.8–4.3 s in H2–H4" — but **F2 was 3838 ms**, as short as anything in H.
+> It had compared G1/G2, the two highest values in the set, against three of the lowest.
+
+There is also a mechanical flaw underneath it: **the first-read baseline fires as soon as the city view
+exists**, so a launch that catches the *pre-city* state times earlier. Every "short" baseline in that
+list was a pre-city catch and every "long" one post-load. **The variable called "load speed" was mostly
+which state the sampler landed on.**
+
+#### ⚠️ My pre-registered row BJ was logically backwards, and the agent refused to adopt it
+
+I wrote: *"any UNSET launch late in the session freezes → warm-cache weakened."* **That is wrong.**
+Freezing without the instrument at a warm cache is **what warm cache predicts** — evidence *for* it.
+What unset-and-frozen actually weakens is **suppression**.
+
+Warm cache dies here on **row BM's** evidence (no drift in the baselines), **not** on BJ's. A
+pre-registered row is only worth something if its inference is sound; this one would have credited the
+right conclusion to the wrong observation, and the agent was right to reject it rather than take the
+convenient reading.
+
+#### The fact that nothing now explains
+
+**Thirteen consecutive frozen launches since F1** — `p = 3.5 × 10⁻⁵` at the pre-F1 rate (verified).
+Every candidate is out:
+
+| candidate | how it died |
+|---|---|
+| the instrument | crossed design, no armed/unset split |
+| warm cache | no baseline drift; the drift was selection |
+| **the probe build** | **F1 churned and F2 froze on the same binary, minutes apart** |
+| fixture, input, sim, elapsed time | eliminated earlier |
+
+Persistent state checked: the only install file touched today is `Apps/SC3U_stkdmp.txt`, written
+**09:02:50**, hours before this session; `Farmsville.sc3` untouched. **Nothing in the install changed
+under these runs.** `[UNCERTAIN]` what did — not measured, and no untested mechanism is being named.
+
+#### Free confirmation, now nine processes deep
+
+I2 caught the load transition and reproduced the caller exactly: `calls=1`,
+`SIMSPR+0x674F` = `FUN_10006736 + 0x19` = **ScrollTo**, one translate store at `+0x62AF`, one SetZoom
+store at `+0x68C9`. With `vt+0x30` resolved from the anchored binary, **the load-time path is settled:
+something calls `ScrollTo` once at load, which subtracts the origin and dispatches to the translate,
+while `+0x354 == 0` rules out `FUN_1000ec0b`.**
+
+Expect-or-refuse passed on all three armed launches — `SIMSPR + 0x6226` now runtime-confirmed in
+**nine** processes. `followTarget = 0` on 91/91. `N == 1` on 91/91. `span = 1024x768` **cumulative
+600/600**.
+
+#### The next move is not another launch on this fixture
+
+Thirteen launches at `p = 3.5 × 10⁻⁵` says the precondition is **gone, not rare.** Sampling the same
+fixture again is unlikely to recover it.
+
+**The cheapest thing that would move it: re-run one exact early configuration** — an A/B/C-era switch
+set and sequence, unchanged. **If churn returns, the difference is in harness configuration and is
+bisectable. If it does not, the precondition is machine or session state and no amount of sampling
+recovers it.** That is a decision procedure rather than another sample, which is what this thread now
+needs.

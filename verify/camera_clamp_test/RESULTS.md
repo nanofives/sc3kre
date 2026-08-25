@@ -1540,3 +1540,187 @@ naming a churn caller while it stands would produce a result nobody could trust.
 
 Install `stock (matches original/)` before and after — the vtable swap is memory-only. No patch; one
 claim held across all four launches, lease per launch by the same owner, both released.
+
+---
+
+# Interleaved CAMCALLER control — PRE-REGISTRATION, written before any launch, 2026-08-25
+
+Six launches with CAMCALLER armed have now all frozen (`p = 0.0083` under the prior rate), but every
+one of them came later in the session than every unarmed launch, so **instrument and warm file cache
+are perfectly confounded**. A batch of unset launches now would repeat that confound with time. This
+design crosses them instead.
+
+> **Design, declared in advance: SIX launches, strictly alternating, STARTING UNSET —
+> unset, set, unset, set, unset, set. All six run regardless of outcome. No early stopping.**
+
+Starting unset puts an unset launch in the **coldest** slot and an armed launch in the **warmest**, so
+if warm cache is the real cause its effect runs **against** the instrument rather than with it. That
+is deliberately the harder test for the warm-cache story, which is currently the more comfortable
+explanation and therefore the one worth stressing.
+
+**`SC3PROBE_CAMWATCH=1` on all six**, so the writer census is constant and **only `CAMCALLER` varies** —
+one variable at a time. Farmsville via `-GamePath`, no input, install stock, one claim across all six
+with the lease per launch.
+
+**Churn detector, correct from the start this time:** a MOVED interval whose **preceding read was
+already post-load (`zoom == 2`)**. Three criteria in this thread have now been defined correctly in
+one place and consumed defectively in another; this one is wired in before the first launch rather
+than patched mid-run.
+
+**Cadence:** `wait:750` (~1.0 s intervals, ~t+5 s to t+20 s), the same sequence as G1, G2 and H1-H4.
+The `GZMAXSEQ` = 32 ceiling still forbids ~1 s cadence and a 30 s window together, and here
+**consistency with the launches being compared outranks reach** — a control that changed the cadence
+would confound a third variable. All five onset brackets ever measured (t+6.26 to t+16.15 s) fall
+inside this window.
+
+**Load baseline recorded for every launch** — the timestamp of the first `cam` read, plus the
+pre-city -> post-load transition where captured.
+
+| row | outcome | what it would mean |
+|---|---|---|
+| **BI** | **any ARMED launch churns** | **suppression is dead outright.** One suffices; no statistics needed. |
+| **BJ** | any **UNSET** launch **late** in the session freezes | warm cache weakened — freezing would then occur without the instrument at a warm cache |
+| **BK** | all three armed frozen **AND** all three unset churn | suppression strongly supported. If the instrument were inert this pattern has **p = 0.015**; stated in advance so it cannot be quoted loosely afterwards. |
+| **BL** | mixed, no clean split | **neither hypothesis is carried.** A real outcome at n = 6; the table gets reported and nothing gets squeezed into a story. |
+| **BM** | **load baselines do NOT shorten across the session** | the warm-cache hypothesis **loses its factual basis entirely**, independent of any churn data. It rests on an observed drift from ~5.0-5.8 s to ~3.8-4.3 s; if that does not continue or reverses, the explanation weakens on its own terms. |
+| BN | crash | thunk first suspect on armed launches; on unset launches it cannot be the thunk |
+
+---
+
+# RESULT — **ROWS BL AND BM FIRED. All six frozen, armed and unset alike. Neither hypothesis survives, and my warm-cache evidence was selection.**
+
+Six launches, strict alternation, no early stopping. **Every one frozen post-load.**
+
+| # | run | CAMCALLER | first-read baseline | load transition | verdict | first motion |
+|---|---|---|---|---|---|---|
+| 1 | I1 | **unset** | 4998 ms | (not captured) | **FROZEN** | — |
+| 2 | I2 | **SET** | 3825 ms | 4776 ms | **FROZEN** | — |
+| 3 | I3 | **unset** | 4822 ms | (not captured) | **FROZEN** | — |
+| 4 | I4 | **SET** | 4868 ms | (not captured) | **FROZEN** | — |
+| 5 | I5 | **unset** | 4315 ms | (not captured) | **FROZEN** | — |
+| 6 | I6 | **SET** | 4704 ms | (not captured) | **FROZEN** | — |
+
+**Armed: 0 churn of 3. Unset: 0 churn of 3.** The instrument variable produced no split whatsoever.
+Row BI did not fire (no armed launch churned) and row BK did not fire (the p = 0.015 pattern did not
+appear). **Row BL is the outcome** — and I am reporting the table rather than squeezing it into a
+story, which is what that row exists for. Its wording says "mixed"; the actual result is *uniform*,
+which is the same thing for its purpose: **armed and unset are indistinguishable, so suppression is
+not supported.**
+
+Under a suppression model the three unset launches should have churned at the historical rate;
+three unset freezes has `p = 0.455^3 = 0.094`. Not decisive alone, but it points the same way as E2
+did for CAMWATCH: **freezing happens without the instrument.**
+
+## Row BM fired, and it takes my own hypothesis down
+
+**Load baselines did not shorten.** Across all fourteen launches since F1 the first-read baseline
+oscillates between **3789 ms and 5760 ms with no trend** — mean of the first three is **4566 ms**,
+mean of the last three is **4629 ms**, i.e. slightly *longer*.
+
+On the cleaner measure it is the same. The **load transition** (`zoom 0 -> 2`) is only available for
+launches whose first read caught the pre-city state: F2 = 5589, H2 = 4740, H3 = 5025, H4 = 5265,
+**I2 = 4776**. Earliest to latest is `-813 ms` of noise, not a drift, and the latest launch is slower
+than two earlier ones.
+
+**And I have to correct myself on how I produced the drift in the first place.** I reported it as
+"~5.0-5.8 s in the F and G runs, ~3.8-4.3 s in H2-H4". Looking at the full list, **F2 was 3838 ms** —
+as short as anything in H — and I compared G1/G2 (the two highest values in the set) against H2-H4
+(three of the lowest). **That was selection, and I presented it as a trend.** It is the same failure
+mode as the criterion errors: a claim assembled from the subset that fit.
+
+There is also a mechanical reason the first-read baseline was never a good proxy: it fires as soon as
+the city view exists, so a launch that catches the **pre-city** state (`zoom=0`) times earlier than one
+that catches the loaded state. Every "short" baseline in my list (F2 3838, H2 3789, H3 4076, H4 4266,
+I2 3825) is a **pre-city** catch and every "long" one is a post-load catch. **The variable I called
+load speed was mostly which state the sampler happened to land on.**
+
+**So the warm-cache hypothesis loses its factual basis entirely**, exactly as row BM anticipated, and
+it loses it independently of any churn data.
+
+## I also have to flag the inference attached to row BJ, because it is backwards
+
+Row BJ read: *"any UNSET launch late in the session freezes -> warm-cache weakened, since freezing
+would then occur without the instrument at a warm cache."*
+
+Unset launches froze (I1, I3, I5), so the row's **condition** fired. But the conclusion does not
+follow. Freezing without the instrument at a warm cache is **what the warm-cache hypothesis
+predicts** — it is evidence *for* that story, not against it. What unset-and-frozen actually weakens
+is **suppression**, because it shows the freeze does not need the instrument.
+
+So BJ's condition fired with its stated inference inverted. Warm cache is dead here on **row BM's**
+evidence (no drift), not BJ's. Recording the correction rather than adopting the row as written.
+
+## What neither hypothesis explains, and it is now the main fact
+
+**Thirteen consecutive frozen launches since F1**: F2, G1, G2, H1, H2, H3, H4, I1, I2, I3, I4, I5,
+I6. At the pre-F1 rate `P(churn) = 6/11` that streak has **`p = 3.5e-5`**.
+
+And the two candidate explanations are now both out:
+
+- **Not the instrument** — unset launches froze at the same rate as armed, in an interleaved design
+  built to detect exactly that.
+- **Not the warm cache** — no baseline drift on either measure, and the proxy I used for it was
+  selected.
+- **Not the probe build** — F1 (churn) and F2 (frozen) ran on the *same* binary minutes apart.
+- **Not the fixture, not input, not the sim, not elapsed time** — all previously eliminated.
+
+Something changed around F1 -> F2 and has held for thirteen launches. I checked the obvious candidate,
+persistent state written by the game: the only install file touched today is `Apps/SC3U_stkdmp.txt`,
+last written **09:02:50**, hours before this session began, and `Cities\Farmsville.sc3` is untouched.
+So no file in the install changed under these runs. `[UNCERTAIN]` what did change; I could not measure
+it, and I am not going to name a mechanism I have not tested.
+
+## Free confirmations, four processes deep
+
+I2 caught the load transition and reproduced the caller **exactly**:
+
+```
+[ 4775.705 ms] ### CAMW: interval 1  dx=+348 dy=+1677  MOVED  writes=2
+[ 4775.732 ms] ### WIDGET: CAMW iv1 writer x1 [MOVING interval] (instr AFTER store) 0x034762AF = SIMSPR.DLL + 0x62AF
+[ 4775.753 ms] ### WIDGET: CAMW iv1 writer x1 [MOVING interval] (instr AFTER store) 0x034768C9 = SIMSPR.DLL + 0x68C9
+[ 4775.773 ms] ### CAMC: interval 1  calls=1
+[ 4775.792 ms] ### WIDGET: CAMC iv1 caller x1 [MOVING interval] (return address) 0x0347674F = SIMSPR.DLL + 0x674F
+```
+
+`SIMSPR+0x674F` = `FUN_10006736+0x19` = **`ScrollTo`**, now confirmed as iso vt `+0x30` from the
+anchored binary. **Four independent processes** (H2, H3, H4, I2), identical single call, identical
+one-call-in / one-translate-store-out correspondence. The load-time path is settled:
+**something calls `ScrollTo(vt+0x30)` once at city load, which subtracts the origin and dispatches to
+the translate (`vt+0x2c`), while `+0x354 == 0` rules out `FUN_1000ec0b`.**
+
+## Validity
+
+0 keys in all six; 25 `Farmsville.sc3` filetrace hits each; **0 exceptions, 0 minidumps** (row BN did
+not fire); 6/6 sequences `COMPLETE`. Expect-or-refuse passed on all three armed launches (slot held
+`SIMSPR+0x6226`), now runtime-confirmed in **nine** processes. `followTarget(+0x354) = 0` on 91/91
+reads. `N == 1` on 91/91. `span = 1024x768` on 91/91 reads, both rects, **cumulative 600/600**.
+
+## Which rows fired
+
+| row | status |
+|---|---|
+| BI — any ARMED launch churns | **no** — 0 of 3 |
+| BJ — any UNSET launch late in session freezes | **condition fired** (I1, I3, I5) — but **its stated inference is inverted**; it weakens suppression, not warm cache |
+| BK — all armed frozen AND all unset churn (`p = 0.015`) | **no** — unset did not churn either |
+| **BL — no clean split, neither hypothesis carried** | **FIRED** — 0/3 vs 0/3, the instrument variable had no effect |
+| **BM — load baselines do NOT shorten** | **FIRED** — no drift on either measure; the warm-cache hypothesis loses its factual basis, and my evidence for it was selection |
+| BN — crash | **no** — 6/6 loaded and completed |
+
+## Where this leaves it
+
+**Cleared:** CAMCALLER is exonerated — the suppression signal I raised was real as a pattern but does
+not survive a crossed design. Nothing built on the armed runs needs withdrawing, and the caller
+identification stands on four processes.
+
+**Open, and it is now the blocking fact:** the churn has not been observed in thirteen consecutive
+launches, and every variable proposed so far has been eliminated, including both of mine. **The next
+step should not be another launch on this fixture.** Thirteen launches at `p = 3.5e-5` says the
+phenomenon's precondition is gone rather than rare, and the productive question is what the *early*
+session had that the last thirteen launches did not. The cheapest thing that would actually move it:
+**re-run one of the exact early configurations** — an A/B/C-era switch set and sequence, unchanged —
+and see whether churn returns. If it does, the difference is in the harness configuration and is
+bisectable. If it does not, the precondition is in machine or session state and no amount of sampling
+this fixture will recover it.
+
+Install `stock (matches original/)` before and after; the vtable swap is memory-only. No patch; one
+claim across all six launches, lease per launch by the same owner, both released.
