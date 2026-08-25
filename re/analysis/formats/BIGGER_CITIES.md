@@ -8,10 +8,10 @@ for the crash; a second, separate patch is what makes the size *offerable* in th
 coordinates up to 495, with no coordinate-dependent failure** — the far-corner block survived *better*
 than the low-coordinate control. See the limits.
 
-⚠️ **Read the limits section before shipping this to anyone.** What is still unmeasured is
-**development** (the test city loaded paused, and bare zones have no road or power) and **authoring
-in game** at 512. `U-081` is open: drag-scroll appeared dead on a 512 map. No bound above 512 has been
-tried.
+⚠️ **Read the limits section before shipping this to anyone.** **Authoring in game at 512 is now
+measured and works** (a tool drag writes+saves a zone at world x=460; 2026-08-25). What is still
+unmeasured is **development** (the test city loaded paused, and bare zones have no road or power).
+`U-081` is CLOSED (a harness held-key defect, not a 512/camera bug). No bound above 512 has been tried.
 
 Tools: `re/tools/patch_citysize.py` and `re/tools/patch_dirtbuf.py`. Both are same-length,
 `--check`-able and `--restore`-able. **Neither has a `--selftest`** — use `--check`.
@@ -149,8 +149,16 @@ Also confirmed at two independent N: the camera's world extent is **`(N-1) x 0x1
   anywhere **including the low-coordinate control**. Three causes, all independent of map size: the
   city loaded **paused**, no unpause command exists among the 90 shipped menu commands, and bare zones
   have neither road nor power. **This is inconclusive about 512, not evidence against it.**
-- **Authoring at 512 has never been attempted.** Placing a zone or road *in game* on a 512 map
-  (`fire:<toolcmd>` + `drag:`/`at:` with a funds oracle) is established at 256 and untried at 512.
+- ⭐ **Authoring at 512 WORKS and picking reaches high coordinates — measured 2026-08-25.** On an
+  all-zero 512 map, a Res-Low tool drag at screen `(250,160)→(380,250)` wrote **151 zone-1 tiles at
+  world bbox `x[441..460] y[18..25]`** and the game's own Save persisted them (raster read back with
+  `city_write.City`). **World x reached 460 — 185+ tiles above 256 — driven by a central screen
+  drag, so the screen→world tile-picking carries no stale-256 clamp.** One companion drag in the
+  lower screen band placed nothing — a partial the pre-registration allowed, **not** a 512 failure.
+  **[UNCERTAIN]:** the "off-map projection" reason once given for that null is post-hoc and untested
+  (`UNCERTAINTIES.md`); do not cite it. Also
+  found: **Save on a bare-path-loaded city overwrites in place with no `0x02DFDD6A` confirm dialog**
+  (that confirm belongs to the Save-As/first-save path). Detail: `STATUS_bigcities.md` Run 1.
 - ✅ **`U-081` is CLOSED as a 512 question — the camera is fine at 512.** Keyboard scroll was chased
   for five runs on the suspicion of a clamp computed from a stale 256 extent. It was not: a
   within-process three-arm control gave **zero drift** and a key delta of **exactly one 32-px step**,
