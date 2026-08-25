@@ -4808,3 +4808,73 @@ a moving sample and a frozen control inside one launch.**
 
 That removes the reason this was parked. The blocker was "we cannot reliably get a moving camera in a
 run"; the answer is that we do not need to — we need to *label* the intervals we already get.
+
+### §31.14.12 — ⭐⭐ THE WRITER IS NAMED, and the question moves one level up (2026-08-25)
+
+**`SIMSPR + 0x62AF` = `FUN_10006226 + 0x89`** — 137 bytes into **the translate itself**
+`[CONFIRMED @ 0x100062af]`. Verified independently: the function spans `0x10006226`–`0x10006735` (the
+next export is `0x10006736`), and iso vt `+0x2c` → `0x10006226`. The reported EIP is the instruction
+*after* the store, so the store to `iso+0x54` sits at or immediately before `+0x89`.
+
+**And a second writer: `SIMSPR + 0x68C9` = `FUN_10006752 + 0x177`** `[CONFIRMED @ 0x100068c9]`, which
+is **`SetZoom`, iso vt `+0x38`** — verified as a different slot. It fired **once**, at the city-load
+transition where zoom went `0 → 2`. **That is the mechanism behind E3's unprompted zoom change**, and
+it confirms that a translate-only hunt would have missed this entry point.
+
+#### The separation is perfect
+
+| | writes > 0 | writes = 0 |
+|---|---:|---:|
+| **MOVED** | **12** | **0** |
+| **still** | **0** | **17** |
+
+**29 of 29 intervals.** Stores to `iso+0x54` occur **if and only if** the origin moved. No still
+interval had any writes, so there is no background set to subtract.
+
+**Row AV did not fire, and that is a second answer: the writer is on the GAME THREAD.** Zero moving
+intervals had zero writes, so **the cross-thread hypothesis is retired** and run D's null was
+ambiguity alone, not a hidden thread.
+
+#### The cleanest data point in the thread
+
+**Interval 11: `writes=1, dx=0, dy=-32`.** One call, one tile. `dx = 0` *with a write recorded* proves
+the counter registers a store **even when the stored value is unchanged** — so the 17 `still` intervals
+at `writes=0` had **no store at all**, not merely no net displacement. **The separation is real, not a
+differencing artefact.**
+
+`[UNCERTAIN]` and explicitly not claimed: that one write equals one 32 px step. It holds for interval 11
+and interval 12 (`dx = -672 = -21 × 32`, 21 writes) but **not** interval 4 (104 writes,
+`dx = -1512`, not a multiple of 32).
+
+#### The per-interval design did exactly what it was built for
+
+**F2 contributed one moving interval and then 15 consecutive `still` intervals over 22.8 s.** Under
+run-level scoring that launch was a wasted lease. Under interval scoring it supplied **the 15 controls
+that make the 29/29 separation meaningful.** The experiment and its control came from the same session.
+
+Also: **F1 churned with the watchpoint armed** — independent confirmation of E2 that the instrument
+neither suppresses churn nor is required for it.
+
+#### ⭐ The number that reframes the question
+
+**66–150 stores per ~0.9 s interval — roughly 75–165 calls per second into the translate, with zero
+input.** Net displacement is far smaller than path length, so it oscillates hard.
+
+But `FUN_10006226` has **zero direct call sites** and **one vtable pointer**, and its only *known*
+input-free dispatch path (`vt+0x148` → `FUN_1000ec0b` → `vt+0x30`) is **gated closed** — `+0x354 == 0`
+on 63+ consecutive reads and throughout F1/F2.
+
+> **So something is entering iso vt `+0x2c` a hundred-plus times a second through a path nobody has
+> identified. The question is no longer what writes the field — it is WHO CALLS `vt+0x2c`.**
+
+**The same technique answers it:** hook `FUN_10006226` at entry, record the **return address**, and
+difference per interval exactly as the writer census did. That names the caller the way this run named
+the writer.
+
+#### Tally, nine runs
+
+Six churn, three frozen. Onset brackets now five: 6.26–7.42, 6.80–8.00, **7.82–8.73**, 13.46–14.59,
+13.51–16.15 — **three in a ~t+7–8.7 s cluster, two in a ~t+13.5–16.2 s cluster, still nothing between.**
+n = 5, so worth counting, not yet a distribution.
+
+`span = 1024x768` on 31/31 reads, **cumulative 232/232**. `N == 1` on 31/31.

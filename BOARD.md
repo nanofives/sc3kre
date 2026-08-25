@@ -356,7 +356,11 @@ times in a row.
 Two limits are printed in its own arm line so they cannot be missed: data breakpoints are **per
 thread**, so **zero hits is ambiguous**; and the reported EIP is the instruction **after** the store.
 
-✅ **UN-PARKED 2026-08-25 — the wall was an artefact of run-level verdicts.** Three controls with the watchpoint disabled produced a freeze (E2, 15 reads / 27.9 s), which **kills the suppression confound and exonerates the instrument**. And E1 showed **churn stops by itself** — it churned 7 transitions then froze for 6 — so churning and frozen are properties of a **window**, not a run. Every run-level verdict here, mine included, was really about *when it sampled*.
+⭐⭐ **WRITER NAMED 2026-08-25: `FUN_10006226 + 0x89` (`SIMSPR+0x62AF`), the translate itself** — and a second, `SetZoom + 0x177`, at city load. **29 of 29 intervals separate perfectly: stores happen iff the origin moved**, and no moving interval lacked writes, so **the writer is on the game thread and the cross-thread hypothesis is retired.** The per-interval census is what did it — one launch supplied 12 moving samples and 17 controls, and the launch that would have been a wasted lease under run-level scoring contributed 15 of those controls.
+
+⭐ **The reframe, and it is the live question now: ~75-165 calls per SECOND into the translate with zero input** — while `FUN_10006226` has zero direct call sites, one vtable pointer, and its only known input-free path is gated closed. **Something enters iso vt `+0x2c` a hundred-plus times a second through a path nobody has identified.** Next step, same technique: hook `FUN_10006226` entry, record the **return address**, difference per interval.
+
+~~UN-PARKED - the wall was an artefact of run-level verdicts.~~ Three controls with the watchpoint disabled produced a freeze (E2, 15 reads / 27.9 s), which **kills the suppression confound and exonerates the instrument**. And E1 showed **churn stops by itself** — it churned 7 transitions then froze for 6 — so churning and frozen are properties of a **window**, not a run. Every run-level verdict here, mine included, was really about *when it sampled*.
 
 **So the blocker dissolves.** The problem was never "we cannot get a moving camera"; it was that we labelled whole runs. **Next step: have `cam` report the watchpoint census PER INTERVAL beside that interval's `dx,dy`.** Each interval becomes its own experiment, the moving intervals are the ones whose EIPs matter, and a single launch yields both a moving sample and a frozen control. Needs no reliable churn at all.
 

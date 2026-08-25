@@ -970,3 +970,190 @@ moving sample and a frozen control inside one launch.
 
 Install `stock (matches original/)` before and after; no patch; claim held across all three launches,
 lease per launch by the same owner, both released.
+
+---
+
+# Per-interval writer census — PRE-REGISTRATION, written before the launches, 2026-08-25
+
+`cam` now scores **intervals, not runs**, which is the fix E1 forced: churn stops by itself, so a
+run-level label is really a statement about when the run sampled. Each read prints
+`### CAMW: interval N dx=+X dy=+Y MOVED|still writes=K`, writer lines are **differenced per
+interval** so a moving interval names its own writers, and a moving interval with zero writes prints
+`<== MOVED WITH ZERO WRITES ON THIS THREAD: the writer is on ANOTHER THREAD`. The `dx,dy` labelling
+runs even with the watchpoint off. Probe rebuilt to 246,784 b.
+
+**Every interval is now an independent experiment, so a frozen launch is no longer a wasted one** —
+its intervals are `still` controls.
+
+## A constraint I hit, and the deviation it forces — disclosed before the run
+
+`GZMAXSEQ` is **32**, so one launch buys at most 16 `cam` reads (16 reads + 15 waits = 31 steps).
+That makes "~1 s cadence" and "30 s or more" **mutually exclusive in a single launch**: at 1 s
+spacing 16 reads span ~15 s, and to reach 30 s the spacing must be ~1.8 s.
+
+Rather than silently pick one, **two launches inside one claim**:
+
+- **F1 — tight cadence.** `wait:750` x 15, giving ~1.0 s intervals across roughly t+5 s to t+20 s.
+  Covers both known onset modes (t+6-8 s and t+13-16 s) at maximum interval resolution.
+- **F2 — long window.** `wait:1500` x 15, giving ~1.8 s intervals across roughly t+5 s to t+31 s.
+  Reaches past t+16.6 s, where run A churned.
+
+Two launches double the independent intervals (30 rather than 15) and hedge the 5-in-6 churn base
+rate, at the cost of one extra load. Same lease-per-launch / claim-held-across pattern as the
+control set. `SC3PROBE_CAMWATCH=1` on both, Farmsville via `-GamePath`, no input, install stock.
+
+| row | prediction | what it would mean |
+|---|---|---|
+| **AU** | any **MOVED** interval **with writes** | **the writer is named.** Every EIP resolved, and stated whether it lands in `FUN_10006226` (translate, iso vt `+0x2c`) or somewhere unmapped. Unmapped is the more interesting answer. |
+| **AV** | any **MOVED** interval with **zero writes** | **the writer is on another thread.** Decisive and new; it retires every same-thread mechanism at once, five of which are already dead. |
+| **AW** | MOVED-with-writes **and** still-with-writes both present | compare them: writers firing in both are background, writers unique to moving intervals are the cause |
+| **AX** | no MOVED intervals in either launch | both launches sat in frozen windows. Reported as such; the intervals still functioned as `still` controls; **not** a negative about the writer |
+
+Secondary, carried forward at no cost: `zoom`/`tilepx` per read (E3 changed zoom with no input), and
+the running `span` count.
+
+---
+
+# RESULT — **ROW AU FIRED. The writer is named: `SIMSPR + 0x62AF` = `FUN_10006226 + 0x89`, the translate.**
+
+Twelve MOVED intervals, **every one of them with writes**. Seventeen `still` intervals, **every one of
+them with zero writes**. **29 of 29 intervals separate perfectly**, and the EIP is the same on all but
+one hit.
+
+**`0x100062AF` is inside `FUN_10006226`.** The next function in the SIMSPR export is `0x10006736`, so
+`FUN_10006226` spans `0x10006226`-`0x10006735` and the faulting EIP sits at **`+0x89`, 137 bytes in**
+[CONFIRMED @ 0x100062af]. The EIP is the instruction *after* the store, so the store to `iso+0x54`
+lives at or immediately before `FUN_10006226+0x89`. **It is the translate**, reached only through
+`.rdata 0x10062538` = iso vt `+0x2c`, exactly the function the call-site hunt pointed at.
+
+**Row AV did not fire, and that is a second answer.** No MOVED interval had zero writes. **The writer
+is on the game thread** — the cross-thread hypothesis is retired, and D's ambiguous null was ambiguity
+only, not a hidden thread.
+
+## The second writer, and it is `SetZoom`
+
+`SIMSPR + 0x68C9` = **`FUN_10006752 + 0x177`**. Next function in the export is `0x1000699f`, so
+`FUN_10006752` spans `0x10006752`-`0x1000699e` and `0x100068C9` is 375 bytes in
+[CONFIRMED @ 0x100068c9]. `FUN_10006752` is **`SetZoom`**, iso vt `+0x38` — a *different* slot from
+the translate.
+
+It fired **once**, in F2 interval 1, the city-load transition where `zoom` went `0 -> 2` and
+`tilepx` `8 -> 32`. So `SetZoom` also writes the origin rect, which is the mechanism behind E3's
+unprompted zoom change, and it confirms the point I raised last run: **a translate-only hunt would
+have missed this entry point.**
+
+## F1 — tight cadence (~0.9 s), CHURN. The interval table
+
+`ARMED 4-byte WRITE watch on iso+0x54 = 0x0EEA0D94, thread 6160.`
+
+| iv | t (ms) | dx | dy | class | writes | writer |
+|---|---|---|---|---|---|---|
+| 0 | 4828 | baseline `-160,1604` | | | | |
+| 1 | 5840 | +0 | +0 | still | **0** | — |
+| 2 | 6875 | +0 | +0 | still | **0** | — |
+| 3 | 7822 | +0 | +0 | still | **0** | — |
+| **4** | **8727** | **-1512** | **+207** | **MOVED** | **104** | `SIMSPR+0x62AF` |
+| 5 | 9602 | +3371 | -1275 | MOVED | 138 | `SIMSPR+0x62AF` |
+| 6 | 10477 | -2785 | -705 | MOVED | 79 | `SIMSPR+0x62AF` |
+| 7 | 11352 | +501 | -148 | MOVED | 150 | `SIMSPR+0x62AF` |
+| 8 | 12226 | +770 | +178 | MOVED | 91 | `SIMSPR+0x62AF` |
+| 9 | 13102 | -519 | +1223 | MOVED | 66 | `SIMSPR+0x62AF` |
+| 10 | 13977 | -928 | +64 | MOVED | 72 | `SIMSPR+0x62AF` |
+| **11** | **14851** | **+0** | **-32** | **MOVED** | **1** | `SIMSPR+0x62AF` |
+| 12 | 15727 | -672 | +576 | MOVED | 21 | `SIMSPR+0x62AF` |
+| 13 | 16602 | +2208 | -1952 | MOVED | 72 | `SIMSPR+0x62AF` |
+| 14 | 17477 | +320 | +1824 | MOVED | 66 | `SIMSPR+0x62AF` |
+
+Onset bracket **t+7.82 s to t+8.73 s**. `zoom=2 tilepx=32` on all 15 reads.
+
+**Interval 11 is the cleanest single data point in this whole investigation:** `writes=1`, `dx=0`,
+`dy=-32`. One call, one tile of movement, and `dx=0` **with a write recorded** — which proves the
+counter registers a store even when the stored value is unchanged. That matters, because it means
+the 17 `still` intervals with `writes=0` had **no store at all**, not merely no net displacement.
+The separation is real, not an artefact of differencing.
+
+**What I will not claim:** that each write equals one 32 px step. It holds for interval 11
+(1 write, 32 px) and interval 12 (`dx = -672 = -21 x 32` with 21 writes), but not for interval 4
+(104 writes, `dx = -1512`, not a multiple of 32). Call frequency is 66-150 stores per ~0.9 s
+interval, i.e. **roughly 75-165 calls per second** into the translate with no input whatsoever;
+the net displacement is much smaller than the path length, so it oscillates. `[UNCERTAIN]` what the
+per-call delta is.
+
+## F2 — long window (~1.6 s), FROZEN. Fifteen `still` controls
+
+`ARMED 4-byte WRITE watch on iso+0x54 = 0x0EEB339C, thread 37124.`
+
+| iv | t (ms) | dx | dy | class | writes | writer |
+|---|---|---|---|---|---|---|
+| 0 | 3838 | baseline `-508,-73` (`zoom=0 tilepx=8`, pre-city) | | | | |
+| **1** | **5589** | **+348** | **+1677** | **MOVED** (city load) | **2** | `SIMSPR+0x62AF` x1, **`SIMSPR+0x68C9` x1** |
+| 2-15 | 7262 - 28386 | +0 | +0 | **still** | **0** | — |
+
+Fifteen consecutive `still` intervals, t+5.59 s to t+28.39 s, **22.8 s frozen at `-160,1604`**. Under
+the old design this launch would have been a wasted run; under the interval design it contributed
+**15 clean controls**, which is exactly what makes the 29/29 separation meaningful.
+
+## The whole result in one line
+
+| | writes > 0 | writes = 0 |
+|---|---|---|
+| **MOVED** | **12** | **0** |
+| **still** | **0** | **17** |
+
+**Stores to `iso+0x54` occur if and only if the origin moved**, across 29 intervals in two processes.
+No background writer, nothing to disambiguate — row AW had nothing to compare because there were no
+still-interval writes at all.
+
+## Validity
+
+0 keys in both launches; 25 `Farmsville.sc3` filetrace hits each; 0 exceptions, 0 minidumps, both
+sequences `COMPLETE`, both shots written. `span = 1024x768` on 31/31 reads across both launches
+(`rectA` and `rectB`) = 62 prints, **cumulative 232/232**. `N == 1` on 31/31. `followTarget(+0x354)`
+zero throughout, as in every run since C.
+
+## Running tally, corrected criterion, nine runs
+
+| run | `CAMWATCH` | window | verdict | onset bracket |
+|---|---|---|---|---|
+| A | unset | t+16.6 - 32.4 s | churn | not bracketed |
+| B | unset | t+6.6 - 14.6 s | churn | t+13.46 - 14.59 s |
+| C | unset | t+5.6 - 32.0 s | churn | t+6.80 - 8.00 s |
+| D | SET | t+4.97 - 32.67 s | frozen | never |
+| E1 | unset | t+4.99 - 31.42 s | churn, then froze from t+15.7 s | t+6.26 - 7.42 s |
+| E2 | unset | t+5.34 - 33.22 s | frozen | never |
+| E3 | unset | t+4.98 - 31.90 s | churn | t+13.51 - 16.15 s |
+| **F1** | **SET** | t+4.83 - 17.48 s | **churn** | **t+7.82 - 8.73 s** |
+| **F2** | **SET** | t+5.59 - 28.39 s | **frozen** | never |
+
+Six churn, three frozen. **F1 churning with the watchpoint armed is the independent confirmation of
+E2's verdict** — the instrument neither suppresses churn nor is required for it.
+
+**Onset brackets, five now:** 6.26-7.42, 6.80-8.00, **7.82-8.73**, 13.46-14.59, 13.51-16.15. Three in
+a t+6.3-8.7 s cluster and two in a t+13.5-16.2 s cluster, still nothing between. n = 5; the gap has
+survived every sample so far, which is worth continuing to count but is not yet a distribution.
+
+## Which rows fired
+
+| row | status |
+|---|---|
+| **AU — MOVED interval with writes** | **FIRED** — 12 of 12, writer resolved to `FUN_10006226 + 0x89`, **inside the translate** |
+| AV — MOVED interval with zero writes | **no** — 0 of 12. **The writer is on the game thread**; the cross-thread hypothesis is retired |
+| AW — MOVED-with-writes and still-with-writes both present | **no** — 0 still intervals had writes, so there is no background set to subtract |
+| AX — no MOVED intervals at all | **no** — F1 supplied 12; F2 supplied 15 controls |
+
+## Where this leaves it
+
+**Answered, for the first time in this thread:** *what* writes the camera origin, *where*, and *on
+which thread*. `FUN_10006226+0x89` on the game thread, plus `FUN_10006752+0x177` (`SetZoom`) on a
+zoom change. Both on the same object `cam` has been reading all along.
+
+**Still open, and it is now a different question.** `FUN_10006226` has **zero direct call sites** and
+one vtable pointer (iso vt `+0x2c`), and the one dispatch path with no input on it — `vt+0x148` ->
+`FUN_1000ec0b` -> `vt+0x30` — is **gated closed** (`+0x354 == 0` on 63+ consecutive reads). So the
+translate is being entered 75-165 times a second through a vtable slot whose known input-free caller
+cannot be firing. **The next question is not what writes the field but who calls vt+0x2c**, and the
+same interval technique answers it: a breakpoint or hook on `FUN_10006226` entry recording its
+**return address**, differenced per interval, names the caller the way this run named the writer.
+
+Install `stock (matches original/)` before and after; no patch; claim held across both launches, lease
+per launch by the same owner, both released.
