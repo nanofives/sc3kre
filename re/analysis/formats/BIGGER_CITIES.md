@@ -4,8 +4,14 @@
 2026-08-20, re-measured 2026-08-22.** The shipped maximum is 256. **Four bytes are the whole fix**
 for the crash; a second, separate patch is what makes the size *offerable* in the first place.
 
-⚠️ **Read the limits section before shipping this to anyone.** Nobody has driven real gameplay
-(zoning, building) in a 512 city, and no bound above 512 has been tried.
+⭐ **Updated 2026-08-25: the engine is now measured to read, render and re-serialise tiles at
+coordinates up to 495, with no coordinate-dependent failure** — the far-corner block survived *better*
+than the low-coordinate control. See the limits.
+
+⚠️ **Read the limits section before shipping this to anyone.** What is still unmeasured is
+**development** (the test city loaded paused, and bare zones have no road or power) and **authoring
+in game** at 512. `U-081` is open: drag-scroll appeared dead on a 512 map. No bound above 512 has been
+tried.
 
 Tools: `re/tools/patch_citysize.py` and `re/tools/patch_dirtbuf.py`. Both are same-length,
 `--check`-able and `--restore`-able. **Neither has a `--selftest`** — use `--check`.
@@ -104,9 +110,30 @@ zone plane through `re/tools/city_parse.py`.
 
 ## ⚠️ Limits — read these before calling it shippable
 
-- **Playability at 512 was never driven.** The city runs, renders, plays to a 177-window tree and
-  saves. **Nobody has zoned, built, or run a full economy in one.** That is the single largest
-  untested claim here.
+- ⭐ **The engine handles high coordinates end to end — measured 2026-08-25.** Four 32x32 zone blocks
+  were planted offline at `(16,16)`, `(464,16)`, `(16,464)`, `(464,464)` and the game **read them,
+  rendered them (main view and minimap) and re-serialised them on save**. The saved file re-parses at
+  `N = 512` and `city_roundtrip.py` passes L0–L4. Coordinate extremes of every change:
+  **x 16..495, y 16..495**, with **216 of 308 changes above 256** and **zero changes outside the four
+  blocks**.
+
+  **Crucially there is no coordinate threshold in the data.** Per-block survival was
+  `(16,16)` 932/1024, `(464,16)` 957/1024, `(16,464)` 893/1024, **`(464,464)` 1006/1024** — the
+  **far corner survived best and the low-coordinate control lost more than it did.** A lingering
+  256-assumption would have damaged the high blocks preferentially; it did the opposite. The 308
+  losses are **unattributed** — not terrain (flat 7.3% against grid value 0 over 3,991 tiles) and not
+  coordinates; the candidate that cannot be excluded is uncontrolled human input during the run.
+
+- **Development at 512 is still unmeasured, and for reasons unrelated to N.** `Pob: 0`, nothing grew
+  anywhere **including the low-coordinate control**. Three causes, all independent of map size: the
+  city loaded **paused**, no unpause command exists among the 90 shipped menu commands, and bare zones
+  have neither road nor power. **This is inconclusive about 512, not evidence against it.**
+- **Authoring at 512 has never been attempted.** Placing a zone or road *in game* on a 512 map
+  (`fire:<toolcmd>` + `drag:`/`at:` with a funds oracle) is established at 256 and untried at 512.
+- ⚠️ **`U-081`: right-click drag-scroll appeared DEAD on a 512 map**, observed live by the owner, and
+  **unmeasured** — the run ended before the `cam` witness could be taken, and `cam` then declined to
+  read. If you ship this, expect a camera-clamp question at 512. Arrow keys versus drag would localise
+  it in one run.
 - **No bound above 512 has been tried.** 512 is where the evidence stops, not where the format does.
 - **The STRIDE (7) and CORNER (1) sites are correct by derivation and unvalidated by measurement.**
   They add nothing observable at 512. They are patched by default because the arithmetic says they

@@ -879,3 +879,187 @@ alignment story does not hold either. Missing evidence: the surface dimensions a
 `Apps/SIMUI.DLL` is **currently patched to N = 272** (sha256 `acc4e06e…33965650`), the largest
 size that survived every valid run. Revert with
 `py -3.12 verify/citysize_mod_test/patch_citysize.py --restore`. No other game file was touched.
+
+---
+
+# Does a 512-tile city PLAY? One run, 2026-08-25. P1 MET, P2 MET, P3 not evaluable.
+
+Pre-registration: `re/sessions/PREREG_512_gameplay.md`, written and saved before the launch.
+
+**Verdict against that table: row 9 (P1) and the P2 criterion are met; row 1 applies to P3; row 7
+applies to the save-confirm step; row 6's validity gate was unavailable rather than failed.**
+
+**The headline: the engine reads, renders and re-serialises tiles at coordinates up to 495, and the
+high-coordinate blocks survived BETTER than the low-coordinate control.** No crash, no coordinate
+threshold, nothing changed outside the planted area.
+
+## Patch state, before and after
+
+| moment | SIMDIRT sha256 | reads |
+|---|---|---|
+| before | `f1708fc1…b070` | shipped: size `132098`, stride `257`, corner `0x204` |
+| patched for the run | `7c87b9ac…05bf` | `size=526338 stride=513 corner=0x404`, 12 sites |
+| after `--restore` | **`f1708fc1…b070`** | shipped values on all 12 sites |
+
+Install `stock (matches original/)` at release; lease and harness claim both released. The
+apply/restore round-trip was verified **before** the run as well, so the restore was not first
+exercised on live evidence.
+
+## What was planted, and what the file contained
+
+`N512_city.sc3` is empty (`{0: 262144}`), so zones were planted offline with `city_write.py`
+(round-trip byte-identical L0–L4 on this exact file). Four **32x32** blocks of slot 1 at origins
+`(16,16)`, `(464,16)`, `(16,464)`, `(464,464)` — tiles spanning `16..47` and `464..495`.
+
+**Histogram after planting: `{0: 258048, 1: 4096}`** — 4,096 tiles, exactly 1,024 per quadrant.
+
+Block size was raised from 6x6 to 32x32 **before** launching, because the minimap read-off is ~80x90
+px for a whole map and a 6x6 block is under one minimap pixel at `N=512`. That correction was made
+by arithmetic in advance, not after a null.
+
+## P1 — the game reads and renders tiles at high coordinates. MET.
+
+**Confirmed twice, by two independent observers.**
+
+1. **Direct human observation, on the live screen: "I see the 4 residential zones fine."** The owner
+   was watching the run.
+2. **In the captured frame, by pixel measurement.** Bright-green minimap marks (residential zone
+   colour) cluster at exactly three positions of ~30 px each — `(942,626)`, `(999,683)`,
+   `(942,740)` — the minimap diamond's **N, E and S** corners. A fourth 6-px green cluster at
+   `(991,627)` is the layers **button**, not a map mark, and is excluded.
+
+**The diamond's WEST corner is occluded in the composite** by main-view blits overdrawing the
+minimap panel, so the fourth mark's absence from my measurement is a **capture artifact, not a
+missing zone**. Three measured plus the owner's four is the honest statement; I am not claiming four
+from the pixels.
+
+Frame: `n512_planted_094120.png` (Happy share folder; a game screenshot, not committed).
+
+⚠️ **The owner was interacting with the window during this run.** Their clicks and drags are an
+uncontrolled input the capture did not account for. **Nothing in that frame about camera position or
+sim state is clean.** It does not touch P1 — a rendered zone block is a rendered zone block, and the
+minimap draws the whole map regardless of camera — but every other reading from the frame is
+qualified by it.
+
+## P2 — the engine's own serialiser round-trips high coordinates. MET.
+
+The in-game Save fired and **the engine rewrote the file**: 920,821 → **922,007 bytes**, mtime moved.
+Re-parsed clean: 11 records, 1 payload, 875,378 → 6,043,226 bytes, **58 sections**, `SC3WorldLayer
+x1`, `SC3ZoneLayer x13`, `DEADBEEF=True`, `N = 512`. `city_roundtrip.py` **PASS L0–L4**.
+
+So this is the engine's serialiser, not ours, writing a 512 map with tiles at 495 and producing a
+file our tools re-read without complaint.
+
+### The coordinate read-off — and it points the opposite way to the risk
+
+| block | origin | kept | lost | lost % |
+|---|---|---|---|---|
+| lo-lo (**the control**) | `(16,16)` | 932 / 1024 | 92 | **9.0%** |
+| hi-lo | `(464,16)` | 957 / 1024 | 67 | 6.5% |
+| lo-hi | `(16,464)` | 893 / 1024 | 131 | 12.8% |
+| hi-hi | `(464,464)` | **1006 / 1024** | 18 | **1.8%** |
+
+- Changed tiles: **308**, all `1 -> 0`. Extremes **x 16..495, y 16..495**. **216** of the 308 have
+  x>256 or y>256.
+- **Zero tiles changed outside the four planted blocks** — nothing spurious anywhere on the 512 map.
+- **The best-preserved block is `(464,464)`, the far corner, at 1.8% loss. The worst is `(16,464)` at
+  12.8%. Those are diagonally opposite.** Both high-x blocks lost *less* than the low-coordinate
+  control.
+
+> **There is no coordinate threshold in this data.** A 256-assumption would damage the high blocks
+> preferentially. The high blocks did better than the control.
+
+### The 308 lost tiles are unattributed, and I am not going to guess
+
+Two candidate explanations tested and **both fail**:
+
+- **Not terrain.** Cross-tabulated against the SIMGEOM tile-grid plane: loss is flat at **7.3%** for
+  grid value 0 (3,991 of the 4,096 tiles). Every non-zero grid value has 1–13 tiles and a noisy rate.
+  No terrain class explains it.
+- **Not coordinates.** See the table above.
+
+`[UNCERTAIN]` what removed them. The live candidate I cannot exclude is **the owner's own clicks and
+drags during the run**, which is exactly why that confound is declared. A roughly uniform ~7.5% loss
+spread across four widely separated corners does not look like localised bulldozing, but "does not
+look like" is not evidence and I am not recording a mechanism. **What matters for the 512 question is
+settled either way: the loss is neither coordinate-dependent nor terrain-dependent.**
+
+## P3 — development. NOT EVALUABLE. Pre-registered row 1.
+
+**Population `Pob: 0`, city `Nueva ciudad`, and the funds and date fields are BLANK.** No development
+anywhere, control block included — which row 1 fixes in advance as **inconclusive about 512**, not as
+evidence against it.
+
+Three independent reasons, two of them pre-registered:
+
+1. **The sim was paused.** The status bar's pause glyph is lit beside the play triangle, and the date
+   field never populated. `[UNCERTAIN]` but consistent with the only explicit record on this
+   question (a menu-loaded city where "the sim is PAUSED and the date never advances").
+2. **No unpause mechanism exists to drive.** There is no Pause/Speed/Resume command among the 90
+   shipped menu commands; the pause/resume functions are known in code only and have never been
+   driven from the harness.
+3. **A bare zone has no road and no power**, and `city_write` cannot supply either — roads are
+   network-layer, not the zone plane.
+
+**The void condition fired:** the date never advanced, so rows 1–4 of the table say nothing about the
+simulation. Reported as such rather than dressed up.
+
+## Instrument outcomes, reported because they are the reusable part
+
+**The save-confirm step SKIPPED, and by the rule fixed in advance that is a failure, not a result:**
+
+```
+GZSEQ[1]: target ready after 0 ms
+GZFIRE: tile=0x12D1BF90 cmdID=0x10009002 -> FUN_1004c209 ; GZFIRE: returned 1
+GZSEQ[2]: target 0x02DFDD6A never appeared within 70000 ms - SKIPPING
+GZSEQ: COMPLETE (3 step(s)) at t+74156 ms
+```
+
+`### GZSEQ: COMPLETE` printed anyway — the documented trap. **Save nevertheless succeeded**, at
+t+4.04 s, without the confirm dialog: firing `0x10009002` on an already-named city writes straight
+through. So the recorded `fire:0x10009002` + `0x02DFDD6A` recipe carries a **superfluous second
+step**, and that step costs 70 s of timeout. `[UNCERTAIN]` whether the confirm is needed on a
+*newly*-named city; on this path it is not.
+
+**The `cam` validity gate was unavailable, not contradictory:**
+
+```
+CAM: no object with vt SIMSPR+0x6250C (0x034D250C) reachable from cityView 0x12D24988
+     or cityViewIso within 0x280 bytes - not reading camera state from an object we cannot identify
+```
+
+The step armed (`target ready after 2563 ms`) and then declined to read from an object it could not
+identify — the right behaviour, and it means **no `512x512` witness was obtained from `cam`.** Row 6
+is therefore not triggered: the map identity is anchored instead by `-filetrace` naming the fixture
+directly, 29 lines, `CreateFileA "…\N512_planted.sc3" -> ok`. That is the whole reason the
+bare-absolute-path fixture is preferred over the list-position dialog, and here it carried the run.
+
+⚠️ **The `cam` map-N witness that the camera-scroll session offered for exactly this question was
+therefore NOT obtained.** The drag-scroll and keyboard-scroll comparison was not run either: the
+owner's report arrived after `capture.ps1` had already terminated the game at t+74.4 s, and
+relaunching to chase it was declined. **"Right-click + move does nothing" at 512 is unmeasured and
+remains open.**
+
+## Coordination lesson worth keeping
+
+`capture.ps1` killed the game at t+74.4 s while a human was actively looking at it. The script is
+correct to clean up what it started, but **a run that a person is watching wants a longer `-AtSec`
+or a hold**, otherwise their observations arrive after the evidence is gone. That is what happened to
+observations 2 and 3.
+
+## What is now established, and what is not
+
+**Established at `N=512`, patched SIMDIRT:** the game loads a planted city by absolute path, renders
+zoned tiles at coordinates up to 495, draws them on the minimap at all four corners, runs 74 s
+without a crash, and its own serialiser writes them back into a file that re-parses as a genuine 512
+map with no out-of-block damage.
+
+**Not established:** that the simulation *advances* in a 512 city (it was paused, and there is no
+recorded way to unpause); that development works at high coordinates; that camera scroll clamps
+correctly at 512 (the owner reports drag-scroll dead, and it is unmeasured); and what removed 7.5% of
+the planted tiles.
+
+**Tier 2 (authoring at a far corner) was not attempted and is not blocked in principle.** The
+capability is established at 256 — `fire:<toolcmd>` plus `drag:`/`at:` aimed at the city view, scored
+against the funds oracle and against zone-histogram deltas — but it has never been done at 512, and
+improvising it across runs was out of scope for one lease.

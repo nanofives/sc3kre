@@ -43,7 +43,7 @@ RE done, tool exists outside a test harness, validated in the running game.
 | **City saves** (zone raster, per tile) | `city_write.py` | `formats/CITY_SAVE.md` | tile (28,0) never visually confirmed; the **name-collision load crash** needs writing up for users |
 | **Camera scroll** | `pe_patch.py` | `formats/CAMERA_MODDING.md` | `drag_divisor` / `edge_margin` static-only (**D-002**), zoom-4 reachability (**D-003**) |
 | **Network tiling rules** (retune / re-skin an existing network) | `tilingrules.py` | `formats/TILINGRULES_MODDING.md` | T1 met game-side 2026-08-25. One edit of one kind; render-path result, no simulation claim |
-| **Bigger cities** (N > 256, proven at 512) | `patch_citysize.py` + `patch_dirtbuf.py` | `formats/BIGGER_CITIES.md` | ⚠️ **playability at 512 never driven** — runs, renders and saves, but nobody has zoned or built in one. No bound above 512 tried |
+| **Bigger cities** (N > 256, proven at 512) | `patch_citysize.py` + `patch_dirtbuf.py` | `formats/BIGGER_CITIES.md` | ⭐ **engine reads/renders/re-serialises tiles to 495 with no coordinate-dependent failure** (2026-08-25). Still open: development (city loads paused; bare zones have no road/power), in-game authoring at 512, and **`U-081`** drag-scroll apparently dead at 512 |
 
 > **Correction on record:** `HANDOFF.md` still claims sprite modding has "no RGB565 quantizer and no
 > PNG import". That is **stale** — `sprite_patch.py` has `quantize565()`, `export_png()` and
@@ -55,11 +55,17 @@ RE done, tool exists outside a test harness, validated in the running game.
 ### 1. Bigger cities (N=512) — not blocked, closest to done
 Sim accepts 512; the renderer crash is fixed by the SIMDIRT SIZE group alone (config C 6/6 survive,
 shipped 0/6). Four bytes are the whole fix. Tool: `patch_dirtbuf.py`.
-✅ **Procedure documented 2026-08-25: `formats/BIGGER_CITIES.md`.** It is in the shippable table
-now, with the playability caveat carried into the doc itself rather than left on the board.
-**Next:** drive actual gameplay in a 512 city (zoning, building) — that is the single largest
-untested claim. Then one execution of the rewritten `verify/citysize_mod_test/run_diff.ps1`, which
-has never been run in its current form. No bound above 512 has been tried.
+✅ **Documented and substantially de-risked 2026-08-25.** `formats/BIGGER_CITIES.md`. Four 32x32
+zone blocks planted at the map corners were **read, rendered and re-serialised by the engine**;
+extremes `x 16..495, y 16..495`, 216 of 308 changes above 256, zero changes outside the blocks, and
+**no coordinate threshold** — the far corner survived best (1006/1024) and the low-coordinate control
+worst of the pair (932/1024). Verified independently before promotion.
+
+**Next, in order:** (1) **`U-081`** — one run with `cam` plus arrow-keys-vs-drag to settle whether the
+camera clamps correctly at 512; the owner saw drag-scroll do nothing. (2) In-game **authoring** at 512
+(`fire:<toolcmd>` + `drag:`, established at 256, untried at 512). (3) Development, which needs an
+unpause path — **none exists among the 90 shipped menu commands** — plus road and power. (4) A bound
+above 512.
 Stride/corner measurement is deferred as cosmetic (~8 runs).
 Session CLOSED. Anyone may pick it up.
 
