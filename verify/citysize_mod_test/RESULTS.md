@@ -1063,3 +1063,158 @@ the planted tiles.
 capability is established at 256 — `fire:<toolcmd>` plus `drag:`/`at:` aimed at the city view, scored
 against the funds oracle and against zone-histogram deltas — but it has never been done at 512, and
 improvising it across runs was out of scope for one lease.
+
+---
+
+# U-081 at N=512, one run, 2026-08-25. Row B RULED OUT. The origin delta is UNRESOLVED — my sequencing error.
+
+Pre-registration: `re/sessions/PREREG_512_gameplay.md`, U-081 addendum, written before launch.
+
+**Verdict: pre-registered row B is ruled out — the extent is 512-derived, not 256-derived. Rows A, C
+and D are all UNREACHED, because my second `cam` fired 63 ms into a 2,500 ms hold instead of after
+it. The like-for-like comparison against `-6848` was not obtained.** Owned below, not buried.
+
+The run is not wasted: `cam` was repaired and four things are now measured that were not before.
+
+## Patch state
+
+| moment | SIMDIRT sha256 |
+|---|---|
+| before | `f1708fc1…b070` (shipped) |
+| patched | `7c87b9ac…05bf`, `size=526338 stride=513 corner=0x404`, 12 sites |
+| after `--restore` | **`f1708fc1…b070`**, shipped on all 12 sites |
+
+Install `stock (matches original/)`; lease and claim released.
+
+## The three numbers, verbatim
+
+```
+### CAM: cell map found at cityViewIso+0x158 -> 0x0EEC9DB8 (vt SIMSPR+0x6250C)
+### CAM: iso=0x0EEC9DB8  rectA=556,111,1580,879 span=1024x768  centre=1068,495
+### CAM: rectB=556,111,1580,879 span=1024x768
+### CAM: zoom=0 rot=0 tilepx=8 (8<<zoom=8)  presentGate(+0x7c)=0  flag(+0x32c)=0
+### CAM: MAP 512x512 tiles  (world extent ~130816x130816 px)
+```
+
+Identical in both readings, before and after the key.
+
+## ⭐ Row B is ruled out: the extent is computed from 512, not from 256
+
+**`130816 = (512-1) * 0x100`.** Had the extent been 256-derived it would read **65,280**
+= `(256-1) * 0x100`. It does not. `MAP` reads `512x512` and the world extent agrees with it exactly.
+
+> **The clamp is NOT being computed from a 256 extent.** That was the leading hypothesis and it is
+> now off the table. Whatever `U-081` is, it is not a stale extent.
+
+The validity gate also passed on its own terms: `MAP 512x512`, so row F does not fire and this run is
+not void.
+
+## ⭐ The input path is NOT being dropped — the gate opens
+
+```
+### GZKEY: cityView=0x12CA3860 vt=0x03507894  +0x177=0 (before)
+### GZKEY: scroll step +0x1c8=32.000  bank z4=32.000 z3=32.000 z2=32.000 z1=32.000 z0=32.000
+### GZKEY: vt+0x64(vk=0x25) = 0x034E979A -> returned 0x03507A01
+### GZKEY: +0x177=1 (after), flags up/down/left/right = 0/0/1/0, holding 2500 ms
+```
+
+- **The scroll gate `+0x177` went 0 → 1.** Input reached the city view and was accepted. Confounding
+  explanation "input is dropped before the camera sees it" is **eliminated**.
+- **The left direction flag is set** (`0/0/1/0`) — the correct one for `VK_LEFT`.
+- **The scroll step `+0x1c8` is 32.000, non-zero at every zoom bank.** So this is *not* the S1
+  patched-build defect where the step was 0.0f and the map "could not" move.
+
+Gate open, flag set, step non-zero. Three of the four stages of the scroll path are confirmed
+working at 512.
+
+## The error, stated plainly
+
+`key:` **dispatches and returns immediately** — the 2,500 ms hold runs asynchronously ("holding 2500
+ms"). The following `cam` step has no target to wait for, so it reported `target ready after 0 ms` and
+ran **63 ms** after the dispatch (`t+17871.98` → `t+17934.90`).
+
+**So the "after" reading is 63 ms into a 2,500 ms hold, not after it.** The origin was unchanged at
+that instant, and that is not the same statement as "unchanged after a 2.5 s hold". It cannot be
+compared against the `-6848` baseline, which is a 2.5 s figure.
+
+> **Rows A, C and D are all unreached.** Reporting "origin delta 0, row C" would have been a
+> plausible-looking number produced by a broken measurement, which is exactly the failure this
+> project has now hit twice (`iso+0x524`, the `Blt=0` misreading).
+
+**The fix for the next run is one step:** `...;key:0x25,2500;wait:3000;cam` — a `wait:` longer than
+the hold, between the key and the second `cam`. `wait:` is a real verb and it worked here
+(`GZSEQ[0]: waited 15000 ms`).
+
+## A lead that may matter more than the clamp: the present gate is SHUT
+
+**`presentGate(+0x7c)=0`** in both readings, and `flag(+0x32c)=0`.
+
+From the probe's own annotation of `FUN_10006226`: `+0x7c` gates the full-surface present — the path
+requires `param_3 != 0` **and** `+0x7c != 0` before `vt+0x14c` (invalidate+paint) and then `vt+0x158`
+(`0x1000e206`, present). **With `+0x7c` at 0, a camera move would not be repainted or presented even
+if the origin did change.**
+
+`[UNCERTAIN]` and explicitly not a conclusion: this is a plausible mechanism for "scrolling appears
+to do nothing" that is **independent of any coordinate clamp**, and it would apply at 256 too. It is
+recorded so the next run reads `+0x7c` at both N values rather than assuming the clamp.
+
+## Instrument findings
+
+### `cam` is repaired, and the diagnosis was the pre-registered one
+
+Last run `cam` declined. **Cause: it ran too early.** It fired at t+3.92 s, ~0.1 s before the in-city
+readiness signal. With `wait:15000` in front it found the object immediately:
+
+```
+### CAM: cell map found at cityViewIso+0x158 -> 0x0EEC9DB8 (vt SIMSPR+0x6250C)
+```
+
+**`cityViewIso+0x158`, exactly where the camera-scroll session placed `cISC3CitySpriteCellMap`, and
+the same offset as at N=256.** So: **not** paused-related, **not** a wrong walk, and **not** different
+at 512 — pre-registered row E resolved to "ran before the object existed". Independently
+corroborated: the bridge-init hook logged `a3=0x0EEC9DB8`, the same address `cam` later found.
+
+### `MAP WxH` needs `-resize`, and `-resize` alone does not resize
+
+Both pre-registered instrument facts held:
+
+- The bridge detour is armed only under `SC3PROBE_RESIZE`
+  (`RZ> armed capture detour on SIMSPR!0x10016EBA`, t+71 ms; hit #1 at t+6.56 s). **Last run had no
+  `-resize`, so its `MAP` number was unobtainable regardless of the camera object.**
+- **Zero resizes were performed** — no `AUTO at t+` and no `resize #1` line. The auto-resize requires
+  `-resizeto`, which was not passed. So `U-068`'s black-viewport path was never entered, confirmed by
+  measurement rather than by hope.
+
+### The instrument-bug report from the pre-registration stands
+
+`cam`'s failure message names `cityViewIso` unconditionally, but that base is only searched when
+`*(cityView+0xb8)` is non-null and readable. **Last run's line was an assertion, not a measurement.**
+Unchanged this run; still worth fixing.
+
+### The trailing `wait:` did not hold for 180 s
+
+`wait:180000` was **SKIPPED at 90 s** — `GZSEQ[4]: target 0x00000000 never appeared within 90000 ms`.
+A step with no `@N` inherits the 90 s default timeout, which is shorter than the wait it is asked to
+perform, so a long `wait:` cancels itself. **A `wait:` longer than 90 s needs an explicit `@N` larger
+than its own duration**, e.g. `wait:180000@200`. Sequence completed at t+108.5 s instead of ~t+197 s.
+
+## Interactive window for the owner
+
+Launched **11:04:48**. **The measurement was banked at t+17.93 s = 11:05:06.** The game then stayed up
+and interactive until `capture.ps1` terminated it after the sequence completed at t+108.5 s, i.e.
+**11:05:06 → ~11:06:38, about 92 seconds.**
+
+Intended 180 s; delivered 92 s, for the `wait:` timeout reason above. Any manual right-drag in that
+window is uncontrolled input and cannot confound the numbers in this section, all of which were
+recorded at t+17.8–17.9 s, before the window opened.
+
+## Where U-081 stands after this run
+
+**Eliminated:** stale 256-derived extent (the extent is 130,816, correct for 512); input being dropped
+before the camera (the gate opens and the flag sets); a zeroed scroll step (32.000 at every bank).
+
+**Still open:** whether the origin moves over a full 2.5 s hold at 512, and by how much against
+`-6848`. One run fixes it, with `wait:3000` inserted between the key and the second `cam`.
+
+**New lead:** `presentGate(+0x7c)=0`, which would suppress the repaint irrespective of the clamp, and
+which should be read at 256 as well before it is treated as a 512 finding.

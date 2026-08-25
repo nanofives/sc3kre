@@ -251,23 +251,35 @@ Ordered by how much damage it can do silently.
    runs). The latched dest is the dominant destination, not one of several rivals, so it does not
    affect the T1 result — but what that 5.6% is was not investigated.
 
-2. **Pre-existing `-filetrace` startup race, found 2026-08-25 and NOT introduced by the fixes.** One
+2. **⚠️ `gzseq` step semantics — three traps, all found 2026-08-25, all of the silent kind.**
+   - **`key:` dispatches and returns immediately.** The hold runs asynchronously, so a following
+     `cam` measures ~63 ms in, not after the hold. A 2.5 s-hold comparison needs
+     `key:0x25,2500;wait:3000;cam`. This produced an apparently clean "delta 0" that was **not
+     reportable** — the run that hit it said so instead of banking the number.
+   - **A `wait:` longer than 90 s cancels itself.** A step without `@N` inherits the 90 s default
+     timeout, so `wait:180000` skipped at 90 s. Use `wait:180000@200`.
+   - **`cam`'s failure message asserts rather than measures.** It names `cityViewIso`
+     unconditionally, even though that base is only searched when `*(cityView+0xb8)` is non-null — so
+     an earlier "no object reachable at `cityViewIso+0x158`" line was an assertion, not a
+     measurement. The real cause was **timing**: it ran ~0.1 s before in-city readiness.
+
+3. **Pre-existing `-filetrace` startup race, found 2026-08-25 and NOT introduced by the fixes.** One
    control run died at **t+117 ms** with `C0000005` at `sc3probe.dll 01:000070BD` on a non-game
    thread, with **`EAX = 0x00005A4D`** — the `MZ` DOS-header magic, i.e. a PE-header parse while
    modules are still arriving. Consistent with `ft_hook_all()`'s 100 ms module walk. **Not
    deterministic** (an identical relaunch ran clean for 75 s) and **not a regression** (the previous
    build ran `-filetrace` for a full 75 s). `[UNCERTAIN]` the exact function — there is no `.map` or
    `.pdb`, and rebuilding to get one would have replaced the binary under test.
-3. **`capture.ps1` does not take the game lease itself.** Until it does, wrap every call in
+4. **`capture.ps1` does not take the game lease itself.** Until it does, wrap every call in
    `game_lock.ps1 -Acquire -Wait -Owner … / -Release`.
-4. **Build→run probe-DLL swap.** `build.ps1` will relink the shared `sc3probe.dll` out from under a
+5. **Build→run probe-DLL swap.** `build.ps1` will relink the shared `sc3probe.dll` out from under a
    live session. Either add a per-session `-Out` name or make `build.ps1` refuse without the claim.
    Deferred by decision in `COORDINATION.md`; do it while the harness is quiet.
-5. **Pre-existing brace bug in the resizable-window harness code, flagged not fixed.** In
+6. **Pre-existing brace bug in the resizable-window harness code, flagged not fixed.** In
    `rz_iso_resize`, `if (redraw != simspr + 0xb4b3) ... else` has no braces, so `FUN_1000b4b3` is
    called even when the vtable check fails. Benign so far. It is that session's code and its call.
-6. **`STUBS.md` is still an empty template.** `DEFERRED.md` was too until 2026-08-24.
-7. **Writing `functions.csv` safely — two rules learned the hard way 2026-08-24.** The file is
+7. **`STUBS.md` is still an empty template.** `DEFERRED.md` was too until 2026-08-24.
+8. **Writing `functions.csv` safely — two rules learned the hard way 2026-08-24.** The file is
    **fully quoted**, so a writer must use `QUOTE_ALL`; a default `csv.writer` re-quotes every field
    and flattens the 61 bare LFs inside quoted `notes`, which turns a 23-row edit into a
    **50,668-line diff**. And records must be matched on the **parsed** `(module, rva)` pair, never a
