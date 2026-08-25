@@ -63,6 +63,9 @@ to Translate (vtbl `+0x34`) as ±step on one or both axes, for **both** the arro
 `0x25`–`0x28`) and edge-scroll. One step, no ramp, no acceleration.
 
 ```
+# SLOWER camera (the common request): shipped is 32.0, so 16 is half speed, 8 a quarter
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --recipe scroll_speed=16 --out SIMSPR.DLL.slow
+
 # double the scroll speed at every zoom level
 py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --recipe scroll_speed=64 --out SIMSPR.DLL.fast
 
@@ -131,6 +134,17 @@ Copy-Item Apps\SIMSPR.DLL.shipped Apps\SIMSPR.DLL -Force
 "this differs from shipped by exactly 5 bytes at these addresses" is checkable independently of the
 code that produced it. **Re-diff the staged file before interpreting any observation** — that became
 a method rule in `verify/tunable_mod_test`.
+
+## ⚠️ A shipped bug you may hit while testing this: the camera is not clamped
+
+Filed as **`U-082`**. Measured on a shipped, unpatched build: the origin scrolled to `-913,-483`,
+**outside the valid `0..48896` extent for that map**, with nothing stopping it. The owner reports the
+camera **works and then stops responding after moving around for a while**, which is the shape you
+would expect if scrolling walks the origin off the map.
+
+**This is not caused by any patch on this page** — it was observed with SIMSPR untouched. But if you
+are testing a scroll-speed change by moving a long way, expect to meet it, and do not read it as your
+patch misbehaving. A *faster* camera will reach the edge sooner; a *slower* one later.
 
 ## Limits, stated
 
