@@ -1157,3 +1157,192 @@ same interval technique answers it: a breakpoint or hook on `FUN_10006226` entry
 
 Install `stock (matches original/)` before and after; no patch; claim held across both launches, lease
 per launch by the same owner, both released.
+
+---
+
+# Caller census on iso vt+0x2c — PRE-REGISTRATION, written before the launches, 2026-08-25
+
+The writer is settled: `FUN_10006226+0x89` on the game thread, 29/29 interval separation. The open
+question changed shape as a result — the translate is entered **75-165 times a second with no input**,
+through a vtable slot whose only known input-free caller (`FUN_1000ec0b`) is gated closed
+(`+0x354 == 0` on every read since run C). So: **who calls `vt+0x2c`?**
+
+Instrument: `SC3PROBE_CAMCALLER=1` swaps the single vtable dword at `.rdata SIMSPR+0x62538`. Checked
+before the run: it is **expect-or-refuse** (reads the slot and refuses unless it holds exactly
+`SIMSPR+0x6226`, logging what it found), the thunk is the house `MAKE_STUB` shape with the return
+address at `[esp+36]` = 32 (`pushad`) + 4 (`pushfd`) which I verified by inspection, and the swap is
+**memory-only** — no file on disk is touched, so the install remains stock by hash throughout.
+A vtable swap rather than an entry detour is the right call on a function this hot. Probe rebuilt to
+248,832 b.
+
+**Both instruments on**, so each interval reports **calls in and stores out**. That is a mutual
+self-check: if `calls=` and `writes=` disagree in shape, one of the two is lying and the disagreement
+is itself the finding.
+
+**Same `GZMAXSEQ` = 32 constraint as last time**, so "~1 s cadence" and "30 s+" remain mutually
+exclusive in one launch, and the same disclosed deviation applies: **two launches inside one claim** —
+**G1** at `wait:750` (~1.0 s intervals, ~t+5 to t+20 s, covering both onset clusters at maximum
+resolution) and **G2** at `wait:1500` (~1.8 s intervals, ~t+5 to t+31 s, reaching past t+16.6 s).
+This also hedges the 6-in-9 churn base rate, and F2 proved a frozen launch is not wasted.
+
+| row | prediction | what it would mean |
+|---|---|---|
+| **AY** | callers named on MOVING intervals | resolve every return address. Is it `FUN_1000ec0b` (the follow — which would **contradict** `+0x354 == 0`), `FUN_1001d503` / `FUN_10006736` (the two mapped dispatch sites), or **something unmapped**? The third is the interesting one and is what the call rate suggests. |
+| **AZ** | the same caller on MOVING **and** still intervals | that caller is not the driver; the driver is whatever differs between the two sets |
+| **BA** | **`MOVED WITH ZERO CALLS`** | the origin moves **without** entering `vt+0x2c` => a **second writer path**, and a direct contradiction of the 29/29 separation. **Bigger than the caller question**; report loudly. |
+| **BB** | refuses to arm | report the slot contents **verbatim** — that is a fact about the binary, not a failure |
+| **BC** | crash | **the new thunk is the first suspect**, it is new code in a hot path; withdraw it rather than let it colour a reading |
+
+Carried forward free: writer census per interval, `zoom`/`tilepx` per read, `span` tally, onset
+bracket for any launch that churns.
+
+---
+
+# RESULT — **NO ROW FIRED. Both launches sat in frozen windows, so the caller was never called.**
+
+28 intervals across two launches, **every one `still`, every one `calls=0`, every one `writes=0`**.
+No MOVED interval, so **no return address was ever recorded and the caller is not named.** The
+instrument armed correctly and the game was alive throughout; the phenomenon simply did not occur.
+
+## First, an omission that is mine, and I made it after writing down that I had made it before
+
+**I did not pre-register a "no MOVED intervals" row this time.** Two runs ago, when the watchpoint
+run produced exactly this outcome, I wrote in this file: *"none of the above — the phenomenon did not
+occur. No row was written for that, and one should have been."* I then wrote row AX for the F-run
+pre-registration, and dropped it again for this one. So the same gap caught me twice. Recording it
+here rather than quietly scoring against row AX from a different pre-registration.
+
+## The arm lines, verbatim — and expect-or-refuse PASSED in both
+
+```
+[ 5034.462 ms] ### CAMW: ARMED 4-byte WRITE watch on iso+0x54 = 0x0EED8BCC, thread 36852. Data breakpoints are PER THREAD, so ZERO HITS IS AMBIGUOUS (writer may be on another thread). Reported EIP is the instruction AFTER the store.
+[ 5034.498 ms] ### CAMC: ARMED caller census - iso vt+0x2c at 0x034F2538 swapped 0x03496226 -> thunk 0x6F361EB0. One vtable pointer, so this catches 100% of calls; no code was patched.
+```
+```
+[ 5760.066 ms] ### CAMW: ARMED 4-byte WRITE watch on iso+0x54 = 0x0EED630C, thread 10212. Data breakpoints are PER THREAD, so ZERO HITS IS AMBIGUOUS (writer may be on another thread). Reported EIP is the instruction AFTER the store.
+[ 5760.112 ms] ### CAMC: ARMED caller census - iso vt+0x2c at 0x034D2538 swapped 0x03476226 -> thunk 0x6F361EB0. One vtable pointer, so this catches 100% of calls; no code was patched.
+```
+
+**This is the run's one unambiguous positive.** The slot held `0x03496226` in G1 and `0x03476226` in
+G2 — in each process exactly `SIMSPR + 0x6226`, so the swap proceeded rather than refusing. Until now
+"iso vt `+0x2c` holds `FUN_10006226`" was a **static** claim from the call-site hunt over `.rdata`.
+It is now **confirmed at runtime in two independent processes** by an instrument that would have
+refused and printed the contents had it been anything else. Row BB did not fire, and the reason it
+did not fire is itself the evidence.
+
+## The interval table — 28 intervals, all still, all silent
+
+**G1** (tight, ~0.97 s intervals), armed t+5.03 s, baseline `-160,1604`:
+
+| iv | t (ms) | dx | dy | class | writes | calls |
+|---|---|---|---|---|---|---|
+| 1-14 | 6003 - 18647 | **+0** | **+0** | **still** | **0** | **0** |
+
+**G2** (long, ~1.75 s intervals), armed t+5.76 s, baseline `-160,1604`:
+
+| iv | t (ms) | dx | dy | class | writes | calls |
+|---|---|---|---|---|---|---|
+| 1-14 | 7455 - 30142 | **+0** | **+0** | **still** | **0** | **0** |
+
+Origin `-160,1604` on **30 of 30 reads** in both launches, `zoom=2 tilepx=32` throughout, no
+transition of any kind. G1 covered t+5.03-18.65 s, G2 covered t+5.76-30.14 s.
+
+## ⭐ What the null does establish, and it is not nothing
+
+**In a frozen window, `vt+0x2c` is called ZERO times.** Not "called with a zero delta" — **not called
+at all**, across 28 intervals and 44 seconds of live city in two processes.
+
+Set that beside F1, where every moving interval carried **66-150 stores** in ~0.9 s. The contrast is
+sharp and it narrows the caller hunt:
+
+> **The driver is not a continuously-running loop whose delta is sometimes zero. It starts and stops.**
+> Something begins calling `vt+0x2c` at ~100 Hz and later ceases, which is exactly the shape E1 showed
+> from the outside when it churned for 7 transitions and then froze for 6 in one launch.
+
+So the caller is gated by something that toggles, and the frozen windows are the gate closed rather
+than the driver idling. A caller census will name it the moment a launch churns; nothing about the
+method needs changing.
+
+## The two instruments agree, which is the self-check passing
+
+`calls=0`, `writes=0`, `dx=dy=0` in **28 of 28 intervals**. Running both was meant to catch one of
+them lying, and in this regime they corroborate each other exactly. Row BA (`MOVED WITH ZERO CALLS`)
+had no opportunity to fire, so the 29/29 separation from the F runs is neither confirmed nor
+challenged here.
+
+## The confound, stated because it is the instrument's first outing
+
+CAMCALLER is new, and **both of its launches froze.** Against reading anything into that:
+
+- The thunk **never executed** (`calls=0`), so it had no runtime cost or timing effect. The only
+  action taken was a single dword write at arm time.
+- `writes=0` as well, so this is not "the swap broke dispatch and the writes stopped" — the entire
+  path was quiet, including the store the watchpoint sees independently of the vtable.
+- The game was demonstrably alive: `raster_blit_hw` 897 -> 7,323 (G1) and 897 -> 12,720 (G2),
+  monotonic; 4 and 7 `WFLAG` heartbeats; both sequences `COMPLETE`; shots written; **0 exceptions,
+  0 minidumps**. Row BC did not fire.
+- And the base rate no longer makes two freezes surprising — see below.
+
+`[UNCERTAIN]` all the same, on one pair of launches. The clean test is the same shape that cleared
+the watchpoint: a churning launch **with** CAMCALLER armed, which would exonerate it the way F1
+exonerated CAMWATCH.
+
+## Running tally, corrected criterion, eleven runs
+
+| run | instruments | window | verdict |
+|---|---|---|---|
+| A | none | t+16.6 - 32.4 s | churn |
+| B | none | t+6.6 - 14.6 s | churn |
+| C | none | t+5.6 - 32.0 s | churn |
+| D | CAMWATCH | t+4.97 - 32.67 s | frozen |
+| E1 | none | t+4.99 - 31.42 s | churn, then froze from t+15.7 s |
+| E2 | none | t+5.34 - 33.22 s | frozen |
+| E3 | none | t+4.98 - 31.90 s | churn |
+| F1 | CAMWATCH | t+4.83 - 17.48 s | churn |
+| F2 | CAMWATCH | t+5.59 - 28.39 s | frozen |
+| **G1** | **CAMWATCH + CAMCALLER** | t+5.03 - 18.65 s | **frozen** |
+| **G2** | **CAMWATCH + CAMCALLER** | t+5.76 - 30.14 s | **frozen** |
+
+**6 churn, 5 frozen.** I previously called this 6-and-3 out of 9; with two more samples the frozen
+rate is close to a coin flip, and **two consecutive freezes now carry probability ~0.21** — ordinary.
+That revision matters more than it looks: at ~45% frozen, **a fixed two-launch design fails to
+observe the phenomenon about one time in five**, which is what happened here.
+
+## The method fix, and why I am NOT running a third launch now
+
+The obvious move is one more launch to catch a churn. **I am not taking it**, because the
+pre-registration committed to two and adding a third after seeing the result is exactly the
+undisclosed flexibility pre-registration exists to prevent — the same discipline that made E2 worth
+something.
+
+Instead, the next caller run should pre-register an **adaptive stopping rule, declared in advance**:
+
+> *Launch repeatedly until one launch yields at least one MOVED interval, to a maximum of four
+> launches; report every launch including the frozen ones.*
+
+At a 45% freeze rate that reaches a churning launch with ~94% probability inside four loads, it is
+honest because it is declared before the run, and the frozen launches are not waste — they are
+`still` controls, which is the property F2 first demonstrated. **And it should also pre-register the
+all-frozen row that I have now omitted twice.**
+
+## Validity
+
+0 keys both launches; 25 `Farmsville.sc3` filetrace hits each; 0 exceptions, 0 minidumps; both
+sequences `COMPLETE`; shots written. `followTarget(+0x354) = 0` on **30/30** reads (the follow gate
+has now been closed on every read since run C). `N == 1` candidate on 30/30. `span = 1024x768` on
+30/30 reads for both rects = 60 prints, **cumulative 292/292**.
+
+## Which rows fired
+
+| row | status |
+|---|---|
+| AY — callers named on MOVING intervals | **no** — there were no MOVING intervals |
+| AZ — same caller on moving and still | **no** — no callers recorded at all |
+| BA — `MOVED WITH ZERO CALLS` | **no** — no opportunity |
+| BB — refuses to arm | **no**, and its not firing is the run's positive: the slot held `SIMSPR+0x6226` in both processes, confirming iso vt `+0x2c` at runtime |
+| BC — crash | **no** — 2/2 loaded, 2/2 completed, 0 exceptions |
+| **(unwritten row) — no MOVED intervals at all** | **this is what happened**, and I failed to pre-register it for the second time |
+
+Install `stock (matches original/)` before and after — the vtable swap is memory-only and touches no
+file on disk. No patch; claim held across both launches, lease per launch by the same owner, both
+released.

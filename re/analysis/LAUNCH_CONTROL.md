@@ -4878,3 +4878,85 @@ Six churn, three frozen. Onset brackets now five: 6.26–7.42, 6.80–8.00, **7.
 n = 5, so worth counting, not yet a distribution.
 
 `span = 1024x768` on 31/31 reads, **cumulative 232/232**. `N == 1` on 31/31.
+
+### §31.14.13 — the caller census armed, the phenomenon did not show, and the null narrows the driver anyway (2026-08-25)
+
+Two launches, `SC3PROBE_CAMWATCH=1` and `SC3PROBE_CAMCALLER=1`. **28 intervals, every one `still`,
+`calls=0`, `writes=0`.** No MOVED interval, so **no return address was recorded and the caller is not
+named.**
+
+#### The one clean positive: expect-or-refuse PASSED at runtime
+
+```
+### CAMC: ARMED caller census - iso vt+0x2c at 0x034F2538 swapped 0x03496226 -> thunk ...
+### CAMC: ARMED caller census - iso vt+0x2c at 0x034D2538 swapped 0x03476226 -> thunk ...
+```
+
+The slot held exactly `SIMSPR + 0x6226` in **two independent processes**. Until now *"iso vt `+0x2c`
+holds `FUN_10006226`"* was a **static** claim from the `.rdata` scan. **It is now confirmed at runtime**,
+by an instrument that would have refused and printed the contents had it been anything else. The
+refuse-row not firing **is** the evidence.
+
+#### ⭐ What the null establishes: the driver STARTS AND STOPS
+
+**In a frozen window, `vt+0x2c` is called ZERO times** — not "called with a zero delta", not called at
+all, across 28 intervals and 44 s of live city in two processes. Against F1, where every moving
+interval carried **66–150 stores in ~0.9 s**:
+
+> **The driver is not a continuously-running loop whose delta is sometimes zero. It starts and stops.**
+> Something begins calling `vt+0x2c` at ~100 Hz and later ceases — which is exactly what E1 showed from
+> the outside when it churned for 7 transitions and then froze for 6 in one launch.
+
+So **frozen windows are the gate closed, not the driver idling.** Nothing about the method needs
+changing; it will name the caller the moment a launch churns.
+
+**The two-instrument self-check passed:** `calls=0`, `writes=0`, `dx=dy=0` agree on 28/28. They were run
+together so that one could catch the other lying; in this regime they corroborate exactly.
+
+#### Base rate revised, and the design consequence is sharp
+
+**Eleven runs: 6 churn, 5 frozen.** Previously reported as 6-and-3 of 9. Verified arithmetic at
+`P(frozen) = 5/11 = 0.4545`:
+
+| | |
+|---|---|
+| two consecutive freezes | **0.207** — ordinary, not suspicious |
+| at least one churn in 2 loads | 0.793 |
+| at least one churn in 3 loads | 0.906 |
+| **at least one churn in 4 loads** | **0.957** |
+
+*(The run report quoted ~94% for four loads; the precise figure is 95.7%. Same conclusion.)*
+
+**At ~45% frozen, a fixed two-launch design fails to observe the phenomenon about one time in five.**
+That is exactly what happened here.
+
+#### Two method points, both raised by the run agent against itself
+
+1. **It did not pre-register a "no MOVED intervals" row — for the second time**, having previously
+   written in this same file that one should have existed. Recorded rather than quietly scored against
+   a row from a different pre-registration.
+2. **It declined to run a third launch after seeing the result.** The pre-registration committed to
+   two, and adding a third post hoc is precisely the undisclosed flexibility that made E2 worth
+   something. **That is the right call**, and the fix belongs in the next design rather than in this
+   one.
+
+#### The adaptive stopping rule, to be declared BEFORE the next caller run
+
+> **Launch until one launch yields at least one MOVED interval, maximum four launches; report every
+> launch including frozen ones.**
+
+Honest because it is declared in advance, ~96% likely to reach a churning launch inside four loads at
+the measured base rate, and the frozen launches serve as `still` controls rather than waste. **It must
+also pre-register the all-frozen row.**
+
+#### Confound on `CAMCALLER`'s first outing, stated rather than dismissed
+
+Both its launches froze. Against reading into it: the thunk **never executed** (`calls=0`), so it had no
+runtime cost; `writes=0` as well, so this is not "the swap broke dispatch" — the watchpoint observes the
+store independently of the vtable and was equally silent; and the game was alive
+(`raster_blit_hw` 897 → 7,323 and 897 → 12,720, monotonic). `[UNCERTAIN]` on one pair. **The clean test
+is a churning launch with `CAMCALLER` armed** — the same shape F1 used to exonerate `CAMWATCH`.
+
+Reconfirmed: `+0x354 = 0` on 30/30 (closed on every read since run C), `N == 1` on 30/30,
+`span = 1024x768` on 30/30, **cumulative 292/292**. The vtable swap is memory-only, so the on-disk
+install stayed stock by hash throughout.
