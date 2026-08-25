@@ -140,8 +140,11 @@ a method rule in `verify/tunable_mod_test`.
 Filed as **`U-082`**, and ⚠️ **the clamp explanation below was investigated and does NOT hold — read
 the correction.**
 
-The camera *can* sit outside the valid extent: measured at origin `-1088` on a 192 map whose range is
-`0..48896`, with the whole viewport left of world x = -64. **But the view renders fine there** — the
+The camera *can* sit at negative coordinates: measured at origin `-1088` on a 192 map, with the whole
+viewport left of x = -64. (⚠️ Earlier notes compared this against `0..48896`; that is SIMGEOM's
+zoom-independent `(N-1) x 0x100` extent and is **8x the wrong scale** for this field, whose values sit
+inside `0..6144 = N x tilepx` at zoom 2. Negative under either, but the number should not be reused.)
+**And the view renders fine there** — the
 frame shows the map edge, the terrain cross-section as a cliff and off-map void, with all UI correct.
 So "the camera leaves the map, therefore the view dies" is **contradicted by measurement.**
 
@@ -154,6 +157,12 @@ reading may have been two different load positions rather than scrolling.
 around a while, and a run did show **7 consecutive input taps moving nothing** — though it recovered
 on the 8th, so it is intermittent, not terminal. Two taps also moved the camera the **wrong way**,
 which no clamp explains.
+
+⭐ **A mechanism has since been identified** (`LAUNCH_CONTROL.md` §31.14): SIMSPR has a **follow/track
+re-centre** on the paint tick (`FUN_1000dc17` -> `FUN_1000ec0b` -> ScrollTo) that moves the camera with
+**no input at all**, armed while `cellmap+0x354 != 0` and `+0x524 == 0`. A user scroll cancels it; its
+own scroll does not. That is consistent with a camera that moves on its own and appears to fight you,
+and it is **not** yet proven to be the cause of the reported symptom.
 
 **None of this is caused by any patch on this page** — it was all observed with SIMSPR untouched. If
 you hit it while testing a scroll-speed change, it is not your patch.

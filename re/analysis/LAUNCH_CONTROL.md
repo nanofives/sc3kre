@@ -4471,3 +4471,143 @@ written for this instrument and is the cheap part.
 `SC3PROBE_U068SURF` is **off by default and inert without it**, so the crashing path cannot fire in
 another session's run. ⚠️ **It must not be enabled again as written.** Locks released, install
 verified stock, nothing committed.
+
+## §31.14 — ⭐⭐ THE INPUT-FREE CAMERA MOVER FOUND: a FOLLOW/TRACK re-centre (2026-08-25)
+
+Two results landed together: a `cam` enumeration run that **falsified** the instrument hypothesis, and
+a call-site hunt that **found the mechanism**. Both are below, and the second explains what four runs
+of camera measurement had been chasing.
+
+### 31.14.1 My instrument fix's premise was falsified — `N == 1`
+
+`cam` was rebuilt to enumerate every object matching iso vtable `SIMSPR+0x6250c` rather than stopping
+at the first, on the theory that the **minimap** is also a city view and would own a cell map, making
+the measured object depend on allocation order.
+
+**It does not. `N == 1` on all seven reads**, same address (`0x0EEBCD68`), same offset
+(`cityViewIso+0x158`), and the `!! N objects` warning never fired. **The first-match theory is dead.**
+
+The enumeration is kept anyway, for two reasons that are not rationalisation: it now *proves*
+uniqueness per read instead of assuming it, and it caught the object's **creation** — the count goes
+`0 → 1` between t+5.27 s and t+6.64 s. The old code would also have found nothing at t+5.27 s, but
+nothing in the log would have said why.
+
+### 31.14.2 `span` never varies — so this is a rigid translation, not corruption
+
+`1024x768` on **14/14** rect prints here, and `rectB == rectA` on all 7 reads. With the earlier 30/30
+that is **44 consecutive rect prints at exactly `1024x768`** across thousands of pixels of excursion.
+
+That is the signature of `FUN_10006226` adding `param_1` to both lefts and rights and `param_2` to both
+tops and bottoms `[CONFIRMED @ 0x10006226]`. **The origin is being translated by something, not
+corrupted** — which redirects the question from *what is `cam` pointing at* to **who is calling the
+translate with no input.**
+
+### 31.14.3 There is no call site to instrument — there is one vtable dword
+
+Scanned every byte of all five sections of the anchored `SIMSPR.DLL`, **verified independently**:
+
+- **Zero `E8` calls and zero `E9` tail-jumps** target `FUN_10006226`.
+- **Exactly one** dword in the module equals it: **`.rdata 0x10062538`**, which is iso vtable
+  `0x1006250c` **+ 0x2c**.
+
+So the function is reached **only by virtual dispatch**, a call-site counter is impossible — and the
+converse is better than what was planned: **swapping that single dword catches 100% of calls with no
+entry detour and no ambiguity.** Entry detours on per-tile functions are what killed a load at 6.7 s
+(§31.10), so this is strictly the safer instrument as well.
+
+### 31.14.4 The caller tree, and the one path with no input
+
+```
+FUN_10006226  (cell-map vt+0x2c, the translate)
+├─ A  FUN_1001d503        cSC3CityViewIso::Translate   (isoVt 0x10063390 +0x78)
+│     └─ FUN_1004327d       cityView vt 0x10067894 +0x34
+│           └─ FUN_10043daf   arrow keys / edge scroll / right-drag
+│                 └─ FUN_10042a95  window tick
+└─ B  FUN_10006736        cell-map vt+0x30, ScrollTo(absolute)
+      ├─ FUN_1001d039       CenterOn (isoVt +0x54) ← window message handler
+      └─ FUN_1000ec0b       FOLLOW / TRACK re-centre        ◀── NO INPUT ON THIS PATH
+            └─ FUN_1000dc17    cell-map vt+0x148, the flush/paint tick
+```
+
+**Branch A is already known to be silent when idle:** `FUN_10043daf` took **0 hits in 16 s of idle
+city** (`verify/scroll_patch_test/RESULTS.md`, recorded at `sc3probe.c:1266`). So A cannot explain
+input-free motion, and `FUN_1000ec0b` is the only remaining path that can.
+
+### 31.14.5 ⚠️ The arming gate, CORRECTED
+
+The hunt reported the follow as armed iff `+0x354 != 0 && +0x358 == 0`. **The second offset is wrong.**
+Read from the decompilation `[CONFIRMED @ 0x1000ec0b]`:
+
+```c
+if ((param_1[0xd5] != 0) && (param_1[0x149] == 0)) {        /* 0xd5*4 = +0x354, 0x149*4 = +0x524 */
+    ...
+    if ((iVar5 != param_1[0x15]) || (iVar4 != param_1[0x16])) {   /* differs from origin +0x54/+0x58 */
+        *(undefined1 *)(param_1 + 0xd6) = 1;                      /* 0xd6*4 = +0x358, guard ON */
+        (**(code **)(*param_1 + 0x30))(iVar5, iVar4, 1);          /* vt+0x30 = ScrollTo */
+        *(undefined1 *)(param_1 + 0xd6) = 0;                      /* guard OFF */
+    }
+}
+```
+
+So:
+
+| field | role |
+|---|---|
+| `+0x354` | the **follow target** — non-zero arms the follow |
+| **`+0x524`** | **the second gate: the follow runs only while this is ZERO** |
+| `+0x358` | a **re-entrancy guard**, set around the call — *not* a gate |
+
+`+0x358` is what the *cancel* side tests, and that is where the hunt's offset came from
+`[CONFIRMED @ 0x10006226:58-59]`:
+
+```c
+if ((*(int *)((int)this + 0x354) != 0) && (*(char *)((int)this + 0x358) == '\0'))
+    *(int *)((int)this + 0x354) = 0;
+```
+
+**A user-initiated scroll cancels the follow; the follow's own scroll does not cancel itself.** Elegant,
+and it means the two mechanisms are designed to interact rather than merely coexisting.
+
+> ### ⭐ `+0x524` is the `U-068` field
+> The same `iso+0x524` that the entire resizable-window investigation turned on — the one §31.11 showed
+> is a *drained* reading rather than a symptom. **It gates the camera follow.** So `U-068` and the
+> camera thread touch the same field from opposite directions, and a reading of `+0x524 == 0` (which is
+> what it reads most of the time) means **the follow is armed** whenever `+0x354` is set.
+
+### 31.14.6 The test needs no counter and no patch
+
+Read **`iso+0x354`** (follow target), **`iso+0x524`** (gate) and **`iso+0x358`** (guard) in `cam`.
+
+- `+0x354 != 0` and `+0x524 == 0` on an idle city → **the follow is armed, and predicts drift.**
+- `+0x354 == 0` → follow disarmed, predicts no drift.
+
+That is a falsifiable prediction from a pure read, on a mechanism whose gate is known. It also explains
+the shape of what was seen: deltas of `target − current` are **arbitrary, not step multiples** (matching
+every non-32-multiple delta observed), the motion is a **rigid translation** (§31.14.2), and it would
+**oscillate** if the tracked rect itself moves.
+
+`[UNCERTAIN]` what writes `+0x354`. Not chased rather than guessed — and that is the next question, not
+this one.
+
+### 31.14.7 A yardstick correction that invalidates a comparison used all day
+
+All 14 rect values lie inside **`0..6144` by `0..3072`**, where `6144 = 192 × 32 = N × tilepx` at
+`zoom=2` — the iso diamond's extent at that zoom. **The `0..48896` this project has been testing camera
+values against is SIMGEOM's `(N-1) × 0x100`** `[CONFIRMED @ 0x100023e8]`, **8× larger and
+zoom-independent.**
+
+`[UNCERTAIN]` which is the field's actual bound. It does **not** rescue the `-2396` reading (negative
+under either), but **"far outside `0..48896`" is the wrong scale and must not be reused.**
+
+### 31.14.8 What was NOT measured
+
+- **The churn window was never entered.** Every stable read here is at **t < 13.5 s**; every churning
+  read in the earlier series is at **t > 16.6 s**. This run ended at t+14.6 s. One run, spent on the
+  enumeration question.
+- The load origin `-160,1604` **reproduced byte-identically** from the earlier series' first read, so
+  the "load-camera non-determinism" claim is **not supported by this run** — though it is not refuted
+  either, since three different values were seen across earlier runs.
+- `MAP dimensions UNAVAILABLE` on every read: N was **not** confirmed from memory. The fixture rests on
+  329 filetrace lines opening `Farmsville.sc3` and the status bar in the frame.
+- One jump did occur, at t+14.59 s: `dx=+1936, dy=-395`, neither a multiple of 32. `SHOT #1` completed
+  at t+14.03 s, between the last stable read and the jumped one — **correlation only, no causal claim.**

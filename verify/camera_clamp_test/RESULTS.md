@@ -269,3 +269,159 @@ pull-back toward the map (falsified here).
 then stops" in a controlled way, and **the instrument now needs repair before more runs**: identify
 which cell-map object `cam` should read, on a fixture whose field is stable (Craterville, not
 Farmsville).
+
+---
+
+# Cell-map enumeration run — PRE-REGISTRATION, written before the launch, 2026-08-25
+
+The instrument change under test: `cam` no longer stops at the first object carrying vtable
+`SIMSPR+0x6250C` (`cISC3CitySpriteCellMap`). It walks both bases (`cityView`, `cityViewIso`) over
+their first `0x280` bytes, de-duplicates objects reachable through two fields, prints **every**
+candidate with the base+offset it was found at, its `rectA`, `span`, `zoom`, `tilepx`, marks the one
+it uses `<== USED`, and shouts when more than one exists. It still uses the first, so every earlier
+reading in this file stays comparable.
+
+Fixture: `Cities\Farmsville.sc3` (N=192) — the fixture whose origin churned at ~1,000 px/s. Several
+`cam` reads, **no input of any kind**, plus one frame. Install stock at claim time
+(`game_lock.ps1 -Status` = "stock (matches original/)").
+
+| row | prediction | what it would mean |
+|---|---|---|
+| **AD** | `N > 1` candidates | the first-match ambiguity is **real**. Payoff: decide which candidate's `rectA` is consistent with the rendered frame, and that identifies the correct object — retro-fitting the whole camera investigation. |
+| **AE** | `N == 1` candidate | the first-match theory is **DEAD**. Stated plainly: it was a fix for a hypothesis, and falsification is the useful outcome. The churn then has another cause (field genuinely observed mid-write, or a live interpolation). |
+| **AF** | `N > 1` but **every** candidate churns | ambiguity real but insufficient to explain the churn. Both reported, neither claim promoted. |
+| **AG** | candidate count **varies between reads in one process** | objects being created/destroyed under the observer. Reported as such. |
+
+**Free side-measurement, registered now:** `span` printed `1024x768` on every read of 2026-08-25. If
+the origin moves ~1,000 px while the span stays exactly constant, the motion is a **rigid
+translation, not corruption** — that is evidence about what writes the field. Whether `span` ever
+varies is recorded either way.
+
+---
+
+# RESULT — **ROW AE FIRED. The first-match theory is DEAD.**
+
+`N == 1` on **every** read. There is exactly one object carrying vtable `SIMSPR+0x6250C` reachable
+from `cityView` or `cityViewIso` within `0x280` bytes, it is at the same base+offset and the same
+address on all seven successful reads, and the `!! N objects` warning never fired.
+
+**Stated plainly: the minimap-cell-map hypothesis is falsified.** The enumeration fix was built to
+catch an ambiguity that does not exist in this process. It stays in (it is now the thing that proves
+the object is unique instead of assuming it) but it explains nothing about the churn, and the
+"`cam` may be reading the minimap's cell map" line in the section above is retracted. Whatever moved
+the origin on 2026-08-25 moved **the** cell map, not a second one.
+
+## The candidate blocks, verbatim — all eight reads, no input (`grep -c GZKEY` = 0)
+
+```
+[ 5272.617 ms] ### CAM: no object with vt SIMSPR+0x6250C (0x034F250C) reachable from cityView 0x0F4DC950 or cityViewIso within 0x280 bytes - not reading camera state from an object we cannot identify
+[ 6641.149 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEBCD68  rectA=-160,1604,864,2372 span=1024x768  zoom=2 tilepx=32   <== USED
+[ 8032.372 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEBCD68  rectA=-160,1604,864,2372 span=1024x768  zoom=2 tilepx=32   <== USED
+[ 9399.914 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEBCD68  rectA=-160,1604,864,2372 span=1024x768  zoom=2 tilepx=32   <== USED
+[10773.465 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEBCD68  rectA=-160,1604,864,2372 span=1024x768  zoom=2 tilepx=32   <== USED
+[12205.294 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEBCD68  rectA=-160,1604,864,2372 span=1024x768  zoom=2 tilepx=32   <== USED
+[13459.899 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEBCD68  rectA=-160,1604,864,2372 span=1024x768  zoom=2 tilepx=32   <== USED
+[14585.137 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEBCD68  rectA=1776,1209,2800,1977 span=1024x768  zoom=2 tilepx=32   <== USED
+```
+
+`rectB` equalled `rectA` on all seven reads. `zoom=2 rot=0 tilepx=32`, `presentGate(+0x7c)=0`,
+`flag(+0x32c)=0` on all seven.
+
+Validity: `Farmsville.sc3` opened at t+1.81 s and again at t+2.96 s, 329 filetrace lines; 0 keys
+dispatched; 152 windows walked by the closing `dump`. `MAP dimensions UNAVAILABLE` on every read —
+the occupant bridge was not captured this run, so **N was not confirmed from memory**; the fixture is
+established by the filetrace and by the status bar reading `Farmsville  Pob: 36,172  45,724
+5/16/1904` in the frame.
+
+## Row AG also fired, in a narrow and benign form
+
+The count is not constant across the run: **0 on the first read (t+5.27 s), then 1 on all seven
+later reads.** The object comes into existence between t+5.27 s and t+6.64 s, while the city is
+still loading, and never multiplies afterwards. That is object creation during load, not churn, and
+the enumeration's refusal to read anything at t+5.27 s is the fix behaving correctly — the old code
+would also have found nothing there, but nothing in the log would have said why.
+
+## The churn did NOT reproduce, and that is the finding
+
+Six consecutive reads spanning **t+6.64 s to t+13.46 s — 6.8 seconds — are byte-identical**
+(`-160,1604,864,2372`). Then one jump to `1776,1209,2800,1977` at t+14.59 s: `dx = +1936`,
+`dy = -395`, neither a multiple of 32.
+
+Set against the earlier Farmsville series (fifteen reads, t+16.6 s to t+32.4 s, mean |dx| 1,080 px
+per interval, zero repeats), this run's first six reads are the opposite behaviour **on the same
+fixture and the same field**. Two facts about the difference are on the record and neither is
+explained:
+
+- **The load-time origin is reproducible.** `-160,1604` here is byte-identical to read #1 of the
+  earlier series (`-160`, `1604`). The addendum-5 claim of a non-deterministic load-time camera is
+  not supported by this run.
+- **The reads that were stable are the early ones.** Every stable read here is at t < 13.5 s; every
+  churning read in the earlier series is at t > 16.6 s. This run stopped at t+14.6 s and so did not
+  sample the window where churn was previously seen. **I did not measure whether the churn is still
+  there after t+16 s** — one game run, and it went to the enumeration question.
+
+A correlation, offered as a correlation only: `SHOT #1` completed at t+14.03 s, between the last
+stable read (t+13.46 s) and the jumped read (t+14.59 s).
+
+## `span` never varied — the motion is a rigid translation
+
+**`1024x768` on 14/14 rect prints (7 x `rectA`, 7 x `rectB`).** Combined with the earlier series
+(30/30) that is **44 consecutive rect prints at exactly `1024x768`**, across origin excursions of
+thousands of pixels. The rects are being *translated*, not corrupted: whatever writes the field
+writes all four edges consistently, which is exactly the signature of `FUN_10006226` (it adds
+`param_1` to both lefts and rights and `param_2` to both tops and bottoms, `:61-68`, so the span is
+invariant by construction) [CONFIRMED @ 0x10006226]. Random memory damage does not preserve a span
+44 times running.
+
+## The frame, and what it can and cannot settle
+
+Frame: `.happy-share/cmsysyj1a0rivn51c47lbyf3l/camenum_122429.png` (from `re/harness/shot_02.bmp`,
+1024x768, mirror window t+15.09 s to t+15.25 s — so it postdates the last read, `1776,1209`, by
+0.67 s and is the frame for that read, not for the six stable ones).
+
+**Which candidate matches the picture: not applicable — there is only one candidate.** The payoff
+registered under row AD cannot be collected, because the ambiguity it was meant to resolve is not
+there.
+
+What the frame does show, and it is consistent rather than contradictory: land in the lower-left,
+off-map grey filling the upper-right, a map boundary running diagonally between them and the map's
+edge cliff at screen x = 860. The game's **own** camera indicator agrees — the minimap's red
+rectangle sits at the east side of the diamond, overhanging its edge. Both say "parked at a map
+edge with off-map space in view", which is what an in-range-but-peripheral origin looks like. This is
+a qualitative agreement; I did **not** derive the world-pixel-to-screen projection, so I cannot
+convert `1776,1209` into an expected pixel and check it numerically.
+
+**One arithmetic observation that bears on every out-of-bounds judgement in this file.** All 14 rect
+values in this run lie inside `0..6144` by `0..3072`, and `6144 = 192 x 32 = N x tilepx`,
+`3072 = N x tilepx / 2` — the iso diamond's own pixel extent at `zoom=2`. The `0..48896` range this
+investigation has been testing against is SIMGEOM's `(N-1) x 0x100`
+[CONFIRMED @ 0x100023e8], which is 8x larger and zoom-independent. `[UNCERTAIN]` which of the two is
+the bound this field is actually kept within — not measured. It does not rescue the `-2396` read
+(negative is out of bounds under either), but "far outside `0..48896`" was the wrong yardstick and
+should not be reused without settling this.
+
+## Which rows fired
+
+| row | status |
+|---|---|
+| AD — `N > 1`, ambiguity real | **no** |
+| **AE — `N == 1`, first-match theory dead** | **FIRED** |
+| AF — `N > 1` but all candidates churn | **no** — not reachable, `N == 1` |
+| **AG — candidate count varies in one process** | **FIRED**, narrowly: `0 -> 1`, object creation during load, never `> 1` |
+| span side-measurement | `span` **never varied**: 14/14 at `1024x768`, 44/44 across both runs |
+
+## Where this leaves U-081 / U-082
+
+**Retracted:** the first-match / minimap-cell-map explanation for the camera anomalies. It was the
+leading hypothesis at the top of this section and it is now falsified by measurement.
+
+**Restored, with a caveat:** `cam` reads a uniquely identified object, and says so per read. The
+instrument is no longer the suspect for *object identity*. It is still an unverified sampler of a
+field that demonstrably changes between reads.
+
+**Open, and now sharper.** The churn is a rigid translation of both rects with an invariant span, so
+the writer is a translate, not corruption — and `FUN_10006226` is the translate. The next run should
+ask **who calls it with no input**, not what `cam` is pointing at. And it should sample past t+16 s,
+because that is the only window where churn has ever been observed and this run never entered it.
+
+Install verified `stock (matches original/)` before launch and after; no patching at any point.
