@@ -347,6 +347,16 @@ Order:
    `RESULTS.md` is still an unfilled template.
 5. **`drag_divisor` / `edge_margin`** (`D-002`) — 1 patched run each.
 
+> ⚠️⚠️ **PATTERN, not an incident: this board keeps listing questions the repo has already answered.**
+> `U-063` went **open → parked → closed** in one afternoon, and *nothing was discovered* to close it —
+> the answer had been sitting in `LAUNCH_CONTROL.md` §31.9.1 the whole time. It joins `U-076` (answered
+> in catalogue §27c since 2026-08-18, filed off a stale label in a second doc), `U-079` (the costed
+> 1–2 run differential was redundant), and `U-075`. **Four uncertainties closed by reading, not by
+> working.**
+>
+> **So: before opening or costing any item here, grep the analysis notes for it.** A row on this board
+> is not evidence that a question is open. The cheapest possible run is the one you do not spend.
+
 ## Static pool — no lease, runnable in parallel right now
 
 | item | what | state |
@@ -359,7 +369,7 @@ Order:
 | ~~`U-080`~~ | ✅ **LATENT, not live (C3).** All 42 predicate vtables share slot 0 `FUN_1001a9bb`, which accepts `0xA1C085DB`; 25/25 call sites pass exactly that. ⚠️ **But it turns live for mod authors** who install a slot-0 that rejects it — belongs in published toolkit docs. | done, one doc action |
 | ~~`U-079`~~ | ✅ **CLOSED 2026-08-24 at C3, no run spent.** Full `*_Protected.txt` → netType binding in `re/analysis/NETWORK_TYPES.md` §9, three independent cascades agreeing. The 1–2 run differential that `UNCERTAINTIES.md` costed is now **redundant — do not spend it.** Two corrections fell out: the loader reads **22** rule files, not 11 (a second parser `FUN_10019600`), and the refuted order-based guess was the slots' **address order**, which is why it kept looking right. | done |
 | `U-077` | Class behind occupant IID `0x41658d28`; label flag bits `0x400`/`0x4000`. Can sit indefinitely. |
-| `U-063` | ⚠️ **NOT the quick static win this row used to claim — corrected 2026-08-25.** Its zone-writer half is already **resolved at C3**; the residual is the RECT writer `0x10032afa` (SIMRCI `vt+0x38`), and **four prior findings establish that the static "no producer" negative cannot carry a conclusion**: `P(0) = 0.23` is not significant, no caller on `+0x38` is the *expected* state for an unused virtual method, and a byte-level scan already found zero uncarved dispatches in SIMRCI. Grinding it statically re-derives a negative already known not to conclude. The decisive test is a **harness plop-test**, so park it until someone is spending a lease anyway. | parked |
+| ~~`U-063`~~ | ✅ **CLOSED — and it was already closed before this board ever listed it as open.** The RECT zone writer's caller is **`SIMGEOM.DLL FUN_10007760+0x5BB` = `0x10007D1B`**, `FF 50 38  call dword ptr [eax+0x38]` reaching SIMRCI `FUN_10032afa`, runtime-confirmed, with **exactly two observed callers**. Written up in `LAUNCH_CONTROL.md` §31.9.1–.3, including `FUN_10007760` named as `cISC3BuildingLayer::commit_placement`. Verified at `LAUNCH_CONTROL.md:3564/3577/3787` before closing this row. | done |
 
 ## ⚠️ THE INSTALL IS DELIBERATELY MODIFIED — `SIMSPR.DLL`, slower camera (TWO mods now)
 
