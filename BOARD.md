@@ -61,8 +61,15 @@ extremes `x 16..495, y 16..495`, 216 of 308 changes above 256, zero changes outs
 **no coordinate threshold** — the far corner survived best (1006/1024) and the low-coordinate control
 worst of the pair (932/1024). Verified independently before promotion.
 
-**Next, in order:** (1) **`U-081`** — one run with `cam` plus arrow-keys-vs-drag to settle whether the
-camera clamps correctly at 512; the owner saw drag-scroll do nothing. (2) In-game **authoring** at 512
+**Next, in order:** (1) **`U-081` — a NO-KEY NULL CONTROL** (`wait:15000;cam;wait:3000;cam`), one run.
+Five causes are eliminated and **the question has moved upstream of 512**: the recorded `-6848` camera
+baseline does **not** reproduce on a path-loaded city at matched field, zoom, key and duration
+(`Δ = +26, 0` vs `-6848, 0` — the axis reproduces, the magnitude does not). **Until a null control
+exists, no delta measured in this investigation can be attributed to the key**, and a 512 number would
+mean nothing. The uncontrolled variable is **menu-load vs path-load**: path-loaded cities are paused,
+and the baseline's pause state is recorded in neither source file. If a paused city simply does not
+scroll, that explains both of the owner's original observations with **no map-size involvement at
+all**. (2) In-game **authoring** at 512
 (`fire:<toolcmd>` + `drag:`, established at 256, untried at 512). (3) Development, which needs an
 unpause path — **none exists among the 90 shipped menu commands** — plus road and power. (4) A bound
 above 512.
