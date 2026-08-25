@@ -2,9 +2,11 @@
 
 **Status: the scroll-speed knob is validated in the running game, 2026-08-20/21**
 (`verify/scroll_patch_test/RESULTS.md`, rungs S1/S2/S3). Two further knobs on this page,
-`drag_divisor` and `edge_margin`: `drag_divisor`'s halving is **observed in a running game** (C3 — a
-within-process A/B/A: velX `50→25→50` across `-2/-4/-2`, byte-verified) plus static byte-verified.
-`edge_margin` is still **derived from the decompilation and never run game-side.**
+`drag_divisor` and `edge_margin` are both **observed in a running game (C3)** via transport-independent
+within-process A/B/A tests: `drag_divisor`'s velocity halves `50→25→50` across `-2/-4/-2`, and
+`edge_margin`'s trigger band moves `48/64 → 24/32 → 48/64`. Both validate the geometry the game
+computes; the OS-input "feel" leg is not measured (needs `SendInput`). Only `scroll_speed=16 +
+drag_divisor=4` are staged live.
 
 Tool: `re/tools/pe_patch.py`. Target: `Apps\SIMSPR.DLL`.
 
@@ -128,16 +130,34 @@ does not fit a signed `imm8`.
 > and right-drag still pans, the game is running and reading input, so "nothing moved" cannot be a
 > frozen client.
 
-### `edge_margin` — the edge-scroll trigger band  ⚠️ never run game-side
+### `edge_margin` — the edge-scroll trigger band  ✅ C3, band change OBSERVED in-game (2026-08-25)
 
-Eight signed `lea` displacements build the edge hit rects `[CONFIRMED @ 0x10043989]`, shipped **64
-horizontal, 48 vertical**. All eight move together so every ± pair stays consistent.
+Eight signed `lea` displacements build the edge hit rects in `FUN_10043989` `[CONFIRMED @ 0x10043989]`,
+shipped **64 horizontal, 48 vertical**. All eight move together so every ± pair stays consistent.
 
 ```
 py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --recipe edge_margin=32,24 --out SIMSPR.DLL.edge
 ```
 
 Range is 1..127 per axis (signed `imm8`).
+
+> **Observed in a running game — 2026-08-25.** `FUN_10043989(view)` is a **pure computation** (reads
+> view bounds `+0xd8/+0xdc/+0xe0/+0xe4`, writes 8 rect fields `+0x178..+0x1c4` as `base ± margin`, no
+> vtable call, no camera side-effect), so the harness `edgetest` calls it directly and reads back the
+> band — transport-independent, the same trick that measured `drag_divisor`. A within-process A/B/A on
+> the live Europolis city view:
+>
+> | live edge imm8 | rect displacements (V+, H+, V-, H-) |
+> |---|---|
+> | `48,64,…` shipped | `+48, +64, -48, -64` |
+> | `24,32,…` (`setedge:32,24`) | `+24, +32, -24, -32` |
+> | `48,64,…` restored | `+48, +64, -48, -64` |
+>
+> **The trigger band the live game computes tracks the imm8 bytes: 48/64 → 24/32 → 48/64**, all three
+> `edgetest` verdicts PASS (displacement == byte). Confidence **C3**. As with `drag_divisor`, this
+> validates the geometry the game computes, not the OS-input "feel" (mouse actually triggering scroll
+> closer to / farther from the edge), which would need the `SendInput`-class instrument. `edge_margin`
+> is **not staged live** — only `scroll_speed=16 + drag_divisor=4` are.
 
 ### `scroll_zero` / `scroll_default_zero` — discriminators, not mods
 
@@ -205,10 +225,10 @@ you hit it while testing a scroll-speed change, it is not your patch.
 - **No code injection.** Operands change in place; instructions are never added. The one camera knob
   that would need that — the missing `1/sqrt(2)` on diagonal scroll, so diagonal movement is faster
   than straight — is deliberately absent from the recipe table rather than half-supported.
-- `drag_divisor`: **C3, halving observed in-game** (within-process A/B/A, velX `50→25→50`) plus static
-  byte-verified. `edge_margin` is still static-only. The "one patched run each" estimate was wrong for
-  the OS-input "feel" path: the pan routing needs real async button state, so a faithful drag needs
-  `SendInput`, not a bare run — but that leg is optional, the arithmetic effect is already observed.
+- `drag_divisor` and `edge_margin`: both **C3, observed in-game** via within-process A/B/A (velX
+  `50→25→50`; band `48/64→24/32→48/64`) plus static byte-verified. The OS-input "feel" leg is not
+  measured for either: the pan routing needs real async button state, so a faithful gesture needs
+  `SendInput`, not a bare WM post — but that leg is optional, the geometry effect is already observed.
 - Zoom level 4's reachability in-game was never established, so the `z4` slot is untested.
 - The `+0x32c` scroll-gate flag ("dirty-rect queue overflow → force full repaint", set at
   `FUN_1000d725:105`, cleared in `FUN_1000dc17`) is read from the decompilation and not
