@@ -1346,3 +1346,197 @@ has now been closed on every read since run C). `N == 1` candidate on 30/30. `sp
 Install `stock (matches original/)` before and after — the vtable swap is memory-only and touches no
 file on disk. No patch; claim held across both launches, lease per launch by the same owner, both
 released.
+
+---
+
+# Caller census, adaptive design — PRE-REGISTRATION, written before any launch, 2026-08-25
+
+**Stopping rule, declared in advance:**
+
+> **Launch until one launch yields at least one MOVED interval. Maximum four launches. Report every
+> launch, including frozen ones. Stop as soon as a launch churns — the maximum is a ceiling, not a
+> quota.**
+
+Farmsville via `-GamePath`, both `SC3PROBE_CAMWATCH=1` and `SC3PROBE_CAMCALLER=1`, no input, install
+stock, one claim held across all launches with the lease taken per launch by the same owner.
+
+## Cadence, and the disclosed trade
+
+`GZMAXSEQ` is 32, so ~1 s cadence and a 30 s window remain mutually exclusive in one launch. This
+time I am choosing **cadence over reach**, and the reason is in the data rather than in preference:
+**all five onset brackets ever measured fall inside t+6.26 s to t+16.15 s** (6.26-7.42, 6.80-8.00,
+7.82-8.73, 13.46-14.59, 13.51-16.15). A `wait:750` sequence covers roughly **t+5 s to t+20 s**, which
+spans the entire observed onset range, at ~1.0 s intervals — the maximum interval resolution
+available. Naming a caller needs resolution on the transition, not reach past t+20 s where no onset
+has ever been seen. If all four launches freeze, that choice is a candidate explanation and I will
+say so rather than defend it.
+
+## Rows
+
+| row | prediction | what it would mean |
+|---|---|---|
+| **BD** | callers named on a MOVING interval | resolve every return address. `FUN_1000ec0b` (the follow — would **contradict** `+0x354 == 0` on 30/30), `FUN_1001d503` or `FUN_10006736` (the two mapped dispatch sites), or **something unmapped**. The third is what a ~100 Hz call rate implies and is the interesting answer. |
+| **BE** | the same caller on MOVING and still intervals | that caller is not the driver; the driver is whatever differs between the sets |
+| **BF** | **MOVED with `calls=0`** | a second writer path, contradicting the 29/29 separation. **Bigger than the caller question**; report loudly. |
+| **BG** | **ALL FOUR LAUNCHES FROZEN** | the phenomenon did not occur. Its **own outcome**, not a negative about the caller; frozen intervals still served as `still` controls. At `P(frozen) = 5/11` this has **p = 0.0427**, so if it happens it is worth stating that it was unlikely rather than shrugging. |
+| **BH** | crash | the thunk is the first suspect — new code in a hot path |
+
+## The extra measurement, registered now
+
+The driver **starts and stops**, so **the transition is the interesting moment.** If a launch churns:
+record which interval is the **first** to move, and whether the caller set on that interval **differs
+from the later moving intervals**. What *starts* the motion may not be what *sustains* it, and that
+distinction is only visible on the first moving interval.
+
+---
+
+# RESULT — **ROW BG FIRED: all four launches frozen post-load (p = 0.043).** But a caller WAS named, on the load transition — and a suppression signal has appeared that must be cleared first.
+
+Four launches, the full pre-registered ceiling, **none of them churned after the city loaded**. Row BG
+is the outcome. At `P(frozen) = 5/11` that is `p = 0.0427`, so this was unlikely rather than routine
+and I am saying so rather than shrugging.
+
+**But the run is not empty.** Three of the four captured the **city-load transition**, and on that
+interval the caller census fired and named its caller identically in three independent processes.
+
+## My stopping rule was defective, and it is the same defect a third time
+
+I wrote the rule as *"until one launch yields at least one MOVED interval."* **H2 tripped it on
+interval 1 — the city-load transition** (`zoom 0 -> 2`, `-508,-73 -> -160,1604`), which under the
+**corrected churn criterion I myself published in this file after the E runs** is not churn at all.
+
+So the rule I wrote to operationalise "churn" inherited the exact defect I had already found and
+fixed for the churn criterion, and it stopped the sequence at two launches for the wrong reason.
+This is the third instance of the same class of error from me (the twice-omitted all-frozen row, now
+this): **fixing a definition in one place and not carrying it to the place that consumes it.**
+
+**What I did about it, disclosed:** I corrected the detector to *a MOVED interval whose preceding read
+was already post-load (`zoom == 2`)* and continued to the **pre-registered ceiling of four**. I did
+not raise the ceiling, change a row, or alter the fixture. The correction applies a criterion that was
+already published in this document before this run began — it is not a new rule invented after seeing
+data. H3 and H4 were run under the corrected detector and both came back frozen.
+
+## The caller, named — `SIMSPR + 0x674F` = `FUN_10006736 + 0x19`
+
+```
+[ 4740.496 ms] ### CAMC: interval 1  calls=1
+[ 4740.531 ms] ### WIDGET: CAMC iv1 caller x1 [MOVING interval] (return address) 0x0348674F = SIMSPR.DLL + 0x674F  (export VA 0x1000674F)
+```
+
+Identical in **H2, H3 and H4** — three independent processes, same interval, same single call, same
+return address.
+
+`FUN_10006736` spans `0x10006736`-`0x10006751`, **28 bytes**, so `0x1000674F` is `+0x19`, the
+instruction after its one `call` [CONFIRMED @ 0x1000674f]. Its entire body:
+
+```c
+void __thiscall FUN_10006736(int *param_1,int param_2,int param_3,undefined4 param_4)
+{
+  (**(code **)(*param_1 + 0x2c))(param_2 - param_1[0x15],param_3 - param_1[0x16],param_4);
+  return;
+}
+```
+
+**`param_1[0x15]` is `+0x54` and `param_1[0x16]` is `+0x58` — exactly the origin x/y the watchpoint
+watches.** So `FUN_10006736` takes an **absolute** target, subtracts the current origin to make a
+**relative delta**, and dispatches to `vt+0x2c` [CONFIRMED @ 0x10006736]. That is
+**`ScrollTo(absolute)` implemented on top of `Scroll(relative)`**, and it is one of the two **mapped**
+dispatch sites — **not** the unmapped answer the ~100 Hz rate suggested, and **not** `FUN_1000ec0b`.
+
+`FUN_10006736` has **zero code xrefs** in the SIMSPR export (only its `symbols.csv` row), so like
+`FUN_10006226` it is reached solely through a vtable slot.
+
+**`[UNCERTAIN]` which slot.** The recorded follow path is `vt+0x148` -> `FUN_1000ec0b` -> `vt+0x30`
+**ScrollTo**, and `FUN_10006736` has exactly the ScrollTo shape — so **`vt+0x30 == FUN_10006736` is a
+hypothesis consistent with both facts, not a measurement.** The export contains no data dump of
+`PTR_FUN_1006250c` and I did not read the slot at runtime. **If it is confirmed, it matters a lot:**
+the load-time motion would be going through *the same final dispatch the follow path uses*, while
+`+0x354 == 0` rules out `FUN_1000ec0b` as the caller — meaning something else calls ScrollTo. One more
+expect-or-refuse swap, on `.rdata SIMSPR+0x6253c`, both confirms the slot and names ScrollTo's caller.
+
+## The two instruments corroborate at single-event resolution
+
+On every load-transition interval: `calls=1`, and **exactly one** store at `SIMSPR+0x62AF` (the
+translate) plus one at `SIMSPR+0x68C9` (`SetZoom`, which does not route through `vt+0x2c`).
+
+**One call in, one translate-store out — three times, in three processes.** The F-run separation was
+statistical over 29 intervals; this is exact at n=1 per event. Row BF had no opportunity to fire and
+nothing contradicts the 29/29 separation.
+
+## The interval tables
+
+**H1** — armed t+4.97 s, baseline already post-load `-160,1604`: intervals 1-14, t+5.91 s to
+t+18.65 s, **all `still`, all `writes=0`, all `calls=0`**. No load transition captured.
+
+**H2 / H3 / H4** — baseline `-508,-73` (`zoom=0 tilepx=8`, pre-city):
+
+| iv | class | dx | dy | writes | calls | caller |
+|---|---|---|---|---|---|---|
+| 1 | MOVED (**city load**) | +348 | +1677 | 2 (`+0x62AF`, `+0x68C9`) | **1** | **`SIMSPR+0x674F`** |
+| 2-15 | **still** | +0 | +0 | **0** | **0** | — |
+
+H2 t+4.74-18.53 s, H3 t+5.03-18.89 s, H4 t+5.26-18.82 s. Post-load origin `-160,1604` on every
+subsequent read in all three.
+
+## ⭐ A suppression signal on CAMCALLER, and this one does not look like noise
+
+| | launches | churn | frozen |
+|---|---|---|---|
+| before CAMCALLER existed | 11 | 6 | 5 |
+| **with CAMCALLER armed** | **6** (G1, G2, H1-H4) | **0** | **6** |
+
+Six consecutive frozen launches with the caller census armed. Under the pre-CAMCALLER rate
+`P(churn) = 6/11 = 0.545`, six frozen in a row is **p = 0.45^6 = 0.0083**. I raised the mirror-image
+concern about CAMWATCH on one sample and it was cleared by E2 and F1; **this is six samples and it is
+an order of magnitude stronger than the signal I flagged then.** It has to be cleared before any
+caller result is built on.
+
+**Against a mechanism:** I inspected the thunk before the run and it is correct — `pushad`/`pushfd`
+save all GP registers and flags, `[esp+36]` = 32+4 is the right return-address slot, `camc_record` is
+`__cdecl` with a matching `add esp,4`, `__thiscall`'s `ecx` survives `pushad`/`popad`, and the `jmp`
+leaves the caller's return address in place. And it demonstrably works: it recorded the load-time call
+correctly in three processes.
+
+**A competing explanation that needs excluding, and it is not the instrument.** Load times have drifted
+**shorter** across the day as the file cache warmed: baselines were t+5.0-5.8 s in the F and G runs and
+t+3.79-4.27 s in H2-H4. If the churn is a load-related transient, faster loads plausibly mean less of
+it inside the sampling window. **CAMCALLER's arrival and the warm cache are confounded with each
+other**, because every CAMCALLER launch came later in the day than every non-CAMCALLER launch.
+
+**So the clean test is not a batch of unset launches — that would repeat the confound with time.**
+It is **interleaved**: alternate CAMCALLER-set and CAMCALLER-unset launches within one session,
+pre-registering the alternation and the count, so instrument and elapsed-session-time are crossed
+rather than confounded. That design answers both explanations at once, and nothing else I can think of
+does.
+
+## Validity
+
+0 keys in all four; 25 `Farmsville.sc3` filetrace hits each; **0 exceptions, 0 minidumps** in any
+launch (row BH did not fire); all four sequences `COMPLETE`, all four shots written; expect-or-refuse
+passed in all four (slot held `SIMSPR + 0x6226` each time — now runtime-confirmed in **six** processes).
+`followTarget(+0x354) = 0` on **63/63** reads across these four launches, and on every read since run C.
+`N == 1` on 63/63. `span = 1024x768` on 63/63 reads for both rects = 126 prints, **cumulative 418/418**.
+
+## Which rows fired
+
+| row | status |
+|---|---|
+| BD — callers named on a MOVING interval | **partially** — named on the **load transition** (`FUN_10006736+0x19`, a **mapped** dispatch site, `ScrollTo`), reproduced 3/3. **The churn caller remains unnamed** — no post-load MOVED interval occurred. |
+| BE — same caller on moving and still | **no** — no still interval had any calls |
+| BF — MOVED with `calls=0` | **no** — no opportunity; the 29/29 separation is untouched |
+| **BG — all four launches frozen** | **FIRED**, `p = 0.0427`. Frozen intervals served as `still` controls throughout. **Not** a negative about the caller. |
+| BH — crash | **no** — 4/4 loaded, 4/4 completed, 0 exceptions |
+
+## Where this leaves it
+
+**Gained:** `ScrollTo` (`FUN_10006736`) is a confirmed caller of the translate, its exact arithmetic
+is known (`target - origin`), single-event instrument corroboration, and a concrete next target
+(`.rdata SIMSPR+0x6253c`).
+
+**Blocked:** the churn has not been observed in **seven** consecutive launches, six of them with
+CAMCALLER armed. **The next run should be the interleaved control, not another caller attempt** — at
+`p = 0.0083` the suppression signal is now the largest uncontrolled variable in this thread, and
+naming a churn caller while it stands would produce a result nobody could trust.
+
+Install `stock (matches original/)` before and after — the vtable swap is memory-only. No patch; one
+claim held across all four launches, lease per launch by the same owner, both released.

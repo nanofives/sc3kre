@@ -4960,3 +4960,88 @@ is a churning launch with `CAMCALLER` armed** — the same shape F1 used to exon
 Reconfirmed: `+0x354 = 0` on 30/30 (closed on every read since run C), `N == 1` on 30/30,
 `span = 1024x768` on 30/30, **cumulative 292/292**. The vtable swap is memory-only, so the on-disk
 install stayed stock by hash throughout.
+
+### §31.14.14 — a caller named, and a suppression signal that outranks it (2026-08-25)
+
+Four launches, the pre-registered ceiling. **All four frozen post-load** (`p = 0.043` at the measured
+base rate) — the all-frozen row, pre-registered this time after being omitted twice.
+
+#### The load-time caller: `SIMSPR + 0x674F` = `FUN_10006736 + 0x19`
+
+Identical in **three independent processes** (H2, H3, H4). `FUN_10006736` is **28 bytes**
+(`0x10006736`–`0x10006751`, verified), so `+0x19` is the instruction after its single `call`. The whole
+body is:
+
+```c
+(**(code **)(*param_1 + 0x2c))(param_2 - param_1[0x15], param_3 - param_1[0x16], param_4);
+```
+
+`param_1[0x15]` = `+0x54` and `param_1[0x16]` = `+0x58` — **exactly the origin fields the watchpoint
+watches.** So it takes an **absolute** target, subtracts the current origin, and dispatches to
+`vt+0x2c`: **`ScrollTo(absolute)` implemented on top of `Scroll(relative)`**
+`[CONFIRMED @ 0x10006736]`.
+
+> **The run report left the slot `[UNCERTAIN]`. It is resolved here from the anchored binary:
+> iso vt `+0x30` → `0x10006736`.** ScrollTo *is* `vt+0x30`, so this is one of the two **mapped**
+> dispatch sites — **not** the unmapped path the ~100 Hz rate implied, and not `FUN_1000ec0b`.
+
+**Why that matters rather than merely tidying a footnote:** load-time motion runs through the *same
+final dispatch the follow path uses* (`vt+0x30` → `vt+0x2c`), while `+0x354 == 0` on 63/63 rules
+`FUN_1000ec0b` out. **So something other than the follow calls ScrollTo.** The next instrument is a
+single expect-or-refuse swap on `.rdata SIMSPR+0x6253c` (= vt `+0x30`, verified), which names that
+caller the same way this run named ScrollTo.
+
+**Instruments corroborated at single-event resolution:** `calls=1` with exactly one store at `+0x62AF`,
+plus one at `+0x68C9` (SetZoom, which does not route through `vt+0x2c`). One call in, one translate
+store out — three times.
+
+**The CHURN caller is still unnamed.** No post-load MOVED interval occurred in any launch.
+
+#### ⚠️ The signal that outranks the caller
+
+| | launches | churn | frozen |
+|---|---:|---:|---:|
+| before `CAMCALLER` existed | 11 | 6 | 5 |
+| **with `CAMCALLER` armed** | **6** | **0** | **6** |
+
+**Six consecutive frozen launches with the caller census armed: `p = 0.4545⁶ = 0.0088`** — verified.
+The same concern was raised about `CAMWATCH` on *one* sample and dismissed; this is six, an order of
+magnitude stronger.
+
+**Against a mechanism:** the thunk is correct (`[esp+36]`, `pushad`/`popad` preserving `ecx` for
+`__thiscall`, the `__cdecl` `add esp,4`, the `jmp` leaving the return address in place) and it
+demonstrably *works* — it recorded the load call in three processes.
+
+**But there is a competing explanation and it is not the instrument.** Load times drifted shorter as
+the file cache warmed: **t+5.0–5.8 s** in the F/G launches, **t+3.79–4.27 s** in H2–H4. If the churn is
+a load-related transient, faster loads leave less of it inside the observation window. **`CAMCALLER`
+and the warm cache are confounded** — every `CAMCALLER` launch came later in the day than every
+non-`CAMCALLER` launch.
+
+#### The clean test is INTERLEAVED, not another batch
+
+A batch of unset launches **repeats the confound with time.** The design that separates them is
+**alternation within one session** — set / unset / set / unset — with the alternation and count
+pre-registered, so instrument and session-time are **crossed rather than confounded**.
+
+**That should run before any further caller work.** At `p = 0.0088` this is the largest uncontrolled
+variable in the thread, and a churn caller named while it stands is a result nobody could trust.
+
+#### The stopping rule was defective — a third instance of the same class
+
+H2 tripped the rule on **interval 1, the city-load transition** (`zoom 0→2`), which the **corrected
+churn criterion published in this file after the E runs** explicitly excludes. The rule was written in
+terms of "MOVED interval" and never had that fix carried over.
+
+Disclosed and corrected mid-run: the detector became *a MOVED interval whose preceding read was already
+post-load (`zoom == 2`)*, and the run continued to the pre-registered ceiling. **The ceiling was not
+raised, no row was changed, the fixture was untouched, and the criterion applied had been published
+before the run began.** H3 and H4 ran under the corrected detector; both frozen.
+
+The pattern worth naming: **three separate criteria in this thread have been written without carrying
+over a fix already made elsewhere in the same document.** The churn criterion, the stopping rule, and
+the all-frozen row. Each was caught by the person who wrote it, which is the good half.
+
+Validity: 0 keys, 25 filetrace hits per launch, **0 exceptions in any launch**, 4/4 COMPLETE,
+expect-or-refuse passed in all four — `SIMSPR + 0x6226` now runtime-confirmed in **six** processes.
+`followTarget = 0` on 63/63. `N == 1` on 63/63. `span = 1024x768` **cumulative 418/418**.
