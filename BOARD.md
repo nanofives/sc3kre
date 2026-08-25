@@ -403,6 +403,31 @@ work. **The live install now perturbs BOTH the step bank AND the drag divisor**,
 taken against it would read `-4` as if it were shipped. **Any subsequent camera measurement must
 restore shipped SIMSPR first.** `U-082`'s record is unaffected (it closed before this was staged).
 
+## ⚠️ STANDING RULE — the owner's SIMSPR build must be live when you finish
+
+The owner's standing install state is a **two-recipe** `Apps\SIMSPR.DLL`: `scroll_speed=16` **and**
+`drag_divisor=4` (half-speed keys, edge-scroll **and** right-drag).
+
+**Any session that touches `SIMSPR.DLL` must restore that build as its LAST action, and verify it.**
+Not usually — every time. Sessions legitimately restore shipped SIMSPR to take a measurement (it
+carries the camera, the iso view and the sprite paths, so it is never neutral), and on 2026-08-25 that
+left the install stock **three separate times** with no run in flight. **The failure mode is silent:**
+the owner launches the game expecting a slow camera, gets a fast one, and nothing in any log explains
+it.
+
+```powershell
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL.shipped --recipe scroll_speed=16 --recipe drag_divisor=4 --out SIMSPR.DLL.slow16drag4
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL.shipped --diff SIMSPR.DLL.slow16drag4   # gate: 7 runs / 12 bytes
+Copy-Item SIMSPR.DLL.slow16drag4 Apps\SIMSPR.DLL -Force
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --read 0x10067690:f32 -n 5   # expect 16.0 x5
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --read 0x10043a5e:hex -n 1   # expect fc
+```
+
+Both recipes pin the shipped SHA, so they must be applied **to `SIMSPR.DLL.shipped` in one
+invocation** — neither will anchor against an already-patched module. The 7-runs/12-bytes gate is five
+2-byte step-slot runs plus two non-adjacent 1-byte drag runs; **a different count means stop, not
+stage.** `Copy-Item Apps\SIMSPR.DLL.shipped Apps\SIMSPR.DLL -Force` still undoes both.
+
 ## Cross-cutting debt
 
 Ordered by how much damage it can do silently.
