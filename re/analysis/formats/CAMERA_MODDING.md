@@ -137,14 +137,26 @@ a method rule in `verify/tunable_mod_test`.
 
 ## ⚠️ A shipped bug you may hit while testing this: the camera is not clamped
 
-Filed as **`U-082`**. Measured on a shipped, unpatched build: the origin scrolled to `-913,-483`,
-**outside the valid `0..48896` extent for that map**, with nothing stopping it. The owner reports the
-camera **works and then stops responding after moving around for a while**, which is the shape you
-would expect if scrolling walks the origin off the map.
+Filed as **`U-082`**, and ⚠️ **the clamp explanation below was investigated and does NOT hold — read
+the correction.**
 
-**This is not caused by any patch on this page** — it was observed with SIMSPR untouched. But if you
-are testing a scroll-speed change by moving a long way, expect to meet it, and do not read it as your
-patch misbehaving. A *faster* camera will reach the edge sooner; a *slower* one later.
+The camera *can* sit outside the valid extent: measured at origin `-1088` on a 192 map whose range is
+`0..48896`, with the whole viewport left of world x = -64. **But the view renders fine there** — the
+frame shows the map edge, the terrain cross-section as a cliff and off-map void, with all UI correct.
+So "the camera leaves the map, therefore the view dies" is **contradicted by measurement.**
+
+Worse for the tidy story: on that run the origin was **already out of range before any input**
+(`-722` at load), and the load-time camera turned out to be **non-deterministic** — the same save
+loaded at `1356,266` in one run and `-722,1817` in another. So the earlier "it scrolled off the map"
+reading may have been two different load positions rather than scrolling.
+
+**What is still real:** the owner reports the camera works and then stops responding after moving
+around a while, and a run did show **7 consecutive input taps moving nothing** — though it recovered
+on the 8th, so it is intermittent, not terminal. Two taps also moved the camera the **wrong way**,
+which no clamp explains.
+
+**None of this is caused by any patch on this page** — it was all observed with SIMSPR untouched. If
+you hit it while testing a scroll-speed change, it is not your patch.
 
 ## Limits, stated
 
