@@ -135,7 +135,7 @@ need unpause solved too, so it is the highest-leverage item on this board. (3) A
 Stride/corner measurement is deferred as cosmetic (~8 runs).
 Session CLOSED. Anyone may pick it up.
 
-### 2. Resizable window / arbitrary resolution — BLOCKED, only open session
+### 2. Resizable window / arbitrary resolution — black-vs-garbage RESOLVED 2026-08-25 (U-068 = "renders but does not blit"; see the run-4 subsection below)
 `U-068`: display lists stay empty after a resize Init. Root cause established 2026-08-23 by two
 independent angles — Init sizes and zeroes grid B, only object registration fills it, and Init's only
 route early-outs on a zero-equality guard. **The fix is to re-drive registration, not to repair the
@@ -226,6 +226,30 @@ have been uninterpretable. Match on the object pointer, keep dims as a secondary
 
 **Stage 1 validated live:** `dest_iso+0x4ec` verified as the `+0x1F328` subclass through the identical
 bracket, no crash and no refusal — the byte-verified interface identity holds in a running game.
+
+### ⭐⭐⭐ U-068 CLOSED: "renders but does not blit" — 2026-08-25, run 4 (probe `963b8105…`)
+Run 4 added a per-blit **live re-snapshot** (closing the mid-window-recreate escape) and a **raw
+`sub+0xf0` census** (content, read RAW per the rule above). Two results, one of them nearly a
+self-inflicted false conclusion:
+
+- **Rasterisation is PROVEN GOOD at the new size.** The post-resize render target holds
+  **1,310,342 / 1,310,720 px non-zero (99%, not uniform)** at 1280x1024, read raw from `sub+0xf0`. The
+  control raw census equals the blit-source census to the pixel (786,233 both), so the method is sound.
+  **A U-068 fix must NOT look at rasterisation.**
+- **The conclusion needs no match counter.** Black screen (§31.12) + a 99% image in the render target
+  are two independent measurements that **force "renders but does not blit"**. This over-determines the
+  result, which is why no confirming re-run was spent.
+- ⚠️ **A counter bug produced a FALSE `HEADLINE REFUTED` line, caught by an internal cross-check.**
+  `g_u068src_livematch` was not reset per window, so it accumulated the control window's matches into
+  the post-resize verdict. The census (gated on the correctly-reset `dumped`) **never fired in the
+  post-resize window**, which proves **zero** post-resize matches — the `36` was carry-over. **Fixed**
+  (probe `963b8105…`); any pre-fix `U068SRC` verdict line is unreliable.
+
+**Verdict: `U-068` is no longer "the display list is empty". It is a named, localised defect — the iso
+view renders a full frame into its render target and never blits it to the frame buffer.** Fix target:
+the **missing render-target blit**, downstream of rasterisation (proven good) and the display list
+(proven good). Both adjacent possibilities are positively excluded. Full record + handoff:
+`STATUS_resize.md`.
 
 ⚠️ **Two caveats on record, both from the run itself.** The post-resize sub pointer was snapshotted at
 window open, so a mid-window recreate could dodge a stale snapshot (mitigated but not closed: the
