@@ -84,7 +84,7 @@ RE done, tool exists outside a test harness, validated in the running game.
 | **Tunables** (any `SYS.PAK` INI value) | `syspak_mod.py` | `formats/SYSPAK.md` | `U-051` credits discriminator, 1 run, cosmetic closure only |
 | **Sprites / asset art** (recolour and author from PNG) | `sprite_patch.py` | `formats/SPRITE_MODDING.md` | `-filetrace` is blind to `Apps\Res\Sprites\`, so sprite runs have no file-access gate |
 | **City saves** (zone raster, per tile) | `city_write.py` | `formats/CITY_SAVE.md` | tile (28,0) never visually confirmed; the **name-collision load crash** needs writing up for users |
-| **Camera scroll** | `pe_patch.py` | `formats/CAMERA_MODDING.md` | `drag_divisor` / `edge_margin` static-only (**D-002**), zoom-4 reachability (**D-003**) |
+| **Camera scroll + drag** | `pe_patch.py` | `formats/CAMERA_MODDING.md` | `drag_divisor` **C3, halving observed in-game** (velX 50→25→50) and staged live alongside `scroll_speed=16`; `edge_margin` static-only (**D-002**), zoom-4 reachability (**D-003**) |
 | **Network tiling rules** (retune / re-skin an existing network) | `tilingrules.py` | `formats/TILINGRULES_MODDING.md` | T1 met game-side 2026-08-25. One edit of one kind; render-path result, no simulation claim |
 | **Bigger cities** (N > 256, proven at 512) | `patch_citysize.py` + `patch_dirtbuf.py` | `formats/BIGGER_CITIES.md` | ⭐ **engine reads/renders/re-serialises tiles to 495 AND in-game authoring works at 512** (2026-08-25): a tool drag wrote+saved 151 zone tiles at world x=460, so screen→world picking has no stale-256 clamp. Still open: **development** (city loads paused; no unpause command; bare zones have no road/power). `U-081` closed (harness held-key defect, not a 512/camera bug) |
 
@@ -322,32 +322,37 @@ Order:
 | `U-077` | Class behind occupant IID `0x41658d28`; label flag bits `0x400`/`0x4000`. Can sit indefinitely. |
 | `U-063` | ⚠️ **NOT the quick static win this row used to claim — corrected 2026-08-25.** Its zone-writer half is already **resolved at C3**; the residual is the RECT writer `0x10032afa` (SIMRCI `vt+0x38`), and **four prior findings establish that the static "no producer" negative cannot carry a conclusion**: `P(0) = 0.23` is not significant, no caller on `+0x38` is the *expected* state for an unused virtual method, and a byte-level scan already found zero uncarved dispatches in SIMRCI. Grinding it statically re-derives a negative already known not to conclude. The decisive test is a **harness plop-test**, so park it until someone is spending a lease anyway. | parked |
 
-## ⚠️ THE INSTALL IS DELIBERATELY MODIFIED — `SIMSPR.DLL`, slower camera
+## ⚠️ THE INSTALL IS DELIBERATELY MODIFIED — `SIMSPR.DLL`, slower camera (TWO mods now)
 
-**Staged 2026-08-25 at the owner's request.** `Apps\SIMSPR.DLL` carries `scroll_speed=16`: all five
-zoom-step slots read **16.0** where shipped is **32.0**, so the camera scrolls at half speed.
+**Staged 2026-08-25 at the owner's request. As of the drag4 close, this is now TWO mods, not one.**
+`Apps\SIMSPR.DLL` carries **both** `scroll_speed=16` (arrow-key + edge scroll at half speed) **and**
+`drag_divisor=4` (right-drag pan at half sensitivity). Built in one invocation from
+`SIMSPR.DLL.shipped`.
 
-**This means `game_lock.ps1 -Status` now reports `install : MODIFIED -> SIMSPR.DLL`, and that is
+**This means `game_lock.ps1 -Status` reports `install : MODIFIED -> SIMSPR.DLL`, and that is
 EXPECTED, not contamination.** Any session that sees it should read this note before assuming a run
 left debris behind.
 
 | | |
 |---|---|
 | backup | `Apps\SIMSPR.DLL.shipped`, sha256 `eec715009152eec0ce756f74…` |
-| staged | 5 differing runs, **10 bytes**, verified by an independent `--diff` |
-| live values | `0x10067690`–`0x100676a0` all read `16.0` |
+| staged build | `verify/drag_divisor_test/SIMSPR.DLL.slow16drag4`, sha256 `117fa3b1…` |
+| staged | **7 differing runs, 12 bytes**, verified by an independent `--diff` (5×2-byte scroll + 2×1-byte drag) |
+| live values | scroll `0x10067690`–`0x100676a0` all `16.0`; drag imm8 `0x10043a5e`/`0x10043a68` both `fc` (−4) |
 
-**Undo, and do this before any run that needs a stock install:**
+**Undo (removes BOTH mods), and do this before any run that needs a stock install:**
 
 ```powershell
 Copy-Item Apps\SIMSPR.DLL.shipped Apps\SIMSPR.DLL -Force
 py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --read 0x10067690:f32 -n 5   # expect 32.0 x5
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --read 0x10043a5e:hex -n 1   # expect fe (-2)
 ```
 
 ⚠️ **Any measurement taken while this is staged is on a modified SIMSPR** — that is the module carrying
 the camera, the iso view and the sprite paths, so it is not a neutral change for rendering or camera
-work. `U-082`'s record is unaffected (it closed before this was staged), but a future camera run must
-restore first or it is not measuring the shipped game.
+work. **The live install now perturbs BOTH the step bank AND the drag divisor**, so a drag measurement
+taken against it would read `-4` as if it were shipped. **Any subsequent camera measurement must
+restore shipped SIMSPR first.** `U-082`'s record is unaffected (it closed before this was staged).
 
 ## Cross-cutting debt
 
