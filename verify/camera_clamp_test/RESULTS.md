@@ -425,3 +425,197 @@ ask **who calls it with no input**, not what `cam` is pointing at. And it should
 because that is the only window where churn has ever been observed and this run never entered it.
 
 Install verified `stock (matches original/)` before launch and after; no patching at any point.
+
+---
+
+# Follow/track gate run — PRE-REGISTRATION, written before the launch, 2026-08-25
+
+The enumeration run above closed the object-identity question (`N == 1`, row AE) and its `span`
+result reframed the churn as a **rigid translation**, so the question became *who calls the
+translate*. A parallel call-site hunt answered that: `FUN_10006226` has **zero `E8`/`E9` call sites**
+and exactly one dword pointer (`.rdata 0x10062538` = iso vtable `+0x2c`), and one of its two
+dispatch paths carries **no input at all** — the flush/paint tick `vt+0x148` (`FUN_1000dc17`) ->
+`FUN_1000ec0b`, a follow/track re-centre -> `vt+0x30` ScrollTo. The keys/edge/drag branch takes 0
+hits in 16 s of idle city, so it cannot be the input-free mover and this can.
+
+Gate, as corrected: armed iff **`+0x354 != 0` AND `+0x524 == 0`**
+`[CONFIRMED @ 0x1000ec0b: param_1[0xd5] and param_1[0x149]]`. `+0x358` (`param_1[0xd6]`) is a
+**re-entrancy guard, not a gate** — `FUN_10006226:58-59` clears `+0x354` only when `+0x358 == 0`.
+`+0x524` is the `U-068` field. `cam` now prints all three plus, when `+0x354` is non-zero, the
+**tracked rect and its centre**. Probe rebuilt to 245,248 b.
+
+Fixture: `Cities\Farmsville.sc3` again, **and this run must go past t+16.6 s** — the whole point.
+The enumeration run has every stable read at t < 13.5 s and the earlier churn series has every
+churning read at t > 16.6 s, and no run has ever sampled across that boundary. Sixteen `cam` reads,
+no input: eight ~1.4 s apart to cover t+6.6 s to t+17.6 s densely, then seven ~2.9 s apart out to
+t+37 s. No `dump`, so no frame this run — the reads are the measurement and the step budget
+(`GZMAXSEQ` = 32) buys reach instead.
+
+> **PRIMARY PREDICTION: `+0x354` becomes non-zero (or `+0x524` drops to 0) at t ~ 14-17 s, and the
+> churn begins when the follow arms.** Arming time coinciding with churn onset is the mechanism,
+> timed.
+
+**Strongest single check, and it is free:** the log prints the tracked rect's centre. If the origin
+moves **toward** that centre, the follow is demonstrably driving it. Compared on every read.
+
+| row | prediction | what it would mean |
+|---|---|---|
+| **AH** | follow arms at ~ the churn onset | **mechanism CONFIRMED and timed** |
+| **AI** | `+0x354` non-zero from read 1 yet no drift before t+16.6 s | `+0x524` is the discriminator; its trajectory is the report |
+| **AJ** | `+0x354` **zero throughout** while churn happens | **mechanism DEAD**, said plainly |
+| **AK** | no churn at all this run | churn not reproduced; and two runs would then have failed to reproduce it on demand |
+| **AL** | origin moves **away** from the tracked centre | the follow is not the driver even if armed |
+
+Install `stock (matches original/)` at claim time. No patch, one run.
+
+---
+
+# RESULT — **ROW AJ FIRED. `+0x354` is ZERO on all 16 reads. The follow/track mechanism is DEAD.**
+
+The churn reproduced, hard — 13 of 15 transitions moved, mean |dx| 1,317 px — and
+**`followTarget(+0x354)` was `0x00000000` on every single read, from t+4.3 s to t+32.0 s.** The gate
+never armed once. `FOLLOW disarmed (predicts none)` printed 16/16 times.
+
+**Said plainly: `FUN_1000ec0b`'s follow/track re-centre did not move this camera.** It cannot have —
+its own gate requires `+0x354 != 0` `[CONFIRMED @ 0x1000ec0b]` and `+0x354` never left zero while
+the origin travelled thousands of pixels. That was the leading mechanism after the call-site hunt and
+it is now falsified on its own gate, by the field the hunt itself identified. Second hypothesis
+killed by measurement in two runs.
+
+## Every read verbatim, 16 reads, no input (`grep -c GZKEY` = 0), all on game thread `tid 9578`
+
+```
+[ 4295.947 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEEC620  rectA=-508,-73,516,695 span=1024x768  zoom=0 tilepx=8   <== USED
+[ 4296.027 ms] ### CAM: followTarget(+0x354)=0x00000000  gate(+0x524)=35253  guard(+0x358)=0  => FOLLOW disarmed (predicts none)
+[ 5610.604 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEEC620  rectA=-160,1604,864,2372 span=1024x768  zoom=2 tilepx=32   <== USED
+[ 5610.670 ms] ### CAM: followTarget(+0x354)=0x00000000  gate(+0x524)=0  guard(+0x358)=0  => FOLLOW disarmed (predicts none)
+[ 6803.315 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEEC620  rectA=-160,1604,864,2372 span=1024x768  zoom=2 tilepx=32   <== USED
+[ 6803.392 ms] ### CAM: followTarget(+0x354)=0x00000000  gate(+0x524)=0  guard(+0x358)=0  => FOLLOW disarmed (predicts none)
+[ 8000.551 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEEC620  rectA=-160,1721,864,2489 span=1024x768  zoom=2 tilepx=32   <== USED
+[ 8000.626 ms] ### CAM: followTarget(+0x354)=0x00000000  gate(+0x524)=0  guard(+0x358)=0  => FOLLOW disarmed (predicts none)
+[ 9130.179 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEEC620  rectA=257,862,1281,1630 span=1024x768  zoom=2 tilepx=32   <== USED
+[ 9130.243 ms] ### CAM: followTarget(+0x354)=0x00000000  gate(+0x524)=102  guard(+0x358)=0  => FOLLOW disarmed (predicts none)
+[10251.308 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEEC620  rectA=-1845,123,-821,891 span=1024x768  zoom=2 tilepx=32   <== USED
+[10251.380 ms] ### CAM: followTarget(+0x354)=0x00000000  gate(+0x524)=0  guard(+0x358)=0  => FOLLOW disarmed (predicts none)
+[11375.598 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEEC620  rectA=-1881,80,-857,848 span=1024x768  zoom=2 tilepx=32   <== USED
+[11375.670 ms] ### CAM: followTarget(+0x354)=0x00000000  gate(+0x524)=0  guard(+0x358)=0  => FOLLOW disarmed (predicts none)
+[12501.485 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEEC620  rectA=762,-18,1786,750 span=1024x768  zoom=2 tilepx=32   <== USED
+[12501.611 ms] ### CAM: followTarget(+0x354)=0x00000000  gate(+0x524)=147  guard(+0x358)=0  => FOLLOW disarmed (predicts none)
+[13625.930 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEEC620  rectA=-1237,1898,-213,2666 span=1024x768  zoom=2 tilepx=32   <== USED
+[13626.018 ms] ### CAM: followTarget(+0x354)=0x00000000  gate(+0x524)=0  guard(+0x358)=0  => FOLLOW disarmed (predicts none)
+[16251.024 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEEC620  rectA=-331,1557,693,2325 span=1024x768  zoom=2 tilepx=32   <== USED
+[16251.090 ms] ### CAM: followTarget(+0x354)=0x00000000  gate(+0x524)=0  guard(+0x358)=0  => FOLLOW disarmed (predicts none)
+[18875.411 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEEC620  rectA=361,1176,1385,1944 span=1024x768  zoom=2 tilepx=32   <== USED
+[18875.481 ms] ### CAM: followTarget(+0x354)=0x00000000  gate(+0x524)=0  guard(+0x358)=0  => FOLLOW disarmed (predicts none)
+[21500.957 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEEC620  rectA=-951,2172,73,2940 span=1024x768  zoom=2 tilepx=32   <== USED
+[21501.058 ms] ### CAM: followTarget(+0x354)=0x00000000  gate(+0x524)=0  guard(+0x358)=0  => FOLLOW disarmed (predicts none)
+[24125.470 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEEC620  rectA=1993,1212,3017,1980 span=1024x768  zoom=2 tilepx=32   <== USED
+[24125.535 ms] ### CAM: followTarget(+0x354)=0x00000000  gate(+0x524)=0  guard(+0x358)=0  => FOLLOW disarmed (predicts none)
+[26752.118 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEEC620  rectA=-279,924,745,1692 span=1024x768  zoom=2 tilepx=32   <== USED
+[26752.204 ms] ### CAM: followTarget(+0x354)=0x00000000  gate(+0x524)=0  guard(+0x358)=0  => FOLLOW disarmed (predicts none)
+[29375.358 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEEC620  rectA=-247,508,777,1276 span=1024x768  zoom=2 tilepx=32   <== USED
+[29375.419 ms] ### CAM: followTarget(+0x354)=0x00000000  gate(+0x524)=0  guard(+0x358)=0  => FOLLOW disarmed (predicts none)
+[32000.314 ms] ### CAM: candidate 1/1 at cityViewIso+0x158 -> 0x0EEEC620  rectA=1417,1500,2441,2268 span=1024x768  zoom=2 tilepx=32   <== USED
+[32000.378 ms] ### CAM: followTarget(+0x354)=0x00000000  gate(+0x524)=0  guard(+0x358)=0  => FOLLOW disarmed (predicts none)
+```
+
+`rectB == rectA` on all 16. `rot=0`, `presentGate(+0x7c)=0` on reads 2-16 (`=1` on read 1).
+`guard(+0x358)=0` on 16/16 — the re-entrancy guard was never up at sample time either.
+`N == 1` candidate on 16/16, same address `0x0EEEC620`, same `cityViewIso+0x158` — row AE reconfirmed.
+
+## I could not measure the tracked-rect check at all
+
+The "strongest single check" was origin-versus-tracked-centre. **The tracked rect never printed,
+because `+0x354` was zero on every read and the print is conditional on it being non-zero.** There
+was no target to compare against. That is a null, not a negative: row AL is **not evaluable**, and I
+am not substituting a proxy for it.
+
+## The trajectory, and it kills the time-boundary theory too
+
+| # | t (ms) | x | y | dx | x32? | dy | y32? | zoom |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 4296 | -508 | -73 | — | | — | | **0** |
+| 2 | 5611 | -160 | 1604 | +348 | no | +1677 | no | 2 |
+| 3 | 6803 | -160 | 1604 | **0** | — | **0** | — | 2 |
+| 4 | 8001 | -160 | 1721 | 0 | — | +117 | no | 2 |
+| 5 | 9130 | 257 | 862 | +417 | no | -859 | no | 2 |
+| 6 | 10251 | -1845 | 123 | -2102 | no | -739 | no | 2 |
+| 7 | 11376 | -1881 | 80 | -36 | no | -43 | no | 2 |
+| 8 | 12501 | 762 | -18 | +2643 | no | -98 | no | 2 |
+| 9 | 13626 | -1237 | 1898 | -1999 | no | +1916 | no | 2 |
+| 10 | 16251 | -331 | 1557 | +906 | no | -341 | no | 2 |
+| 11 | 18875 | 361 | 1176 | +692 | no | -381 | no | 2 |
+| 12 | 21501 | -951 | 2172 | **-1312** | **yes** | +996 | no | 2 |
+| 13 | 24125 | 1993 | 1212 | **+2944** | **yes** | **-960** | **yes** | 2 |
+| 14 | 26752 | -279 | 924 | **-2272** | **yes** | **-288** | **yes** | 2 |
+| 15 | 29375 | -247 | 508 | **+32** | **yes** | **-416** | **yes** | 2 |
+| 16 | 32000 | 1417 | 1500 | **+1664** | **yes** | **+992** | **yes** | 2 |
+
+**Churn onset is between t+6.80 s and t+8.00 s** — reads 2 and 3 are byte-identical at the same
+`-160,1604` load-time origin (now reproduced a **third** time, so that value is deterministic), and
+read 4 has moved. **That is 6-9 seconds earlier than the predicted t ~ 14-17 s, and earlier than the
+enumeration run's stability window, which held to t+13.46 s.** So the "stable before 13.5 s, churning
+after 16.6 s" boundary that motivated the timing of this run **does not hold**: same fixture, same
+switches, same probe path, and this run was churning at t+8.0 s while the previous one was frozen at
+t+13.5 s. Whatever selects between the two regimes is not elapsed time.
+
+## A structure nobody predicted, and it is the one new lead
+
+**The mover becomes exactly tile-quantised partway through the run and stays that way.**
+Transitions 2-11 (t+5.6 s to t+18.9 s): **0 of 10 are multiples of 32 in x.** Transitions 12-16
+(t+21.5 s to t+32.0 s): **5 of 5 are multiples of 32 in x, and 4 of 5 in y.** From read 12 onward
+`x mod 32 == 9` and `y mod 32 == 28` on every read — the origin is locked to one sub-tile phase and
+only ever moves whole tiles.
+
+That is the **same quantisation split** flagged in addendum 5 (key-driven deltas exact multiples,
+others not), except here both regimes appear in one process with **zero input**, so it cannot be
+input that distinguishes them. Two movers, or one mover with two modes; unresolved either way.
+`[UNCERTAIN]` what changes at t ~ 20 s — nothing else in this log changes there.
+
+## `span` still never varies
+
+**`1024x768` on 32/32 rect prints this run.** Cumulative across the three Farmsville series:
+**76/76.** The rigid-translation reading holds and is now the most robust fact about this field.
+
+## Validity
+
+25 filetrace hits on `Farmsville.sc3` out of 329 filetrace lines; 0 keys dispatched; 16/16 reads on
+one thread, so no read is torn across a game-thread write; `MAP dimensions UNAVAILABLE` 16/16 (the
+occupant bridge was again not captured, so **N is not confirmed from memory** — fixture rests on the
+filetrace). Read 1 at t+4.3 s is a distinct pre-city regime: `zoom=0 tilepx=8`, `presentGate=1`,
+`gate(+0x524)=35253`, origin centre `4,311` at the world origin. Frame written but not analysed:
+`.happy-share/cmsysyj1a0rivn51c47lbyf3l/camfollow_123801.png`.
+
+`gate(+0x524)` was non-zero on 3 of 16 reads (35253, 102, 147) and zero on 13. It is moot for the
+prediction — with `+0x354 == 0` the gate is never reached — but recorded because it is the `U-068`
+field and this is the first per-read trajectory of it on a live idle city.
+
+## Which rows fired
+
+| row | status |
+|---|---|
+| AH — follow arms at ~ the churn onset | **no** — it never armed |
+| AI — `+0x354` non-zero from read 1, no drift before t+16.6 s | **no** — `+0x354` never non-zero |
+| **AJ — `+0x354` zero throughout while churn happens** | **FIRED** |
+| AK — no churn this run | **no** — churn reproduced, 13 of 15 transitions moved |
+| AL — origin moves away from the tracked centre | **not evaluable** — no tracked rect was ever printed |
+
+## Where this leaves the investigation
+
+**Dead, by measurement, in order:** origin off-map ⇒ view dies; soft-clamp toward the map;
+first-match / minimap cell map; and now the `FUN_1000ec0b` follow/track re-centre.
+
+**Standing facts.** One cell map, uniquely identified. Both rects translate rigidly, span invariant
+76/76. The load-time origin `-160,1604` is deterministic across three runs. The churn is real,
+input-free, and its onset varies between runs on the identical fixture (t+8.0 s here, not yet begun
+at t+13.5 s in the previous run).
+
+**The two questions I would put next, in this order.** (1) The `vt+0x148` path was reached through
+`FUN_1000ec0b`; with that branch's own gate proven closed, is there a *third* writer of
+`+0x54..+0x70` that is not `FUN_10006226` at all? The call-site hunt established `FUN_10006226` has
+zero direct call sites and one vtable pointer — it did not establish that `FUN_10006226` is the only
+code that writes those eight dwords. A write watchpoint on `iso+0x54` answers it directly and stops
+this from being another gate-by-gate elimination. (2) What changes at t ~ 20 s to make the motion
+tile-quantised, given no input and no other logged transition there.
+
+Install `stock (matches original/)` before and after; no patch, one run, both locks released.

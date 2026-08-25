@@ -4611,3 +4611,51 @@ under either), but **"far outside `0..48896`" is the wrong scale and must not be
   329 filetrace lines opening `Farmsville.sc3` and the status bar in the frame.
 - One jump did occur, at t+14.59 s: `dx=+1936, dy=-395`, neither a multiple of 32. `SHOT #1` completed
   at t+14.03 s, between the last stable read and the jumped one — **correlation only, no causal claim.**
+
+### §31.14.9 — follow/track falsified, and the quantisation lead (second run, 2026-08-25)
+
+**`FUN_1000ec0b` is not the mover.** `followTarget(+0x354)` read `0x00000000` on **all 16 reads**
+(t+4.3 s to t+32.0 s) while the churn reproduced hard — 13 of 15 transitions moved, mean |dx| 1,317 px.
+Its gate requires `+0x354 != 0` `[CONFIRMED @ 0x1000ec0b]`, so it cannot have moved this camera. The
+tracked-rect check — the one called strongest going in — was **not evaluable**, because its print is
+conditional on the field that stayed zero, and no proxy was substituted for it.
+
+**The timing prediction that justified the run is also dead.** Churn onset was **t+8.0 s** (reads 2–3
+byte-identical, read 4 moved), 6–9 s earlier than predicted and earlier than the previous run's
+stability window, which held to t+13.5 s — same fixture, same switches, same probe path.
+**So whatever selects between the frozen and churning regimes is not elapsed time.**
+
+#### The lead nobody predicted: a fixed sub-tile phase lock
+
+The mover becomes **exactly tile-quantised partway through and stays that way.**
+
+| reads | x deltas that are multiples of 32 | x phase (mod 32) |
+|---|---|---|
+| 2–11 | **0 of 10** | varies: 0, 0, 0, 1, 11, 7, 26, 11, 21 |
+| **11 onward** | — | **x = 9 on 6/6 reads** |
+| **12 onward** | — | **y = 28 on 5/5 reads** |
+
+**The two axes lock one read apart** — x at t+18.9 s, y at t+21.5 s. That detail was verified here from
+the raw values; the run report had them as simultaneous. So the quantisation split first seen *across
+two runs* also happens **twice inside one process with zero input**, and input cannot be what
+distinguishes the two modes. `[UNCERTAIN]` what changes at t ~ 19–21 s; nothing else in the log
+transitions there.
+
+#### Two facts that got stronger
+
+- **`span` = `1024x768` on 76/76 rect prints across three series, `rectB == rectA` throughout.**
+  Rigid translation is now the most robust fact about this field.
+- **The load origin is deterministic:** `-160,1604` reproduced a **third** time. The earlier
+  "load-camera non-determinism" claim is **retracted** — those readings were samples taken inside the
+  churning regime, not different load positions.
+
+#### Method point, and it is the reason to stop guessing one gate at a time
+
+**Five mechanisms have now been killed, each on its own gate:** off-map-kills-view, soft clamp /
+pull-back, minimap cell map (first-match), repaint-driven tick count, and follow/track. Each cost a
+run. Each was a plausible reading of real data.
+
+The call-site hunt proved `FUN_10006226` has one vtable pointer and no direct call sites. **It did not
+prove `FUN_10006226` is the only code that writes `iso+0x54..+0x70`.** A **write watchpoint on
+`iso+0x54`** names the writer directly instead of eliminating candidates — and candidate elimination
+has now lost five times in a row here.
