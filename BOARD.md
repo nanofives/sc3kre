@@ -331,6 +331,33 @@ Ordered by how much damage it can do silently.
    does not. **Never bulk-overwrite rows already at C2+** — they were written by someone who read the
    function, and a fresh report is not automatically better (`NETWORK_RULE_ENGINE.md` §12.7).
 
+## Camera thread — `U-082`, six runs deep, mechanism still open
+
+**Your slower camera is DONE and unstaged:** `verify/scroll_patch_test/SIMSPR.DLL.slow16`, verified as
+exactly 10 bytes across the five step slots. `scroll_speed=16` = half the shipped `32.0`.
+
+**The bug is real and unexplained.** Five mechanisms have been falsified one gate at a time:
+off-map-kills-view, soft clamp / pull-back, minimap cell map (first-match), repaint-driven tick count,
+and follow/track (`+0x354` read zero on 16/16 reads while the churn ran). Each cost a run. Two of the
+five were mine.
+
+**Robust facts:** `span = 1024x768` on **76/76** rect prints with `rectB == rectA`, so this is a
+**rigid translation**, not corruption · the load origin is **deterministic** (`-160,1604` three times) ·
+`FUN_10006226` has **zero call sites** and exactly one vtable dword (`.rdata 0x10062538`) · the
+frozen-vs-churning regime is **not** selected by elapsed time · a **fixed sub-tile phase lock** appears
+mid-process with zero input (x ≡ 9, y ≡ 28 mod 32, axes locking one read apart).
+
+**Built and ready, never run: a hardware write watchpoint** (`SC3PROBE_CAMWATCH=1`, probe 246,272 b).
+DR0 on `iso+0x54`, `DR7 = 0x000D0001` (write, 4 bytes, verified bit by bit), a vectored handler
+recording faulting EIPs into a bounded table, resolved to `MODULE + offset`. **It names the writer
+instead of eliminating candidates** — which is the point, because candidate elimination has lost five
+times in a row.
+
+Two limits are printed in its own arm line so they cannot be missed: data breakpoints are **per
+thread**, so **zero hits is ambiguous**; and the reported EIP is the instruction **after** the store.
+
+**Also still open:** whatever flips the quantisation at t ≈ 19–21 s.
+
 ## Publish hygiene — `github.com/nanofives/sc3kre` is PUBLIC
 
 Tools and notes only. **Never** game assets or decompiled output.
