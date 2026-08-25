@@ -22,7 +22,7 @@ one-session-one-STATUS-file rule.
 | ~~1~~ | ✅ **Camera movement speed — CLOSED 2026-08-25** | `cmt96p4rv…` (archived) | `STATUS_camera.md` | `drag_divisor` **and** `edge_margin` both taken from "derived, never run" to **C3 observed**; combined build staged live |
 | 2 | **New road types** | `cmt96pjiy…` | `STATUS_roadtypes.md` | the **constructive** rung (T1 was destructive) |
 | 3 | **Bigger cities** | `cmt96q1v4…` | `STATUS_bigcities.md` | in-game authoring at 512 |
-| 4 | **Resizable window** | `cmt96qpp9…` | `STATUS_resize.md` | **implement** the approved surface-dump redesign |
+| ~~4~~ | ✅ **Resizable window — CLOSED 2026-08-25** | `cmt96qpp9…` (archived) | `STATUS_resize.md` | `U-068` taken from "the display list is empty" to **"renders but does not blit"**, both adjacent causes positively excluded |
 
 > ⚠️ **Stopping a fleet mid-flight leaves orphans — measured, not predicted.** The `claude3` stop left
 > the game lease **HELD** by `bigcities` with a **triple-patched install** (`SIMDIRT` + `SIMUI` +
