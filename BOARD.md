@@ -8,6 +8,25 @@ this file is the live board. Opened 2026-08-24.
 `DEFERRED.md`, open questions in `UNCERTAINTIES.md`, per-session state in `re/sessions/STATUS_*.md`.
 This file points at them and does not restate them.
 
+## ⭐ The live fleet — four child sessions, spawned 2026-08-25
+
+Owner's call: pursue all four in parallel child sessions, steered from here. Each owns its STATUS file
+exclusively and makes integration commits **by path**.
+
+| prio | workstream | session id | owns | first task |
+|---:|---|---|---|---|
+| 1 | **Camera movement speed** | `cmt95zqdq…` | `STATUS_camera.md` | `drag_divisor` game-side — the path `scroll_speed` does **not** touch |
+| 2 | **New road types** | `cmt960ayr…` | `STATUS_roadtypes.md` | the **constructive** rung (T1 was destructive) |
+| 3 | **Bigger cities** | `cmt960qc8…` | `STATUS_bigcities.md` | in-game authoring at 512 |
+| 4 | **Resizable window** | `cmt96143s…` | `STATUS_resize.md` | safe redesign of the surface dump (desk work) |
+
+**The priority column is the game-lease order**, because runs are serial and four sessions can queue on
+one install. Each was told to do its desk work first and take the lease only with a run pre-registered.
+
+`re/harness/` is gitignored, so **`harness_claim.ps1` is the only collision protection** between these
+four on `sc3probe.c` and `build.ps1`. A locked `bin/sc3probe.dll` means it is injected in a live
+process — wait, do not kill it.
+
 ## How to run a workstream from here
 
 One session per workstream. That session owns its `re/sessions/STATUS_<name>.md` exclusively, writes
@@ -340,8 +359,16 @@ Ordered by how much damage it can do silently.
    deterministic** (an identical relaunch ran clean for 75 s) and **not a regression** (the previous
    build ran `-filetrace` for a full 75 s). `[UNCERTAIN]` the exact function — there is no `.map` or
    `.pdb`, and rebuilding to get one would have replaced the binary under test.
-4. **`capture.ps1` does not take the game lease itself.** Until it does, wrap every call in
-   `game_lock.ps1 -Acquire -Wait -Owner … / -Release`.
+4. ~~**`capture.ps1` does not take the game lease itself.**~~ ✅ **STALE — corrected 2026-08-25 by
+   reading the file.** It **does** acquire the lease (line 71) and release it in a `finally` (line 202).
+   Do **not** wrap calls in an outer `game_lock.ps1 -Acquire`; that self-deadlocks or orphans a lease.
+
+   ⚠️ **The real residual is the opposite failure:** if the shell running `capture.ps1` is killed
+   rather than exiting, the `finally` never runs and **the lease is orphaned**. Observed 2026-08-25
+   when the owning session ended mid-capture — lease still `HELD` by `capture-slowcam`, `game up : no`.
+   Release with `-Release -Owner <name>`; if the install is deliberately modified the lock **refuses**
+   and you must pass `-DirtyOk -Note '<why>'`, which is audited. Check `-Status` before assuming a
+   sibling session is really running.
 5. **Build→run probe-DLL swap.** `build.ps1` will relink the shared `sc3probe.dll` out from under a
    live session. Either add a per-session `-Out` name or make `build.ps1` refuse without the claim.
    Deferred by decision in `COORDINATION.md`; do it while the harness is quiet.
