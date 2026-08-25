@@ -195,11 +195,50 @@ Two structural findings, which is what the lease actually bought:
    ⭐ **Now mechanically explained.** `vf1a8` = `*(*(this+0x44)+0xf0)` and `vf1ac` =
    `*(*(this+0x44)+0xf4)`, with `vf1c` delegating the lock to `sub->vt[+0xc]`
    `[CONFIRMED @ 0x1001575d / 0x10015767 / 0x10014649]`. Because `vf1a8` dereferences `this+0x44`
-   **before** `+0xf0`, a null sub-object would fault — it did not. **So the sub-object exists but
-   carries no backing memory at heartbeat.** The pixels are backed **only inside the engine's own lock
-   bracket**, which is why every out-of-band sample reads empty.
+   **before** `+0xf0`, a null sub-object would fault — it did not. **So the sub-object exists.**
 
-**Next, pre-registered in two stages (`STATUS_resize.md`):** **Stage 1** — relax the gate to accept
+   ⛔ **REFUTED IN-GAME 2026-08-25, and the refuted half is mine.** I wrote here that "the pixels are
+   backed only inside the engine's own lock bracket". **False.** A raw read of the same object
+   microseconds apart gives `bits(sub+0xf0) = 0x1110C028`, `pitch = 2560` — a real pointer and the
+   **exact** 1280 × 16bpp / 8 stride — while the `vf1a8`/`vf1ac` *calls* return `0x28` / `0`.
+   **The bits were always present; the out-of-band `vf1c(0x40)` lock was tearing the backing down.**
+   The instrument was destroying the thing it measured.
+
+   **Rule that falls out: read `sub+0xf0` / `sub+0xf4` RAW. Never call `vf1c` out of band.**
+
+### ⭐⭐ BLACK-VS-GARBAGE IS SETTLED — and it is NEITHER. The iso target is never blitted.
+**2026-08-25, run 3, fix OFF, Europolis, stock SIMSPR, resized 1024→1280 at t+22.**
+
+| | result |
+|---|---|
+| **control, pre-resize** | the iso view's `sub(+0x44)` **matched a blit source by pointer** within 8 blits, and censused **786,233 / 786,432 px non-zero (99%), not uniform** — a full Europolis image |
+| **post-resize** | **1,500 blits, ZERO matched** the render target or its sub. 19 distinct sources, none of them the render target |
+
+**The pre-registered third outcome fired: the iso view is not blitting its render target.** The screen
+is black not because the target is black and not because it is garbage — it is created at the new
+size, it holds a live backing surface, and pre-resize its sub is a proven source of a full image —
+but **post-resize it never reaches the composite**. The defect is a **missing or misdirected iso
+blit**, downstream of both rasterisation and the display list, each already shown working.
+
+**Pointer identity is what made this decidable.** Post-resize every surface is 1280x1024, so a
+dims-based filter could not have separated "not blitting" from "not recognised", and a null would
+have been uninterpretable. Match on the object pointer, keep dims as a secondary witness.
+
+**Stage 1 validated live:** `dest_iso+0x4ec` verified as the `+0x1F328` subclass through the identical
+bracket, no crash and no refusal — the byte-verified interface identity holds in a running game.
+
+⚠️ **Two caveats on record, both from the run itself.** The post-resize sub pointer was snapshotted at
+window open, so a mid-window recreate could dodge a stale snapshot (mitigated but not closed: the
+pre-resize snapshot matched within 8 blits, and the more stable render-target *object* never matched
+either). And **post-resize render-target content is still uncensused** — Stage 2 cannot census what
+never blits. Moot for the screen, but it decides whether rasterisation *also* fails or only the blit
+does, which changes what a fix must repair.
+
+**Cost named by the run:** two launches produced nothing because the control and Stage 2 both ride the
+`0x10018c58` fnlog stub installed by `-gzlog <existing gz_draw.txt table>`, and a nonexistent file was
+passed. No crash; those launches did bank the raw-bits refutation above.
+
+**Superseded plan** (kept for the reasoning): **Stage 1** — relax the gate to accept
 either vtable, dump both objects, log the raw sub-object. Cheap, safe, settles the dest side and
 witnesses both sub-objects. **Stage 2** — sample **inside** the paint bracket, between a `vf1c` and
 its `vf20` on `iso+0x74`. That is the only thing that settles black-vs-garbage; cheapest candidate is
