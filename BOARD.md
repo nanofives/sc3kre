@@ -42,6 +42,7 @@ RE done, tool exists outside a test harness, validated in the running game.
 | **Sprites / asset art** (recolour and author from PNG) | `sprite_patch.py` | `formats/SPRITE_MODDING.md` | `-filetrace` is blind to `Apps\Res\Sprites\`, so sprite runs have no file-access gate |
 | **City saves** (zone raster, per tile) | `city_write.py` | `formats/CITY_SAVE.md` | tile (28,0) never visually confirmed; the **name-collision load crash** needs writing up for users |
 | **Camera scroll** | `pe_patch.py` | `formats/CAMERA_MODDING.md` | `drag_divisor` / `edge_margin` static-only (**D-002**), zoom-4 reachability (**D-003**) |
+| **Network tiling rules** (retune / re-skin an existing network) | `tilingrules.py` | ⚠️ **no procedure doc yet** — `formats/TILINGRULES.md` is the format spec | **T1 MET game-side 2026-08-25.** Needs a `TILINGRULES_MODDING.md` to reach the bar the other four cleared |
 
 > **Correction on record:** `HANDOFF.md` still claims sprite modding has "no RGB565 quantizer and no
 > PNG import". That is **stale** — `sprite_patch.py` has `quantize565()`, `export_png()` and
@@ -93,8 +94,29 @@ Verdict already reached: a 7th network is impossible without patching code (clos
 `*6` stride baked into the piece-matrix addressing, 42 predicate vtables flush with no room for a
 43rd). Retuning and re-skinning an existing network is possible and partly game-proven. The format
 round-trips 68/68 byte-identical.
-**Next:** T1, "an edited tiling rule changes the map" — 2 runs, armed and self-contained in
-`verify/tilingrules_read_test/README.md` §7 including a Step 0 backup.
+### ⭐⭐ T1 IS MET — 2026-08-25, game-side, third attempt
+**"An edited tiling rule changes the map" is now measured.** Replacing `ROAD_GRND_Set.txt` with a
+7-byte `{99999}` made **every road tile vanish** — the corridor from the settlement, the segments
+between farm plots, the roads inside the settlement (houses intact), and the vehicles on them —
+while **the railway drew normally**. That is the discriminator: a different network with its own
+untouched Set file. Not "the map stopped drawing"; one network's tiles disappeared, the one whose
+piece list was replaced.
+
+Controls that hold: status bar character-identical (`Farmsville`, `Pob: 36,172`, `§45,724`,
+`5/16/1904`) so no sim drift; camera identical to the pixel; terrain, trees, fields, farmhouses,
+silos, pylons and their lines all unchanged; **111 `TilingRules` filetrace lines in each run**, the
+loader-ran-identically control. Both frames are `### SHOT #5` at t+63.55 s and t+65.58 s, matched for
+sim time as well as camera. Hash restored and re-verified to `9926948A…1358`.
+
+**Also established:** a 7-byte Set file causes **no crash** — so the allowed-piece list is **not
+validated** and degrades rendering silently. Verdict: §4 row 1, *"Rules are honoured. The surface is
+real and moddable."* Full record: `verify/tilingrules_read_test/RESULTS.md`.
+
+**Ladder complete:** T0 files are read → T1b contents are consumed → T1 contents change what is
+drawn. All measured, none inferred.
+
+**Limits on record:** one edit of one kind to one file; no claim about the *simulation* (this is a
+render-path result); and no claim about `U-068` — these are pre-resize frames.
 
 > ⭐ **The `U-068` dependency is dissolved — but one instrument question survives, and run 1 answers
 > it.** Corrected 2026-08-24 after re-reading §7; the first version of this note overstated.
@@ -209,16 +231,34 @@ Ordered by how much damage it can do silently.
 
    Both manufacture confident wrong answers rather than errors. **Any harness instrument must fail
    loudly**; this is the same class of defect as `+0x524` being read as a symptom (§31.11).
-2. **`capture.ps1` does not take the game lease itself.** Until it does, wrap every call in
+
+   ✅ **The `capture.ps1` half is CLOSED 2026-08-25** — the loud diagnostic found the real defect (a
+   mirror-window re-arm loop, not the latch), the fix is in, and T1 then ran and passed. Verified
+   working in the log: `mirror window OPEN: 4000` at t+3.89 s, one `request arrived … IGNORED` at
+   t+7.17 s (the fix firing), `mirror window closed: 3577 matched, 423 aimed elsewhere` at t+13.49 s.
+   Five dumps per run at ~10 s each. **`gzseq` is still open.**
+
+   `[UNCERTAIN]` the steady **5.6%** `aimed elsewhere` (225/4000, stable across every window in both
+   runs). The latched dest is the dominant destination, not one of several rivals, so it does not
+   affect the T1 result — but what that 5.6% is was not investigated.
+
+2. **Pre-existing `-filetrace` startup race, found 2026-08-25 and NOT introduced by the fixes.** One
+   control run died at **t+117 ms** with `C0000005` at `sc3probe.dll 01:000070BD` on a non-game
+   thread, with **`EAX = 0x00005A4D`** — the `MZ` DOS-header magic, i.e. a PE-header parse while
+   modules are still arriving. Consistent with `ft_hook_all()`'s 100 ms module walk. **Not
+   deterministic** (an identical relaunch ran clean for 75 s) and **not a regression** (the previous
+   build ran `-filetrace` for a full 75 s). `[UNCERTAIN]` the exact function — there is no `.map` or
+   `.pdb`, and rebuilding to get one would have replaced the binary under test.
+3. **`capture.ps1` does not take the game lease itself.** Until it does, wrap every call in
    `game_lock.ps1 -Acquire -Wait -Owner … / -Release`.
-3. **Build→run probe-DLL swap.** `build.ps1` will relink the shared `sc3probe.dll` out from under a
+4. **Build→run probe-DLL swap.** `build.ps1` will relink the shared `sc3probe.dll` out from under a
    live session. Either add a per-session `-Out` name or make `build.ps1` refuse without the claim.
    Deferred by decision in `COORDINATION.md`; do it while the harness is quiet.
-4. **Pre-existing brace bug in the resizable-window harness code, flagged not fixed.** In
+5. **Pre-existing brace bug in the resizable-window harness code, flagged not fixed.** In
    `rz_iso_resize`, `if (redraw != simspr + 0xb4b3) ... else` has no braces, so `FUN_1000b4b3` is
    called even when the vtable check fails. Benign so far. It is that session's code and its call.
-5. **`STUBS.md` is still an empty template.** `DEFERRED.md` was too until 2026-08-24.
-6. **Writing `functions.csv` safely — two rules learned the hard way 2026-08-24.** The file is
+6. **`STUBS.md` is still an empty template.** `DEFERRED.md` was too until 2026-08-24.
+7. **Writing `functions.csv` safely — two rules learned the hard way 2026-08-24.** The file is
    **fully quoted**, so a writer must use `QUOTE_ALL`; a default `csv.writer` re-quotes every field
    and flattens the 61 bare LFs inside quoted `notes`, which turns a 23-row edit into a
    **50,668-line diff**. And records must be matched on the **parsed** `(module, rva)` pair, never a

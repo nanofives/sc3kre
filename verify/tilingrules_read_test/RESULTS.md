@@ -592,3 +592,152 @@ would have made this visible on the *first* attempt rather than the third.
 defect rather than on `U-068`, which is a smaller and fully specified problem.
 
 §4's outcome table remains frozen and remains unreached.
+
+---
+
+# T1 RAN, 2026-08-25. ROW 1 OF §4: the roads disappear. Tiling rules are honoured.
+
+**Verdict: §4's T1 table, row 1 — "Visible tiling change or load failure → Rules are honoured. The
+surface is real and moddable."** Breaking `ROAD_GRND_Set.txt` to `{99999}` removes the road tiles
+from the rendered map. The city still loads and does not crash.
+
+This is the first behaviour change this project has driven from a plain-text game file.
+
+## Game content: restored and verified
+
+| moment | `ROAD_GRND_Set.txt` | size | file count |
+|---|---|---|---|
+| backup, checked before editing | `9926948A…1358` | — | 68 |
+| live, before edit | `9926948A…1358` | — | 68 |
+| live, edited | `53A808D3…80AD` | 7 b | 68 |
+| live, after restore | **`9926948A…1358`** | — | 68 |
+
+The restore ran in a `finally`, so it would have executed on a failed or aborted run too. `Cities\`
+still holds **15** `.sc3`. Install `stock (matches original/)`, claim and lease released.
+
+## The re-arm fix works, and its own diagnostics prove it
+
+The first control attempt of the day **crashed the game at t+117 ms** — see the next section. The
+repeat succeeded, and the `SHOT>` sequence is the predicted shape, verbatim:
+
+```
+[ 1698.870 ms] SHOT> g_fb READY 1024x768 from latched dest 0x0BFA0130
+[ 3889.794 ms] SHOT> mirror window OPEN: 4000 blits to mirror (1024x768)
+[ 7172.500 ms] SHOT> request arrived with 2563 blits still to mirror - IGNORED. (Restarting the window here is the defect that made -shot never dump.)
+[13494.959 ms] SHOT> mirror window closed: 3577 matched, 423 aimed elsewhere (latched dest=0x0BFA0130)
+[13499.885 ms] ### SHOT #1: 1024x768 reconstructed composite -> shot_01.bmp
+```
+
+**The `IGNORED` line is the fix firing.** Under the old code that request would have reset the
+countdown to 4,000 and the window would never have closed. It arrived once per window and was
+dropped, and the window closed **9.6 s after opening** — against the predicted t+12-13 s close, and
+consistent with the ~391-416 blits/s measured last attempt.
+
+Five dumps per run thereafter, steady at ~10 s per window. Both frames are `### SHOT #5`, at
+t+63.55 s and t+65.58 s, so they are matched for elapsed sim time as well as camera.
+
+**`aimed elsewhere` is SMALL, and that is worth stating since you asked either way:**
+`225 / 4000 = 5.6%`, stable across every window in both runs (423 on the very first window, then
+225, 226, 225, 225). The latched dest is the dominant blit destination, not one of several rivals.
+`[UNCERTAIN]` what the 5.6% is aimed at — not investigated, and it did not need to be.
+
+## The crash: a race in the filetrace module walk, NOT a regression in the shot path
+
+The first control run died at **t+117 ms**, 32 log lines in, immediately after `KEYHOOK[GZWIND]`.
+From `Apps\SC3U_stkdmp.txt` — which is append-only, so read the LAST record, not the first:
+
+```
+Exception code: C0000005 ACCESS_VIOLATION
+Crash occurred: 08/25/2026, @ 09:02:49
+Fault address:  6F2280BD 01:000070BD  ...\re\harness\bin\sc3probe.dll
+EAX:00005A4D  EBX:760BD720  ECX:0281F774  EDI:00000707  EBP:78000000
+```
+
+Mechanically: the fault is **inside the probe**, on a non-game thread, and **`EAX = 0x00005A4D` is
+the `MZ` DOS-header magic** — the value held while parsing a PE header. README §3's `ft_thread()`
+re-arms `ft_hook_all()` every 100 ms, walking every loaded module and parsing its headers to hook
+IATs, and 117 ms is squarely inside the window where modules are still arriving.
+`[UNCERTAIN]` the exact function: there is no `.map` or `.pdb` for this build, and I did not rebuild
+to get one because that would have replaced the binary under test.
+
+**It is not deterministic, and the retry is the evidence:** identical switches, identical fixture,
+same binary — one crash at 117 ms, one clean 75 s run. And it is **not** in the code that was just
+changed. Attempt 2 ran `-filetrace` on the previous build for a full 75 s, so this is a pre-existing
+race in the module walk that surfaces occasionally, not a cost of the re-arm fix. Anyone hitting a
+sub-200 ms probe-side `C0000005` should relaunch once before investigating.
+
+## Both frames are provenanced
+
+- Farmsville confirmed in both logs by name: 25 `Farmsville` filetrace lines each, `-> ok`.
+- **111 `TilingRules` filetrace lines in each run** — an identical count with the stock file and with
+  the 7-byte one, which is the loader-ran-identically control.
+- Run 2 read the broken file directly, at 7 bytes on disk:
+  `FILETRACE #61: CreateFileA "...\Apps\Res\TilingRules\ROAD_GRND_Set.txt" -> ok` at t+2.025 s.
+
+## The two frames
+
+- baseline, stock rules: `t1_baseline_r2_090658.png`
+- broken road Set: `t1a_setbroken_090900.png`
+
+(Both under the Happy share folder. Not committed — they are game screenshots.)
+
+### Everything that is NOT roads is identical
+
+Checked before claiming any road difference:
+
+- **The status bar reads character-for-character the same in both: `Farmsville`, `Pob: 36,172`,
+  `§45,724`, `5/16/1904`.** Same city, same population, same funds, **same date** — so there is no
+  sim drift and no time-of-day difference between the frames.
+- Camera framing identical: the settlement's red-roofed building, the farm-block corners and the
+  tree clusters all sit on the same pixels.
+- Terrain, trees, farm field layout and colours, farmhouses, silos, power pylons and their lines,
+  and **the railway lines** are all present and unchanged in both.
+- Toolbar, minimap and window size identical. No dialogs in either frame.
+
+### The road difference
+
+**In the broken run the grey road tiles are simply absent.** The corridors they occupied render as
+bare grass and field edge:
+
+1. The road leaving the upper-left settlement and running south-east along the top edge of the farm
+   block, then down its right-hand side to a curve near the lower right — **gone**.
+2. The **road/rail level crossing** below the settlement — the rail track still draws, and the road
+   that crossed it does not. The crossing is now plain track.
+3. The road segments threading between the farm plots in the centre — **gone**.
+4. The grey road surfaces connecting the houses inside the settlement itself — **gone**, while the
+   houses remain.
+5. The vehicles that sit on the road near the settlement in the baseline are **not** on that corridor
+   in the broken run.
+
+**The railway surviving is the discriminator.** Rail is a different network with its own Set file,
+which was untouched, and it draws normally. So this is not "the map stopped drawing" — one network's
+tiles vanished, the one whose allowed-piece list was replaced by a single bogus id.
+
+One non-road difference, declared: a small widget in the status bar next to the speed controls
+differs between the frames (green striped in the baseline, grey striped in the broken run). It is UI,
+not a map tile, and I did not identify it. It does not bear on the road comparison.
+
+### Not a crash, and that matters
+
+The city loaded, ran 75 s, populated the status bar and drew five frames with a 7-byte Set file.
+This confirms the earlier T1a finding from the other direction: **the allowed-piece list is not
+validated.** A bogus id list degrades rendering silently rather than erroring.
+
+## The ladder is complete
+
+**T0 = the files are read. T1b = their contents are consumed. T1 = the contents change what is
+drawn.** All three measured, none inferred.
+
+`NETWORK_TYPES.md` §6 item 3 is fully vindicated: 68 plain-text files, loose on disk, no archive, no
+repack, tooled and documented, and now demonstrated to change the rendered map. The scope limit from
+§5 is unchanged — this is retuning an existing network, not adding one.
+
+### What this does NOT show
+
+- **Not a syntax study.** `{99999}` is one edit, of one kind, to one file. Which grammar changes
+  produce which visual results is unmapped.
+- **Not a simulation result.** Whether traffic, land value or growth react to a broken piece list was
+  not measured. Population and funds match across the frames because the two shots are at matched
+  sim times, not because nothing would ever change.
+- **Not a claim about `U-068`.** These are pre-resize frames. The resize defect is untouched and
+  still open.

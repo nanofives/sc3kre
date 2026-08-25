@@ -485,6 +485,16 @@ independent formats, both run headlessly through the §31 harness with no human 
    red with the geometry unchanged**, while buildings, terrain, vehicles, smoke, the adjacent
    elevated rail line and the UI all stayed normal.
 
+3. **A network tiling rule** (`verify/tilingrules_read_test/RESULTS.md`), **2026-08-25.** Replacing
+   `ROAD_GRND_Set.txt` with a 7-byte `{99999}` via `tilingrules.py` made **every road tile vanish** —
+   corridor, level-crossing road surface, settlement streets (houses intact) and the vehicles on them
+   — while **the railway drew normally** from its own untouched Set file. That contrast is the
+   discriminator: not "the map stopped drawing" but one network's tiles disappearing, the one whose
+   piece list was replaced. Status bar character-identical (`Pob: 36,172`, `§45,724`, `5/16/1904`), so
+   no sim drift; camera identical to the pixel; 111 `TilingRules` filetrace lines in **each** run.
+   Hash restored and re-verified. Also established: a 7-byte Set file **does not crash** the game, so
+   the allowed-piece list is **not validated** and degrades rendering silently.
+
 > The earlier attempt's lesson held up: the credits marker failed because it was a *judged rate*
 > whose ctor default already equalled the shipped value. Both markers here are read-offs — a word on
 > a panel, and the colour of every road. `U-051` is **still open** and untouched;
