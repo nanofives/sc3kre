@@ -13,12 +13,24 @@ This file points at them and does not restate them.
 Owner's call: pursue all four in parallel child sessions, steered from here. Each owns its STATUS file
 exclusively and makes integration commits **by path**.
 
+Relaunched on the **`claude2`** account 2026-08-25 at the owner's request; the first `claude3` fleet was
+stopped after ~30 min. All four STATUS files survived the switch, which is the whole point of the
+one-session-one-STATUS-file rule.
+
 | prio | workstream | session id | owns | first task |
 |---:|---|---|---|---|
-| 1 | **Camera movement speed** | `cmt95zqdq…` | `STATUS_camera.md` | `drag_divisor` game-side — the path `scroll_speed` does **not** touch |
-| 2 | **New road types** | `cmt960ayr…` | `STATUS_roadtypes.md` | the **constructive** rung (T1 was destructive) |
-| 3 | **Bigger cities** | `cmt960qc8…` | `STATUS_bigcities.md` | in-game authoring at 512 |
-| 4 | **Resizable window** | `cmt96143s…` | `STATUS_resize.md` | safe redesign of the surface dump (desk work) |
+| 1 | **Camera movement speed** | `cmt96p4rv…` | `STATUS_camera.md` | `drag_divisor` game-side — the path `scroll_speed` does **not** touch |
+| 2 | **New road types** | `cmt96pjiy…` | `STATUS_roadtypes.md` | the **constructive** rung (T1 was destructive) |
+| 3 | **Bigger cities** | `cmt96q1v4…` | `STATUS_bigcities.md` | in-game authoring at 512 |
+| 4 | **Resizable window** | `cmt96qpp9…` | `STATUS_resize.md` | **implement** the approved surface-dump redesign |
+
+> ⚠️ **Stopping a fleet mid-flight leaves orphans — measured, not predicted.** The `claude3` stop left
+> the game lease **HELD** by `bigcities` with a **triple-patched install** (`SIMDIRT` + `SIMUI` +
+> `SIMSPR`), and the harness claim **ACTIVE** for `camera`. Neither releases itself. Cleanup that was
+> needed: `patch_citysize.py --restore` and `patch_dirtbuf.py --restore` (both re-verified by
+> `--check`), `harness_claim.ps1 -Release -Owner camera`, and `game_lock.ps1 -Release -Owner bigcities
+> -DirtyOk`. **Any interrupted run's measurements are void** — `bigcities` was mid-`capture author512`
+> and banked nothing. Run this checklist before respawning a fleet.
 
 **The priority column is the game-lease order**, because runs are serial and four sessions can queue on
 one install. Each was told to do its desk work first and take the lease only with a run pre-registered.
