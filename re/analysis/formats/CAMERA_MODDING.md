@@ -96,6 +96,15 @@ py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --recipe drag_divisor=1 --out SIMS
 The sign carries the direction and stays negative; `N=0` is refused (division by zero), and `N>128`
 does not fit a signed `imm8`.
 
+> **Built + byte-verified 2026-08-25** (still ⚠️ never run game-side). `drag_divisor=4` from shipped
+> produces `verify/drag_divisor_test/SIMSPR.DLL.drag4` (sha256 `6ba82b2b…`); an independent `--diff`
+> shows **exactly 2 bytes, `fe→fc` (−2→−4)** at `0x10043a5e`/`0x10043a68`, scroll slots untouched.
+> **The game-side run is blocked on a missing instrument**, not on lease scarcity: the pan arms only
+> through the game's **right-button** handler (`FUN_10042cfe`, vtable-dispatched — `+0x1e6`/anchor
+> `+0x1ec/+0x1ee`), and the harness `gzseq` is left-button only (`drag:` drives map tools via
+> `winmgr`, not the camera). Validating it needs a new right-drag primitive or an in-process
+> direct-invoke test. Detail: `re/sessions/STATUS_camera.md`, `DEFERRED.md` D-002.
+
 > That separation is also a **free negative control** for any step-bank test: if the step is zeroed
 > and right-drag still pans, the game is running and reading input, so "nothing moved" cannot be a
 > frozen client.
