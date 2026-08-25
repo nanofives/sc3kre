@@ -164,6 +164,31 @@ Also confirmed at two independent N: the camera's world extent is **`(N-1) x 0x1
   anywhere **including the low-coordinate control**. Three causes, all independent of map size: the
   city loaded **paused**, no unpause command exists among the 90 shipped menu commands, and bare zones
   have neither road nor power. **This is inconclusive about 512, not evidence against it.**
+
+  ⭐ **The development precondition, decoded 2026-08-25 (C3, two witnesses) — the diagnostic key for
+  "why won't this zone grow?" at ANY map size.** A placed residential tile's per-tile developer checks
+  these IN ORDER, each an early-return failure code if it fails (iOS `goResZoneDeveloper::UpdateCell`
+  `[CONFIRMED @ 0x0026e7c8]`; SC3U twin `SIMRCI FUN_10028f12` `[CONFIRMED @ 0x10028f12]`; commercial
+  `FUN_1000fd53` and industrial `FUN_10017fc0` share the shape):
+
+  | order | gate | fail code | kind |
+  |---|---|---|---|
+  | 1 | net demand > 0 (`demand - filled ≥ 1`) | `0xd` (or 0) | BLOCK |
+  | 2 | not radioactive | `0xa` | BLOCK |
+  | 3 | **powered** (power-layer per-cell bit) | **`0xe`** | BLOCK |
+  | 4 | **transport/road within `MaxDistFromTransport`** (SC3Tune.INI `[ResidentialZoneDeveloper]`) | **`0x10`** | BLOCK |
+  | 5 | land value in the developer's `[min,max]` band | `0xb`/`0xc` | BLOCK |
+  | 6 | an eligible building family exists (water filters the list) | `0xf`/`0x12` | BLOCK |
+  | 7 | grow/place the building | — | — |
+
+  So a developable tile needs **demand AND power AND road AND in-band land value AND a family** — six
+  gates, **none of them 512-specific**. Road count/route quality only MODULATE placement after the gate.
+  `[UNCERTAIN]` a power-layer `+0x298` override can force powered=true globally; what sets it is untraced.
+  **Consequence:** `city_write.py` writes zones only (no road/power/network writer exists yet — the
+  network layer `0x2147c2dd` has a validated *reader* in `roadtypes`' `network_layer.py`, not a writer),
+  and the screen→world map is unanchored, so authoring *connected, coordinate-targeted* service in-game
+  is not yet reliable. A served-zone development test is therefore staged behind first proving the
+  unpause primitive functionally (date advances). See `STATUS_bigcities.md` items 2–2b.
 - ⭐ **Authoring at 512 WORKS and picking reaches high coordinates — measured 2026-08-25.** On an
   all-zero 512 map, a Res-Low tool drag at screen `(250,160)→(380,250)` wrote **151 zone-1 tiles at
   world bbox `x[441..460] y[18..25]`** and the game's own Save persisted them (raster read back with

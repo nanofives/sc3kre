@@ -476,6 +476,15 @@ stage.** `Copy-Item Apps\SIMSPR.DLL.shipped Apps\SIMSPR.DLL -Force` still undoes
 
 Ordered by how much damage it can do silently.
 
+> **Cross-workstream dependency (bigcities → roadtypes), recorded not requested (2026-08-25).**
+> `bigcities` Lease 2 (development at 512 with served zones) needs road+power planted at chosen
+> coordinates. `city_write.py` writes zones only; the network layer `0x2147c2dd` has a validated
+> **reader** in `roadtypes`' `re/tools/network_layer.py` but **no writer**. Extending that reader to
+> write is a much smaller step than starting from nothing, and it would unblock offline service
+> planting for the development test (the other unblock path is anchoring the screen→world map).
+> **Not a request — `roadtypes` owns its priorities and has its own lease-ready run.** Flagged so it
+> is visible if they finish first.
+
 1. **⚠️ SILENT-FAILURE INSTRUMENTS — now a pattern, not an incident. Two confirmed.**
    - **`gzseq` target-wait** SKIPs silently, producing a plausible-looking capture.
    - ~~**`capture.ps1`'s frame reconstruction** produces *nothing* and says *nothing*~~ **MADE LOUD
