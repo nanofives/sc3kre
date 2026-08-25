@@ -443,6 +443,18 @@ Ordered by how much damage it can do silently.
    Release with `-Release -Owner <name>`; if the install is deliberately modified the lock **refuses**
    and you must pass `-DirtyOk -Note '<why>'`, which is audited. Check `-Status` before assuming a
    sibling session is really running.
+
+   ⚠️⚠️ **The stale claim caused a real deadlock, 2026-08-25.** A session that believed the old note
+   took an outer lease as `bigcities`, then called `capture.ps1` — which **self-acquires under its own
+   owner name** (`capture-author512`). The inner acquire queued behind the outer one and blocked until
+   expiry, while the session reported its run as "executing in the background". `-Status` showed the
+   truth: `lease : HELD owner: bigcities` with `queue : 1 waiting - capture-author512`.
+
+   **Rule: never wrap `capture.ps1` in an outer `game_lock.ps1 -Acquire`.** It takes and releases its
+   own lease. If you need one lease held across several launches, use `re/harness/with-game.ps1` —
+   `game_lock` passes a same-owner re-acquire through (line 206), but `capture.ps1`'s `finally`
+   releases, which breaks a multi-launch hold. **A blocked acquire looks exactly like a slow run**,
+   so check `-Status` before believing a background launch is live.
 5. **Build→run probe-DLL swap.** `build.ps1` will relink the shared `sc3probe.dll` out from under a
    live session. Either add a per-session `-Out` name or make `build.ps1` refuse without the claim.
    Deferred by decision in `COORDINATION.md`; do it while the harness is quiet.
