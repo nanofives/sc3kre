@@ -268,10 +268,29 @@ Ordered by how much damage it can do silently.
      reportable** — the run that hit it said so instead of banking the number.
    - **A `wait:` longer than 90 s cancels itself.** A step without `@N` inherits the 90 s default
      timeout, so `wait:180000` skipped at 90 s. Use `wait:180000@200`.
-   - **`capture.ps1` splits `-GameArgs` on whitespace.** `Cities\Berlin, Germany.sc3` was passed as two
-     arguments and **the game loaded it anyway**, because SC3U recombines its command-line tail. It
-     worked by luck of the exe's argument handling, not by the harness being correct. Any fixture with
-     a space in its name is on borrowed time.
+   - ⭐ **`key:` DOES NOT SUSTAIN A HOLD — it registers as a single tap.** Established 2026-08-25 by
+     a within-process three-arm control: null arm drift `0,0` exactly, key arm `-32,0` = **exactly one
+     32-px step** where a 2.5 s hold should give **214** (the recorded `-6848` baseline is precisely
+     `214 x 32`). **This one defect is the whole of `U-081`** — it made a working camera look like a
+     512 clamp bug and consumed five runs. Any timed-input measurement taken with `key:` before this
+     date is suspect.
+   - ✅ **`capture.ps1` `-GameArgs` whitespace splitting — FIXED 2026-08-25.** It split unconditionally, so
+     `Cities\Berlin, Germany.sc3` became two arguments. It loaded on one run (SC3U happened to
+     reassemble the tail) and **failed on a later identical run** with *"El archivo especificado en la
+     linea de ordenes no es valido o no se ha encontrado"*, voiding a whole lease. **Intermittent is
+     worse than broken.**
+
+     **The fix needed BOTH ends**, which the run agent caught and I had missed: `capture.ps1` gained a
+     `-GamePath` parameter appended as one quoted argv element, **and `sc3launch.c` was re-flattening
+     the passthrough with bare spaces and no quoting** (`lstrcatA(gameargs, argv[i])`), so no amount
+     of care on the PowerShell side would have survived. The launcher now re-quotes any forwarded
+     argument containing whitespace and echoes what SC3U will actually receive. Both rebuilt.
+
+     Two further guards, each from an error made while fixing it: `-GamePath` is **`.Trim()`ed**
+     because the `-GameArgs:" $path"` idiom carries a deliberate leading space to stop PowerShell
+     binding `-lC:` as a parameter; and the **pre-flight `Test-Path` sits ABOVE the lease acquire**,
+     because when I first placed it below, its `exit` bypassed the `finally` and **orphaned a lease**.
+     Verified by running it: bad path now exits non-zero with `lease : (none)`.
    - **`cam`'s failure message asserts rather than measures.** It names `cityViewIso`
      unconditionally, even though that base is only searched when `*(cityView+0xb8)` is non-null — so
      an earlier "no object reachable at `cityViewIso+0x158`" line was an assertion, not a
