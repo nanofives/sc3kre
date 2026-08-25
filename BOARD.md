@@ -31,6 +31,18 @@ one-session-one-STATUS-file rule.
 > `--check`), `harness_claim.ps1 -Release -Owner camera`, and `game_lock.ps1 -Release -Owner bigcities
 > -DirtyOk`. **Any interrupted run's measurements are void** — `bigcities` was mid-`capture author512`
 > and banked nothing. Run this checklist before respawning a fleet.
+>
+> ⚠️⚠️ **CORRECTION, same day: the sentence above about interrupted runs being void is WRONG, and the
+> error is instructive.** I declared both interrupted runs worthless without reading their transcripts
+> or checking their evidence on disk. **Two of the four had banked complete, correctly pre-registered
+> results before the stop**, and both had cleaned up after themselves. `bigcities` **passed** the 512
+> authoring test; `resize` ran the redesigned instrument for a full 55 s and returned a disciplined
+> VOID plus two structural findings. **Both replacements were briefed to disregard or redo that
+> work**, and had to be corrected after the fact.
+>
+> **The rule that actually holds: a stopped session's STATUS file and artefacts are evidence until
+> checked, not debris.** Read the transcript and re-verify on disk *before* briefing a replacement.
+> Only an *unfinished* run is void, and neither of these was unfinished.
 
 **The priority column is the game-lease order**, because runs are serial and four sessions can queue on
 one install. Each was told to do its desk work first and take the lease only with a run pre-registered.
@@ -97,10 +109,29 @@ The three-arm control gave drift `0,0` and a key delta of `-32,0` — **exactly 
 the `-6848` baseline is precisely `214 x 32`. **`gzseq`'s `key:` does not sustain a hold; it taps
 once.** A working camera looked like a 512 clamp bug for five runs. Debt item 1.
 
-**Next, in order:** (1) In-game **authoring** at 512
-(`fire:<toolcmd>` + `drag:`, established at 256, untried at 512). (3) Development, which needs an
-unpause path — **none exists among the 90 shipped menu commands** — plus road and power. (4) A bound
-above 512.
+### ⭐⭐ IN-GAME AUTHORING AT 512 PASSES — 2026-08-25, game-side, independently re-verified
+A screen drag at (250,160)→(380,250) on a bare-path-loaded 512 city placed **151 Res-Low tiles at
+world x 441..460, y 18..25 — all 151 above 256, with no clamp to 255 and no wrap.** That was the
+actual 512-specific risk (screen→world picking carrying a stale 256 assumption) and it is now
+falsified. The **game itself wrote the save**, and that game-written file passes `city_roundtrip.py`
+L0–L4 byte-identical.
+
+The baseline `N512_city.sc3` is **all-zero across 262,144 tiles**, so every non-zero tile is
+necessarily the tool's work — that is what makes the result clean. Re-parsed independently rather
+than taken on the run's word: `{0: 261993, 1: 151}`. Artefact:
+`verify/citysize_mod_test/N512_authortest.sc3` (game-derived, **never commit**).
+
+The run was **pre-registered** with PASS / FAIL-picking / FAIL-noregister / FAIL-save spelled out
+before firing, which is why it survives its session being killed mid-flight.
+
+`[UNCERTAIN]` The second drag (Com-Low, lower on screen) placed nothing. The run read this as that
+region projecting off-map near the corner — **post-hoc and unverified**. The pre-registration already
+allowed "one rectangle placing = partial PASS", so the result does not depend on it. Do not cite the
+off-map story as fact.
+
+**Next, in order:** (2) Development, **now the critical path**, which needs an unpause path —
+**none exists among the 90 shipped menu commands** — plus road and power. Several sibling workstreams
+need unpause solved too, so it is the highest-leverage item on this board. (3) A bound above 512.
 Stride/corner measurement is deferred as cosmetic (~8 runs).
 Session CLOSED. Anyone may pick it up.
 
@@ -128,6 +159,37 @@ defects.
 > gate on type 1**. The tile refill restores 1537 *type-2* nodes into all 64 cells, so an
 > undifferentiated count reads a fully-populated-but-invisible grid as healthy. That mistake cost a
 > run on 2026-08-24.
+### ⭐ INSTRUMENT FIXED, verdict VOID by design — 2026-08-25, one lease
+The redesigned surface dump **ran the full 55 s and was killed on schedule**, where the previous
+version took the process at t+19.6 s. Expect-or-refuse fired, `__try/__except` was never needed, and
+the `GetSurfaceDesc` COM path is gone. The root cause of the old crash: it called `GetSurfaceDesc`
+through `*(iso+0x74 + 4)` to *decide* whether the object was a surface — dispatching through the
+pointer it was trying to identify. Identity is now decided by **comparing** the vtable against a known
+`MODULE+RVA`, never by dispatching through it.
+
+**Black-vs-garbage is VOID, and that was the correct call.** The pre-registration said *control dump
+reads no known-good frame → instrument suspect, ABORT*. The control gave no image, so the post-resize
+reading was not interpreted. Held to, after the result was in.
+
+Two structural findings, which is what the lease actually bought:
+
+1. ⚠️ **`iso+0x4ec` is NOT the raster class — REFUSED both times.** Its vtable is
+   `GZGraphicD+0x1F328`, not `GZGraphicD+0x1E894`. **This refutes the assumption written into the
+   approved design** (that the blit dest is the same device class as the render target). The real blit
+   destination needs its own read interface. The refusal is the fail-loud gate catching a bad premise
+   instead of crashing on it.
+2. **`iso+0x74` has no lockable bits even in the healthy control** — `vf1a8` returns `0x28`, pitch
+   `0`, while Europolis renders in full. Raw dims *do* track the resize (1024x768 → 1280x1024) and
+   `created` is set. So `iso+0x74` is likely **not where the visible iso pixels live** at
+   heartbeat-sample time, or its bits exist only inside the engine's own paint bracket. The old device
+   probe only saw healthy bits after forcing a fresh create, so `0x28` is the steady state, not a
+   malformed call.
+
+**Next (desk work, no lease):** resolve the `+0x1F328` class's lock/bits slots from the export, and
+evaluate two alternative read points — `iso+0x74`'s `sub(+0x44)` sub-object, and sampling from
+**inside** the engine's paint bracket rather than the heartbeat. Then pre-register a second dump.
+Record: `re/sessions/STATUS_resize.md` line 206 onward.
+
 **Behind it:** `U-069` — downward resize has never been exercised at all, so read every "resize
 works" claim as "resize *upward* works". Only 1280x1024 has been tested; four unpinned device-vtable
 slots.
