@@ -292,10 +292,15 @@ Ordered by how much damage it can do silently.
      only such object.** The minimap is also a city view and would own a cell map. So which rect gets
      measured may depend on allocation order and **vary per process**, which fits every camera anomaly
      seen 2026-08-25: byte-identical reads on one fixture, ~1,000 px/s churn on another, and a frame
-     showing a normal in-map view while the field read `x = -2396`. **Fix: enumerate all matches with
-     offset and address.** Until then, treat any single-process camera series as provisional and any
-     **cross**-process camera delta as void. This blocks the `FUN_10006226` counter — a scroll counter
-     is uninterpretable while it is unknown whose rect is observed.
+     showing a normal in-map view while the field read `x = -2396`. ✅ **FIXED 2026-08-25** (probe rebuilt,
+     244,736 b): the search now enumerates **every** match across both bases, de-duplicates objects
+     reached via two fields, prints each candidate's `rectA`, span, zoom and tilepx so they can be told
+     apart, marks which one is used, and emits a loud `!! N objects carry vt …` line when there is more
+     than one. It still uses the first, so earlier readings stay comparable — but never again without
+     disclosing the ambiguity. ⚠️ **UNVERIFIED — no run has exercised it yet.** Until a run does, treat
+     any single-process camera series as provisional and any **cross**-process camera delta as void,
+     and keep the `FUN_10006226` counter parked: a scroll counter is uninterpretable while it is
+     unknown whose rect is observed.
    - **`cam`'s failure message asserts rather than measures.** It names `cityViewIso`
      unconditionally, even though that base is only searched when `*(cityView+0xb8)` is non-null — so
      an earlier "no object reachable at `cityViewIso+0x158`" line was an assertion, not a
