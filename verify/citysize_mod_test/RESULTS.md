@@ -1360,3 +1360,150 @@ now **`presentGate(+0x7c)` as a mechanism or a 512 property.**
 
 **Still open:** whether the origin moves by `-6848` over a 2.5 s hold at 256, and what it does at 512.
 **One run on Berlin settles the instrument**, and only then is a 512 delta interpretable.
+
+---
+
+# BERLIN / N=256 / zoom 3, 2026-08-25. Field check PASSED. `-6848` does NOT reproduce: Δ = `+26, 0`.
+
+Pre-registration: `re/sessions/PREREG_512_gameplay.md`, addendum 3, written before launch — including
+the field check, which was the gate on running at all.
+
+**Verdict: row L.** The **axis** reproduces exactly (`Δy = 0`); the **magnitude** does not, by a factor
+of 263, with the wrong sign and below one 32-px step. **And the axis result settles the diagonal
+question against my own speculation** — see below.
+
+No patch. SIMDIRT `f1708fc1…b070`, install `stock` throughout. Both locks released.
+
+## Field check — done BEFORE launching, and it passed
+
+Row N was not triggered, and here is the evidence rather than the assertion. From
+`verify/scroll_patch_test/RESULTS.md` "The measurement":
+
+| | baseline | this run |
+|---|---|---|
+| sequence | `cam; key:0x25,2500; wait:3000; cam` | **identical** |
+| object | `cISC3CitySpriteCellMap`, `cityViewIso+0x158` | **identical** |
+| field | `iso+0x54..+0x60`: origin `512,2352`, right/bottom `1536,3120` | **identical** — my `rectA` is that same rect |
+| key / hold | `0x25` (VK_LEFT) / 2500 ms | **identical** |
+| zoom / tilepx | **3 / 64** | **3 / 64** |
+| rot | 0 | 0 |
+| city / N | Berlin / 256 | Berlin / 256 |
+| step `+0x1c8` | `32.000` ×5 | `32.000` ×5 |
+| gate `+0x177` | 0 → 1 | 0 → 1 |
+| direction flags | `0/0/1/0` | `0/0/1/0` |
+
+`512 - 6848 = -6336` closes the baseline's own arithmetic, confirming its "origin" is the rect's first
+two fields. **Same field, same object, same route, same input, same zoom, same city.** The comparison
+is valid.
+
+## Both `cam` blocks, verbatim
+
+Before, t+18.139 s:
+
+```
+### CAM: cell map found at cityViewIso+0x158 -> 0x0F9CC390 (vt SIMSPR+0x6250C)
+### CAM: iso=0x0F9CC390  rectA=303,2866,1327,3634 span=1024x768  centre=815,3250
+### CAM: rectB=303,2866,1327,3634 span=1024x768
+### CAM: zoom=3 rot=0 tilepx=64 (8<<zoom=64)  presentGate(+0x7c)=0  flag(+0x32c)=0
+### CAM: MAP 256x256 tiles  (world extent ~65280x65280 px)
+```
+
+After, t+21.326 s (key dispatched t+18.200 s; `GZSEQ[3]: waited 3000 ms`, so 3.13 s later, after the
+full 2.5 s hold):
+
+```
+### CAM: cell map found at cityViewIso+0x158 -> 0x0F9CC390 (vt SIMSPR+0x6250C)
+### CAM: iso=0x0F9CC390  rectA=329,2866,1353,3634 span=1024x768  centre=841,3250
+### CAM: rectB=329,2866,1353,3634 span=1024x768
+### CAM: zoom=3 rot=0 tilepx=64 (8<<zoom=64)  presentGate(+0x7c)=0  flag(+0x32c)=0
+### CAM: MAP 256x256 tiles  (world extent ~65280x65280 px)
+```
+
+**Δ = `+26, 0`.** Baseline: `-6848, 0`.
+
+`MAP 256x256` and extent `65280` — the void condition (row O) did not fire.
+
+## ⭐ The diagonal question is settled, and NOT the way I guessed
+
+I speculated that my Farmsville diagonal might be the correct isometric shape and the baseline's
+`Δy = 0` the anomaly. **Wrong.** At the baseline's own zoom, on the baseline's own city, `Δy = 0`
+**reproduces exactly**. Left-arrow moves the origin on x only.
+
+> **The baseline's pure-x axis is right. My Farmsville `-2269, -749` diagonal is the odd one out.**
+
+### Which means my own Farmsville number is not safe as a key-driven measurement
+
+That result was reported as the effect of the key. **It has no null control.** Given that Berlin at the
+baseline's conditions moves `+26` — sub-step, wrong sign — while Farmsville at zoom 2 moved 2,269 px
+diagonally, the more parsimonious reading is that **the Farmsville movement was not caused by the
+key at all** (camera settling after load is the obvious candidate: the first `cam` was at t+16 s and
+the view may still have been animating).
+
+**I am withdrawing the attribution, not the number.** `1356,266 -> -913,-483` is what was measured;
+"the left arrow moved it there" is not established. This is the same error class as the 63 ms delta
+and as `+0x524`: a delta attributed to an input without a control.
+
+**The one run that settles it: `wait:15000;cam;wait:3000;cam` with NO key.** If the origin drifts
+anyway, the Farmsville delta was settling and the whole `-2269` line is void. That control should have
+come before either scroll measurement, and it is cheap.
+
+## The tick-rate hypothesis I pre-registered is FALSIFIED
+
+I predicted the 3x magnitude gap was tick count, with repaint rate as the suspect: coarser zoom draws
+fewer tiles, repaints faster, more scroll ticks. **The blit counts refute it.**
+
+`raster_blit_hw` totals on this Berlin run: t+5 s `3,275`; t+10 s `8,472`; t+15 s `21,256`; t+20 s
+`47,756` — i.e. **~1,040/s, then ~2,557/s, then ~5,300/s across the scroll window.** The T1 Farmsville
+runs steady-stated at **~391/s**.
+
+> **Berlin repaints roughly 13x FASTER than Farmsville and scrolled 87x LESS.** Repaint-driven tick
+> count predicts the opposite. Dead.
+
+## What is left as the difference, and it is not one I controlled
+
+Every condition in the table above matches the baseline. The remaining difference is **how the city
+was loaded**: the baseline was **menu-loaded**; mine was **path-loaded** by bare absolute path, and
+path-loaded cities are **paused** — this run's ticker reads `Simulación en pausa`, as Farmsville's did.
+
+`[UNCERTAIN]` **the baseline run's pause state is not recorded in either source file.** So "menu-load
+vs path-load" and "running vs paused" are not separable from what is written down. Both remain live.
+
+Note this does **not** resurrect pause as a simple blocker: Farmsville was paused and its origin moved
+2,269 px. But if that movement was settling rather than scrolling, then **no path-loaded city has yet
+been shown to scroll at all**, and pause becomes the leading candidate again. The null control decides
+that too.
+
+## The clamp question cannot be answered on Berlin
+
+Asked: does Berlin scroll to negative coordinates unclamped, as the 192 control did? **Unanswerable
+here — nothing moved.** `303 -> 329` never approaches 0.
+
+So the position is: **unclamped at N=192 confirmed** (`1356,266 -> -913,-483`, outside `0..48896`, on a
+shipped unpatched build), **untested at N=256.** The "unclamped is normal engine behaviour" reading is
+still the most likely, and still on one data point.
+
+## By-products
+
+**The extent formula now holds at a THIRD independent N.** `65280 = (256-1) * 0x100` exactly, joining
+`48896` at 192 and `130816` at 512. Three N values, three exact matches.
+
+**Fixture hazard, recorded because it nearly bit:** `Cities\Berlin, Germany.sc3` contains a **space**,
+and `capture.ps1` splits `-GameArgs` on whitespace, so the path was passed as two arguments. **The
+game loaded it anyway** — `FILETRACE #225: CreateFileA "c:\...\Cities\Berlin, Germany.sc3" -> ok`, 25
+lines, note the normalised lower-case drive letter — so SC3U recombines the tail of its command line.
+It worked, but it worked by luck of the exe's argument handling, not by the harness passing it
+correctly. Any fixture with a space should be verified in the filetrace before its numbers are used.
+
+## Where U-081 stands
+
+**Eliminated:** stale 256-derived extent; input dropped before the camera (gate opens every time);
+zeroed scroll step (`32.000` every run); `presentGate(+0x7c)` as mechanism or 512 property; and now
+**repaint-driven tick count**.
+
+**Newly established:** left-arrow moves the origin on **x only** — the baseline's axis is correct, mine
+was not.
+
+**Now the central open question, and it is upstream of 512 entirely:** does a **path-loaded** city
+scroll at all? Berlin at the baseline's exact conditions moved `+26` px, which is no scroll. Until a
+no-key null control exists, neither my Farmsville nor my Berlin delta can be attributed to the key,
+and no 512 number would mean anything either. **That control is one run and it should be next.**

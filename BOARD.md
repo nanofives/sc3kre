@@ -261,6 +261,10 @@ Ordered by how much damage it can do silently.
      reportable** — the run that hit it said so instead of banking the number.
    - **A `wait:` longer than 90 s cancels itself.** A step without `@N` inherits the 90 s default
      timeout, so `wait:180000` skipped at 90 s. Use `wait:180000@200`.
+   - **`capture.ps1` splits `-GameArgs` on whitespace.** `Cities\Berlin, Germany.sc3` was passed as two
+     arguments and **the game loaded it anyway**, because SC3U recombines its command-line tail. It
+     worked by luck of the exe's argument handling, not by the harness being correct. Any fixture with
+     a space in its name is on borrowed time.
    - **`cam`'s failure message asserts rather than measures.** It names `cityViewIso`
      unconditionally, even though that base is only searched when `*(cityView+0xb8)` is non-null — so
      an earlier "no object reachable at `cityViewIso+0x158`" line was an assertion, not a
