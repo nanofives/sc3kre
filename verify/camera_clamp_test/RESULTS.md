@@ -1910,3 +1910,160 @@ binary cannot be rebuilt.**
 
 Install `stock (matches original/)` before and after. No patch; one claim across all three launches,
 lease per launch by the same owner, both released.
+
+---
+
+# Window-length two-arm test — PRE-REGISTRATION, written before any launch, 2026-08-25
+
+**A correction to my own last report, accepted before designing this run.** I offered window length as
+"the only remaining difference", and it **does not survive the data already in hand**: three of the
+five recorded onsets sit well inside a short window — E1 at t+6.26-7.42 s, C at t+6.80-8.00 s, F1 at
+t+7.82-8.73 s. A `wait:750` arm reaching ~t+20 s **would have sampled all three**, and thirteen
+short-window launches saw nothing there. From the other side, only **1 of 5** long-window launches
+moved. So window length is already weak as an explanation.
+
+**That makes the short arm a direct re-test of those three onsets rather than a mere control**, which
+is what makes this run worth six loads.
+
+> **Design: SIX launches, strictly alternating, STARTING SHORT — short, long, short, long, short,
+> long. All six run. No early stopping.**
+
+- **Short arm** = `cam` + 15x(`wait:750`,`cam`), reaching ~t+20 s.
+- **Long arm** = the C-era sequence, `cam` + 8x(`wait:1000`,`cam`) + 7x(`wait:2500`,`cam`), reaching
+  ~t+33 s.
+- **Only the sequence varies.** Switches identical
+  (`-nocom -windowed -origin -fix16 -fitclient -nointro -quiet -filetrace`), Farmsville via
+  `-GamePath`, `-AtSec 150`, no input, install stock.
+- **`SC3PROBE_CAMWATCH=1` on all six.** Legitimate rather than a fidelity violation, because **F1
+  churned with it armed** — it is not a suppressor. `SC3PROBE_CAMCALLER` stays **unset** on all six so
+  exactly one variable moves.
+- Churn detector: the corrected one — a MOVED interval whose preceding read was already `zoom == 2`.
+
+| row | outcome | what it would mean |
+|---|---|---|
+| **BT** | long arm moves, short does not | freeze streak substantially a **sampling artefact**; the thirteen frozen verdicts get re-read as *"not sampled long enough"*, and I will name **which** specifically |
+| **BU** | **short arm moves at t+6-9 s** | **window length is dead outright**, the early onsets are reproducible, and the streak had another cause. The outcome that most changes the picture. |
+| **BV** | both arms move | window length irrelevant; onsets reported per arm |
+| **BW** | neither moves | `p = 0.0088` if window length is irrelevant. J3 was a tail, and the difference remains **build or machine/session state — not separable**, since `re/harness/` is gitignored and the era binary cannot be rebuilt. |
+| **BX** | motion of **J3's shape** (single axis, one interval) rather than the regime's (7-13 consecutive both-axes intervals at >1,000 px) | **scored as its own row in either arm.** A 566 px blip is not the churn returning. |
+
+**If anything moves, `CAMWATCH` is armed, so the moving interval carries writer data — the EIPs get
+reported.** J3's motion was uninstrumented and this run should not repeat that.
+
+---
+
+# RESULT — **ROW BW FIRED. Neither arm moved. Window length is dead, and so is the reproducibility of the early onsets.**
+
+Six launches, strict alternation, no early stopping. **Zero post-load motion in either arm.**
+
+| # | run | arm | window reached | verdict | first motion | writer EIPs |
+|---|---|---|---|---|---|---|
+| 1 | K1 | **short** | t+18.8 s | **FROZEN** | — (load transition only, iv1) | `SIMSPR+0x62AF` x1, `SIMSPR+0x68C9` x1 |
+| 2 | K2 | **long** | t+33.1 s | **FROZEN** | — (no load transition captured) | — |
+| 3 | K3 | **short** | t+18.7 s | **FROZEN** | — (load transition only, iv1) | `SIMSPR+0x62AF` x1, `SIMSPR+0x68C9` x1 |
+| 4 | K4 | **long** | t+32.6 s | **FROZEN** | — (load transition only, iv1) | `SIMSPR+0x62AF` x1, `SIMSPR+0x68C9` x1 |
+| 5 | K5 | **short** | t+18.9 s | **FROZEN** | — (load transition only, iv1) | `SIMSPR+0x62AF` x1, `SIMSPR+0x68C9` x1 |
+| 6 | K6 | **long** | t+32.7 s | **FROZEN** | — (no load transition captured) | — |
+
+**Short arm: 0 of 3. Long arm: 0 of 3.** Row BT did not fire (long did not move), row BU did not fire
+(short did not move), row BV did not fire, and **row BX had nothing to score** — no motion of any
+shape, J3's or the regime's, in six launches.
+
+## The short arm was a direct re-test of three recorded onsets, and it failed three times
+
+This is the part that matters more than the window question. E1 (t+6.26-7.42 s), C (t+6.80-8.00 s)
+and F1 (t+7.82-8.73 s) all began churning inside a band the short arm samples at ~1.0 s resolution.
+K1, K3 and K5 each covered t+5 s to t+18.8 s and saw **nothing**.
+
+Counting every short-window launch since F1 — G1, H1-H4, I1-I6, K1, K3, K5 — that is **fifteen
+launches covering the t+6-9 s onset band with zero onsets.** If the early onsets were still
+reproducible at the rate they were observed (3 of 5 recorded onsets fall in that band), fifteen
+consecutive misses has `p = 1.1e-06`.
+
+**So the early onsets are not merely unsampled. They are not reproducible.** That closes the
+last version of the sampling-artefact story, including the one I proposed last run.
+
+## The overall streak, stated once and precisely
+
+Twenty-two launches since F1: **21 frozen post-load, 0 showing the churn regime, 1 (J3) showing a
+single-interval 566 px y-only blip.** At the pre-F1 rate `P(churn) = 6/11`, twenty-one frozen has
+`p = 6.4e-08`.
+
+Every variable proposed by either of us has now been eliminated by measurement:
+
+| candidate | how it died |
+|---|---|
+| the fixture, input, the sim, elapsed time | eliminated earlier in this file |
+| `CAMWATCH` suppression | E2 froze without it; F1 churned with it |
+| `CAMCALLER` suppression | interleaved I block, 0/3 armed vs 0/3 unset |
+| warm file cache | no baseline drift on either measure; my evidence for it was selection |
+| switch set | diff is **empty** — byte-identical between eras |
+| sequence / cadence | C, D, E1, E2, E3 ran the *same* sequence and gave churn, frozen, churn, frozen, churn |
+| **window length** | **this run** — long arm 0/3, and the short arm re-tested three early onsets and missed all three |
+
+## "Not separable" is now confirmed by search, not just by argument
+
+I said the probe build could not be replayed because `re/harness/` is gitignored. I went looking
+anyway. The only other `sc3probe.dll` on disk is
+`.happy-share/.../SC3000-portable/sc3probe.dll` — **159,744 bytes, dated 08-17**, SHA-256 prefix
+`32f03e5b59b4c511`. The B/C-era binary was **244,736 bytes** and dated 08-25. The archived copy
+predates the `cam` candidate enumeration entirely and is eight days older than the era in question,
+so it is **not** an era replay and running it would substitute a third unknown rather than resolve
+one.
+
+**The era binary is genuinely gone.** So the residual difference is **build or machine/session state,
+and those two cannot be separated with the artefacts that exist.** That is the honest terminal state
+of this line of inquiry, and it is row BW as written.
+
+## Free confirmation, now eight processes deep
+
+Four of the six launches caught the city-load transition, and all four reproduced the load-time
+writer pair exactly: **`SIMSPR+0x62AF` (`FUN_10006226+0x89`, the translate) x1 and `SIMSPR+0x68C9`
+(`FUN_10006752+0x177`, `SetZoom`) x1**, one store each. With H2, H3, H4 and I2 that is **eight
+independent processes** with an identical load-time signature.
+
+The load-time path is the one part of this investigation that is fully nailed down:
+**something calls `ScrollTo` (`FUN_10006736`, iso vt `+0x30`) once at city load; it subtracts the
+current origin and dispatches to the translate at `vt+0x2c`; `SetZoom` writes the rect in the same
+interval; and `+0x354 == 0` rules out `FUN_1000ec0b` throughout.**
+
+## Which rows fired
+
+| row | status |
+|---|---|
+| BT — long moves, short does not | **no** — long 0/3 |
+| BU — short moves at t+6-9 s | **no** — short 0/3, and this was a direct re-test of three recorded onsets |
+| BV — both arms move | **no** |
+| **BW — neither moves** | **FIRED** (`p = 0.0088` under the row's model). J3 was a tail; the residual difference is **build or machine/session state, not separable** — now confirmed by search, not just by the gitignore argument. |
+| BX — J3-shaped motion rather than the regime's | **nothing to score** — no motion of either shape |
+
+## Validity
+
+0 keys in all six; 25 `Farmsville.sc3` filetrace hits each; **0 exceptions, 0 minidumps**; 6/6
+sequences `COMPLETE`. `followTarget(+0x354) = 0` on 94/94 reads. `N == 1` on 94/94.
+`span = 1024x768` on 94/94 reads, both rects = 188 prints, **cumulative 882/882**. The load-time
+origin `-160,1604` reproduced in all six.
+
+## My recommendation: stop sampling this fixture
+
+Twenty-two launches, seven eliminated variables, and `p = 6.4e-08` against the phenomenon still being
+present at its old rate. **The precondition for the churn is gone, not rare, and the one artefact that
+could distinguish "gone because the build changed" from "gone because the machine/session changed" no
+longer exists.** More launches on Farmsville will produce more frozen verdicts at a cost of one lease
+each and will not decide anything.
+
+What is still worth doing, in order:
+
+1. **Bank what is solid.** The load-time path is measured to instruction level across eight
+   processes. The writer, the caller, the arithmetic (`target - origin`), the vtable slots and the
+   rigid-translation invariant (882/882) are all confirmed and do not depend on the churn.
+2. **If the churn matters, change the fixture rather than resample this one.** Every churn observation
+   in this file is Farmsville. Craterville was reported stable early on. A fixture that churns *today*
+   would restore the phenomenon and make the instruments useful again; a sweep of the other
+   `Cities\*.sc3` at one launch each is the cheapest way to find one.
+3. **Prevent the recurrence of the unrecoverable-build problem.** The reason this ended in an
+   unanswerable question is that `re/harness/` has no history. Archiving `sc3probe.dll` with its
+   SHA-256 alongside each RESULTS entry would have made today's final question a two-minute check.
+
+Install `stock (matches original/)` before and after. No patch; one claim across all six launches,
+lease per launch by the same owner, both released.

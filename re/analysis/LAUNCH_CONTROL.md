@@ -5211,3 +5211,90 @@ been during this replay.
 
 Validity: 0 keys, 25 filetrace hits each, 0 exceptions, 3/3 COMPLETE. `followTarget = 0` on 47/47.
 `N == 1` on 47/47. `span = 1024x768` **cumulative 694/694**. Load origin `-160,1604` in all three.
+
+### §31.14.17 — neither arm moved: the early onsets are NOT REPRODUCIBLE, and the thread closes here (2026-08-25)
+
+Six launches, strictly alternating, starting short, watchpoint armed throughout.
+
+| # | arm | window | verdict |
+|---|---|---:|---|
+| K1 | short | t+18.8 s | frozen |
+| K2 | long | t+33.1 s | frozen |
+| K3 | short | t+18.7 s | frozen |
+| K4 | long | t+32.6 s | frozen |
+| K5 | short | t+18.9 s | frozen |
+| K6 | long | t+32.7 s | frozen |
+
+**Short 0/3, long 0/3.** No motion of the churn regime's shape *or* of J3's single-interval shape.
+
+#### The result that closes the sampling story
+
+The short arm was a **re-test of three recorded onsets** — E1 (6.26–7.42 s), C (6.80–8.00 s) and
+F1 (7.82–8.73 s) all begin inside a band the short arm samples at ~1 s resolution. **It failed three
+times.** Counting every short-window launch since F1, that is **fifteen launches covering t+6–9 s with
+zero onsets.**
+
+> **So the early onsets are not merely unsampled. They are not reproducible.** That closes the
+> sampling-artefact story, including the window-length version proposed one run earlier.
+
+#### ⚠️ Arithmetic correction: the band figure was overstated
+
+The run report gave `p = 1.1e-06` for fifteen consecutive misses. **That implies a 60% per-run onset
+rate in the band, which no denominator supports.** Recomputed:
+
+| onset rate | basis | P(15 misses) |
+|---|---|---|
+| 3/11 = 0.27 | all pre-F1 launches | **8.4 × 10⁻³** |
+| 3/8 = 0.375 | the A–F1 launches | 8.7 × 10⁻⁴ |
+| 3/6 = 0.50 | only the churning runs | 3.1 × 10⁻⁵ |
+
+**The honest range is 10⁻² to 10⁻⁵, not 10⁻⁶.** The conclusion is unaffected — even the most
+conservative reading is unlikely — but the number should not be quoted as given.
+
+*(The other figure checks exactly: 21 consecutive frozen at the pre-F1 rate is `6.44 × 10⁻⁸`.)*
+
+#### Every proposed variable is now eliminated
+
+| variable | how it died |
+|---|---|
+| fixture, input, sim, elapsed time | eliminated earlier |
+| `CAMWATCH` suppression | E2 froze without it; F1 churned with it |
+| `CAMCALLER` suppression | 0/3 vs 0/3, interleaved crossed design |
+| warm cache | no baseline drift; the drift was selection |
+| switch set | diff **empty**, byte-identical |
+| sequence / cadence | C/D/E1/E2/E3 shared a sequence → churn, frozen, churn, frozen, churn |
+| **window length** | **this run: short 0/3, long 0/3** |
+
+**Twenty-two launches since F1: 21 frozen, 0 churn regime, 1 single-interval blip.**
+
+#### "Not separable" is now confirmed by search, not merely argued
+
+The run agent went looking for an era binary rather than resting on the gitignore claim. The only other
+`sc3probe.dll` on disk is a portable copy at **159,744 bytes dated 08-17**, SHA `32f03e5b…` — it
+**predates the `cam` enumeration entirely**, so running it substitutes a third unknown rather than
+resolving one. The B/C-era binary was 244,736 bytes, same day. **It is genuinely gone**, and build
+versus machine/session state cannot be separated.
+
+#### The fix, applied
+
+`capture.ps1` now logs **the probe DLL's size and SHA-256 at every launch** (verified parsing; current
+build 248,832 bytes, `41125fc3…`). This is the one fact about a run that cannot be recovered
+afterwards, and its absence is what made today's final question permanently unanswerable. It would have
+been a two-minute check.
+
+#### What is banked, and does not depend on the churn
+
+- the field: `iso+0x54`, **rigid translation** — `span = 1024x768` on **882/882** rect prints
+- the writer: **`FUN_10006226 + 0x89`**, with 29/29 interval separation
+- the load-time caller: **`FUN_10006736 + 0x19` = `ScrollTo`, iso vt `+0x30`**, and its arithmetic
+  `target − origin` — now identical across **eight independent processes**
+- the second writer: `SetZoom + 0x177`, vt `+0x38`
+- the driver's character: **it starts and stops**; in a frozen window `vt+0x2c` is called zero times
+- `followTarget = 0` on 94/94; `N == 1` on 94/94
+
+#### Recommendation on record: stop sampling this fixture
+
+More Farmsville launches cost a lease each and cannot decide anything. If the thread is resumed, the
+cheapest useful move is **a different fixture** — every churn observation in this file is Farmsville,
+and a one-launch sweep of the other `Cities\*.sc3` is the cheapest way to find one that churns *today*
+and make the instruments useful again.
