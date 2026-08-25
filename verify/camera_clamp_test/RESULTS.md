@@ -1724,3 +1724,189 @@ this fixture will recover it.
 
 Install `stock (matches original/)` before and after; the vtable swap is memory-only. No patch; one
 claim across all six launches, lease per launch by the same owner, both released.
+
+---
+
+# Era replay — PRE-REGISTRATION, written before any launch, 2026-08-25
+
+## What is and is not recoverable, established before designing the run
+
+- **Run A cannot be reproduced faithfully.** Its section in this file records read cadence
+  (~1.12 s, t+16.6-32.4 s) and validity counts but **no launch line**, and
+  `re/sessions/PREREG_512_gameplay.md` records only a *different*, keyed sequence
+  (`wait:15000;cam;key:0x25,2500;cam;wait:180000`). The A-era invocation was never written down.
+- **Runs B and C are fully recoverable** — both are from this session and their `sc3launch` command
+  lines are on the record verbatim.
+- **The probe build is unrecoverable** (`re/harness/` is gitignored, no history), so the replay can
+  vary **switches and sequence only**, against the current binary.
+
+## The switch diff is EMPTY, and that is a finding before a single launch
+
+The C-era switch string was
+`-nocom -windowed -origin -fix16 -fitclient -nointro -quiet -filetrace`
+and the current standard string is **byte-identical**. `capture.ps1` adds the same
+`-shot -gzlog -log` in both eras. **No switch existed in the B/C era and is absent now.** The
+cheapest bisection candidate list the coordinator asked for is therefore **empty** — nothing to
+bisect on switches.
+
+(For completeness: the *citysize* investigation of the same era used the string without
+`-filetrace` and with `-modlog SIMCITY.DLL:0x10003ea6`. That is a different investigation on a
+different fixture and is not the camera era's invocation.)
+
+**So the only thing that differs between the churning era and the recent launches is the `-GzSeq`
+cadence:** C used `cam` + 8x(`wait:1000`,`cam`) + 7x(`wait:2500`,`cam`); the recent frozen launches
+used `wait:750` x15 (F1, G1, H1-H4, I1-I6) or `wait:1500` x15 (F2, G2).
+
+## And the sequence hypothesis is ALREADY falsified by data in hand
+
+This has to be said before spending launches. **C, D, E1, E2 and E3 all ran the identical switch
+string AND the identical `-GzSeq`** — and produced **churn, frozen, churn, frozen, churn**. The same
+invocation gave both outcomes inside one block. **Switches and sequence therefore cannot be the
+discriminator**, and the first branch of the decision procedure ("churn returns => bisect
+switches/sequence") is already known to be a dead end even if churn returns.
+
+What the replay can still decide is **temporal**: does the exact C-era invocation churn *now*, after
+thirteen consecutive freezes? That is worth measuring, and it is the only thing this run can settle.
+
+## The invocation being replayed, unchanged
+
+```
+capture.ps1 -Name <n> -GamePath <Cities\Farmsville.sc3>
+  -Switches "-nocom -windowed -origin -fix16 -fitclient -nointro -quiet -filetrace"
+  -GzSeq "cam;wait:1000;cam;wait:1000;cam;wait:1000;cam;wait:1000;cam;wait:1000;cam;wait:1000;cam;wait:1000;cam;wait:1000;cam;wait:2500;cam;wait:2500;cam;wait:2500;cam;wait:2500;cam;wait:2500;cam;wait:2500;cam;wait:2500;cam"
+  -AtSec 150
+```
+**`SC3PROBE_CAMWATCH` and `SC3PROBE_CAMCALLER` both UNSET** — neither existed when C ran, so arming
+either would not be a replay.
+
+## Launch count, declared now
+
+**Adaptive, with the corrected post-load detector** (a MOVED interval whose preceding read was
+already `zoom == 2`): **launch until one launch churns, maximum four, report every launch.** Same
+rule and same ceiling as the H block, with the detector correct from the start this time.
+
+| row | outcome | what it would mean |
+|---|---|---|
+| **BO** | churn returns | difference is in switches/sequence and is bisectable — **but see above: C/D/E1/E2/E3 already crossed that variable, so I would treat a return as temporal recovery, not as a sequence effect, and the first thing I would bisect is nothing on the switch list (it is empty) but the `wait:1000/2500` versus `wait:750` cadence, purely because it is the only remaining difference** |
+| **BP** | all four frozen | difference is **build or machine/session state**, and those are **not separable** because the build is unrecoverable. Stated plainly, attributed to neither. |
+| **BQ** | the old invocation cannot be reproduced faithfully | **already fired for run A** before launching (no recorded launch line). Reported as the diff it is. |
+| **BR** | crash or failure to load | instrument or fixture; report and stop |
+| **BS** | **all four frozen** (the row omitted three times, written here explicitly) | the phenomenon did not occur; frozen intervals still serve as `still` controls; **not** a negative about switches or sequence |
+
+---
+
+# RESULT — **ROW BO fired, in the weakest form the row admits. Motion returned once, at t+32.9 s — beyond the window every recent launch sampled.**
+
+Three launches of the exact C-era invocation, adaptive rule, stopped on the third.
+
+| # | run | baseline | window reached | verdict | first motion |
+|---|---|---|---|---|---|
+| 1 | J1 | 3721 ms (pre-city) | t+32.38 s | **FROZEN** | — |
+| 2 | J2 | 4107 ms (pre-city) | t+33.65 s | **FROZEN** | — |
+| 3 | **J3** | 5102 ms (post-load) | t+32.94 s | **CHURN** | **iv14, t+32.94 s, `dx=+0 dy=+566`** |
+
+**J3 is the first post-load motion in sixteen consecutive launches** (F2, G1, G2, H1-H4, I1-I6, J1,
+J2 frozen; J3 moved).
+
+## The invocation replayed, and the diff against the current standard
+
+```
+capture.ps1 -Name J<n> -GamePath <Cities\Farmsville.sc3>
+  -Switches "-nocom -windowed -origin -fix16 -fitclient -nointro -quiet -filetrace"
+  -GzSeq "cam;wait:1000;cam;wait:1000;cam;wait:1000;cam;wait:1000;cam;wait:1000;cam;wait:1000;cam;wait:1000;cam;wait:1000;cam;wait:2500;cam;wait:2500;cam;wait:2500;cam;wait:2500;cam;wait:2500;cam;wait:2500;cam;wait:2500;cam"
+  -AtSec 150
+SC3PROBE_CAMWATCH and SC3PROBE_CAMCALLER both UNSET (neither existed when C ran)
+```
+
+**Switch diff: EMPTY.** The C-era string and the current standard string are byte-identical, and
+`capture.ps1` adds the same `-shot -gzlog -log` in both eras. **No switch existed in the B/C era and
+is absent now** — the bisection candidate list from switches is empty, established before launching.
+
+**The only difference is the `-GzSeq`,** and it changes two things at once: cadence (~1.24 s then
+~2.7 s, versus a flat ~1.0 s) **and total window** (t+33 s versus t+18-20 s).
+
+**Row BQ fired before any launch: run A cannot be reproduced faithfully.** Its section records read
+cadence and validity counts but **no launch line**, and `re/sessions/PREREG_512_gameplay.md` records
+only a different, keyed sequence (`wait:15000;cam;key:0x25,2500;cam;wait:180000`). B and C are
+recoverable; A is not, and was never written down.
+
+## ⭐ The structural fact, and it is the useful output of this run
+
+**All three replay launches reached ~t+33 s. The twelve `wait:750` launches (G1, H1-H4, I1-I6, F1)
+ended at ~t+18-20 s. The single motion observed happened at t+32.94 s — outside the window those
+launches could ever have sampled.**
+
+That is a concrete, bisectable candidate and it is **window length, not cadence** — which is what I
+pre-registered as the first thing I would bisect, arrived at for a better reason than I had then.
+
+**But I am not going to oversell it, and here is the evidence against:** `F2` and `G2` used
+`wait:1500` and reached t+28.4 s and t+30.1 s, both frozen; `J1` reached t+32.4 s and `J2` t+33.6 s,
+both frozen. So a long window does **not** by itself produce motion — 1 of 5 long-window launches
+moved, once. Window length is now the **only remaining** difference on the table, not a demonstrated
+cause.
+
+## And this event is not the churn regime
+
+Reported precisely, because the difference matters:
+
+| | churn regime (A, C, E1, E3, F1) | **J3, iv14** |
+|---|---|---|
+| motion | both axes, oscillating | **`dx=0`**, y only |
+| magnitude | mean \|dx\| ~1,080-1,317 px per interval, peaks 2,700-3,400 | **+566 px, once** |
+| duration | 7-13 consecutive moving intervals | **1** |
+| translate calls | 66-150 per ~0.9 s interval | **not measured** (see below) |
+| quantisation | mixed; tile-locked in late windows | 566 is not a multiple of 32 |
+
+`rectB` moved with `rectA` and `span` held at `1024x768`, so it is a rigid translation like every
+other motion in this file. `followTarget(+0x354) = 0` on that read as on all others.
+
+**It satisfies the pre-registered criterion and I am scoring it as row BO. It does not resemble the
+phenomenon the criterion was written to catch,** and calling one 566 px y-shift "the churn has
+returned" would be exactly the squeezing-into-a-story that row BL exists to prevent.
+
+## The cost of fidelity, stated plainly
+
+The replay ran with **both env vars unset**, because neither existed when C ran. So the probe printed
+`writes=0  (watchpoint disabled)` on every interval, including J3's moving one. **`writes=0` here is
+not a measurement** — it is the instrument reporting itself off. **I have no writer or caller
+information for the one motion this run produced.** That is the direct price of fidelity, and it was
+the right trade for the question asked, but it means J3 tells us *when* and *how much*, not *who*.
+
+## Which rows fired
+
+| row | status |
+|---|---|
+| **BO — churn returns** | **FIRED**, weakly: 1 launch of 3, 1 interval, `dx=0 dy=+566`, at t+32.94 s. Bisection candidate is **window length** (t+33 vs t+18-20), the only remaining difference; the switch list is empty. |
+| BP — all four frozen => build or machine/session state, not separable | **no** — J3 moved |
+| **BQ — old invocation not faithfully reproducible** | **FIRED for run A**, before launching: no launch line was ever recorded. B and C were reproduced exactly. |
+| BR — crash or failure to load | **no** — 3/3 loaded, 3/3 `COMPLETE`, 0 exceptions |
+| BS — all four frozen (the row omitted three times) | **no** — did not arise, but it was written this time |
+
+## Validity
+
+0 keys in all three; 25 `Farmsville.sc3` filetrace hits each; 0 exceptions, 0 minidumps; 3/3
+sequences `COMPLETE` (31 steps each); 3 shots per launch. `followTarget(+0x354) = 0` on 47/47 reads.
+`N == 1` on 47/47. `span = 1024x768` on 47/47 reads, both rects = 94 prints, **cumulative 694/694**.
+The load-time origin `-160,1604` reproduced again in all three.
+
+## Where this leaves it
+
+**Settled by this run:** the switch set is not the difference — the diff is empty and that is now a
+closed question rather than a suspicion. Run A's invocation is unrecoverable and should stop being
+treated as a reference point.
+
+**The single remaining difference between the churning era and the frozen streak is the sampling
+window**, and the one motion recovered sits outside the short window. **The next run is therefore a
+clean two-arm test and needs no new instrument:** the same launch repeated at `wait:750` (t+20) and at
+the C-era sequence (t+33), interleaved as in the I block, with `SC3PROBE_CAMWATCH=1` so a motion
+carries writer data — **arming CAMWATCH is safe here because F1 already churned with it on**, so it
+is not a fidelity violation the way arming it during this replay would have been.
+
+If the long-window arm moves and the short arm does not, the freeze streak was substantially a
+sampling artefact and thirteen of those "frozen" verdicts need re-reading as "not sampled long
+enough". If neither moves, the J3 event was a rare tail and the difference remains **build or
+machine/session state — which are not separable, because `re/harness/` is gitignored and the A/B/C-era
+binary cannot be rebuilt.**
+
+Install `stock (matches original/)` before and after. No patch; one claim across all three launches,
+lease per launch by the same owner, both released.

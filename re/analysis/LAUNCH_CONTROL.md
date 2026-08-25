@@ -5128,3 +5128,86 @@ set and sequence, unchanged. **If churn returns, the difference is in harness co
 bisectable. If it does not, the precondition is machine or session state and no amount of sampling
 recovers it.** That is a decision procedure rather than another sample, which is what this thread now
 needs.
+
+### §31.14.16 — the replay: switch diff is EMPTY, and one motion returns at t+33 s (2026-08-25)
+
+Three launches under the exact C-era invocation, adaptive rule, stopped on the first churn.
+
+| # | baseline | window reached | verdict | first motion |
+|---|---:|---:|---|---|
+| J1 | 3721 ms | t+32.38 s | frozen | — |
+| J2 | 4107 ms | t+33.65 s | frozen | — |
+| **J3** | 5102 ms | t+32.94 s | **CHURN** | **iv14, t+32.94 s, `dx=0 dy=+566`** |
+
+**First post-load motion in sixteen consecutive launches.**
+
+#### The candidate list is empty
+
+**Switch diff: EMPTY.** The C-era switch string and the current standard are **byte-identical**, and
+`capture.ps1` adds the same `-shot -gzlog -log` in both eras. **No switch existed then and is absent
+now.** Established before launching, which is the right order.
+
+The only difference is the `-GzSeq`, and it changes **two things at once**: cadence *and* total window.
+
+**Row BQ fired before any launch: run A cannot be reproduced faithfully.** Its section records cadence
+and validity counts but **no launch line**. **A should stop being treated as a reference point** — it
+has been cited repeatedly in this thread as one of the churning runs, on a record that does not exist.
+
+#### The proposal — window length — and why it does NOT survive the existing data
+
+The replays reached ~t+33 s; the twelve `wait:750` launches ended at **~t+18–20 s**; and J3's motion
+came at **t+32.94 s**, outside anything those launches could sample. That is a real observation.
+
+**But it cannot explain the freeze streak, and this is the check the run report did not make.** The
+recorded churn onsets are:
+
+| run | onset |
+|---|---|
+| E1 | t+6.26–7.42 s |
+| C | t+6.80–8.00 s |
+| F1 | t+7.82–8.73 s |
+| B | t+13.46–14.59 s |
+| E3 | t+13.51–16.15 s |
+
+**Three of the five are at t+6–9 s — well inside an 18–20 s window.** So a short window would have
+sampled them. **Thirteen later short-window launches saw nothing at t+6–9 s**, and window length says
+nothing about why.
+
+Against overselling it from the other side too: **1 of 5 long-window launches moved** (F2 at 28.4 s and
+G2 at 30.1 s were both frozen). **Window length is the only remaining difference on the table — it is
+not a demonstrated cause.**
+
+#### This event is not the churn regime, and the run agent declined to call it one
+
+| | churn regime (C, E1, E3, F1) | J3 iv14 |
+|---|---|---|
+| motion | both axes, oscillating | **`dx = 0`**, y only |
+| magnitude | mean \|dx\| 1,080–1,317 px per interval | **+566 px, once** |
+| duration | 7–13 consecutive moving intervals | **1** |
+
+It satisfies the pre-registered criterion and is scored as such. **Calling one 566 px y-shift "the churn
+is back" would be exactly the squeezing-into-a-story the mixed-outcome row exists to prevent.**
+
+`rectB` moved with `rectA`, span held at `1024x768`, `followTarget = 0`.
+
+#### The cost of fidelity, stated as a cost
+
+Both env vars were unset for faithfulness, so the probe printed `writes=0 (watchpoint disabled)` on
+every interval **including J3's moving one**. **That `writes=0` is the instrument reporting itself off,
+not a measurement.** So J3 tells us *when* and *how much*, and **nothing about who.** Right trade for
+the question asked, and worth naming so the number is never quoted as a null.
+
+#### Next: a two-arm test, no new instrument
+
+Same launch at `wait:750` (≈t+20) against the C-era sequence (≈t+33), **interleaved** as in the I
+block, with `SC3PROBE_CAMWATCH=1` so any motion carries writer data. **Arming the watchpoint is
+legitimate here** — F1 already churned with it on, so it is not the fidelity violation it would have
+been during this replay.
+
+- long arm moves, short does not → the freeze streak was substantially a **sampling artefact**, and
+  thirteen "frozen" verdicts need re-reading as **"not sampled long enough"**.
+- neither moves → J3 was a rare tail, and the difference remains **build or machine/session state —
+  not separable**, because `re/harness/` is gitignored and the era binary cannot be rebuilt.
+
+Validity: 0 keys, 25 filetrace hits each, 0 exceptions, 3/3 COMPLETE. `followTarget = 0` on 47/47.
+`N == 1` on 47/47. `span = 1024x768` **cumulative 694/694**. Load origin `-160,1604` in all three.
