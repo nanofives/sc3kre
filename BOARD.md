@@ -199,6 +199,33 @@ Order:
 | `U-077` | Class behind occupant IID `0x41658d28`; label flag bits `0x400`/`0x4000`. Can sit indefinitely. |
 | `U-063` | Who calls the RECT zone writer `0x10032afa`. Gates rect-level zone edits. |
 
+## ⚠️ THE INSTALL IS DELIBERATELY MODIFIED — `SIMSPR.DLL`, slower camera
+
+**Staged 2026-08-25 at the owner's request.** `Apps\SIMSPR.DLL` carries `scroll_speed=16`: all five
+zoom-step slots read **16.0** where shipped is **32.0**, so the camera scrolls at half speed.
+
+**This means `game_lock.ps1 -Status` now reports `install : MODIFIED -> SIMSPR.DLL`, and that is
+EXPECTED, not contamination.** Any session that sees it should read this note before assuming a run
+left debris behind.
+
+| | |
+|---|---|
+| backup | `Apps\SIMSPR.DLL.shipped`, sha256 `eec715009152eec0ce756f74…` |
+| staged | 5 differing runs, **10 bytes**, verified by an independent `--diff` |
+| live values | `0x10067690`–`0x100676a0` all read `16.0` |
+
+**Undo, and do this before any run that needs a stock install:**
+
+```powershell
+Copy-Item Apps\SIMSPR.DLL.shipped Apps\SIMSPR.DLL -Force
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --read 0x10067690:f32 -n 5   # expect 32.0 x5
+```
+
+⚠️ **Any measurement taken while this is staged is on a modified SIMSPR** — that is the module carrying
+the camera, the iso view and the sprite paths, so it is not a neutral change for rendering or camera
+work. `U-082`'s record is unaffected (it closed before this was staged), but a future camera run must
+restore first or it is not measuring the shipped game.
+
 ## Cross-cutting debt
 
 Ordered by how much damage it can do silently.
