@@ -4727,3 +4727,84 @@ real and D is the fourth sample of a coin flip.
    against a scarce game lease are the wrong instrument for it. Several short runs, or an in-process
    detector that reports whether churn occurred, would settle more per lease than another full
    measurement.
+
+### §31.14.11 — the watchpoint is exonerated, and the wall turns out to be surmountable (2026-08-25)
+
+Three control launches in one lease, `SC3PROBE_CAMWATCH` **unset**, everything else identical.
+
+**`E2` froze: 15 consecutive reads at `-160,1604` over 27.9 s with the variable unset.** That is the
+single freeze the design was bought for. **The suppression hypothesis is dead, the watchpoint is
+exonerated, and nothing built on run D needs withdrawing.**
+
+#### The pre-registered criterion was defective, and the run agent fixed it in the open
+
+The criterion — *"any consecutive pair differing ⇒ churn"* — fires on the **city-load transition**
+(`zoom=0 tilepx=8` at `-508,-73` becoming `zoom=2 tilepx=32` at `-160,1604`). That is loading, not
+churn, and it is **not comparable across runs**: whether a run's first read lands pre- or post-load is
+timing jitter. D and E1 never sampled the pre-city state; E2 and E3 did. **Corrected criterion, applied
+uniformly: count only from the first post-load `zoom=2` read.**
+
+| run | deciding pair | verdict | onset bracket |
+|---|---|---|---|
+| E1 | read 2→3, `-160,1604` → `-362,1346` | **churn** | t+6.26 – 7.42 s |
+| E2 | none | **FROZEN**, 15 reads / 27.9 s | never |
+| E3 | read 9→10, `-160,1604` → `-465,861` | **churn** | t+13.51 – 16.15 s |
+
+#### ⭐ Churn stops by itself — so every run-level verdict in this file is really about sampling
+
+`E1` churned for 7 transitions and then **froze at `-1466,114` for reads 9–15, six consecutive zero
+transitions over 15.8 s.** So **churning and frozen are properties of a WINDOW, not of a run.** A run
+that started at t+18 s would have called E1 frozen.
+
+That reframes the whole non-reproducibility problem, **including my own verdict on D**: those were
+statements about *when each run sampled*, not about what the game was doing.
+
+#### ⭐ The zoom also changes with no input
+
+`E3` went `zoom=2 tilepx=32` → **`zoom=4 tilepx=128`** between t+24.03 s and t+26.65 s, **zero keys**.
+`SetZoom` is a **different vtable slot** (`+0x38` → `0x10006752`) from the translate (`+0x2c` →
+`0x10006226`), so whatever drives this reaches **more than one entry point.** A writer hunt aimed only
+at the translate could therefore miss the cause even when it fires.
+
+#### The out-of-bounds yardstick is zoom-dependent, and that settles the earlier flag
+
+The bound is `N × tilepx` by `N × tilepx / 2`, which moves with zoom — verified: at N=192,
+`zoom 2 → 6144 × 3072`, `zoom 4 → 24576 × 12288`. E3's read 14 has `y = 7426`, **outside** the zoom-2
+bound and **inside** the zoom-4 one. **Every out-of-bounds claim in this thread must be re-checked
+against the zoom on the same read.**
+
+#### Tally across all seven runs, corrected criterion
+
+| run | CAMWATCH | verdict | first motion |
+|---|---|---|---|
+| A | unset | churn | not bracketed |
+| B | unset | churn | t+13.46 – 14.59 |
+| C | unset | churn | t+6.80 – 8.00 |
+| **D** | **SET** | frozen | never |
+| E1 | unset | churn, **then froze from t+15.7 s** | t+6.26 – 7.42 |
+| **E2** | **unset** | **FROZEN** | never |
+| E3 | unset | churn | t+13.51 – 16.15 |
+
+Without the watchpoint: **5 churn, 1 frozen of 6.** D is no longer exceptional. (Row AR, not a
+base-rate argument — one freeze without the variable was the pre-registered killer, and E2 delivered
+it.)
+
+**Onset brackets, four:** 6.26–7.42, 6.80–8.00, 13.46–14.59, 13.51–16.15. **Two near t+7 s, two near
+t+14 s, nothing between.** `[UNCERTAIN]` — n = 4, so an observation, not a distribution. If it survives
+more samples, **bimodal onset would mean two triggers rather than one noisy one**, and counting costs
+nothing.
+
+#### Reconfirmed
+
+`followTarget(+0x354) = 0` on all 47 control reads — **63 consecutive** with C and D. `N == 1` on 47/47.
+`span = 1024x768` on 47/47 for both rects, **cumulative 170/170** across six series.
+
+#### ⭐ The method fix that un-parks this thread
+
+**The churn gate must be a WINDOW gate, not a run gate — E1 is the proof.** Have `cam` report the
+watchpoint census **per interval**, alongside that interval's `dx, dy`. Then **each interval is its own
+experiment**: the intervals that moved are the ones whose EIPs matter, and a run like E1 yields **both
+a moving sample and a frozen control inside one launch.**
+
+That removes the reason this was parked. The blocker was "we cannot reliably get a moving camera in a
+run"; the answer is that we do not need to — we need to *label* the intervals we already get.

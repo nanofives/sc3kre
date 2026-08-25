@@ -356,7 +356,13 @@ times in a row.
 Two limits are printed in its own arm line so they cannot be missed: data breakpoints are **per
 thread**, so **zero hits is ambiguous**; and the reported EIP is the instruction **after** the store.
 
-⚠️ **PARKED 2026-08-25 at a non-reproducibility wall, after seven runs.** The watchpoint was built, armed correctly and reported 0 hits — **but the camera did not move that run**, so it measured the instrument rather than the camera. Churn onset across four identical runs: **t+16.6 s, t+14.6 s, t+8.0 s, never.** A 3-of-4 rate that **nothing identified sorts** — not elapsed time, not the fixture, not input, not the sim.
+✅ **UN-PARKED 2026-08-25 — the wall was an artefact of run-level verdicts.** Three controls with the watchpoint disabled produced a freeze (E2, 15 reads / 27.9 s), which **kills the suppression confound and exonerates the instrument**. And E1 showed **churn stops by itself** — it churned 7 transitions then froze for 6 — so churning and frozen are properties of a **window**, not a run. Every run-level verdict here, mine included, was really about *when it sampled*.
+
+**So the blocker dissolves.** The problem was never "we cannot get a moving camera"; it was that we labelled whole runs. **Next step: have `cam` report the watchpoint census PER INTERVAL beside that interval's `dx,dy`.** Each interval becomes its own experiment, the moving intervals are the ones whose EIPs matter, and a single launch yields both a moving sample and a frozen control. Needs no reliable churn at all.
+
+⭐ **Also found: the ZOOM moves with no input** (`zoom=2` → `zoom=4`, zero keys), and `SetZoom` is a *different* vtable slot from the translate — so the driver touches more than one entry point, and a translate-only hunt could miss it. And the out-of-bounds bound is **zoom-dependent** (`N x tilepx`), so every such claim in this thread needs re-checking against the zoom on the same read.
+
+~~PARKED at a non-reproducibility wall, after seven runs.~~ The watchpoint was built, armed correctly and reported 0 hits — **but the camera did not move that run**, so it measured the instrument rather than the camera. Churn onset across four identical runs: **t+16.6 s, t+14.6 s, t+8.0 s, never.** A 3-of-4 rate that **nothing identified sorts** — not elapsed time, not the fixture, not input, not the sim.
 
 **Before any further run in this thread, two things are required, and they are the reason it is parked rather than continued:** a **live churn-detection gate** (so a null cannot masquerade as a negative — this run fell in that trap) and **a base rate instead of another single run** (at 3-of-4, one run cannot separate "my change suppressed it" from "this one was quiet"). Single runs against a scarce lease are the wrong instrument for a sample-size problem.
 

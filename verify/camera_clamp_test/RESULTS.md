@@ -778,3 +778,195 @@ non-reproducibility is real and D is just the fourth sample of a coin-flip.
 
 Install `stock (matches original/)` before and after; no patch, one run, claim and lease both
 released.
+
+---
+
+# Watchpoint-suppression control — PRE-REGISTRATION, written before the launches, 2026-08-25
+
+Run D (the write-watchpoint run) was the only run with `SC3PROBE_CAMWATCH=1` and the only completely
+frozen run. That coincidence is mine to clear before anything built on D is trusted.
+
+**The design rests on an asymmetry, and it is the reason this run is worth a session.** Three runs
+without the watchpoint already exist (A churned, B stable-then-jumped at t+14.6 s, C churned). So:
+
+> **If freezing EVER happens without `SC3PROBE_CAMWATCH`, the suppression hypothesis is dead.**
+
+**One frozen no-var run is decisive. A churning no-var run is worth nothing** — at the observed
+3-in-4 base rate, churn is simply the expected outcome, and three churns in a row would occur about
+42% of the time by luck alone. This is stated here, before the launches, so a churn cannot later be
+read as evidence for suppression.
+
+**Design: three launches, `SC3PROBE_CAMWATCH` unset, otherwise byte-identical to D** — Farmsville via
+`-GamePath`, the same switch string, the **same `-GzSeq` step-for-step** (16 `cam` reads, eight
+~1.24 s apart then seven ~2.7 s apart, out to ~t+32 s), no input. A shortened sequence was considered
+and rejected: for a control, "identical" is the point, and a shorter window would make "frozen" mean
+something weaker than it did in D.
+
+**Deciding criterion, fixed in advance:** *any* pair of consecutive `cam` reads whose `rectA`
+differs => **churn**. Zero such pairs across the whole window => **frozen**.
+
+| row | prediction | what it would mean |
+|---|---|---|
+| **AR** | **any one of the three is frozen** | suppression hypothesis **DEAD**; the watchpoint is exonerated; non-reproducibility is a property of the game, not the instrument |
+| **AS** | all three churn | **not** proof of suppression. Consistent with it, does not establish it (~42% by chance). What would settle it: a matched set with the var **set**. |
+| **AT** | any run crashes or fails to load | instrument or fixture problem — report and stop |
+
+**Free addition, registered now:** for each run that churns, the **elapsed time to first motion**.
+Four onsets are known (t+16.6 s, t+14.6 s, t+8.0 s, never); three more begin to show whether the
+onset distribution has any shape.
+
+**One protocol deviation, disclosed.** `capture.ps1` acquires the game lease itself and releases it in
+its own `finally`, so a lease taken by hand around all three launches would be dropped by the first
+one. What is actually held continuously across the three is the **harness claim** (`cam-enum`); the
+lease is re-taken and released per launch by the same owner via `SC3_SESSION`, which preserves the
+single-instance guarantee and the attribution. Install verified stock before and after.
+
+---
+
+# RESULT — **ROW AR FIRED. Run E2 froze with `SC3PROBE_CAMWATCH` unset. The suppression hypothesis is DEAD and the watchpoint is exonerated.**
+
+Three launches, var unset, byte-identical sequence to D, no input in any of them, all three ran to
+`COMPLETE` with zero exceptions. **E2 sat at `-160,1604` for 15 consecutive reads spanning 27.9 s.**
+That is the decisive single freeze the design was bought for: freezing happens without the
+instrument, so the instrument does not cause it. My confound on run D is cleared.
+
+## First, the criterion I pre-registered was defective, and I am not going to quietly fix it
+
+I wrote: *any pair of consecutive `cam` reads whose `rectA` differs => churn*. Applied literally,
+**all three controls churn** — and that answer is wrong, because the pair it fires on in E2 and E3 is
+`read 1 -> read 2`, the **city-load transition**: `zoom=0 tilepx=8` at `-508,-73` (the pre-city
+default) becoming `zoom=2 tilepx=32` at `-160,1604`. That is loading, not churn.
+
+Worse, it is not comparable across runs. Whether a run's first read lands before or after the city
+loads is load-timing jitter: **D and E1 never sampled the pre-city state; E2 and E3 did.** So the
+criterion as written classifies runs by when their first sample happened to fall.
+
+**Corrected criterion, applied uniformly to every run in this file:** consider only reads from the
+first `zoom=2` post-load read onward. Churn = any consecutive pair differing within that window.
+
+| run | literal criterion | **corrected criterion** |
+|---|---|---|
+| E1 | churn | **CHURN** |
+| E2 | churn | **FROZEN** |
+| E3 | churn | **CHURN** |
+
+## The three controls, with the deciding read pair for each
+
+**E1 — CHURN, then it STOPPED.** `CAMW` lines: 0 (var confirmed unset). 15 reads.
+
+| # | t (ms) | x | y | dx | dy |
+|---|---|---|---|---|---|
+| 1 | 4994 | -160 | 1604 | — | — |
+| 2 | 6257 | -160 | 1604 | 0 | 0 |
+| **3** | **7421** | **-362** | **1346** | **-202** | **-258** |
+| 4 | 8545 | -82 | -450 | +280 | -1796 |
+| 5 | 9672 | -82 | 1355 | 0 | +1805 |
+| 6 | 10796 | -1362 | 1974 | -1280 | +619 |
+| 7 | 11921 | -1362 | 895 | 0 | -1079 |
+| 8 | 13046 | 794 | -9 | +2156 | -904 |
+| 9 | 15671 | -1466 | 114 | -2260 | +123 |
+| 10-15 | 18296 - 31421 | -1466 | 114 | **0** | **0** |
+
+Deciding pair: **read 2 -> 3, t+6257 -> t+7421 ms, `-160,1604` -> `-362,1346`.** Onset bracket
+**t+6.26 s to t+7.42 s**. Then, unprompted, **it froze at `-1466,114` for reads 9 through 15 — six
+consecutive zero transitions over 15.8 s.**
+
+**E2 — FROZEN. This is the run that settles it.** `CAMW` lines: 0. 16 reads.
+
+| # | t (ms) | x | y | zoom |
+|---|---|---|---|---|
+| 1 | 4113 | -508 | -73 | 0 (pre-city) |
+| 2 | 5335 | -160 | 1604 | 2 |
+| 3-16 | 6623 - 33221 | **-160** | **1604** | 2 |
+
+**Zero differing pairs across the entire post-load window: 15 reads, t+5.34 s to t+33.22 s, 27.9
+seconds, not one pixel.** Materially identical to D — and with the watchpoint absent.
+
+**E3 — CHURN, and the zoom moved on its own.** `CAMW` lines: 0. 16 reads.
+
+| # | t (ms) | rectA | zoom | tilepx |
+|---|---|---|---|---|
+| 1 | 3697 | -508,-73,516,695 | 0 | 8 |
+| 2-9 | 4979 - 13512 | **-160,1604,864,2372** (identical) | 2 | 32 |
+| **10** | **16154** | **-465,861,559,1629** | 2 | 32 |
+| 11 | 18779 | -1154,2077,-130,2845 | 2 | 32 |
+| 12 | 21404 | 1533,570,2557,1338 | 2 | 32 |
+| 13 | 24029 | -600,1347,424,2115 | 2 | 32 |
+| **14** | **26653** | **868,7426,1892,8194** | **4** | **128** |
+| 15 | 29279 | -1516,6838,-492,7606 | 4 | 128 |
+| 16 | 31903 | -2512,7120,-1488,7888 | 4 | 128 |
+
+Deciding pair: **read 9 -> 10, t+13512 -> t+16154 ms, `-160,1604` -> `-465,861`.** Onset bracket
+**t+13.51 s to t+16.15 s**.
+
+## Two findings the control run was not designed to get
+
+**1. Churn stops by itself. E1 churned for 7 transitions then froze for 15.8 s.** So "churning" and
+"frozen" are not properties of a run — they are properties of a *window* within a run. Every
+run-level classification in this file, including my own D verdict, is therefore a statement about
+when it sampled. A run that begins sampling at t+18 s would have called E1 frozen.
+
+**2. The zoom changes with no input.** E3 went `zoom=2 tilepx=32` -> `zoom=4 tilepx=128` between
+t+24.03 s and t+26.65 s, zero keys dispatched. A second field on this object moves unprompted, and
+`SetZoom` is a different vtable slot (`+0x38` -> `0x10006752`) from the translate (`+0x2c` ->
+`0x10006226`), so whatever is driving this reaches more than one entry point.
+
+That also **settles the yardstick question I flagged two runs ago**. E3 read 14 has `y = 7426`, which
+is outside `0..3072` (the diamond at `tilepx=32`) but inside `0..12288` (the diamond at
+`tilepx=128 = 192 x 128 / 2`). The bound is **zoom-dependent**, `N x tilepx` by `N x tilepx / 2`, and
+`0..48896` was never the right comparison. **Any out-of-bounds claim in this file must be re-checked
+against the zoom recorded on the same read.**
+
+## Reconfirmed across the controls
+
+- **`followTarget(+0x354) = 0x00000000` on all 47 control reads.** With C and D that is **63
+  consecutive reads** with the follow gate closed. Row AJ stands, three runs deep.
+- **`N == 1` candidate on 47/47.** Row AE stands.
+- **`span = 1024x768` on 47/47 reads, `rectA` and `rectB` both** = 94 prints, **cumulative 170/170**
+  across six series. Rigid translation remains the most robust fact in the thread.
+- Validity: 0 keys in all three; 25 `Farmsville.sc3` filetrace hits each; 0 exceptions, 0 minidumps,
+  all three sequences `COMPLETE`, all three shots written.
+
+## Running tally, corrected criterion, all seven runs
+
+| run | `CAMWATCH` | post-load window | verdict | first motion (bracket) |
+|---|---|---|---|---|
+| A | unset | t+16.6 -> 32.4 s | churn | not bracketed (already moving at first read) |
+| B | unset | t+6.6 -> 14.6 s | churn | t+13.46 -> 14.59 s |
+| C | unset | t+5.6 -> 32.0 s | churn | t+6.80 -> 8.00 s |
+| **D** | **SET** | t+4.97 -> 32.67 s | **frozen** | never |
+| E1 | unset | t+4.99 -> 31.42 s | churn, **then froze from t+15.7 s** | t+6.26 -> 7.42 s |
+| **E2** | **unset** | t+5.34 -> 33.22 s | **frozen** | **never** |
+| E3 | unset | t+4.98 -> 31.90 s | churn | t+13.51 -> 16.15 s |
+
+**Base rate without the watchpoint: 5 churn, 1 frozen out of 6.** D's freeze is no longer
+exceptional. Suppression is dead by row AR, not by a base-rate argument — one freeze without the var
+was the pre-registered killer and E2 delivered it.
+
+**Onset brackets, four of them now:** t+6.26-7.42, t+6.80-8.00, t+13.46-14.59, t+13.51-16.15. Two
+near t+7 s and two near t+14 s, with nothing in between. **n = 4, so this is an observation and not a
+distribution** — but if it survives more samples, a bimodal onset would mean two triggers rather than
+one noisy one, and that is a cheap thing to keep counting.
+
+## Which rows fired
+
+| row | status |
+|---|---|
+| **AR — any one of the three frozen** | **FIRED** — E2, 15 reads, 27.9 s, zero motion |
+| AS — all three churn | **no** under the corrected criterion (yes under the literal one, which I have shown is not comparable across runs) |
+| AT — a run crashes or fails to load | **no** — 3/3 loaded, 3/3 completed, 0 exceptions |
+
+## What this changes for the next step
+
+**The write-watchpoint instrument is cleared for use.** Nothing built on D needs withdrawing, and D's
+one positive fact stands: no continuous same-value writer of `iso+0x54` on the game thread.
+
+**But the live churn-detection gate is now mandatory, not merely advisable, and E1 shows why it must
+be a *window* gate rather than a run gate.** A watchpoint census is only interpretable if the origin
+demonstrably moved *while the census was accumulating*. The cheap version: have `cam` report the
+watchpoint census **per interval** alongside that interval's `dx,dy`, so each interval is its own
+experiment — the intervals that moved are the ones whose EIPs matter, and a run like E1 yields both a
+moving sample and a frozen control inside one launch.
+
+Install `stock (matches original/)` before and after; no patch; claim held across all three launches,
+lease per launch by the same owner, both released.
