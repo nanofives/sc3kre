@@ -173,22 +173,52 @@ reading was not interpreted. Held to, after the result was in.
 
 Two structural findings, which is what the lease actually bought:
 
-1. ⚠️ **`iso+0x4ec` is NOT the raster class — REFUSED both times.** Its vtable is
-   `GZGraphicD+0x1F328`, not `GZGraphicD+0x1E894`. **This refutes the assumption written into the
-   approved design** (that the blit dest is the same device class as the render target). The real blit
-   destination needs its own read interface. The refusal is the fail-loud gate catching a bad premise
-   instead of crashing on it.
+1. ⚠️ **`iso+0x4ec` was REFUSED both times** — vtable `GZGraphicD+0x1F328`, not `GZGraphicD+0x1E894`.
+
+   ⭐ **But the follow-up refutes the refusal's interpretation, and the correction matters.** The first
+   reading was *"the blit dest is a foreign class and needs its own read interface."* **False.**
+   `+0x1F328` is a **subclass** of `+0x1E894`: ctor `FUN_10015c88` calls the raster base ctor
+   `FUN_10009db4` then installs its own vtable `[CONFIRMED @ 0x10015c88]`. Byte-read from the
+   untouched `original\modules\GZGraphicD.dll`, **only 9 of 109 slots differ**
+   (`0x0,0x4,0x8,0x10,0x14,0x18,0x34,0x38,0x3c` — lifecycle plus the w/h getters). **The whole read
+   interface is identical function pointers**: lock `FUN_10014649`, unlock `FUN_1001467e`, bits
+   `FUN_1001575d` (`+0x1a8`), pitch `FUN_10015767` (`+0x1ac`), and the `+0x0c == FUN_10009efb` second
+   witness. Reproduced independently with `re/tools/gz_vtdump.py`.
+
+   **So `iso+0x4ec` was never unreadable — the gate hard-coded one accepted vtable.** The identical
+   bracket reads both; the fix is to accept either. The fail-loud gate still did its job (it refused
+   rather than crashed), but the conclusion drawn from the refusal was wrong and is corrected here.
 2. **`iso+0x74` has no lockable bits even in the healthy control** — `vf1a8` returns `0x28`, pitch
    `0`, while Europolis renders in full. Raw dims *do* track the resize (1024x768 → 1280x1024) and
-   `created` is set. So `iso+0x74` is likely **not where the visible iso pixels live** at
-   heartbeat-sample time, or its bits exist only inside the engine's own paint bracket. The old device
-   probe only saw healthy bits after forcing a fresh create, so `0x28` is the steady state, not a
-   malformed call.
+   `created` is set.
 
-**Next (desk work, no lease):** resolve the `+0x1F328` class's lock/bits slots from the export, and
-evaluate two alternative read points — `iso+0x74`'s `sub(+0x44)` sub-object, and sampling from
-**inside** the engine's paint bracket rather than the heartbeat. Then pre-register a second dump.
-Record: `re/sessions/STATUS_resize.md` line 206 onward.
+   ⭐ **Now mechanically explained.** `vf1a8` = `*(*(this+0x44)+0xf0)` and `vf1ac` =
+   `*(*(this+0x44)+0xf4)`, with `vf1c` delegating the lock to `sub->vt[+0xc]`
+   `[CONFIRMED @ 0x1001575d / 0x10015767 / 0x10014649]`. Because `vf1a8` dereferences `this+0x44`
+   **before** `+0xf0`, a null sub-object would fault — it did not. **So the sub-object exists but
+   carries no backing memory at heartbeat.** The pixels are backed **only inside the engine's own lock
+   bracket**, which is why every out-of-band sample reads empty.
+
+**Next, pre-registered in two stages (`STATUS_resize.md`):** **Stage 1** — relax the gate to accept
+either vtable, dump both objects, log the raw sub-object. Cheap, safe, settles the dest side and
+witnesses both sub-objects. **Stage 2** — sample **inside** the paint bracket, between a `vf1c` and
+its `vf20` on `iso+0x74`. That is the only thing that settles black-vs-garbage; cheapest candidate is
+piggybacking the existing `FUN_10018c58` blit hook (already game-thread, mid-paint,
+re-entrancy-guarded), fallback a filtered hook on the hot `FUN_10014649`.
+
+⚠️ **Dumping `sub(+0x44)` directly is VOID by construction at heartbeat** — same empty `0x28`/pitch-0
+state. Keep it as logged data, never as the discriminator.
+
+### ⭐ UI reflow root-caused, 2026-08-25, no lease — the shippable half
+`[CONFIRMED @ 0x100270e5]` SIMUI `FUN_100270e5` holds three hardcoded HUD tables and **has no branch
+above width 800**, so **every resolution ≥ 801 gets the 1024x768 top-strip table**. Consumer is
+`FUN_10024a96` (single caller). Field layout decoded: idx 0 is a resource tag, odd fields are X
+anchors that scale, even fields are fixed top-strip Y. An exhaustive **filesystem-walk** negative (not
+`Grep`, which cannot see the export) confirms **no 1152 or 1280 table exists anywhere in SIMUI**.
+Modding fix specified: add a `width >= 0x500` branch plus a registered layout resource.
+
+The uninitialised-buffer theory for the stray magenta widget at ~(1126, 875) is **refuted** — the
+consumer never reads past the written region. Two grounded leads recorded in its place.
 
 **Behind it:** `U-069` — downward resize has never been exercised at all, so read every "resize
 works" claim as "resize *upward* works". Only 1280x1024 has been tested; four unpinned device-vtable
