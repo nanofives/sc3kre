@@ -356,6 +356,12 @@ times in a row.
 Two limits are printed in its own arm line so they cannot be missed: data breakpoints are **per
 thread**, so **zero hits is ambiguous**; and the reported EIP is the instruction **after** the store.
 
+⚠️ **PARKED 2026-08-25 at a non-reproducibility wall, after seven runs.** The watchpoint was built, armed correctly and reported 0 hits — **but the camera did not move that run**, so it measured the instrument rather than the camera. Churn onset across four identical runs: **t+16.6 s, t+14.6 s, t+8.0 s, never.** A 3-of-4 rate that **nothing identified sorts** — not elapsed time, not the fixture, not input, not the sim.
+
+**Before any further run in this thread, two things are required, and they are the reason it is parked rather than continued:** a **live churn-detection gate** (so a null cannot masquerade as a negative — this run fell in that trap) and **a base rate instead of another single run** (at 3-of-4, one run cannot separate "my change suppressed it" from "this one was quiet"). Single runs against a scarce lease are the wrong instrument for a sample-size problem.
+
+**One confound owed on my own instrument:** run D was the only one with `SC3PROBE_CAMWATCH=1` and the only fully frozen one. No mechanism is nameable, but the cheapest test on the list is rerunning it with the env var unset, and it should happen before the watchpoint is trusted on a moving camera.
+
 **Also still open:** whatever flips the quantisation at t ≈ 19–21 s.
 
 ## Publish hygiene — `github.com/nanofives/sc3kre` is PUBLIC

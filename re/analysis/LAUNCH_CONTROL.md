@@ -4659,3 +4659,71 @@ The call-site hunt proved `FUN_10006226` has one vtable pointer and no direct ca
 prove `FUN_10006226` is the only code that writes `iso+0x54..+0x70`.** A **write watchpoint on
 `iso+0x54`** names the writer directly instead of eliminating candidates — and candidate elimination
 has now lost five times in a row here.
+
+### §31.14.10 — the watchpoint works, the phenomenon did not show up, and non-reproducibility is now the blocker (2026-08-25)
+
+**No pre-registered row fired.** The watchpoint armed cleanly on the correct thread, survived 38 s and
+reported **0 hits** — but the camera was **byte-identical on all 15 reads across 27.7 s**. With no
+motion, zero hits is the trivially consistent case, not evidence about a cross-thread writer.
+**Who writes `iso+0x54` is still unmeasured, because on this run nobody did.**
+
+```
+### CAMW: ARMED 4-byte WRITE watch on iso+0x54 = 0x0EEC597C, thread 29684 ...
+### CAMW: 0 hit(s), 0 unique writer(s) of iso+0x54 (0x0EEC597C)
+```
+
+`tid 73f4` = 29684, so it armed exactly the thread `cam` runs on — verified, not assumed.
+
+#### The null is load-bearing, because the game was demonstrably alive
+
+`raster_blit_hw` climbed monotonically 3,063 → 13,395 at ~2,050 blits per interval, 7 heartbeats, no
+exception, no dump, and the frame is a normal dense farmland view. **The engine drew 13,400 blits while
+the camera sat still.** Also: where a frame exists the ticker reads paused, so sim-driven camera motion
+is out on those runs.
+
+#### Two things this run does establish
+
+1. **Hardware-verified: zero writes to `iso+0x54` from the game thread across 27.7 s of a live,
+   rendering, static-camera city.** No continuous same-value writer exists — which **closes off** "the
+   field is constantly rewritten and `cam` catches it mid-write", one of the two survivors from the
+   `U-082` null.
+2. **The instrument is fit for use.** It arms, costs nothing observable, does not crash the process.
+   It has simply never been pointed at a moving camera.
+
+#### ⚠️ The blocker is now non-reproducibility, and it is not a small problem
+
+Four runs. Same fixture, same switches, same probe path, zero input in all four:
+
+| run | window | behaviour |
+|---|---|---|
+| A | t+16.6 → 32.4 s | churn throughout, mean \|dx\| 1,080 px |
+| B (enumeration) | t+6.6 → 14.6 s | stable 6 reads, one jump at t+14.6 s |
+| C (follow gate) | t+4.3 → 32.0 s | churn from t+8.0 s, 13/15 moved |
+| **D (watchpoint)** | t+5.0 → 32.7 s | **frozen: 0 of 14 transitions moved** |
+
+Onset has been **t+16.6 s, t+14.6 s, t+8.0 s, and never** — a **3-of-4 churn rate**. Not elapsed time
+(killed in §31.14.9), not the fixture (all four Farmsville, and the two quiet windows are on the
+fixture called unstable), not input, not the sim. **Nothing identified so far sorts these four runs.**
+The load origin `-160,1604` is now reproduced a **fourth** time.
+
+#### The confound on my own instrument, which the run agent raised rather than buried
+
+**Run D is the only run with `SC3PROBE_CAMWATCH=1`, and run D is the only fully frozen run.** Against
+it: the VEH recorded 0 hits so it never executed, and an armed-but-unhit debug register has no runtime
+cost — there is no mechanism I can name. But "new instrument arrives, phenomenon vanishes" is not
+something to leave unexamined off one run. `[UNCERTAIN]`.
+
+**The test is the cheapest run on the list: identical to D with the env var unset.** If that churns,
+the watchpoint is the suppressor and must be withdrawn. If it is also frozen, non-reproducibility is
+real and D is the fourth sample of a coin flip.
+
+#### Two method requirements for any future run in this thread
+
+1. **A live churn-detection gate.** Only trust a writer census from a run where consecutive reads
+   actually differ. Otherwise a null is indistinguishable from a real negative — exactly the trap this
+   run fell into.
+2. **A base rate, not another single run.** At a 3-of-4 churn rate, one run cannot distinguish "my
+   change suppressed it" from "this one was quiet". That is a sample-size problem, and single runs
+   against a scarce game lease are the wrong instrument for it. Several short runs, or an in-process
+   detector that reports whether churn occurred, would settle more per lease than another full
+   measurement.

@@ -619,3 +619,162 @@ this from being another gate-by-gate elimination. (2) What changes at t ~ 20 s t
 tile-quantised, given no input and no other logged transition there.
 
 Install `stock (matches original/)` before and after; no patch, one run, both locks released.
+
+---
+
+# Write-watchpoint run — PRE-REGISTRATION, written before the launch, 2026-08-25
+
+Four mechanisms have now been eliminated one gate at a time. This run stops eliminating and asks the
+direct question: **who writes `iso+0x54`?**
+
+Instrument: `SC3PROBE_CAMWATCH=1` arms a **hardware 4-byte write watchpoint** on the origin-x dword —
+`DR0` = `iso+0x54`, `DR7` L0 set, `RW0=01` (break on write), `LEN0=11` (4 bytes). A vectored handler
+records faulting EIPs into a bounded 16-entry table with per-EIP counts, resolved to `MODULE +
+offset` via `log_modaddr`. `cam` arms on its first successful read and reports the accumulated census
+on **every** read, so the output is a running total, not one snapshot. Off unless the env var is set.
+Probe rebuilt to 246,272 b.
+
+**Two limits, and the probe prints them itself in the arm line.** Data breakpoints are **per thread**,
+and it arms the thread `cam` runs on (the game thread, `tid` recorded in the arm line), so
+**zero hits is AMBIGUOUS, not a negative**. And x86 reports data breakpoints as traps, so the EIP is
+the instruction **after** the store — the writer is immediately before it.
+
+Fixture: `Cities\Farmsville.sc3`, 16 reads out to t+32 s so the run spans both regimes (churn onset
+was t+8.0 s and the phase lock t+18.9 s in the previous run). No keys, no patch, install stock.
+
+| row | prediction | what it would mean |
+|---|---|---|
+| **AM** | hits, **one** unique EIP | **the writer is named.** Resolve it and say what function it lands in. |
+| **AN** | hits, **several** EIPs | several writers; all reported with counts, and which one correlates with the churn |
+| **AO** | **zero hits while the origin moves** | **the writer is on another thread.** That is a finding in itself and would explain why every same-thread theory failed. It is NOT "nothing wrote it". |
+| **AP** | watchpoint never arms (`GetThreadContext` / `SetThreadContext` / VEH failure) | an **instrument** result, not a camera one. Error code reported. |
+| **AQ** | the game crashes | when and where, and **the instrument is the first suspect** — withdraw it rather than let it corrupt a reading |
+
+Follow-up question if an EIP lands: is it inside `FUN_10006226` (the translate, reached only through
+`.rdata 0x10062538` = iso vt `+0x2c`), or somewhere nobody has looked? The second is the more
+interesting answer.
+
+---
+
+# RESULT — **NO ROW FIRED. The origin did not move at all, so this run measured the instrument, not the camera.**
+
+The watchpoint armed cleanly, the game ran 38 s without a crash or a single foreign exception, and
+recorded **0 hits**. But the origin was **byte-identical on all 15 reads across 27.7 seconds**. So
+zero hits is neither row AM/AN (no EIP to name) nor row AO (nothing moved for a cross-thread writer
+to explain) — it is the trivially consistent case, and **the pre-registered rows all presupposed a
+churn that did not happen.**
+
+Reported honestly: **I could not measure who writes `iso+0x54`, because on this run nobody did.**
+
+## The arm line, verbatim
+
+```
+[ 4965.546 ms][tid 73f4] ### CAMW: ARMED 4-byte WRITE watch on iso+0x54 = 0x0EEC597C, thread 29684. Data breakpoints are PER THREAD, so ZERO HITS IS AMBIGUOUS (writer may be on another thread). Reported EIP is the instruction AFTER the store.
+```
+
+`tid 73f4` = 29684 decimal, so it armed exactly the thread `cam` runs on — the game thread. The
+instrument did what it said.
+
+## The census from the last read, verbatim
+
+```
+[32665.972 ms][tid 73f4] ### CAMW: 0 hit(s), 0 unique writer(s) of iso+0x54 (0x0EEC597C)  <-- zero: either nothing wrote it, or the writer is on another thread
+```
+
+Identical at all 15 reads (t+4.97 s, 6.17, 7.41, 8.65, 9.88, 11.11, 12.34, 13.58, 16.27, 19.00,
+21.74, 24.48, 27.20, 29.91, 32.67 s). **Zero EIPs were recorded, so there is nothing to resolve to
+module+offset and no EIP to test against `FUN_10006226`.**
+
+## The camera was frozen — 15 reads, 27.7 s, not one pixel
+
+Every read: `rectA = -160,1604,864,2372`, `rectB` identical, `span=1024x768`, `zoom=2 rot=0
+tilepx=32`, `followTarget(+0x354)=0x00000000`, `N == 1` at `cityViewIso+0x158`. **0 of 14 transitions
+moved.** `grep -c GZKEY` = 0.
+
+That is the same `-160,1604` load-time origin, now reproduced a **fourth** time, and this run simply
+never left it.
+
+## The game was alive, so "frozen camera" is not "frozen game"
+
+This is the check that decides whether the null means anything, and it passes:
+
+| witness | value |
+|---|---|
+| `raster_blit_hw` census | 3,063 (t+10.9 s) -> 5,086 -> 7,181 -> 9,309 -> 11,371 -> **13,395** (t+38.1 s) — monotonic, ~2,050 blits per 5.4 s interval throughout |
+| `WFLAG` heartbeats | 7, last one "checked 350 times" at t+38.2 s |
+| exceptions / crash / minidump | **none** in the log |
+| sequence | ran to `COMPLETE` at 33.3 s, `SHOT #3` written at t+40.2 s |
+| filetrace | 25 hits on `Farmsville.sc3` |
+
+The engine drew ~13,400 hardware blits while the camera sat still. Frame:
+`.happy-share/cmsysyj1a0rivn51c47lbyf3l/camwatch_125558.png` — a normal, dense in-map farmland view,
+status bar `Farmsville  Pob: 36,172  45,724  5/16/1904`, minimap camera rectangle at the south of the
+diamond. Nothing is wrong with this process.
+
+**And the sim clock is not advancing.** `5/16/1904` in this frame at t+40 s, and `5/16/1904` in the
+enumeration run's frame — the save's own date, unchanged. The enumeration run's frame also carried
+the ticker `Simulación en pausa  Sí`. So on the runs where a frame exists **the simulation is paused**,
+which rules out sim-driven camera motion as the mover on those runs.
+
+## What this run actually establishes
+
+**One positive fact, hardware-verified:** across 27.7 s of a live, rendering, paused city with a
+static camera, there were **zero writes to `iso+0x54` from the game thread**. There is no continuous
+writer re-writing the same value — when the origin is still, nothing is touching it at all. That
+closes off "the field is constantly being rewritten and `cam` catches it mid-write", which was one of
+the two live explanations for the churn after the `U-082` null.
+
+**One instrument fact:** `SC3PROBE_CAMWATCH` arms, survives 38 s in the game thread, costs nothing
+observable, and does not crash the process. Row AP and row AQ are both ruled out. The instrument is
+fit to use — it has simply not yet been pointed at a moving camera.
+
+## ⭐ The churn is not reproducible on demand, and that is now the blocking problem
+
+Four runs, **identical fixture, identical switches, identical probe path, no input in any of them**:
+
+| run | reads | window | behaviour |
+|---|---|---|---|
+| A (earlier session) | 15 | t+16.6 -> 32.4 s | churn throughout, mean \|dx\| 1,080 px |
+| B (enumeration) | 7 | t+6.6 -> 14.6 s | **stable** 6 reads, then one jump at t+14.6 s |
+| C (follow gate) | 16 | t+4.3 -> 32.0 s | churn from **t+8.0 s**, 13 of 15 transitions moved |
+| **D (this run)** | 15 | t+5.0 -> 32.7 s | **frozen. 0 of 14 transitions moved.** |
+
+Churn onset has been t+16.6 s, t+14.6 s, t+8.0 s, and never. **It is not elapsed time** (killed last
+run), **not the fixture** (all four are Farmsville, and B and D were quiet on the fixture called
+unstable), **not input** (zero keys in all four), and **not the sim** (paused where measured). No
+variable identified so far sorts these four runs.
+
+**The confound I have to flag, because it is the one difference.** Run D is the only run with
+`SC3PROBE_CAMWATCH=1`, and run D is the only completely frozen run. Against that: the VEH recorded 0
+hits, so it never executed, and an armed-but-never-hit debug register has no runtime cost — there is
+no mechanism by which it would suppress a write. But **I cannot rule it out from one run**, and it
+would be careless to leave a coincidence between "new instrument" and "phenomenon vanished"
+unexamined. `[UNCERTAIN]`, and the test is cheap: one run identical to D with the env var **unset**.
+If that one churns, the watchpoint is the suppressor and must be withdrawn; if it is also frozen, the
+non-reproducibility is real and D is just the fourth sample of a coin-flip.
+
+## Which rows fired
+
+| row | status |
+|---|---|
+| AM — hits, one unique EIP | **no** — 0 hits, no EIP |
+| AN — hits, several EIPs | **no** — 0 hits |
+| AO — zero hits while the origin moves | **no**, and this is the point: the origin **did not move**, so the cross-thread inference is not licensed |
+| AP — watchpoint never arms | **no** — it armed, on the right thread |
+| AQ — the game crashes | **no** — 38 s, no exception, no dump, sequence completed |
+| **none of the above** | **the phenomenon did not occur.** No row was written for that, and one should have been. |
+
+## What I would do next, in priority order
+
+1. **A control run: identical to this one with `SC3PROBE_CAMWATCH` unset.** Until that exists, every
+   reading from D carries the confound above. This is the cheapest run on the list and it gates the
+   others.
+2. **Stop treating the churn as on-demand.** Three of four runs disagree about when it starts and one
+   says never. Any future writer-hunt run needs a *live* churn-detection gate — arm the watchpoint,
+   then only trust the census from a run where consecutive reads actually differ — otherwise a null
+   like this one is indistinguishable from a real negative.
+3. **If a churning run is caught with the watchpoint armed and still reports 0 hits**, that is row AO
+   for real and names the answer: another thread.
+
+Install `stock (matches original/)` before and after; no patch, one run, claim and lease both
+released.
