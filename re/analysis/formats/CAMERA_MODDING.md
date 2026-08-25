@@ -2,8 +2,9 @@
 
 **Status: the scroll-speed knob is validated in the running game, 2026-08-20/21**
 (`verify/scroll_patch_test/RESULTS.md`, rungs S1/S2/S3). Two further knobs on this page,
-`drag_divisor` and `edge_margin`, are **derived from the decompilation and have never been run
-game-side** — they are marked as such at each mention and must not be quoted as proven.
+`drag_divisor` and `edge_margin`: `drag_divisor` is now **validated at C3** (static byte-verified +
+in-game surgical arithmetic, 2026-08-25); `edge_margin` is still **derived from the decompilation and
+never run game-side** and must not be quoted as proven.
 
 Tool: `re/tools/pe_patch.py`. Target: `Apps\SIMSPR.DLL`.
 
@@ -82,7 +83,7 @@ one reads the patched value; with an arrow held 2.5 s the shipped build moves th
 `-6848` world px and the all-zero build moves `0`. S2/S3 confirmed **one byte on disk moves exactly
 one bank slot**, and that the active slot at the default zoom is `0x10067694`, three ways.
 
-### `drag_divisor` — right-drag pan sensitivity  ⚠️ never run game-side
+### `drag_divisor` — right-drag pan sensitivity  ✅ validated C3 (2026-08-25)
 
 The mouse-drag path is **separate** from the step bank: `0x10043daf`'s `+0x1e6 != 0` branch uses
 `+0x1f4`/`+0x1f8`, computed in `[CONFIRMED @ 0x10043a38]`. Drag velocity is
@@ -96,14 +97,24 @@ py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --recipe drag_divisor=1 --out SIMS
 The sign carries the direction and stays negative; `N=0` is refused (division by zero), and `N>128`
 does not fit a signed `imm8`.
 
-> **Built + byte-verified 2026-08-25** (still ⚠️ never run game-side). `drag_divisor=4` from shipped
-> produces `verify/drag_divisor_test/SIMSPR.DLL.drag4` (sha256 `6ba82b2b…`); an independent `--diff`
-> shows **exactly 2 bytes, `fe→fc` (−2→−4)** at `0x10043a5e`/`0x10043a68`, scroll slots untouched.
-> **The game-side run is blocked on a missing instrument**, not on lease scarcity: the pan arms only
-> through the game's **right-button** handler (`FUN_10042cfe`, vtable-dispatched — `+0x1e6`/anchor
-> `+0x1ec/+0x1ee`), and the harness `gzseq` is left-button only (`drag:` drives map tools via
-> `winmgr`, not the camera). Validating it needs a new right-drag primitive or an in-process
-> direct-invoke test. Detail: `re/sessions/STATUS_camera.md`, `DEFERRED.md` D-002.
+> **Validated at C3 — 2026-08-25.** Three independent legs:
+> 1. **Static, byte-verified.** `drag_divisor=4` from shipped → `verify/drag_divisor_test/SIMSPR.DLL.drag4`
+>    (sha256 `6ba82b2b…`); an independent `--diff` shows **exactly 2 bytes, `fe→fc` (−2→−4)** at
+>    `0x10043a5e`/`0x10043a68`, scroll slots untouched.
+> 2. **In-game arithmetic, surgical.** The harness `dragtest` calls `FUN_10042cfe` (arm) then
+>    `FUN_10043a38` (update) on the live city view and reads back the velocity field: with the shipped
+>    `-2`, anchor `(0,0)` + mouse `(100,40)` gives `velX=50.0 velY=20.0` = `(anchor-mouse)/-2` exactly.
+>    Since drag4 changes ONLY those two imm8 bytes to `-4`, the same call computes exactly half.
+> 3. **Routing CONFIRMED** from the decompilation: `0x10043daf`'s `+0x1e6 != 0` branch dispatches to
+>    `FUN_10043a38`, which consumes these bytes.
+>
+> **Not measured: an OS-input-driven pan *feeling* half as fast.** A fully-faithful `rdrag:` instrument
+> was built and run 2026-08-25; the `SendMessage(WM_RBUTTON*)` transport **moved the camera 0 px** (the
+> validity gate caught it, no false verdict). The pan-recognition routing in GZWinD/winmgr polls
+> `GetAsyncKeyState`, so a posted WM message without real async button state is never classified as a
+> drag — only `SendInput` (which sets that state) would drive it. Owner accepted the surgical+static
+> proof as sufficient; the SendInput "feel" test is optional gilding. Detail:
+> `re/sessions/STATUS_camera.md`, `DEFERRED.md` D-002.
 
 > That separation is also a **free negative control** for any step-bank test: if the step is zeroed
 > and right-drag still pans, the game is running and reading input, so "nothing moved" cannot be a
@@ -186,7 +197,10 @@ you hit it while testing a scroll-speed change, it is not your patch.
 - **No code injection.** Operands change in place; instructions are never added. The one camera knob
   that would need that — the missing `1/sqrt(2)` on diagonal scroll, so diagonal movement is faster
   than straight — is deliberately absent from the recipe table rather than half-supported.
-- `drag_divisor` and `edge_margin` are static-only. One patched run each would settle them.
+- `drag_divisor` is validated at **C3** (static byte-verified + in-game surgical arithmetic; see its
+  section above). `edge_margin` is still static-only. The "one patched run each would settle them"
+  estimate was wrong for the OS-input path: the pan routing needs real async button state, so a
+  faithful drag needs `SendInput`, not a bare run.
 - Zoom level 4's reachability in-game was never established, so the `z4` slot is untested.
 - The `+0x32c` scroll-gate flag ("dirty-rect queue overflow → force full repaint", set at
   `FUN_1000d725:105`, cleared in `FUN_1000dc17`) is read from the decompilation and not
