@@ -131,9 +131,10 @@ Order:
 1. **Road-type T1** — **attempted 2026-08-24, stopped at the instrument control.** Run 1 produced no
    frame, so no game content was edited and nothing was concluded about rules (hashes verified
    unchanged before and after). **It is no longer blocked on `U-068` — it is blocked on
-   `capture.ps1`**, which fails silently (debt item 1). Fix that first; it is desk work. Then 2 runs,
-   and **add `-filetrace`** — without a frame there is no status bar, so run 1 did not even establish
-   that the city loaded.
+   `capture.ps1`** (debt item 1). Its silence was fixed 2026-08-25, so a retry now either works or
+   reports the reason; the underlying latch is still unproven. Retry is **2 runs**, and **add
+   `-filetrace`** — without a frame there is no status bar, so run 1 did not even establish that the
+   city loaded.
 2. **`U-068`** — **DEMOTED, not abandoned.** Five runs spent; the last one crashed the game inside its
    own control (§31.13) and settled nothing. What was bought is real: the defect is localised below
    the display list and specific to the iso path. The next instrument needs a **safe** redesign first
@@ -165,13 +166,27 @@ Ordered by how much damage it can do silently.
 
 1. **⚠️ SILENT-FAILURE INSTRUMENTS — now a pattern, not an incident. Two confirmed.**
    - **`gzseq` target-wait** SKIPs silently, producing a plausible-looking capture.
-   - **`capture.ps1`'s frame reconstruction** produces *nothing* and says *nothing* (found
-     2026-08-24 by T1 run 1: 71 s, engine drawing hard at `raster_blit_hw` 26,565, **zero
-     `### SHOT #` lines**, exit 1). `sc3probe.c` latches `g_rasthw_dest` from `*(this+4)` on the
-     **first** `raster_blit_hw` hit, and `g_fb` allocation, the mirror match and the arming all hang
-     off it. Two runs latched **different objects from the same code** — `0x00A45AB8` wrote frames,
-     `0x0BEC4A80` produced nothing. **Neither the allocation failure nor the no-match case logs
-     anything.** One log line on the `g_fb` attempt would have caught it.
+   - ~~**`capture.ps1`'s frame reconstruction** produces *nothing* and says *nothing*~~ **MADE LOUD
+     2026-08-25 — but see the scope limit below.** Found 2026-08-24 by T1 run 1: 71 s, engine
+     drawing hard at `raster_blit_hw` 26,565, **zero `### SHOT #` lines**, exit 1, no explanation.
+     `sc3probe.c` latches `g_rasthw_dest` from `*(this+4)` on the **first** `raster_blit_hw` hit,
+     and `g_fb` allocation, the mirror match and the arming all hang off it. Two runs latched
+     **different objects from the same code** — `0x00A45AB8` wrote frames, `0x0BEC4A80` produced
+     nothing.
+
+     **What was changed** (`sc3probe.c`, `capture.ps1`; both gitignored, so this note is the record):
+     every `g_fb` abort path now names itself once — unreadable dest, dest vtable with fewer than 33
+     slots, `Lock(slot 25)` failure with `hr`, implausible dims, `VirtualAlloc` failure — plus a
+     warning when a shot is requested while `g_fb` is NULL, and a mirror-window summary
+     (`N matched, M aimed elsewhere`) that says outright when an image is **blank by construction**
+     rather than blank because the game drew nothing. `capture.ps1` now prints those `SHOT>` lines on
+     failure and no longer asks *"did the game render?"* — that framing presupposed the game was at
+     fault and is what sent the 2026-08-22 note to "in-city rendering does not work".
+
+     ⚠️ **SCOPE LIMIT, stated plainly: this makes the failure DIAGNOSABLE, it does not make the
+     latch CORRECT.** Which object should be latched is still unknown, and **the fix is UNVERIFIED**
+     — it compiles and parses, but no run has exercised the new paths. The next T1 attempt either
+     produces a frame or finally says why.
 
    Both manufacture confident wrong answers rather than errors. **Any harness instrument must fail
    loudly**; this is the same class of defect as `+0x524` being read as a symptom (§31.11).
