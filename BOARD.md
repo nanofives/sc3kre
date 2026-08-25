@@ -472,6 +472,28 @@ invocation** — neither will anchor against an already-patched module. The 7-ru
 2-byte step-slot runs plus two non-adjacent 1-byte drag runs; **a different count means stop, not
 stage.** `Copy-Item Apps\SIMSPR.DLL.shipped Apps\SIMSPR.DLL -Force` still undoes both.
 
+## ⚠️ A THIRD instrument-failure class, found 2026-08-25: the NONDIAGNOSTIC PROXY
+
+Debt item 1 covers **silent** failures — instruments that produce nothing and say nothing. This is a
+different animal and needs a different defence.
+
+**A nondiagnostic proxy reports something true that does not answer the question.** Measured: an
+unpause run's `.sc3` grew 920,753 → 921,206 B, which looks like proof the sim mutated state. **The
+paused control — which never received the message — grew to 921,209 B, more than the unpause arm.**
+The save re-serialises non-deterministically per reload, so a changed file witnesses nothing at all.
+Two sibling proxies failed the same way in the same run: the in-game date was **not legible** in the
+composite (a new city's status bar shows the name, no date bar renders), and the pause/play toolbar
+icons are fixed-colour, differing between frozen and running frames by a 2x9 px artifact.
+
+**The defence is not a louder instrument — it is a control that can invalidate the proxy.** A silent
+failure is caught by making the instrument shout; a nondiagnostic proxy is caught only by an arm that
+*should* show no effect and does anyway. Without that control this would have been reported as
+"the save changed after unpause, therefore it unpaused", and it would have been wrong.
+
+**Rule: prefer a definitive internal state read over any UI or file-size proxy.** Here that is the
+coordinator's pause bit at `+0x38` (semantics confirmed at `FUN_100072d8`) plus the clock — two
+internal witnesses, neither depending on the UI rendering anything.
+
 ## Cross-cutting debt
 
 Ordered by how much damage it can do silently.
