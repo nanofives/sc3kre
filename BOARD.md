@@ -42,7 +42,8 @@ RE done, tool exists outside a test harness, validated in the running game.
 | **Sprites / asset art** (recolour and author from PNG) | `sprite_patch.py` | `formats/SPRITE_MODDING.md` | `-filetrace` is blind to `Apps\Res\Sprites\`, so sprite runs have no file-access gate |
 | **City saves** (zone raster, per tile) | `city_write.py` | `formats/CITY_SAVE.md` | tile (28,0) never visually confirmed; the **name-collision load crash** needs writing up for users |
 | **Camera scroll** | `pe_patch.py` | `formats/CAMERA_MODDING.md` | `drag_divisor` / `edge_margin` static-only (**D-002**), zoom-4 reachability (**D-003**) |
-| **Network tiling rules** (retune / re-skin an existing network) | `tilingrules.py` | ⚠️ **no procedure doc yet** — `formats/TILINGRULES.md` is the format spec | **T1 MET game-side 2026-08-25.** Needs a `TILINGRULES_MODDING.md` to reach the bar the other four cleared |
+| **Network tiling rules** (retune / re-skin an existing network) | `tilingrules.py` | `formats/TILINGRULES_MODDING.md` | T1 met game-side 2026-08-25. One edit of one kind; render-path result, no simulation claim |
+| **Bigger cities** (N > 256, proven at 512) | `patch_citysize.py` + `patch_dirtbuf.py` | `formats/BIGGER_CITIES.md` | ⚠️ **playability at 512 never driven** — runs, renders and saves, but nobody has zoned or built in one. No bound above 512 tried |
 
 > **Correction on record:** `HANDOFF.md` still claims sprite modding has "no RGB565 quantizer and no
 > PNG import". That is **stale** — `sprite_patch.py` has `quantize565()`, `export_png()` and
@@ -54,9 +55,11 @@ RE done, tool exists outside a test harness, validated in the running game.
 ### 1. Bigger cities (N=512) — not blocked, closest to done
 Sim accepts 512; the renderer crash is fixed by the SIMDIRT SIZE group alone (config C 6/6 survive,
 shipped 0/6). Four bytes are the whole fix. Tool: `patch_dirtbuf.py`.
-**Next:** one execution of the rewritten `verify/citysize_mod_test/run_diff.ps1`, which has never
-been run in its current form. **Then:** drive actual gameplay in a 512 city (zoning, building) —
-nobody has played one. No bound above 512 has been tried.
+✅ **Procedure documented 2026-08-25: `formats/BIGGER_CITIES.md`.** It is in the shippable table
+now, with the playability caveat carried into the doc itself rather than left on the board.
+**Next:** drive actual gameplay in a 512 city (zoning, building) — that is the single largest
+untested claim. Then one execution of the rewritten `verify/citysize_mod_test/run_diff.ps1`, which
+has never been run in its current form. No bound above 512 has been tried.
 Stride/corner measurement is deferred as cosmetic (~8 runs).
 Session CLOSED. Anyone may pick it up.
 
