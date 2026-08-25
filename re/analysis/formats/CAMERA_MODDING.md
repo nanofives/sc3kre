@@ -2,10 +2,9 @@
 
 **Status: the scroll-speed knob is validated in the running game, 2026-08-20/21**
 (`verify/scroll_patch_test/RESULTS.md`, rungs S1/S2/S3). Two further knobs on this page,
-`drag_divisor` and `edge_margin`: for `drag_divisor` the **mechanism** is confirmed in a running game
-(surgical direct-call at the shipped `-2`) and the static patch is byte-verified, but **drag4's `-4`
-effect is inferred, not yet observed** — do not quote it as proven. `edge_margin` is still **derived
-from the decompilation and never run game-side.**
+`drag_divisor` and `edge_margin`: `drag_divisor`'s halving is **observed in a running game** (C3 — a
+within-process A/B/A: velX `50→25→50` across `-2/-4/-2`, byte-verified) plus static byte-verified.
+`edge_margin` is still **derived from the decompilation and never run game-side.**
 
 Tool: `re/tools/pe_patch.py`. Target: `Apps\SIMSPR.DLL`.
 
@@ -84,7 +83,7 @@ one reads the patched value; with an arrow held 2.5 s the shipped build moves th
 `-6848` world px and the all-zero build moves `0`. S2/S3 confirmed **one byte on disk moves exactly
 one bank slot**, and that the active slot at the default zoom is `0x10067694`, three ways.
 
-### `drag_divisor` — right-drag pan sensitivity  ◐ mechanism confirmed in-game; drag4 effect INFERRED, not yet observed (2026-08-25)
+### `drag_divisor` — right-drag pan sensitivity  ✅ C3, drag4 halving OBSERVED in-game (2026-08-25)
 
 The mouse-drag path is **separate** from the step bank: `0x10043daf`'s `+0x1e6 != 0` branch uses
 `+0x1f4`/`+0x1f8`, computed in `[CONFIRMED @ 0x10043a38]`. Drag velocity is
@@ -98,31 +97,32 @@ py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --recipe drag_divisor=1 --out SIMS
 The sign carries the direction and stays negative; `N=0` is refused (division by zero), and `N>128`
 does not fit a signed `imm8`.
 
-> **What is measured, and what is not — 2026-08-25. Read the distinction; do not quote drag4 as observed.**
+> **drag4's halving is OBSERVED in a running game — 2026-08-25.** A within-process A/B/A on the live
+> Europolis city view (`cam;dragtest;setdiv:-4;dragtest;setdiv:-2;dragtest;cam`), the `dragtest` being
+> a **direct call** to `FUN_10042cfe`+`FUN_10043a38` and so **independent of any input transport**:
 >
-> **MEASURED:**
-> 1. **Static, byte-verified.** `drag_divisor=4` from shipped → `verify/drag_divisor_test/SIMSPR.DLL.drag4`
->    (sha256 `6ba82b2b…`); an independent `--diff` shows **exactly 2 bytes, `fe→fc` (−2→−4)** at
->    `0x10043a5e`/`0x10043a68`, scroll slots untouched.
-> 2. **The drag mechanism, in a running game (shipped `-2` only).** The harness `dragtest` calls
->    `FUN_10042cfe` (arm) then `FUN_10043a38` (update) on the live city view and reads back the velocity
->    field: anchor `(0,0)` + mouse `(100,40)` gives `velX=50.0 velY=20.0` = `(anchor-mouse)/-2`. This is
->    a **direct call, independent of any input transport.**
-> 3. **Routing CONFIRMED** from the decompilation: `0x10043daf`'s `+0x1e6 != 0` branch dispatches to
->    `FUN_10043a38`, which consumes these bytes.
+> | live bytes `@+0x43a5e/68` | velX `+0x1f4` | velY `+0x1f8` |
+> |---|---|---|
+> | `-2` (`FE FE`, shipped) | **50.0** | 20.0 |
+> | `-4` (`FC FC`, hot-patched live) | **25.0** | 0.0 |
+> | `-2` (`FE FE`, restored) | **50.0** | 20.0 |
 >
-> **NOT MEASURED — inferred only:** the `-4` arm. No `velX=25.0` has ever been observed in a running
-> game. drag4's halving is **derivation** from "the patch changes only those two imm8 bytes to −4", not
-> an observation. The patch has not yet been seen to change anything at runtime.
+> **velX 50→25→50 is the halving, observed, with the bytes verified flipping `FE→FC→FE`.** The velY=0
+> at `-4` is **not** a miss: velY there is `(0-40)/-4 = 10`, below the confirmed deadzone
+> `12 < |v| <= 80` `[CONFIRMED @ 0x10043a38]` (`_DAT_100676a4 = 12`), so `+0x1f8` is correctly not
+> written and keeps its idle 0 — the deadzone gating observed alongside the halving. (Test point y=40
+> is simply too small for the Y axis at `-4`; the X axis, y-independent, is the clean witness.)
 >
-> **How to close it cheaply** (the leg 2 call is transport-independent): hot-patch `0x43a5e/68` to
-> `0xfc` live, call `dragtest` again → expect `velX=25.0 velY=10.0`. A within-process A/B; ~15 s.
+> Backing legs: **static byte-verified** (`verify/drag_divisor_test/SIMSPR.DLL.drag4` sha256 `6ba82b2b…`,
+> `--diff` = 2 bytes `fe→fc`, scroll slots untouched) and **routing CONFIRMED** (`0x10043daf`'s
+> `+0x1e6 != 0` branch → `FUN_10043a38`). Confidence **C3**.
 >
-> **Separately, the OS-input "feel" is not measured either.** A faithful `rdrag:` instrument
-> (`SendMessage(WM_RBUTTON*)`) was run 2026-08-25 and **moved the camera 0 px** — the validity gate
-> caught it, no false verdict. The pan-recognition routing in GZWinD/winmgr polls `GetAsyncKeyState`,
-> so a posted WM message without real async button state is never classified as a drag; only `SendInput`
-> would drive it. Detail: `re/sessions/STATUS_camera.md`, `DEFERRED.md` D-002.
+> **Not measured: the OS-input "feel."** A faithful `rdrag:` instrument (`SendMessage(WM_RBUTTON*)`) was
+> run 2026-08-25 and **moved the camera 0 px** — the validity gate caught it, no false verdict. The
+> pan-recognition routing in GZWinD/winmgr polls `GetAsyncKeyState`, so a posted WM message without real
+> async button state is never classified as a drag; only `SendInput` would drive it. That leg is
+> optional gilding — the arithmetic effect is already observed above. Detail:
+> `re/sessions/STATUS_camera.md`, `DEFERRED.md` D-002.
 
 > That separation is also a **free negative control** for any step-bank test: if the step is zeroed
 > and right-drag still pans, the game is running and reading input, so "nothing moved" cannot be a
@@ -205,11 +205,10 @@ you hit it while testing a scroll-speed change, it is not your patch.
 - **No code injection.** Operands change in place; instructions are never added. The one camera knob
   that would need that — the missing `1/sqrt(2)` on diagonal scroll, so diagonal movement is faster
   than straight — is deliberately absent from the recipe table rather than half-supported.
-- `drag_divisor`: static byte-verified and the **mechanism** confirmed in-game at the shipped `-2`,
-  but **drag4's `-4` effect is inferred, not yet observed** (no `25.0` on record). One short
-  dragtest-A/B run closes it. `edge_margin` is still static-only. The "one patched run each" estimate
-  was wrong for the OS-input path: the pan routing needs real async button state, so a faithful drag
-  needs `SendInput`, not a bare run.
+- `drag_divisor`: **C3, halving observed in-game** (within-process A/B/A, velX `50→25→50`) plus static
+  byte-verified. `edge_margin` is still static-only. The "one patched run each" estimate was wrong for
+  the OS-input "feel" path: the pan routing needs real async button state, so a faithful drag needs
+  `SendInput`, not a bare run — but that leg is optional, the arithmetic effect is already observed.
 - Zoom level 4's reachability in-game was never established, so the `z4` slot is untested.
 - The `+0x32c` scroll-gate flag ("dirty-rect queue overflow → force full repaint", set at
   `FUN_1000d725:105`, cleared in `FUN_1000dc17`) is read from the decompilation and not
