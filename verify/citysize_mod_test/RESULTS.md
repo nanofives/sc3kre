@@ -1218,3 +1218,145 @@ before the camera (the gate opens and the flag sets); a zeroed scroll step (32.0
 
 **New lead:** `presentGate(+0x7c)=0`, which would suppress the repaint irrespective of the clamp, and
 which should be read at 256 as well before it is treated as a 512 finding.
+
+---
+
+# The control run, 2026-08-25. ROW H FIRED: `+0x7c == 0` is NOT a 512 finding. The delta comparison is VOID — Farmsville is N=192.
+
+Pre-registration: `re/sessions/PREREG_512_gameplay.md`, addendum 2, written before launch.
+
+**Verdict: row H. `presentGate(+0x7c)` reads 0 on a shipped, populated city too, so it is settled — not
+a 512 defect and not a `U-081` lead. The delta half of the run hit the pre-registered void condition:
+`MAP` read `192x192`, because Farmsville is a 192-tile city, not 256.**
+
+**No patch was applied. SIMDIRT read `f1708fc1…b070` and the install read `stock` before, during and
+after.** Lease and claim released.
+
+## Both `cam` blocks, verbatim
+
+Before the key, t+16.226 s:
+
+```
+### CAM: cell map found at cityViewIso+0x158 -> 0x0EEC1028 (vt SIMSPR+0x6250C)
+### CAM: iso=0x0EEC1028  rectA=1356,266,2380,1034 span=1024x768  centre=1868,650
+### CAM: rectB=1356,266,2380,1034 span=1024x768
+### CAM: zoom=2 rot=0 tilepx=32 (8<<zoom=32)  presentGate(+0x7c)=0  flag(+0x32c)=0
+### CAM: MAP 192x192 tiles  (world extent ~48896x48896 px)
+```
+
+After the key and a 3 s wait, t+19.405 s:
+
+```
+### CAM: cell map found at cityViewIso+0x158 -> 0x0EEC1028 (vt SIMSPR+0x6250C)
+### CAM: iso=0x0EEC1028  rectA=-913,-483,111,285 span=1024x768  centre=-401,-99
+### CAM: rectB=-913,-483,111,285 span=1024x768
+### CAM: zoom=2 rot=0 tilepx=32 (8<<zoom=32)  presentGate(+0x7c)=0  flag(+0x32c)=0
+### CAM: MAP 192x192 tiles  (world extent ~48896x48896 px)
+```
+
+**Delta: x `1356 -> -913` = `-2269`; y `266 -> -483` = `-749`.**
+
+## ⭐ ROW H — the `+0x7c` lead is dead, and killed twice over
+
+**`presentGate(+0x7c) = 0` and `flag(+0x32c) = 0` on Farmsville**, a real shipped city with
+`Pob: 36,172` and `§45,724`. Identical to the 512 reading.
+
+**And the stronger version: the camera moved 2,269 px while `+0x7c` was 0.** So `+0x7c == 0` does not
+prevent camera movement at all — the field gates the *full-surface present*, not the scroll. The
+`[UNCERTAIN]` lead I raised from the 512 run is closed, and closed by the cheapest possible run.
+
+> `+0x7c == 0` is normal. It is not a 512 property, not a `U-081` mechanism, and should not be
+> carried forward as either.
+
+### The pause confound does not exist — both fixtures are paused
+
+The frame's status ticker reads **`Simulación en pausa`** repeated across the bar. **Farmsville, loaded
+by bare absolute path, loads PAUSED**, exactly like the 512 `Nueva ciudad` fixture.
+
+So pause is **controlled**, not confounding: the gate reads 0 in two fixtures that are both paused, one
+empty at N=512 and one populated at N=192. The comparison **does discriminate** on the gate question,
+which is what row H needed. (Emptiness and zoom still differ; neither is required for row H.)
+
+**And the disambiguator I pre-registered as impossible is not needed.** I had checked that none of the
+90 shipped menu commands is a pause/speed/resume command, so a paused-256 reading could not be driven.
+It turns out every path-loaded city is already paused, so the reading was free.
+
+### A correction to this file's own T1 section
+
+The tiling-rules T1 write-up said population and funds matched across its two frames "because the two
+shots are at matched sim times, not because nothing would ever change." **That reasoning was wrong.**
+The real cause is that the sim is **paused** on a path-loaded city, so the date is frozen at the save's
+`5/16/1904` regardless of elapsed wall time. The T1 conclusion is unaffected — a frozen sim makes the
+two road frames *more* comparable, not less — but the stated reason is corrected here.
+
+## The delta is VOID: Farmsville is 192 tiles, and the baseline is Berlin at 256
+
+`MAP` read **`192x192`**, and my pre-registered void condition says a MAP other than `256x256` voids
+the delta comparison. It fired.
+
+Confirmed offline, independently of the game — `city_write` on the shipped corpus:
+
+| N | cities |
+|---|---|
+| 128 | Mount Herrang |
+| **192** | **Farmsville**, Liverpool, Roadless Paradise, TUTORIAL |
+| 256 | Berlin, Craterville, Europolis, Frankfurt, London, Madison, Madrid, Moscow, Sacramento, Seoul |
+
+> ⚠️ **Farmsville is NOT a 256 city.** It is 192. It is the fixture this project reaches for by
+> default — the tiling-rules T1 runs and this control both used it — and anyone who reads a
+> Farmsville result as "the 256 case" is wrong by 64 tiles.
+
+The `-6848` baseline is **Berlin / N=256**, and its recorded delta is **`-6848, 0`**
+(`verify/scroll_patch_test/RESULTS.md:504`; `STATUS_camera-scroll.md:19` names Berlin). So the control
+should have loaded Berlin. **That is my fixture error, and it is the one thing to fix before the next
+attempt:** use `Cities\Berlin, Germany.sc3`.
+
+Two structural differences from the baseline, both worth recording so the next run is designed rather
+than repeated:
+
+1. **The baseline moved in x only (`-6848, 0`); mine moved diagonally (`-2269, -749`).** Same
+   `rot=0`, so rotation does not explain it.
+2. **Zoom differs: `zoom=2 tilepx=32` here, `zoom=0 tilepx=8` in the 512 run.** The scroll step is
+   `32.000` at every bank in both, so per-tick distance is zoom-independent, which makes the 3x
+   magnitude gap against the baseline a **tick-count** difference, not a step-size one. `[UNCERTAIN]`
+   what sets the tick count; repaint rate is the obvious suspect and is not measured.
+
+## The instrument's mechanical defect IS fixed
+
+This is the part that was on trial, and it passed on its own terms:
+
+```
+### GZSEQ[3]: target ready after 3000 ms
+### GZSEQ[3]: waited 3000 ms
+```
+
+The key was dispatched at t+16.278 s and the second `cam` ran at **t+19.404 s — 3.13 s later, after
+the full 2.5 s hold.** The 63 ms-into-the-hold error that voided the 512 delta is gone, and the
+sequence produced a large, unambiguous, non-zero movement that the broken version could not have.
+
+**But "mechanically correct" is not "validated".** The known-answer test did not run, because the
+answer for a 192 city is not known. `wait:` after `key:` is confirmed to work; whether the sequence
+reproduces `-6848` is still unmeasured, and must be settled on Berlin before any 512 delta is
+interpreted.
+
+## Two by-products worth keeping
+
+**The extent formula is now confirmed at a second, independent N.** `48896 = (192-1) * 0x100` exactly,
+alongside `130816 = (512-1) * 0x100` at 512. Two N values, two exact matches, so
+`(N-1) * 0x100` is not an artifact of the 512 patch.
+
+**The camera scrolled to NEGATIVE world coordinates and was not clamped.** `1356,266` went to
+`-913,-483`, i.e. outside `0..48896` on both axes, on a **shipped, unpatched** build at N=192. So
+there is no lower clamp on the camera origin at 192 either. Recorded because `U-081` is a clamp
+question and this is a clamp observation on the control configuration.
+
+Gate and step were identical to the 512 run: `+0x177` `0 -> 1`, flags `0/0/1/0`, step `+0x1c8=32.000`
+at every zoom bank.
+
+## Where U-081 stands now
+
+**Eliminated:** stale 256-derived extent; input dropped before the camera; a zeroed scroll step; and
+now **`presentGate(+0x7c)` as a mechanism or a 512 property.**
+
+**Still open:** whether the origin moves by `-6848` over a 2.5 s hold at 256, and what it does at 512.
+**One run on Berlin settles the instrument**, and only then is a 512 delta interpretable.

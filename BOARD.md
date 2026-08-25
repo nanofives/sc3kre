@@ -112,7 +112,10 @@ untouched Set file. Not "the map stopped drawing"; one network's tiles disappear
 piece list was replaced.
 
 Controls that hold: status bar character-identical (`Farmsville`, `Pob: 36,172`, `§45,724`,
-`5/16/1904`) so no sim drift; camera identical to the pixel; terrain, trees, fields, farmhouses,
+`5/16/1904`) — **and the reason is that path-loaded cities load PAUSED**, corrected 2026-08-25 from the
+original "matched sim times" claim; a frozen sim makes the frames *more* comparable, so the conclusion
+is unaffected. (**Note the fixture is N=192, not 256** — see `formats/BIGGER_CITIES.md`. Irrelevant to
+T1, whose result is size-independent, but the record should be right.) camera identical to the pixel; terrain, trees, fields, farmhouses,
 silos, pylons and their lines all unchanged; **111 `TilingRules` filetrace lines in each run**, the
 loader-ran-identically control. Both frames are `### SHOT #5` at t+63.55 s and t+65.58 s, matched for
 sim time as well as camera. Hash restored and re-verified to `9926948A…1358`.

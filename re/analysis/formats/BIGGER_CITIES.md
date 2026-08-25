@@ -108,6 +108,27 @@ Then start a **New City** and pick the largest size option.
 The saved city round-trips: a **920,753-byte `.sc3`** re-parses as a genuine 512×512 tile grid and
 zone plane through `re/tools/city_parse.py`.
 
+## The shipped cities are NOT all 256 — pick fixtures deliberately
+
+Measured over the whole corpus 2026-08-25, because a test was run against "the 256 case" that was
+actually a 192 map:
+
+| N | cities |
+|---:|---|
+| 128 | Mount Herrang |
+| **192** | **Farmsville** (the project's default fixture), Liverpool, Roadless Paradise, TUTORIAL |
+| 256 | Berlin, Craterville, Europolis, Frankfurt, London, Madison, Madrid, Moscow, Sacramento, Seoul |
+
+⚠️ **`Farmsville.sc3` is 192.** It is the fixture most of this project's runs reach for, and reading it
+as the 256 case is wrong by 64 tiles. The recorded `-6848` camera baseline is **Berlin/256**.
+
+**Every path-loaded city loads PAUSED** (`Simulación en pausa`) — measured on both a 192 and a 512
+fixture. There is **no unpause command** among the 90 shipped menu commands. Any test whose observable
+depends on the simulation advancing has to solve that first.
+
+Also confirmed at two independent N: the camera's world extent is **`(N-1) x 0x100`** — `48896` at 192,
+`130816` at 512.
+
 ## ⚠️ Limits — read these before calling it shippable
 
 - ⭐ **The engine handles high coordinates end to end — measured 2026-08-25.** Four 32x32 zone blocks
