@@ -126,6 +126,21 @@ as the 256 case is wrong by 64 tiles. The recorded `-6848` camera baseline is **
 fixture. There is **no unpause command** among the 90 shipped menu commands. Any test whose observable
 depends on the simulation advancing has to solve that first.
 
+⭐ **The unpause path IS known — it is a GZ message, not a menu command (found + confirmed 2026-08-25).**
+Post message **`0x231e2493`** to the city-simulator coordinator's message server (the PMSG mechanism,
+LAUNCH_CONTROL §31.7). Chain, all in **SIMCITY.DLL** and read from the decompilation:
+dispatcher `FUN_10002fa6` (coordinator `vt+0xc`) maps `0x231e2493` → `vt+0x44(0)`
+`[CONFIRMED @ 0x10002fa6]`; the writer `FUN_100072d8` (`vt+0x44`) with arg 0 **clears the pause bit at
+coordinator `+0x38` bit 0** and re-applies the requested speed `+0x150` via the speed applier `vt+0x204`
+(`FUN_10005ada`) `[CONFIRMED @ 0x100072d8]`. Pause is the paired id `0xe31e2463` → `vt+0x44(1)`. The
+speed message `0xc2684065` (`vt+0x204`, speeds 1..4) sets speed but does **NOT** clear the pause bit, so
+speed alone does not resume `[CONFIRMED @ 0x10002fa6]`. The coordinator is GZCLSID `0xa1a166cc`
+(ctor `FUN_10002709`, vtable `0x10013260`); default speed is 2 (llama). **Not yet driven:** the harness
+has no post-arbitrary-message primitive today (`fire:` is a SIMUI-button COMM via `FUN_1004c209`, not a
+message post) — a development-at-512 run needs a probe primitive that posts `0x231e2493` to the message
+server, or calls coordinator `vt+0x44(0)` directly. That is a shared `sc3probe.c` change (coordinate via
+`harness_claim`), then one lease. Full desk trace: `STATUS_bigcities.md` item 2.
+
 Also confirmed at two independent N: the camera's world extent is **`(N-1) x 0x100`** — `48896` at 192,
 `130816` at 512.
 
