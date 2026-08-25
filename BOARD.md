@@ -19,7 +19,7 @@ one-session-one-STATUS-file rule.
 
 | prio | workstream | session id | owns | first task |
 |---:|---|---|---|---|
-| 1 | **Camera movement speed** | `cmt96p4rv…` | `STATUS_camera.md` | `drag_divisor` game-side — the path `scroll_speed` does **not** touch |
+| ~~1~~ | ✅ **Camera movement speed — CLOSED 2026-08-25** | `cmt96p4rv…` (archived) | `STATUS_camera.md` | `drag_divisor` **and** `edge_margin` both taken from "derived, never run" to **C3 observed**; combined build staged live |
 | 2 | **New road types** | `cmt96pjiy…` | `STATUS_roadtypes.md` | the **constructive** rung (T1 was destructive) |
 | 3 | **Bigger cities** | `cmt96q1v4…` | `STATUS_bigcities.md` | in-game authoring at 512 |
 | 4 | **Resizable window** | `cmt96qpp9…` | `STATUS_resize.md` | **implement** the approved surface-dump redesign |
@@ -314,7 +314,27 @@ render-path result); and no claim about `U-068` — these are pre-resize frames.
 > either way: it returns either the baseline the test needs, or the reason the instrument differs.
 Session CLOSED, test ready to fire.
 
-### 4. Camera scroll — SHIPPED 2026-08-24
+### 4. Camera scroll — SHIPPED 2026-08-24, workstream CLOSED 2026-08-25
+
+⭐ **The reusable technique, which outlives this workstream: a transport-independent within-process
+A/B/A.** Both `drag_divisor` and `edge_margin` were stuck at "derived from the decompilation, never run
+game-side" because driving them needs *input*, and the harness cannot synthesise a real drag —
+`SendMessage(WM_RBUTTON*)` moves the camera **0 px**, since the pan recognition in GZWinD/winmgr polls
+`GetAsyncKeyState` and never classifies a posted message as a drag.
+
+**The way past it is to stop trying to drive the input and call the computation directly**, hot-patching
+the constant live between calls: measure at shipped, hot-patch, measure, restore, measure again.
+`velX 50 → 25 → 50` and band `48/64 → 24/32 → 48/64`. The **return-to-baseline third leg is what makes
+it a measurement** rather than a coincidence — a one-way `50 → 25` leaves drift and one-way state
+changes unexcluded.
+
+This sidesteps the input-transport problem **and** the cross-process `cam`-object ambiguity in one
+move. Harness verbs `dragtest`/`setdiv` and `edgetest`/`setedge` are in `sc3probe.c` for the next
+value knob that needs it.
+
+**Only open leg:** the OS-input "feel" test, needing a `SendInput`-class instrument (`D-002`,
+optional). `STATUS_camera.md` carries a self-contained record of why WM messages fail, so nobody pays
+that run twice. `D-003` zoom-4 reachability is a **read-only rider**, not worth a lease.
 See the shippable table. The proxy-DLL delivery vehicle is **dropped, not deferred** (`D-001`).
 Reopening it means arguing against the recorded evidence.
 
