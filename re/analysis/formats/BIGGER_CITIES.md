@@ -151,10 +151,17 @@ Also confirmed at two independent N: the camera's world extent is **`(N-1) x 0x1
   have neither road nor power. **This is inconclusive about 512, not evidence against it.**
 - **Authoring at 512 has never been attempted.** Placing a zone or road *in game* on a 512 map
   (`fire:<toolcmd>` + `drag:`/`at:` with a funds oracle) is established at 256 and untried at 512.
-- ⚠️ **`U-081`: right-click drag-scroll appeared DEAD on a 512 map**, observed live by the owner, and
-  **unmeasured** — the run ended before the `cam` witness could be taken, and `cam` then declined to
-  read. If you ship this, expect a camera-clamp question at 512. Arrow keys versus drag would localise
-  it in one run.
+- ✅ **`U-081` is CLOSED as a 512 question — the camera is fine at 512.** Keyboard scroll was chased
+  for five runs on the suspicion of a clamp computed from a stale 256 extent. It was not: a
+  within-process three-arm control gave **zero drift** and a key delta of **exactly one 32-px step**,
+  where the recorded `-6848` baseline is precisely `214 x 32`. **The harness's held-key emulation taps
+  once instead of holding** — a test-tool defect that made a working camera look like a map-size bug.
+  The extent is correct at 512 (`130816 = (512-1) x 0x100`), input is accepted, and the step bank
+  reads `32.000`.
+
+  **Still unexplained, and not a reason to avoid shipping:** the owner observed right-click drag doing
+  nothing on a 512 map. That is a *manual* observation on a separate code path (drag uses
+  `+0x1f4`/`+0x1f8` from `FUN_10043a38`, not the step bank) and has never been instrumented.
 - **No bound above 512 has been tried.** 512 is where the evidence stops, not where the format does.
 - **The STRIDE (7) and CORNER (1) sites are correct by derivation and unvalidated by measurement.**
   They add nothing observable at 512. They are patched by default because the arithmetic says they

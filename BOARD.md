@@ -43,7 +43,7 @@ RE done, tool exists outside a test harness, validated in the running game.
 | **City saves** (zone raster, per tile) | `city_write.py` | `formats/CITY_SAVE.md` | tile (28,0) never visually confirmed; the **name-collision load crash** needs writing up for users |
 | **Camera scroll** | `pe_patch.py` | `formats/CAMERA_MODDING.md` | `drag_divisor` / `edge_margin` static-only (**D-002**), zoom-4 reachability (**D-003**) |
 | **Network tiling rules** (retune / re-skin an existing network) | `tilingrules.py` | `formats/TILINGRULES_MODDING.md` | T1 met game-side 2026-08-25. One edit of one kind; render-path result, no simulation claim |
-| **Bigger cities** (N > 256, proven at 512) | `patch_citysize.py` + `patch_dirtbuf.py` | `formats/BIGGER_CITIES.md` | ⭐ **engine reads/renders/re-serialises tiles to 495 with no coordinate-dependent failure** (2026-08-25). Still open: development (city loads paused; bare zones have no road/power), in-game authoring at 512, and **`U-081`** drag-scroll apparently dead at 512 |
+| **Bigger cities** (N > 256, proven at 512) | `patch_citysize.py` + `patch_dirtbuf.py` | `formats/BIGGER_CITIES.md` | ⭐ **engine reads/renders/re-serialises tiles to 495 with no coordinate-dependent failure** (2026-08-25). Still open: development (city loads paused; bare zones have no road/power), in-game authoring at 512, and the manual drag observation (**`U-081`** turned out to be a harness held-key defect, **not** a 512 or camera defect — the map-size angle is closed) |
 
 > **Correction on record:** `HANDOFF.md` still claims sprite modding has "no RGB565 quantizer and no
 > PNG import". That is **stale** — `sprite_patch.py` has `quantize565()`, `export_png()` and
@@ -61,15 +61,12 @@ extremes `x 16..495, y 16..495`, 216 of 308 changes above 256, zero changes outs
 **no coordinate threshold** — the far corner survived best (1006/1024) and the low-coordinate control
 worst of the pair (932/1024). Verified independently before promotion.
 
-**Next, in order:** (1) **`U-081` — a NO-KEY NULL CONTROL** (`wait:15000;cam;wait:3000;cam`), one run.
-Five causes are eliminated and **the question has moved upstream of 512**: the recorded `-6848` camera
-baseline does **not** reproduce on a path-loaded city at matched field, zoom, key and duration
-(`Δ = +26, 0` vs `-6848, 0` — the axis reproduces, the magnitude does not). **Until a null control
-exists, no delta measured in this investigation can be attributed to the key**, and a 512 number would
-mean nothing. The uncontrolled variable is **menu-load vs path-load**: path-loaded cities are paused,
-and the baseline's pause state is recorded in neither source file. If a paused city simply does not
-scroll, that explains both of the owner's original observations with **no map-size involvement at
-all**. (2) In-game **authoring** at 512
+~~**`U-081` — a no-key null control**~~ ✅ **ANSWERED 2026-08-25, and it was never a 512 question.**
+The three-arm control gave drift `0,0` and a key delta of `-32,0` — **exactly one 32-px step** where
+the `-6848` baseline is precisely `214 x 32`. **`gzseq`'s `key:` does not sustain a hold; it taps
+once.** A working camera looked like a 512 clamp bug for five runs. Debt item 1.
+
+**Next, in order:** (1) In-game **authoring** at 512
 (`fire:<toolcmd>` + `drag:`, established at 256, untried at 512). (3) Development, which needs an
 unpause path — **none exists among the 90 shipped menu commands** — plus road and power. (4) A bound
 above 512.
