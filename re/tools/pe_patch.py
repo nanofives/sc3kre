@@ -408,9 +408,9 @@ def r_edge_margin(p, arg):
 # those zeros with a trampoline and rewrite ONE call's rel32 to reach it. No insert, no relocation,
 # no section-header edit. `.text` chars 0x60000020 (CODE|EXECUTE|READ); checksum ships 0x0.
 #
-# Hook: Init's `call FUN_1000b70e` at 0x10005f55 (bytes e8 b4 57 00 00), chosen because EBX and ECX
-# both hold `iso` there (`mov ecx,ebx` @ 0x10005f4b; iso+0x7c=1 / iso+4=1 written just before) and
-# the call is a plain `__thiscall(this)` with no stack args, so wrapping it is clean.
+# Hook: Init's `call FUN_1000b70e` at 0x10005f55 (bytes e8 b4 57 00 00), chosen because `iso` is live
+# in ECX there (`mov ecx,ebx` @ 0x10005f4b; EBX also holds it, but the trampoline uses ECX) and the
+# call is a plain `__thiscall(this)` with no stack args, so wrapping it is clean.
 #   [CONFIRMED @ SIMSPR byte-scan 0x10005f30..0x10005f60; FUN_1000b70e __fastcall(this); ret]
 #
 # Trampoline @ 0x1006149a (37 bytes; rel32s ASLR-invariant, both callees intra-module):
@@ -458,7 +458,40 @@ def r_resize_rectfix(p, arg=None):
             note="redirect Init call FUN_1000b70e -> cave")
 
 
+# --- GZGraphicD resizable-window frame (style flip) ------------------------------------
+#
+# The main "Gonzo" window ships as a FIXED frame: WS_POPUP|CAPTION|SYSMENU|MINIMIZEBOX
+# (0x80CA0000), with no WS_THICKFRAME (sizing border) and no WS_MAXIMIZEBOX. To let the owner
+# drag/maximize the window on a REAL display (the D-004 hand-test), three same-length imm bytes
+# add WS_THICKFRAME (0x40000) + WS_MAXIMIZEBOX (0x10000) at both style sources:
+#   - create-time style FUN_100181d0(mask): mask 0x1b is set by `mov [ebx+0x10],0x1b` at
+#     0x10017ca1 (imm byte 0x10017ca4). Bit 0x20 enables the MAXIMIZEBOX branch; that branch's
+#     `or eax,0x10000` (imm byte 0x10018223) folds THICKFRAME in beside it. [CONFIRMED @ 0x100181d0]
+#   - runtime windowed override FUN_1001854a: `push 0x90C80000` (imm byte 0x10018570) is the LIVE
+#     style slammed via SetWindowLongA(GWL_STYLE) - the load-bearing one. [CONFIRMED @ 0x1001854a]
+# Trap-2 note: FUN_1001854a's SetWindowPos snap-back is a mode-apply method, NOT on the WM_SIZE
+# path, so the flip holds during normal windowed drag (it only refits on a fullscreen<->windowed
+# toggle). This recipe does NOT make the resized view re-render - that is the separate "bridge",
+# which cannot ship as a pure DLL (SIMSPR has no global for the live iso-view/bridge pointers).
+# Bytes verified by disassembly of original\modules\GZGraphicD.dll.
+
+GZGRAPHICD_SHA = "48201f476121adeea2957b8cc9b3063326aee28b86b026acab7179c878ad454d"
+
+
+def r_resizable_frame(p, arg=None):
+    """`--recipe resizable_frame` -> add WS_THICKFRAME|WS_MAXIMIZEBOX to the Gonzo window (GZGraphicD).
+
+    Three same-length imm bytes at the two style sources. Anchored to the shipped GZGraphicD SHA.
+    Expected `--diff` vs shipped: 3 bytes. Does NOT re-render on resize (that is the bridge).
+    """
+    _anchor(p, GZGRAPHICD_SHA, "recipe resizable_frame")
+    p.stage(0x10017ca4, "hex", "3b", expect="1b", note="create-style mask 0x1b->0x3b (enable MAXIMIZEBOX branch)")
+    p.stage(0x10018223, "hex", "05", expect="01", note="or eax,0x10000->0x50000 (fold in WS_THICKFRAME)")
+    p.stage(0x10018570, "hex", "cd", expect="c8", note="live windowed style 0x90C80000->0x90CD0000")
+
+
 RECIPES = {
+    "resizable_frame": r_resizable_frame,
     "scroll_zero": r_scroll_zero,
     "scroll_default_zero": r_scroll_default_zero,
     "scroll_speed": r_scroll_speed,
