@@ -351,6 +351,27 @@ def r_drag_divisor(p, arg):
         p.stage(va, "i8", -n, expect=-2, note="drag divisor %s axis" % axis)
 
 
+def r_drag_deadzone(p, arg):
+    """`--recipe drag_deadzone=N` -> the right-drag dead zone (shipped 12.0f) becomes N.
+
+    The dead zone is a per-axis gate on the POST-divisor velocity `(anchor - mouse)/-N_div`
+    [CONFIRMED @ 0x10043a38]: an axis does not pan until `|v| > deadzone`, and at that instant its
+    velocity field steps discontinuously from 0 to ~deadzone. So a SMALLER dead zone engages sooner
+    (the engage distance is `deadzone * N_div` px, so on a drag_divisor=4 build the shipped 12 means
+    48 px), softens the onset step, and widens the diagonal band (the gate is per-axis/box, not
+    radial). N=0 disables the gate (pans on any motion, risking tremor drift). Must stay below the
+    drag clamp (80.0f) or no proportional band remains.
+    """
+    _anchor(p, SIMSPR_SHA, "recipe drag_deadzone")
+    if arg is None:
+        raise PatchError("drag_deadzone needs a value: --recipe drag_deadzone=4 (shipped is 12)")
+    n = float(arg)
+    if not 0.0 <= n < 80.0:
+        raise PatchError("drag_deadzone %g is outside 0..80 (the drag clamp at 0x100676a8); at or "
+                         "above the clamp no proportional velocity band remains" % n)
+    p.stage(DRAG_DEADZONE_VA, "f32", n, expect=12.0, note="right-drag dead zone")
+
+
 def r_edge_margin(p, arg):
     """`--recipe edge_margin=H,V` -> the edge-scroll trigger band (shipped 64 horizontal, 48 vertical).
 
@@ -375,6 +396,7 @@ RECIPES = {
     "scroll_default_zero": r_scroll_default_zero,
     "scroll_speed": r_scroll_speed,
     "drag_divisor": r_drag_divisor,
+    "drag_deadzone": r_drag_deadzone,
     "edge_margin": r_edge_margin,
 }
 
@@ -540,7 +562,7 @@ def selftest(target):
         return ok, fail
     check("SIMSPR.DLL matches the recipe anchor", simspr.sha == SIMSPR_SHA, simspr.sha[:16])
     for spec in ("scroll_zero", "scroll_default_zero", "scroll_speed=64",
-                 "drag_divisor=1", "edge_margin=32,24"):
+                 "drag_divisor=1", "drag_deadzone=4", "edge_margin=32,24"):
         try:
             q = Patcher(simspr.path)
             apply_recipe(q, spec)
