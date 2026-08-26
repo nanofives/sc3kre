@@ -143,11 +143,40 @@ region projecting off-map near the corner — **post-hoc and unverified**. The p
 allowed "one rectangle placing = partial PASS", so the result does not depend on it. Do not cite the
 off-map story as fact.
 
-**Next, in order:** (2) Development, **now the critical path**, which needs an unpause path —
-**none exists among the 90 shipped menu commands** — plus road and power. Several sibling workstreams
-need unpause solved too, so it is the highest-leverage item on this board. (3) A bound above 512.
+### ⭐⭐ THE SIM UNPAUSES AND RUNS AT 512 — game-verified 2026-08-25, three leases
+`msg:0xc2a35d80,0,0,0` (Post to the message server, expect-or-refuse) → `FUN_10002fa6` →
+`vt+0x210` = `FUN_10005773`, which decrements suspend-depth `+0x140` and calls clock Resume
+`[CONFIRMED @ 0x10002fa6, PE 0x13260]`.
+
+| read | suspendDepth `+0x140` | clock cursor `+0x4c` |
+|---|---|---|
+| #1 baseline, paused | **1** | 2415021 |
+| #2 after post (+8 s) | **0** | 2415021 |
+| #3 (+8 s) | 0 | **2415022** |
+| #4 (+15 s) | 0 | **2415024** |
+
+**The cursor had been frozen at 2415021 through the whole of Lease 2 and this run's own baseline**, so
+the fixture supplies its own control — same field, same city, never moved under the wrong message. The
+extra long final gap was added to catch a running-then-stall and instead confirmed **sustained**
+ticking rather than one delivered tick. Date `+0x40/+0x44` stayed `0/0`; a blank city's date serial
+rolls only after many cursor ticks, so **the cursor is the witness**, not the date.
+
+⚠️ **`0x231e2493` is inert and must stay documented as a dead end.** It clears `+0x38`, which was
+**already 0 at load** — measured under both Post *and* Send. It looks exactly like an unpause in the
+decompilation, so the next reader of `FUN_10002fa6` will find it and draw the same wrong conclusion
+this board did. Quartet: `7e` suspend cmd / `7f` suspended notify / `80` resume cmd / `81` resumed
+notify.
+
+**This unblocks every workstream that needs a running sim**, not just this one.
+
+**Next, in order:** (2) **Development — still the critical path, and now gated on ONE thing:**
+authoring *connected service* (road **and** power) at chosen coordinates. Both are hard preconditions
+— a residential tile's develop check early-returns on demand (`0xd`), radioactivity (`0xa`), power
+(`0xe`), transport (`0x10`), land-value band (`0xb`/`0xc`) and an eligible family (`0xf`/`0x12`)
+`[CONFIRMED @ SIMRCI 0x10028f12, iOS goResZoneDeveloper::UpdateCell 0x0026e7c8]`. `city_write.py`
+writes **zones only**, so this needs either a **network-layer writer** (`roadtypes` has a validated
+reader) or an **anchored screen→world map** so drags can target coordinates. (3) A bound above 512.
 Stride/corner measurement is deferred as cosmetic (~8 runs).
-Session CLOSED. Anyone may pick it up.
 
 ### 2. Resizable window / arbitrary resolution — black-vs-garbage RESOLVED 2026-08-25 (U-068 = "renders but does not blit"; see the run-4 subsection below)
 `U-068`: display lists stay empty after a resize Init. Root cause established 2026-08-23 by two
