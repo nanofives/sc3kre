@@ -1,12 +1,14 @@
 # Changing SimCity 3000's camera scroll — the working procedure
 
 **Status: the scroll-speed knob is validated in the running game, 2026-08-20/21**
-(`verify/scroll_patch_test/RESULTS.md`, rungs S1/S2/S3). Two further knobs on this page,
-`drag_divisor` and `edge_margin` are both **observed in a running game (C3)** via transport-independent
-within-process A/B/A tests: `drag_divisor`'s velocity halves `50→25→50` across `-2/-4/-2`, and
-`edge_margin`'s trigger band moves `48/64 → 24/32 → 48/64`. Both validate the geometry the game
-computes; the OS-input "feel" leg is not measured (needs `SendInput`). Only `scroll_speed=16 +
-drag_divisor=4` are staged live.
+(`verify/scroll_patch_test/RESULTS.md`, rungs S1/S2/S3). Three further knobs on this page,
+`drag_divisor`, `edge_margin` and `drag_deadzone` are all **observed in a running game (C3)** via
+transport-independent within-process A/B/A tests: `drag_divisor`'s velocity halves `50→25→50` across
+`-2/-4/-2`, `edge_margin`'s trigger band moves `48/64 → 24/32 → 48/64`, and `drag_deadzone`'s engage
+gate flips a near-threshold sample `velX 0 → 8 → 0` across dead zone `12 → 4 → 12`. All three validate
+the geometry the game computes; the OS-input "feel" leg is **not** measured — both a `SendMessage` and
+a `SendInput` right-drag moved the camera 0 px in the headless harness (D-002, still open). The owner's
+standing install is `scroll_speed=16 + drag_divisor=4 + drag_deadzone=4` (2026-08-25).
 
 Tool: `re/tools/pe_patch.py`. Target: `Apps\SIMSPR.DLL`.
 
@@ -119,16 +121,62 @@ does not fit a signed `imm8`.
 > `--diff` = 2 bytes `fe→fc`, scroll slots untouched) and **routing CONFIRMED** (`0x10043daf`'s
 > `+0x1e6 != 0` branch → `FUN_10043a38`). Confidence **C3**.
 >
-> **Not measured: the OS-input "feel."** A faithful `rdrag:` instrument (`SendMessage(WM_RBUTTON*)`) was
-> run 2026-08-25 and **moved the camera 0 px** — the validity gate caught it, no false verdict. The
-> pan-recognition routing in GZWinD/winmgr polls `GetAsyncKeyState`, so a posted WM message without real
-> async button state is never classified as a drag; only `SendInput` would drive it. That leg is
-> optional gilding — the arithmetic effect is already observed above. Detail:
-> `re/sessions/STATUS_camera.md`, `DEFERRED.md` D-002.
+> **Not measured: the OS-input "feel."** A faithful `rdrag:` instrument (`SendMessage(WM_RBUTTON*)`)
+> moved the camera 0 px (2026-08-25), and a `rinput:` instrument using **`SendInput`** (OS-level, sets
+> `GetAsyncKeyState` state) **also moved the camera 0 px on a clean negative control** (2026-08-25,
+> idle drift `(0,0)`, gesture Δ `(0,0)`). So the "only SendInput would drive it" hypothesis is
+> **falsified in this harness**: the blocker is now the **headless capture environment** — the frame is
+> rebuilt from the blit mirror with no real display, so the game window is not a true foreground/focused
+> window and injected input is not delivered to it. A first run that showed movement was contaminated by
+> camera churn (its idle control read `(176,128)`) and correctly voided. `[UNCERTAIN]` whether SendInput
+> arms the pan against a real foreground window on a real display — untestable headless. The arithmetic
+> effect is already observed above; D-002's feel leg stays open. Detail: `re/sessions/STATUS_camerafeel.md`.
 
 > That separation is also a **free negative control** for any step-bank test: if the step is zeroed
 > and right-drag still pans, the game is running and reading input, so "nothing moved" cannot be a
 > frozen client.
+
+### `drag_deadzone` — right-drag engage threshold & onset  ✅ C3, engage flip OBSERVED in-game (2026-08-25)
+
+The single lever behind the owner's three right-drag complaints ("engages too late", "diagonal has a
+very short window", "starts too fast — start sooner and slower"). Drag velocity is computed from the
+**anchor** and the dead zone is a hard **per-axis gate applied after the divide**
+`[CONFIRMED @ 0x10043a38]`: an axis does not pan until `|v| > deadzone`, and at that instant its
+velocity field steps discontinuously from 0 to ~`deadzone`. So one constant sets all three feels:
+
+- **engage distance** = `deadzone * |divisor|` px. Shipped `12 * 2 = 24` px; on the `drag_divisor=4`
+  build `12 * 4 = 48` px (the divisor the owner chose for a *slower* pan doubled the "starts too late").
+- **onset step** = the 0→`deadzone` jump. The divisor does not soften it; only the dead zone does.
+- **diagonal band.** The gate is **per-axis (a box), not a radius, and there is no axis-lock or
+  dominant-axis rule** `[CONFIRMED @ 0x10043a38]`. An axis pans only when *it alone* clears the dead
+  zone, so off-axis drags snap to pure H/V in the "arms" of a plus shape and diagonal exists only in
+  the corner quadrants past **both** per-axis dead zones. A smaller dead zone thins the arms and widens
+  the diagonal band.
+
+`DRAG_DEADZONE_VA = 0x100676a4`, ships `12.0f`. The clamp (`0x100676a8`, `80.0f`) is a separate cap and
+is not implicated in any of the three symptoms.
+
+```
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --recipe drag_deadzone=4 --out SIMSPR.DLL.dead
+```
+
+Range `0 <= N < 80` (below the clamp, or no proportional band remains); `0` disables the gate (pans on
+any motion, risking tremor drift). Larger engages later and jumps harder.
+
+> **Observed in a running game — 2026-08-25** (Europolis, transport-independent direct call, the same
+> `dragtest` trick that measured `drag_divisor`). `setdead:N` hot-patches the dead-zone f32 live; a
+> near-threshold sample `dragtest:16,0` on shipped divisor `-2` (`raw = 16/2 = 8`):
+>
+> | live dead zone | velX (+0x1f4) |
+> |---|---|
+> | `12.0` shipped | **0.000** (8 <= 12, dead) |
+> | `4.0` (`setdead:4`) | **8.000** (4 < 8 <= 80, band) |
+> | `12.0` restored | **0.000** |
+>
+> **velX 0 → 8 → 0 as the dead zone flips 12→4→12**, while a `(100,40)` control stays `50/20` (the knob
+> only changes the near-threshold engage, not general motion). Confidence **C3**, geometry level. As
+> with `drag_divisor`, the OS-input "feel" (a real drag engaging sooner) is not measured — same headless
+> blocker as D-002. Staged live in the owner's build.
 
 ### `edge_margin` — the edge-scroll trigger band  ✅ C3, band change OBSERVED in-game (2026-08-25)
 
@@ -225,10 +273,12 @@ you hit it while testing a scroll-speed change, it is not your patch.
 - **No code injection.** Operands change in place; instructions are never added. The one camera knob
   that would need that — the missing `1/sqrt(2)` on diagonal scroll, so diagonal movement is faster
   than straight — is deliberately absent from the recipe table rather than half-supported.
-- `drag_divisor` and `edge_margin`: both **C3, observed in-game** via within-process A/B/A (velX
-  `50→25→50`; band `48/64→24/32→48/64`) plus static byte-verified. The OS-input "feel" leg is not
-  measured for either: the pan routing needs real async button state, so a faithful gesture needs
-  `SendInput`, not a bare WM post — but that leg is optional, the geometry effect is already observed.
+- `drag_divisor`, `edge_margin` and `drag_deadzone`: all **C3, observed in-game** via within-process
+  A/B/A (velX `50→25→50`; band `48/64→24/32→48/64`; engage `0→8→0`) plus static byte-verified. The
+  OS-input "feel" leg is not measured for any of them: **both** a `SendMessage` and a `SendInput`
+  right-drag moved the camera 0 px on a clean control (2026-08-25), so the blocker is the headless
+  capture environment (no true foreground window), not the message transport. That leg is optional; the
+  geometry effect is already observed. D-002 stays open.
 - Zoom level 4's reachability in-game was never established, so the `z4` slot is untested.
 - The `+0x32c` scroll-gate flag ("dirty-rect queue overflow → force full repaint", set at
   `FUN_1000d725:105`, cleared in `FUN_1000dc17`) is read from the decompilation and not
