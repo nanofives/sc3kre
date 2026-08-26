@@ -11,19 +11,27 @@ proposed fix: after Init, replay the ctor's single push_back of `{0,0,new_w,new_
 **persistently** restores per-frame presentation (`STATUS_resize.md`, mechanism section, all `[CONFIRMED]`).
 
 ## The instrument (what the harness will do)
-Within-process three-shot A/B, same city/camera/window across all three (the §31.12 pattern):
+Within-process three-shot A/B, same city/camera/window across all three (the §31.12 pattern), gated on
+`SC3PROBE_RESIZE_PUSHRECT=1`:
 
 - **Shot A** — pre-resize, in-city, the instrument control (must render Europolis, as always).
-- **Shot B** — post-resize, **no push**, harness paint hacks OFF (see below): the game's OWN frame loop
-  is the only presenter. Expected black (reproduces the defect through the path being fixed).
-- **Shot C** — post-resize, **rect pushed** into `iso+0x4d0`, then presented through the **list path**
-  (`FUN_1000dc17` flush → `FUN_1000e058`, NOT the list-independent `FUN_1000e206`).
+- **Shot B** — post-resize control. `rz_iso_resize` runs normally (Init, tile refill, **redraw kept** so
+  `iso+0x74` is rasterised) **but the harness `FUN_1000e206` full present is suppressed.** Redraw's own
+  `flush → FUN_1000e058` presents the **empty** (Init-erased) `iso+0x4d0`, i.e. a no-op — so the render
+  target holds the city yet nothing blits it. Expected **black**: the defect reproduced through the exact
+  list path being fixed.
+- **Shot C** — post-resize, phase C **pushes** `{0,0,w,h}` into `iso+0x4d0` (`FUN_10010586`, advancing
+  `end`), then drives **`FUN_1000e058`** directly (the game's own incremental present) which blits
+  `composite.vt[0x120](iso+0x74, rect, rect)` for that rect. Expected **city**, if the empty list was the
+  whole defect.
 
-**Paint-hack suppression is mandatory and is the whole point.** The harness's own redraw
-(`FUN_1000b4b3`) and full present (`FUN_1000e206`) are list-independent and would show the city
-regardless of the rect list, confounding attribution. Both are gated OFF for B and C so the ONLY
-presenter exercised is `iso+0x4d0` → `FUN_1000e058` → `composite.vt[0x120](iso+0x74,…)`. The blit-source
-census (`SC3PROBE_U068SRC`) watches whether `iso+0x74` (or its `+0x44` sub) becomes a blit source.
+**Why keep redraw but suppress only the full present.** Redraw `FUN_1000b4b3` **rasterises the display
+list into `iso+0x74`** — suppressing it would leave the render target empty and `FUN_1000e058` would blit
+black, a false negative. The list-independent full present `FUN_1000e206` is the only paint that would
+show the city *without* the rect list, so it alone must be gated off for B to be a valid black control and
+for C's city to be attributable to the push. The ONLY presenter that reaches the screen with the city is
+then `iso+0x4d0` → `FUN_1000e058` → composite. The blit-source census (`SC3PROBE_U068SRC`) watches whether
+`iso+0x74` (or its `+0x44` sub) becomes a blit source in the C window.
 
 Logged every phase: `iso+0x4d0`/`+0x4d4` (vector begin/end → count), `iso+0x7c`, `iso+0x524`, and the
 census match/no-match with the source-pointer inventory.
