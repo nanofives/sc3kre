@@ -733,12 +733,33 @@ Ordered by how much damage it can do silently.
    reading the file.** It **does** acquire the lease (line 71) and release it in a `finally` (line 202).
    Do **not** wrap calls in an outer `game_lock.ps1 -Acquire`; that self-deadlocks or orphans a lease.
 
-   ⚠️ **The real residual is the opposite failure:** if the shell running `capture.ps1` is killed
-   rather than exiting, the `finally` never runs and **the lease is orphaned**. Observed 2026-08-25
-   when the owning session ended mid-capture — lease still `HELD` by `capture-slowcam`, `game up : no`.
-   Release with `-Release -Owner <name>`; if the install is deliberately modified the lock **refuses**
-   and you must pass `-DirtyOk -Note '<why>'`, which is audited. Check `-Status` before assuming a
-   sibling session is really running.
+   ⚠️ **A killed shell orphans the lease** — the `finally` never runs. Observed 2026-08-25 when a
+   session ended mid-capture: lease still `HELD` by `capture-slowcam`, `game up : no`.
+
+   ⚠️⚠️ **BUT THAT IS THE MINOR CAUSE. THE REAL ONE IS SILENT, SYSTEMIC, AND FIRES ON EVERY CLEAN
+   EXIT — found 2026-08-26.** `capture.ps1:202` is:
+
+   ```powershell
+   & pwsh -NoProfile -File $lock -Release -Owner $Owner | Out-Null   # free the queue
+   ```
+
+   **`game_lock.ps1 -Release` REFUSES when the install is MODIFIED** unless `-DirtyOk` is passed —
+   and **`| Out-Null` swallows the refusal**. So the `finally` runs, the release fails, nothing is
+   printed, and the lease is held until its 15-minute expiry.
+
+   **The owner's camera build is permanently staged, so the install is ALWAYS dirty. Therefore every
+   capture run currently leaks its lease, silently.** Measured: `bptmim8jp` exited **0**, `game up :
+   no`, and the lease was still `HELD` by `capture-resizehand`. This is what produced every "idle
+   lease with no game behind it" on 2026-08-25/26 — those were misattributed to killed shells.
+
+   **Fix:** `capture.ps1` already detects and prints `NOTE: install is already MODIFIED -> …` at
+   acquire, so it knows. Pass `-DirtyOk -Note "pre-existing: <modules>"` on the release in that case,
+   and **stop piping the release to `Out-Null`** — a failed release must be loud. This is the same
+   silent-failure class as debt item 1 and the nondiagnostic proxy: it does not error, it just
+   quietly does nothing.
+
+   Until fixed: after any `capture.ps1` run, check `-Status` and release with
+   `-Release -Owner capture-<name> -DirtyOk -Note '<why>'`.
 
    ⚠️⚠️ **The stale claim caused a real deadlock, 2026-08-25.** A session that believed the old note
    took an outer lease as `bigcities`, then called `capture.ps1` — which **self-acquires under its own
