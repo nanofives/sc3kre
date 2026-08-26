@@ -31,18 +31,21 @@ render enumerates **grid B**, which was **empty** (nodes=0) because the `FUN_100
 and nothing else fills it. So the render target is black **regardless of the tile-cache pointer** — restoring
 `iso+0x24` cannot help a path that reads grid B. Grid B stayed `nodes=0` through phase C (`:1045`).
 
-## The correction I owe — my redirection was premature
-I steered off the owner's fa36 plan toward tile-cache preservation on the inference "the #1 city rendered
-with grid-B type1=0, so it came from the tile cache." That inference was unsafe:
-- The #1 city rendered because that run's `FUN_10018cdf` refill **ran** (it was not suppressed) and
-  **populates grid B** (1537 type-2 nodes) as well as the tile cache. This run suppressed the refill and the
-  render went black — so **the refill, not the tile-cache pointer, is the lever**.
-- `[UNCERTAIN]` whether the #1 frame rendered from grid-B type-2 nodes or the tile cache — this run cannot
-  say, because #1's zoom was not recorded and its log is overwritten. What IS certain: with the refill
-  suppressed and grid B empty at zoom 3, nothing renders, and preserving `iso+0x24` does not change that.
-- Consequence: the "builders gate only on type 1" simplification is **not safely load-bearing** here — the
-  refill's type-2 population is implicated in what renders at zoom 3. Left as `[UNCERTAIN]`, needs a
-  type-attribution run (census the builder's actual source), not asserted.
+## The correction — BOTH specific mechanisms were wrong; only the shared premise survived
+Two wrong specific calls, stated so no future reader trusts either instinct over a measurement:
+- **My redirection (tile cache) was wrong** — restoring `iso+0x24` rendered black.
+- **The earlier fa36 call (`FUN_1000fa36`, grid-B type-1) was ALSO wrong** — the lever is `FUN_10018cdf`,
+  a distinct 6,959-byte routine. Init `FUN_10005b42` contains **zero references to `FUN_10018cdf`**
+  (verified), consistent with Init zeroing grid B and something else entirely refilling it.
+- **What survived is only the shared premise: grid B matters at this zoom.** The specific refill is
+  `FUN_10018cdf` (the bridge whole-map fill), not fa36 and not the tile cache. The #1 city rendered because
+  that run's `FUN_10018cdf` refill **ran** (it populates grid B); suppress it and the render goes black.
+- `[UNCERTAIN]` whether the zoom-3 frame sources grid-B type-2 or the tile cache — needs a builder-source
+  type-attribution run; the "builders gate only on type 1" simplification is not safely load-bearing here.
+- `[UNCERTAIN]` #1's actual zoom. ⚠️ **Recoverability gap:** #1's `capture.log` was overwritten by this run,
+  so its zoom is unrecoverable. The probe-SHA-in-log fix exists precisely because unrecoverable run identity
+  has burned this project before; per-run logs should be archived (not just the probe SHA) when a later run
+  will overwrite them, or the comparison cannot be re-derived.
 
 ## What this DOES establish for #3
 - The reachable/default Europolis zoom is **3** → the **grid-B** render path.
