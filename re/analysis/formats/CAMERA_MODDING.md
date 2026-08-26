@@ -94,6 +94,14 @@ The mouse-drag path is **separate** from the step bank: `0x10043daf`'s `+0x1e6 !
 `(anchor - mouse) / -N` where `N` is the `imm8` of `push -2` at `0x10043a5e` (X) and `0x10043a68`
 (Y), so a **smaller magnitude is more sensitive**: `-1` doubles it, `-4` halves it.
 
+> ⚠️ **Changing `N` also moves the right-drag ENGAGE DISTANCE, because the dead-zone gate is tested
+> on the post-divisor velocity.** The drag does not engage until `|(anchor-mouse)/N| > deadzone`, so
+> the engage distance is `deadzone * N` px: shipped `12 * 2 = 24`, but a `drag_divisor=4` build
+> engages at `12 * 4 = 48` px. This is a real regression trap: raising `N` to slow the pan makes it
+> "start after getting away from the initial point too much" (owner report, 2026-08-25). If you slow
+> the pan with `N`, lower `drag_deadzone` (below) to keep the engage distance where you want it.
+> `[CONFIRMED @ 0x10043a38 + 0x10043a5e]`
+
 ```
 py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --recipe drag_divisor=1 --out SIMSPR.DLL.drag
 ```
