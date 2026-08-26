@@ -53,6 +53,8 @@
 !/verify/*/README.md
 !/verify/*/RESULTS.md
 !/verify/*/*RESULTS.md
+!/verify/*/PRE.md
+!/verify/*/*PRE.md
 
 # 3) Re-include the re/ tree, then re-ignore everything inside it.
 !/re/
