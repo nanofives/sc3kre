@@ -478,6 +478,44 @@ def r_resize_rectfix(p, arg=None):
 GZGRAPHICD_SHA = "48201f476121adeea2957b8cc9b3063326aee28b86b026acab7179c878ad454d"
 
 
+# --- GZGraphicD X-button (WM_CLOSE) quit fix (code cave) --------------------------------
+#
+# The Gonzo WndProc FUN_10017e2f SWALLOWS WM_CLOSE (the `je 0x100181c7` at 0x10017eab, msg==0x10 →
+# shared return-0 epilogue) — the X does nothing, PRE-EXISTING (shipped WS_SYSMENU always had a close
+# box). SC3U's main loop is a PeekMessage loop (GZWIN FUN_10020971) that exits ONLY on WM_QUIT(0x12)
+# or the GZ end-message 0x700, with NO window-alive check — so DestroyWindow alone would orphan the
+# process (loop spins on a dead window). The SAFE quit is PostQuitMessage(0), but GZGraphicD does not
+# import it. It DOES import LoadLibraryA + GetProcAddress (kernel32) and depends on USER32, and has
+# 2038 bytes of .text slack at 0x1001d80a. So a 67-byte cave resolves PostQuitMessage at runtime and
+# calls it, FAIL-CLOSED: a NULL from LoadLibraryA or GetProcAddress falls through to the original
+# return-0 (X still does nothing) rather than faulting in the WndProc. Blast radius = the WM_CLOSE
+# branch only (which did nothing before). Bytes assembled + capstone-verified; cave disassembles to:
+#   push "user32.dll"; call [LoadLibraryA]; test eax,eax; je ret0
+#   push "PostQuitMessage"; push eax; call [GetProcAddress]; test eax,eax; je ret0
+#   push 0; call eax  (PostQuitMessage(0)); ret0: jmp 0x100181c7
+# IAT slots [CONFIRMED @ GZGraphicD]: LoadLibraryA 0x1001e05c, GetProcAddress 0x1001e048.
+
+GZ_XQUIT_CAVE_VA = 0x1001d80a
+GZ_XQUIT_CAVE = ("6832d80110ff155ce0011085c07414683dd8011050ff1548e0011085c074046a00ffd0"
+                 "e995a9ffff7573657233322e646c6c00506f7374517569744d65737361676500")  # 67 bytes
+GZ_XQUIT_HOOK_VA = 0x10017ead          # the je's rel32 (je itself at 0x10017eab: 0f 84 <rel32>)
+
+
+def r_close_button_quit(p, arg=None):
+    """`--recipe close_button_quit` -> make the window X button quit the game (GZGraphicD, code cave).
+
+    A 67-byte cave (PostQuitMessage(0), fail-closed on NULL) in .text slack + one 4-byte rel32 redirect
+    of the WM_CLOSE branch. Anchored to shipped GZGraphicD SHA. Expected `--diff` vs shipped: 66 bytes /
+    4 runs (67 cave minus 3 bytes that coincide with the pre-existing zero slack = 64, plus 2 changed
+    bytes in the hook rel32 - the other 2 rel bytes are unchanged 0x00).
+    """
+    _anchor(p, GZGRAPHICD_SHA, "recipe close_button_quit")
+    p.stage(GZ_XQUIT_CAVE_VA, "hex", GZ_XQUIT_CAVE, expect="00" * 67,
+            note="WM_CLOSE -> resolve+call PostQuitMessage(0), fail-closed")
+    p.stage(GZ_XQUIT_HOOK_VA, "hex", "59590000", expect="16030000",
+            note="redirect WM_CLOSE je rel32 -> cave 0x1001d80a")
+
+
 def r_resizable_frame(p, arg=None):
     """`--recipe resizable_frame` -> add WS_THICKFRAME|WS_MAXIMIZEBOX to the Gonzo window (GZGraphicD).
 
@@ -492,6 +530,7 @@ def r_resizable_frame(p, arg=None):
 
 RECIPES = {
     "resizable_frame": r_resizable_frame,
+    "close_button_quit": r_close_button_quit,
     "scroll_zero": r_scroll_zero,
     "scroll_default_zero": r_scroll_default_zero,
     "scroll_speed": r_scroll_speed,

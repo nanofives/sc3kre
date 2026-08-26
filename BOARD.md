@@ -512,9 +512,10 @@ was staged).
    `drag_deadzone=2` + **`resize_rectfix`** (the U-068 post-resize present-rect code cave). sha
    `f5b9f1d9…`, **gate 13 runs / 45 bytes** (5 scroll + 2 drag + 2 dead-zone + 36 resize_rectfix =
    33 cave + 3 hook). `resize_rectfix` is inert unless the iso Init runs, so it does not change camera feel.
-2. **`Apps\GZGraphicD.dll` carries `resizable_frame`** (style flip — WS_THICKFRAME|WS_MAXIMIZEBOX, 3 bytes,
-   sha `8999940929…`, gate 3 bytes) so the owner can drag/maximise the window for the D-004 hand-test. This
-   is **experimental**: if the owner reverts the resizable frame, GZGraphicD → shipped.
+2. **`Apps\GZGraphicD.dll` carries TWO recipes: `resizable_frame` + `close_button_quit`** (style flip
+   WS_THICKFRAME|WS_MAXIMIZEBOX, 3 bytes; plus the WM_CLOSE→PostQuitMessage code cave that makes the X quit,
+   66 bytes), combined sha `fc89a394…`, **gate 69 bytes / 7 runs**. Experimental for the D-004 hand-test; if
+   the owner reverts, GZGraphicD → shipped.
 
 **Any session that touches either module must restore the owner's live build as its LAST action, and verify
 it.** Every time. `game_lock.ps1 -Status` will report `install : MODIFIED -> SIMSPR.DLL` (and now also
@@ -525,8 +526,8 @@ GZGraphicD) — EXPECTED, not contamination.
 py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL.shipped --recipe scroll_speed=8 --recipe drag_divisor=4 --recipe drag_deadzone=2 --recipe resize_rectfix --out SIMSPR.DLL.4
 py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL.shipped --diff SIMSPR.DLL.4   # gate: 13 runs / 45 bytes
 Copy-Item SIMSPR.DLL.4 Apps\SIMSPR.DLL -Force
-py -3.12 re/tools/pe_patch.py Apps\GZGraphicD.dll.shipped --recipe resizable_frame --out GZGraphicD.dll.rf
-py -3.12 re/tools/pe_patch.py Apps\GZGraphicD.dll.shipped --diff GZGraphicD.dll.rf   # gate: 3 bytes
+py -3.12 re/tools/pe_patch.py Apps\GZGraphicD.dll.shipped --recipe resizable_frame --recipe close_button_quit --out GZGraphicD.dll.rf
+py -3.12 re/tools/pe_patch.py Apps\GZGraphicD.dll.shipped --diff GZGraphicD.dll.rf   # gate: 69 bytes / 7 runs
 Copy-Item GZGraphicD.dll.rf Apps\GZGraphicD.dll -Force
 py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --read 0x10067690:f32 -n 5   # expect 8.0 x5
 py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --read 0x100676a4:f32 -n 1   # expect 2.0
