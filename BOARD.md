@@ -99,7 +99,7 @@ RE done, tool exists outside a test harness, validated in the running game.
 | **Sprites / asset art** (recolour and author from PNG) | `sprite_patch.py` | `formats/SPRITE_MODDING.md` | `-filetrace` is blind to `Apps\Res\Sprites\`, so sprite runs have no file-access gate |
 | **City saves** (zone raster, per tile) | `city_write.py` | `formats/CITY_SAVE.md` | tile (28,0) never visually confirmed; the **name-collision load crash** needs writing up for users |
 | **Camera scroll + drag** | `pe_patch.py` | `formats/CAMERA_MODDING.md` | `drag_divisor` **C3 observed** (velX 50→25→50) staged live with `scroll_speed=16`; `edge_margin` **C3 observed** (band 48/64→24/32→48/64), not staged; only OS-input "feel" leg unmeasured (**D-002**, optional), zoom-4 reachability (**D-003**) |
-| **Network tiling rules** (retune / re-skin an existing network) | `tilingrules.py` | `formats/TILINGRULES_MODDING.md` | T1 met game-side 2026-08-25. One edit of one kind; render-path result, no simulation claim |
+| **Network tiling rules** (retune / re-skin an existing network) | `tilingrules.py` + `network_layer.py` | `formats/TILINGRULES_MODDING.md` | ⭐⭐ **T1 AND T2 both met game-side 2026-08-25.** T1 destructive (roads vanish), **T2 constructive: a 2-line SimpleRules edit re-skins a freshly-drawn straight to the curve piece — predicted `11203`, measured `11203 ×11`.** ⚠️ The lever is **SimpleRules (fixpoint, first), NOT `final.txt`** (last) — the `final` edit gave a **byte-identical** save. Render-path result, **no simulation claim** |
 | **Bigger cities** (N > 256, proven at 512) | `patch_citysize.py` + `patch_dirtbuf.py` | `formats/BIGGER_CITIES.md` | ⭐ **engine reads/renders/re-serialises tiles to 495, in-game authoring works (x=460), AND the sim UNPAUSES + runs at 512** (2026-08-25): post GZ `0xc2a35d80` (probe `msg:`), game-verified `+0x140` 1→0 + clock ticks. ⚠️ `0x231e2493` measured **inert** (wrong pause field) — the two-mechanism trap. Still open: **development** needs *connected service* (road+power) authored at chosen coords, gated on a network writer or an anchored screen→world map. `U-081` closed |
 
 > **Correction on record:** `HANDOFF.md` still claims sprite modding has "no RGB565 quantizer and no
@@ -514,6 +514,24 @@ Both recipes pin the shipped SHA, so they must be applied **to `SIMSPR.DLL.shipp
 invocation** — neither will anchor against an already-patched module. The 7-runs/12-bytes gate is five
 2-byte step-slot runs plus two non-adjacent 1-byte drag runs; **a different count means stop, not
 stage.** `Copy-Item Apps\SIMSPR.DLL.shipped Apps\SIMSPR.DLL -Force` still undoes both.
+
+## ⚠️ Pre-registration must be COMMITTED before the run, not written beside the result
+
+`verify/tilingrules_constructive/PRE.md` opens *"PRE-REGISTRATION (committed before any run)"* — but it
+was **untracked**, with an mtime of 22:51 against `RESULTS.md` at 22:52. **The file could not
+demonstrate its own claim.** An auditor sees a pre-registration dated, as far as the filesystem knows,
+at result time.
+
+In that instance the claim was **true and independently provable** — the session stated the prediction
+(`11203`, stock control `29`) to the orchestrator *before* the fire order, so it is attested in the
+conversation transcript. **But that was luck, not design.**
+
+**Rule: `git add` + commit the `PRE.md` BEFORE taking the lease.** Git then supplies an independent,
+tamper-evident timestamp and pre-registration becomes a fact rather than an assertion. One commit.
+
+Related: game-content artifacts (`.sc3` saves) are correctly **not retained**, so a result is usually
+not re-derivable afterwards. That makes `RESULTS.md` the sole record — **write the per-run counts and
+hashes into it in full**, because nobody can recompute them.
 
 ## ⚠️ A THIRD instrument-failure class, found 2026-08-25: the NONDIAGNOSTIC PROXY
 
