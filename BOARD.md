@@ -98,7 +98,7 @@ RE done, tool exists outside a test harness, validated in the running game.
 | **Tunables** (any `SYS.PAK` INI value) | `syspak_mod.py` | `formats/SYSPAK.md` | `U-051` credits discriminator, 1 run, cosmetic closure only |
 | **Sprites / asset art** (recolour and author from PNG) | `sprite_patch.py` | `formats/SPRITE_MODDING.md` | `-filetrace` is blind to `Apps\Res\Sprites\`, so sprite runs have no file-access gate |
 | **City saves** (zone raster, per tile) | `city_write.py` | `formats/CITY_SAVE.md` | tile (28,0) never visually confirmed; the **name-collision load crash** needs writing up for users |
-| **Camera scroll + drag** | `pe_patch.py` | `formats/CAMERA_MODDING.md` | `drag_divisor` **C3 observed** (velX 50→25→50) staged live with `scroll_speed=16`; `edge_margin` **C3 observed** (band 48/64→24/32→48/64), not staged; only OS-input "feel" leg unmeasured (**D-002**, optional), zoom-4 reachability (**D-003**) |
+| **Camera scroll + drag** | `pe_patch.py` | `formats/CAMERA_MODDING.md` | `drag_divisor` (velX 50→25→50), `drag_deadzone` (engage 0→8→0) **and** `scroll_speed=16` **staged live** (three-recipe build, `--diff` 8/14); `edge_margin` **C3 observed** (band 48/64→24/32→48/64), not staged. OS-input "feel" leg (**D-002**) now known ENVIRONMENT-blocked: `SendMessage` AND `SendInput` both moved 0px in the headless harness. Zoom-4 reachability (**D-003**) |
 | **Network tiling rules** (retune / re-skin an existing network) | `tilingrules.py` + `network_layer.py` | `formats/TILINGRULES_MODDING.md` | ⭐⭐ **T1 AND T2 both met game-side 2026-08-25.** T1 destructive (roads vanish), **T2 constructive: a 2-line SimpleRules edit re-skins a freshly-drawn straight to the curve piece — predicted `11203`, measured `11203 ×11`.** ⚠️ The lever is **SimpleRules (fixpoint, first), NOT `final.txt`** (last) — the `final` edit gave a **byte-identical** save. Render-path result, **no simulation claim** |
 | **Bigger cities** (N > 256, proven at 512) | `patch_citysize.py` + `patch_dirtbuf.py` | `formats/BIGGER_CITIES.md` | ⭐ **engine reads/renders/re-serialises tiles to 495, in-game authoring works (x=460), AND the sim UNPAUSES + runs at 512** (2026-08-25): post GZ `0xc2a35d80` (probe `msg:`), game-verified `+0x140` 1→0 + clock ticks. ⚠️ `0x231e2493` measured **inert** (wrong pause field) — the two-mechanism trap. Still open: **development** needs *connected service* (road+power) authored at chosen coords, gated on a network writer or an anchored screen→world map. `U-081` closed |
 
@@ -469,11 +469,12 @@ Order:
 | `U-077` | Class behind occupant IID `0x41658d28`; label flag bits `0x400`/`0x4000`. Can sit indefinitely. |
 | ~~`U-063`~~ | ✅ **CLOSED — and it was already closed before this board ever listed it as open.** The RECT zone writer's caller is **`SIMGEOM.DLL FUN_10007760+0x5BB` = `0x10007D1B`**, `FF 50 38  call dword ptr [eax+0x38]` reaching SIMRCI `FUN_10032afa`, runtime-confirmed, with **exactly two observed callers**. Written up in `LAUNCH_CONTROL.md` §31.9.1–.3, including `FUN_10007760` named as `cISC3BuildingLayer::commit_placement`. Verified at `LAUNCH_CONTROL.md:3564/3577/3787` before closing this row. | done |
 
-## ⚠️ THE INSTALL IS DELIBERATELY MODIFIED — `SIMSPR.DLL`, slower camera (TWO mods now)
+## ⚠️ THE INSTALL IS DELIBERATELY MODIFIED — `SIMSPR.DLL`, slower camera (THREE mods now)
 
-**Staged 2026-08-25 at the owner's request. As of the drag4 close, this is now TWO mods, not one.**
-`Apps\SIMSPR.DLL` carries **both** `scroll_speed=16` (arrow-key + edge scroll at half speed) **and**
-`drag_divisor=4` (right-drag pan at half sensitivity). Built in one invocation from
+**Staged 2026-08-25 at the owner's request. As of the camera-feel close, this is now THREE mods.**
+`Apps\SIMSPR.DLL` carries `scroll_speed=16` (arrow-key + edge scroll at half speed), `drag_divisor=4`
+(right-drag pan at half sensitivity) **and** `drag_deadzone=4` (right-drag engages sooner and with a
+gentler onset — dead zone `12→4`, the owner's "start sooner and slower"). Built in one invocation from
 `SIMSPR.DLL.shipped`.
 
 **This means `game_lock.ps1 -Status` reports `install : MODIFIED -> SIMSPR.DLL`, and that is
@@ -483,9 +484,9 @@ left debris behind.
 | | |
 |---|---|
 | backup | `Apps\SIMSPR.DLL.shipped`, sha256 `eec715009152eec0ce756f74…` |
-| staged build | `verify/drag_divisor_test/SIMSPR.DLL.slow16drag4`, sha256 `117fa3b1…` |
-| staged | **7 differing runs, 12 bytes**, verified by an independent `--diff` (5×2-byte scroll + 2×1-byte drag) |
-| live values | scroll `0x10067690`–`0x100676a0` all `16.0`; drag imm8 `0x10043a5e`/`0x10043a68` both `fc` (−4) |
+| staged build | `verify/drag_divisor_test/SIMSPR.DLL.slow16drag4dead4`, sha256 `58aabcb1…` |
+| staged | **8 differing runs, 14 bytes**, verified by an independent `--diff` (5×2-byte scroll + 2×1-byte drag + 1×2-byte dead zone) |
+| live values | scroll `0x10067690`–`0x100676a0` all `16.0`; drag imm8 `0x10043a5e`/`0x10043a68` both `fc` (−4); dead zone `0x100676a4` = `4.0` |
 
 **Undo (removes BOTH mods), and do this before any run that needs a stock install:**
 
@@ -503,8 +504,9 @@ restore shipped SIMSPR first.** `U-082`'s record is unaffected (it closed before
 
 ## ⚠️ STANDING RULE — the owner's SIMSPR build must be live when you finish
 
-The owner's standing install state is a **two-recipe** `Apps\SIMSPR.DLL`: `scroll_speed=16` **and**
-`drag_divisor=4` (half-speed keys, edge-scroll **and** right-drag).
+The owner's standing install state is a **three-recipe** `Apps\SIMSPR.DLL`: `scroll_speed=16`,
+`drag_divisor=4` **and** `drag_deadzone=4` (half-speed keys/edge-scroll/right-drag, plus the right-drag
+engaging sooner and gentler).
 
 **Any session that touches `SIMSPR.DLL` must restore that build as its LAST action, and verify it.**
 Not usually — every time. Sessions legitimately restore shipped SIMSPR to take a measurement (it
@@ -514,17 +516,41 @@ the owner launches the game expecting a slow camera, gets a fast one, and nothin
 it.
 
 ```powershell
-py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL.shipped --recipe scroll_speed=16 --recipe drag_divisor=4 --out SIMSPR.DLL.slow16drag4
-py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL.shipped --diff SIMSPR.DLL.slow16drag4   # gate: 7 runs / 12 bytes
-Copy-Item SIMSPR.DLL.slow16drag4 Apps\SIMSPR.DLL -Force
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL.shipped --recipe scroll_speed=16 --recipe drag_divisor=4 --recipe drag_deadzone=4 --out SIMSPR.DLL.slow16drag4dead4
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL.shipped --diff SIMSPR.DLL.slow16drag4dead4   # gate: 8 runs / 14 bytes
+Copy-Item SIMSPR.DLL.slow16drag4dead4 Apps\SIMSPR.DLL -Force
 py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --read 0x10067690:f32 -n 5   # expect 16.0 x5
 py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --read 0x10043a5e:hex -n 1   # expect fc
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --read 0x100676a4:f32 -n 1   # expect 4.0
 ```
 
-Both recipes pin the shipped SHA, so they must be applied **to `SIMSPR.DLL.shipped` in one
-invocation** — neither will anchor against an already-patched module. The 7-runs/12-bytes gate is five
-2-byte step-slot runs plus two non-adjacent 1-byte drag runs; **a different count means stop, not
-stage.** `Copy-Item Apps\SIMSPR.DLL.shipped Apps\SIMSPR.DLL -Force` still undoes both.
+All three recipes pin the shipped SHA, so they must be applied **to `SIMSPR.DLL.shipped` in one
+invocation** — none will anchor against an already-patched module. The 8-runs/14-bytes gate is five
+2-byte step-slot runs, two non-adjacent 1-byte drag runs, plus one 2-byte dead-zone run (the f32
+`12.0→4.0` only changes its top two bytes); **a different count means stop, not stage.**
+`Copy-Item Apps\SIMSPR.DLL.shipped Apps\SIMSPR.DLL -Force` still undoes all three.
+
+## ⚠️ `capture.ps1` LEASES FOR 15 MINUTES REGARDLESS OF `-AtSec` — found 2026-08-25
+
+`capture.ps1:71` hardcodes `-Minutes 15` on the acquire. **`-AtSec` sets the kill timer, not the lease
+duration.** So any run longer than 15 minutes spends its remainder holding an **expired** lease.
+
+Measured on the owner's 30-minute playtest: lease log says *"acquired by 'capture-playtest' for 15
+minute(s)"* while `-AtSec 1800` kept the game alive for 30. Halfway through, `-Status` reported
+**`lease : STALE - reclaimable`** with the game still running.
+
+**Why this is dangerous rather than untidy:** a stale lease is *reclaimable*, so a sibling session
+polling `-Status` is told the game is free and may launch. **SC3U is single-instance** — a second
+launch exits `0xFFFFFFFF` at ~840 ms with no dump, which this board already records as
+**indistinguishable from a broken patch**. The failure would land on the innocent session and look
+like its own patch failing.
+
+It did not bite this time only because the game had already exited when the state was next checked.
+
+**Fix:** derive the lease minutes from `-AtSec` with headroom (e.g. `[math]::Ceiling($AtSec/60) + 5`)
+rather than hardcoding 15, or renew the lease periodically while the run is live. Until then,
+**do not use `-AtSec` above ~800 s**, and treat a `STALE` lease as "verify no game process is alive"
+rather than "free".
 
 ## ⚠️ Pre-registration must be COMMITTED before the run, not written beside the result
 
