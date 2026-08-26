@@ -391,6 +391,73 @@ def r_edge_margin(p, arg):
         p.stage(va, "i8", new, expect=old, note="edge rect displacement")
 
 
+# --- U-068 resizable-window rect-push fix (code cave, still same-length) ----------------
+#
+# UNLIKE every recipe above, this one is NOT a constant edit -- it installs a CALL. The confirmed
+# U-068 fix (verify/u068_rectpush_test/RESULTS.md, probe da6f2080) is: after the iso-view Init
+# `FUN_10005b42` erases the persistent present-rect list `iso+0x4d0` on a resize, replay the ctor's
+# single `push_back {0,0,new_w,new_h}` via `FUN_10010586`, so the per-frame present `FUN_1000e058`
+# has a rect again and blits `iso+0x74` to the composite. `iso+0x4d0` is appended-only (no per-frame
+# clear -- Init and the dtor are the only emptiers), so one push is enough and there is no leak; the
+# dormant `iso+0x4f0`-gated flush recorder was rejected precisely because forcing it on WOULD leak.
+#
+# It stays inside invariant 2 (same length) by living in EXISTING executable slack: SIMSPR `.text`
+# ends its content at VirtualSize 0x6049a (VA 0x1006149a) but the raw section runs to 0x61000, so
+# 0x1006149a..0x10062000 is 0xB66 zero bytes inside `.text`'s single RX page based at 0x10061000
+# (real code occupies 0x10061000..0x1006149a, so the page is already mapped). We overwrite 37 of
+# those zeros with a trampoline and rewrite ONE call's rel32 to reach it. No insert, no relocation,
+# no section-header edit. `.text` chars 0x60000020 (CODE|EXECUTE|READ); checksum ships 0x0.
+#
+# Hook: Init's `call FUN_1000b70e` at 0x10005f55 (bytes e8 b4 57 00 00), chosen because EBX and ECX
+# both hold `iso` there (`mov ecx,ebx` @ 0x10005f4b; iso+0x7c=1 / iso+4=1 written just before) and
+# the call is a plain `__thiscall(this)` with no stack args, so wrapping it is clean.
+#   [CONFIRMED @ SIMSPR byte-scan 0x10005f30..0x10005f60; FUN_1000b70e __fastcall(this); ret]
+#
+# Trampoline @ 0x1006149a (37 bytes; rel32s ASLR-invariant, both callees intra-module):
+#   51                   push ecx                 ; save iso across FUN_1000b70e
+#   e8 <rel FUN_1000b70e> call FUN_1000b70e        ; original line-253 behaviour, ecx=iso
+#   5a                   pop edx                  ; edx = iso  (do not rely on ebx surviving)
+#   50                   push eax                 ; save FUN_1000b70e result (caller uses it)
+#   ff 72 60             push [edx+0x60]          ; rect.bottom = new height
+#   ff 72 5c             push [edx+0x5c]          ; rect.right  = new width
+#   6a 00                push 0                   ; rect.top
+#   6a 00                push 0                   ; rect.left
+#   8b c4                mov eax, esp             ; -> &rect
+#   50                   push eax                 ; push_back arg = &rect
+#   8d 8a d0 04 00 00    lea ecx, [edx+0x4d0]     ; this = &iso.presentlist
+#   e8 <rel FUN_10010586> call FUN_10010586        ; __thiscall push_back; ret 4 (cleans &rect)
+#   83 c4 10             add esp, 0x10            ; drop the 16-byte rect
+#   58                   pop eax                  ; restore FUN_1000b70e result
+#   c3                   ret                      ; -> 0x10005f5a
+# [CONFIRMED @ FUN_10010586 __thiscall(this,ptr) ends 5f c2 04 00 = pop edi; ret 4]
+#
+# The rel32s are pre-baked for the shipped layout; the recipe REFUSES any file but SIMSPR_SHA, so a
+# different build (where the addresses would be wrong) cannot be mispatched.
+
+RESIZE_CAVE_VA = 0x1006149a
+RESIZE_CAVE_BYTES = ("51e86ea2faff5a50ff7260ff725c6a006a00"
+                     "8bc4508d8ad0040000e8ccf0faff83c41058c3")   # 37 bytes, see table above
+RESIZE_CAVE_EXPECT = "00" * 37                                   # slack, all zero in shipped
+RESIZE_HOOK_VA = 0x10005f55
+RESIZE_HOOK_NEW = "e840b50500"          # call rel32 -> 0x1006149a
+RESIZE_HOOK_EXPECT = "e8b4570000"       # call FUN_1000b70e in shipped
+
+
+def r_resize_rectfix(p, arg=None):
+    """`--recipe resize_rectfix` -> install the U-068 post-resize present-rect push (code cave).
+
+    Two same-length overwrites: fill 37 bytes of `.text` slack at 0x1006149a with a trampoline that
+    (a) performs Init's original `FUN_1000b70e` call, then (b) push_backs {0,0,new_w,new_h} into the
+    iso present-rect list; and rewrite Init's `call FUN_1000b70e` at 0x10005f55 to reach it. Anchored
+    to the shipped SIMSPR SHA. Expected `--diff` vs shipped: 36 bytes (33 in the cave, 3 at the hook).
+    """
+    _anchor(p, SIMSPR_SHA, "recipe resize_rectfix")
+    p.stage(RESIZE_CAVE_VA, "hex", RESIZE_CAVE_BYTES, expect=RESIZE_CAVE_EXPECT,
+            note="U-068 rect-push trampoline (erase->push_back {0,0,w,h})")
+    p.stage(RESIZE_HOOK_VA, "hex", RESIZE_HOOK_NEW, expect=RESIZE_HOOK_EXPECT,
+            note="redirect Init call FUN_1000b70e -> cave")
+
+
 RECIPES = {
     "scroll_zero": r_scroll_zero,
     "scroll_default_zero": r_scroll_default_zero,
@@ -398,6 +465,7 @@ RECIPES = {
     "drag_divisor": r_drag_divisor,
     "drag_deadzone": r_drag_deadzone,
     "edge_margin": r_edge_margin,
+    "resize_rectfix": r_resize_rectfix,
 }
 
 
