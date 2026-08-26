@@ -1,9 +1,15 @@
 # Editing SimCity 3000's network tiling rules — the working procedure
 
-**Status: validated in the running game 2026-08-25.** Replacing `ROAD_GRND_Set.txt` with a 7-byte
-`{99999}` made **every road tile vanish** — the corridor, the level-crossing road surface, the
-streets inside a settlement (houses intact) and the vehicles on them — **while the railway drew
-normally** from its own untouched Set file. Record: `verify/tilingrules_read_test/RESULTS.md`.
+**Status: validated in the running game at BOTH ends, 2026-08-25.**
+- **Destructive (T1):** replacing `ROAD_GRND_Set.txt` with a 7-byte `{99999}` made **every road tile
+  vanish** — the corridor, the level-crossing road surface, the streets inside a settlement (houses
+  intact) and the vehicles on them — **while the railway drew normally** from its own untouched Set
+  file. Record: `verify/tilingrules_read_test/RESULTS.md`.
+- **Constructive (T2):** a **2-line** edit to `ROAD_GRND_SimpleRules.txt` re-skinned a freshly-drawn
+  straight road tile from the straight piece (29) to the curve piece (11203) — the intended piece
+  landed exactly where designed, measured byte-level on the saved network layer. So a *substitution
+  producing a different-but-valid tiling* is now proven, not just an erasure. Record:
+  `verify/tilingrules_constructive/RESULTS.md`.
 
 This is a how-to. The format spec is [TILINGRULES.md](TILINGRULES.md); the engine that consumes it
 is `re/analysis/NETWORK_RULE_ENGINE.md`; the netType enum is `re/analysis/NETWORK_TYPES.md`.
@@ -16,9 +22,18 @@ findings on the shipped set.
 
 | | |
 |---|---|
-| **Retune** an existing network's tiling — which piece appears for which neighbourhood | ✅ possible, **game-proven** |
-| **Re-skin** an existing network (its art is chosen by piece id → exemplar → sprite) | ✅ possible |
+| **Retune** an existing network's tiling — which piece appears for which neighbourhood | ✅ possible, **game-proven both ways** (T1 erase, T2 substitute) |
+| **Re-skin** an existing network (its art is chosen by piece id → exemplar → sprite) | ✅ possible — a drawn straight was re-pointed to the curve piece (T2) |
 | **Add a 7th network type** | ❌ **impossible without patching code** |
+
+**So "a new road type" means re-skin + re-tune of one of the six existing networks, not a seventh
+network.** You can change what any topology (straight / curve / T / cross / stub / isolated) renders
+as, per neighbourhood, and repoint it to a different piece id (→ different exemplar → different
+sprite; author sprites with `sprite_patch.py`). What you cannot do is add ROAD-alongside-a-new-name
+as a distinct network with its own tool, cost and simulation behaviour — the 6-member enum, the `*6`
+piece-matrix stride, the 42 predicate vtables and the fixed `MenuItem.INI` GUIDs all close that off.
+A convincing "new road type" is therefore a **reskinned/retuned variant of an existing network**, not
+a genuine seventh.
 
 The negative is settled and worth not re-litigating: a closed 6-member enum appears in if/else
 cascades across **11 functions**, `*6` is baked into the piece-matrix address computation, the 42
@@ -42,6 +57,47 @@ Four format families, by filename:
 Not all 68 are consumed by the same loader: `FUN_100196ce` reads the COUNTED_LIST set and a **second
 parser `FUN_10019600`** reads the Convert / Complex_Convert families. The full accounting is in
 `NETWORK_TYPES.md` §9 — **use that, do not count filenames.**
+
+## ⭐ Which rule stage chooses the piece — edit SimpleRules, NOT final
+
+**This is the single thing a modder is most likely to get wrong, because `final` is named like the
+answer and is the obvious place to look. It is the wrong file.** Measured byte-level + confirmed in the
+decompilation 2026-08-25 (`verify/tilingrules_constructive/RESULTS.md`).
+
+When a tile is (re)tiled, the retiler `FUN_1001547b` runs the three RULES-family files **in this
+order** `[CONFIRMED @0x1001547b:565/581/597, files mapped @0x100175ed:315/321/327]`:
+
+| order | file | pass | how it runs |
+|--:|---|---|---|
+| 1 | **`*_SimpleRules.txt`** | group 8 | run to **fixpoint FIRST** |
+| 2 | `*_ComplexRules.txt` | group 0x18 | up to 5× (2-tile-radius / intersection pass) |
+| 3 | `*_final.txt` | group 4 | **once, LAST** |
+
+`*_final.txt` runs **last and only resolves tiles the earlier passes left open.** SimpleRules'
+fixpoint already picks the piece for a normal tile, so **editing `final.txt` for that tile does
+nothing.** Proven: editing `ROAD_GRND_final.txt`'s straight entries (29→11203) produced a
+**byte-identical save** — zero effect — while the same edit in `ROAD_GRND_SimpleRules.txt` changed the
+drawn tile. (The "group" constant is a neighbourhood-radius + priority threshold, not a table index or
+a rule filter.)
+
+**Recipe — change what a topology renders as:**
+1. Find the rule in `*_SimpleRules.txt` that fires for your case. For an **isolated** run (no
+   perpendicular/diagonal context) it is the **bare selector with no conditions**: `1,<mask>` then
+   `2,0` then `4,1` then `5,255,<pieceValue>`. Road straight masks: `1,10` (N+S) at line 77 and `1,5`
+   (W+E) at line 105 in the shipped file. `<pieceValue> = pieceId*256 + state` (e.g. `7425 = 29*256+1`,
+   `2867969 = 11203*256+1`).
+2. Edit **only that `5,255,<val>` RESULT line.** ⚠️ **Do NOT `--replace-id` a piece value in
+   SimpleRules** — the same value appears dozens of times as a `3,<dir>,<val>` **neighbour-condition**
+   (7424/7425 occur 87× each, mostly as conditions), and rewriting those corrupts the matching that
+   decides *which* rule fires. Change the result, never the conditions. Use a byte-preserving
+   line-targeted edit (or `--set-value` on the exact token index), then `--lint`.
+3. A rule with `2,N` (N>0) carries `3,<dir>,<val>` conditions; it fires only when the tile's neighbours
+   match, so a contextual variant (road-with-building, traffic texture) is governed by a different
+   result line than the bare rule.
+
+`*_Convert.txt` (a later remap of specific ids) does **not** touch a freshly-drawn basic straight —
+confirmed by the control (drawn straights = 29, not a Convert variant). It can still remap decorative
+ids, so check `--dump` of the Convert file before assuming your target id survives.
 
 ## ⚠️ The ordering trap — this has caught two separate analysis passes
 
@@ -126,12 +182,19 @@ The crash would surface at teardown, far from your change. Filed as `U-080`.
 
 ## Limits of the game-side proof
 
-- **One edit of one kind to one file.** Emptying a Set list is a blunt instrument; a *substitution*
-  producing a different-but-valid tiling has not been run.
-- **It is a render-path result.** Road tiles stopped being drawn. Nothing here shows the
-  **simulation** stopped routing traffic over those tiles.
-- **The frames are pre-resize.** This says nothing about `U-068`.
-- Controls that did hold, for what they are worth: status bar character-identical
-  (`Pob: 36,172`, `§45,724`, `5/16/1904`) so no sim drift, camera identical to the pixel, and **111
-  `TilingRules` filetrace lines in each run** — the loader ran identically with the stock and the
-  broken file.
+- **~~A substitution has not been run.~~** ✅ **Done (T2):** a drawn straight was substituted to the
+  curve piece via a SimpleRules result edit, measured on the saved file. Two kinds of edit are now
+  proven — erase (Set) and substitute (SimpleRules result).
+- **Both results are render/build-path, NOT simulation.** T1 stopped tiles being *drawn*; T2 changed
+  which *piece* a drawn tile is. Neither shows the **simulation** routes traffic differently. The sim
+  was paused for both (path-loaded cities load paused; the unpause message-post primitive is being
+  built separately). A sim-level tiling test is the open follow-up, and this fence stays until one
+  runs.
+- **Scope of T2:** one topology (straight), one network (road), the bare no-context rule. Contextual
+  variants, other topologies, other networks, and ComplexRules' role are untested.
+- **T1 frames are pre-resize** — says nothing about `U-068`. T2 used no frames at all (saved-file
+  oracle), so it is independent of the camera (U-082) and the render defect (U-068) alike.
+- Controls that held: T1 status bar character-identical (`Pob: 36,172`, `§45,724`, `5/16/1904`) so no
+  sim drift, camera identical to the pixel, **111 `TilingRules` filetrace lines** per run; T2 endpoint
+  stubs held at piece 11225 across all three runs (surgical edit) and the stock control's drawn
+  straights were 29 (so the effect is the edit, not the drawing procedure).

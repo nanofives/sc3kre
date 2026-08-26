@@ -248,7 +248,9 @@ trusted here:
 `0x21f6abca` `0x61448030` `0x82937b60` `0xa0f42214` `0xa106cf3d` `0xa11bcc54` `0xc0a81498`
 `0xc0ab8a88` `0xc106c4f5` `0xc259c02d` `0xe1193c2a` `0xc4c90997`. Six more have a directed SAVE
 with no located loader (`0x2147c2dd` `0xc28d0b6e` `0x4296380e` `0x621cda33` `0x80f1e6d3`
-`0x22963800`).
+`0x22963800`). **Update 2026-08-25: `0x2147c2dd` (SIMNTWRK network layer) is now fully resolved** —
+loader `FUN_100130e9`, per-net saver `FUN_10012fc3`, and the on-disk tile format decoded and
+validated; see its own section below.
 
 Two honest limits:
 
@@ -345,6 +347,64 @@ Array writes go through `vt+0x8c` with capacity `0x5a` (90).
 `[UNCERTAIN]` group `0x029ca804` occurs once per file and sits **2 below** the pinned
 `TrafficLayer` id `0x029ca806`. It is *not* treated as a match — a near-miss id is a different
 class, not a typo.
+
+### Group `0x2147c2dd` = the SIMNTWRK network layer `[CONFIRMED, 59/59]` — road/rail/etc. tiles
+
+Decoded 2026-08-25, closing the "directed SAVE with no located loader" note above (§ the 6-group
+list): the loader **is** located, and the on-disk shape is fully decoded and validated. Tool:
+`re/tools/network_layer.py` (reader; `--diff`, `--masks`, per-tile `(x,y,z,pieceId,state)`).
+
+The auto-tiled networks are stored **sparse** — one record per occupied tile, not a raster. Per
+save, up to **4 IXF records** share group `0x2147c2dd`, keyed by IXF **instance** (base
+`0x206c6e7c`, "|nl "):
+
+| instance | content | code |
+|---|---|---|
+| `0` | header: 4× u32 `(count_road, count_rail, count_net2, version=1)` | save `FUN_10012dff`, load `FUN_100130e9` |
+| `1` | **road** tiles (`count_road` records) | per-net save `FUN_10012fc3`, load loop `FUN_100130e9` |
+| `2` | **rail** tiles | " |
+| `3` | third network (omitted when 0 tiles) | " |
+
+Road vs rail is the **instance index only** — nothing inside a record distinguishes them.
+Save orchestration guards the three network pointers `this+0x3c/+0x40/+0x44` and calls the per-net
+saver three times, accumulating occupied-tile counts, then writes the header last
+`[CONFIRMED @0x10012dff]`. The per-net saver enumerates cells (`vt+0x14`/`vt+0x1c` iterator, `vt+0x24`
+occupancy) and serialises each occupant via `FUN_1000d688` `[CONFIRMED @0x10012fc3]`. Load reads the
+header then `count` occupant records per network via `FUN_1000d6b3` `[CONFIRMED @0x100130e9]`.
+
+**Tile record = exactly 8 bytes, two u32 LE** (occupant fields `+4` then `+8`; `FUN_1000d688` writes
+both, `FUN_1000d6b3` reads both under `version==1`):
+
+```
+word0 = coord   [CONFIRMED @0x1000d44f getter, 0x1000d4d2 setter]
+    x   = word0        & 0x7ff      # bits  0..10  (11-bit, supports N up to 2048)
+    y   = (word0 >> 11) & 0x7ff      # bits 11..21
+    z   = (word0 >> 22) & 0xff       # bits 22..29  (altitude; tracks terrain)
+    flg = (word0 >> 30) & 3          # bits 30..31  (preserved; setter keeps 0xC0000000)
+word1 = piece   [CONFIRMED @0x1000d594 getter, 0x1000d5f5 setter]
+    pieceId = word1        & 0xffff   # prop 0x6355941d  -- the tiling-rule piece id
+    state   = word1 >> 16             # orientation/variant (props 0x6355941e..21)
+```
+
+The `pieceId` is the **rule-resolved render piece**, chosen by the tiling pipeline at build time and
+replayed verbatim on load (`FUN_1000d6b3` does no rule lookup) — so reading it off the save is a
+camera- and pixel-independent witness of what the tiler chose. This is what let the tiling-rule
+constructive test (`verify/tilingrules_constructive/RESULTS.md`) score on the file rather than pixels.
+
+**Validation (Farmsville.sc3, N=192):** header `(2232, 545, 0, 1)`; road 2232 tiles, all unique
+`(x,y)` in `[0,192)`, dominant pieces 29 (straight ×1041), 44, 92, 35, 39, 11203 (curve ×37) — every
+id a member of `ROAD_GRND_Set.txt`; rail 545 tiles (335/334 dominant, z flat 69). Parser recipe: pull
+each compressed record's `parse_sections`, key `group==0x2147c2dd` by instance, and for `instance k>0`
+read `(size-frame_len)/8` records as `<II`. Key by **instance, not section order** (the header is
+instance 0 but written last), and mask x/y with `0x7ff` (not 8 bits).
+
+> **Natural extension — a network-layer WRITER** (extend `network_layer.py` to re-emit the sparse
+> record list): this is one of the two named unblock paths for `bigcities`' 512 development test —
+> authoring *connected* road and power at chosen coordinates, which `city_write.py` (zone raster only)
+> cannot do. Not yet built. Round-trip must preserve the `word0` bits 30–31 / `word1` bits 28–31
+> (orientation/flags no property handler surfaces), and the engine reconstructs neighbour masks on
+> load, so a hand-written straight run needs its pieceIds to be self-consistent with its geometry — or
+> drawn in-game and only *retuned* on disk.
 
 ### ⚠️ SECTION OFFSET BASE = **0** `[CONFIRMED, 59/59]` — the `+0x0C` reading is **FALSIFIED**
 
