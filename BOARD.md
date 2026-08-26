@@ -98,7 +98,7 @@ RE done, tool exists outside a test harness, validated in the running game.
 | **Tunables** (any `SYS.PAK` INI value) | `syspak_mod.py` | `formats/SYSPAK.md` | `U-051` credits discriminator, 1 run, cosmetic closure only |
 | **Sprites / asset art** (recolour and author from PNG) | `sprite_patch.py` | `formats/SPRITE_MODDING.md` | `-filetrace` is blind to `Apps\Res\Sprites\`, so sprite runs have no file-access gate |
 | **City saves** (zone raster, per tile) | `city_write.py` | `formats/CITY_SAVE.md` | tile (28,0) never visually confirmed; the **name-collision load crash** needs writing up for users |
-| **Camera scroll + drag** | `pe_patch.py` | `formats/CAMERA_MODDING.md` | `drag_divisor` (velX 50→25→50), `drag_deadzone` (engage 0→8→0) **and** `scroll_speed=16` **staged live** (three-recipe build, `--diff` 8/14); `edge_margin` **C3 observed** (band 48/64→24/32→48/64), not staged. OS-input "feel" leg (**D-002**) now known ENVIRONMENT-blocked: `SendMessage` AND `SendInput` both moved 0px in the headless harness. Zoom-4 reachability (**D-003**) |
+| **Camera scroll + drag** | `pe_patch.py` | `formats/CAMERA_MODDING.md` | `drag_divisor` (velX 50→25→50), `drag_deadzone` (engage 0→8→0) **and** `scroll_speed` **staged live** (three-recipe `scroll8 + drag4 + deadzone2`, retuned gentler 2026-08-26, `--diff` 8/9, diagonal confirmed by owner feel); `edge_margin` **C3 observed** (band 48/64→24/32→48/64), not staged. OS-input "feel" leg (**D-002**) now known ENVIRONMENT-blocked: `SendMessage` AND `SendInput` both moved 0px in the headless harness. Zoom-4 reachability (**D-003**) |
 | **Network tiling rules** (retune / re-skin an existing network) | `tilingrules.py` + `network_layer.py` | `formats/TILINGRULES_MODDING.md` | ⭐⭐ **T1 AND T2 both met game-side 2026-08-25.** T1 destructive (roads vanish), **T2 constructive: a 2-line SimpleRules edit re-skins a freshly-drawn straight to the curve piece — predicted `11203`, measured `11203 ×11`.** ⚠️ The lever is **SimpleRules (fixpoint, first), NOT `final.txt`** (last) — the `final` edit gave a **byte-identical** save. Render-path result, **no simulation claim** |
 | **Bigger cities** (N > 256, proven at 512) | `patch_citysize.py` + `patch_dirtbuf.py` | `formats/BIGGER_CITIES.md` | ⭐ **engine reads/renders/re-serialises tiles to 495, in-game authoring works (x=460), AND the sim UNPAUSES + runs at 512** (2026-08-25): post GZ `0xc2a35d80` (probe `msg:`), game-verified `+0x140` 1→0 + clock ticks. ⚠️ `0x231e2493` measured **inert** (wrong pause field) — the two-mechanism trap. Still open: **development** needs *connected service* (road+power) authored at chosen coords, gated on a network writer or an anchored screen→world map. `U-081` closed |
 
@@ -471,11 +471,12 @@ Order:
 
 ## ⚠️ THE INSTALL IS DELIBERATELY MODIFIED — `SIMSPR.DLL`, slower camera (THREE mods now)
 
-**Staged 2026-08-25 at the owner's request. As of the camera-feel close, this is now THREE mods.**
-`Apps\SIMSPR.DLL` carries `scroll_speed=16` (arrow-key + edge scroll at half speed), `drag_divisor=4`
-(right-drag pan at half sensitivity) **and** `drag_deadzone=4` (right-drag engages sooner and with a
-gentler onset — dead zone `12→4`, the owner's "start sooner and slower"). Built in one invocation from
-`SIMSPR.DLL.shipped`.
+**Staged 2026-08-25, retuned gentler 2026-08-26, at the owner's request. THREE mods.**
+`Apps\SIMSPR.DLL` carries `scroll_speed=8` (arrow-key + edge scroll at a QUARTER of shipped `32.0`),
+`drag_divisor=4` (right-drag pan at half sensitivity) **and** `drag_deadzone=2` (right-drag engages at
+8 px with a much gentler onset — dead zone `12→2`). Built in one invocation from `SIMSPR.DLL.shipped`.
+(The 2026-08-25 build was `scroll16 + drag4 + deadzone4`; the owner confirmed the diagonal held better
+and asked for a gentler onset and gentler keys, hence `scroll8 + deadzone2`.)
 
 **This means `game_lock.ps1 -Status` reports `install : MODIFIED -> SIMSPR.DLL`, and that is
 EXPECTED, not contamination.** Any session that sees it should read this note before assuming a run
@@ -484,11 +485,11 @@ left debris behind.
 | | |
 |---|---|
 | backup | `Apps\SIMSPR.DLL.shipped`, sha256 `eec715009152eec0ce756f74…` |
-| staged build | `verify/drag_divisor_test/SIMSPR.DLL.slow16drag4dead4`, sha256 `58aabcb1…` |
-| staged | **8 differing runs, 14 bytes**, verified by an independent `--diff` (5×2-byte scroll + 2×1-byte drag + 1×2-byte dead zone) |
-| live values | scroll `0x10067690`–`0x100676a0` all `16.0`; drag imm8 `0x10043a5e`/`0x10043a68` both `fc` (−4); dead zone `0x100676a4` = `4.0` |
+| staged build | `verify/drag_divisor_test/SIMSPR.DLL.gentle`, sha256 `e63ec800…` |
+| staged | **8 differing runs, 9 bytes**, verified by an independent `--diff` (5×1-byte scroll `42→41` + 2×1-byte drag + 1×2-byte dead zone). NB fewer bytes than the `16/4` build: `8.0`/`2.0` change fewer bytes than `16.0`/`4.0` |
+| live values | scroll `0x10067690`–`0x100676a0` all `8.0`; drag imm8 `0x10043a5e`/`0x10043a68` both `fc` (−4); dead zone `0x100676a4` = `2.0` |
 
-**Undo (removes BOTH mods), and do this before any run that needs a stock install:**
+**Undo (removes ALL THREE mods), and do this before any run that needs a stock install:**
 
 ```powershell
 Copy-Item Apps\SIMSPR.DLL.shipped Apps\SIMSPR.DLL -Force
@@ -498,15 +499,16 @@ py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --read 0x10043a5e:hex -n 1   # exp
 
 ⚠️ **Any measurement taken while this is staged is on a modified SIMSPR** — that is the module carrying
 the camera, the iso view and the sprite paths, so it is not a neutral change for rendering or camera
-work. **The live install now perturbs BOTH the step bank AND the drag divisor**, so a drag measurement
-taken against it would read `-4` as if it were shipped. **Any subsequent camera measurement must
-restore shipped SIMSPR first.** `U-082`'s record is unaffected (it closed before this was staged).
+work. **The live install now perturbs the step bank, the drag divisor AND the drag dead zone**, so a
+camera measurement taken against it reads the modded values as if shipped. **Any subsequent camera
+measurement must restore shipped SIMSPR first.** `U-082`'s record is unaffected (it closed before this
+was staged).
 
 ## ⚠️ STANDING RULE — the owner's SIMSPR build must be live when you finish
 
-The owner's standing install state is a **three-recipe** `Apps\SIMSPR.DLL`: `scroll_speed=16`,
-`drag_divisor=4` **and** `drag_deadzone=4` (half-speed keys/edge-scroll/right-drag, plus the right-drag
-engaging sooner and gentler).
+The owner's standing install state is a **three-recipe** `Apps\SIMSPR.DLL`: `scroll_speed=8`,
+`drag_divisor=4` **and** `drag_deadzone=2` (quarter-speed keys/edge-scroll, half-sensitivity right-drag,
+plus the right-drag engaging at 8 px with a much gentler onset). Retuned gentler 2026-08-26.
 
 **Any session that touches `SIMSPR.DLL` must restore that build as its LAST action, and verify it.**
 Not usually — every time. Sessions legitimately restore shipped SIMSPR to take a measurement (it
@@ -516,19 +518,20 @@ the owner launches the game expecting a slow camera, gets a fast one, and nothin
 it.
 
 ```powershell
-py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL.shipped --recipe scroll_speed=16 --recipe drag_divisor=4 --recipe drag_deadzone=4 --out SIMSPR.DLL.slow16drag4dead4
-py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL.shipped --diff SIMSPR.DLL.slow16drag4dead4   # gate: 8 runs / 14 bytes
-Copy-Item SIMSPR.DLL.slow16drag4dead4 Apps\SIMSPR.DLL -Force
-py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --read 0x10067690:f32 -n 5   # expect 16.0 x5
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL.shipped --recipe scroll_speed=8 --recipe drag_divisor=4 --recipe drag_deadzone=2 --out SIMSPR.DLL.gentle
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL.shipped --diff SIMSPR.DLL.gentle   # gate: 8 runs / 9 bytes
+Copy-Item SIMSPR.DLL.gentle Apps\SIMSPR.DLL -Force
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --read 0x10067690:f32 -n 5   # expect 8.0 x5
 py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --read 0x10043a5e:hex -n 1   # expect fc
-py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --read 0x100676a4:f32 -n 1   # expect 4.0
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --read 0x100676a4:f32 -n 1   # expect 2.0
 ```
 
 All three recipes pin the shipped SHA, so they must be applied **to `SIMSPR.DLL.shipped` in one
-invocation** — none will anchor against an already-patched module. The 8-runs/14-bytes gate is five
-2-byte step-slot runs, two non-adjacent 1-byte drag runs, plus one 2-byte dead-zone run (the f32
-`12.0→4.0` only changes its top two bytes); **a different count means stop, not stage.**
-`Copy-Item Apps\SIMSPR.DLL.shipped Apps\SIMSPR.DLL -Force` still undoes all three.
+invocation** — none will anchor against an already-patched module. The 8-runs/9-bytes gate is five
+**1-byte** step-slot runs (`32.0→8.0` changes only the exponent's high byte `42→41`), two non-adjacent
+1-byte drag runs, plus one 2-byte dead-zone run (`12.0→2.0` changes its top two bytes); **a different
+count means stop, not stage.** `Copy-Item Apps\SIMSPR.DLL.shipped Apps\SIMSPR.DLL -Force` still undoes
+all three.
 
 ## ⚠️ `capture.ps1` LEASES FOR 15 MINUTES REGARDLESS OF `-AtSec` — found 2026-08-25
 

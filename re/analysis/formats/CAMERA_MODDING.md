@@ -8,7 +8,8 @@ transport-independent within-process A/B/A tests: `drag_divisor`'s velocity halv
 gate flips a near-threshold sample `velX 0 → 8 → 0` across dead zone `12 → 4 → 12`. All three validate
 the geometry the game computes; the OS-input "feel" leg is **not** measured — both a `SendMessage` and
 a `SendInput` right-drag moved the camera 0 px in the headless harness (D-002, still open). The owner's
-standing install is `scroll_speed=16 + drag_divisor=4 + drag_deadzone=4` (2026-08-25).
+standing install is `scroll_speed=8 + drag_divisor=4 + drag_deadzone=2` (retuned gentler 2026-08-26;
+the diagonal was confirmed better by the owner's own feel, which the headless harness could not test).
 
 Tool: `re/tools/pe_patch.py`. Target: `Apps\SIMSPR.DLL`.
 
@@ -184,7 +185,7 @@ any motion, risking tremor drift). Larger engages later and jumps harder.
 > **velX 0 → 8 → 0 as the dead zone flips 12→4→12**, while a `(100,40)` control stays `50/20` (the knob
 > only changes the near-threshold engage, not general motion). Confidence **C3**, geometry level. As
 > with `drag_divisor`, the OS-input "feel" (a real drag engaging sooner) is not measured — same headless
-> blocker as D-002. Staged live in the owner's build.
+> blocker as D-002. Staged live in the owner's build (at `2.0` since the 2026-08-26 gentler retune).
 
 ### `edge_margin` — the edge-scroll trigger band  ✅ C3, band change OBSERVED in-game (2026-08-25)
 
