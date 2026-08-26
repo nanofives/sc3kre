@@ -20,7 +20,7 @@ one-session-one-STATUS-file rule.
 | prio | workstream | session id | owns | first task |
 |---:|---|---|---|---|
 | ~~1~~ | ✅ **Camera movement speed — CLOSED 2026-08-25** | `cmt96p4rv…` (archived) | `STATUS_camera.md` | `drag_divisor` **and** `edge_margin` both taken from "derived, never run" to **C3 observed**; combined build staged live |
-| 2 | **New road types** | `cmt96pjiy…` | `STATUS_roadtypes.md` | the **constructive** rung (T1 was destructive) |
+| ~~2~~ | ✅ **New road types — CLOSED 2026-08-25** | `cmt96pjiy…` (archived) | `STATUS_roadtypes.md` | **T2 met**: predicted `11203`, measured `11203 ×11`. Network save layer decoded and documented |
 | 3 | **Bigger cities** | `cmt96q1v4…` | `STATUS_bigcities.md` | in-game authoring at 512 |
 | ~~4~~ | ✅ **Resizable window — CLOSED 2026-08-25** | `cmt96qpp9…` (archived) | `STATUS_resize.md` | `U-068` taken from "the display list is empty" to **"renders but does not blit"**, both adjacent causes positively excluded |
 
@@ -379,6 +379,17 @@ render-path result); and no claim about `U-068` — these are pre-resize frames.
 > frame, that is a finding about the capture path — reconcile it against shot A's switches — and
 > **nothing may be concluded about tiling rules.** T1 heads the queue because run 1 is worth spending
 > either way: it returns either the baseline the test needs, or the reason the instrument differs.
+### ⭐ T3 (simulation-level tiling test) IS NOW UNBLOCKED — nobody has started it
+The road-types session parked its last rung as *"gated on bigcities' message-post primitive"*. **That
+primitive landed and is game-verified the same day** (`msg:0xc2a35d80` → suspend-depth `+0x140` 1→0,
+clock cursor 2415021→2415022→2415024). **So the gate is open and the session closed before learning
+it.**
+
+That matters because **every tiling result so far carries a render-path fence** — T1 and T2 both prove
+what is *drawn*, with no claim about the simulation. With a running sim, a tiling edit can finally be
+tested for simulation effects (traffic, growth along a network). **The fence stays until such a test
+actually runs** — an unpause capability is not a simulation result.
+
 Session CLOSED, test ready to fire.
 
 ### 4. Camera scroll — SHIPPED 2026-08-24, workstream CLOSED 2026-08-25
