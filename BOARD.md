@@ -66,6 +66,20 @@ Two hazards that have already bitten:
 - **The harness `Grep` tool cannot see `re/ghidra_export*/`.** It reports that as "0 matches". Pass a
   module's `functions/` directory explicitly or walk the filesystem. Any exhaustive-negative claim
   made with `Grep` at or above `re/` is a false negative. See `U-056`.
+- **⚠️⚠️ A CONFIRMED CODE PATH IS NOT A CONFIRMED CAUSE. My error, 2026-08-25, and it cost two leases.**
+  Asked for the unpause path, I read `FUN_10002fa6`, confirmed `0x231e2493 → vt+0x44(0)` clears a pause
+  bit at coordinator `+0x38`, declared the gate **solved**, committed it (`df797e3`), wrote it into
+  `BIGGER_CITIES.md` and told a second workstream to plan on it. **Every one of those reads was
+  correct.** The message does reach that slot; the slot does clear that bit.
+  **But `+0x38` was already 0 at load** — measured in Lease 2 — so it was never what held a
+  path-loaded city paused. The real pause is clock suspend-depth `+0x140`, and the resume is a
+  different message entirely (`0xc2a35d80` → `vt+0x210`).
+
+  **The missing question was not "does this code do what I think?" but "is this the thing that is
+  actually happening?"** Verifying a mechanism says nothing about whether that mechanism is load-bearing
+  for the observed state. **Before declaring a gate solved, measure the field you believe is holding it
+  — a state read is cheap and a wrong mechanism is not.**
+
 - **⚠️ The export itself can be incomplete, which is a SECOND and different false-negative source.**
   Found 2026-08-24: Ghidra rendered **zero** `+0xf0` call sites in SIMNTWRK because it discarded the
   containing block as unreachable, yet the call is right there in the bytes at `0x1001491c`. So a
