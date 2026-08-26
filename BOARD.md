@@ -504,34 +504,45 @@ camera measurement taken against it reads the modded values as if shipped. **Any
 measurement must restore shipped SIMSPR first.** `U-082`'s record is unaffected (it closed before this
 was staged).
 
-## ⚠️ STANDING RULE — the owner's SIMSPR build must be live when you finish
+## ⚠️ STANDING RULE — the owner's build must be live when you finish (UPDATED 2026-08-26: FOUR recipes + GZGraphicD)
 
-The owner's standing install state is a **three-recipe** `Apps\SIMSPR.DLL`: `scroll_speed=8`,
-`drag_divisor=4` **and** `drag_deadzone=2` (quarter-speed keys/edge-scroll, half-sensitivity right-drag,
-plus the right-drag engaging at 8 px with a much gentler onset). Retuned gentler 2026-08-26.
+**Two modules are now modified** (2026-08-26, resize hand-test):
 
-**Any session that touches `SIMSPR.DLL` must restore that build as its LAST action, and verify it.**
-Not usually — every time. Sessions legitimately restore shipped SIMSPR to take a measurement (it
-carries the camera, the iso view and the sprite paths, so it is never neutral), and on 2026-08-25 that
-left the install stock **three separate times** with no run in flight. **The failure mode is silent:**
-the owner launches the game expecting a slow camera, gets a fast one, and nothing in any log explains
-it.
+1. **`Apps\SIMSPR.DLL` is a FOUR-recipe build** (was three): `scroll_speed=8` + `drag_divisor=4` +
+   `drag_deadzone=2` + **`resize_rectfix`** (the U-068 post-resize present-rect code cave). sha
+   `f5b9f1d9…`, **gate 13 runs / 45 bytes** (5 scroll + 2 drag + 2 dead-zone + 36 resize_rectfix =
+   33 cave + 3 hook). `resize_rectfix` is inert unless the iso Init runs, so it does not change camera feel.
+2. **`Apps\GZGraphicD.dll` carries `resizable_frame`** (style flip — WS_THICKFRAME|WS_MAXIMIZEBOX, 3 bytes,
+   sha `8999940929…`, gate 3 bytes) so the owner can drag/maximise the window for the D-004 hand-test. This
+   is **experimental**: if the owner reverts the resizable frame, GZGraphicD → shipped.
 
+**Any session that touches either module must restore the owner's live build as its LAST action, and verify
+it.** Every time. `game_lock.ps1 -Status` will report `install : MODIFIED -> SIMSPR.DLL` (and now also
+GZGraphicD) — EXPECTED, not contamination.
+
+**Re-stage the owner's build (both modules, from shipped, one invocation each):**
 ```powershell
-py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL.shipped --recipe scroll_speed=8 --recipe drag_divisor=4 --recipe drag_deadzone=2 --out SIMSPR.DLL.gentle
-py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL.shipped --diff SIMSPR.DLL.gentle   # gate: 8 runs / 9 bytes
-Copy-Item SIMSPR.DLL.gentle Apps\SIMSPR.DLL -Force
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL.shipped --recipe scroll_speed=8 --recipe drag_divisor=4 --recipe drag_deadzone=2 --recipe resize_rectfix --out SIMSPR.DLL.4
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL.shipped --diff SIMSPR.DLL.4   # gate: 13 runs / 45 bytes
+Copy-Item SIMSPR.DLL.4 Apps\SIMSPR.DLL -Force
+py -3.12 re/tools/pe_patch.py Apps\GZGraphicD.dll.shipped --recipe resizable_frame --out GZGraphicD.dll.rf
+py -3.12 re/tools/pe_patch.py Apps\GZGraphicD.dll.shipped --diff GZGraphicD.dll.rf   # gate: 3 bytes
+Copy-Item GZGraphicD.dll.rf Apps\GZGraphicD.dll -Force
 py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --read 0x10067690:f32 -n 5   # expect 8.0 x5
-py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --read 0x10043a5e:hex -n 1   # expect fc
 py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --read 0x100676a4:f32 -n 1   # expect 2.0
+py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --read 0x10005f55:hex -n 5   # expect e8 40 b5 05 00 (cave hook)
+py -3.12 re/tools/pe_patch.py Apps\GZGraphicD.dll --read 0x10018570:hex -n 1  # expect cd
 ```
 
-All three recipes pin the shipped SHA, so they must be applied **to `SIMSPR.DLL.shipped` in one
-invocation** — none will anchor against an already-patched module. The 8-runs/9-bytes gate is five
-**1-byte** step-slot runs (`32.0→8.0` changes only the exponent's high byte `42→41`), two non-adjacent
-1-byte drag runs, plus one 2-byte dead-zone run (`12.0→2.0` changes its top two bytes); **a different
-count means stop, not stage.** `Copy-Item Apps\SIMSPR.DLL.shipped Apps\SIMSPR.DLL -Force` still undoes
-all three.
+**Full undo — return BOTH modules to shipped (the owner's one-line restore):**
+```powershell
+Copy-Item Apps\SIMSPR.DLL.shipped Apps\SIMSPR.DLL -Force; Copy-Item Apps\GZGraphicD.dll.shipped Apps\GZGraphicD.dll -Force
+```
+(That undoes the resizable frame AND the camera mods. To keep the camera build but drop only the resizable
+frame, restore just GZGraphicD.) Every recipe pins its module's shipped SHA, so all recipes for a module
+must be applied **to that module's `.shipped` in one invocation**. A different `--diff` count means stop,
+not stage. ⚠️ **Restoring shipped SIMSPR for a measurement is still legitimate — but re-stage the FOUR-recipe
+build (not the old three) as your last action.**
 
 ## ⚠️ `capture.ps1` LEASES FOR 15 MINUTES REGARDLESS OF `-AtSec` — found 2026-08-25
 
