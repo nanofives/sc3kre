@@ -59,3 +59,33 @@ BOARD standing rule. If Leg 1 FALSIFIES, restore the two-recipe build and stage 
 
 Leg 2's outcome informs D-002 only; it does not gate the dead-zone adoption (the owner chose 4.0
 independently; Leg 1 confirms the mechanism).
+
+---
+
+# PRE-REGISTRATION 2 — gentler retune (scroll8 + drag4 + deadzone2), 2026-08-26
+
+Committed BEFORE running `--out`/`--diff`. Owner ruling: three-recipe build kept (diagonal confirmed
+better by feel), `rinput` kept disarmed. Retune for a gentler onset and gentler keys:
+`scroll_speed=8` (¼ of shipped 32), `drag_divisor=4` (unchanged), `drag_deadzone=2` (halves the onset
+step again).
+
+**This differs from the owner's stated count (8 runs / 16 bytes), because `8.0f`/`2.0f` have
+different bit patterns than `16.0f`/`4.0f` — the run WIDTHS change, the run COUNT does not:**
+
+| edit | shipped | new | bytes that differ | run |
+|---|---|---|---|---|
+| scroll ×5 | `32.0` = `00 00 00 42` | `8.0` = `00 00 00 41` | top byte only (`42→41`) | 5 × **1-byte** |
+| divisor ×2 | `fe` | `fc` | 1 byte, non-adjacent | 2 × 1-byte |
+| dead zone | `12.0` = `00 00 40 41` | `2.0` = `00 00 00 40` | top two (`40 41→00 40`) | 1 × **2-byte** |
+
+**Pre-registered expectation: 8 runs / 9 bytes** at `0x10067690/94/98/9c/a0` (top byte),
+`0x10043a5e`/`0x10043a68`, `0x100676a4` (top two bytes), and nothing else. **Stop and do not stage if
+the actual `--diff` is anything other than exactly those 8 runs at those addresses.**
+
+Live verify after staging: `0x10067690` `8.0` ×5, `0x10043a5e`/`0x10043a68` `fc`, `0x100676a4` `2.0`.
+
+Coupling to record: engage distance = `deadzone × divisor` = `2×4 = 8` px (down from `4×4 = 16`). The
+owner did not complain about engagement and praised the diagonal, and a smaller dead zone widens the
+diagonal band, so this is expected welcome. **If it feels twitchy or catches on an unintended
+click-drag, raise the divisor and lower the dead zone together to hold `deadzone × divisor` constant
+while shrinking the onset** — one step, not trial and error.
