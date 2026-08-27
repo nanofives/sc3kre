@@ -84,3 +84,6 @@
 !/re/analysis/formats/
 /re/analysis/formats/*
 !/re/analysis/formats/*.md
+
+# session briefs, one per mod (tools/notes only, no game content)
+!/PROMPTS.md
