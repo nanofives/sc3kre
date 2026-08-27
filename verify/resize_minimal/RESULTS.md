@@ -293,3 +293,66 @@ assuming it** — the same discipline that caught the nondiagnostic proxy earlie
 Init-free premise: **intact** (the `iso+0x24` objection is withdrawn). Extent arithmetic: **correct and
 measured**. Remaining defect: localised to the dirty-grid geometry step and its missing companion, with
 a named order to test and a null-delta control to run first. **No lease was spent on this.**
+
+---
+
+# RUN 5 (2026-08-27) — ⭐⭐ **THE HANG IS FIXED AND THE EXTENT IS FIXED.** Content still incomplete.
+# PRE amendment git `b38b6da`. One call added: `FUN_1000ee29(iso, 8, 8, 0)` after `FUN_1000e2c0`.
+
+**`FUN_1000ee29` WAS the missing companion. The desk work called it correctly.**
+
+| | run 4 | **run 5** |
+|---|---|---|
+| `FUN_10018cdf` | **never returned** (killed at t+70 s) | **-> 1 in 47 ms** |
+| extent (rect) | 1280x1024, cell 32x16 | 1280x1024, cell 32x16 |
+| census | *(unreachable — hang)* | **1310720 / 1310720 px non-zero (100%), NOT uniform** |
+| content bbox | — | **rows 0..1023, cols 0..1279 = 1280x1024, full surface** |
+
+**Outcome 1 on the pre-registered extent criterion.** Every quadrant carries content, including the
+right quarter (cols 960-1280) and bottom quarter (rows 768-1024) that were **pure black** in run 2.
+`FUN_1000ee29` did not reallocate grid B (8x8 @ `0x0F298D70` before and after, as expected — 8x8 is
+correct at every resolution); it zeroed it, and `FUN_10018cdf` then ran cleanly.
+
+## ⚠️ BUT THE CONTENT IS INCOMPLETE, and my outcome table let it through AGAIN
+Compared against run 2's rendered region with the same instrument, same city:
+
+| | distinct RGB colours | grey levels | mean | std |
+|---|---|---|---|---|
+| run 2, its 800x600 region | **463** | 175 | 75.9 | 14.2 |
+| run 5, full 1280x1024 | **32** | 22 | 75.9 | 13.8 |
+| run 5, same 800x600 top-left | **32** | 22 | 75.9 | 13.7 |
+
+Identical mean and near-identical std — **the same terrain base** — but a **14x poorer palette**, in the
+very same region that run 2 rendered richly. **The detail layer (buildings/objects) is missing.**
+
+**Cause, measured not guessed:** grid-B insert counter `FUN_1000ef50` reads **222 before the resize and
+222 at every sample after it** (t+44.0, t+54.9, t+65.8 s). `FUN_1000ee29` emptied grid B and **nothing
+re-registered into it.** Terrain draws from the tile cache (which `FUN_10018cdf` refilled); drawable
+objects draw from grid B (which is empty). `builder_hi` kept running (144 -> 208) and had nothing to
+draw. **This is the original U-068 mechanism, reproduced exactly.**
+
+⚠️ **This is the SECOND time my outcome table passed an incomplete result.** Run 2's table had no
+extent criterion; run 5's had extent but **no content-richness criterion**, so "100%, not uniform" read
+as PASS while the buildings were absent. **The lesson is not "add another criterion" — it is that the
+control must be the PREVIOUS GOOD FRAME, compared quantitatively.** Run 6's bar is stated below in
+those terms.
+
+## The remaining gap is a NAMED function the harness ALREADY implements
+Object re-registration: `FUN_1000fa36(iso, recompute_rects, purge_first)` — `FUN_1000cba1` returns
+tag&1 nodes to the free list, then it iterates the **persistent** container `iso+0x3a4` and
+re-registers every object `[CONFIRMED, call topology]`. `iso+0x3a4` is **not** touched by Init's
+per-call block, so it survives. The harness has this as `u068_reregister()` (`SC3PROBE_U068FIX`).
+
+**Run 6 = run 5 + `FUN_1000fa36` after `FUN_10018cdf`.** Note the earlier tile-cache run refuted
+*"fa36 type-1 alone renders a zoom-3 resize"* — correct, and not contradicted here: fa36 alone was
+never enough, but **fa36 was also never combined with a correct extent + `e2c0`+`ee29` + refill.** This
+is the first arm where the other three are known good.
+
+**Run 6 pass bar, in the terms the last two tables lacked:** content extent 1280x1024 **AND** distinct
+RGB colours within a factor of ~2 of run 2's 463 over a comparable area. Anything near 32 means the
+objects are still missing regardless of coverage.
+
+## State at close
+Owner's build untouched and verified: `GZGraphicD.dll` `acefadf0`, `SIMSPR.DLL` `f5b9f1d9`. No SIMSPR
+patch staged in any of runs 1-5. Harness claim released, lease released, no game process alive.
+Artifact: `resize_run5_full_1280x1024_terrain_only.png`.
