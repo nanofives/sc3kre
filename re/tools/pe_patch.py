@@ -541,27 +541,35 @@ def r_resizable_frame(p, arg=None):
 # resize and there is exactly one iso view. POSITION-INDEPENDENT (call/pop EIP -> eax anchor; slots
 # addressed [eax+offset]) because SIMSPR is a load-order relocation coin flip (MEASURED base 0x03340000).
 # ECX (bridge) is only READ (preserved); EAX is the anchor, re-set by the displaced mov; call/pop leaves
-# the stack balanced for EH_prolog. Cave @0x100614c0 (.text slack after resize_rectfix); slots
-# @0x10072f80/0x10072f84 (.data, past VirtualSize, mapped+writable+zero). Assembled + capstone-verified.
-#   call get_eip; pop eax; mov [eax+slot0],ecx; inc dword [eax+slot1]; mov eax,0x1005ddd0; jmp 0x10016ebf
+# the stack balanced. Cave @0x100614c0 (.text slack after resize_rectfix); slots @0x10072f80/0x10072f84
+# (.data, past VirtualSize, mapped+writable+zero). Hooks the push-sequence at 0x10016ec4 (NOT the entry
+# 0x10016eba, which the harness's -gzlog fnlog detour occupies - two hooks there hung the game).
+# Assembled + capstone-verified; no absolute address.
+#   push eax; call get_eip; pop eax; mov [eax+slot0],ecx; inc dword [eax+slot1]; pop eax;
+#   push ecx;push ecx;push ebx;push esi;push edi (re-exec displaced); jmp 0x10016ec9
 
 BRIDGE_STASH_CAVE_VA = 0x100614c0
-BRIDGE_STASH_CAVE = "e800000000588988bb1a0100ff80bf1a0100b8d0dd0510e9e359fbff"   # 28 bytes
-BRIDGE_STASH_HOOK_VA = 0x10016eba
+BRIDGE_STASH_CAVE = "50e800000000588988ba1a0100ff80be1a0100585151535657e9eb59fbff"   # 30 bytes
+BRIDGE_STASH_HOOK_VA = 0x10016ec4   # the 5 pushes (51 51 53 56 57) AFTER EH_prolog, NOT the entry -
+                                    # the entry 0x10016eba is where the harness's -gzlog fnlog detour sits,
+                                    # and two hooks on one address corrupt the function (measured: the game
+                                    # hung there). ECX is still the bridge here (EH_prolog preserves it; the
+                                    # function's own `push ecx;push ecx` saves it as `this`).
 
 
 def r_bridge_stash(p, arg=None):
     """`--recipe bridge_stash` -> stash the live bridge pointer at FUN_10016eba into a .data slot.
 
-    Two same-length overwrites (28-byte position-independent cave + 5-byte hook redirect). Anchored to
-    shipped SIMSPR SHA. Expected `--diff` vs shipped: 27 bytes (22 cave + 5 hook). Slots at 0x10072f80
-    (bridge) / 0x10072f84 (generation) start zero and are written at runtime, not by this recipe.
+    Two same-length overwrites (30-byte position-independent cave + 5-byte hook). Hooks the push
+    sequence at 0x10016ec4 (NOT the entry, to avoid colliding with the harness fnlog detour). EAX saved/
+    restored, ECX (bridge) only read. Anchored to shipped SIMSPR SHA. Expected `--diff`: 29 bytes (24 cave
+    + 5 hook). Slots at 0x10072f80 (bridge) / 0x10072f84 (generation) start zero, written at runtime.
     """
     _anchor(p, SIMSPR_SHA, "recipe bridge_stash")
-    p.stage(BRIDGE_STASH_CAVE_VA, "hex", BRIDGE_STASH_CAVE, expect="00" * 28,
+    p.stage(BRIDGE_STASH_CAVE_VA, "hex", BRIDGE_STASH_CAVE, expect="00" * 30,
             note="bridge-stash trampoline (mov [.data],ecx + gen++, position-independent)")
-    p.stage(BRIDGE_STASH_HOOK_VA, "hex", "e901a60400", expect="b8d0dd0510",
-            note="redirect FUN_10016eba entry mov -> stash cave")
+    p.stage(BRIDGE_STASH_HOOK_VA, "hex", "e9f7a50400", expect="5151535657",
+            note="redirect FUN_10016eba push-seq @0x10016ec4 -> stash cave (avoids fnlog entry detour)")
 
 
 RECIPES = {
