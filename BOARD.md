@@ -344,6 +344,36 @@ resize work is wired behind it. That same run settles the one `[UNCERTAIN]`: whe
 re-Inits its own device surface on resize, or our cave must. One lease, both answers. Full derivation:
 `STATUS_resize.md`.
 
+### ⛔ CORRECTION SAME DAY (2026-08-27): the section above is HALF WRONG, and it is my error
+**The reachability is right; the VALUE does not move.** `B+0x70..0x7C` does **not** update on a stock
+resize, so the per-frame poll would compare stale against stale and never fire. **The `WM_SIZE` cave is
+NOT dropped** — but the cross-module flag still is, and the cave's job changes.
+
+`FUN_100185f5` reads neither `lParam` nor `GetClientRect`: it takes the **window object's STORED** size
+via `vt+0x68` = `FUN_10017c1e` = `*(win+0x40) - *(win+0x38)`, ClientToScreens it, and pushes that
+`[CONFIRMED @ 0x100185f5, 0x10017c1e]`. **Nothing updates `win+0x38..0x44` on a stock resize**, so the
+handler faithfully republishes the OLD size. Window vtable located in `.rdata` at **GZGraphicD+0x1F740**
+(`+0x1c` SetRect `FUN_10018691`, the only writer of `win+0x38..0x44`; `+0x30` `FUN_100185f5`; `+0x68`/
+`+0x6c` the stored w/h getters).
+
+⚠️ **This was already written down in our own harness and I had not read it.** `rz_apply` calls
+`FUN_10018691 SetRect(0,0,w,h)` and *then* re-runs `FUN_100185f5`, commented *"the WINDOW object still
+holds the old rect"* (`sc3probe.c:6362-6387`). **Same failure mode as `0x231e2493`: I confirmed a path
+reached a field and never asked whether the field moves.**
+
+**Corrected design, better than both previous plans.** The cave stops being *"set a pending flag"* and
+becomes *"make the stored rect true"* — then the corrected rect **is** the signal and nothing crosses
+the module boundary. At `FUN_10017e2f` line 126 the WM_SIZE branch has `this` = the window object and
+`param_4` = `lParam` `[CONFIRMED @ 0x10017e2f]`; the cave calls `this->vt[0x1c](this,0,0,LOWORD,HIWORD)`
+before letting `vt+0x30` run. No user32 call needed (GZGraphicD imports `GetWindowRect` and
+`AdjustWindowRect` but **not** `GetClientRect`). Then the SIMSPR poll works exactly as derived.
+
+⚠️ **TRAP: WM_MOVE(3) shares that branch** — gate on `param_2 == 5` only, or a move overwrites the
+stored size with screen coordinates.
+
+**The witness run gets sharper, not cancelled:** it now has a falsifiable prediction —
+`B+0x78-B+0x70` will **not** change across a real resize. If it does, this correction is wrong.
+
 ### ⭐ UI reflow root-caused, 2026-08-25, no lease — the shippable half
 `[CONFIRMED @ 0x100270e5]` SIMUI `FUN_100270e5` holds three hardcoded HUD tables and **has no branch
 above width 800**, so **every resolution ≥ 801 gets the 1024x768 top-strip table**. Consumer is
