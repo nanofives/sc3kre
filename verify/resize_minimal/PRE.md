@@ -183,3 +183,41 @@ it on this build. **That control remains owed either way.**
 116 ms in run 3, never in run 4 — the timing is itself a discriminator).
 
 Harness claim taken as `resize` before this build. Owner's build untouched; no SIMSPR patch staged.
+
+---
+
+# AMENDMENT — run 6: `FUN_1000fa36` object re-registration (committed BEFORE the sixth lease)
+
+Run 5 fixed the hang (`FUN_10018cdf` 47 ms) and the extent (full 1280x1024 coverage) but rendered
+**terrain only**: 32 distinct RGB colours against run 2's 463, with the grid-B insert counter frozen at
+**222** across the entire run. `FUN_1000ee29` empties grid B; `FUN_10018cdf` refills the *tile cache*;
+**drawable objects live in grid B and nothing re-registered them.**
+
+**Change: exactly one call added** after `FUN_10018cdf` — `FUN_1000fa36(iso, 1, 0)`, which iterates the
+**persistent** object container `iso+0x3a4` (never touched by Init's per-call block) and re-registers
+every object. `purge_first = 0` because `ee29` already zeroed the grid — the same reasoning
+`u068_reregister` uses after Init's memset. The function's prologue is **byte-verified before calling**,
+reusing the existing gate.
+
+## Pass bar — stated in the terms my last TWO tables lacked
+Run 2's table had no extent criterion; run 5's had no content criterion. **Both let an incomplete
+result read as PASS.** The bar is now a quantitative comparison against the previous known-good frame:
+
+| # | reading | verdict |
+|---|---|---|
+| 1 | extent **1280x1024** **AND** distinct RGB colours **within ~2x of run 2's 463** over comparable area | ⭐ **PASS.** The Init-free sequence is complete. Licenses building the cave |
+| 2 | extent 1280x1024 but colours still **near 32** | **FAIL — objects still missing.** `fa36` is not sufficient; report the grid-B counter and stop adding calls |
+| 3 | grid-B inserts rise but colours do not | **INFORMATIVE** — registration works, drawing does not. Different defect, report separately |
+| 4 | hang, crash, or black | **REGRESSION** against run 5's known-good state. Say so plainly |
+| 5 | `REFUSE` on the prologue gate, zero/unchanged size, implausible cells | **VOID**, per the standing conditions |
+
+**Pre-registered reads regardless of outcome:** grid-B census before and after `fa36` (the counter that
+diagnosed run 5), builder counters, and `FUN_10018cdf`'s return time (47 ms in run 5 — a regression
+there would mean `fa36` disturbed the refill).
+
+⚠️ **Not contradicted by the earlier tile-cache refutation.** That run refuted *"`fa36` type-1 alone
+renders a zoom-3 resize"* — true, and this is not that claim. `fa36` was never combined with a correct
+extent, `e2c0`+`ee29`, and a working refill. **This is the first arm where the other three are known
+good**, which is precisely why it is worth one lease.
+
+Harness claim taken as `resize` before this build. Owner's build untouched; no SIMSPR patch staged.
