@@ -135,6 +135,19 @@ path-loaded 512 city: **suspend-depth `+0x140` 1→0 and the sim clock cursor `+
 `[CONFIRMED @ 0x10002fa6, PE vtable 0x13260]`. The coordinator is GZCLSID `0xa1a166cc` (vtable
 `0x10013260`).
 
+⚠️ **SCOPE: the `1→0` single-post PASS is for a load that arrives at suspend-depth `+0x140` = 1.** The
+game-verified run used the blank `N512_city` fixture, which loaded at depth 1, so ONE post resumed it.
+A sibling (roadtypes, 2026-08-27) posted `0xc2a35d80` on a **path-loaded populated SAVED city
+(Liverpool, N=192)** and the sim did **NOT** resume — `POST OK`, but the paused-arm and unpaused-arm
+saves were **byte-identical (0/61 sections differ)**, i.e. no tick (`verify/tilingrules_sim_t3/`).
+`FUN_10005773` decrements `+0x140` by **one per post** and calls clock Resume **only at 0**
+`[CONFIRMED @ 0x10005773]`, so a city that loads at depth `k > 1` needs **`k` posts**. **Read the
+loaded depth with the `coord` verb (`suspendDepth(+0x140)`) and post that many times**; `coord`'s
+`+0x140`/cursor `+0x4c` are the witnesses, NOT `POST OK` and NOT a save-diff (the latter is
+nondiagnostic). `[UNCERTAIN]` whether a populated save's extra depth is more coordinator-init suspends
+or a second holder (e.g. the SIMDSTR mediator, a modal/UI suspend) — settled by whether repeated posts
+drain `+0x140` to 0 or it floors above 0.
+
 The **suspend/resume command quartet** (state these together so a reader knows which two are commands
 and which two are events):
 
@@ -147,9 +160,10 @@ and which two are events):
 
 ⚠️ **`0x231e2493` is NOT the unpause — measured inert 2026-08-25.** It routes to `vt+0x44`/`+0x38` bit,
 a DIFFERENT pause representation that is **already 0 at load**; posting or sending it leaves `+0x140`=1
-and the clock frozen. The load-pause is a **depth-1** suspend set by the coordinator's own init
-(`FUN_10003ea6` calls the pause slot once), so a single `0xc2a35d80` fully resumes; it is **not** the
-SIMDSTR refcount mediator (that drives only the `+0x38` path). A confirmed code path (`0x231e2493`) is
+and the clock frozen. On the blank `N512_city` fixture the load-pause is a **depth-1** suspend set by
+the coordinator's own init (`FUN_10003ea6` calls the pause slot once), so a single `0xc2a35d80` fully
+resumes; it is **not** the SIMDSTR refcount mediator (that drives only the `+0x38` path). **A populated
+saved city can load DEEPER — see the SCOPE box above; post once per unit of `+0x140`.** A confirmed code path (`0x231e2493`) is
 not a confirmed cause — the two-mechanism trap. Drive it with the probe's `msg:0xc2a35d80,0,0,0`;
 verify with the `coord` verb (reads `+0x38`, `+0x140`, clock date/cursor). Full trace:
 `STATUS_bigcities.md` item 2 Leases 1-3.
