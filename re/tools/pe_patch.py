@@ -532,9 +532,42 @@ def r_resizable_frame(p, arg=None):
     p.stage(0x10018570, "hex", "cd", expect="c8", note="live windowed style 0x90C80000->0x90CD0000")
 
 
+# --- SIMSPR bridge-pointer STASH (for the #3 resizable-window bridge) ------------------
+#
+# Manufactures the global the harness lacks: an inline hook at the occupant-bridge Init
+# FUN_10016eba (ECX = bridge by thiscall) writes the bridge pointer + a generation counter into a
+# writable .data slot, so a later WM_SIZE-triggered resize routine can find the live view (bridge,
+# and iso = bridge+0x18). The stash-witness falsifier PASSED: the bridge survives + validates across a
+# resize and there is exactly one iso view. POSITION-INDEPENDENT (call/pop EIP -> eax anchor; slots
+# addressed [eax+offset]) because SIMSPR is a load-order relocation coin flip (MEASURED base 0x03340000).
+# ECX (bridge) is only READ (preserved); EAX is the anchor, re-set by the displaced mov; call/pop leaves
+# the stack balanced for EH_prolog. Cave @0x100614c0 (.text slack after resize_rectfix); slots
+# @0x10072f80/0x10072f84 (.data, past VirtualSize, mapped+writable+zero). Assembled + capstone-verified.
+#   call get_eip; pop eax; mov [eax+slot0],ecx; inc dword [eax+slot1]; mov eax,0x1005ddd0; jmp 0x10016ebf
+
+BRIDGE_STASH_CAVE_VA = 0x100614c0
+BRIDGE_STASH_CAVE = "e800000000588988bb1a0100ff80bf1a0100b8d0dd0510e9e359fbff"   # 28 bytes
+BRIDGE_STASH_HOOK_VA = 0x10016eba
+
+
+def r_bridge_stash(p, arg=None):
+    """`--recipe bridge_stash` -> stash the live bridge pointer at FUN_10016eba into a .data slot.
+
+    Two same-length overwrites (28-byte position-independent cave + 5-byte hook redirect). Anchored to
+    shipped SIMSPR SHA. Expected `--diff` vs shipped: 27 bytes (22 cave + 5 hook). Slots at 0x10072f80
+    (bridge) / 0x10072f84 (generation) start zero and are written at runtime, not by this recipe.
+    """
+    _anchor(p, SIMSPR_SHA, "recipe bridge_stash")
+    p.stage(BRIDGE_STASH_CAVE_VA, "hex", BRIDGE_STASH_CAVE, expect="00" * 28,
+            note="bridge-stash trampoline (mov [.data],ecx + gen++, position-independent)")
+    p.stage(BRIDGE_STASH_HOOK_VA, "hex", "e901a60400", expect="b8d0dd0510",
+            note="redirect FUN_10016eba entry mov -> stash cave")
+
+
 RECIPES = {
     "resizable_frame": r_resizable_frame,
     "close_button_quit": r_close_button_quit,
+    "bridge_stash": r_bridge_stash,
     "scroll_zero": r_scroll_zero,
     "scroll_default_zero": r_scroll_default_zero,
     "scroll_speed": r_scroll_speed,
