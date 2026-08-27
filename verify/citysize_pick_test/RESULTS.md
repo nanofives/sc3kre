@@ -118,14 +118,37 @@ drag were reading/using **different cellmap objects**.
 0 failures** (round-trip at several origins/zooms + both runtime points reproduced at the pick's own
 origin (1540,772) as a regression). Removed the bogus offset table; `--origin` fix for negatives.
 
-## Where this leaves anchoring — NOT anchored yet; blocked on the origin source
-The MECHANISM is confirmed and exact. The BLOCKER is that `cam` does not currently report the origin
-the pick uses. Owed, in order:
-1. **Fix the origin read** — make `cam` (or a new verb) return the cellmap of the window the drag
-   targets (`0x6104489A`), not the first GZWIN. Desk + one build + one confirming lease.
-2. Confirming lease: read that origin, aim a drag with pick.py at a CHOSEN tile, read the raster back
-   — and ideally two NON-collinear drags at two scroll positions to prove origin-tracking.
-3. Then rot≠0 / other-zoom coverage (lower priority; dev case is rot0/512).
+## Object-chain trace (desk read 3) — the drag's cellmap is `*(iso+0x158)`, reached by POINTER
+`[CONFIRMED @ SIMSPR 0x1001d503:19,26 → 0x100090b7:6-7]`. Three distinct objects:
+- class-A "city-view window": CLSID `0x0410c5c7`, main vt `0x10067894`, cIGZWin sub-vt **`0x100676ac`**
+  at +4 (what the harness DFS matches), holds the iso view pointer at **+0xb8**.
+- iso `cSC3CityViewIso`: main vt `0x10063224`, `Translate`=`FUN_1001d503` at vt+0x244; reads client
+  w/h from **iso+0x20/+0x24**; reads its cellmap from **iso+0x158**.
+- cellmap `cISC3CitySpriteCellMap`: vt `0x1006250c`, origin **+0x54/+0x58**, tile dims **+0x14/+0x18**.
+
+**Root cause of the origin split:** the harness `cam` SCANS for a `0x6250c` object within 0x280 bytes
+and can pick a **second, independently-allocated cellmap instance** rather than the pick's
+`*(iso+0x158)`. The full-city cellmap on the `iso+0x158` path is a shared singleton fetched under
+resource key `0xfffe1060` (`FUN_10031948:36-42` / released `FUN_10031a60:19-25`, only two sites in the
+whole fleet). **Deterministic recipe:** `cellmap = *(*(classA+0xb8)+0x158)`; origin = `cellmap+0x54/0x58`;
+discriminate MAIN via `cellmap+0x14 == N` and iso rect `iso+0x20/+0x24`.
+
+## ⚠️ RESIDUAL PUZZLE — desk analysis is now at its limit; a run is the right instrument
+The object `cam` found had rectA **span 800x600 = the full client** (windowed 800x600 this run), i.e. a
+FULL-view cellmap, NOT a small minimap. So the clean "cam grabbed the minimap" story is NOT proven —
+there appear to be **two full-view cellmaps with independent origins** (`-396,672` vs `~1540,772`), and
+one ambiguous rectangle (my `1540,772` rests on assumed bbox-corner→endpoint and `(b,a)` axis order)
+cannot separate the remaining possibilities by reading alone. Four desk reads converged on a confirmed
+MECHANISM + a fix RECIPE; the specific-origin reconciliation is now empirical, not textual.
+
+## Where this leaves anchoring — NOT anchored; next step is a run, not more reading
+1. **Harness change:** read origin via the deterministic chain `*(*(classA+0xb8)+0x158)+0x54/0x58`,
+   AND enumerate/log ALL `classA→iso→cellmap` candidates with origin/dims/span (turn `cam` into a
+   diagnostic that resolves the two-cellmap puzzle in one shot). Desk + one build.
+2. **Confirming lease:** an UNAMBIGUOUS single-tile placement (no corner/axis guessing) at a KNOWN
+   screen point; read every candidate origin; feed the pick's own origin to `pick.py` and check the
+   predicted tile == the placed tile. Ideally two scroll positions to prove origin-tracking.
+3. Then rot≠0 / other-zoom (lower priority; dev case is rot0/512).
 
 ## Cleanup (done + verified)
 `patch_citysize --restore` + `patch_dirtbuf --restore` (both `--check`: SIMUI 256, SIMDIRT shipped
