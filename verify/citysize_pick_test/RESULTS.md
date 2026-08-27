@@ -150,6 +150,58 @@ MECHANISM + a fix RECIPE; the specific-origin reconciliation is now empirical, n
    predicted tile == the placed tile. Ideally two scroll positions to prove origin-tracking.
 3. Then rot≠0 / other-zoom (lower priority; dev case is rot0/512).
 
+## Single-tile lease (SINGLETILE_PRE.md) — FIRED 2026-08-27. Two-cellmap REFUTED; ty sign CORRECTED.
+Probe `sc3probe.dll` 292352 B sha `799F9630…` (the CAM-CHAIN build). No crash, 9 steps. Shot
+`single_154544.png` (800x600).
+
+**⭐ CAM-CHAIN works, and it refutes the two-cellmap theory.** Both `cam` reads logged:
+```
+### CAM-CHAIN: 1 class-A city-view window(s) with cIGZWin vt SIMSPR+0x676AC
+### CAM-CHAIN[0]: classA=0x12CECA80 iso=0x12CEFAC8(vt=0x033C3390?) isoRect=704x544 | cellmap=0x0EC56298(vt=0x033C250C CELLMAP)
+### CAM-CHAIN[0]: origin(+0x54/58)=-396,672 dims(+0x14/18)=512,512 span=800x600 rot=0 zoom=0 tilepx=8  <== dims==N: the DRAG's cellmap; feed this origin to pick.py
+```
+**Exactly ONE class-A window; its chain cellmap `0x0EC56298` (dims 512, origin -396,672) is the SAME
+object the scan reported** (`### CAM: candidate 1/1 ... 0x0EC56298 rectA=-396,672`). So there is **one
+cellmap, origin (-396,672)** — the "two full-view cellmaps / cam grabbed the wrong one" hypothesis is
+**REFUTED**. The pick DOES use origin (-396,672); my back-solved `~1540,772` was an artifact of a wrong
+ty-sign assumption. (Minor: `SIMSPR_ISO_MAIN_VT_RVA` should be `0x63390`, not `0x63224` — the iso vt
+printed `0x033C3390?`; the `?` is a cosmetic label mismatch, the cellmap `CELLMAP` match is the real
+discriminator and it worked.)
+
+**Placements — only 1 of 3 registered (a NEW instrument problem).** Saved raster `{0:262143, 5:1}`:
+Com=5 at **(498,38)** from screen (500,200); Res=1 (screen 300,200) and Ind=9 (screen 400,400) placed
+NOTHING. Degenerate single-tile drags (`drag:x,y,x,y`) are UNRELIABLE — and run 1's real-extent drags
+were too (a different tool registered each run). **Zone placement reliability is now its own blocker
+for clean multi-point data.** But the one Com tile is CLEAN and UNAMBIGUOUS (single tile, single
+screen point, no corner guessing).
+
+**The clean point disambiguates the transform — ty sign was wrong.** With `(500,200)→(498,38)` plus
+run-1's two rectangle corners under the CORRECT diagonal:
+`(280,180)→(465,16)`, `(360,240)→(490,11)`, `(500,200)→(498,38)` — all fit
+```
+tx = b + 267 ;  ty = -a + 244        (a,b = diamond branches; origin -396,672, zoom0, rot0, N=512)
+```
+The **`-a`** corrects the earlier `+a` (which came from assuming run-1's rectangle mapped start→min-y;
+the single tile shows it's the anti-diagonal). And **CX+CY = 267+244 = 511 = N-1** — a strong lead that
+these are map-dimension reflection terms (likely f(N), origin-independent), NOT yet proven.
+
+**pick.py CORRECTED** to `tx=b+CX, ty=-a+CY` with `{512:(267,244)}`; `--selftest` **33/0** incl. all
+three runtime points; inverse round-trips (tile (498,38) → screen (500,202), within the 2px centre
+margin).
+
+**Per SINGLETILE_PRE.md this is FAIL-nomatch + FAIL-noregister(partial)** — pick.py-as-fired did not
+predict, and 2/3 placements were absent — BUT it delivered the pre-registered "definitive new data":
+the cellmap identity (refuting the puzzle) and the corrected transform.
+
+## Still open after this lease
+1. **(CX,CY) origin-dependence UNPROVEN** — all data is at origin (-396,672). Need a run at a SECOND
+   scroll to see if (267,244) hold (CX+CY=N-1 says they might). This is the last thing between "fits
+   3 points at one camera" and "anchored".
+2. **Zone-placement reliability** — only 1/3 (and 1/2 in run 1) drags register. Need a reliable
+   single-tile method (more settle time after `fire:`, a real-extent drag, or `at:`) before a
+   multi-point run is worth a lease.
+3. Then rot≠0 / other-zoom / the f(N) form of (CX,CY).
+
 ## Cleanup (done + verified)
 `patch_citysize --restore` + `patch_dirtbuf --restore` (both `--check`: SIMUI 256, SIMDIRT shipped
 `f1708fc1…`). Re-staged FOUR-recipe SIMSPR from shipped (sha `f5b9f1d9…`, gate 13 runs / 45 bytes;
