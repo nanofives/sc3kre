@@ -306,6 +306,15 @@ you hit it while testing a scroll-speed change, it is not your patch.
 `re/harness/src/sc3probe.c` `-pref` adds a real **"Camera Scroll Speed" slider** to the game's own
 Preferences window and applies the value live (dragged 21.25 → 128.0 monotonically; shots
 `pref1_202726.png`, `pref3_005306.png`). That is a nicer end-user shape than a patched DLL, and it
-works — but it arrives by injection through the RE harness, which is not a distributable vehicle.
-With the proxy route closed there is no way to ship it today. Recorded here so the option is not
-rediscovered from scratch.
+works. It arrives by injection through the RE harness, which is a dev tool rather than a shippable
+product.
+
+⚠️ **"No distributable vehicle" was overstated (corrected 2026-08-27).** D-001 closed only the
+**proxy-DLL** route (a `version.dll`/`winmm.dll` shim, whose `DllMain` is skipped under the game's
+AppCompat shim). It did **not** close injection-based delivery: `re/harness/src/sc3launch.c` already
+injects a DLL via `CreateProcess(SUSPENDED)` + `CreateRemoteThread(LoadLibraryA)`, and the `-pref`
+slider ran live through exactly that path under the same shim. So a shippable form does exist — a
+**standalone loader EXE plus a slim mod DLL** carrying only the `pref_*` block, which was already
+written to run standalone (`sc3probe.c:9088-9098`). Scoped, not built, in
+[`re/analysis/SLIDER_DELIVERY.md`](../SLIDER_DELIVERY.md); it is the owner's value call, since the
+byte patch already delivers the scroll knob. Recorded so the option is not rediscovered from scratch.
