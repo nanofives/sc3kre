@@ -3,9 +3,11 @@
 **Status: the scroll-speed knob is validated in the running game, 2026-08-20/21**
 (`verify/scroll_patch_test/RESULTS.md`, rungs S1/S2/S3). Three further knobs on this page,
 `drag_divisor`, `edge_margin` and `drag_deadzone` are all **observed in a running game (C3)** via
-transport-independent within-process A/B/A tests: `drag_divisor`'s velocity halves `50→25→50` across
-`-2/-4/-2`, `edge_margin`'s trigger band moves `48/64 → 24/32 → 48/64`, and `drag_deadzone`'s engage
-gate flips a near-threshold sample `velX 0 → 8 → 0` across dead zone `12 → 4 → 12`. All three validate
+transport-independent within-process A/B/A tests (the technique is written up as a reusable method in
+[`re/analysis/METHOD_within_process_ABA.md`](../METHOD_within_process_ABA.md)): `drag_divisor`'s
+velocity halves `50→25→50` across `-2/-4/-2`, `edge_margin`'s trigger band moves
+`48/64 → 24/32 → 48/64`, and `drag_deadzone`'s engage gate flips a near-threshold sample
+`velX 0 → 8 → 0` across dead zone `12 → 4 → 12`. All three validate
 the geometry the game computes; the OS-input "feel" leg is **not** measured — both a `SendMessage` and
 a `SendInput` right-drag moved the camera 0 px in the headless harness (D-002, still open). The owner's
 standing install is `scroll_speed=8 + drag_divisor=4 + drag_deadzone=2` (retuned gentler 2026-08-26;
@@ -282,6 +284,12 @@ you hit it while testing a scroll-speed change, it is not your patch.
 - **No code injection.** Operands change in place; instructions are never added. The one camera knob
   that would need that — the missing `1/sqrt(2)` on diagonal scroll, so diagonal movement is faster
   than straight — is deliberately absent from the recipe table rather than half-supported.
+- ⚠️ **`drag_divisor` and `drag_deadzone` are COUPLED — do not tune one without the other.** The
+  dead-zone box is tested on the post-divide velocity, so the right-drag **engage distance is
+  `drag_deadzone × drag_divisor` px** (shipped `12 × 2 = 24`; a `drag_divisor=4` build alone jumps to
+  `12 × 4 = 48`, the "starts too late" regression the owner hit). Slow the pan with the divisor and
+  the dead zone must come down to hold the engage distance. Full mechanism in the `drag_divisor` and
+  `drag_deadzone` sections above. `[CONFIRMED @ 0x10043a38 + 0x10043a5e]`
 - `drag_divisor`, `edge_margin` and `drag_deadzone`: all **C3, observed in-game** via within-process
   A/B/A (velX `50→25→50`; band `48/64→24/32→48/64`; engage `0→8→0`) plus static byte-verified. The
   OS-input "feel" leg is not measured for any of them: **both** a `SendMessage` and a `SendInput`
