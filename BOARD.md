@@ -315,6 +315,35 @@ re-entrancy-guarded), fallback a filtered hook on the hot `FUN_10014649`.
 ⚠️ **Dumping `sub(+0x44)` directly is VOID by construction at heartbeat** — same empty `0x28`/pitch-0
 state. Keep it as logged data, never as the discriminator.
 
+### ⭐ THE `WM_SIZE` CAVE IS DROPPED — one cave, not two (2026-08-27, static, no lease)
+The plan of record wanted a GZGraphicD `WM_SIZE` cave setting a pending flag plus a SIMSPR per-frame
+cave reading it: **two** position-independent caves, two relocation-safe hooks, and a cross-module flag
+needing GZGraphicD's runtime base. **None of it is needed.**
+
+`O2` — the `this` of the WM_SIZE rect setter `FUN_10016b90` — **is `B + 0x6C`**, a secondary-base
+subobject of the very object SIMSPR already holds at `iso+0x4ec`. Ctor `FUN_10015c88` writes
+`B+0x00`=`0x1001f328`, `B+0x6C`=`0x1001f290` `[CONFIRMED @ 0x10015c88]`; `FUN_10016a93` is literally
+`return this - 0x6c` `[CONFIRMED @ 0x10016a93]`. So the rect lands at **`B+0x70/0x74/0x78/0x7C`**, and
+B's own getters read exactly it — `vt+0x38` = `*(B+0x78)-*(B+0x70)`, `vt+0x3c` = `*(B+0x7c)-*(B+0x74)`
+`[CONFIRMED @ 0x10015d42, 0x10015d49]`. **The iso view ctor already walks this chain verbatim**
+(`FUN_1004feba` → `vt+0x24` → `vt+0x3c` → stores it at `iso+0x4ec`) `[CONFIRMED @ 0x1001c4a1]`.
+
+So a **SIMSPR-only per-frame poll** self-triggers on member offsets alone: `live_w/h` from
+`B+0x70..0x7c` against the render target's `R+0x24/+0x28` (set by Init `FUN_10009efb`). No absolute
+address, no base derivation, no flag. **SIMSPR imports nothing from GZGraphicD** (6 descriptors, none a
+game DLL) — the GZCOM lookup with the identical `0xC416025C`/`0x73283C` pair is the only route
+`[CONFIRMED @ 0x1004ffec, 0x100157ed]`. The rect updates synchronously in the WndProc
+`[CONFIRMED @ 0x10017e2f]`, so a next-frame poll is sound rather than racy.
+
+⚠️ **`B+0x1C..+0x28` is a DIFFERENT rect** — the device surface size / clip rect
+`[CONFIRMED @ 0x1000e058]`, changing only on a surface re-Init. Second witness, not the same field.
+
+⚠️ **Static reachability, not a runtime result.** Per this board's own rule, the poll needs a live
+**observe-only** witness (log `live_w/h`, `rt_w/h`, `B+0x24/+0x28` across a real resize) **before** any
+resize work is wired behind it. That same run settles the one `[UNCERTAIN]`: whether GZGraphicD
+re-Inits its own device surface on resize, or our cave must. One lease, both answers. Full derivation:
+`STATUS_resize.md`.
+
 ### ⭐ UI reflow root-caused, 2026-08-25, no lease — the shippable half
 `[CONFIRMED @ 0x100270e5]` SIMUI `FUN_100270e5` holds three hardcoded HUD tables and **has no branch
 above width 800**, so **every resolution ≥ 801 gets the 1024x768 top-strip table**. Consumer is
