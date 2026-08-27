@@ -427,9 +427,38 @@ joins a standing build. ⚠️ **No rendering claim** — the render target and 
 by design. `wmsize_setrect` is **not** in the owner's standing build; owner's `acefadf0` restored and
 verified at close.
 
-**Next: the SIMSPR per-frame routine** — re-create the render target (`FUN_10009efb`, clear the `+0x08`
-guard) **and drive the device surface** (proven in arm A that the engine will not), refill grid B via
-`FUN_10018cdf`, present rect already ships as `resize_rectfix`.
+### ⭐⭐⭐ THE MINIMAL Init-FREE RESIZE ROUTINE IS COMPLETE AND PASSES — 2026-08-27, 6 runs
+Full record `verify/resize_minimal/`. Prototyped in the harness (`-resizemin`), **not yet a cave**.
+
+Against run 2 as the known-good control: **401 distinct RGB colours vs 463**, 168 grey levels vs 175,
+mean 76.0 vs 75.9, std 14.1 vs 14.2 — with the content bbox now the **full 1280x1024**. Independent
+mechanism witness: grid-B inserts **364** vs **222 frozen** in run 5.
+
+**The sequence, in order. Init is NEVER called.**
+
+| # | step | note |
+|---|---|---|
+| 1 | `iso+0x5c = iso+0x54 + w`, `iso+0x60 = iso+0x58 + h`, mirror `+0x64..0x70` | ⚠️ **world space, moving origin** (measured `-848, 2924`) — NOT `{0,0,W,H}` |
+| 2 | `FUN_100059fb(w,h,&gw,&gh,0)` -> 40x64 | the game's own table |
+| 3 | `FUN_1000e2c0(iso, gw, gh)` | |
+| 4 | `FUN_1000ee29(iso, 8, 8, 0)` | **grid B is 8x8 at EVERY resolution.** Omitting it **HUNG** the game |
+| 5 | `FUN_10009efb` replay on `iso+0x74` | guard `+0x08` cleared, original 8-arg tuple |
+| 6 | `FUN_10009efb` replay on `iso+0x4ec` | **measured necessary** — the engine will not |
+| 7 | `FUN_10018cdf(bridge, 0, b+0x78, b+0xa8, 0, 0)` | the render lever, 47 ms |
+| 8 | `FUN_1000fa36(iso, 1, 0)` | omitting it = **terrain only, 32 colours** |
+| 9 | present rect `iso+0x4d0` | **already ships as `resize_rectfix`** |
+
+⛔ **Two of my own conclusions were corrected along the way, both recorded:** *"the extent and the
+per-tile grid `iso+0x24` are coupled"* is **WRONG** (`iso+0x24` is **map**-sized, `param_1 << 2` where
+`param_1` is Init's first arg — a view resize never needed it, and the Init-free premise survives);
+and *"stale grid B is the leading suspect"* is **WRONG** (8x8 is correct at every resolution).
+
+`[UNCERTAIN]` 401 vs 463 is a **~13% palette shortfall** — camera/time variance between launches, or a
+small unregistered subset. Passes the declared bar; **not** a claim of pixel-equivalence.
+
+⚠️ **Scope:** upward only, one city, one zoom, headless (no `D-004` claim), and it is a **prototype,
+not a cave**. 8 calls + ~10 field writes is far bigger than `wmsize_setrect`'s 39 bytes — **cost the
+hand-assembly before starting it.**
 
 ### ⭐ UI reflow root-caused, 2026-08-25, no lease — the shippable half
 `[CONFIRMED @ 0x100270e5]` SIMUI `FUN_100270e5` holds three hardcoded HUD tables and **has no branch
