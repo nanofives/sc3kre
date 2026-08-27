@@ -212,3 +212,84 @@ subset, rather than adding one call at a time and measuring.
 Owner's build untouched and verified: `GZGraphicD.dll` `acefadf0`, `SIMSPR.DLL` `f5b9f1d9`. No SIMSPR
 patch staged at any point in runs 1-4. Harness claim released, game lease released, **no game process
 alive** (confirmed after the kill). Nothing left dirty.
+
+---
+
+# DESK WORK (2026-08-27, NO LEASE) — Init's per-call block read as a whole.
+# ⛔ It CORRECTS run 4's own conclusion, and the Init-free premise SURVIVES.
+
+## ⛔ CORRECTION: `iso+0x24` is MAP-sized, NOT view-sized. Run 4's conclusion was WRONG.
+Run 4 concluded *"the extent and the per-tile grid at `iso+0x24` are coupled; Init reallocs it for a
+reason."* **False.** Init's allocation `[CONFIRMED @ 0x10005b42:196-206]`:
+
+```c
+*(this+0x14) = param_1;  *(this+0x1c) = param_1;      // map W
+*(this+0x18) = param_2;  *(this+0x20) = param_2;      // map H
+pvVar5 = operator_new(param_1 << 2);   *(this+0x24) = pvVar5;        // W pointers
+  ... per column: operator_new(*(this+0x18) * 0x14);                  // H records of 20 bytes
+```
+`param_1`/`param_2` are Init's **first two** arguments — the **CITY MAP** dimensions — not `param_3`/
+`param_4` (the view W/H used for the render target, `FUN_100059fb` and the extent rect). **So
+`iso+0x24` is a mapW x mapH x 20-byte array whose size does not depend on the view at all, and a view
+resize does not require reallocating it.**
+
+**This matters: the whole appeal of the Init-free design was avoiding Init's `iso+0x24` discard, and
+run 4 appeared to kill it. It does not.** I stated the coupling as a finding on one run's evidence
+without checking the allocation. Same error shape as the rest of this session's mistakes: a plausible
+inference from a real observation, not verified against the code.
+
+## `FUN_10018cdf` cannot spin on its own — the loop is MAP-bounded `[CONFIRMED @ 0x10018cdf]`
+```c
+piVar1 = *(int**)(this+0xec);                       // bridge+0xec = tiles X
+do { uVar4 = *(uint*)(this+0xf0);                   // bridge+0xf0 = tiles Y
+     do { piVar3 = isoView->vt+0xa0(x, y);
+          if (piVar3 == 0) FUN_1001a291(this, x, y);   // rebuild this tile
+          y++; } while (y < uVar4);
+     x++; } while (x < piVar1);
+```
+Both bounds are map dimensions and neither is touched by a resize, so **the hang is not this loop
+iterating forever.** It is inside `FUN_1001a291`, `isoView->vt+0xa0`, or below them.
+
+`[UNCERTAIN]` **Leading hypothesis, explicitly a hypothesis:** run 4's only delta versus run 2 is the
+dirty-grid geometry — `iso+0x360` reallocated 40x30 -> 40x64 and cell sizes `iso+0x374/+0x378`
+20x20 -> 32x16. If `FUN_1001a291` marks dirty cells using that geometry, a stale/mismatched index
+writes outside the buffer; **heap corruption stalling in the allocator fits the evidence** (the log
+stops mid-call, **no exception, no dump**, where the same call returned in 50 ms in run 2). **Not
+established. Do not cite as fact.**
+
+## Init's per-call block, ordered, against what the minimal routine does
+| # | Init step | minimal routine |
+|---|---|---|
+| 1 | `vt+0x10` teardown if `iso+4 != 0` | **skipped** (deliberate) |
+| 2 | extent: `+0x54/+0x58` = left/top, `+0x5c/+0x60` = W/H, mirror to `+0x64..+0x70` | **done** (run 4, corrected arithmetic) |
+| 3 | `vt+0x48`, then `vt+0x38` | ⚠️ **NOT DONE — both precede the dimension calc in Init** |
+| 4 | `FUN_100059fb(W,H,&+0x364,&+0x368,0)`; `FUN_1000e2c0` | **done** (run 4) |
+| 5 | `FUN_100059fb(W,H,&gw,&gh,1)` -> always 8,8; `FUN_1000ee29(this,8,8,0)` | ⚠️ **NOT DONE** |
+| 6 | `iso+0x350 = 0` | not done |
+| 7 | graphics service `FUN_1004feba()` -> `vt+0x14`; render-target create `vt+0xc(W,H)` | **done** via the `FUN_10009efb` replay |
+| 8 | `vt+0x1bc`, `vt+0x1c`, `vt+0x74`, `vt+0x20(1)`, `vt+0x18c(0x50)` -> `iso+0x10` | not done |
+| 9 | `FUN_1000ba00(this, {0,0,W,H}, 0)` — a PAINT (locks `iso+0x74`, fills), not an extent setter | not done |
+| 10 | map dims + `iso+0x24` realloc | **correctly skipped** (map-sized, see the correction above) |
+| 11 | `iso+0x318/+0x319`, `iso+0x110`, zero 0x80 dwords at `iso+0x118`, `+0x31c = +0x38`, `+0x320 = 0`, `+0x328 = 0` | not done |
+| 12 | `FUN_1001084b` on both present lists `+0x4d0` / `+0x4dc` (erase) | not done — `resize_rectfix` refills `+0x4d0` |
+| 13 | `iso+0x7c = 1`, `iso+4 = 1`, `FUN_1000b70e(this)` | not done |
+
+## The consistent subset this argues for — and what to test FIRST
+Step 4 changes the dirty-grid geometry. **Step 5 is the very next thing Init does, and the minimal
+routine omits it.** So the cheapest, most-likely-consistent next attempt is **step 4 + step 5
+together** (`FUN_1000ee29(this, 8, 8, 0)` immediately after `FUN_1000e2c0`) — grid B is zeroed by
+`ee29`, and `FUN_10018cdf` runs *after* it, which is exactly Init's own order and exactly what refills
+what `ee29` cleared.
+
+Second candidate, if that still hangs: add step 3 (`vt+0x48`, `vt+0x38`) ahead of step 4, since Init
+runs both before computing any dimension.
+
+⚠️ **Cheaper still, and it should come first: a NULL-DELTA arm.** Run the routine with the extent step
+**disabled** and everything else identical to run 4. Run 2 already did approximately that and did not
+hang, but not on this build. **One arm, and it isolates the extent step as the cause instead of
+assuming it** — the same discipline that caught the nondiagnostic proxy earlier on this board.
+
+## Status
+Init-free premise: **intact** (the `iso+0x24` objection is withdrawn). Extent arithmetic: **correct and
+measured**. Remaining defect: localised to the dirty-grid geometry step and its missing companion, with
+a named order to test and a null-delta control to run first. **No lease was spent on this.**
