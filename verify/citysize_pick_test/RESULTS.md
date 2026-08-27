@@ -81,33 +81,51 @@ with **two NON-collinear drags at two different camera positions** to pin it bey
   Cosmetic; fix alongside the formula correction.
 - `cam` read was clean: 1/1 candidate (no ambiguity), stable across both reads, FOLLOW disarmed.
 
-## Reconciliation (desk RE 2026-08-27, no lease) — CORRECTED formula, pick.py fixed
-Re-read `FUN_1000a48a`, `FUN_1000a5c6`, `FUN_1000b70e`/`FUN_1000b867`, `FUN_100090ef` and the iOS
-twin, reconciled against the two measured points:
-- **`rot=0` IS identity** in `FUN_1000a5c6` `[CONFIRMED @ 0x1000a5c6:9-14]`; the prior rot table was
-  right (`rot1:(b,W-1-a) rot2:(W-1-a,H-1-b) rot3:(H-1-b,a)`, W=`+0x14`, H=`+0x18`).
-- **The `+267/-217` is NOT in the SIMSPR pick chain.** `FUN_1000a48a` calls `FUN_100090ef`→`a33a`
-  then `a5c6`, adding no centering term `[CONFIRMED @ 0x1000a48a:11-28]`. The offset is the
-  **city-grid origin translation applied by the caller** (SIMCITY/network layer, not yet read). Per
-  `FUN_1000b70e:52` the sprite-diamond origin `X0=(tileW/-2)*(W-1)`, `Y0=tileH/-2` is a function of
-  **map dimension only, not scroll** — so `(267,-217)` is **INVARIANT across scroll for a 512 map**,
-  map-size-specific. iOS `getZeroAltCellFromWs` does the same `cell -= mapExtent/2`.
-- **`iso+0x1c/+0x20` are (rotated) MAP DIMENSIONS**, not last-mouse (`FUN_1000b70e` multiplies them
-  by tileW/tileH); the old "0,0" note read the object before setup or a colliding struct `[UNCERTAIN
-  which]`.
-- **`[UNCERTAIN]`** the exact 267/-217 split is not produced by any SIMSPR field; carried as a
-  MEASURED anchor per N until the city-grid caller is read.
+## Reconciliation (desk RE 2026-08-27, no lease) — TWO reads, and a CORRECTION of the first
+Two decompilation re-reads. **The first's conclusion was WRONG; the second is right. Recording both
+because the error is instructive (a confirmed code path is not a confirmed cause).**
 
-**Corrected form (validated, rot=0):** `tx = b + 267`, `ty = a - 217` where `a,b` are the diamond
-branches. Inverse: `b=tx-267; a=ty+217; wpx=(4<<zoom)(b-a+1); wpy=(2<<zoom)(a+b); sx=wpx-left;
-sy=wpy-top`. **`pick.py` updated** (city-grid offset table `{512:(267,-217)}`, rot=0 only, `--cam`
-negative-value fix); `--selftest` = **57 checks, 0 failures** including both runtime points as a
-regression guard. **Committed** (see below).
+**Read 1 (SUPERSEDED):** claimed `+267/-217` was a city-grid origin translation in the caller, a
+function of map dimension only (`FUN_1000b70e:52` render origin `(tileW/-2)*(W-1)`), hence scroll-
+invariant f(N). It correctly found `rot=0` identity and that `FUN_1000a48a` adds no centering — but it
+attributed the residual to `b70e`'s render-cull origin, which **the pick never consumes**.
 
-**Where this leaves anchoring:** screen↔tile is **runtime-validated for N=512, rot=0, any scroll** —
-usable for development-run aiming now. Owed: (a) a code source for the offset-in-N (read the city-grid
-caller of `a48a`, likely the SIMCITY grid / `network_layer` area) to generalise + reach C4; (b) a
-confirming lease with two NON-collinear drags (and ideally a second zoom).
+**Read 2 (CORRECT):** the additive site is **`FUN_100090b7` @ 0x100090b7:6-7** — it adds the VIEW
+ORIGIN `iso+0x54/0x58` to the screen coord in the FULL pick path `FUN_1000902f` (the RAW path
+`FUN_1000a48a` skips it). **There is NO separate offset.** The pick is exactly: add view origin →
+diamond `FUN_1000a33a` → rot `FUN_1000a5c6` (identity at rot 0). The tool tile is `(tx,ty) = (b, a)`
+(the +wpx branch b is tile X, the -wpx branch a is tile Y). `[CONFIRMED @ 0x100090b7, 0x1000902f,
+0x1000a33a, 0x1000a5c6]`.
+
+**So the earlier `+267/-217` was NOT a real constant.** It equals `(pick_origin − cam_origin)` in tile
+space for THIS run's scroll, and does NOT generalise. RETRACTED.
+
+## ⚠️ THE ORIGIN DISCREPANCY — the real, definitive finding
+The origin the pick USED does not match the origin `cam` REPORTED:
+- `cam` reported view origin **(-396, 672)** (rectA left/top of the 1/1 cellmap it found).
+- The pick behaved as origin **~(1540, 772)** — the ONLY origin under which the confirmed mechanism
+  `(tx,ty)=(b,a)` reproduces BOTH measured points: `(280,180)@(1540,772)` → a=11,b=465 → `(465,11)`;
+  `(360,240)` → `(490,16)`.
+- **(-396,672) fits NO branch/corner assignment** — it gives `(198,228)`/`(228,198)`, nowhere near
+  the actual `(465,11)`. Checked exhaustively. **Definitive: cam read the wrong origin for the pick.**
+
+Likely cause: `cam` locks the FIRST matching GZWIN cellmap (the code itself warns "the MINIMAP is also
+a city view"), while the drag targets the explicit main city-view window `0x6104489A`. So cam and the
+drag were reading/using **different cellmap objects**.
+
+## pick.py — CORRECTED to the confirmed mechanism (no offset)
+`tx=b, ty=a`, origin-parametrized (`--origin OX,OY --zoom Z`), rot=0. `--selftest` = **122 checks,
+0 failures** (round-trip at several origins/zooms + both runtime points reproduced at the pick's own
+origin (1540,772) as a regression). Removed the bogus offset table; `--origin` fix for negatives.
+
+## Where this leaves anchoring — NOT anchored yet; blocked on the origin source
+The MECHANISM is confirmed and exact. The BLOCKER is that `cam` does not currently report the origin
+the pick uses. Owed, in order:
+1. **Fix the origin read** — make `cam` (or a new verb) return the cellmap of the window the drag
+   targets (`0x6104489A`), not the first GZWIN. Desk + one build + one confirming lease.
+2. Confirming lease: read that origin, aim a drag with pick.py at a CHOSEN tile, read the raster back
+   — and ideally two NON-collinear drags at two scroll positions to prove origin-tracking.
+3. Then rot≠0 / other-zoom coverage (lower priority; dev case is rot0/512).
 
 ## Cleanup (done + verified)
 `patch_citysize --restore` + `patch_dirtbuf --restore` (both `--check`: SIMUI 256, SIMDIRT shipped
