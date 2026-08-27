@@ -356,3 +356,66 @@ objects are still missing regardless of coverage.
 Owner's build untouched and verified: `GZGraphicD.dll` `acefadf0`, `SIMSPR.DLL` `f5b9f1d9`. No SIMSPR
 patch staged in any of runs 1-5. Harness claim released, lease released, no game process alive.
 Artifact: `resize_run5_full_1280x1024_terrain_only.png`.
+
+---
+
+# RUN 6 (2026-08-27) — ⭐⭐⭐ **PASS. The minimal Init-free resize routine is COMPLETE.**
+# PRE amendment git `95d6c8b`, committed before the lease. One call added: `FUN_1000fa36(iso, 1, 0)`.
+
+**Verdict: outcome 1 on the quantitative bar** — full extent AND colour richness comparable to the
+known-good frame. The routine now produces a correct resized view without ever calling Init.
+
+## The measurement, against the previous known-good frame as the control
+| | distinct RGB colours | grey levels | mean | std | content bbox |
+|---|---|---|---|---|---|
+| **run 2** (known good, its 800x600) | **463** | 175 | 75.9 | 14.2 | 800x600 |
+| run 5 (terrain only) | 32 | 22 | 75.9 | 13.8 | 1280x1024 |
+| ⭐ **run 6 (full surface)** | **401** | **168** | **76.0** | **14.1** | **1280x1024** |
+| run 6, same 800x600 top-left | 393 | 168 | 76.0 | 14.3 | 800x600 |
+
+**Extent 1280x1024 and 401 colours against the bar's 463/2 = 232 floor.** Mean and std are
+statistically indistinguishable from the known-good frame (76.0/14.1 vs 75.9/14.2). Run 5's 32-colour
+terrain-only signature is gone.
+
+**Mechanism witness, independent of the image:** grid-B insert counter `FUN_1000ef50` reads **364**
+after the resize, against **222 frozen** through the whole of run 5. `FUN_1000fa36` re-registered ~142
+drawables from the persistent container `iso+0x3a4`. **The counter and the pixels agree**, which is
+what makes this a mechanism result and not just a prettier picture.
+
+**No regression:** `FUN_10018cdf` returned `1` in **47 ms**, identical to run 5, so `fa36` did not
+disturb the refill. `FUN_1000fa36` itself took 0.1 ms. Prologue gate passed (not refused).
+
+`[UNCERTAIN]` **401 vs 463 is a ~13% shortfall in palette, and I am not claiming identity.** It may be
+camera/time variance between two separate launches, or a small subset of drawables still unregistered.
+The pre-registered bar was "within ~2x" and this is within 1.15x, so it passes as declared — **but a
+future run wanting to claim pixel-equivalence must control the camera and compare like-for-like.**
+
+## THE COMPLETE SEQUENCE — what the SIMSPR cave must freeze
+In this order. Every value comes from the game's own code; none is invented.
+
+| # | step | source |
+|---|---|---|
+| 1 | extent: `iso+0x5c = iso+0x54 + w`, `iso+0x60 = iso+0x58 + h`, mirror to `iso+0x64..0x70` | Init:80-94. **World space, moving origin — NOT `{0,0,W,H}`** |
+| 2 | `FUN_100059fb(w, h, &gw, &gh, 0)` -> dirty-grid dims (40x64 at 1280x1024) | the game's own table |
+| 3 | `FUN_1000e2c0(iso, gw, gh)` | Init's order |
+| 4 | `FUN_1000ee29(iso, 8, 8, 0)` — **grid B is 8x8 at EVERY resolution** | `FUN_100059fb` mode 1. **Omitting this HUNG the game (run 4)** |
+| 5 | `FUN_10009efb` replay on `iso+0x74` (render target), guard `+0x08` cleared, original 8-arg tuple | run 2+ |
+| 6 | `FUN_10009efb` replay on `iso+0x4ec` (device surface) | **measured necessary** — the engine will not |
+| 7 | `FUN_10018cdf(bridge, 0, bridge+0x78, bridge+0xa8, 0, 0)` — tile-cache refill + repaint | the render lever |
+| 8 | `FUN_1000fa36(iso, 1, 0)` — re-register drawables from `iso+0x3a4` | **omitting this = terrain only (run 5)** |
+| 9 | present rect `iso+0x4d0` | **already ships as `resize_rectfix`** |
+
+**Init is never called**, so its `vt+0x10` teardown and `iso+0x24` realloc are both avoided — and
+`iso+0x24` never needed touching anyway (map-sized, see the correction above).
+
+## Honest scope
+- Upward only, 800x600 -> 1280x1024, one city, one zoom. `U-069` (downward) still untested.
+- Headless: **no claim about the DirectDraw primary** (`D-004`).
+- This is a **harness prototype**, not a shipped cave. It licenses building the cave; it is not one.
+- 8 calls + ~10 field writes is a substantially bigger cave than `wmsize_setrect`'s 39 bytes.
+  ⚠️ **Hand-assembling this is a real undertaking and should be costed before it is started.**
+
+## State at close
+Owner's build untouched and verified: `GZGraphicD.dll` `acefadf0`, `SIMSPR.DLL` `f5b9f1d9`. **No SIMSPR
+patch was staged in any of runs 1-6.** Harness claim released, lease released, no game process alive.
+Artifact: `resize_run6_full_1280x1024_COMPLETE.png`.
