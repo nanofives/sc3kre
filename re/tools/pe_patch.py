@@ -532,6 +532,62 @@ def r_resizable_frame(p, arg=None):
     p.stage(0x10018570, "hex", "cd", expect="c8", note="live windowed style 0x90C80000->0x90CD0000")
 
 
+# --- GZGraphicD WM_SIZE stored-rect fix (code cave) -------------------------------------
+#
+# WHY: the WM_SIZE handler FUN_100185f5 does NOT read lParam and does NOT call GetClientRect (it is
+# not even imported). It takes the window object's STORED size - vt+0x68 = FUN_10017c1e =
+# *(win+0x40) - *(win+0x38) - ClientToScreens it, and publishes that to the device rect at
+# B+0x70..0x7C [CONFIRMED @ 0x100185f5, 0x10017c1e]. NOTHING updates win+0x38..0x44 on a stock
+# resize, so the handler faithfully republishes the OLD size.
+# MEASURED, not inferred (verify/resize_wmsize_poll/RESULTS.md, 2026-08-27): across a real WM_SIZE
+# that took the OS client from 2560x1351 to 1280x1024, every engine field stayed at 800x600; the
+# same instrument read 1280x1024 after a hand-driven SetRect, which is the control proving the read
+# was not blind.
+#
+# THE FIX: at the WndProc's WM_MOVE/WM_SIZE landing site 0x10017f17 (reached by two separate `je`s
+# at 0x10017eb8 for msg 3 and 0x10017ebc for msg 5), call the window's own SetRect FUN_10018691
+# (vtable GZGraphicD+0x1F740 slot +0x1c, the ONLY writer of win+0x38..0x44) with (0,0,LOWORD(lParam),
+# HIWORD(lParam)) BEFORE letting vt+0x30 run. FUN_100185f5 then computes a TRUE rect.
+# TRAP HANDLED: WM_MOVE(3) shares that landing site and its lParam carries x/y, so the cave gates on
+# `cmp ebx,5` (ebx = uMsg, loaded from [ebp+0xc] at 0x10017e5b and not reloaded on this path) and a
+# move falls straight through to the untouched original instructions.
+# POSITION-INDEPENDENT by construction: every operand is register- or stack-relative and the only
+# control transfers are two rel32s within the module - no absolute address, no IAT, no string.
+# GZGraphicD relocates (MEASURED at 0x02830000 and 0x03010000), which is what killed an earlier
+# absolute cave. Registers touched: eax/ecx/edx, all caller-saved and all already clobbered by the
+# original instructions; esi (this) and ebx (msg) are only read. FUN_10018691 is __thiscall with 4
+# stack args and cleans its own stack (ret 0x10), so the stack stays balanced.
+# Cave @0x1001d860, clear of close_button_quit (0x1001d80a + 77 = ends 0x1001d857); 1952 bytes of
+# zero .text slack run from there to 0x1001E000. Assembled + capstone-verified; disassembles to:
+#   cmp ebx,5; jne skip; mov eax,[ebp+0x14]; movzx edx,ax; shr eax,16
+#   push eax; push edx; push 0; push 0; mov ecx,esi; mov eax,[esi]; call [eax+0x1c]
+#   skip: mov eax,[esi]; mov ecx,esi; call [eax+0x30]; jmp 0x10017f1e
+# The tail jumps to 0x10017f1e - the ORIGINAL `jmp 0x100181c7` - rather than duplicating it.
+
+GZ_WMSIZE_CAVE_VA = 0x1001d860
+GZ_WMSIZE_CAVE = ("83fb0575168b45140fb7d0c1e81050526a006a008bce8b06ff501c8b068bceff5030"
+                  "e997a6ffff")                                    # 39 bytes, position-independent
+GZ_WMSIZE_HOOK_VA = 0x10017f17     # `mov eax,[esi]; mov ecx,esi; call [eax+0x30]` = 7 bytes
+
+
+def r_wmsize_setrect(p, arg=None):
+    """`--recipe wmsize_setrect` -> make WM_SIZE publish the REAL client size (GZGraphicD, code cave).
+
+    Calls the window's own SetRect FUN_10018691 with lParam's LOWORD/HIWORD before the stock handler
+    FUN_100185f5 runs, so the device rect at B+0x70..0x7C becomes true. Gated on `cmp ebx,5` so
+    WM_MOVE(3), which shares the landing site, is untouched. 39-byte position-independent cave in
+    .text slack + a 7-byte hook (5-byte rel32 jmp + 2 nops). Anchored to shipped GZGraphicD SHA.
+    Expected `--diff` vs shipped: **44 bytes / 4 runs** (7 hook + 37 of the 39 cave bytes; the two
+    `push 0` operand zeros coincide with the shipped slack, which also splits the cave into 3 runs).
+    Measured, not predicted - my first estimate of 46/2 was wrong and the tool corrected it.
+    """
+    _anchor(p, GZGRAPHICD_SHA, "recipe wmsize_setrect")
+    p.stage(GZ_WMSIZE_CAVE_VA, "hex", GZ_WMSIZE_CAVE, expect="00" * 39,
+            note="WM_SIZE -> SetRect(0,0,LOWORD(lParam),HIWORD(lParam)) then the stock handler")
+    p.stage(GZ_WMSIZE_HOOK_VA, "hex", "e9445900009090", expect="8b068bceff5030",
+            note="redirect the WM_MOVE/WM_SIZE landing site 0x10017f17 -> cave 0x1001d860")
+
+
 # --- SIMSPR bridge-pointer STASH (for the #3 resizable-window bridge) ------------------
 #
 # Manufactures the global the harness lacks: an inline hook at the occupant-bridge Init
@@ -575,6 +631,7 @@ def r_bridge_stash(p, arg=None):
 RECIPES = {
     "resizable_frame": r_resizable_frame,
     "close_button_quit": r_close_button_quit,
+    "wmsize_setrect": r_wmsize_setrect,
     "bridge_stash": r_bridge_stash,
     "scroll_zero": r_scroll_zero,
     "scroll_default_zero": r_scroll_default_zero,
