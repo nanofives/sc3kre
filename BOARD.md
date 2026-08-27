@@ -399,8 +399,37 @@ was already out of sync before any resize, so `-fitclient` did not produce the s
 in. Does not affect this result (the test is whether the field *moves*). **Do not cite the PRE row as
 evidence that engine and OS agree at startup.**
 
-**Next: build the GZGraphicD `WM_SIZE` cave** — at `FUN_10017e2f`'s `param_2 == 5` branch, call
-`this->vt[0x1c]` (`FUN_10018691`) with `(0,0,LOWORD(lParam),HIWORD(lParam))` before `vt+0x30` runs.
+### ⭐⭐⭐ `wmsize_setrect` CAVE BUILT AND PASSES — WM_SIZE now publishes the REAL size (2026-08-27)
+Recipe `c49dbb0`, `PRE.md` `c233790`, result `bbcf082`. Full record: `verify/resize_wmsize_cave/`.
+39-byte **position-independent** GZGraphicD cave at `0x1001d860` + a 7-byte hook at the WndProc
+WM_MOVE/WM_SIZE landing site `0x10017f17`. Gate **44 bytes / 4 runs** alone, **109 / 16** combined with
+the two existing GZGraphicD recipes (exactly additive).
+
+**A/B at MID, arm A measured before the cave existed:**
+
+| field | arm A (no cave) | **arm B (cave)** | predicted |
+|---|---|---|---|
+| `win+0x38..0x44` stored | 800x600 | **1280x1024** | ✓ |
+| `B+0x70..0x7C` -> live | 800x600 | **1280x1024** | ✓ |
+| device surface `B+0x1C..0x28` | 800x600 | **800x600** | unchanged ✓ |
+| render target `R` | 800x600 | **800x600** | unchanged ✓ |
+
+**All four predictions landed, both no-change rows included** — which is what excludes something other
+than the cave acting. No crash, city reached.
+
+⭐ **It also closed arm A's open `[UNCERTAIN]` for free.** Arm A saw the engine already out of sync at
+startup (OS 2560x1351 vs engine 800x600); arm B's PRE reads `stored = 2560x1351`, matching the OS.
+**Same defect, not a separate one** — the engine was stale from the first `WM_SIZE`.
+
+⚠️ **NOT shown, and it gates shipping: `WM_MOVE(3)` safety is UNEXERCISED.** `SWP_NOMOVE` generates no
+`WM_MOVE`, so the `cmp ebx,5` gate is **disassembly-verified only**. Needs a real move before this
+joins a standing build. ⚠️ **No rendering claim** — the render target and device surface are untouched
+by design. `wmsize_setrect` is **not** in the owner's standing build; owner's `acefadf0` restored and
+verified at close.
+
+**Next: the SIMSPR per-frame routine** — re-create the render target (`FUN_10009efb`, clear the `+0x08`
+guard) **and drive the device surface** (proven in arm A that the engine will not), refill grid B via
+`FUN_10018cdf`, present rect already ships as `resize_rectfix`.
 
 ### ⭐ UI reflow root-caused, 2026-08-25, no lease — the shippable half
 `[CONFIRMED @ 0x100270e5]` SIMUI `FUN_100270e5` holds three hardcoded HUD tables and **has no branch
