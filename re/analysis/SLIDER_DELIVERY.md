@@ -41,8 +41,10 @@ From `re/harness/src/sc3probe.c` (line ranges from the 2026-08-27 survey; re-con
   own single detour at GZGraphicD `0x10018c58` and drives `pref_tick` from `gz_tick_gamethread`
   (`:3180-3183`). Comment at `:9088-9098` says this was written specifically for a standalone ship.
   This is the piece that makes the DLL self-sufficient — keep it.
-- **A minimal `DllMain`** that turns the slider on unconditionally (or from a config file — see
-  below), replacing the `SC3PROBE_*` env-var gate arm at `sc3probe.c:9049-9060`.
+- **A minimal `DllMain`** that turns the slider on unconditionally and reads `slider.ini` from the
+  loader's directory (decision 1), pre-applying the value before the slider is shown — replacing the
+  `SC3PROBE_*` env-var gate arm at `sc3probe.c:9049-9060`. Add a small INI read + write-back
+  (`GetPrivateProfile*`/`WritePrivateProfile*` or equivalent).
 
 ## Hard constraints carried from the harness (do not relearn these)
 
@@ -56,15 +58,19 @@ From `re/harness/src/sc3probe.c` (line ranges from the 2026-08-27 survey; re-con
   patch the DLL on disk, so it composes with a **stock** install and must re-apply every launch (the
   heartbeat already does this). No `SIMSPR.DLL.shipped` dependency.
 
-## Open design decisions (owner input, cheap)
+## Design decisions — DECIDED 2026-08-27 (owner)
 
-1. **Value persistence.** The live slider does not persist across launches. Ship an INI next to the
-   loader (`slider.ini` → scroll value) that `DllMain`/`pref_apply` reads on init? Or slider-only,
-   resets each run? Recommend the INI.
-2. **Does it coexist with a byte-patched `SIMSPR.DLL`?** The slider writes the live `.rdata` bank and
-   the live view field, so on a patched DLL it would override the patched value at runtime. Decide
-   whether the shipped form assumes a **stock** SIMSPR (recommended — simplest story) and says so.
-3. **Packaging name / whether to also expose drag/edge/deadzone** or keep it scroll-only (as built).
+1. **Value persistence: INI beside the loader.** Ship a config file (e.g. `slider.ini`, scroll value)
+   that the mod DLL reads on init and pre-applies before the slider is touched, and that the slider
+   writes back when moved, so the value survives restarts. The loader already owns a known file
+   location (its own directory). Init order: read INI → `pref_apply` the value → slider reflects it.
+2. **Target: stock `SIMSPR.DLL`.** The shipped form assumes an **unpatched** `Apps\SIMSPR.DLL` and
+   applies the value live at runtime — the slider IS the camera mod, no disk patch involved. It does
+   NOT try to layer on a `pe_patch.py` build. (The owner's own dev install stays byte-patched; that is
+   separate from the shipped product.)
+3. **Scope: scroll speed only** — exactly the `-pref` slider as already built and run live. No
+   drag/edge/deadzone sliders in v1; those remain byte-patch-only. Keeps v1 small and matches the code
+   that already has a live run behind it.
 
 ## Build + validation plan (staged, lease deferred)
 
