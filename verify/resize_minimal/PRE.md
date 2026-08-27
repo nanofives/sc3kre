@@ -74,3 +74,50 @@ the fix failed and the run is VOID again** — do not interpret its census.
 
 Harness claim: taken as `resize` before this build (`camera` had released it and its process was
 gone — **not stolen**). Run 1's protocol violation is recorded in `RESULTS.md` and is not repeated.
+
+---
+
+# AMENDMENT — run 3: the EXTENT step (committed BEFORE the third lease, 2026-08-27)
+
+Run 2 was a PARTIAL PASS: a **complete** render at exactly **800x600** (480000 px = 800x600, bbox
+0..799 x 0..599, **zero** px outside) on a correctly-sized 1280x1024 surface. Surfaces right, extent
+wrong. Run 3 adds the extent step.
+
+## ⛔ FIRST: the PRE's leading suspect is REFUTED, statically, with no run spent
+The run-1/2 PRE named **stale grid B (8x8)** as the first suspect. **Wrong.** Init reaches grid B via
+`FUN_100059fb(w, h, &gw, &gh, 1)`, and that helper's first branch is
+`if (param_5 == 1) { *param_3 = 8; *param_4 = 8; return; }` `[CONFIRMED @ 0x100059fb]`.
+**Grid B is 8x8 at EVERY resolution.** The 8x8 I logged as "stale" was correct all along, and the
+builder-counter argument that promoted it was irrelevant. Recorded because the suspect was named in a
+committed pre-registration and must be retired in one.
+
+## What run 3 adds, and where every value comes from
+The resolution-dependent pair is the *other* `FUN_100059fb` call (mode **0**), whose table gives
+40x30 at 800x600 and 40x64 at 1280x1024. It feeds `FUN_1000e2c0`, which reallocs a `gw*gh`
+dirty-region buffer at `iso+0x360` and recomputes per-cell sizes at `iso+0x374/+0x378` as
+`(iso+0x5c - iso+0x54)/gw` and `(iso+0x60 - iso+0x58)/gh` `[CONFIRMED @ 0x1000e2c0]`.
+That divisor **is** the extent: Init writes `iso+0x54/0x58` = left/top, `iso+0x5c/0x60` = W/H, then
+mirrors all four into `iso+0x64..0x70` `[CONFIRMED @ 0x10005b42:80-94]`.
+
+Added steps, in order, before the surface replays:
+1. `FUN_100059fb(w, ht, &gw, &gh, 0)` — **the game's own helper. No invented constants.**
+   Refuse if it returns a zero dimension.
+2. `iso+0x5c = w`, `iso+0x60 = ht` (absolute, as Init does); left/top **preserved**; mirror to
+   `iso+0x64..0x70`.
+3. `FUN_1000e2c0(iso, gw, gh)`.
+Grid B is deliberately **not** touched (it is already correct), and `FUN_1000ee29` is deliberately
+**not** called — it would zero grid B for no reason.
+
+## Outcome table for run 3 — now with the EXTENT criterion my run-2 table lacked
+| # | deferred census content extent | verdict |
+|---|---|---|
+| 1 | **1280x1024** (bbox fills the surface), not uniform | ⭐ **PASS.** The Init-free routine is complete. Licenses building the cave |
+| 2 | still **800x600** | **FAIL.** The extent lives somewhere else; `iso+0x54..0x60` + `e2c0` are not sufficient. Report the remaining candidates |
+| 3 | some **third** size | **INFORMATIVE, not a pass.** Report the number; it localises the divisor |
+| 4 | 0% / black | **REGRESSION** — the extent write broke a working render. Say so plainly |
+| 5 | zero/unchanged-size execution, or any `REFUSE` | **VOID**, as in run 2's amendment |
+
+**The bar is the extent, not merely "an image".** Run 2 would have passed a non-zero test while being
+demonstrably incomplete; that loophole is closed here.
+
+Harness claim taken as `resize` before this build.
