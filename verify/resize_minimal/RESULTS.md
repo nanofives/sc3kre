@@ -151,3 +151,64 @@ game process alive. Artifact shared: `resize_minimal_render_target_1280x1024.png
 Add the view-extent step and re-run the same instrument: `FUN_1000ee29(iso, gw, gh, 0)` to resize grid B
 (the leading suspect, and the dominant builder path), plus the cached extent fields. **The census
 already has a sharp pass criterion for next time: content extent must be 1280x1024, not just non-zero.**
+
+---
+
+# RUN 3 — **FAIL (regression to 100% black). Cause: MY arithmetic.** PRE `1faa792`.
+Measured `extent BEFORE: rect(+0x54..0x60) = (-848, 2924, -48, 3524)` -> 800x600.
+
+**The rect is WORLD PIXEL space with a MOVING ORIGIN; left/top are routinely NEGATIVE.** I read Init's
+`iso+0x5c = param_3` as *"right = W"* and wrote 1280/1024 absolutely. With left=-848 that gave width
+**2128**; with top=2924, a **negative** height. `FUN_1000e2c0`'s divisor then produced
+`cell = 53 x 67108834` (unsigned wrap of a negative division), and the census read **0 of 1310720
+non-zero, ENTIRELY UNIFORM**. Outcome 4.
+
+⚠️ **`%lu` formatting hid it from me** — `-848` printed as `4294966448` and I read straight past it.
+Run 4 logs the rect signed, prints the derived WxH, and gates on cell-size plausibility.
+
+⭐ **Finding worth keeping:** this corroborates the existing `sc3probe.c` note that `iso+0x54/+0x58` is
+*"the camera ORIGIN in WORLD pixel space (not a screen viewport)"* — now with a measured negative
+value. It is why "just write the new width" could never have worked.
+
+# RUN 4 — extent fix is CORRECT. **New failure: `FUN_10018cdf` never returns.** PRE `c192169`.
+
+**The extent write is now provably sound:**
+```
+extent BEFORE: rect=(-848,2924,-48,3524) -> 800x600   dirtygrid=40x30 cell=20x20
+FUN_100059fb(1280,1024,...,0) -> dirty grid 40x64
+extent AFTER:  rect=(-848,2924,432,3948) -> 1280x1024 dirtygrid=40x64 cell=32x16  (cell sizes plausible)
+```
+`1280/40 = 32` and `1024/64 = 16` — both exact. The plausibility gate passed. Both `FUN_10009efb`
+replays then returned 1 at 1280x1024 (confirmed independently by MODLOG hits #166/#167 showing
+`a1=0x500 a2=0x400`).
+
+**Then the log STOPS.** The last line is `MIN> [step] FUN_10018cdf whole-map refill` at t+42.100 s.
+There is **no `FUN_10018cdf -> N` line and no further output of any kind** (the periodic counters that
+ran in earlier runs stop too), until the `-AtSec 70` timer killed the process. No exception logged, no
+dump. In run 2 the same call returned in 50 ms. **Empirical: with the extent changed, `FUN_10018cdf`
+hangs.**
+
+## What run 4 establishes
+- The extent write + `FUN_1000e2c0` are **arithmetically correct and safe** (no crash, plausible cells).
+- **The extent and the per-tile grid at `iso+0x24` are COUPLED.** The minimal routine deliberately
+  skips Init's `iso+0x24` realloc, so after an extent change `FUN_10018cdf` walks with a new
+  tile->cell mapping against an old-size buffer. **Init reallocs `iso+0x24` for a reason.**
+- ⚠️ **This is the load-bearing blow to the "Init-free" premise.** The design's whole appeal was
+  avoiding Init's `iso+0x24` discard. Run 4 says you cannot change the extent *and* keep the old
+  per-tile grid. `[UNCERTAIN]` whether the fix is to realloc `iso+0x24` (which reintroduces the
+  discard the design existed to avoid) or to order the steps differently — **not established, and I
+  will not guess it.**
+
+## Honest status of this workstream after four leases
+Run 1 VOID (my instrument), run 2 PARTIAL (renders at old extent), run 3 FAIL (my arithmetic), run 4
+extent fixed, new hang. **Each run bought a real, durable fact** — grid B is 8x8 by design at every
+resolution `[CONFIRMED @ 0x100059fb]`, the extent rect is world-space with a negative origin, the
+extent and tile cache are coupled — **but the routine is not converging on a working sequence, and two
+of the four failures were mine.** A fifth run should not be spent on another guess at the ordering. The
+next step is **desk work**: read Init's per-call block as a whole and derive the minimal *consistent*
+subset, rather than adding one call at a time and measuring.
+
+## State at close
+Owner's build untouched and verified: `GZGraphicD.dll` `acefadf0`, `SIMSPR.DLL` `f5b9f1d9`. No SIMSPR
+patch staged at any point in runs 1-4. Harness claim released, game lease released, **no game process
+alive** (confirmed after the kill). Nothing left dirty.
