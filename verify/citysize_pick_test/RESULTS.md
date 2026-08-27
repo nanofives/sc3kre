@@ -81,6 +81,34 @@ with **two NON-collinear drags at two different camera positions** to pin it bey
   Cosmetic; fix alongside the formula correction.
 - `cam` read was clean: 1/1 candidate (no ambiguity), stable across both reads, FOLLOW disarmed.
 
+## Reconciliation (desk RE 2026-08-27, no lease) — CORRECTED formula, pick.py fixed
+Re-read `FUN_1000a48a`, `FUN_1000a5c6`, `FUN_1000b70e`/`FUN_1000b867`, `FUN_100090ef` and the iOS
+twin, reconciled against the two measured points:
+- **`rot=0` IS identity** in `FUN_1000a5c6` `[CONFIRMED @ 0x1000a5c6:9-14]`; the prior rot table was
+  right (`rot1:(b,W-1-a) rot2:(W-1-a,H-1-b) rot3:(H-1-b,a)`, W=`+0x14`, H=`+0x18`).
+- **The `+267/-217` is NOT in the SIMSPR pick chain.** `FUN_1000a48a` calls `FUN_100090ef`→`a33a`
+  then `a5c6`, adding no centering term `[CONFIRMED @ 0x1000a48a:11-28]`. The offset is the
+  **city-grid origin translation applied by the caller** (SIMCITY/network layer, not yet read). Per
+  `FUN_1000b70e:52` the sprite-diamond origin `X0=(tileW/-2)*(W-1)`, `Y0=tileH/-2` is a function of
+  **map dimension only, not scroll** — so `(267,-217)` is **INVARIANT across scroll for a 512 map**,
+  map-size-specific. iOS `getZeroAltCellFromWs` does the same `cell -= mapExtent/2`.
+- **`iso+0x1c/+0x20` are (rotated) MAP DIMENSIONS**, not last-mouse (`FUN_1000b70e` multiplies them
+  by tileW/tileH); the old "0,0" note read the object before setup or a colliding struct `[UNCERTAIN
+  which]`.
+- **`[UNCERTAIN]`** the exact 267/-217 split is not produced by any SIMSPR field; carried as a
+  MEASURED anchor per N until the city-grid caller is read.
+
+**Corrected form (validated, rot=0):** `tx = b + 267`, `ty = a - 217` where `a,b` are the diamond
+branches. Inverse: `b=tx-267; a=ty+217; wpx=(4<<zoom)(b-a+1); wpy=(2<<zoom)(a+b); sx=wpx-left;
+sy=wpy-top`. **`pick.py` updated** (city-grid offset table `{512:(267,-217)}`, rot=0 only, `--cam`
+negative-value fix); `--selftest` = **57 checks, 0 failures** including both runtime points as a
+regression guard. **Committed** (see below).
+
+**Where this leaves anchoring:** screen↔tile is **runtime-validated for N=512, rot=0, any scroll** —
+usable for development-run aiming now. Owed: (a) a code source for the offset-in-N (read the city-grid
+caller of `a48a`, likely the SIMCITY grid / `network_layer` area) to generalise + reach C4; (b) a
+confirming lease with two NON-collinear drags (and ideally a second zoom).
+
 ## Cleanup (done + verified)
 `patch_citysize --restore` + `patch_dirtbuf --restore` (both `--check`: SIMUI 256, SIMDIRT shipped
 `f1708fc1…`). Re-staged FOUR-recipe SIMSPR from shipped (sha `f5b9f1d9…`, gate 13 runs / 45 bytes;
