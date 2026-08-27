@@ -374,6 +374,34 @@ stored size with screen coordinates.
 **The witness run gets sharper, not cancelled:** it now has a falsifiable prediction —
 `B+0x78-B+0x70` will **not** change across a real resize. If it does, this correction is wrong.
 
+### ⭐⭐ WITNESS RUN PASSES — the correction is MEASURED, not just derived (2026-08-27, one lease)
+`PRE.md` git `49ea7bd`, committed before the lease. Full record: `verify/resize_wmsize_poll/RESULTS.md`.
+
+| point | `B+0x70..0x7C` -> live | dev `B+0x1C..0x28` | `R` | stored `win+0x38` | OS `GetClientRect` |
+|---|---|---|---|---|---|
+| PRE | **800x600** | 800x600 | 800x600 | 800x600 | 2560x1351 |
+| **MID** (real WM_SIZE done) | **800x600** | 800x600 | 800x600 | 800x600 | **1280x1024** |
+| **POST** (after repair) **[CONTROL]** | **1280x1024** | 1280x1024 | 1280x1024 | 1280x1024 | 1280x1024 |
+
+The OS client moved and **every engine-side field stayed at 800x600**. The control — same instrument,
+same field, same object `0x0054C540` — reads 1280x1024 after the repair, so **the VOID outcome is
+positively excluded** rather than assumed away. Both modules were RELOCATED during the run.
+
+⭐ **Secondary `[UNCERTAIN]` CLOSED in the same run: GZGraphicD does NOT re-Init its own device
+surface** (`B+0x1C..0x28` stayed 800x600 at MID). **A resize fix must drive the device surface itself.**
+
+⚠️ **Unregistered but important: the render target is a NEW OBJECT after a resize** (`0x12329750` ->
+`0x12A7EFC0`). **Re-read `R` from `iso+0x74` on every sample — never cache it**, or the poll reads a
+freed object.
+
+`[UNCERTAIN]` At PRE the OS client was **2560x1351** while every engine field said 800x600 — the engine
+was already out of sync before any resize, so `-fitclient` did not produce the size the engine believed
+in. Does not affect this result (the test is whether the field *moves*). **Do not cite the PRE row as
+evidence that engine and OS agree at startup.**
+
+**Next: build the GZGraphicD `WM_SIZE` cave** — at `FUN_10017e2f`'s `param_2 == 5` branch, call
+`this->vt[0x1c]` (`FUN_10018691`) with `(0,0,LOWORD(lParam),HIWORD(lParam))` before `vt+0x30` runs.
+
 ### ⭐ UI reflow root-caused, 2026-08-25, no lease — the shippable half
 `[CONFIRMED @ 0x100270e5]` SIMUI `FUN_100270e5` holds three hardcoded HUD tables and **has no branch
 above width 800**, so **every resolution ≥ 801 gets the 1024x768 top-strip table**. Consumer is
