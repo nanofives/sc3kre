@@ -92,3 +92,43 @@ validated, pixel verdict still owed"* — not a PASS and not a FAIL.
 
 `resize_rectfix` (step 9) is **already live** in the owner's four-recipe SIMSPR `f5b9f1d9`, so the
 sequence is complete without staging anything.
+
+---
+
+# ⛔ RUN NOT TAKEN — the install changed under us. Lease acquired and released without launching.
+
+At lease-acquire time (2026-08-27) the lock reported:
+`install is already MODIFIED -> GZGraphicD.dll, SIMDIRT.DLL, SIMUI.DLL`
+— **different from the `GZGraphicD.dll, SIMSPR.DLL` this session had verified minutes earlier.**
+
+Measured immediately:
+
+| module | sha | meaning |
+|---|---|---|
+| `Apps/SIMSPR.DLL` | **`eec71500`** | **= `SIMSPR.DLL.shipped`. STOCK.** The owner's four-recipe build `f5b9f1d9` is GONE |
+| `Apps/GZGraphicD.dll` | `acefadf0` | owner's two-recipe build, intact |
+| `Apps/SIMDIRT.DLL` | `7c87b9ac` | patched by another session (the 512 work) |
+| `Apps/SIMUI.DLL` | `f27e5344` | patched by another session |
+
+**Three reasons this run was refused, any one of them sufficient:**
+1. ⚠️ **`resize_rectfix` is NOT live.** It rides the owner's four-recipe SIMSPR, which is now stock.
+   **The amendment above says step 9 is supplied — that is now FALSE.** The sequence would be
+   incomplete by construction.
+2. **Another session's renderer patches are staged.** `SIMDIRT` is the dirty-buffer module and
+   `SIMUI` the HUD; a *rendering* validation run against a normal-size city with another
+   workstream's 512 patches live is contaminated before it starts.
+3. **That session may be between runs.** It released the harness claim but left its modules staged.
+   Restoring the owner's SIMSPR now could break work in flight.
+
+**Nothing was launched. Lease acquired, then released `-DirtyOk` (recording the PRE-EXISTING dirty
+state, not creating it). Harness claim released.** No game process was alive at any point.
+
+⚠️ **I did NOT restore the owner's SIMSPR.** The standing rule binds the session that *touches* a
+module, and this session touched none — the mod is a DLL and patches nothing on disk. Restoring
+another session's staged state unilaterally is the failure mode the board already records from the
+`claude3` fleet stop. **This needs the owner's call, and the owner should know the camera build
+(scroll 8 / drag 4 / dead zone 2) is currently not live.**
+
+**The offline gates above stand unchanged and were all PASSED.** What is still owed is exactly what
+the amendment said: the wiring validation, on an install where `resize_rectfix` is live and no other
+workstream's modules are staged.
