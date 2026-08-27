@@ -72,6 +72,30 @@ From `re/harness/src/sc3probe.c` (line ranges from the 2026-08-27 survey; re-con
    drag/edge/deadzone sliders in v1; those remain byte-patch-only. Keeps v1 small and matches the code
    that already has a live run behind it.
 
+## Progress — carve + offline build gate PASSED (2026-08-27)
+
+Steps 1-2 below are done; step 3's *build* leg passed. The source lives in the gitignored harness
+tree (like `sc3probe.c`), so it is on-disk only, not committed:
+
+- **`re/harness/src/sc3slider.c`** (~590 lines) — the carve. Every `pref_*`, `gz_*` and detour
+  function copied VERBATIM from `sc3probe.c` (ranges cited in-file), with only the four marked
+  `[SLIDER]` adaptations: `slider.ini` read/write (decision 1), a minimal `__stdcall fnlog_enter`
+  driving only the heartbeat → `pref_tick`, a `slider_watcher` thread that installs the single
+  `GZGraphicD 0x10018c58` heartbeat detour position-independently and applies the boot value, and a
+  slim `DllMain`. No env-var arming, no capture/fnlog-table/gzlog/dispatcher.
+- **`re/harness/build_slider.ps1`** — dedicated build (leaves the shared `build.ps1` untouched).
+- **Build gate PASSED:** compiles and links clean → `re/harness/bin/sc3slider.dll`, 130,560 bytes,
+  **PE32 x86 DLL** (matches `SC3U.exe`). `dumpbin /imports` shows **KERNEL32 only** — the slider's
+  expected Win32 set (`GetModuleHandleA`, `VirtualProtect`, `IsBad*Ptr`, `GetPrivateProfileStringA`/
+  `WritePrivateProfileStringA`, `CreateThread`, `FlushInstructionCache`, logging) plus static-CRT
+  boilerplate. **No `ddraw`/`gdi32`/`user32`/capture creep** — confirms the carve is decoupled.
+- **Not touched:** no `Apps` module was written; the owner's live build (`scroll_speed=8`,
+  `drag_deadzone=2`) verified intact after the build. Harness claim taken and released.
+
+**Remaining before a lease:** (a) repackage the loader — `sc3launch.c:254` hardcodes `sc3probe.dll`;
+point a shipped loader at `sc3slider.dll` (a build-time path or a slim loader copy, so the shared
+`sc3launch.c` is not disturbed). (b) The runtime gates below still need one game launch.
+
 ## Build + validation plan (staged, lease deferred)
 
 1. **Carve** the slim source, keep position-independence. Local. Harness claim required
