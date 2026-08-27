@@ -513,9 +513,11 @@ was staged).
    `f5b9f1d9…`, **gate 13 runs / 45 bytes** (5 scroll + 2 drag + 2 dead-zone + 36 resize_rectfix =
    33 cave + 3 hook). `resize_rectfix` is inert unless the iso Init runs, so it does not change camera feel.
 2. **`Apps\GZGraphicD.dll` carries TWO recipes: `resizable_frame` + `close_button_quit`** (style flip
-   WS_THICKFRAME|WS_MAXIMIZEBOX, 3 bytes; plus the WM_CLOSE→PostQuitMessage code cave that makes the X quit,
-   66 bytes), combined sha `fc89a394…`, **gate 69 bytes / 7 runs**. Experimental for the D-004 hand-test; if
-   the owner reverts, GZGraphicD → shipped.
+   WS_THICKFRAME|WS_MAXIMIZEBOX, 3 bytes; plus the WM_CLOSE→PostQuitMessage **position-independent** code
+   cave that makes the X quit, 62 bytes), combined sha `acefadf0…`, **gate 65 bytes / 12 runs**.
+   ⚠️ `close_button_quit` was hardened from an earlier ABSOLUTE version (sha `fc89a394`, which would crash on
+   WM_CLOSE when GZGraphicD relocates — a load-order coin flip); the live build `acefadf0` is
+   position-independent. Experimental for the D-004 hand-test; if the owner reverts, GZGraphicD → shipped.
 
 **Any session that touches either module must restore the owner's live build as its LAST action, and verify
 it.** Every time. `game_lock.ps1 -Status` will report `install : MODIFIED -> SIMSPR.DLL` (and now also
