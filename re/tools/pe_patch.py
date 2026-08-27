@@ -486,7 +486,11 @@ GZGRAPHICD_SHA = "48201f476121adeea2957b8cc9b3063326aee28b86b026acab7179c878ad45
 # or the GZ end-message 0x700, with NO window-alive check — so DestroyWindow alone would orphan the
 # process (loop spins on a dead window). The SAFE quit is PostQuitMessage(0), but GZGraphicD does not
 # import it. It DOES import LoadLibraryA + GetProcAddress (kernel32) and depends on USER32, and has
-# 2038 bytes of .text slack at 0x1001d80a. So a 67-byte cave resolves PostQuitMessage at runtime and
+# 2038 bytes of .text slack at 0x1001d80a. So a 77-byte POSITION-INDEPENDENT cave (call/pop EIP -> ebx
+# anchor; IAT slots + strings addressed ebx-relative; ebx callee-saved so it survives the API calls) -
+# NOT absolute, because GZGraphicD is a load-order coin flip between 0x10000000 and a relocated base
+# (MEASURED both bases; an earlier absolute cave would CRASH on WM_CLOSE when relocated). It resolves
+# PostQuitMessage at runtime and
 # calls it, FAIL-CLOSED: a NULL from LoadLibraryA or GetProcAddress falls through to the original
 # return-0 (X still does nothing) rather than faulting in the WndProc. Blast radius = the WM_CLOSE
 # branch only (which did nothing before). Bytes assembled + capstone-verified; cave disassembles to:
@@ -496,22 +500,22 @@ GZGRAPHICD_SHA = "48201f476121adeea2957b8cc9b3063326aee28b86b026acab7179c878ad45
 # IAT slots [CONFIRMED @ GZGraphicD]: LoadLibraryA 0x1001e05c, GetProcAddress 0x1001e048.
 
 GZ_XQUIT_CAVE_VA = 0x1001d80a
-GZ_XQUIT_CAVE = ("6832d80110ff155ce0011085c07414683dd8011050ff1548e0011085c074046a00ffd0"
-                 "e995a9ffff7573657233322e646c6c00506f7374517569744d65737361676500")  # 67 bytes
+GZ_XQUIT_CAVE = ("e8000000005b8d832d00000050ff934d08000085c074168d8b380000005150ff9339080000"
+                 "85c074046a00ffd0e98ba9ffff7573657233322e646c6c00506f7374517569744d65737361676500")  # 77 bytes, position-independent
 GZ_XQUIT_HOOK_VA = 0x10017ead          # the je's rel32 (je itself at 0x10017eab: 0f 84 <rel32>)
 
 
 def r_close_button_quit(p, arg=None):
     """`--recipe close_button_quit` -> make the window X button quit the game (GZGraphicD, code cave).
 
-    A 67-byte cave (PostQuitMessage(0), fail-closed on NULL) in .text slack + one 4-byte rel32 redirect
-    of the WM_CLOSE branch. Anchored to shipped GZGraphicD SHA. Expected `--diff` vs shipped: 66 bytes /
-    4 runs (67 cave minus 3 bytes that coincide with the pre-existing zero slack = 64, plus 2 changed
-    bytes in the hook rel32 - the other 2 rel bytes are unchanged 0x00).
+    A 77-byte POSITION-INDEPENDENT cave (PostQuitMessage(0), fail-closed on NULL) in .text slack + one
+    4-byte rel32 redirect of the WM_CLOSE branch. Anchored to shipped GZGraphicD SHA. Expected `--diff`
+    vs shipped: 62 bytes / 7 runs (77 cave minus 17 bytes coinciding with the pre-existing zero slack =
+    60, plus 2 changed bytes in the hook rel32).
     """
     _anchor(p, GZGRAPHICD_SHA, "recipe close_button_quit")
-    p.stage(GZ_XQUIT_CAVE_VA, "hex", GZ_XQUIT_CAVE, expect="00" * 67,
-            note="WM_CLOSE -> resolve+call PostQuitMessage(0), fail-closed")
+    p.stage(GZ_XQUIT_CAVE_VA, "hex", GZ_XQUIT_CAVE, expect="00" * 77,
+            note="WM_CLOSE -> resolve+call PostQuitMessage(0), fail-closed, position-independent")
     p.stage(GZ_XQUIT_HOOK_VA, "hex", "59590000", expect="16030000",
             note="redirect WM_CLOSE je rel32 -> cave 0x1001d80a")
 
