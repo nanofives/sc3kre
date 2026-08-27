@@ -72,3 +72,82 @@ no harness claim (it was refused, and `camera` still holds it).
 2. Census **later than immediately after the create** (or at the next present) — the current timing
    cannot distinguish "not yet attached" from "never attached".
 3. Coordinate with `camera` before touching the harness again.
+
+---
+
+# RUN 2 (2026-08-27, after both fixes) — **PARTIAL PASS. The mechanism works; the EXTENT does not follow.**
+# PRE amendment git `04b04e3`, committed before the second lease. Both run-1 defects are fixed and stayed fixed.
+
+**Headline: the minimal Init-free routine renders a real, complete image — at the OLD 800x600 extent
+on the new 1280x1024 surface.** It is **necessary but NOT sufficient**. Do not freeze it into the
+shipping cave as it stands.
+
+## The instrument fixes held (checked before interpreting anything)
+- **Exactly ONE execution**, not four. The pre-registered self-check line is present:
+  `MIN> size check: client 1280x1024 vs render target 800x600 -> proceeding`.
+- **Tuple pristine**: `[800 600 4 16 0 0 0 0]` — not the poisoned `[0 0 …]` of run 1.
+- No zero-size and no unchanged-size execution anywhere in the log, which run 2's amendment made the
+  VOID condition. **So run 2 is interpretable.**
+
+## Mechanical result — every step succeeded
+| step | result |
+|---|---|
+| render target `iso+0x74` `FUN_10009efb` | **-> 1**, raw `+0x24/+0x28` = **1280x1024** |
+| device surface `iso+0x4ec` `FUN_10009efb` | **-> 1**, raw `+0x24/+0x28` = **1280x1024** |
+| `FUN_10018cdf` whole-map refill | **-> 1** (took 50 ms — it did real work) |
+| no Init call | confirmed: no `vt+0x10` teardown, no `iso+0x24` realloc |
+
+## The discriminator (deferred census, ~2 s later, read RAW from `sub+0xf0`)
+```
+bits(sub+0xf0)=0x13AA5028 pitch=2560   <- a real surface, and 2560 == 1280 x 16bpp / 8
+480000 of 1310720 px non-zero (36%); NOT uniform - holds an image
+```
+**The surface IS attached and DOES hold an image** — so run 1's ambiguity is resolved: it was *"not yet
+attached at that instant"*, not *"never attached"*. Fix 2 earned its keep.
+
+## ⭐ And then the number gave it away exactly
+`480000 = 800 x 600` **exactly**. Analysis of the dumped BMP:
+
+```
+bounding box rows 0..599, cols 0..799  =>  content extent 800 x 600
+inside the 800x600 top-left: 100.0% non-zero
+outside it: 0 non-zero px
+```
+
+**A complete render, at the old size, in the top-left corner of a correctly-sized surface.** Not a
+partial or torn frame — 100% inside its extent, zero outside. So rasterisation and the refill both work
+perfectly; **the view's own extent never grew.**
+
+⭐ **This retro-explains the owner's D-004 hand-test observation** ("maximize works, the city stays
+**clipped top-left**, no black viewport and no crash") and puts a number on it. Same phenomenon, now
+measured rather than described.
+
+## What is still missing — named, with candidates
+The routine resizes the two *surfaces*. Nothing updates the *view's* cached extent. Candidates, from the
+iso-view ctor `FUN_1001c4a1` `[CONFIRMED @ 0x1001c4a1]`, which caches the size at construction:
+- `owner+0x20` / `owner+0x24` — cached W/H, from `B->vt+0x38` / `vt+0x3c`
+- `owner+0x10..0x1C` — cached rect `{0, 0, W, H}`
+- **grid B dims stayed `+0x384=8 +0x388=8`** across the whole run, exactly as the PRE flagged as the
+  first suspect. `FUN_1000ee29(iso, gw, gh, 0)` is what Init calls to resize it, and the minimal
+  routine skips it.
+
+`[UNCERTAIN]` which of these is load-bearing for the extent — **not established, and not guessable from
+this run.** Builder counters show `builder_hi(FUN_1000d0f5)=311` vs `builder_lo(FUN_1000be25)=64`, so
+the **grid-B (zoom >= 3) path dominated**, which makes the stale 8x8 grid B the leading suspect rather
+than a footnote.
+
+## Verdict against the pre-registered table, stated honestly
+By the letter, outcome 1 ("non-zero and not uniform") is met — **but acting on that would be wrong, and
+the fault is in my outcome table: it set no EXTENT criterion.** A census can be "an image" and still be
+the wrong size. **Recorded verdict: PARTIAL PASS.** The Init-free approach is validated as far as it
+goes (surfaces + refill are separable from Init, and they work), and it is **not** ready to freeze.
+
+## State at close
+Owner's build untouched and verified: `GZGraphicD.dll` `acefadf0`, `SIMSPR.DLL` `f5b9f1d9`. No SIMSPR
+patch staged at any point. Harness claim taken as `resize` and **released**; game lease released; no
+game process alive. Artifact shared: `resize_minimal_render_target_1280x1024.png`.
+
+## Next
+Add the view-extent step and re-run the same instrument: `FUN_1000ee29(iso, gw, gh, 0)` to resize grid B
+(the leading suspect, and the dominant builder path), plus the cached extent fields. **The census
+already has a sharp pass criterion for next time: content extent must be 1280x1024, not just non-zero.**
