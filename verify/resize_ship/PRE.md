@@ -57,3 +57,38 @@ known-good frame.
 ## Install state
 Owner's build untouched: `SIMSPR.DLL` `f5b9f1d9`, `GZGraphicD.dll` `acefadf0`. **The mod is a DLL —
 it patches nothing on disk.** Harness claim taken as `resize` for the build and released after.
+
+---
+
+# AMENDMENT — the validation run's METHOD and its honest limits (before the lease)
+
+**This run does NOT go through `capture.ps1` or the probe.** The mod is a standalone DLL with no
+census, no blit-mirror and no `-shot`. So the instrument is different from every previous run in this
+workstream, and the outcome table must be read accordingly.
+
+**Method:** acquire the lease manually -> `resize_launch.exe -kill 75` (its own injector) -> wait for
+the city -> resize the game window **externally** from PowerShell (`SetWindowPos`), which is a *real*
+`WM_SIZE` from outside the process -> screenshot the window -> read `sc3resize.log`.
+
+⚠️ **Externally driving the resize is a BETTER test of the shipped path than the harness was** (the
+harness posted its own `WM_EXITSIZEMOVE`), but the screenshot is a **new, unvalidated instrument**.
+Prior work (`D-004`) records that this environment cannot be assumed to have a usable foreground
+display. **If the screenshot comes back black or blank, that is a fact about the screenshot, NOT about
+the mod** — exactly the `capture.ps1` silent-failure trap this board already paid for twice.
+
+## What this run CAN and CANNOT decide
+| pre-registered outcome | decidable here? |
+|---|---|
+| 2 — injects but no bridge captured | **YES**, from the log |
+| 3 — bridge captured but poll never fires | **YES**, from the log |
+| 5 — crash or hang | **YES** (a hang at `FUN_10018cdf` = the grid-B step did not take) |
+| 4 — sequence runs but values are wrong | **PARTLY** — the log carries extent before/after, the cell-size plausibility gate, both `FUN_10009efb` returns and dims, `FUN_10018cdf`'s return, `FUN_1000fa36` |
+| 1 — full PASS incl. content richness | **NO, not by census.** Only by screenshot, which is unvalidated |
+
+**So the honest ceiling for this run is: WIRING VALIDATED, pixels pending.** A full pixel verdict needs
+either a census added to the mod (dev-only, gated) or a probe-side re-run. **Do not report a screenshot
+as a census.** If the wiring passes and the screenshot is unusable, the correct verdict is *"wiring
+validated, pixel verdict still owed"* — not a PASS and not a FAIL.
+
+`resize_rectfix` (step 9) is **already live** in the owner's four-recipe SIMSPR `f5b9f1d9`, so the
+sequence is complete without staging anything.
