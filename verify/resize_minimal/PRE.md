@@ -151,3 +151,35 @@ not be interpreted.
 space**, not a screen viewport at (0,0). That corroborates the earlier `sc3probe.c` note ("the camera
 ORIGIN in WORLD pixel space (not a screen viewport)") with a measured negative value, and it is why
 "just write the new width" was never going to work.
+
+---
+
+# AMENDMENT — run 5: `FUN_1000ee29` added in Init's order (committed BEFORE the fifth lease)
+
+Run 4 fixed the extent arithmetic (`rect -> 1280x1024`, `cell 32x16`, gate passed) and then
+`FUN_10018cdf` **never returned**. Desk work (`RESULTS.md`) established that its loop is MAP-bounded so
+it cannot spin on its own, and that **Init's very next step after `FUN_1000e2c0` is
+`FUN_1000ee29(this, 8, 8, 0)`** — which runs 1-4 all omitted.
+
+**Change: exactly one call added**, immediately after `FUN_1000e2c0`, reproducing Init's order.
+`8, 8` is not a guess — `FUN_100059fb` mode 1 unconditionally returns `8, 8`, so it is the only value
+Init ever passes `[CONFIRMED @ 0x100059fb]`.
+
+⚠️ **Owner chose this over the null-delta arm I recommended first.** Recording the tradeoff: if run 5
+hangs again, we still will not know whether the extent step is the cause, because no arm has isolated
+it on this build. **That control remains owed either way.**
+
+## Outcomes for run 5
+| # | reading | verdict |
+|---|---|---|
+| 1 | census extent **1280x1024**, not uniform | ⭐ **PASS.** `e2c0`+`ee29` is the missing pair. Licenses the cave |
+| 2 | census **0% / uniform black** | **INFORMATIVE FAIL, and the predicted risk:** `ee29` zeroes grid B and `FUN_10018cdf` did not refill it — that is the original U-068 mechanism. Distinguishes "hang" from "empty grid" and is progress even so |
+| 3 | `FUN_10018cdf` **never returns again** (log stops mid-call) | **FAIL.** `ee29` is not the missing companion. Stop adding calls; run the null-delta arm next |
+| 4 | census still **800x600** | **FAIL, extent not applied** — contradicts run 4's measured rect; re-read before interpreting |
+| 5 | zero/unchanged size, `REFUSE`, or implausible cell sizes | **VOID**, per the run-2/run-4 conditions |
+
+**Pre-registered reads regardless of outcome:** the `gridB dims/ptr BEFORE/AFTER` pair around `ee29`
+(does it reallocate, and to what), and whether `FUN_10018cdf` returns and in how long (50 ms in run 2,
+116 ms in run 3, never in run 4 — the timing is itself a discriminator).
+
+Harness claim taken as `resize` before this build. Owner's build untouched; no SIMSPR patch staged.
