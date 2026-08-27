@@ -683,7 +683,7 @@ py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL.shipped --recipe scroll_speed=8 --
 py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL.shipped --diff SIMSPR.DLL.4   # gate: 13 runs / 45 bytes
 Copy-Item SIMSPR.DLL.4 Apps\SIMSPR.DLL -Force
 py -3.12 re/tools/pe_patch.py Apps\GZGraphicD.dll.shipped --recipe resizable_frame --recipe close_button_quit --out GZGraphicD.dll.rf
-py -3.12 re/tools/pe_patch.py Apps\GZGraphicD.dll.shipped --diff GZGraphicD.dll.rf   # gate: 69 bytes / 7 runs
+py -3.12 re/tools/pe_patch.py Apps\GZGraphicD.dll.shipped --diff GZGraphicD.dll.rf   # gate: 65 bytes / 12 runs
 Copy-Item GZGraphicD.dll.rf Apps\GZGraphicD.dll -Force
 py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --read 0x10067690:f32 -n 5   # expect 8.0 x5
 py -3.12 re/tools/pe_patch.py Apps\SIMSPR.DLL --read 0x100676a4:f32 -n 1   # expect 2.0
