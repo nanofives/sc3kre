@@ -49,3 +49,28 @@ WM_MOVE exercise. Prototype only — **a PASS licenses building the cave, it doe
 Owner's standing build stays live and untouched: `SIMSPR.DLL` `f5b9f1d9`, `GZGraphicD.dll` `acefadf0`.
 `wmsize_setrect` is NOT staged (this run drives the resize through the harness, which does its own
 SetRect). Nothing to restore beyond releasing the lease and the harness claim.
+
+---
+
+# AMENDMENT — run 2, after the VOID (committed BEFORE the second lease, 2026-08-27)
+
+Run 1 was VOID on two instrument defects of mine (`RESULTS.md`). **The outcome table above is
+unchanged** — the question and the declared verdicts stand. Only the instrument changed:
+
+1. **Size is interrogated from the WINDOW at execution time** (`GetClientRect` on the game HWND),
+   never from a latched variable. **Zero is a REFUSAL.** Additionally, "render target already at the
+   client size" is an explicit **SKIP**, so stray `WM_EXITSIZEMOVE` events cannot churn the target.
+   This kills defect 1 at its root: the routine can no longer execute at `0x0`, and cannot execute
+   at all when there is nothing to do.
+2. **Two censuses instead of one.** The immediate one (right after the create) is **data only, never
+   the discriminator** — same rule the heartbeat dump already carries. A **deferred** census ~2 s
+   later, after real frames have run, is **the discriminator**, plus a grid-B census at the same
+   point. The pair is what separates *"not yet attached at that instant"* from *"never attached"*,
+   which run 1 could not do.
+
+**Additional pre-registered read for run 2:** the routine must log a `size check` line proving it saw
+a genuine mismatch before acting. **If run 2 shows any `MIN>` execution at a zero or unchanged size,
+the fix failed and the run is VOID again** — do not interpret its census.
+
+Harness claim: taken as `resize` before this build (`camera` had released it and its process was
+gone — **not stolen**). Run 1's protocol violation is recorded in `RESULTS.md` and is not repeated.
