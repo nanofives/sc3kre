@@ -89,12 +89,22 @@ tree (like `sc3probe.c`), so it is on-disk only, not committed:
   expected Win32 set (`GetModuleHandleA`, `VirtualProtect`, `IsBad*Ptr`, `GetPrivateProfileStringA`/
   `WritePrivateProfileStringA`, `CreateThread`, `FlushInstructionCache`, logging) plus static-CRT
   boilerplate. **No `ddraw`/`gdi32`/`user32`/capture creep** — confirms the carve is decoupled.
+- **`re/harness/src/slider_launch.c`** — the shippable loader. `inject()` copied VERBATIM from
+  `sc3launch.c` (CreateProcess SUSPENDED + `CreateRemoteThread(LoadLibraryA)` + resume); only path
+  resolution and args are slimmed — no `SC3PROBE_*` flags. Injects `sc3slider.dll` from beside
+  itself. Resolves `SC3U.exe` two ways: next to the loader (ship: dropped in `Apps\`) or
+  `<root>\Apps\SC3U.exe` (dev: run from `re\harness\bin`). The shared `sc3launch.c` is untouched.
+  **Build gate PASSED:** `slider_launch.exe`, 121,344 bytes, **PE32 x86 console**, imports KERNEL32
+  only.
 - **Not touched:** no `Apps` module was written; the owner's live build (`scroll_speed=8`,
   `drag_deadzone=2`) verified intact after the build. Harness claim taken and released.
 
-**Remaining before a lease:** (a) repackage the loader — `sc3launch.c:254` hardcodes `sc3probe.dll`;
-point a shipped loader at `sc3slider.dll` (a build-time path or a slim loader copy, so the shared
-`sc3launch.c` is not disturbed). (b) The runtime gates below still need one game launch.
+**Ship layout:** drop `slider_launch.exe` + `sc3slider.dll` + `slider.ini` into the game's `Apps\`
+folder (next to `SC3U.exe`) and run `slider_launch.exe`. `slider.ini` is `[camera]` /
+`scroll_speed=<0..128>`; the DLL reads it beside itself and writes it back when the slider moves.
+
+**Remaining before ship:** one game-launch validation (runtime gates below) — lease-deferred (camera
+priority 4).
 
 ## Build + validation plan (staged, lease deferred)
 
