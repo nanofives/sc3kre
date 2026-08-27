@@ -121,3 +121,33 @@ Grid B is deliberately **not** touched (it is already correct), and `FUN_1000ee2
 demonstrably incomplete; that loophole is closed here.
 
 Harness claim taken as `resize` before this build.
+
+---
+
+# AMENDMENT — run 4, after run 3's REGRESSION (committed BEFORE the fourth lease, 2026-08-27)
+
+**Run 3 FAILED at outcome 4 (regression to 100% black) and the cause is my arithmetic, not the
+engine.** Measured `extent BEFORE: rect(+0x54..0x60) = (-848, 2924, -48, 3524)` -> 800x600.
+
+**The rect is in WORLD PIXEL space with a MOVING ORIGIN — left/top are routinely NEGATIVE.** I had
+read Init's `iso+0x5c = param_3` as *"right = W"* and wrote 1280/1024 absolutely, which with
+left=-848 gave width **2128** and with top=2924 gave a **negative** height. `FUN_1000e2c0`'s divisor
+then produced `cell = 53 x 67108834` (an unsigned wrap of a negative division) and the frame went
+**0% non-zero, entirely uniform**.
+
+⚠️ **`%lu` formatting is what hid it from me** — `(-848)` printed as `4294966448` and I read past it.
+Run 4 logs this rect **signed**, prints the derived WxH, and carries an explicit plausibility gate on
+the resulting cell sizes that names run 3 by name.
+
+**The correction:** Init is called with a consistent quadruple, so the only sound read is
+`right = left + w`, `bottom = top + h`. That is run 4's change, and it is the whole change.
+
+**Outcome table is UNCHANGED from run 3's amendment** (the extent criterion stands: content extent
+must be 1280x1024). Added VOID condition: **if the `cell sizes plausible` gate reports IMPLAUSIBLE,
+the run is VOID for the same reason run 3 was** — the arithmetic is wrong again and the census must
+not be interpreted.
+
+⭐ **Kept as a finding in its own right:** `iso+0x54/+0x58` is the camera origin in **world pixel
+space**, not a screen viewport at (0,0). That corroborates the earlier `sc3probe.c` note ("the camera
+ORIGIN in WORLD pixel space (not a screen viewport)") with a measured negative value, and it is why
+"just write the new width" was never going to work.
