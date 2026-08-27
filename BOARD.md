@@ -560,6 +560,15 @@ Order:
 4. **Credits discriminator** (`U-051`) — 1 run. Cosmetic closure; `verify/credits_discriminator/`
    `RESULTS.md` is still an unfilled template.
 5. **`drag_divisor` / `edge_margin`** (`D-002`) — 1 patched run each.
+6. **Standalone slider ship-validation** (`camera`) — **RIDER, not a lease.** Validates the shippable
+   wiring of the in-game Camera Scroll Speed slider (`slider_launch.exe` + `sc3slider.dll` + `slider.ini`,
+   built + offline-gated 2026-08-27; `re/analysis/SLIDER_DELIVERY.md`). PRE committed:
+   `verify/slider_ship_validate/PRE.md`. Needs **stock both modules** (restore shipped, re-stage owner's
+   build after). **Leg A** (loader injects, slim DllMain + heartbeat install, boot `.rdata` apply) is
+   read straight from `sc3slider.log` and only needs the run to reach the **menu** — a sibling holding a
+   headless lease can carry it. **Leg B** (slider appears in Preferences, drags, `slider.ini` round-trips)
+   needs Preferences **open on a real display** — owner hand-test, like the resize hand-test. The scroll
+   arithmetic (C3) and the slider UI (harness `-pref`, witnessed) are already proven; this is wiring only.
 
 > ⚠️⚠️ **PATTERN, not an incident: this board keeps listing questions the repo has already answered.**
 > `U-063` went **open → parked → closed** in one afternoon, and *nothing was discovered* to close it —
