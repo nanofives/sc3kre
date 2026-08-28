@@ -46,3 +46,17 @@ clean run and v3 (which resized at t+11.6s during load).
 
 Predictge: if timing is the cause, the fault fires this run and the breadcrumb names the step. That
 converts "resize-during-load race" from `[UNCERTAIN]` to a located fault.
+
+---
+
+# AMENDMENT — run 3: MINZOOM OFF (my confound). Isolate ZOOM vs the clean run 1.
+
+Runs 1 (t+42s) and 2 (t+5s) both **forced zoom 0** and neither crashed. **v3 crashed at the LOAD zoom
+(3), no min-zoom force.** So my "timing" runs were confounded — the uncontrolled variable vs v3 was
+**zoom**, not timing. Run 3: `SC3RESIZE_MINZOOM=0` (stay at zoom 3), resize to 2048x1152 at t+42s
+(settled, matching run 1). **Single variable changed from the clean run 1: zoom.** No rebuild.
+
+| # | reading | meaning |
+|---|---|---|
+| 1 | `FAULT CAUGHT ... STEP n at MODULE+RVA` | ⭐ **ZOOM (3) is the trigger** and the fault is localized. This is the faithful v3 reproduction |
+| 2 | no fault, clean | neither timing NOR zoom-3 alone reproduces it vs a settled city; v3's remaining difference is the load-time auto-maximize itself. Report honestly |
