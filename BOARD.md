@@ -407,8 +407,27 @@ ceiling** — which reconciles "real crash" with "not reproducible under 5 condi
 **state-dependent**, intermittent). The int[16384] story is doubly dead (an AV, not /GS; census already
 refuted the count). ⚠️ **The load-readiness gate does NOT fix this** (the fault is post-gate).
 `U-069` remains **OPEN** — the down-resize deferred after the caught fault and never ran. Full:
-`verify/resize_down/RESULTS.md`. Next (one lease): SEH filter logs `eax`/bucket index/grid dims at
-fault time → names the stale-pointer source → fix (ordering, or guard the walk).
+`verify/resize_down/RESULTS.md`.
+
+### ⭐⭐⭐ ROOT CAUSE FOUND (2026-08-28) — OOB grid-B bucket index, a latent engine off-by-one
+Enhanced the SEH filter to dump fault-time registers + grid state, churned 8 resizes, caught it:
+`FUN_1000cedb+0x12a`, `edi = base+284 = bucket index 71` on a **64-bucket (8x8)** grid — **7 past the
+array**; `eax=0x80020003` is the garbage dword read from `bucket[71]`, unreadable → AV. **Grid scan: 0
+dangling nodes** → NOT a freed node (that hypothesis refuted); it is an **out-of-bounds INDEX.**
+`FUN_1000cedb` computes far-edge col/row = `round((far-1-origin)·8/extent)` = `round(2047·8/2048)=8`
+and `round(1080·8/1081)=8` (valid 0..7); `(8<<3)+7=71`, matching `edi` exactly. The `-1` guard is
+defeated by round-half-up.
+
+⚠️ **LATENT AT NATIVE TOO:** `round(799·8/800)=8` at 800x600 — the engine computes the same OOB index-8
+at native res; it just doesn't crash there because the memory past the array is benign. **The crash is
+heap-layout-dependent** (faults only when `bucket[64..71]` is unreadable), which is why it is
+intermittent and why 5 controlled runs were clean while the churn caught it. Real crash + not-repro now
+reconcile. Full: `verify/resize_rootcause/RESULTS.md`.
+
+**Fix (design, not built):** ⛔ enlarging grid B does NOT work (round-up scales: `round((W-1)·16/W)=16`).
+(A) clamp the index in a `FUN_1000cedb` cave, or **(B, DLL-friendly) over-allocate the bucket buffer
+after each `FUN_1000ee29`** so `bucket[gw·gh..+gw]` is always readable/zero — guaranteeing the
+benign-memory condition the game relies on at native.
 
 **Workstream summary:** resize routine renders a full-window frame at 2048x1152 (raster + composite
 censused); shippable as `sc3resize.dll` + `resize_launch.exe` (offline-gated). **Real open defect: an
