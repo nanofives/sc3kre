@@ -28,3 +28,21 @@ diagnostic (code/addr/step) is the deliverable — do not interpret anything aft
 ## Install
 Owner build stays live (`SIMSPR f5b9f1d9`, `GZGraphicD acefadf0`). Mod patches nothing on disk;
 `resize_rectfix` (step 9's on-disk companion) is irrelevant here since the DLL does step 9 itself.
+
+---
+
+# AMENDMENT — run 2: EARLY resize, timing isolated (before the lease)
+
+Run 1 (resize at t+42s, settled city) did NOT crash at 2048x1152 min zoom. **Single variable changed:**
+fire the external resize **early (~t+5-10s, during city load)**, everything else identical (same build,
+`MINZOOM=1`, same 2048x1152 target, same SEH catcher). This is the only difference left between the
+clean run and v3 (which resized at t+11.6s during load).
+
+| # | reading | meaning |
+|---|---|---|
+| 1 | `FAULT CAUGHT ... STEP n at MODULE+RVA` | ⭐ **TIMING PROVEN the cause** — and the fault is now localized to a step + address. Report both |
+| 2 | no fault, clean resize | timing is **NOT** sufficient either; v3 had some other difference (the auto-maximize path itself, or a heisenbug). Say so — do not claim timing |
+| 3 | process dies with no `FAULT CAUGHT` | fault is outside `rz_do_resize` (in the game's own load path, perturbed by our early resize) — report where the log stops |
+
+Predictge: if timing is the cause, the fault fires this run and the breadcrumb names the step. That
+converts "resize-during-load race" from `[UNCERTAIN]` to a located fault.
