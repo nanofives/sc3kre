@@ -57,3 +57,50 @@ game into a logged address.
 ## State
 No fault, no orphan (0 processes). Owner build verified `f5b9f1d9` / `acefadf0`. Mod patches nothing on
 disk. Lease + claim released.
+
+---
+
+# RUNS 2 & 3 — the v3 crash does NOT reproduce under ANY tested condition. Routine is robust.
+# PRE amendments git `55909f8`, and the run-3 amendment. Both clean, zero `FAULT CAUGHT`.
+
+| run | timing | zoom | target | result |
+|---|---|---|---|---|
+| 1 | t+42s (settled) | 0 (forced) | 2048x1152 | all 9 steps, no fault |
+| 2 | **t+5.3s (during load**, bridge at t+3.85s) | 0 (forced) | 2048x1152 | all 9 steps, no fault |
+| 3 | t+42s (settled) | **3 (load zoom, no force)** | 2048x1152 | all 9 steps, no fault |
+| + | run 1's window settle | 0 | 2048x1081 | all 9 steps, no fault |
+
+**Five conditions now exclude the v3 crash:** size 2048x1152 and 2048x1081, zoom 0 and zoom 3, timing
+t+5s (during load) and t+42s (settled). `FUN_10018cdf` returned 1 every time. The SEH catcher never
+fired — **no exception occurred in `rz_do_resize` in any run.**
+
+## Conclusion: the v3 crash is NOT REPRODUCIBLE with this build
+- ⛔ My "isolate timing" framing (run 2) was itself confounded — runs 1 and 2 both forced zoom 0 while
+  v3 was zoom 3. Run 3 corrected it (zoom 3, no force) and **still did not crash.** So neither timing
+  nor zoom is the trigger.
+- The routine completes cleanly at 2048x1152 across both zooms and both timings. **The earlier
+  "resize during load is the cause" `[UNCERTAIN]` is now also unsupported** — run 2 resized during load
+  and was clean.
+- The v3 crash (`0xC000041D`, one occurrence) is most consistent with a **transient tied to the exact
+  auto-maximize-during-load sequence** that these five controlled reproductions did not recreate, OR a
+  consequential fault outside `rz_do_resize` that the SEH around the routine would not have caught
+  anyway. `[UNCERTAIN]` — and, correctly, NOT asserted.
+
+## Net effect on the workstream
+The "hard size ceiling" / "it crashes at 2048" narrative is reduced to **a single non-reproducing
+incident.** The mod's resize routine is now demonstrated robust at 2048x1152 across zoom and timing on
+a dense city. What is genuinely open is smaller than it looked: (a) a load-readiness gate on the poll
+is still good hygiene (cheap, do it); (b) the on-screen correctness at large sizes is unverified
+(the screenshot is `D-004`-ambiguous) and needs a real display or a census-in-mod; (c) downward resize
+`U-069` untested.
+
+## Honest scorecard (final for the crash arc)
+Three asserted causes, three refutations: DirectDraw primary (refuted by leaf-blit trace), int[16384]
+overflow (refuted by census + this), resize-during-load timing (refuted by run 2). Plus one
+self-inflicted confound (minzoom on during the "timing" test). **The SEH catcher — built last — is what
+turned the question from repeated wrong guesses into "not reproducible under 5 controlled conditions."
+Build the catcher first next time.**
+
+## State
+No fault, no orphan, owner build verified `f5b9f1d9` / `acefadf0`, mod patches nothing on disk, lease +
+claim released.
