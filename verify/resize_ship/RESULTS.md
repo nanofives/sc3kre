@@ -143,3 +143,43 @@ one that mattered.
 **No orphan processes** (checked: zero `SC3U`/`resize_launch` alive). Owner's build untouched and
 verified: `SIMSPR.DLL` `f5b9f1d9`, `GZGraphicD.dll` `acefadf0`. The mod patches nothing on disk. Lease
 and harness claim released.
+
+---
+
+# ⛔⛔ CORRECTION — BOTH DLL RUNS ARE CONFOUNDED. I never controlled the DISPLAY MODE.
+# Raised by the owner, 2026-08-28: *"were you launching fullscreen?"* The honest answer is
+# **I don't know, because I never set it** — and that undermines the conclusions above.
+
+**The six runs that validated the routine all used**
+`-nocom -windowed -origin -fix16 -fitclient -nointro -quiet` (`capture.ps1:24`).
+
+Those are not cosmetic. `-windowed` is a **live patch**: `patch_windowed` pokes
+**`GZGraphicD+0x6cdac = 1`** plus a nop at `0x117D6` so Init yields windowed
+`[CONFIRMED @ sc3probe.c:7311, 7336]`. `-fix16` patches the surface format. `-fitclient` sizes the
+client.
+
+**`sc3resize.dll` implements NONE of them — measured: zero occurrences of any display-mode handling
+in the file.** `resize_launch.exe` passes no switches either; it only injects and forwards the city
+path. **So both DLL runs launched the game in its DEFAULT display configuration, which is not the
+configuration anything in this workstream was validated under.**
+
+Corroborating oddity I logged and did not question: the window's client read **2048x1152** at
+detection and **800x600** at resize time in run 1, and run 2 logged `WM_SIZE 2048x1152`. I recorded
+those numbers and moved on.
+
+## What this does to the conclusions above
+| claim | status now |
+|---|---|
+| run 1 "WIRING VALIDATED" | **weakened.** Injection, hooks, subclass, poll and trigger did demonstrably work — but under an **uncontrolled display mode**, not the validated one |
+| run 1 "the clip is caused by the missing present rect" | **still well-grounded** (`resize_rectfix` is Init-gated and the routine is Init-free — a static fact), **but I asserted it as THE cause without controlling for mode.** It may not be the only contributor |
+| run 2 "isolates to the create recorder" | **the isolation logic holds** (steps 8/9 provably never ran), **but the mechanism is even less settled**: hooking `FUN_10009efb` during DirectDraw bring-up in an unknown display mode is a different proposition from doing it in the harness's patched windowed mode |
+
+## The real defect in my method
+The DLL was carved to reproduce a routine validated under six specific patches, and **I carried over
+the routine but none of its preconditions.** Worse, I never asked what mode it was launching in — the
+2048x1152/800x600 mismatch was in my own log twice.
+
+**Before any further DLL run:** decide and CONTROL the display mode explicitly — either replicate
+`-windowed` (`GZGraphicD+0x6cdac`) and `-fix16` inside the mod, or run the mod under the harness
+launcher with those switches so the only variable is the mod itself. **Until then, neither DLL run
+should be cited as evidence about the routine.**
