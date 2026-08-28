@@ -164,3 +164,43 @@ instrument now (run 1 returned 8,019 colours and 255 grey levels — not a silen
 
 **Pre-registered reads regardless:** the `[step 9]` rect counts before and after (must go from N to
 exactly 1), whether the tuple came from a RECORDED create or a fallback, and step 8's two log lines.
+
+---
+
+# AMENDMENT — run 3 (`sc3resize` v3): display mode controlled, recorder dropped (before the lease)
+
+Two corrections since v2, and the change set is deliberately minimal after I was burned for bundling:
+
+1. **`-windowed` + `-fix16` are now replicated INSIDE the mod** (`patch_windowed`, `patch_surfacefmt`,
+   carved verbatim from `sc3probe.c`, applied at watcher start before any hook and before the city
+   loads). This removes the display-mode confound the owner caught: v1/v2 launched in the game's
+   default mode, not the mode the routine was validated under.
+2. **The `FUN_10009efb` create-recorder hook is DROPPED.** It crashed the game at startup in v2, and
+   the failure had isolated to it by construction. Reverting to the known-good two-hook set. The
+   tuple now comes from field read-back — which rendered the visible region richly in run 1 — and the
+   replay **logs that it used read-back**, so the measured `p3` 7-vs-4 caveat stays on the record
+   rather than being silently assumed away.
+
+Steps 8 (logging) and 9 (the DLL-side present-rect erase+push) are unchanged from v2 and **have never
+executed** (v2 died before any resize), so this is their first real test.
+
+## Why this is the decisive run
+Every prior confounder is now removed at once *only because each was independently forced*: the crash
+(drop the recorder) and the confound (control the mode) each have exactly one fix, and steps 8/9 are
+the actual thing under test. There is no fourth free variable.
+
+| # | screenshot / log reading | verdict |
+|---|---|---|
+| 1 | content extent **1280x1024**, rich | ⭐ **PASS — mod works end to end under the validated display mode** |
+| 2 | still **800x600** clipped, but `[step 9]` shows the list went N->1 | **FAIL** — the present rect is not the (whole) cause; the clip is elsewhere |
+| 3 | `[step 9]` did NOT change the list, or the routine never ran | **FAIL** — step 9 wiring wrong |
+| 4 | black / blank screenshot | **AMBIGUOUS** — could be the mod or the headless-display limit (`D-004`); check the log rendered first, do not blame the mod from the image alone |
+| 5 | crash / hang | **FAIL** — with the recorder gone, suspect `patch_surfacefmt`'s cave or the step-9 erase |
+
+**Pre-registered reads regardless:** the `--- WINDOWED` and `--- FIX16` log lines confirming both
+patches took; the `[step 9]` list count before/after (must be N -> 1); step 8's two lines; and whether
+the tuple log says RECORDED (it must NOT — the recorder is gone) or field read-back.
+
+⚠️ **The screenshot instrument is still subject to `D-004`.** If windowed mode changes what
+`PrintWindow` can capture, a black image is a fact about the capture, not the mod. The log is the
+primary witness for everything except final pixel extent.
