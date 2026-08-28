@@ -183,3 +183,69 @@ the routine but none of its preconditions.** Worse, I never asked what mode it w
 `-windowed` (`GZGraphicD+0x6cdac`) and `-fix16` inside the mod, or run the mod under the harness
 launcher with those switches so the only variable is the mod itself. **Until then, neither DLL run
 should be cited as evidence about the routine.**
+
+---
+
+# RUN 3 (`sc3resize` v3, 2026-08-28) — CONFOUND FIXED. Real windowed resize TRIGGERED.
+# New crash inside FUN_10018cdf. PRE amendment git `e1b2716`.
+
+**The display-mode fix worked and it changed everything about how the run behaved.**
+
+```
+--- WINDOWED: GZGraphicD+0x6cdac = 0 -> 1
+--- WINDOWED: GZGraphicD+0x117D6 'mov [ebx+0x48],1' -> nop x4
+--- FIX16: 16bpp branch injected at 0x19349 -> cave 0x03530000 (5-6-5)
+### RESIZE: armed ... (create recorder DROPPED after v2 crash)
+### RESIZE: window 0x00200CF0 subclassed
+### RESIZE: bridge captured 0x0D3295F0
+RZ   WM_SIZE 2048x1081 - poll will pick it up on the next frame
+RZ   size change: client 2048x1081 vs render target 800x600
+RZ   extent AFTER: (-848,2924,1200,4005) -> 2048x1081  dirtygrid=16x8 cell=128x135 (cell sizes plausible)
+RZ   render-target  iso+0x74  FUN_10009efb -> 1 | now +0x24=2048 +0x28=1081
+RZ   device-surface iso+0x4ec FUN_10009efb -> 1 | now +0x24=2048 +0x28=1081
+                                                  <- log ends here, t+11597 ms
+```
+
+## What this run PROVED (all new, all under the correct display mode)
+- ⭐ **`patch_windowed` took: the window is now a real 800x600 titled window** (`'SimCity 3000'`,
+  client 800x600) — v1/v2 launched at **2048x1152** (fullscreen desktop). The confound is gone.
+- ⭐ **`patch_surfacefmt` (fix16) installed cleanly**, no crash from the cave.
+- ⭐ **The recorder drop fixed the v2 startup crash** — the game reached a city and ran to t+11.6s.
+- ⭐ **The routine triggered on a REAL, game-driven resize**, not a synthetic one: windowed mode
+  auto-maximized the window to **2048x1081** at t+11.6s and the per-frame poll caught it. Extent math,
+  cell-size gate, and both `FUN_10009efb` replays all succeeded at that size.
+
+## The crash — localized, but a NEW problem
+Exit code **`0xC000041D` = STATUS_FATAL_USER_CALLBACK_EXCEPTION** (an exception inside a Win32
+callback). The log stops **after** the device-surface replay returned 1 and **before** the
+`FUN_10018cdf` line, and that logf calls `FUN_10018cdf` first — **so the crash is inside
+`FUN_10018cdf`** (the tile-cache refill/repaint, step 7), surfacing as a callback exception because the
+poll runs inside the `FUN_10018c58` paint hook.
+
+`[UNCERTAIN]` **why FUN_10018cdf faulted here when it returned in 47-50 ms across six harness runs.**
+Three differences from those runs, none yet isolated:
+1. **Size**: 2048x1081 (odd height) vs the validated 1280x1024. `gw/gh` = 16x8 here vs 40x64 there.
+2. **Timing**: this resize hit at **t+11.6 s, ~5 s after bridge capture** (city just loaded); the
+   harness resized at ~t+42 s, long after load.
+3. **The trigger**: a windowed **auto-maximize** to the full desktop, not a chosen 1280x1024.
+4. **fix16 + our surface replay together at a new size** — the two were both present in the harness
+   runs, but not at 2048x1081. **Do not assert any of these as the cause.**
+
+⚠️ **My intended clean 1280x1024 test never ran** — the window auto-maximized to 2048x1081 first and
+crashed there. The screenshot is stale (0% — taken after the crash) and carries no verdict.
+
+## Where this leaves the mod
+The delivery, injection, display-mode control, both hooks, subclass, poll, trigger, extent, grid and
+BOTH surface replays are now demonstrated **under the validated display mode**. The failure is a single
+localized fault in step 7 on a large/early/auto-maximize resize. Steps 8 and 9 **still have never
+executed** — the crash is upstream of them.
+
+**Recommended next, and it should be ONE change:** stop the window auto-maximizing so the poll fires at
+a controlled size after load — either open the window at a fixed size, or gate the poll to ignore the
+first N seconds / require the size to be stable for two polls. That isolates "does the routine work at
+1280x1024 as a DLL" from "does FUN_10018cdf survive a 2048x1081 auto-maximize 5 s after load", which
+are two different questions I have been accidentally testing at once.
+
+## State at close
+No orphan processes. Owner's build untouched and verified: `SIMSPR.DLL` `f5b9f1d9`, `GZGraphicD.dll`
+`acefadf0`. The mod patches nothing on disk. Lease and harness claim released.
