@@ -434,8 +434,13 @@ Applied **in memory** by the mod at load (`patch_gridb_clamp`, rel32s base-invar
 check — **still patches nothing on disk**). Witness (the churn that caught the fault unfixed): clamp
 installed, **zero faults including 2048x1081 twice** (the exact faulting size), all triggered resizes
 completed 9 steps, plus an incidental clean **downward 2048x1081→800x600** (partial `U-069`).
-⚠️ **SCOPE: clamps `FUN_1000cedb` ONLY.** `FUN_1000d0f5`/`be25`/`ef50` share the latent OOB index math;
-none faulted here, but a complete fix clamps all four or uses fix B (benign for all callers at once).
+**Extended 2026-08-28: `FUN_1000d0f5` + `FUN_1000be25` clamps added** (clone caves @0x61520/0x61560,
+table-driven `g_clamps[]`, fail-closed per entry). Churn witness: all three log `index clamped`, zero
+faults, all resizes complete. **3 of 4 grid-B walkers now clamped.** ⏳ **`FUN_1000ef50` remains** (the
+fiddly one — `this`/base alias `eax`, `push esi` shifts the args), per the owner's "ef50 after" plan.
+Each cave proven by construction (`index <= gw*gh-1`). A self-inflicted verify-check bug (compared hook
+vs the cave's first bytes instead of the stolen bytes) was caught by fail-closed — refused to patch
+rather than mispatch — and fixed with an explicit `expect[5]`.
 
 **Workstream summary:** resize routine renders a full-window frame at 2048x1152 (raster + composite
 censused); shippable as `sc3resize.dll` + `resize_launch.exe` (offline-gated). **Real open defect: an
