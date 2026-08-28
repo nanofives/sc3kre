@@ -249,3 +249,57 @@ are two different questions I have been accidentally testing at once.
 ## State at close
 No orphan processes. Owner's build untouched and verified: `SIMSPR.DLL` `f5b9f1d9`, `GZGraphicD.dll`
 `acefadf0`. The mod patches nothing on disk. Lease and harness claim released.
+
+---
+
+# STATIC INVESTIGATION of the v3 crash (2026-08-28, NO LEASE) — ROOT CAUSE FOUND.
+# ⛔ My "DirectDraw primary" hypothesis was WRONG. It is a FIXED-SIZE STACK ARRAY overrun.
+
+Worker static trace of the repaint chain `FUN_10018cdf` -> iso `vt+0x144` `FUN_1000db86` ->
+per-cell `vt+0x130` `FUN_1000d725` -> the grid-B builders.
+
+## Root cause: the two grid-B builders carry FIXED 16384-entry stack arrays, no bound check
+- `FUN_1000be25` (zoom < 3, `builder_lo`): `int [16384]` x2 `[CONFIRMED @ 0x1000be25:26-27]`
+- `FUN_1000d0f5` (zoom >= 3, `builder_hi`): `int [16384]` + `int [16386]` `[CONFIRMED @ 0x1000d0f5:29-30]`
+
+Each is filled **one entry per visible sprite/tile**, drained at the tail to clear per-sprite flags,
+with **no bound check against 16384 anywhere** `[CONFIRMED @ 0x1000be25:88/117-118,
+0x1000d0f5:107/195/292-308]`. The entry count scales with the **visible tile area** (the extent
+`iso+0x54..0x60` we enlarge). At 800x600 and 1280x1024 it stays under 16384; at **2048x1081** it
+exceeds it, writing past the array top → **/GS stack-cookie corruption**, which is **exactly**
+`0xC000041D` / `0xC0000409`. `FUN_1000d0f5` (far zoom, most tiles on screen) is the likelier overflower
+and matches the run's dominant `builder_hi` counter.
+
+**This is an ENGINE limit, not a mod bug.** The builders were written for a bounded view; the mod hit
+the ceiling by allowing a 2048x1081 view. It is a HARD CAP on how large the iso view can be.
+
+## Why the six harness runs and my "it works" belief never saw it
+All six validated at **1280x1024**, which is **under** the 16384 ceiling. `2048 x 1081` is the first
+size this workstream ever drove that exceeds it — and it only happened because windowed mode
+**auto-maximized** to the full desktop, a size I never intended to test.
+
+## What this retires
+- ⛔ **My ranked-first hypothesis (the un-resized DirectDraw primary) is REFUTED.** The leaf present
+  `(*(iso+0x4ec)+0x120)(*(iso+0x74), ...)` blits between the **two surfaces the mod already resized**
+  `[CONFIRMED @ 0x1000e058:34/44, 0x1000e206:13]`. No un-resized primary is in the leaf path. The
+  D-004 primary question is still open in general but is **not** this crash.
+- The secondary heap hazard (the `iso+0x360` dirty grid, `FUN_1000d725:136`) is real but ranked below:
+  it would corrupt the heap, not trip a /GS cookie, so it is a weaker match for `0xC000041D`.
+
+## Consequence for the mod — concrete and actionable
+1. **Cap the resize target.** The routine is safe up to the tile-area ceiling; **1280x1024 is proven
+   under it** (6 runs). The mod must **clamp the client size** it acts on to a validated maximum and
+   **ignore** (or letterbox) larger windows, rather than driving `rz_do_resize` at any size the OS
+   hands it. Without a clamp, maximizing on a large desktop crashes.
+2. **Find the exact ceiling** before picking the clamp: it is the largest extent whose visible-tile
+   count stays < 16384 **at the busiest zoom** (`iso+0x28 >= 3`, `FUN_1000d0f5`). `[UNCERTAIN]` the
+   precise pixel bound — needs the per-zoom cell table `DAT_100624a0`/`DAT_100624b4` and the tile
+   pitch `iso+0x374/0x378`, or an empirical sweep. Do NOT guess a number.
+3. The auto-maximize itself is a separate issue (the window should open/stay at the chosen size).
+
+**Net: the crash is understood, localized to a named engine limit, and the fix is a clamp — not a
+change to the resize routine, which is correct within the supported range.**
+
+## State
+No lease taken (static + worker only). No install change. Owner's build remains `f5b9f1d9` /
+`acefadf0`.
