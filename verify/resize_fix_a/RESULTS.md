@@ -107,3 +107,41 @@ is proven by construction (index <= gw*gh-1) and the run confirms install + no f
 ## State
 No fault, no orphan. Owner build verified `f5b9f1d9` / `acefadf0`. Mod patches nothing on disk. Lease +
 claim released.
+
+---
+
+# FIX A COMPLETE (2026-08-28): all 4 grid-B walkers clamped. Witnessed, zero faults.
+
+`FUN_1000ef50` clamp added — the fiddly one. Instead of reimplementing through its ABSOLUTE
+`cmp [0x10072670]` (which would not survive SIMSPR relocation), the cave **clamps the two incoming
+params in place on the stack at entry** (`this`=ecx is live there), re-execs the 3 stolen instrs
+(`mov edx,[esp+8]; mov eax,ecx; push esi`), and lets the original code run unchanged incl. its own
+relocated cmp. Fully position-independent (esp/ecx-relative + one intra-module jmp). 46-byte cave
+@0x615a0, capstone-verified, non-overlapping.
+
+**Witness (churn):**
+```
+GRIDB_CLAMP FUN_1000cedb: index clamped
+GRIDB_CLAMP FUN_1000d0f5: index clamped
+GRIDB_CLAMP FUN_1000be25: index clamped
+GRIDB_CLAMP FUN_1000ef50: index clamped
+GRIDB_CLAMP: all grid-B walkers clamped (OOB bucket-index AV fixed engine-wide)
+```
+All four install; **zero `FAULT CAUGHT`**; 8/8 resizes complete 9 steps.
+
+## FIX A is now complete
+| walker | clamped | approach |
+|---|---|---|
+| `FUN_1000cedb` | ✅ | recompute index, row/col clamped |
+| `FUN_1000d0f5` | ✅ | clone of cedb |
+| `FUN_1000be25` | ✅ | clone of cedb |
+| `FUN_1000ef50` | ✅ | clamp incoming params on the stack (avoids its absolute cmp) |
+
+**The OOB grid-B bucket-index AV is fixed engine-wide** for every walker that indexes the 8x8 grid.
+Each cave is proven by construction (`index <= gw*gh-1`); the churn confirms all install with no fault
+and no regression. All four are position-independent and applied in memory — **the mod still patches
+nothing on disk.**
+
+## State
+No fault, no orphan. Owner build verified `f5b9f1d9` / `acefadf0`. Mod patches nothing on disk. Lease +
+claim released.
