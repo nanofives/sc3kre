@@ -45,3 +45,26 @@ writing.
 ## State
 No fault, no orphan. Owner build verified `f5b9f1d9` / `acefadf0`. Mod patches nothing on disk. Lease +
 claim released.
+
+---
+
+# SIBLING CLAMP SITES LOCATED (2026-08-28, static; worker structural + local disasm)
+To COMPLETE FIX A, three more independent clamps are needed (no shared indexer — confirmed).
+
+| function | index site | shape | clamp difficulty |
+|---|---|---|---|
+| `FUN_1000cedb` | +0xe1 | row=[ebp-4], col=[ebp+0xc], this=esi, base=ecx | ✅ **DONE** (shipped) |
+| `FUN_1000d0f5` | +0x18c..+0x19d | `mov ecx,[esi+0x38c]; shl eax,cl; mov ecx,[esi+0x380]; add eax,[ebp-0x1c]; mov eax,[ecx+eax*4]` | **LOW** — clone of cedb (row=eax, col=[ebp-0x1c], this=esi); flags-live (preserve) |
+| `FUN_1000be25` | +0x5f0..+0x601 | `mov eax,[ebp-0x14]; mov ecx,[esi+0x38c]; shl eax,cl; mov ecx,[esi+0x380]; add eax,[ebp-0x18]; mov eax,[ecx+eax*4]` | **LOW** — clone of cedb (row=[ebp-0x14], col=[ebp-0x18], this=esi); flags-live |
+| `FUN_1000ef50` | +0x7..+0x20 | `mov edx,[esp+8](row); mov eax,ecx(this); push esi; mov ecx,[eax+0x38c]; mov eax,[eax+0x380](base — this LOST); shl edx,cl; add edx,[esp+8](col); cmp [DAT];  lea esi,[eax+edx*4]` | ⚠️ **MEDIUM** — `this`/base alias `eax`; a `push esi` shifts the `[esp+8]` args; must hook at +0x7 (before `this` is lost) |
+
+**No shared helper** — the bucket index+read is inlined in all four; none call a common indexer
+`[CONFIRMED: worker decomp sweep + local disasm]`. So FIX A completion = 3 independent caves.
+
+## ENGINEERING NOTE — fix B is one change vs three caves
+`FUN_1000d0f5`/`be25` are safe clones of the proven cedb cave. `FUN_1000ef50` is genuinely fiddlier
+(register aliasing + stack shift). **Fix B (over-allocate the bucket buffer after each `FUN_1000ee29`
+so `bucket[gw*gh..+gw]` is readable/zero) fixes ALL FOUR callers with ONE change and NO hot-function
+caves** — it makes the OOB read benign for every walker, which is exactly the condition the game already
+relies on at native. Given three-caves-vs-one, fix B is the cleaner completion; FIX A per-function is
+viable but is 3x the hot-path surface.
