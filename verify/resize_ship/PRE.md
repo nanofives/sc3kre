@@ -132,3 +132,35 @@ another session's staged state unilaterally is the failure mode the board alread
 **The offline gates above stand unchanged and were all PASSED.** What is still owed is exactly what
 the amendment said: the wiring validation, on an install where `resize_rectfix` is live and no other
 workstream's modules are staged.
+
+---
+
+# AMENDMENT — run 2 (`sc3resize` v2): all three defects fixed (before the lease)
+
+Run 1 validated the wiring and found three defects, all mine (`RESULTS.md`). v2 fixes each.
+
+| # | defect | fix |
+|---|---|---|
+| 1 | **step 9 missing.** I documented the present rect as "already ships as `resize_rectfix`", but that cave hooks **Init** (`BOARD.md:668`: *"inert unless the iso Init runs"*) and this routine never calls Init — mutually exclusive | the DLL now does step 9 itself: `FUN_1001084b` erase then `FUN_10010586` push_back on `iso+0x4d0`, in Init's own order. ⚠️ rect is `{0,0,w,h}` in SCREEN space — deliberately **not** `iso+0x5c/0x60`, which are WORLD-space here (measured 745, 2970) and correct only at Init time. The **erase matters more for us than for the cave**: the list is append-only with Init/dtor its only emptiers, so without it every resize would append |
+| 2 | **step 8 unlogged** — run 1 carried no evidence `FUN_1000fa36` ran | log lines before and after |
+| 3 | **tuple read-back is not equivalent** — measured `p3 = 7` from fields vs a recorded `p3 = 4`, refuting the costing's "no recording hook needed" | a third hook on `FUN_10009efb` (GZGraphicD+0x9efb) records the REAL 8-arg tuple per object; replay prefers it and **logs loudly** when it falls back to field read-back |
+
+New hook site verified offline: `FUN_10009efb` prologue is `push ebp / mov ebp,esp / push esi /
+mov esi,ecx` = **6 stealable bytes, no rel32**. Installed BEFORE the heartbeat, because rasters are
+created during startup and a tuple missed there is one we would have to guess at.
+
+## Pass bar for run 2 — the pixel verdict is now IN SCOPE
+Run 1's ceiling was "wiring validated, pixels pending", because step 9 was absent so a clipped frame
+was expected. With step 9 present the screenshot becomes decisive, and it is a **validated**
+instrument now (run 1 returned 8,019 colours and 255 grey levels — not a silent failure).
+
+| # | reading | verdict |
+|---|---|---|
+| 1 | screenshot content extent **1280x1024** (bbox fills the window), rich content | ⭐ **PASS — the mod works end to end** |
+| 2 | still **800x600** clipped | **FAIL.** Step 9 is not the whole story; report the `[step 9]` before/after rect counts |
+| 3 | black / blank | **REGRESSION** against run 1, which rendered. Suspect the erase or the pushed rect |
+| 4 | crash or hang | **FAIL.** The new `FUN_10009efb` hook is the prime suspect (it is a hot function) |
+| 5 | log shows `NO RECORDED CREATE ... FALLING BACK` for either object | **the tuple fix did not take** — the result may still pass, but say so; do not claim the recorder worked |
+
+**Pre-registered reads regardless:** the `[step 9]` rect counts before and after (must go from N to
+exactly 1), whether the tuple came from a RECORDED create or a fallback, and step 8's two log lines.
