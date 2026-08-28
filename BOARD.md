@@ -424,10 +424,18 @@ heap-layout-dependent** (faults only when `bucket[64..71]` is unreadable), which
 intermittent and why 5 controlled runs were clean while the churn caught it. Real crash + not-repro now
 reconcile. Full: `verify/resize_rootcause/RESULTS.md`.
 
-**Fix (design, not built):** ⛔ enlarging grid B does NOT work (round-up scales: `round((W-1)·16/W)=16`).
-(A) clamp the index in a `FUN_1000cedb` cave, or **(B, DLL-friendly) over-allocate the bucket buffer
-after each `FUN_1000ee29`** so `bucket[gw·gh..+gw]` is always readable/zero — guaranteeing the
-benign-memory condition the game relies on at native.
+**Fix (design):** ⛔ enlarging grid B does NOT work (round-up scales: `round((W-1)·16/W)=16`).
+(A) clamp the index in a `FUN_1000cedb` cave, or (B, DLL-friendly) over-allocate the bucket buffer.
+
+### ✅ FIX A BUILT + PASSES (2026-08-28, `verify/resize_fix_a/`)
+A 59-byte SIMSPR-internal cave recomputes the bucket index as `(min(row,gh-1)<<stride)+min(col,gw-1)`,
+so it cannot exceed `gw·gh-1 = 63` (disassembly-verified — the OOB read is impossible by construction).
+Applied **in memory** by the mod at load (`patch_gridb_clamp`, rel32s base-invariant, fail-closed byte
+check — **still patches nothing on disk**). Witness (the churn that caught the fault unfixed): clamp
+installed, **zero faults including 2048x1081 twice** (the exact faulting size), all triggered resizes
+completed 9 steps, plus an incidental clean **downward 2048x1081→800x600** (partial `U-069`).
+⚠️ **SCOPE: clamps `FUN_1000cedb` ONLY.** `FUN_1000d0f5`/`be25`/`ef50` share the latent OOB index math;
+none faulted here, but a complete fix clamps all four or uses fix B (benign for all callers at once).
 
 **Workstream summary:** resize routine renders a full-window frame at 2048x1152 (raster + composite
 censused); shippable as `sc3resize.dll` + `resize_launch.exe` (offline-gated). **Real open defect: an
