@@ -1,0 +1,1015 @@
+/* sc3resize.c - standalone resizable-window mod for SimCity 3000 Unlimited.
+ *
+ * A slim, shippable carve of the validated minimal Init-FREE resize routine out of
+ * re/harness/src/sc3probe.c (`rz_minimal_resize`). It makes the in-city isometric view
+ * re-render correctly after the window is resized - the defect tracked as U-068 - with NONE
+ * of the harness machinery (no capture, no census, no gzlog, no verb dispatcher).
+ *
+ * WHY A DLL AND NOT A CODE CAVE. Costed in re/analysis/RESIZE_DELIVERY_COST.md: the routine
+ * is 8 thiscall invocations plus ~10 field writes, roughly 4x the largest cave this project
+ * has shipped (close_button_quit, 77 bytes), for no capability the DLL route lacks. The
+ * routine already exists as C validated over six game runs, so shipping it is a carve rather
+ * than a hand-assembly job. Delivery vehicle: launcher EXE (CreateProcess SUSPENDED +
+ * CreateRemoteThread(LoadLibraryA)), the same one sc3launch.c and slider_launch.c use.
+ * DEFERRED.md D-001's foreclosure was proxy-specific, not all injection.
+ *
+ * PROVENANCE. The logging and detour-installer blocks below are copied VERBATIM from
+ * re/harness/src/sc3slider.c (which took them verbatim from sc3probe.c), so the hard-won,
+ * address-anchored, position-independent code is not re-derived. Ranges cited per block.
+ * The resize routine itself is a faithful carve of sc3probe.c's `rz_minimal_resize` and
+ * `rz_recreate_raster` as they stood when run 6 PASSED (verify/resize_minimal/RESULTS.md).
+ *
+ * THE SEQUENCE (validated 2026-08-27, 6 runs; Init FUN_10005b42 is NEVER called, so its
+ * vt+0x10 teardown and iso+0x24 realloc are both avoided):
+ *   1. extent  iso+0x5c = iso+0x54 + w, iso+0x60 = iso+0x58 + h, mirror to iso+0x64..0x70
+ *      !! WORLD PIXEL space with a MOVING ORIGIN - left/top are routinely NEGATIVE (measured
+ *         -848, 2924). Writing w/h absolutely produced a negative height and a BLACK frame.
+ *   2. FUN_100059fb(w, h, &gw, &gh, 0)   - the game's own dirty-grid table (40x64 at 1280x1024)
+ *   3. FUN_1000e2c0(iso, gw, gh)         - realloc dirty grid + recompute cell sizes
+ *   4. FUN_1000ee29(iso, 8, 8, 0)        - grid B is 8x8 at EVERY resolution (FUN_100059fb
+ *                                          mode 1 returns 8,8 unconditionally). OMITTING THIS
+ *                                          HUNG THE GAME inside FUN_10018cdf.
+ *   5. FUN_10009efb replay on iso+0x74   - render target, +0x08 guard cleared, ORIGINAL tuple
+ *   6. FUN_10009efb replay on iso+0x4ec  - device surface. MEASURED NECESSARY: the engine does
+ *                                          not re-Init it on a stock resize.
+ *   7. FUN_10018cdf(bridge, 0, b+0x78, b+0xa8, 0, 0) - tile-cache refill + repaint (~47 ms)
+ *   8. FUN_1000fa36(iso, 1, 0)           - re-register drawables from the PERSISTENT container
+ *                                          iso+0x3a4. Omitting this renders TERRAIN ONLY
+ *                                          (32 distinct colours against a good frame's 463).
+ *   9. present rect iso+0x4d0            - supplied by the separate `resize_rectfix` patch.
+ *
+ * THE STORED-RECT PROBLEM. GZGraphicD's WM_SIZE handler FUN_100185f5 republishes the WINDOW
+ * OBJECT'S STORED size (vt+0x68 = *(win+0x40)-*(win+0x38)), not lParam and not GetClientRect,
+ * and nothing updates that stored size on a stock resize - measured: the OS client went to
+ * 1280x1024 while every engine field stayed at 800x600. This DLL fixes it in C by subclassing
+ * the game window (see rz_subclass), which is why the separate GZGraphicD `wmsize_setrect`
+ * patch is OPTIONAL when running this mod.
+ *
+ * POSITION INDEPENDENCE (BOARD standing rule). SIMSPR and GZGraphicD both prefer base
+ * 0x10000000 and one is relocated per run. Every address is resolved from a live module handle
+ * + offset (GetModuleHandleA), never an absolute.
+ *
+ * EXPECT-OR-REFUSE. Every dereference is IsBadReadPtr-gated and every vtable is COMPARED
+ * against a known MODULE+RVA, never dispatched through to identify it - the mistake that
+ * crashed an earlier surface dump. A refusal is a LOGGED RESULT, not a crash.
+ *
+ * SCOPE, HONESTLY (verify/resize_minimal/RESULTS.md): validated upward only (800x600 ->
+ * 1280x1024), one city, one zoom, in a headless harness. Downward resize (U-069) is UNTESTED.
+ * No claim about the DirectDraw primary (D-004).
+ *
+ * Build: 32-bit x86 (must match SC3U.exe, PE32). re/harness/build_resize.ps1.
+ */
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+/* ============================================================ logging (sc3probe.c:28-66) */
+
+static CRITICAL_SECTION g_lock;
+static HANDLE g_log = INVALID_HANDLE_VALUE;
+static LARGE_INTEGER g_freq, g_t0;
+static HMODULE g_self;                          /* [SLIDER] this DLL, for locating slider.ini */
+
+static void logf(const char *fmt, ...) {
+    char buf[2048];
+    char line[2176];
+    va_list ap;
+    LARGE_INTEGER now;
+    double ms;
+    DWORD wrote;
+    int n;
+
+    va_start(ap, fmt);
+    _vsnprintf(buf, sizeof(buf) - 1, fmt, ap);
+    buf[sizeof(buf) - 1] = 0;
+    va_end(ap);
+
+    QueryPerformanceCounter(&now);
+    ms = (double)(now.QuadPart - g_t0.QuadPart) * 1000.0 / (double)g_freq.QuadPart;
+
+    n = _snprintf(line, sizeof(line) - 1, "[%9.3f ms][tid %04lx] %s\r\n",
+                  ms, GetCurrentThreadId(), buf);
+    if (n < 0) return;
+    line[sizeof(line) - 1] = 0;
+
+    EnterCriticalSection(&g_lock);
+    if (g_log != INVALID_HANDLE_VALUE)
+        WriteFile(g_log, line, (DWORD)n, &wrote, NULL);
+    LeaveCriticalSection(&g_lock);
+    OutputDebugStringA(line);
+}
+
+static void log_open(void) {
+    char path[MAX_PATH];
+    if (!GetEnvironmentVariableA("SC3RESIZE_LOG", path, sizeof(path)))   /* [RESIZE] own default */
+        lstrcpynA(path, "sc3resize.log", sizeof(path));
+    g_log = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, NULL,
+                        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+}
+
+/* ============================== detour installer (sc3probe.c:8144-8229, 8730-8789) VERBATIM.
+ * Self-contained: closure is modrm_len/insn_len/steal_len/pool_alloc + the FNLOG struct.
+ * It emits a stub that jmps to fnlog_enter (resolved by address at install time), so the
+ * minimal fnlog_enter below satisfies it. */
+
+static int modrm_len(const BYTE *p) {
+    BYTE m = p[0];
+    int mod = m >> 6, rm = m & 7, n = 1;
+    if (mod == 3) return n;
+    if (rm == 4) {                       /* SIB */
+        BYTE sib = p[1];
+        n++;
+        if (mod == 0 && (sib & 7) == 5) n += 4;
+    } else if (mod == 0 && rm == 5) {
+        n += 4;                          /* disp32 */
+    }
+    if (mod == 1) n += 1;
+    else if (mod == 2) n += 4;
+    return n;
+}
+
+static int insn_len(const BYTE *p, int *is_rel32) {
+    BYTE op = p[0];
+    *is_rel32 = 0;
+    if (op == 0x66 || op == 0xF2 || op == 0xF3) {
+        int r, l = insn_len(p + 1, &r);
+        *is_rel32 = 0;
+        return l ? l + 1 : 0;
+    }
+    if (op >= 0x50 && op <= 0x5F) return 1;              /* push/pop reg */
+    if (op == 0x90 || op == 0xC3 || op == 0xC9) return 1;
+    if (op == 0x6A) return 2;                            /* push imm8 */
+    if (op == 0x68) return 5;                            /* push imm32 */
+    if (op >= 0xB8 && op <= 0xBF) return 5;              /* mov reg, imm32 */
+    if (op >= 0xA0 && op <= 0xA3) return 5;              /* mov AL/eAX <-> moffs32 (absolute) */
+    if (op == 0xE8 || op == 0xE9) { *is_rel32 = 1; return 5; }
+    if (op == 0xEB) return 2;
+    if (op == 0xC2) return 3;                            /* ret imm16 */
+    if (op == 0x83 || op == 0x80) return 1 + modrm_len(p + 1) + 1;
+    if (op == 0x81) return 1 + modrm_len(p + 1) + 4;
+    if (op == 0xC6) return 1 + modrm_len(p + 1) + 1;
+    if (op == 0xC7) return 1 + modrm_len(p + 1) + 4;
+    switch (op) {
+    case 0x00: case 0x01: case 0x02: case 0x03:
+    case 0x08: case 0x09: case 0x0A: case 0x0B:
+    case 0x20: case 0x21: case 0x22: case 0x23:
+    case 0x28: case 0x29: case 0x2A: case 0x2B:
+    case 0x30: case 0x31: case 0x32: case 0x33:
+    case 0x38: case 0x39: case 0x3A: case 0x3B:
+    case 0x84: case 0x85: case 0x88: case 0x89:
+    case 0x8A: case 0x8B: case 0x8D: case 0x8F:
+    case 0xFF:
+        return 1 + modrm_len(p + 1);
+    }
+    return 0;
+}
+
+#define MAX_REL 4
+static int steal_len(const BYTE *p, int *relofs, int *nrel) {
+    int total = 0;
+    *nrel = 0;
+    while (total < 5) {
+        int r, l = insn_len(p + total, &r);
+        if (!l || total + l > 24) return 0;
+        if (r && *nrel < MAX_REL) relofs[(*nrel)++] = total;
+        total += l;
+    }
+    return total;
+}
+
+#define MAX_FNLOG 8                      /* [SLIDER] only ever the one heartbeat entry */
+
+typedef struct {
+    DWORD  va;
+    char   name[64];
+    BYTE  *target;
+    BYTE  *tramp;
+    volatile LONG hits;
+    int    logret;
+} FNLOG;
+
+static FNLOG g_fn[MAX_FNLOG];
+static int   g_nfn;
+static BYTE *g_codepool;
+static DWORD g_codeused;
+
+static BYTE *pool_alloc(DWORD n) {
+    BYTE *p;
+    if (!g_codepool) {
+        g_codepool = (BYTE *)VirtualAlloc(NULL, 64 * 1024, MEM_COMMIT | MEM_RESERVE,
+                                          PAGE_EXECUTE_READWRITE);
+        g_codeused = 0;
+        if (!g_codepool) return NULL;
+    }
+    if (g_codeused + n > 64 * 1024) return NULL;
+    p = g_codepool + g_codeused;
+    g_codeused += (n + 15) & ~15u;
+    return p;
+}
+
+/* forward decl: the stub emitted below jmps here by address */
+static void __stdcall fnlog_enter(int idx, DWORD *f);
+
+static int fnlog_install_one(FNLOG *e, int idx) {
+    BYTE *t = e->target;
+    int relofs[MAX_REL], nrel = 0, k;
+    int len = steal_len(t, relofs, &nrel);
+    BYTE *tr, *stub;
+    DWORD old;
+
+    if (!len) {
+        logf("FN  %-34s @0x%08lX  UNDECODABLE prologue %02X %02X %02X %02X %02X - skipped",
+             e->name, (DWORD)t, t[0], t[1], t[2], t[3], t[4]);
+        return 0;
+    }
+    tr   = pool_alloc(len + 5);
+    stub = pool_alloc(24);
+    if (!tr || !stub) { logf("FN  code pool exhausted"); return 0; }
+
+    memcpy(tr, t, len);
+    /* Relocate any rel32 that moved with the stolen bytes. */
+    for (k = 0; k < nrel; k++) {
+        int o = relofs[k];
+        DWORD abs_target = (DWORD)(t + o + 5) + *(DWORD *)(t + o + 1);
+        *(DWORD *)(tr + o + 1) = abs_target - (DWORD)(tr + o + 5);
+        logf("FN  %s: relocated rel32 at +%d -> 0x%08lX", e->name, o, abs_target);
+    }
+    tr[len] = 0xE9;
+    *(DWORD *)(tr + len + 1) = (DWORD)(t + len) - (DWORD)(tr + len + 5);
+
+    stub[0] = 0x60; stub[1] = 0x9C; stub[2] = 0x8B; stub[3] = 0xC4; stub[4] = 0x50;
+    stub[5] = 0x68; *(DWORD *)(stub + 6) = (DWORD)idx;
+    stub[10] = 0xE8; *(DWORD *)(stub + 11) = (DWORD)fnlog_enter - (DWORD)(stub + 15);
+    stub[15] = 0x9D; stub[16] = 0x61;
+    stub[17] = 0xE9; *(DWORD *)(stub + 18) = (DWORD)tr - (DWORD)(stub + 22);
+
+    if (!VirtualProtect(t, (SIZE_T)len, PAGE_EXECUTE_READWRITE, &old)) {
+        logf("FN  %s: VirtualProtect failed (%lu)", e->name, GetLastError());
+        return 0;
+    }
+    t[0] = 0xE9;
+    *(DWORD *)(t + 1) = (DWORD)stub - (DWORD)(t + 5);
+    { int j; for (j = 5; j < len; j++) t[j] = 0x90; }
+    VirtualProtect(t, (SIZE_T)len, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), t, (SIZE_T)len);
+
+    e->tramp = tr;
+    return 1;
+}
+
+/* ==================================================================== [RESIZE] the mod itself */
+
+/* SIMSPR RVAs. All resolved against the LIVE base at call time. */
+#define RVA_BRIDGE_INIT   0x16eba   /* FUN_10016eba: ECX = the occupant bridge (thiscall) */
+#define RVA_BRIDGE_FILL   0x18cdf   /* FUN_10018cdf: whole-map tile-cache refill + repaint */
+#define RVA_GRIDDIMS      0x59fb    /* FUN_100059fb: dimension table (cdecl, 5 args) */
+#define RVA_DIRTYGRID     0xe2c0    /* FUN_1000e2c0: realloc dirty grid, recompute cell sizes */
+#define RVA_GRIDB         0xee29    /* FUN_1000ee29: size + zero grid B */
+#define RVA_REREGISTER    0xfa36    /* FUN_1000fa36: re-register drawables from iso+0x3a4 */
+#define RVA_LIST_ERASE    0x1084b   /* FUN_1001084b: __thiscall(list, first, last) - erase */
+#define RVA_LIST_PUSH     0x10586   /* FUN_10010586: __thiscall(list, &rect) - push_back */
+#define RVA_ISO_VT        0x6250c   /* the iso view's vtable, for the identity gate */
+/* GZGraphicD RVAs. */
+#define GZ_RVA_RASTER_CREATE 0x9efb  /* FUN_10009efb, vtable slot +0x0c on both raster classes */
+#define GZ_RVA_VT_RASTER     0x1E894 /* raster class vtable */
+#define GZ_RVA_VT_BLITDEST   0x1F328 /* blit-dest subclass (iso+0x4ec) */
+#define GZ_RVA_HEARTBEAT     0x18c58 /* per-frame, game thread, mid-paint - the poll site */
+
+/* DEFECT 3 FIX (2026-08-28). The validation run MEASURED the costing's open [UNCERTAIN]: the tuple
+ * read back from a raster's own fields gave p3 = 7 where the harness's RECORDED create tuple for the
+ * same object was p3 = 4. So field read-back does NOT reproduce the create arguments, and the
+ * costing's "no recording hook needed" conclusion is WRONG. We now record real tuples by hooking
+ * FUN_10009efb, exactly as the harness does, and only fall back to field read-back when an object
+ * has no recorded create - logging loudly which path was taken. */
+#define MAX_RC 256
+static struct { DWORD obj; DWORD a[8]; } g_rc[MAX_RC];
+static volatile LONG g_nrc;
+static volatile LONG g_rc_full;
+
+static void *g_bridge;                 /* captured at FUN_10016eba; iso = bridge+0x18 */
+static volatile LONG g_rz_step;        /* breadcrumb: which of the 9 steps is executing, for the
+                                          SEH fault catcher (2026-08-28 crash hunt) */
+static int   g_minzoom;                /* SC3RESIZE_MINZOOM: force zoom 0 before resizing (worst case) */
+static DWORD g_bridge_ms;              /* GetTickCount when the bridge was first captured */
+static DWORD g_ready_ms = 3000;        /* load-readiness gate: ignore resizes for this long after
+                                          bridge capture (SC3RESIZE_READYMS overrides). The v3 crash
+                                          (non-reproducing) fired ~5s after capture during load; this
+                                          is preventive hygiene - do not touch the view mid-init. */
+static int   g_defer_logged;
+static int   g_census;                 /* SC3RESIZE_CENSUS: census the resized frame content */
+static DWORD g_census_ms;              /* when to run the post-resize census (0 = not scheduled) */
+
+/* Census one raster's backing RAW (never call vf1c - the standing rule: reading sub+0xf0/f4 out of
+ * band via the lock tears the backing down). Reports total non-zero %, the content bounding box, and
+ * crucially the non-zero count in the AREA BEYOND the old 800x600 - which is what distinguishes a
+ * full-window frame from one clipped to the top-left. 16bpp (fix16). */
+static void rz_census_one(DWORD R, const char *name) {
+    DWORD sub, bits, pitch, w, h, bpp;
+    long total = 0, nz = 0, beyond = 0;
+    int minr = 1 << 30, maxr = -1, minc = 1 << 30, maxc = -1, r, c;
+    if (!R || IsBadReadPtr((void *)R, 0x2c)) { logf("CENSUS> %s: R unreadable", name); return; }
+    w = ((DWORD *)R)[0x24 / 4]; h = ((DWORD *)R)[0x28 / 4]; bpp = ((DWORD *)R)[0x10 / 4];
+    sub = ((DWORD *)R)[0x44 / 4];
+    if (!sub || IsBadReadPtr((void *)sub, 0xf8)) { logf("CENSUS> %s: sub unreadable", name); return; }
+    bits = ((DWORD *)sub)[0xf0 / 4]; pitch = ((DWORD *)sub)[0xf4 / 4];
+    if (!bits || !pitch || w == 0 || h == 0 || IsBadReadPtr((void *)bits, pitch * h)) {
+        logf("CENSUS> %s: no readable backing (bits=0x%08lX pitch=%lu %lux%lu bpp=%lu)",
+             name, bits, pitch, w, h, bpp);
+        return;
+    }
+    for (r = 0; r < (int)h; r++) {
+        BYTE *row = (BYTE *)bits + (DWORD)r * pitch;
+        for (c = 0; c < (int)w; c++) {
+            WORD px = *(WORD *)(row + c * 2);   /* 16bpp */
+            total++;
+            if (px) {
+                nz++;
+                if (r < minr) minr = r; if (r > maxr) maxr = r;
+                if (c < minc) minc = c; if (c > maxc) maxc = c;
+                if (c >= 800 || r >= 600) beyond++;   /* content in the NEW area */
+            }
+        }
+    }
+    logf("CENSUS> %s: %lux%lu bpp=%lu pitch=%lu | non-zero %ld/%ld (%.1f%%) | bbox r%d..%d c%d..%d "
+         "(%dx%d) | beyond-800x600 non-zero=%ld  << %s", name, w, h, bpp, pitch, nz, total,
+         total ? 100.0 * nz / total : 0.0, minr, maxr, minc, maxc,
+         maxc >= minc ? maxc - minc + 1 : 0, maxr >= minr ? maxr - minr + 1 : 0, beyond,
+         beyond > 0 ? "FILLS BEYOND THE OLD EXTENT (not clipped to 800x600)"
+                    : "NO content beyond 800x600 (clipped, or a small zoomed-out scene)");
+}
+static void rz_census(void) {
+    void *iso;
+    if (!g_bridge || IsBadReadPtr(g_bridge, 0x1c)) return;
+    iso = (void *)((DWORD *)g_bridge)[0x18 / 4];
+    if (!iso || IsBadReadPtr(iso, 0x4f0)) { logf("CENSUS> iso unreadable"); return; }
+    logf("CENSUS> ---- post-resize content census (RAW, no vf1c) ----");
+    rz_census_one(((DWORD *)iso)[0x74 / 4],  "render-target iso+0x74");
+    rz_census_one(((DWORD *)iso)[0x4ec / 4], "blit-dest   iso+0x4ec");
+}
+static int   g_zoomed;                 /* min-zoom applied once */
+static DWORD g_exc_code, g_exc_addr;   /* captured by the SEH filter */
+static DWORD g_exc_eax, g_exc_ecx, g_exc_edx, g_exc_ebx, g_exc_esi, g_exc_edi;  /* fault-time regs */
+
+/* Resolve a code address to "MODULE+0xRVA" so a caught fault names its function. */
+static void rz_modstr(DWORD addr, char *out, int n) {
+    static const char *mods[] = { "SIMSPR.DLL", "GZGraphicD.dll", "SIMCITY.DLL", "SIMUI.DLL",
+                                  "GZWIN.DLL", "SC3U.exe", 0 };
+    int i;
+    for (i = 0; mods[i]; i++) {
+        DWORD h = (DWORD)GetModuleHandleA(mods[i]), e, size;
+        if (!h || IsBadReadPtr((void *)h, 0x40)) continue;
+        e = *(DWORD *)(h + 0x3c);                       /* e_lfanew */
+        if (IsBadReadPtr((void *)(h + e + 0x50), 4)) continue;
+        size = *(DWORD *)(h + e + 0x50);                /* OptionalHeader.SizeOfImage (PE32) */
+        if (addr >= h && addr < h + size) {
+            _snprintf(out, n, "%s+0x%lX (base 0x%08lX)", mods[i], addr - h, h);
+            return;
+        }
+    }
+    _snprintf(out, n, "0x%08lX (no known module)", addr);
+}
+static int rz_filter(EXCEPTION_POINTERS *ep) {
+    g_exc_code = ep->ExceptionRecord->ExceptionCode;
+    g_exc_addr = (DWORD)ep->ExceptionRecord->ExceptionAddress;
+    g_exc_eax = ep->ContextRecord->Eax; g_exc_ecx = ep->ContextRecord->Ecx;
+    g_exc_edx = ep->ContextRecord->Edx; g_exc_ebx = ep->ContextRecord->Ebx;
+    g_exc_esi = ep->ContextRecord->Esi; g_exc_edi = ep->ContextRecord->Edi;
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
+/* Fault-time diagnosis for the FUN_1000cedb+0x12a AV (dangling grid-B node). At +0x12a =
+ * `cmp [eax],edx`: EAX is the node the walk faulted on, EDI is (near) the bucket slot address. This
+ * decides OOB-bucket-index vs freed-node by comparing EDI to the 8x8 grid array range, and scans all
+ * 64 buckets to find and count bad node pointers. Called only from the __except handler. */
+static void rz_fault_diag(void *iso) {
+    DWORD gbase, dimW, dimH, stride, i, badbuckets = 0, badnodes = 0, totnodes = 0;
+    char who[128];
+    rz_modstr(g_exc_addr, who, sizeof(who));
+    logf("RZ   FAULT regs: eip=%s code=0x%08lX | eax=0x%08lX ecx=0x%08lX edx=0x%08lX "
+         "ebx=0x%08lX esi=0x%08lX edi=0x%08lX", who, g_exc_code,
+         g_exc_eax, g_exc_ecx, g_exc_edx, g_exc_ebx, g_exc_esi, g_exc_edi);
+    logf("RZ   FAULT eax (the node cmp'd) readable=%d", !IsBadReadPtr((void *)g_exc_eax, 8));
+    if (!iso || IsBadReadPtr(iso, 0x3a0)) { logf("RZ   FAULT: iso unreadable for grid dump"); return; }
+    gbase  = ((DWORD *)iso)[0x380 / 4];
+    dimW   = ((DWORD *)iso)[0x384 / 4];
+    dimH   = ((DWORD *)iso)[0x388 / 4];
+    stride = ((DWORD *)iso)[0x38c / 4];
+    logf("RZ   FAULT grid: base=0x%08lX dims=%lux%lu stride=%lu (64 buckets = base..base+0x100) | "
+         "edi in-grid=%d (edi-base=%ld, /4=%ld) | extent=(%ld,%ld,%ld,%ld) scale39c=%.6f 3a0=%.6f",
+         gbase, dimW, dimH, stride,
+         (gbase && g_exc_edi >= gbase && g_exc_edi < gbase + 0x100),
+         gbase ? (long)(g_exc_edi - gbase) : 0, gbase ? (long)((g_exc_edi - gbase) / 4) : 0,
+         (long)((DWORD *)iso)[0x54/4], (long)((DWORD *)iso)[0x58/4],
+         (long)((DWORD *)iso)[0x5c/4], (long)((DWORD *)iso)[0x60/4],
+         *(float *)((BYTE *)iso + 0x39c), *(float *)((BYTE *)iso + 0x3a0));
+    if (gbase && !IsBadReadPtr((void *)gbase, 64 * 4)) {
+        for (i = 0; i < 64; i++) {
+            DWORD node = ((DWORD *)gbase)[i]; int g = 0;
+            if (node && IsBadReadPtr((void *)node, 8)) { badbuckets++;
+                logf("RZ   FAULT bucket[%lu] head=0x%08lX is UNREADABLE (dangling head)", i, node); }
+            while (node && !IsBadReadPtr((void *)node, 8) && g < 20000) {
+                totnodes++; g++;
+                { DWORD nx = ((DWORD *)node)[1];
+                  if (nx && IsBadReadPtr((void *)nx, 8)) { badnodes++;
+                      logf("RZ   FAULT bucket[%lu] node 0x%08lX ->next 0x%08lX UNREADABLE (dangling "
+                           "next)", i, node, nx); }
+                  node = nx; }
+            }
+        }
+        logf("RZ   FAULT grid scan: %lu total nodes, %lu dangling heads, %lu dangling next-ptrs "
+             "(matches eax=0x%08lX?)", totnodes, badbuckets, badnodes, g_exc_eax);
+    }
+}
+static volatile LONG g_busy;           /* re-entrancy guard for the per-frame poll */
+static int   g_wm_fixed;               /* the window has been subclassed */
+static WNDPROC g_oldproc;
+static HWND  g_hwnd;
+
+/* Indirect __thiscall with n stack args. ESP is saved and restored around the call, so a wrong
+ * argument count shows up as a bad return value rather than as a crash three frames later.
+ * VERBATIM from sc3probe.c rz_thiscall. Also used for the one cdecl callee (FUN_100059fb),
+ * which simply ignores ECX - the esp restore makes that safe. */
+static int rz_thiscall(void *self, void *fn, const DWORD *a, int n) {
+    int rv = 0;
+    __asm {
+        push ebx
+        push esi
+        push edi
+        mov  ebx, esp
+        mov  edi, a
+        mov  ecx, n
+        test ecx, ecx
+        jz   rz_ready
+    rz_push:
+        mov  eax, [edi + ecx*4 - 4]
+        push eax
+        dec  ecx
+        jnz  rz_push
+    rz_ready:
+        mov  ecx, self
+        call [fn]
+        mov  esp, ebx
+        movzx eax, al
+        mov  rv, eax
+        pop  edi
+        pop  esi
+        pop  ebx
+    }
+    return rv;
+}
+
+/* Replay FUN_10009efb at a new size on one raster-class object.
+ * The ORIGINAL 8-arg tuple matters: a 2-arg call writes stack garbage into the raster. The
+ * tuple is recovered from the object's OWN fields, which is sound because FUN_10009efb writes
+ * p3..p8 to +0x0c/+0x10/+0x14/+0x18/+0x3c/+0x40 [CONFIRMED @ 0x10009efb] and nothing
+ * downstream overwrites them: vt+0x1dc (FUN_1001420d) writes only this+0x44, and vt+0x1e0
+ * (FUN_100142a2) writes none of them [CONFIRMED @ 0x1001420d, 0x100142a2].
+ * The +0x08 surfaces-created guard must be cleared first or FUN_10009efb refuses. */
+static int rz_recreate_raster(DWORD obj, const char *name, DWORD w, DWORD ht, HMODULE gz) {
+    DWORD *vt, ca[8];
+    DWORD want_r = (DWORD)gz + GZ_RVA_VT_RASTER, want_b = (DWORD)gz + GZ_RVA_VT_BLITDEST;
+    int rc;
+
+    if (!obj || IsBadReadPtr((void *)obj, 0x44)) {
+        logf("RZ   REFUSE %s: 0x%08lX unreadable", name, obj);
+        return 0;
+    }
+    vt = *(DWORD **)obj;
+    if (IsBadReadPtr(vt, 0x1e0)) { logf("RZ   REFUSE %s: vtable unreadable", name); return 0; }
+    if ((DWORD)vt != want_r && (DWORD)vt != want_b) {
+        logf("RZ   REFUSE %s 0x%08lX: vtable 0x%08lX is neither GZGraphicD+0x1E894 (0x%08lX) "
+             "nor +0x1F328 (0x%08lX) - not the class we think, refusing to call it",
+             name, obj, (DWORD)vt, want_r, want_b);
+        return 0;
+    }
+    if (vt[0x0c / 4] != (DWORD)gz + GZ_RVA_RASTER_CREATE) {
+        logf("RZ   REFUSE %s 0x%08lX: vt+0x0c = 0x%08lX != FUN_10009efb (0x%08lX)",
+             name, obj, vt[0x0c / 4], (DWORD)gz + GZ_RVA_RASTER_CREATE);
+        return 0;
+    }
+    {   /* Prefer the RECORDED create tuple; fall back to field read-back and say so. */
+        int i, found = -1;
+        for (i = 0; i < (int)g_nrc && i < MAX_RC; i++)
+            if (g_rc[i].obj == obj) { found = i; break; }
+        if (found >= 0) {
+            for (i = 0; i < 8; i++) ca[i] = g_rc[found].a[i];
+            logf("RZ   %s 0x%08lX tuple from its RECORDED create "
+                 "[%lu %lu %lu %lu %lu %lu %lu %lu]", name, obj,
+                 ca[0], ca[1], ca[2], ca[3], ca[4], ca[5], ca[6], ca[7]);
+        } else {
+            ca[2] = ((DWORD *)obj)[0x0c / 4];
+            ca[3] = ((DWORD *)obj)[0x10 / 4];
+            ca[4] = ((DWORD *)obj)[0x14 / 4];
+            ca[5] = ((DWORD *)obj)[0x18 / 4];
+            ca[6] = ((DWORD *)obj)[0x3c / 4];
+            ca[7] = (DWORD)*((BYTE *)obj + 0x40);
+            logf("RZ   %s 0x%08lX NO RECORDED CREATE (%ld known%s) - FALLING BACK to field "
+                 "read-back [_ _ %lu %lu %lu %lu %lu %lu]. Field read-back is NOT proven "
+                 "equivalent: p3 measured 7 vs a recorded 4 on 2026-08-28.",
+                 name, obj, g_nrc, g_rc_full ? ", TABLE FULL - miss unreliable" : "",
+                 ca[2], ca[3], ca[4], ca[5], ca[6], ca[7]);
+        }
+        ca[0] = w;
+        ca[1] = ht;
+        logf("RZ   %s replay at %lux%lu", name, w, ht);
+    }
+    *((BYTE *)obj + 8) = 0;
+    rc = rz_thiscall((void *)obj, (void *)vt[0x0c / 4], ca, 8);
+    logf("RZ   %s FUN_10009efb -> %d | now +0x24=%lu +0x28=%lu",
+         name, rc, ((DWORD *)obj)[0x24 / 4], ((DWORD *)obj)[0x28 / 4]);
+    return 1;
+}
+
+/* The routine. Runs on the game thread from the per-frame heartbeat. */
+static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
+    HMODULE ss = GetModuleHandleA("SIMSPR.DLL"), gz = GetModuleHandleA("GZGraphicD.dll");
+    DWORD *v = (DWORD *)iso, *b = (DWORD *)g_bridge;
+    DWORD gw = 0, gh = 0, a5[5], a2[2], a3[3], fa[5];
+    DWORD R, B;
+
+    if (!ss || !gz) { logf("RZ   ABORT: SIMSPR/GZGraphicD not loaded"); return; }
+
+    /* CRASH HUNT (2026-08-28): force MIN zoom before resizing. The headroom census ran at zoom 3 and
+       found >7x margin at 2048x1081, contradicting the 16384-overflow story; min zoom (whole map
+       visible) is the untested worst case. vt+0x38 = setzoom = SIMSPR+0x6752 [from sc3probe]. */
+    if (g_minzoom && !g_zoomed) {
+        DWORD *vt = *(DWORD **)iso, setz;
+        if (!IsBadReadPtr(vt, 0x3c) && (setz = vt[0x38 / 4]) == (DWORD)ss + 0x6752) {
+            DWORD za[1]; za[0] = 0;
+            logf("RZ   MINZOOM: forcing zoom %lu -> 0 before resize", v[0x28 / 4]);
+            rz_thiscall(iso, (void *)setz, za, 1);
+            logf("RZ   MINZOOM: zoom now %lu", v[0x28 / 4]);
+        } else {
+            logf("RZ   MINZOOM: setzoom slot mismatch, NOT forcing (vt+0x38=0x%08lX want 0x%08lX)",
+                 IsBadReadPtr(vt, 0x3c) ? 0 : vt[0x38 / 4], (DWORD)ss + 0x6752);
+        }
+        g_zoomed = 1;
+    }
+
+    R = v[0x74 / 4];
+    B = v[0x4ec / 4];
+    logf("RZ   ---- resize to %lux%lu ---- iso=0x%08lX R=0x%08lX B=0x%08lX bridge=0x%08lX",
+         w, ht, (DWORD)iso, R, B, (DWORD)g_bridge);
+
+    /* 1. extent. WORLD space, moving origin: right/bottom are left/top PLUS the size. */
+    logf("RZ   extent BEFORE: (%ld,%ld,%ld,%ld) -> %ldx%ld  dirtygrid=%lux%lu cell=%ldx%ld",
+         (LONG)v[0x54 / 4], (LONG)v[0x58 / 4], (LONG)v[0x5c / 4], (LONG)v[0x60 / 4],
+         (LONG)v[0x5c / 4] - (LONG)v[0x54 / 4], (LONG)v[0x60 / 4] - (LONG)v[0x58 / 4],
+         v[0x364 / 4], v[0x368 / 4], (LONG)v[0x374 / 4], (LONG)v[0x378 / 4]);
+    g_rz_step = 1;
+    v[0x5c / 4] = v[0x54 / 4] + w;
+    v[0x60 / 4] = v[0x58 / 4] + ht;
+    v[0x64 / 4] = v[0x54 / 4];
+    v[0x68 / 4] = v[0x58 / 4];
+    v[0x6c / 4] = v[0x5c / 4];
+    v[0x70 / 4] = v[0x60 / 4];
+
+    /* 2. the game's own dirty-grid dimension table (mode 0 = resolution-dependent). */
+    g_rz_step = 2;
+    a5[0] = w; a5[1] = ht; a5[2] = (DWORD)&gw; a5[3] = (DWORD)&gh; a5[4] = 0;
+    rz_thiscall(NULL, (void *)((DWORD)ss + RVA_GRIDDIMS), a5, 5);
+    if (gw == 0 || gh == 0) {
+        logf("RZ   REFUSE: FUN_100059fb returned %lux%lu - refusing to call FUN_1000e2c0 with a "
+             "zero dimension (it would new[] a 0-byte grid)", gw, gh);
+        return;
+    }
+
+    /* 3. dirty grid. 4. grid B - Init's very next step; omitting it HANGS FUN_10018cdf. */
+    g_rz_step = 3;
+    a2[0] = gw; a2[1] = gh;
+    rz_thiscall(iso, (void *)((DWORD)ss + RVA_DIRTYGRID), a2, 2);
+    g_rz_step = 4;
+    a3[0] = 8; a3[1] = 8; a3[2] = 0;
+    rz_thiscall(iso, (void *)((DWORD)ss + RVA_GRIDB), a3, 3);
+    logf("RZ   extent AFTER: (%ld,%ld,%ld,%ld) -> %ldx%ld  dirtygrid=%lux%lu cell=%ldx%ld  %s",
+         (LONG)v[0x54 / 4], (LONG)v[0x58 / 4], (LONG)v[0x5c / 4], (LONG)v[0x60 / 4],
+         (LONG)v[0x5c / 4] - (LONG)v[0x54 / 4], (LONG)v[0x60 / 4] - (LONG)v[0x58 / 4],
+         v[0x364 / 4], v[0x368 / 4], (LONG)v[0x374 / 4], (LONG)v[0x378 / 4],
+         ((LONG)v[0x374 / 4] > 0 && (LONG)v[0x374 / 4] < 4096 &&
+          (LONG)v[0x378 / 4] > 0 && (LONG)v[0x378 / 4] < 4096)
+             ? "(cell sizes plausible)" : "<< CELL SIZES IMPLAUSIBLE - rect arithmetic is wrong");
+
+    /* 5-6. the two surfaces. */
+    g_rz_step = 5;
+    rz_recreate_raster(R, "render-target iso+0x74",  w, ht, gz);
+    g_rz_step = 6;
+    rz_recreate_raster(B, "device-surface iso+0x4ec", w, ht, gz);
+
+    /* 7. the render lever. */
+    g_rz_step = 7;
+    fa[0] = 0; fa[1] = b[0x78 / 4]; fa[2] = b[0xa8 / 4]; fa[3] = 0; fa[4] = 0;
+    logf("RZ   FUN_10018cdf -> %d",
+         rz_thiscall(g_bridge, (void *)((DWORD)ss + RVA_BRIDGE_FILL), fa, 5));
+
+    /* 8. re-register drawables, or the frame renders terrain only.
+       DEFECT 2 FIX: this step had NO log line, so the validation run carried no evidence it ran. */
+    a2[0] = 1;   /* recompute each object's world rect, as the scroll path does */
+    a2[1] = 0;   /* do not purge: step 4 already zeroed grid B */
+    g_rz_step = 8;
+    logf("RZ   [step 8] FUN_1000fa36(iso, recompute=1, purge=0) - re-register drawables from "
+         "iso+0x3a4");
+    rz_thiscall(iso, (void *)((DWORD)ss + RVA_REREGISTER), a2, 2);
+    logf("RZ   [step 8] FUN_1000fa36 returned");
+
+    /* 9. THE PRESENT RECT - DEFECT 1 FIX (2026-08-28), and my error was in the design, not the code.
+       I documented step 9 as "already ships as resize_rectfix". It does NOT: that cave hooks INIT
+       (BOARD.md:668, "resize_rectfix is inert unless the iso Init runs") and this routine never
+       calls Init - they are mutually exclusive. The validation run presented a correctly-rendered
+       1280x1024 target through a stale {0,0,800,600} rect, clipped top-left.
+
+       So push it here. Init's own order is erase-then-push:
+         FUN_1001084b(iso+0x4d0, *(iso+0x4d0), *(iso+0x4d4))   erase(begin, end)
+         FUN_10010586(iso+0x4d0, &rect)                        push_back
+       The erase matters MORE for us than for the cave: iso+0x4d0 is append-only with Init and the
+       dtor as its only emptiers, so without it every resize would append another rect.
+       !! rect is {0,0,w,h} in SCREEN space. Do NOT push iso+0x5c/0x60 the way the cave does - those
+       are the WORLD-space right/bottom here (measured 745, 2970), correct only at Init time. */
+    {
+        DWORD list = (DWORD)iso + 0x4d0;
+        g_rz_step = 9;
+        DWORD ea[2], pa[1];
+        LONG rect[4];
+        ea[0] = *(DWORD *)list;
+        ea[1] = *(DWORD *)(list + 4);
+        logf("RZ   [step 9] present list iso+0x4d0: begin=0x%08lX end=0x%08lX (%ld rect(s)) - "
+             "erase then push {0,0,%lu,%lu}", ea[0], ea[1],
+             ea[0] ? (LONG)((ea[1] - ea[0]) / 16) : 0L, w, ht);
+        rz_thiscall((void *)list, (void *)((DWORD)ss + RVA_LIST_ERASE), ea, 2);
+        rect[0] = 0; rect[1] = 0; rect[2] = (LONG)w; rect[3] = (LONG)ht;
+        pa[0] = (DWORD)&rect[0];
+        rz_thiscall((void *)list, (void *)((DWORD)ss + RVA_LIST_PUSH), pa, 1);
+        logf("RZ   [step 9] after: begin=0x%08lX end=0x%08lX (%ld rect(s))",
+             *(DWORD *)list, *(DWORD *)(list + 4),
+             *(DWORD *)list ? (LONG)((*(DWORD *)(list + 4) - *(DWORD *)list) / 16) : 0L);
+    }
+    logf("RZ   ---- done (all 9 steps) ----");
+    if (g_census) g_census_ms = GetTickCount() + 2000;   /* census once, after frames have run */
+}
+
+/* The per-frame poll. Compares the live client size against the render target's size and only
+ * acts on a genuine mismatch - so a stray frame cannot churn the render target. */
+static void rz_poll(void) {
+    void *iso;
+    DWORD *v, R, w, ht;
+    RECT cr;
+
+    if (!g_bridge || IsBadReadPtr(g_bridge, 0xf4)) return;
+    iso = (void *)((DWORD *)g_bridge)[0x18 / 4];
+    if (!iso || IsBadReadPtr(iso, 0x4f0)) return;
+    if (!g_hwnd || !IsWindow(g_hwnd) || !GetClientRect(g_hwnd, &cr)) return;
+
+    w  = (DWORD)(cr.right - cr.left);
+    ht = (DWORD)(cr.bottom - cr.top);
+    if (w == 0 || ht == 0) return;
+
+    v = (DWORD *)iso;
+    R = v[0x74 / 4];
+    if (!R || IsBadReadPtr((void *)R, 0x2c)) return;
+    if (((DWORD *)R)[0x24 / 4] == w && ((DWORD *)R)[0x28 / 4] == ht) return;   /* nothing to do */
+
+    /* LOAD-READINESS GATE (2026-08-28, cheap hygiene). Do not touch the view until the renderer is
+       actually up: (a) >= g_ready_ms since bridge capture, AND (b) the render target holds a real
+       backing surface (sub = *(R+0x44); sub+0xf0 bits nonzero) - i.e. the game has drawn at least
+       one frame. Both cheap reads. Deferring is a no-op that retries on the next poll, so the resize
+       still lands once the city is ready. */
+    if (g_bridge_ms && GetTickCount() - g_bridge_ms < g_ready_ms) {
+        if (!g_defer_logged) {
+            logf("RZ   DEFER: resize to %lux%lu held - only %lu ms since bridge capture (< %lu). "
+                 "Will retry once the city is ready.", w, ht, GetTickCount() - g_bridge_ms, g_ready_ms);
+            g_defer_logged = 1;
+        }
+        return;
+    }
+    {   /* render target must have a real backing (one frame drawn) before we recreate it */
+        DWORD sub = ((DWORD *)R)[0x44 / 4];
+        if (!sub || IsBadReadPtr((void *)sub, 0xf8) || ((DWORD *)sub)[0xf0 / 4] == 0) {
+            if (!g_defer_logged) {
+                logf("RZ   DEFER: resize to %lux%lu held - render target has no backing yet "
+                     "(sub=0x%08lX) - renderer not up. Will retry.", w, ht, sub);
+                g_defer_logged = 1;
+            }
+            return;
+        }
+    }
+
+    if (InterlockedCompareExchange(&g_busy, 1, 0) != 0) return;                /* re-entrancy */
+    logf("RZ   size change: client %lux%lu vs render target %lux%lu", w, ht,
+         ((DWORD *)R)[0x24 / 4], ((DWORD *)R)[0x28 / 4]);
+    /* CRASH HUNT (2026-08-28): SEH around the routine so a fault becomes a DIAGNOSTIC (code +
+       address resolved to MODULE+RVA + which of the 9 steps was executing) instead of a silent
+       process death. This is how we catch WHERE the v3 crash actually is. */
+    g_rz_step = 0;
+    g_exc_code = 0;
+    __try {
+        rz_do_resize(iso, w, ht);
+    } __except (rz_filter(GetExceptionInformation())) {
+        char who[128];
+        rz_modstr(g_exc_addr, who, sizeof(who));
+        logf("RZ   *** FAULT CAUGHT *** code=0x%08lX at %s | executing STEP %ld when it faulted "
+             "(1=extent 2=griddims 3=dirtygrid 4=gridB 5=RT 6=devsurf 7=FUN_10018cdf 8=fa36 9=present)",
+             g_exc_code, who, g_rz_step);
+        rz_fault_diag(iso);
+    }
+    InterlockedExchange(&g_busy, 0);
+}
+
+/* Subclass the game window so a real WM_SIZE publishes the REAL client size.
+ * GZGraphicD's own handler republishes the window object's STORED size and nothing updates it
+ * on a stock resize, so without this the engine never learns the new size. Doing it here in C
+ * is why the separate GZGraphicD `wmsize_setrect` patch is optional under this mod. */
+static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
+    if (m == WM_SIZE && wp != SIZE_MINIMIZED) {
+        /* Let the game's handler run first, then poll on the next frame. The poll is what
+           does the work, on the render thread - never resize from the message thread. */
+        LRESULT r = CallWindowProcA(g_oldproc, h, m, wp, lp);
+        logf("RZ   WM_SIZE %lux%lu - poll will pick it up on the next frame",
+             (DWORD)LOWORD(lp), (DWORD)HIWORD(lp));
+        return r;
+    }
+    return CallWindowProcA(g_oldproc, h, m, wp, lp);
+}
+
+static BOOL CALLBACK rz_enum(HWND h, LPARAM p) {
+    DWORD pid = 0;
+    char cls[64];
+    GetWindowThreadProcessId(h, &pid);
+    if (pid != GetCurrentProcessId()) return TRUE;
+    if (!GetClassNameA(h, cls, sizeof(cls))) return TRUE;
+    if (!IsWindowVisible(h)) return TRUE;
+    *(HWND *)p = h;
+    return FALSE;
+}
+
+static void rz_subclass(void) {
+    HWND h = NULL;
+    EnumWindows(rz_enum, (LPARAM)&h);
+    if (!h) return;
+    g_hwnd = h;
+    g_oldproc = (WNDPROC)SetWindowLongA(h, GWL_WNDPROC, (LONG)rz_wndproc);
+    g_wm_fixed = 1;
+    logf("### RESIZE: window 0x%08lX subclassed (old proc 0x%08lX) - WM_SIZE observed, "
+         "resize performed on the render thread", (DWORD)h, (DWORD)g_oldproc);
+}
+
+/* Minimal replacement for the probe's multi-branch fnlog_enter. Same __stdcall(idx, f)
+ * contract the installed stub expects. idx 0 = the bridge capture, idx 1 = the heartbeat. */
+static void __stdcall fnlog_enter(int idx, DWORD *f) {
+    if (idx == 0) {
+        /* FUN_10016eba is __thiscall: ECX is the bridge.
+           Frame layout is the stub's `pushad; pushfd; mov eax,esp; push eax`, so from the
+           pointer: f[0]=eflags, f[1..8]=edi,esi,ebp,esp,ebx,edx,ecx,eax, f[9]=return address,
+           f[10..]=stack args. **f[7] = ECX** - taken from sc3probe.c:8650-8658, which documents
+           and uses exactly this layout, NOT re-derived here. */
+        DWORD ecx = f[7];
+        if (ecx && !IsBadReadPtr((void *)ecx, 0xf4) && g_bridge != (void *)ecx) {
+            g_bridge = (void *)ecx;
+            g_bridge_ms = GetTickCount();
+            g_defer_logged = 0;
+            logf("### RESIZE: bridge captured 0x%08lX (iso view = bridge+0x18 = 0x%08lX); "
+                 "readiness gate = %lu ms", ecx, ((DWORD *)ecx)[0x18 / 4], g_ready_ms);
+        }
+        return;
+    }
+    if (idx == 1) {
+        if (!g_wm_fixed) rz_subclass();
+        rz_poll();
+        if (g_census_ms && GetTickCount() >= g_census_ms) { g_census_ms = 0; rz_census(); }
+        return;
+    }
+    if (idx == 2) {
+        /* FUN_10009efb create: record the REAL 8-arg tuple per object, so a later replay uses the
+           create arguments rather than field read-back (which is measurably not the same thing).
+           Frame layout per sc3probe.c:8650-8658: f[7]=ecx (the raster), f[10..]=stack args. */
+        DWORD obj = f[7];
+        int i, n;
+        if (!obj) return;
+        n = (int)g_nrc;
+        for (i = 0; i < n && i < MAX_RC; i++) {
+            if (g_rc[i].obj == obj) {                    /* refresh in place */
+                int k; for (k = 0; k < 8; k++) g_rc[i].a[k] = f[10 + k];
+                return;
+            }
+        }
+        if (n >= MAX_RC) { InterlockedExchange(&g_rc_full, 1); return; }
+        g_rc[n].obj = obj;
+        for (i = 0; i < 8; i++) g_rc[n].a[i] = f[10 + i];
+        InterlockedIncrement(&g_nrc);
+    }
+}
+
+static int install_one(DWORD va, void *base, DWORD rva, const char *name, int idx) {
+    FNLOG *e;
+    if (g_nfn >= MAX_FNLOG) return 0;
+    e = &g_fn[g_nfn];
+    memset(e, 0, sizeof(*e));
+    e->va     = va;
+    e->target = (BYTE *)base + rva;
+    e->logret = 0;
+    lstrcpynA(e->name, name, sizeof(e->name));
+    if (!fnlog_install_one(e, idx)) {
+        logf("### RESIZE: FAILED to install %s", name);
+        return 0;
+    }
+    g_nfn++;
+    return 1;
+}
+
+/* DISPLAY-MODE CONTROL (2026-08-28). The routine was validated only under the harness's
+ * -windowed -fix16 patches, and the first two DLL runs launched in the game's DEFAULT mode - a
+ * confound the owner caught. Both patches are carved VERBATIM from sc3probe.c (patch_windowed,
+ * patch_surfacefmt) so the byte operations are not re-derived, resolved from the live GZGraphicD
+ * base. Applied at watcher start, before the fnlog hooks and before the city loads. */
+static void patch_windowed(HMODULE gz) {
+    BYTE *p = (BYTE *)gz + 0x6cdac;         /* the windowed flag Init reads */
+    BYTE *q = (BYTE *)gz + 0x117d6;         /* the fullscreen re-force store */
+    DWORD old;
+    if (VirtualProtect(p, 1, PAGE_READWRITE, &old)) {
+        BYTE before = *p; *p = 1; VirtualProtect(p, 1, old, &old);
+        logf("--- WINDOWED: GZGraphicD+0x6cdac = %u -> 1", before);
+    } else logf("--- WINDOWED: VirtualProtect failed at +0x6cdac (%lu)", GetLastError());
+    if (q[0] == 0xC6 && q[1] == 0x43 && q[2] == 0x48 && q[3] == 0x01) {
+        DWORD o2;
+        if (VirtualProtect(q, 4, PAGE_EXECUTE_READWRITE, &o2)) {
+            q[0] = q[1] = q[2] = q[3] = 0x90; VirtualProtect(q, 4, o2, &o2);
+            FlushInstructionCache(GetCurrentProcess(), q, 4);
+            logf("--- WINDOWED: GZGraphicD+0x117D6 'mov [ebx+0x48],1' -> nop x4");
+        }
+    } else {
+        logf("--- WINDOWED: 0x117D6 pattern mismatch (%02X %02X %02X %02X)", q[0], q[1], q[2], q[3]);
+    }
+}
+
+static void patch_surfacefmt(HMODULE gz) {
+    BYTE *site = (BYTE *)gz + 0x19349;
+    static const BYTE orig[10] = { 0xF6,0xDB, 0x1B,0xDB, 0x81,0xE3,0xC0,0x0F,0x00,0x00 };
+    BYTE *cave;
+    DWORD old;
+    int n = 0, jne_fixup, block_start;
+    if (memcmp(site, orig, sizeof(orig)) != 0) {
+        logf("--- FIX16: 0x19349 pattern mismatch (%02X %02X %02X %02X), NOT patched",
+             site[0], site[1], site[2], site[3]);
+        return;
+    }
+    cave = (BYTE *)VirtualAlloc(NULL, 256, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!cave) { logf("--- FIX16: VirtualAlloc failed (%lu)", GetLastError()); return; }
+    cave[n++] = 0x50;
+    cave[n++]=0x83;cave[n++]=0xBE;cave[n++]=0x10;cave[n++]=0;cave[n++]=0;cave[n++]=0;cave[n++]=0x07;
+    cave[n++] = 0x75; jne_fixup = n; cave[n++] = 0x00;
+    block_start = n;
+    #define MOV_D(off,imm) do{ cave[n++]=0xC7;cave[n++]=0x86; \
+        cave[n++]=(BYTE)(off);cave[n++]=(BYTE)((off)>>8);cave[n++]=0;cave[n++]=0; \
+        cave[n++]=(BYTE)(imm);cave[n++]=(BYTE)((imm)>>8);cave[n++]=(BYTE)((imm)>>16);cave[n++]=(BYTE)((imm)>>24);}while(0)
+    MOV_D(0x10, 0x1007);
+    MOV_D(0x54, 0x20);
+    cave[n++]=0x83;cave[n++]=0x8E;cave[n++]=0x58;cave[n++]=0;cave[n++]=0;cave[n++]=0;cave[n++]=0x40;
+    MOV_D(0x60, 0x10);
+    MOV_D(0x64, 0xF800);
+    MOV_D(0x68, 0x07E0);
+    MOV_D(0x6C, 0x001F);
+    #undef MOV_D
+    cave[jne_fixup] = (BYTE)(n - block_start);
+    cave[n++] = 0x58;
+    memcpy(cave + n, orig, sizeof(orig)); n += sizeof(orig);
+    cave[n++] = 0xE9;
+    { DWORD tgt = (DWORD)((BYTE *)gz + 0x19353);
+      DWORD rel = tgt - (DWORD)(cave + n + 4); memcpy(cave + n, &rel, 4); n += 4; }
+    FlushInstructionCache(GetCurrentProcess(), cave, n);
+    if (!VirtualProtect(site, 10, PAGE_EXECUTE_READWRITE, &old)) {
+        logf("--- FIX16: VirtualProtect failed (%lu)", GetLastError()); return;
+    }
+    site[0] = 0xE9;
+    { DWORD rel = (DWORD)cave - (DWORD)(site + 5); memcpy(site + 1, &rel, 4); }
+    site[5]=site[6]=site[7]=site[8]=site[9]=0x90;
+    VirtualProtect(site, 10, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), site, 10);
+    logf("--- FIX16: 16bpp branch injected at 0x19349 -> cave 0x%08lX (5-6-5)", (DWORD)cave);
+}
+
+/* FIX A (2026-08-28): clamp the grid-B bucket index in FUN_1000cedb.
+ * Root cause (verify/resize_rootcause): the far-edge cell maps to bucket index == grid dim (8 on the
+ * 8x8 grid), one past the 64-bucket array; `lea edi,[base+index*4]` then reads OOB and the walk
+ * dereferences a garbage "node" -> AV (heap-layout-dependent, hence intermittent). This cave replays
+ * the index computation with row clamped to [esi+0x388]-1 (gh-1) and col to [esi+0x384]-1 (gw-1).
+ * SIMSPR-internal, so the two rel32s are constant regardless of load base - written in memory (the mod
+ * patches nothing on disk). Fail-closed: verified against the shipped bytes before writing.
+ * ⚠️ SCOPE: fixes FUN_1000cedb ONLY. FUN_1000d0f5 / FUN_1000be25 / FUN_1000ef50 share the same latent
+ * OOB index math; if one of them faults on a later run, it needs the same clamp (or fix B). */
+/* Each entry clamps one function's grid-B bucket index. All four inline the same OOB index math and
+ * share no helper, so each needs its own cave (verify/resize_fix_a). The caves are SIMSPR-internal
+ * (hook rel32 + one jmp-back rel32, both constant regardless of load base). Cave bytes assembled +
+ * capstone-verified; each ends `jmp <back>` with the rel pre-baked for the shipped layout, so the
+ * recipe is anchored implicitly - a mismatched hook byte aborts that entry (fail-closed). */
+typedef struct { DWORD hook, cave, stolen; const BYTE *bytes; DWORD nbytes;
+                 BYTE expect[5]; const char *name; } CLAMP;
+static const BYTE CLAMP_CEDB[] = { /* 59, jmp 0x1000cfc3 */
+ 0x8b,0x45,0xfc,0x8b,0x8e,0x88,0x03,0x00,0x00,0x49,0x3b,0xc1,0x7e,0x02,0x8b,0xc1,0x8b,0x8e,0x8c,0x03,
+ 0x00,0x00,0xd3,0xe0,0x52,0x8b,0x55,0x0c,0x8b,0x8e,0x84,0x03,0x00,0x00,0x49,0x3b,0xd1,0x7e,0x02,0x8b,
+ 0xd1,0x03,0xc2,0x5a,0x8b,0x8e,0x80,0x03,0x00,0x00,0x80,0x7d,0x10,0x00,0xe9,0xa8,0xba,0xfa,0xff };
+static const BYTE CLAMP_D0F5[] = { /* 52, jmp 0x1000d292 */
+ 0x8b,0x8e,0x88,0x03,0x00,0x00,0x49,0x3b,0xc1,0x7e,0x02,0x8b,0xc1,0x8b,0x8e,0x8c,0x03,0x00,0x00,0xd3,
+ 0xe0,0x52,0x8b,0x55,0xe4,0x8b,0x8e,0x84,0x03,0x00,0x00,0x49,0x3b,0xd1,0x7e,0x02,0x8b,0xd1,0x03,0xc2,
+ 0x5a,0x8b,0x8e,0x80,0x03,0x00,0x00,0xe9,0x3e,0xbd,0xfa,0xff };
+static const BYTE CLAMP_BE25[] = { /* 55, jmp 0x1000c426 */
+ 0x8b,0x45,0xec,0x8b,0x8e,0x88,0x03,0x00,0x00,0x49,0x3b,0xc1,0x7e,0x02,0x8b,0xc1,0x8b,0x8e,0x8c,0x03,
+ 0x00,0x00,0xd3,0xe0,0x52,0x8b,0x55,0xe8,0x8b,0x8e,0x84,0x03,0x00,0x00,0x49,0x3b,0xd1,0x7e,0x02,0x8b,
+ 0xd1,0x03,0xc2,0x5a,0x8b,0x8e,0x80,0x03,0x00,0x00,0xe9,0x8f,0xae,0xfa,0xff };
+static const CLAMP g_clamps[] = {
+ { 0xcfab, 0x614e0, 24, CLAMP_CEDB, sizeof(CLAMP_CEDB), {0x8b,0x45,0xfc,0x8b,0x8e}, "FUN_1000cedb" },
+ { 0xd281, 0x61520, 17, CLAMP_D0F5, sizeof(CLAMP_D0F5), {0x8b,0x8e,0x8c,0x03,0x00}, "FUN_1000d0f5" },
+ { 0xc412, 0x61560, 20, CLAMP_BE25, sizeof(CLAMP_BE25), {0x8b,0x45,0xec,0x8b,0x8e}, "FUN_1000be25" },
+};
+
+static void patch_gridb_clamp(HMODULE ss) {
+    int k;
+    for (k = 0; k < (int)(sizeof(g_clamps) / sizeof(g_clamps[0])); k++) {
+        const CLAMP *c = &g_clamps[k];
+        BYTE *hook = (BYTE *)ss + c->hook, *cave = (BYTE *)ss + c->cave;
+        DWORD old, rel; DWORD i; int slackok = 1;
+        /* the hook's first 5 stolen bytes == the cave's first 5 (the cave re-executes them) */
+        if (IsBadReadPtr(hook, c->stolen) || memcmp(hook, c->expect, 5) != 0) {
+            logf("--- GRIDB_CLAMP %s: hook 0x%X mismatch (%02X %02X %02X %02X %02X) - NOT patching",
+                 c->name, c->hook, hook[0], hook[1], hook[2], hook[3], hook[4]);
+            continue;
+        }
+        for (i = 0; i < c->nbytes; i++) if (cave[i] != 0) { slackok = 0; break; }
+        if (!slackok) {
+            logf("--- GRIDB_CLAMP %s: slack 0x%X not zero at +%lu - NOT patching", c->name, c->cave, i);
+            continue;
+        }
+        if (!VirtualProtect(cave, c->nbytes, PAGE_EXECUTE_READWRITE, &old)) {
+            logf("--- GRIDB_CLAMP %s: VP(cave) failed %lu", c->name, GetLastError()); continue; }
+        memcpy(cave, c->bytes, c->nbytes);
+        VirtualProtect(cave, c->nbytes, old, &old);
+        FlushInstructionCache(GetCurrentProcess(), cave, c->nbytes);
+        if (!VirtualProtect(hook, c->stolen, PAGE_EXECUTE_READWRITE, &old)) {
+            logf("--- GRIDB_CLAMP %s: VP(hook) failed %lu", c->name, GetLastError()); continue; }
+        rel = c->cave - (c->hook + 5);
+        hook[0] = 0xe9; memcpy(hook + 1, &rel, 4);
+        for (i = 5; i < c->stolen; i++) hook[i] = 0x90;
+        VirtualProtect(hook, c->stolen, old, &old);
+        FlushInstructionCache(GetCurrentProcess(), hook, c->stolen);
+        logf("--- GRIDB_CLAMP %s: index clamped (hook 0x%X -> cave 0x%X, base 0x%08lX)",
+             c->name, c->hook, c->cave, (DWORD)ss);
+    }
+    logf("--- GRIDB_CLAMP: all grid-B walkers clamped (OOB bucket-index AV fixed engine-wide)");
+}
+
+static DWORD WINAPI rz_watcher(LPVOID param) {
+    HMODULE ss = NULL, gz = NULL;
+    int tries = 0;
+    (void)param;
+    /* Both modules load after DllMain, so wait for them rather than assuming. */
+    while (tries++ < 600 && (!ss || !gz)) {
+        ss = GetModuleHandleA("SIMSPR.DLL");
+        gz = GetModuleHandleA("GZGraphicD.dll");
+        if (ss && gz) break;
+        Sleep(100);
+    }
+    if (!ss || !gz) {
+        logf("### RESIZE: SIMSPR/GZGraphicD never loaded after %d tries - mod inactive", tries);
+        return 0;
+    }
+    logf("### RESIZE: SIMSPR base 0x%08lX (relocated: %s)  GZGraphicD base 0x%08lX (%s)",
+         (DWORD)ss, (DWORD)ss == 0x10000000 ? "NO" : "YES",
+         (DWORD)gz, (DWORD)gz == 0x10000000 ? "NO" : "YES");
+
+    /* idx 0 must be the bridge capture: without it there is no iso view and no lever. */
+    /* Display-mode control FIRST, before any hook and before the surfaces/city are created -
+       replicates the -windowed and -fix16 the routine was validated under. */
+    patch_windowed(gz);
+    patch_surfacefmt(gz);
+    patch_gridb_clamp(ss);   /* FIX A: clamp the grid-B bucket index (OOB AV root cause) */
+
+    /* v3: the create-recorder hook (idx 2) is DROPPED - it crashed the game at startup in v2
+       (verify/resize_ship RUN 2). Reverts to the known-good two-hook set. The tuple therefore comes
+       from field read-back, which rendered the visible region correctly in run 1 (8019 colours); the
+       replay logs loudly that it used read-back so the p3 7-vs-4 caveat stays on the record. */
+    if (!install_one(0x10016eba, ss, RVA_BRIDGE_INIT, "bridge_capture", 0)) return 0;
+    if (!install_one(0x10018c58, gz, GZ_RVA_HEARTBEAT, "frame_heartbeat", 1)) return 0;
+    logf("### RESIZE: armed - windowed+fix16 applied, bridge capture at SIMSPR+0x%X, "
+         "per-frame poll at GZGraphicD+0x%X (create recorder DROPPED after v2 crash)",
+         RVA_BRIDGE_INIT, GZ_RVA_HEARTBEAT);
+    return 0;
+}
+
+BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
+    (void)reserved;
+    if (reason == DLL_PROCESS_ATTACH) {
+        g_self = (HMODULE)inst;
+        DisableThreadLibraryCalls(inst);
+        InitializeCriticalSection(&g_lock);
+        QueryPerformanceFrequency(&g_freq);
+        QueryPerformanceCounter(&g_t0);
+        log_open();
+        { char v[16];
+          g_minzoom = GetEnvironmentVariableA("SC3RESIZE_MINZOOM", v, sizeof(v)) && atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_READYMS", v, sizeof(v)) && atoi(v) >= 0)
+              g_ready_ms = (DWORD)atoi(v);
+          g_census = GetEnvironmentVariableA("SC3RESIZE_CENSUS", v, sizeof(v)) && atoi(v); }
+        logf("### sc3resize loaded - resizable-window mod (minimal Init-free routine, "
+             "validated 2026-08-27 over 6 runs)%s", g_minzoom ? " [MINZOOM crash-hunt build]" : "");
+        CreateThread(NULL, 0, rz_watcher, NULL, 0, NULL);
+    }
+    return TRUE;
+}

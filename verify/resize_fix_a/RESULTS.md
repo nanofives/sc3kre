@@ -68,3 +68,42 @@ so `bucket[gw*gh..+gw]` is readable/zero) fixes ALL FOUR callers with ONE change
 caves** — it makes the OOB read benign for every walker, which is exactly the condition the game already
 relies on at native. Given three-caves-vs-one, fix B is the cleaner completion; FIX A per-function is
 viable but is 3x the hot-path surface.
+
+---
+
+# COMPLETION (2026-08-28): d0f5 + be25 clamps BUILT + WITNESSED. 3 of 4 walkers now clamped.
+
+Two clone caves added (`FUN_1000d0f5` @0x1000d281 -> cave 0x61520; `FUN_1000be25` @0x1000c412 -> cave
+0x61560), capstone-verified, non-overlapping slack, installed in memory at load. Now table-driven
+(`g_clamps[]`), fail-closed per entry.
+
+**Witness (churn):**
+```
+GRIDB_CLAMP FUN_1000cedb: index clamped (hook 0xCFAB -> cave 0x614E0)
+GRIDB_CLAMP FUN_1000d0f5: index clamped (hook 0xD281 -> cave 0x61520)
+GRIDB_CLAMP FUN_1000be25: index clamped (hook 0xC412 -> cave 0x61560)
+GRIDB_CLAMP: all grid-B walkers clamped
+```
+All three install; **zero `FAULT CAUGHT`**; all triggered resizes complete 9 steps.
+
+⭐ **A self-inflicted check bug, caught by fail-closed (not by a crash).** The first attempt refused
+d0f5 with `hook 0xD281 mismatch (8B 8E 8C 03 00)` — the bytes were RIGHT, but my verify compared the
+hook against the **cave's** first 5 bytes, and d0f5's cave starts with the clamp prologue
+(`mov ecx,[esi+0x388]`), not the stolen `mov ecx,[esi+0x38c]`. Fixed with an explicit per-entry
+`expect[5]`. **Fail-closed did its job: a wrong check refused to patch rather than mispatching a hot
+function.**
+
+## Status of FIX A
+| walker | clamped |
+|---|---|
+| `FUN_1000cedb` | ✅ |
+| `FUN_1000d0f5` | ✅ |
+| `FUN_1000be25` | ✅ |
+| `FUN_1000ef50` | ⏳ **still pending** (the fiddly one: this/base alias eax + push-esi stack shift) |
+
+3 of 4 grid-B walkers clamped. `FUN_1000ef50` remains — per the owner's plan ("ef50 after"). Each cave
+is proven by construction (index <= gw*gh-1) and the run confirms install + no fault + no regression.
+
+## State
+No fault, no orphan. Owner build verified `f5b9f1d9` / `acefadf0`. Mod patches nothing on disk. Lease +
+claim released.
