@@ -303,3 +303,54 @@ change to the resize routine, which is correct within the supported range.**
 ## State
 No lease taken (static + worker only). No install change. Owner's build remains `f5b9f1d9` /
 `acefadf0`.
+
+---
+
+# CEILING PINNED (2026-08-28, static + worker + local PE dump, NO LEASE)
+# ⛔ CORRECTION to my own framing: the ceiling is a SPRITE COUNT, not a pixel size.
+
+Worker traced the fill loops; local PE dump read the tables. Both together settle what the 16384 limit
+actually is.
+
+## The `[16384]` arrays count UNIQUE VISIBLE SPRITES, not view rows x cols
+The builders scan a **fixed 8x8 spatial-bucket grid** (`iso+0x380`, dims 8x8 unconditionally from
+`FUN_100059fb` mode 1; `_DAT_100628ec = 1.0` confirms `col = round((px-left)*8/extentW)`)
+`[CONFIRMED @ 0x100059fb:8-11, PE _DAT_100628ec]`. Each bucket is a linked list of every sprite whose
+screen position hashes into it. The `[16384]` fill is **one entry per unique visible sprite** (dedup by
+a per-zoom flag bit, `DAT_100624f0` = `0x10/0x20/0x40/0x80/0x100` for zoom 0..4), split objects vs
+buildings `[CONFIRMED @ 0x1000d0f5:194-199/114-118, 0x1000be25:114-118/282-285]`.
+
+**So the overflow bound is: visible unique sprites >= 16384.** View pixels enter only indirectly — a
+bigger client → bigger extent (`iso+0x54..0x60` = the client rect, `[CONFIRMED @ 0x10005b42:87-90]`) →
+more map tiles visible → more sprites bucketed. Worst case is **most zoomed OUT** (tile screen area
+~ `16 * 4^zoom`, so smallest zoom shows the most tiles) on the **densest** map content.
+
+## What `DAT_100624a0/b4` actually are — NOT the bound
+`DAT_100624a0 = DAT_100624b4 = 200` at all five zooms. These are the **max dirty-cell width/height**
+`FUN_1000d725` uses to subdivide repaint rects `[CONFIRMED @ PE dump, 0x1000d725:42-92]`. They have
+**nothing to do with the array overflow.** My hope that the table would yield a pixel ceiling was
+misplaced — the table is a repaint-subdivision cap.
+
+## Therefore: there is NO fixed pixel ceiling. It is content-dependent.
+A sparse map tolerates a larger window than a dense one. `1280x1024` is validated safe **on Europolis**
+(a large city, 6 runs) — that is a real, populated data point, not a best case. `2048x1081` overflowed
+on the same city. The true threshold is `visible_sprites(W, H, zoom, map) < 16384`, and the sprite
+density term is **runtime data**, not a static constant `[UNCERTAIN — needs a runtime count]`.
+
+## Recommended clamp — conservative, and honest about why
+1. **Clamp the client the mod acts on to `1280x1024`** (1,310,720 px), the validated-safe point on a
+   dense city. Ignore/letterbox larger. This is a **proxy**, deliberately conservative: it caps *area*,
+   which caps *visible tiles*, which caps *sprites* — with margin, since Europolis at 1280x1024 did not
+   overflow.
+2. **To raise it with evidence, not guesswork:** instrument the fill counter (`puVar20/puVar21` in
+   `FUN_1000d0f5`, `iVar10` in `FUN_1000be25`) and read its **max** at 1280x1024 and one larger size on
+   the densest available city at min zoom. The ratio to 16384 gives the real area headroom. One lease.
+3. ⛔ **Do NOT publish a specific pixel maximum above 1280x1024 without that measurement** — it would be
+   invented, and the whole point of the clamp is to not crash on a player's large monitor.
+
+**Bottom line: the crash ceiling is 16384 visible sprites (hard, static). The safe pixel clamp is
+1280x1024 (validated). A larger pixel maximum is a runtime-density question, correctly left open rather
+than guessed.**
+
+## State
+No lease (static + worker + local PE read). No install change. Owner build `f5b9f1d9` / `acefadf0`.
