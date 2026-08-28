@@ -386,8 +386,20 @@ open, and smaller than it looked: ~~(a) a **load-readiness gate**~~ ✅ **DONE (
 `verify/resize_gate/`):** the poll now defers a resize until >=3000 ms since bridge capture AND the
 render target has a backing (one frame drawn), then fires on a later poll. Witnessed: early resize
 deferred at t+6.1s, landed at t+8.4s once ready, all 9 steps, no fault. Tunable `SC3RESIZE_READYMS`.
-Still open: (b) **on-screen correctness at large sizes** unverified — the `PrintWindow` screenshot is
-`D-004`-ambiguous, needs a real display or a census-in-mod; (c) downward resize **`U-069`** untested.
+~~Still open: (b) on-screen correctness at large sizes~~ ✅ **SETTLED (2026-08-28,
+`verify/resize_census/`):** an in-mod RAW census at 2048x1152 (load zoom, dense Europolis) reads BOTH
+the render target `iso+0x74` (**100%** non-zero, full bbox) AND the blit-dest `iso+0x4ec` (**99.7%**,
+full bbox) holding a **full 2048x1152 image**, ~1.88M non-zero px **beyond** the old 800x600. **The frame
+fills the window — not clipped.** This retires the earlier "clipped 800x600" `PrintWindow` shot as a
+D-004 capture artifact, not the engine frame. The blit-dest feeds the DirectDraw present, so the
+composite is full-size; the only hop a headless census cannot see is the final **primary flip to a
+physical monitor (D-004)** — an owner hand-test on a real display closes it. Still open: (c) downward
+resize **`U-069`** untested.
+
+**Workstream summary:** resize routine robust at 2048x1152 across zoom/timing; frame fills the window on
+both raster and composite surfaces; crash non-reproducing + load-readiness-gated; shippable as
+`sc3resize.dll` + `resize_launch.exe` (offline-gated). Headless limit: the final flip to a real monitor
+(D-004) needs a hand-test.
 
 ⚠️ **Crash-arc scorecard, against myself:** three asserted causes (DirectDraw primary, int[16384]
 overflow, load-timing), three refutations, plus one self-inflicted confound (min-zoom on during the
