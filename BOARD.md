@@ -315,6 +315,29 @@ re-entrancy-guarded), fallback a filtered hook on the hot `FUN_10014649`.
 ⚠️ **Dumping `sub(+0x44)` directly is VOID by construction at heartbeat** — same empty `0x28`/pitch-0
 state. Keep it as logged data, never as the discriminator.
 
+### ⭐⭐ SHIPPABLE MOD `sc3resize` BUILT + a HARD SIZE CEILING FOUND (2026-08-28). Full: `verify/resize_ship/`
+The validated resize routine is carved into a slim injected DLL (`re/harness/src/sc3resize.c` +
+`resize_launch.exe`, Branch B of `RESIZE_DELIVERY_COST.md`). Offline gates all PASSED. Three game runs:
+
+- **v1**: wiring validated end to end (inject, both hooks, subclass, poll, trigger, 7 of 8 steps) but
+  the frame was clipped to 800x600 — my error, step 9 relied on `resize_rectfix` which is Init-gated and
+  the routine is Init-free. **Fixed:** the DLL now pushes the present rect itself.
+- ⛔ **v1/v2 were CONFOUNDED — I never controlled the display mode** (owner caught it). The 6 validating
+  runs used `-windowed -fix16`; the DLL replicated neither and launched fullscreen. **Fixed in v3:**
+  `patch_windowed` + `patch_surfacefmt` carved into the mod, verified applied (`window 800x600 titled`).
+- **v3**: display mode fixed, real game-driven resize triggered — then **crashed at 2048x1081**.
+- ⭐⭐ **ROOT CAUSE (static, no lease): a HARD ENGINE CEILING.** The grid-B builders `FUN_1000be25`
+  (zoom<3) and `FUN_1000d0f5` (zoom>=3) carry **fixed `int[16384]` stack arrays, filled one entry per
+  visible tile with NO bound check** `[CONFIRMED @ 0x1000be25:26-27, 0x1000d0f5:29-30]`. Visible-tile
+  count scales with view area: **under 16384 at 1280x1024 (proven, 6 runs), over it at 2048x1081** →
+  /GS stack-cookie corruption = `0xC000041D`. **Not a mod bug — a cap on how large the iso view can be.**
+  My "un-resized DirectDraw primary" guess was **refuted**: the leaf blits between `iso+0x4ec` and
+  `iso+0x74`, both resized `[CONFIRMED @ 0x1000e058, 0x1000e206]`.
+
+**Fix is a CLAMP, not a routine change:** cap the client size the mod acts on to a validated max
+(1280x1024 safe), ignore/letterbox larger, and stop the window auto-maximizing. Exact ceiling
+`[UNCERTAIN]` — needs the per-zoom cell table `DAT_100624a0` + tile pitch, or an empirical sweep.
+
 ### ⭐ THE `WM_SIZE` CAVE IS DROPPED — one cave, not two (2026-08-27, static, no lease)
 The plan of record wanted a GZGraphicD `WM_SIZE` cave setting a pending flag plus a SIMSPR per-frame
 cave reading it: **two** position-independent caves, two relocation-safe hooks, and a cross-module flag
