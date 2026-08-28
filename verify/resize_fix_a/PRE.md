@@ -19,3 +19,16 @@ applied, SEH catcher still armed.
 ⚠️ The fault is intermittent, so "no fault in one churn" is confirmation, not proof — **the proof is the
 clamp arithmetic** (index <= 63 by construction). Outcome 3 is the one to watch: it would show FIX A is
 correct but incomplete (siblings need the same clamp), which the scope note already predicts.
+
+---
+
+# AMENDMENT — FIX A COMPLETION witness (before the lease)
+Added two more clamps (`FUN_1000d0f5` @0x1000d281, `FUN_1000be25` @0x1000c412) as clones of the shipped
+cedb clamp — caves capstone-verified, placed in non-overlapping slack (0x61520, 0x61560), fail-closed
+byte checks. All three installed in memory at load. Witness: churn run, confirm all three log
+`index clamped`, and zero faults.
+| # | reading | verdict |
+|---|---|---|
+| 1 | all 3 `GRIDB_CLAMP ... index clamped` lines; churn runs; zero `FAULT CAUGHT`; resizes complete | ⭐ **PASS — FIX A complete (all 4 grid-B walkers clamped)** |
+| 2 | any `NOT patching` | **FAIL** — a byte/slack mismatch on that entry |
+| 3 | `FAULT CAUGHT` anywhere | **FAIL** — report address/step |
