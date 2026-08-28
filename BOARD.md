@@ -396,10 +396,24 @@ composite is full-size; the only hop a headless census cannot see is the final *
 physical monitor (D-004)** — an owner hand-test on a real display closes it. Still open: (c) downward
 resize **`U-069`** untested.
 
-**Workstream summary:** resize routine robust at 2048x1152 across zoom/timing; frame fills the window on
-both raster and composite surfaces; crash non-reproducing + load-readiness-gated; shippable as
-`sc3resize.dll` + `resize_launch.exe` (offline-gated). Headless limit: the final flip to a real monitor
-(D-004) needs a hand-test.
+### ⚠️ THE CRASH IS REAL AND NOW LOCATED — intermittent dangling grid-B node AV (2026-08-28)
+Attempting `U-069` (downward resize), the auto-maximize to 2048x1081 fired first and step 7 faulted —
+**the SEH catcher trapped it: `0xC0000005` AV at `SIMSPR+0xD005 = FUN_1000cedb+0x12a`** (the grid-B
+type-2 tagger, reached from the `FUN_10018cdf` repaint). Disassembly: `+0x12a` is
+`cmp dword ptr [eax],edx` with `test eax,eax` two instructions earlier — so **`eax` is non-null but
+INVALID: a grid-B bucket holds a dangling node pointer**, dereferenced during the repaint while the
+resize is tearing down/refilling the grid. **A lifetime/ordering hazard, NOT overflow and NOT a size
+ceiling** — which reconciles "real crash" with "not reproducible under 5 conditions" (it is
+**state-dependent**, intermittent). The int[16384] story is doubly dead (an AV, not /GS; census already
+refuted the count). ⚠️ **The load-readiness gate does NOT fix this** (the fault is post-gate).
+`U-069` remains **OPEN** — the down-resize deferred after the caught fault and never ran. Full:
+`verify/resize_down/RESULTS.md`. Next (one lease): SEH filter logs `eax`/bucket index/grid dims at
+fault time → names the stale-pointer source → fix (ordering, or guard the walk).
+
+**Workstream summary:** resize routine renders a full-window frame at 2048x1152 (raster + composite
+censused); shippable as `sc3resize.dll` + `resize_launch.exe` (offline-gated). **Real open defect: an
+intermittent dangling-grid-B-node AV in the post-resize repaint (`FUN_1000cedb+0x12a`), now located.**
+Also open: `U-069` (downward, preempted) and the D-004 final flip to a physical monitor (hand-test).
 
 ⚠️ **Crash-arc scorecard, against myself:** three asserted causes (DirectDraw primary, int[16384]
 overflow, load-timing), three refutations, plus one self-inflicted confound (min-zoom on during the
