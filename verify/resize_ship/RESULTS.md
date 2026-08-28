@@ -83,3 +83,63 @@ localised, one-call gap**, not a mystery.
 Owner's build untouched and verified: `SIMSPR.DLL` `f5b9f1d9`, `GZGraphicD.dll` `acefadf0`. The mod
 patches nothing on disk. Lease and harness claim released; no game process alive (exit code 0).
 Artifact: `sc3resize_validation_clipped_800x600.png`.
+
+---
+
+# RUN 2 (`sc3resize` v2, 2026-08-28) — **FAIL, outcome 4: the game died before the resize.**
+# PRE amendment git `8d8a796`. **And the failure isolates cleanly to ONE of the three fixes.**
+
+The game process was **gone before the 40 s mark**; the mod log stops at **t+9.56 s**, immediately
+after `bridge captured`. The external resize at ~t+42 s found a `0x0` client rect because there was no
+window left. No screenshot (correctly — the instrument refused rather than saving a blank).
+
+```
+### RESIZE: SIMSPR base 0x03310000 (relocated: YES)  GZGraphicD base 0x02690000 (YES)
+### RESIZE: armed - bridge capture at SIMSPR+0x16EBA, create recorder at GZGraphicD+0x9EFB,
+            per-frame poll at GZGraphicD+0x18C58
+### RESIZE: window 0x00FC072C subclassed
+RZ   WM_SIZE 2048x1152 - poll will pick it up on the next frame
+### RESIZE: bridge captured 0x0E64BCD0 (iso view = bridge+0x18 = 0x00000000)
+                                                     <- log ends here, t+9.56 s
+```
+
+## ⭐ The failure isolates to the create recorder — by construction, not by suspicion
+v2 changed **three** things, but two of them **cannot have run**:
+
+| fix | active before the resize? |
+|---|---|
+| step 9 present-rect erase+push | **NO** — only runs inside `rz_do_resize`, and no resize ever happened |
+| step 8 `FUN_1000fa36` logging | **NO** — same, and it is a log line either way |
+| **`FUN_10009efb` create-recorder hook** | **YES** — installed at startup, fires on every raster create |
+
+**So the only v2 code that executed before the death is the recorder hook**, which is exactly what the
+pre-registration named as outcome 4's prime suspect (*"the new `FUN_10009efb` hook is the prime
+suspect (it is a hot function)"*). Called out before the run, confirmed by the run.
+
+`[UNCERTAIN]` **the mechanism.** No exception was logged and no dump was produced, so *why* it dies is
+not established. Two candidates, neither verified: (a) `FUN_10009efb` is called on more than one
+thread and the recorder's `g_rc[n]`-write-then-`InterlockedIncrement` is not actually safe — the slot
+index is read non-atomically; (b) detouring a function this hot, inside device bring-up, is not
+survivable the way the two cold hooks are. **Do not report either as the cause.**
+
+## What run 2 did NOT invalidate
+Run 1's result stands untouched: injection, both original hooks, the subclass, the poll, the trigger,
+and the executed steps all worked, with the game exiting **code 0**. **The v1 hook set is known-good.**
+The step 9 and step 8 fixes are **untested, not refuted** — they never ran.
+
+## Correct next move — one variable, not three
+**Drop the create recorder; keep the step 9 and step 8 fixes.** That returns to the known-good two-hook
+set and tests the fix that actually addresses the clipped frame. The tuple question then reverts to
+the honest position: field read-back is used, it is **measurably not identical** to the recorded create
+(`p3` 7 vs 4), and the replay **logs which path it took** — a recorded caveat rather than a silent
+assumption. If the frame comes back correct at 1280x1024 with field read-back, the discrepancy is
+demonstrably benign for this purpose and the recorder was never needed.
+
+⚠️ **I changed three things at once after a run that had already told me what to fix.** Run 1's clipped
+frame pointed at exactly one defect. Bundling two more in cost a lease and told us nothing about the
+one that mattered.
+
+## State at close
+**No orphan processes** (checked: zero `SC3U`/`resize_launch` alive). Owner's build untouched and
+verified: `SIMSPR.DLL` `f5b9f1d9`, `GZGraphicD.dll` `acefadf0`. The mod patches nothing on disk. Lease
+and harness claim released.
