@@ -434,13 +434,15 @@ Applied **in memory** by the mod at load (`patch_gridb_clamp`, rel32s base-invar
 check — **still patches nothing on disk**). Witness (the churn that caught the fault unfixed): clamp
 installed, **zero faults including 2048x1081 twice** (the exact faulting size), all triggered resizes
 completed 9 steps, plus an incidental clean **downward 2048x1081→800x600** (partial `U-069`).
-**Extended 2026-08-28: `FUN_1000d0f5` + `FUN_1000be25` clamps added** (clone caves @0x61520/0x61560,
-table-driven `g_clamps[]`, fail-closed per entry). Churn witness: all three log `index clamped`, zero
-faults, all resizes complete. **3 of 4 grid-B walkers now clamped.** ⏳ **`FUN_1000ef50` remains** (the
-fiddly one — `this`/base alias `eax`, `push esi` shifts the args), per the owner's "ef50 after" plan.
-Each cave proven by construction (`index <= gw*gh-1`). A self-inflicted verify-check bug (compared hook
-vs the cave's first bytes instead of the stolen bytes) was caught by fail-closed — refused to patch
-rather than mispatch — and fixed with an explicit `expect[5]`.
+### ✅✅ FIX A COMPLETE (2026-08-28) — all 4 grid-B walkers clamped, witnessed, zero faults
+`FUN_1000cedb` + `FUN_1000d0f5` + `FUN_1000be25` + `FUN_1000ef50` all clamp the bucket index to
+`gw*gh-1` (proven by construction). Table-driven `g_clamps[]`, fail-closed per entry, all
+position-independent, applied in memory — **mod still patches nothing on disk.** Churn witness: all four
+log `index clamped`, **zero `FAULT CAUGHT`**, 8/8 resizes complete. `ef50` avoids its absolute
+`cmp [0x10072670]` (would not survive relocation) by clamping the incoming params on the stack at entry.
+Full: `verify/resize_fix_a/RESULTS.md`. **The OOB grid-B bucket-index AV is fixed engine-wide.**
+Two self-inflicted bugs along the way, both caught by fail-closed (a verify-check comparing the wrong
+bytes) or by construction — never mispatched a hot function.
 
 **Workstream summary:** resize routine renders a full-window frame at 2048x1152 (raster + composite
 censused); shippable as `sc3resize.dll` + `resize_launch.exe` (offline-gated). **Real open defect: an
