@@ -345,14 +345,31 @@ even 2560x1440 stays ~4.9x under. **So the v3 crash was NOT a grid-array overflo
 earlier "root cause = fixed int[16384] overflow" (`609e97a`) — reported from the worker's static array
 read plus an area-scaling story, without measuring the fill — is **contradicted at the tested zoom**.
 
-Two possibilities remain open: (1) the v3 crash was at **min zoom** (zoom<3 → `FUN_1000be25`, whose
-fill is the sector-list **inner-loop sum**, NOT the record count of 144 I measured — and min zoom shows
-the whole map, the true worst case, **still unmeasured**); (2) `0xC000041D` is
-STATUS_FATAL_USER_CALLBACK_EXCEPTION, **not** the /GS `0xC0000409`, so it may be a plain repaint AV, not
-an overflow at all. **Established:** at zoom 3, headroom is large and a clamp is not the binding
-constraint up to ≥2560x1440. **The clamp question is UNRESOLVED; my prior answer was over-confident.**
-Next (one lease): force **zoom 0** and re-census, counting the sector-list inner-loop fill. Full:
-`verify/resize_headroom/RESULTS.md`.
+Two possibilities remain open: (1) the v3 crash was at **min zoom**; (2) `0xC000041D` is a plain
+repaint AV, not an overflow. **Established:** at zoom 3, headroom is large and a clamp is not the binding
+constraint up to ≥2560x1440.
+
+### ⭐⭐⭐ CRASH HUNT (2026-08-28): NO CRASH at 2048x1152 MIN ZOOM. Both crash theories REFUTED.
+A crash-hunt build (`SC3RESIZE_MINZOOM=1` forces zoom 0; `__try/__except` + per-step breadcrumb +
+MODULE+RVA fault resolver) drove an external resize to **2048x1152 at t+42s on a settled city**. **Zero
+faults, zero crash, all 9 steps completed at 2048x1152 AND 2048x1081 at min zoom, twice; game exited
+clean.** `FUN_10018cdf` returned 1 in ~62 ms. Full: `verify/resize_crashhunt/RESULTS.md`.
+
+- ⛔ **16384-overflow root cause FULLY REFUTED** — min zoom (hypothesized worst case) at a size *larger*
+  than the v3 crash ran clean.
+- ⛔ **My "crash in FUN_10018cdf / step 7" localization REFUTED** — step 7 completes here.
+- **The real correlate is TIMING.** v3 fired the resize at **t+11.6 s (~5 s after bridge capture, city
+  still loading)**; this ran at **t+42 s settled**. Size, zoom, routine all excluded. Evidence points to
+  a **resize-during-load race** `[UNCERTAIN, not proven]`. **Actionable fix: gate the poll until the
+  city is initialized** — the mod should do this regardless.
+
+⚠️ **Scorecard, recorded against myself:** I asserted a crash root cause twice from static/structural
+evidence without the load-bearing measurement, and was wrong both times (the primary-blit story, then
+the overflow story). The **SEH fault-catcher is the instrument I should have built first** — it turns
+the crash into a logged address instead of a guess. The board's own recurring lesson, re-learned.
+
+**So there is NO evidence of a size ceiling at 2048x1152.** The clamp may be unnecessary; the real open
+item is the load-timing gate, not a size cap.
 
 ### ⭐ THE `WM_SIZE` CAVE IS DROPPED — one cave, not two (2026-08-27, static, no lease)
 The plan of record wanted a GZGraphicD `WM_SIZE` cave setting a pending flag plus a SIMSPR per-frame
