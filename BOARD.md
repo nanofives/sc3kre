@@ -335,8 +335,18 @@ The validated resize routine is carved into a slim injected DLL (`re/harness/src
   `iso+0x74`, both resized `[CONFIRMED @ 0x1000e058, 0x1000e206]`.
 
 **Fix is a CLAMP, not a routine change:** cap the client size the mod acts on to a validated max
-(1280x1024 safe), ignore/letterbox larger, and stop the window auto-maximizing. Exact ceiling
-`[UNCERTAIN]` — needs the per-zoom cell table `DAT_100624a0` + tile pitch, or an empirical sweep.
+(1280x1024 safe), ignore/letterbox larger, and stop the window auto-maximizing.
+
+⛔ **The ceiling is a SPRITE COUNT, not a pixel size (framing corrected 2026-08-28).** The `[16384]`
+arrays count **unique visible sprites**: the builders scan a **fixed 8x8 bucket grid** (`_DAT_100628ec
+= 1.0`), one entry per visible sprite deduped by `DAT_100624f0`. Overflow = **visible-sprites >=
+16384**; pixels enter only via extent → visible tiles → sprites, worst at **min zoom on the densest
+map**. `DAT_100624a0/b4 = 200` is the dirty-cell **subdivision** cap, NOT the bound — my hope it would
+yield a pixel number was wrong. So there is **no fixed pixel ceiling**: `1280x1024` is validated safe on
+Europolis (dense), `2048x1081` overflowed on the same city. A larger pixel max is a **runtime-density**
+question — instrument the fill counter (`puVar20/puVar21` in `FUN_1000d0f5`, `iVar10` in
+`FUN_1000be25`) at two sizes, one lease. **Do not publish a pixel max above 1280x1024 without it.**
+Full: `verify/resize_ship/RESULTS.md`.
 
 ### ⭐ THE `WM_SIZE` CAVE IS DROPPED — one cave, not two (2026-08-27, static, no lease)
 The plan of record wanted a GZGraphicD `WM_SIZE` cave setting a pending flag plus a SIMSPR per-frame
