@@ -371,6 +371,25 @@ the crash into a logged address instead of a guess. The board's own recurring le
 **So there is NO evidence of a size ceiling at 2048x1152.** The clamp may be unnecessary; the real open
 item is the load-timing gate, not a size cap.
 
+### ⭐⭐⭐ THE v3 CRASH IS NOT REPRODUCIBLE — 5 controlled conditions, all clean (2026-08-28)
+SEH-catcher build, `verify/resize_crashhunt/`. Three runs (plus a settle) exclude the crash across
+**sizes 2048x1152 & 2048x1081, zoom 0 & zoom 3, timing t+5s (during load) & t+42s (settled)** — all 9
+steps complete, `FUN_10018cdf` returns 1, the fault-catcher never fires. **Timing is refuted** (run 2
+resized during load, clean); **zoom is refuted** (run 3 at zoom 3, clean — correcting my own confound
+where runs 1-2 forced zoom 0). The v3 crash (`0xC000041D`, one occurrence) is most consistent with a
+transient tied to the exact auto-maximize-during-load sequence, or a fault outside `rz_do_resize`
+`[UNCERTAIN, not asserted]`.
+
+**Net: the "hard ceiling / crashes at 2048" narrative reduces to a single non-reproducing incident.**
+The routine is demonstrated **robust at 2048x1152 across zoom and timing** on a dense city. Genuinely
+open, and smaller than it looked: (a) a **load-readiness gate** on the poll (cheap hygiene, do it);
+(b) **on-screen correctness at large sizes** unverified — the `PrintWindow` screenshot is
+`D-004`-ambiguous, needs a real display or a census-in-mod; (c) downward resize **`U-069`** untested.
+
+⚠️ **Crash-arc scorecard, against myself:** three asserted causes (DirectDraw primary, int[16384]
+overflow, load-timing), three refutations, plus one self-inflicted confound (min-zoom on during the
+"timing" test). The **SEH fault-catcher, built last, is what settled it** — build the catcher first.
+
 ### ⭐ THE `WM_SIZE` CAVE IS DROPPED — one cave, not two (2026-08-27, static, no lease)
 The plan of record wanted a GZGraphicD `WM_SIZE` cave setting a pending flag plus a SIMSPR per-frame
 cave reading it: **two** position-independent caves, two relocation-safe hooks, and a cross-module flag
