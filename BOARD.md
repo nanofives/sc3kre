@@ -382,8 +382,11 @@ transient tied to the exact auto-maximize-during-load sequence, or a fault outsi
 
 **Net: the "hard ceiling / crashes at 2048" narrative reduces to a single non-reproducing incident.**
 The routine is demonstrated **robust at 2048x1152 across zoom and timing** on a dense city. Genuinely
-open, and smaller than it looked: (a) a **load-readiness gate** on the poll (cheap hygiene, do it);
-(b) **on-screen correctness at large sizes** unverified — the `PrintWindow` screenshot is
+open, and smaller than it looked: ~~(a) a **load-readiness gate**~~ ✅ **DONE (2026-08-28,
+`verify/resize_gate/`):** the poll now defers a resize until >=3000 ms since bridge capture AND the
+render target has a backing (one frame drawn), then fires on a later poll. Witnessed: early resize
+deferred at t+6.1s, landed at t+8.4s once ready, all 9 steps, no fault. Tunable `SC3RESIZE_READYMS`.
+Still open: (b) **on-screen correctness at large sizes** unverified — the `PrintWindow` screenshot is
 `D-004`-ambiguous, needs a real display or a census-in-mod; (c) downward resize **`U-069`** untested.
 
 ⚠️ **Crash-arc scorecard, against myself:** three asserted causes (DirectDraw primary, int[16384]
