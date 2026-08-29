@@ -184,6 +184,12 @@ Stride/corner measurement is deferred as cosmetic (~8 runs).
 > clamps), ships as `sc3resize.dll`+`resize_launch.exe` patching nothing on disk. Only open item is
 > `D-004` (the final DirectDraw flip to a real monitor — needs an owner hand-test). The detailed
 > history below is retained as the working record.
+>
+> ⭐ **HAND-TEST READY FOR THE OWNER: `verify/resize_handtest/HANDTEST.md`** (also in the Happy share as
+> `RESIZE_HANDTEST.md`). Run `re/harness/bin/resize_launch.exe -- <city>`, drag/maximize the window,
+> check rows 1-4 (fills window / real image / shrink / no crash). Binaries are the all-4-clamp build;
+> the owner's `acefadf0` GZGraphicD supplies the draggable frame. This is the ONLY step left to
+> confirm the resize mod end-to-end.
 
 ### 2a. (history) black-vs-garbage RESOLVED 2026-08-25 (U-068 = "renders but does not blit"; see the run-4 subsection below)
 `U-068`: display lists stay empty after a resize Init. Root cause established 2026-08-23 by two
