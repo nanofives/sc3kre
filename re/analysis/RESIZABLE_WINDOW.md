@@ -228,10 +228,64 @@ Blt-ing an 800x600 block into the window's top-left. That is the observed pixel.
 alone can never help, because the primary Blt does not read them for its geometry.** This is what
 `wmsize_setrect` was built to do, and §3's claim that the DLL made it optional was false.
 
-`[UNCERTAIN]` — not established, do not build on these without evidence:
-- The `vt+0x30` **body** and the raw backing-field offset for the stored size. Reached through the
-  window-class vftable at `0x100212bc`, which the text export does not dump as readable pointers.
-  Needs live Ghidra (read slots `+0x30`, `+0x68`, `+0x6c`).
+### 8b. The vftable read, 2026-08-29 — inference replaced by bytes
+
+Done by parsing `Apps/GZGraphicD.dll` directly (the vftable is static `.rdata`; no Ghidra project lock
+needed). This **corrects the worker report** and closes two of its three open items.
+
+⛔ **`0x100212bc` was WRONG.** It is an auto-named `globals.csv` row (line 89, `vftable,pointer`) with
+**zero xrefs anywhere in the decomp**, and its second dword points into `.data`. It is not the window
+class vtable. Anyone re-deriving this from `globals.csv` alone will make the same mistake.
+
+**The real window-object vftable is `0x1001f740`** `[CONFIRMED, GZGraphicD]`. Two constructor sites
+install it, and both write a second base-class vftable alongside:
+```
+RVA 0x17bf7   C7 00 40 F7 01 10      mov dword [eax],    0x1001f740   <- primary, object offset +0x00
+RVA 0x17bfd   C7 40 04 30 F7 01 10   mov dword [eax+4],  0x1001f730   <- second base class
+RVA 0x17c04   A3 B8 CD 06 10         mov [0x1006cdb8], eax            <- object stored to a GLOBAL
+RVA 0x17c6e   C7 01 40 F7 01 10      mov dword [ecx],    0x1001f740
+RVA 0x17c74   C7 41 04 30 F7 01 10   mov dword [ecx+4],  0x1001f730
+```
+
+**Key slots, read from the file:**
+
+| slot | target | body |
+|---|---|---|
+| `vt+0x20` | `0x10017c0a` | `lea esi,[ecx+0x38]` + `movsd` x4 — GetRect, copies the stored RECT |
+| **`vt+0x30`** | **`0x100185f5`** | **the republish function — the WndProc dispatch is now BYTE-PROVEN, not ABI inference** |
+| `vt+0x68` | `0x10017c1e` | `mov eax,[ecx+0x40]; sub eax,[ecx+0x38]; ret` = **right - left = WIDTH** |
+| `vt+0x6c` | `0x10017c25` | `mov eax,[ecx+0x44]; sub eax,[ecx+0x3c]; ret` = **bottom - top = HEIGHT** |
+| `vt+0xc0` | `0x10018c58` | the primary Blt |
+
+**The stored size is a RECT at `win+0x38..win+0x44`** — `+0x38` left, `+0x3c` top, `+0x40` right,
+`+0x44` bottom. HWND is `win+0x34` (`param_1[0xd]` in `FUN_100185f5`). This independently confirms the
+earlier measurement recorded at `sc3resize.c:42` (`vt+0x68 = *(win+0x40) - *(win+0x38)`).
+
+**The window object is reachable from a fixed global: `GZGraphicD+0x6cdb8`** `[CONFIRMED]`. The
+registered WndProc thunk at RVA `0x17e11` loads `this` from it before calling `FUN_10017e2f`:
+```
+FF 74 24 10          push [esp+0x10]
+8B 0D B8 CD 06 10    mov ecx, [0x1006cdb8]     <- the window object
+FF 74 24 10 (x3)     push the remaining 3 args
+E8 03 00 00 00       call 0x10017e2f
+C2 10 00             ret 0x10
+```
+
+**Fix specification (NOT built, NOT tested):** in the DLL's existing `WM_SIZE` subclass, read
+`win = *(void **)(GZGraphicD_base + 0x6cdb8)`, then set `win+0x40 = win+0x38 + newW` and
+`win+0x44 = win+0x3c + newH` (write right/bottom relative to the existing left/top rather than
+zeroing them, since `FUN_100185f5` maps the rect through `ClientToScreen` and left/top may carry a
+position). `FUN_100185f5` then publishes a correctly sized rect and `FUN_10018c58` Blts the full
+window. This is what the subclass was documented as already doing and does not (§3).
+⚠️ Under the BOARD standing rules this needs a committed `PRE.md` with the pass/fail spelled out, an
+`IsBadReadPtr` gate + expect-or-refuse vftable check (`*(DWORD *)win == base + 0x1f740`) before any
+write, and a fresh owner hand-test — it is unverified until a real display shows it.
+
+`[UNCERTAIN]` — still not established:
+
+- ~~The `vt+0x30` body and the raw backing-field offset for the stored size.~~ ✅ **RESOLVED in §8b** —
+  vftable `0x1001f740`, `vt+0x30 = FUN_100185f5`, stored RECT at `win+0x38..+0x44`. No Ghidra needed;
+  the table is static `.rdata` and was read from the PE.
 - The **caller** that hands `param_3`/`param_2` to `FUN_10018c58`. It is invoked virtually and has no
   textual caller in the export, so "the rect it receives is the one published by `FUN_100185f5`" is
   **inference from the DirectDraw ABI, not a byte-proven link**.

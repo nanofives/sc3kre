@@ -221,11 +221,34 @@ Stride/corner measurement is deferred as cosmetic (~8 runs).
 > `FUN_100185f5` so the published rect matches the resized surfaces. Recreating SIMSPR surfaces alone
 > can never help — the primary Blt does not read them for geometry.
 >
-> `[UNCERTAIN]`, do not build on these: the `vt+0x30` body and the raw stored-size field offset (behind
-> the vftable at `0x100212bc`, needs live Ghidra); and the link "the rect `FUN_10018c58` receives is the
-> one `FUN_100185f5` published" is **DirectDraw-ABI inference, not byte-proven** (it is called
-> virtually, no textual caller in the export). **A CONFIRMED CODE PATH IS NOT A CONFIRMED CAUSE** — see
-> the standing warning above. The iOS oracle cannot help: that build is OpenGL-ES, no DirectDraw analog.
+> ✅ **VFTABLE READ SAME DAY — inference replaced by bytes (`RESIZABLE_WINDOW.md` §8b).** Done by
+> parsing `Apps/GZGraphicD.dll` directly; the vftable is static `.rdata`, **no Ghidra project lock was
+> needed**. ⛔ The worker's `0x100212bc` was **WRONG** — an auto-named `globals.csv` row (line 89) with
+> **zero xrefs**. The real window-object vftable is **`0x1001f740`**, installed as `[this+0]` at RVA
+> `0x17bf7` / `0x17c6e` (with `0x1001f730` as a second base class at `[this+4]`).
+>
+> | slot | target | body |
+> |---|---|---|
+> | `vt+0x30` | `0x100185f5` | **byte-proven**, no longer ABI inference |
+> | `vt+0x68` | `0x10017c1e` | `mov eax,[ecx+0x40]; sub eax,[ecx+0x38]; ret` = right-left = **WIDTH** |
+> | `vt+0x6c` | `0x10017c25` | `mov eax,[ecx+0x44]; sub eax,[ecx+0x3c]; ret` = bottom-top = **HEIGHT** |
+>
+> **Stored size is a RECT at `win+0x38`(l) `+0x3c`(t) `+0x40`(r) `+0x44`(b); HWND at `win+0x34`.**
+> Confirms the earlier `sc3resize.c:42` measurement. **The window object is reachable from a fixed
+> global, `GZGraphicD+0x6cdb8`** — the WndProc thunk at RVA `0x17e11` does `mov ecx,[0x1006cdb8]`
+> before calling `FUN_10017e2f`, and the constructor stores it there (`A3 B8 CD 06 10`). So the fix is
+> reachable from the DLL with the module-handle+offset pattern it already uses.
+>
+> **Fix spec (NOT built, NOT tested):** in the WM_SIZE subclass, `win = *(void**)(gz_base + 0x6cdb8)`,
+> then `win+0x40 = win+0x38 + newW`, `win+0x44 = win+0x3c + newH` (relative to existing left/top —
+> `FUN_100185f5` maps through `ClientToScreen`). Needs a committed `PRE.md`, an expect-or-refuse vftable
+> check (`*(DWORD*)win == gz_base + 0x1f740`) before the write, and a fresh owner hand-test.
+>
+> `[UNCERTAIN]`, still not proven: the link "the rect `FUN_10018c58` receives is the one `FUN_100185f5`
+> published" is **DirectDraw-ABI inference** (called virtually, no textual caller in the export), and
+> `FUN_100185f5`'s guard `(*piVar3 + 0x34)() == 0` was labelled "windowed" by the worker without
+> evidence. **A CONFIRMED CODE PATH IS NOT A CONFIRMED CAUSE** — see the standing warning above. The
+> iOS oracle cannot help: that build is OpenGL-ES, no DirectDraw analog.
 >
 > ⚠️⚠️ **METHOD FINDING, and it is the nondiagnostic-proxy class again — third instance, first time the
 > proxy PASSED while the real thing FAILED.** `verify/resize_census` censused `iso+0x74` / `iso+0x4ec`
