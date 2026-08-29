@@ -56,24 +56,28 @@ repaint occurs until camera motion marks cells dirty.
 realloc, and either nothing does or the marking is cleared. Do not write a fix against this paragraph;
 it is a description of the symptom, not a located cause.
 
-## Defect B — buildings and roads NEVER render (independent of resize)
+## Defect B — buildings and roads drop after RESIZE (CORRECTED — it is not a launch defect)
 
-**Observed:** buildings and roads are missing **at launch, before any resize**, and stay missing
-throughout. Only terrain and zones draw.
+⚠️ **CORRECTION, owner clarification after the first write of this file.** The owner first reported
+buildings/roads missing "when you launch the game". A more specific follow-up witness statement
+supersedes it: **"upon launching i can see the game fine, everything breaks when i resize"**, and
+**"buildings and roads are ALWAYS missing"** after that. The two are reconciled as: **at launch
+everything renders correctly; the RESIZE routine drops buildings and roads, and they never come back**
+(terrain and zones do come back on camera motion — see defect A — but buildings and roads do not, at
+any camera position).
 
-**This is NOT caused by the stored-RECT change, and the log proves it.** The subclass installs at
-**4295 ms**; the first `STOREDRECT` write is at **57639 ms**, when the owner first maximized. Everything
-seen before that happened with the stored RECT untouched at `{0,0,800,600}`. The timestamps exclude this
-change as a cause.
+**This makes defect B a consequence of the resize, not a launch-time or load-patch defect.** The
+earlier "control run without the mod" is no longer the priority — the witness has established that the
+same mod, before any resize, renders the city fully. So `patch_windowed` and `FIX16` are **exonerated**
+by the owner's own observation: buildings render fine under them until a resize happens.
 
-`[UNCERTAIN]` — **cause unknown and untested.** The only other load-time changes this mod makes are
-`patch_windowed` and `patch_surfacefmt` (`FIX16`, the 16bpp 5-6-5 cave at `+0x19349`). Whether either is
-responsible, or whether the defect predates the mod entirely, **has not been tested**.
-
-⚠️ **The obvious control has not been run:** launch the game **without** the mod and see whether
-buildings and roads render. Until that is done, defect B's origin is open, and it is a **confound for
-every rendering judgement in this file** — including defect A, which is being observed on an install
-where a whole class of drawables is already missing.
+**The lead — step 8, `FUN_1000fa36(iso, 1, 0)`** (§2 step 8): "re-register drawables from the
+persistent `iso+0x3a4`; **omitting = terrain only (32 colours vs 463)**". The resize re-registers
+drawables through this call and the result is **terrain + zones but not buildings/roads** — a *partial*
+re-registration, between "full" (launch) and "terrain only" (step 8 omitted entirely). That points at
+`FUN_1000fa36` / the `iso+0x3a4` drawable container as where buildings and roads are being lost across
+a resize. `[UNCERTAIN]` — this is a lead from the step-8 note, **not** a located cause; the decomp has
+not yet been read for this specific question.
 
 ## Third observation — input and display now disagree
 

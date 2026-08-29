@@ -197,15 +197,18 @@ Stride/corner measurement is deferred as cosmetic (~8 runs).
 > - **A. Resize does not repaint the new area.** Black except moving traffic; moving the camera makes
 >   terrain and zones appear. Step 7 `FUN_10018cdf -> 1` and step 9's full present-rect push both happen,
 >   so the redraw path is not being *triggered* for the new region. `[UNCERTAIN]`.
-> - **B. Buildings and roads NEVER render** — at launch, before any resize, and throughout.
->   **Excluded as a consequence of the stored-RECT write by the log's own timestamps** (subclass 4295 ms,
->   first write 57639 ms). Cause unknown.
+> - **B. The RESIZE drops buildings and roads** (CORRECTED — the owner first said "missing at launch",
+>   then clarified: **"upon launching i can see the game fine, everything breaks when i resize"**, and
+>   buildings/roads are ALWAYS gone after). So it is a resize consequence, not a launch defect, and
+>   `patch_windowed`/`FIX16` are **exonerated** (live at launch, city fine). Lead: **step 8
+>   `FUN_1000fa36`** re-registers *partially* here (terrain+zones survive, buildings/roads lost — its
+>   own note says omitting it = terrain only). Worker reading the decomp. `[UNCERTAIN]`.
 > - Also: the view fills the window but **navigation works only in the top-left 800x600** — the inverse
 >   of the pre-fix behaviour. Input picking reads a different size source than the blit. Not investigated.
 >
-> ⚠️⚠️ **THE CHEAP CONTROL HAS NOT BEEN RUN: launch the game WITHOUT the mod and see whether buildings
-> and roads render.** Until that exists, defect B's origin is open and it is a **confound for every
-> rendering judgement**, including defect A. Do that before diagnosing anything else here.
+> ⚠️ The launch-vs-resize control is effectively answered by the witness: the same mod, before any
+> resize, renders the full city. Defects A and B are both **inside the 9-step resize routine**, not the
+> load-time patches. That is where to look.
 >
 > ---
 > **History — the first hand-test, which FAILED.** Record: `verify/resize_handtest/RESULTS.md`

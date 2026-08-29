@@ -37,10 +37,12 @@ falsified**.
 ⛔ **But the mod is still NOT shippable — two rendering defects, neither diagnosed:**
 - **A. Resize does not repaint the new area.** After a resize it is **black except moving traffic**;
   moving the camera makes terrain and zones appear. The redraw path works, it is not being triggered.
-- **B. Buildings and roads NEVER render**, at launch and throughout, before any resize.
-  **Proven not to be the stored-RECT change** (subclass installs at 4295 ms, first write at 57639 ms).
-  Cause unknown. ⚠️ **The control — launch WITHOUT the mod — has not been run**, so this is a confound
-  for every rendering judgement, including A.
+- **B. The RESIZE drops buildings and roads** (CORRECTED — not a launch defect). Owner clarified:
+  **"upon launching i can see the game fine, everything breaks when i resize"**. At launch the city
+  renders fully; after a resize, buildings and roads are gone at every camera position (terrain and
+  zones come back on camera motion, per A). So `patch_windowed`/`FIX16` are **exonerated** — they are
+  live at launch and the city is fine. The lead is **step 8 `FUN_1000fa36`** (its own note: omitting
+  it = terrain only), producing a *partial* re-register here. `[UNCERTAIN]`, decomp read in progress.
 
 Also new: the view now fills the window but **navigation only works in the top-left 800x600**, the
 inverse of the pre-fix behaviour. Input picking reads a different size source than the blit. Not
@@ -178,10 +180,11 @@ relocated `SIMSPR` base.
   motion makes terrain and zones appear. Step 7 `FUN_10018cdf -> 1` and step 9's full present-rect push
   both happen, so the redraw path is not being triggered for the new region. `[UNCERTAIN]`, not
   diagnosed. **Blocks shipping.**
-- ⛔ **DEFECT B — buildings and roads never render at all**, at launch and throughout, independent of
-  resize. **Excluded as a consequence of the stored-RECT write by timestamps** (subclass 4295 ms, first
-  write 57639 ms). ⚠️ **The control run without the mod has NOT been done** — until it is, this is a
-  confound for every rendering judgement including defect A. **Blocks shipping.**
+- ⛔ **DEFECT B — the resize drops buildings and roads** (CORRECTED from "never render"; owner:
+  launch is fine, resize breaks it). At every camera position after a resize, buildings and roads are
+  gone; terrain and zones return on camera motion. `patch_windowed`/`FIX16` exonerated (live at launch,
+  city fine). Lead: step 8 `FUN_1000fa36` re-registers *partially* (terrain+zones, not buildings/roads).
+  `[UNCERTAIN]`, worker reading the decomp. **Blocks shipping.**
 - Input picking now disagrees with the blit: the view fills the window but navigation works only in the
   top-left 800x600 (the inverse of the pre-fix behaviour). Not investigated.
 - ✅ ~~**`D-004` — the real-monitor flip: FAILED**~~ **CONFIRMED 2026-08-29** by the stored-RECT fix.
