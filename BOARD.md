@@ -393,8 +393,11 @@ full bbox) holding a **full 2048x1152 image**, ~1.88M non-zero px **beyond** the
 fills the window — not clipped.** This retires the earlier "clipped 800x600" `PrintWindow` shot as a
 D-004 capture artifact, not the engine frame. The blit-dest feeds the DirectDraw present, so the
 composite is full-size; the only hop a headless census cannot see is the final **primary flip to a
-physical monitor (D-004)** — an owner hand-test on a real display closes it. Still open: (c) downward
-resize **`U-069`** untested.
+physical monitor (D-004)** — an owner hand-test on a real display closes it. ✅ **`U-069` (downward) ANSWERED 2026-08-29 (`verify/resize_u069_v2/`): downward resize WORKS.** Two
+downward resizes (2048x1081->800x600 and 1280x1024->800x600) completed all 9 steps, zero faults,
+render-target census shows the frame correctly at the smaller extent (bbox fills 800x600,
+`beyond-800x600=0` — no stale large content). With FIX A in place there is no shrink-specific fault.
+Combined with the upward census, the routine handles resize in **both directions** on a settled city.
 
 ### ⚠️ THE CRASH IS REAL AND NOW LOCATED — intermittent dangling grid-B node AV (2026-08-28)
 Attempting `U-069` (downward resize), the auto-maximize to 2048x1081 fired first and step 7 faulted —
