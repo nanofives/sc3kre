@@ -185,8 +185,31 @@ Stride/corner measurement is deferred as cosmetic (~8 runs).
 > hand-tested on a real display 2026-08-29 and FAILED** — see the block below. The detailed history
 > below is retained as the working record.
 >
-> ⛔⛔ **HAND-TEST DONE 2026-08-29 — `D-004` FAILED. THE MOD IS NOT COMPLETE END-TO-END.**
-> Record: **`verify/resize_handtest/RESULTS.md`** (+ the witness log committed beside it).
+> ✅✅ **`D-004` IS CONFIRMED, 2026-08-29 — the resized view reaches the physical monitor and fills the
+> window.** The fix is the **window stored-RECT write** (`verify/resize_storedrect/`, pre-registered
+> `a85a7f2`): on `WM_SIZE` the DLL reads the window object from `GZGraphicD+0x6cdb8` and sets
+> `win+0x40 = win+0x38 + w`, `win+0x44 = win+0x3c + h` behind an expect-or-refuse vftable check.
+> **Six writes, zero refusals, five resize cycles, zero faults**, hand-witnessed at 2048x1081 and
+> 1920x1009. `RESIZABLE_WINDOW.md` §8 is **confirmed, not falsified** — the pre-registered
+> falsification case did not occur.
+>
+> ⛔⛔ **BUT THE MOD IS NOT SHIPPABLE — two rendering defects, NEITHER DIAGNOSED.**
+> - **A. Resize does not repaint the new area.** Black except moving traffic; moving the camera makes
+>   terrain and zones appear. Step 7 `FUN_10018cdf -> 1` and step 9's full present-rect push both happen,
+>   so the redraw path is not being *triggered* for the new region. `[UNCERTAIN]`.
+> - **B. Buildings and roads NEVER render** — at launch, before any resize, and throughout.
+>   **Excluded as a consequence of the stored-RECT write by the log's own timestamps** (subclass 4295 ms,
+>   first write 57639 ms). Cause unknown.
+> - Also: the view fills the window but **navigation works only in the top-left 800x600** — the inverse
+>   of the pre-fix behaviour. Input picking reads a different size source than the blit. Not investigated.
+>
+> ⚠️⚠️ **THE CHEAP CONTROL HAS NOT BEEN RUN: launch the game WITHOUT the mod and see whether buildings
+> and roads render.** Until that exists, defect B's origin is open and it is a **confound for every
+> rendering judgement**, including defect A. Do that before diagnosing anything else here.
+>
+> ---
+> **History — the first hand-test, which FAILED.** Record: `verify/resize_handtest/RESULTS.md`
+> (+ the witness log committed beside it).
 >
 > Owner maximized by hand on a real 2048x1152 display: **the city stayed drawn in the top-left at the
 > pre-resize size and did not fill the window** — the pre-registered FAIL signature for row 1. Cursor and

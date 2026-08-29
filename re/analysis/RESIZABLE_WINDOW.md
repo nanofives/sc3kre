@@ -27,7 +27,24 @@ present to a screen.
 ⛔ **HAND-TESTED 2026-08-29 AND IT FAILED.** On a real 2048x1152 display, maximizing left the city drawn
 in the **top-left at the pre-resize size**. The routine completed all 9 steps and both surfaces reported
 2048x1081, with zero faults — so the failure is in the present, not the render. See §6 and
-`verify/resize_handtest/RESULTS.md`. **The mod is not complete end-to-end.**
+`verify/resize_handtest/RESULTS.md`.
+
+✅ **FIXED AND RE-TESTED THE SAME DAY — `D-004` IS CONFIRMED.** The stored-RECT write (§8/§8b, delivered
+in `verify/resize_storedrect/`) makes the resized view reach the physical monitor and fill the window.
+Six writes, zero refusals, five resize cycles, zero faults. §8's causal claim is **confirmed, not
+falsified**.
+
+⛔ **But the mod is still NOT shippable — two rendering defects, neither diagnosed:**
+- **A. Resize does not repaint the new area.** After a resize it is **black except moving traffic**;
+  moving the camera makes terrain and zones appear. The redraw path works, it is not being triggered.
+- **B. Buildings and roads NEVER render**, at launch and throughout, before any resize.
+  **Proven not to be the stored-RECT change** (subclass installs at 4295 ms, first write at 57639 ms).
+  Cause unknown. ⚠️ **The control — launch WITHOUT the mod — has not been run**, so this is a confound
+  for every rendering judgement, including A.
+
+Also new: the view now fills the window but **navigation only works in the top-left 800x600**, the
+inverse of the pre-fix behaviour. Input picking reads a different size source than the blit. Not
+investigated. Full record: `verify/resize_storedrect/RESULTS.md`.
 
 ---
 
@@ -75,9 +92,14 @@ The routine runs on the game thread from the per-frame heartbeat hook at `GZGrap
   OPTIONAL under this mod)". **Read the source: `re/harness/src/sc3resize.c:721-731`. `rz_wndproc`
   calls the original proc, `logf`s `lParam`, and returns. It writes nothing.** It is an OBSERVER.
   The same false claim is in the mod's own header comment (`sc3resize.c:44`) and its function comment
-  (`:719`). The engine's stored size is NOT updated by this mod, and `wmsize_setrect` is therefore NOT
-  optional — see §8. The log line `RZ WM_SIZE 2048x1081` is the message parameter being echoed, not
-  evidence that anything in the engine learned the new size.
+  (`:719`). The log line `RZ WM_SIZE 2048x1081` is the message parameter being echoed, not evidence
+  that anything in the engine learned the new size.
+  ✅ **NOW TRUE, as of the same day.** `rz_set_stored_rect` was added (`verify/resize_storedrect/`,
+  pre-registered `a85a7f2`): on `WM_SIZE` it reads the window object from the global
+  `GZGraphicD+0x6cdb8` and writes `win+0x40 = win+0x38 + w`, `win+0x44 = win+0x3c + h`, behind an
+  expect-or-refuse vftable check (`*(DWORD *)win == gz_base + 0x1f740`). Six writes, zero refusals,
+  hand-witnessed. So `wmsize_setrect` **is** optional again — but for the first time that is a
+  measured statement rather than an assumed one.
 
 Env knobs (set before launch; loader inherits): `SC3RESIZE_LOG`, `SC3RESIZE_READYMS` (gate ms, default
 3000), `SC3RESIZE_MINZOOM`, `SC3RESIZE_CENSUS` (dev/witness only).
@@ -152,7 +174,19 @@ subclass publishes the **true** client size (`WM_SIZE 2048x1081`); all 4 clamps 
 relocated `SIMSPR` base.
 
 **Open:**
-- ⛔ **`D-004` — the real-monitor flip: FAILED, and now localized.** Everything from `WM_SIZE` through
+- ⛔ **DEFECT A — resize does not repaint the newly exposed area.** Black except moving traffic; camera
+  motion makes terrain and zones appear. Step 7 `FUN_10018cdf -> 1` and step 9's full present-rect push
+  both happen, so the redraw path is not being triggered for the new region. `[UNCERTAIN]`, not
+  diagnosed. **Blocks shipping.**
+- ⛔ **DEFECT B — buildings and roads never render at all**, at launch and throughout, independent of
+  resize. **Excluded as a consequence of the stored-RECT write by timestamps** (subclass 4295 ms, first
+  write 57639 ms). ⚠️ **The control run without the mod has NOT been done** — until it is, this is a
+  confound for every rendering judgement including defect A. **Blocks shipping.**
+- Input picking now disagrees with the blit: the view fills the window but navigation works only in the
+  top-left 800x600 (the inverse of the pre-fix behaviour). Not investigated.
+- ✅ ~~**`D-004` — the real-monitor flip: FAILED**~~ **CONFIRMED 2026-08-29** by the stored-RECT fix.
+  Retained below for the reasoning that got there:
+- ⛔ **`D-004` — the real-monitor flip: FAILED, and now localized.** *(historical — superseded above)* Everything from `WM_SIZE` through
   `iso+0x4ec` is witnessed correct on a real display; the monitor still shows the old image top-left.
   **The gap is downstream of `iso+0x4ec`** — the component that copies that surface to the DirectDraw
   primary and flips it, which the 9-step routine never touches and never resizes.
