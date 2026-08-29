@@ -198,12 +198,34 @@ Stride/corner measurement is deferred as cosmetic (~8 runs).
 > load; the WndProc subclass publishes the **true** client size (`WM_SIZE 2048x1081`); the clamps rebase
 > correctly onto a relocated `SIMSPR` (`0x03310000`).
 >
-> **Where the defect now sits:** `WM_SIZE` -> ... -> `iso+0x4ec` is all witnessed correct on a real
-> display (both surfaces re-created at 2048x1081, drawables re-registered, present rect pushed at full
-> extent). So the gap is **downstream of `iso+0x4ec`** — the copy-to-DirectDraw-primary + flip, which the
-> 9-step routine never touches and never resizes. `[UNCERTAIN]` the object/call is **not identified**;
-> this is elimination, not a confirmed cause. **A CONFIRMED CODE PATH IS NOT A CONFIRMED CAUSE** — see
-> the standing warning above before anyone writes a fix.
+> **Where the defect sits — IDENTIFIED same day, see `RESIZABLE_WINDOW.md` §8.** All `GZGraphicD`:
+> `FUN_10017e2f` (WM_MOVE/WM_SIZE -> `vt+0x30`, called with **no size args**) -> `FUN_100185f5` (builds
+> the dest rect from the window object's **stored** size via `vt+0x68`/`vt+0x6c` + `ClientToScreen`,
+> publishes it to the display singleton `FUN_1001a7ad()+0x24 -> +0x28`) -> `FUN_10018c58`
+> (`IDirectDrawSurface::Blt`, `vtable+0x14`, with `DDERR_SURFACELOST` recover-and-retry at
+> `vtable+0x60`). The mod resizes the **SIMSPR** surfaces and never touches the **GZGraphicD window
+> object**, so an 800x600 rect keeps getting published and Blt-ed into the window's top-left.
+> All four functions were re-read locally and verify. ⚠️ `FUN_10018c58` is the **same RVA the mod hooks
+> as its per-frame heartbeat** (`GZGraphicD+0x18c58`) — the mod has been polling from inside the very
+> function that presents the wrong rectangle.
+>
+> ⛔⛔ **AND A FALSE CLAIM IN OUR OWN DOCS, corrected today.** `RESIZABLE_WINDOW.md` §3 said the DLL's
+> WndProc subclass "makes a real `WM_SIZE` publish the true client size", which is why `wmsize_setrect`
+> was called optional. **It does not.** `re/harness/src/sc3resize.c:721-731` calls the original proc,
+> `logf`s `lParam`, returns — it writes nothing, it is an OBSERVER. The same false claim sits in the
+> mod's own header comment (`sc3resize.c:44`) and function comment (`:719`). **`wmsize_setrect` is NOT
+> optional.** The log line `RZ WM_SIZE 2048x1081` is an echo of the message parameter, and I initially
+> misread it here as evidence the stored-size defect was fixed.
+>
+> **Fix target:** update the window object's stored width/height on `WM_SIZE`, or intercept `vt+0x30` /
+> `FUN_100185f5` so the published rect matches the resized surfaces. Recreating SIMSPR surfaces alone
+> can never help — the primary Blt does not read them for geometry.
+>
+> `[UNCERTAIN]`, do not build on these: the `vt+0x30` body and the raw stored-size field offset (behind
+> the vftable at `0x100212bc`, needs live Ghidra); and the link "the rect `FUN_10018c58` receives is the
+> one `FUN_100185f5` published" is **DirectDraw-ABI inference, not byte-proven** (it is called
+> virtually, no textual caller in the export). **A CONFIRMED CODE PATH IS NOT A CONFIRMED CAUSE** — see
+> the standing warning above. The iOS oracle cannot help: that build is OpenGL-ES, no DirectDraw analog.
 >
 > ⚠️⚠️ **METHOD FINDING, and it is the nondiagnostic-proxy class again — third instance, first time the
 > proxy PASSED while the real thing FAILED.** `verify/resize_census` censused `iso+0x74` / `iso+0x4ec`

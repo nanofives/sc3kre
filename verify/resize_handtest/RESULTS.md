@@ -89,6 +89,27 @@ resized to 2048x1081 on this run. The same pixels mean something different once 
 resize happened and did not reach the primary. Scoring this run against the old table would produce the
 wrong conclusion.
 
+## FOLLOW-UP, same day — the path IS identified
+
+The "downstream of `iso+0x4ec`" localization above was chased immediately and resolved. Full mechanism
+with decompilation: `re/analysis/RESIZABLE_WINDOW.md` §8. Summary, all `GZGraphicD.dll`:
+
+`FUN_10017e2f` (WM_MOVE/WM_SIZE -> `vt+0x30`, **no size args**) -> `FUN_100185f5` (dest rect built from
+the window object's **stored** size `vt+0x68`/`vt+0x6c` + `ClientToScreen`, published to the display
+singleton) -> `FUN_10018c58` (`IDirectDrawSurface::Blt`, `vtable+0x14`, `DDERR_SURFACELOST` retry).
+All four re-read and verified locally, not taken on the worker's word.
+
+The mod resizes SIMSPR surfaces and never touches the GZGraphicD window object, so an 800x600 rect is
+still published and Blt-ed to the top-left. `FUN_10018c58` is the **same RVA the mod hooks as its
+heartbeat** (`GZGraphicD+0x18c58`).
+
+⛔ **This exposed a false claim in this project's own docs.** `RESIZABLE_WINDOW.md` §3 and
+`sc3resize.c:44,719` all state the WndProc subclass makes `WM_SIZE` publish the true client size.
+`sc3resize.c:721-731` does no such thing — it forwards and logs. **`wmsize_setrect` is not optional.**
+Row 3 above ("shrinking works") is unaffected; but note that this file's own line reading
+`WM_SIZE 2048x1081` as "the stored-size defect is genuinely fixed" is **WRONG** — it is an echo of
+`lParam`, not engine state. Left in place above with this correction rather than silently edited.
+
 ## Method finding — the census was a nondiagnostic proxy
 
 `verify/resize_census` censused `iso+0x74` and `iso+0x4ec` at ~100% fill / full bounding box at

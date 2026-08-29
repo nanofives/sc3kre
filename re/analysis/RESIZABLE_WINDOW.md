@@ -70,8 +70,14 @@ The routine runs on the game thread from the per-frame heartbeat hook at `GZGrap
   `+0x19349`) — replicate the harness `-windowed -fix16` the routine was validated under. ⚠️ **These
   were a confound**: v1/v2 launched fullscreen because the DLL lacked them; caught 2026-08-28.
 - `patch_gridb_clamp` — the crash fix, §4.
-- WndProc subclass makes a real `WM_SIZE` publish the true client size (why the on-disk
-  `wmsize_setrect` GZGraphicD patch is OPTIONAL under this mod).
+- ⛔ **WndProc subclass — THIS CLAIM WAS FALSE, corrected 2026-08-29.** It said the subclass "makes a
+  real `WM_SIZE` publish the true client size (why the on-disk `wmsize_setrect` GZGraphicD patch is
+  OPTIONAL under this mod)". **Read the source: `re/harness/src/sc3resize.c:721-731`. `rz_wndproc`
+  calls the original proc, `logf`s `lParam`, and returns. It writes nothing.** It is an OBSERVER.
+  The same false claim is in the mod's own header comment (`sc3resize.c:44`) and its function comment
+  (`:719`). The engine's stored size is NOT updated by this mod, and `wmsize_setrect` is therefore NOT
+  optional — see §8. The log line `RZ WM_SIZE 2048x1081` is the message parameter being echoed, not
+  evidence that anything in the engine learned the new size.
 
 Env knobs (set before launch; loader inherits): `SC3RESIZE_LOG`, `SC3RESIZE_READYMS` (gate ms, default
 3000), `SC3RESIZE_MINZOOM`, `SC3RESIZE_CENSUS` (dev/witness only).
@@ -171,3 +177,65 @@ self-inflicted patch bugs without ever mispatching a hot function.
 `resize_ship` (DLL carve + display-mode confound) · `resize_rootcause` (OOB cause) ·
 `resize_crashhunt` (not-reproducible + SEH) · `resize_fix_a` (all 4 clamps) · `resize_gate` (readiness)
 · `resize_census` (fill at 2048x1152) · `resize_u069_v2` (downward). Cost/design: `RESIZE_DELIVERY_COST.md`.
+
+---
+
+## 8. Where the resize STOPS — the primary blit, identified 2026-08-29
+
+Found after the `D-004` hand-test failed (`verify/resize_handtest/RESULTS.md`). Worker-drafted from the
+decomp export, **every function below re-read and verified locally** before it was written here.
+
+**The chain, all `GZGraphicD.dll`:**
+
+| hop | RVA | what it does |
+|---|---|---|
+| WndProc | `0x10017e2f` | `param_2 == 3 \|\| param_2 == 5` (WM_MOVE / WM_SIZE) -> `vt+0x30`, called with **NO arguments** `[CONFIRMED @ 0x10017e2f:126-129]` |
+| republish | `0x100185f5` | builds the dest rect from the window object's **stored** size and publishes it `[CONFIRMED @ 0x100185f5]` |
+| present | `0x10018c58` | `IDirectDrawSurface::Blt` to the visible surface `[CONFIRMED @ 0x10018c58]` |
+
+**`FUN_100185f5` — the rect is built from the stored size, not the live client area:**
+```c
+local_14.x = (**(code **)(*param_1 + 0x68))();   // vt+0x68 = STORED WIDTH
+local_14.y = (**(code **)(*param_1 + 0x6c))();   // vt+0x6c = STORED HEIGHT
+ClientToScreen((HWND)param_1[0xd], &local_c);     // (0,0)
+ClientToScreen((HWND)param_1[0xd], &local_14);    // (w,h)
+...
+piVar3 = (int *)FUN_1001a7ad();                   // display singleton
+piVar3 = (int *)(**(code **)(*piVar3 + 0x24))();
+(**(code **)(*piVar3 + 0x28))(&local_2c);         // publish the rect
+```
+`param_1[0xd]` (= `win+0x34`) is the HWND. The stored size behind the getters was measured earlier as
+`vt+0x68 = *(win+0x40) - *(win+0x38)` (`sc3resize.c:42`, prior measurement, not re-derived here).
+
+**`FUN_10018c58` — the actual present, and it is the SAME RVA the mod hooks as its per-frame heartbeat
+(`GZGraphicD+0x18c58`):**
+```c
+iVar1 = (**(code **)(**(int **)((int)this + 4) + 0x14))      // vtable+0x14 = Blt
+          (*(int **)((int)this + 4), param_3, param_1[1], param_2, param_1[0x37], param_1 + 0x1e);
+if (iVar1 == -0x7789fe3e) { ... (**(code **)(... + 0x60))(...) ... retry the same Blt ... }
+```
+ABI check, all three independently correct: `IDirectDrawSurface` slot `+0x14` = `Blt`, slot `+0x60` =
+`IsLost`, and `-0x7789fe3e` = `0x887601C2` = `DDERR_SURFACELOST`. Blt, recover, retry.
+Mapping `Blt(lpDestRect, lpDDSrcSurface, lpSrcRect, dwFlags, lpDDBltFx)`: **dest rect = `param_3`,
+src surface = `param_1[1]`, src rect = `param_2`** — all **caller-supplied**, none computed here.
+
+**So the failure is:** the mod resizes the SIMSPR surfaces (`iso+0x74`, `iso+0x4ec`) and never touches
+the GZGraphicD window object. `FUN_100185f5` keeps publishing an 800x600 rect, and `FUN_10018c58` keeps
+Blt-ing an 800x600 block into the window's top-left. That is the observed pixel.
+
+**The fix target:** update the window object's stored width/height on `WM_SIZE` (or intercept `vt+0x30`
+/ `FUN_100185f5` so the published rect matches the resized surfaces). **Recreating the SIMSPR surfaces
+alone can never help, because the primary Blt does not read them for its geometry.** This is what
+`wmsize_setrect` was built to do, and §3's claim that the DLL made it optional was false.
+
+`[UNCERTAIN]` — not established, do not build on these without evidence:
+- The `vt+0x30` **body** and the raw backing-field offset for the stored size. Reached through the
+  window-class vftable at `0x100212bc`, which the text export does not dump as readable pointers.
+  Needs live Ghidra (read slots `+0x30`, `+0x68`, `+0x6c`).
+- The **caller** that hands `param_3`/`param_2` to `FUN_10018c58`. It is invoked virtually and has no
+  textual caller in the export, so "the rect it receives is the one published by `FUN_100185f5`" is
+  **inference from the DirectDraw ABI, not a byte-proven link**.
+- `FUN_100185f5`'s guard `(**(code **)(*piVar3 + 0x34))() == 0` was read as "windowed" by the worker.
+  That is an unproven label; mechanically it is a char-returning singleton getter gating the
+  ClientToScreen branch.
+- The iOS oracle is **useless here**: that build is OpenGL-ES and has no DirectDraw primary-blit analog.
