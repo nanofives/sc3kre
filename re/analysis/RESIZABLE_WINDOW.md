@@ -34,15 +34,15 @@ in `verify/resize_storedrect/`) makes the resized view reach the physical monito
 Six writes, zero refusals, five resize cycles, zero faults. §8's causal claim is **confirmed, not
 falsified**.
 
-⛔ **But the mod is still NOT shippable — two rendering defects, neither diagnosed:**
-- **A. Resize does not repaint the new area.** After a resize it is **black except moving traffic**;
-  moving the camera makes terrain and zones appear. The redraw path works, it is not being triggered.
-- **B. The RESIZE drops buildings and roads** (CORRECTED — not a launch defect). Owner clarified:
-  **"upon launching i can see the game fine, everything breaks when i resize"**. At launch the city
-  renders fully; after a resize, buildings and roads are gone at every camera position (terrain and
-  zones come back on camera motion, per A). So `patch_windowed`/`FIX16` are **exonerated** — they are
-  live at launch and the city is fine. The lead is **step 8 `FUN_1000fa36`** (its own note: omitting
-  it = terrain only), producing a *partial* re-register here. `[UNCERTAIN]`, decomp read in progress.
+⛔ **But the mod is still NOT shippable — two rendering defects, now ROOT-CAUSED (§9), not yet fixed:**
+- **A. Resize does not repaint the new area.** Black except moving traffic; camera motion restores
+  terrain/zones. Cause: the resize never runs the System-B field repaint `FUN_100071a3` for the newly
+  exposed region; only scroll triggers it.
+- **B. The RESIZE drops buildings and roads** (CORRECTED — not a launch defect; owner: "upon launching
+  i can see the game fine, everything breaks when i resize"). Cause: **step 8 calls the leaf
+  `FUN_1000fa36` instead of the real object re-register `FUN_1000c9bd`**, skipping the fine-grid clear,
+  the tag-2 region pickup, and the draw-key recompute. `patch_windowed`/`FIX16` **exonerated** (live at
+  launch, city fine). One root cause, verified against the decomp. Fix options in §9.
 
 Also new: the view now fills the window but **navigation only works in the top-left 800x600**, the
 inverse of the pre-fix behaviour. Input picking reads a different size source than the blit. Not
@@ -330,3 +330,40 @@ write, and a fresh owner hand-test — it is unverified until a real display sho
   That is an unproven label; mechanically it is a char-returning singleton getter gating the
   ClientToScreen branch.
 - The iOS oracle is **useless here**: that build is OpenGL-ES and has no DirectDraw primary-blit analog.
+
+---
+
+## 9. Defects A + B root-caused, 2026-08-29 — step 8 calls the leaf, not the routine
+
+After the stored-RECT fix confirmed `D-004`, the two remaining rendering defects were diagnosed and
+**verified against the SIMSPR decompilation** (worker-drafted, re-read locally). One root cause.
+
+**Two draw systems on the iso view** (all `SIMSPR.DLL`):
+- **A. Sprites/objects** (buildings, roads): hash-map `iso+0x3a4` -> fine grid `iso+0x380`, drawn by
+  `FUN_1000af7c` off `iso+0x380`. **Scroll never rebuilds `iso+0x380`.**
+- **B. Terrain/zone tiles**: `iso+0x24` map grid, repainted by scroll routine `FUN_100071a3`. **Self-
+  heals on camera move** — why terrain/zones return and buildings/roads do not.
+
+**Step 8 (`FUN_1000fa36(iso,1,0)`) is the innermost leaf of the real re-register.** Its sole caller
+`FUN_1000c9bd` `[CONFIRMED @ 0x1000c9bd]` first `FUN_1000edd9` (clear `iso+0x380`) then a region scan
+adding tag-2 nodes via `FUN_1000cedb`, THEN `FUN_1000fa36` (tag-1). The grandparent `FUN_10006a55`
+(view-change handler) additionally runs `FUN_1000c8f9` (recompute every object draw key `wrapper+0x24`)
+and `FUN_100071a3` (System-B repaint) — sequence at `0x10006a55` lines 60-69:
+`b70e -> e248 -> c8f9 -> 071a3 -> b352 -> c9bd`. The mod runs only the final leaf, with `purge=0`, so it
+skips: the grid clear, the tag-2 region pickup, the draw-key recompute, and the System-B repaint.
+
+**Defect B** = `iso+0x380` object grid never properly rebuilt + scroll never touches it -> buildings/
+roads gone at every camera position. **Defect A** = System-B field repaint `FUN_100071a3` not run for
+the newly exposed region -> black until a scroll triggers it.
+
+### Fix options (NONE built)
+
+| # | change | fixes | risk |
+|---|---|---|---|
+| 1 (surgical) | replace step 8 `FUN_1000fa36(iso,1,0)` with `FUN_1000c8f9(iso)` then `FUN_1000c9bd(iso, iso+0x54, 1)` | **B** (and A's object half); A's terrain half may need #2's `FUN_100071a3` | small blast radius, stays in the spirit of the Init-free routine; `FUN_1000c9bd` region pickup depends on `iso+0x4c4`/zoom guard being set at step-8 time `[UNCERTAIN]` |
+| 2 (canonical) | after the resize, call `FUN_10006a55` (the whole view-change handler) instead of the hand-rolled System-A steps | **A and B together** | bigger hammer; takes rotation/coord params and calls `FUN_1000a513`/`FUN_10008dd4` — may move/rotate the view or undo Init-free guarantees; needs its args reverse-engineered |
+
+Recommendation on record: **#1 first** — it targets the severe defect (buildings/roads never return)
+with minimal risk to the validated 9-step routine, and if defect A's terrain half persists, add
+`FUN_100071a3` for the exposed region as a step 7b rather than adopting the whole `FUN_10006a55`.
+Any build needs a committed `PRE.md` + an owner hand-test (the log cannot see the pixels).

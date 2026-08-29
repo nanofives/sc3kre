@@ -193,22 +193,22 @@ Stride/corner measurement is deferred as cosmetic (~8 runs).
 > 1920x1009. `RESIZABLE_WINDOW.md` §8 is **confirmed, not falsified** — the pre-registered
 > falsification case did not occur.
 >
-> ⛔⛔ **BUT THE MOD IS NOT SHIPPABLE — two rendering defects, NEITHER DIAGNOSED.**
-> - **A. Resize does not repaint the new area.** Black except moving traffic; moving the camera makes
->   terrain and zones appear. Step 7 `FUN_10018cdf -> 1` and step 9's full present-rect push both happen,
->   so the redraw path is not being *triggered* for the new region. `[UNCERTAIN]`.
-> - **B. The RESIZE drops buildings and roads** (CORRECTED — the owner first said "missing at launch",
->   then clarified: **"upon launching i can see the game fine, everything breaks when i resize"**, and
->   buildings/roads are ALWAYS gone after). So it is a resize consequence, not a launch defect, and
->   `patch_windowed`/`FIX16` are **exonerated** (live at launch, city fine). Lead: **step 8
->   `FUN_1000fa36`** re-registers *partially* here (terrain+zones survive, buildings/roads lost — its
->   own note says omitting it = terrain only). Worker reading the decomp. `[UNCERTAIN]`.
-> - Also: the view fills the window but **navigation works only in the top-left 800x600** — the inverse
->   of the pre-fix behaviour. Input picking reads a different size source than the blit. Not investigated.
->
-> ⚠️ The launch-vs-resize control is effectively answered by the witness: the same mod, before any
-> resize, renders the full city. Defects A and B are both **inside the 9-step resize routine**, not the
-> load-time patches. That is where to look.
+> ⛔⛔ **BUT THE MOD IS NOT SHIPPABLE — two rendering defects, now ROOT-CAUSED (verified in decomp),
+> not yet fixed. `RESIZABLE_WINDOW.md` §9.** One root cause: **step 8 calls the leaf `FUN_1000fa36`
+> instead of the real object re-register `FUN_1000c9bd`.**
+> - Two draw systems: **A = sprites/objects** (buildings, roads) via hash-map `iso+0x3a4` -> fine grid
+>   `iso+0x380`, and **B = terrain/zone tiles** via `iso+0x24`, repainted by scroll `FUN_100071a3`.
+>   B self-heals on camera move; A does not.
+> - `FUN_1000fa36`'s sole caller `FUN_1000c9bd` first clears the grid (`FUN_1000edd9`) and does a tag-2
+>   region pickup (`FUN_1000cedb`), THEN calls it; the grandparent `FUN_10006a55` also recomputes draw
+>   keys (`FUN_1000c8f9`) and repaints System B (`FUN_100071a3`). The mod runs only the final leaf.
+> - **Defect B** = `iso+0x380` object grid never rebuilt + scroll never touches it. **Defect A** =
+>   `FUN_100071a3` not run for the new region. `patch_windowed`/`FIX16` exonerated by the witness.
+> - **Fix options (none built):** #1 surgical — swap step 8 for `FUN_1000c8f9` + `FUN_1000c9bd`;
+>   #2 canonical — call the whole view-change handler `FUN_10006a55`. Recommended #1 first. Both need a
+>   committed `PRE.md` + owner hand-test.
+> - Also: view fills the window but **navigation works only in the top-left 800x600** (input picking
+>   reads a different size source than the blit). Not investigated.
 >
 > ---
 > **History — the first hand-test, which FAILED.** Record: `verify/resize_handtest/RESULTS.md`
