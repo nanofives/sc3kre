@@ -181,15 +181,39 @@ Stride/corner measurement is deferred as cosmetic (~8 runs).
 ### 2. Resizable window / arbitrary resolution — ⭐ CONSOLIDATED HANDOFF: `re/analysis/RESIZABLE_WINDOW.md`
 > **Read `RESIZABLE_WINDOW.md` first** — single authoritative summary (2026-08-29). Headline: the mod
 > works headless in both resize directions at 2048x1152, the crash is fixed engine-wide (4 grid-B
-> clamps), ships as `sc3resize.dll`+`resize_launch.exe` patching nothing on disk. Only open item is
-> `D-004` (the final DirectDraw flip to a real monitor — needs an owner hand-test). The detailed
-> history below is retained as the working record.
+> clamps), ships as `sc3resize.dll`+`resize_launch.exe` patching nothing on disk. **`D-004` was
+> hand-tested on a real display 2026-08-29 and FAILED** — see the block below. The detailed history
+> below is retained as the working record.
 >
-> ⭐ **HAND-TEST READY FOR THE OWNER: `verify/resize_handtest/HANDTEST.md`** (also in the Happy share as
-> `RESIZE_HANDTEST.md`). Run `re/harness/bin/resize_launch.exe -- <city>`, drag/maximize the window,
-> check rows 1-4 (fills window / real image / shrink / no crash). Binaries are the all-4-clamp build;
-> the owner's `acefadf0` GZGraphicD supplies the draggable frame. This is the ONLY step left to
-> confirm the resize mod end-to-end.
+> ⛔⛔ **HAND-TEST DONE 2026-08-29 — `D-004` FAILED. THE MOD IS NOT COMPLETE END-TO-END.**
+> Record: **`verify/resize_handtest/RESULTS.md`** (+ the witness log committed beside it).
+>
+> Owner maximized by hand on a real 2048x1152 display: **the city stayed drawn in the top-left at the
+> pre-resize size and did not fill the window** — the pre-registered FAIL signature for row 1. Cursor and
+> input DID follow the full window. Row 4 (no crash) **PASSES**: three resize cycles including
+> maximize/restore, **zero `FAULT CAUGHT`**.
+>
+> **What the run banked (do not re-litigate these):** Fix A's 4 grid-B clamps hold on a real display
+> under hand-driven churn — first non-headless witness; the readiness gate fires on a real Europolis
+> load; the WndProc subclass publishes the **true** client size (`WM_SIZE 2048x1081`); the clamps rebase
+> correctly onto a relocated `SIMSPR` (`0x03310000`).
+>
+> **Where the defect now sits:** `WM_SIZE` -> ... -> `iso+0x4ec` is all witnessed correct on a real
+> display (both surfaces re-created at 2048x1081, drawables re-registered, present rect pushed at full
+> extent). So the gap is **downstream of `iso+0x4ec`** — the copy-to-DirectDraw-primary + flip, which the
+> 9-step routine never touches and never resizes. `[UNCERTAIN]` the object/call is **not identified**;
+> this is elimination, not a confirmed cause. **A CONFIRMED CODE PATH IS NOT A CONFIRMED CAUSE** — see
+> the standing warning above before anyone writes a fix.
+>
+> ⚠️⚠️ **METHOD FINDING, and it is the nondiagnostic-proxy class again — third instance, first time the
+> proxy PASSED while the real thing FAILED.** `verify/resize_census` censused `iso+0x74` / `iso+0x4ec`
+> at ~100% fill and that was written up as "on-screen fill at 2048x1152". **It was not on-screen fill.**
+> Both surfaces were equally full on the run that failed on the monitor. Measuring the last surface the
+> harness can reach is not measuring the flip, and the distance between the two is exactly `D-004`.
+>
+> ⛔ **Trap for the next reader:** `verify/resize_handtest/PRE.md` (2026-08-26, pre-bridge) pre-registers
+> this exact visual as meaning "the render target is NOT resized". **The log proves it WAS resized.**
+> Score future runs against `HANDTEST.md`, not `PRE.md`.
 
 ### 2a. (history) black-vs-garbage RESOLVED 2026-08-25 (U-068 = "renders but does not blit"; see the run-4 subsection below)
 `U-068`: display lists stay empty after a resize Init. Root cause established 2026-08-23 by two

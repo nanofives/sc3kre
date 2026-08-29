@@ -21,10 +21,13 @@ DLL** (`sc3resize.dll` + `resize_launch.exe`), patching **nothing on disk**.
 - **Load-readiness gate** prevents acting mid-city-load (`verify/resize_gate`).
 
 **The one thing NOT verifiable here — `D-004`:** the final DirectDraw **primary flip to a physical
-monitor**. The headless harness reconstructs frames from the raster composite (which is proven full and
-correct); it cannot see the real present to a screen. **Needs an owner hand-test on a real display.**
-An earlier informal hand-test (`verify/resize_handtest`) showed maximize works with no black viewport
-and no crash, but pre-dates the current fixes.
+monitor**. The headless harness reconstructs frames from the raster composite; it cannot see the real
+present to a screen.
+
+⛔ **HAND-TESTED 2026-08-29 AND IT FAILED.** On a real 2048x1152 display, maximizing left the city drawn
+in the **top-left at the pre-resize size**. The routine completed all 9 steps and both surfaces reported
+2048x1081, with zero faults — so the failure is in the present, not the render. See §6 and
+`verify/resize_handtest/RESULTS.md`. **The mod is not complete end-to-end.**
 
 ---
 
@@ -123,13 +126,33 @@ mod works alongside these and needs none of the resize on-disk recipes.
 
 ## 6. What is DONE vs OPEN
 
+> ⛔⛔ **UPDATED 2026-08-29 — `D-004` WAS HAND-TESTED AND IT FAILED. THE MOD IS NOT COMPLETE
+> END-TO-END.** Owner ran it on a real 2048x1152 display and maximized by hand: the city **stayed drawn
+> in the top-left at the pre-resize size** and did not fill the window. Cursor/input did follow the full
+> window. The log shows the routine completing all 9 steps three times with both surfaces re-created at
+> 2048x1081 and **zero faults**. Full record: `verify/resize_handtest/RESULTS.md`.
+>
+> **Read the "on-screen fill at 2048x1152" claim below as *renders into its own surfaces at that size*,
+> NOT *displays at that size*.** The `verify/resize_census` result was a **nondiagnostic proxy** — it
+> measured `iso+0x74` / `iso+0x4ec`, which were full on the failing run too.
+
 **Done (headless-verified):** the 9-step routine (both directions), the crash fix (all 4 walkers), the
-display-mode patches, the load-readiness gate, on-screen fill at 2048x1152 (raster+composite census),
-shippable DLL+loader with offline gates passed.
+display-mode patches, the load-readiness gate, surface-level fill at 2048x1152 (raster+composite
+census — see the correction above), shippable DLL+loader with offline gates passed.
+
+**Done (real-display verified, 2026-08-29 hand-test):** the crash fix holds under hand-driven
+maximize/restore churn (zero `FAULT CAUGHT`); the readiness gate fires on a real city load; the WndProc
+subclass publishes the **true** client size (`WM_SIZE 2048x1081`); all 4 clamps install against a
+relocated `SIMSPR` base.
 
 **Open:**
-- ⏳ **`D-004` — the real-monitor flip.** Only an owner hand-test on a physical foreground display can
-  confirm the final DirectDraw present. Everything upstream is proven.
+- ⛔ **`D-004` — the real-monitor flip: FAILED, and now localized.** Everything from `WM_SIZE` through
+  `iso+0x4ec` is witnessed correct on a real display; the monitor still shows the old image top-left.
+  **The gap is downstream of `iso+0x4ec`** — the component that copies that surface to the DirectDraw
+  primary and flips it, which the 9-step routine never touches and never resizes.
+  `[UNCERTAIN]` the specific object and call are **not identified**; this is localization by
+  elimination, not a confirmed cause. ⛔ Do not score a future run against `PRE.md`'s old table, which
+  reads this exact visual as "the render target is NOT resized" — the log proves it **was**.
 - Camera can scroll to empty corners at large sizes (cosmetic; the census saw low fill when scrolled) —
   not investigated, likely a default camera-origin/clamp question, not a resize defect.
 - The DLL has only been driven via `resize_launch.exe` + external `SetWindowPos`; a real user drag-resize
