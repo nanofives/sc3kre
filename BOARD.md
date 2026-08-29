@@ -178,7 +178,14 @@ writes **zones only**, so this needs either a **network-layer writer** (`roadtyp
 reader) or an **anchored screen→world map** so drags can target coordinates. (3) A bound above 512.
 Stride/corner measurement is deferred as cosmetic (~8 runs).
 
-### 2. Resizable window / arbitrary resolution — black-vs-garbage RESOLVED 2026-08-25 (U-068 = "renders but does not blit"; see the run-4 subsection below)
+### 2. Resizable window / arbitrary resolution — ⭐ CONSOLIDATED HANDOFF: `re/analysis/RESIZABLE_WINDOW.md`
+> **Read `RESIZABLE_WINDOW.md` first** — single authoritative summary (2026-08-29). Headline: the mod
+> works headless in both resize directions at 2048x1152, the crash is fixed engine-wide (4 grid-B
+> clamps), ships as `sc3resize.dll`+`resize_launch.exe` patching nothing on disk. Only open item is
+> `D-004` (the final DirectDraw flip to a real monitor — needs an owner hand-test). The detailed
+> history below is retained as the working record.
+
+### 2a. (history) black-vs-garbage RESOLVED 2026-08-25 (U-068 = "renders but does not blit"; see the run-4 subsection below)
 `U-068`: display lists stay empty after a resize Init. Root cause established 2026-08-23 by two
 independent angles — Init sizes and zeroes grid B, only object registration fills it, and Init's only
 route early-outs on a zero-equality guard. **The fix is to re-drive registration, not to repair the
