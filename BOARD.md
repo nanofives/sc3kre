@@ -185,6 +185,20 @@ Stride/corner measurement is deferred as cosmetic (~8 runs).
 > hand-tested on a real display 2026-08-29 and FAILED** — see the block below. The detailed history
 > below is retained as the working record.
 >
+> ✅✅✅ **RENDER FIXED END-TO-END, 2026-08-30 (step 11).** Owner-confirmed: after a resize, with NO
+> manual layer toggle, **the whole city renders** — terrain, zones, buildings, roads. Root cause: the
+> resize's step 7 called `FUN_10018cdf(bridge, layer=0, .., force=0)` which **nulled the active layer
+> `bridge+0x28`**, so nothing downstream could draw. Step 11 replays SetDataView(0)'s core
+> (`FUN_10018cdf(bridge, *(bridge+0x2c), *(bridge+0x80), .., force=1)`), restoring the active layer +
+> forcing the refresh. Defects A and B CLOSED. `verify/resize_setdataview/`. Five earlier hypotheses
+> (8a/8b, 8c, repaint, device batch, rotation) failed because none restored the active layer.
+>
+> ⛔ **REMAINING, blocks shipping: zooming in after a resize CRASHES** (owner: "it closed itself when i
+> zoomed in"). Uninstrumented — our SEH wraps only the resize routine and SC3U swallows the fault (no
+> WER). Likely the §4 grid-B OOB class on the zoom path (`FUN_10006752`) at the resized window size.
+> **Next: add a process-wide VEH crash logger to localize it** (build the fault-catcher first).
+> `verify/resize_zoomcrash/`.
+>
 > ✅✅ **`D-004` IS CONFIRMED, 2026-08-29 — the resized view reaches the physical monitor and fills the
 > window.** The fix is the **window stored-RECT write** (`verify/resize_storedrect/`, pre-registered
 > `a85a7f2`): on `WM_SIZE` the DLL reads the window object from `GZGraphicD+0x6cdb8` and sets

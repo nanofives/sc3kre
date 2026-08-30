@@ -34,7 +34,19 @@ in `verify/resize_storedrect/`) makes the resized view reach the physical monito
 Six writes, zero refusals, five resize cycles, zero faults. §8's causal claim is **confirmed, not
 falsified**.
 
-⛔ **But the mod is still NOT shippable — two rendering defects, now ROOT-CAUSED (§9), not yet fixed:**
+✅✅ **RENDER FIXED 2026-08-30 (step 11) — the whole city renders after a resize with NO manual toggle.**
+Root cause: the resize's step 7 called `FUN_10018cdf(bridge, layer=0, ..., force=0)`, which **nulled the
+active layer `bridge+0x28`**; nothing downstream could draw. Step 11 replays SetDataView(0)'s core —
+`FUN_10018cdf(bridge, *(bridge+0x2c) base layer, *(bridge+0x80) base renderer, .., force=1)` — restoring
+the active layer and forcing the grid refresh. Owner-confirmed: terrain, zones, buildings, roads all
+render. Defects A and B CLOSED. `verify/resize_setdataview/`.
+
+⛔ **NEW, blocks shipping: zooming in after a resize CRASHES** (owner: "it closed itself when i zoomed
+in"). Uninstrumented - our SEH wraps only the resize routine and SC3U swallows the fault (no WER). Likely
+the §4 grid-B OOB class on the zoom path (`FUN_10006752`) at the resized window size. Next: add a
+process-wide VEH crash logger to localize it. `verify/resize_zoomcrash/`.
+
+⛔ **(historical, now FIXED) two rendering defects, root-caused §9:**
 - **A. Resize does not repaint the new area.** Black except moving traffic; camera motion restores
   terrain/zones. Cause: the resize never runs the System-B field repaint `FUN_100071a3` for the newly
   exposed region; only scroll triggers it.
