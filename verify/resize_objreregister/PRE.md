@@ -99,3 +99,32 @@ of the `iso+0x3a4` objects) and buildings/roads were still missing then too. So 
 tag-2 region sprites (whose pickup in `FUN_1000c9bd` is guarded by `2 < iso+0x28` and the exposed-rect
 list `iso+0x4c4`, possibly empty at resize time) or driven by the layer-visibility system. `[UNCERTAIN]`
 — the layer-switch read will settle which.
+
+
+---
+
+## FOLLOW-UP DIAGNOSIS (2026-08-29) — the missing call is FUN_100071a3, and it unifies A+B
+
+Worker read of the layer-switch path, key claims re-verified locally.
+
+**Buildings and roads are System-B layer-visibility tile drawables** — the `iso+0x24` cell grid
+(0x14-byte cells, flag word at cell+0x10, object ptr at cell+0). They are shown by issuing drawable
+**vtable +0x34** over every occupied cell, and the ONLY routine that does that over the whole grid
+after a view change is **`FUN_100071a3` (SIMSPR 0x100071a3)**. Step 8 never calls it.
+
+**This is the SAME call §9 named as the missing piece for defect A.** One omission explains both: A
+(terrain/new region not repainted) and B (buildings/roads not re-shown). The data-view toggle works
+because switching mode drives `FUN_100071a3` with fromMode != toMode, which hides-then-shows every cell.
+
+**Elimination confirmed:** buildings/roads are NOT tag-1 objects — the OLD step 8 already re-added tag-1
+(`FUN_1000fa36`) and they were still missing `[CONFIRMED @ 0x1000c9bd, 0x1000fa36]`.
+
+**The wrinkle (verified in the decomp, 0x100071a3 head):** `__thiscall(ecx=iso, uint* p1, int fromMode,
+uint* p3, int toMode)`. It **early-outs when `fromMode == toMode`** unless a zoom-band-crossing flag
+`bVar3` is set. So a naive re-show with equal modes is a NO-OP. To force the whole-grid hide-then-show
+you must either pass `fromMode != toMode` (a real mode transition, as the rotate handler does) or trip
+the zoom-band condition, and pair it with `FUN_1000e248(iso)` (the teardown partner) as handlers A/B do.
+
+`[UNCERTAIN]`, needs a hand-test or a live read: the exact benign args that force the re-show without
+rotating/zooming the view. Candidates: (1) force via a zoom-band hint; (2) replicate the proven overlay
+round-trip via `FUN_10008432(iso, layer, iso+0x2c)` after a hide. Both cost a launch to validate.
