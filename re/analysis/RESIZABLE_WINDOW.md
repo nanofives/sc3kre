@@ -41,10 +41,18 @@ active layer `bridge+0x28`**; nothing downstream could draw. Step 11 replays Set
 the active layer and forcing the grid refresh. Owner-confirmed: terrain, zones, buildings, roads all
 render. Defects A and B CLOSED. `verify/resize_setdataview/`.
 
-⛔ **NEW, blocks shipping: zooming in after a resize CRASHES** (owner: "it closed itself when i zoomed
-in"). Uninstrumented - our SEH wraps only the resize routine and SC3U swallows the fault (no WER). Likely
-the §4 grid-B OOB class on the zoom path (`FUN_10006752`) at the resized window size. Next: add a
-process-wide VEH crash logger to localize it. `verify/resize_zoomcrash/`.
+✅✅ **ZOOM FIXED + STABLE 2026-08-30 — the in-city viewport is COMPLETE end-to-end.** The
+zoom-after-resize crash was `GZGraphicD FUN_1000239d` (zoom-scaled 16bpp blit) writing one scanline past
+the render target, which is allocated exactly `height` rows. Fix: allocate `RZ_SURFACE_SLACK=8` guard
+rows (`rz_recreate_raster`) + tolerate them in the poll settle-check (`rz_poll`, else it churned every
+frame -> black + a zoom-out race crash). Owner-confirmed: resize fills the monitor, city renders with no
+toggle, zoom in/out renders and does not crash. Localized via the retained VEH crash logger.
+`verify/resize_zoomcrash/` + `verify/resize_zoomfix/`.
+
+⏭️ **OPEN (new workstream, the always-known "row 5" gap): the HUD/UI does not reflow** - it keeps the
+1024x768 layout with margins. Owner feature request 2026-08-30: extend the UI borders (keep height when
+stretched one axis; scale up when the window grows squarely) and match the edge-scroll margin to the new
+bounds. Scoped separately; needs SIMUI layout RE.
 
 ⛔ **(historical, now FIXED) two rendering defects, root-caused §9:**
 - **A. Resize does not repaint the new area.** Black except moving traffic; camera motion restores
