@@ -48,3 +48,24 @@ reports. Prior log archived `re/harness/sc3resize_handtest.veh1.log`. Install (`
 
 Built + string-verified (`guard rows`, `zoom-blit overrun fix`, VEH logger + step 11 retained; PE32;
 install intact). Pre-registered. Awaiting the owner hand-test.
+
+---
+
+## RESULT v1 (guard rows) + churn fix (2026-08-30)
+
+**Guard rows STOPPED the original overrun** — no more `FUN_1000239d` fault. **But it caused a
+regression I introduced:** padding the render target height to `ht+8` (1089) made the poll's settle
+check (`R+0x28 == ht`) a permanent mismatch (1089 != 1081), so the resize routine **re-fired every
+~130ms** (dozens of `done (all 11 steps)` in the log). That churn -> **zoom renders black** (never a
+stable frame) and, deep in the churn, a **zoom-out crash**: a NEW, different fault
+`GZGraphicD FUN_10014fb4+0x1f9` (RVA 0x151AD), `READ addr=0x00000000`, `ecx=0` — a null deref
+consistent with a resize racing a mid-flight zoom-out (surface torn down under it).
+
+**Churn fix:** the poll's settle check now tolerates the guard rows — width-equal AND height in
+`[ht, ht+RZ_SURFACE_SLACK]` counts as settled (`rz_poll`). One resize per real size change again; no
+per-frame churn. VEH logger retained: if the zoom-out null-deref is independent (not churn-induced), it
+will be re-captured at `FUN_10014fb4` and localized then.
+
+Expected on re-test: resize settles (one cycle), zoom in/out renders and does not crash. If black
+persists with NO churn in the log, the guard-row height change itself breaks the composite (revisit).
+If zoom-out still nulls at `FUN_10014fb4`, that is a real independent bug to fix next.
