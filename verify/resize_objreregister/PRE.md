@@ -60,5 +60,42 @@ verified before and after; no on-disk change.
 
 ## STATUS
 
-Built + string-verified (`step 8a] FUN_1000c8f9`, `step 8b] FUN_1000c9bd` present, PE32, all prior
-fixes retained). Pre-registered. Awaiting the owner hand-test.
+Built + string-verified. Pre-registered. **Hand-tested 2026-08-29 — see RESULT below.**
+
+---
+
+## RESULT (2026-08-29)
+
+**Option 1 ran clean but did NOT visibly fix defect B on a plain resize** — owner: "same as before".
+The log shows `[step 8a]` + `[step 8b] FUN_1000c9bd returned` on all three resize cycles, **zero
+`FAULT CAUGHT`**, three `done (all 9 steps)`, STOREDRECT still working (win `0x00B4AD60`). So the
+convention/args disassembled from `0x10006bc0` were correct and the clamp-hooked taggers held — the
+call executed — but buildings/roads were still missing after a bare resize.
+
+**⭐ THE DECISIVE NEW FINDING — a runtime action fully repairs the render.** Owner: *"when changing
+layers and i go to the water lines view and go back to buildings, everything renders when resized."*
+Toggling a **data layer** (water view -> back to the normal/buildings view) after a resize makes the
+**entire scene render correctly**, buildings and roads included.
+
+**This REFUTES the pre-registered falsification hypothesis.** The buildings/road objects are **present
+and renderable** post-resize — they are not gone from the engine, and this is not a cross-DLL placement
+problem. The resize leaves them in a **not-drawn state that a full view/layer rebuild clears**.
+
+⚠️ **Caveat, owner-stated:** "i didn't check this before so i don't know if any of your changes did make
+an effect." The layer-toggle workaround is **not confirmed to be new** — it may repair the old build
+too. So option 1's 8a/8b cannot be credited with enabling it. Treat option 1 as **did not visibly fix
+B**, and the layer-toggle repair as a **property of the engine**, not of this change.
+
+**What this points at:** the data-view switch is empirically hitting the engine's real "rebuild the
+whole visible scene" path (the family around `FUN_10006a55` — `FUN_1000b70e`/`FUN_1000e248`/
+`FUN_100071a3`/`FUN_1000b352`/`FUN_1000c9bd`). Option 1 ran only `FUN_1000c8f9` + `FUN_1000c9bd`, so
+the missing ingredient is whatever the layer switch does that those two do not. **Next: read the
+data-view/layer-switch handler to find the exact sequence, then replicate the delta** — rather than
+guessing `FUN_10006a55`'s args. Delegated 2026-08-29.
+
+**Also note (consistent with the above):** the OLD step 8 already called `FUN_1000fa36` (tag-1 re-add
+of the `iso+0x3a4` objects) and buildings/roads were still missing then too. So buildings/roads are
+**not** tag-1 `iso+0x3a4` objects — otherwise the pre-fix re-add would have shown them. They are either
+tag-2 region sprites (whose pickup in `FUN_1000c9bd` is guarded by `2 < iso+0x28` and the exposed-rect
+list `iso+0x4c4`, possibly empty at resize time) or driven by the layer-visibility system. `[UNCERTAIN]`
+— the layer-switch read will settle which.

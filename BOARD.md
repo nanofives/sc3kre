@@ -204,9 +204,16 @@ Stride/corner measurement is deferred as cosmetic (~8 runs).
 >   keys (`FUN_1000c8f9`) and repaints System B (`FUN_100071a3`). The mod runs only the final leaf.
 > - **Defect B** = `iso+0x380` object grid never rebuilt + scroll never touches it. **Defect A** =
 >   `FUN_100071a3` not run for the new region. `patch_windowed`/`FIX16` exonerated by the witness.
-> - **Fix options (none built):** #1 surgical — swap step 8 for `FUN_1000c8f9` + `FUN_1000c9bd`;
->   #2 canonical — call the whole view-change handler `FUN_10006a55`. Recommended #1 first. Both need a
->   committed `PRE.md` + owner hand-test.
+> - **Fix #1 (surgical) BUILT + HAND-TESTED 2026-08-29 — ran clean, did NOT visibly fix B.** Step 8 now
+>   `FUN_1000c8f9` + `FUN_1000c9bd` (`verify/resize_objreregister/`, pre-reg `d596089`); log shows both
+>   run, `FUN_1000c9bd returned`, zero faults, but owner: "same as before".
+>   **⭐ Decisive finding: a data-layer toggle (water view -> back) fully repairs the render after a
+>   resize** — buildings/roads included. So the objects are **present and renderable**; resize leaves
+>   them undrawn and a view/layer rebuild clears it. REFUTES the "objects gone / cross-DLL" hypothesis.
+>   Corollary: the old step 8 already re-added tag-1 `iso+0x3a4` objects and buildings were still
+>   missing, so **buildings/roads are NOT tag-1** — they are tag-2 region sprites or layer-visibility
+>   drawables. Worker reading the layer-switch handler to extract the rebuild delta. `[UNCERTAIN]`.
+> - Fix #2 (canonical, call `FUN_10006a55`) still open as a fallback.
 > - Also: view fills the window but **navigation works only in the top-left 800x600** (input picking
 >   reads a different size source than the blit). Not investigated.
 >

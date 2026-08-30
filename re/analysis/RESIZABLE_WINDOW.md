@@ -356,6 +356,27 @@ skips: the grid clear, the tag-2 region pickup, the draw-key recompute, and the 
 roads gone at every camera position. **Defect A** = System-B field repaint `FUN_100071a3` not run for
 the newly exposed region -> black until a scroll triggers it.
 
+### Option 1 RESULT + the layer-toggle finding (2026-08-29)
+
+Option 1 was built (step 8 -> `FUN_1000c8f9` + `FUN_1000c9bd`, `verify/resize_objreregister/`,
+pre-registered `d596089`) and hand-tested. **It ran clean but did NOT visibly fix defect B** on a plain
+resize: log shows `[step 8a]`/`[step 8b] FUN_1000c9bd returned` on all cycles, zero faults, but the
+owner reports "same as before".
+
+**⭐ Decisive new finding: a data-layer toggle fully repairs the render.** Switching to a data view
+(water lines) and back to the buildings view after a resize makes the **whole scene render**, buildings
+and roads included. **This refutes the earlier "objects are gone / cross-DLL placement" hypothesis** —
+the objects are present and renderable; the resize leaves them undrawn and a full view/layer rebuild
+clears it. (Owner caveat: the workaround was not tested on the pre-fix build, so it is an engine
+property, not a credit to option 1.)
+
+**Corollary that narrows the draw class:** the OLD step 8 already called `FUN_1000fa36` (tag-1 re-add of
+`iso+0x3a4` objects) and buildings/roads were missing then too — so **buildings/roads are almost
+certainly NOT tag-1 objects**. They are either tag-2 region sprites (pickup guarded by `2 < iso+0x28`
+and the exposed-rect list `iso+0x4c4`) or layer-visibility tile drawables. `[UNCERTAIN]` — a worker read
+of the data-view/layer-switch handler is in flight to settle which and to extract the exact rebuild
+delta the layer toggle runs that step 8 does not.
+
 ### Fix options (NONE built)
 
 | # | change | fixes | risk |
