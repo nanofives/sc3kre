@@ -215,11 +215,19 @@ Stride/corner measurement is deferred as cosmetic (~8 runs).
 >   (SIMUI/SIMCITY) path that is NOT `FUN_100071a3`, and that mode round-trip resets whatever the resize
 >   leaves stale. `[UNCERTAIN]` — the specific stale state is unidentified. **Do NOT build another
 >   drawable-re-register variant; that class is exhausted.**
-> - Next leads (owner decision pending): (i) find the cross-DLL data-view handler (SIMUI/SIMCITY) and
->   what pipeline reset it does; (ii) test whether a real rotate/zoom transition (`FUN_10006a55`, heavier
->   than 8c) also repairs it; (iii) ship D-004 with the one-click layer-toggle workaround documented.
+> - **PROGRESS 2026-08-30: the defect is the PRESENT, localized.** Cross-DLL read found the toggle's
+>   repair = iso whole-view repaint (`FUN_1000db86` = iso vt+0x144, PE-verified) bracketed by a **device
+>   present batch** (`device+0x240`/`+0x244`, `device = *(bridge+0x14)`) at `FUN_1001818c:53-55`.
+>   - Step 10 = repaint ALONE: hand-tested FAIL (ran clean, screen unchanged). `verify/resize_pipeline/`.
+>   - Owner: **rotating does NOTHING** (refutes the transition/repaint path); **only a data/utility
+>     overlay toggle and back fixes it** — the one path that runs the device batch. So the **device
+>     present batch is the operative part.**
+>   - Next build `verify/resize_present/` (pre-reg committed): wrap step 10's repaint in the device
+>     batch, verbatim `FUN_1001818c:53-55`, live-vtable + SEH guarded. `[UNCERTAIN]` until hand-tested.
+> - Falsified: 8a/8b (sprite re-register), 8c (tile re-register, 65536/65536 cells), step-10-alone
+>   (repaint), and rotation. The fix is narrowed to the device present batch.
 > - **`D-004` (the session goal) is CONFIRMED and complete** — the resizable window fills the monitor.
->   A + B are polish with a working manual workaround.
+>   A + B are polish with a working manual workaround (toggle a data view and back).
 > - Also: view fills the window but **navigation works only in the top-left 800x600** (input picking
 >   reads a different size source than the blit). Not investigated.
 >

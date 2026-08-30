@@ -356,6 +356,22 @@ skips: the grid clear, the tag-2 region pickup, the draw-key recompute, and the 
 roads gone at every camera position. **Defect A** = System-B field repaint `FUN_100071a3` not run for
 the newly exposed region -> black until a scroll triggers it.
 
+### Step 10 + device batch — the defect is the PRESENT, localized 2026-08-30
+
+Progress after 8c falsified drawable re-registration:
+- **Step 10 (iso whole-view repaint `FUN_1000db86` = iso vt+0x144, PE-verified) ALONE: FAIL.** Ran clean
+  (`iso+0x32c=1`, no fault), screen unchanged. `verify/resize_pipeline/`.
+- **Owner: rotating the view does NOTHING; only a data/utility overlay toggle and back fixes it.** This
+  refutes the transition/repaint path entirely and points at the **device present batch** the base-view
+  return runs (`FUN_1001818c:53-55`): `device+0x240` begin -> iso `+0x144` repaint -> `device+0x244`
+  end, `device = *(bridge+0x14)`. Rotation repaints but never runs this batch.
+- **Next build (`verify/resize_present/`):** wrap step 10's repaint in that device batch, verbatim. The
+  `+0x240/+0x244` device slots are called through the live vtable (unverified statically), guarded +
+  SEH. `[UNCERTAIN]` until hand-tested. Falsification: if begin+end run with no fault and the screen is
+  still blank, the repair is deeper in `FUN_100182ba` SetDataView(0), not the batch.
+
+Falsified so far: 8a/8b (sprite re-register), 8c (tile re-register), step-10-alone (repaint), rotation.
+
 ### 8c RESULT — drawable re-registration is FALSIFIED (2026-08-30)
 
 Step 8c (extract `FUN_100071a3`'s inner loop: per-cell `FUN_10006c67` hide + `FUN_10006efc` show over
