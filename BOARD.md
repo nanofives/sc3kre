@@ -204,16 +204,22 @@ Stride/corner measurement is deferred as cosmetic (~8 runs).
 >   keys (`FUN_1000c8f9`) and repaints System B (`FUN_100071a3`). The mod runs only the final leaf.
 > - **Defect B** = `iso+0x380` object grid never rebuilt + scroll never touches it. **Defect A** =
 >   `FUN_100071a3` not run for the new region. `patch_windowed`/`FIX16` exonerated by the witness.
-> - **Fix #1 (surgical) BUILT + HAND-TESTED 2026-08-29 — ran clean, did NOT visibly fix B.** Step 8 now
->   `FUN_1000c8f9` + `FUN_1000c9bd` (`verify/resize_objreregister/`, pre-reg `d596089`); log shows both
->   run, `FUN_1000c9bd returned`, zero faults, but owner: "same as before".
->   **⭐ Decisive finding: a data-layer toggle (water view -> back) fully repairs the render after a
->   resize** — buildings/roads included. So the objects are **present and renderable**; resize leaves
->   them undrawn and a view/layer rebuild clears it. REFUTES the "objects gone / cross-DLL" hypothesis.
->   Corollary: the old step 8 already re-added tag-1 `iso+0x3a4` objects and buildings were still
->   missing, so **buildings/roads are NOT tag-1** — they are tag-2 region sprites or layer-visibility
->   drawables. Worker reading the layer-switch handler to extract the rebuild delta. `[UNCERTAIN]`.
-> - Fix #2 (canonical, call `FUN_10006a55`) still open as a fallback.
+> - ⛔ **DRAWABLE RE-REGISTRATION IS FALSIFIED (2026-08-30) — two builds, both ran clean, neither fixed
+>   B.** 8a/8b (sprite grid `iso+0x380` via `FUN_1000c9bd`, `verify/resize_objreregister/`) and 8c (tile
+>   grid `iso+0x24` via per-cell `FUN_10006c67`+`FUN_10006efc` over all **65536 cells, 0 bad, 0 faults**,
+>   `verify/resize_gridreshow/`, pre-reg `24d67ec`) both drove the exact engine primitives and produced
+>   **no visual change**. The drawable `+0x34` show was invoked for every building/road and they still
+>   did not draw; a manual data-layer toggle is still required.
+> - **The defect is DOWNSTREAM of per-cell registration** — in the render/composite pipeline the show
+>   feeds. The data-view toggle switches render MODE (3D -> flat overlay) and back via a **cross-DLL**
+>   (SIMUI/SIMCITY) path that is NOT `FUN_100071a3`, and that mode round-trip resets whatever the resize
+>   leaves stale. `[UNCERTAIN]` — the specific stale state is unidentified. **Do NOT build another
+>   drawable-re-register variant; that class is exhausted.**
+> - Next leads (owner decision pending): (i) find the cross-DLL data-view handler (SIMUI/SIMCITY) and
+>   what pipeline reset it does; (ii) test whether a real rotate/zoom transition (`FUN_10006a55`, heavier
+>   than 8c) also repairs it; (iii) ship D-004 with the one-click layer-toggle workaround documented.
+> - **`D-004` (the session goal) is CONFIRMED and complete** — the resizable window fills the monitor.
+>   A + B are polish with a working manual workaround.
 > - Also: view fills the window but **navigation works only in the top-left 800x600** (input picking
 >   reads a different size source than the blit). Not investigated.
 >

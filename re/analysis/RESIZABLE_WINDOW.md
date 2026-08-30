@@ -356,6 +356,23 @@ skips: the grid clear, the tag-2 region pickup, the draw-key recompute, and the 
 roads gone at every camera position. **Defect A** = System-B field repaint `FUN_100071a3` not run for
 the newly exposed region -> black until a scroll triggers it.
 
+### 8c RESULT — drawable re-registration is FALSIFIED (2026-08-30)
+
+Step 8c (extract `FUN_100071a3`'s inner loop: per-cell `FUN_10006c67` hide + `FUN_10006efc` show over
+the whole `iso+0x24` grid, `verify/resize_gridreshow/`, pre-reg `24d67ec`) **ran completely and fixed
+nothing**. Log: `grid re-show 256x256: 65536 occupied, 65536 re-shown, 0 bad`, zero faults — the
+drawable `+0x34` show was invoked for every building and road, and they still did not draw; a manual
+data-layer toggle is still required.
+
+**This decisively falsifies the whole "re-register the drawables" line.** Both 8a/8b (sprite grid) and
+8c (tile grid) drove the exact engine primitives and neither reproduced the toggle. The defect is
+**downstream of per-cell registration** — in the render/composite pipeline the `+0x34` show feeds. The
+data-view toggle switches the whole render MODE (3D -> flat overlay) and back via a **cross-DLL**
+(SIMUI/SIMCITY) path that is NOT `FUN_100071a3`, and that mode round-trip resets whatever a resize
+leaves stale. `[UNCERTAIN]` — the specific stale pipeline state is not identified. **Do not build another
+drawable-re-register variant; that class is exhausted.** Next lead: the cross-DLL data-view handler, or
+a test of whether a real rotate/zoom transition also repairs it.
+
 ### Option 1 RESULT + the layer-toggle finding (2026-08-29)
 
 Option 1 was built (step 8 -> `FUN_1000c8f9` + `FUN_1000c9bd`, `verify/resize_objreregister/`,
