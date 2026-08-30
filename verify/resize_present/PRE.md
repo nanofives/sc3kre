@@ -55,3 +55,34 @@ control. Prior log archived `re/harness/sc3resize_handtest.step10a.log`. Install
 Built + string-verified (`device batch begin`/`end`/`REFUSED`, `done (all 10 steps)`; steps 1-9
 retained; PE32; install intact). Batch bracket is verbatim `FUN_1001818c:53-55`. Pre-registered.
 Awaiting the owner hand-test.
+
+
+---
+
+## RESULT (2026-08-30) + the real lead
+
+**FAIL.** Step 10 v2 reproduced `FUN_1001818c:53-55` verbatim — log `device batch begin` /
+`FUN_1000db86` / `device batch end +0x244 - presented`, `iso+0x32c=1`, **no fault** — and the screen was
+still blank until a manual toggle. So the **device present batch is NOT the operative part** either.
+Owner also reported **rotating does nothing** (only a data/utility overlay toggle and back fixes it).
+
+Falsified now: 8a/8b (sprite re-register), 8c (tile re-register), step-10-alone (repaint), step-10-v2
+(device batch), rotation. Five mechanisms.
+
+**The real lead (from reading `FUN_10018cdf` + `FUN_100182ba` SetDataView):** our **step 7 is calling
+`FUN_10018cdf` with the WRONG args**. `FUN_10018cdf(this, layer, rend, rend2, p4, force)` sets
+`this+0x28 = layer` (the active layer) unconditionally and gates its full-grid refresh on `bVar7||force`.
+
+- Step 7 (ours): `FUN_10018cdf(bridge, 0, *(bridge+0x78), *(bridge+0xa8), 0, 0)` → **layer = 0** (nulls
+  the active layer `bridge+0x28`) and **force = 0** (refresh only if the layer changed).
+- SetDataView(0) (the toggle's return-to-base): `FUN_10018cdf(bridge, *(bridge+0x2c), *(bridge+0x80),
+  *(bridge+0x80), 0, 1)` → **base layer** (not null), base renderer, and **force = 1**.
+
+So the resize leaves the active layer NULL with no forced refresh; the toggle restores a valid base
+layer and forces the repaint. `[CONFIRMED @ SIMSPR 0x10018cdf, 0x100182ba]` for the arg difference;
+`[UNCERTAIN]` that fixing it repairs the screen (five prior hypotheses were falsified).
+
+**Next build (`verify/resize_setdataview/`):** add a step that calls the SetDataView(0) core with force —
+`FUN_10018cdf(bridge, *(bridge+0x2c), *(bridge+0x80), *(bridge+0x80), 0, 1)` — after step 7, restoring a
+valid base layer and forcing the grid refresh. Base renderer is always valid (unlike overlay renderers),
+so this is the safe half of the toggle.

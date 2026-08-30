@@ -41,9 +41,16 @@
  * THE STORED-RECT PROBLEM. GZGraphicD's WM_SIZE handler FUN_100185f5 republishes the WINDOW
  * OBJECT'S STORED size (vt+0x68 = *(win+0x40)-*(win+0x38)), not lParam and not GetClientRect,
  * and nothing updates that stored size on a stock resize - measured: the OS client went to
- * 1280x1024 while every engine field stayed at 800x600. This DLL fixes it in C by subclassing
- * the game window (see rz_subclass), which is why the separate GZGraphicD `wmsize_setrect`
- * patch is OPTIONAL when running this mod.
+ * 1280x1024 while every engine field stayed at 800x600.
+ *
+ * ^ CORRECTED 2026-08-29. This comment used to end "This DLL fixes it in C by subclassing the
+ * game window (see rz_subclass), which is why the separate GZGraphicD `wmsize_setrect` patch is
+ * OPTIONAL". THAT WAS FALSE: rz_wndproc called the original proc and logged lParam, and wrote
+ * NOTHING. The claim propagated into RESIZABLE_WINDOW.md section 3 and cost a failed D-004
+ * hand-test, where the city drew 800x600 in the top-left because FUN_100185f5 kept publishing the
+ * stale rect and FUN_10018c58 (IDirectDrawSurface::Blt) kept presenting at that size.
+ * rz_set_stored_rect (below) is the actual fix, added the same day. See verify/resize_storedrect/
+ * and RESIZABLE_WINDOW.md sections 8/8b.
  *
  * POSITION INDEPENDENCE (BOARD standing rule). SIMSPR and GZGraphicD both prefer base
  * 0x10000000 and one is relocated per run. Every address is resolved from a live module handle
@@ -266,7 +273,22 @@ static int fnlog_install_one(FNLOG *e, int idx) {
 #define RVA_GRIDDIMS      0x59fb    /* FUN_100059fb: dimension table (cdecl, 5 args) */
 #define RVA_DIRTYGRID     0xe2c0    /* FUN_1000e2c0: realloc dirty grid, recompute cell sizes */
 #define RVA_GRIDB         0xee29    /* FUN_1000ee29: size + zero grid B */
-#define RVA_REREGISTER    0xfa36    /* FUN_1000fa36: re-register drawables from iso+0x3a4 */
+#define RVA_REREGISTER    0xfa36    /* FUN_1000fa36: re-register drawables from iso+0x3a4 (LEAF - see below) */
+#define RVA_DRAWKEY       0xc8f9    /* FUN_1000c8f9: __thiscall(iso) recompute every object draw key wrapper+0x24 */
+#define RVA_OBJREREG      0xc9bd    /* FUN_1000c9bd: __thiscall(iso, RECT* sentinel, uint* iso+0x54, char recompute)
+                                       the REAL object re-register: clears fine grid iso+0x380 (FUN_1000edd9),
+                                       tag-2 region pickup (FUN_1000cedb), then FUN_1000fa36 (tag-1). Convention
+                                       + args disassembled from the engine's own call at 0x10006bc0. */
+#define RVA_CELL_HIDE     0x6c67    /* FUN_10006c67: __thiscall(iso, int* drawable, int zoom, u32 rot, u32 row, int col)
+                                       per-cell HIDE - clears set sublayer bits, issues drawable vtable +0x38 */
+#define RVA_CELL_SHOW     0x6efc    /* FUN_10006efc: __thiscall(iso, int* drawable, int zoom, u32 rot, int row, u32 col)
+                                       per-cell SHOW - issues drawable vtable +0x34, re-sets sublayer bits */
+#define RVA_FULLREPAINT   0xdb86    /* FUN_1000db86 = iso vtable+0x144 (verified from PE at 0x10062650):
+                                       __fastcall(ecx=iso) - FUN_1000e248 teardown then tessellate the whole
+                                       extent iso+0x54..0x60 into 64 dirty rects (+0x130) and set iso+0x32c=1.
+                                       This is the whole-view repaint the data-view toggle runs (FUN_1001818c
+                                       :53-55) and the resize omitted - the surface is recreated but never
+                                       marked dirty, so the per-frame composite FUN_1000dc17 has nothing to draw. */
 #define RVA_LIST_ERASE    0x1084b   /* FUN_1001084b: __thiscall(list, first, last) - erase */
 #define RVA_LIST_PUSH     0x10586   /* FUN_10010586: __thiscall(list, &rect) - push_back */
 #define RVA_ISO_VT        0x6250c   /* the iso view's vtable, for the identity gate */
@@ -602,15 +624,95 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
     logf("RZ   FUN_10018cdf -> %d",
          rz_thiscall(g_bridge, (void *)((DWORD)ss + RVA_BRIDGE_FILL), fa, 5));
 
-    /* 8. re-register drawables, or the frame renders terrain only.
-       DEFECT 2 FIX: this step had NO log line, so the validation run carried no evidence it ran. */
-    a2[0] = 1;   /* recompute each object's world rect, as the scroll path does */
-    a2[1] = 0;   /* do not purge: step 4 already zeroed grid B */
+    /* 8. re-register the object drawables (buildings, roads).
+       DEFECT B FIX (2026-08-29): step 8 used to call the LEAF FUN_1000fa36(iso,1,0) directly. That
+       only re-stamps the iso+0x3a4 object set into the fine grid iso+0x380 as tag-1 nodes; it does
+       NOT clear the grid first, does NOT do the tag-2 region pickup, and does NOT recompute each
+       object's DRAW KEY (wrapper+0x24). Result on a real display: after a resize, buildings and
+       roads vanished at every camera position (terrain/zones self-heal on scroll via System B, the
+       object grid does not). Root cause + evidence: RESIZABLE_WINDOW.md §9, verify/resize_storedrect/.
+
+       The engine's real object re-register is FUN_1000c9bd (FUN_1000fa36's SOLE caller), and its
+       caller FUN_10006a55 recomputes draw keys via FUN_1000c8f9 first. So we now run, exactly as
+       FUN_10006a55 does at 0x10006a55:
+         8a. FUN_1000c8f9(iso)                       - recompute every object's draw key
+         8b. FUN_1000c9bd(iso, &sentinel, iso+0x54, 1) - clear grid + tag-2 pickup + FUN_1000fa36
+       FUN_1000c9bd calls FUN_1000fa36 internally, so the bare leaf call is REMOVED, not kept.
+       Both internal taggers (FUN_1000cedb tag-2, FUN_1000ef50 tag-1) are grid-B-clamp-hooked, so
+       this path is crash-protected. Convention + args are disassembled from the engine's own call
+       at 0x10006bc0 (ecx=iso; push &rect{0x80000001 x4}; push iso+0x54; push 1; ret 0xC). */
     g_rz_step = 8;
-    logf("RZ   [step 8] FUN_1000fa36(iso, recompute=1, purge=0) - re-register drawables from "
-         "iso+0x3a4");
-    rz_thiscall(iso, (void *)((DWORD)ss + RVA_REREGISTER), a2, 2);
-    logf("RZ   [step 8] FUN_1000fa36 returned");
+    logf("RZ   [step 8a] FUN_1000c8f9(iso) - recompute object draw keys");
+    rz_thiscall(iso, (void *)((DWORD)ss + RVA_DRAWKEY), NULL, 0);
+    {
+        /* the sentinel RECT the engine passes as param_1: four dwords of 0x80000001 */
+        LONG sentinel[4];
+        DWORD c9[3];
+        sentinel[0] = (LONG)0x80000001; sentinel[1] = (LONG)0x80000001;
+        sentinel[2] = (LONG)0x80000001; sentinel[3] = (LONG)0x80000001;
+        c9[0] = (DWORD)&sentinel[0];   /* param_1: &sentinel RECT */
+        c9[1] = (DWORD)iso + 0x54;     /* param_2: scroll origin iso+0x54 */
+        c9[2] = 1;                     /* param_3: recompute (passed through to FUN_1000fa36) */
+        logf("RZ   [step 8b] FUN_1000c9bd(iso, &sentinel, iso+0x54, 1) - clear grid + region pickup "
+             "+ re-register (the real object re-register, not the leaf FUN_1000fa36)");
+        rz_thiscall(iso, (void *)((DWORD)ss + RVA_OBJREREG), c9, 3);
+        logf("RZ   [step 8b] FUN_1000c9bd returned");
+    }
+
+    /* 8c. DEFECT A+B FIX (2026-08-29): re-issue HIDE-then-SHOW over every occupied cell of the
+       System-B tile grid iso+0x24, so terrain, zones, BUILDINGS and ROADS re-register into the
+       freshly rebuilt draw buffer. 8a/8b handle the sprite/object grid (iso+0x380); they left the
+       System-B tile drawables untouched, which is why after a resize the new area was black until a
+       scroll (terrain/zones) and buildings/roads never returned at all. The engine only re-registers
+       these on a view TRANSITION, via FUN_100071a3's inner loop - and FUN_100071a3 is reached only
+       from the rotate/zoom handlers, never from a resize. A data-layer toggle repaired the screen by
+       hand precisely because it drove that transition.
+
+       This is that inner loop, extracted NET-ZERO (no zoom/rotation change, invisible): per occupied
+       cell, FUN_10006c67 clears the current-zoom sublayer bits (+0x38) and FUN_10006efc re-sets and
+       re-issues them (+0x34). Both key off the same zoom/scale, so bits end where they started.
+       Cell layout confirmed from FUN_10005b42; call args from FUN_100071a3:61-64. iso+0x28 = ZOOM,
+       iso+0x2c = ROTATION (corrected 2026-08-29). The sublayer primitives self-lock via iso+0x46c
+       when async (iso+0x3c9), so no outer render lock is added here. EXPECT-OR-REFUSE: every pointer
+       is IsBadReadPtr-gated and the grid dims are sanity-bounded; a bad cell is skipped, not chased. */
+    {
+        int zoom = (int)((DWORD *)iso)[0x28 / 4];
+        int rot  = (int)((DWORD *)iso)[0x2c / 4];
+        int rows = (int)((DWORD *)iso)[0x14 / 4];
+        int cols = (int)((DWORD *)iso)[0x18 / 4];
+        DWORD *grid = (DWORD *)((DWORD *)iso)[0x24 / 4];
+        g_rz_step = 8;
+        if (rows < 1 || rows > 4096 || cols < 1 || cols > 4096 || !grid ||
+            IsBadReadPtr(grid, (UINT)rows * 4)) {
+            logf("RZ   [step 8c] REFUSE grid re-show: rows=%d cols=%d grid=0x%08lX zoom=%d rot=%d",
+                 rows, cols, (DWORD)grid, zoom, rot);
+        } else {
+            DWORD ha[5], sa[5];
+            int r, c, occ = 0, shown = 0, badcell = 0;
+            for (r = 0; r < rows; r++) {
+                DWORD rowp = grid[r];
+                if (!rowp || IsBadReadPtr((void *)rowp, (UINT)cols * 0x14)) { badcell++; continue; }
+                for (c = 0; c < cols; c++) {
+                    DWORD cell = rowp + (DWORD)c * 0x14;
+                    DWORD drawable;
+                    if ((*(BYTE *)(cell + 0x11) & 0x40) == 0) continue;   /* not occupied */
+                    occ++;
+                    drawable = *(DWORD *)cell;                            /* cell+0 = drawable */
+                    if (!drawable || IsBadReadPtr((void *)drawable, 4)) { badcell++; continue; }
+                    /* HIDE then SHOW: args (drawable, zoom, rot, row, col), ecx = iso */
+                    ha[0] = drawable; ha[1] = (DWORD)zoom; ha[2] = (DWORD)rot;
+                    ha[3] = (DWORD)r; ha[4] = (DWORD)c;
+                    rz_thiscall(iso, (void *)((DWORD)ss + RVA_CELL_HIDE), ha, 5);
+                    sa[0] = drawable; sa[1] = (DWORD)zoom; sa[2] = (DWORD)rot;
+                    sa[3] = (DWORD)r; sa[4] = (DWORD)c;
+                    rz_thiscall(iso, (void *)((DWORD)ss + RVA_CELL_SHOW), sa, 5);
+                    shown++;
+                }
+            }
+            logf("RZ   [step 8c] grid re-show %dx%d: %d occupied, %d re-shown, %d bad "
+                 "(hide+show +0x38/+0x34 per cell)", rows, cols, occ, shown, badcell);
+        }
+    }
 
     /* 9. THE PRESENT RECT - DEFECT 1 FIX (2026-08-28), and my error was in the design, not the code.
        I documented step 9 as "already ships as resize_rectfix". It does NOT: that cave hooks INIT
@@ -643,7 +745,90 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
              *(DWORD *)list, *(DWORD *)(list + 4),
              *(DWORD *)list ? (LONG)((*(DWORD *)(list + 4) - *(DWORD *)list) / 16) : 0L);
     }
-    logf("RZ   ---- done (all 9 steps) ----");
+
+    /* 10. THE WHOLE-VIEW REPAINT - DEFECT A+B FIX (2026-08-30). Steps 1-9 recreate the render target
+       iso+0x74 but never mark the view dirty, so the per-frame composite FUN_1000dc17 (which only
+       processes the incremental dirty-rect lists, empty after a surface recreate) draws nothing into
+       the fresh surface. That is why buildings/roads and the newly exposed area stayed blank until a
+       manual data-layer toggle - the toggle runs the iso-view whole-view repaint (iso vtable+0x144 =
+       FUN_1000db86), bracketed by the device batch, at FUN_1001818c:53-55.
+         Root cause + evidence: RESIZABLE_WINDOW.md §9, verify/resize_pipeline/.
+       Drawable RE-REGISTRATION (steps 8a/8b/8c) was proven NOT to be the fix (65536/65536 cells
+       re-shown, no visual change) - the missing work is this full re-rasterization, not registration.
+
+       FUN_1000db86 does FUN_1000e248 (clear draw lists + dirty grid) then tessellates the whole extent
+       into 64 dirty rects and sets iso+0x32c=1, so the very next composite redraws the entire view -
+       terrain, zones, buildings, roads and sprites alike. We call it directly by RVA (verified iso
+       vtable+0x144 -> FUN_1000db86 from the PE); it is __fastcall(ecx=iso), no args. The device begin/
+       end batch the toggle wraps it in is for a synchronous present; the game composites every frame,
+       so marking dirty here suffices and avoids dispatching unverified device vtable slots. */
+    g_rz_step = 10;
+    {
+        /* The DATA-VIEW TOGGLE's exact bracket, FUN_1001818c:53-55 (cMapView = g_bridge):
+             (*(device)+0x240)()   device begin batch - binds the recreated surface
+             (*(iso)+0x144)()      iso whole-view repaint = FUN_1000db86
+             (*(device)+0x244)()   device end batch - PRESENTS to the recreated surface
+           Step-10-alone (repaint without the batch) was hand-tested and did NOT present; rotating the
+           view (which repaints but never runs this device batch) also does not fix it, while switching
+           to a data/utility overlay and back DOES. So the device present batch is the operative part.
+           device = *(cMapView+0x14) = *(g_bridge+0x14), a GZGraphicD device; its +0x240/+0x244 are
+           called through the LIVE vtable (as the engine does), IsBadReadPtr-gated. FUN_1000db86 is
+           called by RVA (== iso vt+0x144, PE-verified). Evidence: verify/resize_pipeline/RESULTS.md. */
+        DWORD dev = ((DWORD *)g_bridge)[0x14 / 4];
+        DWORD *dvt = (dev && !IsBadReadPtr((void *)dev, 4)) ? *(DWORD **)dev : NULL;
+        int have_batch = (dvt && !IsBadReadPtr(dvt, 0x248));
+        if (have_batch) {
+            logf("RZ   [step 10] device batch begin: dev=0x%08lX +0x240", dev);
+            rz_thiscall((void *)dev, (void *)dvt[0x240 / 4], NULL, 0);
+        } else {
+            logf("RZ   [step 10] device batch REFUSED (dev=0x%08lX dvt=0x%08lX) - repaint only",
+                 dev, (DWORD)dvt);
+        }
+        logf("RZ   [step 10] FUN_1000db86(iso) - whole-view repaint (iso vt+0x144)");
+        rz_thiscall(iso, (void *)((DWORD)ss + RVA_FULLREPAINT), NULL, 0);
+        if (have_batch) {
+            rz_thiscall((void *)dev, (void *)dvt[0x244 / 4], NULL, 0);
+            logf("RZ   [step 10] device batch end +0x244 - presented; iso+0x32c=%d",
+                 *(BYTE *)((DWORD)iso + 0x32c));
+        } else {
+            logf("RZ   [step 10] FUN_1000db86 returned - iso+0x32c=%d (no batch)",
+                 *(BYTE *)((DWORD)iso + 0x32c));
+        }
+    }
+
+    /* 11. RESTORE THE BASE VIEW WITH A FORCED REFRESH - DEFECT A+B FIX (2026-08-30).
+       Reading FUN_10018cdf + FUN_100182ba (SetDataView) exposed that step 7 calls FUN_10018cdf with the
+       WRONG args: FUN_10018cdf(bridge, 0, *(bridge+0x78), *(bridge+0xa8), 0, 0) - it passes layer=0,
+       which NULLS the active layer (bridge+0x28), and force=0, so the full-grid refresh (gated on
+       bVar7||force) runs only if the layer changed. The data-view toggle's "return to base view",
+       SetDataView(0), instead calls FUN_10018cdf(bridge, *(bridge+0x2c), *(bridge+0x80), *(bridge+0x80),
+       0, 1) - the BASE layer (not null), the BASE renderer, and force=1. So the resize left the active
+       layer null with no forced repaint; the toggle restored it. That is why re-registering drawables,
+       repainting, and the device batch all failed - none restored the active layer.
+
+       This step reproduces SetDataView(0)'s core (bypassing its mode-guard so it runs even though mode is
+       already 0), with force=1. The base renderer bridge+0x80 is always valid (unlike overlay
+       renderers), so this is the safe half of the toggle. Since step 7 nulled bridge+0x28, bVar7 here is
+       true -> FUN_100184d9 re-register + the forced grid refresh both run.
+       [CONFIRMED arg difference @ SIMSPR 0x10018cdf, 0x100182ba]; [UNCERTAIN] that it repairs the screen. */
+    g_rz_step = 11;
+    {
+        DWORD layer = ((DWORD *)g_bridge)[0x2c / 4];   /* base layer  = *(bridge+0x2c) */
+        DWORD rend  = ((DWORD *)g_bridge)[0x80 / 4];   /* base render = *(bridge+0x80) */
+        if (!layer || IsBadReadPtr((void *)layer, 4) || !rend || IsBadReadPtr((void *)rend, 4)) {
+            logf("RZ   [step 11] REFUSE base-view refresh: layer=0x%08lX rend=0x%08lX", layer, rend);
+        } else {
+            DWORD da[5];
+            da[0] = layer; da[1] = rend; da[2] = rend; da[3] = 0; da[4] = 1;  /* force = 1 */
+            logf("RZ   [step 11] FUN_10018cdf(bridge, base layer 0x%08lX, base rend 0x%08lX, force=1) "
+                 "- SetDataView(0) core, restore active layer + forced refresh", layer, rend);
+            rz_thiscall(g_bridge, (void *)((DWORD)ss + RVA_BRIDGE_FILL), da, 5);
+            logf("RZ   [step 11] returned - active layer bridge+0x28 = 0x%08lX",
+                 ((DWORD *)g_bridge)[0x28 / 4]);
+        }
+    }
+
+    logf("RZ   ---- done (all 11 steps) ----");
     if (g_census) g_census_ms = GetTickCount() + 2000;   /* census once, after frames have run */
 }
 
@@ -707,24 +892,79 @@ static void rz_poll(void) {
         char who[128];
         rz_modstr(g_exc_addr, who, sizeof(who));
         logf("RZ   *** FAULT CAUGHT *** code=0x%08lX at %s | executing STEP %ld when it faulted "
-             "(1=extent 2=griddims 3=dirtygrid 4=gridB 5=RT 6=devsurf 7=FUN_10018cdf 8=fa36 9=present)",
+             "(1=extent 2=griddims 3=dirtygrid 4=gridB 5=RT 6=devsurf 7=FUN_10018cdf 8=rereg 9=present "
+             "10=fullrepaint 11=baseview)",
              g_exc_code, who, g_rz_step);
         rz_fault_diag(iso);
     }
     InterlockedExchange(&g_busy, 0);
 }
 
+/* Write the new client size into the GZGraphicD WINDOW OBJECT's stored RECT.
+ *
+ * THIS IS THE D-004 FIX (2026-08-29). Until now this subclass only OBSERVED WM_SIZE - it called
+ * the original proc and logged lParam, and the comments here and at the top of this file wrongly
+ * claimed it published the true client size. It did not, and that is why the hand-test failed with
+ * the city drawn 800x600 in the top-left: FUN_100185f5 builds the on-screen dest rect from this
+ * stored RECT (vt+0x68 = [win+0x40]-[win+0x38], vt+0x6c = [win+0x44]-[win+0x3c]) and publishes it,
+ * and FUN_10018c58 (IDirectDrawSurface::Blt) presents at that size. Resizing the SIMSPR surfaces
+ * alone can never help. Full evidence: re/analysis/RESIZABLE_WINDOW.md sections 8 and 8b.
+ *
+ * The object comes from the same global the game's own WndProc thunk uses (RVA 0x17e11 does
+ * `mov ecx,[0x1006cdb8]` before calling FUN_10017e2f), so we are reading the engine's own pointer,
+ * not one we inferred.
+ *
+ * EXPECT-OR-REFUSE: identity-check the primary vftable (gz+0x1f740, installed as [this+0] at
+ * 0x17bf7 / 0x17c6e) before writing. A refusal is a LOGGED RESULT, never a forced write. */
+static void rz_set_stored_rect(DWORD w, DWORD h) {
+    DWORD gz = (DWORD)GetModuleHandleA("GZGraphicD.dll");
+    DWORD *win, want;
+    LONG l, t;
+    if (!gz) { logf("RZ   STOREDRECT REFUSED: GZGraphicD not loaded"); return; }
+    if (IsBadReadPtr((void *)(gz + 0x6cdb8), 4)) {
+        logf("RZ   STOREDRECT REFUSED: global gz+0x6cdb8 unreadable"); return;
+    }
+    win = *(DWORD **)(gz + 0x6cdb8);
+    if (!win || IsBadWritePtr(win, 0x48)) {
+        logf("RZ   STOREDRECT REFUSED: window object 0x%08lX unreadable/unwritable", (DWORD)win);
+        return;
+    }
+    want = gz + 0x1f740;
+    if (win[0] != want) {
+        logf("RZ   STOREDRECT REFUSED: vftable mismatch - win[0]=0x%08lX expected 0x%08lX "
+             "(gz base 0x%08lX + 0x1f740)", win[0], want, gz);
+        return;
+    }
+    l = (LONG)win[0x38 / 4];
+    t = (LONG)win[0x3c / 4];
+    logf("RZ   STOREDRECT win=0x%08lX rect BEFORE {%ld,%ld,%ld,%ld} = %ldx%ld",
+         (DWORD)win, l, t, (LONG)win[0x40 / 4], (LONG)win[0x44 / 4],
+         (LONG)win[0x40 / 4] - l, (LONG)win[0x44 / 4] - t);
+    /* right/bottom relative to the EXISTING left/top - FUN_100185f5 maps the rect through
+       ClientToScreen, so left/top may carry a position and must not be zeroed. */
+    win[0x40 / 4] = (DWORD)(l + (LONG)w);
+    win[0x44 / 4] = (DWORD)(t + (LONG)h);
+    logf("RZ   STOREDRECT rect AFTER  {%ld,%ld,%ld,%ld} = %lux%lu - right/bottom updated",
+         l, t, (LONG)win[0x40 / 4], (LONG)win[0x44 / 4], w, h);
+}
+
 /* Subclass the game window so a real WM_SIZE publishes the REAL client size.
- * GZGraphicD's own handler republishes the window object's STORED size and nothing updates it
- * on a stock resize, so without this the engine never learns the new size. Doing it here in C
- * is why the separate GZGraphicD `wmsize_setrect` patch is optional under this mod. */
+ * GZGraphicD's own handler (FUN_100185f5, reached via vt+0x30) republishes the window object's
+ * STORED size and nothing in the engine updates it on a stock resize, so without the
+ * rz_set_stored_rect call below the engine never learns the new size and the primary Blt keeps
+ * presenting the old rectangle. Doing it here in C is what makes the separate GZGraphicD
+ * `wmsize_setrect` patch unnecessary under this mod. */
 static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     if (m == WM_SIZE && wp != SIZE_MINIMIZED) {
-        /* Let the game's handler run first, then poll on the next frame. The poll is what
-           does the work, on the render thread - never resize from the message thread. */
-        LRESULT r = CallWindowProcA(g_oldproc, h, m, wp, lp);
-        logf("RZ   WM_SIZE %lux%lu - poll will pick it up on the next frame",
-             (DWORD)LOWORD(lp), (DWORD)HIWORD(lp));
+        LRESULT r;
+        DWORD w = (DWORD)LOWORD(lp), hh = (DWORD)HIWORD(lp);
+        /* Update the stored RECT BEFORE the game's handler runs, so the republish it performs
+           on this same message already carries the new size. */
+        if (w && hh) rz_set_stored_rect(w, hh);
+        /* Then let the game's handler run, and let the per-frame poll do the surface work on the
+           render thread - never resize from the message thread. */
+        r = CallWindowProcA(g_oldproc, h, m, wp, lp);
+        logf("RZ   WM_SIZE %lux%lu - poll will pick it up on the next frame", w, hh);
         return r;
     }
     return CallWindowProcA(g_oldproc, h, m, wp, lp);
