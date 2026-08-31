@@ -320,3 +320,78 @@ points at the create tuple instead. Only then is H-fps testable on a genuinely b
 - GPU sync stall: **measured and now replicated** (runs 3 and 4), owner-confirmed.
 - Bar background surface: widens, but comes back with no backing. Tiling untested.
 - H-fps: **open**, needs a backed surface to test.
+
+---
+
+# STATIC READ (2026-08-31) — why the widened surface had no backing. Tuple EXONERATED.
+
+Asked to investigate the create tuple before building anything. **The tuple is not the cause, and
+the real mechanism is now proven statically, end to end.** No lease was needed; the sub-object
+vtable was parsed straight from `original\modules\GZGraphicD.dll` (project rule: vtables are static
+`.rdata`, do not open Ghidra, and `globals.csv` vftable rows lie).
+
+## The allocation chain
+
+`FUN_10009efb` (Init, raster `vt+0x0c`) writes the fields and delegates:
+`vt+0x1dc` (`FUN_1001420d`) -> `vt+0x1e0` (`FUN_100142a2`) -> `sub->vt[0x40]`.
+
+`FUN_100142a2:23` calls the allocator with **only** width (`this+0x24`), height (`this+0x28`), the
+format block (`this+0x0c..0x18`), `this+0x3c` and `this+0x40` — exactly the tuple we replay.
+
+## Sub-object vtable, read from the PE (`PTR_FUN_1001f0ac`, RVA `0x1f0ac`)
+
+| slot | target | role |
+|---|---|---|
+| `vt+0x0c` | `FUN_10018a82` | **Lock** |
+| `vt+0x10` | `FUN_10018b53` | **Unlock** |
+| `vt+0x40` | `FUN_10019273` | **Create** (DirectDraw surface) |
+
+## The finding: bits/pitch come from the LOCK, never from CREATE
+
+`FUN_10019273` (create) builds the DirectDraw surface and on success sets `sub+0xec = param_4` and
+`sub+0xe0 = 1`. **It never writes `sub+0xf0` or `sub+0xf4`** `[CONFIRMED @ GZGraphicD 0x10019273]`.
+
+`FUN_10018a82` (lock) is where they appear. It refcounts on `sub+0xe4` and, on the 0->1 transition,
+calls `IDirectDrawSurface::Lock` (COM vtable `+0x64`) with a `DDSURFACEDESC` at `sub+0x0c`
+(`dwSize = 0x6c` is written by the create), then copies out
+`[CONFIRMED @ GZGraphicD 0x10018a82]`:
+
+| written | from | DDSURFACEDESC field |
+|---|---|---|
+| `sub+0xf0` = **bits** | `sub+0x30` | `lpSurface` (DDSD+0x24) |
+| `sub+0xf4` = **pitch** | `sub+0x1c` | `lPitch` (DDSD+0x10) |
+
+The offsets line up exactly with the documented `DDSURFACEDESC` layout against a struct base of
+`sub+0x0c`. That is the confirmation, not a coincidence of two plausible numbers.
+
+**So `bits == 0` immediately after a recreate is the CORRECT, EXPECTED state for every surface of
+this class, the render target included.** Run 4 measured the surface microseconds after creating it
+and before anything locked it. The create tuple never had anything to do with it.
+
+## Bonus: this mechanically explains an older observation, and refines a standing rule
+
+`FUN_10018b53` (unlock) drops the refcount and calls `IDirectDrawSurface::Unlock` — but **it does not
+clear `sub+0xf0`.** The stale pointer stays readable.
+
+That is exactly why the board recorded *"the bits were always present; the out-of-band `vf1c` lock
+was tearing the backing down"*. Both halves now have a mechanism: raw reads keep working because
+unlock leaves the pointer behind, and an out-of-band unlock is destructive because it drops the depth
+to 0 and invalidates a pointer the engine is mid-use of. **The rule "read `sub+0xf0/f4` RAW, never
+call the lock out of band" stands — but the reason is refcount inversion, not the bits vanishing.**
+
+## Consequence for the fix — and a new risk worth pre-registering
+
+Writing tiled art into the widened surface **requires holding a lock**. Two routes:
+
+1. **Deferred poll** (the plan before this read): wait for `sub+0xf0 != 0`, then write.
+   ⚠️ **New risk this read exposes: it may never fire.** The bar surface only gets a lock when
+   something draws *into* it, and the HUD is built once. Per-frame compositing **blits from** the
+   surface, which needs no CPU lock. So the poll could wait forever. That is now a predictable
+   outcome rather than a surprise.
+2. **Drive a balanced lock ourselves** — `sub->vt[0x0c]` to lock, write the tiled art, `sub->vt[0x10]`
+   to unlock. This is the designed API and it is refcounted, so a balanced pair nests safely with
+   engine usage. It is also the direct route and does not depend on the engine ever repainting.
+
+Route 2 is the better bet on this evidence. It must still be `[UNCERTAIN]`-flagged and
+expect-or-refuse gated: nothing here proves the bar surface is lockable at an arbitrary moment on the
+render thread.
