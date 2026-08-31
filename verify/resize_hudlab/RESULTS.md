@@ -244,9 +244,79 @@ pre-registration makes owner perception the ground truth the instrument must mat
 differ strongly, which is consistent, but the confirmation has not been collected. Ask before
 treating the FPS drop and this measured stall as the same event.
 
-## Method note, in credit rather than in scorecard
+## Method note, in credit rather than in scorecard (run 3)
 
 The address resolver in the mod only knows the six game modules, so all three hot buckets logged as
 `(no known module)` and the run looked uninterpretable at first glance. They were resolved by
 querying the **still-running** process's module list, then mapping to nearest export offline.
 Reading the profile before closing the game is what saved the run.
+
+---
+
+# RUN 4 (2026-08-31) — HUDFIT: PARTIAL as pre-registered. H-fps is CONFOUNDED, not falsified.
+
+Owner: **"bar spans with black areas, FPS still drops."**
+
+## Visual: PARTIAL — the surface widened, but with NO BACKING
+
+| | before | after |
+|---|---|---|
+| child `[0x2a]` dims | 600x56 | **2048x64** |
+| `sub` | `0x0F7915A0` | `0x0F7A5970` (new) |
+| `bits` / `pitch` | `0x0C1F3BD8` / 1200 (COHERENT) | **`0x00000000` / 0 (INCOHERENT)** |
+| non-zero | 25525/33600 | 0/0 |
+
+`FUN_10009efb -> 1` and the dims were written, so the recreate itself succeeded. But the new
+sub-object has **no allocated backing**, so the tile step correctly refused:
+`HUDFIT> recreate OK but the new backing is unreadable (bits=0x00000000 pitch=0) - not tiling`.
+That is the guard doing its job — it declined to write into a null pointer and said so — and it is
+the pre-registered **PARTIAL (blank bar)** outcome. The black areas are a 2048-wide surface with
+nothing in it.
+
+**Most likely cause, and it is cheap to test: the backing is allocated LAZILY, and the census ran
+microseconds after the recreate.** `iso+0x74` takes the identical call with the identical tuple
+(`[_ _ 7 16 0 0 0 0]`) and does have bits — but it is censused ~2 s later, after frames have drawn
+into it. `[UNCERTAIN]` — not established, and the alternative (the HUD surface needs a create
+parameter the field read-back does not recover) is not excluded. Note the tuple came from field
+read-back, which the log itself flags as **not proven equivalent** to a recorded create.
+
+## H-fps: CONFOUNDED. Do NOT record it as falsified.
+
+The tempting read is "the surface matched the window at 2048 and the drop persisted, so H-fps is
+dead." **That is not what was tested.** During phase B the surface had 2048 in its dims field and
+**no allocated backing at all**. A surface with no pixels is not "a surface matching the window" —
+it is a third state neither arm of H-fps describes.
+
+**H-fps remains open and needs a re-run with a genuinely backed 2048-wide surface.** Declaring it
+dead here would be exactly the error this board has logged repeatedly: scoring a hypothesis against
+a test that did not implement it.
+
+## What run 4 DID establish independently: run 3 replicates
+
+| bucket | A-native | B-fullwidth |
+|---|---:|---:|
+| `ntdll+0x79AC0` (syscall stub) | 44.43% | **57.50%** |
+| `win32u!NtGdiDdDDIWaitForSynchronizationObject` | 9.86% | **12.73%** |
+| `ntdll+0x79E80` (syscall stub) | 6.39% | **8.47%** |
+| distinct buckets | 417 | **244** |
+
+Same three buckets, same direction, same bucket-count collapse, on a separate run with a different
+process. **The GPU sync stall finding from run 3 is reproduced.** It is not a one-run artefact.
+
+Note this also means the stall does **not** depend on the bar surface holding content — it happened
+with an empty 2048 surface too.
+
+## Next step (small, targeted)
+
+Defer the tile write until the backing exists: after the recreate, poll for `sub+0xf0 != 0` on later
+frames (the same pattern `g_census_ms` already uses) and tile then. That fixes the black bar if the
+lazy-allocation reading is right, and if the bits never appear, that itself falsifies the reading and
+points at the create tuple instead. Only then is H-fps testable on a genuinely backed surface.
+
+## Status after run 4
+
+- FIX C: PASS, holding across runs 2-4.
+- HUD child class + reflow target: settled (run 2).
+- GPU sync stall: **measured and now replicated** (runs 3 and 4), owner-confirmed.
+- Bar background surface: widens, but comes back with no backing. Tiling untested.
+- H-fps: **open**, needs a backed surface to test.
