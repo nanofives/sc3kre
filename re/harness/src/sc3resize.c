@@ -473,6 +473,80 @@ static volatile LONG  g_prof_on;
 static DWORD          g_game_tid;                 /* the render thread, from the heartbeat hook */
 static DWORD          g_prof_n, g_prof_fail;
 
+/* ---- I2b: WAIT ATTRIBUTION (2026-08-31) -------------------------------------------------------
+ * Runs 3-5 established WHERE the render thread stalls (`NtGdiDdDDIWaitForSynchronizationObject`,
+ * doubling with bar width) but not WHO leads it there, and the two obvious causes are eliminated
+ * (surface content, surface size). EIP alone cannot answer that - every sample lands in the same
+ * system stub regardless of caller.
+ *
+ * So at each sample we also copy the top of the suspended thread's stack and, after resuming, scan
+ * it for the first address lying inside a GAME module. That is the nearest game-side return address
+ * - "who called into the wait". Bucketed on the EXACT address (not a range) so it names precise call
+ * sites, which is the whole point.
+ *
+ * This is a stack SCAN, not a frame walk: /O2 code omits frame pointers, so an Ebp chain would lie.
+ * A scan can also pick up stale values left on the stack - it is a heuristic, and a single hit means
+ * little. What makes it decidable is the SAME A/B differential the EIP profiler uses: a call site
+ * that appears overwhelmingly in phase B and not in phase A is attributable to the bar width.
+ * `[UNCERTAIN]` by construction - treat the ranking as a lead, not a proof. */
+#define STK_BYTES 1024
+static DWORD g_modbase[8], g_modsize[8];
+static int   g_nmod;
+static DWORD g_stk_key[PROF_BUCKETS], g_stk_cnt[PROF_BUCKETS];
+static DWORD g_stk_n, g_stk_miss;
+
+static void rz_prof_modinit(void) {
+    static const char *mods[] = { "SIMSPR.DLL", "GZGraphicD.dll", "SIMCITY.DLL", "SIMUI.DLL",
+                                  "GZWIN.DLL", "SC3U.exe", 0 };
+    int i;
+    g_nmod = 0;
+    for (i = 0; mods[i] && g_nmod < 8; i++) {
+        DWORD h = (DWORD)GetModuleHandleA(mods[i]), e;
+        if (!h || IsBadReadPtr((void *)h, 0x40)) continue;
+        e = *(DWORD *)(h + 0x3c);
+        if (IsBadReadPtr((void *)(h + e + 0x50), 4)) continue;
+        g_modbase[g_nmod] = h;
+        g_modsize[g_nmod] = *(DWORD *)(h + e + 0x50);   /* SizeOfImage */
+        g_nmod++;
+    }
+}
+static int rz_in_game_module(DWORD a) {
+    int i;
+    for (i = 0; i < g_nmod; i++)
+        if (a >= g_modbase[i] && a < g_modbase[i] + g_modsize[i]) return 1;
+    return 0;
+}
+static void rz_stk_hit(DWORD a) {
+    DWORD i = (a * 2654435761u) >> 19 & (PROF_BUCKETS - 1), tries = 0;
+    while (tries++ < 64) {
+        if (g_stk_key[i] == a) { g_stk_cnt[i]++; g_stk_n++; return; }
+        if (g_stk_key[i] == 0) { g_stk_key[i] = a; g_stk_cnt[i] = 1; g_stk_n++; return; }
+        i = (i + 1) & (PROF_BUCKETS - 1);
+    }
+}
+static void rz_stk_dump(const char *tag) {
+    DWORD i, rank;
+    static DWORD taken[24];
+    logf("STK> ---- %s ---- attributed=%lu no-game-frame=%lu", tag, g_stk_n, g_stk_miss);
+    for (rank = 0; rank < 20; rank++) {
+        DWORD best = 0xFFFFFFFF, bestc = 0, j;
+        for (i = 0; i < PROF_BUCKETS; i++) {
+            int already = 0;
+            if (!g_stk_key[i]) continue;
+            for (j = 0; j < rank; j++) if (taken[j] == i) { already = 1; break; }
+            if (already) continue;
+            if (g_stk_cnt[i] > bestc) { bestc = g_stk_cnt[i]; best = i; }
+        }
+        if (best == 0xFFFFFFFF) break;
+        taken[rank] = best;
+        {   char who[160];
+            rz_modstr(g_stk_key[best], who, sizeof(who));
+            logf("STK> %s #%02lu %6lu (%5.2f%%) %s", tag, rank + 1, bestc,
+                 g_stk_n ? 100.0 * bestc / g_stk_n : 0.0, who);
+        }
+    }
+}
+
 static void rz_prof_hit(DWORD eip) {
     DWORD k = (eip >> 6) + 1;
     DWORD i = (k * 2654435761u) >> 19 & (PROF_BUCKETS - 1);
@@ -487,7 +561,10 @@ static void rz_prof_hit(DWORD eip) {
 static void rz_prof_reset(void) {
     memset((void *)g_prof_key, 0, sizeof(g_prof_key));
     memset((void *)g_prof_cnt, 0, sizeof(g_prof_cnt));
-    g_prof_n = 0; g_prof_fail = 0;
+    memset((void *)g_stk_key, 0, sizeof(g_stk_key));
+    memset((void *)g_stk_cnt, 0, sizeof(g_stk_cnt));
+    g_prof_n = 0; g_prof_fail = 0; g_stk_n = 0; g_stk_miss = 0;
+    rz_prof_modinit();   /* refresh module ranges; DLLs may have loaded since the last phase */
 }
 /* Dump the top 30 buckets, each resolved to MODULE+RVA. Selection-scan rather than a sort: 30 passes
  * over 8192 slots is trivial and needs no scratch allocation. */
@@ -538,12 +615,30 @@ static DWORD WINAPI rz_prof_thread(LPVOID p) {
         {
             CONTEXT ctx;
             DWORD eip = 0;
-            ctx.ContextFlags = CONTEXT_CONTROL;
+            static BYTE stk[STK_BYTES];
+            int got_stk = 0;
+            ctx.ContextFlags = CONTEXT_CONTROL;      /* gives Eip, Esp, Ebp */
             if (SuspendThread(th) != (DWORD)-1) {
-                if (GetThreadContext(th, &ctx)) eip = ctx.Eip;
+                if (GetThreadContext(th, &ctx)) {
+                    eip = ctx.Eip;
+                    /* Copy the stack top while suspended; SCAN it after the resume so we hold the
+                       thread for as little as possible and never log or allocate under suspension. */
+                    if (ctx.Esp && !IsBadReadPtr((void *)ctx.Esp, STK_BYTES)) {
+                        memcpy(stk, (void *)ctx.Esp, STK_BYTES);
+                        got_stk = 1;
+                    }
+                }
                 ResumeThread(th);                    /* unconditional, same iteration */
             }
             if (eip) rz_prof_hit(eip); else g_prof_fail++;   /* bucketed AFTER the resume */
+            if (got_stk) {                            /* nearest game-side return address */
+                int k, found = 0;
+                for (k = 0; k < STK_BYTES / 4; k++) {
+                    DWORD v = ((DWORD *)stk)[k];
+                    if (v && rz_in_game_module(v)) { rz_stk_hit(v); found = 1; break; }
+                }
+                if (!found) g_stk_miss++;
+            }
         }
         Sleep(1);
     }
@@ -569,7 +664,7 @@ static void rz_hudlab_tick(void) {
     }
     if (g_hudphase == 2) {                       /* end A, widen, start B */
         InterlockedExchange(&g_prof_on, 0);
-        rz_prof_dump("A-native");
+        rz_prof_dump("A-native"); rz_stk_dump("A-native");
         logf("HUDLAB> applying the SetRect widen, then phase B");
         rz_hud_setrect();
         /* With SC3RESIZE_HUDFIT=1, also widen the bar's BACKGROUND SURFACE - the 600x56 raster run 2
@@ -587,7 +682,7 @@ static void rz_hudlab_tick(void) {
     }
     if (g_hudphase == 3) {
         InterlockedExchange(&g_prof_on, 0);
-        rz_prof_dump("B-fullwidth");
+        rz_prof_dump("B-fullwidth"); rz_stk_dump("B-fullwidth");
         logf("HUDLAB> ---- DONE. Diff B against A; score against verify/resize_hudlab/PRE.md ----");
         g_hudphase = 4;
     }

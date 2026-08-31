@@ -290,3 +290,47 @@ The full-width bar carries a **measured, unresolved GPU-sync FPS cost** (runs 3-
 localized, two candidate causes eliminated, root cause still open). Shipping it ON is the owner's
 explicit call. `SC3RESIZE_HUDNATIVE=1` exists so that cost is opt-out-able without a rebuild, and
 this trade-off must stay documented wherever the mod is described to users.
+
+---
+
+# RUN 7 PRE-REGISTRATION (2026-08-31) — wait attribution (stack sampling)
+
+Runs 3-5 established WHERE the render thread stalls
+(`win32u!NtGdiDdDDIWaitForSynchronizationObject`, doubling with bar width) and eliminated two causes
+(surface content, surface size). EIP cannot say WHO leads it there - every sample lands in the same
+system stub whatever the caller.
+
+## Instrument
+
+At each sample, while the thread is suspended, copy `STK_BYTES` (1024) from `Esp`. **After** the
+resume, scan that copy for the first address inside a game module (SIMSPR / GZGraphicD / SIMCITY /
+SIMUI / GZWIN / SC3U) and bucket it on its EXACT address, so hits name precise call sites. Dumped per
+phase alongside the EIP profile.
+
+This is a stack **scan**, not a frame walk: /O2 omits frame pointers, so an `Ebp` chain would lie. A
+scan can also pick up stale stack values, so a single hit means little. **What makes it decidable is
+the same A/B differential that made the EIP profiler work** - a call site heavily present in phase B
+and absent from phase A is attributable to bar width and nothing else.
+
+## Pre-registered outcomes
+
+- **PASS / caller named:** one or a few game-module addresses are strongly over-represented in
+  `STK> B-fullwidth` versus `STK> A-native`. Those resolve to `MODULE+RVA` and become the read
+  target - the engine-side code whose per-frame behaviour changes with bar width.
+- **INCONCLUSIVE:** the B ranking is flat, or matches A's ranking closely. The scan is not
+  separating caller from ambient stack content; a real frame walk or a targeted hook on the blit path
+  would be needed instead.
+- **VOID:** `no-game-frame` dominates (most samples find no game module on the stack), or either
+  phase collects < 200 attributed samples. **Do not interpret a VOID ranking.**
+
+## Explicitly NOT claimed in advance
+
+A top-ranked call site is a **lead, not a proof**. Confirming it means reading that function and
+showing a width-dependent per-frame behaviour - the standing rule that a confirmed code path is not
+a confirmed cause applies with full force here, and this board has paid for ignoring it three times
+in the crash arc.
+
+## Conditions
+
+`SC3RESIZE_HUDLAB=1` (phases). Bar docks and refits as on the ship path, so phase B measures the
+final shipping configuration, not a half-state.
