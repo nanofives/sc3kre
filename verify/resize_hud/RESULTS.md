@@ -45,3 +45,41 @@ re-reads the table without a full teardown.
 - Viewport (D-004 + render + zoom + stability) intact and known-good; HUD reflow gated off.
 - HUD reflow: first approach (driven destruct+rebuild) FALSIFIED. Next: reposition-in-place, gated on a
   read of the child set-position slot. The producer wrap + reflow math are reusable.
+
+---
+
+## FOLLOW-UP (2026-08-30) — reposition path also has NO clean hook; conclusion
+
+Dug the reposition redesign (worker + PE resolution). Findings:
+- **Child<->anchor map** (builder `FUN_10024a96`): the 4 data children `this[0x2c/0x2d/0x2e/0x2f]` =
+  boxes A/B/D/C. But in the builder they get **only SIZE** set (`vt+0xc`); their **POSITION is set by
+  their containers** `this[0x2a]/[0x2b]` via `vt+0x40` at build time. So they cannot be repositioned
+  by a simple per-child `vt+0xcc` call - the container owns their placement.
+- **The stored absolute anchors** `this[0x50..0x6b]` (A/B/C/D client-coord rects) have **no observed
+  runtime reader** - rewriting them repositions nothing.
+- **The lighter-relayout candidate `vt+0xc0` = `FUN_1006dcb7` is just a GetRect getter**
+  (`[CONFIRMED @ SIMUI 0x1006dcb7]`, 18 bytes: copies `this+0x14..0x20` out). NOT a relayout.
+- **No `OnSize`/`Layout`/`Recalc` slot** found in the HUD window vtable (RVA 0xa40dc, Init@+0x34).
+- Hit-testing: `FUN_1000c546` is a message router, not the point-in-widget test; the real hit-test
+  dispatcher was not located `[UNCERTAIN]`.
+
+**Conclusion: SC3's HUD has no clean runtime re-layout path.** It is built once, per window, at a fixed
+resolution, positioning children through container layout with no responsive/relayout machinery. Both
+tried approaches fail cleanly:
+- destruct+rebuild: breaks the HUD (build guard skips alternate rebuilds -> strip vanishes).
+- reposition-in-place: children are positioned via containers, anchors have no runtime reader, no
+  relayout method exists.
+
+A full HUD reflow therefore requires **reimplementing the container layout** (reposition each container
+and re-run its `vt+0x40` child placement, with per-child edge design + hit-test re-verification) - a
+large, uncertain effort, not a hook. The "square->scale" arm additionally needs new/upscaled art.
+
+**Recommendation: bank the completed viewport; treat full HUD reflow as a separate, larger project.**
+A cheaper partial that IS feasible if wanted: **dock each HUD window to the resized edges** (move the
+whole window via `vt+0xcc`), so the bottom toolbar sits at the bottom and side panels at the sides -
+bars are correctly placed but do NOT stretch. Not full reflow, but low-risk.
+
+## Status
+
+- Viewport COMPLETE and known-good; HUD reflow gated off (mod restored).
+- HUD reflow: both clean approaches falsified/blocked; no clean hook exists. Documented negative.
