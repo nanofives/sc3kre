@@ -93,3 +93,42 @@ unknowns.
 **Recommendation:** do the self-contained **edge-scroll at true edges** first (phase 1, feasible now,
 fixes the input-only-in-top-left issue), then scope parts 1-2 of the HUD reflow with a focused read
 before building. The "square -> scale" arm remains gated on the widget-draw-method read (may need art).
+
+---
+
+## DIG RESULT (2026-08-30) — HUD reflow is a large multi-part feature; the two parts confirmed
+
+Worker read of the layout callers + resolution source. Confirmed:
+
+- **No runtime re-layout trigger exists.** The HUD is laid out ONCE at window construction (each HUD
+  window's Init vtable slot -> `FUN_10024a96` top strip / `FUN_1004ca02` / `FUN_1004d4ac` panels).
+  No message, mode-change, or display-changed path re-runs any producer (disciplined negative over
+  SIMUI `functions/`). The Notify handler `FUN_10026144` only toggles visibility, never rebuilds.
+- **The producers select PRESETS by display-MODE W/H** (640/800/1024, 480/600/768) read from a shared
+  object via `vt+0x90`(w)/`vt+0x94`(h) - a DIFFERENT object from the GZGraphicD window (`vt+0x68/0x6c`,
+  §8b). Feeding 2048 just picks the 1024 preset. So a true arbitrary-size reflow needs **BOTH** a
+  producer rewrite AND a re-layout trigger - confirming the §e170a81 scope correction.
+- **Hit-testing rides along:** the producer writes the widgets' stored rects (`this[0x38..0x6d]`) which
+  the GZWIN dispatcher `FUN_1000c546` uses for events, so a re-layout fixes HUD input with the visuals
+  (separate from the iso-view picking bug). `[PLAUSIBLE, pending the point-in-widget slot read]`
+
+**What a full HUD reflow requires (the real build):**
+1. **Rewrite 3 producers** (`FUN_100270e5` top strip, `FUN_1004c3e9`/`FUN_1004cdcd` panels) to compute
+   anchors from live W/H instead of selecting a preset - + per-widget edge-intent design + visual tuning.
+2. **Capture each HUD window's `this`** by hooking each builder entry (stash ECX), like `bridge_stash`.
+3. **Drive destruct+rebuild per HUD window** after a resize (`FUN_100266c1` then `FUN_10024a96` for the
+   top strip; analogous for panels/toolbar/tiled-bg screens - each is built INDEPENDENTLY, no cascade),
+   honoring the guard `FUN_1006db32(this)` (must return 0).
+4. Optionally set the resolution field so stock bucketing picks up, OR bypass it via the rewritten
+   producers taking live W/H directly.
+
+**Still needs disassembly before building (the mod author CAN do these via PE parse, worker could not):**
+(a) the HUD vtable whose Init slot = `0x10024a96` and its construction site (to enumerate the windows);
+(b) obj2's class + the field offsets behind `vt+0x90/+0x94` + who writes them (resolution setter);
+(c) the point-in-widget slot to confirm it reads `this[0x38..0x6d]`.
+
+**Assessment:** this is a MULTI-PART, visually-iterative workstream (rewrite the UI layout engine to be
+resolution-adaptive across all independently-built HUD windows), larger than the viewport fix. The
+"square -> scale bigger" arm additionally likely needs new/upscaled art (widget draw method, prior dig).
+Recommended first increment: resolve (a)/(b)/(c) from the PE, then a TOP-STRIP-only proof (capture +
+destruct/rebuild + rewritten producer) hand-tested, before committing to all windows.
