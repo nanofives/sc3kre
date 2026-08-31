@@ -65,3 +65,31 @@ Splits by risk. Three capabilities, three verdicts:
   W/H; per-widget edge-intent must be encoded.
 - **Phase 3 (uncertain): HUD scaling (square arm).** Gated on reading the widget draw methods
   (`0x100a44cc`/`0x100a42e4`) to learn if boxes magnify art. May require new/upscaled assets.
+
+---
+
+## SCOPE CORRECTION (2026-08-30) — reflow needs a re-layout TRIGGER, not just a table rewrite
+
+Decoded `FUN_100270e5` fully (ends `ret 4`, wrappable; ≥801 branch = the 1024 table; widgets A-D at
+idx1-16 as (X1,Y1,X2,Y2), label group idx17-28). BUT the layout producer runs at **UI init**, keyed on
+the display **resolution getter** (`vt+0x90`/`+0x94`), **not on a window resize**. The mod runs a fixed
+windowed backbuffer and stretches it, so resizing the WINDOW does not change the UI's resolution and the
+HUD layout **never re-runs**. Hooking the producer alone would never fire after the initial 800x600
+layout.
+
+**A real HUD reflow therefore needs THREE parts:**
+1. **Trigger a UI re-layout** after each resize (re-invoke the layout path / broadcast the UI-resize
+   the game uses for a mode change) - `[UNCERTAIN]` which message/function; needs a read.
+2. **Make the resolution source report the live size** so the layout selects the right numbers
+   (the `vt+0x90`/`+0x94` getters, or the object they read).
+3. **Reflow the anchors** across all three tables (top strip `FUN_100270e5` + height-keyed
+   `FUN_1004c3e9`/`FUN_1004cdcd`), with per-widget edge behaviour, + visual tuning over several
+   hand-tests.
+
+This is a multi-part workstream, larger than the viewport fix. The anchor-rewrite (part 3) is ready in
+principle (proportional origin-scale keep-width for the elongated/extend arm); parts 1-2 are the gating
+unknowns.
+
+**Recommendation:** do the self-contained **edge-scroll at true edges** first (phase 1, feasible now,
+fixes the input-only-in-top-left issue), then scope parts 1-2 of the HUD reflow with a focused read
+before building. The "square -> scale" arm remains gated on the widget-draw-method read (may need art).
