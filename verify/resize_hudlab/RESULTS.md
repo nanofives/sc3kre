@@ -569,3 +569,62 @@ module image. `+0x41000` page-aligned in a data section would die to that check 
 - Recorded as a method note: a stack scan without call-site validation produces a confident-looking
   ranking made largely of data. It looked like a working instrument until its output was checked
   against what a return address can physically be.
+
+---
+
+# RUN 8 (2026-08-31) — validation WORKS; attribution still INCONCLUSIVE, now for a diagnosable reason
+
+## The validator did its job
+
+Every entry in both rankings is now a plausible code address. No page-aligned values, no
+`SC3U.exe+0x9`, no header offsets. The run 7 contamination is gone.
+
+## But the attribution is biased against exactly the samples we care about
+
+| phase | attributed | no-game-frame | miss rate |
+|---|---:|---:|---:|
+| A-native | 717 | 5550 | **89%** |
+| B-fullwidth | **240** | 6146 | **96%** |
+
+**Phase B attributed FEWER samples than phase A** (240 vs 717), despite both collecting ~6200
+samples. That is the opposite of useful, and the reason is structural:
+
+Runs 3-5 showed that in phase B the thread spends **62% of its time inside a syscall wait**. Deep in
+a kernel transition the nearest game-side frame is **further up the stack than our 1024-byte scan
+window**. So the waiting samples systematically find no game frame and land in `no-game-frame`,
+while the samples we DO attribute are disproportionately the ones where the thread is *not* waiting.
+
+**The instrument is attributing the complement of the population under investigation.** B's ranking
+largely describes what the thread does when it is NOT stalled - which is precisely not the question.
+
+## A pre-registration weakness, recorded against myself
+
+I set the VOID guard at "< 200 attributed samples". B returned **240** and therefore passes by the
+letter. **The floor was the wrong guard for this failure mode**: it checks quantity, not whether the
+attributed samples are the ones being asked about. A sample-count threshold cannot detect selection
+bias. The 89% -> 96% miss-rate asymmetry between phases is the signal that mattered, and I did not
+pre-register it.
+
+Scoring this INCONCLUSIVE on the substance rather than PASS on the technicality.
+
+## The fix, and it is small
+
+- **Raise `STK_BYTES` substantially** (1024 -> 8192). The game frame during a wait is above the
+  kernel transition frames; the window simply has to reach it.
+- **Record several validated frames per sample**, not just the first, so a caller chain survives
+  rather than one nearest hit.
+- **Pre-register the miss rate as a scoring criterion**: if phase B's miss rate is not brought down
+  to roughly phase A's, the attribution is still biased and the result is INCONCLUSIVE regardless of
+  how many samples were collected.
+
+## Not mined
+
+`SIMCITY.DLL+0xD3ED` tops B at 16.67% (40 samples). It is not cited as a lead: it comes from the
+biased non-waiting population, on 40 absolute samples, from an instrument that has now been
+INCONCLUSIVE twice. The bar for naming a caller has not been met.
+
+## Status
+
+- Return-address validation: **working**, keep it.
+- Wait attribution: **still not achieved**, cause of failure now understood and cheap to fix.
+- Everything from runs 3-5 stands; none of it depended on the stack scan.
