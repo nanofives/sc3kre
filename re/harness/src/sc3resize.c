@@ -1506,12 +1506,63 @@ static const BYTE CLAMP_EF50[] = {
  0x8b,0x81,0x88,0x03,0x00,0x00,0x48,0x39,0x44,0x24,0x08,0x7e,0x04,0x89,0x44,0x24,0x08,0x8b,0x81,0x84,
  0x03,0x00,0x00,0x48,0x39,0x44,0x24,0x04,0x7e,0x04,0x89,0x44,0x24,0x04,0x8b,0x54,0x24,0x08,0x8b,0xc1,
  0x56,0xe9,0x89,0xd9,0xfa,0xff };
+/* FIX C (2026-08-31, verify/resize_hudlab): FUN_1000efa1, the grid-B node REMOVE, dereferences the
+ * NULL list terminator. Caught in-game: 0xC0000005 READ at 0x00000004, eax=0, at BOTH unlink sites.
+ *
+ *   0efc0  test eax,eax / je 0x1000efe3     ; EMPTY BUCKET -> jumps straight into the deref
+ *   0efd4  jne 0x1000efc5                   ; walk exits with eax == 0 when NOT FOUND
+ *   0efdb  mov ecx,[eax+4]                  ; <<< faulted (not found, prev != 0)
+ *   0efe3  mov edx,[eax+4]                  ; <<< faulted (empty bucket, or not found w/ no prev)
+ *   0efe8  test eax,eax                     ; the author DOES null-check eax - one site too late
+ *
+ * The resize exposes it because the caller FUN_1000f122 computes the bucket from the LIVE extent
+ * origin (this+0x54/+0x58) and scale (this+0x39c/+0x3a0) - the exact fields step 1 rewrites - so
+ * nodes inserted under the OLD geometry hash to DIFFERENT buckets. Remove then searches a list the
+ * node is not in and walks off its end. Measured that run: 86 live nodes, 0 dangling - the list is
+ * intact, the lookup is in the wrong list. Same class as FIX A: a latent missing guard, harmless at
+ * a fixed extent, exposed the moment the view geometry changes.
+ * [CONFIRMED @ SIMSPR 0x1000efa1, caller 0x1000f122]
+ *
+ * Skipping the unlink when the node is absent is the CORRECT SEMANTIC, not crash suppression: there
+ * is nothing in that bucket to remove. Two parts, both SIMSPR-internal and base-invariant:
+ *   (1) this cave, hooked at 0xefd6, adds the missing `test eax,eax` before the unlink;
+ *   (2) patch_efa1_emptybucket below retargets the empty-bucket branch (2 bytes, in place).
+ * Cave assembled + capstone-verified at its load address; all three targets checked. */
+static const BYTE GUARD_EFA1[] = {   /* 22, pop esi / test eax,eax / je 0xeff9 / test edx,edx /
+                                        je 0xefe3 / jmp 0xefdb */
+ 0x5e,0x85,0xc0,0x0f,0x84,0x10,0xda,0xfa,0xff,0x85,
+ 0xd2,0x0f,0x84,0xf2,0xd9,0xfa,0xff,0xe9,0xe5,0xd9,
+ 0xfa,0xff };
 static const CLAMP g_clamps[] = {
  { 0xcfab, 0x614e0, 24, CLAMP_CEDB, sizeof(CLAMP_CEDB), {0x8b,0x45,0xfc,0x8b,0x8e}, "FUN_1000cedb" },
  { 0xd281, 0x61520, 17, CLAMP_D0F5, sizeof(CLAMP_D0F5), {0x8b,0x8e,0x8c,0x03,0x00}, "FUN_1000d0f5" },
  { 0xc412, 0x61560, 20, CLAMP_BE25, sizeof(CLAMP_BE25), {0x8b,0x45,0xec,0x8b,0x8e}, "FUN_1000be25" },
  { 0xef50, 0x615a0,  7, CLAMP_EF50, sizeof(CLAMP_EF50), {0x8b,0x54,0x24,0x08,0x8b}, "FUN_1000ef50" },
+ { 0xefd6, 0x615e0,  5, GUARD_EFA1, sizeof(GUARD_EFA1), {0x85,0xd2,0x5e,0x74,0x08}, "FUN_1000efa1" },
 };
+
+/* FIX C part 2: the empty-bucket branch at 0xefc2 (`je 0x1000efe3`) jumps directly into the NULL
+ * deref. Retarget it to the function's ret at 0x1000eff9 - an empty bucket has nothing to unlink.
+ * Two bytes, same instruction length, in place, no cave: rel8 = 0xeff9 - 0xefc4 = 0x35. The
+ * empty-bucket path never executed `push esi` (that is at 0xefc4, after the branch), and the
+ * original reached 0xeff9 without a pop either, so the stack is balanced. Fail-closed on the
+ * shipped bytes. */
+static void patch_efa1_emptybucket(HMODULE ss) {
+    BYTE *site = (BYTE *)ss + 0xefc2;
+    DWORD old;
+    if (IsBadReadPtr(site, 2) || site[0] != 0x74 || site[1] != 0x1f) {
+        logf("--- EFA1_GUARD: empty-bucket site 0xefc2 mismatch (%02X %02X) - NOT patching",
+             IsBadReadPtr(site, 2) ? 0 : site[0], IsBadReadPtr(site, 2) ? 0 : site[1]);
+        return;
+    }
+    if (!VirtualProtect(site, 2, PAGE_EXECUTE_READWRITE, &old)) {
+        logf("--- EFA1_GUARD: VirtualProtect failed (%lu)", GetLastError()); return;
+    }
+    site[1] = 0x35;                      /* je 0x1000efe3 -> je 0x1000eff9 */
+    VirtualProtect(site, 2, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), site, 2);
+    logf("--- EFA1_GUARD: empty-bucket branch 0xefc2 retargeted to the ret (was -> 0xefe3 deref)");
+}
 
 static void patch_gridb_clamp(HMODULE ss) {
     int k;
@@ -1545,7 +1596,8 @@ static void patch_gridb_clamp(HMODULE ss) {
         logf("--- GRIDB_CLAMP %s: index clamped (hook 0x%X -> cave 0x%X, base 0x%08lX)",
              c->name, c->hook, c->cave, (DWORD)ss);
     }
-    logf("--- GRIDB_CLAMP: all grid-B walkers clamped (OOB bucket-index AV fixed engine-wide)");
+    patch_efa1_emptybucket(ss);
+    logf("--- GRIDB_CLAMP: 4 walkers index-clamped (FIX A) + FUN_1000efa1 null-guarded (FIX C)");
 }
 
 /* ===================== HUD REFLOW - top-strip PROOF (2026-08-30) =====================

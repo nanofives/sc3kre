@@ -110,3 +110,48 @@ thread that already performed it safely. Step 12 arms the machine; it does not w
 
 It does not attempt a reflow, does not resize any HUD surface, and does not produce a shippable HUD
 change. It produces the two measurements that decide whether a reflow is reachable at all.
+
+---
+
+# RUN 2 PRE-REGISTRATION (2026-08-31) — FIX C in, HUD lab retried
+
+Run 1 produced **no HUD data**: the resize faulted at step 7 and aborted before step 12 armed the
+phase machine. Root cause found and fixed; everything above is unchanged and still the scoring
+standard for the HUD question.
+
+## What changed since run 1
+
+**FIX C** — `FUN_1000efa1` (grid-B node REMOVE) dereferenced the NULL list terminator on its
+"not found" and "empty bucket" paths, `[CONFIRMED @ SIMSPR 0x1000efa1]`. Two SIMSPR-internal,
+base-invariant, fail-closed edits applied in memory (still nothing patched on disk):
+
+1. cave at `0x615e0`, hooked at `0xefd6`, adding the missing `test eax,eax` before the unlink;
+2. 2-byte in-place retarget of the empty-bucket branch at `0xefc2` to the function's `ret`.
+
+Cave assembled and capstone-verified at its load address; hook bytes, cave slack (64 zero bytes) and
+the `rel8` range all checked against the untouched `original\modules\SIMSPR.DLL`. Smoke run
+confirmed both parts apply with their fail-closed checks passing.
+
+## Pre-registered outcomes for run 2
+
+**On FIX C (scored first — the HUD question is downstream of it):**
+
+- **PASS:** the resize completes all of steps 1-11 at the maximized size with **no `FAULT CAUGHT`
+  and no `*** VEH FAULT ***`** other than the known-benign startup `0xC0000096`, and the city
+  renders. FIX C is then confirmed against the exact fault it targets.
+- **FAIL, same site:** a fault at `SIMSPR+0xEFDB` or `+0xEFE3` again. The guard is then wrong or was
+  not applied — check the `EFA1_GUARD` / `FUN_1000efa1` lines before interpreting anything else.
+- **FAIL, new site:** a fault elsewhere. FIX C did its job and a *different* latent guard is next;
+  record the address, do not re-litigate `efa1`.
+
+**On the HUD question:** scored exactly against the run-1 criteria above (phase A vs phase B profile
+concentration; child surface class/dims across the SetRect). Unchanged.
+
+## Explicitly not claimed
+
+FIX C is a null guard on a lookup that finds nothing. It stops the crash; it does **not** make the
+stale-bucket lookup correct. Objects whose bucket changed under the new geometry are still looked up
+in the wrong bucket — they simply fail to unlink instead of faulting. Whether that leaves a visible
+artefact (a stale node lingering in an old bucket) is **`[UNCERTAIN]` and untested**. If the owner
+reports ghost/stale sprites after a resize, that is the next thread, and it is a *different* defect
+from the crash.
