@@ -234,3 +234,31 @@ docked full-width bar (step 12 SetRect) is achieved but carries an intrinsic per
 - HUD bottom bar: CAN be docked + spanned full-width via its own SetRect (attempt 3), but full-width has
   an intrinsic per-frame redraw cost NOT caused by iso overlap (hypothesis falsified). Removing it needs
   deep, uncertain paint/invalidate RE.
+
+---
+
+## FPS ROOT CAUSE — intrinsic per-frame composite (2026-08-31, read locally; both worker digs timed out)
+
+Both worker digs timed out (900s each), so read `FUN_10026144` (the HUD Notify handler) directly:
+**it is NOT a per-frame invalidator.** Every message case only sets state bytes (`this+0xa5/+0xa6/+0x29/
++0x45`) and toggles visibility via `vt+0xf4(2,x)`. The 6 subscribed messages are discrete state changes
+(show/hide, mode), not a per-tick redraw. `[CONFIRMED @ SIMUI 0x10026144]`
+
+Combined with the FALSIFIED iso-overlap hypothesis (iso stopped above the bar, FPS still dropped), the
+remaining explanation is that the engine **composites the HUD window every frame unconditionally** (it
+draws over the continuously-redrawn iso scene), and that per-frame blit cost scales with the window
+WIDTH. There is no invalidation to narrow - the cost is not dirty-rect-driven.
+
+**Conclusion: the full-width HUD bar's FPS cost is intrinsic to this engine's per-frame compositing, not
+a patchable invalidation/overlap bug.** Removing it would mean changing the compositor (out of scope / a
+different project). Three FPS hypotheses now tried (device batch, iso overlap, per-tick invalidate) - all
+falsified or absent.
+
+## FINAL STATE of the HUD workstream
+
+- Viewport (D-004 + render + zoom + stability): COMPLETE, owner-confirmed - the deliverable.
+- HUD bottom bar: CAN dock + span full-width (attempt 3, SIMUI SetRect vt+0xc8), but full-width has an
+  intrinsic per-frame composite cost that scales with width; not cheaply removable.
+- Recommendation: ship the viewport with the HUD native (revert the SetRect), OR keep the docked
+  full-width bar accepting the FPS cost. The reflow-with-scaling goal is not achievable without engine-
+  level compositor work.
