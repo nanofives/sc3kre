@@ -699,22 +699,46 @@ static void rz_blt_dump(const char *tag) {
         {
             DWORD o = g_blt_key[best];
             double tot = g_freq.QuadPart ? (1000.0 * (double)g_blt_time[best] / (double)g_freq.QuadPart) : 0.0;
-            char dims[160];
+            char dims[320];
             dims[0] = 0;
-            /* IDENTITY (run 9 left this UNCERTAIN): always report the object's vtable resolved to
-               MODULE+RVA, and its dims when the class is one we know. Run 9's dominant object
-               printed nothing because it is neither known raster class, which left it unidentified.*/
+            /* IDENTITY: vtable -> MODULE+RVA always. For the surface SUB-OBJECT class
+               (GZGraphicD+0x1F0AC, run 10) also decode:
+                 sub+0xe8 = the OWNING raster  [CONFIRMED @ GZGraphicD 0x100142a2:41]
+                 sub+0x74 = DDSCAPS.dwCaps - the DDSURFACEDESC sits at sub+0x0c and ddsCaps is at
+                            DDSD+0x68, which is the exact field FUN_10019273 writes when it picks
+                            video vs system memory  [CONFIRMED @ GZGraphicD 0x10019273]
+               This tests, rather than assumes, whether widening the bar moves a surface between
+               video and system memory. */
             if (o && !IsBadReadPtr((void *)o, 0x2c)) {
                 DWORD *vt = *(DWORD **)o;
                 if (!IsBadReadPtr(vt, 4)) {
                     char who[120];
                     rz_modstr((DWORD)vt, who, sizeof(who));
-                    if (gz && ((DWORD)vt == gz + GZ_RVA_VT_RASTER ||
-                               (DWORD)vt == gz + GZ_RVA_VT_BLITDEST))
+                    if (gz && (DWORD)vt == gz + GZ_RVA_VT_SURFACE &&
+                        !IsBadReadPtr((void *)o, 0xf0)) {
+                        DWORD caps  = ((DWORD *)o)[0x74 / 4];
+                        DWORD owner = ((DWORD *)o)[0xe8 / 4];
+                        DWORD ow = 0, oh = 0;
+                        if (owner && !IsBadReadPtr((void *)owner, 0x2c)) {
+                            ow = ((DWORD *)owner)[0x24 / 4];
+                            oh = ((DWORD *)owner)[0x28 / 4];
+                        }
+                        _snprintf(dims, sizeof(dims),
+                                  " SURFACE caps=0x%08lX[%s%s%s%s%s] owner=0x%08lX %lux%lu",
+                                  caps,
+                                  (caps & 0x4000)     ? "VIDMEM "   : "",
+                                  (caps & 0x800)      ? "SYSMEM "   : "",
+                                  (caps & 0x200)      ? "PRIMARY "  : "",
+                                  (caps & 0x40)       ? "OFFSCR "   : "",
+                                  (caps & 0x20000000) ? "NONLOCAL " : "",
+                                  owner, ow, oh);
+                    } else if (gz && ((DWORD)vt == gz + GZ_RVA_VT_RASTER ||
+                                      (DWORD)vt == gz + GZ_RVA_VT_BLITDEST)) {
                         _snprintf(dims, sizeof(dims), " vt=%s raster %lux%lu", who,
                                   ((DWORD *)o)[0x24 / 4], ((DWORD *)o)[0x28 / 4]);
-                    else
+                    } else {
                         _snprintf(dims, sizeof(dims), " vt=%s", who);
+                    }
                 }
             }
             logf("BLT> %s #%02lu obj=0x%08lX%s calls=%lu total=%.1f ms avg=%.3f ms (%.1f%% of window)",

@@ -473,3 +473,47 @@ within-run comparison, not a cross-run one.
 ## Note
 
 The identity line and the split are independent; either can succeed if the other fails.
+
+---
+
+# RUN 11 PRE-REGISTRATION (2026-08-31) — surface memory class and owner, both phases
+
+Run 10 put the cost inside `IDirectDrawSurface::Blt` (x2.55 per call) on one object, identified as a
+surface sub-object (`GZGraphicD+0x1F0AC`). Open: which surface, and why an unrelated wide bar makes
+it 2.55x more expensive.
+
+## What is added
+
+For every blitting object of the sub-object class, the dump now also reports:
+
+- **`sub+0xe8` = the OWNING raster** `[CONFIRMED @ GZGraphicD 0x100142a2:41]`, with its dims;
+- **`sub+0x74` = `DDSCAPS.dwCaps`**, decoded (`VIDMEM` / `SYSMEM` / `PRIMARY` / `OFFSCR` /
+  `NONLOCAL`). The `DDSURFACEDESC` is at `sub+0x0c` and `ddsCaps` at `DDSD+0x68`, which is exactly
+  the field `FUN_10019273` writes when choosing video vs system memory - the fallback path at
+  `0x1001943a` sets `DDSCAPS_SYSTEMMEMORY` (`0x800`) and clears `DDSCAPS_VIDEOMEMORY` (`0x4000`)
+  `[CONFIRMED @ GZGraphicD 0x10019273]`.
+
+Both are read in **both phases**, so a change is visible rather than inferred.
+
+## Hypothesis being tested (H-mem)
+
+> Widening the bar pushes the main scene surface out of video memory into system memory, turning a
+> video->video blit into a system->video transfer. That is the classic shape of a ~2.5x cliff.
+
+- **H-mem SUPPORTED:** the dominant object's caps show `VIDMEM` in phase A and `SYSMEM` in phase B
+  (or gains `NONLOCAL`). The mechanism is then a memory-class demotion, and the fix direction is to
+  stop the bar consuming the video memory the scene surface needs.
+- **H-mem FALSIFIED:** caps are IDENTICAL across phases. The 2.55x then has nothing to do with
+  surface residency, and the next candidate is the blit's own parameters (source rect, clipping,
+  colour-key path) rather than where the memory lives.
+- **VOID:** the dominant object is not of the sub-object class, or `owner`/`caps` read as garbage
+  (owner dims implausible), meaning the offsets do not hold for this object.
+
+**H-mem is a hypothesis with a named falsifier, not a finding.** It was written down before the run
+precisely because it is the kind of tidy story that is easy to believe after the fact. If the caps
+are identical, it dies, and that is a useful result too.
+
+## Bonus the same line gives for free
+
+`owner` + dims identifies WHICH surface the main blit belongs to - the iso view render target, the
+device surface, or something else. That has been `[UNCERTAIN]` since run 9.
