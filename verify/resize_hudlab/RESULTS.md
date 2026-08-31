@@ -628,3 +628,58 @@ INCONCLUSIVE twice. The bar for naming a caller has not been met.
 - Return-address validation: **working**, keep it.
 - Wait attribution: **still not achieved**, cause of failure now understood and cheap to fix.
 - Everything from runs 3-5 stands; none of it depended on the stack scan.
+
+---
+
+# RUN 9 (2026-08-31) — blit timing: **the regression is localized to ONE object**
+
+Structurally sound: 23768 intervals in A, 12749 in B, **zero outliers** in either. The A/B comparison
+is valid (this is the check run 8 failed).
+
+## The result
+
+| | A-native | B-fullwidth | change |
+|---|---|---|---|
+| `obj=0x0F7AFC70` calls | 19849 | 12475 | **-37%** |
+| `obj=0x0F7AFC70` avg | **0.400 ms** | **0.779 ms** | **x1.95** |
+| `obj=0x0F7AFC70` share of window | 79.5% | **97.1%** | +17.6 pts |
+| `obj=0x00567528` avg | 0.875 ms | 2.233 ms | x2.55 (calls 1082 -> 116) |
+| `obj=0x0F7B1110` avg | 1.187 ms | 1.271 ms | flat (calls 914 -> 16) |
+
+**One object, `0x0F7AFC70`, is the whole story.** Its per-call interval nearly doubled, it now
+consumes 97.1% of the phase window, and the blit rate fell 37% (1985/s -> 1248/s) — which is the
+owner-reported FPS drop, measured.
+
+## The most useful part is a NEGATIVE
+
+**The bar's own surface does not appear as a hot blit.** No object with `2048x56` dims shows up
+anywhere in the ranking, in either phase. If the cost were "an extra wide bar blit each frame", that
+is exactly where it would appear, and it does not.
+
+So the mechanism is **not** the bar being drawn. It is that the **main per-frame blit became
+2x slower while the bar is wide.** That reframes the problem: the bar's width is degrading something
+else, not adding work of its own. No amount of stack-scanning would have suggested this.
+
+## Limitation, stated plainly — this instrument cannot say WHERE inside the interval
+
+The metric is *interval between consecutive heartbeat entries*, attributed to the previous call. For
+the dominant object that is effectively frame time. **It does not distinguish "the Blt call itself
+got slower" from "something after the Blt, before the next one, got slower."**
+
+So the honest claim is: *the interval following `0x0F7AFC70`'s blits doubled*, NOT *that blit got
+slower*. Distinguishing them needs **entry AND exit timing** (hook the return), which is a small
+increment on the existing hook and is the obvious next step.
+
+`[UNCERTAIN]` — `0x0F7AFC70`'s identity. It printed no dims, which means its vtable is neither
+`gz+0x1E894` nor `gz+0x1F328`, so it is not a raster of the two classes we know. Identifying it is
+one added log line (dump `*(DWORD*)obj` and resolve to `MODULE+RVA`). **Do not guess what it is** —
+the low-address `0x00567528` sits in the same range as the device surface seen in earlier runs
+(`iso+0x4ec = 0x00547970`), but `0x0F7AFC70` is heap-range and unidentified.
+
+## Status
+
+- Blit timing instrument: **works**, structurally sound, zero outliers. Keep it.
+- Regression localized to one object and quantified (x1.95 interval, -37% throughput).
+- Bar's own blit **excluded** as the cost — a real elimination.
+- Next, in order: (1) log the dominant object's vtable to identify it; (2) add entry/exit timing to
+  split "inside the blit" from "after the blit".
