@@ -197,3 +197,14 @@ each frame. Self-gated on g_hud_top (no capture -> unchanged). barH from the cap
 Expected PASS: bar spans the bottom AND the FPS drop is gone (iso fills above the bar, bar below, no
 black strip between). If a black strip appears or FPS is unchanged, the hypothesis is wrong -> revert
 the step-9 change (it is isolated and self-gated).
+
+---
+
+## TIMING BUG FIXED (2026-08-31): wait for SIMUI before installing the wrap
+
+The prior run's bar "didn't move" because SIMUI was not loaded when the watcher did its one-shot
+`patch_hud_reflow` check ("HUD: SIMUI.DLL not loaded yet - capture NOT armed"). SIMUI loads later than
+SIMSPR/GZGraphicD, and the wrap must be installed before the HUD constructs. Fixed: the watcher now
+WAITS for SIMUI (up to ~30 s, 100 ms poll) after arming the resize, then installs the wrap - still well
+before the city/HUD build. This re-enables both the bar dock/span (step 12 SetRect) and the FPS fix
+(step 9 present-stops-above-bar) in one run. Next hand-test verifies the FPS hypothesis for real.

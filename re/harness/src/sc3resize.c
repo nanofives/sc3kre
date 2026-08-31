@@ -794,6 +794,19 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
              ea[0] ? (LONG)((ea[1] - ea[0]) / 16) : 0L, w, ht);
         rz_thiscall((void *)list, (void *)((DWORD)ss + RVA_LIST_ERASE), ea, 2);
         rect[0] = 0; rect[1] = 0; rect[2] = (LONG)w; rect[3] = (LONG)ht;
+        /* FPS FIX HYPOTHESIS (2026-08-31): if the bottom HUD bar is docked (step 12), stop the iso
+           present rect ABOVE it (ht - barH) so the animated iso does NOT blit under the bar each frame.
+           The bar-over-iso overlap is the suspected per-frame redraw cost (native res is fine; our
+           full-height iso created the overlap). barH from the captured HUD window's height. Self-gated:
+           no g_hud_top -> barH 0 -> unchanged. If this leaves a black strip or does not fix FPS, revert. */
+        if (g_hud_top && !IsBadReadPtr(g_hud_top, 0x24)) {
+            LONG by1 = ((LONG *)g_hud_top)[0x18/4], by2 = ((LONG *)g_hud_top)[0x20/4];
+            LONG barH = by2 - by1;
+            if (barH > 0 && barH < (LONG)ht / 2) {
+                rect[3] = (LONG)ht - barH;
+                logf("RZ   [step 9] iso present stops above bar: ht %lu -> %ld (barH %ld)", ht, rect[3], barH);
+            }
+        }
         pa[0] = (DWORD)&rect[0];
         rz_thiscall((void *)list, (void *)((DWORD)ss + RVA_LIST_PUSH), pa, 1);
         logf("RZ   [step 9] after: begin=0x%08lX end=0x%08lX (%ld rect(s))",
@@ -891,15 +904,65 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
        producer, which reflows the anchors for the live width. Both __fastcall(this). g_hud_top was
        captured by the producer wrap at construction. SIMUI. Only the top strip in this proof; the
        height-keyed side/panel tables (FUN_1004c3e9/FUN_1004cdcd) are a later increment. */
-    if (0 && g_hud_top && !IsBadReadPtr(g_hud_top, 4)) {   /* DISABLED - breaks the HUD, see above */
-        HMODULE sui = GetModuleHandleA("SIMUI.DLL");
-        if (sui) {
-            g_rz_step = 12;
-            logf("RZ   [step 12] HUD rebuild: g_hud_top=0x%08lX - destruct+rebuild (top-strip reflow)",
-                 (DWORD)g_hud_top);
-            rz_thiscall(g_hud_top, (void *)((DWORD)sui + SUI_RVA_DESTRUCT), NULL, 0);
-            rz_thiscall(g_hud_top, (void *)((DWORD)sui + SUI_RVA_BUILD), NULL, 0);
-            logf("RZ   [step 12] HUD rebuild returned");
+    /* 12 (DIAGNOSTIC, read-only): map the captured HUD window's widget structure so attempt 2 can
+       reposition correctly. Logs: the HUD own rect (this+0x14..0x20), the 6 children this[0x2a..0x2f]
+       (ptr, vtable, a candidate own-rect at child+0xe0..0xec, and the vt+0xcc set-position target),
+       and the stored native anchors this[0x50..0x5f] (A/B/D/C). Moves NOTHING. */
+    if (g_hud_top && !IsBadReadPtr(g_hud_top, 0x1b0)) {
+        DWORD *h = (DWORD *)g_hud_top;
+        int ci;
+        g_rz_step = 12;
+        logf("RZ   [HUDDIAG] hud=0x%08lX vt=0x%08lX ownrect this+0x14..0x20=[%ld %ld %ld %ld]",
+             (DWORD)h, h[0], (LONG)h[0x14/4], (LONG)h[0x18/4], (LONG)h[0x1c/4], (LONG)h[0x20/4]);
+        for (ci = 0x2a; ci <= 0x2f; ci++) {
+            DWORD c = h[ci];
+            if (!c || IsBadReadPtr((void *)c, 0xf0)) { logf("RZ   [HUDDIAG] child this[0x%x]=0x%08lX (null/unreadable)", ci, c); continue; }
+            {
+                DWORD *cv = *(DWORD **)c;
+                DWORD setpos = (cv && !IsBadReadPtr(cv, 0xd0)) ? cv[0xcc/4] : 0;
+                logf("RZ   [HUDDIAG] child this[0x%x]=0x%08lX vt=0x%08lX rect@+0xe0=[%ld %ld %ld %ld] vt+0xcc=0x%08lX",
+                     ci, c, (DWORD)cv,
+                     (LONG)((DWORD *)c)[0xe0/4], (LONG)((DWORD *)c)[0xe4/4],
+                     (LONG)((DWORD *)c)[0xe8/4], (LONG)((DWORD *)c)[0xec/4], setpos);
+            }
+        }
+        logf("RZ   [HUDDIAG] anchors A this+0x50=[%ld %ld %ld %ld] B+0x54=[%ld %ld %ld %ld] "
+             "D+0x58=[%ld %ld %ld %ld] C+0x5c=[%ld %ld %ld %ld]",
+             (LONG)h[0x50/4],(LONG)h[0x51/4],(LONG)h[0x52/4],(LONG)h[0x53/4],
+             (LONG)h[0x54/4],(LONG)h[0x55/4],(LONG)h[0x56/4],(LONG)h[0x57/4],
+             (LONG)h[0x58/4],(LONG)h[0x59/4],(LONG)h[0x5a/4],(LONG)h[0x5b/4],
+             (LONG)h[0x5c/4],(LONG)h[0x5d/4],(LONG)h[0x5e/4],(LONG)h[0x5f/4]);
+
+        /* ATTEMPT 2 (deep reflow): move+widen the HUD WINDOW itself via its real SetRect (vt+0xc8,
+           4 int coords; window rect at this+0x14..0x20, GetRect=vt+0xc0). This is the framework's own
+           window-geometry method - no destruct, no child-class assumptions. Dispatched through the LIVE
+           vtable (correct regardless of static base). For the bottom toolbar [0,544,599,600], span it
+           to [0, liveH-barH, liveW, liveH] so the bar docks to the bottom and reaches both side edges.
+           Only widens (liveW > current x2). VEH-guarded; before/after rect logged. */
+        {
+            RECT cr;
+            LONG x1 = (LONG)h[0x14/4], y1 = (LONG)h[0x18/4], x2 = (LONG)h[0x1c/4], y2 = (LONG)h[0x20/4];
+            int barH = (int)(y2 - y1);
+            DWORD *hvt = *(DWORD **)h;
+            if (g_hwnd && GetClientRect(g_hwnd, &cr) && hvt && !IsBadReadPtr(hvt, 0xcc)) {
+                int lw = (int)(cr.right - cr.left), lh = (int)(cr.bottom - cr.top);
+                void *setrect = (void *)hvt[0xc8/4];
+                /* Dock the bottom bar to the CURRENT client size (tracks bigger AND smaller, so moving
+                   to a lower-res monitor re-fits instead of leaving it off-screen). Re-apply only when
+                   the rect actually differs from the desired docked rect. barH is the bar's own height,
+                   preserved. */
+                int wantY1 = lh - barH, wantX2 = lw, wantY2 = lh;
+                if (setrect && barH > 0 && barH < lh &&
+                    (x1 != 0 || y1 != wantY1 || x2 != wantX2 || y2 != wantY2)) {
+                    DWORD a[4];
+                    a[0] = 0; a[1] = (DWORD)wantY1; a[2] = (DWORD)wantX2; a[3] = (DWORD)wantY2;
+                    logf("RZ   [step 12] HUD SetRect vt+0xc8=0x%08lX  [%ld,%ld,%ld,%ld] -> [0,%d,%d,%d]",
+                         (DWORD)setrect, x1, y1, x2, y2, wantY1, wantX2, wantY2);
+                    rz_thiscall(g_hud_top, setrect, a, 4);
+                    logf("RZ   [step 12] HUD SetRect returned; rect now [%ld,%ld,%ld,%ld]",
+                         (LONG)h[0x14/4], (LONG)h[0x18/4], (LONG)h[0x1c/4], (LONG)h[0x20/4]);
+                }
+            }
         }
     }
 
@@ -1404,15 +1467,6 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
     patch_surfacefmt(gz);
     patch_gridb_clamp(ss);   /* FIX A: clamp the grid-B bucket index (OOB AV root cause) */
 
-    /* HUD reflow (top-strip proof) - DISABLED 2026-08-30 after a failed hand-test. The driven
-       destruct+rebuild (step 12) is NOT a clean idempotent re-layout: FUN_10024a96's build guard
-       (vt+0xf0(0x4000)) skips the rebuild on alternate resizes, so the destruct tears the strip down
-       and the next rebuild is skipped -> the strip vanishes and does not return (owner-observed).
-       Both the wrap install and step 12 are gated off until redesigned as a REPOSITION (move existing
-       widgets, no teardown). Evidence: verify/resize_hud/RESULTS.md. */
-    if (0) { HMODULE sui = GetModuleHandleA("SIMUI.DLL");
-      if (sui) patch_hud_reflow(sui);
-      else logf("--- HUD: SIMUI.DLL not loaded yet - top-strip reflow NOT armed"); }
 
     /* v3: the create-recorder hook (idx 2) is DROPPED - it crashed the game at startup in v2
        (verify/resize_ship RUN 2). Reverts to the known-good two-hook set. The tuple therefore comes
@@ -1423,6 +1477,17 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
     logf("### RESIZE: armed - windowed+fix16 applied, bridge capture at SIMSPR+0x%X, "
          "per-frame poll at GZGraphicD+0x%X (create recorder DROPPED after v2 crash)",
          RVA_BRIDGE_INIT, GZ_RVA_HEARTBEAT);
+
+    /* HUD reflow capture: wrap the producer FUN_100270e5 so it captures the HUD window `this` and (with
+       step 12/step 9) docks + spans the bottom bar. SIMUI loads LATER than SIMSPR/GZGraphicD, and the
+       wrap MUST be installed before the HUD constructs (the producer runs at construction; we do not
+       drive a rebuild). A one-shot check missed it when SIMUI was not loaded yet (2026-08-31, "capture
+       NOT armed"). So WAIT for SIMUI here (up to ~30 s) and install as soon as it appears - still well
+       before the city/HUD build. */
+    { int st = 0; HMODULE sui = NULL;
+      while (st++ < 300 && !(sui = GetModuleHandleA("SIMUI.DLL"))) Sleep(100);
+      if (sui) patch_hud_reflow(sui);
+      else logf("--- HUD: SIMUI.DLL never loaded after %d tries - capture NOT armed", st); }
     return 0;
 }
 
