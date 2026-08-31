@@ -94,3 +94,41 @@ HUD window `this` (g_hud_top); step 12 logs, after a resize, the HUD own rect, t
 and the stored native anchors `this[0x50..0x5f]`. **Moves nothing** - the HUD stays intact. Purpose: map
 the real widget structure so attempt 2 repositions the right widgets via vt+0xcc without guessing.
 Expected: `[HUDDIAG]` lines in the log; no visual change; no crash. Then design the in-place reposition.
+
+---
+
+## DIAGNOSTIC RESULT (2026-08-31) — the runtime model does not match the static analysis
+
+Read-only diagnostic run (maximize, log, no modification). Findings and what they refute:
+
+- `g_hud_top=0x0E2B58C8`, HUD own rect `this+0x14..0x20 = [0,544,599,600]` (bottom band, 800-era coords)
+  -> confirms g_hud_top is the BOTTOM toolbar. HUD class vtable = `0x034640EC`.
+- 6 children `this[0x2a..0x2f]` present, ALL class vtable `0x02EEE894` = **GZGraphicD+0x1E894**
+  (GZGraphicD base this run 0x02ED0000). Their `vt+0xcc` target = `0x02ED9EA2` = **GZGraphicD+0x9EA2** =
+  `FUN_10009ea2`, a 9-byte FLAG GETTER (`return *(this+0x34)>>1 & 1`) - **NOT a set-position.**
+- Child rect@`+0xe0` = garbage; stored anchors `this+0x50..0x5f` = garbage.
+
+**Three layers of the model are wrong for the actual runtime object:** the children are a GZGraphicD
+raster-family class (not the SIMUI widgets `FUN_10024a96`'s source described), `vt+0xcc` is a flag
+getter not set-position, and the decoded struct offsets (child rect `+0xe0`, anchors `+0x50`) do not
+hold. The worker analyzed `FUN_10024a96`'s SIMUI source, but the objects in memory at `this[0x2a..0x2f]`
+are a different class - so every reposition primitive derived from that source is invalid for these
+objects.
+
+**Assessment:** the deep HUD reflow is NOT converging. Each attempt/diagnostic reveals the prior model
+was wrong at a new layer (guard toggling -> offsets -> class/slot semantics). Making these actual
+runtime objects reflow would require re-identifying g_hud_top's true class (vt 0x034640EC) and the
+GZGraphicD child class (vt+0x1E894) from scratch - their real geometry fields and a real set-position -
+then repositioning + visual iteration, with the "scale" arm still needing art. That is a large,
+low-confidence effort on top of an already very long session.
+
+**Recommendation: BANK the completed viewport.** The HUD reflow is documented as attempted (destruct+
+rebuild broke it; reposition blocked by a class/offset/slot mismatch) with the exact runtime evidence
+for a future, dedicated effort. Mod is at the known-good viewport build (HUD changes are capture+log
+only; nothing repositioned; the harmful rebuild stays disabled).
+
+## Final status of this workstream
+
+- Viewport (D-004 + render + zoom + stability): COMPLETE, owner-confirmed, shipped.
+- HUD reflow: NOT achieved. Both clean approaches falsified; runtime object class/offsets differ from
+  the static analysis (documented). Requires a dedicated re-RE of the live objects.
