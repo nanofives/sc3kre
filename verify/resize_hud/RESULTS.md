@@ -182,3 +182,18 @@ it needs deep RE of the bar's paint (why width drives per-frame cost) - a separa
 Options: (a) ship the viewport, leave HUD native (no reflow); (b) accept the docked-full-width bar WITH
 the FPS cost; (c) deep-dive the bar per-frame paint to remove the FPS cost. The viewport remains the
 solid, complete, low-risk deliverable.
+
+---
+
+## FPS FIX HYPOTHESIS (2026-08-31) — stop the iso above the bar
+
+The FPS deep-dive worker TIMED OUT (900s, too broad). Testing the leading hypothesis directly instead,
+using code we own (step 9): the per-frame cost is the animated iso view blitting UNDER the docked
+2048-wide bar each frame (native res is fine because the iso stops above the bar there; our full-height
+iso created the overlap). Fix: step 9 now pushes the iso present rect as `{0,0,w,ht-barH}` when the HUD
+bar is captured, so the iso stops above the bar and never blits its region -> the bar is not re-dirtied
+each frame. Self-gated on g_hud_top (no capture -> unchanged). barH from the captured bar's height.
+
+Expected PASS: bar spans the bottom AND the FPS drop is gone (iso fills above the bar, bar below, no
+black strip between). If a black strip appears or FPS is unchanged, the hypothesis is wrong -> revert
+the step-9 change (it is isolated and self-gated).
