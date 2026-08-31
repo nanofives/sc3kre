@@ -185,6 +185,13 @@ Stride/corner measurement is deferred as cosmetic (~8 runs).
 > hand-tested on a real display 2026-08-29 and FAILED** — see the block below. The detailed history
 > below is retained as the working record.
 >
+> ✅ **SHIPPED 2026-08-31 — VIEWPORT, HUD native.** The resizable-window mod is done for the in-city
+> view: resize fills the monitor, city renders (no toggle), zoom in/out stable, no crash. The HUD is
+> left NATIVE by design — it can dock+span full-width (`verify/resize_hud`, SIMUI SetRect vt+0xc8) but
+> full-width has an INTRINSIC per-frame composite cost (three FPS hypotheses falsified) and per-widget
+> reflow hit engine class/offset mismatches; the shipped build does not install the HUD wrap. Full HUD
+> evidence for a future engine-level pass: `verify/resize_hud/RESULTS.md`.
+>
 > ✅✅✅ **RENDER FIXED END-TO-END, 2026-08-30 (step 11).** Owner-confirmed: after a resize, with NO
 > manual layer toggle, **the whole city renders** — terrain, zones, buildings, roads. Root cause: the
 > resize's step 7 called `FUN_10018cdf(bridge, layer=0, .., force=0)` which **nulled the active layer

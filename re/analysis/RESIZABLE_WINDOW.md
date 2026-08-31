@@ -4,6 +4,16 @@ Single authoritative summary of the resizable-window / arbitrary-resolution mod 
 **SimCity 3000 Unlimited**. Supersedes the scattered `verify/resize_*` records for orientation; those
 remain the primary evidence (each has a committed `PRE.md` + `RESULTS.md`).
 
+> ✅ **SHIPPED 2026-08-31 — VIEWPORT, HUD left native.** The mod resizes the in-city view to fill an
+> arbitrary window: `D-004` confirmed on a real monitor, city renders with no toggle, zoom in/out
+> stable, crash fixed (grid-B clamps + zoom-blit guard rows). Delivered as `sc3resize.dll` +
+> `resize_launch.exe`, patching nothing on disk. **The HUD is left NATIVE by design:** it can be docked
+> + spanned full-width (`verify/resize_hud`, attempt 3, SIMUI SetRect `vt+0xc8`), but full-width has an
+> INTRINSIC per-frame composite cost (engine recomposites the HUD window every frame; not invalidation-
+> or overlap-driven - three hypotheses falsified), and true per-widget reflow/scaling hit engine class/
+> offset mismatches. HUD reflow is documented with full runtime evidence in `verify/resize_hud/` for a
+> future engine-level pass; the shipped build does not install the HUD wrap.
+
 ---
 
 ## 1. What it does, and how complete it is
