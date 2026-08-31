@@ -506,3 +506,66 @@ stand in for the test that was actually specified.
 - Second-resize behaviour (height stability, seam stability, shrink re-fit): **UNVERIFIED**, one
   hand-run away.
 - FPS cost: unchanged and still open (runs 3-5).
+
+---
+
+# RUN 7 (2026-08-31) — wait attribution: **INCONCLUSIVE**. The scan is matching data, not frames.
+
+Both phases collected well above the floor (A: 5771 attributed / 500 no-game-frame; B: 6005 / 282),
+so this is not VOID. It is the pre-registered **INCONCLUSIVE** outcome, and the instrument's own
+output is what establishes that.
+
+## The disqualifying evidence: impossible "return addresses"
+
+| rank | A-native | B-fullwidth |
+|---|---|---|
+| #01 | `SC3U.exe+0x41000` **29.39%** | `SC3U.exe+0x41000` 2.65% |
+| #02 | `SC3U.exe+0x41237` 0.88% | `GZGraphicD+0x180FF` 1.08% |
+| #03 | `GZGraphicD+0x21FA` 0.54% | **`SC3U.exe+0x9`** 0.82% |
+| #04 | `SC3U.exe+0x39237` 0.45% | `SC3U.exe+0x80000` 0.67% |
+
+Three entries cannot possibly be return addresses:
+
+- **`SC3U.exe+0x9`** is inside the **DOS header**. Nothing calls from the PE header.
+- **`SC3U.exe+0x41000`** and **`SC3U.exe+0x80000`** are **page-aligned**. A return address points
+  *after* a call instruction; landing exactly on a page boundary is the signature of a base pointer
+  or an allocation value, not a frame.
+
+`+0x9` alone settles it. **The first in-module value above `Esp` is frequently not a return address
+at all** — it is whatever spilled local, pointer or constant happens to sit at the top of frame and
+coincidentally falls inside a module's range. The heuristic has no way to tell those apart, and the
+ranking is therefore contaminated throughout, not just at the top.
+
+## Why the B ranking cannot be mined either
+
+B is **flat**: the highest entry is 2.65% and the rest sit under 1.1%. There is no concentration
+comparable to the EIP profile's 61.86%. Some plausible-looking engine addresses do appear in B and
+not in A (`GZGraphicD+0x180FF`, `SIMSPR+0x42ADC`, `SIMSPR+0x72B8C`), and it would be easy to write
+those up as the lead.
+
+**Doing so would be the exact error the pre-registration warned about, made worse by an instrument
+that has failed its own validity check.** A ranking containing `SC3U.exe+0x9` has no earned
+credibility at rank 6 either. Not mined, deliberately.
+
+Note also that the top A entry *dropped* from 29.39% to 2.65% in B — a large differential pointing
+the wrong way for a stall cause, and further sign the signal is ambient rather than causal.
+
+## The fix, and it is cheap
+
+Validate each candidate as a real return address before bucketing: **check that the bytes
+immediately preceding it are a call.** Walk back and accept only if a `call rel32` (`E8`, 5 bytes) or
+a `call r/m32` (`FF /2`, 2-7 bytes) ends exactly at the candidate. That is the standard test and it
+would have rejected all three impossible entries above outright — `+0x9` is not preceded by code at
+all.
+
+Also worth adding: require the address to lie in an **executable section**, not merely inside the
+module image. `+0x41000` page-aligned in a data section would die to that check alone.
+
+## Status
+
+- Wait attribution: **not achieved.** Instrument needs return-address validation before it can be
+  trusted; the current ranking must not be cited.
+- The EIP-level finding from runs 3-5 is untouched by this - it never depended on the stack scan.
+- Recorded as a method note: a stack scan without call-site validation produces a confident-looking
+  ranking made largely of data. It looked like a working instrument until its output was checked
+  against what a return address can physically be.
