@@ -155,3 +155,58 @@ in the wrong bucket — they simply fail to unlink instead of faulting. Whether 
 artefact (a stale node lingering in an old bucket) is **`[UNCERTAIN]` and untested**. If the owner
 reports ghost/stale sprites after a resize, that is the next thread, and it is a *different* defect
 from the crash.
+
+---
+
+# RUN 4 PRE-REGISTRATION (2026-08-31) — HUDFIT: widen the bar's background surface
+
+Run 2 named the blocker (a fixed 600x56 raster). Run 3 named the FPS mechanism (a GPU sync stall,
+owner-confirmed). This run acts on both.
+
+## What is new
+
+`SC3RESIZE_HUDFIT=1` adds one step after the window SetRect: snapshot the bar background child
+`[0x2a]`'s art RAW, widen the surface to the live client width via `rz_recreate_raster`
+(`FUN_10009efb` through `vt+0x0c`, the same primitive the mod already runs on `iso+0x74` and
+`iso+0x4ec` every resize, with its expect-or-refuse vtable gate), then tile the snapshot across the
+new width. Tiling over stretching: no filtering, no new art.
+
+## The prediction worth stating in advance
+
+Run 3 measured the render thread blocking on `NtGdiDdDDIWaitForSynchronizationObject`, doubling when
+the bar went full-width. **Until now the bar's WINDOW was 2048 wide while its backing SURFACE stayed
+600 wide.** A hypothesis follows directly, and this run tests it without being designed to:
+
+> **H-fps:** the sync stall is caused by that window/surface size MISMATCH — the engine is made to do
+> something per-frame it would not do if the surface matched the window.
+
+- **If H-fps is right:** widening the surface should REDUCE OR REMOVE the FPS drop. That would be a
+  fix, not just a cosmetic improvement.
+- **If H-fps is wrong:** the drop persists unchanged at full width with a correctly-sized surface.
+  The stall is then about width itself, not the mismatch, and H-fps is dead.
+
+Either result is informative and neither is assumed. **This is a prediction, not a claim** — nothing
+in run 3 established the mismatch as the cause, and treating a plausible story as established is the
+exact failure this board has logged repeatedly.
+
+## Pre-registered outcomes
+
+- **PASS:** the log shows `HUDFIT> ... widening to <liveW>x56`, `FUN_10009efb -> 1`, a tiled-pixel
+  count, and `AFTER-setrect` reporting child `[0x2a]` at the live width with a COHERENT pitch — AND
+  the owner sees a bar spanning the screen **with visible art**, no crash.
+- **PARTIAL (blank bar):** the surface widens per the log but the owner sees a blank or garbage bar.
+  Then the engine neither repaints nor preserves our tiled content, and the next question is who
+  draws that surface. **A real possible outcome, flagged `[UNCERTAIN]` in the code comment** — a
+  recreate discards pixels and the tiling is a mitigation, not a guarantee.
+- **FAIL (refused):** `HUDFIT> recreate REFUSED` — the vtable gate rejected the object. The bar is
+  left native and nothing is damaged. Read the refusal line before theorising.
+- **FAIL (crash):** any `FAULT CAUGHT` or `*** VEH FAULT ***` beyond the benign startup
+  `0xC0000096`. Record the address; do not retry blind.
+
+**Scored separately and independently:** the FPS observation, per H-fps above.
+
+## Safety
+
+Gated behind `SC3RESIZE_HUDFIT=1` and additionally behind `SC3RESIZE_HUDLAB=1` (it runs inside the
+phase machine). With either unset the mod is the shipped viewport build. The recreate goes through
+the same expect-or-refuse gate that has never mispatched, and still patches nothing on disk.

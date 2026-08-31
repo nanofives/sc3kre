@@ -391,6 +391,9 @@ static void rz_census(void) {
  * ================================================================================================== */
 static void  rz_modstr(DWORD addr, char *out, int n);   /* fwd: defined below, resolves EIP->MODULE+RVA */
 static int   g_hudlab;                 /* SC3RESIZE_HUDLAB: arm the HUD lab */
+static int   g_hudfit;                 /* SC3RESIZE_HUDFIT: widen the bar's background surface too */
+static HWND  g_hwnd;                   /* the game window (declared here: the HUD lab reads it for
+                                          the live client size) */
 static void *g_hud_top;                /* the HUD bottom-bar window `this`, captured in the FUN_100270e5
                                           wrap. Declared here (not down with the other window globals)
                                           because rz_hud_surfaces below reads it. The 2026-08-31
@@ -544,7 +547,8 @@ static DWORD WINAPI rz_prof_thread(LPVOID p) {
  * docked full-width. Same process, city, window size and zoom - the fixture is its own control. */
 static int   g_hudphase;               /* 0 idle, 1 settle, 2 profiling A, 3 profiling B, 4 done */
 static DWORD g_phase_ms;
-static void rz_hud_setrect(void);      /* fwd: the widen, defined with step 12 */
+static void rz_hud_setrect(void);           /* fwd: the window widen, defined below */
+static void rz_hud_fit_surface(DWORD liveW);/* fwd: the bar background surface widen, defined below */
 
 static void rz_hudlab_tick(void) {
     if (!g_hudphase || GetTickCount() < g_phase_ms) return;
@@ -560,6 +564,12 @@ static void rz_hudlab_tick(void) {
         rz_prof_dump("A-native");
         logf("HUDLAB> applying the SetRect widen, then phase B");
         rz_hud_setrect();
+        /* With SC3RESIZE_HUDFIT=1, also widen the bar's BACKGROUND SURFACE - the 600x56 raster run 2
+           identified as the thing that actually stops the bar spanning the screen. Ordered after the
+           window SetRect so the surface is fitted to the window the bar now occupies. */
+        {   RECT cr;
+            if (g_hudfit && g_hwnd && GetClientRect(g_hwnd, &cr))
+                rz_hud_fit_surface((DWORD)(cr.right - cr.left)); }
         rz_hud_surfaces("AFTER-setrect");
         rz_prof_reset();
         InterlockedExchange(&g_prof_on, 1);
@@ -684,8 +694,7 @@ static void rz_fault_diag(void *iso) {
 static volatile LONG g_busy;           /* re-entrancy guard for the per-frame poll */
 static int   g_wm_fixed;               /* the window has been subclassed */
 static WNDPROC g_oldproc;
-static HWND  g_hwnd;
-/* g_hud_top is declared up with the HUD lab block (it is read by rz_hud_surfaces). */
+/* g_hwnd and g_hud_top are declared up with the HUD lab block (both are read by it). */
 
 /* Indirect __thiscall with n stack args. ESP is saved and restored around the call, so a wrong
  * argument count shows up as a bad return value rather than as a crash three frames later.
@@ -1159,6 +1168,93 @@ static void rz_hud_setrect(void) {
             logf("HUDLAB> HUD SetRect returned; rect now [%ld,%ld,%ld,%ld]",
                  (LONG)h[0x14/4], (LONG)h[0x18/4], (LONG)h[0x1c/4], (LONG)h[0x20/4]);
         }
+    }
+}
+
+/* ---- HUD FIT: widen the bar's BACKGROUND SURFACE (2026-08-31, SC3RESIZE_HUDFIT=1) ---------------
+ *
+ * Run 2's census named the blocker: the bar background is child `g_hud_top[0x2a]`, a FIXED 600x56
+ * raster of class GZGraphicD+0x1E894, pitch 1200 = width*2 (fix16), holding real art (25525/33600
+ * non-zero). The window SetRect can move and widen the WINDOW, but the bar cannot actually span the
+ * screen while its backing surface is 600 px wide.
+ *
+ * That class is one the mod already resizes twice per resize: rz_recreate_raster drives Init
+ * FUN_10009efb through vt+0x0c on iso+0x74 and iso+0x4ec, with an expect-or-refuse vtable check.
+ * The HUD child passes the same gate, so this is the SAME proven primitive on a new object - not a
+ * new mechanism.
+ *
+ * ⚠️ Recreating a surface DISCARDS its pixels, and the bar's art lives in exactly those pixels. If
+ * the engine only blits a cached bar surface rather than repainting it, a bare recreate yields a
+ * BLANK bar. So this snapshots the old image first and, after the recreate, TILES it horizontally
+ * across the wider surface. Tiling is a deliberate choice over stretching: no filtering, no new art,
+ * and the bar's background is a repeating texture, so tiling is the artefact-free option.
+ *
+ * `[UNCERTAIN]` until hand-tested: whether the engine repaints over our tiled content each frame
+ * (in which case the tiling is harmless and redundant) or preserves it (in which case the tiling is
+ * what makes the bar look right). Either way the surface is the correct width, which is the point.
+ *
+ * Self-gated: no g_hud_top, no capture, or a refused vtable -> does nothing and says so. */
+static void rz_hud_fit_surface(DWORD liveW) {
+    DWORD *h = (DWORD *)g_hud_top;
+    HMODULE gz = GetModuleHandleA("GZGraphicD.dll");
+    DWORD obj, sub, oldbits, oldpitch, oldw, oldh;
+    BYTE *snap = NULL;
+
+    if (!g_hudfit) return;
+    if (!h || IsBadReadPtr(h, 0xc0) || !gz) { logf("HUDFIT> skipped: no HUD window or GZGraphicD"); return; }
+    obj = h[0x2a];
+    if (!obj || IsBadReadPtr((void *)obj, 0x48)) { logf("HUDFIT> skipped: child[0x2a] unreadable"); return; }
+
+    oldw = ((DWORD *)obj)[0x24 / 4]; oldh = ((DWORD *)obj)[0x28 / 4];
+    sub  = ((DWORD *)obj)[0x44 / 4];
+    if (!sub || IsBadReadPtr((void *)sub, 0xf8)) { logf("HUDFIT> skipped: sub unreadable"); return; }
+    oldbits = ((DWORD *)sub)[0xf0 / 4]; oldpitch = ((DWORD *)sub)[0xf4 / 4];
+    if (liveW <= oldw) {
+        logf("HUDFIT> skipped: live width %lu <= surface width %lu (nothing to widen)", liveW, oldw);
+        return;
+    }
+    logf("HUDFIT> bar background child[0x2a]=0x%08lX %lux%lu pitch=%lu -> widening to %lux%lu",
+         obj, oldw, oldh, oldpitch, liveW, oldh);
+
+    /* snapshot the existing art RAW (never vf1c out of band - the standing rule) */
+    if (oldbits && oldpitch && oldh && !IsBadReadPtr((void *)oldbits, oldpitch * oldh)) {
+        snap = (BYTE *)HeapAlloc(GetProcessHeap(), 0, oldpitch * oldh);
+        if (snap) memcpy(snap, (void *)oldbits, oldpitch * oldh);
+    }
+    if (!snap) logf("HUDFIT> WARNING: could not snapshot the old art - the bar may come back blank");
+
+    if (!rz_recreate_raster(obj, "HUD bar background", liveW, oldh, gz)) {
+        logf("HUDFIT> recreate REFUSED - bar left at its native width");
+        if (snap) HeapFree(GetProcessHeap(), 0, snap);
+        return;
+    }
+
+    /* tile the snapshot across the new surface */
+    if (snap) {
+        DWORD nsub = ((DWORD *)obj)[0x44 / 4];
+        DWORD nw = ((DWORD *)obj)[0x24 / 4], nh = ((DWORD *)obj)[0x28 / 4];
+        DWORD nbits = 0, npitch = 0;
+        if (nsub && !IsBadReadPtr((void *)nsub, 0xf8)) {
+            nbits = ((DWORD *)nsub)[0xf0 / 4]; npitch = ((DWORD *)nsub)[0xf4 / 4];
+        }
+        if (nbits && npitch && !IsBadReadPtr((void *)nbits, npitch * nh)) {
+            DWORD r, c, copied = 0;
+            for (r = 0; r < nh && r < oldh; r++) {
+                BYTE *dst = (BYTE *)nbits + r * npitch;
+                BYTE *src = snap + r * oldpitch;
+                for (c = 0; c < nw; c += oldw) {
+                    DWORD run = (nw - c < oldw) ? (nw - c) : oldw;
+                    memcpy(dst + c * 2, src, run * 2);
+                    copied += run;
+                }
+            }
+            logf("HUDFIT> tiled the %lux%lu art across %lux%lu (pitch %lu, %lu px written)",
+                 oldw, oldh, nw, nh, npitch, copied);
+        } else {
+            logf("HUDFIT> recreate OK but the new backing is unreadable (bits=0x%08lX pitch=%lu) - "
+                 "not tiling", nbits, npitch);
+        }
+        HeapFree(GetProcessHeap(), 0, snap);
     }
 }
 
@@ -1773,7 +1869,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_READYMS", v, sizeof(v)) && atoi(v) >= 0)
               g_ready_ms = (DWORD)atoi(v);
           g_census = GetEnvironmentVariableA("SC3RESIZE_CENSUS", v, sizeof(v)) && atoi(v);
-          g_hudlab = GetEnvironmentVariableA("SC3RESIZE_HUDLAB", v, sizeof(v)) && atoi(v); }
+          g_hudlab = GetEnvironmentVariableA("SC3RESIZE_HUDLAB", v, sizeof(v)) && atoi(v);
+          g_hudfit = GetEnvironmentVariableA("SC3RESIZE_HUDFIT", v, sizeof(v)) && atoi(v); }
         logf("### sc3resize loaded - resizable-window mod (minimal Init-free routine, "
              "validated 2026-08-27 over 6 runs)%s%s", g_minzoom ? " [MINZOOM crash-hunt build]" : "",
              g_hudlab ? " [HUD LAB armed: surface census + EIP profiler, verify/resize_hudlab]" : "");
