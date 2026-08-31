@@ -749,3 +749,60 @@ measured one.
 - Blitting object class identified (`GZGraphicD+0x1F0AC` surface sub-object).
 - Bar's own blit remains excluded (run 9) - it never appears as a hot object.
 - Open: why an unrelated wide bar makes the main blit 2.55x more expensive.
+
+---
+
+# RUN 11 (2026-08-31) — H-mem **FALSIFIED**. Surface identified as `iso+0x4ec`.
+
+## H-mem: dead, on identical bytes
+
+| | A-native | B-fullwidth |
+|---|---|---|
+| dominant obj | `0x0F8E7488` | `0x0F8E7488` (same) |
+| **caps** | **`0x00006040` [VIDMEM OFFSCR]** | **`0x00006040` [VIDMEM OFFSCR]** |
+| owner | `0x00547970`, **2048x1089** | `0x00547970`, **2048x1089** |
+| avg inside Blt | 0.344 ms | **0.748 ms** |
+
+**The caps dword is byte-identical across phases.** No demotion to system memory, no `NONLOCAL`, no
+change of owner, no change of size. **H-mem is falsified exactly as pre-registered** - the surface
+stays in video memory and gets 2.2x slower anyway.
+
+Recorded as intended: it was a tidy story, written down with a falsifier before the run, and the
+run killed it. Surface residency is now excluded as the mechanism.
+
+## Identity: the main blit is `iso+0x4ec`, the device surface
+
+`owner = 0x00547970` at **2048x1089**. That pointer appears in this session's own resize logs as
+`device-surface iso+0x4ec 0x00547970`, and 2048x1089 is exactly the resized extent
+(1081 + `RZ_SURFACE_SLACK` 8). **So the hot blit is the composite destination - the device surface
+the iso view draws into.** The `[UNCERTAIN]` carried since run 9 is closed.
+
+The secondary object `0x00567528` (`vt=GZGraphicD+0x1F628`, a different class) went 1367 -> 122
+calls at ~1.1-1.7 ms; the third, a `SYSMEM` surface with a null owner, went 349 -> 3 calls.
+
+## Replication
+
+Inside-Blt avg `0.3198 -> 0.7229 ms` this run (x2.26), against run 10's `0.2930 -> 0.7482` (x2.55).
+Same direction, same magnitude, different process. **The core measurement replicates.**
+
+## What this leaves
+
+Same surface. Same video-memory residency. Same dimensions. Same owner. **And each Blt into it costs
+2.2-2.55x more when the HUD bar is wide.** Since nothing about the destination changed, the
+difference must be in either:
+
+1. **the blit's own parameters** - source surface, source/dest rects, `dwFlags` (colour-key, ROP,
+   async vs wait); or
+2. **external contention** on the GPU that the wide bar induces elsewhere.
+
+Both are directly testable with the hook that already exists: `rz_blt_hook` **already receives
+`dr`, `src`, `sr`, `fl`** and currently ignores them. Aggregating flags, and dest-rect area, per
+phase is a few lines and no new risk. That is the next step.
+
+## Status
+
+- Cost: inside `IDirectDrawSurface::Blt`, replicated across two runs.
+- Destination: `iso+0x4ec` device surface, 2048x1089, VIDMEM - **unchanged between phases**.
+- Excluded so far: bar's own blit (run 9), surface residency (run 11), stack-inferred callers
+  (runs 7-8, instrument failures).
+- Next: aggregate the Blt arguments the hook already receives.
