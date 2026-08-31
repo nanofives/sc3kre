@@ -210,3 +210,42 @@ exact failure this board has logged repeatedly.
 Gated behind `SC3RESIZE_HUDFIT=1` and additionally behind `SC3RESIZE_HUDLAB=1` (it runs inside the
 phase machine). With either unset the mod is the shipped viewport build. The recreate goes through
 the same expect-or-refuse gate that has never mispatched, and still patches nothing on disk.
+
+---
+
+# RUN 5 PRE-REGISTRATION (2026-08-31) — lock/tile route
+
+Run 4's `bits=0` was diagnosed statically: `sub+0xf0`/`+0xf4` are written only by the LOCK, never by
+create. So the tile step now takes a **balanced lock** around its write.
+
+## What changed
+
+After the recreate: expect-or-refuse the sub-object vtable against `GZGraphicD+0x1F0AC`, then
+`sub->vt[0x0c]` (Lock) -> read `sub+0xf0`/`+0xf4` -> tile -> `sub->vt[0x10]` (Unlock). The unlock is
+issued **only if our lock succeeded**, so we never drop the refcount below the level we took — the
+precise hazard behind the standing out-of-band rule.
+
+## Pre-registered outcomes
+
+- **PASS:** log shows `lock ... -> 1 | depth=1 bits=0x... pitch=4096`, a tiled-pixel count of about
+  `2048 x 56`, `unlock -> 1 | depth now 0`, no fault — AND the owner sees a full-width bar **with
+  art**, not black.
+- **PARTIAL (locks, tiles, still black):** the write lands but the engine overwrites or ignores the
+  surface. Then the bar's pixels are not sourced from this surface at composite time, and the
+  `[0x2a]`-is-the-background reading needs revisiting.
+- **FAIL (refused):** `HUDFIT> REFUSE lock: sub vtable ...` — the sub-object is not the class the PE
+  says. Nothing is written; read the refusal before theorising.
+- **FAIL (lock returns 0):** `lock did not yield a usable backing`. The surface is not lockable at
+  this moment on this thread — the `[UNCERTAIN]` called out in the code. No write, no unlock.
+- **FAIL (crash):** any fault beyond the benign startup `0xC0000096`. Record the address.
+
+## Also scored, independently: H-fps
+
+Run 4 could not test it (2048 dims, no backing). If the lock succeeds this run, the bar surface is
+**genuinely backed at 2048** for the first time, which is the condition H-fps needs.
+
+- FPS drop **reduced/gone** -> the window/surface mismatch was the stall's cause.
+- FPS drop **unchanged** -> H-fps is falsified, properly this time, and the stall is about width
+  itself.
+
+Only score H-fps **if the lock succeeded**. A refused or failed lock leaves it confounded again.

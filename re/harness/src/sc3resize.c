@@ -301,6 +301,11 @@ static int fnlog_install_one(FNLOG *e, int idx) {
 #define GZ_RVA_RASTER_CREATE 0x9efb  /* FUN_10009efb, vtable slot +0x0c on both raster classes */
 #define GZ_RVA_VT_RASTER     0x1E894 /* raster class vtable */
 #define GZ_RVA_VT_BLITDEST   0x1F328 /* blit-dest subclass (iso+0x4ec) */
+#define GZ_RVA_VT_SURFACE    0x1F0AC /* the SUB-OBJECT (DirectDraw surface) vtable, installed by
+                                        FUN_1001420d as PTR_FUN_1001f0ac. Slots read from the PE:
+                                        +0x0c FUN_10018a82 Lock, +0x10 FUN_10018b53 Unlock,
+                                        +0x40 FUN_10019273 Create. Lock is what writes sub+0xf0
+                                        (bits) and sub+0xf4 (pitch); Create never does. */
 #define RZ_SURFACE_SLACK     8       /* guard rows below the visible height: FUN_1000239d's 2x/4x
                                         zoom blit companion-writes up to ~3 scanlines past the last
                                         row and has no surface-height clamp. Never presented (step 9
@@ -1229,30 +1234,69 @@ static void rz_hud_fit_surface(DWORD liveW) {
         return;
     }
 
-    /* tile the snapshot across the new surface */
+    /* Tile the snapshot across the new surface - UNDER A BALANCED LOCK.
+     *
+     * Run 4 read bits=0 here and I first read that as a failed allocation. It was not. The static
+     * read (RESULTS.md) proves `sub+0xf0`/`+0xf4` are written ONLY by the lock:
+     *   create  sub->vt[0x40] = FUN_10019273 - builds the DD surface, sets sub+0xe0/+0xec,
+     *                                          NEVER writes bits/pitch  [CONFIRMED @ 0x10019273]
+     *   lock    sub->vt[0x0c] = FUN_10018a82 - refcounts sub+0xe4; on 0->1 calls IDDS::Lock and
+     *                                          copies DDSD lpSurface (sub+0x30) -> sub+0xf0 and
+     *                                          DDSD lPitch (sub+0x1c) -> sub+0xf4
+     *                                                                   [CONFIRMED @ 0x10018a82]
+     *   unlock  sub->vt[0x10] = FUN_10018b53 - refcounts down; on ->0 calls IDDS::Unlock
+     *                                                                   [CONFIRMED @ 0x10018b53]
+     * So bits==0 straight after a recreate is the CORRECT state for every surface of this class.
+     * Waiting for it to become non-zero would likely wait forever: the bar is built once, and
+     * per-frame compositing blits FROM the surface without ever taking a CPU lock.
+     *
+     * The lock is refcounted, so a BALANCED pair nests safely with engine usage. That refcount is
+     * also exactly why the standing rule forbids an out-of-band unlock - dropping the depth to 0
+     * invalidates a pointer the engine may be mid-use of. We only ever add and remove our own level.
+     *
+     * EXPECT-OR-REFUSE on the sub-object vtable before dispatching through it - the same discipline
+     * that turned the old GetSurfaceDesc crash into a logged refusal: identify by COMPARING the
+     * vtable against a known MODULE+RVA, never by calling through the pointer being identified.
+     *
+     * `[UNCERTAIN]`: nothing proves this surface is lockable at an arbitrary moment on the render
+     * thread. A refusal or a failed lock is a LOGGED RESULT, never a forced write. */
     if (snap) {
         DWORD nsub = ((DWORD *)obj)[0x44 / 4];
         DWORD nw = ((DWORD *)obj)[0x24 / 4], nh = ((DWORD *)obj)[0x28 / 4];
-        DWORD nbits = 0, npitch = 0;
-        if (nsub && !IsBadReadPtr((void *)nsub, 0xf8)) {
-            nbits = ((DWORD *)nsub)[0xf0 / 4]; npitch = ((DWORD *)nsub)[0xf4 / 4];
-        }
-        if (nbits && npitch && !IsBadReadPtr((void *)nbits, npitch * nh)) {
-            DWORD r, c, copied = 0;
-            for (r = 0; r < nh && r < oldh; r++) {
-                BYTE *dst = (BYTE *)nbits + r * npitch;
-                BYTE *src = snap + r * oldpitch;
-                for (c = 0; c < nw; c += oldw) {
-                    DWORD run = (nw - c < oldw) ? (nw - c) : oldw;
-                    memcpy(dst + c * 2, src, run * 2);
-                    copied += run;
-                }
-            }
-            logf("HUDFIT> tiled the %lux%lu art across %lux%lu (pitch %lu, %lu px written)",
-                 oldw, oldh, nw, nh, npitch, copied);
+        DWORD *svt = NULL, want = (DWORD)gz + GZ_RVA_VT_SURFACE;
+
+        if (!nsub || IsBadReadPtr((void *)nsub, 0xf8)) {
+            logf("HUDFIT> sub 0x%08lX unreadable after recreate - not tiling", nsub);
+        } else if ((svt = *(DWORD **)nsub) == NULL || IsBadReadPtr(svt, 0x14) ||
+                   (DWORD)svt != want) {
+            logf("HUDFIT> REFUSE lock: sub vtable 0x%08lX != GZGraphicD+0x%X (0x%08lX) - not the "
+                 "class we think, refusing to dispatch through it", (DWORD)svt, GZ_RVA_VT_SURFACE, want);
         } else {
-            logf("HUDFIT> recreate OK but the new backing is unreadable (bits=0x%08lX pitch=%lu) - "
-                 "not tiling", nbits, npitch);
+            int lk = rz_thiscall((void *)nsub, (void *)svt[0x0c / 4], NULL, 0);
+            DWORD nbits = ((DWORD *)nsub)[0xf0 / 4], npitch = ((DWORD *)nsub)[0xf4 / 4];
+            logf("HUDFIT> lock vt+0x0c=0x%08lX -> %d | depth=%lu bits=0x%08lX pitch=%lu",
+                 svt[0x0c / 4], lk & 0xff, ((DWORD *)nsub)[0xe4 / 4], nbits, npitch);
+            if (!(lk & 0xff) || !nbits || !npitch || IsBadReadPtr((void *)nbits, npitch * nh)) {
+                logf("HUDFIT> lock did not yield a usable backing - not tiling");
+            } else {
+                DWORD r, c, copied = 0;
+                for (r = 0; r < nh && r < oldh; r++) {
+                    BYTE *dst = (BYTE *)nbits + r * npitch;
+                    BYTE *src = snap + r * oldpitch;
+                    for (c = 0; c < nw; c += oldw) {
+                        DWORD run = (nw - c < oldw) ? (nw - c) : oldw;
+                        memcpy(dst + c * 2, src, run * 2);
+                        copied += run;
+                    }
+                }
+                logf("HUDFIT> tiled the %lux%lu art across %lux%lu (pitch %lu, %lu px written)",
+                     oldw, oldh, nw, nh, npitch, copied);
+            }
+            if (lk & 0xff) {   /* unlock ONLY the level we took - never below our own */
+                int ul = rz_thiscall((void *)nsub, (void *)svt[0x10 / 4], NULL, 0);
+                logf("HUDFIT> unlock vt+0x10 -> %d | depth now %lu", ul & 0xff,
+                     ((DWORD *)nsub)[0xe4 / 4]);
+            }
         }
         HeapFree(GetProcessHeap(), 0, snap);
     }
