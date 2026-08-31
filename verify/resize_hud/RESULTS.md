@@ -150,3 +150,35 @@ for now.
 Expected PASS: log `HUD SetRect ... rect now [0,liveH-barH,liveW,liveH]` AND the bottom bar spans the
 width without vanishing. If SetRect misbehaves (bar clips/blanks/moves wrong) the before/after rect +
 VEH localize it. This is safer than the destruct+rebuild (framework method, no teardown).
+
+---
+
+## ATTEMPT 2 RESULT (2026-08-31) — bar docks + spans, but an FPS cost intrinsic to bar width
+
+**PARTIAL SUCCESS.** Owner: "bottom bar is on the bottom of the screen" - the SetRect approach WORKS
+geometrically. Log: `HUD SetRect vt+0xc8=0x033E6776 [0,544,599,600] -> [0,1025,2048,1081]`, rect
+persisted, **no crash, no VEH fault**. The real window SetRect is `SIMUI FUN_10026776` (runtime
+vt+0xc8; my earlier static vtable base was off by 0x10, now corrected). It sets the rect + repositions
+5 internal parts by POSITION only (not size) - `[CONFIRMED @ SIMUI 0x10026776]`.
+
+**Two issues:**
+1. **FPS drop** while the bar is full-width. Owner: moving the window to a lower-res monitor makes the
+   bar disappear (off-screen) and **the FPS drop stops** - so the cost is the bar's PER-FRAME DRAW
+   scaling with width, not the one-shot SetRect. Mechanism `[UNCERTAIN]`: the docked bar (y1025-1081)
+   overlaps the animated iso view's bottom, so the iso dirties that strip every frame and the
+   2048-wide bar redraws over it each frame; cost scales with width. Diagnosing/fixing needs the bar's
+   per-frame paint path (deep render RE).
+2. **Did not re-fit on a smaller window** (the widen-only guard left it at 2048 off a smaller screen).
+   FIXED this build: the guard now tracks the live client size (re-applies when the rect differs), so
+   the bar re-docks to both larger and smaller windows.
+
+## Assessment
+
+The HUD bottom bar CAN be docked + spanned via its own framework SetRect (attempt 2, no teardown, no
+crash) - a real "extend to edges" result. But full-width has an **intrinsic per-frame FPS cost** in this
+engine (bar redraw scales with width, confirmed by the off-screen->FPS-recovers observation). Removing
+it needs deep RE of the bar's paint (why width drives per-frame cost) - a separate optimization effort.
+
+Options: (a) ship the viewport, leave HUD native (no reflow); (b) accept the docked-full-width bar WITH
+the FPS cost; (c) deep-dive the bar per-frame paint to remove the FPS cost. The viewport remains the
+solid, complete, low-risk deliverable.
