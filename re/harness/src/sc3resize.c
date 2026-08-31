@@ -607,6 +607,98 @@ static void rz_stk_dump(const char *tag) {
     }
 }
 
+/* ---- I3: BLIT TIMING (2026-08-31) -------------------------------------------------------------
+ * Stack attribution failed twice (run 7 contamination, run 8 selection bias). Rather than build a
+ * third scan variant, measure the thing directly.
+ *
+ * `FUN_10018c58` is the engine's IDirectDrawSurface::Blt wrapper and the mod ALREADY hooks it as the
+ * per-frame heartbeat, so the measurement point costs nothing new. At each entry we take a QPC
+ * timestamp and attribute the interval since the PREVIOUS entry to the PREVIOUS call's `this`. That
+ * interval is that blit's duration plus whatever ran before the next one - which is exactly the
+ * quantity that grows when a blit blocks on the GPU.
+ *
+ * This answers the actual question - WHICH blit got slower when the bar went full-width - without
+ * any inference about stacks or callers. If the bar's blit is the stall, it appears here as a
+ * specific object whose average time jumps between phase A and phase B.
+ *
+ * Outliers (> 50 ms) are counted separately, not averaged in: the heartbeat also drives rz_poll,
+ * and a frame that ran the whole resize routine would otherwise swamp one bucket. */
+#define BLT_BUCKETS 256
+#define BLT_OUTLIER_MS 50
+static DWORD   g_blt_key[BLT_BUCKETS], g_blt_cnt[BLT_BUCKETS];
+static __int64 g_blt_time[BLT_BUCKETS];
+static __int64 g_blt_last;
+static DWORD   g_blt_lastkey, g_blt_outliers, g_blt_total;
+
+static void rz_blt_sample(DWORD key) {
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+    if (g_blt_last && g_blt_lastkey) {
+        __int64 d = now.QuadPart - g_blt_last;
+        double ms = g_freq.QuadPart ? (1000.0 * (double)d / (double)g_freq.QuadPart) : 0.0;
+        if (ms > BLT_OUTLIER_MS) {
+            g_blt_outliers++;                      /* a resize frame, not a blit - do not average */
+        } else {
+            DWORD k = g_blt_lastkey;
+            DWORD i = (k * 2654435761u) >> 24 & (BLT_BUCKETS - 1), tries = 0;
+            while (tries++ < 32) {
+                if (g_blt_key[i] == k || g_blt_key[i] == 0) {
+                    g_blt_key[i] = k; g_blt_cnt[i]++; g_blt_time[i] += d; g_blt_total++;
+                    break;
+                }
+                i = (i + 1) & (BLT_BUCKETS - 1);
+            }
+        }
+    }
+    g_blt_last = now.QuadPart;
+    g_blt_lastkey = key;
+}
+static void rz_blt_reset(void) {
+    memset(g_blt_key, 0, sizeof(g_blt_key));
+    memset((void *)g_blt_cnt, 0, sizeof(g_blt_cnt));
+    memset(g_blt_time, 0, sizeof(g_blt_time));
+    g_blt_last = 0; g_blt_lastkey = 0; g_blt_outliers = 0; g_blt_total = 0;
+}
+/* Dump each blitting object with its call count and average interval. Where the object is a raster
+ * of a class we know, print its dims too - that is what lets "the 2048x56 bar" be told apart from
+ * "the 2048x1081 iso view" without guessing. */
+static void rz_blt_dump(const char *tag) {
+    DWORD gz = (DWORD)GetModuleHandleA("GZGraphicD.dll");
+    DWORD i, rank;
+    static DWORD taken[16];
+    logf("BLT> ---- %s ---- intervals=%lu outliers(>%dms)=%lu",
+         tag, g_blt_total, BLT_OUTLIER_MS, g_blt_outliers);
+    for (rank = 0; rank < 12; rank++) {
+        DWORD best = 0xFFFFFFFF, j; __int64 bestt = -1;
+        for (i = 0; i < BLT_BUCKETS; i++) {
+            int already = 0;
+            if (!g_blt_key[i]) continue;
+            for (j = 0; j < rank; j++) if (taken[j] == i) { already = 1; break; }
+            if (already) continue;
+            if (g_blt_time[i] > bestt) { bestt = g_blt_time[i]; best = i; }
+        }
+        if (best == 0xFFFFFFFF) break;
+        taken[rank] = best;
+        {
+            DWORD o = g_blt_key[best];
+            double tot = g_freq.QuadPart ? (1000.0 * (double)g_blt_time[best] / (double)g_freq.QuadPart) : 0.0;
+            char dims[80];
+            dims[0] = 0;
+            if (gz && o && !IsBadReadPtr((void *)o, 0x2c)) {
+                DWORD *vt = *(DWORD **)o;
+                if (!IsBadReadPtr(vt, 4) &&
+                    ((DWORD)vt == gz + GZ_RVA_VT_RASTER || (DWORD)vt == gz + GZ_RVA_VT_BLITDEST))
+                    _snprintf(dims, sizeof(dims), " raster %lux%lu",
+                              ((DWORD *)o)[0x24 / 4], ((DWORD *)o)[0x28 / 4]);
+            }
+            logf("BLT> %s #%02lu obj=0x%08lX%s calls=%lu total=%.1f ms avg=%.3f ms (%.1f%% of window)",
+                 tag, rank + 1, o, dims, g_blt_cnt[best], tot,
+                 g_blt_cnt[best] ? tot / g_blt_cnt[best] : 0.0,
+                 tot / 100.0);   /* the phase window is 10 s = 10000 ms, so ms/100 is a percent */
+        }
+    }
+}
+
 static void rz_prof_hit(DWORD eip) {
     DWORD k = (eip >> 6) + 1;
     DWORD i = (k * 2654435761u) >> 19 & (PROF_BUCKETS - 1);
@@ -719,14 +811,14 @@ static void rz_hudlab_tick(void) {
     if (!g_hudphase || GetTickCount() < g_phase_ms) return;
     if (g_hudphase == 1) {                       /* settled -> start profiling the NATIVE bar */
         logf("HUDLAB> phase A START (bar NATIVE width) - profiling 10 s");
-        rz_prof_reset();
+        rz_prof_reset(); rz_blt_reset();
         InterlockedExchange(&g_prof_on, 1);
         g_hudphase = 2; g_phase_ms = GetTickCount() + 10000;
         return;
     }
     if (g_hudphase == 2) {                       /* end A, widen, start B */
         InterlockedExchange(&g_prof_on, 0);
-        rz_prof_dump("A-native"); rz_stk_dump("A-native");
+        rz_prof_dump("A-native"); rz_stk_dump("A-native"); rz_blt_dump("A-native");
         logf("HUDLAB> applying the SetRect widen, then phase B");
         rz_hud_setrect();
         /* With SC3RESIZE_HUDFIT=1, also widen the bar's BACKGROUND SURFACE - the 600x56 raster run 2
@@ -736,7 +828,7 @@ static void rz_hudlab_tick(void) {
             if (g_hudfit && g_hwnd && GetClientRect(g_hwnd, &cr))
                 rz_hud_fit_surface((DWORD)(cr.right - cr.left)); }
         rz_hud_surfaces("AFTER-setrect");
-        rz_prof_reset();
+        rz_prof_reset(); rz_blt_reset();
         InterlockedExchange(&g_prof_on, 1);
         logf("HUDLAB> phase B START (bar FULL-WIDTH) - profiling 10 s");
         g_hudphase = 3; g_phase_ms = GetTickCount() + 10000;
@@ -744,7 +836,7 @@ static void rz_hudlab_tick(void) {
     }
     if (g_hudphase == 3) {
         InterlockedExchange(&g_prof_on, 0);
-        rz_prof_dump("B-fullwidth"); rz_stk_dump("B-fullwidth");
+        rz_prof_dump("B-fullwidth"); rz_stk_dump("B-fullwidth"); rz_blt_dump("B-fullwidth");
         logf("HUDLAB> ---- DONE. Diff B against A; score against verify/resize_hudlab/PRE.md ----");
         g_hudphase = 4;
     }
@@ -1685,6 +1777,7 @@ static void __stdcall fnlog_enter(int idx, DWORD *f) {
     if (idx == 1) {
         /* This hook IS the render thread, so it is where the profiler learns which thread to sample.
            Cheap and idempotent; no call when it has not changed. */
+        if (g_hudlab) { rz_blt_sample(f[7]); }
         if (g_hudlab) {
             DWORD me = GetCurrentThreadId();
             if (g_game_tid != me) g_game_tid = me;
@@ -2126,3 +2219,4 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+

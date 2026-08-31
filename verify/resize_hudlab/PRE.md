@@ -383,3 +383,49 @@ before spending a lease.
 A top-ranked call site remains a **lead, not a proof**. Validation removes impossible addresses; it
 does not make a surviving address causal. Confirmation still means reading the function and showing
 width-dependent per-frame behaviour.
+
+---
+
+# RUN 9 PRE-REGISTRATION (2026-08-31) — blit timing, direct measurement
+
+Stack attribution failed twice: run 7 (contaminated by non-return-addresses), run 8 (validated, but
+biased against the waiting samples). **Building a third scan variant would be chasing the instrument
+instead of the bug.** Measure the thing directly instead.
+
+## Instrument
+
+`FUN_10018c58` is the engine's `IDirectDrawSurface::Blt` wrapper, and the mod ALREADY hooks it as its
+per-frame heartbeat — so the measurement point costs nothing new and touches no new code path.
+
+At each entry: take a QPC timestamp and attribute the interval since the PREVIOUS entry to the
+PREVIOUS call's `this`. That interval is that blit's duration plus whatever ran before the next one,
+which is exactly the quantity that grows when a blit blocks on the GPU. Bucketed per object, dumped
+per phase with call count, total and average, plus the object's raster dims where its class is known
+— so "the 2048x56 bar" is distinguishable from "the 2048x1081 iso view" by measurement, not by
+assumption.
+
+Intervals over 50 ms are counted separately and NOT averaged in: the heartbeat also drives
+`rz_poll`, so a frame that ran the whole resize routine would otherwise swamp a bucket.
+
+## Why this can succeed where the scans failed
+
+Both scan attempts tried to infer *who* from stack contents. This measures *what*, directly, with no
+inference: if a blit is the stall, it shows up as a specific object whose average interval rises
+between phase A and phase B. There is nothing to misattribute.
+
+## Pre-registered outcomes
+
+- **PASS / blit named:** one object's average interval rises materially from A to B, and its dims
+  identify it. If it is the ~2048x56 bar raster, the stall is the bar's own blit. If it is the iso
+  view, the bar's width is slowing something else down — a different and more interesting result.
+- **FAIL / not in the blits:** no object's average rises appreciably between phases while the owner
+  still reports the drop. The cost is then NOT inside the Blt wrapper at all, and the next target is
+  the present/flip path rather than any blit.
+- **VOID:** fewer than 100 intervals in either phase, or outliers dominate (> 25% of samples).
+
+## Scoring note carried forward from run 8
+
+Run 8 passed its sample-count floor while being unusable. So this run is scored on **whether the A/B
+comparison is structurally sound** (comparable interval counts in both phases, outliers not
+dominating), not merely on collecting enough samples. A count threshold cannot detect a biased
+population, and that lesson cost a lease.
