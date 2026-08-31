@@ -175,3 +175,78 @@ armed and fired on schedule. It needs a run left undisturbed for ~25 s after the
 - **Does not settle:** the FPS cost. Still unmeasured, still the open question from run 1.
 - **Untested:** whether FIX C's non-unlink leaves stale nodes in old buckets (see PRE.md "not
   claimed"). No visual artefact was reported, but nothing probed for one.
+
+---
+
+# RUN 3 (2026-08-31) — I2 **PASS, cause named**. The "intrinsic composite cost" conclusion is REFUTED.
+
+Both phases ran to completion undisturbed. `A-native`: 6232 samples, 530 distinct buckets, 0 probe
+failures. `B-fullwidth`: 6199 samples, 204 distinct buckets, 0 probe failures. Sample counts are
+comparable and far above the 200 VOID floor. `HUD SetRect [0,544,599,600] -> [0,1025,2048,1081]`
+landed between them, so the only variable across the two profiles is the bar's width.
+
+## The delta is concentrated in three buckets — pre-registered PASS
+
+Addresses resolved against the **live process** module list while it was still running, then to
+nearest exported symbol in the on-disk 32-bit binaries.
+
+| bucket | resolves to | A-native | B-fullwidth | delta |
+|---|---|---:|---:|---:|
+| `0x77939AC0` | `ntdll+0x79AC0` (WoW64 syscall stub) | 2148 (34.47%) | **3835 (61.86%)** | +1687 |
+| `0x757E3840` | **`win32u!NtGdiDdDDIWaitForSynchronizationObject`** | 453 (7.27%) | **875 (14.12%)** | +422 |
+| `0x77939E80` | `ntdll+0x79E80` (syscall stub) | 289 (4.64%) | **630 (10.16%)** | +341 |
+
+Three buckets account for **+2450 samples**, the overwhelming majority of the shift. That satisfies
+the pre-registered PASS: *"a small number of buckets (<= 5) account for the majority of the increase,
+resolving to nameable MODULE+RVA sites."*
+
+⚠️ The two `ntdll` names a nearest-export lookup returns (`ZwWorkerFactoryWorkerReady`,
+`ZwCloseObjectAuditAlarm`) are **not** meaningful. ntdll's `Zw*` stubs are identical contiguous
+16-byte syscall thunks, so nearest-export lands on an arbitrary neighbour. Both addresses are hot in
+*both* phases, which is what a shared syscall/WoW64 transition point looks like. **Do not cite those
+two names as the functions being called.** `win32u` is unambiguous and is the load-bearing one.
+
+## What moved the OTHER way — this is what makes the reading decidable
+
+| bucket | resolves to | A-native | B-fullwidth |
+|---|---|---:|---:|
+| `0x757E3780` | `win32u!NtGdiDdDDISubmitCommand` | 111 (1.78%) | 57 (0.92%) |
+| `0x6489A600` | `nvd3dum+0x163A600` (NVIDIA UMD) | 351 (5.63%) | 22 (0.35%) |
+| `0x6489A640` | `nvd3dum+0x163A640` | 279 (4.48%) | absent |
+| `0x6489A700` | `nvd3dum+0x163A700` | 222 (3.56%) | 7 (0.11%) |
+
+**GPU work SUBMITTED went down. Time in the NVIDIA user-mode driver collapsed. Distinct buckets fell
+530 -> 204.** The thread is doing less varied work and sitting in one place more.
+
+## Conclusion: the cost is a GPU synchronization STALL, not CPU compositing
+
+The render thread is **not** burning more CPU compositing a wider bar. It is **blocking longer on a
+D3D kernel synchronization object** — `NtGdiDdDDIWaitForSynchronizationObject` doubles, submissions
+fall, driver work collapses, and syscall-stub residency nearly doubles.
+
+⛔ **This refutes the standing conclusion in `verify/resize_hud/RESULTS.md`:** *"the full-width HUD
+bar's FPS cost is intrinsic to this engine's per-frame compositing... Removing it would mean changing
+the compositor."* That was reached by elimination after three falsified hypotheses, and it named the
+wrong mechanism. A CPU-compositing cost would show as more time in the blitter (SIMSPR / GZGraphicD /
+nvd3dum). The measurement shows the opposite: **less** time there and more time waiting.
+
+`[UNCERTAIN]` — the *reason* the wider bar induces the wait is not established. A plausible and
+untested mechanism is that the widened bar region forces a CPU touch of a surface the GPU still has
+work pending on, serialising CPU and GPU each frame. **Not asserted.** What is measured is the wait
+itself, and that it scales with bar width.
+
+**Why this matters for the goal:** "change the compositor" was the reason the HUD-scaling goal was
+declared unreachable. A synchronization stall is a different and much more tractable class of
+problem than a compositor rewrite.
+
+⚠️ **Not yet confirmed: that the owner perceived the FPS drop during phase B of this run.** The
+pre-registration makes owner perception the ground truth the instrument must match. The profiles
+differ strongly, which is consistent, but the confirmation has not been collected. Ask before
+treating the FPS drop and this measured stall as the same event.
+
+## Method note, in credit rather than in scorecard
+
+The address resolver in the mod only knows the six game modules, so all three hot buckets logged as
+`(no known module)` and the run looked uninterpretable at first glance. They were resolved by
+querying the **still-running** process's module list, then mapping to nearest export offline.
+Reading the profile before closing the game is what saved the run.
