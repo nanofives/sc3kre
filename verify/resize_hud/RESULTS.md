@@ -208,3 +208,29 @@ SIMSPR/GZGraphicD, and the wrap must be installed before the HUD constructs. Fix
 WAITS for SIMUI (up to ~30 s, 100 ms poll) after arming the resize, then installs the wrap - still well
 before the city/HUD build. This re-enables both the bar dock/span (step 12 SetRect) and the FPS fix
 (step 9 present-stops-above-bar) in one run. Next hand-test verifies the FPS hypothesis for real.
+
+---
+
+## FPS HYPOTHESIS FALSIFIED (2026-08-31)
+
+Both fired this run (log): `[step 9] iso present stops above bar: ht 1081 -> 1025 (barH 56)` and
+`[step 12] HUD SetRect [0,544,599,600] -> [0,1025,2048,1081]`. So the iso now presents into rows
+[0,1025] and the bar is at [1025,1081] - they ABUT, no overlap. **FPS STILL DROPS** (owner). Therefore
+the per-frame cost is NOT the animated iso re-dirtying the bar; the bar redraws every frame on its own,
+cost scaling with width, independent of the iso.
+
+Likely (UNCERTAIN, not read): the bottom TOOLBAR contains a per-frame/per-tick updating element (clock/
+date, funds, RCI meters) that invalidates the whole bar each frame; at 2048 wide that full-bar repaint
+is 2.5x the native cost -> the drop. Confirming needs the bar's invalidate path (which child dirties the
+bar, and its paint) - the render RE that already TIMED OUT once as a broad query; a narrow "what
+invalidates the bottom bar each frame" query would be the next attempt.
+
+Reverting the step-9 present-above-bar change (it did not help and slightly shrinks the iso). The
+docked full-width bar (step 12 SetRect) is achieved but carries an intrinsic per-frame FPS cost.
+
+## Standing conclusion
+
+- Viewport: COMPLETE, solid, owner-confirmed (the real deliverable).
+- HUD bottom bar: CAN be docked + spanned full-width via its own SetRect (attempt 3), but full-width has
+  an intrinsic per-frame redraw cost NOT caused by iso overlap (hypothesis falsified). Removing it needs
+  deep, uncertain paint/invalidate RE.
