@@ -461,3 +461,48 @@ is; the stack says who put it there — and that is what makes the stall actiona
 - **Scales (widgets repositioned/resized within the bar): not attempted.** The 5 small child
   surfaces are still at their native sizes and native positions.
 - **FPS cost: unresolved**, but two hypotheses down and the mechanism measured rather than assumed.
+
+---
+
+# RUN 6 (2026-08-31) — ship path CONFIRMED. Second-resize verification NOT performed.
+
+## Ship path: works, end to end, with no environment variables set
+
+```
+RZ    size change: client 2048x1081 vs render target 800x600
+HUDLAB> HUD SetRect [0,544,599,600] -> [0,1025,2048,1081]
+HUDFIT> cached the pristine native art 600x56 pitch=1200 (one-time)
+HUDFIT> bar background child[0x2a] -> refitting to 2048x56 (art 600x56)
+HUDFIT> lock vt+0x0c -> 1 | depth=1 bits=0x0BEE5890 pitch=4096
+HUDFIT> tiled the 600x56 art across 2048x64 (pitch 4096, 114688 px written)
+HUDFIT> unlock vt+0x10 -> 1 | depth now 0
+```
+
+No faults, no refusals. The producer wrap installs without the lab, `g_hud_top` is captured, step 12
+docks and refits on the render thread, and the art cache is taken once. **The dock+span is now a
+property of the mod, not of a diagnostic harness.** Game ran ~54 minutes before the resize, so this
+also exercises a long-settled session rather than a fresh load.
+
+## ⚠️ What this run does NOT verify — and it is exactly what it was designed to verify
+
+**The log contains ONE `size change`.** The run was pre-registered to drive **three** (maximize ->
+restore -> maximize) because the two bugs fixed in this build can only appear on the SECOND resize:
+
+1. bar height growing 8 px per resize (`56 -> 64 -> 72 ...`);
+2. re-tiling already-tiled art, compounding seams.
+
+A single maximize passes **whether or not those fixes work**. `refitting to 2048x56` shows the first
+refit uses the cached native height, which is consistent with fix 1 — but the failure mode is
+*accumulation*, and one iteration cannot show accumulation. The shrink path (`liveW == oldw` guard)
+is likewise untested.
+
+**Status of both fixes: written, reasoned, NOT verified.** They must not be described as confirmed
+until a multi-resize run exists. Recording this rather than letting a clean-looking single-resize log
+stand in for the test that was actually specified.
+
+## Status
+
+- Ship path (dock + span + art, no env vars): **CONFIRMED**.
+- Second-resize behaviour (height stability, seam stability, shrink re-fit): **UNVERIFIED**, one
+  hand-run away.
+- FPS cost: unchanged and still open (runs 3-5).
