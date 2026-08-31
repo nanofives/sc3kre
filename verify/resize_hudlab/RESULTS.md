@@ -683,3 +683,69 @@ the low-address `0x00567528` sits in the same range as the device surface seen i
 - Bar's own blit **excluded** as the cost — a real elimination.
 - Next, in order: (1) log the dominant object's vtable to identify it; (2) add entry/exit timing to
   split "inside the blit" from "after the blit".
+
+---
+
+# RUN 10 (2026-08-31) — **INSIDE**. The cost is in the DirectDraw blit itself. Object identified.
+
+## The split: INSIDE, unambiguously
+
+| | A-native | B-fullwidth | change |
+|---|---:|---:|---:|
+| inside-Blt calls | 26116 | 11693 | **-55%** |
+| inside-Blt **avg** | **0.2930 ms** | **0.7482 ms** | **x2.55** |
+| inside-Blt share of window | 76.5% | **87.5%** | +11 pts |
+| dominant object interval avg | 0.330 ms | 0.793 ms | x2.40 |
+
+**In phase B, inside-Blt total (8749.0 ms) is 99% of the dominant object's total interval
+(8835.9 ms).** Essentially the entire frame interval is spent inside `IDirectDrawSurface::Blt`.
+
+That is the pre-registered **INSIDE** outcome. `AFTER` is excluded: the interval did not grow around
+a flat blit, the blit itself grew and grew by the same factor (x2.55 vs x2.40).
+
+**Two independent instruments now agree.** The EIP profiler said the thread blocks in
+`NtGdiDdDDIWaitForSynchronizationObject`; this says the time is inside the DirectDraw blit. A GPU
+sync wait inside `Blt` is exactly what produces both readings. They were built on different
+principles (sampling vs direct timing) and converge.
+
+## Identity: the blitters are surface SUB-OBJECTS
+
+Run 9's unidentified `0x0F7AFC70` printed no dims because it is not a raster at all:
+
+```
+BLT> A-native #01 obj=0x0F77E068 vt=GZGraphicD.dll+0x1F0AC calls=22229 avg=0.330 ms
+BLT> A-native #02 obj=0x00567528 vt=GZGraphicD.dll+0x1F628 calls=1287  avg=1.115 ms
+```
+
+**`GZGraphicD+0x1F0AC` is `PTR_FUN_1001f0ac` - the exact sub-object (DirectDraw surface) vtable
+parsed from the PE earlier in this session** for Lock/Unlock/Create. So the objects doing the
+blitting are the surface wrappers, not the rasters that own them. `0x00567528` carries a different
+class, `+0x1F628`.
+
+The dominant blitter `0x0F77E068` is the same object in both phases (22229 calls in A, 11147 in B),
+so it is the main scene blit - and it is the one that slowed down.
+
+## What is NOT yet known
+
+**Which surface `0x0F77E068` belongs to, and why its blit costs 2.55x more when an unrelated bar is
+wide.** No mechanism is claimed. Two cheap reads settle the next question, both from structure
+already decoded this session:
+
+- **Owner raster:** `FUN_100142a2:41` writes `*(sub+0xe8) = the owning raster`
+  `[CONFIRMED @ GZGraphicD 0x100142a2]`. One read gives the owner, hence its dims.
+- **Memory class:** the `DDSURFACEDESC` sits at `sub+0x0c` and `DDSCAPS.dwCaps` is at `DDSD+0x68`,
+  i.e. **`sub+0x74`** - which is exactly the field `FUN_10019273` writes when choosing video vs
+  system memory (`|0x800` = `DDSCAPS_SYSTEMMEMORY` on the fallback path at `0x1001943a`, clearing
+  `0x4000` `DDSCAPS_VIDEOMEMORY` at line 81) `[CONFIRMED @ GZGraphicD 0x10019273]`.
+
+Dumping `sub+0x74` for the main surface **in both phases** directly tests whether widening the bar
+pushes a surface out of video memory - a hypothesis that would explain a 2.5x cliff. **Stated as the
+next test, not as a finding.** The board's standing rule applies: a plausible mechanism is not a
+measured one.
+
+## Status
+
+- Cost located: **inside `IDirectDrawSurface::Blt`**, x2.55 per call, on the main scene blit.
+- Blitting object class identified (`GZGraphicD+0x1F0AC` surface sub-object).
+- Bar's own blit remains excluded (run 9) - it never appears as a hot object.
+- Open: why an unrelated wide bar makes the main blit 2.55x more expensive.
