@@ -395,3 +395,69 @@ Writing tiled art into the widened surface **requires holding a lock**. Two rout
 Route 2 is the better bet on this evidence. It must still be `[UNCERTAIN]`-flagged and
 expect-or-refuse gated: nothing here proves the bar surface is lockable at an arbitrary moment on the
 render thread.
+
+---
+
+# RUN 5 (2026-08-31) — lock/tile **PASSES**. H-fps **FALSIFIED**, properly this time.
+
+Owner: **"Bar has art now, FPS still drops."**
+
+## Visual: PASS, exactly as pre-registered
+
+```
+HUDFIT> bar background child[0x2a]=0x0F477008 600x56 pitch=1200 -> widening to 2048x56
+HUDFIT> lock vt+0x0c=0x02F98A82 -> 1 | depth=1 bits=0x0C09FFE0 pitch=4096
+HUDFIT> tiled the 600x56 art across 2048x64 (pitch 4096, 114688 px written)
+HUDFIT> unlock vt+0x10 -> 1 | depth now 0
+HUDSURF> AFTER-setrect child[0x2a] ... dims=2048x64 ... pitch=4096 (COHERENT vs w*2=4096)
+         | non-zero 86366/131072
+```
+
+Every number checks out independently:
+
+- **lock returned 1** and produced `bits`/`pitch` where the create had left zeros — the static read's
+  prediction, confirmed in the running game.
+- **pitch 4096 = 2048 x 2** (fix16), COHERENT.
+- **114688 px written = 2048 x 56** exactly — the tiled region, to the pixel.
+- **depth 1 -> 0**: the lock/unlock pair is balanced. We never dropped below our own level.
+- **non-zero 86366/131072**: the source was 25525/33600 (76%). Tiling 600-wide art across 2048 gives
+  3 full tiles plus a 248-px partial; 25525 x (2048/600) ~= 87,100, and 86366 is that minus the
+  partial tile's shortfall. The content count is arithmetically consistent with the tiling actually
+  performed.
+
+**The HUD bottom bar now docks to the bottom, spans the full window width, and carries its art.**
+
+## H-fps: FALSIFIED — and this time the test implemented the hypothesis
+
+Run 4 could not score H-fps: the surface had 2048 in its dims and **no backing**. This run the
+surface is genuinely backed at 2048, coherent pitch, real content — the exact condition H-fps needs.
+
+**The drop persists.** So the window/surface size mismatch was **not** the cause of the GPU sync
+stall. H-fps is dead, on a test that actually implemented it.
+
+Combined with run 4's finding that the stall occurs even with an **empty** bar surface, two
+properties of the stall are now established:
+
+1. it does not depend on the bar surface holding content;
+2. it does not depend on the surface being the wrong size.
+
+**What remains: the stall scales with the bar's WIDTH itself.** That is now the whole hypothesis
+space, narrowed by two eliminations that were each measured rather than argued.
+
+## Where the FPS question stands
+
+Measured twice (runs 3 and 4), owner-confirmed, localized to
+`win32u!NtGdiDdDDIWaitForSynchronizationObject` with submissions and driver time falling. Two
+candidate causes eliminated. Still unknown: **what the render thread is waiting FOR.**
+
+The next instrument is the obvious one and follows the same logic that made the EIP profiler work:
+**sample the CALL STACK, not just EIP.** A few return addresses per sample, filtered to known
+modules, would name the engine-side caller that leads into the wait. EIP alone says where the thread
+is; the stack says who put it there — and that is what makes the stall actionable.
+
+## Status of the HUD goal
+
+- **Adapts (dock + span full width, with art): ACHIEVED**, this run.
+- **Scales (widgets repositioned/resized within the bar): not attempted.** The 5 small child
+  surfaces are still at their native sizes and native positions.
+- **FPS cost: unresolved**, but two hypotheses down and the mechanism measured rather than assumed.
