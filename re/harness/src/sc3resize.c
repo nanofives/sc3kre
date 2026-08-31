@@ -490,8 +490,10 @@ static DWORD          g_prof_n, g_prof_fail;
  * that appears overwhelmingly in phase B and not in phase A is attributable to the bar width.
  * `[UNCERTAIN]` by construction - treat the ranking as a lead, not a proof. */
 #define STK_BYTES 1024
+#define MAX_EXEC 32
 static DWORD g_modbase[8], g_modsize[8];
-static int   g_nmod;
+static DWORD g_exbase[MAX_EXEC], g_exend[MAX_EXEC];
+static int   g_nmod, g_nex;
 static DWORD g_stk_key[PROF_BUCKETS], g_stk_cnt[PROF_BUCKETS];
 static DWORD g_stk_n, g_stk_miss;
 
@@ -499,7 +501,7 @@ static void rz_prof_modinit(void) {
     static const char *mods[] = { "SIMSPR.DLL", "GZGraphicD.dll", "SIMCITY.DLL", "SIMUI.DLL",
                                   "GZWIN.DLL", "SC3U.exe", 0 };
     int i;
-    g_nmod = 0;
+    g_nmod = 0; g_nex = 0;
     for (i = 0; mods[i] && g_nmod < 8; i++) {
         DWORD h = (DWORD)GetModuleHandleA(mods[i]), e;
         if (!h || IsBadReadPtr((void *)h, 0x40)) continue;
@@ -508,12 +510,70 @@ static void rz_prof_modinit(void) {
         g_modbase[g_nmod] = h;
         g_modsize[g_nmod] = *(DWORD *)(h + e + 0x50);   /* SizeOfImage */
         g_nmod++;
+        /* Record this module's EXECUTABLE sections. PE32: FileHeader at e+4, NumberOfSections at
+           e+6, SizeOfOptionalHeader at e+0x14; section table follows the optional header. Each
+           IMAGE_SECTION_HEADER is 40 bytes: VirtualSize +0x08, VirtualAddress +0x0c,
+           Characteristics +0x24 (IMAGE_SCN_MEM_EXECUTE = 0x20000000). */
+        {   WORD ns = *(WORD *)(h + e + 6), opt = *(WORD *)(h + e + 0x14), s;
+            DWORD sec = h + e + 0x18 + opt;
+            for (s = 0; s < ns && g_nex < MAX_EXEC; s++) {
+                DWORD sh = sec + (DWORD)s * 40;
+                if (IsBadReadPtr((void *)sh, 40)) break;
+                if (*(DWORD *)(sh + 0x24) & 0x20000000) {
+                    g_exbase[g_nex] = h + *(DWORD *)(sh + 0x0c);
+                    g_exend[g_nex]  = g_exbase[g_nex] + *(DWORD *)(sh + 0x08);
+                    g_nex++;
+                }
+            }
+        }
     }
+    logf("PROF> module ranges: %d modules, %d executable sections", g_nmod, g_nex);
 }
 static int rz_in_game_module(DWORD a) {
     int i;
     for (i = 0; i < g_nmod; i++)
         if (a >= g_modbase[i] && a < g_modbase[i] + g_modsize[i]) return 1;
+    return 0;
+}
+static int rz_in_exec(DWORD a) {
+    int i;
+    for (i = 0; i < g_nex; i++) if (a >= g_exbase[i] && a < g_exend[i]) return 1;
+    return 0;
+}
+/* Is `a` a plausible RETURN ADDRESS? Run 7 failed because the scan accepted any in-module value:
+ * its ranking contained SC3U.exe+0x9 (inside the DOS header) and page-aligned SC3U.exe+0x41000 /
+ * +0x80000. A return address points at the instruction AFTER a call, so require:
+ *   (1) `a` lies in an EXECUTABLE section (kills page-aligned data pointers and header offsets), and
+ *   (2) a call instruction ends EXACTLY at `a`.
+ * Encodings accepted: E8 rel32 (5), and the FF /2 family - reg field of the modrm must be 2.
+ * Lengths cover mod 00/01/10/11 with and without SIB. Far call 9A is not accepted (not emitted by
+ * this toolchain and would add false positives). */
+static int rz_is_retaddr(DWORD a) {
+    const BYTE *p = (const BYTE *)a;
+    BYTE m;
+    if (!rz_in_exec(a)) return 0;
+    if (IsBadReadPtr((void *)(a - 7), 7)) return 0;
+    if (p[-5] == 0xE8) return 1;                                  /* call rel32           len 5 */
+    /* FF /2 forms, indexed by total instruction length */
+    m = p[-1];                                                    /* len 2: FF <modrm> */
+    if (p[-2] == 0xFF && ((m >> 3) & 7) == 2 &&
+        ((m >= 0xD0 && m <= 0xD7) ||                              /*   mod 11 call reg    */
+         ((m >= 0x10 && m <= 0x17) && m != 0x14 && m != 0x15)))   /*   mod 00 call [reg]  */
+        return 1;
+    m = p[-2];                                                    /* len 3 */
+    if (p[-3] == 0xFF && ((m >> 3) & 7) == 2 &&
+        (((m >= 0x50 && m <= 0x57) && m != 0x54) ||               /*   mod 01 disp8       */
+         m == 0x14))                                              /*   mod 00 SIB         */
+        return 1;
+    m = p[-3];                                                    /* len 4: mod 01 SIB disp8 */
+    if (p[-4] == 0xFF && m == 0x54) return 1;
+    m = p[-5];                                                    /* len 6 */
+    if (p[-6] == 0xFF &&
+        (m == 0x15 ||                                             /*   call [disp32]      */
+         ((m >= 0x90 && m <= 0x97) && m != 0x94)))                /*   mod 10 disp32      */
+        return 1;
+    m = p[-6];                                                    /* len 7: mod 10 SIB disp32 */
+    if (p[-7] == 0xFF && m == 0x94) return 1;
     return 0;
 }
 static void rz_stk_hit(DWORD a) {
@@ -631,11 +691,13 @@ static DWORD WINAPI rz_prof_thread(LPVOID p) {
                 ResumeThread(th);                    /* unconditional, same iteration */
             }
             if (eip) rz_prof_hit(eip); else g_prof_fail++;   /* bucketed AFTER the resume */
-            if (got_stk) {                            /* nearest game-side return address */
+            if (got_stk) {   /* nearest VALIDATED game-side return address (run 7 fix) */
                 int k, found = 0;
                 for (k = 0; k < STK_BYTES / 4; k++) {
                     DWORD v = ((DWORD *)stk)[k];
-                    if (v && rz_in_game_module(v)) { rz_stk_hit(v); found = 1; break; }
+                    if (v && rz_in_game_module(v) && rz_is_retaddr(v)) {
+                        rz_stk_hit(v); found = 1; break;
+                    }
                 }
                 if (!found) g_stk_miss++;
             }

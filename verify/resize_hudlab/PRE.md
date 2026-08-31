@@ -334,3 +334,52 @@ in the crash arc.
 
 `SC3RESIZE_HUDLAB=1` (phases). Bar docks and refits as on the ship path, so phase B measures the
 final shipping configuration, not a half-state.
+
+---
+
+# RUN 8 PRE-REGISTRATION (2026-08-31) — wait attribution, with return-address validation
+
+Run 7 was INCONCLUSIVE: the scan accepted any in-module value, and its ranking contained
+`SC3U.exe+0x9` (DOS header) and page-aligned `+0x41000` / `+0x80000`.
+
+## The fix
+
+A candidate is now bucketed only if BOTH hold:
+
+1. it lies in an **executable section** (parsed from each module's PE section table at init);
+2. a **call instruction ends exactly at it** - `E8 rel32`, or the `FF /2` family across mod
+   00/01/10/11 with and without SIB (lengths 2,3,4,6,7).
+
+**Pre-flight, offline against `Apps\SC3U.exe`** - the new test re-scored run 7's own entries:
+
+| address | verdict | why |
+|---|---|---|
+| `SC3U.exe+0x9` | **REJECT** | not in an executable section |
+| `SC3U.exe+0x41000` | **REJECT** | no call ends here |
+| `SC3U.exe+0x80000` | **REJECT** | no call ends here |
+| `SC3U.exe+0x39237` | **REJECT** | no call ends here |
+| `SC3U.exe+0x41237` | ACCEPT | `call rel32` |
+| `SC3U.exe+0x25A9F` | ACCEPT | `call r/m32` (len 6) |
+| `SC3U.exe+0x263B0` | ACCEPT | `call r/m32` (len 3) |
+
+All three impossible entries are rejected; plausible ones are accepted with the encoding named.
+Note `+0x41000` IS inside `.text`, so the section test alone would have passed it — **both filters
+carry weight.** Validating the validator against the exact data that discredited the previous run,
+before spending a lease.
+
+## Pre-registered outcomes
+
+- **PASS / caller named:** a small number of validated call sites are strongly over-represented in
+  `STK> B-fullwidth` versus `A-native`. Those become the read target.
+- **INCONCLUSIVE:** B's ranking is flat or mirrors A's. Attribution by stack scan is then exhausted
+  and the next move is a targeted hook on the blit path, not a third scan variant.
+- **VOID:** `no-game-frame` dominates, or either phase attributes < 200 samples. Validation will
+  raise the miss count by design — rejecting junk means some samples now attribute to nothing. **A
+  high miss count is expected and is NOT itself a failure**; only a miss count that starves the
+  sample floor is.
+
+## Unchanged from run 7, deliberately
+
+A top-ranked call site remains a **lead, not a proof**. Validation removes impossible addresses; it
+does not make a surviving address causal. Confirmation still means reading the function and showing
+width-dependent per-frame behaviour.
