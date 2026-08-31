@@ -292,10 +292,19 @@ static int fnlog_install_one(FNLOG *e, int idx) {
 #define RVA_LIST_ERASE    0x1084b   /* FUN_1001084b: __thiscall(list, first, last) - erase */
 #define RVA_LIST_PUSH     0x10586   /* FUN_10010586: __thiscall(list, &rect) - push_back */
 #define RVA_ISO_VT        0x6250c   /* the iso view's vtable, for the identity gate */
+/* SIMUI RVAs (HUD reflow, top-strip proof 2026-08-30). */
+#define SUI_RVA_PRODUCER  0x270e5   /* FUN_100270e5: __thiscall(this=HUD win, int* outTable) ret 4 -
+                                       fills the top-strip anchor table (preset by mode W). We wrap it. */
+#define SUI_RVA_BUILD     0x24a96   /* FUN_10024a96: __fastcall(this) - builds/registers the top-strip HUD */
+#define SUI_RVA_DESTRUCT  0x266c1   /* FUN_100266c1: __fastcall(this) - contents teardown (guarded, keeps this) */
 /* GZGraphicD RVAs. */
 #define GZ_RVA_RASTER_CREATE 0x9efb  /* FUN_10009efb, vtable slot +0x0c on both raster classes */
 #define GZ_RVA_VT_RASTER     0x1E894 /* raster class vtable */
 #define GZ_RVA_VT_BLITDEST   0x1F328 /* blit-dest subclass (iso+0x4ec) */
+#define RZ_SURFACE_SLACK     8       /* guard rows below the visible height: FUN_1000239d's 2x/4x
+                                        zoom blit companion-writes up to ~3 scanlines past the last
+                                        row and has no surface-height clamp. Never presented (step 9
+                                        present rect is {0,0,w,ht}). See verify/resize_zoomcrash/. */
 #define GZ_RVA_HEARTBEAT     0x18c58 /* per-frame, game thread, mid-paint - the poll site */
 
 /* DEFECT 3 FIX (2026-08-28). The validation run MEASURED the costing's open [UNCERTAIN]: the tuple
@@ -400,6 +409,38 @@ static int rz_filter(EXCEPTION_POINTERS *ep) {
     return EXCEPTION_EXECUTE_HANDLER;
 }
 
+/* Process-wide crash logger. The zoom-after-resize crash happens on the GAME's own thread/path, which
+ * our resize __try/__except never wraps, and SC3U's top-level handler swallows the fault (no WER), so
+ * only a vectored handler can capture it. Logs any hardware fault with faulting MODULE+RVA, access
+ * address, registers and the top-of-stack return address, then CONTINUE_SEARCH so the game's own
+ * handling is unchanged. Filtered to hardware/AV codes to avoid first-chance C++/debug noise. */
+static LONG CALLBACK rz_veh(EXCEPTION_POINTERS *ep) {
+    DWORD code = ep->ExceptionRecord->ExceptionCode;
+    if (code == 0xC0000005 /* access violation */ || code == 0xC000001D /* illegal instruction */ ||
+        code == 0xC0000094 /* integer div by zero */ || code == 0xC0000096 /* privileged instr */ ||
+        code == 0xC00000FD /* stack overflow */ || code == 0xC0000006 /* in-page error */) {
+        CONTEXT *c = ep->ContextRecord;
+        char who[160];
+        rz_modstr((DWORD)ep->ExceptionRecord->ExceptionAddress, who, sizeof(who));
+        logf("RZ   *** VEH FAULT *** code=0x%08lX at %s  (resize step at fault=%d)",
+             code, who, g_rz_step);
+        if (code == 0xC0000005 && ep->ExceptionRecord->NumberParameters >= 2) {
+            DWORD acc = (DWORD)ep->ExceptionRecord->ExceptionInformation[0];
+            DWORD ea  = (DWORD)ep->ExceptionRecord->ExceptionInformation[1];
+            logf("RZ   VEH access=%s addr=0x%08lX",
+                 acc == 0 ? "READ" : acc == 1 ? "WRITE" : acc == 8 ? "EXEC" : "?", ea);
+        }
+        logf("RZ   VEH regs eax=%08lX ecx=%08lX edx=%08lX ebx=%08lX esi=%08lX edi=%08lX ebp=%08lX esp=%08lX",
+             c->Eax, c->Ecx, c->Edx, c->Ebx, c->Esi, c->Edi, c->Ebp, c->Esp);
+        if (!IsBadReadPtr((void *)c->Esp, 4)) {
+            char ret[160];
+            rz_modstr(*(DWORD *)c->Esp, ret, sizeof(ret));
+            logf("RZ   VEH [esp]=0x%08lX -> %s", *(DWORD *)c->Esp, ret);
+        }
+    }
+    return EXCEPTION_CONTINUE_SEARCH;   /* do not alter the game's own fault handling */
+}
+
 /* Fault-time diagnosis for the FUN_1000cedb+0x12a AV (dangling grid-B node). At +0x12a =
  * `cmp [eax],edx`: EAX is the node the walk faulted on, EDI is (near) the bucket slot address. This
  * decides OOB-bucket-index vs freed-node by comparing EDI to the 8x8 grid array range, and scans all
@@ -447,6 +488,7 @@ static volatile LONG g_busy;           /* re-entrancy guard for the per-frame po
 static int   g_wm_fixed;               /* the window has been subclassed */
 static WNDPROC g_oldproc;
 static HWND  g_hwnd;
+static void *g_hud_top;                /* the top-strip HUD window `this`, captured in the FUN_100270e5 wrap */
 
 /* Indirect __thiscall with n stack args. ESP is saved and restored around the call, so a wrong
  * argument count shows up as a bad return value rather than as a crash three frames later.
@@ -533,8 +575,21 @@ static int rz_recreate_raster(DWORD obj, const char *name, DWORD w, DWORD ht, HM
                  ca[2], ca[3], ca[4], ca[5], ca[6], ca[7]);
         }
         ca[0] = w;
-        ca[1] = ht;
-        logf("RZ   %s replay at %lux%lu", name, w, ht);
+        /* ZOOM-CRASH FIX (2026-08-30): allocate GUARD ROWS below the visible height.
+           The zoom-scaled 16bpp blitter FUN_1000239d (GZGraphicD) has NO vertical clamp to the
+           surface height - it bounds its row loop only by the caller's dest rect, and its 2x/4x
+           branches issue COMPANION writes one-to-four scanlines BELOW the current row (the vertical
+           up-scaling). When a bottom-edge tile at higher zoom reaches the surface's last row, that
+           companion write spills one page past the buffer -> 0xC0000005 WRITE at edx+pitch (captured:
+           GZGraphicD FUN_1000239d+0x1a1, addr = base+0x1000, one 2048px scanline). The surface is
+           correctly WIDTH-resized (pitch witnessed 0x1000 = 2048px); it is one row too SHORT for the
+           scaled write. Padding the height gives the companion writes mapped space. The 4x branch
+           spills up to ~3 rows, so 8 is a safe guard. These rows are never presented: step 9 pushes
+           the present rect {0,0,w,ht}, so only the top ht rows reach the screen.
+           Root cause + evidence: verify/resize_zoomcrash/RESULTS.md. */
+        ca[1] = ht + RZ_SURFACE_SLACK;
+        logf("RZ   %s replay at %lux%lu (+%d guard rows -> alloc h=%lu, zoom-blit overrun fix)",
+             name, w, ht, RZ_SURFACE_SLACK, ca[1]);
     }
     *((BYTE *)obj + 8) = 0;
     rc = rz_thiscall((void *)obj, (void *)vt[0x0c / 4], ca, 8);
@@ -828,7 +883,27 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
         }
     }
 
-    logf("RZ   ---- done (all 11 steps) ----");
+    /* 12. HUD REFLOW - top-strip PROOF (2026-08-30). The HUD lays out once at construction and never
+       re-runs on a window resize, so reflowing its anchor table (the FUN_100270e5 wrap) only takes
+       effect if we DRIVE a re-layout. Do the guarded destruct+rebuild of the captured top-strip HUD
+       window: FUN_100266c1(this) tears down its contents (guarded by the built-flag vt+0xf0(0x4000);
+       does NOT free `this` or detach it), then FUN_10024a96(this) rebuilds - re-running the wrapped
+       producer, which reflows the anchors for the live width. Both __fastcall(this). g_hud_top was
+       captured by the producer wrap at construction. SIMUI. Only the top strip in this proof; the
+       height-keyed side/panel tables (FUN_1004c3e9/FUN_1004cdcd) are a later increment. */
+    if (0 && g_hud_top && !IsBadReadPtr(g_hud_top, 4)) {   /* DISABLED - breaks the HUD, see above */
+        HMODULE sui = GetModuleHandleA("SIMUI.DLL");
+        if (sui) {
+            g_rz_step = 12;
+            logf("RZ   [step 12] HUD rebuild: g_hud_top=0x%08lX - destruct+rebuild (top-strip reflow)",
+                 (DWORD)g_hud_top);
+            rz_thiscall(g_hud_top, (void *)((DWORD)sui + SUI_RVA_DESTRUCT), NULL, 0);
+            rz_thiscall(g_hud_top, (void *)((DWORD)sui + SUI_RVA_BUILD), NULL, 0);
+            logf("RZ   [step 12] HUD rebuild returned");
+        }
+    }
+
+    logf("RZ   ---- done (all 12 steps) ----");
     if (g_census) g_census_ms = GetTickCount() + 2000;   /* census once, after frames have run */
 }
 
@@ -851,7 +926,14 @@ static void rz_poll(void) {
     v = (DWORD *)iso;
     R = v[0x74 / 4];
     if (!R || IsBadReadPtr((void *)R, 0x2c)) return;
-    if (((DWORD *)R)[0x24 / 4] == w && ((DWORD *)R)[0x28 / 4] == ht) return;   /* nothing to do */
+    /* SETTLED check. The render target is deliberately over-allocated by RZ_SURFACE_SLACK guard rows
+       (zoom-blit overrun fix), so its height (+0x28) is ht..ht+SLACK, NOT exactly ht. Comparing
+       == ht made the poll see a permanent mismatch and re-resize EVERY FRAME (churn -> black view +
+       a zoom-out race crash, 2026-08-30). Treat width-equal and height within [ht, ht+SLACK] as
+       settled; a genuine client-size change still fails this and triggers one resize. */
+    if (((DWORD *)R)[0x24 / 4] == w &&
+        ((DWORD *)R)[0x28 / 4] >= ht && ((DWORD *)R)[0x28 / 4] <= ht + RZ_SURFACE_SLACK)
+        return;   /* nothing to do */
 
     /* LOAD-READINESS GATE (2026-08-28, cheap hygiene). Do not touch the view until the renderer is
        actually up: (a) >= g_ready_ms since bridge capture, AND (b) the render target holds a real
@@ -893,7 +975,7 @@ static void rz_poll(void) {
         rz_modstr(g_exc_addr, who, sizeof(who));
         logf("RZ   *** FAULT CAUGHT *** code=0x%08lX at %s | executing STEP %ld when it faulted "
              "(1=extent 2=griddims 3=dirtygrid 4=gridB 5=RT 6=devsurf 7=FUN_10018cdf 8=rereg 9=present "
-             "10=fullrepaint 11=baseview)",
+             "10=fullrepaint 11=baseview 12=hudreflow)",
              g_exc_code, who, g_rz_step);
         rz_fault_diag(iso);
     }
@@ -1204,6 +1286,98 @@ static void patch_gridb_clamp(HMODULE ss) {
     logf("--- GRIDB_CLAMP: all grid-B walkers clamped (OOB bucket-index AV fixed engine-wide)");
 }
 
+/* ===================== HUD REFLOW - top-strip PROOF (2026-08-30) =====================
+ * The HUD lays out ONCE at window construction and never re-runs on a window resize (SIMUI has no
+ * runtime re-layout trigger - worker dig, verify/resize_ui/). Two parts:
+ *   (1) rz_hud_reflow rewrites the top-strip anchor TABLE for the live width (extend, keep size);
+ *   (2) patch_hud_reflow WRAPS FUN_100270e5 (the table producer) to capture the HUD `this` (=ecx) and
+ *       call rz_hud_reflow on its output;
+ *   (3) resize step 12 drives the guarded destruct+rebuild (FUN_100266c1 then FUN_10024a96) so the
+ *       producer re-runs at the live width. All SIMUI. Only the top strip for this proof. */
+
+/* Rewrite the top-strip anchor table for the live client width. The table's 4 widgets are 4-field
+ * boxes (X1,Y1,X2,Y2) at idx 1-4/5-8/9-12/13-16; idx0 is a resolution tag whose hex digits spell the
+ * NATIVE resolution (0x1024768=1024x768, 0x800600=800x600, 0x640480=640x480). "Extend, keep size":
+ * origin-scale each widget's X by live/native and preserve its width. Y (top strip band) unchanged.
+ * Only widens (live > native); at native or smaller it is a no-op, so construction is untouched.
+ * The label group (idx17-28) is left alone in this proof. __cdecl: the wrap cleans the arg. */
+static void __cdecl rz_hud_reflow(DWORD *arr) {
+    static const int x1i[4] = { 1, 5, 9, 13 };
+    static const int x2i[4] = { 3, 7, 11, 15 };
+    int native_w, live_w, k;
+    RECT cr;
+    DWORD tag;
+    if (!arr || IsBadWritePtr(arr, 0x74)) return;          /* 0x1d ints */
+    tag = arr[0];
+    if      (tag == 0x1024768) native_w = 1024;
+    else if (tag == 0x800600)  native_w = 800;
+    else if (tag == 0x640480)  native_w = 640;
+    else { logf("RZ   HUD reflow: unknown tag 0x%08lX - skip", tag); return; }
+    if (!g_hwnd || !GetClientRect(g_hwnd, &cr)) return;
+    live_w = (int)(cr.right - cr.left);
+    if (live_w <= native_w) return;                         /* only extend when wider than native */
+    for (k = 0; k < 4; k++) {
+        int x1 = (int)arr[x1i[k]], x2 = (int)arr[x2i[k]], w = x2 - x1;
+        int nx1 = (int)(((__int64)x1 * live_w) / native_w);
+        arr[x1i[k]] = (DWORD)nx1;
+        arr[x2i[k]] = (DWORD)(nx1 + w);                     /* keep width */
+    }
+    logf("RZ   HUD reflow: tag native %d -> live %d, top-strip 4 widgets origin-scaled (keep width)",
+         native_w, live_w);
+}
+
+/* Wrap FUN_100270e5: capture ecx (HUD `this`) into g_hud_top, run the original (fills the table), then
+ * rz_hud_reflow(table). Custom cave because we post-process the OUTPUT (an entry hook cannot). The
+ * function is __thiscall(this, outTable) ending `ret 4` (verified from the PE), so the wrapper calls it
+ * as a subroutine with param_1 re-pushed and lets its own ret 4 unwind. Fail-closed: verifies the
+ * prologue bytes before hooking. */
+static void patch_hud_reflow(HMODULE sui) {
+    static const BYTE expect[6] = { 0x8B, 0x01, 0x56, 0xFF, 0x50, 0x10 };
+    BYTE *t = (BYTE *)sui + SUI_RVA_PRODUCER;
+    int relofs[MAX_REL], nrel = 0, k, len;
+    BYTE *tr, *cave;
+    DWORD old, n = 0;
+
+    if (IsBadReadPtr(t, 6) || memcmp(t, expect, 6) != 0) {
+        logf("--- HUD: FUN_100270e5 prologue mismatch (%02X %02X %02X %02X %02X %02X) - NOT hooking",
+             t[0], t[1], t[2], t[3], t[4], t[5]);
+        return;
+    }
+    len = steal_len(t, relofs, &nrel);
+    if (len < 5) { logf("--- HUD: FUN_100270e5 undecodable prologue - skip"); return; }
+    tr   = pool_alloc(len + 5);
+    cave = (BYTE *)VirtualAlloc(NULL, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!tr || !cave) { logf("--- HUD: alloc failed"); return; }
+
+    memcpy(tr, t, len);
+    for (k = 0; k < nrel; k++) {
+        int o = relofs[k];
+        DWORD abs_t = (DWORD)(t + o + 5) + *(DWORD *)(t + o + 1);
+        *(DWORD *)(tr + o + 1) = abs_t - (DWORD)(tr + o + 5);
+    }
+    tr[len] = 0xE9; *(DWORD *)(tr + len + 1) = (DWORD)(t + len) - (DWORD)(tr + len + 5);
+
+    /* cave: mov [g_hud_top],ecx ; push [esp+4] ; call tr ; push eax ; push [esp+8] ; call reflow ;
+             add esp,4 ; pop eax ; ret 4 */
+    cave[n++] = 0x89; cave[n++] = 0x0D; *(DWORD *)(cave + n) = (DWORD)&g_hud_top; n += 4;
+    cave[n++] = 0xFF; cave[n++] = 0x74; cave[n++] = 0x24; cave[n++] = 0x04;
+    cave[n++] = 0xE8; *(DWORD *)(cave + n) = (DWORD)tr - (DWORD)(cave + n + 4); n += 4;
+    cave[n++] = 0x50;
+    cave[n++] = 0xFF; cave[n++] = 0x74; cave[n++] = 0x24; cave[n++] = 0x08;
+    cave[n++] = 0xE8; *(DWORD *)(cave + n) = (DWORD)rz_hud_reflow - (DWORD)(cave + n + 4); n += 4;
+    cave[n++] = 0x83; cave[n++] = 0xC4; cave[n++] = 0x04;
+    cave[n++] = 0x58;
+    cave[n++] = 0xC2; cave[n++] = 0x04; cave[n++] = 0x00;
+
+    if (!VirtualProtect(t, (SIZE_T)len, PAGE_EXECUTE_READWRITE, &old)) {
+        logf("--- HUD: VirtualProtect failed (%lu)", GetLastError()); return; }
+    t[0] = 0xE9; *(DWORD *)(t + 1) = (DWORD)cave - (DWORD)(t + 5);
+    { int j; for (j = 5; j < len; j++) t[j] = 0x90; }
+    VirtualProtect(t, (SIZE_T)len, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), t, (SIZE_T)len);
+    logf("--- HUD: FUN_100270e5 wrapped (cave 0x%08lX tr 0x%08lX) - top-strip reflow armed", (DWORD)cave, (DWORD)tr);
+}
+
 static DWORD WINAPI rz_watcher(LPVOID param) {
     HMODULE ss = NULL, gz = NULL;
     int tries = 0;
@@ -1229,6 +1403,16 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
     patch_windowed(gz);
     patch_surfacefmt(gz);
     patch_gridb_clamp(ss);   /* FIX A: clamp the grid-B bucket index (OOB AV root cause) */
+
+    /* HUD reflow (top-strip proof) - DISABLED 2026-08-30 after a failed hand-test. The driven
+       destruct+rebuild (step 12) is NOT a clean idempotent re-layout: FUN_10024a96's build guard
+       (vt+0xf0(0x4000)) skips the rebuild on alternate resizes, so the destruct tears the strip down
+       and the next rebuild is skipped -> the strip vanishes and does not return (owner-observed).
+       Both the wrap install and step 12 are gated off until redesigned as a REPOSITION (move existing
+       widgets, no teardown). Evidence: verify/resize_hud/RESULTS.md. */
+    if (0) { HMODULE sui = GetModuleHandleA("SIMUI.DLL");
+      if (sui) patch_hud_reflow(sui);
+      else logf("--- HUD: SIMUI.DLL not loaded yet - top-strip reflow NOT armed"); }
 
     /* v3: the create-recorder hook (idx 2) is DROPPED - it crashed the game at startup in v2
        (verify/resize_ship RUN 2). Reverts to the known-good two-hook set. The tuple therefore comes
@@ -1258,6 +1442,11 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           g_census = GetEnvironmentVariableA("SC3RESIZE_CENSUS", v, sizeof(v)) && atoi(v); }
         logf("### sc3resize loaded - resizable-window mod (minimal Init-free routine, "
              "validated 2026-08-27 over 6 runs)%s", g_minzoom ? " [MINZOOM crash-hunt build]" : "");
+        if (AddVectoredExceptionHandler(1, rz_veh))
+            logf("### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the "
+                 "zoom-after-resize crash the game swallows)");
+        else
+            logf("### VEH crash logger FAILED to install");
         CreateThread(NULL, 0, rz_watcher, NULL, 0, NULL);
     }
     return TRUE;
