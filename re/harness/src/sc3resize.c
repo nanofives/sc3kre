@@ -396,7 +396,10 @@ static void rz_census(void) {
  * ================================================================================================== */
 static void  rz_modstr(DWORD addr, char *out, int n);   /* fwd: defined below, resolves EIP->MODULE+RVA */
 static int   g_hudlab;                 /* SC3RESIZE_HUDLAB: arm the HUD lab */
-static int   g_hudfit;                 /* SC3RESIZE_HUDFIT: widen the bar's background surface too */
+static int   g_hudfit = 1;             /* dock+span the HUD bar (SHIP DEFAULT ON; SC3RESIZE_HUDNATIVE=1
+                                          turns it off and leaves the HUD exactly native) */
+static BYTE *g_hud_art;                /* one-time cache of the PRISTINE native bar art */
+static DWORD g_hud_artw, g_hud_arth, g_hud_artpitch;
 static HWND  g_hwnd;                   /* the game window (declared here: the HUD lab reads it for
                                           the live client size) */
 static void *g_hud_top;                /* the HUD bottom-bar window `this`, captured in the FUN_100270e5
@@ -1113,12 +1116,24 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
        native width, then the widen is applied and phase B profiles it full-width. Same process, city,
        window size and zoom across both phases - the run supplies its own control, which is what makes
        the FPS delta attributable to bar width and nothing else. */
-    if (g_hudlab && g_hud_top && !IsBadReadPtr(g_hud_top, 0xc0)) {
+    if (g_hud_top && !IsBadReadPtr(g_hud_top, 0xc0)) {
         g_rz_step = 12;
-        rz_hud_surfaces("BEFORE-setrect");
-        g_hudphase = 1;
-        g_phase_ms = GetTickCount() + 3000;      /* let the resize settle before profiling */
-        logf("HUDLAB> armed - phase A (native bar) begins in 3 s, then widen, then phase B");
+        if (g_hudlab) {
+            /* DIAGNOSTIC path: census now, then let the A/B phase machine drive the dock+fit so the
+               profiler gets a native-width control phase first. */
+            rz_hud_surfaces("BEFORE-setrect");
+            g_hudphase = 1;
+            g_phase_ms = GetTickCount() + 3000;
+            logf("HUDLAB> armed - phase A (native bar) begins in 3 s, then widen, then phase B");
+        } else if (g_hudfit) {
+            /* SHIP path: dock the bar to the resized window and refit its background surface, here
+               and now on the render thread. Same two calls the lab drives, no phases, no census.
+               Both are self-gating and log a refusal rather than forcing anything. */
+            RECT cr;
+            rz_hud_setrect();
+            if (g_hwnd && GetClientRect(g_hwnd, &cr))
+                rz_hud_fit_surface((DWORD)(cr.right - cr.left));
+        }
     }
 
     logf("RZ   ---- done (viewport: steps 1-11%s) ----",
@@ -1214,23 +1229,45 @@ static void rz_hud_fit_surface(DWORD liveW) {
     sub  = ((DWORD *)obj)[0x44 / 4];
     if (!sub || IsBadReadPtr((void *)sub, 0xf8)) { logf("HUDFIT> skipped: sub unreadable"); return; }
     oldbits = ((DWORD *)sub)[0xf0 / 4]; oldpitch = ((DWORD *)sub)[0xf4 / 4];
-    if (liveW <= oldw) {
-        logf("HUDFIT> skipped: live width %lu <= surface width %lu (nothing to widen)", liveW, oldw);
+    /* Re-fit on ANY width change, not just a widen - a later resize to a SMALLER window must bring
+       the bar back down, or it stays wider than the window it lives in. */
+    if (liveW == oldw) {
+        logf("HUDFIT> already fitted: surface width %lu == live width %lu", oldw, liveW);
         return;
     }
-    logf("HUDFIT> bar background child[0x2a]=0x%08lX %lux%lu pitch=%lu -> widening to %lux%lu",
-         obj, oldw, oldh, oldpitch, liveW, oldh);
 
-    /* snapshot the existing art RAW (never vf1c out of band - the standing rule) */
-    if (oldbits && oldpitch && oldh && !IsBadReadPtr((void *)oldbits, oldpitch * oldh)) {
-        snap = (BYTE *)HeapAlloc(GetProcessHeap(), 0, oldpitch * oldh);
-        if (snap) memcpy(snap, (void *)oldbits, oldpitch * oldh);
+    /* ONE-TIME snapshot of the PRISTINE native art, cached for the life of the process.
+       Two bugs this avoids, both of which only appear on the SECOND resize:
+       (1) re-snapshotting would capture already-TILED content and re-tile it at a new width,
+           producing misaligned seams that compound every resize;
+       (2) `oldh` after a recreate is 56+RZ_SURFACE_SLACK = 64, so recreating at `oldh` would grow
+           the bar by 8 px every single resize. The cached NATIVE height is the fix.
+       Read RAW - the standing rule. The surface has bits here because the engine locked and drew it
+       at construction (the BEFORE-setrect census reads them fine). */
+    if (!g_hud_art && oldbits && oldpitch && oldh &&
+        !IsBadReadPtr((void *)oldbits, oldpitch * oldh)) {
+        g_hud_art = (BYTE *)HeapAlloc(GetProcessHeap(), 0, oldpitch * oldh);
+        if (g_hud_art) {
+            memcpy(g_hud_art, (void *)oldbits, oldpitch * oldh);
+            g_hud_artw = oldw; g_hud_arth = oldh; g_hud_artpitch = oldpitch;
+            logf("HUDFIT> cached the pristine native art %lux%lu pitch=%lu (one-time)",
+                 oldw, oldh, oldpitch);
+        }
     }
-    if (!snap) logf("HUDFIT> WARNING: could not snapshot the old art - the bar may come back blank");
+    if (!g_hud_art) {
+        logf("HUDFIT> WARNING: no cached art (bits=0x%08lX pitch=%lu) - the bar may come back blank",
+             oldbits, oldpitch);
+    }
+    snap    = g_hud_art;
+    oldw    = g_hud_artw    ? g_hud_artw    : oldw;
+    oldpitch= g_hud_artpitch ? g_hud_artpitch : oldpitch;
+    oldh    = g_hud_arth    ? g_hud_arth    : oldh;   /* NATIVE height - never the padded one */
+
+    logf("HUDFIT> bar background child[0x2a]=0x%08lX -> refitting to %lux%lu (art %lux%lu)",
+         obj, liveW, oldh, oldw, oldh);
 
     if (!rz_recreate_raster(obj, "HUD bar background", liveW, oldh, gz)) {
-        logf("HUDFIT> recreate REFUSED - bar left at its native width");
-        if (snap) HeapFree(GetProcessHeap(), 0, snap);
+        logf("HUDFIT> recreate REFUSED - bar left as it was");
         return;
     }
 
@@ -1298,7 +1335,7 @@ static void rz_hud_fit_surface(DWORD liveW) {
                      ((DWORD *)nsub)[0xe4 / 4]);
             }
         }
-        HeapFree(GetProcessHeap(), 0, snap);
+        /* g_hud_art is the process-lifetime cache - deliberately NOT freed here. */
     }
 }
 
@@ -1883,19 +1920,21 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
        NOT drive a rebuild - that approach is falsified and stays disabled). SIMUI loads LATER than
        SIMSPR/GZGraphicD, so a one-shot check missed it (2026-08-31, "capture NOT armed"). WAIT for
        SIMUI here (up to ~30 s) - still well before the city/HUD build. */
-    if (!g_hudlab) {
-        logf("### RESIZE: HUD stays native (HUD lab not armed - set SC3RESIZE_HUDLAB=1 to measure)");
+    if (!g_hudfit && !g_hudlab) {
+        logf("### RESIZE: HUD stays NATIVE (SC3RESIZE_HUDNATIVE=1) - viewport only");
         (void)patch_hud_reflow;   /* referenced to avoid an unused-function warning; not installed */
         return 0;
     }
     { int st = 0; HMODULE sui = NULL;
       while (st++ < 300 && !(sui = GetModuleHandleA("SIMUI.DLL"))) Sleep(100);
       if (sui) patch_hud_reflow(sui);
-      else logf("--- HUDLAB: SIMUI.DLL never loaded after %d tries - capture NOT armed", st); }
-    {   DWORD tid;
+      else logf("--- HUD: SIMUI.DLL never loaded after %d tries - capture NOT armed, HUD stays native", st); }
+    if (g_hudlab) {
+        DWORD tid;
         HANDLE ph = CreateThread(NULL, 0, rz_prof_thread, NULL, 0, &tid);
         if (ph) { CloseHandle(ph); logf("### HUDLAB: EIP sampler thread started (tid %lu)", tid); }
-        else     logf("### HUDLAB: FAILED to start the sampler thread (%lu)", GetLastError()); }
+        else     logf("### HUDLAB: FAILED to start the sampler thread (%lu)", GetLastError());
+    }
     return 0;
 }
 
@@ -1914,7 +1953,10 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
               g_ready_ms = (DWORD)atoi(v);
           g_census = GetEnvironmentVariableA("SC3RESIZE_CENSUS", v, sizeof(v)) && atoi(v);
           g_hudlab = GetEnvironmentVariableA("SC3RESIZE_HUDLAB", v, sizeof(v)) && atoi(v);
-          g_hudfit = GetEnvironmentVariableA("SC3RESIZE_HUDFIT", v, sizeof(v)) && atoi(v); }
+          /* HUD dock+span ships ON. SC3RESIZE_HUDNATIVE=1 is the opt-out for anyone who prefers the
+             native bar - the full-width bar carries a measured GPU-sync FPS cost that is NOT yet
+             resolved (verify/resize_hudlab: two causes eliminated, mechanism still open). */
+          if (GetEnvironmentVariableA("SC3RESIZE_HUDNATIVE", v, sizeof(v)) && atoi(v)) g_hudfit = 0; }
         logf("### sc3resize loaded - resizable-window mod (minimal Init-free routine, "
              "validated 2026-08-27 over 6 runs)%s%s", g_minzoom ? " [MINZOOM crash-hunt build]" : "",
              g_hudlab ? " [HUD LAB armed: surface census + EIP profiler, verify/resize_hudlab]" : "");

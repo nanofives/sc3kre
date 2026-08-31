@@ -249,3 +249,44 @@ Run 4 could not test it (2048 dims, no backing). If the lock succeeds this run, 
   itself.
 
 Only score H-fps **if the lock succeeded**. A refused or failed lock leaves it confounded again.
+
+---
+
+# RUN 6 PRE-REGISTRATION (2026-08-31) — HUDFIT promoted to the SHIP path
+
+The dock+span now runs in step 12 unconditionally, on the render thread, with no lab and no phases.
+`SC3RESIZE_HUDNATIVE=1` is the opt-out. `SC3RESIZE_HUDLAB=1` still routes through the A/B phase
+machine for measurement.
+
+## Two second-resize bugs fixed while promoting (neither could appear in runs 1-5, all single-resize)
+
+1. **Bar height would grow 8 px per resize.** After a recreate the surface height reads
+   `56 + RZ_SURFACE_SLACK = 64`, and the old code recreated at that read-back height — so every
+   resize added another 8 px of guard rows permanently.
+2. **Re-tiling already-tiled art.** Re-snapshotting after a widen would capture TILED content and
+   re-tile it at the new width, compounding misaligned seams on every resize.
+
+Both fixed by caching the **pristine native art once** (`g_hud_art`, 600x56, pitch 1200) and always
+tiling from that cache at the cached NATIVE height. Also, the skip guard changed from
+`liveW <= oldw` to `liveW == oldw`, so **shrinking** re-fits too instead of leaving the bar wider
+than its window.
+
+## Pre-registered outcomes — the point of this run is the SECOND and THIRD resize
+
+Drive **at least three window size changes**, including a shrink: maximize -> restore -> maximize.
+
+- **PASS:** every resize logs `HUDFIT> ... refitting to <liveW>x56` with the height **always 56**
+  (never 64, 72, 80...), `art 600x56` every time, lock/unlock balanced (`depth 1 -> 0`), and the bar
+  spans correctly at each size **with art and no seams growing**. No fault.
+- **FAIL (height growth):** any `refitting to <w>x64` or larger. Bug 1 is not fixed.
+- **FAIL (seams/degradation):** the bar art visibly degrades across successive resizes. Bug 2 is not
+  fixed.
+- **FAIL (shrink):** after restoring to a smaller window the bar is still wider than the window.
+- **FAIL (crash/refusal):** any fault beyond the benign startup `0xC0000096`, or a `REFUSE` line.
+
+## Shipping judgement, stated plainly
+
+The full-width bar carries a **measured, unresolved GPU-sync FPS cost** (runs 3-5: mechanism
+localized, two candidate causes eliminated, root cause still open). Shipping it ON is the owner's
+explicit call. `SC3RESIZE_HUDNATIVE=1` exists so that cost is opt-out-able without a rebuild, and
+this trade-off must stay documented wherever the mod is described to users.
