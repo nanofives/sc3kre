@@ -114,3 +114,64 @@ the fix needs one.
 - HUD lab: **built, armed, unexercised.** Instruments are not implicated in the crash and need no
   change. The run is repeatable as-is once the resize survives step 7.
 - New engine defect: **root-caused in the disassembly, fix designed, not built.**
+
+---
+
+# RUN 2 (2026-08-31) — FIX C **PASSES**; I1 **H SUPPORTED**; I2 no data
+
+## FIX C: PASS, scored exactly as pre-registered
+
+Resize to 2048x1081 on a hand-loaded city. **All of steps 1-11 completed, plus step 12.
+Zero `FAULT CAUGHT`, zero `*** VEH FAULT ***`** other than the known-benign startup `0xC0000096`.
+Step 8c re-showed **65536 cells, 0 bad**; step 11 restored the active layer.
+
+That is the pre-registered PASS condition verbatim, against the exact fault FIX C targets. Both
+parts applied with their fail-closed checks passing (`GRIDB_CLAMP FUN_1000efa1`, `EFA1_GUARD`).
+
+**The engine's grid-B node REMOVE no longer faults when the resize invalidates its bucket mapping.**
+
+## I1 — the child surfaces: H SUPPORTED, decisively
+
+`HUDSURF> BEFORE-setrect`, HUD `ownrect=[0 544 599 600]`, class vtable `0x034840EC`:
+
+| child | class | dims | bpp | pitch | coherence | non-zero |
+|---|---|---|---|---|---|---|
+| `[0x2a]` | RASTER `gz+0x1E894` | **600x56** | 16 | 1200 | COHERENT (= w*2) | 25525/33600 |
+| `[0x2b]` | RASTER `gz+0x1E894` | 16x64 | 16 | 32 | COHERENT | 1024/1024 |
+| `[0x2c]` | RASTER `gz+0x1E894` | 136x18 | 16 | 272 | COHERENT | 2448/2448 |
+| `[0x2d]` | RASTER `gz+0x1E894` | 112x18 | 16 | 224 | COHERENT | 2016/2016 |
+| `[0x2e]` | RASTER `gz+0x1E894` | 104x18 | 16 | 208 | COHERENT | 1872/1872 |
+| `[0x2f]` | RASTER `gz+0x1E894` | 148x18 | 16 | 296 | COHERENT | 2664/2664 |
+
+**All six are `GZGraphicD+0x1E894` rasters. Every pitch is exactly `width * 2` (fix16). Every one
+holds real content.** Six for six, no refusals, no incoherent reads.
+
+⛔ **This retires the 2026-08-31 "three layers of the model are wrong / unknown class" conclusion in
+`verify/resize_hud/RESULTS.md`.** The class was never unknown — it is the raster surface family this
+project mapped long ago and which `rz_census_one` already read. The earlier diagnostic probed
+widget-shaped fields (`+0xe0` rect, `vt+0xcc` set-position) on surface-shaped objects and correctly
+got garbage; the objects were fine, the questions were wrong. `vt+0xcc` resolving to a flag getter
+and `+0xe0` reading garbage are exactly what a raster surface should produce.
+
+**The reflow target is now a named object.** The bar's background is a **fixed 600x56 raster** inside
+a window whose own rect is 599 wide. It cannot span 2048 because its backing surface is 600 px wide.
+Making the HUD adapt means resizing *that surface* — and the mod already owns proven machinery for
+exactly this class: `rz_replay_create` drives `FUN_10009efb` (Init, `vt+0x0c`) on `iso+0x74` and
+`iso+0x4ec`, the same vtable family, every resize.
+
+## I2 — profiler: no data (run ended mid-phase-A)
+
+Phase A started at t+21.13 s. At t+27.52 s the window was restored to 800x600 and the process ended
+— **6.4 s into a 10 s phase**, before the `PROF> A-native` dump. No widen, no phase B, no profile.
+The bar was never widened this run, so nothing about the FPS question can be scored either way.
+
+The instrument itself is uncontradicted: the sampler thread started (tid 38260) and the phase machine
+armed and fired on schedule. It needs a run left undisturbed for ~25 s after the maximize.
+
+## What run 2 settles and what it does not
+
+- **Settles:** FIX C works. The HUD children are coherent fixed-extent rasters of a known class, and
+  the specific surface blocking a full-width bar is child `[0x2a]`, 600x56.
+- **Does not settle:** the FPS cost. Still unmeasured, still the open question from run 1.
+- **Untested:** whether FIX C's non-unlink leaves stale nodes in old buckets (see PRE.md "not
+  claimed"). No visual artefact was reported, but nothing probed for one.
