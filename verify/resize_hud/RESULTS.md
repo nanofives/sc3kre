@@ -83,3 +83,14 @@ bars are correctly placed but do NOT stretch. Not full reflow, but low-risk.
 
 - Viewport COMPLETE and known-good; HUD reflow gated off (mod restored).
 - HUD reflow: both clean approaches falsified/blocked; no clean hook exists. Documented negative.
+
+---
+
+## DEEP APPROACH - DIAGNOSTIC build (2026-08-30)
+
+Committing to the deep reflow; instrument-first. This build is READ-ONLY: the producer wrap captures the
+HUD window `this` (g_hud_top); step 12 logs, after a resize, the HUD own rect, the 6 children
+`this[0x2a..0x2f]` (ptr / vtable / candidate own-rect at child+0xe0..0xec / vt+0xcc set-pos target),
+and the stored native anchors `this[0x50..0x5f]`. **Moves nothing** - the HUD stays intact. Purpose: map
+the real widget structure so attempt 2 repositions the right widgets via vt+0xcc without guessing.
+Expected: `[HUDDIAG]` lines in the log; no visual change; no crash. Then design the in-place reposition.
