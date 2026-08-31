@@ -429,3 +429,47 @@ Run 8 passed its sample-count floor while being unusable. So this run is scored 
 comparison is structurally sound** (comparable interval counts in both phases, outliers not
 dominating), not merely on collecting enough samples. A count threshold cannot detect a biased
 population, and that lesson cost a lease.
+
+---
+
+# RUN 10 PRE-REGISTRATION (2026-08-31) — split "inside the blit" from "after the blit", + identity
+
+Run 9 localized the regression to one object (`0x0F7AFC70`, avg interval x1.95, 97.1% of window,
+throughput -37%) but left two things open: WHAT that object is, and WHETHER the cost is inside the
+Blt or between blits.
+
+## Two additions
+
+**1. Identity.** `rz_blt_dump` now always reports each object's vtable resolved to `MODULE+RVA`
+(plus dims where the class is known). Run 9's dominant object printed nothing precisely because it
+is neither known raster class, which is what left it unidentified.
+
+**2. Exact time inside `IDirectDrawSurface::Blt`,** by patching the COM vtable slot `+0x14`.
+
+Chosen deliberately over prologue-wrapping `FUN_10018c58`: that function runs ~2000x/s on the render
+thread, and entry+exit hooking it means stealing a prologue or patching return addresses — a real
+crash risk for a measurement. A COM slot swap is a plain `__stdcall` C function with the documented
+signature: no code generation, no stolen bytes, no rel32 relocation. It is also MORE precise,
+timing the actual DirectDraw call, which is where a GPU synchronization wait lives.
+
+The surface is reached exactly as the engine reaches it: a raster's sub-object holds
+`IDirectDrawSurface*` at `sub+0x04` `[CONFIRMED @ GZGraphicD 0x10018a82]`. All DD surfaces share one
+vtable, so one slot patch covers every blit. **Expect-or-refuse:** the existing slot target must lie
+inside `ddraw.dll`, else the patch is refused and logged rather than forced.
+
+## Pre-registered outcomes
+
+- **INSIDE:** `INSIDE ddraw Blt` total roughly doubles A -> B and accounts for most of the window in
+  B. The stall is then inside the DirectDraw blit — consistent with the GPU-sync EIP finding, and
+  the two independent instruments would agree.
+- **AFTER:** inside-Blt total stays roughly flat A -> B while the heartbeat interval still doubles.
+  The cost is then NOT in the blit at all but between blits, and every blit-focused hypothesis dies
+  at once. This would be a large, clean result.
+- **VOID:** `NOT HOOKED` (refusal), or fewer than 100 ddraw calls in a phase.
+
+Both instruments run in the same window, so they cannot disagree about conditions — the split is a
+within-run comparison, not a cross-run one.
+
+## Note
+
+The identity line and the split are independent; either can succeed if the other fails.

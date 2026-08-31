@@ -625,6 +625,11 @@ static void rz_stk_dump(const char *tag) {
  * and a frame that ran the whole resize routine would otherwise swamp one bucket. */
 #define BLT_BUCKETS 256
 #define BLT_OUTLIER_MS 50
+/* Declared here (ahead of rz_blt_dump, which reports them); the ddraw Blt hook that fills them is
+   defined below. g_blt_slot == (DWORD*)-1 means "refused, do not retry". */
+static DWORD  *g_blt_slot;
+static __int64 g_ddblt_time;
+static DWORD   g_ddblt_calls;
 static DWORD   g_blt_key[BLT_BUCKETS], g_blt_cnt[BLT_BUCKETS];
 static __int64 g_blt_time[BLT_BUCKETS];
 static __int64 g_blt_last;
@@ -654,6 +659,7 @@ static void rz_blt_sample(DWORD key) {
     g_blt_lastkey = key;
 }
 static void rz_blt_reset(void) {
+    g_ddblt_time = 0; g_ddblt_calls = 0;
     memset(g_blt_key, 0, sizeof(g_blt_key));
     memset((void *)g_blt_cnt, 0, sizeof(g_blt_cnt));
     memset(g_blt_time, 0, sizeof(g_blt_time));
@@ -666,6 +672,17 @@ static void rz_blt_dump(const char *tag) {
     DWORD gz = (DWORD)GetModuleHandleA("GZGraphicD.dll");
     DWORD i, rank;
     static DWORD taken[16];
+    {   /* EXACT time inside IDirectDrawSurface::Blt, measured by the COM slot hook. Compared against
+           the heartbeat intervals below, this splits "the blit itself got slower" from "something
+           between blits got slower" - the question run 9 could not answer. */
+        double dd = g_freq.QuadPart ? (1000.0 * (double)g_ddblt_time / (double)g_freq.QuadPart) : 0.0;
+        if (g_blt_slot && g_blt_slot != (DWORD *)-1)
+            logf("BLT> ---- %s ---- INSIDE ddraw Blt: %lu calls, %.1f ms total, %.4f ms avg "
+                 "(%.1f%% of the 10 s window)", tag, g_ddblt_calls, dd,
+                 g_ddblt_calls ? dd / g_ddblt_calls : 0.0, dd / 100.0);
+        else
+            logf("BLT> ---- %s ---- INSIDE ddraw Blt: NOT HOOKED (no split available)", tag);
+    }
     logf("BLT> ---- %s ---- intervals=%lu outliers(>%dms)=%lu",
          tag, g_blt_total, BLT_OUTLIER_MS, g_blt_outliers);
     for (rank = 0; rank < 12; rank++) {
@@ -682,14 +699,23 @@ static void rz_blt_dump(const char *tag) {
         {
             DWORD o = g_blt_key[best];
             double tot = g_freq.QuadPart ? (1000.0 * (double)g_blt_time[best] / (double)g_freq.QuadPart) : 0.0;
-            char dims[80];
+            char dims[160];
             dims[0] = 0;
-            if (gz && o && !IsBadReadPtr((void *)o, 0x2c)) {
+            /* IDENTITY (run 9 left this UNCERTAIN): always report the object's vtable resolved to
+               MODULE+RVA, and its dims when the class is one we know. Run 9's dominant object
+               printed nothing because it is neither known raster class, which left it unidentified.*/
+            if (o && !IsBadReadPtr((void *)o, 0x2c)) {
                 DWORD *vt = *(DWORD **)o;
-                if (!IsBadReadPtr(vt, 4) &&
-                    ((DWORD)vt == gz + GZ_RVA_VT_RASTER || (DWORD)vt == gz + GZ_RVA_VT_BLITDEST))
-                    _snprintf(dims, sizeof(dims), " raster %lux%lu",
-                              ((DWORD *)o)[0x24 / 4], ((DWORD *)o)[0x28 / 4]);
+                if (!IsBadReadPtr(vt, 4)) {
+                    char who[120];
+                    rz_modstr((DWORD)vt, who, sizeof(who));
+                    if (gz && ((DWORD)vt == gz + GZ_RVA_VT_RASTER ||
+                               (DWORD)vt == gz + GZ_RVA_VT_BLITDEST))
+                        _snprintf(dims, sizeof(dims), " vt=%s raster %lux%lu", who,
+                                  ((DWORD *)o)[0x24 / 4], ((DWORD *)o)[0x28 / 4]);
+                    else
+                        _snprintf(dims, sizeof(dims), " vt=%s", who);
+                }
             }
             logf("BLT> %s #%02lu obj=0x%08lX%s calls=%lu total=%.1f ms avg=%.3f ms (%.1f%% of window)",
                  tag, rank + 1, o, dims, g_blt_cnt[best], tot,
@@ -697,6 +723,72 @@ static void rz_blt_dump(const char *tag) {
                  tot / 100.0);   /* the phase window is 10 s = 10000 ms, so ms/100 is a percent */
         }
     }
+}
+
+/* ---- I3b: EXACT time INSIDE IDirectDrawSurface::Blt (2026-08-31) ------------------------------
+ * Run 9 localized the regression to one object but could only measure the INTERVAL between
+ * heartbeat entries - it cannot say whether the cost is inside the Blt or after it.
+ *
+ * Getting entry+exit on `FUN_10018c58` would mean prologue-wrapping or return-address patching a
+ * function that runs ~2000x/s on the render thread. That is a real crash risk for a measurement.
+ *
+ * Instead, patch the COM vtable slot of IDirectDrawSurface::Blt itself (+0x14; index 5 after
+ * QueryInterface/AddRef/Release/AddAttachedSurface/AddOverlayDirtyRect). This is strictly safer:
+ * a plain __stdcall C function with the documented signature, no code generation, no stolen
+ * prologue, no rel32 relocation. And it is MORE precise - it times the actual DirectDraw call,
+ * which is exactly where a GPU synchronization wait would live.
+ *
+ * The surface pointer is reached the same way the engine reaches it: a raster's sub-object holds
+ * IDirectDrawSurface* at sub+0x04 (FUN_10018a82 calls `(*(int**)param_1[1] + 100)` = surface
+ * vt+0x64 = Lock) [CONFIRMED @ GZGraphicD 0x10018a82]. All DD surfaces share one vtable, so a
+ * single slot patch covers every blit.
+ *
+ * EXPECT-OR-REFUSE: the current slot target must lie inside ddraw.dll. If it does not, we are not
+ * looking at the vtable we think and the patch is refused rather than forced. */
+typedef HRESULT (WINAPI *RZ_BLT)(void *, RECT *, void *, RECT *, DWORD, void *);
+static RZ_BLT  g_orig_blt;   /* g_blt_slot / g_ddblt_* are declared up with the BLT block above */
+
+static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, void *fx) {
+    LARGE_INTEGER a, b;
+    HRESULT hr;
+    QueryPerformanceCounter(&a);
+    hr = g_orig_blt(self, dr, src, sr, fl, fx);
+    QueryPerformanceCounter(&b);
+    g_ddblt_time += b.QuadPart - a.QuadPart;
+    g_ddblt_calls++;
+    return hr;
+}
+static void rz_patch_ddblt(void) {
+    DWORD ddbase = (DWORD)GetModuleHandleA("ddraw.dll"), ddsize = 0, e;
+    void *iso, *R; DWORD sub, surf, *svt, old;
+    if (g_blt_slot) return;                                  /* already installed */
+    if (!ddbase || !g_bridge || IsBadReadPtr(g_bridge, 0x1c)) return;
+    e = *(DWORD *)(ddbase + 0x3c);
+    if (IsBadReadPtr((void *)(ddbase + e + 0x50), 4)) return;
+    ddsize = *(DWORD *)(ddbase + e + 0x50);
+    iso = (void *)((DWORD *)g_bridge)[0x18 / 4];
+    if (!iso || IsBadReadPtr(iso, 0x78)) return;
+    R = (void *)((DWORD *)iso)[0x74 / 4];
+    if (!R || IsBadReadPtr(R, 0x48)) return;
+    sub = ((DWORD *)R)[0x44 / 4];
+    if (!sub || IsBadReadPtr((void *)sub, 8)) return;
+    surf = ((DWORD *)sub)[0x04 / 4];                         /* IDirectDrawSurface* */
+    if (!surf || IsBadReadPtr((void *)surf, 4)) return;
+    svt = *(DWORD **)surf;
+    if (!svt || IsBadReadPtr(svt, 0x18)) return;
+    if (svt[0x14 / 4] < ddbase || svt[0x14 / 4] >= ddbase + ddsize) {
+        logf("BLT> REFUSE ddraw hook: vt+0x14 = 0x%08lX is outside ddraw.dll "
+             "(0x%08lX..0x%08lX) - not the vtable we think", svt[0x14 / 4], ddbase, ddbase + ddsize);
+        g_blt_slot = (DWORD *)-1;                            /* do not retry every frame */
+        return;
+    }
+    if (!VirtualProtect(&svt[0x14 / 4], 4, PAGE_READWRITE, &old)) return;
+    g_orig_blt = (RZ_BLT)svt[0x14 / 4];
+    svt[0x14 / 4] = (DWORD)rz_blt_hook;
+    VirtualProtect(&svt[0x14 / 4], 4, old, &old);
+    g_blt_slot = &svt[0x14 / 4];
+    logf("BLT> ddraw Blt hooked: vt+0x14 slot at 0x%08lX, original 0x%08lX (ddraw+0x%lX)",
+         (DWORD)g_blt_slot, (DWORD)g_orig_blt, (DWORD)g_orig_blt - ddbase);
 }
 
 static void rz_prof_hit(DWORD eip) {
@@ -810,6 +902,8 @@ static void rz_hud_fit_surface(DWORD liveW);/* fwd: the bar background surface w
 static void rz_hudlab_tick(void) {
     if (!g_hudphase || GetTickCount() < g_phase_ms) return;
     if (g_hudphase == 1) {                       /* settled -> start profiling the NATIVE bar */
+        rz_patch_ddblt();   /* install the ddraw Blt timer before the first measurement window */
+
         logf("HUDLAB> phase A START (bar NATIVE width) - profiling 10 s");
         rz_prof_reset(); rz_blt_reset();
         InterlockedExchange(&g_prof_on, 1);
@@ -2219,4 +2313,5 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
 
