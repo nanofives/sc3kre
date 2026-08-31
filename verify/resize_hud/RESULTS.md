@@ -132,3 +132,21 @@ only; nothing repositioned; the harmful rebuild stays disabled).
 - Viewport (D-004 + render + zoom + stability): COMPLETE, owner-confirmed, shipped.
 - HUD reflow: NOT achieved. Both clean approaches falsified; runtime object class/offsets differ from
   the static analysis (documented). Requires a dedicated re-RE of the live objects.
+
+---
+
+## ATTEMPT 2 - reposition the HUD WINDOW via its own SetRect (2026-08-31)
+
+New angle from the geometry cluster: the HUD window rect is at `this+0x14..0x20`, GetRect = `vt+0xc0`
+(`FUN_1006dcb7`), and **`vt+0xc8` = SetRect(x1,y1,x2,y2)** - the wrappers `FUN_1006dc1e/dc45/dc6c/dd0d`
+all delegate to it with 4 rect coords. So instead of touching the mismatched child objects, move+widen
+the WINDOW itself via its own framework method (no destruct, no child-class assumptions).
+
+Step 12 now (after the read-only diag): if `g_hud_top` is wider-able, call its `vt+0xc8` (live-vtable
+dispatch) with `[0, liveH-barH, liveW, liveH]` - dock the bottom toolbar to the bottom and span both
+side edges, keeping its height. Before/after rect logged; VEH-guarded. Only the bottom bar (g_hud_top)
+for now.
+
+Expected PASS: log `HUD SetRect ... rect now [0,liveH-barH,liveW,liveH]` AND the bottom bar spans the
+width without vanishing. If SetRect misbehaves (bar clips/blanks/moves wrong) the before/after rect +
+VEH localize it. This is safer than the destruct+rebuild (framework method, no teardown).
