@@ -378,6 +378,203 @@ static void rz_census(void) {
     rz_census_one(((DWORD *)iso)[0x74 / 4],  "render-target iso+0x74");
     rz_census_one(((DWORD *)iso)[0x4ec / 4], "blit-dest   iso+0x4ec");
 }
+/* ==================================================================================================
+ * HUD LAB (2026-08-31, verify/resize_hudlab/PRE.md) - two READ-ONLY instruments behind
+ * SC3RESIZE_HUDLAB=1. Unset, none of this arms and the mod is the shipped viewport build.
+ *
+ * WHY: the HUD workstream closed on two UNMEASURED claims. (1) "the full-width bar's FPS cost is
+ * intrinsic to per-frame compositing" was reached by ELIMINATION (three hypotheses falsified) - frame
+ * time was never profiled. (2) the 6 children g_hud_top[0x2a..0x2f] were written up as an unknown
+ * class, but their vtable GZGraphicD+0x1E894 is the RASTER SURFACE base class this project already
+ * mapped (LAUNCH_CONTROL.md:4048, RESIZE_DELIVERY_COST.md:47) and which rz_census_one above already
+ * reads. Both instruments exist to replace inference with measurement.
+ * ================================================================================================== */
+static void  rz_modstr(DWORD addr, char *out, int n);   /* fwd: defined below, resolves EIP->MODULE+RVA */
+static int   g_hudlab;                 /* SC3RESIZE_HUDLAB: arm the HUD lab */
+static void *g_hud_top;                /* the HUD bottom-bar window `this`, captured in the FUN_100270e5
+                                          wrap. Declared here (not down with the other window globals)
+                                          because rz_hud_surfaces below reads it. The 2026-08-31
+                                          diagnostic proved this is the BOTTOM toolbar, not the top
+                                          strip - ownrect [0,544,599,600]. */
+
+/* ---- I1: HUD child surface census -------------------------------------------------------------
+ * Read one child as a +0x1E894-family raster: dims +0x24/+0x28, bpp +0x10, sub +0x44, and the
+ * backing RAW at sub+0xf0 / sub+0xf4. STANDING RULE, learned the hard way (BOARD.md): read
+ * sub+0xf0/f4 RAW and NEVER call vf1c out of band - the out-of-band lock tears the backing down and
+ * the instrument destroys what it measures. Reports whether pitch is coherent with width*2 (fix16),
+ * which is the check that decides "coherent raster" vs "we are misreading the object". */
+static void rz_hud_surface(DWORD c, const char *tag, int idx) {
+    DWORD gz = (DWORD)GetModuleHandleA("GZGraphicD.dll");
+    DWORD *cv, sub, bits, pitch, w, h, bpp;
+    const char *fam;
+    if (!c || IsBadReadPtr((void *)c, 0x48)) {
+        logf("HUDSURF> %s child[0x%x]=0x%08lX unreadable", tag, idx, c); return;
+    }
+    cv = *(DWORD **)c;
+    fam = (gz && (DWORD)cv == gz + 0x1E894) ? "RASTER gz+0x1E894"
+        : (gz && (DWORD)cv == gz + 0x1F328) ? "BLITDEST gz+0x1F328"
+        : "UNKNOWN-CLASS";
+    w = ((DWORD *)c)[0x24 / 4]; h = ((DWORD *)c)[0x28 / 4]; bpp = ((DWORD *)c)[0x10 / 4];
+    sub = ((DWORD *)c)[0x44 / 4];
+    if (!sub || IsBadReadPtr((void *)sub, 0xf8)) {
+        logf("HUDSURF> %s child[0x%x]=0x%08lX vt=0x%08lX %s dims=%lux%lu bpp=%lu sub=0x%08lX UNREADABLE",
+             tag, idx, c, (DWORD)cv, fam, w, h, bpp, sub);
+        return;
+    }
+    bits = ((DWORD *)sub)[0xf0 / 4]; pitch = ((DWORD *)sub)[0xf4 / 4];
+    {
+        long nz = 0, total = 0;
+        int coherent = (pitch != 0 && w != 0 && pitch >= w * 2 && pitch <= w * 2 + 64);
+        if (bits && pitch && w && h && !IsBadReadPtr((void *)bits, pitch * h)) {
+            DWORD r, cc;
+            for (r = 0; r < h; r++) {
+                BYTE *row = (BYTE *)bits + r * pitch;
+                for (cc = 0; cc < w; cc++) { total++; if (*(WORD *)(row + cc * 2)) nz++; }
+            }
+        }
+        logf("HUDSURF> %s child[0x%x]=0x%08lX vt=0x%08lX %s | dims=%lux%lu bpp=%lu | sub=0x%08lX "
+             "bits=0x%08lX pitch=%lu (%s vs w*2=%lu) | non-zero %ld/%ld",
+             tag, idx, c, (DWORD)cv, fam, w, h, bpp, sub, bits, pitch,
+             coherent ? "COHERENT" : "INCOHERENT", w * 2, nz, total);
+    }
+}
+/* Census all 6 children plus the HUD window's own rect. Called before AND after the SetRect widen -
+ * the comparison is the point: do the child surface EXTENTS track the window, or are they fixed at
+ * construction? Fixed extents identify exactly what a real reflow would have to resize. */
+static void rz_hud_surfaces(const char *tag) {
+    DWORD *h = (DWORD *)g_hud_top;
+    int i;
+    if (!h || IsBadReadPtr(h, 0xc0)) { logf("HUDSURF> %s: g_hud_top unreadable", tag); return; }
+    logf("HUDSURF> ---- %s ---- hud=0x%08lX vt=0x%08lX ownrect=[%ld %ld %ld %ld]",
+         tag, (DWORD)h, h[0], (LONG)h[0x14/4], (LONG)h[0x18/4], (LONG)h[0x1c/4], (LONG)h[0x20/4]);
+    for (i = 0x2a; i <= 0x2f; i++) rz_hud_surface(h[i], tag, i);
+}
+
+/* ---- I2: EIP sampling profiler ----------------------------------------------------------------
+ * Suspend the game render thread, read Eip, resume, bucket by eip>>6 (64-byte granularity) in an
+ * open-addressed table. NOTHING is logged or allocated while the thread is suspended, and the resume
+ * is unconditional in the same iteration. The render thread id is captured in the heartbeat hook,
+ * which already runs on it. Buckets resolve to MODULE+0xRVA at dump time via rz_modstr. */
+#define PROF_BUCKETS 8192
+static DWORD          g_prof_key[PROF_BUCKETS];   /* (eip>>6)+1, 0 = empty slot */
+static DWORD          g_prof_cnt[PROF_BUCKETS];
+static volatile LONG  g_prof_on;
+static DWORD          g_game_tid;                 /* the render thread, from the heartbeat hook */
+static DWORD          g_prof_n, g_prof_fail;
+
+static void rz_prof_hit(DWORD eip) {
+    DWORD k = (eip >> 6) + 1;
+    DWORD i = (k * 2654435761u) >> 19 & (PROF_BUCKETS - 1);
+    DWORD tries = 0;
+    while (tries++ < 64) {
+        if (g_prof_key[i] == k) { g_prof_cnt[i]++; g_prof_n++; return; }
+        if (g_prof_key[i] == 0) { g_prof_key[i] = k; g_prof_cnt[i] = 1; g_prof_n++; return; }
+        i = (i + 1) & (PROF_BUCKETS - 1);
+    }
+    g_prof_fail++;
+}
+static void rz_prof_reset(void) {
+    memset((void *)g_prof_key, 0, sizeof(g_prof_key));
+    memset((void *)g_prof_cnt, 0, sizeof(g_prof_cnt));
+    g_prof_n = 0; g_prof_fail = 0;
+}
+/* Dump the top 30 buckets, each resolved to MODULE+RVA. Selection-scan rather than a sort: 30 passes
+ * over 8192 slots is trivial and needs no scratch allocation. */
+static void rz_prof_dump(const char *tag) {
+    DWORD used = 0, i, rank;
+    static DWORD taken[32];
+    for (i = 0; i < PROF_BUCKETS; i++) if (g_prof_key[i]) used++;
+    logf("PROF> ---- %s ---- samples=%lu distinct-buckets=%lu probe-fail=%lu tid=%lu",
+         tag, g_prof_n, used, g_prof_fail, g_game_tid);
+    if (g_prof_n < 200)
+        logf("PROF> %s: FEWER THAN 200 SAMPLES - pre-registered VOID, do not interpret", tag);
+    for (rank = 0; rank < 30; rank++) {
+        DWORD best = 0xFFFFFFFF, bestc = 0, j;
+        for (i = 0; i < PROF_BUCKETS; i++) {
+            int already = 0;
+            if (!g_prof_key[i]) continue;
+            for (j = 0; j < rank; j++) if (taken[j] == i) { already = 1; break; }
+            if (already) continue;
+            if (g_prof_cnt[i] > bestc) { bestc = g_prof_cnt[i]; best = i; }
+        }
+        if (best == 0xFFFFFFFF) break;
+        taken[rank] = best;
+        {
+            char who[160];
+            DWORD eip = (g_prof_key[best] - 1) << 6;
+            rz_modstr(eip, who, sizeof(who));
+            logf("PROF> %s #%02lu %6lu (%5.2f%%) %s", tag, rank + 1, bestc,
+                 g_prof_n ? 100.0 * bestc / g_prof_n : 0.0, who);
+        }
+    }
+}
+static DWORD WINAPI rz_prof_thread(LPVOID p) {
+    HANDLE th = NULL;
+    DWORD tid = 0;
+    (void)p;
+    /* 1 ms timer resolution, resolved dynamically so the build needs no winmm.lib */
+    {   HMODULE wm = LoadLibraryA("winmm.dll");
+        if (wm) { UINT (WINAPI *tbp)(UINT) = (UINT (WINAPI *)(UINT))GetProcAddress(wm, "timeBeginPeriod");
+                  if (tbp) tbp(1); } }
+    for (;;) {
+        if (!g_prof_on || !g_game_tid) { Sleep(5); continue; }
+        if (tid != g_game_tid) {
+            if (th) CloseHandle(th);
+            tid = g_game_tid;
+            th = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT, FALSE, tid);
+            if (!th) { g_prof_fail++; Sleep(50); continue; }
+        }
+        {
+            CONTEXT ctx;
+            DWORD eip = 0;
+            ctx.ContextFlags = CONTEXT_CONTROL;
+            if (SuspendThread(th) != (DWORD)-1) {
+                if (GetThreadContext(th, &ctx)) eip = ctx.Eip;
+                ResumeThread(th);                    /* unconditional, same iteration */
+            }
+            if (eip) rz_prof_hit(eip); else g_prof_fail++;   /* bucketed AFTER the resume */
+        }
+        Sleep(1);
+    }
+}
+
+/* ---- the A/B phase machine ---------------------------------------------------------------------
+ * Ticks in the per-frame poll (game thread) so the SetRect stays on the thread that already ran it
+ * safely. Step 12 only ARMS it. Phase A profiles the bar at its native width; phase B profiles it
+ * docked full-width. Same process, city, window size and zoom - the fixture is its own control. */
+static int   g_hudphase;               /* 0 idle, 1 settle, 2 profiling A, 3 profiling B, 4 done */
+static DWORD g_phase_ms;
+static void rz_hud_setrect(void);      /* fwd: the widen, defined with step 12 */
+
+static void rz_hudlab_tick(void) {
+    if (!g_hudphase || GetTickCount() < g_phase_ms) return;
+    if (g_hudphase == 1) {                       /* settled -> start profiling the NATIVE bar */
+        logf("HUDLAB> phase A START (bar NATIVE width) - profiling 10 s");
+        rz_prof_reset();
+        InterlockedExchange(&g_prof_on, 1);
+        g_hudphase = 2; g_phase_ms = GetTickCount() + 10000;
+        return;
+    }
+    if (g_hudphase == 2) {                       /* end A, widen, start B */
+        InterlockedExchange(&g_prof_on, 0);
+        rz_prof_dump("A-native");
+        logf("HUDLAB> applying the SetRect widen, then phase B");
+        rz_hud_setrect();
+        rz_hud_surfaces("AFTER-setrect");
+        rz_prof_reset();
+        InterlockedExchange(&g_prof_on, 1);
+        logf("HUDLAB> phase B START (bar FULL-WIDTH) - profiling 10 s");
+        g_hudphase = 3; g_phase_ms = GetTickCount() + 10000;
+        return;
+    }
+    if (g_hudphase == 3) {
+        InterlockedExchange(&g_prof_on, 0);
+        rz_prof_dump("B-fullwidth");
+        logf("HUDLAB> ---- DONE. Diff B against A; score against verify/resize_hudlab/PRE.md ----");
+        g_hudphase = 4;
+    }
+}
+
 static int   g_zoomed;                 /* min-zoom applied once */
 static DWORD g_exc_code, g_exc_addr;   /* captured by the SEH filter */
 static DWORD g_exc_eax, g_exc_ecx, g_exc_edx, g_exc_ebx, g_exc_esi, g_exc_edi;  /* fault-time regs */
@@ -488,7 +685,7 @@ static volatile LONG g_busy;           /* re-entrancy guard for the per-frame po
 static int   g_wm_fixed;               /* the window has been subclassed */
 static WNDPROC g_oldproc;
 static HWND  g_hwnd;
-static void *g_hud_top;                /* the top-strip HUD window `this`, captured in the FUN_100270e5 wrap */
+/* g_hud_top is declared up with the HUD lab block (it is read by rz_hud_surfaces). */
 
 /* Indirect __thiscall with n stack args. ESP is saved and restored around the call, so a wrong
  * argument count shows up as a bad return value rather than as a crash three frames later.
@@ -794,19 +991,9 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
              ea[0] ? (LONG)((ea[1] - ea[0]) / 16) : 0L, w, ht);
         rz_thiscall((void *)list, (void *)((DWORD)ss + RVA_LIST_ERASE), ea, 2);
         rect[0] = 0; rect[1] = 0; rect[2] = (LONG)w; rect[3] = (LONG)ht;
-        /* FPS FIX HYPOTHESIS (2026-08-31): if the bottom HUD bar is docked (step 12), stop the iso
-           present rect ABOVE it (ht - barH) so the animated iso does NOT blit under the bar each frame.
-           The bar-over-iso overlap is the suspected per-frame redraw cost (native res is fine; our
-           full-height iso created the overlap). barH from the captured HUD window's height. Self-gated:
-           no g_hud_top -> barH 0 -> unchanged. If this leaves a black strip or does not fix FPS, revert. */
-        if (g_hud_top && !IsBadReadPtr(g_hud_top, 0x24)) {
-            LONG by1 = ((LONG *)g_hud_top)[0x18/4], by2 = ((LONG *)g_hud_top)[0x20/4];
-            LONG barH = by2 - by1;
-            if (barH > 0 && barH < (LONG)ht / 2) {
-                rect[3] = (LONG)ht - barH;
-                logf("RZ   [step 9] iso present stops above bar: ht %lu -> %ld (barH %ld)", ht, rect[3], barH);
-            }
-        }
+        /* (2026-08-31) The "stop the iso present above the bar" FPS hypothesis was FALSIFIED by hand-test
+           (iso->1025, bar at 1025-1081, no overlap, FPS still dropped). Reverted to full-height present;
+           the bar's per-frame cost is its own redraw, not the iso overlap. See verify/resize_hud. */
         pa[0] = (DWORD)&rect[0];
         rz_thiscall((void *)list, (void *)((DWORD)ss + RVA_LIST_PUSH), pa, 1);
         logf("RZ   [step 9] after: begin=0x%08lX end=0x%08lX (%ld rect(s))",
@@ -904,70 +1091,75 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
        producer, which reflows the anchors for the live width. Both __fastcall(this). g_hud_top was
        captured by the producer wrap at construction. SIMUI. Only the top strip in this proof; the
        height-keyed side/panel tables (FUN_1004c3e9/FUN_1004cdcd) are a later increment. */
-    /* 12 (DIAGNOSTIC, read-only): map the captured HUD window's widget structure so attempt 2 can
-       reposition correctly. Logs: the HUD own rect (this+0x14..0x20), the 6 children this[0x2a..0x2f]
-       (ptr, vtable, a candidate own-rect at child+0xe0..0xec, and the vt+0xcc set-position target),
-       and the stored native anchors this[0x50..0x5f] (A/B/D/C). Moves NOTHING. */
-    if (g_hud_top && !IsBadReadPtr(g_hud_top, 0x1b0)) {
-        DWORD *h = (DWORD *)g_hud_top;
-        int ci;
-        g_rz_step = 12;
-        logf("RZ   [HUDDIAG] hud=0x%08lX vt=0x%08lX ownrect this+0x14..0x20=[%ld %ld %ld %ld]",
-             (DWORD)h, h[0], (LONG)h[0x14/4], (LONG)h[0x18/4], (LONG)h[0x1c/4], (LONG)h[0x20/4]);
-        for (ci = 0x2a; ci <= 0x2f; ci++) {
-            DWORD c = h[ci];
-            if (!c || IsBadReadPtr((void *)c, 0xf0)) { logf("RZ   [HUDDIAG] child this[0x%x]=0x%08lX (null/unreadable)", ci, c); continue; }
-            {
-                DWORD *cv = *(DWORD **)c;
-                DWORD setpos = (cv && !IsBadReadPtr(cv, 0xd0)) ? cv[0xcc/4] : 0;
-                logf("RZ   [HUDDIAG] child this[0x%x]=0x%08lX vt=0x%08lX rect@+0xe0=[%ld %ld %ld %ld] vt+0xcc=0x%08lX",
-                     ci, c, (DWORD)cv,
-                     (LONG)((DWORD *)c)[0xe0/4], (LONG)((DWORD *)c)[0xe4/4],
-                     (LONG)((DWORD *)c)[0xe8/4], (LONG)((DWORD *)c)[0xec/4], setpos);
-            }
-        }
-        logf("RZ   [HUDDIAG] anchors A this+0x50=[%ld %ld %ld %ld] B+0x54=[%ld %ld %ld %ld] "
-             "D+0x58=[%ld %ld %ld %ld] C+0x5c=[%ld %ld %ld %ld]",
-             (LONG)h[0x50/4],(LONG)h[0x51/4],(LONG)h[0x52/4],(LONG)h[0x53/4],
-             (LONG)h[0x54/4],(LONG)h[0x55/4],(LONG)h[0x56/4],(LONG)h[0x57/4],
-             (LONG)h[0x58/4],(LONG)h[0x59/4],(LONG)h[0x5a/4],(LONG)h[0x5b/4],
-             (LONG)h[0x5c/4],(LONG)h[0x5d/4],(LONG)h[0x5e/4],(LONG)h[0x5f/4]);
+    /* 12. HUD LAB (2026-08-31, verify/resize_hudlab/PRE.md). Only with SC3RESIZE_HUDLAB=1; otherwise
+       the HUD is left NATIVE and this whole step is skipped (the shipped viewport build).
 
-        /* ATTEMPT 2 (deep reflow): move+widen the HUD WINDOW itself via its real SetRect (vt+0xc8,
-           4 int coords; window rect at this+0x14..0x20, GetRect=vt+0xc0). This is the framework's own
-           window-geometry method - no destruct, no child-class assumptions. Dispatched through the LIVE
-           vtable (correct regardless of static base). For the bottom toolbar [0,544,599,600], span it
-           to [0, liveH-barH, liveW, liveH] so the bar docks to the bottom and reaches both side edges.
-           Only widens (liveW > current x2). VEH-guarded; before/after rect logged. */
-        {
-            RECT cr;
-            LONG x1 = (LONG)h[0x14/4], y1 = (LONG)h[0x18/4], x2 = (LONG)h[0x1c/4], y2 = (LONG)h[0x20/4];
-            int barH = (int)(y2 - y1);
-            DWORD *hvt = *(DWORD **)h;
-            if (g_hwnd && GetClientRect(g_hwnd, &cr) && hvt && !IsBadReadPtr(hvt, 0xcc)) {
-                int lw = (int)(cr.right - cr.left), lh = (int)(cr.bottom - cr.top);
-                void *setrect = (void *)hvt[0xc8/4];
-                /* Dock the bottom bar to the CURRENT client size (tracks bigger AND smaller, so moving
-                   to a lower-res monitor re-fits instead of leaving it off-screen). Re-apply only when
-                   the rect actually differs from the desired docked rect. barH is the bar's own height,
-                   preserved. */
-                int wantY1 = lh - barH, wantX2 = lw, wantY2 = lh;
-                if (setrect && barH > 0 && barH < lh &&
-                    (x1 != 0 || y1 != wantY1 || x2 != wantX2 || y2 != wantY2)) {
-                    DWORD a[4];
-                    a[0] = 0; a[1] = (DWORD)wantY1; a[2] = (DWORD)wantX2; a[3] = (DWORD)wantY2;
-                    logf("RZ   [step 12] HUD SetRect vt+0xc8=0x%08lX  [%ld,%ld,%ld,%ld] -> [0,%d,%d,%d]",
-                         (DWORD)setrect, x1, y1, x2, y2, wantY1, wantX2, wantY2);
-                    rz_thiscall(g_hud_top, setrect, a, 4);
-                    logf("RZ   [step 12] HUD SetRect returned; rect now [%ld,%ld,%ld,%ld]",
-                         (LONG)h[0x14/4], (LONG)h[0x18/4], (LONG)h[0x1c/4], (LONG)h[0x20/4]);
-                }
-            }
-        }
+       This step does NOT widen the bar inline. It censuses the child surfaces at their native extent
+       and ARMS the A/B phase machine, which ticks in the per-frame poll: phase A profiles the bar at
+       native width, then the widen is applied and phase B profiles it full-width. Same process, city,
+       window size and zoom across both phases - the run supplies its own control, which is what makes
+       the FPS delta attributable to bar width and nothing else. */
+    if (g_hudlab && g_hud_top && !IsBadReadPtr(g_hud_top, 0xc0)) {
+        g_rz_step = 12;
+        rz_hud_surfaces("BEFORE-setrect");
+        g_hudphase = 1;
+        g_phase_ms = GetTickCount() + 3000;      /* let the resize settle before profiling */
+        logf("HUDLAB> armed - phase A (native bar) begins in 3 s, then widen, then phase B");
     }
 
-    logf("RZ   ---- done (all 12 steps) ----");
+    logf("RZ   ---- done (viewport: steps 1-11%s) ----",
+         g_hudlab ? "; step 12 HUD LAB armed" : "; step 12 HUD reflow not shipped, native");
     if (g_census) g_census_ms = GetTickCount() + 2000;   /* census once, after frames have run */
+}
+
+/* The HUD widen (ATTEMPT 3, proven safe 2026-08-31: docked + spanned, no crash, no VEH fault).
+ *
+ * Move+widen the HUD WINDOW itself via its real SetRect (vt+0xc8, 4 int coords; window rect at
+ * this+0x14..0x20, GetRect = vt+0xc0). The framework's own window-geometry method - no destruct, no
+ * child-class assumptions. The runtime slot is SIMUI FUN_10026776, which sets the rect and repositions
+ * 5 internal parts by POSITION only, not size [CONFIRMED @ SIMUI 0x10026776]. Dispatched through the
+ * LIVE vtable, so it is correct regardless of the static base.
+ *
+ * Docks to the CURRENT client size (tracks bigger AND smaller, so a lower-res monitor re-fits instead
+ * of leaving the bar off-screen). barH is the bar's own height, preserved.
+ *
+ * Called by the phase machine at the A->B boundary, on the game thread - the same thread that ran it
+ * safely before. */
+static void rz_hud_setrect(void) {
+    DWORD *h = (DWORD *)g_hud_top;
+    RECT cr;
+    LONG x1, y1, x2, y2;
+    int barH;
+    DWORD *hvt;
+    if (!h || IsBadReadPtr(h, 0xc0)) { logf("HUDLAB> SetRect skipped: g_hud_top unreadable"); return; }
+    x1 = (LONG)h[0x14/4]; y1 = (LONG)h[0x18/4]; x2 = (LONG)h[0x1c/4]; y2 = (LONG)h[0x20/4];
+    barH = (int)(y2 - y1);
+    hvt = *(DWORD **)h;
+    if (!g_hwnd || !GetClientRect(g_hwnd, &cr) || !hvt || IsBadReadPtr(hvt, 0xcc)) {
+        logf("HUDLAB> SetRect skipped: no window or vtable unreadable"); return;
+    }
+    {
+        int lw = (int)(cr.right - cr.left), lh = (int)(cr.bottom - cr.top);
+        void *setrect = (void *)hvt[0xc8/4];
+        int wantY1 = lh - barH, wantX2 = lw, wantY2 = lh;
+        if (!setrect || barH <= 0 || barH >= lh) {
+            logf("HUDLAB> SetRect skipped: setrect=0x%08lX barH=%d lh=%d", (DWORD)setrect, barH, lh);
+            return;
+        }
+        if (x1 == 0 && y1 == wantY1 && x2 == wantX2 && y2 == wantY2) {
+            logf("HUDLAB> SetRect skipped: bar already docked at [0,%d,%d,%d]", wantY1, wantX2, wantY2);
+            return;
+        }
+        {
+            DWORD a[4];
+            a[0] = 0; a[1] = (DWORD)wantY1; a[2] = (DWORD)wantX2; a[3] = (DWORD)wantY2;
+            logf("HUDLAB> HUD SetRect vt+0xc8=0x%08lX  [%ld,%ld,%ld,%ld] -> [0,%d,%d,%d]",
+                 (DWORD)setrect, x1, y1, x2, y2, wantY1, wantX2, wantY2);
+            rz_thiscall(g_hud_top, setrect, a, 4);
+            logf("HUDLAB> HUD SetRect returned; rect now [%ld,%ld,%ld,%ld]",
+                 (LONG)h[0x14/4], (LONG)h[0x18/4], (LONG)h[0x1c/4], (LONG)h[0x20/4]);
+        }
+    }
 }
 
 /* The per-frame poll. Compares the live client size against the render target's size and only
@@ -1157,9 +1349,16 @@ static void __stdcall fnlog_enter(int idx, DWORD *f) {
         return;
     }
     if (idx == 1) {
+        /* This hook IS the render thread, so it is where the profiler learns which thread to sample.
+           Cheap and idempotent; no call when it has not changed. */
+        if (g_hudlab) {
+            DWORD me = GetCurrentThreadId();
+            if (g_game_tid != me) g_game_tid = me;
+        }
         if (!g_wm_fixed) rz_subclass();
         rz_poll();
         if (g_census_ms && GetTickCount() >= g_census_ms) { g_census_ms = 0; rz_census(); }
+        if (g_hudlab) rz_hudlab_tick();
         return;
     }
     if (idx == 2) {
@@ -1478,16 +1677,33 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
          "per-frame poll at GZGraphicD+0x%X (create recorder DROPPED after v2 crash)",
          RVA_BRIDGE_INIT, GZ_RVA_HEARTBEAT);
 
-    /* HUD reflow capture: wrap the producer FUN_100270e5 so it captures the HUD window `this` and (with
-       step 12/step 9) docks + spans the bottom bar. SIMUI loads LATER than SIMSPR/GZGraphicD, and the
-       wrap MUST be installed before the HUD constructs (the producer runs at construction; we do not
-       drive a rebuild). A one-shot check missed it when SIMUI was not loaded yet (2026-08-31, "capture
-       NOT armed"). So WAIT for SIMUI here (up to ~30 s) and install as soon as it appears - still well
-       before the city/HUD build. */
+    /* HUD: NATIVE by default (the shipped viewport build). The bottom bar can be docked + spanned
+       full-width via its own SetRect (attempt 3), but full-width carries a per-frame cost that scales
+       with width, and true per-widget reflow hit engine class/offset mismatches. Full history:
+       verify/resize_hud/RESULTS.md.
+
+       WITH SC3RESIZE_HUDLAB=1 the lab arms instead (verify/resize_hudlab/PRE.md): install the producer
+       wrap to capture g_hud_top, start the EIP sampler thread, and let step 12 run the A/B phases. The
+       two claims that closed this workstream - "intrinsic per-frame composite cost" and "the children
+       are an unknown class" - were both reached by inference, and this measures them.
+
+       The wrap MUST be installed before the HUD constructs (the producer runs at construction; we do
+       NOT drive a rebuild - that approach is falsified and stays disabled). SIMUI loads LATER than
+       SIMSPR/GZGraphicD, so a one-shot check missed it (2026-08-31, "capture NOT armed"). WAIT for
+       SIMUI here (up to ~30 s) - still well before the city/HUD build. */
+    if (!g_hudlab) {
+        logf("### RESIZE: HUD stays native (HUD lab not armed - set SC3RESIZE_HUDLAB=1 to measure)");
+        (void)patch_hud_reflow;   /* referenced to avoid an unused-function warning; not installed */
+        return 0;
+    }
     { int st = 0; HMODULE sui = NULL;
       while (st++ < 300 && !(sui = GetModuleHandleA("SIMUI.DLL"))) Sleep(100);
       if (sui) patch_hud_reflow(sui);
-      else logf("--- HUD: SIMUI.DLL never loaded after %d tries - capture NOT armed", st); }
+      else logf("--- HUDLAB: SIMUI.DLL never loaded after %d tries - capture NOT armed", st); }
+    {   DWORD tid;
+        HANDLE ph = CreateThread(NULL, 0, rz_prof_thread, NULL, 0, &tid);
+        if (ph) { CloseHandle(ph); logf("### HUDLAB: EIP sampler thread started (tid %lu)", tid); }
+        else     logf("### HUDLAB: FAILED to start the sampler thread (%lu)", GetLastError()); }
     return 0;
 }
 
@@ -1504,9 +1720,11 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           g_minzoom = GetEnvironmentVariableA("SC3RESIZE_MINZOOM", v, sizeof(v)) && atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_READYMS", v, sizeof(v)) && atoi(v) >= 0)
               g_ready_ms = (DWORD)atoi(v);
-          g_census = GetEnvironmentVariableA("SC3RESIZE_CENSUS", v, sizeof(v)) && atoi(v); }
+          g_census = GetEnvironmentVariableA("SC3RESIZE_CENSUS", v, sizeof(v)) && atoi(v);
+          g_hudlab = GetEnvironmentVariableA("SC3RESIZE_HUDLAB", v, sizeof(v)) && atoi(v); }
         logf("### sc3resize loaded - resizable-window mod (minimal Init-free routine, "
-             "validated 2026-08-27 over 6 runs)%s", g_minzoom ? " [MINZOOM crash-hunt build]" : "");
+             "validated 2026-08-27 over 6 runs)%s%s", g_minzoom ? " [MINZOOM crash-hunt build]" : "",
+             g_hudlab ? " [HUD LAB armed: surface census + EIP profiler, verify/resize_hudlab]" : "");
         if (AddVectoredExceptionHandler(1, rz_veh))
             logf("### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the "
                  "zoom-after-resize crash the game swallows)");
