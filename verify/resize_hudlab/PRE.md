@@ -1075,3 +1075,52 @@ This is run 25 of a session that has already delivered its main results. The min
 **nice-to-have**, and three approaches to it have now failed (shape-filtered candidates, class
 enumeration, tree walk). If the dest rects do not settle it, that is the signal to stop rather than
 try a fourth.
+
+---
+
+# RUN 26 PRE-REGISTRATION — capture the minimap's caller (geometry-locked)
+
+Run 25 identified the minimap by **geometry**: a per-frame blit to a 160x164 dest at
+`[640 436 800 600]`. Its surface pointer changes every run, so the filter locks on the **shape**, not
+the pointer.
+
+## The filter, and why it is unambiguous
+
+Record callers for blits whose dest is **100-400 px and square-ish**. From run 25's own measured
+table, only the minimap qualifies:
+
+| element | dest size | in band? |
+|---|---|---|
+| **minimap** | **160x164** | **YES** |
+| iso render target | 2048x1081 | no (too big) |
+| side panel | 96x442 | no (not square, h too big) |
+| ticker | 473x14 | no |
+| small controls | 26x26, 32x32 | no (too small) |
+
+The band was chosen **from measured data**, not guessed, and every other element is excluded by a
+value already in the log.
+
+## Two frames, with different confidence
+
+- **L1** = `g_wrapper_caller` (`f[9]`) - **exact**, the mechanism that gave `FUN_10014894+0x76`.
+- **L2** = the frame-pointer walk - **`[UNCERTAIN]`**, valid only if that frame uses `ebp`. It worked
+  for the bar because `FUN_10014894`'s frame pointer was disassembled first; **the minimap's chain
+  may not go through `FUN_10014894` at all**, so L2 could be meaningless here. Logged as
+  `[UNCERTAIN - frame-pointer walk]` and must not be treated as L1's equal.
+
+## Pre-registered outcomes
+
+- **PAINT ROUTINE NAMED:** L1 resolves to a dominant site. If it is inside `FUN_10014894` again, the
+  minimap shares the blit-one-rect path and L2 gives its paint routine. If L1 is somewhere else
+  entirely, that address IS the paint site and the chain is shorter than the bar's.
+- **SPREAD:** several callers - the minimap is drawn from more than one place.
+- **NO CAPTURE:** `MINIMAP src=0x00000000` - nothing matched the band. Then the minimap was not drawn
+  this run (paused? not visible?) and the band or the run conditions need revisiting.
+- **VOID:** a fault.
+
+## After this
+
+The named routine goes through the same chain that worked twice: paint -> vtable slot -> `.text`
+immediate -> constructor -> hook it -> capture the window -> `vt+0xc8` SetRect to
+`[liveW-160, liveH-164, liveW, liveH]`. **That is at least two more runs**, and worth saying plainly
+rather than implying this one finishes the job.

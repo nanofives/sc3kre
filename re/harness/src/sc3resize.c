@@ -730,6 +730,16 @@ static __int64 g_src_time[SRC_BUCKETS];
    it. Where a source lands on screen, and how big, identifies it without needing its owner at all -
    and without dispatching any COM method on a pointer we did not create. */
 static LONG    g_src_rect[SRC_BUCKETS][4];
+/* MINIMAP CALLER (run 26). Run 25 identified the minimap by GEOMETRY: a per-frame blit to a
+   160x164 dest. Lock the filter on that shape rather than on a pointer, because the surface
+   pointer changes every run. Only the minimap falls in a 100..400 px square-ish band - the iso
+   target is 2048x1081, the side panel 96x442, the ticker 473x14, the small controls 26x26/32x32.
+   Record BOTH frames: L1 = g_wrapper_caller (f[9], exact) and L2 = the frame-pointer walk
+   (UNCERTAIN - valid only if that frame uses ebp, and the minimap chain may not match the bar's). */
+#define MM_BUCKETS 12
+static DWORD   g_mm_src, g_mm_w, g_mm_h;
+static DWORD   g_mm_l1[MM_BUCKETS], g_mm_l1c[MM_BUCKETS];
+static DWORD   g_mm_l2[MM_BUCKETS], g_mm_l2c[MM_BUCKETS];
 /* The bar's IDirectDrawSurface*, captured AT REFIT TIME (run 16). Run 15 read it at dump time, but
  * the pointer changes on every recreate, so the dump described the surface at the END of the window
  * rather than the one blitting during it. Both the new and the replaced surface are kept: the old
@@ -878,6 +888,21 @@ static void rz_blt_reset(void) {
 
 
 
+    memset(g_mm_l1, 0, sizeof(g_mm_l1)); memset((void *)g_mm_l1c, 0, sizeof(g_mm_l1c));
+
+
+
+
+    memset(g_mm_l2, 0, sizeof(g_mm_l2)); memset((void *)g_mm_l2c, 0, sizeof(g_mm_l2c));
+
+
+
+
+    g_mm_src = 0; g_mm_w = 0; g_mm_h = 0;
+
+
+
+
     memset(g_src_rect, 0, sizeof(g_src_rect));
 
 
@@ -970,6 +995,32 @@ static void rz_blt_dump(const char *tag) {
             if (!any)
                 logf("BLT> %s CALLER: no blits from child[0x2b] this window (filter=0x%08lX)",
                      tag, g_ret_filter);
+            {   /* MINIMAP callers, geometry-locked (run 26). */
+
+                DWORD m;
+
+                logf("BLT> %s MINIMAP src=0x%08lX %lux%lu", tag, g_mm_src, g_mm_w, g_mm_h);
+
+                for (m = 0; m < MM_BUCKETS && g_mm_l1c[m]; m++) {
+
+                    char who[160]; rz_modstr(g_mm_l1[m], who, sizeof(who));
+
+                    logf("BLT> %s MINIMAP L1 %s calls=%lu  (exact, f[9])", tag, who, g_mm_l1c[m]);
+
+                }
+
+                for (m = 0; m < MM_BUCKETS && g_mm_l2c[m]; m++) {
+
+                    char who[160]; rz_modstr(g_mm_l2[m], who, sizeof(who));
+
+                    logf("BLT> %s MINIMAP L2 %s calls=%lu  [UNCERTAIN - frame-pointer walk]",
+
+                         tag, who, g_mm_l2c[m]);
+
+                }
+
+            }
+
             /* L2: FUN_10014894's caller = THE TILING LOOP. Rests on a frame pointer proven in the
                run-19 disassembly, so this is a result, not a guess. */
             for (i2 = 0; i2 < L_BUCKETS && g_l2_cnt[i2]; i2++) {
@@ -1158,6 +1209,36 @@ static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWO
             }
         }
     }
+    if (dr && !IsBadReadPtr(dr, sizeof(RECT))) {
+
+        LONG w = dr->right - dr->left, h = dr->bottom - dr->top;
+
+        if (w >= 100 && w <= 400 && h >= 100 && h <= 400 && w < h * 2 && h < w * 2) {
+
+            DWORD j;
+
+            g_mm_src = (DWORD)src; g_mm_w = (DWORD)w; g_mm_h = (DWORD)h;
+
+            for (j = 0; j < MM_BUCKETS; j++) {
+
+                if (g_mm_l1c[j] == 0 || g_mm_l1[j] == g_wrapper_caller) {
+
+                    g_mm_l1[j] = g_wrapper_caller; g_mm_l1c[j]++; break; }
+
+            }
+
+            for (j = 0; j < MM_BUCKETS; j++) {
+
+                if (g_mm_l2c[j] == 0 || g_mm_l2[j] == g_caller_l2) {
+
+                    g_mm_l2[j] = g_caller_l2; g_mm_l2c[j]++; break; }
+
+            }
+
+        }
+
+    }
+
     if (!src) g_blt_nullsrc++;
     if (!dr) {
         g_blt_nullrect++;                      /* NULL dest rect = whole surface */
@@ -3008,6 +3089,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
+
 
 
 
