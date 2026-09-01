@@ -1086,3 +1086,65 @@ where a dims-based filter could not have separated "not blitting" from "not reco
 Sweep `600 -> 2048 -> 600` again, so source attribution is measured at both widths with the
 ownership control still in place. If the bar's share grows from `S1` to `S2` and falls back at `S3`,
 that is the same within-run control that settled run 14.
+
+---
+
+# RUN 15 — ONE source carries 93% of the wide-bar cost. Identity not yet pinned.
+
+## The control replicates run 14
+
+| step | width | calls | total | avg |
+|---|---:|---:|---:|---:|
+| `S1_W600` | 600 (engine surface) | 21035 | 6499.4 ms | 0.3090 ms |
+| `S2_W2048` | 2048 (ours) | 8449 | 7798.6 ms | 0.9230 ms |
+| `S3_W600` | 600 (ours) | 18131 | **6501.2 ms** | **0.3586 ms** |
+
+`S3` total is **6501.2 ms against `S1`'s 6499.4 ms** — within 0.03%. Run 14's result reproduces
+exactly: **width is the driver, our recreated surface is not.**
+
+## The finding: a single source dominates only when the bar is wide
+
+| step | top source | calls | total | share of window's Blt time |
+|---|---|---:|---:|---:|
+| `S1_W600` | `0x0C1DF3B0` **iso render target** | 1523 | 1529.3 ms | 24% |
+| `S2_W2048` | **`0x0BEF89E8`** | **6796** | **7267.7 ms** | **93%** |
+| `S3_W600` | `0x0C1DEAB0` | 1010 | 1587.3 ms | 24% |
+
+At 600 the work is spread across ~7 sources of roughly 1000-1500 calls each — the normal pattern in
+both `S1` and `S3`. At 2048 **one source takes 6796 calls and 93% of all blit time**, and the iso
+render target's own share collapses (1529 ms -> 86 ms).
+
+**And `0x0BEF89E8` all but vanishes when the bar narrows again: 29 calls, 31.5 ms in `S3`.** So this
+source IS the wide-bar cost, isolated by the same within-run control that settled run 14.
+
+## `[UNCERTAIN]` — what `0x0BEF89E8` is. Do not guess it.
+
+It is **not** the pointer the dump labelled as the bar surface (`0x0C1DF250` at `S2`). Two reasons
+that label cannot be trusted here, both mine:
+
+1. **The bar's surface pointer changes on every refit** (each recreate makes a new sub-object and a
+   new DirectDraw surface), and the label is computed at DUMP time — the end of the window. It
+   describes the surface as it is at dump, not necessarily the one blitting during the window.
+2. Heap regions hint but do not prove: our recreated surfaces land in `0x0C1Dxxxx` (alongside the
+   render target), while `0x0BEF89E8` sits in `0x0BEFxxxx` — the region where `S1`'s **engine-created**
+   bar surface (`0x0BEF8708`) lived. That points at an ENGINE-allocated surface rather than one of
+   ours, which would weaken "it is the bar's own backing" — **but region adjacency is not identity
+   and is not being treated as evidence.**
+
+## The fix that pins it, and it is small
+
+- **Capture the bar's `IDirectDrawSurface*` at the moment of the refit** (inside `rz_hud_fit_surface`,
+  right after the recreate) instead of reading it at dump time.
+- **At dump, resolve the top source by search**: walk the HUD children `[0x2a..0x2f]` and the iso
+  surfaces, compare each one's `sub+0x04` against the hot source pointer, and name whichever matches.
+  If none match, that is itself informative - the surface belongs to something we have not been
+  looking at.
+
+## Status
+
+- Width-is-the-driver: **replicated** (runs 14 and 15).
+- The cost is concentrated in **one blit source**, not spread - a much sharper target than "the wide
+  bar costs more".
+- That source's identity: **open**, one instrument fix away.
+- Run 9's struck conclusion stays struck; source-side bucketing is what should have been measured
+  from the start.
