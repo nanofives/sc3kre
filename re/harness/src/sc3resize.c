@@ -403,6 +403,20 @@ static BYTE *g_hud_art;                /* one-time cache of the PRISTINE native 
 static DWORD g_hud_artw, g_hud_arth, g_hud_artpitch;
 static HWND  g_hwnd;                   /* the game window (declared here: the HUD lab reads it for
                                           the live client size) */
+/* The SIDE PANEL window `this`, captured in its constructor SIMUI FUN_1004e123 (run 21).
+ *
+ * That constructor installs `*this = &PTR_FUN_100a9834`, the vtable whose slot **+0x144** is
+ * FUN_1004e63e - the vertical tiling paint routine. (+0x144 is this framework's draw slot; the iso
+ * view's whole-view repaint sits at the same offset.) Found by parsing SIMUI's static .rdata for
+ * the function pointer, then locating the .text site that writes that vtable base as an immediate
+ * (0x4e183, inside FUN_1004e123) - the same PE-parsing route used for the GZGraphicD window vtable,
+ * no Ghidra lock needed.
+ *
+ * CROSS-CONFIRMED, not assumed: the constructor zeroes dword fields [0x30..0x33] and [0x45], which
+ * are byte offsets +0xc0/+0xc4/+0xc8/+0xcc and +0x114 - EXACTLY the five child pointers
+ * FUN_1004e63e blits, with [0x33] (+0xcc) being the tiled one. Constructor and paint routine agree
+ * on the layout. [CONFIRMED @ SIMUI 0x1004e123, 0x1004e63e] */
+static void *g_side_top;
 static void *g_hud_top;                /* the HUD bottom-bar window `this`, captured in the FUN_100270e5
                                           wrap. Declared here (not down with the other window globals)
                                           because rz_hud_surfaces below reads it. The 2026-08-31
@@ -1833,6 +1847,31 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
             /* DIAGNOSTIC path: census now, then let the A/B phase machine drive the dock+fit so the
                profiler gets a native-width control phase first. */
             rz_hud_surfaces("BEFORE-setrect");
+            /* SIDE PANEL (run 21) - READ-ONLY. Confirm FUN_1004e63e's object really is the in-city
+               side panel: a tall narrow rect at a screen edge. Children at +0xc0/+0xc4/+0xc8/+0xcc
+               /+0x114, only +0xcc tiled; span for the tile loop = *(+0x10c) - *(+0x104). Moves
+               nothing - this run only decides whether the identification holds. */
+            if (g_side_top && !IsBadReadPtr(g_side_top, 0x120)) {
+                DWORD *s = (DWORD *)g_side_top;
+                static const int so[5] = { 0xc0, 0xc4, 0xc8, 0xcc, 0x114 };
+                int k;
+                logf("SIDE> panel=0x%08lX vt=0x%08lX rect this+0x14..0x20=[%ld %ld %ld %ld] "
+                     "tilespan=*(+0x10c)-*(+0x104)=%ld-%ld=%ld",
+                     (DWORD)s, s[0], (LONG)s[0x14/4], (LONG)s[0x18/4], (LONG)s[0x1c/4],
+                     (LONG)s[0x20/4], (LONG)s[0x10c/4], (LONG)s[0x104/4],
+                     (LONG)s[0x10c/4] - (LONG)s[0x104/4]);
+                for (k = 0; k < 5; k++) {
+                    DWORD ch = s[so[k]/4];
+                    if (!ch || IsBadReadPtr((void *)ch, 0x2c)) {
+                        logf("SIDE> child +0x%x = 0x%08lX (null/unreadable)", so[k], ch); continue;
+                    }
+                    logf("SIDE> child +0x%x = 0x%08lX dims=%lux%lu%s", so[k], ch,
+                         ((DWORD *)ch)[0x24/4], ((DWORD *)ch)[0x28/4],
+                         so[k] == 0xcc ? "   <<< THE TILED ONE (step = its HEIGHT, vt+0x3c)" : "");
+                }
+            } else {
+                logf("SIDE> panel NOT captured (ctor hook did not fire) - identification untested");
+            }
             g_hudphase = 1;
             g_phase_ms = GetTickCount() + 3000;
             logf("HUDLAB> armed - phase A (native bar) begins in 3 s, then widen, then phase B");
@@ -2315,6 +2354,16 @@ static void __stdcall fnlog_enter(int idx, DWORD *f) {
         if (g_hudlab) rz_hudlab_tick();
         return;
     }
+    if (idx == 3) {
+        /* SIMUI FUN_1004e123, the side panel ctor: __fastcall(this), so ECX = f[7] per the stub's
+           documented pushad layout. Captured at construction, exactly as the bar's `this` is. */
+        DWORD ecx = f[7];
+        if (ecx && !IsBadReadPtr((void *)ecx, 0x120) && g_side_top != (void *)ecx) {
+            g_side_top = (void *)ecx;
+            logf("### SIDE: panel window captured 0x%08lX (SIMUI FUN_1004e123 ctor)", ecx);
+        }
+        return;
+    }
     if (idx == 2) {
         /* FUN_10009efb create: record the REAL 8-arg tuple per object, so a later replay uses the
            create arguments rather than field read-back (which is measurably not the same thing).
@@ -2704,7 +2753,12 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
     }
     { int st = 0; HMODULE sui = NULL;
       while (st++ < 300 && !(sui = GetModuleHandleA("SIMUI.DLL"))) Sleep(100);
-      if (sui) patch_hud_reflow(sui);
+      if (sui) {
+          patch_hud_reflow(sui);
+          /* Side panel: capture `this` at its constructor so the vertical tiling routine
+             FUN_1004e63e (vtable +0x144) has an object to work on. Read-only for now. */
+          install_one((DWORD)sui + 0x4e123, sui, 0x4e123, "SIMUI FUN_1004e123 side ctor", 3);
+      }
       else logf("--- HUD: SIMUI.DLL never loaded after %d tries - capture NOT armed, HUD stays native", st); }
     if (g_hudlab) {
         DWORD tid;
@@ -2747,6 +2801,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
+
 
 
 

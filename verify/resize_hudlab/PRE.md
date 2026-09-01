@@ -849,3 +849,50 @@ Naming the loop still does not imply a safe patch exists. The chain so far runs 
 `FUN_10018c58`, which is the mod's own heartbeat hook target and is on every blit in the game -
 evidence that this code is extremely hot and central. **"Identified but not safely patchable" remains
 a legitimate end state**, and after twenty runs the value delivered is the map, not necessarily a fix.
+
+---
+
+# RUN 21 PRE-REGISTRATION — capture the side panel window (READ-ONLY)
+
+`FUN_1004e63e` was identified statically as a vertical tiling paint routine with a single-blit fast
+path. Nothing yet ties it to the in-city side panel **at runtime** - that was flagged `[UNCERTAIN]`
+and this run tests it.
+
+## How the object was found (static, no lease)
+
+1. Parsed SIMUI's `.rdata` for the pointer `0x1004e63e` -> found at RVA `0xa9978`.
+2. Tested candidate vtable bases against `.text` immediates -> base **RVA `0xa9834`**, function at
+   slot **`+0x144`** (this framework's draw slot; the iso view's whole-view repaint is the same
+   offset).
+3. The `.text` site writing that base is `0x4e183`, inside **`FUN_1004e123`** - the constructor,
+   which does `*param_1 = &PTR_FUN_100a9834`.
+
+Same PE-parsing route used for the GZGraphicD window vtable. No Ghidra lock.
+
+**CROSS-CONFIRMED rather than assumed:** `FUN_1004e123` zeroes dword fields `[0x30..0x33]` and
+`[0x45]` = byte offsets `+0xc0/+0xc4/+0xc8/+0xcc/+0x114` - **exactly the five child pointers
+`FUN_1004e63e` blits**, with `+0xcc` the tiled one. Constructor and paint routine agree on the
+layout independently.
+
+## This run
+
+Hook `FUN_1004e123` at entry (fnlog idx 3, `ECX = f[7]`), capture `this`, and log **read-only**: the
+window rect (`this+0x14..0x20`), the tile span (`*(+0x10c) - *(+0x104)`), and all five children with
+their dims. **Moves nothing.**
+
+## Pre-registered outcomes
+
+- **IDENTIFIED:** the ctor fires and the rect is **tall and narrow at a screen edge**, with `+0xcc`
+  a short child whose height is much less than the span. The identification holds and the fix
+  (heighten `+0xcc` so `vt+0x3c` >= span, taking the single-blit path) becomes buildable.
+- **WRONG WINDOW:** the ctor fires but the rect is not a side panel (wide/short, or not at an edge).
+  Then `FUN_1004e63e` paints something else and the vertical-UI thread needs a different object -
+  the shape-based identification was insufficient.
+- **NOT CAPTURED:** the hook never fires. Either this class is not constructed in-city, or the hook
+  is installed too late (SIMUI is waited for, but the panel may build earlier than the bar).
+- **VOID:** a fault, or the run does not reach a city.
+
+## Scope discipline
+
+Read-only by design. The bottom-bar arc spent runs 17 and 20 discovering that a plausible fix
+targeted the wrong mechanism; here the object is confirmed **before** anything is written to it.
