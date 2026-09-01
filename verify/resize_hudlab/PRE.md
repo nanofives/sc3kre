@@ -517,3 +517,43 @@ are identical, it dies, and that is a useful result too.
 
 `owner` + dims identifies WHICH surface the main blit belongs to - the iso view render target, the
 device surface, or something else. That has been `[UNCERTAIN]` since run 9.
+
+---
+
+# RUN 12 PRE-REGISTRATION (2026-08-31) — Blt arguments
+
+Run 11 excluded the destination: same surface (`iso+0x4ec`), same `VIDMEM` residency (caps byte-
+identical `0x00006040`), same 2048x1089 dims — and still x2.2-2.55 per call. What remains on-path is
+the CALL ITSELF.
+
+## What is added
+
+`rz_blt_hook` already receives every parameter and discarded them. Now aggregated per phase:
+
+- **time bucketed by `dwFlags`** — colour-key, ROP, `DDBLT_WAIT` and async paths have very different
+  costs, and a shift in the flag MIX would show here even if no single call got slower;
+- **destination rect area** (count, average, largest w/h seen);
+- **NULL dest rect** count (= whole surface) and **NULL source** count.
+
+Cheap: a 32-entry linear scan at ~2600 calls/s.
+
+## Pre-registered outcomes
+
+- **PARAMETERS CHANGED:** the flag mix shifts A -> B, or the average/largest dest rect grows. The
+  slowdown is then explained by what the engine is asking DirectDraw to do, and the fix direction
+  is to stop it asking for that. A `DDBLT_WAIT` appearing, or a colour-keyed path taking over, would
+  be the clearest form.
+- **PARAMETERS IDENTICAL:** same flags in the same proportions, same rect sizes, same null counts —
+  and the same calls still cost 2.2x more. Then **nothing on the call side changed**, and the cause
+  is external: GPU contention induced by the wide bar elsewhere in the frame. That would leave the
+  DirectDraw call as a victim rather than a culprit, and the investigation should move to what else
+  the wide bar makes the driver do.
+- **VOID:** hook refused, or fewer than 100 calls in a phase.
+
+## Note on what "identical" would mean
+
+**PARAMETERS IDENTICAL is the more likely outcome and is NOT a dead end.** Runs 9-11 have eliminated
+the bar's own blit, surface residency, and now potentially the call parameters. Each elimination has
+been by measurement, and the remaining space (external GPU contention from a wide system-memory
+surface being composited by the desktop compositor) is both smaller and more specific than where
+this started ("intrinsic to the engine's compositing, would require a compositor rewrite").

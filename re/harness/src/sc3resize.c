@@ -630,6 +630,13 @@ static void rz_stk_dump(const char *tag) {
 static DWORD  *g_blt_slot;
 static __int64 g_ddblt_time;
 static DWORD   g_ddblt_calls;
+/* Blt argument aggregates, filled by the ddraw hook below, reported by rz_blt_dump. */
+#define BFL_BUCKETS 32
+static DWORD   g_bfl_key[BFL_BUCKETS], g_bfl_cnt[BFL_BUCKETS];
+static __int64 g_bfl_time[BFL_BUCKETS];
+static __int64 g_blt_area;
+static DWORD   g_blt_areacnt, g_blt_nullrect, g_blt_nullsrc;
+static LONG    g_blt_maxw, g_blt_maxh;
 static DWORD   g_blt_key[BLT_BUCKETS], g_blt_cnt[BLT_BUCKETS];
 static __int64 g_blt_time[BLT_BUCKETS];
 static __int64 g_blt_last;
@@ -660,6 +667,14 @@ static void rz_blt_sample(DWORD key) {
 }
 static void rz_blt_reset(void) {
     g_ddblt_time = 0; g_ddblt_calls = 0;
+
+    memset(g_bfl_key, 0, sizeof(g_bfl_key)); memset((void *)g_bfl_cnt, 0, sizeof(g_bfl_cnt));
+
+    memset(g_bfl_time, 0, sizeof(g_bfl_time));
+
+    g_blt_area = 0; g_blt_areacnt = 0; g_blt_nullrect = 0; g_blt_nullsrc = 0;
+
+    g_blt_maxw = 0; g_blt_maxh = 0;
     memset(g_blt_key, 0, sizeof(g_blt_key));
     memset((void *)g_blt_cnt, 0, sizeof(g_blt_cnt));
     memset(g_blt_time, 0, sizeof(g_blt_time));
@@ -682,6 +697,22 @@ static void rz_blt_dump(const char *tag) {
                  g_ddblt_calls ? dd / g_ddblt_calls : 0.0, dd / 100.0);
         else
             logf("BLT> ---- %s ---- INSIDE ddraw Blt: NOT HOOKED (no split available)", tag);
+    }
+    if (g_blt_slot && g_blt_slot != (DWORD *)-1) {
+        DWORD i;
+        logf("BLT> %s ARGS: dest rects=%lu avg-area=%.0f px max=%ldx%ld | NULL-dest=%lu NULL-src=%lu",
+             tag, g_blt_areacnt,
+             g_blt_areacnt ? (double)g_blt_area / g_blt_areacnt : 0.0,
+             g_blt_maxw, g_blt_maxh, g_blt_nullrect, g_blt_nullsrc);
+        for (i = 0; i < BFL_BUCKETS && g_bfl_cnt[i]; i++) {
+            double ms = g_freq.QuadPart ? (1000.0 * (double)g_bfl_time[i] / (double)g_freq.QuadPart) : 0.0;
+            logf("BLT> %s FLAGS 0x%08lX calls=%lu total=%.1f ms avg=%.4f ms%s%s%s%s",
+                 tag, g_bfl_key[i], g_bfl_cnt[i], ms, g_bfl_cnt[i] ? ms / g_bfl_cnt[i] : 0.0,
+                 (g_bfl_key[i] & 0x01000000) ? " WAIT"    : "",   /* DDBLT_WAIT        */
+                 (g_bfl_key[i] & 0x00000080) ? " KEYSRC"  : "",   /* DDBLT_KEYSRC      */
+                 (g_bfl_key[i] & 0x00000400) ? " ROP"     : "",   /* DDBLT_ROP         */
+                 (g_bfl_key[i] & 0x10000000) ? " ASYNC"   : "");  /* DDBLT_ASYNC       */
+        }
     }
     logf("BLT> ---- %s ---- intervals=%lu outliers(>%dms)=%lu",
          tag, g_blt_total, BLT_OUTLIER_MS, g_blt_outliers);
@@ -772,14 +803,42 @@ static void rz_blt_dump(const char *tag) {
 typedef HRESULT (WINAPI *RZ_BLT)(void *, RECT *, void *, RECT *, DWORD, void *);
 static RZ_BLT  g_orig_blt;   /* g_blt_slot / g_ddblt_* are declared up with the BLT block above */
 
+/* Argument aggregation (run 12). The hook already receives every Blt parameter and run 11 discarded
+ * them. Run 11 excluded the destination (same surface, same VIDMEM residency, same dims), so what
+ * is left on-path is the CALL ITSELF: its flags, its rectangles, its source. Bucket time by
+ * `dwFlags` (colour-key / ROP / DDBLT_WAIT / async differ wildly in cost), and track destination
+ * rectangle area plus the largest rect seen. Cheap: a 32-entry linear scan at ~2600 calls/s. */
+/* (aggregate globals are declared up with the BLT block above) */
+
 static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, void *fx) {
     LARGE_INTEGER a, b;
     HRESULT hr;
+    __int64 d;
     QueryPerformanceCounter(&a);
     hr = g_orig_blt(self, dr, src, sr, fl, fx);
     QueryPerformanceCounter(&b);
-    g_ddblt_time += b.QuadPart - a.QuadPart;
+    d = b.QuadPart - a.QuadPart;
+    g_ddblt_time += d;
     g_ddblt_calls++;
+    {   /* time by flags */
+        DWORD i;
+        for (i = 0; i < BFL_BUCKETS; i++) {
+            if (g_bfl_cnt[i] == 0) { g_bfl_key[i] = fl; g_bfl_cnt[i] = 1; g_bfl_time[i] = d; break; }
+            if (g_bfl_key[i] == fl) { g_bfl_cnt[i]++; g_bfl_time[i] += d; break; }
+        }
+    }
+    if (!src) g_blt_nullsrc++;
+    if (!dr) {
+        g_blt_nullrect++;                      /* NULL dest rect = whole surface */
+    } else if (!IsBadReadPtr(dr, sizeof(RECT))) {
+        LONG w = dr->right - dr->left, h = dr->bottom - dr->top;
+        if (w > 0 && h > 0) {
+            g_blt_area += (__int64)w * h;
+            g_blt_areacnt++;
+            if (w > g_blt_maxw) g_blt_maxw = w;
+            if (h > g_blt_maxh) g_blt_maxh = h;
+        }
+    }
     return hr;
 }
 static void rz_patch_ddblt(void) {
@@ -2337,5 +2396,6 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
 
 
