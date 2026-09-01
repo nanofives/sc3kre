@@ -530,3 +530,66 @@ the blit path honours a wider source rect from that field.
 0x10018a82 / 0x10018b53 / 0x10019273`). Deliberately deferred rather than risk a bulk write at the
 end of a long session - the file is keyed on **(module, rva)** and a careless write has already
 damaged it once. Do this as a dedicated, verified edit.
+
+---
+
+# ⭐ THE VERTICAL UI IS THE EASIER CASE — `SIMUI FUN_1004e63e` (2026-09-01, static, no lease)
+
+Owner asked whether moving the vertical/side UI might behave differently. **It does, and in our
+favour.** Found by searching SIMUI for paint routines with the same shape as the bottom bar's
+(`vt+0x118` blit dispatch + a loop): `FUN_1004e63e` is the only other 6-blit routine with a loop.
+
+## It has a SINGLE-BLIT FAST PATH the bottom bar lacks
+
+```c
+iVar5 = (**(code **)(**(int **)(param_1 + 0xcc) + 0x3c))();          // tile source's HEIGHT
+if (iVar5 < *(int *)(param_1 + 0x10c) - *(int *)(param_1 + 0x104)) {  // shorter than the span?
+    do {                                                              // ... then TILE
+        ... vt[0x118](*(param_1 + 0xcc), uVar4) ...
+    } while (local_14 < *(int *)(param_1 + 0x10c));
+} else {
+    ...
+    (**(code **)(**(int **)(param_1 + 0x5c) + 0x118))                 // ... else ONE blit
+              (*(undefined4 *)(param_1 + 0xcc), &local_18, piVar1, 0);
+}
+```
+
+`vt+0x3c` on the raster class is `mov eax,[ecx+0x28]; ret` = **the surface HEIGHT**
+(`vt+0x38` = `[ecx+0x24]` = width), read from the PE `[CONFIRMED @ GZGraphicD 0x10009e4e]`.
+
+## The asymmetry, and why it matters
+
+| | bottom bar `FUN_10026841` | side panel `FUN_1004e63e` |
+|---|---|---|
+| step | `*(+0xd8) - *(+0xd0)` = **source RECT width** | `src->vt[0x3c]` = **source SURFACE height** |
+| fast path | **none - always tiles** | **yes - one blit if the source covers the span** |
+| tiled child | `+0xac` (`this[0x2b]`) | `+0xcc` |
+| consequence | widening the surface does nothing (run 17, measured) | **heightening the surface should collapse the loop** |
+
+**The fix that FAILED on the bottom bar is the RIGHT fix here.** The vertical routine reads the
+source surface's own height and explicitly takes a single-blit path when it is tall enough — so
+`rz_hud_fit_child` applied to `+0xcc` in the HEIGHT axis should turn the loop into one blit, with no
+field-write trickery needed.
+
+## Object layout of the side panel window
+
+Children at `+0xc0`, `+0xc4`, `+0xc8`, `+0xcc`, `+0x114`; **only `+0xcc` is tiled**, using rect
+fields `+0x100..+0x10c` (span = `+0x10c - +0x104`). Same overall shape as the bottom bar: several
+one-shot widgets plus one tiled filler.
+
+## What is still needed to act on it
+
+The mod has never captured the side panel's window object. The bottom bar's `this` was captured by
+wrapping its producer (`FUN_100270e5`); the side panel needs the equivalent — the board notes
+height-keyed tables `FUN_1004c3e9` / `FUN_1004cdcd`, and `FUN_1004e63e` sits in the same
+neighbourhood, so its producer is very likely nearby.
+
+`[UNCERTAIN]` — that `FUN_1004e63e` paints the in-city side panel specifically. It has the right
+shape and the right address neighbourhood, but nothing yet ties it to that window at runtime. The
+cheap confirmation is the same one used for the bar: wrap the producer, capture `this`, and log its
+rect - if it is a tall narrow rect at a screen edge, that settles it.
+
+## Bottom line for the owner's question
+
+**Yes — worth doing, and the vertical case looks strictly easier than the horizontal one.** The side
+panel's paint routine is written to avoid tiling when it can; the bottom bar's is not.
