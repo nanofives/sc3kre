@@ -1879,3 +1879,55 @@ preserving size. **`[UNCERTAIN]`: whether the painter honours a rewritten `+0x90
 from a layout parent each frame.** If it recomputes, the dock is a no-op and the log shows the rect
 reverting - a clean falsifier. Unlike the bar and side panel, no `vt+0xc8` SetRect is in evidence for
 this class, so the field write is the available lever.
+
+---
+
+# RUN 29 — ⭐⭐ **THE MINIMAP DOCKS.** Field write honoured by the painter.
+
+Fully automated (`auto.ps1`), zero AVs, 175 log lines, no hand-driving.
+
+```
+MINI> dock [640 436 800 600] -> [1888 917 2048 1081]
+BLT> SRC 0x0C034D70 calls=35 dest=[1888 917 2048 1081] 160x164   <<< SQUARE-ISH
+```
+
+**The `this+0x90` rewrite is honoured.** The measured blit destination moved from
+`[640 436 800 600]` (bottom-right of a *native 800x600* screen) to `[1888 917 2048 1081]` (bottom-
+right of the *live* 2048x1081 window), size preserved exactly at 160x164.
+
+The `[UNCERTAIN]` from run 28 - *"whether the painter honours a rewritten `+0x90` or recomputes it
+from a layout parent each frame"* - resolves to **honours it**. Confirmed by the blit's own dest
+rect, not by re-reading the field we wrote.
+
+**That distinction matters:** reading back `+0x90` would only prove our write landed. Reading the
+*blit* dest proves the painter actually used it, which is the thing in question.
+
+## The full arc for the minimap
+
+| run | step | result |
+|---|---|---|
+| 22 | owner reports "minimap was not moved" | a separate window |
+| 23 | two candidate classes hooked | **both eliminated** - 0 instances |
+| 24 | UI tree walk | 21 AVs, my guards were inadequate; no minimap |
+| 25 | **identify by dest rect geometry** | **found: 160x164 at `[640 436 800 600]`** |
+| 26 | caller capture | painted by the **generic** painter `FUN_1006d2d0`, no bespoke class - which is why 23-24 could never have worked |
+| 27 | hook the painter | VOID, no city loaded |
+| 28 | **automated harness** | window captured, vtable RVA `0xAA180` |
+| 29 | dock via `this+0x90` | **WORKS** |
+
+Three approaches failed because I assumed the minimap was special. It is ordinary, and the thing
+that found it was **geometry** - the one property that did not depend on my model of the UI being
+right.
+
+## Still needs an eyeball
+
+The blit destination is measured, but **nobody has looked at it.** Whether the minimap *renders*
+correctly at the new position - not clipped, not duplicated, hit-testing still aligned - is
+unverified. The bar's history is the warning: it docked and spanned correctly on paper, and the
+visual result still needed the owner to catch a black region.
+
+## Automation note
+
+`auto.ps1` env vars must be set in the **parent shell**, not passed via `-EnvVars` with `pwsh -File`
+- PowerShell passes array elements with their quotes embedded, so `SC3RESIZE_MINI` silently never
+got set on the first attempt. Cost one run.
