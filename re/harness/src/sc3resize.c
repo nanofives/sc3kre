@@ -788,7 +788,8 @@ static int    g_anchor;
  *
  * Translation is (liveW - 800, liveH - 600) applied to the cached NATIVE rect every time, so
  * repeated resizes never compound. */
-static int    g_input;         /* SC3RESIZE_INPUT: log the mouse clamp bounds per click */
+static int    g_input;
+static int    g_sink_logged;   /* resolve the UI event sink once, on the first click */         /* SC3RESIZE_INPUT: log the mouse clamp bounds per click */
 static int    g_cluster;
 static LONG   g_bar_nat[4], g_side_nat[4];
 static int    g_bar_nat_ok, g_side_nat_ok;
@@ -2819,6 +2820,31 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                      "%s", x, y, cw, ch, l, t, r2, b,
                      (x >= cw || y >= ch)
                        ? "   <<< OUTSIDE THE CLAMP - this click is being pulled back inside" : "");
+                /* Run 36 proved the clamp innocent, so the blocker is the UI event sink. FUN_10017e2f
+                   dispatches through (*(window+0x30))->vt[0x64] (`+ 100` in the decompilation), and
+                   window+0x30 is written by the plain setter FUN_10017c3c
+                   [CONFIRMED @ GZGraphicD 0x10017e2f, 0x10017c3c]. Resolve the sink's class and that
+                   slot ONCE - it is the door the hit-test lives behind, and the board has carried
+                   "the real hit-test dispatcher was not located" since the HUD reflow work. */
+                if (!g_sink_logged) {
+                    DWORD sink = win[0x30/4];
+                    g_sink_logged = 1;
+                    if (sink && !IsBadReadPtr((void *)sink, 4)) {
+                        DWORD *svt = *(DWORD **)sink;
+                        char who[160], slot[160];
+                        rz_modstr((DWORD)svt, who, sizeof(who));
+                        if (svt && !IsBadReadPtr(svt, 0x68)) {
+                            rz_modstr(svt[0x64/4], slot, sizeof(slot));
+                            logf("INPUT> event sink window+0x30 = 0x%08lX  vtable %s",
+                                 sink, who);
+                            logf("INPUT> sink vt+0x64 (the mouse-event entry) = %s", slot);
+                        } else {
+                            logf("INPUT> event sink 0x%08lX vtable %s unreadable", sink, who);
+                        }
+                    } else {
+                        logf("INPUT> event sink window+0x30 is NULL/unreadable (0x%08lX)", sink);
+                    }
+                }
             }
         }
     }
@@ -3432,6 +3458,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
 
 
 
