@@ -2850,7 +2850,11 @@ static void __stdcall fnlog_enter(int idx, DWORD *f) {
 
             LONG *r = (LONG *)(ecx + 0x90);
             LONG w = r[2] - r[0], h = r[3] - r[1];
-            if (g_anchor && w > 0 && h > 0 && g_wins_n < WIN_MAX) {
+            /* Gated on BOTH consumers. Recording it only under g_anchor meant cluster mode had an empty
+                   table and silently translated nothing - the third time this session a feature was
+                   wired behind the wrong flag (lab-vs-ship twice, now anchor-vs-cluster). The fault
+                   each time was gating the PRODUCER on one consumer instead of on all of them. */
+                if ((g_anchor || g_cluster) && w > 0 && h > 0 && g_wins_n < WIN_MAX) {
                 /* Record each window's NATIVE rect ONCE, before any resize moves it, so repeated
                    resizes re-anchor from the original instead of compounding - the same lesson the
                    bar's art cache taught. Bounded by the native screen, and the main view is
@@ -3362,6 +3366,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
 
 
 
