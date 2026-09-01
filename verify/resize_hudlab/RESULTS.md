@@ -1336,3 +1336,67 @@ diagnosable from the logged `filter=0x0BFFA9A8`. `S3` confirms the filter still 
 - Tiled blits: **single call site**, confirmed, `FUN_10018c58+0x31`.
 - That site is the Blt wrapper, not the loop - the loop is its caller.
 - Next: stash `f[9]` in the existing heartbeat hook. No new hooking, no scanning.
+
+---
+
+# RUN 19 — caller is `FUN_10014894+0x76`. Chain proven; still one frame short of the loop.
+
+| step | caller | calls | total |
+|---|---|---:|---:|
+| `S2_W2048` | **`GZGraphicD+0x1490D`** | 6609 | 7075.1 ms |
+| `S3_W600` | same | 33 | 33.0 ms |
+
+Single site again, and it collapses when the bar narrows. **`LOOP NAMED`** as pre-registered - the
+address is now outside `FUN_10018c58`.
+
+## The call chain, proven in the disassembly and the PE
+
+```
+0x1490a  ff502c   call dword ptr [eax + 0x2c]    <- issues the blit
+0x1490d  eb02     jmp  0x10014911                <- the captured return address
+```
+
+and from the PE's static `.rdata`:
+
+```
+sub vtable (PTR_FUN_1001f0ac) +0x2c -> 0x10018c58
+```
+
+So **`FUN_10014894+0x76` calls `sub->vt[0x2c]` = `FUN_10018c58`, returning to `0x1490D`** - exactly
+the captured value. `[CONFIRMED @ GZGraphicD 0x10014894, vtable 0x1001f0ac+0x2c]`
+
+## What `FUN_10014894` is - and why it is NOT the loop
+
+Reading it: it copies a **dest RECT** (`param_2`) and a **source RECT** (`param_3`) to locals, calls
+`this->vt[0xac]` to clip/validate, then on success compares the source's pixel format
+(`param_1->vt[0x50]`) against `this+0x10` and either
+
+- **same format** -> `sub->vt[0x2c]` = the `Blt` wrapper (the path we are hitting), or
+- **different** -> `this->vt[0x1d4]`, a converting path.
+
+**It blits ONE rect.** It contains no loop. So the tiling is driven by *its* caller - the chain is
+`loop -> FUN_10014894 (blit one rect) -> FUN_10018c58 (wrapper) -> IDirectDrawSurface::Blt`, and we
+have now walked three of those four links.
+
+## Going up without another run per level
+
+Rather than hook `FUN_10014894` and repeat, capture several frames from the heartbeat at once.
+`FUN_10014894` establishes a frame pointer (`push ebp; mov ebp,esp` at `0x14894`), and at
+`FUN_10018c58` entry that `ebp` is still live. The stub's `pushad` layout gives **`f[3]` = EBP**
+(order edi, esi, ebp, esp, ebx, edx, ecx, eax), so:
+
+- `f[9]` -> `0x1490D`, inside `FUN_10014894` (confirmed this run);
+- `*(ebp + 4)` -> the return address into **`FUN_10014894`'s caller** = the tiling loop;
+- `*(*(ebp) + 4)` -> one further, if that frame also uses `ebp`.
+
+`[UNCERTAIN]` for the third level only: frame-pointer walking is valid exactly as far as the frames
+actually use `ebp`, and `/O2` omits it freely. Level 2 rests on a frame pointer **proven in the
+disassembly above**; level 3 is opportunistic and must be read as a hint, not a result. This is the
+same hazard that made runs 7-8's scanning useless - the difference is that here the first hop is
+verified rather than assumed.
+
+## Status
+
+- Chain: `?? -> FUN_10014894+0x76 -> FUN_10018c58+0x31 -> ddraw Blt`, three links proven.
+- `FUN_10014894` reads as a single-rect clipped blit with a format check - not the loop.
+- Next: capture `*(f[3]+4)` (proven-valid) and `*(*(f[3])+4)` (opportunistic) in the same heartbeat.
