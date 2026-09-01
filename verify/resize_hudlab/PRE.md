@@ -896,3 +896,46 @@ their dims. **Moves nothing.**
 
 Read-only by design. The bottom-bar arc spent runs 17 and 20 discovering that a plausible fix
 targeted the wrong mechanism; here the object is confirmed **before** anything is written to it.
+
+---
+
+# RUN 22 PRE-REGISTRATION — extend the side panel and measure (the prediction)
+
+Run 21 confirmed the panel (rect `[704,0,800,442]`, right edge, correct vtable) and found its tiled
+child `+0xcc` **NULL**, so `FUN_1004e63e`'s tile loop is skipped. This tests what follows from that.
+
+## Design — isolated on purpose
+
+`SC3RESIZE_SIDE=1` makes phase B extend **the SIDE PANEL only** and leave the bar **native**, via the
+panel's own `vt+0xc8` SetRect: `[704,0,800,442] -> [liveW-96, 0, liveW, liveH]`.
+
+Phase A and phase B then differ in **exactly one thing**. Runs 13-14 needed a whole extra control run
+because the bar's "docked" and "full-width" changes were entangled; that confound is designed out
+here rather than corrected afterwards.
+
+## THE PREDICTION, stated before the data
+
+> **Extending the side panel costs no material frame time.** Its tile loop is null-guarded and
+> inactive, so extension cannot multiply blits the way widening the bar does (~46/frame).
+
+- **PREDICTION HOLDS:** inside-Blt total and average in phase B are close to phase A (say within
+  ~15%), and the owner reports no FPS drop. This would confirm the tiling model **positively**: the
+  routine WITH an active tile loop is expensive, the one WITHOUT is not, same framework, same
+  SetRect, same measurement.
+- **PREDICTION FAILS:** phase B costs materially more. Then extension is expensive for a reason the
+  tiling model does not explain, and the model is incomplete - the more valuable outcome, and the
+  one I should want to find.
+- **VOID:** the panel was not captured, SetRect refuses, or a fault.
+
+## Expected visual, and it is NOT the measurement
+
+The two real children are 96x417 and 96x25 and will **not** stretch, so a full-height panel will
+very likely show a **blank region below them**. That is expected, is not a defect being tested, and
+must not be read as the run failing. This run measures frame cost.
+
+## Why this is worth a lease at run 22
+
+It is the first **positive** test of the tiling model. Everything so far established the mechanism by
+elimination and by removing width. This predicts, in advance, that a structurally similar UI element
+**without** an active tile loop is free to extend - and a model that only ever explains costs after
+the fact is weaker than one that calls a null result correctly beforehand.

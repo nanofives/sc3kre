@@ -1214,6 +1214,8 @@ static DWORD WINAPI rz_prof_thread(LPVOID p) {
 static int   g_hudphase;               /* 0 idle, 1 settle, 2 profiling A, 3 profiling B, 4 done */
 static DWORD g_phase_ms;
 static void rz_hud_setrect_w(DWORD wantW);  /* fwd: dock the bar, spanning to wantW */
+static void rz_side_extend(void);           /* fwd: dock+extend the side panel, defined below */
+static int  g_sideon;                       /* SC3RESIZE_SIDE: phase B extends the SIDE PANEL only */
 static void rz_hud_fit_surface(DWORD liveW);/* fwd: the bar background surface refit, defined below */
 static void rz_patch_ddblt(void);           /* fwd: install the ddraw Blt timer */
 
@@ -1295,14 +1297,22 @@ static void rz_hudlab_tick(void) {
     if (g_hudphase == 2) {                       /* end A, widen, start B */
         InterlockedExchange(&g_prof_on, 0);
         rz_prof_dump("A-native"); rz_stk_dump("A-native"); rz_blt_dump("A-native");
-        logf("HUDLAB> applying the SetRect widen, then phase B");
-        rz_hud_setrect_w(0);
-        /* With SC3RESIZE_HUDFIT=1, also widen the bar's BACKGROUND SURFACE - the 600x56 raster run 2
-           identified as the thing that actually stops the bar spanning the screen. Ordered after the
-           window SetRect so the surface is fitted to the window the bar now occupies. */
-        {   RECT cr;
-            if (g_hudfit && g_hwnd && GetClientRect(g_hwnd, &cr))
-                rz_hud_fit_surface((DWORD)(cr.right - cr.left)); }
+        if (g_sideon) {
+            /* ISOLATED side-panel test (run 22): extend the PANEL only and leave the bar NATIVE, so
+               phase B differs from phase A in exactly one thing. The bar/panel confound is the kind
+               of thing that cost runs 13-14 a whole extra control, so it is designed out here. */
+            logf("HUDLAB> extending the SIDE PANEL only (bar left native), then phase B");
+            rz_side_extend();
+        } else {
+            logf("HUDLAB> applying the SetRect widen, then phase B");
+            rz_hud_setrect_w(0);
+            /* With SC3RESIZE_HUDFIT=1, also widen the bar's BACKGROUND SURFACE - the 600x56 raster
+               run 2 identified as the thing that actually stops the bar spanning the screen.
+               Ordered after the window SetRect so the surface fits the window the bar now occupies. */
+            {   RECT cr;
+                if (g_hudfit && g_hwnd && GetClientRect(g_hwnd, &cr))
+                    rz_hud_fit_surface((DWORD)(cr.right - cr.left)); }
+        }
         rz_hud_surfaces("AFTER-setrect");
         rz_prof_reset(); rz_blt_reset();
         InterlockedExchange(&g_prof_on, 1);
@@ -2133,6 +2143,56 @@ static void rz_hud_fit_surface(DWORD liveW) {
     rz_hud_fit_child(0x2b, liveW);
 }
 
+/* Dock the SIDE PANEL to the right edge and extend it to full height, via its own framework
+ * SetRect (`vt+0xc8`) - the identical method already proven on the bottom bar.
+ *
+ * Native rect measured in run 21: [704, 0, 800, 442] = 96 wide, 442 tall, at the right edge of the
+ * native 800-wide screen. Docked target: [liveW - 96, 0, liveW, liveH].
+ *
+ * PREDICTION under test: unlike the bar, this should cost nothing per frame. The panel's tiled child
+ * `+0xcc` is NULL, so `FUN_1004e63e`'s tile loop is skipped entirely and extending the panel cannot
+ * multiply blits the way widening the bar does.
+ *
+ * `[UNCERTAIN]` on appearance: the two real children are 96x417 and 96x25 and will NOT stretch, so a
+ * taller panel very likely shows a blank region below them. That is expected and is not the thing
+ * being measured here - this run is about frame cost, not looks. */
+static void rz_side_extend(void) {
+    DWORD *s = (DWORD *)g_side_top;
+    RECT cr;
+    LONG x1, y1, x2, y2;
+    int panelW;
+    DWORD *svt;
+    if (!s || IsBadReadPtr(s, 0x120)) { logf("SIDE> extend skipped: panel not captured"); return; }
+    x1 = (LONG)s[0x14/4]; y1 = (LONG)s[0x18/4]; x2 = (LONG)s[0x1c/4]; y2 = (LONG)s[0x20/4];
+    panelW = (int)(x2 - x1);
+    svt = *(DWORD **)s;
+    if (!g_hwnd || !GetClientRect(g_hwnd, &cr) || !svt || IsBadReadPtr(svt, 0xcc)) {
+        logf("SIDE> extend skipped: no window or vtable unreadable"); return;
+    }
+    {
+        int lw = (int)(cr.right - cr.left), lh = (int)(cr.bottom - cr.top);
+        void *setrect = (void *)svt[0xc8/4];
+        int wantX1 = lw - panelW, wantY2 = lh;
+        if (!setrect || panelW <= 0 || panelW >= lw) {
+            logf("SIDE> extend skipped: setrect=0x%08lX panelW=%d lw=%d",
+                 (DWORD)setrect, panelW, lw);
+            return;
+        }
+        if (x1 == wantX1 && y1 == 0 && x2 == lw && y2 == wantY2) {
+            logf("SIDE> already docked at [%d,0,%d,%d]", wantX1, lw, wantY2); return;
+        }
+        {
+            DWORD a[4];
+            a[0] = (DWORD)wantX1; a[1] = 0; a[2] = (DWORD)lw; a[3] = (DWORD)wantY2;
+            logf("SIDE> SetRect vt+0xc8=0x%08lX  [%ld,%ld,%ld,%ld] -> [%d,0,%d,%d]",
+                 (DWORD)setrect, x1, y1, x2, y2, wantX1, lw, wantY2);
+            rz_thiscall(g_side_top, setrect, a, 4);
+            logf("SIDE> SetRect returned; rect now [%ld,%ld,%ld,%ld] (tiled child +0xcc=0x%08lX)",
+                 (LONG)s[0x14/4], (LONG)s[0x18/4], (LONG)s[0x1c/4], (LONG)s[0x20/4], s[0xcc/4]);
+        }
+    }
+}
+
 /* The per-frame poll. Compares the live client size against the render target's size and only
  * acts on a genuine mismatch - so a stray frame cannot churn the render target. */
 static void rz_poll(void) {
@@ -2785,6 +2845,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           g_census = GetEnvironmentVariableA("SC3RESIZE_CENSUS", v, sizeof(v)) && atoi(v);
           g_hudlab = GetEnvironmentVariableA("SC3RESIZE_HUDLAB", v, sizeof(v)) && atoi(v);
           g_sweepon = GetEnvironmentVariableA("SC3RESIZE_SWEEP", v, sizeof(v)) && atoi(v);
+          g_sideon  = GetEnvironmentVariableA("SC3RESIZE_SIDE",  v, sizeof(v)) && atoi(v);
           /* HUD dock+span ships ON. SC3RESIZE_HUDNATIVE=1 is the opt-out for anyone who prefers the
              native bar - the full-width bar carries a measured GPU-sync FPS cost that is NOT yet
              resolved (verify/resize_hudlab: two causes eliminated, mechanism still open). */
@@ -2801,6 +2862,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
 
 
 
