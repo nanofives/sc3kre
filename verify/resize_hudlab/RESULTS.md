@@ -1596,3 +1596,49 @@ scan (6-blit paint routines) include `FUN_1001ad52` and `FUN_10060f59`, neither 
 - Tiling model: **confirmed positively**, not just by elimination.
 - Open (cosmetic): the panel's blank region needs art, exactly as the bar's did.
 - Open (new): the minimap is a separate window, not yet captured.
+
+---
+
+# RUN 23 — both minimap candidates ELIMINATED. It is a third class.
+
+```
+CAPT> class A (FUN_1001a983/paint FUN_1001ad52): 0 instance(s)
+CAPT> class B (FUN_10060ba9/paint FUN_10060f59): 0 instance(s)
+```
+
+**Neither constructor fired.** The hooks were installed (`FN SIMUI FUN_1001a983 ctor A: relocated
+rel32...`, no `FAILED to install` line for either) at the same moment as the side-panel hook, which
+**did** fire and captured its object at t+59 s. So the instrument worked and the classes simply are
+not constructed.
+
+Timing is excluded as an explanation: these are SIMUI classes and the hooks go in ~102 ms after
+SIMUI loads, so construction could only be missed if it happened inside SIMUI's own DllMain - not
+plausible for in-city UI windows.
+
+**Pre-registered NOT CAPTURED, with the useful reading: both candidates are eliminated.** The
+minimap is a third class that the `+0x144` / no-tile-loop scan did not surface.
+
+## Why the scan missed it, and what would actually find it
+
+The scan looked for paint routines with **6 `vt+0x118` blit dispatches**, matching the bar and the
+side panel. A minimap plausibly paints differently - one blit of a rendered map surface plus a few
+overlays - so a 6-blit filter would skip it. **The filter encoded an assumption about shape that the
+target need not share.**
+
+A better approach, and it needs no guessing: **build a surface -> owner registry.** The ddraw hook
+already sees every blit's source, and earlier runs logged several sources as
+`(not reachable from iso or the HUD children)` at ~1000 calls each - roughly once per frame. **One of
+those is almost certainly the minimap.** Recording each raster's `sub+0x04` at creation would let
+`rz_name_surface` resolve those unknowns to a named object with dims, and the square one is the
+minimap.
+
+⚠️ The natural hook for that is `FUN_10009efb` (fnlog idx 2), which this mod **deliberately dropped
+after a v2 crash** ("create recorder DROPPED after v2 crash"). Re-enabling it is not free and should
+be treated as its own piece of work with its own pre-registration, not bolted on.
+
+## Status
+
+- Minimap: **not found; two candidates eliminated** at the cost of one read-only run.
+- Route to find it: a surface->owner registry, which requires re-opening a hook this mod dropped
+  after a crash. **A fresh piece of work, not a continuation.**
+- Everything else from this session stands unchanged.
