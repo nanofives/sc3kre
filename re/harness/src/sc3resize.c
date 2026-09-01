@@ -788,6 +788,7 @@ static int    g_anchor;
  *
  * Translation is (liveW - 800, liveH - 600) applied to the cached NATIVE rect every time, so
  * repeated resizes never compound. */
+static int    g_input;         /* SC3RESIZE_INPUT: log the mouse clamp bounds per click */
 static int    g_cluster;
 static LONG   g_bar_nat[4], g_side_nat[4];
 static int    g_bar_nat_ok, g_side_nat_ok;
@@ -2790,6 +2791,37 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         logf("RZ   WM_SIZE %lux%lu - poll will pick it up on the next frame", w, hh);
         return r;
     }
+    /* ---- INPUT CLAMP PROBE (SC3RESIZE_INPUT=1) -------------------------------------------------
+     * Owner: the relocated HUD is not clickable. Located statically: EVERY mouse coordinate is
+     * clamped before the UI sees it, in FUN_100178a6 at LAB_10017aaa -
+     *     x < 0        -> 0
+     *     x >= vt+0x68 -> vt+0x68 - 1        (vt+0x68 = [win+0x40] - [win+0x38] = WIDTH)
+     * and identically for y with vt+0x6c (HEIGHT)  [CONFIRMED @ GZGraphicD 0x100178a6, 0x10017c1e].
+     *
+     * Those getters read the STORED RECT at win+0x38..0x44 - the exact field the mod's D-004 fix
+     * writes on WM_SIZE. So either the rect is stale when a click arrives (clamp to 800x600, and the
+     * corner HUD is unreachable by construction), or it is correct and the clamp is innocent and the
+     * blocker is further up in SIMUI's hit-testing.
+     *
+     * This logs, per click, the raw coordinates and the LIVE clamp bounds read from the window
+     * object. One line per click, read-only, no dispatch through anything. It distinguishes the two
+     * cases outright rather than by inference. */
+    if (g_input && (m == WM_LBUTTONDOWN || m == WM_RBUTTONDOWN)) {
+        DWORD gz = (DWORD)GetModuleHandleA("GZGraphicD.dll");
+        LONG x = (LONG)(SHORT)LOWORD(lp), y = (LONG)(SHORT)HIWORD(lp);
+        if (gz && !IsBadReadPtr((void *)(gz + 0x6cdb8), 4)) {
+            DWORD *win = *(DWORD **)(gz + 0x6cdb8);
+            if (win && !IsBadReadPtr(win, 0x48)) {
+                LONG l = (LONG)win[0x38/4], t = (LONG)win[0x3c/4];
+                LONG r2 = (LONG)win[0x40/4], b = (LONG)win[0x44/4];
+                LONG cw = r2 - l, ch = b - t;
+                logf("INPUT> click raw=(%ld,%ld) clamp bounds=%ldx%ld (stored rect [%ld %ld %ld %ld])"
+                     "%s", x, y, cw, ch, l, t, r2, b,
+                     (x >= cw || y >= ch)
+                       ? "   <<< OUTSIDE THE CLAMP - this click is being pulled back inside" : "");
+            }
+        }
+    }
     return CallWindowProcA(g_oldproc, h, m, wp, lp);
 }
 
@@ -3383,6 +3415,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           g_minion  = GetEnvironmentVariableA("SC3RESIZE_MINI",  v, sizeof(v)) && atoi(v);
           g_anchor  = GetEnvironmentVariableA("SC3RESIZE_ANCHOR", v, sizeof(v)) && atoi(v);
           g_cluster = GetEnvironmentVariableA("SC3RESIZE_CLUSTER", v, sizeof(v)) && atoi(v);
+          g_input   = GetEnvironmentVariableA("SC3RESIZE_INPUT",   v, sizeof(v)) && atoi(v);
           /* HUD dock+span ships ON. SC3RESIZE_HUDNATIVE=1 is the opt-out for anyone who prefers the
              native bar - the full-width bar carries a measured GPU-sync FPS cost that is NOT yet
              resolved (verify/resize_hudlab: two causes eliminated, mechanism still open). */
@@ -3399,6 +3432,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
 
 
 
