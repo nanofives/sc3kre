@@ -1124,3 +1124,46 @@ The named routine goes through the same chain that worked twice: paint -> vtable
 immediate -> constructor -> hook it -> capture the window -> `vt+0xc8` SetRect to
 `[liveW-160, liveH-164, liveW, liveH]`. **That is at least two more runs**, and worth saying plainly
 rather than implying this one finishes the job.
+
+---
+
+# RUN 27 PRE-REGISTRATION — capture the minimap window in the generic painter
+
+Run 26 showed the minimap has **no bespoke class and no `+0x144` override** - it is drawn by the
+framework painter `FUN_1006d2d0`, which blits `this[0x16]` (+0x58) into the dest rect at
+**`this+0x90`** `[CONFIRMED @ SIMUI 0x1006d2d0]`.
+
+So: hook the painter, read `this+0x90`, and whichever `this` presents a **160x164** dest IS the
+minimap. **Identification by geometry, because it has no class to match on.** Read-only.
+
+## ⚠️ RISK, stated before the run: this is the hottest function this mod has ever hooked
+
+`FUN_1006d2d0` runs for **every window, every frame** - the minimap alone accounted for 1349 calls in
+10 s, and it is one window among many. That is a different order of traffic from the two cold hooks
+(bridge capture, heartbeat) this mod normally installs.
+
+The relevant precedent is the **v2 crash**, where hooking `FUN_10009efb` - also hot - killed the game,
+with the suspected mechanism *"detouring a function this hot"*. **I argued against re-enabling that
+hook two runs ago on exactly these grounds, so I am obliged to apply the same standard here.**
+
+Why I judge this materially safer, rather than waving it through:
+
+- **Timing.** The v2 hook fired during **DirectDraw device bring-up**; this installs after SIMUI has
+  loaded and fires during steady-state painting. Bring-up was the suspected aggravating factor.
+- **Handler cost.** The v2 recorder wrote an 8-entry tuple into a shared table with a non-atomic
+  slot index. This handler does one `IsBadReadPtr`, four `LONG` reads, a comparison, and returns -
+  no shared-state write except a single pointer on the one frame it matches.
+- **The VEH logger is installed** and has caught every fault this session without losing the process.
+
+**If the game dies at load, that is the answer** and the hook comes straight back out. Recording that
+as a real possible outcome rather than discovering it and rationalising afterwards.
+
+## Pre-registered outcomes
+
+- **CAPTURED:** `### MINI: window captured ...` with a 160x164 dest. The minimap's window object is
+  then in hand and a SetRect / `+0x90` rewrite is one small build away.
+- **NOT CAPTURED, game fine:** the painter fires but nothing matches the band. Then the minimap's
+  dest is not at `+0x90` on that object, and the field map from run 26 needs revisiting.
+- **GAME DIES:** the hot-hook risk was real. Remove the hook; record it beside the v2 precedent as a
+  second data point on hooking hot functions in this engine.
+- **VOID:** no city reached.

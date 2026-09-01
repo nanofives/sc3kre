@@ -740,6 +740,13 @@ static LONG    g_src_rect[SRC_BUCKETS][4];
 static DWORD   g_mm_src, g_mm_w, g_mm_h;
 static DWORD   g_mm_l1[MM_BUCKETS], g_mm_l1c[MM_BUCKETS];
 static DWORD   g_mm_l2[MM_BUCKETS], g_mm_l2c[MM_BUCKETS];
+/* The minimap WINDOW, captured in the generic painter FUN_1006d2d0 (run 27).
+ * Runs 23-26 hunted a bespoke class and a +0x144 override; the minimap has NEITHER - it is drawn by
+ * the framework painter, which blits this[0x16] (+0x58) into the dest rect at this+0x90
+ * [CONFIRMED @ SIMUI 0x1006d2d0]. So identify it by that rect, not by its class: hook the painter,
+ * and whichever `this` presents a 160x164 dest IS the minimap. */
+static void  *g_mini;
+static LONG   g_mini_rect[4];
 /* The bar's IDirectDrawSurface*, captured AT REFIT TIME (run 16). Run 15 read it at dump time, but
  * the pointer changes on every recreate, so the dump described the surface at the END of the window
  * rather than the one blitting during it. Both the new and the replaced surface are kept: the old
@@ -2624,6 +2631,46 @@ static void __stdcall fnlog_enter(int idx, DWORD *f) {
         if (g_hudlab) rz_hudlab_tick();
         return;
     }
+    if (idx == 6) {
+
+        /* FUN_1006d2d0(this): ECX = f[7]. The dest rect lives at this+0x90. Identify the minimap by
+
+           geometry - the same 100..400 square-ish band that isolated it in run 25 - because it has no
+
+           class of its own to match on. Read-only. */
+
+        DWORD ecx = f[7];
+
+        if (ecx && !IsBadReadPtr((void *)ecx, 0xa0)) {
+
+            LONG *r = (LONG *)(ecx + 0x90);
+
+            LONG w = r[2] - r[0], h = r[3] - r[1];
+
+            if (w >= 100 && w <= 400 && h >= 100 && h <= 400 && w < h * 2 && h < w * 2) {
+
+                if (g_mini != (void *)ecx) {
+
+                    g_mini = (void *)ecx;
+
+                    g_mini_rect[0] = r[0]; g_mini_rect[1] = r[1];
+
+                    g_mini_rect[2] = r[2]; g_mini_rect[3] = r[3];
+
+                    logf("### MINI: window captured 0x%08lX vt=0x%08lX dest(this+0x90)=[%ld %ld %ld %ld] %ldx%ld",
+
+                         ecx, *(DWORD *)ecx, r[0], r[1], r[2], r[3], w, h);
+
+                }
+
+            }
+
+        }
+
+        return;
+
+    }
+
     if (idx == 4 || idx == 5) {
         /* Minimap hunt: capture up to CAPT_MAX instances of each candidate window class. ECX = f[7]
            per the stub's documented pushad layout. Rects are read later, at diag time. */
@@ -3045,6 +3092,8 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           /* minimap candidates - same +0x144 draw slot, no tile loop */
           install_one((DWORD)sui + 0x1a983, sui, 0x1a983, "SIMUI FUN_1001a983 ctor A", 4);
           install_one((DWORD)sui + 0x60ba9, sui, 0x60ba9, "SIMUI FUN_10060ba9 ctor B", 5);
+          /* the generic window painter - where the minimap is identified by its dest rect */
+          install_one((DWORD)sui + 0x6d2d0, sui, 0x6d2d0, "SIMUI FUN_1006d2d0 painter", 6);
       }
       else logf("--- HUD: SIMUI.DLL never loaded after %d tries - capture NOT armed, HUD stays native", st); }
     if (g_hudlab) {
@@ -3089,6 +3138,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
 
 
 
