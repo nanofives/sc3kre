@@ -179,6 +179,17 @@ reader) or an **anchored screen→world map** so drags can target coordinates. (
 Stride/corner measurement is deferred as cosmetic (~8 runs).
 
 ### 2. Resizable window / arbitrary resolution — ⭐ CONSOLIDATED HANDOFF: `re/analysis/RESIZABLE_WINDOW.md`
+> ⭐⭐⭐ **HUD BAR SHIPS ADAPTIVE, AND THE FPS COST IS ROOT-CAUSED (2026-09-01, 20 runs,
+> `verify/resize_hudlab/`).** The bar now docks to the bottom, spans the full width and carries its
+> art (`SC3RESIZE_HUDNATIVE=1` opts out). The FPS cost is **`SIMUI FUN_10026841`, a tile loop** that
+> blits a 16x64 filler (`child[0x2b]`) once per 16 px of bar width — **~46 DirectDraw blits per frame
+> at 2048, 93% of all Blt time**; chain `FUN_10026841 -> FUN_10014894 -> FUN_10018c58 -> ddraw Blt`,
+> all four links proven. ⛔ **This REFUTES the 2026-08 conclusion that the cost was "intrinsic to
+> per-frame compositing" and needed a compositor rewrite** — that was reached by elimination and
+> named the wrong mechanism. Eliminated by measurement along the way: surface residency, pixel
+> throughput, our recreated surface, and source-surface width. **Fix candidate (untested): widen the
+> SOURCE RECT at `hud+0xd0..+0xd8`, a field write, turning ~46 iterations into ~2.**
+> ⚠️ `functions.csv` not yet updated with the new names — deliberate debt, see the analysis doc.
 > **Read `RESIZABLE_WINDOW.md` first** — single authoritative summary (2026-08-29). Headline: the mod
 > works headless in both resize directions at 2048x1152, the crash is fixed engine-wide (4 grid-B
 > clamps), ships as `sc3resize.dll`+`resize_launch.exe` patching nothing on disk. **`D-004` was
@@ -1297,3 +1308,4 @@ Tools and notes only. **Never** game assets or decompiled output.
 |---|---|---|
 | 2026-08-17 | End-state is a **modding / format toolkit**. The source port is **closed**, not deferred. | `ROADMAP.md` P1 gate |
 | 2026-08-24 | Camera ships as a **byte patch**; the **standalone proxy-DLL vehicle is dropped**. The `-pref` slider works but has no distributable form. | `DEFERRED.md` D-001 |
+

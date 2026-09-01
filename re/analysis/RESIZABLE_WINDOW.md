@@ -451,3 +451,82 @@ Recommendation on record: **#1 first** — it targets the severe defect (buildin
 with minimal risk to the validated 9-step routine, and if defect A's terrain half persists, add
 `FUN_100071a3` for the exposed region as a step 7b rather than adopting the whole `FUN_10006a55`.
 Any build needs a committed `PRE.md` + an owner hand-test (the log cannot see the pixels).
+
+---
+
+# HUD BAR / FPS — THE COMPLETE CHAIN (2026-09-01, `verify/resize_hudlab/`, runs 1-20)
+
+**Headline: the full-width HUD bar's FPS cost is a TILING LOOP in SIMUI, not a compositor property.**
+The claim that closed this workstream in 2026-08 — *"intrinsic to this engine's per-frame
+compositing... would mean changing the compositor"* — is **refuted by measurement**.
+
+## The chain, all four links proven
+
+```
+SIMUI FUN_10026841        tile loop, one blit per step
+  -> GZGraphicD FUN_10014894+0x76   blit ONE rect (clip via vt+0xac, format check, no loop)
+    -> GZGraphicD FUN_10018c58+0x31 the engine's Blt wrapper  (= sub vtable +0x2c)
+      -> IDirectDrawSurface::Blt    (COM vtable +0x14)
+```
+
+`[CONFIRMED @ SIMUI 0x10026841, GZGraphicD 0x10014894, vtable 0x1001f0ac+0x2c]`
+
+## The loop
+
+```c
+iVar4 = *(param_1 + 0xd8) - *(param_1 + 0xd0);   // STEP = the SOURCE RECT's width
+do {
+    vt[0x118](*(param_1 + 0xac), param_1 + 0xd0, &local_14, 0);
+    local_c -= iVar4;  local_14 -= iVar4;
+} while (*(param_1 + 0x130) < local_c);
+```
+
+Tiles right-to-left from the bar's right edge (`+0x2c`) to `+0x130`. Measured at 2048 wide:
+**~46 DirectDraw blits per frame, 6892-8538 calls per 8 s, 93% of ALL Blt time**; ~0 at native width.
+
+## The HUD bar object, decoded
+
+Children `this[0x2a..0x2f]` are at byte offsets `+0xa8..+0xbc` (`0x2a * 4 = 0xa8`).
+
+| child | offset | dims | how it is drawn |
+|---|---|---|---|
+| `[0x2a]` background | `+0xa8` | 600x56 | once, src `+0xc0` -> dest `+0x120` |
+| **`[0x2b]` filler** | **`+0xac`** | **16x64** | **TILED** in the loop, src rect `+0xd0` |
+| `[0x2c]` | `+0xb0` | 136x18 | once |
+| `[0x2d]` | `+0xb4` | 112x18 | once |
+| `[0x2e]` | `+0xb8` | 104x18 | once |
+| `[0x2f]` | `+0xbc` | 148x18 | once |
+
+All six are `GZGraphicD+0x1E894` rasters with pitch == width*2 (fix16).
+
+## Surface plumbing (useful well beyond the HUD)
+
+- `sub+0x04` = `IDirectDrawSurface*`; `sub+0x74` = `DDSCAPS.dwCaps` (DDSD at `sub+0x0c`, caps at
+  DDSD+0x68); `sub+0xe8` = the OWNING raster; `sub+0xe4` = lock depth.
+- **`sub+0xf0` (bits) / `sub+0xf4` (pitch) are written ONLY by the LOCK** (`sub->vt[0x0c]` =
+  `FUN_10018a82`), never by create (`sub->vt[0x40]` = `FUN_10019273`). `bits == 0` immediately after
+  a recreate is CORRECT for every surface of this class.
+- Unlock (`sub->vt[0x10]` = `FUN_10018b53`) does **not** clear `sub+0xf0`, which is why raw reads
+  keep working and why an out-of-band unlock is destructive (refcount inversion).
+
+## What was eliminated, each by measurement
+
+| excluded | how |
+|---|---|
+| surface residency | caps byte-identical `0x00006040` VIDMEM at both widths (run 11) |
+| pixel throughput | 6x SMALLER blits, 7.7x slower (run 12) |
+| our recreated surface | 600(ours) returns to 600(engine) baseline within 0.03% (runs 14, 15) |
+| source-surface width | widening `[0x2b]` to 2048 changed nothing - the step is the source RECT (runs 17, 20) |
+
+## Fix candidate — a FIELD WRITE, not a code patch (NOT YET TESTED)
+
+The surface is already widened. Widening the **source rect** `+0xd0..+0xd8` widens the step, turning
+~46 iterations into ~2. Same class of write as the shipping `vt+0xc8` SetRect. `[UNCERTAIN]`: that
+the blit path honours a wider source rect from that field.
+
+## ⚠️ Tracker debt
+
+`functions.csv` has NOT been updated with these names (`SIMUI 0x10026841`, `GZGraphicD 0x10014894 /
+0x10018a82 / 0x10018b53 / 0x10019273`). Deliberately deferred rather than risk a bulk write at the
+end of a long session - the file is keyed on **(module, rva)** and a careless write has already
+damaged it once. Do this as a dedicated, verified edit.
