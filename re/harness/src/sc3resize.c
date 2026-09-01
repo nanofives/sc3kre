@@ -789,7 +789,7 @@ static int    g_anchor;
  * Translation is (liveW - 800, liveH - 600) applied to the cached NATIVE rect every time, so
  * repeated resizes never compound. */
 static int    g_input;
-static int    g_sink_logged;   /* resolve the UI event sink once, on the first click */         /* SC3RESIZE_INPUT: log the mouse clamp bounds per click */
+static int    g_sink_logged;  /* one-shot: the sink does not change */   /* resolve the UI event sink once, on the first click */         /* SC3RESIZE_INPUT: log the mouse clamp bounds per click */
 static int    g_cluster;
 static LONG   g_bar_nat[4], g_side_nat[4];
 static int    g_bar_nat_ok, g_side_nat_ok;
@@ -1718,22 +1718,51 @@ static DWORD g_exc_code, g_exc_addr;   /* captured by the SEH filter */
 static DWORD g_exc_eax, g_exc_ecx, g_exc_edx, g_exc_ebx, g_exc_esi, g_exc_edi;  /* fault-time regs */
 
 /* Resolve a code address to "MODULE+0xRVA" so a caught fault names its function. */
+/* Resolve an address by walking the PEB loader list, so EVERY loaded module is covered.
+ *
+ * ⚠️ This replaces a hardcoded six-name list that contained **"GZWIN.DLL"** while the real file is
+ * **GZWIND.DLL**. `GetModuleHandleA` returned NULL for it on every call, so the windowing framework
+ * was invisible to every MODULE+RVA resolution in this session - and it is exactly where the UI
+ * event sink turned out to live. A typo in a lookup table silently degraded every "no known module"
+ * result for 37 runs.
+ *
+ * PEB walk (x86): fs:[0x30] = PEB, PEB+0x0C = Ldr, Ldr+0x14 = InMemoryOrderModuleList.
+ * Each LDR_DATA_TABLE_ENTRY is (link - 8): DllBase +0x18, SizeOfImage +0x20,
+ * BaseDllName UNICODE_STRING +0x2C (Length, MaximumLength, Buffer at +0x30). */
 static void rz_modstr(DWORD addr, char *out, int n) {
-    static const char *mods[] = { "SIMSPR.DLL", "GZGraphicD.dll", "SIMCITY.DLL", "SIMUI.DLL",
-                                  "GZWIN.DLL", "SC3U.exe", 0 };
-    int i;
-    for (i = 0; mods[i]; i++) {
-        DWORD h = (DWORD)GetModuleHandleA(mods[i]), e, size;
-        if (!h || IsBadReadPtr((void *)h, 0x40)) continue;
-        e = *(DWORD *)(h + 0x3c);                       /* e_lfanew */
-        if (IsBadReadPtr((void *)(h + e + 0x50), 4)) continue;
-        size = *(DWORD *)(h + e + 0x50);                /* OptionalHeader.SizeOfImage (PE32) */
-        if (addr >= h && addr < h + size) {
-            _snprintf(out, n, "%s+0x%lX (base 0x%08lX)", mods[i], addr - h, h);
+    DWORD peb, ldr, head, cur, guard = 0;
+    if (IsBadReadPtr(out, 1)) return;
+    __asm { mov eax, fs:[0x30]
+            mov peb, eax }
+    if (!peb || IsBadReadPtr((void *)(peb + 0x0c), 4)) goto unknown;
+    ldr = *(DWORD *)(peb + 0x0c);
+    if (!ldr || IsBadReadPtr((void *)(ldr + 0x14), 4)) goto unknown;
+    head = ldr + 0x14;
+    cur  = *(DWORD *)head;
+    while (cur && cur != head && guard++ < 256 && !IsBadReadPtr((void *)cur, 0x30)) {
+        DWORD ent  = cur - 8;                       /* InMemoryOrderLinks is at entry+0x08 */
+        DWORD base, size;
+        if (IsBadReadPtr((void *)(ent + 0x18), 0x1c)) break;
+        base = *(DWORD *)(ent + 0x18);
+        size = *(DWORD *)(ent + 0x20);
+        if (base && size && addr >= base && addr < base + size) {
+            WORD  len = *(WORD *)(ent + 0x2c);
+            WCHAR *w  = *(WCHAR **)(ent + 0x30);
+            char name[64];
+            int  k = 0;
+            if (w && !IsBadReadPtr(w, len)) {
+                int chars = len / 2;
+                if (chars > (int)sizeof(name) - 1) chars = sizeof(name) - 1;
+                for (k = 0; k < chars; k++) name[k] = (char)w[k];   /* module names are ASCII */
+            }
+            name[k] = 0;
+            _snprintf(out, n, "%s+0x%lX (base 0x%08lX)", k ? name : "?", addr - base, base);
             return;
         }
+        cur = *(DWORD *)cur;                        /* Flink */
     }
-    _snprintf(out, n, "0x%08lX (no known module)", addr);
+unknown:
+    _snprintf(out, n, "0x%08lX (no module)", addr);
 }
 static int rz_filter(EXCEPTION_POINTERS *ep) {
     g_exc_code = ep->ExceptionRecord->ExceptionCode;
@@ -3458,6 +3487,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
 
 
 
