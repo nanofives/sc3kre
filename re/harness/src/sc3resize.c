@@ -800,6 +800,10 @@ static int    g_input;
  * screen coordinates into a link of a parent-relative sum can DOUBLE-COUNT the offset, which would
  * make the mod's own "fix" the thing that misses. [UNCERTAIN] - that is what this measures. */
 static int    g_nohit;
+/* SC3RESIZE_NOPARENTFIX=1 - control arm: skip the ancestor-rect widening. */
+static int    g_noparentfix;
+/* fwd: defined below rz_mini_dock, called from the cluster routine above it */
+static void rz_fix_hud_parents(void *leaf, const char *name, LONG cw, LONG ch);
 static int    g_sink_logged;  /* one-shot: the sink does not change */   /* resolve the UI event sink once, on the first click */         /* SC3RESIZE_INPUT: log the mouse clamp bounds per click */
 static int    g_cluster;
 static LONG   g_bar_nat[4], g_side_nat[4];
@@ -999,6 +1003,78 @@ static void rz_cluster_layout(void) {
                  (LONG)w[0x14/4], (LONG)w[0x18/4], (LONG)w[0x1c/4], (LONG)w[0x20/4],
                  (p[0] == (LONG)w[0x14/4] && p[1] == (LONG)w[0x18/4]) ? "" : "   <<< PAINT/WINDOW DIVERGE");
         }
+    }
+    {   /* THE CLICKABILITY FIX. Widen every ancestor of the relocated windows so the router's
+           per-child `vt+0xe4` gate can pass and the recursion that reaches the HUD can start.
+           `SC3RESIZE_NOPARENTFIX=1` is the A/B control arm. */
+        LONG k, cw = cr.right - cr.left, chh = cr.bottom - cr.top;
+        if (g_noparentfix) {
+            logf("PARENT> SKIPPED (SC3RESIZE_NOPARENTFIX=1) - control arm");
+        } else {
+            for (k = 0; k < g_wins_n && k < 8; k++)
+                rz_fix_hud_parents(g_wins[k].w, "win", cw, chh);
+            if (g_mini) rz_fix_hud_parents(g_mini, "minimap", cw, chh);
+        }
+    }
+}
+
+/* ⭐⭐⭐ THE CLICKABILITY FIX — widen the HUD's ANCESTOR containers.
+ *
+ * Root cause, measured 2026-09-01 (verify/resize_flaggate/ROOTCAUSE_RESULTS.md + parent.json):
+ * the relocated HUD windows hang off a container whose OWN rect is still the pre-resize
+ * `[0 0 800 600]`. The event router normal clicks take is `FUN_1001ec22` (= base vt+0x130,
+ * reached because `sink+0x28`/`sink+0x30` are both NULL in normal play), and it recurses into a
+ * child ONLY if that child passes `vt+0xe4`, a point-in-its-OWN-rect test:
+ *
+ *     if ((*child->vt[0x100])() && (*child->vt[0xe4])(ev[1], ev[2]))
+ *         return (*child->vt[0x130])(ev);
+ *     `[CONFIRMED @ GZWIND 0x1001ec22]`
+ *
+ * So a click outside the old 800x600 box fails at the CONTAINER and the recursion that would
+ * reach the HUD never starts - no matter how correct the HUD's own rect is. That is why every
+ * previous fix failed, and why `FUN_1001e748` (the vt+0x8c walk) found the bar perfectly: that
+ * walk gates only on `vt+0xf0(1)` and does NO parent rect test `[CONFIRMED @ GZWIND 0x1001e748]`.
+ *
+ * Parent is `win+0x3c`, byte-proven: base `vt+0x2c` is `8b 41 3c c3` = `mov eax,[ecx+0x3c]; ret`
+ * `[CONFIRMED @ GZWIND 0x1001e210]`. Measured chain:
+ *     minimap [1888 917 2048 1081] -> 0x602960 [0 0 800 600] -> root [0 0 800 600] -> 0
+ *
+ * Why a DIRECT field write and not `vt+0xc8` SetRect: only `+0x14..0x20` gates the routing
+ * (`vt+0xe4` = `FUN_1001f8ef` compares exactly those). SetRect on a CONTAINER may relayout or
+ * repaint its children and could undo the cluster placement; this touches the four fields the
+ * router reads and nothing else. Expect-or-refuse: widen only, never shrink, and only when the
+ * rect is actually too small.
+ *
+ * The root itself (parent == NULL) is deliberately NOT touched: `FUN_10020818` calls
+ * `root->vt[0x130]` directly with no geometry test, so the root's rect does not gate anything. */
+static void rz_fix_hud_parents(void *leaf, const char *name, LONG cw, LONG ch) {
+    void *cur = leaf;
+    int hop;
+    if (!leaf || cw <= 0 || ch <= 0) return;
+    for (hop = 0; hop < 12; hop++) {
+        void *par;
+        LONG *r;
+        if (!cur || IsBadReadPtr(cur, 0x40)) return;
+        par = *(void **)((DWORD)cur + 0x3c);
+        if (!par) return;                       /* reached the root - leave it alone */
+        if (IsBadReadPtr(par, 0x24)) return;
+        r = (LONG *)((DWORD)par + 0x14);
+        if (r[2] - r[0] <= 0 || r[3] - r[1] <= 0) {
+            logf("PARENT> %s hop %d: 0x%08lX rect [%ld %ld %ld %ld] non-positive - refusing",
+                 name, hop, (DWORD)par, r[0], r[1], r[2], r[3]);
+            return;
+        }
+        if (r[2] < cw || r[3] < ch) {
+            logf("PARENT> %s hop %d: 0x%08lX [%ld %ld %ld %ld] -> [%ld %ld %ld %ld]",
+                 name, hop, (DWORD)par, r[0], r[1], r[2], r[3],
+                 r[0], r[1], (r[2] < cw) ? cw : r[2], (r[3] < ch) ? ch : r[3]);
+            if (r[2] < cw) r[2] = cw;
+            if (r[3] < ch) r[3] = ch;
+        } else {
+            logf("PARENT> %s hop %d: 0x%08lX [%ld %ld %ld %ld] already covers %ldx%ld",
+                 name, hop, (DWORD)par, r[0], r[1], r[2], r[3], cw, ch);
+        }
+        cur = par;
     }
 }
 
@@ -3613,6 +3689,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           g_cluster = GetEnvironmentVariableA("SC3RESIZE_CLUSTER", v, sizeof(v)) && atoi(v);
           g_input   = GetEnvironmentVariableA("SC3RESIZE_INPUT",   v, sizeof(v)) && atoi(v);
           g_nohit   = GetEnvironmentVariableA("SC3RESIZE_NOHIT",   v, sizeof(v)) && atoi(v);
+          g_noparentfix = GetEnvironmentVariableA("SC3RESIZE_NOPARENTFIX", v, sizeof(v)) && atoi(v);
           /* HUD dock+span ships ON. SC3RESIZE_HUDNATIVE=1 is the opt-out for anyone who prefers the
              native bar - the full-width bar carries a measured GPU-sync FPS cost that is NOT yet
              resolved (verify/resize_hudlab: two causes eliminated, mechanism still open). */
@@ -3630,9 +3707,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
          * a self-consistent log). One line makes the whole class loud instead of silent.
          * verify/resize_flaggate/NOHIT_RESULTS.md */
         logf("### FLAGS> cluster=%d input=%d nohit=%d hudfit=%d hudlab=%d sweep=%d side=%d mini=%d "
-             "anchor=%d census=%d minzoom=%d readyms=%lu",
+             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d",
              g_cluster, g_input, g_nohit, g_hudfit, g_hudlab, g_sweepon, g_sideon, g_minion,
-             g_anchor, g_census, g_minzoom, g_ready_ms);
+             g_anchor, g_census, g_minzoom, g_ready_ms, g_noparentfix);
         if (AddVectoredExceptionHandler(1, rz_veh))
             logf("### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the "
                  "zoom-after-resize crash the game swallows)");
