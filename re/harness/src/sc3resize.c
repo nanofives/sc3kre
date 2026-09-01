@@ -789,6 +789,17 @@ static int    g_anchor;
  * Translation is (liveW - 800, liveH - 600) applied to the cached NATIVE rect every time, so
  * repeated resizes never compound. */
 static int    g_input;
+/* SC3RESIZE_NOHIT=1 - disable EVERY write to the window +0x80..0x8c rect (all three call sites of
+ * rz_win_move_hit). The A arm of the 2026-09-01 experiment in verify/resize_flaggate/.
+ *
+ * Why this is a real experiment and not a revert: `FUN_1006ddbd` reads +0x80..0x8c ONLY as a width
+ * and a height (`param_1 >= [+0x88]-[+0x80]`, `param_2 >= [+0x8c]-[+0x84]`), so translating that
+ * rect while preserving its size CANNOT change its verdict [CONFIRMED @ SIMUI 0x1006ddbd]. The write
+ * is therefore a no-op for containment - but +0x80/+0x84 are ALSO read by vt+0x98/vt+0x9c and summed
+ * up the parent chain by vt+0xdc = FUN_1006dd44 to build the screen->local origin. Writing absolute
+ * screen coordinates into a link of a parent-relative sum can DOUBLE-COUNT the offset, which would
+ * make the mod's own "fix" the thing that misses. [UNCERTAIN] - that is what this measures. */
+static int    g_nohit;
 static int    g_sink_logged;  /* one-shot: the sink does not change */   /* resolve the UI event sink once, on the first click */         /* SC3RESIZE_INPUT: log the mouse clamp bounds per click */
 static int    g_cluster;
 static LONG   g_bar_nat[4], g_side_nat[4];
@@ -857,6 +868,13 @@ static int rz_thiscall(void *self, void *fn, const DWORD *a, int n);  /* fwd: de
 static void rz_win_move_hit(void *w, const char *name, LONG oldx, LONG oldy, LONG nx, LONG ny) {
     LONG *p;
     if (!w || IsBadReadPtr(w, 0x88)) return;
+    if (g_nohit) {   /* arm A: leave +0x80..0x8c exactly as the engine built it */
+        p = (LONG *)((DWORD)w + 0x80);
+        logf("NOHIT> %s: LEAVING +0x80..0x8c at [%ld %ld %ld %ld] (would have moved origin to %ld,%ld)",
+             name, p[0], p[1], p[2], p[3], nx, ny);
+        (void)oldx; (void)oldy;
+        return;
+    }
     /* ⭐ The hit area is a FULL RECT at +0x80(l) +0x84(t) +0x88(r) +0x8c(b), not just an origin.
      * FUN_1006ddbd compares:
      *     height = [+0x8c] - [+0x84];   if (y >= height) miss
@@ -2907,6 +2925,37 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                      "%s", x, y, cw, ch, l, t, r2, b,
                      (x >= cw || y >= ch)
                        ? "   <<< OUTSIDE THE CLAMP - this click is being pulled back inside" : "");
+                /* Per-click state of every captured HUD window, using ONLY confirmed offsets.
+                 *   +0x14..0x20  window rect - what vt+0xe4 = SIMUI FUN_1006de62 actually compares,
+                 *                and FUN_1006de62 is the hit test FUN_1001e748 calls on fallthrough
+                 *                [CONFIRMED @ GZWIND 0x1001e748; SIMUI 0x1006de62]
+                 *   +0x80..0x8c  read as EXTENTS by FUN_1006ddbd (vt+0x1a0), and as the origin link
+                 *                by vt+0x98/0x9c summed in FUN_1006dd44 [CONFIRMED @ SIMUI 0x1006dd44]
+                 *   +0xa0        flags; bit 0x1 = shown, gates the child walk in FUN_1001e748
+                 *                [CONFIRMED @ GZWIND 0x1001dd9a, SIMUI 0x1006c2f7]
+                 * No guessed offsets and no dispatch - run 24 threw 21 AVs from invented offsets
+                 * after being described as bounded and defensive. Marks whether the click is inside
+                 * the window rect: run 36 established that "nothing responded" is not evidence
+                 * unless the click is shown to have landed on the target. */
+                {
+                    LONG i;
+                    for (i = 0; i < g_wins_n; i++) {
+                        DWORD *ww = (DWORD *)g_wins[i].w;
+                        LONG *wr, *hr; DWORD fl;
+                        if (!ww || IsBadReadPtr(ww, 0xa4)) continue;
+                        wr = (LONG *)((DWORD)ww + 0x14);
+                        hr = (LONG *)((DWORD)ww + 0x80);
+                        fl = ww[0xa0/4];
+                        logf("WINSTATE> [%ld] %p vt=%p  rect+0x14=[%ld %ld %ld %ld]  "
+                             "ext+0x80=[%ld %ld %ld %ld] (%ldx%ld)  flags+0xa0=0x%08lX shown=%d%s",
+                             i, (void *)ww, (void *)*(DWORD **)ww,
+                             wr[0], wr[1], wr[2], wr[3],
+                             hr[0], hr[1], hr[2], hr[3], hr[2] - hr[0], hr[3] - hr[1],
+                             fl, (int)(fl & 1),
+                             (x >= wr[0] && x < wr[2] && y >= wr[1] && y < wr[3])
+                               ? "   <<< CLICK IS INSIDE THIS WINDOW RECT" : "");
+                    }
+                }
                 /* Run 36 proved the clamp innocent, so the blocker is the UI event sink. FUN_10017e2f
                    dispatches through (*(window+0x30))->vt[0x64] (`+ 100` in the decompilation), and
                    window+0x30 is written by the plain setter FUN_10017c3c
@@ -3563,6 +3612,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           g_anchor  = GetEnvironmentVariableA("SC3RESIZE_ANCHOR", v, sizeof(v)) && atoi(v);
           g_cluster = GetEnvironmentVariableA("SC3RESIZE_CLUSTER", v, sizeof(v)) && atoi(v);
           g_input   = GetEnvironmentVariableA("SC3RESIZE_INPUT",   v, sizeof(v)) && atoi(v);
+          g_nohit   = GetEnvironmentVariableA("SC3RESIZE_NOHIT",   v, sizeof(v)) && atoi(v);
           /* HUD dock+span ships ON. SC3RESIZE_HUDNATIVE=1 is the opt-out for anyone who prefers the
              native bar - the full-width bar carries a measured GPU-sync FPS cost that is NOT yet
              resolved (verify/resize_hudlab: two causes eliminated, mechanism still open). */
@@ -3570,6 +3620,19 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
         logf("### sc3resize loaded - resizable-window mod (minimal Init-free routine, "
              "validated 2026-08-27 over 6 runs)%s%s", g_minzoom ? " [MINZOOM crash-hunt build]" : "",
              g_hudlab ? " [HUD LAB armed: surface census + EIP profiler, verify/resize_hudlab]" : "");
+        /* ⭐ Echo EVERY parsed flag, unconditionally, at init.
+         *
+         * Attempt 1 of the NOHIT experiment (2026-09-01) was VOID because none of three env vars
+         * reached the DLL - auto.ps1 was invoked with `-EnvVars` under `pwsh -File`, the exact form
+         * HANDOFF.md warns embeds quotes. The log looked completely healthy: city loaded, resize
+         * fired, HUD refitted, zero faults. Nothing said "your flags are off", and the previous
+         * session lost three features the same way ("wired behind the wrong flag", each invisible in
+         * a self-consistent log). One line makes the whole class loud instead of silent.
+         * verify/resize_flaggate/NOHIT_RESULTS.md */
+        logf("### FLAGS> cluster=%d input=%d nohit=%d hudfit=%d hudlab=%d sweep=%d side=%d mini=%d "
+             "anchor=%d census=%d minzoom=%d readyms=%lu",
+             g_cluster, g_input, g_nohit, g_hudfit, g_hudlab, g_sweepon, g_sideon, g_minion,
+             g_anchor, g_census, g_minzoom, g_ready_ms);
         if (AddVectoredExceptionHandler(1, rz_veh))
             logf("### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the "
                  "zoom-after-resize crash the game swallows)");
