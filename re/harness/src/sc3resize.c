@@ -677,6 +677,17 @@ static DWORD   g_ret_filter;         /* the source surface whose callers we are 
  * (sc3resize.c: "f[9]=return address, f[10..]=stack args", verbatim from sc3probe.c:8650-8658), so
  * the heartbeat stashes it here immediately before the Blt and the ddraw hook buckets it. */
 static DWORD   g_wrapper_caller;
+/* Two frames further up (run 20). FUN_10014894 establishes a frame pointer (`push ebp; mov ebp,esp`
+ * at 0x14894, disassembled in run 19) and it is still live at FUN_10018c58 entry, so from the stub's
+ * pushad layout (edi,esi,ebp,esp,ebx,edx,ecx,eax => f[3] = EBP):
+ *   L2 = *(ebp + 4)      -> the return into FUN_10014894's CALLER = the tiling loop
+ *   L3 = *(*(ebp) + 4)   -> one further, IF that frame also uses ebp
+ * L2 rests on a frame pointer proven in the disassembly. L3 is opportunistic: /O2 omits frame
+ * pointers freely, so it is a HINT, not a result - the exact hazard that made runs 7-8 useless. */
+static DWORD   g_caller_l2, g_caller_l3;
+#define L_BUCKETS 24
+static DWORD   g_l2_key[L_BUCKETS], g_l2_cnt[L_BUCKETS];
+static DWORD   g_l3_key[L_BUCKETS], g_l3_cnt[L_BUCKETS];
 
 /* Name a source IDirectDrawSurface* by searching the objects we can reach for one whose sub-object
  * holds it at sub+0x04. Identity by POINTER against a reachable owner, never by dims or by heap
@@ -768,6 +779,14 @@ static void rz_blt_reset(void) {
     g_blt_maxw = 0; g_blt_maxh = 0;
 
 
+    memset(g_l2_key, 0, sizeof(g_l2_key)); memset((void *)g_l2_cnt, 0, sizeof(g_l2_cnt));
+
+
+
+    memset(g_l3_key, 0, sizeof(g_l3_key)); memset((void *)g_l3_cnt, 0, sizeof(g_l3_cnt));
+
+
+
     memset(g_ret_key, 0, sizeof(g_ret_key)); memset((void *)g_ret_cnt, 0, sizeof(g_ret_cnt));
 
 
@@ -855,6 +874,21 @@ static void rz_blt_dump(const char *tag) {
             if (!any)
                 logf("BLT> %s CALLER: no blits from child[0x2b] this window (filter=0x%08lX)",
                      tag, g_ret_filter);
+            /* L2: FUN_10014894's caller = THE TILING LOOP. Rests on a frame pointer proven in the
+               run-19 disassembly, so this is a result, not a guess. */
+            for (i2 = 0; i2 < L_BUCKETS && g_l2_cnt[i2]; i2++) {
+                char who[160];
+                rz_modstr(g_l2_key[i2], who, sizeof(who));
+                logf("BLT> %s LOOP(L2) %s calls=%lu  <- FUN_10014894's caller", tag, who, g_l2_cnt[i2]);
+            }
+            /* L3: one further up. OPPORTUNISTIC - valid only if that frame also uses ebp, which /O2
+               does not guarantee. Report as a HINT; do not build on it without confirmation. */
+            for (i2 = 0; i2 < L_BUCKETS && g_l3_cnt[i2]; i2++) {
+                char who[160];
+                rz_modstr(g_l3_key[i2], who, sizeof(who));
+                logf("BLT> %s hint(L3) %s calls=%lu  [UNCERTAIN - frame-pointer walk]",
+                     tag, who, g_l3_cnt[i2]);
+            }
         }
         for (i = 0; i < BFL_BUCKETS && g_bfl_cnt[i]; i++) {
             double ms = g_freq.QuadPart ? (1000.0 * (double)g_bfl_time[i] / (double)g_freq.QuadPart) : 0.0;
@@ -982,6 +1016,25 @@ static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWO
     if (src && (DWORD)src == g_ret_filter) {
         /* EXACT caller of this Blt - the engine code driving the tile loop. */
         DWORD ra = g_wrapper_caller ? g_wrapper_caller : (DWORD)_ReturnAddress(), i;
+        {   DWORD j;
+
+            for (j = 0; j < L_BUCKETS; j++) {
+
+                if (g_l2_cnt[j] == 0) { g_l2_key[j] = g_caller_l2; g_l2_cnt[j] = 1; break; }
+
+                if (g_l2_key[j] == g_caller_l2) { g_l2_cnt[j]++; break; }
+
+            }
+
+            for (j = 0; j < L_BUCKETS; j++) {
+
+                if (g_l3_cnt[j] == 0) { g_l3_key[j] = g_caller_l3; g_l3_cnt[j] = 1; break; }
+
+                if (g_l3_key[j] == g_caller_l3) { g_l3_cnt[j]++; break; }
+
+            }
+
+        }
         for (i = 0; i < RET_BUCKETS; i++) {
             if (g_ret_cnt[i] == 0) { g_ret_key[i] = ra; g_ret_cnt[i] = 1; g_ret_time[i] = d; break; }
             if (g_ret_key[i] == ra) { g_ret_cnt[i]++; g_ret_time[i] += d; break; }
@@ -2231,7 +2284,27 @@ static void __stdcall fnlog_enter(int idx, DWORD *f) {
         /* This hook IS the render thread, so it is where the profiler learns which thread to sample.
            Cheap and idempotent; no call when it has not changed. */
         if (g_hudlab) { rz_blt_sample(f[7]); }
-        g_wrapper_caller = f[9];   /* FUN_10018c58's return address = the tiling loop (run 19) */
+        g_wrapper_caller = f[9];   /* -> FUN_10014894+0x76, proven run 19 */
+
+        {   /* f[3] = EBP = FUN_10014894's live frame pointer (it does push ebp; mov ebp,esp) */
+
+            DWORD fp = f[3], fp2;
+
+            g_caller_l2 = g_caller_l3 = 0;
+
+            if (fp && !IsBadReadPtr((void *)fp, 8)) {
+
+                g_caller_l2 = *(DWORD *)(fp + 4);          /* the tiling loop */
+
+                fp2 = *(DWORD *)fp;
+
+                if (fp2 && fp2 > fp && !IsBadReadPtr((void *)fp2, 8))
+
+                    g_caller_l3 = *(DWORD *)(fp2 + 4);     /* opportunistic - HINT only */
+
+            }
+
+        }
         if (g_hudlab) {
             DWORD me = GetCurrentThreadId();
             if (g_game_tid != me) g_game_tid = me;
@@ -2674,6 +2747,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
 
 
 

@@ -810,3 +810,42 @@ would reproduce run 18's shallow answer rather than produce a wrong one.
 Naming the loop is **not** a fix and does not imply one exists. `FUN_10018c58` is the mod's own
 heartbeat hook target; if the tiling loop turns out to be equally central, patching it may be
 unsafe, and "identified but not patchable" is a legitimate end state for this thread.
+
+---
+
+# RUN 20 PRE-REGISTRATION — walk two frames up, name the tiling loop
+
+Run 19 proved the chain `?? -> FUN_10014894+0x76 -> FUN_10018c58+0x31 -> ddraw Blt` and showed
+`FUN_10014894` blits ONE rect with no loop in it. The loop is its caller.
+
+## The walk, and why L2 is a result while L3 is only a hint
+
+`FUN_10014894` does `push ebp; mov ebp,esp` at `0x14894` - **disassembled in run 19, not assumed** -
+and that frame is still live at `FUN_10018c58` entry. The stub's `pushad` layout gives `f[3]` = EBP.
+
+- **L2 = `*(ebp + 4)`** - the return into `FUN_10014894`'s caller. Rests on a frame pointer proven in
+  bytes, so a **result**.
+- **L3 = `*(*(ebp) + 4)`** - one further. Valid only if THAT frame also uses `ebp`, which `/O2` does
+  not guarantee. Logged as `hint(L3) ... [UNCERTAIN - frame-pointer walk]` and **must not be built
+  on** without independent confirmation.
+
+That distinction is the whole lesson of runs 7-8: unvalidated stack reading produced confident
+rankings made of garbage. Here the first hop is verified and the second is labelled as speculative
+in the log itself, so a future reader cannot mistake one for the other.
+
+## Pre-registered outcomes
+
+- **LOOP NAMED:** a dominant L2 address. That function is read in the decompilation; if it contains
+  the tile loop, its step/count is the patch target.
+- **L2 IS `FUN_10014894` AGAIN:** the walk is not clearing the frame - `ebp` was not what we think at
+  that moment. Instrument problem, not an engine finding.
+- **L2 SPREAD:** several callers - `FUN_10014894` is a shared utility and tiling is issued from more
+  than one place, so no single patch covers it.
+- **VOID:** no `[0x2b]` blits at `S2`, or a fault.
+
+## Standing caution
+
+Naming the loop still does not imply a safe patch exists. The chain so far runs through
+`FUN_10018c58`, which is the mod's own heartbeat hook target and is on every blit in the game -
+evidence that this code is extremely hot and central. **"Identified but not safely patchable" remains
+a legitimate end state**, and after twenty runs the value delivered is the map, not necessarily a fix.
