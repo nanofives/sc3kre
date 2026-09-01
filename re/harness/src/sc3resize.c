@@ -637,6 +637,15 @@ static __int64 g_bfl_time[BFL_BUCKETS];
 static __int64 g_blt_area;
 static DWORD   g_blt_areacnt, g_blt_nullrect, g_blt_nullsrc;
 static LONG    g_blt_maxw, g_blt_maxh;
+/* SOURCE-side attribution (run 15). Blt is a method on the DESTINATION surface, so bucketing by
+ * `self` groups every blit into iso+0x4ec together - including the HUD bar's own blit into it.
+ * Run 9's "the bar's own blit never appears as a hot object" was therefore unsupported: by
+ * construction it could not appear separately. Bucketing by SOURCE separates the scene's tile blits
+ * from the bar's, inside the same destination. At dump time the known sources are labelled by
+ * comparing against the bar's and the render target's own IDirectDrawSurface* (sub+0x04). */
+#define SRC_BUCKETS 64
+static DWORD   g_src_key[SRC_BUCKETS], g_src_cnt[SRC_BUCKETS];
+static __int64 g_src_time[SRC_BUCKETS];
 static double  g_win_ms = 10000.0;   /* length of the current measurement window, for the %-of-window
                                         figure. Run 13 printed percentages against a hardcoded 10 s
                                         while sweep windows were 8 s - all understated. */
@@ -678,6 +687,12 @@ static void rz_blt_reset(void) {
     g_blt_area = 0; g_blt_areacnt = 0; g_blt_nullrect = 0; g_blt_nullsrc = 0;
 
     g_blt_maxw = 0; g_blt_maxh = 0;
+
+
+    memset(g_src_key, 0, sizeof(g_src_key)); memset((void *)g_src_cnt, 0, sizeof(g_src_cnt));
+
+
+    memset(g_src_time, 0, sizeof(g_src_time));
     memset(g_blt_key, 0, sizeof(g_blt_key));
     memset((void *)g_blt_cnt, 0, sizeof(g_blt_cnt));
     memset(g_blt_time, 0, sizeof(g_blt_time));
@@ -707,6 +722,54 @@ static void rz_blt_dump(const char *tag) {
              tag, g_blt_areacnt,
              g_blt_areacnt ? (double)g_blt_area / g_blt_areacnt : 0.0,
              g_blt_maxw, g_blt_maxh, g_blt_nullrect, g_blt_nullsrc);
+        {   /* SOURCE attribution, labelled against the surfaces we can name. `sub+0x04` holds the
+               IDirectDrawSurface* [CONFIRMED @ GZGraphicD 0x10018a82], so the bar's and the render
+               target's own surface pointers identify their blits unambiguously - by pointer, not by
+               dims, which is the discipline that made the U-068 blit-source match decidable. */
+            DWORD barsurf = 0, rtsurf = 0, rank;
+            static DWORD taken[24];
+            if (g_hud_top && !IsBadReadPtr(g_hud_top, 0xc0)) {
+                DWORD c = ((DWORD *)g_hud_top)[0x2a], s;
+                if (c && !IsBadReadPtr((void *)c, 0x48)) {
+                    s = ((DWORD *)c)[0x44 / 4];
+                    if (s && !IsBadReadPtr((void *)s, 8)) barsurf = ((DWORD *)s)[0x04 / 4];
+                }
+            }
+            if (g_bridge && !IsBadReadPtr(g_bridge, 0x1c)) {
+                DWORD iso = ((DWORD *)g_bridge)[0x18 / 4], R, s;
+                if (iso && !IsBadReadPtr((void *)iso, 0x78)) {
+                    R = ((DWORD *)iso)[0x74 / 4];
+                    if (R && !IsBadReadPtr((void *)R, 0x48)) {
+                        s = ((DWORD *)R)[0x44 / 4];
+                        if (s && !IsBadReadPtr((void *)s, 8)) rtsurf = ((DWORD *)s)[0x04 / 4];
+                    }
+                }
+            }
+            logf("BLT> %s SOURCES (bar surface=0x%08lX, render target surface=0x%08lX)",
+                 tag, barsurf, rtsurf);
+            for (rank = 0; rank < 8; rank++) {
+                DWORD best = 0xFFFFFFFF, j; __int64 bestt = -1;
+                for (i = 0; i < SRC_BUCKETS; i++) {
+                    int already = 0;
+                    if (!g_src_cnt[i]) continue;
+                    for (j = 0; j < rank; j++) if (taken[j] == i) { already = 1; break; }
+                    if (already) continue;
+                    if (g_src_time[i] > bestt) { bestt = g_src_time[i]; best = i; }
+                }
+                if (best == 0xFFFFFFFF) break;
+                taken[rank] = best;
+                {   double ms = g_freq.QuadPart
+                                ? (1000.0 * (double)g_src_time[best] / (double)g_freq.QuadPart) : 0.0;
+                    DWORD k = g_src_key[best];
+                    logf("BLT> %s SRC #%lu 0x%08lX%s calls=%lu total=%.1f ms avg=%.4f ms",
+                         tag, rank + 1, k,
+                         k == 0        ? " <NULL: colour fill>" :
+                         (barsurf && k == barsurf) ? "  <<< THE HUD BAR" :
+                         (rtsurf  && k == rtsurf)  ? "  <<< iso render target" : "",
+                         g_src_cnt[best], ms, g_src_cnt[best] ? ms / g_src_cnt[best] : 0.0);
+                }
+            }
+        }
         for (i = 0; i < BFL_BUCKETS && g_bfl_cnt[i]; i++) {
             double ms = g_freq.QuadPart ? (1000.0 * (double)g_bfl_time[i] / (double)g_freq.QuadPart) : 0.0;
             logf("BLT> %s FLAGS 0x%08lX calls=%lu total=%.1f ms avg=%.4f ms%s%s%s%s",
@@ -828,6 +891,13 @@ static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWO
         for (i = 0; i < BFL_BUCKETS; i++) {
             if (g_bfl_cnt[i] == 0) { g_bfl_key[i] = fl; g_bfl_cnt[i] = 1; g_bfl_time[i] = d; break; }
             if (g_bfl_key[i] == fl) { g_bfl_cnt[i]++; g_bfl_time[i] += d; break; }
+        }
+    }
+    {   /* time by SOURCE surface - separates the bar's blit from the scene's within one dest */
+        DWORD k = (DWORD)src, i;
+        for (i = 0; i < SRC_BUCKETS; i++) {
+            if (g_src_cnt[i] == 0) { g_src_key[i] = k; g_src_cnt[i] = 1; g_src_time[i] = d; break; }
+            if (g_src_key[i] == k) { g_src_cnt[i]++; g_src_time[i] += d; break; }
         }
     }
     if (!src) g_blt_nullsrc++;
@@ -1032,7 +1102,7 @@ static void rz_hudlab_tick(void) {
         if (g_hudphase == 1) {                /* settled -> install the timer, start at width[0] */
             rz_patch_ddblt();
             g_sweep_i = 0;
-            logf("SWEEP> starting %d-point width sweep (600/1024/1536/2048), %d ms each",
+            logf("SWEEP> starting %d-point sweep, %d ms each",
                  SWEEP_N, SWEEP_MS);
             rz_sweep_apply(g_sweep[0]);
             g_hudphase = 2;
@@ -2468,6 +2538,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
 
 
 

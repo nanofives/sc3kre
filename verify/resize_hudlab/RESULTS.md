@@ -1025,3 +1025,64 @@ still not as a full window-resize test.
 
 `SWEEP> starting 3-point width sweep (600/1024/1536/2048)` — the label is a stale hardcoded string;
 `SWEEP_N` is correct at 3 and the actual widths run were 600/2048/600. Log text only.
+
+---
+
+# ⚠️ CORRECTION TO RUN 9, made 2026-09-01 before run 15
+
+Run 9 concluded: *"The bar's own surface does not appear as a hot blit... If the cost were an extra
+wide bar blit each frame, that is exactly where it would appear, and it does not."* It was written up
+as "the most useful part is a NEGATIVE" and used to reframe the whole investigation.
+
+**That conclusion is unsupported.** `IDirectDrawSurface::Blt` is a method on the **DESTINATION**
+surface, and the instrument buckets by `self` — the destination. So every blit into `iso+0x4ec`
+lands in one bucket **including the HUD bar's own blit into it**. The bar's blit could never have
+appeared as a separate hot object; its absence carries no information.
+
+This is the same error class the board records repeatedly: reading a null result from an instrument
+that was structurally incapable of producing a positive one. Runs 10-14 are unaffected (they measure
+total inside-Blt time and its scaling, which the destination bucketing does not distort), but the
+"bar's own blit excluded" line must be struck from the elimination ledger.
+
+**Corrected ledger:**
+
+| status | item | by |
+|---|---|---|
+| excluded | surface residency | run 11, caps byte-identical |
+| excluded | pixel throughput | run 12, 6x smaller blits 7.7x slower |
+| excluded | our recreated surface | run 14, S3 returns to baseline |
+| ~~excluded~~ **OPEN** | the bar's own blit | run 9's negative was structural, not evidence |
+| failed instruments | stack-inferred callers | runs 7-8 |
+
+---
+
+# RUN 15 PRE-REGISTRATION — source-side attribution
+
+## Instrument
+
+Bucket Blt time by **SOURCE** surface as well as destination. The hook already receives `src` and
+discarded it. At dump, label the known sources by pointer: the bar's own `IDirectDrawSurface*` and
+the render target's, both read from `sub+0x04` `[CONFIRMED @ GZGraphicD 0x10018a82]`.
+
+**Match on POINTER, not dims** — the discipline that made the U-068 blit-source result decidable,
+where a dims-based filter could not have separated "not blitting" from "not recognised".
+
+## Pre-registered outcomes
+
+- **THE BAR IS THE COST:** the bar's source surface accounts for a large and width-scaling share of
+  inside-Blt time. Then the cost is literally drawing the wide bar each frame — a system-memory
+  surface (the bar is created with `p7=0`, which `FUN_10019273` routes to the `DDSCAPS_SYSTEMMEMORY`
+  branch) transferred to a video-memory destination, which is exactly the shape of an expensive
+  per-frame transfer. Mitigation becomes concrete: make the bar surface video-memory, or draw it
+  less often.
+- **THE BAR IS NOT THE COST:** the bar's source is a small share, and the growth is in the scene's
+  own tile blits. Then the wide bar degrades the scene's blits indirectly, and run 9's conclusion —
+  though unsupported as argued — was right by accident.
+- **VOID:** the bar's surface pointer cannot be resolved (logged as `0x00000000`), or fewer than 100
+  calls in a window.
+
+## Conditions
+
+Sweep `600 -> 2048 -> 600` again, so source attribution is measured at both widths with the
+ownership control still in place. If the bar's share grows from `S1` to `S2` and falls back at `S3`,
+that is the same within-run control that settled run 14.
