@@ -773,6 +773,25 @@ static struct { void *w; LONG nat[4]; } g_wins[WIN_MAX];
 static LONG   g_wins_n;
 static int    g_anchor;
 
+/* ---- CLUSTER MODE (SC3RESIZE_CLUSTER=1) -------------------------------------------------------
+ * Owner's design, and it is better than stretching: keep every HUD element at its NATIVE size and
+ * translate the whole native 800x600 layout into the bottom-right corner, leaving the rest of the
+ * bigger window blank.
+ *
+ * Three things fall out of it:
+ *   - **No tiling, so no FPS cost.** The bar is never widened, so SIMUI FUN_10026841's tile loop
+ *     never runs long - that loop is the entire measured cost (~46 blits/frame at 2048).
+ *   - **No blank stretched regions.** The side panel's black band below its last icon exists because
+ *     its 96x417 art does not stretch to a taller window; at native height there is nothing to fill.
+ *   - **Relative layout preserved.** A single translation keeps every element's position relative to
+ *     the others, so the HUD still reads as one piece.
+ *
+ * Translation is (liveW - 800, liveH - 600) applied to the cached NATIVE rect every time, so
+ * repeated resizes never compound. */
+static int    g_cluster;
+static LONG   g_bar_nat[4], g_side_nat[4];
+static int    g_bar_nat_ok, g_side_nat_ok;
+
 /* Dock the minimap by rewriting the dest rect the generic painter reads.
  * FUN_1006d2d0 blits this[0x16] into the rect at this+0x90 [CONFIRMED @ SIMUI 0x1006d2d0], and run
  * 25 measured that rect as [640 436 800 600] - unchanged at 2048x1081, which is exactly why the
@@ -808,6 +827,72 @@ static void rz_anchor_all(void) {
         moved++;
     }
     logf("ANCHOR> re-anchored %ld of %ld windows (dx=%ld dy=%ld)", moved, g_wins_n, dx, dy);
+}
+
+static int rz_thiscall(void *self, void *fn, const DWORD *a, int n);  /* fwd: defined further down */
+
+/* Move one framework window to an absolute rect via its own vt+0xc8 SetRect - the method already
+ * proven on both the bar and the side panel. Live-vtable dispatch, guarded, logs what it did. */
+static void rz_win_setrect(void *w, const char *name, LONG x1, LONG y1, LONG x2, LONG y2) {
+    DWORD *win = (DWORD *)w, *vt;
+    DWORD a[4];
+    if (!win || IsBadReadPtr(win, 0xcc)) { logf("CLUSTER> %s: unreadable", name); return; }
+    vt = *(DWORD **)win;
+    if (!vt || IsBadReadPtr(vt, 0xcc) || !vt[0xc8/4]) {
+        logf("CLUSTER> %s: no vt+0xc8", name); return;
+    }
+    logf("CLUSTER> %s [%ld %ld %ld %ld] -> [%ld %ld %ld %ld]", name,
+         (LONG)win[0x14/4], (LONG)win[0x18/4], (LONG)win[0x1c/4], (LONG)win[0x20/4], x1, y1, x2, y2);
+    a[0] = (DWORD)x1; a[1] = (DWORD)y1; a[2] = (DWORD)x2; a[3] = (DWORD)y2;
+    rz_thiscall(w, (void *)vt[0xc8/4], a, 4);
+}
+
+/* Translate the whole native HUD into the bottom-right corner, at native size. */
+static void rz_cluster_layout(void) {
+    RECT cr;
+    LONG dx, dy, i, moved = 0;
+    if (!g_cluster || !g_hwnd || !GetClientRect(g_hwnd, &cr)) return;
+    dx = (cr.right - cr.left) - NAT_W;
+    dy = (cr.bottom - cr.top) - NAT_H;
+    if (dx <= 0 && dy <= 0) { logf("CLUSTER> window not larger than native - nothing to do"); return; }
+
+    /* Cache each framework window's native rect the first time we see it, before anything moves. */
+    if (!g_bar_nat_ok && g_hud_top && !IsBadReadPtr(g_hud_top, 0x24)) {
+        DWORD *h = (DWORD *)g_hud_top;
+        g_bar_nat[0] = (LONG)h[0x14/4]; g_bar_nat[1] = (LONG)h[0x18/4];
+        g_bar_nat[2] = (LONG)h[0x1c/4]; g_bar_nat[3] = (LONG)h[0x20/4];
+        g_bar_nat_ok = 1;
+        logf("CLUSTER> cached bar native [%ld %ld %ld %ld]",
+             g_bar_nat[0], g_bar_nat[1], g_bar_nat[2], g_bar_nat[3]);
+    }
+    if (!g_side_nat_ok && g_side_top && !IsBadReadPtr(g_side_top, 0x24)) {
+        DWORD *s = (DWORD *)g_side_top;
+        g_side_nat[0] = (LONG)s[0x14/4]; g_side_nat[1] = (LONG)s[0x18/4];
+        g_side_nat[2] = (LONG)s[0x1c/4]; g_side_nat[3] = (LONG)s[0x20/4];
+        g_side_nat_ok = 1;
+        logf("CLUSTER> cached side native [%ld %ld %ld %ld]",
+             g_side_nat[0], g_side_nat[1], g_side_nat[2], g_side_nat[3]);
+    }
+
+    if (g_bar_nat_ok)
+        rz_win_setrect(g_hud_top, "bottom bar", g_bar_nat[0] + dx, g_bar_nat[1] + dy,
+                       g_bar_nat[2] + dx, g_bar_nat[3] + dy);
+    if (g_side_nat_ok)
+        rz_win_setrect(g_side_top, "side panel", g_side_nat[0] + dx, g_side_nat[1] + dy,
+                       g_side_nat[2] + dx, g_side_nat[3] + dy);
+
+    /* Everything else the generic painter draws: translate its dest rect by the same delta. */
+    for (i = 0; i < g_wins_n; i++) {
+        void *w = g_wins[i].w;
+        LONG *r, *n = g_wins[i].nat;
+        if (!w || w == g_hud_top || w == g_side_top || IsBadReadPtr(w, 0xa0)) continue;
+        r = (LONG *)((DWORD)w + 0x90);
+        r[0] = n[0] + dx; r[1] = n[1] + dy;
+        r[2] = n[2] + dx; r[3] = n[3] + dy;
+        moved++;
+    }
+    logf("CLUSTER> translated %ld painter windows by (%ld,%ld); HUD kept at native size",
+         moved, dx, dy);
 }
 
 static void rz_mini_dock(void) {
@@ -2125,10 +2210,28 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
 
            while run 29 (lab armed) had worked. A shipping feature must not live in a diagnostic branch. */
 
-        rz_mini_dock();
+        if (g_cluster) {
 
 
-        rz_anchor_all();   /* generic edge anchoring for every other native-coord HUD window */
+            /* Cluster mode replaces both: nothing is widened, everything is translated at native size. */
+
+
+            rz_mini_dock();
+
+
+            rz_cluster_layout();
+
+
+        } else {
+
+
+            rz_mini_dock();
+
+
+            rz_anchor_all();
+
+
+        }
 
         if (g_hudlab) {
             /* DIAGNOSTIC path: census now, then let the A/B phase machine drive the dock+fit so the
@@ -2200,14 +2303,18 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
                and now on the render thread. Same two calls the lab drives, no phases, no census.
                Both are self-gating and log a refusal rather than forcing anything. */
             RECT cr;
+
+            if (!g_cluster) {
             rz_hud_setrect_w(0);
             if (g_hwnd && GetClientRect(g_hwnd, &cr))
-                rz_hud_fit_surface((DWORD)(cr.right - cr.left));
+                    rz_hud_fit_surface((DWORD)(cr.right - cr.left));
+
+            }
             /* SC3RESIZE_SIDE on the SHIP path. Placed here deliberately: the first attempt put it
                next to the lab's copy of the same fit block (rz_hudlab_tick phase 2), which is the
                identical wiring mistake that made run 30's minimap dock silently not run. Two
                near-identical blocks exist; this is the one step 12 reaches when the lab is off. */
-            if (g_sideon) rz_side_extend();
+            if (g_sideon && !g_cluster) rz_side_extend();
         }
     }
 
@@ -2750,7 +2857,9 @@ static void __stdcall fnlog_enter(int idx, DWORD *f) {
                    excluded by area so we never move the thing the HUD sits on top of. */
                 LONG q; int seen = 0;
                 for (q = 0; q < g_wins_n; q++) if (g_wins[q].w == (void *)ecx) { seen = 1; break; }
-                if (!seen && r[0] >= 0 && r[1] >= 0 && r[2] <= NAT_W && r[3] <= NAT_H &&
+                /* Bounds relaxed +64: the RCI indicator sits at [599 520 640 608] and a strict `<= 600`
+                       rejected it, which is why it never moved. Overhang is normal for native UI. */
+                    if (!seen && r[0] >= -64 && r[1] >= -64 && r[2] <= NAT_W + 64 && r[3] <= NAT_H + 64 &&
                     (w * h) <= (NAT_W * NAT_H * 7) / 10) {
                     g_wins[g_wins_n].w = (void *)ecx;
                     g_wins[g_wins_n].nat[0] = r[0]; g_wins[g_wins_n].nat[1] = r[1];
@@ -3236,6 +3345,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           g_sideon  = GetEnvironmentVariableA("SC3RESIZE_SIDE",  v, sizeof(v)) && atoi(v);
           g_minion  = GetEnvironmentVariableA("SC3RESIZE_MINI",  v, sizeof(v)) && atoi(v);
           g_anchor  = GetEnvironmentVariableA("SC3RESIZE_ANCHOR", v, sizeof(v)) && atoi(v);
+          g_cluster = GetEnvironmentVariableA("SC3RESIZE_CLUSTER", v, sizeof(v)) && atoi(v);
           /* HUD dock+span ships ON. SC3RESIZE_HUDNATIVE=1 is the opt-out for anyone who prefers the
              native bar - the full-width bar carries a measured GPU-sync FPS cost that is NOT yet
              resolved (verify/resize_hudlab: two causes eliminated, mechanism still open). */
@@ -3252,6 +3362,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
+
+
 
 
 
