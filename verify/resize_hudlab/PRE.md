@@ -1027,3 +1027,51 @@ Two reasons, and the second matters more. It is read-only. And **the crash recor
 `FUN_10009efb` is specific and was pre-registered as the prime suspect before that run** — ignoring
 it because a different question now makes the hook convenient would be exactly the kind of reasoning
 this project's logs exist to prevent.
+
+---
+
+# RUN 25 PRE-REGISTRATION — find the minimap by its DEST RECT (no owner needed)
+
+Run 24's owner-based approach is dead, for two reasons now established statically:
+
+1. **883 SIMUI vtables** have a `.text` pointer at the `+0x144` draw slot, so "enumerate the window
+   classes and hook their constructors" does not narrow anything.
+2. **The child-list head offset is PER-CLASS** - `FUN_1004d9be` uses `[0x2d]` (`+0xb4`),
+   `FUN_1006e2e9` uses `[0x7d]`. Walking `+0xb4` on an arbitrary object is invalid, which is exactly
+   what produced run 24's 21 access violations.
+
+## The realisation
+
+**The identity we want is GEOMETRY, and we already receive it.** `rz_blt_hook` gets the **dest rect**
+on every call and discards it. Where a source lands on screen, and how big, identifies the minimap
+without needing its owner object at all.
+
+Per-source dest rect is now recorded alongside the existing count/time, and reported in the SOURCES
+dump with a square-ish flag.
+
+Notably this also avoids calling `GetSurfaceDesc` on the source pointers - which would have been the
+other way to get dimensions, and which is the exact pattern behind an earlier crash in this project
+("it called `GetSurfaceDesc` through the pointer it was trying to identify"). Here provenance would
+arguably make that safe, but the rects make the question moot, so the risk is not taken.
+
+## Also in this build
+
+**Run 24's tree walk is DISABLED** (`(void)rz_walk_windows;`). It produced 21 AVs and must not run
+again until the node layout is established statically. Recorded rather than quietly deleted.
+
+## Pre-registered outcomes
+
+- **MINIMAP FOUND:** a source blits to a roughly square dest rect of reasonable size, at a plausible
+  minimap position. Its pointer is then the minimap's surface, and the dest rect gives its exact
+  on-screen box - enough to reposition it without ever identifying its window object.
+- **NO SQUARE DEST:** every source lands on a non-square region. The minimap is then not drawn by a
+  distinct DirectDraw blit at all - perhaps rendered into another surface first - and the approach
+  needs rethinking.
+- **VOID:** a fault, or no city.
+
+## Honest note on cost
+
+This is run 25 of a session that has already delivered its main results. The minimap is a
+**nice-to-have**, and three approaches to it have now failed (shape-filtered candidates, class
+enumeration, tree walk). If the dest rects do not settle it, that is the signal to stop rather than
+try a fourth.

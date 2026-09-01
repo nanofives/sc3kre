@@ -723,6 +723,13 @@ static LONG    g_blt_maxw, g_blt_maxh;
 #define SRC_BUCKETS 64
 static DWORD   g_src_key[SRC_BUCKETS], g_src_cnt[SRC_BUCKETS];
 static __int64 g_src_time[SRC_BUCKETS];
+/* Per-source DEST RECT (run 25). Finding the minimap by owner-object was a dead end: 883 SIMUI
+   vtables have a window-shaped draw slot, and walking child lists is invalid because the list-head
+   offset is per-class (FUN_1004d9be uses [0x2d], FUN_1006e2e9 uses [0x7d]). But the identity we
+   actually want is GEOMETRY, and the hook already receives the dest rect on every call and discards
+   it. Where a source lands on screen, and how big, identifies it without needing its owner at all -
+   and without dispatching any COM method on a pointer we did not create. */
+static LONG    g_src_rect[SRC_BUCKETS][4];
 /* The bar's IDirectDrawSurface*, captured AT REFIT TIME (run 16). Run 15 read it at dump time, but
  * the pointer changes on every recreate, so the dump described the surface at the END of the window
  * rather than the one blitting during it. Both the new and the replaced surface are kept: the old
@@ -871,6 +878,11 @@ static void rz_blt_reset(void) {
 
 
 
+    memset(g_src_rect, 0, sizeof(g_src_rect));
+
+
+
+
     memset(g_src_key, 0, sizeof(g_src_key)); memset((void *)g_src_cnt, 0, sizeof(g_src_cnt));
 
 
@@ -928,9 +940,17 @@ static void rz_blt_dump(const char *tag) {
                     DWORD k = g_src_key[best];
                     char nm[160];
                     rz_name_surface(k, nm, sizeof(nm));
-                    logf("BLT> %s SRC #%lu 0x%08lX calls=%lu total=%.1f ms avg=%.4f ms%s",
-                         tag, rank + 1, k, g_src_cnt[best], ms,
-                         g_src_cnt[best] ? ms / g_src_cnt[best] : 0.0, nm);
+                    {   LONG rl = g_src_rect[best][0], rt = g_src_rect[best][1];
+                        LONG rr = g_src_rect[best][2], rb2 = g_src_rect[best][3];
+                        LONG rw = rr - rl, rh = rb2 - rt;
+                        logf("BLT> %s SRC #%lu 0x%08lX calls=%lu total=%.1f ms avg=%.4f ms "
+                             "dest=[%ld %ld %ld %ld] %ldx%ld%s%s",
+                             tag, rank + 1, k, g_src_cnt[best], ms,
+                             g_src_cnt[best] ? ms / g_src_cnt[best] : 0.0,
+                             rl, rt, rr, rb2, rw, rh,
+                             (rw > 40 && rh > 40 && rw < rh * 2 && rh < rw * 2)
+                                 ? "  <<< SQUARE-ISH" : "", nm);
+                    }
                 }
             }
         }
@@ -1119,8 +1139,23 @@ static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWO
     {   /* time by SOURCE surface - separates the bar's blit from the scene's within one dest */
         DWORD k = (DWORD)src, i;
         for (i = 0; i < SRC_BUCKETS; i++) {
-            if (g_src_cnt[i] == 0) { g_src_key[i] = k; g_src_cnt[i] = 1; g_src_time[i] = d; break; }
-            if (g_src_key[i] == k) { g_src_cnt[i]++; g_src_time[i] += d; break; }
+            if (g_src_cnt[i] == 0 || g_src_key[i] == k) {
+
+                if (g_src_cnt[i] == 0) { g_src_key[i] = k; g_src_cnt[i] = 0; g_src_time[i] = 0; }
+
+                g_src_cnt[i]++; g_src_time[i] += d;
+
+                if (dr && !IsBadReadPtr(dr, sizeof(RECT))) {
+
+                    g_src_rect[i][0] = dr->left;  g_src_rect[i][1] = dr->top;
+
+                    g_src_rect[i][2] = dr->right; g_src_rect[i][3] = dr->bottom;
+
+                }
+
+                break;
+
+            }
         }
     }
     if (!src) g_blt_nullsrc++;
@@ -1968,8 +2003,13 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
                 /* UI TREE WALK - read-only enumeration from the two windows we already hold.
                    Chosen over a surface->owner create recorder because that would mean re-enabling
                    the FUN_10009efb hook the v2 crash isolated to. No new hook, nothing detoured. */
-                rz_walk_windows("HUDBAR", g_hud_top, 0);
-                rz_walk_windows("SIDE",   g_side_top, 0);
+                /* run 24's tree walk is DISABLED: it produced 21 access violations because node[2] was a guess
+
+                   and the list-head offset turned out to be per-class ([0x2d] in FUN_1004d9be, [0x7d] in
+
+                   FUN_1006e2e9). It must not run again until the node layout is established statically. */
+
+                (void)rz_walk_windows;
             }
             g_hudphase = 1;
             g_phase_ms = GetTickCount() + 3000;
@@ -2968,6 +3008,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
+
+
 
 
 
