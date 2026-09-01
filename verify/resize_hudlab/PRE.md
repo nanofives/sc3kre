@@ -604,3 +604,45 @@ a mechanism, and this session has already killed four tidy stories that felt con
 
 Sweep is diagnostic only, behind two flags (`SC3RESIZE_HUDLAB=1 SC3RESIZE_SWEEP=1`). With either
 unset the mod is the shipping build: viewport plus HUD dock/span at full width.
+
+---
+
+# RUN 14 PRE-REGISTRATION — the ownership control: 600(engine) -> 2048(ours) -> 600(ours)
+
+Run 13 confounded width with surface OWNERSHIP. `rz_hud_fit_surface` skips when `liveW == oldw`, and
+the bar is natively 600 wide, so run 13's 600 baseline kept the ENGINE's surface while every wider
+step ran on one WE created — and that first step carried nearly all the measured cost
+(x2.00 of a x2.52 total).
+
+## The control
+
+Three 8 s windows: **600 (engine surface) -> 2048 (ours) -> 600 (ours)**. Step 3 refits because
+`oldw` is 2048 by then, so it genuinely lands on our surface at the original width. Steps are tagged
+`S1_W600`, `S2_W2048`, `S3_W600` so the two 600s are distinguishable.
+
+Also fixed: the `%-of-window` divisor is now a `g_win_ms` global rather than a hardcoded 10 s, so
+8 s windows report honestly. Run 13's printed percentages were all understated.
+
+## Pre-registered outcomes — the whole run turns on step 3
+
+- **WIDTH IS THE DRIVER:** `S3_W600` returns to roughly `S1_W600`'s cost. The engine genuinely pays
+  for a wider bar, the mod is behaving correctly, and mitigation means choosing a narrower bar or
+  accepting the cost.
+- **OUR SURFACE IS THE DRIVER:** `S3_W600` stays near `S2_W2048`'s cost. Then width is largely
+  irrelevant and **the recreated surface itself is expensive — a MOD BUG, not an engine property.**
+  That would make it fixable (match the engine's create parameters, or avoid recreating at all),
+  and it would retroactively explain the saturating curve in run 13: one step change at the moment
+  of handover, then little.
+- **MIXED:** `S3_W600` lands materially between the two. Both effects are real and their relative
+  size is the measurement.
+- **VOID:** fewer than 100 inside-Blt calls in any window, a refused hook, or a fault.
+
+## Why this matters more than the previous twelve runs
+
+Every run since 3 has attributed the cost to *bar width* and reasoned about engine behaviour on that
+basis. **If step 3 stays high, that attribution was wrong from run 3 onward** — the confound was
+introduced the first time the mod widened the surface, and every subsequent "wide bar costs more"
+reading would actually have been "our surface costs more".
+
+Stating that plainly in advance, because it is the outcome that invalidates the most of my own prior
+work, and that is exactly the outcome a pre-registration exists to make un-wriggle-out-of-able.

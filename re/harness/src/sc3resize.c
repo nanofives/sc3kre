@@ -637,6 +637,9 @@ static __int64 g_bfl_time[BFL_BUCKETS];
 static __int64 g_blt_area;
 static DWORD   g_blt_areacnt, g_blt_nullrect, g_blt_nullsrc;
 static LONG    g_blt_maxw, g_blt_maxh;
+static double  g_win_ms = 10000.0;   /* length of the current measurement window, for the %-of-window
+                                        figure. Run 13 printed percentages against a hardcoded 10 s
+                                        while sweep windows were 8 s - all understated. */
 static DWORD   g_blt_key[BLT_BUCKETS], g_blt_cnt[BLT_BUCKETS];
 static __int64 g_blt_time[BLT_BUCKETS];
 static __int64 g_blt_last;
@@ -693,8 +696,8 @@ static void rz_blt_dump(const char *tag) {
         double dd = g_freq.QuadPart ? (1000.0 * (double)g_ddblt_time / (double)g_freq.QuadPart) : 0.0;
         if (g_blt_slot && g_blt_slot != (DWORD *)-1)
             logf("BLT> ---- %s ---- INSIDE ddraw Blt: %lu calls, %.1f ms total, %.4f ms avg "
-                 "(%.1f%% of the 10 s window)", tag, g_ddblt_calls, dd,
-                 g_ddblt_calls ? dd / g_ddblt_calls : 0.0, dd / 100.0);
+                 "(%.1f%% of the measurement window)", tag, g_ddblt_calls, dd,
+                 g_ddblt_calls ? dd / g_ddblt_calls : 0.0, dd / (g_win_ms / 100.0));
         else
             logf("BLT> ---- %s ---- INSIDE ddraw Blt: NOT HOOKED (no split available)", tag);
     }
@@ -987,7 +990,16 @@ static void rz_patch_ddblt(void);           /* fwd: install the ddraw Blt timer 
  * HOW the cost grows with width, and that shape is diagnostic: a THRESHOLD implies a resource limit
  * (a surface no longer fitting somewhere), while SMOOTH scaling implies per-pixel driver work.
  * Same within-run control as A/B - one process, one city, one window size, only the bar width moves. */
-static const DWORD g_sweep[] = { 600, 1024, 1536, 2048 };
+/* RUN 14 control: 600(engine surface) -> 2048(ours) -> 600(ours).
+ * Run 13 confounded width with surface ownership: rz_hud_fit_surface skips when liveW == oldw, and
+ * the bar is natively 600, so its 600 baseline kept the ENGINE's surface while every wider step ran
+ * on one we created - and that first step carried nearly all the cost.
+ * Step 3 returns to 600 but now on OUR surface (oldw is 2048 by then, so the refit does happen),
+ * which separates the two explanations:
+ *   cost back at baseline in step 3 -> WIDTH is the driver;
+ *   cost still high in step 3       -> OUR RECREATED SURFACE is the driver = a mod bug, not an
+ *                                      engine property, and a far more fixable one. */
+static const DWORD g_sweep[] = { 600, 2048, 600 };
 #define SWEEP_N (int)(sizeof(g_sweep) / sizeof(g_sweep[0]))
 #define SWEEP_MS 8000
 static int g_sweepon, g_sweep_i;
@@ -999,7 +1011,8 @@ static void rz_sweep_apply(DWORD w) {
     static char tag[32];
     rz_hud_setrect_w(w);
     rz_hud_fit_surface(w);
-    _snprintf(tag, sizeof(tag), "W%lu", w);
+    _snprintf(tag, sizeof(tag), "S%d_W%lu", g_sweep_i + 1, w);
+    g_win_ms = (double)SWEEP_MS;
     rz_prof_reset(); rz_blt_reset();
     InterlockedExchange(&g_prof_on, 1);
     logf("SWEEP> === width %lu === measuring %d ms", w, SWEEP_MS);
@@ -1007,7 +1020,7 @@ static void rz_sweep_apply(DWORD w) {
 }
 static void rz_sweep_dump(DWORD w) {
     char tag[32];
-    _snprintf(tag, sizeof(tag), "W%lu", w);
+    _snprintf(tag, sizeof(tag), "S%d_W%lu", g_sweep_i + 1, w);
     InterlockedExchange(&g_prof_on, 0);
     rz_blt_dump(tag);
 }
@@ -2455,6 +2468,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
+
 
 
 
