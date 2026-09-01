@@ -1536,3 +1536,63 @@ the class in general.
 - Offset map: corroborated by which fields the constructor does and does not initialise.
 - Next, if pursued: dock/extend via the same `vt+0xc8` SetRect used for the bar, then measure -
   the prediction is **no material FPS change**, which is a real falsifiable claim.
+
+---
+
+# RUN 22 — ⭐ **PREDICTION HOLDS.** Extending the side panel costs NOTHING. Model confirmed positively.
+
+Owner: *"you moved the vertical panel, below the buttons there's a black line, minimap was not moved,
+there's no FPS drop."*
+
+```
+SIDE> SetRect vt+0xc8  [704,0,800,442] -> [1952,0,2048,1081]
+SIDE> SetRect returned; rect now [1952,0,2048,1081] (tiled child +0xcc=0x00000000)
+```
+
+| | A (panel native) | B (panel extended full height) | change |
+|---|---:|---:|---:|
+| inside-Blt calls | 25341 | **25419** | **+0.3%** |
+| inside-Blt total | 8636.7 ms | **8387.5 ms** | **-2.9%** |
+| inside-Blt avg | 0.3408 ms | **0.3300 ms** | **-3.2%** |
+
+**No cost. B is fractionally CHEAPER than A**, comfortably inside the pre-registered ~15% band, and
+the owner independently reports no FPS drop.
+
+## The contrast is the point
+
+Same framework, same `vt+0xc8` SetRect, same instrument, same measurement window:
+
+| element | change | inside-Blt avg | calls |
+|---|---|---|---|
+| **bottom bar** (tile loop **ACTIVE**) | 600 -> 2048 wide | 0.34 -> **0.85 ms (x2.5)** | -60% |
+| **side panel** (tile loop **NULL-GUARDED, inactive**) | 442 -> 1081 tall | 0.34 -> **0.33 ms (flat)** | +0.3% |
+
+**This is the first POSITIVE confirmation of the tiling model.** Everything before it established the
+mechanism by elimination - removing width, residency, throughput, surface ownership. This one
+predicted, in advance and in writing, that a structurally similar UI element *without* an active tile
+loop would be **free** to extend. It was.
+
+A model that only explains costs after the fact is weak. This one called a null result correctly
+before the run.
+
+## The black line was predicted
+
+Pre-registration: *"the two real children are 96x417 and 96x25 and will NOT stretch, so a full-height
+panel will very likely show a blank region below them. That is expected and is not the thing being
+measured."* Owner saw exactly that. **Not a defect - the panel has no art to fill the extra height**,
+which is a content problem, not a performance one, and is fixable the same way the bar's was
+(cache the art, refit the child surface, tile it).
+
+## NEW: the minimap is a SEPARATE window
+
+Owner: *"minimap was not moved."* So the minimap is not one of this panel's five children - it is its
+own UI window with its own object and paint routine, and it needs its own capture to move. **Not a
+failure of this run**; a newly identified piece of the surface. Candidates from the earlier SIMUI
+scan (6-blit paint routines) include `FUN_1001ad52` and `FUN_10060f59`, neither of which has a loop.
+
+## Status
+
+- Side panel: **docks and extends to full height at 2048x1081 with ZERO frame cost.**
+- Tiling model: **confirmed positively**, not just by elimination.
+- Open (cosmetic): the panel's blank region needs art, exactly as the bar's did.
+- Open (new): the minimap is a separate window, not yet captured.
