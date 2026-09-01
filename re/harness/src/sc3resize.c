@@ -646,6 +646,57 @@ static LONG    g_blt_maxw, g_blt_maxh;
 #define SRC_BUCKETS 64
 static DWORD   g_src_key[SRC_BUCKETS], g_src_cnt[SRC_BUCKETS];
 static __int64 g_src_time[SRC_BUCKETS];
+/* The bar's IDirectDrawSurface*, captured AT REFIT TIME (run 16). Run 15 read it at dump time, but
+ * the pointer changes on every recreate, so the dump described the surface at the END of the window
+ * rather than the one blitting during it. Both the new and the replaced surface are kept: the old
+ * DD surface is not necessarily destroyed - FUN_1001420d overwrites `param_1[0x11]` without freeing
+ * the previous sub-object [CONFIRMED @ GZGraphicD 0x1001420d] - so a stale surface may still be
+ * blitted by something holding a reference. */
+static DWORD   g_bar_surf, g_bar_surf_prev;
+
+/* Name a source IDirectDrawSurface* by searching the objects we can reach for one whose sub-object
+ * holds it at sub+0x04. Identity by POINTER against a reachable owner, never by dims or by heap
+ * proximity - run 15 could only offer region adjacency, which is not evidence. */
+static void rz_name_surface(DWORD surf, char *out, int n) {
+    DWORD iso = 0;
+    int i;
+    out[0] = 0;
+    if (!surf) { lstrcpynA(out, "  <NULL: colour fill>", n); return; }
+    if (g_bar_surf && surf == g_bar_surf) {
+        lstrcpynA(out, "  <<< THE HUD BAR (surface captured at this step's refit)", n); return;
+    }
+    if (g_bar_surf_prev && surf == g_bar_surf_prev) {
+        lstrcpynA(out, "  <<< THE HUD BAR'S PREVIOUS surface (replaced, not freed)", n); return;
+    }
+    if (g_bridge && !IsBadReadPtr(g_bridge, 0x1c)) iso = ((DWORD *)g_bridge)[0x18 / 4];
+    if (iso && !IsBadReadPtr((void *)iso, 0x4f0)) {
+        static const struct { DWORD off; const char *nm; } isos[] = {
+            { 0x74,  "iso render target" }, { 0x4ec, "iso device/blit-dest surface" } };
+        for (i = 0; i < 2; i++) {
+            DWORD R = ((DWORD *)iso)[isos[i].off / 4], s;
+            if (!R || IsBadReadPtr((void *)R, 0x48)) continue;
+            s = ((DWORD *)R)[0x44 / 4];
+            if (s && !IsBadReadPtr((void *)s, 8) && ((DWORD *)s)[0x04 / 4] == surf) {
+                _snprintf(out, n, "  <<< %s (%lux%lu)", isos[i].nm,
+                          ((DWORD *)R)[0x24 / 4], ((DWORD *)R)[0x28 / 4]);
+                return;
+            }
+        }
+    }
+    if (g_hud_top && !IsBadReadPtr(g_hud_top, 0xc0)) {
+        for (i = 0x2a; i <= 0x2f; i++) {
+            DWORD c = ((DWORD *)g_hud_top)[i], s;
+            if (!c || IsBadReadPtr((void *)c, 0x48)) continue;
+            s = ((DWORD *)c)[0x44 / 4];
+            if (s && !IsBadReadPtr((void *)s, 8) && ((DWORD *)s)[0x04 / 4] == surf) {
+                _snprintf(out, n, "  <<< HUD child[0x%x] (%lux%lu)", i,
+                          ((DWORD *)c)[0x24 / 4], ((DWORD *)c)[0x28 / 4]);
+                return;
+            }
+        }
+    }
+    lstrcpynA(out, "  (not reachable from iso or the HUD children)", n);
+}
 static double  g_win_ms = 10000.0;   /* length of the current measurement window, for the %-of-window
                                         figure. Run 13 printed percentages against a hardcoded 10 s
                                         while sweep windows were 8 s - all understated. */
@@ -722,31 +773,14 @@ static void rz_blt_dump(const char *tag) {
              tag, g_blt_areacnt,
              g_blt_areacnt ? (double)g_blt_area / g_blt_areacnt : 0.0,
              g_blt_maxw, g_blt_maxh, g_blt_nullrect, g_blt_nullsrc);
-        {   /* SOURCE attribution, labelled against the surfaces we can name. `sub+0x04` holds the
-               IDirectDrawSurface* [CONFIRMED @ GZGraphicD 0x10018a82], so the bar's and the render
-               target's own surface pointers identify their blits unambiguously - by pointer, not by
-               dims, which is the discipline that made the U-068 blit-source match decidable. */
-            DWORD barsurf = 0, rtsurf = 0, rank;
+        {   /* SOURCE attribution. Each source is resolved by rz_name_surface, which searches the
+               objects we can reach for one whose sub-object holds it at sub+0x04
+               [CONFIRMED @ GZGraphicD 0x10018a82]. Identity by POINTER against a reachable owner -
+               run 15 could only offer heap-region adjacency, which is not evidence. */
+            DWORD rank;
             static DWORD taken[24];
-            if (g_hud_top && !IsBadReadPtr(g_hud_top, 0xc0)) {
-                DWORD c = ((DWORD *)g_hud_top)[0x2a], s;
-                if (c && !IsBadReadPtr((void *)c, 0x48)) {
-                    s = ((DWORD *)c)[0x44 / 4];
-                    if (s && !IsBadReadPtr((void *)s, 8)) barsurf = ((DWORD *)s)[0x04 / 4];
-                }
-            }
-            if (g_bridge && !IsBadReadPtr(g_bridge, 0x1c)) {
-                DWORD iso = ((DWORD *)g_bridge)[0x18 / 4], R, s;
-                if (iso && !IsBadReadPtr((void *)iso, 0x78)) {
-                    R = ((DWORD *)iso)[0x74 / 4];
-                    if (R && !IsBadReadPtr((void *)R, 0x48)) {
-                        s = ((DWORD *)R)[0x44 / 4];
-                        if (s && !IsBadReadPtr((void *)s, 8)) rtsurf = ((DWORD *)s)[0x04 / 4];
-                    }
-                }
-            }
-            logf("BLT> %s SOURCES (bar surface=0x%08lX, render target surface=0x%08lX)",
-                 tag, barsurf, rtsurf);
+            logf("BLT> %s SOURCES (bar surface at refit=0x%08lX, previous=0x%08lX)",
+                 tag, g_bar_surf, g_bar_surf_prev);
             for (rank = 0; rank < 8; rank++) {
                 DWORD best = 0xFFFFFFFF, j; __int64 bestt = -1;
                 for (i = 0; i < SRC_BUCKETS; i++) {
@@ -761,12 +795,11 @@ static void rz_blt_dump(const char *tag) {
                 {   double ms = g_freq.QuadPart
                                 ? (1000.0 * (double)g_src_time[best] / (double)g_freq.QuadPart) : 0.0;
                     DWORD k = g_src_key[best];
-                    logf("BLT> %s SRC #%lu 0x%08lX%s calls=%lu total=%.1f ms avg=%.4f ms",
-                         tag, rank + 1, k,
-                         k == 0        ? " <NULL: colour fill>" :
-                         (barsurf && k == barsurf) ? "  <<< THE HUD BAR" :
-                         (rtsurf  && k == rtsurf)  ? "  <<< iso render target" : "",
-                         g_src_cnt[best], ms, g_src_cnt[best] ? ms / g_src_cnt[best] : 0.0);
+                    char nm[160];
+                    rz_name_surface(k, nm, sizeof(nm));
+                    logf("BLT> %s SRC #%lu 0x%08lX calls=%lu total=%.1f ms avg=%.4f ms%s",
+                         tag, rank + 1, k, g_src_cnt[best], ms,
+                         g_src_cnt[best] ? ms / g_src_cnt[best] : 0.0, nm);
                 }
             }
         }
@@ -1796,6 +1829,9 @@ static void rz_hud_fit_surface(DWORD liveW) {
     sub  = ((DWORD *)obj)[0x44 / 4];
     if (!sub || IsBadReadPtr((void *)sub, 0xf8)) { logf("HUDFIT> skipped: sub unreadable"); return; }
     oldbits = ((DWORD *)sub)[0xf0 / 4]; oldpitch = ((DWORD *)sub)[0xf4 / 4];
+    /* Remember the surface we are about to replace - FUN_1001420d overwrites the sub-object pointer
+       without freeing the old one, so the previous DD surface may still be blitted by a holder. */
+    if (!IsBadReadPtr((void *)sub, 8)) g_bar_surf_prev = ((DWORD *)sub)[0x04 / 4];
     /* Re-fit on ANY width change, not just a widen - a later resize to a SMALLER window must bring
        the bar back down, or it stays wider than the window it lives in. */
     if (liveW == oldw) {
@@ -1876,7 +1912,12 @@ static void rz_hud_fit_surface(DWORD liveW) {
             logf("HUDFIT> REFUSE lock: sub vtable 0x%08lX != GZGraphicD+0x%X (0x%08lX) - not the "
                  "class we think, refusing to dispatch through it", (DWORD)svt, GZ_RVA_VT_SURFACE, want);
         } else {
-            int lk = rz_thiscall((void *)nsub, (void *)svt[0x0c / 4], NULL, 0);
+            int lk;
+            /* capture the NEW surface here, at refit time - not at dump time (run 15's error) */
+            g_bar_surf = IsBadReadPtr((void *)nsub, 8) ? 0 : ((DWORD *)nsub)[0x04 / 4];
+            logf("HUDFIT> bar IDirectDrawSurface* now 0x%08lX (was 0x%08lX)",
+                 g_bar_surf, g_bar_surf_prev);
+            lk = rz_thiscall((void *)nsub, (void *)svt[0x0c / 4], NULL, 0);
             DWORD nbits = ((DWORD *)nsub)[0xf0 / 4], npitch = ((DWORD *)nsub)[0xf4 / 4];
             logf("HUDFIT> lock vt+0x0c=0x%08lX -> %d | depth=%lu bits=0x%08lX pitch=%lu",
                  svt[0x0c / 4], lk & 0xff, ((DWORD *)nsub)[0xe4 / 4], nbits, npitch);
@@ -2538,6 +2579,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
 
 
 

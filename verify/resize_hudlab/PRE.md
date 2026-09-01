@@ -646,3 +646,45 @@ reading would actually have been "our surface costs more".
 
 Stating that plainly in advance, because it is the outcome that invalidates the most of my own prior
 work, and that is exactly the outcome a pre-registration exists to make un-wriggle-out-of-able.
+
+---
+
+# RUN 16 PRE-REGISTRATION — pin the identity of the hot source
+
+Run 15 found one source (`0x0BEF89E8`) carrying **93%** of Blt time at 2048 and 0.4% at 600, but
+could not name it. Two defects in that labelling, both mine:
+
+1. the bar's surface pointer was read at **dump** time, describing the surface at the end of the
+   window rather than the one blitting during it — and it changes on every refit;
+2. the only alternative offered was heap-region adjacency, which is not identity.
+
+## The fix
+
+- **Capture at refit time.** `rz_hud_fit_surface` now records the new `IDirectDrawSurface*`
+  (`g_bar_surf`) immediately after the recreate, and the one it replaced (`g_bar_surf_prev`).
+  Keeping the replaced pointer matters: `FUN_1001420d` overwrites the sub-object pointer **without
+  freeing the previous one** `[CONFIRMED @ GZGraphicD 0x1001420d]`, so a stale surface can still be
+  blitted by whatever holds a reference.
+- **Resolve by search.** `rz_name_surface` walks every reachable owner — `iso+0x74`, `iso+0x4ec`,
+  and HUD children `[0x2a..0x2f]` — comparing each one's `sub+0x04` against the source pointer, and
+  labels the match with its dims. Identity by pointer against a reachable owner, never by dims or
+  proximity.
+
+## Pre-registered outcomes
+
+- **NAMED — the bar (current):** the hot source is `g_bar_surf`. The cost is drawing the wide bar
+  itself, and mitigation is concrete (video-memory surface, or draw it less often).
+- **NAMED — the bar's PREVIOUS surface:** the hot source is `g_bar_surf_prev`. That would mean the
+  engine keeps blitting a surface we orphaned — **a leak we introduced**, and a mod bug with an
+  obvious fix (release it, or avoid recreating).
+- **NAMED — an iso surface or another HUD child:** the wide bar makes an existing engine surface far
+  more expensive. Points at compositing/overlap rather than the bar's own pixels.
+- **UNREACHABLE:** `(not reachable from iso or the HUD children)`. The surface belongs to something
+  outside everything we have modelled — informative in itself, and would redirect the search to the
+  primary/flip chain.
+- **VOID:** no dominant source at 2048 (would contradict run 15), or a fault.
+
+## Conditions
+
+Same `600 -> 2048 -> 600` control. The hot source must appear at `S2` and vanish at `S3` as it did
+in run 15; if it does not reproduce, the run is VOID regardless of what gets named.
