@@ -985,3 +985,45 @@ not construction order.
 The `SQUARE-ISH` flag is a crude aspect-ratio test (neither side more than 2x the other), printed to
 make the log skimmable. **It is a hint for the reader, not a decision** - the rect values are logged
 in full so the identification can be made from the numbers rather than from my heuristic.
+
+---
+
+# RUN 24 PRE-REGISTRATION — walk the UI window tree (READ-ONLY, no new hook)
+
+Run 23 eliminated both minimap candidates. The obvious next instrument is a surface->owner registry,
+which needs a create hook on `FUN_10009efb` — **the exact hook the v2 crash isolated to**
+(`verify/resize_ship`: *"the only v2 code that executed before the death is the recorder hook"*,
+leading suspect *"detouring a function this hot, inside device bring-up"*). Re-enabling it would
+repeat the experiment that killed the game.
+
+## The read-only alternative
+
+The window BASE constructor allocates a 12-byte node and makes it a **circular doubly-linked list
+head at `this[0x2d]` (= `+0xb4`)**: `n->next = n; n->prev = n`
+`[CONFIRMED @ SIMUI 0x1004d9be]`. So every window of this framework carries a child list, and walking
+it from a window we already hold enumerates the tree — **no new hook, nothing detoured, nothing
+written**.
+
+`rz_walk_windows` walks from `g_hud_top` and `g_side_top`, depth-limited to 2, node count capped at
+64, every dereference guarded, stopping when it returns to the head. A payload is only reported as a
+window if it has a readable vtable and a plausible rect.
+
+## Pre-registered outcomes
+
+- **TREE ENUMERATED / MINIMAP FOUND:** the walk lists sibling or child windows and one is roughly
+  square. That is the minimap, captured without any new hook.
+- **TREE ENUMERATED / NO MINIMAP:** the lists resolve but contain only widgets already known. The
+  minimap is not in these windows' subtrees, and the next step would be finding the tree ROOT
+  (no parent pointer identified yet — `+0xb8`/`+0xbc` are zeroed in the base ctor and `+0xb8` is
+  set to *self* by the side panel, so neither is obviously a parent).
+- **LISTS EMPTY:** `+0xb4` lists are empty for both. Then children are held in the fixed fields
+  (`+0xa8..+0xbc`) rather than the list, and this list serves some other purpose entirely.
+- **VOID:** a fault. The walk is guarded, but it dereferences engine pointers, so this is a real
+  possibility and the VEH logger is on.
+
+## Why this instrument over the registry
+
+Two reasons, and the second matters more. It is read-only. And **the crash record for
+`FUN_10009efb` is specific and was pre-registered as the prime suspect before that run** — ignoring
+it because a different question now makes the hook convenient would be exactly the kind of reasoning
+this project's logs exist to prevent.

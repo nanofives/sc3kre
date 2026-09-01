@@ -432,6 +432,53 @@ static void *g_side_top;
 #define CAPT_MAX 8
 static void *g_capt[2][CAPT_MAX];
 static LONG  g_capt_n[2];
+
+/* ---- UI TREE WALK (run 24) --------------------------------------------------------------------
+ * The minimap is a third window class and guessing candidates cost run 23. The obvious instrument -
+ * a surface->owner registry via a create hook on FUN_10009efb - is exactly the hook this mod DROPPED
+ * after the v2 crash, where the failure "isolates to the create recorder by construction" and the
+ * leading suspect was detouring a hot function during device bring-up (verify/resize_ship).
+ * Re-enabling it would repeat the experiment that killed the game.
+ *
+ * There is a read-only alternative. The window BASE constructor builds a circular doubly-linked list
+ * head at `this[0x2d]` (= +0xb4): `n = alloc(0xc); n->next = n; n->prev = n`
+ * `[CONFIRMED @ SIMUI 0x1004d9be]`. So every window of this framework carries a 12-byte-node list,
+ * and walking it from a window we already hold enumerates the tree - no new hook, nothing written,
+ * nothing detoured.
+ *
+ * Bounded and defensive: node count capped, every dereference guarded, and the walk stops when it
+ * returns to the head (or fails to). A payload is only reported as a window if it has a readable
+ * vtable AND a plausible rect. */
+static void rz_walk_windows(const char *tag, void *w, int depth) {
+    DWORD *win = (DWORD *)w;
+    DWORD head, node;
+    int n = 0;
+    if (!win || IsBadReadPtr(win, 0xb8) || depth > 2) return;
+    head = win[0xb4 / 4];
+    if (!head || IsBadReadPtr((void *)head, 12)) {
+        logf("TREE> %s 0x%08lX: no child list at +0xb4 (0x%08lX)", tag, (DWORD)win, head);
+        return;
+    }
+    node = *(DWORD *)head;                       /* first real node, or head itself if empty */
+    while (node && node != head && n++ < 64 && !IsBadReadPtr((void *)node, 12)) {
+        DWORD payload = ((DWORD *)node)[2];
+        if (payload && !IsBadReadPtr((void *)payload, 0x24)) {
+            DWORD *p = (DWORD *)payload;
+            LONG x1 = (LONG)p[0x14/4], y1 = (LONG)p[0x18/4];
+            LONG x2 = (LONG)p[0x1c/4], y2 = (LONG)p[0x20/4];
+            LONG cw = x2 - x1, ch = y2 - y1;
+            int plausible = (cw > 0 && ch > 0 && cw < 8192 && ch < 8192);
+            logf("TREE> %s child[%d] 0x%08lX vt=0x%08lX rect=[%ld %ld %ld %ld] %ldx%ld%s%s",
+                 tag, n - 1, payload, p[0], x1, y1, x2, y2, cw, ch,
+                 plausible ? "" : "  (rect implausible - may not be a window)",
+                 (plausible && cw < ch * 2 && ch < cw * 2 && cw > 40)
+                     ? "   <<< SQUARE-ISH" : "");
+            if (plausible) rz_walk_windows(tag, (void *)payload, depth + 1);
+        }
+        node = *(DWORD *)node;                   /* ->next */
+    }
+    if (n == 0) logf("TREE> %s 0x%08lX: child list EMPTY", tag, (DWORD)win);
+}
 static void *g_hud_top;                /* the HUD bottom-bar window `this`, captured in the FUN_100270e5
                                           wrap. Declared here (not down with the other window globals)
                                           because rz_hud_surfaces below reads it. The 2026-08-31
@@ -1918,6 +1965,11 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
                              (x2-x1) < (y2-y1)*2 && (y2-y1) < (x2-x1)*2 ? "   <<< SQUARE-ISH" : "");
                     }
                 }
+                /* UI TREE WALK - read-only enumeration from the two windows we already hold.
+                   Chosen over a surface->owner create recorder because that would mean re-enabling
+                   the FUN_10009efb hook the v2 crash isolated to. No new hook, nothing detoured. */
+                rz_walk_windows("HUDBAR", g_hud_top, 0);
+                rz_walk_windows("SIDE",   g_side_top, 0);
             }
             g_hudphase = 1;
             g_phase_ms = GetTickCount() + 3000;
@@ -2916,6 +2968,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
 
 
 
