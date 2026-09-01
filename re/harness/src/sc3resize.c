@@ -671,6 +671,12 @@ static DWORD   g_child_surf[6], g_child_surf_prev[6];
 static DWORD   g_ret_key[RET_BUCKETS], g_ret_cnt[RET_BUCKETS];
 static __int64 g_ret_time[RET_BUCKETS];
 static DWORD   g_ret_filter;         /* the source surface whose callers we are recording */
+/* Run 18 captured GZGraphicD+0x18C89 = FUN_10018c58+0x31 - INSIDE the engine's own Blt wrapper, one
+ * frame too shallow. The tiling loop is that wrapper's CALLER. The wrapper is already hooked
+ * (fnlog_enter idx 1) and the stub's frame layout gives f[9] = the return address into its caller
+ * (sc3resize.c: "f[9]=return address, f[10..]=stack args", verbatim from sc3probe.c:8650-8658), so
+ * the heartbeat stashes it here immediately before the Blt and the ddraw hook buckets it. */
+static DWORD   g_wrapper_caller;
 
 /* Name a source IDirectDrawSurface* by searching the objects we can reach for one whose sub-object
  * holds it at sub+0x04. Identity by POINTER against a reachable owner, never by dims or by heap
@@ -842,7 +848,7 @@ static void rz_blt_dump(const char *tag) {
                 double ms = g_freq.QuadPart
                             ? (1000.0 * (double)g_ret_time[i2] / (double)g_freq.QuadPart) : 0.0;
                 rz_modstr(g_ret_key[i2], who, sizeof(who));
-                logf("BLT> %s CALLER %s calls=%lu total=%.1f ms  (blits sourced from child[0x2b])",
+                logf("BLT> %s CALLER %s calls=%lu total=%.1f ms  (FUN_10018c58's caller = the tiling loop)",
                      tag, who, g_ret_cnt[i2], ms);
                 any = 1;
             }
@@ -975,7 +981,7 @@ static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWO
     }
     if (src && (DWORD)src == g_ret_filter) {
         /* EXACT caller of this Blt - the engine code driving the tile loop. */
-        DWORD ra = (DWORD)_ReturnAddress(), i;
+        DWORD ra = g_wrapper_caller ? g_wrapper_caller : (DWORD)_ReturnAddress(), i;
         for (i = 0; i < RET_BUCKETS; i++) {
             if (g_ret_cnt[i] == 0) { g_ret_key[i] = ra; g_ret_cnt[i] = 1; g_ret_time[i] = d; break; }
             if (g_ret_key[i] == ra) { g_ret_cnt[i]++; g_ret_time[i] += d; break; }
@@ -2225,6 +2231,7 @@ static void __stdcall fnlog_enter(int idx, DWORD *f) {
         /* This hook IS the render thread, so it is where the profiler learns which thread to sample.
            Cheap and idempotent; no call when it has not changed. */
         if (g_hudlab) { rz_blt_sample(f[7]); }
+        g_wrapper_caller = f[9];   /* FUN_10018c58's return address = the tiling loop (run 19) */
         if (g_hudlab) {
             DWORD me = GetCurrentThreadId();
             if (g_game_tid != me) g_game_tid = me;
@@ -2667,6 +2674,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
 
 
 

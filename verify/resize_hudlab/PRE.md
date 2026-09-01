@@ -775,3 +775,38 @@ It does **not** fix anything by itself. It converts "the engine tiles a strip ~4
 specific function whose tile step can be examined and possibly patched. Whether a safe patch exists
 is a separate question this run does not answer, and the honest expectation is that a fix is fresh
 work with its own risk - not a small follow-on.
+
+---
+
+# RUN 19 PRE-REGISTRATION — one frame up: name the tiling loop
+
+Run 18 captured `GZGraphicD+0x18C89` = `FUN_10018c58+0x31`, inside the engine's own `Blt` wrapper.
+Correct and exact, but one frame too shallow: it proves every tiled blit goes through that wrapper,
+not what drives the loop.
+
+## The wiring
+
+The wrapper is already hooked (`fnlog_enter` idx 1) and the stub's frame layout gives **`f[9]` = the
+return address into ITS caller** (`"f[9]=return address, f[10..]=stack args"`, verbatim from
+`sc3probe.c:8650-8658`). The heartbeat fires at `FUN_10018c58` entry, immediately before the `Blt`,
+so it stashes `f[9]` and the ddraw hook buckets that value for `child[0x2b]`-sourced blits.
+
+No new hook, no scanning, no heuristic. Falls back to `_ReturnAddress()` if the stash is empty, which
+would reproduce run 18's shallow answer rather than produce a wrong one.
+
+## Pre-registered outcomes
+
+- **LOOP NAMED:** a dominant `MODULE+RVA` outside `FUN_10018c58`. That is the tiling loop; it gets
+  read in the decompilation and its step/count examined as a patch target.
+- **STILL SHALLOW:** the address lands inside `FUN_10018c58` again (`0x18c58..0x18d1c`). Then the
+  wrapper is re-entrant or the stash is being overwritten between heartbeat and Blt, and the capture
+  needs a different anchor.
+- **SPREAD:** several distinct callers. Tiling is issued from more than one site and a single patch
+  will not cover it - a real finding.
+- **VOID:** no `[0x2b]` blits at `S2`, or a fault.
+
+## Stated in advance, again
+
+Naming the loop is **not** a fix and does not imply one exists. `FUN_10018c58` is the mod's own
+heartbeat hook target; if the tiling loop turns out to be equally central, patching it may be
+unsafe, and "identified but not patchable" is a legitimate end state for this thread.
