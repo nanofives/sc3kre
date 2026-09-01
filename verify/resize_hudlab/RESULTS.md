@@ -1400,3 +1400,79 @@ verified rather than assumed.
 - Chain: `?? -> FUN_10014894+0x76 -> FUN_10018c58+0x31 -> ddraw Blt`, three links proven.
 - `FUN_10014894` reads as a single-rect clipped blit with a format check - not the loop.
 - Next: capture `*(f[3]+4)` (proven-valid) and `*(*(f[3])+4)` (opportunistic) in the same heartbeat.
+
+---
+
+# RUN 20 — ⭐ **THE TILING LOOP: `SIMUI FUN_10026841`.** Decoded, and it explains run 17.
+
+```
+LOOP(L2)  SIMUI.DLL+0x268AF  calls=7371   <- FUN_10014894's caller
+hint(L3)  SIMUI.DLL+0x6D317  calls=7371   [UNCERTAIN - frame-pointer walk]
+```
+
+Single site, all 7371 calls. `0x268AF` is inside **`FUN_10026841`** (0x26841..0x26973), at +0x6E.
+
+## The loop, in the decompilation
+
+```c
+iVar1 = *(int *)(param_1 + 0x2c);                              // bar's RIGHT edge
+if (*(int *)(param_1 + 0x130) < iVar1) {
+    iVar4 = *(int *)(param_1 + 0xd8) - *(int *)(param_1 + 0xd0);   // STEP = source RECT width
+    local_14 = iVar1 - iVar4;
+    local_c  = iVar1;
+    do {
+        (**(code **)(**(int **)(param_1 + 0x5c) + 0x118))
+                  (*(undefined4 *)(param_1 + 0xac), param_1 + 0xd0, &local_14, 0);   // the blit
+        local_c  -= iVar4;
+        local_14 -= iVar4;
+    } while (*(int *)(param_1 + 0x130) < local_c);
+}
+```
+
+**It tiles right-to-left from the bar's right edge (`+0x2c`) down to `+0x130`, stepping by
+`iVar4`, one blit per step.** `[CONFIRMED @ SIMUI 0x10026841]`
+
+## ⭐ Why run 17's fix could never have worked - now explained, not just falsified
+
+**The step is `*(param_1+0xd8) - *(param_1+0xd0)` - the SOURCE RECT's width, not the surface's.**
+
+Widening `child[0x2b]`'s surface to 2048 left that rect at 16 px, so the loop still stepped 16 px at
+a time and issued the same number of blits. Run 17 measured that (7662 calls, unchanged); run 20
+explains it. The empirical falsification and the mechanism now agree.
+
+## The whole HUD bar paint routine is decoded
+
+`param_1` is the HUD window: children `this[0x2a..0x2f]` are at byte offsets `+0xa8..+0xbc`
+(`0x2a * 4 = 0xa8`), which matches every earlier observation.
+
+| child | offset | how it is drawn |
+|---|---|---|
+| `[0x2a]` background | `+0xa8` | **once**, src `+0xc0` -> dest `+0x120` |
+| **`[0x2b]` filler** | **`+0xac`** | **TILED in the loop**, src rect `+0xd0`, dest walked leftwards |
+| `[0x2c]` | `+0xb0` | once, `+0xe0` -> `+0x140` |
+| `[0x2d]` | `+0xb4` | once, `+0xf0` -> `+0x150` |
+| `[0x2e]` | `+0xb8` | once, `+0x100` -> `+0x160` |
+| `[0x2f]` | `+0xbc` | once, `+0x110` -> `+0x170` |
+
+Five widgets blitted once each; **one filler tiled across the gap.** That is the entire cost model,
+and it confirms independently that `[0x2c..0x2f]` were correctly left alone in run 17.
+
+## The fix is now a FIELD WRITE, not a code patch
+
+If the step is the source rect's width, then **widening the source rect widens the step**:
+
+- `child[0x2b]`'s surface is already widened to 2048 (run 17, harmless and now useful);
+- set `*(hud+0xd0) .. *(hud+0xd8)` to a wider span, e.g. 1024;
+- the loop then runs ~2 iterations instead of ~46.
+
+No cave, no engine code patch, no hooking - the same class of write as the `vt+0xc8` SetRect that
+already ships. **`[UNCERTAIN]`** and falsifiable: that `+0xd0..+0xd8` is a plain source RECT the blit
+path will honour at a larger width. If the art tiles wrongly or the count does not fall, the
+hypothesis is dead and the log will say which.
+
+## Status
+
+- Chain complete: **`FUN_10026841` (tile loop) -> `FUN_10014894` (blit one rect) -> `FUN_10018c58`
+  (wrapper) -> `IDirectDrawSurface::Blt`**. All four links proven.
+- Run 17's failure: explained.
+- Fix candidate: a field write, testable next run.
