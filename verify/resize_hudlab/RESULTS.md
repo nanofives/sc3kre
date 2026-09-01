@@ -969,3 +969,59 @@ That single control separates the two explanations the sweep confounded.
 - FPS mechanism: still open, now with a named confound to resolve and a cheap control to resolve it.
 - Two instrument defects recorded against myself: the hardcoded percent divisor and the
   skip-when-equal baseline.
+
+---
+
+# RUN 14 — **WIDTH IS THE DRIVER.** The confound is resolved; the owner's read is confirmed.
+
+| step | surface | width | calls | avg inside-Blt |
+|---|---|---:|---:|---:|
+| `S1_W600` | **engine's** | 600 | 22213 | **0.3029 ms** |
+| `S2_W2048` | ours | 2048 | 9105 | **0.8552 ms** |
+| `S3_W600` | **ours** | 600 | 18806 | **0.3186 ms** |
+
+**`S3_W600` (0.3186 ms) returns to `S1_W600` (0.3029 ms) — a 5% difference.** Our recreated surface
+at 600 costs essentially what the engine's own surface costs at 600. Call throughput recovers too
+(9105 -> 18806).
+
+**Pre-registered outcome: WIDTH IS THE DRIVER.** The recreated surface is exonerated — it is not a
+mod bug. The owner's own reading, *"the issue is extending the UI, that's killing the FPS"*, is
+exactly what the measurement says.
+
+## This vindicates runs 3-12 rather than invalidating them
+
+The pre-registration stated plainly that if `S3_W600` stayed high, the width attribution had been
+wrong since run 3 and the x2.55 headline was really "our surface costs more". **It did not stay
+high.** The attribution holds: widening the bar is what costs frame rate.
+
+Recorded because it cuts both ways — the same pre-registration that would have forced me to retract
+twelve runs is what now licenses keeping them.
+
+## Combined with run 13: the cost SATURATES, and that is the actionable part
+
+Run 13 (now trustworthy, since ownership is excluded): 600 -> **0.3535**, 1024 -> **0.7076**,
+1536 -> 0.8402, 2048 -> 0.8917 ms.
+
+**Nearly all the cost arrives by 1024.** Going 600 -> 1024 doubles it; 1024 -> 2048 adds only ~26%
+more. So there is **no cheap middle ground**: a partially-extended bar costs almost as much as a
+fully-extended one. The practical choice is binary — native width (fast) or extended (costly).
+
+That is a genuinely useful result for the mod's design, and it is why `SC3RESIZE_HUDNATIVE=1` earns
+its place rather than being a token opt-out.
+
+## Standing caveat, still attached
+
+Inside-Blt is 84% of the window even at the 600 baseline, so "avg ms per Blt" partly reports the
+frame-rate drop rather than explaining it (run 13). What runs 9-14 establish is **that** extending
+the bar costs frame rate and **how it scales** — not the driver-level mechanism, which remains open.
+
+## Incidental: the shrink path works
+
+`S2 -> S3` refit the surface DOWN (2048 -> 600, pitch 4096 -> 1200, art re-tiled at 33600 px, lock
+and unlock balanced). That is the shrink behaviour run 6 left unverified, now exercised — though
+still not as a full window-resize test.
+
+## Cosmetic defect
+
+`SWEEP> starting 3-point width sweep (600/1024/1536/2048)` — the label is a stale hardcoded string;
+`SWEEP_N` is correct at 3 and the actual widths run were 600/2048/600. Log text only.
