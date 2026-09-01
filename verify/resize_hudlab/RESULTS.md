@@ -1931,3 +1931,66 @@ visual result still needed the owner to catch a black region.
 `auto.ps1` env vars must be set in the **parent shell**, not passed via `-EnvVars` with `pwsh -File`
 - PowerShell passes array elements with their quotes embedded, so `SC3RESIZE_MINI` silently never
 got set on the first attempt. Cost one run.
+
+---
+
+# RUNS 30-35 — CLUSTER MODE WORKS; clickability blocked by a KNOWN systemic defect
+
+## What now works (owner-confirmed)
+
+**Cluster mode**: the whole native 800x600 HUD translates into the bottom-right corner at native
+size. Owner: *"HUD is clustered in the corner... there's no FPS drop."*
+
+- bar `[0 544 599 600]` -> `[1248 1025 1847 1081]`
+- side panel `[704 0 800 442]` -> `[1952 481 2048 923]`
+- minimap `[640 436 800 600]` -> `[1888 917 2048 1081]`
+- RCI, and the other painter windows, translated by the same delta
+
+**⭐ No FPS drop.** The owner's design avoids widening the bar, so `FUN_10026841`'s tile loop never
+runs long - and that loop was the entire measured cost (~46 blits/frame). **The performance problem
+that took runs 9-20 to characterise is sidestepped rather than solved, which is the better outcome.**
+No stretched art, so no black bands either.
+
+## ⛔ Clickability: NOT a rect problem, and not fixable here
+
+Paint and window rects now MATCH after the fix:
+
+```
+[0] RCI      paint=[1847 1001 1888 1089]  window=[1847 1001 1888 1089]
+[2] minimap  paint=[1888  917 2048 1081]  window=[1888  917 2048 1081]
+```
+
+**And it is still not clickable.** So hit-testing reads neither `+0x90` nor `this+0x14..0x20`.
+
+This is the defect **already on the board, already unresolved**:
+
+> *"view fills the window but navigation works only in the top-left 800x600 (input picking reads a
+> different size source than the blit). Not investigated."*
+
+**Input picking operates in native 800x600 coordinates globally.** Anything drawn outside that
+region cannot receive clicks regardless of which rect is moved. It is the same defect the viewport
+has - HUD relocation merely exposed it, because relocating *outside* the native box is the first
+thing this project has done that leaves the clickable region entirely.
+
+**Consequence for cluster mode:** it is visually correct and performant, but the relocated HUD is
+**not usable** until input mapping is fixed. That is a separate, systemic piece of work: find where
+mouse coordinates enter the UI and rescale them, which touches every UI interaction rather than the
+HUD alone.
+
+## A bug of mine the new diagnostic caught immediately
+
+Entry `[3]`: `paint=[1386 553 1395 568] window=[3274 1470 3283 1485]  <<< PAINT/WINDOW DIVERGE`.
+The window rect is translated **twice** - `vt+0xc8` on that class is not an absolute setter, and my
+fallback then compounded it. The paint/window side-by-side logging added in the same commit surfaced
+it on the first run. Worth noting: the previous version of this code had the same class of bug and
+was invisible, because only one of the two rects was ever printed.
+
+## Honest status
+
+| item | state |
+|---|---|
+| viewport resize | shipped, working |
+| HUD cluster layout | **working, owner-confirmed** |
+| FPS cost | **avoided entirely** by cluster mode |
+| HUD clickability | **BLOCKED** - systemic native-coordinate input picking |
+| `vt+0xc8` on painter classes | not an absolute setter; the fallback double-translates |
