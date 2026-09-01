@@ -733,3 +733,45 @@ so widening them would stretch content without removing a single blit.
 
 Same `600 -> 2048 -> 600` sweep so the result is directly comparable to runs 14-16, whose numbers are
 the baseline this is scored against.
+
+---
+
+# RUN 18 PRE-REGISTRATION — name the tiling loop with `_ReturnAddress()`
+
+Run 17 killed the surface-width hypothesis: `child[0x2b]` was widened to 2048 and its blit count did
+not move (7662 vs 6892). The tile COUNT is engine-side. This run names the code that issues them.
+
+## Instrument
+
+In `rz_blt_hook`, when the blit's SOURCE is `child[0x2b]`'s surface, record `_ReturnAddress()` and
+bucket it with its time. Resolved to `MODULE+RVA` at dump.
+
+**This is what runs 7 and 8 tried to get by scanning the stack, and failed at twice** — first on
+contaminated candidates (`SC3U.exe+0x9`, page-aligned addresses), then on selection bias that
+systematically missed the waiting samples. `_ReturnAddress()` needs no validation because it **is**
+the return address, not a candidate for one. The instrument only became available when the COM
+vtable hook replaced prologue hooking three runs ago — a change made for safety that turned out to
+supply the exact tool the earlier work was groping for.
+
+Also fixed: `g_bar_surf` was set by whichever child refits LAST, so run 17's log said "THE HUD BAR"
+while meaning `child[0x2b]`. Surfaces are now tracked **per child** (`g_child_surf[]`), and the
+resolver names the specific child.
+
+## Pre-registered outcomes
+
+- **LOOP NAMED:** one or two `MODULE+RVA` sites account for the `[0x2b]` blits. That address is then
+  read in the decompilation, and the tile step/count becomes a patch target of exactly the kind this
+  project already ships (FIX A's four clamps, FIX C's null guard).
+- **SPREAD:** many distinct callers with no dominant one. The tiling is not a single loop and a
+  patch would be correspondingly harder - a real finding, not a failure.
+- **NO BLITS:** `no blits from child[0x2b] this window`. Then the filter surface is wrong - most
+  likely because `[0x2b]` was refit again after the filter was set, so `g_ret_filter` points at a
+  replaced surface. Diagnosable from the logged filter value.
+- **VOID:** a fault, or the sweep does not reproduce the `S2` concentration.
+
+## What naming the loop does and does not buy
+
+It does **not** fix anything by itself. It converts "the engine tiles a strip ~46x/frame" into a
+specific function whose tile step can be examined and possibly patched. Whether a safe patch exists
+is a separate question this run does not answer, and the honest expectation is that a fix is fresh
+work with its own risk - not a small follow-on.

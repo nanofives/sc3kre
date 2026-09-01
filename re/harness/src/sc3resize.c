@@ -67,6 +67,7 @@
  * Build: 32-bit x86 (must match SC3U.exe, PE32). re/harness/build_resize.ps1.
  */
 #include <windows.h>
+#include <intrin.h>   /* _ReturnAddress - exact Blt caller, replaces the failed stack scans */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -653,6 +654,23 @@ static __int64 g_src_time[SRC_BUCKETS];
  * the previous sub-object [CONFIRMED @ GZGraphicD 0x1001420d] - so a stale surface may still be
  * blitted by something holding a reference. */
 static DWORD   g_bar_surf, g_bar_surf_prev;
+/* Per-child surfaces (run 18). g_bar_surf is set by whichever child refits LAST, so after run 17 it
+ * meant child[0x2b] while the log still said "THE HUD BAR" - correct attribution, misleading label.
+ * These are indexed [0x2a + i] and let both the resolver and the caller filter name the right one. */
+static DWORD   g_child_surf[6], g_child_surf_prev[6];
+
+/* ---- CALLER CAPTURE (run 18) ------------------------------------------------------------------
+ * Run 17 proved the tile COUNT is engine-side, not surface geometry. Naming the loop that issues
+ * those blits is what runs 7-8 tried to do by SCANNING the stack, and failed at twice (junk
+ * addresses, then selection bias against the very samples of interest).
+ *
+ * That is unnecessary now. The COM vtable hook means we hold the Blt call inside a C function, so
+ * `_ReturnAddress()` gives the EXACT caller - a compiler intrinsic, no scanning, no heuristics, no
+ * validation. Bucketed only for blits whose SOURCE is the tiled child, so the table stays clean. */
+#define RET_BUCKETS 32
+static DWORD   g_ret_key[RET_BUCKETS], g_ret_cnt[RET_BUCKETS];
+static __int64 g_ret_time[RET_BUCKETS];
+static DWORD   g_ret_filter;         /* the source surface whose callers we are recording */
 
 /* Name a source IDirectDrawSurface* by searching the objects we can reach for one whose sub-object
  * holds it at sub+0x04. Identity by POINTER against a reachable owner, never by dims or by heap
@@ -662,11 +680,15 @@ static void rz_name_surface(DWORD surf, char *out, int n) {
     int i;
     out[0] = 0;
     if (!surf) { lstrcpynA(out, "  <NULL: colour fill>", n); return; }
-    if (g_bar_surf && surf == g_bar_surf) {
-        lstrcpynA(out, "  <<< THE HUD BAR (surface captured at this step's refit)", n); return;
-    }
-    if (g_bar_surf_prev && surf == g_bar_surf_prev) {
-        lstrcpynA(out, "  <<< THE HUD BAR'S PREVIOUS surface (replaced, not freed)", n); return;
+    for (i = 0; i < 6; i++) {
+        if (g_child_surf[i] && surf == g_child_surf[i]) {
+            _snprintf(out, n, "  <<< HUD child[0x%x] surface (captured at its refit)", 0x2a + i);
+            return;
+        }
+        if (g_child_surf_prev[i] && surf == g_child_surf_prev[i]) {
+            _snprintf(out, n, "  <<< HUD child[0x%x] PREVIOUS surface (replaced, not freed)", 0x2a + i);
+            return;
+        }
     }
     if (g_bridge && !IsBadReadPtr(g_bridge, 0x1c)) iso = ((DWORD *)g_bridge)[0x18 / 4];
     if (iso && !IsBadReadPtr((void *)iso, 0x4f0)) {
@@ -740,6 +762,14 @@ static void rz_blt_reset(void) {
     g_blt_maxw = 0; g_blt_maxh = 0;
 
 
+    memset(g_ret_key, 0, sizeof(g_ret_key)); memset((void *)g_ret_cnt, 0, sizeof(g_ret_cnt));
+
+
+
+    memset(g_ret_time, 0, sizeof(g_ret_time));
+
+
+
     memset(g_src_key, 0, sizeof(g_src_key)); memset((void *)g_src_cnt, 0, sizeof(g_src_cnt));
 
 
@@ -802,6 +832,23 @@ static void rz_blt_dump(const char *tag) {
                          g_src_cnt[best] ? ms / g_src_cnt[best] : 0.0, nm);
                 }
             }
+        }
+        {   /* EXACT callers of the tiled child's blits - the engine loop we are hunting. This is
+               what runs 7-8 failed to obtain by stack scanning; `_ReturnAddress()` needs no
+               validation because it is the return address, not a candidate for one. */
+            DWORD i2, any = 0;
+            for (i2 = 0; i2 < RET_BUCKETS && g_ret_cnt[i2]; i2++) {
+                char who[160];
+                double ms = g_freq.QuadPart
+                            ? (1000.0 * (double)g_ret_time[i2] / (double)g_freq.QuadPart) : 0.0;
+                rz_modstr(g_ret_key[i2], who, sizeof(who));
+                logf("BLT> %s CALLER %s calls=%lu total=%.1f ms  (blits sourced from child[0x2b])",
+                     tag, who, g_ret_cnt[i2], ms);
+                any = 1;
+            }
+            if (!any)
+                logf("BLT> %s CALLER: no blits from child[0x2b] this window (filter=0x%08lX)",
+                     tag, g_ret_filter);
         }
         for (i = 0; i < BFL_BUCKETS && g_bfl_cnt[i]; i++) {
             double ms = g_freq.QuadPart ? (1000.0 * (double)g_bfl_time[i] / (double)g_freq.QuadPart) : 0.0;
@@ -924,6 +971,14 @@ static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWO
         for (i = 0; i < BFL_BUCKETS; i++) {
             if (g_bfl_cnt[i] == 0) { g_bfl_key[i] = fl; g_bfl_cnt[i] = 1; g_bfl_time[i] = d; break; }
             if (g_bfl_key[i] == fl) { g_bfl_cnt[i]++; g_bfl_time[i] += d; break; }
+        }
+    }
+    if (src && (DWORD)src == g_ret_filter) {
+        /* EXACT caller of this Blt - the engine code driving the tile loop. */
+        DWORD ra = (DWORD)_ReturnAddress(), i;
+        for (i = 0; i < RET_BUCKETS; i++) {
+            if (g_ret_cnt[i] == 0) { g_ret_key[i] = ra; g_ret_cnt[i] = 1; g_ret_time[i] = d; break; }
+            if (g_ret_key[i] == ra) { g_ret_cnt[i]++; g_ret_time[i] += d; break; }
         }
     }
     {   /* time by SOURCE surface - separates the bar's blit from the scene's within one dest */
@@ -1848,7 +1903,10 @@ static void rz_hud_fit_child(int ci, DWORD liveW) {
     oldbits = ((DWORD *)sub)[0xf0 / 4]; oldpitch = ((DWORD *)sub)[0xf4 / 4];
     /* Remember the surface we are about to replace - FUN_1001420d overwrites the sub-object pointer
        without freeing the old one, so the previous DD surface may still be blitted by a holder. */
-    if (!IsBadReadPtr((void *)sub, 8)) g_bar_surf_prev = ((DWORD *)sub)[0x04 / 4];
+    if (!IsBadReadPtr((void *)sub, 8)) {
+        g_bar_surf_prev = ((DWORD *)sub)[0x04 / 4];
+        g_child_surf_prev[ci - 0x2a] = g_bar_surf_prev;
+    }
     /* Re-fit on ANY width change, not just a widen - a later resize to a SMALLER window must bring
        the bar back down, or it stays wider than the window it lives in. */
     if (liveW == oldw) {
@@ -1932,6 +1990,8 @@ static void rz_hud_fit_child(int ci, DWORD liveW) {
             int lk;
             /* capture the NEW surface here, at refit time - not at dump time (run 15's error) */
             g_bar_surf = IsBadReadPtr((void *)nsub, 8) ? 0 : ((DWORD *)nsub)[0x04 / 4];
+            g_child_surf[ci - 0x2a] = g_bar_surf;
+            if (ci == 0x2b) g_ret_filter = g_bar_surf;   /* record callers of the TILED child */
             logf("HUDFIT> bar IDirectDrawSurface* now 0x%08lX (was 0x%08lX)",
                  g_bar_surf, g_bar_surf_prev);
             lk = rz_thiscall((void *)nsub, (void *)svt[0x0c / 4], NULL, 0);
@@ -2607,6 +2667,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
+
 
 
 
