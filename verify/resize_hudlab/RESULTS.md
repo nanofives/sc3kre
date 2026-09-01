@@ -1148,3 +1148,70 @@ that label cannot be trusted here, both mine:
 - That source's identity: **open**, one instrument fix away.
 - Run 9's struck conclusion stays struck; source-side bucketing is what should have been measured
   from the start.
+
+---
+
+# RUN 16 — **NAMED: HUD child[0x2b], a 16x64 filler tile, blitted ~46x PER FRAME when the bar is wide**
+
+## The identification
+
+| step | `0x0C259300` = **HUD child[0x2b] (16x64)** | share of that window's Blt time |
+|---|---:|---:|
+| `S1_W600` | **below the top 8** | negligible |
+| `S2_W2048` | **6892 calls, 7201.9 ms** | **93%** |
+| `S3_W600` | **24 calls, 23.1 ms** | 0.4% |
+
+**6892 calls at 2048 versus 24 at 600 — a 287x change in call count from the same surface**, and it
+returns to nothing when the bar narrows. Resolved by pointer against a reachable owner, exactly as
+pre-registered: `<<< HUD child[0x2b] (16x64)`.
+
+This matches run 2's census: `child[0x2b] = 16x64, pitch 32 (COHERENT), non-zero 1024/1024` — a
+small, fully-opaque strip. **A filler tile.**
+
+## Per-frame estimate `[UNCERTAIN - frames inferred, not counted]`
+
+Most sources blit once per frame, so their call counts approximate the frame count: ~993 in `S1` and
+~982 in `S3` over 8 s (~123 fps), against ~150 in `S2` (~19 fps).
+
+| | frames (est.) | child[0x2b] blits | per frame |
+|---|---:|---:|---:|
+| `S1_W600` | ~982 | <42 | **~0.02** |
+| `S2_W2048` | ~150 | 6892 | **~46** |
+
+**At native width the tile is essentially never drawn. At 2048 it is drawn about 46 times every
+frame.** Frame counts are inferred from other sources' call counts rather than measured directly, so
+the ratio is an estimate — but the 287x raw call-count change needs no inference.
+
+## The mechanism, and it explains every earlier result
+
+**Widening the bar makes the engine cover the extra width by TILING a 16-pixel-wide strip, one
+DirectDraw `Blt` per tile, every frame.** The cost is not pixels — it is ~46 fixed-overhead
+DirectDraw calls per frame, each carrying a GPU synchronization wait.
+
+This reconciles the whole investigation:
+
+- **run 3/4** — time in `NtGdiDdDDIWaitForSynchronizationObject`: 46 tiny blits per frame, each waiting.
+- **run 12** — average dest area fell 6x while cost rose 7.7x: the added calls are *tiny* 16px blits.
+- **run 12** — "smaller blits, slower" now has a cause rather than a paradox.
+- **run 13** — saturation with width: as frame rate collapses, tiles-per-second stops growing.
+- **run 9's struck conclusion** — the bar's drawing WAS the cost all along; destination-bucketing hid
+  it, and the correction made before run 15 was necessary to find this.
+
+## The fix is concrete and uses machinery we already have
+
+If the tile count is the region width divided by the SOURCE surface width, then **widening
+`child[0x2b]` (with its 16x64 art tiled into it) reduces the blit count proportionally** — a 1024-wide
+filler would cut ~46 calls per frame to ~1.
+
+`rz_hud_fit_surface` already does exactly this for `child[0x2a]`: snapshot, `FUN_10009efb` replay,
+lock, tile, unlock. Applying it to `child[0x2b]` is a parameter change, not new machinery.
+
+`[UNCERTAIN]` — that the engine's tile count is driven by source width rather than a fixed step. Not
+established; it is the hypothesis the next run tests, and it has an obvious falsifier (widen
+`[0x2b]`, count its blits: unchanged = hypothesis dead).
+
+## Minor defect noticed in passing
+
+`S1` labelled `0x0C2591C0` as "THE HUD BAR'S PREVIOUS surface (replaced, not freed)" — but no refit
+happens at `S1`, so `g_bar_surf_prev` had been set to the CURRENT surface. Cosmetic mislabel in the
+no-refit case; the pointer and its 993 calls (once per frame, 42.2 ms) are correct and normal.
