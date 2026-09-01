@@ -417,6 +417,21 @@ static HWND  g_hwnd;                   /* the game window (declared here: the HU
  * FUN_1004e63e blits, with [0x33] (+0xcc) being the tiled one. Constructor and paint routine agree
  * on the layout. [CONFIRMED @ SIMUI 0x1004e123, 0x1004e63e] */
 static void *g_side_top;
+
+/* MINIMAP HUNT (run 23). The owner reports the minimap did not move with the side panel, so it is a
+ * separate window. Two more SIMUI classes have a paint routine at the same draw slot **+0x144** and
+ * NO tile loop (so, per the model, cheap to move):
+ *   FUN_1001ad52  vtable RVA 0xa3d08 +0x144, installed at .text 0x1a9dd -> ctor FUN_1001a983
+ *   FUN_10060f59  vtable RVA 0xaab14 +0x144, installed at .text 0x60c07 -> ctor FUN_10060ba9
+ * (The side panel's own is FUN_1004e63e / vtable 0xa9834 / ctor FUN_1004e123 - same shape, which is
+ * what makes +0x144 a reliable handle on "this framework's window classes".)
+ *
+ * Both classes may be instantiated more than once, so capture SEVERAL instances of each rather than
+ * assuming the first is the interesting one - the rect at diag time is what identifies the minimap
+ * (roughly square, near a screen edge), not construction order. */
+#define CAPT_MAX 8
+static void *g_capt[2][CAPT_MAX];
+static LONG  g_capt_n[2];
 static void *g_hud_top;                /* the HUD bottom-bar window `this`, captured in the FUN_100270e5
                                           wrap. Declared here (not down with the other window globals)
                                           because rz_hud_surfaces below reads it. The 2026-08-31
@@ -1882,6 +1897,28 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
             } else {
                 logf("SIDE> panel NOT captured (ctor hook did not fire) - identification untested");
             }
+            {   /* every captured candidate window, with its rect - the minimap is the roughly
+                   SQUARE one. Identification by geometry, decided after the fact from the log. */
+                int cs, ci2;
+                for (cs = 0; cs < 2; cs++) {
+                    logf("CAPT> class %c (%s): %ld instance(s)", 'A' + cs,
+                         cs == 0 ? "FUN_1001a983/paint FUN_1001ad52" : "FUN_10060ba9/paint FUN_10060f59",
+                         g_capt_n[cs]);
+                    for (ci2 = 0; ci2 < g_capt_n[cs]; ci2++) {
+                        DWORD *w = (DWORD *)g_capt[cs][ci2];
+                        LONG x1, y1, x2, y2;
+                        if (!w || IsBadReadPtr(w, 0x24)) {
+                            logf("CAPT>   [%d] unreadable", ci2); continue;
+                        }
+                        x1 = (LONG)w[0x14/4]; y1 = (LONG)w[0x18/4];
+                        x2 = (LONG)w[0x1c/4]; y2 = (LONG)w[0x20/4];
+                        logf("CAPT>   [%d] 0x%08lX vt=0x%08lX rect=[%ld %ld %ld %ld] %ldx%ld%s",
+                             ci2, (DWORD)w, w[0], x1, y1, x2, y2, x2 - x1, y2 - y1,
+                             (x2-x1) > 0 && (y2-y1) > 0 &&
+                             (x2-x1) < (y2-y1)*2 && (y2-y1) < (x2-x1)*2 ? "   <<< SQUARE-ISH" : "");
+                    }
+                }
+            }
             g_hudphase = 1;
             g_phase_ms = GetTickCount() + 3000;
             logf("HUDLAB> armed - phase A (native bar) begins in 3 s, then widen, then phase B");
@@ -2414,6 +2451,20 @@ static void __stdcall fnlog_enter(int idx, DWORD *f) {
         if (g_hudlab) rz_hudlab_tick();
         return;
     }
+    if (idx == 4 || idx == 5) {
+        /* Minimap hunt: capture up to CAPT_MAX instances of each candidate window class. ECX = f[7]
+           per the stub's documented pushad layout. Rects are read later, at diag time. */
+        int slot = idx - 4;
+        DWORD ecx = f[7];
+        LONG n = g_capt_n[slot], k;
+        if (ecx && !IsBadReadPtr((void *)ecx, 0x24) && n < CAPT_MAX) {
+            for (k = 0; k < n; k++) if (g_capt[slot][k] == (void *)ecx) return;
+            g_capt[slot][n] = (void *)ecx;
+            g_capt_n[slot] = n + 1;
+            logf("### CAPT[%d] #%ld = 0x%08lX", slot, n, ecx);
+        }
+        return;
+    }
     if (idx == 3) {
         /* SIMUI FUN_1004e123, the side panel ctor: __fastcall(this), so ECX = f[7] per the stub's
            documented pushad layout. Captured at construction, exactly as the bar's `this` is. */
@@ -2818,6 +2869,9 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           /* Side panel: capture `this` at its constructor so the vertical tiling routine
              FUN_1004e63e (vtable +0x144) has an object to work on. Read-only for now. */
           install_one((DWORD)sui + 0x4e123, sui, 0x4e123, "SIMUI FUN_1004e123 side ctor", 3);
+          /* minimap candidates - same +0x144 draw slot, no tile loop */
+          install_one((DWORD)sui + 0x1a983, sui, 0x1a983, "SIMUI FUN_1001a983 ctor A", 4);
+          install_one((DWORD)sui + 0x60ba9, sui, 0x60ba9, "SIMUI FUN_10060ba9 ctor B", 5);
       }
       else logf("--- HUD: SIMUI.DLL never loaded after %d tries - capture NOT armed, HUD stays native", st); }
     if (g_hudlab) {
@@ -2862,6 +2916,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
 
 
 

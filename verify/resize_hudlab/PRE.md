@@ -939,3 +939,49 @@ It is the first **positive** test of the tiling model. Everything so far establi
 elimination and by removing width. This predicts, in advance, that a structurally similar UI element
 **without** an active tile loop is free to extend - and a model that only ever explains costs after
 the fact is weaker than one that calls a null result correctly beforehand.
+
+---
+
+# RUN 23 PRE-REGISTRATION — find the minimap window (READ-ONLY)
+
+Run 22: the side panel extends for free, but **the minimap did not move with it**, so it is a
+separate window with its own object and paint routine.
+
+## Candidates, found statically
+
+Two more SIMUI classes have a paint routine at the same draw slot **`+0x144`** and **no tile loop**:
+
+| paint | vtable RVA | installed at | constructor |
+|---|---|---|---|
+| `FUN_1001ad52` | `0xa3d08` `+0x144` | `.text 0x1a9dd` | **`FUN_1001a983`** |
+| `FUN_10060f59` | `0xaab14` `+0x144` | `.text 0x60c07` | **`FUN_10060ba9`** |
+
+(The side panel's is `FUN_1004e63e` / vtable `0xa9834` / ctor `FUN_1004e123` - identical shape, which
+is what makes `+0x144` a reliable handle on this framework's window classes.)
+
+## Design
+
+Hook both constructors (fnlog idx 4 and 5) and capture **up to 8 instances of each** - these classes
+may well be instantiated more than once, and assuming the first is the interesting one is the sort of
+shortcut that has cost this session runs before. Identification is by **rect geometry at diag time**,
+not construction order.
+
+**READ-ONLY. Moves nothing.**
+
+## Pre-registered outcomes
+
+- **MINIMAP FOUND:** one captured instance has a roughly **square** rect (flagged `<<< SQUARE-ISH` in
+  the log) sitting near a screen edge. That is the minimap, and per the model - no tile loop - it
+  should be free to move, exactly as the side panel was.
+- **NO SQUARE INSTANCE:** every captured rect is clearly not a minimap. Then neither candidate class
+  is it, and the minimap uses a third class the `+0x144` scan did not surface (or is not a window of
+  this framework at all).
+- **NOT CAPTURED:** neither ctor fires. The classes are not constructed in-city, or are built before
+  our SIMUI wait completes.
+- **VOID:** a fault.
+
+## Note
+
+The `SQUARE-ISH` flag is a crude aspect-ratio test (neither side more than 2x the other), printed to
+make the log skimmable. **It is a hint for the reader, not a decision** - the rect values are logged
+in full so the identification can be made from the numbers rather than from my heuristic.
