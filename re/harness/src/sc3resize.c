@@ -1814,16 +1814,33 @@ static void rz_hud_setrect_w(DWORD wantW) {
  * what makes the bar look right). Either way the surface is the correct width, which is the point.
  *
  * Self-gated: no g_hud_top, no capture, or a refused vtable -> does nothing and says so. */
-static void rz_hud_fit_surface(DWORD liveW) {
+/* Refit ONE HUD child surface to `liveW`, preserving its own native height and tiling its own
+ * pristine art across the new width.
+ *
+ * Generalised from the [0x2a]-only version after run 16: the dominant per-frame cost is NOT the
+ * 600x56 background but **child[0x2b], a 16x64 filler strip the engine tiles across the bar's
+ * width - 6892 blits in 8 s at 2048 against 24 at 600, ~46 DirectDraw calls PER FRAME.** If the
+ * engine's tile count is the region width divided by the SOURCE width, widening [0x2b] collapses
+ * that count. Same primitive, different child - so each child needs its OWN art cache and its OWN
+ * native height (a shared cache would tile [0x2a]'s 56-row art into [0x2b]'s 64-row surface).
+ *
+ * `[UNCERTAIN]`, with a clean falsifier: that the tile count follows source width. If [0x2b]'s blit
+ * count is unchanged after widening it, the hypothesis is dead and the fix does nothing. */
+typedef struct { BYTE *art; DWORD w, h, pitch; } HUDART;
+static HUDART g_hud_cache[6];        /* index i => child [0x2a + i] */
+
+static void rz_hud_fit_child(int ci, DWORD liveW) {
     DWORD *h = (DWORD *)g_hud_top;
     HMODULE gz = GetModuleHandleA("GZGraphicD.dll");
     DWORD obj, sub, oldbits, oldpitch, oldw, oldh;
+    HUDART *ca = &g_hud_cache[ci - 0x2a];
     BYTE *snap = NULL;
 
     if (!g_hudfit) return;
+    if (ci < 0x2a || ci > 0x2f) return;
     if (!h || IsBadReadPtr(h, 0xc0) || !gz) { logf("HUDFIT> skipped: no HUD window or GZGraphicD"); return; }
-    obj = h[0x2a];
-    if (!obj || IsBadReadPtr((void *)obj, 0x48)) { logf("HUDFIT> skipped: child[0x2a] unreadable"); return; }
+    obj = h[ci];
+    if (!obj || IsBadReadPtr((void *)obj, 0x48)) { logf("HUDFIT> skipped: child[0x%x] unreadable", ci); return; }
 
     oldw = ((DWORD *)obj)[0x24 / 4]; oldh = ((DWORD *)obj)[0x28 / 4];
     sub  = ((DWORD *)obj)[0x44 / 4];
@@ -1847,30 +1864,30 @@ static void rz_hud_fit_surface(DWORD liveW) {
            the bar by 8 px every single resize. The cached NATIVE height is the fix.
        Read RAW - the standing rule. The surface has bits here because the engine locked and drew it
        at construction (the BEFORE-setrect census reads them fine). */
-    if (!g_hud_art && oldbits && oldpitch && oldh &&
+    if (!ca->art && oldbits && oldpitch && oldh &&
         !IsBadReadPtr((void *)oldbits, oldpitch * oldh)) {
-        g_hud_art = (BYTE *)HeapAlloc(GetProcessHeap(), 0, oldpitch * oldh);
-        if (g_hud_art) {
-            memcpy(g_hud_art, (void *)oldbits, oldpitch * oldh);
-            g_hud_artw = oldw; g_hud_arth = oldh; g_hud_artpitch = oldpitch;
-            logf("HUDFIT> cached the pristine native art %lux%lu pitch=%lu (one-time)",
-                 oldw, oldh, oldpitch);
+        ca->art = (BYTE *)HeapAlloc(GetProcessHeap(), 0, oldpitch * oldh);
+        if (ca->art) {
+            memcpy(ca->art, (void *)oldbits, oldpitch * oldh);
+            ca->w = oldw; ca->h = oldh; ca->pitch = oldpitch;
+            logf("HUDFIT> child[0x%x]: cached pristine art %lux%lu pitch=%lu (one-time)",
+                 ci, oldw, oldh, oldpitch);
         }
     }
-    if (!g_hud_art) {
-        logf("HUDFIT> WARNING: no cached art (bits=0x%08lX pitch=%lu) - the bar may come back blank",
-             oldbits, oldpitch);
+    if (!ca->art) {
+        logf("HUDFIT> child[0x%x] WARNING: no cached art (bits=0x%08lX pitch=%lu) - may come back blank",
+             ci, oldbits, oldpitch);
     }
-    snap    = g_hud_art;
-    oldw    = g_hud_artw    ? g_hud_artw    : oldw;
-    oldpitch= g_hud_artpitch ? g_hud_artpitch : oldpitch;
-    oldh    = g_hud_arth    ? g_hud_arth    : oldh;   /* NATIVE height - never the padded one */
+    snap     = ca->art;
+    oldw     = ca->w     ? ca->w     : oldw;
+    oldpitch = ca->pitch ? ca->pitch : oldpitch;
+    oldh     = ca->h     ? ca->h     : oldh;   /* THIS child's NATIVE height - never the padded one */
 
-    logf("HUDFIT> bar background child[0x2a]=0x%08lX -> refitting to %lux%lu (art %lux%lu)",
-         obj, liveW, oldh, oldw, oldh);
+    logf("HUDFIT> child[0x%x]=0x%08lX -> refitting to %lux%lu (art %lux%lu)",
+         ci, obj, liveW, oldh, oldw, oldh);
 
-    if (!rz_recreate_raster(obj, "HUD bar background", liveW, oldh, gz)) {
-        logf("HUDFIT> recreate REFUSED - bar left as it was");
+    if (!rz_recreate_raster(obj, "HUD child surface", liveW, oldh, gz)) {
+        logf("HUDFIT> child[0x%x] recreate REFUSED - left as it was", ci);
         return;
     }
 
@@ -1943,8 +1960,19 @@ static void rz_hud_fit_surface(DWORD liveW) {
                      ((DWORD *)nsub)[0xe4 / 4]);
             }
         }
-        /* g_hud_art is the process-lifetime cache - deliberately NOT freed here. */
+        /* ca->art is a process-lifetime per-child cache - deliberately NOT freed here. */
     }
+}
+
+/* Refit the HUD child surfaces that scale with the bar's width.
+ *   [0x2a] the 600x56 background - what "the bar looks right" depends on;
+ *   [0x2b] the 16x64 filler strip - what the FPS cost actually IS (run 16: 6892 blits in 8 s at
+ *          2048 = 93% of all DirectDraw Blt time and ~46 calls per frame, against 24 at 600).
+ * The other four ([0x2c..0x2f], 104-148 x 18) are discrete widgets, not tiled fill, and are left
+ * alone deliberately: widening those would stretch content without removing any blits. */
+static void rz_hud_fit_surface(DWORD liveW) {
+    rz_hud_fit_child(0x2a, liveW);
+    rz_hud_fit_child(0x2b, liveW);
 }
 
 /* The per-frame poll. Compares the live client size against the render target's size and only
@@ -2579,6 +2607,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
 
 
 

@@ -688,3 +688,48 @@ could not name it. Two defects in that labelling, both mine:
 
 Same `600 -> 2048 -> 600` control. The hot source must appear at `S2` and vanish at `S3` as it did
 in run 15; if it does not reproduce, the run is VOID regardless of what gets named.
+
+---
+
+# RUN 17 PRE-REGISTRATION — THE FIX: widen child[0x2b] too
+
+Run 16 named the mechanism: **`child[0x2b]`, a 16x64 filler strip, is blitted ~46 times per frame
+when the bar is 2048 wide** (6892 calls in 8 s = 93% of all DirectDraw Blt time) and ~0 times at 600.
+The engine covers the bar's width by TILING that strip, one `Blt` per tile, every frame.
+
+## The change
+
+`rz_hud_fit_surface` is generalised to `rz_hud_fit_child(ci, liveW)` with a **per-child art cache**
+and each child's **own native height** (a shared cache would tile [0x2a]'s 56-row art into [0x2b]'s
+64-row surface). It now refits **both** `[0x2a]` (the 600x56 background) and `[0x2b]` (the 16x64
+filler).
+
+`[0x2c..0x2f]` (104-148 x 18) are left alone deliberately: they are discrete widgets, not tiled fill,
+so widening them would stretch content without removing a single blit.
+
+## Pre-registered outcomes — the count is the measurement, not the feel
+
+- **FIX WORKS:** `child[0x2b]`'s call count at `S2_W2048` collapses (from ~6892 toward the ~1/frame
+  the other sources show), total inside-Blt at 2048 falls toward the 600 baseline, and the owner
+  reports the FPS drop reduced or gone. **This would confirm the tile-count-follows-source-width
+  hypothesis and fix the actual defect.**
+- **HYPOTHESIS DEAD:** `[0x2b]` is widened per the log, but its blit count at 2048 is **unchanged**.
+  Then the engine's tile count is NOT driven by source width — it is a fixed step or comes from
+  layout metadata — and widening the source cannot help. The fix is reverted and the next target is
+  wherever that count is computed.
+- **PARTIAL:** count falls but not to ~1/frame. The source width matters but is not the only term.
+- **REGRESSION:** the bar renders wrong (gaps, garbage, wrong colours) or a fault occurs. Revert;
+  `[0x2b]` is load-bearing for appearance in a way the 16x64 census did not reveal.
+
+## Two things this run is NOT allowed to conclude
+
+1. **A drop in `[0x2b]`'s call count alone is not success.** Total inside-Blt at 2048 must fall too —
+   otherwise the cost simply moved to another source, which is exactly the shell game
+   destination-bucketing played on run 9.
+2. **The owner's FPS perception remains the ground truth.** If the counters improve and the drop is
+   still there, the counters are measuring the wrong thing again.
+
+## Conditions
+
+Same `600 -> 2048 -> 600` sweep so the result is directly comparable to runs 14-16, whose numbers are
+the baseline this is scored against.
