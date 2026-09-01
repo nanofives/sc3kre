@@ -1476,3 +1476,63 @@ hypothesis is dead and the log will say which.
   (wrapper) -> `IDirectDrawSurface::Blt`**. All four links proven.
 - Run 17's failure: explained.
 - Fix candidate: a field write, testable next run.
+
+---
+
+# RUN 21 — side panel IDENTIFIED, and **its tiling path is INACTIVE**
+
+```
+### SIDE: panel window captured 0x0D487950 (SIMUI FUN_1004e123 ctor)
+SIDE> panel=0x0D487950 vt=0x03469834 rect this+0x14..0x20=[704 0 800 442]
+SIDE> child +0xc0 = 0x100EA9D0 dims=96x417
+SIDE> child +0xc4 = 0x00000000 (null/unreadable)
+SIDE> child +0xc8 = 0x100EA2C8 dims=96x25
+SIDE> child +0xcc = 0x00000000 (null/unreadable)     <<< THE TILED ONE
+SIDE> child +0x114 = 0x00000000 (null/unreadable)
+```
+
+## IDENTIFIED, as pre-registered
+
+`vt = 0x03469834` = SIMUI base + `0xa9834` — the vtable found statically. Rect **`[704, 0, 800, 442]`
+= 96 wide x 442 tall at x=704..800**, i.e. **the rightmost 96 px of the native 800-wide screen**.
+A tall narrow rect at a screen edge: exactly the pre-registered IDENTIFIED signature. The
+static chain (`.rdata` pointer -> vtable base -> `.text` immediate -> constructor) landed on the
+right object.
+
+## ⭐ But `+0xcc`, the tiled child, is **NULL** — so the loop never runs
+
+`FUN_1004e63e` guards its tile loop with `if (*(int **)(param_1 + 0xcc) != (int *)0x0)`. With
+`+0xcc` null, **the entire tiling branch is skipped for this instance.** The panel draws its two
+real children (`+0xc0` 96x417 background, `+0xc8` 96x25) with one blit each and nothing else.
+
+**So the vertical UI has no tiling cost to inherit.** The expensive mechanism that dominates the
+bottom bar is present in the code but inactive in this object.
+
+## The garbage tilespan is expected, and is itself a check
+
+`tilespan=1462513952-825242161` is nonsense because `+0x104`/`+0x10c` are **uninitialised** - the
+constructor zeroes dwords `[0x30..0x33]` and `[0x45]` (= `+0xc0..+0xcc`, `+0x114`) and `[0x38..0x3f]`
+(= `+0xe0..+0xfc`), but **not** `+0x100..+0x10c`. Those fields are only ever read inside the
+`+0xcc != NULL` branch, so leaving them uninitialised is safe engine behaviour.
+
+That the uninitialised fields are exactly the ones the null-guarded branch uses, and the initialised
+ones exactly what the unguarded code touches, **independently corroborates the offset map** rather
+than undermining it.
+
+## What this means for extending the side panel
+
+Docking/extending it vertically should be **cheap** - there is no per-frame tile loop to multiply.
+The likely cost is one stretched or re-fitted background blit, not ~46 small ones.
+
+`[UNCERTAIN]`, and it matters: **only ONE instance was captured** (the hook keeps the first and the
+log shows a single construction). Another instance of this class elsewhere in the UI could have
+`+0xcc` populated and would tile. This result covers the panel that was built in this session, not
+the class in general.
+
+## Status
+
+- Side panel object: **captured and confirmed** (vtable, rect, children all agree).
+- Its tiling path: **inactive** (`+0xcc` null) - no FPS penalty expected from extending it.
+- Offset map: corroborated by which fields the constructor does and does not initialise.
+- Next, if pursued: dock/extend via the same `vt+0xc8` SetRect used for the bar, then measure -
+  the prediction is **no material FPS change**, which is a real falsifiable claim.
