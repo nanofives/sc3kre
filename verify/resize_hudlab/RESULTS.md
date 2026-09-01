@@ -1283,3 +1283,56 @@ the label is misleading. `g_bar_surf` should be per-child.
 - Mechanism: still `child[0x2b]` tiled ~46x/frame. **Confirmed twice now** (runs 16 and 17).
 - Cause of the COUNT: engine-side loop, not surface geometry.
 - Next: `_ReturnAddress()` in the ddraw hook, filtered to that source. One run to name the loop.
+
+---
+
+# RUN 18 — caller captured: **`GZGraphicD+0x18C89`, a SINGLE site, 100% of the tiled blits**
+
+| step | caller | calls | total |
+|---|---|---:|---:|
+| `S1_W600` | *(no `[0x2b]` blits - filter set at S2's refit)* | 0 | — |
+| `S2_W2048` | **`GZGraphicD.dll+0x18C89`** | **8538** | **7403.2 ms** |
+| `S3_W600` | `GZGraphicD.dll+0x18C89` | **15** | 12.2 ms |
+
+**One caller, no spread.** 8538 of 8538 `[0x2b]`-sourced blits come from a single address, and it
+collapses to 15 when the bar narrows. The `_ReturnAddress()` approach worked exactly as intended -
+no junk, no validation needed, no ambiguity. Contrast runs 7-8, which produced rankings containing
+`SC3U.exe+0x9`.
+
+## But it is ONE LEVEL TOO SHALLOW - and that is diagnostic in itself
+
+`FUN_10018c58` spans `0x18c58..0x18d1c` (197 bytes), so **`0x18C89` is `FUN_10018c58+0x31` - inside
+the engine's own `Blt` wrapper.** The captured return address is the instruction after the wrapper's
+`call [vtable+0x14]`, not the tiling loop.
+
+So what run 18 actually proves is: **every one of the tiled blits goes through `FUN_10018c58`**, the
+same wrapper the mod has hooked as its per-frame heartbeat since the beginning. The tiling loop is
+`FUN_10018c58`'s CALLER, one frame further up.
+
+## Getting that frame needs no new mechanism either
+
+`FUN_10018c58` is already hooked (`fnlog_enter` idx 1), and the stub's documented frame layout gives
+**`f[9]` = the return address into its caller** (`sc3resize.c`: *"f[0]=eflags, f[1..8]=edi..eax,
+f[9]=return address, f[10..]=stack args"*, taken verbatim from `sc3probe.c:8650-8658`).
+
+The heartbeat fires at `FUN_10018c58` entry, immediately before the `Blt`. So:
+
+1. in `fnlog_enter` idx 1, stash `f[9]` into a global;
+2. in `rz_blt_hook`, when the source is `child[0x2b]`, bucket **that** stashed value instead of
+   `_ReturnAddress()`.
+
+That yields the tiling loop's address with the same exactness and no stack scanning. Both hooks
+already exist; this is a wiring change.
+
+## Why `S1` shows no blits, and why that is correct
+
+`g_ret_filter` is set when `child[0x2b]` is refit, which first happens at `S2`. So `S1` legitimately
+has no filtered blits - the pre-registered `NO BLITS` case, occurring for the stated reason and
+diagnosable from the logged `filter=0x0BFFA9A8`. `S3` confirms the filter still tracks the surface
+(15 calls) rather than pointing at a stale one.
+
+## Status
+
+- Tiled blits: **single call site**, confirmed, `FUN_10018c58+0x31`.
+- That site is the Blt wrapper, not the loop - the loop is its caller.
+- Next: stash `f[9]` in the existing heartbeat hook. No new hooking, no scanning.
