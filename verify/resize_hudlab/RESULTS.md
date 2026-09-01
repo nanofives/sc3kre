@@ -891,3 +891,81 @@ Normalise per frame, and instrument what the wide bar makes the DRIVER do — e.
 `NtGdiDdDDI*` transitions per frame, or test the bar at intermediate widths (600 / 1024 / 1536 /
 2048) to see whether cost scales with width continuously or steps at a threshold. A threshold would
 point at a resource limit; smooth scaling at per-pixel driver work.
+
+---
+
+# RUN 13 — width sweep: saturating curve, but TWO self-inflicted problems make it non-decisive
+
+| width | calls | total inside-Blt | avg | avg dest area |
+|---:|---:|---:|---:|---:|
+| 600 | 20328 | 7186.1 ms | **0.3535 ms** | 255,813 px |
+| 1024 | 10544 | 7460.6 ms | **0.7076 ms** | 131,116 px |
+| 1536 | 9144 | 7683.2 ms | **0.8402 ms** | 80,721 px |
+| 2048 | 8797 | 7843.9 ms | **0.8917 ms** | 69,699 px |
+
+## Shape: neither SMOOTH nor THRESHOLD
+
+Per-call increments for roughly equal width steps: **+0.354, +0.133, +0.052** — each about half the
+last. A **saturating curve**: nearly all the cost appears at the first step and then asymptotes.
+That matches neither pre-registered shape.
+
+## ⚠️ PROBLEM 1: my "% of window" figures are WRONG in sweep mode
+
+`rz_blt_dump` divides by 100.0, hardcoded for the 10 s A/B window. **Sweep windows are 8 s.** The
+printed percentages (71.9 / 74.6 / 76.8 / 78.4) are all understated. Correct values:
+
+| width | real % of the 8 s window |
+|---:|---:|
+| 600 | **89.8%** |
+| 1024 | **93.3%** |
+| 1536 | **96.0%** |
+| 2048 | **98.0%** |
+
+Absolute milliseconds in the log are correct; only the percentages are wrong. Second labelling bug
+of the session after the `DDBLT_*` names — both were mine, both from reusing a constant without
+re-checking it against the new context.
+
+## ⚠️ PROBLEM 2: the 600 baseline is CONFOUNDED — and it is the step carrying the effect
+
+`rz_hud_fit_surface` skips when `liveW == oldw`. The bar surface is natively 600 wide, so **at width
+600 no refit happens and the bar keeps the ENGINE's original surface.** At 1024/1536/2048 it is
+running on a surface WE created.
+
+So the one large step (600 -> 1024, x2.00) is exactly the step where the surface changes hands. The
+remaining, much smaller increments (x1.19, x1.06) are the only ones that isolate width. **The sweep
+cannot separate "wider costs more" from "our recreated surface costs more".**
+
+## And a deflationary observation that matters
+
+**Total inside-Blt time is nearly constant across all four widths** (7186 -> 7844 ms, +9%) while call
+count falls 57% (20328 -> 8797). Corrected, the thread is inside Blt **89.8% of the time even at the
+600 baseline**, rising only to 98%.
+
+So the thread is essentially always inside Blt at every width, and the per-call average rises
+largely because a near-saturated time budget is divided among fewer calls. **"Average ms per Blt" is
+therefore not an independent measure here** — it partly reports the frame-rate drop rather than
+explaining it. Earlier runs quoted that x2.55 figure as the finding; it needs this caveat attached.
+
+## Scoring
+
+**Non-decisive.** Not SMOOTH, not THRESHOLD, not FLAT. The instrument answered a slightly different
+question than intended because of the skip-when-equal confound, and one of its readouts was
+mislabelled.
+
+## The clean follow-up, which is cheap
+
+Sweep **600(engine) -> 2048 -> 600(ours)**. The final step puts our recreated surface at the
+original width:
+
+- if cost returns to baseline at 600(ours), **width is the driver**;
+- if it stays high, **our recreated surface is the driver** — and that would be a mod bug, not an
+  engine property, which is a very different and much more fixable conclusion.
+
+That single control separates the two explanations the sweep confounded.
+
+## Status
+
+- Shipping build unaffected (sweep is diagnostic, two flags, off by default).
+- FPS mechanism: still open, now with a named confound to resolve and a cheap control to resolve it.
+- Two instrument defects recorded against myself: the hardcoded percent divisor and the
+  skip-when-equal baseline.
