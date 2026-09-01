@@ -806,3 +806,88 @@ phase is a few lines and no new risk. That is the next step.
 - Excluded so far: bar's own blit (run 9), surface residency (run 11), stack-inferred callers
   (runs 7-8, instrument failures).
 - Next: aggregate the Blt arguments the hook already receives.
+
+---
+
+# RUN 12 (2026-08-31) — smaller blits, 7.7x slower. Cost is not proportional to work.
+
+## ⚠️ FIRST, A CORRECTION: my flag labels in the log are WRONG
+
+The log prints `WAIT`, `ROP`, `KEYSRC`, `ASYNC` from a decode I wrote from memory instead of
+checking. Correct `DDBLT_*` values:
+
+| bit | real name | what I printed |
+|---|---|---|
+| `0x01000000` | `DDBLT_WAIT` | WAIT — correct |
+| `0x00010000` | **`DDBLT_KEYSRCOVERRIDE`** | (unlabelled) |
+| `0x00000400` | **`DDBLT_COLORFILL`** | **"ROP" — WRONG** (`DDBLT_ROP` is `0x00020000`) |
+| `0x00000080` | `DDBLT_ALPHASRCNEG` | **"KEYSRC" — WRONG** (`DDBLT_KEYSRC` is `0x00008000`) |
+| `0x10000000` | not a Blt flag | **"ASYNC" — WRONG** (`DDBLT_ASYNC` is `0x00000200`) |
+
+**The raw hex in the log is correct; the names beside it are not.** Read the hex. The three observed
+combinations are:
+
+- `0x01000000` = `DDBLT_WAIT`
+- `0x01010000` = `DDBLT_WAIT | DDBLT_KEYSRCOVERRIDE`
+- `0x01000400` = `DDBLT_WAIT | DDBLT_COLORFILL`
+
+Logged against myself: decoding constants from memory rather than checking is exactly the NO-GUESSING
+violation this project forbids, and it nearly went into a result as fact.
+
+## The measurement
+
+| | A-native | B-fullwidth | change |
+|---|---:|---:|---:|
+| `0x01000000` (WAIT) calls | 15850 | 10932 | -31% |
+| `0x01000000` **avg** | **0.1100 ms** | **0.8463 ms** | **x7.7** |
+| `0x01010000` (WAIT+KEYSRCOVERRIDE) calls | 4874 | 521 | **-89%** |
+| `0x01010000` avg | 1.1766 ms | 0.9303 ms | x0.79 (faster) |
+| **average dest area** | **253,716 px** | **41,849 px** | **x0.16** |
+| max dest rect | 2048x1081 | 2048x1081 | same |
+| NULL-dest / NULL-src | 0 / 336 | 0 / 186 | — |
+
+## The headline: SMALLER blits, 7.7x SLOWER
+
+Average destination area **fell six-fold** (253,716 -> 41,849 px) while the dominant flag's per-call
+cost **rose 7.7x**. Less work per call, far more time per call.
+
+**That rules out throughput.** Whatever the cost is, it is not moving pixels — it is per-call
+overhead or synchronization. This is the same conclusion the EIP profiler reached from a completely
+different direction (`NtGdiDdDDIWaitForSynchronizationObject`), now supported by the blit's own
+geometry.
+
+## Scoring: neither pre-registered outcome cleanly, and that is the honest answer
+
+- **Not "PARAMETERS IDENTICAL":** the mix changed a lot (keyed blits -89%) and rect sizes shrank 6x.
+- **Not "PARAMETERS CHANGED" in the sense intended either:** that outcome meant *parameters changed
+  in a way that explains the slowdown*. These changed in the **opposite** direction — smaller,
+  simpler, fewer keyed blits should all be **faster**.
+
+So the parameter changes are a **consequence** of the slowdown (fewer frames, different work
+composition per sampled window), not its cause. The cause remains external to the call.
+
+`[UNCERTAIN]` and worth stating: part of the mix shift is simply that phase B renders fewer frames in
+the same 10 s, so the sampled population differs. **This run cannot separate "the engine issues
+different blits" from "the same blit pattern sampled at a lower frame rate."** A per-frame
+normalisation would be needed, and it was not built.
+
+## Elimination ledger
+
+| excluded | by | how |
+|---|---|---|
+| the bar's own blit | run 9 | never appears as a hot object |
+| surface residency | run 11 | caps byte-identical, VIDMEM both phases |
+| pixel throughput | run 12 | 6x smaller blits, 7.7x slower |
+| stack-inferred callers | runs 7-8 | instrument failures, scored honestly |
+
+**Remaining:** per-call synchronization / external GPU contention induced by compositing a
+full-width surface. That is a far smaller and more specific space than the starting claim
+("intrinsic to the engine's compositing, would require a compositor rewrite"), which is now dead
+several times over.
+
+## Suggested next step (not taken)
+
+Normalise per frame, and instrument what the wide bar makes the DRIVER do — e.g. count
+`NtGdiDdDDI*` transitions per frame, or test the bar at intermediate widths (600 / 1024 / 1536 /
+2048) to see whether cost scales with width continuously or steps at a threshold. A threshold would
+point at a resource limit; smooth scaling at per-pixel driver work.
