@@ -857,15 +857,32 @@ static int rz_thiscall(void *self, void *fn, const DWORD *a, int n);  /* fwd: de
 static void rz_win_move_hit(void *w, const char *name, LONG oldx, LONG oldy, LONG nx, LONG ny) {
     LONG *p;
     if (!w || IsBadReadPtr(w, 0x88)) return;
+    /* ⭐ The hit area is a FULL RECT at +0x80(l) +0x84(t) +0x88(r) +0x8c(b), not just an origin.
+     * FUN_1006ddbd compares:
+     *     height = [+0x8c] - [+0x84];   if (y >= height) miss
+     *     width  = [+0x88] - [+0x80];   if (x >= width)  miss
+     * `[CONFIRMED @ SIMUI 0x1006ddbd]`
+     * Moving left/top ALONE leaves right/bottom at their old values, so width and height come out
+     * NEGATIVE and every click misses - which is precisely what "still not clickable" was, after
+     * the position fields all read correct. Translate the whole rect, preserving its size. */
     p = (LONG *)((DWORD)w + 0x80);
-    if (p[0] == nx && p[1] == ny) return;                  /* already there */
-    if (p[0] != oldx || p[1] != oldy) {
-        logf("HIT> %s: +0x80/84 = (%ld,%ld), expected the old position (%ld,%ld) - NOT rewriting",
-             name, p[0], p[1], oldx, oldy);
-        return;
+    {
+        LONG cw = p[2] - p[0], ch = p[3] - p[1];
+        logf("HIT> %s: rect +0x80..0x8c = [%ld %ld %ld %ld] (%ldx%ld)  want origin (%ld,%ld)",
+             name, p[0], p[1], p[2], p[3], cw, ch, nx, ny);
+        if (p[0] == nx && p[1] == ny && cw > 0 && ch > 0) return;   /* already correct */
+        if (cw <= 0 || ch <= 0) {
+            /* Non-positive extent means left/top were moved without right/bottom - the exact bug
+               this function now fixes. Refuse rather than invent a size: within one run the first
+               move always sees a clean rect, so this can only mean the offsets are not what we
+               think on this class. */
+            logf("HIT> %s: extent %ldx%ld is non-positive - refusing to guess a size", name, cw, ch);
+            return;
+        }
+        p[0] = nx;      p[1] = ny;
+        p[2] = nx + cw; p[3] = ny + ch;
+        logf("HIT> %s: hit rect -> [%ld %ld %ld %ld]", name, p[0], p[1], p[2], p[3]);
     }
-    logf("HIT> %s: hit-test origin (%ld,%ld) -> (%ld,%ld)", name, p[0], p[1], nx, ny);
-    p[0] = nx; p[1] = ny;
 }
 
 static void rz_win_setrect(void *w, const char *name, LONG x1, LONG y1, LONG x2, LONG y2) {
