@@ -835,6 +835,39 @@ static int rz_thiscall(void *self, void *fn, const DWORD *a, int n);  /* fwd: de
 
 /* Move one framework window to an absolute rect via its own vt+0xc8 SetRect - the method already
  * proven on both the bar and the side panel. Live-vtable dispatch, guarded, logs what it did. */
+/* Move a window's HIT-TEST origin.
+ *
+ * ⭐ This is the field that made the relocated HUD unclickable. The chain, all confirmed statically:
+ *   GZWIND FUN_10020818 -> (sink+0x38)->vt[0x8c] = FUN_1001e748  find-window-at-point
+ *     -> child/self vt+0xe4 = SIMUI FUN_1004efcd  point-in-window
+ *        -> vt+0xd8 = FUN_1006dd8c   screen->local: subtracts the origin from (x,y)
+ *           -> vt+0xdc = FUN_1006dd44  origin = sum of vt+0x98 / vt+0x9c up the parent chain
+ *              -> vt+0x98 = `mov eax,[ecx+0x80]`   vt+0x9c = `mov eax,[ecx+0x84]`
+ * `[CONFIRMED @ GZWIND 0x10020818, 0x1001e748; SIMUI 0x1004efcd, 0x1006dd8c, 0x1006dd44,
+ *   0x1006db74, 0x1006db7b]`
+ *
+ * So a window carries THREE position representations:
+ *   `+0x14..0x20`  the window rect  (what vt+0xc8 SetRect maintains)
+ *   `+0x90`        the paint dest   (what the generic painter blits into)
+ *   `+0x80/+0x84`  the HIT-TEST origin
+ * Moving the first two moves the pixels and leaves input behind - exactly the reported symptom.
+ *
+ * Self-verifying: only rewrite when the field still holds the OLD position, so if these offsets
+ * ever mean something else on some class we refuse rather than corrupt it. */
+static void rz_win_move_hit(void *w, const char *name, LONG oldx, LONG oldy, LONG nx, LONG ny) {
+    LONG *p;
+    if (!w || IsBadReadPtr(w, 0x88)) return;
+    p = (LONG *)((DWORD)w + 0x80);
+    if (p[0] == nx && p[1] == ny) return;                  /* already there */
+    if (p[0] != oldx || p[1] != oldy) {
+        logf("HIT> %s: +0x80/84 = (%ld,%ld), expected the old position (%ld,%ld) - NOT rewriting",
+             name, p[0], p[1], oldx, oldy);
+        return;
+    }
+    logf("HIT> %s: hit-test origin (%ld,%ld) -> (%ld,%ld)", name, p[0], p[1], nx, ny);
+    p[0] = nx; p[1] = ny;
+}
+
 static void rz_win_setrect(void *w, const char *name, LONG x1, LONG y1, LONG x2, LONG y2) {
     DWORD *win = (DWORD *)w, *vt;
     DWORD a[4];
@@ -845,8 +878,11 @@ static void rz_win_setrect(void *w, const char *name, LONG x1, LONG y1, LONG x2,
     }
     logf("CLUSTER> %s [%ld %ld %ld %ld] -> [%ld %ld %ld %ld]", name,
          (LONG)win[0x14/4], (LONG)win[0x18/4], (LONG)win[0x1c/4], (LONG)win[0x20/4], x1, y1, x2, y2);
-    a[0] = (DWORD)x1; a[1] = (DWORD)y1; a[2] = (DWORD)x2; a[3] = (DWORD)y2;
-    rz_thiscall(w, (void *)vt[0xc8/4], a, 4);
+    {   LONG ox = (LONG)win[0x14/4], oy = (LONG)win[0x18/4];
+        a[0] = (DWORD)x1; a[1] = (DWORD)y1; a[2] = (DWORD)x2; a[3] = (DWORD)y2;
+        rz_thiscall(w, (void *)vt[0xc8/4], a, 4);
+        rz_win_move_hit(w, name, ox, oy, x1, y1);   /* SetRect does not touch +0x80/+0x84 */
+    }
 }
 
 /* Translate the whole native HUD into the bottom-right corner, at native size. */
@@ -910,6 +946,7 @@ static void rz_cluster_layout(void) {
             r[0] = n[0] + dx; r[1] = n[1] + dy;
             r[2] = n[2] + dx; r[3] = n[3] + dy;
         }
+        rz_win_move_hit(w, "painter window", n[0], n[1], n[0] + dx, n[1] + dy);
         moved++;
     }
     logf("CLUSTER> translated %ld painter windows by (%ld,%ld); HUD kept at native size",
@@ -943,9 +980,13 @@ static void rz_mini_dock(void) {
     ny = (cr.bottom - cr.top) - h;
     if (nx < 0 || ny < 0) { logf("MINI> dock skipped: window smaller than the minimap"); return; }
     if (r[0] == nx && r[1] == ny) { logf("MINI> already docked at [%ld,%ld]", nx, ny); return; }
-    logf("MINI> dock [%ld %ld %ld %ld] -> [%ld %ld %ld %ld]",
-         r[0], r[1], r[2], r[3], nx, ny, nx + w, ny + h);
-    r[0] = nx; r[1] = ny; r[2] = nx + w; r[3] = ny + h;
+    {   /* capture the OLD position before overwriting - the hit-origin move verifies against it */
+        LONG ox = r[0], oy = r[1];
+        logf("MINI> dock [%ld %ld %ld %ld] -> [%ld %ld %ld %ld]",
+             r[0], r[1], r[2], r[3], nx, ny, nx + w, ny + h);
+        r[0] = nx; r[1] = ny; r[2] = nx + w; r[3] = ny + h;
+        rz_win_move_hit(g_mini, "minimap", ox, oy, nx, ny);
+    }
 }
 /* The bar's IDirectDrawSurface*, captured AT REFIT TIME (run 16). Run 15 read it at dump time, but
  * the pointer changes on every recreate, so the dump described the surface at the END of the window
@@ -3521,6 +3562,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
 
 
 
