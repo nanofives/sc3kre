@@ -557,3 +557,50 @@ the bar's own blit, surface residency, and now potentially the call parameters. 
 been by measurement, and the remaining space (external GPU contention from a wide system-memory
 surface being composited by the desktop compositor) is both smaller and more specific than where
 this started ("intrinsic to the engine's compositing, would require a compositor rewrite").
+
+---
+
+# RUN 13 PRE-REGISTRATION — bar width sweep (600 / 1024 / 1536 / 2048)
+
+Runs 9-12 excluded the bar's own blit, surface residency, and pixel throughput. What is left is
+per-call synchronization or external contention. **The SHAPE of cost-versus-width discriminates
+between those**, and the A/B design cannot show a shape from two points.
+
+## Design
+
+`SC3RESIZE_SWEEP=1` replaces the A/B phases with four measurement windows of 8 s, at bar widths
+600, 1024, 1536, 2048. Each step docks the bar AND refits its background surface to the same width,
+so window and surface always agree — run 5 established that a widened window over a stale surface is
+a third state that scores nothing.
+
+**Tighter control than A/B:** the bar is DOCKED at every step including the 600 baseline, so docking
+is held constant and the only variable across the four windows is width. The A/B design confounded
+"docked" with "full-width"; this does not.
+
+Same process, same city, same window size, same zoom throughout.
+
+## Pre-registered outcomes
+
+- **SMOOTH:** average inside-Blt rises roughly monotonically and proportionally with width
+  (roughly linear in width, or in bar area). The cost is then per-pixel work in the driver/compositor
+  — the wide surface genuinely costs more to composite every frame, and mitigation means drawing
+  less of it (e.g. leaving the bar native and only repositioning it).
+- **THRESHOLD:** cost is flat across two or three widths and then jumps at one step. That implies a
+  RESOURCE LIMIT crossed at a specific size — a surface no longer fitting in a cache or video-memory
+  budget. Mitigation would then be to stay under the threshold, which could make a full-width bar
+  affordable at a slightly reduced width or by splitting it.
+- **FLAT:** no material difference across all four widths. Then bar width is not the driver at all,
+  and everything attributed to it across runs 3-12 needs re-examination — the confound would have to
+  be the dock/refit action itself rather than the width.
+- **VOID:** fewer than 100 inside-Blt calls in any window, a refused ddraw hook, or a fault.
+
+## What this cannot decide
+
+It measures cost versus width; it does not identify the mechanism. A THRESHOLD would name a size to
+investigate, not a cause. Carried forward from every run in this file: a measured correlation is not
+a mechanism, and this session has already killed four tidy stories that felt conclusive.
+
+## Note on the ship path
+
+Sweep is diagnostic only, behind two flags (`SC3RESIZE_HUDLAB=1 SC3RESIZE_SWEEP=1`). With either
+unset the mod is the shipping build: viewport plus HUD dock/span at full width.

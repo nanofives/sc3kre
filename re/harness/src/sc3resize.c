@@ -979,11 +979,66 @@ static DWORD WINAPI rz_prof_thread(LPVOID p) {
  * docked full-width. Same process, city, window size and zoom - the fixture is its own control. */
 static int   g_hudphase;               /* 0 idle, 1 settle, 2 profiling A, 3 profiling B, 4 done */
 static DWORD g_phase_ms;
-static void rz_hud_setrect(void);           /* fwd: the window widen, defined below */
-static void rz_hud_fit_surface(DWORD liveW);/* fwd: the bar background surface widen, defined below */
+static void rz_hud_setrect_w(DWORD wantW);  /* fwd: dock the bar, spanning to wantW */
+static void rz_hud_fit_surface(DWORD liveW);/* fwd: the bar background surface refit, defined below */
+static void rz_patch_ddblt(void);           /* fwd: install the ddraw Blt timer */
+
+/* WIDTH SWEEP (run 13). The A/B design answers "does a full-width bar cost more". It cannot say
+ * HOW the cost grows with width, and that shape is diagnostic: a THRESHOLD implies a resource limit
+ * (a surface no longer fitting somewhere), while SMOOTH scaling implies per-pixel driver work.
+ * Same within-run control as A/B - one process, one city, one window size, only the bar width moves. */
+static const DWORD g_sweep[] = { 600, 1024, 1536, 2048 };
+#define SWEEP_N (int)(sizeof(g_sweep) / sizeof(g_sweep[0]))
+#define SWEEP_MS 8000
+static int g_sweepon, g_sweep_i;
+
+/* Apply one sweep step: dock the bar to `w` and refit its background surface to the same width, so
+ * window and surface always agree (run 5 showed a surface-less widen is a third state that scores
+ * nothing). Then start a fresh measurement window. */
+static void rz_sweep_apply(DWORD w) {
+    static char tag[32];
+    rz_hud_setrect_w(w);
+    rz_hud_fit_surface(w);
+    _snprintf(tag, sizeof(tag), "W%lu", w);
+    rz_prof_reset(); rz_blt_reset();
+    InterlockedExchange(&g_prof_on, 1);
+    logf("SWEEP> === width %lu === measuring %d ms", w, SWEEP_MS);
+    g_phase_ms = GetTickCount() + SWEEP_MS;
+}
+static void rz_sweep_dump(DWORD w) {
+    char tag[32];
+    _snprintf(tag, sizeof(tag), "W%lu", w);
+    InterlockedExchange(&g_prof_on, 0);
+    rz_blt_dump(tag);
+}
 
 static void rz_hudlab_tick(void) {
     if (!g_hudphase || GetTickCount() < g_phase_ms) return;
+
+    if (g_sweepon) {
+        if (g_hudphase == 1) {                /* settled -> install the timer, start at width[0] */
+            rz_patch_ddblt();
+            g_sweep_i = 0;
+            logf("SWEEP> starting %d-point width sweep (600/1024/1536/2048), %d ms each",
+                 SWEEP_N, SWEEP_MS);
+            rz_sweep_apply(g_sweep[0]);
+            g_hudphase = 2;
+            return;
+        }
+        if (g_hudphase == 2) {
+            rz_sweep_dump(g_sweep[g_sweep_i]);
+            g_sweep_i++;
+            if (g_sweep_i >= SWEEP_N) {
+                logf("SWEEP> ---- DONE. Compare avg inside-Blt across widths: a THRESHOLD implies a "
+                     "resource limit, SMOOTH scaling implies per-pixel driver work. ----");
+                g_hudphase = 4;
+                return;
+            }
+            rz_sweep_apply(g_sweep[g_sweep_i]);
+            return;
+        }
+        return;
+    }
     if (g_hudphase == 1) {                       /* settled -> start profiling the NATIVE bar */
         rz_patch_ddblt();   /* install the ddraw Blt timer before the first measurement window */
 
@@ -997,7 +1052,7 @@ static void rz_hudlab_tick(void) {
         InterlockedExchange(&g_prof_on, 0);
         rz_prof_dump("A-native"); rz_stk_dump("A-native"); rz_blt_dump("A-native");
         logf("HUDLAB> applying the SetRect widen, then phase B");
-        rz_hud_setrect();
+        rz_hud_setrect_w(0);
         /* With SC3RESIZE_HUDFIT=1, also widen the bar's BACKGROUND SURFACE - the 600x56 raster run 2
            identified as the thing that actually stops the bar spanning the screen. Ordered after the
            window SetRect so the surface is fitted to the window the bar now occupies. */
@@ -1556,7 +1611,7 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
                and now on the render thread. Same two calls the lab drives, no phases, no census.
                Both are self-gating and log a refusal rather than forcing anything. */
             RECT cr;
-            rz_hud_setrect();
+            rz_hud_setrect_w(0);
             if (g_hwnd && GetClientRect(g_hwnd, &cr))
                 rz_hud_fit_surface((DWORD)(cr.right - cr.left));
         }
@@ -1580,7 +1635,7 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
  *
  * Called by the phase machine at the A->B boundary, on the game thread - the same thread that ran it
  * safely before. */
-static void rz_hud_setrect(void) {
+static void rz_hud_setrect_w(DWORD wantW) {
     DWORD *h = (DWORD *)g_hud_top;
     RECT cr;
     LONG x1, y1, x2, y2;
@@ -1596,7 +1651,10 @@ static void rz_hud_setrect(void) {
     {
         int lw = (int)(cr.right - cr.left), lh = (int)(cr.bottom - cr.top);
         void *setrect = (void *)hvt[0xc8/4];
-        int wantY1 = lh - barH, wantX2 = lw, wantY2 = lh;
+        /* wantW == 0 means "span the whole client" (the ship path). The sweep passes explicit
+           widths, clamped to the client so a sweep step can never exceed the window. */
+        int wantX2 = (wantW == 0 || (int)wantW > lw) ? lw : (int)wantW;
+        int wantY1 = lh - barH, wantY2 = lh;
         if (!setrect || barH <= 0 || barH >= lh) {
             logf("HUDLAB> SetRect skipped: setrect=0x%08lX barH=%d lh=%d", (DWORD)setrect, barH, lh);
             return;
@@ -2380,6 +2438,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
               g_ready_ms = (DWORD)atoi(v);
           g_census = GetEnvironmentVariableA("SC3RESIZE_CENSUS", v, sizeof(v)) && atoi(v);
           g_hudlab = GetEnvironmentVariableA("SC3RESIZE_HUDLAB", v, sizeof(v)) && atoi(v);
+          g_sweepon = GetEnvironmentVariableA("SC3RESIZE_SWEEP", v, sizeof(v)) && atoi(v);
           /* HUD dock+span ships ON. SC3RESIZE_HUDNATIVE=1 is the opt-out for anyone who prefers the
              native bar - the full-width bar carries a measured GPU-sync FPS cost that is NOT yet
              resolved (verify/resize_hudlab: two causes eliminated, mechanism still open). */
@@ -2396,6 +2455,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
 
 
 
