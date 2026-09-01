@@ -2867,6 +2867,40 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                             logf("INPUT> event sink window+0x30 = 0x%08lX  vtable %s",
                                  sink, who);
                             logf("INPUT> sink vt+0x64 (the mouse-event entry) = %s", slot);
+                            /* GZWIND FUN_10020818 consumes the coordinates in two places
+                               [CONFIRMED @ GZWIND 0x10020818]:
+                                 (sink+0x30)->vt[0xe4](x,y)  - hit-test the focused window
+                                 (sink+0x38)->vt[0x8c](x,y)  - find WHICH window contains the point
+                               The second is the dispatcher the board records as never located.
+                               Resolve both objects and both slots. */
+                            {   static const struct { int off, sl; const char *what; } q[] = {
+                                    { 0x28, 0x104, "captured widget" },
+                                    { 0x30, 0x0e4, "focused window HIT-TEST(x,y)" },
+                                    { 0x38, 0x08c, "FIND-WINDOW-AT-POINT(x,y)" } };
+                                int qi;
+                                for (qi = 0; qi < 3; qi++) {
+                                    DWORD o = ((DWORD *)sink)[q[qi].off / 4];
+                                    char ow[160], os[160];
+                                    if (!o || IsBadReadPtr((void *)o, 4)) {
+                                        logf("INPUT>   sink+0x%02x (%s) = 0x%08lX (null)",
+                                             q[qi].off, q[qi].what, o);
+                                        continue;
+                                    }
+                                    {   DWORD *ovt = *(DWORD **)o;
+                                        rz_modstr((DWORD)ovt, ow, sizeof(ow));
+                                        if (ovt && !IsBadReadPtr(ovt, q[qi].sl + 4)) {
+                                            rz_modstr(ovt[q[qi].sl / 4], os, sizeof(os));
+                                            logf("INPUT>   sink+0x%02x = 0x%08lX vtable %s",
+                                                 q[qi].off, o, ow);
+                                            logf("INPUT>     vt+0x%03x %s = %s",
+                                                 q[qi].sl, q[qi].what, os);
+                                        } else {
+                                            logf("INPUT>   sink+0x%02x = 0x%08lX vtable %s (slot unreadable)",
+                                                 q[qi].off, o, ow);
+                                        }
+                                    }
+                                }
+                            }
                         } else {
                             logf("INPUT> event sink 0x%08lX vtable %s unreadable", sink, who);
                         }
