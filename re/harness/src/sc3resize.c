@@ -881,18 +881,51 @@ static void rz_cluster_layout(void) {
         rz_win_setrect(g_side_top, "side panel", g_side_nat[0] + dx, g_side_nat[1] + dy,
                        g_side_nat[2] + dx, g_side_nat[3] + dy);
 
-    /* Everything else the generic painter draws: translate its dest rect by the same delta. */
+    /* Everything else the generic painter draws.
+     *
+     * ⚠️ Writing ONLY `+0x90` moves the PAINT and leaves HIT-TESTING behind - owner-reported:
+     * "the clickable area is not scaling either". `+0x90` is the blit destination; the window's own
+     * rect lives at `this+0x14..0x20`, which is what `vt+0xc8` SetRect maintains and what input
+     * picking reads. The bar and side panel were always clickable because they went through SetRect.
+     *
+     * So prefer SetRect here too, and fall back to the raw `+0x90` write only when the class has no
+     * `vt+0xc8`. Belt and braces: after SetRect, also translate `+0x90` if SetRect did not move it,
+     * since these classes are not all guaranteed to keep the two in sync. */
     for (i = 0; i < g_wins_n; i++) {
         void *w = g_wins[i].w;
         LONG *r, *n = g_wins[i].nat;
+        DWORD *vt;
         if (!w || w == g_hud_top || w == g_side_top || IsBadReadPtr(w, 0xa0)) continue;
+        vt = *(DWORD **)w;
+        if (vt && !IsBadReadPtr(vt, 0xcc) && vt[0xc8/4]) {
+            DWORD a[4];
+            a[0] = (DWORD)(n[0] + dx); a[1] = (DWORD)(n[1] + dy);
+            a[2] = (DWORD)(n[2] + dx); a[3] = (DWORD)(n[3] + dy);
+            rz_thiscall(w, (void *)vt[0xc8/4], a, 4);
+        }
         r = (LONG *)((DWORD)w + 0x90);
-        r[0] = n[0] + dx; r[1] = n[1] + dy;
-        r[2] = n[2] + dx; r[3] = n[3] + dy;
+        if (r[0] != n[0] + dx || r[1] != n[1] + dy) {   /* SetRect did not carry the draw rect */
+            r[0] = n[0] + dx; r[1] = n[1] + dy;
+            r[2] = n[2] + dx; r[3] = n[3] + dy;
+        }
         moved++;
     }
     logf("CLUSTER> translated %ld painter windows by (%ld,%ld); HUD kept at native size",
          moved, dx, dy);
+    {   /* Report paint rect vs WINDOW rect for the first few, so a future divergence is visible in
+           the log instead of only on screen - this run's clickability bug was invisible in the log. */
+        LONG k;
+        for (k = 0; k < g_wins_n && k < 6; k++) {
+            DWORD *w = (DWORD *)g_wins[k].w;
+            LONG *p;
+            if (!w || IsBadReadPtr(w, 0xa0)) continue;
+            p = (LONG *)((DWORD)w + 0x90);
+            logf("CLUSTER>   [%ld] 0x%08lX paint=[%ld %ld %ld %ld] window=[%ld %ld %ld %ld]%s",
+                 k, (DWORD)w, p[0], p[1], p[2], p[3],
+                 (LONG)w[0x14/4], (LONG)w[0x18/4], (LONG)w[0x1c/4], (LONG)w[0x20/4],
+                 (p[0] == (LONG)w[0x14/4] && p[1] == (LONG)w[0x18/4]) ? "" : "   <<< PAINT/WINDOW DIVERGE");
+        }
+    }
 }
 
 static void rz_mini_dock(void) {
@@ -3366,6 +3399,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
 
 
 
