@@ -749,6 +749,30 @@ static void  *g_mini;
 static LONG   g_mini_rect[4];
 static int    g_minion;        /* SC3RESIZE_MINI: dock the minimap to the bottom-right */
 
+/* ---- GENERIC EDGE ANCHORING (SC3RESIZE_ANCHOR=1) ----------------------------------------------
+ * The owner reports the RCI indicator and the net icon staying put, just as the minimap did. They
+ * are more windows positioned in NATIVE 800x600 coordinates. Rather than hunt each one, generalise:
+ * EVERY window passes through FUN_1006d2d0 with its dest rect at `this+0x90`
+ * [CONFIRMED @ SIMUI 0x1006d2d0], so record each one's native rect on first sight and re-anchor it
+ * to the live client size.
+ *
+ * Anchor rule: a window touching the native RIGHT edge (x2 >= 800-EDGE) moves by (liveW - 800); one
+ * touching the native BOTTOM (y2 >= 600-EDGE) moves by (liveH - 600). Left/top-anchored windows stay
+ * put. That is the standard reflow for fixed-resolution UI, and it needs no per-element knowledge.
+ *
+ * The native rect is captured ONCE per window, before any resize, so repeated resizes re-anchor from
+ * the original rather than compounding - the same lesson as the bar's art cache.
+ *
+ * ⚠️ Skips windows covering most of the native screen (the main view is not a HUD element to move),
+ * and skips the bar and side panel, which have their own proper SetRect paths. */
+#define WIN_MAX      48
+#define ANCHOR_EDGE  12
+#define NAT_W        800
+#define NAT_H        600
+static struct { void *w; LONG nat[4]; } g_wins[WIN_MAX];
+static LONG   g_wins_n;
+static int    g_anchor;
+
 /* Dock the minimap by rewriting the dest rect the generic painter reads.
  * FUN_1006d2d0 blits this[0x16] into the rect at this+0x90 [CONFIRMED @ SIMUI 0x1006d2d0], and run
  * 25 measured that rect as [640 436 800 600] - unchanged at 2048x1081, which is exactly why the
@@ -758,6 +782,34 @@ static int    g_minion;        /* SC3RESIZE_MINI: dock the minimap to the bottom
  * each frame. If it recomputes, this is a no-op and the log will show the rect reverting - which is
  * a clean falsifier, not an ambiguous result. Unlike the bar and side panel there is no vt+0xc8
  * SetRect in evidence for this class, so the field write is the available lever. */
+/* Re-anchor every recorded window from its NATIVE rect to the live client size.
+ * Right-edge-anchored windows shift by (liveW - 800); bottom-anchored by (liveH - 600). Computed
+ * from the stored native rect every time, so repeated resizes never compound.
+ * Skips the bar and the side panel: both have proper framework SetRect paths and moving them here
+ * as well would fight those. */
+static void rz_anchor_all(void) {
+    RECT cr;
+    LONG dx, dy, i, moved = 0;
+    if (!g_anchor || !g_hwnd || !GetClientRect(g_hwnd, &cr)) return;
+    dx = (cr.right - cr.left) - NAT_W;
+    dy = (cr.bottom - cr.top) - NAT_H;
+    if (dx == 0 && dy == 0) return;
+    for (i = 0; i < g_wins_n; i++) {
+        void *w = g_wins[i].w;
+        LONG *r, *n = g_wins[i].nat;
+        LONG ax, ay;
+        if (!w || w == g_hud_top || w == g_side_top || IsBadReadPtr(w, 0xa0)) continue;
+        ax = (n[2] >= NAT_W - ANCHOR_EDGE) ? dx : 0;    /* touching the native right edge  */
+        ay = (n[3] >= NAT_H - ANCHOR_EDGE) ? dy : 0;    /* touching the native bottom edge */
+        if (ax == 0 && ay == 0) continue;               /* left/top anchored - leave it    */
+        r = (LONG *)((DWORD)w + 0x90);
+        r[0] = n[0] + ax; r[1] = n[1] + ay;
+        r[2] = n[2] + ax; r[3] = n[3] + ay;
+        moved++;
+    }
+    logf("ANCHOR> re-anchored %ld of %ld windows (dx=%ld dy=%ld)", moved, g_wins_n, dx, dy);
+}
+
 static void rz_mini_dock(void) {
     LONG *r;
     RECT cr;
@@ -1525,12 +1577,6 @@ static void rz_hudlab_tick(void) {
             {   RECT cr;
                 if (g_hudfit && g_hwnd && GetClientRect(g_hwnd, &cr))
                     rz_hud_fit_surface((DWORD)(cr.right - cr.left)); }
-
-            /* SC3RESIZE_SIDE on the ship path. The lab keeps its own phase-B extend so the A/B test stays
-
-               isolated; here it just happens with everything else. */
-
-            if (g_sideon) rz_side_extend();
         }
         rz_hud_surfaces("AFTER-setrect");
         rz_prof_reset(); rz_blt_reset();
@@ -2081,6 +2127,9 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
 
         rz_mini_dock();
 
+
+        rz_anchor_all();   /* generic edge anchoring for every other native-coord HUD window */
+
         if (g_hudlab) {
             /* DIAGNOSTIC path: census now, then let the A/B phase machine drive the dock+fit so the
                profiler gets a native-width control phase first. */
@@ -2154,6 +2203,11 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
             rz_hud_setrect_w(0);
             if (g_hwnd && GetClientRect(g_hwnd, &cr))
                 rz_hud_fit_surface((DWORD)(cr.right - cr.left));
+            /* SC3RESIZE_SIDE on the SHIP path. Placed here deliberately: the first attempt put it
+               next to the lab's copy of the same fit block (rz_hudlab_tick phase 2), which is the
+               identical wiring mistake that made run 30's minimap dock silently not run. Two
+               near-identical blocks exist; this is the one step 12 reaches when the lab is off. */
+            if (g_sideon) rz_side_extend();
         }
     }
 
@@ -2688,8 +2742,22 @@ static void __stdcall fnlog_enter(int idx, DWORD *f) {
         if (ecx && !IsBadReadPtr((void *)ecx, 0xa0)) {
 
             LONG *r = (LONG *)(ecx + 0x90);
-
             LONG w = r[2] - r[0], h = r[3] - r[1];
+            if (g_anchor && w > 0 && h > 0 && g_wins_n < WIN_MAX) {
+                /* Record each window's NATIVE rect ONCE, before any resize moves it, so repeated
+                   resizes re-anchor from the original instead of compounding - the same lesson the
+                   bar's art cache taught. Bounded by the native screen, and the main view is
+                   excluded by area so we never move the thing the HUD sits on top of. */
+                LONG q; int seen = 0;
+                for (q = 0; q < g_wins_n; q++) if (g_wins[q].w == (void *)ecx) { seen = 1; break; }
+                if (!seen && r[0] >= 0 && r[1] >= 0 && r[2] <= NAT_W && r[3] <= NAT_H &&
+                    (w * h) <= (NAT_W * NAT_H * 7) / 10) {
+                    g_wins[g_wins_n].w = (void *)ecx;
+                    g_wins[g_wins_n].nat[0] = r[0]; g_wins[g_wins_n].nat[1] = r[1];
+                    g_wins[g_wins_n].nat[2] = r[2]; g_wins[g_wins_n].nat[3] = r[3];
+                    g_wins_n++;
+                }
+            }
 
             if (w >= 100 && w <= 400 && h >= 100 && h <= 400 && w < h * 2 && h < w * 2) {
 
@@ -3167,6 +3235,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           g_sweepon = GetEnvironmentVariableA("SC3RESIZE_SWEEP", v, sizeof(v)) && atoi(v);
           g_sideon  = GetEnvironmentVariableA("SC3RESIZE_SIDE",  v, sizeof(v)) && atoi(v);
           g_minion  = GetEnvironmentVariableA("SC3RESIZE_MINI",  v, sizeof(v)) && atoi(v);
+          g_anchor  = GetEnvironmentVariableA("SC3RESIZE_ANCHOR", v, sizeof(v)) && atoi(v);
           /* HUD dock+span ships ON. SC3RESIZE_HUDNATIVE=1 is the opt-out for anyone who prefers the
              native bar - the full-width bar carries a measured GPU-sync FPS cost that is NOT yet
              resolved (verify/resize_hudlab: two causes eliminated, mechanism still open). */
@@ -3183,6 +3252,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
+
+
 
 
 
