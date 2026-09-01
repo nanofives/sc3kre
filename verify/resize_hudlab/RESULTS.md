@@ -1705,3 +1705,64 @@ live process, which is not a safe thing to have done casually.
 - Minimap: **still not found**; not in either held window's subtree.
 - Instrument: **must not be re-run as-is.** Any future use needs the node layout established
   statically first, and the recursion removed.
+
+---
+
+# RUN 25 — ⭐ **MINIMAP FOUND** by dest rect. And the method mapped the whole UI for free.
+
+**Zero access violations** this run (run 24's walk disabled). The dest-rect approach worked first try.
+
+## The minimap
+
+```
+SRC #1  0x0C1E54B8  calls=1267  dest=[640 436 800 600]  160x164  <<< SQUARE-ISH
+```
+
+**160x164 at the bottom-right corner of the native 800x600 screen**, blitted 1267 times in 10 s -
+once per frame. Square, corner-anchored, per-frame: the minimap.
+
+## ⭐ And it explains the owner's observation exactly
+
+| | A-native | B-fullwidth |
+|---|---|---|
+| minimap dest | `[640 436 800 600]` | **`[640 436 800 600]` - IDENTICAL** |
+
+**The minimap's dest rect does not change when the window is 2048x1081.** It stays pinned to
+bottom-right-of-800x600 coordinates, which in a maximized window is floating in the middle. That is
+precisely *"minimap was not moved"* - now measured, with the exact rect that needs re-docking:
+`[liveW-160, liveH-164, liveW, liveH]`.
+
+## The method mapped the rest of the UI as a by-product
+
+| source | dest | size | reading |
+|---|---|---|---|
+| `0x0C1E54B8` | `[640 436 800 600]` | 160x164 | **the minimap** |
+| `0x0C1E5358` | `[704 0 800 442]` | 96x442 | **the side panel** - matches its captured rect EXACTLY |
+| `0x03B97828` | `[8 550 481 564]` | 473x14 | a wide thin strip, bottom-left (message/ticker) |
+| `0x0C1E5498` | `[599 520 640 608]` | 41x88 | small vertical element |
+| `0x0C1E6838` | `[774 574 800 600]` | 26x26 | small corner control |
+| `0x0C1E6578` | `[558 239 590 271]` -> `[504 255 536 287]` | 32x32 | **moves between phases** - a cursor or animated indicator |
+
+**The side panel line is the validation:** its dest rect `[704 0 800 442]` matches the rect captured
+independently from its window object in runs 21-24, to the pixel. The method is checked against a
+known answer, not just asserted.
+
+## What this does and does not give us
+
+**Gives:** the minimap's surface pointer, its exact on-screen box, and confirmation that it is
+positioned in stale native coordinates.
+
+**Does NOT give:** its window object, which is what a `vt+0xc8` SetRect would need. But the route is
+now the one already proven twice: **filter caller capture on this source** (`_ReturnAddress` /
+`f[9]`, the machinery that named `FUN_10026841`) -> paint routine -> vtable -> constructor ->
+window object. No guessing, no tree walking, no create recorder.
+
+The filter can be set **dynamically** - "a source whose dest rect is square-ish and 100-400 px" -
+so it needs no advance knowledge of the pointer, which changes per run.
+
+## Note on the stated stopping rule
+
+Run 25's pre-registration said: *"If the dest rects do not settle it, that is the signal to stop
+rather than try a fourth [approach]."* **They did settle it** - so continuing is consistent with the
+rule, not a drift past it. The next step reuses proven machinery rather than inventing a fifth
+approach.
