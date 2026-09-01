@@ -747,6 +747,34 @@ static DWORD   g_mm_l2[MM_BUCKETS], g_mm_l2c[MM_BUCKETS];
  * and whichever `this` presents a 160x164 dest IS the minimap. */
 static void  *g_mini;
 static LONG   g_mini_rect[4];
+static int    g_minion;        /* SC3RESIZE_MINI: dock the minimap to the bottom-right */
+
+/* Dock the minimap by rewriting the dest rect the generic painter reads.
+ * FUN_1006d2d0 blits this[0x16] into the rect at this+0x90 [CONFIRMED @ SIMUI 0x1006d2d0], and run
+ * 25 measured that rect as [640 436 800 600] - unchanged at 2048x1081, which is exactly why the
+ * minimap floats mid-screen when maximized. Move it to the live bottom-right corner, preserving its
+ * own size.
+ * `[UNCERTAIN]`: whether the painter HONOURS a rewritten +0x90 or recomputes it from a layout parent
+ * each frame. If it recomputes, this is a no-op and the log will show the rect reverting - which is
+ * a clean falsifier, not an ambiguous result. Unlike the bar and side panel there is no vt+0xc8
+ * SetRect in evidence for this class, so the field write is the available lever. */
+static void rz_mini_dock(void) {
+    LONG *r;
+    RECT cr;
+    LONG w, h, nx, ny;
+    if (!g_minion || !g_mini || IsBadReadPtr(g_mini, 0xa0)) return;
+    if (!g_hwnd || !GetClientRect(g_hwnd, &cr)) return;
+    r = (LONG *)((DWORD)g_mini + 0x90);
+    w = r[2] - r[0]; h = r[3] - r[1];
+    if (w <= 0 || h <= 0) { logf("MINI> dock skipped: rect %ldx%ld", w, h); return; }
+    nx = (cr.right - cr.left) - w;
+    ny = (cr.bottom - cr.top) - h;
+    if (nx < 0 || ny < 0) { logf("MINI> dock skipped: window smaller than the minimap"); return; }
+    if (r[0] == nx && r[1] == ny) { logf("MINI> already docked at [%ld,%ld]", nx, ny); return; }
+    logf("MINI> dock [%ld %ld %ld %ld] -> [%ld %ld %ld %ld]",
+         r[0], r[1], r[2], r[3], nx, ny, nx + w, ny + h);
+    r[0] = nx; r[1] = ny; r[2] = nx + w; r[3] = ny + h;
+}
 /* The bar's IDirectDrawSurface*, captured AT REFIT TIME (run 16). Run 15 read it at dump time, but
  * the pointer changes on every recreate, so the dump described the surface at the END of the window
  * rather than the one blitting during it. Both the new and the replaced surface are kept: the old
@@ -2041,6 +2069,8 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
         if (g_hudlab) {
             /* DIAGNOSTIC path: census now, then let the A/B phase machine drive the dock+fit so the
                profiler gets a native-width control phase first. */
+            rz_mini_dock();
+
             rz_hud_surfaces("BEFORE-setrect");
             /* SIDE PANEL (run 21) - READ-ONLY. Confirm FUN_1004e63e's object really is the in-city
                side panel: a tall narrow rect at a screen edge. Children at +0xc0/+0xc4/+0xc8/+0xcc
@@ -3122,6 +3152,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           g_hudlab = GetEnvironmentVariableA("SC3RESIZE_HUDLAB", v, sizeof(v)) && atoi(v);
           g_sweepon = GetEnvironmentVariableA("SC3RESIZE_SWEEP", v, sizeof(v)) && atoi(v);
           g_sideon  = GetEnvironmentVariableA("SC3RESIZE_SIDE",  v, sizeof(v)) && atoi(v);
+          g_minion  = GetEnvironmentVariableA("SC3RESIZE_MINI",  v, sizeof(v)) && atoi(v);
           /* HUD dock+span ships ON. SC3RESIZE_HUDNATIVE=1 is the opt-out for anyone who prefers the
              native bar - the full-width bar carries a measured GPU-sync FPS cost that is NOT yet
              resolved (verify/resize_hudlab: two causes eliminated, mechanism still open). */
@@ -3138,6 +3169,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
 
 
 

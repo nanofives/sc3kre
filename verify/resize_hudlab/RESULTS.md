@@ -1829,3 +1829,53 @@ dest rect is 160x164. That is the minimap's window - **no class identification n
 
 `[UNCERTAIN]`: whether the generic painter honours a rewritten `+0x90`, or recomputes it each frame
 from a layout parent. The bar's SetRect precedent suggests the former, but it is untested.
+
+---
+
+# RUN 28 — ⭐ AUTOMATED HARNESS + **MINIMAP WINDOW CAPTURED**
+
+`verify/resize_hudlab/auto.ps1`: path-loads a city, waits for `bridge captured`, maximizes via
+`ShowWindow(SW_MAXIMIZE)`, holds for the phases, kills, and prints the result lines. **Fully
+hands-off.** City loading uses a **bare absolute path** - the only form that works on this build
+(`-lName` touches no file, `-lC:\...\x.sc3` is used verbatim as the path and fails) per
+`LAUNCH_CONTROL.md`.
+
+## The capture
+
+```
+### MINI: window captured 0x0D4AE650 vt=0x0348A180 dest(this+0x90)=[640 436 800 600] 160x164
+```
+
+SIMUI base this run is `0x033E0000` (cross-checked: the side panel's `vt=0x03489834` minus its known
+RVA `0xa9834`). So the minimap's class vtable is **RVA `0xAA180`** - a class **none** of the earlier
+scans surfaced, which is consistent with run 26's finding that it has no `+0x144` override to be
+found by.
+
+**Captured at t+5.3 s, before any resize, zero AVs, 253 log lines.** The hot-hook risk registered in
+run 27's pre-registration did not materialise: `FUN_1006d2d0` hooked cleanly and the game ran
+normally to the end.
+
+## Run 27 was VOID, recorded
+
+Its log ends at 1.3 s with the window subclassed and no city ever loaded - the pre-registered VOID
+condition. That is precisely the failure mode the automation removes.
+
+## Caveat on this run's timings - do NOT compare them to runs 3-26
+
+`INSIDE ddraw Blt` shows 1333 calls / 2.3% in phase A against ~25,000 / ~85% in hand-driven runs.
+The automated game is minimized-then-maximized and unattended, so it renders far less. **The
+automation is sound for CAPTURE and for A/B comparisons within one run, but its absolute frame
+numbers are not comparable to the hand-driven series.** Worth stating before someone reads a 2.3%
+next to an 85% and concludes something changed.
+
+Similarly the geometry band caught a **128x143** source here (the minimap's image inside its 160x164
+window) plus extra L1/L2 sites, because a quieter frame lets more things fall in the band. The
+`+0x90` capture is unaffected - it keys on the window, not the blit.
+
+## Next: dock it
+
+`rz_mini_dock` (built, `SC3RESIZE_MINI=1`) rewrites `this+0x90` to the live bottom-right corner,
+preserving size. **`[UNCERTAIN]`: whether the painter honours a rewritten `+0x90` or recomputes it
+from a layout parent each frame.** If it recomputes, the dock is a no-op and the log shows the rect
+reverting - a clean falsifier. Unlike the bar and side panel, no `vt+0xc8` SetRect is in evidence for
+this class, so the field write is the available lever.
