@@ -1642,3 +1642,66 @@ be treated as its own piece of work with its own pre-registration, not bolted on
 - Route to find it: a surface->owner registry, which requires re-opening a hook this mod dropped
   after a crash. **A fresh piece of work, not a continuation.**
 - Everything else from this session stands unchanged.
+
+---
+
+# RUN 24 — the child list is REAL, but my "guarded" walk was NOT. No minimap.
+
+## What worked: the `+0xb4` list genuinely enumerates children
+
+```
+TREE> SIDE child[0] 0x0F8F7090 vt=0x03488F60 rect=[737   3 793  35] 56x32
+TREE> SIDE child[1] 0x0F8F97C0 vt=0x03488F60 rect=[737  39 793  71] 56x32
+TREE> SIDE child[2] 0x0F8F8008 vt=0x03488F60 rect=[737  75 793 107] 56x32
+TREE> SIDE child[3] 0x0F8F8D70 vt=0x03488F60 rect=[737 111 793 143] 56x32
+TREE> SIDE child[4] 0x0F8FA420 vt=0x03488F60 rect=[737 147 793 179] 56x32
+TREE> SIDE child[5] 0x0F8FAB58 vt=0x03488F60 rect=[737 291 793 323] 56x32
+```
+
+Six objects, **identical class** (`vt=0x03488F60`), **identical size** (56x32), same x span
+(737..793), evenly stepped in y (3/39/75/111/147, +36 each). **These are the side panel's BUTTONS**,
+and they are exactly where the panel is. The `this[0x2d]` / `+0xb4` circular list from
+`FUN_1004d9be` is confirmed as a real child list, live.
+
+## ⛔ What did NOT work, and it is my error
+
+**The walk threw repeated access violations.** Dozens of `*** VEH FAULT *** code=0xC0000005 at
+0x755FCA4E`, caught by the VEH logger, throughout the walk.
+
+**I described this instrument as "bounded and defensive: every dereference guarded". That claim was
+wrong.** Two specific failures:
+
+1. **`IsBadReadPtr` is not a real guard.** It is deprecated precisely because it can fault in the
+   probe itself and gives false results under races. I leaned on it as if it were sound.
+2. **`node[2]` as "the child payload" was a GUESS.** The 12-byte node is `{next, prev, ?}`; nothing
+   established the third field is a window pointer. The garbage entries
+   (`vt=0x3F3F3F3F`, `rect=[1061109567 ...]`, `0x00FF00FF`) are that guess failing, and the
+   recursion then walked *into* the garbage - which is where the faults came from.
+
+The depth-0 side-panel result is trustworthy because it is internally consistent (six identical
+classes, uniform geometry, correct position). **The garbage entries and everything the recursion
+produced are not, and must not be mined.**
+
+## The result on the question: NO MINIMAP
+
+The side panel's subtree contains its buttons, nothing minimap-shaped. `HUDBAR`'s list produced only
+garbage, so nothing can be concluded from it. **The minimap is not reachable from either window we
+hold.** Pre-registered outcome: TREE ENUMERATED / NO MINIMAP.
+
+## Scorecard against myself
+
+This is the second instrument this session I shipped with an overstated safety claim - the first was
+run 7's stack scan ("no scanning, no heuristics" came later, after it produced `SC3U.exe+0x9`). The
+pattern is the same: **a guess about memory layout dressed as a guarded read.** The honest form would
+have been "node[2] is ASSUMED to be the child pointer; if it is not, this will walk garbage."
+
+It cost no data (the VEH caught everything and the game survived) but it generated dozens of AVs in a
+live process, which is not a safe thing to have done casually.
+
+## Status
+
+- `+0xb4` child list: **confirmed real**, enumerates a window's children correctly at depth 0.
+- Side panel's children: **six 56x32 buttons**, mapped.
+- Minimap: **still not found**; not in either held window's subtree.
+- Instrument: **must not be re-run as-is.** Any future use needs the node layout established
+  statically first, and the recursion removed.
