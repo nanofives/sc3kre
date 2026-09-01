@@ -1525,6 +1525,12 @@ static void rz_hudlab_tick(void) {
             {   RECT cr;
                 if (g_hudfit && g_hwnd && GetClientRect(g_hwnd, &cr))
                     rz_hud_fit_surface((DWORD)(cr.right - cr.left)); }
+
+            /* SC3RESIZE_SIDE on the ship path. The lab keeps its own phase-B extend so the A/B test stays
+
+               isolated; here it just happens with everything else. */
+
+            if (g_sideon) rz_side_extend();
         }
         rz_hud_surfaces("AFTER-setrect");
         rz_prof_reset(); rz_blt_reset();
@@ -2066,10 +2072,18 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
        the FPS delta attributable to bar width and nothing else. */
     if (g_hud_top && !IsBadReadPtr(g_hud_top, 0xc0)) {
         g_rz_step = 12;
+
+        /* Repositioning that applies on BOTH the ship path and the lab path. Wiring this inside the
+
+           g_hudlab branch was a real bug: run 30 took the ship path and the minimap never docked,
+
+           while run 29 (lab armed) had worked. A shipping feature must not live in a diagnostic branch. */
+
+        rz_mini_dock();
+
         if (g_hudlab) {
             /* DIAGNOSTIC path: census now, then let the A/B phase machine drive the dock+fit so the
                profiler gets a native-width control phase first. */
-            rz_mini_dock();
 
             rz_hud_surfaces("BEFORE-setrect");
             /* SIDE PANEL (run 21) - READ-ONLY. Confirm FUN_1004e63e's object really is the in-city
@@ -3169,6 +3183,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     }
     return TRUE;
 }
+
 
 
 
