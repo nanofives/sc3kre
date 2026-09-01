@@ -1215,3 +1215,71 @@ established; it is the hypothesis the next run tests, and it has an obvious fals
 `S1` labelled `0x0C2591C0` as "THE HUD BAR'S PREVIOUS surface (replaced, not freed)" — but no refit
 happens at `S1`, so `g_bar_surf_prev` had been set to the CURRENT surface. Cosmetic mislabel in the
 no-refit case; the pointer and its 993 calls (once per frame, 42.2 ms) are correct and normal.
+
+---
+
+# RUN 17 — THE FIX FAILED. Tile count is NOT driven by source width. Hypothesis dead.
+
+## What the log shows
+
+```
+HUDFIT> child[0x2b]: cached pristine art 16x64 pitch=32 (one-time)
+HUDFIT> child[0x2b]=0x0F4677E8 -> refitting to 2048x64 (art 16x64)
+BLT> ---- S2_W2048 ---- INSIDE ddraw Blt: 9677 calls, 7821.0 ms total, 0.8082 ms avg
+BLT> S2_W2048 SRC #1 0x03F852D8 calls=7662 total=7256.0 ms  <<< THE HUD BAR (captured at refit)
+```
+
+The widen applied exactly as intended — `child[0x2b]` went from 16x64 to **2048x64**, art cached and
+tiled, no fault, no refusal.
+
+**And its blit count did not fall. 7662 calls against run 16's 6892 — if anything slightly more.**
+
+| | run 16 (no fix) | run 17 (fix) |
+|---|---:|---:|
+| `[0x2b]` calls at 2048 | 6892 | **7662** |
+| total inside-Blt at 2048 | 7747.1 ms | **7821.0 ms** |
+| avg at 2048 | 0.9195 ms | 0.8082 ms |
+
+Total inside-Blt is **unchanged within noise**. This is the pre-registered **HYPOTHESIS DEAD**
+outcome, and the pre-registration's first bar — *"a drop in `[0x2b]`'s call count alone is not
+success; total inside-Blt must fall too"* — never even came into play, because the count did not drop
+at all.
+
+## What that rules out, and what it points to
+
+**The engine's tile count is not a function of the source surface's width.** Widening the source
+changed nothing, so the count must come from somewhere else. The most likely remaining reading, and
+it is `[UNCERTAIN]`:
+
+> the engine passes a **16-pixel source RECT** on every blit regardless of how wide the surface is,
+> so a bigger surface simply leaves most of itself unused.
+
+Under that reading no surface-side change can ever help. The count lives in the **loop that issues
+the blits**, which is engine code — and this project patches engine code routinely (FIX A's four
+grid-B clamps, FIX C's null guard).
+
+## The next instrument is now trivial and exact
+
+Earlier attempts to find callers used stack SCANNING and failed twice (run 7 contamination, run 8
+selection bias). **That is no longer necessary.** We hold the `Blt` call in a C function, so:
+
+> in `rz_blt_hook`, when `src == g_bar_surf`, record `_ReturnAddress()`.
+
+That is the **exact** caller, an MSVC intrinsic, no scanning, no heuristics, no validation needed.
+Bucket those and the tiling loop names itself in one run. It is the instrument the earlier stack work
+was groping for, and it only became available once the COM hook replaced the prologue hook.
+
+## Also recorded: a labelling ambiguity I introduced this run
+
+`g_bar_surf` is set by `rz_hud_fit_child` for whichever child ran LAST — now `[0x2b]`, not `[0x2a]`.
+So `<<< THE HUD BAR` in run 17's log means **child[0x2b]'s surface**, not the background. The
+attribution is correct (the resolver's `g_bar_surf` check short-circuits before the child search) but
+the label is misleading. `g_bar_surf` should be per-child.
+
+## Status
+
+- Fix: **failed, reverted in conclusion though still in the build** (it is harmless - a wider filler
+  surface costs nothing extra; it simply does not help).
+- Mechanism: still `child[0x2b]` tiled ~46x/frame. **Confirmed twice now** (runs 16 and 17).
+- Cause of the COUNT: engine-side loop, not surface geometry.
+- Next: `_ReturnAddress()` in the ddraw hook, filtered to that source. One run to name the loop.
