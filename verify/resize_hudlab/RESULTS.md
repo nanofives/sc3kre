@@ -1766,3 +1766,66 @@ Run 25's pre-registration said: *"If the dest rects do not settle it, that is th
 rather than try a fourth [approach]."* **They did settle it** - so continuing is consistent with the
 rule, not a drift past it. The next step reuses proven machinery rather than inventing a fifth
 approach.
+
+---
+
+# RUN 26 — ⭐ minimap paint located, and it explains why runs 23-24 could never have worked
+
+```
+MINIMAP src=0x0C26B970 160x164
+MINIMAP L1 GZGraphicD.dll+0x1490D  calls=1349  (exact, f[9])
+MINIMAP L2 SIMUI.DLL+0x6D39A       calls=1349  [UNCERTAIN - frame-pointer walk]
+```
+
+Zero AVs. Consistent across all three phase windows.
+
+**L1 is `GZGraphicD+0x1490D` - identical to the bottom bar's.** So the minimap goes through the same
+`FUN_10014894+0x76` blit-one-rect path, which also means the frame-pointer walk is on the same
+footing here as it was for the bar, and L2 can be trusted more than the `[UNCERTAIN]` tag implied.
+
+## L2 is the GENERIC window painter, not a bespoke routine
+
+`SIMUI+0x6D39A` is inside **`FUN_1006d2d0`** (`0x6d2d0..0x6d3aa`), whose tail is:
+
+```c
+(**(code **)(*param_1 + 0x144))();                       // the class's own draw slot
+... walk children at param_1[0xd] ...                    // then children
+(**(code **)(*piVar3 + 0x118))(param_1[0x16],            // then blit ITS OWN image
+                               param_1 + 9,              //   src rect  = this+0x24
+                               param_1 + 0x24, 0);       //   dest rect = this+0x90
+```
+
+**⭐ This is why the minimap was never found by class.** Runs 23-24 hunted for a bespoke paint routine
+at slot `+0x144` and a distinctive class. **The minimap has neither** - it is drawn by the framework's
+*generic* window painter, blitting `this+0x58` into `this+0x90`. No amount of `+0x144` scanning could
+have surfaced it, because its drawing is not in a `+0x144` override at all.
+
+Three failed approaches, one cause: **I kept assuming the minimap was special. It is ordinary.**
+
+## Field map, and it hands us the fix directly
+
+| field | meaning |
+|---|---|
+| `this+0x58` (`[0x16]`) | the window's image/raster |
+| `this+0x24` (`+9`) | source rect |
+| **`this+0x90` (`+0x24`)** | **DEST RECT - what pins the minimap to `[640 436 800 600]`** |
+| `this+0x34` (`[0xd]`) | child list head |
+
+## ⚠️ Correction to run 24, in my favour and worth recording
+
+Run 24's walk failed and I attributed it to two guesses. **One of those guesses was correct.** Line
+31 does `iVar4 = *(int *)(iVar4 + 4)` then `*(int **)(iVar4 + 8)` - so the node is
+`{prev, next, child}` and **`node[2]` IS the child pointer, exactly as I assumed.**
+
+The real error was the **list-head OFFSET**: `+0xb4` for `FUN_1004d9be`'s class, but **`+0x34`** here.
+I was right about the node and wrong about the head, and I wrote up both as wrong. Recording the
+correction because a future reader would otherwise avoid a technique that works.
+
+## The remaining step is now small and exact
+
+Hook `FUN_1006d2d0` at entry (`ECX` = the window), read `this+0x90`, and capture the object whose
+dest rect is 160x164. That is the minimap's window - **no class identification needed at all**. Then
+`vt+0xc8` SetRect (or a direct `this+0x90` rewrite) to `[liveW-160, liveH-164, liveW, liveH]`.
+
+`[UNCERTAIN]`: whether the generic painter honours a rewritten `+0x90`, or recomputes it each frame
+from a layout parent. The bar's SetRect precedent suggests the former, but it is untested.
