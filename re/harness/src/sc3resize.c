@@ -1277,9 +1277,25 @@ static void rz_side_children_bottom(void) {
         }
         n = *(void **)n;
     }
-    if (moved)
-        logf("SIDEKIDS> pushed %d side-panel BUTTON(s) down by %ld (panel %ld tall local, native %d)",
-             moved, dy, panelH, SIDE_NAT_H);
+    if (moved) {
+        /* ⭐ INVALIDATE AFTER MOVING, or the cached composite keeps the old pixels.
+         *
+         * The window geometry was already provably right - a live dump with a submenu open showed
+         * every button at LOCAL/ABS y 510..870 and nothing anywhere near the top - yet the owner
+         * saw clicked buttons and submenus drawn at the top, and toast labels appear high then
+         * jump down. That is stale paint, not stale geometry: rz_side_fit_surface invalidates and
+         * THEN this routine moves 54 buttons, so the moves themselves were never invalidated and
+         * only regions the engine happened to re-dirty got corrected.
+         *
+         * vt+0x154 = FUN_1006e06b: set the dirty byte at +0x60 and propagate to every ancestor
+         * `[CONFIRMED @ SIMUI 0x1006e06b, 0x1006c784]`. Call it on the PANEL so the whole strip
+         * repaints, not on each button. */
+        DWORD *pvt = *(DWORD **)p;
+        if (pvt && !IsBadReadPtr(pvt, 0x158) && pvt[0x154 / 4])
+            rz_thiscall(p, (void *)pvt[0x154 / 4], NULL, 0);
+        logf("SIDEKIDS> pushed %d side-panel BUTTON(s) down by %ld (panel %ld tall local, native %d)"
+             " + invalidated the panel", moved, dy, panelH, SIDE_NAT_H);
+    }
 
     /* ⭐ ROOT-LEVEL FLYOUTS. The tool submenu (the column of round icons) is a DIRECT CHILD OF THE
      * ROOT, not of the panel - measured with one open: 0xE194150, class SIMUI+0xa9cc8, depth 0,
@@ -1331,9 +1347,13 @@ static void rz_side_children_bottom(void) {
                 rn = *(void **)rn;
             }
         }
-        if (fmoved)
-            logf("SIDEKIDS> pushed %d root-level flyout(s) down by %ld (band x>%ld)",
+        if (fmoved) {
+            DWORD *pvt2 = *(DWORD **)p;
+            if (pvt2 && !IsBadReadPtr(pvt2, 0x158) && pvt2[0x154 / 4])
+                rz_thiscall(p, (void *)pvt2[0x154 / 4], NULL, 0);
+            logf("SIDEKIDS> pushed %d root-level flyout(s) down by %ld (band x>%ld) + invalidated",
                  fmoved, dy, bandL);
+        }
     }
 }
 
@@ -3557,7 +3577,17 @@ static void rz_poll(void) {
     if (g_sideon && !g_cluster) {
         static DWORD rz_side_next_ms;
         DWORD now = GetTickCount();
-        if (now >= rz_side_next_ms) { rz_side_next_ms = now + 400; rz_side_children_bottom(); }
+        /* 80 ms, not 400. The pass corrects popups the game creates at a stale anchor, and at
+           400 ms the owner could SEE the correction happen: "toast labels appear briefly at the
+           top and then they move to the bottom" (2026-09-02). Tightening the interval makes the
+           correction land within a frame or two instead of a fifth of a second.
+           ⚠️ Be clear about what this is: it HIDES the latency of a correction, it does not fix
+           the anchor those popups are positioned from. The real fix is to find that anchor - the
+           tool flyout's own positioner (FUN_1004ec95) reads the owning item's absolute rect and is
+           already correct, so whatever creates these labels uses something else. Cost is bounded:
+           the walk only touches the root's direct children and issues SetRect only on a match, of
+           which there are none in the idle state (measured: 0 matches over 6 s idle). */
+        if (now >= rz_side_next_ms) { rz_side_next_ms = now + 80; rz_side_children_bottom(); }
     }
 
     v = (DWORD *)iso;
