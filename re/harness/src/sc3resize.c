@@ -832,6 +832,8 @@ static LONG   g_hud_dy = 8;
  * the child move in rz_side_children_bottom, so those two can never drift apart - keeping them in
  * lockstep is the whole reason it is a single global. */
 static LONG   g_side_dy;
+static int    g_srcrect = 1;      /* SC3RESIZE_SRCRECT=0 disables the tile-step FPS fix (A/B) */
+static int    g_side_poll;         /* SC3RESIZE_SIDEPOLL: re-enable the periodic popup correction */
 static LONG   g_side_dy_applied;   /* the delta actually used, captured once - see rz_side_children_bottom */
 static int    g_sink_logged;  /* one-shot: the sink does not change */   /* resolve the UI event sink once, on the first click */         /* SC3RESIZE_INPUT: log the mouse clamp bounds per click */
 static int    g_cluster;
@@ -1095,11 +1097,29 @@ static void rz_fix_hud_parents(void *leaf, const char *name, LONG cw, LONG ch) {
             return;
         }
         if (r[2] < cw || r[3] < ch) {
-            logf("PARENT> %s hop %d: 0x%08lX [%ld %ld %ld %ld] -> [%ld %ld %ld %ld]",
+            /* ⭐ WIDEN THE AUTHORITATIVE LOCAL RECT TOO (+0x80..+0x8c), not only the derived
+             * absolute one at +0x14.
+             *
+             * Measured 2026-09-02 with a 20 ms sampler: an ancestor read LOCAL [0 0 800 600]
+             * against the ABS [0 0 2048 1081] this code had poked. The framework treats +0x80 as
+             * the only storage and rebuilds +0x14 from it (`FUN_1006c61b`), so the poke survives
+             * only until the next cascade - and every absolute rect downstream is computed from
+             * the stale local one. The tool flyout anchors on an item's ABSOLUTE rect
+             * `[CONFIRMED @ SIMUI 0x1004ec95]`, which is why popups landed wrong.
+             * Widen-only in both fields; the +0x14 write stays so nothing regresses if a given
+             * ancestor class does not implement the cascade slot. */
+            LONG *lr = (LONG *)((DWORD)par + 0x80);
+            logf("PARENT> %s hop %d: 0x%08lX ABS [%ld %ld %ld %ld] LOCAL [%ld %ld %ld %ld] -> %ldx%ld",
                  name, hop, (DWORD)par, r[0], r[1], r[2], r[3],
-                 r[0], r[1], (r[2] < cw) ? cw : r[2], (r[3] < ch) ? ch : r[3]);
+                 lr[0], lr[1], lr[2], lr[3], cw, ch);
             if (r[2] < cw) r[2] = cw;
             if (r[3] < ch) r[3] = ch;
+            if (!IsBadWritePtr(lr, 0x10)) {
+                if (lr[2] - lr[0] > 0 && lr[3] - lr[1] > 0) {   /* only a sane rect */
+                    if (lr[2] < cw) lr[2] = cw;
+                    if (lr[3] < ch) lr[3] = ch;
+                }
+            }
         } else {
             logf("PARENT> %s hop %d: 0x%08lX [%ld %ld %ld %ld] already covers %ldx%ld",
                  name, hop, (DWORD)par, r[0], r[1], r[2], r[3], cw, ch);
@@ -1251,6 +1271,36 @@ static void rz_side_children_bottom(void) {
         if (IsBadReadPtr(n, 0x0c)) break;
         page = *(DWORD **)((DWORD)n + 8);
         if (page && !IsBadReadPtr(page, 0xa0)) {
+            /* ⭐ MOVE THE SMALL DIRECT CHILDREN TOO — the ITEM windows.
+             *
+             * These are class SIMUI+0xa8f60 (56x32, LOCAL x 33..89), direct children of the panel,
+             * and they are the items that OWN THE FLYOUTS: `vt+0x1f0` news up this class for kind
+             * tag 0x0287C760 and caches the popup at the item's `+0xbc`, and the positioner reads
+             * the OWNING ITEM's absolute rect `[CONFIRMED @ SIMUI 0x1004dc89, 0x1004b8c5,
+             * 0x1004ec95]`.
+             *
+             * I moved them in the first version of this routine, then switched to moving the
+             * buttons inside the page columns and STOPPED moving these - my own regression. A
+             * visible-window enumeration found exactly nine of them still at LOCAL y 3..395 while
+             * everything else was at the bottom, which is precisely why toasts and submenus kept
+             * anchoring to the top. Both sets have to move.
+             *
+             * The page COLUMNS (class SIMUI+0xa9a80) are full-height and must NOT be translated -
+             * they already span the panel - so height is what separates the two cases. */
+            LONG *pe = (LONG *)((DWORD)page + 0x80);
+            LONG ph = pe[3] - pe[1];
+            if (ph > 0 && ph < panelH / 2) {          /* a small item, not a full-height column */
+                DWORD *pvt2 = *(DWORD **)page;
+                if (pvt2 && !IsBadReadPtr(pvt2, 0xcc) && pvt2[0xc8 / 4] &&
+                    pe[2] - pe[0] > 0 && pe[1] < dy) {
+                    DWORD a2[4];
+                    a2[0] = (DWORD)pe[0]; a2[1] = (DWORD)(pe[1] + dy);
+                    a2[2] = (DWORD)pe[2]; a2[3] = (DWORD)(pe[3] + dy);
+                    rz_thiscall(page, (void *)pvt2[0xc8 / 4], a2, 4);
+                    moved++;
+                }
+            }
+            {
             void *bhead = *(void **)((DWORD)page + 0x34);
             if (bhead && !IsBadReadPtr(bhead, 4)) {
                 void *bn = *(void **)bhead;
@@ -1273,6 +1323,20 @@ static void rz_side_children_bottom(void) {
                     }
                     bn = *(void **)bn;
                 }
+                /* Mark the COLUMN dirty as well, not just the panel.
+                 *
+                 * FUN_1006d2d0 gates each window paint on that window own dirty byte at +0x60
+                 * [CONFIRMED @ SIMUI 0x1006d2d0], and every full-height column carries its OWN
+                 * back surface (measured: +0x58 = 36x1081). Invalidating only the panel therefore
+                 * left each column composite holding the pixels from when its buttons were at the
+                 * top - the owner: "buttons are all in their place, some textures are rendering at
+                 * the top". vt+0x154 sets the byte and propagates upward
+                 * [CONFIRMED @ SIMUI 0x1006e06b, 0x1006c784]. */
+                {   DWORD *cvt2 = *(DWORD **)page;
+                    if (cvt2 && !IsBadReadPtr(cvt2, 0x158) && cvt2[0x154 / 4])
+                        rz_thiscall(page, (void *)cvt2[0x154 / 4], NULL, 0);
+                }
+            }
             }
         }
         n = *(void **)n;
@@ -1478,6 +1542,17 @@ static void rz_mini_dock(void) {
         logf("MINI> dock [%ld %ld %ld %ld] -> [%ld %ld %ld %ld]",
              r[0], r[1], r[2], r[3], nx, ny, nx + w, ny + h);
         r[0] = nx; r[1] = ny; r[2] = nx + w; r[3] = ny + h;
+        /* ⭐ AND THE AUTHORITATIVE LOCAL RECT. Writing only +0x90 (the blit dest) moved the pixels
+         * and left the minimap's ABS rect at its native [640 436 ...] - measured live, with its
+         * children deriving their absolute rects from that stale origin (640+138, 436+72). +0x90
+         * is itself derived (`FUN_1006d8b4`), so the local rect is what has to change. */
+        {   LONG *lr = (LONG *)((DWORD)g_mini + 0x80);
+            if (!IsBadWritePtr(lr, 0x10) && lr[2] - lr[0] > 0 && lr[3] - lr[1] > 0) {
+                logf("MINI> local [%ld %ld %ld %ld] -> [%ld %ld %ld %ld]",
+                     lr[0], lr[1], lr[2], lr[3], nx, ny, nx + w, ny + h);
+                lr[0] = nx; lr[1] = ny; lr[2] = nx + w; lr[3] = ny + h;
+            }
+        }
         rz_win_move_hit(g_mini, "minimap", ox, oy, nx, ny);
     }
 }
@@ -2957,6 +3032,40 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
                         rz_fix_hud_parents(g_wins[k].w, "win", gw, gh);
                 }
                 rz_input_geometry(gw, gh, gw - NAT_W, gh - NAT_H + g_hud_dy);
+
+                /* ⭐⭐ THE CASCADE — rebuild every DERIVED rect from the local ones, once, last.
+                 *
+                 * `vt+0x14c` recomputes this window's +0x14..+0x20 as local + the sum of ancestor
+                 * origins and then RECURSES into every child `[CONFIRMED @ SIMUI 0x1006c61b]`, and
+                 * `vt+0x168` does the same for the +0x24 source and +0x90 blit-dest rects
+                 * `[CONFIRMED @ SIMUI 0x1006d4eb, 0x1006d438, 0x1006d8b4]`. Called on the ROOT it
+                 * fixes the whole tree in one pass.
+                 *
+                 * Why this matters beyond tidiness: the engine positions popups from ABSOLUTE
+                 * rects - the tool flyout reads its owning item's +0x14
+                 * `[CONFIRMED @ SIMUI 0x1004ec95, 0x1004b8c5]` - so while the derived rects were
+                 * stale, every toast and submenu inherited a wrong anchor and had to be corrected
+                 * after the fact by a timer.
+                 *
+                 * `[UNCERTAIN]`: the ancestors are GZWIND / SC3U.exe classes and this slot is only
+                 * byte-verified on the SIMUI window base. Guarded, and a refusal is logged rather
+                 * than forced. */
+                {   DWORD gzb = (DWORD)GetModuleHandleA("GZGraphicD.dll");
+                    DWORD *w2 = (gzb && !IsBadReadPtr((void *)(gzb + 0x6cdb8), 4))
+                              ? *(DWORD **)(gzb + 0x6cdb8) : NULL;
+                    DWORD *snk = (w2 && !IsBadReadPtr(w2, 0x34)) ? (DWORD *)w2[0x30 / 4] : NULL;
+                    DWORD *rt  = (snk && !IsBadReadPtr(snk, 0x3c)) ? (DWORD *)snk[0x38 / 4] : NULL;
+                    DWORD *rvt = (rt && !IsBadReadPtr(rt, 4)) ? *(DWORD **)rt : NULL;
+                    if (rvt && !IsBadReadPtr(rvt, 0x16c) && rvt[0x14c / 4] && rvt[0x168 / 4]) {
+                        rz_thiscall(rt, (void *)rvt[0x168 / 4], NULL, 0);   /* src + blit dest */
+                        rz_thiscall(rt, (void *)rvt[0x14c / 4], NULL, 0);   /* absolute rects */
+                        logf("CASCADE> root 0x%08lX vt+0x168 + vt+0x14c - derived rects rebuilt "
+                             "tree-wide from the LOCAL rects", (DWORD)rt);
+                    } else {
+                        logf("CASCADE> REFUSED: root 0x%08lX vtable has no vt+0x14c/vt+0x168",
+                             (DWORD)rt);
+                    }
+                }
             } else {
                 logf("GEOM> SKIPPED: no client rect");
             }
@@ -3245,11 +3354,33 @@ static void rz_hud_srcrect(DWORD liveW) {
              sr[0], sr[1], sr[2], sr[3], sr[2] - sr[0], liveW);
         return;
     }
+    if (!g_srcrect) {
+        logf("SRCRECT> DISABLED (SC3RESIZE_SRCRECT=0) - leaving the %ld-px tile step, "
+             "so the full-width bar keeps its ~%ld blits/frame",
+             sr[2] - sr[0], ((LONG)liveW + (sr[2] - sr[0]) - 1) / (sr[2] - sr[0]));
+        return;
+    }
     logf("SRCRECT> tile step [%ld %ld %ld %ld] step=%ld -> right=%ld step=%lu  (FUN_10026841: "
          "~%ld blits/frame -> ~1)",
          sr[0], sr[1], sr[2], sr[3], sr[2] - sr[0], sr[0] + (LONG)liveW, liveW,
          ((LONG)liveW + (sr[2] - sr[0]) - 1) / (sr[2] - sr[0]));
     sr[2] = sr[0] + (LONG)liveW;
+    /* ⚠️ Clamp the source rect to the SURFACE it samples. The widening only ever touched the right
+     * edge, leaving the bottom at 64 while child[0x2a]'s refit surface is 2048x56 - a source rect 8
+     * rows taller than its own surface, which is the shape that makes a blit read past the end.
+     * Suspected in the "some textures are rendering at the top" report; clamped here so the source
+     * can never exceed the surface regardless. */
+    {   DWORD obj = ((DWORD *)g_hud_top)[0x2a];
+        if (obj && !IsBadReadPtr((void *)obj, 0x2c)) {
+            LONG sw = (LONG)((DWORD *)obj)[0x24 / 4], sh = (LONG)((DWORD *)obj)[0x28 / 4];
+            if (sw > 0 && sr[2] - sr[0] > sw) sr[2] = sr[0] + sw;
+            if (sh > 0 && sr[3] - sr[1] > sh) {
+                logf("SRCRECT> clamped bottom %ld -> %ld (surface is %ldx%ld)",
+                     sr[3], sr[1] + sh, sw, sh);
+                sr[3] = sr[1] + sh;
+            }
+        }
+    }
 }
 
 static void rz_hud_fit_surface(DWORD liveW) {
@@ -3587,7 +3718,10 @@ static void rz_poll(void) {
            already correct, so whatever creates these labels uses something else. Cost is bounded:
            the walk only touches the root's direct children and issues SetRect only on a match, of
            which there are none in the idle state (measured: 0 matches over 6 s idle). */
-        if (now >= rz_side_next_ms) { rz_side_next_ms = now + 80; rz_side_children_bottom(); }
+        /* DISABLED for the cascade A/B, per CASCADE_PRE.md: if the refactor is the real fix,
+           popups land correctly with no timer at all, and leaving the timer on would make the two
+           indistinguishable. SC3RESIZE_SIDEPOLL=1 turns it back on. */
+        if (g_side_poll && now >= rz_side_next_ms) { rz_side_next_ms = now + 80; rz_side_children_bottom(); }
     }
 
     v = (DWORD *)iso;
@@ -4434,6 +4568,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           g_nohit   = GetEnvironmentVariableA("SC3RESIZE_NOHIT",   v, sizeof(v)) && atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDDY", v, sizeof(v))) g_hud_dy = (LONG)atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_SIDEDY", v, sizeof(v))) g_side_dy = (LONG)atoi(v);
+          g_side_poll = GetEnvironmentVariableA("SC3RESIZE_SIDEPOLL", v, sizeof(v)) && atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_SRCRECT", v, sizeof(v))) g_srcrect = atoi(v);
           g_noparentfix = GetEnvironmentVariableA("SC3RESIZE_NOPARENTFIX", v, sizeof(v)) && atoi(v);
           /* HUD dock+span ships ON. SC3RESIZE_HUDNATIVE=1 is the opt-out for anyone who prefers the
              native bar - the full-width bar carries a measured GPU-sync FPS cost that is NOT yet
