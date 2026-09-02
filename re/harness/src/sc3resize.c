@@ -1314,6 +1314,39 @@ static void rz_side_children_bottom(void) {
                     a2[0] = (DWORD)pe[0]; a2[1] = (DWORD)(pe[1] + dy);
                     a2[2] = (DWORD)pe[2]; a2[3] = (DWORD)(pe[3] + dy);
                     rz_thiscall(page, (void *)pvt2[0xc8 / 4], a2, 4);
+                    /* GROUP-OVERLAY Y at +0xf4 - the duplicate cluster drawn at the top.
+                     *
+                     * The item does not draw its +0xe8 raster. `vt+0x1f0 = FUN_1004c373` pushes
+                     * `(raster, +0xf0, +0xf4)` to the panel (`vt+0x22c = FUN_1004e81c`), which
+                     * stores them at +0x114/+0x128/+0x12c, and the panel's SetRect builds the dest
+                     * as `(x + panel+0x24, y + panel+0x28)`; a panel owning its own surface has
+                     * +0x24/+0x28 = 0, so the overlay lands at exactly `(+0xf0, +0xf4)`
+                     * `[CONFIRMED @ SIMUI 0x1004c373, 0x1004e81c, 0x1004e20b, 0x1006d438]`.
+                     * Verified live: after clicking a group item the panel read
+                     * `overlay=0xf0305d8, x=0, y=0, dest=[0 0 96 247]` - drawn at the very top
+                     * while its item sat at y 508.
+                     *
+                     * +0xf4 is a resolution-keyed constant from the table in FUN_1004c3e9, written
+                     * only by Init, so nothing derives it from the item's rect and vt+0xc8 can
+                     * never move it. Bump it by the same delta.
+                     *
+                     * ⚠️ The guard is `< dy`, NOT `> 0 && < dy`. My first version required a
+                     * positive value and therefore skipped every item whose overlay y is ZERO -
+                     * two of the nine, and one of those is the item that produced the measured
+                     * duplicate. An item legitimately anchored at the top is exactly the case that
+                     * needs moving most. */
+                    {   DWORD sui2 = (DWORD)GetModuleHandleA("SIMUI.DLL");
+                        if (sui2 && (DWORD)pvt2 == sui2 + 0xa8f60 &&
+                            !IsBadWritePtr((void *)((DWORD)page + 0xf8), 4) &&
+                            *(DWORD *)((DWORD)page + 0xe8)) {      /* has a group overlay */
+                            LONG *oy = (LONG *)((DWORD)page + 0xf4);
+                            if (*oy < dy) {
+                                logf("SIDEKIDS> item 0x%08lX group-overlay y %ld -> %ld (+0xf4)",
+                                     (DWORD)page, *oy, *oy + dy);
+                                *oy += dy;
+                            }
+                        }
+                    }
                     moved++;
                 }
             }
