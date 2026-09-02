@@ -3927,6 +3927,38 @@ static void rz_poll(void) {
         if (g_side_poll && now >= rz_side_next_ms) { rz_side_next_ms = now + 80; rz_side_children_bottom(); }
     }
 
+    {   /* MINIMIZE -> RESTORE: force the HUD to repaint.
+         *
+         * Owner: after minimizing, part of the bottom keeps the bar's colour instead of the city.
+         * Reproduced programmatically (ShowWindow SW_MINIMIZE then SW_RESTORE, then a capture):
+         * the restored frame has NO HUD in it at all - no bar, no side panel, no minimap - because
+         * the engine repaints the city on restore while every HUD window keeps a clear dirty byte
+         * at +0x60, and FUN_1006d2d0 paints only dirty windows `[CONFIRMED @ SIMUI 0x1006d2d0]`.
+         * Whatever those pixels held survives, which is what the owner sees.
+         *
+         * vt+0x154 sets the byte and propagates to ancestors `[CONFIRMED @ 0x1006e06b, 0x1006c784]`,
+         * but it does NOT descend - so each HUD root has to be marked itself. */
+        static int was_iconic;
+        int now_iconic = g_hwnd ? (IsIconic(g_hwnd) ? 1 : 0) : 0;
+        if (was_iconic && !now_iconic) {
+            void *wins[3];
+            int i, n = 0;
+            wins[n++] = g_hud_top;
+            wins[n++] = g_side_top;
+            wins[n++] = g_mini;
+            for (i = 0; i < n; i++) {
+                DWORD *w = (DWORD *)wins[i];
+                if (w && !IsBadReadPtr(w, 0x158)) {
+                    DWORD *vt = *(DWORD **)w;
+                    if (vt && !IsBadReadPtr(vt, 0x158) && vt[0x154 / 4])
+                        rz_thiscall(w, (void *)vt[0x154 / 4], NULL, 0);
+                }
+            }
+            logf("RESTORE> window un-minimized - invalidated %d HUD root(s) so they repaint", n);
+        }
+        was_iconic = now_iconic;
+    }
+
     {   /* DUMP TRIGGER: a file named DUMP in the dump dir. Deleted once seen, so the owner can
            set the game up, drop the file, and get a capture of exactly that frame. */
         static DWORD next_check;
