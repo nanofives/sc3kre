@@ -1,3 +1,10 @@
+        /* ⛔ DO NOT stretch the dest rect PAST the panel to kill the blit scaling.
+         * That was the first attempt and it backfired: with the dest bottom at the surface's real
+         * 1089 rows, a layout pass grew the PANEL itself to 2178 = 2 x 1089 a couple of seconds
+         * later (measured 2026-09-02, caught by the SIDEKIDS runaway guard). The scaling is instead
+         * removed by making the SURFACE match this rect - see the liveH passed to
+         * rz_side_fit_child below, which subtracts RZ_SURFACE_SLACK so the padded surface comes out
+         * exactly `bottom` tall and the blit is 1:1. */
 /* sc3resize.c - standalone resizable-window mod for SimCity 3000 Unlimited.
  *
  * A slim, shippable carve of the validated minimal Init-FREE resize routine out of
@@ -817,6 +824,13 @@ static void rz_side_fit_surface(DWORD liveH);
  * art paints the surplus black - do not implement this by growing rects. Measured: a 72-tall bar
  * (art 56) produced exactly the "black bar below the bottom bar" the owner reported. */
 static LONG   g_hud_dy = 8;
+/* SC3RESIZE_SIDEDY - lift the side panel's contents (pages, tabs AND the background art) by this
+ * many px from the panel bottom. Owner, 2026-09-02: with 0 the group sat "too shifted down" and
+ * three buttons fell out of view. ONE knob feeds both the art placement in rz_side_fit_child and
+ * the child move in rz_side_children_bottom, so those two can never drift apart - keeping them in
+ * lockstep is the whole reason it is a single global. */
+static LONG   g_side_dy;
+static LONG   g_side_dy_applied;   /* the delta actually used, captured once - see rz_side_children_bottom */
 static int    g_sink_logged;  /* one-shot: the sink does not change */   /* resolve the UI event sink once, on the first click */         /* SC3RESIZE_INPUT: log the mouse clamp bounds per click */
 static int    g_cluster;
 static LONG   g_bar_nat[4], g_side_nat[4];
@@ -1195,8 +1209,28 @@ static void rz_side_children_bottom(void) {
     /* the caller already gates on g_sideon && !g_cluster (both declared further down the file) */
     if (!p || IsBadReadPtr(p, 0xa0)) { logf("SIDEKIDS> skipped: side panel unreadable"); return; }
     panelH = (LONG)p[0x20 / 4] - (LONG)p[0x18 / 4];
-    dy = panelH - SIDE_NAT_H;
-    if (dy <= 0) { logf("SIDEKIDS> skipped: panel %ld tall, native %d", panelH, SIDE_NAT_H); return; }
+    /* ⚠️ NEVER recompute the delta from the live panel height inside a repeating pass.
+     *
+     * Measured 2026-09-02, 17 s after a clean layout: the panel's height read 2178 = 2 x 1089 and
+     * this routine "pushed 2 side-panel child(ren) down by 1586". Recomputing dy from a height
+     * that something else can grow makes the pass feed on its own output - a runaway. The delta is
+     * captured ONCE by the resize-time call and reused verbatim afterwards, and a panel taller
+     * than the window is refused outright rather than acted on. */
+    {   RECT ccr;
+        LONG maxH = (g_hwnd && GetClientRect(g_hwnd, &ccr)) ? (ccr.bottom - ccr.top) : 0;
+        if (maxH > 0 && panelH > maxH + RZ_SURFACE_SLACK) {
+            logf("SIDEKIDS> REFUSED: panel %ld tall exceeds the %ld-px client - not touching it",
+                 panelH, maxH);
+            return;
+        }
+    }
+    if (g_side_dy_applied > 0) {
+        dy = g_side_dy_applied;               /* the delta from the resize-time pass, verbatim */
+    } else {
+        dy = panelH - SIDE_NAT_H - g_side_dy;
+        if (dy > 0) g_side_dy_applied = dy;   /* capture once */
+    }
+    if (dy <= 0) return;                      /* silent: this runs on a timer */
     head = *(void **)((DWORD)p + 0x34);
     if (!head || IsBadReadPtr(head, 4)) { logf("SIDEKIDS> skipped: no child list"); return; }
     n = *(void **)head;
@@ -1207,8 +1241,16 @@ static void rz_side_children_bottom(void) {
         if (c && !IsBadWritePtr(c, 0xa0)) {
             LONG *e = (LONG *)((DWORD)c + 0x80);       /* PARENT-LOCAL rect - what SetRect wants */
             DWORD *vt = *(DWORD **)c;
+            /* IDEMPOTENCE, and it is what lets this be re-run.
+             *
+             * A child already sitting at or below `dy` has been placed by a previous pass; moving
+             * it again would push it down by another `dy` every call. Skipping those makes the
+             * whole routine safe to call repeatedly, which is required because the game creates
+             * windows LATER: the owner opened a tool submenu and it rendered at the top of the
+             * strip (2026-09-02), because it did not exist when the resize ran. In the steady state
+             * every child fails this test, so a periodic pass issues zero SetRect calls. */
             if (vt && !IsBadReadPtr(vt, 0xcc) && vt[0xc8 / 4] &&
-                e[2] - e[0] > 0 && e[3] - e[1] > 0 && e[3] + dy <= panelH) {
+                e[2] - e[0] > 0 && e[3] - e[1] > 0 && e[3] + dy <= panelH && e[1] < dy) {
                 DWORD a[4];
                 a[0] = (DWORD)e[0]; a[1] = (DWORD)(e[1] + dy);
                 a[2] = (DWORD)e[2]; a[3] = (DWORD)(e[3] + dy);
@@ -1218,8 +1260,9 @@ static void rz_side_children_bottom(void) {
         }
         n = *(void **)n;
     }
-    logf("SIDEKIDS> pushed %d side-panel child(ren) down by %ld (panel %ld tall, native %d)",
-         moved, dy, panelH, SIDE_NAT_H);
+    if (moved)   /* silent when there is nothing to place - this runs on a timer */
+        logf("SIDEKIDS> pushed %d side-panel child(ren) down by %ld (panel %ld tall, native %d)",
+             moved, dy, panelH, SIDE_NAT_H);
 }
 
 static void rz_input_geometry(LONG cw, LONG ch, LONG dx, LONG dy) {
@@ -3221,7 +3264,29 @@ static void rz_side_fit_child(int slot, DWORD off, DWORD liveH) {
                    put the pages, and fill the space above with a single PLAIN row taken from below
                    the last button (the buttons occupy art rows ~21..381 of 417). */
                 DWORD r, run = (nw < oldw) ? nw : oldw;
-                LONG art_at = (LONG)liveH - SIDE_NAT_H;      /* same dy the children get */
+                /* Anchor the art to the page's TOP - the same row the child windows get.
+                 *
+                 * The art's button frames sit at art rows 21.. and the real button windows at
+                 * page-local 21.., so top-anchoring is what makes them coincide. I briefly
+                 * bottom-anchored this (art bottom == page bottom) because the art is 417 tall
+                 * against a 442-tall page; that put every frame 25 px low, which the owner then
+                 * measured as a uniform offset once the real defect was fixed.
+                 *
+                 * The real defect was SCALING, not the anchor: the dest rect was 33 rows shorter
+                 * than the surface, so the blit compressed everything and the error grew down the
+                 * strip ("misaligned in one way at the top, differently at the bottom"). With the
+                 * dest matched 1:1 below, top-anchoring is correct and the 25-row remainder is
+                 * simply plain filler behind the cap. */
+                /* Derive the row from the PANEL's height, not from `liveH` - liveH is now the
+                   surface REQUEST (cap top minus slack), so using it would offset the art from the
+                   child windows by exactly that slack. The children move by
+                   panelH - SIDE_NAT_H - g_side_dy, and surface row r maps to panel y r, so the art
+                   must use the same expression. */
+                LONG panelH_ = (g_side_top && !IsBadReadPtr(g_side_top, 0x24))
+                             ? (LONG)((DWORD *)g_side_top)[0x20 / 4] -
+                               (LONG)((DWORD *)g_side_top)[0x18 / 4]
+                             : (LONG)liveH;
+                LONG art_at = panelH_ - SIDE_NAT_H - g_side_dy;
                 DWORD plain = (oldh > 8) ? oldh - 4 : oldh - 1;
                 if (art_at < 0) art_at = 0;
                 for (r = 0; r < nh; r++) {
@@ -3240,8 +3305,70 @@ static void rz_side_fit_child(int slot, DWORD off, DWORD liveH) {
 }
 
 static void rz_side_fit_surface(DWORD liveH) {
-    rz_side_fit_child(0, 0xc0, liveH);
-    rz_side_fit_child(1, 0xc8, liveH);
+    DWORD *p = (DWORD *)g_side_top;
+    DWORD want = liveH;
+    /* Target the BOTTOM CAP's top edge, and subtract the slack rz_recreate_raster pads on, so the
+       finished surface is exactly as tall as the dest rect and the blit does not scale. */
+    if (p && !IsBadReadPtr(p, 0x120)) {
+        LONG capTop = (LONG)((LONG *)((DWORD)p + 0xf0))[1];
+        LONG panelH = (LONG)p[0x20 / 4] - (LONG)p[0x18 / 4];
+        LONG target = (capTop > 0 && capTop <= panelH) ? capTop : panelH;
+        if (target > RZ_SURFACE_SLACK) want = (DWORD)(target - RZ_SURFACE_SLACK);
+        logf("SIDEFIT> target height %ld (cap top %ld, panel %ld) -> requesting %lu + %d slack",
+             target, capTop, panelH, want, RZ_SURFACE_SLACK);
+    }
+    rz_side_fit_child(0, 0xc0, want);
+    rz_side_fit_child(1, 0xc8, want);
+
+    /* ⭐ AND THE DESTINATION RECT — the half that makes the taller surface visible at all.
+     *
+     * `FUN_1004e63e` blits each child surface into its OWN dest rect stored in the panel:
+     * `+0xc0 -> +0xd0`, `+0xc4 -> +0xe0`, `+0xc8 -> +0xf0`, `+0x114 -> +0x118`, and the tiled
+     * `+0xcc` walks `+0x100..+0x10c` `[CONFIRMED @ SIMUI 0x1004e63e]`.
+     *
+     * Measured live 2026-09-02 on the extended panel: `+0xd0` was still the native
+     * `[0 0 96 417]` while `+0xf0` (the 25-px bottom cap) had moved itself to `[0 1056 96 1081]`.
+     * So the panel painted y 0..417 and y 1056..1081 and NOTHING BETWEEN - the owner's "black
+     * section on the vertical bar", exactly, and the reason three earlier attempts at filling the
+     * SURFACE could not have worked no matter how it was filled. Stretching this one rect to the
+     * bottom cap is what made the fill appear.
+     *
+     * Bottom edge comes from the cap's own top when it looks sane, so the cap is never overdrawn. */
+    if (p && !IsBadWritePtr(p, 0x120)) {
+        LONG *d0 = (LONG *)((DWORD)p + 0xd0);
+        LONG *f0 = (LONG *)((DWORD)p + 0xf0);
+        LONG panelH = (LONG)p[0x20 / 4] - (LONG)p[0x18 / 4];
+        LONG bottom = (f0[1] > 0 && f0[1] <= panelH) ? f0[1] : panelH;
+        /* ⚠️ MATCH THE DEST HEIGHT TO THE SURFACE, or the blit SCALES.
+         *
+         * `rz_recreate_raster` pads every surface by RZ_SURFACE_SLACK guard rows, so a surface
+         * requested at 1081 is really 1089 tall. Blitting that into a 1056-tall dest compresses it
+         * by ~3.1%: no drift at the top, ~33 px by the bottom. Owner, 2026-09-02, on two
+         * screenshots: "the one at the top is misaligned in one way, the one at the bottom is
+         * misaligned differently" - which is scaling, not an offset, and is why moving the art
+         * could not fix it. Extend the dest to the surface's REAL height so the mapping is 1:1.
+         * The extra rows land under the bottom cap, which paints after this one and covers them. */
+        {   DWORD bg = p[0xc0 / 4];
+            if (bg && !IsBadReadPtr((void *)bg, 0x2c)) {
+                LONG surfH = (LONG)((DWORD *)bg)[0x28 / 4];
+                if (surfH > bottom) {
+                    logf("SIDEFIT> dest bottom %ld -> %ld to match the %ld-row surface 1:1 "
+                         "(no scaling; the cap repaints the overlap)", bottom, surfH, surfH);
+                    bottom = surfH;
+                }
+            }
+        }
+        if (d0[2] - d0[0] > 0 && d0[3] - d0[1] > 0 && d0[3] < bottom) {
+            logf("SIDEFIT> dest rect +0xd0 [%ld %ld %ld %ld] -> [%ld %ld %ld %ld]  (cap top %ld, "
+                 "panel %ld) - the black band between 0x%lx and the cap was UNPAINTED",
+                 d0[0], d0[1], d0[2], d0[3], d0[0], d0[1], d0[2], bottom, f0[1], panelH,
+                 (DWORD)d0[3]);
+            d0[3] = bottom;
+        } else {
+            logf("SIDEFIT> dest rect +0xd0 [%ld %ld %ld %ld] left as-is (cap top %ld, panel %ld)",
+                 d0[0], d0[1], d0[2], d0[3], f0[1], panelH);
+        }
+    }
 }
 
 
@@ -3310,6 +3437,18 @@ static void rz_poll(void) {
     w  = (DWORD)(cr.right - cr.left);
     ht = (DWORD)(cr.bottom - cr.top);
     if (w == 0 || ht == 0) return;
+
+    /* Late-created side-panel windows. A tool submenu opened after the resize renders at its
+       native position (owner, 2026-09-02: "when i open a menu it is rendered at the top"), because
+       the layout pass ran before that window existed. rz_side_children_bottom is idempotent - it
+       skips anything already placed - so re-running it costs nothing in the steady state and
+       catches whatever the game has just built. Rate-limited, and placed BEFORE the settled check
+       below, which returns early on every frame once the size stops changing. */
+    if (g_sideon && !g_cluster) {
+        static DWORD rz_side_next_ms;
+        DWORD now = GetTickCount();
+        if (now >= rz_side_next_ms) { rz_side_next_ms = now + 400; rz_side_children_bottom(); }
+    }
 
     v = (DWORD *)iso;
     R = v[0x74 / 4];
@@ -4154,6 +4293,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           g_input   = GetEnvironmentVariableA("SC3RESIZE_INPUT",   v, sizeof(v)) && atoi(v);
           g_nohit   = GetEnvironmentVariableA("SC3RESIZE_NOHIT",   v, sizeof(v)) && atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDDY", v, sizeof(v))) g_hud_dy = (LONG)atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_SIDEDY", v, sizeof(v))) g_side_dy = (LONG)atoi(v);
           g_noparentfix = GetEnvironmentVariableA("SC3RESIZE_NOPARENTFIX", v, sizeof(v)) && atoi(v);
           /* HUD dock+span ships ON. SC3RESIZE_HUDNATIVE=1 is the opt-out for anyone who prefers the
              native bar - the full-width bar carries a measured GPU-sync FPS cost that is NOT yet
@@ -4172,9 +4312,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
          * a self-consistent log). One line makes the whole class loud instead of silent.
          * verify/resize_flaggate/NOHIT_RESULTS.md */
         logf("### FLAGS> cluster=%d input=%d nohit=%d hudfit=%d hudlab=%d sweep=%d side=%d mini=%d "
-             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld",
+             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld sidedy=%ld",
              g_cluster, g_input, g_nohit, g_hudfit, g_hudlab, g_sweepon, g_sideon, g_minion,
-             g_anchor, g_census, g_minzoom, g_ready_ms, g_noparentfix, g_hud_dy);
+             g_anchor, g_census, g_minzoom, g_ready_ms, g_noparentfix, g_hud_dy, g_side_dy);
         if (AddVectoredExceptionHandler(1, rz_veh))
             logf("### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the "
                  "zoom-after-resize crash the game swallows)");

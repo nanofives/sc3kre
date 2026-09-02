@@ -1,0 +1,213 @@
+[    0.659 ms][tid 73a8] ### sc3resize loaded - resizable-window mod (minimal Init-free routine, validated 2026-08-27 over 6 runs)
+[    1.316 ms][tid 73a8] ### FLAGS> cluster=0 input=0 nohit=0 hudfit=1 hudlab=0 sweep=0 side=1 mini=1 anchor=1 census=0 minzoom=0 readyms=3000 noparentfix=0 huddy=8 sidedy=150
+[    1.486 ms][tid 73a8] ### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the zoom-after-resize crash the game swallows)
+[    4.417 ms][tid 5ec4] RZ   *** VEH FAULT *** code=0xC0000096 at SC3U.exe+0x84122 (base 0x00400000)  (resize step at fault=0)
+[    4.512 ms][tid 5ec4] RZ   VEH regs eax=00000000 ecx=AB2A0000 edx=00000000 ebx=00000001 esi=7FFFFFFF edi=FFFFFFFF ebp=001AFD00 esp=001AFCFC
+[    4.616 ms][tid 5ec4] RZ   VEH [esp]=0x00000000 -> 0x00000000 (no module)
+[  102.397 ms][tid 9948] ### RESIZE: SIMSPR base 0x03310000 (relocated: YES)  GZGraphicD base 0x01050000 (YES)
+[  102.612 ms][tid 9948] --- WINDOWED: GZGraphicD+0x6cdac = 0 -> 1
+[  102.681 ms][tid 9948] --- WINDOWED: GZGraphicD+0x117D6 'mov [ebx+0x48],1' -> nop x4
+[  102.748 ms][tid 9948] --- FIX16: 16bpp branch injected at 0x19349 -> cave 0x03520000 (5-6-5)
+[  102.923 ms][tid 9948] --- GRIDB_CLAMP FUN_1000cedb: index clamped (hook 0xCFAB -> cave 0x614E0, base 0x03310000)
+[  103.170 ms][tid 9948] --- GRIDB_CLAMP FUN_1000d0f5: index clamped (hook 0xD281 -> cave 0x61520, base 0x03310000)
+[  103.426 ms][tid 9948] --- GRIDB_CLAMP FUN_1000be25: index clamped (hook 0xC412 -> cave 0x61560, base 0x03310000)
+[  103.558 ms][tid 9948] --- GRIDB_CLAMP FUN_1000ef50: index clamped (hook 0xEF50 -> cave 0x615A0, base 0x03310000)
+[  103.865 ms][tid 9948] --- GRIDB_CLAMP FUN_1000efa1: index clamped (hook 0xEFD6 -> cave 0x615E0, base 0x03310000)
+[  104.016 ms][tid 9948] --- EFA1_GUARD: empty-bucket branch 0xefc2 retargeted to the ret (was -> 0xefe3 deref)
+[  104.104 ms][tid 9948] --- GRIDB_CLAMP: 4 walkers index-clamped (FIX A) + FUN_1000efa1 null-guarded (FIX C)
+[  104.594 ms][tid 9948] ### RESIZE: armed - windowed+fix16 applied, bridge capture at SIMSPR+0x16EBA, per-frame poll at GZGraphicD+0x18C58 (create recorder DROPPED after v2 crash)
+[  104.816 ms][tid 9948] --- HUD: FUN_100270e5 wrapped (cave 0x03540000 tr 0x03530060) - top-strip reflow armed
+[  104.857 ms][tid 9948] FN  SIMUI FUN_1004e123 side ctor: relocated rel32 at +3 -> 0x0340D9BE
+[  104.926 ms][tid 9948] FN  SIMUI FUN_1001a983 ctor A: relocated rel32 at +3 -> 0x0342C2F7
+[ 2139.160 ms][tid 5ec4] ### RESIZE: window 0x012D1558 subclassed (old proc 0x01067E11) - WM_SIZE observed, resize performed on the render thread
+[ 6679.442 ms][tid 5ec4] ### SIDE: panel window captured 0x0D33EE28 (SIMUI FUN_1004e123 ctor)
+[ 6775.473 ms][tid 5ec4] ### RESIZE: bridge captured 0x0D33EBB8 (iso view = bridge+0x18 = 0x00000000); readiness gate = 3000 ms
+[ 7882.028 ms][tid 5ec4] ### MINI: window captured 0x0D33E6D8 vt=0x0346A180 dest(this+0x90)=[640 436 800 600] 160x164
+[12430.059 ms][tid 5ec4] RZ   STOREDRECT win=0x00CDAFF8 rect BEFORE {0,0,800,600} = 800x600
+[12430.181 ms][tid 5ec4] RZ   STOREDRECT rect AFTER  {0,0,2048,1081} = 2048x1081 - right/bottom updated
+[12430.275 ms][tid 5ec4] RZ   WM_SIZE 2048x1081 - poll will pick it up on the next frame
+[12430.628 ms][tid 5ec4] RZ   size change: client 2048x1081 vs render target 800x600
+[12430.698 ms][tid 5ec4] RZ   ---- resize to 2048x1081 ---- iso=0x0DB28EF8 R=0x0F05B988 B=0x00588028 bridge=0x0D33EBB8
+[12430.720 ms][tid 5ec4] RZ   extent BEFORE: (-848,2924,-48,3524) -> 800x600  dirtygrid=40x30 cell=20x20
+[12430.752 ms][tid 5ec4] RZ   extent AFTER: (-848,2924,1200,4005) -> 2048x1081  dirtygrid=16x8 cell=128x135  (cell sizes plausible)
+[12430.770 ms][tid 5ec4] RZ   render-target iso+0x74 0x0F05B988 NO RECORDED CREATE (0 known) - FALLING BACK to field read-back [_ _ 7 16 0 0 0 0]. Field read-back is NOT proven equivalent: p3 measured 7 vs a recorded 4 on 2026-08-28.
+[12430.785 ms][tid 5ec4] RZ   render-target iso+0x74 replay at 2048x1081 (+8 guard rows -> alloc h=1089, zoom-blit overrun fix)
+[12430.837 ms][tid 5ec4] RZ   render-target iso+0x74 FUN_10009efb -> 1 | now +0x24=2048 +0x28=1089
+[12430.897 ms][tid 5ec4] RZ   device-surface iso+0x4ec 0x00588028 NO RECORDED CREATE (0 known) - FALLING BACK to field read-back [_ _ 7 16 0 0 3 0]. Field read-back is NOT proven equivalent: p3 measured 7 vs a recorded 4 on 2026-08-28.
+[12430.916 ms][tid 5ec4] RZ   device-surface iso+0x4ec replay at 2048x1081 (+8 guard rows -> alloc h=1089, zoom-blit overrun fix)
+[12432.794 ms][tid 5ec4] RZ   device-surface iso+0x4ec FUN_10009efb -> 1 | now +0x24=2048 +0x28=1089
+[12523.320 ms][tid 5ec4] RZ   FUN_10018cdf -> 1
+[12523.403 ms][tid 5ec4] RZ   [step 8a] FUN_1000c8f9(iso) - recompute object draw keys
+[12523.448 ms][tid 5ec4] RZ   [step 8b] FUN_1000c9bd(iso, &sentinel, iso+0x54, 1) - clear grid + region pickup + re-register (the real object re-register, not the leaf FUN_1000fa36)
+[12523.980 ms][tid 5ec4] RZ   [step 8b] FUN_1000c9bd returned
+[12530.159 ms][tid 5ec4] RZ   [step 8c] grid re-show 256x256: 65536 occupied, 65536 re-shown, 0 bad (hide+show +0x38/+0x34 per cell)
+[12530.233 ms][tid 5ec4] RZ   [step 9] present list iso+0x4d0: begin=0x0DAE4110 end=0x0DAE4130 (2 rect(s)) - erase then push {0,0,2048,1081}
+[12530.254 ms][tid 5ec4] RZ   [step 9] after: begin=0x0DAE4110 end=0x0DAE4120 (1 rect(s))
+[12530.282 ms][tid 5ec4] RZ   [step 10] device batch begin: dev=0x0D3D9D10 +0x240
+[12530.385 ms][tid 5ec4] RZ   [step 10] FUN_1000db86(iso) - whole-view repaint (iso vt+0x144)
+[12530.478 ms][tid 5ec4] RZ   [step 10] device batch end +0x244 - presented; iso+0x32c=1
+[12530.558 ms][tid 5ec4] RZ   [step 11] FUN_10018cdf(bridge, base layer 0x0DD76670, base rend 0x0F015678, force=1) - SetDataView(0) core, restore active layer + forced refresh
+[12621.979 ms][tid 5ec4] RZ   [step 11] returned - active layer bridge+0x28 = 0x0DD76670
+[12622.114 ms][tid 5ec4] MINI> dock [640 436 800 600] -> [1888 925 2048 1089]
+[12622.238 ms][tid 5ec4] HIT> minimap: rect +0x80..0x8c = [640 436 800 600] (160x164)  want origin (1888,925)
+[12622.299 ms][tid 5ec4] HIT> minimap: hit rect -> [1888 925 2048 1089]
+[12622.368 ms][tid 5ec4] ANCHOR> re-anchored 2 of 4 windows (dx=1248 dy=489)
+[12622.476 ms][tid 5ec4] HUDLAB> HUD SetRect vt+0xc8=0x033E6776  [0,544,599,600] -> [0,1033,2048,1089]
+[12622.528 ms][tid 5ec4] HUDLAB> HUD SetRect returned; rect now [0,1033,2048,1089]
+[12622.633 ms][tid 5ec4] HUDFIT> child[0x2a]: cached pristine art 600x56 pitch=1200 (one-time)
+[12622.707 ms][tid 5ec4] HUDFIT> child[0x2a]=0x00639448 -> refitting to 2048x56 (art 600x56)
+[12622.744 ms][tid 5ec4] RZ   HUD child surface 0x00639448 NO RECORDED CREATE (0 known) - FALLING BACK to field read-back [_ _ 7 16 0 0 0 0]. Field read-back is NOT proven equivalent: p3 measured 7 vs a recorded 4 on 2026-08-28.
+[12622.762 ms][tid 5ec4] RZ   HUD child surface replay at 2048x56 (+8 guard rows -> alloc h=64, zoom-blit overrun fix)
+[12622.864 ms][tid 5ec4] RZ   HUD child surface FUN_10009efb -> 1 | now +0x24=2048 +0x28=64
+[12622.890 ms][tid 5ec4] HUDFIT> bar IDirectDrawSurface* now 0x038B3C70 (was 0x038B4770)
+[12622.955 ms][tid 5ec4] HUDFIT> lock vt+0x0c=0x01068A82 -> 1 | depth=1 bits=0x10250208 pitch=4096
+[12623.060 ms][tid 5ec4] HUDFIT> tiled the 600x56 art across 2048x64 (pitch 4096, 114688 px written)
+[12623.099 ms][tid 5ec4] HUDFIT> unlock vt+0x10 -> 1 | depth now 0
+[12623.131 ms][tid 5ec4] HUDFIT> child[0x2b]: cached pristine art 16x64 pitch=32 (one-time)
+[12623.149 ms][tid 5ec4] HUDFIT> child[0x2b]=0x00639538 -> refitting to 2048x64 (art 16x64)
+[12623.174 ms][tid 5ec4] RZ   HUD child surface 0x00639538 NO RECORDED CREATE (0 known) - FALLING BACK to field read-back [_ _ 7 16 0 0 0 0]. Field read-back is NOT proven equivalent: p3 measured 7 vs a recorded 4 on 2026-08-28.
+[12623.196 ms][tid 5ec4] RZ   HUD child surface replay at 2048x64 (+8 guard rows -> alloc h=72, zoom-blit overrun fix)
+[12623.289 ms][tid 5ec4] RZ   HUD child surface FUN_10009efb -> 1 | now +0x24=2048 +0x28=72
+[12623.338 ms][tid 5ec4] HUDFIT> bar IDirectDrawSurface* now 0x038B3C90 (was 0x038B4790)
+[12623.399 ms][tid 5ec4] HUDFIT> lock vt+0x0c=0x01068A82 -> 1 | depth=1 bits=0x10290218 pitch=4096
+[12623.737 ms][tid 5ec4] HUDFIT> tiled the 16x64 art across 2048x72 (pitch 4096, 131072 px written)
+[12623.819 ms][tid 5ec4] HUDFIT> unlock vt+0x10 -> 1 | depth now 0
+[12623.982 ms][tid 5ec4] SRCRECT> tile step [0 0 16 64] step=16 -> right=2048 step=2048  (FUN_10026841: ~128 blits/frame -> ~1)
+[12624.388 ms][tid 5ec4] SIDE> SetRect vt+0xc8=0x0340E20B  [704,0,800,442] -> [1952,0,2048,1081]
+[12624.651 ms][tid 5ec4] SIDE> SetRect returned; rect now [1952,0,2048,1081] (tiled child +0xcc=0x00000000)
+[12624.696 ms][tid 5ec4] SIDEFIT> target height 1056 (cap top 1056, panel 1081) -> requesting 1048 + 8 slack
+[12624.744 ms][tid 5ec4] SIDEFIT> +0xc0 cached pristine art 96x417 pitch=192 (one-time)
+[12624.772 ms][tid 5ec4] SIDEFIT> +0xc0=0x0F035BA0 -> refitting to 96x1048 (art 96x417)
+[12624.797 ms][tid 5ec4] RZ   side child surface 0x0F035BA0 NO RECORDED CREATE (0 known) - FALLING BACK to field read-back [_ _ 7 16 0 0 0 0]. Field read-back is NOT proven equivalent: p3 measured 7 vs a recorded 4 on 2026-08-28.
+[12624.996 ms][tid 5ec4] RZ   side child surface replay at 96x1048 (+8 guard rows -> alloc h=1056, zoom-blit overrun fix)
+[12625.157 ms][tid 5ec4] RZ   side child surface FUN_10009efb -> 1 | now +0x24=96 +0x28=1056
+[12625.201 ms][tid 5ec4] SIDEFIT> lock -> 1 | bits=0x1030ACF8 pitch=192 new 96x1056
+[12625.244 ms][tid 5ec4] SIDEFIT> placed the 96x417 art ONCE at row 489 of 1056 and filled the rest from plain art row 413 (no tiling)
+[12625.285 ms][tid 5ec4] SIDEFIT> +0xc8 cached pristine art 96x25 pitch=192 (one-time)
+[12625.328 ms][tid 5ec4] SIDEFIT> +0xc8=0x0F035600 -> refitting to 96x1048 (art 96x25)
+[12625.354 ms][tid 5ec4] RZ   side child surface 0x0F035600 NO RECORDED CREATE (0 known) - FALLING BACK to field read-back [_ _ 7 16 0 0 0 0]. Field read-back is NOT proven equivalent: p3 measured 7 vs a recorded 4 on 2026-08-28.
+[12625.371 ms][tid 5ec4] RZ   side child surface replay at 96x1048 (+8 guard rows -> alloc h=1056, zoom-blit overrun fix)
+[12625.458 ms][tid 5ec4] RZ   side child surface FUN_10009efb -> 1 | now +0x24=96 +0x28=1056
+[12625.508 ms][tid 5ec4] SIDEFIT> lock -> 1 | bits=0x1033C508 pitch=192 new 96x1056
+[12625.574 ms][tid 5ec4] SIDEFIT> placed the 96x25 art ONCE at row 489 of 1056 and filled the rest from plain art row 21 (no tiling)
+[12625.596 ms][tid 5ec4] SIDEFIT> dest rect +0xd0 [0 0 96 417] -> [0 0 96 1056]  (cap top 1056, panel 1081) - the black band between 0x1a1 and the cap was UNPAINTED
+[12625.619 ms][tid 5ec4] SIDEKIDS> pushed 17 side-panel child(ren) down by 489 (panel 1081 tall, native 442)
+[12625.634 ms][tid 5ec4] PARENT> bar hop 0: 0x00640118 [0 0 800 600] -> [0 0 2048 1081]
+[12625.649 ms][tid 5ec4] PARENT> bar hop 1: 0x005A5050 [0 0 800 600] -> [0 0 2048 1081]
+[12625.663 ms][tid 5ec4] PARENT> side hop 0: 0x00640118 [0 0 2048 1081] already covers 2048x1081
+[12625.681 ms][tid 5ec4] PARENT> side hop 1: 0x005A5050 [0 0 2048 1081] already covers 2048x1081
+[12625.739 ms][tid 5ec4] PARENT> minimap hop 0: 0x00640118 [0 0 2048 1081] already covers 2048x1081
+[12625.773 ms][tid 5ec4] PARENT> minimap hop 1: 0x005A5050 [0 0 2048 1081] already covers 2048x1081
+[12625.802 ms][tid 5ec4] PARENT> win hop 0: 0x00640118 [0 0 2048 1081] already covers 2048x1081
+[12625.828 ms][tid 5ec4] PARENT> win hop 1: 0x005A5050 [0 0 2048 1081] already covers 2048x1081
+[12625.852 ms][tid 5ec4] PARENT> win hop 0: 0x00640118 [0 0 2048 1081] already covers 2048x1081
+[12625.878 ms][tid 5ec4] PARENT> win hop 1: 0x005A5050 [0 0 2048 1081] already covers 2048x1081
+[12625.923 ms][tid 5ec4] PARENT> win hop 0: 0x00640118 [0 0 2048 1081] already covers 2048x1081
+[12625.973 ms][tid 5ec4] PARENT> win hop 1: 0x005A5050 [0 0 2048 1081] already covers 2048x1081
+[12626.008 ms][tid 5ec4] PARENT> win hop 0: 0x0D33E6D8 [640 436 800 600] -> [640 436 2048 1081]
+[12626.067 ms][tid 5ec4] PARENT> win hop 1: 0x00640118 [0 0 2048 1081] already covers 2048x1081
+[12626.100 ms][tid 5ec4] PARENT> win hop 2: 0x005A5050 [0 0 2048 1081] already covers 2048x1081
+[12626.216 ms][tid 5ec4] GEOM> root 0x005A5050 ext [0 0 800 600] -> [0 0 2048 1081]  (hover label clamp)
+[12626.295 ms][tid 5ec4] GEOM> city view 0x0F05D024 hit [0 0 800 600] bounds [0 0 704 544]
+[12626.357 ms][tid 5ec4] GEOM> city view    hit [0 0 2048 1081] bounds [0 0 2048 1081]  (map clicks + camera pan)
+[12626.422 ms][tid 5ec4] GEOM> corner widget 0x0D34A5C8 [774 574] -> [2022 1063] (hit rect carried)
+[12626.474 ms][tid 5ec4] GEOM> relocated 1 native-corner widget(s) by (1248,489)
+[12626.524 ms][tid 5ec4] RZ   ---- done (viewport: steps 1-11; step 12 HUD reflow not shipped, native) ----
+[118980.767 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[119386.640 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[119792.482 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[120198.667 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[120604.753 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[121011.995 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[121417.989 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[121823.174 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[122230.031 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[122644.079 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[123042.356 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[123449.052 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[123855.094 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[124260.632 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[124667.581 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[125073.598 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[125479.846 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[125887.310 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[126292.227 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[126698.086 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[127105.339 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[127511.337 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[127918.584 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[128323.650 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[128730.711 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[129135.819 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[129542.250 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[129949.780 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[130354.925 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[130760.372 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[131168.744 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[131573.547 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[131979.729 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[132385.395 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[132792.966 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[133200.221 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[133604.175 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[134011.608 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[134417.157 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[134823.465 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[135229.540 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[135637.016 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[136043.111 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[136450.014 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[136854.572 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[137260.726 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[137666.538 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[138074.862 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[138481.969 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[138886.142 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[139293.502 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[139698.777 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[140105.902 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[140514.500 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[140918.366 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[141322.776 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[141731.615 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[142137.600 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[142543.148 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[142948.447 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[143354.113 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[143761.672 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[144166.951 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[144573.388 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[144979.352 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[145385.833 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[145792.618 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[146199.090 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[146604.859 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[147011.266 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[147417.903 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[147822.910 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[148230.772 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[148635.852 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[149042.578 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[149448.530 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[149855.602 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[150267.230 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[150667.422 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[151075.209 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[151481.865 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[151888.048 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[152292.050 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[152698.815 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[153105.840 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[153510.982 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[153917.364 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[154323.322 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[154730.238 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[155138.177 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[155542.369 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[155948.455 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[156355.306 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[156761.267 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[157167.309 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[157573.484 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[157979.617 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
+[158386.981 ms][tid 5ec4] SIDEKIDS> REFUSED: panel 2112 tall exceeds the 1081-px client - not touching it
