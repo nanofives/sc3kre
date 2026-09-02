@@ -139,7 +139,17 @@ rpc.exports = {
                         var cr = rect(cw);
                         var fits = cr[0] >= 0 && cr[1] >= 0 && cr[2] <= 800 && cr[3] <= 600;
                         var corner = cr[2] >= 760 && cr[3] >= 560;      /* anchored bottom-right */
-                        if (fits && corner) {
+                        /* ⚠️ SIZE BOUND - back-ported from sc3resize.c 2026-09-02 after this tool,
+                           still carrying the loose rule, translated the CITY VIEW window itself to
+                           [1248 481 2048 1081]: a full-screen [0 0 800 600] rect "touches" the
+                           bottom-right corner and passed both other tests. The real widget is
+                           26x26. Also skip the hover label, which parks near the old corner. */
+                        var sz = (cr[2]-cr[0]) > 0 && (cr[2]-cr[0]) <= 200 &&
+                                 (cr[3]-cr[1]) > 0 && (cr[3]-cr[1]) <= 200;
+                        var sc3 = Process.enumerateModules()[0].base;
+                        var isLabel = false;
+                        try { isLabel = rp(cw,0).equals(sc3.add(0xd3bcc)); } catch (e) {}
+                        if (fits && corner && sz && !isLabel) {
                             var vt = rp(cw, 0), fn = rp(vt, 0xc8);
                             if (!fn.isNull()) {
                                 var f = new NativeFunction(fn, 'int',

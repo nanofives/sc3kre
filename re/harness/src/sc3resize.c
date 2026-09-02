@@ -765,6 +765,7 @@ static int    g_minion;        /* SC3RESIZE_MINI: dock the minimap to the bottom
  *
  * ⚠️ Skips windows covering most of the native screen (the main view is not a HUD element to move),
  * and skips the bar and side panel, which have their own proper SetRect paths. */
+#define SIDE_NAT_H   442   /* native side-panel height, measured rect [704 0 800 442] */
 #define WIN_MAX      48
 #define ANCHOR_EDGE  12
 #define NAT_W        800
@@ -806,6 +807,8 @@ static int    g_noparentfix;
 static void rz_fix_hud_parents(void *leaf, const char *name, LONG cw, LONG ch);
 /* fwd: the 2026-09-02 input-geometry fixes, called at the end of the cluster routine */
 static void rz_input_geometry(LONG cw, LONG ch, LONG dx, LONG dy);
+static void rz_side_children_bottom(void);
+static void rz_side_fit_surface(DWORD liveH);
 /* SC3RESIZE_HUDDY - extra downward bias applied to the whole relocated HUD, on top of the
  * (client - native) translate. Owner-tuned to 8 px on 2026-09-02 at 2048x1081: at bias 0 the bar's
  * bottom lands exactly on the client edge and a black strip shows below it; at 8 the bar, RCI,
@@ -838,7 +841,7 @@ static void rz_anchor_all(void) {
     LONG dx, dy, i, moved = 0;
     if (!g_anchor || !g_hwnd || !GetClientRect(g_hwnd, &cr)) return;
     dx = (cr.right - cr.left) - NAT_W;
-    dy = (cr.bottom - cr.top) - NAT_H;
+    dy = (cr.bottom - cr.top) - NAT_H + g_hud_dy;   /* same bottom bias as the bar and the cluster */
     if (dx == 0 && dy == 0) return;
     for (i = 0; i < g_wins_n; i++) {
         void *w = g_wins[i].w;
@@ -1026,12 +1029,6 @@ static void rz_cluster_layout(void) {
                 rz_fix_hud_parents(g_wins[k].w, "win", cw, chh);
             if (g_mini) rz_fix_hud_parents(g_mini, "minimap", cw, chh);
         }
-        /* MUST be last. SIMUI recomputes the view bounds from the HUD panel edges
-           (FUN_10014a5d broadcasts 0x624a8241, FUN_10048d7a unpacks it), so any bounds write done
-           BEFORE the HUD moves gets clobbered. Measured 2026-09-02: after the moves the rect had
-           been rewritten to [0 0 1952 1025] = client - 96 wide - 56 tall, the side panel's width
-           and the bar's height. */
-        rz_input_geometry(cw, chh, dx, dy);
     }
 }
 
@@ -1168,6 +1165,63 @@ static void *rz_find_view(void *w, DWORD want_e4, int depth, int *budget) {
     return NULL;
 }
 
+/* ⭐ SIDE PANEL CONTENTS — push the pages and tabs to the BOTTOM of the extended panel.
+ *
+ * `rz_side_extend` makes the panel span the full right edge, but its contents do not follow: the
+ * pages are 96x442 windows anchored at the panel's top, so the panel grows and the buttons stay up
+ * top with dead space below. Owner's ask (2026-09-02): buttons near the minimap, empty space above.
+ *
+ * Two things this gets right that a live experiment got wrong, both measured the hard way:
+ *
+ *   ⚠️ **`vt+0xc8` SetRect on a CHILD takes PARENT-LOCAL coordinates**, not absolute. Feeding it the
+ *      child's absolute `+0x14` rect adds the parent origin a second time - a tab at absolute
+ *      x 1985 landed at 3937 = 1985 + 1952. The parent-local rect is `+0x80..+0x8c`, so that is what
+ *      gets translated. Invisible on the corner button, whose parent is the root at (0,0) where
+ *      local and absolute coincide.
+ *
+ *   ⚠️ **This must run BEFORE rz_input_geometry.** SetRect churn on HUD windows makes SIMUI relayout
+ *      and rebroadcast, which clobbers BOTH the view bounds AND the ancestor widening - measured
+ *      live: the root's rect reverted to [0 0 800 600] and the whole HUD went unclickable, with the
+ *      camera clamped back to the original viewport. Doing it here, with geometry applied last,
+ *      is the whole reason this lives in the mod instead of a script.
+ *
+ * Grandchildren (the 36x36 buttons inside each page) are NOT touched: SetRect propagates to them and
+ * their parent-local hit rects stay valid because their page moved as a unit. */
+static void rz_side_children_bottom(void) {
+    DWORD *p = (DWORD *)g_side_top;
+    void *head, *n;
+    LONG panelH, dy;
+    int guard = 0, moved = 0;
+    /* the caller already gates on g_sideon && !g_cluster (both declared further down the file) */
+    if (!p || IsBadReadPtr(p, 0xa0)) { logf("SIDEKIDS> skipped: side panel unreadable"); return; }
+    panelH = (LONG)p[0x20 / 4] - (LONG)p[0x18 / 4];
+    dy = panelH - SIDE_NAT_H;
+    if (dy <= 0) { logf("SIDEKIDS> skipped: panel %ld tall, native %d", panelH, SIDE_NAT_H); return; }
+    head = *(void **)((DWORD)p + 0x34);
+    if (!head || IsBadReadPtr(head, 4)) { logf("SIDEKIDS> skipped: no child list"); return; }
+    n = *(void **)head;
+    while (n && n != head && guard++ < 300) {
+        DWORD *c;
+        if (IsBadReadPtr(n, 0x0c)) break;
+        c = *(DWORD **)((DWORD)n + 8);
+        if (c && !IsBadWritePtr(c, 0xa0)) {
+            LONG *e = (LONG *)((DWORD)c + 0x80);       /* PARENT-LOCAL rect - what SetRect wants */
+            DWORD *vt = *(DWORD **)c;
+            if (vt && !IsBadReadPtr(vt, 0xcc) && vt[0xc8 / 4] &&
+                e[2] - e[0] > 0 && e[3] - e[1] > 0 && e[3] + dy <= panelH) {
+                DWORD a[4];
+                a[0] = (DWORD)e[0]; a[1] = (DWORD)(e[1] + dy);
+                a[2] = (DWORD)e[2]; a[3] = (DWORD)(e[3] + dy);
+                rz_thiscall(c, (void *)vt[0xc8 / 4], a, 4);
+                moved++;
+            }
+        }
+        n = *(void **)n;
+    }
+    logf("SIDEKIDS> pushed %d side-panel child(ren) down by %ld (panel %ld tall, native %d)",
+         moved, dy, panelH, SIDE_NAT_H);
+}
+
 static void rz_input_geometry(LONG cw, LONG ch, LONG dx, LONG dy) {
     DWORD gz = (DWORD)GetModuleHandleA("GZGraphicD.dll");
     DWORD ss = (DWORD)GetModuleHandleA("SIMSPR.DLL");
@@ -1232,14 +1286,23 @@ static void rz_input_geometry(LONG cw, LONG ch, LONG dx, LONG dy) {
             c = *(DWORD **)((DWORD)n + 8);
             if (c && !IsBadWritePtr(c, 0xa0)) {
                 LONG *r = (LONG *)((DWORD)c + 0x14);
-                /* fits inside the native screen AND is anchored to its bottom-right corner */
+                /* fits inside the native screen AND is anchored to its bottom-right corner AND is
+                   actually a small widget.
+                   ⚠️ The size bound is not cosmetic. Without it a FULL-SCREEN window whose rect is
+                   [0 0 800 600] passes both other tests - it "touches" the bottom-right corner - and
+                   gets translated off to the right. Measured 2026-09-02 on the dock+span path
+                   (`GEOM> corner widget 0x00644140 [0 0] -> [1248 489]`), where cluster mode had
+                   masked it because the parent fix widens that window first. The real widget is
+                   26x26. */
                 int fits = r[0] >= 0 && r[1] >= 0 && r[2] <= NAT_W && r[3] <= NAT_H;
                 int corner = r[2] >= NAT_W - 40 && r[3] >= NAT_H - 40;
+                int is_small = (r[2] - r[0]) > 0 && (r[2] - r[0]) <= 200 &&
+                            (r[3] - r[1]) > 0 && (r[3] - r[1]) <= 200;
                 /* ⚠️ exclude the hover label: it parks near the old corner between hovers and its
                    position is recomputed from the cursor anyway, so moving it is noise. Measured
                    2026-09-02 - the first version of this heuristic matched it. */
                 int is_label = sc3 && c[0] == sc3 + 0xd3bcc;
-                if (fits && corner && !is_label) {
+                if (fits && corner && is_small && !is_label) {
                     DWORD *vt = *(DWORD **)c;
                     if (vt && !IsBadReadPtr(vt, 0xcc) && vt[0xc8 / 4]) {
                         LONG *e = (LONG *)((DWORD)c + 0x80);
@@ -1272,7 +1335,7 @@ static void rz_mini_dock(void) {
     w = r[2] - r[0]; h = r[3] - r[1];
     if (w <= 0 || h <= 0) { logf("MINI> dock skipped: rect %ldx%ld", w, h); return; }
     nx = (cr.right - cr.left) - w;
-    ny = (cr.bottom - cr.top) - h;
+    ny = (cr.bottom - cr.top) - h + g_hud_dy;   /* same bottom bias as the bar and the cluster */
     if (nx < 0 || ny < 0) { logf("MINI> dock skipped: window smaller than the minimap"); return; }
     if (r[0] == nx && r[1] == ny) { logf("MINI> already docked at [%ld,%ld]", nx, ny); return; }
     {   /* capture the OLD position before overwriting - the hit-origin move verifies against it */
@@ -2714,7 +2777,54 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
                next to the lab's copy of the same fit block (rz_hudlab_tick phase 2), which is the
                identical wiring mistake that made run 30's minimap dock silently not run. Two
                near-identical blocks exist; this is the one step 12 reaches when the lab is off. */
-            if (g_sideon && !g_cluster) rz_side_extend();
+            if (g_sideon && !g_cluster) {
+                RECT sr;
+                rz_side_extend();
+                if (g_hwnd && GetClientRect(g_hwnd, &sr))
+                    rz_side_fit_surface((DWORD)(sr.bottom - sr.top));   /* fill the new height */
+                rz_side_children_bottom();                              /* then place the buttons */
+            }
+        }
+
+        /* ⭐ INPUT GEOMETRY - MUST BE LAST, AND MUST RUN IN EVERY HUD MODE.
+         *
+         * Last, because SIMUI recomputes the view bounds from the HUD panel edges
+         * (FUN_10014a5d broadcasts 0x624a8241, FUN_10048d7a unpacks it). Measured 2026-09-02: after
+         * the HUD moved, the rect had been rewritten to [0 0 1952 1025] = client minus the side
+         * panel's 96 and the bar's 56. A bounds write done before the moves is simply lost.
+         *
+         * Every mode, because the first version of this call sat inside rz_cluster_layout, which
+         * returns early when cluster mode is off - so switching to dock+span would have silently
+         * dropped all four fixes (dead map, dead camera pan, clamped hover label, stranded corner
+         * widget) with nothing in the log to say so. Exactly the "wired behind the wrong flag" class
+         * this file has been bitten by three times. */
+        {   RECT gr;
+            if (g_hwnd && GetClientRect(g_hwnd, &gr)) {
+                LONG gw = gr.right - gr.left, gh = gr.bottom - gr.top;
+                /* ⭐ ANCESTOR WIDENING, IN EVERY MODE.
+                 *
+                 * This was called only from rz_cluster_layout, so on the dock+span path the HUD's
+                 * parent containers kept their [0 0 800 600] rects and the router's per-child
+                 * `vt+0xe4` gate rejected every click before the recursion could reach the HUD
+                 * `[CONFIRMED @ GZWIND 0x1001ec22]` - the identical defect that made the CLUSTER
+                 * HUD unclickable until it was fixed there. Owner-reported "still not clickable"
+                 * on dock+span, 2026-09-02, with cluster mode working fine at the same time.
+                 *
+                 * Runs before rz_input_geometry for the same reason everything else does: the
+                 * SIMUI relayout these SetRects provoke clobbers the view bounds, so geometry is
+                 * last. */
+                if (!g_noparentfix) {
+                    LONG k;
+                    rz_fix_hud_parents(g_hud_top,  "bar",     gw, gh);
+                    rz_fix_hud_parents(g_side_top, "side",    gw, gh);
+                    if (g_mini) rz_fix_hud_parents(g_mini, "minimap", gw, gh);
+                    for (k = 0; k < g_wins_n && k < 8; k++)
+                        rz_fix_hud_parents(g_wins[k].w, "win", gw, gh);
+                }
+                rz_input_geometry(gw, gh, gw - NAT_W, gh - NAT_H + g_hud_dy);
+            } else {
+                logf("GEOM> SKIPPED: no client rect");
+            }
         }
     }
 
@@ -2755,7 +2865,11 @@ static void rz_hud_setrect_w(DWORD wantW) {
         /* wantW == 0 means "span the whole client" (the ship path). The sweep passes explicit
            widths, clamped to the client so a sweep step can never exceed the window. */
         int wantX2 = (wantW == 0 || (int)wantW > lw) ? lw : (int)wantW;
-        int wantY1 = lh - barH, wantY2 = lh;
+        /* g_hud_dy pushes the docked bar below the client edge by the owner-tuned bias, the same
+           bias the cluster translate uses. At bias 0 the bar's bottom lands exactly on the client
+           edge and the owner reports a black strip below it; the native RCI overhangs its own
+           screen bottom by 8 for the same reason. Measured and tuned 2026-09-02. */
+        int wantY1 = lh - barH + g_hud_dy, wantY2 = lh + g_hud_dy;
         if (!setrect || barH <= 0 || barH >= lh) {
             logf("HUDLAB> SetRect skipped: setrect=0x%08lX barH=%d lh=%d", (DWORD)setrect, barH, lh);
             return;
@@ -2960,10 +3074,176 @@ static void rz_hud_fit_child(int ci, DWORD liveW) {
  *          2048 = 93% of all DirectDraw Blt time and ~46 calls per frame, against 24 at 600).
  * The other four ([0x2c..0x2f], 104-148 x 18) are discrete widgets, not tiled fill, and are left
  * alone deliberately: widening those would stretch content without removing any blits. */
+/* ⭐ THE FPS FIX for the full-width bar — widen the TILE STEP, 2026-09-02.
+ *
+ * `FUN_10026841` fills the bar by blitting the `[0x2b]` filler once per step and walking the dest
+ * leftwards, and the step is NOT the surface width:
+ *
+ *     iVar4 = *(int *)(param_1 + 0xd8) - *(int *)(param_1 + 0xd0);   // STEP = SOURCE RECT width
+ *     ... vt[0x118](*(param_1 + 0xac), param_1 + 0xd0, &local_14, 0);
+ *     `[CONFIRMED @ SIMUI 0x10026841]`
+ *
+ * With a 16-px source rect that is ~46 DirectDraw blits per frame at 2048 = 93% of all Blt time,
+ * the measured cost of the full-width bar (`verify/resize_hudlab`, 20 runs). Run 17 already proved
+ * widening the SURFACE alone changes nothing, which is what identified the source rect as the real
+ * step. `rz_hud_fit_child(0x2b)` has just refit that surface to liveW, so a source rect of liveW
+ * has real pixels behind it.
+ *
+ * `[UNCERTAIN]`, and this is the falsifiable part: that `+0xd0..+0xd8` is a plain source RECT the
+ * blit path honours at any width. If the blit clamps it to the surface's original 16, the step stays
+ * 16 and the FPS cost survives - a clean negative, visible as an unchanged frame rate.
+ *
+ * Widen only, never shrink, and only when the surface can actually back it. */
+static void rz_hud_srcrect(DWORD liveW) {
+    LONG *sr;
+    if (!g_hud_top || IsBadWritePtr(g_hud_top, 0xe0)) {
+        logf("SRCRECT> skipped: g_hud_top unreadable"); return;
+    }
+    sr = (LONG *)((DWORD)g_hud_top + 0xd0);
+    if (sr[2] - sr[0] <= 0 || sr[3] - sr[1] <= 0) {
+        logf("SRCRECT> REFUSED: +0xd0 is not a positive rect [%ld %ld %ld %ld]",
+             sr[0], sr[1], sr[2], sr[3]);
+        return;
+    }
+    if (sr[2] - sr[0] >= (LONG)liveW) {
+        logf("SRCRECT> already wide: [%ld %ld %ld %ld] step=%ld >= %lu",
+             sr[0], sr[1], sr[2], sr[3], sr[2] - sr[0], liveW);
+        return;
+    }
+    logf("SRCRECT> tile step [%ld %ld %ld %ld] step=%ld -> right=%ld step=%lu  (FUN_10026841: "
+         "~%ld blits/frame -> ~1)",
+         sr[0], sr[1], sr[2], sr[3], sr[2] - sr[0], sr[0] + (LONG)liveW, liveW,
+         ((LONG)liveW + (sr[2] - sr[0]) - 1) / (sr[2] - sr[0]));
+    sr[2] = sr[0] + (LONG)liveW;
+}
+
 static void rz_hud_fit_surface(DWORD liveW) {
     rz_hud_fit_child(0x2a, liveW);
     rz_hud_fit_child(0x2b, liveW);
+    rz_hud_srcrect(liveW);   /* after the refit: the surface must back the wider source rect */
 }
+
+/* ⭐ SIDE PANEL BACKGROUND — refit its art surfaces to the panel's new HEIGHT, 2026-09-02.
+ *
+ * `rz_side_extend` makes the panel span the full right edge and the owner reports "a black section
+ * on the vertical bar": the panel's art surfaces are the native 96x442, so everything below 442 has
+ * nothing drawn in it. This is NOT the bar's problem in a different place - the bar is filled by a
+ * TILE LOOP with a 16-px source rect, while the panel simply blits its children, and its tiled child
+ * `+0xcc` is NULL (measured live, along with `+0xc4` and `+0x114`). So there is no filler to widen;
+ * the background surface itself has to get taller.
+ *
+ * Same primitive as `rz_hud_fit_child` with the axis swapped: keep the 96 width, grow the height,
+ * and tile the cached native art DOWNWARDS (destination row r takes art row r % nativeH).
+ *
+ * The two live children are at `+0xc0` and `+0xc8` (`FUN_1004e63e` blits five slots: `+0xc0`,
+ * `+0xc4`, `+0xc8`, `+0xcc`, `+0x114`; only the first and third are non-NULL here).
+ *
+ * Every hazard `rz_hud_fit_child` documents applies unchanged and is honoured the same way: a
+ * one-time PRISTINE art snapshot (re-snapshotting would capture already-tiled content and compound
+ * seams on the second resize), expect-or-refuse on the sub-object vtable before dispatching through
+ * it, a balanced lock/unlock of only our own level, and a logged refusal rather than a forced write.
+ *
+ * `[UNCERTAIN]`: that a taller background surface is what the panel's paint routine actually reads
+ * for the full height. If the panel blits a fixed 442-tall destination rect regardless, the extra
+ * rows will never appear and the black section survives - a clean negative, visible on screen. */
+static HUDART g_side_cache[2];       /* [0] => child +0xc0, [1] => child +0xc8 */
+
+static void rz_side_fit_child(int slot, DWORD off, DWORD liveH) {
+    DWORD *p = (DWORD *)g_side_top;
+    HMODULE gz = GetModuleHandleA("GZGraphicD.dll");
+    DWORD obj, sub, oldbits, oldpitch, oldw, oldh;
+    HUDART *ca = &g_side_cache[slot];
+    BYTE *snap;
+
+    if (!p || IsBadReadPtr(p, 0x120) || !gz) { logf("SIDEFIT> skipped: no side panel"); return; }
+    obj = p[off / 4];
+    if (!obj || IsBadReadPtr((void *)obj, 0x48)) {
+        logf("SIDEFIT> child +0x%lx is NULL/unreadable (0x%08lX) - nothing to refit", off, obj);
+        return;
+    }
+    oldw = ((DWORD *)obj)[0x24 / 4]; oldh = ((DWORD *)obj)[0x28 / 4];
+    sub  = ((DWORD *)obj)[0x44 / 4];
+    if (!sub || IsBadReadPtr((void *)sub, 0xf8)) { logf("SIDEFIT> +0x%lx sub unreadable", off); return; }
+    oldbits = ((DWORD *)sub)[0xf0 / 4]; oldpitch = ((DWORD *)sub)[0xf4 / 4];
+
+    if (liveH == oldh) {
+        logf("SIDEFIT> +0x%lx already fitted: surface height %lu == live %lu", off, oldh, liveH);
+        return;
+    }
+    if (!ca->art && oldbits && oldpitch && oldh &&
+        !IsBadReadPtr((void *)oldbits, oldpitch * oldh)) {
+        ca->art = (BYTE *)HeapAlloc(GetProcessHeap(), 0, oldpitch * oldh);
+        if (ca->art) {
+            memcpy(ca->art, (void *)oldbits, oldpitch * oldh);
+            ca->w = oldw; ca->h = oldh; ca->pitch = oldpitch;
+            logf("SIDEFIT> +0x%lx cached pristine art %lux%lu pitch=%lu (one-time)",
+                 off, oldw, oldh, oldpitch);
+        }
+    }
+    if (!ca->art) {
+        logf("SIDEFIT> +0x%lx WARNING: no cached art (bits=0x%08lX pitch=%lu) - may come back blank",
+             off, oldbits, oldpitch);
+    }
+    snap     = ca->art;
+    oldw     = ca->w     ? ca->w     : oldw;
+    oldh     = ca->h     ? ca->h     : oldh;
+    oldpitch = ca->pitch ? ca->pitch : oldpitch;
+
+    logf("SIDEFIT> +0x%lx=0x%08lX -> refitting to %lux%lu (art %lux%lu)",
+         off, obj, oldw, liveH, oldw, oldh);
+    if (!rz_recreate_raster(obj, "side child surface", oldw, liveH, gz)) {
+        logf("SIDEFIT> +0x%lx recreate REFUSED - left as it was", off);
+        return;
+    }
+    if (snap) {
+        DWORD nsub = ((DWORD *)obj)[0x44 / 4];
+        DWORD nw = ((DWORD *)obj)[0x24 / 4], nh = ((DWORD *)obj)[0x28 / 4];
+        DWORD *svt = NULL, want = (DWORD)gz + GZ_RVA_VT_SURFACE;
+        if (!nsub || IsBadReadPtr((void *)nsub, 0xf8)) {
+            logf("SIDEFIT> sub 0x%08lX unreadable after recreate - not tiling", nsub);
+        } else if ((svt = *(DWORD **)nsub) == NULL || IsBadReadPtr(svt, 0x14) ||
+                   (DWORD)svt != want) {
+            logf("SIDEFIT> REFUSE lock: sub vtable 0x%08lX != GZGraphicD+0x%X - not the class we think",
+                 (DWORD)svt, GZ_RVA_VT_SURFACE);
+        } else {
+            int lk = rz_thiscall((void *)nsub, (void *)svt[0x0c / 4], NULL, 0);
+            DWORD nbits = ((DWORD *)nsub)[0xf0 / 4], npitch = ((DWORD *)nsub)[0xf4 / 4];
+            logf("SIDEFIT> lock -> %d | bits=0x%08lX pitch=%lu new %lux%lu",
+                 lk & 0xff, nbits, npitch, nw, nh);
+            if (!(lk & 0xff) || !nbits || !npitch || IsBadReadPtr((void *)nbits, npitch * nh)) {
+                logf("SIDEFIT> lock did not yield a usable backing - not tiling");
+            } else {
+                /* ⛔ DO NOT TILE THIS ART. Owner, 2026-09-02: "you have repeated the same texture
+                   with the 5 buttons over and over." The 96x417 surface is not a filler strip - it
+                   is the whole PAGE, button frames included - which is also why the panel's tiled
+                   slot `+0xcc` is NULL: this panel was never meant to be tiled.
+                   So: place the art ONCE, aligned with where rz_side_children_bottom is about to
+                   put the pages, and fill the space above with a single PLAIN row taken from below
+                   the last button (the buttons occupy art rows ~21..381 of 417). */
+                DWORD r, run = (nw < oldw) ? nw : oldw;
+                LONG art_at = (LONG)liveH - SIDE_NAT_H;      /* same dy the children get */
+                DWORD plain = (oldh > 8) ? oldh - 4 : oldh - 1;
+                if (art_at < 0) art_at = 0;
+                for (r = 0; r < nh; r++) {
+                    LONG src = (LONG)r - art_at;
+                    BYTE *from = (src >= 0 && src < (LONG)oldh)
+                               ? snap + (DWORD)src * oldpitch      /* the real art, once */
+                               : snap + plain * oldpitch;          /* plain background elsewhere */
+                    memcpy((BYTE *)nbits + r * npitch, from, run * 2);
+                }
+                logf("SIDEFIT> placed the %lux%lu art ONCE at row %ld of %lu and filled the rest "
+                     "from plain art row %lu (no tiling)", oldw, oldh, art_at, nh, plain);
+            }
+            if (lk & 0xff) rz_thiscall((void *)nsub, (void *)svt[0x10 / 4], NULL, 0);
+        }
+    }
+}
+
+static void rz_side_fit_surface(DWORD liveH) {
+    rz_side_fit_child(0, 0xc0, liveH);
+    rz_side_fit_child(1, 0xc8, liveH);
+}
+
 
 /* Dock the SIDE PANEL to the right edge and extend it to full height, via its own framework
  * SetRect (`vt+0xc8`) - the identical method already proven on the bottom bar.
