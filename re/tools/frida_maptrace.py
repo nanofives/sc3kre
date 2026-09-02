@@ -96,7 +96,11 @@ rpc.exports = {
                 try { t = args[0].add(0).readS32(); x = args[0].add(4).readS32();
                       y = args[0].add(8).readS32(); } catch (e) {}
                 this.opened = false;
-                if (t === 7 || t === 8 || t === 9) {
+                /* ALL event types, not just 7/8/9. The first version opened only on the types a
+                   LEFT click produces, so a right-button drag - the camera pan - was invisible to
+                   it. The owner reported right-drag panning dead outside the old viewport and the
+                   trace had nothing to say, because it was never listening. */
+                if (t >= 0 && t < 64) {
                     G.deep++; this.opened = true;
                     var o = { at: 'DISPATCH', evType: t, x: x, y: y };
                     try {
