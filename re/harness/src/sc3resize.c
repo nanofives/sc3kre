@@ -804,6 +804,16 @@ static int    g_nohit;
 static int    g_noparentfix;
 /* fwd: defined below rz_mini_dock, called from the cluster routine above it */
 static void rz_fix_hud_parents(void *leaf, const char *name, LONG cw, LONG ch);
+/* fwd: the 2026-09-02 input-geometry fixes, called at the end of the cluster routine */
+static void rz_input_geometry(LONG cw, LONG ch, LONG dx, LONG dy);
+/* SC3RESIZE_HUDDY - extra downward bias applied to the whole relocated HUD, on top of the
+ * (client - native) translate. Owner-tuned to 8 px on 2026-09-02 at 2048x1081: at bias 0 the bar's
+ * bottom lands exactly on the client edge and a black strip shows below it; at 8 the bar, RCI,
+ * minimap and corner button all sit where the owner wants them.
+ * ⚠️ This is a POSITION bias only. HUD art is TOP-ANCHORED in its rect, so a rect taller than the
+ * art paints the surplus black - do not implement this by growing rects. Measured: a 72-tall bar
+ * (art 56) produced exactly the "black bar below the bottom bar" the owner reported. */
+static LONG   g_hud_dy = 8;
 static int    g_sink_logged;  /* one-shot: the sink does not change */   /* resolve the UI event sink once, on the first click */         /* SC3RESIZE_INPUT: log the mouse clamp bounds per click */
 static int    g_cluster;
 static LONG   g_bar_nat[4], g_side_nat[4];
@@ -932,6 +942,7 @@ static void rz_cluster_layout(void) {
     dx = (cr.right - cr.left) - NAT_W;
     dy = (cr.bottom - cr.top) - NAT_H;
     if (dx <= 0 && dy <= 0) { logf("CLUSTER> window not larger than native - nothing to do"); return; }
+    dy += g_hud_dy;   /* owner-tuned bottom bias; see g_hud_dy */
 
     /* Cache each framework window's native rect the first time we see it, before anything moves. */
     if (!g_bar_nat_ok && g_hud_top && !IsBadReadPtr(g_hud_top, 0x24)) {
@@ -1015,6 +1026,12 @@ static void rz_cluster_layout(void) {
                 rz_fix_hud_parents(g_wins[k].w, "win", cw, chh);
             if (g_mini) rz_fix_hud_parents(g_mini, "minimap", cw, chh);
         }
+        /* MUST be last. SIMUI recomputes the view bounds from the HUD panel edges
+           (FUN_10014a5d broadcasts 0x624a8241, FUN_10048d7a unpacks it), so any bounds write done
+           BEFORE the HUD moves gets clobbered. Measured 2026-09-02: after the moves the rect had
+           been rewritten to [0 0 1952 1025] = client - 96 wide - 56 tall, the side panel's width
+           and the bar's height. */
+        rz_input_geometry(cw, chh, dx, dy);
     }
 }
 
@@ -1075,6 +1092,173 @@ static void rz_fix_hud_parents(void *leaf, const char *name, LONG cw, LONG ch) {
                  name, hop, (DWORD)par, r[0], r[1], r[2], r[3], cw, ch);
         }
         cur = par;
+    }
+}
+
+/* ⭐⭐⭐ INPUT GEOMETRY — the four stale rects that survived the HUD work, 2026-09-01/02.
+ *
+ * All four were found the same way: the mod widened the rects it knew about, the owner played the
+ * game, and each remaining rect announced itself as a dead input path. All four are owner-verified
+ * fixed in a running game. Full record: verify/resize_clicklab/SESSION.md.
+ *
+ * There is no single "window size" in this engine. A window carries four independent position
+ * representations and the city view carries two more, each read by different code:
+ *
+ *   1. ROOT `+0x88/+0x8c`   the hover label is placed at the cursor and then CLAMPED into the root
+ *      window's extent, read through `vt+0xa0`/`vt+0xa4`. Stale, it pins the label to
+ *      right = 798 (= 800-2) and top <= 582 (= 600-2-16, label height 16). Measured across 51
+ *      samples before the fix and again after: right edge 798 -> 2000, top 582 -> 1036.
+ *      `[CONFIRMED @ SC3U 0x00443331, 0x00441d3e, 0x00441d45]`
+ *      Note rz_fix_hud_parents deliberately stops one hop short of the root, so nothing had ever
+ *      written these two.
+ *
+ *   2. VIEW `+0x1c/+0x20`   the view's hit test rejects any point outside `this+0x14..+0x20`, so a
+ *      stale rect makes the MAP DEAD outside the old viewport - no zoning, no picking.
+ *      `[CONFIRMED @ SIMSPR 0x1004ecd3]`  Traced per click: inside -> `vt+0xe4` ret=1 and the
+ *      handler runs; outside -> ret=0 and the handler is never entered.
+ *
+ *   3. VIEW `+0xd4..+0xe0`  a DIFFERENT rect, and the one that killed the camera. `FUN_1004947d`
+ *      tests every mouse-move against it and calls `FUN_1004a37e` -> `FUN_10042cfe(this,0,0,0)`
+ *      when the point is outside, which zeroes the right-drag anchor `+0x1ec/+0x1ee` and both
+ *      velocities `+0x1f4/+0x1f8`. So every drag-move outside the old viewport DISARMED the pan.
+ *      Measured stale at [0 0 704 544] = native minus the side panel and the bar.
+ *      `[CONFIRMED @ SIMSPR 0x1004947d, 0x1004a37e, 0x10042cfe]`
+ *
+ *   4. NATIVE-CORNER WIDGETS hanging off the ROOT rather than off the HUD tree the cluster routine
+ *      walks - which is why they were never relocated (owner: "a minimize button on the old
+ *      viewport position"). Moved through the framework's own `vt+0xc8` SetRect.
+ *
+ * Two mistakes from that day, both encoded here:
+ *   ⚠️ Poking `+0x14..+0x20` on a widget moves the HIT TEST and leaves the PIXELS behind (owner:
+ *      "the functionality moved, visually the button is still on the original position"). Use
+ *      SetRect for anything that has to be seen.
+ *   ⚠️ SetRect on a container PROPAGATES to its children. Calling it again on the child
+ *      double-moves it - a 26x26 button landed at [4044 2110]. Parents only, which is why this
+ *      walks the root's DIRECT children and does not recurse.
+ *
+ * NOT fixed here, deliberately, and both documented in SESSION.md:
+ *   - Edge-scroll bands `+0x178..+0x1c4`: rebuilt by `FUN_10043989` from the same bounds rect and
+ *     re-run from `FUN_10044323`, so hand-written bands cannot survive. Widening the source rect
+ *     (item 3) is the correct half; the rebuild call is untested and is not made here.
+ *     `[CONFIRMED @ SIMSPR 0x10043989, 0x10044323]`
+ *   - The ghost strip on the incremental scroll path, which is a PRESENT asymmetry inside
+ *     `FUN_10006226`, not a geometry problem. `[CONFIRMED @ SIMSPR 0x10006226, 0x1000e058,
+ *     0x1000e206]`
+ */
+static void *rz_find_view(void *w, DWORD want_e4, int depth, int *budget) {
+    void *head, *n;
+    int guard = 0;
+    if (!w || depth > 8 || *budget <= 0 || IsBadReadPtr(w, 0x40)) return NULL;
+    head = *(void **)((DWORD)w + 0x34);
+    if (!head || IsBadReadPtr(head, 4)) return NULL;
+    n = *(void **)head;
+    while (n && n != head && guard++ < 500 && *budget > 0) {
+        void *cw;
+        if (IsBadReadPtr(n, 0x0c)) break;
+        cw = *(void **)((DWORD)n + 8);
+        (*budget)--;
+        if (cw && !IsBadReadPtr(cw, 0xe4)) {
+            DWORD *vt = *(DWORD **)cw;
+            if (vt && !IsBadReadPtr(vt, 0xe8) && vt[0xe4 / 4] == want_e4) return cw;
+            {   void *hit = rz_find_view(cw, want_e4, depth + 1, budget);
+                if (hit) return hit;   }
+        }
+        n = *(void **)n;
+    }
+    return NULL;
+}
+
+static void rz_input_geometry(LONG cw, LONG ch, LONG dx, LONG dy) {
+    DWORD gz = (DWORD)GetModuleHandleA("GZGraphicD.dll");
+    DWORD ss = (DWORD)GetModuleHandleA("SIMSPR.DLL");
+    DWORD sc3 = (DWORD)GetModuleHandleA(NULL);
+    DWORD *win, *sink, *root;
+    void *view;
+
+    if (!gz || !ss) { logf("GEOM> REFUSED: GZGraphicD or SIMSPR not loaded"); return; }
+    if (IsBadReadPtr((void *)(gz + 0x6cdb8), 4)) {
+        logf("GEOM> REFUSED: gz+0x6cdb8 unreadable"); return;
+    }
+    win = *(DWORD **)(gz + 0x6cdb8);
+    if (!win || IsBadReadPtr(win, 0x48) || win[0] != gz + 0x1f740) {
+        logf("GEOM> REFUSED: window object 0x%08lX vftable mismatch", (DWORD)win); return;
+    }
+    sink = (DWORD *)win[0x30 / 4];
+    if (!sink || IsBadReadPtr(sink, 0x3c)) { logf("GEOM> REFUSED: sink unreadable"); return; }
+    root = (DWORD *)sink[0x38 / 4];
+    if (!root || IsBadWritePtr(root, 0x90)) { logf("GEOM> REFUSED: root unreadable"); return; }
+
+    /* 1. root extent - the hover-label clamp. Widen only, never shrink. */
+    {   LONG *e = (LONG *)((DWORD)root + 0x80);
+        if (e[2] < cw || e[3] < ch) {
+            logf("GEOM> root 0x%08lX ext [%ld %ld %ld %ld] -> [%ld %ld %ld %ld]  (hover label clamp)",
+                 (DWORD)root, e[0], e[1], e[2], e[3], e[0], e[1],
+                 e[2] < cw ? cw : e[2], e[3] < ch ? ch : e[3]);
+            if (e[2] < cw) e[2] = cw;
+            if (e[3] < ch) e[3] = ch;
+        } else {
+            logf("GEOM> root ext already [%ld %ld %ld %ld]", e[0], e[1], e[2], e[3]);
+        }
+    }
+
+    /* 2+3. the city view, found by IDENTITY (its vt+0xe4 is SIMSPR FUN_1004ecd3), never by a
+           remembered pointer - the object is at a different address every launch. */
+    {   int budget = 3000;
+        view = rz_find_view(root, ss + 0x4ecd3, 0, &budget);
+    }
+    if (!view) { logf("GEOM> city view NOT FOUND (vt+0xe4 != SIMSPR+0x4ecd3) - map/camera unfixed"); return; }
+    if (IsBadWritePtr(view, 0xe4)) { logf("GEOM> city view 0x%08lX unwritable", (DWORD)view); return; }
+    {   LONG *r = (LONG *)((DWORD)view + 0x14);
+        LONG *b = (LONG *)((DWORD)view + 0xd4);
+        logf("GEOM> city view 0x%08lX hit [%ld %ld %ld %ld] bounds [%ld %ld %ld %ld]",
+             (DWORD)view, r[0], r[1], r[2], r[3], b[0], b[1], b[2], b[3]);
+        if (r[2] < cw) r[2] = cw;
+        if (r[3] < ch) r[3] = ch;
+        if (b[2] < cw) b[2] = cw;
+        if (b[3] < ch) b[3] = ch;
+        logf("GEOM> city view    hit [%ld %ld %ld %ld] bounds [%ld %ld %ld %ld]  (map clicks + camera pan)",
+             r[0], r[1], r[2], r[3], b[0], b[1], b[2], b[3]);
+    }
+
+    /* 4. native-corner widgets, DIRECT children of the root only. */
+    {   void *head = *(void **)((DWORD)root + 0x34);
+        void *n;
+        int guard = 0, moved = 0;
+        if (!head || IsBadReadPtr(head, 4)) return;
+        n = *(void **)head;
+        while (n && n != head && guard++ < 500) {
+            DWORD *c;
+            if (IsBadReadPtr(n, 0x0c)) break;
+            c = *(DWORD **)((DWORD)n + 8);
+            if (c && !IsBadWritePtr(c, 0xa0)) {
+                LONG *r = (LONG *)((DWORD)c + 0x14);
+                /* fits inside the native screen AND is anchored to its bottom-right corner */
+                int fits = r[0] >= 0 && r[1] >= 0 && r[2] <= NAT_W && r[3] <= NAT_H;
+                int corner = r[2] >= NAT_W - 40 && r[3] >= NAT_H - 40;
+                /* ⚠️ exclude the hover label: it parks near the old corner between hovers and its
+                   position is recomputed from the cursor anyway, so moving it is noise. Measured
+                   2026-09-02 - the first version of this heuristic matched it. */
+                int is_label = sc3 && c[0] == sc3 + 0xd3bcc;
+                if (fits && corner && !is_label) {
+                    DWORD *vt = *(DWORD **)c;
+                    if (vt && !IsBadReadPtr(vt, 0xcc) && vt[0xc8 / 4]) {
+                        LONG *e = (LONG *)((DWORD)c + 0x80);
+                        LONG ox = r[0], oy = r[1], nx = r[0] + dx, ny = r[1] + dy;
+                        int ext_abs = (e[0] == r[0] && e[1] == r[1]);   /* absolute, not parent-local */
+                        DWORD a[4];
+                        a[0] = (DWORD)nx;        a[1] = (DWORD)ny;
+                        a[2] = (DWORD)(r[2]+dx); a[3] = (DWORD)(r[3]+dy);
+                        rz_thiscall(c, (void *)vt[0xc8 / 4], a, 4);
+                        if (ext_abs) { e[0] = nx; e[1] = ny; e[2] = (LONG)a[2]; e[3] = (LONG)a[3]; }
+                        logf("GEOM> corner widget 0x%08lX [%ld %ld] -> [%ld %ld]%s",
+                             (DWORD)c, ox, oy, nx, ny, ext_abs ? " (hit rect carried)" : " (hit rect parent-local, left alone)");
+                        moved++;
+                    }
+                }
+            }
+            n = *(void **)n;
+        }
+        logf("GEOM> relocated %d native-corner widget(s) by (%ld,%ld)", moved, dx, dy);
     }
 }
 
@@ -3689,6 +3873,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           g_cluster = GetEnvironmentVariableA("SC3RESIZE_CLUSTER", v, sizeof(v)) && atoi(v);
           g_input   = GetEnvironmentVariableA("SC3RESIZE_INPUT",   v, sizeof(v)) && atoi(v);
           g_nohit   = GetEnvironmentVariableA("SC3RESIZE_NOHIT",   v, sizeof(v)) && atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_HUDDY", v, sizeof(v))) g_hud_dy = (LONG)atoi(v);
           g_noparentfix = GetEnvironmentVariableA("SC3RESIZE_NOPARENTFIX", v, sizeof(v)) && atoi(v);
           /* HUD dock+span ships ON. SC3RESIZE_HUDNATIVE=1 is the opt-out for anyone who prefers the
              native bar - the full-width bar carries a measured GPU-sync FPS cost that is NOT yet
@@ -3707,9 +3892,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
          * a self-consistent log). One line makes the whole class loud instead of silent.
          * verify/resize_flaggate/NOHIT_RESULTS.md */
         logf("### FLAGS> cluster=%d input=%d nohit=%d hudfit=%d hudlab=%d sweep=%d side=%d mini=%d "
-             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d",
+             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld",
              g_cluster, g_input, g_nohit, g_hudfit, g_hudlab, g_sweepon, g_sideon, g_minion,
-             g_anchor, g_census, g_minzoom, g_ready_ms, g_noparentfix);
+             g_anchor, g_census, g_minzoom, g_ready_ms, g_noparentfix, g_hud_dy);
         if (AddVectoredExceptionHandler(1, rz_veh))
             logf("### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the "
                  "zoom-after-resize crash the game swallows)");
