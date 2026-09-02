@@ -21,9 +21,30 @@ dominated by that. The instrument cannot separate a widget action from a camera 
 **No claim is made about clickability from this run.** `BUTTON_RESULTS.md`'s B-CONSUMED still
 stands on its own evidence; this run adds nothing to it.
 
-## ⛔ What the screenshots actually show: in CLUSTER mode the HUD is NOT ON SCREEN
+## ⛔⛔ CORRECTION (owner, same day): the HUD IS ON SCREEN. The captures are the artifact.
 
-This was not what the run was looking for, and it is the more important observation.
+**Everything in the section below is refuted by direct witness.** The owner looked at the running
+game in cluster mode and the HUD is there in the bottom-right corner. The `[UNCERTAIN]` caveat that
+was written into this file before the owner was asked is the one that fired: **a GDI
+`CopyFromScreen` capture of this DirectDraw-presented window does not contain the HUD layer.**
+
+Consequences, and they are the useful part:
+
+- **Screenshot diffing is nondiagnostic for any HUD question in this game.** The HUD regions in the
+  table above were measuring the *city view underneath* the HUD, not the HUD. That also explains why
+  those regions moved 70–80% in lockstep with `VIEW`: it was all one scrolling frame.
+- This is the **nondiagnostic-proxy class again** — the same failure as `verify/resize_census`
+  (surface fill read as on-screen fill) and the `PrintWindow` "clipped 800x600" shot already retired
+  as a capture artifact. **Pixel capture of SC3U from outside the process has now been wrong three
+  times.** Do not settle a visual question with it; ask the owner or read inside the process.
+- The four-arm table below is still evidence of *something* — `HUDNATIVE=1` and the default arm DID
+  capture HUD pixels while cluster captured none — but whatever that difference is, it is a
+  difference in what the capture path sees, **not** in what reaches the monitor. Unexplained, and
+  not worth a run.
+
+## (REFUTED — kept for the reasoning) What the screenshots showed
+
+This was not what the run was looking for, and it is refuted above.
 
 | arm | flags | HUD visible in the capture? |
 |---|---|---|
@@ -45,6 +66,10 @@ captures of a DirectDraw-presented window. A capture landing between the viewpor
 composite would look exactly like this. **An owner glance settles it in one second**, and the board
 records the cluster HUD as previously owner-confirmed, so this is a contradiction to resolve by eye
 before any code is touched.
+
+> **That is exactly what happened. The owner looked; the HUD is there. See the correction above.**
+> Cost of not asking first: three control-arm runs. Cost avoided by writing the caveat before the
+> answer: a false "the cluster HUD regressed" entry on the board.
 
 ## Also visible in the log, unexplained
 
