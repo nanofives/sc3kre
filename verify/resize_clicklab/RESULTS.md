@@ -1,4 +1,41 @@
-# RESULTS.md — the visual click test is **V-AMBIG**, and it found something bigger (2026-09-01)
+# RESULTS.md — the visual click test is **V-AMBIG**; the OWNER HAND-TEST then PASSED (2026-09-01)
+
+## ⭐⭐⭐ THE RELOCATED HUD IS CLICKABLE — owner hand-test, cluster mode, 2048x1081
+
+The question `BUTTON_RESULTS.md` refused to answer is answered, and by the only instrument that could
+answer it. Owner, on the running game (`handtest/run.log`, pid 28528, `cluster=1 input=1`, no
+synthetic input posted — every click in that log is a human one):
+
+> "the buttons of the HUD works, tool changes / panels open ... i can move panels around the whole
+> screen and it works"
+
+So the chain is complete end to end: the router reaches the relocated widget (`P-PASS`), the widget
+accepts the event (`B-CONSUMED`), and **the widget performs its user-visible action**. Panels are
+also draggable anywhere in the 2048x1081 client area, which was never tested before.
+
+The log corroborates the setup rather than the verdict: real clicks come in at `clamp bounds=2048x1081
+(stored rect [0 0 2048 1081])` — the mouse clamp is correct at the new size — and clicks landing on
+the side panel resolve to the relocated window (`[1952 481 2048 923]`, `shown=1`).
+
+### Two residual defects, owner-reported, both NEW to the record
+
+1. **Hover/tooltip labels still paint in the old 800x600 region**, not next to the cursor. This is
+   visible in an old artefact nobody read: the `Zona` tooltip sitting mid-screen in
+   `verify/resize_flaggate/before.png`. In this run's window census the same class shows the split —
+   window `[3]` logs `rect+0x14=[3274 1470 3283 1485]` against `ext+0x80=[1386 553 1395 568]`, the
+   `<<< PAINT/WINDOW DIVERGE` line that reproduces in every cluster run.
+2. **The map itself cannot be clicked.** The HUD works, the city view does not take input. This is
+   almost certainly the standing board note *"navigation works only in the top-left 800x600 — input
+   picking reads a different size source than the blit"*, now sharpened: the mod records and fixes
+   only HUD windows (`g_wins`), and **no city-view window appears in the census at all**, so nothing
+   has ever widened its hit rect. `[UNCERTAIN]` — not yet instrumented.
+
+**Next target: the city-view window's hit/pick rect**, the same class of fix that just worked for the
+HUD, applied to the one window the mod never touched.
+
+---
+
+## The automated part of this session: V-AMBIG (2026-09-01)
 
 Scored against `PRE.md` (committed `34a821a`, before the run). Four automated runs, all at client
 **2048x1081**, path-loaded Europolis, zero `FAULT CAUGHT` in any log.

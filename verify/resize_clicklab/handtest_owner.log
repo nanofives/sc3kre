@@ -1,0 +1,658 @@
+[    0.385 ms][tid b518] ### sc3resize loaded - resizable-window mod (minimal Init-free routine, validated 2026-08-27 over 6 runs)
+[    0.569 ms][tid b518] ### FLAGS> cluster=1 input=1 nohit=0 hudfit=1 hudlab=0 sweep=0 side=0 mini=0 anchor=0 census=0 minzoom=0 readyms=3000 noparentfix=0
+[    0.633 ms][tid b518] ### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the zoom-after-resize crash the game swallows)
+[    2.980 ms][tid 8eec] RZ   *** VEH FAULT *** code=0xC0000096 at SC3U.exe+0x84122 (base 0x00400000)  (resize step at fault=0)
+[    3.330 ms][tid 8eec] RZ   VEH regs eax=00000000 ecx=35DA0000 edx=00000000 ebx=00000001 esi=7FFFFFFF edi=FFFFFFFF ebp=001AFD00 esp=001AFCFC
+[    3.414 ms][tid 8eec] RZ   VEH [esp]=0x00000000 -> 0x00000000 (no module)
+[  111.936 ms][tid 77a0] ### RESIZE: SIMSPR base 0x03330000 (relocated: YES)  GZGraphicD base 0x02EF0000 (YES)
+[  112.058 ms][tid 77a0] --- WINDOWED: GZGraphicD+0x6cdac = 0 -> 1
+[  112.128 ms][tid 77a0] --- WINDOWED: GZGraphicD+0x117D6 'mov [ebx+0x48],1' -> nop x4
+[  112.187 ms][tid 77a0] --- FIX16: 16bpp branch injected at 0x19349 -> cave 0x025F0000 (5-6-5)
+[  112.275 ms][tid 77a0] --- GRIDB_CLAMP FUN_1000cedb: index clamped (hook 0xCFAB -> cave 0x614E0, base 0x03330000)
+[  112.404 ms][tid 77a0] --- GRIDB_CLAMP FUN_1000d0f5: index clamped (hook 0xD281 -> cave 0x61520, base 0x03330000)
+[  112.470 ms][tid 77a0] --- GRIDB_CLAMP FUN_1000be25: index clamped (hook 0xC412 -> cave 0x61560, base 0x03330000)
+[  112.614 ms][tid 77a0] --- GRIDB_CLAMP FUN_1000ef50: index clamped (hook 0xEF50 -> cave 0x615A0, base 0x03330000)
+[  112.684 ms][tid 77a0] --- GRIDB_CLAMP FUN_1000efa1: index clamped (hook 0xEFD6 -> cave 0x615E0, base 0x03330000)
+[  112.719 ms][tid 77a0] --- EFA1_GUARD: empty-bucket branch 0xefc2 retargeted to the ret (was -> 0xefe3 deref)
+[  112.738 ms][tid 77a0] --- GRIDB_CLAMP: 4 walkers index-clamped (FIX A) + FUN_1000efa1 null-guarded (FIX C)
+[  112.794 ms][tid 77a0] ### RESIZE: armed - windowed+fix16 applied, bridge capture at SIMSPR+0x16EBA, per-frame poll at GZGraphicD+0x18C58 (create recorder DROPPED after v2 crash)
+[  112.878 ms][tid 77a0] --- HUD: FUN_100270e5 wrapped (cave 0x03590000 tr 0x03580060) - top-strip reflow armed
+[  112.911 ms][tid 77a0] FN  SIMUI FUN_1004e123 side ctor: relocated rel32 at +3 -> 0x0342D9BE
+[  112.954 ms][tid 77a0] FN  SIMUI FUN_1001a983 ctor A: relocated rel32 at +3 -> 0x0344C2F7
+[ 1824.757 ms][tid 8eec] ### RESIZE: window 0x02700E92 subclassed (old proc 0x02F07E11) - WM_SIZE observed, resize performed on the render thread
+[ 5105.695 ms][tid 8eec] ### SIDE: panel window captured 0x0D334FE0 (SIMUI FUN_1004e123 ctor)
+[ 5155.766 ms][tid 8eec] ### RESIZE: bridge captured 0x0E188B10 (iso view = bridge+0x18 = 0x00000000); readiness gate = 3000 ms
+[ 5736.107 ms][tid 8eec] ### MINI: window captured 0x0F052518 vt=0x0348A180 dest(this+0x90)=[640 436 800 600] 160x164
+[ 8220.162 ms][tid 8eec] INPUT> click raw=(519,415) clamp bounds=800x600 (stored rect [0 0 800 600])
+[ 8220.232 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[599 520 640 608]  ext+0x80=[599 520 640 608] (41x88)  flags+0xa0=0x00034103 shown=1
+[ 8220.260 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[704 0 800 442]  ext+0x80=[704 0 800 442] (96x442)  flags+0xa0=0x00014103 shown=1
+[ 8220.302 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[640 436 800 600]  ext+0x80=[640 436 800 600] (160x164)  flags+0xa0=0x000B4103 shown=1
+[ 8220.322 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[778 508 787 523]  ext+0x80=[138 72 147 87] (9x15)  flags+0xa0=0x00034103 shown=1
+[ 8220.344 ms][tid 8eec] INPUT> event sink window+0x30 = 0x00590358  vtable GZWIND.DLL+0x2DB80 (base 0x02FD0000)
+[ 8220.359 ms][tid 8eec] INPUT> sink vt+0x64 (the mouse-event entry) = GZWIND.DLL+0x20818 (base 0x02FD0000)
+[ 8220.375 ms][tid 8eec] INPUT>   sink+0x28 = 0x0F634050 vtable GZWIND.DLL+0x2B190 (base 0x02FD0000)
+[ 8220.389 ms][tid 8eec] INPUT>     vt+0x104 captured widget = GZWIND.DLL+0x1F9B1 (base 0x02FD0000)
+[ 8220.408 ms][tid 8eec] INPUT>   sink+0x30 = 0x0F4C5938 vtable SIMUI.DLL+0xA4D64 (base 0x033E0000)
+[ 8220.495 ms][tid 8eec] INPUT>     vt+0x0e4 focused window HIT-TEST(x,y) = SIMUI.DLL+0x4EFCD (base 0x033E0000)
+[ 8220.521 ms][tid 8eec] INPUT>   sink+0x38 = 0x005A94A8 vtable GZWIND.DLL+0x2D764 (base 0x02FD0000)
+[ 8220.536 ms][tid 8eec] INPUT>     vt+0x08c FIND-WINDOW-AT-POINT(x,y) = GZWIND.DLL+0x1E748 (base 0x02FD0000)
+[10303.024 ms][tid 8eec] RZ   size change: client 2048x1081 vs render target 800x600
+[10303.145 ms][tid 8eec] RZ   ---- resize to 2048x1081 ---- iso=0x0DB17538 R=0x0F053500 B=0x00589F98 bridge=0x0E188B10
+[10303.186 ms][tid 8eec] RZ   extent BEFORE: (-848,2924,-48,3524) -> 800x600  dirtygrid=40x30 cell=20x20
+[10303.238 ms][tid 8eec] RZ   extent AFTER: (-848,2924,1200,4005) -> 2048x1081  dirtygrid=16x8 cell=128x135  (cell sizes plausible)
+[10303.269 ms][tid 8eec] RZ   render-target iso+0x74 0x0F053500 NO RECORDED CREATE (0 known) - FALLING BACK to field read-back [_ _ 7 16 0 0 0 0]. Field read-back is NOT proven equivalent: p3 measured 7 vs a recorded 4 on 2026-08-28.
+[10303.297 ms][tid 8eec] RZ   render-target iso+0x74 replay at 2048x1081 (+8 guard rows -> alloc h=1089, zoom-blit overrun fix)
+[10303.387 ms][tid 8eec] RZ   render-target iso+0x74 FUN_10009efb -> 1 | now +0x24=2048 +0x28=1089
+[10303.432 ms][tid 8eec] RZ   device-surface iso+0x4ec 0x00589F98 NO RECORDED CREATE (0 known) - FALLING BACK to field read-back [_ _ 7 16 0 0 3 0]. Field read-back is NOT proven equivalent: p3 measured 7 vs a recorded 4 on 2026-08-28.
+[10303.461 ms][tid 8eec] RZ   device-surface iso+0x4ec replay at 2048x1081 (+8 guard rows -> alloc h=1089, zoom-blit overrun fix)
+[10306.394 ms][tid 8eec] RZ   device-surface iso+0x4ec FUN_10009efb -> 1 | now +0x24=2048 +0x28=1089
+[10369.923 ms][tid 8eec] RZ   FUN_10018cdf -> 1
+[10370.006 ms][tid 8eec] RZ   [step 8a] FUN_1000c8f9(iso) - recompute object draw keys
+[10370.039 ms][tid 8eec] RZ   [step 8b] FUN_1000c9bd(iso, &sentinel, iso+0x54, 1) - clear grid + region pickup + re-register (the real object re-register, not the leaf FUN_1000fa36)
+[10370.351 ms][tid 8eec] RZ   [step 8b] FUN_1000c9bd returned
+[10374.961 ms][tid 8eec] RZ   [step 8c] grid re-show 256x256: 65536 occupied, 65536 re-shown, 0 bad (hide+show +0x38/+0x34 per cell)
+[10375.038 ms][tid 8eec] RZ   [step 9] present list iso+0x4d0: begin=0x0DAD1130 end=0x0DAD1150 (2 rect(s)) - erase then push {0,0,2048,1081}
+[10375.058 ms][tid 8eec] RZ   [step 9] after: begin=0x0DAD1130 end=0x0DAD1140 (1 rect(s))
+[10375.073 ms][tid 8eec] RZ   [step 10] device batch begin: dev=0x0DB1B7B0 +0x240
+[10375.088 ms][tid 8eec] RZ   [step 10] FUN_1000db86(iso) - whole-view repaint (iso vt+0x144)
+[10375.121 ms][tid 8eec] RZ   [step 10] device batch end +0x244 - presented; iso+0x32c=1
+[10375.144 ms][tid 8eec] RZ   [step 11] FUN_10018cdf(bridge, base layer 0x00588540, base rend 0x0F00F638, force=1) - SetDataView(0) core, restore active layer + forced refresh
+[10436.510 ms][tid 8eec] RZ   [step 11] returned - active layer bridge+0x28 = 0x00588540
+[10436.597 ms][tid 8eec] CLUSTER> cached bar native [0 544 599 600]
+[10436.617 ms][tid 8eec] CLUSTER> cached side native [704 0 800 442]
+[10436.633 ms][tid 8eec] CLUSTER> bottom bar [0 544 599 600] -> [1248 1025 1847 1081]
+[10436.655 ms][tid 8eec] HIT> bottom bar: rect +0x80..0x8c = [1248 1025 1847 1081] (599x56)  want origin (1248,1025)
+[10436.670 ms][tid 8eec] CLUSTER> side panel [704 0 800 442] -> [1952 481 2048 923]
+[10436.696 ms][tid 8eec] HIT> side panel: rect +0x80..0x8c = [1952 481 2048 923] (96x442)  want origin (1952,481)
+[10436.712 ms][tid 8eec] HIT> painter window: rect +0x80..0x8c = [1847 1001 1888 1089] (41x88)  want origin (1847,1001)
+[10436.728 ms][tid 8eec] HIT> painter window: rect +0x80..0x8c = [1888 917 2048 1081] (160x164)  want origin (1888,917)
+[10436.744 ms][tid 8eec] HIT> painter window: rect +0x80..0x8c = [1386 553 1395 568] (9x15)  want origin (1386,553)
+[10436.758 ms][tid 8eec] CLUSTER> translated 3 painter windows by (1248,481); HUD kept at native size
+[10436.773 ms][tid 8eec] CLUSTER>   [0] 0x0EF65A40 paint=[1847 1001 1888 1089] window=[1847 1001 1888 1089]
+[10436.842 ms][tid 8eec] CLUSTER>   [1] 0x0D334FE0 paint=[1952 481 2048 923] window=[1952 481 2048 923]
+[10436.861 ms][tid 8eec] CLUSTER>   [2] 0x0F052518 paint=[1888 917 2048 1081] window=[1888 917 2048 1081]
+[10436.876 ms][tid 8eec] CLUSTER>   [3] 0x0DAEE3C8 paint=[1386 553 1395 568] window=[3274 1470 3283 1485]   <<< PAINT/WINDOW DIVERGE
+[10436.891 ms][tid 8eec] PARENT> win hop 0: 0x00644108 [0 0 800 600] -> [0 0 2048 1081]
+[10436.905 ms][tid 8eec] PARENT> win hop 1: 0x005A94A8 [0 0 800 600] -> [0 0 2048 1081]
+[10436.919 ms][tid 8eec] PARENT> win hop 0: 0x00644108 [0 0 2048 1081] already covers 2048x1081
+[10436.933 ms][tid 8eec] PARENT> win hop 1: 0x005A94A8 [0 0 2048 1081] already covers 2048x1081
+[10436.947 ms][tid 8eec] PARENT> win hop 0: 0x00644108 [0 0 2048 1081] already covers 2048x1081
+[10436.961 ms][tid 8eec] PARENT> win hop 1: 0x005A94A8 [0 0 2048 1081] already covers 2048x1081
+[10436.976 ms][tid 8eec] PARENT> win hop 0: 0x0F052518 [1888 917 2048 1081] already covers 2048x1081
+[10436.990 ms][tid 8eec] PARENT> win hop 1: 0x00644108 [0 0 2048 1081] already covers 2048x1081
+[10437.004 ms][tid 8eec] PARENT> win hop 2: 0x005A94A8 [0 0 2048 1081] already covers 2048x1081
+[10437.029 ms][tid 8eec] PARENT> minimap hop 0: 0x00644108 [0 0 2048 1081] already covers 2048x1081
+[10437.046 ms][tid 8eec] PARENT> minimap hop 1: 0x005A94A8 [0 0 2048 1081] already covers 2048x1081
+[10437.060 ms][tid 8eec] RZ   ---- done (viewport: steps 1-11; step 12 HUD reflow not shipped, native) ----
+[10444.111 ms][tid 8eec] RZ   STOREDRECT win=0x005A6ED0 rect BEFORE {0,0,800,600} = 800x600
+[10444.175 ms][tid 8eec] RZ   STOREDRECT rect AFTER  {0,0,2048,1081} = 2048x1081 - right/bottom updated
+[10444.198 ms][tid 8eec] RZ   WM_SIZE 2048x1081 - poll will pick it up on the next frame
+[13053.913 ms][tid 8eec] INPUT> click raw=(1691,788) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[13053.980 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[13054.000 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[13054.017 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[13054.033 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[13291.885 ms][tid 8eec] INPUT> click raw=(1691,788) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[13291.955 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[13291.981 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[13292.003 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[13292.023 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[13684.535 ms][tid 8eec] INPUT> click raw=(1634,698) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[13684.601 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[13684.626 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[13684.648 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[13684.668 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[14211.407 ms][tid 8eec] INPUT> click raw=(1577,646) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[14211.463 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[14211.491 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[14211.513 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[14211.531 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[14773.317 ms][tid 8eec] INPUT> click raw=(1472,631) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[14773.389 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[14773.424 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[14773.449 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[14773.478 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[69688.881 ms][tid 8eec] INPUT> click raw=(696,255) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[69688.956 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[69688.984 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[69689.009 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[69689.033 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[70065.485 ms][tid 8eec] INPUT> click raw=(1486,378) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[70065.552 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[70065.572 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[70065.589 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[70065.605 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[71316.070 ms][tid 8eec] INPUT> click raw=(763,393) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[71316.135 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[71316.163 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[71316.188 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[71316.210 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[71922.063 ms][tid 8eec] INPUT> click raw=(531,341) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[71922.130 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[71922.219 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[71922.250 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[71922.283 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[72916.503 ms][tid 8eec] INPUT> click raw=(1262,456) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[72916.563 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[72916.586 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[72916.612 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[72916.631 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[88933.960 ms][tid 8eec] INPUT> click raw=(2025,494) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[88934.032 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[88934.065 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[88934.095 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[88934.122 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[89327.829 ms][tid 8eec] INPUT> click raw=(2025,494) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[89327.884 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[89327.903 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[89327.918 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[89327.934 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[89327.949 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074103 shown=1
+[89720.099 ms][tid 8eec] INPUT> click raw=(2007,527) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[89720.177 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[89720.197 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[89720.214 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[89720.229 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[89720.245 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[90225.146 ms][tid 8eec] INPUT> click raw=(1971,514) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[90225.248 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[90225.272 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[90225.289 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[90225.306 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[90225.321 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0   <<< CLICK IS INSIDE THIS WINDOW RECT
+[90225.337 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[90477.631 ms][tid 8eec] INPUT> click raw=(1971,514) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[90477.693 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[90477.713 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[90477.730 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[90477.745 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[90477.761 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0   <<< CLICK IS INSIDE THIS WINDOW RECT
+[90477.776 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[90844.389 ms][tid 8eec] INPUT> click raw=(2024,550) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[90844.445 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[90844.465 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[90844.481 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[90844.497 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[90844.513 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[90844.528 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074103 shown=1
+[91062.106 ms][tid 8eec] INPUT> click raw=(2021,573) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[91062.168 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[91062.190 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[91062.207 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[91062.223 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[91062.245 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[91062.263 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[91226.813 ms][tid 8eec] INPUT> click raw=(2018,588) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[91226.870 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[91226.890 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[91226.907 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[91226.922 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[91226.938 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[91226.953 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[91226.968 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074103 shown=1
+[91404.981 ms][tid 8eec] INPUT> click raw=(2009,610) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[91405.056 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[91405.090 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[91405.125 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[91405.149 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[91405.173 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[91405.194 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[91405.216 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074103 shown=1
+[91578.953 ms][tid 8eec] INPUT> click raw=(2007,623) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[91579.019 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[91579.044 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[91579.065 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[91579.086 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[91579.106 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[91579.126 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[91579.143 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[91579.167 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074103 shown=1
+[91737.305 ms][tid 8eec] INPUT> click raw=(2007,637) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[91737.356 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[91737.376 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[91737.393 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[91737.409 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[91737.424 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[91737.439 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[91737.454 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[91737.469 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[92068.519 ms][tid 8eec] INPUT> click raw=(2000,740) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[92068.576 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[92068.596 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[92068.612 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[92068.627 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[92068.643 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[92068.658 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[92068.673 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[92068.688 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[92068.703 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074103 shown=1
+[92283.451 ms][tid 8eec] INPUT> click raw=(2011,781) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[92283.509 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[92283.528 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[92283.545 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[92283.561 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[92283.576 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[92283.595 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[92283.612 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[92283.627 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[92283.642 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074103 shown=1
+[92450.844 ms][tid 8eec] INPUT> click raw=(2013,787) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[92450.911 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[92450.936 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[92450.958 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[92450.974 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[92450.990 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[92451.006 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[92451.021 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[92451.036 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[92451.051 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[93222.239 ms][tid 8eec] INPUT> click raw=(2006,717) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[93222.295 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[93222.315 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[93222.331 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[93222.347 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[93222.362 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[93222.389 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[93222.404 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[93222.419 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[93222.434 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[94052.606 ms][tid 8eec] INPUT> click raw=(2006,716) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[94052.672 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[94052.699 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[94052.718 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[94052.734 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[94052.750 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[94052.765 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[94052.780 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[94052.795 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[94052.810 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[94052.826 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074103 shown=1
+[94558.462 ms][tid 8eec] INPUT> click raw=(2014,786) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[94558.522 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[94558.721 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[94558.742 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[94558.758 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[94558.774 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[94558.789 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[94558.810 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[94558.826 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[94558.841 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[94558.856 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[94963.996 ms][tid 8eec] INPUT> click raw=(2014,812) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[94964.047 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[94964.068 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[94964.085 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[94964.102 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[94964.117 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[94964.136 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[94964.153 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[94964.169 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[94964.184 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[94964.199 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[95284.665 ms][tid 8eec] INPUT> click raw=(2014,813) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[95284.723 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[95284.745 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[95284.762 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[95284.777 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[95284.793 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[95284.808 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[95284.823 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[95284.839 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[95284.854 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[95284.869 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[95284.884 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074103 shown=1
+[95658.468 ms][tid 8eec] INPUT> click raw=(2014,813) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[95658.537 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[95658.561 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[95658.578 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[95658.595 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[95658.611 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[95658.626 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[95658.642 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[95658.657 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[95658.677 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[95658.694 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[95658.709 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[95970.244 ms][tid 8eec] INPUT> click raw=(2011,854) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[95970.298 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[95970.318 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[95970.335 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[95970.351 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[95970.367 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[95970.382 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[95970.398 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[95970.413 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[95970.428 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[95970.443 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[95970.458 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074103 shown=1
+[96490.647 ms][tid 8eec] INPUT> click raw=(2011,852) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[96490.705 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[96490.726 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[96490.743 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[96490.759 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[96490.774 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[96490.790 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[96490.805 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[96490.820 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[96490.835 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[96490.850 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[96490.869 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[96490.886 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074103 shown=1
+[97555.551 ms][tid 8eec] INPUT> click raw=(2001,1031) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[97555.638 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[97555.671 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[97555.694 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[97555.715 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[97555.735 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[97555.756 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[97555.783 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[97555.826 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[97555.857 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[97555.884 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[97555.902 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[97555.917 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[97705.985 ms][tid 8eec] INPUT> click raw=(1996,1046) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[97706.047 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[97706.068 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[97706.085 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[97706.101 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[3274 1470 3283 1485]  ext+0x80=[1386 553 1395 568] (9x15)  flags+0xa0=0x00034103 shown=1
+[97706.117 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[97706.132 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[97706.147 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[97706.163 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[97706.178 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[97706.193 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[97706.213 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[97706.230 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98322.848 ms][tid 8eec] INPUT> click raw=(1997,1045) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[98322.908 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[98322.929 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[98322.946 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[98322.962 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[1962 923 1971 938]  ext+0x80=[74 6 83 21] (9x15)  flags+0xa0=0x00034103 shown=1
+[98322.978 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98323.007 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98323.024 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98323.040 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98323.055 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98323.070 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98323.085 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98323.100 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98576.472 ms][tid 8eec] INPUT> click raw=(1997,1045) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[98576.528 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[98576.548 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[98576.565 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[98576.581 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[1899 989 1908 1004]  ext+0x80=[11 72 20 87] (9x15)  flags+0xa0=0x00034103 shown=1
+[98576.597 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98576.612 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98576.627 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98576.641 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98576.656 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98576.671 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98576.692 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98576.710 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98939.439 ms][tid 8eec] INPUT> click raw=(1997,1045) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[98939.510 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[98939.540 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[98939.568 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[98939.595 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[1962 1053 1971 1068]  ext+0x80=[74 136 83 151] (9x15)  flags+0xa0=0x00034103 shown=1
+[98939.633 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98939.657 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98939.679 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98939.705 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98939.722 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98939.738 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98939.753 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[98939.768 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[99624.670 ms][tid 8eec] INPUT> click raw=(1880,1048) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[99624.756 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[99624.786 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[99624.812 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[99624.838 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[2026 989 2035 1004]  ext+0x80=[138 72 147 87] (9x15)  flags+0xa0=0x00034103 shown=1
+[99624.863 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[99624.888 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[99624.913 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[99624.935 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[99624.959 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[99624.982 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[99625.011 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[99625.037 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[99869.782 ms][tid 8eec] INPUT> click raw=(1874,1048) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[99869.835 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[99869.856 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[99869.874 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[99869.890 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[2026 989 2035 1004]  ext+0x80=[138 72 147 87] (9x15)  flags+0xa0=0x00034103 shown=1
+[99869.905 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[99869.921 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[99869.936 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[99869.952 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[99869.967 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[99869.983 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[99869.998 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[99870.013 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[100030.344 ms][tid 8eec] INPUT> click raw=(1871,1049) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[100030.418 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1   <<< CLICK IS INSIDE THIS WINDOW RECT
+[100030.445 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[100030.466 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[100030.487 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[2026 989 2035 1004]  ext+0x80=[138 72 147 87] (9x15)  flags+0xa0=0x00034103 shown=1
+[100030.508 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[100030.528 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[100030.548 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[100030.569 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[100030.597 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[100030.630 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[100030.773 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[100030.806 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[100840.939 ms][tid 8eec] INPUT> click raw=(1773,1034) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[100841.003 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[100841.030 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[100841.054 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[100841.077 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[2026 989 2035 1004]  ext+0x80=[138 72 147 87] (9x15)  flags+0xa0=0x00034103 shown=1
+[100841.099 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[100841.121 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[100841.143 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[100841.165 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[100841.188 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[100841.210 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[100841.232 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[100841.254 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[101387.743 ms][tid 8eec] INPUT> click raw=(1752,1041) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[101387.797 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[101387.816 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[101387.832 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[101387.848 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[2026 989 2035 1004]  ext+0x80=[138 72 147 87] (9x15)  flags+0xa0=0x00034103 shown=1
+[101387.863 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[101387.878 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[101387.893 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[101387.908 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[101387.923 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[101387.938 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[101387.953 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[101388.006 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102080.905 ms][tid 8eec] INPUT> click raw=(1691,1039) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[102080.966 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[102080.986 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[102081.003 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[102081.019 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[2026 989 2035 1004]  ext+0x80=[138 72 147 87] (9x15)  flags+0xa0=0x00034103 shown=1
+[102081.034 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102081.050 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102081.065 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102081.080 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102081.095 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102081.109 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102081.124 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102081.139 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102242.244 ms][tid 8eec] INPUT> click raw=(1658,1049) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[102242.305 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[102242.330 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[102242.352 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[102242.372 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[2026 989 2035 1004]  ext+0x80=[138 72 147 87] (9x15)  flags+0xa0=0x00034103 shown=1
+[102242.393 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102242.413 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102242.433 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102242.454 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102242.473 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102242.494 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102242.513 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102242.582 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102463.887 ms][tid 8eec] INPUT> click raw=(1658,1049) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[102463.956 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[102463.982 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[102464.004 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[102464.026 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[2026 989 2035 1004]  ext+0x80=[138 72 147 87] (9x15)  flags+0xa0=0x00034103 shown=1
+[102464.048 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102464.069 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102464.090 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102464.111 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102464.132 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102464.154 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102464.184 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102464.208 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102685.730 ms][tid 8eec] INPUT> click raw=(1628,1050) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[102685.785 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[102685.805 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[102685.821 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[102685.837 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[2026 989 2035 1004]  ext+0x80=[138 72 147 87] (9x15)  flags+0xa0=0x00034103 shown=1
+[102685.852 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102685.867 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102685.882 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102685.897 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102685.911 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102685.926 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102685.941 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102685.955 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102842.601 ms][tid 8eec] INPUT> click raw=(1620,1053) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[102842.659 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[102842.680 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[102842.697 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[102842.712 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[2026 989 2035 1004]  ext+0x80=[138 72 147 87] (9x15)  flags+0xa0=0x00034103 shown=1
+[102842.728 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102842.743 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102842.758 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102842.773 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102842.788 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102842.803 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102842.818 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[102842.833 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103065.605 ms][tid 8eec] INPUT> click raw=(1584,1055) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[103065.669 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[103065.689 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[103065.706 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[103065.722 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[2026 989 2035 1004]  ext+0x80=[138 72 147 87] (9x15)  flags+0xa0=0x00034103 shown=1
+[103065.738 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103065.754 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103065.769 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103065.785 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103065.800 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103065.815 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103065.830 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103065.845 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103528.475 ms][tid 8eec] INPUT> click raw=(1706,1049) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[103528.537 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[103528.558 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[103528.575 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[103528.590 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[2026 989 2035 1004]  ext+0x80=[138 72 147 87] (9x15)  flags+0xa0=0x00034103 shown=1
+[103528.606 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103528.622 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103528.637 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103528.653 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103528.668 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103528.683 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103528.700 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103528.742 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103750.666 ms][tid 8eec] INPUT> click raw=(1705,1049) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[103750.729 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[103750.749 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[103750.766 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[103750.782 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[2026 989 2035 1004]  ext+0x80=[138 72 147 87] (9x15)  flags+0xa0=0x00034103 shown=1
+[103750.797 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103750.813 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103750.828 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103750.843 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103750.859 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103750.874 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103750.889 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103750.904 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103986.022 ms][tid 8eec] INPUT> click raw=(1694,1037) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[103986.169 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[103986.213 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[103986.242 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[103986.267 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[2026 989 2035 1004]  ext+0x80=[138 72 147 87] (9x15)  flags+0xa0=0x00034103 shown=1
+[103986.292 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103986.314 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103986.368 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103986.402 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103986.428 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103986.453 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103986.477 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[103986.500 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104287.138 ms][tid 8eec] INPUT> click raw=(1691,1032) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[104287.192 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[104287.212 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[104287.228 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[104287.244 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[2026 989 2035 1004]  ext+0x80=[138 72 147 87] (9x15)  flags+0xa0=0x00034103 shown=1
+[104287.260 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104287.276 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104287.291 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104287.306 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104287.321 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104287.336 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104287.351 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104287.367 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104822.836 ms][tid 8eec] INPUT> click raw=(1445,1051) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[104822.969 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[104822.996 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[104823.014 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[104823.030 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[2026 989 2035 1004]  ext+0x80=[138 72 147 87] (9x15)  flags+0xa0=0x00034103 shown=1
+[104823.046 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104823.061 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104823.076 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104823.092 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104823.107 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104823.122 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104823.137 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104823.152 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104976.487 ms][tid 8eec] INPUT> click raw=(1445,1051) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[104976.567 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[104976.608 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[104976.642 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[104976.669 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[2026 989 2035 1004]  ext+0x80=[138 72 147 87] (9x15)  flags+0xa0=0x00034103 shown=1
+[104976.693 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104976.715 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104976.742 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104976.770 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104976.798 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104976.821 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104976.842 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[104976.864 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[105207.317 ms][tid 8eec] INPUT> click raw=(1350,1058) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[105207.379 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[105207.407 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[105207.426 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[105207.442 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[2026 989 2035 1004]  ext+0x80=[138 72 147 87] (9x15)  flags+0xa0=0x00034103 shown=1
+[105207.458 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[105207.473 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[105207.488 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[105207.503 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[105207.518 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[105207.533 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[105207.548 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[105207.563 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[105435.467 ms][tid 8eec] INPUT> click raw=(1339,1055) clamp bounds=2048x1081 (stored rect [0 0 2048 1081])
+[105435.529 ms][tid 8eec] WINSTATE> [0] 0EF65A40 vt=0348B274  rect+0x14=[1847 1001 1888 1089]  ext+0x80=[1847 1001 1888 1089] (41x88)  flags+0xa0=0x00034103 shown=1
+[105435.555 ms][tid 8eec] WINSTATE> [1] 0D334FE0 vt=03489834  rect+0x14=[1952 481 2048 923]  ext+0x80=[1952 481 2048 923] (96x442)  flags+0xa0=0x00014103 shown=1
+[105435.573 ms][tid 8eec] WINSTATE> [2] 0F052518 vt=0348A180  rect+0x14=[1888 917 2048 1081]  ext+0x80=[1888 917 2048 1081] (160x164)  flags+0xa0=0x000B4103 shown=1
+[105435.594 ms][tid 8eec] WINSTATE> [3] 0DAEE3C8 vt=0348A378  rect+0x14=[2026 989 2035 1004]  ext+0x80=[138 72 147 87] (9x15)  flags+0xa0=0x00034103 shown=1
+[105435.610 ms][tid 8eec] WINSTATE> [4] 0DBC3578 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[105435.625 ms][tid 8eec] WINSTATE> [5] 0DBC3258 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[105435.641 ms][tid 8eec] WINSTATE> [6] 0DBC33E8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[105435.655 ms][tid 8eec] WINSTATE> [7] 0DBC28F8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[105435.671 ms][tid 8eec] WINSTATE> [8] 0DBC2B50 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[105435.686 ms][tid 8eec] WINSTATE> [9] 0DBC2DA8 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[105435.700 ms][tid 8eec] WINSTATE> [10] 0DBC2CE0 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[105435.715 ms][tid 8eec] WINSTATE> [11] 0DBC2C18 vt=03489A80  rect+0x14=[1952 481 1988 923]  ext+0x80=[0 0 36 442] (36x442)  flags+0xa0=0x00074102 shown=0
+[202240.805 ms][tid 8eec] RZ   STOREDRECT win=0x005A6ED0 rect BEFORE {0,0,2048,1081} = 2048x1081
+[202240.896 ms][tid 8eec] RZ   STOREDRECT rect AFTER  {0,0,2048,1081} = 2048x1081 - right/bottom updated
+[202240.923 ms][tid 8eec] RZ   WM_SIZE 2048x1081 - poll will pick it up on the next frame
+[225544.995 ms][tid 8eec] RZ   STOREDRECT win=0x005A6ED0 rect BEFORE {0,0,2048,1081} = 2048x1081
+[225545.073 ms][tid 8eec] RZ   STOREDRECT rect AFTER  {0,0,2048,1081} = 2048x1081 - right/bottom updated
+[225545.106 ms][tid 8eec] RZ   WM_SIZE 2048x1081 - poll will pick it up on the next frame

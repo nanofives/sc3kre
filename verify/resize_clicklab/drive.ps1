@@ -11,6 +11,7 @@ param(
     [string]   $OutDir,
     [int]      $Settle = 10,
     [switch]   $KeepOpen,
+    [switch]   $NoClick,        # hand-test mode: set up, shoot the baseline, post NO input
     [string[]] $Point = @('btn_b:1747:1045', 'btn_a:1815:1055', 'bar_bg:1547:1053'),
     [string[]] $EnvVars = @('SC3RESIZE_CLUSTER=1')
 )
@@ -107,7 +108,7 @@ Shot 's0_noise_a'
 Start-Sleep -Milliseconds 1400
 Shot 's0_noise_b'
 
-foreach ($spec in $Point) {
+foreach ($spec in ($(if ($NoClick) { @() } else { $Point }))) {
     $parts = $spec.Split(':')
     $name = $parts[0]; $x = [int]$parts[1]; $y = [int]$parts[2]
     Write-Host "[*] click $name ($x,$y)"

@@ -179,6 +179,24 @@ reader) or an **anchored screen→world map** so drags can target coordinates. (
 Stride/corner measurement is deferred as cosmetic (~8 runs).
 
 ### 2. Resizable window / arbitrary resolution — ⭐ CONSOLIDATED HANDOFF: `re/analysis/RESIZABLE_WINDOW.md`
+> ⭐⭐⭐ **THE RELOCATED HUD IS CLICKABLE — owner hand-test, 2026-09-01, cluster mode at 2048x1081.**
+> Tool buttons change the tool, panels open, and panels drag anywhere in the client area. That closes
+> the arc `R-REACHED` → `P-PASS` → `B-CONSUMED` → **owner-confirmed action**, and the ancestor-rect
+> widening (`PARENT` fix) is what unblocked it. `verify/resize_clicklab/RESULTS.md`.
+>
+> **Two residual defects, both from the same hand-test, both new to this board:**
+> (a) **hover/tooltip labels still paint in the old 800x600 region** (the `<<< PAINT/WINDOW DIVERGE`
+> window, `rect+0x14=[3274 1470 3283 1485]` vs `ext+0x80=[1386 553 1395 568]`, reproduces every run);
+> (b) **the map cannot be clicked** — the mod records and widens HUD windows only, and **no city-view
+> window appears in its census**, so nothing has ever widened the viewport's hit rect. Next target,
+> and it is the same class of fix that just worked.
+>
+> ⚠️ **Method, third instance: external pixel capture of SC3U is nondiagnostic.** A GDI
+> `CopyFromScreen` grab of this DirectDraw window **does not contain the HUD layer**; five captures
+> across three runs read as "the cluster HUD is not on screen" and the owner refuted it by looking.
+> Same class as the `resize_census` surface-fill proxy and the retired `PrintWindow` shot. Ask the
+> owner or read inside the process; do not settle a visual question with a screen grab.
+
 > ⭐⭐⭐ **HUD BAR SHIPS ADAPTIVE, AND THE FPS COST IS ROOT-CAUSED (2026-09-01, 20 runs,
 > `verify/resize_hudlab/`).** The bar now docks to the bottom, spans the full width and carries its
 > art (`SC3RESIZE_HUDNATIVE=1` opts out). The FPS cost is **`SIMUI FUN_10026841`, a tile loop** that
