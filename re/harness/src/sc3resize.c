@@ -832,6 +832,9 @@ static LONG   g_hud_dy = 8;
  * the child move in rz_side_children_bottom, so those two can never drift apart - keeping them in
  * lockstep is the whole reason it is a single global. */
 static LONG   g_side_dy;
+static int    g_dump_pending;        /* set by the trigger, consumed at the present */
+static void  *g_dump_iso;            /* iso captured by the poll for the dumper */
+static char   g_dumpdir[MAX_PATH];   /* SC3RESIZE_DUMPDIR: where the surface dumps go */
 static int    g_srcrect = 1;      /* SC3RESIZE_SRCRECT=0 disables the tile-step FPS fix (A/B) */
 static int    g_side_poll;         /* SC3RESIZE_SIDEPOLL: re-enable the periodic popup correction */
 static LONG   g_side_dy_applied;   /* the delta actually used, captured once - see rz_side_children_bottom */
@@ -872,6 +875,20 @@ static void rz_anchor_all(void) {
         r = (LONG *)((DWORD)w + 0x90);
         r[0] = n[0] + ax; r[1] = n[1] + ay;
         r[2] = n[2] + ax; r[3] = n[3] + ay;
+        /* AND THE AUTHORITATIVE LOCAL RECT, or the cascade undoes this.
+         *
+         * +0x90 is DERIVED (FUN_1006d8b4 rebuilds it from the local rect), so writing it alone
+         * survives only until something cascades - and this mod now cascades deliberately on every
+         * resize. Caught by dumping the composited frame: the RCI indicator was sitting at its
+         * NATIVE [599 520 640 608] in the middle of the city view, because the cascade had faithfully
+         * recomputed its blit dest from a local rect nobody had moved. Same defect I had already
+         * fixed for the minimap and missed here. */
+        {   LONG *lr = (LONG *)((DWORD)w + 0x80);
+            if (!IsBadWritePtr(lr, 0x10) && lr[2] - lr[0] > 0 && lr[3] - lr[1] > 0) {
+                lr[0] = n[0] + ax; lr[1] = n[1] + ay;
+                lr[2] = n[2] + ax; lr[3] = n[3] + ay;
+            }
+        }
         moved++;
     }
     logf("ANCHOR> re-anchored %ld of %ld windows (dx=%ld dy=%ld)", moved, g_wins_n, dx, dy);
@@ -1959,6 +1976,10 @@ static RZ_BLT  g_orig_blt;   /* g_blt_slot / g_ddblt_* are declared up with the 
  * rectangle area plus the largest rect seen. Cheap: a 32-entry linear scan at ~2600 calls/s. */
 /* (aggregate globals are declared up with the BLT block above) */
 
+/* fwd: the surface dumper. Declared here because the Blt hook below is its first caller -
+ * the capture rides the final present so the frame is fully composited. */
+static void rz_dump_all(void *iso);
+
 static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, void *fx) {
     LARGE_INTEGER a, b;
     HRESULT hr;
@@ -1969,6 +1990,20 @@ static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWO
     d = b.QuadPart - a.QuadPart;
     g_ddblt_time += d;
     g_ddblt_calls++;
+    /* THE FULL-FRAME CAPTURE POINT. The final present blits the whole composited frame to the
+       window (measured: dest [0 23 2048 1104] via GZGraphicD+0x16C3D, i.e. client-sized and offset
+       by the title bar). Capturing right after it guarantees the HUD is already composited. */
+    if (g_dump_pending && dr && !IsBadReadPtr(dr, sizeof(RECT))) {
+        RECT cr;
+        if (g_hwnd && GetClientRect(g_hwnd, &cr) &&
+            dr->right - dr->left >= cr.right - cr.left &&
+            dr->bottom - dr->top >= cr.bottom - cr.top) {
+            g_dump_pending = 0;
+            logf("DUMP> present seen (dest [%ld %ld %ld %ld]) - capturing the composited frame",
+                 dr->left, dr->top, dr->right, dr->bottom);
+            rz_dump_all(g_dump_iso);
+        }
+    }
     {   /* time by flags */
         DWORD i;
         for (i = 0; i < BFL_BUCKETS; i++) {
@@ -2211,7 +2246,8 @@ static void rz_hud_setrect_w(DWORD wantW);  /* fwd: dock the bar, spanning to wa
 static void rz_side_extend(void);           /* fwd: dock+extend the side panel, defined below */
 static int  g_sideon;                       /* SC3RESIZE_SIDE: phase B extends the SIDE PANEL only */
 static void rz_hud_fit_surface(DWORD liveW);/* fwd: the bar background surface refit, defined below */
-static void rz_patch_ddblt(void);           /* fwd: install the ddraw Blt timer */
+static void rz_patch_ddblt(void);
+           /* fwd: install the ddraw Blt timer */
 
 /* WIDTH SWEEP (run 13). The A/B design answers "does a full-width bar cost more". It cannot say
  * HOW the cost grows with width, and that shape is diagnostic: a THRESHOLD implies a resource limit
@@ -3685,6 +3721,140 @@ static void rz_side_extend(void) {
 
 /* The per-frame poll. Compares the live client size against the render target's size and only
  * acts on a genuine mismatch - so a stray frame cannot churn the render target. */
+
+/* ============================ ON-DEMAND SURFACE DUMPER ============================
+ *
+ * Why this exists: this session burned hours diagnosing HUD paint defects blind. External screen
+ * capture CANNOT see the HUD layer (measured: five GDI captures read as "the HUD is not on screen"
+ * while the owner was looking straight at it), so every visual question had to go through a human
+ * describing pixels. Four consecutive wrong models came out of that loop.
+ *
+ * The engine's composited frame is reachable in-process: `iso+0x4ec` is the blit destination the
+ * DirectDraw present reads, and it contains the HUD. `iso+0x74` is the iso render target (city
+ * only). Both are raster objects with the same shape:
+ *     obj+0x24 width, obj+0x28 height, obj+0x44 -> sub, sub+0xf0 bits, sub+0xf4 pitch
+ * Pixels are read RAW from sub+0xf0/+0xf4 and NEVER through the out-of-band lock: calling `vf1c`
+ * here tore the backing down and destroyed the thing being measured (2026-08-25).
+ *
+ * Trigger: drop any file named DUMP next to the log (or set SC3RESIZE_DUMPDIR). The poll notices
+ * it, deletes it, and writes the BMPs - so the owner can put the game in the exact state that
+ * misbehaves (a submenu open, a tool clicked) and the capture is of THAT frame.
+ * 16bpp RGB565 in, 24bpp BMP out, top-down via a negative height. */
+static int rz_bmp_write(const char *path, const BYTE *bits, LONG w, LONG h, LONG pitch) {
+    HANDLE f;
+    DWORD wrote, rowbytes = (DWORD)(w * 3), pad = (4 - (rowbytes & 3)) & 3;
+    BYTE hdr[54];
+    BYTE *row;
+    LONG y, x;
+    DWORD fsz = 54 + (rowbytes + pad) * (DWORD)h;
+    if (!bits || w <= 0 || h <= 0 || pitch <= 0) return 0;
+    f = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (f == INVALID_HANDLE_VALUE) return 0;
+    memset(hdr, 0, sizeof(hdr));
+    hdr[0] = 'B'; hdr[1] = 'M';
+    *(DWORD *)(hdr + 2) = fsz;
+    *(DWORD *)(hdr + 10) = 54;
+    *(DWORD *)(hdr + 14) = 40;
+    *(LONG  *)(hdr + 18) = w;
+    *(LONG  *)(hdr + 22) = -h;            /* negative = top-down rows */
+    *(WORD  *)(hdr + 26) = 1;
+    *(WORD  *)(hdr + 28) = 24;
+    *(DWORD *)(hdr + 34) = (rowbytes + pad) * (DWORD)h;
+    WriteFile(f, hdr, 54, &wrote, NULL);
+    row = (BYTE *)HeapAlloc(GetProcessHeap(), 0, rowbytes + 4);
+    if (!row) { CloseHandle(f); return 0; }
+    for (y = 0; y < h; y++) {
+        const WORD *src = (const WORD *)(bits + (DWORD)y * (DWORD)pitch);
+        if (IsBadReadPtr(src, (UINT)(w * 2))) break;
+        for (x = 0; x < w; x++) {
+            WORD v = src[x];                       /* RGB565 */
+            row[x * 3 + 0] = (BYTE)(( v        & 0x1f) << 3);   /* B */
+            row[x * 3 + 1] = (BYTE)(((v >> 5)  & 0x3f) << 2);   /* G */
+            row[x * 3 + 2] = (BYTE)(((v >> 11) & 0x1f) << 3);   /* R */
+        }
+        memset(row + rowbytes, 0, pad);
+        WriteFile(f, row, rowbytes + pad, &wrote, NULL);
+    }
+    HeapFree(GetProcessHeap(), 0, row);
+    CloseHandle(f);
+    return 1;
+}
+
+static void rz_dump_raster(void *obj, const char *tag, int seq) {
+    char path[MAX_PATH];
+    DWORD sub, bits, pitch, w, h;
+    if (!obj || IsBadReadPtr(obj, 0x48)) { logf("DUMP> %s: unreadable object", tag); return; }
+    w = ((DWORD *)obj)[0x24 / 4]; h = ((DWORD *)obj)[0x28 / 4];
+    sub = ((DWORD *)obj)[0x44 / 4];
+    if (!sub || IsBadReadPtr((void *)sub, 0xf8)) { logf("DUMP> %s: no sub-object", tag); return; }
+    bits = ((DWORD *)sub)[0xf0 / 4]; pitch = ((DWORD *)sub)[0xf4 / 4];
+    if (!bits || !pitch) {
+        logf("DUMP> %s: %lux%lu but bits=0x%08lX pitch=%lu - nothing mapped", tag, w, h, bits, pitch);
+        return;
+    }
+    _snprintf(path, sizeof(path), "%s\\dump%02d_%s_%lux%lu.bmp", g_dumpdir, seq, tag, w, h);
+    if (rz_bmp_write(path, (const BYTE *)bits, (LONG)w, (LONG)h, (LONG)pitch))
+        logf("DUMP> %s -> %s (%lux%lu pitch %lu)", tag, path, w, h, pitch);
+    else
+        logf("DUMP> %s: BMP write FAILED (%lux%lu pitch %lu)", tag, w, h, pitch);
+}
+
+/* Find a window by its vftable, anywhere in the tree from the event sink's root. */
+static void *rz_find_by_vt(void *w, DWORD wantvt, int depth, int *budget) {
+    void *head, *n;
+    int guard = 0;
+    if (!w || depth > 8 || *budget <= 0 || IsBadReadPtr(w, 0x40)) return NULL;
+    head = *(void **)((DWORD)w + 0x34);
+    if (!head || IsBadReadPtr(head, 4)) return NULL;
+    n = *(void **)head;
+    while (n && n != head && guard++ < 400 && *budget > 0) {
+        void *cw;
+        if (IsBadReadPtr(n, 0x0c)) break;
+        cw = *(void **)((DWORD)n + 8);
+        (*budget)--;
+        if (cw && !IsBadReadPtr(cw, 4)) {
+            if (*(DWORD *)cw == wantvt) return cw;
+            {   void *hit = rz_find_by_vt(cw, wantvt, depth + 1, budget);
+                if (hit) return hit;   }
+        }
+        n = *(void **)n;
+    }
+    return NULL;
+}
+
+static void rz_dump_all(void *iso) {
+    static int seq;
+    DWORD gz = (DWORD)GetModuleHandleA("GZGraphicD.dll");
+    DWORD sui = (DWORD)GetModuleHandleA("SIMUI.DLL");
+    seq++;
+    logf("DUMP> ---- capture %02d ----", seq);
+    if (iso && !IsBadReadPtr(iso, 0x4f0)) {
+        rz_dump_raster((void *)((DWORD *)iso)[0x4ec / 4], "frame_with_hud", seq);
+        rz_dump_raster((void *)((DWORD *)iso)[0x74 / 4],  "iso_target", seq);
+    }
+    if (gz && sui && !IsBadReadPtr((void *)(gz + 0x6cdb8), 4)) {
+        DWORD *win = *(DWORD **)(gz + 0x6cdb8);
+        DWORD *sink = (win && !IsBadReadPtr(win, 0x34)) ? (DWORD *)win[0x30 / 4] : NULL;
+        void *root = (sink && !IsBadReadPtr(sink, 0x3c)) ? (void *)sink[0x38 / 4] : NULL;
+        if (root) {
+            int budget = 3000;
+            void *panel = rz_find_by_vt(root, sui + 0xa9834, 0, &budget);
+            if (panel && !IsBadReadPtr(panel, 0xd0)) {
+                rz_dump_raster((void *)((DWORD *)panel)[0x58 / 4], "panel_composite", seq);
+                rz_dump_raster((void *)((DWORD *)panel)[0xc0 / 4], "panel_bg_art", seq);
+            } else {
+                logf("DUMP> side panel not found");
+            }
+            budget = 3000;
+            {   void *bar = g_hud_top;
+                if (bar && !IsBadReadPtr(bar, 0xd0))
+                    rz_dump_raster((void *)((DWORD *)bar)[0x58 / 4], "bar_composite", seq);
+            }
+        }
+    }
+    logf("DUMP> ---- capture %02d done ----", seq);
+}
+
 static void rz_poll(void) {
     void *iso;
     DWORD *v, R, w, ht;
@@ -3722,6 +3892,31 @@ static void rz_poll(void) {
            popups land correctly with no timer at all, and leaving the timer on would make the two
            indistinguishable. SC3RESIZE_SIDEPOLL=1 turns it back on. */
         if (g_side_poll && now >= rz_side_next_ms) { rz_side_next_ms = now + 80; rz_side_children_bottom(); }
+    }
+
+    {   /* DUMP TRIGGER: a file named DUMP in the dump dir. Deleted once seen, so the owner can
+           set the game up, drop the file, and get a capture of exactly that frame. */
+        static DWORD next_check;
+        DWORD now = GetTickCount();
+        if (now >= next_check) {
+            char trig[MAX_PATH];
+            next_check = now + 200;
+            _snprintf(trig, sizeof(trig), "%s\\DUMP", g_dumpdir);
+            if (GetFileAttributesA(trig) != INVALID_FILE_ATTRIBUTES) {
+                DeleteFileA(trig);
+                /* Do NOT dump here. The poll runs mid-frame, so a capture taken from it can land
+                   between the city blit and the HUD blits - measured: a dump with NO HUD at all
+                   (no bar, no panel, no minimap), which looks exactly like a catastrophic defect
+                   and is purely an artefact of sampling a half-composited frame. Instead arm a
+                   flag and let the Blt hook capture immediately after the FINAL PRESENT, when the
+                   frame is whole. Sampling a partial composite is the same nondiagnostic-proxy
+                   mistake this project has already paid for three times. */
+                g_dump_pending = 1;
+                g_dump_iso = iso;
+                rz_patch_ddblt();      /* the capture rides the Blt hook */
+                logf("DUMP> armed - will capture right after the next full-frame present");
+            }
+        }
     }
 
     v = (DWORD *)iso;
@@ -4570,6 +4765,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_SIDEDY", v, sizeof(v))) g_side_dy = (LONG)atoi(v);
           g_side_poll = GetEnvironmentVariableA("SC3RESIZE_SIDEPOLL", v, sizeof(v)) && atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_SRCRECT", v, sizeof(v))) g_srcrect = atoi(v);
+          if (!GetEnvironmentVariableA("SC3RESIZE_DUMPDIR", g_dumpdir, sizeof(g_dumpdir)))
+              lstrcpynA(g_dumpdir, ".", sizeof(g_dumpdir));
           g_noparentfix = GetEnvironmentVariableA("SC3RESIZE_NOPARENTFIX", v, sizeof(v)) && atoi(v);
           /* HUD dock+span ships ON. SC3RESIZE_HUDNATIVE=1 is the opt-out for anyone who prefers the
              native bar - the full-width bar carries a measured GPU-sync FPS cost that is NOT yet
