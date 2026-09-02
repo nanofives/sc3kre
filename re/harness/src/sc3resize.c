@@ -772,6 +772,8 @@ static int    g_minion;        /* SC3RESIZE_MINI: dock the minimap to the bottom
  *
  * ⚠️ Skips windows covering most of the native screen (the main view is not a HUD element to move),
  * and skips the bar and side panel, which have their own proper SetRect paths. */
+#define SIDE_CAP_H   25    /* native bottom-cap height; the panel clamps its own height UP to
+                                   the SUM of its art heights (417 + 25 = 442) - see rz_side_fit_surface */
 #define SIDE_NAT_H   442   /* native side-panel height, measured rect [704 0 800 442] */
 #define WIN_MAX      48
 #define ANCHOR_EDGE  12
@@ -1206,63 +1208,133 @@ static void rz_side_children_bottom(void) {
     void *head, *n;
     LONG panelH, dy;
     int guard = 0, moved = 0;
-    /* the caller already gates on g_sideon && !g_cluster (both declared further down the file) */
     if (!p || IsBadReadPtr(p, 0xa0)) { logf("SIDEKIDS> skipped: side panel unreadable"); return; }
-    panelH = (LONG)p[0x20 / 4] - (LONG)p[0x18 / 4];
-    /* ⚠️ NEVER recompute the delta from the live panel height inside a repeating pass.
-     *
-     * Measured 2026-09-02, 17 s after a clean layout: the panel's height read 2178 = 2 x 1089 and
-     * this routine "pushed 2 side-panel child(ren) down by 1586". Recomputing dy from a height
-     * that something else can grow makes the pass feed on its own output - a runaway. The delta is
-     * captured ONCE by the resize-time call and reused verbatim afterwards, and a panel taller
-     * than the window is refused outright rather than acted on. */
+    panelH = (LONG)((LONG *)((DWORD)p + 0x80))[3] - (LONG)((LONG *)((DWORD)p + 0x80))[1];
+
+    /* Read the LOCAL rect (+0x80..+0x8c), never the derived +0x14 one.
+     * `+0x14` is local plus the sum of every ancestor origin, rebuilt by FUN_1006c61b
+     * `[CONFIRMED @ SIMUI 0x1006c61b]`, and this mod widens those ancestors - so +0x14 conflates
+     * "the panel changed" with "an ancestor moved". Reading it is what made me report a doubling
+     * as an ancestor artefact when it was real. */
     {   RECT ccr;
         LONG maxH = (g_hwnd && GetClientRect(g_hwnd, &ccr)) ? (ccr.bottom - ccr.top) : 0;
         if (maxH > 0 && panelH > maxH + RZ_SURFACE_SLACK) {
-            logf("SIDEKIDS> REFUSED: panel %ld tall exceeds the %ld-px client - not touching it",
+            logf("SIDEKIDS> REFUSED: panel local height %ld exceeds the %ld-px client",
                  panelH, maxH);
             return;
         }
     }
-    if (g_side_dy_applied > 0) {
-        dy = g_side_dy_applied;               /* the delta from the resize-time pass, verbatim */
-    } else {
-        dy = panelH - SIDE_NAT_H - g_side_dy;
-        if (dy > 0) g_side_dy_applied = dy;   /* capture once */
-    }
-    if (dy <= 0) return;                      /* silent: this runs on a timer */
+    dy = panelH - SIDE_NAT_H - g_side_dy;
+    if (dy <= 0) return;                       /* silent: runs on a timer */
+
+    /* ⭐ MOVE THE BUTTONS, NOT THE PAGES.
+     *
+     * Measured 2026-09-02 with a submenu open: once the panel is stable at the client height, its
+     * page children (class SIMUI+0xa9a80) are 36-wide FULL-HEIGHT columns - LOCAL [0 0 36 1081] -
+     * not the 96x442 blocks they are natively, and their buttons sit at local y 21, 57, 93...
+     * So pushing the pages down is meaningless (they already span the panel) and my old guard
+     * skipped them forever once they had grown. What needs moving is the BUTTONS INSIDE each page.
+     *
+     * This also explains the "submenu renders at the top": the flyout was measured at
+     * [1827 164 1953 200], exactly beside the button at local 165..201. It was never misplaced -
+     * it correctly follows a button that was at the top.
+     *
+     * Buttons carry PARENT-LOCAL rects at +0x80..+0x8c and vt+0xc8 SetRect takes parent-local
+     * coordinates, so the local rect is both the input and the thing to keep consistent. Skipping
+     * anything already at or below `dy` keeps this idempotent, which is what lets the timer re-run
+     * it and catch buttons the game creates later. */
     head = *(void **)((DWORD)p + 0x34);
     if (!head || IsBadReadPtr(head, 4)) { logf("SIDEKIDS> skipped: no child list"); return; }
     n = *(void **)head;
     while (n && n != head && guard++ < 300) {
-        DWORD *c;
+        DWORD *page;
         if (IsBadReadPtr(n, 0x0c)) break;
-        c = *(DWORD **)((DWORD)n + 8);
-        if (c && !IsBadWritePtr(c, 0xa0)) {
-            LONG *e = (LONG *)((DWORD)c + 0x80);       /* PARENT-LOCAL rect - what SetRect wants */
-            DWORD *vt = *(DWORD **)c;
-            /* IDEMPOTENCE, and it is what lets this be re-run.
-             *
-             * A child already sitting at or below `dy` has been placed by a previous pass; moving
-             * it again would push it down by another `dy` every call. Skipping those makes the
-             * whole routine safe to call repeatedly, which is required because the game creates
-             * windows LATER: the owner opened a tool submenu and it rendered at the top of the
-             * strip (2026-09-02), because it did not exist when the resize ran. In the steady state
-             * every child fails this test, so a periodic pass issues zero SetRect calls. */
-            if (vt && !IsBadReadPtr(vt, 0xcc) && vt[0xc8 / 4] &&
-                e[2] - e[0] > 0 && e[3] - e[1] > 0 && e[3] + dy <= panelH && e[1] < dy) {
-                DWORD a[4];
-                a[0] = (DWORD)e[0]; a[1] = (DWORD)(e[1] + dy);
-                a[2] = (DWORD)e[2]; a[3] = (DWORD)(e[3] + dy);
-                rz_thiscall(c, (void *)vt[0xc8 / 4], a, 4);
-                moved++;
+        page = *(DWORD **)((DWORD)n + 8);
+        if (page && !IsBadReadPtr(page, 0xa0)) {
+            void *bhead = *(void **)((DWORD)page + 0x34);
+            if (bhead && !IsBadReadPtr(bhead, 4)) {
+                void *bn = *(void **)bhead;
+                int bguard = 0;
+                while (bn && bn != bhead && bguard++ < 200) {
+                    DWORD *b;
+                    if (IsBadReadPtr(bn, 0x0c)) break;
+                    b = *(DWORD **)((DWORD)bn + 8);
+                    if (b && !IsBadWritePtr(b, 0xa0)) {
+                        LONG *e = (LONG *)((DWORD)b + 0x80);
+                        DWORD *bvt = *(DWORD **)b;
+                        if (bvt && !IsBadReadPtr(bvt, 0xcc) && bvt[0xc8 / 4] &&
+                            e[2] - e[0] > 0 && e[3] - e[1] > 0 && e[1] < dy) {
+                            DWORD a[4];
+                            a[0] = (DWORD)e[0]; a[1] = (DWORD)(e[1] + dy);
+                            a[2] = (DWORD)e[2]; a[3] = (DWORD)(e[3] + dy);
+                            rz_thiscall(b, (void *)bvt[0xc8 / 4], a, 4);
+                            moved++;
+                        }
+                    }
+                    bn = *(void **)bn;
+                }
             }
         }
         n = *(void **)n;
     }
-    if (moved)   /* silent when there is nothing to place - this runs on a timer */
-        logf("SIDEKIDS> pushed %d side-panel child(ren) down by %ld (panel %ld tall, native %d)",
+    if (moved)
+        logf("SIDEKIDS> pushed %d side-panel BUTTON(s) down by %ld (panel %ld tall local, native %d)",
              moved, dy, panelH, SIDE_NAT_H);
+
+    /* ⭐ ROOT-LEVEL FLYOUTS. The tool submenu (the column of round icons) is a DIRECT CHILD OF THE
+     * ROOT, not of the panel - measured with one open: 0xE194150, class SIMUI+0xa9cc8, depth 0,
+     * parent == the root window. So the walk above can never see it, which is why it stayed at the
+     * top while everything else moved.
+     *
+     * Note what is NOT broken: the dropdown list ("Parque pequeno...") already appears beside its
+     * moved button, so those popups do follow. Only the ones laid out from a stale anchor near the
+     * panel's top need shifting, and `top < dy` is exactly that test - a popup already down at the
+     * buttons fails it and is left alone.
+     *
+     * Deliberately narrow: right edge inside the panel's x-band, and shorter than the panel, so
+     * this cannot grab a dialog or the full-screen containers (the corner-widget heuristic already
+     * taught me what an unbounded rect test picks up). */
+    {   LONG bandL = (LONG)((LONG *)((DWORD)p + 0x80))[0] - 160;   /* panel left, minus a margin */
+        void *rhead;
+        void *root = NULL;
+        DWORD gz = (DWORD)GetModuleHandleA("GZGraphicD.dll");
+        int fmoved = 0;
+        if (gz && !IsBadReadPtr((void *)(gz + 0x6cdb8), 4)) {
+            DWORD *win = *(DWORD **)(gz + 0x6cdb8);
+            if (win && !IsBadReadPtr(win, 0x34)) {
+                DWORD *sink = (DWORD *)win[0x30 / 4];
+                if (sink && !IsBadReadPtr(sink, 0x3c)) root = (void *)sink[0x38 / 4];
+            }
+        }
+        if (root && !IsBadReadPtr(root, 0x38) &&
+            (rhead = *(void **)((DWORD)root + 0x34)) != NULL && !IsBadReadPtr(rhead, 4)) {
+            void *rn = *(void **)rhead;
+            int rguard = 0;
+            while (rn && rn != rhead && rguard++ < 300) {
+                DWORD *c;
+                if (IsBadReadPtr(rn, 0x0c)) break;
+                c = *(DWORD **)((DWORD)rn + 8);
+                if (c && !IsBadWritePtr(c, 0xa0)) {
+                    LONG *e = (LONG *)((DWORD)c + 0x80);
+                    LONG h = e[3] - e[1];
+                    DWORD *cvt = *(DWORD **)c;
+                    if (cvt && !IsBadReadPtr(cvt, 0xcc) && cvt[0xc8 / 4] &&
+                        e[2] - e[0] > 0 && h > 0 && h < panelH / 2 &&
+                        e[2] > bandL && e[1] < dy) {
+                        DWORD a[4];
+                        a[0] = (DWORD)e[0]; a[1] = (DWORD)(e[1] + dy);
+                        a[2] = (DWORD)e[2]; a[3] = (DWORD)(e[3] + dy);
+                        rz_thiscall(c, (void *)cvt[0xc8 / 4], a, 4);
+                        fmoved++;
+                    }
+                }
+                rn = *(void **)rn;
+            }
+        }
+        if (fmoved)
+            logf("SIDEKIDS> pushed %d root-level flyout(s) down by %ld (band x>%ld)",
+                 fmoved, dy, bandL);
+    }
 }
 
 static void rz_input_geometry(LONG cw, LONG ch, LONG dx, LONG dy) {
@@ -3306,19 +3378,57 @@ static void rz_side_fit_child(int slot, DWORD off, DWORD liveH) {
 
 static void rz_side_fit_surface(DWORD liveH) {
     DWORD *p = (DWORD *)g_side_top;
-    DWORD want = liveH;
-    /* Target the BOTTOM CAP's top edge, and subtract the slack rz_recreate_raster pads on, so the
-       finished surface is exactly as tall as the dest rect and the blit does not scale. */
-    if (p && !IsBadReadPtr(p, 0x120)) {
-        LONG capTop = (LONG)((LONG *)((DWORD)p + 0xf0))[1];
-        LONG panelH = (LONG)p[0x20 / 4] - (LONG)p[0x18 / 4];
-        LONG target = (capTop > 0 && capTop <= panelH) ? capTop : panelH;
-        if (target > RZ_SURFACE_SLACK) want = (DWORD)(target - RZ_SURFACE_SLACK);
-        logf("SIDEFIT> target height %ld (cap top %ld, panel %ld) -> requesting %lu + %d slack",
-             target, capTop, panelH, want, RZ_SURFACE_SLACK);
-    }
+    DWORD capH = 0, target, want;
+    if (!p || IsBadReadPtr(p, 0x120)) { logf("SIDEFIT> skipped: no side panel"); return; }
+
+    /* ⭐⭐ THE PANEL SIZES ITSELF TO THE SUM OF ITS ART. This is the whole story.
+     *
+     * `FUN_1004e20b` (the panel's own vt+0xc8 SetRect) does:
+     *     minH = c0->height + c4->height + c8->height     // ART SURFACE heights, vt+0x3c
+     *     h    = max(requested, minH)                     // clamp UP only
+     *     w    = c0->width                                // width is not ours to set
+     *   `[CONFIRMED @ SIMUI 0x1004e20b]`, and 417 + 25 == 442 == the native panel height exactly.
+     *
+     * So refitting BOTH surfaces to the full height made minH the SUM of two full heights and the
+     * panel duly resized itself to 2x: measured 1056 + 1056 -> 2112, and 1089 + 1089 -> 2178, in
+     * its LOCAL rect (+0x80), not merely the derived +0x14 one. The engine was doing exactly what
+     * it is written to do; the bug was mine.
+     *
+     * Therefore: grow ONLY the background (+0xc0), to `clientH - capHeight`, and leave the bottom
+     * cap (+0xc8) at its native 25 rows. minH then lands on exactly the height we want and the
+     * panel is stable.
+     *
+     * Also do NOT write the child dest rects (+0xd0 / +0xf0): SetRect recomputes them from each
+     * surface's own pixel size and then translates them, so a hand-written value is overwritten on
+     * the next pass and its only other consumer (+0x104, the tile span) is dead while +0xcc is
+     * NULL. `[CONFIRMED @ SIMUI 0x1004e20b, 0x1004e63e]` */
+    if (p[0xc8 / 4] && !IsBadReadPtr((void *)p[0xc8 / 4], 0x2c))
+        capH = ((DWORD *)p[0xc8 / 4])[0x28 / 4];
+    if (capH == 0 || capH > liveH) capH = SIDE_CAP_H;
+    target = liveH - capH;
+    want = (target > RZ_SURFACE_SLACK) ? target - RZ_SURFACE_SLACK : target;
+    logf("SIDEFIT> background target %lu (client %lu - cap %lu) -> requesting %lu + %d slack; "
+         "cap left at native so minH = %lu + %lu = %lu",
+         target, liveH, capH, want, RZ_SURFACE_SLACK, target, capH, target + capH);
     rz_side_fit_child(0, 0xc0, want);
-    rz_side_fit_child(1, 0xc8, want);
+
+    /* Re-run the panel's own SetRect so it recomputes the child dest rects from the new art size,
+       then mark it dirty the way the framework does (vt+0x154 = dirty + propagate to ancestors,
+       `[CONFIRMED @ SIMUI 0x1006e06b, 0x1006c784]`) rather than hoping a layout pass notices. */
+    {   DWORD *vt = *(DWORD **)p;
+        LONG *loc = (LONG *)((DWORD)p + 0x80);
+        if (vt && !IsBadReadPtr(vt, 0x158) && vt[0xc8 / 4]) {
+            DWORD a[4];
+            a[0] = (DWORD)loc[0]; a[1] = (DWORD)loc[1];
+            a[2] = (DWORD)loc[2]; a[3] = (DWORD)loc[3];
+            rz_thiscall(p, (void *)vt[0xc8 / 4], a, 4);
+            logf("SIDEFIT> re-SetRect [%ld %ld %ld %ld] -> local now [%ld %ld %ld %ld]",
+                 (LONG)a[0], (LONG)a[1], (LONG)a[2], (LONG)a[3],
+                 loc[0], loc[1], loc[2], loc[3]);
+            if (vt[0x154 / 4]) rz_thiscall(p, (void *)vt[0x154 / 4], NULL, 0);
+        }
+    }
+
 
     /* ⭐ AND THE DESTINATION RECT — the half that makes the taller surface visible at all.
      *

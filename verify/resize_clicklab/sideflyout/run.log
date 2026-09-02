@@ -1,0 +1,112 @@
+[    0.381 ms][tid ba98] ### sc3resize loaded - resizable-window mod (minimal Init-free routine, validated 2026-08-27 over 6 runs)
+[    0.530 ms][tid ba98] ### FLAGS> cluster=0 input=0 nohit=0 hudfit=1 hudlab=0 sweep=0 side=1 mini=1 anchor=1 census=0 minzoom=0 readyms=3000 noparentfix=0 huddy=8 sidedy=150
+[    0.581 ms][tid ba98] ### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the zoom-after-resize crash the game swallows)
+[    3.095 ms][tid 7290] RZ   *** VEH FAULT *** code=0xC0000096 at SC3U.exe+0x84122 (base 0x00400000)  (resize step at fault=0)
+[    3.170 ms][tid 7290] RZ   VEH regs eax=00000000 ecx=3B0A0000 edx=00000000 ebx=00000001 esi=7FFFFFFF edi=FFFFFFFF ebp=001AFD00 esp=001AFCFC
+[    3.206 ms][tid 7290] RZ   VEH [esp]=0x00000000 -> 0x00000000 (no module)
+[  111.606 ms][tid 1c04] ### RESIZE: SIMSPR base 0x03340000 (relocated: YES)  GZGraphicD base 0x02F00000 (YES)
+[  111.701 ms][tid 1c04] --- WINDOWED: GZGraphicD+0x6cdac = 0 -> 1
+[  111.765 ms][tid 1c04] --- WINDOWED: GZGraphicD+0x117D6 'mov [ebx+0x48],1' -> nop x4
+[  111.830 ms][tid 1c04] --- FIX16: 16bpp branch injected at 0x19349 -> cave 0x00E80000 (5-6-5)
+[  111.901 ms][tid 1c04] --- GRIDB_CLAMP FUN_1000cedb: index clamped (hook 0xCFAB -> cave 0x614E0, base 0x03340000)
+[  111.957 ms][tid 1c04] --- GRIDB_CLAMP FUN_1000d0f5: index clamped (hook 0xD281 -> cave 0x61520, base 0x03340000)
+[  112.006 ms][tid 1c04] --- GRIDB_CLAMP FUN_1000be25: index clamped (hook 0xC412 -> cave 0x61560, base 0x03340000)
+[  112.046 ms][tid 1c04] --- GRIDB_CLAMP FUN_1000ef50: index clamped (hook 0xEF50 -> cave 0x615A0, base 0x03340000)
+[  112.116 ms][tid 1c04] --- GRIDB_CLAMP FUN_1000efa1: index clamped (hook 0xEFD6 -> cave 0x615E0, base 0x03340000)
+[  112.164 ms][tid 1c04] --- EFA1_GUARD: empty-bucket branch 0xefc2 retargeted to the ret (was -> 0xefe3 deref)
+[  112.189 ms][tid 1c04] --- GRIDB_CLAMP: 4 walkers index-clamped (FIX A) + FUN_1000efa1 null-guarded (FIX C)
+[  112.260 ms][tid 1c04] ### RESIZE: armed - windowed+fix16 applied, bridge capture at SIMSPR+0x16EBA, per-frame poll at GZGraphicD+0x18C58 (create recorder DROPPED after v2 crash)
+[  112.372 ms][tid 1c04] --- HUD: FUN_100270e5 wrapped (cave 0x03590000 tr 0x027A0060) - top-strip reflow armed
+[  112.404 ms][tid 1c04] FN  SIMUI FUN_1004e123 side ctor: relocated rel32 at +3 -> 0x0343D9BE
+[  112.446 ms][tid 1c04] FN  SIMUI FUN_1001a983 ctor A: relocated rel32 at +3 -> 0x0345C2F7
+[ 1301.863 ms][tid 7290] ### RESIZE: window 0x02341710 subclassed (old proc 0x02F17E11) - WM_SIZE observed, resize performed on the render thread
+[ 4074.238 ms][tid 7290] ### SIDE: panel window captured 0x0D382A98 (SIMUI FUN_1004e123 ctor)
+[ 4125.971 ms][tid 7290] ### RESIZE: bridge captured 0x0D3830B0 (iso view = bridge+0x18 = 0x00000000); readiness gate = 3000 ms
+[ 4634.747 ms][tid 7290] ### MINI: window captured 0x0D382960 vt=0x0349A180 dest(this+0x90)=[640 436 800 600] 160x164
+[ 9469.323 ms][tid 7290] RZ   STOREDRECT win=0x00B7AE40 rect BEFORE {0,0,800,600} = 800x600
+[ 9469.392 ms][tid 7290] RZ   STOREDRECT rect AFTER  {0,0,2048,1081} = 2048x1081 - right/bottom updated
+[ 9469.418 ms][tid 7290] RZ   WM_SIZE 2048x1081 - poll will pick it up on the next frame
+[ 9470.543 ms][tid 7290] RZ   size change: client 2048x1081 vs render target 800x600
+[ 9470.636 ms][tid 7290] RZ   ---- resize to 2048x1081 ---- iso=0x0DB34F40 R=0x0F0553A8 B=0x00588028 bridge=0x0D3830B0
+[ 9470.676 ms][tid 7290] RZ   extent BEFORE: (-848,2924,-48,3524) -> 800x600  dirtygrid=40x30 cell=20x20
+[ 9470.723 ms][tid 7290] RZ   extent AFTER: (-848,2924,1200,4005) -> 2048x1081  dirtygrid=16x8 cell=128x135  (cell sizes plausible)
+[ 9470.753 ms][tid 7290] RZ   render-target iso+0x74 0x0F0553A8 NO RECORDED CREATE (0 known) - FALLING BACK to field read-back [_ _ 7 16 0 0 0 0]. Field read-back is NOT proven equivalent: p3 measured 7 vs a recorded 4 on 2026-08-28.
+[ 9470.777 ms][tid 7290] RZ   render-target iso+0x74 replay at 2048x1081 (+8 guard rows -> alloc h=1089, zoom-blit overrun fix)
+[ 9470.847 ms][tid 7290] RZ   render-target iso+0x74 FUN_10009efb -> 1 | now +0x24=2048 +0x28=1089
+[ 9470.951 ms][tid 7290] RZ   device-surface iso+0x4ec 0x00588028 NO RECORDED CREATE (0 known) - FALLING BACK to field read-back [_ _ 7 16 0 0 3 0]. Field read-back is NOT proven equivalent: p3 measured 7 vs a recorded 4 on 2026-08-28.
+[ 9470.988 ms][tid 7290] RZ   device-surface iso+0x4ec replay at 2048x1081 (+8 guard rows -> alloc h=1089, zoom-blit overrun fix)
+[ 9473.422 ms][tid 7290] RZ   device-surface iso+0x4ec FUN_10009efb -> 1 | now +0x24=2048 +0x28=1089
+[ 9524.917 ms][tid 7290] RZ   FUN_10018cdf -> 1
+[ 9525.010 ms][tid 7290] RZ   [step 8a] FUN_1000c8f9(iso) - recompute object draw keys
+[ 9525.049 ms][tid 7290] RZ   [step 8b] FUN_1000c9bd(iso, &sentinel, iso+0x54, 1) - clear grid + region pickup + re-register (the real object re-register, not the leaf FUN_1000fa36)
+[ 9525.404 ms][tid 7290] RZ   [step 8b] FUN_1000c9bd returned
+[ 9529.425 ms][tid 7290] RZ   [step 8c] grid re-show 256x256: 65536 occupied, 65536 re-shown, 0 bad (hide+show +0x38/+0x34 per cell)
+[ 9529.498 ms][tid 7290] RZ   [step 9] present list iso+0x4d0: begin=0x0DAF7138 end=0x0DAF7158 (2 rect(s)) - erase then push {0,0,2048,1081}
+[ 9529.517 ms][tid 7290] RZ   [step 9] after: begin=0x0DAF7138 end=0x0DAF7148 (1 rect(s))
+[ 9529.532 ms][tid 7290] RZ   [step 10] device batch begin: dev=0x0DBEBB38 +0x240
+[ 9529.548 ms][tid 7290] RZ   [step 10] FUN_1000db86(iso) - whole-view repaint (iso vt+0x144)
+[ 9529.564 ms][tid 7290] RZ   [step 10] device batch end +0x244 - presented; iso+0x32c=1
+[ 9529.580 ms][tid 7290] RZ   [step 11] FUN_10018cdf(bridge, base layer 0x0DD28F60, base rend 0x0F01BF58, force=1) - SetDataView(0) core, restore active layer + forced refresh
+[ 9586.572 ms][tid 7290] RZ   [step 11] returned - active layer bridge+0x28 = 0x0DD28F60
+[ 9586.653 ms][tid 7290] MINI> dock [640 436 800 600] -> [1888 925 2048 1089]
+[ 9586.673 ms][tid 7290] HIT> minimap: rect +0x80..0x8c = [640 436 800 600] (160x164)  want origin (1888,925)
+[ 9586.687 ms][tid 7290] HIT> minimap: hit rect -> [1888 925 2048 1089]
+[ 9586.702 ms][tid 7290] ANCHOR> re-anchored 2 of 4 windows (dx=1248 dy=489)
+[ 9586.717 ms][tid 7290] HUDLAB> HUD SetRect vt+0xc8=0x03416776  [0,544,599,600] -> [0,1033,2048,1089]
+[ 9586.737 ms][tid 7290] HUDLAB> HUD SetRect returned; rect now [0,1033,2048,1089]
+[ 9586.798 ms][tid 7290] HUDFIT> child[0x2a]: cached pristine art 600x56 pitch=1200 (one-time)
+[ 9586.816 ms][tid 7290] HUDFIT> child[0x2a]=0x00639CC0 -> refitting to 2048x56 (art 600x56)
+[ 9586.833 ms][tid 7290] RZ   HUD child surface 0x00639CC0 NO RECORDED CREATE (0 known) - FALLING BACK to field read-back [_ _ 7 16 0 0 0 0]. Field read-back is NOT proven equivalent: p3 measured 7 vs a recorded 4 on 2026-08-28.
+[ 9586.847 ms][tid 7290] RZ   HUD child surface replay at 2048x56 (+8 guard rows -> alloc h=64, zoom-blit overrun fix)
+[ 9586.979 ms][tid 7290] RZ   HUD child surface FUN_10009efb -> 1 | now +0x24=2048 +0x28=64
+[ 9587.013 ms][tid 7290] HUDFIT> bar IDirectDrawSurface* now 0x0C0AF0D0 (was 0x0097B8E0)
+[ 9587.034 ms][tid 7290] HUDFIT> lock vt+0x0c=0x02F18A82 -> 1 | depth=1 bits=0x101FB6D0 pitch=4096
+[ 9587.066 ms][tid 7290] HUDFIT> tiled the 600x56 art across 2048x64 (pitch 4096, 114688 px written)
+[ 9587.094 ms][tid 7290] HUDFIT> unlock vt+0x10 -> 1 | depth now 0
+[ 9587.128 ms][tid 7290] HUDFIT> child[0x2b]: cached pristine art 16x64 pitch=32 (one-time)
+[ 9587.152 ms][tid 7290] HUDFIT> child[0x2b]=0x00639F18 -> refitting to 2048x64 (art 16x64)
+[ 9587.175 ms][tid 7290] RZ   HUD child surface 0x00639F18 NO RECORDED CREATE (0 known) - FALLING BACK to field read-back [_ _ 7 16 0 0 0 0]. Field read-back is NOT proven equivalent: p3 measured 7 vs a recorded 4 on 2026-08-28.
+[ 9587.191 ms][tid 7290] RZ   HUD child surface replay at 2048x64 (+8 guard rows -> alloc h=72, zoom-blit overrun fix)
+[ 9587.293 ms][tid 7290] RZ   HUD child surface FUN_10009efb -> 1 | now +0x24=2048 +0x28=72
+[ 9587.311 ms][tid 7290] HUDFIT> bar IDirectDrawSurface* now 0x0C0AF410 (was 0x0097BB20)
+[ 9587.327 ms][tid 7290] HUDFIT> lock vt+0x0c=0x02F18A82 -> 1 | depth=1 bits=0x1023B6E0 pitch=4096
+[ 9587.412 ms][tid 7290] HUDFIT> tiled the 16x64 art across 2048x72 (pitch 4096, 131072 px written)
+[ 9587.431 ms][tid 7290] HUDFIT> unlock vt+0x10 -> 1 | depth now 0
+[ 9587.447 ms][tid 7290] SRCRECT> tile step [0 0 16 64] step=16 -> right=2048 step=2048  (FUN_10026841: ~128 blits/frame -> ~1)
+[ 9587.461 ms][tid 7290] SIDE> SetRect vt+0xc8=0x0343E20B  [704,0,800,442] -> [1952,0,2048,1081]
+[ 9587.588 ms][tid 7290] SIDE> SetRect returned; rect now [1952,0,2048,1081] (tiled child +0xcc=0x00000000)
+[ 9587.623 ms][tid 7290] SIDEFIT> background target 1056 (client 1081 - cap 25) -> requesting 1048 + 8 slack; cap left at native so minH = 1056 + 25 = 1081
+[ 9587.664 ms][tid 7290] SIDEFIT> +0xc0 cached pristine art 96x417 pitch=192 (one-time)
+[ 9587.691 ms][tid 7290] SIDEFIT> +0xc0=0x0F038388 -> refitting to 96x1048 (art 96x417)
+[ 9587.714 ms][tid 7290] RZ   side child surface 0x0F038388 NO RECORDED CREATE (0 known) - FALLING BACK to field read-back [_ _ 7 16 0 0 0 0]. Field read-back is NOT proven equivalent: p3 measured 7 vs a recorded 4 on 2026-08-28.
+[ 9587.737 ms][tid 7290] RZ   side child surface replay at 96x1048 (+8 guard rows -> alloc h=1056, zoom-blit overrun fix)
+[ 9587.815 ms][tid 7290] RZ   side child surface FUN_10009efb -> 1 | now +0x24=96 +0x28=1056
+[ 9587.834 ms][tid 7290] SIDEFIT> lock -> 1 | bits=0x102B61C0 pitch=192 new 96x1056
+[ 9587.861 ms][tid 7290] SIDEFIT> placed the 96x417 art ONCE at row 489 of 1056 and filled the rest from plain art row 413 (no tiling)
+[ 9587.882 ms][tid 7290] SIDEFIT> re-SetRect [1952 0 2048 1081] -> local now [1952 0 2048 1081]
+[ 9587.905 ms][tid 7290] SIDEFIT> dest rect +0xd0 [0 0 96 1056] left as-is (cap top 1056, panel 1081)
+[ 9587.933 ms][tid 7290] SIDEKIDS> pushed 54 side-panel BUTTON(s) down by 489 (panel 1081 tall local, native 442)
+[ 9587.989 ms][tid 7290] PARENT> bar hop 0: 0x00640928 [0 0 800 600] -> [0 0 2048 1081]
+[ 9588.030 ms][tid 7290] PARENT> bar hop 1: 0x00B705C0 [0 0 800 600] -> [0 0 2048 1081]
+[ 9588.055 ms][tid 7290] PARENT> side hop 0: 0x00640928 [0 0 2048 1081] already covers 2048x1081
+[ 9588.072 ms][tid 7290] PARENT> side hop 1: 0x00B705C0 [0 0 2048 1081] already covers 2048x1081
+[ 9588.086 ms][tid 7290] PARENT> minimap hop 0: 0x00640928 [0 0 2048 1081] already covers 2048x1081
+[ 9588.100 ms][tid 7290] PARENT> minimap hop 1: 0x00B705C0 [0 0 2048 1081] already covers 2048x1081
+[ 9588.115 ms][tid 7290] PARENT> win hop 0: 0x00640928 [0 0 2048 1081] already covers 2048x1081
+[ 9588.129 ms][tid 7290] PARENT> win hop 1: 0x00B705C0 [0 0 2048 1081] already covers 2048x1081
+[ 9588.142 ms][tid 7290] PARENT> win hop 0: 0x00640928 [0 0 2048 1081] already covers 2048x1081
+[ 9588.156 ms][tid 7290] PARENT> win hop 1: 0x00B705C0 [0 0 2048 1081] already covers 2048x1081
+[ 9588.170 ms][tid 7290] PARENT> win hop 0: 0x00640928 [0 0 2048 1081] already covers 2048x1081
+[ 9588.183 ms][tid 7290] PARENT> win hop 1: 0x00B705C0 [0 0 2048 1081] already covers 2048x1081
+[ 9588.197 ms][tid 7290] PARENT> win hop 0: 0x0D382960 [640 436 800 600] -> [640 436 2048 1081]
+[ 9588.211 ms][tid 7290] PARENT> win hop 1: 0x00640928 [0 0 2048 1081] already covers 2048x1081
+[ 9588.225 ms][tid 7290] PARENT> win hop 2: 0x00B705C0 [0 0 2048 1081] already covers 2048x1081
+[ 9588.249 ms][tid 7290] GEOM> root 0x00B705C0 ext [0 0 800 600] -> [0 0 2048 1081]  (hover label clamp)
+[ 9588.280 ms][tid 7290] GEOM> city view 0x0F05666C hit [0 0 800 600] bounds [0 0 704 544]
+[ 9588.295 ms][tid 7290] GEOM> city view    hit [0 0 2048 1081] bounds [0 0 2048 1081]  (map clicks + camera pan)
+[ 9588.310 ms][tid 7290] GEOM> corner widget 0x0D38DD00 [774 574] -> [2022 1063] (hit rect carried)
+[ 9588.324 ms][tid 7290] GEOM> relocated 1 native-corner widget(s) by (1248,489)
+[ 9588.338 ms][tid 7290] RZ   ---- done (viewport: steps 1-11; step 12 HUD reflow not shipped, native) ----
+[18788.864 ms][tid 7290] SIDEKIDS> pushed 1 root-level flyout(s) down by 489 (band x>1792)
+[19194.297 ms][tid 7290] SIDEKIDS> pushed 1 root-level flyout(s) down by 489 (band x>1792)
+[20007.279 ms][tid 7290] SIDEKIDS> pushed 1 root-level flyout(s) down by 489 (band x>1792)
