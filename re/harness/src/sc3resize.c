@@ -1498,10 +1498,33 @@ static void rz_bar_children_right(void) {
     if (!g_bar_nat_ok) return;
     barW = (LONG)((LONG *)((DWORD)bar + 0x80))[2] - (LONG)((LONG *)((DWORD)bar + 0x80))[0];
     {   LONG natW = g_bar_nat[2] - g_bar_nat[0];
-        LONG mmLeft = 0;
+        LONG mmLeft = 0, rciW = 0;
+        DWORD sui0 = (DWORD)GetModuleHandleA("SIMUI.DLL");
+        DWORD gz0 = (DWORD)GetModuleHandleA("GZGraphicD.dll");
+        void *r0 = NULL;
         if (g_mini && !IsBadReadPtr(g_mini, 0x90))
             mmLeft = (LONG)((LONG *)((DWORD)g_mini + 0x80))[0];
-        target = (mmLeft > natW) ? mmLeft : barW;   /* left of the minimap, else the window edge */
+        /* ⭐ THE NATIVE LAYOUT, read from the game at 800x600 rather than guessed:
+         *     bar     [0   544 599 600]   ends at 599
+         *     RCI     [599 520 640 608]   sits BETWEEN the two
+         *     minimap [640 436 800 600]   starts at 640
+         * So the order is console | RCI | minimap, and the console must stop where the RCI starts,
+         * not at the minimap's edge. My first version parked the RCI to the LEFT of the console -
+         * the wrong side entirely. Reserve the RCI's width here. */
+        if (sui0 && gz0 && !IsBadReadPtr((void *)(gz0 + 0x6cdb8), 4)) {
+            DWORD *w0 = *(DWORD **)(gz0 + 0x6cdb8);
+            DWORD *s0 = (w0 && !IsBadReadPtr(w0, 0x34)) ? (DWORD *)w0[0x30 / 4] : NULL;
+            if (s0 && !IsBadReadPtr(s0, 0x3c)) r0 = (void *)s0[0x38 / 4];
+        }
+        if (r0 && sui0) {
+            int budget = 3000;
+            void *rci0 = rz_find_by_vt(r0, sui0 + 0xab274, 0, &budget);
+            if (rci0 && !IsBadReadPtr(rci0, 0x90)) {
+                LONG *e0 = (LONG *)((DWORD)rci0 + 0x80);
+                if (e0[2] - e0[0] > 0) rciW = e0[2] - e0[0];
+            }
+        }
+        target = (mmLeft > natW) ? mmLeft - rciW : barW;
         dx = target - natW;
         if (natW <= 0 || dx <= 0) return;
     }
@@ -1573,14 +1596,14 @@ static void rz_bar_children_right(void) {
             void *rci = rz_find_by_vt(rroot, sui3 + 0xab274, 0, &budget);
             if (rci && !IsBadWritePtr(rci, 0xa0)) {
                 LONG *e = (LONG *)((DWORD)rci + 0x80);
-                LONG w = e[2] - e[0], want = art[0] - w;
+                LONG w = e[2] - e[0], want = art[2];   /* right of the console, i.e. against the minimap */
                 DWORD *rvt = *(DWORD **)rci;
                 if (w > 0 && want > 0 && e[0] != want &&
                     rvt && !IsBadReadPtr(rvt, 0xcc) && rvt[0xc8 / 4]) {
                     DWORD a[4];
                     a[0] = (DWORD)want;     a[1] = (DWORD)e[1];
                     a[2] = (DWORD)(want+w); a[3] = (DWORD)e[3];
-                    logf("BARKIDS> RCI [%ld %ld %ld %ld] -> [%ld %ld %ld %ld] (left of the console)",
+                    logf("BARKIDS> RCI [%ld %ld %ld %ld] -> [%ld %ld %ld %ld] (between console and minimap, as native)",
                          e[0], e[1], e[2], e[3], a[0], a[1], a[2], a[3]);
                     rz_thiscall(rci, (void *)rvt[0xc8 / 4], a, 4);
                     moved++;

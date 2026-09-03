@@ -12,6 +12,7 @@ param(
     [int]      $Settle = 10,
     [switch]   $KeepOpen,
     [switch]   $NoClick,        # hand-test mode: set up, shoot the baseline, post NO input
+    [switch]   $NoMaximize,     # leave the window at its native size (to read the stock layout)
     [string[]] $Point = @('btn_b:1747:1045', 'btn_a:1815:1055', 'bar_bg:1547:1053'),
     [string[]] $EnvVars = @('SC3RESIZE_CLUSTER=1')
 )
@@ -70,9 +71,14 @@ $g = Get-Process -Name SC3U -ErrorAction SilentlyContinue | Select-Object -First
 if (-not $g -or $g.MainWindowHandle -eq 0) { throw "no SC3U main window" }
 $h = $g.MainWindowHandle
 [void][W.U]::SetForegroundWindow($h)
-[void][W.U]::ShowWindow($h, 3)     # SW_MAXIMIZE
+if (-not $NoMaximize) { [void][W.U]::ShowWindow($h, 3) }   # SW_MAXIMIZE
 Write-Host "[*] maximized 0x$('{0:X}' -f [int]$h); settling $Settle s"
 Start-Sleep -Seconds $Settle
+
+# Dismiss the startup tip dialog. While a modal is up the engine discards every click outside it,
+# so leaving it there silently invalidates any click test that follows.
+$dismiss = Join-Path $root 're\tools\dismiss_tips.py'
+if (Test-Path $dismiss) { & python $dismiss --quiet 2>&1 | Out-Null; Write-Host '[*] startup tips dismissed' }
 
 $cr = New-Object W.U+RECT
 [void][W.U]::GetClientRect($h, [ref]$cr)
