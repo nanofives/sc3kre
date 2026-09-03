@@ -818,6 +818,20 @@ static void rz_fix_hud_parents(void *leaf, const char *name, LONG cw, LONG ch);
 static void rz_input_geometry(LONG cw, LONG ch, LONG dx, LONG dy);
 static void rz_side_children_bottom(void);
 static void rz_bar_children_right(void);
+static void rz_make_resizable(void);
+/* NATIVE geometry of the bar's contents, captured once before anything moves.
+ * The first version SHIFTED children incrementally, which works exactly once: dx
+ * depends on the client size, so after a resize the already-moved children failed the
+ * "not yet moved" guard and stayed at coordinates that fall outside the smaller bar -
+ * owner: "after re-resizing the bottom bar looks broken, no teleprompter, no clickable
+ * buttons". Absolute placement from a cached native rect is idempotent by construction
+ * and correct at every size. */
+#define BARKID_MAX 12
+static void  *g_barkid[BARKID_MAX];
+static LONG   g_barkid_nat[BARKID_MAX][4];
+static int    g_barkid_n;
+static LONG   g_bar_art_nat[4], g_bar_fill_nat[4], g_bar_info_nat[4][4];
+static int    g_bar_art_ok;
 static void *rz_find_by_vt(void *w, DWORD wantvt, int depth, int *budget);
 static void rz_side_fit_surface(DWORD liveH);
 /* SC3RESIZE_HUDDY - extra downward bias applied to the whole relocated HUD, on top of the
@@ -836,6 +850,8 @@ static LONG   g_hud_dy = 8;
 static LONG   g_side_dy;
 static int    g_dump_pending;        /* set by the trigger, consumed at the present */
 static void  *g_dump_iso;            /* iso captured by the poll for the dumper */
+static int    g_minmax_logged;
+static int    g_thickframe = 1;   /* SC3RESIZE_THICKFRAME=0 leaves the fixed frame */
 static int    g_presentfix = 1;   /* SC3RESIZE_PRESENTFIX=0 disables the present source clamp */
 static int    g_presentfix_logged;
 static int    g_presentlog;       /* SC3RESIZE_PRESENTLOG: log the present src/dst rects */
@@ -1542,12 +1558,25 @@ static void rz_bar_children_right(void) {
             LONG *e = (LONG *)((DWORD)c + 0x80);
             DWORD *cvt = *(DWORD **)c;
             if (cvt && !IsBadReadPtr(cvt, 0xcc) && cvt[0xc8 / 4] &&
-                e[2] - e[0] > 0 && e[3] - e[1] > 0 && e[0] < dx) {
-                DWORD a[4];
-                a[0] = (DWORD)(e[0] + dx); a[1] = (DWORD)e[1];
-                a[2] = (DWORD)(e[2] + dx); a[3] = (DWORD)e[3];
-                rz_thiscall(c, (void *)cvt[0xc8 / 4], a, 4);
-                moved++;
+                e[2] - e[0] > 0 && e[3] - e[1] > 0) {
+                LONG *nat = NULL;
+                int k;
+                for (k = 0; k < g_barkid_n; k++)
+                    if (g_barkid[k] == (void *)c) { nat = g_barkid_nat[k]; break; }
+                if (!nat && g_barkid_n < BARKID_MAX) {      /* first sight: remember it as native */
+                    g_barkid[g_barkid_n] = (void *)c;
+                    g_barkid_nat[g_barkid_n][0] = e[0]; g_barkid_nat[g_barkid_n][1] = e[1];
+                    g_barkid_nat[g_barkid_n][2] = e[2]; g_barkid_nat[g_barkid_n][3] = e[3];
+                    nat = g_barkid_nat[g_barkid_n];
+                    g_barkid_n++;
+                }
+                if (nat && (e[0] != nat[0] + dx || e[1] != nat[1])) {
+                    DWORD a[4];
+                    a[0] = (DWORD)(nat[0] + dx); a[1] = (DWORD)nat[1];
+                    a[2] = (DWORD)(nat[2] + dx); a[3] = (DWORD)nat[3];
+                    rz_thiscall(c, (void *)cvt[0xc8 / 4], a, 4);
+                    moved++;
+                }
             }
         }
         n = *(void **)n;
@@ -1564,20 +1593,43 @@ static void rz_bar_children_right(void) {
      * vacates. Idempotent: only acts while the console art is still left of dx. */
     {   LONG *art = (LONG *)((DWORD)bar + 0x120);
         LONG *fill = (LONG *)((DWORD)bar + 0x130);
-        if (!IsBadWritePtr(art, 0x60) && art[0] < dx && art[2] - art[0] > 0) {
+        if (!IsBadWritePtr(art, 0x60) && art[2] - art[0] > 0) {
             int f;
-            logf("BARKIDS> console art [%ld %ld %ld %ld] -> [%ld %ld %ld %ld]",
-                 art[0], art[1], art[2], art[3], art[0] + dx, art[1], art[2] + dx, art[3]);
-            art[0] += dx; art[2] += dx;
-            /* filler now covers everything to the LEFT of the console */
-            fill[0] = 0; fill[2] = art[0];
-            for (f = 0; f < 4; f++) {
-                LONG *r = (LONG *)((DWORD)bar + 0x140 + f * 0x10);
-                if (r[2] - r[0] > 0) { r[0] += dx; r[2] += dx; }
+            if (!g_bar_art_ok) {           /* capture the native art geometry once */
+                for (f = 0; f < 4; f++) {
+                    g_bar_art_nat[f]  = art[f];
+                    g_bar_fill_nat[f] = fill[f];
+                }
+                for (f = 0; f < 4; f++) {
+                    LONG *r = (LONG *)((DWORD)bar + 0x140 + f * 0x10);
+                    g_bar_info_nat[f][0] = r[0]; g_bar_info_nat[f][1] = r[1];
+                    g_bar_info_nat[f][2] = r[2]; g_bar_info_nat[f][3] = r[3];
+                }
+                g_bar_art_ok = 1;
+                logf("BARKIDS> cached native art [%ld %ld %ld %ld] filler [%ld %ld %ld %ld]",
+                     art[0], art[1], art[2], art[3], fill[0], fill[1], fill[2], fill[3]);
             }
-            logf("BARKIDS> filler region -> [%ld %ld %ld %ld]; 4 info-field dests shifted",
-                 fill[0], fill[1], fill[2], fill[3]);
-            moved++;
+            /* ABSOLUTE placement from the cached native values, every time - never incremental.
+               The bar's own y comes from the CURRENT rect, since the bar re-docks on each resize. */
+            {   LONG *br = (LONG *)((DWORD)bar + 0x80);
+                LONG dy2 = br[1] - g_bar_art_nat[1];
+                if (art[0] != g_bar_art_nat[0] + dx || art[1] != g_bar_art_nat[1] + dy2) {
+                    art[0] = g_bar_art_nat[0] + dx;  art[1] = g_bar_art_nat[1] + dy2;
+                    art[2] = g_bar_art_nat[2] + dx;  art[3] = g_bar_art_nat[3] + dy2;
+                    fill[0] = 0;              fill[1] = g_bar_fill_nat[1] + dy2;
+                    fill[2] = art[0];         fill[3] = g_bar_fill_nat[3] + dy2;
+                    for (f = 0; f < 4; f++) {
+                        LONG *r = (LONG *)((DWORD)bar + 0x140 + f * 0x10);
+                        if (g_bar_info_nat[f][2] - g_bar_info_nat[f][0] > 0) {
+                            r[0] = g_bar_info_nat[f][0] + dx; r[1] = g_bar_info_nat[f][1] + dy2;
+                            r[2] = g_bar_info_nat[f][2] + dx; r[3] = g_bar_info_nat[f][3] + dy2;
+                        }
+                    }
+                    logf("BARKIDS> art -> [%ld %ld %ld %ld], filler -> [%ld %ld %ld %ld] (dx %ld dy %ld)",
+                         art[0], art[1], art[2], art[3], fill[0], fill[1], fill[2], fill[3], dx, dy2);
+                    moved++;
+                }
+            }
         }
     }
 
@@ -3322,6 +3374,7 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
                         rz_fix_hud_parents(g_wins[k].w, "win", gw, gh);
                 }
                 rz_input_geometry(gw, gh, gw - NAT_W, gh - NAT_H + g_hud_dy);
+                if (g_thickframe) rz_make_resizable();
                 if (g_presentlog || g_presentfix) {
                     rz_patch_ddblt();
                     logf("PRESENT> hook installed (log=%d fix=%d)", g_presentlog, g_presentfix);
@@ -4311,6 +4364,34 @@ static void rz_poll(void) {
  *
  * EXPECT-OR-REFUSE: identity-check the primary vftable (gz+0x1f740, installed as [this+0] at
  * 0x17bf7 / 0x17c6e) before writing. A refusal is a LOGGED RESULT, never a forced write. */
+/* ⭐ MAKE THE WINDOW ACTUALLY RESIZABLE.
+ *
+ * The game creates a fixed-frame window: it can be maximized but not dragged to an arbitrary size
+ * (owner, 2026-09-02: "i want to make the window resizeable, i just can maximize today"). The mod
+ * already handles any client size - the HUD tracks it in both directions - so the only thing
+ * missing is the frame style itself.
+ *
+ * Adds WS_THICKFRAME (the sizing border) and WS_MAXIMIZEBOX, then SWP_FRAMECHANGED so the
+ * non-client area is recomputed. Done once, guarded, and logged either way. The resulting drag
+ * produces ordinary WM_SIZE messages, which is the path the mod already services.
+ *
+ * SC3RESIZE_THICKFRAME=0 opts out. */
+static void rz_make_resizable(void) {
+    LONG st, want;
+    if (!g_hwnd || !IsWindow(g_hwnd)) return;
+    st = GetWindowLongA(g_hwnd, GWL_STYLE);
+    want = st | WS_THICKFRAME | WS_MAXIMIZEBOX;
+    if (st == want) {
+        logf("FRAME> already resizable (style 0x%08lX)", st);
+        return;
+    }
+    SetWindowLongA(g_hwnd, GWL_STYLE, want);
+    SetWindowPos(g_hwnd, NULL, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    logf("FRAME> style 0x%08lX -> 0x%08lX (added WS_THICKFRAME|WS_MAXIMIZEBOX) - drag-resize enabled",
+         st, GetWindowLongA(g_hwnd, GWL_STYLE));
+}
+
 static void rz_set_stored_rect(DWORD w, DWORD h) {
     DWORD gz = (DWORD)GetModuleHandleA("GZGraphicD.dll");
     DWORD *win, want;
@@ -4350,6 +4431,34 @@ static void rz_set_stored_rect(DWORD w, DWORD h) {
  * presenting the old rectangle. Doing it here in C is what makes the separate GZGraphicD
  * `wmsize_setrect` patch unnecessary under this mod. */
 static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
+    /* ⭐ LET THE USER DRAG THE WINDOW TO ANY SIZE.
+     *
+     * The window already carries WS_THICKFRAME|WS_MAXIMIZEBOX (measured: style 0x95CF0000), so the
+     * sizing border exists - yet the owner can only maximize. The remaining lever is
+     * WM_GETMINMAXINFO: whatever the game answers there caps the drag. Let the game's handler run
+     * first, then widen the track limits. Min is kept sane (the HUD is 800x600 native and the
+     * layout code needs room); max is the virtual screen, so multi-monitor still works.
+     * SC3RESIZE_THICKFRAME=0 leaves the game's own limits alone. */
+    if (m == WM_GETMINMAXINFO && g_thickframe && lp) {
+        LRESULT r = CallWindowProcA(g_oldproc, h, m, wp, lp);
+        MINMAXINFO *mmi = (MINMAXINFO *)lp;
+        if (!IsBadWritePtr(mmi, sizeof(MINMAXINFO))) {
+            int vx = GetSystemMetrics(SM_CXVIRTUALSCREEN), vy = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+            if (vx < 1024) vx = 1024;
+            if (vy < 768)  vy = 768;
+            mmi->ptMinTrackSize.x = 640;
+            mmi->ptMinTrackSize.y = 480;
+            mmi->ptMaxTrackSize.x = vx;
+            mmi->ptMaxTrackSize.y = vy;
+            if (!g_minmax_logged) {
+                g_minmax_logged = 1;
+                logf("FRAME> WM_GETMINMAXINFO widened: track %ld..%ld x %ld..%ld (virtual screen)",
+                     mmi->ptMinTrackSize.x, mmi->ptMaxTrackSize.x,
+                     mmi->ptMinTrackSize.y, mmi->ptMaxTrackSize.y);
+            }
+        }
+        return r;
+    }
     if (m == WM_SIZE && wp != SIZE_MINIMIZED) {
         LRESULT r;
         DWORD w = (DWORD)LOWORD(lp), hh = (DWORD)HIWORD(lp);
@@ -5084,6 +5193,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_SRCRECT", v, sizeof(v))) g_srcrect = atoi(v);
           g_presentlog = GetEnvironmentVariableA("SC3RESIZE_PRESENTLOG", v, sizeof(v)) && atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PRESENTFIX", v, sizeof(v))) g_presentfix = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_THICKFRAME", v, sizeof(v))) g_thickframe = atoi(v);
           if (!GetEnvironmentVariableA("SC3RESIZE_DUMPDIR", g_dumpdir, sizeof(g_dumpdir)))
               lstrcpynA(g_dumpdir, ".", sizeof(g_dumpdir));
           g_noparentfix = GetEnvironmentVariableA("SC3RESIZE_NOPARENTFIX", v, sizeof(v)) && atoi(v);
