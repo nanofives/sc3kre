@@ -3831,9 +3831,9 @@ static void rz_side_fit_child(int slot, DWORD off, DWORD liveH) {
     }
 }
 
-static void rz_side_fit_surface(DWORD liveH) {
+static void rz_side_fit_surface(DWORD clientH) {
     DWORD *p = (DWORD *)g_side_top;
-    DWORD capH = 0, target, want;
+    DWORD capH = 0, target, want, liveH;
     if (!p || IsBadReadPtr(p, 0x120)) { logf("SIDEFIT> skipped: no side panel"); return; }
 
     /* ⭐⭐ THE PANEL SIZES ITSELF TO THE SUM OF ITS ART. This is the whole story.
@@ -3859,12 +3859,13 @@ static void rz_side_fit_surface(DWORD liveH) {
      * NULL. `[CONFIRMED @ SIMUI 0x1004e20b, 0x1004e63e]` */
     if (p[0xc8 / 4] && !IsBadReadPtr((void *)p[0xc8 / 4], 0x2c))
         capH = ((DWORD *)p[0xc8 / 4])[0x28 / 4];
-    if (capH == 0 || capH > liveH) capH = SIDE_CAP_H;
-    target = liveH - capH;
+    if (capH == 0 || capH > clientH) capH = SIDE_CAP_H;
+    target = clientH - capH;   /* the background gets everything above the cap */
+    liveH = target;            /* what the re-SetRect below asks for, plus capH */
     want = (target > RZ_SURFACE_SLACK) ? target - RZ_SURFACE_SLACK : target;
     logf("SIDEFIT> background target %lu (client %lu - cap %lu) -> requesting %lu + %d slack; "
          "cap left at native so minH = %lu + %lu = %lu",
-         target, liveH, capH, want, RZ_SURFACE_SLACK, target, capH, target + capH);
+         target, clientH, capH, want, RZ_SURFACE_SLACK, target, capH, target + capH);
     rz_side_fit_child(0, 0xc0, want);
 
     /* Re-run the panel's own SetRect so it recomputes the child dest rects from the new art size,
@@ -3874,8 +3875,20 @@ static void rz_side_fit_surface(DWORD liveH) {
         LONG *loc = (LONG *)((DWORD)p + 0x80);
         if (vt && !IsBadReadPtr(vt, 0x158) && vt[0xc8 / 4]) {
             DWORD a[4];
+            /* ⭐ RE-SETRECT WITH THE DESIRED HEIGHT, NOT THE CURRENT ONE. This is what let the panel
+             * grow but never SHRINK.
+             *
+             * FUN_1004e20b clamps the panel height UP to the sum of its art heights, so on a shrink
+             * the first SetRect is legitimately refused: requested 861, returned 1081, because the
+             * art was still 1056 tall. The art is refit just above, so by here the clamp would allow
+             * the smaller height - but replaying `loc` re-applies the REFUSED value and the panel
+             * stays tall forever. Measured 2026-09-02 at 1384x861: bar, minimap and RCI all tracked
+             * the client; only the panel stayed 1081.
+             * Ask for `top + liveH + capH` - the art we just installed plus the cap - which is
+             * exactly what minH will now be. */
+            LONG wantBottom = loc[1] + (LONG)liveH + (LONG)capH;
             a[0] = (DWORD)loc[0]; a[1] = (DWORD)loc[1];
-            a[2] = (DWORD)loc[2]; a[3] = (DWORD)loc[3];
+            a[2] = (DWORD)loc[2]; a[3] = (DWORD)wantBottom;
             rz_thiscall(p, (void *)vt[0xc8 / 4], a, 4);
             logf("SIDEFIT> re-SetRect [%ld %ld %ld %ld] -> local now [%ld %ld %ld %ld]",
                  (LONG)a[0], (LONG)a[1], (LONG)a[2], (LONG)a[3],
