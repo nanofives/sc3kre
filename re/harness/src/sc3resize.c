@@ -817,6 +817,8 @@ static void rz_fix_hud_parents(void *leaf, const char *name, LONG cw, LONG ch);
 /* fwd: the 2026-09-02 input-geometry fixes, called at the end of the cluster routine */
 static void rz_input_geometry(LONG cw, LONG ch, LONG dx, LONG dy);
 static void rz_side_children_bottom(void);
+static void rz_bar_children_right(void);
+static void *rz_find_by_vt(void *w, DWORD wantvt, int depth, int *budget);
 static void rz_side_fit_surface(DWORD liveH);
 /* SC3RESIZE_HUDDY - extra downward bias applied to the whole relocated HUD, on top of the
  * (client - native) translate. Owner-tuned to 8 px on 2026-09-02 at 2048x1081: at bias 0 the bar's
@@ -1468,6 +1470,131 @@ static void rz_side_children_bottom(void) {
             logf("SIDEKIDS> pushed %d root-level flyout(s) down by %ld (band x>%ld) + invalidated",
                  fmoved, dy, bandL);
         }
+    }
+}
+
+
+/* ⭐ BAR CONTENTS — slide the controls to the right end, beside the minimap.
+ *
+ * The bar docks and spans the full client width, but its children keep their NATIVE offsets, so the
+ * status text, speed buttons, help and RCI stay clustered in the leftmost 599 px with a vast empty
+ * stretch to their right. Owner's ask (2026-09-02): bring them next to the minimap.
+ *
+ * The shift is DERIVED, not hardcoded: the minimap occupies the bottom-right corner and overlaps
+ * the bar's own y range, so the target is the minimap's LEFT edge minus the bar's native width -
+ * put the block immediately left of the minimap rather than flush to the window edge, where it
+ * would slide underneath. Falls back to (clientW - nativeW) when the minimap is not docked.
+ *
+ * Children are moved with their PARENT-LOCAL rect through vt+0xc8, the same discipline the side
+ * panel needed: SetRect on a child takes parent-local coordinates, and feeding it absolute ones
+ * adds the parent origin twice. Idempotent (skips anything already shifted), so the periodic pass
+ * can re-run it and catch controls the game creates later. */
+static void rz_bar_children_right(void) {
+    DWORD *bar = (DWORD *)g_hud_top;
+    void *head, *n;
+    LONG barW, dx, target;
+    int guard = 0, moved = 0;
+    if (!bar || IsBadReadPtr(bar, 0xa0)) return;
+    if (!g_bar_nat_ok) return;
+    barW = (LONG)((LONG *)((DWORD)bar + 0x80))[2] - (LONG)((LONG *)((DWORD)bar + 0x80))[0];
+    {   LONG natW = g_bar_nat[2] - g_bar_nat[0];
+        LONG mmLeft = 0;
+        if (g_mini && !IsBadReadPtr(g_mini, 0x90))
+            mmLeft = (LONG)((LONG *)((DWORD)g_mini + 0x80))[0];
+        target = (mmLeft > natW) ? mmLeft : barW;   /* left of the minimap, else the window edge */
+        dx = target - natW;
+        if (natW <= 0 || dx <= 0) return;
+    }
+    head = *(void **)((DWORD)bar + 0x34);
+    if (!head || IsBadReadPtr(head, 4)) return;
+    n = *(void **)head;
+    while (n && n != head && guard++ < 200) {
+        DWORD *c;
+        if (IsBadReadPtr(n, 0x0c)) break;
+        c = *(DWORD **)((DWORD)n + 8);
+        if (c && !IsBadWritePtr(c, 0xa0)) {
+            LONG *e = (LONG *)((DWORD)c + 0x80);
+            DWORD *cvt = *(DWORD **)c;
+            if (cvt && !IsBadReadPtr(cvt, 0xcc) && cvt[0xc8 / 4] &&
+                e[2] - e[0] > 0 && e[3] - e[1] > 0 && e[0] < dx) {
+                DWORD a[4];
+                a[0] = (DWORD)(e[0] + dx); a[1] = (DWORD)e[1];
+                a[2] = (DWORD)(e[2] + dx); a[3] = (DWORD)e[3];
+                rz_thiscall(c, (void *)cvt[0xc8 / 4], a, 4);
+                moved++;
+            }
+        }
+        n = *(void **)n;
+    }
+    /* ⭐ AND THE BAR'S OWN ART RECTS. Moving the window children is only half of it: the bar paints
+     * child surfaces [0x2a..0x2f] ITSELF into absolute rects stored on the object, so the console
+     * art and the four info fields (city name, population, money, date) stay at the left while the
+     * controls move right - which is exactly the "second set of controls at the left" the owner
+     * sees. Field map, read live from the bar object:
+     *     +0x120..+0x12c   where the 600-wide console art is drawn  [0 1033 600 1089]
+     *     +0x130..+0x13c   the region the filler is tiled across    [600 1033 2048 1089]
+     *     +0x140/+0x150/+0x160/+0x170   the four info-field dests, all at x 8..500
+     * Shift every x by the same dx, and flip the two regions so the filler covers what the console
+     * vacates. Idempotent: only acts while the console art is still left of dx. */
+    {   LONG *art = (LONG *)((DWORD)bar + 0x120);
+        LONG *fill = (LONG *)((DWORD)bar + 0x130);
+        if (!IsBadWritePtr(art, 0x60) && art[0] < dx && art[2] - art[0] > 0) {
+            int f;
+            logf("BARKIDS> console art [%ld %ld %ld %ld] -> [%ld %ld %ld %ld]",
+                 art[0], art[1], art[2], art[3], art[0] + dx, art[1], art[2] + dx, art[3]);
+            art[0] += dx; art[2] += dx;
+            /* filler now covers everything to the LEFT of the console */
+            fill[0] = 0; fill[2] = art[0];
+            for (f = 0; f < 4; f++) {
+                LONG *r = (LONG *)((DWORD)bar + 0x140 + f * 0x10);
+                if (r[2] - r[0] > 0) { r[0] += dx; r[2] += dx; }
+            }
+            logf("BARKIDS> filler region -> [%ld %ld %ld %ld]; 4 info-field dests shifted",
+                 fill[0], fill[1], fill[2], fill[3]);
+            moved++;
+        }
+    }
+
+    /* The RCI indicator travels with the console. It is a separate window (SIMUI+0xab274), not a
+     * bar child, and natively sits immediately RIGHT of the 600-wide console at [599 520 640 608].
+     * With the console moved to the right end, its native side is where the minimap now lives, so
+     * park it against the console's LEFT edge instead - visually adjacent, no overlap. */
+    {   DWORD sui3 = (DWORD)GetModuleHandleA("SIMUI.DLL");
+        LONG *art = (LONG *)((DWORD)bar + 0x120);
+        void *rroot = NULL;
+        DWORD gz3 = (DWORD)GetModuleHandleA("GZGraphicD.dll");
+        if (sui3 && gz3 && !IsBadReadPtr((void *)(gz3 + 0x6cdb8), 4)) {
+            DWORD *w3 = *(DWORD **)(gz3 + 0x6cdb8);
+            DWORD *sk3 = (w3 && !IsBadReadPtr(w3, 0x34)) ? (DWORD *)w3[0x30 / 4] : NULL;
+            if (sk3 && !IsBadReadPtr(sk3, 0x3c)) rroot = (void *)sk3[0x38 / 4];
+        }
+        if (rroot && !IsBadReadPtr(art, 0x10)) {
+            int budget = 3000;
+            void *rci = rz_find_by_vt(rroot, sui3 + 0xab274, 0, &budget);
+            if (rci && !IsBadWritePtr(rci, 0xa0)) {
+                LONG *e = (LONG *)((DWORD)rci + 0x80);
+                LONG w = e[2] - e[0], want = art[0] - w;
+                DWORD *rvt = *(DWORD **)rci;
+                if (w > 0 && want > 0 && e[0] != want &&
+                    rvt && !IsBadReadPtr(rvt, 0xcc) && rvt[0xc8 / 4]) {
+                    DWORD a[4];
+                    a[0] = (DWORD)want;     a[1] = (DWORD)e[1];
+                    a[2] = (DWORD)(want+w); a[3] = (DWORD)e[3];
+                    logf("BARKIDS> RCI [%ld %ld %ld %ld] -> [%ld %ld %ld %ld] (left of the console)",
+                         e[0], e[1], e[2], e[3], a[0], a[1], a[2], a[3]);
+                    rz_thiscall(rci, (void *)rvt[0xc8 / 4], a, 4);
+                    moved++;
+                }
+            }
+        }
+    }
+
+    if (moved) {
+        DWORD *bvt = *(DWORD **)bar;
+        if (bvt && !IsBadReadPtr(bvt, 0x158) && bvt[0x154 / 4])
+            rz_thiscall(bar, (void *)bvt[0x154 / 4], NULL, 0);
+        logf("BARKIDS> slid %d bar element(s) right by %ld (bar %ld wide, target x %ld) + invalidated",
+             moved, dx, barW, target);
     }
 }
 
@@ -3050,6 +3177,7 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
             rz_hud_setrect_w(0);
             if (g_hwnd && GetClientRect(g_hwnd, &cr))
                     rz_hud_fit_surface((DWORD)(cr.right - cr.left));
+            rz_bar_children_right();   /* slide the controls beside the minimap */
 
             }
             /* SC3RESIZE_SIDE on the SHIP path. Placed here deliberately: the first attempt put it
@@ -3168,6 +3296,16 @@ static void rz_hud_setrect_w(DWORD wantW) {
     if (!h || IsBadReadPtr(h, 0xc0)) { logf("HUDLAB> SetRect skipped: g_hud_top unreadable"); return; }
     x1 = (LONG)h[0x14/4]; y1 = (LONG)h[0x18/4]; x2 = (LONG)h[0x1c/4]; y2 = (LONG)h[0x20/4];
     barH = (int)(y2 - y1);
+    /* Cache the bar's NATIVE rect here too, not only in the cluster routine.
+     * rz_bar_children_right needs the native width to know how far to slide the controls, and the
+     * cluster routine (the only other place that cached it) returns early on the dock+span path -
+     * so on the path that actually spans the bar the cache was never filled and the slide silently
+     * did nothing. Cached BEFORE the SetRect below, while the rect is still native. */
+    if (!g_bar_nat_ok && x2 - x1 > 0 && y2 - y1 > 0) {
+        g_bar_nat[0] = x1; g_bar_nat[1] = y1; g_bar_nat[2] = x2; g_bar_nat[3] = y2;
+        g_bar_nat_ok = 1;
+        logf("HUDLAB> cached bar native [%ld %ld %ld %ld] (%ld wide)", x1, y1, x2, y2, x2 - x1);
+    }
     hvt = *(DWORD **)h;
     if (!g_hwnd || !GetClientRect(g_hwnd, &cr) || !hvt || IsBadReadPtr(hvt, 0xcc)) {
         logf("HUDLAB> SetRect skipped: no window or vtable unreadable"); return;
@@ -3924,7 +4062,11 @@ static void rz_poll(void) {
         /* DISABLED for the cascade A/B, per CASCADE_PRE.md: if the refactor is the real fix,
            popups land correctly with no timer at all, and leaving the timer on would make the two
            indistinguishable. SC3RESIZE_SIDEPOLL=1 turns it back on. */
-        if (g_side_poll && now >= rz_side_next_ms) { rz_side_next_ms = now + 80; rz_side_children_bottom(); }
+        if (g_side_poll && now >= rz_side_next_ms) {
+            rz_side_next_ms = now + 80;
+            rz_side_children_bottom();
+            if (!g_cluster) rz_bar_children_right();
+        }
     }
 
     {   /* MINIMIZE -> RESTORE: force the HUD to repaint.
