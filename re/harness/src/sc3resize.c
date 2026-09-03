@@ -851,6 +851,7 @@ static LONG   g_side_dy;
 static int    g_dump_pending;        /* set by the trigger, consumed at the present */
 static void  *g_dump_iso;            /* iso captured by the poll for the dumper */
 static int    g_minmax_logged;
+static int    g_hit_logged;
 static int    g_thickframe = 1;   /* SC3RESIZE_THICKFRAME=0 leaves the fixed frame */
 static int    g_presentfix = 1;   /* SC3RESIZE_PRESENTFIX=0 disables the present source clamp */
 static int    g_presentfix_logged;
@@ -1545,7 +1546,12 @@ static void rz_bar_children_right(void) {
         }
         target = (mmLeft > natW) ? mmLeft - rciW : barW;
         dx = target - natW;
-        if (natW <= 0 || dx <= 0) return;
+        /* dx == 0 is the NATIVE layout, not "nothing to do".
+         * Bailing on it stranded the bar's children at their wide-window coordinates whenever the
+         * window came back to ~800x600: measured at client 800x600 with the art correctly back at
+         * [0 552 600 608] while the children still sat at 1256/1795/1737 - a bar with no reachable
+         * buttons and no ticker, exactly as the owner reported. Only a NEGATIVE dx is meaningless. */
+        if (natW <= 0 || dx < 0) return;
     }
     head = *(void **)((DWORD)bar + 0x34);
     if (!head || IsBadReadPtr(head, 4)) return;
@@ -4439,6 +4445,39 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
      * first, then widen the track limits. Min is kept sane (the HUD is 800x600 native and the
      * layout code needs room); max is the virtual screen, so multi-monitor still works.
      * SC3RESIZE_THICKFRAME=0 leaves the game's own limits alone. */
+    /* ⭐ THE SIZING BORDER HAS TO ANSWER THE HIT TEST.
+     *
+     * The window carries WS_THICKFRAME and WM_GETMINMAXINFO is widened, yet the owner still cannot
+     * drag an edge - and SetWindowPos resizes the window fine, so nothing rejects the SIZE, only
+     * the DRAG. That points at WM_NCHITTEST: if the game answers HTCLIENT over the frame, Windows
+     * never starts a sizing loop. Let the game answer first, and only when it says HTCLIENT and the
+     * cursor is within the border margin of the window edge, substitute the proper edge code. */
+    if (m == WM_NCHITTEST && g_thickframe) {
+        LRESULT r = CallWindowProcA(g_oldproc, h, m, wp, lp);
+        if (r == HTCLIENT) {
+            RECT wr;
+            int mx = (int)(short)LOWORD(lp), my = (int)(short)HIWORD(lp);
+            int bw = GetSystemMetrics(SM_CXSIZEFRAME) + 4;
+            if (GetWindowRect(h, &wr)) {
+                int left = mx < wr.left + bw, right = mx >= wr.right - bw;
+                int top = my < wr.top + bw, bottom = my >= wr.bottom - bw;
+                if (!g_hit_logged && (left || right || top || bottom)) {
+                    g_hit_logged = 1;
+                    logf("FRAME> WM_NCHITTEST returned HTCLIENT over the frame - substituting edge "
+                         "codes so the sizing border works (margin %d)", bw);
+                }
+                if (top && left)      return HTTOPLEFT;
+                if (top && right)     return HTTOPRIGHT;
+                if (bottom && left)   return HTBOTTOMLEFT;
+                if (bottom && right)  return HTBOTTOMRIGHT;
+                if (left)             return HTLEFT;
+                if (right)            return HTRIGHT;
+                if (top)              return HTTOP;
+                if (bottom)           return HTBOTTOM;
+            }
+        }
+        return r;
+    }
     if (m == WM_GETMINMAXINFO && g_thickframe && lp) {
         LRESULT r = CallWindowProcA(g_oldproc, h, m, wp, lp);
         MINMAXINFO *mmi = (MINMAXINFO *)lp;
