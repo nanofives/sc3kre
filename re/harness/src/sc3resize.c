@@ -836,6 +836,9 @@ static LONG   g_hud_dy = 8;
 static LONG   g_side_dy;
 static int    g_dump_pending;        /* set by the trigger, consumed at the present */
 static void  *g_dump_iso;            /* iso captured by the poll for the dumper */
+static int    g_presentfix = 1;   /* SC3RESIZE_PRESENTFIX=0 disables the present source clamp */
+static int    g_presentfix_logged;
+static int    g_presentlog;       /* SC3RESIZE_PRESENTLOG: log the present src/dst rects */
 static char   g_dumpdir[MAX_PATH];   /* SC3RESIZE_DUMPDIR: where the surface dumps go */
 static int    g_srcrect = 1;      /* SC3RESIZE_SRCRECT=0 disables the tile-step FPS fix (A/B) */
 static int    g_side_poll;         /* SC3RESIZE_SIDEPOLL: re-enable the periodic popup correction */
@@ -2167,12 +2170,79 @@ static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWO
     LARGE_INTEGER a, b;
     HRESULT hr;
     __int64 d;
+    RECT sfix;
+    /* ⭐⭐ THE BOTTOM STRIP: the present squashes the frame by the slack rows.
+     *
+     * Measured 2026-09-02 with the present logger:
+     *     dst [0 23 2048 1104] = 2048x1081      src [0 0 2048 1089] = 2048x1089
+     * The render target is deliberately over-allocated by RZ_SURFACE_SLACK guard rows (the
+     * zoom-blit overrun fix), and the present blits the WHOLE surface into the client-sized
+     * destination - so every frame is compressed vertically by 8 rows AND the surface's bottom 8
+     * rows are squeezed into view. Those rows are the part of the bar that hangs below the client
+     * (the bar sits at 1033..1089 with the 8px bias), which is exactly the owner's report: "part of
+     * the bottom is not rendering the game, it stays the color of the bottom bar".
+     *
+     * Fix: for the final present only - destination at least the client size - clamp the SOURCE to
+     * the destination's height so the mapping is 1:1 and the slack rows are never shown. A COPY of
+     * the caller's rect is passed; the caller's own structure is never modified.
+     * SC3RESIZE_PRESENTFIX=0 disables it for an A/B. */
+    if (g_presentfix && dr && sr && !IsBadReadPtr(dr, sizeof(RECT)) && !IsBadReadPtr(sr, sizeof(RECT))) {
+        RECT cr3;
+        if (g_hwnd && GetClientRect(g_hwnd, &cr3)) {
+            LONG dw = dr->right - dr->left, dh = dr->bottom - dr->top;
+            LONG sw = sr->right - sr->left, sh = sr->bottom - sr->top;
+            if (dw >= cr3.right - cr3.left && dh >= cr3.bottom - cr3.top && sh > dh && sw == dw) {
+                sfix = *sr;
+                sfix.bottom = sfix.top + dh;
+                if (!g_presentfix_logged) {
+                    g_presentfix_logged = 1;
+                    logf("PRESENTFIX> src %ldx%ld -> %ldx%ld to match the %ldx%ld dest "
+                         "(was squashing the frame and showing %ld slack row(s))",
+                         sw, sh, sw, dh, dw, dh, sh - dh);
+                }
+                sr = &sfix;
+            }
+        }
+    }
     QueryPerformanceCounter(&a);
     hr = g_orig_blt(self, dr, src, sr, fl, fx);
     QueryPerformanceCounter(&b);
     d = b.QuadPart - a.QuadPart;
     g_ddblt_time += d;
     g_ddblt_calls++;
+    /* PRESENT GEOMETRY LOG. The composited surface is provably correct across a minimize (row-by-row
+     * identical), yet the owner still sees a strip at the bottom of the WINDOW - so the defect is
+     * downstream of the composite, in the present itself. A present is a Blt with a SOURCE rect and
+     * a DEST rect; if those disagree in height the image is scaled or clipped and a band at the
+     * bottom shows something else. Logging both costs nothing and needs no COM call on the primary
+     * (this project has been burned locking surfaces out of band). Rate-limited to one line/sec. */
+    if (g_presentlog && dr && !IsBadReadPtr(dr, sizeof(RECT))) {
+        RECT cr2;
+        if (g_hwnd && GetClientRect(g_hwnd, &cr2) &&
+            dr->right - dr->left >= cr2.right - cr2.left &&
+            dr->bottom - dr->top >= cr2.bottom - cr2.top) {
+            static DWORD next_present_ms;
+            DWORD now2 = GetTickCount();
+            if (now2 >= next_present_ms) {
+                next_present_ms = now2 + 1000;
+                if (sr && !IsBadReadPtr(sr, sizeof(RECT)))
+                    logf("PRESENT> dst [%ld %ld %ld %ld] %ldx%ld  src [%ld %ld %ld %ld] %ldx%ld  "
+                         "client %ldx%ld  surf=0x%08lX",
+                         dr->left, dr->top, dr->right, dr->bottom,
+                         dr->right - dr->left, dr->bottom - dr->top,
+                         sr->left, sr->top, sr->right, sr->bottom,
+                         sr->right - sr->left, sr->bottom - sr->top,
+                         cr2.right - cr2.left, cr2.bottom - cr2.top, (DWORD)src);
+                else
+                    logf("PRESENT> dst [%ld %ld %ld %ld] %ldx%ld  src NULL (whole surface)  "
+                         "client %ldx%ld  surf=0x%08lX",
+                         dr->left, dr->top, dr->right, dr->bottom,
+                         dr->right - dr->left, dr->bottom - dr->top,
+                         cr2.right - cr2.left, cr2.bottom - cr2.top, (DWORD)src);
+            }
+        }
+    }
+
     /* THE FULL-FRAME CAPTURE POINT. The final present blits the whole composited frame to the
        window (measured: dest [0 23 2048 1104] via GZGraphicD+0x16C3D, i.e. client-sized and offset
        by the title bar). Capturing right after it guarantees the HUD is already composited. */
@@ -3252,6 +3322,10 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
                         rz_fix_hud_parents(g_wins[k].w, "win", gw, gh);
                 }
                 rz_input_geometry(gw, gh, gw - NAT_W, gh - NAT_H + g_hud_dy);
+                if (g_presentlog || g_presentfix) {
+                    rz_patch_ddblt();
+                    logf("PRESENT> hook installed (log=%d fix=%d)", g_presentlog, g_presentfix);
+                }
 
                 /* ⭐⭐ THE CASCADE — rebuild every DERIVED rect from the local ones, once, last.
                  *
@@ -4995,6 +5069,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_SIDEDY", v, sizeof(v))) g_side_dy = (LONG)atoi(v);
           g_side_poll = GetEnvironmentVariableA("SC3RESIZE_SIDEPOLL", v, sizeof(v)) && atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_SRCRECT", v, sizeof(v))) g_srcrect = atoi(v);
+          g_presentlog = GetEnvironmentVariableA("SC3RESIZE_PRESENTLOG", v, sizeof(v)) && atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_PRESENTFIX", v, sizeof(v))) g_presentfix = atoi(v);
           if (!GetEnvironmentVariableA("SC3RESIZE_DUMPDIR", g_dumpdir, sizeof(g_dumpdir)))
               lstrcpynA(g_dumpdir, ".", sizeof(g_dumpdir));
           g_noparentfix = GetEnvironmentVariableA("SC3RESIZE_NOPARENTFIX", v, sizeof(v)) && atoi(v);
@@ -5015,9 +5091,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
          * a self-consistent log). One line makes the whole class loud instead of silent.
          * verify/resize_flaggate/NOHIT_RESULTS.md */
         logf("### FLAGS> cluster=%d input=%d nohit=%d hudfit=%d hudlab=%d sweep=%d side=%d mini=%d "
-             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld sidedy=%ld",
+             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld sidedy=%ld presentlog=%d",
              g_cluster, g_input, g_nohit, g_hudfit, g_hudlab, g_sweepon, g_sideon, g_minion,
-             g_anchor, g_census, g_minzoom, g_ready_ms, g_noparentfix, g_hud_dy, g_side_dy);
+             g_anchor, g_census, g_minzoom, g_ready_ms, g_noparentfix, g_hud_dy, g_side_dy, g_presentlog);
         if (AddVectoredExceptionHandler(1, rz_veh))
             logf("### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the "
                  "zoom-after-resize crash the game swallows)");
