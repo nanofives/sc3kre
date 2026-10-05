@@ -22,7 +22,10 @@ param(
   [string]$Script,
   [string]$ScriptArgs = "",
   [switch]$IOS,
-  [string]$Module = ""
+  [string]$Module = "",
+  # Loki Linux demo library (x86 ELF, GCC 2.95, .dynsym-named), e.g. -Linux libSimRCI.so
+  # See re\analysis\TOOLING_ADOPTION.md section 4.
+  [string]$Linux = ""
 )
 $ErrorActionPreference = "Stop"
 # This script lives in <project>\re\scripts\ — project root is two levels up.
@@ -53,6 +56,15 @@ if ($Module) {
   $ProcName  = $Module
   $ExportDir = Join-Path $Root "re\ghidra_export_$($stem.ToLower())"
 }
+elseif ($Linux) {
+  $Bin = Join-Path $Root "original\loki_demo\sc3u_demo\lib\$Linux"
+  if ($Linux -eq "sc3u_demo.x86") { $Bin = Join-Path $Root "original\loki_demo\sc3u_demo\sc3u_demo.x86" }
+  if (-not (Test-Path $Bin)) { throw "Linux binary not found: $Bin (see original\loki_demo\ANCHORS.txt)" }
+  $stem      = [IO.Path]::GetFileNameWithoutExtension($Linux)
+  $ProjName  = "SC3linux_$stem"
+  $ProcName  = $Linux
+  $ExportDir = Join-Path $Root "re\ghidra_export_linux_$($stem.ToLower())"
+}
 elseif ($IOS) {
   $ProjName  = "SC3iOS"
   $Bin       = Join-Path $Root "original\SimCity_DLX_armv7"
@@ -67,6 +79,15 @@ elseif ($IOS) {
 
 if (-not (Test-Path $Headless)) { throw "Ghidra not found at $Headless — run install first." }
 
+# Fail fast on a held project lock. Measured 2026-10-05: with a ghidra-headless-mcp session holding
+# SC3_SIMRCI open (even read-only), `-Count` on the same project did not error, it HUNG for 13+ minutes.
+# A live JVM keeps <proj>.lock open; a stale lock file (crashed run) can be opened and is ignored.
+$lock = Join-Path $ProjDir "$ProjName.lock"
+if (Test-Path $lock) {
+  try { $fh = [IO.File]::Open($lock, 'Open', 'ReadWrite', 'None'); $fh.Close() }
+  catch { throw "Ghidra project $ProjName is locked by a live process (another session, or an open ghidra-headless-mcp program). Close it there first (program.close) rather than killing it." }
+}
+
 function Invoke-Headless([string[]]$hlArgs) {
   Write-Host ">> analyzeHeadless $($hlArgs -join ' ')" -ForegroundColor Cyan
   & $Headless @hlArgs
@@ -75,7 +96,10 @@ function Invoke-Headless([string[]]$hlArgs) {
 
 if ($Import) {
   # Fresh import + full analysis. -overwrite so re-runs re-baseline cleanly.
-  Invoke-Headless @($ProjDir, $ProjName, "-import", $Bin, "-overwrite")
+  $imp = @($ProjDir, $ProjName, "-import", $Bin, "-overwrite")
+  # GCC 2.95 mangling needs the deprecated GNU demangler, set before auto-analysis runs.
+  if ($Linux) { $imp += @("-scriptPath", $ScriptDir, "-preScript", "SetGnuV2Demangler.java") }
+  Invoke-Headless $imp
 }
 elseif ($Export) {
   Invoke-Headless @($ProjDir, $ProjName, "-process", $ProcName, "-noanalysis", "-readOnly",
