@@ -247,15 +247,16 @@ enable by default.
 1. **Owner hand-test of the 2026-09-03 to 2026-09-07 fixes on a rebuilt DLL.** None of `KIDFIX`,
    `ARTGUARD`, `RCIFIX`, the corner re-anchor or the flyout change has been looked at by the owner.
    `re/harness/bin/sc3resize.dll` predates the last source edit. Rebuild first.
-2. **Edge-scroll band still uses the native view size.** Owner request 2026-08-30. `edge_margin` is
-   C3 in `CAMERA_MODDING.md`. The band rects are built from view bounds `+0xd8..+0xe4` in
-   `SIMSPR FUN_10043989`. Next step in progress, see BOARD §2.
-3. **`[UNCERTAIN]` The view did not pan after a resize under posted input** (2026-09-07,
-   `verify/offscreen/MAP_INPUT.md`, local): right-drag, left-drag and posted arrows all measured
-   dx=0 dy=0 by image alignment. The arrows are explained: the arrow handler reads the physical key
-   state, so posted arrows never scroll at any size (`KEY_BINDINGS_RUNTIME.md`, local). The drags
-   are NOT explained, and no real-mouse test after a resize separates "the mod breaks panning"
-   from "posted drags do not pan". Settle before or with item 2.
+2. ⛔ **REGRESSION: map input beyond the native 800x600 is dead** (measured and causal 2026-10-05,
+   `verify/resize_edgescroll/RESULTS.md`). The cascade (`37989b5`) runs after `rz_input_geometry` and
+   rebuilds the city view's hit rect `+0x14` from its local rect `+0x80` = `[0 0 800 600]`, undoing
+   the widen. A live poke of the hit rect restored delivery at (1792,336). Fix: also set the local
+   rect. Needs a PRE. This also explains the 2026-09-07 "view does not pan" result (drags started at
+   x=900).
+3. **Edge-scroll band:** `EDGEFIX` (`03ca3c3`) rebuilds the bands from native + delta, measured
+   correct at 1920x1009 and back at 800x600. But `+0x177` is "scroll in progress", and every SIMSPR
+   starter of a scroll is keyboard-driven, so the bands may never start a scroll from the mouse
+   alone. Owner question pending: does the native game scroll with the mouse at the edge and no key?
 4. **Shippable package is stale.** The only packaged `sc3resize.dll` + `resize_launch.exe` is from
    2026-08-28. Cluster mode needs `SC3RESIZE_CLUSTER=1`. Bake the defaults and rerun the offline
    gates.

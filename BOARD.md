@@ -196,9 +196,12 @@ Stride/corner measurement is deferred as cosmetic (~8 runs).
 >
 > **Open, in order.**
 > 1. Owner hand-test of the 09-03 to 09-07 fixes on a REBUILT DLL (the binary predates the last edit).
-> 2. Edge-scroll band to the live window size (owner 2026-08-30). In progress.
-> 3. `[UNCERTAIN]` posted drags did not pan the view after a resize (2026-09-07). Not separated from
->    "posted drags never pan". Needs a real-mouse check.
+> 2. ⛔ REGRESSION, causal 2026-10-05: map input beyond the native 800x600 is dead. The cascade
+>    rebuilds the city view's hit rect from its 800x600 local rect after the mod widens it. Fix: set
+>    the local rect too (needs a PRE). Explains the 09-07 "posted drags do not pan" result.
+> 3. Edge-scroll band: `EDGEFIX` rebuilds the bands to the window, geometry measured correct. But
+>    the bands only steer a scroll that the keyboard started (`+0x177` = scroll in progress). Owner
+>    question: does the native game edge-scroll with the mouse alone? `verify/resize_edgescroll/`.
 > 4. Shippable package: the only package is 2026-08-28. Bake cluster defaults, rerun offline gates.
 > 5. UI scale-up when the window grows in both directions (owner 2026-08-30, second half).
 > 6. Tracker debt (list at the end of `RESIZABLE_WINDOW.md`), via `tracker.py batch`.
