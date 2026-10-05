@@ -6,7 +6,7 @@ known end to end, code *and* data.
 ## The chain
 
 ```
-SC3U.exe                sc3_gz_make_resource_key  0x00484b6d   {type=0x2026960b, group, instance}
+SC3U.exe                sc3_geom_reskey_ctor  0x00484b6d   {type=0x2026960b, group, instance}
    ctor tail       →    sc3_gz_reskey_resolve     0x004862e1   (*(*mgr+0x14))(triple, 0x69, out)
    mgr = GZCOM service CLSID 0x801998e4 / IID 0x1995e7   (framework DAT_004fab74, @0x00406ec6)
         │  not implemented in SC3U.exe
@@ -14,7 +14,7 @@ SC3U.exe                sc3_gz_make_resource_key  0x00484b6d   {type=0x2026960b,
 GZResourceD.dll         director 0x10002d89 registers 0x801998e4 → factory 0x100033b1
                         ctor 0x10011ea4 (operator_new(0x104)), returns object+0x18
                         vtable PTR_LAB_1001d92c slot 5 (+0x14) = sc3_gz_resolve_key_to_string 0x10012c48
-                        → sc3_gz_open_indexed_db 0x1000ca78   (magic + 20-byte index)
+                        → sc3spr_dbseg_open_read_index 0x1000ca78   (magic + 20-byte index)
         ▼
 Apps\Res\Text\<LANGUAGE>\*.IXF        7 languages, verified on disk
 ```

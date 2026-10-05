@@ -221,8 +221,8 @@ shell-link / OLE-persisted file to a real path. `[UNCERTAIN]` exact extension in
 rva,subsystem,confidence,new_name,evidence
 0x1001e4e4,gzcom-director,C2,sc3_ntwrk_get_gzcom_director,"PE export; guarded singleton DAT_1003222c; ctor FUN_100010d1; returns &DAT_100321e8 [CONFIRMED]"
 0x100010d1,gzcom-director,C2,sc3_ntwrk_director_ctor,"installs vtables; registers 2 classes 0x2171c021/0xe223741f via FUN_1001e866 [CONFIRMED]"
-0x1001e4e9,gzcom-director,C2,sc3_ntwrk_director_base_ctor,"sets director vtables; builds class map at +0x14 [CONFIRMED]"
-0x1001e866,gzcom-director,C2,sc3_ntwrk_register_class,"packs {clsid,factory,arg}; inserts into map at this+0x14 [CONFIRMED]"
+0x1001e4e9,gzcom-director,C2,sc3_gz_director_base_ctor,"sets director vtables; builds class map at +0x14 [CONFIRMED]"
+0x1001e866,gzcom-director,C2,sc3_gzcom_register_class,"packs {clsid,factory,arg}; inserts into map at this+0x14 [CONFIRMED]"
 0x10001138,gzcom-factory,C2,sc3_ntwrk_factory_cls2171c021,"operator_new(0x6c)+FUN_1001a12e [CONFIRMED]"
 0x1000116a,gzcom-factory,C2,sc3_ntwrk_factory_clse223741f,"operator_new(0x150)+FUN_1000daec [CONFIRMED]"
 0x1001a12e,gzcom-class,C2,sc3_ntwrk_cls6c_ctor,"0x6c obj; vtable PTR_FUN_1002c7bc; subobj at +0x14 via FUN_1000aa2e [CONFIRMED]"
@@ -241,7 +241,7 @@ rva,subsystem,confidence,new_name,evidence
 0x1001b456,util-vector,C2,sc3_ntwrk_vec_push_record,"std::vector push of 12B record; advances +0xc or grows via FUN_1001b670 [CONFIRMED]"
 0x1000bdcd,piece-factory,C2,sc3_ntwrk_make_piece,"switch (type&0xff)-1 22 cases; new 0x20/0x1c + per-case vtables; vcalls [0]/[0xc]/[0x104] [CONFIRMED]"
 0x1000d2da,piece-ctor,C2,sc3_ntwrk_piece_ctor_20,"chains FUN_1000d0fc; +7=0; vtables PTR_FUN_1002badc/PTR_LAB_1002b994 [CONFIRMED]"
-0x10020b60,com-pathresolve,C2,sc3_ntwrk_resolve_ole_path,"ext==DAT_1003209c; dynamic Ole32; CoCreateInstance+IPersistFile Load; extract path<=261 [CONFIRMED]"
+0x10020b60,com-pathresolve,C2,sc3_util_resolve_shell_link,"ext==DAT_1003209c; dynamic Ole32; CoCreateInstance+IPersistFile Load; extract path<=261 [CONFIRMED]"
 0x1000119f,gzcom-dtor,C1,sc3_ntwrk_scalar_deleting_dtor,"calls FUN_100011bb then conditional FUN_10026665(free) on (param&1) [CONFIRMED]"
 ```
 

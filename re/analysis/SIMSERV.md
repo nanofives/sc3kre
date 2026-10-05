@@ -181,7 +181,7 @@ rva,subsystem,confidence,new_name,evidence
 0x100135fd,gzcom-director,C2,sc3_serv_get_gzcom_director,"PE export; guarded one-shot returns &DAT_100249c0 @0x100135fd"
 0x100103fb,gzcom-director,C2,sc3_serv_get_director_dup,"identical body to 0x100135fd @0x100103fb"
 0x10010426,gzcom-director,C2,sc3_serv_director_ctor,"sets director vtables + 7x register_class @0x10010426"
-0x10013983,gzcom-director,C2,sc3_serv_register_class,"inserts {clsid,factory,0} into map at director+0x14 @0x10013983"
+0x10013983,gzcom-director,C2,sc3_gzcom_register_class,"inserts {clsid,factory,0} into map at director+0x14 @0x10013983"
 0x100104e3,gzcom-factory,C2,sc3_crime_factory_layer,"operator_new(0xe0)+ctor 0x10005f9a, returns obj+0x1c; clsid 0x20a7ae7f"
 0x10010521,gzcom-factory,C2,sc3_flam_factory_layer,"operator_new(0x54)+ctor 0x1000c3e6, returns obj+0x10; clsid 0x61448030"
 0x1001055c,gzcom-factory,C2,sc3_police_factory_layer,"operator_new(0xf0)+ctor 0x1000d7b8, returns obj+0x1c; clsid 0x00abf2ec"

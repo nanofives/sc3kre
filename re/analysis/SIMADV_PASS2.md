@@ -49,7 +49,7 @@ Same template as doc §3.1 (`FUN_10029434` parser init → attach `Advisor-<Doma
 ### Promoted-rows CSV
 ```csv
 rva,subsystem,confidence,new_name,evidence
-0x10024b9d,advisor-director,C2,sc3_advisor_director_insert_factory,"forwards (GZCLSID,factory,0) to map-insert FUN_10024e9a on director+0x14 [0x10024b9d:11-14]"
+0x10024b9d,advisor-director,C2,sc3_gzcom_register_class,"forwards (GZCLSID,factory,0) to map-insert FUN_10024e9a on director+0x14 [0x10024b9d:11-14]"
 0x10006656,advisor-cityplanner,C2,sc3_advisor_ctor_cityplanner,"4 vtables 10030154..; topic-ids grp 0xc29a6083 idx0x57 + grp0x29541f4 idx0x2c5/0x2be/0x156; topicgfx instance byte 0x03; this[0x24]=0x12d; defaults this[0x38]=50000,[0x30]=20000,[0x31]=100000 [0x10006656]"
 0x1000c8e1,advisor-demographics,C2,sc3_advisor_ctor_demographics,"topic grp0xc29a6083 idx0x53 + 0x2c8/0x2c1/0x15c; gfx byte 0x07; this[0x24]=0x12a; defaults [0x30]=5000,[0x2a]=15000,[0x2b]=50000,[0x32]=52000,[0x33]=80000 [0x1000c8e1]"
 0x1000f0db,advisor-environment,C2,sc3_advisor_ctor_environment,"circ-list FUN_100031c0(0xc)@[0x29]; topic grp0xc29a6083 idx0x54 + 0x2c6/0x2bf/0x158; gfx byte 0x04; this[0x24]=0x129; [0x2a/0x2c/0x2e]=0x42,[0x2b/0x2d/0x2f]=0x21 [0x1000f0db]"

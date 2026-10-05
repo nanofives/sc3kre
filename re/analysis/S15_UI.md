@@ -19,7 +19,7 @@ holds the client side.
 
 Corrects an earlier reading in `RESOURCE_KEYS.md`: `FUN_00484bef` does **not** resolve anything.
 
-1. `sc3_gz_make_resource_key` `0x00484b6d` stores the triple `{0x2026960b, group, instance}` at `+8`.
+1. `sc3_geom_reskey_ctor` `0x00484b6d` stores the triple `{0x2026960b, group, instance}` at `+8`.
 2. The ctor tail calls **`sc3_gz_reskey_resolve` `0x004862e1`** — the actual resolver:
    `(*(*stringManager + 0x14))(this+8, 0x69, this+4)` @`0x004862f1`. Manager vtable **slot 0x14**,
    the triple, the constant **`0x69` (105, meaning unknown — `[UNCERTAIN]`)**, and an out-pointer.

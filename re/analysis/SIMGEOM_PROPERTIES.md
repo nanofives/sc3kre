@@ -107,7 +107,7 @@ rva,subsystem,confidence,new_name,evidence
 0x10023580,simgeom-occupant,C2,sc3_bldocc_vt_set_delegate,"thunk->FUN_10022ff1"
 0x10023591,simgeom-occupant,C2,sc3_bldocc_vt_delegate_or_default,"thunk->FUN_1002301d"
 0x1001d907,simgeom-occupant,C2,sc3_bldocc_resolve_class_579,"resolves (this+4)->vt+0x8c id to GZCOM iface 0x579 via factory"
-0x1001958a,simgeom,C2,sc3_geom_get_class_factory,"FUN_10012880 vt+0x30 -> GZCOM class factory (vt+0xc = create/lookup by id,iid,&out)"
+0x1001958a,simgeom,C2,sc3_get_class_object,"FUN_10012880 vt+0x30 -> GZCOM class factory (vt+0xc = create/lookup by id,iid,&out)"
 0x1001bead,simgeom,C2,sc3_geom_get_id_manager,"FUN_1001bdb4 vt+0x40 -> manager used to resolve +0x04 id into +0x2c"
 ```
 

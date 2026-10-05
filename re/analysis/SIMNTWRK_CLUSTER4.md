@@ -38,7 +38,7 @@ Same six `param_3` typed setters (`+0x28,+0x2c,+0x30,+0x34,+0x38,+0x3c`) → `pa
 ```csv
 rva,subsystem,confidence,new_name,evidence
 0x1000ca2c,piece-serialize,C2,sc3_ntwrk_tile_write_record,"emit path: (*param_3+0x84)(key,val) keys 0x6355941d/1e/1f/20/21 + typed setters +0x30(x11,y11,z8)/+0x38(rot2)/+0x3c(2 flags); exact inverse of reader FUN_1000c86f (+0x80 GET) [CONFIRMED @ 0x1000ca2c, 0x1000c86f, 0x1000d594]"
-0x10023b3a,piece-serialize,C2,sc3_ntwrk_tile_write_record_virtual,"sibling emit: same param_3 setters +0x28/2c/30/34/38/3c, source via virtual getters (*param_1+0x14/+0x88/+0xd4); same 11/11/8 packing at param_1[4], flags at param_1[3] bit24/25 [CONFIRMED @ 0x10023b3a]"
+0x10023b3a,piece-serialize,C2,sc3_record_fill_descriptor,"sibling emit: same param_3 setters +0x28/2c/30/34/38/3c, source via virtual getters (*param_1+0x14/+0x88/+0xd4); same 11/11/8 packing at param_1[4], flags at param_1[3] bit24/25 [CONFIRMED @ 0x10023b3a]"
 0x10013965,gzcom,C2,sc3_ntwrk_get_clsid_2147c2dd,"returns const 0x2147c2dd; used as GZCLSID paired with IID 0x206c6e7c (GZIID_cISC3CityLayer) in FUN_10012dff layer queries [CONFIRMED @ 0x10013965, 0x10012dff]"
 ```
 

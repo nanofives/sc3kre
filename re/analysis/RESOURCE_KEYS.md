@@ -5,7 +5,7 @@ killed it exposed this instead.
 
 ## The object `[CONFIRMED]`
 
-`sc3_gz_make_resource_key` @`0x00484b6d` (45 bytes) builds a 3-tuple key:
+`sc3_geom_reskey_ctor` @`0x00484b6d` (45 bytes) builds a 3-tuple key:
 
 ```c
 this[0x00] = &PTR_FUN_004da53c;   // vtable
@@ -26,7 +26,7 @@ It is not: in `SC3U.exe` the type is always `0x2026960b` and the payload is **lo
 
 | RVA | name | role | conf |
 |---|---|---|---|
-| `0x00484b6d` | `sc3_gz_make_resource_key` | ctor (group, instance) | C2 |
+| `0x00484b6d` | `sc3_geom_reskey_ctor` | ctor (group, instance) | C2 |
 | `0x00484c7a` | `sc3_gz_get_resource_key` | getter → triple | C2 |
 | `0x00484bef` | `sc3_gz_resolve_key_to_string` | key → `std::string` (then `FUN_0040262c`) | C1 |
 | `0x00484b9a` | — | destructor/release (paired with every ctor) | C0 |

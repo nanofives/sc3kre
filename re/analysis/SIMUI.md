@@ -12,7 +12,7 @@ game UI, and `GZWIND.DLL` is the window-manager service underneath both.
 SC3U.exe          UI shell: theme, splash, credits, resolution, updater
    │  GetService(0xa417445e, 0x5a4)
 SIMUI.DLL         game screens: setup, catalog, terrain edit, advisors, graphs, chat
-   │  GetService(0xa417445e, 0x5a4)   ← sc3ui_get_windowmgr_service 0x10012666
+   │  GetService(0xa417445e, 0x5a4)   ← sc3_ui_construct_dialog_manager 0x10012666
 GZWIND.DLL        the dialog/window manager itself (ctor 0x1001fd88,
                   service-base init FUN_10023875(this, 0xa417445e, 0x1312d0))
 ```
@@ -28,7 +28,7 @@ and **string-table group+instance ids resolved against `re/data/ixf_text.csv`**.
 sc3ui_object_base_ctor        0x1006c2f7   ROOT, 0xa4 bytes, field [0x28]=0x903
    ├─ sc3ui_widget_base_ctor  0x1002c688   + secondary interface vtable at +0xa4
    │     └─ sc3ui_labeled_widget_base_ctor 0x10031dde   + std::string @+0xe4, [0x3e]=500
-   └─ sc3ui_view_base_ctor    0x10082406   embeds the root at byte +4; 0xdeadbeef sentinels
+   └─ sc3_ui_construct_composite_widget    0x10082406   embeds the root at byte +4; 0xdeadbeef sentinels
 ```
 
 > **Cross-binary link:** the root's `[0x28] = 0x903` and the view base's `0xdeadbeef` sentinels +
@@ -38,7 +38,7 @@ sc3ui_object_base_ctor        0x1006c2f7   ROOT, 0xa4 bytes, field [0x28]=0x903
 ## The registry — 40 classes `[CONFIRMED @0x1006a964]`
 
 `GZDllGetGZCOMDirector` `0x100848a9` → singleton `0x1006a939` → ctor `0x1006a964` → 40 ×
-`sc3ui_register_class` `0x10084c36`, which inserts `{GZCLSID, factory}` into a BST at
+`sc3_gzcom_register_class` `0x10084c36`, which inserts `{GZCLSID, factory}` into a BST at
 `director+0x14` (`0x10084eb2`).
 
 **12 of the 40 were invisible.** Ghidra had left their factories as bare `LAB_*` — GZCOM factory

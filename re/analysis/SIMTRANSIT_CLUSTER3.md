@@ -2,10 +2,10 @@
 
 ```csv
 rva,subsystem,confidence,new_name,evidence
-0x10013b6a,transit-serialize,C2,sc3_transit_visit_arrays_dispatch38,"__thiscall(this,param_1,param_2); iterates 3 arrays via FUN_10013e21 over 16-byte headers at this+0x78 (12 elts), this+0xa0 (10), this+0xc8 (10), short-circuits on char return; calls param_2 vtbl+0x38 per element passing *piVar3; then single this+0x60; finalizes via this vtbl+0x48 (if this+0x64==0) or FUN_1001355f(this-8) [CONFIRMED @ 0x10013b6a]"
-0x10012003,io-util,C2,sc3_io_move_file,"__cdecl(int*,int*); lazily LoadLibraryA(KERNEL32.DLL)+GetProcAddress(MoveFileExA) cached in DAT_1001fe8c (init flag DAT_1001fe88); path via param vtbl+0x14; MoveFileExA(flags=2) else MoveFileA fallback [CONFIRMED @ 0x10012003]"
-0x10015da8,transit-serialize,C2,sc3_transit_write_record,"__thiscall; guards *(this+4)!=0; writes fields to param_2 stream via vtbl 0x28/0x2c/0x30/0x34/0x38/0x3c; unpacks packed dword this+0x10 into bitfields &0x7ff,>>0xb&0x7ff,>>0x16&0xff,>>0x1e; reads this+0xc bytes [CONFIRMED @ 0x10015da8]"
-0x10013c35,transit-serialize,C2,sc3_transit_visit_arrays_dispatch88,"__thiscall; same 3-array iteration as 0x10013b6a (this+0x78/0xa0/0xc8, counts 12/10/10) but calls param_2 vtbl+0x88 passing *(undefined4*)*piVar2; single this+0x60 tail; no finalizer [CONFIRMED @ 0x10013c35]"
+0x10013b6a,transit-serialize,C2,sc3_object_load_arrays,"__thiscall(this,param_1,param_2); iterates 3 arrays via FUN_10013e21 over 16-byte headers at this+0x78 (12 elts), this+0xa0 (10), this+0xc8 (10), short-circuits on char return; calls param_2 vtbl+0x38 per element passing *piVar3; then single this+0x60; finalizes via this vtbl+0x48 (if this+0x64==0) or FUN_1001355f(this-8) [CONFIRMED @ 0x10013b6a]"
+0x10012003,io-util,C2,sc3_util_move_file,"__cdecl(int*,int*); lazily LoadLibraryA(KERNEL32.DLL)+GetProcAddress(MoveFileExA) cached in DAT_1001fe8c (init flag DAT_1001fe88); path via param vtbl+0x14; MoveFileExA(flags=2) else MoveFileA fallback [CONFIRMED @ 0x10012003]"
+0x10015da8,transit-serialize,C2,sc3_record_fill_descriptor,"__thiscall; guards *(this+4)!=0; writes fields to param_2 stream via vtbl 0x28/0x2c/0x30/0x34/0x38/0x3c; unpacks packed dword this+0x10 into bitfields &0x7ff,>>0xb&0x7ff,>>0x16&0xff,>>0x1e; reads this+0xc bytes [CONFIRMED @ 0x10015da8]"
+0x10013c35,transit-serialize,C2,sc3_object_save_arrays,"__thiscall; same 3-array iteration as 0x10013b6a (this+0x78/0xa0/0xc8, counts 12/10/10) but calls param_2 vtbl+0x88 passing *(undefined4*)*piVar2; single this+0x60 tail; no finalizer [CONFIRMED @ 0x10013c35]"
 0x100051fc,gzcom,C2,sc3_gzcom_query_interface,"__thiscall(this,int iid,void** out); if iid in {1,0x58d,0x29ca805,0x206c6e7c,0x81c0cb7c} writes this to *param_2, calls this vtbl+0x4 (AddRef), returns 1 in low byte; else returns iid&0xffffff00 (0) [CONFIRMED @ 0x100051fc]"
 ```
 

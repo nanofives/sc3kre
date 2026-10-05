@@ -31,7 +31,7 @@ Step by step `[CONFIRMED @ 0x10010634]`:
 
 ```csv
 rva,subsystem,confidence,new_name,evidence
-0x10010634,io-stream,C2,sc3_eco_stream_read_line,"reads a CR/LF-terminated text line from stream at this+0x28 (vtable 0x18 tell / 0x1c len / 0x2c seek-rel / 0x30 seek-abs / 0x38 read) into std::string at param_1+4; accumulates via FUN_100029c7, assigns via FUN_10002b19; 40-byte chunks; returns bool bytes-read [CONFIRMED @ 0x10010634]"
+0x10010634,io-stream,C2,sc3_io_read_line,"reads a CR/LF-terminated text line from stream at this+0x28 (vtable 0x18 tell / 0x1c len / 0x2c seek-rel / 0x30 seek-abs / 0x38 read) into std::string at param_1+4; accumulates via FUN_100029c7, assigns via FUN_10002b19; 40-byte chunks; returns bool bytes-read [CONFIRMED @ 0x10010634]"
 ```
 
 ### 2. Notable findings

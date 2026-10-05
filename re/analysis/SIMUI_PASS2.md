@@ -19,7 +19,7 @@ rva,subsystem,confidence,new_name,evidence
 0x1008665b,ui/widget,C2,sc3ui_smallobj_ctor_5a6,"trivial: zero [1..4]; set vtable [0]=PTR_LAB_100aeba0; no base ctor; new 0x14 (5 dwords)"
 ```
 
-**Notes on the naming corrections:** `0x10085091` was `sc3ui_get_parent_registry` — the decomp shows it caches the **window-manager** service (`0xa417445e/0x5a4`), the same pair SIMUI.md already names `sc3ui_get_windowmgr_service`. `0x10085179` was `sc3ui_get_screen_info` — no evidence supports "screen info"; it caches `GetService(0x441e5070, 0x54b7d5)`, so the name now carries the raw ids.
+**Notes on the naming corrections:** `0x10085091` was `sc3ui_get_parent_registry` — the decomp shows it caches the **window-manager** service (`0xa417445e/0x5a4`), the same pair SIMUI.md already names `sc3_ui_construct_dialog_manager`. `0x10085179` was `sc3ui_get_screen_info` — no evidence supports "screen info"; it caches `GetService(0x441e5070, 0x54b7d5)`, so the name now carries the raw ids.
 
 **Two would-be-trivial ctors that still reach C2:** `0x1001a983` and `0x10064a0f` are pure zero-init + vtable ctors, but callees (`FUN_1006c2f7` root) and every offset/vtable are identified, so they clear the C2 bar.
 

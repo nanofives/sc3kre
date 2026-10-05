@@ -271,7 +271,7 @@ rva,subsystem,confidence,new_name,evidence
 0x100092fa,calendar,C2,sc3_cal_date_copy,"copies date field [+4], sets vtable PTR_LAB_10013978"
 0x100071ce,rng,C2,sc3_rng_seed_from_time,"seed from time()+mktime()+_timezone, low nibble from FUN_1000adf8"
 0x1000addd,timing,C2,sc3_timer_set_base,"sets timeGetTime baseline (uses now if arg 0xffffffff)"
-0x1000d931,timing,C2,sc3_hrtimer_init,"QueryPerformanceFrequency, precomputes scale factors to _DAT_10017608.."
+0x1000d931,timing,C2,sc3_util_init_perf_timer,"QueryPerformanceFrequency, precomputes scale factors to _DAT_10017608.."
 0x1000d9db,timing,C2,sc3_hrtimer_read_delta,"QueryPerformanceCounter minus base at +0x10/+0x14"
 0x1000da1b,timing,C2,sc3_hrtimer_read,"raw QueryPerformanceCounter into out param"
 0x1000d0a9,threading,C2,sc3_thread_start,"_beginthreadex(LAB_1000d08f,args); handle +0xc, id +0x10"

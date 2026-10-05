@@ -252,7 +252,7 @@ handler read here `[UNCERTAIN]`.
 rva,subsystem,confidence,new_name,evidence
 0x1000f984,scenario-director,C2,sc3_scenario_get_gzcom_director,PE export; guarded ctor of DAT_1001e9e0 returns director
 0x100010b1,scenario-director,C2,sc3_scenario_director_ctor,sets vtables + 2x register_class(0x03de4ce4/0x03dfae27)
-0x1000fd11,scenario-director,C2,sc3_scenario_register_class,inserts {clsid,factory} into director map at this+0x14
+0x1000fd11,scenario-director,C2,sc3_gzcom_register_class,inserts {clsid,factory} into director map at this+0x14
 0x10001116,scenario-director,C2,sc3_scenario_factory_layer,operator_new(0x9b0)+ctor 0x100065dc (SC3ScenarioLayer)
 0x1000114b,scenario-director,C2,sc3_scenario_factory_helper,operator_new(0xc)+ctor 0x100011ab
 0x100011ab,scenario-director,C2,sc3_scenario_helper_ctor,sets 3 vtables 1001a224/a24c/a264 on 12-byte object

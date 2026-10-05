@@ -1760,7 +1760,7 @@ result stored as the bool at `this+0x10` — plus a reset-and-retry-once around 
 
 The base-0 correction rested on two witnesses (SIMCITY `0x10010315`, SIMGEOM `0x1001f360`). This is
 a **third, in a third module**, found by a worker with no knowledge of either. The frame really is a
-per-module copy of a shared helper. Tracker name corrected to `sc3_zonedev_frame_read_ctor`; the
+per-module copy of a shared helper. Tracker name corrected to `sc3_serial_record_reader_ctor`; the
 worker had it as a "cursor ctor", which understates what it is.
 
 ### 3. The `u16` permutation READER is confirmed field-for-field `[CONFIRMED @0x1004350e]`

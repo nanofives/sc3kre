@@ -40,15 +40,15 @@ rva,subsystem,confidence,new_name,evidence
 0x10004f20,audio-init,C2,sc3_audio_manager_ctor,"AudioManager ctor; sets 2 vtables, default tunables (0x400 vols,10000,0xfa,300...), zeroes 512-slot array, allocs sub-objs (FUN_1001b691,FUN_10019f90); sets singleton DAT_10026f00 [0x10004f20:19-150]"
 0x1000a459,audio-listener,C2,sc3_audio_update_listener_position,"view/camera change handler (msg 0x400); caches zoom/rot/center to this+0x990..0x9b8; pushes listener pos (vtable+0x7c) to all fsc sets + 15 voices; then FUN_10009890 [0x1000a459:21-134]"
 0x1000b48b,audio-event-map,C2,sc3_audio_play_building_sound,"one-shot positional building/disaster sound (dispatch case 200); layer vtable+0x94 group id (0x118,0x119,0x11b-0x11e), variant table DAT_1002050c via RNG, quadrant pan _DAT_10020608/10020610 [0x1000b48b:70-151]"
-0x10018c53,audio-ini,C2,sc3_audio_ini_foreach_key,"enumerates a [section]'s key=value lines (split DAT_10026c28), collects 0x28-byte pairs, invokes callback param_2(key,val,param_3) per entry [0x10018c53:74-107]"
-0x100189b6,audio-ini,C2,sc3_audio_ini_get_value,"INI key read (GetPrivateProfileString-equiv); finds section, splits '=' , compares key (FUN_1000c68a), writes value to param_3, returns bool; powers all audio.ini tunables [0x100189b6:54-108]"
+0x10018c53,audio-ini,C2,sc3_ini_read_section_cb,"enumerates a [section]'s key=value lines (split DAT_10026c28), collects 0x28-byte pairs, invokes callback param_2(key,val,param_3) per entry [0x10018c53:74-107]"
+0x100189b6,audio-ini,C2,sc3_ini_get_value,"INI key read (GetPrivateProfileString-equiv); finds section, splits '=' , compares key (FUN_1000c68a), writes value to param_3, returns bool; powers all audio.ini tunables [0x100189b6:54-108]"
 0x100143c8,audio-emitters,C2,sc3_audio_update_random_emitters,"per-tick random emitter spawner; reaps done voices (+0xe0 array), region gate via layer+0xa8, RNG (FUN_1001a253) vs weight*BuildingRandMultiplier(mgr+0x38), creates+plays; vol from mgr+0x2c/+0x50/zoom [0x100143c8:39-139]"
 0x1000da02,audio-music-select,C2,sc3_audio_find_best_cell,"best-scoring cell search in a random-jittered window (rand within +/-this+0x74/0x70 of this+0x40/0x44); scores cells via vtable+0x98, tracks max into param_1/param_2 [0x1000da02:35-117]"
 ```
 
 ## 2. Notable findings (highest value)
 
-**Tunable table — `audio.ini` `[Options]` keys (the modding surface).** `FUN_100053e3` reads ~40 named keys through `sc3_audio_ini_get_value` (`FUN_100189b6`) and writes each to a fixed `this` offset. Section string `s_Options_10026860`, file `s_audio_ini_1002688c`. Confirmed key → offset map [all CONFIRMED @ 0x100053e3]:
+**Tunable table — `audio.ini` `[Options]` keys (the modding surface).** `FUN_100053e3` reads ~40 named keys through `sc3_ini_get_value` (`FUN_100189b6`) and writes each to a fixed `this` offset. Section string `s_Options_10026860`, file `s_audio_ini_1002688c`. Confirmed key → offset map [all CONFIRMED @ 0x100053e3]:
 
 | Key (string) | Store | Key | Store |
 |---|---|---|---|
@@ -76,7 +76,7 @@ Also `Res/Sound/` prefix (`s_Res_Sound__10026898`), and the 22 hard-coded ambien
 
 **Serializer** — `sc3_audio_load_freshness_table` (`0x1000ea5e`) is the one true file loader (versions 5/6/7, 14-int header, rows×cols grid of 0x5c-byte cells). The six `sc3_audio_parse_sound_entry_*` functions (`0x10002e5a`, `0x1000401f`, `0x10003a1e`, `0x1000287d`, `0x1000467b`, `0x10003584`) are a **parser family**: each consumes the same two tokenized strings (delimiters `DAT_10026270`, `DAT_1002626c`) and constructs a different sound-object subclass (ctors `FUN_10012d97`/0xb8, `FUN_1001422b`/0x154, `FUN_100147ec`/0x78, `FUN_100127a4`/0x5c, `FUN_10013c61`/0x64, `FUN_100109b0`/`FUN_10010c40`) into the 512-slot table — i.e. one parser per sound "type".
 
-**INI subsystem** — `sc3_audio_ini_get_value` (`0x100189b6`), `sc3_audio_ini_write_key` (`0x10018068`), `sc3_audio_ini_foreach_key` (`0x10018c53`) form a self-contained INI reader/writer keyed on `'='` (`DAT_10026c28`), `'['` sections, `';'` comments.
+**INI subsystem** — `sc3_ini_get_value` (`0x100189b6`), `sc3_audio_ini_write_key` (`0x10018068`), `sc3_ini_read_section_cb` (`0x10018c53`) form a self-contained INI reader/writer keyed on `'='` (`DAT_10026c28`), `'['` sections, `';'` comments.
 
 ## 3. Not determined / uncertain
 

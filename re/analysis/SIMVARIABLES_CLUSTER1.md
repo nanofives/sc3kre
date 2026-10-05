@@ -59,7 +59,7 @@ Mechanical behaviour:
 ```csv
 rva,subsystem,confidence,new_name,evidence
 0x10004dd1,tune,C2,sc3_tune_ini_write_entry,"update-or-insert 'key = value' under an INI section on stream this+0x28; uses fmt '\n[%s]\n'@1000e258, '%s = %s\n'@1000e264, '[%s]\n'@1000e270; scans for '['/';' lines; map lookup FUN_100063dd/FUN_10006313; empty key/value -> false [@0x10004dd1 L60-67,93,96,142,146,188]"
-0x10005f31,tune,C2,sc3_tune_stream_read_line,"getline over stream this+0x28; remaining = +0x1c size - +0x18 pos; reads 0x28-byte chunks via +0x38; splits on \r/\n, handles \r\n by peek+seekback +0x2c(-1); accumulates via FUN_10001d05; writes out_str param_1 [@0x10005f31 L41-90]"
+0x10005f31,tune,C2,sc3_io_read_line,"getline over stream this+0x28; remaining = +0x1c size - +0x18 pos; reads 0x28-byte chunks via +0x38; splits on \r/\n, handles \r\n by peek+seekback +0x2c(-1); accumulates via FUN_10001d05; writes out_str param_1 [@0x10005f31 L41-90]"
 0x10008267,util,C2,sc3_util_move_file,"rename src(param_1)->dst(param_2); lazy-load MoveFileExA from KERNEL32.DLL cached DAT_1000e5c4/guard DAT_1000e5c0; MoveFileExA(...,2=MOVEFILE_COPY_ALLOWED) preferred, MoveFileA fallback disables Ex on success; paths via vtable +0x14 [@0x10008267 L14-41]"
 ```
 

@@ -233,7 +233,7 @@ step constants `0/10/0x14/0x1e/0x28/0x32/0x3c` [CONFIRMED @ 0x1001a26b].
 rva,subsystem,confidence,new_name,evidence
 0x10024e87,disaster-director,C2,sc3_dstr_get_gzcom_director,"PE export; guarded init of DAT_1003abf0, calls ctor FUN_1002269e + onexit"
 0x1002269e,disaster-director,C2,sc3_dstr_director_ctor,"installs director vtables; 12x FUN_1002520d(GZCLSID,factory,0)"
-0x1002520d,disaster-director,C2,sc3_dstr_register_class,"builds {clsid,factory,0}; inserts into map at this+0x14 via FUN_1002547e"
+0x1002520d,disaster-director,C2,sc3_gzcom_register_class,"builds {clsid,factory,0}; inserts into map at this+0x14 via FUN_1002547e"
 0x10007978,disaster-layer,C2,sc3_dstr_layer_ctor,"class#1 0x61f6abf5; 4 vtables + 2 circular lists (FUN_1000454c 0x10) + FUN_100298cc"
 0x100227b5,disaster-factory,C2,sc3_dstr_factory_layer,"new(0x108)+FUN_10007978, returns obj+4; factory for 0x61f6abf5"
 0x100227f3,disaster-factory,C2,sc3_dstr_factory_cls2,"new(0x90)+FUN_100051e2, returns obj+0xC; 0x428fd431"
@@ -272,7 +272,7 @@ rva,subsystem,confidence,new_name,evidence
 0x10020726,disaster-parade,C2,sc3_dstr_parade_load_tunables,"group ParadeEvent(FUN_1001f933)/ParadeEventTunables; blocks(FUN_1001f9a3)/configs(FUN_1001fa88)"
 0x10014c98,disaster-toxiccloud,C2,sc3_dstr_toxic_compute_score,"WeightForPollution*sample/norm - ordinance weights + WeightForEachToxicWastePlant*count"
 0x10014fc8,disaster-toxiccloud,C2,sc3_dstr_toxic_should_trigger,"gate vs DAT_10039b1c, ftol sample, score>ThresholdScoreForToxicCloud(DAT_10039b64)"
-0x1001a26b,disaster-spread,C2,sc3_dstr_build_area_footprint,"packs (x&0xFF)|((y&0xFF)<<8) tiles; bins area vs DAT_1003337e..; rand() origin; calls FUN_1001b95d"
+0x1001a26b,disaster-spread,C2,sc3_cellmap_init_rect_scan_order,"packs (x&0xFF)|((y&0xFF)<<8) tiles; bins area vs DAT_1003337e..; rand() origin; calls FUN_1001b95d"
 0x1001b95d,disaster-spread,C1,sc3_dstr_shuffle_area,"uses rand(); called by FUN_1001a26b to randomize the tile buffer"
 ```
 

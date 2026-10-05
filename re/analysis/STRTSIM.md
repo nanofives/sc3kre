@@ -229,8 +229,8 @@ service singletons and creates objects by GZCLSID:
 rva,subsystem,confidence,new_name,evidence
 0x10024389,gzcom-director,C2,sc3_strtsim_get_gzcom_director,"PE export; guarded singleton returns &DAT_10032c08, calls ctor FUN_10006643 @0x10024389"
 0x10006643,gzcom-director,C2,sc3_strtsim_director_ctor,"registers 13 classes via FUN_10024716; installs PTR_FUN_1002a978 @0x10006643"
-0x1002438e,gzcom-director,C2,sc3_strtsim_director_base_ctor,"base ctor, vtables PTR_LAB_1002d3d8/PTR_FUN_1002d364, builds class map @0x1002438e"
-0x10024716,gzcom-director,C2,sc3_strtsim_register_class,"thiscall; writes {clsid,factory,0} into map at this+0x14 @0x10024716"
+0x1002438e,gzcom-director,C2,sc3_gz_director_base_ctor,"base ctor, vtables PTR_LAB_1002d3d8/PTR_FUN_1002d364, builds class map @0x1002438e"
+0x10024716,gzcom-director,C2,sc3_gzcom_register_class,"thiscall; writes {clsid,factory,0} into map at this+0x14 @0x10024716"
 0x1000676c,gzcom-factory,C2,sc3_strtsim_factory_layer,"new(0x27e0)+FUN_1001245b; clsid 0x22498f2c @0x1000676c"
 0x100067a1,gzcom-factory,C2,sc3_strtsim_factory_subiface,"new(0x2c)+FUN_1000959b, returns obj+0x14; clsid 0x21fd6eef @0x100067a1"
 0x100067dc,gzcom-factory,C2,sc3_strtsim_factory_c025c6d8b,"new(0xc)+FUN_10006a18; clsid 0x025c6d8b @0x100067dc"
@@ -268,7 +268,7 @@ rva,subsystem,confidence,new_name,evidence
 0x10010182,gzcom-services,C2,sc3_strtsim_resolve_clsid_table,"4-entry clsid table DAT_1002c318 -> handles DAT_10032ee0 via svc +0x14 @0x10010182"
 0x100264e9,gzcom-services,C2,sc3_strtsim_get_class_factory,"lazy singleton DAT_100333d0 (create-by-clsid service) @0x100264e9"
 0x10026443,gzcom-services,C2,sc3_strtsim_get_resource_service,"lazy singleton DAT_100333cc; method +0x50 builds key from path @0x10026443"
-0x10024f79,util,C2,sc3_strtsim_parse_uint_auto_radix,"strtoul with 0x/hex-digit auto radix detect @0x10024f79"
+0x10024f79,util,C2,sc3_str_to_ulong_autoradix,"strtoul with 0x/hex-digit auto radix detect @0x10024f79"
 0x1002517f,util,C2,sc3_strtsim_sleep_ms,"SleepEx(arg/1000, alertable) @0x1002517f"
 ```
 
