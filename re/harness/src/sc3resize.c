@@ -930,7 +930,13 @@ static LONG   g_wsnap = 0;        /* SC3RESIZE_WSNAP: during a drag, snap the CL
 static int    g_kidfix = 1;
 /* SC3RESIZE_ARTGUARD=0 - A/B control arm for the fix below. Default ON. */
 static int    g_artguard = 1;
-static int    g_side_span;        /* SC3RESIZE_SIDESPAN: in cluster mode, dock+extend the side panel to
+/* SC3RESIZE_EDGEFIX=0 - A/B control arm for the edge-scroll band fix in rz_input_geometry (2026-10-05,
+ * verify/resize_edgescroll). Default ON. =0 restores the widen-only bounds write with no band rebuild. */
+static int    g_edgefix = 1;
+static LONG   g_view_nat[4];      /* city view bounds (+0xd4..+0xe0 on the window sub-object) as the
+                                     engine set them at native size, cached on first sight */
+static int    g_view_nat_ok;
+static int    g_side_span;       /* SC3RESIZE_SIDESPAN: in cluster mode, dock+extend the side panel to
                                      the full client height (background filled down, buttons at the
                                      bottom) instead of translating it at native height. */
 static void   rz_side_extend(void);  /* fwd: dock+extend the side panel to full height */
@@ -1419,11 +1425,11 @@ static void rz_fix_hud_parents(void *leaf, const char *name, LONG cw, LONG ch) {
  *      double-moves it - a 26x26 button landed at [4044 2110]. Parents only, which is why this
  *      walks the root's DIRECT children and does not recurse.
  *
- * NOT fixed here, deliberately, and both documented in SESSION.md:
- *   - Edge-scroll bands `+0x178..+0x1c4`: rebuilt by `FUN_10043989` from the same bounds rect and
- *     re-run from `FUN_10044323`, so hand-written bands cannot survive. Widening the source rect
- *     (item 3) is the correct half; the rebuild call is untested and is not made here.
- *     `[CONFIRMED @ SIMSPR 0x10043989, 0x10044323]`
+ * Edge-scroll bands `+0x178..+0x1c4`: now rebuilt here (2026-10-05, SC3RESIZE_EDGEFIX), see the
+ * EDGE-SCROLL BAND comment in rz_input_geometry. Item 3's bounds are set from the native rect + delta
+ * rather than widened to the client, because the same field is the bands' source.
+ *
+ * NOT fixed here, deliberately, documented in SESSION.md:
  *   - The ghost strip on the incremental scroll path, which is a PRESENT asymmetry inside
  *     `FUN_10006226`, not a geometry problem. `[CONFIRMED @ SIMSPR 0x10006226, 0x1000e058,
  *     0x1000e206]`
@@ -2076,10 +2082,64 @@ static void rz_input_geometry(LONG cw, LONG ch, LONG dx, LONG dy) {
         LONG *b = (LONG *)((DWORD)view + 0xd4);
         logf("GEOM> city view 0x%08lX hit [%ld %ld %ld %ld] bounds [%ld %ld %ld %ld]",
              (DWORD)view, r[0], r[1], r[2], r[3], b[0], b[1], b[2], b[3]);
+        /* Cache the engine's NATIVE bounds the first time we see them. Measured on every logged run:
+         * the first call sees [0 0 704 544] = 800x600 minus the 96-wide side panel and the 56-tall bar,
+         * because nothing but this function ever writes the field after load. Accept only a rect that
+         * fits the native client, so a pointer that was already widened can never be cached. */
+        if (!g_view_nat_ok && b[0] == 0 && b[1] == 0 && b[2] > 0 && b[3] > 0 &&
+            b[2] <= NAT_W && b[3] <= NAT_H) {
+            g_view_nat[0] = b[0]; g_view_nat[1] = b[1]; g_view_nat[2] = b[2]; g_view_nat[3] = b[3];
+            g_view_nat_ok = 1;
+            logf("EDGE> native view bounds cached [%ld %ld %ld %ld]", b[0], b[1], b[2], b[3]);
+        }
         if (r[2] < cw) r[2] = cw;
         if (r[3] < ch) r[3] = ch;
-        if (b[2] < cw) b[2] = cw;
-        if (b[3] < ch) b[3] = ch;
+        if (g_edgefix && g_view_nat_ok) {
+            /* ⭐ EDGE-SCROLL BAND (2026-10-05, verify/resize_edgescroll).
+             *
+             * These bounds feed TWO readers. `FUN_1004947d` disarms the right-drag pan for a point
+             * outside them (item 3 above). And `FUN_10043989(outer)` builds the four edge-scroll bands
+             * `outer+0x178..+0x1c4` from them as base +-64 (x) / +-48 (y) `[CONFIRMED @ SIMSPR
+             * 0x10043989]`, which the mouse-move test `FUN_10043a38` (outer vt+0x40, reached from sub
+             * vt+0x1cc `FUN_1004947d` -> outer vt+0x7c `FUN_10049a6e`; vtables read from the PE)
+             * compares every move against `[CONFIRMED @ SIMSPR 0x10043a38, 0x10049a6e]`.
+             * The engine rebuilds the bands only on load (`FUN_10044323`, outer vt+0xa8) and on
+             * event 0x624a8241 (`FUN_10048d7a`), neither of which fires on a resize. So the old
+             * widen-only write left the bands at their native positions: at 2048 wide the "right
+             * edge" fired around x=640..704, mid-window, and the real edges never fired.
+             *
+             * Bounds = native + (dx, dy) on the right/bottom, EXACT in both directions (the old write
+             * never shrank, so after a restore-down the rect stayed at the maximized size). This keeps
+             * the native relationship: the bands end at the side panel and the bar, where the mouse can
+             * reach them, instead of under the HUD. Then the game's own builder recomputes the bands. */
+            DWORD *ovt;
+            void  *outer = (void *)((DWORD)view - 4);
+            b[0] = g_view_nat[0];      b[1] = g_view_nat[1];
+            b[2] = g_view_nat[2] + dx; b[3] = g_view_nat[3] + dy;
+            if (b[2] <= b[0]) b[2] = b[0] + 1;
+            if (b[3] <= b[1]) b[3] = b[1] + 1;
+            ovt = IsBadReadPtr(outer, 0x1c8) ? NULL : *(DWORD **)outer;
+            if (ovt == (DWORD *)(ss + 0x67894)) {   /* expect-or-refuse: the city view outer vtable */
+                LONG *bd = (LONG *)((DWORD)outer + 0x178);
+                rz_thiscall(outer, (void *)(ss + 0x43989), NULL, 0);
+                logf("EDGE> bands rebuilt from bounds [%ld %ld %ld %ld]: inner [%ld %ld %ld %ld] "
+                     "L [%ld %ld %ld %ld] T [%ld %ld %ld %ld] R [%ld %ld %ld %ld] B [%ld %ld %ld %ld] enabled=%d",
+                     b[0], b[1], b[2], b[3], bd[0], bd[1], bd[2], bd[3],
+                     bd[4], bd[5], bd[6], bd[7],          /* +0x188 left   -> flag +0x1e4 */
+                     bd[8], bd[9], bd[10], bd[11],        /* +0x198 top    -> flag +0x1e1 */
+                     bd[12], bd[13], bd[14], bd[15],      /* +0x1a8 right  -> flag +0x1e3 */
+                     bd[16], bd[17], bd[18], bd[19],      /* +0x1b8 bottom -> flag +0x1e2 */
+                     *(BYTE *)((DWORD)outer + 0x177));
+            } else {
+                logf("EDGE> REFUSED band rebuild: outer 0x%08lX vtable 0x%08lX != SIMSPR+0x67894",
+                     (DWORD)outer, (DWORD)ovt);
+            }
+        } else {
+            if (b[2] < cw) b[2] = cw;
+            if (b[3] < ch) b[3] = ch;
+            if (!g_edgefix) logf("EDGE> EDGEFIX OFF - control arm, bands left as built");
+            else logf("EDGE> no native bounds cached - bands left as built");
+        }
         logf("GEOM> city view    hit [%ld %ld %ld %ld] bounds [%ld %ld %ld %ld]  (map clicks + camera pan)",
              r[0], r[1], r[2], r[3], b[0], b[1], b[2], b[3]);
     }
@@ -6227,7 +6287,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           g_side_span = GetEnvironmentVariableA("SC3RESIZE_SIDESPAN", v, sizeof(v)) && atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_KIDFIX", v, sizeof(v))) g_kidfix = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_ARTGUARD", v, sizeof(v))) g_artguard = atoi(v);
-          g_bltbeat  = GetEnvironmentVariableA("SC3RESIZE_BLTBEAT", v, sizeof(v)) && atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_EDGEFIX", v, sizeof(v))) g_edgefix = atoi(v);
+          g_bltbeat = GetEnvironmentVariableA("SC3RESIZE_BLTBEAT", v, sizeof(v)) && atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_THICKFRAME", v, sizeof(v))) g_thickframe = atoi(v);
           if (!GetEnvironmentVariableA("SC3RESIZE_DUMPDIR", g_dumpdir, sizeof(g_dumpdir)))
               lstrcpynA(g_dumpdir, ".", sizeof(g_dumpdir));
@@ -6249,10 +6310,10 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
          * a self-consistent log). One line makes the whole class loud instead of silent.
          * verify/resize_flaggate/NOHIT_RESULTS.md */
         logf("### FLAGS> cluster=%d input=%d nohit=%d hudfit=%d hudlab=%d sweep=%d side=%d mini=%d "
-             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld sidedy=%ld presentlog=%d kidfix=%d artguard=%d",
+             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld sidedy=%ld presentlog=%d kidfix=%d artguard=%d edgefix=%d",
              g_cluster, g_input, g_nohit, g_hudfit, g_hudlab, g_sweepon, g_sideon, g_minion,
              g_anchor, g_census, g_minzoom, g_ready_ms, g_noparentfix, g_hud_dy, g_side_dy, g_presentlog,
-             g_kidfix, g_artguard);
+             g_kidfix, g_artguard, g_edgefix);
         if (AddVectoredExceptionHandler(1, rz_veh))
             logf("### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the "
                  "zoom-after-resize crash the game swallows)");
