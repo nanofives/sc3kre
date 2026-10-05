@@ -12,6 +12,7 @@ import time
 from ctypes import wintypes
 
 import frida
+import sys as _s, pathlib as _p; _s.path.insert(0, str(_p.Path(__file__).resolve().parent)); import sc3io as _sc3io
 
 JS = r"""
 function ri(p,o){return p.add(o).readS32();}
@@ -105,12 +106,12 @@ def report(tag):
 
 
 report("A. maximized")
-user32.ShowWindow(hwnd, SW_RESTORE); user32.SetForegroundWindow(hwnd); time.sleep(4)
+_sc3io.restore_without_focus(hwnd); _sc3io.raise_without_focus(hwnd); time.sleep(4)
 report("B. restored down")
-user32.ShowWindow(hwnd, SW_MAXIMIZE); user32.SetForegroundWindow(hwnd); time.sleep(4)
+_sc3io.maximize_without_focus(hwnd); _sc3io.raise_without_focus(hwnd); time.sleep(4)
 report("C. maximized again")
 user32.SetWindowPos(hwnd, 0, 100, 100, 1400, 900, 0x0004 | 0x0010)
-user32.SetForegroundWindow(hwnd); time.sleep(4)
+_sc3io.raise_without_focus(hwnd); time.sleep(4)
 report("D. dragged to 1400x900")
-user32.ShowWindow(hwnd, SW_MAXIMIZE); user32.SetForegroundWindow(hwnd); time.sleep(4)
+_sc3io.maximize_without_focus(hwnd); _sc3io.raise_without_focus(hwnd); time.sleep(4)
 report("E. maximized again")

@@ -47,7 +47,8 @@ hwnd, cw, ch = found[0]
 print(f"pid {pid} hwnd 0x{hwnd:X} client {cw}x{ch}")
 
 lp = (y << 16) | (x & 0xFFFF)
-user32.SetForegroundWindow(hwnd)
+import sys as _s, pathlib as _p; _s.path.insert(0, str(_p.Path(__file__).resolve().parent)); import sc3io as _sc3io
+_sc3io.raise_without_focus(hwnd)  # was SetForegroundWindow: raise Z-order only, never take focus
 time.sleep(0.3)
 user32.PostMessageW(hwnd, 0x0200, 0, lp)          # WM_MOUSEMOVE
 time.sleep(0.2)

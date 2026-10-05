@@ -27,14 +27,16 @@ if (-not $Log)    { $Log = Join-Path $OutDir 'run.log' }
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
 Add-Type -AssemblyName System.Drawing
+# Window control, capture and input all go through re/tools/sc3io.py - the ONE capture path and
+# the ONE input path. This driver used to carry its own: SetForegroundWindow before every shot
+# (stealing focus), ShowWindow(SW_MAXIMIZE) (which activates), and CopyFromScreen (which has no
+# gate, so an overlapping window silently became "the result"). All three are gone.
 Add-Type -Namespace W -Name U -MemberDefinition @'
-[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
-[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
 [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out RECT r);
 [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
-[DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
 public struct RECT { public int L, T, R, B; }
 '@
+$sc3io = Join-Path $root 're	ools\sc3io_cli.py' 
 
 foreach ($pair in $EnvVars) {
     $i = $pair.IndexOf('=')
@@ -70,9 +72,8 @@ Start-Sleep -Seconds 5
 $g = Get-Process -Name SC3U -ErrorAction SilentlyContinue | Select-Object -First 1
 if (-not $g -or $g.MainWindowHandle -eq 0) { throw "no SC3U main window" }
 $h = $g.MainWindowHandle
-[void][W.U]::SetForegroundWindow($h)
-if (-not $NoMaximize) { [void][W.U]::ShowWindow($h, 3) }   # SW_MAXIMIZE
-Write-Host "[*] maximized 0x$('{0:X}' -f [int]$h); settling $Settle s"
+if (-not $NoMaximize) { & python $sc3io maximize | Write-Host }
+Write-Host "[*] maximized 0x$('{0:X}' -f [int]$h) (no focus taken); settling $Settle s"
 Start-Sleep -Seconds $Settle
 
 # Dismiss the startup tip dialog. While a modal is up the engine discards every click outside it,
@@ -85,28 +86,20 @@ $cr = New-Object W.U+RECT
 $cw = $cr.R - $cr.L; $ch = $cr.B - $cr.T
 Write-Host "[*] client : ${cw}x${ch}"
 
+# A shot that cannot be trusted is a THROW, not a warning. The old CopyFromScreen version would
+# happily save whatever window happened to be on top; several past "results" were that.
 function Shot([string]$name) {
-    [void][W.U]::SetForegroundWindow($h)
-    Start-Sleep -Milliseconds 250
-    $r = New-Object W.U+RECT
-    [void][W.U]::GetWindowRect($h, [ref]$r)
-    $w = $r.R - $r.L; $ht = $r.B - $r.T
-    $bmp = New-Object System.Drawing.Bitmap $w, $ht
-    $gr  = [System.Drawing.Graphics]::FromImage($bmp)
-    $gr.CopyFromScreen($r.L, $r.T, 0, 0, $bmp.Size)
     $p = Join-Path $OutDir "$name.png"
-    $bmp.Save($p, [System.Drawing.Imaging.ImageFormat]::Png)
-    $gr.Dispose(); $bmp.Dispose()
-    Write-Host "    shot $name  win=[$($r.L) $($r.T) $($r.R) $($r.B)] ${w}x${ht}"
+    $out = & python $sc3io grab $p --settle 0.25 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "SCREENSHOT FAILED for '$name' - stopping the run rather than banking a bad frame:`n$out"
+    }
+    Write-Host "    shot $name  $($out -join ' ')"
 }
 
 function Click([int]$x, [int]$y) {
-    $lp = [IntPtr](($y -shl 16) -bor ($x -band 0xFFFF))
-    [void][W.U]::PostMessage($h, 0x0200, [IntPtr]0, $lp)   # WM_MOUSEMOVE
-    Start-Sleep -Milliseconds 200
-    [void][W.U]::PostMessage($h, 0x0201, [IntPtr]1, $lp)   # WM_LBUTTONDOWN
-    Start-Sleep -Milliseconds 120
-    [void][W.U]::PostMessage($h, 0x0202, [IntPtr]0, $lp)   # WM_LBUTTONUP
+    $out = & python $sc3io click $x $y 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "click ($x,$y) failed:`n$out" }
 }
 
 # Idle-animation baseline: two shots, no input.

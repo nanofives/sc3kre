@@ -115,7 +115,8 @@ if g.get("foc") != "0x0" or g.get("cap") != "0x0":
 print("gates clear (cap=0 foc=0) - the router branch will run")
 sc.exports_sync.drain()
 lp = (y << 16) | (x & 0xFFFF)
-user32.SetForegroundWindow(hwnd)
+import sys as _s, pathlib as _p; _s.path.insert(0, str(_p.Path(__file__).resolve().parent)); import sc3io as _sc3io
+_sc3io.raise_without_focus(hwnd)  # was SetForegroundWindow: raise Z-order only, never take focus
 time.sleep(0.2)
 user32.PostMessageW(hwnd, 0x0200, 0, lp)
 time.sleep(0.12)

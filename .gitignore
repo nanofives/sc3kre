@@ -53,6 +53,7 @@
 !/verify/*/README.md
 !/verify/*/RESULTS.md
 !/verify/*/*RESULTS.md
+!/verify/*/RESULTS_*.md
 !/verify/*/PRE.md
 !/verify/*/*PRE.md
 

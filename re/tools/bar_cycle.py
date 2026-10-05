@@ -10,6 +10,7 @@ import time
 from ctypes import wintypes
 
 import frida
+import sys as _s, pathlib as _p; _s.path.insert(0, str(_p.Path(__file__).resolve().parent)); import sc3io as _sc3io
 
 JS = r"""
 function ri(p,o){return p.add(o).readS32();}
@@ -89,10 +90,10 @@ def show(tag):
 
 show("A maximized")
 user32.SetWindowPos(hwnd, 0, 60, 60, 1400, 900, 0x0004 | 0x0010)
-user32.SetForegroundWindow(hwnd)
+_sc3io.raise_without_focus(hwnd)
 time.sleep(4)
 show("B 1400x900")
 user32.SetWindowPos(hwnd, 0, 60, 60, 1700, 1000, 0x0004 | 0x0010)
-user32.SetForegroundWindow(hwnd)
+_sc3io.raise_without_focus(hwnd)
 time.sleep(4)
 show("C 1700x1000")

@@ -779,7 +779,23 @@ static int    g_minion;        /* SC3RESIZE_MINI: dock the minimap to the bottom
 #define ANCHOR_EDGE  12
 #define NAT_W        800
 #define NAT_H        600
-static struct { void *w; LONG nat[4]; } g_wins[WIN_MAX];
+/* Per painter window: the native PAINT rect (+0x90), the native WINDOW rect (+0x14..0x20), and
+ * whether the two disagree.
+ *
+ * ⭐ Why `child` exists. `+0x90` is PARENT-RELATIVE for a child window, while `+0x14..0x20` is
+ * absolute - so for a root the two match and for a child they differ by the parent's origin.
+ * Measured at native 2026-09-07 (verify/resize_clicklab/live_resizeio/run.log:388-393):
+ *     [1] 0x0D3680B8 paint=[704 0 800 442] window=[704 0 800 442]   <- root, delta (0,0)
+ *     [4] 0x0E2D6F80 paint=[0 0 36 442]    window=[704 0 740 442]   <- child, delta (704,0)
+ *                                                                      = the side panel's origin
+ *     [3] 0x0D42D110 paint=[138 72 147 87] window=[778 508 787 523] <- child, delta (640,436)
+ *                                                                      = the MINIMAP's origin
+ * A child must NOT be translated: its parent's SetRect already carries it. Translating it anyway
+ * double-counts the delta, which is the whole "PAINT/WINDOW DIVERGE + missing side panel" bug.
+ * At maximize (dx,dy)=(1120,409) the mod fed SetRect the absolute [1120 409 1156 851] and the
+ * engine added the panel's NEW origin (1824,409), landing item [4] at [2944 818 2980 1260] - off
+ * a 1920x1009 client, taking every visible side-panel child with it. */
+static struct { void *w; LONG nat[4]; LONG natwin[4]; int child; } g_wins[WIN_MAX];
 static LONG   g_wins_n;
 static int    g_anchor;
 
@@ -830,10 +846,31 @@ static void rz_make_resizable(void);
 static void  *g_barkid[BARKID_MAX];
 static LONG   g_barkid_nat[BARKID_MAX][4];
 static int    g_barkid_n;
+/* Native positions of the side-panel ITEMS (tool buttons), cached by pointer the first time each is
+ * seen at its native y. The item WINDOW (+0x80) and its group-overlay (+0xf4, where the icon draws)
+ * must be placed ABSOLUTELY (native + dy), not incrementally: the old `pe[1] += dy` with a `pe[1]<dy`
+ * guard re-added the offset whenever dy grew between passes, drifting the icons/hits away from the
+ * background-art icons (owner: the hover highlight showed the wrong icon). */
+#define SIDEITEM_MAX 48
+static struct { void *w; LONG naty; LONG natovl; int has_ovl; } g_sideitem[SIDEITEM_MAX];
+static int    g_sideitem_n;
 static LONG   g_bar_art_nat[4], g_bar_fill_nat[4], g_bar_info_nat[4][4];
 static int    g_bar_art_ok;
+/* Native rects of the bottom-right corner widgets (the minimize/restore button and friends), cached
+ * by pointer the first time each is seen still at its native position. Relocation must be ABSOLUTE
+ * (native+dx), not incremental: the discovery heuristic only matches a widget while it is inside the
+ * native bounds, so an incremental move fired once and then the widget was never matched again -
+ * stranded at native+dx1 while the window kept growing (owner: "the minimize button is not
+ * following"). */
+#define CORNER_MAX 12
+static struct { void *w; LONG nat[4]; } g_corner[CORNER_MAX];
+static int    g_corner_n;
+static LONG   g_rci_nat[4];   /* RCI indicator native rect, cached once for absolute y placement */
+static int    g_rci_nat_ok;
 static void *rz_find_by_vt(void *w, DWORD wantvt, int depth, int *budget);
 static void rz_side_fit_surface(DWORD liveH);
+static void rz_hud_setrect_w(DWORD wantW);   /* dock the bar, spanning to wantW (0 = full client) */
+static void rz_hud_fit_surface(DWORD liveW); /* widen the bar bg+filler source surfaces to liveW */
 /* SC3RESIZE_HUDDY - extra downward bias applied to the whole relocated HUD, on top of the
  * (client - native) translate. Owner-tuned to 8 px on 2026-09-02 at 2048x1081: at bias 0 the bar's
  * bottom lands exactly on the client edge and a black strip shows below it; at 8 the bar, RCI,
@@ -841,7 +878,11 @@ static void rz_side_fit_surface(DWORD liveH);
  * ⚠️ This is a POSITION bias only. HUD art is TOP-ANCHORED in its rect, so a rect taller than the
  * art paints the surplus black - do not implement this by growing rects. Measured: a 72-tall bar
  * (art 56) produced exactly the "black bar below the bottom bar" the owner reported. */
-static LONG   g_hud_dy = 8;
+static LONG   g_hud_dy = 0;   /* was 8 to overhang the bar below the client and hide a "black strip"
+                                 below it; the present source clamp (PRESENTFIX) removes that strip, so
+                                 the +8 only pushed the bar/minimap/RCI/corner bottoms 8px past the
+                                 client edge where they clipped. 0 sits them flush (measured clean,
+                                 2026-09-03). SC3RESIZE_HUDDY overrides. */
 /* SC3RESIZE_SIDEDY - lift the side panel's contents (pages, tabs AND the background art) by this
  * many px from the panel bottom. Owner, 2026-09-02: with 0 the group sat "too shifted down" and
  * three buttons fell out of view. ONE knob feeds both the art placement in rz_side_fit_child and
@@ -852,9 +893,61 @@ static int    g_dump_pending;        /* set by the trigger, consumed at the pres
 static void  *g_dump_iso;            /* iso captured by the poll for the dumper */
 static int    g_minmax_logged;
 static int    g_hit_logged;
+static int    g_wsnap_logged;
+static int    g_reassert_quiet;   /* set during the periodic bar-span re-assert so the idempotent
+                                     "already docked / already fitted" skips do not spam the log */
 static int    g_thickframe = 1;   /* SC3RESIZE_THICKFRAME=0 leaves the fixed frame */
+static LONG   g_rt_p3 = -1;       /* SC3RESIZE_RTP3: pin FUN_10009efb arg p3. -1 = field read-back.
+                                     Tested 4: did NOT cure the shear, so p3 is not the pitch control;
+                                     left as an A/B hook, default off. */
+static int    g_sysmem;           /* SC3RESIZE_SYSMEM: zero obj+0x8c before recreate to force a
+                                     system-memory surface (tight width*2 pitch, no shear). */
+static LONG   g_rt_p7 = -1;       /* SC3RESIZE_RTP7: pin FUN_10009efb arg p7 (obj+0x3c) = the memory
+                                     POOL selector. Worker RE 2026-09-03 (FUN_10019273): param_4==0
+                                     -> DDSCAPS_SYSTEMMEMORY (tight pitch = width*2 for even widths),
+                                     nonzero -> VIDEOMEMORY (driver pads the pitch = shear). Read back
+                                     p7=0 on the render target (clean, pitch 2000 at w=1000) and p7=3
+                                     on the composite surface (sheared) - the {0,3} pool domain the
+                                     worker found. Pinning p7=0 forces system memory => no shear at any
+                                     even width, so the 32-snap can drop to a 2px even constraint.
+                                     -1 = field read-back (old behaviour). */
+static LONG   g_walign = 0;       /* SC3RESIZE_WALIGN: round the recreated surface WIDTH up to this
+                                     multiple. TESTED 32: made it WORSE - padding +0x24 to 1024 left
+                                     the city BLACK (renderer keys off +0x24) and the composite still
+                                     sheared. The real fix snaps the WINDOW client width to a 32-
+                                     multiple during the drag (WM_SIZING, g_wsnap), so the surface is
+                                     created at an aligned width natively. Default off. */
+static LONG   g_wsnap = 0;        /* SC3RESIZE_WSNAP: during a drag, snap the CLIENT width to this
+                                     multiple. DEFAULT OFF (0): the "shear at unaligned widths" this was
+                                     built to avoid was a bug in the SCREENSHOT tool (screen_grab.py read
+                                     the DIB back with a packed stride while GetDIBits pads rows to 4
+                                     bytes), NOT in the game - DirectDraw presents each surface with its
+                                     own pitch, so the on-screen frame never shears. The snap only added
+                                     the "never reaches the cursor" lag. Set >1 to re-enable (A/B). */
+/* SC3RESIZE_KIDFIX=0 - A/B control arm: restore the pre-2026-09-07 behaviour of translating
+ * CHILD painter windows too, which double-counts the delta (see the g_wins comment). Default
+ * ON because the double-translate is a plain arithmetic error, not a trade-off. */
+static int    g_kidfix = 1;
+/* SC3RESIZE_ARTGUARD=0 - A/B control arm for the fix below. Default ON. */
+static int    g_artguard = 1;
+static int    g_side_span;        /* SC3RESIZE_SIDESPAN: in cluster mode, dock+extend the side panel to
+                                     the full client height (background filled down, buttons at the
+                                     bottom) instead of translating it at native height. */
+static void   rz_side_extend(void);  /* fwd: dock+extend the side panel to full height */
+static int    g_bar_span;         /* SC3RESIZE_BARSPAN: in cluster mode, dock+span the bottom bar to
+                                     the full client width (filler source widened so the per-frame
+                                     tile count does not grow -> the intended FPS fix) instead of
+                                     translating the native-width bar. Default off until measured. */
+static int    g_bltbeat;          /* SC3RESIZE_BLTBEAT: log ddraw Blt calls/sec so the full-width
+                                     bar's FPS cost can be read as a number, not inferred. */
 static int    g_presentfix = 1;   /* SC3RESIZE_PRESENTFIX=0 disables the present source clamp */
 static int    g_presentfix_logged;
+static int    g_submove;           /* SC3RESIZE_SUBMOVE=1 re-enables moving flyout sub-tool buttons */
+static int    g_rcifix = 1;        /* SC3RESIZE_RCIFIX=0 disables the present-time RCI re-composite */
+static int    g_rcifix_logged;
+static void  *g_rci_cached;        /* the RCI window, cached across frames (a root child) */
+static DWORD  rz_thiscall_ret(void *self, void *fn, const DWORD *a, int n); /* fwd: full EAX return */
+static void   rz_repaint_rci(void);                                          /* fwd: present-hook re-blit */
 static int    g_presentlog;       /* SC3RESIZE_PRESENTLOG: log the present src/dst rects */
 static char   g_dumpdir[MAX_PATH];   /* SC3RESIZE_DUMPDIR: where the surface dumps go */
 static int    g_srcrect = 1;      /* SC3RESIZE_SRCRECT=0 disables the tile-step FPS fix (A/B) */
@@ -891,6 +984,7 @@ static void rz_anchor_all(void) {
         LONG *r, *n = g_wins[i].nat;
         LONG ax, ay;
         if (!w || w == g_hud_top || w == g_side_top || IsBadReadPtr(w, 0xa0)) continue;
+        if (g_kidfix && g_wins[i].child) continue;   /* parent-relative: carried by the parent */
         ax = (n[2] >= NAT_W - ANCHOR_EDGE) ? dx : 0;    /* touching the native right edge  */
         ay = (n[3] >= NAT_H - ANCHOR_EDGE) ? dy : 0;    /* touching the native bottom edge */
         if (ax == 0 && ay == 0) continue;               /* left/top anchored - leave it    */
@@ -995,14 +1089,35 @@ static void rz_win_setrect(void *w, const char *name, LONG x1, LONG y1, LONG x2,
 }
 
 /* Translate the whole native HUD into the bottom-right corner, at native size. */
+/* The height the extended side panel should fill: the client height, but clamped to the MINIMAP's
+ * top so the panel stops above it instead of hiding the lower buttons behind it. */
+static LONG rz_side_target_h(void) {
+    RECT cr;
+    LONG h;
+    if (!g_hwnd || !GetClientRect(g_hwnd, &cr)) return 0;
+    h = cr.bottom - cr.top;
+    if (g_mini && !IsBadReadPtr(g_mini, 0x90)) {
+        LONG mtop = ((LONG *)((DWORD)g_mini + 0x80))[1];
+        if (mtop > 0 && mtop < h) h = mtop;
+    }
+    return h;
+}
+
 static void rz_cluster_layout(void) {
     RECT cr;
-    LONG dx, dy, i, moved = 0;
+    LONG dx, dy, i, moved = 0, skipped_kids = 0;
     if (!g_cluster || !g_hwnd || !GetClientRect(g_hwnd, &cr)) return;
     dx = (cr.right - cr.left) - NAT_W;
     dy = (cr.bottom - cr.top) - NAT_H;
-    if (dx <= 0 && dy <= 0) { logf("CLUSTER> window not larger than native - nothing to do"); return; }
-    dy += g_hud_dy;   /* owner-tuned bottom bias; see g_hud_dy */
+    /* CLAMP, do not early-return. Shrinking back toward native must RE-APPLY native positions:
+     * the HUD was translated by the last (larger) offset, so bailing here on dx<=0&&dy<=0 leaves the
+     * side panel stuck at that offset - pushed off the bottom - which is the "bar breaks / panel
+     * disappears after re-resizing" the owner reported (measured 2026-09-03: 960x720 -> 800x600 left
+     * the side panel translated 120px down, off-screen). Never translate the native HUD to a NEGATIVE
+     * offset (it would go smaller than native and clip); at exactly native, offset 0 restores it. */
+    if (dx < 0) dx = 0;
+    if (dy < 0) dy = 0;
+    if (dy > 0) dy += g_hud_dy;   /* owner-tuned bottom bias, only when enlarged; native restores clean */
 
     /* Cache each framework window's native rect the first time we see it, before anything moves. */
     if (!g_bar_nat_ok && g_hud_top && !IsBadReadPtr(g_hud_top, 0x24)) {
@@ -1022,10 +1137,31 @@ static void rz_cluster_layout(void) {
              g_side_nat[0], g_side_nat[1], g_side_nat[2], g_side_nat[3]);
     }
 
-    if (g_bar_nat_ok)
+    if (g_bar_span) {
+        /* FULL-WIDTH BAR in cluster mode: dock+span the bar object to the whole client width, widen
+         * its background+filler SOURCE surfaces (so the engine's per-frame tile count does not grow
+         * with the width - the FPS fix), then slide the console/RCI/info to the right end. This is
+         * the same sequence the non-cluster ship path uses; here it replaces the native-width
+         * translate so the bottom-left gap is filled. */
+        RECT bcr;
+        rz_hud_setrect_w(0);
+        if (g_hwnd && GetClientRect(g_hwnd, &bcr))
+            rz_hud_fit_surface((DWORD)(bcr.right - bcr.left));
+        rz_bar_children_right();
+    } else if (g_bar_nat_ok)
         rz_win_setrect(g_hud_top, "bottom bar", g_bar_nat[0] + dx, g_bar_nat[1] + dy,
                        g_bar_nat[2] + dx, g_bar_nat[3] + dy);
-    if (g_side_nat_ok)
+    if (g_side_span) {
+        /* FULL-HEIGHT SIDE PANEL in cluster mode: dock+extend the panel to the whole client height,
+         * fill its background surface down the new height, then push the buttons to the bottom. Same
+         * sequence the non-cluster ship path uses; replaces the native-height translate so the
+         * vertical bar is filled instead of floating at native size. */
+        LONG sideH;
+        rz_side_extend();
+        sideH = rz_side_target_h();
+        if (sideH > 0) rz_side_fit_surface((DWORD)sideH);
+        rz_side_children_bottom();
+    } else if (g_side_nat_ok)
         rz_win_setrect(g_side_top, "side panel", g_side_nat[0] + dx, g_side_nat[1] + dy,
                        g_side_nat[2] + dx, g_side_nat[3] + dy);
 
@@ -1044,6 +1180,21 @@ static void rz_cluster_layout(void) {
         LONG *r, *n = g_wins[i].nat;
         DWORD *vt;
         if (!w || w == g_hud_top || w == g_side_top || IsBadReadPtr(w, 0xa0)) continue;
+        /* ⭐ CHILD WINDOWS ARE CARRIED BY THEIR PARENT - do not translate them.
+         *
+         * Their `+0x90` is parent-relative, so `vt+0xc8` SetRect adds the parent's origin. Feeding
+         * it an absolutely-translated rect applies the delta TWICE. That is what put the side
+         * panel's contents at x=2944 on a 1920-wide client and made the panel look absent (the
+         * container moved fine; everything visible inside it left the screen).
+         * `SC3RESIZE_KIDFIX=0` is the A/B control arm - it restores the old double-translate. */
+        if (g_kidfix && g_wins[i].child) {
+            logf("CLUSTER>   [%ld] 0x%08lX CHILD of a parent at (%ld,%ld) - left at its "
+                 "parent-relative [%ld %ld %ld %ld], parent's move carries it",
+                 i, (DWORD)w, g_wins[i].natwin[0] - n[0], g_wins[i].natwin[1] - n[1],
+                 n[0], n[1], n[2], n[3]);
+            skipped_kids++;
+            continue;
+        }
         vt = *(DWORD **)w;
         if (vt && !IsBadReadPtr(vt, 0xcc) && vt[0xc8/4]) {
             DWORD a[4];
@@ -1059,12 +1210,12 @@ static void rz_cluster_layout(void) {
         rz_win_move_hit(w, "painter window", n[0], n[1], n[0] + dx, n[1] + dy);
         moved++;
     }
-    logf("CLUSTER> translated %ld painter windows by (%ld,%ld); HUD kept at native size",
-         moved, dx, dy);
+    logf("CLUSTER> translated %ld painter windows by (%ld,%ld), left %ld child window(s) to their parents%s; HUD kept at native size",
+         moved, dx, dy, skipped_kids, g_kidfix ? "" : " [KIDFIX OFF - control arm]");
     {   /* Report paint rect vs WINDOW rect for the first few, so a future divergence is visible in
            the log instead of only on screen - this run's clickability bug was invisible in the log. */
         LONG k;
-        for (k = 0; k < g_wins_n && k < 6; k++) {
+        for (k = 0; k < g_wins_n; k++) {   /* ALL of them: capping at 6 hid the windows the side-panel buttons live in */
             DWORD *w = (DWORD *)g_wins[k].w;
             LONG *p;
             if (!w || IsBadReadPtr(w, 0xa0)) continue;
@@ -1072,11 +1223,26 @@ static void rz_cluster_layout(void) {
             logf("CLUSTER>   [%ld] 0x%08lX paint=[%ld %ld %ld %ld] window=[%ld %ld %ld %ld]%s",
                  k, (DWORD)w, p[0], p[1], p[2], p[3],
                  (LONG)w[0x14/4], (LONG)w[0x18/4], (LONG)w[0x1c/4], (LONG)w[0x20/4],
-                 (p[0] == (LONG)w[0x14/4] && p[1] == (LONG)w[0x18/4]) ? "" : "   <<< PAINT/WINDOW DIVERGE");
+                 /* A CHILD's +0x90 is parent-relative, so paint != window is its CORRECT state -
+                    flagging it as a divergence was noise that hid the real ones. Only an
+                    unexplained mismatch on a ROOT is a defect now. */
+                 (p[0] == (LONG)w[0x14/4] && p[1] == (LONG)w[0x18/4]) ? ""
+                     : (g_wins[k].child ? "   (child: parent-relative, expected)"
+                                        : "   <<< PAINT/WINDOW DIVERGE"));
         }
     }
     {   /* THE CLICKABILITY FIX. Widen every ancestor of the relocated windows so the router's
-           per-child `vt+0xe4` gate can pass and the recursion that reaches the HUD can start.
+           per-child `vt+0xe4` gate can pass.
+
+           ⚠️ CORRECTION 2026-09-07: this comment used to add "and the recursion that reaches the
+           HUD can start". That is FALSE and it mattered - it is why widening was applied to art
+           windows too, which broke the side panel. `vt+0xe4` (`FUN_1006de62`) is a HIT-TEST against
+           the object's own +0x14..0x20 [CONFIRMED @ SIMUI 0x1006de62], called only from the INPUT
+           walks `FUN_1006ccda` / `FUN_1006d1af` [CONFIRMED @ SIMUI 0x1006ccda, 0x1006d1af]. The
+           PAINT walk (`FUN_1006d2d0`) iterates this+0x34 and calls every child's vt+0x148
+           unconditionally - no gate, no clip, no early exit [CONFIRMED @ SIMUI 0x1006d2d0]. A
+           window outside its parent's rect still PAINTS; it just gets no mouse input. So this walk
+           is an INPUT fix only, and must never grow a window that owns a surface.
            `SC3RESIZE_NOPARENTFIX=1` is the A/B control arm. */
         LONG k, cw = cr.right - cr.left, chh = cr.bottom - cr.top;
         if (g_noparentfix) {
@@ -1131,9 +1297,53 @@ static void rz_fix_hud_parents(void *leaf, const char *name, LONG cw, LONG ch) {
         if (IsBadReadPtr(par, 0x24)) return;
         r = (LONG *)((DWORD)par + 0x14);
         if (r[2] - r[0] <= 0 || r[3] - r[1] <= 0) {
-            logf("PARENT> %s hop %d: 0x%08lX rect [%ld %ld %ld %ld] non-positive - refusing",
-                 name, hop, (DWORD)par, r[0], r[1], r[2], r[3]);
+            if (!g_reassert_quiet)
+                logf("PARENT> %s hop %d: 0x%08lX rect [%ld %ld %ld %ld] non-positive - refusing",
+                     name, hop, (DWORD)par, r[0], r[1], r[2], r[3]);
             return;
+        }
+        /* ⭐ NEVER WIDEN A WINDOW THAT BLITS ART (2026-09-07, verify/resize_sidekidfix).
+         *
+         * This walk exists to let the router's per-child `vt+0xe4` gate pass, and for a layout
+         * CONTAINER growing the rect is free. For a window that blits a fixed-size surface it is
+         * destructive: the blit destination stops matching the source and the window paints
+         * NOTHING.
+         *
+         * That is the whole "side panel missing when maximized" bug, and it is in this log:
+         *   PARENT> win hop 0: 0x0D34F698 ABS [1952 481 2048 923] LOCAL [1952 481 2048 923]
+         *                                                                     -> 2048x1081
+         * The cluster step had just placed the panel correctly at [1952 481 2048 923], matching
+         * its 96x442 surface; this walk then stretched it to 96x600 and the panel vanished.
+         * Proven by poking the rect back to [1952 481 2048 923] on the live object - the panel,
+         * its background art and its buttons all reappeared with no other change.
+         *
+         * Why it needed a tool-button CLICK first: the panel only becomes an ANCESTOR once its
+         * page children exist, and those are created by clicking a tool button. Before that the
+         * panel is never on this walk, which is exactly why maximizing on a fresh load looked fine.
+         *
+         * Discriminator: a non-NULL surface at `+0x58` - the field FUN_1006d2d0 blits
+         * `[CONFIRMED @ SIMUI 0x1006d2d0]`. Measured in the native dump: the panel had
+         * surf=0xf6aaca8; both layout ancestors (0x00640BA8, 0x005A6040) had NULL. The mod's own
+         * managed HUD windows are named explicitly as belt-and-braces.
+         *
+         * CONTINUE up the chain rather than returning - the containers above still need widening
+         * or the gate fix regresses. */
+        if (g_artguard) {
+            void *surf = NULL;
+            if (!IsBadReadPtr((void *)((DWORD)par + 0x5c), 4))
+                surf = *(void **)((DWORD)par + 0x58);
+            if (surf || par == g_side_top || par == g_hud_top || par == g_mini) {
+                if (!g_reassert_quiet)
+                    logf("PARENT> %s hop %d: 0x%08lX SKIPPED - blits art (surface 0x%08lX%s); "
+                         "widening it to %ldx%ld would break its blit. rect left [%ld %ld %ld %ld]",
+                         name, hop, (DWORD)par, (DWORD)surf,
+                         par == g_side_top ? ", the SIDE PANEL" :
+                         par == g_hud_top ? ", the BOTTOM BAR" :
+                         par == g_mini ? ", the MINIMAP" : "",
+                         cw, ch, r[0], r[1], r[2], r[3]);
+                cur = par;
+                continue;
+            }
         }
         if (r[2] < cw || r[3] < ch) {
             /* ⭐ WIDEN THE AUTHORITATIVE LOCAL RECT TOO (+0x80..+0x8c), not only the derived
@@ -1148,9 +1358,10 @@ static void rz_fix_hud_parents(void *leaf, const char *name, LONG cw, LONG ch) {
              * Widen-only in both fields; the +0x14 write stays so nothing regresses if a given
              * ancestor class does not implement the cascade slot. */
             LONG *lr = (LONG *)((DWORD)par + 0x80);
-            logf("PARENT> %s hop %d: 0x%08lX ABS [%ld %ld %ld %ld] LOCAL [%ld %ld %ld %ld] -> %ldx%ld",
-                 name, hop, (DWORD)par, r[0], r[1], r[2], r[3],
-                 lr[0], lr[1], lr[2], lr[3], cw, ch);
+            if (!g_reassert_quiet)
+                logf("PARENT> %s hop %d: 0x%08lX ABS [%ld %ld %ld %ld] LOCAL [%ld %ld %ld %ld] -> %ldx%ld",
+                     name, hop, (DWORD)par, r[0], r[1], r[2], r[3],
+                     lr[0], lr[1], lr[2], lr[3], cw, ch);
             if (r[2] < cw) r[2] = cw;
             if (r[3] < ch) r[3] = ch;
             if (!IsBadWritePtr(lr, 0x10)) {
@@ -1159,7 +1370,7 @@ static void rz_fix_hud_parents(void *leaf, const char *name, LONG cw, LONG ch) {
                     if (lr[3] < ch) lr[3] = ch;
                 }
             }
-        } else {
+        } else if (!g_reassert_quiet) {
             logf("PARENT> %s hop %d: 0x%08lX [%ld %ld %ld %ld] already covers %ldx%ld",
                  name, hop, (DWORD)par, r[0], r[1], r[2], r[3], cw, ch);
         }
@@ -1262,6 +1473,27 @@ static void *rz_find_view(void *w, DWORD want_e4, int depth, int *budget) {
  *
  * Grandchildren (the 36x36 buttons inside each page) are NOT touched: SetRect propagates to them and
  * their parent-local hit rects stay valid because their page moved as a unit. */
+/* Rebuild every DERIVED rect (+0x14..+0x20) from the LOCAL rects (+0x84..) tree-wide, by calling the
+ * root window's vt+0x168 (src + blit-dest) and vt+0x14c (absolute rects). These recurse into every
+ * child `[CONFIRMED @ SIMUI 0x1006c61b, 0x1006d4eb]`. Hit-testing (vt+0xe4 = FUN_1006de62) compares
+ * the DERIVED +0x14 rect, so after moving a window's LOCAL rect this MUST run or the moved window
+ * stays clickable only at its old (native) position - the side-panel "hover hits a button off from
+ * the icon" defect (2026-09-05). Returns 1 if it ran. */
+static int rz_cascade_derived(void) {
+    DWORD gzb = (DWORD)GetModuleHandleA("GZGraphicD.dll");
+    DWORD *w2 = (gzb && !IsBadReadPtr((void *)(gzb + 0x6cdb8), 4))
+              ? *(DWORD **)(gzb + 0x6cdb8) : NULL;
+    DWORD *snk = (w2 && !IsBadReadPtr(w2, 0x34)) ? (DWORD *)w2[0x30 / 4] : NULL;
+    DWORD *rt  = (snk && !IsBadReadPtr(snk, 0x3c)) ? (DWORD *)snk[0x38 / 4] : NULL;
+    DWORD *rvt = (rt && !IsBadReadPtr(rt, 4)) ? *(DWORD **)rt : NULL;
+    if (rvt && !IsBadReadPtr(rvt, 0x16c) && rvt[0x14c / 4] && rvt[0x168 / 4]) {
+        rz_thiscall(rt, (void *)rvt[0x168 / 4], NULL, 0);   /* src + blit dest */
+        rz_thiscall(rt, (void *)rvt[0x14c / 4], NULL, 0);   /* absolute rects */
+        return 1;
+    }
+    return 0;
+}
+
 static void rz_side_children_bottom(void) {
     DWORD *p = (DWORD *)g_side_top;
     void *head, *n;
@@ -1330,12 +1562,42 @@ static void rz_side_children_bottom(void) {
             LONG ph = pe[3] - pe[1];
             if (ph > 0 && ph < panelH / 2) {          /* a small item, not a full-height column */
                 DWORD *pvt2 = *(DWORD **)page;
-                if (pvt2 && !IsBadReadPtr(pvt2, 0xcc) && pvt2[0xc8 / 4] &&
-                    pe[2] - pe[0] > 0 && pe[1] < dy) {
+                /* Cache this item's NATIVE y the first time it is seen (before we move it), then place
+                 * it ABSOLUTELY at native+dy every pass - idempotent, no drift when dy changes. */
+                int si = -1, sk;
+                for (sk = 0; sk < g_sideitem_n; sk++)
+                    if (g_sideitem[sk].w == (void *)page) { si = sk; break; }
+                /* Cache on FIRST SIGHT for EVERY native-positioned item, not just those above dy.
+                 * The old `pe[1] < dy` excluded any item whose NATIVE y already sits below dy - i.e.
+                 * the alert button and everything under it (native y ~200..395 vs a dy of 175) - so
+                 * they were never tracked and never pushed. That is the "top 5 ok, alert and below all
+                 * wrong" report: only the handful of items above dy moved. The real intent is "cache it
+                 * once, while it is still at a native (unmoved) position"; the native band is bounded by
+                 * the native panel height (SIDE_NAT_H = 442), NOT by dy. Items we already moved are
+                 * found via the pointer loop above (si >= 0) and never re-cached. (2026-09-05) */
+                if (si < 0 && g_sideitem_n < SIDEITEM_MAX &&
+                    pe[2] - pe[0] > 0 && pe[1] < SIDE_NAT_H) {   /* still in the native band */
+                    DWORD sui2 = (DWORD)GetModuleHandleA("SIMUI.DLL");
+                    si = g_sideitem_n++;
+                    g_sideitem[si].w = (void *)page;
+                    g_sideitem[si].naty = pe[1];
+                    g_sideitem[si].has_ovl = 0;
+                    if (sui2 && (DWORD)pvt2 == sui2 + 0xa8f60 &&
+                        !IsBadWritePtr((void *)((DWORD)page + 0xf8), 4) &&
+                        *(DWORD *)((DWORD)page + 0xe8)) {
+                        g_sideitem[si].has_ovl = 1;
+                        g_sideitem[si].natovl = *(LONG *)((DWORD)page + 0xf4);
+                    }
+                }
+                if (si >= 0 && pvt2 && !IsBadReadPtr(pvt2, 0xcc) && pvt2[0xc8 / 4] &&
+                    pe[2] - pe[0] > 0) {
+                    LONG wy = g_sideitem[si].naty + dy, ih = pe[3] - pe[1];
+                    if (pe[1] != wy) {
                     DWORD a2[4];
-                    a2[0] = (DWORD)pe[0]; a2[1] = (DWORD)(pe[1] + dy);
-                    a2[2] = (DWORD)pe[2]; a2[3] = (DWORD)(pe[3] + dy);
+                    a2[0] = (DWORD)pe[0]; a2[1] = (DWORD)wy;
+                    a2[2] = (DWORD)pe[2]; a2[3] = (DWORD)(wy + ih);
                     rz_thiscall(page, (void *)pvt2[0xc8 / 4], a2, 4);
+                    }
                     /* GROUP-OVERLAY Y at +0xf4 - the duplicate cluster drawn at the top.
                      *
                      * The item does not draw its +0xe8 raster. `vt+0x1f0 = FUN_1004c373` pushes
@@ -1357,16 +1619,21 @@ static void rz_side_children_bottom(void) {
                      * two of the nine, and one of those is the item that produced the measured
                      * duplicate. An item legitimately anchored at the top is exactly the case that
                      * needs moving most. */
-                    {   DWORD sui2 = (DWORD)GetModuleHandleA("SIMUI.DLL");
-                        if (sui2 && (DWORD)pvt2 == sui2 + 0xa8f60 &&
-                            !IsBadWritePtr((void *)((DWORD)page + 0xf8), 4) &&
-                            *(DWORD *)((DWORD)page + 0xe8)) {      /* has a group overlay */
-                            LONG *oy = (LONG *)((DWORD)page + 0xf4);
-                            if (*oy < dy) {
-                                logf("SIDEKIDS> item 0x%08lX group-overlay y %ld -> %ld (+0xf4)",
-                                     (DWORD)page, *oy, *oy + dy);
-                                *oy += dy;
-                            }
+                    /* The group overlay (where the icon actually draws) placed ABSOLUTELY at its
+                     * cached native + dy, so it stays locked to the item window and the background
+                     * art. The old `*oy += dy` re-added the offset when dy grew and drifted the icon
+                     * off its button (owner: the hover highlight showed the wrong icon). */
+                    if (g_sideitem[si].has_ovl) {
+                        /* The group overlay (+0xe8 raster) draws at (+0xf0,+0xf4). It should sit ON its
+                         * OWN item button, not at the shared native +0xf4 constant - otherwise every
+                         * active group's icon stacks at one spot and shows as a DUPLICATE button in the
+                         * middle of the panel (owner). Anchor it to this item's own window y. */
+                        LONG *oy = (LONG *)((DWORD)page + 0xf4);
+                        if (*oy != wy) {
+                            if (!g_reassert_quiet)
+                                logf("SIDEKIDS> item 0x%08lX group-overlay y %ld -> %ld (+0xf4 = item y)",
+                                     (DWORD)page, *oy, wy);
+                            *oy = wy;
                         }
                     }
                     moved++;
@@ -1384,7 +1651,16 @@ static void rz_side_children_bottom(void) {
                     if (b && !IsBadWritePtr(b, 0xa0)) {
                         LONG *e = (LONG *)((DWORD)b + 0x80);
                         DWORD *bvt = *(DWORD **)b;
-                        if (bvt && !IsBadReadPtr(bvt, 0xcc) && bvt[0xc8 / 4] &&
+                        /* ⛔ DO NOT MOVE FLYOUT SUB-TOOL BUTTONS (2026-09-05). These grandchildren are
+                         * the tool-submenu buttons (class a917c) inside the page columns. Moving them
+                         * by +dy displaced their HIT-RECTS away from the ICONS - the game draws the
+                         * flyout icons at its own anchor (next to the owning category button), so the
+                         * shifted hit-rects diverged from the icons, growing toward the bottom (owner:
+                         * "menu open ... top a little, more and more misaligned"). It also stranded live
+                         * hit-rects in the empty area over the minimap while the flyout was closed. The
+                         * game already positions these correctly; leave them alone. Gated so it can be
+                         * re-enabled for an A/B (SC3RESIZE_SUBMOVE=1). */
+                        if (g_submove && bvt && !IsBadReadPtr(bvt, 0xcc) && bvt[0xc8 / 4] &&
                             e[2] - e[0] > 0 && e[3] - e[1] > 0 && e[1] < dy) {
                             DWORD a[4];
                             a[0] = (DWORD)e[0]; a[1] = (DWORD)(e[1] + dy);
@@ -1429,8 +1705,19 @@ static void rz_side_children_bottom(void) {
         DWORD *pvt = *(DWORD **)p;
         if (pvt && !IsBadReadPtr(pvt, 0x158) && pvt[0x154 / 4])
             rz_thiscall(p, (void *)pvt[0x154 / 4], NULL, 0);
-        logf("SIDEKIDS> pushed %d side-panel BUTTON(s) down by %ld (panel %ld tall local, native %d)"
-             " + invalidated the panel", moved, dy, panelH, SIDE_NAT_H);
+        /* ⭐ REBUILD DERIVED RECTS after moving the item LOCAL rects. vt+0xc8 SetRect writes only the
+         * LOCAL rect (+0x84); hit-testing compares the DERIVED rect (+0x14), which the framework
+         * rebuilds from local only when the cascade runs. During rz_do_resize the cascade runs after
+         * this routine, but on the per-frame poll (where the game re-creates the items later) nothing
+         * re-ran it - so the moved items stayed clickable at their OLD native y while their icons drew
+         * at the pushed y. That is the "top 5 ok, alert and below all wrong" bug: the divergence grows
+         * downward because only the bottom items are pushed far. Rebuild now. */
+        {   int did = rz_cascade_derived();
+            logf("SIDEKIDS> pushed %d side-panel BUTTON(s) down by %ld (panel %ld tall local, native "
+                 "%d) + invalidated the panel%s", moved, dy, panelH, SIDE_NAT_H,
+                 did ? " + rebuilt derived rects (hit-test follows the icons)"
+                     : " + CASCADE REFUSED (derived rects may lag)");
+        }
     }
 
     /* ⭐ ROOT-LEVEL FLYOUTS. The tool submenu (the column of round icons) is a DIRECT CHILD OF THE
@@ -1659,15 +1946,33 @@ static void rz_bar_children_right(void) {
                 LONG *e = (LONG *)((DWORD)rci + 0x80);
                 LONG w = e[2] - e[0], want = art[2];   /* right of the console, i.e. against the minimap */
                 DWORD *rvt = *(DWORD **)rci;
-                if (w > 0 && want > 0 && e[0] != want &&
-                    rvt && !IsBadReadPtr(rvt, 0xcc) && rvt[0xc8 / 4]) {
-                    DWORD a[4];
-                    a[0] = (DWORD)want;     a[1] = (DWORD)e[1];
-                    a[2] = (DWORD)(want+w); a[3] = (DWORD)e[3];
-                    logf("BARKIDS> RCI [%ld %ld %ld %ld] -> [%ld %ld %ld %ld] (between console and minimap, as native)",
-                         e[0], e[1], e[2], e[3], a[0], a[1], a[2], a[3]);
-                    rz_thiscall(rci, (void *)rvt[0xc8 / 4], a, 4);
-                    moved++;
+                /* Cache the RCI's NATIVE rect once (still at native the first time we see it), then
+                 * place it at native_y + the bar's vertical shift, so it docks DOWN with the bar
+                 * instead of floating at native y and getting clipped (owner: "the lower part of the
+                 * RCI is shorter"). The bar's shift is bar_top - native_art_top. */
+                if (!g_rci_nat_ok && e[3] - e[1] > 0) {
+                    g_rci_nat[0] = e[0]; g_rci_nat[1] = e[1]; g_rci_nat[2] = e[2]; g_rci_nat[3] = e[3];
+                    g_rci_nat_ok = 1;
+                }
+                {   /* Align the RCI's BOTTOM with the bar's bottom. The RCI is 88 px tall vs the bar's
+                     * 56, and its native rect hangs 8 px below the bar's, so shifting it by the global
+                     * dy pushed its bottom past the client edge and clipped it (owner: "still cutting
+                     * off the bottom part of the RCI"). Pinning its bottom to the bar bottom keeps it
+                     * fully on-screen; the extra height sticks UP above the bar, which is its native
+                     * look. */
+                    LONG barBottom = ((LONG *)((DWORD)bar + 0x80))[3];
+                    LONG rh = g_rci_nat_ok ? (g_rci_nat[3] - g_rci_nat[1]) : (e[3] - e[1]);
+                    LONG ny = barBottom - rh;
+                    if (w > 0 && want > 0 && (e[0] != want || e[1] != ny) &&
+                        rvt && !IsBadReadPtr(rvt, 0xcc) && rvt[0xc8 / 4]) {
+                        DWORD a[4];
+                        a[0] = (DWORD)want;     a[1] = (DWORD)ny;
+                        a[2] = (DWORD)(want+w); a[3] = (DWORD)(ny + rh);
+                        logf("BARKIDS> RCI [%ld %ld %ld %ld] -> [%ld %ld %ld %ld] (bottom aligned to bar bottom %ld)",
+                             e[0], e[1], e[2], e[3], a[0], a[1], a[2], a[3], barBottom);
+                        rz_thiscall(rci, (void *)rvt[0xc8 / 4], a, 4);
+                        moved++;
+                    }
                 }
             }
         }
@@ -1679,6 +1984,51 @@ static void rz_bar_children_right(void) {
             rz_thiscall(bar, (void *)bvt[0x154 / 4], NULL, 0);
         logf("BARKIDS> slid %d bar element(s) right by %ld (bar %ld wide, target x %ld) + invalidated",
              moved, dx, barW, target);
+    }
+}
+
+/* Re-assert the cached corner widgets' positions absolutely (native+dx/dy). Same as rz_input_geometry
+ * item 4a, but standalone so the per-frame poll can call it: after a resize a framework relayout can
+ * clobber the corner widget's rect, leaving the minimize button visually right but UNCLICKABLE until
+ * the next resize (owner, 2026-09-03). Re-running this a few times a second re-sets both the visual
+ * (SetRect) and the hit rect (+0x80) and self-heals that within a frame or two. Idempotent: SetRect
+ * only when the position actually differs. */
+static void rz_corner_reanchor(void) {
+    RECT cr;
+    LONG dx, dy, cw, ch;
+    int i;
+    if (!g_hwnd || !GetClientRect(g_hwnd, &cr)) return;
+    cw = cr.right - cr.left; ch = cr.bottom - cr.top;
+    dx = cw - NAT_W;
+    dy = ch - NAT_H + g_hud_dy;
+    if (dx < 0) dx = 0;
+    if (dy < 0) dy = 0;
+    for (i = 0; i < g_corner_n; i++) {
+        void *c = g_corner[i].w;
+        LONG *nat = g_corner[i].nat;
+        DWORD *vt;
+        if (!c || IsBadWritePtr(c, 0xa0)) continue;
+        vt = *(DWORD **)c;
+        if (!vt || IsBadReadPtr(vt, 0xcc) || !vt[0xc8 / 4]) continue;
+        {   LONG *cur = (LONG *)((DWORD)c + 0x14);
+            LONG *e = (LONG *)((DWORD)c + 0x80);
+            LONG nx = nat[0] + dx, ny = nat[1] + dy;
+            int ext_abs = (e[0] == cur[0] && e[1] == cur[1]);
+            if (cur[0] != nx || cur[1] != ny) {
+                DWORD a[4];
+                a[0] = (DWORD)nx;          a[1] = (DWORD)ny;
+                a[2] = (DWORD)(nat[2]+dx); a[3] = (DWORD)(nat[3]+dy);
+                rz_thiscall(c, (void *)vt[0xc8 / 4], a, 4);
+                if (ext_abs) { e[0] = nx; e[1] = ny; e[2] = (LONG)a[2]; e[3] = (LONG)a[3]; }
+            }
+        }
+        /* ⭐ AND widen its ANCESTOR containers. A corner widget's own rect being correct is not enough:
+         * the dispatch router (FUN_1001ec22) recurses into a child only if the child's ancestor passes
+         * a point-in-rect gate, and an ancestor's LOCAL rect gets re-shrunk to [0 0 800 600] by a
+         * relayout after the resize - so a click below the native bottom fails at the container and the
+         * button was dead until the NEXT resize re-widened it (owner: "still dead until I resize
+         * again"). Re-widening here every ~120ms self-heals it. */
+        rz_fix_hud_parents(c, "corner", cw, ch);
     }
 }
 
@@ -1734,54 +2084,89 @@ static void rz_input_geometry(LONG cw, LONG ch, LONG dx, LONG dy) {
              r[0], r[1], r[2], r[3], b[0], b[1], b[2], b[3]);
     }
 
-    /* 4. native-corner widgets, DIRECT children of the root only. */
-    {   void *head = *(void **)((DWORD)root + 0x34);
+    /* 4. native-corner widgets, DIRECT children of the root only.
+     *
+     * ABSOLUTE from a cached native rect, not incremental. The discovery heuristic below only matches
+     * a widget while it is still inside the NATIVE bounds; once moved it fails `fits` and is never
+     * matched again, so an incremental `r[0]+dx` fired exactly once and the widget then stayed put
+     * while the window kept growing (owner: "the minimize button is not following"). So: first move
+     * every ALREADY-CACHED widget to native+dx (idempotent), THEN discover any still-native widget,
+     * cache its native rect, and place it. */
+    {   void *head;
         void *n;
-        int guard = 0, moved = 0;
+        int guard = 0, moved = 0, i;
+
+        /* 4a. reposition cached corner widgets absolutely. */
+        for (i = 0; i < g_corner_n; i++) {
+            void *c = g_corner[i].w;
+            LONG *nat = g_corner[i].nat;
+            DWORD *vt;
+            if (!c || IsBadWritePtr(c, 0xa0)) continue;
+            vt = *(DWORD **)c;
+            if (!vt || IsBadReadPtr(vt, 0xcc) || !vt[0xc8 / 4]) continue;
+            {   LONG *cur = (LONG *)((DWORD)c + 0x14);
+                LONG *e = (LONG *)((DWORD)c + 0x80);
+                LONG nx = nat[0] + dx, ny = nat[1] + dy;
+                int ext_abs = (e[0] == cur[0] && e[1] == cur[1]);   /* absolute, not parent-local */
+                if (cur[0] != nx || cur[1] != ny) {
+                    DWORD a[4];
+                    a[0] = (DWORD)nx;          a[1] = (DWORD)ny;
+                    a[2] = (DWORD)(nat[2]+dx); a[3] = (DWORD)(nat[3]+dy);
+                    rz_thiscall(c, (void *)vt[0xc8 / 4], a, 4);
+                    if (ext_abs) { e[0] = nx; e[1] = ny; e[2] = (LONG)a[2]; e[3] = (LONG)a[3]; }
+                    moved++;
+                }
+            }
+        }
+
+        /* 4b. discover NEW corner widgets still at their native position and cache them. */
+        head = *(void **)((DWORD)root + 0x34);
         if (!head || IsBadReadPtr(head, 4)) return;
         n = *(void **)head;
         while (n && n != head && guard++ < 500) {
             DWORD *c;
             if (IsBadReadPtr(n, 0x0c)) break;
             c = *(DWORD **)((DWORD)n + 8);
-            if (c && !IsBadWritePtr(c, 0xa0)) {
+            if (c && !IsBadWritePtr(c, 0xa0) && g_corner_n < CORNER_MAX) {
                 LONG *r = (LONG *)((DWORD)c + 0x14);
-                /* fits inside the native screen AND is anchored to its bottom-right corner AND is
-                   actually a small widget.
-                   ⚠️ The size bound is not cosmetic. Without it a FULL-SCREEN window whose rect is
-                   [0 0 800 600] passes both other tests - it "touches" the bottom-right corner - and
-                   gets translated off to the right. Measured 2026-09-02 on the dock+span path
-                   (`GEOM> corner widget 0x00644140 [0 0] -> [1248 489]`), where cluster mode had
-                   masked it because the parent fix widens that window first. The real widget is
-                   26x26. */
-                int fits = r[0] >= 0 && r[1] >= 0 && r[2] <= NAT_W && r[3] <= NAT_H;
-                int corner = r[2] >= NAT_W - 40 && r[3] >= NAT_H - 40;
-                int is_small = (r[2] - r[0]) > 0 && (r[2] - r[0]) <= 200 &&
-                            (r[3] - r[1]) > 0 && (r[3] - r[1]) <= 200;
-                /* ⚠️ exclude the hover label: it parks near the old corner between hovers and its
-                   position is recomputed from the cursor anyway, so moving it is noise. Measured
-                   2026-09-02 - the first version of this heuristic matched it. */
-                int is_label = sc3 && c[0] == sc3 + 0xd3bcc;
-                if (fits && corner && is_small && !is_label) {
-                    DWORD *vt = *(DWORD **)c;
-                    if (vt && !IsBadReadPtr(vt, 0xcc) && vt[0xc8 / 4]) {
-                        LONG *e = (LONG *)((DWORD)c + 0x80);
-                        LONG ox = r[0], oy = r[1], nx = r[0] + dx, ny = r[1] + dy;
-                        int ext_abs = (e[0] == r[0] && e[1] == r[1]);   /* absolute, not parent-local */
-                        DWORD a[4];
-                        a[0] = (DWORD)nx;        a[1] = (DWORD)ny;
-                        a[2] = (DWORD)(r[2]+dx); a[3] = (DWORD)(r[3]+dy);
-                        rz_thiscall(c, (void *)vt[0xc8 / 4], a, 4);
-                        if (ext_abs) { e[0] = nx; e[1] = ny; e[2] = (LONG)a[2]; e[3] = (LONG)a[3]; }
-                        logf("GEOM> corner widget 0x%08lX [%ld %ld] -> [%ld %ld]%s",
-                             (DWORD)c, ox, oy, nx, ny, ext_abs ? " (hit rect carried)" : " (hit rect parent-local, left alone)");
-                        moved++;
+                int already = 0, k;
+                for (k = 0; k < g_corner_n; k++) if (g_corner[k].w == (void *)c) { already = 1; break; }
+                /* fits inside the native screen AND anchored to its bottom-right corner AND small.
+                   ⚠️ The size bound is not cosmetic: without it a FULL-SCREEN [0 0 800 600] window
+                   passes the corner test and gets flung off-screen. The real widget is 26x26. */
+                if (!already) {
+                    int fits = r[0] >= 0 && r[1] >= 0 && r[2] <= NAT_W && r[3] <= NAT_H;
+                    int corner = r[2] >= NAT_W - 40 && r[3] >= NAT_H - 40;
+                    int is_small = (r[2] - r[0]) > 0 && (r[2] - r[0]) <= 200 &&
+                                (r[3] - r[1]) > 0 && (r[3] - r[1]) <= 200;
+                    int is_label = sc3 && c[0] == sc3 + 0xd3bcc;   /* the hover label, excluded */
+                    if (fits && corner && is_small && !is_label) {
+                        DWORD *vt = *(DWORD **)c;
+                        if (vt && !IsBadReadPtr(vt, 0xcc) && vt[0xc8 / 4]) {
+                            LONG *e = (LONG *)((DWORD)c + 0x80);
+                            LONG nx = r[0] + dx, ny = r[1] + dy;
+                            int ext_abs = (e[0] == r[0] && e[1] == r[1]);
+                            DWORD a[4];
+                            g_corner[g_corner_n].w = (void *)c;
+                            g_corner[g_corner_n].nat[0] = r[0]; g_corner[g_corner_n].nat[1] = r[1];
+                            g_corner[g_corner_n].nat[2] = r[2]; g_corner[g_corner_n].nat[3] = r[3];
+                            g_corner_n++;
+                            a[0] = (DWORD)nx;        a[1] = (DWORD)ny;
+                            a[2] = (DWORD)(r[2]+dx); a[3] = (DWORD)(r[3]+dy);
+                            rz_thiscall(c, (void *)vt[0xc8 / 4], a, 4);
+                            if (ext_abs) { e[0] = nx; e[1] = ny; e[2] = (LONG)a[2]; e[3] = (LONG)a[3]; }
+                            logf("GEOM> corner widget 0x%08lX cached native [%ld %ld %ld %ld] -> [%ld %ld]%s",
+                                 (DWORD)c, r[0], r[1], r[2], r[3], nx, ny,
+                                 ext_abs ? " (hit rect carried)" : " (hit rect parent-local)");
+                            moved++;
+                        }
                     }
                 }
             }
             n = *(void **)n;
         }
-        logf("GEOM> relocated %d native-corner widget(s) by (%ld,%ld)", moved, dx, dy);
+        if (moved)
+            logf("GEOM> relocated %d corner widget(s) by (%ld,%ld) [%d cached]", moved, dx, dy, g_corner_n);
     }
 }
 
@@ -1797,7 +2182,7 @@ static void rz_mini_dock(void) {
     nx = (cr.right - cr.left) - w;
     ny = (cr.bottom - cr.top) - h + g_hud_dy;   /* same bottom bias as the bar and the cluster */
     if (nx < 0 || ny < 0) { logf("MINI> dock skipped: window smaller than the minimap"); return; }
-    if (r[0] == nx && r[1] == ny) { logf("MINI> already docked at [%ld,%ld]", nx, ny); return; }
+    if (r[0] == nx && r[1] == ny) { if (!g_reassert_quiet) logf("MINI> already docked at [%ld,%ld]", nx, ny); return; }
     {   /* capture the OLD position before overwriting - the hit-origin move verifies against it */
         LONG ox = r[0], oy = r[1];
         logf("MINI> dock [%ld %ld %ld %ld] -> [%ld %ld %ld %ld]",
@@ -2224,6 +2609,77 @@ static RZ_BLT  g_orig_blt;   /* g_blt_slot / g_ddblt_* are declared up with the 
  * the capture rides the final present so the frame is fully composited. */
 static void rz_dump_all(void *iso);
 
+/* ⭐ RE-COMPOSITE THE RCI, LAST, AT PRESENT TIME.
+ *
+ * The RCI indicator (root child, class SIMUI+0xab274) is 88px tall and overhangs ~32px ABOVE the
+ * 56px bottom bar. Worker RE (2026-09-05) + runtime probes established: the RCI blits its FULL 88px
+ * surface to its dest +0x90 every frame via FUN_1006d2d0 (blit is unconditional), yet the overhang
+ * shows the city. The reason is FRAME ORDER - the resize grows the viewport present to the full
+ * client (iso+0x4d0 = {0,0,w,h}), and the SIMSPR viewport device-batch composites the city over the
+ * overhang band AFTER the SIMUI HUD blit. Native never hits this because the shipped mod leaves the
+ * viewport native-height. Neither a one-time nor a per-frame HUD invalidate wins the race.
+ *
+ * The fix that always wins: re-run the RCI's OWN blit (the exact FUN_1006d2d0:36-52 path -
+ * target = parent->vt[0x158](); target->vt[0x1c](0x10) begin; target->vt[0x118](src=+0x58,
+ * srcRect=+0x24, destRect=+0x90, 0); target->vt[0x20](0x10) end) from INSIDE the final-present hook,
+ * just before the composite is blitted to the screen. Being the last write to the composite, the
+ * overhang shows the RCI gauge, not the city. Uses the game's own blit so the magenta colour-key
+ * transparency is handled exactly as the game handles it. `[CONFIRMED @ SIMUI 0x1006d2d0:36-52]` */
+static int g_in_rci_repaint;
+static void rz_repaint_rci(void) {
+    DWORD sui = (DWORD)GetModuleHandleA("SIMUI.DLL");
+    DWORD gz  = (DWORD)GetModuleHandleA("GZGraphicD.dll");
+    void *rci = g_rci_cached, *par, *tgt;
+    DWORD *pvt, *tvt, src58;
+    if (!g_rcifix || !sui || !gz || g_in_rci_repaint) return;
+    /* find + cache the RCI once; re-find if the cached pointer went stale */
+    if (!rci || IsBadReadPtr(rci, 0x94) || *(DWORD *)rci != sui + 0xab274) {
+        DWORD *w = (!IsBadReadPtr((void *)(gz + 0x6cdb8), 4)) ? *(DWORD **)(gz + 0x6cdb8) : NULL;
+        DWORD *sk = (w && !IsBadReadPtr(w, 0x34)) ? (DWORD *)w[0x30 / 4] : NULL;
+        void *rt = (sk && !IsBadReadPtr(sk, 0x3c)) ? (void *)sk[0x38 / 4] : NULL;
+        int budget = 3000;
+        rci = rt ? rz_find_by_vt(rt, sui + 0xab274, 0, &budget) : NULL;
+        g_rci_cached = rci;
+    }
+    if (!rci || IsBadReadPtr(rci, 0x94)) return;
+    src58 = ((DWORD *)rci)[0x58 / 4];
+    if (!src58 || IsBadReadPtr((void *)src58, 4)) return;
+    /* Only bother when it actually overhangs above the bar (dest top < the bar's top). */
+    if (g_hud_top && !IsBadReadPtr(g_hud_top, 0x90)) {
+        LONG barTop = ((LONG *)((DWORD)g_hud_top + 0x80))[1];
+        LONG rciTop = ((LONG *)((DWORD)rci + 0x90))[1];
+        if (rciTop >= barTop) return;   /* no overhang -> the normal HUD blit already covers it */
+    }
+    par = *(void **)((DWORD)rci + 0x3c);
+    if (!par || IsBadReadPtr(par, 4)) return;
+    pvt = *(DWORD **)par;
+    if (IsBadReadPtr(pvt, 0x15c) || !pvt[0x158 / 4]) return;
+    tgt = (void *)rz_thiscall_ret(par, (void *)pvt[0x158 / 4], NULL, 0);   /* FUN_1006d2d0:46 */
+    if (!tgt || IsBadReadPtr(tgt, 0x11c)) return;
+    tvt = *(DWORD **)tgt;
+    if (IsBadReadPtr(tvt, 0x11c) || !tvt[0x1c / 4] || !tvt[0x118 / 4] || !tvt[0x20 / 4]) return;
+    g_in_rci_repaint = 1;
+    {   DWORD one = 0x10;
+        if (rz_thiscall(tgt, (void *)tvt[0x1c / 4], &one, 1) & 0xff) {   /* begin/lock */
+            DWORD a4[4];
+            a4[0] = src58;                     /* the RCI's surface        */
+            a4[1] = (DWORD)((DWORD)rci + 0x24);/* source rect  +0x24       */
+            a4[2] = (DWORD)((DWORD)rci + 0x90);/* dest rect    +0x90       */
+            a4[3] = 0;
+            rz_thiscall(tgt, (void *)tvt[0x118 / 4], a4, 4);            /* the blit */
+            rz_thiscall(tgt, (void *)tvt[0x20 / 4], &one, 1);          /* end/unlock */
+            if (!g_rcifix_logged) {
+                g_rcifix_logged = 1;
+                logf("RCIFIX> re-composited the RCI at present time (dest +0x90 = [%ld %ld %ld %ld]) "
+                     "so its overhang draws over the viewport",
+                     ((LONG *)((DWORD)rci + 0x90))[0], ((LONG *)((DWORD)rci + 0x90))[1],
+                     ((LONG *)((DWORD)rci + 0x90))[2], ((LONG *)((DWORD)rci + 0x90))[3]);
+            }
+        }
+    }
+    g_in_rci_repaint = 0;
+}
+
 static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, void *fx) {
     LARGE_INTEGER a, b;
     HRESULT hr;
@@ -2262,12 +2718,39 @@ static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWO
             }
         }
     }
+    /* ⭐ RCI OVERHANG FIX: this Blt is the FINAL present (composite -> screen) when the dest is at
+     * least the client size. Just before it fires, re-composite the RCI onto the composite so its
+     * overhang draws over the viewport (see rz_repaint_rci). Only in cluster+bar_span, where the RCI
+     * was moved and the viewport spans the full client. */
+    if (g_rcifix && g_cluster && g_bar_span && dr && !IsBadReadPtr(dr, sizeof(RECT))) {
+        RECT crx;
+        if (g_hwnd && GetClientRect(g_hwnd, &crx) &&
+            dr->right - dr->left >= crx.right - crx.left &&
+            dr->bottom - dr->top >= crx.bottom - crx.top) {
+            rz_repaint_rci();
+        }
+    }
     QueryPerformanceCounter(&a);
     hr = g_orig_blt(self, dr, src, sr, fl, fx);
     QueryPerformanceCounter(&b);
     d = b.QuadPart - a.QuadPart;
     g_ddblt_time += d;
     g_ddblt_calls++;
+    /* BLT HEARTBEAT (SC3RESIZE_BLTBEAT): report Blt calls/sec and ms-in-Blt/sec, so the full-width
+     * bar's per-frame cost is a measured number. Frame rate itself is not counted, but a present is
+     * one Blt/frame, so calls/sec upper-bounds FPS and calls-per-present exposes the tiling growth. */
+    if (g_bltbeat) {
+        static DWORD beat_ms, beat_calls; static __int64 beat_time;
+        DWORD now3 = GetTickCount();
+        if (!beat_ms) beat_ms = now3;
+        if (now3 - beat_ms >= 1000) {
+            double ms = g_freq.QuadPart ? (1000.0 * (double)beat_time / (double)g_freq.QuadPart) : 0.0;
+            logf("BLTBEAT> %lu Blt/sec, %.2f ms/sec inside Blt (%.3f ms avg)",
+                 beat_calls, ms, beat_calls ? ms / beat_calls : 0.0);
+            beat_ms = now3; beat_calls = 0; beat_time = 0;
+        }
+        beat_calls++; beat_time += d;
+    }
     /* PRESENT GEOMETRY LOG. The composited surface is provably correct across a minimize (row-by-row
      * identical), yet the owner still sees a strip at the bottom of the WINDOW - so the defect is
      * downstream of the composite, in the present itself. A present is a Blt with a SOURCE rect and
@@ -2842,6 +3325,36 @@ static int rz_thiscall(void *self, void *fn, const DWORD *a, int n) {
     return rv;
 }
 
+/* Same __thiscall shim as rz_thiscall but returns the FULL EAX (not the low byte) - needed for
+ * methods that return a pointer, e.g. the window's target-surface getter vt+0x158. */
+static DWORD rz_thiscall_ret(void *self, void *fn, const DWORD *a, int n) {
+    DWORD rv = 0;
+    __asm {
+        push ebx
+        push esi
+        push edi
+        mov  ebx, esp
+        mov  edi, a
+        mov  ecx, n
+        test ecx, ecx
+        jz   rzr_ready
+    rzr_push:
+        mov  eax, [edi + ecx*4 - 4]
+        push eax
+        dec  ecx
+        jnz  rzr_push
+    rzr_ready:
+        mov  ecx, self
+        call [fn]
+        mov  esp, ebx
+        mov  rv, eax
+        pop  edi
+        pop  esi
+        pop  ebx
+    }
+    return rv;
+}
+
 /* Replay FUN_10009efb at a new size on one raster-class object.
  * The ORIGINAL 8-arg tuple matters: a 2-arg call writes stack garbage into the raster. The
  * tuple is recovered from the object's OWN fields, which is sound because FUN_10009efb writes
@@ -2893,7 +3406,31 @@ static int rz_recreate_raster(DWORD obj, const char *name, DWORD w, DWORD ht, HM
                  name, obj, g_nrc, g_rc_full ? ", TABLE FULL - miss unreliable" : "",
                  ca[2], ca[3], ca[4], ca[5], ca[6], ca[7]);
         }
+        /* PITCH-SHEAR FIX (2026-09-03): pin p3 to the recorded-good value. Field read-back yields 7,
+           which places some widths in a pool whose pitch rounds up (1000 -> 2048) while the present
+           reads width*2 -> the whole frame shears diagonally and goes grey. The recorded create used
+           4. Applied to BOTH the render target and the device surface (same routine). Only when a
+           recorded tuple was NOT found (a real recording is authoritative and already correct). */
+        if (found < 0 && g_rt_p3 >= 0) {
+            logf("RZ   %s p3 pinned %lu -> %ld (pitch-shear fix)", name, ca[2], g_rt_p3);
+            ca[2] = (DWORD)g_rt_p3;
+        }
+        if (found < 0 && g_rt_p7 >= 0 && ca[6] != (DWORD)g_rt_p7) {
+            logf("RZ   %s p7 pinned %lu -> %ld (force system memory, tight pitch)", name, ca[6], g_rt_p7);
+            ca[6] = (DWORD)g_rt_p7;
+        }
         ca[0] = w;
+        /* PITCH-SHEAR FIX (2026-09-03): round surface width up so width*2 is 64-byte aligned. See
+           g_walign. Keeps the client width intact (present pushes the client rect); only the backing
+           allocation is wider. */
+        if (g_walign > 1) {
+            DWORD aw = (w + (DWORD)g_walign - 1) & ~((DWORD)g_walign - 1);
+            if (aw != w) {
+                logf("RZ   %s width padded %lu -> %lu (walign %ld, pitch-shear fix)",
+                     name, w, aw, g_walign);
+                ca[0] = aw;
+            }
+        }
         /* ZOOM-CRASH FIX (2026-08-30): allocate GUARD ROWS below the visible height.
            The zoom-scaled 16bpp blitter FUN_1000239d (GZGraphicD) has NO vertical clamp to the
            surface height - it bounds its row loop only by the caller's dest rect, and its 2x/4x
@@ -2909,6 +3446,19 @@ static int rz_recreate_raster(DWORD obj, const char *name, DWORD w, DWORD ht, HM
         ca[1] = ht + RZ_SURFACE_SLACK;
         logf("RZ   %s replay at %lux%lu (+%d guard rows -> alloc h=%lu, zoom-blit overrun fix)",
              name, w, ht, RZ_SURFACE_SLACK, ca[1]);
+    }
+    /* FORCE SYSTEM MEMORY (SC3RESIZE_SYSMEM). Worker RE 2026-09-03: the surface pool is derived in
+     * the create path from obj+0x8c (param_1[0x23]) as `-(param_1[0x23]!=0) & 3` - nonzero picks
+     * VIDEOMEMORY (driver pads the pitch -> the composite shears at widths whose width*2 is not
+     * 64-byte aligned), zero picks SYSTEMMEMORY (tight pitch = width*2 for even widths). This field is
+     * NOT in the replayed p3..p8 tuple, so zero it directly before the create. Testing whether this
+     * kills the shear at arbitrary even widths and lets the 32-snap drop to a 2px even constraint. */
+    if (g_sysmem) {
+        DWORD *o = (DWORD *)obj;
+        if (!IsBadWritePtr(o, 0x90) && o[0x8c / 4] != 0) {
+            logf("RZ   %s obj+0x8c %lu -> 0 (force system memory)", name, o[0x8c / 4]);
+            o[0x8c / 4] = 0;
+        }
     }
     *((BYTE *)obj + 8) = 0;
     rc = rz_thiscall((void *)obj, (void *)vt[0x0c / 4], ca, 8);
@@ -3482,7 +4032,8 @@ static void rz_hud_setrect_w(DWORD wantW) {
             return;
         }
         if (x1 == 0 && y1 == wantY1 && x2 == wantX2 && y2 == wantY2) {
-            logf("HUDLAB> SetRect skipped: bar already docked at [0,%d,%d,%d]", wantY1, wantX2, wantY2);
+            if (!g_reassert_quiet)
+                logf("HUDLAB> SetRect skipped: bar already docked at [0,%d,%d,%d]", wantY1, wantX2, wantY2);
             return;
         }
         {
@@ -3561,7 +4112,8 @@ static void rz_hud_fit_child(int ci, DWORD liveW) {
     /* Re-fit on ANY width change, not just a widen - a later resize to a SMALLER window must bring
        the bar back down, or it stays wider than the window it lives in. */
     if (liveW == oldw) {
-        logf("HUDFIT> already fitted: surface width %lu == live width %lu", oldw, liveW);
+        if (!g_reassert_quiet)
+            logf("HUDFIT> already fitted: surface width %lu == live width %lu", oldw, liveW);
         return;
     }
 
@@ -3747,7 +4299,13 @@ static void rz_hud_srcrect(DWORD liveW) {
 }
 
 static void rz_hud_fit_surface(DWORD liveW) {
-    rz_hud_fit_child(0x2a, liveW);
+    /* ONLY the filler [0x2b] gets widened. [0x2a] is the console BACKGROUND - a unique 600x56 image
+     * (ticker well + info-field wells + control-button wells), NOT a repeating texture. Tiling it to
+     * liveW duplicated its baked-in button graphics across the surface, which showed up as ghost
+     * controls (a blue button + speed squares) painted over the money field (owner, 2026-09-03). The
+     * console is painted into a fixed 600-wide rect (+0x120), so it never needs widening; leaving it
+     * at native 600 is correct. Only the 16-px filler [0x2b] is a repeating texture and the one whose
+     * per-frame tile count the widening was meant to collapse. */
     rz_hud_fit_child(0x2b, liveW);
     rz_hud_srcrect(liveW);   /* after the refit: the surface must back the wider source rect */
 }
@@ -3776,6 +4334,12 @@ static void rz_hud_fit_surface(DWORD liveW) {
  * for the full height. If the panel blits a fixed 442-tall destination rect regardless, the extra
  * rows will never appear and the black section survives - a clean negative, visible on screen. */
 static HUDART g_side_cache[2];       /* [0] => child +0xc0, [1] => child +0xc8 */
+static DWORD  g_side_plainrow[2];    /* the flattest art row (min horizontal variation) - the fill
+                                        source, chosen adaptively so the extended area is not streaky */
+static DWORD  g_side_failh[2];       /* the liveH a recreate last FAILED at (per slot). The fit runs
+                                        every poll; without this memo a height whose CreateSurface fails
+                                        is retried forever, and each failed create churns the video pool
+                                        until the game blits a null surface and dies (2026-09-05). */
 
 static void rz_side_fit_child(int slot, DWORD off, DWORD liveH) {
     DWORD *p = (DWORD *)g_side_top;
@@ -3805,8 +4369,23 @@ static void rz_side_fit_child(int slot, DWORD off, DWORD liveH) {
         if (ca->art) {
             memcpy(ca->art, (void *)oldbits, oldpitch * oldh);
             ca->w = oldw; ca->h = oldh; ca->pitch = oldpitch;
-            logf("SIDEFIT> +0x%lx cached pristine art %lux%lu pitch=%lu (one-time)",
-                 off, oldw, oldh, oldpitch);
+            /* Pick the FLATTEST row (least horizontal RGB565 variation) as the fill source, so the
+             * extended background is a clean panel-fill and not a streaky one. Buttons and the top
+             * cap have high variation; the plain gap between button clusters is the minimum. */
+            {   DWORD rr, best = oldh / 2; DWORD bestv = 0xFFFFFFFF;
+                for (rr = 0; rr < oldh; rr++) {
+                    const WORD *row = (const WORD *)(ca->art + rr * oldpitch);
+                    DWORD x, v = 0;
+                    for (x = 1; x < oldw; x++) {
+                        int d = (int)row[x] - (int)row[x - 1];
+                        v += (DWORD)(d < 0 ? -d : d);
+                    }
+                    if (v < bestv) { bestv = v; best = rr; }
+                }
+                g_side_plainrow[slot] = best;
+            }
+            logf("SIDEFIT> +0x%lx cached pristine art %lux%lu pitch=%lu, flattest fill row %lu",
+                 off, oldw, oldh, oldpitch, g_side_plainrow[slot]);
         }
     }
     if (!ca->art) {
@@ -3818,12 +4397,45 @@ static void rz_side_fit_child(int slot, DWORD off, DWORD liveH) {
     oldh     = ca->h     ? ca->h     : oldh;
     oldpitch = ca->pitch ? ca->pitch : oldpitch;
 
+    /* Don't re-attempt a height that already failed - the fit runs every poll and each failed
+     * video-memory create leaks/churns the pool until the game blits a null surface and crashes. */
+    if (g_side_failh[slot] == liveH) return;
+
+    /* ⭐ FORCE SYSTEM MEMORY for the side-panel background (2026-09-05). The stock surface is VIDEO
+     * memory (obj+0x8c != 0 -> DDSCAPS_VIDEOMEMORY), and at tall heights, after many resizes, the
+     * driver's video CreateSurface starts returning NO surface - EVERY poll - so the fit churned the
+     * video pool and the game eventually blitted a null +0x44 (esi=0 READ +0xDC, GZGraphicD+0x18C74).
+     * Zeroing obj+0x8c selects the SYSTEMMEMORY branch of FUN_10009efb (worker RE: pool =
+     * -(param_1[0x23]!=0) & 3), whose software allocator does not fail like the video pool and hands
+     * back a tight width*2 pitch. This surface is tiny (96 x <1000 x 2 = <200KB) and only blitted, so
+     * system memory costs nothing visible. Done once; the field then stays zero across recreates. */
+    if (!IsBadWritePtr((void *)(obj + 0x8c), 4) && ((DWORD *)obj)[0x8c / 4] != 0) {
+        logf("SIDEFIT> +0x%lx obj+0x8c %lu -> 0 (force SYSTEM memory, video pool was failing)",
+             off, ((DWORD *)obj)[0x8c / 4]);
+        ((DWORD *)obj)[0x8c / 4] = 0;
+    }
+
     logf("SIDEFIT> +0x%lx=0x%08lX -> refitting to %lux%lu (art %lux%lu)",
          off, obj, oldw, liveH, oldw, oldh);
     if (!rz_recreate_raster(obj, "side child surface", oldw, liveH, gz)) {
         logf("SIDEFIT> +0x%lx recreate REFUSED - left as it was", off);
         return;
     }
+    /* ⛔ CRASH GUARD (2026-09-05): if the recreate still handed back a NULL DirectDraw surface at
+     * +0x44, the game's per-frame Blt wrapper FUN_10018c58 dereferences it (esi=0 READ +0xDC, fault
+     * at GZGraphicD+0x18C74) and the process dies. Make it TRANSACTIONAL: re-create at the known-good
+     * native size so the object always holds a valid surface, and MEMO this height so we never retry
+     * it (the retry loop is what churned the pool into the crash). */
+    {   DWORD chk = ((DWORD *)obj)[0x44 / 4];
+        if (!chk || IsBadReadPtr((void *)chk, 0xf8)) {
+            g_side_failh[slot] = liveH;
+            logf("SIDEFIT> +0x%lx recreate yielded NULL surface at h=%lu - rolling back to native "
+                 "%lux%lu and MEMOing the height (no more retries at this size)", off, liveH, oldw, oldh);
+            rz_recreate_raster(obj, "side child ROLLBACK", oldw, oldh, gz);
+            return;
+        }
+    }
+    g_side_failh[slot] = 0;   /* success clears any earlier memo */
     if (snap) {
         DWORD nsub = ((DWORD *)obj)[0x44 / 4];
         DWORD nw = ((DWORD *)obj)[0x24 / 4], nh = ((DWORD *)obj)[0x28 / 4];
@@ -3868,12 +4480,18 @@ static void rz_side_fit_child(int slot, DWORD off, DWORD liveH) {
                    child windows by exactly that slack. The children move by
                    panelH - SIDE_NAT_H - g_side_dy, and surface row r maps to panel y r, so the art
                    must use the same expression. */
-                LONG panelH_ = (g_side_top && !IsBadReadPtr(g_side_top, 0x24))
-                             ? (LONG)((DWORD *)g_side_top)[0x20 / 4] -
-                               (LONG)((DWORD *)g_side_top)[0x18 / 4]
+                /* Use the panel's LOCAL height (+0x80..+0x8c), the SAME field rz_side_children_bottom
+                 * reads to place the button windows. Reading the derived +0x14 ABS rect here (which
+                 * this mod leaves at its stale native 442 while the local rect is the extended height)
+                 * put the icon art at a different offset than the button windows - so the hover
+                 * highlight sat a button off from the icon (owner: "the alignment is still off"). */
+                LONG panelH_ = (g_side_top && !IsBadReadPtr(g_side_top, 0x90))
+                             ? (LONG)((DWORD *)g_side_top)[0x8c / 4] -
+                               (LONG)((DWORD *)g_side_top)[0x84 / 4]
                              : (LONG)liveH;
                 LONG art_at = panelH_ - SIDE_NAT_H - g_side_dy;
-                DWORD plain = (oldh > 8) ? oldh - 4 : oldh - 1;
+                DWORD plain = g_side_plainrow[slot] < oldh ? g_side_plainrow[slot]
+                            : ((oldh > 8) ? oldh - 4 : oldh - 1);
                 if (art_at < 0) art_at = 0;
                 for (r = 0; r < nh; r++) {
                     LONG src = (LONG)r - art_at;
@@ -3888,6 +4506,40 @@ static void rz_side_fit_child(int slot, DWORD off, DWORD liveH) {
             if (lk & 0xff) rz_thiscall((void *)nsub, (void *)svt[0x10 / 4], NULL, 0);
         }
     }
+}
+
+/* Patch the panel bottom-cap's transparency COLOR-KEY (RGB565 magenta 0xF81F, the rounded-corner
+ * outside pixels) to the panel blue. Native rendering hides these behind the minimap; the extended
+ * panel exposes them and the paint blits them as solid magenta (owner: the magenta line at the panel
+ * bottom). The cap is never recreated, so patch its surface once. */
+static int g_cap_patched;
+static void rz_side_patch_cap(void) {
+    DWORD *p = (DWORD *)g_side_top;
+    HMODULE gz = GetModuleHandleA("GZGraphicD.dll");
+    DWORD cap, sub, bits, pitch, w, h;
+    DWORD *svt, want;
+    int lk;
+    if (g_cap_patched || !p || IsBadReadPtr(p, 0x120) || !gz) return;
+    cap = p[0xc8 / 4];
+    if (!cap || IsBadReadPtr((void *)cap, 0x48)) return;
+    w = ((DWORD *)cap)[0x24 / 4]; h = ((DWORD *)cap)[0x28 / 4];
+    sub = ((DWORD *)cap)[0x44 / 4];
+    if (!sub || IsBadReadPtr((void *)sub, 0xf8)) return;
+    svt = *(DWORD **)sub; want = (DWORD)gz + GZ_RVA_VT_SURFACE;
+    if (!svt || IsBadReadPtr(svt, 0x14) || (DWORD)svt != want) return;
+    lk = rz_thiscall((void *)sub, (void *)svt[0x0c / 4], NULL, 0);
+    bits = ((DWORD *)sub)[0xf0 / 4]; pitch = ((DWORD *)sub)[0xf4 / 4];
+    if ((lk & 0xff) && bits && pitch && w && h && !IsBadWritePtr((void *)bits, pitch * h)) {
+        DWORD r, x, patched = 0;
+        for (r = 0; r < h; r++) {
+            WORD *row = (WORD *)(bits + r * pitch);
+            for (x = 0; x < w; x++)
+                if (row[x] == 0xF81F) { row[x] = 0x9D3F; patched++; }   /* magenta key -> panel blue */
+        }
+        g_cap_patched = 1;
+        logf("SIDEFIT> cap: patched %lu magenta color-key px -> panel blue (once)", patched);
+    }
+    if (lk & 0xff) rz_thiscall((void *)sub, (void *)svt[0x10 / 4], NULL, 0);
 }
 
 static void rz_side_fit_surface(DWORD clientH) {
@@ -3926,6 +4578,7 @@ static void rz_side_fit_surface(DWORD clientH) {
          "cap left at native so minH = %lu + %lu = %lu",
          target, clientH, capH, want, RZ_SURFACE_SLACK, target, capH, target + capH);
     rz_side_fit_child(0, 0xc0, want);
+    rz_side_patch_cap();   /* kill the magenta color-key line at the exposed panel bottom */
 
     /* Re-run the panel's own SetRect so it recomputes the child dest rects from the new art size,
        then mark it dirty the way the framework does (vt+0x154 = dirty + propagate to ancestors,
@@ -4039,13 +4692,21 @@ static void rz_side_extend(void) {
         int lw = (int)(cr.right - cr.left), lh = (int)(cr.bottom - cr.top);
         void *setrect = (void *)svt[0xc8/4];
         int wantX1 = lw - panelW, wantY2 = lh;
+        /* Stop the panel at the MINIMAP's top, not the client bottom. The minimap docks in the
+         * bottom-right corner and is wider than the panel; extending the panel over it hid the lower
+         * button cluster BEHIND the minimap (owner: "side bar buttons are wrong"). The minimap docks
+         * before this runs (rz_mini_dock precedes rz_cluster_layout), so its top is current. */
+        {   LONG th = rz_side_target_h();
+            if (th > 0 && th < lh) wantY2 = (int)th;
+        }
         if (!setrect || panelW <= 0 || panelW >= lw) {
             logf("SIDE> extend skipped: setrect=0x%08lX panelW=%d lw=%d",
                  (DWORD)setrect, panelW, lw);
             return;
         }
         if (x1 == wantX1 && y1 == 0 && x2 == lw && y2 == wantY2) {
-            logf("SIDE> already docked at [%d,0,%d,%d]", wantX1, lw, wantY2); return;
+            if (!g_reassert_quiet) logf("SIDE> already docked at [%d,0,%d,%d]", wantX1, lw, wantY2);
+            return;
         }
         {
             DWORD a[4];
@@ -4123,20 +4784,40 @@ static int rz_bmp_write(const char *path, const BYTE *bits, LONG w, LONG h, LONG
 static void rz_dump_raster(void *obj, const char *tag, int seq) {
     char path[MAX_PATH];
     DWORD sub, bits, pitch, w, h;
+    int locked = 0;
     if (!obj || IsBadReadPtr(obj, 0x48)) { logf("DUMP> %s: unreadable object", tag); return; }
     w = ((DWORD *)obj)[0x24 / 4]; h = ((DWORD *)obj)[0x28 / 4];
     sub = ((DWORD *)obj)[0x44 / 4];
     if (!sub || IsBadReadPtr((void *)sub, 0xf8)) { logf("DUMP> %s: no sub-object", tag); return; }
     bits = ((DWORD *)sub)[0xf0 / 4]; pitch = ((DWORD *)sub)[0xf4 / 4];
+    /* A VIDEO-memory surface (the composite is recreated as one after a resize) has no persistent CPU
+     * mapping - bits/pitch are 0 until it is LOCKED. Take a BALANCED lock (add and remove our own
+     * refcount level, the exact primitive rz_hud_fit_child uses) to map it for the read, so the HUD
+     * composite can be captured post-resize instead of coming back "nothing mapped". Expect-or-refuse
+     * on the sub vtable before dispatching through it. */
+    if ((!bits || !pitch)) {
+        HMODULE gz = GetModuleHandleA("GZGraphicD.dll");
+        DWORD *svt = *(DWORD **)sub, wantvt = gz ? (DWORD)gz + GZ_RVA_VT_SURFACE : 0;
+        if (gz && svt && !IsBadReadPtr(svt, 0x14) && (DWORD)svt == wantvt && svt[0x0c / 4]) {
+            int lk = rz_thiscall((void *)sub, (void *)svt[0x0c / 4], NULL, 0);
+            if (lk & 0xff) {
+                locked = 1;
+                bits = ((DWORD *)sub)[0xf0 / 4]; pitch = ((DWORD *)sub)[0xf4 / 4];
+                logf("DUMP> %s: locked video surface -> bits=0x%08lX pitch=%lu", tag, bits, pitch);
+            }
+        }
+    }
     if (!bits || !pitch) {
         logf("DUMP> %s: %lux%lu but bits=0x%08lX pitch=%lu - nothing mapped", tag, w, h, bits, pitch);
+        if (locked) { DWORD *svt = *(DWORD **)sub; if (svt && svt[0x10/4]) rz_thiscall((void *)sub, (void *)svt[0x10/4], NULL, 0); }
         return;
     }
     _snprintf(path, sizeof(path), "%s\\dump%02d_%s_%lux%lu.bmp", g_dumpdir, seq, tag, w, h);
-    if (rz_bmp_write(path, (const BYTE *)bits, (LONG)w, (LONG)h, (LONG)pitch))
+    if (!IsBadReadPtr((void *)bits, pitch * h) && rz_bmp_write(path, (const BYTE *)bits, (LONG)w, (LONG)h, (LONG)pitch))
         logf("DUMP> %s -> %s (%lux%lu pitch %lu)", tag, path, w, h, pitch);
     else
         logf("DUMP> %s: BMP write FAILED (%lux%lu pitch %lu)", tag, w, h, pitch);
+    if (locked) { DWORD *svt = *(DWORD **)sub; if (svt && svt[0x10/4]) rz_thiscall((void *)sub, (void *)svt[0x10/4], NULL, 0); }
 }
 
 /* Find a window by its vftable, anywhere in the tree from the event sink's root. */
@@ -4235,6 +4916,59 @@ static void rz_poll(void) {
             rz_side_next_ms = now + 80;
             rz_side_children_bottom();
             if (!g_cluster) rz_bar_children_right();
+        }
+    }
+
+    /* CLUSTER RE-ANCHOR. The full layout runs only on a size CHANGE, and the settle check below
+     * returns early once the render target matches the client - so if a hand-drag stops on a frame
+     * where the minimap re-docked AFTER the bar read its position, the bar's controls stay anchored
+     * to a stale minimap and drift away from it (owner, 2026-09-03: "the bar is not stuck near the
+     * minimap"). Re-assert the LIGHTWEIGHT anchoring here: rz_mini_dock and rz_bar_children_right are
+     * both idempotent (skip when already correct) and do NO surface recreate, so re-running them a
+     * few times a second is free in the steady state and self-heals any staleness within a frame or
+     * two. The expensive dock+span+fit stays on the size-change path only. */
+    if (g_cluster) {
+        static DWORD rz_cbar_next_ms;
+        DWORD now2 = GetTickCount();
+        /* EVERY FRAME: re-assert the corner widgets' ancestor rects. The game's own per-frame layout
+         * re-shrinks that ancestor's rect back toward [0 0 800 600], so at a 120 ms cadence the widen
+         * only wins ~1 frame in 7 and the minimize button is dead most of the time (owner: "it worked
+         * a few times and it died"). rz_corner_reanchor is idempotent and cheap (widen-only, SetRect
+         * skipped when the position matches), so running it every poll - after the game's cascade -
+         * keeps the router's gate open whenever a click arrives. */
+        g_reassert_quiet = 1;
+        rz_corner_reanchor();
+        g_reassert_quiet = 0;
+        if (now2 >= rz_cbar_next_ms) {
+            rz_cbar_next_ms = now2 + 120;
+            g_reassert_quiet = 1;
+            rz_mini_dock();
+            g_reassert_quiet = 0;
+            if (g_bar_span) {
+                /* Re-assert the WHOLE bar-span, not just the children. Each step is idempotent and
+                 * cheap when nothing changed (SetRect skips when already docked, fit_surface skips
+                 * when the surface width already matches), so this is free in the steady state and
+                 * self-heals a stale filler / stale dock left by a resize the size-change path did not
+                 * fully service - owner: "the fill bar is not triggering ... elements get buried". */
+                RECT pcr;
+                g_reassert_quiet = 1;
+                rz_hud_setrect_w(0);
+                if (g_hwnd && GetClientRect(g_hwnd, &pcr))
+                    rz_hud_fit_surface((DWORD)(pcr.right - pcr.left));
+                rz_bar_children_right();
+                g_reassert_quiet = 0;
+            }
+            if (g_side_span) {
+                /* Re-assert the full-height side panel, same idempotent sequence as the size-change
+                 * path, so the fill and the button placement persist after a resize. */
+                LONG sideH;
+                g_reassert_quiet = 1;
+                rz_side_extend();
+                sideH = rz_side_target_h();
+                if (sideH > 0) rz_side_fit_surface((DWORD)sideH);
+                rz_side_children_bottom();
+                g_reassert_quiet = 0;
+            }
         }
     }
 
@@ -4478,15 +5212,83 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         }
         return r;
     }
+    /* Show the SIZING CURSOR over the frame.
+     *
+     * The drag itself works once WM_NCHITTEST answers edge codes (verified by driving the real
+     * mouse: client 1684x961 -> 1836x961 on a right-edge drag). But the game paints its own cursor
+     * and answers WM_SETCURSOR, so the user never sees a resize arrow and cannot tell the border is
+     * grabbable - which is indistinguishable from "cannot drag". Set the system sizing cursor
+     * whenever the hit code in the low word is a border code, and claim the message. */
+    if (m == WM_SETCURSOR && g_thickframe) {
+        WORD hit = LOWORD(lp);
+        LPCSTR id = NULL;
+        switch (hit) {
+            case HTLEFT: case HTRIGHT:              id = IDC_SIZEWE;   break;
+            case HTTOP:  case HTBOTTOM:             id = IDC_SIZENS;   break;
+            case HTTOPLEFT: case HTBOTTOMRIGHT:     id = IDC_SIZENWSE; break;
+            case HTTOPRIGHT: case HTBOTTOMLEFT:     id = IDC_SIZENESW; break;
+            default: break;
+        }
+        if (id) {
+            SetCursor(LoadCursorA(NULL, id));
+            return TRUE;
+        }
+    }
+    /* SNAP the client WIDTH to a 32-multiple while dragging. At widths whose width*2 is not 64-byte
+     * aligned (e.g. client 1000 -> pitch 2000) the device/composite surface pads its pitch to 2048
+     * and the compositor's width*2 stride no longer matches, shearing the whole frame diagonally and
+     * greying it (measured 2026-09-03: 800/960 clean, 1000 sheared). Constraining the drag rect so
+     * the CLIENT width is always a multiple of 32 keeps every size on a self-consistent pitch. The
+     * edge being dragged is in wp (WMSZ_*); adjust the moving edge so the fixed edge stays put. */
+    if (m == WM_SIZING && g_thickframe && g_wsnap > 1 && lp) {
+        RECT *wr = (RECT *)lp, cr, cwr;
+        if (GetClientRect(h, &cr) && GetWindowRect(h, &cwr)) {
+            LONG frame = (cwr.right - cwr.left) - (cr.right - cr.left);   /* constant non-client width */
+            LONG cw = (wr->right - wr->left) - frame;                     /* PROPOSED client width */
+            /* Round to the NEAREST multiple (not floor) so the dragged edge meets or just passes the
+             * cursor (±g_wsnap/2) instead of always trailing it by up to g_wsnap-1 (owner: "it never
+             * reaches the end position of my cursor"). The multiple itself is required: width*2 must
+             * be 64-byte aligned or the composite surface shears. */
+            LONG snapped = ((cw + g_wsnap / 2) / g_wsnap) * g_wsnap;
+            if (snapped < g_wsnap) snapped = g_wsnap;
+            if (snapped != cw) {
+                LONG neww = snapped + frame;
+                if (!g_wsnap_logged) {
+                    g_wsnap_logged = 1;
+                    logf("FRAME> WM_SIZING wp=%lu wr=[%ld %ld %ld %ld] client cur=%ld frame=%ld "
+                         "proposed cw=%ld -> snap %ld (neww=%ld)", (DWORD)wp, wr->left, wr->top,
+                         wr->right, wr->bottom, cr.right - cr.left, frame, cw, snapped, neww);
+                }
+                switch (wp) {
+                    case WMSZ_LEFT: case WMSZ_TOPLEFT: case WMSZ_BOTTOMLEFT:
+                        wr->left = wr->right - neww; break;
+                    default:  /* right/top/bottom edges move the right side */
+                        wr->right = wr->left + neww; break;
+                }
+            }
+        }
+        return CallWindowProcA(g_oldproc, h, m, wp, lp);
+    }
     if (m == WM_GETMINMAXINFO && g_thickframe && lp) {
         LRESULT r = CallWindowProcA(g_oldproc, h, m, wp, lp);
         MINMAXINFO *mmi = (MINMAXINFO *)lp;
         if (!IsBadWritePtr(mmi, sizeof(MINMAXINFO))) {
             int vx = GetSystemMetrics(SM_CXVIRTUALSCREEN), vy = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-            if (vx < 1024) vx = 1024;
-            if (vy < 768)  vy = 768;
-            mmi->ptMinTrackSize.x = 640;
-            mmi->ptMinTrackSize.y = 480;
+            /* MIN = native. The HUD is authored for an 800x600 client and stays native-size (dx/dy
+             * clamp at 0); below that the window is narrower than the HUD and the right panel clips
+             * off-screen (measured 2026-09-03 at 704x600). Floor the window at the size that yields an
+             * 800x600 CLIENT, computed from THIS window's own frame so it is correct for the style. */
+            RECT nc = { 0, 0, NAT_W, NAT_H };
+            LONG minw = NAT_W + 16, minh = NAT_H + 39;   /* fallback if AdjustWindowRect fails */
+            LONG style = GetWindowLongA(h, GWL_STYLE), ex = GetWindowLongA(h, GWL_EXSTYLE);
+            if (AdjustWindowRectEx(&nc, (DWORD)style, FALSE, (DWORD)ex)) {
+                minw = nc.right - nc.left;
+                minh = nc.bottom - nc.top;
+            }
+            if (vx < minw) vx = minw;
+            if (vy < minh) vy = minh;
+            mmi->ptMinTrackSize.x = minw;
+            mmi->ptMinTrackSize.y = minh;
             mmi->ptMaxTrackSize.x = vx;
             mmi->ptMaxTrackSize.y = vy;
             if (!g_minmax_logged) {
@@ -4739,9 +5541,22 @@ static void __stdcall fnlog_enter(int idx, DWORD *f) {
                        rejected it, which is why it never moved. Overhang is normal for native UI. */
                     if (!seen && r[0] >= -64 && r[1] >= -64 && r[2] <= NAT_W + 64 && r[3] <= NAT_H + 64 &&
                     (w * h) <= (NAT_W * NAT_H * 7) / 10) {
+                    LONG *wr = (LONG *)(ecx + 0x14);   /* the window's own (absolute) rect */
                     g_wins[g_wins_n].w = (void *)ecx;
                     g_wins[g_wins_n].nat[0] = r[0]; g_wins[g_wins_n].nat[1] = r[1];
                     g_wins[g_wins_n].nat[2] = r[2]; g_wins[g_wins_n].nat[3] = r[3];
+                    /* Classify root vs child ONCE, at native, before anything moves - the same
+                       reason `nat` is captured once. Comparing the ORIGINS is enough and is what
+                       the existing DIVERGE log line already computes; sizes can legitimately
+                       differ without implying parentage. */
+                    g_wins[g_wins_n].natwin[0] = wr[0]; g_wins[g_wins_n].natwin[1] = wr[1];
+                    g_wins[g_wins_n].natwin[2] = wr[2]; g_wins[g_wins_n].natwin[3] = wr[3];
+                    g_wins[g_wins_n].child = (wr[0] != r[0] || wr[1] != r[1]);
+                    logf("WINCAP> [%ld] 0x%08lX paint=[%ld %ld %ld %ld] window=[%ld %ld %ld %ld] "
+                         "-> %s (parent origin delta %ld,%ld)",
+                         g_wins_n, ecx, r[0], r[1], r[2], r[3], wr[0], wr[1], wr[2], wr[3],
+                         g_wins[g_wins_n].child ? "CHILD (will NOT be translated)" : "root",
+                         wr[0] - r[0], wr[1] - r[1]);
                     g_wins_n++;
                 }
             }
@@ -5033,6 +5848,173 @@ static void patch_gridb_clamp(HMODULE ss) {
     logf("--- GRIDB_CLAMP: 4 walkers index-clamped (FIX A) + FUN_1000efa1 null-guarded (FIX C)");
 }
 
+/* ===================== FLYOUT LAYOUT DETOUR (2026-09-06) =====================
+ * FUN_1004cdcd (SIMUI) is the resolution-keyed layout table for the tool-submenu 36x36 icons: it
+ * reads the view height (this->vt[0x20]()->vt[0x94]()) and a resolution code (vt[0xe8]()) and picks
+ * per-resolution icon offsets. When side-span makes the panel taller than native, it selects a
+ * "tall" table entry that spaces the icons wider than the fixed 36px click-targets -> the flyout
+ * icons drift below their targets, growing down the column (owner: "menu open, top a little, more
+ * and more misaligned"). External frida instrumentation of this crashes the game during resize, so
+ * this is a MOD-SIDE wrapping detour: run the original, then log its inputs/outputs to the mod log.
+ * Prologue at SIMUI+0x4cdcd = `53 8b d9 56 57` (push ebx;mov ebx,ecx;push esi;push edi) - a clean
+ * 5-byte boundary, so we steal 5 and trampoline. When SC3RESIZE_CDCDCLAMP is set, we also force the
+ * NATIVE (600) layout by remembering the native output and re-applying it. */
+static void *g_orig_cdcd;             /* trampoline: stolen prologue + jmp back to SIMUI+0x4cdcd+5 */
+static int   g_cdcdlog = 0;          /* SC3RESIZE_CDCDLOG=1: install the flyout diag detours + log.
+                                        Default OFF - they are diagnostic (ruled out FUN_1004cdcd and
+                                        FUN_1004e81c as the flyout-icon scale source, 2026-09-06). */
+static int   g_cdcdlogn;
+
+static DWORD __fastcall rz_cdcd_detour(void *self, void *edx, void *param_1) {
+    DWORD r, arg = (DWORD)param_1;
+    (void)edx;
+    r = rz_thiscall_ret(self, g_orig_cdcd, &arg, 1);   /* run the original via the trampoline */
+    if (g_cdcdlog && g_cdcdlogn < 60 && param_1 && !IsBadReadPtr(param_1, 0x28)) {
+        LONG *p = (LONG *)param_1;
+        RECT cr; LONG ch = (g_hwnd && GetClientRect(g_hwnd, &cr)) ? cr.bottom - cr.top : -1;
+        logf("CDCD> clientH=%ld self=0x%08lX out: p0=0x%lx p2=0x%lx cellW(p6)=%ld cellH(p7)=%ld "
+             "p8=%ld p9=%ld", ch, (DWORD)self, (DWORD)p[0], (DWORD)p[2], p[6], p[7], p[8], p[9]);
+        g_cdcdlogn++;
+    }
+    return r;
+}
+
+static void rz_hook_cdcd(HMODULE sui) {
+    BYTE *fn = (BYTE *)sui + 0x4cdcd, *tr;
+    static const BYTE expect[5] = { 0x53, 0x8b, 0xd9, 0x56, 0x57 };
+    DWORD old;
+    if (g_orig_cdcd) return;                          /* once */
+    if (IsBadReadPtr(fn, 5) || memcmp(fn, expect, 5) != 0) {
+        logf("CDCD> SIMUI+0x4cdcd prologue mismatch (%02X %02X %02X %02X %02X) - NOT hooking",
+             fn[0], fn[1], fn[2], fn[3], fn[4]);
+        return;
+    }
+    tr = (BYTE *)VirtualAlloc(NULL, 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!tr) { logf("CDCD> VirtualAlloc failed"); return; }
+    memcpy(tr, expect, 5);                             /* stolen prologue */
+    tr[5] = 0xE9;                                      /* jmp fn+5 */
+    *(DWORD *)(tr + 6) = (DWORD)(fn + 5) - (DWORD)(tr + 10);
+    FlushInstructionCache(GetCurrentProcess(), tr, 16);
+    g_orig_cdcd = (void *)tr;
+    if (!VirtualProtect(fn, 5, PAGE_EXECUTE_READWRITE, &old)) {
+        logf("CDCD> VP failed %lu", GetLastError()); g_orig_cdcd = NULL; return;
+    }
+    fn[0] = 0xE9;                                      /* jmp rz_cdcd_detour */
+    *(DWORD *)(fn + 1) = (DWORD)rz_cdcd_detour - (DWORD)(fn + 5);
+    VirtualProtect(fn, 5, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), fn, 5);
+    logf("CDCD> logging detour installed at SIMUI+0x4cdcd (trampoline 0x%08lX)", (DWORD)tr);
+}
+
+/* ===================== ICON-DRAW DETOUR (2026-09-06) =====================
+ * FUN_1004e81c (SIMUI, panel vt+0x22c) is the panel/column draw that RECEIVES an item's final dest:
+ * __thiscall(this, param_2=raster, param_3, param_4=x, param_5=y) - it stores them at +0xac/+0x114/
+ * +0x128/+0x12c and blits. FUN_1004cdcd was ruled out (it lays icons at native 36px); the stretch is
+ * HERE, in the render, where the native icon y gets scaled by the extended panel height. This detour
+ * logs (x,y) per draw so we can see the scale. Prologue at SIMUI+0x4e81c = `8b 44 24 04 56` - clean
+ * 5-byte boundary. */
+static void *g_orig_e81c;
+static int   g_e81cn;
+static DWORD __fastcall rz_e81c_detour(void *self, void *edx, DWORD p2, DWORD p3, DWORD p4, DWORD p5) {
+    DWORD args[4], r;
+    (void)edx;
+    args[0] = p2; args[1] = p3; args[2] = p4; args[3] = p5;
+    r = rz_thiscall_ret(self, g_orig_e81c, args, 4);
+    if (g_cdcdlog) {                    /* burst up to 40 draws per 500ms window (the recent log = a
+                                           near-complete frame while the flyout is open) */
+        static DWORD win_start; static int win_n;
+        DWORD now = GetTickCount();
+        if (now - win_start >= 500) { win_start = now; win_n = 0; }
+        if (win_n < 40) {
+            logf("E81C> self=0x%08lX raster=0x%lx x=%ld y=%ld", (DWORD)self, p2, (LONG)p4, (LONG)p5);
+            win_n++;
+        }
+    }
+    (void)g_e81cn; (void)p3;
+    return r;
+}
+static void rz_hook_e81c(HMODULE sui) {
+    BYTE *fn = (BYTE *)sui + 0x4e81c, *tr;
+    static const BYTE expect[5] = { 0x8b, 0x44, 0x24, 0x04, 0x56 };
+    DWORD old;
+    if (g_orig_e81c) return;
+    if (IsBadReadPtr(fn, 5) || memcmp(fn, expect, 5) != 0) {
+        logf("E81C> SIMUI+0x4e81c prologue mismatch - NOT hooking"); return;
+    }
+    tr = (BYTE *)VirtualAlloc(NULL, 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!tr) return;
+    memcpy(tr, expect, 5); tr[5] = 0xE9;
+    *(DWORD *)(tr + 6) = (DWORD)(fn + 5) - (DWORD)(tr + 10);
+    FlushInstructionCache(GetCurrentProcess(), tr, 16);
+    g_orig_e81c = (void *)tr;
+    if (!VirtualProtect(fn, 5, PAGE_EXECUTE_READWRITE, &old)) { g_orig_e81c = NULL; return; }
+    fn[0] = 0xE9; *(DWORD *)(fn + 1) = (DWORD)rz_e81c_detour - (DWORD)(fn + 5);
+    VirtualProtect(fn, 5, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), fn, 5);
+    logf("E81C> icon-draw logging detour installed at SIMUI+0x4e81c");
+}
+
+/* ===================== a917c ICON PAINT DETOUR (2026-09-06) =====================
+ * FUN_1004cac8 is the flyout sub-tool (class a917c) OWN paint (vtable +0x144). It blits sprite
+ * param_1[0x36] with SOURCE rect [0,0,vt0x90(),vt0x94()] (native icon dims) into DEST rect =
+ * param_1+0x24, via param_1[0x17]->vt[0x118] (FUN_10014894, which STRETCHES if src!=dst height).
+ * So the flyout icon's size/position is param_1+0x24. This detour logs that dest rect (burst per
+ * 500ms) so we can see whether it is stretched (size) or spread (spacing) vs the native 36px.
+ * Prologue at SIMUI+0x4cac8 = `55 8b ec 83 ec 10` (push ebp;mov ebp,esp;sub esp,0x10) - 6-byte
+ * clean boundary; steal 6 (5-byte jmp + 1 nop). __thiscall(this) - this in ecx, no stack args. */
+static void *g_orig_cac8;
+static DWORD __fastcall rz_cac8_detour(void *self, void *edx) {
+    DWORD r;
+    (void)edx;
+    r = rz_thiscall_ret(self, g_orig_cac8, NULL, 0);   /* run the original icon paint */
+    if (g_cdcdlog && self && !IsBadReadPtr(self, 0x34)) {
+        static DWORD win_start; static int win_n;
+        DWORD now = GetTickCount();
+        LONG *d = (LONG *)((DWORD)self + 0x24);        /* the dest rect the icon blits into */
+        if (now - win_start >= 500) { win_start = now; win_n = 0; }
+        if (win_n < 40) {
+            /* Walk to the a917c's PARENT (the column window, a9a80) and read ITS composite blit:
+             * FUN_1006d2d0 blits column +0x58 surface with src=+0x24 -> dest=+0x90. If those heights
+             * differ, the column-surface->screen blit stretches the icons. Also its derived +0x14. */
+            DWORD col = ((DWORD *)((DWORD)self))[0x3c / 4];
+            LONG cs[4]={0,0,0,0}, cd[4]={0,0,0,0}, cab[4]={0,0,0,0}, clo[4]={0,0,0,0};
+            if (col && !IsBadReadPtr((void *)col, 0x94)) {
+                LONG *a=(LONG*)(col+0x24),*b=(LONG*)(col+0x90),*c=(LONG*)(col+0x14),*e=(LONG*)(col+0x80);
+                cs[0]=a[0];cs[1]=a[1];cs[2]=a[2];cs[3]=a[3];
+                cd[0]=b[0];cd[1]=b[1];cd[2]=b[2];cd[3]=b[3];
+                cab[0]=c[0];cab[1]=c[1];cab[2]=c[2];cab[3]=c[3];
+                clo[0]=e[0];clo[1]=e[1];clo[2]=e[2];clo[3]=e[3];
+            }
+            logf("CAC8> iconY=%ld..%ld | COL 0x%08lX src24=[%ld %ld %ld %ld](h=%ld) dst90=[%ld %ld %ld %ld](h=%ld) "
+                 "local80=[%ld %ld %ld %ld] abs14=[%ld %ld %ld %ld]",
+                 d[1], d[3], col, cs[0],cs[1],cs[2],cs[3], cs[3]-cs[1], cd[0],cd[1],cd[2],cd[3], cd[3]-cd[1],
+                 clo[0],clo[1],clo[2],clo[3], cab[0],cab[1],cab[2],cab[3]);
+            win_n++;
+        }
+    }
+    return r;
+}
+static void rz_hook_cac8(HMODULE sui) {
+    BYTE *fn = (BYTE *)sui + 0x4cac8, *tr;
+    static const BYTE expect[6] = { 0x55, 0x8b, 0xec, 0x83, 0xec, 0x10 };
+    DWORD old;
+    if (g_orig_cac8) return;
+    if (IsBadReadPtr(fn, 6) || memcmp(fn, expect, 6) != 0) {
+        logf("CAC8> SIMUI+0x4cac8 prologue mismatch - NOT hooking"); return;
+    }
+    tr = (BYTE *)VirtualAlloc(NULL, 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!tr) return;
+    memcpy(tr, expect, 6); tr[6] = 0xE9;
+    *(DWORD *)(tr + 7) = (DWORD)(fn + 6) - (DWORD)(tr + 11);
+    FlushInstructionCache(GetCurrentProcess(), tr, 16);
+    g_orig_cac8 = (void *)tr;
+    if (!VirtualProtect(fn, 6, PAGE_EXECUTE_READWRITE, &old)) { g_orig_cac8 = NULL; return; }
+    fn[0] = 0xE9; *(DWORD *)(fn + 1) = (DWORD)rz_cac8_detour - (DWORD)(fn + 5); fn[5] = 0x90;
+    VirtualProtect(fn, 6, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), fn, 6);
+    logf("CAC8> a917c icon-paint logging detour installed at SIMUI+0x4cac8");
+}
+
 /* ===================== HUD REFLOW - top-strip PROOF (2026-08-30) =====================
  * The HUD lays out ONCE at window construction and never re-runs on a window resize (SIMUI has no
  * runtime re-layout trigger - worker dig, verify/resize_ui/). Two parts:
@@ -5193,6 +6175,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           install_one((DWORD)sui + 0x60ba9, sui, 0x60ba9, "SIMUI FUN_10060ba9 ctor B", 5);
           /* the generic window painter - where the minimap is identified by its dest rect */
           install_one((DWORD)sui + 0x6d2d0, sui, 0x6d2d0, "SIMUI FUN_1006d2d0 painter", 6);
+          if (g_cdcdlog) { rz_hook_cdcd(sui); rz_hook_e81c(sui); rz_hook_cac8(sui); }  /* flyout diag detours */
       }
       else logf("--- HUD: SIMUI.DLL never loaded after %d tries - capture NOT armed, HUD stays native", st); }
     if (g_hudlab) {
@@ -5232,6 +6215,19 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_SRCRECT", v, sizeof(v))) g_srcrect = atoi(v);
           g_presentlog = GetEnvironmentVariableA("SC3RESIZE_PRESENTLOG", v, sizeof(v)) && atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PRESENTFIX", v, sizeof(v))) g_presentfix = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_RCIFIX", v, sizeof(v))) g_rcifix = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_SUBMOVE", v, sizeof(v))) g_submove = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_CDCDLOG", v, sizeof(v))) g_cdcdlog = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_RTP3", v, sizeof(v))) g_rt_p3 = (LONG)atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_RTP7", v, sizeof(v))) g_rt_p7 = (LONG)atoi(v);
+          g_sysmem = GetEnvironmentVariableA("SC3RESIZE_SYSMEM", v, sizeof(v)) && atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_WALIGN", v, sizeof(v))) g_walign = (LONG)atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_WSNAP", v, sizeof(v))) g_wsnap = (LONG)atoi(v);
+          g_bar_span = GetEnvironmentVariableA("SC3RESIZE_BARSPAN", v, sizeof(v)) && atoi(v);
+          g_side_span = GetEnvironmentVariableA("SC3RESIZE_SIDESPAN", v, sizeof(v)) && atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_KIDFIX", v, sizeof(v))) g_kidfix = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_ARTGUARD", v, sizeof(v))) g_artguard = atoi(v);
+          g_bltbeat  = GetEnvironmentVariableA("SC3RESIZE_BLTBEAT", v, sizeof(v)) && atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_THICKFRAME", v, sizeof(v))) g_thickframe = atoi(v);
           if (!GetEnvironmentVariableA("SC3RESIZE_DUMPDIR", g_dumpdir, sizeof(g_dumpdir)))
               lstrcpynA(g_dumpdir, ".", sizeof(g_dumpdir));
@@ -5253,9 +6249,10 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
          * a self-consistent log). One line makes the whole class loud instead of silent.
          * verify/resize_flaggate/NOHIT_RESULTS.md */
         logf("### FLAGS> cluster=%d input=%d nohit=%d hudfit=%d hudlab=%d sweep=%d side=%d mini=%d "
-             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld sidedy=%ld presentlog=%d",
+             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld sidedy=%ld presentlog=%d kidfix=%d artguard=%d",
              g_cluster, g_input, g_nohit, g_hudfit, g_hudlab, g_sweepon, g_sideon, g_minion,
-             g_anchor, g_census, g_minzoom, g_ready_ms, g_noparentfix, g_hud_dy, g_side_dy, g_presentlog);
+             g_anchor, g_census, g_minzoom, g_ready_ms, g_noparentfix, g_hud_dy, g_side_dy, g_presentlog,
+             g_kidfix, g_artguard);
         if (AddVectoredExceptionHandler(1, rz_veh))
             logf("### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the "
                  "zoom-after-resize crash the game swallows)");

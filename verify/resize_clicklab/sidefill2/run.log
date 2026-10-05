@@ -111,3 +111,6 @@
 [ 9090.170 ms][tid 7cf8] RZ   STOREDRECT win=0x00ABADE0 rect BEFORE {0,0,800,600} = 800x600
 [ 9090.226 ms][tid 7cf8] RZ   STOREDRECT rect AFTER  {0,0,2048,1081} = 2048x1081 - right/bottom updated
 [ 9090.245 ms][tid 7cf8] RZ   WM_SIZE 2048x1081 - poll will pick it up on the next frame
+[34858.759 ms][tid 7cf8] RZ   STOREDRECT win=0x00ABADE0 rect BEFORE {0,0,2048,1081} = 2048x1081
+[34858.854 ms][tid 7cf8] RZ   STOREDRECT rect AFTER  {0,0,2048,1081} = 2048x1081 - right/bottom updated
+[34858.886 ms][tid 7cf8] RZ   WM_SIZE 2048x1081 - poll will pick it up on the next frame

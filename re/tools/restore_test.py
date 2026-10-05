@@ -14,6 +14,7 @@ import time
 from ctypes import wintypes
 
 from PIL import Image
+import sys as _s, pathlib as _p; _s.path.insert(0, str(_p.Path(__file__).resolve().parent)); import sc3io as _sc3io
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 DUMPS = os.path.join(ROOT, "verify", "resize_clicklab", "dumps")
@@ -75,19 +76,19 @@ print("A) minimize to taskbar and restore")
 capture("A_before")
 user32.ShowWindow(hwnd, SW_MINIMIZE)
 time.sleep(2.0)
-user32.ShowWindow(hwnd, SW_RESTORE)
-user32.SetForegroundWindow(hwnd)
+_sc3io.restore_without_focus(hwnd)
+_sc3io.raise_without_focus(hwnd)
 time.sleep(3.0)
 capture("A_after")
 
 print("\nB) restore DOWN from maximized, then maximize again")
-user32.ShowWindow(hwnd, SW_RESTORE)
-user32.SetForegroundWindow(hwnd)
+_sc3io.restore_without_focus(hwnd)
+_sc3io.raise_without_focus(hwnd)
 time.sleep(3.5)
 print(f"  client after restore-down: {client()}")
 capture("B_restored_down")
-user32.ShowWindow(hwnd, SW_MAXIMIZE)
-user32.SetForegroundWindow(hwnd)
+_sc3io.maximize_without_focus(hwnd)
+_sc3io.raise_without_focus(hwnd)
 time.sleep(3.5)
 print(f"  client after re-maximize: {client()}")
 capture("B_remaximized")

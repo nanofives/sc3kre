@@ -13,6 +13,7 @@ import time
 from ctypes import wintypes
 
 import frida
+import sys as _s, pathlib as _p; _s.path.insert(0, str(_p.Path(__file__).resolve().parent)); import sc3io as _sc3io
 
 JS = r"""
 function rp(p,o){return p.add(o).readPointer();}
@@ -53,7 +54,7 @@ sc.load()
 print("gates before: " + json.dumps(sc.exports_sync.gates()))
 
 lp = (y << 16) | (x & 0xFFFF)
-user32.SetForegroundWindow(hwnd)
+_sc3io.raise_without_focus(hwnd)
 time.sleep(0.25)
 user32.PostMessageW(hwnd, 0x0200, 0, lp)
 time.sleep(0.12)

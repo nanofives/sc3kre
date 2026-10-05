@@ -1,91 +1,47 @@
-"""Look AT the bottom strip, not at a before/after difference.
-
-My earlier "minimize is fixed" rested on diffing the frames before and after a minimize, which
-cannot see a defect that is present in both. This captures the bottom band and reports, per row,
-how much of it is the bar's colour versus city - so a strip that should be city and is not shows up
-as a number instead of an impression.
-
-Usage: bottom_band.py [--minimize] [--rows 80]
-"""
-import ctypes
-import glob
-import os
-import subprocess
-import sys
-import time
-from collections import Counter
+"""List every window whose rect sits in the bottom bar band but in the MIDDLE x (over the info
+fields, where only painted text should be) - these are the misplaced control widgets."""
+import subprocess, frida, ctypes
 from ctypes import wintypes
-
-from PIL import Image
-
-ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-DUMPS = os.path.join(ROOT, "verify", "resize_clicklab", "dumps")
-SHARE = os.path.join(ROOT, ".happy-share", "cmtjbgk1sassbqj1cz1js6rwh")
-
-rows = 80
-if "--rows" in sys.argv:
-    rows = int(sys.argv[sys.argv.index("--rows") + 1])
-
-user32 = ctypes.WinDLL("user32", use_last_error=True)
-out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq SC3U.exe", "/FO", "CSV", "/NH"],
-                     capture_output=True, text=True).stdout
-pid = int(out.split(",")[1].strip('" '))
-found = []
-CB = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-def cb(h, _l):
-    p = wintypes.DWORD()
-    user32.GetWindowThreadProcessId(h, ctypes.byref(p))
-    if p.value == pid and user32.IsWindowVisible(h):
-        r = wintypes.RECT()
-        user32.GetClientRect(h, ctypes.byref(r))
-        found.append((h, r.right - r.left, r.bottom - r.top))
+u=ctypes.WinDLL("user32")
+out=subprocess.run(["tasklist","/FI","IMAGENAME eq SC3U.exe","/FO","CSV","/NH"],capture_output=True,text=True).stdout
+pid=int(out.split(",")[1].strip('" '))
+# client size
+t=[]
+CB=ctypes.WINFUNCTYPE(wintypes.BOOL,wintypes.HWND,wintypes.LPARAM)
+def cb(h,l):
+    p=wintypes.DWORD();u.GetWindowThreadProcessId(h,ctypes.byref(p));c=ctypes.create_unicode_buffer(64);u.GetClassNameW(h,c,64)
+    if p.value==pid and c.value=='Gonzo':t.append(h)
     return True
-user32.EnumWindows(CB(cb), 0)
-found.sort(key=lambda t: t[1] * t[2], reverse=True)
-hwnd, cw, ch = found[0]
-print(f"client {cw}x{ch}")
-
-
-def capture(tag):
-    for f in glob.glob(os.path.join(DUMPS, "*.bmp")):
-        try:
-            os.remove(f)
-        except OSError:
-            pass
-    open(os.path.join(DUMPS, "DUMP"), "w").close()
-    for _ in range(40):
-        time.sleep(0.2)
-        if not os.path.exists(os.path.join(DUMPS, "DUMP")):
-            break
-    time.sleep(0.6)
-    fs = glob.glob(os.path.join(DUMPS, "*frame_with_hud*.bmp"))
-    if not fs:
-        print(f"  {tag}: composite not mapped")
-        return None
-    im = Image.open(max(fs, key=os.path.getmtime)).convert("RGB")
-    band = im.crop((0, im.height - rows, im.width, im.height))
-    band.save(os.path.join(SHARE, f"band_{tag}.png"))
-    print(f"  {tag}: surface {im.width}x{im.height}, band saved")
-    px = band.load()
-    print(f"    row  distinct-colours  dominant  share")
-    for y in range(0, band.height, 4):
-        c = Counter(px[x, y] for x in range(0, band.width, 4))
-        dom, n = c.most_common(1)[0]
-        share = 100.0 * n / sum(c.values())
-        abs_y = im.height - rows + y
-        print(f"    {abs_y:5d}  {len(c):5d}            {dom}  {share:5.1f}%")
-    return im
-
-
-if "--minimize" in sys.argv:
-    print("BEFORE minimize")
-    capture("before")
-    user32.ShowWindow(hwnd, 6)
-    time.sleep(2.0)
-    user32.ShowWindow(hwnd, 9)
-    user32.SetForegroundWindow(hwnd)
-    time.sleep(3.5)
-    print("AFTER restore")
-    capture("after")
-else:
-    capture("now")
+u.EnumWindows(CB(cb),0); r=wintypes.RECT();u.GetClientRect(t[0],ctypes.byref(r)); CW,CH=r.right,r.bottom
+JS=r"""
+function modBase(w){var m=Process.enumerateModules();for(var i=0;i<m.length;i++)if(m[i].name.toLowerCase()===w.toLowerCase())return m[i].base;return null;}
+function rp(p,o){return p.add(o).readPointer();}
+function root(){var gz=modBase("GZGraphicD.dll");return rp(rp(rp(gz.add(0x6cdb8),0),0x30),0x38);}
+var OUT=[];
+function walk(w,depth){
+ if(depth>10) return;
+ var head; try{head=rp(w,0x34);}catch(e){return;} if(head.isNull())return;
+ var n; try{n=rp(head,0);}catch(e){return;} var g=0;
+ while(!n.isNull() && !n.equals(head) && g++<400){
+   var c; try{c=rp(n,8);}catch(e){break;}
+   if(!c.isNull()){
+     try{
+       var e=[c.add(0x80).readS32(),c.add(0x84).readS32(),c.add(0x88).readS32(),c.add(0x8c).readS32()];
+       var vt=rp(c,0); var mods=Process.enumerateModules(); var mod="?",rva=0;
+       for(var i=0;i<mods.length;i++){ if(vt.compare(mods[i].base)>=0 && vt.compare(mods[i].base.add(mods[i].size))<0){mod=mods[i].name;rva=vt.sub(mods[i].base).toNumber();break;} }
+       OUT.push({rect:e, mod:mod, rva:rva, ptr:c.toString()});
+     }catch(e2){}
+     walk(c,depth+1);
+   }
+   n=rp(n,0);
+ }
+}
+rpc.exports={scan:function(){OUT=[];walk(root(),0);return OUT;}};
+"""
+s=frida.attach(pid);sc=s.create_script(JS);sc.load()
+res=sc.exports_sync.scan()
+print(f"client {CW}x{CH}; windows in bottom band (y2>{CH-70}) with middle x (120..{CW-200}):")
+for k in res:
+    x1,y1,x2,y2=k['rect']
+    if y2 > CH-70 and x2-x1>0 and x2-x1<200 and x1>120 and x1<CW-200:
+        print(f"  {k['mod']}+0x{k['rva']:x}  rect {k['rect']} ({x2-x1}x{y2-y1})  {k['ptr']}")

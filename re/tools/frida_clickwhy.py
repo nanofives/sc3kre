@@ -144,7 +144,8 @@ sc.exports_sync.drain()
 if a.click:
     x, y = a.click
     lp = (y << 16) | (x & 0xFFFF)
-    user32.SetForegroundWindow(hwnd)
+    import sys as _s, pathlib as _p; _s.path.insert(0, str(_p.Path(__file__).resolve().parent)); import sc3io as _sc3io
+    _sc3io.raise_without_focus(hwnd)  # was SetForegroundWindow: raise Z-order only, never take focus
     time.sleep(0.3)
     sc.exports_sync.drain()
     print(f"\n--- posting a click at ({x},{y}) ---")

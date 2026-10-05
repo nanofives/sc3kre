@@ -18,6 +18,7 @@ from ctypes import wintypes
 
 import frida
 from PIL import Image, ImageChops
+import sys as _s, pathlib as _p; _s.path.insert(0, str(_p.Path(__file__).resolve().parent)); import sc3io as _sc3io
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 DUMPS = os.path.join(ROOT, "verify", "resize_clicklab", "dumps")
@@ -136,7 +137,7 @@ def strip_diff(a, b):
 
 def posted_click(x, y):
     lp = (y << 16) | (x & 0xFFFF)
-    user32.SetForegroundWindow(hwnd)
+    _sc3io.raise_without_focus(hwnd)  # Z-order only, never take focus
     time.sleep(0.2)
     user32.PostMessageW(hwnd, 0x0200, 0, lp)
     time.sleep(0.1)
@@ -146,6 +147,9 @@ def posted_click(x, y):
 
 
 def real_click(x, y):
+    # RE control arm: the point of this function is that a REAL cursor click may be treated
+    # differently from a posted one. It therefore needs the physical cursor and is opt-in only.
+    _sc3io.require_cursor_optin("click_probe's real_click A/B arm")
     pt = wintypes.POINT(x, y)
     user32.ClientToScreen(hwnd, ctypes.byref(pt))
     user32.SetForegroundWindow(hwnd)

@@ -73,9 +73,10 @@ print("minimizing...")
 user32.ShowWindow(hwnd, SW_MINIMIZE)
 time.sleep(2.0)
 print("restoring...")
-user32.ShowWindow(hwnd, SW_RESTORE)
+_sc3io.restore_without_focus(hwnd)
 time.sleep(1.0)
-user32.SetForegroundWindow(hwnd)
+import sys as _s, pathlib as _p; _s.path.insert(0, str(_p.Path(__file__).resolve().parent)); import sc3io as _sc3io
+_sc3io.raise_without_focus(hwnd)  # was SetForegroundWindow: raise Z-order only, never take focus
 time.sleep(2.5)
 
 r = wintypes.RECT()
