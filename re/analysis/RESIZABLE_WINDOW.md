@@ -1,5 +1,8 @@
 # RESIZABLE_WINDOW.md — consolidated handoff (2026-08-29)
 
+> **Current state: §6 (rewritten 2026-10-05) and the last section (2026-09-02 to 2026-09-07).** The
+> SHIPPED banner below is history: the HUD is no longer left native, it tracks the window in cluster mode.
+
 Single authoritative summary of the resizable-window / arbitrary-resolution mod for
 **SimCity 3000 Unlimited**. Supersedes the scattered `verify/resize_*` records for orientation; those
 remain the primary evidence (each has a committed `PRE.md` + `RESULTS.md`).
@@ -184,52 +187,86 @@ mod works alongside these and needs none of the resize on-disk recipes.
 
 ---
 
-## 6. What is DONE vs OPEN
+## 6. What is DONE vs OPEN (rewritten 2026-10-05; the 2026-08-29 version was stale)
 
-> ⛔⛔ **UPDATED 2026-08-29 — `D-004` WAS HAND-TESTED AND IT FAILED. THE MOD IS NOT COMPLETE
-> END-TO-END.** Owner ran it on a real 2048x1152 display and maximized by hand: the city **stayed drawn
-> in the top-left at the pre-resize size** and did not fill the window. Cursor/input did follow the full
-> window. The log shows the routine completing all 9 steps three times with both surfaces re-created at
-> 2048x1081 and **zero faults**. Full record: `verify/resize_handtest/RESULTS.md`.
->
-> **Read the "on-screen fill at 2048x1152" claim below as *renders into its own surfaces at that size*,
-> NOT *displays at that size*.** The `verify/resize_census` result was a **nondiagnostic proxy** — it
-> measured `iso+0x74` / `iso+0x4ec`, which were full on the failing run too.
+Status as of commit `83d679a` (work through 2026-09-07). Each item cites the commit or `verify/`
+record that carries the evidence. "Owner" = confirmed by the owner looking at a real monitor.
+HUD items apply to **cluster mode** (`SC3RESIZE_CLUSTER=1`), which the 2026-08-28 package does not
+enable by default.
 
-**Done (headless-verified):** the 9-step routine (both directions), the crash fix (all 4 walkers), the
-display-mode patches, the load-readiness gate, surface-level fill at 2048x1152 (raster+composite
-census — see the correction above), shippable DLL+loader with offline gates passed.
+### Done
 
-**Done (real-display verified, 2026-08-29 hand-test):** the crash fix holds under hand-driven
-maximize/restore churn (zero `FAULT CAUGHT`); the readiness gate fires on a real city load; the WndProc
-subclass publishes the **true** client size (`WM_SIZE 2048x1081`); all 4 clamps install against a
-relocated `SIMSPR` base.
+**Viewport (in-city view)**
+- Resize fills the window on a real monitor, up and down. `D-004` confirmed 2026-08-29 by the
+  stored-RECT write (§3, `verify/resize_storedrect/`). Owner.
+- The whole city renders after a resize with no manual layer toggle (step 11, 2026-08-30,
+  `verify/resize_setdataview/`). Owner.
+- Zoom in/out after a resize renders and does not crash (8 guard rows, 2026-08-30,
+  `verify/resize_zoomfix/`). Owner.
+- Grid-B OOB crash fixed engine-wide, all 4 walkers clamped (§4).
+- Bottom-strip defect fixed: the final present blitted the 8 guard rows into a client-sized
+  destination and squashed the frame. Source clamped to the destination height, `PRESENTFIX`
+  (`a90ec5f`). Owner.
 
-**Open:**
-- ⛔ **DEFECT A — resize does not repaint the newly exposed area.** Black except moving traffic; camera
-  motion makes terrain and zones appear. Step 7 `FUN_10018cdf -> 1` and step 9's full present-rect push
-  both happen, so the redraw path is not being triggered for the new region. `[UNCERTAIN]`, not
-  diagnosed. **Blocks shipping.**
-- ⛔ **DEFECT B — the resize drops buildings and roads** (CORRECTED from "never render"; owner:
-  launch is fine, resize breaks it). At every camera position after a resize, buildings and roads are
-  gone; terrain and zones return on camera motion. `patch_windowed`/`FIX16` exonerated (live at launch,
-  city fine). Lead: step 8 `FUN_1000fa36` re-registers *partially* (terrain+zones, not buildings/roads).
-  `[UNCERTAIN]`, worker reading the decomp. **Blocks shipping.**
-- Input picking now disagrees with the blit: the view fills the window but navigation works only in the
-  top-left 800x600 (the inverse of the pre-fix behaviour). Not investigated.
-- ✅ ~~**`D-004` — the real-monitor flip: FAILED**~~ **CONFIRMED 2026-08-29** by the stored-RECT fix.
-  Retained below for the reasoning that got there:
-- ⛔ **`D-004` — the real-monitor flip: FAILED, and now localized.** *(historical — superseded above)* Everything from `WM_SIZE` through
-  `iso+0x4ec` is witnessed correct on a real display; the monitor still shows the old image top-left.
-  **The gap is downstream of `iso+0x4ec`** — the component that copies that surface to the DirectDraw
-  primary and flips it, which the 9-step routine never touches and never resizes.
-  `[UNCERTAIN]` the specific object and call are **not identified**; this is localization by
-  elimination, not a confirmed cause. ⛔ Do not score a future run against `PRE.md`'s old table, which
-  reads this exact visual as "the render target is NOT resized" — the log proves it **was**.
-- Camera can scroll to empty corners at large sizes (cosmetic; the census saw low fill when scrolled) —
-  not investigated, likely a default camera-origin/clamp question, not a resize defect.
-- The DLL has only been driven via `resize_launch.exe` + external `SetWindowPos`; a real user drag-resize
-  goes through the same `WM_SIZE`, but has not been hand-exercised.
+**HUD (cluster mode)**
+- Bottom bar spans the full width with its art, side panel spans the full height (`cc687b8`).
+- Bar FPS cost fixed: the SIMUI tile loop's step is the source rect at `hud+0xd0..+0xd8`, set to
+  the client width so the loop runs ~1 time instead of ~128 (`cc687b8`, owner, `SRCRECT` default 1).
+- Bar, side panel, minimap and RCI track the window both ways (`7bf1df2`), across repeated resizes
+  (absolute placement from cached native rects, `8067c46`), back to native size (`db1fd42`), and
+  across minimize/restore (`a2b8ad4`). RCI sits in the native order console | RCI | minimap
+  (`1d7a2f2`). RCI overhang above the bar re-composited at present time, `RCIFIX` (2026-09-05).
+- Minimize/corner widget re-anchored a few times a second, so a framework relayout cannot leave it
+  visible but unclickable (2026-09-03, `rz_corner_reanchor`).
+- `KIDFIX` (2026-09-07): child painter windows are no longer translated twice. A/B in
+  `verify/resize_sidekidfix/RESULTS.md`.
+- `ARTGUARD` (2026-09-07): the side panel no longer vanishes after a tool click plus a resize.
+  Section "2026-09-02 to 2026-09-07" below.
+
+**Window**
+- Drag-resizable: `WM_GETMINMAXINFO` track limits widened (`8067c46`), and `WM_NCHITTEST`
+  answers edge codes over the border where the game said `HTCLIENT` (`db1fd42`).
+
+**Input**
+- The relocated HUD is clickable: tool buttons change the tool, panels open and drag (owner
+  hand-test 2026-09-01, `1980948`).
+- Hover label unclamped from 800x600 (`f103a66`).
+- Dead-map root cause (city view rect still 800x600) and six input-geometry fixes baked into the
+  mod (`beff2c4`, `7a67b9f`).
+- Map clicks hit-test to the correct tile at native and maximized size, measured 2026-09-07 on a
+  100%-scaled virtual display (local note `verify/offscreen/MAP_INPUT.md`).
+- Flyout sub-tool buttons are left where the game puts them. Moving them split their hit-rects
+  from their icons (2026-09-05, `SUBMOVE` default 0). Side-panel hit rects are re-derived after a
+  move (`rz_cascade_derived`).
+
+**Tooling**
+- `re/tools/sc3io.py` is the one capture path and the one input path (section below).
+
+### Open
+
+1. **Owner hand-test of the 2026-09-03 to 2026-09-07 fixes on a rebuilt DLL.** None of `KIDFIX`,
+   `ARTGUARD`, `RCIFIX`, the corner re-anchor or the flyout change has been looked at by the owner.
+   `re/harness/bin/sc3resize.dll` predates the last source edit. Rebuild first.
+2. **Edge-scroll band still uses the native view size.** Owner request 2026-08-30. `edge_margin` is
+   C3 in `CAMERA_MODDING.md`. The band rects are built from view bounds `+0xd8..+0xe4` in
+   `SIMSPR FUN_10043989`. Next step in progress, see BOARD §2.
+3. **`[UNCERTAIN]` The view did not pan after a resize under posted input** (2026-09-07,
+   `verify/offscreen/MAP_INPUT.md`, local): right-drag, left-drag and posted arrows all measured
+   dx=0 dy=0 by image alignment. The arrows are explained: the arrow handler reads the physical key
+   state, so posted arrows never scroll at any size (`KEY_BINDINGS_RUNTIME.md`, local). The drags
+   are NOT explained, and no real-mouse test after a resize separates "the mod breaks panning"
+   from "posted drags do not pan". Settle before or with item 2.
+4. **Shippable package is stale.** The only packaged `sc3resize.dll` + `resize_launch.exe` is from
+   2026-08-28. Cluster mode needs `SC3RESIZE_CLUSTER=1`. Bake the defaults and rerun the offline
+   gates.
+5. **UI scale-up when the window grows in both directions** (owner 2026-08-30, second half). Today
+   the HUD extends. Not started. Constraint known: the side panel's `SetRect` override
+   `SIMUI FUN_1004e20b` forces the width to its 96-wide raster.
+6. **A root window created while already maximized caches a resized rect as its native one**
+   (`final/run.log`, `RESULTS_ARTGUARD.md`). Harmless for children. A root would be translated a
+   second time on the next resize. Not yet observed to bite.
+7. **Tracker debt** (end of this file). Write with `py re/scripts/tracker.py batch`.
+8. Cosmetic: the camera can scroll to empty corners at large sizes.
 
 **Method notes worth keeping (cost paid once):** always control the **display mode** (the v1/v2
 confound); a **confirmed code path is not a confirmed cause** (three wrong crash root-causes before the
@@ -531,6 +568,13 @@ the blit path honours a wider source rect from that field.
 end of a long session - the file is keyed on **(module, rva)** and a careless write has already
 damaged it once. Do this as a dedicated, verified edit.
 
+Added 2026-10-05 from the 09-07 work, same treatment: `SIMUI 0x1006d2d0` (paint), `0x1006d438`
+(rebuild source rect), `0x1006d56c` (surface keep/release), `0x1006db90` (base SetRect),
+`0x1004e20b` (side panel SetRect), `0x1006de62` (hit-test), `0x1006ccda` / `0x1006d1af` (input
+walks). `GZWIND 0x10025790` (key-state leaf), `0x10020947` (key sink), `0x10020108` (SetFocus).
+`SIMSPR 0x10049265` (city view OnKeyDown), `0x1004979a` (arrow scroll), `0x10048a2d` (tool
+delegate install/clear). Check each row's current name and confidence first.
+
 ---
 
 # ⭐ THE VERTICAL UI IS THE EASIER CASE — `SIMUI FUN_1004e63e` (2026-09-01, static, no lease)
@@ -593,3 +637,98 @@ rect - if it is a tall narrow rect at a screen edge, that settles it.
 
 **Yes — worth doing, and the vertical case looks strictly easier than the horizontal one.** The side
 panel's paint routine is written to avoid tiling when it can; the bottom bar's is not.
+
+---
+
+# 2026-09-02 to 2026-09-07 — KIDFIX, ARTGUARD, sc3io, minimised input, the DPI correction
+
+Committed in `83d679a`. Primary records: `verify/resize_sidekidfix/RESULTS.md`,
+`verify/resize_sidekidfix/RESULTS_ARTGUARD.md`, and the `re/tools/sc3io.py` docstring.
+
+## KIDFIX — child windows were translated twice (`SC3RESIZE_KIDFIX`, default 1)
+
+The cluster step translated every painter window by the resize delta, children included. A child's
+rect is parent-relative, so moving the parent already moves it, and the second translation pushed
+it off the client. Measured at virtual client 2048x1081 (`dx,dy = 1248,481`): side-panel page
+children at `[3200 962 3236 1404]` with `KIDFIX=0`, `[1952 481 1988 923]` with `KIDFIX=1`. The
+root/child classifier was correct on all 10 windows. Kept on because the write is plain arithmetic
+error. **It did not fix the missing side panel**, which was the pre-registered discriminating
+prediction.
+
+## ARTGUARD — the side panel vanished after a tool click plus a resize (`SC3RESIZE_ARTGUARD`, default 1)
+
+**Trigger, isolated by sequence:** maximize alone, panel present. Tool clicks alone, panel present.
+Tool clicks then maximize, panel gone, and it stays gone after restore.
+
+**Cause:** `rz_fix_hud_parents` widens every ancestor of a relocated window to the client height so
+the input router's hit-test passes. The panel becomes an ancestor only once a tool click creates
+its page children. It blits a fixed 96x442 surface (`this+0x58`), and the walk stretched it to
+96x600.
+
+**Why that paints nothing** `[CONFIRMED @ SIMUI]`:
+- `vt+0x164` = `FUN_1006d438` rebuilds the blit source rect `+0x24..+0x30` from the local rect as
+  `(0,0,w,h)`. The paint is `dev->vt+0x118(surface, this+0x24, this+0x90, 0)` in `FUN_1006d2d0`.
+- `vt+0x170` = `FUN_1006d56c` keeps a surface only if the local rect matches its size exactly, and
+  releases it (`+0x58 = 0`) on an empty rect. The paint skips a null surface silently.
+- Paint gates are `+0xA0 & 1`, the `+0x60` dirty byte and `+0x58` null. No clip, no empty-rect test.
+
+**Evidence chain:** the mod's own `PARENT>` log line shows the correct rect in and a client-height
+rect out. Poking the four rects back to 96x442 in the broken state brought the panel, its art,
+its ten buttons and the open flyout back. `side_paint_probe.py --diff` across the maximize found
+one non-positional change: `panel+0x30: 442 -> 600`. Matched A/B with one flag: present with
+`ARTGUARD=1`, absent with `=0`. Tool clicks at maximized size still work with the guard on.
+
+**The fix:** the walk still traverses a window that owns a surface at `+0x58` (or is one of the
+mod's managed HUD windows) but does not widen it.
+
+**Corrected comment:** the parent widen is an input fix only. `vt+0xe4` = `FUN_1006de62` is a
+hit-test, called only from the input walks `FUN_1006ccda` / `FUN_1006d1af`. The paint walk calls
+every child's `vt+0x148` unconditionally. So a window outside its parent's rect still paints but
+gets no mouse input.
+
+**Constraint for UI scaling:** the panel's `SetRect` override `vt+0xc8` = `FUN_1004e20b` replaces
+the requested width with the width of the raster at `+0xC0` and clamps the height up to the sum of
+three decoration rasters `[CONFIRMED @ SIMUI 0x1004e20b]`. The panel cannot be widened through
+`SetRect` while that raster is the shipped 96-wide one.
+
+## sc3io — the one capture path and the one input path
+
+`re/tools/sc3io.py` replaces about 20 scripts that each captured or clicked their own way.
+- **Never moves the cursor and never takes focus.** Input is `PostMessageW` to the game's HWND.
+  The window is raised with `SWP_NOACTIVATE` for capture only.
+- **One capture method, no fallback:** desktop-DC `BitBlt` of the window's screen rect, the only
+  method measured to see the DirectDraw layer. If the gate cannot trust a grab (occluded,
+  minimised, off-screen), it raises and writes nothing.
+- `sc3io_audit.py` is the regression check for cursor, focus and second-capture code in any tool.
+  `sc3io_selftest.py` poisons the banned APIs and runs the live invariants. `sc3io_cli.py` serves
+  PowerShell drivers (exit 2 = not grabbable, fatal).
+- `vdd.py` + `launch_offscreen.py` run the game on a Parsec virtual display, so capture needs no
+  real monitor.
+
+## The DPI correction — posted input coordinates are PHYSICAL
+
+The game is DPI-unaware: it renders at a virtual client size (800x600) and Windows scales it to
+physical (1000x750 at 125%). The earlier tooling assumed posted mouse coordinates were virtual.
+**They are physical**, the same space as a grab. Windows scales the `lParam` down into the
+window's virtual space. Measured inside the engine (GZWIND window manager `mgr+0x170/+0x174`):
+posting x=765 arrived as 612 (x0.8), posting x=956 arrived as 765. A pixel read off a grab is
+directly clickable. `GetDpiForWindow` returned 96 in a state where the true factor was 1.25, so
+derive the factor from the physical client and the engine's stored rect `win+0x38..+0x44`.
+
+The wrong model put clicks ~20% off, which earlier read as "the map takes no clicks" and "input
+fails when minimised". Re-measured on a 100%-scaled virtual display, map clicks resolve the correct
+tile at native and maximized size.
+
+## Input reaches the game while minimised
+
+Measured 2026-09-07 across visible, buried under a topmost window, `SW_MINIMIZE`,
+`SW_SHOWMINNOACTIVE` and off-screen: the WndProc receives every posted message and the window
+manager dispatches it at the same coordinate in all five states. A posted click on a side-panel
+tool button switched the tool while the window was minimised (15 rows of the panel subtree
+changed). Only capture needs the window on screen. Tools: `input_reaches_game.py`,
+`minput_probe.py`, with OS-level controls `minput_os_control.py` / `minput_cloak_control.py`.
+
+**Keyboard limit (tooling, not the mod):** the city view's arrow handler reads the physical key
+state, and modifiers come from `GetKeyState`, so posted keys never scroll and never carry
+Ctrl/Shift/Alt. `key_state_spoof.py` hooks the key-state leaf `GZWIND FUN_10025790` to scroll
+under automation. Full chain in the local note `verify/offscreen/KEY_BINDINGS_RUNTIME.md`.

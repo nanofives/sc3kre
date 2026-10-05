@@ -179,6 +179,31 @@ reader) or an **anchored screen→world map** so drags can target coordinates. (
 Stride/corner measurement is deferred as cosmetic (~8 runs).
 
 ### 2. Resizable window / arbitrary resolution — ⭐ CONSOLIDATED HANDOFF: `re/analysis/RESIZABLE_WINDOW.md`
+> **CURRENT STATE, 2026-10-05 (work through 2026-09-07, commit `83d679a`). Authoritative list:
+> `RESIZABLE_WINDOW.md` §6.** Everything below this block is the working record and partly stale.
+>
+> **Done.** Viewport: fills the window on a real monitor up and down, renders with no toggle, zoom
+> stable, grid-B crash fixed, bottom-strip present squash fixed (owner). HUD in cluster mode
+> (`SC3RESIZE_CLUSTER=1`): full-width bar, full-height side panel, FPS cost fixed (source rect
+> `hud+0xd0..+0xd8`, owner), tracks the window both ways, across repeats, back to native, and across
+> minimize/restore. Window drag-resizable. Input: relocated HUD clickable (owner 2026-09-01), hover
+> label unclamped, map clicks hit the correct tile at native and maximized size.
+> New 2026-09-03 to 09-07: `KIDFIX` (children no longer translated twice), `ARTGUARD` (side panel
+> no longer vanishes after a tool click plus a resize: the parent walk widened its 96x442 surface
+> to 96x600, and SIMUI `FUN_1006d56c` drops a surface on any size mismatch), `RCIFIX`, corner
+> widget re-anchor, flyout sub-tool buttons left alone. `re/tools/sc3io.py` is the one capture and
+> input path. Posted input coordinates are PHYSICAL, and input works while minimised.
+>
+> **Open, in order.**
+> 1. Owner hand-test of the 09-03 to 09-07 fixes on a REBUILT DLL (the binary predates the last edit).
+> 2. Edge-scroll band to the live window size (owner 2026-08-30). In progress.
+> 3. `[UNCERTAIN]` posted drags did not pan the view after a resize (2026-09-07). Not separated from
+>    "posted drags never pan". Needs a real-mouse check.
+> 4. Shippable package: the only package is 2026-08-28. Bake cluster defaults, rerun offline gates.
+> 5. UI scale-up when the window grows in both directions (owner 2026-08-30, second half).
+> 6. Tracker debt (list at the end of `RESIZABLE_WINDOW.md`), via `tracker.py batch`.
+> 7. Cosmetic: camera can scroll to empty corners at large sizes.
+
 > ⭐⭐⭐ **THE RELOCATED HUD IS CLICKABLE — owner hand-test, 2026-09-01, cluster mode at 2048x1081.**
 > Tool buttons change the tool, panels open, and panels drag anywhere in the client area. That closes
 > the arc `R-REACHED` → `P-PASS` → `B-CONSUMED` → **owner-confirmed action**, and the ancestor-rect
