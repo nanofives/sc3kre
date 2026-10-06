@@ -85,6 +85,7 @@ static CRITICAL_SECTION g_lock;
 static HANDLE g_log = INVALID_HANDLE_VALUE;
 static LARGE_INTEGER g_freq, g_t0;
 static HMODULE g_self;                          /* [SLIDER] this DLL, for locating slider.ini */
+static DWORD g_logcap, g_logbytes;              /* default-log cap, see log_open */
 
 static void logf(const char *fmt, ...) {
     char buf[2048];
@@ -109,16 +110,31 @@ static void logf(const char *fmt, ...) {
     line[sizeof(line) - 1] = 0;
 
     EnterCriticalSection(&g_lock);
-    if (g_log != INVALID_HANDLE_VALUE)
-        WriteFile(g_log, line, (DWORD)n, &wrote, NULL);
+    if (g_log != INVALID_HANDLE_VALUE) {
+        if (g_logcap && g_logbytes + (DWORD)n > g_logcap) {
+            static const char stop[] = "### log cap reached (8 MB) - further lines dropped. "
+                                       "Set SC3RESIZE_LOG=<path> for an uncapped log.\r\n";
+            WriteFile(g_log, stop, sizeof(stop) - 1, &wrote, NULL);
+            CloseHandle(g_log);
+            g_log = INVALID_HANDLE_VALUE;
+        } else {
+            WriteFile(g_log, line, (DWORD)n, &wrote, NULL);
+            g_logbytes += (DWORD)n;
+        }
+    }
     LeaveCriticalSection(&g_lock);
     OutputDebugStringA(line);
 }
 
+/* The default log (no SC3RESIZE_LOG) is capped so a long play session cannot grow it without bound:
+ * an owner session with many resizes wrote ~1.6 MB (verify/handtest_1006). An explicit SC3RESIZE_LOG
+ * path (dev and verify runs) stays uncapped. */
 static void log_open(void) {
     char path[MAX_PATH];
-    if (!GetEnvironmentVariableA("SC3RESIZE_LOG", path, sizeof(path)))   /* [RESIZE] own default */
+    if (!GetEnvironmentVariableA("SC3RESIZE_LOG", path, sizeof(path))) {  /* [RESIZE] own default */
         lstrcpynA(path, "sc3resize.log", sizeof(path));
+        g_logcap = 8u * 1024u * 1024u;
+    }
     g_log = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, NULL,
                         CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 }
@@ -6671,7 +6687,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           g_sideon  = GetEnvironmentVariableA("SC3RESIZE_SIDE",  v, sizeof(v)) && atoi(v);
           g_minion  = GetEnvironmentVariableA("SC3RESIZE_MINI",  v, sizeof(v)) && atoi(v);
           g_anchor  = GetEnvironmentVariableA("SC3RESIZE_ANCHOR", v, sizeof(v)) && atoi(v);
-          g_cluster = GetEnvironmentVariableA("SC3RESIZE_CLUSTER", v, sizeof(v)) && atoi(v);
+          /* Cluster mode (the HUD follows the window) ships ON - owner pass 2026-10-06. =0 opts out. */
+          g_cluster = 1;
+          if (GetEnvironmentVariableA("SC3RESIZE_CLUSTER", v, sizeof(v))) g_cluster = atoi(v);
           g_input   = GetEnvironmentVariableA("SC3RESIZE_INPUT",   v, sizeof(v)) && atoi(v);
           g_nohit   = GetEnvironmentVariableA("SC3RESIZE_NOHIT",   v, sizeof(v)) && atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDDY", v, sizeof(v))) g_hud_dy = (LONG)atoi(v);
