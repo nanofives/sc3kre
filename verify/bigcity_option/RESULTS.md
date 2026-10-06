@@ -58,3 +58,7 @@ Smoke test of the unzipped package at `bin` depth, no `SC3BIGCITY_LOG`, no `bigc
   simspr`, 43 anchor sites). Log written beside the DLL.
 - New City: game default radio (Grande) selected, "Enorme 512" listed, slider and frame hidden
   (`pkg_smoke_crop.png`). Frame and slider created OK. 0 faults.
+
+Published 2026-10-06 as GitHub release `sc3bigcity-2026-10-06` on nanofives/sc3kre, target
+`e92020e7bc040b6341671a3a24494529b6e4082f`. Asset downloaded back: SHA-256
+`82ADE051566451AC5EA6FF93DFB47C8318D6A8EB83FE4048B980A7C724B9C7D5`, identical to the local zip.
