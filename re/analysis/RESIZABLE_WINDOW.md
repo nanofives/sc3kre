@@ -216,6 +216,11 @@ enable by default.
   icons (sub-tool windows now placed at native + dy). Verified: stock layout at native, identical
   offsets at 1680x979, click on the drawn icon lands on the right tool, back to stock after resizes.
   `=0` on `SC3RESIZE_BARSPAN` / `SC3RESIZE_SIDESPAN` opts out.
+- ✅ **Dialogs follow the window** (owner hand test 2026-10-05, `verify/resize_dialogs/RESULTS.md`).
+  Centered in the map area when opened at a non-native size, re-centered on resize unless dragged
+  (then clamped), stock placement kept at 800x600. The RCI no longer draws over a dialog. The HUD
+  window cache no longer captures dialogs and drops freed windows (the hand-test fault in
+  GZWIND+0x1EF7A was a SetRect on a closed dialog). `SC3RESIZE_DIALOGS=0` opts out.
 - Edge scrolling OFF in windowed mode (owner 2026-10-05, `SC3RESIZE_EDGESCROLL`, default 0).
 - Bar FPS cost fixed: the SIMUI tile loop's step is the source rect at `hud+0xd0..+0xd8`, set to
   the client width so the loop runs ~1 time instead of ~128 (`cc687b8`, owner, `SRCRECT` default 1).

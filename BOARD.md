@@ -205,6 +205,8 @@ Stride/corner measurement is deferred as cosmetic (~8 runs).
 >    default. Three side-panel defects the flip exposed are fixed and verified (native stock, flyout
 >    clicks land on their icons). Maximize crash = display topology change (owner confirmed).
 >    Owner hand test pending. `verify/resize_spandefault/`, `verify/resize_panelshots/`.
+> 3c. Owner hand test 2026-10-05 found 3 dialog issues + 1 fault, all fixed and verified
+>    (`verify/resize_dialogs/`). Second hand test pending.
 > 4. Shippable package: the only package is 2026-08-28. Bake cluster defaults, rerun offline gates.
 > 5. UI scale-up when the window grows in both directions (owner 2026-08-30, second half).
 > 6. Tracker debt (list at the end of `RESIZABLE_WINDOW.md`), via `tracker.py batch`.
