@@ -36,3 +36,22 @@ normally. In-game date 3/31/2088 → 7/18/2088 with the camera moving the whole 
   not affect this verdict.
 - Not tested: zoom and rotate (left stock on purpose, they are momentary brackets), edge scrolling in
   fullscreen (same `FUN_10043daf` step as arrows), the other three mods loaded together, owner hand test.
+
+## Hand test follow-up (2026-10-06): date overprint and arrows stopping on mouse move
+
+Owner hand test (all four mods, maximized 2560x1351 on a 125% display) found two defects. Post-hoc A/B, all four
+mods, Europolis, speed 3, `run_while_scrolling` 0 (A) vs 1 (B), date field cropped from `sc3io` grabs:
+
+| window | A (mod off) | B (mod on) |
+|---|---|---|
+| default 1000x750 | clean, frozen while scrolling | clean, keeps changing while scrolling |
+| maximized 2560x1351 | **smears, from the camera-still phase on** | **smears, from the camera-still phase on** |
+
+- **Date overprint is not caused by sc3simrun.** It appears with the patch off and with the camera never moved,
+  only at the large window. It belongs to the large-window status bar layout (`sc3resize`), or to stock code that
+  only shows there. `[UNCERTAIN]` which of the two: a stock-size run without `sc3resize` at a large window is not
+  possible, so the next step is to read how the date field is erased.
+- **Arrows stopping when the mouse moves: not reproduced with posted input.** Arrows held through the key-state
+  spoof plus posted `WM_MOUSEMOVE`: about 70% of pixels change between every pair of frames in both arms, so the
+  camera kept moving. A real mouse produces something a posted move does not. Needs an owner run with the mod off
+  to tell stock from mod.
