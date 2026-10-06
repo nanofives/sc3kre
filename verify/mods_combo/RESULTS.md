@@ -36,3 +36,7 @@ Smoke test of the unzipped package at `bin` depth, no `SC3*_LOG` variables, Euro
   deleted from the game folder).
 - Europolis rendered windowed (`pkg_smoke.png`). 0 faults in bigcity and overscroll, resize's only
   VEH entry is the startup one above.
+
+Published 2026-10-06 as GitHub release `sc3mods-2026-10-06` on nanofives/sc3kre, target
+`84ec7daf09cdd051a8d6d261653abf9b6deadaab`. Asset downloaded back: SHA-256
+`84AA4C611AB3B9E7B3D004DB6859168896A4B379C3E90ED8D0F572E1A4523A65`, identical to the local zip.
