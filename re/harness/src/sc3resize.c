@@ -936,6 +936,10 @@ static int    g_edgefix = 1;
 static LONG   g_view_nat[4];      /* city view bounds (+0xd4..+0xe0 on the window sub-object) as the
                                      engine set them at native size, cached on first sight */
 static int    g_view_nat_ok;
+/* SC3RESIZE_EDGESCROLL=1 keeps the game's mouse edge-scroll bands. Default 0: the owner does not want
+ * edge scrolling in windowed mode (2026-10-05), and this mod is always windowed. */
+static int    g_edgescroll = 0;
+static void   rz_edge_off(void);  /* fwd: neutralise the edge bands, defined after rz_find_view */
 static int    g_side_span;       /* SC3RESIZE_SIDESPAN: in cluster mode, dock+extend the side panel to
                                      the full client height (background filled down, buttons at the
                                      bottom) instead of translating it at native height. */
@@ -1455,6 +1459,57 @@ static void *rz_find_view(void *w, DWORD want_e4, int depth, int *budget) {
         n = *(void **)n;
     }
     return NULL;
+}
+
+/* ⭐ NO EDGE SCROLLING IN WINDOWED MODE (owner, 2026-10-05). SC3RESIZE_EDGESCROLL=1 keeps it.
+ *
+ * The band test `SIMSPR FUN_10043a38` (outer vt+0x40) clears all four edge flags and sets nothing when
+ * the point is INSIDE the inner rect `outer+0x178..+0x184` `[CONFIRMED @ SIMSPR 0x10043a38]`. So an
+ * inner rect that covers every possible coordinate makes the bands inert. The other branch of the same
+ * function (taken while `+0x1e6` is set) is the right-drag pan, and it never reads these fields, so
+ * panning is untouched. Arrow-key scrolling reads the keyboard, not the bands, so it is untouched too.
+ * The engine rewrites the inner rect from `FUN_10043989` (load, event 0x624a8241, and our EDGEFIX
+ * rebuild), so this is re-asserted from rz_poll rather than written once. Writes only on a mismatch. */
+static void rz_edge_off(void) {
+    static void *view;            /* the city view window sub-object; outer = view - 4 */
+    static int logged;
+    DWORD ss = (DWORD)GetModuleHandleA("SIMSPR.DLL");
+    LONG *in;
+    if (g_edgescroll || !ss) return;
+    if (view) {                   /* revalidate the cached pointer by identity every time */
+        DWORD *vt = IsBadReadPtr(view, 4) ? NULL : *(DWORD **)view;
+        if (!vt || IsBadReadPtr(vt, 0xe8) || vt[0xe4 / 4] != ss + 0x4ecd3) view = NULL;
+    }
+    if (!view) {
+        DWORD gz = (DWORD)GetModuleHandleA("GZGraphicD.dll");
+        DWORD *win, *sink, *root;
+        int budget = 3000;
+        if (!gz || IsBadReadPtr((void *)(gz + 0x6cdb8), 4)) return;
+        win = *(DWORD **)(gz + 0x6cdb8);
+        if (!win || IsBadReadPtr(win, 0x48) || win[0] != gz + 0x1f740) return;
+        sink = (DWORD *)win[0x30 / 4];
+        if (!sink || IsBadReadPtr(sink, 0x3c)) return;
+        root = (DWORD *)sink[0x38 / 4];
+        if (!root || IsBadReadPtr(root, 0x40)) return;
+        view = rz_find_view(root, ss + 0x4ecd3, 0, &budget);
+        if (!view) return;
+    }
+    {   void *outer = (void *)((DWORD)view - 4);
+        if (IsBadWritePtr(outer, 0x1c8) || *(DWORD *)outer != ss + 0x67894) {
+            if (!logged) { logf("EDGE> REFUSED edge-off: outer 0x%08lX vtable mismatch", (DWORD)outer); logged = 1; }
+            return;
+        }
+        in = (LONG *)((DWORD)outer + 0x178);
+        if (in[0] != -0x7fff || in[1] != -0x7fff || in[2] != 0x7fff || in[3] != 0x7fff) {
+            /* Direction flags +0x1e1..+0x1e4 are NOT cleared here: the arrow keys drive the same flags,
+               and the band test clears them itself on the next mouse move. */
+            static int writes;
+            if (writes++ < 8)
+                logf("EDGE> edge scrolling OFF (windowed): inner [%ld %ld %ld %ld] -> covers all",
+                     in[0], in[1], in[2], in[3]);
+            in[0] = -0x7fff; in[1] = -0x7fff; in[2] = 0x7fff; in[3] = 0x7fff;
+        }
+    }
 }
 
 /* ⭐ SIDE PANEL CONTENTS — push the pages and tabs to the BOTTOM of the extended panel.
@@ -2130,6 +2185,7 @@ static void rz_input_geometry(LONG cw, LONG ch, LONG dx, LONG dy) {
                      bd[12], bd[13], bd[14], bd[15],      /* +0x1a8 right  -> flag +0x1e3 */
                      bd[16], bd[17], bd[18], bd[19],      /* +0x1b8 bottom -> flag +0x1e2 */
                      *(BYTE *)((DWORD)outer + 0x177));
+                rz_edge_off();   /* windowed default: no edge scrolling, re-neutralise at once */
             } else {
                 logf("EDGE> REFUSED band rebuild: outer 0x%08lX vtable 0x%08lX != SIMSPR+0x67894",
                      (DWORD)outer, (DWORD)ovt);
@@ -4950,6 +5006,13 @@ static void rz_poll(void) {
     ht = (DWORD)(cr.bottom - cr.top);
     if (w == 0 || ht == 0) return;
 
+    /* No edge scrolling in windowed mode (owner, 2026-10-05) - see rz_edge_off. 250 ms cadence. */
+    if (!g_edgescroll) {
+        static DWORD rz_edge_next_ms;
+        DWORD nowe = GetTickCount();
+        if (nowe >= rz_edge_next_ms) { rz_edge_next_ms = nowe + 250; rz_edge_off(); }
+    }
+
     /* Late-created side-panel windows. A tool submenu opened after the resize renders at its
        native position (owner, 2026-09-02: "when i open a menu it is rendered at the top"), because
        the layout pass ran before that window existed. rz_side_children_bottom is idempotent - it
@@ -6288,6 +6351,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_KIDFIX", v, sizeof(v))) g_kidfix = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_ARTGUARD", v, sizeof(v))) g_artguard = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_EDGEFIX", v, sizeof(v))) g_edgefix = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_EDGESCROLL", v, sizeof(v))) g_edgescroll = atoi(v);
           g_bltbeat = GetEnvironmentVariableA("SC3RESIZE_BLTBEAT", v, sizeof(v)) && atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_THICKFRAME", v, sizeof(v))) g_thickframe = atoi(v);
           if (!GetEnvironmentVariableA("SC3RESIZE_DUMPDIR", g_dumpdir, sizeof(g_dumpdir)))
@@ -6310,10 +6374,10 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
          * a self-consistent log). One line makes the whole class loud instead of silent.
          * verify/resize_flaggate/NOHIT_RESULTS.md */
         logf("### FLAGS> cluster=%d input=%d nohit=%d hudfit=%d hudlab=%d sweep=%d side=%d mini=%d "
-             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld sidedy=%ld presentlog=%d kidfix=%d artguard=%d edgefix=%d",
+             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld sidedy=%ld presentlog=%d kidfix=%d artguard=%d edgefix=%d edgescroll=%d",
              g_cluster, g_input, g_nohit, g_hudfit, g_hudlab, g_sweepon, g_sideon, g_minion,
              g_anchor, g_census, g_minzoom, g_ready_ms, g_noparentfix, g_hud_dy, g_side_dy, g_presentlog,
-             g_kidfix, g_artguard, g_edgefix);
+             g_kidfix, g_artguard, g_edgefix, g_edgescroll);
         if (AddVectoredExceptionHandler(1, rz_veh))
             logf("### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the "
                  "zoom-after-resize crash the game swallows)");
