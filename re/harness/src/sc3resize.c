@@ -2774,6 +2774,13 @@ static void rz_repaint_rci(void) {
     if (!tgt || IsBadReadPtr(tgt, 0x11c)) return;
     tvt = *(DWORD **)tgt;
     if (IsBadReadPtr(tvt, 0x11c) || !tvt[0x1c / 4] || !tvt[0x118 / 4] || !tvt[0x20 / 4]) return;
+    /* ⛔ Both rasters must have a live DirectDraw sub-surface at +0x44. The blit lands in GZGraphicD
+     * FUN_10014894, which does `mov ecx,[dest+0x44]; mov eax,[ecx]` and pushes `[src+0x44]` with no
+     * null check `[CONFIRMED @ GZGraphicD 0x100148fa]`. Right after a resize a raster can sit with
+     * +0x44 = NULL between release and re-create: owner maximize crash 2026-10-05, AV READ 0 at
+     * GZGraphicD+0x14904 with dest ebx=0x0054BC40 (verify/resize_panelshots/run_edgeon.log:467). */
+    if (IsBadReadPtr((void *)((DWORD)tgt + 0x44), 4) || !*(DWORD *)((DWORD)tgt + 0x44)) return;
+    if (IsBadReadPtr((void *)(src58 + 0x44), 4) || !*(DWORD *)(src58 + 0x44)) return;
     g_in_rci_repaint = 1;
     {   DWORD one = 0x10;
         if (rz_thiscall(tgt, (void *)tvt[0x1c / 4], &one, 1) & 0xff) {   /* begin/lock */
@@ -3355,6 +3362,25 @@ static LONG CALLBACK rz_veh(EXCEPTION_POINTERS *ep) {
             char ret[160];
             rz_modstr(*(DWORD *)c->Esp, ret, sizeof(ret));
             logf("RZ   VEH [esp]=0x%08lX -> %s", *(DWORD *)c->Esp, ret);
+        }
+        /* Who called? The single [esp] word above could not name the caller of the 2026-10-05
+         * maximize crash. Scan the stack for words that land inside a loaded module (candidate return
+         * addresses - a heuristic, not an unwind: stale words are possible) and say whether the mod's
+         * own present-time RCI blit was on the stack. */
+        logf("RZ   VEH in_rci_repaint=%d", g_in_rci_repaint);
+        {   DWORD *sp = (DWORD *)c->Esp;
+            int k, shown = 0;
+            for (k = 0; k < 512 && shown < 14; k++) {
+                char m[160];
+                DWORD wv;
+                if (IsBadReadPtr(sp + k, 4)) break;
+                wv = sp[k];
+                if (wv < 0x00400000) continue;
+                rz_modstr(wv, m, sizeof(m));
+                if (strstr(m, "no module")) continue;
+                logf("RZ   VEH stack[esp+0x%03X] = %s", k * 4, m);
+                shown++;
+            }
         }
     }
     return EXCEPTION_CONTINUE_SEARCH;   /* do not alter the game's own fault handling */
