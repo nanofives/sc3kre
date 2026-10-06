@@ -1,5 +1,84 @@
 # Making SimCity 3000 build cities larger than 256 tiles — the working procedure
 
+> **CURRENT STATE, 2026-10-06: superseded by the `sc3bigcity` mod (section "The mod" directly
+> below).** The two byte patchers further down still work, but they stop at 512 and leave four
+> large-map defects in place that the mod fixes: per-tile terrain spikes above 512, dashed rivers,
+> a camera that refuses every step over tiles >= 256, and blank zoom levels 3 and 4. Everything
+> below "The mod" is the historical record of how 512 was first reached. Some of its statements are
+> now known to be incomplete (for example the right-click drag note in the limits, and "U-081 closed,
+> the camera is fine at 512": the anchor bug below refuses camera steps over tiles >= 256. Why the
+> earlier one-tap keyboard measurement passed was not re-examined `[UNCERTAIN]`).
+
+## The mod: `sc3bigcity` (owner-tested 2026-10-06)
+
+`re/harness/src/sc3bigcity.c`, launcher `bigcity_launch.exe`, build `re/harness/build_bigcity.ps1`
+(which first runs `re/tools/gen_anchor16.py` to write `anchor16_sites.h`). Run record:
+`verify/bigcity_option/RESULTS.md`. All patches are in memory, every installer checks the shipped
+bytes first and is all-or-nothing. **No game file is modified.**
+
+**What the player sees.** New City gets a fifth size radio, "Enorme 512", under "Grande". A slider
+in an inset frame picks 512, 640, 768, 896 or 1024 (square map). The slider and frame only show
+while Enorme is selected. The last choice is kept in `bigcity.ini` beside the DLL. The game runs
+windowed (`[display] windowed=0` turns that off).
+
+| # | defect at large N | cause | fix in the mod |
+|---|---|---|---|
+| 1 | renderer crash | SIMDIRT `DAT_10025bac+0x2c` buffer sized and strided for 257 | the 12 sites below set ONCE for N=1024: size `0x201002`, stride 1025, corner `0x804`. All 13 references to the buffer go through those sites, so the fixed max layout is right for every N, shipped sizes included, and removes the row aliasing a size-only patch leaves |
+| 2 | spikes on every tile above 512 | `FUN_100177b7` midpoint subdivision called with depth 8 (`push 8` @ `0x10017f2f`). 9 rounds reach every vertex only while N <= 512. Unwritten vertices stay 0 | `depth_hook` pushes 9 when N > 512, the stock 8 otherwise |
+| 3 | river broken into dashes at 1024 | `FUN_100187da` carves the river at a fixed 1024 Bezier samples (alloc `0x2000` @ `0x10018831`, count @ `0x10018a51`, loop bound @ `0x10018b37`, ramp `shr 10` @ `0x10018aab`) | 4096 samples, ramp `shr 12`, when N > 512. The sampler `FUN_10018c30` divides by its count, so any count is safe |
+| 4 | camera refuses every step, zoom 3 and 4 draw nothing | every SIMSPR cell record (0x14 bytes, `rows[x] + y*0x14`) keeps its anchor as BYTES: +8 = X (max X of the footprint), +9 = Y (min Y). Above 255 they wrap | record bytes +0x12/+0x13 are never accessed, so they now hold the high bytes. 8 writes and 48 reads detoured, see below |
+| 5 | vertical extent set to N | SIMINIT `FUN_1000c09c` writes N into desc +0x40, the Z range, and occupant Z is 8 bits with no mask | +0x40 clamped to 256, which is what every shipped 256 city gets |
+
+### The anchor bug in detail
+
+Measured before the fix with `re/tools/bigcity_camtrace.py` (Frida, read-only): on three 1024 cities
+the camera Translate `SIMSPR FUN_1001d503` accepted **0 of about 950 steps**, at zoom 0, 2 and 4. It
+only moves when `FUN_1000902f` can pick a tile under the new screen centre, and the pick
+(`FUN_100090ef`) looks up the cell's anchor through the wrapped bytes. The centre was on valid tiles
+(494,497) and (796,803). At 512 the camera starts on (256,256), the wrap line, which is why right-drag
+"works at the start then stops".
+
+Zoom 3 and 4 use a different draw-list builder (`FUN_1000d0c5` -> `FUN_1000d0f5` when zoom >= 3) that
+rebuilds each cell's screen position from the anchor bytes, so every cell >= 256 lands off screen and
+is clipped. Zoom 0-2 (`FUN_1000be25`) use real coordinates. The sprite loader `FUN_10008a81` also
+compares the anchor byte to the cell's own x.
+
+Inventory (all in SIMSPR, nothing outside reaches into the records): writes at `0x10005ec7/ecc` (init
+loop, zeroed), `0x10007be6/beb` and `0x10007ca1/ca4` (`FUN_10007b4d` place, full X in `[ebp-8]`, full
+Y in `ebx`), `0x10007fdf/fe2` (remove). Reads: 48 single-byte `movzx` in `8046 8071 8a81 90ef 961f
+a48a aea5 af7c b1ec b352 be25 c678 d059 d0f5 f2c2 f6f4`. `re/tools/gen_anchor16.py` lists them,
+builds one detour per site (`r = byte[m+8|9] | byte[m+0x12|0x13] << 8`, scratch register and flags
+saved), re-targets relative branches it copies, and refuses any site where a direct branch elsewhere
+in SIMSPR lands inside the stolen bytes. Result: 43 sites, none refused. Readers that `shl 8` the
+coordinate afterwards produce world units (0x100 per tile) in 32-bit ints, so widening is safe there.
+
+### Dialog plumbing (reusable for any dialog mod)
+- `SIMUI FUN_1005eb40` reads the size radios. The else arm `mov [esi+0x174], 0x100` @ `0x1005ecf8` is
+  where every non-stock id lands, with `eax = id - 0x25524852`, `esi` = dialog, `edi` = the settings
+  struct whose `+8` the game saves. The mod jumps out there and puts `+8` back to the 256 id, so the
+  game's own settings never hold an id it doesn't know.
+- Option group `0x2552484e`: QI `0xa1336cc0`, `vt+0x38(id, str, 0,0,0)` add option, `vt+0x30` get
+  selected, `vt+0x34(id)` select. A radio added after the build lands at local (0,0): move it.
+- Frames: the dialog's `+0xa4` subobject `vt+0x54` = `FUN_1002d3c4(id, mode, sides, rect*)`, the same
+  inset image as the Preferences audio box. The Preferences recipe `FUN_10058c80` does NOT work from
+  outside that dialog: its GZCOM create returned an object whose `vt+0xc` is a message handler, and
+  passing `0x22` faulted.
+- Show or hide: window `vt+0xf4(1, on)` (`GZWIND FUN_1001dfa7`), then `vt+0x154` on the dialog. Without
+  the invalidate the hidden window stays drawn until the mouse moves.
+- The dialog object is reused across openings, so the mod detects its own radio by id and re-applies
+  the layout if the game resets it.
+
+### Still open
+- Minimap indicator near the map edges: the owner saw it fixed after #4, but the edge clamp in
+  `FUN_1000aa4b` / `FUN_1000a707` was not traced.
+- SIMSPR `FUN_100071a3` / `FUN_10008835` pack a cell rectangle into 4 bytes on a zoom change when the
+  memory class is below `0x14`. Not reached on this machine, untested.
+- Development at 512+ has still not been measured in an instrumented run.
+- Not tested together with `sc3resize.dll`. Each launcher injects only its own DLL.
+- 2048 would overflow `W*H*255*12` in `FUN_10017c2d`. The slider stops at 1024.
+
+---
+
 **Status: a 512-tile city runs, plays to a 177-window tree, and saves — measured game-side
 2026-08-20, re-measured 2026-08-22.** The shipped maximum is 256. **Four bytes are the whole fix**
 for the crash; a second, separate patch is what makes the size *offerable* in the first place.

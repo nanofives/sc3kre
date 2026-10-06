@@ -21,7 +21,7 @@ one-session-one-STATUS-file rule.
 |---:|---|---|---|---|
 | ~~1~~ | ✅ **Camera movement speed — CLOSED 2026-08-25** | `cmt96p4rv…` (archived) | `STATUS_camera.md` | `drag_divisor` **and** `edge_margin` both taken from "derived, never run" to **C3 observed**; combined build staged live |
 | ~~2~~ | ✅ **New road types — CLOSED 2026-08-25** | `cmt96pjiy…` (archived) | `STATUS_roadtypes.md` | **T2 met**: predicted `11203`, measured `11203 ×11`. Network save layer decoded and documented |
-| 3 | **Bigger cities** | `cmt96q1v4…` | `STATUS_bigcities.md` | in-game authoring at 512 |
+| ~~3~~ | ✅ **Bigger cities — SHIPPED as the `sc3bigcity` mod 2026-10-06** | (this session) | `verify/bigcity_option/RESULTS.md` | New City "Enorme" option, 512..1024, owner hand test passed |
 | ~~4~~ | ✅ **Resizable window — CLOSED 2026-08-25** | `cmt96qpp9…` (archived) | `STATUS_resize.md` | `U-068` taken from "the display list is empty" to **"renders but does not blit"**, both adjacent causes positively excluded |
 
 > ⚠️ **Stopping a fleet mid-flight leaves orphans — measured, not predicted.** The `claude3` stop left
@@ -101,7 +101,7 @@ RE done, tool exists outside a test harness, validated in the running game.
 | **Resizable window** (any size, HUD follows, dialogs centered) | `sc3resize.dll` + `resize_launch.exe` (`sc3resize_2026-10-06`) | `re/analysis/RESIZABLE_WINDOW.md`, `verify/resize_release/` | owner hand test passed 2026-10-06. Changing monitors while running can crash (DirectDraw). Camera can scroll into empty corners at large sizes (cosmetic) |
 | **Camera scroll + drag** | `pe_patch.py` | `formats/CAMERA_MODDING.md` | `drag_divisor` (velX 50→25→50), `drag_deadzone` (engage 0→8→0) **and** `scroll_speed` **staged live** (three-recipe `scroll8 + drag4 + deadzone2`, retuned gentler 2026-08-26, `--diff` 8/9, diagonal confirmed by owner feel); `edge_margin` **C3 observed** (band 48/64→24/32→48/64), not staged. OS-input "feel" leg (**D-002**) now known ENVIRONMENT-blocked: `SendMessage` AND `SendInput` both moved 0px in the headless harness. Zoom-4 reachability (**D-003**) |
 | **Network tiling rules** (retune / re-skin an existing network) | `tilingrules.py` + `network_layer.py` | `formats/TILINGRULES_MODDING.md` | ⭐⭐ **T1 AND T2 both met game-side 2026-08-25.** T1 destructive (roads vanish), **T2 constructive: a 2-line SimpleRules edit re-skins a freshly-drawn straight to the curve piece — predicted `11203`, measured `11203 ×11`.** ⚠️ The lever is **SimpleRules (fixpoint, first), NOT `final.txt`** (last) — the `final` edit gave a **byte-identical** save. Render-path result, **no simulation claim** |
-| **Bigger cities** (N > 256, proven at 512) | `patch_citysize.py` + `patch_dirtbuf.py` | `formats/BIGGER_CITIES.md` | ⭐ **engine reads/renders/re-serialises tiles to 495, in-game authoring works (x=460), AND the sim UNPAUSES + runs at 512** (2026-08-25): post GZ `0xc2a35d80` (probe `msg:`), game-verified `+0x140` 1→0 + clock ticks. ⚠️ `0x231e2493` measured **inert** (wrong pause field) — the two-mechanism trap. Still open: **development** needs *connected service* (road+power) authored at chosen coords, gated on a network writer or an anchored screen→world map. `U-081` closed |
+| **Bigger cities** (N up to 1024, New City option) | `sc3bigcity.dll` + `bigcity_launch.exe` (`re/harness/build_bigcity.ps1`) | `formats/BIGGER_CITIES.md` "The mod" | owner hand test passed 2026-10-06 at 512 and 1024: terrain, rivers, right-drag, arrows, zoom 3/4, minimap. Fixes on top of the old 512 patches: subdivision depth, river density, **16-bit SIMSPR cell anchors** (camera refused every step over tiles >= 256, zoom 3/4 blank). Open: development not measured in an instrumented run, not tested together with `sc3resize`, minimap edge clamp untraced |
 
 > **Correction on record:** `HANDOFF.md` still claims sprite modding has "no RGB565 quantizer and no
 > PNG import". That is **stale** — `sprite_patch.py` has `quantize565()`, `export_png()` and
@@ -110,7 +110,7 @@ RE done, tool exists outside a test harness, validated in the running game.
 
 ## Active workstreams
 
-### 1. Bigger cities (N=512) — not blocked, closest to done
+### 1. Bigger cities (N=512) — HISTORICAL. Shipped 2026-10-06 as `sc3bigcity`, see `formats/BIGGER_CITIES.md` "The mod"
 Sim accepts 512; the renderer crash is fixed by the SIMDIRT SIZE group alone (config C 6/6 survive,
 shipped 0/6). Four bytes are the whole fix. Tool: `patch_dirtbuf.py`.
 ✅ **Documented and substantially de-risked 2026-08-25.** `formats/BIGGER_CITIES.md`. Four 32x32
