@@ -38,3 +38,23 @@ The owner's verdict on run 5: "all of those things works perfectly".
 - Development (zones growing) at 512+ has still not been measured in an instrumented run. The owner has played the cities by hand.
 - Combining with `sc3resize.dll`: each launcher injects only its own DLL. Untested together.
 - Above 1024 the generator overflows (`W*H*255*12` in `FUN_10017c2d`) at 2048. The slider stops at 1024.
+
+## Release package `sc3bigcity_2026-10-06` (built from `3973896`)
+
+Local: `re/harness/dist/sc3bigcity_2026-10-06/` (gitignored, binaries are not committed).
+
+| file | bytes | SHA-256 |
+|---|---|---|
+| `sc3bigcity.dll` | 130,560 | `CEEB27FE18C6F48D82F043258FF3F52F448BE6451682C530991AE83B56DA3AA3` |
+| `bigcity_launch.exe` | 121,344 | `AAF10966BFC776BB36EC283BC1B3D78276F9878E2DC9979666259A7AB05D390F` |
+| `README.txt` | 2,158 | install, uninstall, options, known limits |
+| `sc3bigcity_2026-10-06.zip` | 141,122 | `82ADE051566451AC5EA6FF93DFB47C8318D6A8EB83FE4048B980A7C724B9C7D5` |
+
+Offline gates: both PE32 x86 (machine `0x14c`, magic `0x10b`), both import KERNEL32 only. Clean build,
+no warnings. Every in-memory installer checks the shipped bytes first.
+
+Smoke test of the unzipped package at `bin` depth, no `SC3BIGCITY_LOG`, no `bigcity.ini`:
+- Defaults read back: `size 512`, `selected=0`, `windowed=1`. All installers OK (`simdirt simui siminit
+  simspr`, 43 anchor sites). Log written beside the DLL.
+- New City: game default radio (Grande) selected, "Enorme 512" listed, slider and frame hidden
+  (`pkg_smoke_crop.png`). Frame and slider created OK. 0 faults.
