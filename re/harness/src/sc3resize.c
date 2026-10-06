@@ -403,6 +403,7 @@ static void rz_census(void) {
  * reads. Both instruments exist to replace inference with measurement.
  * ================================================================================================== */
 static void  rz_modstr(DWORD addr, char *out, int n);   /* fwd: defined below, resolves EIP->MODULE+RVA */
+static int   rz_win_alive(void *want);                  /* fwd: is this window still in the live tree */
 static int   g_hudlab;                 /* SC3RESIZE_HUDLAB: arm the HUD lab */
 static int   g_hudfit = 1;             /* dock+span the HUD bar (SHIP DEFAULT ON; SC3RESIZE_HUDNATIVE=1
                                           turns it off and leaves the HUD exactly native) */
@@ -1002,6 +1003,7 @@ static void rz_anchor_all(void) {
         LONG *r, *n = g_wins[i].nat;
         LONG ax, ay;
         if (!w || w == g_hud_top || w == g_side_top || IsBadReadPtr(w, 0xa0)) continue;
+        if (!rz_win_alive(w)) { g_wins[i].w = NULL; continue; }   /* freed: see rz_win_alive */
         if (g_kidfix && g_wins[i].child) continue;   /* parent-relative: carried by the parent */
         ax = (n[2] >= NAT_W - ANCHOR_EDGE) ? dx : 0;    /* touching the native right edge  */
         ay = (n[3] >= NAT_H - ANCHOR_EDGE) ? dy : 0;    /* touching the native bottom edge */
@@ -1198,6 +1200,11 @@ static void rz_cluster_layout(void) {
         LONG *r, *n = g_wins[i].nat;
         DWORD *vt;
         if (!w || w == g_hud_top || w == g_side_top || IsBadReadPtr(w, 0xa0)) continue;
+        if (!rz_win_alive(w)) {   /* freed (a closed dialog): calling SetRect on it faulted, see rz_win_alive */
+            logf("CLUSTER>   [%ld] 0x%08lX no longer in the window tree - dropped", i, (DWORD)w);
+            g_wins[i].w = NULL;
+            continue;
+        }
         /* ⭐ CHILD WINDOWS ARE CARRIED BY THEIR PARENT - do not translate them.
          *
          * Their `+0x90` is parent-relative, so `vt+0xc8` SetRect adds the parent's origin. Feeding
@@ -1564,6 +1571,197 @@ static void rz_view_rect_assert(LONG cw, LONG ch) {
         loc[0] = 0; loc[1] = 0; loc[2] = cw; loc[3] = ch;
         hit[0] = 0; hit[1] = 0; hit[2] = cw; hit[3] = ch;
     }
+}
+
+static int rz_cascade_derived(void);   /* fwd: defined below */
+
+/* The GZWIND root window (the top of the SIMUI/GZWIND tree), or NULL. */
+static void *rz_ui_root(void) {
+    DWORD gz = (DWORD)GetModuleHandleA("GZGraphicD.dll");
+    DWORD *win, *sink, *root;
+    if (!gz || IsBadReadPtr((void *)(gz + 0x6cdb8), 4)) return NULL;
+    win = *(DWORD **)(gz + 0x6cdb8);
+    if (!win || IsBadReadPtr(win, 0x48) || win[0] != gz + 0x1f740) return NULL;
+    sink = (DWORD *)win[0x30 / 4];
+    if (!sink || IsBadReadPtr(sink, 0x3c)) return NULL;
+    root = (DWORD *)sink[0x38 / 4];
+    if (!root || IsBadReadPtr(root, 0x40)) return NULL;
+    return root;
+}
+
+/* Is `want` still a window in the live tree? Walks children from `w` (child list +0x34, node +0 next,
+ * +8 child). Needed because IsBadReadPtr cannot tell a FREED window from a live one: freed heap is
+ * still readable. Owner hand test 2026-10-05: after a dialog was closed, rz_cluster_layout called
+ * SetRect on its freed object and faulted in GZWIND+0x1EF7A reading 0xDFDB3AD3
+ * (verify/handtest_1005/run.log:10597). */
+static int rz_tree_has(void *w, void *want, int depth, int *budget) {
+    void *head, *n;
+    int guard = 0;
+    if (!w || depth > 6 || *budget <= 0 || IsBadReadPtr(w, 0x40)) return 0;
+    head = *(void **)((DWORD)w + 0x34);
+    if (!head || IsBadReadPtr(head, 4)) return 0;
+    n = *(void **)head;
+    while (n && n != head && guard++ < 500 && *budget > 0) {
+        void *c;
+        if (IsBadReadPtr(n, 0x0c)) break;
+        c = *(void **)((DWORD)n + 8);
+        (*budget)--;
+        if (c == want) return 1;
+        if (c && rz_tree_has(c, want, depth + 1, budget)) return 1;
+        n = *(void **)n;
+    }
+    return 0;
+}
+static int rz_win_alive(void *want) {
+    void *root = rz_ui_root();
+    int budget = 6000;
+    if (!want || !root) return 0;
+    if (want == root) return 1;
+    return rz_tree_has(root, want, 0, &budget);
+}
+
+/* ⭐ DIALOGS FOLLOW THE WINDOW (owner hand test 2026-10-05, verify/resize_dialogs).
+ *
+ * Measured: dialogs are SIMUI+0xa4d64 windows, either direct children of the root (Reunirse
+ * [8 8 391 362], budget [102 32 602 512], at the SAME fixed spots at 800x600 and at 1680x979) or children
+ * of the full-client HUD container SC3U.exe+0xd32d0 (snapshots, centered at creation). Each is created
+ * ONCE and never re-placed: snapshots opened maximized and re-opened at 800x600 sat at
+ * [584 309 1096 669], its buttons outside the client. Owner: windows should open centered and adjust
+ * when the window is resized.
+ *
+ * Policy: at exactly 800x600 the stock placement is left alone (and remembered). At any other size a
+ * dialog that becomes visible is centered in the map area (client minus the side panel and bar). On a
+ * resize, a dialog still where we (or the stock layout) put it is re-placed: stock rect at 800x600,
+ * centered otherwise. A dialog the player dragged is only clamped back inside the client.
+ * SC3RESIZE_DIALOGS=0 disables it. Moves go through the dialog's own vt+0xc8 SetRect (same size, so
+ * FUN_1006d56c keeps its surface), then one cascade rebuilds the derived hit rects. */
+static int g_dialogs = 1;
+#define DLG_MAX 24
+static struct { void *w; LONG placed[4]; LONG stock[4]; LONG rect[4]; int has_stock, vis, seen; } g_dlg[DLG_MAX];
+static int g_dlg_n;
+
+static int rz_dlg_place(void *w, const LONG *t) {
+    DWORD *vt = IsBadReadPtr(w, 4) ? NULL : *(DWORD **)w;
+    DWORD a[4];
+    if (!vt || IsBadReadPtr(vt, 0xcc) || !vt[0xc8 / 4]) return 0;
+    a[0] = (DWORD)t[0]; a[1] = (DWORD)t[1]; a[2] = (DWORD)t[2]; a[3] = (DWORD)t[3];
+    rz_thiscall(w, (void *)vt[0xc8 / 4], a, 4);   /* parents sit at (0,0): local == absolute */
+    return 1;
+}
+
+static void rz_dialogs_poll(LONG cw, LONG ch) {
+    static LONG lcw, lch;
+    DWORD sui = (DWORD)GetModuleHandleA("SIMUI.DLL");
+    DWORD exe = (DWORD)GetModuleHandleA(NULL);
+    void *root = rz_ui_root();
+    void *lists[2];
+    int nl = 0, li, k, moved = 0, sizechg, native;
+    LONG ax1 = cw, ay1 = ch;
+    if (!g_dialogs || !sui || !root || cw <= 0 || ch <= 0) return;
+    sizechg = (cw != lcw || ch != lch);
+    lcw = cw; lch = ch;
+    native = (cw == NAT_W && ch == NAT_H);
+    /* the map area: left of a right-docked side panel, above a bottom-docked bar */
+    if (g_side_top && !IsBadReadPtr(g_side_top, 0x24)) {
+        LONG sx = ((LONG *)((DWORD)g_side_top + 0x14))[0];
+        if (sx > cw / 2 && sx < cw) ax1 = sx;
+    }
+    if (g_hud_top && !IsBadReadPtr(g_hud_top, 0x24)) {
+        LONG by = ((LONG *)((DWORD)g_hud_top + 0x14))[1];
+        if (by > ch / 2 && by < ch) ay1 = by;
+    }
+    lists[nl++] = root;
+    {   /* the HUD container: a root child of class SC3U.exe+0xd32d0 */
+        void *head = *(void **)((DWORD)root + 0x34), *n;
+        int g = 0;
+        if (head && !IsBadReadPtr(head, 4)) {
+            n = *(void **)head;
+            while (n && n != head && g++ < 200) {
+                void *c;
+                if (IsBadReadPtr(n, 0x0c)) break;
+                c = *(void **)((DWORD)n + 8);
+                if (c && !IsBadReadPtr(c, 4) && *(DWORD *)c == exe + 0xd32d0) { lists[nl++] = c; break; }
+                n = *(void **)n;
+            }
+        }
+    }
+    for (k = 0; k < g_dlg_n; k++) g_dlg[k].seen = 0;
+    for (li = 0; li < nl; li++) {
+        void *head = *(void **)((DWORD)lists[li] + 0x34), *n;
+        int g = 0;
+        if (!head || IsBadReadPtr(head, 4)) continue;
+        n = *(void **)head;
+        while (n && n != head && g++ < 200) {
+            void *c;
+            LONG *r;
+            int e = -1;
+            if (IsBadReadPtr(n, 0x0c)) break;
+            c = *(void **)((DWORD)n + 8);
+            n = *(void **)n;
+            if (!c || IsBadReadPtr(c, 0xa4) || *(DWORD *)c != sui + 0xa4d64) continue;
+            r = (LONG *)((DWORD)c + 0x14);
+            if (r[2] - r[0] < 120 || r[3] - r[1] < 80) continue;          /* not the corner widget */
+            for (k = 0; k < g_dlg_n; k++) if (g_dlg[k].w == c) { e = k; break; }
+            if (!(*(DWORD *)((DWORD)c + 0xa0) & 1)) { if (e >= 0) { g_dlg[e].vis = 0; g_dlg[e].seen = 1; } continue; }
+            if (e < 0) {
+                if (g_dlg_n >= DLG_MAX) continue;
+                e = g_dlg_n++;
+                g_dlg[e].w = c; g_dlg[e].vis = 0; g_dlg[e].has_stock = 0;
+            }
+            g_dlg[e].seen = 1;
+            {   LONG w = r[2] - r[0], h = r[3] - r[1], t[4];
+                int place = 0;
+                LONG cx = (ax1 - w) / 2, cy = (ay1 - h) / 2;
+                if (cx < 0) cx = 0;
+                if (cy < 0) cy = 0;
+                if (!g_dlg[e].vis) {                                    /* just opened */
+                    /* At 800x600 a dialog fully inside the client is at its stock spot: keep it. One that
+                       is not was positioned at another size (dialogs are created once and reused, e.g.
+                       snapshots re-opened at [584 309 1096 669]) and is centered like at any other size. */
+                    int inside = r[0] >= 0 && r[1] >= 0 && r[2] <= cw && r[3] <= ch;
+                    if (native && inside) {
+                        memcpy(g_dlg[e].stock, r, sizeof(LONG) * 4); g_dlg[e].has_stock = 1;
+                        memcpy(g_dlg[e].placed, r, sizeof(LONG) * 4);
+                    } else { t[0] = cx; t[1] = cy; t[2] = cx + w; t[3] = cy + h; place = 1; }
+                    g_dlg[e].vis = 1;
+                } else if (sizechg) {
+                    int untouched = !memcmp(r, g_dlg[e].placed, sizeof(LONG) * 4);
+                    if (untouched) {
+                        if (native && g_dlg[e].has_stock) { memcpy(t, g_dlg[e].stock, sizeof(t)); place = 1; }
+                        else if (native) { memcpy(g_dlg[e].placed, r, sizeof(LONG) * 4); }
+                        else { t[0] = cx; t[1] = cy; t[2] = cx + w; t[3] = cy + h; place = 1; }
+                    } else {                                            /* the player moved it: clamp */
+                        LONG x = r[0], y = r[1];
+                        if (x + w > cw) x = cw - w;
+                        if (y + h > ch) y = ch - h;
+                        if (x < 0) x = 0;
+                        if (y < 0) y = 0;
+                        if (x != r[0] || y != r[1]) { t[0] = x; t[1] = y; t[2] = x + w; t[3] = y + h; place = 1; }
+                        else memcpy(g_dlg[e].placed, r, sizeof(LONG) * 4);
+                    }
+                }
+                if (place && memcmp(t, r, sizeof(t)) && rz_dlg_place(c, t)) {
+                    logf("DLG> dialog 0x%08lX [%ld %ld %ld %ld] -> [%ld %ld %ld %ld] (client %ldx%ld, map area %ldx%ld)",
+                         (DWORD)c, r[0], r[1], r[2], r[3], t[0], t[1], t[2], t[3], cw, ch, ax1, ay1);
+                    moved++;
+                }
+                if (place) memcpy(g_dlg[e].placed, t, sizeof(t));
+                memcpy(g_dlg[e].rect, r, sizeof(LONG) * 4);
+            }
+        }
+    }
+    for (k = 0; k < g_dlg_n; k++) if (!g_dlg[k].seen) g_dlg[k].vis = 0;   /* gone: never dereferenced again until re-seen */
+    if (moved) rz_cascade_derived();
+}
+
+/* Does any visible dialog overlap this absolute rect? Uses the rect copies, never the pointers. */
+static int rz_dialog_over(const LONG *q) {
+    int k;
+    for (k = 0; k < g_dlg_n; k++) {
+        const LONG *r = g_dlg[k].rect;
+        if (g_dlg[k].vis && r[0] < q[2] && q[0] < r[2] && r[1] < q[3] && q[1] < r[3]) return 1;
+    }
+    return 0;
 }
 
 /* ⭐ SIDE PANEL CONTENTS — push the pages and tabs to the BOTTOM of the extended panel.
@@ -2858,6 +3056,9 @@ static void rz_repaint_rci(void) {
     if (!rci || IsBadReadPtr(rci, 0x94)) return;
     src58 = ((DWORD *)rci)[0x58 / 4];
     if (!src58 || IsBadReadPtr((void *)src58, 4)) return;
+    /* A dialog over the RCI must cover it: the re-composite runs after everything, so without this the
+       RCI drew on top of a dragged window (owner hand test 2026-10-05). */
+    if (rz_dialog_over((LONG *)((DWORD)rci + 0x14))) return;
     /* Only bother when it actually overhangs above the bar (dest top < the bar's top). */
     if (g_hud_top && !IsBadReadPtr(g_hud_top, 0x90)) {
         LONG barTop = ((LONG *)((DWORD)g_hud_top + 0x80))[1];
@@ -5136,6 +5337,12 @@ static void rz_poll(void) {
         DWORD nowe = GetTickCount();
         if (nowe >= rz_edge_next_ms) { rz_edge_next_ms = nowe + 250; rz_edge_off(); }
     }
+    /* Dialogs follow the window - see rz_dialogs_poll. 100 ms. */
+    if (g_dialogs) {
+        static DWORD rz_dlg_next_ms;
+        DWORD nowd = GetTickCount();
+        if (nowd >= rz_dlg_next_ms) { rz_dlg_next_ms = nowd + 100; rz_dialogs_poll((LONG)w, (LONG)ht); }
+    }
     /* Map input past 800x600 - see rz_view_rect_assert. Same 250 ms cadence. */
     if (g_viewfix) {
         static DWORD rz_view_next_ms;
@@ -5792,7 +5999,12 @@ static void __stdcall fnlog_enter(int idx, DWORD *f) {
                 for (q = 0; q < g_wins_n; q++) if (g_wins[q].w == (void *)ecx) { seen = 1; break; }
                 /* Bounds relaxed +64: the RCI indicator sits at [599 520 640 608] and a strict `<= 600`
                        rejected it, which is why it never moved. Overhang is normal for native UI. */
-                    if (!seen && r[0] >= -64 && r[1] >= -64 && r[2] <= NAT_W + 64 && r[3] <= NAT_H + 64 &&
+                    /* Not dialogs: SIMUI+0xa4d64 windows of at least 120x80 are managed by rz_dialogs_poll.
+                       Capturing them here translated them like HUD pieces and kept their pointers after
+                       they were freed (owner hand test 2026-10-05). */
+                    DWORD suic = (DWORD)GetModuleHandleA("SIMUI.DLL");
+                    int is_dlg = suic && *(DWORD *)ecx == suic + 0xa4d64 && w >= 120 && h >= 80;
+                    if (!seen && !is_dlg && r[0] >= -64 && r[1] >= -64 && r[2] <= NAT_W + 64 && r[3] <= NAT_H + 64 &&
                     (w * h) <= (NAT_W * NAT_H * 7) / 10) {
                     LONG *wr = (LONG *)(ecx + 0x14);   /* the window's own (absolute) rect */
                     g_wins[g_wins_n].w = (void *)ecx;
@@ -6483,6 +6695,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_EDGEFIX", v, sizeof(v))) g_edgefix = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_EDGESCROLL", v, sizeof(v))) g_edgescroll = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_VIEWFIX", v, sizeof(v))) g_viewfix = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_DIALOGS", v, sizeof(v))) g_dialogs = atoi(v);
           g_bltbeat = GetEnvironmentVariableA("SC3RESIZE_BLTBEAT", v, sizeof(v)) && atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_THICKFRAME", v, sizeof(v))) g_thickframe = atoi(v);
           if (!GetEnvironmentVariableA("SC3RESIZE_DUMPDIR", g_dumpdir, sizeof(g_dumpdir)))
@@ -6505,10 +6718,10 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
          * a self-consistent log). One line makes the whole class loud instead of silent.
          * verify/resize_flaggate/NOHIT_RESULTS.md */
         logf("### FLAGS> cluster=%d input=%d nohit=%d hudfit=%d hudlab=%d sweep=%d side=%d mini=%d "
-             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld sidedy=%ld presentlog=%d kidfix=%d artguard=%d edgefix=%d edgescroll=%d barspan=%d sidespan=%d viewfix=%d",
+             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld sidedy=%ld presentlog=%d kidfix=%d artguard=%d edgefix=%d edgescroll=%d barspan=%d sidespan=%d viewfix=%d dialogs=%d",
              g_cluster, g_input, g_nohit, g_hudfit, g_hudlab, g_sweepon, g_sideon, g_minion,
              g_anchor, g_census, g_minzoom, g_ready_ms, g_noparentfix, g_hud_dy, g_side_dy, g_presentlog,
-             g_kidfix, g_artguard, g_edgefix, g_edgescroll, g_bar_span, g_side_span, g_viewfix);
+             g_kidfix, g_artguard, g_edgefix, g_edgescroll, g_bar_span, g_side_span, g_viewfix, g_dialogs);
         if (AddVectoredExceptionHandler(1, rz_veh))
             logf("### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the "
                  "zoom-after-resize crash the game swallows)");
