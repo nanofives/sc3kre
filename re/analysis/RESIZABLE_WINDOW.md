@@ -254,12 +254,10 @@ enable by default.
 1. **Owner hand-test of the 2026-09-03 to 2026-09-07 fixes on a rebuilt DLL.** None of `KIDFIX`,
    `ARTGUARD`, `RCIFIX`, the corner re-anchor or the flyout change has been looked at by the owner.
    `re/harness/bin/sc3resize.dll` predates the last source edit. Rebuild first.
-2. ⛔ **REGRESSION: map input beyond the native 800x600 is dead** (measured and causal 2026-10-05,
-   `verify/resize_edgescroll/RESULTS.md`). The cascade (`37989b5`) runs after `rz_input_geometry` and
-   rebuilds the city view's hit rect `+0x14` from its local rect `+0x80` = `[0 0 800 600]`, undoing
-   the widen. A live poke of the hit rect restored delivery at (1792,336). Fix: also set the local
-   rect. Needs a PRE. This also explains the 2026-09-07 "view does not pan" result (drags started at
-   x=900).
+2. ✅ **FIXED 2026-10-05: map input beyond the native 800x600** (`verify/resize_mapinput/RESULTS.md`,
+   A/B PASS). The city view's local AND hit rects now follow the client (`SC3RESIZE_VIEWFIX`, default 1),
+   so the cascade can no longer reset the hit rect. Moves and right-drag pan work past the old area,
+   and the control arm reproduces the dead zone. Zoning past 800x600 is for the owner's hand test.
 3. **Edge-scroll band:** `EDGEFIX` (`03ca3c3`) rebuilds the bands from native + delta, measured
    correct at 1920x1009 and back at 800x600. But `+0x177` is "scroll in progress", and every SIMSPR
    starter of a scroll is keyboard-driven, so the bands may never start a scroll from the mouse

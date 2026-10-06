@@ -196,9 +196,8 @@ Stride/corner measurement is deferred as cosmetic (~8 runs).
 >
 > **Open, in order.**
 > 1. Owner hand-test of the 09-03 to 09-07 fixes on a REBUILT DLL (the binary predates the last edit).
-> 2. ⛔ REGRESSION, causal 2026-10-05: map input beyond the native 800x600 is dead. The cascade
->    rebuilds the city view's hit rect from its 800x600 local rect after the mod widens it. Fix: set
->    the local rect too (needs a PRE). Explains the 09-07 "posted drags do not pan" result.
+> 2. ✅ FIXED 2026-10-05: map input beyond the native 800x600 (`SC3RESIZE_VIEWFIX`, A/B PASS,
+>    `verify/resize_mapinput/`). Moves and right-drag pan work across the whole window.
 > 3. Edge-scroll band: `EDGEFIX` rebuilds the bands to the window, geometry measured correct. But
 >    the bands only steer a scroll that the keyboard started (`+0x177` = scroll in progress). Owner
 >    question: does the native game edge-scroll with the mouse alone? `verify/resize_edgescroll/`.
