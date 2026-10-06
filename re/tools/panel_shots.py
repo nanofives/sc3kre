@@ -68,17 +68,24 @@ def visible_chain(tree, ptr):
     return True
 
 
+CAT_CLS = "SIMUI.DLL+0xa8f60"     # category buttons in the panel column (56x32)
+SUB_CLS = "SIMUI.DLL+0xa917c"     # round sub-tool buttons of an open flyout (36x36)
+N_TOOL_CATS = 6                   # landscape, zoning, transport, utilities, civic, emergency; the
+                                  # rest (advisors, query, options) open MODAL dialogs and are not clicked
+
+
 def buttons(panel_dump):
-    """Category buttons: visible leaf-ish windows inside the panel with a button-sized rect."""
-    out = []
-    sub = panel_dump["sub"]
-    for n in sub:
-        a = n.get("abs")
-        if not a or not n.get("vis") or not visible_chain(sub + [panel_dump["panel"]], n["ptr"]):
-            continue
-        w, h = a[2] - a[0], a[3] - a[1]
-        if 20 <= w <= 70 and 20 <= h <= 50:
-            out.append(n)
+    """Category buttons: visible SIMUI+0xa8f60 windows in the panel, top to bottom."""
+    sub = panel_dump["sub"] + [panel_dump["panel"]]
+    out = [n for n in panel_dump["sub"] if n.get("cls") == CAT_CLS and n.get("abs")
+           and visible_chain(sub, n["ptr"])]
+    out.sort(key=lambda n: (n["abs"][1], n["abs"][0]))
+    return out
+
+
+def flyout(tree):
+    """Every sub-tool button that would paint right now."""
+    out = [n for n in tree if n.get("cls") == SUB_CLS and n.get("abs") and visible_chain(tree, n["ptr"])]
     out.sort(key=lambda n: (n["abs"][1], n["abs"][0]))
     return out
 
@@ -118,27 +125,26 @@ def main(argv) -> int:
     rec["panel"] = pd["panel"]
     cats = buttons(pd)
     print(f"  panel {pd['panel']['abs']}  category buttons: {len(cats)}")
-    for i, b in enumerate(cats):
+    rec["all_cats"] = cats
+    for i, b in enumerate(cats[:N_TOOL_CATS]):
         x0, y0, x1, y1 = b["abs"]
         cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
-        before = {n["ptr"] for n in sc.exports_sync.tree() if n.get("vis")}
         sc3io.click(hwnd, cx, cy)
         time.sleep(0.9)
         sc3io.move(hwnd, cw // 4, ch // 3)                # hover off the panel so no tooltip covers it
         time.sleep(0.5)
         shot = out / f"cat{i:02d}.png"
         sc3io.grab_to(str(shot), hwnd, settle=0.2)
-        tree = sc.exports_sync.tree()
-        new = [n for n in tree if n.get("vis") and n["ptr"] not in before and n.get("abs")
-               and visible_chain(tree, n["ptr"])]
-        offs = [n for n in new if n["abs"][0] < 0 or n["abs"][1] < 0 or n["abs"][2] > cw or n["abs"][3] > ch]
-        print(f"  cat{i:02d} button {b['abs']} {b['cls']}: {len(new)} new visible windows, "
-              f"{len(offs)} outside the client")
+        fl = flyout(sc.exports_sync.tree())
+        offs = [n for n in fl if n["abs"][0] < 0 or n["abs"][1] < 0 or n["abs"][2] > cw or n["abs"][3] > ch]
+        rel = [[n["abs"][0] - x0, n["abs"][1] - y0] for n in fl]
+        print(f"  cat{i:02d} button {b['abs']}: flyout {len(fl)} buttons, {len(offs)} outside the client, "
+              f"offsets from category {rel}")
         rec["cats"].append({"i": i, "button": b, "click": [cx, cy], "png": shot.name,
-                            "new": new, "offclient": offs})
+                            "new": fl, "rel": rel, "offclient": offs})
     # close whatever flyout is open: click the last category again
-    if cats:
-        b = cats[-1]["abs"]
+    if cats[:N_TOOL_CATS]:
+        b = cats[:N_TOOL_CATS][-1]["abs"]
         sc3io.click(hwnd, (b[0] + b[2]) // 2, (b[1] + b[3]) // 2)
     (out / "panel_shots.json").write_text(json.dumps(rec, indent=1))
     sess.detach()

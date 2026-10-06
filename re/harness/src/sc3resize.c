@@ -1452,7 +1452,14 @@ static void *rz_find_view(void *w, DWORD want_e4, int depth, int *budget) {
         (*budget)--;
         if (cw && !IsBadReadPtr(cw, 0xe4)) {
             DWORD *vt = *(DWORD **)cw;
-            if (vt && !IsBadReadPtr(vt, 0xe8) && vt[0xe4 / 4] == want_e4) return cw;
+            /* vt+0xe4 alone is NOT unique: on 2026-10-05, with the water-structure picker open, this
+             * matched an object whose outer vtable was 0x94003A00 (verify/resize_maxcrash/run.log,
+             * "REFUSED band rebuild") - likely the dialog's building preview. Also require the CITY VIEW
+             * outer vtable SIMSPR+0x67894 at cw-4 (constructor at SIMSPR RVA 0x486d2 installs it there).
+             * want_e4 is SIMSPR+0x4ecd3, so the module base is want_e4 - 0x4ecd3. */
+            if (vt && !IsBadReadPtr(vt, 0xe8) && vt[0xe4 / 4] == want_e4 &&
+                !IsBadReadPtr((void *)((DWORD)cw - 4), 4) &&
+                *(DWORD *)((DWORD)cw - 4) == want_e4 - 0x4ecd3 + 0x67894) return cw;
             {   void *hit = rz_find_view(cw, want_e4, depth + 1, budget);
                 if (hit) return hit;   }
         }
@@ -2131,7 +2138,7 @@ static void rz_input_geometry(LONG cw, LONG ch, LONG dx, LONG dy) {
     {   int budget = 3000;
         view = rz_find_view(root, ss + 0x4ecd3, 0, &budget);
     }
-    if (!view) { logf("GEOM> city view NOT FOUND (vt+0xe4 != SIMSPR+0x4ecd3) - map/camera unfixed"); return; }
+    if (!view) { logf("GEOM> city view NOT FOUND (vt+0xe4 SIMSPR+0x4ecd3 + outer vt SIMSPR+0x67894) - map/camera unfixed"); return; }
     if (IsBadWritePtr(view, 0xe4)) { logf("GEOM> city view 0x%08lX unwritable", (DWORD)view); return; }
     {   LONG *r = (LONG *)((DWORD)view + 0x14);
         LONG *b = (LONG *)((DWORD)view + 0xd4);

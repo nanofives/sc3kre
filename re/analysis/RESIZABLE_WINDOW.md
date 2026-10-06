@@ -209,7 +209,12 @@ enable by default.
   (`a90ec5f`). Owner.
 
 **HUD (cluster mode)**
-- Bottom bar spans the full width with its art, side panel spans the full height (`cc687b8`).
+- ⚠️ **Default launch: the HUD MOVES, it does not extend** (measured 2026-10-05,
+  `verify/resize_panelshots/RESULTS.md`). The side panel stays 96x442 docked on the minimap, the bar
+  stays 600 wide beside it. Full-width bar and full-height panel exist (`cc687b8`) but sit behind
+  `SC3RESIZE_BARSPAN` / `SC3RESIZE_SIDESPAN`, both default 0. All buttons present and aligned at both
+  sizes: 9 categories, flyouts 6/8/7/6/7/6 with identical offsets, bar and minimap sets complete.
+- Edge scrolling OFF in windowed mode (owner 2026-10-05, `SC3RESIZE_EDGESCROLL`, default 0).
 - Bar FPS cost fixed: the SIMUI tile loop's step is the source rect at `hud+0xd0..+0xd8`, set to
   the client width so the loop runs ~1 time instead of ~128 (`cc687b8`, owner, `SRCRECT` default 1).
 - Bar, side panel, minimap and RCI track the window both ways (`7bf1df2`), across repeated resizes
@@ -257,6 +262,11 @@ enable by default.
    correct at 1920x1009 and back at 800x600. But `+0x177` is "scroll in progress", and every SIMSPR
    starter of a scroll is keyboard-driven, so the bands may never start a scroll from the mouse
    alone. Owner question pending: does the native game scroll with the mouse at the edge and no key?
+3b. **Maximize crash 2026-10-05** (`verify/resize_maxcrash/`): null dest sub-surface in GZGraphicD
+   `FUN_10014894`. RCIFIX guarded, VEH now names the caller. 34 cycles clean since. Competing cause:
+   the display topology changed (4 displays to 1) around the crash. Owner hand maximize decides.
+3c. **Decide the HUD default:** extend (BARSPAN/SIDESPAN on, needs an FPS + hand check) or keep it
+   moving at native size.
 4. **Shippable package is stale.** The only packaged `sc3resize.dll` + `resize_launch.exe` is from
    2026-08-28. Cluster mode needs `SC3RESIZE_CLUSTER=1`. Bake the defaults and rerun the offline
    gates.
