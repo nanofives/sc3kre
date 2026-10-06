@@ -202,10 +202,10 @@ Stride/corner measurement is deferred as cosmetic (~8 runs).
 > 3. Edge-scroll band: `EDGEFIX` rebuilds the bands to the window, geometry measured correct. But
 >    the bands only steer a scroll that the keyboard started (`+0x177` = scroll in progress). Owner
 >    question: does the native game edge-scroll with the mouse alone? `verify/resize_edgescroll/`.
-> 3b. 2026-10-05: edge scrolling now OFF in windowed mode (`SC3RESIZE_EDGESCROLL=0`). Panel survey:
->    every button present and aligned at native and 1600x700, BUT by default the HUD only MOVES, the
->    bar and panel stay native size (`BARSPAN`/`SIDESPAN` default 0). Maximize crash: guarded,
->    unconfirmed cause. `verify/resize_panelshots/`, `verify/resize_maxcrash/`.
+> 3b. 2026-10-05: edge scrolling OFF in windowed mode. Full-width bar + full-height side panel ON by
+>    default. Three side-panel defects the flip exposed are fixed and verified (native stock, flyout
+>    clicks land on their icons). Maximize crash = display topology change (owner confirmed).
+>    Owner hand test pending. `verify/resize_spandefault/`, `verify/resize_panelshots/`.
 > 4. Shippable package: the only package is 2026-08-28. Bake cluster defaults, rerun offline gates.
 > 5. UI scale-up when the window grows in both directions (owner 2026-08-30, second half).
 > 6. Tracker debt (list at the end of `RESIZABLE_WINDOW.md`), via `tracker.py batch`.

@@ -209,11 +209,13 @@ enable by default.
   (`a90ec5f`). Owner.
 
 **HUD (cluster mode)**
-- ⚠️ **Default launch: the HUD MOVES, it does not extend** (measured 2026-10-05,
-  `verify/resize_panelshots/RESULTS.md`). The side panel stays 96x442 docked on the minimap, the bar
-  stays 600 wide beside it. Full-width bar and full-height panel exist (`cc687b8`) but sit behind
-  `SC3RESIZE_BARSPAN` / `SC3RESIZE_SIDESPAN`, both default 0. All buttons present and aligned at both
-  sizes: 9 categories, flyouts 6/8/7/6/7/6 with identical offsets, bar and minimap sets complete.
+- ✅ **Full-width bar and full-height side panel ON by default** (owner 2026-10-05, `b68bdca` +
+  `verify/resize_spandefault/RESULTS.md`). The flip exposed three side-panel defects, all fixed: buttons
+  stuck under the minimap at native (`dy <= 0` early return), a duplicate button group when a category
+  is open (overlay anchored at the item, not native + dy), and flyout click targets 94 px above their
+  icons (sub-tool windows now placed at native + dy). Verified: stock layout at native, identical
+  offsets at 1680x979, click on the drawn icon lands on the right tool, back to stock after resizes.
+  `=0` on `SC3RESIZE_BARSPAN` / `SC3RESIZE_SIDESPAN` opts out.
 - Edge scrolling OFF in windowed mode (owner 2026-10-05, `SC3RESIZE_EDGESCROLL`, default 0).
 - Bar FPS cost fixed: the SIMUI tile loop's step is the source rect at `hud+0xd0..+0xd8`, set to
   the client width so the loop runs ~1 time instead of ~128 (`cc687b8`, owner, `SRCRECT` default 1).
@@ -263,10 +265,9 @@ enable by default.
    starter of a scroll is keyboard-driven, so the bands may never start a scroll from the mouse
    alone. Owner question pending: does the native game scroll with the mouse at the edge and no key?
 3b. **Maximize crash 2026-10-05** (`verify/resize_maxcrash/`): null dest sub-surface in GZGraphicD
-   `FUN_10014894`. RCIFIX guarded, VEH now names the caller. 34 cycles clean since. Competing cause:
-   the display topology changed (4 displays to 1) around the crash. Owner hand maximize decides.
-3c. **Decide the HUD default:** extend (BARSPAN/SIDESPAN on, needs an FPS + hand check) or keep it
-   moving at native size.
+   `FUN_10014894`. RCIFIX guarded, VEH now names the caller. 34 cycles clean since. Owner confirmed the
+   monitors changed at that moment: the topology change is the likely trigger.
+3c. Owner hand test of the span defaults (build 195,072 B).
 4. **Shippable package is stale.** The only packaged `sc3resize.dll` + `resize_launch.exe` is from
    2026-08-28. Cluster mode needs `SC3RESIZE_CLUSTER=1`. Bake the defaults and rerun the offline
    gates.

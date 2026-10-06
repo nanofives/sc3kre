@@ -853,6 +853,12 @@ static int    g_barkid_n;
  * background-art icons (owner: the hover highlight showed the wrong icon). */
 #define SIDEITEM_MAX 48
 static struct { void *w; LONG naty; LONG natovl; int has_ovl; } g_sideitem[SIDEITEM_MAX];
+/* Flyout sub-tool buttons (SIMUI+0xa917c, inside the full-height page columns): native LOCAL y and the
+ * y we last placed, so placement is ABSOLUTE (native + dy) and a recreated or game-moved button is
+ * re-cached instead of being pushed twice. */
+#define SUBBTN_MAX 160
+static struct { void *w; LONG naty; LONG placed; } g_subbtn[SUBBTN_MAX];
+static int g_subbtn_n;
 static int    g_sideitem_n;
 static LONG   g_bar_art_nat[4], g_bar_fill_nat[4], g_bar_info_nat[4][4];
 static int    g_bar_art_ok;
@@ -953,7 +959,8 @@ static int    g_bltbeat;          /* SC3RESIZE_BLTBEAT: log ddraw Blt calls/sec 
                                      bar's FPS cost can be read as a number, not inferred. */
 static int    g_presentfix = 1;   /* SC3RESIZE_PRESENTFIX=0 disables the present source clamp */
 static int    g_presentfix_logged;
-static int    g_submove;           /* SC3RESIZE_SUBMOVE=1 re-enables moving flyout sub-tool buttons */
+static int    g_submove = -1;      /* SC3RESIZE_SUBMOVE: move flyout sub-tool buttons with the panel's dy.
+                                     -1 (default) = follow SIDESPAN. 0 / 1 force it (A/B). */
 static int    g_rcifix = 1;        /* SC3RESIZE_RCIFIX=0 disables the present-time RCI re-composite */
 static int    g_rcifix_logged;
 static void  *g_rci_cached;        /* the RCI window, cached across frames (a root child) */
@@ -1567,7 +1574,7 @@ static void rz_side_children_bottom(void) {
     DWORD *p = (DWORD *)g_side_top;
     void *head, *n;
     LONG panelH, dy;
-    int guard = 0, moved = 0;
+    int guard = 0, moved = 0, changed = 0;
     if (!p || IsBadReadPtr(p, 0xa0)) { logf("SIDEKIDS> skipped: side panel unreadable"); return; }
     panelH = (LONG)((LONG *)((DWORD)p + 0x80))[3] - (LONG)((LONG *)((DWORD)p + 0x80))[1];
 
@@ -1585,7 +1592,13 @@ static void rz_side_children_bottom(void) {
         }
     }
     dy = panelH - SIDE_NAT_H - g_side_dy;
-    if (dy <= 0) return;                       /* silent: runs on a timer */
+    /* ⛔ dy == 0 IS the native layout, not "nothing to do" (2026-10-05, verify/resize_spandefault).
+     * At an 800x600 client the panel is first stretched to 600 (buttons pushed +158), then a later
+     * pass shrinks it to 436 above the minimap. The old `if (dy <= 0) return;` left the buttons at
+     * +158, under the minimap. Same bug class as the bar's dx <= 0 early return fixed in db1fd42.
+     * Clamp instead, so every cached item goes back to native + 0. */
+    if (dy < 0) dy = 0;
+    if (dy == 0 && g_sideitem_n == 0) return;  /* nothing was ever moved: silent, runs on a timer */
 
     /* ⭐ MOVE THE BUTTONS, NOT THE PAGES.
      *
@@ -1663,6 +1676,7 @@ static void rz_side_children_bottom(void) {
                     LONG wy = g_sideitem[si].naty + dy, ih = pe[3] - pe[1];
                     if (pe[1] != wy) {
                     DWORD a2[4];
+                    changed++;
                     a2[0] = (DWORD)pe[0]; a2[1] = (DWORD)wy;
                     a2[2] = (DWORD)pe[2]; a2[3] = (DWORD)(wy + ih);
                     rz_thiscall(page, (void *)pvt2[0xc8 / 4], a2, 4);
@@ -1697,12 +1711,20 @@ static void rz_side_children_bottom(void) {
                          * OWN item button, not at the shared native +0xf4 constant - otherwise every
                          * active group's icon stacks at one spot and shows as a DUPLICATE button in the
                          * middle of the panel (owner). Anchor it to this item's own window y. */
+                        /* ⛔ CORRECTED 2026-10-05: NOT the item's own y. The overlay raster is the whole
+                         * highlighted GROUP (measured natively: dest [0 0 96 247] = the top group of
+                         * buttons), so anchoring it at the clicked item's y drew a second copy of the
+                         * group starting at that item - a duplicate landscape button and a covered slot
+                         * (verify/resize_spandefault, panel_triptych.png). It belongs at its native y
+                         * plus the same dy as the buttons. Absolute, so it cannot drift when dy changes. */
                         LONG *oy = (LONG *)((DWORD)page + 0xf4);
-                        if (*oy != wy) {
+                        LONG want = g_sideitem[si].natovl + dy;
+                        if (*oy != want) {
                             if (!g_reassert_quiet)
-                                logf("SIDEKIDS> item 0x%08lX group-overlay y %ld -> %ld (+0xf4 = item y)",
-                                     (DWORD)page, *oy, wy);
-                            *oy = wy;
+                                logf("SIDEKIDS> item 0x%08lX group-overlay y %ld -> %ld (native %ld + dy %ld)",
+                                     (DWORD)page, *oy, want, g_sideitem[si].natovl, dy);
+                            *oy = want;
+                            changed++;
                         }
                     }
                     moved++;
@@ -1729,13 +1751,39 @@ static void rz_side_children_bottom(void) {
                          * hit-rects in the empty area over the minimap while the flyout was closed. The
                          * game already positions these correctly; leave them alone. Gated so it can be
                          * re-enabled for an A/B (SC3RESIZE_SUBMOVE=1). */
-                        if (g_submove && bvt && !IsBadReadPtr(bvt, 0xcc) && bvt[0xc8 / 4] &&
-                            e[2] - e[0] > 0 && e[3] - e[1] > 0 && e[1] < dy) {
-                            DWORD a[4];
-                            a[0] = (DWORD)e[0]; a[1] = (DWORD)(e[1] + dy);
-                            a[2] = (DWORD)e[2]; a[3] = (DWORD)(e[3] + dy);
-                            rz_thiscall(b, (void *)bvt[0xc8 / 4], a, 4);
-                            moved++;
+                        /* ✅ REVISED 2026-10-05 (verify/resize_spandefault/v2): with SIDESPAN on, the
+                         * icons follow their category item (+dy) but these windows stayed at native y,
+                         * so a click on the drawn tree icon resolved to the 4th sub-tool
+                         * (hit_test.txt). A live poke proved these windows do NOT draw the icons
+                         * (moving one left its icon in place, poke_pair.png), so moving them moves only
+                         * the click target - onto the icon. The 09-05 drift came from the INCREMENTAL
+                         * `e[1] + dy` with an `e[1] < dy` guard. This is absolute: native + dy. */
+                        int sm = (g_submove >= 0) ? g_submove : g_side_span;
+                        if (sm && bvt && !IsBadReadPtr(bvt, 0xcc) && bvt[0xc8 / 4] &&
+                            e[2] - e[0] > 0 && e[3] - e[1] > 0) {
+                            int bi = -1, bk;
+                            for (bk = 0; bk < g_subbtn_n; bk++)
+                                if (g_subbtn[bk].w == (void *)b) { bi = bk; break; }
+                            if (bi >= 0 && e[1] != g_subbtn[bi].placed) {
+                                g_subbtn[bi].naty = e[1];     /* recreated / moved by the game: re-cache */
+                                g_subbtn[bi].placed = e[1];
+                            }
+                            if (bi < 0 && g_subbtn_n < SUBBTN_MAX) {
+                                bi = g_subbtn_n++;
+                                g_subbtn[bi].w = (void *)b;
+                                g_subbtn[bi].naty = e[1];
+                                g_subbtn[bi].placed = e[1];
+                            }
+                            if (bi >= 0 && e[1] != g_subbtn[bi].naty + dy) {
+                                DWORD a[4];
+                                LONG ny = g_subbtn[bi].naty + dy, bh = e[3] - e[1];
+                                a[0] = (DWORD)e[0]; a[1] = (DWORD)ny;
+                                a[2] = (DWORD)e[2]; a[3] = (DWORD)(ny + bh);
+                                rz_thiscall(b, (void *)bvt[0xc8 / 4], a, 4);
+                                g_subbtn[bi].placed = ny;
+                                moved++;
+                                changed++;
+                            }
                         }
                     }
                     bn = *(void **)bn;
@@ -1758,7 +1806,7 @@ static void rz_side_children_bottom(void) {
         }
         n = *(void **)n;
     }
-    if (moved) {
+    if (moved && (dy > 0 || changed)) {   /* at dy 0, only when a restore actually changed something */
         /* ⭐ INVALIDATE AFTER MOVING, or the cached composite keeps the old pixels.
          *
          * The window geometry was already provably right - a live dump with a submenu open showed
