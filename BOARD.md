@@ -98,6 +98,7 @@ RE done, tool exists outside a test harness, validated in the running game.
 | **Tunables** (any `SYS.PAK` INI value) | `syspak_mod.py` | `formats/SYSPAK.md` | `U-051` credits discriminator, 1 run, cosmetic closure only |
 | **Sprites / asset art** (recolour and author from PNG) | `sprite_patch.py` | `formats/SPRITE_MODDING.md` | `-filetrace` is blind to `Apps\Res\Sprites\`, so sprite runs have no file-access gate |
 | **City saves** (zone raster, per tile) | `city_write.py` | `formats/CITY_SAVE.md` | tile (28,0) never visually confirmed; the **name-collision load crash** needs writing up for users |
+| **Resizable window** (any size, HUD follows, dialogs centered) | `sc3resize.dll` + `resize_launch.exe` (`sc3resize_2026-10-06`) | `re/analysis/RESIZABLE_WINDOW.md`, `verify/resize_release/` | owner hand test passed 2026-10-06. Changing monitors while running can crash (DirectDraw). Camera can scroll into empty corners at large sizes (cosmetic) |
 | **Camera scroll + drag** | `pe_patch.py` | `formats/CAMERA_MODDING.md` | `drag_divisor` (velX 50→25→50), `drag_deadzone` (engage 0→8→0) **and** `scroll_speed` **staged live** (three-recipe `scroll8 + drag4 + deadzone2`, retuned gentler 2026-08-26, `--diff` 8/9, diagonal confirmed by owner feel); `edge_margin` **C3 observed** (band 48/64→24/32→48/64), not staged. OS-input "feel" leg (**D-002**) now known ENVIRONMENT-blocked: `SendMessage` AND `SendInput` both moved 0px in the headless harness. Zoom-4 reachability (**D-003**) |
 | **Network tiling rules** (retune / re-skin an existing network) | `tilingrules.py` + `network_layer.py` | `formats/TILINGRULES_MODDING.md` | ⭐⭐ **T1 AND T2 both met game-side 2026-08-25.** T1 destructive (roads vanish), **T2 constructive: a 2-line SimpleRules edit re-skins a freshly-drawn straight to the curve piece — predicted `11203`, measured `11203 ×11`.** ⚠️ The lever is **SimpleRules (fixpoint, first), NOT `final.txt`** (last) — the `final` edit gave a **byte-identical** save. Render-path result, **no simulation claim** |
 | **Bigger cities** (N > 256, proven at 512) | `patch_citysize.py` + `patch_dirtbuf.py` | `formats/BIGGER_CITIES.md` | ⭐ **engine reads/renders/re-serialises tiles to 495, in-game authoring works (x=460), AND the sim UNPAUSES + runs at 512** (2026-08-25): post GZ `0xc2a35d80` (probe `msg:`), game-verified `+0x140` 1→0 + clock ticks. ⚠️ `0x231e2493` measured **inert** (wrong pause field) — the two-mechanism trap. Still open: **development** needs *connected service* (road+power) authored at chosen coords, gated on a network writer or an anchored screen→world map. `U-081` closed |
@@ -193,6 +194,8 @@ Stride/corner measurement is deferred as cosmetic (~8 runs).
 > to 96x600, and SIMUI `FUN_1006d56c` drops a surface on any size mismatch), `RCIFIX`, corner
 > widget re-anchor, flyout sub-tool buttons left alone. `re/tools/sc3io.py` is the one capture and
 > input path. Posted input coordinates are PHYSICAL, and input works while minimised.
+>
+> ✅✅ **SHIPPED 2026-10-06** (owner hand test passed, package `sc3resize_2026-10-06`, `verify/resize_release/`).
 >
 > **Open, in order.**
 > 1. Owner hand-test of the 09-03 to 09-07 fixes on a REBUILT DLL (the binary predates the last edit).

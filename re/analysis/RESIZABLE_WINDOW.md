@@ -1,5 +1,9 @@
 # RESIZABLE_WINDOW.md — consolidated handoff (2026-08-29)
 
+> ✅✅ **SHIPPED 2026-10-06 — owner hand test passed.** Release package `sc3resize_2026-10-06`
+> (`verify/resize_release/RESULTS.md`): resizable window, HUD spans, map input everywhere, dialogs
+> follow the window, edge scrolling off. No environment needed.
+>
 > **Current state: §6 (rewritten 2026-10-05) and the last section (2026-09-02 to 2026-09-07).** The
 > SHIPPED banner below is history: the HUD is no longer left native, it tracks the window in cluster mode.
 
@@ -270,8 +274,8 @@ enable by default.
 3b. **Maximize crash 2026-10-05** (`verify/resize_maxcrash/`): null dest sub-surface in GZGraphicD
    `FUN_10014894`. RCIFIX guarded, VEH now names the caller. 34 cycles clean since. Owner confirmed the
    monitors changed at that moment: the topology change is the likely trigger.
-3c. Owner hand test of the span defaults (build 195,072 B).
-4. **Shippable package is stale.** The only packaged `sc3resize.dll` + `resize_launch.exe` is from
+3c. ✅ Owner hand test passed 2026-10-06.
+4. ~~**Shippable package is stale.**~~ ✅ Released 2026-10-06 (`verify/resize_release/`). Old text: The only packaged `sc3resize.dll` + `resize_launch.exe` is from
    2026-08-28. Cluster mode needs `SC3RESIZE_CLUSTER=1`. Bake the defaults and rerun the offline
    gates.
 5. **UI scale-up when the window grows in both directions** (owner 2026-08-30, second half). Today
