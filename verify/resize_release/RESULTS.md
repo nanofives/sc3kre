@@ -11,8 +11,8 @@ not committed).
 |---|---|---|
 | `sc3resize.dll` | 198,144 | `8A579A493019B551E13205FF4B05AE4E229A75F35FC098E4800BF5CC657D2A33` |
 | `resize_launch.exe` | 121,344 | `4EB213BB44E9F41E8B51886C9247F86BD15E837090ECC97A7AA9F1DDE9584D59` |
-| `README.txt` | — | install, uninstall, options, known limits |
-| `sc3resize_2026-10-06.zip` | 182,990 | `51D09580057B4A19E82B949B8BC0255100E93C86404736562636C48D6850CAF2` |
+| `README.txt` | 2,297 | install, uninstall, options, known limits |
+| `sc3resize_2026-10-06.zip` | 177,556 | `3B1CA80B96F400D0CDB97338AE0BA35C2D00117DD6774BE2D9151EC6869FBB78` |
 
 ## Offline gates (same table as `verify/resize_ship/PRE.md`)
 
