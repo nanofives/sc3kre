@@ -20,7 +20,8 @@ The crash client was 1680x979, which is a 1680x1050 display maximized. By the ti
 desktop had gone from four displays to that one display. A display-topology change under a running
 SC3U was measured on 2026-09-07 to kill it, and lost DirectDraw surfaces would leave exactly a
 raster with `+0x44 = NULL`. If the monitors changed while the owner maximized, that is the more
-likely cause. `[UNCERTAIN]`, owner to confirm.
+likely cause. **Owner confirmed 2026-10-05: the monitors changed at that moment.** So the topology
+change is the most likely trigger. RCIFIX is not shown to be involved, and the guard stays as cheap insurance.
 
 ## What is in place either way
 

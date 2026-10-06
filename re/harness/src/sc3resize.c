@@ -940,14 +940,15 @@ static int    g_view_nat_ok;
  * edge scrolling in windowed mode (2026-10-05), and this mod is always windowed. */
 static int    g_edgescroll = 0;
 static void   rz_edge_off(void);  /* fwd: neutralise the edge bands, defined after rz_find_view */
-static int    g_side_span;       /* SC3RESIZE_SIDESPAN: in cluster mode, dock+extend the side panel to
+static int    g_side_span = 1;   /* SC3RESIZE_SIDESPAN (default 1, owner 2026-10-05; =0 opts out): in cluster mode, dock+extend the side panel to
                                      the full client height (background filled down, buttons at the
                                      bottom) instead of translating it at native height. */
 static void   rz_side_extend(void);  /* fwd: dock+extend the side panel to full height */
-static int    g_bar_span;         /* SC3RESIZE_BARSPAN: in cluster mode, dock+span the bottom bar to
+static int    g_bar_span = 1;     /* SC3RESIZE_BARSPAN (default 1, owner 2026-10-05; =0 opts out): in cluster mode, dock+span the bottom bar to
                                      the full client width (filler source widened so the per-frame
                                      tile count does not grow -> the intended FPS fix) instead of
-                                     translating the native-width bar. Default off until measured. */
+                                     translating the native-width bar. Was default off until measured;
+                                     the FPS fix was owner-confirmed in cc687b8. */
 static int    g_bltbeat;          /* SC3RESIZE_BLTBEAT: log ddraw Blt calls/sec so the full-width
                                      bar's FPS cost can be read as a number, not inferred. */
 static int    g_presentfix = 1;   /* SC3RESIZE_PRESENTFIX=0 disables the present source clamp */
@@ -6379,8 +6380,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           g_sysmem = GetEnvironmentVariableA("SC3RESIZE_SYSMEM", v, sizeof(v)) && atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_WALIGN", v, sizeof(v))) g_walign = (LONG)atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_WSNAP", v, sizeof(v))) g_wsnap = (LONG)atoi(v);
-          g_bar_span = GetEnvironmentVariableA("SC3RESIZE_BARSPAN", v, sizeof(v)) && atoi(v);
-          g_side_span = GetEnvironmentVariableA("SC3RESIZE_SIDESPAN", v, sizeof(v)) && atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_BARSPAN", v, sizeof(v))) g_bar_span = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_SIDESPAN", v, sizeof(v))) g_side_span = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_KIDFIX", v, sizeof(v))) g_kidfix = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_ARTGUARD", v, sizeof(v))) g_artguard = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_EDGEFIX", v, sizeof(v))) g_edgefix = atoi(v);
@@ -6407,10 +6408,10 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
          * a self-consistent log). One line makes the whole class loud instead of silent.
          * verify/resize_flaggate/NOHIT_RESULTS.md */
         logf("### FLAGS> cluster=%d input=%d nohit=%d hudfit=%d hudlab=%d sweep=%d side=%d mini=%d "
-             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld sidedy=%ld presentlog=%d kidfix=%d artguard=%d edgefix=%d edgescroll=%d",
+             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld sidedy=%ld presentlog=%d kidfix=%d artguard=%d edgefix=%d edgescroll=%d barspan=%d sidespan=%d",
              g_cluster, g_input, g_nohit, g_hudfit, g_hudlab, g_sweepon, g_sideon, g_minion,
              g_anchor, g_census, g_minzoom, g_ready_ms, g_noparentfix, g_hud_dy, g_side_dy, g_presentlog,
-             g_kidfix, g_artguard, g_edgefix, g_edgescroll);
+             g_kidfix, g_artguard, g_edgefix, g_edgescroll, g_bar_span, g_side_span);
         if (AddVectoredExceptionHandler(1, rz_veh))
             logf("### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the "
                  "zoom-after-resize crash the game swallows)");
