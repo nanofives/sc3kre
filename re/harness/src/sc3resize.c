@@ -1485,35 +1485,42 @@ static void *rz_find_view(void *w, DWORD want_e4, int depth, int *budget) {
  * panning is untouched. Arrow-key scrolling reads the keyboard, not the bands, so it is untouched too.
  * The engine rewrites the inner rect from `FUN_10043989` (load, event 0x624a8241, and our EDGEFIX
  * rebuild), so this is re-asserted from rz_poll rather than written once. Writes only on a mismatch. */
-static void rz_edge_off(void) {
-    static void *view;            /* the city view window sub-object; outer = view - 4 */
-    static int logged;
+/* The city view window sub-object (outer = view - 4), cached and revalidated by BOTH vtables on every
+ * call, so a freed or reused pointer is never written through. NULL if not present. */
+static void *rz_city_view(void) {
+    static void *view;
     DWORD ss = (DWORD)GetModuleHandleA("SIMSPR.DLL");
-    LONG *in;
-    if (g_edgescroll || !ss) return;
-    if (view) {                   /* revalidate the cached pointer by identity every time */
+    if (!ss) return NULL;
+    if (view) {
         DWORD *vt = IsBadReadPtr(view, 4) ? NULL : *(DWORD **)view;
-        if (!vt || IsBadReadPtr(vt, 0xe8) || vt[0xe4 / 4] != ss + 0x4ecd3) view = NULL;
+        if (!vt || IsBadReadPtr(vt, 0xe8) || vt[0xe4 / 4] != ss + 0x4ecd3 ||
+            IsBadReadPtr((void *)((DWORD)view - 4), 4) ||
+            *(DWORD *)((DWORD)view - 4) != ss + 0x67894) view = NULL;
     }
     if (!view) {
         DWORD gz = (DWORD)GetModuleHandleA("GZGraphicD.dll");
         DWORD *win, *sink, *root;
         int budget = 3000;
-        if (!gz || IsBadReadPtr((void *)(gz + 0x6cdb8), 4)) return;
+        if (!gz || IsBadReadPtr((void *)(gz + 0x6cdb8), 4)) return NULL;
         win = *(DWORD **)(gz + 0x6cdb8);
-        if (!win || IsBadReadPtr(win, 0x48) || win[0] != gz + 0x1f740) return;
+        if (!win || IsBadReadPtr(win, 0x48) || win[0] != gz + 0x1f740) return NULL;
         sink = (DWORD *)win[0x30 / 4];
-        if (!sink || IsBadReadPtr(sink, 0x3c)) return;
+        if (!sink || IsBadReadPtr(sink, 0x3c)) return NULL;
         root = (DWORD *)sink[0x38 / 4];
-        if (!root || IsBadReadPtr(root, 0x40)) return;
-        view = rz_find_view(root, ss + 0x4ecd3, 0, &budget);
-        if (!view) return;
+        if (!root || IsBadReadPtr(root, 0x40)) return NULL;
+        view = rz_find_view(root, ss + 0x4ecd3, 0, &budget);   /* checks both vtables */
     }
+    return view;
+}
+
+static void rz_edge_off(void) {
+    void *view;
+    LONG *in;
+    if (g_edgescroll) return;
+    view = rz_city_view();
+    if (!view) return;
     {   void *outer = (void *)((DWORD)view - 4);
-        if (IsBadWritePtr(outer, 0x1c8) || *(DWORD *)outer != ss + 0x67894) {
-            if (!logged) { logf("EDGE> REFUSED edge-off: outer 0x%08lX vtable mismatch", (DWORD)outer); logged = 1; }
-            return;
-        }
+        if (IsBadWritePtr(outer, 0x1c8)) return;
         in = (LONG *)((DWORD)outer + 0x178);
         if (in[0] != -0x7fff || in[1] != -0x7fff || in[2] != 0x7fff || in[3] != 0x7fff) {
             /* Direction flags +0x1e1..+0x1e4 are NOT cleared here: the arrow keys drive the same flags,
@@ -1524,6 +1531,38 @@ static void rz_edge_off(void) {
                      in[0], in[1], in[2], in[3]);
             in[0] = -0x7fff; in[1] = -0x7fff; in[2] = 0x7fff; in[3] = 0x7fff;
         }
+    }
+}
+
+/* ⭐ MAP INPUT PAST 800x600 (2026-10-05, verify/resize_mapinput). SC3RESIZE_VIEWFIX=0 = old behaviour.
+ *
+ * The city view's hit test `vt+0xe4` = `SIMSPR FUN_1004ecd3` rejects any point outside its DERIVED rect
+ * `+0x14..+0x20` `[CONFIRMED @ SIMSPR 0x1004ecd3]`. The mod widened that rect, but the cascade (root
+ * vt+0x14c, run after rz_input_geometry and again from rz_side_children_bottom) rebuilds every derived
+ * rect from the LOCAL rect `+0x80..+0x8c` `[CONFIRMED @ SIMUI 0x1006c61b]`, and the view's local rect
+ * stayed [0 0 800 600]. Measured live at 1920x1009: hit = local = [0 0 800 600]; posted moves at
+ * (1792,336) reached the view 0 times, and 3 times after a poke of the hit rect
+ * (verify/resize_edgescroll/T/poke.txt). So both rects are written, EXACT to the client in both
+ * directions. Direct field writes, not SetRect: the view owns no SIMUI paint surface (paint rect +0x90
+ * reads [0 0 0 0]) and a SetRect would provoke the relayout that clobbers the view bounds. Re-asserted
+ * from rz_poll so an engine relayout cannot win. */
+static int g_viewfix = 1;
+static void rz_view_rect_assert(LONG cw, LONG ch) {
+    void *view;
+    LONG *loc, *hit;
+    static int writes;
+    if (!g_viewfix || cw <= 0 || ch <= 0) return;
+    view = rz_city_view();
+    if (!view || IsBadWritePtr(view, 0x90)) return;
+    loc = (LONG *)((DWORD)view + 0x80);
+    hit = (LONG *)((DWORD)view + 0x14);
+    if (loc[0] != 0 || loc[1] != 0 || loc[2] != cw || loc[3] != ch ||
+        hit[0] != 0 || hit[1] != 0 || hit[2] != cw || hit[3] != ch) {
+        if (writes++ < 12)
+            logf("VIEW> city view 0x%08lX local [%ld %ld %ld %ld] hit [%ld %ld %ld %ld] -> [0 0 %ld %ld]",
+                 (DWORD)view, loc[0], loc[1], loc[2], loc[3], hit[0], hit[1], hit[2], hit[3], cw, ch);
+        loc[0] = 0; loc[1] = 0; loc[2] = cw; loc[3] = ch;
+        hit[0] = 0; hit[1] = 0; hit[2] = cw; hit[3] = ch;
     }
 }
 
@@ -2203,8 +2242,11 @@ static void rz_input_geometry(LONG cw, LONG ch, LONG dx, LONG dy) {
             g_view_nat_ok = 1;
             logf("EDGE> native view bounds cached [%ld %ld %ld %ld]", b[0], b[1], b[2], b[3]);
         }
-        if (r[2] < cw) r[2] = cw;
-        if (r[3] < ch) r[3] = ch;
+        if (g_viewfix) rz_view_rect_assert(cw, ch);   /* local + hit, exact; survives the cascade */
+        else {
+            if (r[2] < cw) r[2] = cw;
+            if (r[3] < ch) r[3] = ch;
+        }
         if (g_edgefix && g_view_nat_ok) {
             /* ⭐ EDGE-SCROLL BAND (2026-10-05, verify/resize_edgescroll).
              *
@@ -5094,6 +5136,12 @@ static void rz_poll(void) {
         DWORD nowe = GetTickCount();
         if (nowe >= rz_edge_next_ms) { rz_edge_next_ms = nowe + 250; rz_edge_off(); }
     }
+    /* Map input past 800x600 - see rz_view_rect_assert. Same 250 ms cadence. */
+    if (g_viewfix) {
+        static DWORD rz_view_next_ms;
+        DWORD nowv = GetTickCount();
+        if (nowv >= rz_view_next_ms) { rz_view_next_ms = nowv + 250; rz_view_rect_assert((LONG)w, (LONG)ht); }
+    }
 
     /* Late-created side-panel windows. A tool submenu opened after the resize renders at its
        native position (owner, 2026-09-02: "when i open a menu it is rendered at the top"), because
@@ -6434,6 +6482,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_ARTGUARD", v, sizeof(v))) g_artguard = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_EDGEFIX", v, sizeof(v))) g_edgefix = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_EDGESCROLL", v, sizeof(v))) g_edgescroll = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_VIEWFIX", v, sizeof(v))) g_viewfix = atoi(v);
           g_bltbeat = GetEnvironmentVariableA("SC3RESIZE_BLTBEAT", v, sizeof(v)) && atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_THICKFRAME", v, sizeof(v))) g_thickframe = atoi(v);
           if (!GetEnvironmentVariableA("SC3RESIZE_DUMPDIR", g_dumpdir, sizeof(g_dumpdir)))
@@ -6456,10 +6505,10 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
          * a self-consistent log). One line makes the whole class loud instead of silent.
          * verify/resize_flaggate/NOHIT_RESULTS.md */
         logf("### FLAGS> cluster=%d input=%d nohit=%d hudfit=%d hudlab=%d sweep=%d side=%d mini=%d "
-             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld sidedy=%ld presentlog=%d kidfix=%d artguard=%d edgefix=%d edgescroll=%d barspan=%d sidespan=%d",
+             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld sidedy=%ld presentlog=%d kidfix=%d artguard=%d edgefix=%d edgescroll=%d barspan=%d sidespan=%d viewfix=%d",
              g_cluster, g_input, g_nohit, g_hudfit, g_hudlab, g_sweepon, g_sideon, g_minion,
              g_anchor, g_census, g_minzoom, g_ready_ms, g_noparentfix, g_hud_dy, g_side_dy, g_presentlog,
-             g_kidfix, g_artguard, g_edgefix, g_edgescroll, g_bar_span, g_side_span);
+             g_kidfix, g_artguard, g_edgefix, g_edgescroll, g_bar_span, g_side_span, g_viewfix);
         if (AddVectoredExceptionHandler(1, rz_veh))
             logf("### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the "
                  "zoom-after-resize crash the game swallows)");
