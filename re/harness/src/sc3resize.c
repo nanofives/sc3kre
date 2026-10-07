@@ -1653,7 +1653,7 @@ static int rz_win_alive(void *want) {
  * FUN_1006d56c keeps its surface), then one cascade rebuilds the derived hit rects. */
 static int g_dialogs = 1;
 #define DLG_MAX 24
-static struct { void *w; LONG placed[4]; LONG stock[4]; LONG rect[4]; int has_stock, vis, seen; } g_dlg[DLG_MAX];
+static struct { void *w; LONG placed[4]; LONG stock[4]; LONG rect[4]; int has_stock, vis, seen, rdock; LONG rdock_y; } g_dlg[DLG_MAX];
 static int g_dlg_n;
 
 static int rz_dlg_place(void *w, const LONG *t) {
@@ -1722,7 +1722,12 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
             if (e < 0) {
                 if (g_dlg_n >= DLG_MAX) continue;
                 e = g_dlg_n++;
-                g_dlg[e].w = c; g_dlg[e].vis = 0; g_dlg[e].has_stock = 0;
+                g_dlg[e].w = c; g_dlg[e].vis = 0; g_dlg[e].has_stock = 0; g_dlg[e].rdock = 0;
+                /* RIGHT-DOCKED panels (owner 2026-10-07: "Editar Terreno" during New City, stock
+                   [628 60 800 540]): dialogs are created at their 800x600 stock spot, so one whose
+                   right edge is exactly NAT_W, in the right half, is a tool panel docked to the right
+                   edge. It stays docked there at its stock y instead of being centered. */
+                if (r[2] == NAT_W && r[0] >= NAT_W / 2) { g_dlg[e].rdock = 1; g_dlg[e].rdock_y = r[1]; }
             }
             g_dlg[e].seen = 1;
             {   LONG w = r[2] - r[0], h = r[3] - r[1], t[4];
@@ -1730,7 +1735,23 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
                 LONG cx = (ax1 - w) / 2, cy = (ay1 - h) / 2;
                 if (cx < 0) cx = 0;
                 if (cy < 0) cy = 0;
-                if (!g_dlg[e].vis) {                                    /* just opened */
+                if (g_dlg[e].rdock) {                       /* docked: right edge, stock y, kept inside */
+                    cx = cw - w;
+                    cy = g_dlg[e].rdock_y;
+                    if (cy + h > ch) cy = ch - h;
+                    if (cx < 0) cx = 0;
+                    if (cy < 0) cy = 0;
+                }
+                if (g_dlg[e].rdock && g_dlg[e].vis) {
+                    /* Docked panels are held at the dock on EVERY poll, not only on our own resize:
+                       the terrain editor re-lays out its own panel when the window changes size
+                       (measured at y 1222 in an 1135-tall client), which the "player moved it" rule
+                       below would only clamp to the bottom. Trade-off: dragging it does not stick. */
+                    t[0] = native && g_dlg[e].has_stock ? g_dlg[e].stock[0] : cx;
+                    t[1] = native && g_dlg[e].has_stock ? g_dlg[e].stock[1] : cy;
+                    t[2] = t[0] + w; t[3] = t[1] + h;
+                    place = 1;
+                } else if (!g_dlg[e].vis) {                             /* just opened */
                     /* At 800x600 a dialog fully inside the client is at its stock spot: keep it. One that
                        is not was positioned at another size (dialogs are created once and reused, e.g.
                        snapshots re-opened at [584 309 1096 669]) and is centered like at any other size. */

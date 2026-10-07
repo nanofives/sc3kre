@@ -751,3 +751,20 @@ changed). Only capture needs the window on screen. Tools: `input_reaches_game.py
 state, and modifiers come from `GetKeyState`, so posted keys never scroll and never carry
 Ctrl/Shift/Alt. `key_state_spoof.py` hooks the key-state leaf `GZWIND FUN_10025790` to scroll
 under automation. Full chain in the local note `verify/offscreen/KEY_BINDINGS_RUNTIME.md`.
+
+## Right-docked tool panels and the city-load HUD glitch (2026-10-07)
+
+**Editar Terreno (fixed).** The terrain editor panel during New City is a dialog-class window
+(`SIMUI+0xa4d64`, root child, stock `[628 60 800 540]`). `rz_dialogs_poll` centered it in the map area,
+and the terrain editor also re-lays out its own panel on resize (measured at y 1222 in an 1135-tall client),
+which the "player moved it" rule only clamped to the bottom. Now a dialog first seen with its right edge at
+`NAT_W` (and in the right half) is RIGHT-DOCKED: held every poll at `[cw - w, stock y]`, its stock rect at
+exactly 800x600. Measured: `[1028 60 1200 540]` at 1200x800, `[1876 60 2048 540]` at 2048x1081. Trade-off:
+dragging that panel does not stick.
+
+**City-load HUD glitch (open).** Owner, maximized, after loading Europolis following a 1024 city: side panel
+contents jumped up, bottom bar contents slid left. Log (`re/harness/simrun/reload_glitch_resize.log`): the
+maximize landed 640 ms after the bridge capture, the view resize was DEFERRED, the HUD path ran against the
+half-built layout (`slid 1 bar element right by 0`), then `CLUSTER> cached side native [1952 0 2048 436]`
+(an already-moved rect stored as native) and the bar art slid by the full `dx 1248`. A scripted repro
+(maximize 0.6 s into the load) logged the same DEFER but showed a correct HUD 25 s later. Not yet reproduced.
