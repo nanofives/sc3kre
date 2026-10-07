@@ -55,8 +55,10 @@ mods, Europolis, speed 3, `run_while_scrolling` 0 (A) vs 1 (B), date field cropp
   spoof plus posted `WM_MOUSEMOVE`: about 70% of pixels change between every pair of frames in both arms, so the
   camera kept moving. A real mouse produces something a posted move does not.
   **Owner run with the mod off (2026-10-07, `run_while_scrolling=0`, `patched=0`, 10 stock camera holds logged):
-  arrows still stop on a real mouse move. Not caused by sc3simrun.** Stock or one of the other three mods,
-  not yet bisected.
+  arrows still stop on a real mouse move. Not caused by sc3simrun.**
+  **Bisect (owner, real mouse, 2026-10-07): stops with resize ONLY, overscroll ONLY and bigcity ONLY.** Every
+  single-mod launch shows it, so it is not one mod. Either stock behaviour or the windowed mode all three enable
+  (a no-mod launch is fullscreen, which is not tested). `[UNCERTAIN]` which of those two; not traced in code.
 - One mod-off launch crashed during load (null read at `GZGraphicD+0x14904`, the blit dispatcher
   `FUN_10014894`, from a window message), log kept as `re/harness/combo/crash_resize_0024.log`. The relaunch
   of the same build loaded fine. `[UNCERTAIN]` trigger; the patch was off in that run.
