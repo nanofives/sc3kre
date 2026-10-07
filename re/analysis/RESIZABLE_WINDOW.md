@@ -768,3 +768,23 @@ maximize landed 640 ms after the bridge capture, the view resize was DEFERRED, t
 half-built layout (`slid 1 bar element right by 0`), then `CLUSTER> cached side native [1952 0 2048 436]`
 (an already-moved rect stored as native) and the bar art slid by the full `dx 1248`. A scripted repro
 (maximize 0.6 s into the load) logged the same DEFER but showed a correct HUD 25 s later. Not yet reproduced.
+
+## Main menu: full-window background, buttons native and centred (MENUBG, 2026-10-07)
+
+Before: at the menu the game draws an 800x600 frame and the present stretched it to the window, buttons
+included, while input stayed 1:1 in the top-left 800x600 (a click where "Nueva Ciudad" was drawn did nothing,
+one at its 800x600 spot opened it). The Blt hook was only installed once a city view existed.
+
+Now (`rz_mb_present`, `SC3RESIZE_MENUBG=0` disables):
+- the ddraw Blt hook is also installed from the GZGraphicD blit wrapper `FUN_10018c58` (`this+4` =
+  destination surface), so it exists at the menu;
+- a final present whose source is exactly 800x600 into a larger client draws `menu_bg.bmp` (beside the DLL,
+  24-bit, any size, stretched to the client with HALFTONE) in the margins through GDI, and presents the frame
+  1:1 centred;
+- inside the frame every pixel still equal to the stock background (`menu_orig.raw`, 800x600 RGB565, the
+  decoded `MAIN.IXF` `0x22729921`) becomes the matching centre of the stretched picture: the stock background is
+  blitted unchanged and buttons use a hard magenta key, so the swap is exact;
+- mouse messages are shifted by the centring offset from a centred present until any other full-window frame.
+Measured at 2048x1081: frame at [624 263 1424 863], no seams, New City opens from its drawn position, the New
+City dialog shows centred over the picture. The background asset: `MAIN.IXF` record `0x22729921` = header
+`[2][size][800][600][7][size]` then QFS, RGB565. Menu buttons are 8-frame sheets `0x22729930..38`, magenta key.

@@ -3139,11 +3139,211 @@ static void rz_repaint_rci(void) {
     g_in_rci_repaint = 0;
 }
 
+/* MENU BACKGROUND (owner 2026-10-07): at the main menu the game still draws an 800x600 frame and the
+ * final present stretched it to the window, buttons included - and input was never remapped, so a click
+ * where a stretched button showed missed it (measured: "Nueva Ciudad" opened only at its 800x600 spot).
+ * Now, for a present whose SOURCE is exactly 800x600 into a larger client:
+ *   - menu_bg.bmp (beside the DLL, any size, 24-bit) is stretched to the client and drawn in the margins,
+ *   - the 800x600 frame is presented 1:1 in the centre, so the buttons keep their native size,
+ *   - inside that frame, every pixel still equal to the stock background (menu_orig.raw, 800x600 RGB565,
+ *     the decoded MAIN.IXF 0x22729921) is replaced by the matching centre of the stretched picture.
+ *     The stock background is blitted unchanged and the buttons use a hard magenta key, so an exact
+ *     565 match is the background and nothing else,
+ *   - mouse messages are shifted by the centring offset while this is active.
+ * SC3RESIZE_MENUBG=0 disables it. Missing files: stock behaviour. */
+#pragma comment(lib, "gdi32.lib")   /* MENUBG uses GDI for the stretched margins */
+static int    g_menubg = 1;
+static int    g_mb_state;                 /* 0 untried, 1 loaded, -1 failed */
+static BYTE  *g_mb_img;                   /* menu_bg.bmp pixel data */
+static BITMAPINFO g_mb_bi;
+static WORD  *g_mb_orig;                  /* 800x600 stock background, RGB565 */
+static LONG   g_mb_cw, g_mb_ch;           /* size the caches below were built for */
+static HDC    g_mb_dc;
+static HBITMAP g_mb_bmp, g_mb_oldbmp;
+static DWORD *g_mb_bits;                  /* stretched picture, 32-bit top-down, g_mb_cw x g_mb_ch */
+static WORD  *g_mb_center;                /* its centre 800x600 in RGB565 */
+static volatile LONG g_mb_offx, g_mb_offy;
+static volatile DWORD g_mb_tick;          /* GetTickCount of the last centred present */
+static volatile LONG g_mb_dx0, g_mb_dy0;  /* dest origin of the last full present (client origin in dest space) */
+static volatile LONG g_mb_active;         /* 1 from a centred present until a full-window present of any other frame */
+
+static void rz_mb_path(char *out, int cap, const char *leaf) {
+    char *sl;
+    if (!GetModuleFileNameA(g_self, out, cap)) { out[0] = 0; return; }
+    sl = strrchr(out, '\\'); if (sl) sl[1] = 0; else out[0] = 0;
+    lstrcatA(out, leaf);
+}
+
+static BYTE *rz_mb_readfile(const char *path, DWORD *len) {
+    HANDLE f = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    DWORD sz, got = 0;
+    BYTE *b;
+    if (f == INVALID_HANDLE_VALUE) return NULL;
+    sz = GetFileSize(f, NULL);
+    b = (BYTE *)malloc(sz ? sz : 1);
+    if (b && !ReadFile(f, b, sz, &got, NULL)) got = 0;
+    CloseHandle(f);
+    if (!b || got != sz) { free(b); return NULL; }
+    *len = sz;
+    return b;
+}
+
+static int rz_mb_load(void) {
+    char path[MAX_PATH];
+    BYTE *f;
+    DWORD len = 0;
+    if (g_mb_state) return g_mb_state > 0;
+    g_mb_state = -1;
+    rz_mb_path(path, sizeof(path), "menu_orig.raw");
+    f = rz_mb_readfile(path, &len);
+    if (!f || len != NAT_W * NAT_H * 2) { logf("MENUBG> %s missing or not %d bytes - off", path, NAT_W * NAT_H * 2); free(f); return 0; }
+    g_mb_orig = (WORD *)f;
+    rz_mb_path(path, sizeof(path), "menu_bg.bmp");
+    f = rz_mb_readfile(path, &len);
+    if (!f || len < 54 || f[0] != 'B' || f[1] != 'M') { logf("MENUBG> %s missing or not a BMP - off", path); free(f); return 0; }
+    {   BITMAPINFOHEADER *bh = (BITMAPINFOHEADER *)(f + 14);
+        DWORD off = *(DWORD *)(f + 10);
+        LONG w = bh->biWidth, h = bh->biHeight < 0 ? -bh->biHeight : bh->biHeight;
+        DWORD stride = ((DWORD)w * 3 + 3) & ~3u;
+        if (bh->biBitCount != 24 || bh->biCompression != BI_RGB || w <= 0 || h <= 0 || off + stride * h > len) {
+            logf("MENUBG> menu_bg.bmp must be an uncompressed 24-bit BMP - off"); free(f); return 0;
+        }
+        g_mb_img = f + off;
+        memset(&g_mb_bi, 0, sizeof(g_mb_bi));
+        g_mb_bi.bmiHeader = *bh;
+        logf("MENUBG> loaded menu_bg.bmp %ldx%ld and the stock background", w, h);
+    }
+    g_mb_state = 1;
+    return 1;
+}
+
+/* Stretch the picture to cw x ch once per size, keep its centre 800x600 as RGB565. */
+static int rz_mb_prepare(LONG cw, LONG ch) {
+    BITMAPINFO bi;
+    HDC sdc;
+    LONG x, y, ox = (cw - NAT_W) / 2, oy = (ch - NAT_H) / 2;
+    if (g_mb_cw == cw && g_mb_ch == ch && g_mb_bits) return 1;
+    if (g_mb_dc) { SelectObject(g_mb_dc, g_mb_oldbmp); DeleteObject(g_mb_bmp); DeleteDC(g_mb_dc); g_mb_dc = NULL; }
+    free(g_mb_center); g_mb_center = NULL; g_mb_bits = NULL;
+    memset(&bi, 0, sizeof(bi));
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = cw; bi.bmiHeader.biHeight = -ch;
+    bi.bmiHeader.biPlanes = 1; bi.bmiHeader.biBitCount = 32; bi.bmiHeader.biCompression = BI_RGB;
+    sdc = GetDC(NULL);
+    g_mb_dc = CreateCompatibleDC(sdc);
+    g_mb_bmp = CreateDIBSection(sdc, &bi, DIB_RGB_COLORS, (void **)&g_mb_bits, NULL, 0);
+    ReleaseDC(NULL, sdc);
+    if (!g_mb_dc || !g_mb_bmp || !g_mb_bits) { logf("MENUBG> DIB %ldx%ld failed", cw, ch); g_mb_bits = NULL; return 0; }
+    g_mb_oldbmp = (HBITMAP)SelectObject(g_mb_dc, g_mb_bmp);
+    SetStretchBltMode(g_mb_dc, HALFTONE);
+    SetBrushOrgEx(g_mb_dc, 0, 0, NULL);
+    StretchDIBits(g_mb_dc, 0, 0, cw, ch, 0, 0, g_mb_bi.bmiHeader.biWidth,
+                  g_mb_bi.bmiHeader.biHeight < 0 ? -g_mb_bi.bmiHeader.biHeight : g_mb_bi.bmiHeader.biHeight,
+                  g_mb_img, &g_mb_bi, DIB_RGB_COLORS, SRCCOPY);
+    GdiFlush();
+    g_mb_center = (WORD *)malloc(NAT_W * NAT_H * 2);
+    if (!g_mb_center) return 0;
+    for (y = 0; y < NAT_H; y++)
+        for (x = 0; x < NAT_W; x++) {
+            LONG sx = ox + x, sy = oy + y;
+            DWORD q = (sx >= 0 && sy >= 0 && sx < cw && sy < ch) ? g_mb_bits[sy * cw + sx] : 0;
+            g_mb_center[y * NAT_W + x] = (WORD)(((q >> 8) & 0xF800) | ((q >> 5) & 0x07E0) | ((q >> 3) & 0x001F));
+        }
+    g_mb_cw = cw; g_mb_ch = ch;
+    logf("MENUBG> picture stretched to %ldx%ld, menu frame centred at (%ld,%ld)", cw, ch, ox, oy);
+    return 1;
+}
+
+/* Replace stock-background pixels in the 800x600 source frame. IDirectDrawSurface Lock = vt+0x64,
+   Unlock = vt+0x80; lPitch at desc+0x10 and lpSurface at desc+0x24 in both DDSURFACEDESC sizes. */
+typedef HRESULT (WINAPI *RZ_LOCK)(void *, RECT *, void *, DWORD, HANDLE);
+typedef HRESULT (WINAPI *RZ_UNLOCK)(void *, void *);
+static void rz_mb_patch_src(void *src, const RECT *sr, LONG fx0, LONG fy0, LONG fw, LONG fh) {
+    DWORD *vt = *(DWORD **)src;
+    BYTE desc[124];
+    HRESULT hr;
+    LONG x, y, pitch;
+    BYTE *bits;
+    static int logged;
+    memset(desc, 0, sizeof(desc)); *(DWORD *)desc = 124;
+    hr = ((RZ_LOCK)vt[0x64 / 4])(src, NULL, desc, 1 /* DDLOCK_WAIT */, NULL);
+    if (hr) { memset(desc, 0, sizeof(desc)); *(DWORD *)desc = 108; hr = ((RZ_LOCK)vt[0x64 / 4])(src, NULL, desc, 1, NULL); }
+    if (hr) { if (!logged++) logf("MENUBG> Lock failed 0x%08lX", (DWORD)hr); return; }
+    pitch = *(LONG *)(desc + 0x10);
+    bits = *(BYTE **)(desc + 0x24);
+    /* sr = the region of the source surface; (fx0, fy0) = where it sits in the 800x600 frame */
+    if (bits && pitch >= (sr->left + fw) * 2) {
+        for (y = 0; y < fh; y++) {
+            WORD *row = (WORD *)(bits + (sr->top + y) * pitch) + sr->left;
+            const WORD *o = g_mb_orig + (fy0 + y) * NAT_W + fx0, *n = g_mb_center + (fy0 + y) * NAT_W + fx0;
+            for (x = 0; x < fw; x++) if (row[x] == o[x]) row[x] = n[x];
+        }
+    } else if (!logged++) logf("MENUBG> unexpected surface: bits 0x%08lX pitch %ld", (DWORD)bits, pitch);
+    ((RZ_UNLOCK)vt[0x80 / 4])(src, NULL);
+}
+
+static void rz_mb_margins(LONG cw, LONG ch, LONG ox, LONG oy) {
+    HDC dc = GetDC(g_hwnd);
+    if (!dc) return;
+    if (oy > 0) BitBlt(dc, 0, 0, cw, oy, g_mb_dc, 0, 0, SRCCOPY);
+    if (ch - oy - NAT_H > 0) BitBlt(dc, 0, oy + NAT_H, cw, ch - oy - NAT_H, g_mb_dc, 0, oy + NAT_H, SRCCOPY);
+    if (ox > 0) BitBlt(dc, 0, oy, ox, NAT_H, g_mb_dc, 0, oy, SRCCOPY);
+    if (cw - ox - NAT_W > 0) BitBlt(dc, ox + NAT_W, oy, cw - ox - NAT_W, NAT_H, g_mb_dc, ox + NAT_W, oy, SRCCOPY);
+    ReleaseDC(g_hwnd, dc);
+}
+
+/* Returns 1 and sets *hr when it presented the frame itself. */
+static int rz_mb_present(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, void *fx, HRESULT *hr) {
+    RECT cr, c;
+    LONG dw, dh, ox, oy;
+    static int logged, logged_part;
+    if (!g_menubg || !g_hwnd || !dr || !sr || !src || IsBadReadPtr(dr, sizeof(RECT)) || IsBadReadPtr(sr, sizeof(RECT))) return 0;
+    if (g_mb_active && g_mb_bits && (sr->right - sr->left != NAT_W || sr->bottom - sr->top != NAT_H)) {
+        /* A PARTIAL present of the menu frame (only the changed part): the game stretched the sub-rect by
+           client/800. Recognise that mapping, present it 1:1 at its centred spot instead. The source
+           surface's frame origin is the full present's source origin, assumed (0,0) as measured. */
+        LONG sw = sr->right - sr->left, sh = sr->bottom - sr->top;
+        LONG ex = g_mb_dx0 + sr->left * g_mb_cw / NAT_W, ey = g_mb_dy0 + sr->top * g_mb_ch / NAT_H;
+        if (sw > 0 && sh > 0 && sr->left >= 0 && sr->top >= 0 && sr->right <= NAT_W && sr->bottom <= NAT_H &&
+            labs(dr->left - ex) <= 2 && labs(dr->top - ey) <= 2) {
+            rz_mb_patch_src(src, sr, sr->left, sr->top, sw, sh);
+            c.left = g_mb_dx0 + g_mb_offx + sr->left; c.top = g_mb_dy0 + g_mb_offy + sr->top;
+            c.right = c.left + sw; c.bottom = c.top + sh;
+            *hr = g_orig_blt(self, &c, src, sr, fl, fx);
+            if (!logged_part++) logf("MENUBG> partial present [%ld %ld %ld %ld] -> [%ld %ld %ld %ld]",
+                                      sr->left, sr->top, sr->right, sr->bottom, c.left, c.top, c.right, c.bottom);
+            return 1;
+        }
+        return 0;
+    }
+    if (sr->right - sr->left != NAT_W || sr->bottom - sr->top != NAT_H) return 0;
+    dw = dr->right - dr->left; dh = dr->bottom - dr->top;
+    if (dw < NAT_W || dh < NAT_H || (dw == NAT_W && dh == NAT_H)) return 0;
+    if (!GetClientRect(g_hwnd, &cr) || dw < cr.right - cr.left || dh < cr.bottom - cr.top) return 0;
+    if (!rz_mb_load() || !rz_mb_prepare(dw, dh)) return 0;
+    ox = (dw - NAT_W) / 2; oy = (dh - NAT_H) / 2;
+    rz_mb_patch_src(src, sr, 0, 0, NAT_W, NAT_H);
+    c.left = dr->left + ox; c.top = dr->top + oy; c.right = c.left + NAT_W; c.bottom = c.top + NAT_H;
+    *hr = g_orig_blt(self, &c, src, sr, fl, fx);
+    rz_mb_margins(dw, dh, ox, oy);
+    g_mb_offx = ox; g_mb_offy = oy; g_mb_tick = GetTickCount(); g_mb_active = 1;
+    g_mb_dx0 = dr->left; g_mb_dy0 = dr->top;
+    if (!logged++) logf("MENUBG> first centred present: dest [%ld %ld %ld %ld] -> frame at [%ld %ld %ld %ld]",
+                        dr->left, dr->top, dr->right, dr->bottom, c.left, c.top, c.right, c.bottom);
+    return 1;
+}
+
 static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, void *fx) {
     LARGE_INTEGER a, b;
     HRESULT hr;
     __int64 d;
     RECT sfix;
+    if (rz_mb_present(self, dr, src, sr, fl, fx, &hr)) return hr;
+    if (g_mb_active && dr && g_hwnd && !IsBadReadPtr(dr, sizeof(RECT))) {   /* another full-window frame: menu over */
+        RECT crm;
+        if (GetClientRect(g_hwnd, &crm) && dr->right - dr->left >= crm.right - crm.left &&
+            dr->bottom - dr->top >= crm.bottom - crm.top) g_mb_active = 0;
+    }
     /* ⭐⭐ THE BOTTOM STRIP: the present squashes the frame by the slack rows.
      *
      * Measured 2026-09-02 with the present logger:
@@ -3357,6 +3557,26 @@ static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWO
     }
     return hr;
 }
+/* Install the same Blt hook from any IDirectDrawSurface (the menu has no city view to find one through):
+   the GZGraphicD blit wrapper FUN_10018c58 holds its destination surface at this+4. */
+static void rz_patch_ddblt_surf(DWORD surf) {
+    DWORD ddbase = (DWORD)GetModuleHandleA("ddraw.dll"), ddsize, e, *svt, old;
+    if (g_blt_slot || !ddbase || !surf || IsBadReadPtr((void *)surf, 4)) return;
+    e = *(DWORD *)(ddbase + 0x3c);
+    if (IsBadReadPtr((void *)(ddbase + e + 0x50), 4)) return;
+    ddsize = *(DWORD *)(ddbase + e + 0x50);
+    svt = *(DWORD **)surf;
+    if (!svt || IsBadReadPtr(svt, 0x84)) return;
+    if (svt[0x14 / 4] < ddbase || svt[0x14 / 4] >= ddbase + ddsize) return;
+    if (!VirtualProtect(&svt[0x14 / 4], 4, PAGE_READWRITE, &old)) return;
+    g_orig_blt = (RZ_BLT)svt[0x14 / 4];
+    svt[0x14 / 4] = (DWORD)rz_blt_hook;
+    VirtualProtect(&svt[0x14 / 4], 4, old, &old);
+    g_blt_slot = &svt[0x14 / 4];
+    logf("BLT> ddraw Blt hooked from the blit wrapper's surface (menu): slot 0x%08lX, original 0x%08lX",
+         (DWORD)g_blt_slot, (DWORD)g_orig_blt);
+}
+
 static void rz_patch_ddblt(void) {
     DWORD ddbase = (DWORD)GetModuleHandleA("ddraw.dll"), ddsize = 0, e;
     void *iso, *R; DWORD sub, surf, *svt, old;
@@ -5668,6 +5888,11 @@ static void rz_set_stored_rect(DWORD w, DWORD h) {
  * presenting the old rectangle. Doing it here in C is what makes the separate GZGraphicD
  * `wmsize_setrect` patch unnecessary under this mod. */
 static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
+    /* MENUBG: while the 800x600 menu frame is presented centred, shift client mouse coordinates into it. */
+    if (g_menubg && g_mb_active && m >= WM_MOUSEMOVE && m <= WM_MBUTTONDBLCLK) {
+        int mx = (int)(short)LOWORD(lp) - (int)g_mb_offx, my = (int)(short)HIWORD(lp) - (int)g_mb_offy;
+        lp = MAKELPARAM((WORD)(short)mx, (WORD)(short)my);
+    }
     /* ⭐ LET THE USER DRAG THE WINDOW TO ANY SIZE.
      *
      * The window already carries WS_THICKFRAME|WS_MAXIMIZEBOX (measured: style 0x95CF0000), so the
@@ -6004,6 +6229,8 @@ static void __stdcall fnlog_enter(int idx, DWORD *f) {
             if (g_game_tid != me) g_game_tid = me;
         }
         if (!g_wm_fixed) rz_subclass();
+        if (g_menubg && !g_blt_slot && f[7] && !IsBadReadPtr((void *)(f[7] + 4), 4))
+            rz_patch_ddblt_surf(*(DWORD *)(f[7] + 4));
         rz_poll();
         if (g_census_ms && GetTickCount() >= g_census_ms) { g_census_ms = 0; rz_census(); }
         if (g_hudlab) rz_hudlab_tick();
@@ -6776,6 +7003,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_KIDFIX", v, sizeof(v))) g_kidfix = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_ARTGUARD", v, sizeof(v))) g_artguard = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_FIELDBG", v, sizeof(v))) g_fieldbg = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_MENUBG", v, sizeof(v))) g_menubg = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_EDGEFIX", v, sizeof(v))) g_edgefix = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_EDGESCROLL", v, sizeof(v))) g_edgescroll = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_VIEWFIX", v, sizeof(v))) g_viewfix = atoi(v);
