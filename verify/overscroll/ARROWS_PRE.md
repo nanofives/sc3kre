@@ -12,3 +12,6 @@ Treatment (owner hand, all four mods via `re/harness/combo/mods_launch.exe`, Eur
 - Hold an arrow, move the mouse around the view: the camera keeps scrolling. Release the arrow: it stops.
 - Edge scroll while placing (overscroll feature) and right-drag still work as before.
 Fail: arrows still stop, the camera keeps scrolling after the arrow is released, or right-drag/placing breaks.
+
+## Result (owner hand test, 2026-10-07): PASS
+Log `arrows_keep=1`. Owner: "that's fixed". Held arrows keep scrolling through mouse moves.
