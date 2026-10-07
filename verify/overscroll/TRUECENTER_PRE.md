@@ -21,3 +21,22 @@ the camera was pushed.
 | B `true_center=1` | log `TRUECENTER: view stores 704x544, visible WxH`. The four limits within 10 points of each other, each near the configured 75%. |
 
 Fail: B still asymmetric by more than 10 points, or right-drag / arrows / edge-scroll-while-placing break.
+
+## Results (2026-10-07)
+
+Window maximized 2560x1351 (client 1952x1025 game px visible). Each push ran until two identical frames (the first
+10 s version was too short to cross the map in B, rerun). Metric deviation: share of the city-view AREA that is void
+colour (66,73,99), not the centre-line fraction pre-registered. It ranks the arms the same way.
+
+| arm | up-left | up-right | down-left | down-right |
+|---|---|---|---|---|
+| A `true_center=0` | 23% | 74% | 63% | 63% |
+| B `true_center=1`, surface height on every edge | 87% | 86% | 42% | 37% |
+| C `true_center=1` + `front_wall=1` | **87%** | **86%** | **91%** | **85%** |
+
+- A: the reported asymmetry, prediction met.
+- B: **FAIL** against the pre-registration (spread 50 points). Top surface symmetric, but the front (south-facing)
+  edges draw the terrain's cliff wall below their surface and the limit ignored it.
+- C (added after B, not pre-registered): front edges, chosen per rotation, judged at altitude 0, the bottom of the
+  wall. Spread 6 points. Frames look alike: a sliver of map in the far corner on all four sides.
+Owner hand test pending.

@@ -64,12 +64,25 @@ ecx = the view's cIGZWin sub-object (vtable `SIMSPR+0x676ac`), the outer view (v
 is ecx - 4 (`run13.log`). The first version ran from the GZGraphicD blit heartbeat and posted a
 mouse move every step: the UI flickered while the camera moved (owner).
 
+**4. True centre and the front wall (2026-10-07).** The view stores its size at `+0x20/+0x24` as the native
+visible area, **704x544** (800x600 minus the side panel and bar), and the resize mod never changes it (read live
+in a 2560x1322 window). Translate judges each step at `w/2+dx, h/2+dy` of that size, so at a large window the
+judged point sat far up-left of the real centre: north/west limits came early, south/east late (owner). The mod
+now takes over at the FIRST pick (`SIMSPR 0x1001d56e`) and judges every step at the visible centre, visible size
+= stored size + (client - 800x600). The game's height-aware pick runs first at that point, then the flat rule.
+Front edges (stepping off them moves down the screen, chosen per rotation) draw a cliff wall below their surface,
+so they are judged at altitude 0, the bottom of the wall. Measured void share at the four diagonal limits: old
+23/74/63/63%, true centre alone 87/86/42/37%, with the wall rule 87/86/91/85% (`verify/overscroll/TRUECENTER_PRE.md`).
+
 ## Config (`overscroll.ini` beside the DLL)
 
 ```ini
 [camera]
 overscroll=75   ; percent of the screen allowed past the edge, 50 = stock, max 95
 slide=1
+arrows_keep=1   ; a held arrow survives a mouse move
+true_center=1   ; judge steps at the real visible centre
+front_wall=1    ; front edges judged at the bottom of the cliff wall
 [edge]
 enabled=1
 gain=8          ; px/s per pixel the cursor is outside the window
