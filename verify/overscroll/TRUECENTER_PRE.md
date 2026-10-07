@@ -40,3 +40,16 @@ colour (66,73,99), not the centre-line fraction pre-registered. It ranks the arm
 - C (added after B, not pre-registered): front edges, chosen per rotation, judged at altitude 0, the bottom of the
   wall. Spread 6 points. Frames look alike: a sliver of map in the far corner on all four sides.
 Owner hand test pending.
+
+## Owner session 2 crash (2026-10-07 10:47) and repro attempt
+
+Owner launched all four mods, created a new **1024** city ("Enorme", bigcity log 41.3 s), crashed at 107.8 s:
+`0xC0000005 WRITE 0x186EB000` (a page boundary) at `GZGraphicD+0xC4FB`, one of the per-format span writers that
+`FUN_1000c48e` hands out, called from SIMDIRT `FUN_10013556` (`sc3_dirt_render_gouraudpoly_flat`, terrain
+rasterizer). So the terrain fill wrote past the end of its target surface. Camera code is not on the stack.
+Log kept: `re/harness/combo/crash_resize_1047.log`.
+
+Repro attempt, true_center=1, all four mods, maximized 2560x1351, blank **512** fixture
+(`verify/citysize_mod_test/N512_city.sc3`), 2 laps of all four diagonal limits (8 pushes, each until the camera
+stopped): **no crash**, edges reached. `[UNCERTAIN]` whether the crash needs 1024, a particular zoom or terrain,
+or the reach `true_center` adds. No 1024 fixture exists to rerun it.
