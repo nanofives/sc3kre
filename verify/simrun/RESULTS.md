@@ -53,5 +53,10 @@ mods, Europolis, speed 3, `run_while_scrolling` 0 (A) vs 1 (B), date field cropp
   possible, so the next step is to read how the date field is erased.
 - **Arrows stopping when the mouse moves: not reproduced with posted input.** Arrows held through the key-state
   spoof plus posted `WM_MOUSEMOVE`: about 70% of pixels change between every pair of frames in both arms, so the
-  camera kept moving. A real mouse produces something a posted move does not. Needs an owner run with the mod off
-  to tell stock from mod.
+  camera kept moving. A real mouse produces something a posted move does not.
+  **Owner run with the mod off (2026-10-07, `run_while_scrolling=0`, `patched=0`, 10 stock camera holds logged):
+  arrows still stop on a real mouse move. Not caused by sc3simrun.** Stock or one of the other three mods,
+  not yet bisected.
+- One mod-off launch crashed during load (null read at `GZGraphicD+0x14904`, the blit dispatcher
+  `FUN_10014894`, from a window message), log kept as `re/harness/combo/crash_resize_0024.log`. The relaunch
+  of the same build loaded fine. `[UNCERTAIN]` trigger; the patch was off in that run.
