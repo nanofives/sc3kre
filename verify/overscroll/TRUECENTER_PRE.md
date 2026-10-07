@@ -53,3 +53,22 @@ Repro attempt, true_center=1, all four mods, maximized 2560x1351, blank **512** 
 (`verify/citysize_mod_test/N512_city.sc3`), 2 laps of all four diagonal limits (8 pushes, each until the camera
 stopped): **no crash**, edges reached. `[UNCERTAIN]` whether the crash needs 1024, a particular zoom or terrain,
 or the reach `true_center` adds. No 1024 fixture exists to rerun it.
+
+## Scripted 1024 A/B (2026-10-07): no crash in either arm
+
+Fixture flow scripted end to end (`re/harness/simrun/scripts/run1024.py`): launch to the menu (`-intro:off`), click
+New City (`0x712BF5BE`), OK (`0x2552483D`, `bigcity.ini` preselects Enorme 1024), accept the terrain, maximize,
+then `laps.py` pushes to all four diagonal limits until the camera stops. Window ids are found read-only with Frida
+(`uifind.py`, id at `+0x10`). Fresh random terrain per run.
+
+| run | B `true_center=1` | A `true_center=0` |
+|---|---|---|
+| 512 fixture, far zoom, 2 laps | no crash | - |
+| fresh 1024, far zoom, 3 laps | no crash | no crash |
+| fresh 1024, far zoom (wheel did not zoom), 2 laps | no crash | no crash |
+| fresh 1024, 3 zoom-in clicks, 1 lap | no crash, edges reached and even | no crash |
+
+26 edge pushes with the fix on, none crashed. The owner's crash (terrain rasterizer write past its surface, fresh
+1024, about a minute in) is **not reproduced** and not tied to `true_center`. `[UNCERTAIN]` its trigger: something
+in the owner's session that the script does not do (terrain editing, building, zoom 4, a resize while drawing).
+Note: the wheel does not zoom with posted input; the minimap + button does.
