@@ -357,6 +357,7 @@ static DWORD g_ready_ms = 3000;        /* load-readiness gate: ignore resizes fo
                                           (non-reproducing) fired ~5s after capture during load; this
                                           is preventive hygiene - do not touch the view mid-init. */
 static int   g_defer_logged;
+static volatile LONG g_bridge_fresh;   /* a new city view not yet laid out by rz_do_resize (see the SETTLED check) */
 static int   g_census;                 /* SC3RESIZE_CENSUS: census the resized frame content */
 static DWORD g_census_ms;              /* when to run the post-resize census (0 = not scheduled) */
 
@@ -2148,7 +2149,12 @@ static void rz_side_children_bottom(void) {
                     LONG *e = (LONG *)((DWORD)c + 0x80);
                     LONG h = e[3] - e[1];
                     DWORD *cvt = *(DWORD **)c;
+                    /* NOT dialogs (SIMUI+0xa4d64): rz_dialogs_poll owns them. The terrain editor panel
+                       (172x480 at the right edge) passed this test and was pushed down by dy here while
+                       the dialog dock pulled it back, every poll (owner 2026-10-07: "moves constantly"). */
+                    DWORD suif = (DWORD)GetModuleHandleA("SIMUI.DLL");
                     if (cvt && !IsBadReadPtr(cvt, 0xcc) && cvt[0xc8 / 4] &&
+                        !(suif && (DWORD)cvt == suif + 0xa4d64) &&
                         e[2] - e[0] > 0 && h > 0 && h < panelH / 2 &&
                         e[2] > bandL && e[1] < dy) {
                         DWORD a[4];
@@ -5588,6 +5594,34 @@ static void rz_poll(void) {
     ht = (DWORD)(cr.bottom - cr.top);
     if (w == 0 || ht == 0) return;
 
+    /* HUD REBUILT -> LAY OUT AGAIN (owner 2026-10-07). New City builds a terrain-mode HUD, then on
+       "accept terrain" the game builds the city HUD (new bottom bar / side panel objects). With the
+       window already maximized there is no size change, so nothing laid the new objects out: minimap
+       mid-screen, side buttons twice, bar contents at the left. A de-maximize/maximize fixed it because
+       the size change runs the full routine. Treat a new bar or panel object like a new city view:
+       wait the readiness gate, then run the routine once. */
+    {   static void *s_hud, *s_side;
+        if ((g_hud_top && g_hud_top != s_hud) || (g_side_top && g_side_top != s_side)) {
+            if (s_hud || s_side) {
+                g_bridge_fresh = 1; g_bridge_ms = GetTickCount(); g_defer_logged = 0;
+                logf("RZ   HUD rebuilt (bar 0x%08lX side 0x%08lX) - layout will run again once ready",
+                     (DWORD)g_hud_top, (DWORD)g_side_top);
+            }
+            s_hud = g_hud_top; s_side = g_side_top;
+        }
+    }
+    /* ...and when the city HUD becomes VISIBLE. Measured: "accept terrain" reuses the same bar and panel
+       objects (no rebuild logged) but shows them after the terrain editor, where the first pass ran
+       with them hidden - the result was the same broken HUD. Side panel +0xa0 bit 0 going 0 -> 1. */
+    {   static int s_vis = -1;
+        int vis = (g_side_top && !IsBadReadPtr(g_side_top, 0xa4)) ? (int)(*(DWORD *)((DWORD)g_side_top + 0xa0) & 1) : -1;
+        if (vis == 1 && s_vis == 0) {
+            g_bridge_fresh = 1; g_bridge_ms = GetTickCount(); g_defer_logged = 0;
+            logf("RZ   city HUD became visible - layout will run again once ready");
+        }
+        s_vis = vis;
+    }
+
     /* No edge scrolling in windowed mode (owner, 2026-10-05) - see rz_edge_off. 250 ms cadence. */
     if (!g_edgescroll) {
         static DWORD rz_edge_next_ms;
@@ -5755,8 +5789,15 @@ static void rz_poll(void) {
        a zoom-out race crash, 2026-08-30). Treat width-equal and height within [ht, ht+SLACK] as
        settled; a genuine client-size change still fails this and triggers one resize. */
     if (((DWORD *)R)[0x24 / 4] == w &&
-        ((DWORD *)R)[0x28 / 4] >= ht && ((DWORD *)R)[0x28 / 4] <= ht + RZ_SURFACE_SLACK)
-        return;   /* nothing to do */
+        ((DWORD *)R)[0x28 / 4] >= ht && ((DWORD *)R)[0x28 / 4] <= ht + RZ_SURFACE_SLACK) {
+        /* FRESH CITY AT THE CURRENT SIZE (owner 2026-10-07): when the window was already maximized
+           before New City / Load City, the game creates the new view's render target at the stored
+           client size itself, so this check said "settled" and the rest of the routine (root window,
+           HUD layout, input geometry) never ran - the terrain editor fought the dock every 100 ms
+           and the city needed a de-maximize/maximize. Run the full routine once per new bridge. */
+        if (!g_bridge_fresh || (w == NAT_W && ht == NAT_H)) { g_bridge_fresh = 0; return; }
+        if (!g_defer_logged) logf("RZ   fresh city view already at %lux%lu - running the layout once", w, ht);
+    }
 
     /* LOAD-READINESS GATE (2026-08-28, cheap hygiene). Do not touch the view until the renderer is
        actually up: (a) >= g_ready_ms since bridge capture, AND (b) the render target holds a real
@@ -5793,6 +5834,7 @@ static void rz_poll(void) {
     g_exc_code = 0;
     __try {
         rz_do_resize(iso, w, ht);
+        g_bridge_fresh = 0;
     } __except (rz_filter(GetExceptionInformation())) {
         char who[128];
         rz_modstr(g_exc_addr, who, sizeof(who));
@@ -6194,6 +6236,7 @@ static void __stdcall fnlog_enter(int idx, DWORD *f) {
             g_bridge = (void *)ecx;
             g_bridge_ms = GetTickCount();
             g_defer_logged = 0;
+            g_bridge_fresh = 1;
             logf("### RESIZE: bridge captured 0x%08lX (iso view = bridge+0x18 = 0x%08lX); "
                  "readiness gate = %lu ms", ecx, ((DWORD *)ecx)[0x18 / 4], g_ready_ms);
         }

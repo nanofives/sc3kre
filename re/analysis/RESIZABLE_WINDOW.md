@@ -788,3 +788,19 @@ Now (`rz_mb_present`, `SC3RESIZE_MENUBG=0` disables):
 Measured at 2048x1081: frame at [624 263 1424 863], no seams, New City opens from its drawn position, the New
 City dialog shows centred over the picture. The background asset: `MAIN.IXF` record `0x22729921` = header
 `[2][size][800][600][7][size]` then QFS, RGB565. Menu buttons are 8-frame sheets `0x22729930..38`, magenta key.
+
+## New City / Load City while already maximized (fixed 2026-10-07)
+
+Owner: with the window maximized before New City, the terrain panel moved constantly and the city needed a
+de-maximize/maximize. Three causes, each measured:
+1. **SETTLED check skipped the layout.** The game creates the new view's render target at the stored client
+   size itself, so `rz_poll` saw "settled" and never ran `rz_do_resize` (root stayed `[0 0 800 600]`). Now a new
+   bridge sets `g_bridge_fresh` and the routine runs once after the readiness gate.
+2. **Two movers on the terrain panel.** Frida on the panel's `vt+0xc8` showed both callers in sc3resize: the
+   dialog dock (y 60) and the side panel's ROOT-LEVEL FLYOUTS push (y 60 + dy = 699), whose test (right edge in the
+   panel band, shorter than half the panel, top < dy) matched the 172x480 panel. Dialog-class windows
+   (`SIMUI+0xa4d64`) are now excluded from the flyout push. Result: 6/6 samples steady at `[1876 60 2048 540]`.
+3. **Accept terrain shows the hidden city HUD without a layout.** Same bar/panel objects (no rebuild), shown
+   after the first pass ran with them hidden: minimap mid-screen, side buttons twice, bar contents left. The
+   routine now also runs once when the side panel's `+0xa0` bit 0 goes 0 -> 1. Verified with a grab: HUD correct
+   without a de-maximize.
