@@ -92,3 +92,29 @@ earlier resize hand-test log too, it is not from the combination.
 - Click-to-place tools (buildings) do not hold the button, so edge scroll while placing does not
   trigger for them.
 - The overscroll limit is computed from the view size, measured only at the sizes the owner used.
+
+## Arrow scrolling stops when the mouse moves (stock, traced 2026-10-07)
+
+Owner report: holding an arrow key scrolls, moving the mouse stops it. Bisect: happens with resize, overscroll
+and bigcity each loaded alone (`verify/simrun/RESULTS.md`), so it is not a mod.
+
+The arrow keys and the mouse edge scroll **share four latch bytes** on the city view (outer object, vtable
+`SIMSPR 0x10067894`): up `+0x1e1`, down `+0x1e2`, right `+0x1e3`, left `+0x1e4`. `+0x177` enables scrolling,
+`+0x1e6` is the right-drag mode.
+
+- Arrows set them only from key events: KeyDown `vt+0x68` = `FUN_1004985a` and KeyUp `vt+0x64` =
+  `FUN_1004979a` re-read all four arrows through the key-state object `+0x210` (`vt+0xc(vk)`), and the scroll step
+  `FUN_10043daf` re-reads them only when all four are 0. `[CONFIRMED @ 0x1004985a, 0x1004979a, 0x10043daf]`
+- The mouse edge handler `vt+0x40` = `FUN_10043a38(x, y)` writes the same bytes. Cursor inside the view's inner
+  rect (`+0x178..+0x184`): **all four cleared**. Outside it: each set from its edge band rect (`+0x188..`,
+  `+0x198..`, `+0x1a8..`, `+0x1b8..`). `[CONFIRMED @ 0x10043a38]` With the resize mod the bands are emptied
+  (`rz_edge_off`), so outside the inner rect they also come out 0.
+- Once all four are 0 the view tick stops calling the scroll step, so nothing re-reads the keys until the next
+  key event. `[UNCERTAIN]` whether typematic repeat KeyDowns reach `vt+0x68`; the owner sees the scroll stay
+  stopped, which suggests they do not.
+- `[UNCERTAIN]` why a posted `WM_MOUSEMOVE` did not reproduce it. GZWIND has a `GetCursorPos` + `ScreenToClient`
+  accessor (`FUN_10020260`, vtable slot at `0x1002dc04`), so the edge handler is probably fed the real cursor
+  position (unchanged by a posted message) rather than the message's lParam. Caller not traced.
+
+Fix candidate (not built): after `FUN_10043a38` runs, OR the four latches with the live arrow-key state from
+`+0x210` `vt+0xc`, so a held arrow survives a mouse move and edge scroll still works.
