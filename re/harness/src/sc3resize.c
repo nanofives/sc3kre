@@ -6588,6 +6588,49 @@ static void patch_hud_reflow(HMODULE sui) {
     logf("--- HUD: FUN_100270e5 wrapped (cave 0x%08lX tr 0x%08lX) - top-strip reflow armed", (DWORD)cave, (DWORD)tr);
 }
 
+/* FIELDBG (2026-10-07, verify/simrun/RESULTS.md follow-up): the bottom bar's four info fields (city,
+ * population, money, date) erase their old text by copying a patch of the bar background raster
+ * (+0xa8, 600x56) into the field raster. SIMUI FUN_10026a09 computes that patch as the field's DEST
+ * rect (+0x120 + idx*0x10) minus the BAR origin (+0x24, +0x28) [CONFIRMED @ 0x10026a5c]. The bar span
+ * above moves the art (+0x120) and the field dests by dx but the bar origin stays put, so once
+ * dest - origin passes x=600 the erase reads outside the art and new text lands on the old text: the
+ * owner's "dates piling over each other" at 2560 wide (measured 2026-10-07, both simrun arms).
+ * Fix: subtract the ART origin instead (where the background raster is actually drawn). At native size
+ * the two are equal, so this is stock there. Falls back to the stock read if the art rect is empty.
+ * Patch site 0x10026a5c: mov ecx,[edx+24] / mov eax,[edx+28] / movsd (7 bytes) -> jmp cave. */
+static int g_fieldbg = 1;          /* SC3RESIZE_FIELDBG=0 = control arm */
+static void patch_fieldbg(HMODULE sui) {
+    static const BYTE expect[] = { 0x8B, 0x4A, 0x24, 0x8B, 0x42, 0x28, 0xA5, 0x8B, 0x75, 0x08 };
+    BYTE *t = (BYTE *)sui + 0x26a5c, *cave;
+    DWORD old, n = 0;
+    if (!g_fieldbg) { logf("--- FIELDBG: off (SC3RESIZE_FIELDBG=0) - stock field erase"); return; }
+    if (IsBadReadPtr(t, sizeof(expect)) || memcmp(t, expect, sizeof(expect))) {
+        logf("--- FIELDBG: SIMUI+0x26a5c differs from shipped - NOT patched"); return; }
+    cave = (BYTE *)VirtualAlloc(NULL, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!cave) { logf("--- FIELDBG: VirtualAlloc failed"); return; }
+    /* mov ecx,[edx+0x128] ; sub ecx,[edx+0x120] ; jz stock */
+    cave[n++] = 0x8B; cave[n++] = 0x8A; *(DWORD *)(cave + n) = 0x128; n += 4;
+    cave[n++] = 0x2B; cave[n++] = 0x8A; *(DWORD *)(cave + n) = 0x120; n += 4;
+    cave[n++] = 0x74; cave[n++] = 0x0E;                                      /* jz +14 -> stock */
+    /* art: mov ecx,[edx+0x120] ; mov eax,[edx+0x124] ; movsd ; jmp back */
+    cave[n++] = 0x8B; cave[n++] = 0x8A; *(DWORD *)(cave + n) = 0x120; n += 4;
+    cave[n++] = 0x8B; cave[n++] = 0x82; *(DWORD *)(cave + n) = 0x124; n += 4;
+    cave[n++] = 0xEB; cave[n++] = 0x06;                                      /* jmp +6 -> tail */
+    /* stock: mov ecx,[edx+0x24] ; mov eax,[edx+0x28] */
+    cave[n++] = 0x8B; cave[n++] = 0x4A; cave[n++] = 0x24;
+    cave[n++] = 0x8B; cave[n++] = 0x42; cave[n++] = 0x28;
+    /* tail: movsd ; jmp t+7 */
+    cave[n++] = 0xA5;
+    cave[n++] = 0xE9; *(DWORD *)(cave + n) = (DWORD)(t + 7) - (DWORD)(cave + n + 4); n += 4;
+    FlushInstructionCache(GetCurrentProcess(), cave, n);
+    if (!VirtualProtect(t, 7, PAGE_EXECUTE_READWRITE, &old)) { logf("--- FIELDBG: VirtualProtect failed"); return; }
+    t[0] = 0xE9; *(DWORD *)(t + 1) = (DWORD)cave - (DWORD)(t + 5);
+    t[5] = 0x90; t[6] = 0x90;
+    VirtualProtect(t, 7, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), t, 7);
+    logf("--- FIELDBG: SIMUI FUN_10026a09 field erase reads the ART origin (cave 0x%08lX)", (DWORD)cave);
+}
+
 static DWORD WINAPI rz_watcher(LPVOID param) {
     HMODULE ss = NULL, gz = NULL;
     int tries = 0;
@@ -6648,6 +6691,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
       while (st++ < 300 && !(sui = GetModuleHandleA("SIMUI.DLL"))) Sleep(100);
       if (sui) {
           patch_hud_reflow(sui);
+          patch_fieldbg(sui);
           /* Side panel: capture `this` at its constructor so the vertical tiling routine
              FUN_1004e63e (vtable +0x144) has an object to work on. Read-only for now. */
           install_one((DWORD)sui + 0x4e123, sui, 0x4e123, "SIMUI FUN_1004e123 side ctor", 3);
@@ -6710,6 +6754,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_SIDESPAN", v, sizeof(v))) g_side_span = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_KIDFIX", v, sizeof(v))) g_kidfix = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_ARTGUARD", v, sizeof(v))) g_artguard = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_FIELDBG", v, sizeof(v))) g_fieldbg = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_EDGEFIX", v, sizeof(v))) g_edgefix = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_EDGESCROLL", v, sizeof(v))) g_edgescroll = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_VIEWFIX", v, sizeof(v))) g_viewfix = atoi(v);

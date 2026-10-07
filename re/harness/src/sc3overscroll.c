@@ -20,7 +20,12 @@
  *
  * Arrow keys, edge scrolling and right-drag all go through Translate, so all of them get it.
  *
- * Config: overscroll.ini beside the DLL:  [camera] overscroll=75  (50 = stock, max 95), slide=1
+ * Arrows (2026-10-07): a held arrow key keeps scrolling when the mouse moves (stock clears it), see patch_arrows.
+ *
+ * True centre (2026-10-07): steps are judged at the real visible centre, not the view's stale native centre.
+ *
+ * Config: overscroll.ini beside the DLL:  [camera] overscroll=75  (50 = stock, max 95), slide=1, arrows_keep=1,
+ *                                                  true_center=1
  *                                         [display] windowed=1
  * Build: re/harness/build_overscroll.ps1. Launcher: overscroll_launch.exe.
  */
@@ -92,6 +97,9 @@ static int g_overscroll = 75;        /* percent of the screen allowed past the m
 static int g_windowed = 1;
 static int g_slide = 1;
 static int g_edge, g_edge_gain, g_edge_max;   /* defaults set in ini_read */
+static int g_arrows = 1;             /* [camera] arrows_keep: a held arrow survives a mouse move */
+static int g_truec = 1;              /* [camera] true_center: judge steps at the real visible centre */
+static int g_wall = 1;               /* [camera] front_wall: front edges judged at the bottom of the cliff wall */
 
 static void ini_read(void) {
     char path[MAX_PATH];
@@ -102,6 +110,9 @@ static void ini_read(void) {
     if (g_overscroll > 95) g_overscroll = 95;
     g_windowed = GetPrivateProfileIntA("display", "windowed", 1, path) ? 1 : 0;
     g_slide = GetPrivateProfileIntA("camera", "slide", 1, path) ? 1 : 0;
+    g_arrows = GetPrivateProfileIntA("camera", "arrows_keep", 1, path) ? 1 : 0;
+    g_truec = GetPrivateProfileIntA("camera", "true_center", 1, path) ? 1 : 0;
+    g_wall = GetPrivateProfileIntA("camera", "front_wall", 1, path) ? 1 : 0;
     g_edge = GetPrivateProfileIntA("edge", "enabled", 1, path) ? 1 : 0;
     g_edge_gain = GetPrivateProfileIntA("edge", "gain", 8, path);
     g_edge_max = GetPrivateProfileIntA("edge", "max", 1600, path);
@@ -185,6 +196,25 @@ static void build_profiles(BYTE *cm) {
          g_prof[3] ? g_prof[3][0] : -1, g_prof[3] ? g_prof[3][H - 1] : -1);
 }
 
+/* Is map edge e (0: ty=0, 1: ty=H-1, 2: tx=0, 3: tx=W-1) a FRONT edge at rotation rot, i.e. does stepping off
+   the map across it move DOWN the screen? Screen y grows with raw u+v (flat_tile_at), and the raw (u, v) of a
+   tile is the inverse of flat_tile_at's rotation switch:
+     rot 0: u = tx, v = ty      rot 1: u = W-1-ty, v = tx      rot 2: u = W-1-tx, v = H-1-ty      rot 3: u = ty, v = H-1-tx
+   Front edges draw the terrain's cliff wall below their surface, down to altitude 0 (owner, 2026-10-07: with the
+   limit judged at the surface height, the south/east walls filled ~40% of the screen at the limit while the
+   north/west edges showed ~87% void). So front edges are judged at altitude 0, the bottom of the wall. */
+static int front_edge(int e, int rot) {
+    static const int out[4][2] = { {0, -1}, {0, 1}, {-1, 0}, {1, 0} };   /* outward (dtx, dty) */
+    int dtx = out[e][0], dty = out[e][1], du, dv;
+    switch (rot) {
+    case 1:  du = -dty; dv = dtx;  break;
+    case 2:  du = -dtx; dv = -dty; break;
+    case 3:  du = dty;  dv = -dtx; break;
+    default: du = dtx;  dv = dty;  break;
+    }
+    return du + dv > 0;
+}
+
 /* Height of the drawn edge nearest to map cell (tx, ty) (clamped onto the map). */
 static int edge_alt(BYTE *cm, int tx, int ty) {
     int W = *(int *)(cm + 0x14), H = *(int *)(cm + 0x18), d[4], e = 0, i;
@@ -192,6 +222,7 @@ static int edge_alt(BYTE *cm, int tx, int ty) {
     if (ty < 0) ty = 0; if (ty > H - 1) ty = H - 1;
     d[0] = ty; d[1] = H - 1 - ty; d[2] = tx; d[3] = W - 1 - tx;
     for (i = 1; i < 4; i++) if (d[i] < d[e]) e = i;
+    if (g_wall && front_edge(e, *(int *)(cm + 0x2c))) return 0;
     if (!g_prof[e]) return 0;
     return g_prof[e][e < 2 ? tx : ty];
 }
@@ -260,11 +291,52 @@ static int allowed(void *cmv, int w, int h, int cx, int cy, DWORD *tx, DWORD *ty
    cISC3CityViewIso (+0x20/+0x24 = view w/h, +0x158 = cellmap). (x, y) = the requested new screen
    centre. On success the step in Translate's frame may be REWRITTEN to the part that can still
    move (edge sliding): Translate reads dx/dy back from [ebp-0xc]/[ebp-4] after this returns. */
+/* TRUE CENTRE (2026-10-07). The view's stored size (+0x20/+0x24) is the native visible area, 704x544
+   (800x600 minus the 96-px side panel and 56-px bar), and the resize mod never changes it. Measured live
+   in a 2560x1322 window: 704x544. Translate tests the new centre at w/2+dx, h/2+dy, so at a large window
+   the point it judges sits far up-left of the real screen centre: the north/west limit came early and
+   the south/east one late (owner). The visible area is the view size plus however much the client grew
+   past 800x600 (the side panel and bar keep their size), measured from the top-level game window. */
+static HWND g_gamewnd;
+static BOOL CALLBACK find_game_wnd(HWND h, LPARAM lp) {
+    DWORD pid = 0;
+    (void)lp;
+    GetWindowThreadProcessId(h, &pid);
+    if (pid == GetCurrentProcessId() && IsWindowVisible(h) && !GetWindow(h, GW_OWNER)) { g_gamewnd = h; return FALSE; }
+    return TRUE;
+}
+static void visible_size(BYTE *view, int *w, int *h) {
+    RECT rc;
+    *w = *(int *)(view + 0x20);
+    *h = *(int *)(view + 0x24);
+    if (!g_truec) return;
+    if (!g_gamewnd || !IsWindow(g_gamewnd)) { g_gamewnd = NULL; EnumWindows(find_game_wnd, 0); }
+    if (g_gamewnd && GetClientRect(g_gamewnd, &rc)) {
+        int cw = rc.right - rc.left, ch = rc.bottom - rc.top;
+        if (cw > 800) *w += cw - 800;
+        if (ch > 600) *h += ch - 600;
+    }
+}
+
 static int __stdcall step_hook(BYTE *view, int x, int y, DWORD *tx, DWORD *ty, int *sdx, int *sdy) {
     void *cm = *(void **)(view + 0x158);
-    int w = *(int *)(view + 0x20), h = *(int *)(view + 0x24);
+    int w0 = *(int *)(view + 0x20), h0 = *(int *)(view + 0x24), w, h;
     int vx = *sdx, vy = *sdy, probe;
     if (!cm) return 0;
+    visible_size(view, &w, &h);
+    if (g_truec) {
+        int hit = 0;
+        static LONG logged;
+        /* (x, y) came in as w0/2 + dx, h0/2 + dy: move it to the real visible centre */
+        x += w / 2 - w0 / 2;
+        y += h / 2 - h0 / 2;
+        if (!InterlockedExchange(&logged, 1))
+            logf("### TRUECENTER: view stores %dx%d, visible %dx%d - steps judged at the visible centre", w0, h0, w, h);
+        /* the game's own height-aware pick at the true centre first (mode 0, then 1), as Translate does */
+        if (g_pick(cm, NULL, x, y, tx, ty, 0, NULL, 0) & 0xff) return 1;
+        if (g_pick(cm, NULL, x, y, tx, ty, 1, NULL, 0) & 0xff) return 1;
+        (void)hit;
+    }
 
     if (allowed(cm, w, h, x, y, tx, ty, &probe)) {
         if ((InterlockedIncrement(&g_n_over) & 0x3ff) == 1)
@@ -342,6 +414,35 @@ __declspec(naked) static void translate_hook(void) {
     }
 }
 
+/* true_center: replaces SIMSPR 0x1001d56e..0x1001d576 (first pick, mode 0 ; test al,al ; jne accept) so EVERY step
+   is decided by step_hook, not only the ones both stock picks refused. The stock call still runs (it consumes its
+   pushed args, ret 0x1c) but its answer is ignored. Same register/frame contract as translate_hook. */
+__declspec(naked) static void translate_hook_all(void) {
+    __asm {
+        call dword ptr [g_pick]
+        pushad
+        lea eax, [ebp - 4]
+        push eax
+        lea eax, [ebp - 0xc]
+        push eax
+        lea eax, [ebp + 0xc]
+        push eax
+        lea eax, [ebp + 8]
+        push eax
+        push ebx
+        push edi
+        push esi
+        call step_hook
+        mov [esp + 28], eax
+        popad
+        test eax, eax
+        jnz all_ok
+        jmp dword ptr [g_refuse]
+    all_ok:
+        jmp dword ptr [g_accept]
+    }
+}
+
 static int patch_translate(HMODULE m) {
     static const BYTE expect[] = { 0xe8, 0x9d, 0xba, 0xfe, 0xff, 0x84, 0xc0, 0x74, 0x26 };
     BYTE *b = (BYTE *)m, *p = b + 0x1d58d;
@@ -352,6 +453,17 @@ static int patch_translate(HMODULE m) {
     g_pick   = (PFN_Pick)(b + 0x902f);
     g_accept = (DWORD)b + 0x1d596;
     g_refuse = (DWORD)b + 0x1d5bc;
+    if (g_truec) {
+        BYTE *q = b + 0x1d56e;
+        static const BYTE tail[] = { 0x84, 0xc0, 0x75, 0x1f };
+        if (q[0] == 0xe8 && (DWORD)(q + 5) + *(DWORD *)(q + 1) == (DWORD)(b + 0x902f) && !memcmp(q + 5, tail, 4)) {
+            if (!write_jmp(q, (void *)translate_hook_all, 9)) return 0;
+            logf("### OVERSCROLL: true_center on - every step judged at the visible centre (SIMSPR+0x1d56e)");
+            return 1;
+        }
+        logf("### OVERSCROLL: SIMSPR+0x1d56e differs from shipped - true_center OFF, falling back");
+        g_truec = 0;
+    }
     if (!write_jmp(p, (void *)translate_hook, 9)) return 0;
     logf("### OVERSCROLL: Translate hooked, camera may go until %d%% of the screen is past the edge, slide %d",
          g_overscroll, g_slide);
@@ -611,6 +723,51 @@ static void patch_surfacefmt(HMODULE gz) {
     logf("--- FIX16: 16bpp branch injected at 0x19349 -> cave 0x%08lX (5-6-5)", (DWORD)cave);
 }
 
+
+/* ============================================================ arrows survive a mouse move */
+
+/* Stock (re/analysis/formats/CAMERA_OVERSCROLL.md, "Arrow scrolling stops when the mouse moves"): the arrow keys
+   and the mouse edge scroll share four latch bytes on the city view (outer +0x1e1 up, +0x1e2 down, +0x1e3 right,
+   +0x1e4 left). The edge handler vt+0x40 = FUN_10043a38(x, y) clears all four whenever the cursor is inside the
+   view's inner rect, so a held arrow dies on any mouse move and nothing re-reads the keys until the next key
+   event. This wraps that slot: after the stock handler, any arrow still held (read through the view's own
+   key-state object +0x210, vt+0xc(vk)) is latched again. Edge scrolling is untouched. Not in right-drag mode
+   (+0x1e6) or with scrolling disabled (+0x177 = 0), where the stock handler does not touch the latches. */
+typedef void (__fastcall *PFN_Edge)(void *, void *, int, int);
+typedef char (__fastcall *PFN_KeyDown)(void *, void *, int);
+static PFN_Edge g_edge_orig;
+static volatile LONG g_n_rearm;
+
+static void __fastcall edge_wrap(void *self, void *edx, int x, int y) {
+    BYTE *v = (BYTE *)self;
+    void *keys;
+    g_edge_orig(self, edx, x, y);
+    if (!v[0x177] || v[0x1e6]) return;
+    keys = *(void **)(v + 0x210);
+    if (!keys || IsBadReadPtr(keys, 4)) return;
+    {   PFN_KeyDown down = (PFN_KeyDown)(*(DWORD **)keys)[0xc / 4];
+        int any = 0;
+        if (down(keys, NULL, 0x26)) { v[0x1e1] = 1; any = 1; }
+        if (down(keys, NULL, 0x28)) { v[0x1e2] = 1; any = 1; }
+        if (down(keys, NULL, 0x27)) { v[0x1e3] = 1; any = 1; }
+        if (down(keys, NULL, 0x25)) { v[0x1e4] = 1; any = 1; }
+        if (any) InterlockedIncrement(&g_n_rearm);
+    }
+}
+
+static int patch_arrows(HMODULE spr) {
+    DWORD *slot = (DWORD *)((BYTE *)spr + 0x678d4), old;      /* outer vtable 0x10067894, slot +0x40 */
+    if (IsBadReadPtr(slot, 4) || *slot != (DWORD)spr + 0x43a38) {
+        logf("### ARROWS: vtable slot SIMSPR+0x678d4 differs from shipped - NOT installed");
+        return 0;
+    }
+    if (!VirtualProtect(slot, 4, PAGE_READWRITE, &old)) return 0;
+    g_edge_orig = (PFN_Edge)*slot;
+    *slot = (DWORD)edge_wrap;
+    VirtualProtect(slot, 4, old, &old);
+    return 1;
+}
+
 /* ================================================================ boot */
 
 static DWORD WINAPI watcher(LPVOID param) {
@@ -622,7 +779,10 @@ static DWORD WINAPI watcher(LPVOID param) {
             patch_windowed(gz);
             patch_surfacefmt(gz);
         }
-        if (!spr && (spr = GetModuleHandleA("SIMSPR.DLL")) != NULL) ok = patch_translate(spr);
+        if (!spr && (spr = GetModuleHandleA("SIMSPR.DLL")) != NULL) {
+            ok = patch_translate(spr);
+            if (g_arrows) g_arrows = patch_arrows(spr) ? 1 : 0;
+        }
         Sleep(1);
         ms++;
     }
@@ -638,8 +798,8 @@ static DWORD WINAPI watcher(LPVOID param) {
             else logf("### EDGE: SIMSPR+0x42a95 differs from shipped - edge scroll NOT installed");
         }
         QueryPerformanceCounter(&g_edge_last);
-        logf("### READY: windowed=%d overscroll=%d%% slide=%d hook=%d edge=%d (gain %d, max %d px/s, tick %d)",
-             g_windowed, g_overscroll, g_slide, ok, g_edge, g_edge_gain, g_edge_max, hb);
+        logf("### READY: windowed=%d overscroll=%d%% slide=%d hook=%d edge=%d (gain %d, max %d px/s, tick %d) arrows_keep=%d",
+             g_windowed, g_overscroll, g_slide, ok, g_edge, g_edge_gain, g_edge_max, hb, g_arrows);
     }
     return 0;
 }
