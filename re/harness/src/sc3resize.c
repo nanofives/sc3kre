@@ -5713,6 +5713,38 @@ static void rz_dump_all(void *iso) {
     logf("DUMP> ---- capture %02d done ----", seq);
 }
 
+
+/* CLOSE OPEN FLYOUTS ON A RESIZE (owner 2026-10-08: "if a menu of the vertical bar is open when resizing you
+   have to close it after resize"). The side panel's tool flyouts are ROOT children of class SIMUI+0xa9cc8
+   (measured with one open). Hide any visible one with GZWIND vt+0xf4 SetFlags(1 = visible, 0), the same call
+   sc3bigcity uses, then invalidate the root (vt+0x154) so it repaints. SC3RESIZE_CLOSEFLY=0 disables. */
+static int g_closefly = 1;
+static void rz_close_flyouts(void) {
+    DWORD sui = (DWORD)GetModuleHandleA("SIMUI.DLL");
+    void *root = rz_ui_root(), *head, *n;
+    int g = 0, closed = 0;
+    if (!g_closefly || !sui || !root || IsBadReadPtr((BYTE *)root + 0x34, 4)) return;
+    head = *(void **)((DWORD)root + 0x34);
+    if (!head || IsBadReadPtr(head, 4)) return;
+    for (n = *(void **)head; n && n != head && g++ < 300; n = *(void **)n) {
+        DWORD *c, *vt;
+        if (IsBadReadPtr(n, 0x0c)) break;
+        c = *(DWORD **)((DWORD)n + 8);
+        if (!c || IsBadReadPtr(c, 0xa4) || c[0] != sui + 0xa9cc8 || !(c[0xa0 / 4] & 1)) continue;
+        vt = (DWORD *)c[0];
+        if (vt && !IsBadReadPtr(vt, 0xf8) && vt[0xf4 / 4]) {
+            DWORD a[2]; a[0] = 1; a[1] = 0;
+            rz_thiscall(c, (void *)vt[0xf4 / 4], a, 2);
+            closed++;
+        }
+    }
+    if (closed) {
+        DWORD *rvt = *(DWORD **)root;
+        if (rvt && !IsBadReadPtr(rvt, 0x158) && rvt[0x154 / 4]) rz_thiscall(root, (void *)rvt[0x154 / 4], NULL, 0);
+        logf("CLOSEFLY> closed %d open side-panel flyout(s) after a resize", closed);
+    }
+}
+
 static void rz_poll(void) {
     void *iso;
     DWORD *v, R, w, ht;
@@ -5958,6 +5990,7 @@ static void rz_poll(void) {
     }
 
     if (InterlockedCompareExchange(&g_busy, 1, 0) != 0) return;                /* re-entrancy */
+    if (!g_bridge_fresh) rz_close_flyouts();   /* a real resize, not the first layout of a new city */
     logf("RZ   size change: client %lux%lu vs render target %lux%lu", w, ht,
          ((DWORD *)R)[0x24 / 4], ((DWORD *)R)[0x28 / 4]);
     /* CRASH HUNT (2026-08-28): SEH around the routine so a fault becomes a DIAGNOSTIC (code +
@@ -7232,6 +7265,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_HOLD", v, sizeof(v))) g_hold = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_BAR800", v, sizeof(v))) g_bar800 = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDREFLOW", v, sizeof(v))) g_hudreflow = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_CLOSEFLY", v, sizeof(v))) g_closefly = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_EDGEFIX", v, sizeof(v))) g_edgefix = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_EDGESCROLL", v, sizeof(v))) g_edgescroll = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_VIEWFIX", v, sizeof(v))) g_viewfix = atoi(v);

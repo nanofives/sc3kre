@@ -891,3 +891,7 @@ should detect it or run a renamed copy (`mods_launch -exe`).
   the client bottom. Repro of the owner's flow afterwards: panel docked `[1508 249 1680 729]`, terrain accepted, alive
   20 s later, no native-height rebuild, no fault, HUD correct (1 valid run, the other picked the wrong window).
   Log kept: `re/harness/combo/crash_0008.log`.
+- **Close side-panel flyouts on a resize (owner, 2026-10-08):** `rz_close_flyouts` hides visible ROOT children of class
+  `SIMUI+0xa9cc8` (an open flyout; the panel's page templates are invisible root children of the same class) with
+  `vt+0xf4` SetFlags(1, 0) and invalidates the root, right before a real resize runs (not on a new city's first layout).
+  `SC3RESIZE_CLOSEFLY=0` disables. Open question: whether the game then needs two clicks to reopen that flyout.
