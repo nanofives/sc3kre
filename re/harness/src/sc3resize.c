@@ -1660,7 +1660,7 @@ static int rz_win_alive(void *want) {
  * FUN_1006d56c keeps its surface), then one cascade rebuilds the derived hit rects. */
 static int g_dialogs = 1;
 #define DLG_MAX 24
-static struct { void *w; LONG placed[4]; LONG stock[4]; LONG rect[4]; int has_stock, vis, seen, rdock; LONG rdock_y; } g_dlg[DLG_MAX];
+static struct { void *w; LONG placed[4]; LONG stock[4]; LONG rect[4]; int has_stock, vis, seen, rdock; LONG rdock_y, ew, eh; } g_dlg[DLG_MAX];
 static int g_dlg_n;
 
 static int rz_dlg_place(void *w, const LONG *t) {
@@ -1726,9 +1726,21 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
             if (r[2] - r[0] < 120 || r[3] - r[1] < 80) continue;          /* not the corner widget */
             for (k = 0; k < g_dlg_n; k++) if (g_dlg[k].w == c) { e = k; break; }
             if (!(*(DWORD *)((DWORD)c + 0xa0) & 1)) { if (e >= 0) { g_dlg[e].vis = 0; g_dlg[e].seen = 1; } continue; }
+            /* A tracked address that comes back with another size is ANOTHER window (dialogs are freed and the
+               heap hands the address to the next one): forget what we knew. Owner 2026-10-08: on a second New City
+               the terrain panel inherited a plain dialog's entry and was centred instead of docked. */
+            if (e >= 0 && (g_dlg[e].ew != r[2] - r[0] || g_dlg[e].eh != r[3] - r[1])) {
+                g_dlg[e].vis = 0; g_dlg[e].has_stock = 0; g_dlg[e].rdock = 0;
+                g_dlg[e].ew = r[2] - r[0]; g_dlg[e].eh = r[3] - r[1];
+                if (r[2] == NAT_W && r[0] >= NAT_W / 2) { g_dlg[e].rdock = 1; g_dlg[e].rdock_y = r[1]; }
+                if (r[2] - r[0] == 172 && r[3] - r[1] >= 400) { g_dlg[e].rdock = 1; g_dlg[e].rdock_y = 60; }
+            }
+            /* and the terrain panel is recognised by size on every (re)open, not only at first sight */
+            if (e >= 0 && !g_dlg[e].vis && r[2] - r[0] == 172 && r[3] - r[1] >= 400) { g_dlg[e].rdock = 1; g_dlg[e].rdock_y = 60; }
             if (e < 0) {
                 if (g_dlg_n >= DLG_MAX) continue;
                 e = g_dlg_n++;
+                g_dlg[e].ew = r[2] - r[0]; g_dlg[e].eh = r[3] - r[1];
                 g_dlg[e].w = c; g_dlg[e].vis = 0; g_dlg[e].has_stock = 0; g_dlg[e].rdock = 0;
                 /* RIGHT-DOCKED panels (owner 2026-10-07: "Editar Terreno" during New City, stock
                    [628 60 800 540]): dialogs are created at their 800x600 stock spot, so one whose

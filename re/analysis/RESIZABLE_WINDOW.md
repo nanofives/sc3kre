@@ -880,3 +880,7 @@ should detect it or run a renamed copy (`mods_launch -exe`).
   8 px higher than native and opened a step against the bar. Now at the native offset: top = bar top - 24 (520 vs 544),
   bottom 8 px past the client edge and cut off, as in the unmodded game.
   Owner hand test 2026-10-08: "RCI looks right now".
+- **Terrain panel on a second New City (owner, 2026-10-08):** centred in the map area instead of docked. Dialogs are
+  tracked by address and the dock decision was made only at first sight; a freed dialog's address handed to the new
+  panel left it with a plain dialog's entry. An entry whose window comes back with another size is now reset, and the
+  172x480 panel is recognised on every reopen. Not yet verified (needs two New Citys in a row).
