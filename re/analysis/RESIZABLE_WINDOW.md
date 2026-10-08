@@ -867,3 +867,8 @@ should detect it or run a renamed copy (`mods_launch -exe`).
   `[1876 300 2048 780]` at 2048x1081.
 - **De-maximize:** dialogs with no recorded stock rect are centred at 800x600 instead of left in place.
 - **Ghost dialog during loads:** root invalidated (vt+0x154) after any dialog move. Not yet verified by eye.
+- **Two pictures on the maximized menu (owner):** the menu redraws from a stored copy of its composed frame after a
+  size change, and a copy taken at native size holds the native-size picture. Swap counts showed it: after maximizing,
+  462,335 frame pixels matched neither stock nor the last write. The swap now treats a pixel as background if it equals
+  the stock picture, the last value written there, or the 800x600 version of the picture. After: every maximized frame
+  swaps 380,018 background pixels and leaves about 100k button pixels; grabs maximized and restored show one picture.

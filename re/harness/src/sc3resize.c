@@ -3182,6 +3182,10 @@ static HDC    g_mb_dc;
 static HBITMAP g_mb_bmp, g_mb_oldbmp;
 static DWORD *g_mb_bits;                  /* stretched picture, 32-bit top-down, g_mb_cw x g_mb_ch */
 static WORD  *g_mb_center;                /* its centre 800x600 in RGB565 */
+static LONG g_mb_m_orig, g_mb_m_last, g_mb_m_none;
+static int  g_mb_dbg_left = 0;
+static WORD *g_mb_native;                 /* the picture at 800x600 (what native frames got), RGB565 */
+static WORD  *g_mb_last;                  /* what was last written at each frame pixel (init = stock) */
 static volatile LONG g_mb_offx, g_mb_offy;
 static volatile DWORD g_mb_tick;          /* GetTickCount of the last centred present */
 static volatile LONG g_mb_dx0, g_mb_dy0;  /* dest origin of the last full present (client origin in dest space) */
@@ -3218,6 +3222,9 @@ static int rz_mb_load(void) {
     f = rz_mb_readfile(path, &len);
     if (!f || len != NAT_W * NAT_H * 2) { logf("MENUBG> %s missing or not %d bytes - off", path, NAT_W * NAT_H * 2); free(f); return 0; }
     g_mb_orig = (WORD *)f;
+    g_mb_last = (WORD *)malloc(NAT_W * NAT_H * 2);
+    if (!g_mb_last) return 0;
+    memcpy(g_mb_last, g_mb_orig, NAT_W * NAT_H * 2);
     rz_mb_path(path, sizeof(path), "menu_bg.bmp");
     f = rz_mb_readfile(path, &len);
     if (!f || len < 54 || f[0] != 'B' || f[1] != 'M') { logf("MENUBG> %s missing or not a BMP - off", path); free(f); return 0; }
@@ -3270,6 +3277,12 @@ static int rz_mb_prepare(LONG cw, LONG ch) {
             g_mb_center[y * NAT_W + x] = (WORD)(((q >> 8) & 0xF800) | ((q >> 5) & 0x07E0) | ((q >> 3) & 0x001F));
         }
     g_mb_cw = cw; g_mb_ch = ch;
+    g_mb_dbg_left = 3;
+    /* The menu keeps a copy of its composed frame and redraws from it after a size change; a copy taken at
+       native size holds the native-size picture, so that version must count as background too (measured: after
+       maximizing, 462,335 frame pixels matched neither stock nor our last write). */
+    if (cw == NAT_W && ch == NAT_H && !g_mb_native && (g_mb_native = (WORD *)malloc(NAT_W * NAT_H * 2)) != NULL)
+        memcpy(g_mb_native, g_mb_center, NAT_W * NAT_H * 2);
     logf("MENUBG> picture stretched to %ldx%ld, menu frame centred at (%ld,%ld)", cw, ch, ox, oy);
     return 1;
 }
@@ -3296,8 +3309,23 @@ static void rz_mb_patch_src(void *src, const RECT *sr, LONG fx0, LONG fy0, LONG 
         for (y = 0; y < fh; y++) {
             WORD *row = (WORD *)(bits + (sr->top + y) * pitch) + sr->left;
             const WORD *o = g_mb_orig + (fy0 + y) * NAT_W + fx0, *n = g_mb_center + (fy0 + y) * NAT_W + fx0;
-            for (x = 0; x < fw; x++) if (row[x] == o[x]) row[x] = n[x];
+            WORD *l = g_mb_last + (fy0 + y) * NAT_W + fx0;
+            /* background = still the stock pixel, OR still what we wrote last time. The game does not redraw the
+               static menu background every frame, so after a size change the frame holds our previous picture
+               (owner: the native-size picture stayed inside the maximized frame - two images). */
+            for (x = 0; x < fw; x++) {
+                if (row[x] == o[x]) { g_mb_m_orig++; row[x] = n[x]; l[x] = n[x]; }
+                else if (row[x] == l[x]) { g_mb_m_last++; row[x] = n[x]; l[x] = n[x]; }
+                else if (g_mb_native && row[x] == g_mb_native[(fy0 + y) * NAT_W + fx0 + x]) { g_mb_m_last++; row[x] = n[x]; l[x] = n[x]; }
+                else g_mb_m_none++;
+            }
         }
+        if (g_mb_dbg_left > 0) {
+            g_mb_dbg_left--;
+            logf("MENUBG> swap %ldx%ld at (%ld,%ld) surf 0x%08lX: stock %ld, last %ld, other %ld (cache %ldx%ld)",
+                 fw, fh, fx0, fy0, (DWORD)src, g_mb_m_orig, g_mb_m_last, g_mb_m_none, g_mb_cw, g_mb_ch);
+        }
+        g_mb_m_orig = g_mb_m_last = g_mb_m_none = 0;
     } else if (!logged++) logf("MENUBG> unexpected surface: bits 0x%08lX pitch %ld", (DWORD)bits, pitch);
     ((RZ_UNLOCK)vt[0x80 / 4])(src, NULL);
 }
