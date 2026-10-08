@@ -826,3 +826,20 @@ froze the same way, so neither is the cause. A same-size `WM_SIZE` and a SetWind
 not unfreeze it (the owner's hand re-maximize does). `[UNCERTAIN]` why presents stop reaching the window. Leading
 hypothesis, not tested: Windows' compatibility layer for 16-bit DirectDraw games (the 8/16-bit mitigation shim)
 composes from its own copy sized when the mode was set, and stops tracking it after the size changes.
+
+### ROOT CAUSE FOUND: the `DWM8And16BitMitigation` compatibility layer (2026-10-07)
+
+`Apps\SC3U.exe` has `DWM8And16BitMitigation` set in BOTH `HKCU` and `HKLM`
+`Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers` (the HKLM value is `$ DWM8And16BitMitigation`),
+and `AcLayers.dll` is loaded in the process. Compat layers are keyed by the exe's full path, so a byte-identical
+copy `Apps\SC3U_nocompat.exe` (launched with the new `mods_launch -exe SC3U_nocompat.exe`) drops that layer while
+`AcLayers` still loads for built-in shims.
+
+A/B, same build, 1024x768 start (`sc3startsize`), overscroll + sc3resize, Europolis:
+- `SC3U.exe`: screen pure white for 60+ s while the present logger shows correct 1024x768 presents to the client.
+- `SC3U_nocompat.exe`: **renders**, 22,081 colours, the city with SIMUI's native 1024 HUD.
+
+So the mitigation composes the game through its own copy and stops showing the game's presents once the window
+or mode size differs from what it set up. That is very likely the New-City-while-maximized freeze too (correct
+presents, stale screen, fixed only by a real resize). The `0xC0000096` / present-gate history in LAUNCH_CONTROL
+predates this finding and may need re-reading in its light.

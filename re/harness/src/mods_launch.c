@@ -69,6 +69,7 @@ static void dirname_of(const char *full, char *dir, int cb) {
 }
 
 int main(int argc, char **argv) {
+    const char *exename = "SC3U.exe";
     char self[MAX_PATH], owndir[MAX_PATH], root[MAX_PATH];
     char exe[MAX_PATH], workdir[MAX_PATH], dll[MAX_PATH];
     static const char *mods[] = { "sc3resize.dll", "sc3bigcity.dll", "sc3overscroll.dll", "sc3simrun.dll", "sc3startsize.dll" };
@@ -92,6 +93,8 @@ int main(int argc, char **argv) {
     for (i = 1; i < argc; i++) {
         if (!lstrcmpiA(argv[i], "-delay") && i + 1 < argc) {
             delayms = atoi(argv[++i]);
+        } else if (!lstrcmpiA(argv[i], "-exe") && i + 1 < argc) {
+            exename = argv[++i];   /* test option: launch a renamed copy (compat layers are keyed by path) */
         } else if (!lstrcmpiA(argv[i], "-kill") && i + 1 < argc) {
             killsec = atoi(argv[++i]);
         } else if (!lstrcmpA(argv[i], "--")) {
@@ -113,13 +116,13 @@ int main(int argc, char **argv) {
 
     /* SC3U.exe: ship layout is next to us (loader dropped in Apps); dev layout is
        <root>\Apps\SC3U.exe reached by walking up 4 levels from bin\bigcity_launch.exe. */
-    _snprintf(exe, sizeof(exe), "%s\\SC3U.exe", owndir);
+    _snprintf(exe, sizeof(exe), "%s\\%s", owndir, exename);
     if (GetFileAttributesA(exe) != INVALID_FILE_ATTRIBUTES) {
         lstrcpynA(workdir, owndir, sizeof(workdir));
     } else {
         lstrcpynA(root, self, sizeof(root));
         for (i = 0; i < 4; i++) { p = strrchr(root, '\\'); if (p) *p = 0; }
-        _snprintf(exe, sizeof(exe), "%s\\Apps\\SC3U.exe", root);
+        _snprintf(exe, sizeof(exe), "%s\\Apps\\%s", root, exename);
         _snprintf(workdir, sizeof(workdir), "%s\\Apps", root);
     }
 
