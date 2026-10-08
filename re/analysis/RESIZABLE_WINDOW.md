@@ -872,3 +872,7 @@ should detect it or run a renamed copy (`mods_launch -exe`).
   462,335 frame pixels matched neither stock nor the last write. The swap now treats a pixel as background if it equals
   the stock picture, the last value written there, or the 800x600 version of the picture. After: every maximized frame
   swaps 380,018 background pixels and leaves about 100k button pixels; grabs maximized and restored show one picture.
+- **Minimap / side panel seam and RCI (owner):** natively the 442-tall panel overlaps the minimap (top 436) by 6 px and
+  the RCI sits 1 px over the console's right edge (599 vs 600). The extended panel now ends at minimap top + 6
+  (`[1584 0 1680 821]` over a minimap at 815) and the RCI at art right - 1. The RCI stays bottom-aligned to the bar (its
+  native 8-px overhang below the client edge was clipped, owner asked for the full RCI earlier).

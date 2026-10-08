@@ -1139,7 +1139,9 @@ static LONG rz_side_target_h(void) {
     h = cr.bottom - cr.top;
     if (g_mini && !IsBadReadPtr(g_mini, 0x90)) {
         LONG mtop = ((LONG *)((DWORD)g_mini + 0x80))[1];
-        if (mtop > 0 && mtop < h) h = mtop;
+        /* +6: natively the 442-tall panel overlaps the minimap (top 436) by 6 px, which is what joins the two
+           frames. Stopping exactly at the minimap top left a visible seam (owner 2026-10-07). */
+        if (mtop > 0 && mtop < h) h = mtop + 6 <= h ? mtop + 6 : h;
     }
     return h;
 }
@@ -2355,7 +2357,7 @@ static void rz_bar_children_right(void) {
             void *rci = rz_find_by_vt(rroot, sui3 + 0xab274, 0, &budget);
             if (rci && !IsBadWritePtr(rci, 0xa0)) {
                 LONG *e = (LONG *)((DWORD)rci + 0x80);
-                LONG w = e[2] - e[0], want = art[2];   /* right of the console, i.e. against the minimap */
+                LONG w = e[2] - e[0], want = art[2] - 1;   /* right of the console with the native 1-px overlap (599 vs art 600) */
                 DWORD *rvt = *(DWORD **)rci;
                 /* Cache the RCI's NATIVE rect once (still at native the first time we see it), then
                  * place it at native_y + the bar's vertical shift, so it docks DOWN with the bar
