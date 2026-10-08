@@ -876,3 +876,6 @@ should detect it or run a renamed copy (`mods_launch -exe`).
   the RCI sits 1 px over the console's right edge (599 vs 600). The extended panel now ends at minimap top + 6
   (`[1584 0 1680 821]` over a minimap at 815) and the RCI at art right - 1. The RCI stays bottom-aligned to the bar (its
   native 8-px overhang below the client edge was clipped, owner asked for the full RCI earlier).
+- **RCI vertical position (owner, 2026-10-08, "a gap on the RCI indicator"):** bottom-aligning the RCI to the bar put it
+  8 px higher than native and opened a step against the bar. Now at the native offset: top = bar top - 24 (520 vs 544),
+  bottom 8 px past the client edge and cut off, as in the unmodded game.

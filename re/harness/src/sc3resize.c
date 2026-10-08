@@ -2375,13 +2375,17 @@ static void rz_bar_children_right(void) {
                      * look. */
                     LONG barBottom = ((LONG *)((DWORD)bar + 0x80))[3];
                     LONG rh = g_rci_nat_ok ? (g_rci_nat[3] - g_rci_nat[1]) : (e[3] - e[1]);
-                    LONG ny = barBottom - rh;
+                    /* NATIVE relation (owner 2026-10-08, "there's a gap on the RCI indicator"): natively the RCI top is
+                       24 px above the bar top (520 vs 544) and its bottom 8 px hang past the client edge and are cut
+                       off. Bottom-aligning it (an earlier request to see the whole RCI) put it 8 px higher than the
+                       original and opened a visible step against the bar. Use the native offset. */
+                    LONG ny = ((LONG *)((DWORD)bar + 0x80))[1] - 24;
                     if (w > 0 && want > 0 && (e[0] != want || e[1] != ny) &&
                         rvt && !IsBadReadPtr(rvt, 0xcc) && rvt[0xc8 / 4]) {
                         DWORD a[4];
                         a[0] = (DWORD)want;     a[1] = (DWORD)ny;
                         a[2] = (DWORD)(want+w); a[3] = (DWORD)(ny + rh);
-                        logf("BARKIDS> RCI [%ld %ld %ld %ld] -> [%ld %ld %ld %ld] (bottom aligned to bar bottom %ld)",
+                        logf("BARKIDS> RCI [%ld %ld %ld %ld] -> [%ld %ld %ld %ld] (native: top 24 px above the bar top; bar bottom %ld)",
                              e[0], e[1], e[2], e[3], a[0], a[1], a[2], a[3], barBottom);
                         rz_thiscall(rci, (void *)rvt[0xc8 / 4], a, 4);
                         moved++;
