@@ -1139,6 +1139,12 @@ static LONG rz_side_target_h(void) {
     h = cr.bottom - cr.top;
     if (g_mini && !IsBadReadPtr(g_mini, 0x90)) {
         LONG mtop = ((LONG *)((DWORD)g_mini + 0x80))[1];
+        LONG mbot = ((LONG *)((DWORD)g_mini + 0x80))[3];
+        /* Only follow the minimap once it is DOCKED at the client bottom. While it still sits at its native spot
+           (436..600 in a larger client) this gave the native height, the panel surface was rebuilt at 442 and
+           again at full height ~2 ms later, and the panel's paint read a null surface between the two (owner crash
+           2026-10-08, GZGraphicD+0x18C7A from SIMUI+0x4E6B0). */
+        if (mbot != h) return h;
         /* +6: natively the 442-tall panel overlaps the minimap (top 436) by 6 px, which is what joins the two
            frames. Stopping exactly at the minimap top left a visible seam (owner 2026-10-07). */
         if (mtop > 0 && mtop < h) h = mtop + 6 <= h ? mtop + 6 : h;

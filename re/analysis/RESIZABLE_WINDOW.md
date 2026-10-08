@@ -884,3 +884,10 @@ should detect it or run a renamed copy (`mods_launch -exe`).
   tracked by address and the dock decision was made only at first sight; a freed dialog's address handed to the new
   panel left it with a plain dialog's entry. An entry whose window comes back with another size is now reset, and the
   172x480 panel is recognised on every reopen. Not yet verified (needs two New Citys in a row).
+- **Crash: maximize during the terrain editor, then accept (owner, 2026-10-08):** null read at `GZGraphicD+0x18C7A`
+  (blit wrapper) from the side panel paint `SIMUI+0x4E6B0`, ~1 ms after the panel background surface was rebuilt twice
+  in ~2 ms: first at the native height (the minimap still at its native spot, top 436, so "minimap top + 6" = 442),
+  then at full height once the minimap docked. The panel now follows the minimap top only when the minimap is docked at
+  the client bottom. Repro of the owner's flow afterwards: panel docked `[1508 249 1680 729]`, terrain accepted, alive
+  20 s later, no native-height rebuild, no fault, HUD correct (1 valid run, the other picked the wrong window).
+  Log kept: `re/harness/combo/crash_0008.log`.
