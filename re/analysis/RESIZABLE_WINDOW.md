@@ -851,3 +851,19 @@ the HUD already laid out (side panel right, minimap bottom-right, bar right), up
 screen, no native-layout frames, no de-maximize needed. The present hold engaged 3.7 s and 4.4 s and released itself.
 **Open for release:** other players may have the same layer (the HKLM `$` value looks installer-set); the launcher
 should detect it or run a renamed copy (`mods_launch -exe`).
+
+## Hand-test round 2 fixes (2026-10-07)
+
+- **Bar fields after New City while maximized:** the culprit was the old `rz_hud_reflow` "top-strip PROOF": built in a
+  wide window, it origin-scaled the four info-field boxes by live/native (2.56x) and the bar-span code then added dx
+  (live read: date at x 2261..2365 in a 2048 client). Now opt-in (`SC3RESIZE_HUDREFLOW=1`). Live read after: fields
+  1256..1748 inside the art 1248..1848; grab shows name centred, population, money, date. The selector already chose
+  the 800 group (`tag native 800`); a `BAR800` guard (spoof the selector's own window to 800 wide) stays for safety.
+- **Menu background only on the menu:** "menu" = the HUD container (`SC3U.exe+0xd32d0`) has no city view
+  (`SIMSPR+0x676ac`). Keying on the menu button container (`SC3U.exe+0xd2c20`) failed: it disappears while the New City
+  dialog is open. Only the FINAL present counts (intermediate 800x600 blits made it re-stretch every frame).
+- **Native 800x600 menu** gets the same picture (no margins).
+- **Terrain panel:** recognised by class + size (172x480) as well as the edge test, docked right, centred vertically:
+  `[1876 300 2048 780]` at 2048x1081.
+- **De-maximize:** dialogs with no recorded stock rect are centred at 800x600 instead of left in place.
+- **Ghost dialog during loads:** root invalidated (vt+0x154) after any dialog move. Not yet verified by eye.

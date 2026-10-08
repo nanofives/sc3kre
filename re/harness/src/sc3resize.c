@@ -1733,6 +1733,10 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
                    right edge is exactly NAT_W, in the right half, is a tool panel docked to the right
                    edge. It stays docked there at its stock y instead of being centered. */
                 if (r[2] == NAT_W && r[0] >= NAT_W / 2) { g_dlg[e].rdock = 1; g_dlg[e].rdock_y = r[1]; }
+                /* ...or recognised by its size: the terrain editor panel is 172 wide and 480 tall. On a later
+                   New City (after a city was loaded) the game can create it somewhere else, and the edge test
+                   alone then sent it to the centring rule (owner 2026-10-07). */
+                if (r[2] - r[0] == 172 && r[3] - r[1] >= 400) { g_dlg[e].rdock = 1; g_dlg[e].rdock_y = 60; }
             }
             g_dlg[e].seen = 1;
             {   LONG w = r[2] - r[0], h = r[3] - r[1], t[4];
@@ -1740,9 +1744,9 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
                 LONG cx = (ax1 - w) / 2, cy = (ay1 - h) / 2;
                 if (cx < 0) cx = 0;
                 if (cy < 0) cy = 0;
-                if (g_dlg[e].rdock) {                       /* docked: right edge, stock y, kept inside */
+                if (g_dlg[e].rdock) {                       /* docked: right edge, centred vertically (owner) */
                     cx = cw - w;
-                    cy = g_dlg[e].rdock_y;
+                    cy = (ch - h) / 2;
                     if (cy + h > ch) cy = ch - h;
                     if (cx < 0) cx = 0;
                     if (cy < 0) cy = 0;
@@ -1770,7 +1774,7 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
                     int untouched = !memcmp(r, g_dlg[e].placed, sizeof(LONG) * 4);
                     if (untouched) {
                         if (native && g_dlg[e].has_stock) { memcpy(t, g_dlg[e].stock, sizeof(t)); place = 1; }
-                        else if (native) { memcpy(g_dlg[e].placed, r, sizeof(LONG) * 4); }
+                        else if (native) { t[0] = cx; t[1] = cy; t[2] = cx + w; t[3] = cy + h; place = 1; }  /* owner: re-centre on de-maximize */
                         else { t[0] = cx; t[1] = cy; t[2] = cx + w; t[3] = cy + h; place = 1; }
                     } else {                                            /* the player moved it: clamp */
                         LONG x = r[0], y = r[1];
@@ -1793,7 +1797,13 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
         }
     }
     for (k = 0; k < g_dlg_n; k++) if (!g_dlg[k].seen) g_dlg[k].vis = 0;   /* gone: never dereferenced again until re-seen */
-    if (moved) rz_cascade_derived();
+    if (moved) {
+        DWORD *rvt = *(DWORD **)root;
+        rz_cascade_derived();
+        /* repaint what was under the dialog's old spot: during a load nothing redraws there, so the old copy
+           stayed (owner: two "Cargando..." boxes). vt+0x154 = invalidate. */
+        if (rvt && !IsBadReadPtr(rvt, 0x158) && rvt[0x154 / 4]) rz_thiscall(root, (void *)rvt[0x154 / 4], NULL, 0);
+    }
 }
 
 /* Does any visible dialog overlap this absolute rect? Uses the rect copies, never the pointers. */
@@ -3302,6 +3312,40 @@ static void rz_mb_margins(LONG cw, LONG ch, LONG ox, LONG oy) {
     ReleaseDC(g_hwnd, dc);
 }
 
+/* Is the main menu up? Its button container is a root child of class SC3U.exe+0xd2c20 (measured at
+   [80 60 720 540], 15 children). Early city frames are 800x600 too and must not get the menu treatment
+   (owner: New City briefly showed the city frame centred inside the menu picture). */
+static int rz_menu_visible(void) {
+    /* "Menu" = no city view yet: the full-client HUD container (root child, class SC3U.exe+0xd32d0) holds the
+       city view (class SIMSPR+0x676ac) once a city exists, and is empty at the main menu and its dialogs.
+       (First try keyed on the menu button container SC3U.exe+0xd2c20, which disappears while the New City
+       dialog is open - the dialog then went out stretched and clicks missed.) */
+    DWORD exe = (DWORD)GetModuleHandleA(NULL), spr = (DWORD)GetModuleHandleA("SIMSPR.DLL");
+    void *root = rz_ui_root(), *head, *n;
+    int g = 0;
+    if (!root || IsBadReadPtr((BYTE *)root + 0x34, 4)) return 0;
+    head = *(void **)((DWORD)root + 0x34);
+    if (!head || IsBadReadPtr(head, 4)) return 0;
+    for (n = *(void **)head; n && n != head && g++ < 200; n = *(void **)n) {
+        DWORD *c;
+        if (IsBadReadPtr(n, 0x0c)) break;
+        c = *(DWORD **)((DWORD)n + 8);
+        if (c && !IsBadReadPtr(c, 0x38) && c[0] == exe + 0xd32d0) {
+            void *h2 = *(void **)((DWORD)c + 0x34), *m;
+            int g2 = 0;
+            if (!h2 || IsBadReadPtr(h2, 4)) return 1;
+            for (m = *(void **)h2; m && m != h2 && g2++ < 100; m = *(void **)m) {
+                DWORD *k;
+                if (IsBadReadPtr(m, 0x0c)) break;
+                k = *(DWORD **)((DWORD)m + 8);
+                if (k && !IsBadReadPtr(k, 4) && spr && k[0] == spr + 0x676ac) return 0;   /* a city view */
+            }
+            return 1;
+        }
+    }
+    return 0;
+}
+
 /* Returns 1 and sets *hr when it presented the frame itself. */
 static int rz_mb_present(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, void *fx, HRESULT *hr) {
     RECT cr, c;
@@ -3328,7 +3372,16 @@ static int rz_mb_present(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, vo
     }
     if (sr->right - sr->left != NAT_W || sr->bottom - sr->top != NAT_H) return 0;
     dw = dr->right - dr->left; dh = dr->bottom - dr->top;
-    if (dw < NAT_W || dh < NAT_H || (dw == NAT_W && dh == NAT_H)) return 0;
+    if (dw < NAT_W || dh < NAT_H) return 0;
+    /* only the FINAL present (dest covers the client); intermediate 800x600 blits are not ours */
+    if (!GetClientRect(g_hwnd, &cr) || dw < cr.right - cr.left || dh < cr.bottom - cr.top) return 0;
+    if (!rz_menu_visible()) { g_mb_active = 0; return 0; }
+    if (cr.right - cr.left == NAT_W && cr.bottom - cr.top == NAT_H) {
+        /* native window: no margins, but the same picture (owner: the 800x600 menu still showed the old one) */
+        if (rz_mb_load() && rz_mb_prepare(NAT_W, NAT_H)) rz_mb_patch_src(src, sr, 0, 0, NAT_W, NAT_H);
+        g_mb_active = 0;
+        return 0;   /* the caller presents it normally */
+    }
     if (!GetClientRect(g_hwnd, &cr) || dw < cr.right - cr.left || dh < cr.bottom - cr.top) return 0;
     if (!rz_mb_load() || !rz_mb_prepare(dw, dh)) return 0;
     ox = (dw - NAT_W) / 2; oy = (dh - NAT_H) / 2;
@@ -6830,6 +6883,7 @@ static void rz_hook_cac8(HMODULE sui) {
  * origin-scale each widget's X by live/native and preserve its width. Y (top strip band) unchanged.
  * Only widens (live > native); at native or smaller it is a no-op, so construction is untouched.
  * The label group (idx17-28) is left alone in this proof. __cdecl: the wrap cleans the arg. */
+static int g_hudreflow = 0;
 static void __cdecl rz_hud_reflow(DWORD *arr) {
     static const int x1i[4] = { 1, 5, 9, 13 };
     static const int x2i[4] = { 3, 7, 11, 15 };
@@ -6837,6 +6891,12 @@ static void __cdecl rz_hud_reflow(DWORD *arr) {
     RECT cr;
     DWORD tag;
     if (!arr || IsBadWritePtr(arr, 0x74)) return;          /* 0x1d ints */
+    /* OFF BY DEFAULT (owner 2026-10-07). This proof origin-scales the bar's four info-field boxes by live/native.
+       When the HUD is built in an already-maximized window (New City while maximized) that scaled the fields by
+       2.56x and the bar-span code then shifted them by dx again: date field at x 2261..2365 in a 2048 client,
+       population and money out of place. The bar-span code places the fields itself, so this is not needed.
+       SC3RESIZE_HUDREFLOW=1 restores it. */
+    if (!g_hudreflow) return;
     tag = arr[0];
     if      (tag == 0x1024768) native_w = 1024;
     else if (tag == 0x800600)  native_w = 800;
@@ -6860,6 +6920,44 @@ static void __cdecl rz_hud_reflow(DWORD *arr) {
  * function is __thiscall(this, outTable) ending `ret 4` (verified from the PE), so the wrapper calls it
  * as a subroutine with param_1 re-pushed and lets its own ret 4 unwind. Fail-closed: verifies the
  * prologue bytes before hooking. */
+/* BAR800 (owner 2026-10-07): SIMUI FUN_100270e5 picks the bar layout group from the ROOT WIDTH (640 / 800 /
+   >= 801 -> 1024x768 group; worker report re/harness/simrun/opt2_result.txt). Maximized BEFORE New City, the
+   game built the 1024 group's field positions on top of the 800 group's 600-wide art (live read: date field
+   at x 2070..2174 in a 1920 client, population out of place), while this mod lays the bar out from the 800
+   layout. Present an 800-wide root to that one call so both flows build the same bar. SC3RESIZE_BAR800=0. */
+static int  g_bar800 = 1;
+static LONG g_bar800_saved = 0x7fffffff;
+static LONG *g_bar800_win;
+static DWORD rz_thiscall_ret(void *self, void *fn, const DWORD *a, int n);   /* fwd */
+/* cdecl, arg = the HUD `this` (the cave pushes ecx). Resolve the window the selector itself reads -
+   this->vt[0x10]()->vt[0x0c](), width = vt[0x90] = +0x88 - +0x80 - and present it 800 wide. */
+static void __cdecl rz_bar800_begin(void *self) {
+    DWORD *vt, w1, *vt1, w2;
+    LONG *r;
+    g_bar800_saved = 0x7fffffff; g_bar800_win = NULL;
+    if (!g_bar800 || !self || IsBadReadPtr(self, 4)) return;
+    vt = *(DWORD **)self;
+    if (!vt || IsBadReadPtr(vt, 0x14) || !vt[0x10 / 4]) return;
+    w1 = rz_thiscall_ret(self, (void *)vt[0x10 / 4], NULL, 0);
+    if (!w1 || IsBadReadPtr((void *)w1, 4)) return;
+    vt1 = *(DWORD **)w1;
+    if (!vt1 || IsBadReadPtr(vt1, 0x10) || !vt1[0x0c / 4]) return;
+    w2 = rz_thiscall_ret((void *)w1, (void *)vt1[0x0c / 4], NULL, 0);
+    if (!w2 || IsBadWritePtr((BYTE *)w2 + 0x80, 16)) return;
+    r = (LONG *)w2;
+    if (r[0x88 / 4] - r[0x80 / 4] > NAT_W) {
+        g_bar800_win = r; g_bar800_saved = r[0x88 / 4];
+        r[0x88 / 4] = r[0x80 / 4] + NAT_W;
+        logf("BAR800> layout window 0x%08lX width %ld presented as %d to the bar layout selector",
+             w2, g_bar800_saved - r[0x80 / 4], NAT_W);
+    }
+}
+static void __cdecl rz_bar800_end(void) {
+    if (g_bar800_win && g_bar800_saved != 0x7fffffff && !IsBadWritePtr((BYTE *)g_bar800_win + 0x80, 16))
+        g_bar800_win[0x88 / 4] = g_bar800_saved;
+    g_bar800_saved = 0x7fffffff; g_bar800_win = NULL;
+}
+
 static void patch_hud_reflow(HMODULE sui) {
     static const BYTE expect[6] = { 0x8B, 0x01, 0x56, 0xFF, 0x50, 0x10 };
     BYTE *t = (BYTE *)sui + SUI_RVA_PRODUCER;
@@ -6875,7 +6973,7 @@ static void patch_hud_reflow(HMODULE sui) {
     len = steal_len(t, relofs, &nrel);
     if (len < 5) { logf("--- HUD: FUN_100270e5 undecodable prologue - skip"); return; }
     tr   = pool_alloc(len + 5);
-    cave = (BYTE *)VirtualAlloc(NULL, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    cave = (BYTE *)VirtualAlloc(NULL, 96, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     if (!tr || !cave) { logf("--- HUD: alloc failed"); return; }
 
     memcpy(tr, t, len);
@@ -6889,9 +6987,13 @@ static void patch_hud_reflow(HMODULE sui) {
     /* cave: mov [g_hud_top],ecx ; push [esp+4] ; call tr ; push eax ; push [esp+8] ; call reflow ;
              add esp,4 ; pop eax ; ret 4 */
     cave[n++] = 0x89; cave[n++] = 0x0D; *(DWORD *)(cave + n) = (DWORD)&g_hud_top; n += 4;
+    cave[n++] = 0x51;                                                                   /* push ecx */
+    cave[n++] = 0xE8; *(DWORD *)(cave + n) = (DWORD)rz_bar800_begin - (DWORD)(cave + n + 4); n += 4;
+    cave[n++] = 0x59;                                                                   /* pop ecx */
     cave[n++] = 0xFF; cave[n++] = 0x74; cave[n++] = 0x24; cave[n++] = 0x04;
     cave[n++] = 0xE8; *(DWORD *)(cave + n) = (DWORD)tr - (DWORD)(cave + n + 4); n += 4;
     cave[n++] = 0x50;
+    cave[n++] = 0xE8; *(DWORD *)(cave + n) = (DWORD)rz_bar800_end - (DWORD)(cave + n + 4); n += 4;
     cave[n++] = 0xFF; cave[n++] = 0x74; cave[n++] = 0x24; cave[n++] = 0x08;
     cave[n++] = 0xE8; *(DWORD *)(cave + n) = (DWORD)rz_hud_reflow - (DWORD)(cave + n + 4); n += 4;
     cave[n++] = 0x83; cave[n++] = 0xC4; cave[n++] = 0x04;
@@ -7076,6 +7178,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_FIELDBG", v, sizeof(v))) g_fieldbg = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUBG", v, sizeof(v))) g_menubg = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HOLD", v, sizeof(v))) g_hold = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_BAR800", v, sizeof(v))) g_bar800 = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_HUDREFLOW", v, sizeof(v))) g_hudreflow = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_EDGEFIX", v, sizeof(v))) g_edgefix = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_EDGESCROLL", v, sizeof(v))) g_edgescroll = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_VIEWFIX", v, sizeof(v))) g_viewfix = atoi(v);
