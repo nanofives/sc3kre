@@ -357,7 +357,11 @@ static DWORD g_ready_ms = 3000;        /* load-readiness gate: ignore resizes fo
                                           (non-reproducing) fired ~5s after capture during load; this
                                           is preventive hygiene - do not touch the view mid-init. */
 static int   g_defer_logged;
-static volatile LONG g_bridge_fresh;   /* a new city view not yet laid out by rz_do_resize (see the SETTLED check) */
+static volatile LONG g_bridge_fresh;
+#define RZ_HOLD_MAX_MS 6000
+static int    g_hold = 1;            /* SC3RESIZE_HOLD=0: no present hold, dialogs on the 100 ms timer only */
+static int    g_hold_logged;
+static LONG   g_hold_frames;   /* a new city view not yet laid out by rz_do_resize (see the SETTLED check) */
 static int   g_census;                 /* SC3RESIZE_CENSUS: census the resized frame content */
 static DWORD g_census_ms;              /* when to run the post-resize census (0 = not scheduled) */
 
@@ -3345,6 +3349,30 @@ static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWO
     __int64 d;
     RECT sfix;
     if (rz_mb_present(self, dr, src, sr, fl, fx, &hr)) return hr;
+    /* EVENT-STYLE LAYOUT (owner 2026-10-07: "reposition of the elements looks buggy while it loads").
+       On the FINAL present (dest covers the client):
+         - HOLD: while a fresh city view / newly shown HUD is waiting for its layout pass, skip the
+           present so the half-built native layout is never shown; the previous frame stays up.
+           Capped at RZ_HOLD_MAX_MS after the trigger so a layout that never runs cannot black out.
+         - DIALOGS: place dialogs right before the frame goes out, not on a 100 ms timer, so a dialog
+           never shows a frame at its old spot. SC3RESIZE_HOLD=0 disables both. */
+    if (g_hold && dr && g_hwnd && !IsBadReadPtr(dr, sizeof(RECT))) {
+        RECT crh;
+        if (GetClientRect(g_hwnd, &crh) && dr->right - dr->left >= crh.right - crh.left &&
+            dr->bottom - dr->top >= crh.bottom - crh.top) {
+            LONG cw = crh.right - crh.left, ch = crh.bottom - crh.top;
+            if (g_bridge_fresh && !(cw == NAT_W && ch == NAT_H) && GetTickCount() - g_bridge_ms < RZ_HOLD_MAX_MS) {
+                if (!g_hold_logged) { g_hold_logged = 1; logf("HOLD> presents held until the layout pass runs"); }
+                g_hold_frames++;
+                return 0;   /* DD_OK: nothing drawn, previous frame stays on screen */
+            }
+            if (g_hold_logged) {
+                logf("HOLD> released after %ld held present(s)", g_hold_frames);
+                g_hold_logged = 0; g_hold_frames = 0;
+            }
+            if (g_dialogs) rz_dialogs_poll(cw, ch);
+        }
+    }
     if (g_mb_active && dr && g_hwnd && !IsBadReadPtr(dr, sizeof(RECT))) {   /* another full-window frame: menu over */
         RECT crm;
         if (GetClientRect(g_hwnd, &crm) && dr->right - dr->left >= crm.right - crm.left &&
@@ -7047,6 +7075,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_ARTGUARD", v, sizeof(v))) g_artguard = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_FIELDBG", v, sizeof(v))) g_fieldbg = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUBG", v, sizeof(v))) g_menubg = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_HOLD", v, sizeof(v))) g_hold = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_EDGEFIX", v, sizeof(v))) g_edgefix = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_EDGESCROLL", v, sizeof(v))) g_edgescroll = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_VIEWFIX", v, sizeof(v))) g_viewfix = atoi(v);

@@ -71,7 +71,7 @@ static void dirname_of(const char *full, char *dir, int cb) {
 int main(int argc, char **argv) {
     char self[MAX_PATH], owndir[MAX_PATH], root[MAX_PATH];
     char exe[MAX_PATH], workdir[MAX_PATH], dll[MAX_PATH];
-    static const char *mods[] = { "sc3resize.dll", "sc3bigcity.dll", "sc3overscroll.dll", "sc3simrun.dll" };
+    static const char *mods[] = { "sc3resize.dll", "sc3bigcity.dll", "sc3overscroll.dll", "sc3simrun.dll", "sc3startsize.dll" };
     int nmods = 0, m;
     char cmdline[2048];
     char gameargs[1024];

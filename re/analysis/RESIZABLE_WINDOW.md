@@ -804,3 +804,25 @@ de-maximize/maximize. Three causes, each measured:
    after the first pass ran with them hidden: minimap mid-screen, side buttons twice, bar contents left. The
    routine now also runs once when the side panel's `+0xa0` bit 0 goes 0 -> 1. Verified with a grab: HUD correct
    without a de-maximize.
+
+## Start size experiment and the "presents do not reach the screen" problem (2026-10-07)
+
+**Worker report** (`re/harness/simrun/opt2_result.txt`): one stored rect drives the Win32 window, the device
+and the SIMUI root. The HUD layout is chosen from three fixed groups only: SIMUI `FUN_100270e5` by root width
+(640 -> `0x640480`, 800 -> `0x800600`, >= 801 -> `0x1024768`, 641..800 fails) and `FUN_1004cdcd` by view height
+(480 / 600 / >= 601, 481..599 fails). Nothing interpolates, so a 2048-wide window gets the 1024x768 layout.
+
+**`sc3startsize.c`** hooks GZGraphicD `FUN_10010ed1` (copies the 7-dword mode block to `+0x6cd90`, stdcall
+ret 4): copy the game's block, then write our W/H. Measured at 1024x768 with Europolis (overscroll for windowed
+mode, then also with sc3resize): the game asked 800x600x16 and got 1024x768; window, root and stored rect all
+1024x768, and **SIMUI built the city HUD natively** for 1024 (view `[0 0 1024 768]`, side panel `[928 0 1024 610]`,
+minimap `[864 604 1024 768]`, RCI `[823 680 864 768]`, bar `[0 704 823 768]`) with no mod moving anything.
+
+**But the screen stayed white**, with and without sc3resize, while the present logger showed 41 correct full-size
+presents to the client position (`dst [512 179 1536 947] src 1024x768`). That is the same symptom as the
+intermittent New-City-while-maximized freeze: an in-process dump of the presented frame showed the correct city
+and HUD, the screen showed an old 800x600 frame, at the same time. The pre-hold build and a run with MENUBG off
+froze the same way, so neither is the cause. A same-size `WM_SIZE` and a SetWindowPlacement restore/maximize did
+not unfreeze it (the owner's hand re-maximize does). `[UNCERTAIN]` why presents stop reaching the window. Leading
+hypothesis, not tested: Windows' compatibility layer for 16-bit DirectDraw games (the 8/16-bit mitigation shim)
+composes from its own copy sized when the mode was set, and stops tracking it after the size changes.
