@@ -5715,22 +5715,75 @@ static void rz_dump_all(void *iso) {
 
 
 /* CLOSE OPEN FLYOUTS ON A RESIZE (owner 2026-10-08: "if a menu of the vertical bar is open when resizing you
-   have to close it after resize"). The side panel's tool flyouts are ROOT children of class SIMUI+0xa9cc8
-   (measured with one open). Hide any visible one with GZWIND vt+0xf4 SetFlags(1 = visible, 0), the same call
-   sc3bigcity uses, then invalidate the root (vt+0x154) so it repaints. SC3RESIZE_CLOSEFLY=0 disables. */
+   have to close it after resize"). Hide it with GZWIND vt+0xf4 SetFlags(1 = visible, 0), the same call sc3bigcity
+   uses, then invalidate the panel (vt+0x154) so it repaints. SC3RESIZE_CLOSEFLY=0 disables. */
 static int g_closefly = 1;
-static void rz_close_flyouts(void) {
+/* Returns 1 and the abs rect of the first open flyout (a visible a9a80 child of the side panel narrower than a page). */
+static int rz_open_flyout(LONG *out) {
     DWORD sui = (DWORD)GetModuleHandleA("SIMUI.DLL");
-    void *root = rz_ui_root(), *head, *n;
+    void *p = g_side_top, *head, *n;
+    int g = 0;
+    if (!sui || !p || IsBadReadPtr((BYTE *)p + 0x34, 4)) return 0;
+    head = *(void **)((DWORD)p + 0x34);
+    if (!head || IsBadReadPtr(head, 4)) return 0;
+    for (n = *(void **)head; n && n != head && g++ < 300; n = *(void **)n) {
+        DWORD *c;
+        LONG *r;
+        if (IsBadReadPtr(n, 0x0c)) break;
+        c = *(DWORD **)((DWORD)n + 8);
+        if (!c || IsBadReadPtr(c, 0xa4) || c[0] != sui + 0xa9a80 || !(c[0xa0 / 4] & 1)) continue;
+        r = (LONG *)((DWORD)c + 0x80);
+        if (r[2] - r[0] >= 96) continue;
+        if (out) memcpy(out, (BYTE *)c + 0x14, 16);
+        return 1;
+    }
+    return 0;
+}
+
+/* The last left click on a side-panel CATEGORY button (inside the panel, outside any open flyout), in client
+   coordinates. The game toggles a flyout only through that button (Escape does not close it, measured), and hiding
+   the flyout from outside left the game thinking it was open, so reopening took two clicks (measured). */
+static LPARAM g_fly_lp;
+static int    g_fly_have;
+static void rz_note_panel_click(LPARAM lp) {
+    LONG x = (short)LOWORD(lp), y = (short)HIWORD(lp), f[4];
+    LONG *pr;
+    if (!g_side_top || IsBadReadPtr((BYTE *)g_side_top + 0x14, 16)) return;
+    pr = (LONG *)((BYTE *)g_side_top + 0x14);
+    if (x < pr[0] || x >= pr[2] || y < pr[1] || y >= pr[3]) return;
+    if (rz_open_flyout(f) && x >= f[0] && x < f[2] && y >= f[1] && y < f[3]) return;   /* a click inside the flyout */
+    g_fly_lp = lp; g_fly_have = 1;
+}
+
+/* Called from the poll on a size change, before any layout moves the button: replay the click on the
+   button that opened the flyout, so the game closes it through its own toggle and its state stays consistent. */
+static void rz_close_flyout_by_click(HWND h) {
+    if (!g_closefly || !rz_open_flyout(NULL)) return;
+    if (!g_fly_have) { logf("CLOSEFLY> a flyout is open but no category click was recorded - falling back to hiding it"); return; }
+    CallWindowProcA(g_oldproc, h, WM_LBUTTONDOWN, MK_LBUTTON, g_fly_lp);
+    CallWindowProcA(g_oldproc, h, WM_LBUTTONUP, 0, g_fly_lp);
+    logf("CLOSEFLY> replayed the category click at (%d,%d) to close the open flyout before the resize",
+         (int)(short)LOWORD(g_fly_lp), (int)(short)HIWORD(g_fly_lp));
+}
+
+static void rz_close_flyouts(void) {
+    /* Measured with a flyout open (Europolis, landscape button): the flyout is a 36-px column of class
+       SIMUI+0xa9a80 inside the side panel ([704 0 740 442], visible); the panel's pages are the same class but
+       96 wide and hidden. Hide visible a9a80 children of the panel narrower than a page. */
+    DWORD sui = (DWORD)GetModuleHandleA("SIMUI.DLL");
+    void *p = g_side_top, *head, *n;
     int g = 0, closed = 0;
-    if (!g_closefly || !sui || !root || IsBadReadPtr((BYTE *)root + 0x34, 4)) return;
-    head = *(void **)((DWORD)root + 0x34);
+    if (!g_closefly || !sui || !p || IsBadReadPtr((BYTE *)p + 0x34, 4)) return;
+    head = *(void **)((DWORD)p + 0x34);
     if (!head || IsBadReadPtr(head, 4)) return;
     for (n = *(void **)head; n && n != head && g++ < 300; n = *(void **)n) {
         DWORD *c, *vt;
+        LONG *r;
         if (IsBadReadPtr(n, 0x0c)) break;
         c = *(DWORD **)((DWORD)n + 8);
-        if (!c || IsBadReadPtr(c, 0xa4) || c[0] != sui + 0xa9cc8 || !(c[0xa0 / 4] & 1)) continue;
+        if (!c || IsBadReadPtr(c, 0xa4) || c[0] != sui + 0xa9a80 || !(c[0xa0 / 4] & 1)) continue;
+        r = (LONG *)((DWORD)c + 0x80);
+        if (r[2] - r[0] >= 96) continue;                 /* a full page, not a flyout */
         vt = (DWORD *)c[0];
         if (vt && !IsBadReadPtr(vt, 0xf8) && vt[0xf4 / 4]) {
             DWORD a[2]; a[0] = 1; a[1] = 0;
@@ -5739,8 +5792,8 @@ static void rz_close_flyouts(void) {
         }
     }
     if (closed) {
-        DWORD *rvt = *(DWORD **)root;
-        if (rvt && !IsBadReadPtr(rvt, 0x158) && rvt[0x154 / 4]) rz_thiscall(root, (void *)rvt[0x154 / 4], NULL, 0);
+        DWORD *pvt = *(DWORD **)p;
+        if (pvt && !IsBadReadPtr(pvt, 0x158) && pvt[0x154 / 4]) rz_thiscall(p, (void *)pvt[0x154 / 4], NULL, 0);
         logf("CLOSEFLY> closed %d open side-panel flyout(s) after a resize", closed);
     }
 }
@@ -5990,7 +6043,13 @@ static void rz_poll(void) {
     }
 
     if (InterlockedCompareExchange(&g_busy, 1, 0) != 0) return;                /* re-entrancy */
-    if (!g_bridge_fresh) rz_close_flyouts();   /* a real resize, not the first layout of a new city */
+    if (!g_bridge_fresh) {   /* a real resize, not the first layout of a new city */
+        /* The poll sees the new client size ~140 ms before WM_SIZE is delivered (measured), so close here, on the
+           game thread, before the layout moves the button: replay the category click first (the game's own toggle),
+           and hide only if that did not close it. */
+        if (g_hwnd) rz_close_flyout_by_click(g_hwnd);
+        rz_close_flyouts();
+    }
     logf("RZ   size change: client %lux%lu vs render target %lux%lu", w, ht,
          ((DWORD *)R)[0x24 / 4], ((DWORD *)R)[0x28 / 4]);
     /* CRASH HUNT (2026-08-28): SEH around the routine so a fault becomes a DIAGNOSTIC (code +
@@ -6230,6 +6289,7 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         }
         return r;
     }
+    if (m == WM_LBUTTONDOWN && !g_mb_active) rz_note_panel_click(lp);
     if (m == WM_SIZE && wp != SIZE_MINIMIZED) {
         LRESULT r;
         DWORD w = (DWORD)LOWORD(lp), hh = (DWORD)HIWORD(lp);

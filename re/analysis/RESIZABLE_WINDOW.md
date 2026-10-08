@@ -895,3 +895,10 @@ should detect it or run a renamed copy (`mods_launch -exe`).
   `SIMUI+0xa9cc8` (an open flyout; the panel's page templates are invisible root children of the same class) with
   `vt+0xf4` SetFlags(1, 0) and invalidates the root, right before a real resize runs (not on a new city's first layout).
   `SC3RESIZE_CLOSEFLY=0` disables. Open question: whether the game then needs two clicks to reopen that flyout.
+  **Revised (same day):** the flyout is NOT a root a9cc8 window: measured with one open, it is a 36-px column of class
+  `SIMUI+0xa9a80` inside the side panel (`[704 0 740 442]`); the panel's pages are the same class, 96 wide, hidden.
+  Hiding it with SetFlags left the game believing it was open (reopening took 2 clicks, measured; Escape does not
+  close flyouts). Now the mod records the last click on a side-panel category button and, on a size change, replays
+  that click into the game (on the game thread, from the poll, which sees the new size ~140 ms before WM_SIZE) so the
+  game closes the flyout through its own toggle. Hide stays as a fallback. Verified: open, maximize (closed by the
+  replayed click), restore, ONE click reopens.
