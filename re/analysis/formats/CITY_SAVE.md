@@ -398,13 +398,79 @@ each compressed record's `parse_sections`, key `group==0x2147c2dd` by instance, 
 read `(size-frame_len)/8` records as `<II`. Key by **instance, not section order** (the header is
 instance 0 but written last), and mask x/y with `0x7ff` (not 8 bits).
 
-> **Natural extension — a network-layer WRITER** (extend `network_layer.py` to re-emit the sparse
-> record list): this is one of the two named unblock paths for `bigcities`' 512 development test —
-> authoring *connected* road and power at chosen coordinates, which `city_write.py` (zone raster only)
-> cannot do. Not yet built. Round-trip must preserve the `word0` bits 30–31 / `word1` bits 28–31
-> (orientation/flags no property handler surfaces), and the engine reconstructs neighbour masks on
-> load, so a hand-written straight run needs its pieceIds to be self-consistent with its geometry — or
-> drawn in-game and only *retuned* on disk.
+> **Network-layer WRITER — BUILT 2026-08-27, byte-identical offline** (`network_layer.py`
+> `NetworkEditor`, on top of `city_write.City`). This is one of the two named unblock paths for
+> `bigcities`' 512 development test — authoring *connected* road at chosen coordinates, which
+> `city_write.py` (zone raster only) cannot do. API: `set_piece` (re-skin an existing tile, keeps
+> z/flg/state), `add_tile` (plant; `z` **required**, never guessed), `remove_tile`, and first-tile
+> **section creation** for a previously-empty network. `flush()` re-packs `frame(verbatim)+records`
+> and rewrites the header's three counts; a network dropping to 0 tiles has its section removed to
+> match the shipped format (empty networks omit the tile section).
+>
+> **Offline proof, ZERO game runs** (`network_layer.py --selftest`): load → flush with no edits →
+> re-emit reproduces the whole file **byte-for-byte, 59/59** shipped city-family files — the writer
+> reproduces both the container (via the proven `City` pipeline) and the network encoding exactly.
+> `--selftest-edit` exercises set/add/remove/create → save → reload and asserts each change re-reads
+> with consistent header counts. An edited file passes `city_roundtrip` L0–L4 (a self-consistent
+> valid container).
+>
+> Round-trip preserves `word0` bits 30–31 (`flg`) and all of `word1`'s high 16 bits (`state`) exactly,
+> because they are copied verbatim, not re-derived. **Honest limits, unchanged by the writer:** no
+> modified network has ever been *loaded by the game*; `z` is terrain elevation and must match the
+> ground at (x,y) or the tile floats; `add_tile` writes an exact (piece,state) and BYPASSES the
+> SimpleRules tiler `[CONFIRMED @0x1001547b]`, so a hand-planted straight run does **not** auto-tile
+> its neighbours — for auto-tiling, draw in-game and only *retune* on disk. For bigcities, plant road
+> whose pieceIds are self-consistent with the geometry, or plant then let an in-game edit re-tile.
+
+### Group `0x029ca804` = the SimTransit traffic-density layer `[CONFIRMED]` — six per-cell grids
+
+Decoded and validated 2026-08-27. Tool: `re/tools/transit_layer.py` (reader; `--validate`, `--diff`,
+`--sum` for a whole-map/regional total, `--grid` per-cell CSV). This is SimTransit's own save section
+(class iOS `SimCity::goTrafficLayer`), save `FUN_10004c8d` / load `FUN_100048ee`, both hold the literal
+`0x29ca804` `[CONFIRMED @0x10004c8d, 0x100048ee]`. ⚠️ **It is `0x029ca804`, NOT `0x029ca806`** (that
+near-miss id, TrafficLayer, never appears in a save — §the near-miss note above).
+
+One instance-0 blob after the 8-byte object frame. **Payload = `165 + 6.25*cells`**, `cells = N*N`
+(byte-verified N=192 payload 230565, N=256 payload 409765). The `25/4` per cell = **six 1-byte-per-cell
+grids + two 1-bit-per-cell grids** `[CONFIRMED write FUN_10004ee9 (byte) / FUN_10004e98 (bit,
+ceil(N/32) dwords/row); read FUN_10004bb1 / FUN_10004b63]`. On-disk order and offsets
+`[CONFIRMED write-order @0x10004c8d; boundaries A=0/B=145/C=20 measured across N=128/192/256]`:
+
+| offset | field | member | bytes | meaning |
+|---|---|---|---|---|
+| `0` | `surf_snap` | `+0x60` | `cells` | surface (road+hwy) **monthly density snapshot** |
+| `cells` | `rail_snap` | `+0x64` | `cells` | rail monthly snapshot |
+| `2*cells` | `sub_snap` | `+0x68` | `cells` | subway monthly snapshot |
+| `3*cells` | `bit0` | `+0x80` | `cells/8` | 1-bit/cell boolean plane (unnamed) |
+| `3*cells + cells/8` | `bit1` | `+0x7c` | `cells/8` | 1-bit/cell boolean plane (paired with bit0) |
+| `3*cells + cells/4` | *(B)* | — | `145` | 2×u32 + u8 + u32 scalars, then the `+0xac` stats object (132 B) |
+| `3*cells + cells/4 + 145` | `surf_live` | `+0x6c` | `cells` | surface **LIVE within-month accumulator** |
+| `4*cells + cells/4 + 145` | `rail_live` | `+0x70` | `cells` | rail live accumulator |
+| `5*cells + cells/4 + 145` | `sub_live` | `+0x74` | `cells` | subway live accumulator |
+| `6*cells + cells/4 + 145` | *(C)* | — | `20` | 4×u32 + u32 trailing scalars, to EOF |
+
+Grid element = **1 byte, row-major stride N, value 0..`TrafficMaxDensity`** (a `STTraffic.INI` scalar).
+The `A=0/B=145/C=20` split satisfies the coder-width equation `a + Sac + 3*W90 = 144` (0 + 132 + 12,
+with `W90 = 4` since `vt+0x90` is a u32 `[CONFIRMED @0x1000c1d6]`).
+
+**There are NO static per-cell cost grids** — static routing costs are `STTraffic.INI` scalars in
+`DAT_` globals (`FUN_100015b1`); the per-cell "cost" pathfinding uses is the density value itself. **All
+six grids are dynamic simulation outputs.** `FUN_10006edd` adds each trip's contribution along its route
+(masks `0x35`→surface, `2`→rail, `8`→subway); the monthly pass `FUN_100093e9` decrements the live grids
+into both live and snapshot `[CONFIRMED @0x10006edd, 0x100093e9]`. The public
+`goTrafficLayer::GetTrafficDensity` reads the **snapshot** trio `[iOS-HINT @0x2711dc]`. Mode grouping
+(surface = road+highway, mask bits 1/4/0x10/0x20) is `[iOS-HINT]`; the snap/live pairing is `[CONFIRMED]`.
+
+**Validation (`--validate`, 0 failures / 68 files):** the trailing chunk C is exactly 20 bytes at every
+map size (would break if the boundaries were wrong); `surf_snap == surf_live` byte-exact for the 40
+saves taken right after a monthly tick; rail/subway grids are zero in cities with no traffic of that
+mode. Density is **not** confined to network tiles, so the robust readout is a **whole-map or regional
+SUM** of a grid (`--sum`), not a per-tile-on-road match.
+
+**Use as a simulation oracle (T3):** the `*_live` grids respond to the sim ticking, so
+`sum(surf_live)` (or a rect around the test network) **before vs after an unpaused run** is a
+camera-independent traffic-volume signal. `verify/tilingrules_sim_t3/PRE.md` locks this as the metric.
+Not yet a writer, and no per-cell semantic beyond mode+density — enough for the oracle.
 
 ### ⚠️ SECTION OFFSET BASE = **0** `[CONFIRMED, 59/59]` — the `+0x0C` reading is **FALSIFIED**
 

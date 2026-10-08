@@ -39,6 +39,50 @@ The negative is settled and worth not re-litigating: a closed 6-member enum appe
 cascades across **11 functions**, `*6` is baked into the piece-matrix address computation, the 42
 predicate vtables end flush with no room for a 43rd, and `MenuItem.INI` carries fixed GUIDs.
 
+## Scoping "a new road type" — three data levers over one code-locked core
+
+"A new road type" decomposes into **dimensions**, and they split cleanly into what data reaches and
+what only a code patch reaches. The full per-network decomposition is `NETWORK_TYPES.md` §5–§6
+(data-driven vs hard-coded, ranked by evidence) — that is the authority; this is the modder's summary.
+
+**The code-locked core of a network's identity, shared by every variant you build on it:** its
+`netType` enum value, its traffic-mode bit and cost-pair (`0x1000755e`: road `1`→b0/c1,
+highway `2`→b2/c3, rail `4`, subway `8` `[CONFIRMED @0x1000755e:378-520]`), its tool/menu command
+GUID (`0xC2B5DE77` Roads, retarget-not-create `[CONFIRMED, NETWORK_TYPES.md §2]`), whether it can
+bridge (only ROAD/RAIL/HWAY/POWR do `[CONFIRMED @0x10017f98]`), and the default piece ids baked as
+immediates (`0x1d` road, `0x2c` rail, `0x5c` power `[CONFIRMED @0x1000122a]`). **A reskinned/retuned
+road is still road to the simulation** — same capacity model, same demand coupling, same tool. You are
+changing how it looks and tiles, not creating a distinct simulation entity.
+
+**The three data levers that ARE reachable, and what each changes:**
+
+| lever | tool | granularity | what it changes | evidence |
+|---|---|---|---|---|
+| **Retile** (which piece a topology picks) | `tilingrules.py` (edit `*_SimpleRules.txt` RESULT lines) | per network, all future drawn tiles | topology→piece selection at build time | **game-proven** T1 erase + T2 substitute |
+| **Reskin** (what art a piece id resolves to) | `sprite_patch.py` on `*_Roads.DAT` etc. | per piece id (→ exemplar → sprite) | the pixels, geometry unchanged | **game-proven**, `verify/sprite_mod_test/RESULTS.md` |
+| **Author** (place exact tiles on a save) | `network_layer.py` `NetworkEditor` (**new 2026-08-27**) | per city, per tile | the (pieceId, state, z) written into one save's network layer | **byte-identical offline**, `--selftest` 59/59; **never loaded by the game** |
+
+The **retile** and **reskin** levers are network-wide design changes: they retune the *rules and art*
+so every tile of that network drawn afterwards follows them. The **author** lever is different in kind
+— it edits *one save's placed tiles directly*, bypassing the tiler entirely (`add_tile` writes an
+exact piece, so a hand-planted run does **not** auto-tile its neighbours `[CONFIRMED @0x1001547b]`).
+Authoring is the offline path to *planting* a network (its first customer is `bigcities`, which needs
+connected road at 512 that `city_write.py` — zones only — cannot place); it is not a way to define a
+type. For a network that auto-tiles, use retile+reskin and draw in-game; use author to plant a fixed
+layout or to *retune* an already-drawn one.
+
+**So the honest ceiling: a convincing "new road type" is a reskinned + retuned variant of one of the
+six networks, optionally hand-authored into a specific save, sharing that network's code-locked
+simulation identity.** What no data lever delivers is a seventh enum member, a new tool, or a distinct
+cost/capacity/traffic-mode — those are the exe/DLL-patch project (`pe_patch.py` is the lever), and are
+out of scope for a data mod. This is why SC4 rewrote the network layer rather than extend this one.
+
+> **Fence, unchanged.** Every lever above is **render/build-path or file-level**. None has been shown
+> to change how the **simulation** routes traffic or grows zones along a network. The author lever adds
+> a further, narrower fence: **no modified network layer has ever been loaded by the game** — the
+> byte-identical round-trip proves the container and the encoding, not the sim's acceptance of edited
+> tiles. A sim-level tiling test (T3) is the open follow-up and this fence holds until one runs.
+
 ## Where the files are, and when they load
 
 `Apps\Res\TilingRules\` — **68 loose text files**, read **unconditionally at startup**, 1,735–1,749 ms,
@@ -130,10 +174,14 @@ data carries **two authoring zeros**, one quarter turn apart — every piece fam
 90° apart, so `id2 state s` = `id1 state (s+1)`. The per-piece state-0 connection sets are tabulated
 in §13.5.
 
-> ⚠️ **The rotation sense and the per-piece zero are safe to build on. The word "clockwise" is not.**
-> All of it is proved in tile-index `(dx, dy)` terms; the W/N/E/S labels come from a convention that
-> was never independently re-derived. If that convention is wrong, the rotation sense is unaffected
-> and every compass word flips.
+> ⚠️ **The rotation sense and the per-piece zero are safe to build on. The compass WORD is not — but
+> the screen geometry now is.** All of it is proved in tile-index `(dx, dy)` terms. Update 2026-08-27
+> (`NETWORK_RULE_ENGINE.md` §14.11): the isometric world→screen projection `[CONFIRMED @ SIMSPR
+> 0x1000d0f5]` pins the two neighbour axes as a **down-left / down-right mirror pair**, collapsing the
+> facing ambiguity from 4 conventions to **2** — the turn is CCW iff world-x is the down-left axis, one
+> named static hop from settled. The cardinal words N/E/S/W have **no referent in the PC binary** (no
+> such string exists in it); they are an iOS-port convention only. **Build on `(dx, dy)` and the mirror
+> geometry; never hard-code a compass word as if the PC game asserted it.**
 
 ## The procedure
 

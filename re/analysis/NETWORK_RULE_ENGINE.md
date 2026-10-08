@@ -1077,6 +1077,13 @@ but every compass word flips**.
 > **Rotation sense and per-piece zero are safe to build a rule editor on. The word "clockwise" is not,
 > until the world-axis convention has its own witness.**
 
+> **UPDATE 2026-08-27 (§14.11).** The projection route sharpened this. The **screen geometry** is now
+> pinned `[CONFIRMED @ 0x1000d0f5]`: the two neighbour axes are a down-left / down-right mirror pair.
+> "Clockwise" is now precise — the turn is **CCW iff world-x is the down-left axis**, one named static
+> hop from settled. And the compass **words** have **no PC referent** (no N/E/S/W string anywhere in the
+> PC binaries); they are an iOS-sourced convention, not a PC fact. So build on `(dx, dy)` and the mirror
+> geometry; treat the cardinal words as an `[iOS-HINT]` label, never a PC `[CONFIRMED]`.
+
 ### 13.10 Verification done before promotion
 
 Re-checked by the orchestrator against the anchored `SIMNTWRK.DLL` rather than accepted on report:
@@ -1256,9 +1263,11 @@ residue. **Rotation sense and per-piece zero: safe. Compass words: still unwitne
 
 ### 14.8 Residuals added
 
-1. **The sign of index 0 (`-x` vs `+x`) and the on-screen rotation sense** — 4 candidate conventions,
-   2 disqualified candidate witnesses, qualification criterion in §14.5. This is the surviving residue
-   of `U-078` and it is a *labelling* question, not a mechanism question.
+1. **The sign of index 0 (`-x` vs `+x`) and the on-screen rotation sense** — ~~4 candidate conventions~~
+   **halved to 2 by the projection route, §14.11 (2026-08-27).** The two remaining are not independent:
+   both are fixed by the single bit "which world axis is the down-left screen diagonal," and the
+   cardinal WORDS are proven to have no PC referent. Surviving static hop: one call site binding the iso
+   view's dim `+0x14` to SIMNTWRK's x-size `vt[0xcc]`. A *labelling* question, not a mechanism one.
 2. **`+0x140` is never written non-zero; `+0x144`/`+0x148` are dead.** Find a caller of slot `+0xb4` on
    class `0xe223741f`, or prove there is none (§14.6).
 3. **Whether the 6-byte rule records' direction byte (24-entry table at `0x10032134`) shares numbering
@@ -1336,3 +1345,69 @@ independently of what this function is for.
 > **This does NOT promote a compass witness and §14.5's disqualification stands**, because this index
 > goes to a two-argument `+0xb0` on a different object, never into `FUN_1000d73d`'s space. Recorded so
 > that a later pass can weigh it, not lean on it.
+
+### 14.11 ⭐ The projection route — 4 → 2, and why the compass WORD has no PC referent (2026-08-27)
+
+§14.5 left the facing at **4 candidate conventions** (sign of index 0 × on-screen rotation sense),
+having exhausted the SIMNTWRK-internal route. A third route — the **isometric world→screen
+projection** in the render path — was not tried before. It **halves the residue to 2** and reframes
+what the last ambiguity even is. This is the `roadtypes` "compass labelling" backlog item.
+
+**The projection, in SIMSPR.DLL `[CONFIRMED @ 0x1000d0f5]` (per-cell render walk), setup
+`[CONFIRMED @ 0x10006752]`:**
+
+```
+screenX = (axis2 − axis1) · halfW          # puVar2[4], minus camera originX (+0x54)
+screenY = (axis1 + axis2) · halfH  − z·…    # puVar2[5], minus camera originY (+0x58)
+halfW = 4<<zoom ,  halfH = 2<<zoom  ->  halfW = 2·halfH   (textbook 2:1 iso; screenY grows downward)
+```
+
+`axis1` = the occupant field flipped against iso map-dim `+0x14`, `axis2` the one flipped against
+`+0x18`, pinned via the two rotation routines `FUN_1000f6f4` (grid) and `FUN_1000a62c` (sprite), both
+identity at rotation 0 `[CONFIRMED @ 0x1000f6f4, 0x1000a62c]`. Corroborated by the depth-sort key
+(same **sum** axis, `[CONFIRMED @ 0x1000c962]`), the map bounding quad (`[CONFIRMED @ 0x1000b70e /
+0x1000b867]`) and the separable inverse world-pixel→cell map (`[CONFIRMED @ 0x1000effc]`).
+
+**What this fixes with zero render observation:** the two world tile-axes render as **mirror images
+across the vertical, both pointing downward** — one down-**left** (the subtracted `axis1`), one
+down-**right** (the added `axis2`). `screenY` cannot tell them apart (both `+halfH`); only `screenX`
+does (one `−`, one `+`). The 4-way map rotation only permutes which world axis lands on `axis1` vs
+`axis2`; the diamond sign-structure is fixed.
+
+**Consequence — sign and rotation-sense are no longer independent; they collapse to one bit.** Feed
+the `0x10032134` deltas `dir0=(-1,0) dir1=(0,-1) dir2=(+1,0) dir3=(0,+1)` through the projection. The
+only free choice is **which world axis is the down-left diagonal** (SIMNTWRK world-x, tested against
+`vt[0xcc]`, vs world-y against `vt[0xd0]`), and it determines BOTH remaining bits at once:
+
+| the one free bit | dir0 `(-1,0)` on screen | state++ (dir0→1→2→3) on screen |
+|---|---|---|
+| **world-x = down-left** | up-right (≈63° CW-from-up) | **counter-clockwise** |
+| **world-x = down-right** | up-left (≈297°) | **clockwise** |
+
+(Derived from the projection; the two rows are the only survivors — script check, 4 candidates → these
+2.) So **§14.8 residual 1 is halved**: not "sign × rotation = 4 free" but **one** cross-module
+identification — bind "iso view axis1 / dim `+0x14`" to "SIMNTWRK x-size `vt[0xcc]`". The §14.5
+qualification criterion is unchanged in spirit but now concrete and screen-visible: **one call site (or
+one live read) that feeds the network layer's x-size into the iso view's `+0x14`.**
+
+**And the compass WORD itself has no PC referent — a hard negative `[CONFIRMED, exhaustive over the PC
+export]`.** No `north / south / east / west / compass / minimap / rose / bearing` string, LTEXT, or
+code token exists **anywhere** in SC3U.exe or any SIM\*/GZ\* DLL. The PC binary never names a cardinal
+direction, so "which delta is North" is **not a fact the PC target carries** — it is a naming choice,
+not something a static witness can settle. The cardinal words live only in the **iOS Deluxe** port
+(`re/ghidra_export_ios/`, a different binary): `sg::geomEdge` corner/edge enums
+`"NorthCorner"/"SouthCorner"/"EastCorner"/"WestCorner"` (@ `0x004af9b0`..`d4`) and
+`"NorthWestEdge"..` consumed by `SimCity::TerrainMap::_refreshEdgeVertsSE/SW` (@ `0x002228f4 /
+0x00222f40`) with `sg::GetRect2CornerCells(e_rotation,…)` (@ `0x0027ed94`). That last is the
+**structural twin** of the PC's `FUN_1000a62c` (identical `e_rotation` 0..3: rot2 = `dim−c−1` both
+axes, rot1/3 = swap+flip), so the two ports demonstrably **share the rotation convention** — which
+makes the Deluxe "corners N/S/E/W, edges NW/NE/SW/SE" the likely franchise convention, but it is an
+`[iOS-HINT]`, **not** a PC witness, and is not treated as one.
+
+**Net verdict for a modder.** The screen geometry is now fully pinned: the two neighbour axes are a
+down-left / down-right mirror pair, both descending. The rotation MECHANISM (rigid quarter turn) and
+per-piece zero were already safe (§13). What remains is (a) one named, checkable static hop to fix
+which physical axis is down-left, collapsing to a single screen picture, and (b) the cardinal WORDS,
+which are unwitnessable from the PC binary by construction and only knowable as an iOS-sourced
+convention. **The "clockwise" caveat in §13.9 is therefore now precise: the turn is CCW iff world-x is
+the down-left axis, and the compass words are an iOS convention, not a PC fact.**
