@@ -879,3 +879,4 @@ should detect it or run a renamed copy (`mods_launch -exe`).
 - **RCI vertical position (owner, 2026-10-08, "a gap on the RCI indicator"):** bottom-aligning the RCI to the bar put it
   8 px higher than native and opened a step against the bar. Now at the native offset: top = bar top - 24 (520 vs 544),
   bottom 8 px past the client edge and cut off, as in the unmodded game.
+  Owner hand test 2026-10-08: "RCI looks right now".
