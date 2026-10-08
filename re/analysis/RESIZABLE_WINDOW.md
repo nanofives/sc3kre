@@ -843,3 +843,11 @@ So the mitigation composes the game through its own copy and stops showing the g
 or mode size differs from what it set up. That is very likely the New-City-while-maximized freeze too (correct
 presents, stale screen, fixed only by a real resize). The `0xC0000096` / present-gate history in LAUNCH_CONTROL
 predates this finding and may need re-reading in its light.
+
+**Fixed on the dev PC (2026-10-07):** both `Layers` values for `Apps\SC3U.exe` removed (backup and restore commands in
+`re/harness/simrun/compat_layers_backup.txt`; HKLM removed through an owner-approved elevated `reg delete`). Retest,
+New City while maximized, 15 grabs from "accept terrain": the held terrain-editor frame, then at +8.3 s the city with
+the HUD already laid out (side panel right, minimap bottom-right, bar right), updating normally to +27.9 s. No frozen
+screen, no native-layout frames, no de-maximize needed. The present hold engaged 3.7 s and 4.4 s and released itself.
+**Open for release:** other players may have the same layer (the HKLM `$` value looks installer-set); the launcher
+should detect it or run a renamed copy (`mods_launch -exe`).
