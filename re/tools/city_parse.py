@@ -93,10 +93,12 @@ def parse_payload(body):
     version = body[8:12].decode("ascii", "replace")
     clen, ulen, clen2 = struct.unpack_from("<3I", body, 12)
     out, consumed, declared = qfs.decompress(body, HDR)
-    if declared != ulen:
+    # The QFS size field is 24 bits, so above 16 MB (a 1024 city) it holds ulen mod 2^24; the game writes it
+    # that way and the decompressor stops at the terminator, not at the declared size (verify/perf1024).
+    if declared != ulen & 0xFFFFFF:
         raise CityError("header says %d uncompressed, QFS stream says %d" % (ulen, declared))
-    if len(out) != declared:
-        raise CityError("produced %d bytes, declared %d" % (len(out), declared))
+    if len(out) != ulen:
+        raise CityError("produced %d bytes, header says %d" % (len(out), ulen))
     info = {"a": a, "b": b, "version": version, "clen": clen, "ulen": ulen,
             "clen2": clen2, "consumed": consumed,
             "deadbeef": len(out) >= 16 and struct.unpack_from("<I", out, 12)[0] == DEADBEEF}

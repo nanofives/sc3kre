@@ -276,7 +276,9 @@ def compress_stream(src, quick=1):
     Transcription of FUN_100168cb: FUN_1001691d(dst, 0x10FB, 2) then
     FUN_1001691d(dst + 2, size, 3), both big-endian [CONFIRMED @0x100168cb].
     """
-    return (b"\x10\xfb" + len(src).to_bytes(3, "big")) + compress(src, quick)
+    # The size field is 3 bytes: the game writes the LOW 24 bits of the size (a 1024 city's main record is
+    # 24,134,028 bytes and its game-written stream says 7,356,812 = that mod 2^24; verify/perf1024, 2026-10-08).
+    return (b"\x10\xfb" + (len(src) & 0xFFFFFF).to_bytes(3, "big")) + compress(src, quick)
 
 
 def city_stream(path):
