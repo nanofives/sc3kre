@@ -132,7 +132,13 @@ static void logf(const char *fmt, ...) {
 static void log_open(void) {
     char path[MAX_PATH];
     if (!GetEnvironmentVariableA("SC3RESIZE_LOG", path, sizeof(path))) {  /* [RESIZE] own default */
-        lstrcpynA(path, "sc3resize.log", sizeof(path));
+        /* Beside the DLL, not the process CWD: the game runs with CWD = Apps\, a game folder, so a
+         * bare relative name wrote the log into the install (2026-10-09). */
+        char *sl;
+        if (g_self && GetModuleFileNameA(g_self, path, sizeof(path) - 16) && (sl = strrchr(path, '\\')) != NULL)
+            lstrcpyA(sl + 1, "sc3resize.log");
+        else
+            lstrcpynA(path, "sc3resize.log", sizeof(path));
         g_logcap = 8u * 1024u * 1024u;
     }
     g_log = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, NULL,
@@ -4125,6 +4131,23 @@ static void rz_fault_diag(void *iso) {
     }
 }
 static volatile LONG g_busy;           /* re-entrancy guard for the per-frame poll */
+/* DEFERRESIZE (2026-10-08): the resize pass must not run from the blit heartbeat. That heartbeat fires
+   inside the city view's Plot (SIMSPR 0x1001cab9 -> dirty-rect blits), where the game thread already holds
+   the city-data lock; step 7/11 (SIMSPR FUN_10018cdf -> FUN_100184d9) then takes the lock the sim thread
+   holds for its whole timer pass, while the sim thread (SIMCITY timer -> SIMRCI -> SIMGEOM -> GZServiceD)
+   waits for the data lock. Measured deadlock with cdb, sc3perf run moscowB0, 2026-10-08: game thread held
+   CS 0x0d76a220 and waited on 0x0d76a1fc, sim thread the reverse. The game itself calls FUN_10018cdf from
+   UI handlers, i.e. from message dispatch with no drawing locks held, so the poll now only POSTS
+   WM_RZ_DORESIZE and the pass runs from rz_wndproc. SC3RESIZE_DEFERRESIZE=0 restores the old path. */
+#define WM_RZ_DORESIZE (WM_APP + 0x5C3)
+/* ZOOMKEYS (owner 2026-10-09): the main-keyboard + and - keys also zoom. The hotkey table
+   (Apps\Res\Hotkeys\<LANG>.IXF, group 0xa2e3d56d, text lines "ctrl shift alt VK = 583838163 cmd 0 0") binds zoom in
+   (cmd 41) to VK 107 (numpad +) and zoom out (cmd 42) to VK 109 (numpad -) only. Rather than edit game files, the
+   window procedure hands the game VK_ADD / VK_SUBTRACT when it sees VK_OEM_PLUS (0xBB) / VK_OEM_MINUS (0xBD), which
+   are the unshifted + and - keys on a Spanish layout. The numpad keys keep working. SC3RESIZE_ZOOMKEYS=0 disables. */
+static int g_zoomkeys = 1;
+static int           g_deferresize = 1;
+static volatile LONG g_in_wndproc_pass, g_resize_posted;
 static int   g_wm_fixed;               /* the window has been subclassed */
 static WNDPROC g_oldproc;
 /* g_hwnd and g_hud_top are declared up with the HUD lab block (both are read by it). */
@@ -5173,6 +5196,7 @@ static void rz_hud_fit_surface(DWORD liveW) {
 static HUDART g_side_cache[2];       /* [0] => child +0xc0, [1] => child +0xc8 */
 static DWORD  g_side_plainrow[2];    /* the flattest art row (min horizontal variation) - the fill
                                         source, chosen adaptively so the extended area is not streaky */
+static LONG   g_side_intended_h;     /* the panel height rz_side_fit_surface is about to SetRect (see art_at) */
 static DWORD  g_side_failh[2];       /* the liveH a recreate last FAILED at (per slot). The fit runs
                                         every poll; without this memo a height whose CreateSurface fails
                                         is retried forever, and each failed create churns the video pool
@@ -5196,8 +5220,15 @@ static void rz_side_fit_child(int slot, DWORD off, DWORD liveH) {
     if (!sub || IsBadReadPtr((void *)sub, 0xf8)) { logf("SIDEFIT> +0x%lx sub unreadable", off); return; }
     oldbits = ((DWORD *)sub)[0xf0 / 4]; oldpitch = ((DWORD *)sub)[0xf4 / 4];
 
-    if (liveH == oldh) {
-        logf("SIDEFIT> +0x%lx already fitted: surface height %lu == live %lu", off, oldh, liveH);
+    /* rz_recreate_raster pads every surface by RZ_SURFACE_SLACK rows, so a surface WE made at liveH
+     * reads back as liveH + slack. Comparing against liveH alone never matched, and the re-assert
+     * pass (every poll) re-created the background each time. Each re-create leaked the previous
+     * 80 KB system-memory surface inside DDRAW: +40 MB/min, game dead at ~1.6 GB after 36 min with
+     * the year-end budget dialog open (2026-10-09, Frida: 80x CreateSurface 96x417 per 10 s from
+     * this path). The native 96x417 at a 409 request is also "fitted" by the same rule. */
+    if (liveH == oldh || liveH + RZ_SURFACE_SLACK == oldh) {
+        if (!g_reassert_quiet)
+            logf("SIDEFIT> +0x%lx already fitted: surface height %lu for live %lu", off, oldh, liveH);
         return;
     }
     if (!ca->art && oldbits && oldpitch && oldh &&
@@ -5322,7 +5353,15 @@ static void rz_side_fit_child(int slot, DWORD off, DWORD liveH) {
                  * this mod leaves at its stale native 442 while the local rect is the extended height)
                  * put the icon art at a different offset than the button windows - so the hover
                  * highlight sat a button off from the icon (owner: "the alignment is still off"). */
-                LONG panelH_ = (g_side_top && !IsBadReadPtr(g_side_top, 0x90))
+                /* ⭐ The height the panel is ABOUT TO HAVE, not the one it has now (2026-10-09). The fit
+                 * runs before rz_side_fit_surface's re-SetRect, and while the art is still the old,
+                 * taller size SetRect clamps the panel UP, so the local rect still reads the old
+                 * height here: placed at 1081 - 442 = 639 while the panel then settled at 923 above
+                 * the minimap and the buttons went to 923 - 442 = 481, so every icon sat 158 px
+                 * below its button (owner screenshot). This used to self-heal only because the
+                 * leaking refit re-ran every poll; with the leak fixed it has to be right first time. */
+                LONG panelH_ = g_side_intended_h > 0 ? g_side_intended_h
+                             : (g_side_top && !IsBadReadPtr(g_side_top, 0x90))
                              ? (LONG)((DWORD *)g_side_top)[0x8c / 4] -
                                (LONG)((DWORD *)g_side_top)[0x84 / 4]
                              : (LONG)liveH;
@@ -5411,10 +5450,13 @@ static void rz_side_fit_surface(DWORD clientH) {
     target = clientH - capH;   /* the background gets everything above the cap */
     liveH = target;            /* what the re-SetRect below asks for, plus capH */
     want = (target > RZ_SURFACE_SLACK) ? target - RZ_SURFACE_SLACK : target;
+    if (!g_reassert_quiet)
     logf("SIDEFIT> background target %lu (client %lu - cap %lu) -> requesting %lu + %d slack; "
          "cap left at native so minH = %lu + %lu = %lu",
          target, clientH, capH, want, RZ_SURFACE_SLACK, target, capH, target + capH);
+    g_side_intended_h = (LONG)(target + capH);
     rz_side_fit_child(0, 0xc0, want);
+    g_side_intended_h = 0;
     rz_side_patch_cap();   /* kill the magenta color-key line at the exposed panel bottom */
 
     /* Re-run the panel's own SetRect so it recomputes the child dest rects from the new art size,
@@ -5439,6 +5481,7 @@ static void rz_side_fit_surface(DWORD clientH) {
             a[0] = (DWORD)loc[0]; a[1] = (DWORD)loc[1];
             a[2] = (DWORD)loc[2]; a[3] = (DWORD)wantBottom;
             rz_thiscall(p, (void *)vt[0xc8 / 4], a, 4);
+            if (!g_reassert_quiet)
             logf("SIDEFIT> re-SetRect [%ld %ld %ld %ld] -> local now [%ld %ld %ld %ld]",
                  (LONG)a[0], (LONG)a[1], (LONG)a[2], (LONG)a[3],
                  loc[0], loc[1], loc[2], loc[3]);
@@ -5492,7 +5535,7 @@ static void rz_side_fit_surface(DWORD clientH) {
                  (DWORD)d0[3]);
             d0[3] = bottom;
         } else {
-            logf("SIDEFIT> dest rect +0xd0 [%ld %ld %ld %ld] left as-is (cap top %ld, panel %ld)",
+            if (!g_reassert_quiet) logf("SIDEFIT> dest rect +0xd0 [%ld %ld %ld %ld] left as-is (cap top %ld, panel %ld)",
                  d0[0], d0[1], d0[2], d0[3], f0[1], panelH);
         }
     }
@@ -6042,6 +6085,10 @@ static void rz_poll(void) {
         }
     }
 
+    if (g_deferresize && g_hwnd && !g_in_wndproc_pass) {   /* DEFERRESIZE: run it from message dispatch */
+        if (!InterlockedExchange(&g_resize_posted, 1)) PostMessageA(g_hwnd, WM_RZ_DORESIZE, 0, 0);
+        return;
+    }
     if (InterlockedCompareExchange(&g_busy, 1, 0) != 0) return;                /* re-entrancy */
     if (!g_bridge_fresh) {   /* a real resize, not the first layout of a new city */
         /* The poll sees the new client size ~140 ms before WM_SIZE is delivered (measured), so close here, on the
@@ -6155,6 +6202,17 @@ static void rz_set_stored_rect(DWORD w, DWORD h) {
  * presenting the old rectangle. Doing it here in C is what makes the separate GZGraphicD
  * `wmsize_setrect` patch unnecessary under this mod. */
 static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
+    if (g_zoomkeys && (m == WM_KEYDOWN || m == WM_KEYUP)) {   /* ZOOMKEYS */
+        if (wp == VK_OEM_PLUS) wp = VK_ADD;
+        else if (wp == VK_OEM_MINUS) wp = VK_SUBTRACT;
+    }
+    if (m == WM_RZ_DORESIZE) {   /* DEFERRESIZE: the resize pass, outside any drawing lock */
+        InterlockedExchange(&g_resize_posted, 0);
+        g_in_wndproc_pass = 1;
+        rz_poll();
+        g_in_wndproc_pass = 0;
+        return 0;
+    }
     /* MENUBG: while the 800x600 menu frame is presented centred, shift client mouse coordinates into it. */
     if (g_menubg && g_mb_active && m >= WM_MOUSEMOVE && m <= WM_MBUTTONDBLCLK) {
         int mx = (int)(short)LOWORD(lp) - (int)g_mb_offx, my = (int)(short)HIWORD(lp) - (int)g_mb_offy;
@@ -6810,6 +6868,128 @@ static void patch_efa1_emptybucket(HMODULE ss) {
     logf("--- EFA1_GUARD: empty-bucket branch 0xefc2 retargeted to the ret (was -> 0xefe3 deref)");
 }
 
+/* ================= DIRTGUARD (2026-10-09)
+ * SIMDIRT FUN_10013556 (sc3_dirt_render_gouraudpoly_flat, cdecl, 10 args) fills terrain polygons into the
+ * surface it is handed, through the pixel pointer from surface vt+0x1a8, stored at 0x10013A8F
+ * (`mov word ptr [ecx], ax`). That store faulted on the Europolis 1024 city one second after a maximize
+ * (owner, ECX=0x18604496, Apps\SC3U_stkdmp.txt 2026-10-09 15:17) and at the same address on 2026-08-21,
+ * when the cause was the surface lock not taken (LAUNCH_CONTROL.md 33.2 defect 5). 29 maximize/restore
+ * cycles with the sim running and a per-store bounds probe (6.4M stores) found no out-of-surface store, so
+ * the trigger is a rare timing case not yet isolated.
+ * Guard: the entry (`mov eax, imm32`, the EH_prolog frame address) is replaced by a JMP to dirt_guard, which
+ * runs the original through a trampoline inside __try. An access violation drops that one polygon instead
+ * of killing the game: the faulting store did not happen, so nothing was overwritten. The function holds a
+ * lock (global 0x100249f0) through a guard object in its own EH frame; SEH unwinding runs that frame's
+ * handler, which releases it (checked with a forced fault). The first 20 faults are logged with the
+ * surface, its pixel pointer and the rectangles, for the root cause. SC3RESIZE_DIRTGUARD=0 disables. */
+static int g_dirtguard = 1;
+static BYTE *g_dirt_tramp;
+static volatile LONG g_dirt_faults;
+typedef void (__cdecl *DIRT_RAST)(void *, int *, int *, DWORD, short *, int, int, int, DWORD, int);
+
+static int dirt_filter(EXCEPTION_POINTERS *ep, void *srf, int *r2, int *r3, short *v) {
+    LONG n;
+    if (ep->ExceptionRecord->ExceptionCode != EXCEPTION_ACCESS_VIOLATION) return EXCEPTION_CONTINUE_SEARCH;
+    n = InterlockedIncrement(&g_dirt_faults);
+    if (n <= 20) {
+        DWORD addr = ep->ExceptionRecord->NumberParameters > 1 ? (DWORD)ep->ExceptionRecord->ExceptionInformation[1] : 0;
+        LONG R[4] = {0, 0, 0, 0}, C[4] = {-1, -1, -1, -1}, w = -1, h = -1;
+        DWORD bits = 0, pitch = 0;
+        if (r2 && !IsBadReadPtr(r2, 16)) memcpy(R, r2, 16);
+        if (r3 && !IsBadReadPtr(r3, 16)) memcpy(C, r3, 16);
+        if (srf && !IsBadReadPtr(srf, 0x2c)) {
+            DWORD *vt = *(DWORD **)srf;
+            w = ((LONG *)srf)[0x24 / 4]; h = ((LONG *)srf)[0x28 / 4];
+            if (vt && !IsBadReadPtr(vt, 0x1b0)) {
+                bits = rz_thiscall_ret(srf, (void *)vt[0x1a8 / 4], NULL, 0);
+                pitch = rz_thiscall_ret(srf, (void *)vt[0x1ac / 4], NULL, 0);
+            }
+        }
+        logf("DIRTGUARD> fault #%ld at 0x%08lX writing 0x%08lX: surface 0x%08lX %ldx%ld bits 0x%08lX pitch %lu "
+             "rect [%ld %ld %ld %ld] clip [%ld %ld %ld %ld] v0 (%d,%d) - polygon dropped",
+             n, (DWORD)ep->ExceptionRecord->ExceptionAddress, addr, (DWORD)srf, w, h, bits, pitch,
+             R[0], R[1], R[2], R[3], C[0], C[1], C[2], C[3],
+             v && !IsBadReadPtr(v, 4) ? v[0] : 0, v && !IsBadReadPtr(v, 4) ? v[1] : 0);
+    }
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
+static void __cdecl dirt_guard(void *srf, int *r2, int *r3, DWORD shape, short *v, int a6, int a7, int a8, DWORD a9, int a10) {
+    __try {
+        ((DIRT_RAST)(void *)g_dirt_tramp)(srf, r2, r3, shape, v, a6, a7, a8, a9, a10);
+    } __except (dirt_filter(GetExceptionInformation(), srf, r2, r3, v)) {
+    }
+}
+
+/* Second level: the per-tile terrain draw FUN_10012cb7 (sc3_dirt_draw_dispatch, thiscall, 6 args, ret 0x18;
+ * vtable slot +0x40 shared by all six terrain classes, called per tile from SIMSPR FUN_1000dc17). A forced
+ * fault (surface pixel pointer replaced with a read-only page) landed in the depth-tested sibling rasterizer
+ * FUN_100148d7, outside the first guard; the August crash log also has SIMDIRT 0x11EAB/0x12EC2/0x4AE1. Guarding
+ * the dispatch covers every rasterizer: a fault skips that tile for that frame. */
+static BYTE *g_dirt_tramp2;
+static volatile LONG g_dirt_faults2;
+typedef void (__fastcall *DIRT_DISPATCH)(void *self, void *edx, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD);
+
+static int dirt_filter2(EXCEPTION_POINTERS *ep, DWORD x, DWORD y) {
+    LONG n;
+    if (ep->ExceptionRecord->ExceptionCode != EXCEPTION_ACCESS_VIOLATION) return EXCEPTION_CONTINUE_SEARCH;
+    n = InterlockedIncrement(&g_dirt_faults2);
+    if (n <= 20)
+        logf("DIRTGUARD> tile fault #%ld at 0x%08lX writing 0x%08lX (tile args %lu,%lu) - tile skipped this frame", n,
+             (DWORD)ep->ExceptionRecord->ExceptionAddress,
+             ep->ExceptionRecord->NumberParameters > 1 ? (DWORD)ep->ExceptionRecord->ExceptionInformation[1] : 0, x, y);
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
+static void __fastcall dirt_dispatch_guard(void *self, void *edx, DWORD a1, DWORD a2, DWORD a3, DWORD a4, DWORD a5, DWORD a6) {
+    (void)edx;
+    __try {
+        ((DIRT_DISPATCH)(void *)g_dirt_tramp2)(self, NULL, a1, a2, a3, a4, a5, a6);
+    } __except (dirt_filter2(GetExceptionInformation(), a2, a3)) {
+    }
+}
+
+static void patch_dirtguard(HMODULE dm) {
+    BYTE *f = (BYTE *)dm + 0x13556;
+    DWORD old;
+    if (!g_dirtguard) { logf("--- DIRTGUARD: disabled (SC3RESIZE_DIRTGUARD=0)"); return; }
+    /* b8 <imm32 = SIMDIRT+0x1ecf3, relocated>  e8 <rel32 -> SIMDIRT+0x1e280 (__EH_prolog)> */
+    if (f[0] != 0xb8 || *(DWORD *)(f + 1) != (DWORD)dm + 0x1ecf3 || f[5] != 0xe8 ||
+        (DWORD)(f + 10) + *(DWORD *)(f + 6) != (DWORD)dm + 0x1e280) {
+        logf("--- DIRTGUARD: SIMDIRT+0x13556 differs from shipped - not installed");
+        return;
+    }
+    g_dirt_tramp = (BYTE *)VirtualAlloc(NULL, 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!g_dirt_tramp) return;
+    memcpy(g_dirt_tramp, f, 5);                                            /* mov eax, imm32 (already relocated) */
+    g_dirt_tramp[5] = 0xE9; *(DWORD *)(g_dirt_tramp + 6) = (DWORD)(f + 5) - (DWORD)(g_dirt_tramp + 10);
+    if (!VirtualProtect(f, 5, PAGE_EXECUTE_READWRITE, &old)) return;
+    f[0] = 0xE9; *(DWORD *)(f + 1) = (DWORD)dirt_guard - (DWORD)(f + 5);
+    FlushInstructionCache(GetCurrentProcess(), f, 5);
+    logf("--- DIRTGUARD: terrain polygon fill (SIMDIRT+0x13556) runs under an access-violation guard");
+    {   static const BYTE pro[] = { 0x55, 0x8b, 0xec, 0x83, 0xec, 0x10 };   /* push ebp / mov ebp,esp / sub esp,0x10 */
+        BYTE *d = (BYTE *)dm + 0x12cb7;
+        if (memcmp(d, pro, sizeof(pro))) { logf("--- DIRTGUARD: SIMDIRT+0x12cb7 differs from shipped - tile guard not installed"); return; }
+        g_dirt_tramp2 = (BYTE *)VirtualAlloc(NULL, 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        if (!g_dirt_tramp2) return;
+        memcpy(g_dirt_tramp2, d, 6);
+        g_dirt_tramp2[6] = 0xE9; *(DWORD *)(g_dirt_tramp2 + 7) = (DWORD)(d + 6) - (DWORD)(g_dirt_tramp2 + 11);
+        if (!VirtualProtect(d, 6, PAGE_EXECUTE_READWRITE, &old)) return;
+        d[0] = 0xE9; *(DWORD *)(d + 1) = (DWORD)dirt_dispatch_guard - (DWORD)(d + 5); d[5] = 0x90;
+        FlushInstructionCache(GetCurrentProcess(), d, 6);
+        logf("--- DIRTGUARD: per-tile terrain draw (SIMDIRT+0x12cb7) runs under an access-violation guard");
+    }
+}
+
+static DWORD WINAPI dirtguard_watcher(LPVOID p) {
+    HMODULE dm = NULL;
+    int ms = 0;
+    (void)p;
+    while (!(dm = GetModuleHandleA("SIMDIRT.DLL")) && ms++ < 3000) Sleep(100);
+    if (dm) patch_dirtguard(dm); else logf("--- DIRTGUARD: SIMDIRT.DLL never loaded");
+    return 0;
+}
+
 static void patch_gridb_clamp(HMODULE ss) {
     int k;
     for (k = 0; k < (int)(sizeof(g_clamps) / sizeof(g_clamps[0])); k++) {
@@ -7222,6 +7402,9 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
     patch_windowed(gz);
     patch_surfacefmt(gz);
     patch_gridb_clamp(ss);   /* FIX A: clamp the grid-B bucket index (OOB AV root cause) */
+    {   char v[8];
+        if (GetEnvironmentVariableA("SC3RESIZE_DIRTGUARD", v, sizeof(v))) g_dirtguard = atoi(v); }
+    CreateThread(NULL, 0, dirtguard_watcher, NULL, 0, NULL);
 
 
     /* v3: the create-recorder hook (idx 2) is DROPPED - it crashed the game at startup in v2
@@ -7323,6 +7506,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_FIELDBG", v, sizeof(v))) g_fieldbg = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUBG", v, sizeof(v))) g_menubg = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HOLD", v, sizeof(v))) g_hold = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_DEFERRESIZE", v, sizeof(v))) g_deferresize = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_ZOOMKEYS", v, sizeof(v))) g_zoomkeys = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_BAR800", v, sizeof(v))) g_bar800 = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDREFLOW", v, sizeof(v))) g_hudreflow = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_CLOSEFLY", v, sizeof(v))) g_closefly = atoi(v);

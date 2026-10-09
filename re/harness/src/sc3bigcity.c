@@ -140,7 +140,7 @@ static int write_code(BYTE *p, const void *src, int n) {
     DWORD old;
     if (!VirtualProtect(p, n, PAGE_EXECUTE_READWRITE, &old)) return 0;
     memcpy(p, src, n);
-    VirtualProtect(p, n, old, &old);
+    (void)0; /* VirtualProtect(p, n, old, &old); left RWX, see the note below */
     FlushInstructionCache(GetCurrentProcess(), p, n);
     return 1;
 }
@@ -981,13 +981,13 @@ static void patch_windowed(HMODULE gz) {
     BYTE *q = (BYTE *)gz + 0x117d6;         /* the fullscreen re-force store */
     DWORD old;
     if (VirtualProtect(p, 1, PAGE_READWRITE, &old)) {
-        BYTE before = *p; *p = 1; VirtualProtect(p, 1, old, &old);
+        BYTE before = *p; *p = 1; (void)0; /* protection left RWX on purpose: several mods patch the same pages from their own threads at module load, and a restore landing mid-write in another mod faulted the game (sc3bigcity+0x5B89 memcpy, 2026-10-09) */ /* VirtualProtect(p, 1, old, &old); */
         logf("--- WINDOWED: GZGraphicD+0x6cdac = %u -> 1", before);
     } else logf("--- WINDOWED: VirtualProtect failed at +0x6cdac (%lu)", GetLastError());
     if (q[0] == 0xC6 && q[1] == 0x43 && q[2] == 0x48 && q[3] == 0x01) {
         DWORD o2;
         if (VirtualProtect(q, 4, PAGE_EXECUTE_READWRITE, &o2)) {
-            q[0] = q[1] = q[2] = q[3] = 0x90; VirtualProtect(q, 4, o2, &o2);
+            q[0] = q[1] = q[2] = q[3] = 0x90; (void)0; /* VirtualProtect(q, 4, o2, &o2); */
             FlushInstructionCache(GetCurrentProcess(), q, 4);
             logf("--- WINDOWED: GZGraphicD+0x117D6 'mov [ebx+0x48],1' -> nop x4");
         }
@@ -1037,22 +1037,456 @@ static void patch_surfacefmt(HMODULE gz) {
     site[0] = 0xE9;
     { DWORD rel = (DWORD)cave - (DWORD)(site + 5); memcpy(site + 1, &rel, 4); }
     site[5]=site[6]=site[7]=site[8]=site[9]=0x90;
-    VirtualProtect(site, 10, old, &old);
+    (void)0; /* VirtualProtect(site, 10, old, &old); */
     FlushInstructionCache(GetCurrentProcess(), site, 10);
     logf("--- FIX16: 16bpp branch injected at 0x19349 -> cave 0x%08lX (5-6-5)", (DWORD)cave);
+}
+
+/* ================================================================ QFS24: save files above 16 MB
+ *
+ * A QFS stream stores its uncompressed size in 3 bytes. A 1024 city's main record is 24,134,028 bytes, so
+ * the stream says 7,356,812 (= that mod 2^24); the record header keeps the full size (verify/perf1024,
+ * 2026-10-08). GZResourceD's compressor object decompresses the whole stream (the loop stops at the
+ * terminator) but REPORTS the 24-bit size: FUN_10015cb1 returns its local_c = the declared size, and
+ * GetDecompressedSize (FUN_10015bcf -> FUN_10015c5f) returns it too. Measured: the game loads its own
+ * 1024 save as blank water with $0 funds, i.e. everything past the first 7.3 MB is lost.
+ *
+ * Fix: redirect the only call of each (0x10015b80 -> FUN_10015cb1, 0x10015beb -> FUN_10015c5f) to wrappers
+ * that compute the TRUE size by walking the stream's control bytes (lengths only, no copy). Both originals are
+ * STDCALL (ret 0xc / ret 4, read from the bytes; Ghidra shows them as cdecl): a cdecl hook unbalanced the stack
+ * and returned into the output buffer (cdb, 2026-10-08). The true size is
+ * used only when it agrees with the 24-bit field mod 2^24, so streams under 16 MB are untouched.
+ * SC3BIGCITY_QFS24=0 disables it. */
+typedef unsigned int (__stdcall *QFS_DEC)(BYTE *src, int *consumed, BYTE *dst);   /* ret 0xc */
+typedef unsigned int (__stdcall *QFS_SIZE)(BYTE *src);                         /* ret 4 */
+static QFS_DEC  g_qfs_dec;
+static QFS_SIZE g_qfs_size;
+static int      g_qfs24 = 1;
+static volatile LONG g_qfs24_logged;
+
+static unsigned int qfs_true_size(BYTE *s, unsigned int declared) {
+    unsigned int total = 0;
+    BYTE *p;
+    __try {
+        p = s + ((s[0] & 1) ? 5 : 2) + 3;
+        for (;;) {
+            BYTE b0 = p[0];
+            unsigned int lit, cp;
+            if (!(b0 & 0x80))      { lit = b0 & 3;       cp = ((b0 >> 2) & 7) + 3;                  p += 2 + lit; }
+            else if (!(b0 & 0x40)) { lit = p[1] >> 6;    cp = (b0 & 0x3f) + 4;                      p += 3 + lit; }
+            else if (!(b0 & 0x20)) { lit = b0 & 3;       cp = ((unsigned)(b0 & 0x0c) << 6) + p[3] + 5; p += 4 + lit; }
+            else {
+                unsigned int n = (b0 & 0x1f) * 4 + 4;
+                if (n <= 0x70) { total += n; p += 1 + n; continue; }
+                total += b0 & 3;   /* terminator: trailing literals */
+                break;
+            }
+            total += lit + cp;
+            if (total > 0x10000000) return declared;   /* 256 MB: not a city record, give up */
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return declared;
+    }
+    return (total & 0xFFFFFF) == (declared & 0xFFFFFF) ? total : declared;
+}
+static unsigned int __stdcall qfs_dec_hook(BYTE *src, int *consumed, BYTE *dst) {
+    unsigned int d = g_qfs_dec(src, consumed, dst), t;
+    if (d == 0 || !src) return d;
+    t = qfs_true_size(src, d);
+    if (t != d && !InterlockedExchange(&g_qfs24_logged, 1))
+        logf("--- QFS24: stream declares %u bytes, true size %u (above 16 MB) - reporting the true size", d, t);
+    return t;
+}
+static unsigned int __stdcall qfs_size_hook(BYTE *src) {
+    unsigned int d = g_qfs_size(src);
+    return src ? qfs_true_size(src, d) : d;
+}
+static int redirect_call(BYTE *site, void *target_expected, void *hook, void **orig) {
+    DWORD old;
+    if (site[0] != 0xE8 || (DWORD)(site + 5) + *(LONG *)(site + 1) != (DWORD)target_expected) return 0;
+    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &old)) return 0;
+    *orig = target_expected;
+    *(LONG *)(site + 1) = (LONG)((DWORD)hook - (DWORD)(site + 5));
+    (void)0; /* VirtualProtect(site, 5, old, &old); */
+    FlushInstructionCache(GetCurrentProcess(), site, 5);
+    return 1;
+}
+static void patch_qfs24(HMODULE rz) {
+    BYTE *b = (BYTE *)rz;
+    int a, c;
+    if (!g_qfs24) { logf("--- QFS24: disabled (SC3BIGCITY_QFS24=0)"); return; }
+    a = redirect_call(b + 0x15b80, b + 0x15cb1, (void *)qfs_dec_hook, (void **)&g_qfs_dec);
+    c = redirect_call(b + 0x15beb, b + 0x15c5f, (void *)qfs_size_hook, (void **)&g_qfs_size);
+    logf("--- QFS24: decompress call %s, size call %s (GZResourceD at 0x%08lX)",
+         a ? "redirected" : "NOT as shipped - left alone", c ? "redirected" : "NOT as shipped - left alone", (DWORD)rz);
+}
+
+/* ================================================================ TRAVERSE: zone development above 256
+ *
+ * The zone developers visit tiles from a traversal object T (zone layer + 0x280). FUN_100318e8 fills a vector of
+ * u16 entries packed as (x & 0xff) << 8 | (y & 0xff), and FUN_10031a78 (thiscall, ret 8) returns the next (x, y)
+ * by unpacking it [CONFIRMED @ 0x100318e8, 0x10031a78]. Both coordinates wrap at 256, so on a 1024 map only the
+ * 256x256 corner at the origin is ever offered to the per-tile developer check (SIMRCI FUN_10028f12, measured
+ * 0 calls in 30 s for zones elsewhere vs ~48,000 in Moscow; a game-written 1024 save holds 1,048,576 entries with
+ * 65,536 distinct values). Nothing outside that corner can ever develop.
+ *
+ * Fix: replace FUN_10031a78. Map <= 65,536 tiles, or T's stride mode: the original logic, line for line. Above:
+ * the cursor T+0x2c becomes a step count over all N = A*B tiles, v = (c*stride + offset) mod N with stride coprime
+ * to N, x = v % A + Amin, y = v / A + Bmin, and the same "pass finished" state (T+0 = 2) so the game's own rebuild
+ * and cursor reset (FUN_1003372a -> FUN_100318e8, which zeroes T+0x2c) keep working. The u16 vector is still
+ * filled and saved as before, so the save format is unchanged. SC3BIGCITY_TRAVERSE=0 disables. */
+static int g_traverse = 1;
+static unsigned g_trav_offset;
+static volatile LONG g_trav_logged;
+
+static unsigned gcd_u(unsigned a, unsigned b) { while (b) { unsigned t = a % b; a = b; b = t; } return a; }
+
+static int __fastcall trav_next(BYTE *T, void *edx_unused, unsigned *px, unsigned *py) {
+    int amin = *(int *)(T + 0x0c), amax = *(int *)(T + 0x14);
+    int bmin = *(int *)(T + 0x10), bmax = *(int *)(T + 0x18);
+    unsigned A = (unsigned)(amax - amin + 1), B = (unsigned)(bmax - bmin + 1), N = A * B, c;
+    (void)edx_unused;
+    if (T[0] == 2) return 0;
+    if (*(int *)(T + 4) != 0) {                      /* stride mode: original */
+        int cur = ++*(int *)(T + 0x2c), v;
+        if (*(int *)(T + 0x1c) < cur) { T[0] = 2; return 0; }
+        v = (*(int *)(T + 0x34) + *(int *)(T + 0x30)) % *(int *)(T + 0x1c);
+        *(int *)(T + 0x30) = v;
+        *px = (unsigned)(v % (amax - amin + 1) + amin);
+        *py = (unsigned)(*(int *)(T + 0x30) / (amax - amin + 1) + bmin);
+        if ((unsigned)cur == *(unsigned *)(T + 0x1c)) T[0] = 2;
+        return 1;
+    }
+    if (!g_traverse || N <= 65536) {                  /* array mode at stock sizes: original */
+        int cnt = (*(int *)(T + 0x24) - *(int *)(T + 0x20)) >> 1, cur = *(int *)(T + 0x2c);
+        WORD v;
+        if (cnt <= cur) { T[0] = 2; return 0; }
+        *(int *)(T + 0x2c) = cur + 1;
+        v = *(WORD *)(*(BYTE **)(T + 0x20) + cur * 2);
+        *px = (BYTE)(v >> 8);
+        *py = v & 0xff;
+        if (cur + 1 == cnt) T[0] = 2;
+        return 1;
+    }
+    c = *(unsigned *)(T + 0x2c);
+    if (c >= N) { T[0] = 2; return 0; }
+    if (c == 0) g_trav_offset = (GetTickCount() * 2654435761u) % N;   /* new pass: new starting point */
+    {
+        static unsigned stride, strideN;
+        unsigned v;
+        if (strideN != N) {                          /* odd step near N*0.618, coprime to N: visits every tile */
+            stride = ((unsigned)((double)N * 0.6180339887) | 1u);
+            while (gcd_u(stride, N) != 1) stride += 2;
+            strideN = N;
+        }
+        v = (unsigned)(((unsigned __int64)c * stride + g_trav_offset) % N);
+        *(unsigned *)(T + 0x2c) = c + 1;
+        *px = v % A + (unsigned)amin;
+        *py = v / A + (unsigned)bmin;
+        if (!InterlockedExchange(&g_trav_logged, 1))
+            logf("--- TRAVERSE: %ux%u map (%u tiles) - zone developers now visit every tile (stride %u)", A, B, N, stride);
+    }
+    if (c + 1 == N) T[0] = 2;
+    return 1;
+}
+
+static void patch_traverse(HMODULE rci) {
+    BYTE *p = (BYTE *)rci + 0x31a78;
+    static const BYTE expect[] = { 0x80, 0x39, 0x02, 0x56, 0x0f, 0x84 };
+    DWORD old;
+    if (!g_traverse) { logf("--- TRAVERSE: disabled (SC3BIGCITY_TRAVERSE=0)"); return; }
+    if (memcmp(p, expect, sizeof(expect))) { logf("--- TRAVERSE: SIMRCI+0x31a78 differs from shipped - not patched"); return; }
+    if (!VirtualProtect(p, 5, PAGE_EXECUTE_READWRITE, &old)) return;
+    p[0] = 0xE9; *(LONG *)(p + 1) = (LONG)((DWORD)trav_next - (DWORD)(p + 5));
+    (void)0; /* VirtualProtect(p, 5, old, &old); */
+    FlushInstructionCache(GetCurrentProcess(), p, 5);
+    logf("--- TRAVERSE: FUN_10031a78 replaced (SIMRCI at 0x%08lX)", (DWORD)rci);
+}
+
+/* ================================================================ DSTR256: disaster open-rectangle scan
+ *
+ * SIMDSTR FUN_1001e2ab (sc3_dstr_find_open_rectangles) scans the map into a 65,536-byte STACK bitmap indexed
+ * row*0x100 + col, but takes its loop bounds from the map's real width/height (param_1 vt+0xa8 / vt+0xac)
+ * [CONFIRMED @ 0x1001e2ab]. On a 1024 map it writes far past the array: the 1024 stress city crashed with
+ * SIMDSTR+0x1E572 on the sim thread (2026-10-08). Fix: the two size calls (0x1001e2e5, 0x1001e2f4, 6 bytes each)
+ * call stubs that make the same virtual call and clamp the result to 256, so the scan stays inside its buffer.
+ * Disasters that look for open ground then only search the first 256x256; a full port with a map-sized buffer
+ * is the proper fix. SC3BIGCITY_DSTR256=0 disables. */
+static int g_dstr256 = 1;
+__declspec(naked) static void dstr_width_256(void) {
+    __asm {
+        mov eax, [ecx]
+        call dword ptr [eax + 0xa8]
+        cmp eax, 256
+        jbe w_ok
+        mov eax, 256
+    w_ok:
+        ret
+    }
+}
+__declspec(naked) static void dstr_height_256(void) {
+    __asm {
+        mov eax, [ecx]
+        call dword ptr [eax + 0xac]
+        cmp eax, 256
+        jbe h_ok
+        mov eax, 256
+    h_ok:
+        ret
+    }
+}
+static void patch_dstr256(HMODULE dstr) {
+    static const BYTE cw[] = { 0xff, 0x90, 0xa8, 0x00, 0x00, 0x00 }, ch[] = { 0xff, 0x90, 0xac, 0x00, 0x00, 0x00 };
+    BYTE *a = (BYTE *)dstr + 0x1e2e5, *b = (BYTE *)dstr + 0x1e2f4;
+    DWORD old;
+    if (!g_dstr256) { logf("--- DSTR256: disabled (SC3BIGCITY_DSTR256=0)"); return; }
+    if (memcmp(a, cw, 6) || memcmp(b, ch, 6)) { logf("--- DSTR256: SIMDSTR+0x1e2e5/0x1e2f4 differ from shipped - not patched"); return; }
+    if (!VirtualProtect(a, 0x20, PAGE_EXECUTE_READWRITE, &old)) return;
+    a[0] = 0xE8; *(LONG *)(a + 1) = (LONG)((DWORD)dstr_width_256 - (DWORD)(a + 5)); a[5] = 0x90;
+    b[0] = 0xE8; *(LONG *)(b + 1) = (LONG)((DWORD)dstr_height_256 - (DWORD)(b + 5)); b[5] = 0x90;
+    (void)0; /* VirtualProtect(a, 0x20, old, &old); */
+    FlushInstructionCache(GetCurrentProcess(), a, 0x20);
+    logf("--- DSTR256: open-rectangle scan clamped to 256x256 (SIMDSTR at 0x%08lX)", (DWORD)dstr);
+}
+
+/* ================================================================ SPRJOURNAL
+ * SIMSPR's sprite loader thread (FUN_10008a81) realizes/releases building sprites and journals each change
+ * into the vector at iso+0x448 as a 4-byte record {op, x, y, zoom} with x and y as BYTES (writers at
+ * 0x10008b94 release / 0x10008c46 realize). The game thread applies the journal in FUN_10008dd4: it sets or
+ * clears the cell's per-zoom "realized" bit (or calls iso vt+0x78 for the live zoom). On a map wider than
+ * 256 the bit lands on cell (x & 0xff, y & 0xff): the sprite is loaded but its own cell is never marked, so
+ * the building keeps drawing as the light-blue placeholder box until a zoom change takes the other path
+ * (owner 2026-10-09 on the Europolis 1024 test city: "scrolling, buildings don't load; zooming loads them").
+ * Measured before the fix: zoom 1 marked complete, 2,649 of 4,329 cells in view realized.
+ * Fix: both writers call spr_build_rec, which packs op (2 bits), zoom (3), x (11) and y (11) into the same
+ * 4 bytes, and FUN_10008dd4 is replaced by spr_apply_journal, which decodes that and does what the original
+ * does. Expect-or-refuse on all three sites. SC3BIGCITY_SPRJOURNAL=0 disables. */
+static int g_sprjournal = 1;
+static DWORD g_spr_mask;            /* SIMSPR 0x100624f0: per-zoom realized bit, dword per zoom */
+
+static void __cdecl spr_build_rec(DWORD op, BYTE *iso, DWORD *out) {
+    DWORD x = *(DWORD *)(iso + 0x3d8), y = *(DWORD *)(iso + 0x3dc);
+    DWORD z = (DWORD)(*(signed char *)(iso + 0x428)) & 7;
+    *out = (op & 3) | (z << 2) | ((x & 0x7ff) << 5) | ((y & 0x7ff) << 16);
+}
+static __declspec(naked) void spr_rec_release(void) {
+    __asm { pushad
+            lea eax, [ebp - 4]
+            push eax
+            push esi
+            push 0
+            call spr_build_rec
+            add esp, 12
+            popad
+            ret }
+}
+static __declspec(naked) void spr_rec_realize(void) {
+    __asm { pushad
+            lea eax, [ebp - 4]
+            push eax
+            push esi
+            push 2
+            call spr_build_rec
+            add esp, 12
+            popad
+            ret }
+}
+
+typedef void (__fastcall *SPR_THIS0)(void *self, void *edx);
+typedef void (__fastcall *SPR_VT78)(void *self, void *edx, DWORD x, DWORD y, DWORD a, DWORD b, DWORD c);
+
+/* Replaces FUN_10008dd4 (fastcall, iso in ecx, no stack args), reached by a JMP at its first byte. */
+static void __fastcall spr_apply_journal(BYTE *iso, void *edx) {
+    BYTE *lk = iso + 0x46c;
+    DWORD *lvt = *(DWORD **)lk, **vec = (DWORD **)(iso + 0x448), *rp;
+    DWORD w = *(DWORD *)(iso + 0x14), h = *(DWORD *)(iso + 0x18);
+    (void)edx;
+    ((SPR_THIS0)lvt[1])(lk, NULL);
+    for (rp = vec[0]; rp && rp < vec[1]; rp++) {
+        DWORD r = *rp, op = r & 3, z = (r >> 2) & 7, x = (r >> 5) & 0x7ff, y = (r >> 16) & 0x7ff;
+        if ((op != 0 && op != 2) || z > 4 || x >= w || y >= h) continue;
+        if ((int)z == *(int *)(iso + 0x28)) {
+            ((SPR_VT78)(*(DWORD **)iso)[0x78 / 4])(iso, NULL, x, y, 1, op == 2 ? 8 : 0x10, 0);
+        } else {
+            WORD *fl = (WORD *)((*(BYTE ***)(iso + 0x24))[x] + y * 0x14 + 0x10);
+            WORD m = (WORD)((DWORD *)g_spr_mask)[z];
+            if (op == 2) *fl |= m; else *fl &= (WORD)~m;
+        }
+    }
+    vec[1] = vec[0];                                         /* the original erase(begin, end) of a POD vector */
+    ((SPR_THIS0)lvt[2])(lk, NULL);
+}
+
+static void patch_sprjournal(HMODULE spr) {
+    static const BYTE rel[] = { 0x8a,0x86,0xd8,0x03,0x00,0x00, 0x80,0x65,0xfc,0x00, 0x88,0x45,0xfd, 0x8a,0x86,0xdc,0x03,0x00,0x00,
+                                0x88,0x45,0xfe, 0x8a,0x86,0x28,0x04,0x00,0x00, 0x88,0x45,0xff };                       /* 31 */
+    static const BYTE rea[] = { 0x8a,0x86,0xd8,0x03,0x00,0x00, 0x8d,0x8e,0x48,0x04,0x00,0x00, 0x88,0x45,0xfd,
+                                0x8a,0x86,0xdc,0x03,0x00,0x00, 0x88,0x45,0xfe, 0x8a,0x86,0x28,0x04,0x00,0x00, 0x88,0x45,0xff,
+                                0x8d,0x45,0xfc, 0x50, 0xc6,0x45,0xfc,0x02 };                                         /* 41 */
+    static const BYTE app[] = { 0xb8,0x14,0xd7,0x05,0x10 };
+    BYTE *a = (BYTE *)spr + 0x8b94, *b = (BYTE *)spr + 0x8c46, *c = (BYTE *)spr + 0x8dd4;
+    DWORD old;
+    if (!g_sprjournal) { logf("--- SPRJOURNAL: disabled (SC3BIGCITY_SPRJOURNAL=0)"); return; }
+    /* app[] holds an absolute address (mov eax, 0x1005d714) that is relocated with the module */
+    if (memcmp(a, rel, sizeof(rel)) || memcmp(b, rea, sizeof(rea)) || c[0] != 0xb8 ||
+        *(DWORD *)(c + 1) != (DWORD)spr + 0x5d714) {
+        logf("--- SPRJOURNAL: SIMSPR+0x8b94/0x8c46/0x8dd4 differ from shipped - not patched");
+        return;
+    }
+    (void)app;
+    g_spr_mask = (DWORD)spr + 0x624f0;
+    if (!VirtualProtect(a, 0x250, PAGE_EXECUTE_READWRITE, &old)) return;
+    memset(a, 0x90, sizeof(rel));
+    a[0] = 0xE8; *(LONG *)(a + 1) = (LONG)((DWORD)spr_rec_release - (DWORD)(a + 5));
+    memset(b, 0x90, sizeof(rea));
+    b[0] = 0xE8; *(LONG *)(b + 1) = (LONG)((DWORD)spr_rec_realize - (DWORD)(b + 5));
+    b[5] = 0x8d; b[6] = 0x8e; b[7] = 0x48; b[8] = 0x04; b[9] = 0x00; b[10] = 0x00;    /* lea ecx, [esi+0x448] */
+    b[11] = 0x8d; b[12] = 0x45; b[13] = 0xfc;                                             /* lea eax, [ebp-4] */
+    b[14] = 0x50;                                                                         /* push eax */
+    c[0] = 0xE9; *(LONG *)(c + 1) = (LONG)((DWORD)spr_apply_journal - (DWORD)(c + 5));
+    (void)0; /* VirtualProtect(a, 0x250, old, &old); */
+    FlushInstructionCache(GetCurrentProcess(), a, 0x250);
+    logf("--- SPRJOURNAL: sprite journal records widened to 11-bit x/y (SIMSPR at 0x%08lX)", (DWORD)spr);
+}
+
+/* ================================================================ ECOCURSOR
+ * Owner 2026-10-09: on the Europolis 1024 city pollution shows only on the top-left quarter. Measured: the
+ * pollution grid is the right size (SIMECO cISC3PollutionLayer, 512x512 cells of 2x2 tiles), but air is
+ * non-zero only in cells x 0..255, z 0..255 - and there in EVERY cell, all 16 copies folded onto them.
+ * The per-tick pass FUN_10008249 walks the grid with a cursor (layer +0x498) that init FUN_10005844 forces
+ * into LIST mode. FUN_1000a3eb builds the list as one ushort per cell, (z & 0xff) | (x & 0xff) << 8, then
+ * shuffles it (FUN_1000af46); FUN_1000a5a7 unpacks the two bytes. On a 512-cell grid every coordinate wraps
+ * mod 256: the pass visits only the first quarter, four times each. Air, water and garbage share the cursor.
+ * [CONFIRMED @ SIMECO 0x1000a3eb, 0x1000a5a7; callers only FUN_10005844 and FUN_10008249]
+ * Fix: FUN_1000a3eb runs as shipped, then, for a list-mode cursor wider than 256 in either axis, builds a
+ * parallel list of full coordinates (x << 16 | z, same raster order, shuffled when the game shuffles).
+ * FUN_1000a5a7 is replaced by a C copy of both modes that reads that list when the cursor has one.
+ * The shipped ushort list is still built and sized, so the game's own count checks stay consistent.
+ * SC3BIGCITY_ECOCURSOR=0 disables. */
+static int g_ecocursor = 1;
+static BYTE *g_eco_tramp;
+typedef struct { void *cur; DWORD n, cap; DWORD *xz; } ECOLIST;
+static ECOLIST g_eco[4];
+static DWORD g_eco_rng = 0x9e3779b9u;
+
+static DWORD eco_rand(void) { g_eco_rng ^= g_eco_rng << 13; g_eco_rng ^= g_eco_rng >> 17; g_eco_rng ^= g_eco_rng << 5; return g_eco_rng; }
+
+static ECOLIST *eco_find(void *cur, int make) {
+    int i;
+    for (i = 0; i < 4; i++) if (g_eco[i].cur == cur) return &g_eco[i];
+    if (!make) return NULL;
+    for (i = 0; i < 4; i++) if (!g_eco[i].cur) { g_eco[i].cur = cur; return &g_eco[i]; }
+    return NULL;
+}
+
+typedef DWORD (__fastcall *ECO_REBUILD)(void *self, void *edx, DWORD shuffle);
+static DWORD __fastcall eco_rebuild(BYTE *c, void *edx, DWORD shuffle) {
+    DWORD r = ((ECO_REBUILD)(void *)g_eco_tramp)(c, NULL, shuffle);
+    LONG x0 = *(LONG *)(c + 0xc), z0 = *(LONG *)(c + 0x10), x1 = *(LONG *)(c + 0x14), z1 = *(LONG *)(c + 0x18);
+    ECOLIST *L;
+    (void)edx;
+    if (*(DWORD *)(c + 4) != 0 || (x1 < 256 && z1 < 256) || x1 < x0 || z1 < z0) {
+        if ((L = eco_find(c, 0)) != NULL) L->n = 0;          /* a size the original handles */
+        return r;
+    }
+    if ((L = eco_find(c, 1)) == NULL) return r;
+    {   DWORD n = (DWORD)(x1 - x0 + 1) * (DWORD)(z1 - z0 + 1), k = 0, i;
+        LONG x, z;
+        if (n > L->cap) {
+            DWORD *nx = (DWORD *)HeapAlloc(GetProcessHeap(), 0, n * 4);
+            if (!nx) { L->n = 0; return r; }
+            if (L->xz) HeapFree(GetProcessHeap(), 0, L->xz);
+            L->xz = nx; L->cap = n;
+            logf("--- ECOCURSOR: pollution cursor 0x%08lX list widened to %lu cells (%ld..%ld x %ld..%ld)",
+                 (DWORD)c, n, x0, x1, z0, z1);
+        }
+        for (x = x0; x <= x1; x++) for (z = z0; z <= z1; z++) L->xz[k++] = ((DWORD)x << 16) | (DWORD)(z & 0xffff);
+        if (shuffle & 0xff) {
+            g_eco_rng ^= GetTickCount();
+            for (i = n - 1; i > 0; i--) { DWORD j = eco_rand() % (i + 1), t = L->xz[i]; L->xz[i] = L->xz[j]; L->xz[j] = t; }
+        }
+        L->n = n;
+    }
+    return r;
+}
+
+/* C copy of FUN_1000a5a7 (thiscall, ret 8): returns 1 and the next cell, or 0 when the sweep is over. */
+static DWORD __fastcall eco_next(BYTE *c, void *edx, DWORD *px, DWORD *pz) {
+    ECOLIST *L;
+    (void)edx;
+    if (c[0] == 2) return 0;
+    if (*(DWORD *)(c + 4) == 0) {
+        LONG idx = *(LONG *)(c + 0x2c), n;
+        L = eco_find(c, 0);
+        if (L && L->n) {
+            n = (LONG)L->n;
+            if (idx >= n) { c[0] = 2; return 0; }
+            *(LONG *)(c + 0x2c) = idx + 1;
+            *px = L->xz[idx] >> 16; *pz = L->xz[idx] & 0xffff;
+        } else {
+            WORD e;
+            n = (*(LONG *)(c + 0x24) - *(LONG *)(c + 0x20)) >> 1;
+            if (idx >= n) { c[0] = 2; return 0; }
+            *(LONG *)(c + 0x2c) = idx + 1;
+            e = ((WORD *)*(DWORD *)(c + 0x20))[idx];
+            *px = e >> 8; *pz = e & 0xff;
+        }
+        if (*(LONG *)(c + 0x2c) == n) c[0] = 2;
+    } else {
+        LONG w = *(LONG *)(c + 0x14) - *(LONG *)(c + 0xc) + 1, cnt = *(LONG *)(c + 0x1c), pos;
+        *(LONG *)(c + 0x2c) += 1;
+        if (cnt < *(LONG *)(c + 0x2c)) { c[0] = 2; return 0; }
+        pos = (*(LONG *)(c + 0x34) + *(LONG *)(c + 0x30)) % cnt;
+        *(LONG *)(c + 0x30) = pos;
+        *px = (DWORD)(pos % w + *(LONG *)(c + 0xc));
+        *pz = (DWORD)(pos / w + *(LONG *)(c + 0x10));
+        if (*(LONG *)(c + 0x2c) == cnt) c[0] = 2;
+    }
+    return 1;
+}
+
+static void patch_ecocursor(HMODULE eco) {
+    static const BYTE pro[] = { 0x55, 0x8b, 0xec, 0x83, 0xec, 0x14 };
+    static const BYTE nxt[] = { 0x80, 0x39, 0x02, 0x56, 0x0f, 0x84 };
+    BYTE *a = (BYTE *)eco + 0xa3eb, *b = (BYTE *)eco + 0xa5a7;
+    DWORD old;
+    if (!g_ecocursor) { logf("--- ECOCURSOR: disabled (SC3BIGCITY_ECOCURSOR=0)"); return; }
+    if (memcmp(a, pro, sizeof(pro)) || memcmp(b, nxt, sizeof(nxt))) {
+        logf("--- ECOCURSOR: SIMECO+0xa3eb/0xa5a7 differ from shipped - not patched");
+        return;
+    }
+    g_eco_tramp = (BYTE *)VirtualAlloc(NULL, 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!g_eco_tramp) return;
+    memcpy(g_eco_tramp, a, 6);
+    g_eco_tramp[6] = 0xE9; *(LONG *)(g_eco_tramp + 7) = (LONG)((DWORD)(a + 6) - (DWORD)(g_eco_tramp + 11));
+    if (!VirtualProtect(a, 0x200, PAGE_EXECUTE_READWRITE, &old)) return;
+    a[0] = 0xE9; *(LONG *)(a + 1) = (LONG)((DWORD)eco_rebuild - (DWORD)(a + 5)); a[5] = 0x90;
+    b[0] = 0xE9; *(LONG *)(b + 1) = (LONG)((DWORD)eco_next - (DWORD)(b + 5));
+    FlushInstructionCache(GetCurrentProcess(), a, 0x200);
+    logf("--- ECOCURSOR: pollution cursor carries full coordinates on grids wider than 256 (SIMECO at 0x%08lX)", (DWORD)eco);
 }
 
 /* ================================================================ boot */
 
 static DWORD WINAPI watcher(LPVOID param) {
-    HMODULE gz = NULL, dirtm = NULL, initm = NULL, uim = NULL, sprm = NULL;
+    HMODULE gz = NULL, dirtm = NULL, initm = NULL, uim = NULL, sprm = NULL, rzm = NULL, rcim = NULL, dstrm = NULL, ecom = NULL;
     int dirt = 0, dims = 0, ui = 0, anchors = 0, ms = 0;
     (void)param;
+    {   char v[16];
+        if (GetEnvironmentVariableA("SC3BIGCITY_QFS24", v, sizeof(v))) g_qfs24 = atoi(v);
+        if (GetEnvironmentVariableA("SC3BIGCITY_TRAVERSE", v, sizeof(v))) g_traverse = atoi(v);
+        if (GetEnvironmentVariableA("SC3BIGCITY_DSTR256", v, sizeof(v))) g_dstr256 = atoi(v);
+        if (GetEnvironmentVariableA("SC3BIGCITY_SPRJOURNAL", v, sizeof(v))) g_sprjournal = atoi(v);
+        if (GetEnvironmentVariableA("SC3BIGCITY_ECOCURSOR", v, sizeof(v))) g_ecocursor = atoi(v); }
 
     /* Patch each module the moment it maps. Windowed mode must land before GZGraphicD's Init
        (~250 ms); SIMDIRT's buffer singleton is created lazily at first terrain use, much later. */
     while (ms < 300000 && !(gz && dirtm && uim && sprm && (initm || !g_fix_vertical))) {
-        if (!sprm && (sprm = GetModuleHandleA("SIMSPR.DLL")) != NULL) anchors = patch_anchor16(sprm);
+        if (!rzm && (rzm = GetModuleHandleA("GZResourceD.dll")) != NULL) patch_qfs24(rzm);
+        if (!rcim && (rcim = GetModuleHandleA("SIMRCI.DLL")) != NULL) patch_traverse(rcim);
+        if (!dstrm && (dstrm = GetModuleHandleA("SIMDSTR.DLL")) != NULL) patch_dstr256(dstrm);
+        if (!ecom && (ecom = GetModuleHandleA("SIMECO.DLL")) != NULL) patch_ecocursor(ecom);
+        if (!sprm && (sprm = GetModuleHandleA("SIMSPR.DLL")) != NULL) { anchors = patch_anchor16(sprm); patch_sprjournal(sprm); }
         if (!gz && (gz = GetModuleHandleA("GZGraphicD.dll")) != NULL && g_windowed) {
             patch_windowed(gz);
             patch_surfacefmt(gz);
