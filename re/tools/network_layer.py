@@ -62,7 +62,7 @@ import ixf_parse
 import city_parse
 
 NET_GROUP = 0x2147c2dd
-NET_NAME = {1: "road", 2: "rail", 3: "net2"}
+NET_NAME = {1: "road", 2: "rail", 3: "net2"}   # measured 2026-10-09: 1 = all surface networks, 2 = water pipes, 3 = subway (CITY_SAVE.md)
 NAME_NET = {v: k for k, v in NET_NAME.items()}
 
 

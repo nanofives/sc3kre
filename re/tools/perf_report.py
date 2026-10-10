@@ -47,11 +47,11 @@ def load_dump(path, thread="game"):
             head = line.strip()
         elif p[0] == "M":
             mods.append((int(p[1], 16), int(p[2], 16), " ".join(p[3:])))
-        elif p[0] == ("E" if thread == "game" else "E2"):
+        elif p[0] == {"game": "E", "sim": "E2", "workers": "E3"}[thread]:
             ex[int(p[1], 16)] += int(p[2])
-        elif p[0] == ("I" if thread == "game" else "I2"):
+        elif p[0] == {"game": "I", "sim": "I2", "workers": "I3"}[thread]:
             inc[int(p[1], 16)] += int(p[2])
-    key = " samples=" if thread == "game" else " samples2="
+    key = {"game": " samples=", "sim": " samples2=", "workers": " samples3="}[thread]
     samples = int(head.split(key)[1].split()[0]) if key in head else sum(ex.values())
     return head, mods, ex, inc, samples
 
@@ -122,8 +122,8 @@ def main():
     ap.add_argument("dump")
     ap.add_argument("--top", type=int, default=30)
     ap.add_argument("--base")
-    ap.add_argument("--thread", choices=["game", "sim"], default="game",
-                    help="game = the window thread, sim = SIMCITY-class threads (E2/I2)")
+    ap.add_argument("--thread", choices=["game", "sim", "workers"], default="game",
+                    help="game = the window thread, sim = SIMCITY-class threads (E2/I2), workers = sc3perf TRAFFIC_MT threads (E3/I3)")
     a = ap.parse_args()
     idx = load_tracker()
     head, mods, ex, inc, n = load_dump(a.dump, a.thread)
