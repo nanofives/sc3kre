@@ -4131,6 +4131,29 @@ static void rz_fault_diag(void *iso) {
     }
 }
 static volatile LONG g_busy;           /* re-entrancy guard for the per-frame poll */
+/* SIMLOCK (2026-10-10): the map-wide refresh (step 7/11, SIMSPR FUN_10018cdf) ends by walking EVERY cell's occupant
+   chain (bridge+0x18 vt+0xa0, occupant vt+0x60 / vt+0x4c) holding only the view's data lock, while the sim thread's
+   zone development replaces buildings under the city's TICK lock L1 (city+0x1a8, lock object: vt+4 lock, vt+8 unlock;
+   SIMCITY FUN_10002ef3 / FUN_10003178). On the 1024 city it met a building half destroyed (SIMSPR+0x5AFDA: the
+   forwarder FUN_1005afd3 read a null inner object; also +0x2D102). The pass now holds L1 from the start, so the sim
+   tick waits for it: same order as the sim (L1 -> data lock -> view), and L1 is re-entrant for its owner, so the
+   refresh's own L1 take inside FUN_100184d9 still works. The pass runs from rz_wndproc with no locks held
+   (DEFERRESIZE). SC3RESIZE_SIMLOCK=0 turns it off. Call with NULL to take; pass the result back to release. */
+static int g_simlock = 1;
+static BYTE *rz_sim_lock(BYTE *held) {
+    typedef void (__fastcall *LK_FN)(BYTE *self, void *edx);
+    BYTE *app, *city, *lk;
+    if (held) { ((LK_FN)(*(DWORD **)held)[2])(held, NULL); return NULL; }
+    if (!g_simlock) return NULL;
+    app = *(BYTE **)((BYTE *)GetModuleHandleA(NULL) + 0xfa86c);
+    if (!app || IsBadReadPtr(app + 0x48, 4)) return NULL;
+    city = *(BYTE **)(app + 0x48);
+    if (!city || IsBadReadPtr(city + 0x1a8, 4)) return NULL;
+    lk = city + 0x1a8;
+    if (IsBadReadPtr(*(DWORD **)lk, 12)) return NULL;
+    ((LK_FN)(*(DWORD **)lk)[1])(lk, NULL);
+    return lk;
+}
 /* DEFERRESIZE (2026-10-08): the resize pass must not run from the blit heartbeat. That heartbeat fires
    inside the city view's Plot (SIMSPR 0x1001cab9 -> dirty-rect blits), where the game thread already holds
    the city-data lock; step 7/11 (SIMSPR FUN_10018cdf -> FUN_100184d9) then takes the lock the sim thread
@@ -5845,6 +5868,7 @@ static void rz_poll(void) {
     void *iso;
     DWORD *v, R, w, ht;
     RECT cr;
+    BYTE *lk;
 
     if (!g_bridge || IsBadReadPtr(g_bridge, 0xf4)) return;
     iso = (void *)((DWORD *)g_bridge)[0x18 / 4];
@@ -6104,6 +6128,7 @@ static void rz_poll(void) {
        process death. This is how we catch WHERE the v3 crash actually is. */
     g_rz_step = 0;
     g_exc_code = 0;
+    lk = rz_sim_lock(NULL);
     __try {
         rz_do_resize(iso, w, ht);
         g_bridge_fresh = 0;
@@ -6116,6 +6141,7 @@ static void rz_poll(void) {
              g_exc_code, who, g_rz_step);
         rz_fault_diag(iso);
     }
+    rz_sim_lock(lk);
     InterlockedExchange(&g_busy, 0);
 }
 
@@ -7507,6 +7533,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MENUBG", v, sizeof(v))) g_menubg = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HOLD", v, sizeof(v))) g_hold = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_DEFERRESIZE", v, sizeof(v))) g_deferresize = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_SIMLOCK", v, sizeof(v))) g_simlock = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_ZOOMKEYS", v, sizeof(v))) g_zoomkeys = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_BAR800", v, sizeof(v))) g_bar800 = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDREFLOW", v, sizeof(v))) g_hudreflow = atoi(v);
