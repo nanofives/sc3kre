@@ -436,3 +436,267 @@ after 4 game-minutes every block with buildings is at 100%; the five copies left
 (23, 30-33) are at 1-18% (spill-over from neighbours). Before: 100% in the four top-left blocks, 0% elsewhere.
 Note: this is a balance change on big maps - garbage and pollution now come from the whole city, about 4x the
 cells, so landfill/incinerator demand rises accordingly.
+
+## Finding 18 - the 1024 freezes were a quadratic registry list in SIMCITY (fixed: LIST_COUNT + LIST_FIND)
+
+Europolis 1024 (re/tools/city_clone.py, ~369k occupants): the date stood still for minutes at a time (one stall passed 12
+minutes, then the game exited with no fault logged), the first month-end froze the window for 211 s, and the city took
+97 s to load. Address space was not the cause (sc3perf now logs it: 620 MB used, 896 MB largest free block, flat).
+
+sc3perf sampled the sim threads during a stall: 72% of the busy samples were in SIMCITY `FUN_10001db0` and 11% in
+`FUN_10001c63` `[CONFIRMED @ 0x10001db0, 0x10001c63, 0x10001bec]`:
+- SIMCITY keeps per-category registries of sim objects as VC6 `std::list`s (heads at `this+0x44+4*i`, i < 6; node
+  +0 next, +4 prev, +8 value, erase `FUN_10001df7`). Category 3 holds every building: 348k nodes on this city.
+- Add `FUN_10001bec` pushes to the back (`FUN_10001dc0`), then calls `FUN_10001db0`, which counts the list by walking
+  every node, only to test `== 1`. Remove `FUN_10001c63` searches from the front for the node, erases it, and counts
+  again only to test `== 0`. `FUN_10001db0` has no other caller. So every add or remove walks the whole list, and a
+  remove walks it twice. Measured with Frida: 2,450 removes a minute, the removed node on average 303k from the front.
+  This is Finding 6's "small inefficiency" at 1024 scale.
+
+Fix (sc3perf, default on):
+- `list_count`: JMP at `FUN_10001db0` to a constant-time version returning min(count, 2), exact for both tests.
+- `list_find`: hash index (list head, object) -> node. Hooks: the push_back call at `0x10001c15` (new node =
+  head->prev), the remove's search loop `0x10001c80..0x10001c96`, and the range erase `FUN_10002120` (teardown:
+  wipes the index). A list is indexed by one walk at its first search; every hit is checked against the node's links
+  (value, next->prev, prev->next) and any mismatch or duplicate drops back to the walk.
+
+| Europolis 1024, speed 3, 10 min | days simulated | longest date stall | load |
+|---|---|---|---|
+| before | (stalls of 224 s and 722 s; one run exited) | > 12 min | 97 s |
+| list_count | 206 | 3-7 s | 48 s |
+| list_count + both-ends search (tried, replaced) | 222 | 3-10 s | 21 s |
+| list_count + list_find (index) | 519 | 2.7-7.6 s (weekly traffic batches) | 21-25 s |
+
+Index counters over the 10 minutes: 400,367 lookups, 0 fallback walks, 1 build, 0 drops. Worst frame 35 ms across
+about 17 month-ends (the 211 s month-end freeze was the game thread waiting on the registry lock). Regression on
+Moscow (256), speed 4, 4 min: 1,358 days = 5.9 days/s (nominal 6.08), worst frame 7 ms, 64,290 lookups, 0 walks.
+
+What is left on the 1024 sim thread: traffic routing (56% of the stall samples) and SIMGEOM occupant queries (21%),
+in weekly batches (SimTransit `FUN_100097b9`, one trip per building per month in four weekly groups). A threading
+study (scratchpad worker_transit_mt.md) found the trips can be farmed out to worker threads with per-thread copies of
+the marker grid and iterator, but results would differ from serial (each trip's congestion feeds the next) and every
+routing step takes SIMGEOM's occupant-manager lock (mgr+0x90), so the speedup must be measured before it is worth it.
+
+## Finding 19 - sim-busy indicator (sc3perf `busy=1`)
+
+Owner request: a visible cue when the date stops for a reason. A 10-byte hook at SIMCITY `FUN_1000aa4d` (day fire,
+ecx = clock: +0x50 speed, +0x54 pause count, +0x60 ms per day `[CONFIRMED @ 0x1000a066, 0x1000a0ec]`) timestamps
+every day. When a day is more than 1 s late, the speed is not the paused one and the city is neither user-paused nor
+camera-held (city+0x140/+0x144), the overlay shows a red line with how late the date is, the sim threads' CPU use and
+which modules their samples fall in ("SIM BUSY 12.4 s CPU 79% traffic 62% map grid 18%"), or "sim idle, clock held"
+when the sim is not working. The stack probes use VirtualQuery, not IsBadReadPtr (whose first-chance faults filled
+sc3resize's crash log with 88k lines in 3 minutes).
+
+## Finding 20 - traffic routing on worker threads (sc3perf `traffic_mt=N`, default 8 since 2026-10-09)
+
+Owner question: can the 32-bit game use more cores? 32-bit is not the limit (a 32-bit process runs threads on every
+core; its limit is 2 GB of address space, SC3U.exe is not large-address-aware). The limit is that the sim runs on
+one thread and its state is shared. After Finding 18 the 1024 sim thread is mostly traffic routing in weekly bursts.
+
+Design (static study: scratchpad worker_transit_mt.md): the per-building issuer SimTransit `FUN_100097b9` (iOS
+`BuildingTrafficMonthly::Apply`) calls the trip function `FUN_10006fe3` and discards the result. Those calls are
+queued (occupant AddRef'd); a flush routes the queue on N workers, each on a SHADOW of the 0x110-byte traffic layer
+with its own visited-marker grid (write-watch cleared), cell iterator and counters. The two shared writers are replaced
+for every caller by atomic versions with the same arithmetic: congestion `FUN_10006edd` (CAS saturating byte add) and
+trip-result bits `FUN_10006a72` (InterlockedOr/And). Flush points: queue full (4096), 500 ms after the first queued
+trip, the trip-from-cell entry `FUN_1000706a`, the stats pass `FUN_10009242`, and any other caller of the trip function.
+
+Results, Europolis 1024 (`city_clone.py`), speed 3, Ryzen 7 5800X (8 cores / 16 threads):
+
+| run | days | trips | arrived | notes |
+|---|---|---|---|---|
+| 10 min, traffic_mt=0 (Finding 18) | 519 | | | |
+| 10 min, traffic_mt=8 | 850 (+64%; nominal 900) | 2,420,680 routed by workers, 0 faults | | median date stall 2.7 s, window minimized after 400 s |
+| 4 min, traffic_mt=0 | 203 | 610,853 | 90.7% | |
+| 4 min, traffic_mt=8 | 257 (+27%) | 737,996 | 89.7% | |
+
+Trips in one batch see the congestion other workers leave as they go, not a fixed serial order, so arrivals moved by
+1 point. 3 maximize/restore cycles with 8 workers: no fault. Owner turned it on by default (8 workers, capped at logical CPUs - 1).
+
+## Open: resize step 7 faults in SIMSPR on the 1024 city
+
+With or without traffic_mt, the map-wide refresh in sc3resize's resize step 7 (`FUN_10018cdf`) faulted on a null read in
+SIMSPR (`+0x2D102` once fatal after 2.5 game years of play, `+0x5AFDA` once caught by sc3resize's guard). Not
+investigated yet.
+
+## Finding 21 - what else can run on worker threads (owner question, 2026-10-09)
+
+Profiled the sim thread with traffic_mt=8 (10 min, Europolis 1024, speed 3): it is busy 9% of the time; 38% of its
+samples are the wait for a traffic batch. No other pass is above 1.5% (SIMGEOM `grid_query_point_in_window` 1.45%, the
+registry iteration `FUN_10001914` 0.2%), so on this city nothing else is worth moving to workers yet. The cost left is the
+traffic batches themselves.
+
+Profiling the 8 workers (sc3perf now samples them as sim threads) showed most of their routing time waiting on locks:
+| lock | where | share of worker samples (inclusive) |
+|---|---|---|
+| SIMNTWRK network-piece AddRef/Release, one global CRITICAL_SECTION 0x100325f8 | `FUN_10023886` / `FUN_100238cc` via `FUN_10026584` | ~15% |
+| SimTransit STL node allocator spinlock DAT_1001fe00, backs off with Sleep() up to 128 ms | `FUN_10009f58` / `FUN_1000a08f` / `FUN_10009fcf` | ~11.5% |
+| SIMGEOM occupant manager CRITICAL_SECTION mgr+0x90 | `get_occupant_at_cell 0x1000ec60` via `FUN_1001adf5` | ~10.5% |
+
+sc3perf `mt_locks=1` (default, with traffic_mt) removes the first two: worker threads get their own allocator free
+lists (TLS; other threads run the original code with the original lock), and the piece refcount (low 16 bits of
+piece+0xc) plus the stats counter (`FUN_100010a6()`+0x20) become CAS loops with the same arithmetic. The SIMGEOM lock is
+left: the UI thread edits the occupant grids under it, and it is now ~20% of the remaining stall samples.
+
+| 5 min, speed 3, traffic_mt=8 | days | routing ms per trip | stalls | stall total |
+|---|---|---|---|---|
+| without mt_locks | 322 | 0.09 | 45 | ~160 s |
+| mt_locks | 374 | 0.04 | 16 | 38.5 s |
+| mt_locks + traffic_mt_async | 380 | (overlapped) | 17 | 36.8 s |
+
+`traffic_mt_async=1` lets the sim thread continue while a batch routes (double-buffered queue); it gained 2% because the
+weekly trip burst refills the queue faster than a batch routes, so the sim thread waits anyway. Default off.
+Arrivals (4 min): serial 90.7%, traffic_mt 89.7%, traffic_mt + mt_locks 88.9% (849,932 trips, 299 days vs 203 serial).
+Remaining ceiling: routing throughput (~27k trips/s on 8 workers) and the SIMGEOM lock.
+
+### Finding 21b - the SIMGEOM occupant-manager lock (sc3perf `geom_held`, default off)
+
+Tried at the owner's request. For a synchronous batch the sim thread takes the locks of the traffic layer's two occupant
+managers (layer+0x94 / +0x98, lock object *(mgr+0x90), vt+4 / vt+8) once, releases the workers, and drops them after the
+batch; worker threads read through a lock-free copy of GetOccupantAtCell `0x1000ec60` (same logic, from its disassembly).
+Lock order is the original one (the sim thread took that lock while routing). 5 min, Europolis 1024, speed 3: 377 days
+(374 without), routing 39.4 s (41.3 s), 400,620,199 lock-free reads, 0 faults. An uncontended CRITICAL_SECTION costs
+nanoseconds; the wait seen before was mostly the two locks mt_locks removed. Left off by default: ~1% gain, and player edits
+would wait for a whole batch. Worker profile after it: no lock waits left; the busy time is routing itself
+(`route_trip`, `select_next_cell`) plus ~3% in sc3perf's replacement functions.
+
+## Finding 22 - cheaper routing per trip (owner request): FAST_CEIL, and what is left
+
+The DFS router (`route_trip 0x100070d0`) does per step: arrival test `FUN_10008a94`, push a 32-byte cell record,
+`select_next_cell 0x1000755e` (scan the ring around the current piece: marker grid, network flags +0x5c, congestion
+bytes; keep the least congested; GetOccupantAtCell on the pick; mark its footprint visited; step cost), backtrack with
+Release of the piece on failure. The step cost ends with `ftol(ceil((double)cost))` `[CONFIRMED @ 0x100083a6]`, and
+msvcrt's ceil switches the x87 rounding mode with fldcw and back (msvcrt+0xa9024, the same helper FAST_FTOL removed
+from _ftol) - it was the largest single item in the workers' routing samples.
+
+sc3perf `fast_ceil=1` (default) points SimTransit's ceil import (IAT 0x1001a0ac) at a FISTTP version (truncate, +1 when
+below the input; |x| >= 2^31 and NaN go to msvcrt). All three SimTransit call sites convert the result to an integer
+at once. Offline check against the CRT ceil: edge cases plus 10,000,000 values in the game's range, 0 mismatches.
+Also: the SIMNTWRK stats object pointer used by the lock-free AddRef/Release is cached (was a call per step), and the
+profiler's stack copies are guarded (a copy past a worker's stack top read memory freed after VirtualQuery and took
+the game down once).
+
+| 5 min, Europolis 1024, speed 3, traffic_mt=8 + mt_locks | trips | routing | ms per trip | stall total | days |
+|---|---|---|---|---|---|
+| before | 1,060,792 | 41.3 s | 0.039 | 38.5 s | 374 |
+| fast_ceil | 1,123,202 | 35.4 s | 0.032 | 33.7 s | 375 |
+
+Days hardly move now: stalls are ~11% of the run, and speed 3's ceiling is 450 days per 5 minutes. Routing cost per trip
+since the first threaded version: 0.09 -> 0.032 ms. What is left inside a trip (worker samples): select_next_cell's own
+scan ~40%, occupant lookups + their lock ~22% (geom_held removes the lock, +1%), the lock-free piece refcounts ~16%
+(cache-line traffic between workers on shared road pieces), the marker grid's write-watch syscalls ~13% (2 per trip).
+
+## Finding 23 - where the rest of the daily sim pass goes (10 min profile, all optimizations on)
+
+Europolis 1024, speed 3, traffic_mt=8 + mt_locks + fast_ceil: 754 days in 600 s (speed 3 nominal: 900). sc3perf now
+logs day lengths once a minute (`DAYS>`) and samples the TRAFFIC_MT workers into their own tables (E3/I3,
+`perf_report.py --thread workers`; the thread finder's 8-thread cap had hidden the real sim threads behind the workers).
+
+Day lengths (the sim pauses the clock while it works, so every ms of sim work lengthens a day): median 657 ms on a
+666 ms nominal day, mean ~790 ms, p90 1.1-1.3 s, max 2.2-2.3 s. Ordinary days are on time; about one day in ten
+carries the loss.
+
+The slow days are traffic-batch days: all 29 stalls >= 1.7 s in the 10 minutes were dominated by routing chains
+(`select_next_cell < route_trip < FUN_10006fe3`, occupant lookups). Roughly 87k trips come due on such a day; at
+0.032 ms wall per trip on 8 workers that is ~2.8 s, during which the sim keeps the clock paused.
+
+Sim threads outside the traffic waits: busy 11.3% of samples. Inclusive, mostly zone development: SIMRCI
+`FUN_1003372a` / `FUN_10031499` ~9.6% (tile evaluation `inddev/resdev/comdev_evaluate_tile`, building placement
+`zonelayer_place_building_attrib` / `_reskey`, removals `occmgr_remove_occupant_*` ~4%, `zonelayer_is_near_transport`
+~2.5% driving SIMGEOM region scans `grid_query_point_in_window` 1.8% exclusive, the top exclusive item). Order-dependent
+(each placement changes the map), so not a worker-thread candidate. Also seen on the sim thread, not threaded: a trip
+issued from SC3U.exe `FUN_004bfe89` and a second router path through `FUN_100140f4`.
+
+Next lever (not built): smooth the traffic batch instead of routing it all on one day - keep an unbounded queue that the
+workers drain in the background while the clock runs, and flush only before the monthly stats pass `FUN_10009242`. It
+keeps which trips happen but applies their congestion and result bits up to a few days later (the congestion grids
+are a decayed monthly accumulator), and the workers would run concurrently with the sim thread's own day passes,
+which the synchronous design avoids.
+
+## Finding 24 - traffic smoothing: the trip queue drains in the background (sc3perf `traffic_mt_smooth=1`, default)
+
+The monthly per-building trips go into a 524,288-slot ring; the 8 workers take chunks of 32 continuously while the sim
+thread and the clock carry on. Each chunk runs on the worker's shadow layer refreshed from the live layer; counters go
+into shared accumulators the sim thread adds to the layer; finished trips' occupants come back through a second ring
+and are Released on the sim thread (a building's last Release must not run its destructor on a worker).
+
+Drain points, found by measurement: the first version also drained before every other trip call and lost (709 days):
+`FUN_1000706a` (trip from a cell) is called ~17 times a second by zone development, and SIMECO+0x423c calls the trip
+function too - 8,871 waits in 10 minutes. Those callers now route at once on the sim thread on the real layer and its own
+marker grid, alongside the workers (all shared writes are atomic or lock-free; they see congestion without the queued
+trips, the same lag the queued trips have). Only the monthly stats pass `FUN_10009242` (it decays and publishes the
+congestion grids), a full ring, and city teardown drain. Teardown signal: at exit the traffic layer object is never
+deleted (a destructor hook on `FUN_1000154e` never fired in 5 closes) but its marker grid is, so the grid destructor
+(sc3perf's `tr_dtor`) drains first; this is why smoothing requires transit_clear.
+
+| 10 min, Europolis 1024, speed 3 | days | stalls >= 1.7 s | sim thread waiting on traffic | p90 day |
+|---|---|---|---|---|
+| synchronous batches (Finding 23) | 754 | 29 | ~38 s | 1.1-1.3 s |
+| background queue | 849 / 853 | 2 / 0 | 2.2 s / 1.2 s | 0.76-0.81 s |
+
+2.39 million trips routed by the workers per 10 minutes, 0 faults. Arrivals (4 min): 88.7% (synchronous 88.9%, original
+serial routing 90.7%); 340 days in 240 s vs 203 for the original routing.
+
+Exit-time crash seen while testing (separate bug, not the queue): closing the game faulted in SIMSPR during shutdown in
+4 of 5 runs with traffic_mt on and 1 of 3 with it off (`SIMSPR+0x2D112`, `+0x40B9F`). `0x1002d0e2` walks SIMSPR's
+sparse sprite-cell map (row list -> cell list) and read a null `next`: the map was being changed while walked. The sim
+thread changes it when buildings are replaced (`sc3_spritecellmap_insert` in the sim profiles) while the game thread
+walks it in map-wide refreshes and at teardown - the same family as the 1024 maximize crash (`+0x2D102`, Finding 16
+area). A faster sim replaces buildings more often per second, so it hits more often. To fix in SIMSPR (locking), not in
+the queue.
+
+## Finding 25 - the maximize / exit crashes: non-atomic reference counts and an unlocked map walk (fixed)
+
+Crashes after maximizing the 1024 city and on quitting it (SIMSPR `+0x2D102` / `+0x2D112` / `+0x40B9F` / `+0x5AFDA`,
+SIMSERV `+0xCAD3`, SIMCITY teardown `+0x69BB` calling a dead object) - more frequent with traffic_mt, also seen without.
+Live probe: the sparse-map methods behind `0x1002d0e2` run only on the game thread, so it was not two threads editing
+one list. Static read (scratchpad worker_sprmap.md) and teardown probes found two original-game bugs:
+
+1. Non-atomic reference counts on objects that receive message fan-out from the SIM thread while the GAME thread also
+   references them (GZServiceD MessageSend Releases each target after dropping its lock, on the sending thread). A lost
+   update frees the object while in use; the walk then reads freed memory (the "null next"), or a later Release destroys
+   it twice. Replaced by atomic versions with the same results (sc3perf `spr_refcount=1`, default; no lock added):
+   - SIMSPR AddRef `0x10021551` (+8, shared by five classes: view overlays 0x10064390 at bridge+0x110/+0x114/+0x118 and
+     vtables 0x10064194, 0x10065f24, 0x10066618, 0x10066a24) and their Releases `0x1002209c`, `0x10021558`,
+     `0x10035433`, `0x1002e929` (destroys at <= 1 via vt+0x20), `0x10037c93` (vt+0x28); effect manager 0x10067264
+     (bridge+0x108) AddRef `0x1003cf95` / Release `0x1003cf9c` (+0xc).
+   - SIMSERV class 0x1001f2c8: AddRef `0x1000c3df` / Release `0x1000cab6` (+0x38, destroy vt+0x44).
+   - SimTransit traffic layer: AddRef `0x1000526c` / Release `0x10005237` (+0xc, plus the module stats counter;
+     destroy vt+0xc4). Teardown probe: index 19 of city+0x94, released by SIMCITY `0x100069b8` with its vtable already
+     overwritten by text ("dern"). Same fault with traffic_mt=0, so this is the game's bug.
+2. The resize pass's map-wide refresh (SIMSPR FUN_10018cdf, sc3resize steps 7 and 11) ends by walking every cell's
+   occupant chain holding only the view's data lock, while zone development replaces buildings under the city's tick
+   lock L1 (city+0x1a8): it met a half-destroyed building (forwarder FUN_1005afd3, null inner object, SIMSPR+0x5AFDA).
+   sc3resize `SIMLOCK` (default; SC3RESIZE_SIMLOCK=0 off) holds L1 for the whole pass: same order as the sim
+   (L1 -> data lock -> view), L1 is re-entrant for its owner, and the pass runs from the window procedure with no locks.
+
+| 1024 city | exits faulted (traffic_mt=8) | exits faulted (traffic_mt=0) | maximize/restore cycles faulted |
+|---|---|---|---|
+| before | 4 of 5 | 1 of 3 | step-7 faults, one fatal |
+| after | 0 of 6 | 1 of 6 (heap corruption freeing in another module) | 0 of 5 |
+
+The one remaining kind of exit fault (heap corruption detected during teardown frees, seen once in SIMADV and once in
+ntdll from a free) is not explained yet. The crash logger also records handled first-chance faults from IsBadReadPtr
+probes (KERNEL32+0x2CC02); those are not crashes.
+
+### Finding 25b - the remaining exit heap corruption: the same bug, engine-wide (fixed: LAYER_REFCOUNT)
+
+Both heap-corruption exits had one stack: city teardown (SIMCITY `0x100069bb`) -> SIMADV Release `FUN_1002ba93` ->
+deleting destructor `FUN_1002baec` -> `free(this)` on an object already freed. FUN_1002ba93 is again a plain
+decrement-and-destroy, with the module stats counter. A survey of every game DLL (scratchpad refsurvey.py) found ~600
+AddRef bodies with an unlocked `inc`; the ones that matter are the layer/agent objects that get sim-thread message
+fan-out, and their AddRef/Release come from four compiler templates (AddRef with stats; Release always-decrement;
+Release if-nonzero, two encodings). sc3perf `layer_refcount=1` (default) matches them byte for byte in every game DLL
+as it loads (only the field offset, the stats-getter call and the destroy slot vary; branch distances must match) and
+routes each through a 16-byte stub to one atomic implementation with the same results: 51 AddRef + 61 Release in 21
+DLLs, as the static scan predicted. SimTransit's layer keeps its own atomic version (it drains the trip queue).
+
+| 1024 city exits | traffic_mt=8 | traffic_mt=0 |
+|---|---|---|
+| before Finding 25 | 4 of 5 crashed | 1 of 3 |
+| after 25 (SIMSPR/SIMSERV/traffic layer) | 0 of 6 | 1 of 6 (SIMADV heap) |
+| after 25b (all layer templates) | 0 of 8 | 0 of 8 |
+
+Two runs logged a fault at KERNEL32+0x2CC02: that is sc3resize's own IsBadReadPtr probe (sc3resize+0x8767/+0x87CC)
+raising and handling a first-chance fault during teardown; the exit completed normally in both.
+Play check after the patch: 84 days per 60 s at speed 3, median day 657 ms, no faults.

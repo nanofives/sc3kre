@@ -3069,3 +3069,26 @@ The previous section named the wrong next step with confidence ("resolve it by f
 The correction cost two scans and no re-carve, because an encoding scan can refute a hypothesis
 about *what construct is present*, not merely find a known one. **When a field has no visible
 producer, scan for the store before assuming the framework idiom.**
+
+---
+
+# City-wide sections decoded for writing (2026-10-09, Europolis 1024 clone)
+
+Used by `re/tools/city_clone.py`, which rebuilds a whole 256 city 4x4 on a 1024 map offline. Result loaded in the
+game: 362,720 buildings, population 29,282,226 after the first month, deals still active, ordinances and the
+2100 date kept in the game's own re-save. Layouts come from worker reads of the savers/loaders cited below and
+were checked byte-exact against the shipped files; the in-game load is the validation.
+
+| section | layout | tool |
+|---|---|---|
+| occupants `0xa0ab89f0` inst 0 / 1 | inst 0: frame + u32 count + u32 1. inst 1: frame + records, no count or ids. Record +0 u32 position (x bits 0-10, y 11-21, height 22-29 recomputed on load at SIMGEOM `0x100035fd`, rotation 30-31), +4 flags (footprint x 0-5, y 6-11, optional fields bits 21-28), +8 building type id = the `[AgentTypes]` id (3100.. residential, 12810 WaterPump, 12116 Europolis's plant), +12 resource key; optional name, (year, day) build date, +0x38, property maps. Saver SIMGEOM `0x100032ca`, loader `0x10002cc2`, record `0x1001e226`/`0x1001e516` | `occupant_layer.py` |
+| networks `0x2147c2dd` inst 1/2/3 | inst 1 holds EVERY surface network (road, rail, highway, power line pieces together), inst 2 is WATER PIPES, inst 3 is SUBWAY. Measured against `Apps\Res\TilingRules\*_Set.txt` on Farmsville, Berlin, Moscow, Madrid, Europolis. `network_layer.py`'s names `rail`/`net2` for inst 2/3 are wrong | `network_layer.py` |
+| ordinances `0xe1193c2a` (type `0x41193c3a`, 256 bytes) | u32 count (42), then {u32 id, u8 enacted, u8 available} | copied verbatim |
+| budget `0xa11bcc54` | SIMMISC budget layer (funds, taxes, funding) | copied verbatim |
+| neighbor deals `0x82937b60` (type `0xc2910e7d`, no frame) | 4 neighbors (index = map side 0 x=0, 1 y=0, 2 x=w-1, 3 y=h-1) with per-side connection counts, active and pending deals, then 6 edge-cell lists (`x<<16|y`). Save SIMMISC `0x10015378`, load `0x10014ae3`. Deals are cancelled with a penalty when their side lacks the connection (validator `0x10018cd5`) | `neighbor_layer.py` |
+| date | raw (uncompressed) header record `{0xfa1, 0x617e198d}`: after the strings, u32 day of year, u32 year, u32 speed, u32 founding year (SIMCITY saver `0x1000429d`); preview record `{0xe2f42628, 0x62f42635}` day +0x1c, year +0x20 | `city_clone.patch_date` |
+
+Water for pumps: a tile is water when ANY of its corners has terrain height <= water level (SIMDIRT `0x100065f0`), and
+a pump gives full output only with fresh water in the 8 tiles around it, 20% at distance 2, else 0 (SIMUTIL
+`0x1000f771`, `SC3WaterLayer.ini` WaterPumpCapa 1500, WaterPumpDistanceFactor 20). Europolis builds rings of pumps
+around corners whose water level equals the ground (A = B = 75), so copying grids A and B brings its water along.
