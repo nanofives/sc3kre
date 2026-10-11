@@ -114,6 +114,8 @@ int main(int argc, char **argv) {
     int i;
     char *p;
 
+    /* Unbuffered: piped to a script, a buffered stdout held the "pid = N" line until the game exited (2026-10-11). */
+    setvbuf(stdout, NULL, _IONBF, 0);
     gameargs[0] = 0;
 
     /* Where we are, and the DLL that sits beside us. */
