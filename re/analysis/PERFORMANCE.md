@@ -754,5 +754,6 @@ Checks: frames after each of 10 paused states pixel-identical to the stock pair 
 differ before any resize); buildings render after every cycle, sim running, and after zooming in; no new faults
 (SC3U+0x84122 and KERNEL32+0x2CC02 only). SIMDIRT+0x13A8F (Finding 16) bursts came once in 18 running cycles with the
 stock pair AND once in 18 with one refresh, each 6.7 s after a maximize, writes at y 984-998 of a 1680x987 surface:
-independent of this change. SIMLOCK and DEFERRESIZE are unchanged (the pass still holds L1 and runs from the window
+independent of this change, and root-caused and fixed by sc3resize CELLFIX + DIRTCLIP (DIRTCRASH.md). Merged build
+(SKIPREFRESH + CELLFIX/DIRTCLIP), shipped config, sim running: 16 resizes, pass 128-209 ms, 0 DIRTGUARD catches. SIMLOCK and DEFERRESIZE are unchanged (the pass still holds L1 and runs from the window
 procedure). `SC3RESIZE_SKIPREFRESH=0` restores the pair, `=2` runs step 11 alone when the base layer is active.
