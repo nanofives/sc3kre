@@ -4,7 +4,8 @@
  * below that sits beside the launcher, then resumes. Same injector as bigcity_launch.c /
  * resize_launch.c (copied from sc3launch.c). Each mod finds its own ini and log beside itself.
  *
- *   mods_launch.exe [-delay <ms>] [-kill <seconds>] [-- <args passed to the game>]
+ *   mods_launch.exe [-delay <ms>] [-kill <seconds>] [-multi] [-exe <name>] [-- <args passed to the game>]
+ *   -multi: per-instance mutex name, so several games can run at once (see unique_mutex).
  *
  * Mods are independent: each one checks the game bytes it patches and refuses (logging why)
  * rather than half-patching, so a collision shows up in that mod's log, not as a crash.
@@ -46,6 +47,35 @@ static int inject(HANDLE proc, const char *dll) {
     return 1;
 }
 
+/* -multi (2026-10-11): run several games at once. SC3U.exe refuses a second instance through the named mutex
+   "SimCity 3000 Mutex" (FUN_0040496d reads its name through the pointer at 0x004f4b10, string at 0x004f4b24;
+   a failed acquire without -restart focuses the other window and exits ~30 ms in, measured 2026-08-21). A named
+   mutex is session-wide, so a second install copy does not help. With the process still suspended, write
+   "SimCity 3000 Mutex <pid>" into it and point 0x004f4b10 at that copy: each instance owns its own mutex and the
+   restart path is never taken. The exe file is not touched. Refuses (returns 0) if the pointer is not the shipped
+   one, i.e. a different SC3U.exe build. */
+static int unique_mutex(HANDLE proc, DWORD pid) {
+    const DWORD slot = 0x004f4b10, shipped = 0x004f4b24;
+    DWORD cur = 0, newp, oldprot;
+    char name[64];
+    SIZE_T got = 0, len;
+    void *mem;
+    if (!ReadProcessMemory(proc, (void *)slot, &cur, 4, &got) || got != 4 || cur != shipped) {
+        printf("[!] -multi: mutex name pointer at 0x%08lX is 0x%08lX, expected 0x%08lX - not patched\n", slot, cur, shipped);
+        return 0;
+    }
+    _snprintf(name, sizeof(name), "SimCity 3000 Mutex %lu", pid);
+    len = lstrlenA(name) + 1;
+    mem = VirtualAllocEx(proc, NULL, len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!mem || !WriteProcessMemory(proc, mem, name, len, NULL)) { printf("[!] -multi: cannot write the name\n"); return 0; }
+    newp = (DWORD)mem;
+    VirtualProtectEx(proc, (void *)slot, 4, PAGE_READWRITE, &oldprot);
+    if (!WriteProcessMemory(proc, (void *)slot, &newp, 4, NULL)) { printf("[!] -multi: cannot write the pointer\n"); return 0; }
+    VirtualProtectEx(proc, (void *)slot, 4, oldprot, &oldprot);
+    printf("[+] -multi: mutex renamed to \"%s\"\n", name);
+    return 1;
+}
+
 static int inject_all(HANDLE proc, const char *dir, const char **mods, int n) {
     char dll[MAX_PATH];
     int m;
@@ -80,6 +110,7 @@ int main(int argc, char **argv) {
     PROCESS_INFORMATION pi;
     int delayms = 0;
     int killsec = 0;
+    int multi = 0;
     int i;
     char *p;
 
@@ -95,6 +126,8 @@ int main(int argc, char **argv) {
             delayms = atoi(argv[++i]);
         } else if (!lstrcmpiA(argv[i], "-exe") && i + 1 < argc) {
             exename = argv[++i];   /* test option: launch a renamed copy (compat layers are keyed by path) */
+        } else if (!lstrcmpiA(argv[i], "-multi")) {
+            multi = 1;
         } else if (!lstrcmpiA(argv[i], "-kill") && i + 1 < argc) {
             killsec = atoi(argv[++i]);
         } else if (!lstrcmpA(argv[i], "--")) {
@@ -155,6 +188,7 @@ int main(int argc, char **argv) {
         return 3;
     }
     printf("[+] created suspended, pid = %lu\n", pi.dwProcessId);
+    if (multi && !unique_mutex(pi.hProcess, pi.dwProcessId)) { TerminateProcess(pi.hProcess, 1); return 5; }
 
     if (delayms > 0) {
         /* Inject after the process loader has run, not while still suspended (sc3launch.c note). */

@@ -139,6 +139,16 @@ def _dpi_scale(hwnd: int) -> float:
 # ---------------------------------------------------------------------------------------------
 
 def game_pid() -> int:
+    """The game's pid. With several games running (mods_launch.exe -multi), set SC3_PID to the one this
+    session owns: every tool that calls game_pid() then drives that instance and no other."""
+    env = os.environ.get("SC3_PID", "").strip()
+    if env:
+        want = int(env)
+        out = subprocess.run(["tasklist", "/FI", f"PID eq {want}", "/FO", "CSV", "/NH"],
+                             capture_output=True, text=True).stdout
+        if GAME_EXE.lower() not in out.lower():
+            raise GameNotFound(f"SC3_PID={want} is not a running {GAME_EXE}.")
+        return want
     out = subprocess.run(
         ["tasklist", "/FI", f"IMAGENAME eq {GAME_EXE}", "/FO", "CSV", "/NH"],
         capture_output=True, text=True,
@@ -159,8 +169,8 @@ def game_pid() -> int:
         raise GameNotFound(f"tasklist listed {GAME_EXE} but no pid could be parsed:\n{out}")
     if len(pids) > 1:
         raise CaptureError(
-            f"{len(pids)} {GAME_EXE} processes are running (pids {pids}). The game is "
-            "single-instance by design; this is a stale process. Refusing to guess which to drive."
+            f"{len(pids)} {GAME_EXE} processes are running (pids {pids}). Set SC3_PID to the one "
+            "this session owns (several run at once only with mods_launch.exe -multi). Refusing to guess."
         )
     return pids[0]
 
@@ -358,8 +368,13 @@ class Gate:
 
 def check(hwnd: int | None = None, raise_first: bool = True) -> Gate:
     """Everything that must be true for a desktop-DC blit to be the real frame."""
-    pid = game_pid()
-    hwnd = game_hwnd(pid) if hwnd is None else hwnd
+    if hwnd is None:
+        pid = game_pid()
+        hwnd = game_hwnd(pid)
+    else:
+        p = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(p))
+        pid = p.value
     if raise_first:
         raise_without_focus(hwnd)
         time.sleep(0.15)
