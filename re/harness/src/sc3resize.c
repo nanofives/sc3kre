@@ -3977,6 +3977,342 @@ static int rz_hs_mouse(UINT m, LPARAM *lp) {
     return 1;
 }
 
+/* HUDOPT (task hudopt 2026-10-11, re/analysis/OPTIONS_DIALOG.md): the HUD scale choice lives in the game's own
+ * Preferences dialog ("Preferencias"), so the player picks it there instead of an env var.
+ *
+ * The dialog is built in CODE by SIMUI FUN_100564d9 (480x472, ids 0x02F95AD5..0x02F95B11), reached through its
+ * controller's message handler FUN_10055e07 (message 0xa2bf8ace). It closes through FUN_100562b1(win, id):
+ * id 0x02F95AD8 = OK (the check button AND the Enter key), 0x02F95AD6 = cancel (Esc, the close box)
+ * [CONFIRMED @ SIMUI 0x10055e07, 0x10058f14]. Two entry detours, no other code change:
+ *   - after FUN_10055e07 handles 0xa2bf8ace, add a label, a 5-option group and a checkbox to the window, with the
+ *     game's own widget factory (FUN_10085065) and the same calls its builder uses for its own option groups
+ *     (FUN_10059ccf) and checkboxes (FUN_10058d67). They sit in the empty right half of "Opciones generales".
+ *   - before FUN_100562b1 runs, read them back (GetChildAs vt+0x80 with the option-group IID 0xa1336cc0 and the
+ *     checkbox IID 0x8810, exactly as the game's OK handler FUN_100593ac does) and, on OK only, apply them to
+ *     g_hudscale / g_hs_filter and write sc3resize.ini beside the DLL. Cancel applies nothing.
+ * Our ids (0x02F95B40..47) fall outside every range the dialog's command handler acts on, so a click on them only
+ * runs the widget's own behaviour (radio exclusivity, check toggle).
+ * Persistence: sc3resize.ini [hud] scale = 0 off | 1 fit | 100..400 percent, smooth = 0 | 1. The env vars
+ * SC3RESIZE_HUDSCALE / SC3RESIZE_HUDSCALE_FILTER still override the ini at startup. SC3RESIZE_HUDOPT=0 turns this
+ * whole block off (no detours, ini not read): exactly the earlier env-only behaviour. */
+static int  g_hudopt = 1;
+static int  g_ho_env;                     /* bit 0 scale came from env, bit 1 smooth came from env */
+static void *g_orig_5e07, *g_orig_62b1;   /* trampolines */
+#define HO_GROUP   0x02F95B40
+#define HO_OFF     0x02F95B41
+#define HO_FIT     0x02F95B42
+#define HO_P125    0x02F95B43
+#define HO_P150    0x02F95B44
+#define HO_P200    0x02F95B45
+#define HO_LABEL   0x02F95B46
+#define HO_SMOOTH  0x02F95B47
+#define HO_X       250                    /* right half of the "Opciones generales" frame [6 346 474 422] */
+#define HO_Y_LABEL 346
+#define HO_Y_GROUP 364
+#define HO_Y_CHECK 400
+#define HO_W       218
+
+static void ho_ini_path(char *out, int cap) { rz_mb_path(out, cap, "sc3resize.ini"); }
+
+static int ho_valid_scale(int v) { return v == 0 || v == 1 || (v >= 100 && v <= 400); }
+
+static void ho_load_ini(void) {
+    char p[MAX_PATH];
+    int s, f;
+    ho_ini_path(p, sizeof(p));
+    s = (int)GetPrivateProfileIntA("hud", "scale", 0, p);
+    f = (int)GetPrivateProfileIntA("hud", "smooth", 0, p);
+    g_hudscale = ho_valid_scale(s) ? s : 0;
+    g_hs_filter = f ? 1 : 0;
+}
+
+static void ho_save_ini(void) {
+    char p[MAX_PATH], v[16];
+    ho_ini_path(p, sizeof(p));
+    wsprintfA(v, "%d", g_hudscale);
+    WritePrivateProfileStringA("hud", "scale", v, p);
+    WritePrivateProfileStringA("hud", "smooth", g_hs_filter ? "1" : "0", p);
+}
+
+/* vtable call on a GZ object: __thiscall, slot byte offset, up to 5 dword args. 0 on a bad object. */
+static DWORD ho_v(void *o, DWORD slot, int n, DWORD a0, DWORD a1, DWORD a2, DWORD a3, DWORD a4) {
+    DWORD *vt, a[5];
+    if (!o || IsBadReadPtr(o, 4)) return 0;
+    vt = *(DWORD **)o;
+    if (!vt || IsBadReadPtr((BYTE *)vt + slot, 4) || !vt[slot / 4]) return 0;
+    a[0] = a0; a[1] = a1; a[2] = a2; a[3] = a3; a[4] = a4;
+    return rz_thiscall_ret(o, (void *)vt[slot / 4], a, n);
+}
+
+/* SIMUI's GZ string class (ctor FUN_10005eb6, dtor FUN_10006057, vt+0x10 = assign from char*), re/analysis/PREFS_UI.md */
+typedef void (__fastcall *HO_STRFN)(void *);
+static void ho_str(BYTE *buf, const char *text) {
+    HMODULE sui = GetModuleHandleA("SIMUI.DLL");
+    memset(buf, 0, 0x20);
+    ((HO_STRFN)((BYTE *)sui + 0x5eb6))(buf);
+    if (text) ho_v(buf, 0x10, 1, (DWORD)text, 0, 0, 0, 0);
+}
+static void ho_str_free(BYTE *buf) { ((HO_STRFN)((BYTE *)GetModuleHandleA("SIMUI.DLL") + 0x6057))(buf); }
+
+/* Language of our text: load the dialog's own title string (resource 0x14e in group 0x029541f4, the key the
+   builder FUN_100564d9 opens with) through SIMUI's resource key FUN_1008ebbd / FUN_1008ebea, and look at its
+   text: "Preferencias" -> Spanish, anything else -> English. The game's locale id (SC3U FUN_004845fe vt+0x74)
+   reads 1 on the Spanish install, so it cannot tell the text language. sc3resize.ini [hud] lang=es|en overrides. */
+static int ho_spanish(void) {
+    static int done, es;
+    char p[MAX_PATH], v[8];
+    HMODULE sui = GetModuleHandleA("SIMUI.DLL");
+    DWORD key[8], a[2], fn;
+    const char *t = NULL;
+    int i;
+    if (done) return es;
+    done = 1;
+    ho_ini_path(p, sizeof(p));
+    GetPrivateProfileStringA("hud", "lang", "", v, sizeof(v), p);
+    if (v[0]) { es = (v[0] == 'e' || v[0] == 'E') && (v[1] == 's' || v[1] == 'S'); logf("HUDOPT> text language from ini: %s", es ? "es" : "en"); return es; }
+    memset(key, 0, sizeof(key));
+    a[0] = 0x14e; a[1] = 0x29541f4;
+    rz_thiscall_ret(key, (BYTE *)sui + 0x8ebbd, a, 2);
+    fn = key[1];                                         /* the loaded string object, NULL if the key missed */
+    for (i = 1; fn && !IsBadReadPtr((void *)fn, 0x14) && !t && i < 5; i++) {   /* its char* is in one of its first dwords */
+        const char *c = ((const char **)fn)[i];
+        if (c && !IsBadReadPtr(c, 12) && c[0] == 'P' && c[1] == 'r') t = c;
+    }
+    es = t && memcmp(t, "Preferencias", 12) == 0;
+    logf("HUDOPT> dialog title resource: \"%.20s\" -> %s text", t ? t : "(not found)", es ? "Spanish" : "English");
+    rz_thiscall_ret(key, (BYTE *)sui + 0x8ebea, NULL, 0);
+    return es;
+}
+
+/* Label, mirrored from SIMUI FUN_1005844a (the dialog's section labels), caption set from our own string. */
+static int ho_add_label(void *fac, void *win, DWORD id, const char *text, int x, int y, int w) {
+    HMODULE sui = GetModuleHandleA("SIMUI.DLL");
+    BYTE s[0x20];
+    void *lbl, *lw, *cs;
+    int ok = 0;
+    ho_str(s, text);
+    lbl = (void *)ho_v(fac, 0x44, 2, id, (DWORD)s, 0, 0, 0);                         /* CreateLabel */
+    if (lbl) {
+        ho_v(lbl, 0x40, 1, ho_v(fac, 0x14, 1, 0xf, 0, 0, 0, 0), 0, 0, 0, 0);          /* font 0xf */
+        cs = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85039))();                   /* colour service */
+        if (cs) ho_v(lbl, 0x24, 1, ho_v(cs, 0x84, 3, 0x79, 0x7d, 0xb5, 0, 0) & 0xffff, 0, 0, 0, 0);
+        lw = (void *)ho_v(lbl, 0x0c, 0, 0, 0, 0, 0, 0);
+        ho_v(lw, 0x10c, 1, (DWORD)s, 0, 0, 0, 0);                                     /* caption */
+        ho_v(lw, 0xb8, 1, (DWORD)w, 0, 0, 0, 0);
+        ho_v(lbl, 0x44, 1, 1, 0, 0, 0, 0);
+        ho_v(lw, 0xcc, 2, (DWORD)x, (DWORD)y, 0, 0, 0);
+        ok = (int)(ho_v(win, 0x34, 1, (DWORD)lw, 0, 0, 0, 0) & 0xff);                  /* AddChild */
+        if (!ok) ho_v(lw, 0x28, 0, 0, 0, 0, 0, 0);
+        ho_v(lbl, 0x08, 0, 0, 0, 0, 0, 0);
+    }
+    ho_str_free(s);
+    return ok;
+}
+
+static DWORD ho_sel_id(int scale) {
+    switch (scale) {
+    case 0: return HO_OFF;
+    case 1: return HO_FIT;
+    case 125: return HO_P125;
+    case 150: return HO_P150;
+    case 200: return HO_P200;
+    }
+    return 0;   /* a custom env/ini percent: no option selected, OK keeps it unless the player picks one */
+}
+
+static void ho_log_child(void *win, DWORD id, const char *tag) {
+    void *c = (void *)ho_v(win, 0x78, 1, id, 0, 0, 0, 0);
+    if (c && !IsBadReadPtr(c, 0x90)) {
+        LONG *l = (LONG *)((BYTE *)c + 0x80), *d = (LONG *)((BYTE *)c + 0x14);
+        logf("HUDOPT>   %s 0x%08lX local [%ld %ld %ld %ld] abs [%ld %ld %ld %ld]", tag, id, l[0], l[1], l[2], l[3],
+             d[0], d[1], d[2], d[3]);
+    } else logf("HUDOPT>   %s 0x%08lX not found by vt+0x78", tag, id);
+}
+
+static void ho_add_controls(void *win) {
+    HMODULE sui = GetModuleHandleA("SIMUI.DLL");
+    void *fac, *grp, *gw, *cb, *cw;
+    DWORD col, font, sel;
+    BYTE s[0x20];
+    LONG r[4];
+    int es = ho_spanish(), okl, okg = 0, okc = 0, i;
+    static const DWORD ids[5] = { HO_OFF, HO_FIT, HO_P125, HO_P150, HO_P200 };
+    const char *txt_es[5] = { "Normal", "Ajustar", "125%", "150%", "200%" };
+    const char *txt_en[5] = { "Normal", "Fit", "125%", "150%", "200%" };
+    if (!sui || !win || IsBadReadPtr(win, 0x90)) return;
+    if (ho_v(win, 0x78, 1, HO_GROUP, 0, 0, 0, 0)) { logf("HUDOPT> controls already in this window"); return; }
+    fac = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85065))();
+    if (!fac || IsBadReadPtr(fac, 4)) { logf("HUDOPT> no widget factory"); return; }
+    col = ho_v(fac, 0x80, 1, 0x62e56a2e, 0, 0, 0, 0);
+    okl = ho_add_label(fac, win, HO_LABEL, es ? "Escala de la interfaz:" : "Interface scale:", HO_X, HO_Y_LABEL, 0xb4);
+
+    /* option group, FUN_10059ccf + the builder's AddOption/Select/SetXY/AddChild sequence */
+    ho_str(s, NULL);
+    grp = (void *)ho_v(fac, 0x48, 3, HO_GROUP, (DWORD)s, 0, 0, 0);
+    ho_str_free(s);
+    if (grp) {
+        font = ho_v(fac, 0x14, 1, 0xf, 0, 0, 0, 0);
+        ho_v(grp, 0x24, 1, font, 0, 0, 0, 0);
+        ho_v(grp, 0x28, 2, 2, col, 0, 0, 0);
+        ho_v(grp, 0x28, 2, 3, col, 0, 0, 0);
+        ho_v(grp, 0x28, 2, 4, col, 0, 0, 0);
+        ho_v(grp, 0x14, 2, 1, 0, 0, 0, 0);
+        ho_v(grp, 0x14, 2, 8, 0, 0, 0, 0);
+        ho_v(grp, 0x18, 2, 0, 0, 0, 0, 0);
+        r[0] = HO_X; r[1] = HO_Y_GROUP; r[2] = HO_X + HO_W; r[3] = HO_Y_GROUP + 36;   /* 2 rows of 18, as the game sizes them */
+        gw = (void *)ho_v(grp, 0x0c, 0, 0, 0, 0, 0, 0);
+        ho_v(gw, 0xc4, 1, (DWORD)r, 0, 0, 0, 0);
+        for (i = 0; i < 5; i++) {
+            ho_str(s, es ? txt_es[i] : txt_en[i]);
+            ho_v(grp, 0x38, 5, ids[i], (DWORD)s, 0, 0, 0);
+            ho_str_free(s);
+        }
+        sel = ho_sel_id(g_hudscale);
+        if (sel) ho_v(grp, 0x34, 1, sel, 0, 0, 0, 0);
+        gw = (void *)ho_v(grp, 0x0c, 0, 0, 0, 0, 0, 0);
+        ho_v(gw, 0xcc, 2, HO_X, HO_Y_GROUP, 0, 0, 0);
+        gw = (void *)ho_v(grp, 0x0c, 0, 0, 0, 0, 0, 0);
+        okg = (int)(ho_v(win, 0x34, 1, (DWORD)gw, 0, 0, 0, 0) & 0xff);
+        if (!okg) ho_v(gw, 0x28, 0, 0, 0, 0, 0, 0);
+        ho_v(grp, 0x08, 0, 0, 0, 0, 0, 0);
+    }
+
+    /* checkbox, FUN_10058d67 */
+    ho_str(s, es ? "Suavizado" : "Smooth");
+    cb = (void *)ho_v(fac, 0x3c, 5, HO_SMOOTH, (DWORD)s, 0, 0, 0);
+    ho_str_free(s);
+    if (cb) {
+        ho_v(cb, 0x34, 1, g_hs_filter ? 1 : 0, 0, 0, 0, 0);
+        ho_v(cb, 0x74, 4, 3, 1, 2, 2, 0);
+        ho_v(cb, 0x60, 1, ho_v(fac, 0x14, 1, 0xf, 0, 0, 0, 0), 0, 0, 0, 0);
+        ho_v(cb, 0x64, 2, 0, col, 0, 0, 0);
+        ho_v(cb, 0x64, 2, 2, col, 0, 0, 0);
+        ho_v(cb, 0x64, 2, 4, col, 0, 0, 0);
+        cw = (void *)ho_v(cb, 0x1c, 0, 0, 0, 0, 0, 0);
+        ho_v(cw, 0xb8, 1, 0x78, 0, 0, 0, 0);
+        cw = (void *)ho_v(cb, 0x1c, 0, 0, 0, 0, 0, 0);
+        ho_v(cw, 0xcc, 2, HO_X, HO_Y_CHECK, 0, 0, 0);
+        cw = (void *)ho_v(cb, 0x1c, 0, 0, 0, 0, 0, 0);
+        okc = (int)(ho_v(win, 0x34, 1, (DWORD)cw, 0, 0, 0, 0) & 0xff);
+        if (!okc) ho_v(cw, 0x28, 0, 0, 0, 0, 0, 0);
+        ho_v(cb, 0x08, 0, 0, 0, 0, 0, 0);
+    }
+    logf("HUDOPT> Preferences 0x%08lX: label %s, scale group %s (selected 0x%08lX for scale %d), smooth checkbox %s (%d)",
+         (DWORD)win, okl ? "added" : "FAILED", okg ? "added" : "FAILED", ho_sel_id(g_hudscale), g_hudscale,
+         okc ? "added" : "FAILED", g_hs_filter);
+    {   static int dumped;
+        if (dumped++ < 2) {
+            ho_log_child(win, HO_LABEL, "label");
+            ho_log_child(win, HO_GROUP, "group");
+            for (i = 0; i < 5; i++) ho_log_child(win, ids[i], "option");
+            ho_log_child(win, HO_SMOOTH, "smooth");
+            ho_log_child(win, 0x02F95AF8, "game checkbox");
+            ho_log_child(win, 0x02F95AD8, "game OK");
+        }
+    }
+}
+
+/* Read the controls back. Returns 1 and fills scale/smooth when both were found. */
+static int ho_read(void *win, int *scale, int *smooth) {
+    void *o = NULL;
+    DWORD id;
+    int got = 0;
+    *scale = g_hudscale; *smooth = g_hs_filter;
+    if ((ho_v(win, 0x80, 3, HO_GROUP, 0xa1336cc0, (DWORD)&o, 0, 0) & 0xff) && o) {
+        id = ho_v(o, 0x30, 0, 0, 0, 0, 0, 0);
+        ho_v(o, 0x08, 0, 0, 0, 0, 0, 0);
+        switch (id) {
+        case HO_OFF: *scale = 0; break;
+        case HO_FIT: *scale = 1; break;
+        case HO_P125: *scale = 125; break;
+        case HO_P150: *scale = 150; break;
+        case HO_P200: *scale = 200; break;
+        }
+        got |= 1;
+    }
+    o = NULL;
+    if ((ho_v(win, 0x80, 3, HO_SMOOTH, 0x8810, (DWORD)&o, 0, 0) & 0xff) && o) {
+        *smooth = (ho_v(o, 0x38, 0, 0, 0, 0, 0, 0) & 0xff) ? 1 : 0;
+        ho_v(o, 0x08, 0, 0, 0, 0, 0, 0);
+        got |= 2;
+    }
+    return got == 3;
+}
+
+static DWORD __fastcall ho_prefs_msg(void *self, void *edx, DWORD win, DWORD msg, DWORD p3, DWORD p4, DWORD p5) {
+    DWORD a[5], r;
+    (void)edx;
+    a[0] = win; a[1] = msg; a[2] = p3; a[3] = p4; a[4] = p5;
+    r = rz_thiscall_ret(self, g_orig_5e07, a, 5);
+    if (msg == 0xa2bf8ace && (r & 0xff) && win) ho_add_controls((void *)win);
+    return r;
+}
+
+static DWORD __fastcall ho_prefs_close(void *self, void *edx, DWORD win, DWORD id) {
+    DWORD a[2];
+    int sc, sm;
+    (void)edx;
+    if (win && !IsBadReadPtr((void *)win, 4)) {
+        int got = ho_read((void *)win, &sc, &sm);
+        if (id == 0x02F95AD8 && got) {
+            int changed = sc != g_hudscale || sm != g_hs_filter;
+            g_hudscale = sc; g_hs_filter = sm;
+            g_hs_capture = 0;
+            ho_save_ini();
+            logf("HUDOPT> OK: scale %d, smooth %d%s, saved to sc3resize.ini%s", sc, sm, changed ? "" : " (unchanged)",
+                 g_ho_env ? " (an env var overrides it at the next start)" : "");
+        } else if (id == 0x02F95AD8) {
+            logf("HUDOPT> OK but our controls were not found (read %d) - nothing applied", got);
+        } else {
+            logf("HUDOPT> closed with 0x%08lX (cancel): dialog showed scale %d smooth %d, kept scale %d smooth %d",
+                 id, sc, sm, g_hudscale, g_hs_filter);
+        }
+    }
+    a[0] = win; a[1] = id;
+    return rz_thiscall_ret(self, g_orig_62b1, a, 2);
+}
+
+/* 5- or 6-byte prologue steal, same shape as rz_hook_cdcd. */
+static int ho_hook(HMODULE sui, DWORD rva, const BYTE *expect, int len, void *detour, void **orig, const char *name) {
+    BYTE *fn = (BYTE *)sui + rva, *tr;
+    DWORD old;
+    int i;
+    if (*orig) return 1;
+    if (IsBadReadPtr(fn, len) || memcmp(fn, expect, len) != 0) {
+        logf("HUDOPT> SIMUI+0x%lx (%s) prologue mismatch - NOT hooking, no HUD option in Preferences", rva, name);
+        return 0;
+    }
+    tr = (BYTE *)VirtualAlloc(NULL, 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!tr) return 0;
+    memcpy(tr, expect, len);
+    tr[len] = 0xE9;
+    *(DWORD *)(tr + len + 1) = (DWORD)(fn + len) - (DWORD)(tr + len + 5);
+    FlushInstructionCache(GetCurrentProcess(), tr, 16);
+    if (!VirtualProtect(fn, len, PAGE_EXECUTE_READWRITE, &old)) return 0;
+    *orig = tr;
+    fn[0] = 0xE9;
+    *(DWORD *)(fn + 1) = (DWORD)detour - (DWORD)(fn + 5);
+    for (i = 5; i < len; i++) fn[i] = 0x90;
+    VirtualProtect(fn, len, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), fn, len);
+    logf("HUDOPT> detour on SIMUI+0x%lx (%s)", rva, name);
+    return 1;
+}
+
+static void ho_install(HMODULE sui) {
+    static const BYTE e5e07[6] = { 0x55, 0x8b, 0xec, 0x83, 0xec, 0x18 };   /* push ebp; mov ebp,esp; sub esp,0x18 */
+    static const BYTE e62b1[5] = { 0x55, 0x8b, 0xec, 0x51, 0x51 };         /* push ebp; mov ebp,esp; push ecx; push ecx */
+    if (!g_hudopt) return;
+    /* both or neither: controls that could never be applied would be a lie */
+    if (memcmp((BYTE *)sui + 0x55e07, e5e07, 6) != 0 || memcmp((BYTE *)sui + 0x562b1, e62b1, 5) != 0) {
+        logf("HUDOPT> SIMUI prologues differ from the anchor - HUD option NOT added to Preferences");
+        return;
+    }
+    ho_hook(sui, 0x562b1, e62b1, 5, (void *)ho_prefs_close, &g_orig_62b1, "Preferences close FUN_100562b1");
+    if (g_orig_62b1)
+        ho_hook(sui, 0x55e07, e5e07, 6, (void *)ho_prefs_msg, &g_orig_5e07, "Preferences messages FUN_10055e07");
+}
+
 static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, void *fx) {
     LARGE_INTEGER a, b;
     HRESULT hr;
@@ -8287,6 +8623,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           /* the generic window painter - where the minimap is identified by its dest rect */
           install_one((DWORD)sui + 0x6d2d0, sui, 0x6d2d0, "SIMUI FUN_1006d2d0 painter", 6);
           if (g_cdcdlog) { rz_hook_cdcd(sui); rz_hook_e81c(sui); rz_hook_cac8(sui); }  /* flyout diag detours */
+          ho_install(sui);   /* HUDOPT: HUD scale controls in the Preferences dialog */
       }
       else logf("--- HUD: SIMUI.DLL never loaded after %d tries - capture NOT armed, HUD stays native", st); }
     if (g_hudlab) {
@@ -8342,8 +8679,10 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_ARTGUARD", v, sizeof(v))) g_artguard = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_FIELDBG", v, sizeof(v))) g_fieldbg = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUBG", v, sizeof(v))) g_menubg = atoi(v);
-          if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE", v, sizeof(v))) g_hudscale = atoi(v);
-          if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_FILTER", v, sizeof(v))) g_hs_filter = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_HUDOPT", v, sizeof(v))) g_hudopt = atoi(v);
+          if (g_hudopt) ho_load_ini();   /* HUDOPT: the Preferences choice, env vars below still override */
+          if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE", v, sizeof(v))) { g_hudscale = atoi(v); g_ho_env |= 1; }
+          if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_FILTER", v, sizeof(v))) { g_hs_filter = atoi(v); g_ho_env |= 2; }
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_KEY", v, sizeof(v))) g_hs_key = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUBGSTOCK", v, sizeof(v))) g_menubg_stock = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HOLD", v, sizeof(v))) g_hold = atoi(v);
@@ -8376,6 +8715,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
         logf("### sc3resize loaded - resizable-window mod (minimal Init-free routine, "
              "validated 2026-08-27 over 6 runs)%s%s", g_minzoom ? " [MINZOOM crash-hunt build]" : "",
              g_hudlab ? " [HUD LAB armed: surface census + EIP profiler, verify/resize_hudlab]" : "");
+        if (g_hudopt)
+            logf("HUDOPT> on: scale %d smooth %d (sc3resize.ini [hud]%s%s)", g_hudscale, g_hs_filter,
+                 (g_ho_env & 1) ? ", scale from SC3RESIZE_HUDSCALE" : "", (g_ho_env & 2) ? ", smooth from SC3RESIZE_HUDSCALE_FILTER" : "");
         if (g_hudscale)
             logf("HUDSCALE> ON (prototype): %s, filter %s", g_hudscale >= 100 ? "fixed percent, capped at min(cw/800, ch/600)"
                  : "factor min(cw/800, ch/600)", g_hs_filter ? "bilinear" : "nearest");
