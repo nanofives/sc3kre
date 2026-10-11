@@ -3349,7 +3349,7 @@ static int rz_mb_load(void) {
     f = rz_mb_readfile(path, &len);
     if (!f && g_menubg_stock) {
         /* No picture of the player's own: stretch the stock background itself, so the buttons still stay at
-           native size, centred, and clickable where they are drawn (see MENUBG_STOCK in the header comment). */
+           native size, centred, and clickable where they are drawn (header comment above). */
         BYTE *rgb = (BYTE *)malloc(NAT_W * NAT_H * 3);
         LONG i;
         if (!rgb) return 0;

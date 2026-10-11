@@ -781,13 +781,58 @@ Now (`rz_mb_present`, `SC3RESIZE_MENUBG=0` disables):
 - a final present whose source is exactly 800x600 into a larger client draws `menu_bg.bmp` (beside the DLL,
   24-bit, any size, stretched to the client with HALFTONE) in the margins through GDI, and presents the frame
   1:1 centred;
-- inside the frame every pixel still equal to the stock background (`menu_orig.raw`, 800x600 RGB565, the
+- inside the frame every pixel still equal to the stock background (800x600 RGB565, the
   decoded `MAIN.IXF` `0x22729921`) becomes the matching centre of the stretched picture: the stock background is
   blitted unchanged and buttons use a hard magenta key, so the swap is exact;
 - mouse messages are shifted by the centring offset from a centred present until any other full-window frame.
 Measured at 2048x1081: frame at [624 263 1424 863], no seams, New City opens from its drawn position, the New
 City dialog shows centred over the picture. The background asset: `MAIN.IXF` record `0x22729921` = header
 `[2][size][800][600][7][size]` then QFS, RGB565. Menu buttons are 8-frame sheets `0x22729930..38`, magenta key.
+
+### MENUBG without shipped game art (2026-10-11)
+
+The 2026-10-07 build read the stock background from `menu_orig.raw` beside the DLL. That file is game art and the
+2026-10-11 release left it out, so MENUBG switched itself off for players. Now `rz_mb_stock_from_ixf` decodes it at
+runtime from the game's own data:
+
+- path: `<directory of SC3U.exe>\Res\UI\Shared\MAIN.IXF` (exe dir, not DLL dir: in the shipped layout the DLL sits
+  in `Apps` too, in dev it sits in `re\harness\inst_*`);
+- index walk exactly as GZResourceD reads it (`formats/IXF_segment.md`): magic `0x80c381d7`, 20-byte records
+  `{group, instance, type, offset, size}`, zero triple ends, `0xFFFFFFFF` slots skipped. The record is
+  `{0x82b9b75c, 0x22729921, 0x62b9da24}` at file offset `0x3c5231`, 593,209 bytes;
+- payload header dwords `[2][0x90d25][800][600][7][0x90d25]`, checked for 800 / 600 / 7, then QFS at `+0x18`
+  (`10 fb`, declared 960,000 = 800x600x2). The C decoder is a transcription of `re/tools/qfs.py`, bounds-checked;
+- offline: the C decode is byte-identical to the old `menu_orig.raw` (scratch test compiled from the same source).
+
+Why the file and not the game's own loaded raster: SC3U `FUN_0043e05b` loads the backdrop into a resource object
+stored at `this+0x10` of the backdrop's second base (`+0xb4` of the full object) and reads only its rect through
+`vt+0x40` [CONFIRMED @ 0x0043e05b]. Pixels from that object would need its pixel accessor and surface format (not
+read), the object pointer from the window tree, and a guard against `FUN_0043e48e` releasing it. The file path is
+self-contained and byte-exact. What it does not follow is the registry override `WINSC3BMP` ("<group>,<instance>",
+read by `FUN_0043e28b` [CONFIRMED @ 0x0043e28b], used instead of the default key at `0x0043e05b`). With an override
+set, the presented background matches no stock pixel, so nothing is swapped: the frame shows the override art 1:1
+and the picture fills only the margins. [UNCERTAIN] not tested, no override is set on this PC.
+
+**No `menu_bg.bmp` (new default).** The stock background itself becomes the picture: converted 565 to 24-bit and
+stretched to the client exactly like a player's picture. `SC3RESIZE_MENUBGSTOCK=0` restores the release behaviour
+(MENUBG off without a picture). A `menu_bg.bmp` that is present but not an uncompressed 24-bit BMP still turns
+MENUBG off, as before.
+
+Measured 2026-10-11, 1680x979 client (maximized on a 1680x1050 display), instances `re\harness\inst_menubg*`:
+
+| arm | files beside the DLL | result |
+|---|---|---|
+| reference | combo `sc3resize.dll` + `menu_orig.raw` + `menu_bg.bmp` | owner's picture, buttons native size and centred |
+| new | new DLL + `menu_bg.bmp`, no `menu_orig.raw` | pixel-identical to the reference except the live sc3perf FPS text (551 px, rows 193..206). `Cancelar` clicked at its drawn spot closed the quit dialog |
+| stock | new DLL, neither file | stock picture stretched, buttons native size and centred. A click on the drawn "Nueva Ciudad" opened "Nuevas opciones de ciudad", centred |
+| off | new DLL, neither file, `SC3RESIZE_MENUBGSTOCK=0` | whole 800x600 frame stretched, buttons included. A click on the drawn "Nueva Ciudad" opened "Cargar Terreno de ciudad real", drawn stretched and mostly past the right edge |
+
+The `off` arm is what the 2026-10-11 release does for every player who maximizes at the main menu: the release menu
+is broken when maximized. Log swap counts on the first menu frame agree across the three MENUBG arms
+(`stock 203934`).
+
+Harness note from these runs: twice, killing the Python process that had started `mods_launch.exe` left that game
+showing its quit dialog ("Salir") before any input was sent. Cause not established.
 
 ## New City / Load City while already maximized (fixed 2026-10-07)
 
