@@ -781,13 +781,58 @@ Now (`rz_mb_present`, `SC3RESIZE_MENUBG=0` disables):
 - a final present whose source is exactly 800x600 into a larger client draws `menu_bg.bmp` (beside the DLL,
   24-bit, any size, stretched to the client with HALFTONE) in the margins through GDI, and presents the frame
   1:1 centred;
-- inside the frame every pixel still equal to the stock background (`menu_orig.raw`, 800x600 RGB565, the
+- inside the frame every pixel still equal to the stock background (800x600 RGB565, the
   decoded `MAIN.IXF` `0x22729921`) becomes the matching centre of the stretched picture: the stock background is
   blitted unchanged and buttons use a hard magenta key, so the swap is exact;
 - mouse messages are shifted by the centring offset from a centred present until any other full-window frame.
 Measured at 2048x1081: frame at [624 263 1424 863], no seams, New City opens from its drawn position, the New
 City dialog shows centred over the picture. The background asset: `MAIN.IXF` record `0x22729921` = header
 `[2][size][800][600][7][size]` then QFS, RGB565. Menu buttons are 8-frame sheets `0x22729930..38`, magenta key.
+
+### MENUBG without shipped game art (2026-10-11)
+
+The 2026-10-07 build read the stock background from `menu_orig.raw` beside the DLL. That file is game art and the
+2026-10-11 release left it out, so MENUBG switched itself off for players. Now `rz_mb_stock_from_ixf` decodes it at
+runtime from the game's own data:
+
+- path: `<directory of SC3U.exe>\Res\UI\Shared\MAIN.IXF` (exe dir, not DLL dir: in the shipped layout the DLL sits
+  in `Apps` too, in dev it sits in `re\harness\inst_*`);
+- index walk exactly as GZResourceD reads it (`formats/IXF_segment.md`): magic `0x80c381d7`, 20-byte records
+  `{group, instance, type, offset, size}`, zero triple ends, `0xFFFFFFFF` slots skipped. The record is
+  `{0x82b9b75c, 0x22729921, 0x62b9da24}` at file offset `0x3c5231`, 593,209 bytes;
+- payload header dwords `[2][0x90d25][800][600][7][0x90d25]`, checked for 800 / 600 / 7, then QFS at `+0x18`
+  (`10 fb`, declared 960,000 = 800x600x2). The C decoder is a transcription of `re/tools/qfs.py`, bounds-checked;
+- offline: the C decode is byte-identical to the old `menu_orig.raw` (scratch test compiled from the same source).
+
+Why the file and not the game's own loaded raster: SC3U `FUN_0043e05b` loads the backdrop into a resource object
+stored at `this+0x10` of the backdrop's second base (`+0xb4` of the full object) and reads only its rect through
+`vt+0x40` [CONFIRMED @ 0x0043e05b]. Pixels from that object would need its pixel accessor and surface format (not
+read), the object pointer from the window tree, and a guard against `FUN_0043e48e` releasing it. The file path is
+self-contained and byte-exact. What it does not follow is the registry override `WINSC3BMP` ("<group>,<instance>",
+read by `FUN_0043e28b` [CONFIRMED @ 0x0043e28b], used instead of the default key at `0x0043e05b`). With an override
+set, the presented background matches no stock pixel, so nothing is swapped: the frame shows the override art 1:1
+and the picture fills only the margins. [UNCERTAIN] not tested, no override is set on this PC.
+
+**No `menu_bg.bmp` (new default).** The stock background itself becomes the picture: converted 565 to 24-bit and
+stretched to the client exactly like a player's picture. `SC3RESIZE_MENUBGSTOCK=0` restores the release behaviour
+(MENUBG off without a picture). A `menu_bg.bmp` that is present but not an uncompressed 24-bit BMP still turns
+MENUBG off, as before.
+
+Measured 2026-10-11, 1680x979 client (maximized on a 1680x1050 display), instances `re\harness\inst_menubg*`:
+
+| arm | files beside the DLL | result |
+|---|---|---|
+| reference | combo `sc3resize.dll` + `menu_orig.raw` + `menu_bg.bmp` | owner's picture, buttons native size and centred |
+| new | new DLL + `menu_bg.bmp`, no `menu_orig.raw` | pixel-identical to the reference except the live sc3perf FPS text (551 px, rows 193..206). `Cancelar` clicked at its drawn spot closed the quit dialog |
+| stock | new DLL, neither file | stock picture stretched, buttons native size and centred. A click on the drawn "Nueva Ciudad" opened "Nuevas opciones de ciudad", centred |
+| off | new DLL, neither file, `SC3RESIZE_MENUBGSTOCK=0` | whole 800x600 frame stretched, buttons included. A click on the drawn "Nueva Ciudad" opened "Cargar Terreno de ciudad real", drawn stretched and mostly past the right edge |
+
+The `off` arm is what the 2026-10-11 release does for every player who maximizes at the main menu: the release menu
+is broken when maximized. Log swap counts on the first menu frame agree across the three MENUBG arms
+(`stock 203934`).
+
+Harness note from these runs: twice, killing the Python process that had started `mods_launch.exe` left that game
+showing its quit dialog ("Salir") before any input was sent. Cause not established.
 
 ## New City / Load City while already maximized (fixed 2026-10-07)
 
@@ -902,3 +947,41 @@ should detect it or run a renamed copy (`mods_launch -exe`).
   that click into the game (on the game thread, from the poll, which sees the new size ~140 ms before WM_SIZE) so the
   game closes the flyout through its own toggle. Hide stays as a fallback. Verified: open, maximize (closed by the
   replayed click), restore, ONE click reopens.
+
+## Post-ship checklist run, 2026-10-11 (child session `query`)
+
+Environment: one 1680x1050 display at 100%, client 1680x979 maximized, Europolis and Berlin (256), combo of the five mods.
+Instance `re/harness/inst_query`, game started through `mods_launch -multi`. Rects were read with a Frida sampler at 10 ms
+(UI root walk), frames came from sc3io desktop grabs at about 2.5 fps.
+
+- **Query (?) dialog moves both bars (owner report):** the same cause as Ordinances, already fixed by MINICLASS. Querying a
+  zone tile opens a 308x280 `SIMUI+0xa4d64` dialog, which is inside the minimap size band. A/B with the same steps
+  (1100x800 after maximize then restore, sim running): with `SC3RESIZE_MINICLASS=0`, `MINI: window captured ... 308x280`
+  alternates with the real minimap every ~33 ms, the side panel goes 642 <-> 800 tall (buttons +158 px) and the bar
+  controls +201 px. Default build: 5 queries over 75 s, no capture, no rect change on the panel or the bar.
+- **Double "Cargando..." box, maximized (FAIL, fixed: DLGKEEP):** Load City and in-city New City. In a city the game
+  creates the box centred on the CLIENT (`[712 412 968 566]` at 1680x979) and it is painted before the 100 ms poll. The
+  poll moved it to the map-area centre `[664 384]`, and nothing repainted the first spot until the new city presented,
+  so both copies stayed up for the whole load. A dialog that opens centred on the client is now left there. From the
+  main menu the box opens at `[272 223]` (centred in the 800x600 root) and the moves land while HOLD holds presents:
+  one box on screen before and after the fix.
+- **Dialog re-centre after a size change (partial FAIL, fixed: DLGAREA):** the map area came from the live side panel
+  and bar, which the first poll at the new size still saw at the old size. Measured: maximize put a 308x280 dialog at
+  `[348 232]` (the 1100x800 map-area centre) in a 1680x979 client. Now a map-area change within 3 s of a size change
+  re-centres a dialog still where it was placed. After the fix: maximize `[638 264]` directly, restore `[396 202]`
+  then `[348 174]` 18 ms later.
+- **Maximize during Edit Terrain, then accept:** PASS. Panel docked at `[1508 249 1680 729]`, accepted, alive, HUD
+  correct, no menu picture in 57 frames.
+- **Terrain panel on a second New City (from inside a maximized city):** PASS, `[1508 249 1680 729]`.
+- **Open flyout closes on resize:** PASS. `CLOSEFLY> replayed the category click`, flyout gone at 1200x850, one click
+  reopens it.
+- **Load City while maximized:** PASS for layout (Berlin: panel, bar, minimap, RCI docked). It was the path with the
+  double box above.
+- **Menu flash on early city frames:** not seen. Load City from the maximized menu gave 11 menu frames, then 37 city
+  frames over 15 s with no menu frame. Sampling is about 2.5 fps, so a flash shorter than ~400 ms can fall between grabs.
+
+Harness trap found on the way: running `re/tools/dismiss_tips.py` while the intro movie is up leaves GZ's capture
+pointer (`*(*(GZGraphicD+0x6cdb8)+0x30)+0x28`) set to a window that is later freed. The New City dialog's "Dificil" radio
+was allocated at that address, so every later click went to the radio, and the dialog's accept button looked dead
+(runs B and D). One posted `WM_LBUTTONUP` released it and the same click then accepted. Without dismiss_tips at the intro
+(run C) the accept works. Run dismiss_tips only once a city is up.

@@ -391,7 +391,7 @@ Shipped anyway (correct, small): sc3perf `transit_clear` (marker grid cleared by
 1,838 -> 1,901 trips/s (+3%, inside the window-to-window spread of 12k-28k trips per 10 s). Days-per-second over
 90 s is NOT a usable metric here: it swung 0.15-0.76 with the same build, depending on the sim phase.
 
-## Finding 16 - crash one second after maximizing the 1024 city (SIMDIRT rasterizer) - guarded, root cause open
+## Finding 16 - crash one second after maximizing the 1024 city (SIMDIRT rasterizer) - FIXED 2026-10-11 (CELLFIX + DIRTCLIP)
 
 Owner, 2026-10-09 15:17: maximize at 697.5 s, sc3resize finished at 699.1 s, game dead at 700.2 s with a write
 AV at SIMDIRT `0x10013A8F` (`mov word ptr [ecx],ax`, ECX=0x18604496) in `FUN_10013556`
@@ -411,6 +411,15 @@ test: the surface pixel pointer replaced with the read-only page 0x7FFE0000 for 
 caught (rasterizers 0x10013556 and 0x100148d7), game kept drawing at 165 fps, the lock at SIMDIRT 0x100249f0
 free afterwards (LockCount -1, RecursionCount 0). The next real occurrence logs surface, pixel pointer and
 rectangles in sc3resize.log for the root cause.
+
+Root cause (2026-10-11, re/analysis/DIRTCRASH.md): reproduced with DIRTGUARD off on the 7th maximize. The tile
+clip was [1672 984 1680 988] on the 1680x987 render target (lock depth 1, live pointer): a clip below the
+surface, not a stale surface. SIMSPR sizes the dirty grid with FUN_100059fb (falls back to 8 cells when no even
+count 12..24 divides the size, 979 is odd) and FUN_1000e2c0 (cell = extent / count, truncated, 979 / 8 = 122).
+FUN_1000d725 then maps rows 976..978 to cell row 8 of an 8-row grid: it writes the grid byte past the block and
+passes cell rows 976..1098, which the display items use as the rasterizer clip. Fixed in sc3resize: CELLFIX
+rounds the cell size up after each resize, DIRTCLIP clamps cell rects to the view at SIMSPR FUN_1000d0c5.
+30 maximize cycles with the fix and the guard off: 0 faults. The same build with both fixes off faulted on cycle 8.
 
 ## Finding 17 - pollution only on the top-left quarter of a 1024 map (sc3bigcity ECOCURSOR, FIXED)
 
@@ -607,6 +616,13 @@ Sim threads outside the traffic waits: busy 11.3% of samples. Inclusive, mostly 
 ~2.5% driving SIMGEOM region scans `grid_query_point_in_window` 1.8% exclusive, the top exclusive item). Order-dependent
 (each placement changes the map), so not a worker-thread candidate. Also seen on the sim thread, not threaded: a trip
 issued from SC3U.exe `FUN_004bfe89` and a second router path through `FUN_100140f4`.
+Correction 2026-10-11: `FUN_100140f4` is SimTransit.dll (the only module with a tracker row there, and the only one
+with samples at +0x140f4..+0x14100 in the profile dumps). It is not a router: `push 0x200; call
+sc3_transit_alloc_node; pop ecx; ret`, the deque buffer allocator of the router's work queue, now
+`sc3_transit_alloc_dequebuf` (its pair `FUN_10014100` = `sc3_transit_free_dequebuf`) [CONFIRMED @ SimTransit 0x100140f4].
+In `sc3perf_prof_mtprof.txt` the return address after the allocator call (+0x140fe) is on the stack in 2508 worker
+samples (I3) and 3 sim-thread samples (I2); the free call's (+0x1410e) in 1309 worker samples. So that cost is
+STL node allocation inside routing, not a second routing path.
 
 Next lever (not built): smooth the traffic batch instead of routing it all on one day - keep an unbounded queue that the
 workers drain in the background while the clock runs, and flush only before the monthly stats pass `FUN_10009242`. It
