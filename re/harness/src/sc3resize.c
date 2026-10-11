@@ -3195,14 +3195,18 @@ static void rz_repaint_rci(void) {
  * Now, for a present whose SOURCE is exactly 800x600 into a larger client:
  *   - menu_bg.bmp (beside the DLL, any size, 24-bit) is stretched to the client and drawn in the margins,
  *   - the 800x600 frame is presented 1:1 in the centre, so the buttons keep their native size,
- *   - inside that frame, every pixel still equal to the stock background (menu_orig.raw, 800x600 RGB565,
- *     the decoded MAIN.IXF 0x22729921) is replaced by the matching centre of the stretched picture.
- *     The stock background is blitted unchanged and the buttons use a hard magenta key, so an exact
- *     565 match is the background and nothing else,
+ *   - inside that frame, every pixel still equal to the stock background (800x600 RGB565, MAIN.IXF
+ *     0x22729921, decoded at runtime from the game's own data by rz_mb_stock_from_ixf) is replaced by the
+ *     matching centre of the stretched picture. The stock background is blitted unchanged and the buttons
+ *     use a hard magenta key, so an exact 565 match is the background and nothing else,
  *   - mouse messages are shifted by the centring offset while this is active.
- * SC3RESIZE_MENUBG=0 disables it. Missing files: stock behaviour. */
+ * No menu_bg.bmp (2026-10-11): the stock background itself is the picture, stretched the same way, so the
+ * buttons keep native size and clicks land where they are drawn. SC3RESIZE_MENUBGSTOCK=0 keeps MENUBG off
+ * without a menu_bg.bmp instead (the 2026-10-11 release behaviour: whole frame stretched, clicks off).
+ * SC3RESIZE_MENUBG=0 disables it. MAIN.IXF unreadable: stock behaviour. */
 #pragma comment(lib, "gdi32.lib")   /* MENUBG uses GDI for the stretched margins */
 static int    g_menubg = 1;
+static int    g_menubg_stock = 1;         /* no menu_bg.bmp: stretch the stock background */
 static int    g_mb_state;                 /* 0 untried, 1 loaded, -1 failed */
 static BYTE  *g_mb_img;                   /* menu_bg.bmp pixel data */
 static BITMAPINFO g_mb_bi;
@@ -3242,21 +3246,129 @@ static BYTE *rz_mb_readfile(const char *path, DWORD *len) {
     return b;
 }
 
+/* QFS decompress, transcribed from re/tools/qfs.py (itself from SIMSPR sc3_qfs_decompress 0x10050d09).
+   Every read and write is bounds-checked; returns the bytes written, or -1 on a malformed stream. */
+static LONG rz_qfs_decode(const BYTE *in, DWORD inlen, BYTE *out, DWORD cap) {
+    DWORD p, o = 0, lit, off, n, k;
+    if (inlen < 5) return -1;
+    p = (in[0] & 1) ? 5 : 2;
+    if (in[1] != 0xFB || p + 3 > inlen) return -1;
+    p += 3;
+    for (;;) {
+        BYTE b0;
+        if (p >= inlen) return -1;
+        b0 = in[p];
+        if (!(b0 & 0x80)) {                       /* 2-byte form */
+            if (p + 2 > inlen) return -1;
+            lit = b0 & 3; off = ((b0 & 0x60) << 3) + in[p + 1] + 1; n = ((b0 >> 2) & 7) + 3; p += 2;
+        } else if (!(b0 & 0x40)) {                /* 3-byte form */
+            if (p + 3 > inlen) return -1;
+            lit = in[p + 1] >> 6; off = ((in[p + 1] & 0x3F) << 8) + in[p + 2] + 1; n = (b0 & 0x3F) + 4; p += 3;
+        } else if (!(b0 & 0x20)) {                /* 4-byte form */
+            if (p + 4 > inlen) return -1;
+            lit = b0 & 3; off = ((b0 & 0x10) << 12) + (in[p + 1] << 8) + in[p + 2] + 1;
+            n = ((b0 & 0x0C) << 6) + in[p + 3] + 5; p += 4;
+        } else {                                  /* literal run, or the terminator */
+            lit = (b0 & 0x1F) * 4 + 4;
+            if (lit > 0x70) {
+                lit = b0 & 3; p++;
+                if (p + lit > inlen || o + lit > cap) return -1;
+                memcpy(out + o, in + p, lit); o += lit;
+                return (LONG)o;
+            }
+            p++;
+            if (p + lit > inlen || o + lit > cap) return -1;
+            memcpy(out + o, in + p, lit); o += lit; p += lit;
+            continue;
+        }
+        if (p + lit > inlen || o + lit > cap) return -1;
+        memcpy(out + o, in + p, lit); o += lit; p += lit;
+        if (off > o || o + n > cap) return -1;
+        for (k = 0; k < n; k++, o++) out[o] = out[o - off];   /* byte by byte: off < n repeats the tail */
+    }
+}
+
+/* The stock menu background, read from the game's own data instead of a shipped copy (game art cannot ship).
+   SC3U FUN_0043e05b @ 0x0043e05b loads the backdrop by {group 0x82b9b75c, instance 0x22729921} unless the
+   registry value WINSC3BMP overrides it (FUN_0043e28b). The record lives in <exe dir>\Res\UI\Shared\MAIN.IXF:
+   index records are { group, instance, type, offset, size } after the 0x80c381d7 magic, end = zero triple,
+   0xFFFFFFFF slots skipped (re/analysis/formats/IXF_segment.md). Payload = 6 dwords
+   [2][size-0x14][800][600][7][..] then a QFS stream that inflates to 800x600 RGB565, top-down.
+   Measured 2026-10-11: the decode is byte-identical to the menu_orig.raw the dev build used. */
+static WORD *rz_mb_stock_from_ixf(void) {
+    char path[MAX_PATH], *sl;
+    HANDLE h;
+    DWORD rec[5], got, magic = 0, n = 0, off = 0, size = 0;
+    BYTE *pay = NULL;
+    WORD *px = NULL;
+    LONG dec;
+    if (!GetModuleFileNameA(NULL, path, sizeof(path))) return NULL;
+    sl = strrchr(path, '\\'); if (sl) sl[1] = 0; else path[0] = 0;
+    lstrcatA(path, "Res\\UI\\Shared\\MAIN.IXF");
+    h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (h == INVALID_HANDLE_VALUE) { logf("MENUBG> cannot open %s", path); return NULL; }
+    if (!ReadFile(h, &magic, 4, &got, NULL) || got != 4 || magic != 0x80c381d7) {
+        logf("MENUBG> %s: bad magic 0x%08lX", path, magic); CloseHandle(h); return NULL;
+    }
+    while (n++ < 100000 && ReadFile(h, rec, 20, &got, NULL) && got == 20) {
+        if (!rec[0] && !rec[1] && !rec[2]) break;
+        if (rec[3] == 0xFFFFFFFF || rec[4] == 0xFFFFFFFF) continue;
+        if (rec[0] == 0x82b9b75c && rec[1] == 0x22729921 && rec[2] == 0x62b9da24) { off = rec[3]; size = rec[4]; break; }
+    }
+    if (!size || size < 0x20 || size > 0x200000) { logf("MENUBG> %s: record 0x22729921 not found (size %lu)", path, size); CloseHandle(h); return NULL; }
+    pay = (BYTE *)malloc(size);
+    if (!pay || SetFilePointer(h, (LONG)off, NULL, FILE_BEGIN) != off || !ReadFile(h, pay, size, &got, NULL) || got != size) {
+        logf("MENUBG> %s: cannot read record at 0x%08lX", path, off); free(pay); CloseHandle(h); return NULL;
+    }
+    CloseHandle(h);
+    if (((DWORD *)pay)[2] != NAT_W || ((DWORD *)pay)[3] != NAT_H || ((DWORD *)pay)[4] != 7) {
+        logf("MENUBG> record header [%lu %lu %lu %lu %lu] is not 800x600 format 7", ((DWORD *)pay)[0],
+             ((DWORD *)pay)[1], ((DWORD *)pay)[2], ((DWORD *)pay)[3], ((DWORD *)pay)[4]);
+        free(pay); return NULL;
+    }
+    px = (WORD *)malloc(NAT_W * NAT_H * 2);
+    dec = px ? rz_qfs_decode(pay + 0x18, size - 0x18, (BYTE *)px, NAT_W * NAT_H * 2) : -1;
+    free(pay);
+    if (dec != NAT_W * NAT_H * 2) { logf("MENUBG> QFS decode gave %ld bytes, want %d", dec, NAT_W * NAT_H * 2); free(px); return NULL; }
+    logf("MENUBG> stock background decoded from %s (record at 0x%08lX, %lu bytes)", path, off, size);
+    return px;
+}
+
 static int rz_mb_load(void) {
     char path[MAX_PATH];
     BYTE *f;
     DWORD len = 0;
     if (g_mb_state) return g_mb_state > 0;
     g_mb_state = -1;
-    rz_mb_path(path, sizeof(path), "menu_orig.raw");
-    f = rz_mb_readfile(path, &len);
-    if (!f || len != NAT_W * NAT_H * 2) { logf("MENUBG> %s missing or not %d bytes - off", path, NAT_W * NAT_H * 2); free(f); return 0; }
-    g_mb_orig = (WORD *)f;
+    g_mb_orig = rz_mb_stock_from_ixf();
+    if (!g_mb_orig) { logf("MENUBG> no stock background - off"); return 0; }
     g_mb_last = (WORD *)malloc(NAT_W * NAT_H * 2);
     if (!g_mb_last) return 0;
     memcpy(g_mb_last, g_mb_orig, NAT_W * NAT_H * 2);
     rz_mb_path(path, sizeof(path), "menu_bg.bmp");
     f = rz_mb_readfile(path, &len);
+    if (!f && g_menubg_stock) {
+        /* No picture of the player's own: stretch the stock background itself, so the buttons still stay at
+           native size, centred, and clickable where they are drawn (header comment above). */
+        BYTE *rgb = (BYTE *)malloc(NAT_W * NAT_H * 3);
+        LONG i;
+        if (!rgb) return 0;
+        for (i = 0; i < NAT_W * NAT_H; i++) {
+            WORD q = g_mb_orig[i];
+            BYTE r = (BYTE)(q >> 11), g = (BYTE)((q >> 5) & 0x3F), b = (BYTE)(q & 0x1F);
+            rgb[i * 3 + 0] = (BYTE)((b << 3) | (b >> 2));
+            rgb[i * 3 + 1] = (BYTE)((g << 2) | (g >> 4));
+            rgb[i * 3 + 2] = (BYTE)((r << 3) | (r >> 2));
+        }
+        g_mb_img = rgb;
+        memset(&g_mb_bi, 0, sizeof(g_mb_bi));
+        g_mb_bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        g_mb_bi.bmiHeader.biWidth = NAT_W; g_mb_bi.bmiHeader.biHeight = -NAT_H;   /* top-down */
+        g_mb_bi.bmiHeader.biPlanes = 1; g_mb_bi.bmiHeader.biBitCount = 24; g_mb_bi.bmiHeader.biCompression = BI_RGB;
+        logf("MENUBG> %s missing - using the stock background stretched", path);
+        g_mb_state = 1;
+        return 1;
+    }
     if (!f || len < 54 || f[0] != 'B' || f[1] != 'M') { logf("MENUBG> %s missing or not a BMP - off", path); free(f); return 0; }
     {   BITMAPINFOHEADER *bh = (BITMAPINFOHEADER *)(f + 14);
         DWORD off = *(DWORD *)(f + 10);
@@ -8164,6 +8276,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE", v, sizeof(v))) g_hudscale = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_FILTER", v, sizeof(v))) g_hs_filter = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_KEY", v, sizeof(v))) g_hs_key = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_MENUBGSTOCK", v, sizeof(v))) g_menubg_stock = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HOLD", v, sizeof(v))) g_hold = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_DEFERRESIZE", v, sizeof(v))) g_deferresize = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_SIMLOCK", v, sizeof(v))) g_simlock = atoi(v);
@@ -8204,10 +8317,10 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
          * a self-consistent log). One line makes the whole class loud instead of silent.
          * verify/resize_flaggate/NOHIT_RESULTS.md */
         logf("### FLAGS> cluster=%d input=%d nohit=%d hudfit=%d hudlab=%d sweep=%d side=%d mini=%d "
-             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld sidedy=%ld presentlog=%d kidfix=%d artguard=%d edgefix=%d edgescroll=%d barspan=%d sidespan=%d viewfix=%d dialogs=%d",
+             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld sidedy=%ld presentlog=%d kidfix=%d artguard=%d edgefix=%d edgescroll=%d barspan=%d sidespan=%d viewfix=%d dialogs=%d menubg=%d menubgstock=%d",
              g_cluster, g_input, g_nohit, g_hudfit, g_hudlab, g_sweepon, g_sideon, g_minion,
              g_anchor, g_census, g_minzoom, g_ready_ms, g_noparentfix, g_hud_dy, g_side_dy, g_presentlog,
-             g_kidfix, g_artguard, g_edgefix, g_edgescroll, g_bar_span, g_side_span, g_viewfix, g_dialogs);
+             g_kidfix, g_artguard, g_edgefix, g_edgescroll, g_bar_span, g_side_span, g_viewfix, g_dialogs, g_menubg, g_menubg_stock);
         if (AddVectoredExceptionHandler(1, rz_veh))
             logf("### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the "
                  "zoom-after-resize crash the game swallows)");
