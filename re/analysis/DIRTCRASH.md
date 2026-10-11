@@ -89,7 +89,7 @@ so rounding them up changes nothing else.
 | fix10 | fixed | off | 10 | alive. 0 faults, 0 clips outside the surface (clip box max [0 0 1680 979]), 88 cell rects clamped (5 rows over, from the rounded-up cells) |
 | control | fixed, both fixes off | off | 8 | fault on cycle 8 (above) |
 | fix20 | fixed | off | 20 | alive. 0 faults, 0 clips outside the surface (grid mode never hit the bottom rows in this run) |
-| defaults10 | fixed, shipped env | on | 10 | see STATUS_dirtcrash.md |
+| defaults10 | fixed, shipped env | on | 10 | alive. 0 faults, 0 DIRTGUARD catches, 132 cell rects clamped (5 rows over), clip box max [0 0 1680 979] |
 
-The rate in the unfixed runs (2 faults in 15 cycles) puts the chance of 30 clean fixed cycles by luck at about 1.4% ((13/15)^30).
+The rate in the unfixed runs (2 faults in 15 cycles) puts the chance of 30 clean fixed cycles with the guard off by luck at about 1.4% ((13/15)^30).
 The stronger evidence is the mechanism: with the fix, no tile clip ever passed the view, while the clamp fired.
