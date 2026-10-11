@@ -356,9 +356,8 @@ a memcpy, 1 of 3 launches). Both mods now leave patched pages RWX.
 
 ## Measured, not yet fixed
 
-- Maximize on the 1024 city freezes 2.9 s (unmaximize 1.4 s): sc3resize steps 7 and 11 each call
-  `FUN_10018cdf` (map-wide refresh), about 1.2 s each on 1024 vs ~50 ms on 256; step 8c re-show of all 1,048,576
-  cells 0.1-0.3 s. Minimize/restore does not stall (max 0.26 s, sim running).
+- ~~Maximize on the 1024 city freezes 2.9 s~~ FIXED 2026-10-11, Finding 26 (sc3resize SKIPREFRESH): the two
+  `FUN_10018cdf` map-wide refreshes are gone from the resize pass, 2.2 s -> 0.15 s.
 - Simulation on the Europolis 1024 city with ~240k placed buildings: one sim thread at 83% of a core
   (8% of 16), clock paused waiting for it. EIP samples: SimTransit `sc3_transit_select_next_cell` 18%,
   SIMGEOM `get_occupant_at_cell` 12%, msvcrt 30% + ntdll 17% (allocation/copies inside routing),
@@ -514,6 +513,8 @@ Trips in one batch see the congestion other workers leave as they go, not a fixe
 1 point. 3 maximize/restore cycles with 8 workers: no fault. Owner turned it on by default (8 workers, capped at logical CPUs - 1).
 
 ## Open: resize step 7 faults in SIMSPR on the 1024 city
+
+(2026-10-11: fixed by SIMLOCK, Finding 25, and since Finding 26 the default resize pass no longer calls step 7 at all.)
 
 With or without traffic_mt, the map-wide refresh in sc3resize's resize step 7 (`FUN_10018cdf`) faulted on a null read in
 SIMSPR (`+0x2D102` once fatal after 2.5 game years of play, `+0x5AFDA` once caught by sc3resize's guard). Not
@@ -700,3 +701,42 @@ DLLs, as the static scan predicted. SimTransit's layer keeps its own atomic vers
 Two runs logged a fault at KERNEL32+0x2CC02: that is sc3resize's own IsBadReadPtr probe (sc3resize+0x8767/+0x87CC)
 raising and handling a first-chance fault during teardown; the exit completed normally in both.
 Play check after the patch: 84 days per 60 s at speed 3, median day 657 ms, no faults.
+
+## Finding 26 - the 1024 maximize freeze was the resize pass's two map-wide refreshes (fixed: SKIPREFRESH)
+
+sc3resize's pass called SIMSPR `FUN_10018cdf` twice. Both calls end the same way: device batch, whole-view repaint
+(iso vt+0x144), then a walk over all bridge+0xec x bridge+0xf0 cells (1,048,576 on a 1024 map) calling iso vt+0xa0,
+`FUN_1001924c` (occupant chain, vt+0x4c / vt+0x60) and `FUN_1001a291` per cell [CONFIRMED @ SIMSPR 0x10018cdf].
+- Step 7 passes layer 0. With the base layer active it unregisters every occupant (`FUN_1001879e`, vt+0x50 each),
+  detaches the view from the layer (layer vt+0x2c, message 0x5a6dd1aa), nulls bridge+0x28, then walks.
+- Step 11 passes the base layer and base renderer back (bridge+0x2c, +0x80, force 1): re-attach (layer vt+0x28),
+  re-register every occupant (`FUN_100184d9`), walk again.
+
+Step 11 was only ever needed to undo step 7 (RESIZABLE_WINDOW.md, "RENDER FIXED 2026-08-30"), and step 7 was the
+render lever before steps 8b/8c/10 existed. A resize invalidates none of what the pair rebuilds: Init is never called,
+so the tile grid iso+0x24, the occupant registrations and the layer attachment survive; 8c re-shows the tiles and 10
+repaints. Side effect of the pair: step 11 forces the base layer and base renderer, so a resize with a data or
+underground view open (land value, water pipes) showed the surface city while the UI stayed in the data view. With
+the skip the view stays.
+
+Measured on europolis1024_v2_test.sc3, 1680x979 <-> 800x600, pass = SIMLOCK taken to released (log `RZ   TIMING`):
+
+| resize pass | cycles | median | range | step 7 | step 8c | step 11 |
+|---|---|---|---|---|---|---|
+| stock pair, sim paused | 10 | 1,778 ms | 1,665-2,869 | 962 | 91 | 778 |
+| stock pair, sim running | 36 | 2,160 ms | 1,423-3,345 | 1,101 | 90 | 869 |
+| one refresh (step 11 only), paused | 10 | 359 ms | 286-403 | 0 | 149 | 193 |
+| one refresh, running | 36 | 507 ms | 342-1,323 | 0 | 199 | 295 |
+| no refresh, paused | 10 | 107 ms | 106-112 | 0 | | 0 |
+| no refresh, running (incl. shipped config, no env) | 26 | ~145 ms | 127-382 | 0 | | 0 |
+
+Ranges with the sim running include runs with two to five other 1024 games open (parallel child sessions). The
+window call itself (SetWindowPlacement from another thread) takes 650-750 ms in every mode, waiting for the game's
+message pump (WM_GETMINMAXINFO to WM_SIZE is ~200 ms); it is not resize work.
+
+Checks: frames after each of 10 paused states pixel-identical to the stock pair (the same 221 / 449 px of animation
+differ before any resize); buildings render after every cycle, sim running, and after zooming in; no new faults
+(SC3U+0x84122 and KERNEL32+0x2CC02 only). SIMDIRT+0x13A8F (Finding 16) bursts came once in 18 running cycles with the
+stock pair AND once in 18 with one refresh, each 6.7 s after a maximize, writes at y 984-998 of a 1680x987 surface:
+independent of this change. SIMLOCK and DEFERRESIZE are unchanged (the pass still holds L1 and runs from the window
+procedure). `SC3RESIZE_SKIPREFRESH=0` restores the pair, `=2` runs step 11 alone when the base layer is active.
