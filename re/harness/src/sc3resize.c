@@ -3454,9 +3454,400 @@ static int rz_mb_present(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, vo
     return 1;
 }
 
+/* HUDSCALE (prototype, task hudscale 2026-10-11, re/analysis/HUD_SCALE.md option A). OFF unless
+ * SC3RESIZE_HUDSCALE is set: 1 = factor min(cw/800, ch/600), n >= 100 = n/100 capped at that.
+ * SC3RESIZE_HUDSCALE_FILTER=1 resamples bilinear instead of nearest.
+ *
+ * The layout stays exactly as the cluster code builds it (full-width bar, full-height panel, minimap and RCI
+ * docked bottom-right). At the final present every visible HUD window that touches the right or bottom client
+ * edge is drawn again enlarged about the bottom-right corner C: dest = C + s * (rect - C). Each such window,
+ * and so their union, is closed under "move towards C", so the enlarged union covers every native copy. All
+ * windows share the one map, so each dest pixel reads source pixel C + (d - C) / s and overlap order does not
+ * matter. The frame is snapshotted first and restored right after the present: the game reuses it.
+ * The city-only target iso+0x74 is the see-through mask (SC3RESIZE_HUDSCALE_KEY=0 disables): a HUD-rect pixel
+ * equal to the city layer is the city showing through, so the dest gets the city under it instead (without it,
+ * the minimap's transparent corner showed a magnified piece of city). Small floating windows (tooltips) are
+ * enlarged too, and their native copy is overwritten with the city layer.
+ * Mouse messages on an enlarged rect (or during a press that started on one) get the inverse map.
+ * Measured 2026-10-11 at 1200x900 and 1600x960: re/analysis/HUD_SCALE.md, verify/hudscale/. */
+static int    g_hudscale;               /* 0 off, 1 auto, >= 100 percent */
+static int    g_hs_filter;              /* 0 nearest, 1 bilinear */
+#define HS_MAX 32
+static LONG   g_hs_src[HS_MAX][4], g_hs_dst[HS_MAX][4];
+static int    g_hs_float[HS_MAX];          /* 1 = not edge-anchored (a tooltip): its native copy is erased */
+static volatile LONG g_hs_n;            /* dest rects in use (0 = inactive): read by the wndproc */
+static volatile LONG g_hs_cw, g_hs_ch;
+static double g_hs_s = 1.0;
+static LONG   g_hs_dlg[16][4];
+static int    g_hs_ndlg;
+static int    g_hs_capture, g_hs_depth, g_hs_nestlog;
+static WORD  *g_hs_snap;
+static LONG   g_hs_snapcap;
+static LONG  *g_hs_xs, *g_hs_ys, *g_hs_xf, *g_hs_yf;   /* per column/row: source index, bilinear base + weight */
+static LONG   g_hs_tcw, g_hs_tch;
+static double g_hs_ts;
+static DWORD  g_hs_sig;
+static int    g_hs_logs;
+static void  *g_hs_primary, *g_hs_lastsrc;
+static int    g_hs_key = 1;             /* SC3RESIZE_HUDSCALE_KEY=0: no city mask (transparent HUD edges carry city) */
+static __int64 g_hs_time; static DWORD g_hs_frames, g_hs_beat;
+
+/* The city-only render target iso+0x74 (raster: +0x44 sub, sub+0xf0 bits, sub+0xf4 pitch, mapped by a
+   balanced sub vt+0x0c / vt+0x10 lock as the surface dumper does). Used as the mask: a HUD-rect pixel that
+   equals the city layer is the city showing through, not HUD. Returns bits or NULL; *sub_locked to unlock. */
+static BYTE *rz_hs_city(LONG cw, LONG ch, LONG *pitch, DWORD *sub_locked) {
+    DWORD iso, obj, sub, bits, pt, *svt;
+    HMODULE gz = GetModuleHandleA("GZGraphicD.dll");
+    static int logged;
+    *sub_locked = 0;
+    if (!g_bridge || IsBadReadPtr(g_bridge, 0x1c) || !gz) return NULL;
+    iso = ((DWORD *)g_bridge)[0x18 / 4];
+    if (!iso || IsBadReadPtr((void *)iso, 0x78)) return NULL;
+    obj = ((DWORD *)iso)[0x74 / 4];
+    if (!obj || IsBadReadPtr((void *)obj, 0x48)) return NULL;
+    if ((LONG)((DWORD *)obj)[0x24 / 4] < cw || (LONG)((DWORD *)obj)[0x28 / 4] < ch) {
+        if (!logged++) logf("HUDSCALE> city layer %lux%lu smaller than the client %ldx%ld - no mask",
+                            ((DWORD *)obj)[0x24 / 4], ((DWORD *)obj)[0x28 / 4], cw, ch);
+        return NULL;
+    }
+    sub = ((DWORD *)obj)[0x44 / 4];
+    if (!sub || IsBadReadPtr((void *)sub, 0xf8)) return NULL;
+    bits = ((DWORD *)sub)[0xf0 / 4]; pt = ((DWORD *)sub)[0xf4 / 4];
+    if (!bits || !pt) {
+        svt = *(DWORD **)sub;
+        if (!svt || IsBadReadPtr(svt, 0x14) || (DWORD)svt != (DWORD)gz + GZ_RVA_VT_SURFACE || !svt[0x0c / 4]) return NULL;
+        if (!(rz_thiscall((void *)sub, (void *)svt[0x0c / 4], NULL, 0) & 0xff)) return NULL;
+        *sub_locked = sub;
+        bits = ((DWORD *)sub)[0xf0 / 4]; pt = ((DWORD *)sub)[0xf4 / 4];
+    }
+    if (!bits || (LONG)pt < cw * 2) {
+        if (*sub_locked) { svt = *(DWORD **)sub; rz_thiscall((void *)sub, (void *)svt[0x10 / 4], NULL, 0); *sub_locked = 0; }
+        return NULL;
+    }
+    if (!logged++) logf("HUDSCALE> city mask: iso+0x74 %lux%lu pitch %lu%s", ((DWORD *)obj)[0x24 / 4],
+                        ((DWORD *)obj)[0x28 / 4], pt, *sub_locked ? " (locked)" : " (mapped)");
+    *pitch = (LONG)pt;
+    return (BYTE *)bits;
+}
+static void rz_hs_city_unlock(DWORD sub) {
+    DWORD *svt;
+    if (!sub) return;
+    svt = *(DWORD **)sub;
+    if (svt && !IsBadReadPtr(svt, 0x14) && svt[0x10 / 4]) rz_thiscall((void *)sub, (void *)svt[0x10 / 4], NULL, 0);
+}
+
+static LONG rz_hs_src_coord(LONG d, LONG c, double s) {   /* nearest source pixel of dest pixel d */
+    double u = (double)c + ((double)d + 0.5 - (double)c) / s;
+    LONG v = (LONG)u;
+    if ((double)v > u) v--;   /* floor for negatives */
+    return v;
+}
+static LONG rz_hs_dst_lo(LONG a, LONG c, double s) {      /* smallest d whose source >= a */
+    double t = (double)c + s * ((double)a - (double)c) - 0.5;
+    LONG v = (LONG)t;
+    if ((double)v < t) v++;   /* ceil */
+    while (rz_hs_src_coord(v, c, s) < a) v++;
+    while (rz_hs_src_coord(v - 1, c, s) >= a) v--;
+    return v;
+}
+static int rz_hs_tables(LONG cw, LONG ch, double s) {
+    LONG i;
+    if (g_hs_xs && g_hs_tcw == cw && g_hs_tch == ch && g_hs_ts == s) return 1;
+    free(g_hs_xs); free(g_hs_ys); free(g_hs_xf); free(g_hs_yf);
+    g_hs_xs = (LONG *)malloc(cw * sizeof(LONG)); g_hs_xf = (LONG *)malloc(cw * sizeof(LONG));
+    g_hs_ys = (LONG *)malloc(ch * sizeof(LONG)); g_hs_yf = (LONG *)malloc(ch * sizeof(LONG));
+    if (!g_hs_xs || !g_hs_ys || !g_hs_xf || !g_hs_yf) { g_hs_xs = NULL; return 0; }
+    for (i = 0; i < cw; i++) {
+        double u = (double)cw + ((double)i + 0.5 - (double)cw) / s - 0.5;
+        LONG b = (LONG)u; if ((double)b > u) b--;
+        g_hs_xs[i] = rz_hs_src_coord(i, cw, s);
+        g_hs_xf[i] = (b < 0 ? 0 : b) | ((LONG)((u - (double)b) * 256.0) << 20);   /* base | weight<<20 */
+    }
+    for (i = 0; i < ch; i++) {
+        double u = (double)ch + ((double)i + 0.5 - (double)ch) / s - 0.5;
+        LONG b = (LONG)u; if ((double)b > u) b--;
+        g_hs_ys[i] = rz_hs_src_coord(i, ch, s);
+        g_hs_yf[i] = (b < 0 ? 0 : b) | ((LONG)((u - (double)b) * 256.0) << 20);
+    }
+    g_hs_tcw = cw; g_hs_tch = ch; g_hs_ts = s;
+    logf("HUDSCALE> tables for %ldx%ld at %.3fx (native HUD box [%ld %ld %ld %ld] fills the client)", cw, ch, s,
+         cw - (LONG)((double)cw / s), ch - (LONG)((double)ch / s), cw, ch);
+    return 1;
+}
+
+/* Collect visible HUD windows (root children, and children of the full-client HUD container). Returns count. */
+static int rz_hs_collect(LONG cw, LONG ch, double s, int can_erase) {
+    DWORD exe = (DWORD)GetModuleHandleA(NULL), spr = (DWORD)GetModuleHandleA("SIMSPR.DLL");
+    DWORD sui = (DWORD)GetModuleHandleA("SIMUI.DLL");
+    void *lvl[2], *root = rz_ui_root();
+    int nl = 1, li, n = 0;
+    DWORD sig = 2166136261u;
+    char skipped[400];
+    int sk = 0;
+    g_hs_ndlg = 0;
+    skipped[0] = 0;
+    if (!root) return 0;
+    lvl[0] = root;
+    for (li = 0; li < nl; li++) {
+        void *head = *(void **)((DWORD)lvl[li] + 0x34), *nd;
+        int g = 0;
+        if (!head || IsBadReadPtr(head, 4)) continue;
+        for (nd = *(void **)head; nd && nd != head && g++ < 300; nd = *(void **)nd) {
+            DWORD *c, vt;
+            LONG r[4], w, h;
+            if (IsBadReadPtr(nd, 0x0c)) break;
+            c = *(DWORD **)((DWORD)nd + 8);
+            if (!c || IsBadReadPtr(c, 0xa4)) continue;
+            vt = c[0];
+            if (exe && vt == exe + 0xd32d0) { if (nl < 2) lvl[nl++] = c; continue; }   /* HUD container */
+            if (!(c[0xa0 / 4] & 1)) continue;                                         /* hidden */
+            if (spr && vt == spr + 0x676ac) continue;                                 /* city view */
+            r[0] = (LONG)c[0x14 / 4]; r[1] = (LONG)c[0x18 / 4]; r[2] = (LONG)c[0x1c / 4]; r[3] = (LONG)c[0x20 / 4];
+            w = r[2] - r[0]; h = r[3] - r[1];
+            if (sui && vt == sui + 0xa4d64 && w >= 120 && h >= 80) {                  /* dialog: stays native, on top */
+                if (g_hs_ndlg < 16) { memcpy(g_hs_dlg[g_hs_ndlg], r, sizeof(r)); g_hs_ndlg++; }
+                continue;
+            }
+            if (r[0] < 0) r[0] = 0;
+            if (r[1] < 0) r[1] = 0;
+            if (r[2] > cw) r[2] = cw;
+            if (r[3] > ch) r[3] = ch;
+            if (r[2] <= r[0] || r[3] <= r[1]) continue;
+            if ((r[2] - r[0]) * (r[3] - r[1]) > cw * ch / 2) continue;                 /* full-client layer */
+            if (r[2] < cw - 2 && r[3] < ch - 2) {   /* floating (tooltips): enlarged only if it fits and can be erased */
+                LONG fx0 = rz_hs_dst_lo(r[0], cw, s), fy0 = rz_hs_dst_lo(r[1], ch, s);
+                if (can_erase && n < HS_MAX && fx0 >= 0 && fy0 >= 0 && (r[2] - r[0]) * (r[3] - r[1]) <= cw * ch / 16) {
+                    memcpy(g_hs_src[n], r, sizeof(r));
+                    g_hs_dst[n][0] = fx0; g_hs_dst[n][1] = fy0;
+                    g_hs_dst[n][2] = rz_hs_dst_lo(r[2], cw, s); g_hs_dst[n][3] = rz_hs_dst_lo(r[3], ch, s);
+                    g_hs_float[n] = 1;
+                    sig = (sig ^ (DWORD)vt ^ 0x5a5a) * 16777619u;
+                    sig = (sig ^ (DWORD)(r[0] * 7 + r[1] * 131 + r[2] * 8191 + r[3] * 524287)) * 16777619u;
+                    n++;
+                    continue;
+                }
+                if (sk < 6) {
+                    char t[64];
+                    wsprintfA(t, " %08lX[%ld %ld %ld %ld]", vt - (sui && vt > sui && vt < sui + 0x200000 ? sui : 0),
+                              r[0], r[1], r[2], r[3]);
+                    lstrcatA(skipped, t); sk++;
+                }
+                continue;
+            }
+            if (n >= HS_MAX) continue;
+            memcpy(g_hs_src[n], r, sizeof(r));
+            g_hs_dst[n][0] = rz_hs_dst_lo(r[0], cw, s); g_hs_dst[n][1] = rz_hs_dst_lo(r[1], ch, s);
+            g_hs_dst[n][2] = rz_hs_dst_lo(r[2], cw, s); g_hs_dst[n][3] = rz_hs_dst_lo(r[3], ch, s);
+            if (g_hs_dst[n][0] < 0) g_hs_dst[n][0] = 0;
+            if (g_hs_dst[n][1] < 0) g_hs_dst[n][1] = 0;
+            if (g_hs_dst[n][2] > cw) g_hs_dst[n][2] = cw;
+            if (g_hs_dst[n][3] > ch) g_hs_dst[n][3] = ch;
+            g_hs_float[n] = 0;
+            sig = (sig ^ (DWORD)vt) * 16777619u;
+            sig = (sig ^ (DWORD)(r[0] * 7 + r[1] * 131 + r[2] * 8191 + r[3] * 524287)) * 16777619u;
+            n++;
+        }
+    }
+    sig ^= (DWORD)g_hs_ndlg * 0x9e3779b9u;
+    if (sig != g_hs_sig && g_hs_logs < 60) {
+        int i;
+        g_hs_sig = sig; g_hs_logs++;
+        logf("HUDSCALE> %d window(s) enlarged %.3fx about (%ld,%ld), %d dialog(s) kept native%s%s",
+             n, s, cw, ch, g_hs_ndlg, sk ? "; not scaled (floating):" : "", skipped);
+        for (i = 0; i < n; i++)
+            logf("HUDSCALE>   [%ld %ld %ld %ld] -> [%ld %ld %ld %ld]%s", g_hs_src[i][0], g_hs_src[i][1], g_hs_src[i][2],
+                 g_hs_src[i][3], g_hs_dst[i][0], g_hs_dst[i][1], g_hs_dst[i][2], g_hs_dst[i][3],
+                 g_hs_float[i] ? " (floating: native copy erased)" : "");
+    }
+    return n;
+}
+
+static void rz_hs_copy(BYTE *bits, LONG pitch, LONG ox, LONG oy, LONG cw, const LONG *r, int to_snap) {
+    LONG y, x0 = r[0] < 0 ? 0 : r[0], x1 = r[2] > cw ? cw : r[2], y0 = r[1] < 0 ? 0 : r[1], y1 = r[3];
+    if (x1 <= x0) return;
+    for (y = y0; y < y1; y++) {
+        WORD *f = (WORD *)(bits + (oy + y) * pitch) + ox + x0, *s = g_hs_snap + y * cw + x0;
+        if (to_snap) memcpy(s, f, (x1 - x0) * 2); else memcpy(f, s, (x1 - x0) * 2);
+    }
+}
+
+static BYTE *rz_hs_lock(void *src, LONG *pitch, DWORD *bpp, DWORD *gmask, LONG *sw, LONG *sh) {
+    DWORD *vt = *(DWORD **)src;
+    BYTE desc[124];
+    HRESULT hr;
+    memset(desc, 0, sizeof(desc)); *(DWORD *)desc = 124;
+    hr = ((RZ_LOCK)vt[0x64 / 4])(src, NULL, desc, 1 /* DDLOCK_WAIT */, NULL);
+    if (hr) { memset(desc, 0, sizeof(desc)); *(DWORD *)desc = 108; hr = ((RZ_LOCK)vt[0x64 / 4])(src, NULL, desc, 1, NULL); }
+    if (hr) return NULL;
+    *pitch = *(LONG *)(desc + 0x10);
+    *sh = *(LONG *)(desc + 0x08); *sw = *(LONG *)(desc + 0x0c);
+    *bpp = *(DWORD *)(desc + 0x54); *gmask = *(DWORD *)(desc + 0x5c);
+    return *(BYTE **)(desc + 0x24);
+}
+
+static WORD rz_hs_lerp(WORD a, WORD b, LONG f, int g6) {   /* f 0..256 toward b */
+    LONG ra = a >> 11, rb = b >> 11, ga, gb, ba = a & 31, bb = b & 31;
+    if (g6) { ga = (a >> 5) & 63; gb = (b >> 5) & 63; }
+    else    { ra = (a >> 10) & 31; rb = (b >> 10) & 31; ga = (a >> 5) & 31; gb = (b >> 5) & 31; }
+    ra += ((rb - ra) * f) >> 8; ga += ((gb - ga) * f) >> 8; ba += ((bb - ba) * f) >> 8;
+    return g6 ? (WORD)((ra << 11) | (ga << 5) | ba) : (WORD)((ra << 10) | (ga << 5) | ba);
+}
+
+/* Before the final present: enlarge the HUD into the frame. Returns 1 when the frame must be restored after. */
+static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch) {
+    double s, smax;
+    int n, i, k, g6;
+    LONG pitch, sw, sh, ox, oy;
+    DWORD bpp, gmask, csub = 0;
+    BYTE *bits, *city = NULL;
+    LONG cpitch = 0;
+    LARGE_INTEGER t0, t1;
+    static int logged_fmt;
+    g_hs_n = 0;
+    if (!g_hudscale || g_mb_active || cw <= 0 || ch <= 0) return 0;
+    if (sr->right - sr->left != cw || sr->bottom - sr->top != ch) return 0;   /* only a 1:1 present */
+    smax = (double)cw / NAT_W < (double)ch / NAT_H ? (double)cw / NAT_W : (double)ch / NAT_H;
+    s = g_hudscale >= 100 ? (double)g_hudscale / 100.0 : smax;
+    if (s > smax) s = smax;
+    if (s < 1.01) return 0;
+    if (rz_menu_visible()) return 0;
+    if (!rz_hs_tables(cw, ch, s)) return 0;
+    QueryPerformanceCounter(&t0);
+    if (g_hs_key) city = rz_hs_city(cw, ch, &cpitch, &csub);
+    n = rz_hs_collect(cw, ch, s, city != NULL);
+    if (n <= 0) { rz_hs_city_unlock(csub); return 0; }
+    if (g_hs_snapcap < cw * ch) {
+        free(g_hs_snap);
+        g_hs_snap = (WORD *)malloc((size_t)cw * ch * 2);
+        g_hs_snapcap = g_hs_snap ? cw * ch : 0;
+        if (!g_hs_snap) { rz_hs_city_unlock(csub); return 0; }
+    }
+    bits = rz_hs_lock(src, &pitch, &bpp, &gmask, &sw, &sh);
+    if (!bits) { rz_hs_city_unlock(csub); return 0; }
+    ox = sr->left; oy = sr->top;
+    if (bpp != 16 || sw < ox + cw || sh < oy + ch || pitch < (ox + cw) * 2) {
+        if (!logged_fmt++) logf("HUDSCALE> refused: frame %ldx%ld pitch %ld bpp %lu for client %ldx%ld", sw, sh, pitch, bpp, cw, ch);
+        ((RZ_UNLOCK)(*(DWORD **)src)[0x80 / 4])(src, NULL);
+        rz_hs_city_unlock(csub);
+        return 0;
+    }
+    g6 = gmask == 0x07E0;
+    for (i = 0; i < n; i++) {   /* snapshot sources (1 px margin for the bilinear taps) and dests */
+        LONG m[4];
+        m[0] = g_hs_src[i][0] - 1; m[1] = g_hs_src[i][1] - 1; m[2] = g_hs_src[i][2] + 1; m[3] = g_hs_src[i][3] + 1;
+        if (m[1] < 0) m[1] = 0;
+        if (m[3] > ch) m[3] = ch;
+        rz_hs_copy(bits, pitch, ox, oy, cw, m, 1);
+        rz_hs_copy(bits, pitch, ox, oy, cw, g_hs_dst[i], 1);
+    }
+    if (city)   /* erase floating windows' native copies with the city underneath (the enlarged pass below may cover parts) */
+        for (i = 0; i < n; i++) {
+            LONG x, y;
+            if (!g_hs_float[i]) continue;
+            for (y = g_hs_src[i][1]; y < g_hs_src[i][3]; y++) {
+                WORD *f = (WORD *)(bits + (oy + y) * pitch) + ox;
+                const WORD *cd = (const WORD *)(city + y * cpitch);
+                for (x = g_hs_src[i][0]; x < g_hs_src[i][2]; x++) f[x] = cd[x];
+            }
+        }
+    for (i = 0; i < n; i++) {
+        const LONG *d = g_hs_dst[i];
+        LONG x, y;
+        for (y = d[1]; y < d[3]; y++) {
+            WORD *f = (WORD *)(bits + (oy + y) * pitch) + ox;
+            if (city) {   /* masked: a source pixel equal to the city layer is see-through -> the city at the dest */
+                const WORD *srow = g_hs_snap + g_hs_ys[y] * cw;
+                const WORD *crow = (const WORD *)(city + g_hs_ys[y] * cpitch), *cd = (const WORD *)(city + y * cpitch);
+                if (!g_hs_filter) {
+                    for (x = d[0]; x < d[2]; x++) { LONG sx = g_hs_xs[x]; f[x] = srow[sx] == crow[sx] ? cd[x] : srow[sx]; }
+                } else {
+                    LONG yb = g_hs_yf[y] & 0xfffff, fy = (g_hs_yf[y] >> 20) & 0x1ff, yb1 = yb + 1 < ch ? yb + 1 : yb;
+                    const WORD *r0 = g_hs_snap + yb * cw, *r1 = g_hs_snap + yb1 * cw;
+                    for (x = d[0]; x < d[2]; x++) {
+                        LONG sx = g_hs_xs[x], xb, fx, xb1;
+                        if (srow[sx] == crow[sx]) { f[x] = cd[x]; continue; }
+                        xb = g_hs_xf[x] & 0xfffff; fx = (g_hs_xf[x] >> 20) & 0x1ff; xb1 = xb + 1 < cw ? xb + 1 : xb;
+                        f[x] = rz_hs_lerp(rz_hs_lerp(r0[xb], r0[xb1], fx, g6), rz_hs_lerp(r1[xb], r1[xb1], fx, g6), fy, g6);
+                    }
+                }
+            } else if (!g_hs_filter) {
+                const WORD *srow = g_hs_snap + g_hs_ys[y] * cw;
+                for (x = d[0]; x < d[2]; x++) f[x] = srow[g_hs_xs[x]];
+            } else {
+                LONG yb = g_hs_yf[y] & 0xfffff, fy = (g_hs_yf[y] >> 20) & 0x1ff, yb1 = yb + 1 < ch ? yb + 1 : yb;
+                const WORD *r0 = g_hs_snap + yb * cw, *r1 = g_hs_snap + yb1 * cw;
+                for (x = d[0]; x < d[2]; x++) {
+                    LONG xb = g_hs_xf[x] & 0xfffff, fx = (g_hs_xf[x] >> 20) & 0x1ff, xb1 = xb + 1 < cw ? xb + 1 : xb;
+                    f[x] = rz_hs_lerp(rz_hs_lerp(r0[xb], r0[xb1], fx, g6), rz_hs_lerp(r1[xb], r1[xb1], fx, g6), fy, g6);
+                }
+            }
+        }
+    }
+    for (k = 0; k < g_hs_ndlg; k++)   /* dialogs stay native and on top */
+        for (i = 0; i < n; i++) {
+            LONG q[4];
+            q[0] = max(g_hs_dlg[k][0], g_hs_dst[i][0]); q[1] = max(g_hs_dlg[k][1], g_hs_dst[i][1]);
+            q[2] = min(g_hs_dlg[k][2], g_hs_dst[i][2]); q[3] = min(g_hs_dlg[k][3], g_hs_dst[i][3]);
+            if (q[2] > q[0] && q[3] > q[1]) rz_hs_copy(bits, pitch, ox, oy, cw, q, 0);
+        }
+    ((RZ_UNLOCK)(*(DWORD **)src)[0x80 / 4])(src, NULL);
+    rz_hs_city_unlock(csub);
+    g_hs_cw = cw; g_hs_ch = ch; g_hs_s = s;
+    g_hs_n = n;
+    QueryPerformanceCounter(&t1);
+    g_hs_time += t1.QuadPart - t0.QuadPart; g_hs_frames++;
+    if (!g_hs_beat) g_hs_beat = GetTickCount();
+    if (GetTickCount() - g_hs_beat >= 10000 && g_hs_frames) {
+        logf("HUDSCALE> %lu enlarged frames in %lu ms, %.2f ms per frame in the pre-present pass%s",
+             g_hs_frames, GetTickCount() - g_hs_beat,
+             g_freq.QuadPart ? 1000.0 * (double)g_hs_time / (double)g_freq.QuadPart / g_hs_frames : 0.0, city ? " (masked)" : "");
+        g_hs_beat = GetTickCount(); g_hs_frames = 0; g_hs_time = 0;
+    }
+    return 1;
+}
+
+/* After the present: give the game its frame back. */
+static void rz_hs_post(void *src, const RECT *sr) {
+    LONG pitch, sw, sh, i, n = g_hs_n;
+    DWORD bpp, gmask;
+    BYTE *bits = rz_hs_lock(src, &pitch, &bpp, &gmask, &sw, &sh);
+    if (!bits) { logf("HUDSCALE> restore lock failed"); return; }
+    for (i = n - 1; i >= 0; i--) {
+        LONG mm[4];
+        mm[0] = g_hs_src[i][0] - 1; mm[1] = g_hs_src[i][1] - 1; mm[2] = g_hs_src[i][2] + 1; mm[3] = g_hs_src[i][3] + 1;
+        if (mm[1] < 0) mm[1] = 0;
+        if (mm[3] > g_hs_ch) mm[3] = g_hs_ch;
+        rz_hs_copy(bits, pitch, sr->left, sr->top, g_hs_cw, mm, 0);
+        rz_hs_copy(bits, pitch, sr->left, sr->top, g_hs_cw, g_hs_dst[i], 0);
+    }
+    ((RZ_UNLOCK)(*(DWORD **)src)[0x80 / 4])(src, NULL);
+}
+
+/* Map a client mouse point through the inverse of the enlargement. Returns 1 if it changed lp. */
+static int rz_hs_mouse(UINT m, LPARAM *lp) {
+    LONG qx = (LONG)(short)LOWORD(*lp), qy = (LONG)(short)HIWORD(*lp), n = g_hs_n, i, px, py;
+    int inside = 0, down = (m == WM_LBUTTONDOWN || m == WM_RBUTTONDOWN || m == WM_MBUTTONDOWN),
+        up = (m == WM_LBUTTONUP || m == WM_RBUTTONUP || m == WM_MBUTTONUP);
+    static int logged;
+    for (i = 0; i < n && !inside; i++)
+        inside = qx >= g_hs_dst[i][0] && qx < g_hs_dst[i][2] && qy >= g_hs_dst[i][1] && qy < g_hs_dst[i][3];
+    if (inside)   /* a dialog drawn on top of the enlarged HUD keeps its native input */
+        for (i = 0; i < g_hs_ndlg; i++)
+            if (qx >= g_hs_dlg[i][0] && qx < g_hs_dlg[i][2] && qy >= g_hs_dlg[i][1] && qy < g_hs_dlg[i][3]) { inside = 0; break; }
+    if (!inside && !g_hs_capture) return 0;
+    if (down) g_hs_capture = 1;
+    if (up) g_hs_capture = 0;
+    px = rz_hs_src_coord(qx, g_hs_cw, g_hs_s);
+    py = rz_hs_src_coord(qy, g_hs_ch, g_hs_s);
+    if ((down || up) && logged < 40) { logged++; logf("HUDSCALE> %s (%ld,%ld) -> native (%ld,%ld)", down ? "down" : "up", qx, qy, px, py); }
+    *lp = MAKELPARAM((WORD)(short)px, (WORD)(short)py);
+    return 1;
+}
+
 static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, void *fx) {
     LARGE_INTEGER a, b;
     HRESULT hr;
+    int hs_did;
     __int64 d;
     RECT sfix;
     if (rz_mb_present(self, dr, src, sr, fl, fx, &hr)) return hr;
@@ -3534,9 +3925,24 @@ static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWO
             rz_repaint_rci();
         }
     }
+    hs_did = 0;
+    if (g_hudscale && dr && sr && src && g_hwnd && !IsBadReadPtr(dr, sizeof(RECT)) && !IsBadReadPtr(sr, sizeof(RECT))) {
+        RECT crh2;
+        if (GetClientRect(g_hwnd, &crh2) && dr->right - dr->left >= crh2.right - crh2.left &&
+            dr->bottom - dr->top >= crh2.bottom - crh2.top) {
+            hs_did = rz_hs_pre(src, sr, crh2.right - crh2.left, crh2.bottom - crh2.top);
+            if (hs_did) { g_hs_primary = self; g_hs_lastsrc = src; }
+        } else if (g_hs_n > 0 && self == g_hs_primary) {
+            static int hs_part;
+            if (hs_part++ < 10)
+                logf("HUDSCALE> blit onto the presented surface 0x%08lX while active: dest [%ld %ld %ld %ld] src 0x%08lX (last full present src 0x%08lX)",
+                     (DWORD)self, dr->left, dr->top, dr->right, dr->bottom, (DWORD)src, (DWORD)g_hs_lastsrc);
+        }
+    }
     QueryPerformanceCounter(&a);
     hr = g_orig_blt(self, dr, src, sr, fl, fx);
     QueryPerformanceCounter(&b);
+    if (hs_did) rz_hs_post(src, sr);
     d = b.QuadPart - a.QuadPart;
     g_ddblt_time += d;
     g_ddblt_calls++;
@@ -6307,6 +6713,23 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         int mx = (int)(short)LOWORD(lp) - (int)g_mb_offx, my = (int)(short)HIWORD(lp) - (int)g_mb_offy;
         lp = MAKELPARAM((WORD)(short)mx, (WORD)(short)my);
     }
+    /* HUDSCALE: a mouse message on the enlarged HUD goes to the native widget under it. Only messages that come
+       from the queue are mapped: a mouse message the game sends to itself while handling one (nested) already
+       carries native coordinates, and mapping it again moved a flyout-item click onto the emergency button. */
+    if (g_hudscale && !g_mb_active && m >= WM_MOUSEMOVE && m <= WM_MBUTTONDBLCLK) {
+        LRESULT r;
+        if (g_hs_depth == 0) { if (g_hs_n > 0) rz_hs_mouse(m, &lp); }
+        else if (m != WM_MOUSEMOVE && g_hs_nestlog < 20) {
+            g_hs_nestlog++;
+            logf("HUDSCALE> nested mouse msg 0x%04X at (%d,%d) left as is (sent by the game while handling one)",
+                 m, (int)(short)LOWORD(lp), (int)(short)HIWORD(lp));
+        }
+        if (m == WM_LBUTTONDOWN) rz_note_panel_click(lp);
+        g_hs_depth++;
+        r = CallWindowProcA(g_oldproc, h, m, wp, lp);
+        g_hs_depth--;
+        return r;
+    }
     /* ⭐ LET THE USER DRAG THE WINDOW TO ANY SIZE.
      *
      * The window already carries WS_THICKFRAME|WS_MAXIMIZEBOX (measured: style 0x95CF0000), so the
@@ -7606,6 +8029,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_ARTGUARD", v, sizeof(v))) g_artguard = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_FIELDBG", v, sizeof(v))) g_fieldbg = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUBG", v, sizeof(v))) g_menubg = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE", v, sizeof(v))) g_hudscale = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_FILTER", v, sizeof(v))) g_hs_filter = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_KEY", v, sizeof(v))) g_hs_key = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HOLD", v, sizeof(v))) g_hold = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_DEFERRESIZE", v, sizeof(v))) g_deferresize = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_SIMLOCK", v, sizeof(v))) g_simlock = atoi(v);
@@ -7632,6 +8058,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
         logf("### sc3resize loaded - resizable-window mod (minimal Init-free routine, "
              "validated 2026-08-27 over 6 runs)%s%s", g_minzoom ? " [MINZOOM crash-hunt build]" : "",
              g_hudlab ? " [HUD LAB armed: surface census + EIP profiler, verify/resize_hudlab]" : "");
+        if (g_hudscale)
+            logf("HUDSCALE> ON (prototype): %s, filter %s", g_hudscale >= 100 ? "fixed percent, capped at min(cw/800, ch/600)"
+                 : "factor min(cw/800, ch/600)", g_hs_filter ? "bilinear" : "nearest");
         /* ⭐ Echo EVERY parsed flag, unconditionally, at init.
          *
          * Attempt 1 of the NOHIT experiment (2026-09-01) was VOID because none of three env vars

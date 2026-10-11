@@ -1,0 +1,183 @@
+# HUD scale-up for large windows (task hudscale, 2026-10-11)
+
+Owner request 2026-08-30, second half: when the game window grows in both directions the HUD should get
+BIGGER (buttons, bar, side panel, minimap), not only longer. Today sc3resize extends the bar to the full
+width and the side panel to the full height (owner design calls, `project-resize-mod-shipped`), and every
+widget stays at its 800x600 pixel size.
+
+This note compares the ways to do it, with cost and risk, and records the recommendation that the
+prototype (`SC3RESIZE_HUDSCALE`, off by default) implements.
+
+## What the engine gives us (facts)
+
+- **Widget size is fixed per layout group, and the 1024 group is not bigger.** SIMUI `FUN_100270e5` fills the
+  bar field table from three hard-coded groups keyed on the root width (`0x280` -> 640 group, `800` -> 800
+  group, `> 0x320` -> 1024 group). The field heights are identical in the 800 and 1024 groups (rows `0x1a..0x2c`
+  in both); the 1024 group only moves the fields further right (`0x16e`, `0x1e0`, `0x276` vs `0x90`, `0x102`,
+  `0x198`) `[CONFIRMED @ SIMUI 0x100270e5]`. The side panel table builder writes a `0x24` x `0x24` (36x36)
+  button cell before it looks at the height at all `[CONFIRMED @ SIMUI 0x1004cdcd]`. Measured at a real
+  1024x768 start (sc3startsize run, RESIZABLE_WINDOW.md): side panel `[928 0 1024 610]` = 96 wide, minimap
+  `[864 604 1024 768]` = 160x164, RCI `[823 680 864 768]` = 41x88. At 800x600 the same windows are 96 wide,
+  160x164 and 41x88. So the stock game never scales its HUD, it only spreads it.
+- **Each window paints into its parent's surface, top-level windows into the frame.** `FUN_1006d2d0` repaints a
+  dirty window (vt+0x144) and its children (vt+0x148), then blits its own surface `+0x58` (source rect `+0x24`,
+  dest rect `+0x90`) into `parent->vt[0x158]()`, or into the global target when the parent has none
+  `[CONFIRMED @ SIMUI 0x1006d2d0]`. The blit lands in GZGraphicD `FUN_10014894`, which forwards the two rects
+  to the surface object's `vt+0x2c` `[CONFIRMED @ GZGraphicD 0x10014894]`. Whether that path stretches when the
+  rects differ in size is `[UNCERTAIN]` (not read).
+- **A window surface is dropped when its size changes** (`FUN_1006d56c` keeps a surface only on an exact size
+  match, `project-simui-window-model`). Art is fixed-size bitmaps from the IXF archives.
+- **Hit-testing reads the DERIVED rect `+0x14..+0x20`, rebuilt from the LOCAL rect** by the root cascade
+  (vt+0x14c / vt+0x168). Input arrives through the game window's wndproc in client coordinates.
+- **The mod already owns the final present.** `rz_blt_hook` sees every ddraw `Blt`; the final present is the one
+  whose dest covers the client. MENUBG already rewrites the frame there (locks the source surface, edits pixels)
+  and shifts mouse coordinates in `rz_wndproc` to match what it drew. RCIFIX already re-composites a HUD
+  window at present time. Both shipped and were verified.
+
+## Options
+
+### A. Magnify the HUD at present time, map input back (RECOMMENDED)
+
+Leave the game's layout exactly as sc3resize builds it today (full-width bar, full-height side panel, minimap
+and RCI docked bottom-right). At the final present, take each HUD window's rect from the composed frame and
+draw it again enlarged by a factor `s`, **scaled about the client's bottom-right corner C = (cw, ch)**:
+`dest = C + s * (rect - C)`, clipped to the client. Mouse messages that land on an enlarged HUD rect are mapped
+back with the inverse `p = C + (q - C) / s` before the game sees them, so the game hit-tests its own native
+widget. Everything else (the city view) is untouched and keeps the full window resolution.
+
+Why the bottom-right corner works with no layout change:
+- every HUD window touches the right or bottom edge, or sits inside one that does. Such a region is closed
+  under "move towards C", which means its enlarged copy always COVERS the native copy. No native-size widget
+  is left visible beside its enlarged twin;
+- the parts that scaling pushes off screen are exactly the stretched filler: the left part of the full-width
+  bar and the top part of the full-height panel. The controls are already slid to the right end of the bar
+  and the bottom of the panel, so they stay on screen;
+- one affine map for all of it, so the relative layout (panel on the minimap, RCI beside the console) is
+  preserved and the input map is a single formula.
+
+Largest useful factor: `s_max = min(cw / 800, ch / 600)`. At `s_max` the HUD fills the window in the limiting
+dimension exactly as it fills an 800x600 window, and the bar's controls (600-px art + RCI + minimap) still fit.
+At the owner's maximized virtual client 2048x1081 that is 1.8 (bar 101 px tall, panel 173 wide, minimap
+288x295).
+
+Cost: one present-time pass, about 300 lines in sc3resize.c, no new hooks. Per frame: lock the composed
+frame, snapshot it, resample the HUD rects into it, present, restore the touched rows (the game reuses the
+frame, so it must get back exactly what it drew). Snapshot + restore at 2048x1081x2 bytes is ~4.4 MB each way.
+
+Risks:
+1. **Transparent HUD edges carry the city.** The composed frame holds HUD and city mixed. Where a HUD window
+   is colour-keyed (for example around the RCI gauge), the enlarged copy shows an enlarged bit of the city
+   from the corner instead of the city underneath. Mitigation if it shows: source the HUD from the window's
+   own surface with the magenta key (option B's pixel source), or mask with the city-only target `iso+0x74`.
+2. **Scaling filter.** Nearest-neighbour is crisp at integer factors and uneven at 1.5 or 1.8. Bilinear is
+   even but soft. Owner call (needs owner).
+3. **Dialogs and tooltips stay native size.** They are drawn into the same frame. The prototype redraws
+   visible dialogs on top of the enlarged HUD so a dialog is never covered or copied into it. A dialog that
+   sits ON a native HUD rect would also be copied enlarged (needs a player drag to the very edge). Tooltips
+   from enlarged buttons show native size near the native button.
+4. **The game might read the cursor itself** (GetCursorPos) for hover or drag instead of the message
+   coordinates. Then hover over an enlarged widget is wrong while clicks are right. MENUBG only needed the
+   message shift for clicks. To be checked in the prototype.
+5. **Partial presents.** A present smaller than the client would draw native pixels over the enlarged HUD.
+   None were seen in city mode in the PRESENTLOG runs (the logger only prints full presents, so this is
+   `[UNCERTAIN]`); the prototype logs any partial present it sees while active.
+6. Drags that start on the HUD (minimap pan) and leave it: the prototype keeps mapping from button-down to
+   button-up so the drag does not jump between the two coordinate systems.
+
+### B. Per-window enlarged composite
+
+Same idea as A, but instead of resampling the composed frame, redo each top-level HUD window's final blit
+(`FUN_1006d2d0`: surface `+0x58`, src `+0x24`, dest `+0x90`) with an enlarged dest rect and the colour key.
+Clean transparency (no city in the HUD). Costs: needs either a stretching path in GZGraphicD (`[UNCERTAIN]`,
+`vt+0x2c` not read) or a CPU resample from the raw raster bits (`+0x44` sub, `+0xf0` bits, `+0xf4` pitch, as the
+surface dumper does); must suppress the game's own native-size blit of the same windows; input mapping is the
+same as A. Best as a refinement of A's pixel source if risk 1 shows, not as a separate design.
+
+### C. Pick the 1024 widget group at large sizes
+
+Rejected. The 1024 group uses the same art at the same size and only spreads it (facts above). It gives a
+wider bar layout, not a bigger HUD. It would also undo the BAR800 fix (800 fields on 1024 positions).
+
+### D. True per-widget scaling (art, rects, fonts)
+
+Rejected for now. Every widget surface is a fixed-size bitmap; scaling means resampling every HUD bitmap at load
+(IXF decoders), multiplying every LOCAL rect (and the cascade, the flyout anchors, the side-panel item anchors
+`+0xa917c`, the 36x36 cells in `FUN_1004cdcd`), rebuilding every surface at the new size (`FUN_1006d56c` drops
+mismatches), and rendering text at a bigger font size through the game's own font code. Weeks to months, many
+classes, and every mod fix keyed on native rects would need a scaled twin. The visual result would be no better
+than A with bilinear filtering, because the art is the same 800x600-era bitmaps either way.
+
+### E. Render the whole game smaller and stretch the whole frame
+
+Cheapest of all (the menu used to do this before MENUBG): run the game at `cw/s x ch/s` and stretch every
+present. The HUD gets bigger, but so does the city, so a big window shows no more map than a small one. That
+defeats the point of the resize mod. Listed only as the fallback "zoom" behaviour if the owner prefers it.
+
+## Recommendation
+
+Option A behind `SC3RESIZE_HUDSCALE`, off by default:
+- `SC3RESIZE_HUDSCALE=1`: factor = `s_max = min(cw/800, ch/600)`, so the HUD keeps its 800x600 proportion;
+- `SC3RESIZE_HUDSCALE=<n>` with n >= 100: factor n/100, capped at `s_max` (for example 150);
+- `SC3RESIZE_HUDSCALE_FILTER=0` nearest (default), `=1` bilinear;
+- only in a city (not at the menu, MENUBG owns that), only when `s > 1.01`.
+
+Risk 1 did show (city in the minimap's transparent corner) and is solved with the city-layer mask, so option B
+is not needed for it. `SC3RESIZE_HUDSCALE_KEY=0` turns the mask off for an A/B.
+
+## Needs owner
+
+1. Size: HUD at the largest factor that fits (`min(cw/800, ch/600)`, 1.8 at a maximized 2048x1081), or a fixed
+   percent (for example 150), or whole steps only (2x and up, crisp, but 1x until the window is 1600x1200)?
+2. Filter: nearest (crisp, uneven pixel widths at 1.5x to 1.8x, cheaper) or bilinear (even, soft, about 4 ms
+   per frame at 1600x960)?
+3. Dialogs (budget, meeting, query): keep them native size as now, or enlarge them too?
+4. The full-width bar and full-height panel stay, the enlarged copy just pushes their filler off screen. Keep
+   that, or stop the bar and panel at the enlarged controls?
+
+## Prototype (phase 2), 2026-10-11
+
+Code: `re/harness/src/sc3resize.c`, the HUDSCALE block just before `rz_blt_hook`, two calls inside
+`rz_blt_hook` (before and after the original Blt of a full-client present), and the mouse map at the top of
+`rz_wndproc`. Env: `SC3RESIZE_HUDSCALE` (unset or 0 = off, the shipped behaviour), `_FILTER`, `_KEY`.
+
+Per final present (dest covers the client, source rect 1:1 with the client, city view up, MENUBG not active):
+1. collect visible root windows and children of the HUD container `SC3U+0xd32d0`, skipping the city view
+   (`SIMSPR+0x676ac`), full-client layers, and dialogs (`SIMUI+0xa4d64` >= 120x80, kept native);
+2. edge-touching windows are enlarged about C; small floating windows (tooltips) too, when their enlarged copy
+   fits on screen, and their native copy is overwritten with the city layer;
+3. lock the frame, snapshot the touched rects, write each dest pixel from source `C + (d - C) / s`, using the
+   city-only target `iso+0x74` as the see-through mask (a source pixel equal to the city layer shows the city
+   at the dest instead), redraw dialog pixels on top, unlock;
+4. original Blt; then lock again and restore the snapshot so the game gets its frame back.
+Mouse: a queue message on an enlarged rect (or between a press there and its release) gets the inverse map.
+A mouse message the game sends to itself while handling one is passed through unmapped.
+
+### Results (instance `inst_hudscale`, Europolis copy, display awake at 100%, 1680x1050)
+
+Evidence in `verify/hudscale/` (MAIN, gitignored), logs `sc3resize_key.log` / `_v3.log` / `_bil.log` there.
+
+| Check | Result |
+|---|---|
+| Default off | control run with `SC3RESIZE_HUDSCALE=0`: 0 HUDSCALE log lines. Code default `g_hudscale = 0`. |
+| 1200x900, auto | factor 1.5. Bar `[0 844 1200 900]` -> `[0 816 1200 900]`, panel `[1104 0 1200 742]` -> `[1056 0 1200 663]`, minimap `[1040 736 1200 900]` -> `[960 654 1200 900]`, RCI `[999 820 1040 900]` -> `[898 780 960 900]` (`02_nearest_1200x900.png`) |
+| 1600x960, auto | factor 1.6 (`03`, `05`) |
+| See-through mask | without it a magnified chunk of city sat in the minimap's transparent corner (`01_unmasked...`). With the `iso+0x74` mask the corner shows the city under it (`02`). |
+| Clicks | enlarged transport button `(1545,145)` -> native `(1565,450)` opened the transport flyout, drawn enlarged (`07`); first flyout item -> road tool active, red preview and cost label in the city (`08`); minimap "+" `(1385,877)` -> native `(1465,908)` zoomed the city (`11`); meeting button opened "Reunirse" (`10`); the dialog's own close box (not enlarged) closed it. |
+| Hover / tooltips | hover highlights the enlarged flyout item; the "Reunirse" tooltip is enlarged next to its button (`09`). |
+| Dialogs | native size, centred, drawn over the enlarged HUD (`10`). |
+| Cost (pre-present pass, 10-s windows) | nearest 0.65 to 2.2 ms per frame at 1200x900 and 1600x960 (masked); bilinear 3.95 to 4.78 ms at 1600x960. The game stayed at its ~50 to 60 fps cap in both. |
+| Filter | nearest is crisp with uneven pixel widths at 1.5x/1.6x; bilinear is even and soft (`06_nearest_vs_bilinear_crop.png`). |
+
+One glitch seen and not explained: in the first build, 2 of 3 clicks on the first transport flyout item opened
+the EMERGENCY flyout instead. The emergency button is exactly where that item's native point lands if mapped a
+second time, so a guard now leaves game-sent nested mouse messages unmapped. After it: 0 of 5 item clicks
+misfired, and the guard logged no nested message, so the cause is `[UNCERTAIN]` (the first build differed only
+in that guard and in not handling tooltips). Logged in the status file for the owner's hand test.
+
+Not yet checked: drag on the minimap (pan) starting on it and leaving it, right-click on the HUD, the terrain
+editor / New City while enlarged, Load City while enlarged, 1024 maps with sc3bigcity, maximized at the owner's
+2048x1081 (factor 1.8), live resize drags with HUDSCALE on, the main menu (excluded by design, MENUBG owns it).
+
+Also seen: blits onto the presented surface with client-coordinate dests right after a resize (the bar fields
+redrawn, `src` = the bar's field surfaces). They happen in the frame after a size change only and did not show
+in any grab. Where they go is `[UNCERTAIN]`.
