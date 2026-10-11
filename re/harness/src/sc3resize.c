@@ -4180,8 +4180,8 @@ static int g_miniclass = 1;
 /* SPEEDKEYS (owner 2026-10-11): 1-4 (top row and numpad) set the sim speed. The hotkey table binds 1-5 to cmds 84..76,
    which change nothing (posted live: the clock speed stayed put). 0xc2684065 with arg N sets the clock: 1 = 10080
    game-min/day (8571 ms per day), 2 = 43200 (2000 ms), 3 = 129600 (666 ms), 4 = 525600 (164 ms), measured at clock
-   +0x50/+0x60 after each post; it does not touch the pause depth, so a paused sim is also resumed (one level per press,
-   like P). SC3RESIZE_SPEEDKEYS=0 disables. */
+   +0x50/+0x60 after each post; it does not touch the pause depth, so a paused sim stays paused (owner call 2026-10-11:
+   speed keys must not unpause, P does that). SC3RESIZE_SPEEDKEYS=0 disables. */
 static int g_speedkeys = 1;
 /* Post a GZ message to the loaded city through the message service (sc3simrun gz_post). Returns the city, NULL if
    no city is loaded or the service is not the expected one. */
@@ -4218,12 +4218,8 @@ static int rz_pause_toggle(void) {
     return 1;
 }
 static int rz_speed_key(int n) {
-    BYTE *city = rz_city_post(0xc2684065, (DWORD)n);
-    DWORD depth;
-    if (!city) return 0;
-    depth = *(DWORD *)(city + 0x140);
-    if (depth) rz_city_post(0xc2a35d80, 0);
-    logf("SPEEDKEYS> speed %d%s", n, depth ? " + resume" : "");
+    if (!rz_city_post(0xc2684065, (DWORD)n)) return 0;
+    logf("SPEEDKEYS> speed %d", n);
     return 1;
 }
 static int           g_deferresize = 1;
