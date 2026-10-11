@@ -947,3 +947,41 @@ should detect it or run a renamed copy (`mods_launch -exe`).
   that click into the game (on the game thread, from the poll, which sees the new size ~140 ms before WM_SIZE) so the
   game closes the flyout through its own toggle. Hide stays as a fallback. Verified: open, maximize (closed by the
   replayed click), restore, ONE click reopens.
+
+## Post-ship checklist run, 2026-10-11 (child session `query`)
+
+Environment: one 1680x1050 display at 100%, client 1680x979 maximized, Europolis and Berlin (256), combo of the five mods.
+Instance `re/harness/inst_query`, game started through `mods_launch -multi`. Rects were read with a Frida sampler at 10 ms
+(UI root walk), frames came from sc3io desktop grabs at about 2.5 fps.
+
+- **Query (?) dialog moves both bars (owner report):** the same cause as Ordinances, already fixed by MINICLASS. Querying a
+  zone tile opens a 308x280 `SIMUI+0xa4d64` dialog, which is inside the minimap size band. A/B with the same steps
+  (1100x800 after maximize then restore, sim running): with `SC3RESIZE_MINICLASS=0`, `MINI: window captured ... 308x280`
+  alternates with the real minimap every ~33 ms, the side panel goes 642 <-> 800 tall (buttons +158 px) and the bar
+  controls +201 px. Default build: 5 queries over 75 s, no capture, no rect change on the panel or the bar.
+- **Double "Cargando..." box, maximized (FAIL, fixed: DLGKEEP):** Load City and in-city New City. In a city the game
+  creates the box centred on the CLIENT (`[712 412 968 566]` at 1680x979) and it is painted before the 100 ms poll. The
+  poll moved it to the map-area centre `[664 384]`, and nothing repainted the first spot until the new city presented,
+  so both copies stayed up for the whole load. A dialog that opens centred on the client is now left there. From the
+  main menu the box opens at `[272 223]` (centred in the 800x600 root) and the moves land while HOLD holds presents:
+  one box on screen before and after the fix.
+- **Dialog re-centre after a size change (partial FAIL, fixed: DLGAREA):** the map area came from the live side panel
+  and bar, which the first poll at the new size still saw at the old size. Measured: maximize put a 308x280 dialog at
+  `[348 232]` (the 1100x800 map-area centre) in a 1680x979 client. Now a map-area change within 3 s of a size change
+  re-centres a dialog still where it was placed. After the fix: maximize `[638 264]` directly, restore `[396 202]`
+  then `[348 174]` 18 ms later.
+- **Maximize during Edit Terrain, then accept:** PASS. Panel docked at `[1508 249 1680 729]`, accepted, alive, HUD
+  correct, no menu picture in 57 frames.
+- **Terrain panel on a second New City (from inside a maximized city):** PASS, `[1508 249 1680 729]`.
+- **Open flyout closes on resize:** PASS. `CLOSEFLY> replayed the category click`, flyout gone at 1200x850, one click
+  reopens it.
+- **Load City while maximized:** PASS for layout (Berlin: panel, bar, minimap, RCI docked). It was the path with the
+  double box above.
+- **Menu flash on early city frames:** not seen. Load City from the maximized menu gave 11 menu frames, then 37 city
+  frames over 15 s with no menu frame. Sampling is about 2.5 fps, so a flash shorter than ~400 ms can fall between grabs.
+
+Harness trap found on the way: running `re/tools/dismiss_tips.py` while the intro movie is up leaves GZ's capture
+pointer (`*(*(GZGraphicD+0x6cdb8)+0x30)+0x28`) set to a window that is later freed. The New City dialog's "Dificil" radio
+was allocated at that address, so every later click went to the radio, and the dialog's accept button looked dead
+(runs B and D). One posted `WM_LBUTTONUP` released it and the same click then accepted. Without dismiss_tips at the intro
+(run C) the accept works. Run dismiss_tips only once a city is up.

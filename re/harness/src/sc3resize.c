@@ -1671,6 +1671,16 @@ static int rz_win_alive(void *want) {
  * SC3RESIZE_DIALOGS=0 disables it. Moves go through the dialog's own vt+0xc8 SetRect (same size, so
  * FUN_1006d56c keeps its surface), then one cascade rebuilds the derived hit rects. */
 static int g_dialogs = 1;
+/* DLGKEEP (2026-10-11): a dialog that opens already centred on the CLIENT is left there. The "Cargando..."
+ * box is created centred on the client (measured maximized 1680x979: stale copy at [712 412], centre of
+ * the client for 256x154) and painted once before the 100 ms poll sees it. Moving it to the map-area centre
+ * [664 384] left that first copy on screen for the whole load, because nothing under it repaints until the
+ * new city presents (Load City and in-city New City, both maximized). SC3RESIZE_DLGKEEP=0 moves it as before.
+ * DLGAREA (2026-10-11): the map area is read from the live side panel and bar, which the first poll after a
+ * size change still sees at the OLD size. Measured: maximize put a 308x280 dialog at [348 232], the centre of
+ * the 1100x800 map area. For 3 s after a size change, a change of the map area alone re-centres a dialog
+ * still where we put it. SC3RESIZE_DLGAREA=0 re-centres on the size change only. */
+static int g_dlgkeep = 1, g_dlgarea = 1;
 #define DLG_MAX 24
 static struct { void *w; LONG placed[4]; LONG stock[4]; LONG rect[4]; int has_stock, vis, seen, rdock; LONG rdock_y, ew, eh; } g_dlg[DLG_MAX];
 static int g_dlg_n;
@@ -1685,7 +1695,8 @@ static int rz_dlg_place(void *w, const LONG *t) {
 }
 
 static void rz_dialogs_poll(LONG cw, LONG ch) {
-    static LONG lcw, lch;
+    static LONG lcw, lch, lax1, lay1;
+    static DWORD area_until;
     DWORD sui = (DWORD)GetModuleHandleA("SIMUI.DLL");
     DWORD exe = (DWORD)GetModuleHandleA(NULL);
     void *root = rz_ui_root();
@@ -1705,6 +1716,9 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
         LONG by = ((LONG *)((DWORD)g_hud_top + 0x14))[1];
         if (by > ch / 2 && by < ch) ay1 = by;
     }
+    if (sizechg) area_until = GetTickCount() + 3000;
+    else if (g_dlgarea && (ax1 != lax1 || ay1 != lay1) && (LONG)(GetTickCount() - area_until) < 0) sizechg = 1;
+    lax1 = ax1; lay1 = ay1;
     lists[nl++] = root;
     {   /* the HUD container: a root child of class SC3U.exe+0xd32d0 */
         void *head = *(void **)((DWORD)root + 0x34), *n;
@@ -1765,7 +1779,7 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
                 if (r[2] - r[0] == 172 && r[3] - r[1] >= 400) { g_dlg[e].rdock = 1; g_dlg[e].rdock_y = 60; }
             }
             g_dlg[e].seen = 1;
-            {   LONG w = r[2] - r[0], h = r[3] - r[1], t[4];
+            {   LONG w = r[2] - r[0], h = r[3] - r[1], t[4], was[4];
                 int place = 0;
                 LONG cx = (ax1 - w) / 2, cy = (ay1 - h) / 2;
                 if (cx < 0) cx = 0;
@@ -1791,9 +1805,14 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
                        is not was positioned at another size (dialogs are created once and reused, e.g.
                        snapshots re-opened at [584 309 1096 669]) and is centered like at any other size. */
                     int inside = r[0] >= 0 && r[1] >= 0 && r[2] <= cw && r[3] <= ch;
+                    int ccent = g_dlgkeep && !native && labs(r[0] - (cw - w) / 2) <= 1 && labs(r[1] - (ch - h) / 2) <= 1;
                     if (native && inside) {
                         memcpy(g_dlg[e].stock, r, sizeof(LONG) * 4); g_dlg[e].has_stock = 1;
                         memcpy(g_dlg[e].placed, r, sizeof(LONG) * 4);
+                    } else if (ccent) {                 /* DLGKEEP: the game centred it on the client, leave it */
+                        memcpy(g_dlg[e].placed, r, sizeof(LONG) * 4);
+                        logf("DLG> dialog 0x%08lX [%ld %ld %ld %ld] opened centred on the client %ldx%ld - kept",
+                             (DWORD)c, r[0], r[1], r[2], r[3], cw, ch);
                     } else { t[0] = cx; t[1] = cy; t[2] = cx + w; t[3] = cy + h; place = 1; }
                     g_dlg[e].vis = 1;
                 } else if (sizechg) {
@@ -1812,9 +1831,10 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
                         else memcpy(g_dlg[e].placed, r, sizeof(LONG) * 4);
                     }
                 }
+                memcpy(was, r, sizeof(was));   /* r is the live rect: SetRect rewrites it */
                 if (place && memcmp(t, r, sizeof(t)) && rz_dlg_place(c, t)) {
                     logf("DLG> dialog 0x%08lX [%ld %ld %ld %ld] -> [%ld %ld %ld %ld] (client %ldx%ld, map area %ldx%ld)",
-                         (DWORD)c, r[0], r[1], r[2], r[3], t[0], t[1], t[2], t[3], cw, ch, ax1, ay1);
+                         (DWORD)c, was[0], was[1], was[2], was[3], t[0], t[1], t[2], t[3], cw, ch, ax1, ay1);
                     moved++;
                 }
                 if (place) memcpy(g_dlg[e].placed, t, sizeof(t));
@@ -8285,6 +8305,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_SPEEDKEYS", v, sizeof(v))) g_speedkeys = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_KEYFOCUS", v, sizeof(v))) g_keyfocus = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MINICLASS", v, sizeof(v))) g_miniclass = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_DLGKEEP", v, sizeof(v))) g_dlgkeep = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_DLGAREA", v, sizeof(v))) g_dlgarea = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_BAR800", v, sizeof(v))) g_bar800 = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDREFLOW", v, sizeof(v))) g_hudreflow = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_CLOSEFLY", v, sizeof(v))) g_closefly = atoi(v);
