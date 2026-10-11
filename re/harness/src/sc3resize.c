@@ -4183,6 +4183,36 @@ static int g_miniclass = 1;
    +0x50/+0x60 after each post; it does not touch the pause depth, so a paused sim stays paused (owner call 2026-10-11:
    speed keys must not unpause, P does that). SC3RESIZE_SPEEDKEYS=0 disables. */
 static int g_speedkeys = 1;
+/* KEYFOCUS (2026-10-11): P and 1-4 are left to the game while a text field has keyboard focus, so a city or file name
+   can contain them. The GZGraphicD WndProc hands every key to the window manager (GZGraphicD+0x6cdb8 -> +0x30, vtable
+   GZWIND+0x2db80) at vt+0x68 [CONFIRMED @ GZGraphicD 0x10017e2f], which passes it to the in-game focus window at
+   +0x2c through its vt+0xc [CONFIRMED @ GZWIND 0x10020947]; the window's char handler is vt+0x1a8 [CONFIRMED @ SIMINIT
+   0x100181a1, event type 4]. Text fields are the classes whose char handler inserts text: single-line edits GZWIND
+   0x1002a8cc, SIMINIT 0x10030890, SIMUI 0x100a5f7c / 0x100adca0 (handler gated on byte +0x111 [CONFIRMED @ SIMINIT
+   0x1001d706, GZWIND 0x100053a9, SIMUI 0x1007cb69]) and the GZWIND multi-line text area 0x1002bf10. Measured live: the
+   save dialog's three name fields put a SIMINIT+0x30890 object at +0x2c, its file list a SIMINIT+0x3050c one, the city
+   view a SIMSPR+0x676ac one. SC3RESIZE_KEYFOCUS=0 disables (P and 1-4 then fire everywhere, as before). */
+static int g_keyfocus = 1;
+static int rz_text_focus(void) {
+    DWORD gz = (DWORD)GetModuleHandleA("GZGraphicD.dll"), gw = (DWORD)GetModuleHandleA("GZWIND.DLL");
+    DWORD si = (DWORD)GetModuleHandleA("SIMINIT.DLL"), su = (DWORD)GetModuleHandleA("SIMUI.DLL");
+    BYTE *win, *sink, *f;
+    DWORD vt;
+    if (!g_keyfocus || !gz) return 0;
+    __try {
+        win = *(BYTE **)(gz + 0x6cdb8);
+        if (!win || *(DWORD *)win != gz + 0x1f740) return 0;
+        sink = *(BYTE **)(win + 0x30);
+        if (!sink || !gw || *(DWORD *)sink != gw + 0x2db80) return 0;
+        f = *(BYTE **)(sink + 0x2c);
+        if (!f) return 0;
+        vt = *(DWORD *)f;
+        if (vt == gw + 0x2bf10) return 1;
+        if (vt == gw + 0x2a8cc || (si && vt == si + 0x30890) || (su && (vt == su + 0xa5f7c || vt == su + 0xadca0)))
+            return f[0x111] != 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
+    return 0;
+}
 /* Post a GZ message to the loaded city through the message service (sc3simrun gz_post). Returns the city, NULL if
    no city is loaded or the service is not the expected one. */
 static BYTE *rz_city_post(DWORD id, DWORD arg) {
@@ -6282,12 +6312,12 @@ static void rz_set_stored_rect(DWORD w, DWORD h) {
  * `wmsize_setrect` patch unnecessary under this mod. */
 static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     if (g_pausekey && wp == 'P' && (m == WM_KEYDOWN || m == WM_KEYUP) && GetKeyState(VK_CONTROL) >= 0 &&
-        GetKeyState(VK_MENU) >= 0 && GetKeyState(VK_SHIFT) >= 0) {        /* PAUSEKEY */
+        GetKeyState(VK_MENU) >= 0 && GetKeyState(VK_SHIFT) >= 0 && !rz_text_focus()) {        /* PAUSEKEY */
         if (m == WM_KEYUP || (lp & 0x40000000) || rz_pause_toggle()) return 0;
     }
     if (g_speedkeys && (m == WM_KEYDOWN || m == WM_KEYUP) && GetKeyState(VK_CONTROL) >= 0 &&
         GetKeyState(VK_MENU) >= 0 && GetKeyState(VK_SHIFT) >= 0 &&
-        ((wp >= '1' && wp <= '4') || (wp >= VK_NUMPAD1 && wp <= VK_NUMPAD4))) {   /* SPEEDKEYS */
+        ((wp >= '1' && wp <= '4') || (wp >= VK_NUMPAD1 && wp <= VK_NUMPAD4)) && !rz_text_focus()) {   /* SPEEDKEYS */
         int n = (wp >= VK_NUMPAD1) ? (int)(wp - VK_NUMPAD1) + 1 : (int)(wp - '1') + 1;
         if (m == WM_KEYUP || (lp & 0x40000000) || rz_speed_key(n)) return 0;
     }
@@ -7612,6 +7642,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_ZOOMKEYS", v, sizeof(v))) g_zoomkeys = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PAUSEKEY", v, sizeof(v))) g_pausekey = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_SPEEDKEYS", v, sizeof(v))) g_speedkeys = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_KEYFOCUS", v, sizeof(v))) g_keyfocus = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MINICLASS", v, sizeof(v))) g_miniclass = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_BAR800", v, sizeof(v))) g_bar800 = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDREFLOW", v, sizeof(v))) g_hudreflow = atoi(v);

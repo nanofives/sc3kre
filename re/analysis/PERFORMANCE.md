@@ -606,6 +606,13 @@ Sim threads outside the traffic waits: busy 11.3% of samples. Inclusive, mostly 
 ~2.5% driving SIMGEOM region scans `grid_query_point_in_window` 1.8% exclusive, the top exclusive item). Order-dependent
 (each placement changes the map), so not a worker-thread candidate. Also seen on the sim thread, not threaded: a trip
 issued from SC3U.exe `FUN_004bfe89` and a second router path through `FUN_100140f4`.
+Correction 2026-10-11: `FUN_100140f4` is SimTransit.dll (the only module with a tracker row there, and the only one
+with samples at +0x140f4..+0x14100 in the profile dumps). It is not a router: `push 0x200; call
+sc3_transit_alloc_node; pop ecx; ret`, the deque buffer allocator of the router's work queue, now
+`sc3_transit_alloc_dequebuf` (its pair `FUN_10014100` = `sc3_transit_free_dequebuf`) [CONFIRMED @ SimTransit 0x100140f4].
+In `sc3perf_prof_mtprof.txt` the return address after the allocator call (+0x140fe) is on the stack in 2508 worker
+samples (I3) and 3 sim-thread samples (I2); the free call's (+0x1410e) in 1309 worker samples. So that cost is
+STL node allocation inside routing, not a second routing path.
 
 Next lever (not built): smooth the traffic batch instead of routing it all on one day - keep an unbounded queue that the
 workers drain in the background while the clock runs, and flush only before the monthly stats pass `FUN_10009242`. It
