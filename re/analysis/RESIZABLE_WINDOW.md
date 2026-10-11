@@ -103,7 +103,7 @@ resize routine per-frame off a size mismatch, **without calling Init** (Init's `
 | 4 | `FUN_1000ee29(iso,8,8,0)` | grid B is 8x8 at EVERY resolution; **omitting this HANGS `FUN_10018cdf`** |
 | 5 | `FUN_10009efb` replay on `iso+0x74` (render target) | +0x08 guard cleared, original 8-arg tuple |
 | 6 | `FUN_10009efb` replay on `iso+0x4ec` (device surface) | **measured necessary** — the engine won't |
-| 7 | `FUN_10018cdf(bridge,0,b+0x78,b+0xa8,0,0)` | tile-cache refill + repaint (~47 ms) |
+| 7 | `FUN_10018cdf(bridge,0,b+0x78,b+0xa8,0,0)` | tile-cache refill + repaint (~47 ms on 256, ~1 s on 1024). **Skipped by default since 2026-10-11 together with step 11 (SKIPREFRESH, PERFORMANCE.md Finding 26)** |
 | 8 | `FUN_1000fa36(iso,1,0)` | re-register drawables from the persistent `iso+0x3a4`; omitting = terrain only (32 colours vs 463) |
 | 9 | present rect: erase+push `{0,0,w,h}` into `iso+0x4d0` (`FUN_1001084b`+`FUN_10010586`) | the DLL does this itself — `resize_rectfix` is Init-gated and does NOT fire here |
 
