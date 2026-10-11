@@ -4140,6 +4140,17 @@ static volatile LONG g_busy;           /* re-entrancy guard for the per-frame po
    refresh's own L1 take inside FUN_100184d9 still works. The pass runs from rz_wndproc with no locks held
    (DEFERRESIZE). SC3RESIZE_SIMLOCK=0 turns it off. Call with NULL to take; pass the result back to release. */
 static int g_simlock = 1;
+/* ONEREFRESH (2026-10-11): one map-wide refresh per resize instead of two. Both step 7 and step 11 call SIMSPR
+   FUN_10018cdf, and each call ends with a walk over all bridge+0xec x bridge+0xf0 cells (1,048,576 on a 1024 map,
+   occupant chain via iso vt+0xa0 / FUN_1001924c / FUN_1001a291) plus the whole-view repaint iso vt+0x144
+   [CONFIRMED @ SIMSPR 0x10018cdf]. Step 7 passes layer 0: it unregisters every occupant of the active layer
+   (FUN_1001879e), nulls bridge+0x28 and walks; step 11 then passes the base layer back, which re-registers every
+   occupant (FUN_100184d9) and walks again. Net effect of the pair = the same-layer forced refresh the game runs on a
+   data-view change that keeps the base layer (SetDataView FUN_100182ba -> FUN_10018cdf(base, rend, rend, 0, 1)):
+   FUN_100184d9 re-register through the renderer filter + repaint + one walk. So when the active layer already is
+   the base layer, step 7 is skipped and step 11 runs alone. 1 = that (default), 2 = skip both refreshes (diagnostic
+   only), 0 = both, as before. */
+static int g_onerefresh = 1;
 static BYTE *rz_sim_lock(BYTE *held) {
     typedef void (__fastcall *LK_FN)(BYTE *self, void *edx);
     BYTE *app, *city, *lk;
@@ -4409,6 +4420,10 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
     DWORD *v = (DWORD *)iso, *b = (DWORD *)g_bridge;
     DWORD gw = 0, gh = 0, a5[5], a2[2], a3[3], fa[5];
     DWORD R, B;
+    LARGE_INTEGER tq[7];   /* ONEREFRESH timing: [0]/[1] step 7, [2]/[3] step 8c, [4]/[5] step 11, [6] pass start */
+    int skip7;
+
+    QueryPerformanceCounter(&tq[6]);
 
     if (!ss || !gz) { logf("RZ   ABORT: SIMSPR/GZGraphicD not loaded"); return; }
 
@@ -4478,11 +4493,21 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
     g_rz_step = 6;
     rz_recreate_raster(B, "device-surface iso+0x4ec", w, ht, gz);
 
-    /* 7. the render lever. */
+    /* 7. the render lever. ONEREFRESH: skipped when the active layer is the base layer (step 11 then does the whole
+       refresh once, see g_onerefresh). With a non-base layer active the original pair runs, so the end state is the
+       one the pair always produced. */
     g_rz_step = 7;
-    fa[0] = 0; fa[1] = b[0x78 / 4]; fa[2] = b[0xa8 / 4]; fa[3] = 0; fa[4] = 0;
-    logf("RZ   FUN_10018cdf -> %d",
-         rz_thiscall(g_bridge, (void *)((DWORD)ss + RVA_BRIDGE_FILL), fa, 5));
+    QueryPerformanceCounter(&tq[0]);
+    skip7 = g_onerefresh && b[0x28 / 4] && b[0x28 / 4] == b[0x2c / 4];
+    if (skip7) {
+        logf("RZ   [step 7] ONEREFRESH=%d: skipped (active layer bridge+0x28 = base layer 0x%08lX)",
+             g_onerefresh, b[0x28 / 4]);
+    } else {
+        fa[0] = 0; fa[1] = b[0x78 / 4]; fa[2] = b[0xa8 / 4]; fa[3] = 0; fa[4] = 0;
+        logf("RZ   FUN_10018cdf -> %d",
+             rz_thiscall(g_bridge, (void *)((DWORD)ss + RVA_BRIDGE_FILL), fa, 5));
+    }
+    QueryPerformanceCounter(&tq[1]);
 
     /* 8. re-register the object drawables (buildings, roads).
        DEFECT B FIX (2026-08-29): step 8 used to call the LEAF FUN_1000fa36(iso,1,0) directly. That
@@ -4535,6 +4560,7 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
        iso+0x2c = ROTATION (corrected 2026-08-29). The sublayer primitives self-lock via iso+0x46c
        when async (iso+0x3c9), so no outer render lock is added here. EXPECT-OR-REFUSE: every pointer
        is IsBadReadPtr-gated and the grid dims are sanity-bounded; a bad cell is skipped, not chased. */
+    QueryPerformanceCounter(&tq[2]);
     {
         int zoom = (int)((DWORD *)iso)[0x28 / 4];
         int rot  = (int)((DWORD *)iso)[0x2c / 4];
@@ -4573,6 +4599,8 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
                  "(hide+show +0x38/+0x34 per cell)", rows, cols, occ, shown, badcell);
         }
     }
+
+    QueryPerformanceCounter(&tq[3]);
 
     /* 9. THE PRESENT RECT - DEFECT 1 FIX (2026-08-28), and my error was in the design, not the code.
        I documented step 9 as "already ships as resize_rectfix". It does NOT: that cave hooks INIT
@@ -4675,7 +4703,10 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
        true -> FUN_100184d9 re-register + the forced grid refresh both run.
        [CONFIRMED arg difference @ SIMSPR 0x10018cdf, 0x100182ba]; [UNCERTAIN] that it repairs the screen. */
     g_rz_step = 11;
-    {
+    QueryPerformanceCounter(&tq[4]);
+    if (g_onerefresh == 2) {
+        logf("RZ   [step 11] ONEREFRESH=2: skipped (diagnostic, no map-wide refresh at all)");
+    } else {
         DWORD layer = ((DWORD *)g_bridge)[0x2c / 4];   /* base layer  = *(bridge+0x2c) */
         DWORD rend  = ((DWORD *)g_bridge)[0x80 / 4];   /* base render = *(bridge+0x80) */
         if (!layer || IsBadReadPtr((void *)layer, 4) || !rend || IsBadReadPtr((void *)rend, 4)) {
@@ -4689,6 +4720,13 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
             logf("RZ   [step 11] returned - active layer bridge+0x28 = 0x%08lX",
                  ((DWORD *)g_bridge)[0x28 / 4]);
         }
+    }
+    QueryPerformanceCounter(&tq[5]);
+    {
+#define RZ_MS(a, z) ((double)(tq[z].QuadPart - tq[a].QuadPart) * 1000.0 / (double)g_freq.QuadPart)
+        logf("RZ   TIMING onerefresh=%d step7=%.1f ms%s step8c=%.1f ms step11=%.1f ms steps1-11=%.1f ms",
+             g_onerefresh, RZ_MS(0, 1), skip7 ? " (skipped)" : "", RZ_MS(2, 3), RZ_MS(4, 5), RZ_MS(6, 5));
+#undef RZ_MS
     }
 
     /* 12. HUD REFLOW - top-strip PROOF (2026-08-30). The HUD lays out once at construction and never
@@ -5922,6 +5960,7 @@ static void rz_poll(void) {
     DWORD *v, R, w, ht;
     RECT cr;
     BYTE *lk;
+    LARGE_INTEGER tp0, tp1, tp2;   /* ONEREFRESH timing: sim-lock wait and the pass */
 
     if (!g_bridge || IsBadReadPtr(g_bridge, 0xf4)) return;
     iso = (void *)((DWORD *)g_bridge)[0x18 / 4];
@@ -6181,7 +6220,9 @@ static void rz_poll(void) {
        process death. This is how we catch WHERE the v3 crash actually is. */
     g_rz_step = 0;
     g_exc_code = 0;
+    QueryPerformanceCounter(&tp0);
     lk = rz_sim_lock(NULL);
+    QueryPerformanceCounter(&tp1);
     __try {
         rz_do_resize(iso, w, ht);
         g_bridge_fresh = 0;
@@ -6195,6 +6236,10 @@ static void rz_poll(void) {
         rz_fault_diag(iso);
     }
     rz_sim_lock(lk);
+    QueryPerformanceCounter(&tp2);
+    logf("RZ   TIMING pass %lux%lu: simlock wait %.1f ms, pass %.1f ms (lock to unlock)", w, ht,
+         (double)(tp1.QuadPart - tp0.QuadPart) * 1000.0 / (double)g_freq.QuadPart,
+         (double)(tp2.QuadPart - tp1.QuadPart) * 1000.0 / (double)g_freq.QuadPart);
     InterlockedExchange(&g_busy, 0);
 }
 
@@ -7609,6 +7654,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_HOLD", v, sizeof(v))) g_hold = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_DEFERRESIZE", v, sizeof(v))) g_deferresize = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_SIMLOCK", v, sizeof(v))) g_simlock = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_ONEREFRESH", v, sizeof(v))) g_onerefresh = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_ZOOMKEYS", v, sizeof(v))) g_zoomkeys = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PAUSEKEY", v, sizeof(v))) g_pausekey = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_SPEEDKEYS", v, sizeof(v))) g_speedkeys = atoi(v);

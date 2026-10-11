@@ -56,12 +56,14 @@ def say(m):
 
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
-out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq SC3U.exe", "/FO", "CSV", "/NH"],
-                     capture_output=True, text=True).stdout
-if "SC3U" not in out:
-    say("SC3U not running")
+import pathlib as _pl
+sys.path.insert(0, str(_pl.Path(__file__).resolve().parent))
+import sc3io  # noqa: E402
+try:
+    pid = sc3io.game_pid()   # honours SC3_PID when several games run (mods_launch -multi)
+except Exception as e:  # noqa: BLE001
+    say(f"SC3U not running ({e})")
     raise SystemExit(0)
-pid = int(out.split(",")[1].strip('" '))
 found = []
 CB = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 def cb(h, _l):
