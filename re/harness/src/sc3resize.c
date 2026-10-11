@@ -4403,6 +4403,7 @@ static int rz_recreate_raster(DWORD obj, const char *name, DWORD w, DWORD ht, HM
     return 1;
 }
 
+static void rz_cellfix(void *iso);   /* DIRTCLIP + CELLFIX block */
 /* The routine. Runs on the game thread from the per-frame heartbeat. */
 static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
     HMODULE ss = GetModuleHandleA("SIMSPR.DLL"), gz = GetModuleHandleA("GZGraphicD.dll");
@@ -4461,6 +4462,7 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
     g_rz_step = 3;
     a2[0] = gw; a2[1] = gh;
     rz_thiscall(iso, (void *)((DWORD)ss + RVA_DIRTYGRID), a2, 2);
+    rz_cellfix(iso);   /* round the cell size up: no row/column may map past the grid (DIRTCLIP block) */
     g_rz_step = 4;
     a3[0] = 8; a3[1] = 8; a3[2] = 0;
     rz_thiscall(iso, (void *)((DWORD)ss + RVA_GRIDB), a3, 3);
@@ -6982,7 +6984,9 @@ static void patch_efa1_emptybucket(HMODULE ss) {
  * of killing the game: the faulting store did not happen, so nothing was overwritten. The function holds a
  * lock (global 0x100249f0) through a guard object in its own EH frame; SEH unwinding runs that frame's
  * handler, which releases it (checked with a forced fault). The first 20 faults are logged with the
- * surface, its pixel pointer and the rectangles, for the root cause. SC3RESIZE_DIRTGUARD=0 disables. */
+ * surface, its pixel pointer and the rectangles, for the root cause. SC3RESIZE_DIRTGUARD=0 disables.
+ * Root cause found 2026-10-11 and fixed by CELLFIX + DIRTCLIP below (dirty-grid cells past the view); this guard
+ * stays on as the fallback. */
 static int g_dirtguard = 1;
 static BYTE *g_dirt_tramp;
 static volatile LONG g_dirt_faults;
@@ -7089,6 +7093,100 @@ static DWORD WINAPI dirtguard_watcher(LPVOID p) {
     while (!(dm = GetModuleHandleA("SIMDIRT.DLL")) && ms++ < 3000) Sleep(100);
     if (dm) patch_dirtguard(dm); else logf("--- DIRTGUARD: SIMDIRT.DLL never loaded");
     return 0;
+}
+
+/* ================= DIRTCLIP + CELLFIX (2026-10-11): the root cause behind DIRTGUARD
+ * Reproduced with DIRTGUARD off on the Europolis 1024 city, sim running, 7th maximize (re/tools/dirtprobe.py,
+ * re/analysis/DIRTCRASH.md): the faulting terrain tile drew with clip [1672 984 1680 988] into the render
+ * target iso+0x74 allocated 1680x987 (979 + RZ_SURFACE_SLACK), lock depth 1, and the write landed on row 987,
+ * the first row past the allocation. Mechanism, all SIMSPR:
+ *   - FUN_100059fb picks the dirty-grid cell COUNT: a table for 640/800/1024/1152/1280 widths and
+ *     480/600/768/864/1024 heights, otherwise the first even count 12..24 that divides the size, else 8.
+ *     979 is odd, so the count is 8.  [CONFIRMED @ 0x100059fb]
+ *   - FUN_1000e2c0 sets the cell SIZE = extent / count, truncated: 979 / 8 = 122, so the grid covers 976 rows.
+ *     [CONFIRMED @ 0x1000e2c0, iso+0x374 / +0x378]
+ *   - FUN_1000d725 (iso vt+0x130, dirty-rect intake) maps rows 976..978 to cell row (978 / 122) = 8 of an
+ *     8-row grid: it sets the grid byte one row past the gw*gh allocation (iso+0x360) and passes the cell rect
+ *     rows 976..1098 to FUN_1000d0c5, which builds display items as (object rect) AND (cell rect), never
+ *     clipped to the view.  [CONFIRMED @ 0x1000d9a2..0x1000d9f1]
+ *   - FUN_1000dc17 draws those items with the item rect as the rasterizer clip, so a terrain polygon below the
+ *     view writes past the surface end. It faults only when the write crosses into an unmapped page, which is
+ *     why it is rare. The shipped game never meets this: its window sizes are all table sizes.
+ * CELLFIX: after the resize's FUN_1000e2c0 call, round the cell size UP, so (size - 1) / cell < count and no
+ * index leaves the grid. DIRTCLIP: at FUN_1000d0c5 entry, clamp the cell rect to the view rect iso+0x64 (the
+ * rect FUN_1000d725 already intersects every incoming rect with) and skip an empty one, so nothing is drawn
+ * outside the view whatever the cell math. SC3RESIZE_CELLFIX=0 / SC3RESIZE_DIRTCLIP=0 turn them off. */
+static int g_cellfix = 1, g_dirtclip = 1;
+static DWORD g_d0c5_ret;                 /* SIMSPR+0xd0cb, after the 6 stolen prologue bytes */
+static volatile LONG g_dirtclip_n, g_dirtclip_skip;
+
+static int __cdecl dirtclip_rect(DWORD iso, LONG *r) {
+    const LONG *v = (const LONG *)(iso + 0x64);
+    LONG n;
+    if (v[2] <= v[0] || v[3] <= v[1]) return 1;   /* no view rect yet: leave the call alone */
+    if (r[0] >= v[0] && r[1] >= v[1] && r[2] <= v[2] && r[3] <= v[3]) return 1;
+    n = InterlockedIncrement(&g_dirtclip_n);
+    if (n <= 10 || (n & 0x3ff) == 0)
+        logf("DIRTCLIP> #%ld cell rect [%ld %ld %ld %ld] outside view [%ld %ld %ld %ld] (cell %lux%lu, grid %lux%lu) - clamped",
+             n, r[0], r[1], r[2], r[3], v[0], v[1], v[2], v[3],
+             *(DWORD *)(iso + 0x374), *(DWORD *)(iso + 0x378), *(DWORD *)(iso + 0x364), *(DWORD *)(iso + 0x368));
+    if (r[0] < v[0]) r[0] = v[0];
+    if (r[1] < v[1]) r[1] = v[1];
+    if (r[2] > v[2]) r[2] = v[2];
+    if (r[3] > v[3]) r[3] = v[3];
+    if (r[2] <= r[0] || r[3] <= r[1]) { InterlockedIncrement(&g_dirtclip_skip); return 0; }
+    return 1;
+}
+
+/* FUN_1000d0c5 is __thiscall(iso, RECT *cell, int), ret 8. Both callers (0x1000d97e, 0x1000d9f1) pass a local
+ * rect they rebuild before every call, so clamping it in place is safe. */
+static __declspec(naked) void dirtclip_stub(void) {
+    __asm {
+        pushad
+        push dword ptr [esp + 32 + 4]   /* RECT* */
+        push ecx                        /* iso */
+        call dirtclip_rect
+        add  esp, 8
+        test eax, eax
+        popad                           /* POPAD leaves the flags alone */
+        jz   dc_skip
+        push ebp                        /* the 6 stolen bytes: push ebp / mov ebp,esp / push esi / mov esi,ecx */
+        mov  ebp, esp
+        push esi
+        mov  esi, ecx
+        jmp  dword ptr [g_d0c5_ret]
+    dc_skip:
+        ret  8
+    }
+}
+
+static void patch_dirtclip(HMODULE ss) {
+    static const BYTE pro[] = { 0x55, 0x8b, 0xec, 0x56, 0x8b, 0xf1 };
+    BYTE *f = (BYTE *)ss + 0xd0c5;
+    DWORD old;
+    if (!g_dirtclip) { logf("--- DIRTCLIP: disabled (SC3RESIZE_DIRTCLIP=0)"); return; }
+    if (memcmp(f, pro, sizeof(pro))) { logf("--- DIRTCLIP: SIMSPR+0xd0c5 differs from shipped - not installed"); return; }
+    g_d0c5_ret = (DWORD)f + sizeof(pro);
+    if (!VirtualProtect(f, sizeof(pro), PAGE_EXECUTE_READWRITE, &old)) return;
+    f[0] = 0xE9; *(DWORD *)(f + 1) = (DWORD)dirtclip_stub - (DWORD)(f + 5); f[5] = 0x90;
+    FlushInstructionCache(GetCurrentProcess(), f, sizeof(pro));
+    logf("--- DIRTCLIP: dirty-cell rects clamped to the view at SIMSPR+0xd0c5 (terrain never drawn past the surface)");
+}
+
+/* CELLFIX: called by rz_do_resize right after FUN_1000e2c0. */
+static void rz_cellfix(void *iso) {
+    DWORD *v = (DWORD *)iso;
+    LONG w = (LONG)v[0x5c / 4] - (LONG)v[0x54 / 4], h = (LONG)v[0x60 / 4] - (LONG)v[0x58 / 4];
+    DWORD gw = v[0x364 / 4], gh = v[0x368 / 4], cw, ch;
+    if (!g_cellfix || w <= 0 || h <= 0 || !gw || !gh) return;
+    cw = ((DWORD)w + gw - 1) / gw;
+    ch = ((DWORD)h + gh - 1) / gh;
+    if (cw != v[0x374 / 4] || ch != v[0x378 / 4])
+        logf("RZ   CELLFIX: dirty cell %lux%lu -> %lux%lu (%ldx%ld over a %lux%lu grid; truncated cells left %ld cols / %ld rows "
+             "outside the grid)", v[0x374 / 4], v[0x378 / 4], cw, ch, w, h, gw, gh,
+             w - (LONG)(gw * v[0x374 / 4]), h - (LONG)(gh * v[0x378 / 4]));
+    v[0x374 / 4] = cw;
+    v[0x378 / 4] = ch;
 }
 
 static void patch_gridb_clamp(HMODULE ss) {
@@ -7503,6 +7601,10 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
     patch_windowed(gz);
     patch_surfacefmt(gz);
     patch_gridb_clamp(ss);   /* FIX A: clamp the grid-B bucket index (OOB AV root cause) */
+    {   char v[8];
+        if (GetEnvironmentVariableA("SC3RESIZE_CELLFIX", v, sizeof(v))) g_cellfix = atoi(v);
+        if (GetEnvironmentVariableA("SC3RESIZE_DIRTCLIP", v, sizeof(v))) g_dirtclip = atoi(v); }
+    patch_dirtclip(ss);      /* the SIMDIRT 0x10013A8F crash: dirty cells past the view (DIRTCLIP block) */
     {   char v[8];
         if (GetEnvironmentVariableA("SC3RESIZE_DIRTGUARD", v, sizeof(v))) g_dirtguard = atoi(v); }
     CreateThread(NULL, 0, dirtguard_watcher, NULL, 0, NULL);

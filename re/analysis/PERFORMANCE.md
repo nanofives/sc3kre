@@ -392,7 +392,7 @@ Shipped anyway (correct, small): sc3perf `transit_clear` (marker grid cleared by
 1,838 -> 1,901 trips/s (+3%, inside the window-to-window spread of 12k-28k trips per 10 s). Days-per-second over
 90 s is NOT a usable metric here: it swung 0.15-0.76 with the same build, depending on the sim phase.
 
-## Finding 16 - crash one second after maximizing the 1024 city (SIMDIRT rasterizer) - guarded, root cause open
+## Finding 16 - crash one second after maximizing the 1024 city (SIMDIRT rasterizer) - FIXED 2026-10-11 (CELLFIX + DIRTCLIP)
 
 Owner, 2026-10-09 15:17: maximize at 697.5 s, sc3resize finished at 699.1 s, game dead at 700.2 s with a write
 AV at SIMDIRT `0x10013A8F` (`mov word ptr [ecx],ax`, ECX=0x18604496) in `FUN_10013556`
@@ -412,6 +412,15 @@ test: the surface pixel pointer replaced with the read-only page 0x7FFE0000 for 
 caught (rasterizers 0x10013556 and 0x100148d7), game kept drawing at 165 fps, the lock at SIMDIRT 0x100249f0
 free afterwards (LockCount -1, RecursionCount 0). The next real occurrence logs surface, pixel pointer and
 rectangles in sc3resize.log for the root cause.
+
+Root cause (2026-10-11, re/analysis/DIRTCRASH.md): reproduced with DIRTGUARD off on the 7th maximize. The tile
+clip was [1672 984 1680 988] on the 1680x987 render target (lock depth 1, live pointer): a clip below the
+surface, not a stale surface. SIMSPR sizes the dirty grid with FUN_100059fb (falls back to 8 cells when no even
+count 12..24 divides the size, 979 is odd) and FUN_1000e2c0 (cell = extent / count, truncated, 979 / 8 = 122).
+FUN_1000d725 then maps rows 976..978 to cell row 8 of an 8-row grid: it writes the grid byte past the block and
+passes cell rows 976..1098, which the display items use as the rasterizer clip. Fixed in sc3resize: CELLFIX
+rounds the cell size up after each resize, DIRTCLIP clamps cell rects to the view at SIMSPR FUN_1000d0c5.
+30 maximize cycles with the fix and the guard off: 0 faults. The same build with both fixes off faulted on cycle 8.
 
 ## Finding 17 - pollution only on the top-left quarter of a 1024 map (sc3bigcity ECOCURSOR, FIXED)
 
