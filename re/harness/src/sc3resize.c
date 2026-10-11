@@ -4169,6 +4169,63 @@ static BYTE *rz_sim_lock(BYTE *held) {
    window procedure hands the game VK_ADD / VK_SUBTRACT when it sees VK_OEM_PLUS (0xBB) / VK_OEM_MINUS (0xBD), which
    are the unshifted + and - keys on a Spanish layout. The numpad keys keep working. SC3RESIZE_ZOOMKEYS=0 disables. */
 static int g_zoomkeys = 1;
+/* PAUSEKEY (owner 2026-10-10): P toggles the pause, like the bottom bar's pause / play buttons. The hotkey table binds
+   plain P (VK 80) to cmd 24, which neither pauses nor resumes (posted live on a running city, 2026-10-10). The city
+   subscribes to 0xc2a35d7e (vt+0x20c, user pause depth city+0x140 += 1) and 0xc2a35d80 (vt+0x210, -= 1)
+   [CONFIRMED @ SIMCITY 0x10002fa6]; posted through the message service (sc3simrun gz_post) the bar's pause button lights
+   and unlights with them. Key down without Ctrl/Alt/Shift and not auto-repeat: depth 0 -> pause, else resume one level.
+   The P key message is swallowed so cmd 24 does not also run. SC3RESIZE_PAUSEKEY=0 disables. */
+static int g_pausekey = 1;
+static int g_miniclass = 1;
+/* SPEEDKEYS (owner 2026-10-11): 1-4 (top row and numpad) set the sim speed. The hotkey table binds 1-5 to cmds 84..76,
+   which change nothing (posted live: the clock speed stayed put). 0xc2684065 with arg N sets the clock: 1 = 10080
+   game-min/day (8571 ms per day), 2 = 43200 (2000 ms), 3 = 129600 (666 ms), 4 = 525600 (164 ms), measured at clock
+   +0x50/+0x60 after each post; it does not touch the pause depth, so a paused sim is also resumed (one level per press,
+   like P). SC3RESIZE_SPEEDKEYS=0 disables. */
+static int g_speedkeys = 1;
+/* Post a GZ message to the loaded city through the message service (sc3simrun gz_post). Returns the city, NULL if
+   no city is loaded or the service is not the expected one. */
+static BYTE *rz_city_post(DWORD id, DWORD arg) {
+    typedef int (__fastcall *GETSVC)(void *self, void *edx, DWORD a, DWORD b, void **out);
+    typedef int (__fastcall *POST)(void *self, void *edx, DWORD *msg, int now);
+    BYTE *exe = (BYTE *)GetModuleHandleA(NULL), *app, *city;
+    HMODULE simcity = GetModuleHandleA("SIMCITY.DLL"), gzsvc = GetModuleHandleA("GZServiceD.dll");
+    void *fw, *srv = NULL;
+    DWORD msg[4];
+    if (!simcity || !gzsvc) return NULL;
+    __try {
+        app = *(BYTE **)(exe + 0xfa86c);
+        if (!app) return NULL;
+        city = *(BYTE **)(app + 0x48);
+        if (!city || *(DWORD *)city != (DWORD)simcity + 0x13260) return NULL;    /* no city loaded */
+        fw = *(void **)(exe + 0xFAB74);
+        if (!fw) return NULL;
+        ((GETSVC)(*(DWORD **)fw)[0x10 / 4])(fw, NULL, 0x64063387, 0xC1085722, &srv);
+        if (!srv || *(DWORD *)srv != (DWORD)gzsvc + 0x14618) return NULL;
+        if (!id) return city;
+        msg[0] = id; msg[1] = arg; msg[2] = msg[3] = 0;
+        ((POST)(*(DWORD **)srv)[0x10 / 4])(srv, NULL, msg, 0);
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return NULL; }
+    return city;
+}
+static int rz_pause_toggle(void) {
+    BYTE *city = rz_city_post(0, 0);
+    DWORD depth;
+    if (!city) return 0;
+    depth = *(DWORD *)(city + 0x140);
+    rz_city_post(depth ? 0xc2a35d80 : 0xc2a35d7e, 0);
+    logf("PAUSEKEY> depth %lu -> %s", depth, depth ? "resume" : "pause");
+    return 1;
+}
+static int rz_speed_key(int n) {
+    BYTE *city = rz_city_post(0xc2684065, (DWORD)n);
+    DWORD depth;
+    if (!city) return 0;
+    depth = *(DWORD *)(city + 0x140);
+    if (depth) rz_city_post(0xc2a35d80, 0);
+    logf("SPEEDKEYS> speed %d%s", n, depth ? " + resume" : "");
+    return 1;
+}
 static int           g_deferresize = 1;
 static volatile LONG g_in_wndproc_pass, g_resize_posted;
 static int   g_wm_fixed;               /* the window has been subclassed */
@@ -6228,6 +6285,16 @@ static void rz_set_stored_rect(DWORD w, DWORD h) {
  * presenting the old rectangle. Doing it here in C is what makes the separate GZGraphicD
  * `wmsize_setrect` patch unnecessary under this mod. */
 static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
+    if (g_pausekey && wp == 'P' && (m == WM_KEYDOWN || m == WM_KEYUP) && GetKeyState(VK_CONTROL) >= 0 &&
+        GetKeyState(VK_MENU) >= 0 && GetKeyState(VK_SHIFT) >= 0) {        /* PAUSEKEY */
+        if (m == WM_KEYUP || (lp & 0x40000000) || rz_pause_toggle()) return 0;
+    }
+    if (g_speedkeys && (m == WM_KEYDOWN || m == WM_KEYUP) && GetKeyState(VK_CONTROL) >= 0 &&
+        GetKeyState(VK_MENU) >= 0 && GetKeyState(VK_SHIFT) >= 0 &&
+        ((wp >= '1' && wp <= '4') || (wp >= VK_NUMPAD1 && wp <= VK_NUMPAD4))) {   /* SPEEDKEYS */
+        int n = (wp >= VK_NUMPAD1) ? (int)(wp - VK_NUMPAD1) + 1 : (int)(wp - '1') + 1;
+        if (m == WM_KEYUP || (lp & 0x40000000) || rz_speed_key(n)) return 0;
+    }
     if (g_zoomkeys && (m == WM_KEYDOWN || m == WM_KEYUP)) {   /* ZOOMKEYS */
         if (wp == VK_OEM_PLUS) wp = VK_ADD;
         else if (wp == VK_OEM_MINUS) wp = VK_SUBTRACT;
@@ -6643,7 +6710,19 @@ static void __stdcall fnlog_enter(int idx, DWORD *f) {
                 }
             }
 
-            if (w >= 100 && w <= 400 && h >= 100 && h <= 400 && w < h * 2 && h < w * 2) {
+            /* MINICLASS (2026-10-10): geometry alone also matched DIALOGS. The Ordinances window
+               (374x226) passed the band, so every repaint of it while the sim ran (its costs update)
+               re-captured it as the minimap, alternating with the real one. The side panel's target
+               height and the bar's anchor follow g_mini, so both flipped (panel local 923 <-> 1081,
+               every button +-158 px, the bar's controls slid right) - owner: "the bottom bar moves
+               when a panel like ordinances is open, only while the simulation runs". Measured live:
+               captures of 0x22CA7298 [789 394 1163 620] interleaved with the minimap 0x0EB2C498.
+               The minimap does have a class: SIMUI+0xaa180, set by its ctor FUN_1004f90f
+               [CONFIRMED @ SIMUI 0x1004f90f] and the only window of it in a live tree walk.
+               SC3RESIZE_MINICLASS=0 restores the geometry-only match. */
+            DWORD suim = (DWORD)GetModuleHandleA("SIMUI.DLL");
+            if (w >= 100 && w <= 400 && h >= 100 && h <= 400 && w < h * 2 && h < w * 2 &&
+                (!g_miniclass || !suim || *(DWORD *)ecx == suim + 0xaa180)) {
 
                 if (g_mini != (void *)ecx) {
 
@@ -7535,6 +7614,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_DEFERRESIZE", v, sizeof(v))) g_deferresize = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_SIMLOCK", v, sizeof(v))) g_simlock = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_ZOOMKEYS", v, sizeof(v))) g_zoomkeys = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_PAUSEKEY", v, sizeof(v))) g_pausekey = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_SPEEDKEYS", v, sizeof(v))) g_speedkeys = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_MINICLASS", v, sizeof(v))) g_miniclass = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_BAR800", v, sizeof(v))) g_bar800 = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDREFLOW", v, sizeof(v))) g_hudreflow = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_CLOSEFLY", v, sizeof(v))) g_closefly = atoi(v);
