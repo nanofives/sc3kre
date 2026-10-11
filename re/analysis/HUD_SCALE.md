@@ -174,6 +174,13 @@ second time, so a guard now leaves game-sent nested mouse messages unmapped. Aft
 misfired, and the guard logged no nested message, so the cause is `[UNCERTAIN]` (the first build differed only
 in that guard and in not handling tooltips). Logged in the status file for the owner's hand test.
 
+**Update 2026-10-11 (task hudopt, `OPTIONS_DIALOG.md` section 5):** the second mapping was measured. A mouse move
+comes back through the QUEUE (not nested) about 15 ms later carrying the native point the mod produced, with the
+same message time, and was mapped again (`(1100,332) -> (1120,446) -> (1120,537)`, the enlarged "Preferencias"
+flyout icon hovered and clicked as "Guardar como"). Fixed with the REPOST guard (`SC3RESIZE_HUDSCALE_REPOST=0` to
+disable). Also found there and NOT fixed: an open flyout during a window resize with the HUD enlarged leaves a
+stale enlarged side panel.
+
 Not yet checked: drag on the minimap (pan) starting on it and leaving it, right-click on the HUD, the terrain
 editor / New City while enlarged, Load City while enlarged, 1024 maps with sc3bigcity, maximized at the owner's
 2048x1081 (factor 1.8), live resize drags with HUDSCALE on, the main menu (excluded by design, MENUBG owns it).

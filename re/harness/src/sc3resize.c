@@ -3614,6 +3614,10 @@ static double g_hs_s = 1.0;
 static LONG   g_hs_dlg[16][4];
 static int    g_hs_ndlg;
 static int    g_hs_capture, g_hs_depth, g_hs_nestlog;
+static int    g_hs_repost = 1, g_hs_repost_log, g_hs_last_ok;   /* SC3RESIZE_HUDSCALE_REPOST=0 disables the guard */
+static LPARAM g_hs_last_out;
+static DWORD  g_hs_last_t;
+static int    g_hs_mlog, g_hs_mlog_n;     /* SC3RESIZE_HUDSCALE_MLOG=1: log every mouse message the HUDSCALE path sees (diag) */
 static WORD  *g_hs_snap;
 static LONG   g_hs_snapcap;
 static LONG  *g_hs_xs, *g_hs_ys, *g_hs_xf, *g_hs_yf;   /* per column/row: source index, bilinear base + weight */
@@ -4137,8 +4141,10 @@ static void ho_add_controls(void *win) {
     LONG r[4];
     int es = ho_spanish(), okl, okg = 0, okc = 0, i;
     static const DWORD ids[5] = { HO_OFF, HO_FIT, HO_P125, HO_P150, HO_P200 };
-    const char *txt_es[5] = { "Normal", "Ajustar", "125%", "150%", "200%" };
-    const char *txt_en[5] = { "Normal", "Fit", "125%", "150%", "200%" };
+    /* trailing spaces widen the auto-sized options: the group spaces its columns by the widest option so far
+       (GZWIND FUN_1000337d), and without them the next column's radio touches the text before it */
+    const char *txt_es[5] = { "Normal   ", "Ajustar   ", "125%   ", "150%   ", "200%" };
+    const char *txt_en[5] = { "Normal   ", "Fit   ", "125%   ", "150%   ", "200%" };
     if (!sui || !win || IsBadReadPtr(win, 0x90)) return;
     if (ho_v(win, 0x78, 1, HO_GROUP, 0, 0, 0, 0)) { logf("HUDOPT> controls already in this window"); return; }
     fac = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85065))();
@@ -4174,6 +4180,13 @@ static void ho_add_controls(void *win) {
         gw = (void *)ho_v(grp, 0x0c, 0, 0, 0, 0, 0, 0);
         okg = (int)(ho_v(win, 0x34, 1, (DWORD)gw, 0, 0, 0, 0) & 0xff);
         if (!okg) ho_v(gw, 0x28, 0, 0, 0, 0, 0, 0);
+        else {
+            /* measured: once its options are in, the group's rect is 170 wide while its third column ends at 185,
+               so the tail of the last option took no clicks. Give it the full width back, parent-local (vt+0xc8). */
+            LONG *lr = (LONG *)((BYTE *)gw + 0x80);
+            logf("HUDOPT>   group rect before widening [%ld %ld %ld %ld]", lr[0], lr[1], lr[2], lr[3]);
+            ho_v(gw, 0xc8, 4, HO_X, HO_Y_GROUP, HO_X + HO_W, lr[3], 0);
+        }
         ho_v(grp, 0x08, 0, 0, 0, 0, 0, 0);
     }
 
@@ -4204,7 +4217,19 @@ static void ho_add_controls(void *win) {
         if (dumped++ < 2) {
             ho_log_child(win, HO_LABEL, "label");
             ho_log_child(win, HO_GROUP, "group");
-            for (i = 0; i < 5; i++) ho_log_child(win, ids[i], "option");
+            {   void *g = (void *)ho_v(win, 0x78, 1, HO_GROUP, 0, 0, 0, 0), *head, *n;   /* the options are the group's children */
+                int guard = 0;
+                head = (g && !IsBadReadPtr(g, 0x40)) ? *(void **)((BYTE *)g + 0x34) : NULL;
+                n = (head && !IsBadReadPtr(head, 4)) ? *(void **)head : NULL;
+                while (n && n != head && guard++ < 16 && !IsBadReadPtr(n, 0x0c)) {
+                    BYTE *c = *(BYTE **)((BYTE *)n + 8);
+                    if (c && !IsBadReadPtr(c, 0x90)) {
+                        LONG *l = (LONG *)(c + 0x80), *d = (LONG *)(c + 0x14);
+                        logf("HUDOPT>   option local [%ld %ld %ld %ld] abs [%ld %ld %ld %ld]", l[0], l[1], l[2], l[3], d[0], d[1], d[2], d[3]);
+                    }
+                    n = *(void **)n;
+                }
+            }
             ho_log_child(win, HO_SMOOTH, "smooth");
             ho_log_child(win, 0x02F95AF8, "game checkbox");
             ho_log_child(win, 0x02F95AD8, "game OK");
@@ -7267,7 +7292,26 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
        carries native coordinates, and mapping it again moved a flyout-item click onto the emergency button. */
     if (g_hudscale && !g_mb_active && m >= WM_MOUSEMOVE && m <= WM_MBUTTONDBLCLK) {
         LRESULT r;
-        if (g_hs_depth == 0) { if (g_hs_n > 0) rz_hs_mouse(m, &lp); }
+        if (g_hs_mlog && g_hs_mlog_n < 400) {
+            g_hs_mlog_n++;
+            logf("HSMLOG> in  msg 0x%04X (%d,%d) wp 0x%lx depth %d n %ld t %lu", m, (int)(short)LOWORD(lp),
+                 (int)(short)HIWORD(lp), (DWORD)wp, g_hs_depth, g_hs_n, GetMessageTime());
+        }
+        if (g_hs_depth == 0 && g_hs_n > 0) {
+            /* REPOST (task hudopt 2026-10-11): a WM_MOUSEMOVE carrying exactly the native point we produced for the
+               previous message comes back through the queue ~15 ms later (measured: in (1100,332) -> native
+               (1120,446), then a queued move at (1120,446); the physical cursor never moved). Mapping it again
+               put the hover two flyout items lower ("Guardar como" over "Preferencias") and the click opened
+               nothing. Such a move already holds native coordinates: pass it through. =0 maps it like any other. */
+            if (g_hs_repost && m == WM_MOUSEMOVE && g_hs_last_ok && lp == g_hs_last_out &&
+                GetTickCount() - g_hs_last_t < 500) {
+                if (g_hs_repost_log < 10) { g_hs_repost_log++;
+                    logf("HUDSCALE> queued move at our last native point (%d,%d) left unmapped",
+                         (int)(short)LOWORD(lp), (int)(short)HIWORD(lp)); }
+            } else if (rz_hs_mouse(m, &lp)) {
+                g_hs_last_out = lp; g_hs_last_ok = 1; g_hs_last_t = GetTickCount();
+            }
+        }
         else if (m != WM_MOUSEMOVE && g_hs_nestlog < 20) {
             g_hs_nestlog++;
             logf("HUDSCALE> nested mouse msg 0x%04X at (%d,%d) left as is (sent by the game while handling one)",
@@ -8684,6 +8728,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE", v, sizeof(v))) { g_hudscale = atoi(v); g_ho_env |= 1; }
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_FILTER", v, sizeof(v))) { g_hs_filter = atoi(v); g_ho_env |= 2; }
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_KEY", v, sizeof(v))) g_hs_key = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_MLOG", v, sizeof(v))) g_hs_mlog = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_REPOST", v, sizeof(v))) g_hs_repost = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUBGSTOCK", v, sizeof(v))) g_menubg_stock = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HOLD", v, sizeof(v))) g_hold = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_DEFERRESIZE", v, sizeof(v))) g_deferresize = atoi(v);
