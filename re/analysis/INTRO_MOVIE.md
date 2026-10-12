@@ -62,3 +62,12 @@ SC3U: `FUN_00429f95`, `FUN_0043ee87`, `FUN_0043f1fd`, `FUN_0043f36d`, `FUN_0043f
 UV.DLL: `uV_Open`, `FUN_100061f0`, `FUN_10005c40`, `FUN_10004560`, `FUN_100049c0`, `FUN_10006a40`, `FUN_10007030`,
 `FUN_10006900`, `FUN_10006860`, `FUN_100065a0`.
 GZGraphicD: `FUN_100185f5` (ClientToScreen of a window rect; not the intro path).
+
+## Decision
+
+Owner design call, 2026-10-12: integer scaling is the default (`SC3RESIZE_INTRO=1`), fill-to-window stays as the
+opt-in `SC3RESIZE_INTRO=2`.
+
+DPI (owner decision: the game becomes per-monitor DPI-aware, child windowed): awareness is set in DllMain before the
+window exists, so client rect, screen metrics and primary are all physical and the ratio branch stays off. No change
+needed. The >100% case is not run (dev PC at 100%).

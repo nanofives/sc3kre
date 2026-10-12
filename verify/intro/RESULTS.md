@@ -63,3 +63,8 @@ like after the intro (display asleep).
 - Owner laptop: not measured. If its desktop runs at 16bpp, or Windows applies the DWM 16-bit mitigation layer to
   SC3U.exe, the codec doubles natively and INTRO stays out (logs `stock path (bpp 16 ...)`). If the laptop uses display
   scaling above 100%, the client-to-primary mapping uses surface/screen ratios that were not tested here.
+
+## Owner decision (2026-10-12, via orchestrator)
+
+Default stays integer scaling: 1x in the 800x600 window, 2x when it fits. `SC3RESIZE_INTRO=2` (fill the window at any
+scale) stays available as an option. `SC3RESIZE_INTRO=0` = stock.
