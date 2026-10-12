@@ -9782,6 +9782,137 @@ static void patch_lcenter(HMODULE ss) {
     logf("--- LCENTER: lcenter=1, CenterOnTile centres on the visible map area (SIMSPR+0x1d09c)");
 }
 
+/* TIPCURSOR (task toolicon, owner 2026-10-12: "el ícono de la herramienta seleccionada está renderizando sobre el valor
+ * de lo que estoy construyendo"). The cost label next to the cursor is the game's tooltip window (SC3U class 0x4d3bcc),
+ * placed centred 2 px below an anchor box. The city view builds that box as [mx, my, mx+0x2c, my+0x2c] from the mouse
+ * point (view +0x204/+0x208), or [mx-0x2c, my-0x20, mx, my] when the box leaves the view [CONFIRMED @ SIMSPR
+ * 0x1004a3d7, the immediates at 0x1004a47b/0x1004a486/0x1004a4d5/0x1004a4e0], and posts it with message 0x22c010d0
+ * [CONFIRMED @ SC3U 0x00443952 -> 0x00443aba -> 0x004430f3]. 0x2c = a 32 px cursor + 12. The tool cursors are 32x32
+ * .cur files with the hotspot at (0,0), but Windows draws them at the accessibility pointer size: on the owner's PC
+ * (CursorBaseSize 80, pointer size 4, 125%) the road cursor is drawn 80x80 physical, measured with DXGI desktop
+ * duplication both DPI-aware and unaware, so the label at +46 sits inside the icon (verify/toolicon/RESULTS.md). That is
+ * stock behaviour at that pointer size; per-monitor DPI awareness only moves the label 11 px closer (46 vs 57.5).
+ * Fix: the same box sized from the drawn pointer, B = pointer / (physical px per game px) + 12; when the box leaves the
+ * view, the label goes above-left of the cursor instead of onto its hotspot. At the default pointer size B = 44 and the
+ * flip is the shipped one, so the stock layout is unchanged.
+ * Pointer size = max(HKCU\Control Panel\Cursors CursorBaseSize, SM_CYCURSOR at the monitor dpi). Measured only at dpi
+ * 120 with base 80 (drawn 80); other dpi/size pairs are [UNCERTAIN] (UNCERTAINTIES.md), SC3RESIZE_TIPCURSOR_PX=<n> sets
+ * the pointer size by hand. SC3RESIZE_TIPCURSOR=0 leaves the game code alone. */
+static int g_tipcursor = 1, g_tipcursor_px;
+static DWORD g_tip_ret1, g_tip_ret2;     /* SIMSPR+0x4a495, +0x4a4ef */
+static LONG g_tip_box = 0x2c, g_tip_uptop = 0x20, g_tip_upbot = 0;   /* shipped values until the first update */
+static DWORD g_tip_tick;
+static LONG g_tip_logged = -1;
+
+static void __stdcall tip_update(void) {
+    typedef LONG (WINAPI *REGGET)(HKEY, LPCSTR, LPCSTR, DWORD, LPDWORD, PVOID, LPDWORD);
+    typedef LONG (WINAPI *MONDPI)(HMONITOR, int, UINT *, UINT *);
+    typedef HANDLE (WINAPI *SETCTX)(HANDLE);
+    static REGGET rg; static MONDPI md; static SETCTX sc; static RZ_DPIWIN dw; static RZ_SMFORDPI sm; static int init;
+    DWORD now = GetTickCount(), base = 32, cb = sizeof(base);
+    UINT mdx = 96, mdy = 96, wdpi = 96;
+    LONG ptr, box;
+    double scale;
+    if (g_tip_tick && now - g_tip_tick < 1000) return;   /* settings can change while playing: re-read once a second */
+    g_tip_tick = now ? now : 1;
+    if (!init) {
+        HMODULE u = GetModuleHandleA("user32.dll"), a = LoadLibraryA("advapi32.dll"), sh = LoadLibraryA("shcore.dll");
+        init = 1;
+        rg = a ? (REGGET)GetProcAddress(a, "RegGetValueA") : NULL;
+        md = sh ? (MONDPI)GetProcAddress(sh, "GetDpiForMonitor") : NULL;
+        sc = (SETCTX)GetProcAddress(u, "SetThreadDpiAwarenessContext");
+        dw = (RZ_DPIWIN)GetProcAddress(u, "GetDpiForWindow");
+        sm = (RZ_SMFORDPI)GetProcAddress(u, "GetSystemMetricsForDpi");
+    }
+    if (rg && rg(HKEY_CURRENT_USER, "Control Panel\\Cursors", "CursorBaseSize", 0x18 /* RRF_RT_REG_DWORD */, NULL,
+                 &base, &cb) != ERROR_SUCCESS) base = 32;
+    if (g_hwnd) {
+        HANDLE prev = sc ? sc((HANDLE)(LONG_PTR)-4) : NULL;   /* per-monitor v2 for this query: an unaware thread reads 96 */
+        if (md) md(MonitorFromWindow(g_hwnd, MONITOR_DEFAULTTONEAREST), 0, &mdx, &mdy);
+        if (prev) sc(prev);
+        if (dw) wdpi = dw(g_hwnd);   /* 96 for an unaware window (game px are logical), the monitor dpi when aware */
+    }
+    if (!mdy) mdy = 96;
+    if (!wdpi) wdpi = 96;
+    ptr = (LONG)base;
+    if (sm && (LONG)sm(SM_CYCURSOR, mdy) > ptr) ptr = sm(SM_CYCURSOR, mdy);
+    if (g_tipcursor_px > 0) ptr = g_tipcursor_px;
+    scale = (double)mdy / (double)wdpi;                    /* physical px per game px */
+    if (scale < 1.0) scale = 1.0;
+    box = (LONG)((double)ptr / scale + 0.999) + 12;
+    if (box <= 0x2c) { g_tip_box = 0x2c; g_tip_uptop = 0x20; g_tip_upbot = 0; }          /* shipped */
+    else             { g_tip_box = box;  g_tip_uptop = 36;   g_tip_upbot = 20; }          /* label above-left */
+    if (g_tip_logged != g_tip_box) {
+        g_tip_logged = g_tip_box;
+        logf("TIPCURSOR> pointer %ld px (CursorBaseSize %lu%s), monitor dpi %u, window dpi %u -> anchor box %ld game px%s",
+             ptr, base, g_tipcursor_px > 0 ? ", SC3RESIZE_TIPCURSOR_PX" : "", mdy, wdpi, g_tip_box,
+             g_tip_box == 0x2c ? " (shipped)" : "");
+    }
+}
+
+/* Replaces SIMSPR 0x1004a475..0x1004a494 (mov ecx,[ebx+208h] / lea edx,[eax+2Ch] / mov [esi],eax / mov [ebx+14Ch],ecx /
+ * lea edi,[ecx+2Ch] / mov [ebx+150h],edx / mov [ebx+154h],edi). eax = mx, ebx = the view, esi = ebx+148h. */
+static __declspec(naked) void tip_stub1(void) {
+    __asm {
+        pushad
+        call tip_update
+        popad
+        mov  ecx, [ebx+208h]
+        mov  edx, eax
+        add  edx, [g_tip_box]
+        mov  [esi], eax
+        mov  [ebx+14Ch], ecx
+        mov  edi, ecx
+        add  edi, [g_tip_box]
+        mov  [ebx+150h], edx
+        mov  [ebx+154h], edi
+        jmp  dword ptr [g_tip_ret1]
+    }
+}
+
+/* Replaces SIMSPR 0x1004a4d5..0x1004a4ee, the flip (lea edx,[eax-2Ch] / mov [ebx+150h],eax / mov [esi],edx /
+ * lea edx,[ecx-20h] / mov [ebx+14Ch],edx / mov [ebx+154h],ecx). eax = mx, ecx = my; edx is dead after it. */
+static __declspec(naked) void tip_stub2(void) {
+    __asm {
+        mov  [ebx+150h], eax
+        mov  edx, eax
+        sub  edx, [g_tip_box]
+        mov  [esi], edx
+        mov  edx, ecx
+        sub  edx, [g_tip_uptop]
+        mov  [ebx+14Ch], edx
+        mov  edx, ecx
+        sub  edx, [g_tip_upbot]
+        mov  [ebx+154h], edx
+        jmp  dword ptr [g_tip_ret2]
+    }
+}
+
+static void patch_tipcursor(HMODULE ss) {
+    static const BYTE o1[32] = { 0x8b, 0x8b, 0x08, 0x02, 0x00, 0x00, 0x8d, 0x50, 0x2c, 0x89, 0x06, 0x89, 0x8b, 0x4c, 0x01,
+                                 0x00, 0x00, 0x8d, 0x79, 0x2c, 0x89, 0x93, 0x50, 0x01, 0x00, 0x00, 0x89, 0xbb, 0x54, 0x01,
+                                 0x00, 0x00 };
+    static const BYTE o2[26] = { 0x8d, 0x50, 0xd4, 0x89, 0x83, 0x50, 0x01, 0x00, 0x00, 0x89, 0x16, 0x8d, 0x51, 0xe0, 0x89,
+                                 0x93, 0x4c, 0x01, 0x00, 0x00, 0x89, 0x8b, 0x54, 0x01, 0x00, 0x00 };
+    BYTE *f1 = (BYTE *)ss + 0x4a475, *f2 = (BYTE *)ss + 0x4a4d5;
+    DWORD old;
+    int i;
+    if (!g_tipcursor) { logf("--- TIPCURSOR: disabled (SC3RESIZE_TIPCURSOR=0) - cost label 46 px below the cursor point"); return; }
+    if (memcmp(f1, o1, sizeof(o1)) || memcmp(f2, o2, sizeof(o2))) {
+        logf("--- TIPCURSOR: SIMSPR+0x4a475/+0x4a4d5 differ from shipped - not installed"); return;
+    }
+    g_tip_ret1 = (DWORD)f1 + sizeof(o1);
+    g_tip_ret2 = (DWORD)f2 + sizeof(o2);
+    if (!VirtualProtect(f1, 0x4a4ef - 0x4a475, PAGE_EXECUTE_READWRITE, &old)) return;
+    f1[0] = 0xE9; *(DWORD *)(f1 + 1) = (DWORD)tip_stub1 - (DWORD)(f1 + 5);
+    for (i = 5; i < (int)sizeof(o1); i++) f1[i] = 0x90;
+    f2[0] = 0xE9; *(DWORD *)(f2 + 1) = (DWORD)tip_stub2 - (DWORD)(f2 + 5);
+    for (i = 5; i < (int)sizeof(o2); i++) f2[i] = 0x90;
+    VirtualProtect(f1, 0x4a4ef - 0x4a475, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), f1, 0x4a4ef - 0x4a475);
+    logf("--- TIPCURSOR: tipcursor=1, the cost label's anchor box follows the drawn pointer size (SIMSPR+0x4a475, +0x4a4d5)");
+}
+
 /* ZOOMCENTER (task leftclick, owner design call 2026-10-12: zoom centres on the map area like the left click).
  * The zoom keys and the rotate keys call the iso view's zoom in / zoom out / rotate methods (vtable 0x10063390 slots
  * +0x60 FUN_1001d2d6, +0x64 FUN_1001d365, +0x70 FUN_1001d3f3, +0x74 FUN_1001d47b); the generic set (+0x6c FUN_1001d1d9)
@@ -10522,6 +10653,10 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
     {   char v[8];
         if (GetEnvironmentVariableA("SC3RESIZE_ZOOMCENTER", v, sizeof(v))) g_zoomcenter = atoi(v); }
     patch_zoomcenter(ss);    /* zoom / rotate keep the map-area centre tile (ZOOMCENTER block) */
+    {   char v[8];
+        if (GetEnvironmentVariableA("SC3RESIZE_TIPCURSOR", v, sizeof(v))) g_tipcursor = atoi(v);
+        if (GetEnvironmentVariableA("SC3RESIZE_TIPCURSOR_PX", v, sizeof(v))) g_tipcursor_px = atoi(v); }
+    patch_tipcursor(ss);     /* cost label clear of a large pointer (TIPCURSOR block) */
     {   char v[8];
         if (GetEnvironmentVariableA("SC3RESIZE_DIRTGUARD", v, sizeof(v))) g_dirtguard = atoi(v); }
     CreateThread(NULL, 0, dirtguard_watcher, NULL, 0, NULL);
