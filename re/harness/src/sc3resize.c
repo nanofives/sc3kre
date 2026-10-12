@@ -9052,6 +9052,214 @@ static void patch_dirtclip(HMODULE ss) {
     logf("--- DIRTCLIP: dirty-cell rects clamped to the view at SIMSPR+0xd0c5 (terrain never drawn past the surface)");
 }
 
+/* LCENTER (task leftclick, owner 2026-10-12: "el click izquierdo en el mapa para desplazarse no se adapta a la ventana").
+ * A left click on the map (default tool, SIMSPR FUN_10043540), a left-drag (one call on the press) and a minimap click
+ * (SIMUI+0x5090c) all call cISC3CityViewIso vt+0x54 = SIMSPR FUN_1001d039 CenterOnTile(tx, ty, flag). It puts the tile at
+ * world - (+0x20 >> 1, +0x24 >> 1) [CONFIRMED @ SIMSPR 0x1001d09c], and +0x20/+0x24 is the stored 704x544 that the
+ * resize never changes, so at any size the tile lands at view point (352, 272): maximized at 1680x979 a click on the
+ * map-area centre moved the camera (+448, +192) (verify/leftclick/PRE.md). The stub subtracts half the VISIBLE map area
+ * instead: right = the docked side panel's left edge, bottom = the bar's top, else stored size + (client - 800x600)
+ * (sc3overscroll true_center's rule); with HUDSCALE on, the edges the enlarged HUD covers. At 800x600 it is stock.
+ * SC3RESIZE_LCENTER=0 leaves the function alone. */
+static int g_lcenter = 1;
+static DWORD g_d09c_ret;                 /* SIMSPR+0x1d0b5, after the 25 stolen bytes */
+static volatile LONG g_lcenter_n;
+
+static void rz_lcenter_area(LONG cw, LONG ch, LONG w0, LONG h0, LONG *w, LONG *h) {
+    LONG ax1 = -1, ay1 = -1;
+    *w = w0; *h = h0;
+    if (cw <= 0 || ch <= 0 || (cw == NAT_W && ch == NAT_H)) return;
+    if (g_side_top && !IsBadReadPtr(g_side_top, 0x24)) {
+        LONG sx = ((LONG *)((DWORD)g_side_top + 0x14))[0];
+        if (sx > cw / 2 && sx < cw) ax1 = sx;
+    }
+    if (g_hud_top && !IsBadReadPtr(g_hud_top, 0x24)) {
+        LONG by = ((LONG *)((DWORD)g_hud_top + 0x14))[1];
+        if (by > ch / 2 && by < ch) ay1 = by;
+    }
+    if (ax1 < 0) ax1 = w0 + (cw - NAT_W);
+    if (ay1 < 0) ay1 = h0 + (ch - NAT_H);
+    if (g_hudscale && g_hs_n > 0 && g_hs_s > 1.0 && g_hs_cw == cw && g_hs_ch == ch) {   /* enlarged about the corner */
+        ax1 = cw - (LONG)(g_hs_s * (double)(cw - ax1) + 0.5);
+        ay1 = ch - (LONG)(g_hs_s * (double)(ch - ay1) + 0.5);
+    }
+    if (ax1 < 64 || ay1 < 64) return;
+    *w = ax1; *h = ay1;
+}
+
+static void __stdcall lcenter_sub(BYTE *view, LONG *wx, LONG *wy) {
+    LONG w0 = *(LONG *)(view + 0x20), h0 = *(LONG *)(view + 0x24), w, h, cw = 0, ch = 0, n;
+    RECT rc;
+    if (g_hwnd && GetClientRect(g_hwnd, &rc)) { cw = rc.right - rc.left; ch = rc.bottom - rc.top; }
+    rz_lcenter_area(cw, ch, w0, h0, &w, &h);
+    *wx -= (LONG)((DWORD)w >> 1);
+    *wy -= (LONG)((DWORD)h >> 1);
+    n = InterlockedIncrement(&g_lcenter_n);
+    if (n <= 12 || (n & 0x3f) == 0)
+        logf("LCENTER> #%ld tile (%ld,%ld) centred on the map area %ldx%ld (stored %ldx%ld, client %ldx%ld)",
+             n, *(LONG *)(view + 0xb0), *(LONG *)(view + 0xb4), w, h, w0, h0, cw, ch);
+}
+
+/* Replaces SIMSPR 0x1001d09c..0x1001d0b4: mov eax,[esi+20h] / push [ebp+10h] / shr eax,1 / sub [ebp-8],eax /
+ * mov eax,[esi+24h] / mov ecx,[esi+158h] / shr eax,1 / sub [ebp-4],eax. esi = the view, [ebp-8]/[ebp-4] = the tile's
+ * world position. The code after it reloads eax from [ecx], so eax is free. */
+static __declspec(naked) void lcenter_stub(void) {
+    __asm {
+        pushad
+        lea  eax, [ebp-4]
+        push eax
+        lea  eax, [ebp-8]
+        push eax
+        push esi
+        call lcenter_sub
+        popad
+        push dword ptr [ebp+10h]
+        mov  ecx, [esi+158h]
+        jmp  dword ptr [g_d09c_ret]
+    }
+}
+
+static void patch_lcenter(HMODULE ss) {
+    static const BYTE orig[25] = { 0x8b, 0x46, 0x20, 0xff, 0x75, 0x10, 0xd1, 0xe8, 0x29, 0x45, 0xf8, 0x8b, 0x46,
+                                   0x24, 0x8b, 0x8e, 0x58, 0x01, 0x00, 0x00, 0xd1, 0xe8, 0x29, 0x45, 0xfc };
+    BYTE *f = (BYTE *)ss + 0x1d09c;
+    DWORD old;
+    int i;
+    if (!g_lcenter) { logf("--- LCENTER: disabled (SC3RESIZE_LCENTER=0) - clicks centre on the stored 704x544"); return; }
+    if (memcmp(f, orig, sizeof(orig))) { logf("--- LCENTER: SIMSPR+0x1d09c differs from shipped - not installed"); return; }
+    g_d09c_ret = (DWORD)f + sizeof(orig);
+    if (!VirtualProtect(f, sizeof(orig), PAGE_EXECUTE_READWRITE, &old)) return;
+    f[0] = 0xE9; *(DWORD *)(f + 1) = (DWORD)lcenter_stub - (DWORD)(f + 5);
+    for (i = 5; i < (int)sizeof(orig); i++) f[i] = 0x90;
+    VirtualProtect(f, sizeof(orig), old, &old);
+    FlushInstructionCache(GetCurrentProcess(), f, sizeof(orig));
+    logf("--- LCENTER: lcenter=1, CenterOnTile centres on the visible map area (SIMSPR+0x1d09c)");
+}
+
+/* ZOOMCENTER (task leftclick, owner design call 2026-10-12: zoom centres on the map area like the left click).
+ * The zoom keys and the rotate keys call the iso view's zoom in / zoom out / rotate methods (vtable 0x10063390 slots
+ * +0x60 FUN_1001d2d6, +0x64 FUN_1001d365, +0x70 FUN_1001d3f3, +0x74 FUN_1001d47b); the generic set (+0x6c FUN_1001d1d9)
+ * runs at city load. All pass the stored centre tile +0xb0/+0xb4 to the camera, which ends in FUN_10006752 (zoom) /
+ * FUN_10006a55 (rotate). Both put that tile at world - (camera rect +0x64..+0x70) / 2 [CONFIRMED @ SIMSPR 0x1000688d,
+ * 0x10006b0f], and that rect is the WHOLE client (800x600 stock, 1680x979 read live maximized), while the view's own
+ * centre (CenterOnTile, Translate's pick) is the map area's: (352,272) at 800x600. Two changes: the two half-rect sites
+ * use half the map area (rz_lcenter_area), and the four user methods are wrapped (vtable slots) so the stored tile is
+ * first refreshed with the game's own pick (FUN_1000902f, mode 0 then 1, as Translate does) at the map-area centre: the
+ * tile was stale after a window resize (measured). A failed pick (centre past the map edge) keeps the stored tile. The
+ * load-time set is NOT refreshed: its tile is the saved city centre (refreshing it moved the loaded view, measured).
+ * SC3RESIZE_ZOOMCENTER=0 stock; 1 (default) at every size; 2 only when the client is not 800x600. */
+static int g_zoomcenter = 1;
+static DWORD g_688d_ret, g_6b0f_ret, g_zc_orig[4];   /* original vt+0x60, +0x64, +0x70, +0x74 */
+typedef int (__fastcall *PFN_RzPick)(void *, void *, int, int, DWORD *, DWORD *, int, int *, int);
+static PFN_RzPick g_rz_pick;
+static volatile LONG g_zc_n;
+
+static int rz_zc_area(LONG *w, LONG *h) {   /* 0 = leave this call stock */
+    RECT rc;
+    LONG cw, ch;
+    if (!g_zoomcenter || !g_hwnd || !GetClientRect(g_hwnd, &rc)) return 0;
+    cw = rc.right - rc.left; ch = rc.bottom - rc.top;
+    if (cw <= 0 || ch <= 0 || (g_zoomcenter == 2 && cw == NAT_W && ch == NAT_H)) return 0;
+    rz_lcenter_area(cw, ch, NAT_W - 96, NAT_H - 56, w, h);   /* 704x544 = the view's stored size, read live */
+    return 1;
+}
+
+static int __stdcall zc_delta(DWORD *cam, LONG *xslot) {   /* returns the y delta, adds the x delta */
+    LONG w, h;
+    if (!rz_zc_area(&w, &h)) { w = (LONG)cam[0x6c / 4] - (LONG)cam[0x64 / 4]; h = (LONG)cam[0x70 / 4] - (LONG)cam[0x68 / 4]; }
+    *xslot += w / -2;
+    return h / -2;
+}
+
+static void __stdcall zc_refresh_tile(BYTE *view) {
+    void *cam = IsBadReadPtr(view, 0x160) ? NULL : *(void **)(view + 0x158);
+    LONG w, h, n;
+    DWORD tx = 0, ty = 0, ox = *(DWORD *)(view + 0xb0), oy = *(DWORD *)(view + 0xb4);
+    int ok;
+    if (!cam || !g_rz_pick || !rz_zc_area(&w, &h)) return;
+    ok = g_rz_pick(cam, NULL, w / 2, h / 2, &tx, &ty, 0, NULL, 0) & 0xff;
+    if (!ok) ok = g_rz_pick(cam, NULL, w / 2, h / 2, &tx, &ty, 1, NULL, 0) & 0xff;
+    if (ok) { *(DWORD *)(view + 0xb0) = tx; *(DWORD *)(view + 0xb4) = ty; }
+    n = InterlockedIncrement(&g_zc_n);
+    if (n <= 12 || (n & 0x3f) == 0)
+        logf("ZOOMCENTER> #%ld zoom/rotate: map area %ldx%ld, centre tile %s (%lu,%lu) (stored was %lu,%lu)",
+             n, w, h, ok ? "picked" : "not on the map, kept", ok ? tx : ox, ok ? ty : oy, ox, oy);
+}
+
+/* SIMSPR 0x1000688d..0x100068a4 (zoom) and 0x10006b0f..0x10006b26 (rotate): mov eax,[esi+6ch] / push -2 / sub eax,
+ * [esi+64h] / pop ecx / cdq / idiv ecx / add [x],eax / mov eax,[esi+70h] / sub eax,[esi+68h] / cdq / idiv ecx. esi = the
+ * camera, x = [ebp+8] (zoom) or [ebp+14h] (rotate). The code after it needs eax = the y delta; ecx/edx are reloaded. */
+static __declspec(naked) void zc_zoom_stub(void) {
+    __asm {
+        pushad
+        lea  eax, [ebp+8]
+        push eax
+        push esi
+        call zc_delta
+        mov  [esp+28], eax
+        popad
+        jmp  dword ptr [g_688d_ret]
+    }
+}
+static __declspec(naked) void zc_rot_stub(void) {
+    __asm {
+        pushad
+        lea  eax, [ebp+14h]
+        push eax
+        push esi
+        call zc_delta
+        mov  [esp+28], eax
+        popad
+        jmp  dword ptr [g_6b0f_ret]
+    }
+}
+/* Wrappers for iso view vt+0x60/+0x64/+0x70/+0x74 (thiscall, no stack args; the originals read ebx, kept by pushad). */
+#define ZC_WRAP(k) static __declspec(naked) void zc_wrap##k(void) { __asm { pushad } __asm { push ecx }     __asm { call zc_refresh_tile } __asm { popad } __asm { jmp dword ptr [g_zc_orig + 4 * k] } }
+ZC_WRAP(0)
+ZC_WRAP(1)
+ZC_WRAP(2)
+ZC_WRAP(3)
+
+static void rz_jmp_patch(BYTE *f, int len, void *to) {
+    DWORD old;
+    int i;
+    if (!VirtualProtect(f, len, PAGE_EXECUTE_READWRITE, &old)) return;
+    f[0] = 0xE9; *(DWORD *)(f + 1) = (DWORD)to - (DWORD)(f + 5);
+    for (i = 5; i < len; i++) f[i] = 0x90;
+    VirtualProtect(f, len, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), f, len);
+}
+
+static void patch_zoomcenter(HMODULE ss) {
+    static const BYTE zoom[24] = { 0x8b, 0x46, 0x6c, 0x6a, 0xfe, 0x2b, 0x46, 0x64, 0x59, 0x99, 0xf7, 0xf9,
+                                   0x01, 0x45, 0x08, 0x8b, 0x46, 0x70, 0x2b, 0x46, 0x68, 0x99, 0xf7, 0xf9 };
+    static const BYTE rot[24]  = { 0x8b, 0x46, 0x6c, 0x6a, 0xfe, 0x2b, 0x46, 0x64, 0x59, 0x99, 0xf7, 0xf9,
+                                   0x01, 0x45, 0x14, 0x8b, 0x46, 0x70, 0x2b, 0x46, 0x68, 0x99, 0xf7, 0xf9 };
+    static const DWORD slot[4] = { 0x633f0, 0x633f4, 0x63400, 0x63404 }, fn[4] = { 0x1d2d6, 0x1d365, 0x1d3f3, 0x1d47b };
+    void (*wrap[4])(void) = { zc_wrap0, zc_wrap1, zc_wrap2, zc_wrap3 };
+    BYTE *fz = (BYTE *)ss + 0x688d, *fr = (BYTE *)ss + 0x6b0f;
+    DWORD old, *vt = (DWORD *)((BYTE *)ss + 0x633f0);
+    int k;
+    if (!g_zoomcenter) { logf("--- ZOOMCENTER: disabled (SC3RESIZE_ZOOMCENTER=0) - zoom/rotate centre on the whole window"); return; }
+    for (k = 0; k < 4; k++)
+        if (*(DWORD *)((BYTE *)ss + slot[k]) != (DWORD)ss + fn[k]) break;
+    if (k < 4 || memcmp(fz, zoom, sizeof(zoom)) || memcmp(fr, rot, sizeof(rot))) {
+        logf("--- ZOOMCENTER: SIMSPR+0x688d/+0x6b0f or iso vtable +0x60..+0x74 differ from shipped - not installed"); return;
+    }
+    g_rz_pick = (PFN_RzPick)((BYTE *)ss + 0x902f);
+    g_688d_ret = (DWORD)fz + sizeof(zoom);
+    g_6b0f_ret = (DWORD)fr + sizeof(rot);
+    for (k = 0; k < 4; k++) g_zc_orig[k] = (DWORD)ss + fn[k];
+    rz_jmp_patch(fz, sizeof(zoom), zc_zoom_stub);
+    rz_jmp_patch(fr, sizeof(rot), zc_rot_stub);
+    if (VirtualProtect(vt, 0x18, PAGE_READWRITE, &old)) {
+        for (k = 0; k < 4; k++) *(DWORD *)((BYTE *)ss + slot[k]) = (DWORD)wrap[k];
+        VirtualProtect(vt, 0x18, old, &old);
+    }
+    logf("--- ZOOMCENTER: zoomcenter=%d, zoom/rotate keep the map-area centre tile (SIMSPR+0x688d, +0x6b0f, iso vt+0x60/64/70/74)%s",
+         g_zoomcenter, g_zoomcenter == 2 ? ", stock at 800x600" : "");
+}
+
 /* CELLFIX: called by rz_do_resize right after FUN_1000e2c0. */
 static void rz_cellfix(void *iso) {
     DWORD *v = (DWORD *)iso;
@@ -9662,6 +9870,12 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
         if (GetEnvironmentVariableA("SC3RESIZE_CELLFIX", v, sizeof(v))) g_cellfix = atoi(v);
         if (GetEnvironmentVariableA("SC3RESIZE_DIRTCLIP", v, sizeof(v))) g_dirtclip = atoi(v); }
     patch_dirtclip(ss);      /* the SIMDIRT 0x10013A8F crash: dirty cells past the view (DIRTCLIP block) */
+    {   char v[8];
+        if (GetEnvironmentVariableA("SC3RESIZE_LCENTER", v, sizeof(v))) g_lcenter = atoi(v); }
+    patch_lcenter(ss);       /* left click / minimap centre on the visible map area (LCENTER block) */
+    {   char v[8];
+        if (GetEnvironmentVariableA("SC3RESIZE_ZOOMCENTER", v, sizeof(v))) g_zoomcenter = atoi(v); }
+    patch_zoomcenter(ss);    /* zoom / rotate keep the map-area centre tile (ZOOMCENTER block) */
     {   char v[8];
         if (GetEnvironmentVariableA("SC3RESIZE_DIRTGUARD", v, sizeof(v))) g_dirtguard = atoi(v); }
     CreateThread(NULL, 0, dirtguard_watcher, NULL, 0, NULL);

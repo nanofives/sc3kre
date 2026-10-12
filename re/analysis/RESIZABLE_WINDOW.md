@@ -267,6 +267,23 @@ enable by default.
    A/B PASS). The city view's local AND hit rects now follow the client (`SC3RESIZE_VIEWFIX`, default 1),
    so the cascade can no longer reset the hit rect. Moves and right-drag pan work past the old area,
    and the control arm reproduces the dead zone. Zoning past 800x600 is for the owner's hand test.
+2b. ✅ **FIXED 2026-10-12: left click centres on the visible map area** (`verify/leftclick/RESULTS.md`, A/B PASS on
+   MAIN and on a stock tree, `SC3RESIZE_LCENTER`, default 1). Every left-click camera move is one call: a map click
+   with the default tool (`SIMSPR FUN_10043540`, return `+0x435b0`), a left-drag (one call on the press, no pan) and a
+   minimap click (`SIMUI+0x5090c`) all reach `FUN_1001d039` = iso view vt+0x54 CenterOnTile, which subtracts
+   `+0x20 >> 1`, `+0x24 >> 1` = the stored 704x544 `[CONFIRMED @ SIMSPR 0x1001d09c]`. So the tile always landed at
+   (352, 272): maximized at 1680x979 a click on the map-area centre moved the camera (+448, +192). The stub at
+   `0x1001d09c` (25 bytes) subtracts half the visible map area instead (side panel left edge x bar top, with the
+   HUDSCALE enlargement mapped). At 800x600 it is the stock numbers.
+2c. ✅ **FIXED 2026-10-12: zoom and rotate keep the map-area centre tile** (`verify/leftclick/ZOOMCENTER_RESULTS.md`,
+   `SC3RESIZE_ZOOMCENTER`, default 1, owner design call). The zoom keys, rotate keys (PageDown/PageUp) and the four minimap
+   buttons call iso view vt+0x60/+0x64/+0x70/+0x74 (`FUN_1001d2d6`, `FUN_1001d365`, `FUN_1001d3f3`, `FUN_1001d47b`), which
+   pass the stored centre tile `+0xb0/+0xb4` to the camera. The camera (`FUN_10006752` zoom, `FUN_10006a55` rotate) put it
+   at the centre of its own rect `+0x64..+0x70` = the WHOLE client `[CONFIRMED @ SIMSPR 0x1000688d, 0x10006b0f]`: (400,300)
+   at 800x600, (840,489) maximized, so the centre tile changed on every stock zoom, at 800x600 too. Now both sites use
+   half the map area, and the four methods first re-pick the tile at the map-area centre (stale after a window resize,
+   measured). `FUN_1001d1d9` (+0x6c) keeps its tile (no re-pick): it runs at city load with the saved centre (re-picking
+   there moved the loaded view). `=2` keeps stock numbers at exactly 800x600.
 3. **Edge-scroll band:** `EDGEFIX` (`03ca3c3`) rebuilds the bands from native + delta, measured
    correct at 1920x1009 and back at 800x600. But `+0x177` is "scroll in progress", and every SIMSPR
    starter of a scroll is keyboard-driven, so the bands may never start a scroll from the mouse
