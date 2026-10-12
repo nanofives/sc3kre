@@ -8611,6 +8611,90 @@ static void patch_dirtclip(HMODULE ss) {
     logf("--- DIRTCLIP: dirty-cell rects clamped to the view at SIMSPR+0xd0c5 (terrain never drawn past the surface)");
 }
 
+/* LCENTER (task leftclick, owner 2026-10-12: "el click izquierdo en el mapa para desplazarse no se adapta a la ventana").
+ * A left click on the map (default tool, SIMSPR FUN_10043540), a left-drag (one call on the press) and a minimap click
+ * (SIMUI+0x5090c) all call cISC3CityViewIso vt+0x54 = SIMSPR FUN_1001d039 CenterOnTile(tx, ty, flag). It puts the tile at
+ * world - (+0x20 >> 1, +0x24 >> 1) [CONFIRMED @ SIMSPR 0x1001d09c], and +0x20/+0x24 is the stored 704x544 that the
+ * resize never changes, so at any size the tile lands at view point (352, 272): maximized at 1680x979 a click on the
+ * map-area centre moved the camera (+448, +192) (verify/leftclick/PRE.md). The stub subtracts half the VISIBLE map area
+ * instead: right = the docked side panel's left edge, bottom = the bar's top, else stored size + (client - 800x600)
+ * (sc3overscroll true_center's rule); with HUDSCALE on, the edges the enlarged HUD covers. At 800x600 it is stock.
+ * SC3RESIZE_LCENTER=0 leaves the function alone. */
+static int g_lcenter = 1;
+static DWORD g_d09c_ret;                 /* SIMSPR+0x1d0b5, after the 25 stolen bytes */
+static volatile LONG g_lcenter_n;
+
+static void rz_lcenter_area(LONG cw, LONG ch, LONG w0, LONG h0, LONG *w, LONG *h) {
+    LONG ax1 = -1, ay1 = -1;
+    *w = w0; *h = h0;
+    if (cw <= 0 || ch <= 0 || (cw == NAT_W && ch == NAT_H)) return;
+    if (g_side_top && !IsBadReadPtr(g_side_top, 0x24)) {
+        LONG sx = ((LONG *)((DWORD)g_side_top + 0x14))[0];
+        if (sx > cw / 2 && sx < cw) ax1 = sx;
+    }
+    if (g_hud_top && !IsBadReadPtr(g_hud_top, 0x24)) {
+        LONG by = ((LONG *)((DWORD)g_hud_top + 0x14))[1];
+        if (by > ch / 2 && by < ch) ay1 = by;
+    }
+    if (ax1 < 0) ax1 = w0 + (cw - NAT_W);
+    if (ay1 < 0) ay1 = h0 + (ch - NAT_H);
+    if (g_hudscale && g_hs_n > 0 && g_hs_s > 1.0 && g_hs_cw == cw && g_hs_ch == ch) {   /* enlarged about the corner */
+        ax1 = cw - (LONG)(g_hs_s * (double)(cw - ax1) + 0.5);
+        ay1 = ch - (LONG)(g_hs_s * (double)(ch - ay1) + 0.5);
+    }
+    if (ax1 < 64 || ay1 < 64) return;
+    *w = ax1; *h = ay1;
+}
+
+static void __stdcall lcenter_sub(BYTE *view, LONG *wx, LONG *wy) {
+    LONG w0 = *(LONG *)(view + 0x20), h0 = *(LONG *)(view + 0x24), w, h, cw = 0, ch = 0, n;
+    RECT rc;
+    if (g_hwnd && GetClientRect(g_hwnd, &rc)) { cw = rc.right - rc.left; ch = rc.bottom - rc.top; }
+    rz_lcenter_area(cw, ch, w0, h0, &w, &h);
+    *wx -= (LONG)((DWORD)w >> 1);
+    *wy -= (LONG)((DWORD)h >> 1);
+    n = InterlockedIncrement(&g_lcenter_n);
+    if (n <= 12 || (n & 0x3f) == 0)
+        logf("LCENTER> #%ld tile (%ld,%ld) centred on the map area %ldx%ld (stored %ldx%ld, client %ldx%ld)",
+             n, *(LONG *)(view + 0xb0), *(LONG *)(view + 0xb4), w, h, w0, h0, cw, ch);
+}
+
+/* Replaces SIMSPR 0x1001d09c..0x1001d0b4: mov eax,[esi+20h] / push [ebp+10h] / shr eax,1 / sub [ebp-8],eax /
+ * mov eax,[esi+24h] / mov ecx,[esi+158h] / shr eax,1 / sub [ebp-4],eax. esi = the view, [ebp-8]/[ebp-4] = the tile's
+ * world position. The code after it reloads eax from [ecx], so eax is free. */
+static __declspec(naked) void lcenter_stub(void) {
+    __asm {
+        pushad
+        lea  eax, [ebp-4]
+        push eax
+        lea  eax, [ebp-8]
+        push eax
+        push esi
+        call lcenter_sub
+        popad
+        push dword ptr [ebp+10h]
+        mov  ecx, [esi+158h]
+        jmp  dword ptr [g_d09c_ret]
+    }
+}
+
+static void patch_lcenter(HMODULE ss) {
+    static const BYTE orig[25] = { 0x8b, 0x46, 0x20, 0xff, 0x75, 0x10, 0xd1, 0xe8, 0x29, 0x45, 0xf8, 0x8b, 0x46,
+                                   0x24, 0x8b, 0x8e, 0x58, 0x01, 0x00, 0x00, 0xd1, 0xe8, 0x29, 0x45, 0xfc };
+    BYTE *f = (BYTE *)ss + 0x1d09c;
+    DWORD old;
+    int i;
+    if (!g_lcenter) { logf("--- LCENTER: disabled (SC3RESIZE_LCENTER=0) - clicks centre on the stored 704x544"); return; }
+    if (memcmp(f, orig, sizeof(orig))) { logf("--- LCENTER: SIMSPR+0x1d09c differs from shipped - not installed"); return; }
+    g_d09c_ret = (DWORD)f + sizeof(orig);
+    if (!VirtualProtect(f, sizeof(orig), PAGE_EXECUTE_READWRITE, &old)) return;
+    f[0] = 0xE9; *(DWORD *)(f + 1) = (DWORD)lcenter_stub - (DWORD)(f + 5);
+    for (i = 5; i < (int)sizeof(orig); i++) f[i] = 0x90;
+    VirtualProtect(f, sizeof(orig), old, &old);
+    FlushInstructionCache(GetCurrentProcess(), f, sizeof(orig));
+    logf("--- LCENTER: lcenter=1, CenterOnTile centres on the visible map area (SIMSPR+0x1d09c)");
+}
+
 /* CELLFIX: called by rz_do_resize right after FUN_1000e2c0. */
 static void rz_cellfix(void *iso) {
     DWORD *v = (DWORD *)iso;
@@ -9043,6 +9127,9 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
         if (GetEnvironmentVariableA("SC3RESIZE_CELLFIX", v, sizeof(v))) g_cellfix = atoi(v);
         if (GetEnvironmentVariableA("SC3RESIZE_DIRTCLIP", v, sizeof(v))) g_dirtclip = atoi(v); }
     patch_dirtclip(ss);      /* the SIMDIRT 0x10013A8F crash: dirty cells past the view (DIRTCLIP block) */
+    {   char v[8];
+        if (GetEnvironmentVariableA("SC3RESIZE_LCENTER", v, sizeof(v))) g_lcenter = atoi(v); }
+    patch_lcenter(ss);       /* left click / minimap centre on the visible map area (LCENTER block) */
     {   char v[8];
         if (GetEnvironmentVariableA("SC3RESIZE_DIRTGUARD", v, sizeof(v))) g_dirtguard = atoi(v); }
     CreateThread(NULL, 0, dirtguard_watcher, NULL, 0, NULL);

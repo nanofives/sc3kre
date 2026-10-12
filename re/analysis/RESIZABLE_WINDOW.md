@@ -267,6 +267,14 @@ enable by default.
    A/B PASS). The city view's local AND hit rects now follow the client (`SC3RESIZE_VIEWFIX`, default 1),
    so the cascade can no longer reset the hit rect. Moves and right-drag pan work past the old area,
    and the control arm reproduces the dead zone. Zoning past 800x600 is for the owner's hand test.
+2b. ✅ **FIXED 2026-10-12: left click centres on the visible map area** (`verify/leftclick/RESULTS.md`, A/B PASS on
+   MAIN and on a stock tree, `SC3RESIZE_LCENTER`, default 1). Every left-click camera move is one call: a map click
+   with the default tool (`SIMSPR FUN_10043540`, return `+0x435b0`), a left-drag (one call on the press, no pan) and a
+   minimap click (`SIMUI+0x5090c`) all reach `FUN_1001d039` = iso view vt+0x54 CenterOnTile, which subtracts
+   `+0x20 >> 1`, `+0x24 >> 1` = the stored 704x544 `[CONFIRMED @ SIMSPR 0x1001d09c]`. So the tile always landed at
+   (352, 272): maximized at 1680x979 a click on the map-area centre moved the camera (+448, +192). The stub at
+   `0x1001d09c` (25 bytes) subtracts half the visible map area instead (side panel left edge x bar top, with the
+   HUDSCALE enlargement mapped). At 800x600 it is the stock numbers.
 3. **Edge-scroll band:** `EDGEFIX` (`03ca3c3`) rebuilds the bands from native + delta, measured
    correct at 1920x1009 and back at 800x600. But `+0x177` is "scroll in progress", and every SIMSPR
    starter of a scroll is keyboard-driven, so the bands may never start a scroll from the mouse
