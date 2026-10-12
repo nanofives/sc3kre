@@ -231,7 +231,7 @@ def build(src, dst_in, out, ponds=(), year=2100, extra_plants=4):
         dst = e.tiles(inst)
         for ox, oy in copies:
             for t in s.tiles(inst):
-                dst.append(nl.Tile(ox + t.x, oy + t.y, t.z, t.flg, t.piece, t.state))
+                dst.append(nl.Tile(ox + t.x, oy + t.y, t.z, t.state, t.piece, t.props))
         counts[inst] = len(dst)
 
     # surface network + seam
@@ -242,7 +242,7 @@ def build(src, dst_in, out, ponds=(), year=2100, extra_plants=4):
     road, seam = {}, set()
     for ox, oy in copies:
         for t in src1:
-            road[(ox + t.x, oy + t.y)] = (t.z, t.flg, t.piece, t.state)
+            road[(ox + t.x, oy + t.y)] = (t.z, t.state, t.piece, t.props)
         for q in range(SRC_N):
             if (0, q) not in keep0:
                 seam.add((ox, oy + q))
