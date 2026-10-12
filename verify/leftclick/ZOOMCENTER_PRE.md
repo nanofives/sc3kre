@@ -55,3 +55,24 @@ stock tree `Simcity_stock_leftclick`.
 
 PASS: Z1 and ZS rows 1-5 as predicted, Z0 reproduces rows 2-3, Z2 row 2. VOID: no zoom/rotate calls recorded, a modal
 up, or `zoomcenter` not read back. Frames: display asleep at writing, recorded as pending.
+
+## Addendum, after the first Z1 run (written before the reruns)
+
+First Z1 run (`re/harness/inst_leftclick/armZ1`, MAIN): every key zoom/rotate landed on the map-area centre and kept
+the centre tile, at both sizes. Two findings changed the design:
+- The keys do NOT go through `FUN_1001d1d9`. Zoom in / zoom out / the two rotates are iso view vtable `0x10063390`
+  slots +0x60 `FUN_1001d2d6`, +0x64 `FUN_1001d365`, +0x70 `FUN_1001d3f3`, +0x74 `FUN_1001d47b` (only vtable references
+  in the PE). So the refresh never ran for them, and the first zoom after restore used a stale tile (passed 137,114,
+  centre showed 150,115).
+- `FUN_1001d1d9` (+0x6c, a generic set) runs at city load with the SAVED centre tile. Refreshing it there replaced
+  143,127 with 142,114 and the city loaded elsewhere (later tiles 147,114 vs 149,127 without it). Regression.
+New design: refresh only in the four user methods (their vtable slots point to wrappers), never in `FUN_1001d1d9`.
+The camera-site patches are unchanged. The driver now also clicks the four minimap buttons (twice each) and records a
+backtrace per camera call.
+
+Added rows (all arms with ZOOMCENTER on):
+| # | observable | predicted |
+|---|---|---|
+| 6 | load position: the tile under the first click (200,200) at 800x600 | same as Z0's, +-1 tile (Z0 run: 149,127 / LCENTER arms: 150,127) |
+| 7 | restored zoom: tile passed == centre pick before | yes (row 4, now through the wrappers) |
+| 8 | minimap buttons that zoom or rotate: landed / pick as rows 2-3 | as the keys |
