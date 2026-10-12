@@ -932,6 +932,7 @@ static int    g_wsnap_logged;
 static int    g_reassert_quiet;   /* set during the periodic bar-span re-assert so the idempotent
                                      "already docked / already fitted" skips do not spam the log */
 static int    g_thickframe = 1;   /* SC3RESIZE_THICKFRAME=0 leaves the fixed frame */
+static int    g_dpiaware = 1;     /* DPIAWARE block: sc3resize.ini [display] dpiaware=0 / SC3RESIZE_DPIAWARE=0 = unaware */
 static LONG   g_rt_p3 = -1;       /* SC3RESIZE_RTP3: pin FUN_10009efb arg p3. -1 = field read-back.
                                      Tested 4: did NOT cure the shear, so p3 is not the pitch control;
                                      left as an A/B hook, default off. */
@@ -7618,6 +7619,27 @@ static void rz_poll(void) {
  *
  * EXPECT-OR-REFUSE: identity-check the primary vftable (gz+0x1f740, installed as [this+0] at
  * 0x17bf7 / 0x17c6e) before writing. A refusal is a LOGGED RESULT, never a forced write. */
+/* DPIAWARE block (child windowed, 2026-10-12): per-DPI metrics for the frame handlers. Under per-monitor
+   awareness GetSystemMetrics / AdjustWindowRectEx answer for the SYSTEM dpi (fixed at logon), not the monitor the
+   window is on; the ForDpi variants (Win10 1607+) take the window's dpi. Unaware or older Windows: plain calls. */
+typedef UINT (WINAPI *RZ_DPIWIN)(HWND);
+typedef int  (WINAPI *RZ_SMFORDPI)(int, UINT);
+typedef BOOL (WINAPI *RZ_AWRFORDPI)(LPRECT, DWORD, BOOL, DWORD, UINT);
+static int rz_metric(HWND h, int idx) {
+    HMODULE u = GetModuleHandleA("user32.dll");
+    RZ_DPIWIN dw = (RZ_DPIWIN)GetProcAddress(u, "GetDpiForWindow");
+    RZ_SMFORDPI sm = (RZ_SMFORDPI)GetProcAddress(u, "GetSystemMetricsForDpi");
+    UINT dpi = dw ? dw(h) : 0;
+    return (sm && dpi) ? sm(idx, dpi) : GetSystemMetrics(idx);
+}
+static BOOL rz_adjust_rect(HWND h, RECT *r, DWORD style, DWORD ex) {
+    HMODULE u = GetModuleHandleA("user32.dll");
+    RZ_DPIWIN dw = (RZ_DPIWIN)GetProcAddress(u, "GetDpiForWindow");
+    RZ_AWRFORDPI aw = (RZ_AWRFORDPI)GetProcAddress(u, "AdjustWindowRectExForDpi");
+    UINT dpi = dw ? dw(h) : 0;
+    return (aw && dpi) ? aw(r, style, FALSE, ex, dpi) : AdjustWindowRectEx(r, style, FALSE, ex);
+}
+
 /* ⭐ MAKE THE WINDOW ACTUALLY RESIZABLE.
  *
  * The game creates a fixed-frame window: it can be maximized but not dragged to an arbitrary size
@@ -7767,7 +7789,7 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         if (r == HTCLIENT) {
             RECT wr;
             int mx = (int)(short)LOWORD(lp), my = (int)(short)HIWORD(lp);
-            int bw = GetSystemMetrics(SM_CXSIZEFRAME) + 4;
+            int bw = rz_metric(h, SM_CXSIZEFRAME) + 4;
             if (GetWindowRect(h, &wr)) {
                 int left = mx < wr.left + bw, right = mx >= wr.right - bw;
                 int top = my < wr.top + bw, bottom = my >= wr.bottom - bw;
@@ -7857,7 +7879,7 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             RECT nc = { 0, 0, NAT_W, NAT_H };
             LONG minw = NAT_W + 16, minh = NAT_H + 39;   /* fallback if AdjustWindowRect fails */
             LONG style = GetWindowLongA(h, GWL_STYLE), ex = GetWindowLongA(h, GWL_EXSTYLE);
-            if (AdjustWindowRectEx(&nc, (DWORD)style, FALSE, (DWORD)ex)) {
+            if (rz_adjust_rect(h, &nc, (DWORD)style, (DWORD)ex)) {
                 minw = nc.right - nc.left;
                 minh = nc.bottom - nc.top;
             }
@@ -8033,6 +8055,41 @@ static void rz_subclass(void) {
     g_wm_fixed = 1;
     logf("### RESIZE: window 0x%08lX subclassed (old proc 0x%08lX) - WM_SIZE observed, "
          "resize performed on the render thread", (DWORD)h, (DWORD)g_oldproc);
+    /* WINDOWED-EARLY block: if the style bytes could not be patched, the frame is still fixed here and the
+       resize step that would add it never runs (no resize is possible). Add it now. */
+    if (g_thickframe) rz_make_resizable();
+    /* One line that answers "what did this machine do" from a player's log: frame style, client size,
+       DPI of the window and its monitor, and the process DPI awareness (0 = unaware: Windows scales the
+       window bitmap on a >100% screen). Resolved dynamically, every call is Win10 1607+. */
+    {   typedef UINT (WINAPI *DPIWIN)(HWND);
+        typedef HANDLE (WINAPI *GETCTX)(void);
+        typedef int (WINAPI *AWARE)(HANDLE);
+        typedef LONG (WINAPI *MONDPI)(HMONITOR, int, UINT *, UINT *);
+        HMODULE u = GetModuleHandleA("user32.dll"), sh = LoadLibraryA("shcore.dll");
+        DPIWIN dw = (DPIWIN)GetProcAddress(u, "GetDpiForWindow");
+        GETCTX gc = (GETCTX)GetProcAddress(u, "GetThreadDpiAwarenessContext");
+        AWARE aw = (AWARE)GetProcAddress(u, "GetAwarenessFromDpiAwarenessContext");
+        MONDPI md = sh ? (MONDPI)GetProcAddress(sh, "GetDpiForMonitor") : NULL;
+        HMONITOR mon = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO mi;
+        RECT cr;
+        UINT mx = 0, my = 0;
+        mi.cbSize = sizeof(mi);
+        GetMonitorInfoA(mon, &mi);
+        GetClientRect(h, &cr);
+        if (md) md(mon, 0, &mx, &my);
+        typedef HANDLE (WINAPI *WINCTX)(HWND);
+        typedef BOOL (WINAPI *CTXEQ)(HANDLE, HANDLE);
+        WINCTX wc = (WINCTX)GetProcAddress(u, "GetWindowDpiAwarenessContext");
+        CTXEQ eq = (CTXEQ)GetProcAddress(u, "AreDpiAwarenessContextsEqual");
+        HANDLE ctx = wc ? wc(h) : NULL;
+        logf("DISPLAY> style 0x%08lX client %ldx%ld, window dpi %u, monitor dpi %u (effective), monitor [%ld %ld %ld %ld], "
+             "thread awareness %d, WINDOW awareness %d%s (0 unaware = Windows stretches it, 1 system, 2 per-monitor), "
+             "dpiaware setting %d", (DWORD)GetWindowLongA(h, GWL_STYLE),
+             cr.right - cr.left, cr.bottom - cr.top, dw ? dw(h) : 0, mx, mi.rcMonitor.left, mi.rcMonitor.top,
+             mi.rcMonitor.right, mi.rcMonitor.bottom, (gc && aw) ? aw(gc()) : -1, (ctx && aw) ? aw(ctx) : -1,
+             (ctx && eq && eq(ctx, (HANDLE)(LONG_PTR)-4)) ? " (per-monitor v2)" : "", g_dpiaware);
+    }
 }
 
 /* Minimal replacement for the probe's multi-branch fnlog_enter. Same __stdcall(idx, f)
@@ -8313,6 +8370,131 @@ static void patch_surfacefmt(HMODULE gz) {
     VirtualProtect(site, 10, old, &old);
     FlushInstructionCache(GetCurrentProcess(), site, 10);
     logf("--- FIX16: 16bpp branch injected at 0x19349 -> cave 0x%08lX (5-6-5)", (DWORD)cave);
+}
+
+/* ⭐ WINDOWED-EARLY + FRAME (child windowed, 2026-10-12, verify/windowed/).
+ *
+ * Owner report from a STOCK install + release sc3mods-2026-10-12: no windowed, no "escalado". Measured on
+ * Simcity_stock: the window comes up windowed but with the stock FIXED frame, style 0x94CA0000 (no
+ * WS_THICKFRAME, no WS_MAXIMIZEBOX), so it can be neither dragged nor maximized. rz_make_resizable only runs
+ * inside the resize step, which only runs after a resize: on stock it never runs. Every owner test so far ran
+ * on MAIN\Apps, whose GZGraphicD carries pe_patch.py `resizable_frame` on disk (style 0x94CF0000 from creation).
+ *
+ * This applies that recipe's three same-length imm bytes in memory, plus the windowed and 16-bit patches,
+ * from a loader notification (LdrRegisterDllNotification, LOADED), i.e. after GZGraphicD is mapped and
+ * relocated and before its DllMain or any of its code runs. The watcher's 100 ms poll (and the 1 ms polls in
+ * sc3bigcity / sc3overscroll) only win the race against GZGraphicD Init by load order; this removes the race.
+ *   0x10017ca1  c7 43 10 1b 00 00 00   mov [ebx+0x10],0x1b   -> 0x3b  create mask: MAXIMIZEBOX branch on
+ *   0x10018220  0d 00 00 01 00         or eax,0x10000        -> 0x50000 fold WS_THICKFRAME in beside it
+ *   0x1001856d  68 00 00 c8 90         push 0x90C80000       -> 0x90CD0000 live windowed style (SetWindowLongA)
+ * [CONFIRMED @ GZGraphicD 0x100181d0, 0x1001854a], none of the bytes is under a base relocation.
+ * All-or-nothing; already-patched bytes (MAIN's on-disk build) are logged and left alone.
+ * SC3RESIZE_EARLY=0 goes back to the watcher-only path. SC3RESIZE_THICKFRAME=0 skips the frame bytes. */
+static int g_early = 1;
+static PVOID g_ldr_cookie;
+static volatile LONG g_gz_early;
+
+static void patch_frame_style(HMODULE gz) {
+    static const struct { DWORD rva; BYTE stock[7]; int len; int at; BYTE want; } s[3] = {
+        { 0x17ca1, { 0xC7,0x43,0x10,0x1B,0x00,0x00,0x00 }, 7, 3, 0x3B },
+        { 0x18220, { 0x0D,0x00,0x00,0x01,0x00 },           5, 3, 0x05 },
+        { 0x1856d, { 0x68,0x00,0x00,0xC8,0x90 },           5, 3, 0xCD },
+    };
+    int i, stock = 0, done = 0;
+    for (i = 0; i < 3; i++) {
+        BYTE *p = (BYTE *)gz + s[i].rva;
+        if (!memcmp(p, s[i].stock, s[i].len)) stock++;
+        else if (!memcmp(p, s[i].stock, s[i].at) && p[s[i].at] == s[i].want &&
+                 !memcmp(p + s[i].at + 1, s[i].stock + s[i].at + 1, s[i].len - s[i].at - 1)) done++;
+    }
+    if (done == 3) { logf("--- FRAME: GZGraphicD style bytes already resizable (on-disk resizable_frame or applied earlier)"); return; }
+    if (stock != 3) { logf("--- FRAME: GZGraphicD style bytes differ from shipped (%d stock, %d patched) - NOT patched", stock, done); return; }
+    for (i = 0; i < 3; i++) {
+        BYTE *p = (BYTE *)gz + s[i].rva + s[i].at;
+        DWORD old;
+        if (!VirtualProtect(p, 1, PAGE_EXECUTE_READWRITE, &old)) {
+            logf("--- FRAME: VirtualProtect failed at +0x%lX (%lu)", s[i].rva + s[i].at, GetLastError()); return; }
+        *p = s[i].want;
+        VirtualProtect(p, 1, old, &old);
+        FlushInstructionCache(GetCurrentProcess(), p, 1);
+    }
+    logf("--- FRAME: GZGraphicD create mask 0x1b->0x3b, or 0x10000->0x50000, live style 0x90C80000->0x90CD0000 "
+         "(WS_THICKFRAME|WS_MAXIMIZEBOX, same bytes as pe_patch resizable_frame)");
+}
+
+typedef struct { USHORT Length, MaximumLength; PWSTR Buffer; } RZ_USTR;
+typedef struct { ULONG Flags; const RZ_USTR *FullDllName; const RZ_USTR *BaseDllName; PVOID DllBase; ULONG SizeOfImage; } RZ_LDR_DATA;
+typedef VOID (CALLBACK *RZ_LDR_FN)(ULONG, const RZ_LDR_DATA *, PVOID);
+typedef LONG (NTAPI *RZ_LDR_REG)(ULONG, RZ_LDR_FN, PVOID, PVOID *);
+
+/* Loader-lock context: only byte patches, VirtualAlloc/Protect and logf (whose lock is never held across a
+   loader call). No LoadLibrary, no thread waits. */
+static VOID CALLBACK rz_ldr_notify(ULONG reason, const RZ_LDR_DATA *d, PVOID ctx) {
+    static const WCHAR want[] = L"gzgraphicd.dll";
+    int i, n;
+    (void)ctx;
+    if (reason != 1 || !d || !d->BaseDllName || !d->BaseDllName->Buffer || g_gz_early) return;
+    n = d->BaseDllName->Length / 2;
+    if (n != (int)(sizeof(want) / 2 - 1)) return;
+    for (i = 0; i < n; i++) {
+        WCHAR c = d->BaseDllName->Buffer[i];
+        if (c >= L'A' && c <= L'Z') c = (WCHAR)(c + 32);
+        if (c != want[i]) return;
+    }
+    if (InterlockedExchange(&g_gz_early, 1)) return;
+    logf("--- EARLY: GZGraphicD mapped at 0x%08lX, patching before its DllMain (loader notification)", (DWORD)d->DllBase);
+    patch_windowed((HMODULE)d->DllBase);
+    patch_surfacefmt((HMODULE)d->DllBase);
+    if (g_thickframe) patch_frame_style((HMODULE)d->DllBase);
+}
+
+/* ⭐ DPIAWARE (child windowed, 2026-10-12). Owner design call: on a >100% screen the game is drawn sharp at its
+ * real pixel size, not stretched by Windows (SC3U has no manifest, so it ran DPI-unaware, measured awareness 0).
+ * Set here, in DllMain: mods_launch injects sc3resize first while the game's main thread is still suspended, so
+ * this runs before the game creates any window. Awareness is per process and settable once.
+ * Per-monitor v2 first: the game draws its whole client itself (no child controls), so v2 only adds what we want:
+ * the caption/frame scaled for the monitor the window is on, and no bitmap stretch on a monitor whose dpi differs
+ * from the system dpi (system-aware would stretch there, the thing the owner rejected). WM_DPICHANGED is not
+ * handled: moving to another monitor keeps the client's pixel size, which the resize mod handles like any size.
+ * Fallbacks: per-monitor v1 context, then system-aware (SetProcessDPIAware). Read back and logged, so an AppCompat layer that
+ * forces awareness (DPIUNAWARE / GDIDPISCALING) shows up as "requested 2, in effect 0".
+ * sc3resize.ini [display] dpiaware=0 or SC3RESIZE_DPIAWARE=0 keeps the old unaware behaviour (g_dpiaware). */
+
+static void rz_dpi_aware(void) {
+    typedef BOOL (WINAPI *SETCTX)(HANDLE);
+    typedef HANDLE (WINAPI *GETCTX)(void);
+    typedef int (WINAPI *AWARE)(HANDLE);
+    HMODULE u = GetModuleHandleA("user32.dll");
+    SETCTX sc = (SETCTX)GetProcAddress(u, "SetProcessDpiAwarenessContext");
+    GETCTX gc = (GETCTX)GetProcAddress(u, "GetThreadDpiAwarenessContext");
+    AWARE aw = (AWARE)GetProcAddress(u, "GetAwarenessFromDpiAwarenessContext");
+    const char *how = "none";
+    DWORD err = 0;
+    int before = (gc && aw) ? aw(gc()) : -1;
+    if (sc && sc((HANDLE)(LONG_PTR)-4)) how = "SetProcessDpiAwarenessContext(PER_MONITOR_AWARE_V2)";
+    else {
+        err = GetLastError();
+        if (sc && sc((HANDLE)(LONG_PTR)-3)) how = "SetProcessDpiAwarenessContext(PER_MONITOR_AWARE)";
+        else { typedef BOOL (WINAPI *SETAW)(void); SETAW sa = (SETAW)GetProcAddress(u, "SetProcessDPIAware");
+               if (sa && sa()) how = "SetProcessDPIAware (system)"; }   /* no LoadLibrary under the loader lock */
+    }
+    logf("DPI> awareness before %d, last call that returned TRUE: %s (first call error %lu), in effect now %d "
+         "(0 unaware, 1 system, 2 per-monitor; the DISPLAY> line has the window's own)%s",
+         before, how, err, (gc && aw) ? aw(gc()) : -1,
+         err == ERROR_ACCESS_DENIED ? " - ALREADY FIXED BEFORE THE MOD: an AppCompat layer (Properties > Compatibility >"
+         " high DPI override) or a manifest decides it. Measured: System / System (Enhanced) keep it at 0" : "");
+}
+
+static void rz_early_register(void) {
+    RZ_LDR_REG reg = (RZ_LDR_REG)GetProcAddress(GetModuleHandleA("ntdll.dll"), "LdrRegisterDllNotification");
+    LONG st;
+    if (GetModuleHandleA("GZGraphicD.dll")) {
+        logf("--- EARLY: GZGraphicD already loaded at mod load - the watcher patches it (late injection)");
+        return;
+    }
+    if (!reg) { logf("--- EARLY: LdrRegisterDllNotification not found - watcher path only"); return; }
+    st = reg(0, rz_ldr_notify, NULL, &g_ldr_cookie);
+    logf("--- EARLY: loader notification %s (status 0x%08lX)", st >= 0 ? "registered" : "FAILED", (DWORD)st);
 }
 
 /* FIX A (2026-08-28): clamp the grid-B bucket index in FUN_1000cedb.
@@ -9215,6 +9397,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
        replicates the -windowed and -fix16 the routine was validated under. */
     patch_windowed(gz);
     patch_surfacefmt(gz);
+    if (g_thickframe) patch_frame_style(gz);   /* WINDOWED-EARLY block: no-op when the loader notification ran */
     patch_gridb_clamp(ss);   /* FIX A: clamp the grid-B bucket index (OOB AV root cause) */
     {   char v[8];
         if (GetEnvironmentVariableA("SC3RESIZE_CELLFIX", v, sizeof(v))) g_cellfix = atoi(v);
@@ -9356,6 +9539,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_DIALOGS", v, sizeof(v))) g_dialogs = atoi(v);
           g_bltbeat = GetEnvironmentVariableA("SC3RESIZE_BLTBEAT", v, sizeof(v)) && atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_THICKFRAME", v, sizeof(v))) g_thickframe = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_EARLY", v, sizeof(v))) g_early = atoi(v);
           if (!GetEnvironmentVariableA("SC3RESIZE_DUMPDIR", g_dumpdir, sizeof(g_dumpdir)))
               lstrcpynA(g_dumpdir, ".", sizeof(g_dumpdir));
           g_noparentfix = GetEnvironmentVariableA("SC3RESIZE_NOPARENTFIX", v, sizeof(v)) && atoi(v);
@@ -9391,6 +9575,13 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
                  "zoom-after-resize crash the game swallows)");
         else
             logf("### VEH crash logger FAILED to install");
+        {   char ip[MAX_PATH], v[8];
+            rz_mb_path(ip, sizeof(ip), "sc3resize.ini");
+            if (ip[0]) g_dpiaware = GetPrivateProfileIntA("display", "dpiaware", 1, ip) ? 1 : 0;
+            if (GetEnvironmentVariableA("SC3RESIZE_DPIAWARE", v, sizeof(v))) g_dpiaware = atoi(v) ? 1 : 0; }
+        logf("### FLAGS> early=%d thickframe=%d dpiaware=%d", g_early, g_thickframe, g_dpiaware);
+        if (g_dpiaware) rz_dpi_aware();
+        if (g_early) rz_early_register();
         CreateThread(NULL, 0, intro_watcher, NULL, 0, NULL);   /* INTRO block: UV.DLL writer re-target
                                                                    (UV.DLL loads early, own thread) */
         CreateThread(NULL, 0, rz_watcher, NULL, 0, NULL);
