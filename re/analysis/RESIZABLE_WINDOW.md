@@ -282,8 +282,8 @@ enable by default.
    at the centre of its own rect `+0x64..+0x70` = the WHOLE client `[CONFIRMED @ SIMSPR 0x1000688d, 0x10006b0f]`: (400,300)
    at 800x600, (840,489) maximized, so the centre tile changed on every stock zoom, at 800x600 too. Now both sites use
    half the map area, and the four methods first re-pick the tile at the map-area centre (stale after a window resize,
-   measured). `FUN_1001d1d9` (+0x6c) is left alone: it runs at city load with the saved centre (refreshing it moved the
-   loaded view). `=2` keeps stock numbers at exactly 800x600.
+   measured). `FUN_1001d1d9` (+0x6c) keeps its tile (no re-pick): it runs at city load with the saved centre (re-picking
+   there moved the loaded view). `=2` keeps stock numbers at exactly 800x600.
 3. **Edge-scroll band:** `EDGEFIX` (`03ca3c3`) rebuilds the bands from native + delta, measured
    correct at 1920x1009 and back at 800x600. But `+0x177` is "scroll in progress", and every SIMSPR
    starter of a scroll is keyboard-driven, so the bands may never start a scroll from the mouse
