@@ -48,3 +48,43 @@ entry). The owner layout (launcher and mods in `Apps\`) is not affected: same pa
   crashes them. The game is DPI-unaware (awareness 0 measured), so on a 125-150% laptop panel Windows stretches
   the window bitmap. Behaviour of resize and maximize under that stretch is not measured.
 - Older releases (2026-10-06, 10-11): same frame bug expected from the code path, not run.
+
+## DPI awareness (owner call 2026-10-12: sharp, not stretched) - a535102
+
+SC3U.exe has no manifest (no RT_MANIFEST resource, no .manifest file), so it ran DPI-unaware (awareness 0
+measured). sc3resize now calls `SetProcessDpiAwarenessContext(PER_MONITOR_AWARE_V2)` in DllMain. mods_launch
+injects sc3resize first while the game's main thread is still suspended, so this happens before any window
+exists. Fallbacks: per-monitor v1 context, then `SetProcessDPIAware`. Opt-out: `sc3resize.ini [display]
+dpiaware=0` or `SC3RESIZE_DPIAWARE=0`.
+
+Why per-monitor v2 and not system-aware: the game draws its whole client itself, no child controls, so v2 only
+adds the caption scaled for the monitor the window is on, and no bitmap stretch on a monitor whose dpi differs
+from the system dpi. System-aware would still stretch there, which is what the owner rejected. WM_DPICHANGED is
+not handled: on a move to another monitor the client keeps its pixel size, handled like any resize.
+
+| run | setting | window awareness (outside read / DISPLAY>) | maximize | restore | resize_client 1200x800 | min..max track |
+|---|---|---|---|---|---|---|
+| dA | default | 2 / 2 (per-monitor v2) | 1680x979 [-8 -8 1688 1010] | 800x600 [432 181 1248 820] | 1200x800 [432 181 1648 1020] | 816..1680 x 639..1050 |
+| dB | dpiaware=0 | 0 / 0 | 1680x979 [-8 -8 1688 1010] | 800x600 [432 181 1248 820] | 1200x800 [432 181 1648 1020] | 816..1680 x 639..1050 |
+| dC | default, cold no city | 2 | - | - | - | - |
+
+Identical at 100%, as expected: at 96 dpi all coordinate spaces coincide. The effect above 100% is NOT
+measured (this PC has one monitor at 96 dpi, and changing scaling would crash the other sessions' games).
+
+AppCompat check, HKCU layer on the test tree's exe path only, removed afterwards:
+
+| layer (Properties > Compatibility > Change high DPI settings) | first call | awareness in effect |
+|---|---|---|
+| `~ DPIUNAWARE` (override: System) | error 5 (access denied) | 0, the layer wins |
+| `~ GDIDPISCALING DPIUNAWARE` (System (Enhanced)) | error 5 | 0, the layer wins |
+| `~ HIGHDPIAWARE` (Application) | error 5 | 2 (per-monitor v1, set by the layer) |
+| none (the system shims SC3U gets by default, AcLayers loaded) | ok | 2, per-monitor v2 |
+
+`DPI>` now says "ALREADY FIXED BEFORE THE MOD" when the first call fails with error 5.
+
+Coordinate paths audited (all in the game's own process, so all in one coordinate space whatever the
+awareness): WM_SIZE / GetClientRect (resize step, HUDSCALE fit min(cw/800, ch/600)), WM_GETMINMAXINFO
+(virtual-screen metrics; the 800x600 floor now from AdjustWindowRectExForDpi), WM_NCHITTEST margin (now
+GetSystemMetricsForDpi), overscroll edge scroll (GetCursorPos + ScreenToClient), game mouse (window messages).
+sc3io is itself DPI-aware and posts physical coordinates: with the game aware those equal the game's client
+coordinates on any scale. Before, Windows rescaled them for an unaware game.

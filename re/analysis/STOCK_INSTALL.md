@@ -37,6 +37,7 @@ notification (`LdrRegisterDllNotification`), before GZGraphicD's DllMain and bef
 the game, so load order no longer decides it.
 
 ## DPI
-SC3U is DPI-unaware (awareness 0 measured). On a >100% panel Windows stretches the window bitmap. Not
-measured here (single 96 dpi monitor). sc3resize logs one `DISPLAY>` line at window subclass with style,
-client size, window and monitor DPI and awareness, so a player's log answers it.
+SC3U has no manifest and ran DPI-unaware: on a >100% screen Windows stretched the window bitmap. Owner call
+2026-10-12: sharp instead. sc3resize sets per-monitor v2 awareness in DllMain, before the game's window exists
+(a535102, opt-out `[display] dpiaware=0`). An exe-level "override high DPI scaling: System / System (Enhanced)"
+compat layer wins over it (measured, logged in `DPI>`). Details and A/B: `verify/windowed/RESULTS.md`.
