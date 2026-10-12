@@ -5590,6 +5590,81 @@ static int rz_speed_key(int n) {
     logf("SPEEDKEYS> speed %d", n);
     return 1;
 }
+/* CLOSEX (owner 2026-10-12, "no funcionó la X para cerrar"): the window X, the system-menu Close and Alt+F4 open the
+   game's own quit dialog. Stock GZGraphicD FUN_10017e2f returns 0 on WM_CLOSE without DefWindowProc (the je at
+   0x10017eab) and sends WM_SYSKEYDOWN to its key path, so on a stock install none of the three does anything
+   [CONFIRMED @ GZGraphicD 0x10017e2f]. Only MAIN's on-disk pe_patch recipe close_button_quit made the X work, and it
+   quits at once (PostQuitMessage). Here the X does what the game's own "Salir" button does in the current screen:
+   - main menu (root child with vtable SC3U+0xd2c20): the menu's button handler vt+0x1e0 = FUN_0043b51d(1, 0x712bf5c4),
+     the exact call a click on its "Salir" tile reaches [CONFIRMED @ SC3U 0x0043b51d; id 0x712BF5C4 = Exit,
+     LAUNCH_CONTROL.md section 31]. Measured: the Quit command below does nothing at the menu.
+   - city: the menu bar's Quit command, {0x025F0A91, 0x10009005, 0, 0} through the message service, the message
+     SIMUI FUN_1004c209 posts for a click on that item [CONFIRMED @ SIMUI 0x1004c209; id from MenuItem.INI].
+   - the intro screen (vtable SC3U+0xd1784): PostQuitMessage(0), what the recipe did. Nothing to save there.
+   - any other screen (loading, terrain editor, ...): nothing, as on stock, so work there is never lost to a stray X.
+   Both game paths ask before quitting, so an unsaved city is not lost on a stray click. CLOSEX takes WM_CLOSE before
+   the game's WndProc, so on a GZGraphicD that carries the recipe cave the cave never runs. SC3RESIZE_CLOSEX=0 passes
+   WM_CLOSE and Alt+F4 to the game as before. */
+static int g_closex = 1;
+static void *rz_closex_screen(DWORD vtoff) {   /* the visible root child with vtable SC3U+vtoff, or NULL */
+    DWORD vt = (DWORD)GetModuleHandleA(NULL) + vtoff;
+    BYTE *root = (BYTE *)rz_ui_root(), *head, *n, *c;
+    int guard = 0;
+    if (!root) return NULL;
+    head = *(BYTE **)(root + 0x34);
+    if (!head) return NULL;
+    for (n = *(BYTE **)head; n && n != head && guard++ < 200; n = *(BYTE **)n) {
+        c = *(BYTE **)(n + 8);
+        if (c && *(DWORD *)c == vt && (*(DWORD *)(c + 0xa0) & 1)) return c;
+    }
+    return NULL;
+}
+static void rz_closex(const char *why) {
+    typedef int (__fastcall *GETSVC)(void *self, void *edx, DWORD a, DWORD b, void **out);
+    typedef int (__fastcall *POST)(void *self, void *edx, DWORD *msg, int now);
+    typedef int (__fastcall *MENUBTN)(void *self, void *edx, int ev, DWORD id);
+    BYTE *exe = (BYTE *)GetModuleHandleA(NULL);
+    void *menu = NULL, *intro = NULL, *fw = NULL, *srv = NULL;
+    DWORD msg[4] = { 0x025f0a91, 0x10009005, 0, 0 };
+    int how = 0;
+    __try {
+        /* A modal dialog is already up (the quit question itself, or any other): do nothing. The modal loop GZWIND
+           FUN_10020971 (vtable GZWIND+0x2db80 slot 0xa0) counts its depth in sink+0x194 and dispatches messages
+           itself, so a second X arrived inside the first quit dialog and stacked a second one (measured: two dialogs,
+           depth 2). The main menu and the intro screen (vtable SC3U+0xd1784, up for ~40 s at start) each run in one modal
+           loop (measured: depth 1 there, 0 in a city), so those two screens allow depth 1
+           [CONFIRMED @ GZWIND 0x10020971, 0x1002174d]. */
+        DWORD gz = (DWORD)GetModuleHandleA("GZGraphicD.dll"), gw = (DWORD)GetModuleHandleA("GZWIND.DLL");
+        BYTE *win = gz ? *(BYTE **)(gz + 0x6cdb8) : NULL, *sink = win ? *(BYTE **)(win + 0x30) : NULL;
+        menu = rz_closex_screen(0xd2c20);
+        intro = menu ? NULL : rz_closex_screen(0xd1784);
+        if (sink && gw && *(DWORD *)sink == gw + 0x2db80 && *(LONG *)(sink + 0x194) > ((menu || intro) ? 1 : 0)) {
+            logf("CLOSEX> %s: a modal dialog is open (depth %ld%s) - ignored", why, *(LONG *)(sink + 0x194),
+                 menu ? ", main menu" : intro ? ", intro" : "");
+            return;
+        }
+        if (menu) {
+            ((MENUBTN)(*(DWORD **)menu)[0x1e0 / 4])(menu, NULL, 1, 0x712bf5c4);
+            how = 1;
+        } else if (rz_city_post(0, 0)) {
+            HMODULE gzsvc = GetModuleHandleA("GZServiceD.dll");
+            fw = *(void **)(exe + 0xFAB74);
+            if (fw) ((GETSVC)(*(DWORD **)fw)[0x10 / 4])(fw, NULL, 0x64063387, 0xC1085722, &srv);
+            if (gzsvc && srv && *(DWORD *)srv == (DWORD)gzsvc + 0x14618) {
+                ((POST)(*(DWORD **)srv)[0x10 / 4])(srv, NULL, msg, 0);
+                how = 2;
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        logf("CLOSEX> %s: fault 0x%08lX in the game's quit path (menu %p)", why, (DWORD)GetExceptionCode(), menu);
+        return;
+    }
+    if (how == 1) { logf("CLOSEX> %s: main menu 0x%08lX -> its Salir button 0x712BF5C4", why, (DWORD)menu); return; }
+    if (how == 2) { logf("CLOSEX> %s: city -> posted the Quit command 0x10009005", why); return; }
+    if (!intro) { logf("CLOSEX> %s: no menu, no city, no intro - ignored", why); return; }
+    logf("CLOSEX> %s: intro screen - PostQuitMessage(0)", why);
+    PostQuitMessage(0);
+}
 static int           g_deferresize = 1;
 static volatile LONG g_in_wndproc_pass, g_resize_posted;
 static int   g_wm_fixed;               /* the window has been subclassed */
@@ -7695,6 +7770,11 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         int n = (wp >= VK_NUMPAD1) ? (int)(wp - VK_NUMPAD1) + 1 : (int)(wp - '1') + 1;
         if (m == WM_KEYUP || (lp & 0x40000000) || rz_speed_key(n)) return 0;
     }
+    if (g_closex && m == WM_CLOSE) { rz_closex("WM_CLOSE"); return 0; }   /* CLOSEX */
+    if (g_closex && wp == VK_F4 && (m == WM_SYSKEYDOWN || m == WM_SYSKEYUP) && (lp & 0x20000000)) {
+        if (m == WM_SYSKEYDOWN && !(lp & 0x40000000)) rz_closex("Alt+F4");
+        return 0;
+    }
     if (g_zoomkeys && (m == WM_KEYDOWN || m == WM_KEYUP)) {   /* ZOOMKEYS */
         if (wp == VK_OEM_PLUS) wp = VK_ADD;
         else if (wp == VK_OEM_MINUS) wp = VK_SUBTRACT;
@@ -8033,6 +8113,14 @@ static void rz_subclass(void) {
     g_wm_fixed = 1;
     logf("### RESIZE: window 0x%08lX subclassed (old proc 0x%08lX) - WM_SIZE observed, "
          "resize performed on the render thread", (DWORD)h, (DWORD)g_oldproc);
+    {   /* CLOSEX: say whether this GZGraphicD carries the on-disk close_button_quit cave (WM_CLOSE je rel32 at
+           0x10017ead = 0x00005959 instead of stock 0x00000316). Diagnostic only. */
+        BYTE *gz = (BYTE *)GetModuleHandleA("GZGraphicD.dll");
+        DWORD rel = 0;
+        if (gz) { __try { rel = *(DWORD *)(gz + 0x17ead); } __except (EXCEPTION_EXECUTE_HANDLER) { rel = 0; } }
+        logf("CLOSEX> %s; GZGraphicD WM_CLOSE branch rel32 0x%08lX (%s)", g_closex ? "on" : "off (SC3RESIZE_CLOSEX=0)",
+             rel, rel == 0x5959 ? "on-disk close_button_quit cave present" : rel == 0x316 ? "stock" : "unknown");
+    }
 }
 
 /* Minimal replacement for the probe's multi-branch fnlog_enter. Same __stdcall(idx, f)
@@ -9166,6 +9254,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_ZOOMKEYS", v, sizeof(v))) g_zoomkeys = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PAUSEKEY", v, sizeof(v))) g_pausekey = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_SPEEDKEYS", v, sizeof(v))) g_speedkeys = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_CLOSEX", v, sizeof(v))) g_closex = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_KEYFOCUS", v, sizeof(v))) g_keyfocus = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MINICLASS", v, sizeof(v))) g_miniclass = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_DLGKEEP", v, sizeof(v))) g_dlgkeep = atoi(v);
