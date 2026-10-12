@@ -9014,6 +9014,183 @@ static void patch_fieldbg(HMODULE sui) {
     logf("--- FIELDBG: SIMUI FUN_10026a09 field erase reads the ART origin (cave 0x%08lX)", (DWORD)cave);
 }
 
+/* ---- INTRO: the intro movie whole and centred in the window (task intro, 2026-10-12) ----------
+ * Owner report: "la intro se ve cortada". Mechanism, all in re/analysis/INTRO_MOVIE.md:
+ * SC3U FUN_00429f95 plays Res/UI/Shared/Movies/Intro.tgq through UV.DLL in "direct" mode (ctx flag 0x400):
+ * the codec Locks the whole PRIMARY and writes pixels itself. The movie is 320x480 and flag 0x40 asks for
+ * double width. The doubling writer (UV FUN_10006900, case 3 FUN_100065a0) writes one DWORD per source pixel
+ * at dst = bits + x*4 + y*pitch: on a 16bpp primary that DWORD is two pixels (640 wide), and the game
+ * passes x/2 to match (FUN_00429f95: vt+0x40 gets (x & 0xffff) >> 1). On a 32bpp primary (our windowed
+ * desktop) the same DWORD is ONE pixel: the picture comes out 320x480 at half the intended screen x, which
+ * for a centred 800x600 window starts left of the client. Only its right part lands inside the window.
+ * Fix: the two writer calls in UV FUN_10005c40 are re-targeted here. On a 32bpp primary the codec decodes
+ * into a private buffer and this code scales it into the client, centred, aspect kept, black bars.
+ * Default (1): integer scale, 1x in the 800x600 window like stock fullscreen, 2x when it fits. 2: fit to the
+ * window at any scale. 0 (SC3RESIZE_INTRO=0): stock. A 16bpp primary is left to the codec (it doubles). */
+static int g_intro = 1;
+typedef void (__cdecl *uv_writer_t)(int *, void *, BYTE *, void *, unsigned);
+static uv_writer_t g_uv_w6900, g_uv_w65a0;
+static DWORD *g_intro_buf;
+static unsigned g_intro_bw, g_intro_bh;      /* buffer size in pixels (16-aligned, the writers work in 16x16 blocks) */
+static int g_intro_bpp = -1;                 /* primary bpp from GetSurfaceDesc, -1 = not read yet */
+static LONG g_intro_sw, g_intro_sh, g_intro_sp; /* primary width, height, pitch */
+static unsigned g_intro_frames, g_intro_pass;
+static RECT g_intro_last;                    /* last client rect on the primary, for change logging */
+static HWND g_intro_hwnd;
+
+static BOOL CALLBACK intro_enum(HWND h, LPARAM p) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    if (pid != GetCurrentProcessId() || !IsWindowVisible(h)) return TRUE;
+    *(HWND *)p = h;
+    return FALSE;
+}
+
+/* Primary surface desc (IDirectDrawSurface vt+0x58 GetSurfaceDesc, DDSURFACEDESC v1 = 0x6c bytes). */
+static int intro_read_desc(void *surf) {
+    DWORD d[0x7c / 4];
+    typedef HRESULT (__stdcall *gsd_t)(void *, DWORD *);
+    HRESULT hr;
+    if (!surf) return 0;
+    memset(d, 0, sizeof(d)); d[0] = 0x6c;
+    hr = ((gsd_t)(*(DWORD **)surf)[0x58 / 4])(surf, d);
+    if (hr != 0) { logf("INTRO> GetSurfaceDesc failed 0x%08lX - stock path", (DWORD)hr); return 0; }
+    g_intro_sh = (LONG)d[2]; g_intro_sw = (LONG)d[3]; g_intro_sp = (LONG)d[4];
+    g_intro_bpp = (int)d[(0x48 + 0xc) / 4];
+    logf("INTRO> primary %ldx%ld pitch %ld bpp %d", g_intro_sw, g_intro_sh, g_intro_sp, g_intro_bpp);
+    return 1;
+}
+
+static void intro_frame(uv_writer_t orig, const char *which, int *p1, void *src, BYTE *dst, void *p4, unsigned pitch) {
+    BYTE *ctx, *base;
+    DWORD flags;
+    unsigned sw, sh, need;
+    LONG x, y, cw, ch, sw2, tw, th, tx, ty, r, c, r0, r1, c0, c1, k, scrw, scrh;
+    RECT cr;
+    POINT org = {0, 0};
+    void *surf;
+
+    ctx = (BYTE *)p1[0];
+    flags = *(DWORD *)(ctx + 4);
+    /* Only the case measured: mode 1 (p1[0x13]), direct-to-primary (0x400), double width (0x40). */
+    if (!g_intro || p1[0x13] != 1 || !(flags & 0x400) || !(flags & 0x40)) { orig(p1, src, dst, p4, pitch); return; }
+    surf = *(void **)(ctx + ((flags & 0x8000000) ? 0x18 : 0x14));
+    if (g_intro_bpp < 0 && !intro_read_desc(surf)) g_intro_bpp = 0;
+    sw = *(unsigned *)(ctx + 100); sh = *(unsigned *)(ctx + 0x60);
+    if (g_intro_bpp != 32 || (LONG)pitch != g_intro_sp || !sw || !sh || sw > 4096 || sh > 4096) {
+        if (!g_intro_pass++) logf("INTRO> %s: stock path (bpp %d, pitch %u vs %ld, movie %ux%u)",
+                                  which, g_intro_bpp, pitch, g_intro_sp, sw, sh);
+        orig(p1, src, dst, p4, pitch); return;
+    }
+    x = p1[5]; y = p1[6];
+    base = dst - x * 4 - y * (LONG)pitch;    /* the codec's own address: bits + x*4 + y*pitch (UV 0x10005ef9) */
+
+    need = ((sw + 15) & ~15u) * ((sh + 15) & ~15u);
+    if (!g_intro_buf || g_intro_bw * g_intro_bh < need) {
+        if (g_intro_buf) HeapFree(GetProcessHeap(), 0, g_intro_buf);
+        g_intro_bw = (sw + 15) & ~15u; g_intro_bh = (sh + 15) & ~15u;
+        g_intro_buf = (DWORD *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, g_intro_bw * g_intro_bh * 4);
+        if (!g_intro_buf) { logf("INTRO> buffer alloc failed - stock path"); g_intro = 0; orig(p1, src, dst, p4, pitch); return; }
+    }
+    orig(p1, src, (BYTE *)g_intro_buf, p4, g_intro_bw * 4);
+
+    if (!g_intro_hwnd || !IsWindow(g_intro_hwnd)) {
+        g_intro_hwnd = g_hwnd;
+        if (!g_intro_hwnd) EnumWindows(intro_enum, (LPARAM)&g_intro_hwnd);
+    }
+    if (!g_intro_hwnd || !GetClientRect(g_intro_hwnd, &cr) || !ClientToScreen(g_intro_hwnd, &org)) return;
+    cw = cr.right - cr.left; ch = cr.bottom - cr.top;
+    /* Client rect in primary pixels. Same space when the primary is the size Windows reports for the screen
+       (measured here, 100% scaling). Otherwise scale by surface/screen [UNVERIFIED on a scaled display]. */
+    scrw = GetSystemMetrics(SM_CXSCREEN); scrh = GetSystemMetrics(SM_CYSCREEN);
+    if (scrw > 0 && scrh > 0 && (scrw != g_intro_sw || scrh != g_intro_sh)) {
+        org.x = MulDiv(org.x, g_intro_sw, scrw); org.y = MulDiv(org.y, g_intro_sh, scrh);
+        cw = MulDiv(cw, g_intro_sw, scrw); ch = MulDiv(ch, g_intro_sh, scrh);
+    }
+    if (cw <= 0 || ch <= 0) return;
+
+    sw2 = (LONG)sw * 2;                      /* the picture as designed: double width */
+    k = (cw / sw2 < ch / (LONG)sh) ? cw / sw2 : ch / (LONG)sh;
+    if (g_intro == 1 && k >= 1) { tw = sw2 * k; th = (LONG)sh * k; }
+    else if ((__int64)cw * sh <= (__int64)ch * sw2) { tw = cw; th = (LONG)((__int64)cw * sh / sw2); }
+    else { th = ch; tw = (LONG)((__int64)ch * sw2 / sh); }
+    if (tw <= 0 || th <= 0) return;
+    tx = org.x + (cw - tw) / 2; ty = org.y + (ch - th) / 2;
+
+    g_intro_frames++;
+    if (g_intro_frames == 1 || cr.right != g_intro_last.right || cr.bottom != g_intro_last.bottom ||
+        org.x != g_intro_last.left || org.y != g_intro_last.top) {
+        logf("INTRO> %s frame %u: codec x,y %ld,%ld (stock dest), client %ldx%ld at %ld,%ld on the primary, "
+             "movie %ux%u shown %ldx%ld at %ld,%ld", which, g_intro_frames, x, y, cw, ch, org.x, org.y,
+             sw, sh, tw, th, tx, ty);
+        g_intro_last.left = org.x; g_intro_last.top = org.y; g_intro_last.right = cr.right; g_intro_last.bottom = cr.bottom;
+    }
+
+    __try {
+        /* Every write is clipped to client AND primary bounds. */
+        r0 = org.y > 0 ? org.y : 0; r1 = org.y + ch < g_intro_sh ? org.y + ch : g_intro_sh;
+        c0 = org.x > 0 ? org.x : 0; c1 = org.x + cw < g_intro_sw ? org.x + cw : g_intro_sw;
+        for (r = r0; r < r1; r++) {
+            DWORD *row = (DWORD *)(base + r * (LONG)pitch);
+            if (r < ty || r >= ty + th) { for (c = c0; c < c1; c++) row[c] = 0; continue; }
+            {
+                const DWORD *srow = g_intro_buf + (unsigned)((__int64)(r - ty) * sh / th) * g_intro_bw;
+                LONG a = tx > c0 ? tx : c0, b = tx + tw < c1 ? tx + tw : c1;
+                DWORD step = (DWORD)(((unsigned __int64)sw << 16) / (unsigned)tw);
+                DWORD acc = (DWORD)(a - tx) * step;
+                for (c = c0; c < a; c++) row[c] = 0;
+                for (c = a; c < b; c++, acc += step) row[c] = srow[acc >> 16];
+                for (c = b; c < c1; c++) row[c] = 0;
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        logf("INTRO> fault while drawing (primary %ldx%ld pitch %u) - INTRO off", g_intro_sw, g_intro_sh, pitch);
+        g_intro = 0;
+    }
+}
+
+static void __cdecl intro_w6900(int *p1, void *src, BYTE *dst, void *p4, unsigned pitch) {
+    intro_frame(g_uv_w6900, "FUN_10006900", p1, src, dst, p4, pitch);
+}
+static void __cdecl intro_w65a0(int *p1, void *src, BYTE *dst, void *p4, unsigned pitch) {
+    intro_frame(g_uv_w65a0, "FUN_100065a0", p1, src, dst, p4, pitch);
+}
+
+/* Re-target the two doubling-writer calls in UV FUN_10005c40 (E8 rel32 at +0x5ef9 -> +0x6900, +0x5e2a -> +0x65a0).
+   Both sites are checked before either is written. UV.DLL is identical in the dev and stock installs
+   (SHA-256 e81ade5b...bef4). */
+static DWORD WINAPI intro_watcher(LPVOID param) {
+    static const DWORD site[2] = {0x5ef9, 0x5e2a}, target[2] = {0x6900, 0x65a0};
+    BYTE *uv = NULL;
+    DWORD old;
+    int i, tries = 0;
+    (void)param;
+    { char v[8]; if (GetEnvironmentVariableA("SC3RESIZE_INTRO", v, sizeof(v))) g_intro = atoi(v); }
+    if (!g_intro) { logf("--- INTRO: off (SC3RESIZE_INTRO=0) - stock intro"); return 0; }
+    while (tries++ < 30000 && !(uv = (BYTE *)GetModuleHandleA("UV.DLL"))) Sleep(1);
+    if (!uv) { logf("--- INTRO: UV.DLL never loaded - not armed"); return 0; }
+    for (i = 0; i < 2; i++) {
+        BYTE *s = uv + site[i];
+        if (IsBadReadPtr(s, 5) || s[0] != 0xE8 || (DWORD)(s + 5 + *(LONG *)(s + 1)) != (DWORD)(uv + target[i])) {
+            logf("--- INTRO: UV+0x%lX is not the expected call - not armed", site[i]);
+            return 0;
+        }
+    }
+    g_uv_w6900 = (uv_writer_t)(uv + target[0]);
+    g_uv_w65a0 = (uv_writer_t)(uv + target[1]);
+    for (i = 0; i < 2; i++) {
+        BYTE *s = uv + site[i];
+        DWORD fn = i == 0 ? (DWORD)intro_w6900 : (DWORD)intro_w65a0;
+        if (!VirtualProtect(s, 5, PAGE_EXECUTE_READWRITE, &old)) { logf("--- INTRO: VirtualProtect failed"); return 0; }
+        *(LONG *)(s + 1) = (LONG)(fn - (DWORD)(s + 5));
+        VirtualProtect(s, 5, old, &old);
+        FlushInstructionCache(GetCurrentProcess(), s, 5);
+    }
+    logf("--- INTRO: armed (mode %d) - UV.DLL base 0x%08lX, writer calls at +0x5ef9/+0x5e2a re-targeted",
+         g_intro, (DWORD)uv);
+    return 0;
+}
+
 static DWORD WINAPI rz_watcher(LPVOID param) {
     HMODULE ss = NULL, gz = NULL;
     int tries = 0;
@@ -9214,6 +9391,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
                  "zoom-after-resize crash the game swallows)");
         else
             logf("### VEH crash logger FAILED to install");
+        CreateThread(NULL, 0, intro_watcher, NULL, 0, NULL);   /* INTRO block: UV.DLL writer re-target
+                                                                   (UV.DLL loads early, own thread) */
         CreateThread(NULL, 0, rz_watcher, NULL, 0, NULL);
     }
     return TRUE;
