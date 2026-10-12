@@ -1842,6 +1842,9 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
                     int meet = c == g_meet_dlg && g_meet_cw == cw && g_meet_ch == ch && r[0] == g_meet_x && r[1] == g_meet_y;
                     /* MEETALL: the answer popup, built at this client size, sits where the game centred it on its page */
                     int pop = g_meetall && c == g_meet_pop && g_meet_pop_cw == cw && g_meet_pop_ch == ch;
+                    /* MEETALL: a Reunirse page whose spot was noted at another client size is centred at 800x600 too.
+                       Measured (F3): closed maximized at (210,125), restored to 800x600, reopened -> kept at [210 125]. */
+                    int resized = g_meetall && c == g_meet_dlg && g_meet_cw && (g_meet_cw != cw || g_meet_ch != ch);
                     int stay = g_dlgstay && !g_dlg[e].rdock && (meet || pop || (g_dlg[e].has_rect && g_dlg[e].rcw == cw
                                && g_dlg[e].rch == ch && r[0] == g_dlg[e].rect[0] && r[1] == g_dlg[e].rect[1]));
                     if (stay) {                         /* DLGSTAY: back where it was, keep it there */
@@ -1864,7 +1867,7 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
                         } else if ((x != r[0] || y != r[1]) && rz_dlg_place(c, t)) {
                             moved++;                    /* clamped; placed is left alone, so it still counts as dragged */
                         }
-                    } else if (native && inside) {
+                    } else if (native && inside && !resized) {
                         memcpy(g_dlg[e].stock, r, sizeof(LONG) * 4); g_dlg[e].has_stock = 1;
                         memcpy(g_dlg[e].placed, r, sizeof(LONG) * 4);
                     } else if (ccent) {                 /* DLGKEEP: the game centred it on the client, leave it */
