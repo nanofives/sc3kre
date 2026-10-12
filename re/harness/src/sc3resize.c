@@ -932,6 +932,7 @@ static int    g_wsnap_logged;
 static int    g_reassert_quiet;   /* set during the periodic bar-span re-assert so the idempotent
                                      "already docked / already fitted" skips do not spam the log */
 static int    g_thickframe = 1;   /* SC3RESIZE_THICKFRAME=0 leaves the fixed frame */
+static int    g_dpiaware = 1;     /* DPIAWARE block: sc3resize.ini [display] dpiaware=0 / SC3RESIZE_DPIAWARE=0 = unaware */
 static LONG   g_rt_p3 = -1;       /* SC3RESIZE_RTP3: pin FUN_10009efb arg p3. -1 = field read-back.
                                      Tested 4: did NOT cure the shear, so p3 is not the pitch control;
                                      left as an A/B hook, default off. */
@@ -7618,6 +7619,27 @@ static void rz_poll(void) {
  *
  * EXPECT-OR-REFUSE: identity-check the primary vftable (gz+0x1f740, installed as [this+0] at
  * 0x17bf7 / 0x17c6e) before writing. A refusal is a LOGGED RESULT, never a forced write. */
+/* DPIAWARE block (child windowed, 2026-10-12): per-DPI metrics for the frame handlers. Under per-monitor
+   awareness GetSystemMetrics / AdjustWindowRectEx answer for the SYSTEM dpi (fixed at logon), not the monitor the
+   window is on; the ForDpi variants (Win10 1607+) take the window's dpi. Unaware or older Windows: plain calls. */
+typedef UINT (WINAPI *RZ_DPIWIN)(HWND);
+typedef int  (WINAPI *RZ_SMFORDPI)(int, UINT);
+typedef BOOL (WINAPI *RZ_AWRFORDPI)(LPRECT, DWORD, BOOL, DWORD, UINT);
+static int rz_metric(HWND h, int idx) {
+    HMODULE u = GetModuleHandleA("user32.dll");
+    RZ_DPIWIN dw = (RZ_DPIWIN)GetProcAddress(u, "GetDpiForWindow");
+    RZ_SMFORDPI sm = (RZ_SMFORDPI)GetProcAddress(u, "GetSystemMetricsForDpi");
+    UINT dpi = dw ? dw(h) : 0;
+    return (sm && dpi) ? sm(idx, dpi) : GetSystemMetrics(idx);
+}
+static BOOL rz_adjust_rect(HWND h, RECT *r, DWORD style, DWORD ex) {
+    HMODULE u = GetModuleHandleA("user32.dll");
+    RZ_DPIWIN dw = (RZ_DPIWIN)GetProcAddress(u, "GetDpiForWindow");
+    RZ_AWRFORDPI aw = (RZ_AWRFORDPI)GetProcAddress(u, "AdjustWindowRectExForDpi");
+    UINT dpi = dw ? dw(h) : 0;
+    return (aw && dpi) ? aw(r, style, FALSE, ex, dpi) : AdjustWindowRectEx(r, style, FALSE, ex);
+}
+
 /* ⭐ MAKE THE WINDOW ACTUALLY RESIZABLE.
  *
  * The game creates a fixed-frame window: it can be maximized but not dragged to an arbitrary size
@@ -7767,7 +7789,7 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         if (r == HTCLIENT) {
             RECT wr;
             int mx = (int)(short)LOWORD(lp), my = (int)(short)HIWORD(lp);
-            int bw = GetSystemMetrics(SM_CXSIZEFRAME) + 4;
+            int bw = rz_metric(h, SM_CXSIZEFRAME) + 4;
             if (GetWindowRect(h, &wr)) {
                 int left = mx < wr.left + bw, right = mx >= wr.right - bw;
                 int top = my < wr.top + bw, bottom = my >= wr.bottom - bw;
@@ -7857,7 +7879,7 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             RECT nc = { 0, 0, NAT_W, NAT_H };
             LONG minw = NAT_W + 16, minh = NAT_H + 39;   /* fallback if AdjustWindowRect fails */
             LONG style = GetWindowLongA(h, GWL_STYLE), ex = GetWindowLongA(h, GWL_EXSTYLE);
-            if (AdjustWindowRectEx(&nc, (DWORD)style, FALSE, (DWORD)ex)) {
+            if (rz_adjust_rect(h, &nc, (DWORD)style, (DWORD)ex)) {
                 minw = nc.right - nc.left;
                 minh = nc.bottom - nc.top;
             }
@@ -8056,10 +8078,17 @@ static void rz_subclass(void) {
         GetMonitorInfoA(mon, &mi);
         GetClientRect(h, &cr);
         if (md) md(mon, 0, &mx, &my);
+        typedef HANDLE (WINAPI *WINCTX)(HWND);
+        typedef BOOL (WINAPI *CTXEQ)(HANDLE, HANDLE);
+        WINCTX wc = (WINCTX)GetProcAddress(u, "GetWindowDpiAwarenessContext");
+        CTXEQ eq = (CTXEQ)GetProcAddress(u, "AreDpiAwarenessContextsEqual");
+        HANDLE ctx = wc ? wc(h) : NULL;
         logf("DISPLAY> style 0x%08lX client %ldx%ld, window dpi %u, monitor dpi %u (effective), monitor [%ld %ld %ld %ld], "
-             "process awareness %d (0 unaware, 1 system, 2 per-monitor)", (DWORD)GetWindowLongA(h, GWL_STYLE),
+             "thread awareness %d, WINDOW awareness %d%s (0 unaware = Windows stretches it, 1 system, 2 per-monitor), "
+             "dpiaware setting %d", (DWORD)GetWindowLongA(h, GWL_STYLE),
              cr.right - cr.left, cr.bottom - cr.top, dw ? dw(h) : 0, mx, mi.rcMonitor.left, mi.rcMonitor.top,
-             mi.rcMonitor.right, mi.rcMonitor.bottom, (gc && aw) ? aw(gc()) : -1);
+             mi.rcMonitor.right, mi.rcMonitor.bottom, (gc && aw) ? aw(gc()) : -1, (ctx && aw) ? aw(ctx) : -1,
+             (ctx && eq && eq(ctx, (HANDLE)(LONG_PTR)-4)) ? " (per-monitor v2)" : "", g_dpiaware);
     }
 }
 
@@ -8417,6 +8446,43 @@ static VOID CALLBACK rz_ldr_notify(ULONG reason, const RZ_LDR_DATA *d, PVOID ctx
     patch_windowed((HMODULE)d->DllBase);
     patch_surfacefmt((HMODULE)d->DllBase);
     if (g_thickframe) patch_frame_style((HMODULE)d->DllBase);
+}
+
+/* ⭐ DPIAWARE (child windowed, 2026-10-12). Owner design call: on a >100% screen the game is drawn sharp at its
+ * real pixel size, not stretched by Windows (SC3U has no manifest, so it ran DPI-unaware, measured awareness 0).
+ * Set here, in DllMain: mods_launch injects sc3resize first while the game's main thread is still suspended, so
+ * this runs before the game creates any window. Awareness is per process and settable once.
+ * Per-monitor v2 first: the game draws its whole client itself (no child controls), so v2 only adds what we want:
+ * the caption/frame scaled for the monitor the window is on, and no bitmap stretch on a monitor whose dpi differs
+ * from the system dpi (system-aware would stretch there, the thing the owner rejected). WM_DPICHANGED is not
+ * handled: moving to another monitor keeps the client's pixel size, which the resize mod handles like any size.
+ * Fallbacks: per-monitor v1 context, then system-aware (SetProcessDPIAware). Read back and logged, so an AppCompat layer that
+ * forces awareness (DPIUNAWARE / GDIDPISCALING) shows up as "requested 2, in effect 0".
+ * sc3resize.ini [display] dpiaware=0 or SC3RESIZE_DPIAWARE=0 keeps the old unaware behaviour (g_dpiaware). */
+
+static void rz_dpi_aware(void) {
+    typedef BOOL (WINAPI *SETCTX)(HANDLE);
+    typedef HANDLE (WINAPI *GETCTX)(void);
+    typedef int (WINAPI *AWARE)(HANDLE);
+    HMODULE u = GetModuleHandleA("user32.dll");
+    SETCTX sc = (SETCTX)GetProcAddress(u, "SetProcessDpiAwarenessContext");
+    GETCTX gc = (GETCTX)GetProcAddress(u, "GetThreadDpiAwarenessContext");
+    AWARE aw = (AWARE)GetProcAddress(u, "GetAwarenessFromDpiAwarenessContext");
+    const char *how = "none";
+    DWORD err = 0;
+    int before = (gc && aw) ? aw(gc()) : -1;
+    if (sc && sc((HANDLE)(LONG_PTR)-4)) how = "SetProcessDpiAwarenessContext(PER_MONITOR_AWARE_V2)";
+    else {
+        err = GetLastError();
+        if (sc && sc((HANDLE)(LONG_PTR)-3)) how = "SetProcessDpiAwarenessContext(PER_MONITOR_AWARE)";
+        else { typedef BOOL (WINAPI *SETAW)(void); SETAW sa = (SETAW)GetProcAddress(u, "SetProcessDPIAware");
+               if (sa && sa()) how = "SetProcessDPIAware (system)"; }   /* no LoadLibrary under the loader lock */
+    }
+    logf("DPI> awareness before %d, last call that returned TRUE: %s (first call error %lu), in effect now %d "
+         "(0 unaware, 1 system, 2 per-monitor; the DISPLAY> line has the window's own)%s",
+         before, how, err, (gc && aw) ? aw(gc()) : -1,
+         err == ERROR_ACCESS_DENIED ? " - ALREADY FIXED BEFORE THE MOD: an AppCompat layer (Properties > Compatibility >"
+         " high DPI override) or a manifest decides it. Measured: System / System (Enhanced) keep it at 0" : "");
 }
 
 static void rz_early_register(void) {
@@ -9332,7 +9398,12 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
                  "zoom-after-resize crash the game swallows)");
         else
             logf("### VEH crash logger FAILED to install");
-        logf("### FLAGS> early=%d thickframe=%d", g_early, g_thickframe);
+        {   char ip[MAX_PATH], v[8];
+            rz_mb_path(ip, sizeof(ip), "sc3resize.ini");
+            if (ip[0]) g_dpiaware = GetPrivateProfileIntA("display", "dpiaware", 1, ip) ? 1 : 0;
+            if (GetEnvironmentVariableA("SC3RESIZE_DPIAWARE", v, sizeof(v))) g_dpiaware = atoi(v) ? 1 : 0; }
+        logf("### FLAGS> early=%d thickframe=%d dpiaware=%d", g_early, g_thickframe, g_dpiaware);
+        if (g_dpiaware) rz_dpi_aware();
         if (g_early) rz_early_register();
         CreateThread(NULL, 0, rz_watcher, NULL, 0, NULL);
     }
