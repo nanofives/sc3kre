@@ -128,3 +128,69 @@ no env = Off. `SC3RESIZE_HUDOPT=0`: no detours and the ini is not read, which is
    (`uitree_max.txt`), so clicks land on the real layout (`30c.png`, `32c.png`, persists > 1 min). Controls:
    same steps with the HUD at Normal draw a correct panel (`33c.png`); HUD enlarged and maximize without an open
    flyout is correct (`34c.png`). Cause not established.
+
+## 6. FPS counter and profiler toggles (sc3resize PERFPREFS + sc3perf, task perfprefs 2026-10-12)
+
+Owner request 2026-10-12: "quiero un toggle en preferencias para desactivar el FPS counter y el profiler".
+
+### What draws on screen
+
+Only sc3perf draws text over the game. No `TextOut`/`DrawText` in sc3resize, sc3bigcity, sc3overscroll or sc3simrun.
+sc3perf `draw_overlay` paints into the present's source surface right before each final present and copies the
+pixels back after it. It draws two things:
+
+| item | look | ini key (release default) |
+|---|---|---|
+| FPS line | top-left, yellow on black: fps, ms/frame, worst, mem | `overlay=1` |
+| busy lines | red line "SIM BUSY ..." or "DATE STOPPED ...", plus up to two dark red call-chain lines | `busy=1` (detector) |
+
+The sampling profiler (`profile=1`) writes files only and draws nothing. The owner's "profiler" is the red busy
+lines (they carry the call chains of the stall).
+
+### The controls
+
+| id | widget | local rect (measured) | text (es / en) |
+|---|---|---|---|
+| `0x02F95B48` | checkbox | `[18 400 84 417]` | "Ver FPS" / "Show FPS" |
+| `0x02F95B49` | checkbox | `[120 400 221 417]` | "Ver perfilador" / "Show profiler" |
+
+Free row under the game's "Ir a los desastres automatico" (`0x02F95AF8`, `[18 381 212 398]`), left of HUDOPT's
+"Suavizado" (`[250 400 327 417]`), inside "Opciones generales" (`[6 346 474 422]`). Wording follows the game's own
+"Ver consejos al iniciar". Language comes from the same title-resource test as HUDOPT. Ids above `0x02F95B11`: the
+dialog's command handler only returns for them `[CONFIRMED @ SIMUI 0x10058f14]`. Same widget calls as "Suavizado".
+The dialog window is built fresh on every open (a new address each time in the log), so the boxes always show the
+current state.
+
+### How the choice reaches sc3perf
+
+sc3perf exports two functions, resolved by sc3resize with `GetProcAddress` when the dialog is built:
+
+| export | does |
+|---|---|
+| `int sc3perf_show_get(void)` | bits: 1 FPS line shown, 2 busy lines shown, 4 busy detector running, 0x100 always set |
+| `int sc3perf_show_set(int bits)` | sets the two flags `draw_overlay` reads on every final present, writes perf.ini, returns get() |
+
+So the change shows on the next present, no restart. Either DLL works without the other: no sc3perf, or an sc3perf
+without the exports (release 2026-10-12), means no boxes (logged `PERFPREFS> sc3perf.dll ...`).
+
+### Apply, cancel, persistence
+
+Read back in the same close detour as HUDOPT: OK (`0x02F95AD8`) applies, any other close (Esc, close box) keeps the
+old values. The state lives in **perf.ini**, sc3perf's own file beside its DLL: `overlay=` (existing key, the FPS line)
+and the new `busy_show=` (default 1, the busy lines). `busy=` is unchanged: it still switches the whole detector (day
+hook, stall log) at startup, and `busy_show=0` only stops the drawing, the `BUSY>` log keeps working. `WritePrivateProfileString`
+replaces the value line in place, the comments stay. A hand edit of perf.ini is read at the next start and the dialog
+shows it. `SC3PERF_OVERLAY` / `SC3PERF_BUSY_SHOW` env vars override at startup, as for every perf.ini key.
+
+Defaults: unchanged release behaviour, both shown (`overlay=1` in the release perf.ini, `busy_show` missing = 1).
+
+Opt-outs: `SC3RESIZE_PERFPREFS=0` (no boxes; HUDOPT controls stay). The boxes ride on the HUDOPT detours, so
+`SC3RESIZE_HUDOPT=0` removes them too.
+
+Test aid: writing `busytest <text>` into `sc3perf.cmd` puts text on the busy line (`busytest` alone clears it), to
+check the draw gate without a real stall. The Preferences dialog itself does not raise the busy line: with it open
+the city hold `city+0x144` reads 2 (`sim_status`), and the detector treats a held city as paused on purpose.
+
+### Evidence
+
+`verify/perfprefs/PRE.md` (pre-registration) and `RESULTS.md`.
