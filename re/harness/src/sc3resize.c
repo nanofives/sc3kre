@@ -8033,6 +8033,9 @@ static void rz_subclass(void) {
     g_wm_fixed = 1;
     logf("### RESIZE: window 0x%08lX subclassed (old proc 0x%08lX) - WM_SIZE observed, "
          "resize performed on the render thread", (DWORD)h, (DWORD)g_oldproc);
+    /* WINDOWED-EARLY block: if the style bytes could not be patched, the frame is still fixed here and the
+       resize step that would add it never runs (no resize is possible). Add it now. */
+    if (g_thickframe) rz_make_resizable();
 }
 
 /* Minimal replacement for the probe's multi-branch fnlog_enter. Same __stdcall(idx, f)
@@ -8313,6 +8316,94 @@ static void patch_surfacefmt(HMODULE gz) {
     VirtualProtect(site, 10, old, &old);
     FlushInstructionCache(GetCurrentProcess(), site, 10);
     logf("--- FIX16: 16bpp branch injected at 0x19349 -> cave 0x%08lX (5-6-5)", (DWORD)cave);
+}
+
+/* ⭐ WINDOWED-EARLY + FRAME (child windowed, 2026-10-12, verify/windowed/).
+ *
+ * Owner report from a STOCK install + release sc3mods-2026-10-12: no windowed, no "escalado". Measured on
+ * Simcity_stock: the window comes up windowed but with the stock FIXED frame, style 0x94CA0000 (no
+ * WS_THICKFRAME, no WS_MAXIMIZEBOX), so it can be neither dragged nor maximized. rz_make_resizable only runs
+ * inside the resize step, which only runs after a resize: on stock it never runs. Every owner test so far ran
+ * on MAIN\Apps, whose GZGraphicD carries pe_patch.py `resizable_frame` on disk (style 0x94CF0000 from creation).
+ *
+ * This applies that recipe's three same-length imm bytes in memory, plus the windowed and 16-bit patches,
+ * from a loader notification (LdrRegisterDllNotification, LOADED), i.e. after GZGraphicD is mapped and
+ * relocated and before its DllMain or any of its code runs. The watcher's 100 ms poll (and the 1 ms polls in
+ * sc3bigcity / sc3overscroll) only win the race against GZGraphicD Init by load order; this removes the race.
+ *   0x10017ca1  c7 43 10 1b 00 00 00   mov [ebx+0x10],0x1b   -> 0x3b  create mask: MAXIMIZEBOX branch on
+ *   0x10018220  0d 00 00 01 00         or eax,0x10000        -> 0x50000 fold WS_THICKFRAME in beside it
+ *   0x1001856d  68 00 00 c8 90         push 0x90C80000       -> 0x90CD0000 live windowed style (SetWindowLongA)
+ * [CONFIRMED @ GZGraphicD 0x100181d0, 0x1001854a], none of the bytes is under a base relocation.
+ * All-or-nothing; already-patched bytes (MAIN's on-disk build) are logged and left alone.
+ * SC3RESIZE_EARLY=0 goes back to the watcher-only path. SC3RESIZE_THICKFRAME=0 skips the frame bytes. */
+static int g_early = 1;
+static PVOID g_ldr_cookie;
+static volatile LONG g_gz_early;
+
+static void patch_frame_style(HMODULE gz) {
+    static const struct { DWORD rva; BYTE stock[7]; int len; int at; BYTE want; } s[3] = {
+        { 0x17ca1, { 0xC7,0x43,0x10,0x1B,0x00,0x00,0x00 }, 7, 3, 0x3B },
+        { 0x18220, { 0x0D,0x00,0x00,0x01,0x00 },           5, 3, 0x05 },
+        { 0x1856d, { 0x68,0x00,0x00,0xC8,0x90 },           5, 3, 0xCD },
+    };
+    int i, stock = 0, done = 0;
+    for (i = 0; i < 3; i++) {
+        BYTE *p = (BYTE *)gz + s[i].rva;
+        if (!memcmp(p, s[i].stock, s[i].len)) stock++;
+        else if (!memcmp(p, s[i].stock, s[i].at) && p[s[i].at] == s[i].want &&
+                 !memcmp(p + s[i].at + 1, s[i].stock + s[i].at + 1, s[i].len - s[i].at - 1)) done++;
+    }
+    if (done == 3) { logf("--- FRAME: GZGraphicD style bytes already resizable (on-disk resizable_frame or applied earlier)"); return; }
+    if (stock != 3) { logf("--- FRAME: GZGraphicD style bytes differ from shipped (%d stock, %d patched) - NOT patched", stock, done); return; }
+    for (i = 0; i < 3; i++) {
+        BYTE *p = (BYTE *)gz + s[i].rva + s[i].at;
+        DWORD old;
+        if (!VirtualProtect(p, 1, PAGE_EXECUTE_READWRITE, &old)) {
+            logf("--- FRAME: VirtualProtect failed at +0x%lX (%lu)", s[i].rva + s[i].at, GetLastError()); return; }
+        *p = s[i].want;
+        VirtualProtect(p, 1, old, &old);
+        FlushInstructionCache(GetCurrentProcess(), p, 1);
+    }
+    logf("--- FRAME: GZGraphicD create mask 0x1b->0x3b, or 0x10000->0x50000, live style 0x90C80000->0x90CD0000 "
+         "(WS_THICKFRAME|WS_MAXIMIZEBOX, same bytes as pe_patch resizable_frame)");
+}
+
+typedef struct { USHORT Length, MaximumLength; PWSTR Buffer; } RZ_USTR;
+typedef struct { ULONG Flags; const RZ_USTR *FullDllName; const RZ_USTR *BaseDllName; PVOID DllBase; ULONG SizeOfImage; } RZ_LDR_DATA;
+typedef VOID (CALLBACK *RZ_LDR_FN)(ULONG, const RZ_LDR_DATA *, PVOID);
+typedef LONG (NTAPI *RZ_LDR_REG)(ULONG, RZ_LDR_FN, PVOID, PVOID *);
+
+/* Loader-lock context: only byte patches, VirtualAlloc/Protect and logf (whose lock is never held across a
+   loader call). No LoadLibrary, no thread waits. */
+static VOID CALLBACK rz_ldr_notify(ULONG reason, const RZ_LDR_DATA *d, PVOID ctx) {
+    static const WCHAR want[] = L"gzgraphicd.dll";
+    int i, n;
+    (void)ctx;
+    if (reason != 1 || !d || !d->BaseDllName || !d->BaseDllName->Buffer || g_gz_early) return;
+    n = d->BaseDllName->Length / 2;
+    if (n != (int)(sizeof(want) / 2 - 1)) return;
+    for (i = 0; i < n; i++) {
+        WCHAR c = d->BaseDllName->Buffer[i];
+        if (c >= L'A' && c <= L'Z') c = (WCHAR)(c + 32);
+        if (c != want[i]) return;
+    }
+    if (InterlockedExchange(&g_gz_early, 1)) return;
+    logf("--- EARLY: GZGraphicD mapped at 0x%08lX, patching before its DllMain (loader notification)", (DWORD)d->DllBase);
+    patch_windowed((HMODULE)d->DllBase);
+    patch_surfacefmt((HMODULE)d->DllBase);
+    if (g_thickframe) patch_frame_style((HMODULE)d->DllBase);
+}
+
+static void rz_early_register(void) {
+    RZ_LDR_REG reg = (RZ_LDR_REG)GetProcAddress(GetModuleHandleA("ntdll.dll"), "LdrRegisterDllNotification");
+    LONG st;
+    if (GetModuleHandleA("GZGraphicD.dll")) {
+        logf("--- EARLY: GZGraphicD already loaded at mod load - the watcher patches it (late injection)");
+        return;
+    }
+    if (!reg) { logf("--- EARLY: LdrRegisterDllNotification not found - watcher path only"); return; }
+    st = reg(0, rz_ldr_notify, NULL, &g_ldr_cookie);
+    logf("--- EARLY: loader notification %s (status 0x%08lX)", st >= 0 ? "registered" : "FAILED", (DWORD)st);
 }
 
 /* FIX A (2026-08-28): clamp the grid-B bucket index in FUN_1000cedb.
@@ -9038,6 +9129,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
        replicates the -windowed and -fix16 the routine was validated under. */
     patch_windowed(gz);
     patch_surfacefmt(gz);
+    if (g_thickframe) patch_frame_style(gz);   /* WINDOWED-EARLY block: no-op when the loader notification ran */
     patch_gridb_clamp(ss);   /* FIX A: clamp the grid-B bucket index (OOB AV root cause) */
     {   char v[8];
         if (GetEnvironmentVariableA("SC3RESIZE_CELLFIX", v, sizeof(v))) g_cellfix = atoi(v);
@@ -9179,6 +9271,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_DIALOGS", v, sizeof(v))) g_dialogs = atoi(v);
           g_bltbeat = GetEnvironmentVariableA("SC3RESIZE_BLTBEAT", v, sizeof(v)) && atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_THICKFRAME", v, sizeof(v))) g_thickframe = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_EARLY", v, sizeof(v))) g_early = atoi(v);
           if (!GetEnvironmentVariableA("SC3RESIZE_DUMPDIR", g_dumpdir, sizeof(g_dumpdir)))
               lstrcpynA(g_dumpdir, ".", sizeof(g_dumpdir));
           g_noparentfix = GetEnvironmentVariableA("SC3RESIZE_NOPARENTFIX", v, sizeof(v)) && atoi(v);
@@ -9214,6 +9307,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
                  "zoom-after-resize crash the game swallows)");
         else
             logf("### VEH crash logger FAILED to install");
+        logf("### FLAGS> early=%d thickframe=%d", g_early, g_thickframe);
+        if (g_early) rz_early_register();
         CreateThread(NULL, 0, rz_watcher, NULL, 0, NULL);
     }
     return TRUE;
