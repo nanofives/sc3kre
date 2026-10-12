@@ -100,6 +100,8 @@ static int g_edge, g_edge_gain, g_edge_max;   /* defaults set in ini_read */
 static int g_arrows = 1;             /* [camera] arrows_keep: a held arrow survives a mouse move */
 static int g_truec = 1;              /* [camera] true_center: judge steps at the real visible centre */
 static int g_wall = 1;               /* [camera] front_wall: front edges judged at the bottom of the cliff wall */
+static int g_camfeel = 1;            /* CAMFEEL block: SC3OVERSCROLL_CAMFEEL=0 keeps the shipped camera constants */
+static int g_cam_step = 8, g_cam_div = 4, g_cam_dead = 2;   /* [camera] scroll_step / drag_divisor / drag_deadzone */
 
 static void ini_read(void) {
     char path[MAX_PATH];
@@ -116,6 +118,9 @@ static void ini_read(void) {
     g_edge = GetPrivateProfileIntA("edge", "enabled", 1, path) ? 1 : 0;
     g_edge_gain = GetPrivateProfileIntA("edge", "gain", 8, path);
     g_edge_max = GetPrivateProfileIntA("edge", "max", 1600, path);
+    g_cam_step = GetPrivateProfileIntA("camera", "scroll_step", 8, path);
+    g_cam_div = GetPrivateProfileIntA("camera", "drag_divisor", 4, path);
+    g_cam_dead = GetPrivateProfileIntA("camera", "drag_deadzone", 2, path);
 }
 
 /* ============================================================ in-memory code patching */
@@ -768,6 +773,45 @@ static int patch_arrows(HMODULE spr) {
     return 1;
 }
 
+/* ⭐ CAMFEEL (child windowed, 2026-10-12, verify/windowed/).
+ *
+ * The owner's camera feel lives on disk on the dev PC only: MAIN\Apps\SIMSPR.DLL carries the pe_patch.py recipes
+ * scroll_speed=8 + drag_divisor=4 + drag_deadzone=2 (owner ruling 2026-08-26, re/sessions/STATUS_camera.md). A stock
+ * install (the owner's laptop) has the shipped 32 / 2 / 12. Same bytes, in memory, from here:
+ *   SIMSPR 0x10067690..0x100676a0  five per-zoom keyboard scroll steps, 32.0f   -> scroll_step
+ *   SIMSPR 0x10043a5d / 0x10043a67 `push -2`, the right-drag divisor X / Y      -> -drag_divisor
+ *   SIMSPR 0x100676a4              right-drag dead zone, 12.0f                  -> drag_deadzone
+ * [CONFIRMED @ 0x10043a38] (drag branch), none of the bytes is under a base relocation. All-or-nothing: bytes already
+ * at the target (the dev PC's on-disk build) are logged and left alone, anything else is refused.
+ * overscroll.ini [camera] scroll_step=32 drag_divisor=2 drag_deadzone=12 is the shipped feel. */
+static void patch_camfeel(HMODULE spr) {
+    float *step = (float *)((BYTE *)spr + 0x67690), *dead = (float *)((BYTE *)spr + 0x676a4);
+    BYTE *dx = (BYTE *)spr + 0x43a5d, *dy = (BYTE *)spr + 0x43a67;
+    static const BYTE ctx_x[6] = { 0x6a, 0xfe, 0x99, 0x59, 0xf7, 0xf9 }, ctx_y[4] = { 0x6a, 0xfe, 0x8b, 0xf8 };
+    float want_step = (float)g_cam_step, want_dead = (float)g_cam_dead;
+    BYTE want_div = (BYTE)(-g_cam_div);
+    int i, stock = 1, done = 1;
+    if (g_cam_step < 1 || g_cam_step > 256 || g_cam_div < 1 || g_cam_div > 128 || g_cam_dead < 0 || g_cam_dead > 79) {
+        logf("### CAMFEEL: overscroll.ini values out of range (scroll_step 1..256, drag_divisor 1..128, drag_deadzone 0..79)"
+             " - NOT patched"); return; }
+    for (i = 0; i < 5; i++) { if (step[i] != 32.0f) stock = 0; if (step[i] != want_step) done = 0; }
+    if (*dead != 12.0f) stock = 0;
+    if (*dead != want_dead) done = 0;
+    if (memcmp(dx + 2, ctx_x + 2, 4) || memcmp(dy + 2, ctx_y + 2, 2) || dx[0] != 0x6a || dy[0] != 0x6a) stock = done = 0;
+    if (dx[1] != 0xfe || dy[1] != 0xfe) stock = 0;
+    if (dx[1] != want_div || dy[1] != want_div) done = 0;
+    if (done) { logf("### CAMFEEL: SIMSPR already at scroll %d, drag divisor %d, dead zone %d (on-disk camera build) - left alone",
+                     g_cam_step, g_cam_div, g_cam_dead); return; }
+    if (!stock) { logf("### CAMFEEL: SIMSPR camera bytes are neither shipped nor the target - NOT patched"); return; }
+    {   float st[5];
+        for (i = 0; i < 5; i++) st[i] = want_step;
+        if (!write_code((BYTE *)step, st, sizeof(st)) || !write_code((BYTE *)dead, &want_dead, 4)
+            || !write_code(dx + 1, &want_div, 1) || !write_code(dy + 1, &want_div, 1)) {
+            logf("### CAMFEEL: VirtualProtect failed (%lu) - camera bytes may be partly written", GetLastError()); return; } }
+    logf("### CAMFEEL: SIMSPR scroll step 32 -> %d, drag divisor 2 -> %d, drag dead zone 12 -> %d (dev PC camera build)",
+         g_cam_step, g_cam_div, g_cam_dead);
+}
+
 /* ================================================================ boot */
 
 static DWORD WINAPI watcher(LPVOID param) {
@@ -781,6 +825,7 @@ static DWORD WINAPI watcher(LPVOID param) {
         }
         if (!spr && (spr = GetModuleHandleA("SIMSPR.DLL")) != NULL) {
             ok = patch_translate(spr);
+            if (g_camfeel) patch_camfeel(spr);
             if (g_arrows) g_arrows = patch_arrows(spr) ? 1 : 0;
         }
         Sleep(1);
@@ -813,6 +858,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
         QueryPerformanceFrequency(&g_freq);
         QueryPerformanceCounter(&g_t0);
         ini_read();
+        {   char v[8];
+            if (GetEnvironmentVariableA("SC3OVERSCROLL_CAMFEEL", v, sizeof(v))) g_camfeel = atoi(v); }
         log_open();
         logf("### sc3overscroll loaded - overscroll %d%%", g_overscroll);
         CreateThread(NULL, 0, watcher, NULL, 0, NULL);
