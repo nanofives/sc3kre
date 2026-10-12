@@ -2728,6 +2728,10 @@ static void read_cmd(void) {
     else if (!strcmp(buf, "profile on")) { g_profile = 1; logf("CMD> profiling on"); }
     else if (!strcmp(buf, "profile off")) { g_profile = 0; logf("CMD> profiling off"); }
     else if (!strncmp(buf, "mark ", 5)) logf("MARK> %s", buf + 5);
+    else if (!strncmp(buf, "busytest", 8)) {   /* test aid: put text on the busy line ("busytest" alone clears it) */
+        busy_set(buf[8] == ' ' ? buf + 9 : "");
+        logf("CMD> busy line test text '%s'", buf[8] == ' ' ? buf + 9 : "");
+    }
     else logf("CMD> unknown '%s'", buf);
 }
 
