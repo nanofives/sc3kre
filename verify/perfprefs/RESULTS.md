@@ -4,8 +4,21 @@ Build: branch `child/perfprefs` (sc3resize + sc3perf from the worktree), instanc
 install) and `Simcity_stock_windowed/re/harness/inst_perfprefs` (stock GZGraphicD/SIMSPR, release perf.ini).
 Europolis 256 copy, 800x600 windowed.
 
-**Visual check pending: display asleep** (taskbar clock frozen at 13:04 from 13:45 on, every grab white or stale).
-Everything below is runtime evidence that does not need the screen: the mods' logs, perf.ini on disk, the live UI
+**Visual check: DONE at 14:55 on the stock copy** (`Simcity_stock_perfprefs`, own hard-linked mod-free tree per
+protocol section 10, release perf.ini), images in MAIN `verify/perfprefs/` (gitignored), each looked at:
+
+| image | shows |
+|---|---|
+| `21_city_busy_on.png` | city, yellow FPS line and the red busy line (text injected with `busytest`) top-left |
+| `22_prefs_open.png` | Preferencias from the in-city flyout: "Ver FPS" and "Ver perfilador" checked, on the row under "Ir a los desastres automatico", left of "Suavizado", no overlap |
+| `23_prefs_unchecked.png` | both boxes unchecked, the lines still drawn (nothing applies before OK) |
+| `24_after_ok_both_off.png` | one second after OK: no FPS line, no red line, the city under them intact |
+| `30_menu_after_restart.png` | after a restart, main menu with no FPS line |
+| `31_menu_prefs_saved_state.png` | main menu Preferencias: both boxes unchecked = the saved state |
+| `32_menu_after_ok_fps_on.png` | both checked + OK: FPS line back on the main menu at once |
+
+Before the display woke (13:04 to 14:55 it was asleep), the tests below were run on runtime evidence that does not
+need the screen: the mods' logs, perf.ini on disk, the live UI
 tree (`uiwin_dump.py`), and a Frida hook counting the `TextOutA` calls made from sc3perf.dll
 (`textout_count`, numbers normalised to `#`). The overlay is drawn only by those calls.
 
