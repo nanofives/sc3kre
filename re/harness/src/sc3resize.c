@@ -3642,7 +3642,8 @@ static int    g_hs_diag;                /* SC3RESIZE_HUDSCALE_DIAG=1: per-second
  *   so enlarged edges are composited over the city they sit on. Before, edge taps read the city next to the native
  *   rect, a different spot of the map, which moved during a scroll.
  * - The minimap picture is plain pixel data (no anti-aliasing), so bilinear alone keeps its stair steps. In smooth
- *   mode its source is first doubled with Scale2x (EPX) and the bilinear tap reads that.
+ *   mode its source is first doubled with Scale2x (EPX), softened with one [1 2 1] tent in 2x space (HUD pixels only),
+ *   and the bilinear tap reads that (filters compared offline: verify/hudfix/minimap_filters_x2.png).
  *   SC3RESIZE_HUDSCALE_MINISMOOTH=0 turns that step off. */
 static int    g_hudfix = 1;
 static int    g_hs_minismooth = 1;
@@ -3658,6 +3659,8 @@ static WORD  *g_hs_x2;
 static LONG   g_hs_x2cap;
 static LONG  *g_hs_c2b, *g_hs_c2f, g_hs_c2cap;
 static DWORD  g_hsd_recs, g_hsd_fallback;
+static __int64 g_hst[6];   /* HUDFIX stage times: snapshot, coverage, resolve, epx, resample, total */
+static void rz_hs_tick(int k, LARGE_INTEGER *t) { LARGE_INTEGER u; QueryPerformanceCounter(&u); g_hst[k] += u.QuadPart - t->QuadPart; *t = u; }
 static char   g_hs_dump[MAX_PATH];      /* SC3RESIZE_HUDSCALE_DUMP=<abs prefix>: raw dumps of one frame (diag) */
 static int    g_hs_why;                 /* last rz_hs_pre exit: 0 enlarged, else the refusing check */
 static DWORD  g_hsd_beat, g_hsd_full, g_hsd_did, g_hsd_why[12], g_hsd_part, g_hsd_partc, g_hsd_null, g_hsd_logn;
@@ -3967,17 +3970,70 @@ static void rz_hs_coverage(int n, LONG cw, LONG ch, int recs_ok) {
 }
 
 /* HUDFIX: is native pixel (px,py) HUD? */
-static __inline int rz_hs_hud(LONG px, LONG py, LONG cw, const BYTE *city, LONG cpitch) {
-    BYTE c = g_hs_cov[py * cw + px];
-    if (c == 2) return 1;
-    if (!c) return 0;
-    return g_hs_snap[py * cw + px] != ((const WORD *)(city + py * cpitch))[px];
+/* HUDFIX: settle the fallback pixels once per frame (cov 1 -> 2 if the pixel differs from the city layer, else 0), so
+ * the per-tap test below is one byte read. */
+static void rz_hs_resolve(int n, LONG cw, LONG ch, const BYTE *city, LONG cpitch) {
+    int i;
+    LONG x, y;
+    for (i = 0; i < n; i++) {
+        LONG x0 = max(g_hs_src[i][0] - 1, 0), x1 = min(g_hs_src[i][2] + 1, cw), y0 = max(g_hs_src[i][1] - 1, 0), y1 = min(g_hs_src[i][3] + 1, ch);
+        for (y = y0; y < y1; y++) {
+            BYTE *c = g_hs_cov + y * cw;
+            const WORD *sn = g_hs_snap + y * cw, *ct = (const WORD *)(city + y * cpitch);
+            for (x = x0; x < x1; x++) if (c[x] == 1) c[x] = sn[x] != ct[x] ? 2 : 0;
+        }
+    }
 }
 
+/* HUDFIX: is native pixel (px,py) HUD? (after rz_hs_resolve) */
+static __inline int rz_hs_hud(LONG px, LONG py, LONG cw, const BYTE *city, LONG cpitch) {
+    (void)city; (void)cpitch;
+    return g_hs_cov[py * cw + px] == 2;
+}
+
+static WORD rz_hs_tent3(WORD a, WORD b, WORD c, int g6) {   /* (a + 2b + c) / 4 per channel */
+    LONG r, g, bl;
+    if (g6) {
+        r = ((a >> 11) + 2 * (b >> 11) + (c >> 11) + 2) >> 2;
+        g = (((a >> 5) & 63) + 2 * ((b >> 5) & 63) + ((c >> 5) & 63) + 2) >> 2;
+        bl = ((a & 31) + 2 * (b & 31) + (c & 31) + 2) >> 2;
+        return (WORD)((r << 11) | (g << 5) | bl);
+    }
+    r = (((a >> 10) & 31) + 2 * ((b >> 10) & 31) + ((c >> 10) & 31) + 2) >> 2;
+    g = (((a >> 5) & 31) + 2 * ((b >> 5) & 31) + ((c >> 5) & 31) + 2) >> 2;
+    bl = ((a & 31) + 2 * (b & 31) + (c & 31) + 2) >> 2;
+    return (WORD)((r << 10) | (g << 5) | bl);
+}
+static WORD *g_hs_x2t;
+static LONG  g_hs_x2tcap;
+
 /* HUDFIX: Scale2x (EPX) of the snapshot region r (native, clipped) into g_hs_x2 (2w x 2h). */
-static int rz_hs_epx(const LONG *r, LONG cw) {
+static WORD *g_hs_epxkey;        /* the snapshot region the 2x buffer was built from (skip the rebuild when unchanged) */
+static BYTE *g_hs_epxcov;
+static LONG  g_hs_epxr[4], g_hs_epxcap;
+static int   g_hs_epxg6 = -1;
+static int rz_hs_epx(const LONG *r, LONG cw, int g6) {
     LONG w = r[2] - r[0], h = r[3] - r[1], x, y;
+    int same;
     if (w <= 0 || h <= 0) return 0;
+    if (g_hs_epxcap < w * h) {
+        free(g_hs_epxkey); free(g_hs_epxcov);
+        g_hs_epxkey = (WORD *)malloc((size_t)w * h * 2); g_hs_epxcov = (BYTE *)malloc((size_t)w * h);
+        g_hs_epxcap = g_hs_epxkey && g_hs_epxcov ? w * h : 0;
+        g_hs_epxr[2] = -1;
+    }
+    same = g_hs_epxcap >= w * h && g_hs_x2 && g_hs_x2cap >= 4 * w * h && g6 == g_hs_epxg6 && !memcmp(g_hs_epxr, r, sizeof(g_hs_epxr));
+    for (y = 0; same && y < h; y++)
+        same = !memcmp(g_hs_epxkey + y * w, g_hs_snap + (r[1] + y) * cw + r[0], w * 2) &&
+               !memcmp(g_hs_epxcov + y * w, g_hs_cov + (r[1] + y) * cw + r[0], w);
+    if (same) return 1;
+    if (g_hs_epxcap >= w * h) {
+        for (y = 0; y < h; y++) {
+            memcpy(g_hs_epxkey + y * w, g_hs_snap + (r[1] + y) * cw + r[0], w * 2);
+            memcpy(g_hs_epxcov + y * w, g_hs_cov + (r[1] + y) * cw + r[0], w);
+        }
+        memcpy(g_hs_epxr, r, sizeof(g_hs_epxr)); g_hs_epxg6 = g6;
+    }
     if (g_hs_x2cap < 4 * w * h) {
         free(g_hs_x2);
         g_hs_x2 = (WORD *)malloc((size_t)4 * w * h * 2);
@@ -3996,7 +4052,58 @@ static int rz_hs_epx(const LONG *r, LONG cw) {
             o1[2 * x + 1] = (B == D && B != A && D != C) ? D : P;
         }
     }
+    /* then one [1 2 1] tent in 2x space (about half a native pixel of blur), horizontal then vertical, taking only HUD
+       neighbours (a non-HUD neighbour counts as the centre), so no city is mixed into the picture */
+    if (g_hs_x2tcap < 4 * w * h) {
+        free(g_hs_x2t);
+        g_hs_x2t = (WORD *)malloc((size_t)4 * w * h * 2);
+        g_hs_x2tcap = g_hs_x2t ? 4 * w * h : 0;
+    }
+    if (g_hs_x2t) {
+        LONG W = 2 * w, H = 2 * h;
+        for (y = 0; y < H; y++) {
+            const BYTE *cv = g_hs_cov + (r[1] + y / 2) * cw + r[0];
+            const WORD *in = g_hs_x2 + y * W;
+            WORD *o = g_hs_x2t + y * W;
+            for (x = 0; x < W; x++) {
+                WORD c = in[x], l, rr;
+                if (cv[x / 2] != 2) { o[x] = c; continue; }
+                l = x > 0 && cv[(x - 1) / 2] == 2 ? in[x - 1] : c;
+                rr = x < W - 1 && cv[(x + 1) / 2] == 2 ? in[x + 1] : c;
+                o[x] = rz_hs_tent3(l, c, rr, g6);
+            }
+        }
+        for (y = 0; y < H; y++) {
+            const BYTE *cv = g_hs_cov + (r[1] + y / 2) * cw + r[0];
+            const BYTE *cu = y > 0 ? g_hs_cov + (r[1] + (y - 1) / 2) * cw + r[0] : NULL;
+            const BYTE *cdn = y < H - 1 ? g_hs_cov + (r[1] + (y + 1) / 2) * cw + r[0] : NULL;
+            const WORD *in = g_hs_x2t + y * W;
+            WORD *o = g_hs_x2 + y * W;
+            for (x = 0; x < W; x++) {
+                WORD c = in[x], u, dn;
+                if (cv[x / 2] != 2) { o[x] = c; continue; }
+                u = cu && cu[x / 2] == 2 ? in[x - W] : c;
+                dn = cdn && cdn[x / 2] == 2 ? in[x + W] : c;
+                o[x] = rz_hs_tent3(u, c, dn, g6);
+            }
+        }
+    }
     return 1;
+}
+
+/* HUDFIX: bilinear of four 16-bit taps in one pass (fx, fy 0..256). */
+static __inline WORD rz_hs_blend4(WORD a, WORD b, WORD c, WORD d, LONG fx, LONG fy, int g6) {
+    LONG w0 = (256 - fx) * (256 - fy), w1 = fx * (256 - fy), w2 = (256 - fx) * fy, w3 = fx * fy, r, g, bl;
+    if (g6) {
+        r  = ((a >> 11) * w0 + (b >> 11) * w1 + (c >> 11) * w2 + (d >> 11) * w3 + 32768) >> 16;
+        g  = (((a >> 5) & 63) * w0 + ((b >> 5) & 63) * w1 + ((c >> 5) & 63) * w2 + ((d >> 5) & 63) * w3 + 32768) >> 16;
+        bl = ((a & 31) * w0 + (b & 31) * w1 + (c & 31) * w2 + (d & 31) * w3 + 32768) >> 16;
+        return (WORD)((r << 11) | (g << 5) | bl);
+    }
+    r  = (((a >> 10) & 31) * w0 + ((b >> 10) & 31) * w1 + ((c >> 10) & 31) * w2 + ((d >> 10) & 31) * w3 + 32768) >> 16;
+    g  = (((a >> 5) & 31) * w0 + ((b >> 5) & 31) * w1 + ((c >> 5) & 31) * w2 + ((d >> 5) & 31) * w3 + 32768) >> 16;
+    bl = ((a & 31) * w0 + (b & 31) * w1 + (c & 31) * w2 + (d & 31) * w3 + 32768) >> 16;
+    return (WORD)((r << 10) | (g << 5) | bl);
 }
 
 /* Before the final present: enlarge the HUD into the frame. Returns 1 when the frame must be restored after. */
@@ -4060,14 +4167,16 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
         rz_hs_copy(bits, pitch, ox, oy, cw, m, 1);
         rz_hs_copy(bits, pitch, ox, oy, cw, g_hs_dst[i], 1);
     }
+    { LARGE_INTEGER tq = t0; rz_hs_tick(0, &tq); }
     if (city && g_hudfix) {   /* HUDFIX: what the game drew into the composite this frame */
+        LARGE_INTEGER tq; QueryPerformanceCounter(&tq);
         if (g_hs_covcap < cw * ch) {
             free(g_hs_cov);
             g_hs_cov = (BYTE *)malloc((size_t)cw * ch);
             g_hs_covcap = g_hs_cov ? cw * ch : 0;
         }
         if (!g_hs_cov) city_fix = 0;
-        else rz_hs_coverage(n, cw, ch, src == g_hs_comp && !g_hs_recover && g_hs_nrec > 0);
+        else { rz_hs_coverage(n, cw, ch, src == g_hs_comp && !g_hs_recover && g_hs_nrec > 0); rz_hs_tick(1, &tq); rz_hs_resolve(n, cw, ch, city, cpitch); rz_hs_tick(2, &tq); }
         if (g_hs_c2cap < cw + ch) {
             free(g_hs_c2b); free(g_hs_c2f);
             g_hs_c2b = (LONG *)malloc((size_t)(cw + ch) * sizeof(LONG)); g_hs_c2f = (LONG *)malloc((size_t)(cw + ch) * sizeof(LONG));
@@ -4091,7 +4200,7 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
         if (g_hs_filter && g_hs_minismooth && sui_base && g_hs_vt[i] == sui_base + 0xaa180 && g_hs_c2cap >= cw + ch) {
             er[0] = max(g_hs_src[i][0] - 1, 0); er[1] = max(g_hs_src[i][1] - 1, 0);
             er[2] = min(g_hs_src[i][2] + 1, cw); er[3] = min(g_hs_src[i][3] + 1, ch);
-            epx = rz_hs_epx(er, cw);
+            { LARGE_INTEGER te; QueryPerformanceCounter(&te); epx = rz_hs_epx(er, cw, g6); rz_hs_tick(3, &te); }
             w2 = 2 * (er[2] - er[0]); h2 = 2 * (er[3] - er[1]);
             if (epx) {   /* per dest column / row: base tap in the 2x buffer and weight */
                 for (x = d[0]; x < d[2]; x++) {
@@ -4121,29 +4230,27 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
                 for (x = d[0]; x < d[2]; x++) { LONG sx = g_hs_xs[x]; f[x] = rz_hs_hud(sx, sy, cw, city, cpitch) ? srow[sx] : cd[x]; }
             } else if (epx) {
                 LONG b0 = g_hs_c2b[cw + y], b1 = b0 + 1 < h2 ? b0 + 1 : b0, fy = g_hs_c2f[cw + y];
-                LONG py0 = er[1] + b0 / 2, py1 = er[1] + b1 / 2;
+                const BYTE *c0 = g_hs_cov + (er[1] + b0 / 2) * cw + er[0], *c1 = g_hs_cov + (er[1] + b1 / 2) * cw + er[0];
                 const WORD *r0 = g_hs_x2 + b0 * w2, *r1 = g_hs_x2 + b1 * w2;
                 for (x = d[0]; x < d[2]; x++) {
                     LONG a0 = g_hs_c2b[x], a1 = a0 + 1 < w2 ? a0 + 1 : a0, fx = g_hs_c2f[x];
-                    LONG px0 = er[0] + a0 / 2, px1 = er[0] + a1 / 2;
-                    int h00 = rz_hs_hud(px0, py0, cw, city, cpitch), h01 = rz_hs_hud(px1, py0, cw, city, cpitch),
-                        h10 = rz_hs_hud(px0, py1, cw, city, cpitch), h11 = rz_hs_hud(px1, py1, cw, city, cpitch);
+                    int h00 = c0[a0 >> 1] == 2, h01 = c0[a1 >> 1] == 2, h10 = c1[a0 >> 1] == 2, h11 = c1[a1 >> 1] == 2;
                     WORD c = cd[x];
-                    if (!(h00 | h01 | h10 | h11)) { f[x] = c; continue; }
-                    f[x] = rz_hs_lerp(rz_hs_lerp(h00 ? r0[a0] : c, h01 ? r0[a1] : c, fx, g6),
-                                      rz_hs_lerp(h10 ? r1[a0] : c, h11 ? r1[a1] : c, fx, g6), fy, g6);
+                    if (h00 & h01 & h10 & h11) f[x] = rz_hs_blend4(r0[a0], r0[a1], r1[a0], r1[a1], fx, fy, g6);
+                    else if (!(h00 | h01 | h10 | h11)) f[x] = c;
+                    else f[x] = rz_hs_blend4(h00 ? r0[a0] : c, h01 ? r0[a1] : c, h10 ? r1[a0] : c, h11 ? r1[a1] : c, fx, fy, g6);
                 }
             } else {
                 LONG yb = g_hs_yf[y] & 0xfffff, fy = (g_hs_yf[y] >> 20) & 0x1ff, yb1 = yb + 1 < ch ? yb + 1 : yb;
                 const WORD *r0 = g_hs_snap + yb * cw, *r1 = g_hs_snap + yb1 * cw;
+                const BYTE *c0 = g_hs_cov + yb * cw, *c1 = g_hs_cov + yb1 * cw;
                 for (x = d[0]; x < d[2]; x++) {
                     LONG xb = g_hs_xf[x] & 0xfffff, fx = (g_hs_xf[x] >> 20) & 0x1ff, xb1 = xb + 1 < cw ? xb + 1 : xb;
-                    int h00 = rz_hs_hud(xb, yb, cw, city, cpitch), h01 = rz_hs_hud(xb1, yb, cw, city, cpitch),
-                        h10 = rz_hs_hud(xb, yb1, cw, city, cpitch), h11 = rz_hs_hud(xb1, yb1, cw, city, cpitch);
+                    int h00 = c0[xb] == 2, h01 = c0[xb1] == 2, h10 = c1[xb] == 2, h11 = c1[xb1] == 2;
                     WORD c = cd[x];
-                    if (!(h00 | h01 | h10 | h11)) { f[x] = c; continue; }
-                    f[x] = rz_hs_lerp(rz_hs_lerp(h00 ? r0[xb] : c, h01 ? r0[xb1] : c, fx, g6),
-                                      rz_hs_lerp(h10 ? r1[xb] : c, h11 ? r1[xb1] : c, fx, g6), fy, g6);
+                    if (h00 & h01 & h10 & h11) f[x] = rz_hs_blend4(r0[xb], r0[xb1], r1[xb], r1[xb1], fx, fy, g6);
+                    else if (!(h00 | h01 | h10 | h11)) f[x] = c;
+                    else f[x] = rz_hs_blend4(h00 ? r0[xb] : c, h01 ? r0[xb1] : c, h10 ? r1[xb] : c, h11 ? r1[xb1] : c, fx, fy, g6);
                 }
             }
         }
@@ -4197,6 +4304,11 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
     g_hs_time += t1.QuadPart - t0.QuadPart; g_hs_frames++;
     if (!g_hs_beat) g_hs_beat = GetTickCount();
     if (GetTickCount() - g_hs_beat >= 10000 && g_hs_frames) {
+        if (g_hudfix && g_hs_diag && g_freq.QuadPart)
+            logf("HUDSCALE> stages ms/frame: lock+snapshot %.2f coverage %.2f resolve %.2f minimap2x %.2f",
+                 1000.0 * g_hst[0] / g_freq.QuadPart / g_hs_frames, 1000.0 * g_hst[1] / g_freq.QuadPart / g_hs_frames,
+                 1000.0 * g_hst[2] / g_freq.QuadPart / g_hs_frames, 1000.0 * g_hst[3] / g_freq.QuadPart / g_hs_frames);
+        memset(g_hst, 0, sizeof(g_hst));
         logf("HUDSCALE> %lu enlarged frames in %lu ms, %.2f ms per frame in the pre-present pass%s; HUDFIX: %lu recorded HUD Blts used, %lu frame(s) on the equality fallback",
              g_hs_frames, GetTickCount() - g_hs_beat,
              g_freq.QuadPart ? 1000.0 * (double)g_hs_time / (double)g_freq.QuadPart / g_hs_frames : 0.0, city ? " (masked)" : "",
@@ -9081,8 +9193,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
             logf("HUDOPT> on: scale %d smooth %d (sc3resize.ini [hud]%s%s)", g_hudscale, g_hs_filter,
                  (g_ho_env & 1) ? ", scale from SC3RESIZE_HUDSCALE" : "", (g_ho_env & 2) ? ", smooth from SC3RESIZE_HUDSCALE_FILTER" : "");
         if (g_hudscale)
-            logf("HUDSCALE> ON (prototype): %s, filter %s", g_hudscale >= 100 ? "fixed percent, capped at min(cw/800, ch/600)"
-                 : "factor min(cw/800, ch/600)", g_hs_filter ? "bilinear" : "nearest");
+            logf("HUDSCALE> ON (prototype): %s, filter %s, HUDFIX %d (minimap Scale2x %d)", g_hudscale >= 100 ? "fixed percent, capped at min(cw/800, ch/600)"
+                 : "factor min(cw/800, ch/600)", g_hs_filter ? "bilinear" : "nearest", g_hudfix, g_hs_minismooth);
         /* ⭐ Echo EVERY parsed flag, unconditionally, at init.
          *
          * Attempt 1 of the NOHIT experiment (2026-09-01) was VOID because none of three env vars

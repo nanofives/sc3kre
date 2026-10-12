@@ -188,3 +188,52 @@ editor / New City while enlarged, Load City while enlarged, 1024 maps with sc3bi
 Also seen: blits onto the presented surface with client-coordinate dests right after a resize (the bar fields
 redrawn, `src` = the bar's field surfaces). They happen in the frame after a size change only and did not show
 in any grab. Where they go is `[UNCERTAIN]`.
+
+## Defects after the owner's hand test (task hudfix, 2026-10-11)
+
+Owner report on the hudopt build: (1) smoothing should be on by default, (2) the minimap looks pixelated with
+Suavizado on, (3) while the camera moves, city shows over the bars and around buttons. Code: the HUDFIX block in
+`sc3resize.c` (`rz_hs_record`, `rz_hs_coverage`, `rz_hs_resolve`, `rz_hs_epx`, the HUDFIX resample loop in
+`rz_hs_pre`). `SC3RESIZE_HUDFIX=0` restores the hudopt behaviour. A/B: `verify/hudfix/PRE.md`, `RESULTS.md`.
+
+**Frame structure (measured, HSSEQ Blt dump, 1200x900).** Per frame the game Blts the city layer (iso+0x74's surface)
+into a composite surface with dest `[0 0 cw ch]`, then each HUD window into the composite (bar tiles, bar fields,
+side panel opaque with `DDBLT_WAIT`; minimap, RCI, corner widget and ticker with `DDBLT_KEYSRCOVERRIDE`, flags
+`0x01010000`), then the composite into the primary (caps `0x1000E200`) at screen coordinates. The camera scroll is a
+Blt of the city layer onto itself (`[0 3 1200 900]`). The hudopt code treated every Blt with a client-sized dest as
+the present, so the enlarge pass ran twice per frame, once on the city -> composite Blt (a no-op with the mask).
+No present was skipped by the pass (HSDIAG census: 0 skips in every 1-s window).
+
+**(3) mechanism.** The see-through test was `snapshot pixel == city-layer pixel at the same spot`. An opaque HUD pixel
+that happens to equal the city pixel under it passed as see-through and showed the city at the dest instead. While
+the camera moves the city under the HUD changes every frame, so those pixels flicker: specks along the side-panel
+button outlines, in the RCI's white columns, around the minimap buttons (`verify/hudfix/armA/heat_hud.png`). Second
+source: bilinear taps at the outer edge of an enlarged rect read the snapshot just outside the native rect, which is
+city from a different spot of the map, and that moved too (a 1-px line along the bar top and the panel's left edge).
+Fix: every Blt onto the composite after the frame's city Blt is recorded (dest, source rect, flags, colour key); a
+pixel covered by an opaque Blt, or by a keyed Blt whose source pixel is outside the key range, is HUD regardless of
+colour. The equality test is kept only for pixels no recorded Blt covers (HUD drawn some other way, if any). Each tap
+that is not HUD takes the city at the DEST pixel, so edges are blended with the city they sit on. Result: changed HUD
+pixels during a scroll 3553 -> 0 (panel), 1385 -> 0 (bar + RCI), also 0 maximized.
+
+**(2) mechanism.** The minimap does go through the bilinear path (in-process dump: 88 interpolated colours in a 40x40
+block of the enlarged map). Its native picture is plain pixel data with hard stair-step edges and 1-px dots
+(`verify/hudfix/dump3/mini_before_x3.png`), while the rest of the HUD is pre-anti-aliased art. Bilinear cannot remove
+steps that are in the source, so at 125% to 150% the map reads as pixelated next to soft buttons. Fix: in smooth mode
+the minimap window's source (class `SIMUI+0xaa180`) is doubled with Scale2x (EPX), softened with one `[1 2 1]` tent in
+2x space using only HUD neighbours, and the bilinear tap reads that buffer. Chosen from five filters compared offline
+(`verify/hudfix/minimap_filters_x2.png`): Scale2x alone barely changes the shallow isometric diagonals, a plain blur
+loses the dots. The 2x buffer is rebuilt only when the minimap's snapshot or coverage changes.
+`SC3RESIZE_HUDSCALE_MINISMOOTH=0` turns it off.
+
+**(1)** `[hud] smooth` now defaults to 1 when the key is missing (no ini). An explicit `smooth=0` or
+`SC3RESIZE_HUDSCALE_FILTER=0` still wins. `g_hs_filter`'s static default stays 0, so `SC3RESIZE_HUDOPT=0` (no ini read)
+is unchanged.
+
+Cost (B3 build): 3.9 to 4.1 ms per frame at 1200x900, 5.0 ms maximized (2048x1081), one pass per frame, ~82 fps,
+same as hudopt (2.6 to 3.1 ms per pass, two passes per frame).
+
+Not addressed here, seen in the logs: while the sim is paused the cluster re-assert runs SRCRECT + SIDEKIDS every
+~125 ms (the game resets the bar's source rect to 600 and the panel buttons to native, the mod pushes them back). The
+owner's `inst_hudopt` log has 963 such passes in 2 minutes after a maximize. No frame in the scroll runs showed a
+layout change from it. Why the game resets them is `[UNCERTAIN]`.

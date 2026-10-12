@@ -25,13 +25,16 @@ def main() -> int:
     rects = [tuple(int(v) for v in r.split(",")) for r in a.rect]
     frames = sorted(d.glob("f*.png"))
     rows = []
+    unions = [np.zeros((y1 - y0, x1 - x0), bool) for (x0, y0, x1, y1) in rects]
     moved = 0
     prev = None
     for f in frames:
         arr = np.asarray(Image.open(f).convert("RGB")).astype(np.int16)
         sc = []
-        for (x0, y0, x1, y1) in rects:
-            sc.append(float((np.abs(arr[y0:y1, x0:x1] - ref[y0:y1, x0:x1]).sum(axis=2) > 24).mean()))
+        for k, (x0, y0, x1, y1) in enumerate(rects):
+            ch = np.abs(arr[y0:y1, x0:x1] - ref[y0:y1, x0:x1]).sum(axis=2) > 24
+            unions[k] |= ch
+            sc.append(float(ch.mean()))
         if a.city and prev is not None:
             x0, y0, x1, y1 = (int(v) for v in a.city.split(","))
             if (np.abs(arr[y0:y1, x0:x1] - prev[y0:y1, x0:x1]).sum(axis=2) > 24).mean() > 0.3:
@@ -42,7 +45,7 @@ def main() -> int:
     for i in range(len(rects)):
         vals = [r[1][i] for r in rows]
         top = sorted(rows, key=lambda r: -r[1][i])[: a.top]
-        print(f"rect {rects[i]}: median {np.median(vals) * 100:.2f}% max {max(vals) * 100:.2f}%  top: "
+        print(f"rect {rects[i]}: U = {int(unions[i].sum())} px changed in >= 1 frame; median {np.median(vals) * 100:.2f}% max {max(vals) * 100:.2f}%  top: "
               + ", ".join(f"{n} {s[i] * 100:.1f}%" for n, s in top))
     return 0
 
