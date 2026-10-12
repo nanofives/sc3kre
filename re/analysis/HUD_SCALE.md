@@ -241,3 +241,52 @@ Not addressed here, seen in the logs: while the sim is paused the cluster re-ass
 ~125 ms (the game resets the bar's source rect to 600 and the panel buttons to native, the mod pushes them back). The
 owner's `inst_hudopt` log has 963 such passes in 2 minutes after a maximize. No frame in the scroll runs showed a
 layout change from it. Why the game resets them is `[UNCERTAIN]`.
+
+## Cost of the enlarged HUD (task hudperf, 2026-10-12)
+
+Owner report: "hay bajones de FPS cuando aumento el escalado, es proporcional a la cantidad de escalado". Owner log at
+2560x1351: 11.23 ms per frame in the pre-present pass at 200%, 12.5 to 14.6 ms at Fit. Code: the HUDPERF and
+LAZYRESTORE blocks in `sc3resize.c`. A/B: `verify/hudperf/PRE.md`, `RESULTS.md`.
+
+**Where the time went (measured, Fit 2.252x, 2560x1351, round/1012 build).** Stage times per frame: snapshot 0.6 to 1.4 ms,
+coverage 0.4 to 1.2, resolve 0.3 to 0.85, minimap 2x 0.03 to 1.56, and the rest of the 12 to 22 ms in the per-pixel
+resample of every enlarged dest pixel (about 690,000 at Fit). The restore after the present was not in that number:
+1.7 to 4.3 ms more, with no lock wait (the copy itself), 4.1 to 5.0 M thread cycles per frame. Both scale with the dest
+area, so with s^2.
+
+**What changed (all bit-identical to the hudfix pass):**
+1. Cached resample. Each dest pixel is decided by the coverage of its source taps: all taps HUD (value from the snapshot
+   or the minimap 2x buffer only), no tap HUD (the city at the dest), or mixed (edges of see-through parts). The first
+   kind is kept per window in a dest-sized cache keyed by the window's class and rects. Each window keeps a copy of its
+   snapshot and coverage over its source rect + 1 px; per frame only the changed native rows are found, and only the
+   dest pixels whose taps can reach them (+-4 native px) are recomputed. Per dest row a run list: cached runs and city
+   runs are memcpy'd, mixed pixels recomputed with the same arithmetic (`rz_hp_px`). Typical rebuild with the sim
+   running: 10,000 to 20,000 px per frame (the scrolling news ticker, date, funds, RCI); while scrolling 40,000 to
+   78,000 (the minimap's view frame); mixed pixels 3,700 per frame.
+2. Lazy restore. Every frame the game first Blts its city layer over the whole composite (one client-sized Blt onto it
+   per present: 313 of 313, 543 of 543, 771 of 771 frames), which overwrites everything the restore puts back. The
+   restore is now owed and paid only if something touches that surface first: any other Blt or BltFast onto or from
+   it, a Lock or GetDC of it, the next present. Hooks for BltFast/GetDC/Lock go on the shared ddraw vtable on top of
+   sc3perf's (sc3perf's FPS overlay calls its saved Lock directly and must not pay it every frame). Measured: all owed
+   restores cancelled in every window except one Fit hover window, 131 paid before a Blt onto the frame with dest
+   `[0 0 800 599]` (what the game draws there is `[UNCERTAIN]`).
+3. Coverage: an opaque recorded Blt sets 2 on its intersection with each HUD rect (inside a HUD rect the old "nonzero"
+   test is always true), keyed Blts read 1:1 without a divide per pixel, resolve skips to cov 1 with memchr. Same values
+   inside every HUD rect + 1 px, the only part anything reads (CHECK compares it every frame).
+4. Snapshot and restore copy a native rect + 1 px only when it is not inside its own enlarged rect.
+
+**Result (thread cycles per frame, pass + restore, the CPU was shared so wall clock is secondary):** round/1012 22.6 M at
+125% rising to 37.1 M at Fit (static), HUDPERF 3.9 to 4.5 M at every scale (static), 8.4 to 11.8 M while scrolling.
+29,209 frames compared in CHECK with 0 differing pixels.
+
+**Opt-outs and diagnostics:** `SC3RESIZE_HUDPERF=0` (the hudfix pass, restore right after the present),
+`SC3RESIZE_HUDPERF_LAZY=0` (cached pass, restore right after the present), `SC3RESIZE_HUDPERF_CHECK=1` (both passes every
+frame, differing pixels counted, the hudfix result shows). Every 10 s, with HUD scale on: `HUDPERF> thread cycles per
+frame`, the resample/restore split, rebuilt and mixed px, and the lazy-restore counters next to the existing
+`ms per frame in the pre-present pass` line.
+
+**Not explained:** one arm-B launch of ten at Fit showed a 7-row black line in the city about 53 px above the enlarged
+bar for the whole run; 0 of 7 arm-A launches, 0 of 9 further arm-B launches (`verify/hudperf/RESULTS.md`).
+
+**Also measured, not changed:** sc3perf's fps counts every client-sized Blt as a frame, and there are two per frame
+(city layer -> composite, composite -> screen), so its overlay reads about twice the presents (93 shown vs 45/s).
