@@ -1,6 +1,6 @@
 """One arm of verify/hudperf: launch an instance, maximize it, run timed phases, report per-phase cost and fps.
 
-Task hudperf 2026-10-12. Phases (each --phase seconds, default 25, so each holds at least one full 10-s HUDSCALE window):
+Task hudperf 2026-10-12. Phases (each --phase seconds, default 32, so each holds at least two full 10-s HUDSCALE windows; the first window of a phase straddles the previous one):
   static  camera still, sim at speed 3 (date, funds, RCI and minimap tick on their own)
   scroll  camera scrolling left/right continuously (spoofed arrow keys, sc3io.scroll)
   hover   posted mouse moves across the enlarged side-panel buttons (highlights + tooltips appear and go)
@@ -87,7 +87,7 @@ def main(argv):
     ap.add_argument("--inst", required=True); ap.add_argument("--city", required=True)
     ap.add_argument("--out", required=True); ap.add_argument("--env", action="append", default=[])
     ap.add_argument("--phases", default="static,scroll,hover,flyout")
-    ap.add_argument("--phase", type=float, default=25.0)
+    ap.add_argument("--phase", type=float, default=32.0)
     ap.add_argument("--keep", action="store_true", help="leave the game running at the end")
     ap.add_argument("--speed", default="3")
     ap.add_argument("--at", default="-2400,100", help="move the window here (screen px) before maximizing, '' = leave")
@@ -171,7 +171,12 @@ def main(argv):
                 except (ValueError, IndexError):
                     pass
         fps = fps[2:] if len(fps) > 4 else fps
+        cyc = [(float(x), float(y)) for x, y in re.findall(r"thread cycles per frame: pass ([0-9.]+) M, restore ([0-9.]+) M", rl)]
+        pres = [int(x) * 10000.0 / int(t) for x, t in re.findall(r"HUDSCALE> (\d+) enlarged frames in (\d+) ms", rl)]
+        lazy = re.findall(r"cancelled by it (\d+), paid late (\d+) (\d+) (\d+) (\d+) (\d+) .*dropped (\d+)", rl)
+        chk = re.findall(r"CHECK: (\d+) frames compared, (\d+) with a difference, (\d+) px differ.*coverage: (\d+) frames with a difference, (\d+) px", rl)
         r = {"pass_ms": ms, "fps_median": statistics.median(fps) if fps else None,
+             "cycles_M": cyc, "presents_per_10s": pres, "lazy": lazy, "check": chk,
              "fps_min": min(fps) if fps else None, "fps_n": len(fps), "hudperf": hp, "stages": st}
         res["phases"][name] = r
         print(f"[{name}] pass ms {ms}  fps median {r['fps_median']} min {r['fps_min']} (n={len(fps)})", flush=True)

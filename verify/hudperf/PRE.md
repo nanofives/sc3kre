@@ -5,11 +5,12 @@ MAIN `verify/hudperf/`) are exploration, not evidence for the predictions below.
 
 ## Setup
 
-- Build: `child/hudperf` at the commit that adds this file. Instance `MAIN\re\harness\inst_hudperf` (all six binaries
+- Build: `child/hudperf` at the commit that adds this file (sc3resize source; a follow-up commit changes only the bench
+  tool and this line: 32-s phases, per-phase cycles in its JSON). Instance `MAIN\re\harness\inst_hudperf` (all six binaries
   built from the worktree), Europolis copy in `inst_hudperf\city\`, `mods_launch -multi`, windowed.
 - Driver: `re/tools/hudperf_bench.py`. It moves the window to the left monitor (2560x1440, 125%, the same model as the
   owner's), maximizes it (client 2560x1351, the owner's measured size), sets speed 3 and unpauses with P (date, funds, RCI
-  and minimap tick), then runs 25-s phases: `static`, `scroll` (spoofed arrows, left/right), `hover` (posted moves over
+  and minimap tick), then runs 32-s phases (the first 10-s log window of each phase straddles the previous phase and is not used): `static`, `scroll` (spoofed arrows, left/right), `hover` (posted moves over
   the enlarged side-panel buttons: highlights and tooltips), `flyout` (one category open, hover over its items, closed).
 - Scales: `SC3RESIZE_HUDSCALE=125`, `150`, `200`, `1` (Fit, 2.252x here), `SC3RESIZE_HUDSCALE_FILTER=1` (Suavizado on).
   Normal (HUD scale off) is one extra run of arm B with `SC3RESIZE_HUDSCALE=0` for the fps reference.
