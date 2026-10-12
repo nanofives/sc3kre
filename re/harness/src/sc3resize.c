@@ -4359,6 +4359,12 @@ static DWORD   g_hpd_px, g_hpd_mixed, g_hpd_full, g_hpd_part, g_hpd_frames, g_hp
 static __int64 g_hpd_comp, g_hpd_post, g_hpd_postlock, g_hpd_chkt, g_hpd_prelock, g_hpd_cityblt;
 static DWORD   g_hpd_citybn;
 static ULONG64 g_hpd_cyc, g_hpd_cycpost;   /* thread cycles in the pass / the restore (not inflated by preemption) */
+/* is the copy rect m (as rz_hs_copy clips it) inside d? Then copying d alone copies it too. */
+static int rz_hp_inside(const LONG *m, const LONG *d, LONG cw) {
+    LONG x0 = m[0] < 0 ? 0 : m[0], x1 = m[2] > cw ? cw : m[2];
+    if (x1 <= x0 || m[3] <= m[1]) return 1;
+    return x0 >= d[0] && x1 <= d[2] && m[1] >= d[1] && m[3] <= d[3];
+}
 static void rz_hp_cyc(ULONG64 *c) {   /* QueryThreadCycleTime (Vista+, resolved at run time: the build targets 0x0501) */
     static BOOL (WINAPI *q)(HANDLE, ULONG64 *);
     static int tried;
@@ -4765,7 +4771,7 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
         m[0] = g_hs_src[i][0] - 1; m[1] = g_hs_src[i][1] - 1; m[2] = g_hs_src[i][2] + 1; m[3] = g_hs_src[i][3] + 1;
         if (m[1] < 0) m[1] = 0;
         if (m[3] > ch) m[3] = ch;
-        rz_hs_copy(bits, pitch, ox, oy, cw, m, 1);
+        if (!(g_hudperf && rz_hp_inside(m, g_hs_dst[i], cw))) rz_hs_copy(bits, pitch, ox, oy, cw, m, 1);   /* HUDPERF: not twice */
         rz_hs_copy(bits, pitch, ox, oy, cw, g_hs_dst[i], 1);
     }
     { LARGE_INTEGER tq = t0; rz_hs_tick(0, &tq); }
@@ -4924,7 +4930,7 @@ static void rz_hs_post(void *src, const RECT *sr) {
         mm[0] = g_hs_src[i][0] - 1; mm[1] = g_hs_src[i][1] - 1; mm[2] = g_hs_src[i][2] + 1; mm[3] = g_hs_src[i][3] + 1;
         if (mm[1] < 0) mm[1] = 0;
         if (mm[3] > g_hs_ch) mm[3] = g_hs_ch;
-        rz_hs_copy(bits, pitch, sr->left, sr->top, g_hs_cw, mm, 0);
+        if (!(g_hudperf && rz_hp_inside(mm, g_hs_dst[i], g_hs_cw))) rz_hs_copy(bits, pitch, sr->left, sr->top, g_hs_cw, mm, 0);
         rz_hs_copy(bits, pitch, sr->left, sr->top, g_hs_cw, g_hs_dst[i], 0);
     }
     ((RZ_UNLOCK)(*(DWORD **)src)[0x80 / 4])(src, NULL);
