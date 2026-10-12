@@ -33,8 +33,10 @@ The owner's crop shows (a) city above the bar left of the globe/news button, nea
 the R, C and I columns.
 
 - **(b) is the defect fixed here.** Arm A (HUDFIX=0) reproduces it during a scroll: city pieces inside the RCI columns,
-  plus a speck right of "?" (`owner_repro_rci_crop.png`, A frame f93 next to B3 frame f98 and the native HUD). Cause:
-  the white RCI pixels matched white city pixels under them and were drawn as see-through. B3: none.
+  plus a speck right of "?" (`owner_repro_rci_crop.png`, A frame f93 next to B3 frame f98 and the native HUD). Mechanism
+  (code, not a per-pixel trace of that frame): the old test drew a HUD pixel as see-through whenever it equalled the
+  city-layer pixel at the same spot; the RCI is a keyed Blt straight into the composite, and with the recorded coverage
+  its non-key pixels are HUD whatever their colour. B3: none in 150 frames.
 - **Self-updating widgets, sim running** (not pre-registered, added for this report): `runA` / `runB`, ini scale 150,
   P to unpause, 4 for the top speed (log `PAUSEKEY> ... resume`, `SPEEDKEYS> speed 4`), same scroll. Changed pixels in
   the panel 4296 (A) vs 0 (B). Bar heat map (`runA/heat_bar.png`, `runB/heat_bar.png`): in B only the ticker, the date
