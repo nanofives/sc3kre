@@ -33,8 +33,8 @@ question, and it never shipped to players.
 and 0xa3/0x209e6378, type 0x10001), result 0x5301814a continues. Modal question 2 (0x127/0x209e6378, type 0x10004):
 0x5301814c opens the save dialog (class 0x410438DD), 0x53018149 skips the save, anything else cancels the quit. It
 then quits through the framework (`thunk_FUN_0045d5ae()->vt+0x40(0)`). Measured: question 1 left button = continue,
-right = cancel. Question 2 right button = quit without saving (exit code 0). The left button of question 2 (save) was
-not pressed in these tests.
+right = cancel. Question 2 right button (No) = quit without saving, left button (Sí) = save the city to its file, then
+quit (both exit code 0).
 
 The Quit command does nothing at the main menu (measured: posted, no dialog, menu stays). That is why there are two
 routes.
@@ -53,8 +53,9 @@ On WM_CLOSE (X, system menu, taskbar) and on WM_SYSKEYDOWN VK_F4 with the Alt co
    depth 2). Allowed depth is 1 on the menu and the intro, 0 elsewhere.
 2. Main menu visible: call its Salir button handler (route 1 above).
 3. City loaded (`rz_city_post(0,0)`): post the Quit command (route 2 above).
-4. Otherwise (the intro screen, or no menu and no city): `PostQuitMessage(0)`, like the recipe. Measured on the
-   intro: exit code 0.
+4. Intro screen visible: `PostQuitMessage(0)`, like the recipe. Measured: exit code 0.
+5. Any other screen (no menu, no city, no intro: loading, possibly the terrain editor): nothing, as on stock, so a
+   stray X never quits without a question where there may be work. Not exercised in a run.
 
 Because CLOSEX takes the message first and returns 0, a GZGraphicD that carries the recipe cave never reaches the cave
 (measured on MAIN: the game asked, it did not quit). With `SC3RESIZE_CLOSEX=0` the message goes to the game as before,
@@ -67,12 +68,13 @@ where there is nothing to save.
 
 ## Open
 
-- Visual check of the dialogs is pending: the display was asleep for the whole session (taskbar clock frozen at 13:04),
-  so every result above is from the UI tree (`re/tools/uiwin_dump.py`), the modal depth (`re/tools/dlg_text.py`), the
-  mod log and the process exit code. The dialog text was not read (it is rendered to a surface).
+- Visual (2026-10-12 15:03-15:06, stock): question 1 = "Salir / Saliendo de Sim City 3000 / OK / Cancelar", question
+  2 = "Salir / ¿Quieres guardar el juego? / Sí / No", and the menu shows the same question 1. "Sí" rewrote the loaded
+  city's file and then exited 0. Before 15:03 the display was asleep, so most arms were judged by the UI tree, the
+  modal depth, the log and the exit code (`verify/closex/RESULTS.md`).
 - Alt+F4 was sent as posted WM_SYSKEYDOWN/UP with the Alt context bit, not from a physical keyboard. A real key press
   goes through the same TranslateMessage/DispatchMessage in the game's loop to the same WndProc.
 - The X button itself was not clicked with a real mouse. SC_CLOSE posted to the window was, and DefWindowProc turns
   that into WM_CLOSE. The owner's earlier real X clicks on MAIN reached the WM_CLOSE branch (the recipe cave fired).
-- Not covered: X while a city is loading, in the terrain editor (New City), or with another modal dialog open (by
-  rule 1 it is ignored there).
+- Not covered by a run: X while a city is loading, in the terrain editor (New City; if the game has a city object
+  there, rule 3 applies, else rule 5), or with another modal dialog open (rule 1 ignores it).
