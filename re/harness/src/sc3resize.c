@@ -1797,6 +1797,10 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
                 if (r[2] - r[0] == 172 && r[3] - r[1] >= 400) { g_dlg[e].rdock = 1; g_dlg[e].rdock_y = 60; }
             }
             g_dlg[e].seen = 1;
+            /* DLGSTAY: a Reunirse page is never the right-docked terrain panel. Measured: a detail page kept at
+               [416 246 800 600] (clamped at 800x600) and reopened maximized matched the "right edge == NAT_W" test and
+               was docked to [1296 312]. */
+            if (g_dlgstay && c == g_meet_dlg) g_dlg[e].rdock = 0;
             {   LONG w = r[2] - r[0], h = r[3] - r[1], t[4], was[4];
                 int place = 0, drag_clamp = 0;
                 LONG cx = (ax1 - w) / 2, cy = (ay1 - h) / 2;

@@ -119,6 +119,11 @@ def main(argv) -> int:
         (out / "ab.json").write_text(json.dumps(rec, indent=1))
         return 3
     sc3io.click(h, *meet)
+    time.sleep(1.2)
+    if not dialogs(tree()):                                 # measured: the first click after the X close can be dropped
+        rec["reopen_clicks"] = 2
+        print("reopen: first click opened nothing, clicking again")
+        sc3io.click(h, *meet)
     d, nodes = step("4_reopen")
     if d:
         advs = sorted([n for n in nodes if n.get("parent") == d["p"] and n.get("cls") == ADV and n.get("vis")],
