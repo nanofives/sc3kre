@@ -5599,6 +5599,12 @@ static int qi_build(BYTE *qo, char *t, int cap) {
                 ho_v(dirt, 0x48, 3, (DWORD)cx, (DWORD)cz + 1, (DWORD)&alt[2], 0, 0);
                 ho_v(dirt, 0x48, 3, (DWORD)cx + 1, (DWORD)cz + 1, (DWORD)&alt[3], 0, 0);
                 L = qi_cat(t, cap, L, "terrain.corner_alt: %u %u %u %u\r\n", alt[0], alt[1], alt[2], alt[3]);
+                memset(alt, 0, sizeof(alt));
+                ho_v(dirt, 0x4c, 3, (DWORD)cx, (DWORD)cz, (DWORD)&alt[0], 0, 0);
+                ho_v(dirt, 0x4c, 3, (DWORD)cx + 1, (DWORD)cz, (DWORD)&alt[1], 0, 0);
+                ho_v(dirt, 0x4c, 3, (DWORD)cx, (DWORD)cz + 1, (DWORD)&alt[2], 0, 0);
+                ho_v(dirt, 0x4c, 3, (DWORD)cx + 1, (DWORD)cz + 1, (DWORD)&alt[3], 0, 0);
+                L = qi_cat(t, cap, L, "terrain.ground_alt: %u %u %u %u\r\n", alt[0], alt[1], alt[2], alt[3]);
             }
         } __except (EXCEPTION_EXECUTE_HANDLER) { L = qi_cat(t, cap, L, "terrain: (fault)\r\n"); }
     }
@@ -5631,7 +5637,7 @@ static int qi_build(BYTE *qo, char *t, int cap) {
         ho_v(occ, 0xbc, 2, (DWORD)&ox, (DWORD)&oz, 0, 0, 0);
         L = qi_cat(t, cap, L, "object.cell: x=%lu z=%lu alt=%lu\r\n", ox, oz, ho_v(occ, 0xc0, 0, 0, 0, 0, 0, 0) & 0xff);
         sx = ho_v(occ, 0xd4, 0, 0, 0, 0, 0, 0); sz = ho_v(occ, 0xd8, 0, 0, 0, 0, 0, 0); sy = ho_v(occ, 0xdc, 0, 0, 0, 0, 0, 0);
-        L = qi_cat(t, cap, L, "object.size: %lux%lu height?=%lu\r\n", sx, sz, sy);
+        L = qi_cat(t, cap, L, "object.size: %lux%lu height=%lu\r\n", sx, sz, sy);
         ho_v(occ, 0xb4, 1, (DWORD)&rot, 0, 0, 0, 0);
         L = qi_cat(t, cap, L, "object.rotation: %lu\r\n", rot);
         L = qi_cat(t, cap, L, "object.class: %s+0x%lX\r\n", mn, rva);
@@ -5654,9 +5660,7 @@ static int qi_build(BYTE *qo, char *t, int cap) {
                 L = qi_cat(t, cap, L, "%s\r\n", any ? "" : " none");
                 L = qi_cat(t, cap, L, "network.state: %lu\r\n", st);
                 L = qi_cat(t, cap, L, "network.tile: x=%lu y=%lu z=%lu\r\n", w0 & 0x7ff, (w0 >> 11) & 0x7ff, (w0 >> 22) & 0xff);
-                L = qi_cat(t, cap, L, "network.exemplar_key: 0xE223741F 0xA317745F 0x%08lX\r\n", id);
                 L = qi_cat(t, cap, L, "network.trblkatt_key: 0x625C6226 0x825C6289 0x%08lX\r\n", id * 0x100 + st);
-                L = qi_cat(t, cap, L, "network.piece_class: %d\r\n", i + 1);
                 L = qi_cat(t, cap, L, "network.words: 0x%08lX 0x%08lX\r\n", w0, w1);
             }
         }
@@ -5732,7 +5736,14 @@ static void qi_add_button(void *win, BYTE *qo) {
     fac = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85065))();
     if (!fac || IsBadReadPtr(fac, 4)) { logf("QUERYID> no widget factory"); return; }
     w = l[2] - l[0]; h = l[3] - l[1];
-    { static int dumped; if (dumped++ < 6) qi_dump_children(win); }
+    {   static DWORD modes;   /* the layout of the first dialog of each mode, for checking the button against it */
+        DWORD md = *(DWORD *)(qo + 0x14) & 31;
+        if (!(modes & (1u << md))) {
+            modes |= 1u << md;
+            logf("QUERYID>   first dialog of mode %lu, children before the button:", md);
+            qi_dump_children(win);
+        }
+    }
     bx = w - 0x32 - 8 - QI_BW;
     by = h - 0x25 + (32 - QI_BH) / 2;
     ho_str(s, ho_spanish() ? "Copiar ID" : "Copy ID");
@@ -5752,9 +5763,7 @@ static void qi_add_button(void *win, BYTE *qo) {
     logf("QUERYID> dialog 0x%08lX %ldx%ld mode %lu: button %s", (DWORD)win, w, h, *(DWORD *)(qo + 0x14), ok ? "added" : "FAILED");
     if (ok) {
         LONG *bl = (LONG *)((BYTE *)bw + 0x80);
-        static int d2;
         logf("QUERYID>   button local [%ld %ld %ld %ld]", bl[0], bl[1], bl[2], bl[3]);
-        if (d2++ < 3) qi_dump_children(win);
     }
 }
 
@@ -5773,7 +5782,7 @@ static DWORD __fastcall qi_msg(void *self, void *edx, DWORD win, DWORD msg, DWOR
 
 static void qi_install(HMODULE sui) {
     static const BYTE e338f[6] = { 0x55, 0x8b, 0xec, 0x56, 0x8b, 0xf1 };   /* push ebp; mov ebp,esp; push esi; mov esi,ecx */
-    if (!g_queryid) return;
+    if (!g_queryid) { logf("QUERYID> off (SC3RESIZE_QUERYID=0): no button in the query dialog"); return; }
     if (ho_hook(sui, 0x6338f, e338f, 6, (void *)qi_msg, &g_orig_338f, "query dialog messages FUN_1006338f"))
         logf("QUERYID> on: \"Copiar ID\" button in the query (?) dialog");
 }
