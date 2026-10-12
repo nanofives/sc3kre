@@ -5499,6 +5499,285 @@ static void ho_install(HMODULE sui) {
         ho_hook(sui, 0x55e07, e5e07, 6, (void *)ho_prefs_msg, &g_orig_5e07, "Preferences messages FUN_10055e07");
 }
 
+/* QUERYID (task queryid 2026-10-12, re/analysis/QUERY_ID.md). Owner: "me gustaria senalar con ID el elemento que quiero
+ * trabajar, podemos implementar un boton en el menu de '?' para que copie el ID de lo seleccionado?"
+ * The query dialog is one SIMUI class (ctor FUN_10061f53, vtables 0x100aadc8 and 0x100aadb8 at +4). Its message
+ * handler FUN_1006338f is slot 3 of the +4 vtable, the only reference to it in the image [CONFIRMED @ SIMUI 0x100aadc4].
+ * Message 0xa2bf8ace builds the content (FUN_100634a6), message 3 with p3 1 carries a button id in p4 (0, 4 and the
+ * close box 0x42b7c353 are the game's) [CONFIRMED @ SIMUI 0x1006338f]. One entry detour: after the build we add a text
+ * button made by the game's widget factory (+0x30, the text-only path of SIMUI 0x1000114e); on its click we read the
+ * queried object and put a labelled text block on the clipboard. Object fields (query object, handler this - 4):
+ * +0x14 dialog mode, +0xd8 occupant or NULL, +0xdc/+0xe0/+0xe4 coord with cell = +0xdc >> 8, +0xe0 >> 8
+ * [CONFIRMED @ SIMUI 0x10062cee, 0x10062cba, 0x1006255a]. SC3RESIZE_QUERYID=0: no detour, no button. */
+static int   g_queryid = 1;
+static void *g_orig_338f;
+#define QI_BTN 0x02F95B50
+
+static const char *qi_mod_of(DWORD a, DWORD *rva) {
+    static char name[64];
+    HMODULE m = NULL;
+    char p[MAX_PATH], *s;
+    *rva = 0;
+    if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            (LPCSTR)a, &m) || !m) return "?";
+    *rva = a - (DWORD)m;
+    if (!GetModuleFileNameA(m, p, sizeof(p))) return "?";
+    s = strrchr(p, '\\');
+    lstrcpynA(name, s ? s + 1 : p, sizeof(name));
+    return name;
+}
+
+/* The 22 SIMNTWRK network-piece classes, cISC3Occupant subobject vtable (piece + 4), from the factory FUN_1000bdcd
+   [CONFIRMED @ SIMNTWRK 0x1000bdcd] (re/analysis/NETWORK_RULE_ENGINE.md section 11.2). */
+static const DWORD qi_piece_vt2[22] = {
+    0x2b5dc, 0x2b284, 0x2b0d8, 0x2af2c, 0x2abd4, 0x2aa28, 0x2a87c, 0x2a6d0, 0x2ad80, 0x2b430, 0x2a524,
+    0x2a378, 0x2a1cc, 0x2a020, 0x29e74, 0x29cc8, 0x29b1c, 0x29970, 0x297c4, 0x29618, 0x2946c, 0x292c0 };
+
+/* Is piece id in one of SIMNTWRK's per-network id lists? Each global is a pointer to {begin, end} of 12-byte keys
+   {0xe223741f, 0xa317745f, id}, filled from TilingRules\<NET>_GRND_Set.txt [CONFIRMED @ SIMNTWRK 0x1001726e..0x10017312,
+   0x1001746e]; the six membership predicates scan them [CONFIRMED @ SIMNTWRK 0x1001a719..0x1001a7d2]. */
+static int qi_in_list(HMODULE nt, DWORD rva, DWORD id) {
+    DWORD *v = *(DWORD **)((BYTE *)nt + rva), b, e, n = 0;
+    if (!v || IsBadReadPtr(v, 8)) return -1;
+    b = v[0]; e = v[1];
+    if (!b || e < b || IsBadReadPtr((void *)b, e - b)) return -1;
+    for (; b < e && n < 100000; b += 12, n++) if (((DWORD *)b)[2] == id) return 1;
+    return 0;
+}
+
+static int qi_cat(char *out, int cap, int len, const char *fmt, ...) {
+    va_list ap;
+    int n;
+    if (len >= cap - 1) return len;
+    va_start(ap, fmt);
+    n = _vsnprintf(out + len, cap - 1 - len, fmt, ap);
+    va_end(ap);
+    if (n < 0) { out[cap - 1] = 0; return cap - 1; }
+    return len + n;
+}
+
+static const char *qi_zone_name(DWORD z) {   /* zone bytes from the 13 zone tools, LAUNCH_CONTROL.md (C4 for 6) */
+    switch (z) {
+    case 0: return "none";
+    case 1: return "residential light"; case 2: return "residential medium"; case 3: return "residential dense";
+    case 5: return "commercial light"; case 6: return "commercial medium"; case 7: return "commercial dense";
+    case 9: return "industrial light"; case 10: return "industrial medium"; case 11: return "industrial dense";
+    case 14: return "airport"; case 15: return "seaport"; case 17: return "landfill";
+    }
+    return NULL;
+}
+
+/* Build the text for the query object `qo`. Field meanings and their evidence: re/analysis/QUERY_ID.md.
+   Every virtual call is guarded: an unexpected object costs a line, not the game. */
+static int qi_build(BYTE *qo, char *t, int cap) {
+    HMODULE sui = GetModuleHandleA("SIMUI.DLL"), nt = GetModuleHandleA("SIMNTWRK.DLL");
+    int L = 0, i;
+    LONG cx, cz;
+    DWORD *c = (DWORD *)(qo + 0xdc), mode = *(DWORD *)(qo + 0x14), rva;
+    void *occ = *(void **)(qo + 0xd8), *city = NULL;
+    L = qi_cat(t, cap, L, "SC3 query id v1\r\n");
+    cx = (LONG)c[0] >> 8; cz = (LONG)c[1] >> 8;
+    L = qi_cat(t, cap, L, "cell: x=%ld z=%ld alt=%ld\r\n", cx, cz, (LONG)c[2] >> 8);
+    __try { city = ((void *(__cdecl *)(void))((BYTE *)sui + 0x8e7da))(); } __except (EXCEPTION_EXECUTE_HANDLER) { city = NULL; }
+    if (city) {
+        void *dirt = NULL, *zl = NULL;
+        BYTE zb = 0xff, alt[4];
+        __try {
+            dirt = (void *)ho_v(city, 0x13c, 0, 0, 0, 0, 0, 0);
+            zl = (void *)ho_v(city, 0x14c, 0, 0, 0, 0, 0, 0);
+            if (zl) {
+                const char *zn;
+                ho_v(zl, 0x34, 3, (DWORD)cx, (DWORD)cz, (DWORD)&zb, 0, 0);
+                zn = qi_zone_name(zb);
+                L = qi_cat(t, cap, L, "zone: %u%s%s%s\r\n", zb, zn ? " (" : "", zn ? zn : "", zn ? ")" : "");
+            }
+            if (dirt) {
+                L = qi_cat(t, cap, L, "terrain.water: %lu\r\n", ho_v(dirt, 0x54, 2, (DWORD)cx, (DWORD)cz, 0, 0, 0) & 0xff);
+                memset(alt, 0, sizeof(alt));
+                ho_v(dirt, 0x48, 3, (DWORD)cx, (DWORD)cz, (DWORD)&alt[0], 0, 0);
+                ho_v(dirt, 0x48, 3, (DWORD)cx + 1, (DWORD)cz, (DWORD)&alt[1], 0, 0);
+                ho_v(dirt, 0x48, 3, (DWORD)cx, (DWORD)cz + 1, (DWORD)&alt[2], 0, 0);
+                ho_v(dirt, 0x48, 3, (DWORD)cx + 1, (DWORD)cz + 1, (DWORD)&alt[3], 0, 0);
+                L = qi_cat(t, cap, L, "terrain.corner_alt: %u %u %u %u\r\n", alt[0], alt[1], alt[2], alt[3]);
+            }
+        } __except (EXCEPTION_EXECUTE_HANDLER) { L = qi_cat(t, cap, L, "terrain: (fault)\r\n"); }
+    }
+    if (!occ) { L = qi_cat(t, cap, L, "object: none\r\n"); goto tail; }
+    __try {
+        DWORD vt = *(DWORD *)occ, *o = (DWORD *)occ, ox = 0, oz = 0, sx, sz, sy, rot = 0, clsid = 0, *k = NULL;
+        void *attr;
+        BYTE nm[0x20];
+        const char *mn = qi_mod_of(vt, &rva), *nmt;
+        ho_str(nm, NULL);
+        ho_v(occ, 0x7c, 1, (DWORD)nm, 0, 0, 0, 0);
+        nmt = (const char *)ho_v(nm, 0x14, 0, 0, 0, 0, 0, 0);
+        if (nmt && !IsBadStringPtrA(nmt, 128) && nmt[0]) L = qi_cat(t, cap, L, "object.name: %.80s\r\n", nmt);
+        ho_str_free(nm);
+        L = qi_cat(t, cap, L, "object.type_id: %lu\r\n", ho_v(occ, 0x88, 0, 0, 0, 0, 0, 0));
+        attr = (void *)ho_v(occ, 0x80, 0, 0, 0, 0, 0, 0);
+        if (attr) {
+            k = (DWORD *)ho_v(attr, 0x14, 0, 0, 0, 0, 0, 0);
+            if (k && IsBadReadPtr(k, 12)) k = NULL;
+        }
+        /* the occupant's own key: its first field points 0x10 past a key block (measured on SIMGEOM buildings, equal
+           to the save record's +12 key, also for an abandoned one whose attrib in use is the abandoned look) */
+        if (k && o[1] > 0x10000 && !IsBadReadPtr((void *)(o[1] - 0x10), 12)) {
+            DWORD *ok = (DWORD *)(o[1] - 0x10);
+            if (ok[0] == k[0] && ok[1] == k[1])
+                L = qi_cat(t, cap, L, "object.key: 0x%08lX 0x%08lX 0x%08lX\r\n", ok[0], ok[1], ok[2]);
+        }
+        if (k) L = qi_cat(t, cap, L, "object.attrib_key: 0x%08lX 0x%08lX 0x%08lX\r\n", k[0], k[1], k[2]);
+        if (attr) L = qi_cat(t, cap, L, "attrib.type_id: %lu\r\n", ho_v(attr, 0x50, 0, 0, 0, 0, 0, 0));
+        ho_v(occ, 0xbc, 2, (DWORD)&ox, (DWORD)&oz, 0, 0, 0);
+        L = qi_cat(t, cap, L, "object.cell: x=%lu z=%lu alt=%lu\r\n", ox, oz, ho_v(occ, 0xc0, 0, 0, 0, 0, 0, 0) & 0xff);
+        sx = ho_v(occ, 0xd4, 0, 0, 0, 0, 0, 0); sz = ho_v(occ, 0xd8, 0, 0, 0, 0, 0, 0); sy = ho_v(occ, 0xdc, 0, 0, 0, 0, 0, 0);
+        L = qi_cat(t, cap, L, "object.size: %lux%lu height?=%lu\r\n", sx, sz, sy);
+        ho_v(occ, 0xb4, 1, (DWORD)&rot, 0, 0, 0, 0);
+        L = qi_cat(t, cap, L, "object.rotation: %lu\r\n", rot);
+        L = qi_cat(t, cap, L, "object.class: %s+0x%lX\r\n", mn, rva);
+        L = qi_cat(t, cap, L, "object.packed: 0x%08lX\r\n", o[4]);
+        if (attr) {
+            ho_v(attr, 0x0c, 1, (DWORD)&clsid, 0, 0, 0, 0);
+            L = qi_cat(t, cap, L, "attrib.clsid?: 0x%08lX\r\n", clsid);
+        }
+        if (nt && vt >= (DWORD)nt) {
+            for (i = 0; i < 22; i++) if (vt == (DWORD)nt + qi_piece_vt2[i]) break;
+            if (i < 22) {
+                BYTE *pc = (BYTE *)occ - 4;
+                DWORD w0 = *(DWORD *)(pc + 0x14), w1 = *(DWORD *)(pc + 0x18), id = w1 & 0xffff, st = w0 >> 30;
+                static const char *nets[6] = { "ROAD", "HWAY", "RAIL", "SUBW", "PIPE", "POWR" };
+                static const DWORD lists[6] = { 0x32348, 0x3234c, 0x32350, 0x32354, 0x32358, 0x3235c };
+                int j, any = 0;
+                L = qi_cat(t, cap, L, "network.piece_id: %lu\r\n", id);
+                L = qi_cat(t, cap, L, "network.sets:");
+                for (j = 0; j < 6; j++) if (qi_in_list(nt, lists[j], id) == 1) { L = qi_cat(t, cap, L, " %s", nets[j]); any = 1; }
+                L = qi_cat(t, cap, L, "%s\r\n", any ? "" : " none");
+                L = qi_cat(t, cap, L, "network.state: %lu\r\n", st);
+                L = qi_cat(t, cap, L, "network.tile: x=%lu y=%lu z=%lu\r\n", w0 & 0x7ff, (w0 >> 11) & 0x7ff, (w0 >> 22) & 0xff);
+                L = qi_cat(t, cap, L, "network.exemplar_key: 0xE223741F 0xA317745F 0x%08lX\r\n", id);
+                L = qi_cat(t, cap, L, "network.trblkatt_key: 0x625C6226 0x825C6289 0x%08lX\r\n", id * 0x100 + st);
+                L = qi_cat(t, cap, L, "network.piece_class: %d\r\n", i + 1);
+                L = qi_cat(t, cap, L, "network.words: 0x%08lX 0x%08lX\r\n", w0, w1);
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { L = qi_cat(t, cap, L, "object: (fault while reading)\r\n"); }
+tail:
+    L = qi_cat(t, cap, L, "query.mode: %lu\r\n", mode);
+    L = qi_cat(t, cap, L, "query.coord: 0x%08lX 0x%08lX 0x%08lX\r\n", c[0], c[1], c[2]);
+    return L;
+}
+
+static void qi_copy(BYTE *qo) {
+    static char t[4096];
+    int n;
+    HGLOBAL h;
+    t[0] = 0;
+    n = qi_build(qo, t, sizeof(t));
+    t[sizeof(t) - 1] = 0;
+    logf("QUERYID> copied %d bytes:\n%s", n, t);
+    if (!OpenClipboard(g_hwnd)) { logf("QUERYID> OpenClipboard failed (%lu)", GetLastError()); return; }
+    EmptyClipboard();
+    h = GlobalAlloc(GMEM_MOVEABLE, (SIZE_T)n + 1);
+    if (h) {
+        char *p = (char *)GlobalLock(h);
+        if (p) { memcpy(p, t, (size_t)n + 1); GlobalUnlock(h); }
+        if (!SetClipboardData(CF_TEXT, h)) { GlobalFree(h); logf("QUERYID> SetClipboardData failed (%lu)", GetLastError()); }
+    }
+    /* the game's text is Windows-1252 (the Spanish names log as single bytes, e.g. 0xF3); give the Unicode form too,
+       so a paste does not depend on the system code page */
+    h = GlobalAlloc(GMEM_MOVEABLE, ((SIZE_T)n + 1) * sizeof(WCHAR));
+    if (h) {
+        WCHAR *w = (WCHAR *)GlobalLock(h);
+        if (w) { MultiByteToWideChar(1252, 0, t, n + 1, w, n + 1); GlobalUnlock(h); }
+        if (!SetClipboardData(CF_UNICODETEXT, h)) GlobalFree(h);
+    }
+    CloseClipboard();
+}
+
+static void qi_dump_children(void *win) {
+    BYTE *w = (BYTE *)win;
+    void *head = *(void **)(w + 0x34), *n;
+    int guard = 0;
+    LONG *l = (LONG *)(w + 0x80);
+    logf("QUERYID>   dialog local [%ld %ld %ld %ld]", l[0], l[1], l[2], l[3]);
+    n = (head && !IsBadReadPtr(head, 4)) ? *(void **)head : NULL;
+    while (n && n != head && guard++ < 40 && !IsBadReadPtr(n, 0x0c)) {
+        BYTE *ch = *(BYTE **)((BYTE *)n + 8);
+        if (ch && !IsBadReadPtr(ch, 0xa4)) {
+            DWORD rva;
+            const char *mn = qi_mod_of(*(DWORD *)ch, &rva);
+            LONG *cl = (LONG *)(ch + 0x80);
+            logf("QUERYID>   child %s+0x%lX local [%ld %ld %ld %ld] flags 0x%lX", mn, rva, cl[0], cl[1], cl[2], cl[3], *(DWORD *)(ch + 0xa0));
+        }
+        n = *(void **)n;
+    }
+}
+
+/* A text button made the way the game makes its own (SIMUI FUN_1003f16b, FUN_1003f900, FUN_1003a303):
+   factory +0x2c(id, str, 0, 0, 0), button +0x24(4, 1) and +0x24(0x20, 0), caption = window vt+0x10c(str),
+   parent-local rect = window vt+0xc8(l, t, r, b), window vt+0xf4(2, 1), then parent AddChild [CONFIRMED @ SIMUI
+   0x1003f16b]. (Factory +0x30 is the image button: without an image it drew an empty pill, measured.)
+   Placed on the bottom row, right-aligned against the game's OK button, which the dialog puts at (w - 0x32, h - 0x25),
+   32 tall (SIMUI 0x1006260e; measured [258 358 300 390] in a 308x395 dialog). */
+#define QI_BW 92
+#define QI_BH 33
+static void qi_add_button(void *win, BYTE *qo) {
+    HMODULE sui = GetModuleHandleA("SIMUI.DLL");
+    void *fac, *btn, *bw = NULL;
+    BYTE s[0x20];
+    LONG *l = (LONG *)((BYTE *)win + 0x80), w, h, bx, by;
+    int ok = 0;
+    if (!sui || !win || IsBadReadPtr(win, 0xa4)) return;
+    if (ho_v(win, 0x78, 1, QI_BTN, 0, 0, 0, 0)) return;
+    fac = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85065))();
+    if (!fac || IsBadReadPtr(fac, 4)) { logf("QUERYID> no widget factory"); return; }
+    w = l[2] - l[0]; h = l[3] - l[1];
+    { static int dumped; if (dumped++ < 6) qi_dump_children(win); }
+    bx = w - 0x32 - 8 - QI_BW;
+    by = h - 0x25 + (32 - QI_BH) / 2;
+    ho_str(s, ho_spanish() ? "Copiar ID" : "Copy ID");
+    btn = (void *)ho_v(fac, 0x2c, 5, QI_BTN, (DWORD)s, 0, 0, 0);
+    if (btn) {
+        ho_v(btn, 0x24, 2, 4, 1, 0, 0, 0);
+        ho_v(btn, 0x24, 2, 0x20, 0, 0, 0, 0);
+        bw = (void *)ho_v(btn, 0x1c, 0, 0, 0, 0, 0, 0);
+        ho_v(bw, 0x10c, 1, (DWORD)s, 0, 0, 0, 0);
+        ho_v(bw, 0xc8, 4, (DWORD)bx, (DWORD)by, (DWORD)(bx + QI_BW), (DWORD)(by + QI_BH), 0);
+        ho_v(bw, 0xf4, 2, 2, 1, 0, 0, 0);
+        ok = (int)(ho_v(win, 0x34, 1, (DWORD)bw, 0, 0, 0, 0) & 0xff);
+        if (!ok) ho_v(bw, 0x28, 0, 0, 0, 0, 0, 0);
+        ho_v(btn, 0x08, 0, 0, 0, 0, 0, 0);
+    }
+    ho_str_free(s);
+    logf("QUERYID> dialog 0x%08lX %ldx%ld mode %lu: button %s", (DWORD)win, w, h, *(DWORD *)(qo + 0x14), ok ? "added" : "FAILED");
+    if (ok) {
+        LONG *bl = (LONG *)((BYTE *)bw + 0x80);
+        static int d2;
+        logf("QUERYID>   button local [%ld %ld %ld %ld]", bl[0], bl[1], bl[2], bl[3]);
+        if (d2++ < 3) qi_dump_children(win);
+    }
+}
+
+static DWORD __fastcall qi_msg(void *self, void *edx, DWORD win, DWORD msg, DWORD p3, DWORD p4, DWORD p5) {
+    DWORD a[5], r;
+    (void)edx;
+    if (msg == 3 && p4 == QI_BTN) {
+        logf("QUERYID> click (p3 %lu)", p3);
+        if (p3 == 1) { qi_copy((BYTE *)self - 4); return 1; }
+    }
+    a[0] = win; a[1] = msg; a[2] = p3; a[3] = p4; a[4] = p5;
+    r = rz_thiscall_ret(self, g_orig_338f, a, 5);
+    if (msg == 0xa2bf8ace && (r & 0xff) && win) qi_add_button((void *)win, (BYTE *)self - 4);
+    return r;
+}
+
+static void qi_install(HMODULE sui) {
+    static const BYTE e338f[6] = { 0x55, 0x8b, 0xec, 0x56, 0x8b, 0xf1 };   /* push ebp; mov ebp,esp; push esi; mov esi,ecx */
+    if (!g_queryid) return;
+    if (ho_hook(sui, 0x6338f, e338f, 6, (void *)qi_msg, &g_orig_338f, "query dialog messages FUN_1006338f"))
+        logf("QUERYID> on: \"Copiar ID\" button in the query (?) dialog");
+}
+
 static HRESULT WINAPI rz_blt_hook_inner(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, void *fx) {
     LARGE_INTEGER a, b;
     HRESULT hr;
@@ -10572,6 +10851,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           if (g_cdcdlog) { rz_hook_cdcd(sui); rz_hook_e81c(sui); rz_hook_cac8(sui); }  /* flyout diag detours */
           ho_install(sui);   /* HUDOPT: HUD scale controls in the Preferences dialog */
           rz_meet_hook(sui); /* DLGSTAY: the Reunirse pages share one stored position */
+          qi_install(sui);   /* QUERYID: "Copiar ID" button in the query (?) dialog */
       }
       else logf("--- HUD: SIMUI.DLL never loaded after %d tries - capture NOT armed, HUD stays native", st); }
     if (g_hudlab) {
@@ -10629,6 +10909,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MENUBG", v, sizeof(v))) g_menubg = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDOPT", v, sizeof(v))) g_hudopt = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PERFPREFS", v, sizeof(v))) g_perfprefs = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_QUERYID", v, sizeof(v))) g_queryid = atoi(v);
           if (g_hudopt) ho_load_ini();   /* HUDOPT: the Preferences choice, env vars below still override */
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE", v, sizeof(v))) { g_hudscale = atoi(v); g_ho_env |= 1; }
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_FILTER", v, sizeof(v))) { g_hs_filter = atoi(v); g_ho_env |= 2; }
