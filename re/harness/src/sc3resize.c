@@ -4641,12 +4641,119 @@ static int ho_read(void *win, int *scale, int *smooth) {
     return got == 3;
 }
 
+/* PERFPREFS (task perfprefs 2026-10-12, owner: "quiero un toggle en preferencias para desactivar el FPS counter y el
+ * profiler"). Two more checkboxes in the same dialog, on the free row under the game's "Ir a los desastres" (game
+ * checkbox 0x02F95AF8 at local [18 381 212 398], measured): "Ver FPS" and "Ver perfilador", worded like the game's
+ * own "Ver consejos al iniciar". They drive sc3perf's on-screen text: the FPS line and the red SIM BUSY / DATE
+ * STOPPED lines. sc3perf owns that state and its file: we call its exports sc3perf_show_get / sc3perf_show_set
+ * (bits 1 FPS, 2 busy lines, 4 busy detector running, 0x100 valid), resolved when the dialog is built. The setter
+ * takes effect on the next present and writes perf.ini (overlay=, busy_show=), so a hand edit of perf.ini and the
+ * SC3PERF_OVERLAY / SC3PERF_BUSY_SHOW env vars keep working. No sc3perf.dll, or one without the exports: no boxes.
+ * OK applies, every other close keeps the old values (same rule as HUDOPT). Ids 0x02F95B48/49 are above 0x02F95B11,
+ * so the dialog's command handler only returns for them [CONFIRMED @ SIMUI 0x10058f14].
+ * SC3RESIZE_PERFPREFS=0: no boxes. Rides on the HUDOPT detours, so SC3RESIZE_HUDOPT=0 removes them too. */
+static int g_perfprefs = 1;
+#define PP_FPS     0x02F95B48
+#define PP_BUSY    0x02F95B49
+#define PP_Y       400
+#define PP_X_FPS   18
+#define PP_X_BUSY  120
+typedef int (*PP_GET)(void);
+typedef int (*PP_SET)(int);
+
+static int pp_api(PP_GET *get, PP_SET *set) {
+    HMODULE pm = GetModuleHandleA("sc3perf.dll");
+    *get = pm ? (PP_GET)GetProcAddress(pm, "sc3perf_show_get") : NULL;
+    *set = pm ? (PP_SET)GetProcAddress(pm, "sc3perf_show_set") : NULL;
+    return *get && *set;
+}
+
+/* one checkbox, the same calls as HUDOPT's "Suavizado" (the game's FUN_10058d67) */
+static int pp_add_checkbox(void *fac, void *win, DWORD id, const char *text, int on, int x, int w, DWORD col) {
+    BYTE s[0x20];
+    void *cb, *cw;
+    int ok = 0;
+    ho_str(s, text);
+    cb = (void *)ho_v(fac, 0x3c, 5, id, (DWORD)s, 0, 0, 0);
+    ho_str_free(s);
+    if (!cb) return 0;
+    ho_v(cb, 0x34, 1, on ? 1 : 0, 0, 0, 0, 0);
+    ho_v(cb, 0x74, 4, 3, 1, 2, 2, 0);
+    ho_v(cb, 0x60, 1, ho_v(fac, 0x14, 1, 0xf, 0, 0, 0, 0), 0, 0, 0, 0);
+    ho_v(cb, 0x64, 2, 0, col, 0, 0, 0);
+    ho_v(cb, 0x64, 2, 2, col, 0, 0, 0);
+    ho_v(cb, 0x64, 2, 4, col, 0, 0, 0);
+    cw = (void *)ho_v(cb, 0x1c, 0, 0, 0, 0, 0, 0);
+    ho_v(cw, 0xb8, 1, (DWORD)w, 0, 0, 0, 0);
+    cw = (void *)ho_v(cb, 0x1c, 0, 0, 0, 0, 0, 0);
+    ho_v(cw, 0xcc, 2, (DWORD)x, PP_Y, 0, 0, 0);
+    cw = (void *)ho_v(cb, 0x1c, 0, 0, 0, 0, 0, 0);
+    ok = (int)(ho_v(win, 0x34, 1, (DWORD)cw, 0, 0, 0, 0) & 0xff);
+    if (!ok) ho_v(cw, 0x28, 0, 0, 0, 0, 0, 0);
+    ho_v(cb, 0x08, 0, 0, 0, 0, 0, 0);
+    return ok;
+}
+
+static void pp_add_controls(void *win) {
+    HMODULE sui = GetModuleHandleA("SIMUI.DLL");
+    PP_GET get;
+    PP_SET set;
+    void *fac;
+    DWORD col;
+    int bits, es, okf, okb;
+    if (!g_perfprefs || !sui || !win || IsBadReadPtr(win, 0x90)) return;
+    if (!pp_api(&get, &set)) { logf("PERFPREFS> sc3perf.dll %s - no FPS/profiler boxes",
+                                    GetModuleHandleA("sc3perf.dll") ? "has no sc3perf_show_get/set exports" : "not loaded"); return; }
+    if (ho_v(win, 0x78, 1, PP_FPS, 0, 0, 0, 0)) return;
+    fac = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85065))();
+    if (!fac || IsBadReadPtr(fac, 4)) return;
+    col = ho_v(fac, 0x80, 1, 0x62e56a2e, 0, 0, 0, 0);
+    bits = get();
+    es = ho_spanish();
+    okf = pp_add_checkbox(fac, win, PP_FPS, es ? "Ver FPS" : "Show FPS", bits & 1, PP_X_FPS, 96, col);
+    okb = pp_add_checkbox(fac, win, PP_BUSY, es ? "Ver perfilador" : "Show profiler", bits & 2, PP_X_BUSY, 120, col);
+    logf("PERFPREFS> Preferences 0x%08lX: FPS box %s (%d), profiler box %s (%d), sc3perf bits 0x%x",
+         (DWORD)win, okf ? "added" : "FAILED", bits & 1, okb ? "added" : "FAILED", (bits >> 1) & 1, bits);
+    {   static int dumped;
+        if (dumped++ < 2) { ho_log_child(win, PP_FPS, "fps box"); ho_log_child(win, PP_BUSY, "profiler box"); }
+    }
+}
+
+/* -1 = box not found, else 0/1 */
+static int pp_read_box(void *win, DWORD id) {
+    void *o = NULL;
+    int v;
+    if (!(ho_v(win, 0x80, 3, id, 0x8810, (DWORD)&o, 0, 0) & 0xff) || !o) return -1;
+    v = (ho_v(o, 0x38, 0, 0, 0, 0, 0, 0) & 0xff) ? 1 : 0;
+    ho_v(o, 0x08, 0, 0, 0, 0, 0, 0);
+    return v;
+}
+
+static void pp_close(void *win, DWORD id) {
+    PP_GET get;
+    PP_SET set;
+    int f, b, cur;
+    if (!g_perfprefs || !pp_api(&get, &set)) return;
+    f = pp_read_box(win, PP_FPS);
+    b = pp_read_box(win, PP_BUSY);
+    if (f < 0 || b < 0) return;   /* not our dialog build (boxes never added) */
+    cur = get();
+    if (id == 0x02F95AD8) {
+        int now = set((f ? 1 : 0) | (b ? 2 : 0));
+        logf("PERFPREFS> OK: FPS %d, profiler %d%s (sc3perf bits 0x%x)", f, b,
+             f == (cur & 1) && b == ((cur >> 1) & 1) ? " (unchanged)" : "", now);
+    } else {
+        logf("PERFPREFS> closed with 0x%08lX (cancel): dialog showed FPS %d profiler %d, kept %d %d", id, f, b,
+             cur & 1, (cur >> 1) & 1);
+    }
+}
+
 static DWORD __fastcall ho_prefs_msg(void *self, void *edx, DWORD win, DWORD msg, DWORD p3, DWORD p4, DWORD p5) {
     DWORD a[5], r;
     (void)edx;
     a[0] = win; a[1] = msg; a[2] = p3; a[3] = p4; a[4] = p5;
     r = rz_thiscall_ret(self, g_orig_5e07, a, 5);
-    if (msg == 0xa2bf8ace && (r & 0xff) && win) ho_add_controls((void *)win);
+    if (msg == 0xa2bf8ace && (r & 0xff) && win) { ho_add_controls((void *)win); pp_add_controls((void *)win); }
     return r;
 }
 
@@ -4669,6 +4776,7 @@ static DWORD __fastcall ho_prefs_close(void *self, void *edx, DWORD win, DWORD i
             logf("HUDOPT> closed with 0x%08lX (cancel): dialog showed scale %d smooth %d, kept scale %d smooth %d",
                  id, sc, sm, g_hudscale, g_hs_filter);
         }
+        pp_close((void *)win, id);   /* PERFPREFS */
     }
     a[0] = win; a[1] = id;
     return rz_thiscall_ret(self, g_orig_62b1, a, 2);
@@ -9148,6 +9256,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_FIELDBG", v, sizeof(v))) g_fieldbg = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUBG", v, sizeof(v))) g_menubg = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDOPT", v, sizeof(v))) g_hudopt = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_PERFPREFS", v, sizeof(v))) g_perfprefs = atoi(v);
           if (g_hudopt) ho_load_ini();   /* HUDOPT: the Preferences choice, env vars below still override */
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE", v, sizeof(v))) { g_hudscale = atoi(v); g_ho_env |= 1; }
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_FILTER", v, sizeof(v))) { g_hs_filter = atoi(v); g_ho_env |= 2; }
@@ -9192,6 +9301,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
         if (g_hudopt)
             logf("HUDOPT> on: scale %d smooth %d (sc3resize.ini [hud]%s%s)", g_hudscale, g_hs_filter,
                  (g_ho_env & 1) ? ", scale from SC3RESIZE_HUDSCALE" : "", (g_ho_env & 2) ? ", smooth from SC3RESIZE_HUDSCALE_FILTER" : "");
+        logf("PERFPREFS> %s", !g_hudopt ? "off (rides on HUDOPT, which is off)" : g_perfprefs ? "on: FPS/profiler boxes in Preferences when sc3perf.dll exports them"
+             : "off (SC3RESIZE_PERFPREFS=0)");
         if (g_hudscale)
             logf("HUDSCALE> ON (prototype): %s, filter %s, HUDFIX %d (minimap Scale2x %d)", g_hudscale >= 100 ? "fixed percent, capped at min(cw/800, ch/600)"
                  : "factor min(cw/800, ch/600)", g_hs_filter ? "bilinear" : "nearest", g_hudfix, g_hs_minismooth);
