@@ -81,7 +81,8 @@
  *    (city+0x144), the overlay shows a red line: how late the day is, the CPU use of the SIMCITY-class sim
  *    threads, and which sim modules their samples fall in (EIP, or the first return address outside the
  *    system DLLs). Sim threads idle while the date is late mean the clock is held by something else (a
- *    dialog), and the line says so. Drawn even with overlay=0. busy=0 turns it off.
+ *    dialog), and the line says so. Drawn even with overlay=0. busy=0 turns it off. busy_show=0 (PERFPREFS,
+ *    "Ver perfilador" in Preferencias) keeps the detector and its log and only stops the drawing.
  *    Below it, the two most frequent CALL CHAINS of the stall so far: the function the sim thread is in and the
  *    next two game functions under it on the stack (stack scan, so a stale return address can appear), named
  *    from sc3perf_names.txt beside the DLL (re/tools/perf_names.py, from functions.csv). When the date moves
@@ -103,8 +104,9 @@
  *    (node+8 == object, next->prev == node, prev->next == node) drops the index and falls back to the walk.
  *
  * Config: perf.ini beside the DLL, [perf] overlay=1 profile=0 sysmem=0 clock_ms=50 spr_budget=40
- * spr_sleep_us=1000 spr_follow=1 transit_clear=1 fast_ftol=1 busy=1; env SC3PERF_OVERLAY /
- * SC3PERF_PROFILE / SC3PERF_SYSMEM / SC3PERF_CLOCK_MS override; SC3PERF_LOG=<path> (default sc3perf.log beside the DLL).
+ * spr_sleep_us=1000 spr_follow=1 transit_clear=1 fast_ftol=1 busy=1 busy_show=1; overlay and busy_show are also
+ * written by the Preferences checkboxes (PERFPREFS, sc3perf_show_set). Env SC3PERF_<KEY> overrides any key at
+ * startup (SC3PERF_OVERLAY, SC3PERF_BUSY_SHOW, SC3PERF_PROFILE, ...); SC3PERF_LOG=<path> (default sc3perf.log beside the DLL).
  */
 #include <windows.h>
 #include <tlhelp32.h>
@@ -126,6 +128,7 @@ static LONG    g_seed_x = -100000, g_seed_y = -100000;
 static volatile LONG g_reseeds;
 static int     g_fastceil = 1, g_sprref = 1, g_layerref = 1;
 static int     g_trclear = 1, g_fastftol = 1, g_busy = 1, g_listcount = 1, g_listfind = 1;
+static volatile int g_busy_show = 1;   /* PERFPREFS: draw the busy lines (busy= keeps the detector itself) */
 static LARGE_INTEGER g_qf, g_t0;
 
 static double now_ms(void) {
@@ -269,6 +272,7 @@ static void draw_overlay(void *src, RECT *sr) {
     memcpy(busy, g_busy_text, sizeof(busy));
     LeaveCriticalSection(&g_busycs);
     busy[sizeof(busy) - 1] = 0;
+    if (!g_busy_show) busy[0] = 0;
     if (!g_overlay && !busy[0]) return;
     if (!src || IsBadReadPtr(src, 4)) return;
     vt = *(DWORD **)src;
@@ -2724,6 +2728,10 @@ static void read_cmd(void) {
     else if (!strcmp(buf, "profile on")) { g_profile = 1; logf("CMD> profiling on"); }
     else if (!strcmp(buf, "profile off")) { g_profile = 0; logf("CMD> profiling off"); }
     else if (!strncmp(buf, "mark ", 5)) logf("MARK> %s", buf + 5);
+    else if (!strncmp(buf, "busytest", 8)) {   /* test aid: put text on the busy line ("busytest" alone clears it) */
+        busy_set(buf[8] == ' ' ? buf + 9 : "");
+        logf("CMD> busy line test text '%s'", buf[8] == ' ' ? buf + 9 : "");
+    }
     else logf("CMD> unknown '%s'", buf);
 }
 
@@ -2803,6 +2811,35 @@ static DWORD WINAPI stats_thread(LPVOID p) {
     }
 }
 
+/* ---------------------------------------------------------------- PERFPREFS (2026-10-12)
+   The game's Preferences dialog (sc3resize HUDOPT) shows two checkboxes, "Ver FPS" and "Ver perfilador", and
+   reaches us through these two exports (GetProcAddress: either DLL works without the other). They only change
+   what draw_overlay paints, which it reads on every final present, so a change shows on the next frame. Set
+   writes the choice into perf.ini beside this DLL: overlay= (the FPS line, existing key) and busy_show= (the red
+   busy lines; busy= stays the switch for the detector itself, its day hook and its log). Bits: 1 FPS line shown,
+   2 busy lines shown, 4 busy detector running (read only), 0x100 always set. */
+static void perf_ini_put(const char *key, int v) {
+    char ini[MAX_PATH], val[16];
+    _snprintf(ini, sizeof(ini), "%sperf.ini", g_dir);
+    _snprintf(val, sizeof(val), "%d", v);
+    WritePrivateProfileStringA("perf", key, val, ini);
+}
+
+__declspec(dllexport) int sc3perf_show_get(void) {
+    return 0x100 | (g_overlay ? 1 : 0) | (g_busy_show ? 2 : 0) | (g_busy ? 4 : 0);
+}
+
+__declspec(dllexport) int sc3perf_show_set(int bits) {
+    int fps = (bits & 1) ? 1 : 0, busy = (bits & 2) ? 1 : 0, was = sc3perf_show_get();
+    g_overlay = fps;
+    g_busy_show = busy;
+    perf_ini_put("overlay", fps);
+    perf_ini_put("busy_show", busy);
+    logf("PERFPREFS> from Preferences: FPS line %d, busy lines %d (was %d/%d), saved to perf.ini%s", fps, busy,
+         was & 1, (was >> 1) & 1, g_busy ? "" : " (busy=0: the detector is off, there is nothing to show)");
+    return sc3perf_show_get();
+}
+
 /* ---------------------------------------------------------------- startup */
 static int cfg(const char *key, int def) {
     char ini[MAX_PATH], v[32];
@@ -2864,6 +2901,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID r) {
         g_sprref = cfg("spr_refcount", 1);
         g_layerref = cfg("layer_refcount", 1);
         g_busy = cfg("busy", 1);
+        g_busy_show = cfg("busy_show", 1);
         g_listcount = cfg("list_count", 1);
         g_listfind = cfg("list_find", 1);
         {   /* default 8 workers (owner call 2026-10-09), never more than the logical processors minus one */
@@ -2882,8 +2920,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID r) {
         g_geomheld = cfg("geom_held", 0);
         if (g_mt_batch < 64) g_mt_batch = 64;
         InitializeCriticalSection(&g_busycs);
-        logf("sc3perf loaded: overlay=%d profile=%d sysmem=%d fps_cap=%d clock_ms=%d spr_budget=%.0f spr_sleep_us=%d", g_overlay,
-             g_profile, g_sysmem, g_cap, g_clock_ms, g_spr_budget, g_spr_sleep_us);
+        logf("sc3perf loaded: overlay=%d profile=%d sysmem=%d fps_cap=%d clock_ms=%d spr_budget=%.0f spr_sleep_us=%d busy=%d busy_show=%d",
+             g_overlay, g_profile, g_sysmem, g_cap, g_clock_ms, g_spr_budget, g_spr_sleep_us, g_busy, g_busy_show);
         CreateThread(NULL, 0, watcher, NULL, 0, NULL);
         if (g_clock_ms || g_busy || g_listcount || g_listfind) CreateThread(NULL, 0, clock_watcher, NULL, 0, NULL);
         if (g_spr_budget > 0 || g_spr_follow || g_sprref) CreateThread(NULL, 0, spr_watcher, NULL, 0, NULL);
