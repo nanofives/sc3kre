@@ -8,6 +8,7 @@ origin +0x54/+0x58). The map-area centre is read from the live side panel / bar 
 
 Usage: py -3.12 re/tools/zoomcenter_run_arm.py --inst <abs instance folder> --city <abs .sc3> --out <abs dir>
        [--env NAME=VALUE ...]
+Also clicks the four minimap buttons twice each (pair order A B C D A B C D).
 Kills only the PID it started.
 """
 from __future__ import annotations
@@ -41,11 +42,13 @@ function hook(off, name){
     onEnter: function(){ var sp = this.context.esp; this.cam = this.context.ecx;
       this.a = [sp.add(4).readS32(), sp.add(8).readU8(), sp.add(12).readS32(), sp.add(16).readS32()];
       this.old = name == "zoom" ? this.cam.add(0x28).readS32() : this.cam.add(0x2c).readS32();
+      this.bt = Thread.backtrace(this.context, Backtracer.FUZZY).slice(0, 4).map(function(x){
+        var m = Process.findModuleByAddress(x); return m ? m.name + "+0x" + x.sub(m.base).toString(16) : x.toString(); });
       this.p0 = pk(this.cam); this.o0 = [this.cam.add(0x54).readS32(), this.cam.add(0x58).readS32()]; },
     onLeave: function(){ var c = this.cam, r = {t:name, from:this.old, to:this.a[0], tile:[this.a[2], this.a[3]],
         centre:[cx, cy], pick_before:this.p0, pick_after:pk(c), origin_before:this.o0,
         origin_after:[c.add(0x54).readS32(), c.add(0x58).readS32()],
-        rect64:[c.add(0x64).readS32(), c.add(0x68).readS32(), c.add(0x6c).readS32(), c.add(0x70).readS32()]};
+        rect64:[c.add(0x64).readS32(), c.add(0x68).readS32(), c.add(0x6c).readS32(), c.add(0x70).readS32()], bt:this.bt};
       if (this.a[2] != 0x7fffffff && this.a[3] != 0x7fffffff) { var b = Memory.alloc(8);
         t2w(c, this.a[2], this.a[3], b, b.add(4));
         r.landed = [b.readS32() - r.origin_after[0], b.add(4).readS32() - r.origin_after[1]]; }
@@ -108,20 +111,28 @@ def main(argv):
 
     def tree_centre():
         r = subprocess.run([sys.executable, str(TOOLS / "uiwin_dump.py")], capture_output=True, text=True, env=os.environ)
-        side = bar = None
+        side = bar = mini = None
         for ln in r.stdout.splitlines():
             if "abs [" not in ln: continue
             rect = json.loads(ln.split("abs ")[1].split(" loc")[0])
             if "SIMUI.DLL+0xa9834" in ln: side = rect
             elif "SIMUI.DLL+0xa40ec" in ln: bar = rect
-        return side, bar
+            elif "SIMUI.DLL+0xaa180" in ln: mini = rect
+        return side, bar, mini
+
+    state = {}
 
     def setc(label):
-        side, bar = tree_centre()
+        side, bar, mini = tree_centre()
         c = (side[0] // 2, bar[1] // 2)
+        state["mini"] = mini
         scr.exports_sync.setc(*c)
-        emit({"t": "mark", "label": label, "side": side, "bar": bar, "centre": c})
-        print(label, "side", side, "bar", bar, "centre", c, flush=True)
+        emit({"t": "mark", "label": label, "side": side, "bar": bar, "mini": mini, "centre": c})
+        print(label, "side", side, "bar", bar, "mini", mini, "centre", c, flush=True)
+
+    # the four 26x29 GZWIND buttons inside the minimap (local rects from the tree): centres, minimap-local
+    MINI_BTNS = (("mini btn A (100,120)", 113, 134), ("mini btn B (34,120)", 47, 134),
+                 ("mini btn C (120,100)", 133, 114), ("mini btn D (14,100)", 27, 114))
 
     def step(label, fn, wait=2.5):
         emit({"t": "mark", "label": label}); fn(); time.sleep(wait)
@@ -135,6 +146,9 @@ def main(argv):
         step(f"{tag} right-drag {drag}", lambda: sc3io.drag(hwnd, *drag, button="right"))
         for nm, vk in (("zoom in", VK_ADD), ("zoom out", VK_SUB)):
             step(f"{tag} {nm} after drag", lambda vk=vk: sc3io.key(hwnd, vk))
+        m = state["mini"]
+        for nm, lx, ly in MINI_BTNS + MINI_BTNS:
+            step(f"{tag} {nm}", lambda lx=lx, ly=ly: sc3io.click(hwnd, m[0] + lx, m[1] + ly))
 
     setc("800x600")
     block("800x600", (200, 200), (400, 300, 300, 250))
