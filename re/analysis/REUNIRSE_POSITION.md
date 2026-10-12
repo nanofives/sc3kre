@@ -45,3 +45,42 @@ area. So the mod turned "jump to the detail page's old spot" into "jump to the c
    page is never taken for the right-docked terrain panel.
 
 Not covered: with `SC3RESIZE_HUDNATIVE=1` the SIMUI install block returns early, so parts 1-2 are not installed.
+
+## Five pages, not two (child `reunirse2`, 2026-10-12)
+
+Owner after DLGSTAY: "si muevo la ventana cuando voy a otro cartel la ventana no sigue". Evidence: `verify/reunirse2/`.
+
+The meeting manager's message dispatcher `FUN_100032ea` [CONFIRMED @ 0x100032ea] opens five page kinds. Every open
+message first calls `FUN_100037f0`, which closes the pages at manager +0xc/+0x10/+0x14/+0x18. Each page has its own
+stored spot in the same slot struct:
+
+| Page | Window id | Opened by | Builder | Closer | Slot |
+|---|---|---|---|---|---|
+| list | 0x62be5dd2 | msg 0x724a82d0 | `FUN_10004405` | `FUN_10004cda` | +4/+8 |
+| advisor | 0x62be5df0 | 0x724a82d1 (advisor portrait) | `FUN_10005602` | `FUN_10005fb4` | +0xc/+0x10 |
+| topic text | 0x62be5000 | 0x724a82d2/d4/d5 (topic row on the advisor page, `FUN_100052fc`) | `FUN_10008d40` | `FUN_1000a1a2` | +0x18/+0x1c |
+| petitioner | 0x62be5f00 | 0x724a82d6 (list button 0x62be5dd6, `FUN_100042f7`) | `FUN_1000690a` | `FUN_10007b8c` | +0x20/+0x24 |
+| page 0x62be6000 | 0x62be6000 | 0x724a82d7 (topic page button 0x62be5009, `FUN_1000a202`) | `FUN_1000a5ec` | `FUN_1000ae3e` | +0x28/+0x2c |
+
+The topic page's handler is `FUN_10008ceb` (0xa2bf8ace = build, 0xa2bf8acf = close). All five are 384x354 except the
+list (`n*0x34+0x13` wide). Separate: the petitioner page's answer buttons 0x62be5f0c/0x62be5f0d (`FUN_10007c7a`) build
+a 337x254 window with `FUN_1000823d`, which the game centres on the petitioner page's rect (`FUN_10008169` passes it
+as the anchor at controller +0x14) [CONFIRMED @ 0x1000823d].
+
+The topic page's back arrow (0x42b7c355 in `FUN_1000a202`) reaches the advisor builder BEFORE the topic page's
+closer runs: measured 6 ms later in the log. `FUN_10008c67` closes a flagged (0x1000) window through the window
+manager (`vt+0x44(0xd, ...)`), so the close is deferred.
+
+A page built at the address the previous page just freed, with the same size, is not "just opened" for the dialog
+poll (tracked entry still visible): it stays wherever the game put it, including half outside the client. Measured
+in X1 (`SC3RESIZE_MEETALL=0`): topic page at [640 296 1024 650] in an 800x600 client, X out of reach. Round/1012
+shipped with this (the C1 run got a new address and the poll centred it instead).
+
+### MEETALL (sc3resize, `SC3RESIZE_MEETALL=0` opts out)
+
+1. Each of the five closers copies the spot it stored into all five slots.
+2. Each builder first takes the local top-left of a page that is still open (live in the tree, visible, SIMUI
+   dialog class, >= 300x300) and shares it, which covers the deferred close. The closer then clears the noted page
+   pointer so a freed address reused by another dialog is never read.
+3. The answer popup is kept where the game centred it on its page, at the client size it was built at.
+4. Unchanged: closed at one client size and reopened at another, the page is centred.

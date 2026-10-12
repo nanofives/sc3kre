@@ -1696,6 +1696,16 @@ static int g_dlgstay = 1;
 static void *g_meet_dlg;                 /* the window the last Reunirse page builder ran on */
 static LONG g_meet_x = -1, g_meet_y = -1, g_meet_cw, g_meet_ch;   /* where the last page closed, client size then */
 static int g_meet_dragged;               /* the last visible Reunirse page was not where we placed it */
+/* MEETALL (child reunirse2 2026-10-12, verify/reunirse2): owner, "si muevo la ventana cuando voy a otro cartel la
+ * ventana no sigue". Reunirse has FIVE pages with a stored spot each, not two (rz_meet_hook). Measured on round/1012:
+ * advisor dragged to [140 115], the topic text page opened at its own slot [640 296] and the poll centred it; topic
+ * dragged to [280 195], its back arrow reopened the advisor at [140 115]. Any page's spot now goes to all five slots,
+ * and the petitioner answer popup (centred by the game on the page it came from) is kept where the game put it.
+ * SC3RESIZE_MEETALL=0 keeps DLGSTAY's list <-> advisor sharing only. */
+static int g_meetall = 1;
+static void *g_meet_pop;                 /* the last petitioner answer popup the game built */
+static void rz_meet_pre(void *nw);       /* fwd: MEETALL, below */
+static LONG g_meet_pop_cw, g_meet_pop_ch;
 static LONG g_dlg_cw, g_dlg_ch;          /* client size at the last poll */
 #define DLG_MAX 24
 static struct { void *w; LONG placed[4]; LONG stock[4]; LONG rect[4]; int has_stock, vis, seen, rdock; LONG rdock_y, ew, eh;
@@ -1801,7 +1811,7 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
             /* DLGSTAY: a Reunirse page is never the right-docked terrain panel. Measured: a detail page kept at
                [416 246 800 600] (clamped at 800x600) and reopened maximized matched the "right edge == NAT_W" test and
                was docked to [1296 312]. */
-            if (g_dlgstay && c == g_meet_dlg) g_dlg[e].rdock = 0;
+            if (g_dlgstay && (c == g_meet_dlg || (g_meetall && c == g_meet_pop))) g_dlg[e].rdock = 0;
             {   LONG w = r[2] - r[0], h = r[3] - r[1], t[4], was[4];
                 int place = 0, drag_clamp = 0;
                 LONG cx = (ax1 - w) / 2, cy = (ay1 - h) / 2;
@@ -1830,19 +1840,25 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
                     int inside = r[0] >= 0 && r[1] >= 0 && r[2] <= cw && r[3] <= ch;
                     int ccent = g_dlgkeep && !native && labs(r[0] - (cw - w) / 2) <= 1 && labs(r[1] - (ch - h) / 2) <= 1;
                     int meet = c == g_meet_dlg && g_meet_cw == cw && g_meet_ch == ch && r[0] == g_meet_x && r[1] == g_meet_y;
-                    int stay = g_dlgstay && !g_dlg[e].rdock && (meet || (g_dlg[e].has_rect && g_dlg[e].rcw == cw
+                    /* MEETALL: the answer popup, built at this client size, sits where the game centred it on its page */
+                    int pop = g_meetall && c == g_meet_pop && g_meet_pop_cw == cw && g_meet_pop_ch == ch;
+                    /* MEETALL: a Reunirse page whose spot was noted at another client size is centred at 800x600 too.
+                       Measured (F3): closed maximized at (210,125), restored to 800x600, reopened -> kept at [210 125]. */
+                    int resized = g_meetall && c == g_meet_dlg && g_meet_cw && (g_meet_cw != cw || g_meet_ch != ch);
+                    int stay = g_dlgstay && !g_dlg[e].rdock && (meet || pop || (g_dlg[e].has_rect && g_dlg[e].rcw == cw
                                && g_dlg[e].rch == ch && r[0] == g_dlg[e].rect[0] && r[1] == g_dlg[e].rect[1]));
                     if (stay) {                         /* DLGSTAY: back where it was, keep it there */
                         LONG x = r[0], y = r[1];
                         int ours = meet ? !g_meet_dragged                                  /* not dragged since */
-                                        : g_dlg[e].placed[0] == x && g_dlg[e].placed[1] == y;
+                                        : pop || (g_dlg[e].placed[0] == x && g_dlg[e].placed[1] == y);
                         if (x + w > cw) x = cw - w;
                         if (y + h > ch) y = ch - h;
                         if (x < 0) x = 0;
                         if (y < 0) y = 0;
                         t[0] = x; t[1] = y; t[2] = x + w; t[3] = y + h;
                         logf("DLGSTAY> dialog 0x%08lX [%ld %ld %ld %ld] %s (%s) - kept at [%ld %ld]", (DWORD)c, r[0], r[1],
-                             r[2], r[3], meet ? "Reunirse page where the last one closed" : "reappeared where it was",
+                             r[2], r[3], meet ? "Reunirse page where the last one closed"
+                                         : pop ? "Reunirse answer popup on its page" : "reappeared where it was",
                              ours ? "our spot" : "dragged", x, y);
                         if (!ours && meet) memset(g_dlg[e].placed, 0, sizeof(g_dlg[e].placed));   /* counts as dragged */
                         if (ours) {
@@ -1851,7 +1867,7 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
                         } else if ((x != r[0] || y != r[1]) && rz_dlg_place(c, t)) {
                             moved++;                    /* clamped; placed is left alone, so it still counts as dragged */
                         }
-                    } else if (native && inside) {
+                    } else if (native && inside && !resized) {
                         memcpy(g_dlg[e].stock, r, sizeof(LONG) * 4); g_dlg[e].has_stock = 1;
                         memcpy(g_dlg[e].placed, r, sizeof(LONG) * 4);
                     } else if (ccent) {                 /* DLGKEEP: the game centred it on the client, leave it */
@@ -1920,7 +1936,10 @@ static int rz_dialog_over(const LONG *q) {
  * PAGE and opening an advisor jumps to wherever the detail page was last. After either closer runs we copy the
  * slot it wrote into the other one: the next page opens where the last one was. */
 static void *g_orig_4cda, *g_orig_5fb4;
-static void rz_meet_share(int from_list) {
+/* MEETALL: the five pages' slot offsets (in LONGs): list +4, advisor +0xc, topic +0x18, petitioner +0x20,
+ * page 0x62be6000 +0x28 [CONFIRMED @ SIMUI 0x10004cda, 0x10005fb4, 0x1000a1a2, 0x10007b8c, 0x1000ae3e]. */
+static const int g_meet_slot[5] = { 1, 3, 6, 8, 10 };
+static void rz_meet_share(int from) {
     BYTE *sui = (BYTE *)GetModuleHandleA("SIMUI.DLL");
     void *o;
     DWORD *vt;
@@ -1931,12 +1950,16 @@ static void rz_meet_share(int from_list) {
     vt = *(DWORD **)o;
     if (!vt || IsBadReadPtr(vt, 0x60) || !vt[0x5c / 4]) return;
     s = (LONG *)rz_thiscall_ret(o, (void *)vt[0x5c / 4], NULL, 0);
-    if (!s || IsBadReadPtr(s, 0x18)) return;
-    if (from_list) { s[3] = s[1]; s[4] = s[2]; }
-    else           { s[1] = s[3]; s[2] = s[4]; }
-    g_meet_x = s[1]; g_meet_y = s[2]; g_meet_cw = g_dlg_cw; g_meet_ch = g_dlg_ch;
-    logf("DLGSTAY> Reunirse %s page closed at (%ld,%ld), client %ldx%ld: both pages will open there",
-         from_list ? "list" : "detail", s[1], s[2], g_dlg_cw, g_dlg_ch);
+    if (!s || IsBadReadPtr(s, 0x30)) return;
+    {   int k, n = g_meetall ? 5 : 2;   /* without MEETALL only list <-> advisor, as DLGSTAY shipped */
+        LONG x = from > 0 ? s[from] : g_meet_x, y = from > 0 ? s[from + 1] : g_meet_y;   /* from 0: rz_meet_pre */
+        for (k = 0; k < n; k++) { s[g_meet_slot[k]] = x; s[g_meet_slot[k] + 1] = y; }
+        g_meet_x = x; g_meet_y = y; g_meet_cw = g_dlg_cw; g_meet_ch = g_dlg_ch;
+        logf("DLGSTAY> Reunirse %s page %s at (%ld,%ld), client %ldx%ld: %s pages will open there",
+             from == 0 ? "previous" : from == 1 ? "list" : from == 3 ? "detail" : from == 6 ? "topic"
+             : from == 8 ? "petitioner" : "0x62be6000", from == 0 ? "still open" : "closed",
+             x, y, g_dlg_cw, g_dlg_ch, g_meetall ? "all five" : "both");
+    }
 }
 /* The page builders FUN_10004405 / FUN_10005602 are __thiscall(this, dialog window): note which window is the
  * current Reunirse page. Both start with `mov eax, <SIMUI EH handler>` (5 bytes, relocated imm32). */
@@ -1944,13 +1967,13 @@ static void *g_orig_4405, *g_orig_5602;
 static DWORD __fastcall rz_4405_detour(void *self, void *edx, DWORD p1) {
     DWORD a[1];
     (void)edx;
-    a[0] = p1; g_meet_dlg = (void *)p1;
+    a[0] = p1; rz_meet_pre((void *)p1); g_meet_dlg = (void *)p1;
     return rz_thiscall_ret(self, g_orig_4405, a, 1);
 }
 static DWORD __fastcall rz_5602_detour(void *self, void *edx, DWORD p1) {
     DWORD a[1];
     (void)edx;
-    a[0] = p1; g_meet_dlg = (void *)p1;
+    a[0] = p1; rz_meet_pre((void *)p1); g_meet_dlg = (void *)p1;
     return rz_thiscall_ret(self, g_orig_5602, a, 1);
 }
 static void *rz_detour_movimm(HMODULE mod, DWORD rva, DWORD imm_rva, void *det, const char *name) {
@@ -1977,6 +2000,7 @@ static DWORD __fastcall rz_4cda_detour(void *self, void *edx, DWORD p1) {
     a[0] = p1;
     r = rz_thiscall_ret(self, g_orig_4cda, a, 1);
     rz_meet_share(1);
+    if (g_meetall && g_meet_dlg == (void *)p1) g_meet_dlg = NULL;   /* MEETALL: freed next */
     return r;
 }
 static DWORD __fastcall rz_5fb4_detour(void *self, void *edx, DWORD p1) {
@@ -1984,7 +2008,8 @@ static DWORD __fastcall rz_5fb4_detour(void *self, void *edx, DWORD p1) {
     (void)edx;
     a[0] = p1;
     r = rz_thiscall_ret(self, g_orig_5fb4, a, 1);
-    rz_meet_share(0);
+    rz_meet_share(3);
+    if (g_meetall && g_meet_dlg == (void *)p1) g_meet_dlg = NULL;   /* MEETALL: freed next */
     return r;
 }
 /* 6-byte entry detour (both prologues are push ebx/ebp/esi/edi + a 2-byte mov), all-or-nothing on the bytes */
@@ -2004,6 +2029,82 @@ static void *rz_detour6(HMODULE mod, DWORD rva, const BYTE *expect, void *det, c
     logf("DLGSTAY> detour installed at %s", name);
     return tr;
 }
+/* MEETALL game side: the other three Reunirse pages and the petitioner answer popup. Same calling convention and
+ * prologues as the four DLGSTAY detours (bytes checked in SIMUI.DLL sha1 165301ae, MAIN = stock):
+ *   topic text page   0x62be5000  build FUN_10008d40 (mov eax, SIMUI+0x98eaa)  close FUN_1000a1a2 (slot +0x18/+0x1c)
+ *   petitioner page   0x62be5f00  build FUN_1000690a (mov eax, SIMUI+0x98d59)  close FUN_10007b8c (slot +0x20/+0x24)
+ *   page 0x62be6000               build FUN_1000a5ec (mov eax, SIMUI+0x98eff)  close FUN_1000ae3e (slot +0x28/+0x2c)
+ * Dispatcher [CONFIRMED @ SIMUI 0x100032ea]: msgs 0x724a82d2/d4/d5 open the topic page (from the advisor page),
+ * d6 the petitioner page (list button 0x62be5dd6), d7 page 0x62be6000 (topic page button 0x62be5009). Every open first
+ * closes the open page (FUN_100037f0), so its closer has already shared the spot when the next builder reads it.
+ * Answer popup: the petitioner page's answer buttons (0x62be5f0c/0x62be5f0d, FUN_10007c7a) build a 337x254 window with
+ * FUN_1000823d (mov eax, SIMUI+0x98daf), which the game centres on the page's rect [CONFIRMED @ 0x1000823d]. */
+static void *g_orig_8d40, *g_orig_690a, *g_orig_a5ec, *g_orig_823d, *g_orig_a1a2, *g_orig_7b8c, *g_orig_ae3e;
+/* A page builder that runs while the previous page is STILL OPEN: share that page's spot before the builder reads its
+ * slot. Measured (F1, 800x600): the topic page's back arrow built the advisor page at its old slot [140 115] and the
+ * topic page's closer ran 6 ms LATER with the dragged spot (260,195): that close is deferred (FUN_10008c67 hands it to
+ * the window manager, vt+0x44(0xd)). Only a live, visible SIMUI+0xa4d64 page of at least 300x300 is read. */
+static void rz_meet_pre(void *nw) {
+    void *o = g_meet_dlg;
+    DWORD sui = (DWORD)GetModuleHandleA("SIMUI.DLL");
+    LONG *lr;
+    if (!g_meetall || !o || o == nw || !sui || !rz_win_alive(o) || IsBadReadPtr(o, 0xa4)) return;
+    if (*(DWORD *)o != sui + 0xa4d64 || !(*(DWORD *)((DWORD)o + 0xa0) & 1)) return;
+    lr = (LONG *)((DWORD)o + 0x80);
+    if (lr[2] - lr[0] < 300 || lr[3] - lr[1] < 300) return;
+    g_meet_x = lr[0]; g_meet_y = lr[1];
+    rz_meet_share(0);
+}
+static DWORD __fastcall rz_8d40_detour(void *self, void *edx, DWORD p1) {
+    DWORD a[1]; (void)edx; a[0] = p1; rz_meet_pre((void *)p1); g_meet_dlg = (void *)p1;
+    return rz_thiscall_ret(self, g_orig_8d40, a, 1);
+}
+static DWORD __fastcall rz_690a_detour(void *self, void *edx, DWORD p1) {
+    DWORD a[1]; (void)edx; a[0] = p1; rz_meet_pre((void *)p1); g_meet_dlg = (void *)p1;
+    return rz_thiscall_ret(self, g_orig_690a, a, 1);
+}
+static DWORD __fastcall rz_a5ec_detour(void *self, void *edx, DWORD p1) {
+    DWORD a[1]; (void)edx; a[0] = p1; rz_meet_pre((void *)p1); g_meet_dlg = (void *)p1;
+    return rz_thiscall_ret(self, g_orig_a5ec, a, 1);
+}
+static DWORD __fastcall rz_823d_detour(void *self, void *edx, DWORD p1) {
+    DWORD a[1]; (void)edx; a[0] = p1;
+    g_meet_pop = (void *)p1; g_meet_pop_cw = g_dlg_cw; g_meet_pop_ch = g_dlg_ch;
+    return rz_thiscall_ret(self, g_orig_823d, a, 1);
+}
+static DWORD __fastcall rz_a1a2_detour(void *self, void *edx, DWORD p1) {
+    DWORD a[1], r; (void)edx; a[0] = p1;
+    r = rz_thiscall_ret(self, g_orig_a1a2, a, 1);
+    rz_meet_share(6);
+    if (g_meetall && g_meet_dlg == (void *)p1) g_meet_dlg = NULL;   /* MEETALL: freed next */
+    return r;
+}
+static DWORD __fastcall rz_7b8c_detour(void *self, void *edx, DWORD p1) {
+    DWORD a[1], r; (void)edx; a[0] = p1;
+    r = rz_thiscall_ret(self, g_orig_7b8c, a, 1);
+    rz_meet_share(8);
+    if (g_meetall && g_meet_dlg == (void *)p1) g_meet_dlg = NULL;   /* MEETALL: freed next */
+    return r;
+}
+static DWORD __fastcall rz_ae3e_detour(void *self, void *edx, DWORD p1) {
+    DWORD a[1], r; (void)edx; a[0] = p1;
+    r = rz_thiscall_ret(self, g_orig_ae3e, a, 1);
+    rz_meet_share(10);
+    if (g_meetall && g_meet_dlg == (void *)p1) g_meet_dlg = NULL;   /* MEETALL: freed next */
+    return r;
+}
+static void rz_meetall_hook(HMODULE sui) {
+    static const BYTE ed9[6] = { 0x53, 0x55, 0x56, 0x57, 0x8b, 0xd9 };   /* push ebx/ebp/esi/edi ; mov ebx, ecx */
+    static const BYTE ef1[6] = { 0x53, 0x55, 0x56, 0x57, 0x8b, 0xf1 };   /* ... ; mov esi, ecx */
+    if (!g_orig_4cda || !g_orig_5fb4) return;   /* the DLGSTAY closers are the base: without them, nothing to extend */
+    g_orig_a1a2 = rz_detour6(sui, 0xa1a2, ed9, (void *)rz_a1a2_detour, "SIMUI+0xa1a2 (Reunirse topic close)");
+    g_orig_7b8c = rz_detour6(sui, 0x7b8c, ef1, (void *)rz_7b8c_detour, "SIMUI+0x7b8c (Reunirse petitioner close)");
+    g_orig_ae3e = rz_detour6(sui, 0xae3e, ed9, (void *)rz_ae3e_detour, "SIMUI+0xae3e (Reunirse page 0x62be6000 close)");
+    g_orig_8d40 = rz_detour_movimm(sui, 0x8d40, 0x98eaa, (void *)rz_8d40_detour, "SIMUI+0x8d40 (Reunirse topic build)");
+    g_orig_690a = rz_detour_movimm(sui, 0x690a, 0x98d59, (void *)rz_690a_detour, "SIMUI+0x690a (Reunirse petitioner build)");
+    g_orig_a5ec = rz_detour_movimm(sui, 0xa5ec, 0x98eff, (void *)rz_a5ec_detour, "SIMUI+0xa5ec (Reunirse page 0x62be6000 build)");
+    g_orig_823d = rz_detour_movimm(sui, 0x823d, 0x98daf, (void *)rz_823d_detour, "SIMUI+0x823d (Reunirse answer popup build)");
+}
 static void rz_meet_hook(HMODULE sui) {
     static const BYTE e4cda[6] = { 0x53, 0x55, 0x56, 0x57, 0x8b, 0xd9 };
     static const BYTE e5fb4[6] = { 0x53, 0x55, 0x56, 0x57, 0x8b, 0xf1 };
@@ -2013,6 +2114,7 @@ static void rz_meet_hook(HMODULE sui) {
         g_orig_5fb4 = rz_detour6(sui, 0x5fb4, e5fb4, (void *)rz_5fb4_detour, "SIMUI+0x5fb4 (Reunirse detail close)");
     g_orig_4405 = rz_detour_movimm(sui, 0x4405, 0x98bf1, (void *)rz_4405_detour, "SIMUI+0x4405 (Reunirse list build)");
     g_orig_5602 = rz_detour_movimm(sui, 0x5602, 0x98c5d, (void *)rz_5602_detour, "SIMUI+0x5602 (Reunirse detail build)");
+    if (g_meetall) rz_meetall_hook(sui);
 }
 
 /* ⭐ SIDE PANEL CONTENTS — push the pages and tabs to the BOTTOM of the extended panel.
@@ -10791,6 +10893,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_DLGKEEP", v, sizeof(v))) g_dlgkeep = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_DLGAREA", v, sizeof(v))) g_dlgarea = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_DLGSTAY", v, sizeof(v))) g_dlgstay = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_MEETALL", v, sizeof(v))) g_meetall = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_BAR800", v, sizeof(v))) g_bar800 = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDREFLOW", v, sizeof(v))) g_hudreflow = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_CLOSEFLY", v, sizeof(v))) g_closefly = atoi(v);
@@ -10836,7 +10939,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
              g_cluster, g_input, g_nohit, g_hudfit, g_hudlab, g_sweepon, g_sideon, g_minion,
              g_anchor, g_census, g_minzoom, g_ready_ms, g_noparentfix, g_hud_dy, g_side_dy, g_presentlog,
              g_kidfix, g_artguard, g_edgefix, g_edgescroll, g_bar_span, g_side_span, g_viewfix, g_dialogs, g_menubg, g_menubg_stock);
-        logf("### FLAGS> dlgstay=%d (Reunirse keeps its position, verify/reunirse)", g_dlgstay);
+        logf("### FLAGS> dlgstay=%d (Reunirse keeps its position, verify/reunirse) meetall=%d (all five pages, verify/reunirse2)",
+             g_dlgstay, g_meetall);
         if (AddVectoredExceptionHandler(1, rz_veh))
             logf("### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the "
                  "zoom-after-resize crash the game swallows)");
