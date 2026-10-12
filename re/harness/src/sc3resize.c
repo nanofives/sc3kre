@@ -8036,6 +8036,31 @@ static void rz_subclass(void) {
     /* WINDOWED-EARLY block: if the style bytes could not be patched, the frame is still fixed here and the
        resize step that would add it never runs (no resize is possible). Add it now. */
     if (g_thickframe) rz_make_resizable();
+    /* One line that answers "what did this machine do" from a player's log: frame style, client size,
+       DPI of the window and its monitor, and the process DPI awareness (0 = unaware: Windows scales the
+       window bitmap on a >100% screen). Resolved dynamically, every call is Win10 1607+. */
+    {   typedef UINT (WINAPI *DPIWIN)(HWND);
+        typedef HANDLE (WINAPI *GETCTX)(void);
+        typedef int (WINAPI *AWARE)(HANDLE);
+        typedef LONG (WINAPI *MONDPI)(HMONITOR, int, UINT *, UINT *);
+        HMODULE u = GetModuleHandleA("user32.dll"), sh = LoadLibraryA("shcore.dll");
+        DPIWIN dw = (DPIWIN)GetProcAddress(u, "GetDpiForWindow");
+        GETCTX gc = (GETCTX)GetProcAddress(u, "GetThreadDpiAwarenessContext");
+        AWARE aw = (AWARE)GetProcAddress(u, "GetAwarenessFromDpiAwarenessContext");
+        MONDPI md = sh ? (MONDPI)GetProcAddress(sh, "GetDpiForMonitor") : NULL;
+        HMONITOR mon = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO mi;
+        RECT cr;
+        UINT mx = 0, my = 0;
+        mi.cbSize = sizeof(mi);
+        GetMonitorInfoA(mon, &mi);
+        GetClientRect(h, &cr);
+        if (md) md(mon, 0, &mx, &my);
+        logf("DISPLAY> style 0x%08lX client %ldx%ld, window dpi %u, monitor dpi %u (effective), monitor [%ld %ld %ld %ld], "
+             "process awareness %d (0 unaware, 1 system, 2 per-monitor)", (DWORD)GetWindowLongA(h, GWL_STYLE),
+             cr.right - cr.left, cr.bottom - cr.top, dw ? dw(h) : 0, mx, mi.rcMonitor.left, mi.rcMonitor.top,
+             mi.rcMonitor.right, mi.rcMonitor.bottom, (gc && aw) ? aw(gc()) : -1);
+    }
 }
 
 /* Minimal replacement for the probe's multi-branch fnlog_enter. Same __stdcall(idx, f)
