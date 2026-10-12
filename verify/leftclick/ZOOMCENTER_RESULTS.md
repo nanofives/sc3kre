@@ -55,5 +55,8 @@ centre tile changes on every zoom and rotate (Z0: 0 of 14 kept). The view's own 
 
 - Frames: display asleep for the whole session.
 - HUDSCALE on: the map area goes through the same `rz_lcenter_area` as LCENTER, not run.
+- City load: `FUN_1001d1d9` keeps the saved tile, but the camera-site change applies to it as well, so if the load call
+  moves the camera the saved tile lands on the map-area centre instead of the whole-window centre. Not measured on its
+  own. Row 6 only shows the position after the first click stayed within the run-to-run spread.
 - The mouse wheel: posted wheel messages do not zoom (memory note, sc3io), so wheel zoom was not driven. If the game
   zooms on the wheel it calls the same vt+0x60/+0x64 (not verified).
