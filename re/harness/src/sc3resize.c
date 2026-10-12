@@ -1682,8 +1682,23 @@ static int g_dialogs = 1;
  * the 1100x800 map area. For 3 s after a size change, a change of the map area alone re-centres a dialog
  * still where we put it. SC3RESIZE_DLGAREA=0 re-centres on the size change only. */
 static int g_dlgkeep = 1, g_dlgarea = 1;
+/* DLGSTAY (child reunirse 2026-10-12, verify/reunirse): owner, "cuando mueva una ventana en el menú 'reunirse' que
+ * al abrir un ítem la ventana se mantenga en la misma posición". Measured: opening an advisor rebuilds the SAME
+ * window as the detail page (383 -> 384 wide) and the game moves it to the detail page's own stored spot, then this
+ * poll took the size change for a new window and centred it. Two parts, both off with SC3RESIZE_DLGSTAY=0:
+ * (1) rz_meet_hook: the two Reunirse pages share one stored position (game side, below).
+ * (2) here: a dialog that becomes visible where the game put it back is kept there (clamped), not centred:
+ *     a Reunirse page the game built at the spot where the last page closed, at the same client size (the pages
+ *     are often NEW window objects, measured 0x0FACB560 -> 0x0FACADE0), or any dialog reappearing at the
+ *     top-left where this poll last saw it, at the same client size. */
+static int g_dlgstay = 1;
+static void *g_meet_dlg;                 /* the window the last Reunirse page builder ran on */
+static LONG g_meet_x = -1, g_meet_y = -1, g_meet_cw, g_meet_ch;   /* where the last page closed, client size then */
+static int g_meet_dragged;               /* the last visible Reunirse page was not where we placed it */
+static LONG g_dlg_cw, g_dlg_ch;          /* client size at the last poll */
 #define DLG_MAX 24
-static struct { void *w; LONG placed[4]; LONG stock[4]; LONG rect[4]; int has_stock, vis, seen, rdock; LONG rdock_y, ew, eh; } g_dlg[DLG_MAX];
+static struct { void *w; LONG placed[4]; LONG stock[4]; LONG rect[4]; int has_stock, vis, seen, rdock; LONG rdock_y, ew, eh;
+                int has_rect; LONG rcw, rch; } g_dlg[DLG_MAX];
 static int g_dlg_n;
 
 static int rz_dlg_place(void *w, const LONG *t) {
@@ -1707,6 +1722,7 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
     if (!g_dialogs || !sui || !root || cw <= 0 || ch <= 0) return;
     sizechg = (cw != lcw || ch != lch);
     lcw = cw; lch = ch;
+    g_dlg_cw = cw; g_dlg_ch = ch;
     native = (cw == NAT_W && ch == NAT_H);
     /* the map area: left of a right-docked side panel, above a bottom-docked bar */
     if (g_side_top && !IsBadReadPtr(g_side_top, 0x24)) {
@@ -1744,7 +1760,7 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
         while (n && n != head && g++ < 200) {
             void *c;
             LONG *r;
-            int e = -1;
+            int e = -1, had_stock;
             if (IsBadReadPtr(n, 0x0c)) break;
             c = *(void **)((DWORD)n + 8);
             n = *(void **)n;
@@ -1753,6 +1769,7 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
             if (r[2] - r[0] < 120 || r[3] - r[1] < 80) continue;          /* not the corner widget */
             for (k = 0; k < g_dlg_n; k++) if (g_dlg[k].w == c) { e = k; break; }
             if (!(*(DWORD *)((DWORD)c + 0xa0) & 1)) { if (e >= 0) { g_dlg[e].vis = 0; g_dlg[e].seen = 1; } continue; }
+            had_stock = e >= 0 && g_dlg[e].has_stock;      /* DLGSTAY: the size reset below clears it */
             /* A tracked address that comes back with another size is ANOTHER window (dialogs are freed and the
                heap hands the address to the next one): forget what we knew. Owner 2026-10-08: on a second New City
                the terrain panel inherited a plain dialog's entry and was centred instead of docked. */
@@ -1768,7 +1785,7 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
                 if (g_dlg_n >= DLG_MAX) continue;
                 e = g_dlg_n++;
                 g_dlg[e].ew = r[2] - r[0]; g_dlg[e].eh = r[3] - r[1];
-                g_dlg[e].w = c; g_dlg[e].vis = 0; g_dlg[e].has_stock = 0; g_dlg[e].rdock = 0;
+                g_dlg[e].w = c; g_dlg[e].vis = 0; g_dlg[e].has_stock = 0; g_dlg[e].rdock = 0; g_dlg[e].has_rect = 0;
                 /* RIGHT-DOCKED panels (owner 2026-10-07: "Editar Terreno" during New City, stock
                    [628 60 800 540]): dialogs are created at their 800x600 stock spot, so one whose
                    right edge is exactly NAT_W, in the right half, is a tool panel docked to the right
@@ -1781,7 +1798,7 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
             }
             g_dlg[e].seen = 1;
             {   LONG w = r[2] - r[0], h = r[3] - r[1], t[4], was[4];
-                int place = 0;
+                int place = 0, drag_clamp = 0;
                 LONG cx = (ax1 - w) / 2, cy = (ay1 - h) / 2;
                 if (cx < 0) cx = 0;
                 if (cy < 0) cy = 0;
@@ -1807,7 +1824,29 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
                        snapshots re-opened at [584 309 1096 669]) and is centered like at any other size. */
                     int inside = r[0] >= 0 && r[1] >= 0 && r[2] <= cw && r[3] <= ch;
                     int ccent = g_dlgkeep && !native && labs(r[0] - (cw - w) / 2) <= 1 && labs(r[1] - (ch - h) / 2) <= 1;
-                    if (native && inside) {
+                    int meet = c == g_meet_dlg && g_meet_cw == cw && g_meet_ch == ch && r[0] == g_meet_x && r[1] == g_meet_y;
+                    int stay = g_dlgstay && !g_dlg[e].rdock && (meet || (g_dlg[e].has_rect && g_dlg[e].rcw == cw
+                               && g_dlg[e].rch == ch && r[0] == g_dlg[e].rect[0] && r[1] == g_dlg[e].rect[1]));
+                    if (stay) {                         /* DLGSTAY: back where it was, keep it there */
+                        LONG x = r[0], y = r[1];
+                        int ours = meet ? !g_meet_dragged                                  /* not dragged since */
+                                        : g_dlg[e].placed[0] == x && g_dlg[e].placed[1] == y;
+                        if (x + w > cw) x = cw - w;
+                        if (y + h > ch) y = ch - h;
+                        if (x < 0) x = 0;
+                        if (y < 0) y = 0;
+                        t[0] = x; t[1] = y; t[2] = x + w; t[3] = y + h;
+                        logf("DLGSTAY> dialog 0x%08lX [%ld %ld %ld %ld] %s (%s) - kept at [%ld %ld]", (DWORD)c, r[0], r[1],
+                             r[2], r[3], meet ? "Reunirse page where the last one closed" : "reappeared where it was",
+                             ours ? "our spot" : "dragged", x, y);
+                        if (!ours && meet) memset(g_dlg[e].placed, 0, sizeof(g_dlg[e].placed));   /* counts as dragged */
+                        if (ours) {
+                            place = 1;                  /* placed = t: a resize may re-place it as ours */
+                            if (had_stock) { memcpy(g_dlg[e].stock, t, sizeof(t)); g_dlg[e].has_stock = 1; }
+                        } else if ((x != r[0] || y != r[1]) && rz_dlg_place(c, t)) {
+                            moved++;                    /* clamped; placed is left alone, so it still counts as dragged */
+                        }
+                    } else if (native && inside) {
                         memcpy(g_dlg[e].stock, r, sizeof(LONG) * 4); g_dlg[e].has_stock = 1;
                         memcpy(g_dlg[e].placed, r, sizeof(LONG) * 4);
                     } else if (ccent) {                 /* DLGKEEP: the game centred it on the client, leave it */
@@ -1828,8 +1867,8 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
                         if (y + h > ch) y = ch - h;
                         if (x < 0) x = 0;
                         if (y < 0) y = 0;
-                        if (x != r[0] || y != r[1]) { t[0] = x; t[1] = y; t[2] = x + w; t[3] = y + h; place = 1; }
-                        else memcpy(g_dlg[e].placed, r, sizeof(LONG) * 4);
+                        if (x != r[0] || y != r[1]) { t[0] = x; t[1] = y; t[2] = x + w; t[3] = y + h; place = 1; drag_clamp = g_dlgstay; }
+                        else if (!g_dlgstay) memcpy(g_dlg[e].placed, r, sizeof(LONG) * 4);   /* DLGSTAY: stays "dragged" */
                     }
                 }
                 memcpy(was, r, sizeof(was));   /* r is the live rect: SetRect rewrites it */
@@ -1839,7 +1878,12 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
                     moved++;
                 }
                 if (place) memcpy(g_dlg[e].placed, t, sizeof(t));
+                /* DLGSTAY: a dragged dialog clamped on a resize stays "dragged". Measured: recorded as ours, DLGAREA then
+                   re-centred it 33 ms later ([1350 959] -> [417 246] -> [160 95] on restore to 800x600). */
+                if (drag_clamp) memset(g_dlg[e].placed, 0, sizeof(g_dlg[e].placed));
                 memcpy(g_dlg[e].rect, r, sizeof(LONG) * 4);
+                g_dlg[e].has_rect = 1; g_dlg[e].rcw = cw; g_dlg[e].rch = ch;
+                if (c == g_meet_dlg) g_meet_dragged = memcmp(r, g_dlg[e].placed, sizeof(LONG) * 4) != 0;
             }
         }
     }
@@ -1861,6 +1905,109 @@ static int rz_dialog_over(const LONG *q) {
         if (g_dlg[k].vis && r[0] < q[2] && q[0] < r[2] && r[1] < q[3] && q[1] < r[3]) return 1;
     }
     return 0;
+}
+
+/* DLGSTAY game side: ONE stored position for both Reunirse pages (verify/reunirse/PRE.md).
+ * [CONFIRMED @ SIMUI 0x10004405] the list page builder moves the dialog to (8,8) when byte 0 of the struct from
+ * FUN_1008e998()->vt+0x5c is 0, else to (s+4, s+8). [CONFIRMED @ 0x10005602] the detail page builder uses (8,8)
+ * or (s+0xc, s+0x10). The page closers store the dialog's local left/top (vt+0x98 = +0x80, vt+0x9c = +0x84):
+ * FUN_10004cda into s+4/s+8, FUN_10005fb4 into s+0xc/s+0x10, both set byte 0 = 1. So stock keeps one spot PER
+ * PAGE and opening an advisor jumps to wherever the detail page was last. After either closer runs we copy the
+ * slot it wrote into the other one: the next page opens where the last one was. */
+static void *g_orig_4cda, *g_orig_5fb4;
+static void rz_meet_share(int from_list) {
+    BYTE *sui = (BYTE *)GetModuleHandleA("SIMUI.DLL");
+    void *o;
+    DWORD *vt;
+    LONG *s;
+    if (!sui) return;
+    o = ((void *(__cdecl *)(void))(sui + 0x8e998))();
+    if (!o || IsBadReadPtr(o, 4)) return;
+    vt = *(DWORD **)o;
+    if (!vt || IsBadReadPtr(vt, 0x60) || !vt[0x5c / 4]) return;
+    s = (LONG *)rz_thiscall_ret(o, (void *)vt[0x5c / 4], NULL, 0);
+    if (!s || IsBadReadPtr(s, 0x18)) return;
+    if (from_list) { s[3] = s[1]; s[4] = s[2]; }
+    else           { s[1] = s[3]; s[2] = s[4]; }
+    g_meet_x = s[1]; g_meet_y = s[2]; g_meet_cw = g_dlg_cw; g_meet_ch = g_dlg_ch;
+    logf("DLGSTAY> Reunirse %s page closed at (%ld,%ld), client %ldx%ld: both pages will open there",
+         from_list ? "list" : "detail", s[1], s[2], g_dlg_cw, g_dlg_ch);
+}
+/* The page builders FUN_10004405 / FUN_10005602 are __thiscall(this, dialog window): note which window is the
+ * current Reunirse page. Both start with `mov eax, <SIMUI EH handler>` (5 bytes, relocated imm32). */
+static void *g_orig_4405, *g_orig_5602;
+static DWORD __fastcall rz_4405_detour(void *self, void *edx, DWORD p1) {
+    DWORD a[1];
+    (void)edx;
+    a[0] = p1; g_meet_dlg = (void *)p1;
+    return rz_thiscall_ret(self, g_orig_4405, a, 1);
+}
+static DWORD __fastcall rz_5602_detour(void *self, void *edx, DWORD p1) {
+    DWORD a[1];
+    (void)edx;
+    a[0] = p1; g_meet_dlg = (void *)p1;
+    return rz_thiscall_ret(self, g_orig_5602, a, 1);
+}
+static void *rz_detour_movimm(HMODULE mod, DWORD rva, DWORD imm_rva, void *det, const char *name) {
+    BYTE *fn = (BYTE *)mod + rva, *tr;
+    DWORD old;
+    if (IsBadReadPtr(fn, 5) || fn[0] != 0xB8 || *(DWORD *)(fn + 1) != (DWORD)mod + imm_rva) {
+        logf("DLGSTAY> %s prologue mismatch - NOT hooking", name); return NULL;
+    }
+    tr = (BYTE *)VirtualAlloc(NULL, 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!tr) return NULL;
+    memcpy(tr, fn, 5); tr[5] = 0xE9;                   /* mov eax, imm32 (already relocated) ; jmp fn+5 */
+    *(DWORD *)(tr + 6) = (DWORD)(fn + 5) - (DWORD)(tr + 10);
+    FlushInstructionCache(GetCurrentProcess(), tr, 16);
+    if (!VirtualProtect(fn, 5, PAGE_EXECUTE_READWRITE, &old)) { VirtualFree(tr, 0, MEM_RELEASE); return NULL; }
+    fn[0] = 0xE9; *(DWORD *)(fn + 1) = (DWORD)det - (DWORD)(fn + 5);
+    VirtualProtect(fn, 5, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), fn, 5);
+    logf("DLGSTAY> detour installed at %s", name);
+    return tr;
+}
+static DWORD __fastcall rz_4cda_detour(void *self, void *edx, DWORD p1) {
+    DWORD a[1], r;
+    (void)edx;
+    a[0] = p1;
+    r = rz_thiscall_ret(self, g_orig_4cda, a, 1);
+    rz_meet_share(1);
+    return r;
+}
+static DWORD __fastcall rz_5fb4_detour(void *self, void *edx, DWORD p1) {
+    DWORD a[1], r;
+    (void)edx;
+    a[0] = p1;
+    r = rz_thiscall_ret(self, g_orig_5fb4, a, 1);
+    rz_meet_share(0);
+    return r;
+}
+/* 6-byte entry detour (both prologues are push ebx/ebp/esi/edi + a 2-byte mov), all-or-nothing on the bytes */
+static void *rz_detour6(HMODULE mod, DWORD rva, const BYTE *expect, void *det, const char *name) {
+    BYTE *fn = (BYTE *)mod + rva, *tr;
+    DWORD old;
+    if (IsBadReadPtr(fn, 6) || memcmp(fn, expect, 6) != 0) { logf("DLGSTAY> %s prologue mismatch - NOT hooking", name); return NULL; }
+    tr = (BYTE *)VirtualAlloc(NULL, 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!tr) return NULL;
+    memcpy(tr, expect, 6); tr[6] = 0xE9;
+    *(DWORD *)(tr + 7) = (DWORD)(fn + 6) - (DWORD)(tr + 11);
+    FlushInstructionCache(GetCurrentProcess(), tr, 16);
+    if (!VirtualProtect(fn, 6, PAGE_EXECUTE_READWRITE, &old)) { VirtualFree(tr, 0, MEM_RELEASE); return NULL; }
+    fn[0] = 0xE9; *(DWORD *)(fn + 1) = (DWORD)det - (DWORD)(fn + 5); fn[5] = 0x90;
+    VirtualProtect(fn, 6, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), fn, 6);
+    logf("DLGSTAY> detour installed at %s", name);
+    return tr;
+}
+static void rz_meet_hook(HMODULE sui) {
+    static const BYTE e4cda[6] = { 0x53, 0x55, 0x56, 0x57, 0x8b, 0xd9 };
+    static const BYTE e5fb4[6] = { 0x53, 0x55, 0x56, 0x57, 0x8b, 0xf1 };
+    if (!g_dlgstay || g_orig_4cda) return;
+    g_orig_4cda = rz_detour6(sui, 0x4cda, e4cda, (void *)rz_4cda_detour, "SIMUI+0x4cda (Reunirse list close)");
+    if (g_orig_4cda)
+        g_orig_5fb4 = rz_detour6(sui, 0x5fb4, e5fb4, (void *)rz_5fb4_detour, "SIMUI+0x5fb4 (Reunirse detail close)");
+    g_orig_4405 = rz_detour_movimm(sui, 0x4405, 0x98bf1, (void *)rz_4405_detour, "SIMUI+0x4405 (Reunirse list build)");
+    g_orig_5602 = rz_detour_movimm(sui, 0x5602, 0x98c5d, (void *)rz_5602_detour, "SIMUI+0x5602 (Reunirse detail build)");
 }
 
 /* ⭐ SIDE PANEL CONTENTS — push the pages and tabs to the BOTTOM of the extended panel.
@@ -9092,6 +9239,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           install_one((DWORD)sui + 0x6d2d0, sui, 0x6d2d0, "SIMUI FUN_1006d2d0 painter", 6);
           if (g_cdcdlog) { rz_hook_cdcd(sui); rz_hook_e81c(sui); rz_hook_cac8(sui); }  /* flyout diag detours */
           ho_install(sui);   /* HUDOPT: HUD scale controls in the Preferences dialog */
+          rz_meet_hook(sui); /* DLGSTAY: the Reunirse pages share one stored position */
       }
       else logf("--- HUD: SIMUI.DLL never loaded after %d tries - capture NOT armed, HUD stays native", st); }
     if (g_hudlab) {
@@ -9170,6 +9318,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MINICLASS", v, sizeof(v))) g_miniclass = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_DLGKEEP", v, sizeof(v))) g_dlgkeep = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_DLGAREA", v, sizeof(v))) g_dlgarea = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_DLGSTAY", v, sizeof(v))) g_dlgstay = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_BAR800", v, sizeof(v))) g_bar800 = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDREFLOW", v, sizeof(v))) g_hudreflow = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_CLOSEFLY", v, sizeof(v))) g_closefly = atoi(v);
@@ -9209,6 +9358,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
              g_cluster, g_input, g_nohit, g_hudfit, g_hudlab, g_sweepon, g_sideon, g_minion,
              g_anchor, g_census, g_minzoom, g_ready_ms, g_noparentfix, g_hud_dy, g_side_dy, g_presentlog,
              g_kidfix, g_artguard, g_edgefix, g_edgescroll, g_bar_span, g_side_span, g_viewfix, g_dialogs, g_menubg, g_menubg_stock);
+        logf("### FLAGS> dlgstay=%d (Reunirse keeps its position, verify/reunirse)", g_dlgstay);
         if (AddVectoredExceptionHandler(1, rz_veh))
             logf("### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the "
                  "zoom-after-resize crash the game swallows)");
