@@ -233,6 +233,10 @@ is unchanged.
 Cost (B3 build): 3.9 to 4.1 ms per frame at 1200x900, 5.0 ms maximized (2048x1081), one pass per frame, ~82 fps,
 same as hudopt (2.6 to 3.1 ms per pass, two passes per frame).
 
+Owner's frame (black/white junk in the RCI columns) is the same mechanism and is reproduced by the control arm; the
+fixed build also stays clean with the sim running at speed 4 (`verify/hudfix/RESULTS.md`, follow-up section).
+A black 4-px line that scrolls through the city during scrolls shows with HUD scale off too, so it is not this code.
+
 Not addressed here, seen in the logs: while the sim is paused the cluster re-assert runs SRCRECT + SIDEKIDS every
 ~125 ms (the game resets the bar's source rect to 600 and the panel buttons to native, the mod pushes them back). The
 owner's `inst_hudopt` log has 963 such passes in 2 minutes after a maximize. No frame in the scroll runs showed a
