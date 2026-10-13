@@ -97,6 +97,25 @@ the control saw 2 such moves succeed.
 Road traffic DENSITY at the site is not part of this: the router steps between road cells without the turn matrix
 (arm H control check), so the ring is one-way for the animated cars and two-way for the density model.
 
+### Arm D, second run: the layout agreed with artkit and multitile (PIDs 40520 arm, 31192 control)
+
+After the run above, artkit and multitile had already built art and placement on the mirrored quarter (ring through
+local x- and z+, exit road on z-, pinwheel states 3, 0 / 2, 1). `quarter.lanes.json` was switched to that frame (one lane
+changes: z- 2 -> z+ 2 becomes z+ 1 -> z- 1, commit 4f11991) and arm D repeated on a site that fits it: Berlin cells
+(25,181) state 3, (26,181) 0, (25,182) 2, (26,182) 1 (stock 43/0, 39/0, 39/2, 39/1), ring order
+(26,181) -> (25,181) -> (25,182) -> (26,182). Same predictions as D2 / D3, not re-registered (a repeat, not a new
+hypothesis). Both cameras moved to the site by the same minimap click (758, 503) and two zoom-in clicks; probe 484 s.
+
+| | arm | control |
+|---|---|---|
+| ring-to-ring with the ring order | 69 | 40 |
+| ring-to-ring against it | **0** | 44 |
+| ring -> own exit road | 24 | 45 |
+| exit road -> ring | 35 | 59 |
+| from (25,180), which faces a closed side of the ring cell | 10 failed | 12 succeeded |
+
+D2 and D3 met again in the agreed layout. Owner shots 04 and 06 show this run.
+
 ## Cleanup
 
 All instances stopped by PID. `netpack.py uninstall` of each package after its arm; final `link_tree.py --verify`:
