@@ -62,3 +62,19 @@ the road network), then |difference| per tile; summary = mean |diff| over road t
 
 Coordinate check (not a prediction, recorded): the cells the DLL logs (SimTransit node x, z) must be the edited save
 coordinates; if they come out transposed, the analysis indexes the probe grids accordingly and says so.
+
+## Addendum 1 (2026-10-13, after N1 / N2 / A1, before any B2 arm)
+
+The pre-registered roundabout site (lanekit's (25..26, 181..182)) carries no traffic density in stock Berlin: the sum
+of the 12-month means over its four cells is 0.0 in N1 and N2 (1.2 in A1). So it cannot show a density effect; the
+B arms keep it (their router-step counters still apply), and three more arms use a busier site:
+
+- `berlin_lanes2.sc3` = stock Berlin + the same one-way run (147..157, 46) = 20430/0 + roundabout at (61,95) 20400/3,
+  (62,95) 20400/0, (61,96) 20400/2, (62,96) 20400/1 (was 11213/1, 11211/1, 39/2, 39/1). Found by a search over every
+  2x2 block of road cells in Berlin: the only one whose four outside road neighbours are exactly the pinwheel's exits
+  ((60,95), (62,94), (61,97), (63,96)) with no other road touching the block. Stock density over the block: 143.5
+  (sum of N1's 12-month means).
+- Arms B2_off (0), B2_ctl (count), B2_on (unset), same protocol as B.
+- Predictions for B2 = the B predictions (one-way and roundabout), on these cells. Ring order in world cells:
+  (62,95) -> (61,95) -> (61,96) -> (62,96) -> (62,95); B2_on: steps against it = 0, entries through a quarter's ring
+  exit side continue = 0; B2_ctl: > 0.
