@@ -166,7 +166,7 @@ tile of that net, compared with the saved tile.
 
 The 1024 city is 16 copies of Europolis (256). Most non-seam counts are exactly 16x the 256 city's (POWR
 arm-to-building 2 and arm-to-empty 1, SUBW gap 4 and arm-to-building 4). SUBW interior is 112, not 16 x 4 = 64: 48
-interior tiles exist only in the copy, presumably further than 1 cell from a seam `[UNCERTAIN]`, not examined.
+interior tiles exist only in the copy. Not examined `[UNCERTAIN]`.
 
 Progress over the relaunch (same 16 cities): PIPE 98.85% -> 99.91% (utilities), ROAD 99.81% -> 99.83% and HWAY
 99.65% -> 99.71% (buildings in the surface layer). POWR did not move: 237 of its 263 disagreements are pole
