@@ -1,0 +1,40 @@
+{
+  "netpack": 1,
+  "name": "roundabout",
+  "version": "1.0.0",
+  "author": "netmod demo (artkit + lanekit + multitile, unified by task roundabout)",
+  "description": "A 2x2 one-way mini roundabout as ONE new piece id, 20400, used in four states (pinwheel 3,0 / 2,1), with four exits. Behaves as road T 39 (exemplar, cost) except for its own lanes. Art: built at install time by recipe.json (netart.py compose: ring = stock curve 11203, exit = stock straight 29), no game art in the package. Lanes: quarter.lanes.json (street-sim lanes one way round the ring, turn matrix from those lanes). Placement: template 'rotonda' with the On-ramp tool in template mode (sc3netmod, keys T / R), protected cells, demolished as one block. layout.json is the netart preview of the block with roads on the exits.",
+  "game": {
+    "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+  },
+  "variants": [
+    {"id": 20400, "base": 39, "network": "ROAD",
+     "name": {"*": "Roundabout", "ENGLISH": "Rotonda"},
+     "art": {"from": 39, "recipe": "recipe.json"},
+     "trblkatt": "copy_base"}
+  ],
+  "lanes": [
+    {"piece": 20400, "spec": "quarter.lanes.json"}
+  ],
+  "templates": [
+    {
+      "name": "rotonda",
+      "label": {"*": "Roundabout 2x2", "ENGLISH": "Rotonda 2x2"},
+      "size": [2, 2],
+      "network": "ROAD",
+      "rows": [
+        [[20400, 3], [20400, 0]],
+        [[20400, 2], [20400, 1]]
+      ],
+      "edges": [
+        {"at": [0, 0], "dir": "W", "need": "optional"},
+        {"at": [1, 0], "dir": "N", "need": "optional"},
+        {"at": [1, 1], "dir": "E", "need": "optional"},
+        {"at": [0, 1], "dir": "S", "need": "optional"}
+      ],
+      "terrain": {"flat": true, "water": false},
+      "cost": 400,
+      "rotate": "generate"
+    }
+  ]
+}

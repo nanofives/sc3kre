@@ -185,6 +185,6 @@ band at zoom 3.
 ## 10. Proof piece
 
 The demo agreed with tasks lanekit and multitile: a 2x2 mini roundabout made of ONE new id in states 3,0 / 2,1
-(pinwheel). Art: `examples/example_roundabout_art/recipe.json` = stock curve 11203 (a road quarter-circle round
+(pinwheel). Art: `examples/roundabout/recipe.json` (package `roundabout`, which also carries the lanes and the template; it replaced `example_roundabout_art` and lanekit's `example_roundabout`) = stock curve 11203 (a road quarter-circle round
 the right vertex, which is the 2x2 centre in slot 0) + the exit road from stock straight 29 within 0.55 tile of the
 NW edge, outside the ring's road. Results in `verify/artkit/RESULTS.md`.

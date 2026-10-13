@@ -228,7 +228,7 @@ slot re-pointed, every other record keeps offset and bytes. One package per (pie
 Checks: ERROR = spec does not compile, a node outside -16..271, an exit code over 31, no exemplar for a matrix edit,
 two packages on one piece. WARNING = a lane turn missing from the low half, a used side with no arm in either half
 (the tiler will not connect it), a matrix turn no lane drives, a curve whose end points are not the lane's nodes in some
-language. Examples: `example_lanes_t_exit_only`, `example_connects_hway_block`, `example_roundabout`.
+language. Examples: `example_lanes_t_exit_only`, `example_connects_hway_block`, `roundabout` (the 20400 demo: art recipe + lanes + template in one package).
 
 ## 10. Templates: multi-cell intersections (task multitile, 2026-10-13)
 
