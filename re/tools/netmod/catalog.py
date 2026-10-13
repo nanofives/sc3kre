@@ -29,9 +29,8 @@ class Catalog:
         self.ids = self._ids()
 
     def _ids(self):
-        """Every id in a Set, plus exemplar ids the rules or bridges reference."""
-        ids = set(self.rules.all_ids())
-        return sorted(ids)
+        """Every id in a network Set file or DIAG_Set.txt (420 on the stock install)."""
+        return self.rules.all_ids()
 
     # --------------------------------------------------------------------- piece
 
@@ -151,7 +150,6 @@ def _jsonable(v):
 def _rule_summary(refs):
     out = {}
     for r in refs:
-        k = "%s %s" % (r.stage, r.role.split(" [")[0].split("[")[0])
         k = "%s %s" % (r.stage, r.role if not r.role.startswith(("bridge", "collapse"))
                        else r.role.split()[0])
         out[k] = out.get(k, 0) + 1
