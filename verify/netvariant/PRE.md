@@ -69,3 +69,20 @@ Highway, onramps, subway, pipes, bridges and other bases; variants of rail or po
 variant keeping the variant's look (it becomes the stock crossing tile, by design in this first version);
 what the crossing tile turns back into when the rail is removed (recorded if seen, not predicted); 1024 cities;
 the owner's dev install.
+
+## Addendum 1 (2026-10-13, after arm S1 and a first X1 attempt, before the X1/X0/P1 runs below)
+
+First X1 attempt (build with only the `0x10016821` site): rail laid from the west and stopped at the blue road,
+no crossing, `crossing-switch lookups mapped=0`, so the switch was never reached. A live read-only Frida trace of
+the id getters during a second rail drag showed the 20029 reads came from `FUN_1001af19` (vt+0x5c at
+`0x1001af4f`), `FUN_1001ade7` (`0x1001ae22`) and `FUN_10014939` (`FUN_1001a93d` at `0x1001497c`). The inventory
+(re/analysis/NETVARIANT.md) explains the order: a path planner outside SIMNTWRK asks the rotation-aware predicates
+(index 0x10..0x1b of manager vt+0x54) per cell, then SIMNTWRK `FUN_1001547b` calls the crossing `FUN_100167d4`
+with the per-network id-list predicate (`FUN_1001ac2b` for rail), and only then the switch.
+
+Hook set for the runs below: the switch site `0x10016821` as before, plus the two id getters `0x1000c2fc`
+(vt+0x5c) and `0x1000cc83` (vt+0x30) report the base only while one of 15 wrapped predicates runs on the same
+thread: id lists `0x1001ab26/0x1001ac2b/0x1001abb2/0x1001acbe`, flag-or-0xe/0xf `0x1001ad60/0x1001ade7/0x1001ae36`,
+rotation lists `0x1001ae85/0x1001af19/0x1001afc7/0x1001b07c/0x1001b10c/0x1001b248/0x1001b1a1/0x1001b2e0`. Not
+wrapped: the decoration predicates `0x1001b378/0x1001b3c4`. Predictions for X1, X0, P1 unchanged. Added for X1: the
+log shows `predicate id reads mapped` > 0 and `crossing-switch lookups mapped` > 0.
