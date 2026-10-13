@@ -21,7 +21,11 @@ import os
 import sys
 
 if __package__ in (None, ""):
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    # run as a script: drop this folder from sys.path (its module names must not shadow the
+    # stdlib) and import the package from its parent instead
+    _here = os.path.dirname(os.path.abspath(__file__))
+    sys.path[:] = [p for p in sys.path if os.path.abspath(p or ".") != _here]
+    sys.path.insert(0, os.path.dirname(_here))
     __package__ = "netmod"
 
 from netmod import catalog as _cat  # noqa: E402
@@ -128,9 +132,11 @@ def show(C, pid, frames=False, state=None, rules_limit=None):
         _p("  hardcoded in SIMNTWRK.DLL: none of the decoded tables/constants")
     t = p["trblkatt"]
     if t:
-        _p("  TrBlkAtt (SSimData\\%s\\TRBLKATT.IXF): states %s, sizes %s%s" % (
-            t["lang"], t["states"], t["sizes"],
-            "" if t["same_in_all_langs"] else "  (differs in another language folder)"))
+        _p("  TrBlkAtt (SSimData\\%s\\TRBLKATT.IXF, traffic paths): states %s%s" % (
+            t["lang"], t["states"],
+            "" if t["same_in_all_langs"] else "  (bytes differ in another language folder)"))
+        for st in t["states"]:
+            _p("      state %d (%d B): %s" % (st, t["sizes"][st], t["decoded"][st]))
     else:
         _p("  TrBlkAtt: no {0x625C6226, 0x825C6289, id*0x100+state} record for any state")
     return p
@@ -323,6 +329,17 @@ def cmd_selftest(C):
            C.cs[k]["hdr"]["b0f"] * (C.cs[k]["hdr"]["layer_flags"] & 0xFF)]
     res.append(("CSATTRIB frames == hdr[0x0f] x (layer_flags & 0xff), tables the catalog uses",
                 not lay, "%d of %d differ %s" % (len(lay), len(used), sorted(lay)[:8])))
+    n_ok = n_all = 0
+    for lang in C.game.trblkatt_langs():
+        for blob in trblkatt.records(C.game.trblkatt(lang)).values():
+            n_all += 1
+            try:
+                trblkatt.parse(blob)
+                n_ok += 1
+            except (trblkatt.TrbError, ValueError, IndexError):
+                pass
+    res.append(("TrBlkAtt records parse to their exact size", n_ok == n_all,
+                "%d / %d" % (n_ok, n_all)))
     tl = trblkatt.lang_summary(C.game)
     res.append(("TRBLKATT.IXF records per language x languages = 6,034",
                 sum(n for _, n, _ in tl) == 6034,
@@ -380,8 +397,8 @@ def main(argv=None):
             else:
                 pid, state, how = query.piece_of(blk)
                 if pid is None:
-                    raise SystemExit("not a network piece: %s (object.name %r)" %
-                                     (how, blk.get("object.name")))
+                    raise SystemExit("not a network piece: %s (cell %s, object.name %r)" %
+                                     (how, blk.get("cell"), blk.get("object.name")))
                 _p("from the block (%s): cell %s, object.name %r" %
                    (how, blk.get("cell"), blk.get("object.name")))
         else:
@@ -409,7 +426,7 @@ def main(argv=None):
                                                      len(cat["pieces"])))
         return 0
     if a.cmd == "html":
-        from netmod import html as _html
+        from netmod import htmlcat as _html
         _html.build(C, a.out, all_frames=a.all_frames)
         return 0
     if a.cmd == "tables":
