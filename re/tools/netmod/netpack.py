@@ -67,6 +67,7 @@ import netpack_bridges as NB  # noqa: E402  task netbridge: inheritance, replace
 import netramp as RAMP  # noqa: E402  ramps / on-ramps / tunnels / slopes (NET_RAMPS.md)
 from PIL import Image   # noqa: E402  png_dir art (any size with anchors.json, NET_ART.md)
 import netpack_lanes as NL  # noqa: E402  task lanekit: lanes (TrBlkAtt) and connects (turn matrices), NET_LANES.md
+import netpack_templates as TPL  # noqa: E402  task multitile: multi-cell templates (MULTITILE.md)
 
 SCHEMA_VERSION = 1
 SCHEMA_FILE = os.path.join(HERE, "netpack.schema.json")
@@ -341,7 +342,7 @@ def frame_png_name(k):
 
 
 def _recolor_fn(spec):
-    if spec in NP.TINTS:
+    if isinstance(spec, str) and spec in NP.TINTS:          # a {"mul", "add"} dict is not hashable
         return ("tint", spec)
     if isinstance(spec, str):
         if spec not in PRESETS:
@@ -560,7 +561,8 @@ def compile_pack(stock, pack_dir, man):
     langs_text = stock.lang_dirs("Text")
     out = {"name": pname, "variants": [], "reskins": [], "rule_edits": [], "ini": [], "warnings": [],
            "bridges": [dict(e, _pack=pname) for e in man.get("bridges", [])],              # task netbridge
-           "crossings": list(man.get("crossings", []))}
+           "crossings": list(man.get("crossings", [])),
+           "templates": list(man.get("templates", []))}                                     # task multitile
     for n, v in enumerate(man.get("variants", [])):
         where = "%s variant %d (id %s)" % (pname, n + 1, v.get("id"))
         vid, base, net = v["id"], v["base"], v["network"]
@@ -767,6 +769,30 @@ def merge(stock, packs):
                                   stock.set_files_of, report["warnings"])
     except RAMP.RampError as e:
         raise NetpackError(str(e))
+    # ---- task multitile: templates (netpack_templates.py, MULTITILE.md). Their cell pieces go into the Protected
+    # list of their network so a later re-tile never replaces a template cell.
+    try:
+        inh = NB.inherit_edits(stock, variants)
+        tdir = stock.listdir("Apps/Res/TilingRules")
+        set_m, prot_m, prot_f = {}, {}, {}
+        for n in NETS:
+            set_m[n] = stock.set_ids(n) | {v["id"] for v in variants if v["net"] == n}
+            for e in inh.get("%s_GRND_Set.txt" % n, []):
+                set_m[n] |= set(e.get("ids", []))
+            f = [x for x in tdir if x.lower() == ("%s_grnd_protected.txt" % n).lower()]
+            prot_f[n] = f[0] if f else None
+            prot_m[n] = {int(x) for x in NR.counted(stock.read("Apps/Res/TilingRules/" + f[0]))[0]
+                         if x.strip().isdigit()} if f else set()
+            for e in inh.get(prot_f[n] or "", []):
+                prot_m[n] |= set(e.get("ids", []))
+        templates, tprot = TPL.compile_all(stock, [(c["name"], c["templates"]) for c in comp], variants, set_m, prot_m,
+                                           report["warnings"])
+    except TPL.TemplateError as e:
+        raise NetpackError(str(e))
+    for n, ids in sorted(tprot.items()):
+        if not prot_f[n]:
+            raise NetpackError("templates: no %s_GRND_Protected.txt in the stock tree" % n)
+        edits.setdefault(prot_f[n], []).append({"op": "list_add", "ids": ids, "_pack": "(templates)"})
     for c in comp:
         for e in c["rule_edits"]:
             edits.setdefault(e["file"], []).append(e)
@@ -811,6 +837,18 @@ def merge(stock, packs):
             raise NetpackError(str(e))
         if cdata is not None:
             files["Apps/Res/TilingRules/" + cfn[0]] = cdata
+    # task multitile: one Collapse group per package holding its template pieces, so removing one template cell
+    # removes the template (FUN_1001da5f: first group holding the id, 4-connected flood within +-8 cells plus the
+    # straight walks from the clicked cell; MULTITILE.md)
+    tgroups = TPL.collapse_groups(templates)
+    if cfn and tgroups:
+        rel = "Apps/Res/TilingRules/" + cfn[0]
+        try:
+            groups = NB.parse_collapse(files.get(rel) or stock.read(rel))
+            TPL.add_collapse(groups, tgroups, NB.COLLAPSE_MAX)
+        except (NB.BridgeError, TPL.TemplateError) as e:
+            raise NetpackError(str(e))
+        files[rel] = NB.render_collapse(groups)
     bed = {}
     for c in comp:
         for e in c["bridges"]:
@@ -856,10 +894,11 @@ def merge(stock, packs):
 
     # ---- variant tables for sc3netmod.dll, one per package
     for c in comp:
-        if c["variants"] or c["ramps"]:
+        mine = [t for t in templates if t["pack"] == c["name"]]
+        if c["variants"] or c["ramps"] or mine:
             tables[c["name"]] = ("# netpack %s: <variant id> <base id>, read by sc3netmod.dll\r\n" % c["name"]).encode() + \
                 b"".join(b"%d %d\r\n" % (v["id"], v["base"]) for v in sorted(c["variants"], key=lambda v: v["id"])) + \
-                RAMP.table_lines(c["ramps"])
+                RAMP.table_lines(c["ramps"]) + TPL.table_lines(mine)
 
     # ---- report + checks that need the merged result
     placed = set()
@@ -872,6 +911,7 @@ def merge(stock, packs):
     for c in comp:
         placed |= {e.get("piece") for e in c["crossings"]}
     placed |= {r["to"] >> 8 for r in ramps}                 # a table slot places it (netramp.py)
+    placed |= {c[0] for t in templates for c in t["cells"].values()}   # a template places it (task multitile)
     for v in variants:
         if v["id"] not in placed:
             report["warnings"].append("%s: no rule RESULT places %d, so the tiler never builds it" % (v["where"], v["id"]))
@@ -881,6 +921,9 @@ def merge(stock, packs):
         for r in c["reskins"]:
             report["reskins"].append({"piece": r["piece"], "frames": len(r["art"]["frames"]), "sharers": r["sharers"]})
     report["ramps"] = [{"table": r["table"], "slot": r["slot"], "from": r["from"], "to": r["to"]} for r in ramps]
+    report["templates"] = [{"name": t["name"], "pack": t["pack"], "orientations": len(t["orients"]), "cost": t["cost"],
+                            "cells": len(t["cells"]), "protect_add": t["protect_add"],
+                            "picture": [TPL.render(t, k) for k in range(len(t["orients"]))]} for t in templates]
     return files, tables, report
 
 
@@ -1206,6 +1249,11 @@ def _print_report(report):
     for r in report.get("ramps", []):
         print("  ramp    %s slot %d  %d.%d -> %d.%d" % (r["table"], r["slot"], r["from"] >> 8, r["from"] & 0xFF,
                                                        r["to"] >> 8, r["to"] & 0xFF))
+    for t in report.get("templates", []):                                       # task multitile
+        print("  template %s/%s  %d cell(s), %d orientation(s), cost %d, Protected += %s"
+              % (t["pack"], t["name"], t["cells"], t["orientations"], t["cost"], t["protect_add"] or "-"))
+        for pic in t["picture"]:
+            print("    " + pic.replace("\n", "\n    "))
     for w in report["warnings"]:
         print("  WARNING " + w)
     for w in report.get("info", []):

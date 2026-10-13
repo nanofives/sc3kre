@@ -229,3 +229,15 @@ Checks: ERROR = spec does not compile, a node outside -16..271, an exit code ove
 two packages on one piece. WARNING = a lane turn missing from the low half, a used side with no arm in either half
 (the tiler will not connect it), a matrix turn no lane drives, a curve whose end points are not the lane's nodes in some
 language. Examples: `example_lanes_t_exit_only`, `example_connects_hway_block`, `example_roundabout`.
+
+## 10. Templates: multi-cell intersections (task multitile, 2026-10-13)
+
+Manifest section `templates` (schema `template`, `template_cell`): a fixed block of pieces the player places in one
+click with the On-ramp tool in template mode (keys T / R, sc3netmod TMPL block). netpack checks shape, states, arms
+(exemplar connectivity), inner arms, exits and the 4 generated rotations; install adds the template pieces to their
+network's Protected list (so later retiles keep them), one Collapse.txt group per package (so demolish takes the whole
+block), and `tmpl` lines to `mods\netmod\tables\<package>.txt`. Simulator: `netpack_templates.py place`. Game-proven
+on stock DLLs, guide and evidence: `MULTITILE.md`, `verify/multitile/RESULTS.md`.
+
+Also fixed in that task: `recolor` given as `{"mul": [r,g,b], "add": [r,g,b]}` failed with `unhashable type: 'dict'`
+(the preset lookup hashed the spec before checking it was a string).

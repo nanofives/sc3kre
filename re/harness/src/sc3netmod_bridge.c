@@ -39,6 +39,7 @@ static DWORD __stdcall nb_map(DWORD id) {
 }
 
 static DWORD __stdcall nb_map_count(DWORD id, volatile LONG *n) {
+    if (id < 65536 && n == &g_nb_n_remove && g_tmpl_keep[id]) return id;   /* task multitile: own Collapse group */
     if (id < 65536 && g_base[id]) { InterlockedIncrement(n); return g_base[id]; }
     return id;
 }
@@ -87,6 +88,8 @@ static __declspec(naked) void nb_collapse_wrap(void) {
     __asm {
         push eax
         movzx eax, word ptr [esp + 0x18]
+        cmp byte ptr [g_tmpl_keep + eax], 0      ; task multitile: a template piece keeps its own Collapse group
+        jnz keep
         movzx eax, word ptr [g_base + eax * 2]
         test eax, eax
         jz keep

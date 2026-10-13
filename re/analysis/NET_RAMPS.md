@@ -30,7 +30,10 @@ the entrance pieces from the tables at `0x10031fd8..0x10032028` through `FUN_100
 
 ### 1.1 The On-ramp tool, step by step
 
-1. **Hover.** The tool helper (`0x1000f72c`) calls selection vt+0x38 = `FUN_10009d20` with the cursor cell. It tries
+1. **Hover.** (Correction, task multitile 2026-10-13: the framework mouse move `FUN_10025c93` calls tool vt+0x54
+   `FUN_1000f760`, which calls the selection's primary vt+0xc = `FUN_10009d20` (slot 0x1002c1bc, the same address as
+   0x1002c184 + 0x38, the two vtables are adjacent); `0x1000f72c` is tool vt+0x4c/+0x50, the cost preview. See
+   `MULTITILE.md` 2.) `FUN_10009d20` gets the cursor cell. It tries
    the cell and its four neighbours, each along both axes: three cells in a row that are empty (or flora,
    `FUN_10009c65`: occupant major type 5), the three lane cells beside them hold the straight highway (0x49 for a
    strip along z, 0x3acb along x) at one height, the lane cell past one end holds the highway or its crossing
