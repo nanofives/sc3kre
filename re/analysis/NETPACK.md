@@ -205,6 +205,5 @@ The stock files are read from `$SC3_GAME_ROOT` (or the main checkout). `install`
 Three manifest additions, game-proven on stock DLLs (`NETBRIDGE.md`, `verify/netbridge/RESULTS.md`): variants inherit
 their base's Set / DIAG / Protected membership, Convert rows and Collapse groups (`"inherit"`, default true);
 `"replace_base": true` retargets every rule RESULT that places the base; `bridges` inserts / deletes records of the four
-Bridges files; `crossings` gives a variant its own crossing piece (`mods
-etmod\cross\<package>.txt`, read by
+Bridges files; `crossings` gives a variant its own crossing piece (`mods\netmod\cross\<package>.txt`, read by
 `sc3netmod.dll` XCROSS). Code: `netpack_bridges.py`. Selftest U8..U10.
