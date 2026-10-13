@@ -56,3 +56,14 @@ surface sums with and without the mod. T3 of the tiling ladder was VOID, so a nu
 
 ## Not claimed by this test
 Highway, rail, bridges, slopes, ComplexRules contexts, other topologies. Only the bare straight selector is retargeted.
+
+## Addendum before arm T (2026-10-12, written after arms C, M, L, X, R and before T)
+
+T is run as: `Cities\Berlin, Germany.sc3` copied twice. TM = every surface tile with piece 29 set to 20029 (state and
+props kept) by `network_layer.NetworkEditor` (the first game load of an edited network layer). TC = unedited. Both
+in the modded tree. Per arm: load, dismiss tips, frame dump (date), sc3resize P (unpause) + 3 (speed), 120 s, P, frame
+dump (date), save. Validity gate: the date moved in both arms. Oracle: `transit_layer.py` surf_live and surf_snap
+summed over S = the switched cells, and over all cells.
+Prediction (from the mechanism, not measured): if routing treats 20029 like 29 (same class `SIMNTWRK+0x2B5DC`, same
+TrBlkAtt copies), the S sums of TM and TC are of the same order; if 20029 is not routable, TM's S sums fall toward 0
+while traffic moves to other cells or disappears.
