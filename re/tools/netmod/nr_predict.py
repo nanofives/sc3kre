@@ -28,10 +28,14 @@ def predict(a):
     T = tiler.Tiler(rules, c2, opts, pe, ex)
     T.retile_rect(a.mask, x0, z0, x1, z1)
     m = a.margin
+    if a.window:
+        wx0, wz0, wx1, wz1 = (int(v) for v in a.window.split(","))
+    else:
+        wx0, wz0, wx1, wz1 = x0 - m, z0 - m, x1 + m, z1 + m
     lay0, lay1 = city.layers["surface"], T.layer(1)
     cells = []
-    for x in range(max(x0 - m, 0), min(x1 + m, city.n - 1) + 1):
-        for z in range(max(z0 - m, 0), min(z1 + m, city.n - 1) + 1):
+    for x in range(max(wx0, 0), min(wx1, city.n - 1) + 1):
+        for z in range(max(wz0, 0), min(wz1, city.n - 1) + 1):
             s, p = lay0.get((x, z)), lay1.get((x, z))
             cells.append({"x": x, "z": z,
                           "saved": [s.id, s.state] if s is not None else None,
@@ -87,6 +91,7 @@ def main(argv=None):
     p.add_argument("rect")
     p.add_argument("--mask", type=lambda s: int(s, 0), default=1)
     p.add_argument("--margin", type=int, default=3)
+    p.add_argument("--window", help="x0,z0,x1,z1 listed cells (default: rect + margin)")
     c = sub.add_parser("compare")
     c.add_argument("pred")
     c.add_argument("live")

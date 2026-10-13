@@ -80,10 +80,23 @@ function run(j) {
   if (j.kind === 'conn') return {cells: walk(j, true)};
   return {error: 'unknown job'};
 }
+function drain() {
+  while (jobs.length) { var j = jobs.shift(); try { results.push(run(j)); } catch (e) { results.push({error: '' + e}); } }
+}
 Interceptor.attach(Process.getModuleByName('USER32.dll').getExportByName('DispatchMessageA'), {
   onEnter: function (args) {
     if (args[0].add(4).readU32() !== %WM% || jobs.length === 0) return;
-    while (jobs.length) { var j = jobs.shift(); try { results.push(run(j)); } catch (e) { results.push({error: '' + e}); } }
+    drain();
+  }
+});
+/* 2026-10-13: on the stock tree with the display asleep the main loop removes WM_JOB with PeekMessageA(PM_REMOVE)
+   and never passes it to DispatchMessageA (measured: 600 peeks, our message returned once, 0 dispatches), so the
+   job also runs when PeekMessageA hands it back. Same thread, between frames. */
+Interceptor.attach(Process.getModuleByName('USER32.dll').getExportByName('PeekMessageA'), {
+  onEnter: function (args) { this.m = args[0]; },
+  onLeave: function (r) {
+    if (r.toInt32() === 0 || this.m.add(4).readU32() !== %WM% || jobs.length === 0) return;
+    drain();
   }
 });
 rpc.exports = {
@@ -132,11 +145,14 @@ def main(argv):
         print(frida_job({"kind": "post4", "w": [0x637C0DAB, mask, (x1 << 16) | y1, (x2 << 16) | y2]}))
     elif cmd in ("conn", "cells"):
         x0, y0, x1, y1 = rect(argv[2])
-        r = frida_job({"kind": cmd, "x0": x0, "y0": y0, "x1": x1, "y1": y1}, timeout=120)
-        for c in r.get("cells", []):
-            print(json.dumps(c))
-        if "error" in r:
-            print(r)
+        # one job per row: a 30x9 window as one job never came back within 120 s on 2026-10-13, while each of its
+        # rows took ~2 s (cause not looked into)
+        for y in range(y0, y1 + 1):
+            r = frida_job({"kind": cmd, "x0": x0, "y0": y, "x1": x1, "y1": y}, timeout=60)
+            for c in r.get("cells", []):
+                print(json.dumps(c), flush=True)
+            if "error" in r:
+                print(r)
     elif cmd == "save":
         print(frida_job({"kind": "post4", "w": [0x025F0A91, 0x10009002, 0, 0]}))
     else:

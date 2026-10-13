@@ -30,3 +30,10 @@ Fail: any predicted change that does not happen, or a change outside the predict
 - Arm B predicted: 22 cells change, all on z=128: x=95..114 29/0 -> 29/1, x=94 29/0 -> 39/0, x=115 29/0 -> 39/2.
   Nothing else in the window changes. (`netrules preview --rect 100,128,110,128` lists the same 22.)
 - before-read: in both arms the window must equal the save before the message (else the run is void, not a fail).
+
+## Addendum 2 (before any retile message was sent, 2026-10-13 ~12:00)
+- predA.json / predB.json regenerated with `--window 90,124,119,132` (= the read-back window; margin 3 was too small to
+  list x=94..96 and 114..115). Content of the prediction unchanged: A 0 changes, B the same 22 cells as above.
+- nr_drive.py: jobs now also run when PeekMessageA returns WM_JOB (this build removes it with PM_REMOVE and never
+  dispatches it), and `cells` reads one row per job. Read path only, no change to what is read.
+- arm A before-read done (PID 36924): 34 of 34 network cells in the window equal the save.
