@@ -340,7 +340,7 @@ def frame_png_name(k):
 
 
 def _recolor_fn(spec):
-    if spec in NP.TINTS:
+    if isinstance(spec, str) and spec in NP.TINTS:          # a {"mul", "add"} dict is not hashable
         return ("tint", spec)
     if isinstance(spec, str):
         if spec not in PRESETS:

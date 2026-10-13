@@ -9,9 +9,9 @@
   },
   "variants": [
     {"id": 21039, "base": 39, "network": "ROAD", "name": {"*": "Rotonda (calle T, plantilla)"},
-     "art": {"from": 39, "recolor": "blue"}, "trblkatt": "copy_base"},
+     "art": {"from": 39, "recolor": {"mul": [0.75, 0.85, 1.0], "add": [0, 10, 70]}}, "trblkatt": "copy_base"},
     {"id": 21035, "base": 35, "network": "ROAD", "name": {"*": "Rotonda (calle curva, plantilla)"},
-     "art": {"from": 35, "recolor": "blue"}, "trblkatt": "copy_base"}
+     "art": {"from": 35, "recolor": {"mul": [0.75, 0.85, 1.0], "add": [0, 10, 70]}}, "trblkatt": "copy_base"}
   ],
   "templates": [
     {

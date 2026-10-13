@@ -37,3 +37,17 @@ merged rules); the commands are in the arm.
 
 Not predicted (no basis yet): traffic over the template (the variants copy their bases' TrBlkAtt, so cars should use
 it as T pieces; checked only if time allows), 1024 cities, the owner's dev install.
+
+## Addendum 1 (2026-10-13, after arms L H P C N R S B W ran, before AB / B0 / F / X ran)
+
+Test-only packages in `verify/multitile/packs/` installed beside the fixture: `ab_noprotect` (variant 21139 of 39,
+green, templates `noprotect4` (protect off) and `tooexpensive` (cost 9,999,999)), `ab_nocollapse` (variant 21239 of
+39, yellow, template `nocollapse4`, protected, collapse off). The fixture's tint changed to a light blue mul/add (art
+only).
+
+| arm | setup | prediction |
+|---|---|---|
+| AB | `noprotect4` at (126,114) | the click's own retile replaces the cells: `11203.3 11203.0 / 11203.2 11203.1` (SIM `place verify/multitile/packs/ab_noprotect ... 126,114 --template noprotect4`); log still says PLACED |
+| B0 | `nocollapse4` placed, Demolish one cell | exploratory, two outcomes named in advance: only the clicked cell goes (the plain road removal path) or nothing goes (the Collapse path returning for an id in no group, netbridge arm AB0). Either way, fewer cells than arm B, which shows the group is what removes the whole template |
+| F | `tooexpensive` | log `REFUSED: funds <n> < cost 9999999`, nothing placed, funds unchanged |
+| X | `SC3NETMOD_TMPL=0` | log `tmpl: off (SC3NETMOD_TMPL=0)`, no window subclass line, the On-ramp tool hovers stock (1 or 3 points in the trace) |

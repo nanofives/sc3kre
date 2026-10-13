@@ -1,0 +1,12 @@
+{
+  "netpack": 1, "name": "ab_noprotect", "version": "1.0.0", "author": "multitile A/B fixture",
+  "description": "A/B arm AB: the rotonda4 template with protect off (its pieces NOT in the Protected list), and arm F: a template that costs more than any city has.",
+  "game": {"Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"},
+  "variants": [
+    {"id": 21139, "base": 39, "network": "ROAD", "name": {"*": "Rotonda A/B sin proteger"}, "art": {"from": 39, "recolor": "green"}}
+  ],
+  "templates": [
+    {"name": "noprotect4", "size": [2, 2], "rows": [[[21139, 3], [21139, 0]], [[21139, 2], [21139, 1]]], "cost": 400, "protect": false},
+    {"name": "tooexpensive", "size": [2, 2], "rows": [[[21139, 3], [21139, 0]], [[21139, 2], [21139, 1]]], "cost": 9999999, "protect": false}
+  ]
+}

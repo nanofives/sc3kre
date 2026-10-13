@@ -230,7 +230,9 @@ static char __fastcall tm_hover(BYTE *sel, void *edx, DWORD a1, int *cell, DWORD
 
 static char __fastcall tm_cost(BYTE *mgr, void *edx, void *sel, DWORD *cost) {
     Tmpl *t;
-    if (!tm_active()) return ((PFN_Cost)g_tm_orig_cost)(mgr, edx, sel, cost);
+    char r = ((PFN_Cost)g_tm_orig_cost)(mgr, edx, sel, cost);   /* stock first (points x price), so tools that
+                                                                     watch FUN_100145aa still see the selection */
+    if (!tm_active()) return r;
     tm_ori(&t);
     if (cost) *cost = (DWORD)t->cost;
     return 1;
@@ -248,11 +250,11 @@ static char __fastcall tm_build(BYTE *mgr, void *edx, BYTE *sel, DWORD *cost, DW
     if (!tm_active()) return ((PFN_Build)g_tm_orig_build)(mgr, edx, sel, cost, a3, a4);
     o = tm_ori(&t);
     if (g_tm_hx == 0x7fffffff) { logf("tmpl: click before any template hover - nothing placed"); return 0; }
+    /* the anchor of the selection the hover generator just made: the tool's mouse-up (FUN_10025b3c) runs vt+0x54
+       (FUN_1000f760 -> selection vt+0xc = tm_hover) and then the build (vt+0x48 -> FUN_1000f9b7 -> here). `sel` is
+       the point-list interface (object + 4, QI 0x62c0838e), not the object tm_hover receives. */
     X = g_tm_hx; Z = g_tm_hz;
-    if (sel && *(int **)(sel + 8) != *(int **)(sel + 0xc)) {   /* the selection's first point = first cell */
-        int *p0 = *(int **)(sel + 8);
-        X = (p0[0] >> 8) - o->c[0].x; Z = (p0[1] >> 8) - o->c[0].z;
-    }
+    (void)sel;
     if (cost) *cost = 0;
     why = tm_check(mgr, t, o, X, Z, &cx, &cz);
     if (why) {
@@ -281,8 +283,8 @@ static char __fastcall tm_build(BYTE *mgr, void *edx, BYTE *sel, DWORD *cost, DW
     rect[3] = (X + o->w - 1) << 8; rect[4] = (Z + o->h - 1) << 8; rect[5] = 0;
     if (!env_off("SC3NETMOD_TMPL_RETILE")) ((PFN_Retile)VT(mgr, 0xb0))(mgr, 0, rect, mask);
     InterlockedIncrement(&g_tm_n_place);
-    logf("tmpl: %s rot %ld PLACED at (%d,%d) %dx%d, %d cell(s), cost %d (funds were %lu), retile mask 0x%lx", t->name,
-         g_tm_rot % t->nori, X, Z, o->w, o->h, o->nc, t->cost, (DWORD)funds, mask);
+    logf("tmpl: %s rot %ld PLACED at (%d,%d) %dx%d, %d cell(s), cost %d, funds %lu -> %lu, retile mask 0x%lx", t->name,
+         g_tm_rot % t->nori, X, Z, o->w, o->h, o->nc, t->cost, (DWORD)funds, (DWORD)((PFN_Funds)VT(bud, 0x10))(bud), mask);
     return 1;
 }
 
