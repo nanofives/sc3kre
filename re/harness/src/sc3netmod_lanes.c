@@ -1,0 +1,304 @@
+/* sc3netmod_lanes.c - the LANEDENSITY block of sc3netmod.dll (task lanedensity, 2026-10-13). #included by sc3netmod.c
+ * above its "arming" section; it reads the variant table (g_base) and uses the patch helpers (write_code,
+ * retarget_call, bytes_are). Evidence: re/analysis/LANE_DENSITY.md, verify/lanedensity/.
+ *
+ * Road traffic density follows the trip router SimTransit FUN_100070d0 (DFS, deposits on the final path only). Its
+ * step FUN_1000755e asks the piece's turn matrix (exemplar props 310..312) for highway / bus nodes (types 2, 3,
+ * 0x42, 0x43), but a ROAD node (type 1, bus 0x41) takes the ring scan at 0x10007a63: any road cell beside it is a
+ * candidate, whatever the piece's lanes [CONFIRMED @ SimTransit 0x1000755e]. This block makes road nodes on an
+ * HONOURED piece obey the same matrix, asked the same way the game asks it for highways
+ * (piece vt+0x4c(0, *(u8 *)(layer+0x54), entry side) -> 4 exits).
+ *
+ *   SELECT (entry of FUN_1000755e, 6 bytes -> jmp ld_select): for a 1x1 road node on an honoured piece,
+ *     allowed exits = matrix row of the entry side (node+0x1c, world frame) when the node was entered from a network
+ *     node (node+0x15 = 1, 2, 3, 0x41..0x43), else (start lot 0x80, stations) the union of the four rows.
+ *     - row empty (entered against the lanes): the step fails (the DFS backtracks) and the node's own visited mark,
+ *       set by the step that chose it, is cleared, so the cell can still be entered later through a legal side.
+ *     - else each road neighbour (+0x5c flags & 0x11 == 1) on a forbidden side gets the node type's bits in the
+ *       visited grid (+0x78) for this one call, so the ring scan skips it; the bits this block added are cleared
+ *       again after the call. Station neighbours (flag 0x10) stay candidates (a mode change is not a lane).
+ *   ARRIVE (call FUN_10008a94 at 0x100071eb): a road node entered against the lanes does not count as arrived.
+ * A piece whose matrix half is all zero has no lane data and stays unconstrained.
+ *
+ * Honoured pieces: variant ids of the netmod tables (g_base != 0). SC3NETMOD_LANEDENSITY=all honours every piece,
+ * =count honours nothing but counts, per piece id, the router steps the matrix would forbid (stock check),
+ * =0 turns the block off. The visited grid and the node are per trip (sc3perf traffic_mt workers each route on their
+ * own shadow layer and marker grid), the caches below are written with interlocked ops, so workers are safe.
+ */
+
+static int   g_ld_mode;                  /* 0 off, 1 variants, 2 all, 3 count */
+static DWORD g_ld_st;                    /* SimTransit base */
+static BYTE *g_ld_tramp;                 /* original FUN_1000755e: its 6 entry bytes + jmp +0x7564 */
+static DWORD g_ld_arrive_orig;           /* FUN_10008a94 */
+static volatile LONG g_ld_nvt;
+static volatile LONG g_ld_rows[2][65536 * 4];   /* [half][id*4+state]: bit 31 valid, bits 4e+t = entry e -> exit t */
+
+typedef BYTE  (__fastcall *LD_SEL)(BYTE *layer, void *edx, BYTE *node, BYTE *out, DWORD budget, DWORD p4, DWORD p5, DWORD p6);
+typedef DWORD (__fastcall *LD_ARR)(BYTE *layer, void *edx, BYTE *node, DWORD kind);
+typedef char  (__fastcall *LD_QI)(void *self, void *edx, DWORD iid, void **out);
+typedef void  (__fastcall *LD_REL)(void *self, void *edx);
+typedef void  (__fastcall *LD_CONN)(void *self, void *edx, DWORD sel, DWORD half, DWORD dir, BYTE *o0, BYTE *o1, BYTE *o2, BYTE *o3);
+
+/* counters */
+static volatile LONG g_ld_n_eval, g_ld_n_hon, g_ld_n_wrong, g_ld_n_premark, g_ld_n_arrblock;
+static volatile LONG g_ld_n_slowqi;
+static volatile LONG *g_ld_c_steps, *g_ld_c_forbid, *g_ld_c_wrong;   /* count mode, per piece id */
+
+/* per honoured cell: steps by (entry 0..3, 4 = not from the network) x exit, wrong-way entries */
+#define LD_NCELL 1024
+typedef struct { volatile LONG key; DWORD id; volatile LONG step[5][4]; volatile LONG wrong, arrblock; } LdCell;
+static LdCell *g_ld_cells;
+
+static int ld_is_net(BYTE t) { return t == 1 || t == 2 || t == 3 || t == 0x41 || t == 0x42 || t == 0x43; }
+
+static LdCell *ld_cell(DWORD x, DWORD z, DWORD id) {
+    LONG key = (LONG)(((x & 0x7fff) << 16) | (z & 0xffff)) | 0x40000000;
+    DWORD h = ((x * 2654435761u) ^ (z * 40503u)) & (LD_NCELL - 1), i;
+    if (!g_ld_cells) return NULL;
+    for (i = 0; i < LD_NCELL; i++) {
+        LdCell *c = &g_ld_cells[(h + i) & (LD_NCELL - 1)];
+        LONG k = c->key;
+        if (k == key) return c;
+        if (!k) {
+            if (InterlockedCompareExchange(&c->key, key, 0) == 0) { c->id = id; return c; }
+            if (c->key == key) return c;
+        }
+    }
+    return NULL;
+}
+
+/* The piece object behind a road node's occupant (node+0), or NULL. The occupant is an interface of the piece, not
+   its primary object (measured: QI(0x41658d28) never returned the occupant itself), so the fast path caches, per
+   occupant vtable, the offset QI returned. A vtable is trusted after 16 identical offsets and dropped for good
+   (always QI) if one ever differs. The node holds a reference to the occupant while it is on the DFS stack, so the
+   piece stays alive without the QI's reference. */
+typedef struct { volatile LONG vt, delta, seen; } LdVt;   /* seen < 0: offsets differed, never trusted */
+static LdVt g_ld_vtc[32];
+
+static BYTE *ld_piece(BYTE *occ) {
+    DWORD vt, i;
+    void *p = NULL;
+    LONG d;
+    if (!occ) return NULL;
+    vt = *(DWORD *)occ;
+    for (i = 0; i < 32 && g_ld_vtc[i].vt; i++)
+        if ((DWORD)g_ld_vtc[i].vt == vt) {
+            if (g_ld_vtc[i].seen >= 16) return occ + g_ld_vtc[i].delta;
+            break;
+        }
+    InterlockedIncrement(&g_ld_n_slowqi);
+    if (!((LD_QI)(*(DWORD **)occ)[0])(occ, NULL, 0x41658d28, &p) || !p) return NULL;
+    ((LD_REL)(*(DWORD **)p)[2])(p, NULL);
+    d = (LONG)((BYTE *)p - occ);
+    for (i = 0; i < 32; i++) {
+        LdVt *c = &g_ld_vtc[i];
+        if (!c->vt && InterlockedCompareExchange(&c->vt, (LONG)vt, 0) == 0) { c->delta = d; InterlockedExchange(&c->seen, 1); break; }
+        if ((DWORD)c->vt == vt) {
+            if (c->seen < 0) break;
+            if (c->delta != d) { InterlockedExchange(&c->seen, -1000000); logf("lanedensity: vtable 0x%08lX: QI offsets differ (%ld, %ld), not cached", vt, c->delta, d); }
+            else if (InterlockedIncrement(&c->seen) == 16) { InterlockedIncrement(&g_ld_nvt); logf("lanedensity: vtable 0x%08lX -> piece at %+ld (cached)", vt, d); }
+            break;
+        }
+    }
+    return (BYTE *)p;
+}
+
+/* rows of piece (id, state) in the world frame, the half the router uses: bit 4*e + t = entry e -> exit t */
+static DWORD ld_rows(BYTE *piece, DWORD id, DWORD state, DWORD half) {
+    volatile LONG *slot = &g_ld_rows[half ? 1 : 0][id * 4 + state];
+    LONG r = *slot;
+    DWORD e, m = 0;
+    if (r < 0) return (DWORD)r & 0xffff;
+    for (e = 0; e < 4; e++) {
+        BYTE o[4] = {0, 0, 0, 0};
+        ((LD_CONN)(*(DWORD **)piece)[0x4c / 4])(piece, NULL, 0, half, e, &o[0], &o[1], &o[2], &o[3]);
+        m |= (DWORD)((o[0] ? 1 : 0) | (o[1] ? 2 : 0) | (o[2] ? 4 : 0) | (o[3] ? 8 : 0)) << (4 * e);
+    }
+    InterlockedExchange(slot, (LONG)(0x80000000u | m));
+    return m;
+}
+
+/* Evaluate a road node. Returns 0 = not constrained (allow all), else 0x100 | allowed exits (bits 0..3), with
+   0x200 set when it was entered against the lanes. *pid gets the piece id (or 0). count != 0: evaluate any piece. */
+static DWORD ld_eval(BYTE *layer, BYTE *node, DWORD *pid, int any) {
+    BYTE t = node[0x14], prev = node[0x15];
+    BYTE *piece;
+    DWORD id, state, rows, allow;
+    *pid = 0;
+    if (t != 1 && t != 0x41) return 0;
+    if (*(DWORD *)(node + 4) != *(DWORD *)(node + 0xc) || *(DWORD *)(node + 8) != *(DWORD *)(node + 0x10)) return 0;
+    piece = ld_piece(*(BYTE **)node);
+    if (!piece) return 0;
+    id = *(DWORD *)(piece + 0x18) & 0xffff;
+    *pid = id;
+    if (!any && !(g_ld_mode == 2 || g_base[id])) return 0;
+    InterlockedIncrement(&g_ld_n_eval);
+    state = *(DWORD *)(piece + 0x14) >> 30;
+    rows = ld_rows(piece, id, state, layer[0x54]);
+    if (!rows) return 0;                                           /* no lane data: unconstrained */
+    if (ld_is_net(prev)) {
+        allow = (rows >> (4 * (node[0x1c] & 3))) & 0xf;
+        if (!allow) return 0x300;
+    } else
+        allow = (rows | rows >> 4 | rows >> 8 | rows >> 12) & 0xf;
+    return 0x100 | allow;
+}
+
+static BYTE *ld_mark(BYTE *layer, DWORD x, DWORD z) {
+    return *(BYTE **)(*(BYTE **)(*(BYTE **)(layer + 0x78) + 0xc) + x * 4) + z;
+}
+static WORD ld_flags(BYTE *layer, DWORD x, DWORD z) {
+    return *(WORD *)(*(BYTE **)(*(BYTE **)(*(BYTE **)(layer + 0x5c) + 0xc) + x * 4) + z * 2);
+}
+
+static const int g_ld_dx[4] = {-1, 0, 1, 0}, g_ld_dz[4] = {0, -1, 0, 1};
+
+static BYTE __fastcall ld_select(BYTE *layer, void *edx, BYTE *node, BYTE *out, DWORD budget, DWORD p4, DWORD p5, DWORD p6) {
+    DWORD id, ev, x, z, w, h, s;
+    BYTE *added[4], addb[4], t, r;
+    int nadd = 0, k, honoured;
+    LdCell *c = NULL;
+    (void)edx;
+    ev = ld_eval(layer, node, &id, g_ld_mode == 3);
+    if (!ev) return ((LD_SEL)g_ld_tramp)(layer, NULL, node, out, budget, p4, p5, p6);
+    honoured = g_ld_mode != 3;
+    x = *(DWORD *)(node + 4); z = *(DWORD *)(node + 8); t = node[0x14];
+    if (id < 65536 && g_base[id]) c = ld_cell(x, z, id);
+    if (ev & 0x200) {                                              /* entered against the lanes */
+        if (g_ld_mode == 3) InterlockedIncrement(&g_ld_c_wrong[id]);
+        if (c) InterlockedIncrement(&c->wrong);
+        if (honoured) {
+            InterlockedIncrement(&g_ld_n_wrong);
+            *ld_mark(layer, x, z) &= (BYTE)~node[0x15];             /* set by the step that chose this node */
+            *(DWORD *)out = 0;
+            node[0x1d] = 0;
+            out[0x1d] = 0;
+            return 0;
+        }
+    } else if (honoured) {
+        InterlockedIncrement(&g_ld_n_hon);
+        w = *(DWORD *)(layer + 0x14); h = *(DWORD *)(layer + 0x18);
+        for (s = 0; s < 4; s++) {
+            DWORD nx, nz;
+            BYTE *m;
+            if (ev & (1u << s)) continue;
+            nx = x + g_ld_dx[s]; nz = z + g_ld_dz[s];
+            if (nx >= w || nz >= h) continue;                      /* unsigned: also catches -1 */
+            if ((ld_flags(layer, nx, nz) & 0x11) != 0x01) continue;
+            m = ld_mark(layer, nx, nz);
+            if ((*m & t) == t) continue;
+            added[nadd] = m; addb[nadd] = (BYTE)(t & ~*m); nadd++;
+            *m |= t;
+        }
+        if (nadd) InterlockedExchangeAdd(&g_ld_n_premark, nadd);
+    }
+    r = ((LD_SEL)g_ld_tramp)(layer, NULL, node, out, budget, p4, p5, p6);
+    for (k = 0; k < nadd; k++) *added[k] &= (BYTE)~addb[k];
+    if (r && (out[0x14] == 1 || out[0x14] == 3 || out[0x14] == 0x41)) {
+        DWORD exitside = (out[0x1c] + 2) & 3, entry = ld_is_net(node[0x15]) ? (node[0x1c] & 3) : 4;
+        if (c) InterlockedIncrement(&c->step[entry][exitside]);
+        if (g_ld_mode == 3 && id < 65536) {
+            InterlockedIncrement(&g_ld_c_steps[id]);
+            if (!(ev & (1u << exitside)) && !(ev & 0x200)) InterlockedIncrement(&g_ld_c_forbid[id]);
+        }
+    }
+    return r;
+}
+
+static DWORD __fastcall ld_arrive(BYTE *layer, void *edx, BYTE *node, DWORD kind) {
+    DWORD r = ((LD_ARR)g_ld_arrive_orig)(layer, NULL, node, kind), id, ev;
+    (void)edx;
+    if (!(r & 0xff) || g_ld_mode == 3) return r;
+    ev = ld_eval(layer, node, &id, 0);
+    if (ev & 0x200) {
+        LdCell *c = (id < 65536 && g_base[id]) ? ld_cell(*(DWORD *)(node + 4), *(DWORD *)(node + 8), id) : NULL;
+        InterlockedIncrement(&g_ld_n_arrblock);
+        if (c) InterlockedIncrement(&c->arrblock);
+        return r & 0xffffff00;
+    }
+    return r;
+}
+
+static const BYTE g_ld_entry[6] = {0x55, 0x8b, 0xec, 0x83, 0xec, 0x68};   /* push ebp; mov ebp,esp; sub esp,0x68 */
+
+static void lanedensity_install(void) {
+    char v[16];
+    BYTE *st, *e, jmp[6];
+    DWORD got = GetEnvironmentVariableA("SC3NETMOD_LANEDENSITY", v, sizeof(v));
+    int ms = 0;
+    g_ld_mode = 1;
+    if (got && v[0] == '0') g_ld_mode = 0;
+    else if (got && !lstrcmpiA(v, "all")) g_ld_mode = 2;
+    else if (got && !lstrcmpiA(v, "count")) g_ld_mode = 3;
+    if (!g_ld_mode) { logf("lanedensity: off (SC3NETMOD_LANEDENSITY=0)"); return; }
+    if (g_ld_mode == 1 && !g_nvariants) { logf("lanedensity: no variants, nothing to honour - not patched"); g_ld_mode = 0; return; }
+    while (!(st = (BYTE *)GetModuleHandleA("SimTransit.dll")) && ms++ < 300000) Sleep(1);
+    if (!st) { logf("lanedensity: SimTransit.dll never loaded"); g_ld_mode = 0; return; }
+    e = st + 0x755e;
+    if (!bytes_are(e, g_ld_entry, 6) || st[0x71eb] != 0xE8 || (DWORD)(st + 0x71f0) + *(DWORD *)(st + 0x71ec) != (DWORD)st + 0x8a94) {
+        logf("lanedensity: SimTransit+0x755e / +0x71eb differ from shipped - not patched");
+        g_ld_mode = 0;
+        return;
+    }
+    g_ld_cells = (LdCell *)VirtualAlloc(NULL, sizeof(LdCell) * LD_NCELL, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (g_ld_mode == 3) {
+        g_ld_c_steps = (volatile LONG *)VirtualAlloc(NULL, 3 * 65536 * sizeof(LONG), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        if (!g_ld_c_steps) { logf("lanedensity: no memory"); g_ld_mode = 0; return; }
+        g_ld_c_forbid = g_ld_c_steps + 65536;
+        g_ld_c_wrong = g_ld_c_steps + 2 * 65536;
+    }
+    g_ld_tramp = (BYTE *)VirtualAlloc(NULL, 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!g_ld_tramp) { logf("lanedensity: no memory"); g_ld_mode = 0; return; }
+    memcpy(g_ld_tramp, g_ld_entry, 6);
+    g_ld_tramp[6] = 0xE9;
+    *(DWORD *)(g_ld_tramp + 7) = (DWORD)(e + 6) - (DWORD)(g_ld_tramp + 11);
+    FlushInstructionCache(GetCurrentProcess(), g_ld_tramp, 16);
+    g_ld_st = (DWORD)st;
+    g_ld_arrive_orig = g_ld_st + 0x8a94;
+    if (g_ld_mode != 3 && !retarget_call(st, 0x71eb, 0x8a94, (void *)ld_arrive)) {
+        logf("lanedensity: arrival call not patched");
+        g_ld_mode = 0;
+        return;
+    }
+    jmp[0] = 0xE9;
+    *(DWORD *)(jmp + 1) = (DWORD)ld_select - (DWORD)(e + 5);
+    jmp[5] = 0x90;
+    if (!write_code(e, jmp, 6)) { logf("lanedensity: entry not patched"); g_ld_mode = 0; return; }
+    logf("lanedensity: ON, mode %s (SimTransit at 0x%08lX: step 0x1000755e, arrival call 0x100071eb)",
+         g_ld_mode == 1 ? "variants" : g_ld_mode == 2 ? "all pieces" : "count only (nothing filtered)", (DWORD)st);
+}
+
+static void lanedensity_stats(void) {
+    int i, j, n = 0;
+    if (!g_ld_mode) return;
+    logf("lanedensity: evals=%ld honoured steps=%ld neighbours closed=%ld wrong-way fails=%ld arrivals refused=%ld slow QI=%ld vtables=%ld",
+         g_ld_n_eval, g_ld_n_hon, g_ld_n_premark, g_ld_n_wrong, g_ld_n_arrblock, g_ld_n_slowqi, g_ld_nvt);
+    if (g_ld_cells)
+        for (i = 0; i < LD_NCELL; i++) {
+            LdCell *c = &g_ld_cells[i];
+            char buf[400];
+            int p = 0;
+            if (!c->key) continue;
+            for (j = 0; j < 20; j++) p += _snprintf(buf + p, sizeof(buf) - p, "%s%ld", j ? "," : "", c->step[j / 4][j % 4]);
+            logf("lanedensity: cell (%ld,%ld) id %lu wrong=%ld arrblock=%ld steps[entry x-,z-,x+,z+,start][exit]=%s",
+                 (c->key >> 16) & 0x7fff, c->key & 0xffff, c->id, c->wrong, c->arrblock, buf);
+            if (++n >= 64) break;
+        }
+    if (g_ld_mode == 3) {
+        LONG tot = 0, forb = 0, wr = 0;
+        for (i = 0; i < 65536; i++) { tot += g_ld_c_steps[i]; forb += g_ld_c_forbid[i]; wr += g_ld_c_wrong[i]; }
+        logf("lanedensity: count: road steps on pieces with lane data=%ld, forbidden by their matrix=%ld, entered against it=%ld",
+             tot, forb, wr);
+        for (i = 0; i < 65536; i++)
+            if (g_ld_c_forbid[i] || g_ld_c_wrong[i])
+                logf("lanedensity: count: id %d steps=%ld forbidden=%ld against=%ld", i, g_ld_c_steps[i], g_ld_c_forbid[i], g_ld_c_wrong[i]);
+    }
+}
+
+/* own thread: SimTransit may map after SIMNTWRK, and the other blocks must not wait for it */
+static DWORD WINAPI lanedensity_thread(LPVOID param) {
+    (void)param;
+    lanedensity_install();
+    while (g_ld_mode) { Sleep(10000); lanedensity_stats(); }
+    return 0;
+}

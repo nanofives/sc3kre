@@ -1,0 +1,20 @@
+{
+ "netpack": 1,
+ "name": "example_oneway",
+ "version": "1.0.0",
+ "author": "lanedensity test fixture",
+ "description": "Test fixture for road traffic density that follows lanes (task lanedensity): straight road 29 cloned as piece 20430 (red), state 0 only, with ONE car lane x- -> x+ and the turn matrix that lane gives (connects auto: low x- => x+, high = its transpose). With sc3netmod's LANEDENSITY block the trip router steps through it only in +x, so its traffic density is one-way too. Placed by save edit, no tiling rule places it.",
+ "variants": [
+  {
+   "id": 20430,
+   "base": 29,
+   "network": "ROAD",
+   "name": {"*": "One-way road", "ENGLISH": "Calle de un sentido"},
+   "art": {"from": 29, "recolor": "red"},
+   "trblkatt": "copy_base"
+  }
+ ],
+ "lanes": [
+  {"piece": 20430, "spec": "oneway.lanes.json"}
+ ]
+}

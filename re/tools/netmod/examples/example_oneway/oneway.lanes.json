@@ -1,0 +1,26 @@
+{
+ "piece": 20430,
+ "states": [0],
+ "flag": 0,
+ "vehicle": {
+  "class": "car",
+  "speed": 64000,
+  "lanes": [
+   {"from": "x- 1", "to": "x+ 1", "path": 512}
+  ]
+ },
+ "pedestrian": {
+  "walks": [
+   {"from": [15, 15], "to": [240, 15], "path": 256},
+   {"from": [240, 240], "to": [15, 240], "path": 512}
+  ],
+  "exits": [
+   {"at": [15, 15], "code": 0},
+   {"at": [15, 240], "code": 0},
+   {"at": [240, 15], "code": 16},
+   {"at": [240, 240], "code": 16}
+  ]
+ },
+ "connects": {"road": "auto"},
+ "_comment": "Road 29 state 0 with only its +x car lane (0,80) -> (255,80), curve 512. Pedestrian graph = road 29's."
+}

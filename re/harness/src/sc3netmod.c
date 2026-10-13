@@ -1288,6 +1288,7 @@ static int netramp_install(BYTE *m) {
 }
 /* ==== NETRAMP end ======================================================================================= */
 #include "sc3netmod_tmpl.c"         /* task multitile: TMPL, multi-cell templates (SC3NETMOD_TMPL=0) */
+#include "sc3netmod_lanes.c"        /* task lanedensity: road density honours turn matrices (SC3NETMOD_LANEDENSITY) */
 
 /* ============================================================ arming */
 
@@ -1300,6 +1301,7 @@ static DWORD WINAPI watcher(LPVOID param) {
     table_load();
     netramp_install(m);                                          /* NETRAMP: table slots + classifier (section 4) */
     tmpl_install(m);                                             /* TMPL: multi-cell templates (task multitile) */
+    CreateThread(NULL, 0, lanedensity_thread, NULL, 0, NULL);   /* LANEDENSITY (task lanedensity) */
     if (!g_nvariants) { logf("### READY: no variants in the table, nothing patched"); return 0; }
     g_wopen = (PFN_WOpen)(m + 0x26129);
     g_ropen = (PFN_ROpen)(m + 0x25f0d);
