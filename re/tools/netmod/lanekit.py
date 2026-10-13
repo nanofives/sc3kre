@@ -942,6 +942,64 @@ def draw(rec, out_png, title="", masks=None, state=0, scale=2):
     return out_png
 
 
+def draw_cells(cells, out_png, title="", lines=(), scale=1.6, P=None):
+    """Several tiles in one picture: cells = [(cx, cz, rec, label)], cx / cz in tiles. Vehicle lanes as arrows along
+    their curves (colour by class), pedestrian walks grey (crossings orange), exit ticks."""
+    from PIL import Image, ImageDraw, ImageFont
+    import math
+    try:
+        font = ImageFont.truetype("arial.ttf", 15)
+    except OSError:
+        font = None
+    xs = [c[0] for c in cells]
+    zs = [c[1] for c in cells]
+    nx, nz = max(xs) - min(xs) + 1, max(zs) - min(zs) + 1
+    T = int(256 * scale)
+    pad = 36
+    im = Image.new("RGB", (nx * T + 2 * pad, nz * T + 2 * pad + 18 * (1 + len(lines))), (250, 250, 247))
+    d = ImageDraw.Draw(im)
+    colours = {0: (200, 60, 40), 1: (40, 90, 200), 2: (40, 150, 60)}
+    for cx, cz, rec, label in cells:
+        ox, oz = pad + (cx - min(xs)) * T, pad + (cz - min(zs)) * T
+
+        def xy(x, z):
+            return ox + x * scale, oz + z * scale
+        d.rectangle([xy(0, 0), xy(255, 255)], outline=(90, 90, 90), width=2)
+        if label:
+            d.text(xy(6, 4), label, fill=(60, 60, 60), font=font)
+        for n in rec["ped"]:
+            for e in n["edges"]:
+                if e["to"] is None or e["e3"]:
+                    continue
+                m = rec["ped"][e["to"]]
+                pts = (P.ped.get(e["path"], {}).get("pts") if P else None) or [(n["x"], 0, n["z"]), (m["x"], 0, m["z"])]
+                for p0, p1 in zip(pts, pts[1:]):
+                    d.line([xy(p0[0], p0[2]), xy(p1[0], p1[2])], fill=(235, 160, 0) if e["code"] else (170, 170, 170),
+                           width=2)
+        for n in rec["veh"]:
+            col = colours.get(n["cls"], (0, 0, 0))
+            for e in n["edges"]:
+                if e["to"] is None:
+                    dx, dz = EXIT_STEP[e["code"] >> 2]
+                    d.line([xy(n["x"], n["z"]), xy(n["x"] + 14 * dx, n["z"] + 14 * dz)], fill=col, width=3)
+                    continue
+                m = rec["veh"][e["to"]]
+                pts = (P.veh.get(e["path"], {}).get("pts") if P else None) or [(n["x"], 0, n["z"]), (m["x"], 0, m["z"])]
+                for p0, p1 in zip(pts, pts[1:]):
+                    d.line([xy(p0[0], p0[2]), xy(p1[0], p1[2])], fill=col, width=3)
+                (ax, _, az), (bx, _, bz) = pts[-2], pts[-1]
+                ang = math.atan2(bz - az, bx - ax)
+                for da in (2.6, -2.6):
+                    d.line([xy(bx, bz), xy(bx + 14 * math.cos(ang + da), bz + 14 * math.sin(ang + da))], fill=col, width=3)
+            d.ellipse([xy(n["x"] - 4, n["z"] - 4), xy(n["x"] + 4, n["z"] + 4)], fill=col)
+    y = nz * T + 2 * pad
+    for t in ([title] if title else []) + list(lines):
+        d.text((pad, y), t, fill=(20, 20, 20), font=font)
+        y += 18
+    im.save(out_png)
+    return out_png
+
+
 def cmd_diagram(a):
     g = Game(a.root)
     draw.paths = g.paths(a.lang)
