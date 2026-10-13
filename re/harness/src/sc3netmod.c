@@ -127,6 +127,8 @@ static int table_read(const char *path) {
         while (*p == ' ' || *p == '\t') p++;
         if (*p == '#' || *p == ';' || *p == '\r' || *p == '\n' || !*p) continue;
         if (!strncmp(p, "ramp ", 5)) continue;                 /* NETRAMP lines, read by netramp_install */
+        if (p[0] == 't' && (!strncmp(p, "tmpl ", 5) || !strncmp(p, "tori ", 5) || !strncmp(p, "tcel ", 5) ||
+                            !strncmp(p, "tedg ", 5) || !strncmp(p, "tend", 4))) continue;   /* TMPL lines */
         if (sscanf(p, "%lu %lu", &v, &b) != 2 || v == 0 || v > 0xffff || b == 0 || b > 0xffff || v == b) {
             logf("table: %s: bad line '%s'", path, p);
             continue;
@@ -1024,6 +1026,7 @@ static void overlay_init(void) {
     logf("overlay: ON (%d file(s)%s)", g_novfiles, g_filelog ? ", file log on" : "");
 }
 
+static BYTE g_tmpl_keep[65536];   /* task multitile: template piece ids, kept out of the INHERIT collapse mapping */
 #include "sc3netmod_bridge.c"     /* task netbridge: INHERIT + XCROSS (SC3NETMOD_INHERIT / SC3NETMOD_XCROSS) */
 /* ==== NETRAMP begin (task netramp, 2026-10-13) ==========================================================
  * 4. RAMPS (SC3NETMOD_RAMPS=0 turns it off). SIMNTWRK picks on-ramp, tunnel and slope pieces from hardcoded tables,
@@ -1284,17 +1287,19 @@ static int netramp_install(BYTE *m) {
     return g_n_ramp_ok;
 }
 /* ==== NETRAMP end ======================================================================================= */
+#include "sc3netmod_tmpl.c"         /* task multitile: TMPL, multi-cell templates (SC3NETMOD_TMPL=0) */
 
 /* ============================================================ arming */
 
 static DWORD WINAPI watcher(LPVOID param) {
     BYTE *m;
-    int cross = !env_off("SC3NETMOD_CROSS"), nc = 0, sv = 0, ld = 0;
+    int cross = !env_off("SC3NETMOD_CROSS"), nc = 0, sv = 0, ld = 0, k;
     (void)param;
     g_savebase = !env_off("SC3NETMOD_SAVEBASE");
     while (!(m = (BYTE *)GetModuleHandleA("SIMNTWRK.DLL"))) Sleep(1);
     table_load();
     netramp_install(m);                                          /* NETRAMP: table slots + classifier (section 4) */
+    tmpl_install(m);                                             /* TMPL: multi-cell templates (task multitile) */
     if (!g_nvariants) { logf("### READY: no variants in the table, nothing patched"); return 0; }
     g_wopen = (PFN_WOpen)(m + 0x26129);
     g_ropen = (PFN_ROpen)(m + 0x25f0d);
@@ -1307,8 +1312,11 @@ static DWORD WINAPI watcher(LPVOID param) {
     bridge_patch(m);                 /* task netbridge, sc3netmod_bridge.c */
     logf("### READY: SIMNTWRK at 0x%08lX, variants=%d, cross=%d (%d site(s)), savebase=%d (%s), load=%s",
          (DWORD)m, g_nvariants, cross, nc, g_savebase, sv ? "patched" : "off", ld ? "patched" : "FAILED");
-    for (;;) {
-        Sleep(10000);
+    for (k = 0;; k++) {
+        Sleep(500);
+        tmpl_keys();                     /* task multitile: subclass the game window once it exists */
+        if (k % 20 != 19) continue;
+        tmpl_stats();
         if (g_n_cross_map || g_n_pred_map || g_n_saved_base)
             logf("stats: crossing-switch lookups mapped=%ld, predicate id reads mapped=%ld, tiles saved as base (last save)=%ld",
                  g_n_cross_map, g_n_pred_map, g_n_saved_base);
