@@ -22,6 +22,7 @@ folder (`run1..run5_sc3netmod.log`, `S_after.sc3`, `shots\`). Owner images: `MAI
 | B0 | `nocollapse4` (protected, no Collapse group) at (126,118), Demolish on (127,119): only that cell went, the other 3 stayed | met (first named outcome); the group is what removes the whole template |
 | AB | `noprotect4` (pieces not Protected) at (126,114): log PLACED, live cells `11203.3 11203.0 / 11203.2 11203.1` right after the click, as SIM; the game's retile made its own 2x2 loop (owner shot 05) | met |
 | F | `tooexpensive` (cost 9,999,999): `REFUSED: funds 24435 < cost 9999999`, nothing placed | met |
+| D | shared demo (addendum 2): `demo_rotonda20400/rotonda` at (120,120): log PLACED cost 400 (24835 -> 24435); cells `20400.3 20400.0 / 20400.2 20400.1`; after the 4 road drags: (119,120) 29.0, (121,119) 29.1, (122,121) 29.0, (120,122) 29.1, template unchanged; draws as a roundabout with artkit's art (owner shot 07) | met |
 | X | `SC3NETMOD_TMPL=0`: log `tmpl: off (SC3NETMOD_TMPL=0)`, no subclass line, key T logged nothing, On-ramp hover gave 1 point (`trace_x.jsonl`) | met |
 
 Not run: traffic over a template, water / building / protected-piece refusals, a `required` exit, 1024 cities, the
