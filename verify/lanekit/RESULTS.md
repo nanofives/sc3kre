@@ -68,4 +68,38 @@ Conclusion: the street sim's cars follow the TrBlkAtt lanes: removing the two la
 successful entries through it from 93% to 9% while the other two arms were unchanged.
 
 
-ARM_D_PLACEHOLDER
+## Arm D: the demo piece, a 2x2 one-way roundabout of NEW id 20400 (PIDs 23172 arm, 34584 control)
+
+Package `example_roundabout` (21 overlay files: variant 20400 from base 39, yellow art, `quarter.lanes.json`, connects
+auto). Arm city: `berlin_rb.sc3` (the four cells set with `network_layer.py --set-piece`, worktree version: state in word0
+bits 30-31, props kept, `--diff` shows exactly the 4 tiles). Control: `berlin.sc3`, overlay off.
+
+Deviations: (1) the first arm-D instance (PID 33756) hung (date stopped, `bracket` 1) after a failed SIMSPR zoom call
+from `nramp_cam.py` ("system error"); it was killed and the arm restarted (PID 23172); its 16 transitions are not used.
+(2) The control's first probe (`probe_CD_run1.jsonl`) ran with the camera elsewhere; after both cameras were moved to
+the site by the same minimap clicks and zoom steps, the probes were restarted on both. Street-sim vehicles at the site
+rose from 0-16 per 2 minutes to about 20 per minute once the camera was there (`[UNCERTAIN]` whether STRTSIM spawns by
+view; not traced). (3) `np_drive.py shot` triggers sc3resize's dump through a file in the game's Apps folder, which both
+instances of one tree watch: a "control" dump came back from the arm. Control pictures are window grabs (`sc3io`).
+
+| prediction | arm D | control | verdict |
+|---|---|---|---|
+| D1 cells load as 20400 and draw yellow | Frida: (22,152) 20400/2, (23,152) 20400/3, (22,153) 20400/1, (23,153) 20400/0, exemplar instance 0x4fb0; drawn yellow (owner shot 04) | stock 39/2, 39/3, 43/0, 39/0, grey | **met** |
+| D2 ring-to-ring transitions all with the ring order | 28 with, **0 against** | 31 with, 24 against | **met** |
+| D3 ring -> spur and spur -> ring both occur | 18 and 19 | 16 and 26 | **met** |
+| >= 30 transitions out of ring cells | 46 | 49 | met |
+| control: ring-to-ring against the order > 0 | | 24 | **met** |
+
+Not pre-registered: one car from (22,154) (curve 11203, whose arm points at (22,153)) tried to enter the ring cell
+(22,153) through a side where 20400 at state 1 has no lane, and the move failed (result 0). With the stock 4-way there,
+the control saw 2 such moves succeed.
+
+Road traffic DENSITY at the site is not part of this: the router steps between road cells without the turn matrix
+(arm H control check), so the ring is one-way for the animated cars and two-way for the density model.
+
+## Cleanup
+
+All instances stopped by PID. `netpack.py uninstall` of each package after its arm; final `link_tree.py --verify`:
+3,488 linked, 0 de-linked, 0 missing. Instance folders, city copies and probe logs left in
+`Simcity_stock_lanekit\re\harness\inst_lanekit*`.
+
