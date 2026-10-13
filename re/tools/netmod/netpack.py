@@ -628,8 +628,14 @@ def merge(stock, packs):
             raise NetpackError(str(e))
         tr[real[0]] = files[rel]
 
-    # ---- ini edits inside SYS.PAK members
-    ini = [e for c in comp for e in c["ini"]]
+    # ---- ini edits inside SYS.PAK members. The names container is opened only if Default.ini [DBSegments] lists it
+    # (arm O: GZResourceD opens Text\<lang>\*.IXF by the names listed there; a file merely present is not read).
+    # The shipped list repeats key 0xa1096a4f for SC3StringsBuildings.IXF and SC3StringsBuildings_Holidays.IXF.
+    ini = []
+    if any(v["names"] for v in variants):
+        ini.append({"file": "Default.ini", "section": "DBSegments", "key": "0xa1096a4f", "op": "append",
+                    "value": r"0x80c381d7;Res\Text\%%Language%%\%s" % NAME_FILE, "_pack": "(variant names)"})
+    ini += [e for c in comp for e in c["ini"]]
     if ini:
         files[SYSPAK] = apply_ini(stock.read(SYSPAK), ini)
 
@@ -674,9 +680,12 @@ def apply_ini(pak, edits):
             if len(keys) != 1:
                 raise NetpackError("%s: set needs the key exactly once, found %d" % (where, len(keys)))
             L[keys[0]] = "%s=%s" % (L[keys[0]].split("=", 1)[0], e["value"])
-        elif op == "add":
-            if keys:
-                raise NetpackError("%s: add refuses an existing key" % where)
+        elif op in ("add", "append"):
+            if keys and op == "add":
+                raise NetpackError("%s: add refuses an existing key (use append for list sections such as "
+                                   "[DBSegments], where the shipped Default.ini repeats keys)" % where)
+            if any(L[i].strip() == "%s=%s" % (e["key"], e["value"]) for i in range(sec[0] + 1, end)):
+                continue
             k = end
             while k > sec[0] + 1 and not L[k - 1].strip():
                 k -= 1
@@ -1110,6 +1119,28 @@ def cmd_selftest(a):
             check(False, "U5 refuses a PNG whose size differs from the base frame")
         except NetpackError as e:
             check("is 7x5" in str(e), "U5 refuses a PNG whose size differs from the base frame: %s" % str(e)[:110])
+
+        # U6: authoring path. export-art writes the stock frames, png_dir re-imports them: same pixels as the source
+        d = os.path.join(tmp, "pngpack")
+        shutil.copytree(A, d)
+        m = load_manifest(d)
+        m["variants"][0]["art"] = {"from": 29, "png_dir": "art"}
+        with open(os.path.join(d, "manifest.json"), "w") as fh:
+            json.dump(m, fh)
+        with open(os.devnull, "w") as dn:
+            so = sys.stdout
+            sys.stdout = dn
+            try:
+                cmd_export_art(argparse.Namespace(piece=29, dir=os.path.join(d, "art"), stock=stock_root))
+            finally:
+                sys.stdout = so
+        art = compile_art(Stock(stock_root), d, m["variants"][0]["art"], 29, "U6")
+        src = Stock(stock_root).sprite_records(set(art["keys"]))
+        surf = lambda p: sprite_encode.block_to_surface(qfs.decode_record(p)[1])[0]   # noqa: E731
+        same = all(surf(art["pix"][k]) == surf(src[k][0]) for k in art["keys"])
+        check(same and len(os.listdir(os.path.join(d, "art"))) == len(art["frames"]),
+              "U6 export-art -> png_dir re-import: %d frames, decoded pixels identical to the stock frames"
+              % len(art["frames"]))
 
         # U1/U2/U4: round trips on a hard-linked copy of the stock tree, both modes
         for mode in ("overlay", "direct"):

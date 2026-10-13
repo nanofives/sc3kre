@@ -133,7 +133,7 @@
         "section": {"type": "string"},
         "key": {"type": "string", "minLength": 1},
         "value": {"type": "string"},
-        "op": {"enum": ["set", "add"], "default": "set"}
+        "op": {"enum": ["set", "add", "append"], "default": "set", "description": "set = change the one existing key; add = new key, refused if it exists; append = add the line even if the key exists (list sections such as [DBSegments])"}
       }
     }
   }
