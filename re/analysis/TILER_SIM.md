@@ -198,16 +198,39 @@ placement, which a save cannot determine.
   like netpack install) and applies them with `netpack_rules.apply()`, the single implementation, into a copy;
   lints the result against stock; optionally previews it. Variant ids borrow their base's connectivity masks (netpack
   copies the base exemplar, `newpiece.py` step 1).
-- `lint [--rules DIR] [--base DIR] [--all]`: findings by kind. Stock: 440 duplicate (same conditions in another
-  order, harmless), 75 shadowed (a rule an earlier rule always pre-empts), 0 never-matches, 0 unknown-id.
+- `lint [--rules DIR] [--base DIR] [--all]`: findings by severity and kind, from `rulecheck.py` (shared with
+  netpack, section 11). Stock: 0 ERROR, 75 WARNING shadowed (a rule an earlier rule always pre-empts), 440 INFO
+  duplicate (same conditions in another order, harmless), 0 never-matches, 0 unknown-id, 0 misparse, 0 bad-value.
+  Exit 1 only on ERROR (before 2026-10-13 `netrules` never passed its return code to the shell, so it always exited 0).
 
-## 11. For netpack_rules (asks, meaning of existing keys unchanged)
+## 11. One rule checker: `rulecheck.py` (done 2026-10-13, child/packlint)
 
-- `lint()` refuses a result dir >= mode, but `FUN_10016327` never checks result dirs, so a final-stage rule may
-  write a neighbour. It also refuses final-stage conditions at dirs 4..7, which the 3x3 collector does report
-  (the dir comes from `FUN_1001a056`, no mode gate). Both refusals are stricter than the engine. Harmless, but they
-  block valid edits.
-- It accepts any selector in a ComplexRules file, while only 0x100 (or 0) can ever match there.
+The three asks to `netpack_rules` are closed. Its own `lint()` is gone: `netpack validate / build / install`,
+`netrules lint` and `netrules apply-edits` all call `rulecheck.lint_rules` (bounds from this file's `tiler.py`), so
+the two tools report the same finding for the same input (netpack selftest U7). Severities and kinds:
+`NETPACK.md` 4.1.
+
+- A result dir >= the mode is legal: `FUN_10016327` reads the result's dir through `FUN_1002205c` and checks the
+  target cell (in map, flat, predicate A or crossing, not Protected), never the dir against the mode [read].
+- A final-stage condition at dirs 4..7 is legal: the 3x3 collector of `FUN_10019768` reports every occupied cell of
+  the ring, and `FUN_1001a056` sets its dir through `FUN_1002203e` with no mode test [read]. Only the MASK bit is
+  gated, `(dir & 0xff) < mode` before `FUN_10022092`.
+- A ComplexRules selector other than 0x100 or 0 is a WARNING never-matches: every `FUN_10022092` call (the only
+  mask-bit writer) sits outside the `mode == 0x18` branch of `FUN_10019768` [read], so the mask `FUN_100222f9`
+  compares is 0. The shadow check treats 0 and 0x100 as both matching there.
+
+Engine facts added for the checks [read]:
+- `FUN_10022676` (with its reader `FUN_10022552`, strtok over the file, isdigit then atoi per token) is a state
+  machine, not a line parser: `2,N` goes to +0x18 and is never read back, a rule is stored when the `5,` count reaches
+  the last `4,N`, and the selector is reset to 0 after each stored rule (`FUN_10022338`). A dir is kept as one byte
+  (0xff -> 0x1f). `rulecheck.engine_parse` re-reads a file that way; all 18 stock stage files give exactly their `1,`
+  records. `[UNCERTAIN]` the strtok delimiter string (a stack constant the export does not show): ',' CR LF assumed,
+  the only separators in the shipped files and in what netpack writes.
+- The table `FUN_1002205c` reads at `0x10032134` (2 bytes per dir) holds 24 real entries; entries 24..31 are zero
+  bytes (offset 0, 0, so 31 = 0x1f = self), and from entry 32 (`0x10032174`) the bytes are other data (32 reads
+  -1, +5). A rule record at a dir outside 0..23 / self is an ERROR.
+- `[UNCERTAIN]` `FUN_10022552` reads the file into a 0x20000-byte stack buffer; the read length is not visible in
+  the export, so a rule file over 128 KiB is unexamined (the largest shipped stage file, HWAY Complex, is 75,153 bytes).
 
 ## 12. Open
 - Live read of the station / utility occupants in the SUBW / PIPE layers (class, flags, removable).
