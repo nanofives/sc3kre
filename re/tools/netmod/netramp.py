@@ -23,15 +23,15 @@ the same Set files as the `from` piece. netpack writes the result as `ramp <tabl
 package's table file (mods\netmod\tables\<package>.txt), which sc3netmod.dll applies in memory when SIMNTWRK maps:
 it checks each slot still holds the stock value and refuses a slot it does not know.
 
-A table variant needs everything SIMNTWRK decides by its base's id in data files; netpack's variant inheritance (task
-netbridge, `"inherit"`, on by default: netpack_bridges.py) gives it: every Set file that lists the base, the base's
-Protected lists, Convert / Complex_Convert rows (the rules see the base) and the base's Collapse.txt groups (bulldozing
-removes the whole multi-tile piece). Without it the HWAY retile right after the build replaces the strip
-(`build-onramp` shows it). sc3netmod.dll gives ramp-table variants the base's piece class (the on-ramp classes add flag
+A variant with "mirror_base": true also gets everything SIMNTWRK decides by its base's id in data files: every Set file
+that lists the base (so FUN_1001a5f2 gives it the same networks), the base's Protected lists, Convert / Complex_Convert
+rows that make the tiler's rules see it as the base, and the base's Collapse.txt groups (bulldozing removes the whole
+multi-tile piece). sc3netmod.dll gives ramp-table variants the base's piece class (the on-ramp class adds flag
 0x200000, which SIMTRANSIT FUN_10005983 tests).
 
   py -3.12 netramp.py tables [--json]        every table, slot, stock id.state and what the slot means
   py -3.12 netramp.py selftest               registry vs the stock SIMNTWRK.DLL bytes
+  py -3.12 netramp.py check-saves CITY...    every saved straight on-ramp strip vs FUN_1000abde's case logic
 """
 import json
 import os
@@ -46,27 +46,28 @@ from netmod.pe_tables import Simntwrk  # noqa: E402
 
 NETS = ("ROAD", "RAIL", "POWR", "HWAY", "PIPE", "SUBW")
 COLLAPSE = "Apps/Res/TilingRules/Collapse.txt"
+COLLAPSE_MAX = 0x1D        # FUN_1001da5f: a group whose count token is > 0x1d ends the scan [CONFIRMED @ 0x1001da5f]
 
 # ------------------------------------------------------------------ the registry
 # On-ramp builder FUN_1000abde [CONFIRMED @ 0x1000abde]: `mov dword ptr [ebp+d8], imm32` (C7 45 d8 imm32); the imm32
-# sits at site + 3. The selection holds 3 points, p0 = the middle one. Straight case (one shared coordinate):
-#   hi  [ebp+8]     placed at the strip end with the LARGER coordinate (local_d0 after the swap at 0x1000ade0),
-#   mid [ebp-0x1c]  placed at p0,
-#   lo  [ebp-0x20]  placed at the end with the smaller coordinate (local_7c).
-# "highway at +side" = the three cells one step toward + on the other axis hold the straight highway (local_29),
-# "-side" = toward - (local_2a); "road past hi/lo" = FUN_1000ab5b accepts the cell one step past that end (local_12 /
-# local_13). Live check (verify/netramp): road at x=101, strip x=102..104 z=143, highway at z=144 -> slots 21..23:
-# 0x3b1b00 at 104, 0x3b1f00 at 103, 0x3b2300 at 102.
+# sits at site + 3. The selection holds 3 points, p0 = the middle one; the other two are ordered by the swap at
+# 0x1000add0 (swap when p1.x < p2.x or p2.z < p1.z): d0 = the larger-x end of an x-strip but the SMALLER-z end of a
+# z-strip, 7c = the other end. Per case three slots: [ebp+8] placed at d0, [ebp-0x1c] at p0, [ebp-0x20] at 7c.
+# Highway side = the lane the three cells one step across hold 0x49 (z-strip) / 0x3acb (x-strip) in (local_29: -x for a
+# z-strip, +z for an x-strip; local_2a the other side). Road end = FUN_1000ab5b accepts the cell past d0 (local_12,
+# tested first) else past 7c (local_13), each with the lane cells beside it holding the highway or its road crossing.
+# Labels give the slot's cell by coordinate (lo/mid/hi = smaller/middle/larger x or z). Checked against every straight
+# on-ramp strip of the 16 shipped cities (netramp.py check-saves) and live (verify/netramp, slots 21..23).
 _ONRAMP_SITES = [
     # (site VA, stock value, meaning)
-    (0x1000B5CD, 0x3B2500, "z-strip, highway at +x, road past hi: hi"), (0x1000B5D4, 0x3B2100, "z-strip, highway at +x, road past hi: mid"),
-    (0x1000B5DB, 0x3B1D00, "z-strip, highway at +x, road past hi: lo"),
-    (0x1000B5E8, 0x3B1C02, "z-strip, highway at +x, road past lo: hi"), (0x1000B5EF, 0x3B2002, "z-strip, highway at +x, road past lo: mid"),
-    (0x1000B5F6, 0x3B2402, "z-strip, highway at +x, road past lo: lo"),
-    (0x1000B609, 0x3B1D02, "z-strip, highway at -x, road past lo: hi"), (0x1000B610, 0x3B2102, "z-strip, highway at -x, road past lo: mid"),
-    (0x1000B617, 0x3B2502, "z-strip, highway at -x, road past lo: lo"),
-    (0x1000B624, 0x3B2400, "z-strip, highway at -x, road past hi: hi"), (0x1000B62B, 0x3B2000, "z-strip, highway at -x, road past hi: mid"),
-    (0x1000B632, 0x3B1C00, "z-strip, highway at -x, road past hi: lo"),
+    (0x1000B5CD, 0x3B2500, "z-strip, highway at -x, road past lo: lo"), (0x1000B5D4, 0x3B2100, "z-strip, highway at -x, road past lo: mid"),
+    (0x1000B5DB, 0x3B1D00, "z-strip, highway at -x, road past lo: hi"),
+    (0x1000B5E8, 0x3B1C02, "z-strip, highway at -x, road past hi: lo"), (0x1000B5EF, 0x3B2002, "z-strip, highway at -x, road past hi: mid"),
+    (0x1000B5F6, 0x3B2402, "z-strip, highway at -x, road past hi: hi"),
+    (0x1000B609, 0x3B1D02, "z-strip, highway at +x, road past hi: lo"), (0x1000B610, 0x3B2102, "z-strip, highway at +x, road past hi: mid"),
+    (0x1000B617, 0x3B2502, "z-strip, highway at +x, road past hi: hi"),
+    (0x1000B624, 0x3B2400, "z-strip, highway at +x, road past lo: lo"), (0x1000B62B, 0x3B2000, "z-strip, highway at +x, road past lo: mid"),
+    (0x1000B632, 0x3B1C00, "z-strip, highway at +x, road past lo: hi"),
     (0x1000B64B, 0x3B2302, "x-strip, highway at -z, road past hi: hi"), (0x1000B652, 0x3B1F02, "x-strip, highway at -z, road past hi: mid"),
     (0x1000B659, 0x3B1B02, "x-strip, highway at -z, road past hi: lo"),
     (0x1000B666, 0x3B1A00, "x-strip, highway at -z, road past lo: hi"), (0x1000B66D, 0x3B1E00, "x-strip, highway at -z, road past lo: mid"),
@@ -76,6 +77,12 @@ _ONRAMP_SITES = [
     (0x1000B6A2, 0x3B1B00, "x-strip, highway at +z, road past lo: hi"), (0x1000B6A9, 0x3B1F00, "x-strip, highway at +z, road past lo: mid"),
     (0x1000B6B0, 0x3B2300, "x-strip, highway at +z, road past lo: lo"),
 ]
+# (axis, highway side, road end) -> onramp slot index for the (lo, mid, hi) cell. Derived from the labels above.
+ONRAMP_CASES = {}
+for _i, (_va, _v, _lab) in enumerate(_ONRAMP_SITES):
+    _a, _s, _r = _lab.split(": ")[0].split(", ")
+    _key = (_a[0], _s[-2], _r.split()[-1])
+    ONRAMP_CASES.setdefault(_key, [None, None, None])[("lo", "mid", "hi").index(_lab.split(": ")[1])] = _i
 # Corner case (p0 is the corner of an L): [ebp-0x24] is placed at p0, [ebp+8] at the arm that shares p0's x (local_f4,
 # swap at 0x1000b7xx), [ebp-0x2c] at the arm that shares p0's z (local_e8). Not built live (no city tried it).
 _CORNER_SITES = [
@@ -219,9 +226,9 @@ def check_merged(comp_ramps, variants, set_files_of, warnings):
             if v is not None:
                 if v["base"] != fid:
                     raise RampError("%s: variant %d has base %d, but the slot holds %d" % (r["where"], tid, v["base"], fid))
-                if not v.get("inherit", True):
-                    warnings.append("%s: variant %d has \"inherit\": false, so rules and bulldozing do not treat it as %d "
-                                    "and the HWAY retile replaces it (netramp.py build-onramp shows it)" % (r["where"], tid, fid))
+                if not v.get("mirror_base"):
+                    warnings.append("%s: variant %d has no \"mirror_base\": rules and bulldozing will not treat it as %d"
+                                    % (r["where"], tid, fid))
             else:
                 a, b = set_files_of(fid), set_files_of(tid)
                 if not b:
@@ -240,7 +247,51 @@ def table_lines(lst):
                     for r in sorted(lst, key=lambda r: (r["table"], r["slot"])))
 
 
-# ------------------------------------------------------------------ Collapse.txt (selftest only; packs use netpack_bridges)
+# ------------------------------------------------------------------ mirror_base: data-file membership
+def _counted_pairs(data):
+    lines = data.split(b"\r\n")
+    n = int(lines[0])
+    return [tuple(int(x) for x in ln.split(b",")) for ln in lines[1:1 + n]]
+
+
+def mirror_edits(stock, list_files, variants):
+    """-> ({TilingRules file name: [netpack_rules edits]}, notes) for every mirror_base variant.
+    stock: netpack.Stock. list_files: names in Apps/Res/TilingRules."""
+    low = {n.lower(): n for n in list_files}
+    edits, notes = {}, []
+    for v in variants:
+        if not v.get("mirror_base"):
+            continue
+        vid, base = v["id"], v["base"]
+        for net in NETS:
+            sname = low.get(("%s_grnd_set.txt" % net).lower())
+            if sname is None or base not in set(int(x) for x in stock.read("Apps/Res/TilingRules/" + sname).replace(b"{", b" ").replace(b"}", b" ").replace(b",", b" ").split() if x.isdigit()):
+                continue
+            edits.setdefault(sname, []).append({"op": "list_add", "ids": [vid], "_pack": "(mirror %d)" % vid})
+            pname = low.get(("%s_grnd_protected.txt" % net).lower())
+            if pname:
+                body = stock.read("Apps/Res/TilingRules/" + pname).split(b"\r\n")
+                if (b"%d" % base) in body[1:1 + int(body[0])]:
+                    edits.setdefault(pname, []).append({"op": "list_add", "ids": [vid], "_pack": "(mirror %d)" % vid})
+            for kind in ("convert", "complex_convert"):
+                cname = low.get(("%s_grnd_%s.txt" % (net, kind)).lower())
+                if not cname:
+                    continue
+                pairs = _counted_pairs(stock.read("Apps/Res/TilingRules/" + cname))
+                for st in range(4):
+                    tgt = (base << 8) | st
+                    for a, b in pairs:                       # FUN_1001a85a: the last matching row wins
+                        if a == (base << 8) | st:
+                            tgt = b
+                    edits.setdefault(cname, []).append({"op": "convert_add", "from": [vid, st], "to": [tgt >> 8, tgt & 0xFF],
+                                                        "_pack": "(mirror %d)" % vid})
+            notes.append("variant %d mirrors %d in %s" % (vid, base, net))
+        dname = low.get("diag_set.txt")
+        if dname and base in set(int(x) for x in stock.read("Apps/Res/TilingRules/" + dname).replace(b"{", b" ").replace(b"}", b" ").replace(b",", b" ").split() if x.isdigit()):
+            edits.setdefault(dname, []).append({"op": "list_add", "ids": [vid], "_pack": "(mirror %d)" % vid})
+    return edits, notes
+
+
 def collapse_parse(data):
     toks = [int(x) for x in data.split()]
     groups, i = [], 1
@@ -258,6 +309,126 @@ def collapse_render(groups):
     for g in groups:
         toks += [len(g) + 1] + list(g)
     return b"".join(b"%d\r\n" % t for t in [len(toks)] + toks)
+
+
+def collapse_apply(data, variants):
+    """Each mirror_base variant joins every Collapse group that holds its base. None if nothing changes."""
+    groups = collapse_parse(data)
+    changed = False
+    for v in variants:
+        if not v.get("mirror_base"):
+            continue
+        for gi, g in enumerate(groups):
+            if v["base"] in g and v["id"] not in g:
+                g.append(v["id"])
+                changed = True
+                if len(g) + 1 > COLLAPSE_MAX:
+                    raise RampError("Collapse.txt group %d would hold %d tokens with variant %d; FUN_1001da5f stops at "
+                                    "groups over %d (0x1d)" % (gi, len(g) + 1, v["id"], COLLAPSE_MAX))
+    return collapse_render(groups) if changed else None
+
+
+# ------------------------------------------------------------------ the on-ramp builder as a function (FUN_1000abde)
+ONRAMP_IDS = set(range(15130, 15142))
+CROSSING_IDS = {0x2BFA, 0x3AFA}             # 11258 / 15098: what FUN_1000abde accepts beside the road end (local_30)
+
+
+def onramp_case(cells, layer, hway_ids, road_ok):
+    """FUN_1000abde's straight case for three collinear cells (any order) -> (axis, side, end, (lo, mid, hi)) or None.
+    layer: {(x, z): (id, state)}; road_ok(cell) = FUN_1000ab5b (road predicate, not Protected). hway_ids: the
+    straight highway id the code wants on this axis is 0x49 for a z-strip and 0x3acb for an x-strip; callers that
+    look at a SAVED strip (where the lane is already retiled to merge pieces) pass every HWAY Set id instead."""
+    cells = sorted(cells)
+    xs, zs = {c[0] for c in cells}, {c[1] for c in cells}
+    if len(cells) != 3 or not (len(xs) == 1 or len(zs) == 1):
+        return None
+    axis = "z" if len(xs) == 1 else "x"
+    if axis == "z":
+        cells.sort(key=lambda c: c[1])
+    lo, mid, hi = cells
+    perp = (1, 0) if axis == "z" else (0, 1)
+    want = hway_ids if hway_ids is not None else ({0x49} if axis == "z" else {0x3ACB})
+    sides = []
+    for s, k in (("-", -1), ("+", 1)):
+        lane = [(c[0] + k * perp[0], c[1] + k * perp[1]) for c in cells]
+        if all(layer.get(q, (0,))[0] in want for q in lane):
+            sides.append((s, k))
+    # local_29 is tested first: -x for a z-strip, +z for an x-strip
+    order = {"z": ("-", "+"), "x": ("+", "-")}[axis]
+    sides.sort(key=lambda sk: order.index(sk[0]))
+    if not sides:
+        return None
+    s, k = sides[0]
+    step = (0, 1) if axis == "z" else (1, 0)
+    ends = {"lo": (lo[0] - step[0], lo[1] - step[1]), "hi": (hi[0] + step[0], hi[1] + step[1])}
+    # local_12 (past d0) first, d0 = hi for an x-strip, lo for a z-strip: the lane cell past this end holds the highway
+    # or its crossing (local_28), the lane cell past the OTHER end holds the plain highway (piVar2), and FUN_1000ab5b
+    # accepts the road cell past this end [CONFIRMED @ 0x1000b4b0..0x1000b5b0]. A strip with crossings at both ends
+    # fails both tests.
+    lane = {e: (q[0] + k * perp[0], q[1] + k * perp[1]) for e, q in ends.items()}
+    plain = want - CROSSING_IDS
+    for e, other in ((("lo", "hi"), ("hi", "lo")) if axis == "z" else (("hi", "lo"), ("lo", "hi"))):
+        if layer.get(lane[e], (0,))[0] in (want | CROSSING_IDS) and layer.get(lane[other], (0,))[0] in plain                 and road_ok(ends[e]):
+            return axis, s, e, (lo, mid, hi)
+    return None
+
+
+def onramp_pieces(tabs, case):
+    """-> [(cell, id<<8|state)] the builder places for a case, read through the (possibly patched) onramp table."""
+    axis, s, e, cells = case
+    slots = tabs["onramp"]["slots"]
+    return [(c, slots[i].stock) for c, i in zip(cells, ONRAMP_CASES[(axis, s, e)])]
+
+
+def cmd_check_saves(argv):
+    """Every straight on-ramp strip of the given saves: predict its three pieces from FUN_1000abde's case logic and
+    the onramp table, compare with the saved ids and states."""
+    import glob
+    import collections
+    import network_layer as nl
+    from netmod import netpack_rules as NR
+    tr = os.path.join(paths.game_root(), "Apps", "Res", "TilingRules")
+    hway = set(NR.braced_ids(open(os.path.join(tr, "HWAY_GRND_Set.txt"), "rb").read()))
+    road = set(NR.braced_ids(open(os.path.join(tr, "ROAD_GRND_Set.txt"), "rb").read()))
+    tabs = tables()
+    saves = []
+    for a in argv:
+        saves += sorted(set(glob.glob(a))) or [a]
+    tot = collections.Counter()
+    for p in saves:
+        nets, _ = nl.read_networks(p)
+        g = {(t[0], t[1]): (t[4], t[3]) for t in nets.get(1, [])}
+        seen, n = set(), collections.Counter()
+        for c in sorted(k for k, v in g.items() if v[0] in ONRAMP_IDS):
+            if c in seen:
+                continue
+            comp, st = [], [c]
+            while st:
+                q = st.pop()
+                if q in seen or q not in g or g[q][0] not in ONRAMP_IDS:
+                    continue
+                seen.add(q)
+                comp.append(q)
+                st += [(q[0] + 1, q[1]), (q[0] - 1, q[1]), (q[0], q[1] + 1), (q[0], q[1] - 1)]
+            case = onramp_case(comp, g, hway, lambda q: g.get(q, (0,))[0] in road)
+            if case is None:
+                n["builder refuses today"] += 1
+                print("  %s %s: the builder refuses this geometry today (e.g. a crossing past both ends): built "
+                      "before a later road" % (os.path.basename(p), sorted(comp)))
+                continue
+            got = [(q, (g[q][0] << 8) | g[q][1]) for q in case[3]]
+            if got == onramp_pieces(tabs, case):
+                n["match"] += 1
+            else:
+                n["MISMATCH"] += 1
+                print("  %s %s case %s: saved %s predicted %s" % (os.path.basename(p), case[3], case[:3],
+                      ["%d.%d" % (v >> 8, v & 255) for _, v in got],
+                      ["%d.%d" % (v >> 8, v & 255) for _, v in onramp_pieces(tabs, case)]))
+        if n:
+            print("%-28s %s" % (os.path.basename(p), dict(n)))
+        tot.update(n)
+    print("--- total", dict(tot))
+    return 1 if tot["MISMATCH"] else 0
 
 
 # ------------------------------------------------------------------ CLI
@@ -304,10 +475,11 @@ def cmd_selftest(argv):
 
 
 def main(argv):
-    if len(argv) < 2 or argv[1] not in ("tables", "selftest"):
+    cmds = {"tables": cmd_tables, "selftest": cmd_selftest, "check-saves": cmd_check_saves}
+    if len(argv) < 2 or argv[1] not in cmds:
         print(__doc__)
         return 2
-    return {"tables": cmd_tables, "selftest": cmd_selftest}[argv[1]](argv[2:])
+    return cmds[argv[1]](argv[2:])
 
 
 if __name__ == "__main__":

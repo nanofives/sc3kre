@@ -7,6 +7,7 @@ trace running (its JSON lines in TRACE), a posted WM_MOUSEMOVE tells which cell 
 
   py -3.12 nramp_view.py TRACE goto X,Z        # minimap clicks until X,Z is near the view centre, then prints its pixel
   py -3.12 nramp_view.py TRACE pix X,Z [X,Z..] # pixel of each cell (local search), JSON
+  py -3.12 nramp_view.py TRACE center X,Z     # arrow-key scroll until X,Z sits at the view centre (350,270)
   py -3.12 nramp_view.py TRACE cell PX,PY      # cell under a pixel
 SC3_PID picks the instance.
 """
@@ -30,17 +31,55 @@ class View:
     def _last(self):
         with open(self.trace) as f:
             ls = [l for l in f.read().splitlines() if '"cost90"' in l]
-        return json.loads(ls[-1])["pts"][0][:2] if ls else None
+        if not ls:
+            return None
+        pts = json.loads(ls[-1])["pts"]
+        return pts[0][:2] if pts else None
+
+    def reset_cap(self):
+        """The tool's points stop at the global cap DAT_100322a4 < 0x200 (FUN_10004754); a road drag tool hover runs
+        FUN_1000488d, which resets it. Then reselect the On-ramp tool."""
+        import subprocess
+        np = os.path.join(HERE, "np_drive.py")
+        subprocess.run([sys.executable, np, "cmd", "0x10004001"], stdout=subprocess.DEVNULL)
+        time.sleep(0.6)
+        sc3io.move(self.h, 300, 200)
+        time.sleep(0.4)
+        sc3io.move(self.h, 310, 205)
+        time.sleep(0.4)
+        subprocess.run([sys.executable, np, "cmd", "0x10004302"], stdout=subprocess.DEVNULL)
+        time.sleep(0.6)
 
     def cell(self, x, y):
-        before = os.path.getsize(self.trace)
-        sc3io.move(self.h, x, y)
-        for _ in range(20):
-            time.sleep(0.1)
-            if os.path.getsize(self.trace) != before:
-                break
-        time.sleep(0.15)
-        return tuple(self._last())
+        for attempt in range(2):
+            before = os.path.getsize(self.trace)
+            sc3io.move(self.h, x, y)
+            for _ in range(20):
+                time.sleep(0.1)
+                if os.path.getsize(self.trace) != before:
+                    break
+            time.sleep(0.15)
+            c = self._last()
+            if c is not None:
+                return tuple(c)
+            self.reset_cap()
+        raise RuntimeError("no cell under (%d,%d): is the On-ramp tool selected and nramp_trace.py running?" % (x, y))
+
+    def center(self, tx, tz, cx=350, cy=270, tol=40):
+        """Scroll (sc3io.scroll, arrow keys) until cell tx,tz is within tol px of (cx, cy). Returns its pixel."""
+        p = None
+        for _ in range(10):
+            p = self.pix(tx, tz, start=(cx, cy))
+            if p is None:
+                return None
+            dx, dy = p[0] - cx, p[1] - cy
+            if abs(dx) <= tol and abs(dy) <= tol:
+                return p
+            if abs(dx) > tol:
+                sc3io.scroll(self.h, "right" if dx > 0 else "left", taps=1, hold=min(0.4, abs(dx) / 2500.0))
+            if abs(dy) > tol:
+                sc3io.scroll(self.h, "down" if dy > 0 else "up", taps=1, hold=min(0.4, abs(dy) / 2500.0))
+        return p
 
     def pix(self, tx, tz, start=(400, 300)):
         x, y = start
@@ -94,6 +133,9 @@ def main(argv):
             tx, tz = map(int, a.split(","))
             out[a] = v.pix(tx, tz)
         print(json.dumps(out))
+    elif cmd == "center":
+        tx, tz = map(int, argv[3].split(","))
+        print(json.dumps({"cell": [tx, tz], "pix": v.center(tx, tz)}))
     elif cmd == "cell":
         x, y = map(int, argv[3].split(","))
         print(json.dumps(v.cell(x, y)))
