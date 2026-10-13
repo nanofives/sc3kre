@@ -84,6 +84,8 @@
 !/re/tools/netmod/examples/*/README.md
 !/re/tools/netmod/examples/*/recipe.json
 !/re/tools/netmod/examples/*/layout.json
+# lanekit (2026-10-13): lane specs are text descriptions (side, slot, curve key), no game art
+!/re/tools/netmod/examples/*/*.lanes.json
 
 # 5) re/scripts — .py / .ps1 / .java only.
 #    Explicitly NOT the .log / .txt Ghidra run artifacts (absolute-path leaks)

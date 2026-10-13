@@ -83,7 +83,9 @@
         "$ref": "#/$defs/ramp_edit"
       },
       "description": "Hardcoded SIMNTWRK piece tables (on-ramps, tunnels, slope pieces): which piece a table slot places. netramp.py tables lists every table and slot. Guide: re/analysis/NET_RAMPS.md."
-    }
+    },
+    "lanes": {"type": "array", "items": {"$ref": "#/$defs/lanes_entry"}, "description": "Task lanekit: street-sim lane graphs (TrBlkAtt) for a variant or stock piece, written in lanekit's authoring format (re/tools/netmod/lanekit.py, guide re/analysis/NET_LANES.md). Records for every language folder; English-UK gets the mirrored lanes unless the spec says mirror_uk false."},
+    "connects": {"type": "array", "items": {"$ref": "#/$defs/connects_entry"}, "description": "Task lanekit: turn matrices (exemplar props 310 road / 311 rail / 312 subway): which (entry side, exit side) pairs a piece connects. Read by the tiler (final stage) and by the SimTransit router for highway and bus nodes. low = ENGLISH-side lanes, high = English-UK-side lanes; a plain list sets both."}
   },
   "$defs": {
     "piece_id": {
@@ -764,6 +766,8 @@
           "description": "Restrict to these slot numbers."
         }
       }
-    }
+    },
+    "lanes_entry": {"type": "object", "required": ["piece", "spec"], "additionalProperties": false, "properties": {"piece": {"$ref": "#/$defs/piece_id"}, "spec": {"oneOf": [{"type": "string", "minLength": 1}, {"type": "object"}], "description": "lanekit spec: a file in the package folder or inline."}, "langs": {"type": "array", "items": {"type": "string"}, "description": "Language folders to write (default: all)."}}},
+    "connects_entry": {"type": "object", "required": ["piece"], "additionalProperties": false, "properties": {"piece": {"$ref": "#/$defs/piece_id"}, "road": {"oneOf": [{"const": "auto"}, {"type": "array", "items": {"type": "array", "items": {"enum": ["x-", "z-", "x+", "z+", "d0", "d1", "d2", "d3"]}, "minItems": 2, "maxItems": 2}}, {"type": "object", "additionalProperties": false, "properties": {"low": {"type": "array", "items": {"type": "array", "items": {"enum": ["x-", "z-", "x+", "z+", "d0", "d1", "d2", "d3"]}, "minItems": 2, "maxItems": 2}}, "high": {"type": "array", "items": {"type": "array", "items": {"enum": ["x-", "z-", "x+", "z+", "d0", "d1", "d2", "d3"]}, "minItems": 2, "maxItems": 2}}}}]}, "rail": {"oneOf": [{"const": "auto"}, {"type": "array", "items": {"type": "array", "items": {"enum": ["x-", "z-", "x+", "z+", "d0", "d1", "d2", "d3"]}, "minItems": 2, "maxItems": 2}}, {"type": "object", "additionalProperties": false, "properties": {"low": {"type": "array", "items": {"type": "array", "items": {"enum": ["x-", "z-", "x+", "z+", "d0", "d1", "d2", "d3"]}, "minItems": 2, "maxItems": 2}}, "high": {"type": "array", "items": {"type": "array", "items": {"enum": ["x-", "z-", "x+", "z+", "d0", "d1", "d2", "d3"]}, "minItems": 2, "maxItems": 2}}}}]}, "subway": {"oneOf": [{"const": "auto"}, {"type": "array", "items": {"type": "array", "items": {"enum": ["x-", "z-", "x+", "z+", "d0", "d1", "d2", "d3"]}, "minItems": 2, "maxItems": 2}}, {"type": "object", "additionalProperties": false, "properties": {"low": {"type": "array", "items": {"type": "array", "items": {"enum": ["x-", "z-", "x+", "z+", "d0", "d1", "d2", "d3"]}, "minItems": 2, "maxItems": 2}}, "high": {"type": "array", "items": {"type": "array", "items": {"enum": ["x-", "z-", "x+", "z+", "d0", "d1", "d2", "d3"]}, "minItems": 2, "maxItems": 2}}}}]}}}
   }
 }

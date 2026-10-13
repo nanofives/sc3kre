@@ -1,0 +1,13 @@
+{
+ "netpack": 1,
+ "name": "example_lanes_t_exit_only",
+ "version": "1.0.0",
+ "author": "lanekit test fixture",
+ "description": "Street-sim lanes of the stock T junction (piece 39): no lane enters from the stem. Test fixture for NET_LANES.md arm S.",
+ "lanes": [
+  {
+   "piece": 39,
+   "spec": "t_exit_only.lanes.json"
+  }
+ ]
+}
