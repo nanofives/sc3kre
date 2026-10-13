@@ -373,8 +373,9 @@ STATIONS = {
 
 class Options:
     def __init__(self, conn_masks="exemplar", nb_state="piece", edge_conn="cells", stations="utilities",
-                 trace=False, watch=None):
+                 trace=False, watch=None, buildings="surface"):
         self.stations = stations        # "none" | "subway" | "utilities" (STATIONS)
+        self.buildings = buildings      # "surface": saved buildings as foreign surface occupants (flags 0) | "none"
         self.watch = watch              # trace only events at / writing these cells (None = all)
         self.conn_masks = conn_masks    # "zero" (as shipped, 14.6) | "shape" (diagnostic)
         self.nb_state = nb_state        # "piece" (orientation bits) | "zero" (vt+0xa0 null)

@@ -39,12 +39,22 @@ def exemplars(game):
     return _EX[game.occupant]
 
 
-def retile_all(rules, city, net, opts, pe, ex=None):
-    """Re-tile every cell of `net` from scratch, as one FUN_1001547b call whose node list is
-    every occupied cell of that network (sorted (x, y), like FUN_1001b7cc)."""
+def prepared(city, opts):
+    """A copy of the city with the non-network occupants the engine sees in its layers: stations / utilities
+    (tiler.STATIONS) and, with Options.buildings == "surface", every saved building in the surface layer, which
+    is the city's occupant manager (vt+0x11c -> manager +0x3c, FUN_10012609)."""
     c2 = city.copy()
     if opts.stations in tiler.STATIONS:
         c2.add_stations(tiler.STATIONS[opts.stations])
+    if opts.buildings == "surface":
+        c2.add_stations({t: ("surface", 0) for t in getattr(city, "buildings", {})})
+    return c2
+
+
+def retile_all(rules, city, net, opts, pe, ex=None):
+    """Re-tile every cell of `net` from scratch, as one FUN_1001547b call whose node list is
+    every occupied cell of that network (sorted (x, y), like FUN_1001b7cc)."""
+    c2 = prepared(city, opts)
     T = tiler.Tiler(rules, c2, opts, pe, ex)
     lay = T.layer(net)
     nodes = sorted(p for p, o in lay.items() if o.flags is None and T.predA(net, o))
@@ -71,9 +81,10 @@ CLASSES = [
     ("slope", "sloped tile: slope tables / illegal slope (FUN_1001a2c0, FUN_10016d00)"),
     ("seam", "within 1 cell of a --seam multiple: the 1024 test city is a 4x4 copy of a 256 city, so a piece cut at "
              "a seam keeps the arm that pointed into its old neighbour (an artifact of how the save was assembled)"),
-    ("pole-phase", "POWR poles 14/15 every 4 cells on both sides, at a different phase: Complex rules #20-36/#44-60 "
-                   "phase the poles from the first cell the Complex pass reaches, so the phase records the order of "
-                   "past retiles, which a save does not keep"),
+    ("pole-phase", "POWR pole 14/15 positions differ inside a straight pole run: Complex rules #34/#58 make a pole "
+                   "where the line runs straight 2 cells each way, #20-33/#35-36 and #44-57/#59-60 place the next "
+                   "one 4 cells from any pole or non-straight piece, in work-list order, so the poles record the "
+                   "order and extent of past retiles, which a save does not keep"),
     ("edge", "map edge row/column: neighbour-connection input (+0x48 vt+0x58) [UNCERTAIN]"),
     ("arm-to-building", "the saved piece has an arm into a cell that holds a building and no network piece"),
     ("arm-to-empty", "the saved piece has an arm into an empty cell"),
@@ -130,9 +141,7 @@ def _pole_phase(city, T, net, cell, saved, sim):
         return out
 
     a, b = run(L0), run(L1)
-    if not a or not b:
-        return False
-    return all((v - a[0]) % 4 == 0 for v in a) and all((v - b[0]) % 4 == 0 for v in b) and a != b
+    return bool(a) and bool(b) and a != b
 
 
 def classify(city, T0, net, cell, saved, sim, rules, T=None, seam=None):
@@ -381,11 +390,9 @@ def simulate(rules, city, net, opts, pe, ex, rect=None):
     """rect None: from-scratch retile of the whole net; else the in-game rectangle retile (message 0x637c0dab)."""
     if rect is None:
         return retile_all(rules, city, net, opts, pe, ex)[0]
-    c2 = city.copy()
-    if opts.stations in tiler.STATIONS:
-        c2.add_stations(tiler.STATIONS[opts.stations])
+    c2 = prepared(city, opts)
     T = tiler.Tiler(rules, c2, opts, pe, ex)
-    bit = {1: 1, 4: 1, 2: 4, 3: 0x20, 5: 8, 6: 0x10}[net]
+    bit ={1: 1, 4: 1, 2: 4, 3: 0x20, 5: 8, 6: 0x10}[net]
     T.retile_rect(bit, *rect)
     return T
 
@@ -545,10 +552,8 @@ def cmd_apply_edits(a):
     print("rules copied from %s to %s" % (base, out_dir))
     for n, old, new, k in done:
         print("  %-34s %d edit(s), %d -> %d bytes" % (n, k, len(old), len(new)))
-    probs = lint_dir(out_dir)
-    print("lint: %s" % ("clean" if not probs else "%d finding(s)" % len(probs)))
-    for p in probs[:20]:
-        print("  " + p)
+    print("findings the edits add (lint against %s):" % base)
+    print_lint(lint_dir(out_dir, base), True)
     if a.save:
         args = argparse.Namespace(rules_dir=out_dir, base=base, save=a.save, net=a.net, rect=a.rect, out=a.png,
                                   opt=a.opt, scale=a.scale, full=False,
@@ -574,61 +579,81 @@ def lint_rules(rules):
                 w = rj.where()
                 sel = rj.selector
                 if mode == 0x18 and sel not in (0, 0x100):
-                    out.append("%s: selector %s in a Complex file can never match: FUN_10019768 builds no mask in "
-                               "mode 0x18, so the observed mask is always 0" % (w, mask_label(sel)))
+                    out.append(("never-matches", "%s: selector %s in a Complex file can never match: FUN_10019768 "
+                                                 "builds no mask in mode 0x18, so the observed mask is always 0"
+                                % (w, mask_label(sel))))
                 elif sel != 0x100 and sel >> (4 if mode == 4 else 8):
-                    out.append("%s: selector %s sets bits the %s stage never sets (FUN_10019768 sets bit d only for "
-                               "d < mode %d)" % (w, mask_label(sel), stage_name, mode))
+                    out.append(("never-matches", "%s: selector %s sets bits the %s stage never sets (FUN_10019768 "
+                                                 "sets bit d only for d < mode %d)" % (w, mask_label(sel), stage_name, mode)))
                 lim = 24 if mode == 0x18 else 8
                 for c in rj.conds:
                     if c.dir != tiler.SELF and c.dir >= lim:
-                        out.append("%s: condition %s looks outside the %s window (3x3 in modes 4/8, 5x5 in "
-                                   "0x18, FUN_10019768)" % (w, rec_label(c.dir, c.id, c.state), stage_name))
+                        out.append(("never-matches", "%s: condition %s is outside the %s window (3x3 in modes 4/8, "
+                                                     "5x5 in 0x18, FUN_10019768)" % (w, rec_label(c.dir, c.id, c.state), stage_name)))
                     if mode != 0x18 and c.id == 0 and c.dir != tiler.SELF:
-                        out.append("%s: condition %s can never be observed in the %s stage: modes 4/8 report "
-                                   "neighbours only for occupied cells, and a sentinel record keeps dir self "
-                                   "(FUN_1001a056 / FUN_100220b7)" % (w, rec_label(c.dir, c.id, c.state), stage_name))
+                        out.append(("never-matches", "%s: condition %s can never be observed in the %s stage: modes "
+                                                     "4/8 report neighbours only for occupied cells, and a sentinel "
+                                                     "record keeps dir self (FUN_1001a056 / FUN_100220b7)"
+                                    % (w, rec_label(c.dir, c.id, c.state), stage_name)))
                 dirs = {}
                 for c in rj.conds:
                     if c.dir != tiler.SELF:
                         dirs.setdefault(c.dir, set()).add((c.id, c.state if c.state not in (0, 5) or c.id else 0))
                 for d, s in dirs.items():
                     if len(s) > 1:
-                        out.append("%s: two different conditions at %s; one cell yields one record, so the rule "
-                                   "never matches" % (w, dlabel(d)))
+                        out.append(("never-matches", "%s: two different conditions at %s; one cell yields one "
+                                                     "record, so the rule never matches" % (w, dlabel(d))))
                 if not rj.results:
-                    out.append("%s: no results: the parser (FUN_10022676) only stores a rule when its result "
-                               "count is reached, so its conditions would merge into the next rule" % w)
+                    out.append(("no-results", "%s: no results: the parser (FUN_10022676) only stores a rule when its "
+                                              "result count is reached, so its conditions merge into the next rule" % w))
                 for i in range(j):
                     ri = rl[i]
                     if ri.selector not in (0x100, sel) or not ri.results:
                         continue
                     if all(any(_implied(ci, cj) for cj in rj.conds) for ci in ri.conds):
-                        out.append("%s: unreachable, shadowed by rule #%d (line %d): same or wildcard selector and "
-                                   "its conditions are a subset; first match wins (FUN_100228ff)" % (w, ri.index, ri.line))
+                        if (ri.selector == sel and set(ri.conds) == set(rj.conds)
+                                and list(ri.results) == list(rj.results)):
+                            out.append(("duplicate", "%s: duplicate of rule #%d (line %d), conditions in another "
+                                                     "order; never reached, harmless" % (w, ri.index, ri.line)))
+                        else:
+                            out.append(("shadowed", "%s: never reached, rule #%d (line %d) matches first whenever "
+                                                    "it would (same or wildcard selector, conditions a subset; first "
+                                                    "match wins, FUN_100228ff)" % (w, ri.index, ri.line)))
                         break
                 for r in rj.results:
-                    if r.id and r.id not in rules.sets.get(tiler.NET_TAG[net], ()) and r.id not in rules.sets["DIAG"]:
-                        out.append("%s: result %s places id %d, which is not in %s_GRND_Set.txt or DIAG_Set.txt"
-                                   % (w, rec_label(r.dir, r.id, r.state), r.id, tiler.NET_TAG[net]))
+                    if r.id and not any(r.id in s for s in rules.sets.values()):
+                        out.append(("unknown-id", "%s: result %s places id %d, which is in no *_GRND_Set.txt nor "
+                                                  "DIAG_Set.txt" % (w, rec_label(r.dir, r.id, r.state), r.id)))
     return out
 
 
-def lint_dir(d):
-    return lint_rules(tiler.Rules(d))
+def lint_dir(d, base=None):
+    """-> [(kind, text)]; with `base`, only findings absent from that directory (an edit's new problems)."""
+    probs = lint_rules(tiler.Rules(d))
+    if base:
+        have = set(lint_rules(tiler.Rules(base)))
+        probs = [p for p in probs if p not in have]
+    return probs
+
+
+def print_lint(probs, show_all=False, out=print):
+    from collections import Counter as _C
+    c = _C(k for k, _ in probs)
+    out("lint: %s" % (", ".join("%d %s" % (v, k) for k, v in sorted(c.items())) or "clean"))
+    for k, t in probs:
+        if show_all or k != "duplicate":
+            out("  [%s] %s" % (k, t))
+    if c.get("duplicate") and not show_all:
+        out("  (%d duplicate rules not listed: --all)" % c["duplicate"])
 
 
 def cmd_lint(a):
     g = paths.Game()
     d = a.rules or g.tiling
-    probs = lint_dir(d)
-    if a.base:
-        base = set(lint_dir(a.base))
-        probs = [p for p in probs if p not in base]
-    print("%s: %d finding(s)%s" % (d, len(probs), " not in %s" % a.base if a.base else ""))
-    for p in probs:
-        print("  " + p)
-    return 1 if probs else 0
+    probs = lint_dir(d, a.base)
+    print("%s%s" % (d, " (findings not in %s)" % a.base if a.base else ""))
+    print_lint(probs, a.all)
+    return 1 if any(k != "duplicate" for k, _ in probs) else 0
 
 
 def main(argv=None):
@@ -673,6 +698,7 @@ def main(argv=None):
     li = sub.add_parser("lint", help="rules that can never fire, or place ids outside the network's Set")
     li.add_argument("--rules")
     li.add_argument("--base", help="only report findings not already present in this directory")
+    li.add_argument("--all", action="store_true", help="list duplicate rules too")
     a = ap.parse_args(argv)
     return {"validate": cmd_validate, "explain": cmd_explain, "preview": cmd_preview,
             "apply-edits": cmd_apply_edits, "lint": cmd_lint}[a.cmd](a)
