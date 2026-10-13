@@ -391,6 +391,31 @@ def sprite_size(payload):
     return m["w"], m["h"]
 
 
+DRAW_FLAGS_OFF = 0x12          # frame table header u32 after AnimFrames (+0x10), RegRects (+0x11); reader SIMSPR 0x10001c90
+FIRST_PASS = 0x80             # -> view cell flag bit 0 (0x100192aa): drawn in the pass before every other occupant (0x1000dc17)
+
+
+def _finish_art(res, art, where):
+    """art.first_pass: true / false sets / clears the frame table's first-pass draw bit (NET_ART.md 8). Road pieces
+    ship it set (29, 39), so a sprite TALLER than its base frame is overdrawn above the ground by the second pass
+    in some view rotations (arm D, verify/artkit). -> res with "cs" edited and "warnings"."""
+    res["warnings"] = []
+    cs = bytearray(res["cs"])
+    flags, = struct.unpack_from("<I", cs, DRAW_FLAGS_OFF)
+    if "first_pass" in art:
+        flags = (flags | FIRST_PASS) if art["first_pass"] else (flags & ~FIRST_PASS)
+        struct.pack_into("<I", cs, DRAW_FLAGS_OFF, flags)
+        res["cs"] = bytes(cs)
+    elif flags & FIRST_PASS:
+        src_t = res.get("src_T", {})
+        taller = [k for k in res["keys"] if k in src_t and struct.unpack_from("<h", res["anchor"][k], 2)[0] > src_t[k]]
+        if taller:
+            res["warnings"].append("%s: %d frame(s) are taller than the source frames but the table keeps the "
+                                   "first-pass draw bit (0x80): their top will be overdrawn in some rotations; "
+                                   "set art.first_pass to false" % (where, len(taller)))
+    return res
+
+
 def compile_art(stock, pack_dir, art, default_piece, where):
     """art spec -> {"from", "cs_key", "cs_rel", "cs", "frames", "keys", "pix", "anchor"}.
     keys = the distinct (group, instance) records of the source frames, in first-use order."""
@@ -472,10 +497,12 @@ def compile_art(stock, pack_dir, art, default_piece, where):
         stray = sorted(set(anchors) - {frame_png_name(p) for p in range(len(frames))})
         if stray:
             raise NetpackError("%s: %s names no frame of piece %d: %s" % (where, ANCHOR_FILE, src, stray[:5]))
-        return {"from": src, "cs_key": cs_key, "cs_rel": cs_rel, "cs": cs, "frames": frames, "keys": keys,
-                "pix": pix, "anchor": anc, "pos_keys": pos_keys}
-    return {"from": src, "cs_key": cs_key, "cs_rel": cs_rel, "cs": cs, "frames": frames, "keys": keys, "pix": pix,
-            "anchor": {k: recs[k][1] for k in keys}, "pos_keys": [(g, i) for _, _, g, i, _ in frames]}
+        src_T = {k: struct.unpack_from("<h", recs[k[:2]][1], 2)[0] for k in keys}
+        return _finish_art({"from": src, "cs_key": cs_key, "cs_rel": cs_rel, "cs": cs, "frames": frames,
+                            "keys": keys, "pix": pix, "anchor": anc, "pos_keys": pos_keys, "src_T": src_T}, art, where)
+    return _finish_art({"from": src, "cs_key": cs_key, "cs_rel": cs_rel, "cs": cs, "frames": frames, "keys": keys,
+                        "pix": pix, "anchor": {k: recs[k][1] for k in keys},
+                        "pos_keys": [(g, i) for _, _, g, i, _ in frames]}, art, where)
 
 
 ANCHOR_FILE = "anchors.json"
@@ -549,6 +576,7 @@ def compile_pack(stock, pack_dir, man):
         if vid in stock.set_ids(net):
             raise NetpackError("%s: id %d is already in %s_GRND_Set.txt" % (where, vid, net))
         art = compile_art(stock, pack_dir, v.get("art"), base, where)
+        out["warnings"] += art.get("warnings", [])
         ex = tkb1_set_key(stock_ex[base][1], 0x67, (CS_TYPE, KOREA_CS_GROUP, vid))
         names = _names(v, langs_text)
         if names:
@@ -575,6 +603,7 @@ def compile_pack(stock, pack_dir, man):
         if piece not in stock_ex:
             raise NetpackError("%s: piece %d has no stock exemplar" % (where, piece))
         art = compile_art(stock, pack_dir, r.get("art"), piece, where)
+        out["warnings"] += art.get("warnings", [])
         if art["from"] != piece:
             raise NetpackError("%s: a reskin draws over the piece's own frames; \"from\" must be omitted" % where)
         if not r.get("art", {}).get("recolor") and not r.get("art", {}).get("png_dir"):
@@ -1558,6 +1587,16 @@ def cmd_selftest(a):
         check(ok_size and ok_split,
               "U11 80x50 frame + anchors.json -> record 80x50, anchor %r; shared-record split %s"
               % (a13, "checked on frames %r" % (twin,) if twin else "not exercised (road 29 shares no record)"))
+
+        # U12 (artkit): art.first_pass clears / sets the frame table's first-pass draw bit (header +0x12, 0x80)
+        m12 = dict(m["variants"][0]["art"])
+        fp = {}
+        for val in (False, True):
+            a12 = compile_art(Stock(stock_root), d, dict(m12, first_pass=val), 29, "U12")
+            fp[val] = struct.unpack_from("<I", a12["cs"], DRAW_FLAGS_OFF)[0]
+        check(not fp[False] & FIRST_PASS and fp[True] & FIRST_PASS and art2.get("warnings"),
+              "U12 first_pass false -> flags 0x%X, true -> 0x%X; taller frames with the bit kept warn: %s"
+              % (fp[False], fp[True], (art2.get("warnings") or ["NO WARNING"])[0][:70]))
 
         # U1/U2/U4: round trips on a hard-linked copy of the stock tree, both modes
         for mode in ("overlay", "direct"):

@@ -10,7 +10,7 @@
   "variants": [
     {"id": 20401, "base": 39, "network": "ROAD",
      "name": {"*": "Roundabout with lamps", "ENGLISH": "Rotonda con farolas"},
-     "art": {"from": 39, "recipe": "recipe.json"},
+     "art": {"from": 39, "recipe": "recipe.json", "first_pass": false},
      "trblkatt": "copy_base"}
   ]
 }

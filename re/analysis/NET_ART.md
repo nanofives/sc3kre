@@ -63,6 +63,7 @@ vertical clip range (cell record +4 / +6, built into the clip rect `{left, y-T, 
   anchors (buildings' zoom 4 reusing zoom-3 art). Applied at 0x10001272 (size), 0x100014e7 (anchors), 0x1000138b
   (dest rect), 0x100011c7 (hit test); the blit takes a stretch path (GZGraphicD 0x100022b1). Network pieces ship
   their own zoom-4 art (scale 0 on 8,924 of 8,940 frames).
+- Header layout and the first-pass bit: section 8.1.
 - RotCount is not consulted by the index (`zoom*4` is a literal) [CONFIRMED @ 0x1005aeab].
 - Size limits: none in pixels on the decode path (stack buffer below 0xc011 bytes, heap above, 0x1001de49). T and
   B are s16. The real limit is the cell clip (section 3 and 8).
@@ -100,11 +101,26 @@ that shared the stock record.
 
 Arm D of the proof: a variant whose zoom-4 frame is 128x208 (T 175) instead of the base's 128x64 (T 31) draws, but
 in view rotations 0 and 2 two of four cells lose the top of the sprite on a horizontal line, stable across camera
-positions. Rotation 1 draws all of it. See section 8.1 for the cause.
+positions. Rotation 1 draws all of it.
 
-### 8.1 Cause
+### 8.1 Cause and fix
 
-PENDING (code read in progress at the time of writing; filled in below when known).
+- T is not the problem. The cell's vertical range is the current frame's own anchor T: occupant vt+0x14 =
+  `0x100159e2` -> `0x1005ad34` (frame = vt+0x68(zoom, rot)) -> `0x100014e7` (anchor cache record +0x10..+0x16,
+  scaled by the frame's scale byte), stored as s16 at cell+4 by `0x10007b4d` (placement) and `0x1000b352` (zoom and
+  rotation change) [CONFIRMED]. No cap. The anchor cache is a verbatim copy of the type-1 record (`0x1001dfd1`).
+- Draw order is. The frame table header (reader `0x10001c90`): `+0x0c` ZoomCount, `+0x0d` RotCount, `+0x0e`
+  ZoomSetCount, `+0x0f` AnimSetCount (20), `+0x10` AnimFrames (layers: 2 on bridge tables), `+0x11` RegRects, `+0x12`
+  u32 LayerFlags, `+0x16` u16 Frames. (netcat's `layer_flags` is the raw dword at +0x10; sprites.py now also reports
+  `anim_frames`, `reg_rects`, `draw_flags`.) LayerFlags bit 0x80 becomes cell flag bit 0 (`0x100192aa`), and
+  `FUN_1000dc17` draws those records in a pass before all other records [CONFIRMED]. Road 39 and 29 ship 0x80,
+  highway 73 ships 0, curve 11203 0xC0, bridge 83 0x01020401.
+- Fix, data only: netpack `"art": {"first_pass": false}` clears the bit in the variant's table copy (`true` sets
+  it). netpack warns when a frame is taller than its source frame and the bit stays set. Measured: lamps complete
+  in all 20 dumps (verify/artkit arm F).
+- Open: a cell without the bit sorts by depth with cars and pedestrians on it; not run with traffic. The bridge
+  tables' child-layer bits (+0x12 low bits, 40 frames) are the way the stock pieces split a ground layer from a
+  tall layer; using that for props instead of clearing the bit was not tried.
 
 ## 9. The kit
 

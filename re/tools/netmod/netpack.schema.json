@@ -154,6 +154,10 @@
           "type": "string",
           "minLength": 1
         },
+        "first_pass": {
+          "type": "boolean",
+          "description": "artkit: set (true) or clear (false) the frame table's first-pass draw bit (header +0x12, 0x80). Road pieces ship it set: they draw before every other occupant, so art taller than the base frame gets its top overdrawn in some rotations. Clear it for pieces with tall props. NET_ART.md 8."
+        },
         "recipe": {
           "type": "string",
           "minLength": 1,
