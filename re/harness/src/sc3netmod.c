@@ -31,12 +31,21 @@
  *   +0x12ee0  push ebx/push 4/sub esp,0xc in FUN_10012dff (3 nets out)-> save_end_hook     (SAVEBASE)
  *   +0x130e9  mov eax,<eh> in FUN_100130e9 (load entry)               -> load_begin_hook
  *   +0x13264/+0x13338/+0x1340b  call FUN_1000d6b3 (read one tile)     -> load_rec_thunk
- * Env: SC3NETMOD_LOG=<path> (default sc3netmod.log beside the DLL), SC3NETMOD_TABLE=<path> (variant table).
+ *
+ * 3. OVERLAY (task netpack, SC3NETMOD_OVERLAY=0 turns it off). Files under <root>\mods\netmod\overlay\ are served in
+ *    place of <root>\<same path> (read-only opens, existence checks, merged directory listings), so netpack packages
+ *    install without writing to Apps\. Variant tables come from every <root>\mods\netmod\tables\*.txt (one per pack),
+ *    then Apps\Res\netmod_variants.txt. Details at overlay_init and table_load; evidence in re/analysis/NETPACK.md.
+ * Env: SC3NETMOD_LOG=<path> (default sc3netmod.log beside the DLL), SC3NETMOD_TABLE=<path> (variant table, only that
+ * file), SC3NETMOD_FILELOG=1 (log every hooked file call under Apps\Res).
  */
 
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
+#include <intrin.h>
+#pragma intrinsic(_ReturnAddress)
 
 /* ============================================================ logging */
 
@@ -84,36 +93,99 @@ static int env_off(const char *name) {
 /* ============================================================ the variant table */
 
 static WORD g_base[65536];          /* g_base[variant] = base id, 0 = not a variant */
+static BYTE g_conflict[65536];      /* two tables gave this variant different bases: dropped */
 static int  g_nvariants;
 
-static void table_load(void) {
-    char path[MAX_PATH], line[256], *slash;
-    FILE *f;
-    if (!GetEnvironmentVariableA("SC3NETMOD_TABLE", path, sizeof(path))) {
-        /* Apps\SC3U.exe -> Apps\Res\netmod_variants.txt (installed with the variant's data files) */
-        if (!GetModuleFileNameA(NULL, path, sizeof(path))) return;
-        slash = strrchr(path, '\\');
-        if (!slash) return;
-        slash[1] = 0;
-        lstrcatA(path, "Res\\netmod_variants.txt");
-    }
-    f = fopen(path, "r");
-    if (!f) { logf("table: %s not found, no variants", path); return; }
+static char g_root[MAX_PATH];       /* game root with a trailing '\' (parent of the folder holding SC3U.exe) */
+static int  g_rootlen;
+
+/* <exe dir>\..\ -> g_root. Works for the dev layout and the release layout (both keep SC3U.exe in Apps). */
+static void root_init(void) {
+    char *s;
+    if (!GetModuleFileNameA(NULL, g_root, sizeof(g_root))) { g_root[0] = 0; return; }
+    if ((s = strrchr(g_root, '\\')) != NULL) *s = 0;          /* strip SC3U.exe */
+    if ((s = strrchr(g_root, '\\')) != NULL) s[1] = 0;        /* strip Apps, keep the slash */
+    else g_root[0] = 0;
+    g_rootlen = lstrlenA(g_root);
+}
+
+/* One table file: "<variant> <base>" per line, '#'/';' comments. A variant declared twice with different bases
+   (two packs disagree) is dropped, so neither pack's base is applied by accident. */
+static int table_read(const char *path) {
+    char line[256];
+    int n = 0;
+    FILE *f = fopen(path, "r");
+    if (!f) return -1;
     while (fgets(line, sizeof(line), f)) {
         unsigned long v, b;
         char *p = line;
         while (*p == ' ' || *p == '\t') p++;
         if (*p == '#' || *p == ';' || *p == '\r' || *p == '\n' || !*p) continue;
         if (sscanf(p, "%lu %lu", &v, &b) != 2 || v == 0 || v > 0xffff || b == 0 || b > 0xffff || v == b) {
-            logf("table: bad line '%s'", p);
+            logf("table: %s: bad line '%s'", path, p);
+            continue;
+        }
+        if (g_conflict[v]) continue;
+        if (g_base[v] && g_base[v] != (WORD)b) {
+            logf("### table: %s: variant %lu -> base %lu, but an earlier table said base %u - variant DROPPED",
+                 path, v, b, g_base[v]);
+            g_conflict[v] = 1; g_base[v] = 0; g_nvariants--;
             continue;
         }
         if (!g_base[v]) g_nvariants++;
         g_base[v] = (WORD)b;
-        logf("table: variant %lu -> base %lu", v, b);
+        n++;
+        logf("table: %s: variant %lu -> base %lu", path, v, b);
     }
     fclose(f);
-    logf("table: %s, %d variant(s)", path, g_nvariants);
+    return n;
+}
+
+/* Sources, in order (task netpack 2026-10-13):
+   1. SC3NETMOD_TABLE=<path>: that file only (tests).
+   2. every <root>\mods\netmod\tables\*.txt, name order: one per installed netpack package (netpack.py install).
+   3. Apps\Res\netmod_variants.txt: the single-mod table newpiece.py installs (kept for old installs). */
+static void table_load(void) {
+    char path[MAX_PATH], pat[MAX_PATH], *slash;
+    WIN32_FIND_DATAA fd;
+    HANDLE h;
+    int n, nfiles = 0;
+    if (GetEnvironmentVariableA("SC3NETMOD_TABLE", path, sizeof(path))) {
+        n = table_read(path);
+        logf("table: SC3NETMOD_TABLE %s: %s", path, n < 0 ? "not found" : "read");
+        logf("table: %d variant(s)", g_nvariants);
+        return;
+    }
+    if (g_rootlen) {
+        /* FindFirstFileA here is kernel32's own: this module's IAT is never hooked (ov_hook_all skips g_self). */
+        _snprintf(pat, sizeof(pat), "%smods\\netmod\\tables\\*.txt", g_root);
+        pat[sizeof(pat) - 1] = 0;
+        h = FindFirstFileA(pat, &fd);
+        if (h != INVALID_HANDLE_VALUE) {
+            char names[64][MAX_PATH];
+            int k, j, cnt = 0;
+            do {
+                if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && cnt < 64) lstrcpynA(names[cnt++], fd.cFileName, MAX_PATH);
+            } while (FindNextFileA(h, &fd));
+            FindClose(h);
+            for (k = 1; k < cnt; k++)                     /* name order, so the result does not depend on the FS */
+                for (j = k; j > 0 && lstrcmpiA(names[j - 1], names[j]) > 0; j--) {
+                    char t[MAX_PATH]; lstrcpyA(t, names[j]); lstrcpyA(names[j], names[j - 1]); lstrcpyA(names[j - 1], t);
+                }
+            for (k = 0; k < cnt; k++) {
+                _snprintf(path, sizeof(path), "%smods\\netmod\\tables\\%s", g_root, names[k]);
+                path[sizeof(path) - 1] = 0;
+                if (table_read(path) >= 0) nfiles++;
+            }
+        }
+    }
+    /* Apps\SC3U.exe -> Apps\Res\netmod_variants.txt (newpiece.py's single-mod install) */
+    if (GetModuleFileNameA(NULL, path, sizeof(path)) && (slash = strrchr(path, '\\')) != NULL) {
+        slash[1] = 0;
+        lstrcatA(path, "Res\\netmod_variants.txt");
+        if (table_read(path) >= 0) nfiles++;
+    }
+    logf("table: %d table file(s), %d variant(s)", nfiles, g_nvariants);
 }
 
 /* ============================================================ patch helpers */
@@ -575,6 +647,377 @@ static int patch_load(BYTE *m) {
     return write_rel(p, 0xE9, (void *)load_begin_hook, 5);
 }
 
+/* ============================================================ 3. OVERLAY: mods\netmod\overlay serves game files */
+
+/* Task netpack (2026-10-13, re/analysis/NETPACK.md). `netpack.py install` (overlay mode) writes every built file to
+ * <root>\mods\netmod\overlay\<path relative to root> and never writes under Apps\. This block makes the game read
+ * them: a read-only open of <root>\X is served from overlay\X when that file exists, and a directory listing of a
+ * folder the overlay mirrors is merged (stock entries first, then overlay-only names), so a new Res\Sprites\*.DAT is
+ * enumerated like a shipped one. Without this DLL the game sees the stock install only.
+ *
+ * Every game module imports CreateFileA / GetFileAttributesA / FindFirstFileA / FindNextFileA / FindClose from
+ * KERNEL32.dll by name, ANSI only; fopen/_sopen reach CreateFileA through the shipped MSVCRT.DLL's own import (import
+ * tables read with pefile, 2026-10-13). So the hooks are IAT slots in every loaded module, re-armed after every
+ * LoadLibraryA/ExA returns (the sim DLLs load after injection). Writes are never redirected.
+ * Off: SC3NETMOD_OVERLAY=0, or no <root>\mods\netmod\overlay folder (then nothing is hooked).
+ * SC3NETMOD_FILELOG=1 logs every hooked call on a path under <root>\Apps\Res, with the calling module. */
+
+typedef HANDLE (WINAPI *PFN_CreateFileA)(LPCSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
+typedef DWORD  (WINAPI *PFN_GetFileAttributesA)(LPCSTR);
+typedef HANDLE (WINAPI *PFN_FindFirstFileA)(LPCSTR, LPWIN32_FIND_DATAA);
+typedef BOOL   (WINAPI *PFN_FindNextFileA)(HANDLE, LPWIN32_FIND_DATAA);
+typedef BOOL   (WINAPI *PFN_FindClose)(HANDLE);
+typedef HMODULE (WINAPI *PFN_LoadLibraryA)(LPCSTR);
+typedef HMODULE (WINAPI *PFN_LoadLibraryExA)(LPCSTR, HANDLE, DWORD);
+
+static PFN_CreateFileA o_CreateFileA;
+static PFN_GetFileAttributesA o_GetFileAttributesA;
+static PFN_FindFirstFileA o_FindFirstFileA;
+static PFN_FindNextFileA o_FindNextFileA;
+static PFN_FindClose o_FindClose;
+static PFN_LoadLibraryA o_LoadLibraryA;
+static PFN_LoadLibraryExA o_LoadLibraryExA;
+
+static int g_ov_on, g_filelog;
+static char g_ovdir[MAX_PATH];       /* <root>\mods\netmod\overlay\ */
+static int g_ovdirlen;
+static char **g_ovfiles;             /* overlay files, path relative to the overlay = relative to root */
+static int g_novfiles;
+static CRITICAL_SECTION g_ovlock;
+static volatile LONG g_n_redirect;
+
+static void ov_add(const char *rel) {
+    char **n;
+    if (g_novfiles % 64 == 0) {
+        n = (char **)realloc(g_ovfiles, (g_novfiles + 64) * sizeof(char *));
+        if (!n) return;
+        g_ovfiles = n;
+    }
+    g_ovfiles[g_novfiles] = _strdup(rel);
+    if (g_ovfiles[g_novfiles]) g_novfiles++;
+}
+
+static void ov_walk(const char *rel) {          /* rel = "" or "Apps\Res\" (ends with '\') */
+    char pat[MAX_PATH], sub[MAX_PATH];
+    WIN32_FIND_DATAA fd;
+    HANDLE h;
+    _snprintf(pat, sizeof(pat), "%s%s*", g_ovdir, rel);
+    pat[sizeof(pat) - 1] = 0;
+    h = FindFirstFileA(pat, &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        if (!lstrcmpA(fd.cFileName, ".") || !lstrcmpA(fd.cFileName, "..")) continue;
+        _snprintf(sub, sizeof(sub), "%s%s", rel, fd.cFileName);
+        sub[sizeof(sub) - 1] = 0;
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            lstrcatA(sub, "\\");
+            ov_walk(sub);
+        } else {
+            ov_add(sub);
+        }
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+}
+
+/* full path of `in` under the root -> pointer to its root-relative part inside `full`, else NULL */
+static const char *ov_rel(LPCSTR in, char *full) {
+    DWORD n;
+    if (!in || !g_rootlen) return NULL;
+    n = GetFullPathNameA(in, MAX_PATH, full, NULL);
+    if (!n || n >= MAX_PATH) return NULL;
+    if (_strnicmp(full, g_root, g_rootlen)) return NULL;
+    return full + g_rootlen;
+}
+
+/* `in` names a file the overlay holds -> overlay path in `out`, 1 */
+static int ov_map(LPCSTR in, char *out) {
+    char full[MAX_PATH];
+    const char *rel = ov_rel(in, full);
+    int i;
+    if (!rel) return 0;
+    for (i = 0; i < g_novfiles; i++) {
+        if (!lstrcmpiA(g_ovfiles[i], rel)) {
+            _snprintf(out, MAX_PATH, "%s%s", g_ovdir, g_ovfiles[i]);
+            out[MAX_PATH - 1] = 0;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int is_res(LPCSTR in) {
+    char full[MAX_PATH];
+    const char *rel = ov_rel(in, full);
+    return rel && !_strnicmp(rel, "Apps\\Res\\", 9);
+}
+
+static const char *caller_mod(void *ret, char *buf, int cap) {
+    HMODULE m = NULL;
+    char *s;
+    buf[0] = 0;
+    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (LPCSTR)ret, &m) && GetModuleFileNameA(m, buf, cap)) {
+        s = strrchr(buf, '\\');
+        return s ? s + 1 : buf;
+    }
+    return "?";
+}
+
+#define WANTS_WRITE(acc) ((acc) & (GENERIC_WRITE | GENERIC_ALL | FILE_WRITE_DATA | FILE_APPEND_DATA | DELETE))
+
+static HANDLE WINAPI h_CreateFileA(LPCSTR name, DWORD acc, DWORD share, LPSECURITY_ATTRIBUTES sa, DWORD disp,
+                                   DWORD flags, HANDLE tmpl) {
+    char alt[MAX_PATH], who[MAX_PATH];
+    HANDLE r;
+    if (!WANTS_WRITE(acc) && (disp == OPEN_EXISTING || disp == OPEN_ALWAYS) && ov_map(name, alt)) {
+        r = o_CreateFileA(alt, acc, share, sa, OPEN_EXISTING, flags, tmpl);
+        InterlockedIncrement(&g_n_redirect);
+        logf("overlay: CreateFileA \"%s\" -> \"%s\" %s (%s)", name, alt, r == INVALID_HANDLE_VALUE ? "FAIL" : "ok",
+             caller_mod(_ReturnAddress(), who, sizeof(who)));
+        return r;
+    }
+    r = o_CreateFileA(name, acc, share, sa, disp, flags, tmpl);
+    if (g_filelog && is_res(name))
+        logf("filelog: CreateFileA \"%s\" acc 0x%lX disp %lu -> %s (%s)%s", name, acc, disp,
+             r == INVALID_HANDLE_VALUE ? "FAIL" : "ok", caller_mod(_ReturnAddress(), who, sizeof(who)),
+             WANTS_WRITE(acc) && ov_map(name, alt) ? " ### WRITE to an overlaid path, not redirected" : "");
+    return r;
+}
+
+static DWORD WINAPI h_GetFileAttributesA(LPCSTR name) {
+    char alt[MAX_PATH], who[MAX_PATH];
+    DWORD r;
+    if (ov_map(name, alt)) {
+        r = o_GetFileAttributesA(alt);
+        logf("overlay: GetFileAttributesA \"%s\" -> overlay %s (%s)", name,
+             r == INVALID_FILE_ATTRIBUTES ? "MISSING" : "exists", caller_mod(_ReturnAddress(), who, sizeof(who)));
+        return r;
+    }
+    r = o_GetFileAttributesA(name);
+    if (g_filelog && is_res(name))
+        logf("filelog: GetFileAttributesA \"%s\" -> %s (%s)", name, r == INVALID_FILE_ATTRIBUTES ? "MISSING" : "exists",
+             caller_mod(_ReturnAddress(), who, sizeof(who)));
+    return r;
+}
+
+/* ---- merged directory listings: our handles are FindCtx pointers kept in g_finds ---- */
+typedef struct { WIN32_FIND_DATAA *e; int n, pos; } FindCtx;
+static FindCtx *g_finds[64];
+
+static int wild(const char *p, const char *s) {           /* '*' and '?', case-insensitive */
+    for (; *p; p++, s++) {
+        if (*p == '*') {
+            while (p[1] == '*') p++;
+            if (!p[1]) return 1;
+            for (; *s; s++) if (wild(p + 1, s)) return 1;
+            return 0;
+        }
+        if (!*s) return 0;
+        if (*p != '?' && toupper((unsigned char)*p) != toupper((unsigned char)*s)) return 0;
+    }
+    return !*s;
+}
+
+static void fc_push(FindCtx *c, const WIN32_FIND_DATAA *d) {
+    int i;
+    for (i = 0; i < c->n; i++)
+        if (!lstrcmpiA(c->e[i].cFileName, d->cFileName)) { c->e[i] = *d; return; }   /* overlay replaces stock */
+    if (c->n % 32 == 0) {
+        WIN32_FIND_DATAA *n = (WIN32_FIND_DATAA *)realloc(c->e, (c->n + 32) * sizeof(*n));
+        if (!n) return;
+        c->e = n;
+    }
+    c->e[c->n++] = *d;
+}
+
+static int fc_ours(HANDLE h) {
+    int i;
+    for (i = 0; i < 64; i++) if (g_finds[i] && (HANDLE)g_finds[i] == h) return i;
+    return -1;
+}
+
+static HANDLE WINAPI h_FindFirstFileA(LPCSTR pat, LPWIN32_FIND_DATAA d) {
+    char full[MAX_PATH], dir[MAX_PATH], opat[MAX_PATH], who[MAX_PATH];
+    const char *rel = ov_rel(pat, full), *spec;
+    char *slash;
+    int i, dlen, slot, extra = 0;
+    FindCtx *c;
+    WIN32_FIND_DATAA fd;
+    HANDLE h;
+    if (rel) {
+        lstrcpynA(dir, rel, sizeof(dir));
+        slash = strrchr(dir, '\\');
+        if (slash) { slash[1] = 0; spec = rel + (slash + 1 - dir); } else { dir[0] = 0; spec = rel; }
+        dlen = lstrlenA(dir);
+        for (i = 0; i < g_novfiles; i++)
+            if (!_strnicmp(g_ovfiles[i], dir, dlen) && !strchr(g_ovfiles[i] + dlen, '\\') && wild(spec, g_ovfiles[i] + dlen))
+                extra++;
+        if (extra) {
+            c = (FindCtx *)calloc(1, sizeof(FindCtx));
+            if (!c) goto plain;
+            h = o_FindFirstFileA(pat, &fd);
+            if (h != INVALID_HANDLE_VALUE) {
+                do fc_push(c, &fd); while (o_FindNextFileA(h, &fd));
+                o_FindClose(h);
+            }
+            for (i = 0; i < g_novfiles; i++) {
+                if (_strnicmp(g_ovfiles[i], dir, dlen) || strchr(g_ovfiles[i] + dlen, '\\') || !wild(spec, g_ovfiles[i] + dlen))
+                    continue;
+                _snprintf(opat, sizeof(opat), "%s%s", g_ovdir, g_ovfiles[i]);
+                opat[sizeof(opat) - 1] = 0;
+                h = o_FindFirstFileA(opat, &fd);
+                if (h != INVALID_HANDLE_VALUE) { fc_push(c, &fd); o_FindClose(h); }
+            }
+            EnterCriticalSection(&g_ovlock);
+            for (slot = 0; slot < 64 && g_finds[slot]; slot++) ;
+            if (slot < 64) g_finds[slot] = c;
+            LeaveCriticalSection(&g_ovlock);
+            logf("overlay: FindFirstFileA \"%s\" -> merged listing, %d entries incl. %d from the overlay (%s)", pat, c->n,
+                 extra, caller_mod(_ReturnAddress(), who, sizeof(who)));
+            if (slot == 64 || !c->n) {
+                free(c->e); free(c);
+                if (slot < 64) { EnterCriticalSection(&g_ovlock); g_finds[slot] = NULL; LeaveCriticalSection(&g_ovlock); }
+                if (slot == 64) { logf("### overlay: 64 merged listings open, plain listing"); goto plain; }
+                SetLastError(ERROR_FILE_NOT_FOUND);
+                return INVALID_HANDLE_VALUE;
+            }
+            *d = c->e[0];
+            c->pos = 1;
+            return (HANDLE)c;
+        }
+    }
+plain:
+    h = o_FindFirstFileA(pat, d);
+    if (g_filelog && is_res(pat))
+        logf("filelog: FindFirstFileA \"%s\" -> %s (%s)", pat, h == INVALID_HANDLE_VALUE ? "none" : d->cFileName,
+             caller_mod(_ReturnAddress(), who, sizeof(who)));
+    return h;
+}
+
+static BOOL WINAPI h_FindNextFileA(HANDLE h, LPWIN32_FIND_DATAA d) {
+    int i = fc_ours(h);
+    FindCtx *c;
+    if (i < 0) return o_FindNextFileA(h, d);
+    c = g_finds[i];
+    if (c->pos >= c->n) { SetLastError(ERROR_NO_MORE_FILES); return FALSE; }
+    *d = c->e[c->pos++];
+    return TRUE;
+}
+
+static BOOL WINAPI h_FindClose(HANDLE h) {
+    int i;
+    FindCtx *c;
+    EnterCriticalSection(&g_ovlock);
+    i = fc_ours(h);
+    c = i >= 0 ? g_finds[i] : NULL;
+    if (c) g_finds[i] = NULL;
+    LeaveCriticalSection(&g_ovlock);
+    if (!c) return o_FindClose(h);
+    free(c->e);
+    free(c);
+    return TRUE;
+}
+
+static void ov_hook_all(void);
+
+static HMODULE WINAPI h_LoadLibraryA(LPCSTR name) {
+    HMODULE r = o_LoadLibraryA(name);
+    if (r) ov_hook_all();
+    return r;
+}
+
+static HMODULE WINAPI h_LoadLibraryExA(LPCSTR name, HANDLE f, DWORD flags) {
+    HMODULE r = o_LoadLibraryExA(name, f, flags);
+    if (r && !(flags & (LOAD_LIBRARY_AS_DATAFILE | 0x40 /* AS_IMAGE_RESOURCE */))) ov_hook_all();
+    return r;
+}
+
+/* Patch module m's KERNEL32.dll import of `fn` (looked up by name in the import name table) to `to`. */
+static int iat_patch(BYTE *m, const char *fn, void *to) {
+    IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER *)m;
+    IMAGE_NT_HEADERS *nt;
+    IMAGE_IMPORT_DESCRIPTOR *imp;
+    DWORD rva;
+    int hits = 0;
+    if (IsBadReadPtr(dos, sizeof(*dos)) || dos->e_magic != IMAGE_DOS_SIGNATURE) return 0;
+    nt = (IMAGE_NT_HEADERS *)(m + dos->e_lfanew);
+    if (IsBadReadPtr(nt, sizeof(*nt)) || nt->Signature != IMAGE_NT_SIGNATURE) return 0;
+    rva = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
+    if (!rva) return 0;
+    for (imp = (IMAGE_IMPORT_DESCRIPTOR *)(m + rva); imp->Name; imp++) {
+        IMAGE_THUNK_DATA *names, *slots;
+        if (lstrcmpiA((const char *)(m + imp->Name), "KERNEL32.dll") || !imp->OriginalFirstThunk) continue;
+        names = (IMAGE_THUNK_DATA *)(m + imp->OriginalFirstThunk);
+        slots = (IMAGE_THUNK_DATA *)(m + imp->FirstThunk);
+        for (; names->u1.AddressOfData; names++, slots++) {
+            IMAGE_IMPORT_BY_NAME *ibn;
+            if (IMAGE_SNAP_BY_ORDINAL(names->u1.Ordinal)) continue;
+            ibn = (IMAGE_IMPORT_BY_NAME *)(m + names->u1.AddressOfData);
+            if (lstrcmpA((const char *)ibn->Name, fn)) continue;
+            if (slots->u1.Function != (DWORD)to && write_code((BYTE *)&slots->u1.Function, &to, 4)) hits++;
+        }
+    }
+    return hits;
+}
+
+static void ov_hook_all(void) {
+    typedef BOOL (WINAPI *PFN_EPM)(HANDLE, HMODULE *, DWORD, LPDWORD);
+    static PFN_EPM epm;
+    HMODULE mods[512];
+    DWORD needed = 0, i;
+    int hits = 0;
+    if (!epm) epm = (PFN_EPM)GetProcAddress(GetModuleHandleA("KERNEL32.dll"), "K32EnumProcessModules");
+    if (!epm || !epm(GetCurrentProcess(), mods, sizeof(mods), &needed)) return;
+    EnterCriticalSection(&g_ovlock);
+    for (i = 0; i < needed / sizeof(HMODULE) && i < 512; i++) {
+        BYTE *m = (BYTE *)mods[i];
+        if (mods[i] == g_self) continue;                 /* our own reads stay on kernel32 */
+        hits += iat_patch(m, "CreateFileA", (void *)h_CreateFileA);
+        hits += iat_patch(m, "GetFileAttributesA", (void *)h_GetFileAttributesA);
+        hits += iat_patch(m, "FindFirstFileA", (void *)h_FindFirstFileA);
+        hits += iat_patch(m, "FindNextFileA", (void *)h_FindNextFileA);
+        hits += iat_patch(m, "FindClose", (void *)h_FindClose);
+        hits += iat_patch(m, "LoadLibraryA", (void *)h_LoadLibraryA);
+        hits += iat_patch(m, "LoadLibraryExA", (void *)h_LoadLibraryExA);
+    }
+    LeaveCriticalSection(&g_ovlock);
+    if (hits) logf("overlay: %d import slot(s) hooked over %lu module(s)", hits, needed / sizeof(HMODULE));
+}
+
+/* Runs in DllMain: mods_launch injects while the game's main thread is still suspended, so the hooks are in place
+   before the game opens any resource. Only kernel32 calls here (loader lock). */
+static void overlay_init(void) {
+    char v[8];
+    HMODULE k = GetModuleHandleA("KERNEL32.dll");
+    InitializeCriticalSection(&g_ovlock);
+    g_filelog = GetEnvironmentVariableA("SC3NETMOD_FILELOG", v, sizeof(v)) && v[0] == '1';
+    if (env_off("SC3NETMOD_OVERLAY")) { logf("overlay: off (SC3NETMOD_OVERLAY=0)"); if (!g_filelog) return; }
+    else if (g_rootlen) {
+        _snprintf(g_ovdir, sizeof(g_ovdir), "%smods\\netmod\\overlay\\", g_root);
+        g_ovdir[sizeof(g_ovdir) - 1] = 0;
+        g_ovdirlen = lstrlenA(g_ovdir);
+        if (GetFileAttributesA(g_ovdir) != INVALID_FILE_ATTRIBUTES) ov_walk("");
+        logf("overlay: %s, %d file(s)", g_ovdir, g_novfiles);
+    }
+    if (!g_novfiles && !g_filelog) return;
+    o_CreateFileA = (PFN_CreateFileA)GetProcAddress(k, "CreateFileA");
+    o_GetFileAttributesA = (PFN_GetFileAttributesA)GetProcAddress(k, "GetFileAttributesA");
+    o_FindFirstFileA = (PFN_FindFirstFileA)GetProcAddress(k, "FindFirstFileA");
+    o_FindNextFileA = (PFN_FindNextFileA)GetProcAddress(k, "FindNextFileA");
+    o_FindClose = (PFN_FindClose)GetProcAddress(k, "FindClose");
+    o_LoadLibraryA = (PFN_LoadLibraryA)GetProcAddress(k, "LoadLibraryA");
+    o_LoadLibraryExA = (PFN_LoadLibraryExA)GetProcAddress(k, "LoadLibraryExA");
+    if (!o_CreateFileA || !o_GetFileAttributesA || !o_FindFirstFileA || !o_FindNextFileA || !o_FindClose
+        || !o_LoadLibraryA || !o_LoadLibraryExA) {
+        logf("### overlay: kernel32 originals not bound, overlay OFF");
+        g_novfiles = 0;
+        return;
+    }
+    g_ov_on = 1;
+    ov_hook_all();
+    logf("overlay: ON (%d file(s)%s)", g_novfiles, g_filelog ? ", file log on" : "");
+}
+
 /* ============================================================ arming */
 
 static DWORD WINAPI watcher(LPVOID param) {
@@ -616,6 +1059,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
             self_path(path, sizeof(path), "sc3netmod.log");
         g_log = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         logf("### sc3netmod loaded");
+        root_init();
+        overlay_init();
         CreateThread(NULL, 0, watcher, NULL, 0, NULL);
     }
     return TRUE;

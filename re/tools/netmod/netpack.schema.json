@@ -1,0 +1,504 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nanofives/sc3kre/re/tools/netmod/netpack.schema.json",
+  "title": "netpack manifest (SimCity 3000 network mod package)",
+  "description": "One folder per package; this is its manifest.json. Guide: re/analysis/NETPACK.md. Tool: re/tools/netmod/netpack.py.",
+  "type": "object",
+  "required": [
+    "netpack",
+    "name",
+    "version"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "netpack": {
+      "const": 1,
+      "description": "Schema version."
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,47}$",
+      "description": "Unique package name; also its folder under mods\\netmod\\packs and its variant table name."
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "author": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "game": {
+      "type": "object",
+      "description": "Anchors: game-root-relative path -> sha256 of the stock file the package was made against. install and validate refuse a tree whose file differs.",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[0-9a-fA-F]{64}$"
+      }
+    },
+    "variants": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/variant"
+      }
+    },
+    "reskins": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/reskin"
+      }
+    },
+    "rule_edits": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/rule_edit"
+      },
+      "description": "TilingRules edits, format agreed with the netrules session (re/tools/netmod/netpack_rules.py). Indexes are 0-based in the STOCK file."
+    },
+    "ini": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ini_edit"
+      }
+    }
+  },
+  "$defs": {
+    "piece_id": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "network": {
+      "enum": [
+        "ROAD",
+        "RAIL",
+        "POWR",
+        "HWAY",
+        "PIPE",
+        "SUBW"
+      ]
+    },
+    "recolor": {
+      "oneOf": [
+        {
+          "enum": [
+            "blue",
+            "green",
+            "red",
+            "gray",
+            "yellow"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mul": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0
+              },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "add": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": -255,
+                "maximum": 255
+              },
+              "minItems": 3,
+              "maxItems": 3
+            }
+          }
+        }
+      ]
+    },
+    "art": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Start from the frames of piece `from` (variants: default = base; reskins: always the piece itself), optionally recolour them, then replace any frame that has a PNG in png_dir (file names zZ_rR.png, layer > 0: lL_zZ_rR.png; same size as the frame).",
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/piece_id"
+        },
+        "recolor": {
+          "$ref": "#/$defs/recolor"
+        },
+        "png_dir": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "names": {
+      "description": "Piece name: one string for every language folder, or {folder or \"*\": text} (folders of Apps\\Res\\Text; the Spanish GOG install keeps Spanish in ENGLISH).",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minProperties": 1
+        }
+      ]
+    },
+    "variant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "base",
+        "network"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/piece_id",
+          "description": "New piece id: no stock exemplar, not 15130..15141."
+        },
+        "base": {
+          "$ref": "#/$defs/piece_id",
+          "description": "Stock piece the variant behaves as (exemplar, cost, traffic, crossings, the id written to saves)."
+        },
+        "network": {
+          "$ref": "#/$defs/network"
+        },
+        "name": {
+          "$ref": "#/$defs/names"
+        },
+        "art": {
+          "$ref": "#/$defs/art"
+        },
+        "trblkatt": {
+          "enum": [
+            "copy_base",
+            "none"
+          ],
+          "default": "copy_base"
+        }
+      }
+    },
+    "reskin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "piece",
+        "art"
+      ],
+      "properties": {
+        "piece": {
+          "$ref": "#/$defs/piece_id"
+        },
+        "art": {
+          "$ref": "#/$defs/art"
+        }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selector",
+        "results"
+      ],
+      "properties": {
+        "selector": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "conds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/record"
+          }
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/record"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "rule_edit": {
+      "type": "object",
+      "required": [
+        "op",
+        "file"
+      ],
+      "properties": {
+        "op": {
+          "enum": [
+            "set_results",
+            "insert_rule",
+            "delete_rule",
+            "list_add",
+            "list_remove",
+            "convert_add",
+            "convert_remove"
+          ]
+        },
+        "file": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_]+\\.txt$",
+          "description": "A file name in Apps\\Res\\TilingRules (case-insensitive)."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "const": "set_results"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "rule",
+              "expect",
+              "results"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "op": {},
+              "file": {},
+              "rule": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "0-based index into the STOCK file's rules"
+              },
+              "expect": {
+                "$ref": "#/$defs/rule"
+              },
+              "results": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/record"
+                },
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "const": "insert_rule"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "at",
+              "rule"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "op": {},
+              "file": {},
+              "at": {
+                "oneOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "0-based index into the STOCK file's rules"
+                  },
+                  {
+                    "const": "end"
+                  }
+                ]
+              },
+              "rule": {
+                "$ref": "#/$defs/rule"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "const": "delete_rule"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "rule",
+              "expect"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "op": {},
+              "file": {},
+              "rule": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "0-based index into the STOCK file's rules"
+              },
+              "expect": {
+                "$ref": "#/$defs/rule"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "enum": [
+                  "list_add",
+                  "list_remove"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "ids"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "op": {},
+              "file": {},
+              "ids": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "enum": [
+                  "convert_add",
+                  "convert_remove"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "from",
+              "to"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "op": {},
+              "file": {},
+              "from": {
+                "$ref": "#/$defs/piece_state"
+              },
+              "to": {
+                "$ref": "#/$defs/piece_state"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "ini_edit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "section",
+        "key",
+        "value"
+      ],
+      "description": "A key inside a SYS.PAK member (the archive wins over loose files, SC3U 0x004872e8). set = change an existing key, add = a new key at the end of the section.",
+      "properties": {
+        "file": {
+          "type": "string",
+          "description": "SYS.PAK member name, e.g. Occupant.ini"
+        },
+        "section": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": "string"
+        },
+        "op": {
+          "enum": [
+            "set",
+            "add",
+            "append"
+          ],
+          "default": "set",
+          "description": "set = change the one existing key; add = new key, refused if it exists; append = add the line even if the key exists (list sections such as [DBSegments])"
+        }
+      }
+    },
+    "piece_state": {
+      "description": "[id, state]: id 1..65535 with state 0..3, or id 0 with state 5 (empty), 1 (pending), 0 (foreign).",
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        }
+      ]
+    },
+    "record": {
+      "description": "[dir, id, state]: dir 0..23 (5x5 neighbourhood table, SIMNTWRK 0x10032134) or 255 (the tile itself).",
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        {
+          "type": "integer",
+          "anyOf": [
+            {
+              "minimum": 0,
+              "maximum": 23
+            },
+            {
+              "const": 255
+            }
+          ]
+        },
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        }
+      ]
+    }
+  }
+}
