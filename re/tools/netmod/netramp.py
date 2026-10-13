@@ -32,6 +32,9 @@ multi-tile piece). sc3netmod.dll gives ramp-table variants the base's piece clas
   py -3.12 netramp.py tables [--json]        every table, slot, stock id.state and what the slot means
   py -3.12 netramp.py selftest               registry vs the stock SIMNTWRK.DLL bytes
   py -3.12 netramp.py check-saves CITY...    every saved straight on-ramp strip vs FUN_1000abde's case logic
+  py -3.12 netramp.py build-onramp SAVE X,Z [--table mods
+etmod	ables\<pack>.txt] [--show x0,z0,x1,z1]
+                                             the On-ramp tool offline: strip + HWAY/ROAD retile (tiler.py)
 """
 import json
 import os
@@ -431,6 +434,123 @@ def cmd_check_saves(argv):
     return 1 if tot["MISMATCH"] else 0
 
 
+# ------------------------------------------------------------------ simulator: the whole On-ramp interaction offline
+def apply_table_lines(tabs, path):
+    """Read a netpack table file (mods\\netmod\\tables\\<pack>.txt): -> (patched tables copy, {variant: base})."""
+    import copy
+    tabs = copy.deepcopy(tabs)
+    bases = {}
+    for ln in open(path, encoding="latin-1"):
+        w = ln.split()
+        if not w or w[0].startswith(("#", ";")):
+            continue
+        if w[0] == "ramp" and len(w) == 5:
+            s = tabs[w[1]]["slots"][int(w[2])]
+            if s.stock != int(w[3], 16):
+                raise RampError("%s: slot %s %s holds 0x%x, line says 0x%s" % (path, w[1], w[2], s.stock, w[3]))
+            s.stock = int(w[4], 16)
+        elif len(w) == 2:
+            bases[int(w[0])] = int(w[1])
+    return tabs, bases
+
+
+def simulate_onramp(T, tabs, mid, bases=None):
+    """Reproduce the On-ramp tool on a tiler.Tiler for the strip centred on `mid`: FUN_1000abde's straight case
+    (onramp_case, exact highway ids per axis), the three pieces through the table, then the HWAY and ROAD retiles
+    over the strip's box (FUN_10016a25 + FUN_1001547b, netType 4 then 1, 0x1000bb9x..0x1000bc9x). Variants of the
+    table classify as their base (as sc3netmod does). Not modelled: the selection search of FUN_10009d20 (the caller
+    gives the middle cell), terrain heights and funds. -> (case, placed) or (None, [])."""
+    from netmod import tiler
+    for v, b in (bases or {}).items():
+        T.R._kind[v] = T.R.kind(b)
+    lay = T.layer(4)
+    g = {c: (p.id, p.state) for c, p in lay.items()}
+
+    def road_ok(q):                         # FUN_1000ab5b: road predicate DAT_100323c0, not Protected
+        o = lay.get(q)
+        return o is not None and T.predA(1, o) and not T.R.is_protected(1, o.id)
+    x, z = mid
+    case = None
+    for cells in ([(x - 1, z), (x, z), (x + 1, z)], [(x, z - 1), (x, z), (x, z + 1)]):
+        case = onramp_case(cells, g, None, road_ok)
+        if case:
+            break
+    if case is None:
+        return None, []
+    if any(c in lay for c in case[3]):          # FUN_10009c65: a strip cell must be empty (or flora, not modelled)
+        return None, []
+    placed = onramp_pieces(tabs, case)
+    for c, v in placed:
+        lay[c] = tiler.Piece(v >> 8, v & 3, T.C.h(*c))
+    xs = [c[0] for c, _ in placed]
+    zs = [c[1] for c, _ in placed]
+    for net in (4, 1):
+        T.retile(net, T.rect_nodes(net, min(xs), min(zs), max(xs), max(zs)))
+    return case, placed
+
+
+def _grid(lay, x0, z0, x1, z1):
+    out = []
+    for z in range(z0, z1 + 1):
+        out.append("%4d " % z + " ".join(("%5d.%d" % (lay[(x, z)].id, lay[(x, z)].state)) if (x, z) in lay and
+                                        lay[(x, z)].flags is None else "     B " if (x, z) in lay else "      ."
+                                        for x in range(x0, x1 + 1)))
+    out.append("     " + " ".join("%7d" % x for x in range(x0, x1 + 1)))
+    return "\n".join(out)
+
+
+def cmd_build_onramp(argv):
+    """build-onramp SAVE X,Z [X,Z ...] [--table FILE] [--pre x,z=id.state|x,z=- ...] [--show x0,z0,x1,z1]"""
+    import argparse
+    from netmod import tiler, netrules
+    ap = argparse.ArgumentParser(prog="netramp.py build-onramp")
+    ap.add_argument("save")
+    ap.add_argument("mids", nargs="+")
+    ap.add_argument("--table")
+    ap.add_argument("--rules", help="TilingRules dir (default stock); for a pack: stock files + its built ones")
+    ap.add_argument("--pre", nargs="*", default=[])
+    ap.add_argument("--show")
+    ap.add_argument("--expect", help="a save to compare the result with, over --show")
+    a = ap.parse_args(argv)
+    g = paths.Game()
+    rules = tiler.Rules(a.rules or g.tiling)
+    pe = tiler.load_pe(g)
+    opts = tiler.Options()
+    city = netrules.prepared(tiler.City.load(a.save), opts)
+    T = tiler.Tiler(rules, city, opts, pe, netrules.exemplars(g))
+    tabs, bases = tables(), {}
+    if a.table:
+        tabs, bases = apply_table_lines(tabs, a.table)
+    lay = T.layer(4)
+    for e in a.pre:
+        c, v = e.split("=")
+        c = tuple(int(t) for t in c.split(","))
+        if v == "-":
+            lay.pop(c, None)
+        else:
+            i, s = v.split(".")
+            lay[c] = tiler.Piece(int(i), int(s), city.h(*c))
+    box = [int(t) for t in a.show.split(",")] if a.show else None
+    if box:
+        print("before:\n" + _grid(lay, *box))
+    for m in a.mids:
+        case, placed = simulate_onramp(T, tabs, tuple(int(t) for t in m.split(",")), bases)
+        print("on-ramp at %s: %s" % (m, ("case %s, placed %s" % (case[:3], ["%s %d.%d" % (c, v >> 8, v & 255)
+                                                                               for c, v in placed])) if case else
+                                     "refused (no straight case)"))
+    if box:
+        print("after:\n" + _grid(lay, *box))
+    if a.expect and box:
+        ex = tiler.City.load(a.expect).layers["surface"]
+        net = {c: o for c, o in lay.items() if o.flags is None}          # buildings sit in the layer as flags 0
+        diff = [(x, z) for x in range(box[0], box[2] + 1) for z in range(box[1], box[3] + 1)
+                if ((net[(x, z)].id, net[(x, z)].state) if (x, z) in net else None) !=
+                ((ex[(x, z)].id, ex[(x, z)].state) if (x, z) in ex else None)]
+        print("vs %s over the box: %d cell(s) differ %s" % (os.path.basename(a.expect), len(diff), diff[:12]))
+        return 1 if diff else 0
+    return 0
+
+
 # ------------------------------------------------------------------ CLI
 def cmd_tables(argv):
     tabs = tables()
@@ -475,7 +595,8 @@ def cmd_selftest(argv):
 
 
 def main(argv):
-    cmds = {"tables": cmd_tables, "selftest": cmd_selftest, "check-saves": cmd_check_saves}
+    cmds = {"tables": cmd_tables, "selftest": cmd_selftest, "check-saves": cmd_check_saves,
+            "build-onramp": cmd_build_onramp}
     if len(argv) < 2 or argv[1] not in cmds:
         print(__doc__)
         return 2
