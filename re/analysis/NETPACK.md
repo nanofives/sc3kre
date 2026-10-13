@@ -208,3 +208,15 @@ their base's Set / DIAG / Protected membership, Convert rows and Collapse groups
 `"replace_base": true` retargets every rule RESULT that places the base; `bridges` inserts / deletes records of the four
 Bridges files; `crossings` gives a variant its own crossing piece (`mods\netmod\cross\<package>.txt`, read by
 `sc3netmod.dll` XCROSS). Code: `netpack_bridges.py`. Selftest U8..U10.
+
+## 9. Templates: multi-cell intersections (task multitile, 2026-10-13)
+
+Manifest section `templates` (schema `template`, `template_cell`): a fixed block of pieces the player places in one
+click with the On-ramp tool in template mode (keys T / R, sc3netmod TMPL block). netpack checks shape, states, arms
+(exemplar connectivity), inner arms, exits and the 4 generated rotations; install adds the template pieces to their
+network's Protected list (so later retiles keep them), one Collapse.txt group per package (so demolish takes the whole
+block), and `tmpl` lines to `mods\netmod\tables\<package>.txt`. Simulator: `netpack_templates.py place`. Game-proven
+on stock DLLs, guide and evidence: `MULTITILE.md`, `verify/multitile/RESULTS.md`.
+
+Also fixed in that task: `recolor` given as `{"mul": [r,g,b], "add": [r,g,b]}` failed with `unhashable type: 'dict'`
+(the preset lookup hashed the spec before checking it was a string).

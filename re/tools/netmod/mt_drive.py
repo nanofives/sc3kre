@@ -12,6 +12,8 @@ All input is posted to the instance's window (sc3io): no cursor, no focus.
   py -3.12 mt_drive.py TRACE LOG demolish X,Z             Demolish tool click (0x1000400A)
   py -3.12 mt_drive.py TRACE LOG cells X0,Z0,X1,Z1        live grid (piece.state) of the box
   py -3.12 mt_drive.py TRACE LOG goto X,Z                 minimap + pixel search so X,Z is near the view centre
+  py -3.12 mt_drive.py TRACE LOG hover X,Z                hover only (template footprint highlighted, no click)
+  py -3.12 mt_drive.py TRACE LOG pix X,Z [X,Z ...]        client pixel of each cell (JSON), for the shot boxes
 """
 import json
 import os
@@ -132,6 +134,23 @@ def main(argv):
         time.sleep(0.5)
         sc3io.click(v.h, *px)
         time.sleep(3)
+    elif what == "hover":
+        x, z = map(int, argv[4].split(","))
+        cmd(CMD["onramp"])
+        v.reset_cap()
+        px = v.pix(x, z)
+        sc3io.move(v.h, px[0] - 3, px[1] - 2)
+        time.sleep(0.3)
+        sc3io.move(v.h, *px)
+        time.sleep(0.8)
+        print("pixel", px, flush=True)
+    elif what == "pix":
+        cmd(CMD["onramp"])
+        out = {}
+        for a in argv[4:]:
+            x, z = map(int, a.split(","))
+            out[a] = v.pix(x, z)
+        print(json.dumps(out), flush=True)
     elif what == "cells":
         print(grid(cells(argv[4]), argv[4]))
     return 0
