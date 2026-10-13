@@ -195,12 +195,12 @@ SLOPE_RESULT = [  # FUN_1001a2c0 [CONFIRMED @ 0x1001a2c0]: u32[8] each, row = ma
     (0x10031A3C, "HWAY", "after a match: probed neighbour present"),
 ]
 RAMP = [  # u32[4] indexed by direction d (-x 0, -z 1, +x 2, +z 3); far end uses (d+2)&3
-    (0x10031FD8, "ROAD", "FUN_1001c102 slope ramp, netType 1"),
-    (0x10031FE8, "RAIL", "FUN_1001c102 slope ramp, netType 2"),
-    (0x10031FF8, "HWAY", "FUN_1001ca1a onramp, arg5=d, cell local_38"),
-    (0x10032008, "HWAY", "FUN_1001ca1a onramp, arg5=d, cell local_5c"),
-    (0x10032018, "HWAY", "FUN_1001ca1a onramp, arg5=8, cell local_50"),
-    (0x10032028, "HWAY", "FUN_1001ca1a onramp, arg5=8, cell local_44"),
+    (0x10031FD8, "ROAD", "FUN_1001c102 tunnel entrances, netType 1 (NET_RAMPS.md)"),
+    (0x10031FE8, "RAIL", "FUN_1001c102 tunnel entrances, netType 2"),
+    (0x10031FF8, "HWAY", "FUN_1001ca1a highway tunnel, arg5=d, cell local_38"),
+    (0x10032008, "HWAY", "FUN_1001ca1a highway tunnel, arg5=d, cell local_5c"),
+    (0x10032018, "HWAY", "FUN_1001ca1a highway tunnel, arg5=8, cell local_50"),
+    (0x10032028, "HWAY", "FUN_1001ca1a highway tunnel, arg5=8, cell local_44"),
 ]
 LEGACY = [  # FUN_1001272e legacy tilemap import: {s16 base, s16 stride} then 12-byte records
     (0x100313C0, 0x10031688, "codes 0x0e..0x48 (plane 2)"),
@@ -227,11 +227,11 @@ CODE_CONSTANTS = [
       (0x5C, "E=3"), (0x49, "E=4"), (0x3ACB, "E=5")]),
     (0x1000122A, 5225, "bridge builder road/rail/power: fallback end piece id*0x100+axis",
      [(0x1D, "netType 1"), (0x2C, "netType 2"), (0x5C, "netType 3")]),
-    (0x10009D20, 3342, "highway crossing/diagonal test",
+    (0x10009D20, 3342, "On-ramp tool selection (hover), NET_RAMPS.md",
      [(0x49, "in-line cells, pass 0"), (0x2BFA, "alt side cell, pass 0"),
       (0x3ACB, "in-line cells, pass 1"), (0x3AFA, "alt side cell, pass 1"),
       (0x3B07, "corner cell 0x3b07..0x3b0a"), (0x3B0A, "corner cell 0x3b07..0x3b0a")]),
-    (0x1000ABDE, 4375, "diagonal highway placement (no caller found, NETWORK_RULE_ENGINE 12.3)",
+    (0x1000ABDE, 4375, "On-ramp tool build, netmgr vt+0xac (live caller SIMNTWRK 0x1000fa84, NET_RAMPS.md)",
      [(0x49, "base, straight"), (0x2BFA, "alt, straight"), (0x3ACB, "base"), (0x3AFA, "alt")]),
     (0x1001DA5F, 2187, "diagonal pairs recursion",
      [(0x3ACC, "state 0 <-> 2 along x-1,z-1 / x+1,z+1"),

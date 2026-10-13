@@ -40,7 +40,7 @@ own right.
 |---|---|---|
 | `+0xb0` | `FUN_100151f1` | **rectangle invalidate / retile.** `(this, bbox6, netMask)`. Early-outs on the `0x7fffffff` sentinel, then per bit of `netMask`: `bit0\|bit1`→HIGHWAY then ROAD, `bit2`→RAIL, `bit5`→POWER, `bit3`→PIPE, `bit4`→SUBWAY. The shape expected for city load and post-bulldoze refresh. |
 | `+0xf0` | `FUN_10014a23` | **drag/build.** Funds check, then bridge path (netType 1–4 only, path length > 3) or normal path. For HIGHWAY it runs a **second** `FUN_1001547b` pass with netType 1 — highways retile the roads they touch. |
-| `+0xac` | `FUN_1000abde` | reaches `FUN_1001547b`; not read. **No caller found in any of the 30 binaries (§12.3) — an apparently unreferenced virtual.** |
+| `+0xac` | `FUN_1000abde` | reaches `FUN_1001547b`; not read. **No caller found in any of the 30 binaries (§12.3) — an apparently unreferenced virtual.** **2026-10-13 (task netramp): the On-ramp tool build, called live from SIMNTWRK `0x1000fa84` (tool helper, selection vtable `0x1002c184`) <- SIMSPR `+0x495bb`; `NET_RAMPS.md`.** |
 
 ### Phase 1 — occupancy mask and the "dilation pass"
 
