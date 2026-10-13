@@ -217,6 +217,16 @@ class Rules:
                             k = (res.id, res.state)
                             simple[k] = simple.get(k, 15) & (r.selector & 15)
             a.update({k: v for k, v in simple.items() if k not in a})
+            # Complex rules that replace the centre in place (cond (self, id, st) -> result (self, id2, st2), e.g.
+            # POWR #34 92/0 -> pole 14/0) keep the replaced piece's arms
+            for net in NET_TAG:
+                for r in self.complex[net][0]:
+                    src = [c for c in r.conds if c.dir == SELF and c.id]
+                    for res in r.results:
+                        if res.dir == SELF and res.id and src and (res.id, res.state) not in a:
+                            m = a.get((src[0].id, src[0].state))
+                            if m is not None:
+                                a[(res.id, res.state)] = m
             self._arms = a
         return self._arms.get((pid, st))
 
@@ -349,10 +359,23 @@ class City:
         return False
 
 
+# Buildings that sit in a network layer as non-removable occupants (save occupant record +8 type -> layer, flags).
+# Measured, not decoded: subway stations make SUBW agree once they count as 0x40100 occupants (the special case in
+# FUN_10019768), water utilities make PIPE go 98.85% -> 99.91% over the 16 shipped cities as 0x800000 occupants.
+# The pipe layer is city vt+0x120 [CONFIRMED @ 0x10012609], the subway layer vt+0x124.
+STATIONS = {
+    "subway": {12360: ("subway", 0x40100), 12361: ("subway", 0x40100)},
+    "utilities": {12360: ("subway", 0x40100), 12361: ("subway", 0x40100),
+                  12810: ("pipe", 0x800000), 12820: ("pipe", 0x800000),     # Water Pump, Water Treatment Plant
+                  12830: ("pipe", 0x800000), 12840: ("pipe", 0x800000)},    # Desalinization Plant, Water Tower
+}
+
+
 class Options:
-    def __init__(self, conn_masks="exemplar", nb_state="piece", edge_conn="cells", stations="subway",
-                 trace=False):
-        self.stations = stations        # "none" | "subway" (12360/12361 in subway, flags 0x40100)
+    def __init__(self, conn_masks="exemplar", nb_state="piece", edge_conn="cells", stations="utilities",
+                 trace=False, watch=None):
+        self.stations = stations        # "none" | "subway" | "utilities" (STATIONS)
+        self.watch = watch              # trace only events at / writing these cells (None = all)
         self.conn_masks = conn_masks    # "zero" (as shipped, 14.6) | "shape" (diagnostic)
         self.nb_state = nb_state        # "piece" (orientation bits) | "zero" (vt+0xa0 null)
         self.edge_conn = edge_conn      # "none" | "cells" (save neighbour-deal edge cells) | "all"
@@ -360,7 +383,7 @@ class Options:
 
 
 class Event:
-    __slots__ = ("stage", "cell", "rule", "mask", "obs", "results", "committed", "why")
+    __slots__ = ("stage", "cell", "rule", "mask", "obs", "results", "committed", "why", "passno", "after")
 
     def __init__(self, **kw):
         for k in self.__slots__:
@@ -643,21 +666,37 @@ class Tiler:
                     ok = True
         return ok
 
+    def traced(self, cell, results):
+        """Record an event for this cell? Options.watch limits the trace to events at, or writing, those cells."""
+        if not self.o.trace:
+            return False
+        w = self.o.watch
+        if w is None or cell in w:
+            return True
+        for r in results or ():
+            dx, dy = DIRS[r.dir]
+            if (cell[0] + dx, cell[1] + dy) in w:
+                return True
+        return False
+
     # ------------------------------------------------------------------ FUN_10016327
     def evaluate(self, net, work, pending_set, changed, deferred, stage_name, mode):
         stage = self.R.stage(stage_name, net)
         lay = self.layer(net)
         work_set = set(work)
+        self.passno = getattr(self, "passno", {})
+        self.passno[stage_name] = self.passno.get(stage_name, 0) + 1
         for cell in list(work):
             if not self.flat(*cell):
                 continue
             mask, recs = self.collect(net, cell, pending_set, work_set, mode)
             rule = self.match(stage, mask, recs)
             if rule is None or not rule.results:
-                if self.o.trace:
+                if self.traced(cell, None):
                     self.events.append(Event(stage=stage_name, cell=cell, rule=rule, mask=mask,
                                              obs=recs, results=None, committed=False,
-                                             why="no rule" if rule is None else "empty result"))
+                                             why="no rule" if rule is None else "empty result",
+                                             passno=self.passno[stage_name]))
                 continue
             ok = True
             why = None
@@ -676,12 +715,20 @@ class Tiler:
                             ok, why = False, "target %s is Protected (%d)" % (t, occ.id)
                 if not ok:
                     break
-            if self.o.trace:
-                self.events.append(Event(stage=stage_name, cell=cell, rule=rule, mask=mask,
-                                         obs=recs, results=rule.results, committed=ok, why=why))
+            ev = None
+            if self.traced(cell, rule.results):
+                ev = Event(stage=stage_name, cell=cell, rule=rule, mask=mask, obs=recs,
+                           results=rule.results, committed=ok, why=why, passno=self.passno[stage_name])
+                self.events.append(ev)
             if not ok:
                 continue
             self.commit(net, cell, rule.results)
+            if ev is not None:
+                ev.after = {}
+                for r in rule.results:
+                    dx, dy = DIRS[r.dir]
+                    t = (cell[0] + dx, cell[1] + dy)
+                    ev.after[t] = lay.get(t)
             for r in rule.results:
                 dx, dy = DIRS[r.dir]
                 t = (cell[0] + dx, cell[1] + dy)
@@ -860,9 +907,10 @@ class Tiler:
             pid, st, row = got
             res = [Rec(pid, SELF, st)]
             ok = self.commit(net, c, res)
-            if self.o.trace:
+            if self.traced(c, res):
                 self.events.append(Event(stage="slope", cell=c, rule=None, mask=row, obs=None,
-                                         results=res, committed=ok, why="slope row %d" % row))
+                                         results=res, committed=ok, why="slope row %d" % row,
+                                         passno=1, after={c: self.layer(net).get(c)}))
         pending = set(list70)
         deferred = []
         while True:                                      # Simple, to fixpoint
@@ -886,6 +934,56 @@ class Tiler:
         changed = []
         self.evaluate(net, work, pending, changed, [], "final", 4)
         return list70
+
+    # ------------------------------------------------------------------ FUN_10016a25
+    def rect_nodes(self, net, x0, y0, x1, y1):
+        """Nodes FUN_10016a25 hands to FUN_1001547b for a rectangle: the rectangle grown by e (2 when
+        netType & 0x12, i.e. RAIL / POWR / SUBW, else 1; FUN_1000aa9a), clipped to the map (FUN_1000aa47 with
+        manager +0x50), then only its four border strips, in this order (x outer, y inner), duplicates kept.
+        A node is an occupant passing the net's positive predicate."""
+        top = self.C.n - 1                                   # +0x5c / +0x60 = (W-1)<<8, (H-1)<<8 (FUN_10012609)
+        e = 2 if net & 0x12 else 1
+        x0, y0 = max(x0 - e, 0), max(y0 - e, 0)
+        x1, y1 = min(x1 + e, top), min(y1 + e, top)
+        ya = min(y0 + e, top)
+        yb = y1 - e
+        y10 = max(yb, 0)
+        y2c, y18 = (0, top) if yb < 0 else (yb, yb)
+        xl, xr = min(x0 + e, top), max(x1 - e, 0)
+        lay = self.layer(net)
+        out = []
+        for xs, ys in ((range(x0, x1 + 1), range(y0, ya + 1)),
+                       (range(x0, xl + 1), range(ya, y10 + 1)),
+                       (range(xr, x1 + 1), range(ya, y18 + 1)),
+                       (range(x0, x1 + 1), range(y2c, y1 + 1))):
+            for x in xs:
+                for y in ys:
+                    o = lay.get((x, y))
+                    if o is not None and self.predA(net, o):
+                        out.append((x, y))
+        return out
+
+    # ------------------------------------------------------------------ FUN_100151f1
+    def retile_rect(self, mask, x0, y0, x1, y1):
+        """GZ message 0x637c0dab {mask, x0<<16|y0, x1<<16|y1} (FUN_10013afe -> vt+0xb0 = FUN_100151f1).
+        Mask bits: 1|2 HWAY then ROAD (over the rectangle grown to HWAY's touched box), 4 RAIL, 0x20 POWR,
+        8 PIPE, 0x10 SUBW. -> {net: work list of the FUN_1001547b call}."""
+        top = self.C.n - 1
+        x0, y0, x1, y1 = max(x0, 0), max(y0, 0), min(x1, top), min(y1, top)
+        done = {}
+        if mask & 3:
+            w = self.retile(4, self.rect_nodes(4, x0, y0, x1, y1))
+            done[4] = w
+            if w:                                            # FUN_1001547b param_3 = box of its work list
+                bx0, by0 = min(c[0] for c in w), min(c[1] for c in w)
+                bx1, by1 = max(c[0] for c in w), max(c[1] for c in w)
+                if bx0 or by0 or bx1 or by1:                 # FUN_10005fad union, skipped for an all-zero box
+                    x0, y0, x1, y1 = min(x0, bx0), min(y0, by0), max(x1, bx1), max(y1, by1)
+            done[1] = self.retile(1, self.rect_nodes(1, x0, y0, x1, y1))
+        for bit, net in ((4, 2), (0x20, 3), (8, 5), (0x10, 6)):
+            if mask & bit:
+                done[net] = self.retile(net, self.rect_nodes(net, x0, y0, x1, y1))
+        return done
 
 
 class Exemplars:
