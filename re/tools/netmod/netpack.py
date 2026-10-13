@@ -65,6 +65,7 @@ import newpiece as NP   # noqa: E402
 import netpack_rules as NR  # noqa: E402
 import netpack_bridges as NB  # noqa: E402  task netbridge: inheritance, replace_base, bridges, crossings
 import netramp as RAMP  # noqa: E402  ramps / on-ramps / tunnels / slopes (NET_RAMPS.md)
+import netpack_lanes as NL  # noqa: E402  task lanekit: lanes (TrBlkAtt) and connects (turn matrices), NET_LANES.md
 
 SCHEMA_VERSION = 1
 SCHEMA_FILE = os.path.join(HERE, "netpack.schema.json")
@@ -524,6 +525,12 @@ def compile_pack(stock, pack_dir, man):
             raise NetpackError(str(e))
     for e in man.get("ini", []):
         out["ini"].append(dict(e, _pack=pname))
+    out["lanekit"] = {"lanes": [], "connects": [], "warnings": [], "info": []}
+    if man.get("lanes") or man.get("connects"):          # task lanekit (netpack_lanes.py, NET_LANES.md)
+        try:
+            out["lanekit"] = NL.compile_entries(stock.root, pack_dir, man)
+        except NL.LanesError as e:
+            raise NetpackError(str(e))
     return out
 
 
@@ -585,6 +592,10 @@ def merge(stock, packs):
         files["Apps/Res/Sprites/%08X_netpack.DAT" % g] = ixf_insert.new_container(recs)
 
     variants = sorted((v for c in comp for v in c["variants"]), key=lambda v: v["id"])
+    try:                                    # task lanekit: edits variant exemplars / records, writes stock copies
+        NL.merge(stock, [(c["name"], c["lanekit"]) for c in comp], {v["id"]: v for v in variants}, files, report)
+    except NL.LanesError as e:
+        raise NetpackError(str(e))
     if variants:
         files[OCC_KOREA] = ixf_insert.new_container([(EX_GROUP, v["id"], EX_TYPE, v["exemplar"]) for v in variants])
         files[CS_KOREA] = ixf_insert.new_container([(KOREA_CS_GROUP, v["id"], CS_TYPE, v["table"]) for v in variants])
@@ -612,7 +623,7 @@ def merge(stock, packs):
     for rel, recs in sorted(trb.items()):
         if not recs:
             continue
-        old = stock.read(rel)
+        old = files.get(rel) or stock.read(rel)          # task lanekit may have replaced stock records already
         recs = sorted(recs, key=lambda r: r[1])
         try:
             new = ixf_insert.append(old, recs)

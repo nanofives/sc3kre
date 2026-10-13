@@ -239,9 +239,11 @@ class Game:
     def masks(self, pid):
         """-> {"road": u32, "rail": u32, "subway": u32} or None (no exemplar)."""
         ex = self.exemplars().get(pid)
-        if ex is None:
-            return None
-        props = tkb1_u32(ex)
+        return None if ex is None else self.masks_of(ex)
+
+    @staticmethod
+    def masks_of(exemplar):
+        props = tkb1_u32(exemplar)
         return {net: props.get(p, 0) for net, p in CONN_PROPS.items()}
 
 
@@ -428,7 +430,36 @@ def _resolve_point(v, cls, slots):
     return list(v)
 
 
-def compile_spec(spec, game, lang="ENGLISH"):
+MIRROR_LANGS = ("English-UK",)     # its VPathAtt.IXF holds every vehicle curve reversed under the same key
+
+
+def mirror_spec(spec):
+    """The other driving side: every vehicle lane reversed (from <-> to, via reversed, same curve key). English-UK's
+    VPathAtt.IXF stores each curve reversed under the same key, and its TrBlkAtt edges run the other way (NET_LANES.md
+    4). Explicit vehicle "exits" are dropped: the reversed lanes end where the old ones started and get their exits
+    from there. Connects are untouched (one exemplar serves both: low half = ENGLISH lanes, high half = UK lanes)."""
+    m = json.loads(json.dumps(spec))
+    v = m.get("vehicle") or {}
+    for lane in v.get("lanes", []):
+        lane["from"], lane["to"] = lane["to"], lane["from"]
+        if "via" in lane:
+            lane["via"] = lane["via"][::-1]
+        if isinstance(lane.get("path"), list):
+            lane["path"] = lane["path"][::-1]
+    if v.get("exits"):
+        v.pop("exits")
+        for lane in v.get("lanes", []):
+            lane["exit"] = True
+    m.pop("edge_order", None) if any(m.get("edge_order", {}).get("veh", [])) else None
+    return m
+
+
+def compile_spec(spec, game, lang="ENGLISH", mirror=None):
+    """mirror: None = automatic (True for the languages in MIRROR_LANGS unless the spec says "mirror_uk": false)."""
+    if mirror is None:
+        mirror = lang in MIRROR_LANGS and spec.get("mirror_uk", True)
+    if mirror:
+        spec = mirror_spec(spec)
     """Authoring spec (state 0, local coordinates) -> {"records": {state: bytes}, "masks": {net: u32}, "warnings"}.
 
     spec = {
@@ -571,16 +602,20 @@ def compile_connects(c, turns, warns):
     for net, val in c.items():
         if net not in CONN_PROPS:
             raise LaneError("connects: network %r, use road / rail / subway" % net)
+        # low half = the ENGLISH-side lanes, high half = the English-UK lanes. Every non-zero shipped mask (311 of 311,
+        # NET_LANES.md 2.3) has high == transpose(low): the UK lanes are the ENGLISH ones reversed. A list (or "auto")
+        # gives the low half and the high half follows that rule; {"low", "high"} sets both halves explicitly.
         if val == "auto":
             t = {(f, s) for (n, f, s) in turns if n == net}
             if not t:
                 warns.append("connects %s auto: no %s lane enters and leaves the tile" % (net, net))
-            lo = hi = mask_half(t)
+            lo, hi = mask_half(t), mask_half({(b, a) for a, b in t})
         elif isinstance(val, dict):
             lo = mask_half({(side_of(a), side_of(b)) for a, b in val.get("low", [])})
             hi = mask_half({(side_of(a), side_of(b)) for a, b in val.get("high", [])})
         else:
-            lo = hi = mask_half({(side_of(a), side_of(b)) for a, b in val})
+            t = {(side_of(a), side_of(b)) for a, b in val}
+            lo, hi = mask_half(t), mask_half({(b, a) for a, b in t})
         out[net] = lo | (hi << 16)
     return out
 
@@ -735,7 +770,7 @@ def cmd_describe(a):
         for net, v in m.items():
             if v:
                 lo, hi = v & 0xFFFF, v >> 16
-                if lo == hi:
+                if hi == mask_half({(b, a) for a, b in mask_turns(lo)}):
                     spec["connects"][net] = [[SIDES[x], SIDES[y]] for x, y in mask_turns(lo)]
                 else:
                     spec["connects"][net] = {"low": [[SIDES[x], SIDES[y]] for x, y in mask_turns(lo)],
@@ -942,11 +977,11 @@ def cmd_build(a):
     print(json.dumps(rep, indent=1))
 
 
-def verify_spec(g, spec, lang="ENGLISH", against=None):
+def verify_spec(g, spec, lang="ENGLISH", against=None, mirror=None):
     """Compile a spec and byte-compare every state with the stock records of `against` (default spec piece),
     and each connects mask with the stock exemplar. -> (ok, lines)."""
     pid = against or spec["piece"]
-    c = compile_spec(spec, g, lang)
+    c = compile_spec(spec, g, lang, mirror)
     t = g.trblkatt(lang)
     lines, ok = [], True
     for st, b in sorted(c["records"].items()):
