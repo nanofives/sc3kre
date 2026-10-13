@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nanofives/sc3kre/re/tools/netmod/netpack.schema.json",
+  "title": "netpack manifest (SimCity 3000 network mod package)",
+  "description": "One folder per package; this is its manifest.json. Guide: re/analysis/NETPACK.md. Tool: re/tools/netmod/netpack.py.",
+  "type": "object",
+  "required": ["netpack", "name", "version"],
+  "additionalProperties": false,
+  "properties": {
+    "netpack": {"const": 1, "description": "Schema version."},
+    "name": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,47}$", "description": "Unique package name; also its folder under mods\\netmod\\packs and its variant table name."},
+    "version": {"type": "string", "minLength": 1},
+    "author": {"type": "string"},
+    "description": {"type": "string"},
+    "game": {
+      "type": "object",
+      "description": "Anchors: game-root-relative path -> sha256 of the stock file the package was made against. install and validate refuse a tree whose file differs.",
+      "additionalProperties": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"}
+    },
+    "variants": {"type": "array", "items": {"$ref": "#/$defs/variant"}},
+    "reskins": {"type": "array", "items": {"$ref": "#/$defs/reskin"}},
+    "rules": {"type": "array", "items": {"$ref": "#/$defs/rule_edit"}},
+    "ini": {"type": "array", "items": {"$ref": "#/$defs/ini_edit"}}
+  },
+  "$defs": {
+    "piece_id": {"type": "integer", "minimum": 1, "maximum": 65535},
+    "network": {"enum": ["ROAD", "RAIL", "POWR", "HWAY", "PIPE", "SUBW"]},
+    "value": {
+      "description": "A rule value: raw int (pieceId*256+state, or a sentinel < 256) or \"ID:STATE\" with STATE 0..3.",
+      "oneOf": [
+        {"type": "integer", "minimum": 0},
+        {"type": "string", "pattern": "^\\s*\\d+\\s*:\\s*[0-3]\\s*$"}
+      ]
+    },
+    "dir_val": {
+      "type": "array", "minItems": 2, "maxItems": 2,
+      "prefixItems": [
+        {"type": "integer", "description": "dir: 0..23 index into the 5x5 neighbourhood table at SIMNTWRK 0x10032134, 255 = the tile itself", "anyOf": [{"minimum": 0, "maximum": 23}, {"const": 255}]},
+        {"$ref": "#/$defs/value"}
+      ]
+    },
+    "recolor": {
+      "oneOf": [
+        {"enum": ["blue", "green", "red", "gray", "yellow"]},
+        {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "mul": {"type": "array", "items": {"type": "number", "minimum": 0}, "minItems": 3, "maxItems": 3},
+            "add": {"type": "array", "items": {"type": "integer", "minimum": -255, "maximum": 255}, "minItems": 3, "maxItems": 3}
+          }
+        }
+      ]
+    },
+    "art": {
+      "type": "object", "additionalProperties": false,
+      "description": "Start from the frames of piece `from` (variants: default = base; reskins: always the piece itself), optionally recolour them, then replace any frame that has a PNG in png_dir (file names zZ_rR.png, layer > 0: lL_zZ_rR.png; same size as the frame).",
+      "properties": {
+        "from": {"$ref": "#/$defs/piece_id"},
+        "recolor": {"$ref": "#/$defs/recolor"},
+        "png_dir": {"type": "string", "minLength": 1}
+      }
+    },
+    "names": {
+      "description": "Piece name: one string for every language folder, or {folder or \"*\": text} (folders of Apps\\Res\\Text; the Spanish GOG install keeps Spanish in ENGLISH).",
+      "oneOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}, "minProperties": 1}
+      ]
+    },
+    "variant": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "base", "network"],
+      "properties": {
+        "id": {"$ref": "#/$defs/piece_id", "description": "New piece id: no stock exemplar, not 15130..15141."},
+        "base": {"$ref": "#/$defs/piece_id", "description": "Stock piece the variant behaves as (exemplar, cost, traffic, crossings, the id written to saves)."},
+        "network": {"$ref": "#/$defs/network"},
+        "name": {"$ref": "#/$defs/names"},
+        "art": {"$ref": "#/$defs/art"},
+        "trblkatt": {"enum": ["copy_base", "none"], "default": "copy_base"}
+      }
+    },
+    "reskin": {
+      "type": "object", "additionalProperties": false,
+      "required": ["piece", "art"],
+      "properties": {
+        "piece": {"$ref": "#/$defs/piece_id"},
+        "art": {"$ref": "#/$defs/art"}
+      }
+    },
+    "match": {
+      "type": "object", "additionalProperties": false,
+      "description": "Finds rules: by number in the STOCK file and/or by exact content. expect = how many must match (default 1).",
+      "properties": {
+        "rule": {"type": "integer", "minimum": 1},
+        "selector": {"type": "integer", "minimum": 0},
+        "conds": {"type": "array", "items": {"$ref": "#/$defs/dir_val"}},
+        "results": {"type": "array", "items": {"$ref": "#/$defs/dir_val"}},
+        "expect": {"type": "integer", "minimum": 1}
+      },
+      "anyOf": [{"required": ["rule"]}, {"required": ["selector"]}, {"required": ["conds"]}, {"required": ["results"]}]
+    },
+    "rule": {
+      "type": "object", "additionalProperties": false,
+      "required": ["selector", "results"],
+      "properties": {
+        "selector": {"type": "integer", "minimum": 0},
+        "conds": {"type": "array", "items": {"$ref": "#/$defs/dir_val"}},
+        "results": {"type": "array", "items": {"$ref": "#/$defs/dir_val"}, "minItems": 1}
+      }
+    },
+    "rule_edit": {
+      "type": "object",
+      "required": ["file", "op"],
+      "properties": {
+        "file": {"type": "string", "pattern": "^[A-Za-z0-9_]+\\.txt$", "description": "A file name in Apps\\Res\\TilingRules (case-insensitive)."},
+        "op": {"enum": ["set_results", "replace_rule", "insert_rule", "delete_rule", "set_add", "list_add", "pairs_add"]}
+      },
+      "allOf": [
+        {"if": {"properties": {"op": {"const": "set_results"}}}, "then": {"required": ["match", "results"], "properties": {"match": {"$ref": "#/$defs/match"}, "results": {"type": "array", "items": {"$ref": "#/$defs/dir_val"}, "minItems": 1}}}},
+        {"if": {"properties": {"op": {"const": "replace_rule"}}}, "then": {"required": ["match", "rule"], "properties": {"match": {"$ref": "#/$defs/match"}, "rule": {"$ref": "#/$defs/rule"}}}},
+        {"if": {"properties": {"op": {"const": "delete_rule"}}}, "then": {"required": ["match"], "properties": {"match": {"$ref": "#/$defs/match"}}}},
+        {"if": {"properties": {"op": {"const": "insert_rule"}}}, "then": {"required": ["rule"], "properties": {"rule": {"$ref": "#/$defs/rule"}, "before": {"$ref": "#/$defs/match"}, "after": {"$ref": "#/$defs/match"}, "at": {"enum": ["start", "end"]}}, "oneOf": [{"required": ["before"]}, {"required": ["after"]}, {"required": ["at"]}]}},
+        {"if": {"properties": {"op": {"enum": ["set_add", "list_add"]}}}, "then": {"required": ["ids"], "properties": {"ids": {"type": "array", "items": {"$ref": "#/$defs/piece_id"}, "minItems": 1}}}},
+        {"if": {"properties": {"op": {"const": "pairs_add"}}}, "then": {"required": ["pairs"], "properties": {"pairs": {"type": "array", "minItems": 1, "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/value"}}}}}}
+      ]
+    },
+    "ini_edit": {
+      "type": "object", "additionalProperties": false,
+      "required": ["file", "section", "key", "value"],
+      "description": "A key inside a SYS.PAK member (the archive wins over loose files, SC3U 0x004872e8). set = change an existing key, add = a new key at the end of the section.",
+      "properties": {
+        "file": {"type": "string", "description": "SYS.PAK member name, e.g. Occupant.ini"},
+        "section": {"type": "string"},
+        "key": {"type": "string", "minLength": 1},
+        "value": {"type": "string"},
+        "op": {"enum": ["set", "add"], "default": "set"}
+      }
+    }
+  }
+}

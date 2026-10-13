@@ -1,0 +1,34 @@
+{
+  "netpack": 1,
+  "name": "example_blue_road",
+  "version": "1.0.0",
+  "author": "sc3kre",
+  "description": "Test fixture: road straight 29 cloned as piece 20029 with a blue tint, placed by the two bare straight rules.",
+  "game": {
+    "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+  },
+  "variants": [
+    {
+      "id": 20029,
+      "base": 29,
+      "network": "ROAD",
+      "name": {"*": "Blue road", "ENGLISH": "Carretera azul"},
+      "art": {"from": 29, "recolor": "blue"},
+      "trblkatt": "copy_base"
+    }
+  ],
+  "rules": [
+    {
+      "file": "ROAD_GRND_SimpleRules.txt",
+      "op": "set_results",
+      "match": {"selector": 10, "conds": [], "results": [[255, "29:1"]]},
+      "results": [[255, "20029:1"]]
+    },
+    {
+      "file": "ROAD_GRND_SimpleRules.txt",
+      "op": "set_results",
+      "match": {"selector": 5, "conds": [], "results": [[255, "29:0"]]},
+      "results": [[255, "20029:0"]]
+    }
+  ]
+}
