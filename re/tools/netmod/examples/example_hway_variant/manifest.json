@@ -1,0 +1,26 @@
+{
+  "netpack": 1,
+  "name": "example_hway_variant",
+  "version": "1.0.0",
+  "author": "sc3kre",
+  "description": "Test fixture: highway straight 73 cloned as piece 20073 in yellow; every rule result that places 73 places 20073.",
+  "game": {
+    "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+  },
+  "variants": [
+    {
+      "id": 20073,
+      "base": 73,
+      "network": "HWAY",
+      "name": {
+        "*": "Yellow highway",
+        "ENGLISH": "Autopista amarilla"
+      },
+      "art": {
+        "recolor": "yellow"
+      },
+      "trblkatt": "copy_base",
+      "replace_base": true
+    }
+  ]
+}

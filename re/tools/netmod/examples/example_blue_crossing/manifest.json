@@ -1,0 +1,31 @@
+{
+  "netpack": 1,
+  "name": "example_blue_crossing",
+  "version": "1.0.0",
+  "author": "sc3kre",
+  "description": "Test fixture: a blue level crossing (variant of 69) built when rail crosses the blue road 20029 of example_blue_road.",
+  "game": {
+    "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+  },
+  "variants": [
+    {
+      "id": 20069,
+      "base": 69,
+      "network": "ROAD",
+      "name": {
+        "*": "Blue level crossing",
+        "ENGLISH": "Paso a nivel azul"
+      },
+      "art": {
+        "recolor": "blue"
+      }
+    }
+  ],
+  "crossings": [
+    {
+      "over": 20029,
+      "crossing": 69,
+      "piece": 20069
+    }
+  ]
+}
