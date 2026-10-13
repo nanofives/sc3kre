@@ -688,7 +688,7 @@ def is_identity(order):
 def fmt_matrix(m):
     lo, hi = m & 0xFFFF, m >> 16
     def f(h):
-        return " ".join("%s>%s" % (SIDES[a], SIDES[b]) for a, b in mask_turns(h)) or "-"
+        return " ".join("%s=>%s" % (SIDES[a], SIDES[b]) for a, b in mask_turns(h)) or "-"
     return ("both: " + f(lo)) if lo == hi else ("low: %s | high: %s" % (f(lo), f(hi)))
 
 
@@ -711,7 +711,7 @@ def cmd_show(a):
         r = decode(b)
         print("  state %d: %d bytes flag %d alt %s; lane turns %s" % (
             st, len(b), r["flag"], alt_offsets(r),
-            " ".join("%s>%s" % (SIDES[f], SIDES[s]) for f, s in sorted(lane_turns(r)))))
+            " ".join("%s=>%s" % (SIDES[f], SIDES[s]) for f, s in sorted(lane_turns(r)))))
         for kind in ("veh", "ped"):
             for i, n in enumerate(r[kind]):
                 es = ", ".join(("exit %d" % e["code"]) if e["to"] is None else
@@ -942,6 +942,42 @@ def cmd_build(a):
     print(json.dumps(rep, indent=1))
 
 
+def verify_spec(g, spec, lang="ENGLISH", against=None):
+    """Compile a spec and byte-compare every state with the stock records of `against` (default spec piece),
+    and each connects mask with the stock exemplar. -> (ok, lines)."""
+    pid = against or spec["piece"]
+    c = compile_spec(spec, g, lang)
+    t = g.trblkatt(lang)
+    lines, ok = [], True
+    for st, b in sorted(c["records"].items()):
+        s = t.get(pid * 256 + st)
+        same = s == b
+        ok &= same
+        lines.append("state %d: %s (%d bytes, stock %s)" % (st, "identical" if same else "DIFFERS", len(b),
+                                                           len(s) if s else "none"))
+    m = g.masks(pid) or {}
+    for net, v in c["masks"].items():
+        same = m.get(net) == v
+        ok &= same
+        lines.append("connects %s: 0x%08x %s stock 0x%08x" % (net, v, "==" if same else "!=", m.get(net, 0)))
+    for w in c["warnings"]:
+        lines.append("warning: " + w)
+    return ok, lines
+
+
+def cmd_verify(a):
+    g = Game(a.root)
+    bad = 0
+    for f in a.specs:
+        spec = json.load(open(f, encoding="utf-8"))
+        ok, lines = verify_spec(g, spec, a.lang, a.against)
+        bad += not ok
+        print("%s %s (piece %s)" % ("OK  " if ok else "FAIL", os.path.basename(f), spec.get("piece")))
+        for l in lines:
+            print("     " + l)
+    return 1 if bad else 0
+
+
 def cmd_selftest(a):
     g = Game(a.root)
     ok = True
@@ -1009,10 +1045,15 @@ def main(argv=None):
     s.add_argument("--png", required=True)
     s.add_argument("--state", type=int, default=0)
     s.add_argument("--lang", default="ENGLISH")
+    s = sub.add_parser("verify")
+    s.add_argument("specs", nargs="+")
+    s.add_argument("--lang", default="ENGLISH")
+    s.add_argument("--against", type=int, default=None)
     sub.add_parser("selftest")
     a = ap.parse_args(argv)
     r = {"show": cmd_show, "describe": cmd_describe, "build": cmd_build, "roundtrip": cmd_roundtrip,
-         "check-connects": cmd_check_connects, "diagram": cmd_diagram, "selftest": cmd_selftest}[a.cmd](a)
+         "check-connects": cmd_check_connects, "diagram": cmd_diagram, "verify": cmd_verify,
+         "selftest": cmd_selftest}[a.cmd](a)
     return r if isinstance(r, int) else 0
 
 
