@@ -8,6 +8,8 @@ SC3_PID picks the instance (set it: this tool only touches that pid).
   py nb_drive.py build NETTYPE X0,Z0 X1,Z1 [--cost N]
                                           # call vt+0xf0 on the game thread with the straight cell line X0,Z0..X1,Z1
                                           # (NETTYPE 1 road, 2 rail, 3 power, 4 highway)
+  py nb_drive.py center X,Z               # iso view vt+0x54 (SIMSPR FUN_1001d039 CenterOnTile): the cell lands at
+                                          # client (352,272) at 800x600
   py nb_drive.py cells X0,Z0,X1,Z1        # piece id/state per surface cell (same read as nr_drive.py)
   py nb_drive.py remove X,Z               # bulldoze one cell through the network manager (vt+0x100 path, see notes)
   py nb_drive.py retile MASK X0,Z0,X1,Z1  # GZ message 0x637c0dab (nr_drive.py retile)
@@ -137,7 +139,55 @@ function build(j) {
   }
   return {ret: r, code_was: code, asked: asked, trace: tr};
 }
+function remove(j) {
+  /* manager vt+0xb4 = FUN_1001d6ef(layer, {x<<8, z<<8, y<<8}, id, state, int box[6], scratch), ret 0x20. Argument
+     shapes copied from the game's own bulldozer call (SIMGEOM+0x142cf, watched 2026-10-13): y = the occupant height
+     << 8, the state in the low byte, box = 6 ints the game fills. Removes the piece (FUN_1001d761 flag 1) and walks
+     the Collapse.txt group (vt+0x104 FUN_1001da5f). */
+  if (!MGR) return {error: 'manager not known yet'};
+  var c = city(), om = vfn(c, 0x11c, 'pointer', [])(c), op = Memory.alloc(4);
+  op.writePointer(ptr(0));
+  if (!vfn(om, 0x7c, 'uint8', ['uint32', 'uint32', 'pointer'])(om, j.x, j.z, op)) return {error: 'empty cell'};
+  var o = op.readPointer();
+  if (modname(o.readPointer()).indexOf('SIMNTWRK') !== 0) return {error: 'not a network piece: ' + modname(o.readPointer())};
+  var id = o.add(0x14).readU32() & 0xffff, st = o.add(0x10).readU32() >>> 30;
+  var h = vfn(o, 0xc0, 'uint32', [])(o) & 0xff;
+  var box = Memory.alloc(64);
+  for (var b = 0; b < 16; b++) box.add(4 * b).writeU32(0x7fffffff);
+  var f = new NativeFunction(MGR.readPointer().add(0xb4).readPointer(), 'void',
+    ['pointer', 'pointer', 'int32', 'int32', 'int32', 'uint32', 'uint32', 'pointer', 'uint32'], {abi: 'thiscall', exceptions: 'propagate'});
+  f(MGR, MGR.add(0x3c).readPointer(), j.x << 8, j.z << 8, h << 8, id, st, box, 0);
+  return {removed: [id, st], height: h};
+}
+var ISO = null;     /* cISC3CityViewIso (vtable SIMSPR+0x63390, vt+0x54 = FUN_1001d039 CenterOnTile) */
+function iso(known) {
+  if (!ISO && known) { var k = ptr(known); try { if (k.readPointer().equals(Process.getModuleByName('SIMSPR.DLL').base.add(0x63390))) ISO = k; } catch (e) {} }
+  if (ISO) return ISO;
+  var spr = Process.getModuleByName('SIMSPR.DLL').base, vt = spr.add(0x63390);
+  var b = [0, 8, 16, 24].map(function (sh) { return ('0' + ((vt.toUInt32() >>> sh) & 0xff).toString(16)).slice(-2); }).join(' ');
+  var hits = [];
+  Process.enumerateRanges('rw-').forEach(function (r) {
+    if (r.size > 0x4000000) return;
+    try { Memory.scanSync(r.base, r.size, b).forEach(function (h) { if ((h.address.toUInt32() & 3) === 0) hits.push(h.address); }); } catch (e) {}
+  });
+  hits = hits.filter(function (h) { try { h.add(0x158).readPointer().readPointer(); return true; } catch (e) { return false; } });
+  if (hits.length !== 1) throw new Error('iso view: ' + hits.length + ' candidates');
+  ISO = hits[0];
+  return ISO;
+}
 function run(j) {
+  if (j.kind === 'isoinfo') {
+    var v = iso(j.iso);
+    return {iso: '' + v, w: v.add(0x20).readU32(), h: v.add(0x24).readU32(), centre: [v.add(0xb0).readS32(), v.add(0xb4).readS32()],
+            f148: modname(v.add(0x148).readPointer().readPointer()), f158: modname(v.add(0x158).readPointer().readPointer())};
+  }
+  if (j.kind === 'center') {
+    var v = iso(j.iso);
+    new NativeFunction(v.readPointer().add(0x54).readPointer(), 'void', ['pointer', 'int32', 'int32', 'uint32'],
+                       {abi: 'thiscall', exceptions: 'propagate'})(v, j.x, j.z, 0);
+    return {iso: '' + v, centre: [v.add(0xb0).readS32(), v.add(0xb4).readS32()]};
+  }
+  if (j.kind === 'remove') return remove(j);
   if (j.kind === 'post4') return {ok: post4(j.w)};
   if (j.kind === 'cells') return {cells: walk(j)};
   if (j.kind === 'build') return build(j);
@@ -174,7 +224,21 @@ Interceptor.attach(Process.getModuleByName('USER32.dll').getExportByName('PeekMe
   onEnter: function (args) { this.m = args[0]; },
   onLeave: function (r) { if (r.toInt32() !== 0 && this.m.add(4).readU32() === %WM% && jobs.length) drain(); }
 });
+var watched = [];
+function watch(rvas, nargs) {
+  rvas.forEach(function (rva) {
+    Interceptor.attach(ntw.add(rva), {
+      onEnter: function () {
+        var sp = this.context.esp, a = [];
+        for (var i = 1; i <= nargs; i++) a.push('0x' + (sp.add(4 * i).readU32() >>> 0).toString(16));
+        watched.push({rva: '0x' + rva.toString(16), ecx: '' + this.context.ecx, ret: modname(sp.readPointer()), args: a});
+      }
+    });
+  });
+}
 rpc.exports = {
+  watch: function (rvas, n) { watch(rvas, n); return 1; },
+  watched: function () { var w = watched; watched = []; return w; },
   queue: function (j) { jobs.push(j); return jobs.length; },
   results: function () { var r = results; results = []; return r; },
 };
@@ -207,6 +271,17 @@ class Session:
     def close(self):
         self.sc.unload()
         self.s.detach()
+
+
+def iso_cache(val=None):
+    """The view object's address for this pid (the vtable scan takes ~2 min): %TEMP%
+b_iso_<pid>.txt."""
+    import tempfile
+    f = os.path.join(tempfile.gettempdir(), "nb_iso_%d.txt" % sc3io.game_pid())
+    if val:
+        open(f, "w").write(val)
+        return val
+    return open(f).read().strip() if os.path.exists(f) else None
 
 
 def xy(s):
@@ -254,6 +329,39 @@ def main(argv):
     elif cmd == "pt":
         s = Session()
         print(json.dumps(s.job({"kind": "pt", "pts": [xy(a) + [0] for a in argv[2:]]}), indent=0))
+        s.close()
+    elif cmd == "remove":
+        x, z = xy(argv[2])
+        s = Session()
+        s.job({"kind": "post4", "w": [0x637C0DAB, 0, 0, 0]})
+        print(json.dumps(s.job({"kind": "remove", "x": x, "z": z}, timeout=300)))
+        s.close()
+    elif cmd == "center":
+        x, z = xy(argv[2])
+        s = Session()
+        r = s.job({"kind": "center", "x": x, "z": z, "iso": iso_cache()}, timeout=400)
+        iso_cache(r.get("iso"))
+        print(json.dumps(r))
+        s.close()
+    elif cmd == "isoinfo":
+        s = Session()
+        r = s.job({"kind": "isoinfo", "iso": iso_cache()}, timeout=400)
+        iso_cache(r.get("iso"))
+        print(json.dumps(r))
+        s.close()
+    elif cmd == "watch":
+        # watch RVA,RVA,... SECONDS [cmd 0x.. | click X,Y | drag X0,Y0 X1,Y1]: log the stack args of SIMNTWRK functions
+        s = Session()
+        s.sc.exports_sync.watch([int(v, 16) for v in argv[2].split(",")], 10)
+        act = argv[4:]
+        if act and act[0] == "click":
+            sc3io.click(s.hwnd, *xy(act[1]))
+        elif act and act[0] == "drag":
+            (x0, y0), (x1, y1) = xy(act[1]), xy(act[2])
+            sc3io.drag(s.hwnd, x0, y0, x1, y1, button="left")
+        time.sleep(float(argv[3]))
+        for w in s.sc.exports_sync.watched():
+            print(json.dumps(w))
         s.close()
     elif cmd == "probe":
         s = Session()
