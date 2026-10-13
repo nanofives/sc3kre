@@ -1,0 +1,68 @@
+{
+  "netpack": 1,
+  "name": "example_ramp_variant",
+  "version": "1.0.0",
+  "author": "netramp test fixture",
+  "description": "Test fixture: green variants of the three on-ramp pieces 15131/15135/15139, placed by the On-ramp tool through the onramp table (both states, so x-strips with the highway at +z and the road past the low end, or the highway at -z and the road past the high end).",
+  "game": {
+    "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+  },
+  "variants": [
+    {
+      "id": 25131,
+      "base": 15131,
+      "network": "HWAY",
+      "name": {
+        "*": "Incorporacion autopista (variante 25131)"
+      },
+      "art": {
+        "from": 15131,
+        "recolor": "green"
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 25135,
+      "base": 15135,
+      "network": "HWAY",
+      "name": {
+        "*": "Incorporacion autopista (variante 25135)"
+      },
+      "art": {
+        "from": 15135,
+        "recolor": "green"
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 25139,
+      "base": 15139,
+      "network": "HWAY",
+      "name": {
+        "*": "Incorporacion autopista (variante 25139)"
+      },
+      "art": {
+        "from": 15139,
+        "recolor": "green"
+      },
+      "trblkatt": "copy_base"
+    }
+  ],
+  "ramps": [
+    {
+      "table": "onramp",
+      "from": 15131,
+      "to": 25131
+    },
+    {
+      "table": "onramp",
+      "from": 15135,
+      "to": 25135
+    },
+    {
+      "table": "onramp",
+      "from": 15139,
+      "to": 25139
+    }
+  ]
+}
