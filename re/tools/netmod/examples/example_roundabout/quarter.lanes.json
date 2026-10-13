@@ -1,0 +1,129 @@
+{
+ "piece": 20400,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 1,
+ "vehicle": {
+  "class": "car",
+  "lanes": [
+   {
+    "from": "z+ 1",
+    "to": "x- 2",
+    "path": 768
+   },
+   {
+    "from": "z- 2",
+    "to": "z+ 2",
+    "path": 259
+   },
+   {
+    "from": "z- 2",
+    "to": "x- 2",
+    "path": 1025
+   }
+  ]
+ },
+ "pedestrian": {
+  "walks": [
+   {
+    "from": [
+     15,
+     240
+    ],
+    "to": [
+     15,
+     15
+    ],
+    "path": 259,
+    "crosswalk": true
+   },
+   {
+    "from": [
+     15,
+     15
+    ],
+    "to": [
+     240,
+     15
+    ],
+    "path": 256,
+    "crosswalk": true
+   },
+   {
+    "from": [
+     240,
+     240
+    ],
+    "to": [
+     15,
+     240
+    ],
+    "path": 258,
+    "crosswalk": true
+   },
+   {
+    "from": [
+     240,
+     15
+    ],
+    "to": [
+     240,
+     240
+    ],
+    "path": 257
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     15,
+     15
+    ],
+    "code": 8
+   },
+   {
+    "at": [
+     15,
+     15
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     15,
+     240
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     15,
+     240
+    ],
+    "code": 24
+   },
+   {
+    "at": [
+     240,
+     15
+    ],
+    "code": 8
+   },
+   {
+    "at": [
+     240,
+     240
+    ],
+    "code": 24
+   }
+  ]
+ },
+ "connects": {
+  "road": "auto"
+ },
+ "_comment": "Quarter of a 2x2 one-way roundabout, in the frame of T junction 39 at state 0 (arms x-, z-, z+). Ring lanes: enter z- (175,0), leave x- (0,175). Spur in: z+ (80,255) -> x- (0,175). Spur out: z- (175,0) -> z+ (175,255). Place four cells at (x,z) state 2, (x+1,z) state 3, (x+1,z+1) state 0, (x,z+1) state 1: the spurs leave at z-, x+, z+, x-. Pedestrian graph: the T's."
+}
