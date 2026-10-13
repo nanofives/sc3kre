@@ -65,6 +65,7 @@ import newpiece as NP   # noqa: E402
 import netpack_rules as NR  # noqa: E402
 import netpack_bridges as NB  # noqa: E402  task netbridge: inheritance, replace_base, bridges, crossings
 import netramp as RAMP  # noqa: E402  ramps / on-ramps / tunnels / slopes (NET_RAMPS.md)
+from PIL import Image   # noqa: E402  png_dir art (any size with anchors.json, NET_ART.md)
 
 SCHEMA_VERSION = 1
 SCHEMA_FILE = os.path.join(HERE, "netpack.schema.json")
@@ -415,28 +416,83 @@ def compile_art(stock, pack_dir, art, default_piece, where):
         d = os.path.join(pack_dir, art["png_dir"])
         if not os.path.isdir(d):
             raise NetpackError("%s: png_dir %s does not exist" % (where, art["png_dir"]))
-        done = {}
+        anchors = _png_anchors(d, where)
+        anc = {k: recs[k][1] for k in keys}
+        pos_keys = [(g, i) for _, _, g, i, _ in frames]
+        owner = {}                      # record key -> (png bytes, anchor) that claimed it
         for pos, (_, _, g, i, _) in enumerate(frames):
-            f = os.path.join(d, frame_png_name(pos))
+            name = frame_png_name(pos)
+            f = os.path.join(d, name)
             if not os.path.isfile(f):
                 continue
             data = rd(f)
-            if (g, i) in done:
-                if done[(g, i)] != data:
-                    raise NetpackError("%s: %s and an earlier frame share one sprite record but the PNGs differ"
-                                       % (where, frame_png_name(pos)))
-                continue
+            src_pix, src_anc = recs[(g, i)][0], recs[(g, i)][1]
             try:
-                pix[(g, i)], nudged = sprite_patch.replace_from_png(recs[(g, i)][0], f)
+                img = Image.open(f)
+                img.load()
+                if name in anchors:
+                    # any size: the sidecar gives the registration point, R/B follow from the size (NET_ART.md 3)
+                    rx, ry = anchors[name]
+                    pix_new, (w, h), nudged = sprite_patch.record_from_image(src_pix, img)
+                    anc_new = sprite_patch.anchor_payload(rx, ry, w, h)
+                else:
+                    pix_new, nudged = sprite_patch.replace_from_png(src_pix, f)
+                    anc_new = src_anc
             except sprite_patch.SpritePatchError as e:
-                raise NetpackError("%s: %s: %s" % (where, frame_png_name(pos), e))
-            done[(g, i)] = data
+                raise NetpackError("%s: %s: %s (a PNG of another size needs its registration point in "
+                                   "%s)" % (where, name, e, ANCHOR_FILE))
+            k = (g, i)
+            if k in owner and owner[k] != (data, anc_new):
+                # the stock frames share one record but the new art differs: this frame gets its own record
+                k = (g, i, pos)
+                keys.append(k)
+            elif k in owner:
+                continue
+            owner[k] = (data, anc_new)
+            pix[k], anc[k] = pix_new, anc_new
+            pos_keys[pos] = k
         extra = sorted(set(n for n in os.listdir(d) if n.lower().endswith(".png"))
                        - {frame_png_name(p) for p in range(len(frames))})
         if extra:
             raise NetpackError("%s: png_dir has files that name no frame of piece %d: %s" % (where, src, extra[:5]))
+        stray = sorted(set(anchors) - {frame_png_name(p) for p in range(len(frames))})
+        if stray:
+            raise NetpackError("%s: %s names no frame of piece %d: %s" % (where, ANCHOR_FILE, src, stray[:5]))
+        return {"from": src, "cs_key": cs_key, "cs_rel": cs_rel, "cs": cs, "frames": frames, "keys": keys,
+                "pix": pix, "anchor": anc, "pos_keys": pos_keys}
     return {"from": src, "cs_key": cs_key, "cs_rel": cs_rel, "cs": cs, "frames": frames, "keys": keys, "pix": pix,
-            "anchor": {k: recs[k][1] for k in keys}}
+            "anchor": {k: recs[k][1] for k in keys}, "pos_keys": [(g, i) for _, _, g, i, _ in frames]}
+
+
+ANCHOR_FILE = "anchors.json"
+
+
+def _png_anchors(d, where):
+    """png_dir/anchors.json: {"z3_r0.png": [reg_x, reg_y], ...} -> {name: (x, y)}. Optional.
+    A frame listed here may have any size; its anchor record is written as {x, y, w - x, h - y}."""
+    p = os.path.join(d, ANCHOR_FILE)
+    if not os.path.isfile(p):
+        return {}
+    try:
+        raw = json.load(open(p, encoding="utf-8"))
+    except ValueError as e:
+        raise NetpackError("%s: %s: %s" % (where, ANCHOR_FILE, e))
+    out = {}
+    for n, v in raw.items():
+        if n.startswith("_"):
+            continue                    # comments
+        if not (isinstance(v, list) and len(v) == 2 and all(isinstance(x, int) for x in v)):
+            raise NetpackError("%s: %s: %s must be [reg_x, reg_y] integers" % (where, ANCHOR_FILE, n))
+        out[n] = tuple(v)
+    return out
+
+
+def cs_retarget_pos(buf, pos_new):
+    """Rewrite frame position k's (group, instance) to pos_new[k] -> new bytes (same size)."""
+    b = bytearray(buf)
+    for k, (o, fi, g, i, fl) in enumerate(NP.cs_frames(buf)[1]):
+        struct.pack_into("<II", b, o + 2, pos_new[k][0], pos_new[k][1])
+    return bytes(b)
 
 
 # =================================================================== compile one package
@@ -578,7 +634,7 @@ def merge(stock, packs):
             mp[k] = nk
             cur.append((nk[0], nk[1], 1, a["anchor"][k]))     # anchor first, as Roads_2.DAT orders them
             cur.append((nk[0], nk[1], 0, a["pix"][k]))
-        it["table"] = NP.cs_retarget(a["cs"], mp)
+        it["table"] = cs_retarget_pos(a["cs"], [mp[k] for k in a["pos_keys"]])
     if cur:
         dats.append((group, cur))
     for g, recs in dats:
@@ -1462,6 +1518,32 @@ def cmd_selftest(a):
         check(same and len(os.listdir(os.path.join(d, "art"))) == len(art["frames"]),
               "U6 export-art -> png_dir re-import: %d frames, decoded pixels identical to the stock frames"
               % len(art["frames"]))
+
+        # U11 (artkit): a frame of ANOTHER size with its registration point in anchors.json, and new art on a
+        # frame whose stock record is shared with another frame (the frame gets its own record)
+        shared = {}
+        for pos, (_, _, g, i, _) in enumerate(art["frames"]):
+            shared.setdefault((g, i), []).append(pos)
+        twin = next((ps for ps in shared.values() if len(ps) > 1), None)
+        big = Image.new("RGBA", (80, 50), (0, 0, 0, 0))
+        big.paste(Image.new("RGBA", (70, 30), (0, 200, 0, 255)), (5, 15))
+        big.save(os.path.join(d, "art", "z3_r1.png"))
+        with open(os.path.join(d, "art", ANCHOR_FILE), "w") as fh:
+            json.dump({"z3_r1.png": [8, 31]}, fh)
+        if twin:
+            Image.open(os.path.join(d, "art", frame_png_name(twin[1]))).convert("RGBA").transpose(
+                Image.FLIP_LEFT_RIGHT).save(os.path.join(d, "art", frame_png_name(twin[1])))
+        art2 = compile_art(Stock(stock_root), d, m["variants"][0]["art"], 29, "U11")
+        k13 = art2["pos_keys"][13]
+        a13 = struct.unpack("<4h", art2["anchor"][k13])
+        ok_size = sprite_size(art2["pix"][k13]) == (80, 50) and a13 == (8, 31, 72, 19) \
+            and qfs.record_header(art2["pix"][k13])["d2"] == 80
+        ok_split = (twin is None) or (art2["pos_keys"][twin[0]] != art2["pos_keys"][twin[1]]
+                                      and len(art2["keys"]) == len(art["keys"]) + 1)
+        files_u11, _, _ = merge(Stock(stock_root), [(d, m)])
+        check(ok_size and ok_split,
+              "U11 80x50 frame + anchors.json -> record 80x50, anchor %r; shared-record split %s"
+              % (a13, "checked on frames %r" % (twin,) if twin else "not exercised (road 29 shares no record)"))
 
         # U1/U2/U4: round trips on a hard-linked copy of the stock tree, both modes
         for mode in ("overlay", "direct"):
