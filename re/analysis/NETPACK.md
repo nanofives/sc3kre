@@ -38,6 +38,7 @@ One folder, one `manifest.json`, optional PNG art. Nothing else.
 | `reskins[]` | new art for the frames of an EXISTING piece | no two packages reskin the same frame table; pieces that share the table are reported |
 | `rule_edits[]` | TilingRules edits, section 4 (format agreed with netrules) | stock rule N must exist and equal `expect`; `rulecheck` ERROR refuses, WARNING / INFO reported (4.1) |
 | `ini[]` | keys inside a SYS.PAK member: `set` (existing key), `add` (new key), `append` (line even if the key exists) | member, section and key found exactly as required |
+| `ramps[]` | hardcoded SIMNTWRK piece tables (on-ramp tool, tunnels, slope pieces): `{"table", "from", "to", "slots"?}`, task netramp, `NET_RAMPS.md` | table and slot exist and hold `from`; `to` is a variant of that base or a stock piece of the same Sets; one package per slot |
 
 Art file names inside `png_dir`: frame position k in the piece's table -> `z{zoom}_r{rot}.png` with zoom `(k % 20) // 4`,
 rotation slot `k % 4`, layer `k // 20` (`l{layer}_z.._r...png` for layer > 0); the layout netcat measured over all 380

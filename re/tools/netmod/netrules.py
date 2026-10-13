@@ -89,7 +89,10 @@ CLASSES = [
     ("arm-to-building", "the saved piece has an arm into a cell that holds a building and no network piece"),
     ("arm-to-empty", "the saved piece has an arm into an empty cell"),
     ("arm-missing", "the saved piece lacks an arm toward a network neighbour that the simulator connects"),
-    ("diag", "diagonal piece in the 3x3: diagonal drag path (FUN_1001da5f / FUN_1000abde), not modelled"),
+    ("diag", "diagonal piece in the 3x3: diagonal drag path (FUN_1001da5f), not modelled"),
+    ("onramp-area", "within 2 cells of a piece the On-ramp tool places (15123..15141, FUN_1000abde; NET_RAMPS.md): "
+                    "the tool retiles HWAY then ROAD over its strip right after the build, which a from-scratch retile "
+                    "does not replay [UNCERTAIN] which rule order made the saved pieces"),
     ("gap", "an empty cell within 2 cells with the network on two opposite sides of it"),
     ("near-slope", "within 2 cells of a sloped tile"),
     ("interior", "flat interior, no class above"),
@@ -187,6 +190,11 @@ def classify(city, T0, net, cell, saved, sim, rules, T=None, seam=None):
                 return "diag"
     if sim and sim[0] in diag:
         return "diag"
+    for dx in range(-2, 3):                    # task netramp: On-ramp tool pieces (straight 15130..15141, corner 15123..15128)
+        for dy in range(-2, 3):
+            o = lay.get((x + dx, y + dy))
+            if o is not None and 15123 <= o.id <= 15141:
+                return "onramp-area"
     for dx in range(-2, 3):
         for dy in range(-2, 3):
             q = (x + dx, y + dy)

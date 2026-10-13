@@ -76,6 +76,13 @@
         "$ref": "#/$defs/crossing"
       },
       "description": "Task netbridge: crossing art for variants (sc3netmod.dll XCROSS). When the existing piece is `over`, the crossing the matrix gives (`crossing`) is built as `piece`, a variant of that crossing."
+    },
+    "ramps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ramp_edit"
+      },
+      "description": "Hardcoded SIMNTWRK piece tables (on-ramps, tunnels, slope pieces): which piece a table slot places. netramp.py tables lists every table and slot. Guide: re/analysis/NET_RAMPS.md."
     }
   },
   "$defs": {
@@ -688,6 +695,66 @@
           "maximum": 3
         }
       ]
+    },
+    "ramp_edit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "table",
+        "from",
+        "to"
+      ],
+      "properties": {
+        "table": {
+          "type": "string",
+          "pattern": "^(onramp|onramp_corner|slope[.][A-Za-z_]+|tunnel[.][A-Za-z_]+)$"
+        },
+        "from": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/piece_id"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 65535
+              },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          ],
+          "description": "Stock piece id (every slot holding it, state kept) or [id, state] (one slot)."
+        },
+        "to": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/piece_id"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 65535
+              },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          ],
+          "description": "A variant whose base is the from id (keep its inherit on), or a stock piece in the same Set files."
+        },
+        "slots": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 63
+          },
+          "description": "Restrict to these slot numbers."
+        }
+      }
     }
   }
 }

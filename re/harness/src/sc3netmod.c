@@ -32,6 +32,8 @@
  *   +0x130e9  mov eax,<eh> in FUN_100130e9 (load entry)               -> load_begin_hook
  *   +0x13264/+0x13338/+0x1340b  call FUN_1000d6b3 (read one tile)     -> load_rec_thunk
  *
+ * 4. RAMPS (task netramp, SC3NETMOD_RAMPS=0 turns it off): `ramp` lines of the same table files change the hardcoded
+ *    on-ramp / tunnel / slope piece tables; variants they place classify as their base. See the NETRAMP block.
  * 3. OVERLAY (task netpack, SC3NETMOD_OVERLAY=0 turns it off). Files under <root>\mods\netmod\overlay\ are served in
  *    place of <root>\<same path> (read-only opens, existence checks, merged directory listings), so netpack packages
  *    install without writing to Apps\. Variant tables come from every <root>\mods\netmod\tables\*.txt (one per pack),
@@ -124,6 +126,7 @@ static int table_read(const char *path) {
         char *p = line;
         while (*p == ' ' || *p == '\t') p++;
         if (*p == '#' || *p == ';' || *p == '\r' || *p == '\n' || !*p) continue;
+        if (!strncmp(p, "ramp ", 5)) continue;                 /* NETRAMP lines, read by netramp_install */
         if (sscanf(p, "%lu %lu", &v, &b) != 2 || v == 0 || v > 0xffff || b == 0 || b > 0xffff || v == b) {
             logf("table: %s: bad line '%s'", path, p);
             continue;
@@ -1022,6 +1025,265 @@ static void overlay_init(void) {
 }
 
 #include "sc3netmod_bridge.c"     /* task netbridge: INHERIT + XCROSS (SC3NETMOD_INHERIT / SC3NETMOD_XCROSS) */
+/* ==== NETRAMP begin (task netramp, 2026-10-13) ==========================================================
+ * 4. RAMPS (SC3NETMOD_RAMPS=0 turns it off). SIMNTWRK picks on-ramp, tunnel and slope pieces from hardcoded tables,
+ *    not from TilingRules (re/analysis/NET_RAMPS.md):
+ *      onramp / onramp_corner  imm32 operands of `mov [ebp+d8], imm32` in FUN_1000abde (On-ramp tool, netmgr vt+0xac)
+ *      slope.<NET>             u32[8] in .data, read only by FUN_1001a2c0
+ *      tunnel.<NET>            u32[4] in .data, read by FUN_1001c102 / FUN_1001ca1a (build) and FUN_1001d761 (removal)
+ *    netpack.py writes `ramp <table> <slot> <from> <to>` lines into the package's mods\netmod\tables\<package>.txt.
+ *    Each line is applied in place when SIMNTWRK maps, only if (table, slot) is in g_rslots below, `from` is that
+ *    slot's stock value and memory still holds it. Patching the table itself keeps the builder and the removal path
+ *    (FUN_1001d761 compares ids against the same tunnel tables) consistent.
+ *    A variant placed by a table gets its BASE's piece class: the two calls of the classifier FUN_1001a5f2 (in
+ *    FUN_1001363a and FUN_1001369f) go through ramp_class_thunk, which hands the classifier the base id. The class
+ *    decides the occupant flags: the on-ramp classes (kind 14/15, ids 15130..15141 only) add 0x200000 [CONFIRMED @
+ *    0x1000c5f6, 0x1000c62e], which SIMTRANSIT FUN_10005983 tests. Only ids listed as a ramp `to` AND as a variant
+ *    are mapped; every other id classifies exactly as stock.
+ *  Hooks: +0x13643, +0x136ce call FUN_1001a5f2 -> ramp_class_thunk; table slots as listed. Log lines "ramp: ...". */
+
+typedef struct { const char *table; int slot; DWORD va; int imm; DWORD stock; } RampSlot;
+static const RampSlot g_rslots[] = {
+    {"onramp", 0, 0x1000B5D0, 1, 0x3B2500},
+    {"onramp", 1, 0x1000B5D7, 1, 0x3B2100},
+    {"onramp", 2, 0x1000B5DE, 1, 0x3B1D00},
+    {"onramp", 3, 0x1000B5EB, 1, 0x3B1C02},
+    {"onramp", 4, 0x1000B5F2, 1, 0x3B2002},
+    {"onramp", 5, 0x1000B5F9, 1, 0x3B2402},
+    {"onramp", 6, 0x1000B60C, 1, 0x3B1D02},
+    {"onramp", 7, 0x1000B613, 1, 0x3B2102},
+    {"onramp", 8, 0x1000B61A, 1, 0x3B2502},
+    {"onramp", 9, 0x1000B627, 1, 0x3B2400},
+    {"onramp", 10, 0x1000B62E, 1, 0x3B2000},
+    {"onramp", 11, 0x1000B635, 1, 0x3B1C00},
+    {"onramp", 12, 0x1000B64E, 1, 0x3B2302},
+    {"onramp", 13, 0x1000B655, 1, 0x3B1F02},
+    {"onramp", 14, 0x1000B65C, 1, 0x3B1B02},
+    {"onramp", 15, 0x1000B669, 1, 0x3B1A00},
+    {"onramp", 16, 0x1000B670, 1, 0x3B1E00},
+    {"onramp", 17, 0x1000B677, 1, 0x3B2200},
+    {"onramp", 18, 0x1000B68A, 1, 0x3B2202},
+    {"onramp", 19, 0x1000B691, 1, 0x3B1E02},
+    {"onramp", 20, 0x1000B698, 1, 0x3B1A02},
+    {"onramp", 21, 0x1000B6A5, 1, 0x3B1B00},
+    {"onramp", 22, 0x1000B6AC, 1, 0x3B1F00},
+    {"onramp", 23, 0x1000B6B3, 1, 0x3B2300},
+    {"onramp_corner", 0, 0x1000B8C0, 1, 0x3B1700},
+    {"onramp_corner", 1, 0x1000B8C7, 1, 0x3B1600},
+    {"onramp_corner", 2, 0x1000B8CE, 1, 0x3B1300},
+    {"onramp_corner", 3, 0x1000B8D7, 1, 0x3B1800},
+    {"onramp_corner", 4, 0x1000B8DE, 1, 0x3B1500},
+    {"onramp_corner", 5, 0x1000B8E5, 1, 0x3B1402},
+    {"onramp_corner", 6, 0x1000B8FE, 1, 0x3B1802},
+    {"onramp_corner", 7, 0x1000B905, 1, 0x3B1502},
+    {"onramp_corner", 8, 0x1000B90C, 1, 0x3B1400},
+    {"onramp_corner", 9, 0x1000B915, 1, 0x3B1702},
+    {"onramp_corner", 10, 0x1000B91C, 1, 0x3B1602},
+    {"onramp_corner", 11, 0x1000B923, 1, 0x3B1302},
+    {"slope.ROAD", 0, 0x1003195C, 0, 0x2BC200},
+    {"slope.ROAD", 1, 0x10031960, 0, 0x2BC100},
+    {"slope.ROAD", 2, 0x10031964, 0, 0x2BC202},
+    {"slope.ROAD", 3, 0x10031968, 0, 0x2BC102},
+    {"slope.ROAD", 4, 0x1003196C, 0, 0x002000},
+    {"slope.ROAD", 5, 0x10031970, 0, 0x001F00},
+    {"slope.ROAD", 6, 0x10031974, 0, 0x002002},
+    {"slope.ROAD", 7, 0x10031978, 0, 0x001F02},
+    {"slope.RAIL", 0, 0x1003197C, 0, 0x3E8800},
+    {"slope.RAIL", 1, 0x10031980, 0, 0x3E8900},
+    {"slope.RAIL", 2, 0x10031984, 0, 0x3E8802},
+    {"slope.RAIL", 3, 0x10031988, 0, 0x3E8902},
+    {"slope.RAIL", 4, 0x1003198C, 0, 0x002E00},
+    {"slope.RAIL", 5, 0x10031990, 0, 0x002F00},
+    {"slope.RAIL", 6, 0x10031994, 0, 0x002E02},
+    {"slope.RAIL", 7, 0x10031998, 0, 0x002F02},
+    {"slope.SUBW", 0, 0x1003199C, 0, 0x2D6000},
+    {"slope.SUBW", 1, 0x100319A0, 0, 0x2D6100},
+    {"slope.SUBW", 2, 0x100319A4, 0, 0x2D6002},
+    {"slope.SUBW", 3, 0x100319A8, 0, 0x2D6102},
+    {"slope.SUBW", 4, 0x100319AC, 0, 0x2D5E00},
+    {"slope.SUBW", 5, 0x100319B0, 0, 0x2D5F00},
+    {"slope.SUBW", 6, 0x100319B4, 0, 0x2D5E02},
+    {"slope.SUBW", 7, 0x100319B8, 0, 0x2D5F02},
+    {"slope.PIPE", 0, 0x100319BC, 0, 0x2D8200},
+    {"slope.PIPE", 1, 0x100319C0, 0, 0x2D8100},
+    {"slope.PIPE", 2, 0x100319C4, 0, 0x2D8202},
+    {"slope.PIPE", 3, 0x100319C8, 0, 0x2D8102},
+    {"slope.PIPE", 4, 0x100319CC, 0, 0x2D8000},
+    {"slope.PIPE", 5, 0x100319D0, 0, 0x2D7F00},
+    {"slope.PIPE", 6, 0x100319D4, 0, 0x2D8002},
+    {"slope.PIPE", 7, 0x100319D8, 0, 0x2D7F02},
+    {"slope.POWR_line", 0, 0x100319DC, 0, 0x2BFE00},
+    {"slope.POWR_line", 1, 0x100319E0, 0, 0x2BFE01},
+    {"slope.POWR_line", 2, 0x100319E4, 0, 0x2BFE02},
+    {"slope.POWR_line", 3, 0x100319E8, 0, 0x2BFE03},
+    {"slope.POWR_line", 4, 0x100319EC, 0, 0x2BFF00},
+    {"slope.POWR_line", 5, 0x100319F0, 0, 0x2BFF01},
+    {"slope.POWR_line", 6, 0x100319F4, 0, 0x2BFF02},
+    {"slope.POWR_line", 7, 0x100319F8, 0, 0x2BFF03},
+    {"slope.POWR_pole", 0, 0x100319FC, 0, 0x46A100},
+    {"slope.POWR_pole", 1, 0x10031A00, 0, 0x46A000},
+    {"slope.POWR_pole", 2, 0x10031A04, 0, 0x46A102},
+    {"slope.POWR_pole", 3, 0x10031A08, 0, 0x46A002},
+    {"slope.POWR_pole", 4, 0x10031A0C, 0, 0x46A300},
+    {"slope.POWR_pole", 5, 0x10031A10, 0, 0x46A200},
+    {"slope.POWR_pole", 6, 0x10031A14, 0, 0x46A302},
+    {"slope.POWR_pole", 7, 0x10031A18, 0, 0x46A202},
+    {"slope.HWAY_absent", 0, 0x10031A1C, 0, 0x3B0000},
+    {"slope.HWAY_absent", 1, 0x10031A20, 0, 0x3AFF00},
+    {"slope.HWAY_absent", 2, 0x10031A24, 0, 0x3AFE02},
+    {"slope.HWAY_absent", 3, 0x10031A28, 0, 0x3B0102},
+    {"slope.HWAY_absent", 4, 0x10031A2C, 0, 0x3AFC00},
+    {"slope.HWAY_absent", 5, 0x10031A30, 0, 0x3AFB00},
+    {"slope.HWAY_absent", 6, 0x10031A34, 0, 0x370E02},
+    {"slope.HWAY_absent", 7, 0x10031A38, 0, 0x3AFD02},
+    {"slope.HWAY_present", 0, 0x10031A3C, 0, 0x3AFE00},
+    {"slope.HWAY_present", 1, 0x10031A40, 0, 0x3B0100},
+    {"slope.HWAY_present", 2, 0x10031A44, 0, 0x3B0002},
+    {"slope.HWAY_present", 3, 0x10031A48, 0, 0x3AFF02},
+    {"slope.HWAY_present", 4, 0x10031A4C, 0, 0x370E00},
+    {"slope.HWAY_present", 5, 0x10031A50, 0, 0x3AFD00},
+    {"slope.HWAY_present", 6, 0x10031A54, 0, 0x3AFC02},
+    {"slope.HWAY_present", 7, 0x10031A58, 0, 0x3AFB02},
+    {"tunnel.ROAD", 0, 0x10031FD8, 0, 0x004000},
+    {"tunnel.ROAD", 1, 0x10031FDC, 0, 0x003F00},
+    {"tunnel.ROAD", 2, 0x10031FE0, 0, 0x004002},
+    {"tunnel.ROAD", 3, 0x10031FE4, 0, 0x003F02},
+    {"tunnel.RAIL", 0, 0x10031FE8, 0, 0x466800},
+    {"tunnel.RAIL", 1, 0x10031FEC, 0, 0x466300},
+    {"tunnel.RAIL", 2, 0x10031FF0, 0, 0x466802},
+    {"tunnel.RAIL", 3, 0x10031FF4, 0, 0x466302},
+    {"tunnel.HWAY_a", 0, 0x10031FF8, 0, 0x466E00},
+    {"tunnel.HWAY_a", 1, 0x10031FFC, 0, 0x466D00},
+    {"tunnel.HWAY_a", 2, 0x10032000, 0, 0x466E02},
+    {"tunnel.HWAY_a", 3, 0x10032004, 0, 0x466D02},
+    {"tunnel.HWAY_b", 0, 0x10032008, 0, 0x466C00},
+    {"tunnel.HWAY_b", 1, 0x1003200C, 0, 0x466B00},
+    {"tunnel.HWAY_b", 2, 0x10032010, 0, 0x466C02},
+    {"tunnel.HWAY_b", 3, 0x10032014, 0, 0x466B02},
+    {"tunnel.HWAY_c", 0, 0x10032018, 0, 0x46AB00},
+    {"tunnel.HWAY_c", 1, 0x1003201C, 0, 0x46AA00},
+    {"tunnel.HWAY_c", 2, 0x10032020, 0, 0x46AB02},
+    {"tunnel.HWAY_c", 3, 0x10032024, 0, 0x46AA02},
+    {"tunnel.HWAY_d", 0, 0x10032028, 0, 0x46A900},
+    {"tunnel.HWAY_d", 1, 0x1003202C, 0, 0x46A800},
+    {"tunnel.HWAY_d", 2, 0x10032030, 0, 0x46A902},
+    {"tunnel.HWAY_d", 3, 0x10032034, 0, 0x46A802},
+};
+#define NRSLOTS (sizeof(g_rslots) / sizeof(g_rslots[0]))
+
+static BYTE g_rampcls[65536];        /* variant ids a ramp line places: classify as the base */
+static DWORD g_a5f2;
+static volatile LONG g_n_rampcls;
+static int g_n_ramp_ok, g_n_ramp_bad;
+
+static DWORD __stdcall ramp_class_id(DWORD id) {
+    if (id <= 0xffff && g_rampcls[id] && g_base[id]) { InterlockedIncrement(&g_n_rampcls); return g_base[id]; }
+    return id;
+}
+
+/* __thiscall FUN_1001a5f2(this, uint id), ret 4: replace the id argument, keep ecx, tail-jump to the original. */
+static __declspec(naked) void ramp_class_thunk(void) {
+    __asm {
+        push ecx
+        push dword ptr [esp + 8]
+        call ramp_class_id
+        pop ecx
+        mov [esp + 4], eax
+        jmp dword ptr [g_a5f2]
+    }
+}
+
+static void ramp_line(BYTE *m, const char *path, const char *line) {
+    char tab[64];
+    int slot, k;
+    unsigned long from, to;
+    if (sscanf(line, "ramp %63s %d %lx %lx", tab, &slot, &from, &to) != 4) {
+        logf("### ramp: %s: bad line '%s'", path, line); g_n_ramp_bad++; return;
+    }
+    for (k = 0; k < (int)NRSLOTS; k++) {
+        const RampSlot *r = &g_rslots[k];
+        DWORD *p, cur;
+        if (lstrcmpA(r->table, tab) || r->slot != slot) continue;
+        if (from != r->stock) {
+            logf("### ramp: %s slot %d: line says stock 0x%lx, this DLL knows 0x%lx - skipped", tab, slot, from, r->stock);
+            g_n_ramp_bad++; return;
+        }
+        p = (DWORD *)(m + (r->va - 0x10000000));
+        cur = *p;
+        if (cur == to) { logf("ramp: %s slot %d already 0x%lx (another line set it) - kept", tab, slot, to); return; }
+        if (cur != r->stock) {
+            logf("### ramp: %s slot %d holds 0x%lx, not the stock 0x%lx - skipped", tab, slot, cur, r->stock);
+            g_n_ramp_bad++; return;
+        }
+        if (!write_code((BYTE *)p, &to, 4)) { logf("### ramp: %s slot %d: write failed", tab, slot); g_n_ramp_bad++; return; }
+        if ((to >> 8) <= 0xffff && g_base[to >> 8]) g_rampcls[to >> 8] = 1;
+        logf("ramp: %s slot %d  %lu.%lu -> %lu.%lu%s", tab, slot, from >> 8, from & 0xff, to >> 8, to & 0xff,
+             g_base[to >> 8] ? " (variant)" : "");
+        g_n_ramp_ok++;
+        return;
+    }
+    logf("### ramp: %s: unknown table/slot '%s %d' - skipped", path, tab, slot);
+    g_n_ramp_bad++;
+}
+
+static void ramp_file(BYTE *m, const char *path) {
+    char line[256];
+    FILE *f = fopen(path, "r");
+    if (!f) return;
+    while (fgets(line, sizeof(line), f)) {
+        char *e = line + strlen(line);
+        while (e > line && (e[-1] == '\r' || e[-1] == '\n')) *--e = 0;
+        if (!strncmp(line, "ramp ", 5)) ramp_line(m, path, line);
+    }
+    fclose(f);
+}
+
+/* Same sources as table_load: SC3NETMOD_TABLE alone, else every mods\netmod\tables\*.txt in name order. */
+static int netramp_install(BYTE *m) {
+    char path[MAX_PATH], pat[MAX_PATH];
+    WIN32_FIND_DATAA fd;
+    HANDLE h;
+    int k, j, cnt = 0, ncls = 0;
+    static char names[64][MAX_PATH];
+    if (env_off("SC3NETMOD_RAMPS")) { logf("ramp: off (SC3NETMOD_RAMPS=0)"); return 0; }
+    if (GetEnvironmentVariableA("SC3NETMOD_TABLE", path, sizeof(path))) ramp_file(m, path);
+    else if (g_rootlen) {
+        _snprintf(pat, sizeof(pat), "%smods\\netmod\\tables\\*.txt", g_root);
+        pat[sizeof(pat) - 1] = 0;
+        h = FindFirstFileA(pat, &fd);
+        if (h != INVALID_HANDLE_VALUE) {
+            do {
+                if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && cnt < 64) lstrcpynA(names[cnt++], fd.cFileName, MAX_PATH);
+            } while (FindNextFileA(h, &fd));
+            FindClose(h);
+        }
+        for (k = 1; k < cnt; k++)
+            for (j = k; j > 0 && lstrcmpiA(names[j - 1], names[j]) > 0; j--) {
+                char t[MAX_PATH]; lstrcpyA(t, names[j]); lstrcpyA(names[j], names[j - 1]); lstrcpyA(names[j - 1], t);
+            }
+        for (k = 0; k < cnt; k++) {
+            _snprintf(path, sizeof(path), "%smods\\netmod\\tables\\%s", g_root, names[k]);
+            path[sizeof(path) - 1] = 0;
+            ramp_file(m, path);
+        }
+    }
+    for (k = 0; k < 65536; k++) ncls += g_rampcls[k];
+    if (ncls) {
+        DWORD a, b;
+        g_a5f2 = (DWORD)m + 0x1a5f2;                                 /* set before any call can reach the thunk */
+        a = retarget_call(m, 0x13643, 0x1a5f2, (void *)ramp_class_thunk);
+        b = a ? retarget_call(m, 0x136ce, 0x1a5f2, (void *)ramp_class_thunk) : 0;
+        if (!(a && b)) {
+            if (a) write_rel(m + 0x13643, 0xE8, (void *)a, 5);      /* undo the first: all or nothing */
+            logf("### ramp: classifier call sites do not match the shipped bytes - class mapping OFF");
+            ncls = 0;
+        }
+    }
+    logf("ramp: %d slot(s) changed, %d line(s) refused, %d variant id(s) classified as their base", g_n_ramp_ok,
+         g_n_ramp_bad, ncls);
+    return g_n_ramp_ok;
+}
+/* ==== NETRAMP end ======================================================================================= */
 
 /* ============================================================ arming */
 
@@ -1032,6 +1294,7 @@ static DWORD WINAPI watcher(LPVOID param) {
     g_savebase = !env_off("SC3NETMOD_SAVEBASE");
     while (!(m = (BYTE *)GetModuleHandleA("SIMNTWRK.DLL"))) Sleep(1);
     table_load();
+    netramp_install(m);                                          /* NETRAMP: table slots + classifier (section 4) */
     if (!g_nvariants) { logf("### READY: no variants in the table, nothing patched"); return 0; }
     g_wopen = (PFN_WOpen)(m + 0x26129);
     g_ropen = (PFN_ROpen)(m + 0x25f0d);

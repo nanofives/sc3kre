@@ -64,6 +64,7 @@ import ixf_insert       # noqa: E402
 import newpiece as NP   # noqa: E402
 import netpack_rules as NR  # noqa: E402
 import netpack_bridges as NB  # noqa: E402  task netbridge: inheritance, replace_base, bridges, crossings
+import netramp as RAMP  # noqa: E402  ramps / on-ramps / tunnels / slopes (NET_RAMPS.md)
 
 SCHEMA_VERSION = 1
 SCHEMA_FILE = os.path.join(HERE, "netpack.schema.json")
@@ -237,6 +238,25 @@ class Stock:
 
     def set_ids(self, net):
         return set(NR.braced_ids(self.read("Apps/Res/TilingRules/%s_GRND_Set.txt" % net)))
+
+    def set_files_of(self, pid):
+        """-> frozenset of the Set lists (6 networks + DIAG) that hold pid."""
+        out = {n for n in NETS if pid in self.set_ids(n)}
+        if self.exists("Apps/Res/TilingRules/DIAG_Set.txt") and \
+                pid in set(NR.braced_ids(self.read("Apps/Res/TilingRules/DIAG_Set.txt"))):
+            out.add("DIAG")
+        return frozenset(out)
+
+    def ramp_tables(self):
+        """netramp.py's registry with the stock values read from this tree's SIMNTWRK.DLL."""
+        if getattr(self, "_rt", None) is None:
+            from netmod.pe_tables import Simntwrk
+            from netmod import paths as _paths
+            try:
+                self._rt = RAMP.tables(Simntwrk(_paths.Game(self.root)))
+            except ValueError as e:
+                raise NetpackError("SIMNTWRK.DLL of %s: %s" % (self.root, e))
+        return self._rt
 
     def lang_dirs(self, sub):
         d = os.path.join(self.root, "Apps/Res", sub)
@@ -496,6 +516,12 @@ def compile_pack(stock, pack_dir, man):
         out["reskins"].append({"piece": piece, "art": art, "where": where, "sharers": sharers})
     for e in man.get("rule_edits", []):
         out["rule_edits"].append(dict(e, _pack=pname))
+    out["ramps"] = []
+    if man.get("ramps"):                                 # hardcoded SIMNTWRK tables (netramp.py, NET_RAMPS.md)
+        try:
+            out["ramps"] = RAMP.compile_ramps(stock.ramp_tables(), man)
+        except RAMP.RampError as e:
+            raise NetpackError(str(e))
     for e in man.get("ini", []):
         out["ini"].append(dict(e, _pack=pname))
     return out
@@ -625,6 +651,12 @@ def merge(stock, packs):
         if v["replace_base"]:
             for fname, el in sorted(NB.replace_base_edits(stock, v).items()):
                 edits.setdefault(fname, []).extend(el)
+    # ---- task netramp: hardcoded piece tables (on-ramps, tunnels, slope pieces), netramp.py / NET_RAMPS.md
+    try:
+        ramps = RAMP.check_merged([(c["name"], c["ramps"]) for c in comp], {v["id"]: v for v in variants},
+                                  stock.set_files_of, report["warnings"])
+    except RAMP.RampError as e:
+        raise NetpackError(str(e))
     for c in comp:
         for e in c["rule_edits"]:
             edits.setdefault(e["file"], []).append(e)
@@ -714,9 +746,10 @@ def merge(stock, packs):
 
     # ---- variant tables for sc3netmod.dll, one per package
     for c in comp:
-        if c["variants"]:
+        if c["variants"] or c["ramps"]:
             tables[c["name"]] = ("# netpack %s: <variant id> <base id>, read by sc3netmod.dll\r\n" % c["name"]).encode() + \
-                b"".join(b"%d %d\r\n" % (v["id"], v["base"]) for v in sorted(c["variants"], key=lambda v: v["id"]))
+                b"".join(b"%d %d\r\n" % (v["id"], v["base"]) for v in sorted(c["variants"], key=lambda v: v["id"])) + \
+                RAMP.table_lines(c["ramps"])
 
     # ---- report + checks that need the merged result
     placed = set()
@@ -728,6 +761,7 @@ def merge(stock, packs):
             placed |= {val >> 8 for rec in NB.parse_bridges(data) for l in rec[2] for val in l}
     for c in comp:
         placed |= {e.get("piece") for e in c["crossings"]}
+    placed |= {r["to"] >> 8 for r in ramps}                 # a table slot places it (netramp.py)
     for v in variants:
         if v["id"] not in placed:
             report["warnings"].append("%s: no rule RESULT places %d, so the tiler never builds it" % (v["where"], v["id"]))
@@ -736,6 +770,7 @@ def merge(stock, packs):
     for c in comp:
         for r in c["reskins"]:
             report["reskins"].append({"piece": r["piece"], "frames": len(r["art"]["frames"]), "sharers": r["sharers"]})
+    report["ramps"] = [{"table": r["table"], "slot": r["slot"], "from": r["from"], "to": r["to"]} for r in ramps]
     return files, tables, report
 
 
@@ -1058,6 +1093,9 @@ def _print_report(report):
                                        ", ".join("L %d..%d: record %s" % (a, z, w) for a, z, w in runs)))
     for n, b in sorted(report.get("cross", {}).items()):
         print("  crossings %s: %s" % (n, b.decode().strip().splitlines()[1:]))
+    for r in report.get("ramps", []):
+        print("  ramp    %s slot %d  %d.%d -> %d.%d" % (r["table"], r["slot"], r["from"] >> 8, r["from"] & 0xFF,
+                                                       r["to"] >> 8, r["to"] & 0xFF))
     for w in report["warnings"]:
         print("  WARNING " + w)
     for w in report.get("info", []):
