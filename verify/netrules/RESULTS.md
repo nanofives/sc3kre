@@ -43,3 +43,19 @@ Files: `run/predA.json`, `run/predB.json`, `run/liveA_before.jsonl`, `run/liveA_
 - A 30x9 `cells` job never returned within 120 s while each of its rows took about 2 s; nr_drive reads one row per
   job. Cause not looked into.
 - The tips dialog at load blocks input; `re/tools/dismiss_tips.py` with SC3_PID clears it (needed two tries once).
+
+## The edit (verify/netrules/edit_straight.json, kept local: verify/*/* is unpublished except notes)
+
+```json
+{
+  "name": "netrules_check_straight",
+  "description": "In-game check of the tiler simulator: the bare x-straight road rule places 29/1 (the z-straight state) instead of 29/0.",
+  "rule_edits": [
+    {
+      "op": "set_results", "file": "ROAD_GRND_SimpleRules.txt", "rule": 21,
+      "expect": {"selector": 5, "conds": [], "results": [[255, 29, 0]]},
+      "results": [[255, 29, 1]]
+    }
+  ]
+}
+```
