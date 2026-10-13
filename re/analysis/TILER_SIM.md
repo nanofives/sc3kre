@@ -159,7 +159,14 @@ tile of that net, compared with the saved tile.
 | Berlin | PIPE | 6425 | 99.88% | 8 | arm-to-building 5, arm-to-empty 1, near-slope 1, gap 1 |
 | Berlin | SUBW | 1232 | 98.54% | 18 | arm-to-building 6, interior 5, gap 5, arm-to-empty 2 |
 | Berlin | POWR | 96 | 80.21% | 19 | pole-phase 18, arm-to-empty 1 |
-1024_PLACEHOLDER
+| Europolis 1024 test city (`--seam 256`) | ROAD | 152848 | 99.80% | 304 | seam 304 |
+| Europolis 1024 test city | PIPE | 104480 | 99.91% | 96 | seam 96 |
+| Europolis 1024 test city | SUBW | 95216 | 99.70% | 288 | interior 112, gap 64, arm-to-building 64, seam 48 |
+| Europolis 1024 test city | POWR | 992 | 90.32% | 96 | seam 48, arm-to-building 32, arm-to-empty 16 |
+
+The 1024 city is 16 copies of Europolis (256). Most non-seam counts are exactly 16x the 256 city's (POWR
+arm-to-building 2 and arm-to-empty 1, SUBW gap 4 and arm-to-building 4). SUBW interior is 112, not 16 x 4 = 64: 48
+interior tiles exist only in the copy, presumably further than 1 cell from a seam `[UNCERTAIN]`, not examined.
 
 Progress over the relaunch (same 16 cities): PIPE 98.85% -> 99.91% (utilities), ROAD 99.81% -> 99.83% and HWAY
 99.65% -> 99.71% (buildings in the surface layer). POWR did not move: 237 of its 263 disagreements are pole
