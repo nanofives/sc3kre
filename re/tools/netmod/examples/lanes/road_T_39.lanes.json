@@ -1,0 +1,170 @@
+{
+ "piece": 39,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 1,
+ "vehicle": {
+  "class": "car",
+  "lanes": [
+   {
+    "from": "x- 1",
+    "to": "z- 1",
+    "path": 769
+   },
+   {
+    "from": "x- 1",
+    "to": "z+ 2",
+    "path": 1024
+   },
+   {
+    "from": "z+ 1",
+    "to": "z- 1",
+    "path": 257
+   },
+   {
+    "from": "z+ 1",
+    "to": "x- 2",
+    "path": 768
+   },
+   {
+    "from": "z- 2",
+    "to": "z+ 2",
+    "path": 259
+   },
+   {
+    "from": "z- 2",
+    "to": "x- 2",
+    "path": 1025
+   }
+  ]
+ },
+ "pedestrian": {
+  "walks": [
+   {
+    "from": [
+     15,
+     240
+    ],
+    "to": [
+     15,
+     15
+    ],
+    "path": 259,
+    "crosswalk": true
+   },
+   {
+    "from": [
+     15,
+     15
+    ],
+    "to": [
+     240,
+     15
+    ],
+    "path": 256,
+    "crosswalk": true
+   },
+   {
+    "from": [
+     240,
+     240
+    ],
+    "to": [
+     15,
+     240
+    ],
+    "path": 258,
+    "crosswalk": true
+   },
+   {
+    "from": [
+     240,
+     15
+    ],
+    "to": [
+     240,
+     240
+    ],
+    "path": 257
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     15,
+     15
+    ],
+    "code": 8
+   },
+   {
+    "at": [
+     15,
+     15
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     15,
+     240
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     15,
+     240
+    ],
+    "code": 24
+   },
+   {
+    "at": [
+     240,
+     15
+    ],
+    "code": 8
+   },
+   {
+    "at": [
+     240,
+     240
+    ],
+    "code": 24
+   }
+  ]
+ },
+ "connects": {
+  "road": "auto"
+ },
+ "edge_order": {
+  "ped": [
+   [
+    0,
+    1,
+    2,
+    3
+   ],
+   [
+    1,
+    0,
+    2,
+    3
+   ],
+   [
+    1,
+    0,
+    2
+   ],
+   [
+    1,
+    0,
+    2
+   ]
+  ]
+ },
+ "_comment": "edge_order is optional: it only reorders a node's pedestrian edges to reproduce the stock bytes. The street sim picks among a node's edges at random."
+}

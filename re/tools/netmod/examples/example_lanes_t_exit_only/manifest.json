@@ -7,7 +7,7 @@
  "lanes": [
   {
    "piece": 39,
-   "spec": "t_exit_only.json"
+   "spec": "t_exit_only.lanes.json"
   }
  ]
 }

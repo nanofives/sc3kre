@@ -1,0 +1,6 @@
+{
+ "piece": 15130, "states": [0, 2], "flag": 0,
+ "vehicle": {"class": "car", "speed": 74999, "lanes": [
+   {"from": "z- @80", "to": "x- @64", "y": 1024, "path": 69633}]},
+ "connects": {"road": {"low": [["z-", "x-"]], "high": [["x-", "z-"]]}}
+}

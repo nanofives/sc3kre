@@ -1,0 +1,131 @@
+{
+ "piece": 39,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 1,
+ "vehicle": {
+  "class": "car",
+  "lanes": [
+   {
+    "from": "z+ 1",
+    "to": "z- 1",
+    "path": 257
+   },
+   {
+    "from": "z+ 1",
+    "to": "x- 2",
+    "path": 768
+   },
+   {
+    "from": "z- 2",
+    "to": "z+ 2",
+    "path": 259
+   },
+   {
+    "from": "z- 2",
+    "to": "x- 2",
+    "path": 1025
+   }
+  ]
+ },
+ "pedestrian": {
+  "walks": [
+   {
+    "from": [
+     15,
+     240
+    ],
+    "to": [
+     15,
+     15
+    ],
+    "path": 259,
+    "crosswalk": true
+   },
+   {
+    "from": [
+     15,
+     15
+    ],
+    "to": [
+     240,
+     15
+    ],
+    "path": 256,
+    "crosswalk": true
+   },
+   {
+    "from": [
+     240,
+     240
+    ],
+    "to": [
+     15,
+     240
+    ],
+    "path": 258,
+    "crosswalk": true
+   },
+   {
+    "from": [
+     240,
+     15
+    ],
+    "to": [
+     240,
+     240
+    ],
+    "path": 257
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     15,
+     15
+    ],
+    "code": 8
+   },
+   {
+    "at": [
+     15,
+     15
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     15,
+     240
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     15,
+     240
+    ],
+    "code": 24
+   },
+   {
+    "at": [
+     240,
+     15
+    ],
+    "code": 8
+   },
+   {
+    "at": [
+     240,
+     240
+    ],
+    "code": 24
+   }
+  ]
+ },
+ "_comment": "Stock T junction 39 with the two lanes that ENTER from its stem (side x- at state 0) removed: cars can turn into the stem but never come out of it. Turn matrix left stock."
+}
