@@ -1,0 +1,172 @@
+{
+  "netpack": 1,
+  "name": "example_bridge_style",
+  "version": "1.0.0",
+  "author": "sc3kre",
+  "description": "Test fixture: a red copy of the plain road bridge as a new bridge style for road crossings shorter than 6 cells.",
+  "game": {
+    "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+  },
+  "variants": [
+    {
+      "id": 20087,
+      "base": 87,
+      "network": "ROAD",
+      "name": {
+        "*": "Red bridge",
+        "ENGLISH": "Puente rojo"
+      },
+      "art": {
+        "recolor": "red"
+      }
+    },
+    {
+      "id": 20088,
+      "base": 88,
+      "network": "ROAD",
+      "name": {
+        "*": "Red bridge",
+        "ENGLISH": "Puente rojo"
+      },
+      "art": {
+        "recolor": "red"
+      }
+    },
+    {
+      "id": 21265,
+      "base": 11265,
+      "network": "ROAD",
+      "name": {
+        "*": "Red bridge",
+        "ENGLISH": "Puente rojo"
+      },
+      "art": {
+        "recolor": "red"
+      }
+    },
+    {
+      "id": 21271,
+      "base": 11271,
+      "network": "ROAD",
+      "name": {
+        "*": "Red bridge",
+        "ENGLISH": "Puente rojo"
+      },
+      "art": {
+        "recolor": "red"
+      }
+    },
+    {
+      "id": 28050,
+      "base": 18050,
+      "network": "ROAD",
+      "name": {
+        "*": "Red bridge ramp",
+        "ENGLISH": "Rampa de puente rojo"
+      },
+      "art": {
+        "recolor": "red"
+      }
+    },
+    {
+      "id": 28051,
+      "base": 18051,
+      "network": "ROAD",
+      "name": {
+        "*": "Red bridge ramp",
+        "ENGLISH": "Rampa de puente rojo"
+      },
+      "art": {
+        "recolor": "red"
+      }
+    }
+  ],
+  "bridges": [
+    {
+      "op": "insert",
+      "network": "ROAD",
+      "at": 6,
+      "record": {
+        "axis": 0,
+        "min_len": 1,
+        "a": [
+          [
+            28051,
+            2
+          ]
+        ],
+        "b": [
+          [
+            20088,
+            0
+          ]
+        ],
+        "span": [
+          [
+            20087,
+            0
+          ],
+          [
+            20088,
+            0
+          ]
+        ],
+        "d": [
+          [
+            20088,
+            0
+          ]
+        ],
+        "e": [
+          [
+            28051,
+            0
+          ]
+        ]
+      }
+    },
+    {
+      "op": "insert",
+      "network": "ROAD",
+      "at": 6,
+      "record": {
+        "axis": 1,
+        "min_len": 1,
+        "a": [
+          [
+            28050,
+            2
+          ]
+        ],
+        "b": [
+          [
+            21271,
+            0
+          ]
+        ],
+        "span": [
+          [
+            21271,
+            0
+          ],
+          [
+            21265,
+            0
+          ]
+        ],
+        "d": [
+          [
+            21271,
+            0
+          ]
+        ],
+        "e": [
+          [
+            28050,
+            0
+          ]
+        ]
+      }
+    }
+  ]
+}

@@ -62,6 +62,20 @@
       "items": {
         "$ref": "#/$defs/ini_edit"
       }
+    },
+    "bridges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/bridge_edit"
+      },
+      "description": "Task netbridge: records of <NET>_GRND_Bridges.txt (ROAD, RAIL, HWAY, POWR). Road/rail/power builders take the FIRST record whose axis matches and min_len <= the crossing length; the highway builder takes the first whose axis (0..3, two lanes) matches. Indexes are 0-based in the STOCK file."
+    },
+    "crossings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/crossing"
+      },
+      "description": "Task netbridge: crossing art for variants (sc3netmod.dll XCROSS). When the existing piece is `over`, the crossing the matrix gives (`crossing`) is built as `piece`, a variant of that crossing."
     }
   },
   "$defs": {
@@ -184,6 +198,16 @@
             "none"
           ],
           "default": "copy_base"
+        },
+        "inherit": {
+          "type": "boolean",
+          "default": true,
+          "description": "Task netbridge: the variant joins every Set, DIAG_Set and Protected list that holds the base, and gets Convert / Complex_Convert rows (variant, s) -> what the base reads as, so rule conditions that test for the base also match it (re/analysis/NETBRIDGE.md)."
+        },
+        "replace_base": {
+          "type": "boolean",
+          "default": false,
+          "description": "Task netbridge: every RESULT that places the base in the variant's network's stage rule files places the variant instead (one set_results edit per rule, generated at install)."
         }
       }
     },
@@ -497,6 +521,171 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 5
+        }
+      ]
+    },
+    "bridge_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "axis",
+        "a",
+        "b",
+        "span",
+        "d",
+        "e"
+      ],
+      "properties": {
+        "axis": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "description": "Road/rail/power: 0 = run along x, 1 = along z. Highway: 0..3, one record per lane (0/2 x run, 3/1 z run)."
+        },
+        "min_len": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 255,
+          "default": 1,
+          "description": "Road/rail/power: the record is a candidate when the crossing length L >= min_len. The highway builder never reads it."
+        },
+        "a": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/piece_tok"
+          },
+          "minItems": 1,
+          "maxItems": 5,
+          "description": "Start ramp, A[0] at position -1 (5-slot stack buffer)."
+        },
+        "b": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/piece_tok"
+          },
+          "minItems": 1,
+          "maxItems": 5,
+          "description": "Pad, B[0] repeated (r >> 1) times, r = L - k * len(span)."
+        },
+        "span": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/piece_tok"
+          },
+          "minItems": 1,
+          "maxItems": 20,
+          "description": "The span, repeated k = L // len(span) times (20-slot stack buffer)."
+        },
+        "d": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/piece_tok"
+          },
+          "minItems": 1,
+          "maxItems": 5,
+          "description": "Pad, D[0] repeated r - (r >> 1) times."
+        },
+        "e": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/piece_tok"
+          },
+          "minItems": 1,
+          "maxItems": 5,
+          "description": "End ramp, E[0] at position L."
+        }
+      }
+    },
+    "bridge_edit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "op",
+        "network"
+      ],
+      "properties": {
+        "op": {
+          "enum": [
+            "insert",
+            "delete"
+          ]
+        },
+        "network": {
+          "enum": [
+            "ROAD",
+            "RAIL",
+            "HWAY",
+            "POWR"
+          ]
+        },
+        "at": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "enum": [
+                "start",
+                "end"
+              ]
+            }
+          ],
+          "description": "insert: before stock record N, or start / end."
+        },
+        "record": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/bridge_record"
+            },
+            {
+              "type": "integer",
+              "minimum": 0
+            }
+          ],
+          "description": "insert: the new record. delete: the stock record index."
+        },
+        "expect": {
+          "$ref": "#/$defs/bridge_record",
+          "description": "delete: the stock record's content."
+        }
+      }
+    },
+    "crossing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "over",
+        "crossing",
+        "piece"
+      ],
+      "properties": {
+        "over": {
+          "$ref": "#/$defs/piece_id"
+        },
+        "crossing": {
+          "$ref": "#/$defs/piece_id"
+        },
+        "piece": {
+          "$ref": "#/$defs/piece_id"
+        }
+      }
+    },
+    "piece_tok": {
+      "description": "Task netbridge: a bridge list entry [piece id, state 0..3] (file value id << 8 | state).",
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
         }
       ]
     }

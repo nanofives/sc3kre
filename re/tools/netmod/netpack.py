@@ -63,6 +63,7 @@ import syspak_parse     # noqa: E402
 import ixf_insert       # noqa: E402
 import newpiece as NP   # noqa: E402
 import netpack_rules as NR  # noqa: E402
+import netpack_bridges as NB  # noqa: E402  task netbridge: inheritance, replace_base, bridges, crossings
 
 SCHEMA_VERSION = 1
 SCHEMA_FILE = os.path.join(HERE, "netpack.schema.json")
@@ -76,6 +77,7 @@ PACKS = NETMOD + "/packs"
 
 OCC_KOREA = NP.OCC_KOREA
 CS_KOREA = NP.CS_KOREA
+CROSS = NETMOD + "/cross"                      # task netbridge: <pack>.txt crossing tables for sc3netmod XCROSS
 LEGACY_TABLE = NP.VARIANT_TABLE                 # newpiece.py's single-mod table
 EX_TYPE, EX_GROUP, CS_TYPE = NP.EX_TYPE, NP.EX_GROUP, NP.CS_TYPE
 KOREA_CS_GROUP = NP.KOREA_CS_GROUP
@@ -438,7 +440,9 @@ def compile_pack(stock, pack_dir, man):
     pname = man["name"]
     stock_ex = stock.exemplars()
     langs_text = stock.lang_dirs("Text")
-    out = {"name": pname, "variants": [], "reskins": [], "rule_edits": [], "ini": [], "warnings": []}
+    out = {"name": pname, "variants": [], "reskins": [], "rule_edits": [], "ini": [], "warnings": [],
+           "bridges": [dict(e, _pack=pname) for e in man.get("bridges", [])],              # task netbridge
+           "crossings": list(man.get("crossings", []))}
     for n, v in enumerate(man.get("variants", [])):
         where = "%s variant %d (id %s)" % (pname, n + 1, v.get("id"))
         vid, base, net = v["id"], v["base"], v["network"]
@@ -473,7 +477,8 @@ def compile_pack(stock, pack_dir, man):
                     out["warnings"].append("%s: %s has no TrBlkAtt record for base %d, none copied" % (where, rel, base))
                 trb[rel] = recs
         out["variants"].append({"id": vid, "base": base, "net": net, "art": art, "exemplar": ex, "names": names,
-                                "trblk": trb, "where": where})
+                                "trblk": trb, "where": where, "_pack": pname,
+                                "inherit": v.get("inherit", True), "replace_base": v.get("replace_base", False)})
     for n, r in enumerate(man.get("reskins", [])):
         where = "%s reskin %d (piece %s)" % (pname, n + 1, r.get("piece"))
         piece = r["piece"]
@@ -612,9 +617,25 @@ def merge(stock, packs):
         ids = [v["id"] for v in variants if v["net"] == net]
         if ids:
             edits.setdefault("%s_GRND_Set.txt" % net, []).append({"op": "list_add", "ids": ids, "_pack": "(variants)"})
+    # ---- task netbridge: variants inherit the base's Set / DIAG / Protected membership and Convert rows, and
+    # "replace_base" retargets every rule RESULT that places the base (netpack_bridges.py, NETBRIDGE.md)
+    for fname, el in sorted(NB.inherit_edits(stock, variants).items()):
+        edits.setdefault(fname, []).extend(el)
+    for v in variants:
+        if v["replace_base"]:
+            for fname, el in sorted(NB.replace_base_edits(stock, v).items()):
+                edits.setdefault(fname, []).extend(el)
     for c in comp:
         for e in c["rule_edits"]:
             edits.setdefault(e["file"], []).append(e)
+    low = {}                                      # one entry per real file, whatever case each edit used
+    for fname in list(edits):
+        low.setdefault(fname.lower(), []).append(fname)
+    for k, names_ in low.items():
+        if len(names_) > 1:
+            keep = names_[0]
+            for o in names_[1:]:
+                edits[keep].extend(edits.pop(o))
     tr = {}
     for fname, el in sorted(edits.items()):
         rel = "Apps/Res/TilingRules/" + fname
@@ -638,6 +659,48 @@ def merge(stock, packs):
         for f in found:
             report["warnings" if f.severity == NR.RC.WARNING else "info"].append("%s: %s" % (f.kind, f.text()))
 
+    # ---- task netbridge: Collapse.txt groups (removal of multi-tile pieces), Bridges records (ROAD / RAIL / HWAY /
+    # POWR, the four files FUN_10017f98 loads) and crossings
+    cfn = [n for n in stock.listdir("Apps/Res/TilingRules") if n.lower() == "collapse.txt"]
+    if cfn and variants:
+        try:
+            cdata = NB.collapse_inherit(stock.read("Apps/Res/TilingRules/" + cfn[0]), variants, report["warnings"])
+        except NB.BridgeError as e:
+            raise NetpackError(str(e))
+        if cdata is not None:
+            files["Apps/Res/TilingRules/" + cfn[0]] = cdata
+    bed = {}
+    for c in comp:
+        for e in c["bridges"]:
+            net = e.get("network")
+            if net not in NB.BRIDGE_NETS:
+                raise NetpackError("%s bridges: network %r; the game loads Bridges files for %s only (FUN_10017f98)"
+                                   % (c["name"], net, sorted(NB.BRIDGE_NETS)))
+            bed.setdefault(net, []).append(e)
+    report["bridges"] = {}
+    for net, el in sorted(bed.items()):
+        fn = [n for n in stock.listdir("Apps/Res/TilingRules") if n.lower() == ("%s_grnd_bridges.txt" % net).lower()][0]
+        setf = [n for n in stock.listdir("Apps/Res/TilingRules") if n.lower() == ("%s_grnd_set.txt" % net).lower()][0]
+        set_ids = set(NR.braced_ids(tr.get(setf) or stock.read("Apps/Res/TilingRules/" + setf)))
+        try:
+            data = NB.apply_bridge_edits(net, stock.read("Apps/Res/TilingRules/" + fn), el, set_ids)
+        except NB.BridgeError as e:
+            raise NetpackError(str(e))
+        files["Apps/Res/TilingRules/" + fn] = data
+        recs = NB.parse_bridges(data)
+        report["bridges"][net] = {"records": len(recs), "winners": NB.winners(recs, net)}
+        if net == "HWAY":
+            mine = {(e.get("record") or {}).get("axis") for e in el if e.get("op") == "insert"}
+            for a, b in ((0, 2), (1, 3)):
+                if (a in mine) != (b in mine):
+                    report["warnings"].append("HWAY bridges: axis %d is replaced but its other lane (axis %d) is not; "
+                                              "FUN_10002693 builds the two lanes from the two records" % ((a, b) if a in mine else (b, a)))
+    vby = {v["id"]: v for v in variants}
+    try:
+        report["cross"] = NB.check_crossings(stock, [(c["name"], c["crossings"]) for c in comp], vby)
+    except NB.BridgeError as e:
+        raise NetpackError(str(e))
+
     # ---- ini edits inside SYS.PAK members. The names container is opened only if Default.ini [DBSegments] lists it
     # (arm O: GZResourceD opens Text\<lang>\*.IXF by the names listed there; a file merely present is not read).
     # The shipped list repeats key 0xa1096a4f for SC3StringsBuildings.IXF and SC3StringsBuildings_Holidays.IXF.
@@ -660,6 +723,11 @@ def merge(stock, packs):
     for fn in stock.listdir("Apps/Res/TilingRules"):
         if NR.family(fn) == "RULES" and NR.stage_mode(fn):
             placed |= NR.result_ids(tr.get(fn) or stock.read("Apps/Res/TilingRules/" + fn))
+    for rel, data in files.items():                     # task netbridge: bridge records and crossing pieces place too
+        if rel.lower().endswith("_grnd_bridges.txt"):
+            placed |= {val >> 8 for rec in NB.parse_bridges(data) for l in rec[2] for val in l}
+    for c in comp:
+        placed |= {e.get("piece") for e in c["crossings"]}
     for v in variants:
         if v["id"] not in placed:
             report["warnings"].append("%s: no rule RESULT places %d, so the tiler never builds it" % (v["where"], v["id"]))
@@ -767,8 +835,9 @@ def installed_packs(tree, led):
             for p in led.get("packs", [])]
 
 
-def apply_outputs(tree, led, files, tables):
-    """Make the tree hold exactly `files` (+ tables) for led["mode"]; restore whatever is no longer produced."""
+def apply_outputs(tree, led, files, tables, cross=None):
+    """Make the tree hold exactly `files` (+ tables, + crossing tables) for led["mode"]; restore whatever is no longer
+    produced."""
     mode = led["mode"]
     old = led.get("files", {})
     new_led = {}
@@ -812,6 +881,18 @@ def apply_outputs(tree, led, files, tables):
             if n not in want:
                 os.remove(os.path.join(tdir, n))
         _prune(tdir, os.path.join(tree, NETMOD))
+    # task netbridge: crossing tables, mods\netmod\cross\<package>.txt (sc3netmod.dll XCROSS), same rules as tables
+    xdir = os.path.join(tree, CROSS)
+    xwant = {"%s.txt" % n: b for n, b in (cross or {}).items()}
+    for n, b in sorted(xwant.items()):
+        p = os.path.join(xdir, n)
+        if not (os.path.isfile(p) and rd(p) == b):
+            _write_new(p, b)
+    if os.path.isdir(xdir):
+        for n in sorted(os.listdir(xdir)):
+            if n not in xwant:
+                os.remove(os.path.join(xdir, n))
+        _prune(xdir, os.path.join(tree, NETMOD))
 
 
 def restore_one(tree, rel, ent):
@@ -871,7 +952,7 @@ def install(pack_dir, tree, mode=None, allow=False):
     _copy_pack(pack_dir, os.path.join(tree, PACKS, man["name"]))
     led["packs"].append({"name": man["name"], "version": man.get("version"),
                          "manifest_sha256": sha(rd(os.path.join(pack_dir, "manifest.json")))})
-    apply_outputs(tree, led, files, tables)
+    apply_outputs(tree, led, files, tables, report.get("cross"))
     ledger_save(tree, led)
     return led, report
 
@@ -887,7 +968,7 @@ def uninstall(name, tree, allow=False):
         files, tables, report = merge(stock, installed_packs(tree, led))
     else:
         files, tables, report = {}, {}, None
-    apply_outputs(tree, led, files, tables)
+    apply_outputs(tree, led, files, tables, (report or {}).get("cross"))
     shutil.rmtree(os.path.join(tree, PACKS, name))
     if led["packs"]:
         ledger_save(tree, led)
@@ -969,6 +1050,14 @@ def _print_report(report):
     for r in report["reskins"]:
         print("  reskin  %d  %d frames%s" % (r["piece"], r["frames"],
                                              ("  (also changes %s)" % r["sharers"]) if r["sharers"] else ""))
+    for net, b in sorted(report.get("bridges", {}).items()):                    # task netbridge
+        print("  bridges %s: %d record(s); record the builder picks per axis (road/rail/power: per crossing length):"
+              % (net, b["records"]))
+        for axis, runs in sorted(b["winners"].items()):
+            print("    axis %d: %s" % (axis, ("record %s" % runs) if net == "HWAY" else
+                                       ", ".join("L %d..%d: record %s" % (a, z, w) for a, z, w in runs)))
+    for n, b in sorted(report.get("cross", {}).items()):
+        print("  crossings %s: %s" % (n, b.decode().strip().splitlines()[1:]))
     for w in report["warnings"]:
         print("  WARNING " + w)
     for w in report.get("info", []):
@@ -1003,9 +1092,12 @@ def cmd_build(a):
         listing[rel] = {"sha256": sha(data), "bytes": len(data), "replaces_stock": stock.exists(rel)}
     for n, b in sorted(tables.items()):
         _write_new(os.path.join(out, "tables", n + ".txt"), b)
+    for n, b in sorted(report.get("cross", {}).items()):                        # task netbridge
+        _write_new(os.path.join(out, "cross", n + ".txt"), b)
     with open(os.path.join(out, "BUILD.json"), "w", encoding="utf-8", newline="\n") as fh:
         json.dump({"package": man["name"], "version": man.get("version"), "files": listing,
-                   "tables": {n: sha(b) for n, b in tables.items()}, "warnings": report["warnings"]},
+                   "tables": {n: sha(b) for n, b in tables.items()}, "warnings": report["warnings"],
+                   "cross": {n: sha(b) for n, b in report.get("cross", {}).items()}},
                   fh, indent=1, sort_keys=True)
     for rel, m in sorted(listing.items()):
         print("%-58s %9d  %s" % (rel, m["bytes"], "replaces stock" if m["replaces_stock"] else "new file"))
@@ -1068,7 +1160,7 @@ def cmd_export_art(a):
     return 0
 
 
-# =================================================================== selftest (offline U1..U7)
+# =================================================================== selftest (offline U1..U10)
 
 def tree_hashes(root, skip=("re", ".git")):      # .git: other sessions commit while the selftest runs
     out = {}
@@ -1238,6 +1330,78 @@ def cmd_selftest(a):
         found = NR.check(stock_tr, {sname: bad})
         check(bad != stock_tr[sname] and [f.kind for f in found if f.severity == NR.RC.ERROR] == ["misparse"],
               "U7 a `4,0` rule is an ERROR misparse (%s)" % (found[0].text()[:90] if found else "no finding"))
+
+        # U8..U10 (task netbridge): bridges, inheritance / replace_base, crossings
+        HV, BS, XC = (os.path.join(ex_dir, n) for n in ("example_hway_variant", "example_bridge_style",
+                                                         "example_blue_crossing"))
+        raw = st.read("Apps/Res/TilingRules/Collapse.txt")
+        check(NB.render_collapse(NB.parse_collapse(raw)) == raw,
+              "U8 Collapse.txt parse + render == stock bytes (%d groups)" % len(NB.parse_collapse(raw)))
+        for net in sorted(NB.BRIDGE_NETS):
+            raw = st.read("Apps/Res/TilingRules/%s_GRND_Bridges.txt" % net)
+            check(NB.render_bridges(NB.parse_bridges(raw)) == raw,
+                  "U8 %s_GRND_Bridges.txt parse + render == stock bytes (%d records)" % (net, len(NB.parse_bridges(raw))))
+        fb, _, rb = merge(Stock(stock_root), [(BS, load_manifest(BS))])
+        recs = NB.parse_bridges(fb["Apps/Res/TilingRules/ROAD_GRND_Bridges.txt"])
+        w = rb["bridges"]["ROAD"]["winners"]
+        check(len(recs) == 10 and recs[6][2][2] == [20087 * 256, 20088 * 256] and w[0][0] == [1, 5, 6]
+              and w[1][0] == [1, 5, 7] and w[0][1][2] == 4,
+              "U8 example_bridge_style: 10 ROAD records, crossings of 1..5 cells pick the pack's records 6 / 7, 6..9 stock 4")
+
+        def brefuses(mut, what):
+            m = load_manifest(BS)
+            mut(m)
+            d = os.path.join(tmp, "badb")
+            if os.path.isdir(d):
+                shutil.rmtree(d)
+            shutil.copytree(BS, d)
+            with open(os.path.join(d, "manifest.json"), "w") as fh:
+                json.dump(m, fh)
+            try:
+                merge(Stock(stock_root), [(d, load_manifest(d))])
+                check(False, "U8 refuses " + what)
+            except NetpackError as e:
+                check(True, "U8 refuses %s: %s" % (what, str(e).splitlines()[0][:110]))
+        cg = NB.parse_collapse(fb["Apps/Res/TilingRules/Collapse.txt"])
+        check(20087 in cg[4] and 20088 in cg[1] and 20088 in cg[4] and 28051 in cg[1] and all(len(g) + 1 <= 0x1D for g in cg),
+              "U8 example_bridge_style: the variants join their bases' Collapse.txt groups (20087 in group 4, 20088 in 1 and 4)")
+        brefuses(lambda m: m["bridges"][0]["record"].update(span=[[20087, 0]] * 21), "a span of 21 (20-slot stack buffer)")
+        brefuses(lambda m: m["bridges"][0]["record"].update(a=[[28051, 2]] * 6), "a ramp list of 6 (5-slot buffer)")
+        brefuses(lambda m: m["bridges"][0]["record"].update(b=[]), "an empty pad list (B[0] is read)")
+        brefuses(lambda m: m["bridges"][0]["record"].update(e=[[44, 0]]), "a piece that is not in ROAD_GRND_Set.txt")
+        brefuses(lambda m: m["bridges"][0]["record"].update(axis=2), "axis 2 on a road (0..1)")
+        brefuses(lambda m: m["bridges"][0].update(network="PIPE"), "a PIPE bridge (FUN_10017f98 loads 4 files)")
+        brefuses(lambda m: m["bridges"].append({"op": "delete", "network": "ROAD", "record": 0,
+                                                "expect": NB.rec_to_manifest(recs[1])}), "a delete whose expect differs")
+        fh_, _, rh = merge(Stock(stock_root), [(HV, load_manifest(HV))])
+        conv = NB.convert_table(fh_["Apps/Res/TilingRules/HWAY_GRND_Convert.txt"])
+        left = set()
+        for fn in ("HWAY_GRND_SIMPLERULES.txt", "HWAY_GRND_COMPLEXRULES.txt", "HWAY_GRND_final.txt"):
+            left |= {i for i in NR.result_ids(fh_["Apps/Res/TilingRules/" + fn]) if i == 73}
+        check(all(conv.get((20073, s)) == (73, s) for s in range(4)) and not left
+              and 20073 in NR.braced_ids(fh_["Apps/Res/TilingRules/HWAY_GRND_Set.txt"]),
+              "U9 example_hway_variant: Convert rows 20073/s -> 73/s, no stage rule places 73 any more, 20073 in the Set")
+        fx, _, rx = merge(Stock(stock_root), [(A, load_manifest(A)), (XC, load_manifest(XC))])
+        check(rx["cross"].get("example_blue_crossing", b"").endswith(b"20029 69 20069" + NB.CRLF)
+              and 20069 in NR.braced_ids(fx["Apps/Res/TilingRules/RAIL_GRND_Set.txt"])
+              and NB.CRLF + b"20069" + NB.CRLF in fx["Apps/Res/TilingRules/ROAD_GRND_Protected.txt"],
+              "U10 blue crossing: table line 20029 69 20069, 20069 inherits 69's RAIL Set and ROAD Protected membership")
+        try:
+            merge(Stock(stock_root), [(XC, load_manifest(XC))])
+            check(False, "U10 refuses a crossing over a piece no package declares")
+        except NetpackError as e:
+            check(True, "U10 refuses a crossing over a piece no package declares: %s" % str(e)[:90])
+        m = load_manifest(XC)
+        m["crossings"][0]["crossing"] = 67
+        d = os.path.join(tmp, "badx")
+        shutil.copytree(XC, d)
+        with open(os.path.join(d, "manifest.json"), "w") as fh:
+            json.dump(m, fh)
+        try:
+            merge(Stock(stock_root), [(A, load_manifest(A)), (d, load_manifest(d))])
+            check(False, "U10 refuses a replacement that is not a variant of the crossing piece")
+        except NetpackError as e:
+            check(True, "U10 refuses a replacement that is not a variant of the crossing piece: %s" % str(e)[:90])
 
         # U6: authoring path. export-art writes the stock frames, png_dir re-imports them: same pixels as the source
         d = os.path.join(tmp, "pngpack")

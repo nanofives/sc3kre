@@ -199,3 +199,11 @@ The stock files are read from `$SC3_GAME_ROOT` (or the main checkout). `install`
   so far reads them for network pieces.
 - Not tested: 1024 cities, the owner's dev install (MAIN\Apps), the release layout with the DLL in Apps, two packages
   editing the same rule (the second edit's match then sees the first edit's result and fails loudly if it changed).
+
+## 8. Highways, bridges, crossings (task netbridge, 2026-10-13)
+
+Three manifest additions, game-proven on stock DLLs (`NETBRIDGE.md`, `verify/netbridge/RESULTS.md`): variants inherit
+their base's Set / DIAG / Protected membership, Convert rows and Collapse groups (`"inherit"`, default true);
+`"replace_base": true` retargets every rule RESULT that places the base; `bridges` inserts / deletes records of the four
+Bridges files; `crossings` gives a variant its own crossing piece (`mods\netmod\cross\<package>.txt`, read by
+`sc3netmod.dll` XCROSS). Code: `netpack_bridges.py`. Selftest U8..U10.

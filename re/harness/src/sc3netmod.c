@@ -36,6 +36,9 @@
  *    place of <root>\<same path> (read-only opens, existence checks, merged directory listings), so netpack packages
  *    install without writing to Apps\. Variant tables come from every <root>\mods\netmod\tables\*.txt (one per pack),
  *    then Apps\Res\netmod_variants.txt. Details at overlay_init and table_load; evidence in re/analysis/NETPACK.md.
+ * 4. INHERIT + XCROSS (task netbridge, sc3netmod_bridge.c): highway / removal id reads see the base, and crossing art
+ *    for variants from <root>\mods
+etmod\cross\*.txt. SC3NETMOD_INHERIT=0 / SC3NETMOD_XCROSS=0 turn them off.
  * Env: SC3NETMOD_LOG=<path> (default sc3netmod.log beside the DLL), SC3NETMOD_TABLE=<path> (variant table, only that
  * file), SC3NETMOD_FILELOG=1 (log every hooked file call under Apps\Res).
  */
@@ -1018,6 +1021,8 @@ static void overlay_init(void) {
     logf("overlay: ON (%d file(s)%s)", g_novfiles, g_filelog ? ", file log on" : "");
 }
 
+#include "sc3netmod_bridge.c"     /* task netbridge: INHERIT + XCROSS (SC3NETMOD_INHERIT / SC3NETMOD_XCROSS) */
+
 /* ============================================================ arming */
 
 static DWORD WINAPI watcher(LPVOID param) {
@@ -1036,6 +1041,7 @@ static DWORD WINAPI watcher(LPVOID param) {
     if (cross) nc = patch_cross(m);
     if (g_savebase) sv = patch_save(m);
     ld = patch_load(m);
+    bridge_patch(m);                 /* task netbridge, sc3netmod_bridge.c */
     logf("### READY: SIMNTWRK at 0x%08lX, variants=%d, cross=%d (%d site(s)), savebase=%d (%s), load=%s",
          (DWORD)m, g_nvariants, cross, nc, g_savebase, sv ? "patched" : "off", ld ? "patched" : "FAILED");
     for (;;) {
@@ -1043,6 +1049,7 @@ static DWORD WINAPI watcher(LPVOID param) {
         if (g_n_cross_map || g_n_pred_map || g_n_saved_base)
             logf("stats: crossing-switch lookups mapped=%ld, predicate id reads mapped=%ld, tiles saved as base (last save)=%ld",
                  g_n_cross_map, g_n_pred_map, g_n_saved_base);
+        bridge_stats();                  /* task netbridge */
     }
 }
 

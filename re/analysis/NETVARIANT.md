@@ -120,6 +120,10 @@ so the variants of that file are gone for good; the tiles stay as base pieces, n
 
 ## 6. Not covered
 
+**Update 2026-10-13 (task netbridge, `NETBRIDGE.md`):** highway, rail and power bases, bridges and a crossing that keeps
+the variant look are now covered and game-proven; highway diagonals (static only) and removing a crossing again are
+still open.
+
 Highway, onramps, subway, pipes, bridges as bases (their id paths are listed above but not wired); variants of rail or
 power pieces; a crossing that keeps the variant look; removing a crossing again; 1024 cities; the owner's dev install
 (MAIN\Apps); the release layout (DLL in Apps); a traffic run over a crossing the DLL built (see RESULTS, arm T).
