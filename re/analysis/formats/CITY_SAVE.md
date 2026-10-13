@@ -380,11 +380,22 @@ word0 = coord   [CONFIRMED @0x1000d44f getter, 0x1000d4d2 setter]
     x   = word0        & 0x7ff      # bits  0..10  (11-bit, supports N up to 2048)
     y   = (word0 >> 11) & 0x7ff      # bits 11..21
     z   = (word0 >> 22) & 0xff       # bits 22..29  (altitude; tracks terrain)
-    flg = (word0 >> 30) & 3          # bits 30..31  (preserved; setter keeps 0xC0000000)
+    state = (word0 >> 30) & 3        # bits 30..31  the 2-bit quarter turn [CONFIRMED @0x1000d50b]
 word1 = piece   [CONFIRMED @0x1000d594 getter, 0x1000d5f5 setter]
     pieceId = word1        & 0xffff   # prop 0x6355941d  -- the tiling-rule piece id
-    state   = word1 >> 16             # orientation/variant (props 0x6355941e..21)
+    props   = word1 >> 16             # bits 16..27 props 0x63559421/1e/1f/20, bits 28..29 two occupant flags
 ```
+
+> **CORRECTED 2026-10-12 (task newpiece).** This section used to call word0 bits 30..31 `flg` and
+> word1's high half `state`. The saver `FUN_1000ca2c` (the piece occupant's vt+0x24, called per cell by
+> `FUN_10012fc3` at `0x10013070`) fills the record with: coord via record vt+0x30 (`0x1000d4d2`), the
+> state `occupant+0x10 >> 0x1e` via vt+0x38 (`0x1000d50b`, word0 bits 30..31), the piece id and the
+> props `0x63559421/1e/20/1f` via vt+0x84 (`0x1000d5f5`, word1 bits 0..27), and occupant `+0xc` bits 25
+> and 24 via vt+0x3c (`0x1000d536`, word1 bits 28 and 29) `[CONFIRMED @0x1000ca2c]`. The shipped saves
+> agree: straight road 29 and straight rail 44 use state {0,1} only, the curve 11203 all four, and
+> props = 0x3000 (both flags set, no props) on 421,692 of 421,792 tiles (`network_layer.py
+> --selftest-fields`). Instance 2 is water pipes and instance 3 the subway, not rail/net2 (see the
+> 2026-10-09 table at the end of this file).
 
 The `pieceId` is the **rule-resolved render piece**, chosen by the tiling pipeline at build time and
 replayed verbatim on load (`FUN_1000d6b3` does no rule lookup) — so reading it off the save is a

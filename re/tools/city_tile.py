@@ -77,7 +77,7 @@ def build(src, dst_in, out, z, per_copy):
         for i in range(k):
             ox, oy = i * SRC_N, j * SRC_N
             for (x, y), t in src_tiles.items():
-                road[(ox + x, oy + y)] = (t.piece, t.flg, t.state)
+                road[(ox + x, oy + y)] = (t.piece, t.state, t.props)
             for t in range(SRC_N):
                 seam.add((ox, oy + t)); seam.add((ox + t, oy))
     for p in seam:
