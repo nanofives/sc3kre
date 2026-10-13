@@ -22,10 +22,16 @@ package's edits to one file in one pass, and an insert by one package does not s
 set_results / delete_rule are refused when stock rule N was already deleted or its current content differs from
 "expect" (so two packages editing one rule fail loudly). insert_rule "at": N goes before stock rule N ("end": after
 the last rule); several inserts at one N keep list order. Header counts are recomputed, untouched rules and lines are
-re-emitted byte for byte, CRLF kept. New rules pass the tilingrules.py --lint stage invariants. list_add skips ids
-already present; list_remove and convert_remove refuse an absent item.
+re-emitted byte for byte, CRLF kept. list_add skips ids already present; list_remove and convert_remove refuse an
+absent item.
 
-Library: apply(file_name, stock_bytes, edits) -> new bytes; parse_rules, result_ids, family, stage_mode.
+What a rule may contain and what can match is NOT decided here: records go through rulecheck.record_problem, and the
+merged result is checked by rulecheck (check() below), the same code `netrules lint` runs (re/analysis/TILER_SIM.md
+section 11). apply() refuses only what cannot be applied (bad shape, expect mismatch, stock rule gone, index past
+the file, a record outside the engine's tables).
+
+Library: apply(file_name, stock_bytes, edits) -> new bytes; check(stock_files, new_files) -> [rulecheck.Finding];
+parse_rules, result_ids, family, stage_mode.
 """
 import os
 import re
@@ -33,10 +39,10 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from tilingrules import DEAD  # noqa: E402  files the game never reads (formats/TILINGRULES.md)
+from netmod import rulecheck as RC  # noqa: E402  the engine-derived checks, shared with netrules lint
 
 DEAD_LOWER = {n.lower() for n in DEAD}
 CRLF = b"\r\n"
-SENTINEL_STATES = (0, 1, 5)
 
 
 class RuleEditError(Exception):
@@ -58,17 +64,7 @@ def family(name):
     return None
 
 
-def stage_mode(name):
-    """-> the stage mode a RULES file is loaded into (exclusive bound on dir and on selector bits), or None.
-    Same table as tilingrules.stage_mode: FUN_1001547b runs Simple (8) -> Complex (0x18) -> final (4)."""
-    n = name.lower()
-    if n.endswith("_final.txt"):
-        return 4
-    if "complexrules" in n:
-        return 0x18
-    if "simplerules" in n:
-        return 8
-    return None
+stage_mode = RC.stage_mode      # the 18 files tiler.Rules.FILES binds (FUN_100175ed), -> 8 / 0x18 / 4 or None
 
 
 # --------------------------------------------------------------------------- values
@@ -82,11 +78,9 @@ def piece_state(p, where):
     if not isinstance(p, (list, tuple)) or len(p) != 2 or not all(_is_int(x) for x in p):
         raise RuleEditError("%s: %r is not [id, state]" % (where, p))
     pid, st = p
-    if pid == 0:
-        if st not in SENTINEL_STATES:
-            raise RuleEditError("%s: id 0 takes state 5 (empty), 1 (pending) or 0 (foreign), not %d" % (where, st))
-    elif not (0 < pid <= 0xFFFF) or not (0 <= st <= 3):
-        raise RuleEditError("%s: [%d, %d]: id 1..65535 and state 0..3" % (where, pid, st))
+    prob = RC.record_problem(RC.tiler.SELF, pid, st)
+    if prob:
+        raise RuleEditError("%s: [%d, %d]: %s" % (where, pid, st, prob))
     return pid * 256 + st
 
 
@@ -97,8 +91,11 @@ def records(lst, where):
         if not isinstance(r, (list, tuple)) or len(r) != 3:
             raise RuleEditError("%s: %r is not [dir, id, state]" % (where, r))
         d = r[0]
-        if not _is_int(d) or not (0 <= d <= 23 or d == 255):
-            raise RuleEditError("%s: dir %r: 0..23 or 255 (SIMNTWRK 0x10032134 table)" % (where, d))
+        if not _is_int(d):
+            raise RuleEditError("%s: dir %r is not an integer" % (where, d))
+        prob = RC.record_problem(d, 0, 5)
+        if prob:
+            raise RuleEditError("%s: %s" % (where, prob))
         out.append((d, piece_state(list(r[1:]), where)))
     return out
 
@@ -181,21 +178,10 @@ def make_rule(r, where):
     return Rule(r["selector"], records(r.get("conds"), where + " conds"), res)
 
 
-def lint(name, rules):
-    """-> problems for the rules this edit set created or changed (tilingrules.py --lint invariants)."""
-    mode = stage_mode(name)
-    probs = []
-    if not mode:
-        return probs
-    for i, r in enumerate(rules):
-        if r.lines is not None:
-            continue
-        if r.sel != 0x100 and r.sel >> mode:
-            probs.append("%s: rule at position %d: selector 0x%x sets bits >= mode %d" % (name, i, r.sel, mode))
-        for d, v in r.conds + r.results:
-            if d != 255 and d >= mode:
-                probs.append("%s: rule at position %d: dir %d >= mode %d, unreachable in this stage" % (name, i, d, mode))
-    return probs
+def check(stock_files, new_files):
+    """-> the rulecheck findings `new_files` ({TilingRules file name: bytes}, laid over `stock_files`) add to the
+    stock directory: exactly what `netrules lint --rules <merged> --base <stock>` prints."""
+    return RC.lint_files(stock_files, new_files)
 
 
 def _where(name, n, e):
@@ -248,9 +234,6 @@ def apply_rules_file(name, data, edits):
                 raise RuleEditError("%s: \"at\" must be 0..%d (stock index) or \"end\"" % (where, nstock))
         else:
             raise RuleEditError("%s: op %r does not apply to a RULES file" % (where, op))
-    probs = lint(name, rules)
-    if probs:
-        raise RuleEditError("; ".join(probs))
     return render_rules(rules, trailer)
 
 

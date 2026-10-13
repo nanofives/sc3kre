@@ -513,7 +513,7 @@ def merge(stock, packs):
     if len(set(names)) != len(names):
         raise NetpackError("two packages are named %r" % [n for n in names if names.count(n) > 1][0])
     comp = [compile_pack(stock, d, m) for d, m in packs]
-    files, tables, report = {}, {}, {"warnings": [], "variants": [], "reskins": []}
+    files, tables, report = {}, {}, {"warnings": [], "info": [], "variants": [], "reskins": []}
     for c in comp:
         report["warnings"] += c["warnings"]
 
@@ -627,6 +627,16 @@ def merge(stock, packs):
         except NR.RuleEditError as e:
             raise NetpackError(str(e))
         tr[real[0]] = files[rel]
+    # what the merged rules add to the stock findings, by the checks `netrules lint` runs (rulecheck.py): ERROR
+    # refuses the merge, WARNING / INFO are reported (TILER_SIM.md section 11)
+    if tr:
+        stock_tr = {n: stock.read("Apps/Res/TilingRules/" + n) for n in stock.listdir("Apps/Res/TilingRules")}
+        found = NR.check(stock_tr, tr)
+        errs = [f for f in found if f.severity == NR.RC.ERROR]
+        if errs:
+            raise NetpackError("rule edits: " + "; ".join("%s: %s" % (f.kind, f.text()) for f in errs))
+        for f in found:
+            report["warnings" if f.severity == NR.RC.WARNING else "info"].append("%s: %s" % (f.kind, f.text()))
 
     # ---- ini edits inside SYS.PAK members. The names container is opened only if Default.ini [DBSegments] lists it
     # (arm O: GZResourceD opens Text\<lang>\*.IXF by the names listed there; a file merely present is not read).
@@ -961,6 +971,8 @@ def _print_report(report):
                                              ("  (also changes %s)" % r["sharers"]) if r["sharers"] else ""))
     for w in report["warnings"]:
         print("  WARNING " + w)
+    for w in report.get("info", []):
+        print("  INFO " + w)
 
 
 def cmd_validate(a):
