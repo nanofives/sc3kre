@@ -1,0 +1,13 @@
+{
+  "netpack": 1, "name": "demo_rotonda20400", "version": "1.0.0", "author": "multitile + artkit + lanekit shared demo",
+  "description": "Shared demo of the three sibling tasks: piece 20400 (quarter roundabout, base road T 39, art by artkit) placed as a 2x2 template in the pinwheel layout 3,0 / 2,1. The art folder is artkit's (MAIN verify, not in git); connectivity here is the base's (T 39 state 0 = WNS, the same arms lanekit's masks give).",
+  "game": {"Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"},
+  "variants": [
+    {"id": 20400, "base": 39, "network": "ROAD", "name": {"*": "Rotonda"},
+     "art": {"from": 39, "png_dir": "C:/Users/maria/Desktop/Proyectos/Simcity/verify/artkit/roundabout_art"}}
+  ],
+  "templates": [
+    {"name": "rotonda", "label": {"*": "Rotonda 2x2"}, "size": [2, 2], "network": "ROAD",
+     "rows": [[[20400, 3], [20400, 0]], [[20400, 2], [20400, 1]]], "cost": 400}
+  ]
+}

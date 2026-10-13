@@ -51,3 +51,11 @@ only).
 | B0 | `nocollapse4` placed, Demolish one cell | exploratory, two outcomes named in advance: only the clicked cell goes (the plain road removal path) or nothing goes (the Collapse path returning for an id in no group, netbridge arm AB0). Either way, fewer cells than arm B, which shows the group is what removes the whole template |
 | F | `tooexpensive` | log `REFUSED: funds <n> < cost 9999999`, nothing placed, funds unchanged |
 | X | `SC3NETMOD_TMPL=0` | log `tmpl: off (SC3NETMOD_TMPL=0)`, no window subclass line, the On-ramp tool hovers stock (1 or 3 points in the trace) |
+
+## Addendum 2 (2026-10-13, shared demo agreed with artkit + lanekit, before arm D ran)
+
+Package `verify/multitile/packs/demo_rotonda20400`: piece 20400 (base 39, art = artkit png_dir, connectivity = base T 39), template `rotonda` = rows 20400.3 20400.0 / 20400.2 20400.1 (the rotonda4 layout).
+
+| arm | setup | prediction |
+|---|---|---|
+| D | fresh Roadless Paradise, key T until `demo_rotonda20400/rotonda`, click on (120,120), then the 4 road drags of arm C | log PLACED cost 400; cells `20400.3 20400.0 / 20400.2 20400.1`; road cells next to the exits as arm C (29.0 / 29.1 at (119,120), (121,119), (122,121), (120,122)); the block draws with artkit art (a roundabout), template cells unchanged after the roads |
