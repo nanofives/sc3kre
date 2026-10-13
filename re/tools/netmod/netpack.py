@@ -4,7 +4,7 @@ r"""netpack.py - network mod packages for SimCity 3000: new / validate / build /
 A package is one folder with a manifest.json (schema: netpack.schema.json, guide: re/analysis/NETPACK.md) that declares
   variants   new piece ids that behave as a stock piece (base) and draw their own art
   reskins    new art for the frames of existing pieces
-  rules      structured TilingRules edits (netpack_rules.py), so the tiler places the variants
+  rule_edits structured TilingRules edits (netpack_rules.py, format agreed with netrules), so the tiler places the variants
   names      piece names (per language), ini  key edits inside SYS.PAK members
 Art is either derived from a stock piece (recolour) or authored as PNG, one file per frame. No game art is stored in a
 package unless its author puts PNGs there.
@@ -438,7 +438,7 @@ def compile_pack(stock, pack_dir, man):
     pname = man["name"]
     stock_ex = stock.exemplars()
     langs_text = stock.lang_dirs("Text")
-    out = {"name": pname, "variants": [], "reskins": [], "rules": [], "ini": [], "warnings": []}
+    out = {"name": pname, "variants": [], "reskins": [], "rule_edits": [], "ini": [], "warnings": []}
     for n, v in enumerate(man.get("variants", [])):
         where = "%s variant %d (id %s)" % (pname, n + 1, v.get("id"))
         vid, base, net = v["id"], v["base"], v["network"]
@@ -489,8 +489,8 @@ def compile_pack(stock, pack_dir, man):
         if sharers:
             out["warnings"].append("%s: pieces %s draw from the same frame table and change too" % (where, sharers))
         out["reskins"].append({"piece": piece, "art": art, "where": where, "sharers": sharers})
-    for e in man.get("rules", []):
-        out["rules"].append(dict(e, _pack=pname))
+    for e in man.get("rule_edits", []):
+        out["rule_edits"].append(dict(e, _pack=pname))
     for e in man.get("ini", []):
         out["ini"].append(dict(e, _pack=pname))
     return out
@@ -611,9 +611,9 @@ def merge(stock, packs):
     for net in NETS:
         ids = [v["id"] for v in variants if v["net"] == net]
         if ids:
-            edits.setdefault("%s_GRND_Set.txt" % net, []).append({"op": "set_add", "ids": ids, "_pack": "(variants)"})
+            edits.setdefault("%s_GRND_Set.txt" % net, []).append({"op": "list_add", "ids": ids, "_pack": "(variants)"})
     for c in comp:
-        for e in c["rules"]:
+        for e in c["rule_edits"]:
             edits.setdefault(e["file"], []).append(e)
     tr = {}
     for fname, el in sorted(edits.items()):
@@ -917,21 +917,31 @@ def cmd_new(a):
     if not NAME_RE.match(name):
         raise NetpackError("package name %r: lower case letters, digits, - or _" % name)
     stock = Stock(default_stock(a))
+    net = next((n for n in NETS if a.base in stock.set_ids(n)), None)
+    if net is None:
+        raise NetpackError("base %d is in no network Set" % a.base)
+    simple = [n for n in stock.listdir("Apps/Res/TilingRules") if n.lower() == ("%s_grnd_simplerules.txt" % net).lower()]
+    edits = []
+    if simple:
+        rules, _ = NR.parse_rules(stock.read("Apps/Res/TilingRules/" + simple[0]))
+        # the bare (no-condition) rules that place the base: retarget the two plain straight selectors when present
+        # (mask 10 and 5, T2-proven for road 29), else the first bare rule, so the scaffold places the variant at once
+        bare = [r for r in rules if not r.conds and len(r.results) == 1 and r.results[0][0] == 255
+                and r.results[0][1] >> 8 == a.base]
+        pick = [r for r in bare if r.sel in (10, 5)] or bare[:1]
+        for r in pick:
+            st = r.results[0][1] & 0xFF
+            edits.append({"op": "set_results", "file": simple[0], "rule": r.stock_no, "expect": r.as_dict(),
+                          "results": [[255, a.id, st]]})
     man = {
         "netpack": SCHEMA_VERSION, "name": name, "version": "0.1.0", "author": a.author or "",
         "description": "Describe the package in one line.",
         "game": {"Apps/SIMNTWRK.DLL": sha(stock.read("Apps/SIMNTWRK.DLL"))},
         "variants": [{
-            "id": a.id, "base": a.base, "network": "ROAD", "name": "Road (variant)",
+            "id": a.id, "base": a.base, "network": net, "name": "Variant of %d" % a.base,
             "art": {"from": a.base, "recolor": "green"}, "trblkatt": "copy_base"}],
         "reskins": [],
-        "rules": [
-            {"file": "ROAD_GRND_SimpleRules.txt", "op": "set_results",
-             "match": {"selector": 10, "conds": [], "results": [[255, "%d:1" % a.base]]},
-             "results": [[255, "%d:1" % a.id]]},
-            {"file": "ROAD_GRND_SimpleRules.txt", "op": "set_results",
-             "match": {"selector": 5, "conds": [], "results": [[255, "%d:0" % a.base]]},
-             "results": [[255, "%d:0" % a.id]]}],
+        "rule_edits": edits,
         "ini": []}
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, "manifest.json"), "w", encoding="utf-8", newline="\n") as fh:
@@ -1019,7 +1029,7 @@ def cmd_list(a):
         m = load_manifest(os.path.join(a.tree, PACKS, p["name"]))
         print("  %-24s %-8s variants %s  reskins %s  rule edits %d" % (
             p["name"], p.get("version") or "", [v["id"] for v in m.get("variants", [])],
-            [r["piece"] for r in m.get("reskins", [])], len(m.get("rules", []))))
+            [r["piece"] for r in m.get("reskins", [])], len(m.get("rule_edits", []))))
     for rel in sorted(led["files"]):
         e = led["files"][rel]
         print("    %s%s" % (rel, "" if led["mode"] == "overlay" else
@@ -1083,7 +1093,7 @@ def cmd_selftest(a):
         check({k: sha(v) for k, v in f1.items()} == {k: sha(v) for k, v in f2.items()} and t1 == t2,
               "U3 merge A+B == B+A, %d files" % len(f1))
         check(NR.apply("ROAD_GRND_SimpleRules.txt", st.read("Apps/Res/TilingRules/ROAD_GRND_SimpleRules.txt"),
-                       load_manifest(A)["rules"]) == NP.rules_retarget(
+                       load_manifest(A)["rule_edits"]) == NP.rules_retarget(
                   st.read("Apps/Res/TilingRules/ROAD_GRND_SimpleRules.txt"), 29, 20029),
               "example_blue_road rules == newpiece.py rules_retarget (the game-proven 20029 edit)")
         # U5: validate refusals
@@ -1103,8 +1113,9 @@ def cmd_selftest(a):
                 check(True, "U5 refuses %s: %s" % (what, str(e).splitlines()[0][:110]))
         refuses(lambda m: m["variants"][0].update(id=73), "an id with a stock exemplar")
         refuses(lambda m: m["variants"][0].update(base=44), "a base on another network")
-        refuses(lambda m: m["rules"][0]["match"].update(selector=11), "a rule match that finds 0 rules")
-        refuses(lambda m: m["rules"][0]["match"].update(expect=2), "a rule match whose count differs from expect")
+        refuses(lambda m: m["rule_edits"][0]["expect"].update(selector=11), "an edit whose expect differs from the stock rule")
+        refuses(lambda m: m["rule_edits"][1].update(rule=15), "two edits of one stock rule (the second sees the first's result)")
+        refuses(lambda m: m["rule_edits"][0].update(rule=100000), "a rule index past the stock file")
         d = os.path.join(tmp, "badpng")
         shutil.copytree(A, d)
         os.makedirs(os.path.join(d, "art"))

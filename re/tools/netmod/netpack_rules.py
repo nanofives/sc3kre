@@ -1,31 +1,31 @@
 #!/usr/bin/env python3
 r"""netpack_rules.py - structured edits to Apps\Res\TilingRules\*.txt for netpack packages (2026-10-13).
 
-A package never edits rule files by byte offset. It names a rule by its number in the STOCK file or by its content,
-says what to change, and this module applies the edit to the parsed file and renders it back. Rules nobody edited
-are re-emitted as their original lines, so an edit touches only the lines it has to.
+The format was agreed with the sibling `netrules` (tiler simulator + rule editor), which owns its semantics; this
+module is the one implementation, used by netpack install/validate and offered to `netrules apply-edits`. A package
+never edits a rule file by byte offset: it names a rule by its index in the STOCK file plus the content it expects.
 
-File families (grammar: re/tools/tilingrules.py, formats/TILINGRULES.md):
-  RULES          *_SimpleRules, *_ComplexRules, *_final, Landfill*: "0,N" then N rules of
-                 1,selector / 2,C / C x "3,dir,val" / 4,R / R x "5,dir,val"   (C and R are derived here)
-  BRACED         *_Set.txt, DIAG_Set.txt: any integer token is a member (SIMNTWRK FUN_1001746e)
-  COUNTED_LIST   *_Protected.txt: line 1 = N, then N ids
-  COUNTED_PAIRS  *_Convert.txt, *_Complex_Convert.txt: line 1 = N, then N "from,to"
+Manifest key "rule_edits": a list, applied in order to a copy of each named file. File names are case-insensitive.
+Rule record = [dir, id, state]: dir 0..23 (5x5 neighbourhood table, SIMNTWRK 0x10032134) or 255 (the tile itself),
+id = piece id, state 0..3; id 0 with state 5 / 1 / 0 = empty / pending / foreign (the sentinels). Raw file values
+(id*256+state) never appear in a manifest. Rule = {"selector": int, "conds": [rec, ...], "results": [rec, ...]}.
 
-Edit objects (the "rules" list of a manifest; JSON Schema in netpack.schema.json):
-  {"file": F, "op": "set_results",  "match": M, "results": [[dir, val], ...]}
-  {"file": F, "op": "replace_rule", "match": M, "rule": R}
-  {"file": F, "op": "insert_rule",  "rule": R, "before": M | "after": M | "at": "start" | "end"}
-  {"file": F, "op": "delete_rule",  "match": M}
-  {"file": F, "op": "set_add",      "ids": [id, ...]}             BRACED
-  {"file": F, "op": "list_add",     "ids": [id, ...]}             COUNTED_LIST
-  {"file": F, "op": "pairs_add",    "pairs": [[from, to], ...]}   COUNTED_PAIRS
-R = {"selector": int, "conds": [[dir, val], ...], "results": [[dir, val], ...]}
-M = {"rule": N} (1-based number in the stock file, as netcat prints it) and/or any of "selector", "conds", "results"
-    (exact; conds and results are order-sensitive), plus "expect": how many rules must match (default 1).
-val = int (raw id*256+state, or a sentinel < 256) or "ID:STATE" (state 0..3).
+  {"op": "set_results", "file": F, "rule": N, "expect": RULE, "results": [rec, ...]}
+  {"op": "insert_rule", "file": F, "at": N | "end", "rule": RULE}
+  {"op": "delete_rule", "file": F, "rule": N, "expect": RULE}
+  {"op": "list_add" | "list_remove", "file": "<NET>_GRND_Set.txt" | "DIAG_Set.txt" | "<NET>_GRND_Protected.txt", "ids": [...]}
+  {"op": "convert_add" | "convert_remove", "file": "<NET>_GRND_Convert.txt" | "<NET>_GRND_Complex_Convert.txt",
+   "from": [id, state], "to": [id, state]}
 
-Library entry point for other tools (the netrules editor): apply(name, stock_bytes, edits) -> new bytes.
+Indexes: N is 0-based in the STOCK file order. That keeps packages composable: netpack applies every installed
+package's edits to one file in one pass, and an insert by one package does not shift another's indexes.
+set_results / delete_rule are refused when stock rule N was already deleted or its current content differs from
+"expect" (so two packages editing one rule fail loudly). insert_rule "at": N goes before stock rule N ("end": after
+the last rule); several inserts at one N keep list order. Header counts are recomputed, untouched rules and lines are
+re-emitted byte for byte, CRLF kept. New rules pass the tilingrules.py --lint stage invariants. list_add skips ids
+already present; list_remove and convert_remove refuse an absent item.
+
+Library: apply(file_name, stock_bytes, edits) -> new bytes; parse_rules, result_ids, family, stage_mode.
 """
 import os
 import re
@@ -36,6 +36,7 @@ from tilingrules import DEAD  # noqa: E402  files the game never reads (formats/
 
 DEAD_LOWER = {n.lower() for n in DEAD}
 CRLF = b"\r\n"
+SENTINEL_STATES = (0, 1, 5)
 
 
 class RuleEditError(Exception):
@@ -70,35 +71,41 @@ def stage_mode(name):
     return None
 
 
-def value(v):
-    """int or "ID:STATE" -> int."""
-    if isinstance(v, bool):
-        raise RuleEditError("value %r is not a number" % (v,))
-    if isinstance(v, int):
-        if v < 0:
-            raise RuleEditError("negative value %d" % v)
-        return v
-    m = re.fullmatch(r"\s*(\d+)\s*:\s*(\d+)\s*", str(v))
-    if not m:
-        raise RuleEditError("value %r is neither an int nor \"ID:STATE\"" % (v,))
-    pid, st = int(m.group(1)), int(m.group(2))
-    if st > 3:
-        raise RuleEditError("state %d in %r: only 0..3 occur in shipped rules" % (st, v))
-    if not 0 < pid <= 0xFFFF:
-        raise RuleEditError("piece id %d in %r does not fit 16 bits" % (pid, v))
+# --------------------------------------------------------------------------- values
+
+def _is_int(x):
+    return isinstance(x, int) and not isinstance(x, bool)
+
+
+def piece_state(p, where):
+    """[id, state] -> raw id*256+state."""
+    if not isinstance(p, (list, tuple)) or len(p) != 2 or not all(_is_int(x) for x in p):
+        raise RuleEditError("%s: %r is not [id, state]" % (where, p))
+    pid, st = p
+    if pid == 0:
+        if st not in SENTINEL_STATES:
+            raise RuleEditError("%s: id 0 takes state 5 (empty), 1 (pending) or 0 (foreign), not %d" % (where, st))
+    elif not (0 < pid <= 0xFFFF) or not (0 <= st <= 3):
+        raise RuleEditError("%s: [%d, %d]: id 1..65535 and state 0..3" % (where, pid, st))
     return pid * 256 + st
 
 
-def pairs(lst, what):
+def records(lst, where):
+    """[[dir, id, state], ...] -> [(dir, raw value)]."""
     out = []
-    for p in lst or []:
-        if not isinstance(p, (list, tuple)) or len(p) != 2:
-            raise RuleEditError("%s entry %r is not [dir, val]" % (what, p))
-        d = p[0]
-        if not isinstance(d, int) or not (0 <= d <= 23 or d == 255):
-            raise RuleEditError("%s dir %r: 0..23 or 255 (SIMNTWRK 0x10032134 table)" % (what, d))
-        out.append((d, value(p[1])))
+    for r in lst or []:
+        if not isinstance(r, (list, tuple)) or len(r) != 3:
+            raise RuleEditError("%s: %r is not [dir, id, state]" % (where, r))
+        d = r[0]
+        if not _is_int(d) or not (0 <= d <= 23 or d == 255):
+            raise RuleEditError("%s: dir %r: 0..23 or 255 (SIMNTWRK 0x10032134 table)" % (where, d))
+        out.append((d, piece_state(list(r[1:]), where)))
     return out
+
+
+def as_records(pairs_):
+    """[(dir, raw)] -> [[dir, id, state]] (to print a rule, or to read a file back into manifest form)."""
+    return [[d, v >> 8, v & 0xFF] for d, v in pairs_]
 
 
 # --------------------------------------------------------------------------- RULES files
@@ -108,7 +115,7 @@ class Rule:
 
     def __init__(self, sel, conds, results, stock_no=None, lines=None):
         self.sel, self.conds, self.results = sel, list(conds), list(results)
-        self.stock_no, self.lines = stock_no, lines
+        self.stock_no, self.lines = stock_no, lines      # stock_no: 0-based index in the stock file, None if new
 
     def render(self):
         if self.lines is not None:
@@ -118,6 +125,9 @@ class Rule:
         out += [b"4,%d" % len(self.results)]
         out += [b"5,%d,%d" % r for r in self.results]
         return out
+
+    def as_dict(self):
+        return {"selector": self.sel, "conds": as_records(self.conds), "results": as_records(self.results)}
 
 
 def _ints(line):
@@ -133,7 +143,7 @@ def parse_rules(data):
     if len(head) != 2 or head[0] != 0:
         raise RuleEditError("first line %r is not 0,N" % lines[0])
     n, k, rules = head[1], 1, []
-    for no in range(1, n + 1):
+    for no in range(n):
         start = k
         try:
             op, sel = _ints(lines[k])
@@ -162,41 +172,13 @@ def render_rules(rules, trailer):
     return CRLF.join(out) + CRLF
 
 
-def _matches(rule, m):
-    if "rule" in m and rule.stock_no != m["rule"]:
-        return False
-    if "selector" in m and rule.sel != m["selector"]:
-        return False
-    if "conds" in m and rule.conds != pairs(m["conds"], "match conds"):
-        return False
-    if "results" in m and rule.results != pairs(m["results"], "match results"):
-        return False
-    return True
-
-
-def find(rules, m, where):
-    if not isinstance(m, dict) or not any(k in m for k in ("rule", "selector", "conds", "results")):
-        raise RuleEditError("%s: match needs \"rule\" and/or \"selector\"/\"conds\"/\"results\"" % where)
-    hits = [i for i, r in enumerate(rules) if _matches(r, m)]
-    want = m.get("expect", 1)
-    if len(hits) != want:
-        raise RuleEditError("%s: match %s found %d rule(s), expected %d" % (where, _short(m), len(hits), want))
-    return hits
-
-
-def _short(m):
-    return "{" + ", ".join("%s=%s" % (k, m[k]) for k in sorted(m) if k != "expect") + "}"
-
-
 def make_rule(r, where):
-    if not isinstance(r, dict) or "selector" not in r:
-        raise RuleEditError("%s: rule needs \"selector\"" % where)
-    if not isinstance(r["selector"], int) or r["selector"] < 0:
-        raise RuleEditError("%s: selector %r" % (where, r["selector"]))
-    res = pairs(r.get("results"), where + " results")
+    if not isinstance(r, dict) or not _is_int(r.get("selector")) or r["selector"] < 0:
+        raise RuleEditError("%s: rule needs an integer \"selector\"" % where)
+    res = records(r.get("results"), where + " results")
     if not res:
         raise RuleEditError("%s: a rule with no results places nothing" % where)
-    return Rule(r["selector"], pairs(r.get("conds"), where + " conds"), res)
+    return Rule(r["selector"], records(r.get("conds"), where + " conds"), res)
 
 
 def lint(name, rules):
@@ -209,45 +191,61 @@ def lint(name, rules):
         if r.lines is not None:
             continue
         if r.sel != 0x100 and r.sel >> mode:
-            probs.append("%s: rule at position %d: selector 0x%x sets bits >= mode %d" % (name, i + 1, r.sel, mode))
+            probs.append("%s: rule at position %d: selector 0x%x sets bits >= mode %d" % (name, i, r.sel, mode))
         for d, v in r.conds + r.results:
             if d != 255 and d >= mode:
-                probs.append("%s: rule at position %d: dir %d >= mode %d, unreachable in this stage" % (name, i + 1, d, mode))
+                probs.append("%s: rule at position %d: dir %d >= mode %d, unreachable in this stage" % (name, i, d, mode))
     return probs
+
+
+def _where(name, n, e):
+    return "%s%s edit %d (%s)" % (e.get("_pack", "") and e["_pack"] + ": ", name, n + 1, e.get("op"))
+
+
+def _stock_index(rules, e, where):
+    """-> current list position of stock rule e["rule"], after checking e["expect"] against its current content."""
+    n = e.get("rule")
+    if not _is_int(n) or n < 0:
+        raise RuleEditError("%s: \"rule\" must be a 0-based index into the stock file" % where)
+    if "expect" not in e:
+        raise RuleEditError("%s: \"expect\" (the rule's current content) is required" % where)
+    pos = [i for i, r in enumerate(rules) if r.stock_no == n]
+    if not pos:
+        raise RuleEditError("%s: stock rule %d does not exist or was deleted by an earlier edit" % (where, n))
+    r = rules[pos[0]]
+    want = make_rule(e["expect"], where + " expect")
+    if (r.sel, r.conds, r.results) != (want.sel, want.conds, want.results):
+        raise RuleEditError("%s: rule %d is %s, expect says %s" % (where, n, r.as_dict(), e["expect"]))
+    return pos[0]
 
 
 def apply_rules_file(name, data, edits):
     rules, trailer = parse_rules(data)
+    nstock = len(rules)
     for n, e in enumerate(edits):
-        where = "%s%s edit %d (%s)" % (e.get("_pack", "") and e["_pack"] + ": ", name, n + 1, e.get("op"))
+        where = _where(name, n, e)
         op = e.get("op")
         if op == "set_results":
-            for i in find(rules, e.get("match"), where):
-                r = rules[i]
-                rules[i] = Rule(r.sel, r.conds, pairs(e.get("results"), where), stock_no=r.stock_no)
-        elif op == "replace_rule":
-            for i in find(rules, e.get("match"), where):
-                nr = make_rule(e.get("rule"), where)
-                nr.stock_no = rules[i].stock_no
-                rules[i] = nr
+            i = _stock_index(rules, e, where)
+            r = rules[i]
+            res = records(e.get("results"), where + " results")
+            if not res:
+                raise RuleEditError("%s: empty results" % where)
+            rules[i] = Rule(r.sel, r.conds, res, stock_no=r.stock_no)
         elif op == "delete_rule":
-            for i in sorted(find(rules, e.get("match"), where), reverse=True):
-                del rules[i]
+            del rules[_stock_index(rules, e, where)]
         elif op == "insert_rule":
             nr = make_rule(e.get("rule"), where)
-            if "before" in e or "after" in e:
-                key = "before" if "before" in e else "after"
-                m = dict(e[key])
-                if m.get("expect", 1) != 1:
-                    raise RuleEditError("%s: an insert anchor must match exactly one rule" % where)
-                i = find(rules, m, where)[0]
-                rules.insert(i if key == "before" else i + 1, nr)
-            elif e.get("at") == "start":
-                rules.insert(0, nr)
-            elif e.get("at") == "end":
+            at = e.get("at")
+            if at == "end":
                 rules.append(nr)
+            elif _is_int(at) and 0 <= at <= nstock:
+                # before the first surviving stock rule with index >= at; earlier inserts at the same index sit
+                # right before that rule, so this one lands after them (list order kept)
+                nxt = [i for i, r in enumerate(rules) if r.stock_no is not None and r.stock_no >= at]
+                rules.insert(nxt[0] if nxt else len(rules), nr)
             else:
-                raise RuleEditError("%s: insert_rule needs before / after / at" % where)
+                raise RuleEditError("%s: \"at\" must be 0..%d (stock index) or \"end\"" % (where, nstock))
         else:
             raise RuleEditError("%s: op %r does not apply to a RULES file" % (where, op))
     probs = lint(name, rules)
@@ -262,48 +260,84 @@ def braced_ids(data):
     return [int(x) for x in re.findall(rb"\d+", data)]
 
 
-def set_add(data, ids):
-    """Add ids before the closing brace (format kept: ", <id>" like the shipped lists)."""
+def braced_add(data, ids):
+    """Add ids before the closing brace, as ", <id>" like the shipped lists."""
     have = set(braced_ids(data))
     k = data.rindex(b"}")
-    add = b"".join(b", %d" % i for i in ids if i not in have)
+    add = b""
+    for i in ids:
+        if i not in have:
+            add += b", %d" % i
+            have.add(i)
     return data[:k] + add + data[k:]
 
 
-def counted_add(data, items):
-    """COUNTED_LIST / COUNTED_PAIRS: append lines, rewrite the count on line 1."""
+def braced_remove(data, pid, where):
+    m = re.search(rb"(?<!\d)%d(?!\d)" % pid, data)
+    if not m:
+        raise RuleEditError("%s: id %d is not in the list" % (where, pid))
+    a, b = m.start(), m.end()
+    before = re.search(rb",\s*$", data[:a])
+    if before:                                   # ", id" -> ""
+        return data[:before.start()] + data[b:]
+    after = re.match(rb"\s*,\s*", data[b:])      # first element: "id, " -> ""
+    return data[:a] + data[b + (after.end() if after else 0):]
+
+
+def counted(data):
     lines = data.split(CRLF)
     if lines and lines[-1] == b"":
         lines = lines[:-1]
     n = int(lines[0])
-    body = lines[1:1 + n]
-    have = set(body)
-    for it in items:
-        if it not in have:
-            body.append(it)
-            have.add(it)
-    return CRLF.join([b"%d" % len(body)] + body + lines[1 + n:]) + CRLF
+    return lines[1:1 + n], lines[1 + n:]
+
+
+def counted_render(body, tail):
+    return CRLF.join([b"%d" % len(body)] + body + tail) + CRLF
 
 
 def apply(name, data, edits):
-    """Apply `edits` (all for this one file) to `data` (the stock bytes) -> new bytes."""
+    """Apply `edits` (all for this one file, in order) to `data` (the stock bytes) -> new bytes."""
     fam = family(name)
     if fam is None:
         raise RuleEditError("%s: not an editable TilingRules file (unknown, or DEAD: the game never reads it)" % name)
     if fam == "RULES":
         return apply_rules_file(name, data, edits)
     for n, e in enumerate(edits):
-        where = "%s%s edit %d (%s)" % (e.get("_pack", "") and e["_pack"] + ": ", name, n + 1, e.get("op"))
+        where = _where(name, n, e)
         op = e.get("op")
-        if fam == "BRACED" and op == "set_add":
-            ids = [value(i) if isinstance(i, str) else i for i in e.get("ids", [])]
-            if any(not (0 < i <= 0xFFFF) for i in ids):
-                raise RuleEditError("%s: Set ids are raw piece ids (1..65535)" % where)
-            data = set_add(data, ids)
-        elif fam == "COUNTED_LIST" and op == "list_add":
-            data = counted_add(data, [b"%d" % i for i in e.get("ids", [])])
-        elif fam == "COUNTED_PAIRS" and op == "pairs_add":
-            data = counted_add(data, [b"%d,%d" % (value(a), value(b)) for a, b in e.get("pairs", [])])
+        if op in ("list_add", "list_remove") and fam in ("BRACED", "COUNTED_LIST"):
+            ids = e.get("ids") or []
+            if not ids or any(not _is_int(i) or not 0 < i <= 0xFFFF for i in ids):
+                raise RuleEditError("%s: \"ids\" must be piece ids 1..65535" % where)
+            if fam == "BRACED":
+                if op == "list_add":
+                    data = braced_add(data, ids)
+                else:
+                    for i in ids:
+                        data = braced_remove(data, i, where)
+            else:
+                body, tail = counted(data)
+                for i in ids:
+                    t = b"%d" % i
+                    if op == "list_add":
+                        if t not in body:
+                            body.append(t)
+                    elif t in body:
+                        body.remove(t)
+                    else:
+                        raise RuleEditError("%s: id %d is not in the list" % (where, i))
+                data = counted_render(body, tail)
+        elif op in ("convert_add", "convert_remove") and fam == "COUNTED_PAIRS":
+            line = b"%d,%d" % (piece_state(e.get("from"), where + " from"), piece_state(e.get("to"), where + " to"))
+            body, tail = counted(data)
+            if op == "convert_add":
+                body.append(line)                     # the game scan takes the LAST matching row (netrules)
+            elif line in body:
+                del body[len(body) - 1 - body[::-1].index(line)]
+            else:
+                raise RuleEditError("%s: row %s is not in the file" % (where, line.decode()))
+            data = counted_render(body, tail)
         else:
             raise RuleEditError("%s: op %r does not apply to a %s file" % (where, op, fam))
     return data

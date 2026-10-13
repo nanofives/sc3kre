@@ -22,8 +22,8 @@ One folder, one `manifest.json`, optional PNG art. Nothing else.
   "variants": [{"id": 20029, "base": 29, "network": "ROAD", "name": {"*": "Blue road", "ENGLISH": "Carretera azul"},
                 "art": {"from": 29, "recolor": "blue"}, "trblkatt": "copy_base"}],
   "reskins":  [{"piece": 73, "art": {"recolor": "red"}}],
-  "rules":    [{"file": "ROAD_GRND_SimpleRules.txt", "op": "set_results",
-                "match": {"selector": 10, "conds": [], "results": [[255, "29:1"]]}, "results": [[255, "20029:1"]]}],
+  "rule_edits": [{"op": "set_results", "file": "ROAD_GRND_SimpleRules.txt", "rule": 15,
+                  "expect": {"selector": 10, "conds": [], "results": [[255, 29, 1]]}, "results": [[255, 20029, 1]]}],
   "ini":      [{"file": "Occupant.ini", "section": "...", "key": "...", "value": "...", "op": "set"}]
 }
 ```
@@ -36,7 +36,7 @@ One folder, one `manifest.json`, optional PNG art. Nothing else.
 | `variants[].name` | piece name, one string or `{language folder or "*": text}` | written per `Apps\Res\Text\<folder>` |
 | `variants[].trblkatt` | `copy_base` (default): the base's TrBlkAtt records re-keyed to the new id, every language; `none` | the reserved index must have room (161 free slots per language) |
 | `reskins[]` | new art for the frames of an EXISTING piece | no two packages reskin the same frame table; pieces that share the table are reported |
-| `rules[]` | TilingRules edits, section 4 | every match count must equal `expect` (default 1); stage lint |
+| `rule_edits[]` | TilingRules edits, section 4 (format agreed with netrules) | stock rule N must exist and equal `expect`; stage lint |
 | `ini[]` | keys inside a SYS.PAK member: `set` (existing key), `add` (new key), `append` (line even if the key exists) | member, section and key found exactly as required |
 
 Art file names inside `png_dir`: frame position k in the piece's table -> `z{zoom}_r{rot}.png` with zoom `(k % 20) // 4`,
@@ -104,20 +104,38 @@ stock file's sha256). Installed package sources are copied to `mods\netmod\packs
 do not depend on the original folder. A tree with a `mods\netmod` folder but no ledger, or with newpiece.py files in
 `Apps\Res` that no ledger owns, is refused.
 
-## 4. Rule edits (`netpack_rules.py`)
+## 4. Rule edits (`netpack_rules.py`, format agreed with `netrules`)
 
-No byte offsets. A rule is found by its number in the STOCK file (`{"rule": N}`, as netcat prints it) and/or by its
-exact content (`selector`, `conds`, `results`), and `expect` says how many must match. Edits: `set_results`,
-`replace_rule`, `insert_rule` (`before` / `after` / `at`), `delete_rule` on RULES files; `set_add` (Set files),
-`list_add` (Protected), `pairs_add` (Convert). Values are raw ints or `"ID:STATE"`. All packages' edits to one file are
-applied in one parse, so `{"rule": N}` always means the stock rule N. Rules nobody touched are re-emitted as their
-original lines; every live rule file round-trips byte-identical through the parser. New or changed rules pass the
-`tilingrules.py --lint` stage invariants (selector bits and dir below the stage mode). DEAD files are refused.
+The sibling `netrules` (tiler simulator and rule editor) owns the semantics; `netpack_rules.py` is the one
+implementation, used by netpack and offered to `netrules apply-edits`. Manifest key `rule_edits`, applied in order:
 
-The two `set_results` edits of `example_blue_road` produce the same bytes as newpiece.py's `rules_retarget` (the
-game-proven 20029 edit; selftest).
+```
+{"op": "set_results", "file": F, "rule": N, "expect": RULE, "results": [[dir, id, state], ...]}
+{"op": "insert_rule", "file": F, "at": N | "end", "rule": RULE}
+{"op": "delete_rule", "file": F, "rule": N, "expect": RULE}
+{"op": "list_add" | "list_remove", "file": "<NET>_GRND_Set.txt" | "DIAG_Set.txt" | "<NET>_GRND_Protected.txt", "ids": [...]}
+{"op": "convert_add" | "convert_remove", "file": "<NET>_GRND_Convert.txt" | "..._Complex_Convert.txt", "from": [id, state], "to": [id, state]}
+RULE = {"selector": int, "conds": [[dir, id, state], ...], "results": [[dir, id, state], ...]}
+```
 
-Library use: `netpack_rules.apply(file_name, stock_bytes, edits) -> bytes`, `parse_rules`, `result_ids`.
+- No byte offsets and no raw values: a record is `[dir, id, state]` (dir 0..23 or 255 = the tile itself; id 0 with
+  state 5 / 1 / 0 = empty / pending / foreign). Header counts are recomputed.
+- `rule` and `at` are 0-based indexes into the STOCK file. All installed packages' edits to one file are applied in
+  one pass, so an insert by one package never shifts another package's indexes. `expect` is required on
+  `set_results` and `delete_rule`: the edit is refused when the rule's current content differs, which also refuses a
+  second package editing a rule the first already changed. Several inserts at one index keep list order.
+- `list_add` skips ids already present; `list_remove` and `convert_remove` refuse an absent item. `convert_add`
+  appends (the game takes the last matching row, per netrules).
+- Untouched rules and lines are re-emitted byte for byte; every live rule file round-trips identical. New or changed
+  rules pass the `tilingrules.py --lint` stage invariants. DEAD files are refused.
+- `netpack.py new` writes the edits for the chosen base: the bare rules with selectors 10 and 5 (the plain straights,
+  T2-proven for road 29), else the first bare rule that places the base.
+
+The two edits of `example_blue_road` (stock rules 15 and 21) produce the same bytes as newpiece.py's `rules_retarget`,
+the game-proven 20029 edit (selftest).
+
+Library use: `netpack_rules.apply(file_name, stock_bytes, edits) -> bytes`; `parse_rules` (each `Rule` has
+`stock_no`, `sel`, `conds`, `results`, `as_dict()`), `result_ids`, `family`, `stage_mode`.
 
 ## 5. sc3netmod.dll changes
 

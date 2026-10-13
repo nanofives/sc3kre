@@ -17,18 +17,16 @@
       "trblkatt": "copy_base"
     }
   ],
-  "rules": [
+  "rule_edits": [
     {
-      "file": "ROAD_GRND_SimpleRules.txt",
-      "op": "set_results",
-      "match": {"selector": 10, "conds": [], "results": [[255, "29:1"]]},
-      "results": [[255, "20029:1"]]
+      "op": "set_results", "file": "ROAD_GRND_SimpleRules.txt", "rule": 15,
+      "expect": {"selector": 10, "conds": [], "results": [[255, 29, 1]]},
+      "results": [[255, 20029, 1]]
     },
     {
-      "file": "ROAD_GRND_SimpleRules.txt",
-      "op": "set_results",
-      "match": {"selector": 5, "conds": [], "results": [[255, "29:0"]]},
-      "results": [[255, "20029:0"]]
+      "op": "set_results", "file": "ROAD_GRND_SimpleRules.txt", "rule": 21,
+      "expect": {"selector": 5, "conds": [], "results": [[255, 29, 0]]},
+      "results": [[255, 20029, 0]]
     }
   ]
 }

@@ -28,8 +28,8 @@ folders (game art, not committed).
 ```
 ok   U3 merge A+B == B+A, 21 files
 ok   example_blue_road rules == newpiece.py rules_retarget (the game-proven 20029 edit)
-ok   U5 refuses an id with a stock exemplar / a base on another network / a rule match that finds 0 rules /
-     a match whose count differs from expect / a PNG whose size differs from the base frame (7x5 vs 8x5)
+ok   U5 refuses an id with a stock exemplar / a base on another network / an edit whose expect differs from the
+     stock rule / two edits of one stock rule / a rule index past the file / a PNG whose size differs (7x5 vs 8x5)
 ok   U6 export-art -> png_dir re-import: 20 frames, decoded pixels identical to the stock frames
 ok   U1 overlay: nothing under Apps changed after installing both
 ok   U4 overlay: id clash refused, tree unchanged
@@ -39,7 +39,8 @@ ok   U4 direct: id clash refused, tree unchanged
 ok   U1 direct: tree byte-identical after install A, B, uninstall B, A (3488 files); mods\ removed
 ok   U2 the 11 stock files the packages replace are unchanged in the hard-link source
 ```
-(U6 was added after the run above; it passed on its own, 20 of 20 frames.) `build` twice on the same package: identical
+(Output of the final run, after the rule edits moved to the format agreed with netrules: `rule_edits`, stock indexes,
+`expect` guards. The example's rule file bytes are unchanged by that switch, so the game arms stand.) `build` twice on the same package: identical
 outputs (sha256 of every file). Every live TilingRules file round-trips byte-identical through `netpack_rules`.
 
 ## Not covered
