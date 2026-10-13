@@ -65,6 +65,11 @@
 !/re/tools/
 /re/tools/*
 !/re/tools/*.py
+# 4b) re/tools/netmod — the network-modding suite package (netcat etc.), Python only.
+#     Its catalog/HTML/PNG output goes to re/netcat_out/ (ignored by /re/*): game art never published.
+!/re/tools/netmod/
+/re/tools/netmod/*
+!/re/tools/netmod/*.py
 
 # 5) re/scripts — .py / .ps1 / .java only.
 #    Explicitly NOT the .log / .txt Ghidra run artifacts (absolute-path leaks)
