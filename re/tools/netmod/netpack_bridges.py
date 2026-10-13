@@ -257,6 +257,54 @@ def replace_base_edits(stock, v):
     return out
 
 
+# --------------------------------------------------------------------------- Collapse.txt
+
+COLLAPSE_MAX = 0x1D        # FUN_1001da5f returns when a group's count (which counts itself) is over 0x1d
+
+
+def parse_collapse(data):
+    """-> list of groups (lists of ids). Line 1 = number of tokens after it; then [n, ids x (n-1)] per group."""
+    toks = [int(t) for t in data.split()]
+    body, groups, k = toks[1:], [], 0
+    if toks and toks[0] != len(body):
+        raise BridgeError("Collapse.txt: line 1 says %d tokens, the file has %d" % (toks[0], len(body)))
+    while k < len(body):
+        n = body[k]
+        if n < 1 or k + n > len(body):
+            raise BridgeError("Collapse.txt: group at token %d runs past the file" % (k + 2))
+        groups.append(body[k + 1:k + n])
+        k += n
+    return groups
+
+
+def render_collapse(groups):
+    body = []
+    for g in groups:
+        body += [len(g) + 1] + list(g)
+    return CRLF.join(b"%d" % v for v in [len(body)] + body) + CRLF
+
+
+def collapse_inherit(stock_bytes, variants, warnings):
+    """Each inheriting variant joins every Collapse.txt group that holds its base, while the group stays within
+    0x1d entries. Without the DLL this is what lets FUN_1001da5f find the group of a variant bridge piece (it returns
+    before its walk, and nothing is removed, when the id is in no group: measured, arm AB0)."""
+    groups = parse_collapse(stock_bytes)
+    changed = False
+    for v in variants:
+        if not v.get("inherit", True):
+            continue
+        for gi, g in enumerate(groups):
+            if v["base"] in g and v["id"] not in g:
+                if len(g) + 2 > COLLAPSE_MAX:
+                    warnings.append("Collapse.txt group %d holds %d (base of %d) but is full (%d entries, limit %d): "
+                                    "the variant is left out; sc3netmod.dll INHERIT still maps it at removal"
+                                    % (gi, v["base"], v["id"], len(g) + 1, COLLAPSE_MAX))
+                    continue
+                g.append(v["id"])
+                changed = True
+    return render_collapse(groups) if changed else None
+
+
 # --------------------------------------------------------------------------- crossings
 
 def crossing_matrix(stock):

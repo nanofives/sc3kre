@@ -659,7 +659,16 @@ def merge(stock, packs):
         for f in found:
             report["warnings" if f.severity == NR.RC.WARNING else "info"].append("%s: %s" % (f.kind, f.text()))
 
-    # ---- task netbridge: Bridges records (ROAD / RAIL / HWAY / POWR, the four files FUN_10017f98 loads) and crossings
+    # ---- task netbridge: Collapse.txt groups (removal of multi-tile pieces), Bridges records (ROAD / RAIL / HWAY /
+    # POWR, the four files FUN_10017f98 loads) and crossings
+    cfn = [n for n in stock.listdir("Apps/Res/TilingRules") if n.lower() == "collapse.txt"]
+    if cfn and variants:
+        try:
+            cdata = NB.collapse_inherit(stock.read("Apps/Res/TilingRules/" + cfn[0]), variants, report["warnings"])
+        except NB.BridgeError as e:
+            raise NetpackError(str(e))
+        if cdata is not None:
+            files["Apps/Res/TilingRules/" + cfn[0]] = cdata
     bed = {}
     for c in comp:
         for e in c["bridges"]:
@@ -1325,6 +1334,9 @@ def cmd_selftest(a):
         # U8..U10 (task netbridge): bridges, inheritance / replace_base, crossings
         HV, BS, XC = (os.path.join(ex_dir, n) for n in ("example_hway_variant", "example_bridge_style",
                                                          "example_blue_crossing"))
+        raw = st.read("Apps/Res/TilingRules/Collapse.txt")
+        check(NB.render_collapse(NB.parse_collapse(raw)) == raw,
+              "U8 Collapse.txt parse + render == stock bytes (%d groups)" % len(NB.parse_collapse(raw)))
         for net in sorted(NB.BRIDGE_NETS):
             raw = st.read("Apps/Res/TilingRules/%s_GRND_Bridges.txt" % net)
             check(NB.render_bridges(NB.parse_bridges(raw)) == raw,
@@ -1350,6 +1362,9 @@ def cmd_selftest(a):
                 check(False, "U8 refuses " + what)
             except NetpackError as e:
                 check(True, "U8 refuses %s: %s" % (what, str(e).splitlines()[0][:110]))
+        cg = NB.parse_collapse(fb["Apps/Res/TilingRules/Collapse.txt"])
+        check(20087 in cg[4] and 20088 in cg[1] and 20088 in cg[4] and 28051 in cg[1] and all(len(g) + 1 <= 0x1D for g in cg),
+              "U8 example_bridge_style: the variants join their bases' Collapse.txt groups (20087 in group 4, 20088 in 1 and 4)")
         brefuses(lambda m: m["bridges"][0]["record"].update(span=[[20087, 0]] * 21), "a span of 21 (20-slot stack buffer)")
         brefuses(lambda m: m["bridges"][0]["record"].update(a=[[28051, 2]] * 6), "a ramp list of 6 (5-slot buffer)")
         brefuses(lambda m: m["bridges"][0]["record"].update(b=[]), "an empty pad list (B[0] is read)")

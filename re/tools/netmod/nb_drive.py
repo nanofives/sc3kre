@@ -7,7 +7,8 @@ SC3_PID picks the instance (set it: this tool only touches that pid).
                                           # its arguments; with two client pixels it also performs that left drag
   py nb_drive.py build NETTYPE X0,Z0 X1,Z1 [--cost N]
                                           # call vt+0xf0 on the game thread with the straight cell line X0,Z0..X1,Z1
-                                          # (NETTYPE 1 road, 2 rail, 3 power, 4 highway)
+                                          # (NETTYPE 1 road, 2 rail, 3 power, 4 highway: two lanes, the second at
+                                          # -1 on the other axis, as the game's highway tool sends them)
   py nb_drive.py center X,Z               # iso view vt+0x54 (SIMSPR FUN_1001d039 CenterOnTile): the cell lands at
                                           # client (352,272) at 800x600
   py nb_drive.py cells X0,Z0,X1,Z1        # piece id/state per surface cell (same read as nr_drive.py)
@@ -165,6 +166,23 @@ function iso(known) {
   if (ISO) return ISO;
   var spr = Process.getModuleByName('SIMSPR.DLL').base, vt = spr.add(0x63390);
   var b = [0, 8, 16, 24].map(function (sh) { return ('0' + ((vt.toUInt32() >>> sh) & 0xff).toString(16)).slice(-2); }).join(' ');
+  /* fast path: a pointer walk (depth 3, first 0x400 bytes per object) from the SIMSPR object FUN_10021b37()->vt+0x8c
+     and the city; the full memory scan below took 2-7 min */
+  var g0 = new NativeFunction(ntw.add(0x21b37), 'pointer', [])();
+  var roots = [vfn(g0, 0x8c, 'pointer', [])(g0), city()], seenp = {}, found = null;
+  function walkp(p, d) {
+    if (found || d > 3) return;
+    var k = p.toString();
+    if (seenp[k]) return;
+    seenp[k] = 1;
+    for (var o = 0; o < 0x400 && !found; o += 4) {
+      var q;
+      try { q = p.add(o).readPointer(); if (q.isNull() || (q.toUInt32() & 3)) continue; if (q.readPointer().equals(vt)) { found = q; return; } } catch (e) { continue; }
+      walkp(q, d + 1);
+    }
+  }
+  roots.forEach(function (r) { walkp(r, 0); });
+  if (found) { ISO = found; return ISO; }
   var hits = [];
   Process.enumerateRanges('rw-').forEach(function (r) {
     if (r.size > 0x4000000) return;
@@ -319,6 +337,11 @@ def main(argv):
         net = int(argv[2])
         cells = line(xy(argv[3]), xy(argv[4]))
         cost = int(argv[argv.index("--cost") + 1]) if "--cost" in argv else 0
+        if net == 4:
+            # the highway tool sends two lanes, interleaved per step: (x, z) then (x - 1, z) on a z run, (x, z) then
+            # (x, z - 1) on an x run (UI drags captured 2026-10-13, 34 cells each, cost 150 per cell)
+            zrun = cells[0][0] == cells[-1][0]
+            cells = [c for x, z in cells for c in ((x, z), (x - 1, z) if zrun else (x, z - 1))]
         s = Session()
         s.job({"kind": "post4", "w": [0x637C0DAB, 0, 0, 0]})     # empty retile: the handler hook learns the manager
         trace = [int(v, 16) for v in argv[argv.index("--trace") + 1].split(",")] if "--trace" in argv else []
@@ -381,6 +404,11 @@ def main(argv):
         x1, y1, x2, y2 = xy(argv[3])
         s = Session()
         print(s.job({"kind": "post4", "w": [0x637C0DAB, mask, (x1 << 16) | y1, (x2 << 16) | y2]}))
+        s.close()
+    elif cmd == "post":
+        # post ID [ARG]: one GZ message {ID, ARG, 0, 0} (pause 0xc2a35d7e, resume 0xc2a35d80, speed 0xc2684065 1..4)
+        s = Session()
+        print(s.job({"kind": "post4", "w": [int(argv[2], 0), int(argv[3], 0) if len(argv) > 3 else 0, 0, 0]}))
         s.close()
     elif cmd == "save":
         s = Session()
