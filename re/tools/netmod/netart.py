@@ -52,11 +52,23 @@ def frame_name(z, r, layer=0):
 _CAT = None
 
 
+_ROOT = None
+
+
+def set_game(root):
+    """Read stock frames from this game root (default: $SC3_GAME_ROOT or the main checkout)."""
+    global _CAT, _ROOT
+    if root != _ROOT:
+        _CAT, _ROOT = None, root
+        _MASKS.clear()
+
+
 def catalog():
     global _CAT
     if _CAT is None:
         from netmod import catalog as C
-        _CAT = C.Catalog(with_dims=False)
+        from netmod import paths as P
+        _CAT = C.Catalog(game=P.Game(_ROOT) if _ROOT else None, with_dims=False)
     return _CAT
 
 
@@ -294,32 +306,79 @@ Paint over these at the same size, delete the guide marks, leave unused pixels f
 
 # --------------------------------------------------------------------------------------- route b: compositor
 
+def region_has(region, u, v):
+    """Point test in slot-0 tile space. Region grammar (all coordinates in tiles, slot 0):
+      {"all": true}                       everything
+      {"poly": [[u, v], ...]}             polygon (even-odd)
+      {"half": "N" | "S" | "W" | "E"}     half tile cut along a diagonal (keeps that screen corner)
+      {"disc": [cu, cv, r]}               points within r of (cu, cv)
+      {"ring": [cu, cv, r0, r1]}          r0 <= distance < r1
+      {"box": [u0, v0, u1, v1]}           u0 <= u < u1 and v0 <= v < v1
+      {"and": [R, ...]}, {"or": [R, ...]}, {"not": R}"""
+    if region.get("all"):
+        return True
+    if "and" in region:
+        return all(region_has(x, u, v) for x in region["and"])
+    if "or" in region:
+        return any(region_has(x, u, v) for x in region["or"])
+    if "not" in region:
+        return not region_has(region["not"], u, v)
+    if "disc" in region:
+        cu, cv, rr = region["disc"]
+        return (u - cu) ** 2 + (v - cv) ** 2 < rr * rr
+    if "ring" in region:
+        cu, cv, r0, r1 = region["ring"]
+        d2 = (u - cu) ** 2 + (v - cv) ** 2
+        return r0 * r0 <= d2 < r1 * r1
+    if "box" in region:
+        u0, v0, u1, v1 = region["box"]
+        return u0 <= u < u1 and v0 <= v < v1
+    pts = HALVES[region["half"]] if "half" in region else region.get("poly")
+    if pts:
+        inside = False
+        n = len(pts)
+        for i in range(n):
+            (u0, v0), (u1, v1) = pts[i], pts[(i + 1) % n]
+            if (v0 > v) != (v1 > v) and u < (u1 - u0) * (v - v0) / (v1 - v0) + u0:
+                inside = not inside
+        return inside
+    raise ValueError("unknown region %r" % (region,))
+
+
 def _region_mask(z, r, size, LT, region, src_e=0.0):
-    """Rasterise a tile-space region (slot-0 coords, turned to slot r) into a frame-sized L mask.
-    region: {"poly": [[u, v], ...], "e": height, "down": px_extrude} | {"all": true} | {"half": "NE"|...}
-    "down": the polygon is extruded straight down by this many zoom-3 px (walls under a deck edge)."""
+    """Rasterise a tile-space region (slot-0 coords, turned to slot r) into a frame-sized L mask by sampling
+    every pixel centre: pixel -> (u, v) on the plane at height e ("e" in zoom-3 px, default 0) -> turned back
+    to slot 0 -> region_has. "down": also every pixel up to that many zoom-3 px BELOW a region point
+    (walls hanging under a deck edge)."""
     w, h = size
     L, T = LT
     m = Image.new("L", (w, h), 0)
     if region.get("all"):
         m.paste(255, (0, 0, w, h))
         return m
-    pts = region.get("poly")
-    if region.get("half"):
-        pts = HALVES[region["half"]]
     e = region.get("e", src_e)
-    d = ImageDraw.Draw(m)
-    tp = [rot_uv(u, v, r) for u, v in pts]
-    poly = [(L + project(z, u, v, e)[0], T + project(z, u, v, e)[1]) for u, v in tp]
-    down = region.get("down", 0)
-    if down:
-        W = TILE_W[z]
-        k = down * W / 64.0
-        n = len(poly)
-        for i in range(n):                      # sweep every edge down: union of quads
-            (x0, y0), (x1, y1) = poly[i], poly[(i + 1) % n]
-            d.polygon([(x0, y0), (x1, y1), (x1, y1 + k), (x0, y0 + k)], fill=255)
-    d.polygon(poly, fill=255)
+    down = region.get("down", 0) * TILE_W[z] / 64.0
+    clamp = region.get("clamp", True)
+    px = m.load()
+    for y in range(h):
+        for x in range(w):
+            hit = False
+            k = 0.0
+            while True:
+                u, v = unproject(z, x + 0.5 - L, y + 0.5 - T - k, e)
+                u, v = rot_uv(u, v, -r % 4)
+                if clamp:
+                    # the stock frames carry a 1 px rim just outside the exact diamond (NET_ART.md 6): those
+                    # pixels belong to the nearest edge point, or a region ending at an edge leaves a seam
+                    u, v = min(1.0, max(0.0, u)), min(1.0, max(0.0, v))
+                if region_has(region, u, v):
+                    hit = True
+                    break
+                k += 1.0
+                if k > down:
+                    break
+            if hit:
+                px[x, y] = 255
     return m
 
 
@@ -658,6 +717,9 @@ def preview(layout, out_png, src_dir=None, zooms=range(ZOOMS), rots=range(ROTS),
                     a = stock_frames(c.get("like", ELEVATED_PIECE))[(z, s)][1]
                 X, Y = project(z, u2 - min(us) + 1, v2 - min(vs) + 1)
                 img.alpha_composite(im, (int(round(ox + X - a[0])), int(round(oy + Y - a[1] - W / 2))))
+            bb = _content_box(img, bg)
+            if bb:
+                img = img.crop((max(0, bb[0] - pad), max(0, bb[1] - pad), min(w, bb[2] + pad), min(h, bb[3] + pad)))
             shots[(z, r)] = img
     if out_png:
         cw = max(i.width for i in shots.values())
@@ -667,6 +729,13 @@ def preview(layout, out_png, src_dir=None, zooms=range(ZOOMS), rots=range(ROTS),
             sheet.paste(im, (list(rots).index(r) * cw, list(zooms).index(z) * ch))
         sheet.save(out_png)
     return shots
+
+
+def _content_box(img, bg):
+    """bbox of the pixels that differ from the background colour."""
+    from PIL import ImageChops
+    diff = ImageChops.difference(img.convert("RGB"), Image.new("RGB", img.size, bg[:3]))
+    return diff.getbbox()
 
 
 # ---------------------------------------------------------------------------------------------------- lint

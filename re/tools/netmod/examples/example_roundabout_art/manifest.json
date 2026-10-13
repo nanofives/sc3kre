@@ -1,0 +1,16 @@
+{
+  "netpack": 1,
+  "name": "example_roundabout_art",
+  "version": "1.0.0",
+  "author": "artkit test fixture",
+  "description": "NEW geometry from stock parts: a quarter of a 2x2 mini roundabout (one new id, 20400, used in states 3,0 / 2,1). Behaves as road T 39 (exemplar, cost, traffic copy). Art built at build time by recipe.json (netart.py compose): ring = stock curve 11203, exit = stock straight 29. No rule places it: a template (task multitile) or a save edit does.",
+  "game": {
+    "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+  },
+  "variants": [
+    {"id": 20400, "base": 39, "network": "ROAD",
+     "name": {"*": "Roundabout", "ENGLISH": "Rotonda"},
+     "art": {"from": 39, "recipe": "recipe.json"},
+     "trblkatt": "copy_base"}
+  ]
+}

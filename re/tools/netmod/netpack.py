@@ -412,6 +412,20 @@ def compile_art(stock, pack_dir, art, default_piece, where):
                 pix[k] = recolor_payload(pix[k], art["recolor"])
             except Exception as e:  # format-0 masks and the like: say which record
                 raise NetpackError("%s: recolor of record (0x%08X, 0x%08X): %s" % (where, k[0], k[1], e))
+    if art.get("recipe"):
+        if art.get("png_dir"):
+            raise NetpackError("%s: art has both png_dir and recipe" % where)
+        rp = os.path.join(pack_dir, art["recipe"])
+        if not os.path.isfile(rp):
+            raise NetpackError("%s: recipe %s does not exist" % (where, art["recipe"]))
+        import netart                                   # artkit compositor (NET_ART.md 6), stock frames only
+        d = tempfile.mkdtemp(prefix="netpack_recipe_")
+        netart.set_game(stock.root)
+        try:
+            netart.compose(json.load(open(rp, encoding="utf-8")), d, src_dir=os.path.dirname(rp))
+        except Exception as e:
+            raise NetpackError("%s: recipe %s: %s" % (where, art["recipe"], e))
+        art = dict(art, png_dir=d)
     if art.get("png_dir"):
         d = os.path.join(pack_dir, art["png_dir"])
         if not os.path.isdir(d):
