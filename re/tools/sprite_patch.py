@@ -299,6 +299,42 @@ def replace_from_png(payload, png_path, alpha_threshold=128):
     return pack_payload(inf, stream), nudged
 
 
+def anchor_payload(reg_x, reg_y, w, h):
+    """-> the 8-byte type-1 anchor record for a w x h sprite whose registration point is (reg_x, reg_y).
+
+    Layout: 4 x signed i16 {L, T, R, B} (SPRITE_SII.md result 1). Over all 8,940 network frames
+    R == w - L and B == h - T with no exception (NET_ART.md 3), so R and B are derived, never authored.
+    """
+    for v in (reg_x, reg_y, w - reg_x, h - reg_y):
+        if not -32768 <= v <= 32767:
+            raise SpritePatchError("anchor value %d does not fit a signed i16" % v)
+    return struct.pack("<4h", reg_x, reg_y, w - reg_x, h - reg_y)
+
+
+def record_from_image(template_payload, img, alpha_threshold=128):
+    """-> (new payload, (w, h), n_nudged): a format-1 record of ANY size, drawn from `img`.
+
+    The colour key, pixel format id and block tag come from `template_payload` (any format-1 record of
+    the same container family); the record header's d2/d3 are set to the new size (d2/d3 == width/height
+    on all 8,940 network frames, d0 0x107, d1 0x80000). Pair it with `anchor_payload` for the new size:
+    a sprite of another size needs both records, the game reads nothing else about the size
+    (NET_ART.md 5).
+    """
+    kind, block, inf = qfs.decode_record(template_payload)
+    if kind != "qfs" or inf["format"] != 1:
+        raise SpritePatchError("template is not a format-1 sprite record")
+    m = sr.parse_span_block(block)
+    w, h = img.size
+    if not (1 <= w <= 0x7FFF and 1 <= h <= 0xFFFF):
+        raise SpritePatchError("sprite size %dx%d out of range" % (w, h))
+    surf, nudged = image_to_surface(img, w, h, m["key"], alpha_threshold)
+    new_block = sprite_encode.encode(surf, w, h, m["key"], m["b"], m["a"])
+    stream = qfs_encode.compress_stream(new_block, quick=1)
+    hdr = dict(inf)
+    hdr["d2"], hdr["d3"] = w, h
+    return pack_payload(hdr, stream), (w, h), nudged
+
+
 def png_roundtrip(payload):
     """-> (ok, detail). Export a shipped record to PNG, re-import it, demand the SAME payload.
 

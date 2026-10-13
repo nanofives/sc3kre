@@ -142,7 +142,7 @@
     "art": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Start from the frames of piece `from` (variants: default = base; reskins: always the piece itself), optionally recolour them, then replace any frame that has a PNG in png_dir (file names zZ_rR.png, layer > 0: lL_zZ_rR.png; same size as the frame).",
+      "description": "Start from the frames of piece `from` (variants: default = base; reskins: always the piece itself), optionally recolour them, then replace any frame that has a PNG in png_dir (file names zZ_rR.png, layer > 0: lL_zZ_rR.png; same size as the frame, or any size with its registration point in png_dir/anchors.json) or that a compose recipe builds.",
       "properties": {
         "from": {
           "$ref": "#/$defs/piece_id"
@@ -153,6 +153,15 @@
         "png_dir": {
           "type": "string",
           "minLength": 1
+        },
+        "first_pass": {
+          "type": "boolean",
+          "description": "artkit: set (true) or clear (false) the frame table's first-pass draw bit (header +0x12, 0x80). Road pieces ship it set: they draw before every other occupant, so art taller than the base frame gets its top overdrawn in some rotations. Clear it for pieces with tall props. NET_ART.md 8."
+        },
+        "recipe": {
+          "type": "string",
+          "minLength": 1,
+          "description": "artkit: a netart.py compose recipe (JSON) in the package; the frames are composed from the stock install at build time into a png_dir (both may not be given). NET_ART.md 6."
         }
       }
     },

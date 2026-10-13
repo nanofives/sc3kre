@@ -73,12 +73,17 @@
 # netpack (2026-10-13): the manifest JSON Schema, and the example packages' manifest + README ONLY. Examples derive
 # their art from the stock pieces at build time; a PNG, DAT or IXF in a package folder is game art and stays ignored.
 !/re/tools/netmod/netpack.schema.json
+# artkit (2026-10-13): the Blender calibration (numbers only) and the example packages' art RECIPES (compositor JSON:
+# the art is built from the stock frames at build time, never shipped).
+!/re/tools/netmod/netart_calib.json
 !/re/tools/netmod/examples/
 /re/tools/netmod/examples/*
 !/re/tools/netmod/examples/*/
 /re/tools/netmod/examples/*/*
 !/re/tools/netmod/examples/*/manifest.json
 !/re/tools/netmod/examples/*/README.md
+!/re/tools/netmod/examples/*/recipe.json
+!/re/tools/netmod/examples/*/layout.json
 
 # 5) re/scripts — .py / .ps1 / .java only.
 #    Explicitly NOT the .log / .txt Ghidra run artifacts (absolute-path leaks)

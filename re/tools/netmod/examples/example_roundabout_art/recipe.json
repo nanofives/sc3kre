@@ -1,0 +1,9 @@
+{
+ "_": "Roundabout quarter (state 0 = slot 0): ring = stock curve 11203 (centred on the right vertex = the 2x2 centre), exit road through the NW edge (-z) = stock straight 29 turned along v, kept outside the ring's road (r < 0.84) within 0.55 tile of the edge. Tile-space units, slot 0 (NET_ART.md 6).",
+ "canvas": 39,
+ "layers": [
+  {"piece": 11203, "slot_offset": 0},
+  {"piece": 29, "slot_offset": 1,
+   "region": {"and": [{"box": [0, 0, 1, 0.55]}, {"not": {"disc": [1, 1, 0.84]}}]}}
+ ]
+}

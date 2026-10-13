@@ -61,6 +61,11 @@ def csattrib(game):
                 "file": f, "size": r["size"],
                 "hdr": {"version": ver, "clsid": clsid, "zoom_count": zc, "rot_count": rc,
                         "b0e": b0e, "b0f": b0f, "layer_flags": layer, "u14": u14,
+                        # artkit 2026-10-13: the reader's field order (SIMSPR 0x10001c90) puts AnimFrames at +0x10,
+                        # RegRects at +0x11 and the u32 LayerFlags at +0x12; "layer_flags" above is the raw dword at
+                        # +0x10 (kept for the selftest's layer count, its low byte). draw_flags & 0x80 = first pass.
+                        "anim_frames": p[0x10], "reg_rects": p[0x11],
+                        "draw_flags": struct.unpack_from("<I", p, 0x12)[0],
                         "frames": n},
                 "frames": frames})
     return out
