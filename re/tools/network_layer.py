@@ -121,7 +121,7 @@ def read_networks(path):
             if inst == 0:
                 s = e["abs"] + (e["frame"]["len"] if e["frame"] else 0)
                 header = struct.unpack_from("<4I", body, s)
-            elif e["frame"]:
+            elif inst in (1, 2, 3) and e["frame"]:   # 0x4E56 = sc3netmod variant list, not tiles
                 nets[inst] = _decode_tiles(body, e)
     return nets, header
 

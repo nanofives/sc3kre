@@ -20,7 +20,7 @@ Where the new records go, chosen so NO shipped container is rewritten except whe
     and edited (TrBlkAtt by ixf_insert.append, old bytes kept).
 
   py -3.12 re/tools/netmod/newpiece.py build --stock <tree> --out <moddir> [--id 20029] [--src 29]
-          [--group 0x4E3D0001] [--tint blue] [--no-trblk] [--no-rules] [--no-set]
+          [--group 0x4E3D0001] [--tint blue] [--base <id>] [--no-trblk] [--no-rules] [--no-set]
   py -3.12 re/tools/netmod/newpiece.py install --mod <moddir> --tree <test tree> --stock <stock tree>
   py -3.12 re/tools/netmod/newpiece.py uninstall --mod <moddir> --tree <test tree> --stock <stock tree>
   py -3.12 re/tools/netmod/newpiece.py check --tree <tree> --id 20029
@@ -58,6 +58,7 @@ OCC_KOREA = "Apps/Res/Occupant/OccupantAttribs_Korea.IXF"
 CS_KOREA = "Apps/Res/Sprites/CSAttrib_Korea.IXF"
 SET_FILE = "Apps/Res/TilingRules/ROAD_GRND_Set.txt"
 RULE_FILE = "Apps/Res/TilingRules/ROAD_GRND_SimpleRules.txt"
+VARIANT_TABLE = "Apps/Res/netmod_variants.txt"   # read by sc3netmod.dll: "<variant> <base>" per line
 # The two bare straight selectors (no neighbour conditions) of ROAD_GRND_SimpleRules.txt, T2-proven
 # (verify/tilingrules_constructive): mask 10 (state 1) and mask 5 (state 0) -> piece 29.
 STRAIGHT_RULES = [(10, 1), (5, 0)]
@@ -306,8 +307,12 @@ def build(a):
     if not a.no_rules:
         files[RULE_FILE] = rules_retarget(read(os.path.join(stock, RULE_FILE)), a.src, a.id)
 
+    # 6. variant table for sc3netmod.dll (crossings and stock-safe saves treat the id as its base)
+    base = a.src if a.base is None else a.base
+    files[VARIANT_TABLE] = ("# sc3netmod variant table: <variant id> <base id>\r\n%d %d\r\n" % (a.id, base)).encode()
+
     os.makedirs(a.out, exist_ok=True)
-    manifest = {"id": a.id, "src": a.src, "group": "0x%08X" % a.group, "tint": a.tint,
+    manifest = {"id": a.id, "src": a.src, "base": base, "group": "0x%08X" % a.group, "tint": a.tint,
                 "frames": nframes, "sprite_records": len(recs), "files": {}}
     for rel, data in sorted(files.items()):
         dst = os.path.join(a.out, rel)
@@ -408,6 +413,8 @@ def main(argv):
     b.add_argument("--out", required=True)
     b.add_argument("--id", type=int, default=20029)
     b.add_argument("--src", type=int, default=29)
+    b.add_argument("--base", type=int, default=None,
+                   help="piece id the variant behaves as for crossings and stock-safe saves (default: --src)")
     b.add_argument("--group", type=lambda v: int(v, 0), default=0x4E3D0001)
     b.add_argument("--tint", choices=sorted(TINTS) + ["none"], default="blue")
     b.add_argument("--no-trblk", action="store_true")
