@@ -4,7 +4,7 @@
   py -3 -m netmod.netrules explain <save> <x> <y> [--net ROAD] [--rules DIR]
   py -3 -m netmod.netrules preview <rules dir> <save> [--net ROAD] [--out map.png|map.txt]
   py -3 -m netmod.netrules apply-edits <manifest.json> [--base DIR] [--out DIR] [--save <city>]
-  py -3 -m netmod.netrules lint [--rules DIR]
+  py -3 -m netmod.netrules lint [--rules DIR] [--base DIR] [--all]   # rulecheck.py; exit 1 only on ERROR
 
 Run from re/tools (or with re/tools on sys.path). Read-only on the game install: edits are
 applied to a copy (--out, default re/netcat_out/rules_<manifest name>).
@@ -14,7 +14,7 @@ import os
 import sys
 from collections import Counter
 
-from . import paths, tiler
+from . import paths, rulecheck, tiler
 
 NETS = ["ROAD", "RAIL", "POWR", "HWAY", "PIPE", "SUBW"]
 
@@ -246,25 +246,7 @@ def cmd_validate(a):
 
 
 # ---------------------------------------------------------------------------- explain
-# dir -> label by grid offset. The engine has no compass (NETWORK_RULE_ENGINE.md 13), so offsets, not N/E/S/W.
-def dlabel(d):
-    if d == tiler.SELF:
-        return "self"
-    dx, dy = tiler.DIRS[d]
-    return "%s%s" % ("" if not dx else ("x%+d" % dx), "" if not dy else ("z%+d" % dy))
-
-
-def mask_label(m):
-    if m == 0x100:
-        return "any"
-    bits = [dlabel(d) for d in range(24) if m >> d & 1]
-    return "0x%x (%s)" % (m, " ".join(bits) if bits else "none")
-
-
-def rec_label(dir_, pid, st):
-    if pid == 0:
-        return "%s:%s" % (dlabel(dir_), {5: "empty", 1: "pending", 0: "empty-or-foreign"}.get(st, "0/%d" % st))
-    return "%s:%d/%d" % (dlabel(dir_), pid, st)
+dlabel, mask_label, rec_label = rulecheck.dlabel, rulecheck.mask_label, rulecheck.rec_label
 
 
 def rule_label(rule):
@@ -563,86 +545,24 @@ def cmd_apply_edits(a):
 
 
 # ---------------------------------------------------------------------------- lint
-def _implied(ci, cj):
-    """A condition of rule i is met whenever rule j's condition cj is (same dir and id; state equal, or ci.state
-    0 which also accepts an observed 5, FUN_100220c5)."""
-    return ci.dir == cj.dir and ci.id == cj.id and (ci.state == cj.state or (ci.state == 0 and cj.state in (0, 5)))
-
-
 def lint_rules(rules):
-    """Findings the engine semantics make certain (each cites the code that makes it so)."""
-    out = []
-    for stage_name, mode in (("Simple", 8), ("Complex", 0x18), ("final", 4)):
-        for net in tiler.NET_TAG:
-            rl, _ = rules.stage(stage_name, net)
-            for j, rj in enumerate(rl):
-                w = rj.where()
-                sel = rj.selector
-                if mode == 0x18 and sel not in (0, 0x100):
-                    out.append(("never-matches", "%s: selector %s in a Complex file can never match: FUN_10019768 "
-                                                 "builds no mask in mode 0x18, so the observed mask is always 0"
-                                % (w, mask_label(sel))))
-                elif sel != 0x100 and sel >> (4 if mode == 4 else 8):
-                    out.append(("never-matches", "%s: selector %s sets bits the %s stage never sets (FUN_10019768 "
-                                                 "sets bit d only for d < mode %d)" % (w, mask_label(sel), stage_name, mode)))
-                lim = 24 if mode == 0x18 else 8
-                for c in rj.conds:
-                    if c.dir != tiler.SELF and c.dir >= lim:
-                        out.append(("never-matches", "%s: condition %s is outside the %s window (3x3 in modes 4/8, "
-                                                     "5x5 in 0x18, FUN_10019768)" % (w, rec_label(c.dir, c.id, c.state), stage_name)))
-                    if mode != 0x18 and c.id == 0 and c.dir != tiler.SELF:
-                        out.append(("never-matches", "%s: condition %s can never be observed in the %s stage: modes "
-                                                     "4/8 report neighbours only for occupied cells, and a sentinel "
-                                                     "record keeps dir self (FUN_1001a056 / FUN_100220b7)"
-                                    % (w, rec_label(c.dir, c.id, c.state), stage_name)))
-                dirs = {}
-                for c in rj.conds:
-                    if c.dir != tiler.SELF:
-                        dirs.setdefault(c.dir, set()).add((c.id, c.state if c.state not in (0, 5) or c.id else 0))
-                for d, s in dirs.items():
-                    if len(s) > 1:
-                        out.append(("never-matches", "%s: two different conditions at %s; one cell yields one "
-                                                     "record, so the rule never matches" % (w, dlabel(d))))
-                if not rj.results:
-                    out.append(("no-results", "%s: no results: the parser (FUN_10022676) only stores a rule when its "
-                                              "result count is reached, so its conditions merge into the next rule" % w))
-                for i in range(j):
-                    ri = rl[i]
-                    if ri.selector not in (0x100, sel) or not ri.results:
-                        continue
-                    if all(any(_implied(ci, cj) for cj in rj.conds) for ci in ri.conds):
-                        if (ri.selector == sel and set(ri.conds) == set(rj.conds)
-                                and list(ri.results) == list(rj.results)):
-                            out.append(("duplicate", "%s: duplicate of rule #%d (line %d), conditions in another "
-                                                     "order; never reached, harmless" % (w, ri.index, ri.line)))
-                        else:
-                            out.append(("shadowed", "%s: never reached, rule #%d (line %d) matches first whenever "
-                                                    "it would (same or wildcard selector, conditions a subset; first "
-                                                    "match wins, FUN_100228ff)" % (w, ri.index, ri.line)))
-                        break
-                for r in rj.results:
-                    if r.id and not any(r.id in s for s in rules.sets.values()):
-                        out.append(("unknown-id", "%s: result %s places id %d, which is in no *_GRND_Set.txt nor "
-                                                  "DIAG_Set.txt" % (w, rec_label(r.dir, r.id, r.state), r.id)))
-    return out
+    """Findings the engine semantics make certain: rulecheck.lint_rules, shared with netpack."""
+    return rulecheck.lint_rules(rules)
 
 
 def lint_dir(d, base=None):
-    """-> [(kind, text)]; with `base`, only findings absent from that directory (an edit's new problems)."""
-    probs = lint_rules(tiler.Rules(d))
-    if base:
-        have = set(lint_rules(tiler.Rules(base)))
-        probs = [p for p in probs if p not in have]
-    return probs
+    """-> [rulecheck.Finding]; with `base`, only findings absent from that directory (an edit's new problems)."""
+    return rulecheck.lint_dir(d, base)
 
 
 def print_lint(probs, show_all=False, out=print):
-    from collections import Counter as _C
-    c = _C(k for k, _ in probs)
-    out("lint: %s" % (", ".join("%d %s" % (v, k) for k, v in sorted(c.items())) or "clean"))
-    for k, t in probs:
-        if show_all or k != "duplicate":
-            out("  [%s] %s" % (k, t))
+    out("lint: %s" % rulecheck.summary(probs))
+    c = Counter(f.kind for f in probs)
+    if c:
+        out("  by kind: %s" % ", ".join("%d %s" % (v, k) for k, v in sorted(c.items())))
+    for f in probs:
+        if show_all or f.kind != "duplicate":
+            out("  %s" % f)
     if c.get("duplicate") and not show_all:
         out("  (%d duplicate rules not listed: --all)" % c["duplicate"])
 
@@ -653,7 +573,7 @@ def cmd_lint(a):
     probs = lint_dir(d, a.base)
     print("%s%s" % (d, " (findings not in %s)" % a.base if a.base else ""))
     print_lint(probs, a.all)
-    return 1 if any(k != "duplicate" for k, _ in probs) else 0
+    return 1 if any(f.severity == rulecheck.ERROR for f in probs) else 0
 
 
 def main(argv=None):
@@ -705,4 +625,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -38,7 +38,7 @@ and mods\netmod is deleted.
   py -3.12 netpack.py uninstall <name> --tree <game root> [--allow-tree]
   py -3.12 netpack.py list --tree <game root>
   py -3.12 netpack.py export-art <piece id> <dir> [--stock <tree>]     # base frames as PNG, for authoring
-  py -3.12 netpack.py selftest [--stock <tree>]                        # offline checks U1..U5 (verify/netpack/PRE.md)
+  py -3.12 netpack.py selftest [--stock <tree>]                        # offline checks U1..U7 (verify/netpack/PRE.md; U7 rule lint)
 --stock defaults to the game root found by paths.game_root() ($SC3_GAME_ROOT, walking up, or the main checkout).
 """
 import argparse
@@ -513,7 +513,7 @@ def merge(stock, packs):
     if len(set(names)) != len(names):
         raise NetpackError("two packages are named %r" % [n for n in names if names.count(n) > 1][0])
     comp = [compile_pack(stock, d, m) for d, m in packs]
-    files, tables, report = {}, {}, {"warnings": [], "variants": [], "reskins": []}
+    files, tables, report = {}, {}, {"warnings": [], "info": [], "variants": [], "reskins": []}
     for c in comp:
         report["warnings"] += c["warnings"]
 
@@ -627,6 +627,16 @@ def merge(stock, packs):
         except NR.RuleEditError as e:
             raise NetpackError(str(e))
         tr[real[0]] = files[rel]
+    # what the merged rules add to the stock findings, by the checks `netrules lint` runs (rulecheck.py): ERROR
+    # refuses the merge, WARNING / INFO are reported (TILER_SIM.md section 11)
+    if tr:
+        stock_tr = {n: stock.read("Apps/Res/TilingRules/" + n) for n in stock.listdir("Apps/Res/TilingRules")}
+        found = NR.check(stock_tr, tr)
+        errs = [f for f in found if f.severity == NR.RC.ERROR]
+        if errs:
+            raise NetpackError("rule edits: " + "; ".join("%s: %s" % (f.kind, f.text()) for f in errs))
+        for f in found:
+            report["warnings" if f.severity == NR.RC.WARNING else "info"].append("%s: %s" % (f.kind, f.text()))
 
     # ---- ini edits inside SYS.PAK members. The names container is opened only if Default.ini [DBSegments] lists it
     # (arm O: GZResourceD opens Text\<lang>\*.IXF by the names listed there; a file merely present is not read).
@@ -961,6 +971,8 @@ def _print_report(report):
                                              ("  (also changes %s)" % r["sharers"]) if r["sharers"] else ""))
     for w in report["warnings"]:
         print("  WARNING " + w)
+    for w in report.get("info", []):
+        print("  INFO " + w)
 
 
 def cmd_validate(a):
@@ -1056,9 +1068,9 @@ def cmd_export_art(a):
     return 0
 
 
-# =================================================================== selftest (offline U1..U5)
+# =================================================================== selftest (offline U1..U7)
 
-def tree_hashes(root, skip=("re",)):
+def tree_hashes(root, skip=("re", ".git")):      # .git: other sessions commit while the selftest runs
     out = {}
     for dp, dns, fns in os.walk(root):
         rel_dp = os.path.relpath(dp, root)
@@ -1130,6 +1142,102 @@ def cmd_selftest(a):
             check(False, "U5 refuses a PNG whose size differs from the base frame")
         except NetpackError as e:
             check("is 7x5" in str(e), "U5 refuses a PNG whose size differs from the base frame: %s" % str(e)[:110])
+
+        # U7: rule edits are judged by rulecheck (the netrules lint checks), ERROR refuses, WARNING / INFO pass
+        def with_edits(extra, tag):
+            m = load_manifest(A)
+            m["rule_edits"] = m["rule_edits"] + extra
+            d = os.path.join(tmp, "u7_" + tag)
+            shutil.copytree(A, d)
+            with open(os.path.join(d, "manifest.json"), "w") as fh:
+                json.dump(m, fh)
+            return d
+
+        def lint_of(extra, tag):
+            """-> (error text or None, [(severity, kind, text)] the merge reports, same from netrules lint)."""
+            from netmod import netrules as NRL
+            d = with_edits(extra, tag)
+            try:
+                _, _, rep = merge(Stock(stock_root), [(d, load_manifest(d))])
+            except NetpackError as e:
+                return str(e), [], []
+            got = [("WARNING",) + tuple(w.split(": ", 1)) for w in rep["warnings"] if ": " in w and " rule #" in w] + \
+                  [("INFO",) + tuple(w.split(": ", 1)) for w in rep["info"]]
+            edits, _ = NRL.load_edits([os.path.join(d, "manifest.json")])
+            out = os.path.join(tmp, "u7_rules_" + tag)
+            stock_tiling = os.path.join(stock_root, "Apps", "Res", "TilingRules")
+            NRL.apply_edits(stock_tiling, out, edits)
+            ref = [(f.severity, f.kind, f.text()) for f in NRL.lint_dir(out, stock_tiling)]
+            return None, sorted(got), sorted(ref)
+
+        def rule(sel, conds, results):
+            return {"selector": sel, "conds": conds, "results": results}
+
+        u7 = [
+            ("final-stage result at a neighbour dir (2) and a Simple result at dir 16: FUN_10016327 never checks "
+             "result dirs", "resdir",
+             [{"op": "insert_rule", "file": "ROAD_GRND_final.txt", "at": 0,
+               "rule": rule(1, [[255, 20029, 2]], [[2, 29, 0]])},
+              {"op": "insert_rule", "file": "ROAD_GRND_SimpleRules.txt", "at": 0,
+               "rule": rule(0x100, [[255, 20029, 2], [0, 29, 0]], [[16, 29, 0]])}], None, set()),
+            ("final-stage condition at diagonal dir 5: the 3x3 collector reports it (FUN_1001a056)", "conddiag",
+             [{"op": "insert_rule", "file": "ROAD_GRND_final.txt", "at": 0,
+               "rule": rule(1, [[5, 20029, 1]], [[255, 29, 0]])}], None, set()),
+            ("ComplexRules selector 5: WARNING never-matches, merge passes", "cxsel",
+             [{"op": "insert_rule", "file": "ROAD_GRND_ComplexRules.txt", "at": 0,
+               "rule": rule(5, [[255, 20029, 0], [12, 29, 0]], [[255, 29, 1]])}], None, {("WARNING", "never-matches")}),
+            ("ComplexRules selector 0x100 and 0: no selector finding", "cxok",
+             [{"op": "insert_rule", "file": "ROAD_GRND_ComplexRules.txt", "at": 0,
+               "rule": rule(0x100, [[255, 20029, 3], [12, 20029, 3]], [[255, 29, 1]])},
+              {"op": "insert_rule", "file": "ROAD_GRND_ComplexRules.txt", "at": 0,
+               "rule": rule(0, [[255, 20029, 2], [12, 20029, 2]], [[255, 29, 1]])}], None, set()),
+            ("a rule shadowed by stock rule 15 (bare, selector 10): WARNING shadowed, merge passes", "shadow",
+             [{"op": "insert_rule", "file": "ROAD_GRND_SimpleRules.txt", "at": "end",
+               "rule": rule(10, [], [[255, 29, 0]])}], None, {("WARNING", "shadowed")}),
+            ("a result dir 24 (zero offsets at 0x10032164 in the FUN_1002205c table): ERROR, refused", "dir24",
+             [{"op": "insert_rule", "file": "ROAD_GRND_final.txt", "at": "end",
+               "rule": rule(1, [], [[24, 29, 0]])}], ("outside the 25-entry table", "rule/results/0/0: 24"), set()),
+        ]
+        for what, tag, extra, err, kinds in u7:
+            e, got, ref = lint_of(extra, tag)
+            if err:
+                check(e is not None and any(x in e for x in err), "U7 %s (%s)" % (what, (e or "accepted")[:90]))
+                continue
+            seen = {(s, k) for s, k, _ in got}
+            check(e is None and seen == kinds and got == ref,
+                  "U7 %s: %s, netrules lint reports the same %d finding(s)%s"
+                  % (what, "accepted" if e is None else "REFUSED " + e[:80], len(ref),
+                     "" if got == ref else " MISMATCH netpack %s / netrules %s" % (got, ref)))
+        try:
+            NR.records([[24, 29, 0]], "U7")
+            check(False, "U7 netpack_rules.records refuses dir 24 through rulecheck.record_problem")
+        except NR.RuleEditError as e:
+            check("outside the 25-entry table" in str(e), "U7 netpack_rules.records refuses dir 24: %s" % str(e)[:90])
+        # the schema is the authors' contract; pin its record domain to rulecheck's so the two cannot drift
+        try:
+            import jsonschema
+        except ImportError:
+            jsonschema = None
+        if jsonschema is None:
+            print("  skip U7 schema vs rulecheck record domain (jsonschema not installed)")
+        else:
+            with open(SCHEMA_FILE, encoding="utf-8") as fh:
+                sch = json.load(fh)["$defs"]
+            ok_rec = jsonschema.Draft202012Validator(sch["record"]).is_valid
+            ok_ps = jsonschema.Draft202012Validator(sch["piece_state"]).is_valid
+            bad = [d for d in range(-2, 300) if ok_rec([d, 29, 0]) != (NR.RC.record_problem(d, 29, 0) is None)
+                   and d != NR.RC.tiler.SELF]      # 31 reads as self like 255; the manifest form for self is 255
+            bad += [(i, s) for i in (0, 1, 29, 65535, 65536) for s in range(-1, 7)
+                    if NR.RC.record_problem(255, i, s) is None and not (ok_ps([i, s]) and ok_rec([255, i, s]))]
+            check(not bad, "U7 every record rulecheck accepts the schema accepts, dirs both ways%s"
+                  % (" MISMATCH %s" % bad[:6] if bad else ""))
+        # U7 misparse: a rule declared `4,0` runs into the next one in FUN_10022676 -> ERROR (netrules lint exit 1)
+        sname = "ROAD_GRND_SimpleRules.txt"
+        stock_tr = {n: st.read("Apps/Res/TilingRules/" + n) for n in st.listdir("Apps/Res/TilingRules")}
+        bad = stock_tr[sname].replace(b"\r\n4,1\r\n5,255,7425\r\n", b"\r\n4,0\r\n", 1)
+        found = NR.check(stock_tr, {sname: bad})
+        check(bad != stock_tr[sname] and [f.kind for f in found if f.severity == NR.RC.ERROR] == ["misparse"],
+              "U7 a `4,0` rule is an ERROR misparse (%s)" % (found[0].text()[:90] if found else "no finding"))
 
         # U6: authoring path. export-art writes the stock frames, png_dir re-imports them: same pixels as the source
         d = os.path.join(tmp, "pngpack")

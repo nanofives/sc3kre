@@ -36,7 +36,7 @@ One folder, one `manifest.json`, optional PNG art. Nothing else.
 | `variants[].name` | piece name, one string or `{language folder or "*": text}` | written per `Apps\Res\Text\<folder>` |
 | `variants[].trblkatt` | `copy_base` (default): the base's TrBlkAtt records re-keyed to the new id, every language; `none` | the reserved index must have room (161 free slots per language) |
 | `reskins[]` | new art for the frames of an EXISTING piece | no two packages reskin the same frame table; pieces that share the table are reported |
-| `rule_edits[]` | TilingRules edits, section 4 (format agreed with netrules) | stock rule N must exist and equal `expect`; stage lint |
+| `rule_edits[]` | TilingRules edits, section 4 (format agreed with netrules) | stock rule N must exist and equal `expect`; `rulecheck` ERROR refuses, WARNING / INFO reported (4.1) |
 | `ini[]` | keys inside a SYS.PAK member: `set` (existing key), `add` (new key), `append` (line even if the key exists) | member, section and key found exactly as required |
 
 Art file names inside `png_dir`: frame position k in the piece's table -> `z{zoom}_r{rot}.png` with zoom `(k % 20) // 4`,
@@ -126,16 +126,43 @@ RULE = {"selector": int, "conds": [[dir, id, state], ...], "results": [[dir, id,
   second package editing a rule the first already changed. Several inserts at one index keep list order.
 - `list_add` skips ids already present; `list_remove` and `convert_remove` refuse an absent item. `convert_add`
   appends (the game takes the last matching row, per netrules).
-- Untouched rules and lines are re-emitted byte for byte; every live rule file round-trips identical. New or changed
-  rules pass the `tilingrules.py --lint` stage invariants. DEAD files are refused.
+- Untouched rules and lines are re-emitted byte for byte; every live rule file round-trips identical. DEAD files are
+  refused. What a rule may contain and what can match is judged by `rulecheck.py` (4.1), not by this module.
 - `netpack.py new` writes the edits for the chosen base: the bare rules with selectors 10 and 5 (the plain straights,
   T2-proven for road 29), else the first bare rule that places the base.
 
 The two edits of `example_blue_road` (stock rules 15 and 21) produce the same bytes as newpiece.py's `rules_retarget`,
 the game-proven 20029 edit (selftest).
 
-Library use: `netpack_rules.apply(file_name, stock_bytes, edits) -> bytes`; `parse_rules` (each `Rule` has
-`stock_no`, `sel`, `conds`, `results`, `as_dict()`), `result_ids`, `family`, `stage_mode`.
+Library use: `netpack_rules.apply(file_name, stock_bytes, edits) -> bytes`; `check(stock_files, new_files) ->
+[rulecheck.Finding]`; `parse_rules` (each `Rule` has `stock_no`, `sel`, `conds`, `results`, `as_dict()`),
+`result_ids`, `family`, `stage_mode` (= `rulecheck.stage_mode`, the 18 files `tiler.Rules.FILES` binds).
+
+### 4.1 Rule findings: one checker for netpack and netrules (`rulecheck.py`, 2026-10-13, child/packlint)
+
+`validate`, `build` and `install` lay the merged TilingRules files over the stock ones and keep the findings the
+merge ADDS (compared by a position-free key, so an insert does not re-report every rule after it). It is the same
+call `netrules lint --rules <merged> --base <stock>` and `netrules apply-edits` make, so both tools print the same
+finding, word for word, for the same input (selftest U7 compares them). The bounds come from `tiler.py`, the
+re-implementation validated in `TILER_SIM.md`, and the functions it cites:
+
+| severity | effect | kinds |
+|---|---|---|
+| ERROR | refuses the package (`validate` exits non-zero); `netrules lint` exits 1 | `misparse`: the file read the way `FUN_10022676` reads it (a token state machine: a rule is stored when its `4,N` result count is reached, `2,N` is never used, the selector resets to 0 after each rule) gives other rules than its `1,` records. `bad-value`: a dir outside the 25-entry table `FUN_1002205c` reads at `0x10032134` (entries 24..31 hold zero offsets, 32 on are other data), a dir over one byte, an id over 65535, a state over 3 with an id, id 0 with a state other than 5 / 1 / 0 |
+| WARNING | reported, in `BUILD.json` `warnings` | `never-matches`: a Complex selector other than 0x100 or 0 (`FUN_10019768` writes no mask bit in mode 0x18), a Simple / final selector bit >= the mode, a Simple / final condition outside dirs 0..7 or with id 0 off the centre, two conditions at one dir. `shadowed`: an earlier rule always matches first (`FUN_100228ff`, `FUN_100222f9`; in Complex 0 and 0x100 both match). `unknown-id`: a result id in no Set file |
+| INFO | printed | `duplicate`: the same rule as an earlier one, conditions in another order |
+
+Legal and not reported (the old `netpack_rules.lint()` refused them): a result at any of the 24 dirs in any stage
+(`FUN_10016327` never compares a result dir with the mode), and a final-stage condition at the diagonals 4..7
+(`FUN_1001a056` sets the dir with no mode test). A ComplexRules selector other than 0x100 / 0, which the old lint
+accepted, is now a WARNING.
+
+Edit refusals stay in `netpack_rules.apply` (ERROR, the edit cannot apply): bad shape, `expect` differing from the
+stock rule, the same stock rule edited twice, an index past the stock file, a record `rulecheck.record_problem`
+rejects. `netpack.schema.json` keeps the record domain for authors' editors; selftest U7 pins it to
+`rulecheck.record_problem` (dir 31, which the parser reads as self like 255, is the one value only rulecheck takes).
+Stock rules: 0 ERROR, 75 WARNING (shadowed), 440 INFO (duplicate). The two example packages add none, and build the
+same 25 files byte for byte as before the change.
 
 ## 5. sc3netmod.dll changes
 
