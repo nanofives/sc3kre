@@ -401,6 +401,212 @@ def _rot_vec(du, dv, steps):
     return du, dv
 
 
+# ------------------------------------------------------------------------------------- route c: Blender render
+
+BLENDER = os.environ.get("SC3_BLENDER", r"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe")
+BLENDER_SCRIPT = os.path.join(HERE, "netart_blender.py")
+CALIB_DEFAULT = os.path.join(HERE, "netart_calib.json")
+
+
+def _canvas(z, n=1):
+    W = TILE_W[z]
+    return 2 * (n + 2) * W, 2 * (n + 3) * W
+
+
+def run_blender(job, work, blend=None):
+    import subprocess
+    os.makedirs(work, exist_ok=True)
+    jp = os.path.join(work, "job.json")
+    with open(jp, "w", encoding="utf-8") as fh:
+        json.dump(job, fh)
+    cmd = [BLENDER, "-b"] + ([blend] if blend else ["--factory-startup"]) + ["-P", BLENDER_SCRIPT, "--", jp]
+    r = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+    if r.returncode != 0 or "Traceback" in (r.stdout or "") + (r.stderr or ""):
+        raise RuntimeError("blender failed (%d): %s" % (r.returncode, ((r.stdout or "") + (r.stderr or ""))[-1500:]))
+    return r
+
+
+def crop_frame(render_png, size, LT):
+    """Cut a frame of `size` whose registration point LT sits on the render centre pixel (cw/2, ch/2)."""
+    im = Image.open(render_png).convert("RGBA")
+    cw, ch = im.size
+    x0, y0 = cw // 2 - LT[0], ch // 2 - LT[1]
+    return im.crop((x0, y0, x0 + size[0], y0 + size[1]))
+
+
+def auto_frame(render_png, n=1, z=3):
+    """Frame for NEW art: the opaque bounding box, clipped horizontally to the footprint (the engine clips a
+    piece to n * (8 << z) px from the left vertex, SIMSPR 0x1000be25). -> (image, (L, T))."""
+    im = Image.open(render_png).convert("RGBA")
+    cw, ch = im.size
+    a = im.getchannel("A").point(lambda v: 255 if v >= 128 else 0)
+    bb = a.getbbox()
+    if not bb:
+        raise RuntimeError("%s: empty render" % render_png)
+    x0, x1 = cw // 2, cw // 2 + n * TILE_W[z]
+    return im.crop((x0, bb[1], x1, bb[3])), (cw // 2 - x0, ch // 2 - bb[1])
+
+
+def cut_alpha(im, threshold=128):
+    """Alpha is a cut, not a channel: >= threshold becomes opaque, the rest the colour key."""
+    out = im.copy()
+    out.putalpha(im.getchannel("A").point(lambda v: 255 if v >= threshold else 0))
+    return out
+
+
+def quantize565(im, palette=None):
+    """-> the exact colours the game will show (5/6/5, expanded like the exporter), never the colour key.
+    palette: optional RGB list; each opaque pixel snaps to the nearest entry first (the 'materials' step)."""
+    import numpy as np
+    pal = np.array(palette, dtype=float) if palette else None
+    px = im.load()
+    for y in range(im.height):
+        for x in range(im.width):
+            r, g, b, a = px[x, y]
+            if a < 128:
+                px[x, y] = (0, 0, 0, 0)
+                continue
+            if pal is not None:
+                r, g, b = [int(v) for v in pal[int(np.argmin(((pal - (r, g, b)) ** 2).sum(1)))]]
+            q = (r >> 3, g >> 2, b >> 3)
+            if q == (31, 0, 31):
+                q = (31, 0, 30)
+            px[x, y] = (q[0] * 255 // 31, q[1] * 255 // 63, q[2] * 255 // 31, 255)
+    return im
+
+
+def stock_palette(pid, max_colors=256):
+    """The most used colours of a stock piece's frames."""
+    from collections import Counter
+    c = Counter()
+    for (im, _a) in stock_frames(pid).values():
+        for p in im.getdata():
+            if p[3]:
+                c[p[:3]] += 1
+    return [k for k, _ in c.most_common(max_colors)]
+
+
+def load_calib(path=None):
+    """-> ({zoom: (dx, dy)}, {zoom: bleed}) from a calibrate report (default netart_calib.json)."""
+    p = path or CALIB_DEFAULT
+    if os.path.isfile(p):
+        j = json.load(open(p))
+        return ({int(k[1:]): tuple(v) for k, v in j["shift"].items()},
+                {int(k[1:]): v for k, v in j.get("bleed", {}).items()} or {z: 0.0 for z in range(ZOOMS)})
+    return {z: (0.0, 0.0) for z in range(ZOOMS)}, {z: 0.0 for z in range(ZOOMS)}
+
+
+def mask_of(im):
+    px = im.load()
+    return {(x, y) for y in range(im.height) for x in range(im.width) if px[x, y][3] >= 128}
+
+
+def compare_masks(a, b):
+    """-> px in each, xor, IoU, and 'gross': xor pixels more than 1 px away from b's silhouette edge."""
+    x = a ^ b
+    bd = set()
+    for p in b:
+        if not all((p[0] + dx, p[1] + dy) in b for dx in (-1, 0, 1) for dy in (-1, 0, 1)):
+            bd |= {(p[0] + dx, p[1] + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1)}
+    return {"a": len(a), "b": len(b), "xor": len(x), "iou": len(a & b) / float(len(a | b) or 1),
+            "gross": len([p for p in x if p not in bd])}
+
+
+STEPS = tuple(k / 4.0 for k in range(-6, 7))      # -1.5 .. +1.5 px in quarter steps
+BLEEDS = (0.0, 0.25, 0.5, 0.75, 1.0)
+
+
+def calibrate(pid, model, work, steps=STEPS, bleeds=BLEEDS, out_json=None):
+    """Route c calibration: render `model` (netart_blender scene spec, e.g. {"build": "box", "height": 4}) with
+    every sub-pixel camera shift (dx, dy) and footprint bleed per zoom, compare its silhouette with stock piece
+    `pid` at every zoom x slot, keep the combination with the fewest mismatched pixels (ties: the smallest
+    change). -> report dict, written to out_json; its "shift" + "bleed" feed `render` (netart_calib.json)."""
+    stock = stock_frames(pid)
+    n = model.get("n", 1)
+    name = lambda z, r, dx, dy, b: os.path.join(  # noqa: E731
+        work, "c_z%d_r%d_%+.2f_%+.2f_b%.2f.png" % (z, r, dx, dy, b))
+    combos = [(dx, dy, b) for b in bleeds for dx in steps for dy in steps]
+    renders = [{"z": z, "r": r, "dx": dx, "dy": dy, "bleed": b, "canvas": list(_canvas(z, n)),
+                "out": name(z, r, dx, dy, b).replace("\\", "/")}
+               for z in range(ZOOMS) for dx, dy, b in combos for r in range(ROTS)]
+    run_blender({"scene": model, "engine": "WORKBENCH", "renders": renders}, work)
+    rep = {"piece": pid, "model": model, "shift": {}, "bleed": {}, "frames": {}}
+    sm = {k: mask_of(im) for k, (im, _) in stock.items()}
+    for z in range(ZOOMS):
+        best = None
+        for dx, dy, b in combos:
+            tot = 0
+            for r in range(ROTS):
+                im, LT = stock[(z, r)]
+                tot += len(mask_of(crop_frame(name(z, r, dx, dy, b), im.size, LT)) ^ sm[(z, r)])
+            key = (tot, b, abs(dx) + abs(dy))
+            if best is None or key < best[0]:
+                best = (key, dx, dy, b)
+        _, dx, dy, b = best
+        rep["shift"]["z%d" % z] = [dx, dy]
+        rep["bleed"]["z%d" % z] = b
+        for r in range(ROTS):
+            im, LT = stock[(z, r)]
+            rep["frames"]["z%d_r%d" % (z, r)] = compare_masks(
+                mask_of(crop_frame(name(z, r, dx, dy, b), im.size, LT)), sm[(z, r)])
+    if out_json:
+        with open(out_json, "w") as fh:
+            json.dump(rep, fh, indent=1)
+    return rep
+
+
+def evaluate(pid, model, work, calib=None, out_json=None):
+    """Render `model` with a FIXED calibration (default netart_calib.json) and compare with stock piece `pid`
+    at every zoom x slot: measures the model, not the camera. -> report dict."""
+    sh, bl = calib or load_calib()
+    stock = stock_frames(pid)
+    n = model.get("n", 1)
+    name = lambda z, r: os.path.join(work, "e_z%d_r%d.png" % (z, r))  # noqa: E731
+    run_blender({"scene": model, "engine": "WORKBENCH",
+                 "renders": [{"z": z, "r": r, "dx": sh[z][0], "dy": sh[z][1], "bleed": bl[z],
+                              "canvas": list(_canvas(z, n)), "out": name(z, r).replace("\\", "/")}
+                             for z in range(ZOOMS) for r in range(ROTS)]}, work)
+    rep = {"piece": pid, "model": model, "shift": {"z%d" % z: list(sh[z]) for z in range(ZOOMS)},
+           "bleed": {"z%d" % z: bl[z] for z in range(ZOOMS)}, "frames": {}}
+    for z in range(ZOOMS):
+        for r in range(ROTS):
+            im, LT = stock[(z, r)]
+            rep["frames"]["z%d_r%d" % (z, r)] = compare_masks(mask_of(crop_frame(name(z, r), im.size, LT)),
+                                                              mask_of(im))
+    if out_json:
+        with open(out_json, "w") as fh:
+            json.dump(rep, fh, indent=1)
+    return rep
+
+
+def render(scene, out_dir, work, like=None, calib=None, engine="CYCLES", samples=16, blend=None, palette=None,
+           zooms=range(ZOOMS), n=1):
+    """Route c: render a piece at every zoom x slot, cut alpha, quantise, write a netpack png_dir.
+    like: a stock piece whose frame sizes / anchors to reuse (else auto frames + anchors.json)."""
+    sh, bl = calib or load_calib()
+    renders = [{"z": z, "r": r, "dx": sh[z][0], "dy": sh[z][1], "bleed": bl[z], "canvas": list(_canvas(z, n)),
+                "out": os.path.join(work, "b_z%d_r%d.png" % (z, r)).replace("\\", "/")}
+               for z in zooms for r in range(ROTS)]
+    run_blender({"scene": scene, "engine": engine, "samples": samples, "renders": renders}, work, blend=blend)
+    os.makedirs(out_dir, exist_ok=True)
+    base = stock_frames(like) if like is not None else None
+    anchors = {}
+    for z in zooms:
+        for r in range(ROTS):
+            src = os.path.join(work, "b_z%d_r%d.png" % (z, r))
+            if base:
+                im, LT = base[(z, r)]
+                fr = crop_frame(src, im.size, LT)
+            else:
+                fr, LT = auto_frame(src, n, z)
+                anchors[frame_name(z, r)] = list(LT)
+            quantize565(cut_alpha(fr), palette).save(os.path.join(out_dir, frame_name(z, r)))
+    if anchors:
+        with open(os.path.join(out_dir, "anchors.json"), "w") as fh:
+            json.dump(anchors, fh, indent=1)
+    return out_dir
+
+
 # ------------------------------------------------------------------------------------------------- preview
 
 def preview(layout, out_png, src_dir=None, zooms=range(ZOOMS), rots=range(ROTS), pad=8, bg=(54, 88, 54, 255)):
@@ -513,6 +719,20 @@ def main(argv=None):
     p.add_argument("layout")
     p.add_argument("out")
     p.add_argument("--zoom", type=int, action="append")
+    cb = sub.add_parser("calibrate")
+    cb.add_argument("piece", type=int)
+    cb.add_argument("work")
+    cb.add_argument("--model", default='{"build": "box", "height": 4}')
+    cb.add_argument("--out", help="report json (default <work>/calib_<piece>.json)")
+    cb.add_argument("--fixed", action="store_true", help="no search: evaluate the model with netart_calib.json")
+    rn = sub.add_parser("render")
+    rn.add_argument("scene", help="scene json for netart_blender.py, or a .blend with SC3_PIECE / SC3_ROOT")
+    rn.add_argument("dir")
+    rn.add_argument("--work", required=True)
+    rn.add_argument("--like", type=int)
+    rn.add_argument("--engine", default="CYCLES")
+    rn.add_argument("--samples", type=int, default=16)
+    rn.add_argument("--palette-from", type=int)
     li = sub.add_parser("lint")
     li.add_argument("dir")
     li.add_argument("--like", type=int, default=ELEVATED_PIECE)
@@ -567,6 +787,23 @@ def main(argv=None):
         preview(lay, a.out, src_dir=os.path.dirname(os.path.abspath(a.layout)),
                 zooms=a.zoom or range(ZOOMS))
         print(a.out)
+        return 0
+    if a.cmd == "calibrate":
+        fn = evaluate if a.fixed else calibrate
+        rep = fn(a.piece, json.loads(a.model), a.work,
+                 out_json=a.out or os.path.join(a.work, "%s_%d.json" % ("eval" if a.fixed else "calib", a.piece)))
+        for z in range(ZOOMS):
+            fr = [rep["frames"]["z%d_r%d" % (z, r)] for r in range(ROTS)]
+            print("zoom %d shift %s bleed %s: stock px %s, mismatched %s, IoU %s, beyond 1 px of the edge %s"
+                  % (z, rep["shift"]["z%d" % z], rep["bleed"]["z%d" % z], [f["b"] for f in fr], [f["xor"] for f in fr],
+                     ["%.3f" % f["iou"] for f in fr], [f["gross"] for f in fr]))
+        return 0
+    if a.cmd == "render":
+        blend = a.scene if a.scene.lower().endswith(".blend") else None
+        scene = {"build": "blend"} if blend else json.load(open(a.scene, encoding="utf-8"))
+        pal = stock_palette(a.palette_from) if a.palette_from else None
+        render(scene, a.dir, a.work, like=a.like, engine=a.engine, samples=a.samples, blend=blend, palette=pal)
+        print("rendered 20 frames into", a.dir)
         return 0
     if a.cmd == "lint":
         probs = lint(a.dir, a.like)
