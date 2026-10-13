@@ -56,6 +56,13 @@ py -3.12 re/tools/netmod/newpiece.py install --mod <moddir> --tree C:\...\Simcit
 py -3.12 re/tools/netmod/newpiece.py check --tree C:\...\Simcity_stock_<name> --id 20029
 ```
 `--no-trblk`, `--no-rules`, `--no-set` drop parts; `uninstall` relinks the stock files and deletes the new ones.
+
+**Manifest and the base piece (2026-10-13, task netvariant).** `manifest.json` holds `id`, `src`, **`base`**, `group`,
+`tint`, `frames`, `sprite_records` and `files` (each with sha256, bytes, `replaces_stock`, `stock_sha256`). `base`
+(`--base <id>`, default `--src`) is the stock piece the variant behaves as where SIMNTWRK decides by id: crossings, and the
+id written into saves so a game without the mod still loads the tiles. `build` also writes
+`Apps/Res/netmod_variants.txt` (one `<variant> <base>` pair per line, `#` comments), which `sc3netmod.dll` reads at
+startup. Without that DLL the variant behaves as in section 4 below; with it, see `NETVARIANT.md`.
 To author art instead of tinting, export the 20 pixel records with `sprite_patch.py --export`, edit, and swap them in
 before `new_container` (same size rule as `SPRITE_MODDING.md`).
 
@@ -72,6 +79,11 @@ Measured:
   0x0e, 0x0f, 0x5c, 0x2bc4, 0x3acb; any other existing piece returns without placing.
 - **A save that holds the id loses those tiles when loaded without the mod**: no crash, the tiles are not created and
   the next save drops them (arm R, -22 tiles). Players must keep the mod for as long as the save has the piece.
+
+**Both closed by `sc3netmod.dll` (2026-10-13, `NETVARIANT.md`, `verify/netvariant/RESULTS.md`):** with the DLL, rail and
+power cross a variant (the crossing tile is the stock 69/67), and saves store the base id plus a variant section the
+stock game ignores, so a game without the mod loads grey road and the mod restores the variant. Old raw saves: open with
+the mod and save once, or `netvariant.py fallback` offline.
 
 Static only (read, not run). Each compares the piece id against a fixed list, so a new id takes the "other" branch:
 - `0x1001ab26`, `0x1001abb2`, `0x1001ac2b`, `0x1001acbe`, `0x1001af19`, `0x1001afc7`, `0x1001b07c`, `0x1001b10c`,
@@ -104,7 +116,7 @@ Berlin, arm TM), which lifts that fence for `set_piece`; `add_tile` remains unlo
 | a NEW look as an extra variant that coexists with the stock one | this recipe: new id + rule RESULT | works for one id per bare rule; `newpiece.py` clones any `--src`; needs a rule editor that targets contextual rules |
 | variants chosen by context (next to buildings, near water) | ComplexRules / conditions | no ComplexRules semantics yet (gap 5) |
 | random variants like 0x3ac0/0x3ac1 | `0x1000de17` is code | needs a patch, or a ComplexRules lever if one exists |
-| the new piece crossing rail / power / highway | crossing matrix + the 0x100167d4 list are code | needs a code patch (mod DLL) or reusing a crossing-capable id |
+| the new piece crossing rail / power / highway | crossing matrix + the 0x100167d4 list are code | rail and power over a road variant: done, `sc3netmod.dll` (`NETVARIANT.md`); highway paths listed there, not wired |
 | more mod containers than the Korea pair | SYS.PAK `[DBSegments]` key | `syspak_mod.py` cannot add keys (gap 1) |
 | new art at a different size | anchor record + .SII | untested (`SPRITE_MODDING.md` rule 1) |
 | highway / rail / bridges | same chain, other Set/rule files; bridges use `*_Bridges.txt` (netcat decoded) | untested here |

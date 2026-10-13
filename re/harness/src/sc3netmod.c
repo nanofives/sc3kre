@@ -6,11 +6,13 @@
  * Each variant declares a BASE id (manifest.json "base", installed as Apps\Res\netmod_variants.txt, one
  * "<variant> <base>" pair per line). This DLL does two things with that table:
  *
- * 1. CROSS (SC3NETMOD_CROSS=0 turns it off). The id lookups that decide crossings see the base id, so rail and
+ * 1. CROSS (SC3NETMOD_CROSS=0 turns it off). The id checks that decide crossings see the base id, so rail and
  *    power lines cross a variant exactly as they cross its base. The crossing tile becomes the stock crossing
  *    piece (69 rail, 67 power over road 29): the variant look is lost on that one tile, as it is for the base.
- *    Only the call sites listed in g_cross_sites are redirected; everything else (art, tiler, save, query)
- *    still sees the variant id. Evidence per site: re/analysis/NETVARIANT.md.
+ *    Two levers: the crossing switch's id lookup (g_cross_sites) returns the base, and the two piece-id getters
+ *    return the base only while one of the 15 predicates in g_preds runs (the "may X cross this cell" id lists
+ *    that the path planner and FUN_1001547b ask). Everything else (art, tiler, decorations, save, query) still
+ *    sees the variant id. Evidence per site: re/analysis/NETVARIANT.md.
  *
  * 2. SAVEBASE (SC3NETMOD_SAVEBASE=0 turns the save side off). The saved tile words carry the BASE id, so a
  *    stock game (no mod) loads the city with stock pieces instead of dropping the tiles. The variant ids are
@@ -22,6 +24,8 @@
  *
  * Hooks (SIMNTWRK.DLL, all relative to the module base, all checked against the shipped bytes first):
  *   +0x16821  call FUN_1001a93d in FUN_100167d4 (crossing)            -> id_base_thunk     (CROSS)
+ *   +0x0c2fc  FUN_1000c2fc piece vt+0x5c getter, +0x0cc83 FUN_1000cc83 vt+0x30 getter -> scoped map (CROSS)
+ *   15 predicate vtables, slot +0xc (g_preds)                         -> pred_wrapN        (CROSS)
  *   +0x13082  call FUN_1000d688 in FUN_10012fc3 (write one tile)      -> save_rec_thunk    (SAVEBASE)
  *   +0x12e3e  mov eax,0x2147c2dd in FUN_10012dff (save start)         -> save_begin_hook   (SAVEBASE)
  *   +0x12ee0  push ebx/push 4/sub esp,0xc in FUN_10012dff (3 nets out)-> save_end_hook     (SAVEBASE)
@@ -174,6 +178,136 @@ static const DWORD g_cross_sites[] = {
     0x16821,        /* FUN_100167d4: crossing switch on {0x49,0xe,0xf,0x1d,0x2c,0x5c,0x2bc4,0x3acb} */
 };
 
+/* ---- scoped mapping: the piece-id getters report the base only while a wrapped predicate runs ----
+   Every network piece class shares primary vt+0x30 = FUN_1000cc83 (`[this+0x18] & 0xffff`) and primary vt+0x5c =
+   FUN_1000c2fc (`[this+0x18] & mask`; the secondary vt+0x5c FUN_1000d6fd is `sub ecx,4; jmp 0x1000c2fc`).
+   Both getters are hooked; they map a variant id to its base only when the calling thread is inside one of the
+   predicates in g_preds (vtable slot +0xc swapped to a wrapper). Outside that scope they return the raw id. */
+static volatile LONG g_scope_any;    /* wrappers active on any thread */
+static DWORD g_tls = TLS_OUT_OF_INDEXES;
+static volatile LONG g_n_pred_map;
+
+static void __stdcall scope_enter(void) {
+    InterlockedIncrement(&g_scope_any);
+    TlsSetValue(g_tls, (void *)((DWORD)TlsGetValue(g_tls) + 1));
+}
+
+static void __stdcall scope_leave(void) {
+    TlsSetValue(g_tls, (void *)((DWORD)TlsGetValue(g_tls) - 1));
+    InterlockedDecrement(&g_scope_any);
+}
+
+/* r = [piece+0x18] & mask. Maps only a full 16-bit id read inside a scope on this thread. */
+static DWORD __stdcall map_masked(DWORD r, DWORD mask) {
+    DWORD id;
+    if ((mask & 0xffff) != 0xffff || !TlsGetValue(g_tls)) return r;
+    id = r & 0xffff;
+    if (!g_base[id]) return r;
+    InterlockedIncrement(&g_n_pred_map);
+    return (r & 0xffff0000) | g_base[id];
+}
+
+static __declspec(naked) void get5c_hook(void) {      /* replaces FUN_1000c2fc, ret 4 */
+    __asm {
+        mov eax, dword ptr [ecx + 0x18]
+        and eax, dword ptr [esp + 4]
+        cmp dword ptr [g_scope_any], 0
+        jne slow
+        ret 4
+    slow:
+        push dword ptr [esp + 4]
+        push eax
+        call map_masked
+        ret 4
+    }
+}
+
+static __declspec(naked) void get30_hook(void) {      /* replaces FUN_1000cc83, ret */
+    __asm {
+        mov eax, dword ptr [ecx + 0x18]
+        and eax, 0xffff
+        cmp dword ptr [g_scope_any], 0
+        jne slow
+        ret
+    slow:
+        push 0xffff
+        push eax
+        call map_masked
+        ret
+    }
+}
+
+/* Predicates: objects with a 5-slot vtable, slot +0xc = test(occupant) -> al, `ret 4` (ecx = predicate object).
+   Built by SIMNTWRK FUN_10010dff into DAT_100323c0..; which ones are wrapped and why: re/analysis/NETVARIANT.md. */
+typedef struct { DWORD vt, fn; const char *what; } Pred;
+static const Pred g_preds[] = {
+    /* per-network "may this network cross / take over this cell" id lists (FUN_1001547b passes them to the crossing
+       FUN_100167d4, FUN_100165d8 and the rule check FUN_10016327) */
+    { 0x2c608, 0x1ab26, "FUN_1001ab26 road  id list (DAT_10032400, idx 0x0a)" },
+    { 0x2c5f4, 0x1ac2b, "FUN_1001ac2b rail  id list (DAT_10032404, idx 0x0c)" },
+    { 0x2c5cc, 0x1abb2, "FUN_1001abb2 power id list (DAT_10032408, idx 0x0f)" },
+    { 0x2c5e0, 0x1acbe, "FUN_1001acbe hway  id list (DAT_1003240c, idx 0x0b)" },
+    /* flag-or-{0xe,0xf} tests (idx 0x1c..0x1e) */
+    { 0x2c590, 0x1ad60, "FUN_1001ad60 flags 0x8800 or id 0xe/0xf (DAT_10032418)" },
+    { 0x2c57c, 0x1ade7, "FUN_1001ade7 flags 0x20800 or id 0xe/0xf (DAT_1003241c)" },
+    { 0x2c568, 0x1ae36, "FUN_1001ae36 flags 0x10800 or id 0xe/0xf (DAT_10032424)" },
+    /* rotation-aware id lists handed to other DLLs through manager vt+0x54 (idx 0x10..0x1b); the rail drag asks
+       FUN_1001af19 for every cell of its path (live trace 2026-10-13) */
+    { 0x2c518, 0x1ae85, "FUN_1001ae85 rotation list (DAT_10032430, idx 0x10)" },
+    { 0x2c4f0, 0x1afc7, "FUN_1001afc7 rotation list (DAT_1003243c, idx 0x11)" },
+    { 0x2c504, 0x1af19, "FUN_1001af19 rotation list (DAT_10032434, idx 0x12)" },
+    { 0x2c4dc, 0x1b07c, "FUN_1001b07c rotation list (DAT_10032438, idx 0x15)" },
+    { 0x2c4a0, 0x1b10c, "FUN_1001b10c rotation list (DAT_10032448, idx 0x16)" },
+    { 0x2c478, 0x1b248, "FUN_1001b248 rotation list (DAT_10032454, idx 0x17)" },
+    { 0x2c48c, 0x1b1a1, "FUN_1001b1a1 rotation list (DAT_1003244c, idx 0x18)" },
+    { 0x2c464, 0x1b2e0, "FUN_1001b2e0 rotation list (DAT_10032450, idx 0x1b)" },
+    /* NOT wrapped: FUN_1001b378 / FUN_1001b3c4 (decoration pick, FUN_1000de17): a variant must not be swapped for
+       the base's random decoration pieces 0x3ac0..0x3ac2 */
+};
+#define NPRED (sizeof(g_preds) / sizeof(g_preds[0]))
+static DWORD g_porig[16];
+
+#define PRED_WRAP(i) \
+    static __declspec(naked) void pred_wrap##i(void) { \
+        __asm push ecx \
+        __asm call scope_enter \
+        __asm pop ecx \
+        __asm push dword ptr [esp + 4] \
+        __asm call dword ptr [g_porig + i * 4] \
+        __asm push eax \
+        __asm call scope_leave \
+        __asm pop eax \
+        __asm ret 4 \
+    }
+PRED_WRAP(0) PRED_WRAP(1) PRED_WRAP(2) PRED_WRAP(3) PRED_WRAP(4) PRED_WRAP(5) PRED_WRAP(6) PRED_WRAP(7)
+PRED_WRAP(8) PRED_WRAP(9) PRED_WRAP(10) PRED_WRAP(11) PRED_WRAP(12) PRED_WRAP(13) PRED_WRAP(14) PRED_WRAP(15)
+static void *g_pwrap[16] = { pred_wrap0, pred_wrap1, pred_wrap2, pred_wrap3, pred_wrap4, pred_wrap5, pred_wrap6,
+    pred_wrap7, pred_wrap8, pred_wrap9, pred_wrap10, pred_wrap11, pred_wrap12, pred_wrap13, pred_wrap14, pred_wrap15 };
+
+static int patch_getters(BYTE *m) {
+    static const BYTE g5c[] = { 0x8b, 0x41, 0x18, 0x23, 0x44, 0x24, 0x04, 0xc2, 0x04, 0x00 };
+    static const BYTE g30[] = { 0x8b, 0x41, 0x18, 0x25, 0xff, 0xff, 0x00, 0x00, 0xc3 };
+    if (!bytes_are(m + 0xc2fc, g5c, sizeof(g5c)) || !bytes_are(m + 0xcc83, g30, sizeof(g30))) {
+        logf("### CROSS: id getters differ from shipped - predicates NOT wrapped");
+        return 0;
+    }
+    return write_rel(m + 0xc2fc, 0xE9, (void *)get5c_hook, 5) && write_rel(m + 0xcc83, 0xE9, (void *)get30_hook, 5);
+}
+
+static int patch_preds(BYTE *m) {
+    int i, ok = 0;
+    for (i = 0; i < (int)NPRED && i < 16; i++) {
+        DWORD *slot = (DWORD *)(m + g_preds[i].vt + 0xc), want = (DWORD)m + g_preds[i].fn, nv = (DWORD)g_pwrap[i];
+        if (IsBadReadPtr(slot, 4) || *slot != want) {
+            logf("### CROSS: predicate vtable +0x%05lX slot +0xc != FUN at +0x%05lX - skipped", g_preds[i].vt, g_preds[i].fn);
+            continue;
+        }
+        g_porig[i] = want;
+        if (write_code((BYTE *)slot, &nv, 4)) { ok++; logf("CROSS: wrapped %s", g_preds[i].what); }
+    }
+    return ok;
+}
+
 static int patch_cross(BYTE *m) {
     int i, ok = 0;
     for (i = 0; i < (int)(sizeof(g_cross_sites) / sizeof(g_cross_sites[0])); i++) {
@@ -181,6 +315,8 @@ static int patch_cross(BYTE *m) {
         if (old) { g_a93d = old; ok++; }
         else logf("### CROSS: site +0x%05lX is not `call FUN_1001a93d` - skipped", g_cross_sites[i]);
     }
+    g_tls = TlsAlloc();
+    if (g_tls != TLS_OUT_OF_INDEXES && patch_getters(m)) ok += patch_preds(m);
     return ok;
 }
 
@@ -461,9 +597,9 @@ static DWORD WINAPI watcher(LPVOID param) {
          (DWORD)m, g_nvariants, cross, nc, g_savebase, sv ? "patched" : "off", ld ? "patched" : "FAILED");
     for (;;) {
         Sleep(10000);
-        if (g_n_cross_map || g_n_saved_base)
-            logf("stats: cross lookups mapped=%ld, tiles saved as base (last save)=%ld",
-                 g_n_cross_map, g_n_saved_base);
+        if (g_n_cross_map || g_n_pred_map || g_n_saved_base)
+            logf("stats: crossing-switch lookups mapped=%ld, predicate id reads mapped=%ld, tiles saved as base (last save)=%ld",
+                 g_n_cross_map, g_n_pred_map, g_n_saved_base);
     }
 }
 
