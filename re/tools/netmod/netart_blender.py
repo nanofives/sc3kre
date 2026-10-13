@@ -101,6 +101,33 @@ def build(spec):
         add_box(col, root, -n / 2.0, -n / 2.0, 0.0, n / 2.0, n / 2.0, h, top, side)
     elif kind == "flat":
         add_box(col, root, -n / 2.0, -n / 2.0, -0.0001, n / 2.0, n / 2.0, 0.0, top, top)
+    elif kind == "parts":
+        # props in TILE coordinates of slot 0 (u, v as in netart.py), heights in ALTITUDE units:
+        #   {"cyl": [u, v, radius, z0, z1], "color": [r, g, b]}       vertical cylinder
+        #   {"box": [u0, v0, u1, v1, z0, z1], "color": [...]}         axis-aligned box
+        #   {"ball": [u, v, z, radius], "color": [...]}               sphere (radius in tiles)
+        for i, p in enumerate(spec.get("parts", [])):
+            m = mat("part%d" % i, p.get("color", (0.5, 0.5, 0.5)))
+            if "cyl" in p:
+                u, v, rad, z0, z1 = p["cyl"]
+                bpy.ops.mesh.primitive_cylinder_add(vertices=24, radius=rad, depth=(z1 - z0) * ALT,
+                                                    location=(v, u, (z0 + z1) / 2.0 * ALT))
+            elif "ball" in p:
+                u, v, z, rad = p["ball"]
+                bpy.ops.mesh.primitive_uv_sphere_add(radius=rad, location=(v, u, z * ALT))
+            elif "box" in p:
+                u0, v0, u1, v1, z0, z1 = p["box"]
+                o = add_box(col, root, v0 - n / 2.0, u0 - n / 2.0, z0 * ALT, v1 - n / 2.0, u1 - n / 2.0, z1 * ALT,
+                            m, m, name="part%d" % i)
+                continue
+            o = bpy.context.active_object
+            for c0 in list(o.users_collection):
+                c0.objects.unlink(o)
+            col.objects.link(o)
+            o.data.materials.append(m)
+            o.parent = root
+            o.location = (o.location[0] - n / 2.0, o.location[1] - n / 2.0, o.location[2])
+            bpy.ops.object.shade_smooth()
     return root
 
 

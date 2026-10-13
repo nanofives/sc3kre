@@ -389,9 +389,11 @@ HALVES = {  # slot-0 half tiles cut along a diagonal, named by the screen corner
 
 def compose(recipe, out_dir, src_dir=None):
     """Route b. recipe = {
-        "canvas": <piece> | {"z3": [w, h, L, T], ...}  (frame sizes; default the first layer's piece),
-        "layers": [ {"piece": 73 | "dir": "<png_dir>", "slot_offset": 0..3, "region": {...}, "shift": [du, dv],
-                     "erase": false}, ... ]   (drawn in order, later on top)
+        "canvas": <piece> | {"like": <piece>, "grow_top": <altitude units>} | {"z3": [w, h, L, T], ...}
+                  (frame sizes; default the first layer's piece; grow_top makes room for tall props),
+        "layers": [ {"piece": 73 | "dir": "<png_dir>" | "render": <netart_blender scene spec>,
+                     "slot_offset": 0..3, "region": {...}, "shift": [du, dv], "erase": false}, ... ]
+                     (drawn in order, later on top; a "render" layer is rendered in Blender, cached)
       }
     Each layer takes the source frame for slot (r + slot_offset) % 4 and keeps only the region (tile space,
     slot-0 coords, turned with r). "shift" moves the source by whole/fractional tiles in slot-0 tile space,
@@ -405,6 +407,8 @@ def compose(recipe, out_dir, src_dir=None):
         if key not in srcs:
             if "piece" in spec:
                 srcs[key] = stock_frames(spec["piece"])
+            elif "render" in spec:
+                srcs[key] = load_dir(render_cached(spec["render"]))
             else:
                 p = spec["dir"]
                 if src_dir and not os.path.isabs(p):
@@ -417,7 +421,13 @@ def compose(recipe, out_dir, src_dir=None):
     anchors = {}
     for z in range(ZOOMS):
         for r in range(ROTS):
-            if isinstance(cv, dict):
+            if isinstance(cv, dict) and "like" in cv:
+                # a stock piece's frames grown upwards by grow_top altitude units (alt << zoom px, NET_ART.md 2)
+                im0, (L, T) = stock_frames(cv["like"])[(z, r)]
+                g = int(math.ceil(cv.get("grow_top", 0) * (1 << z)))
+                w, h, T = im0.width, im0.height + g, T + g
+                anchors[frame_name(z, r)] = [L, T]
+            elif isinstance(cv, dict):
                 w, h, L, T = cv["z%d" % z]
                 anchors[frame_name(z, r)] = [L, T]
             else:
@@ -432,6 +442,8 @@ def compose(recipe, out_dir, src_dir=None):
                 src, a = fr[(z, sr_)]
                 if a is None:
                     a = stock_frames(cv)[(z, sr_)][1] if not isinstance(cv, dict) else (L, T)
+                if "render" in lay:
+                    sr_ = r                     # a render is already turned per slot
                 # shift is a vector in slot-0 tile space: turned with the slot, no translation
                 du, dv = _rot_vec(*lay.get("shift", (0, 0)), r)
                 sx, sy = project(z, du, dv)
@@ -500,8 +512,8 @@ def auto_frame(render_png, n=1, z=3):
     cw, ch = im.size
     a = im.getchannel("A").point(lambda v: 255 if v >= 128 else 0)
     bb = a.getbbox()
-    if not bb:
-        raise RuntimeError("%s: empty render" % render_png)
+    if not bb:                              # nothing survives the alpha cut at this zoom (thin props at zoom 0)
+        return Image.new("RGBA", (1, 1), (0, 0, 0, 0)), (0, 0)
     x0, x1 = cw // 2, cw // 2 + n * TILE_W[z]
     return im.crop((x0, bb[1], x1, bb[3])), (cw // 2 - x0, ch // 2 - bb[1])
 
@@ -612,6 +624,21 @@ def calibrate(pid, model, work, steps=STEPS, bleeds=BLEEDS, out_json=None):
         with open(out_json, "w") as fh:
             json.dump(rep, fh, indent=1)
     return rep
+
+
+def render_cached(scene, engine="CYCLES", samples=32):
+    """Blender render of a scene spec into a png_dir (auto frames + anchors.json), cached by content hash under
+    %TEMP%\netart_cache so repeated netpack validate/install calls render once. Needs Blender (SC3_BLENDER)."""
+    import hashlib
+    import tempfile
+    sh, bl = load_calib()
+    key = hashlib.sha256(json.dumps([scene, engine, samples, sorted(sh.items()), sorted(bl.items()),
+                                     open(BLENDER_SCRIPT, "rb").read().decode("utf-8", "replace")],
+                                    sort_keys=True, default=str).encode()).hexdigest()[:16]
+    d = os.path.join(tempfile.gettempdir(), "netart_cache", key)
+    if not os.path.isfile(os.path.join(d, "art", "anchors.json")):
+        render(scene, os.path.join(d, "art"), os.path.join(d, "work"), engine=engine, samples=samples)
+    return os.path.join(d, "art")
 
 
 def evaluate(pid, model, work, calib=None, out_json=None):
@@ -731,6 +758,64 @@ def preview(layout, out_png, src_dir=None, zooms=range(ZOOMS), rots=range(ROTS),
     return shots
 
 
+SENTINEL = (1, 2, 3, 255)          # preview background no sprite pixel can be (it expands from no 5/6/5 value)
+
+
+def match(dump_png, layout, z, r, src_dir=None, diff_png=None, exclude=None):
+    """In-game check: find the offline composite of `layout` (zoom z, view rotation r) inside a game frame dump
+    and compare the piece pixels in 5/6/5 (the framebuffer expands 5/6/5 by shifting, the exporter by scaling:
+    SPRITE_MODDING.md, so both are cut back to 5/6/5 first). -> dict(offset, piece_px, equal, frac, diff_png).
+    exclude: list of screen rects (x0, y0, x1, y1) of the dump to ignore (HUD)."""
+    import numpy as np
+    shot = preview(layout, None, src_dir=src_dir, zooms=[z], rots=[r], bg=SENTINEL)[(z, r)]
+    P = np.asarray(shot.convert("RGB"), dtype=np.int32)
+    mask = ~np.all(P == np.array(SENTINEL[:3]), axis=2)
+    q = lambda A: ((A[..., 0] >> 3) << 11) | ((A[..., 1] >> 2) << 5) | (A[..., 2] >> 3)   # noqa: E731
+    Pq = q(P)
+    D = np.asarray(Image.open(dump_png).convert("RGB"), dtype=np.int32)
+    Dq = q(D)
+    valid = np.ones(Dq.shape, bool)
+    for x0, y0, x1, y1 in (exclude or []):
+        valid[y0:y1, x0:x1] = False
+    ys, xs = np.nonzero(mask)
+    rng = np.random.default_rng(0)
+    pick = rng.choice(len(ys), size=min(400, len(ys)), replace=False)
+    sy, sx, sv = ys[pick], xs[pick], Pq[ys[pick], xs[pick]]
+    H, W = Dq.shape
+    ph, pw = mask.shape
+    best = (-1, 0, 0)
+    oxs = np.arange(-pw + 1, W)
+    for oy in range(-ph + 1, H):
+        yy = sy + oy
+        okY = (yy >= 0) & (yy < H)
+        if okY.sum() < len(sy) // 3:
+            continue
+        XX = sx[okY, None] + oxs[None, :]                 # samples x offsets
+        ok = (XX >= 0) & (XX < W)
+        vals = Dq[yy[okY], :][np.arange(okY.sum())[:, None], np.clip(XX, 0, W - 1)]
+        n = ((vals == sv[okY, None]) & ok).sum(0)
+        k = int(n.argmax())
+        if n[k] > best[0]:
+            best = (int(n[k]), int(oxs[k]), oy)
+    _, ox, oy = best
+    # full comparison at the best offset
+    gy, gx = ys + oy, xs + ox
+    inb = (gy >= 0) & (gy < H) & (gx >= 0) & (gx < W)
+    inb[inb] &= valid[gy[inb], gx[inb]]
+    eq = Dq[gy[inb], gx[inb]] == Pq[ys[inb], xs[inb]]
+    res = {"zoom": z, "rot": r, "offset": [int(ox), int(oy)], "piece_px": int(inb.sum()),
+           "equal": int(eq.sum()), "frac": float(eq.mean()) if inb.any() else 0.0}
+    if diff_png:
+        img = Image.open(dump_png).convert("RGB")
+        px = img.load()
+        for (y, x), e in zip(zip(gy[inb], gx[inb]), eq):
+            if not e:
+                px[int(x), int(y)] = (255, 0, 0)
+        img.save(diff_png)
+        res["diff_png"] = diff_png
+    return res
+
+
 def _content_box(img, bg):
     """bbox of the pixels that differ from the background colour."""
     from PIL import ImageChops
@@ -802,6 +887,15 @@ def main(argv=None):
     rn.add_argument("--engine", default="CYCLES")
     rn.add_argument("--samples", type=int, default=16)
     rn.add_argument("--palette-from", type=int)
+    mt = sub.add_parser("match", help="compare game frame dumps with the offline composite of a layout")
+    mt.add_argument("layout")
+    mt.add_argument("dumps", help="pattern with {z} and {r}, e.g. shots/B_z{z}_r{r}.png")
+    mt.add_argument("--zooms", default="0,1,2,3,4")
+    mt.add_argument("--rots", default="0,1,2,3")
+    mt.add_argument("--diff", help="pattern for diff images (mismatches in red)")
+    mt.add_argument("--exclude", default="0,540,800,600;700,0,800,600",
+                    help="dump rects to ignore, x0,y0,x1,y1;... (default: the 800x600 HUD bar and tool column)")
+    mt.add_argument("--json")
     li = sub.add_parser("lint")
     li.add_argument("dir")
     li.add_argument("--like", type=int, default=ELEVATED_PIECE)
@@ -873,6 +967,22 @@ def main(argv=None):
         pal = stock_palette(a.palette_from) if a.palette_from else None
         render(scene, a.dir, a.work, like=a.like, engine=a.engine, samples=a.samples, blend=blend, palette=pal)
         print("rendered 20 frames into", a.dir)
+        return 0
+    if a.cmd == "match":
+        lay = json.load(open(a.layout, encoding="utf-8"))
+        exc = [tuple(int(v) for v in r.split(",")) for r in a.exclude.split(";") if r]
+        out = []
+        for z in (int(v) for v in a.zooms.split(",")):
+            for r in (int(v) for v in a.rots.split(",")):
+                res = match(a.dumps.format(z=z, r=r), lay, z, r,
+                            src_dir=os.path.dirname(os.path.abspath(a.layout)),
+                            diff_png=a.diff.format(z=z, r=r) if a.diff else None, exclude=exc)
+                out.append(res)
+                print("zoom %d rot %d: offset %s, piece px %d, equal %d (%.2f%%)"
+                      % (z, r, res["offset"], res["piece_px"], res["equal"], 100 * res["frac"]))
+        if a.json:
+            with open(a.json, "w") as fh:
+                json.dump(out, fh, indent=1)
         return 0
     if a.cmd == "lint":
         probs = lint(a.dir, a.like)

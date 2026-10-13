@@ -1,0 +1,14 @@
+{
+ "_": "Roundabout quarter with a street lamp: the example_roundabout_art layers plus a lamp rendered in Blender at build time (netart_blender 'parts', calibrated camera). The lamp is 7.5 altitude units tall, so the frames grow upwards by 9 units (anchors.json written by compose). Tile-space units, slot 0.",
+ "canvas": {"like": 39, "grow_top": 9},
+ "layers": [
+  {"piece": 11203, "slot_offset": 0},
+  {"piece": 29, "slot_offset": 1,
+   "region": {"and": [{"box": [0, 0, 1, 0.55]}, {"not": {"disc": [1, 1, 0.84]}}]}},
+  {"render": {"build": "parts", "n": 1, "parts": [
+     {"cyl": [0.10, 0.66, 0.035, 0.0, 0.4], "color": [0.25, 0.25, 0.27]},
+     {"cyl": [0.10, 0.66, 0.014, 0.0, 7.2], "color": [0.18, 0.19, 0.21]},
+     {"ball": [0.10, 0.66, 7.35, 0.05], "color": [1.0, 0.92, 0.55]},
+     {"cyl": [0.10, 0.66, 0.06, 7.5, 7.7], "color": [0.15, 0.15, 0.17]}]}}
+ ]
+}

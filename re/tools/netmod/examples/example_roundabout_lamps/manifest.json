@@ -1,0 +1,16 @@
+{
+  "netpack": 1,
+  "name": "example_roundabout_lamps",
+  "version": "1.0.0",
+  "author": "artkit test fixture",
+  "description": "Route c demo: the roundabout quarter of example_roundabout_art with a street lamp rendered in Blender at build time (needs Blender 4.5, SC3_BLENDER). Frames are TALLER than base T 39's: their registration points come from compose's anchors.json. New id 20401, behaves as T 39.",
+  "game": {
+    "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+  },
+  "variants": [
+    {"id": 20401, "base": 39, "network": "ROAD",
+     "name": {"*": "Roundabout with lamps", "ENGLISH": "Rotonda con farolas"},
+     "art": {"from": 39, "recipe": "recipe.json"},
+     "trblkatt": "copy_base"}
+  ]
+}
