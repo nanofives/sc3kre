@@ -110,6 +110,8 @@ def compile_entries(stock_root, pack_dir, man):
                              "_pack": man["name"], "rec0": rec0, "states": sorted(spec.get("states", [0, 1, 2, 3]))})
     for n, e in enumerate(man.get("connects", [])):
         where = "%s connects %d (piece %s)" % (man["name"], n + 1, e.get("piece"))
+        if any(e.get(k) == "auto" for k in LK.CONN_PROPS):
+            raise LanesError("%s: \"auto\" needs lanes; put the connects in the lane spec instead" % where)
         try:
             m = LK.compile_connects({k: v for k, v in e.items() if k in LK.CONN_PROPS}, set(), out["warnings"])
         except LK.LaneError as ex:

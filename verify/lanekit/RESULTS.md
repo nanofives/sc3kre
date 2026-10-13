@@ -44,7 +44,7 @@ transposed order by mistake (its `cells_sum` values are not used here); the thir
 
 Package `example_lanes_t_exit_only` (overlay: the 7 TrBlkAtt containers, records of 39 states 0..3 replaced; every other
 record unchanged, checked offline). Probe with `--all` (every street-sim cell transition, `FUN_1001c750`), 244 s
-each, speed 1 (unpaused, default speed). Orientation of the hook's (param_1, param_2): save (x, z), settled by the exits
+each, unpaused at the speed the game kept from the previous run (about 5.4 game days per second in both). Orientation of the hook's (param_1, param_2): save (x, z), settled by the exits
 from T cells, which fall on the T's arms in that order (arm: 602 / 311 / 417 on arms x- / z- / z+, 46 on the side with
 no arm) and not in the swapped one.
 
