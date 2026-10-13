@@ -317,6 +317,10 @@ def line(a, b):
 
 
 def main(argv):
+    if not os.environ.get("SC3_PID", "").strip().isdigit():
+        # never fall back to "the only running game": with several sessions it can be another session's game
+        # (2026-10-13: an empty SC3_PID sent this tool's builds into a sibling's test game)
+        raise SystemExit("set SC3_PID to the pid of YOUR game (mods_launch -multi prints it); refusing to guess")
     if len(argv) < 2:
         print(__doc__)
         return 2
