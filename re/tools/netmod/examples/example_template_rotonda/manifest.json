@@ -1,0 +1,49 @@
+{
+  "netpack": 1,
+  "name": "example_template_rotonda",
+  "version": "1.0.0",
+  "author": "multitile test fixture",
+  "description": "Test fixture for templates: a 2x2 mini roundabout built from stock road pieces the tiler would not place this way. Blue variants of road T 39 (21039) and road curve 35 (21035), so the template cells are visible and can be protected without protecting the stock pieces. rotonda4: four exits (pinwheel), rotonda3: three exits (the (0,1) cell is a curve), which shows the rotation.",
+  "game": {
+    "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+  },
+  "variants": [
+    {"id": 21039, "base": 39, "network": "ROAD", "name": {"*": "Rotonda (calle T, plantilla)"},
+     "art": {"from": 39, "recolor": "blue"}, "trblkatt": "copy_base"},
+    {"id": 21035, "base": 35, "network": "ROAD", "name": {"*": "Rotonda (calle curva, plantilla)"},
+     "art": {"from": 35, "recolor": "blue"}, "trblkatt": "copy_base"}
+  ],
+  "templates": [
+    {
+      "name": "rotonda4",
+      "label": {"*": "Rotonda 2x2 (4 salidas)"},
+      "size": [2, 2],
+      "network": "ROAD",
+      "rows": [
+        [[21039, 3], [21039, 0]],
+        [[21039, 2], [21039, 1]]
+      ],
+      "terrain": {"flat": true, "water": false},
+      "cost": 400,
+      "rotate": "generate"
+    },
+    {
+      "name": "rotonda3",
+      "label": {"*": "Rotonda 2x2 (3 salidas)"},
+      "size": [2, 2],
+      "network": "ROAD",
+      "rows": [
+        [[21039, 3], [21039, 0]],
+        [[21035, 2], [21039, 1]]
+      ],
+      "edges": [
+        {"at": [0, 0], "dir": "W", "need": "optional"},
+        {"at": [1, 0], "dir": "N", "need": "optional"},
+        {"at": [1, 1], "dir": "E", "need": "optional"}
+      ],
+      "terrain": {"flat": true, "water": false},
+      "cost": 350,
+      "rotate": "generate"
+    }
+  ]
+}
