@@ -17,13 +17,13 @@
    },
    {
     "from": "z- 2",
-    "to": "z+ 2",
-    "path": 259
-   },
-   {
-    "from": "z- 2",
     "to": "x- 2",
     "path": 1025
+   },
+   {
+    "from": "z+ 1",
+    "to": "z- 1",
+    "path": 257
    }
   ]
  },
@@ -125,5 +125,5 @@
  "connects": {
   "road": "auto"
  },
- "_comment": "Quarter of a 2x2 one-way roundabout, in the frame of T junction 39 at state 0 (arms x-, z-, z+). Ring lanes: enter z- (175,0), leave x- (0,175). Spur in: z+ (80,255) -> x- (0,175). Spur out: z- (175,0) -> z+ (175,255). Place four cells at (x,z) state 2, (x+1,z) state 3, (x+1,z+1) state 0, (x,z+1) state 1: the spurs leave at z-, x+, z+, x-. Pedestrian graph: the T's."
+ "_comment": "Quarter of a 2x2 one-way roundabout, frame of T junction 39 at state 0 (arms x-, z-, z+; +x closed). Ring through x- and z+ (the 2x2 centre is corner (-x,+z)): z+ (80,255) -> x- (0,175), curve 768. Exit road on z-: in z- (175,0) -> x- (0,175), curve 1025; out z+ (80,255) -> z- (80,0), curve 257. Layout agreed with artkit and multitile (pinwheel): (x,z) state 3, (x+1,z) state 0, (x,z+1) state 2, (x+1,z+1) state 1; exits W, N, E, S. Pedestrian graph: the T's."
 }
