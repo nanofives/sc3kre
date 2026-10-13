@@ -70,6 +70,15 @@
 !/re/tools/netmod/
 /re/tools/netmod/*
 !/re/tools/netmod/*.py
+# netpack (2026-10-13): the manifest JSON Schema, and the example packages' manifest + README ONLY. Examples derive
+# their art from the stock pieces at build time; a PNG, DAT or IXF in a package folder is game art and stays ignored.
+!/re/tools/netmod/netpack.schema.json
+!/re/tools/netmod/examples/
+/re/tools/netmod/examples/*
+!/re/tools/netmod/examples/*/
+/re/tools/netmod/examples/*/*
+!/re/tools/netmod/examples/*/manifest.json
+!/re/tools/netmod/examples/*/README.md
 
 # 5) re/scripts — .py / .ps1 / .java only.
 #    Explicitly NOT the .log / .txt Ghidra run artifacts (absolute-path leaks)

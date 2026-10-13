@@ -45,7 +45,8 @@ index has 161 free slots of the 1,024 it reserves).
 
 A second mod cannot also use the Korea pair. More free names need a SYS.PAK `[DBSegments]` key, which `syspak_mod.py`
 cannot add today (gap 1 of the capability map). Several pieces fit in one Korea pair: the containers take up to 1,023
-records each.
+records each. **Superseded 2026-10-13 by `netpack` (`NETPACK.md`):** packages are merged into the Korea pair together,
+and a SYS.PAK with an added `[DBSegments]` line loads in game (netpack arm N), so gap 1 is closed in practice.
 
 ## 3. Recipe
 

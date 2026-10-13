@@ -1,0 +1,13 @@
+{
+  "netpack": 1,
+  "name": "example_reskin",
+  "version": "1.0.0",
+  "author": "sc3kre",
+  "description": "Test fixture: every frame of highway piece 73 recoloured red. No new id, no rule edits.",
+  "game": {
+    "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+  },
+  "reskins": [
+    {"piece": 73, "art": {"recolor": "red"}}
+  ]
+}
