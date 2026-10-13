@@ -142,7 +142,11 @@ mod, grey T / curve pieces on the same cells without it (arm S).
   (slope refusal measured).
 - Multi-network templates (a highway + road interchange) are accepted by the format (per-cell network, HWAY arms
   from rule geometry, retile mask 1|2 runs HWAY then ROAD) and not tried in game.
-- Traffic over a template: not measured (the variants copy their bases' TrBlkAtt).
+- Traffic over a template: not measured here. lanekit measured the shared demo 20400 with its own lanes (child/lanekit
+  4f11991, Berlin (25,181), same 3,0 / 2,1 layout): animated cars 69 ring moves with the one-way ring, 0 against (stock
+  control 44 against); road density ignores lanes and masks. Their 20400 mask differs from T 39's in the low half
+  (row x- empty there, set in the high half), so the arms check must read both halves, as it does (the tiler asks
+  half 1 then half 0).
 - Cost is one number per template, not derived from piece prices.
 
 ## 4. Cómo definir y colocar una intersección de varias casillas (para el dueño)
