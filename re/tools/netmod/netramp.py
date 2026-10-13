@@ -23,10 +23,11 @@ the same Set files as the `from` piece. netpack writes the result as `ramp <tabl
 package's table file (mods\netmod\tables\<package>.txt), which sc3netmod.dll applies in memory when SIMNTWRK maps:
 it checks each slot still holds the stock value and refuses a slot it does not know.
 
-A variant with "mirror_base": true also gets everything SIMNTWRK decides by its base's id in data files: every Set file
-that lists the base (so FUN_1001a5f2 gives it the same networks), the base's Protected lists, Convert / Complex_Convert
-rows that make the tiler's rules see it as the base, and the base's Collapse.txt groups (bulldozing removes the whole
-multi-tile piece). sc3netmod.dll gives ramp-table variants the base's piece class (the on-ramp class adds flag
+A table variant needs everything SIMNTWRK decides by its base's id in data files; netpack's variant inheritance (task
+netbridge, `"inherit"`, on by default: netpack_bridges.py) gives it: every Set file that lists the base, the base's
+Protected lists, Convert / Complex_Convert rows (the rules see the base) and the base's Collapse.txt groups (bulldozing
+removes the whole multi-tile piece). Without it the HWAY retile right after the build replaces the strip
+(`build-onramp` shows it). sc3netmod.dll gives ramp-table variants the base's piece class (the on-ramp classes add flag
 0x200000, which SIMTRANSIT FUN_10005983 tests).
 
   py -3.12 netramp.py tables [--json]        every table, slot, stock id.state and what the slot means
@@ -49,7 +50,6 @@ from netmod.pe_tables import Simntwrk  # noqa: E402
 
 NETS = ("ROAD", "RAIL", "POWR", "HWAY", "PIPE", "SUBW")
 COLLAPSE = "Apps/Res/TilingRules/Collapse.txt"
-COLLAPSE_MAX = 0x1D        # FUN_1001da5f: a group whose count token is > 0x1d ends the scan [CONFIRMED @ 0x1001da5f]
 
 # ------------------------------------------------------------------ the registry
 # On-ramp builder FUN_1000abde [CONFIRMED @ 0x1000abde]: `mov dword ptr [ebp+d8], imm32` (C7 45 d8 imm32); the imm32
@@ -229,9 +229,9 @@ def check_merged(comp_ramps, variants, set_files_of, warnings):
             if v is not None:
                 if v["base"] != fid:
                     raise RampError("%s: variant %d has base %d, but the slot holds %d" % (r["where"], tid, v["base"], fid))
-                if not v.get("mirror_base"):
-                    warnings.append("%s: variant %d has no \"mirror_base\": rules and bulldozing will not treat it as %d"
-                                    % (r["where"], tid, fid))
+                if not v.get("inherit", True):
+                    warnings.append("%s: variant %d has \"inherit\": false, so rules and bulldozing do not treat it as %d "
+                                    "and the HWAY retile replaces it (netramp.py build-onramp shows it)" % (r["where"], tid, fid))
             else:
                 a, b = set_files_of(fid), set_files_of(tid)
                 if not b:
@@ -250,51 +250,7 @@ def table_lines(lst):
                     for r in sorted(lst, key=lambda r: (r["table"], r["slot"])))
 
 
-# ------------------------------------------------------------------ mirror_base: data-file membership
-def _counted_pairs(data):
-    lines = data.split(b"\r\n")
-    n = int(lines[0])
-    return [tuple(int(x) for x in ln.split(b",")) for ln in lines[1:1 + n]]
-
-
-def mirror_edits(stock, list_files, variants):
-    """-> ({TilingRules file name: [netpack_rules edits]}, notes) for every mirror_base variant.
-    stock: netpack.Stock. list_files: names in Apps/Res/TilingRules."""
-    low = {n.lower(): n for n in list_files}
-    edits, notes = {}, []
-    for v in variants:
-        if not v.get("mirror_base"):
-            continue
-        vid, base = v["id"], v["base"]
-        for net in NETS:
-            sname = low.get(("%s_grnd_set.txt" % net).lower())
-            if sname is None or base not in set(int(x) for x in stock.read("Apps/Res/TilingRules/" + sname).replace(b"{", b" ").replace(b"}", b" ").replace(b",", b" ").split() if x.isdigit()):
-                continue
-            edits.setdefault(sname, []).append({"op": "list_add", "ids": [vid], "_pack": "(mirror %d)" % vid})
-            pname = low.get(("%s_grnd_protected.txt" % net).lower())
-            if pname:
-                body = stock.read("Apps/Res/TilingRules/" + pname).split(b"\r\n")
-                if (b"%d" % base) in body[1:1 + int(body[0])]:
-                    edits.setdefault(pname, []).append({"op": "list_add", "ids": [vid], "_pack": "(mirror %d)" % vid})
-            for kind in ("convert", "complex_convert"):
-                cname = low.get(("%s_grnd_%s.txt" % (net, kind)).lower())
-                if not cname:
-                    continue
-                pairs = _counted_pairs(stock.read("Apps/Res/TilingRules/" + cname))
-                for st in range(4):
-                    tgt = (base << 8) | st
-                    for a, b in pairs:                       # FUN_1001a85a: the last matching row wins
-                        if a == (base << 8) | st:
-                            tgt = b
-                    edits.setdefault(cname, []).append({"op": "convert_add", "from": [vid, st], "to": [tgt >> 8, tgt & 0xFF],
-                                                        "_pack": "(mirror %d)" % vid})
-            notes.append("variant %d mirrors %d in %s" % (vid, base, net))
-        dname = low.get("diag_set.txt")
-        if dname and base in set(int(x) for x in stock.read("Apps/Res/TilingRules/" + dname).replace(b"{", b" ").replace(b"}", b" ").replace(b",", b" ").split() if x.isdigit()):
-            edits.setdefault(dname, []).append({"op": "list_add", "ids": [vid], "_pack": "(mirror %d)" % vid})
-    return edits, notes
-
-
+# ------------------------------------------------------------------ Collapse.txt (selftest only; packs use netpack_bridges)
 def collapse_parse(data):
     toks = [int(x) for x in data.split()]
     groups, i = [], 1
@@ -312,23 +268,6 @@ def collapse_render(groups):
     for g in groups:
         toks += [len(g) + 1] + list(g)
     return b"".join(b"%d\r\n" % t for t in [len(toks)] + toks)
-
-
-def collapse_apply(data, variants):
-    """Each mirror_base variant joins every Collapse group that holds its base. None if nothing changes."""
-    groups = collapse_parse(data)
-    changed = False
-    for v in variants:
-        if not v.get("mirror_base"):
-            continue
-        for gi, g in enumerate(groups):
-            if v["base"] in g and v["id"] not in g:
-                g.append(v["id"])
-                changed = True
-                if len(g) + 1 > COLLAPSE_MAX:
-                    raise RampError("Collapse.txt group %d would hold %d tokens with variant %d; FUN_1001da5f stops at "
-                                    "groups over %d (0x1d)" % (gi, len(g) + 1, v["id"], COLLAPSE_MAX))
-    return collapse_render(groups) if changed else None
 
 
 # ------------------------------------------------------------------ the on-ramp builder as a function (FUN_1000abde)
