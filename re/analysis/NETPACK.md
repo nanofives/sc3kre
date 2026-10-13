@@ -208,3 +208,24 @@ their base's Set / DIAG / Protected membership, Convert rows and Collapse groups
 `"replace_base": true` retargets every rule RESULT that places the base; `bridges` inserts / deletes records of the four
 Bridges files; `crossings` gives a variant its own crossing piece (`mods\netmod\cross\<package>.txt`, read by
 `sc3netmod.dll` XCROSS). Code: `netpack_bridges.py`. Selftest U8..U10.
+
+## 9. Lanes and connections (task lanekit, 2026-10-13)
+
+Two manifest keys, code `netpack_lanes.py`, format and semantics `NET_LANES.md` (game-proven: `verify/lanekit/RESULTS.md`):
+
+```json
+"lanes":    [{"piece": 20400, "spec": "quarter.lanes.json", "langs": ["ENGLISH"]}],
+"connects": [{"piece": 73, "road": [["z-", "z+"]]}, {"piece": 15051, "road": {"low": [], "high": []}}]
+```
+
+| key | effect | where it lands |
+|---|---|---|
+| `lanes[].spec` | a lanekit spec (file in the package folder or inline): street-sim lanes for the states it lists, every language folder (`langs` to narrow), English-UK mirrored unless `"mirror_uk": false`; its own `connects` key, if any, sets the turn matrix | variant: its TrBlkAtt records (replacing the `copy_base` ones) and its Korea exemplar. Stock piece: copies of `SSimData\<lang>\TrBlkAtt.IXF` with the records replaced |
+| `connects[]` | turn matrix only: `road` / `rail` / `subway` = exemplar props 310 / 311 / 312. A list sets the low half and its transpose as the high half (the rule of all 311 stock masks), `{"low", "high"}` sets both, `"auto"` is not allowed here (no lanes) | variant: its Korea exemplar. Stock piece: a copy of the Occupant container that holds its exemplar |
+
+Stock records and exemplars are replaced with `netpack_lanes.replace_records`: the new payload is appended, the index
+slot re-pointed, every other record keeps offset and bytes. One package per (piece, lanes) and per (piece, connects).
+Checks: ERROR = spec does not compile, a node outside -16..271, an exit code over 31, no exemplar for a matrix edit,
+two packages on one piece. WARNING = a lane turn missing from the low half, a used side with no arm in either half
+(the tiler will not connect it), a matrix turn no lane drives, a curve whose end points are not the lane's nodes in some
+language. Examples: `example_lanes_t_exit_only`, `example_connects_hway_block`, `example_roundabout`.
