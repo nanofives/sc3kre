@@ -96,3 +96,20 @@ from a lot has its cell marked with the lot's bits (0x80), so the ring scan offe
 side 2 (SimTransit 0x100083e4, same rect) and then read as a wrong-way entry. Fix: an honoured node closes its own cell
 for the call; the cell statistics skip self-steps. Second debug run: every step through the eleven 20430 cells exits
 x+. Final build for all re-run arms: this commit.
+
+## Addendum 4 (2026-10-13, after the B / B2 re-runs, before arms P2_*)
+
+Result that prompted this: the router-step counters show 0 steps against the lanes in B_on / B2_on, but the 12-month
+density sum over the one-way run moved only -15% (B_on vs B_ctl) and -0.5% (B2_on vs B2_ctl), inside the spread of
+the four unfiltered arms on that sum (1,300-1,489). Step counters include DFS exploration that is backtracked; density
+is deposited only along final paths. New witness, `ld_paths.py`: a Frida hook on the deposit FUN_10006edd that recovers
+the forward direction of every final path through watched cells (deposits of one trip come in reverse path order).
+
+Arms P2_ctl (count) and P2_on (unset), berlin_lanes2.sc3, same protocol, `ld_paths.py` attached for 50 s from 10 s
+after the unpause, watched cells = the one-way run (147..157, 46) and the roundabout (61..62, 95..96).
+
+Predictions:
+- P2_on: final-path steps inside the run in -x (x -> x-1, both cells in the run) = 0; final-path steps (158,46) ->
+  (157,46) = 0; final-path steps between roundabout cells against the ring order = 0.
+- P2_ctl: final-path steps inside the run in -x > 0 and >= 20% of all final-path steps inside the run; against the
+  ring > 0.
