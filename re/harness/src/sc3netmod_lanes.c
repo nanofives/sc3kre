@@ -144,6 +144,16 @@ static DWORD ld_eval(BYTE *layer, BYTE *node, DWORD *pid, int any) {
     return 0x100 | allow;
 }
 
+/* count mode: re-evaluate a node as if entered from a lot (union of the rows) */
+static DWORD ld_eval_union(BYTE *layer, BYTE *node) {
+    BYTE p = node[0x15];
+    DWORD id, ev;
+    node[0x15] = 0x80;
+    ev = ld_eval(layer, node, &id, 1);
+    node[0x15] = p;
+    return ev;
+}
+
 static BYTE *ld_mark(BYTE *layer, DWORD x, DWORD z) {
     return *(BYTE **)(*(BYTE **)(*(BYTE **)(layer + 0x78) + 0xc) + x * 4) + z;
 }
@@ -159,7 +169,7 @@ static const int g_ld_dx[4] = {-1, 0, 1, 0}, g_ld_dz[4] = {0, -1, 0, 1};
    treats B as visited. Cleared when the trip's start node (type 0x80) is scanned: the DFS never re-pushes a cell it
    has visited, so A cannot come back after its stack frame is gone. Full list: B simply stays visited. */
 #define LD_TRIPMAX 32
-typedef struct { int n; DWORD from[LD_TRIPMAX], to[LD_TRIPMAX]; } LdTrip;
+typedef struct { int n; DWORD from[LD_TRIPMAX], to[LD_TRIPMAX]; DWORD selfkey; } LdTrip;
 static DWORD g_ld_tls = TLS_OUT_OF_INDEXES;
 static volatile LONG g_ld_n_tripfull, g_ld_n_tripmark;
 
@@ -188,16 +198,21 @@ static void ld_close(BYTE *layer, DWORD x, DWORD z, BYTE t, BYTE **added, BYTE *
 static BYTE __fastcall ld_select(BYTE *layer, void *edx, BYTE *node, BYTE *out, DWORD budget, DWORD p4, DWORD p5, DWORD p6) {
     DWORD id, ev, x, z, s;
     BYTE *added[4 + LD_TRIPMAX], addb[4 + LD_TRIPMAX], t = node[0x14], r;
-    int nadd = 0, k, honoured;
+    int nadd = 0, k, honoured, selfcopy = 0;
     LdCell *c = NULL;
     LdTrip *tr;
     (void)edx;
     if (t == 0x80) {                                               /* a trip (re)starts at its lot */
-        if ((tr = ld_trip(0)) != NULL) tr->n = 0;
+        if ((tr = ld_trip(0)) != NULL) { tr->n = 0; tr->selfkey = 0; }
         return ((LD_SEL)g_ld_tramp)(layer, NULL, node, out, budget, p4, p5, p6);
     }
-    ev = ld_eval(layer, node, &id, g_ld_mode == 3);
     x = *(DWORD *)(node + 4); z = *(DWORD *)(node + 8);
+    ev = ld_eval(layer, node, &id, g_ld_mode == 3);
+    if (g_ld_mode == 3 && (ev & 0x200) && (tr = ld_trip(0)) != NULL && tr->selfkey == LD_KEY(x, z) + 1) {
+        ev = ld_eval_union(layer, node);                           /* a self-step copy (count mode), not an entry */
+        tr->selfkey = 0;
+        selfcopy = 1;
+    }
     tr = ld_is_net(t) ? ld_trip(0) : NULL;              /* highway nodes check the same visited grid (FUN_100086e7) */
     if (tr && tr->n) {                                             /* transitions refused earlier in this trip */
         DWORD key = LD_KEY(x, z);
@@ -243,9 +258,11 @@ static BYTE __fastcall ld_select(BYTE *layer, void *edx, BYTE *node, BYTE *out, 
     }
     r = ((LD_SEL)g_ld_tramp)(layer, NULL, node, out, budget, p4, p5, p6);
     for (k = 0; k < nadd; k++) *added[k] &= (BYTE)~addb[k];
+    if (g_ld_mode == 3 && r && *(DWORD *)(out + 4) == x && *(DWORD *)(out + 8) == z && (tr = ld_trip(1)) != NULL)
+        tr->selfkey = LD_KEY(x, z) + 1;
     if (ev && r && (out[0x14] == 1 || out[0x14] == 3 || out[0x14] == 0x41) &&
         (*(DWORD *)(out + 4) != x || *(DWORD *)(out + 8) != z)) {            /* not a step onto its own cell */
-        DWORD exitside = (out[0x1c] + 2) & 3, entry = ld_is_net(node[0x15]) ? (node[0x1c] & 3) : 4;
+        DWORD exitside = (out[0x1c] + 2) & 3, entry = (ld_is_net(node[0x15]) && !selfcopy) ? (node[0x1c] & 3) : 4;
         if (c) InterlockedIncrement(&c->step[entry][exitside]);
         if (honoured && !(ev & 0x200) && !(ev & (1u << exitside))) {
             static volatile LONG nlog;
