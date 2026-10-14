@@ -235,13 +235,26 @@ static BYTE __fastcall ld_select(BYTE *layer, void *edx, BYTE *node, BYTE *out, 
         InterlockedIncrement(&g_ld_n_hon);
         for (s = 0; s < 4; s++)
             if (!(ev & (1u << s))) ld_close(layer, x + g_ld_dx[s], z + g_ld_dz[s], t, added, addb, &nadd);
+        /* A node entered from a lot has its own cell marked with the lot's bits (0x80), not its own type, so the ring
+           scan (which includes the centre) can step from the cell to itself; the copy then claims entry side x+
+           (the else branch at SimTransit 0x100083e4 sets 2 for a same rect) and would read as a wrong-way entry. Close the centre. */
+        ld_close(layer, x, z, t, added, addb, &nadd);
         if (nadd > before) InterlockedExchangeAdd(&g_ld_n_premark, nadd - before);
     }
     r = ((LD_SEL)g_ld_tramp)(layer, NULL, node, out, budget, p4, p5, p6);
     for (k = 0; k < nadd; k++) *added[k] &= (BYTE)~addb[k];
-    if (ev && r && (out[0x14] == 1 || out[0x14] == 3 || out[0x14] == 0x41)) {
+    if (ev && r && (out[0x14] == 1 || out[0x14] == 3 || out[0x14] == 0x41) &&
+        (*(DWORD *)(out + 4) != x || *(DWORD *)(out + 8) != z)) {            /* not a step onto its own cell */
         DWORD exitside = (out[0x1c] + 2) & 3, entry = ld_is_net(node[0x15]) ? (node[0x1c] & 3) : 4;
         if (c) InterlockedIncrement(&c->step[entry][exitside]);
+        if (honoured && !(ev & 0x200) && !(ev & (1u << exitside))) {
+            static volatile LONG nlog;
+            if (InterlockedIncrement(&nlog) <= 20)
+                logf("lanedensity: ### step through a closed side: node t=%02x prev=%02x entry=%u rect=(%lu,%lu)-(%lu,%lu) ev=%03lx nadd=%d -> out t=%02x entry=%u rect=(%lu,%lu)-(%lu,%lu) flags=%04x mark=%02x",
+                     t, node[0x15], node[0x1c], x, z, *(DWORD *)(node + 0xc), *(DWORD *)(node + 0x10), ev, nadd,
+                     out[0x14], out[0x1c], *(DWORD *)(out + 4), *(DWORD *)(out + 8), *(DWORD *)(out + 0xc), *(DWORD *)(out + 0x10),
+                     ld_flags(layer, *(DWORD *)(out + 4), *(DWORD *)(out + 8)), *ld_mark(layer, *(DWORD *)(out + 4), *(DWORD *)(out + 8)));
+        }
         if (g_ld_mode == 3 && id < 65536) {
             InterlockedIncrement(&g_ld_c_steps[id]);
             if (!(ev & (1u << exitside)) && !(ev & 0x200)) InterlockedIncrement(&g_ld_c_forbid[id]);

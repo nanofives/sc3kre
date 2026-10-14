@@ -88,3 +88,11 @@ kept per thread for the rest of the trip and closed in every later scan from tha
 highway branch FUN_100086e7 reads the same visited grid); the list is cleared when a trip's start node (type 0x80)
 is scanned; when full (32) the cell keeps its visited mark. Every arm that runs the hook (A1, B_off, B_ctl, B_on, B2_*)
 is re-run with the fixed build; N1 / N2 (block off) are kept. Predictions unchanged.
+
+## Addendum 3 (2026-10-13, after a 6-month debug run, before the re-runs)
+
+Debug run (`inst_ld_dbg`, berlin_lanes, 6 months, not an arm) found steps from a one-way cell to ITSELF: a node entered
+from a lot has its cell marked with the lot's bits (0x80), so the ring scan offers its own cell; the copy gets entry
+side 2 (SimTransit 0x100083e4, same rect) and then read as a wrong-way entry. Fix: an honoured node closes its own cell
+for the call; the cell statistics skip self-steps. Second debug run: every step through the eleven 20430 cells exits
+x+. Final build for all re-run arms: this commit.
