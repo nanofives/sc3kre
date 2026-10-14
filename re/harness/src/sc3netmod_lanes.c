@@ -75,6 +75,23 @@ static LdCell *ld_cell(DWORD x, DWORD z, DWORD id) {
 typedef struct { volatile LONG vt, delta, seen; } LdVt;   /* seen < 0: offsets differed, never trusted */
 static LdVt g_ld_vtc[32];
 
+/* Fast path (ld_stub): everything a road step needs to be passed straight to the game without a C call. */
+static BYTE  g_ld_hon[65536];            /* 1 = honoured piece id */
+static volatile LONG g_ld_fvt[8];         /* trusted occupant vtables ... */
+static volatile LONG g_ld_fdl[8];         /* ... and the offset from the occupant to the piece */
+static volatile LONG g_ld_ntact;          /* threads whose trip holds refused transitions */
+static volatile LONG g_ld_force;          /* 1 = every call takes the C path (count mode) */
+
+static void ld_fast_add(DWORD vt, LONG d) {
+    int k;
+    EnterCriticalSection(&g_lock);
+    for (k = 0; k < 8; k++) {
+        if ((DWORD)g_ld_fvt[k] == vt) break;
+        if (!g_ld_fvt[k]) { g_ld_fdl[k] = d; MemoryBarrier(); InterlockedExchange(&g_ld_fvt[k], (LONG)vt); break; }
+    }
+    LeaveCriticalSection(&g_lock);
+}
+
 static BYTE *ld_piece(BYTE *occ) {
     DWORD vt, i;
     void *p = NULL;
@@ -96,7 +113,7 @@ static BYTE *ld_piece(BYTE *occ) {
         if ((DWORD)c->vt == vt) {
             if (c->seen < 0) break;
             if (c->delta != d) { InterlockedExchange(&c->seen, -1000000); logf("lanedensity: vtable 0x%08lX: QI offsets differ (%ld, %ld), not cached", vt, c->delta, d); }
-            else if (InterlockedIncrement(&c->seen) == 16) { InterlockedIncrement(&g_ld_nvt); logf("lanedensity: vtable 0x%08lX -> piece at %+ld (cached)", vt, d); }
+            else if (InterlockedIncrement(&c->seen) == 16) { InterlockedIncrement(&g_ld_nvt); ld_fast_add(vt, d); logf("lanedensity: vtable 0x%08lX -> piece at %+ld (cached)", vt, d); }
             break;
         }
     }
@@ -203,7 +220,10 @@ static BYTE __fastcall ld_select(BYTE *layer, void *edx, BYTE *node, BYTE *out, 
     LdTrip *tr;
     (void)edx;
     if (t == 0x80) {                                               /* a trip (re)starts at its lot */
-        if ((tr = ld_trip(0)) != NULL) { tr->n = 0; tr->selfkey = 0; }
+        if ((tr = ld_trip(0)) != NULL) {
+            if (tr->n) InterlockedDecrement(&g_ld_ntact);
+            tr->n = 0; tr->selfkey = 0;
+        }
         return ((LD_SEL)g_ld_tramp)(layer, NULL, node, out, budget, p4, p5, p6);
     }
     x = *(DWORD *)(node + 4); z = *(DWORD *)(node + 8);
@@ -236,7 +256,7 @@ static BYTE __fastcall ld_select(BYTE *layer, void *edx, BYTE *node, BYTE *out, 
             if (tr && tr->n < LD_TRIPMAX) {
                 tr->from[tr->n] = LD_KEY(x + g_ld_dx[e], z + g_ld_dz[e]);   /* the node we came from */
                 tr->to[tr->n] = LD_KEY(x, z);
-                tr->n++;
+                if (tr->n++ == 0) InterlockedIncrement(&g_ld_ntact);
                 *ld_mark(layer, x, z) &= (BYTE)~node[0x15];         /* set by the step that chose this node */
             } else
                 InterlockedIncrement(&g_ld_n_tripfull);
@@ -278,6 +298,70 @@ static BYTE __fastcall ld_select(BYTE *layer, void *edx, BYTE *node, BYTE *out, 
         }
     }
     return r;
+}
+
+/* Entry of FUN_1000755e. Passes the call to the game (trampoline) unless the node is a road / bus node on an
+   honoured piece, or some thread holds refused transitions, or count mode: then the C path ld_select. Uses only
+   eax / edx; ecx (the layer) and the stack are untouched, so both targets see the game's own call. */
+static __declspec(naked) void ld_stub(void) {
+    __asm {
+        cmp  g_ld_force, 0
+        jne  slow
+        cmp  g_ld_ntact, 0
+        jne  slow
+        mov  eax, [esp + 4]
+        mov  dl, byte ptr [eax + 0x14]
+        cmp  dl, 1
+        je   road
+        cmp  dl, 0x41
+        je   road
+        jmp  dword ptr [g_ld_tramp]
+    road:
+        mov  eax, [eax]
+        test eax, eax
+        jz   pass
+        mov  edx, [eax]
+        cmp  edx, dword ptr [g_ld_fvt]
+        je   v0
+        cmp  edx, dword ptr [g_ld_fvt + 4]
+        je   v1
+        cmp  edx, dword ptr [g_ld_fvt + 8]
+        je   v2
+        cmp  edx, dword ptr [g_ld_fvt + 12]
+        je   v3
+        cmp  edx, dword ptr [g_ld_fvt + 16]
+        je   v4
+        cmp  edx, dword ptr [g_ld_fvt + 20]
+        je   v5
+        cmp  edx, dword ptr [g_ld_fvt + 24]
+        je   v6
+        cmp  edx, dword ptr [g_ld_fvt + 28]
+        je   v7
+        jmp  slow
+    v0: add  eax, dword ptr [g_ld_fdl]
+        jmp  got
+    v1: add  eax, dword ptr [g_ld_fdl + 4]
+        jmp  got
+    v2: add  eax, dword ptr [g_ld_fdl + 8]
+        jmp  got
+    v3: add  eax, dword ptr [g_ld_fdl + 12]
+        jmp  got
+    v4: add  eax, dword ptr [g_ld_fdl + 16]
+        jmp  got
+    v5: add  eax, dword ptr [g_ld_fdl + 20]
+        jmp  got
+    v6: add  eax, dword ptr [g_ld_fdl + 24]
+        jmp  got
+    v7: add  eax, dword ptr [g_ld_fdl + 28]
+    got:
+        movzx eax, word ptr [eax + 0x18]
+        cmp  byte ptr [g_ld_hon + eax], 0
+        jne  slow
+    pass:
+        jmp  dword ptr [g_ld_tramp]
+    slow:
+        jmp  ld_select
+    }
 }
 
 static DWORD __fastcall ld_arrive(BYTE *layer, void *edx, BYTE *node, DWORD kind) {
@@ -330,6 +414,10 @@ static void lanedensity_install(void) {
     g_ld_tramp[6] = 0xE9;
     *(DWORD *)(g_ld_tramp + 7) = (DWORD)(e + 6) - (DWORD)(g_ld_tramp + 11);
     FlushInstructionCache(GetCurrentProcess(), g_ld_tramp, 16);
+    {   DWORD i;
+        for (i = 0; i < 65536; i++) g_ld_hon[i] = (BYTE)(g_ld_mode == 2 || g_base[i]);
+        g_ld_force = g_ld_mode == 3;
+    }
     g_ld_st = (DWORD)st;
     g_ld_arrive_orig = g_ld_st + 0x8a94;
     if (g_ld_mode != 3 && !retarget_call(st, 0x71eb, 0x8a94, (void *)ld_arrive)) {
@@ -338,7 +426,7 @@ static void lanedensity_install(void) {
         return;
     }
     jmp[0] = 0xE9;
-    *(DWORD *)(jmp + 1) = (DWORD)ld_select - (DWORD)(e + 5);
+    *(DWORD *)(jmp + 1) = (DWORD)ld_stub - (DWORD)(e + 5);
     jmp[5] = 0x90;
     if (!write_code(e, jmp, 6)) { logf("lanedensity: entry not patched"); g_ld_mode = 0; return; }
     logf("lanedensity: ON, mode %s (SimTransit at 0x%08lX: step 0x1000755e, arrival call 0x100071eb)",

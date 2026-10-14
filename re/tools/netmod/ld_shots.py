@@ -101,7 +101,7 @@ def cmd_heat(a):
     d.text((gap, 10), a.title, fill=(10, 10, 10), font=font(22))
     for i, p in enumerate((p1, p2, p3)):
         im.paste(p, (gap + i * (p1.width + gap), 44))
-    d.text((gap, H - 40), "%s. Max %.0f (left, middle); diff +-%.0f (right: red = more in %s, blue = less)." %
+    d.text((gap, H - 40), "%s. Escala hasta %.0f. Derecha: diferencia hasta +-%.0f, rojo = mas en '%s', azul = menos. Gris = sin red." %
            (a.legend, vmax, dmax, lb), fill=(40, 40, 40), font=font(15))
     im.save(a.out, optimize=True)
     print("wrote", a.out, im.size)
@@ -170,8 +170,73 @@ def cmd_steps(a):
                     hx, hz = DX[t]
                     d.polygon([(tx + hx * 6, tz + hz * 6), (tx - hz * 6, tz + hx * 6), (tx + hz * 6, tz - hx * 6)], fill=col)
             if c["wrong"] or c["arrblock"]:
-                d.text((px + 4, pz + cs - 18), "refused %d" % (c["wrong"] + c["arrblock"]), fill=(120, 20, 20), font=font(12))
-        d.text((10, h + 52), "with the lanes %d, against %d" % (tot_ok, tot_bad), fill=(20, 20, 20), font=font(16))
+                d.text((px + 4, pz + cs - 18), "rechazados %d" % (c["wrong"] + c["arrblock"]), fill=(120, 20, 20), font=font(12))
+        d.text((10, h + 52), "a favor %d, en contra %d" % (tot_ok, tot_bad), fill=(20, 20, 20), font=font(16))
+        panels.append(im)
+    gap = 20
+    W = sum(p.width for p in panels) + gap * (len(panels) + 1)
+    H = max(p.height for p in panels) + 90
+    out = Image.new("RGB", (W, H), (250, 250, 248))
+    d = ImageDraw.Draw(out)
+    d.text((gap, 10), a.title, fill=(10, 10, 10), font=font(22))
+    x = gap
+    for p in panels:
+        out.paste(p, (x, 44)); x += p.width + gap
+    d.text((gap, H - 38), a.legend, fill=(40, 40, 40), font=font(15))
+    out.save(a.out, optimize=True)
+    print("wrote", a.out, out.size)
+
+
+def cmd_paths(a):
+    """Final-path steps (ld_paths.py json) between cells of a rect: one arrow per directed pair, width by count,
+    red when --bad says the direction is against the lanes."""
+    x0, z0, x1, z1 = (int(v) for v in a.rect.split(","))
+    cs = a.cell
+    bad = set()
+    for b in a.bad:
+        p, q = b.split(">")
+        bad.add((tuple(int(v) for v in p.split(",")), tuple(int(v) for v in q.split(","))))
+    hl = set()
+    for b in a.hl:
+        bx0, bz0, bx1, bz1 = (int(v) for v in b.split(","))
+        hl |= {(x, z) for x in range(bx0, bx1 + 1) for z in range(bz0, bz1 + 1)}
+    panels = []
+    for spec in a.json:
+        label, path = spec.split("=", 1)
+        import json as _j
+        pairs = _j.load(open(path))["pairs"]
+        w, h = (x1 - x0 + 1) * cs, (z1 - z0 + 1) * cs
+        im = Image.new("RGB", (w + 20, h + 84), (250, 250, 248))
+        d = ImageDraw.Draw(im)
+        d.text((10, 8), label, fill=(20, 20, 20), font=font(18))
+        for x in range(x0, x1 + 1):
+            for z in range(z0, z1 + 1):
+                px, pz = 10 + (x - x0) * cs, 40 + (z - z0) * cs
+                d.rectangle([px, pz, px + cs - 1, pz + cs - 1], fill=(255, 236, 236) if (x, z) in hl else (236, 236, 230),
+                            outline=(200, 200, 192))
+        for (bx0, bz0, bx1, bz1) in [tuple(int(v) for v in b.split(",")) for b in a.hl]:
+            d.rectangle([10 + (bx0 - x0) * cs - 1, 40 + (bz0 - z0) * cs - 1, 10 + (bx1 - x0 + 1) * cs, 40 + (bz1 - z0 + 1) * cs],
+                        outline=(220, 20, 20), width=3)
+        ok_n = bad_n = 0
+        for k, n in pairs.items():
+            p, q = k.split(">")
+            p = tuple(int(v) for v in p.split(",")); q = tuple(int(v) for v in q.split(","))
+            if not (x0 <= p[0] <= x1 and z0 <= p[1] <= z1 and x0 <= q[0] <= x1 and z0 <= q[1] <= z1):
+                continue
+            isbad = (p, q) in bad or ("-x" in a.badrule and q[0] == p[0] - 1 and (p in hl or q in hl))
+            if isbad: bad_n += n
+            else: ok_n += n
+            col = (210, 30, 30) if isbad else (40, 120, 60)
+            dx, dz = q[0] - p[0], q[1] - p[1]
+            # side offset so the two directions of one pair do not overlap
+            ox, oz = -dz * cs * 0.18, dx * cs * 0.18
+            sx, sz = 10 + (p[0] - x0 + 0.5) * cs + ox, 40 + (p[1] - z0 + 0.5) * cs + oz
+            tx, tz = 10 + (q[0] - x0 + 0.5) * cs + ox, 40 + (q[1] - z0 + 0.5) * cs + oz
+            wdt = max(2, min(10, int(1 + 2.2 * np.log10(1 + n))))
+            d.line([sx, sz, tx - dx * 8, tz - dz * 8], fill=col, width=wdt)
+            d.polygon([(tx, tz), (tx - dx * 12 - dz * 7, tz - dz * 12 + dx * 7), (tx - dx * 12 + dz * 7, tz - dz * 12 - dx * 7)], fill=col)
+            d.text(((sx + tx) / 2 + oz * 0.6 - 8, (sz + tz) / 2 - ox * 0.6 - 8), str(n), fill=col, font=font(13))
+        d.text((10, h + 52), "a favor %d, en contra %d" % (ok_n, bad_n), fill=(20, 20, 20), font=font(16))
         panels.append(im)
     gap = 20
     W = sum(p.width for p in panels) + gap * (len(panels) + 1)
@@ -197,7 +262,7 @@ def main():
     h.add_argument("--rect", required=True)
     h.add_argument("--box", action="append", default=[])
     h.add_argument("--title", default="")
-    h.add_argument("--legend", default="Mean monthly traffic density per cell, months 3-14")
+    h.add_argument("--legend", default="Densidad media mensual por celda, meses 3-14")
     h.add_argument("--months", default="3:14")
     h.add_argument("--cell", type=int, default=14)
     h.add_argument("--out", required=True)
@@ -209,8 +274,18 @@ def main():
     s.add_argument("--legend", default="")
     s.add_argument("--cell", type=int, default=120)
     s.add_argument("--out", required=True)
+    q = sub.add_parser("paths")
+    q.add_argument("--json", action="append", required=True)
+    q.add_argument("--rect", required=True)
+    q.add_argument("--hl", action="append", default=[])
+    q.add_argument("--bad", action="append", default=[])
+    q.add_argument("--badrule", default="")
+    q.add_argument("--title", default="")
+    q.add_argument("--legend", default="")
+    q.add_argument("--cell", type=int, default=60)
+    q.add_argument("--out", required=True)
     a = ap.parse_args()
-    cmd_heat(a) if a.cmd == "heat" else cmd_steps(a)
+    {"heat": cmd_heat, "steps": cmd_steps, "paths": cmd_paths}[a.cmd](a)
 
 
 if __name__ == "__main__":
