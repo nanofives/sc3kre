@@ -3478,10 +3478,15 @@ static void rz_repaint_rci(void) {
  * No menu_bg.bmp (2026-10-11): the stock background itself is the picture, stretched the same way, so the
  * buttons keep native size and clicks land where they are drawn. SC3RESIZE_MENUBGSTOCK=0 keeps MENUBG off
  * without a menu_bg.bmp instead (the 2026-10-11 release behaviour: whole frame stretched, clicks off).
- * SC3RESIZE_MENUBG=0 disables it. MAIN.IXF unreadable: stock behaviour. */
+ * SC3RESIZE_MENUBG=0 disables it. MAIN.IXF unreadable: stock behaviour.
+ * Owner calls 2026-10-14 (task menucrop): a menu_bg.bmp that is present but unusable (not a BMP, not
+ * uncompressed 24-bit, truncated) falls back to the stock picture like a missing one, instead of turning MENUBG
+ * off. The picture is scaled to COVER the client keeping its proportions, the overflow cropped evenly on both
+ * sides (no distortion on a wide client). SC3RESIZE_MENUBGFIT=0 restores the plain stretch. */
 #pragma comment(lib, "gdi32.lib")   /* MENUBG uses GDI for the stretched margins */
 static int    g_menubg = 1;
-static int    g_menubg_stock = 1;         /* no menu_bg.bmp: stretch the stock background */
+static int    g_menubg_stock = 1;         /* no (or unusable) menu_bg.bmp: use the stock background */
+static int    g_menubg_fit = 1;           /* 1 cover + centre crop (keeps proportions), 0 plain stretch */
 static int    g_mb_state;                 /* 0 untried, 1 loaded, -1 failed */
 static BYTE  *g_mb_img;                   /* menu_bg.bmp pixel data */
 static BITMAPINFO g_mb_bi;
@@ -3609,10 +3614,32 @@ static WORD *rz_mb_stock_from_ixf(void) {
     return px;
 }
 
+/* The stock background as the picture: 565 to 24-bit, top-down (header comment above). */
+static int rz_mb_use_stock(void) {
+    BYTE *rgb = (BYTE *)malloc(NAT_W * NAT_H * 3);
+    LONG i;
+    if (!rgb) return 0;
+    for (i = 0; i < NAT_W * NAT_H; i++) {
+        WORD q = g_mb_orig[i];
+        BYTE r = (BYTE)(q >> 11), g = (BYTE)((q >> 5) & 0x3F), b = (BYTE)(q & 0x1F);
+        rgb[i * 3 + 0] = (BYTE)((b << 3) | (b >> 2));
+        rgb[i * 3 + 1] = (BYTE)((g << 2) | (g >> 4));
+        rgb[i * 3 + 2] = (BYTE)((r << 3) | (r >> 2));
+    }
+    g_mb_img = rgb;
+    memset(&g_mb_bi, 0, sizeof(g_mb_bi));
+    g_mb_bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    g_mb_bi.bmiHeader.biWidth = NAT_W; g_mb_bi.bmiHeader.biHeight = -NAT_H;   /* top-down */
+    g_mb_bi.bmiHeader.biPlanes = 1; g_mb_bi.bmiHeader.biBitCount = 24; g_mb_bi.bmiHeader.biCompression = BI_RGB;
+    g_mb_state = 1;
+    return 1;
+}
+
 static int rz_mb_load(void) {
     char path[MAX_PATH];
     BYTE *f;
     DWORD len = 0;
+    const char *why = NULL;
     if (g_mb_state) return g_mb_state > 0;
     g_mb_state = -1;
     g_mb_orig = rz_mb_stock_from_ixf();
@@ -3622,42 +3649,31 @@ static int rz_mb_load(void) {
     memcpy(g_mb_last, g_mb_orig, NAT_W * NAT_H * 2);
     rz_mb_path(path, sizeof(path), "menu_bg.bmp");
     f = rz_mb_readfile(path, &len);
-    if (!f && g_menubg_stock) {
-        /* No picture of the player's own: stretch the stock background itself, so the buttons still stay at
-           native size, centred, and clickable where they are drawn (header comment above). */
-        BYTE *rgb = (BYTE *)malloc(NAT_W * NAT_H * 3);
-        LONG i;
-        if (!rgb) return 0;
-        for (i = 0; i < NAT_W * NAT_H; i++) {
-            WORD q = g_mb_orig[i];
-            BYTE r = (BYTE)(q >> 11), g = (BYTE)((q >> 5) & 0x3F), b = (BYTE)(q & 0x1F);
-            rgb[i * 3 + 0] = (BYTE)((b << 3) | (b >> 2));
-            rgb[i * 3 + 1] = (BYTE)((g << 2) | (g >> 4));
-            rgb[i * 3 + 2] = (BYTE)((r << 3) | (r >> 2));
-        }
-        g_mb_img = rgb;
-        memset(&g_mb_bi, 0, sizeof(g_mb_bi));
-        g_mb_bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        g_mb_bi.bmiHeader.biWidth = NAT_W; g_mb_bi.bmiHeader.biHeight = -NAT_H;   /* top-down */
-        g_mb_bi.bmiHeader.biPlanes = 1; g_mb_bi.bmiHeader.biBitCount = 24; g_mb_bi.bmiHeader.biCompression = BI_RGB;
-        logf("MENUBG> %s missing - using the stock background stretched", path);
-        g_mb_state = 1;
-        return 1;
-    }
-    if (!f || len < 54 || f[0] != 'B' || f[1] != 'M') { logf("MENUBG> %s missing or not a BMP - off", path); free(f); return 0; }
-    {   BITMAPINFOHEADER *bh = (BITMAPINFOHEADER *)(f + 14);
+    if (!f) why = "missing";
+    else if (len < 54 || f[0] != 'B' || f[1] != 'M') why = "not a BMP";
+    else {
+        BITMAPINFOHEADER *bh = (BITMAPINFOHEADER *)(f + 14);
         DWORD off = *(DWORD *)(f + 10);
         LONG w = bh->biWidth, h = bh->biHeight < 0 ? -bh->biHeight : bh->biHeight;
         DWORD stride = ((DWORD)w * 3 + 3) & ~3u;
-        if (bh->biBitCount != 24 || bh->biCompression != BI_RGB || w <= 0 || h <= 0 || off + stride * h > len) {
-            logf("MENUBG> menu_bg.bmp must be an uncompressed 24-bit BMP - off"); free(f); return 0;
+        if (bh->biBitCount != 24 || bh->biCompression != BI_RGB || w <= 0 || h <= 0 || w > 0x4000 || h > 0x4000
+            || off > len || stride * h > len - off)
+            why = "not an uncompressed 24-bit BMP";
+        else {
+            g_mb_img = f + off;
+            memset(&g_mb_bi, 0, sizeof(g_mb_bi));
+            g_mb_bi.bmiHeader = *bh;
+            logf("MENUBG> loaded menu_bg.bmp %ldx%ld and the stock background", w, h);
+            g_mb_state = 1;
+            return 1;
         }
-        g_mb_img = f + off;
-        memset(&g_mb_bi, 0, sizeof(g_mb_bi));
-        g_mb_bi.bmiHeader = *bh;
-        logf("MENUBG> loaded menu_bg.bmp %ldx%ld and the stock background", w, h);
     }
-    g_mb_state = 1;
+    free(f);
+    if (!g_menubg_stock) { logf("MENUBG> %s %s - off (SC3RESIZE_MENUBGSTOCK=0)", path, why); return 0; }
+    /* No usable picture of the player's own: the stock background itself, so the buttons still stay at native
+       size, centred, and clickable where they are drawn. */
+    if (!rz_mb_use_stock()) return 0;
+    logf("MENUBG> %s %s - using the stock background", path, why);
     return 1;
 }
 
@@ -3681,9 +3697,21 @@ static int rz_mb_prepare(LONG cw, LONG ch) {
     g_mb_oldbmp = (HBITMAP)SelectObject(g_mb_dc, g_mb_bmp);
     SetStretchBltMode(g_mb_dc, HALFTONE);
     SetBrushOrgEx(g_mb_dc, 0, 0, NULL);
-    StretchDIBits(g_mb_dc, 0, 0, cw, ch, 0, 0, g_mb_bi.bmiHeader.biWidth,
-                  g_mb_bi.bmiHeader.biHeight < 0 ? -g_mb_bi.bmiHeader.biHeight : g_mb_bi.bmiHeader.biHeight,
-                  g_mb_img, &g_mb_bi, DIB_RGB_COLORS, SRCCOPY);
+    {   LONG iw = g_mb_bi.bmiHeader.biWidth;
+        LONG ih = g_mb_bi.bmiHeader.biHeight < 0 ? -g_mb_bi.bmiHeader.biHeight : g_mb_bi.bmiHeader.biHeight;
+        LONG sx0 = 0, sy0 = 0, sw = iw, sh = ih;
+        /* Cover: the source rect with the client's proportions, as large as fits, centred. The overflow is split
+           evenly, so a bottom-up BMP (whose source y counts from the bottom) crops the same way, within 1 px. */
+        if (g_menubg_fit) {
+            if ((__int64)iw * ch > (__int64)ih * cw) { sw = (LONG)((__int64)ih * cw / ch); sx0 = (iw - sw) / 2; }
+            else                                     { sh = (LONG)((__int64)iw * ch / cw); sy0 = (ih - sh) / 2; }
+            if (sw < 1) sw = 1;
+            if (sh < 1) sh = 1;
+        }
+        StretchDIBits(g_mb_dc, 0, 0, cw, ch, sx0, sy0, sw, sh, g_mb_img, &g_mb_bi, DIB_RGB_COLORS, SRCCOPY);
+        logf("MENUBG> %s source [%ld %ld %ld %ld] of %ldx%ld", g_menubg_fit ? "cover" : "stretch",
+             sx0, sy0, sx0 + sw, sy0 + sh, iw, ih);
+    }
     GdiFlush();
     g_mb_center = (WORD *)malloc(NAT_W * NAT_H * 2);
     if (!g_mb_center) return 0;
@@ -11170,6 +11198,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_HUDPERF_LAZY", v, sizeof(v))) g_hp_lazy = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_REPOST", v, sizeof(v))) g_hs_repost = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUBGSTOCK", v, sizeof(v))) g_menubg_stock = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_MENUBGFIT", v, sizeof(v))) g_menubg_fit = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HOLD", v, sizeof(v))) g_hold = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_DEFERRESIZE", v, sizeof(v))) g_deferresize = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_SIMLOCK", v, sizeof(v))) g_simlock = atoi(v);
@@ -11225,10 +11254,10 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
          * a self-consistent log). One line makes the whole class loud instead of silent.
          * verify/resize_flaggate/NOHIT_RESULTS.md */
         logf("### FLAGS> cluster=%d input=%d nohit=%d hudfit=%d hudlab=%d sweep=%d side=%d mini=%d "
-             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld sidedy=%ld presentlog=%d kidfix=%d artguard=%d edgefix=%d edgescroll=%d barspan=%d sidespan=%d viewfix=%d dialogs=%d menubg=%d menubgstock=%d",
+             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld sidedy=%ld presentlog=%d kidfix=%d artguard=%d edgefix=%d edgescroll=%d barspan=%d sidespan=%d viewfix=%d dialogs=%d menubg=%d menubgstock=%d menubgfit=%d",
              g_cluster, g_input, g_nohit, g_hudfit, g_hudlab, g_sweepon, g_sideon, g_minion,
              g_anchor, g_census, g_minzoom, g_ready_ms, g_noparentfix, g_hud_dy, g_side_dy, g_presentlog,
-             g_kidfix, g_artguard, g_edgefix, g_edgescroll, g_bar_span, g_side_span, g_viewfix, g_dialogs, g_menubg, g_menubg_stock);
+             g_kidfix, g_artguard, g_edgefix, g_edgescroll, g_bar_span, g_side_span, g_viewfix, g_dialogs, g_menubg, g_menubg_stock, g_menubg_fit);
         logf("### FLAGS> dlgstay=%d (Reunirse keeps its position, verify/reunirse) meetall=%d (all five pages, verify/reunirse2)",
              g_dlgstay, g_meetall);
         if (AddVectoredExceptionHandler(1, rz_veh))
