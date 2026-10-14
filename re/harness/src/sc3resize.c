@@ -3504,6 +3504,7 @@ static volatile LONG g_mb_offx, g_mb_offy;
 static volatile DWORD g_mb_tick;          /* GetTickCount of the last centred present */
 static volatile LONG g_mb_dx0, g_mb_dy0;  /* dest origin of the last full present (client origin in dest space) */
 static volatile LONG g_mb_active;         /* 1 from a centred present until a full-window present of any other frame */
+static int    g_ms_valid;                 /* MENUSCALE: g_ms_f32 / g_ms_bg hold a whole frame and g_ms_out is composed from it */
 
 static void rz_mb_path(char *out, int cap, const char *leaf) {
     char *sl;
@@ -3765,6 +3766,7 @@ static void rz_mb_patch_src(void *src, const RECT *sr, LONG fx0, LONG fy0, LONG 
                 else g_mb_m_none++;
             }
         }
+        g_ms_valid = 0;   /* MENUSCALE: g_mb_last may have changed, so a cached class may be stale */
         if (g_mb_dbg_left > 0) {
             g_mb_dbg_left--;
             logf("MENUBG> swap %ldx%ld at (%ld,%ld) surf 0x%08lX: stock %ld, last %ld, other %ld (cache %ldx%ld)",
@@ -3844,12 +3846,12 @@ static volatile LONG g_ms_rx, g_ms_ry, g_ms_rw, g_ms_rh;   /* the 4:3 rect, clie
 static DWORD *g_ms_lut;                   /* RGB565 -> XRGB */
 static DWORD *g_ms_f32;                   /* the frame as last read, 800x600 XRGB */
 static BYTE  *g_ms_bg;                    /* 1 = that frame pixel is background */
+static WORD  *g_ms_raw;                   /* the frame as last read, RGB565: an unchanged row is skipped */
 static HDC    g_ms_dc;
 static HBITMAP g_ms_bmp, g_ms_oldbmp;
 static DWORD *g_ms_out;                   /* the composed rect, rw x rh, 32-bit top-down */
 static LONG   g_ms_cw, g_ms_ch, g_ms_tfilter = -1;
 static LONG  *g_ms_xs, *g_ms_xf, *g_ms_ys, *g_ms_yf;   /* per rect column / row: source index, weight 0..256 */
-static int    g_ms_valid;                 /* g_ms_f32 / g_ms_bg hold a whole frame and g_ms_out is composed from it */
 static char   g_ms_dump[MAX_PATH];
 static int    g_ms_dumpn;
 static __int64 g_ms_t[3], g_ms_tmax;       /* read, compose, blit; worst present */
@@ -3858,6 +3860,10 @@ static int    g_ms_depth, g_ms_nestlog, g_ms_mlog, g_ms_replog;
 static LPARAM g_ms_last_out;
 static DWORD  g_ms_last_t;
 static int    g_ms_last_ok;
+static int    g_ms_fullblit;             /* SC3RESIZE_MENUSCALE_FULLBLIT=1: whole client on every present */
+static volatile LONG g_ms_full_req;      /* the wndproc saw a paint / size / activation message */
+static DWORD  g_ms_full_t, g_ms_nfull;
+static int    g_ms_refresh;              /* SC3RESIZE_MENUSCALE_REFRESH=<ms>: periodic whole-client blit, 0 = off */
 
 static void rz_ms_rect(LONG cw, LONG ch, LONG *rx, LONG *ry, LONG *rw, LONG *rh) {
     if ((__int64)cw * NAT_H >= (__int64)ch * NAT_W) { *rh = ch; *rw = (LONG)((__int64)ch * NAT_W / NAT_H); }
@@ -3899,7 +3905,8 @@ static int rz_ms_prepare(LONG cw, LONG ch) {
     }
     if (!g_ms_f32) g_ms_f32 = (DWORD *)malloc(NAT_W * NAT_H * 4);
     if (!g_ms_bg) g_ms_bg = (BYTE *)malloc(NAT_W * NAT_H);
-    if (!g_ms_f32 || !g_ms_bg) return 0;
+    if (!g_ms_raw) g_ms_raw = (WORD *)malloc(NAT_W * NAT_H * 2);
+    if (!g_ms_f32 || !g_ms_bg || !g_ms_raw) return 0;
     if (g_ms_dc) { SelectObject(g_ms_dc, g_ms_oldbmp); DeleteObject(g_ms_bmp); DeleteDC(g_ms_dc); g_ms_dc = NULL; }
     g_ms_out = NULL;
     free(g_ms_xs); free(g_ms_xf); free(g_ms_ys); free(g_ms_yf);
@@ -3919,7 +3926,7 @@ static int rz_ms_prepare(LONG cw, LONG ch) {
     ReleaseDC(NULL, sdc);
     if (!g_ms_dc || !g_ms_bmp || !g_ms_out) { logf("MENUSCALE> DIB %ldx%ld failed", rw, rh); g_ms_out = NULL; return 0; }
     g_ms_oldbmp = (HBITMAP)SelectObject(g_ms_dc, g_ms_bmp);
-    g_ms_cw = cw; g_ms_ch = ch; g_ms_tfilter = g_ms_filter; g_ms_valid = 0;
+    g_ms_cw = cw; g_ms_ch = ch; g_ms_tfilter = g_ms_filter; g_ms_valid = 0; g_ms_full_req = 1;
     g_ms_rx = rx; g_ms_ry = ry; g_ms_rw = rw; g_ms_rh = rh;
     logf("MENUSCALE> client %ldx%ld: menu frame scaled to [%ld %ld %ld %ld] = %ldx%ld (x%.4f, %s)", cw, ch, rx, ry,
          rx + rw, ry + rh, rw, rh, (double)rh / NAT_H, g_ms_filter ? "bilinear" : "nearest");
@@ -3953,6 +3960,8 @@ static int rz_ms_read(void *src, const RECT *sr, LONG fx0, LONG fy0, LONG fw, LO
         DWORD *f = g_ms_f32 + i0;
         BYTE *b = g_ms_bg + i0;
         LONG cx0 = -1, cx1 = -1;
+        if (g_ms_valid && !memcmp(g_ms_raw + i0, row, fw * 2)) continue;   /* same pixels, same classes */
+        memcpy(g_ms_raw + i0, row, fw * 2);
         for (x = 0; x < fw; x++) {
             WORD p = row[x];
             BYTE isbg;
@@ -4038,7 +4047,7 @@ static void rz_ms_write_bmp(const char *path, const DWORD *px, LONG w, LONG h) {
 }
 
 /* SC3RESIZE_MENUSCALE_DUMP: the whole client as sent to the window (margins from the picture, rect from the
-   composed DIB) and the source frame as read. */
+   composed DIB), the source frame as read, the cover picture and the background mask (for offline checks). */
 static void rz_ms_dump_if_asked(void) {
     char req[MAX_PATH], p[MAX_PATH];
     DWORD *cl;
@@ -4055,6 +4064,9 @@ static void rz_ms_dump_if_asked(void) {
     g_ms_dumpn++;
     wsprintfA(p, "%s%03d_client.bmp", g_ms_dump, g_ms_dumpn); rz_ms_write_bmp(p, cl, cw, ch);
     wsprintfA(p, "%s%03d_frame.bmp", g_ms_dump, g_ms_dumpn); rz_ms_write_bmp(p, g_ms_f32, NAT_W, NAT_H);
+    wsprintfA(p, "%s%03d_picture.bmp", g_ms_dump, g_ms_dumpn); rz_ms_write_bmp(p, g_mb_bits, cw, ch);
+    for (y = 0; y < NAT_W * NAT_H; y++) cl[y] = g_ms_bg[y] ? 0xFFFFFF : 0;   /* background mask, white = background */
+    wsprintfA(p, "%s%03d_mask.bmp", g_ms_dump, g_ms_dumpn); rz_ms_write_bmp(p, cl, NAT_W, NAT_H);
     free(cl);
     logf("MENUSCALE> dump %03d: client %ldx%ld, rect [%ld %ld %ld %ld]", g_ms_dumpn, cw, ch, g_ms_rx, g_ms_ry,
          g_ms_rx + g_ms_rw, g_ms_ry + g_ms_rh);
@@ -4072,9 +4084,9 @@ static void rz_ms_account(int part, LARGE_INTEGER *t) {   /* t[0..3] = start, re
     if (now - g_ms_beat >= 2000 && g_freq.QuadPart) {
         double k = 1000.0 / (double)g_freq.QuadPart, n = (double)(g_ms_n + g_ms_np);
         logf("MENUSCALE> %lu full + %lu partial presents in %lu ms: avg read %.3f compose %.3f blit %.3f ms, worst %.3f ms,"
-             " %lu rect px recomposed", g_ms_n, g_ms_np, now - g_ms_beat, k * g_ms_t[0] / n, k * g_ms_t[1] / n,
-             k * g_ms_t[2] / n, k * (double)g_ms_tmax, g_ms_area);
-        g_ms_n = g_ms_np = g_ms_area = 0; g_ms_t[0] = g_ms_t[1] = g_ms_t[2] = g_ms_tmax = 0; g_ms_beat = now;
+             " %lu rect px recomposed, %lu whole-client blits", g_ms_n, g_ms_np, now - g_ms_beat, k * g_ms_t[0] / n,
+             k * g_ms_t[1] / n, k * g_ms_t[2] / n, k * (double)g_ms_tmax, g_ms_area, g_ms_nfull);
+        g_ms_n = g_ms_np = g_ms_area = g_ms_nfull = 0; g_ms_t[0] = g_ms_t[1] = g_ms_t[2] = g_ms_tmax = 0; g_ms_beat = now;
     }
 }
 
@@ -4097,14 +4109,25 @@ static int rz_ms_full(void *src, const RECT *sr, LONG cw, LONG ch) {
     g_ms_valid = 1;
     GdiFlush();
     QueryPerformanceCounter(&t[2]);
-    dc = GetDC(g_hwnd);
-    if (dc) {
-        LONG rx = g_ms_rx, ry = g_ms_ry, rw = g_ms_rw, rh = g_ms_rh;
-        BitBlt(dc, rx, ry, rw, rh, g_ms_dc, 0, 0, SRCCOPY);
-        if (ry > 0) BitBlt(dc, 0, 0, cw, ry, g_mb_dc, 0, 0, SRCCOPY);
-        if (ch - ry - rh > 0) BitBlt(dc, 0, ry + rh, cw, ch - ry - rh, g_mb_dc, 0, ry + rh, SRCCOPY);
-        if (rx > 0) BitBlt(dc, 0, ry, rx, rh, g_mb_dc, 0, ry, SRCCOPY);
-        if (cw - rx - rw > 0) BitBlt(dc, rx + rw, ry, cw - rx - rw, rh, g_mb_dc, rx + rw, ry, SRCCOPY);
+    /* The window keeps what was drawn (measured: a desktop grab equals the dump except the live FPS text), so a
+       static present sends only the recomposed box. The whole client goes out on a new size, on the first scaled
+       present, and after a paint / size / activation message (g_ms_full_req). SC3RESIZE_MENUSCALE_REFRESH=<ms> also
+       sends it every <ms> (off by default: at 3840x1984 that blit is the 14-17 ms worst present, measured with 1000).
+       SC3RESIZE_MENUSCALE_FULLBLIT=1 sends the whole client on every present (measured at 3840x1984: 11-16 ms). */
+    if (g_ms_fullblit || g_ms_full_req || !g_ms_on || (g_ms_refresh > 0 && GetTickCount() - g_ms_full_t >= (DWORD)g_ms_refresh)) {
+        dc = GetDC(g_hwnd);
+        if (dc) {
+            LONG rx = g_ms_rx, ry = g_ms_ry, rw = g_ms_rw, rh = g_ms_rh;
+            BitBlt(dc, rx, ry, rw, rh, g_ms_dc, 0, 0, SRCCOPY);
+            if (ry > 0) BitBlt(dc, 0, 0, cw, ry, g_mb_dc, 0, 0, SRCCOPY);
+            if (ch - ry - rh > 0) BitBlt(dc, 0, ry + rh, cw, ch - ry - rh, g_mb_dc, 0, ry + rh, SRCCOPY);
+            if (rx > 0) BitBlt(dc, 0, ry, rx, rh, g_mb_dc, 0, ry, SRCCOPY);
+            if (cw - rx - rw > 0) BitBlt(dc, rx + rw, ry, cw - rx - rw, rh, g_mb_dc, rx + rw, ry, SRCCOPY);
+            ReleaseDC(g_hwnd, dc);
+            g_ms_full_req = 0; g_ms_full_t = GetTickCount(); g_ms_nfull++;
+        }
+    } else if (bb[2] > bb[0] && (dc = GetDC(g_hwnd)) != NULL) {
+        BitBlt(dc, g_ms_rx + d[0], g_ms_ry + d[1], d[2] - d[0], d[3] - d[1], g_ms_dc, d[0], d[1], SRCCOPY);
         ReleaseDC(g_hwnd, dc);
     }
     QueryPerformanceCounter(&t[3]);
@@ -9363,6 +9386,8 @@ static void rz_set_stored_rect(DWORD w, DWORD h) {
  * presenting the old rectangle. Doing it here in C is what makes the separate GZGraphicD
  * `wmsize_setrect` patch unnecessary under this mod. */
 static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
+    if (m == WM_PAINT || m == WM_ERASEBKGND || m == WM_SIZE || m == WM_ACTIVATE || m == WM_ACTIVATEAPP ||
+        m == WM_WINDOWPOSCHANGED || m == WM_DISPLAYCHANGE || m == WM_NCPAINT) g_ms_full_req = 1;   /* MENUSCALE */
     if (g_pausekey && wp == 'P' && (m == WM_KEYDOWN || m == WM_KEYUP) && GetKeyState(VK_CONTROL) >= 0 &&
         GetKeyState(VK_MENU) >= 0 && GetKeyState(VK_SHIFT) >= 0 && !rz_text_focus()) {        /* PAUSEKEY */
         if (m == WM_KEYUP || (lp & 0x40000000) || rz_pause_toggle()) return 0;
@@ -9390,26 +9415,25 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         return 0;
     }
     /* MENUSCALE: while the menu frame is presented scaled, map client mouse coordinates into it through the same rect.
-       Only messages from the queue are mapped (depth 0), as for HUDSCALE: a mouse message the game sends to itself
-       while handling one already carries frame coordinates. */
+       Nesting depth does NOT tell queue messages apart at the menu: "Preferencias" runs a modal loop inside the button
+       handler, so every later click arrives at depth 1 from the queue, in client coordinates (measured: the close box
+       missed while depth-1 messages were left alone). What is left alone is a message carrying exactly the frame
+       point we produced last, within 500 ms: a WM_MOUSEMOVE at any depth (the game's queued repost, measured at the
+       menu after every click), or a button message at depth > 0 (one the game sends itself while handling ours). */
     if (g_menubg && g_mb_active && g_ms_on && m >= WM_MOUSEMOVE && m <= WM_MBUTTONDBLCLK) {
         LRESULT r;
-        if (g_ms_depth == 0) {
-            if (g_ms_repost && m == WM_MOUSEMOVE && g_ms_last_ok && lp == g_ms_last_out && GetTickCount() - g_ms_last_t < 500) {
-                if (g_ms_replog < 10) { g_ms_replog++;
-                    logf("MENUSCALE> queued move at our last frame point (%d,%d) left unmapped",
-                         (int)(short)LOWORD(lp), (int)(short)HIWORD(lp)); }
-            } else {
-                LONG cx = (LONG)(short)LOWORD(lp), cy = (LONG)(short)HIWORD(lp);
-                LONG fx = rz_ms_map(cx, g_ms_rx, g_ms_rw, NAT_W), fy = rz_ms_map(cy, g_ms_ry, g_ms_rh, NAT_H);
-                lp = MAKELPARAM((WORD)(short)fx, (WORD)(short)fy);
-                g_ms_last_out = lp; g_ms_last_ok = 1; g_ms_last_t = GetTickCount();
-                if (m != WM_MOUSEMOVE && g_ms_mlog < 60) { g_ms_mlog++;
-                    logf("MENUSCALE> msg 0x%04X client (%ld,%ld) -> frame (%ld,%ld)", m, cx, cy, fx, fy); }
-            }
-        } else if (m != WM_MOUSEMOVE && g_ms_nestlog < 20) {
-            g_ms_nestlog++;
-            logf("MENUSCALE> nested mouse msg 0x%04X at (%d,%d) left as is", m, (int)(short)LOWORD(lp), (int)(short)HIWORD(lp));
+        if (g_ms_repost && g_ms_last_ok && lp == g_ms_last_out && GetTickCount() - g_ms_last_t < 500 &&
+            (m == WM_MOUSEMOVE || g_ms_depth > 0)) {
+            if (g_ms_replog < 10) { g_ms_replog++;
+                logf("MENUSCALE> msg 0x%04X at our last frame point (%d,%d), depth %d, left unmapped", m,
+                     (int)(short)LOWORD(lp), (int)(short)HIWORD(lp), g_ms_depth); }
+        } else {
+            LONG cx = (LONG)(short)LOWORD(lp), cy = (LONG)(short)HIWORD(lp);
+            LONG fx = rz_ms_map(cx, g_ms_rx, g_ms_rw, NAT_W), fy = rz_ms_map(cy, g_ms_ry, g_ms_rh, NAT_H);
+            lp = MAKELPARAM((WORD)(short)fx, (WORD)(short)fy);
+            g_ms_last_out = lp; g_ms_last_ok = 1; g_ms_last_t = GetTickCount();
+            if (m != WM_MOUSEMOVE && g_ms_mlog < 60) { g_ms_mlog++;
+                logf("MENUSCALE> msg 0x%04X client (%ld,%ld) -> frame (%ld,%ld), depth %d", m, cx, cy, fx, fy, g_ms_depth); }
         }
         g_ms_depth++;
         r = CallWindowProcA(g_oldproc, h, m, wp, lp);
@@ -11576,6 +11600,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_FILTER", v, sizeof(v))) g_ms_filter = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_REPOST", v, sizeof(v))) g_ms_repost = atoi(v);
           GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_DUMP", g_ms_dump, sizeof(g_ms_dump));
+          if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_FULLBLIT", v, sizeof(v))) g_ms_fullblit = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_REFRESH", v, sizeof(v))) g_ms_refresh = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HOLD", v, sizeof(v))) g_hold = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_DEFERRESIZE", v, sizeof(v))) g_deferresize = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_SIMLOCK", v, sizeof(v))) g_simlock = atoi(v);
@@ -11637,8 +11663,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
              g_kidfix, g_artguard, g_edgefix, g_edgescroll, g_bar_span, g_side_span, g_viewfix, g_dialogs, g_menubg, g_menubg_stock, g_menubg_fit);
         logf("### FLAGS> dlgstay=%d (Reunirse keeps its position, verify/reunirse) meetall=%d (all five pages, verify/reunirse2)",
              g_dlgstay, g_meetall);
-        logf("### FLAGS> menuscale=%d filter=%s repost=%d dump=%s", g_menuscale, g_ms_filter ? "bilinear" : "nearest",
-             g_ms_repost, g_ms_dump[0] ? g_ms_dump : "-");
+        logf("### FLAGS> menuscale=%d filter=%s repost=%d fullblit=%d refresh=%d dump=%s", g_menuscale,
+             g_ms_filter ? "bilinear" : "nearest", g_ms_repost, g_ms_fullblit, g_ms_refresh, g_ms_dump[0] ? g_ms_dump : "-");
         if (AddVectoredExceptionHandler(1, rz_veh))
             logf("### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the "
                  "zoom-after-resize crash the game swallows)");
