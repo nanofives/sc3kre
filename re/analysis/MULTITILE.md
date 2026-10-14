@@ -17,6 +17,7 @@ together, keep their pieces and connect outward. This is that framework. Sibling
 variants until their piece exists; a template references ids, so swapping in a new piece is a manifest edit.
 Shared demo done: piece 20400 (base 39, artkit's roundabout art, lanekit's layout 3,0 / 2,1) placed in game as the
 2x2 template `demo_rotonda20400/rotonda` (`verify/multitile/packs/demo_rotonda20400`, RESULTS arm D, owner shot 07).
+The shipped form of that demo is the package `re/tools/netmod/examples/roundabout` (art recipe + lanes + template).
 
 ## 1. The format (`templates` in a netpack manifest)
 
