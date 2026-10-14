@@ -170,3 +170,15 @@ runs of paint samples round the circle.
 - G after (rebuilt package, same lab save and camera calls): zoom 4, runs 16..24 per view (4..6 per entry); zoom 3,
   more runs than before in every rotation.
 - `netpaint.py seams`: 1320 / 1320 after the rebuild. W stays 0 in all 12 views.
+
+## Addendum 2 (2026-10-14, after computing G on the before frames only)
+
+G as worded is **not met** on the before frames: zoom 4, 48 runs in each of the 4 views (paint 0.251 of the circle),
+zoom 3 20 runs (0.196), zoom 2 none; stock control frames 0 everywhere. The single radius 214.5 crosses the slanted
+"on" stripes that the old phase makes inside the band, so it sees many short runs; the merge into a line happens
+ACROSS the band's width, which one radius cannot show. The metric was wrong for the question, not the cause.
+
+G' (computed on no frame yet): per angle (every 0.25 degrees), paint = ANY of the 7 radii 211.5, 212.5 .. 217.5 hits
+the marking colour (same projection and colour test as G). Report the paint fraction of the circle and the runs.
+- Before (`rb_*` V0 frames): zoom 4, paint fraction >= 0.35 and runs <= 12 per view.
+- After: zoom 4, paint fraction 0.18..0.32 and runs 16..24 per view; zoom 3, more runs than before in every rotation.
