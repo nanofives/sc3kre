@@ -182,3 +182,14 @@ G' (computed on no frame yet): per angle (every 0.25 degrees), paint = ANY of th
 the marking colour (same projection and colour test as G). Report the paint fraction of the circle and the runs.
 - Before (`rb_*` V0 frames): zoom 4, paint fraction >= 0.35 and runs <= 12 per view.
 - After: zoom 4, paint fraction 0.18..0.32 and runs 16..24 per view; zoom 3, more runs than before in every rotation.
+
+## Addendum 3 (2026-10-14, after the after-fix frames `af_*`)
+
+Measured on `af_*` (dash phase fix only): W 0 in all 12 views (met). G zoom 4: 20 runs per view (16..24: met). G'
+zoom 4: paint 0.310 (0.18..0.32: met), 28 runs (16..24: not met). Zoom 3: G 18 runs, G' 18 runs vs 20 / 18 before
+("more runs than before": not met). By eye: zoom 4 shows separate dashes on all four entries; zoom 3 is still
+scattered 1-px dots along the contour, before and after, because the 7-unit band is about 1 px at zoom 3.
+
+Change: `give_way.r_z3 = [208, 222]` (netpaint reads a per-zoom band `r_z<zoom>`): a 14-unit band at zoom 3 only. Zoom
+4 frames are unchanged by it. Prediction for the rebuilt package (`af2_*`, same lab and camera): zoom 4 W, G, G'
+identical to `af_*`; zoom 3 G' paint fraction above 0.213 and runs 16..24; W 0 in all views; seams 1320 / 1320.

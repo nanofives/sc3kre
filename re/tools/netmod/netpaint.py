@@ -132,7 +132,7 @@ class PinwheelRoundabout:
                 return True
         g = self.dash
         if g and z >= g.get("min_zoom", 2):
-            r0, r1 = g.get("r", [self.ring_out, self.ring_out + 6.0])
+            r0, r1 = g.get("r_z%d" % z, g.get("r", [self.ring_out, self.ring_out + 6.0]))   # per-zoom band
             if r0 <= r_o < r1 and X >= self.c0 + g.get("from_centre", 8.0) and X <= self.edge_in:
                 per, on = g.get("period", 24.0), g.get("dash", 13.0)
                 # arc length at the band's middle radius, from the dash run's start (X = c0 + from_centre). Not

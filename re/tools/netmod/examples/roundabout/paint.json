@@ -12,5 +12,5 @@
  "island": {"gutter_xp": 40, "curb": 22, "inner_curb": 5},
  "yellow_xp": [132, 135.5],
  "arrows": [],
- "give_way": {"r": [211, 218], "period": 40, "dash": 22, "from_centre": 8, "min_zoom": 3}
+ "give_way": {"r": [211, 218], "r_z3": [208, 222], "period": 40, "dash": 22, "from_centre": 8, "min_zoom": 3}
 }
