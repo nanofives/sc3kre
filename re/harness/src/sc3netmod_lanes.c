@@ -153,48 +153,93 @@ static WORD ld_flags(BYTE *layer, DWORD x, DWORD z) {
 
 static const int g_ld_dx[4] = {-1, 0, 1, 0}, g_ld_dz[4] = {0, -1, 0, 1};
 
+/* Refused transitions of the trip being routed on this thread. A wrong-way entry into B from A fails and clears B's
+   visited mark (so B stays reachable through a legal side); without this list the DFS retries A, which picks B
+   again, for ever (measured: 6e8 refusals, the trip never ended). With it, every later scan from A in the same trip
+   treats B as visited. Cleared when the trip's start node (type 0x80) is scanned: the DFS never re-pushes a cell it
+   has visited, so A cannot come back after its stack frame is gone. Full list: B simply stays visited. */
+#define LD_TRIPMAX 32
+typedef struct { int n; DWORD from[LD_TRIPMAX], to[LD_TRIPMAX]; } LdTrip;
+static DWORD g_ld_tls = TLS_OUT_OF_INDEXES;
+static volatile LONG g_ld_n_tripfull, g_ld_n_tripmark;
+
+static LdTrip *ld_trip(int create) {
+    LdTrip *t = (LdTrip *)TlsGetValue(g_ld_tls);
+    if (!t && create) {
+        t = (LdTrip *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(LdTrip));
+        TlsSetValue(g_ld_tls, t);
+    }
+    return t;
+}
+
+#define LD_KEY(x, z) ((((x) & 0xffff) << 16) | ((z) & 0xffff))
+
+/* give cell (x, z) the type bits t in the visited grid for this call, if it is a road cell not yet visited by t */
+static void ld_close(BYTE *layer, DWORD x, DWORD z, BYTE t, BYTE **added, BYTE *addb, int *nadd) {
+    BYTE *m;
+    if (x >= *(DWORD *)(layer + 0x14) || z >= *(DWORD *)(layer + 0x18)) return;   /* unsigned: also catches -1 */
+    if ((ld_flags(layer, x, z) & 0x11) != 0x01) return;
+    m = ld_mark(layer, x, z);
+    if ((*m & t) == t) return;
+    added[*nadd] = m; addb[*nadd] = (BYTE)(t & ~*m); (*nadd)++;
+    *m |= t;
+}
+
 static BYTE __fastcall ld_select(BYTE *layer, void *edx, BYTE *node, BYTE *out, DWORD budget, DWORD p4, DWORD p5, DWORD p6) {
-    DWORD id, ev, x, z, w, h, s;
-    BYTE *added[4], addb[4], t, r;
+    DWORD id, ev, x, z, s;
+    BYTE *added[4 + LD_TRIPMAX], addb[4 + LD_TRIPMAX], t = node[0x14], r;
     int nadd = 0, k, honoured;
     LdCell *c = NULL;
+    LdTrip *tr;
     (void)edx;
+    if (t == 0x80) {                                               /* a trip (re)starts at its lot */
+        if ((tr = ld_trip(0)) != NULL) tr->n = 0;
+        return ((LD_SEL)g_ld_tramp)(layer, NULL, node, out, budget, p4, p5, p6);
+    }
     ev = ld_eval(layer, node, &id, g_ld_mode == 3);
-    if (!ev) return ((LD_SEL)g_ld_tramp)(layer, NULL, node, out, budget, p4, p5, p6);
+    x = *(DWORD *)(node + 4); z = *(DWORD *)(node + 8);
+    tr = ld_is_net(t) ? ld_trip(0) : NULL;              /* highway nodes check the same visited grid (FUN_100086e7) */
+    if (tr && tr->n) {                                             /* transitions refused earlier in this trip */
+        DWORD key = LD_KEY(x, z);
+        for (k = 0; k < tr->n; k++)
+            if (tr->from[k] == key) {
+                ld_close(layer, tr->to[k] >> 16, tr->to[k] & 0xffff, t, added, addb, &nadd);
+                InterlockedIncrement(&g_ld_n_tripmark);
+            }
+    }
+    if (!ev && !nadd) return ((LD_SEL)g_ld_tramp)(layer, NULL, node, out, budget, p4, p5, p6);
     honoured = g_ld_mode != 3;
-    x = *(DWORD *)(node + 4); z = *(DWORD *)(node + 8); t = node[0x14];
-    if (id < 65536 && g_base[id]) c = ld_cell(x, z, id);
+    if (ev && id < 65536 && g_base[id]) c = ld_cell(x, z, id);
     if (ev & 0x200) {                                              /* entered against the lanes */
         if (g_ld_mode == 3) InterlockedIncrement(&g_ld_c_wrong[id]);
         if (c) InterlockedIncrement(&c->wrong);
         if (honoured) {
+            DWORD e = node[0x1c] & 3;
+            for (k = 0; k < nadd; k++) *added[k] &= (BYTE)~addb[k];
             InterlockedIncrement(&g_ld_n_wrong);
-            *ld_mark(layer, x, z) &= (BYTE)~node[0x15];             /* set by the step that chose this node */
+            tr = ld_trip(1);
+            if (tr && tr->n < LD_TRIPMAX) {
+                tr->from[tr->n] = LD_KEY(x + g_ld_dx[e], z + g_ld_dz[e]);   /* the node we came from */
+                tr->to[tr->n] = LD_KEY(x, z);
+                tr->n++;
+                *ld_mark(layer, x, z) &= (BYTE)~node[0x15];         /* set by the step that chose this node */
+            } else
+                InterlockedIncrement(&g_ld_n_tripfull);
             *(DWORD *)out = 0;
             node[0x1d] = 0;
             out[0x1d] = 0;
             return 0;
         }
-    } else if (honoured) {
+    } else if (ev && honoured) {
+        int before = nadd;
         InterlockedIncrement(&g_ld_n_hon);
-        w = *(DWORD *)(layer + 0x14); h = *(DWORD *)(layer + 0x18);
-        for (s = 0; s < 4; s++) {
-            DWORD nx, nz;
-            BYTE *m;
-            if (ev & (1u << s)) continue;
-            nx = x + g_ld_dx[s]; nz = z + g_ld_dz[s];
-            if (nx >= w || nz >= h) continue;                      /* unsigned: also catches -1 */
-            if ((ld_flags(layer, nx, nz) & 0x11) != 0x01) continue;
-            m = ld_mark(layer, nx, nz);
-            if ((*m & t) == t) continue;
-            added[nadd] = m; addb[nadd] = (BYTE)(t & ~*m); nadd++;
-            *m |= t;
-        }
-        if (nadd) InterlockedExchangeAdd(&g_ld_n_premark, nadd);
+        for (s = 0; s < 4; s++)
+            if (!(ev & (1u << s))) ld_close(layer, x + g_ld_dx[s], z + g_ld_dz[s], t, added, addb, &nadd);
+        if (nadd > before) InterlockedExchangeAdd(&g_ld_n_premark, nadd - before);
     }
     r = ((LD_SEL)g_ld_tramp)(layer, NULL, node, out, budget, p4, p5, p6);
     for (k = 0; k < nadd; k++) *added[k] &= (BYTE)~addb[k];
-    if (r && (out[0x14] == 1 || out[0x14] == 3 || out[0x14] == 0x41)) {
+    if (ev && r && (out[0x14] == 1 || out[0x14] == 3 || out[0x14] == 0x41)) {
         DWORD exitside = (out[0x1c] + 2) & 3, entry = ld_is_net(node[0x15]) ? (node[0x1c] & 3) : 4;
         if (c) InterlockedIncrement(&c->step[entry][exitside]);
         if (g_ld_mode == 3 && id < 65536) {
@@ -240,6 +285,8 @@ static void lanedensity_install(void) {
         g_ld_mode = 0;
         return;
     }
+    g_ld_tls = TlsAlloc();
+    if (g_ld_tls == TLS_OUT_OF_INDEXES) { logf("lanedensity: no TLS slot"); g_ld_mode = 0; return; }
     g_ld_cells = (LdCell *)VirtualAlloc(NULL, sizeof(LdCell) * LD_NCELL, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (g_ld_mode == 3) {
         g_ld_c_steps = (volatile LONG *)VirtualAlloc(NULL, 3 * 65536 * sizeof(LONG), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
@@ -271,8 +318,8 @@ static void lanedensity_install(void) {
 static void lanedensity_stats(void) {
     int i, j, n = 0;
     if (!g_ld_mode) return;
-    logf("lanedensity: evals=%ld honoured steps=%ld neighbours closed=%ld wrong-way fails=%ld arrivals refused=%ld slow QI=%ld vtables=%ld",
-         g_ld_n_eval, g_ld_n_hon, g_ld_n_premark, g_ld_n_wrong, g_ld_n_arrblock, g_ld_n_slowqi, g_ld_nvt);
+    logf("lanedensity: evals=%ld honoured steps=%ld neighbours closed=%ld wrong-way fails=%ld arrivals refused=%ld slow QI=%ld vtables=%ld refused-transition closes=%ld trip list full=%ld",
+         g_ld_n_eval, g_ld_n_hon, g_ld_n_premark, g_ld_n_wrong, g_ld_n_arrblock, g_ld_n_slowqi, g_ld_nvt, g_ld_n_tripmark, g_ld_n_tripfull);
     if (g_ld_cells)
         for (i = 0; i < LD_NCELL; i++) {
             LdCell *c = &g_ld_cells[i];
@@ -281,7 +328,7 @@ static void lanedensity_stats(void) {
             if (!c->key) continue;
             for (j = 0; j < 20; j++) p += _snprintf(buf + p, sizeof(buf) - p, "%s%ld", j ? "," : "", c->step[j / 4][j % 4]);
             logf("lanedensity: cell (%ld,%ld) id %lu wrong=%ld arrblock=%ld steps[entry x-,z-,x+,z+,start][exit]=%s",
-                 (c->key >> 16) & 0x7fff, c->key & 0xffff, c->id, c->wrong, c->arrblock, buf);
+                 (c->key >> 16) & 0x3fff, c->key & 0xffff, c->id, c->wrong, c->arrblock, buf);
             if (++n >= 64) break;
         }
     if (g_ld_mode == 3) {

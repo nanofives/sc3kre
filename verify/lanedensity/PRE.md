@@ -78,3 +78,13 @@ B arms keep it (their router-step counters still apply), and three more arms use
 - Predictions for B2 = the B predictions (one-way and roundabout), on these cells. Ring order in world cells:
   (62,95) -> (61,95) -> (61,96) -> (62,96) -> (62,95); B2_on: steps against it = 0, entries through a quarter's ring
   exit side continue = 0; B2_ctl: > 0.
+
+## Addendum 2 (2026-10-13, after arm B_on hung, before any re-run)
+
+Arm B_on (PID 3556) never published a month: a wrong-way entry cleared the cell's visited mark and failed, the DFS
+retried the node it came from, which picked the same cell again, for ever (sc3netmod.log: 6.3e8 wrong-way fails in
+19 minutes, counters wrapped). Killed by PID. Fix (sc3netmod_lanes.c): the refused transition (from cell, to cell) is
+kept per thread for the rest of the trip and closed in every later scan from that cell (any network node type, the
+highway branch FUN_100086e7 reads the same visited grid); the list is cleared when a trip's start node (type 0x80)
+is scanned; when full (32) the cell keeps its visited mark. Every arm that runs the hook (A1, B_off, B_ctl, B_on, B2_*)
+is re-run with the fixed build; N1 / N2 (block off) are kept. Predictions unchanged.
