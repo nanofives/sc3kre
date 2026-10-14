@@ -59,10 +59,11 @@ class RoadSampler:
 
     def __call__(self, z, r, xp, t):
         px, (w, h), (L, T) = self.px[(z, (r + 1) & 3)]
-        if not -16.0 <= t <= 272.0:              # wrap, but keep the 1 px rim just outside the tile edges
+        m = 4.0 / NA.TILE_W[z]                   # one pixel row, in tiles: the stock rim lies within it
+        if not -256.0 * m <= t <= 256.0 * (1.0 + m):   # wrap, but keep the rim just outside the tile edges
             t %= 256.0
-        u = min(1.02, max(-0.02, 1.0 - xp / 256.0))
-        v = min(1.02, max(-0.02, t / 256.0))
+        u = min(1.0 + m, max(-m, 1.0 - xp / 256.0))
+        v = min(1.0 + m, max(-m, t / 256.0))
         for k in range(8):                       # step towards the tile centre when the point hits the outer rim
             su, sv = NA.rot_uv(u, v, r)
             X, Y = NA.project(z, su, sv)
@@ -104,7 +105,8 @@ class PinwheelRoundabout:
         self.yellow_w = p.get("yellow_width", 6.5)       # single yellow line on the island edge: x' c0 .. c0+w
         isl = p.get("island", {})
         self.gutter_x = isl.get("gutter_xp", 40.0)       # island edge sampled as the stock outer edge from here
-        self.curb = isl.get("curb", 18.0)                # width of the island curb (stock sidewalk), units
+        self.curb = isl.get("curb", 18.0)                # width of the island apron (stock sidewalk), units
+        self.inner_curb = isl.get("inner_curb", 5.0)     # curb ring between the apron and the raised centre
         self.adj = 2.0 * self.c0 - 256.0
         self.arrows = p.get("arrows", [])
         self.dash = p.get("give_way", {})
@@ -152,8 +154,10 @@ class PinwheelRoundabout:
         in_x = xp_x <= self.c0
         in_r = r_o < self.ring_out
         S = self.s
-        if zl < self.stub:                               # arm edge strip: the stock road itself, so the seam
-            return S(z, r, X, zl)                        # against a stock road cell is exact
+        # arm edge strip: the stock road itself, so the seam against a stock road cell is exact. At least one
+        # pixel row deep: a row spans 1024 / W units across the edge (W = tile width in px at this zoom)
+        if zl < max(self.stub, 1024.0 / NA.TILE_W[z]):
+            return S(z, r, X, zl)
         if self.marking(z, X, Zb, r_o, th):
             if z not in self.white:
                 self.white[z] = S.paint_white(z)
@@ -164,11 +168,15 @@ class PinwheelRoundabout:
         if in_x and xp_x < self.edge_out:
             return S(z, r, xp_x, t_x)
         if in_r:
-            if r_o < self.c0:                            # island: gutter + curb (stock outer edge), then terrain
-                xp = r_o - self.c0 + self.gutter_x
-                if xp < self.gutter_x - 4.0 - self.curb:
-                    return (0, 0, 0, 0)
-                return S(z, r, xp, t_r)
+            if r_o < self.c0:                            # island: gutter + apron (stock outer edge profile),
+                xp = r_o - self.c0 + self.gutter_x       # then a curb ring and a raised concrete centre. The
+                if xp >= self.gutter_x - 4.0 - self.curb:     # engine draws no terrain under this piece (measured:
+                    return S(z, r, xp, t_r)              # transparent pixels show the previous frame), so the
+                r_in = self.c0 - 4.0 - self.curb         # whole island is painted
+                if r_o >= r_in - self.inner_curb:
+                    return S(z, r, self.gutter_x - 3.0, t_r)
+                # the stock sidewalk band (x' 10..24) tiled straight across the centre: no radial streaks
+                return S(z, r, 10.0 + (Zb % 14.0), X)
             if r_o < self.c0 + self.yellow_w:            # single yellow edge line round the island
                 y0, y1 = self.yellow_xp
                 return S(z, r, y0 + (y1 - y0) * (r_o - self.c0) / self.yellow_w, t_r)

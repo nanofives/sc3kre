@@ -185,6 +185,37 @@ band at zoom 3.
 ## 10. Proof piece
 
 The demo agreed with tasks lanekit and multitile: a 2x2 mini roundabout made of ONE new id in states 3,0 / 2,1
-(pinwheel). Art: `examples/roundabout/recipe.json` (package `roundabout`, which also carries the lanes and the template; it replaced `example_roundabout_art` and lanekit's `example_roundabout`) = stock curve 11203 (a road quarter-circle round
-the right vertex, which is the 2x2 centre in slot 0) + the exit road from stock straight 29 within 0.55 tile of the
-NW edge, outside the ring's road. Results in `verify/artkit/RESULTS.md`.
+(pinwheel). Round 1 art (artkit): a compose of stock curve 11203 + straight 29; the owner rejected it (roads not
+seamless at the block edge, lines not converging, two-way look). Current art (task roundabout2): `examples/roundabout/
+paint.json` through `netpaint.py` (section 11). Results in `verify/artkit/RESULTS.md` (round 1) and
+`verify/roundabout2/RESULTS.md`.
+
+## 11. Procedural ground art: `netpaint.py` (task roundabout2)
+
+Every output pixel of every zoom x slot is unprojected to the lane frame of state 0 (x, z in 0..256: `u = 1 - x/256`,
+`v = z/256`), classified by a plan (JSON), and coloured by SAMPLING STOCK ROAD 29's FRAME OF THE SAME ZOOM at a mapped
+point `(x', t)`: x' = position across the road, t = along it. The sample is read on 29's slot `(r + 1) & 3`, where 29
+runs along lane z (29 slot k+2 == slot k on every zoom, measured), at the screen position of `rot^r(1 - x'/256, t/256)`.
+So a band is 29's cross profile bent along a path, in the stock palette and dither at every zoom, and where the band
+IS the straight road (the arm edge) the pixels are 29's own pixels: the seam against a stock road cell is exact.
+
+Measured on 29 (zoom 4, lane-x terms): sidewalk < 36, gutter 36-39, white edge line 40-47, asphalt 48-123, double
+yellow 124-135 (centre 129.5), asphalt 136-211, white 212-219, gutter 220-227, sidewalk > 227. Along-road variation
+is small: +-3..5 levels on asphalt and sidewalk (`netpaint` keeps t continuous anyway, one 256 period per quarter).
+
+Plan kind `pinwheel_roundabout` (one quarter, state 0, block centre at the corner (0,256)): entry band x' = x
+(inbound half of the arm, straight), exit band x' = distance from the corner (0,0) (+ a linear adjustment of
+`2 * 129.5 - 256` so it meets the next quarter's mirror profile), ring x' = distance from the block centre (island
+edge line = 29's right yellow line, asphalt), island = 29's outer edge profile + curb + concrete centre, splitter =
+what no band covers (29's outer profile from the ring side). Asphalt takes the lane shade of the NEAREST lane centre
+line, so the bands join without a step. Markings (arrows, dashed give-way line) are drawn with the brightest colour of
+29's frames at that zoom, at zoom >= 3. An arm edge strip at least one pixel row deep (1024 / W units) is 29 itself.
+
+- The engine draws NO terrain under a 20400 cell (base 39): transparent pixels showed the previous frame in game.
+  Paint every pixel of a full-tile piece. (Stock curve 11203 leaves its outer corner transparent and grass shows; the
+  difference was not traced.)
+- No stock network piece has plain grass to sample (395 exemplars scanned), hence the concrete island.
+- `netpaint.py seams PLAN DIR`: pixels within one pixel row of the arm edge vs 29's frame there (1320 / 1320 equal).
+- In a recipe: `{"paint": "paint.json"}` as a compose layer (netart.compose), so a package ships JSON only.
+- Why not Blender for this: flat textured ground; the calibrated camera is exact only at zooms 3-4 (9.2) and a
+  rendered texture is resampled. Blender stays the route for 3D props.

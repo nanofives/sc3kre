@@ -53,7 +53,12 @@ rpc.exports = {
 
 
 def shot(path):
-    subprocess.run([sys.executable, os.path.join(HERE, "np_drive.py"), "shot", path], check=True, stdout=subprocess.DEVNULL)
+    # SC3_CAM_GRAB=1: a window grab (sc3io) instead of sc3resize's in-process dump, for when the dump trigger has
+    # stopped answering (seen twice after camera calls, roundabout and roundabout2 2026-10-13)
+    how = "grab" if os.environ.get("SC3_CAM_GRAB") == "1" else "shot"
+    if how == "grab":
+        time.sleep(1.5)
+    subprocess.run([sys.executable, os.path.join(HERE, "np_drive.py"), how, path], check=True, stdout=subprocess.DEVNULL)
 
 
 def main(argv):

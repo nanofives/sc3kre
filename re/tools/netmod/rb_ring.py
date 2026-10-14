@@ -6,8 +6,10 @@ code / 8 = side 0 x-, 1 z-, 2 x+, 3 z+ (settled from lanekit's probe_D3 counts: 
 ring cell (25,182), only codes 8 and 24 occur; from (24,181), west of (25,181), only 0 and 16; and every ring cell's
 codes fall on its two ring arms and its exit).
 
-  py -3.12 rb_ring.py PROBE.jsonl X,Z        # X,Z = anchor (top-left cell) of the 2x2 pinwheel 3,0 / 2,1
-Ring order of that layout: (X+1,Z) -> (X,Z) -> (X,Z+1) -> (X+1,Z+1) -> (X+1,Z) (lanekit RESULTS arm D2).
+  py -3.12 rb_ring.py PROBE.jsonl X,Z [ccw]  # X,Z = anchor (top-left cell) of the 2x2 pinwheel 3,0 / 2,1
+Ring order of round 1's lanes: (X+1,Z) -> (X,Z) -> (X,Z+1) -> (X+1,Z+1) -> (X+1,Z) (lanekit RESULTS arm D2).
+`ccw`: the order of the roundabout2 lanes (counter-clockwise seen from above, right-hand traffic), the reverse:
+(X+1,Z) -> (X+1,Z+1) -> (X,Z+1) -> (X,Z) -> (X+1,Z). Rows may come from lk_probe.py or rb_island.py.
 Prints, for the LAST sample: ring-to-ring with / against the order, ring -> outside, outside -> ring (ok / failed),
 and SimTransit cells_6c (density over the --cells list) at every sample.
 """
@@ -21,6 +23,8 @@ def main(argv):
     rows = [json.loads(l) for l in open(argv[1]) if l.strip().startswith("{")]
     X, Z = map(int, argv[2].split(","))
     ring = [(X + 1, Z), (X, Z), (X, Z + 1), (X + 1, Z + 1)]
+    if len(argv) > 3 and argv[3] == "ccw":
+        ring = ring[:1] + ring[1:][::-1]
     nxt = {ring[i]: ring[(i + 1) % 4] for i in range(4)}
     out = {"with": 0, "against": 0, "ring_to_out": 0, "ring_to_out_failed": 0, "in_ok": 0, "in_failed": 0,
            "ring_failed": 0}

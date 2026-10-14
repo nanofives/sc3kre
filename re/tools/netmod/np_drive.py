@@ -122,8 +122,10 @@ def game_dir():
     return os.path.dirname(buf.value)
 
 
-def shot(out, timeout=15):
-    """sc3resize writes dumpNN_frame_with_hud_WxH.bmp right after the next full present when a file DUMP appears."""
+def shot(out, timeout=None):
+    """sc3resize writes dumpNN_frame_with_hud_WxH.bmp right after the next full present when a file DUMP appears.
+    A paused game can take over 15 s to present: SC3_SHOT_TIMEOUT (s) raises the wait."""
+    timeout = timeout or float(os.environ.get("SC3_SHOT_TIMEOUT", "15"))
     import glob
     from PIL import Image
     d = game_dir()

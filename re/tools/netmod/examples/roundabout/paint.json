@@ -1,0 +1,16 @@
+{
+ "_": "Ground art of the 2x2 one-way mini roundabout, one quarter cell in state 0 (netpaint.py, NET_ART.md 11). Lane-frame units (tile = 256). Colours are read from stock road 29 at build time.",
+ "kind": "pinwheel_roundabout",
+ "source": 29,
+ "canvas": 39,
+ "profile_centre": 129.5,
+ "lane_in": 175, "lane_out": 80,
+ "ring_out": 212,
+ "asphalt_in": [136, 211], "asphalt_out": [48, 123],
+ "edge_in": 211, "edge_out": 48,
+ "yellow_width": 6.5,
+ "island": {"gutter_xp": 40, "curb": 22, "inner_curb": 5},
+ "yellow_xp": [132, 135.5],
+ "arrows": [{"at_deg": -45, "r": 175, "length": 76, "head": 28, "shaft": 5.5, "head_w": 17, "min_zoom": 3}],
+ "give_way": {"r": [211, 218], "period": 40, "dash": 22, "from_centre": 8, "min_zoom": 3}
+}
