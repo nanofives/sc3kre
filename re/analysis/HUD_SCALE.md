@@ -124,7 +124,12 @@ Option A behind `SC3RESIZE_HUDSCALE`, off by default:
 Risk 1 did show (city in the minimap's transparent corner) and is solved with the city-layer mask, so option B
 is not needed for it. `SC3RESIZE_HUDSCALE_KEY=0` turns the mask off for an A/B.
 
-## Needs owner
+## Needs owner (all answered, owner 2026-10-14)
+
+**Decided.** (1) and (2) were answered by the hudopt and hudfix rounds: the scale is picked in Preferencias
+(Off / Fit / 125% / 150% / 200%) and Smooth is on by default (`[hud] smooth` missing = 1). Owner calls 2026-10-14:
+(3) dialogs stay native size, (4) the bar keeps the full width and the panel the full height, and a fresh install
+starts at Off. All three are what the code already does, so no code change. The questions as first asked:
 
 1. Size: HUD at the largest factor that fits (`min(cw/800, ch/600)`, 1.8 at a maximized 2048x1081), or a fixed
    percent (for example 150), or whole steps only (2x and up, crisp, but 1x until the window is 1600x1200)?
