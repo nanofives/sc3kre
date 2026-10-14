@@ -11,36 +11,24 @@
   "class": "car",
   "lanes": [
    {
-    "from": "z+ 1",
-    "to": "x- 2",
-    "path": 768
+    "from": "x- 1",
+    "to": "z+ 2",
+    "path": 1024
+   },
+   {
+    "from": "x- 1",
+    "to": "z- 1",
+    "path": 769
    },
    {
     "from": "z- 2",
-    "to": "x- 2",
-    "path": 1025
-   },
-   {
-    "from": "z+ 1",
-    "to": "z- 1",
-    "path": 257
+    "to": "z+ 2",
+    "path": 259
    }
   ]
  },
  "pedestrian": {
   "walks": [
-   {
-    "from": [
-     15,
-     240
-    ],
-    "to": [
-     15,
-     15
-    ],
-    "path": 259,
-    "crosswalk": true
-   },
    {
     "from": [
      15,
@@ -51,18 +39,6 @@
      15
     ],
     "path": 256,
-    "crosswalk": true
-   },
-   {
-    "from": [
-     240,
-     240
-    ],
-    "to": [
-     15,
-     240
-    ],
-    "path": 258,
     "crosswalk": true
    },
    {
@@ -94,20 +70,6 @@
    },
    {
     "at": [
-     15,
-     240
-    ],
-    "code": 0
-   },
-   {
-    "at": [
-     15,
-     240
-    ],
-    "code": 24
-   },
-   {
-    "at": [
      240,
      15
     ],
@@ -125,5 +87,5 @@
  "connects": {
   "road": "auto"
  },
- "_comment": "Quarter of a 2x2 one-way roundabout, frame of T junction 39 at state 0 (arms x-, z-, z+; +x closed). Ring through x- and z+ (the 2x2 centre is corner (-x,+z)): z+ (80,255) -> x- (0,175), curve 768. Exit road on z-: in z- (175,0) -> x- (0,175), curve 1025; out z+ (80,255) -> z- (80,0), curve 257. Layout agreed with artkit and multitile (pinwheel): (x,z) state 3, (x+1,z) state 0, (x,z+1) state 2, (x+1,z+1) state 1; exits W, N, E, S. Pedestrian graph: the T's."
+ "_comment": "Quarter of a 2x2 one-way mini roundabout, state 0 (frame of T 39: arms x-, z-, z+; +x closed; the block centre is the corner (x 0, z 255)). ENGLISH (right-hand traffic) runs the ring counter-clockwise seen from above: ring = x- (0,80) -> z+ (175,255), the outer lane of a curve round the block centre, radius 175 (same circle in every quarter). Entry from the arm: z- (175,0) -> z+ (175,255), straight, tangent to the ring where it joins it. Exit to the arm: x- (0,80) -> z- (80,0), a right turn of radius 80. No lane comes closer than 175 to the block centre; the art's island (netpaint paint.json) has radius 130 including its edge line. English-UK: lanekit mirror_uk reverses every lane (clockwise ring, left-hand traffic). Pinwheel (agreed with artkit and multitile): (x,z) state 3, (x+1,z) state 0, (x,z+1) state 2, (x+1,z+1) state 1; exits W, N, E, S. Pedestrians: the block's outer sidewalks only (round 1 used the T's graph, whose walks along the two internal sides crossed the ring and the island): crosswalk over the arm (15,15) -> (240,15), sidewalk along the closed side (240,15) -> (240,240); exits (15,15) to x- and z-, (240,15) to z-, (240,240) to z+. On the shared edges the neighbour quarter's (240,240) and (15,15) sit at the same points, so the walk goes round the outside of the block."
 }

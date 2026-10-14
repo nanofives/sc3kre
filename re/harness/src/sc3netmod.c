@@ -41,6 +41,8 @@
  * 4. INHERIT + XCROSS (task netbridge, sc3netmod_bridge.c): highway / removal id reads see the base, and crossing art
  *    for variants from <root>\mods
 etmod\cross\*.txt. SC3NETMOD_INHERIT=0 / SC3NETMOD_XCROSS=0 turn them off.
+ * 5. RBT (task roundabout3, sc3netmod_rbt.c): automatic 2x2 roundabouts from `rbt` table lines, after every road
+ *    retile (FUN_1001547b entry) and after a city load. SC3NETMOD_RBT=0 / SC3NETMOD_RBT_LOAD=0 turn it off.
  * Env: SC3NETMOD_LOG=<path> (default sc3netmod.log beside the DLL), SC3NETMOD_TABLE=<path> (variant table, only that
  * file), SC3NETMOD_FILELOG=1 (log every hooked file call under Apps\Res).
  */
@@ -127,6 +129,7 @@ static int table_read(const char *path) {
         while (*p == ' ' || *p == '\t') p++;
         if (*p == '#' || *p == ';' || *p == '\r' || *p == '\n' || !*p) continue;
         if (!strncmp(p, "ramp ", 5)) continue;                 /* NETRAMP lines, read by netramp_install */
+        if (!strncmp(p, "rbt ", 4)) continue;                  /* RBT lines, read by rbt_install */
         if (p[0] == 't' && (!strncmp(p, "tmpl ", 5) || !strncmp(p, "tori ", 5) || !strncmp(p, "tcel ", 5) ||
                             !strncmp(p, "tedg ", 5) || !strncmp(p, "tend", 4))) continue;   /* TMPL lines */
         if (sscanf(p, "%lu %lu", &v, &b) != 2 || v == 0 || v > 0xffff || b == 0 || b > 0xffff || v == b) {
@@ -446,11 +449,15 @@ static void sv_add(DWORD w0, DWORD w1, DWORD id) {
     g_nsv++;
 }
 
+static WORD rb_save_id(DWORD w0, WORD id);       /* RBT block (sc3netmod_rbt.c): stock id of a roundabout cell */
+
 /* record = the 8-byte tile record object; +4 word0 (coord, state), +8 word1 (id, props) */
 static void __stdcall save_rec(BYTE *rec) {
     DWORD w1 = *(DWORD *)(rec + 8), id = w1 & 0xffff;
+    WORD rb;
     if (!g_base[id]) return;
-    *(DWORD *)(rec + 8) = (w1 & 0xffff0000) | g_base[id];
+    rb = rb_save_id(*(DWORD *)(rec + 4), (WORD)id);
+    *(DWORD *)(rec + 8) = (w1 & 0xffff0000) | (rb ? rb : g_base[id]);
     sv_add(*(DWORD *)(rec + 4), *(DWORD *)(rec + 8), id);
     InterlockedIncrement(&g_n_saved_base);
 }
@@ -1288,6 +1295,7 @@ static int netramp_install(BYTE *m) {
 }
 /* ==== NETRAMP end ======================================================================================= */
 #include "sc3netmod_tmpl.c"         /* task multitile: TMPL, multi-cell templates (SC3NETMOD_TMPL=0) */
+#include "sc3netmod_rbt.c"          /* task roundabout3: RBT, automatic 2x2 roundabouts (SC3NETMOD_RBT=0) */
 
 /* ============================================================ arming */
 
@@ -1301,6 +1309,7 @@ static DWORD WINAPI watcher(LPVOID param) {
     netramp_install(m);                                          /* NETRAMP: table slots + classifier (section 4) */
     tmpl_install(m);                                             /* TMPL: multi-cell templates (task multitile) */
     if (!g_nvariants) { logf("### READY: no variants in the table, nothing patched"); return 0; }
+    rbt_install(m);                                              /* RBT: automatic 2x2 roundabouts (task roundabout3) */
     g_wopen = (PFN_WOpen)(m + 0x26129);
     g_ropen = (PFN_ROpen)(m + 0x25f0d);
     g_stream = (PFN_Stream)(m + 0x262a3);
@@ -1315,8 +1324,10 @@ static DWORD WINAPI watcher(LPVOID param) {
     for (k = 0;; k++) {
         Sleep(500);
         tmpl_keys();                     /* task multitile: subclass the game window once it exists */
+        rbt_window();                    /* task roundabout3: the window that runs the load pass */
         if (k % 20 != 19) continue;
         tmpl_stats();
+        rbt_stats();
         if (g_n_cross_map || g_n_pred_map || g_n_saved_base)
             logf("stats: crossing-switch lookups mapped=%ld, predicate id reads mapped=%ld, tiles saved as base (last save)=%ld",
                  g_n_cross_map, g_n_pred_map, g_n_saved_base);

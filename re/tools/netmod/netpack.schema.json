@@ -92,6 +92,20 @@
         "$ref": "#/$defs/template"
       },
       "description": "Multi-cell templates the player places in one click (task multitile): a fixed block of pieces that keeps its cells (Protected list) and connects to the networks around it. Guide: re/analysis/MULTITILE.md."
+    },
+    "auto_roundabouts": {
+      "type": "array",
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["piece"],
+        "properties": {
+          "piece": {"$ref": "#/$defs/piece_id", "description": "A ROAD variant of T 39 declared in this package, with art and lanes for the pinwheel states 3,0 / 2,1."},
+          "min_arms": {"type": "integer", "minimum": 1, "maximum": 4, "default": 3, "description": "Exits (one per block side) that must hold a single road."}
+        }
+      },
+      "description": "Task roundabout3: sc3netmod turns every qualifying 2x2 road block into this piece by itself (after each road retile and after a city load) and back into stock road when it stops qualifying. Rule: re/analysis/MULTITILE.md section 5. One piece across all installed packages."
     }
   },
   "$defs": {
