@@ -562,7 +562,8 @@ def compile_pack(stock, pack_dir, man):
     out = {"name": pname, "variants": [], "reskins": [], "rule_edits": [], "ini": [], "warnings": [],
            "bridges": [dict(e, _pack=pname) for e in man.get("bridges", [])],              # task netbridge
            "crossings": list(man.get("crossings", [])),
-           "templates": list(man.get("templates", []))}                                     # task multitile
+           "templates": list(man.get("templates", [])),                                     # task multitile
+           "auto_roundabouts": []}                                                          # task roundabout3
     for n, v in enumerate(man.get("variants", [])):
         where = "%s variant %d (id %s)" % (pname, n + 1, v.get("id"))
         vid, base, net = v["id"], v["base"], v["network"]
@@ -618,6 +619,18 @@ def compile_pack(stock, pack_dir, man):
         out["reskins"].append({"piece": piece, "art": art, "where": where, "sharers": sharers})
     for e in man.get("rule_edits", []):
         out["rule_edits"].append(dict(e, _pack=pname))
+    vids = {v["id"]: v for v in out["variants"]}
+    for n, a in enumerate(man.get("auto_roundabouts", [])):          # task roundabout3: sc3netmod RBT block
+        where = "%s auto_roundabouts %d (piece %s)" % (pname, n + 1, a.get("piece"))
+        v = vids.get(a.get("piece"))
+        if v is None or v["base"] != 39 or v["net"] != "ROAD":
+            raise NetpackError("%s: piece must be a ROAD variant of T 39 declared in this package" % where)
+        mn = a.get("min_arms", 3)
+        if not isinstance(mn, int) or not 1 <= mn <= 4:
+            raise NetpackError("%s: min_arms must be 1..4" % where)
+        out["auto_roundabouts"].append({"piece": v["id"], "min_arms": mn, "where": where})
+    if len(out["auto_roundabouts"]) > 1:
+        raise NetpackError("%s: at most one auto_roundabouts entry (sc3netmod applies one piece)" % pname)
     out["ramps"] = []
     if man.get("ramps"):                                 # hardcoded SIMNTWRK tables (netramp.py, NET_RAMPS.md)
         try:
@@ -769,6 +782,11 @@ def merge(stock, packs):
                                   stock.set_files_of, report["warnings"])
     except RAMP.RampError as e:
         raise NetpackError(str(e))
+    # ---- task roundabout3: one automatic roundabout piece across all packages (sc3netmod RBT applies one)
+    autos = [a for c in comp for a in c["auto_roundabouts"]]
+    if len(autos) > 1:
+        raise NetpackError("auto_roundabouts: %s and %s both declare one; sc3netmod applies a single piece" %
+                           (autos[0]["where"], autos[1]["where"]))
     # ---- task multitile: templates (netpack_templates.py, MULTITILE.md). Their cell pieces go into the Protected
     # list of their network so a later re-tile never replaces a template cell.
     try:
@@ -895,10 +913,11 @@ def merge(stock, packs):
     # ---- variant tables for sc3netmod.dll, one per package
     for c in comp:
         mine = [t for t in templates if t["pack"] == c["name"]]
-        if c["variants"] or c["ramps"] or mine:
+        if c["variants"] or c["ramps"] or mine or c["auto_roundabouts"]:
             tables[c["name"]] = ("# netpack %s: <variant id> <base id>, read by sc3netmod.dll\r\n" % c["name"]).encode() + \
                 b"".join(b"%d %d\r\n" % (v["id"], v["base"]) for v in sorted(c["variants"], key=lambda v: v["id"])) + \
-                RAMP.table_lines(c["ramps"]) + TPL.table_lines(mine)
+                RAMP.table_lines(c["ramps"]) + TPL.table_lines(mine) + \
+                b"".join(b"rbt %d %d\r\n" % (a["piece"], a["min_arms"]) for a in c["auto_roundabouts"])
 
     # ---- report + checks that need the merged result
     placed = set()
@@ -912,6 +931,7 @@ def merge(stock, packs):
         placed |= {e.get("piece") for e in c["crossings"]}
     placed |= {r["to"] >> 8 for r in ramps}                 # a table slot places it (netramp.py)
     placed |= {c[0] for t in templates for c in t["cells"].values()}   # a template places it (task multitile)
+    placed |= {a["piece"] for a in autos}                    # sc3netmod RBT places it (task roundabout3)
     for v in variants:
         if v["id"] not in placed:
             report["warnings"].append("%s: no rule RESULT places %d, so the tiler never builds it" % (v["where"], v["id"]))
@@ -921,6 +941,7 @@ def merge(stock, packs):
         for r in c["reskins"]:
             report["reskins"].append({"piece": r["piece"], "frames": len(r["art"]["frames"]), "sharers": r["sharers"]})
     report["ramps"] = [{"table": r["table"], "slot": r["slot"], "from": r["from"], "to": r["to"]} for r in ramps]
+    report["auto_roundabouts"] = [{"piece": a["piece"], "min_arms": a["min_arms"]} for a in autos]
     report["templates"] = [{"name": t["name"], "pack": t["pack"], "orientations": len(t["orients"]), "cost": t["cost"],
                             "cells": len(t["cells"]), "protect_add": t["protect_add"],
                             "picture": [TPL.render(t, k) for k in range(len(t["orients"]))]} for t in templates]
@@ -1249,6 +1270,8 @@ def _print_report(report):
     for r in report.get("ramps", []):
         print("  ramp    %s slot %d  %d.%d -> %d.%d" % (r["table"], r["slot"], r["from"] >> 8, r["from"] & 0xFF,
                                                        r["to"] >> 8, r["to"] & 0xFF))
+    for r in report.get("auto_roundabouts", []):                                # task roundabout3
+        print("  auto roundabout: piece %d, 2x2 road blocks with >= %d arm(s) (sc3netmod RBT)" % (r["piece"], r["min_arms"]))
     for t in report.get("templates", []):                                       # task multitile
         print("  template %s/%s  %d cell(s), %d orientation(s), cost %d, Protected += %s"
               % (t["pack"], t["name"], t["cells"], t["orientations"], t["cost"], t["protect_add"] or "-"))

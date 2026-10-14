@@ -1,0 +1,351 @@
+/* sc3netmod_rbt.c - the RBT block of sc3netmod.dll (task roundabout3, 2026-10-14): automatic 2x2 roundabouts.
+ * #included by sc3netmod.c after the TMPL block; shares the variant table, patch helpers, log and save hooks.
+ * Rule, evidence and owner guide: re/analysis/MULTITILE.md section 5, verify/roundabout3/.
+ *
+ * A package declares `rbt <piece> <min_arms>` (netpack manifest "auto_roundabouts"; piece = a ROAD variant of T 39,
+ * art and lanes for the pinwheel states 3,0 / 2,1). A block = the 2x2 of ROAD cells with origin (X, Z). It becomes
+ * that piece (same states) when ALL hold, and goes back to the stock tiles when one stops holding:
+ *  (a) the 4 cells are the stock pinwheel: (X,Z) state 3, (X+1,Z) 0, (X+1,Z+1) 1, (X,Z+1) 2, each T 39 when its exit
+ *      holds road and curve 11203 when it does not (the piece itself counts as either);
+ *  (b) no closed cell (X-1,Z+1) (X,Z-1) (X+2,Z) (X+1,Z+2) holds road;
+ *  (c) no exit that holds road is part of a 2x2 of road outside the block (the exit, the corner beside it and the two
+ *      cells beyond them): a 2-wide road or another 2x2 block;
+ *  (d) at least min_arms of the exits W (X-1,Z), N (X+1,Z-1), E (X+2,Z+1), S (X,Z+2) hold road.
+ * "Road" = an occupant of the surface layer (manager +0x3c) that the manager's network test vt+0x14c accepts for
+ * netType 1 (FUN_10007791 -> the ROAD predicate DAT_100323c0, the one the rect retile gathers its nodes with).
+ * Offline twin: re/tools/netmod/rb_auto.py (same rule on a save).
+ *
+ * When: (1) after every ROAD call of the retile pass FUN_1001547b (entry hooked; all three callers, the rect retile
+ * FUN_100151f1, the drag build FUN_10014a23 and the On-ramp build FUN_1000abde, go through it), over the blocks whose
+ * cells or surroundings fall in the box of the pass's work list (its 4th argument, written by the pass); (2) once
+ * after a city load (manager vt+0x1c = FUN_100130e9 wrapped; the pass runs from a message posted to the game window,
+ * so on the UI thread after the load call returns), over the whole map.
+ * Convert = the game's piece writer FUN_10008919 per cell (as the TMPL click), free (the road is paid for). Revert =
+ * the rect retile FUN_100151f1 (manager vt+0xb0, mask 3) over the block: the piece is NOT in the Protected list, so
+ * the stock tiler re-places the cells as it would for road; any later retile that reaches the block does the same.
+ * Save: SAVEBASE writes the stock id of each cell (39, or 11203 for a cell without an arm), not just the base id.
+ * Off: SC3NETMOD_RBT=0 (whole block), SC3NETMOD_RBT_LOAD=0 (no pass after a load).
+ */
+
+#define RB_WM (WM_APP + 0x5D1)
+
+typedef void (__fastcall *PFN_Pass)(void *mgr, void *edx, DWORD list, int net, int *box);   /* FUN_1001547b ret 0xc */
+typedef char (__fastcall *PFN_At)(void *lay, void *edx, int x, int z, void **out);          /* layer vt+0x7c ret 0xc */
+typedef char (__fastcall *PFN_Load)(void *mgr, void *edx, void *p1, void *p2);              /* FUN_100130e9 ret 8 */
+
+static WORD g_rb_piece;
+static int g_rb_min = 3, g_rb_on;
+static BYTE *g_rb_m;
+static DWORD g_rb_msize;
+static DWORD g_rb_eh, g_rb_cont, g_rb_orig_load;
+static volatile LONG g_rb_busy, g_rb_load_pending;
+static void *g_rb_mgr;
+static BYTE *g_rb_stock;                     /* [z * 1024 + x]: 0 unknown, 1 stock T 39, 2 stock curve 11203 */
+static HWND g_rb_hwnd;
+static WNDPROC g_rb_oldproc;
+static volatile LONG g_rb_n_pass, g_rb_n_conv, g_rb_n_rev, g_rb_n_load, g_rb_n_fault;
+static int g_rb_logged_box;
+
+static const signed char RB_CELL[4][3] = { { 0, 0, 3 }, { 1, 0, 0 }, { 1, 1, 1 }, { 0, 1, 2 } };  /* dx, dz, state */
+static const signed char RB_EXIT[4][2] = { { 1, -1 }, { 2, 1 }, { 0, 2 }, { -1, 0 } };     /* by state 0..3 */
+static const signed char RB_CORNER[4][2] = { { 2, -1 }, { 2, 2 }, { -1, 2 }, { -1, -1 } };
+static const signed char RB_OUT[4][2] = { { 0, -1 }, { 1, 0 }, { 0, 1 }, { -1, 0 } };
+static const signed char RB_CLOSED[4][2] = { { -1, 1 }, { 0, -1 }, { 2, 0 }, { 1, 2 } };
+
+/* ---------------------------------------------------------------- table line */
+static void rb_file(const char *path) {
+    char line[256];
+    FILE *f = fopen(path, "r");
+    if (!f) return;
+    while (fgets(line, sizeof(line), f)) {
+        unsigned long p, n;
+        if (strncmp(line, "rbt ", 4)) continue;
+        if (sscanf(line + 4, "%lu %lu", &p, &n) != 2 || !p || p > 0xffff || n < 1 || n > 4 || g_base[p] != 39) {
+            logf("### rbt: %s: bad line or piece not a variant of T 39: '%s'", path, line);
+            continue;
+        }
+        if (g_rb_piece && g_rb_piece != (WORD)p) {
+            logf("### rbt: %s: a second roundabout piece %lu (already %u) - ignored", path, p, g_rb_piece);
+            continue;
+        }
+        g_rb_piece = (WORD)p; g_rb_min = (int)n;
+        logf("rbt: %s: automatic 2x2 roundabout = piece %lu, at least %lu arm(s)", path, p, n);
+    }
+    fclose(f);
+}
+
+/* ---------------------------------------------------------------- reading cells */
+/* -> 0 = no road, else 0x80000000 | state << 16 | id. The occupant of a network piece: +0x10 word0 (state bits
+   30-31), +0x14 low 16 = id (np_drive.py cells, QUERY_ID.md 2). */
+static DWORD rb_read(BYTE *mgr, void *lay, int x, int z, int W, int H) {
+    void *occ = NULL;
+    DWORD r = 0, vt;
+    if (x < 0 || z < 0 || x >= W || z >= H) return 0;
+    if (!((PFN_At)VT(lay, 0x7c))(lay, 0, x, z, &occ) || !occ) return 0;
+    vt = *(DWORD *)occ;
+    if (vt >= (DWORD)g_rb_m && vt < (DWORD)g_rb_m + g_rb_msize && ((PFN_Pred)VT(mgr, 0x14c))(mgr, 0, 1, occ))
+        r = 0x80000000UL | ((*(DWORD *)((BYTE *)occ + 0x10) >> 30) << 16) | (*(DWORD *)((BYTE *)occ + 0x14) & 0xffff);
+    ((PFN_B0)VT(occ, 8))(occ);
+    return r;
+}
+
+typedef struct { int x0, z0, w, h; DWORD *c; } RbBuf;
+
+static DWORD rb_at(RbBuf *b, int x, int z) {
+    x -= b->x0; z -= b->z0;
+    if (x < 0 || z < 0 || x >= b->w || z >= b->h) return 0;
+    return b->c[z * b->w + x];
+}
+
+/* the rule; -> arms (>= min) when the block qualifies, else -1 (why in *why) */
+static int rb_check(RbBuf *b, int X, int Z, const char **why) {
+    int k, arms = 0;
+    DWORD c[4];
+    for (k = 0; k < 4; k++) {
+        DWORD v = rb_at(b, X + RB_CELL[k][0], Z + RB_CELL[k][1]), id = v & 0xffff;
+        if (!v || (int)((v >> 16) & 3) != RB_CELL[k][2] || (id != 39 && id != 11203 && id != g_rb_piece)) {
+            *why = "a"; return -1;
+        }
+        c[k] = id;
+    }
+    for (k = 0; k < 4; k++) {
+        int s = RB_CELL[k][2], ex = X + RB_EXIT[s][0], ez = Z + RB_EXIT[s][1];
+        int has = rb_at(b, ex, ez) != 0;
+        if ((c[k] == 39 && !has) || (c[k] == 11203 && has)) { *why = "a (stock tile disagrees with its exit)"; return -1; }
+        if (has) {
+            int cx = X + RB_CORNER[s][0], cz = Z + RB_CORNER[s][1], ox = RB_OUT[s][0], oz = RB_OUT[s][1];
+            if (rb_at(b, cx, cz) && rb_at(b, ex + ox, ez + oz) && rb_at(b, cx + ox, cz + oz)) {
+                *why = "c (exit in a 2x2 of road)"; return -1;
+            }
+            arms++;
+        }
+    }
+    for (k = 0; k < 4; k++)
+        if (rb_at(b, X + RB_CLOSED[k][0], Z + RB_CLOSED[k][1])) { *why = "b (closed cell holds road)"; return -1; }
+    if (arms < g_rb_min) { *why = "d (arms)"; return -1; }
+    return arms;
+}
+
+/* ---------------------------------------------------------------- the pass over block origins [ox0..ox1] x [oz0..oz1] */
+static void rb_run(BYTE *mgr, int ox0, int oz0, int ox1, int oz1, const char *who) {
+    void *lay = *(void **)(mgr + 0x3c);
+    int W = (*(int *)(mgr + 0x5c) >> 8) + 1, H = (*(int *)(mgr + 0x60) >> 8) + 1;
+    int x, z, k, nconv = 0, nrev = 0, nq = 0;
+    RbBuf b;
+    BYTE *q;
+    if (W < 2 || H < 2 || W > 4096 || H > 4096) return;
+    if (ox0 < 0) ox0 = 0;
+    if (oz0 < 0) oz0 = 0;
+    if (ox1 > W - 2) ox1 = W - 2;
+    if (oz1 > H - 2) oz1 = H - 2;
+    if (ox0 > ox1 || oz0 > oz1) return;
+    b.x0 = ox0 - 2; b.z0 = oz0 - 2; b.w = ox1 - ox0 + 6; b.h = oz1 - oz0 + 6;
+    b.c = (DWORD *)VirtualAlloc(NULL, (SIZE_T)b.w * b.h * 4 + (SIZE_T)(ox1 - ox0 + 1) * (oz1 - oz0 + 1), MEM_COMMIT,
+                                PAGE_READWRITE);
+    if (!b.c) return;
+    q = (BYTE *)(b.c + b.w * b.h);                    /* q[origin] = 1 qualifies */
+    for (z = 0; z < b.h; z++)
+        for (x = 0; x < b.w; x++) b.c[z * b.w + x] = rb_read(mgr, lay, b.x0 + x, b.z0 + z, W, H);
+    for (z = oz0; z <= oz1; z++)
+        for (x = ox0; x <= ox1; x++) {
+            const char *why = "";
+            int arms = rb_check(&b, x, z, &why), need = 0;
+            if (arms < 0) continue;
+            q[(z - oz0) * (ox1 - ox0 + 1) + (x - ox0)] = 1;
+            nq++;
+            for (k = 0; k < 4; k++) {
+                int cx = x + RB_CELL[k][0], cz = z + RB_CELL[k][1], s = RB_CELL[k][2];
+                int has = rb_at(&b, x + RB_EXIT[s][0], z + RB_EXIT[s][1]) != 0;
+                if ((rb_at(&b, cx, cz) & 0xffff) != g_rb_piece) need = 1;
+                if (g_rb_stock && cx < 1024 && cz < 1024) g_rb_stock[cz * 1024 + cx] = has ? 1 : 2;
+            }
+            if (!need) continue;
+            for (k = 0; k < 4; k++) {
+                int pos[3];
+                pos[0] = (x + RB_CELL[k][0]) << 8; pos[1] = (z + RB_CELL[k][1]) << 8; pos[2] = 0;
+                ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, lay, pos, ((DWORD)g_rb_piece << 8) | RB_CELL[k][2], -1, 8, 0);
+            }
+            nconv++;
+            logf("rbt: %s: (%d,%d) -> roundabout, %d arm(s)", who, x, z, arms);
+        }
+    /* 20400 cells of blocks (origin in range) that do not qualify: back to the stock tiles */
+    for (z = oz0; z <= oz1; z++)
+        for (x = ox0; x <= ox1; x++) {
+            int found = 0, rect[6];
+            if (q[(z - oz0) * (ox1 - ox0 + 1) + (x - ox0)]) continue;
+            for (k = 0; k < 4 && !found; k++) {
+                DWORD v = rb_at(&b, x + RB_CELL[k][0], z + RB_CELL[k][1]);
+                found = (v & 0xffff) == g_rb_piece && (int)((v >> 16) & 3) == RB_CELL[k][2];
+            }
+            if (!found) continue;
+            rect[0] = x << 8; rect[1] = z << 8; rect[2] = 0; rect[3] = (x + 1) << 8; rect[4] = (z + 1) << 8; rect[5] = 0;
+            ((PFN_Retile)VT(mgr, 0xb0))(mgr, 0, rect, 3);
+            nrev++;
+            {
+                const char *why = "";
+                rb_check(&b, x, z, &why);
+                logf("rbt: %s: (%d,%d) roundabout cells, block no longer qualifies (%s) -> stock retile", who, x, z, why);
+            }
+        }
+    VirtualFree(b.c, 0, MEM_RELEASE);
+    InterlockedExchangeAdd(&g_rb_n_conv, nconv);
+    InterlockedExchangeAdd(&g_rb_n_rev, nrev);
+    if (nconv || nrev || !strcmp(who, "load"))
+        logf("rbt: %s pass over origins (%d,%d)-(%d,%d) [tid %04lx]: %d qualify, %d converted, %d reverted", who, ox0,
+             oz0, ox1, oz1, GetCurrentThreadId(), nq, nconv, nrev);
+}
+
+/* ---------------------------------------------------------------- the retile pass hook (FUN_1001547b entry) */
+static __declspec(naked) void rb_tramp(void) {
+    __asm {
+        mov eax, dword ptr [g_rb_eh]
+        jmp dword ptr [g_rb_cont]
+    }
+}
+
+static void __fastcall rb_pass(BYTE *mgr, void *edx, DWORD list, int net, int *box) {
+    int x0, z0, x1, z1;
+    ((PFN_Pass)(void *)rb_tramp)(mgr, edx, list, net, box);
+    if (net != 1 || !box || g_rb_busy) return;
+    g_rb_mgr = mgr;
+    if (box[0] == 0x7fffffff || box[1] == 0x7fffffff || box[3] == 0x7fffffff || box[4] == 0x7fffffff) return;
+    x0 = min(box[0], box[3]) >> 8; x1 = max(box[0], box[3]) >> 8;
+    z0 = min(box[1], box[4]) >> 8; z1 = max(box[1], box[4]) >> 8;
+    if (g_rb_logged_box < 6) {
+        g_rb_logged_box++;
+        logf("rbt: retile pass ROAD [tid %04lx], work box {%d,%d,%d,%d,%d,%d} -> cells (%d,%d)-(%d,%d)",
+             GetCurrentThreadId(), box[0], box[1], box[2], box[3], box[4], box[5], x0, z0, x1, z1);
+    }
+    InterlockedIncrement(&g_rb_n_pass);
+    InterlockedIncrement(&g_rb_busy);
+    __try {
+        rb_run(mgr, x0 - 3, z0 - 3, x1 + 2, z1 + 2, "edit");    /* every block whose cells/ring/beyond touch the box */
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        InterlockedIncrement(&g_rb_n_fault);
+        logf("### rbt: exception 0x%08lX in the edit pass", GetExceptionCode());
+    }
+    InterlockedDecrement(&g_rb_busy);
+}
+
+/* ---------------------------------------------------------------- after a load */
+static void rb_load_pass(void) {
+    BYTE *mgr = (BYTE *)g_rb_mgr;
+    if (!mgr || !InterlockedExchange(&g_rb_load_pending, 0)) return;
+    InterlockedIncrement(&g_rb_n_load);
+    InterlockedIncrement(&g_rb_busy);
+    __try {
+        rb_run(mgr, 0, 0, 0x7fffffff, 0x7fffffff, "load");
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        InterlockedIncrement(&g_rb_n_fault);
+        logf("### rbt: exception 0x%08lX in the load pass", GetExceptionCode());
+    }
+    InterlockedDecrement(&g_rb_busy);
+}
+
+static char __fastcall rb_load(BYTE *mgr, void *edx, void *p1, void *p2) {
+    char r;
+    logf("rbt: city load (manager vt+0x1c) [tid %04lx]", GetCurrentThreadId());
+    r = ((PFN_Load)g_rb_orig_load)(mgr, edx, p1, p2);
+    g_rb_mgr = mgr;
+    if (g_rb_stock) ZeroMemory(g_rb_stock, 1024 * 1024);
+    if (!env_off("SC3NETMOD_RBT_LOAD")) {
+        InterlockedExchange(&g_rb_load_pending, 1);
+        logf("rbt: city load returned %d [tid %04lx]; full-map pass posted to the game window 0x%08lX", (int)r,
+             GetCurrentThreadId(), (DWORD)g_rb_hwnd);
+        if (g_rb_hwnd) PostMessageA(g_rb_hwnd, RB_WM, 0, 0);
+    }
+    return r;
+}
+
+static LRESULT CALLBACK rb_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
+    if (m == RB_WM) {
+        logf("rbt: load pass message [tid %04lx]", GetCurrentThreadId());
+        rb_load_pass();
+        return 0;
+    }
+    return CallWindowProcA(g_rb_oldproc, h, m, wp, lp);
+}
+
+/* SAVEBASE: the stock id of a roundabout cell (39, or 11203 where the cell has no arm) */
+static WORD rb_save_id(DWORD w0, WORD id) {
+    DWORD x = w0 & 0x7ff, z = (w0 >> 11) & 0x7ff;
+    if (!g_rb_on || id != g_rb_piece || !g_rb_stock || x >= 1024 || z >= 1024) return 0;
+    return g_rb_stock[z * 1024 + x] == 2 ? 11203 : 0;
+}
+
+/* ---------------------------------------------------------------- install */
+static int rbt_install(BYTE *m) {
+    char path[MAX_PATH], pat[MAX_PATH];
+    WIN32_FIND_DATAA fd;
+    HANDLE hf;
+    BYTE *e = m + 0x1547b;
+    DWORD *s_load = (DWORD *)(m + 0x2c7bc + 0x1c), v;
+    IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(m + ((IMAGE_DOS_HEADER *)m)->e_lfanew);
+    if (env_off("SC3NETMOD_RBT")) { logf("rbt: off (SC3NETMOD_RBT=0)"); return 0; }
+    if (GetEnvironmentVariableA("SC3NETMOD_TABLE", path, sizeof(path))) rb_file(path);
+    else if (g_rootlen) {
+        static char names[64][MAX_PATH];
+        int k, j, cnt = 0;
+        _snprintf(pat, sizeof(pat), "%smods\\netmod\\tables\\*.txt", g_root);
+        pat[sizeof(pat) - 1] = 0;
+        hf = FindFirstFileA(pat, &fd);
+        if (hf != INVALID_HANDLE_VALUE) {
+            do {
+                if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && cnt < 64) lstrcpynA(names[cnt++], fd.cFileName, MAX_PATH);
+            } while (FindNextFileA(hf, &fd));
+            FindClose(hf);
+        }
+        for (k = 1; k < cnt; k++)
+            for (j = k; j > 0 && lstrcmpiA(names[j - 1], names[j]) > 0; j--) {
+                char t[MAX_PATH]; lstrcpyA(t, names[j]); lstrcpyA(names[j], names[j - 1]); lstrcpyA(names[j - 1], t);
+            }
+        for (k = 0; k < cnt; k++) {
+            _snprintf(path, sizeof(path), "%smods\\netmod\\tables\\%s", g_root, names[k]);
+            path[sizeof(path) - 1] = 0;
+            rb_file(path);
+        }
+    }
+    if (!g_rb_piece) { logf("rbt: no automatic roundabout in the tables"); return 0; }
+    g_rb_m = m;
+    g_rb_msize = nt->OptionalHeader.SizeOfImage;
+    if (IsBadReadPtr(e, 10) || e[0] != 0xb8 || *(DWORD *)(e + 1) != (DWORD)m + 0x27a52 || e[5] != 0xe8 ||
+        (DWORD)(e + 10) + *(DWORD *)(e + 6) != (DWORD)m + 0x266d4 || *s_load != (DWORD)m + 0x130e9) {
+        logf("### rbt: FUN_1001547b entry or manager vt+0x1c differ from shipped - RBT OFF");
+        g_rb_piece = 0;
+        return 0;
+    }
+    g_rb_stock = (BYTE *)VirtualAlloc(NULL, 1024 * 1024, MEM_COMMIT, PAGE_READWRITE);
+    g_rb_eh = (DWORD)m + 0x27a52;
+    g_rb_cont = (DWORD)m + 0x15480;
+    g_rb_orig_load = *s_load;
+    v = (DWORD)rb_load;
+    if (!write_code((BYTE *)s_load, &v, 4) || !write_rel(e, 0xE9, (void *)rb_pass, 5)) {
+        logf("### rbt: patch failed - RBT OFF");
+        g_rb_piece = 0;
+        return 0;
+    }
+    g_rb_on = 1;
+    logf("rbt: hooked the retile pass FUN_1001547b (entry) and the city load (manager vt+0x1c); piece %u, min %d arm(s)",
+         g_rb_piece, g_rb_min);
+    return 1;
+}
+
+static void rbt_window(void) {
+    HWND h = NULL;
+    if (!g_rb_on || g_rb_hwnd) return;
+    EnumWindows(tm_enum, (LPARAM)&h);
+    if (!h) return;
+    g_rb_oldproc = (WNDPROC)SetWindowLongA(h, GWL_WNDPROC, (LONG)rb_wndproc);
+    g_rb_hwnd = h;
+    logf("rbt: window 0x%08lX subclassed for the load pass", (DWORD)h);
+    if (g_rb_load_pending) PostMessageA(h, RB_WM, 0, 0);
+}
+
+static void rbt_stats(void) {
+    static LONG last;
+    LONG n = g_rb_n_pass + g_rb_n_conv + g_rb_n_rev + g_rb_n_load + g_rb_n_fault;
+    if (!g_rb_on || n == last) return;
+    last = n;
+    logf("stats: rbt ROAD passes=%ld, blocks converted=%ld, reverted=%ld, load passes=%ld, faults=%ld", g_rb_n_pass,
+         g_rb_n_conv, g_rb_n_rev, g_rb_n_load, g_rb_n_fault);
+}

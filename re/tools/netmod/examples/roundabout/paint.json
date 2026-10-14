@@ -11,6 +11,6 @@
  "yellow_width": 6.5,
  "island": {"gutter_xp": 40, "curb": 22, "inner_curb": 5},
  "yellow_xp": [132, 135.5],
- "arrows": [{"at_deg": -45, "r": 175, "length": 76, "head": 28, "shaft": 5.5, "head_w": 17, "min_zoom": 3}],
+ "arrows": [],
  "give_way": {"r": [211, 218], "period": 40, "dash": 22, "from_centre": 8, "min_zoom": 3}
 }
