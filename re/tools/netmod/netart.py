@@ -391,7 +391,7 @@ def compose(recipe, out_dir, src_dir=None):
     """Route b. recipe = {
         "canvas": <piece> | {"like": <piece>, "grow_top": <altitude units>} | {"z3": [w, h, L, T], ...}
                   (frame sizes; default the first layer's piece; grow_top makes room for tall props),
-        "layers": [ {"piece": 73 | "dir": "<png_dir>" | "render": <netart_blender scene spec>,
+        "layers": [ {"piece": 73 | "dir": "<png_dir>" | "render": <netart_blender scene spec> | "paint": "<plan.json>",
                      "slot_offset": 0..3, "region": {...}, "shift": [du, dv], "erase": false}, ... ]
                      (drawn in order, later on top; a "render" layer is rendered in Blender, cached)
       }
@@ -409,6 +409,14 @@ def compose(recipe, out_dir, src_dir=None):
                 srcs[key] = stock_frames(spec["piece"])
             elif "render" in spec:
                 srcs[key] = load_dir(render_cached(spec["render"]))
+            elif "paint" in spec:
+                # procedural ground art (netpaint.py, NET_ART.md 11): a plan JSON, coloured from stock frames
+                import tempfile
+                from netmod import netpaint
+                pp = spec["paint"]
+                if src_dir and not os.path.isabs(pp):
+                    pp = os.path.join(src_dir, pp)
+                srcs[key] = load_dir(netpaint.paint(pp, tempfile.mkdtemp(prefix="netpaint_")))
             else:
                 p = spec["dir"]
                 if src_dir and not os.path.isabs(p):
@@ -442,8 +450,8 @@ def compose(recipe, out_dir, src_dir=None):
                 src, a = fr[(z, sr_)]
                 if a is None:
                     a = stock_frames(cv)[(z, sr_)][1] if not isinstance(cv, dict) else (L, T)
-                if "render" in lay:
-                    sr_ = r                     # a render is already turned per slot
+                if "render" in lay or "paint" in lay:
+                    sr_ = r                     # a render / paint is already turned per slot
                 # shift is a vector in slot-0 tile space: turned with the slot, no translation
                 du, dv = _rot_vec(*lay.get("shift", (0, 0)), r)
                 sx, sy = project(z, du, dv)
