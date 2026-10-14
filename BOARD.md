@@ -8,7 +8,34 @@ this file is the live board. Opened 2026-08-24.
 `DEFERRED.md`, open questions in `UNCERTAINTIES.md`, per-session state in `re/sessions/STATUS_*.md`.
 This file points at them and does not restate them.
 
-## ⭐ The live fleet — four child sessions, spawned 2026-08-25
+## Current state, 2026-10-12 (read this first)
+
+**Latest release: `sc3mods-2026-10-12`** on sc3kre (target `7c1db20`, record `verify/mods_release_1012/RESULTS.md`).
+One launcher (`mods_launch.exe`) and six DLLs: `sc3resize`, `sc3bigcity`, `sc3overscroll`, `sc3simrun`, `sc3perf`
+(+ `perf.ini`), with `menu_bg.bmp` shipped by owner call. It supersedes `sc3mods-2026-10-11`, whose maximized main
+menu sent clicks to the wrong button.
+
+Owner hand test PASSED 2026-10-11 on the merged fix round (main `7c1db20`, staged in `re/harness/combo/`):
+`SKIPREFRESH` (1024 maximize freeze 2.2 s -> 0.13-0.21 s, `PERFORMANCE.md` Finding 26), `CELLFIX` + `DIRTCLIP`
+(SIMDIRT `0x10013A8F` crash fixed at its cause, `re/analysis/DIRTCRASH.md`), `DLGKEEP` / `DLGAREA`, `KEYFOCUS`,
+`MENUBG` stock art decoded from MAIN.IXF at runtime. All four mods were tested together (combo) and `sc3bigcity`
+was tested with `sc3resize` on the 1024 Europolis city (2026-10-09/11).
+
+**Still open, owner tests or design calls:**
+
+| # | item | where |
+|---:|---|---|
+| 1 | Main menu picture: DONE on `round/1012` 2026-10-14 (owner calls: crop keeping proportions, broken bmp falls back to stock; `verify/menucrop/`). Centred menu frame not seen unfocused, owner hand test | `RESIZABLE_WINDOW.md` on `round/1012` |
+| 2 | `HUDSCALE`: design calls all answered 2026-10-14 (Preferencias scale, smooth on, dialogs native, full bar/panel, default Off, no code change). Lives on `round/1012` (hudopt/hudfix/hudperf), needs merge + owner hand test | `re/analysis/HUD_SCALE.md` on `round/1012` |
+| 3 | Menu flash on the first city frames: not seen by the 2026-10-11 checklist run at ~2.5 fps, owner check | `RESIZABLE_WINDOW.md` "Post-ship checklist run, 2026-10-11" |
+| 4 | `sc3simrun` at the fastest speed: not soaked | `formats/SIM_WHILE_SCROLLING.md` |
+| 5 | ~~`sc3overscroll` with click-to-place tools~~: owner call 2026-10-14, leave as is (closed) | `formats/CAMERA_OVERSCROLL.md` |
+| 6 | The 10-12 package as downloaded from GitHub: smoke test run by the session, not by the owner | `verify/mods_release_1012/RESULTS.md` |
+
+Known limits, not bugs to chase: changing monitors while running can crash (DirectDraw), the DWM8And16BitMitigation
+compat layer needs `mods_launch.exe -exe <renamed copy>`, traffic on dense 1024 maps is the throughput ceiling.
+
+## (historical) The live fleet — four child sessions, spawned 2026-08-25
 
 Owner's call: pursue all four in parallel child sessions, steered from here. Each owns its STATUS file
 exclusively and makes integration commits **by path**.
@@ -98,12 +125,12 @@ RE done, tool exists outside a test harness, validated in the running game.
 | **Tunables** (any `SYS.PAK` INI value) | `syspak_mod.py` | `formats/SYSPAK.md` | `U-051` credits discriminator, 1 run, cosmetic closure only |
 | **Sprites / asset art** (recolour and author from PNG) | `sprite_patch.py` | `formats/SPRITE_MODDING.md` | `-filetrace` is blind to `Apps\Res\Sprites\`, so sprite runs have no file-access gate |
 | **City saves** (zone raster, per tile) | `city_write.py` | `formats/CITY_SAVE.md` | tile (28,0) never visually confirmed; the **name-collision load crash** needs writing up for users |
-| **Resizable window** (any size, HUD follows, dialogs centered) | `sc3resize.dll` + `resize_launch.exe` (`sc3resize_2026-10-06`) | `re/analysis/RESIZABLE_WINDOW.md`, `verify/resize_release/` | owner hand test passed 2026-10-06. Changing monitors while running can crash (DirectDraw). Camera can scroll into empty corners at large sizes (cosmetic) |
+| **Resizable window** (any size, HUD follows, dialogs centered) | `sc3resize.dll` via `mods_launch.exe` (latest: `sc3mods-2026-10-12`) | `re/analysis/RESIZABLE_WINDOW.md`, `verify/mods_release_1012/` | first shipped 2026-10-06. Post-ship round (BAR800, MENUBG, docked terrain panel, MINICLASS, SKIPREFRESH, DLGKEEP/DLGAREA, KEYFOCUS, P / 1-4 keys) owner-passed 2026-10-11, released 2026-10-12. Open: menu look with no `menu_bg.bmp`, HUDSCALE design calls, menu flash check. Changing monitors while running can crash (DirectDraw). Camera can scroll into empty corners at large sizes (cosmetic) |
 | **Camera scroll + drag** | `pe_patch.py` | `formats/CAMERA_MODDING.md` | `drag_divisor` (velX 50→25→50), `drag_deadzone` (engage 0→8→0) **and** `scroll_speed` **staged live** (three-recipe `scroll8 + drag4 + deadzone2`, retuned gentler 2026-08-26, `--diff` 8/9, diagonal confirmed by owner feel); `edge_margin` **C3 observed** (band 48/64→24/32→48/64), not staged. OS-input "feel" leg (**D-002**) now known ENVIRONMENT-blocked: `SendMessage` AND `SendInput` both moved 0px in the headless harness. Zoom-4 reachability (**D-003**) |
 | **Network tiling rules** (retune / re-skin an existing network) | `tilingrules.py` + `network_layer.py` | `formats/TILINGRULES_MODDING.md` | ⭐⭐ **T1 AND T2 both met game-side 2026-08-25.** T1 destructive (roads vanish), **T2 constructive: a 2-line SimpleRules edit re-skins a freshly-drawn straight to the curve piece — predicted `11203`, measured `11203 ×11`.** ⚠️ The lever is **SimpleRules (fixpoint, first), NOT `final.txt`** (last) — the `final` edit gave a **byte-identical** save. Render-path result, **no simulation claim** |
-| **Bigger cities** (N up to 1024, New City option) | `sc3bigcity.dll` + `bigcity_launch.exe` (`re/harness/build_bigcity.ps1`) | `formats/BIGGER_CITIES.md` "The mod" | owner hand test passed 2026-10-06 at 512 and 1024: terrain, rivers, right-drag, arrows, zoom 3/4, minimap. Fixes on top of the old 512 patches: subdivision depth, river density, **16-bit SIMSPR cell anchors** (camera refused every step over tiles >= 256, zoom 3/4 blank). Open: development not measured in an instrumented run, not tested together with `sc3resize`, minimap edge clamp untraced |
-| **Camera past the map edge** (overscroll, edge sliding, edge scroll while placing) | `sc3overscroll.dll` + `overscroll_launch.exe`, or all mods via `mods_launch.exe` | `formats/CAMERA_OVERSCROLL.md` | owner hand test passed 2026-10-06, alone and with resize + bigcity. Camera goes until ~75% of the screen is past the edge, slides when blocked, follows a placing drag out of the window. Released in `sc3mods-2026-10-06` (all three mods, one launcher). Open: click-to-place tools |
-| **Sim keeps running while the camera moves** (drag, held button, arrows) | `sc3simrun.dll` via `mods_launch.exe` | `formats/SIM_WHILE_SCROLLING.md` | A/B + 3.5 min soak passed 2026-10-06 (`verify/simrun/RESULTS.md`): one byte at SIMSPR `0x1004401a` skips the scroll step's coordinator hold (`vt+0x21c`, clock pause). Open: owner hand test, four mods together, fastest speed not soaked |
+| **Bigger cities** (N up to 1024, New City option) | `sc3bigcity.dll` + `bigcity_launch.exe` (`re/harness/build_bigcity.ps1`) | `formats/BIGGER_CITIES.md` "The mod" | owner hand test passed 2026-10-06 at 512 and 1024: terrain, rivers, right-drag, arrows, zoom 3/4, minimap. Fixes on top of the old 512 patches: subdivision depth, river density, **16-bit SIMSPR cell anchors** (camera refused every step over tiles >= 256, zoom 3/4 blank). Tested with `sc3resize` and `sc3perf` on the 1024 Europolis city 2026-10-09/11 (owner pass). Open: development not measured in an instrumented run, minimap edge clamp untraced |
+| **Camera past the map edge** (overscroll, edge sliding, edge scroll while placing) | `sc3overscroll.dll` + `overscroll_launch.exe`, or all mods via `mods_launch.exe` | `formats/CAMERA_OVERSCROLL.md` | owner hand test passed 2026-10-06, alone and with resize + bigcity. Camera goes until ~75% of the screen is past the edge, slides when blocked, follows a placing drag out of the window. Released in `sc3mods-2026-10-06`, latest `sc3mods-2026-10-12`. `arrows_keep` owner-passed 2026-10-07. Open: click-to-place tools |
+| **Sim keeps running while the camera moves** (drag, held button, arrows) | `sc3simrun.dll` via `mods_launch.exe` | `formats/SIM_WHILE_SCROLLING.md` | A/B + 3.5 min soak passed 2026-10-06 (`verify/simrun/RESULTS.md`): one byte at SIMSPR `0x1004401a` skips the scroll step's coordinator hold (`vt+0x21c`, clock pause). Owner hand test 2026-10-07 and four-mod combo 2026-10-11 passed, released in `sc3mods-2026-10-11` and `-12`. Open: fastest speed not soaked, `+0x148` driver unknown |
 
 > **Correction on record:** `HANDOFF.md` still claims sprite modding has "no RGB565 quantizer and no
 > PNG import". That is **stale** — `sprite_patch.py` has `quantize565()`, `export_png()` and
@@ -199,7 +226,9 @@ Stride/corner measurement is deferred as cosmetic (~8 runs).
 >
 > ✅✅ **SHIPPED 2026-10-06** (owner hand test passed, package `sc3resize_2026-10-06`, `verify/resize_release/`).
 >
-> **Open, in order.**
+> ⚠️ **The list below is the pre-ship state and is superseded.** Live open items: "Current state, 2026-10-12" at the top of this file.
+>
+> **Open, in order (pre-ship, historical).**
 > 1. Owner hand-test of the 09-03 to 09-07 fixes on a REBUILT DLL (the binary predates the last edit).
 > 2. ✅ FIXED 2026-10-05: map input beyond the native 800x600 (`SC3RESIZE_VIEWFIX`, A/B PASS,
 >    `verify/resize_mapinput/`). Moves and right-drag pan work across the whole window.
