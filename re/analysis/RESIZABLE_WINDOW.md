@@ -857,6 +857,35 @@ is broken when maximized. Log swap counts on the first menu frame agree across t
 Harness note from these runs: twice, killing the Python process that had started `mods_launch.exe` left that game
 showing its quit dialog ("Salir") before any input was sent. Cause not established.
 
+### MENUSCALE: the menu frame scaled to the largest 4:3 rect (2026-10-14, task menuscale)
+
+Owner request 2026-10-14: "the main menu has to scale on the viewable 4:3 area, despite textures not scaling". On a
+client larger than 800x600 the frame is no longer presented 1:1 in the centre. `rz_ms_*` in `sc3resize.c`, called
+from `rz_mb_present` after `rz_mb_prepare` has built the cover picture:
+
+- rect = largest 4:3 that fits, floor, centred (`rz_ms_rect`). 3840x1984 -> `[597 0 3242 1984]`, 1000x900 ->
+  `[0 75 1000 825]`. Exactly 800x600 keeps the native path.
+- the source frame is READ only (never written, unlike the 1:1 path). Each pixel is background when it equals the
+  stock background, `g_mb_last`, or `g_mb_native`, the same three classes `rz_mb_patch_src` uses. When the native or
+  1:1 path rewrites `g_mb_last`, the MENUSCALE cache is invalidated so no class goes stale.
+- each rect pixel resamples the frame at pixel centres (8-bit weights, `rz_ms_axis`), bilinear by default,
+  `SC3RESIZE_MENUSCALE_FILTER=0` nearest. A tap on a background pixel takes the cover picture at the DEST pixel, so the
+  picture stays at client resolution behind the buttons and button edges blend into it.
+- only the dest box fed by changed source pixels is recomposed and sent (GDI BitBlt to the window DC). The whole client
+  goes out on a new size, the first scaled present, and after a paint / size / activation message. The ddraw present
+  of the frame is not called, so the window holds exactly what was composed (desktop grab = dump, except the live FPS
+  text and the rounded window corners).
+- mouse: client -> frame = `floor((2(c - r0) + 1) * 800 / (2 rw))`, the pixel the nearest filter draws there. Left
+  alone: a message carrying exactly our last frame point within 500 ms, a move at any depth (the game re-posts a move
+  at the point it received after every click, also at the menu) or a button message at depth > 0. Depth alone is not
+  usable at the menu: "Preferencias" runs a modal loop inside its button handler, so its clicks come from the queue at
+  depth 1.
+- `SC3RESIZE_MENUSCALE=0` = the 1:1 centred frame. `SC3RESIZE_MENUSCALE_DUMP=<abs prefix>`: on `<prefix>req` the next
+  scaled present writes the client, frame, picture and background mask as BMP. `re/tools/menuscale_check.py`
+  recomputes the rect from those and compares (0 mismatches on every dump taken).
+- cost, 3840x1984: about 0.15 ms per static present, one present of about 32 ms when a dialog opens (whole rect).
+  Evidence and arms: `verify/menuscale/RESULTS.md`.
+
 ## New City / Load City while already maximized (fixed 2026-10-07)
 
 Owner: with the window maximized before New City, the terrain panel moved constantly and the city needed a
