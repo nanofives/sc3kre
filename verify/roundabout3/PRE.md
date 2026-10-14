@@ -142,3 +142,31 @@ zoom 3, the 4 rotations at zoom 4, a converted stock-city block, a revert sequen
 
 Anything not met is reported as not met. Changes after this file (art fix, any rule change) are listed in RESULTS
 with the reason.
+
+## Addendum 1 (2026-10-14, after V0, before any after-fix frame)
+
+V0 as worded is **not met**: W = 0 in all 12 views (lab, 4-arm block, roundabout vs stock frames pixel-aligned:
+same camera origins in both games). On the block's outer 1-px outline nothing is white that is not white in stock;
+the only pixels brighter than stock by > 60 (sum of RGB) are 22 sidewalk greys per zoom-4 view. So the line the
+roundabout2 match diff showed on the block edge is not in the game frames (it was a difference against the offline
+composite, not a white line on screen).
+
+What the frames do show as thin white lines along the ring's contour where an entry's asphalt meets the ring: the
+give-way marking. Provenance (each pixel of the 20400 frame z4 slot 0 mapped to the `PinwheelRoundabout.colour`
+branch that painted it): 35 white pixels come from `marking` (give-way), 30 from the entry's outer edge line (the
+stock edge line of the arm). Cause, in `netpaint.py` `marking`: the dash phase `(r_o * (th % TAU)) % period` uses the
+pixel's own radius; th % TAU is about 5.5 rad there, so across the 7-unit band (r 211..218) the phase moves about 38
+units, one period of 40, and every angle has an "on" pixel: on the arc r 211..218 inside the entry span, 90% of
+angles are covered, in 2 runs, so it draws as a thin ragged line, not dashes. Fix (`netpaint.py`, this commit): phase
+= arc length at the band's middle radius from the start of the dash run: 58% of angles, 5 separate dashes per entry.
+Plan values unchanged (period 40, dash 22, r 211..218, zoom >= 3).
+
+New pre-registered metric G (in-game frames, lab, same 12 views): sample the circle of radius 214.5 units round the
+block centre every 0.25 degrees, projected with the SIMSPR draw point; a sample is "paint" when its pixel equals, in
+5/6/5, the marking colour of that zoom (`RoadSampler.paint_white`, the colour netpaint draws marks with). Runs = maximal
+runs of paint samples round the circle.
+- G before (the V0 roundabout frames `rb_*`, package as committed in 4a04f22): zoom 4, runs <= 8 per view (at most 2
+  per entry).
+- G after (rebuilt package, same lab save and camera calls): zoom 4, runs 16..24 per view (4..6 per entry); zoom 3,
+  more runs than before in every rotation.
+- `netpaint.py seams`: 1320 / 1320 after the rebuild. W stays 0 in all 12 views.

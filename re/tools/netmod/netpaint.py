@@ -135,7 +135,13 @@ class PinwheelRoundabout:
             r0, r1 = g.get("r", [self.ring_out, self.ring_out + 6.0])
             if r0 <= r_o < r1 and X >= self.c0 + g.get("from_centre", 8.0) and X <= self.edge_in:
                 per, on = g.get("period", 24.0), g.get("dash", 13.0)
-                if (r_o * (th % TAU)) % per < on:
+                # arc length at the band's middle radius, from the dash run's start (X = c0 + from_centre). Not
+                # r_o * th: with th near -1 rad mod 2 pi (~5.5) that phase moves ~38 units across a 7-unit band,
+                # about one period, so every angle had an "on" pixel and the dashes merged into a thin ragged
+                # line along the ring's edge (task roundabout3, NET_ART.md 11)
+                rm = 0.5 * (r0 + r1)
+                th0 = -math.acos(min(1.0, (self.c0 + g.get("from_centre", 8.0)) / rm))
+                if (rm * (th - th0)) % per < on:
                     return True
         return False
 
