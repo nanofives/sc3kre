@@ -41,6 +41,8 @@
  * 4. INHERIT + XCROSS (task netbridge, sc3netmod_bridge.c): highway / removal id reads see the base, and crossing art
  *    for variants from <root>\mods
 etmod\cross\*.txt. SC3NETMOD_INHERIT=0 / SC3NETMOD_XCROSS=0 turn them off.
+ * 5. RBT (task roundabout3, sc3netmod_rbt.c): automatic 2x2 roundabouts from `rbt` table lines, after every road
+ *    retile (FUN_1001547b entry) and after a city load. SC3NETMOD_RBT=0 / SC3NETMOD_RBT_LOAD=0 turn it off.
  * Env: SC3NETMOD_LOG=<path> (default sc3netmod.log beside the DLL), SC3NETMOD_TABLE=<path> (variant table, only that
  * file), SC3NETMOD_FILELOG=1 (log every hooked file call under Apps\Res).
  */

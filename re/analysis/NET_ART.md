@@ -216,6 +216,11 @@ line, so the bands join without a step. Markings (arrows, dashed give-way line) 
   difference was not traced.)
 - No stock network piece has plain grass to sample (395 exemplars scanned), hence the concrete island.
 - `netpaint.py seams PLAN DIR`: pixels within one pixel row of the arm edge vs 29's frame there (1320 / 1320 equal).
+- Give-way dashes (task roundabout3): the dash phase is the arc length at the band's middle radius, counted from
+  the start of the dash run. The first version used `r_o * (th mod 2 pi)`: with th near 5.5 rad the phase moved about
+  38 units across the 7-unit band, one period, so every angle had an "on" pixel and the dashes drew as a thin ragged
+  line along the ring's edge (the owner's "small white lines"). `give_way.r_z<zoom>` sets a band per zoom; the
+  package uses 14 units at zoom 3, where 7 units is about one pixel. Measured in game: `verify/roundabout3/RESULTS.md`.
 - In a recipe: `{"paint": "paint.json"}` as a compose layer (netart.compose), so a package ships JSON only.
 - Why not Blender for this: flat textured ground; the calibrated camera is exact only at zooms 3-4 (9.2) and a
   rendered texture is resampled. Blender stays the route for 3D props.
