@@ -114,6 +114,13 @@ class PinwheelRoundabout:
         yl = p.get("yellow_xp", [131.0, 136.0])         # the island edge line is the stock road's right yellow
         self.yellow_xp = tuple(yl)                       # line (x' 131..136) stretched over yellow_width
         self.stub = p.get("arm_stub", 12.0)              # depth of the arm edge strip drawn as the straight road
+        # task roundabout4: the quarter of a 3-arm block whose exit holds no road. Ring and island as above; no arm,
+        # entry, exit, splitter or markings: the ring's outer profile (edge line, gutter, sidewalk) runs on round the
+        # block centre to closed_out and the rest of the cell is left transparent, as stock curve 11203 state 0
+        # does about the same centre (measured: edge line 212-219, sidewalk to 256, transparent from ~259). The
+        # piece ships the frame table's ground bit (0x40) so the engine draws the terrain under those pixels.
+        self.closed = bool(p.get("closed_mouth", False))
+        self.closed_out = p.get("closed_out", 258.0)
 
     # -- markings (zoom >= min_zoom): -> True when the point is white paint
     def marking(self, z, X, Zb, r_o, th):
@@ -160,6 +167,10 @@ class PinwheelRoundabout:
         in_x = xp_x <= self.c0
         in_r = r_o < self.ring_out
         S = self.s
+        if self.closed:
+            if not in_r:
+                return S(z, r, r_o, t_r) if r_o <= self.closed_out else (0, 0, 0, 0)
+            return self.ring(z, r, X, Zb, r_o, t_r, lambda: S(z, r, min(self.asph_in[1], max(self.asph_in[0], r_o)), t_r))
         # arm edge strip: the stock road itself, so the seam against a stock road cell is exact. At least one
         # pixel row deep: a row spans 1024 / W units across the edge (W = tile width in px at this zoom)
         if zl < max(self.stub, 1024.0 / NA.TILE_W[z]):
@@ -174,19 +185,7 @@ class PinwheelRoundabout:
         if in_x and xp_x < self.edge_out:
             return S(z, r, xp_x, t_x)
         if in_r:
-            if r_o < self.c0:                            # island: gutter + apron (stock outer edge profile),
-                xp = r_o - self.c0 + self.gutter_x       # then a curb ring and a raised concrete centre. The
-                if xp >= self.gutter_x - 4.0 - self.curb:     # engine draws no terrain under this piece (measured:
-                    return S(z, r, xp, t_r)              # transparent pixels show the previous frame), so the
-                r_in = self.c0 - 4.0 - self.curb         # whole island is painted
-                if r_o >= r_in - self.inner_curb:
-                    return S(z, r, self.gutter_x - 3.0, t_r)
-                # the stock sidewalk band (x' 10..24) tiled straight across the centre: no radial streaks
-                return S(z, r, 10.0 + (Zb % 14.0), X)
-            if r_o < self.c0 + self.yellow_w:            # single yellow edge line round the island
-                y0, y1 = self.yellow_xp
-                return S(z, r, y0 + (y1 - y0) * (r_o - self.c0) / self.yellow_w, t_r)
-            return self.asphalt(z, r, X, r_o, xp_x, t_e, t_x, t_r, r_e)
+            return self.ring(z, r, X, Zb, r_o, t_r, lambda: self.asphalt(z, r, X, r_o, xp_x, t_e, t_x, t_r, r_e))
         if in_e:
             if self.asph_in[0] <= xp_e <= self.asph_in[1]:
                 return self.asphalt(z, r, X, r_o, xp_x, t_e, t_x, t_r, r_e)
@@ -197,6 +196,23 @@ class PinwheelRoundabout:
             return S(z, r, xp_x, t_x)
         # splitter island: the ring's outer profile (edge line at its nose, gutter, sidewalk)
         return S(z, r, r_o, t_r)
+
+    def ring(self, z, r, X, Zb, r_o, t_r, asphalt):
+        """Inside ring_out: island, its yellow edge line, then the ring asphalt (asphalt() -> colour)."""
+        S = self.s
+        if r_o < self.c0:                                # island: gutter + apron (stock outer edge profile),
+            xp = r_o - self.c0 + self.gutter_x           # then a curb ring and a raised concrete centre. The
+            if xp >= self.gutter_x - 4.0 - self.curb:    # engine draws no terrain under this piece (measured:
+                return S(z, r, xp, t_r)                  # transparent pixels show the previous frame), so the
+            r_in = self.c0 - 4.0 - self.curb             # whole island is painted
+            if r_o >= r_in - self.inner_curb:
+                return S(z, r, self.gutter_x - 3.0, t_r)
+            # the stock sidewalk band (x' 10..24) tiled straight across the centre: no radial streaks
+            return S(z, r, 10.0 + (Zb % 14.0), X)
+        if r_o < self.c0 + self.yellow_w:                # single yellow edge line round the island
+            y0, y1 = self.yellow_xp
+            return S(z, r, y0 + (y1 - y0) * (r_o - self.c0) / self.yellow_w, t_r)
+        return asphalt()
 
     def asphalt(self, z, r, X, r_o, xp_x, t_e, t_x, t_r, r_e):
         """Stock lane shade of the nearest lane centre line, read on that band's own profile."""

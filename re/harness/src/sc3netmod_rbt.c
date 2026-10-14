@@ -25,6 +25,12 @@
  * the stock tiler re-places the cells as it would for road; any later retile that reaches the block does the same.
  * Save: SAVEBASE writes the stock id of each cell (39, or 11203 for a cell without an arm), not just the base id.
  * Off: SC3NETMOD_RBT=0 (whole block), SC3NETMOD_RBT_LOAD=0 (no pass after a load).
+ *
+ * Task roundabout4: `rbt <piece> <min_arms> <closed>` names a second variant of T 39 for the quarter whose exit holds
+ * no road (art closed on that side, lanes only round the ring). Each block cell then becomes <piece> when its exit
+ * holds road and <closed> when it does not, in the cell's own state; (a) counts either piece as either stock tile.
+ * <closed> is always saved as curve 11203 (it only ever sits on an arm-less quarter). Without the third number the
+ * block behaves as in roundabout3 (every quarter <piece>).
  */
 
 #define RB_WM (WM_APP + 0x5D1)
@@ -33,7 +39,7 @@ typedef void (__fastcall *PFN_Pass)(void *mgr, void *edx, DWORD list, int net, i
 typedef char (__fastcall *PFN_At)(void *lay, void *edx, int x, int z, void **out);          /* layer vt+0x7c ret 0xc */
 typedef char (__fastcall *PFN_Load)(void *mgr, void *edx, void *p1, void *p2);              /* FUN_100130e9 ret 8 */
 
-static WORD g_rb_piece;
+static WORD g_rb_piece, g_rb_closed;          /* g_rb_closed: arm-less quarter piece, 0 = none (roundabout4) */
 static int g_rb_min = 3, g_rb_on;
 static BYTE *g_rb_m;
 static DWORD g_rb_msize;
@@ -58,18 +64,23 @@ static void rb_file(const char *path) {
     FILE *f = fopen(path, "r");
     if (!f) return;
     while (fgets(line, sizeof(line), f)) {
-        unsigned long p, n;
+        unsigned long p, n, c = 0;
+        int k;
         if (strncmp(line, "rbt ", 4)) continue;
-        if (sscanf(line + 4, "%lu %lu", &p, &n) != 2 || !p || p > 0xffff || n < 1 || n > 4 || g_base[p] != 39) {
+        k = sscanf(line + 4, "%lu %lu %lu", &p, &n, &c);
+        if (k < 2 || !p || p > 0xffff || n < 1 || n > 4 || g_base[p] != 39 ||
+            (k == 3 && (!c || c > 0xffff || c == p || g_base[c] != 39))) {
             logf("### rbt: %s: bad line or piece not a variant of T 39: '%s'", path, line);
             continue;
         }
+        if (k < 3) c = 0;
         if (g_rb_piece && g_rb_piece != (WORD)p) {
             logf("### rbt: %s: a second roundabout piece %lu (already %u) - ignored", path, p, g_rb_piece);
             continue;
         }
-        g_rb_piece = (WORD)p; g_rb_min = (int)n;
-        logf("rbt: %s: automatic 2x2 roundabout = piece %lu, at least %lu arm(s)", path, p, n);
+        g_rb_piece = (WORD)p; g_rb_min = (int)n; g_rb_closed = (WORD)c;
+        logf("rbt: %s: automatic 2x2 roundabout = piece %lu, at least %lu arm(s), arm-less quarter %lu%s", path, p, n,
+             c, c ? "" : " (none: every quarter is the piece)");
     }
     fclose(f);
 }
@@ -103,7 +114,8 @@ static int rb_check(RbBuf *b, int X, int Z, const char **why) {
     DWORD c[4];
     for (k = 0; k < 4; k++) {
         DWORD v = rb_at(b, X + RB_CELL[k][0], Z + RB_CELL[k][1]), id = v & 0xffff;
-        if (!v || (int)((v >> 16) & 3) != RB_CELL[k][2] || (id != 39 && id != 11203 && id != g_rb_piece)) {
+        if (!v || (int)((v >> 16) & 3) != RB_CELL[k][2] ||
+            (id != 39 && id != 11203 && id != g_rb_piece && (!g_rb_closed || id != g_rb_closed))) {
             *why = "a"; return -1;
         }
         c[k] = id;
@@ -150,23 +162,26 @@ static void rb_run(BYTE *mgr, int ox0, int oz0, int ox1, int oz1, const char *wh
         for (x = ox0; x <= ox1; x++) {
             const char *why = "";
             int arms = rb_check(&b, x, z, &why), need = 0;
+            WORD want[4];
             if (arms < 0) continue;
             q[(z - oz0) * (ox1 - ox0 + 1) + (x - ox0)] = 1;
             nq++;
             for (k = 0; k < 4; k++) {
                 int cx = x + RB_CELL[k][0], cz = z + RB_CELL[k][1], s = RB_CELL[k][2];
                 int has = rb_at(&b, x + RB_EXIT[s][0], z + RB_EXIT[s][1]) != 0;
-                if ((rb_at(&b, cx, cz) & 0xffff) != g_rb_piece) need = 1;
+                want[k] = (has || !g_rb_closed) ? g_rb_piece : g_rb_closed;     /* roundabout4: arm-less quarter */
+                if ((rb_at(&b, cx, cz) & 0xffff) != want[k]) need = 1;
                 if (g_rb_stock && cx < 1024 && cz < 1024) g_rb_stock[cz * 1024 + cx] = has ? 1 : 2;
             }
             if (!need) continue;
             for (k = 0; k < 4; k++) {
                 int pos[3];
                 pos[0] = (x + RB_CELL[k][0]) << 8; pos[1] = (z + RB_CELL[k][1]) << 8; pos[2] = 0;
-                ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, lay, pos, ((DWORD)g_rb_piece << 8) | RB_CELL[k][2], -1, 8, 0);
+                ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, lay, pos, ((DWORD)want[k] << 8) | RB_CELL[k][2], -1, 8, 0);
             }
             nconv++;
-            logf("rbt: %s: (%d,%d) -> roundabout, %d arm(s)", who, x, z, arms);
+            logf("rbt: %s: (%d,%d) -> roundabout, %d arm(s): %u %u / %u %u", who, x, z, arms, want[0], want[1], want[3],
+                 want[2]);
         }
     /* 20400 cells of blocks (origin in range) that do not qualify: back to the stock tiles */
     for (z = oz0; z <= oz1; z++)
@@ -175,7 +190,8 @@ static void rb_run(BYTE *mgr, int ox0, int oz0, int ox1, int oz1, const char *wh
             if (q[(z - oz0) * (ox1 - ox0 + 1) + (x - ox0)]) continue;
             for (k = 0; k < 4 && !found; k++) {
                 DWORD v = rb_at(&b, x + RB_CELL[k][0], z + RB_CELL[k][1]);
-                found = (v & 0xffff) == g_rb_piece && (int)((v >> 16) & 3) == RB_CELL[k][2];
+                found = ((v & 0xffff) == g_rb_piece || (g_rb_closed && (v & 0xffff) == g_rb_closed)) &&
+                        (int)((v >> 16) & 3) == RB_CELL[k][2];
             }
             if (!found) continue;
             rect[0] = x << 8; rect[1] = z << 8; rect[2] = 0; rect[3] = (x + 1) << 8; rect[4] = (z + 1) << 8; rect[5] = 0;
@@ -266,9 +282,11 @@ static LRESULT CALLBACK rb_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     return CallWindowProcA(g_rb_oldproc, h, m, wp, lp);
 }
 
-/* SAVEBASE: the stock id of a roundabout cell (39, or 11203 where the cell has no arm) */
+/* SAVEBASE: the stock id of a roundabout cell (39, or 11203 where the cell has no arm; the arm-less quarter piece
+   is always 11203) */
 static WORD rb_save_id(DWORD w0, WORD id) {
     DWORD x = w0 & 0x7ff, z = (w0 >> 11) & 0x7ff;
+    if (g_rb_on && g_rb_closed && id == g_rb_closed) return 11203;
     if (!g_rb_on || id != g_rb_piece || !g_rb_stock || x >= 1024 || z >= 1024) return 0;
     return g_rb_stock[z * 1024 + x] == 2 ? 11203 : 0;
 }
@@ -325,8 +343,8 @@ static int rbt_install(BYTE *m) {
         return 0;
     }
     g_rb_on = 1;
-    logf("rbt: hooked the retile pass FUN_1001547b (entry) and the city load (manager vt+0x1c); piece %u, min %d arm(s)",
-         g_rb_piece, g_rb_min);
+    logf("rbt: hooked the retile pass FUN_1001547b (entry) and the city load (manager vt+0x1c); piece %u, min %d arm(s), "
+         "arm-less quarter %u", g_rb_piece, g_rb_min, g_rb_closed);
     return 1;
 }
 

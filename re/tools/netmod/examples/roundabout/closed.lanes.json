@@ -1,0 +1,24 @@
+{
+ "piece": 20401,
+ "states": [0, 1, 2, 3],
+ "flag": 1,
+ "vehicle": {
+  "class": "car",
+  "lanes": [
+   {"from": "x- 1", "to": "z+ 2", "path": 1024}
+  ]
+ },
+ "pedestrian": {
+  "walks": [
+   {"from": [15, 15], "to": [240, 240], "path": 768}
+  ],
+  "exits": [
+   {"at": [15, 15], "code": 0},
+   {"at": [240, 240], "code": 24}
+  ]
+ },
+ "connects": {
+  "road": "auto"
+ },
+ "_comment": "Task roundabout4: the quarter of a 3-arm automatic roundabout whose exit holds no road (state 0 frame, as quarter.lanes.json: block centre at the corner (x 0, z 255), x- and z+ are the neighbouring quarters, z- is where the arm would be, x+ the closed side). Cars: only the ring, x- (0,80) -> z+ (175,255), path 1024, radius 175 (the 20400 ring lane; stock curve 11203 state 0 drives the same curve, one way here). No entry, no exit. Pedestrians: the outer sidewalk round the ring, (15,15) -> (240,240) path 768, which is stock curve 11203 state 0's walk; exits (15,15) to x- and (240,240) to z+, the points the neighbouring 20400 quarters' walks end on. Nothing leaves through z-."
+}
