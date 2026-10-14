@@ -34,11 +34,15 @@ parallel road one cell away (no junction) and the cell itself.
 Quirk (stock): a road node entered from a lot has its cell marked with 0x80, not 1, so the ring scan offers its own
 centre; the copy gets entry side 2 (same rect -> the else branch at `0x100083e4`). Harmless in stock (one extra step).
 
-## 2. Stock matrices vs today's router (measured, `SC3NETMOD_LANEDENSITY=count`)
+## 2. Stock matrices vs today's router (measured, `SC3NETMOD_LANEDENSITY=count`, RESULTS arm S_cnt)
 
-See RESULTS.md arm S_cnt. Honouring the stock matrices would change stock routing (steps the matrix forbids, entries
-through sides with no lane), so the default honours only netmod VARIANT ids (`g_base`, the tables of installed
-packs); `SC3NETMOD_LANEDENSITY=all` honours every piece.
+Berlin, about 80 s of play: 2,216,925 road steps on pieces with lane data; the piece's own matrix forbids 99,361
+(4.5%), and 134,605 (6.1%) entered the piece through a side whose row is empty. Mostly Avenue 11204 (the router steps
+sideways between an avenue's two cells, the matrix is a straight's: 61,682 + 105,096 of 404,335), T 39 (entries
+through the closed side) and curve 11203. So honouring the stock matrices would change stock routing. Default:
+honour only netmod VARIANT ids (`g_base`, the tables of installed packs); `SC3NETMOD_LANEDENSITY=all` honours every
+piece. A variant clone of a stock piece (blue road 20029) is honoured too: on it, sideways hops to a parallel road
+stop.
 
 ## 3. The patch (sc3netmod LANEDENSITY)
 
@@ -61,6 +65,18 @@ packs); `SC3NETMOD_LANEDENSITY=all` honours every piece.
   marker grid); caches are written with interlocked operations; the per-thread list is TLS.
 - Logs every 10 s in sc3netmod.log: counters, and per variant cell the router steps by (entry side, exit side).
 
-## 4. Results
+## 4. Results (verify/lanedensity/RESULTS.md)
 
-See `verify/lanedensity/RESULTS.md`.
+- Stock city: per-tile density difference equal to the run-to-run noise (11.25-11.37 vs 11.54).
+- One-way piece and roundabout: 0 router steps and 0 final-path steps against the lanes with the block, 35-50% of
+  steps against them without it.
+- The AMOUNT of density on a busy one-way street does not change measurably (12-month sums inside the arm-to-arm
+  spread). The ring scan takes a road cell only while its congestion byte is below `DAT_1001f0c0` = 150, and those
+  cells sit at 120-150 in every arm; whether that cap is why is `[UNCERTAIN]`.
+- Cost: see RESULTS (c). The C wrapper alone cost +22% ms per trip on the 1024 city; v3 puts an asm filter in front.
+
+## 5. Open
+
+- Stations (flag 0x10) beside an honoured piece stay reachable from any side: lanes are not applied to mode changes.
+- `[UNCERTAIN]` the selection order of the ring scan (section 1 table) against PERFORMANCE.md Finding 22.
+- English-UK: the block passes `layer+0x54` as the game does for highways; an English-UK run was not done.
