@@ -113,3 +113,12 @@ Predictions:
   (157,46) = 0; final-path steps between roundabout cells against the ring order = 0.
 - P2_ctl: final-path steps inside the run in -x > 0 and >= 20% of all final-path steps inside the run; against the
   ring > 0.
+
+## Addendum 5 (2026-10-13, after P_off / P_on / P_off2, before the v3 arms)
+
+Perf result (c) failed: ms per trip P_off 0.04592, P_off2 0.04577 (0.3% apart), P_on 0.05599 (+22%), with 0 honoured
+evaluations: the cost is the C wrapper on every router step. P_cnt died at startup (another session's game started
+20 s before it) and is void. Build v3 (commit above) adds an asm filter at the entry that jumps to the game unless the
+node is a road / bus node on an honoured piece (trusted vtable -> piece id -> table), some thread holds refused
+transitions, or count mode. Semantics unchanged (the C path is the same). Re-run with v3: P_on3, P_off3, P_on4
+alternating (same criterion: within the off-off spread or <= +5%), then A1 and B2_on (+ ld_paths) for the record.
