@@ -193,3 +193,12 @@ scattered 1-px dots along the contour, before and after, because the 7-unit band
 Change: `give_way.r_z3 = [208, 222]` (netpaint reads a per-zoom band `r_z<zoom>`): a 14-unit band at zoom 3 only. Zoom
 4 frames are unchanged by it. Prediction for the rebuilt package (`af2_*`, same lab and camera): zoom 4 W, G, G'
 identical to `af_*`; zoom 3 G' paint fraction above 0.213 and runs 16..24; W 0 in all views; seams 1320 / 1320.
+
+## Addendum 4 (2026-10-14, before the run): load-time revert
+
+Not covered above: a saved roundabout that does not qualify when the city is opened (another rule version, or a
+roundabout2 template save). Test: the saved Moscow (`moscow_saved.sc3`, 12 cells in 0x4E56) opened with
+`SC3NETMOD_TABLE` = a table with `20400 39` and `rbt 20400 4` (4 arms required). Prediction: `all 12 variant tiles
+restored`; load pass `1 qualify, 0 converted, 2 reverted` with `-> stock retile` lines for (30,54) and (92,141);
+afterwards those two blocks read the shipped tiles (39.3 39.0 / 11203.2 39.1 and 11203.3 39.0 / 39.2 39.1) and
+(122,130) stays 20400; cells in the 10x10 boxes equal the shipped save.
