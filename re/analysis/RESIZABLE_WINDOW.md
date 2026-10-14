@@ -835,6 +835,12 @@ stretched to the client exactly like a player's picture. `SC3RESIZE_MENUBGSTOCK=
 (MENUBG off without a picture). A `menu_bg.bmp` that is present but not an uncompressed 24-bit BMP still turns
 MENUBG off, as before.
 
+**Owner calls 2026-10-14 (task menucrop, `verify/menucrop/`).** (1) The picture is CROPPED, not stretched: scaled to
+cover the client with its proportions kept, overflow cut evenly (maximized 3840x1984: source rows 169..917 of the
+owner's 1448x1086). `SC3RESIZE_MENUBGFIT=0` gives the old stretch. (2) A `menu_bg.bmp` that is present but unusable
+(not a BMP, not uncompressed 24-bit, truncated) now falls back to the stock picture like a missing one, so MENUBG stays
+on and the clicks stay right. This replaces the "still turns MENUBG off" sentence above.
+
 Measured 2026-10-11, 1680x979 client (maximized on a 1680x1050 display), instances `re\harness\inst_menubg*`:
 
 | arm | files beside the DLL | result |
