@@ -12,7 +12,8 @@ import collections
 import json
 
 COLS = ["day_aa4d", "issuer_97b9", "trip_6fe3", "trip_706a", "route_trip", "route_trip.arrive", "route_trip.fail",
-        "steps", "deposit_6edd", "stats_9242", "publish_93e9", "strt_c750", "veh"]
+        "steps", "deposit_6edd", "stats_9242", "publish_93e9", "strt_c750", "veh", "veh_update", "veh_delta",
+        "cam_hold_take", "cam_hold_release"]
 
 
 def load(path):
@@ -31,16 +32,18 @@ def load(path):
 
 
 def phases(ticks, skip):
-    order, per = [], collections.OrderedDict()
-    seen = collections.Counter()
+    """Phases in run order; a repeated label is a new phase (#k prefix)."""
+    per = collections.OrderedDict()
+    k, prev, n = 0, None, 0
     for r in ticks:
         ph = r["phase"]
-        seen[ph] += 1
-        if ph not in per:
-            per[ph] = []
-            order.append(ph)
-        if seen[ph] > skip:
-            per[ph].append(r)
+        if ph != prev:
+            k, prev, n = k + 1, ph, 0
+        n += 1
+        key = "%02d %s" % (k, ph)
+        per.setdefault(key, [])
+        if n > skip:
+            per[key].append(r)
     return per
 
 
@@ -68,10 +71,11 @@ def main():
     per = phases(ticks, a.skip)
     allrows = phases(ticks, 0)
     out = {"meta": meta, "phases": []}
-    hdr = "%-8s %4s %6s " % ("phase", "n", "bad") + " ".join("%12s" % c.replace("route_trip", "rt") for c in COLS)
+    hdr = "%-11s %4s %6s " % ("phase", "n", "bad") + " ".join("%12s" % c.replace("route_trip", "rt") for c in COLS)
     print(hdr)
     for ph, rows in per.items():
-        if ph in ("boot", "meta", "end") or ph.startswith("sw>"):
+        lab = ph.split(" ", 1)[1]
+        if lab in ("boot", "meta", "end") or lab.startswith("sw>"):
             continue
         sums = collections.Counter()
         for r in rows:
@@ -80,7 +84,7 @@ def main():
             sums["steps"] += r.get("steps", 0)
             sums["veh"] += r.get("veh", 0)
         n = len(rows)
-        bad = valid(ph, rows, meta and meta.get("game_tid"))
+        bad = valid(lab, rows, meta and meta.get("game_tid"))
         st0 = rows[0]["st"] if rows else {}
         st1 = rows[-1]["st"] if rows else {}
         rec = {"phase": ph, "n": n, "bad": bad, "sum": dict(sums),
@@ -107,7 +111,7 @@ def main():
                     rec["th." + key] = dict(b)
             rec["bt"] = [x for r in allrows[ph] for x in r.get("bt", [])]
         out["phases"].append(rec)
-        print("%-8s %4d %6d " % (ph, n, bad) + " ".join("%12d" % sums.get(c, 0) for c in COLS) +
+        print("%-11s %4d %6d " % (ph, n, bad) + " ".join("%12d" % sums.get(c, 0) for c in COLS) +
               "  hold%d clkp%d day %s->%s vehphase %s" % (rec["cam_hold_secs"], rec["clk_pause_secs"], rec["day0"],
                                                               rec["day1"], rec["veh_phase"]))
     if a.detail:

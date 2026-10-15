@@ -112,3 +112,24 @@ arms, schedule or predictions):
 - The summary reports backtraces from every second of a phase (the 3 per phase are taken in its first second, which
   the 3 s skip dropped), and a new per-phase count: distinct STRTSIM vehicles moved since the phase started (`vehp`).
 Smoke counts are not used in RESULTS beyond this note.
+
+## Addendum 2 (2026-10-15, after S1, during S2, before F1)
+
+S1 showed STRTSIM `FUN_1001c750` running at the same rate user-paused as running, on the game thread, and at 0 under
+the camera hold. Static read since: `FUN_1001c750` is reached from the per-vehicle update STRTSIM `FUN_1001d2c0`
+(adds its argument to vehicle `+0x30`, steps the animation frame, runs the behaviour `vt+0x14c` = `FUN_10019ab0`
+-> `FUN_1001b340` -> `FUN_1001c440` -> `FUN_1001c750`). The camera hold `FUN_100058ac` differs from the user pause
+`FUN_100056bb` by one call: `FUN_1000ee96()->vt+0x1c(1)` (released with `(0)` in `FUN_1000590e`); the user pause
+posts `0xc2a35d7f` instead [CONFIRMED @ SIMCITY 0x100058ac, 0x100056bb, 0x1000590e].
+
+Probe additions (no change to the trip hooks; S2 runs the probe of addendum 1): count `FUN_1001d2c0` and sum its
+argument (`veh_delta`), 2 FUZZY backtraces per phase; resolve the service of `FUN_1000ee96` once (getter called from
+the probe thread) and count its `vt+0x1c` calls by argument; count camera hold take / release (`FUN_100058ac`,
+`FUN_1000590e`) with the take's caller.
+
+New arm X (inst_pt_stock, Berlin), schedule `s3:60,P:60,s1:60,H:45,s3:30,PH:30,P:30`, then F1 with this probe.
+Predictions:
+9. `FUN_1001d2c0` calls per second in P within 25% of the s3 rate, and `veh_delta` per second in P within 25% of s3
+   (the vehicle update runs on real time, not sim days).
+10. In H and PH: `FUN_1001d2c0` = 0 after the first 3 s; `vt+0x1c(1)` once at the hold's start and `vt+0x1c(0)` once
+   at its end; camera hold take caller = SIMSPR 0x1004402e.

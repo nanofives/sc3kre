@@ -82,6 +82,33 @@ Interceptor.attach(A(ST, 0x1001c750), function () {
   bt('strt_c750', this.context);
 });
 
+
+// --- STRTSIM per-vehicle update FUN_1001d2c0 (thiscall vehicle, arg = time delta), addendum 2
+Interceptor.attach(A(ST, 0x1001d2c0), function (args) {
+  inc('veh_update'); inc('veh_delta', this.context.esp.add(4).readU32());
+  if (btLeft['veh_update']) {
+    btLeft['veh_update']--;
+    var f = Thread.backtrace(this.context, Backtracer.FUZZY).slice(0, 16).map(where);
+    BT.push({ fn: 'veh_update', tid: Process.getCurrentThreadId(), frames: f });
+  }
+});
+// camera-hold service: SIMCITY FUN_1000ee96() (cdecl getter) -> vt+0x1c(1) in FUN_100058ac / (0) in FUN_1000590e
+var svcInfo = null;
+function resolveSvc() {
+  if (svcInfo) return svcInfo;
+  try {
+    var get = new NativeFunction(A(SC, 0x1000ee96), 'pointer', []);
+    var o = get();
+    if (o.isNull()) return { err: 'null' };
+    var vt = o.readPointer(), f = vt.add(0x1c).readPointer();
+    svcInfo = { obj: o.toString(), vt: where(vt), slot1c: where(f) };
+    Interceptor.attach(f, function () { inc('svc1c_' + this.context.esp.add(4).readU32()); bt('svc1c', this.context); });
+  } catch (e) { svcInfo = { err: '' + e }; }
+  return svcInfo;
+}
+Interceptor.attach(A(SC, 0x100058ac), function () { inc('cam_hold_take'); incBy('cam_hold_take.caller', where(this.context.esp.readPointer())); });
+Interceptor.attach(A(SC, 0x1000590e), function () { inc('cam_hold_release'); });
+
 // --- state
 function rd32(p, o) { try { return p.add(o).readU32(); } catch (e) { return null; } }
 function rdp(p, o) { try { return p.add(o).readPointer(); } catch (e) { return null; } }
@@ -131,8 +158,8 @@ setInterval(function () {
 }, 1000);
 
 rpc.exports = {
-  config: function (c) { for (var k in c) cfg[k] = c[k]; attachUnsafe(); return cfg; },
-  phase: function (name) { VEHP = {}; vehpN = 0; btLeft = { trip_6fe3: cfg.bt_per_phase, trip_706a: cfg.bt_per_phase, strt_c750: cfg.bt_per_phase }; return name; },
+  config: function (c) { for (var k in c) cfg[k] = c[k]; attachUnsafe(); cfg.svc = resolveSvc(); return cfg; },
+  phase: function (name) { VEHP = {}; vehpN = 0; btLeft = { trip_6fe3: cfg.bt_per_phase, trip_706a: cfg.bt_per_phase, strt_c750: cfg.bt_per_phase, veh_update: 2, svc1c: 2 }; return name; },
   timers: function () { return timers(); },
   state: function () { return state(); }
 };
