@@ -122,3 +122,34 @@ evaluations: the cost is the C wrapper on every router step. P_cnt died at start
 node is a road / bus node on an honoured piece (trusted vtable -> piece id -> table), some thread holds refused
 transitions, or count mode. Semantics unchanged (the C path is the same). Re-run with v3: P_on3, P_off3, P_on4
 alternating (same criterion: within the off-off spread or <= +5%), then A1 and B2_on (+ ld_paths) for the record.
+
+## Addendum 6 (2026-10-15, session lanedensity2, before any Q arm)
+
+P_on3 / P_off3 / P_on4 (addendum 5) never ran the sim and are void (RESULTS, Deviations). A series "Q*" was started on
+2026-10-14 without being written here; none of it is used. This addendum registers its replacement.
+
+Setup (the 2026-10-13 tree no longer exists): tree `C:\Users\maria\Desktop\Proyectos\Simcity_stock_lanedensity2` =
+hard links of MAIN `Apps`, `Buildings`, `Cities`, `Scripts` (3,475 linked, release mod files skipped),
+`GZGraphicD.dll` / `SIMSPR.DLL` = `original\modules` copies, `*.ini/*.cfg/*.txt` in Apps / Cities de-linked. SHA-256
+prefixes: SC3U.exe 49dd55e1 (anchor), SIMNTWRK 693f6572, SimTransit b478ded4, GZGraphicD 48201f47, SIMSPR eec71500.
+Packages `example_oneway` (20430) and `example_roundabout` (20400) from this branch, overlay. DLLs = the 2026-10-13
+builds of this branch: sc3netmod v3 48bd8545, sc3perf 0c1d8b5f, sc3resize f7d307fd, sc3bigcity e12ce12c, mods_launch
+88f3a974; bigcity.ini of combo; perf.ini = combo's (same bytes as on 2026-10-13) with traffic_mt_smooth=0 (32328e3f).
+City `MAIN\verify\perf1024\europolis1024_v2_test.sc3` (9ce07478). Driver: load, dismiss tips, unpause, speed 3,
+300 s, kill by PID (same steps as the P arms), plus a census of SC3U processes every 10 s.
+
+Arms, in this order, one game at a time: Q_off1, Q_on1, Q_off2, Q_on2, Q_off3, Q_on3 (off = SC3NETMOD_LANEDENSITY=0,
+on = unset).
+
+Metric: ms per trip = routing ms / trips of the last `TRAFFIC_MT> N batches, T trips, R ms routing` line in sc3perf.log.
+
+Validity (decided before reading any metric): the census shows no SC3U process other than the arm's own at launch and
+at every sample, and T >= 500,000. An invalid arm is re-run at the end of the series and reported.
+
+Prediction (c), the bound of the PRE unchanged: every Q_on arm's ms per trip <= the largest Q_off value, or <= 1.05 x the
+mean of the Q_off values. Also reported: mean(Q_on) / mean(Q_off), and sc3perf faults (prediction: 0 in every arm).
+
+After the Q series, for the record (no bound): QB_off1, QB_on1, QB_off2, QB_on2, `berlin_lanes2.sc3` (rebuilt with
+the addendum 1 edits, diff = the same 15 tiles), 300 s, speed 3, same validity: the cost where pieces are honoured.
+
+If the bound is missed: a profiling run and any new build are registered here before they run.
