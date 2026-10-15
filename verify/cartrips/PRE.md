@@ -143,3 +143,25 @@ after its settle period (killed by PID; 31 lines, no counted phase). Change: whe
 viewport trips in a **virtual rect of Berlin's size (33 x 28 cells) centred on the view** (`view2` centre), written to
 the state as `vrect`. Arm **E2** = E's instance, city and schedule (`s3:120,s4:120,P:60`, `--safe`, settle 90 s) with
 this probe. On E2 only the trip-side columns are reported; the car side is Berlin's (S1 / S2).
+
+## Addendum 3 (2026-10-15, owner request "P1: freeze cars on pause, cars only", before arm FZ)
+
+Change: sc3simrun FREEZECARS (`re/harness/src/sc3simrun.c`, ini `[sim] freeze_cars_on_pause=1`, default on). The car
+vtable's Tick slot STRTSIM `0x1002ce20` (`FUN_1001d2c0`, checked against the shipped value before patching) is swapped
+for a thunk that returns 0 at once while city `+0x140` > 0 and the car's producer `+0x44` is the street sim's car
+producer (layer `+0x100`); otherwise it calls the original. Build: worktree `re/harness/build_ct/sc3simrun.dll` (cl
+/O2 /MT /GS-, the build_simrun.ps1 flags), hash in RESULTS.
+
+Arm **FZ**: instance `inst_ct_freeze` = mods_launch 059ae8df + sc3resize 43cb5059 + the new sc3simrun (default ini:
+run_while_scrolling=1, freeze_cars_on_pause=1); Berlin; probe `ct_probe.py` (all groups); schedule
+`s3:60,P:60,s3:60,P:30,s3:30`. Control = S1 / S2 (stock, same city and view).
+
+Predictions:
+- F1. In every P phase: car cell moves (`FUN_1001c750` successes) 0, NeedVehicleDisappear calls 0, removals 0 except
+  `view-update` / `produce-off` / `placement-failed` (none expected without camera moves), spawns 0, cars alive constant.
+  Control S1 / S2 paused: 44.1 / 41.2 moves/s, 3.21 / 3.18 removals/s.
+- F2. In every s3 phase: cell moves per second within 30% of S1 / S2's speed 3 (46.0 / 44.6).
+- F3. sc3simrun.log has `FREEZECARS: ... armed=1` and, at each pause edge, a frozen-tick count that grows only while
+  paused.
+- F4. 0 native faults; the game alive to the end.
+Not measured: trains, boats, planes and people (unchanged by construction, not probed).
