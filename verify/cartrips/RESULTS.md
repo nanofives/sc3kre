@@ -95,3 +95,33 @@ The first run phase's higher spawns and placement failures are the probe attachi
 placed (count 0 -> 145 in its first seconds). One second of the agent-loop timer in the 60 s pause reads 429,557 ms
 (an unmatched enter/leave in the probe's CModule timer); the other 59 read 51-70 ms. Not measured: trains, boats,
 planes, people (not patched).
+
+## Addendum 4: freeze all street animation on pause (arms FS street, FC cars)
+
+sc3simrun FREEZE (commit 6c49a04, build SHA-256 408194e5): the agent loop's tick call at SC3U `0x00425a99` skips agents
+of the frozen set while user-paused. Berlin, `s3:60,P:60,s3:60,P:30,s3:30`, first 3 s of each phase dropped. Agent
+Tick calls per second by class (`ticks` probe group); census in `data/HB_enum_running.json`; logs
+`data/FS_sc3simrun.log`, `data/FC_sc3simrun.log`; raw `inst_ct_freezes\FS.jsonl`, `inst_ct_freezec\FC.jsonl`.
+
+**FS, `freeze_on_pause=street` (the new default):**
+
+| phase | cars | trains | subway | people | boats | aircraft | other road | class 0x1002c19c | SIMSPR sprites | car moves/s | removals/s | spawns/s | agent-loop passes/s |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| speed 3 | 35,621 | 15,889 | 33,963 | 21,226 | 3,327 | 5,273 | 1,515 | 115 | 6,327 | 52.1 | 4.54 | 7.02 | 261 |
+| **pause 60 s** | **0** | **0** | **0** | **0** | **0** | **0** | **0** | **0** | 8,910 | **0** | **0** | **0** | 377 |
+| speed 3 | 36,716 | 36,348 | 42,312 | 24,948 | 5,006 | 5,348 | 2,338 | 403 | 6,507 | 41.9 | 3.26 | 3.18 | 275 |
+| **pause 30 s** | **0** | **0** | **0** | **0** | **0** | **0** | **0** | **0** | 9,349 | **0** | **0** | **0** | 391 |
+| speed 3 | 40,558 | 50,180 | 39,826 | 26,659 | 6,833 | 5,345 | 2,656 | 483 | 6,671 | 52.6 | 3.27 | 3.15 | 281 |
+
+**FC, `freeze_on_pause=cars`:** paused, cars 0 Ticks, 0 moves, 0 removals, 0 spawns (count flat at 115 and 113); trains
+37,711 / 47,845, subway 27,845 / 24,929, people 26,520 / 25,081, boats 9,251 / 9,564, aircraft 6,761 / 5,729 per
+second, all still ticking.
+
+| # | prediction | result |
+|---|---|---|
+| S1 | FS paused: every STRTSIM class 0; SIMSPR within 25% of s3; car moves, removals, spawns 0 | STRTSIM classes 0 (all nine, including `0x1002c19c`, which the census had not seen), car moves / removals / spawns 0: **met**. SIMSPR **not met as written**: +41% / +43% per second, because the agent loop ran 377-391 passes/s while paused against 261-281 running (frozen agents make a pass cheaper: 8-9 ms against 156-183 ms of loop time per second, probe included); per pass SIMSPR is unchanged (23.6-23.9 against 23.7-24.2 ticks). |
+| S2 | FC paused: cars 0; trains, subway, people within 25% of the s3 phases | cars 0: met. Against the mean of FC's three s3 phases: subway +8% / -2%, people +13% / +6%, trains +4% / +32%. **Trains miss in the 30 s pause**: train ticks rise through the run in both arms (FS running 15.9k -> 36.3k -> 50.2k; FC 20.5k -> 39.6k -> 48.4k), not tied to the pause. |
+| S3 | running: per-class rates and car moves within 30% of the first s3 phase | **not met for trains and boats** (the same rise through the run, both arms); car moves met in FS (41.9, 52.6 against 52.1), missed by 2 points in FC's last phase (33.9 against 49.9, -32%, with 98-107 cars against 115-145). 0 faults, both games alive to the end, `armed=1` in both logs: met. |
+
+The frozen-tick counts also grew during the pause the game loads with (FS: 5.85 M of 6.39 M agent ticks before the
+first unpause), so street animation now stays still from load until the first unpause, as it does in any later pause.

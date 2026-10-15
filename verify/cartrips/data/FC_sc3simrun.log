@@ -1,0 +1,10 @@
+[    0.737 ms][tid 3d90] ### sc3simrun loaded
+[   50.882 ms][tid 3854] ### READY: run_while_scrolling=1 patched=1 trace=0
+[   51.045 ms][tid 3854] ### FREEZE: freeze_on_pause=cars, armed=1
+[  315.221 ms][tid 3854] FREEZE> running: agent ticks 0, frozen 0
+[ 1875.285 ms][tid 3854] FREEZE> paused: agent ticks 0, frozen 0
+[66423.621 ms][tid 3854] FREEZE> running: agent ticks 4652308, frozen 0
+[127061.552 ms][tid 3854] FREEZE> paused: agent ticks 12121843, frozen 9085
+[187620.874 ms][tid 3854] FREEZE> running: agent ticks 21443927, frozen 2425350
+[248401.548 ms][tid 3854] FREEZE> paused: agent ticks 30056652, frozen 2435164
+[279059.079 ms][tid 3854] FREEZE> running: agent ticks 34777903, frozen 3527552
