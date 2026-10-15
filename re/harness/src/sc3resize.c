@@ -6281,6 +6281,81 @@ static void qi_install(HMODULE sui) {
         logf("QUERYID> on: \"Copiar ID\" button in the query (?) dialog");
 }
 
+/* FRAMEDUMP (diag, task hudclick 2026-10-15). SC3RESIZE_FRAMEDUMP=<abs prefix>: when the file <prefix>req exists, the
+ * next client-sized Blt onto the primary writes its source rect (the frame exactly as presented, after any HUDSCALE
+ * pass) to <prefix><tag>.bmp, tag = the first line of req (else a counter), and deletes req. A smaller Blt onto the
+ * primary writes its source surface's client area from (0,0) instead (some dialogs present only their own rect; that
+ * area then holds the HUD at native size). Desktop grabs cannot be used while the game window is not in the
+ * foreground: the game then presents white/black (verify/menucrop). */
+static char  g_fd_prefix[MAX_PATH];
+static DWORD g_fd_t, g_fd_n;
+static void rz_fd_maybe(void *self, const RECT *dr, void *src, const RECT *sr) {
+    char req[MAX_PATH + 8], tag[64], path[MAX_PATH + 80];
+    HANDLE f;
+    DWORD rd = 0, bpp, gmask, wr;
+    LONG pitch, sw, sh, w, h, x, y, rowb;
+    RECT cr, all;
+    int part;
+    BYTE *bits, *row;
+    BITMAPFILEHEADER bf;
+    BITMAPINFOHEADER bi;
+    if (rz_hs_is_screen(self) != 1 || GetTickCount() - g_fd_t < 50) return;   /* only Blts onto the primary count */
+    g_fd_t = GetTickCount();
+    wsprintfA(req, "%sreq", g_fd_prefix);
+    if (GetFileAttributesA(req) == INVALID_FILE_ATTRIBUTES || !GetClientRect(g_hwnd, &cr)) return;
+    part = dr->right - dr->left < cr.right || dr->bottom - dr->top < cr.bottom;
+    tag[0] = 0;
+    f = CreateFileA(req, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+    if (f != INVALID_HANDLE_VALUE) {
+        if (ReadFile(f, tag, sizeof(tag) - 1, &rd, NULL)) tag[rd] = 0;
+        CloseHandle(f);
+    }
+    for (x = 0; tag[x]; x++) if (tag[x] == '\r' || tag[x] == '\n') { tag[x] = 0; break; }
+    if (!tag[0]) wsprintfA(tag, "%03lu", g_fd_n);
+    g_fd_n++;
+    DeleteFileA(req);
+    bits = rz_hs_lock(src, &pitch, &bpp, &gmask, &sw, &sh);
+    if (bits && part) {   /* a partial present: the source surface's client-sized area from (0,0), HUD as drawn natively */
+        if (sw < cr.right || sh < cr.bottom) { logf("FRAMEDUMP> %s: partial present from a %ldx%ld surface, not dumped", tag, sw, sh);
+            ((RZ_UNLOCK)(*(DWORD **)src)[0x80 / 4])(src, NULL); return; }
+        all.left = 0; all.top = 0; all.right = cr.right; all.bottom = cr.bottom; sr = &all;
+    }
+    w = sr->right - sr->left; h = sr->bottom - sr->top;
+    if (!bits) { logf("FRAMEDUMP> %s: lock failed", tag); return; }
+    if (bpp != 16 || w <= 0 || h <= 0 || sr->left < 0 || sr->top < 0 || sr->right > sw || sr->bottom > sh) {
+        logf("FRAMEDUMP> %s: refused (bpp %lu, src [%ld %ld %ld %ld] of %ldx%ld)", tag, bpp, sr->left, sr->top, sr->right, sr->bottom, sw, sh);
+        ((RZ_UNLOCK)(*(DWORD **)src)[0x80 / 4])(src, NULL);
+        return;
+    }
+    rowb = (w * 3 + 3) & ~3;
+    row = (BYTE *)malloc(rowb);
+    wsprintfA(path, "%s%s.bmp", g_fd_prefix, tag);
+    f = row ? CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL) : INVALID_HANDLE_VALUE;
+    if (f != INVALID_HANDLE_VALUE) {
+        memset(&bf, 0, sizeof(bf)); memset(&bi, 0, sizeof(bi));
+        bf.bfType = 0x4d42; bf.bfOffBits = sizeof(bf) + sizeof(bi); bf.bfSize = bf.bfOffBits + rowb * h;
+        bi.biSize = sizeof(bi); bi.biWidth = w; bi.biHeight = h; bi.biPlanes = 1; bi.biBitCount = 24;
+        WriteFile(f, &bf, sizeof(bf), &wr, NULL); WriteFile(f, &bi, sizeof(bi), &wr, NULL);
+        memset(row, 0, rowb);
+        for (y = h - 1; y >= 0; y--) {
+            const WORD *p = (const WORD *)(bits + (sr->top + y) * pitch) + sr->left;
+            for (x = 0; x < w; x++) {
+                WORD v = p[x];
+                BYTE r, g, b;
+                if (gmask == 0x07E0) { r = (BYTE)((v >> 11) << 3); g = (BYTE)(((v >> 5) & 63) << 2); }
+                else { r = (BYTE)(((v >> 10) & 31) << 3); g = (BYTE)(((v >> 5) & 31) << 3); }
+                b = (BYTE)((v & 31) << 3);
+                row[x * 3] = b; row[x * 3 + 1] = g; row[x * 3 + 2] = r;
+            }
+            WriteFile(f, row, rowb, &wr, NULL);
+        }
+        CloseHandle(f);
+        logf("FRAMEDUMP> %s: %ldx%ld frame written to %s%s", tag, w, h, path, part ? " (partial present: source surface from (0,0), HUD native)" : "");
+    } else logf("FRAMEDUMP> %s: cannot write %s", tag, path);
+    free(row);
+    ((RZ_UNLOCK)(*(DWORD **)src)[0x80 / 4])(src, NULL);
+}
+
 static HRESULT WINAPI rz_blt_hook_inner(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, void *fx) {
     LARGE_INTEGER a, b;
     HRESULT hr;
@@ -6428,6 +6503,8 @@ static HRESULT WINAPI rz_blt_hook_inner(void *self, RECT *dr, void *src, RECT *s
                      (DWORD)self, dr->left, dr->top, dr->right, dr->bottom, (DWORD)src, (DWORD)g_hs_lastsrc);
         }
     }
+    if (g_fd_prefix[0] && dr && sr && src && g_hwnd && !IsBadReadPtr(dr, sizeof(RECT)) && !IsBadReadPtr(sr, sizeof(RECT)))
+        rz_fd_maybe(self, dr, src, sr);   /* FRAMEDUMP diag: the frame as it goes to the screen */
     QueryPerformanceCounter(&a);
     hr = g_orig_blt(self, dr, src, sr, fl, fx);
     QueryPerformanceCounter(&b);
@@ -11588,6 +11665,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_MLOG", v, sizeof(v))) g_hs_mlog = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_DIAG", v, sizeof(v))) g_hs_diag = atoi(v);
           GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_DUMP", g_hs_dump, sizeof(g_hs_dump));
+          GetEnvironmentVariableA("SC3RESIZE_FRAMEDUMP", g_fd_prefix, sizeof(g_fd_prefix));
           if (GetEnvironmentVariableA("SC3RESIZE_HUDFIX", v, sizeof(v))) g_hudfix = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_MINISMOOTH", v, sizeof(v))) g_hs_minismooth = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDPERF", v, sizeof(v))) g_hudperf = atoi(v);
