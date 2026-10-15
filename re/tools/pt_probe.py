@@ -51,7 +51,7 @@ Interceptor.attach(A(TR, 0x100070d0), {          // route_trip (thiscall layer)
   },
   onLeave: function (r) { inc((r.toInt32() & 0xff) ? 'route_trip.arrive' : 'route_trip.fail'); }
 });
-Interceptor.attach(A(TR, 0x100097b9), function () { inc('issuer_97b9'); });           // monthly per-building issuer
+Interceptor.attach(A(TR, 0x100097b9), function () { inc('issuer_97b9'); incTh('issuer_97b9', Process.getCurrentThreadId()); });           // monthly per-building issuer
 Interceptor.attach(A(TR, 0x100093e9), function () { inc('publish_93e9'); });          // monthly density publish
 
 var safeHooksDone = false;
