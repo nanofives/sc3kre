@@ -64,6 +64,12 @@ stop.
 - Threads: the visited grid and the node belong to the trip (sc3perf traffic_mt workers each have a shadow layer and
   marker grid); caches are written with interlocked operations; the per-thread list is TLS.
 - Logs every 10 s in sc3netmod.log: counters, and per variant cell the router steps by (entry side, exit side).
+- v3 (2026-10-13): an asm filter at the entry passes every call straight to the game's own code unless the node is a
+  road / bus node whose piece (trusted occupant vtable -> piece id) is honoured, some thread holds refused
+  transitions, or count mode is on.
+- ALT (2026-10-15, measurement aid): the export `sc3netmod_ld_set(0|1)` writes SimTransit's shipped bytes back at both
+  sites, or the detours again, with every other thread suspended and none inside the bytes written or the
+  trampoline. `ld_alt.py` uses it to compare stock and patched routing inside one game.
 
 ## 4. Results (verify/lanedensity/RESULTS.md)
 
@@ -73,10 +79,22 @@ stop.
 - The AMOUNT of density on a busy one-way street does not change measurably (12-month sums inside the arm-to-arm
   spread). The ring scan takes a road cell only while its congestion byte is below `DAT_1001f0c0` = 150, and those
   cells sit at 120-150 in every arm; whether that cap is why is `[UNCERTAIN]`.
-- Cost: see RESULTS (c). The C wrapper alone cost +22% ms per trip on the 1024 city; v3 puts an asm filter in front.
+- Cost (RESULTS (c)): no measurable routing time per trip on the 1024 city, measured in game with ALT (paired 30 s
+  windows, 20 minutes): v3 -3.7%, merged build -2.1% (bound +5%). Between separate games the same measure falls in
+  two states, ~0.05 and ~0.11-0.13 ms per trip, in either condition, so a single game per condition cannot resolve a
+  few percent (what sets the state was not found). v2's +22% was such a comparison and was not re-measured.
+- With RBT (round/1012): RBT's 20400 / 20401 are variants, so they are honoured. Berlin's three automatic blocks: 0
+  final-path ring steps against the ring with the block, 636 without; nothing enters or leaves the 20401 quarter
+  either way. Package 4.0.0 runs the ring (X,Z) -> (X+1,Z) -> (X+1,Z+1) -> (X,Z+1), the reverse of the 2026-10-13
+  example package. Where pieces are honoured (Berlin with RBT blocks, berlin_lanes2) the paired cost read +2.8% and
+  +1.8% (record runs, small windows).
 
 ## 5. Open
 
 - Stations (flag 0x10) beside an honoured piece stay reachable from any side: lanes are not applied to mode changes.
 - `[UNCERTAIN]` the selection order of the ring scan (section 1 table) against PERFORMANCE.md Finding 22.
 - English-UK: the block passes `layer+0x54` as the game does for highways; an English-UK run was not done.
+- `ld_paths.py` needs `--mask 0x35` wherever another network (subway, highway) runs under the watched cells; without
+  it those deposits pair too (Berlin's subway under block (57,167)).
+- A startup death seen twice (game exits 0.2 s after start, VEH fault at sc3perf.dll+0x7963 reading a module's PE
+  header) is not traced `[UNCERTAIN]`.
