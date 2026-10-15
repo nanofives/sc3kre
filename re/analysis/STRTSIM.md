@@ -286,8 +286,11 @@ rva,subsystem,confidence,new_name,evidence
 - **Byte-packed date semantics** in `FUN_10009b35` are mechanically derived but the field
   ordering (which byte is year/month/day) is not proven against a real
   `SC3StrtSimLayer.INI` schedule. Missing evidence: a sample INI/PAK schedule block.
-- **63-byte table @ 0x10032660** (`"$$$$%%%%…////,,,,"`): purpose undetermined; reported
-  raw. Missing evidence: an xref reading it as an index/LUT (not located in functions read).
+- ~~**63-byte table @ 0x10032660**~~ RESOLVED 2026-10-15 (task cartrips): the vehicle sprite-frame offset table,
+  `sPitchAndOrientationOffset` `[LINUX-HINT]`. The car's Draw pair `FUN_100199b0` / `FUN_10019a30` and the frame
+  accessors `FUN_1001a950` / `FUN_1001aa10` / `FUN_1001aa80` / `FUN_1001ab60` / `FUN_1001ae30` index it with
+  `((DAT_1003265c[rotation] + car[+0x38]) & 0x1f) + car[+0x40] * 0x20` (orientation, pitch) and add the action
+  descriptor's frame and the zoom offset `DAT_1003320c[zoom]` `[CONFIRMED @ 0x100199b0]`.
 - ~~**The layer’s per-frame tick / simulate method**~~ RESOLVED 2026-10-15 (task pausetrips): the vehicles are
   driven per vehicle from SC3U.exe's heartbeat, not from a layer simulate slot. See section 8.
 - **External GZCLSID → owning module** mapping (§5). Missing evidence: cross-module
@@ -321,4 +324,7 @@ SIMSPR view tick `FUN_10042a95` -> `[view+0xb4]->vt+0x20` at `0x10042b04` -> SIM
 - Vehicles never deposit traffic density; density comes only from SimTransit trips (NET_LANES verdict table), which
   stop entirely while paused (`verify/pausetrips/RESULTS.md`).
 
-Still open: how vehicles are spawned and removed (the count on screen), and what `FUN_004758e3` reads.
+Still open: what `FUN_004758e3` reads. ~~How vehicles are spawned and removed~~ RESOLVED 2026-10-15 (task
+cartrips): the car producer (layer `+0x100`) keeps a density-derived count in a sim rect around the view, and cars
+are removed by a density test, a failed next-cell move, view changes and zoom; decoded and measured in
+`re/analysis/CAR_TRIPS.md` sections 1-2.
