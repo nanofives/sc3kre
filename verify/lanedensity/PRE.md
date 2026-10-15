@@ -153,3 +153,70 @@ After the Q series, for the record (no bound): QB_off1, QB_on1, QB_off2, QB_on2,
 the addendum 1 edits, diff = the same 15 tiles), 300 s, speed 3, same validity: the cost where pieces are honoured.
 
 If the bound is missed: a profiling run and any new build are registered here before they run.
+
+## Addendum 7 (2026-10-15, after the Q series, before any ALT or merge-check run)
+
+Q series result (all six arms valid by addendum 6): ms per trip off 0.04919 / 0.13377 / 0.05580, on 0.11240 / 0.05925 /
+0.11540. The bound as worded is met (every on arm <= the largest off arm), but the arms fall in two states, ~0.05 and
+~0.11-0.13, in both conditions (off-off spread 172%), so between-game comparison cannot resolve 5%. The lanedensity
+counters in the on arms read 0 evaluations (Europolis has no variant piece): the only work of the block there is the
+asm filter and the arrival wrapper. A passive CPU log (other processes' CPU every 10 s) was added from Q_on2 on and
+showed no outside load above 0.6 cores. The registered QB arms (record only) are dropped, not run: they would be the
+same between-game comparison.
+
+New measurement, ALT (in-game, paired). Build change: `sc3netmod_ld_set(int)` exported from sc3netmod (code in
+`sc3netmod_lanes.c`): 0 writes SimTransit's shipped bytes back at both patch sites (entry 0x1000755e, arrival call
+0x100071eb), 1 writes the detours again, with every other thread of the process suspended and the write retried until
+no thread's EIP is inside the bytes written or the trampoline. The stub and the C path are unchanged, so ON runs the
+same code as v3, and OFF runs SimTransit's own bytes (sc3netmod's install work having been done). Driver
+`re/tools/netmod/ld_alt.py`: reads sc3perf's trip counter and routing-ms double at each window edge (addresses taken
+from sc3perf's own log call, opcodes checked), switches with the export. Schedule: switch OFF, 60 s warm-up, then 10
+ABBA blocks (off on on off) of 30 s windows, 2 s settle after each switch excluded. Same launch / keys / census / CPU
+log as the Q arms, game at speed 3.
+
+Builds:
+- v3a = this branch at 0449aed (v3 code) with `sc3netmod_lanes.c` replaced by the ALT version (no other file changed);
+  sc3perf / sc3resize / sc3bigcity / mods_launch = the 2026-10-13 builds of addendum 6.
+- m1 = the merge of round/1012 (f3a129f) plus the ALT commit: sc3netmod and sc3resize built from it; sc3perf /
+  sc3bigcity / mods_launch = the same builds (their sources are identical between the two commits).
+
+ALT runs (one game at a time, nothing else heavy):
+| run | build | tree | city |
+|---|---|---|---|
+| ALT_v3_euro | v3a | Simcity_stock_lanedensity2 (addendum 6) | europolis1024_v2_test.sc3 |
+| ALT_v3_b2 (record) | v3a | same | berlin_lanes2.sc3 (one-way run + roundabout honoured in ON windows) |
+| ALT_m_euro | m1 | Simcity_stock_lanedensity2m (below) | europolis1024_v2_test.sc3 (RBT on: any qualifying block converted is honoured in ON windows) |
+| ALT_m_berlin (record) | m1 | same | berlin.sc3 (RBT converts its 2x2 blocks on load) |
+
+Metric: pooled ms per trip = sum of routing ms / sum of trips over the ON windows, divided by the same over the OFF
+windows. Also reported: the 10 per-block ratios (median, mean).
+Validity: census as in addendum 6; every switch logged by sc3netmod (`lanedensity: ALT ON|OFF`) with no `NOT switched`;
+trips > 0 in every window; the game alive at the end.
+Prediction (c), the +5% part of the PRE bound: pooled ON / OFF <= 1.05 for ALT_v3_euro and for ALT_m_euro. No bound
+for the two record runs. 0 sc3perf faults in all four.
+
+Merge check, tree `C:\Users\maria\Desktop\Proyectos\Simcity_stock_lanedensity2m`: built like addendum 6's, packages
+`roundabout` (4.0.0, examples/roundabout of the merged branch) and `example_oneway`, instances with the m1 DLLs and
+the addendum 6 perf.ini (smooth=1 for the probe arms, as the 2026-10-13 B arms) / perf_batch.ini (ALT). City
+`berlin.sc3` = stock Berlin (sha256 9932777587b602f1). Per arm: load, dismiss tips, `ld_probe.py --start 4 --months
+14` (as addendum 1 arms), sc3netmod.log counters.
+
+| arm | SC3NETMOD_LANEDENSITY | SC3NETMOD_RBT |
+|---|---|---|
+| MN1, MN2 | 0 | 0 |
+| MA1 | unset | 0 |
+| MR_ctl | count | unset (on) |
+| MR_on | unset | unset (on) |
+
+MR_ctl / MR_on also run `ld_paths.py` for 120 s from 10 s after the unpause on the cells of Berlin's three RBT blocks
+(29..30, 86..87), (57..58, 167..168), (145..146, 102..103) (roundabout4 RESULTS arm A).
+
+Predictions:
+- Stock preserved (merged build): MA1 vs MN1 mean |diff| per road tile and p99 <= 1.25 x MN1 vs MN2 (same metric as
+  (a)); MA1 counters: honoured steps 0, wrong-way 0, arrivals refused 0.
+- RBT in both MR arms: sc3netmod.log reports 3 qualifying blocks converted.
+- Router honours the RBT pieces: MR_on final paths: steps between two ring cells of a block against the ring order
+  ((X+1,Z) -> (X,Z) -> (X,Z+1) -> (X+1,Z+1) -> (X+1,Z) for anchor (X,Z); states 3/0/2/1 as placed by RBT, the same
+  layout whose lanes were checked in (b)) = 0 at every block; steps between the 20401 quarter and the outside cell
+  beyond its closed side = 0. MR_ctl: steps against the ring order > 0 summed over the three blocks. A block with no
+  final-path ring step in either arm is reported as carrying no traffic, not as evidence.
