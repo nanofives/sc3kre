@@ -50,6 +50,7 @@ SIDE_OF = {(-1, 0): 0, (0, -1): 1, (1, 0): 2, (0, 1): 3}
 SKIPC = 3          # cost per skipped route cell
 OFFC = 1           # cost per entry into a corridor cell that is not a route cell
 BACK = 2           # how far behind the reached route index a cell may lie
+WIDE_START = True  # w >= 1: start on any corridor cell around r0 too (the spawn lane is the mod's choice)
 
 
 class Graph:
@@ -324,7 +325,7 @@ def cheb(a, b):
     return max(abs(a[0] - b[0]), abs(a[1] - b[1]))
 
 
-def solve(G, r, rect, skipc=SKIPC, offc=OFFC, back=BACK, width=1, limit=200000):
+def solve(G, r, rect, skipc=SKIPC, offc=OFFC, back=BACK, width=1, limit=200000, wide_start=WIDE_START):
     free = 2 if width >= 1 else 1
     """corridor search (PRE addendum 1) -> dict(ok, path=[(x, z, node)], skipped, jmax, expanded, reason...)
 
@@ -352,18 +353,34 @@ def solve(G, r, rect, skipc=SKIPC, offc=OFFC, back=BACK, width=1, limit=200000):
             gcache[c] = G.at(c)[0]
         return gcache[c]
 
-    g0 = gat(cells[0])
-    if g0 is None:
-        return {"ok": False, "reason": "start-no-graph", "jmax": 0, "expanded": 0}
-    starts = [i for i in range(len(g0.cls)) if g0.cls[i] == 0]
-    if not starts:
-        return {"ok": False, "reason": "start-no-node", "jmax": 0, "expanded": 0}
+    # start cells: r0, then (wide_start, w >= 1) the corridor cells around r0 in dx, dz order, cost offc each
+    scells = [cells[0]]
+    if wide_start and width >= 1:
+        for dx in range(-width, width + 1):
+            for dz in range(-width, width + 1):
+                c = (cells[0][0] + dx, cells[0][1] + dz)
+                if c != cells[0] and c in M:
+                    scells.append(c)
     pq, best, prev, seq = [], {}, {}, 0
-    for n in starts:
-        s = (cells[0], n, 0)
-        best[s] = 0
-        heapq.heappush(pq, (0, seq, s))
-        seq += 1
+    nstart = 0
+    for c in scells:
+        g0 = gat(c)
+        if g0 is None:
+            continue
+        for n in range(len(g0.cls)):
+            if g0.cls[n] != 0:
+                continue
+            s = (c, n, 0)
+            d0 = 0 if c == cells[0] else offc
+            if d0 < best.get(s, 1e18):
+                best[s] = d0
+                heapq.heappush(pq, (d0, seq, s))
+                seq += 1
+                nstart += 1
+    if gat(cells[0]) is None and not nstart:
+        return {"ok": False, "reason": "start-no-graph", "jmax": 0, "expanded": 0}
+    if not nstart:
+        return {"ok": False, "reason": "start-no-node", "jmax": 0, "expanded": 0}
     jmax, expanded, goal = 0, 0, None
     fail_moves = collections.Counter()
     while pq:
@@ -475,14 +492,16 @@ def classify(G, r, jmax):
     """why a route has no lane path: the first step from route index jmax - 1 on that is not lane-linked, else a
     reversal (U-turn) after it, else 'turn'"""
     cells = r["cells"]
-    for i in range(max(0, jmax - 1), len(cells) - 1):
+    lo = max(0, jmax - 3)
+    for i in range(lo, len(cells) - 1):
         stt = step_status(G, cells[i], cells[i + 1])
         if stt not in ("linked", "same-cell"):
             return stt, i
-    for i in range(max(1, jmax - 1), len(cells) - 1):
-        a, b, c = cells[i - 1], cells[i], cells[i + 1]
-        if a != b and b != c and (c[0] - b[0], c[1] - b[1]) == (a[0] - b[0], a[1] - b[1]):
-            return "u-turn", i
+    d = [(cells[i + 1][0] - cells[i][0], cells[i + 1][1] - cells[i][1]) for i in range(len(cells) - 1)]
+    for i in range(lo, len(d)):
+        for q in range(i + 1, min(len(d), i + 4)):           # a step, then its opposite after <= 2 sideways steps
+            if d[q] == (-d[i][0], -d[i][1]) and all(d[m][0] * d[i][0] + d[m][1] * d[i][1] == 0 for m in range(i + 1, q)):
+                return "u-turn", i
     return "turn", jmax
 
 

@@ -266,7 +266,6 @@ static const int STEPX[8] = { -1, -1, 0, 1, 1, 1, 0, -1 }, STEPZ[8] = { 0, -1, -
 static void solve(const short (*cells)[2], int ncell, const short *rect, int width, SolveRes *R) {
     int k = ncell - 1, i, dx, dz, free = width >= 1 ? 2 : 1, goal = -1, c0, n0;
     DWORD seq = 0;
-    BYTE *g0;
     memset(R, 0, sizeof(*R));
     g_nc = 0; g_ns = 0; g_nh = 0;
     memset(g_chash, 0, sizeof(g_chash));
@@ -293,18 +292,30 @@ static void solve(const short (*cells)[2], int ncell, const short *rect, int wid
         }
         for (i = 0; i <= k; i++) { int ci = cell_find(cells[i][0], cells[i][1]); if (ci >= 0) g_c[ci].route = 1; }
     }
+    /* start cells: r0, then (w >= 1) the corridor cells around r0 in dx, dz order, cost OFFC each (ctm_lanes WIDE_START) */
     c0 = cell_find(cells[0][0], cells[0][1]);
-    g0 = c0 >= 0 ? cell_graph(c0) : NULL;
-    if (!g0) { R->reason = SR_START_NO_GRAPH; return; }
-    for (n0 = 0, i = 0; i < GN(g0); i++) {
-        int s;
-        if (NCLS(GNODE(g0, i)) != 0) continue;
-        s = st_get(c0, i, 0, 1);
-        g_s[s].cost = 0;
-        heap_push(0, seq++, s);
-        n0++;
-    }
-    if (!n0) { R->reason = SR_START_NO_NODE; return; }
+    n0 = 0;
+    for (dx = -1 - width; dx <= width; dx++)
+        for (dz = (dx < -width ? 0 : -width); dz <= (dx < -width ? 0 : width); dz++) {
+            int ci, s;
+            DWORD d0;
+            BYTE *gs;
+            if (dx < -width) ci = c0;                                     /* first pass: r0 itself */
+            else {
+                if (!width || (!dx && !dz)) continue;
+                ci = cell_find(cells[0][0] + dx, cells[0][1] + dz);
+                if (ci < 0 || !g_c[ci].mn) continue;
+            }
+            if (ci < 0 || !(gs = cell_graph(ci))) continue;
+            d0 = ci == c0 ? 0 : OFFC;
+            for (i = 0; i < GN(gs); i++) {
+                if (NCLS(GNODE(gs, i)) != 0) continue;
+                s = st_get(ci, i, 0, 1);
+                if (s < 0) { R->reason = SR_TOO_BIG; return; }
+                if (d0 < g_s[s].cost) { g_s[s].cost = d0; heap_push(d0, seq++, s); n0++; }
+            }
+        }
+    if (!n0) { R->reason = (c0 < 0 || !g_c[c0].g) ? SR_START_NO_GRAPH : SR_START_NO_NODE; return; }
     while (g_nh) {
         HeapE e = heap_pop();
         State *s = &g_s[e.s];

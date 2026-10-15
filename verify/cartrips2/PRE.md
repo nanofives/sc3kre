@@ -171,3 +171,16 @@ Predictions (M2):
 2. 0 faults, 0 graph faults (`fault=0` in `M2>`), budget_skipped <= 1% of routes in the Berlin-size arms.
 3. Measured only: per city the % exact / corridor / full / cov90, failure reasons with counts and places, solve
    time per route (median, p90, max), and in M2R the routes through 20400 / 20401 cells.
+
+## Addendum 2 (2026-10-15, during M2B on a3038ce4; before every other M2 arm)
+
+Offline on A1's Berlin trips (save graphs), the remaining corridor failures included routes on the "wrong half" of an
+avenue: the router walks one half, hops to the parallel half (no lane link), then turns where only that half connects.
+Where an M3 car starts is the mod's choice, so the solver may start on the parallel half.
+
+**Rule change (C and Python)**: for w >= 1 the start states are every class-0 node of r0 (cost 0) and then of each
+corridor cell within distance w of r0, in (dx, dz) order (cost +1, an off-route cell). w = 0 unchanged. Failure reason
+look-back: from route index jmax - 3; `u-turn` = a step followed by its opposite after at most two sideways steps.
+Build **7adfb2e2** (build_ct2m2b). M2B (a3038ce4, old start rule) is kept as a match test of that build only; every
+other M2 arm and F1 / F2 / C1 / C2 run on 7adfb2e2, and Berlin's M2 figures come from a new arm **M2B2** (same as M2B).
+Predictions unchanged.
