@@ -1,6 +1,6 @@
 {
- "_": "Closed roundabout quarter (20401), all 20 frames: procedural ground art from paint_closed.json (netpaint.py, NET_ART.md 11) on the frames of flat tile 39; transparent outside the ring's outer sidewalk.",
- "canvas": 39,
+ "_": "Closed roundabout quarter (20401), all 20 frames at stock curve 11203's frame sizes and anchors: procedural ground art from paint_closed.json (netpaint.py, NET_ART.md 11), transparent outside the ring's outer sidewalk.",
+ "canvas": 11203,
  "layers": [
   {
    "paint": "paint_closed.json"

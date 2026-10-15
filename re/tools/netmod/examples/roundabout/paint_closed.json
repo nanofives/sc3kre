@@ -1,5 +1,5 @@
 {
- "_": "Ground art of the closed quarter of a 3-arm automatic roundabout (piece 20401, task roundabout4): the 20400 quarter's ring and island, no arm, no entry / exit / splitter / give-way dashes; the ring's outer profile (edge line, gutter, sidewalk) runs on round the block centre to closed_out and the rest of the cell stays transparent, as stock curve 11203 state 0 does about the same centre. The variant's frame table carries the ground bit (art.ground_under), so the engine draws the terrain there. netpaint.py, NET_ART.md 11.",
+ "_": "Ground art of the closed quarter of a 3-arm automatic roundabout (piece 20401, task roundabout4): the 20400 quarter's ring and island, no arm, no entry / exit / splitter / give-way dashes; the ring's outer profile (edge line, gutter, sidewalk) runs on round the block centre to closed_out and the rest of the cell stays transparent, as stock curve 11203 state 0 does about the same centre. The variant's frame table carries the ground bit (art.ground_under), so the engine draws the terrain there. netpaint.py, NET_ART.md 11. Frames are written at stock curve 11203's frame sizes and anchors (frame_like), the geometry under which the engine draws the terrain under 11203 in every view (roundabout4 GR: with 39's full frames the terrain was missing in part of the cell in some views).",
  "kind": "pinwheel_roundabout",
  "source": 29,
  "canvas": 39,
@@ -29,5 +29,6 @@
  ],
  "arrows": [],
  "closed_mouth": true,
- "closed_out": 258
+ "closed_out": 258,
+ "frame_like": 11203
 }

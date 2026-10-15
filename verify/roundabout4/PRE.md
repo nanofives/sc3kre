@@ -117,3 +117,30 @@ variant tiles, 12 entries; the saved ids of (30,55) and (92,141) are 11203 (the 
 grow / shrink sequence.
 
 Anything not met is reported as not met; changes after this file are listed in RESULTS with the reason.
+
+## Addendum 1 (2026-10-14, after GR, before arms A, T, S, O)
+
+**GR not met as worded.** Measured on the first build (20401 drawn on T 39's full 128x64 frames, ground bit set):
+black 0.0 of G in all 48 views, but equal-to-stock 0.00 to 0.54. Two separate causes, found before any change:
+- **Holes.** In 15 of 48 views part of the closed quarter outside the curb was neither art nor terrain (back-buffer
+  pixels, up to 811 px at zoom 4; `rb_hole.py`: b > g + 8 and all channels < 130, inside the cell). Stock frames of
+  the same views: 0, except 3 px in one view. The W zoom-4 rotation-0 hole is stable (778 px in 5 shots after 4
+  different camera paths); the rotation-3 one depends on camera history (811, then 0). Stock 11203 (same draw bits
+  0xC0) never shows it. What differs is frame geometry: 11203 ships partial frames (zoom 4: 92x64 anchor (-36,31),
+  128x46 anchor (0,32) / (0,13)), 20401 had 39's full frames. Mechanism inside SIMSPR not traced `[UNCERTAIN]`.
+- **The equality bar was ill-posed.** Plain empty terrain cells away from any roundabout differ between the same two
+  games too: equal 0.06 to 1.0 per cell (5 cells, 3 views). Grass noise is not the same between two sessions, so
+  pixel equality with stock cannot test "terrain drawn".
+
+**Change.** netpaint `frame_like`: 20401's frames are written at stock 11203's size and anchor in every slot
+(`paint_closed.json` `"frame_like": 11203`, recipe canvas 11203, manifest `art.from` 11203: the variant's frame table
+is a copy of 11203's, flags 0xC0). The art is the same (the 39 silhouette decides which pixels are painted); 12 rim
+pixels at r ~258 in zoom 4 slot 3 fall outside 11203's rectangle and are dropped (opaque 3446 -> 3434). 20400
+untouched (0 of 20 frames differ). Installed tables: 20400 0x80, 20401 0xC0.
+
+**Replacement metrics for GR (stated here; H and green were measured on the rebuilt package's `mod2_*` frames before
+this addendum was written, so they are reported as observations, not as pre-registered results):** H = hole pixels in
+the closed cell, mod vs stock, every view; green = fraction of G that is green-dominant (g > r and g > b).
+
+**Predictions for the remaining arms, rebuilt package:** A, T, S, S0, S1 as in the main text (the art change does not
+touch the rule or lanes); 20400 cells unchanged; O pictures from `mod2_*` and new city frames.

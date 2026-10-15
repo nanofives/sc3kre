@@ -31,7 +31,7 @@
         "ENGLISH": "Rotonda (lado cerrado)"
       },
       "art": {
-        "from": 39,
+        "from": 11203,
         "recipe": "recipe_closed.json",
         "ground_under": true
       },

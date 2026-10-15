@@ -237,16 +237,24 @@ def paint(plan, out_dir, canvas=None, zooms=range(NA.ZOOMS)):
     sample = RoadSampler(plan.get("source", 29))
     model = KINDS[plan["kind"]](plan, sample)
     cv = NA.stock_frames(canvas or plan.get("canvas", NA.FULL_TILE_PIECE))
+    # task roundabout4: "frame_like": <piece> writes each frame at that piece's frame size and anchor (the canvas
+    # silhouette still decides which pixels are painted; pixels outside that piece's frame rectangle are dropped)
+    like = NA.stock_frames(plan["frame_like"]) if plan.get("frame_like") else None
     for z in zooms:
         for r in range(NA.ROTS):
-            im0, (L, T) = cv[(z, r)]
-            w, h = im0.size
+            im0, (L0, T0) = cv[(z, r)]
+            if like:
+                w, h = like[(z, r)][0].size
+                L, T = like[(z, r)][1]
+            else:
+                (w, h), L, T = im0.size, L0, T0
             out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
             mpx, opx = im0.load(), out.load()
             for y in range(h):
                 for xx in range(w):
-                    if mpx[xx, y][3] < 128:              # the canvas piece's own silhouette (diamond + rim)
-                        continue
+                    mx, my = xx - L + L0, y - T + T0         # the same screen point in the canvas frame
+                    if not (0 <= mx < im0.width and 0 <= my < im0.height) or mpx[mx, my][3] < 128:
+                        continue                         # the canvas piece's own silhouette (diamond + rim)
                     u, v = NA.unproject(z, xx + 0.5 - L, y + 0.5 - T)
                     u, v = NA.rot_uv(u, v, -r % 4)
                     # rim pixels (just outside the exact diamond) keep their unclamped position: the sampler
