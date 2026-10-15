@@ -104,3 +104,33 @@ per-frame, visibility is reported as UNKNOWN and only the cause and position of 
    arm. Checked on the samples (1 in 5 viewport trips), so this is a lower bound.
 
 Not predicted (measured only): the share of each removal cause, the share visible, rates of viewport trips per speed.
+
+## Addendum 1 (2026-10-15, after the smoke runs, before arms S1 / S2 / E)
+
+Smoke runs (Berlin, `inst_ct_stock`, files `smoke*.jsonl` in the instance folder) were tooling checks only. What they
+showed and what changed:
+
+- **Two of my probe versions killed the game** (both before any counted second): (1) CModule globals are read-only
+  once linked, so the first write from a hook faulted; every mutable object is now allocated by JS and passed in as an
+  `extern`. (2) A native (CModule) listener on the call instruction `0x100072f8` itself faults the game even with an
+  empty callback (sim thread, SIMRCI `0x100312f8` after a trip-from-cell call, its saved `edi` garbage), while a JS
+  listener at the same address runs. The final-path nodes are now taken at the **entry of the deque pop
+  `FUN_10009eed`**, counted only when the return address is `0x100072fd` (the call from the final-path loop); `ebx`
+  still holds the node copy there. Checked: 7,045 trips in 12 s at speed 4, the last popped node of every sample has
+  type 0x80 and the trips' type mix matches the code (road 1 dominant).
+- **Visibility accessor.** Of the four accessors registered, `0x1001a950` runs ~320 times per agent-loop pass (every
+  agent, every tick) and the other three never ran, so none is a visibility signal. The Windows Draw pair was then found:
+  `FUN_100199b0` (Draw at x, y; sprite attrib `vt+0x40`) and `FUN_10019a30` (Draw in a rect; `vt+0x3c`), both
+  skipping when car `+0x22` (the visible byte) is 0, as Linux `cSSVehicle::Draw` does with `this[0x22]`. The probe
+  now records accessors k = 0 `0x100199b0`, 1 `0x10019a30`, 2 `0x1001a950`, 3 `0x1001ae30`. Measured: k0 runs
+  ~15-23k times per second with ~120 cars alive (~70 per agent pass). **Visible removal is applied to k0 or k1
+  (Draw)**: drawn within the last 3 agent-loop passes, as registered; the distribution of passes since the last draw is
+  reported too, and a 250-pass (~1 s) window as a secondary figure.
+- **Every car's script is MoveNStages(10000, 0)** (all 1,000+ MoveNStages calls seen), so "stages done" is not a
+  practical end of life; removals without a mark are mostly not lifetime.
+- **Placement failures**: cars removed inside `FUN_1001f112` itself (backtrace through `0x1001609d` / `0x1001d618`),
+  age 0, never drawn. The probe tags removals inside `FUN_1001f112` as cause `placement-failed` (added to prediction 2's
+  list).
+- **Cars spawned before the probe attached** get a record on first sight (`tracked = false`, no age); their marks are
+  recorded. Removals with no mark and no context stay `no-mark`.
+- The exception handler that logs a native fault ignores `system` exceptions (driver OutputDebugString noise).

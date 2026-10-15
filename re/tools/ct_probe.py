@@ -10,8 +10,9 @@ CSRC = r"""
 #include <gum/guminterceptor.h>
 
 typedef unsigned int u32;
-extern int __stdcall QueryPerformanceCounter(long long *);
-extern long __stdcall InterlockedCompareExchange(volatile long *, long, long);
+typedef struct { long long ticks, t0; u32 calls; u32 acc_calls[4]; u32 rt_in, pop_in, pop_hit, noslot; } G;
+extern G g;
+extern int __attribute__((stdcall)) QueryPerformanceCounter(long long *);
 
 /* ---------- trip side: SimTransit route_trip FUN_100070d0, final-path pop at 0x100072f8 (ebx = node copy) ---------- */
 #define NSLOT 24
@@ -23,7 +24,7 @@ typedef struct {
 } Trip;
 typedef struct { int n, flag; short xs[MAXN], zs[MAXN]; unsigned char ts[MAXN]; } Sample;
 typedef struct {
-  volatile long tid;
+  volatile int tid;
   Trip t;
   u32 calls, arrived, nodes, flagged, vp, vpnodes, vpflag, roadonly, vproadonly, vpfirstin, vplastin;
   u32 nhist[8], vphist[8];
@@ -33,15 +34,23 @@ typedef struct {
   u32 sw;           /* samples written */
   Sample ring[SRING];
 } Slot;
-Slot slots[NSLOT];
-volatile int rect[4];       /* x0 z0 x1 z1 of the STRTSIM vehicle sim rect (layer +0xb0..+0xbc), set by JS */
-volatile int sample_every;  /* keep 1 viewport trip of every N per slot */
+/* CModule globals are read-only once linked: every mutable object is allocated by JS and passed in as extern */
+extern Slot slots[];
+extern volatile int rect[4];       /* x0 z0 x1 z1 of the STRTSIM vehicle sim rect (layer +0xb0..+0xbc), set by JS */
+extern volatile int sample_every;  /* keep 1 viewport trip of every N per slot */
+extern volatile u32 pop_ret;       /* runtime address of SimTransit 0x100072fd (return from the final-path pop call) */
+
+static int cas(volatile int *p, int old, int nw) {
+  int prev;
+  __asm__ __volatile__("lock; cmpxchgl %2, %1" : "=a"(prev), "+m"(*p) : "r"(nw), "0"(old) : "memory");
+  return prev;
+}
 
 static Slot *slot_of(u32 tid) {
   int i;
-  for (i = 0; i < NSLOT; i++) if (slots[i].tid == (long)tid) return &slots[i];
+  for (i = 0; i < NSLOT; i++) if (slots[i].tid == (int)tid) return &slots[i];
   for (i = 0; i < NSLOT; i++)
-    if (slots[i].tid == 0 && InterlockedCompareExchange(&slots[i].tid, (long)tid, 0) == 0) return &slots[i];
+    if (slots[i].tid == 0 && cas(&slots[i].tid, 0, (int)tid) == 0) return &slots[i];
   return 0;
 }
 
@@ -54,16 +63,24 @@ static int tclass(int ty) {
 }
 
 void rt_enter(GumInvocationContext *ic) {
-  Slot *s = slot_of(gum_invocation_context_get_thread_id(ic));
-  if (!s) return;
+  Slot *s;
+  g.rt_in++;
+  s = slot_of(gum_invocation_context_get_thread_id(ic));
+  if (!s) { g.noslot++; return; }
   s->t.n = 0; s->t.nin = 0; s->t.flag = 0; s->t.types = 0; s->t.active = 1;
   s->calls++;
   QueryPerformanceCounter(&s->t0);
 }
 
+/* hooked at the ENTRY of the deque pop FUN_10009eed (a native listener on the call instruction 0x100072f8 itself
+   faults the game, measured in the smoke run); only the call from the final-path loop (return 0x100072fd) counts. */
 void pop_node(GumInvocationContext *ic) {
-  Slot *s = slot_of(gum_invocation_context_get_thread_id(ic));
+  Slot *s;
   unsigned char *node, ty; int x0, z0, x1, z1, k;
+  g.pop_in++;
+  if (*(u32 *)ic->cpu_context->esp != pop_ret) return;
+  g.pop_hit++;
+  s = slot_of(gum_invocation_context_get_thread_id(ic));
   if (!s || !s->t.active) return;
   node = (unsigned char *)ic->cpu_context->ebx;
   x0 = *(int *)(node + 4); z0 = *(int *)(node + 8); x1 = *(int *)(node + 0xc); z1 = *(int *)(node + 0x10);
@@ -107,15 +124,14 @@ void rt_leave(GumInvocationContext *ic) {
 
 /* ---------- animation side ---------- */
 /* SC3U.exe FUN_00425a10: the heartbeat's agent loop (game thread), one call per heartbeat */
-long long ag_ticks, ag_t0; u32 ag_calls;
-void ag_enter(GumInvocationContext *ic) { QueryPerformanceCounter(&ag_t0); }
-void ag_leave(GumInvocationContext *ic) { long long t1; QueryPerformanceCounter(&t1); ag_ticks += t1 - ag_t0; ag_calls++; }
+/* G and g are declared at the top */
+void ag_enter(GumInvocationContext *ic) { QueryPerformanceCounter(&g.t0); }
+void ag_leave(GumInvocationContext *ic) { long long t1; QueryPerformanceCounter(&t1); g.ticks += t1 - g.t0; g.calls++; }
 
 /* STRTSIM vehicle sprite accessors (vtable at vehicle+0x1c): this = vehicle+0x1c. Per vehicle: last agent-loop
-   number at which accessor k ran (k = 0..3 for 0x1001ab60, 0x1001aa80, 0x1001a950, 0x1001aa10). */
+   number at which accessor k ran (k = 0..3 for 0x100199b0 Draw, 0x10019a30 Draw, 0x1001a950, 0x1001ae30). */
 #define HT 65536
-u32 hkey[HT]; u32 hlast[HT][4];
-u32 acc_calls[4];
+extern u32 hkey[]; extern u32 hlast[][4];
 static u32 *hfind(u32 key, int make) {
   u32 h = (key >> 3) * 2654435761u, i;
   for (i = 0; i < 64; i++) {
@@ -127,8 +143,8 @@ static u32 *hfind(u32 key, int make) {
 }
 static void acc(GumInvocationContext *ic, int k) {
   u32 *p = hfind(ic->cpu_context->ecx - 0x1c, 1);
-  acc_calls[k]++;
-  if (p) p[k] = ag_calls;
+  g.acc_calls[k]++;
+  if (p) p[k] = g.calls;
 }
 void acc0(GumInvocationContext *ic) { acc(ic, 0); }
 void acc1(GumInvocationContext *ic) { acc(ic, 1); }
@@ -143,6 +159,7 @@ void layout(int *o) {
   o[0] = sizeof(Slot); o[1] = (int)&s->calls; o[2] = (int)&s->nhist; o[3] = (int)&s->vphist; o[4] = (int)&s->typecnt;
   o[5] = (int)&s->ticks; o[6] = (int)&s->sw; o[7] = (int)&s->ring; o[8] = sizeof(Sample); o[9] = (int)&m->flag;
   o[10] = (int)&m->xs; o[11] = (int)&m->zs; o[12] = (int)&m->ts;
+  o[13] = (int)&((G *)0)->ticks; o[14] = (int)&((G *)0)->calls; o[15] = (int)&((G *)0)->acc_calls; o[16] = sizeof(G); o[17] = (int)&((G *)0)->rt_in;
 }
 """
 
@@ -162,9 +179,36 @@ function where(p) {
 function stva(p) { return 0x10000000 + p.sub(ST.base).toInt32(); }
 
 var k32 = mod('kernel32.dll');
+// report a native fault before the process dies (diagnosis only; the game's own handlers still run: return false)
+Process.setExceptionHandler(function (d) {
+  if (d.type === 'system') return false;   // OutputDebugString / C++ throws in the driver and the game: noise
+  try {
+    var c = d.context;
+    send({ t: 'fault', type: d.type, address: where(d.address), memory: d.memory ? { op: d.memory.operation, addr: d.memory.address.toString() } : null,
+           regs: { eax: c.eax.toString(), ebx: c.ebx.toString(), ecx: c.ecx.toString(), edx: c.edx.toString(), esi: c.esi.toString(), edi: c.edi.toString(), ebp: c.ebp.toString(), esp: c.esp.toString() },
+           bt: Thread.backtrace(c, Backtracer.FUZZY).slice(0, 12).map(where), tid: Process.getCurrentThreadId() });
+  } catch (e) {}
+  return false;
+});
+var GROUPS = '__CT_GROUPS__';   // replaced by ct_run.py (env CT_GROUPS), default all
+var HOOKS = [];
+function H(g, addr, cb) { HOOKS.push([g, addr, cb]); }
+var installed = false;
+function install() {
+  if (installed) return;
+  installed = true;
+  var on = GROUPS === 'all' ? null : GROUPS.split(',');
+  for (var i = 0; i < HOOKS.length; i++) if (!on || on.indexOf(HOOKS[i][0]) >= 0) Interceptor.attach(HOOKS[i][1], HOOKS[i][2]);
+  if (!on || on.indexOf('acc') >= 0) attachAcc();
+}
+var MEM = {
+  slots: Memory.alloc(512 * 1024), rect: Memory.alloc(16), sample_every: Memory.alloc(4), pop_ret: Memory.alloc(4), g: Memory.alloc(64),
+  hkey: Memory.alloc(65536 * 4), hlast: Memory.alloc(65536 * 16)
+};
+MEM.pop_ret.writeU32(A(TR, 0x100072fd).toUInt32());
 var cm = new CModule(CSRC, {
   QueryPerformanceCounter: k32.getExportByName('QueryPerformanceCounter'),
-  InterlockedCompareExchange: k32.getExportByName('InterlockedCompareExchange')
+  slots: MEM.slots, rect: MEM.rect, sample_every: MEM.sample_every, pop_ret: MEM.pop_ret, g: MEM.g, hkey: MEM.hkey, hlast: MEM.hlast
 });
 var accLast = new NativeFunction(cm.acc_last, 'uint32', ['uint32', 'int']);
 var accForget = new NativeFunction(cm.acc_forget, 'void', ['uint32']);
@@ -175,13 +219,13 @@ function inc(n, k) { C[n] = (C[n] || 0) + (k === undefined ? 1 : k); }
 function incBy(n, key, k) { var b = BY[n] || (BY[n] = {}); b[key] = (b[key] || 0) + (k === undefined ? 1 : k); }
 
 // ---------------- trip side (CModule) ----------------
-Interceptor.attach(A(TR, 0x100070d0), { onEnter: cm.rt_enter, onLeave: cm.rt_leave });
-Interceptor.attach(A(TR, 0x100072f8), { onEnter: cm.pop_node });
-Interceptor.attach(A(SC, 0x1000aa4d), function () { inc('day'); });
+H('rt', A(TR, 0x100070d0), { onEnter: cm.rt_enter, onLeave: cm.rt_leave });
+H('pop', A(TR, 0x10009eed), { onEnter: cm.pop_node });
+H('trip', A(SC, 0x1000aa4d), function () { inc('day'); });
 
 // ---------------- animation side ----------------
-Interceptor.attach(EXE.base.add(0x25a10), { onEnter: cm.ag_enter, onLeave: cm.ag_leave });
-var ACC = [0x1001ab60, 0x1001aa80, 0x1001a950, 0x1001aa10];
+H('ag', EXE.base.add(0x25a10), { onEnter: cm.ag_enter, onLeave: cm.ag_leave });
+var ACC = [0x100199b0, 0x10019a30, 0x1001a950, 0x1001ae30];   // Draw (x,y), Draw (rect), per-tick accessor, slot +0x30
 var accOn = false;
 function attachAcc() {
   if (accOn || !cfg.accessors) return;
@@ -197,16 +241,27 @@ function layer() {
   return LAYER;
 }
 
+var CTX = [];           // removal context stack (spawn / view update / produce off)
 var V = {};            // vehicle -> record
+// a car of the car producer seen first after the probe attached gets a record with t = null (untracked spawn)
+function getRec(v) {
+  var r = V[v];
+  if (r) return r;
+  layer();
+  try { if (!PROD || !ptr(v).add(0x44).readPointer().equals(PROD)) return null; } catch (e) { return null; }
+  r = V[v] = { t: null, cells: 0, stages: 0, N: null, mark: null, mt: 0 };
+  return r;
+}
 var nowMs = function () { return Date.now(); };
 var pendingSpawn = [];
 var PHASE = 'boot', REM = [], SPAWNS = [], CELLS = [], NS = {};
 
 // FUN_1001f112 PutVehiclesOnRoadTile(occ, n): this = producer. Caller 0x1001ef25 = Tick path (PutAVehicleInRect),
 // 0x1001f040 = PutVehiclesInRect (view change / produce state on).
-Interceptor.attach(A(ST, 0x1001f112), {
-  onEnter: function (a) { this.c = where(this.context.esp.readPointer()); pendingSpawn = []; },
+H('spawn', A(ST, 0x1001f112), {
+  onEnter: function (a) { this.c = where(this.context.esp.readPointer()); pendingSpawn = []; CTX.push('placement-failed'); },
   onLeave: function (r) {
+    CTX.pop();
     var n = r.toInt32();
     inc('spawn_calls'); incBy('spawn_by_caller', this.c, n);
     for (var i = 0; i < pendingSpawn.length; i++) {
@@ -222,7 +277,7 @@ Interceptor.attach(A(ST, 0x1001f112), {
   }
 });
 // FUN_1001c990 SetProducer(this = vehicle, producer)
-Interceptor.attach(A(ST, 0x1001c990), function (a) {
+H('spawn', A(ST, 0x1001c990), function (a) {
   layer();
   var pr = this.context.esp.add(4).readPointer();
   if (PROD && pr.equals(PROD)) {
@@ -234,17 +289,17 @@ Interceptor.attach(A(ST, 0x1001c990), function (a) {
   }
 });
 // FUN_1001b280 MoveNStages(N, range, action): this = vehicle
-Interceptor.attach(A(ST, 0x1001b280), function () {
+H('spawn', A(ST, 0x1001b280), function () {
   var sp = this.context.esp, N = sp.add(4).readS32(), rg = sp.add(8).readS32();
-  var v = this.context.ecx.toString(), rec = V[v];
+  var v = this.context.ecx.toString(), rec = getRec(v);
   incBy('movenstages', N + '/' + rg);
   if (rec) { rec.N = N; rec.rg = rg; }
 });
 // FUN_1001eec4 NeedVehicleDisappear(veh+0x18, u16 *counter): this = producer
-Interceptor.attach(A(ST, 0x1001eec4), {
+H('path', A(ST, 0x1001eec4), {
   onEnter: function () { this.v = this.context.esp.add(4).readPointer().sub(0x18).toString(); this.cp = this.context.esp.add(8).readPointer(); },
   onLeave: function (r) {
-    var rec = V[this.v]; inc('nvd_calls');
+    var rec = getRec(this.v); inc('nvd_calls');
     var c = this.cp.readU16();
     if (rec) rec.stages++;
     if (c > 0) inc('nvd_low');
@@ -254,10 +309,10 @@ Interceptor.attach(A(ST, 0x1001eec4), {
 
 // FUN_1001c440 SelectNextPath(this = vehicle, curPath, out): out = 0 -> no next path
 var cur = null;     // the c750 call in progress (game thread only)
-Interceptor.attach(A(ST, 0x1001c440), {
+H('path', A(ST, 0x1001c440), {
   onEnter: function () { this.v = this.context.ecx.toString(); this.out = this.context.esp.add(8).readPointer(); cur = { v: this.v, st: 'c440' }; },
   onLeave: function () {
-    var rec = V[this.v], st = cur; cur = null;
+    var rec = getRec(this.v), st = cur; cur = null;
     if (!rec) return;
     var p = this.out.readPointer();
     if (p.isNull()) {
@@ -267,10 +322,10 @@ Interceptor.attach(A(ST, 0x1001c440), {
     }
   }
 });
-Interceptor.attach(A(ST, 0x1001c290), { onLeave: function (r) { if (cur && cur.st === 'c440' && r.isNull()) cur.why = 'no-outgoing-edge'; } });
+H('path', A(ST, 0x1001c290), { onLeave: function (r) { if (cur && cur.st === 'c440' && r.isNull()) cur.why = 'no-outgoing-edge'; } });
 // FUN_1001c750 SelectPathFromConnectingNodeOnNextCell(x, z, edge, px, pz): this = vehicle
 var DX = [-1, -1, 0, 1, 1, 1, 0, -1], DZ = [0, -1, -1, -1, 0, 1, 1, 1];
-Interceptor.attach(A(ST, 0x1001c750), {
+H('path', A(ST, 0x1001c750), {
   onEnter: function () {
     var sp = this.context.esp, x = sp.add(4).readS32(), z = sp.add(8).readS32(), e = sp.add(12).readPointer();
     var code = e.add(0x16).readU8() >> 2;
@@ -291,8 +346,8 @@ Interceptor.attach(A(ST, 0x1001c750), {
       else if (c.nodeRes === 0) why = 'no-arrival-node-at-position';
       else why = 'arrival-node-edge-is-exit';
       c.why = why;
-      if (V[c.v] && CELLS.length < 3000) CELLS.push({ f: 1, x: c.x, z: c.z, nx: c.nx, nz: c.nz, why: why });
-    } else if (V[c.v]) {
+      if (getRec(c.v) && CELLS.length < 3000) CELLS.push({ f: 1, x: c.x, z: c.z, nx: c.nx, nz: c.nz, why: why });
+    } else if (getRec(c.v)) {
       inc('cell_moves'); V[c.v].cells++;
       if (CELLS.length < 3000) CELLS.push({ f: 0, x: c.nx, z: c.nz });
     }
@@ -300,21 +355,21 @@ Interceptor.attach(A(ST, 0x1001c750), {
     if (cur === null) cur = c;
   }
 });
-Interceptor.attach(A(ST, 0x10011e4e), { onLeave: function (r) { if (cur && cur.st === 'c750') cur.rectRes = r.toInt32() & 0xff; } });
-Interceptor.attach(A(ST, 0x1001ac90), { onLeave: function (r) { if (cur && cur.st === 'c750') cur.inclRes = r.toInt32() & 0xff; } });
-Interceptor.attach(A(ST, 0x10020108), { onLeave: function (r) { if (cur && cur.st === 'c750') cur.nodeRes = r.isNull() ? 0 : 1; } });
+H('path', A(ST, 0x10011e4e), { onLeave: function (r) { if (cur && cur.st === 'c750') cur.rectRes = r.toInt32() & 0xff; } });
+H('path', A(ST, 0x1001ac90), { onLeave: function (r) { if (cur && cur.st === 'c750') cur.inclRes = r.toInt32() & 0xff; } });
+H('path', A(ST, 0x10020108), { onLeave: function (r) { if (cur && cur.st === 'c750') cur.nodeRes = r.isNull() ? 0 : 1; } });
 
 // view / zoom contexts
-var CTX = [];
-Interceptor.attach(A(ST, 0x10015415), { onEnter: function () { CTX.push('view-update'); inc('view_update'); }, onLeave: function () { CTX.pop(); } });
-Interceptor.attach(A(ST, 0x100146b2), { onEnter: function () { CTX.push('produce-off'); inc('produce_off'); }, onLeave: function () { CTX.pop(); } });
+H('view', A(ST, 0x10015415), { onEnter: function () { CTX.push('view-update'); inc('view_update'); }, onLeave: function () { CTX.pop(); } });
+H('view', A(ST, 0x100146b2), { onEnter: function () { CTX.push('produce-off'); inc('produce_off'); }, onLeave: function () { CTX.pop(); } });
 
 // FUN_1001f610 VehicleDisappears(veh+0x18): this = producer. Every car removal passes here (vehicle Shutdown 0x1001c9e0).
 var btLeft = 0;
-Interceptor.attach(A(ST, 0x1001f610), function () {
+H('rem', A(ST, 0x1001f610), function () {
   layer();
   if (!PROD || !this.context.ecx.equals(PROD)) return;
   var vp = this.context.esp.add(4).readPointer().sub(0x18), v = vp.toString(), rec = V[v], now = nowMs();
+  var tracked = !!(rec && rec.t !== null);
   var ctx = CTX.length ? CTX[CTX.length - 1] : null;
   var cause = ctx ? ctx : (rec && rec.mark ? rec.mark : 'no-mark');
   inc('removed'); incBy('removed_by', cause);
@@ -322,7 +377,7 @@ Interceptor.attach(A(ST, 0x1001f610), function () {
   try { x = vp.add(0xc).readS32() >> 8; z = vp.add(0x14).readS32() >> 8; } catch (e) {}
   var u = vp.toUInt32(), last = [];
   for (var k = 0; k < 4; k++) last.push(accLast(u, k));
-  var r = { t: now, ph: PHASE, cause: cause, x: x, z: z, age: rec ? now - rec.t : null, cells: rec ? rec.cells : null,
+  var r = { t: now, ph: PHASE, cause: cause, tracked: tracked, x: x, z: z, age: tracked ? now - rec.t : null, cells: rec ? rec.cells : null,
             stages: rec ? rec.stages : null, N: rec ? rec.N : null, rg: rec ? rec.rg : null,
             mark_ms: rec && rec.mt ? now - rec.mt : null, mc: rec ? rec.mc : null, fx: rec ? rec.fx : null, fz: rec ? rec.fz : null,
             acc: last, ag: cmAg() };
@@ -331,7 +386,7 @@ Interceptor.attach(A(ST, 0x1001f610), function () {
   accForget(u);
   delete V[v];
 });
-function cmAg() { return cm.ag_calls.readU32(); }
+function cmAg() { return MEM.g.add(G_CALLS).readU32(); }
 
 // ---------------- state ----------------
 function rd32(p, o) { try { return p.add(o).readU32(); } catch (e) { return null; } }
@@ -367,7 +422,9 @@ function state() {
 
 // trip slots: offsets from the CModule itself
 var MAXN = 128, SRING = 8, NSLOT = 24;
-var LO = (function () { var o = Memory.alloc(64); new NativeFunction(cm.layout, 'void', ['pointer'])(o); var r = []; for (var i = 0; i < 13; i++) r.push(o.add(4 * i).readS32()); return r; })();
+var LO = (function () { var o = Memory.alloc(128); new NativeFunction(cm.layout, 'void', ['pointer'])(o); var r = []; for (var i = 0; i < 18; i++) r.push(o.add(4 * i).readS32()); return r; })();
+if (LO[0] * NSLOT > 512 * 1024 || LO[16] > 64) throw new Error('CModule layout larger than its buffers: ' + LO);
+var G_TICKS = LO[13], G_CALLS = LO[14], G_ACC = LO[15], G_RT = LO[17];
 var SLOT_SZ = LO[0], OFF_CNT = LO[1], OFF_NH = LO[2], OFF_VH = LO[3], OFF_TY = LO[4], OFF_TICKS = LO[5], OFF_SW = LO[6], OFF_RING = LO[7];
 var SAMPLE_SZ = LO[8], S_FLAG = LO[9], S_XS = LO[10], S_ZS = LO[11], S_TS = LO[12];
 var CNT = ['calls', 'arrived', 'nodes', 'flagged', 'vp', 'vpnodes', 'vpflag', 'roadonly', 'vproadonly', 'vpfirstin', 'vplastin'];
@@ -376,7 +433,7 @@ var lastSw = {};
 function readSlots() {
   var out = { by_thread: {} }, samples = [];
   for (var i = 0; i < NSLOT; i++) {
-    var b = cm.slots.add(i * SLOT_SZ), tid = b.readU32();
+    var b = MEM.slots.add(i * SLOT_SZ), tid = b.readU32();
     if (tid === 0) continue;
     var cur = { tid: tid }, k;
     for (k = 0; k < CNT.length; k++) cur[CNT[k]] = b.add(OFF_CNT + 4 * k).readU32();
@@ -401,12 +458,13 @@ var QPF = (function () { var f = Memory.alloc(8); new NativeFunction(k32.getExpo
 var prevAcc = [0, 0, 0, 0], prevAg = 0, prevAgT = 0;
 setInterval(function () {
   var s = state();
-  if (s.simrect) { for (var i = 0; i < 4; i++) cm.rect.add(4 * i).writeS32(s.simrect[i]); }
+  if (s.simrect) { for (var i = 0; i < 4; i++) MEM.rect.add(4 * i).writeS32(s.simrect[i]); }
   var sl = readSlots();
-  var accNow = [], agNow = cm.ag_calls.readU32(), agT = cm.ag_ticks.readS64().toNumber();
-  for (var k = 0; k < 4; k++) accNow.push(cm.acc_calls.add(4 * k).readU32());
+  var accNow = [], agNow = MEM.g.add(G_CALLS).readU32(), agT = MEM.g.add(G_TICKS).readS64().toNumber();
+  for (var k = 0; k < 4; k++) accNow.push(MEM.g.add(G_ACC + 4 * k).readU32());
   var accD = accNow.map(function (v, k) { return v - prevAcc[k]; });
-  send({ t: 'tick', c: C, by: BY, st: s, trips: sl.cum, samples: sl.samples,
+  var dbg = [0, 1, 2, 3].map(function (k) { return MEM.g.add(G_RT + 4 * k).readU32(); });
+  send({ t: 'tick', c: C, by: BY, st: s, trips: sl.cum, samples: sl.samples, dbg: dbg,
          ag: { calls: agNow - prevAg, ms: (agT - prevAgT) * 1000 / QPF }, acc: accD,
          rem: REM, spawns: SPAWNS, cells: CELLS });
   prevAcc = accNow; prevAg = agNow; prevAgT = agT;
@@ -416,10 +474,10 @@ setInterval(function () {
 rpc.exports = {
   config: function (c) {
     for (var k in c) cfg[k] = c[k];
-    cm.sample_every.writeS32(cfg.sample_every);
-    attachAcc();
+    MEM.sample_every.writeS32(cfg.sample_every);
+    install();
     layer();
-    return { cfg: cfg, qpf: QPF, slot_sz: SLOT_SZ, prod: PROD ? PROD.toString() : null, layer: LAYER ? LAYER.toString() : null };
+    return { groups: GROUPS, cfg: cfg, qpf: QPF, slot_sz: SLOT_SZ, prod: PROD ? PROD.toString() : null, layer: LAYER ? LAYER.toString() : null };
   },
   phase: function (name) { PHASE = name; btLeft = cfg.removal_bt; return name; },
   timers: function () { return null; },
