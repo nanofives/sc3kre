@@ -231,6 +231,12 @@ Run from `re/tools`, `SC3_GAME_ROOT` = a stock install.
 - **Lanes -> street sim (arm S).** T junction 39 without the lanes that start at its stem: successful vehicle entries
   through the stem fell from 93% (234 / 251) to 9% (32 / 352); the other two arms unchanged (99% / 95-98%).
 - **Demo (arm D)**: section 9.
+- **Direction of a one-way ring (roundabout2, 2026-10-13).** ENGLISH is right-hand traffic (road 29's lane at z 80
+  runs +x, and +x -> +z is counter-clockwise seen from above on screen, NET_ART.md 2). Round 1's 20400 ring used the
+  curve's INNER lane (radius 80, curve 768), which runs clockwise; roundabout2 uses the OUTER lane (curve 1024,
+  9 points, radius 175-176 about the block centre). Live: 78 ring moves counter-clockwise, 0 clockwise; vehicle
+  positions (STRTSIM vehicle +0x0c / +0x14, `rb_island.py`) never closer than 173 to the centre
+  (`verify/roundabout2/RESULTS.md`).
 
 SimTransit facts found on the way `[CONFIRMED @ SimTransit 0x10006edd, 0x100070d0]` + live:
 - Deposits: mask `& 0x35` -> `+0x6c`, `& 2` -> `+0x70`, `& 8` -> `+0x74`; the route driver passes 2 for highway nodes,

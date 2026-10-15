@@ -92,6 +92,21 @@
         "$ref": "#/$defs/template"
       },
       "description": "Multi-cell templates the player places in one click (task multitile): a fixed block of pieces that keeps its cells (Protected list) and connects to the networks around it. Guide: re/analysis/MULTITILE.md."
+    },
+    "auto_roundabouts": {
+      "type": "array",
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["piece"],
+        "properties": {
+          "piece": {"$ref": "#/$defs/piece_id", "description": "A ROAD variant of T 39 declared in this package, with art and lanes for the pinwheel states 3,0 / 2,1."},
+          "min_arms": {"type": "integer", "minimum": 1, "maximum": 4, "default": 3, "description": "Exits (one per block side) that must hold a single road."},
+          "closed_piece": {"$ref": "#/$defs/piece_id", "description": "Task roundabout4: another ROAD variant of T 39 in this package, placed (same state) on the quarter whose exit holds no road; art and lanes for a quarter without an arm. Absent: every quarter is `piece`."}
+        }
+      },
+      "description": "Task roundabout3: sc3netmod turns every qualifying 2x2 road block into this piece by itself (after each road retile and after a city load) and back into stock road when it stops qualifying. Rule: re/analysis/MULTITILE.md section 5. One piece across all installed packages."
     }
   },
   "$defs": {
@@ -166,6 +181,10 @@
         "first_pass": {
           "type": "boolean",
           "description": "artkit: set (true) or clear (false) the frame table's first-pass draw bit (header +0x12, 0x80). Road pieces ship it set: they draw before every other occupant, so art taller than the base frame gets its top overdrawn in some rotations. Clear it for pieces with tall props. NET_ART.md 8."
+        },
+        "ground_under": {
+          "type": "boolean",
+          "description": "roundabout4: set (true) or clear (false) the frame table's ground bit (header +0x12, 0x40). With it set the engine draws the cell's terrain under the piece (SIMSPR 0x100192aa -> 0x1001a303), so transparent pixels show grass; curve 11203 ships it set, road 29 and T 39 do not (their transparent pixels show the previous frame). NET_ART.md 11."
         },
         "recipe": {
           "type": "string",

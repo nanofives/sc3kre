@@ -3478,10 +3478,15 @@ static void rz_repaint_rci(void) {
  * No menu_bg.bmp (2026-10-11): the stock background itself is the picture, stretched the same way, so the
  * buttons keep native size and clicks land where they are drawn. SC3RESIZE_MENUBGSTOCK=0 keeps MENUBG off
  * without a menu_bg.bmp instead (the 2026-10-11 release behaviour: whole frame stretched, clicks off).
- * SC3RESIZE_MENUBG=0 disables it. MAIN.IXF unreadable: stock behaviour. */
+ * SC3RESIZE_MENUBG=0 disables it. MAIN.IXF unreadable: stock behaviour.
+ * Owner calls 2026-10-14 (task menucrop): a menu_bg.bmp that is present but unusable (not a BMP, not
+ * uncompressed 24-bit, truncated) falls back to the stock picture like a missing one, instead of turning MENUBG
+ * off. The picture is scaled to COVER the client keeping its proportions, the overflow cropped evenly on both
+ * sides (no distortion on a wide client). SC3RESIZE_MENUBGFIT=0 restores the plain stretch. */
 #pragma comment(lib, "gdi32.lib")   /* MENUBG uses GDI for the stretched margins */
 static int    g_menubg = 1;
-static int    g_menubg_stock = 1;         /* no menu_bg.bmp: stretch the stock background */
+static int    g_menubg_stock = 1;         /* no (or unusable) menu_bg.bmp: use the stock background */
+static int    g_menubg_fit = 1;           /* 1 cover + centre crop (keeps proportions), 0 plain stretch */
 static int    g_mb_state;                 /* 0 untried, 1 loaded, -1 failed */
 static BYTE  *g_mb_img;                   /* menu_bg.bmp pixel data */
 static BITMAPINFO g_mb_bi;
@@ -3499,6 +3504,7 @@ static volatile LONG g_mb_offx, g_mb_offy;
 static volatile DWORD g_mb_tick;          /* GetTickCount of the last centred present */
 static volatile LONG g_mb_dx0, g_mb_dy0;  /* dest origin of the last full present (client origin in dest space) */
 static volatile LONG g_mb_active;         /* 1 from a centred present until a full-window present of any other frame */
+static int    g_ms_valid;                 /* MENUSCALE: g_ms_f32 / g_ms_bg hold a whole frame and g_ms_out is composed from it */
 
 static void rz_mb_path(char *out, int cap, const char *leaf) {
     char *sl;
@@ -3609,10 +3615,32 @@ static WORD *rz_mb_stock_from_ixf(void) {
     return px;
 }
 
+/* The stock background as the picture: 565 to 24-bit, top-down (header comment above). */
+static int rz_mb_use_stock(void) {
+    BYTE *rgb = (BYTE *)malloc(NAT_W * NAT_H * 3);
+    LONG i;
+    if (!rgb) return 0;
+    for (i = 0; i < NAT_W * NAT_H; i++) {
+        WORD q = g_mb_orig[i];
+        BYTE r = (BYTE)(q >> 11), g = (BYTE)((q >> 5) & 0x3F), b = (BYTE)(q & 0x1F);
+        rgb[i * 3 + 0] = (BYTE)((b << 3) | (b >> 2));
+        rgb[i * 3 + 1] = (BYTE)((g << 2) | (g >> 4));
+        rgb[i * 3 + 2] = (BYTE)((r << 3) | (r >> 2));
+    }
+    g_mb_img = rgb;
+    memset(&g_mb_bi, 0, sizeof(g_mb_bi));
+    g_mb_bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    g_mb_bi.bmiHeader.biWidth = NAT_W; g_mb_bi.bmiHeader.biHeight = -NAT_H;   /* top-down */
+    g_mb_bi.bmiHeader.biPlanes = 1; g_mb_bi.bmiHeader.biBitCount = 24; g_mb_bi.bmiHeader.biCompression = BI_RGB;
+    g_mb_state = 1;
+    return 1;
+}
+
 static int rz_mb_load(void) {
     char path[MAX_PATH];
     BYTE *f;
     DWORD len = 0;
+    const char *why = NULL;
     if (g_mb_state) return g_mb_state > 0;
     g_mb_state = -1;
     g_mb_orig = rz_mb_stock_from_ixf();
@@ -3622,42 +3650,31 @@ static int rz_mb_load(void) {
     memcpy(g_mb_last, g_mb_orig, NAT_W * NAT_H * 2);
     rz_mb_path(path, sizeof(path), "menu_bg.bmp");
     f = rz_mb_readfile(path, &len);
-    if (!f && g_menubg_stock) {
-        /* No picture of the player's own: stretch the stock background itself, so the buttons still stay at
-           native size, centred, and clickable where they are drawn (header comment above). */
-        BYTE *rgb = (BYTE *)malloc(NAT_W * NAT_H * 3);
-        LONG i;
-        if (!rgb) return 0;
-        for (i = 0; i < NAT_W * NAT_H; i++) {
-            WORD q = g_mb_orig[i];
-            BYTE r = (BYTE)(q >> 11), g = (BYTE)((q >> 5) & 0x3F), b = (BYTE)(q & 0x1F);
-            rgb[i * 3 + 0] = (BYTE)((b << 3) | (b >> 2));
-            rgb[i * 3 + 1] = (BYTE)((g << 2) | (g >> 4));
-            rgb[i * 3 + 2] = (BYTE)((r << 3) | (r >> 2));
-        }
-        g_mb_img = rgb;
-        memset(&g_mb_bi, 0, sizeof(g_mb_bi));
-        g_mb_bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        g_mb_bi.bmiHeader.biWidth = NAT_W; g_mb_bi.bmiHeader.biHeight = -NAT_H;   /* top-down */
-        g_mb_bi.bmiHeader.biPlanes = 1; g_mb_bi.bmiHeader.biBitCount = 24; g_mb_bi.bmiHeader.biCompression = BI_RGB;
-        logf("MENUBG> %s missing - using the stock background stretched", path);
-        g_mb_state = 1;
-        return 1;
-    }
-    if (!f || len < 54 || f[0] != 'B' || f[1] != 'M') { logf("MENUBG> %s missing or not a BMP - off", path); free(f); return 0; }
-    {   BITMAPINFOHEADER *bh = (BITMAPINFOHEADER *)(f + 14);
+    if (!f) why = "missing";
+    else if (len < 54 || f[0] != 'B' || f[1] != 'M') why = "not a BMP";
+    else {
+        BITMAPINFOHEADER *bh = (BITMAPINFOHEADER *)(f + 14);
         DWORD off = *(DWORD *)(f + 10);
         LONG w = bh->biWidth, h = bh->biHeight < 0 ? -bh->biHeight : bh->biHeight;
         DWORD stride = ((DWORD)w * 3 + 3) & ~3u;
-        if (bh->biBitCount != 24 || bh->biCompression != BI_RGB || w <= 0 || h <= 0 || off + stride * h > len) {
-            logf("MENUBG> menu_bg.bmp must be an uncompressed 24-bit BMP - off"); free(f); return 0;
+        if (bh->biBitCount != 24 || bh->biCompression != BI_RGB || w <= 0 || h <= 0 || w > 0x4000 || h > 0x4000
+            || off > len || stride * h > len - off)
+            why = "not an uncompressed 24-bit BMP";
+        else {
+            g_mb_img = f + off;
+            memset(&g_mb_bi, 0, sizeof(g_mb_bi));
+            g_mb_bi.bmiHeader = *bh;
+            logf("MENUBG> loaded menu_bg.bmp %ldx%ld and the stock background", w, h);
+            g_mb_state = 1;
+            return 1;
         }
-        g_mb_img = f + off;
-        memset(&g_mb_bi, 0, sizeof(g_mb_bi));
-        g_mb_bi.bmiHeader = *bh;
-        logf("MENUBG> loaded menu_bg.bmp %ldx%ld and the stock background", w, h);
     }
-    g_mb_state = 1;
+    free(f);
+    if (!g_menubg_stock) { logf("MENUBG> %s %s - off (SC3RESIZE_MENUBGSTOCK=0)", path, why); return 0; }
+    /* No usable picture of the player's own: the stock background itself, so the buttons still stay at native
+       size, centred, and clickable where they are drawn. */
+    if (!rz_mb_use_stock()) return 0;
+    logf("MENUBG> %s %s - using the stock background", path, why);
     return 1;
 }
 
@@ -3681,9 +3698,21 @@ static int rz_mb_prepare(LONG cw, LONG ch) {
     g_mb_oldbmp = (HBITMAP)SelectObject(g_mb_dc, g_mb_bmp);
     SetStretchBltMode(g_mb_dc, HALFTONE);
     SetBrushOrgEx(g_mb_dc, 0, 0, NULL);
-    StretchDIBits(g_mb_dc, 0, 0, cw, ch, 0, 0, g_mb_bi.bmiHeader.biWidth,
-                  g_mb_bi.bmiHeader.biHeight < 0 ? -g_mb_bi.bmiHeader.biHeight : g_mb_bi.bmiHeader.biHeight,
-                  g_mb_img, &g_mb_bi, DIB_RGB_COLORS, SRCCOPY);
+    {   LONG iw = g_mb_bi.bmiHeader.biWidth;
+        LONG ih = g_mb_bi.bmiHeader.biHeight < 0 ? -g_mb_bi.bmiHeader.biHeight : g_mb_bi.bmiHeader.biHeight;
+        LONG sx0 = 0, sy0 = 0, sw = iw, sh = ih;
+        /* Cover: the source rect with the client's proportions, as large as fits, centred. The overflow is split
+           evenly, so a bottom-up BMP (whose source y counts from the bottom) crops the same way, within 1 px. */
+        if (g_menubg_fit) {
+            if ((__int64)iw * ch > (__int64)ih * cw) { sw = (LONG)((__int64)ih * cw / ch); sx0 = (iw - sw) / 2; }
+            else                                     { sh = (LONG)((__int64)iw * ch / cw); sy0 = (ih - sh) / 2; }
+            if (sw < 1) sw = 1;
+            if (sh < 1) sh = 1;
+        }
+        StretchDIBits(g_mb_dc, 0, 0, cw, ch, sx0, sy0, sw, sh, g_mb_img, &g_mb_bi, DIB_RGB_COLORS, SRCCOPY);
+        logf("MENUBG> %s source [%ld %ld %ld %ld] of %ldx%ld", g_menubg_fit ? "cover" : "stretch",
+             sx0, sy0, sx0 + sw, sy0 + sh, iw, ih);
+    }
     GdiFlush();
     g_mb_center = (WORD *)malloc(NAT_W * NAT_H * 2);
     if (!g_mb_center) return 0;
@@ -3737,6 +3766,7 @@ static void rz_mb_patch_src(void *src, const RECT *sr, LONG fx0, LONG fy0, LONG 
                 else g_mb_m_none++;
             }
         }
+        g_ms_valid = 0;   /* MENUSCALE: g_mb_last may have changed, so a cached class may be stale */
         if (g_mb_dbg_left > 0) {
             g_mb_dbg_left--;
             logf("MENUBG> swap %ldx%ld at (%ld,%ld) surf 0x%08lX: stock %ld, last %ld, other %ld (cache %ldx%ld)",
@@ -3791,6 +3821,347 @@ static int rz_menu_visible(void) {
     return 0;
 }
 
+/* MENUSCALE (task menuscale 2026-10-14, owner: "the main menu has to scale on the viewable 4:3 area, despite textures
+ * not scaling"). On a client larger than 800x600 the menu frame is no longer presented 1:1: it is scaled to the largest
+ * 4:3 rectangle that fits the client, centred (old art simply upscaled, accepted by the owner). Per present:
+ *   - the 800x600 source frame is READ (never written, unlike the 1:1 path) and every pixel classified as background
+ *     with the same test as rz_mb_patch_src: equal to the stock background, to what the 1:1 / native path last wrote,
+ *     or to the picture at 800x600 (g_mb_native);
+ *   - the rect is composed into a 32-bit DIB: each dest pixel resamples the frame (bilinear, or nearest with
+ *     SC3RESIZE_MENUSCALE_FILTER=0), and a tap on a background pixel takes the picture AT THE DEST PIXEL instead, so
+ *     the picture shows at client resolution behind the buttons and their edges blend into it;
+ *   - only the dest region fed by frame pixels that changed since the last present is recomposed;
+ *   - the rect and the margins (the cover picture, as before) go to the window through GDI. The ddraw present of the
+ *     frame is not called, so the window holds exactly what was composed;
+ *   - mouse messages from the queue map client -> frame through the same rect: frame = floor((2(c - r0) + 1) * 800 /
+ *     (2 rw)), the source pixel the nearest filter draws at that client pixel.
+ * Exactly 800x600: unchanged (the native path above). SC3RESIZE_MENUSCALE=0: the 1:1 centred frame.
+ * SC3RESIZE_MENUSCALE_DUMP=<abs prefix>: when <prefix>req exists, the next scaled present writes <prefix>NNN_client.bmp
+ * (what was sent to the window) and <prefix>NNN_frame.bmp (the source frame as read), then deletes the request. */
+static int    g_menuscale = 1;
+static int    g_ms_filter = 1;            /* 1 bilinear, 0 nearest */
+static int    g_ms_repost = 1;            /* SC3RESIZE_MENUSCALE_REPOST=0: map a queued move at our last output too */
+static volatile LONG g_ms_on;             /* the last full menu present was scaled: the wndproc maps through g_ms_r* */
+static volatile LONG g_ms_rx, g_ms_ry, g_ms_rw, g_ms_rh;   /* the 4:3 rect, client coords */
+static DWORD *g_ms_lut;                   /* RGB565 -> XRGB */
+static DWORD *g_ms_f32;                   /* the frame as last read, 800x600 XRGB */
+static BYTE  *g_ms_bg;                    /* 1 = that frame pixel is background */
+static WORD  *g_ms_raw;                   /* the frame as last read, RGB565: an unchanged row is skipped */
+static HDC    g_ms_dc;
+static HBITMAP g_ms_bmp, g_ms_oldbmp;
+static DWORD *g_ms_out;                   /* the composed rect, rw x rh, 32-bit top-down */
+static LONG   g_ms_cw, g_ms_ch, g_ms_tfilter = -1;
+static LONG  *g_ms_xs, *g_ms_xf, *g_ms_ys, *g_ms_yf;   /* per rect column / row: source index, weight 0..256 */
+static char   g_ms_dump[MAX_PATH];
+static int    g_ms_dumpn;
+static __int64 g_ms_t[3], g_ms_tmax;       /* read, compose, blit; worst present */
+static DWORD  g_ms_n, g_ms_np, g_ms_beat, g_ms_area;
+static int    g_ms_depth, g_ms_nestlog, g_ms_mlog, g_ms_replog;
+static LPARAM g_ms_last_out;
+static DWORD  g_ms_last_t;
+static int    g_ms_last_ok;
+static int    g_ms_fullblit;             /* SC3RESIZE_MENUSCALE_FULLBLIT=1: whole client on every present */
+static volatile LONG g_ms_full_req;      /* the wndproc saw a paint / size / activation message */
+static DWORD  g_ms_full_t, g_ms_nfull;
+static int    g_ms_refresh;              /* SC3RESIZE_MENUSCALE_REFRESH=<ms>: periodic whole-client blit, 0 = off */
+
+static void rz_ms_rect(LONG cw, LONG ch, LONG *rx, LONG *ry, LONG *rw, LONG *rh) {
+    if ((__int64)cw * NAT_H >= (__int64)ch * NAT_W) { *rh = ch; *rw = (LONG)((__int64)ch * NAT_W / NAT_H); }
+    else                                            { *rw = cw; *rh = (LONG)((__int64)cw * NAT_H / NAT_W); }
+    *rx = (cw - *rw) / 2; *ry = (ch - *rh) / 2;
+}
+
+/* client coordinate -> frame coordinate (floor division, so the margins map below 0 / past the frame) */
+static LONG rz_ms_map(LONG c, LONG r0, LONG rl, LONG nat) {
+    __int64 num = (__int64)(2 * (c - r0) + 1) * nat, den = 2 * (__int64)rl;
+    return (LONG)(num >= 0 ? num / den : -((-num + den - 1) / den));
+}
+
+/* Per-column / per-row source taps for a rect side of rl dest pixels over nat source pixels. */
+static void rz_ms_axis(LONG *s, LONG *f, LONG rl, LONG nat, int filter) {
+    LONG i;
+    for (i = 0; i < rl; i++) {
+        if (filter) {   /* pixel centres: u = (i + 0.5) * nat / rl - 0.5, 8 fraction bits */
+            __int64 u = (__int64)(2 * i + 1) * nat * 256 / (2 * (__int64)rl) - 128;
+            if (u < 0) u = 0;
+            s[i] = (LONG)(u >> 8); f[i] = (LONG)(u & 255);
+            if (s[i] >= nat - 1) { s[i] = nat - 1; f[i] = 0; }
+        } else { s[i] = (LONG)((__int64)(2 * i + 1) * nat / (2 * (__int64)rl)); f[i] = 0; }
+    }
+}
+
+static int rz_ms_prepare(LONG cw, LONG ch) {
+    BITMAPINFO bi;
+    HDC sdc;
+    LONG rx, ry, rw, rh, i;
+    if (g_ms_cw == cw && g_ms_ch == ch && g_ms_out && g_ms_tfilter == g_ms_filter) return 1;
+    if (!g_ms_lut) {
+        g_ms_lut = (DWORD *)malloc(65536 * 4);
+        if (!g_ms_lut) return 0;
+        for (i = 0; i < 65536; i++) {
+            DWORD r = (i >> 11) & 31, g = (i >> 5) & 63, b = i & 31;
+            g_ms_lut[i] = (((r << 3) | (r >> 2)) << 16) | (((g << 2) | (g >> 4)) << 8) | ((b << 3) | (b >> 2));
+        }
+    }
+    if (!g_ms_f32) g_ms_f32 = (DWORD *)malloc(NAT_W * NAT_H * 4);
+    if (!g_ms_bg) g_ms_bg = (BYTE *)malloc(NAT_W * NAT_H);
+    if (!g_ms_raw) g_ms_raw = (WORD *)malloc(NAT_W * NAT_H * 2);
+    if (!g_ms_f32 || !g_ms_bg || !g_ms_raw) return 0;
+    if (g_ms_dc) { SelectObject(g_ms_dc, g_ms_oldbmp); DeleteObject(g_ms_bmp); DeleteDC(g_ms_dc); g_ms_dc = NULL; }
+    g_ms_out = NULL;
+    free(g_ms_xs); free(g_ms_xf); free(g_ms_ys); free(g_ms_yf);
+    rz_ms_rect(cw, ch, &rx, &ry, &rw, &rh);
+    g_ms_xs = (LONG *)malloc(rw * 4); g_ms_xf = (LONG *)malloc(rw * 4);
+    g_ms_ys = (LONG *)malloc(rh * 4); g_ms_yf = (LONG *)malloc(rh * 4);
+    if (!g_ms_xs || !g_ms_xf || !g_ms_ys || !g_ms_yf) return 0;
+    rz_ms_axis(g_ms_xs, g_ms_xf, rw, NAT_W, g_ms_filter);
+    rz_ms_axis(g_ms_ys, g_ms_yf, rh, NAT_H, g_ms_filter);
+    memset(&bi, 0, sizeof(bi));
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = rw; bi.bmiHeader.biHeight = -rh;
+    bi.bmiHeader.biPlanes = 1; bi.bmiHeader.biBitCount = 32; bi.bmiHeader.biCompression = BI_RGB;
+    sdc = GetDC(NULL);
+    g_ms_dc = CreateCompatibleDC(sdc);
+    g_ms_bmp = CreateDIBSection(sdc, &bi, DIB_RGB_COLORS, (void **)&g_ms_out, NULL, 0);
+    ReleaseDC(NULL, sdc);
+    if (!g_ms_dc || !g_ms_bmp || !g_ms_out) { logf("MENUSCALE> DIB %ldx%ld failed", rw, rh); g_ms_out = NULL; return 0; }
+    g_ms_oldbmp = (HBITMAP)SelectObject(g_ms_dc, g_ms_bmp);
+    g_ms_cw = cw; g_ms_ch = ch; g_ms_tfilter = g_ms_filter; g_ms_valid = 0; g_ms_full_req = 1;
+    g_ms_rx = rx; g_ms_ry = ry; g_ms_rw = rw; g_ms_rh = rh;
+    logf("MENUSCALE> client %ldx%ld: menu frame scaled to [%ld %ld %ld %ld] = %ldx%ld (x%.4f, %s)", cw, ch, rx, ry,
+         rx + rw, ry + rh, rw, rh, (double)rh / NAT_H, g_ms_filter ? "bilinear" : "nearest");
+    return 1;
+}
+
+/* Read the frame region [fx0,fx0+fw) x [fy0,fy0+fh) from the source (its sr->left/top = the region's surface origin),
+   classify, and widen *bb (x0 y0 x1 y1, frame coords) by every pixel whose value or class changed. Never writes. */
+static int rz_ms_read(void *src, const RECT *sr, LONG fx0, LONG fy0, LONG fw, LONG fh, LONG *bb) {
+    DWORD *vt = *(DWORD **)src;
+    BYTE desc[124];
+    HRESULT hr;
+    LONG x, y, pitch;
+    BYTE *bits;
+    static int logged;
+    memset(desc, 0, sizeof(desc)); *(DWORD *)desc = 124;
+    hr = ((RZ_LOCK)vt[0x64 / 4])(src, NULL, desc, 1 /* DDLOCK_WAIT */, NULL);
+    if (hr) { memset(desc, 0, sizeof(desc)); *(DWORD *)desc = 108; hr = ((RZ_LOCK)vt[0x64 / 4])(src, NULL, desc, 1, NULL); }
+    if (hr) { if (!logged++) logf("MENUSCALE> Lock failed 0x%08lX", (DWORD)hr); return 0; }
+    pitch = *(LONG *)(desc + 0x10);
+    bits = *(BYTE **)(desc + 0x24);
+    if (!bits || pitch < (sr->left + fw) * 2) {
+        if (!logged++) logf("MENUSCALE> unexpected surface: bits 0x%08lX pitch %ld", (DWORD)bits, pitch);
+        ((RZ_UNLOCK)vt[0x80 / 4])(src, NULL);
+        return 0;
+    }
+    for (y = 0; y < fh; y++) {
+        const WORD *row = (const WORD *)(bits + (sr->top + y) * pitch) + sr->left;
+        LONG i0 = (fy0 + y) * NAT_W + fx0;
+        const WORD *o = g_mb_orig + i0, *l = g_mb_last + i0, *nv = g_mb_native ? g_mb_native + i0 : NULL;
+        DWORD *f = g_ms_f32 + i0;
+        BYTE *b = g_ms_bg + i0;
+        LONG cx0 = -1, cx1 = -1;
+        if (g_ms_valid && !memcmp(g_ms_raw + i0, row, fw * 2)) continue;   /* same pixels, same classes */
+        memcpy(g_ms_raw + i0, row, fw * 2);
+        for (x = 0; x < fw; x++) {
+            WORD p = row[x];
+            BYTE isbg;
+            DWORD q = g_ms_lut[p];
+            if (p == o[x]) { isbg = 1; g_mb_m_orig++; }
+            else if (p == l[x] || (nv && p == nv[x])) { isbg = 1; g_mb_m_last++; }
+            else { isbg = 0; g_mb_m_none++; }
+            if (q != f[x] || isbg != b[x]) { f[x] = q; b[x] = isbg; if (cx0 < 0) cx0 = x; cx1 = x; }
+        }
+        if (cx0 >= 0) {
+            if (bb[0] > fx0 + cx0) bb[0] = fx0 + cx0;
+            if (bb[2] < fx0 + cx1 + 1) bb[2] = fx0 + cx1 + 1;
+            if (bb[1] > fy0 + y) bb[1] = fy0 + y;
+            if (bb[3] < fy0 + y + 1) bb[3] = fy0 + y + 1;
+        }
+    }
+    ((RZ_UNLOCK)vt[0x80 / 4])(src, NULL);
+    if (g_mb_dbg_left > 0) {
+        g_mb_dbg_left--;
+        logf("MENUSCALE> read %ldx%ld at (%ld,%ld) surf 0x%08lX: stock %ld, last %ld, other %ld", fw, fh, fx0, fy0,
+             (DWORD)src, g_mb_m_orig, g_mb_m_last, g_mb_m_none);
+    }
+    g_mb_m_orig = g_mb_m_last = g_mb_m_none = 0;
+    return 1;
+}
+
+static __inline DWORD rz_ms_lerp(DWORD a, DWORD b, LONG f) {   /* f 0..256 toward b */
+    DWORD w = 256 - (DWORD)f;
+    return ((((a & 0xFF00FF) * w + (b & 0xFF00FF) * (DWORD)f) >> 8) & 0xFF00FF) |
+           ((((a & 0x00FF00) * w + (b & 0x00FF00) * (DWORD)f) >> 8) & 0x00FF00);
+}
+
+/* Compose rect pixels [dx0,dx1) x [dy0,dy1) (rect coords) from the frame cache and the cover picture. */
+static void rz_ms_compose(LONG dx0, LONG dy0, LONG dx1, LONG dy1) {
+    LONG x, y, rw = g_ms_rw, cw = g_ms_cw, rx = g_ms_rx, ry = g_ms_ry;
+    for (y = dy0; y < dy1; y++) {
+        LONG sy0 = g_ms_ys[y], fy = g_ms_yf[y], sy1 = sy0 < NAT_H - 1 ? sy0 + 1 : sy0;
+        const DWORD *f0 = g_ms_f32 + sy0 * NAT_W, *f1 = g_ms_f32 + sy1 * NAT_W;
+        const BYTE *b0 = g_ms_bg + sy0 * NAT_W, *b1 = g_ms_bg + sy1 * NAT_W;
+        const DWORD *p = g_mb_bits + (ry + y) * cw + rx;
+        DWORD *o = g_ms_out + y * rw;
+        if (!g_ms_filter) {
+            for (x = dx0; x < dx1; x++) { LONG sx = g_ms_xs[x]; o[x] = b0[sx] ? p[x] : f0[sx]; }
+            continue;
+        }
+        for (x = dx0; x < dx1; x++) {
+            LONG sx0 = g_ms_xs[x], fx = g_ms_xf[x], sx1 = sx0 < NAT_W - 1 ? sx0 + 1 : sx0;
+            BYTE ba = b0[sx0], bb = b0[sx1], bc = b1[sx0], bd = b1[sx1];
+            DWORD pa, pb, pc, pd;
+            if (ba & bb & bc & bd) { o[x] = p[x]; continue; }
+            pa = ba ? p[x] : f0[sx0]; pb = bb ? p[x] : f0[sx1];
+            pc = bc ? p[x] : f1[sx0]; pd = bd ? p[x] : f1[sx1];
+            o[x] = rz_ms_lerp(rz_ms_lerp(pa, pb, fx), rz_ms_lerp(pc, pd, fx), fy);
+        }
+    }
+}
+
+/* Frame box (x0 y0 x1 y1) -> the rect pixels whose taps can read it (rect coords), clamped. */
+static void rz_ms_dest_box(const LONG *bb, LONG *d) {
+    d[0] = (LONG)((__int64)(bb[0] - 1) * g_ms_rw / NAT_W) - 1;
+    d[1] = (LONG)((__int64)(bb[1] - 1) * g_ms_rh / NAT_H) - 1;
+    d[2] = (LONG)((__int64)(bb[2] + 1) * g_ms_rw / NAT_W) + 2;
+    d[3] = (LONG)((__int64)(bb[3] + 1) * g_ms_rh / NAT_H) + 2;
+    if (d[0] < 0) d[0] = 0;
+    if (d[1] < 0) d[1] = 0;
+    if (d[2] > g_ms_rw) d[2] = g_ms_rw;
+    if (d[3] > g_ms_rh) d[3] = g_ms_rh;
+}
+
+static void rz_ms_write_bmp(const char *path, const DWORD *px, LONG w, LONG h) {
+    BITMAPFILEHEADER fh;
+    BITMAPINFOHEADER ih;
+    DWORD wr;
+    HANDLE f = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE) { logf("MENUSCALE> cannot write %s", path); return; }
+    memset(&fh, 0, sizeof(fh)); memset(&ih, 0, sizeof(ih));
+    fh.bfType = 0x4D42; fh.bfOffBits = sizeof(fh) + sizeof(ih); fh.bfSize = fh.bfOffBits + (DWORD)w * h * 4;
+    ih.biSize = sizeof(ih); ih.biWidth = w; ih.biHeight = -h; ih.biPlanes = 1; ih.biBitCount = 32; ih.biCompression = BI_RGB;
+    WriteFile(f, &fh, sizeof(fh), &wr, NULL);
+    WriteFile(f, &ih, sizeof(ih), &wr, NULL);
+    WriteFile(f, px, (DWORD)w * h * 4, &wr, NULL);
+    CloseHandle(f);
+}
+
+/* SC3RESIZE_MENUSCALE_DUMP: the whole client as sent to the window (margins from the picture, rect from the
+   composed DIB), the source frame as read, the cover picture and the background mask (for offline checks). */
+static void rz_ms_dump_if_asked(void) {
+    char req[MAX_PATH], p[MAX_PATH];
+    DWORD *cl;
+    LONG y, cw = g_ms_cw, ch = g_ms_ch;
+    if (!g_ms_dump[0]) return;
+    wsprintfA(req, "%sreq", g_ms_dump);
+    if (GetFileAttributesA(req) == INVALID_FILE_ATTRIBUTES) return;
+    DeleteFileA(req);
+    cl = (DWORD *)malloc((size_t)cw * ch * 4);
+    if (!cl) return;
+    memcpy(cl, g_mb_bits, (size_t)cw * ch * 4);
+    for (y = 0; y < g_ms_rh; y++)
+        memcpy(cl + (g_ms_ry + y) * cw + g_ms_rx, g_ms_out + y * g_ms_rw, g_ms_rw * 4);
+    g_ms_dumpn++;
+    wsprintfA(p, "%s%03d_client.bmp", g_ms_dump, g_ms_dumpn); rz_ms_write_bmp(p, cl, cw, ch);
+    wsprintfA(p, "%s%03d_frame.bmp", g_ms_dump, g_ms_dumpn); rz_ms_write_bmp(p, g_ms_f32, NAT_W, NAT_H);
+    wsprintfA(p, "%s%03d_picture.bmp", g_ms_dump, g_ms_dumpn); rz_ms_write_bmp(p, g_mb_bits, cw, ch);
+    for (y = 0; y < NAT_W * NAT_H; y++) cl[y] = g_ms_bg[y] ? 0xFFFFFF : 0;   /* background mask, white = background */
+    wsprintfA(p, "%s%03d_mask.bmp", g_ms_dump, g_ms_dumpn); rz_ms_write_bmp(p, cl, NAT_W, NAT_H);
+    free(cl);
+    logf("MENUSCALE> dump %03d: client %ldx%ld, rect [%ld %ld %ld %ld]", g_ms_dumpn, cw, ch, g_ms_rx, g_ms_ry,
+         g_ms_rx + g_ms_rw, g_ms_ry + g_ms_rh);
+}
+
+static void rz_ms_account(int part, LARGE_INTEGER *t) {   /* t[0..3] = start, read, compose, blit */
+    __int64 tot = t[3].QuadPart - t[0].QuadPart;
+    DWORD now = GetTickCount();
+    g_ms_t[0] += t[1].QuadPart - t[0].QuadPart;
+    g_ms_t[1] += t[2].QuadPart - t[1].QuadPart;
+    g_ms_t[2] += t[3].QuadPart - t[2].QuadPart;
+    if (tot > g_ms_tmax) g_ms_tmax = tot;
+    if (part) g_ms_np++; else g_ms_n++;
+    if (!g_ms_beat) g_ms_beat = now;
+    if (now - g_ms_beat >= 2000 && g_freq.QuadPart) {
+        double k = 1000.0 / (double)g_freq.QuadPart, n = (double)(g_ms_n + g_ms_np);
+        logf("MENUSCALE> %lu full + %lu partial presents in %lu ms: avg read %.3f compose %.3f blit %.3f ms, worst %.3f ms,"
+             " %lu rect px recomposed, %lu whole-client blits", g_ms_n, g_ms_np, now - g_ms_beat, k * g_ms_t[0] / n,
+             k * g_ms_t[1] / n, k * g_ms_t[2] / n, k * (double)g_ms_tmax, g_ms_area, g_ms_nfull);
+        g_ms_n = g_ms_np = g_ms_area = g_ms_nfull = 0; g_ms_t[0] = g_ms_t[1] = g_ms_t[2] = g_ms_tmax = 0; g_ms_beat = now;
+    }
+}
+
+/* The full menu present, scaled. cw x ch = the dest size (rz_mb_prepare already built the cover picture for it). */
+static int rz_ms_full(void *src, const RECT *sr, LONG cw, LONG ch) {
+    LONG bb[4] = { NAT_W, NAT_H, 0, 0 }, d[4];
+    LARGE_INTEGER t[4];
+    HDC dc;
+    QueryPerformanceCounter(&t[0]);
+    if (!rz_ms_prepare(cw, ch)) return 0;
+    if (!rz_ms_read(src, sr, 0, 0, NAT_W, NAT_H, bb)) return 0;
+    if (!g_ms_valid) { bb[0] = 0; bb[1] = 0; bb[2] = NAT_W; bb[3] = NAT_H; }
+    QueryPerformanceCounter(&t[1]);
+    if (bb[2] > bb[0]) {
+        rz_ms_dest_box(bb, d);
+        if (!g_ms_valid) { d[0] = 0; d[1] = 0; d[2] = g_ms_rw; d[3] = g_ms_rh; }
+        rz_ms_compose(d[0], d[1], d[2], d[3]);
+        g_ms_area += (DWORD)((d[2] - d[0]) * (d[3] - d[1]));
+    }
+    g_ms_valid = 1;
+    GdiFlush();
+    QueryPerformanceCounter(&t[2]);
+    /* The window keeps what was drawn (measured: a desktop grab equals the dump except the live FPS text), so a
+       static present sends only the recomposed box. The whole client goes out on a new size, on the first scaled
+       present, and after a paint / size / activation message (g_ms_full_req). SC3RESIZE_MENUSCALE_REFRESH=<ms> also
+       sends it every <ms> (off by default: at 3840x1984 that blit is the 14-17 ms worst present, measured with 1000).
+       SC3RESIZE_MENUSCALE_FULLBLIT=1 sends the whole client on every present (measured at 3840x1984: 11-16 ms). */
+    if (g_ms_fullblit || g_ms_full_req || !g_ms_on || (g_ms_refresh > 0 && GetTickCount() - g_ms_full_t >= (DWORD)g_ms_refresh)) {
+        dc = GetDC(g_hwnd);
+        if (dc) {
+            LONG rx = g_ms_rx, ry = g_ms_ry, rw = g_ms_rw, rh = g_ms_rh;
+            BitBlt(dc, rx, ry, rw, rh, g_ms_dc, 0, 0, SRCCOPY);
+            if (ry > 0) BitBlt(dc, 0, 0, cw, ry, g_mb_dc, 0, 0, SRCCOPY);
+            if (ch - ry - rh > 0) BitBlt(dc, 0, ry + rh, cw, ch - ry - rh, g_mb_dc, 0, ry + rh, SRCCOPY);
+            if (rx > 0) BitBlt(dc, 0, ry, rx, rh, g_mb_dc, 0, ry, SRCCOPY);
+            if (cw - rx - rw > 0) BitBlt(dc, rx + rw, ry, cw - rx - rw, rh, g_mb_dc, rx + rw, ry, SRCCOPY);
+            ReleaseDC(g_hwnd, dc);
+            g_ms_full_req = 0; g_ms_full_t = GetTickCount(); g_ms_nfull++;
+        }
+    } else if (bb[2] > bb[0] && (dc = GetDC(g_hwnd)) != NULL) {
+        BitBlt(dc, g_ms_rx + d[0], g_ms_ry + d[1], d[2] - d[0], d[3] - d[1], g_ms_dc, d[0], d[1], SRCCOPY);
+        ReleaseDC(g_hwnd, dc);
+    }
+    QueryPerformanceCounter(&t[3]);
+    rz_ms_account(0, t);
+    rz_ms_dump_if_asked();
+    return 1;
+}
+
+/* A partial present of the menu frame: frame sub-rect sr (surface origin = frame origin, as in the 1:1 path). */
+static int rz_ms_partial(void *src, const RECT *sr) {
+    LONG bb[4] = { NAT_W, NAT_H, 0, 0 }, d[4];
+    LARGE_INTEGER t[4];
+    HDC dc;
+    if (!g_ms_valid || !g_ms_out) return 0;
+    QueryPerformanceCounter(&t[0]);
+    if (!rz_ms_read(src, sr, sr->left, sr->top, sr->right - sr->left, sr->bottom - sr->top, bb)) return 0;
+    QueryPerformanceCounter(&t[1]);
+    if (bb[2] > bb[0]) {
+        rz_ms_dest_box(bb, d);
+        rz_ms_compose(d[0], d[1], d[2], d[3]);
+        g_ms_area += (DWORD)((d[2] - d[0]) * (d[3] - d[1]));
+        GdiFlush();
+        QueryPerformanceCounter(&t[2]);
+        dc = GetDC(g_hwnd);
+        if (dc) {
+            BitBlt(dc, g_ms_rx + d[0], g_ms_ry + d[1], d[2] - d[0], d[3] - d[1], g_ms_dc, d[0], d[1], SRCCOPY);
+            ReleaseDC(g_hwnd, dc);
+        }
+    } else t[2] = t[1];
+    QueryPerformanceCounter(&t[3]);
+    rz_ms_account(1, t);
+    return 1;
+}
+
 /* Returns 1 and sets *hr when it presented the frame itself. */
 static int rz_mb_present(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, void *fx, HRESULT *hr) {
     RECT cr, c;
@@ -3805,6 +4176,14 @@ static int rz_mb_present(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, vo
         LONG ex = g_mb_dx0 + sr->left * g_mb_cw / NAT_W, ey = g_mb_dy0 + sr->top * g_mb_ch / NAT_H;
         if (sw > 0 && sh > 0 && sr->left >= 0 && sr->top >= 0 && sr->right <= NAT_W && sr->bottom <= NAT_H &&
             labs(dr->left - ex) <= 2 && labs(dr->top - ey) <= 2) {
+            if (g_ms_on) {   /* MENUSCALE: recompose the part of the rect it feeds; dropped if nothing is cached yet */
+                static int logged_ms;
+                int ok = rz_ms_partial(src, sr);
+                if (logged_ms < 3) { logged_ms++; logf("MENUSCALE> partial present [%ld %ld %ld %ld] %s", sr->left, sr->top,
+                                                       sr->right, sr->bottom, ok ? "recomposed" : "dropped (no frame cached)"); }
+                *hr = 0;
+                return 1;
+            }
             rz_mb_patch_src(src, sr, sr->left, sr->top, sw, sh);
             c.left = g_mb_dx0 + g_mb_offx + sr->left; c.top = g_mb_dy0 + g_mb_offy + sr->top;
             c.right = c.left + sw; c.bottom = c.top + sh;
@@ -3820,7 +4199,10 @@ static int rz_mb_present(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, vo
     if (dw < NAT_W || dh < NAT_H) return 0;
     /* only the FINAL present (dest covers the client); intermediate 800x600 blits are not ours */
     if (!GetClientRect(g_hwnd, &cr) || dw < cr.right - cr.left || dh < cr.bottom - cr.top) return 0;
-    if (!rz_menu_visible()) { g_mb_active = 0; return 0; }
+    if (!rz_menu_visible()) {
+        if (g_ms_on) logf("MENUSCALE> 800x600 present with a city view up: not the menu, mapping off");
+        g_mb_active = 0; g_ms_on = 0; return 0;
+    }
     if (cr.right - cr.left == NAT_W && cr.bottom - cr.top == NAT_H) {
         /* native window: no margins, but the same picture (owner: the 800x600 menu still showed the old one) */
         if (rz_mb_load() && rz_mb_prepare(NAT_W, NAT_H)) rz_mb_patch_src(src, sr, 0, 0, NAT_W, NAT_H);
@@ -3829,6 +4211,16 @@ static int rz_mb_present(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, vo
     }
     if (!GetClientRect(g_hwnd, &cr) || dw < cr.right - cr.left || dh < cr.bottom - cr.top) return 0;
     if (!rz_mb_load() || !rz_mb_prepare(dw, dh)) return 0;
+    if (g_menuscale && rz_ms_full(src, sr, dw, dh)) {
+        static int logged_ms;
+        g_ms_on = 1; g_mb_active = 1; g_mb_tick = GetTickCount();
+        g_mb_offx = g_ms_rx; g_mb_offy = g_ms_ry; g_mb_dx0 = dr->left; g_mb_dy0 = dr->top;
+        if (!logged_ms++) logf("MENUSCALE> first scaled present: dest [%ld %ld %ld %ld] -> frame at [%ld %ld %ld %ld]",
+                               dr->left, dr->top, dr->right, dr->bottom, g_ms_rx, g_ms_ry, g_ms_rx + g_ms_rw, g_ms_ry + g_ms_rh);
+        *hr = 0;
+        return 1;
+    }
+    g_ms_on = 0;
     ox = (dw - NAT_W) / 2; oy = (dh - NAT_H) / 2;
     rz_mb_patch_src(src, sr, 0, 0, NAT_W, NAT_H);
     c.left = dr->left + ox; c.top = dr->top + oy; c.right = c.left + NAT_W; c.bottom = c.top + NAT_H;
@@ -5889,6 +6281,81 @@ static void qi_install(HMODULE sui) {
         logf("QUERYID> on: \"Copiar ID\" button in the query (?) dialog");
 }
 
+/* FRAMEDUMP (diag, task hudclick 2026-10-15). SC3RESIZE_FRAMEDUMP=<abs prefix>: when the file <prefix>req exists, the
+ * next client-sized Blt onto the primary writes its source rect (the frame exactly as presented, after any HUDSCALE
+ * pass) to <prefix><tag>.bmp, tag = the first line of req (else a counter), and deletes req. A smaller Blt onto the
+ * primary writes its source surface's client area from (0,0) instead (some dialogs present only their own rect; that
+ * area then holds the HUD at native size). Desktop grabs cannot be used while the game window is not in the
+ * foreground: the game then presents white/black (verify/menucrop). */
+static char  g_fd_prefix[MAX_PATH];
+static DWORD g_fd_t, g_fd_n;
+static void rz_fd_maybe(void *self, const RECT *dr, void *src, const RECT *sr) {
+    char req[MAX_PATH + 8], tag[64], path[MAX_PATH + 80];
+    HANDLE f;
+    DWORD rd = 0, bpp, gmask, wr;
+    LONG pitch, sw, sh, w, h, x, y, rowb;
+    RECT cr, all;
+    int part;
+    BYTE *bits, *row;
+    BITMAPFILEHEADER bf;
+    BITMAPINFOHEADER bi;
+    if (rz_hs_is_screen(self) != 1 || GetTickCount() - g_fd_t < 50) return;   /* only Blts onto the primary count */
+    g_fd_t = GetTickCount();
+    wsprintfA(req, "%sreq", g_fd_prefix);
+    if (GetFileAttributesA(req) == INVALID_FILE_ATTRIBUTES || !GetClientRect(g_hwnd, &cr)) return;
+    part = dr->right - dr->left < cr.right || dr->bottom - dr->top < cr.bottom;
+    tag[0] = 0;
+    f = CreateFileA(req, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+    if (f != INVALID_HANDLE_VALUE) {
+        if (ReadFile(f, tag, sizeof(tag) - 1, &rd, NULL)) tag[rd] = 0;
+        CloseHandle(f);
+    }
+    for (x = 0; tag[x]; x++) if (tag[x] == '\r' || tag[x] == '\n') { tag[x] = 0; break; }
+    if (!tag[0]) wsprintfA(tag, "%03lu", g_fd_n);
+    g_fd_n++;
+    DeleteFileA(req);
+    bits = rz_hs_lock(src, &pitch, &bpp, &gmask, &sw, &sh);
+    if (bits && part) {   /* a partial present: the source surface's client-sized area from (0,0), HUD as drawn natively */
+        if (sw < cr.right || sh < cr.bottom) { logf("FRAMEDUMP> %s: partial present from a %ldx%ld surface, not dumped", tag, sw, sh);
+            ((RZ_UNLOCK)(*(DWORD **)src)[0x80 / 4])(src, NULL); return; }
+        all.left = 0; all.top = 0; all.right = cr.right; all.bottom = cr.bottom; sr = &all;
+    }
+    w = sr->right - sr->left; h = sr->bottom - sr->top;
+    if (!bits) { logf("FRAMEDUMP> %s: lock failed", tag); return; }
+    if (bpp != 16 || w <= 0 || h <= 0 || sr->left < 0 || sr->top < 0 || sr->right > sw || sr->bottom > sh) {
+        logf("FRAMEDUMP> %s: refused (bpp %lu, src [%ld %ld %ld %ld] of %ldx%ld)", tag, bpp, sr->left, sr->top, sr->right, sr->bottom, sw, sh);
+        ((RZ_UNLOCK)(*(DWORD **)src)[0x80 / 4])(src, NULL);
+        return;
+    }
+    rowb = (w * 3 + 3) & ~3;
+    row = (BYTE *)malloc(rowb);
+    wsprintfA(path, "%s%s.bmp", g_fd_prefix, tag);
+    f = row ? CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL) : INVALID_HANDLE_VALUE;
+    if (f != INVALID_HANDLE_VALUE) {
+        memset(&bf, 0, sizeof(bf)); memset(&bi, 0, sizeof(bi));
+        bf.bfType = 0x4d42; bf.bfOffBits = sizeof(bf) + sizeof(bi); bf.bfSize = bf.bfOffBits + rowb * h;
+        bi.biSize = sizeof(bi); bi.biWidth = w; bi.biHeight = h; bi.biPlanes = 1; bi.biBitCount = 24;
+        WriteFile(f, &bf, sizeof(bf), &wr, NULL); WriteFile(f, &bi, sizeof(bi), &wr, NULL);
+        memset(row, 0, rowb);
+        for (y = h - 1; y >= 0; y--) {
+            const WORD *p = (const WORD *)(bits + (sr->top + y) * pitch) + sr->left;
+            for (x = 0; x < w; x++) {
+                WORD v = p[x];
+                BYTE r, g, b;
+                if (gmask == 0x07E0) { r = (BYTE)((v >> 11) << 3); g = (BYTE)(((v >> 5) & 63) << 2); }
+                else { r = (BYTE)(((v >> 10) & 31) << 3); g = (BYTE)(((v >> 5) & 31) << 3); }
+                b = (BYTE)((v & 31) << 3);
+                row[x * 3] = b; row[x * 3 + 1] = g; row[x * 3 + 2] = r;
+            }
+            WriteFile(f, row, rowb, &wr, NULL);
+        }
+        CloseHandle(f);
+        logf("FRAMEDUMP> %s: %ldx%ld frame written to %s%s", tag, w, h, path, part ? " (partial present: source surface from (0,0), HUD native)" : "");
+    } else logf("FRAMEDUMP> %s: cannot write %s", tag, path);
+    free(row);
+    ((RZ_UNLOCK)(*(DWORD **)src)[0x80 / 4])(src, NULL);
+}
+
 static HRESULT WINAPI rz_blt_hook_inner(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, void *fx) {
     LARGE_INTEGER a, b;
     HRESULT hr;
@@ -5923,7 +6390,12 @@ static HRESULT WINAPI rz_blt_hook_inner(void *self, RECT *dr, void *src, RECT *s
     if (g_mb_active && dr && g_hwnd && !IsBadReadPtr(dr, sizeof(RECT))) {   /* another full-window frame: menu over */
         RECT crm;
         if (GetClientRect(g_hwnd, &crm) && dr->right - dr->left >= crm.right - crm.left &&
-            dr->bottom - dr->top >= crm.bottom - crm.top) g_mb_active = 0;
+            dr->bottom - dr->top >= crm.bottom - crm.top) {
+            if (g_ms_on) logf("MENUSCALE> menu over: full-window present of another frame (src %ldx%ld), mapping off",
+                              sr && !IsBadReadPtr(sr, sizeof(RECT)) ? sr->right - sr->left : -1,
+                              sr && !IsBadReadPtr(sr, sizeof(RECT)) ? sr->bottom - sr->top : -1);
+            g_mb_active = 0; g_ms_on = 0;
+        }
     }
     /* ⭐⭐ THE BOTTOM STRIP: the present squashes the frame by the slack rows.
      *
@@ -6031,6 +6503,8 @@ static HRESULT WINAPI rz_blt_hook_inner(void *self, RECT *dr, void *src, RECT *s
                      (DWORD)self, dr->left, dr->top, dr->right, dr->bottom, (DWORD)src, (DWORD)g_hs_lastsrc);
         }
     }
+    if (g_fd_prefix[0] && dr && sr && src && g_hwnd && !IsBadReadPtr(dr, sizeof(RECT)) && !IsBadReadPtr(sr, sizeof(RECT)))
+        rz_fd_maybe(self, dr, src, sr);   /* FRAMEDUMP diag: the frame as it goes to the screen */
     QueryPerformanceCounter(&a);
     hr = g_orig_blt(self, dr, src, sr, fl, fx);
     QueryPerformanceCounter(&b);
@@ -8989,6 +9463,8 @@ static void rz_set_stored_rect(DWORD w, DWORD h) {
  * presenting the old rectangle. Doing it here in C is what makes the separate GZGraphicD
  * `wmsize_setrect` patch unnecessary under this mod. */
 static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
+    if (m == WM_PAINT || m == WM_ERASEBKGND || m == WM_SIZE || m == WM_ACTIVATE || m == WM_ACTIVATEAPP ||
+        m == WM_WINDOWPOSCHANGED || m == WM_DISPLAYCHANGE || m == WM_NCPAINT) g_ms_full_req = 1;   /* MENUSCALE */
     if (g_pausekey && wp == 'P' && (m == WM_KEYDOWN || m == WM_KEYUP) && GetKeyState(VK_CONTROL) >= 0 &&
         GetKeyState(VK_MENU) >= 0 && GetKeyState(VK_SHIFT) >= 0 && !rz_text_focus()) {        /* PAUSEKEY */
         if (m == WM_KEYUP || (lp & 0x40000000) || rz_pause_toggle()) return 0;
@@ -9014,6 +9490,32 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         rz_poll();
         g_in_wndproc_pass = 0;
         return 0;
+    }
+    /* MENUSCALE: while the menu frame is presented scaled, map client mouse coordinates into it through the same rect.
+       Nesting depth does NOT tell queue messages apart at the menu: "Preferencias" runs a modal loop inside the button
+       handler, so every later click arrives at depth 1 from the queue, in client coordinates (measured: the close box
+       missed while depth-1 messages were left alone). What is left alone is a message carrying exactly the frame
+       point we produced last, within 500 ms: a WM_MOUSEMOVE at any depth (the game's queued repost, measured at the
+       menu after every click), or a button message at depth > 0 (one the game sends itself while handling ours). */
+    if (g_menubg && g_mb_active && g_ms_on && m >= WM_MOUSEMOVE && m <= WM_MBUTTONDBLCLK) {
+        LRESULT r;
+        if (g_ms_repost && g_ms_last_ok && lp == g_ms_last_out && GetTickCount() - g_ms_last_t < 500 &&
+            (m == WM_MOUSEMOVE || g_ms_depth > 0)) {
+            if (g_ms_replog < 10) { g_ms_replog++;
+                logf("MENUSCALE> msg 0x%04X at our last frame point (%d,%d), depth %d, left unmapped", m,
+                     (int)(short)LOWORD(lp), (int)(short)HIWORD(lp), g_ms_depth); }
+        } else {
+            LONG cx = (LONG)(short)LOWORD(lp), cy = (LONG)(short)HIWORD(lp);
+            LONG fx = rz_ms_map(cx, g_ms_rx, g_ms_rw, NAT_W), fy = rz_ms_map(cy, g_ms_ry, g_ms_rh, NAT_H);
+            lp = MAKELPARAM((WORD)(short)fx, (WORD)(short)fy);
+            g_ms_last_out = lp; g_ms_last_ok = 1; g_ms_last_t = GetTickCount();
+            if (m != WM_MOUSEMOVE && g_ms_mlog < 60) { g_ms_mlog++;
+                logf("MENUSCALE> msg 0x%04X client (%ld,%ld) -> frame (%ld,%ld), depth %d", m, cx, cy, fx, fy, g_ms_depth); }
+        }
+        g_ms_depth++;
+        r = CallWindowProcA(g_oldproc, h, m, wp, lp);
+        g_ms_depth--;
+        return r;
     }
     /* MENUBG: while the 800x600 menu frame is presented centred, shift client mouse coordinates into it. */
     if (g_menubg && g_mb_active && m >= WM_MOUSEMOVE && m <= WM_MBUTTONDBLCLK) {
@@ -11163,6 +11665,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_MLOG", v, sizeof(v))) g_hs_mlog = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_DIAG", v, sizeof(v))) g_hs_diag = atoi(v);
           GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_DUMP", g_hs_dump, sizeof(g_hs_dump));
+          GetEnvironmentVariableA("SC3RESIZE_FRAMEDUMP", g_fd_prefix, sizeof(g_fd_prefix));
           if (GetEnvironmentVariableA("SC3RESIZE_HUDFIX", v, sizeof(v))) g_hudfix = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_MINISMOOTH", v, sizeof(v))) g_hs_minismooth = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDPERF", v, sizeof(v))) g_hudperf = atoi(v);
@@ -11170,6 +11673,13 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_HUDPERF_LAZY", v, sizeof(v))) g_hp_lazy = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_REPOST", v, sizeof(v))) g_hs_repost = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUBGSTOCK", v, sizeof(v))) g_menubg_stock = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_MENUBGFIT", v, sizeof(v))) g_menubg_fit = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE", v, sizeof(v))) g_menuscale = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_FILTER", v, sizeof(v))) g_ms_filter = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_REPOST", v, sizeof(v))) g_ms_repost = atoi(v);
+          GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_DUMP", g_ms_dump, sizeof(g_ms_dump));
+          if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_FULLBLIT", v, sizeof(v))) g_ms_fullblit = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_REFRESH", v, sizeof(v))) g_ms_refresh = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HOLD", v, sizeof(v))) g_hold = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_DEFERRESIZE", v, sizeof(v))) g_deferresize = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_SIMLOCK", v, sizeof(v))) g_simlock = atoi(v);
@@ -11225,12 +11735,14 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
          * a self-consistent log). One line makes the whole class loud instead of silent.
          * verify/resize_flaggate/NOHIT_RESULTS.md */
         logf("### FLAGS> cluster=%d input=%d nohit=%d hudfit=%d hudlab=%d sweep=%d side=%d mini=%d "
-             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld sidedy=%ld presentlog=%d kidfix=%d artguard=%d edgefix=%d edgescroll=%d barspan=%d sidespan=%d viewfix=%d dialogs=%d menubg=%d menubgstock=%d",
+             "anchor=%d census=%d minzoom=%d readyms=%lu noparentfix=%d huddy=%ld sidedy=%ld presentlog=%d kidfix=%d artguard=%d edgefix=%d edgescroll=%d barspan=%d sidespan=%d viewfix=%d dialogs=%d menubg=%d menubgstock=%d menubgfit=%d",
              g_cluster, g_input, g_nohit, g_hudfit, g_hudlab, g_sweepon, g_sideon, g_minion,
              g_anchor, g_census, g_minzoom, g_ready_ms, g_noparentfix, g_hud_dy, g_side_dy, g_presentlog,
-             g_kidfix, g_artguard, g_edgefix, g_edgescroll, g_bar_span, g_side_span, g_viewfix, g_dialogs, g_menubg, g_menubg_stock);
+             g_kidfix, g_artguard, g_edgefix, g_edgescroll, g_bar_span, g_side_span, g_viewfix, g_dialogs, g_menubg, g_menubg_stock, g_menubg_fit);
         logf("### FLAGS> dlgstay=%d (Reunirse keeps its position, verify/reunirse) meetall=%d (all five pages, verify/reunirse2)",
              g_dlgstay, g_meetall);
+        logf("### FLAGS> menuscale=%d filter=%s repost=%d fullblit=%d refresh=%d dump=%s", g_menuscale,
+             g_ms_filter ? "bilinear" : "nearest", g_ms_repost, g_ms_fullblit, g_ms_refresh, g_ms_dump[0] ? g_ms_dump : "-");
         if (AddVectoredExceptionHandler(1, rz_veh))
             logf("### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the "
                  "zoom-after-resize crash the game swallows)");

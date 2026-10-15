@@ -1,0 +1,7 @@
+{
+ "_": "Roundabout quarter, all 20 frames: procedural ground art from paint.json (netpaint.py, NET_ART.md 11) on the frames of flat tile 39. No stock piece is stitched in: every pixel is coloured by sampling stock road 29's cross profile, bent along the ring, entry and exit bands, at build time.",
+ "canvas": 39,
+ "layers": [
+  {"paint": "paint.json"}
+ ]
+}

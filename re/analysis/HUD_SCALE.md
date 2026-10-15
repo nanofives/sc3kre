@@ -124,7 +124,12 @@ Option A behind `SC3RESIZE_HUDSCALE`, off by default:
 Risk 1 did show (city in the minimap's transparent corner) and is solved with the city-layer mask, so option B
 is not needed for it. `SC3RESIZE_HUDSCALE_KEY=0` turns the mask off for an A/B.
 
-## Needs owner
+## Needs owner (all answered, owner 2026-10-14)
+
+**Decided.** (1) and (2) were answered by the hudopt and hudfix rounds: the scale is picked in Preferencias
+(Off / Fit / 125% / 150% / 200%) and Smooth is on by default (`[hud] smooth` missing = 1). Owner calls 2026-10-14:
+(3) dialogs stay native size, (4) the bar keeps the full width and the panel the full height, and a fresh install
+starts at Off. All three are what the code already does, so no code change. The questions as first asked:
 
 1. Size: HUD at the largest factor that fits (`min(cw/800, ch/600)`, 1.8 at a maximized 2048x1081), or a fixed
    percent (for example 150), or whole steps only (2x and up, crisp, but 1x until the window is 1600x1200)?
@@ -290,3 +295,22 @@ bar for the whole run; 0 of 7 arm-A launches, 0 of 9 further arm-B launches (`ve
 
 **Also measured, not changed:** sc3perf's fps counts every client-sized Blt as a frame, and there are two per frame
 (city layer -> composite, composite -> screen), so its overlay reads about twice the presents (93 shown vs 45/s).
+
+## Clicks while a dialog is up (task hudclick, 2026-10-15)
+
+Question from menuscale: its first build mapped only depth-0 mouse messages, and "Preferencias" at the main menu runs its
+modal loop inside the button handler, so its clicks came at depth 1 and missed. HUDSCALE has the same depth-0 rule.
+Measured in a city (N / Fit / 200%, `verify/hudclick/RESULTS.md`): no miss.
+- Dialogs opened from the HUD (Preferencias, Presupuesto, Ordenanzas, Mapa de vecinos, Reunirse, Guardar ciudad, the
+  Load save question, Salir) get every message at depth 0: the HUD click returns before the dialog opens. Only the query
+  dialog (opened by a city click with the query tool) nests at depth 1.
+- Dialogs are drawn native, so their clicks need no mapping at any depth. All dialog-control clicks hit in all arms.
+- The modal loop is GZWIND `FUN_10020971` (window-manager vtable `0x1002db80` slot `+0xa0`), closed by
+  `vt+0x44(0xd, win, id)` = `FUN_10020f08` `[CONFIRMED @ GZWIND 0x10020971, 0x10020f08]`; while it runs, the mouse
+  dispatcher `FUN_10020818` drops clicks outside the dialog `[CONFIRMED @ GZWIND 0x10020818]`. Reunirse is not modal for
+  the HUD in the stock game: the side panel works with it open, and with HUDSCALE too.
+- `g_hs_capture` is set by a mapped press and cleared only by a release that reaches `rz_hs_mouse` (or the HUDOPT OK). A
+  HUD control that opened a nested modal on the press would leave it set after the dialog. None does: every opener's
+  release was logged at depth 0 and mapped.
+Diag added: `SC3RESIZE_FRAMEDUMP=<prefix>` writes the presented frame to `<prefix><tag>.bmp` when `<prefix>req` exists
+(tag = its first line). Needed because background desktop grabs of this game are black/white.

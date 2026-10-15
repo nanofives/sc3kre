@@ -103,7 +103,8 @@ earlier resize hand-test log too, it is not from the combination.
 
 ## Still open
 - Click-to-place tools (buildings) do not hold the button, so edge scroll while placing does not
-  trigger for them.
+  trigger for them. **Owner call 2026-10-14: leave as is** (the plain edge scroll already works with
+  no button held, so this is not chased).
 - The overscroll limit is computed from the view size, measured only at the sizes the owner used.
 
 ## Arrow scrolling stops when the mouse moves (stock, traced 2026-10-07)

@@ -17,6 +17,7 @@ together, keep their pieces and connect outward. This is that framework. Sibling
 variants until their piece exists; a template references ids, so swapping in a new piece is a manifest edit.
 Shared demo done: piece 20400 (base 39, artkit's roundabout art, lanekit's layout 3,0 / 2,1) placed in game as the
 2x2 template `demo_rotonda20400/rotonda` (`verify/multitile/packs/demo_rotonda20400`, RESULTS arm D, owner shot 07).
+The shipped form of that demo is the package `re/tools/netmod/examples/roundabout` (art recipe + lanes + template).
 
 ## 1. The format (`templates` in a netpack manifest)
 
@@ -172,3 +173,66 @@ mod, grey T / curve pieces on the same cells without it (arm S).
    salida se unen solas. Demoler una casilla saca la plantilla entera.
 6. **Guardado.** La ciudad se guarda con las piezas base más una sección aparte: sin el mod abre con piezas grises
    normales, con el mod vuelven las variantes.
+
+## 5. Automatic 2x2 roundabouts (sc3netmod RBT, task roundabout3, 2026-10-14)
+
+Owner call 2026-10-14: no key for the roundabout. A 2x2 road square that qualifies becomes the roundabout piece by
+itself, also in loaded cities, and goes back to stock road when it stops qualifying. Evidence: `verify/roundabout3/`
+(PRE + RESULTS). Code: `re/harness/src/sc3netmod_rbt.c`. Package: `examples/roundabout` 3.0.0 (no template).
+
+**Format.** Manifest section `"auto_roundabouts": [{"piece": 20400, "min_arms": 3}]`: the piece must be a ROAD variant
+of T 39 in the same package (art and lanes for the pinwheel states 3,0 / 2,1). netpack writes `rbt <piece> <min>` into
+the package's table; one piece across all installed packages. No Protected list entry, no Collapse group.
+
+**Rule.** Block = the 2x2 of ROAD cells with origin (X, Z). Cell states of the stock pinwheel: (X,Z) 3, (X+1,Z) 0,
+(X+1,Z+1) 1, (X,Z+1) 2; exits W (X-1,Z), N (X+1,Z-1), E (X+2,Z+1), S (X,Z+2) for the cells in states 3, 0, 1, 2;
+closed cells (X-1,Z+1) (X,Z-1) (X+2,Z) (X+1,Z+2). Converts when ALL hold:
+- (a) the 4 cells are the stock pinwheel: right state, T 39 where the exit holds road, curve 11203 where it does not;
+- (b) no closed cell holds road;
+- (c) no exit that holds road is part of a 2x2 of road outside the block (exit, the corner beside it, and the two
+  cells beyond them): that is a 2-wide road, or another 2x2, at the exit;
+- (d) at least `min_arms` exits hold road.
+"Road" = surface-layer occupant that the manager's network test vt+0x14c accepts for netType 1 (`FUN_10007791` ->
+`DAT_100323c0`) [CONFIRMED @ 0x10007791]. Measured in game (lab cases): an avenue arriving on the closed cell turns
+the block's cells into 11204 (fails a, b); arriving on the exit and corner columns leaves the block 39.x but makes the
+exit 39.2 with 11203.1 / 11204.x beside it (fails c); two 2x2 side by side become 11204 in the middle (fails a, b).
+Diagonal roads (piece 35) and roads that bend right after the exit pass (c). `rb_auto.py scan` runs the same rule on a
+save: 7 blocks in the 16 shipped cities (Berlin 3, Craterville 1, Moscow 3).
+
+**Mechanism.**
+| step | code |
+|---|---|
+| after every road retile | `FUN_1001547b(manager, list by value, netType, int box[6])` entry hooked (`mov eax, 0x10027a52` -> jmp); its three callers are the rect retile `FUN_100151f1`, the drag build `FUN_10014a23` and the On-ramp build `FUN_1000abde`. The pass writes its work-list box `{x0<<8, z0<<8, 0x7fffffff, x1<<8, z1<<8, 0x7fffffff}` into arg 4 (measured); RBT re-evaluates every block whose cells, closed, corner or beyond cells fall in it [CONFIRMED @ 0x1001547b, 0x100151f1] |
+| after a load | manager vtable 0x1002c7bc +0x1c = `FUN_100130e9` (network layer load) wrapped; a message to the game window runs the full-map pass on the window's thread, which is the thread that runs tool retiles (same tid, measured) |
+| convert | `FUN_10008919(layer, pos, piece << 8 \| state, -1, 8, 0)` per cell, free |
+| revert | nothing to do in the edit case: the piece is not Protected, so the stock retile that reaches the block re-places it as stock road and RBT leaves it; a non-qualifying block found by the load pass gets `FUN_100151f1(block, mask 3)` |
+| save | SAVEBASE writes 39 for a cell with an arm and 11203 for one without (the stock tiles), so a game without the mod opens exactly the stock junction |
+
+Opt-outs: `SC3NETMOD_RBT=0` (whole block), `SC3NETMOD_RBT_LOAD=0` (no pass after a load).
+
+Limits: one piece (one chirality: a mirrored pinwheel, arms on the other cell of each side, never converts). Any
+retile that reaches the block re-places its cells (as stock does for every road nearby) and RBT converts them again.
+
+**Arm-less quarter (task roundabout4, `verify/roundabout4/`).** `"closed_piece": 20401` in the manifest entry (table
+line `rbt 20400 3 20401`): on a 3-arm block the cell whose exit holds no road becomes 20401 in its own state, the
+other three 20400, so the closed mouth always faces the missing arm. 20401 = base 39, ring and island as 20400, the
+ring's outer edge line, gutter and sidewalk continue round the block centre, terrain outside (frame table ground bit
+0x40 on stock 11203's frame geometry, NET_ART.md 11); lanes: the ring only (x- -> z+, path 1024) and the outer
+sidewalk walk (15,15) -> (240,240) path 768, both stock 11203 state 0's. (a) counts 20401 as either stock tile; a
+block is rewritten when any cell differs from the wanted piece, so adding the fourth road turns 20401 into 20400 and
+removing it turns it back. Saves write 20401 as 11203. A table line with two numbers keeps every quarter 20400; such a
+DLL reverts 20401 blocks on load (rule (a)) and converts them on the next load.
+
+### 5.1 Rotondas automáticas (para el dueño)
+
+Ya no hay tecla. Cuando tirás calles y queda un cuadrado de 2x2 casillas de calle con al menos tres salidas de una
+sola calle, se convierte solo en rotonda, sin costo extra. Hay una salida por lado y las cuatro giran como un
+molinete, igual que en la rotonda que ya viste: en cada lado sirve una de las dos casillas, la otra queda cerrada. No se convierte si una avenida (calle doble) llega
+a un lado, si hay otra calle pegada a un lado cerrado o si hay otro cuadrado de 2x2 al lado. Si después pasa algo de
+eso, o si sacás una salida y quedan dos, vuelve a ser cruce normal solo. Al abrir una ciudad (también las del juego)
+se convierten los cuadrados que cumplen. La ciudad guardada abre sin el mod con el cruce normal del juego.
+
+Rotonda de tres salidas (roundabout4): el lado sin calle ya no queda abierto. Esa casilla usa una segunda pieza,
+20401, con el mismo anillo e isla; el cordón y la vereda del anillo siguen de largo por ese lado y afuera se ve el
+terreno. Si después le agregás la cuarta calle, esa casilla pasa a ser una entrada normal, y si la sacás vuelve a
+cerrarse.

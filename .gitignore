@@ -86,6 +86,11 @@
 !/re/tools/netmod/examples/*/layout.json
 # lanekit (2026-10-13): lane specs are text descriptions (side, slot, curve key), no game art
 !/re/tools/netmod/examples/*/*.lanes.json
+# roundabout2 (2026-10-13): netpaint plans are geometry + parameters; colours come from the game at build time
+!/re/tools/netmod/examples/*/paint.json
+# roundabout4 (2026-10-14): the closed-quarter plan and recipe (JSON parameters, no game art)
+!/re/tools/netmod/examples/*/paint_*.json
+!/re/tools/netmod/examples/*/recipe_*.json
 
 # 5) re/scripts — .py / .ps1 / .java only.
 #    Explicitly NOT the .log / .txt Ghidra run artifacts (absolute-path leaks)
