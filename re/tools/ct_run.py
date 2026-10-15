@@ -15,7 +15,8 @@ sys.path.insert(0, HERE)
 import pt_run  # noqa: E402
 from ct_probe import CSRC, JS  # noqa: E402
 
-pt_run.JS = "var CSRC = " + json.dumps(CSRC) + ";\n" + JS
+# CT_GROUPS (env): comma list of hook groups (trip, ag, acc, spawn, path, view, rem) or "all"
+pt_run.JS = "var CSRC = " + json.dumps(CSRC) + ";\n" + JS.replace("__CT_GROUPS__", os.environ.get("CT_GROUPS", "all"))
 
 if __name__ == "__main__":
     sys.exit(pt_run.main())
