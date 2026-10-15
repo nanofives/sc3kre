@@ -26,6 +26,11 @@
  * own shadow layer and marker grid), the caches below are written with interlocked ops, so workers are safe.
  */
 
+#include <tlhelp32.h>
+#define LD_MAXTH 1024
+static volatile LONG g_ld_on = 1, g_ld_alt_busy, g_ld_n_toggle, g_ld_n_toggle_retry;
+static BYTE g_ld_jmp_e[6], g_ld_call_a[5], g_ld_orig_a[5];
+static HANDLE g_ld_th[LD_MAXTH];
 static int   g_ld_mode;                  /* 0 off, 1 variants, 2 all, 3 count */
 static DWORD g_ld_st;                    /* SimTransit base */
 static BYTE *g_ld_tramp;                 /* original FUN_1000755e: its 6 entry bytes + jmp +0x7564 */
@@ -428,14 +433,82 @@ static void lanedensity_install(void) {
     jmp[0] = 0xE9;
     *(DWORD *)(jmp + 1) = (DWORD)ld_stub - (DWORD)(e + 5);
     jmp[5] = 0x90;
+    memcpy(g_ld_jmp_e, jmp, 6);                                    /* ALT: the two patched sites, both ways */
+    memcpy(g_ld_call_a, st + 0x71eb, 5);
+    g_ld_orig_a[0] = 0xE8;
+    *(DWORD *)(g_ld_orig_a + 1) = (st + 0x8a94) - (st + 0x71f0);
     if (!write_code(e, jmp, 6)) { logf("lanedensity: entry not patched"); g_ld_mode = 0; return; }
     logf("lanedensity: ON, mode %s (SimTransit at 0x%08lX: step 0x1000755e, arrival call 0x100071eb)",
          g_ld_mode == 1 ? "variants" : g_ld_mode == 2 ? "all pieces" : "count only (nothing filtered)", (DWORD)st);
 }
 
+/* ALT (perf measurement, verify/lanedensity PRE addendum 7): sc3netmod_ld_set(0) puts both patch sites back to the
+   shipped bytes, sc3netmod_ld_set(1) re-installs the detours, so one game can alternate stock and patched routing.
+   Every other thread of the process is suspended while the bytes change, and the write is retried until none of them
+   sits inside the bytes being written or the trampoline. Nothing that takes a lock runs while they are suspended.
+   Returns the previous state, or -1 when the block is not installed. */
+
+static int ld_in(DWORD ip, DWORD at, DWORD n) { return ip >= at && ip < at + n; }
+
+__declspec(dllexport) int __cdecl sc3netmod_ld_set(int on) {
+    BYTE *e = (BYTE *)g_ld_st + 0x755e, *a = (BYTE *)g_ld_st + 0x71eb;
+    DWORD me = GetCurrentThreadId(), pid = GetCurrentProcessId(), olde, olda;
+    HANDLE snap;
+    THREADENTRY32 te;
+    int n = 0, k, tries, prev, busy;
+    on = on ? 1 : 0;
+    if (!g_ld_st || !g_ld_tramp || (g_ld_mode != 1 && g_ld_mode != 2)) return -1;
+    if (InterlockedCompareExchange(&g_ld_alt_busy, 1, 0)) return -1;
+    prev = g_ld_on;
+    if (prev == on) { g_ld_alt_busy = 0; return prev; }
+    snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    te.dwSize = sizeof(te);
+    if (snap != INVALID_HANDLE_VALUE && Thread32First(snap, &te)) do {
+        if (te.th32OwnerProcessID == pid && te.th32ThreadID != me && n < LD_MAXTH) {
+            HANDLE h = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT, FALSE, te.th32ThreadID);
+            if (h) g_ld_th[n++] = h;
+        }
+        te.dwSize = sizeof(te);
+    } while (Thread32Next(snap, &te));
+    if (snap != INVALID_HANDLE_VALUE) CloseHandle(snap);
+    VirtualProtect(e, 6, PAGE_EXECUTE_READWRITE, &olde);
+    VirtualProtect(a, 5, PAGE_EXECUTE_READWRITE, &olda);
+    for (tries = 0; tries < 200; tries++) {
+        busy = 0;
+        for (k = 0; k < n; k++) SuspendThread(g_ld_th[k]);
+        for (k = 0; k < n && !busy; k++) {
+            CONTEXT c;
+            c.ContextFlags = CONTEXT_CONTROL;
+            if (GetThreadContext(g_ld_th[k], &c) &&
+                (ld_in(c.Eip, (DWORD)e, 6) || ld_in(c.Eip, (DWORD)a, 5) || ld_in(c.Eip, (DWORD)g_ld_tramp, 11)))
+                busy = 1;
+        }
+        if (!busy) {
+            if (on) { memcpy(e, g_ld_jmp_e, 6); memcpy(a, g_ld_call_a, 5); }
+            else    { memcpy(e, g_ld_entry, 6); memcpy(a, g_ld_orig_a, 5); }
+            FlushInstructionCache(GetCurrentProcess(), e, 6);
+            FlushInstructionCache(GetCurrentProcess(), a, 5);
+            g_ld_on = on;
+        }
+        for (k = 0; k < n; k++) ResumeThread(g_ld_th[k]);
+        if (!busy) break;
+        InterlockedIncrement(&g_ld_n_toggle_retry);
+        Sleep(1);
+    }
+    VirtualProtect(e, 6, olde, &olde);
+    VirtualProtect(a, 5, olda, &olda);
+    for (k = 0; k < n; k++) CloseHandle(g_ld_th[k]);
+    if (g_ld_on == on) InterlockedIncrement(&g_ld_n_toggle);
+    logf("lanedensity: ALT %s (%d thread(s) suspended, %d retr%s)%s", on ? "ON" : "OFF (shipped bytes)", n, tries,
+         tries == 1 ? "y" : "ies", g_ld_on == on ? "" : " - NOT switched");
+    g_ld_alt_busy = 0;
+    return prev;
+}
+
 static void lanedensity_stats(void) {
     int i, j, n = 0;
     if (!g_ld_mode) return;
+    if (g_ld_n_toggle) logf("lanedensity: ALT state %s, %ld switch(es), %ld retr(ies)", g_ld_on ? "ON" : "OFF", g_ld_n_toggle, g_ld_n_toggle_retry);
     logf("lanedensity: evals=%ld honoured steps=%ld neighbours closed=%ld wrong-way fails=%ld arrivals refused=%ld slow QI=%ld vtables=%ld refused-transition closes=%ld trip list full=%ld",
          g_ld_n_eval, g_ld_n_hon, g_ld_n_premark, g_ld_n_wrong, g_ld_n_arrblock, g_ld_n_slowqi, g_ld_nvt, g_ld_n_tripmark, g_ld_n_tripfull);
     if (g_ld_cells)
