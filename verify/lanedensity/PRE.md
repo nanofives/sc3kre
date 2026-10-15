@@ -220,3 +220,27 @@ Predictions:
   layout whose lanes were checked in (b)) = 0 at every block; steps between the 20401 quarter and the outside cell
   beyond its closed side = 0. MR_ctl: steps against the ring order > 0 summed over the three blocks. A block with no
   final-path ring step in either arm is reported as carrying no traffic, not as evidence.
+
+## Addendum 8 (2026-10-15, after MR_ctl / MR_on, before MR_ctl2 / MR_on2)
+
+Two faults in addendum 7's ring check, found in the MR arms:
+1. The registered ring order ((X+1,Z) -> (X,Z) -> ...) was taken from the 2026-10-13 package (lanekit's
+   example_roundabout, quarter ring z+ -> x-). Package roundabout 4.0.0 (the one RBT places) runs the ring the other
+   way: `examples/roundabout/quarter.lanes.json`, state 0, ring lane x- (0,80) -> z+ (175,255) ("counter-clockwise for
+   right-hand traffic"); `closed.lanes.json` (20401) the same lane. With the pinwheel states (3, 0 / 2, 1) the world
+   order is (X,Z) -> (X+1,Z) -> (X+1,Z+1) -> (X,Z+1) -> (X,Z): quarter (X+1,Z) at state 0 is entered from x- (from
+   (X,Z)) and left through z+ (to (X+1,Z+1)). That order is read from the package files, not from the runs.
+2. `ld_paths.py` paired every deposit of FUN_10006edd, whatever its network mask (4th argument: 0x15 road / rail /
+   bus, 2 highway, 8 subway [CONFIRMED @ SimTransit 0x10006edd and its five calls in 0x100070d0]). Berlin's subway
+   (network instance 3) runs under block (57,167) along x = 58, z 165..169 (pieces 16013, 16037, 11612), and (58,169)
+   has no surface road, so north-south pairs there come at least in part from subway trips.
+
+MR_ctl / MR_on are reported as run (registered order and unfiltered). New arms, same protocol as MR_ctl / MR_on:
+MR_ctl2 (count), MR_on2 (unset), `ld_paths.py --mask 0x35` (only deposits into the surface grid +0x6c; a deposit of
+another mask breaks the per-thread chain), checked with `ld_ringcheck.py --ring400`.
+
+Predictions:
+- MR_on2: final-path steps between two ring cells against the 4.0.0 order = 0 at each of the three blocks; steps
+  between the 20401 quarter and any cell outside its block = 0.
+- MR_ctl2: steps against the 4.0.0 order > 0 summed over the three blocks.
+- Both: 3 blocks converted by RBT; 0 `step through a closed side` lines.

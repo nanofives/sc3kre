@@ -9,7 +9,9 @@ previous one: when both are adjacent cells and at least one is watched, the forw
 cell). Pairs that straddle two trips are counted only if adjacent (rare; reported as is).
 
   py -3.12 ld_paths.py --cells 147,46,157,46 --cells 61,95,62,96 --secs 120 --out paths.json
-Output: {"from x,z>to x,z": count}, sides as world steps.
+Output: {"from x,z>to x,z": count}, sides as world steps. --mask 0x35 keeps only deposits into the surface grid +0x6c
+(roads 0x15; highway 2 and subway 8 excluded; mask = 4th argument [CONFIRMED @ SimTransit 0x10006edd, callers in
+0x100070d0]); without it, a subway or highway under watched cells adds its own pairs (verify/lanedensity addendum 8).
 """
 import argparse
 import json
@@ -25,12 +27,13 @@ import sc3io  # noqa: E402
 
 JS = r"""
 var TR = Process.getModuleByName('SimTransit.dll').base;
-var RECTS = %RECTS%;
+var RECTS = %RECTS%, MASK = %MASK%;
 function watched(x, z) { for (var i = 0; i < RECTS.length; i++) { var r = RECTS[i]; if (x >= r[0] && x <= r[2] && z >= r[1] && z <= r[3]) return true; } return false; }
 var last = {}, cnt = {}, n = 0;
 Interceptor.attach(TR.add(0x6edd), {
   onEnter: function (a) {
     var x = a[0].toInt32(), z = a[1].toInt32(), t = this.threadId, p = last[t];
+    if (MASK && !(a[3].toInt32() & MASK)) { last[t] = null; return; }   // another network's deposit breaks the chain
     last[t] = [x, z];
     n++;
     if (!p || (p[0] === x && p[1] === z)) return;
@@ -50,16 +53,18 @@ def main():
     ap.add_argument("--cells", action="append", required=True)
     ap.add_argument("--secs", type=float, default=120)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--mask", type=lambda v: int(v, 0), default=0,
+                    help="keep only deposits whose mask (arg 4 of FUN_10006edd) has these bits, e.g. 0x35 = the surface grid +0x6c; 0 = all")
     a = ap.parse_args()
     rects = [[int(v) for v in c.split(",")] for c in a.cells]
     s = frida.attach(sc3io.game_pid())
-    sc = s.create_script(JS.replace("%RECTS%", json.dumps(rects)))
+    sc = s.create_script(JS.replace("%RECTS%", json.dumps(rects)).replace("%MASK%", str(a.mask)))
     sc.load()
     time.sleep(a.secs)
     r = sc.exports_sync.get()
     s.detach()
     with open(a.out, "w") as f:
-        json.dump({"deposits": r["n"], "secs": a.secs, "pairs": r["cnt"]}, f, indent=1, sort_keys=True)
+        json.dump({"deposits": r["n"], "secs": a.secs, "mask": a.mask, "pairs": r["cnt"]}, f, indent=1, sort_keys=True)
     print("deposits %d, %d watched pairs -> %s" % (r["n"], len(r["cnt"]), a.out))
 
 
