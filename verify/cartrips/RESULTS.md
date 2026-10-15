@@ -68,3 +68,30 @@ Validity: 0 native faults in S1, S2, E2; every arm alive to the end of its sched
   time in S1 / S2 (81-131 ms per second) includes that hook. The unhooked figure is smoke B's 60 ms per second.
 - Routing times include the probe's per-node hooks (CModule); on E2 they slow sc3perf's workers (sim thread waited
   64.8 s in drains over the run).
+
+## Addendum 3: P1, freeze cars on pause (arm FZ)
+
+sc3simrun with FREEZECARS (commit cfd618e, build `re/harness/build_ct/sc3simrun.dll` SHA-256 a6cac208), Berlin, schedule
+`s3:60,P:60,s3:60,P:30,s3:30`. Data: `data/FZ_summary.json`, `data/FZ_sc3simrun.log`; raw `inst_ct_freeze\FZ.jsonl`.
+
+| phase | cars alive | car cell moves/s | despawn tests/s | removals/s | spawns/s | visible removals/min |
+|---|---|---|---|---|---|---|
+| speed 3 | 129.8 | 54.7 | 58.4 | 5.55 | 7.88 | 66.4 |
+| **pause 60 s** | **130 (flat)** | **0** | **0** | **0** | **0** | **0** |
+| speed 3 | 134.6 | 51.0 | 54.4 | 3.96 | 4.05 | 64.2 |
+| **pause 30 s** | **135 (flat)** | **0** | **0** | **0** | **0** | **0** |
+| speed 3 | 133.9 | 45.5 | 48.1 | 3.00 | 2.78 | 44.4 |
+
+Stock control, paused (S1 / S2): 44.1 / 41.2 moves/s, 3.21 / 3.18 removals/s, 34.7 / 35.8 visible removals per minute.
+
+| # | prediction | result |
+|---|---|---|
+| F1 | paused: moves, despawn tests, removals, spawns 0; count constant | met, both pauses |
+| F2 | running: moves within 30% of S1 / S2 speed 3 (46.0 / 44.6) | met: 54.7, 51.0, 45.5 (max +19%) |
+| F3 | log armed=1; frozen ticks grow only while paused | met: armed=1; frozen 1,430 -> 2,771,080 over the 60 s pause, unchanged over the next run phase (2,773,915), -> 4,186,555 over the 30 s pause |
+| F4 | 0 faults, game alive to the end | met |
+
+The first run phase's higher spawns and placement failures are the probe attaching to a city whose cars were not yet
+placed (count 0 -> 145 in its first seconds). One second of the agent-loop timer in the 60 s pause reads 429,557 ms
+(an unmatched enter/leave in the probe's CModule timer); the other 59 read 51-70 ms. Not measured: trains, boats,
+planes, people (not patched).
