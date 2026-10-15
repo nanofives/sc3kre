@@ -29,8 +29,12 @@ every hold and clock pause.
 
 The coordinator has three independent counters with the same shape: `+0x140` (`vt+0x20c`/`+0x210`,
 the user pause, posts `0xc2a35d7f`/`0xc2a35d81`), `+0x144` (`vt+0x21c`/`+0x220`, camera and UI holds) and
-`+0x148` (`vt+0x22c`/`+0x230`, a bracket seen around periodic work, `[UNCERTAIN]` who drives it). All
-three pause the same clock.
+`+0x148` (`vt+0x22c`/`+0x230`, the **month-pass bracket**: SIMCITY's sim-thread command switch `FUN_10001675`
+wraps command 7, the first-day-of-month pass, in `vt+0x22c` = `FUN_100059cf` / `vt+0x230`
+`[CONFIRMED @ SIMCITY 0x100016c9, 0x100016ea, 0x100059cf]`, `verify/pausetrips/RESULTS.md`). All three pause the
+same clock. While the clock is paused its 1000 ms callback skips every minute/hour/day fire
+(`cmp [esi+0x54],0; jne` at `0x1000a885`) and Resume `FUN_1000a145` restarts the time base, so paused time is dropped,
+not replayed `[CONFIRMED @ SIMCITY 0x1000a885, 0x1000a0ec, 0x1000a145]`.
 
 ## The mod: one byte
 
@@ -63,4 +67,7 @@ Soak with the mod: 180 s of continuous drag at 0.50 ticks/s, process alive, fram
 - Owner hand test, and the four mods together through `mods_launch.exe`.
 - The stock hold may have been there to keep a full-speed sim from competing with scroll redraws on
   2000-era CPUs. No race showed in 3.5 min of drag at the default speed. Fastest speed not soaked.
-- `+0x148` driver and the cursor jumps seen during it.
+- ~~`+0x148` driver~~: the month pass (above). The cursor jumps seen during it are still unexplained.
+- **Vehicles still freeze while scrolling with the mod.** Days and trips keep running (pausetrips F1: 5.7 days/s and
+  trips during the camera move), but the SIMSPR view tick skips the heartbeat that animates the vehicles whenever a
+  camera-busy byte is set (`0x10042ad5`), independent of the hold this mod removes. STRTSIM.md section 8.
