@@ -94,29 +94,32 @@ def cmd_a1(a):
     in the dump by (tid, node sequence)."""
     jl = os.path.join(a.inst, a.arm + ".jsonl")
     recs = [json.loads(l) for l in open(jl, encoding="utf-8") if l.strip()]
-    marks = [r for r in recs if r.get("mark") == "start"]
-    phases = []
-    for i, m in enumerate(marks):
-        end = next((r["t"] for r in recs if r.get("mark") == "end" and r["phase"] == m["phase"] and r["t"] >= m["t"]), None)
-        phases.append((m["phase"], m["t"] + 3, end))           # first 3 s dropped, as the phase-1 arms
-    # ct_probe: cumulative per-thread counters each second
-    ticks = [r for r in recs if r.get("t") and isinstance(r.get("trips"), dict)]
+    # phases from the start / end marks (wall time); the probe's per-second records carry t = "tick", so they are
+    # assigned to a phase by their position between the marks, first 3 dropped
+    phases, cur = [], None
+    for r in recs:
+        if r.get("mark") == "start":
+            cur = {"phase": r["phase"], "t0": r["t"], "ticks": []}
+        elif r.get("mark") == "end" and cur:
+            cur["t1"] = r["t"]
+            phases.append(cur)
+            cur = None
+        elif cur is not None and isinstance(r.get("trips"), dict):
+            cur["ticks"].append(r)
 
     def ct_total(r, key):
         return sum(v.get(key, 0) for v in r["trips"]["by_thread"].values())
     stats = [r for r in read_log(os.path.join(a.inst, "sc3cartrips.log")) if r["kind"] == "STAT"]
     out = []
-    for name, t0, t1 in phases:
-        if t1 is None:
-            continue
-        ins = [r for r in ticks if t0 <= r["t"] <= t1]
+    for ph in phases:
+        ins = ph["ticks"][3:]
         if len(ins) < 2:
             continue
-        dt = ins[-1]["t"] - ins[0]["t"]
-        row = {"phase": name, "ct_secs": round(dt, 1)}
+        dt = float(len(ins) - 1)
+        t0, t1 = ph["t0"] + 3, ph["t1"]
+        row = {"phase": ph["phase"], "ct_secs": dt}
         for key in ("vp", "vpflag", "arrived", "nodes", "vpnodes"):
             row["ct_" + key] = (ct_total(ins[-1], key) - ct_total(ins[0], key)) / dt
-        # DLL: STAT windows fully inside the phase (epoch ms at the window end, dt seconds long)
         sw = [s for s in stats if t0 * 1000 <= s["epoch"] - s["dt"] * 1000 and s["epoch"] <= t1 * 1000]
         if sw:
             d = sum(s["dt"] for s in sw)
@@ -146,7 +149,7 @@ def cmd_a1(a):
                 hit = None
                 for c in cands:
                     seg = [(x0, z0, ty) for (x0, z0, x1, z1, ty, *_r) in c["nodes"]]
-                    if seg == [tuple(q) for q in p[c["first"]:c["first"] + c["nstore"]]] and bool(c["flag"]) == bool(smp["flag"]):
+                    if seg == [tuple(q) for q in p[c["first"]:c["first"] + len(c["nodes"])]] and bool(c["flag"]) == bool(smp["flag"]):
                         hit = c
                         break
                 st["ct_samples"] += 1

@@ -85,6 +85,8 @@ static unsigned __int64 epoch_ms(void) {
 
 static int g_mode = 1;                           /* 0 off, 1 capture */
 static int g_verify, g_time, g_dump, g_choice, g_log_s = 10;
+static int g_solve;
+static int g_rect_ovr, g_ovr[4];                 /* [cartrips] rect=x0,z0,x1,z1: measurement region instead of the sim rect */
 
 static void ini_read(void) {
     char path[MAX_PATH], v[32];
@@ -96,6 +98,9 @@ static void ini_read(void) {
     g_time = GetPrivateProfileIntA("cartrips", "time_route", 0, path) ? 1 : 0;
     g_dump = GetPrivateProfileIntA("cartrips", "dump", 0, path) ? 1 : 0;
     g_choice = GetPrivateProfileIntA("cartrips", "choice", 0, path) ? 1 : 0;
+    g_solve = GetPrivateProfileIntA("cartrips", "solve", 0, path) ? 1 : 0;
+    GetPrivateProfileStringA("cartrips", "rect", "", v, sizeof(v), path);
+    if (v[0] && sscanf(v, "%d,%d,%d,%d", &g_ovr[0], &g_ovr[1], &g_ovr[2], &g_ovr[3]) == 4) g_rect_ovr = 1;
     g_log_s = GetPrivateProfileIntA("cartrips", "log_s", 10, path);
     if (g_log_s < 1) g_log_s = 1;
 }
@@ -550,10 +555,13 @@ static int g_dlen;
 #define DCAP (512 * 1024)
 static volatile DWORD g_dump_drop;
 
+#include "sc3cartrips_lanes.c"
+
 static void __cdecl on_tick(BYTE *layer8) {
     BYTE *L = layer8 - 8;
     int x0, z0, x1, z1, virt = 0;
     LARGE_INTEGER now;
+    LONGLONG budget_end;
     g_ticks++;
     g_game_tid = GetCurrentThreadId();
     __try {
@@ -564,11 +572,13 @@ static void __cdecl on_tick(BYTE *layer8) {
             virt = 1;
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) { return; }
+    if (g_rect_ovr) { x0 = g_ovr[0]; z0 = g_ovr[1]; x1 = g_ovr[2]; z1 = g_ovr[3]; virt = 2; }
     g_rect_xz0 = (LONG)((x0 & 0xffff) << 16 | (z0 & 0xffff));
     g_rect_xz1 = (LONG)((x1 & 0xffff) << 16 | (z1 & 0xffff));
     g_rect_virtual = virt;
     if (!g_ring) return;
     QueryPerformanceCounter(&now);
+    budget_end = now.QuadPart + g_freq.QuadPart * 4 / 1000;            /* M2 solving: 4 ms per tick at most */
     for (;;) {
         RSlot *s = &g_ring[g_rpos & (RN - 1)];
         TripRec *q;
@@ -588,6 +598,7 @@ static void __cdecl on_tick(BYTE *layer8) {
         s->seq = g_rpos + RN;
         g_rpos++;
         g_drained++;
+        if (g_solve && g_strt_base) solve_trip(q, &budget_end);
         if (g_dump) {
             int sz = (int)(sizeof(TripRec) - (MAXSTORE - q->nstore) * sizeof(Node));
             EnterCriticalSection(&g_dlock);
@@ -841,6 +852,7 @@ static DWORD WINAPI logger(LPVOID param) {
     (void)param;
     while (!(st = GetModuleHandleA("SimTransit.dll"))) Sleep(5);
     while (!(strt = GetModuleHandleA("STRTSIM.DLL"))) Sleep(5);
+    g_strt_base = (BYTE *)strt;
     g_cap = *((BYTE *)st + 0x1f0c0);                       /* DAT_1001f0c0, the ring scan's congestion cap */
     {
         int c = arm_capture(st), v = g_verify ? arm_verify(st) : 0, tm = g_time ? arm_time(st) : 0, d = arm_tick(strt);
@@ -854,6 +866,23 @@ static DWORD WINAPI logger(LPVOID param) {
         dump = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         if (dump != INVALID_HANDLE_VALUE) WriteFile(dump, hdr, sizeof(hdr), &w, NULL);
     }
+    if (g_solve && g_dump) {
+        static const DWORD hg[2] = { 0x31474354 /* "TCG1" */, 1 }, hr[2] = { 0x31524354 /* "TCR1" */, 1 };
+        DWORD w;
+        Out *os[2] = { &g_og, &g_or };
+        const char *names[2] = { "cartrips_graphs.bin", "cartrips_routes.bin" };
+        int i;
+        g_cellseen = (BYTE *)VirtualAlloc(NULL, 1024 * 1024 / 8, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        for (i = 0; i < 2; i++) {
+            InitializeCriticalSection(&os[i]->cs);
+            os[i]->cap = 4 * 1024 * 1024;
+            os[i]->buf = (BYTE *)VirtualAlloc(NULL, os[i]->cap, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+            self_path(path, sizeof(path), names[i]);
+            os[i]->f = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+            if (os[i]->f != INVALID_HANDLE_VALUE) WriteFile(os[i]->f, i ? hr : hg, 8, &w, NULL);
+        }
+        if (!g_cellseen) g_og.buf = g_or.buf = NULL;
+    }
     sum_threads(&prev);
     QueryPerformanceCounter(&q0);
     logf("CLOCK> qpc=%I64d freq=%I64d epoch=%I64u", q0.QuadPart, g_freq.QuadPart, epoch_ms());
@@ -862,6 +891,8 @@ static DWORD WINAPI logger(LPVOID param) {
         int s;
         for (s = 0; s < g_log_s * 4; s++) {
             Sleep(250);
+            out_flush(&g_og);
+            out_flush(&g_or);
             if (dump != INVALID_HANDLE_VALUE && g_dlen) {
                 DWORD w;
                 EnterCriticalSection(&g_dlock);
@@ -884,7 +915,7 @@ static DWORD WINAPI logger(LPVOID param) {
                  "rect=%d,%d,%d,%d%s tsc_mhz=%.1f ticks=%lu dumpdrop=%lu",
                  epoch_ms(), dt, g_cap_on, D(0), D(1), D(2), D(3), D(4), D(5), D(6), D(7), D(8), D(9), D(10), D(11), dr - dr0, g_qlen,
                  lat / 1000.0, D(12), g_nthreads, (short)(g_rect_xz0 >> 16), (short)g_rect_xz0, (short)(g_rect_xz1 >> 16),
-                 (short)g_rect_xz1, g_rect_virtual ? " (virtual)" : "", (double)(tsc1 - tsc0) / dt / 1e6, g_ticks, g_dump_drop);
+                 (short)g_rect_xz1, g_rect_virtual == 2 ? " (ini)" : g_rect_virtual ? " (virtual)" : "", (double)(tsc1 - tsc0) / dt / 1e6, g_ticks, g_dump_drop);
             logf("TYPES> 0x80=%lu 1=%lu 2=%lu 3=%lu 4=%lu 8=%lu 0x14=%lu 0x18=%lu 0x30=%lu 0x41=%lu 0x42=%lu 0x43=%lu 0x50=%lu other=%lu",
                  cur.ty[0], cur.ty[1], cur.ty[2], cur.ty[3], cur.ty[4], cur.ty[5], cur.ty[6], cur.ty[7], cur.ty[8], cur.ty[9],
                  cur.ty[10], cur.ty[11], cur.ty[12], cur.ty[13]);
@@ -895,6 +926,13 @@ static DWORD WINAPI logger(LPVOID param) {
             if (g_choice)
                 logf("CHOICE> cap=%u steps=%lu max=%lu min=%lu mid=%lu all_equal=%lu single=%lu b_not_candidate=%lu faults=%lu",
                      g_cap, cur.ch[0], cur.ch[1], cur.ch[2], cur.ch[3], cur.ch[4], cur.ch[5], cur.ch[6], cur.ch[7]);
+            if (g_solve)
+                logf("M2> trips=%lu routes=%lu one_cell=%lu exact_w0=%lu solved_w1=%lu full_w1=%lu cov90_w1=%lu fail_nopath=%lu "
+                     "fail_start=%lu fail_limit=%lu budget_skipped=%lu solve_us_total=%lu max_us=%lu graphs: ok=%lu offmap=%lu "
+                     "noocc=%lu notroad=%lu noqi=%lu nograph=%lu fault=%lu dumpdrop=%lu/%lu",
+                     g_m2[12], g_m2[0], g_m2[11], g_m2[1], g_m2[2], g_m2[3], g_m2[4], g_m2[5], g_m2[6], g_m2[7], g_m2[8],
+                     g_m2[9], g_m2[10], g_gs[GS_OK], g_gs[GS_OFFMAP], g_gs[GS_NOOCC], g_gs[GS_NOTROAD], g_gs[GS_NOQI],
+                     g_gs[GS_NOGRAPH], g_gs[GS_FAULT], g_og.drop, g_or.drop);
             if (g_time) {
                 sc3cartrips_stats(stats, 16);
                 logf("TIME> calls=%lu cycles=%I64u", stats[7], (unsigned __int64)stats[9] << 32 | stats[8]);
@@ -919,8 +957,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
         ini_read();
         if (!GetEnvironmentVariableA("SC3CARTRIPS_LOG", path, sizeof(path))) self_path(path, sizeof(path), "sc3cartrips.log");
         g_log = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-        logf("### sc3cartrips loaded: mode=%s verify=%d time_route=%d dump=%d choice=%d log_s=%d", g_mode ? "capture" : "off",
-             g_verify, g_time, g_dump, g_choice, g_log_s);
+        logf("### sc3cartrips loaded: mode=%s verify=%d time_route=%d dump=%d choice=%d solve=%d log_s=%d rect=%s", g_mode ? "capture" : "off",
+             g_verify, g_time, g_dump, g_choice, g_solve, g_log_s, g_rect_ovr ? "ini" : "sim rect");
         if (g_mode) {
             int i;
             g_tls = TlsAlloc();

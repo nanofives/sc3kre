@@ -119,3 +119,55 @@ flag (the unflagged ~60%, CAR_TRIPS 5), the CHOICE scores (A1).
   the corridor only.
 - An addendum before the M2 arms fixes: the lane-graph source (in-memory dump from the DLL, or TrBlkAtt + the save's
   network layer), the corridor definition, the failure reasons, and the in-DLL vs offline match test.
+
+## Addendum 1 (2026-10-15, after arms K, A1, V2; before any M2 arm and before F1 / F2 / C1 / C2)
+
+Done before this addendum: K (smoke), A1, V2 on build c392ccbc. Their results go to RESULTS as registered.
+
+**Build change.** `sc3cartrips.dll` **a3038ce4** (build_ct2m2) = c392ccbc's capture, ring, drain, verify, time and
+choice code unchanged, plus the M2 solver (`sc3cartrips_lanes.c`, ini `solve=1`) and an ini `rect=x0,z0,x1,z1`
+(measurement region in place of the sim rect; logged `(ini)`). F1, F2, C1, C2 run on a3038ce4 instead of c392ccbc, so
+the long runs test the shipped binary: F1 / F2 with `solve=1` (no dumps), C1 / C2 with `solve=0` (they time routing,
+which the solver does not touch). Their predictions are unchanged; F1 / F2 add: M2 counters grow, 0 graph faults.
+
+**M2 lane graph source**: the in-memory graphs, read by the DLL on the game thread exactly as `FUN_1001c750` reads
+them (occupant `DAT_100331e0[0]->vt+0x7c`, road predicate `DAT_10033108[0]`, QI `0x41658d28`, `vt+0x54` ->
+`[[+4]+0x28]`), arrival node as `FUN_10020108`. `dump=1` writes each graph once and each queried cell once
+(`cartrips_graphs.bin`) and every solved route (`cartrips_routes.bin`). Offline: `ctm_lanes.py` (graphs from the dump,
+or from the save's network layer + TrBlkAtt, `sources` compares the two per cell).
+
+**Route**: as registered (in-view window, travel order, road types 1-3, 1 x 1 nodes inside the trip's rect),
+consecutive repeats of a cell merged (the lot-entered road cell is popped twice, LANE_DENSITY 1).
+
+**Solver** (C and Python, same rules, Dijkstra with (cost, push order) priority): state (cell, lane node, j = route
+index reached). Start: every class-0 node of r0. A move takes an internal edge (cost 1) or an exit edge into the next
+cell (the crossing conditions above), allowed only into the corridor = cells within Chebyshev distance `w` of some route
+cell, inside the rect, and not behind r(j - 2). Entering cell n: j becomes the largest route index in (j, j + f] within
+distance `w` of n (f = 2 for w >= 1, 1 for w = 0), else the smallest larger one (the cells in between are skipped,
+cost 3 each), else j stays. Cost +1 for entering a cell that is not a route cell. Goal: j = k. Expansion limit 200,000.
+- **exact (w = 0)**: the car enters the route cells and only them, in order: "fully drivable as routed" (lane level).
+- **corridor (w = 1)**: the in-game solver's mode. Reported: solved, solved with 0 skipped route cells ("full"),
+  solved with <= 10% skipped ("cov90").
+- Offline also: the phase-1 `literal` rule and w = 2.
+- Failure reason (offline, w = 1), first match from the stall index on: a route step between adjacent cells with no
+  lane link either way (`unconnected`: the router stepping between roads the lanes do not join), a link only the other
+  way (`against-lanes`), the next cell without lanes (`no-lanes`), a reversal a -> b -> a (`u-turn`), else `turn`.
+- Solver cost per route: the DLL's QPC time per w = 1 solve; budget 4 ms per animation tick (routes past it counted
+  `budget_skipped`, not solved).
+
+**M2 arms** (build a3038ce4, `capture, solve, dump`, CT_GROUPS=none, schedule `s3:120,s4:120`, default camera):
+
+| arm | tree / instance | city | note |
+|---|---|---|---|
+| M2B | stock / inst_ct2_stock | Berlin | |
+| M2M | stock / inst_ct2_stock | Moscow | |
+| M2L | stock / inst_ct2_stock | London | most avenue tiles |
+| M2E | stock / inst_ct2_full (`--safe`, settle 90) | Europolis 1024 | virtual rect (zoomed out) |
+| M2R | `Simcity_stock_roundabout4` / new `inst_ct2_rbt` = mods_launch 88452c54 + sc3resize + sc3netmod from `inst_rb4` (RBT, package 4.0.0) + sc3cartrips a3038ce4 | Berlin | `rect=45,155,70,180` around the RBT block (57,167) |
+
+Predictions (M2):
+1. **Match**: the DLL's result equals `ctm_lanes.py match` on the same dumped graphs for >= 99% of routes (w = 1:
+   ok, cost, skipped, off-route cells and the lane path; w = 0: ok and cost), every arm.
+2. 0 faults, 0 graph faults (`fault=0` in `M2>`), budget_skipped <= 1% of routes in the Berlin-size arms.
+3. Measured only: per city the % exact / corridor / full / cov90, failure reasons with counts and places, solve
+   time per route (median, p90, max), and in M2R the routes through 20400 / 20401 cells.
