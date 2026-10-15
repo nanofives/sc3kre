@@ -458,7 +458,14 @@ var QPF = (function () { var f = Memory.alloc(8); new NativeFunction(k32.getExpo
 var prevAcc = [0, 0, 0, 0], prevAg = 0, prevAgT = 0;
 setInterval(function () {
   var s = state();
-  if (s.simrect) { for (var i = 0; i < 4; i++) MEM.rect.add(4 * i).writeS32(s.simrect[i]); }
+  // PRE addendum 2: no sim rect (cars off, e.g. zoomed out) -> a virtual 33 x 28 rect (Berlin's) centred on the view
+  var R = s.simrect;
+  if (R && !(R[2] > R[0] && R[3] > R[1]) && s.view2) {
+    var cx = (s.view2[0] + s.view2[2]) >> 1, cz = (s.view2[1] + s.view2[3]) >> 1;
+    R = [cx - 16, cz - 13, cx + 16, cz + 14];
+    s.vrect = R;
+  }
+  if (R) { for (var i = 0; i < 4; i++) MEM.rect.add(4 * i).writeS32(R[i]); }
   var sl = readSlots();
   var accNow = [], agNow = MEM.g.add(G_CALLS).readU32(), agT = MEM.g.add(G_TICKS).readS64().toNumber();
   for (var k = 0; k < 4; k++) accNow.push(MEM.g.add(G_ACC + 4 * k).readU32());

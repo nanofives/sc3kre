@@ -134,3 +134,12 @@ showed and what changed:
 - **Cars spawned before the probe attached** get a record on first sight (`tracked = false`, no age); their marks are
   recorded. Removals with no mark and no context stay `no-mark`.
 - The exception handler that logs a native fault ignores `system` exceptions (driver OutputDebugString noise).
+
+## Addendum 2 (2026-10-15, after arm E's first launch, before E2)
+
+Arm E loaded the 1024 city at zoom 0, below the cars' birth zoom (`DAT_10032710` = 2): producer off, sim rect
+`0,0,0,0`, no cars. So E measured no car side and its viewport-trip counter counted only cell (0, 0). E was stopped
+after its settle period (killed by PID; 31 lines, no counted phase). Change: when the sim rect is empty the probe counts
+viewport trips in a **virtual rect of Berlin's size (33 x 28 cells) centred on the view** (`view2` centre), written to
+the state as `vrect`. Arm **E2** = E's instance, city and schedule (`s3:120,s4:120,P:60`, `--safe`, settle 90 s) with
+this probe. On E2 only the trip-side columns are reported; the car side is Berlin's (S1 / S2).
