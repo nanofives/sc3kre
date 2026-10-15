@@ -10,6 +10,7 @@ cursor. Keys: P = sc3resize PAUSEKEY (posts 0xc2a35d7e / 0xc2a35d80, city+0x140)
 
 Schedule tokens (seconds after the colon):
   sN  run at speed N (key N, then P if user-paused)        P   user pause (P if not paused)
+  PW  run until a second with weekly-issuer calls (FUN_100097b9) arrives, then user pause (P at once)
   H   camera hold while running: right button down at the view centre, mouse moves with MK_RBUTTON back and forth
       every 50 ms for the whole phase, button up at the end (the SIMSPR 0x10043daf scroll hold, SIM_WHILE_SCROLLING.md)
   PH  user pause, then the same camera hold
@@ -56,6 +57,7 @@ class Arm:
     def __init__(self, a):
         self.a = a
         self.phase = "boot"
+        self.issuer_seen = 0
         self.out = open(a.out, "a", buffering=1)
         self.lock = threading.Lock()
         self.last = {}
@@ -71,6 +73,8 @@ class Arm:
             return
         p = m["payload"]
         self.last = p.get("st", {})
+        if p.get("c", {}).get("issuer_97b9", 0) > 0:
+            self.issuer_seen = time.time()
         self.write({"t": time.time(), "phase": self.phase, **p})
 
     def st(self):
@@ -120,6 +124,15 @@ class Arm:
                 self.ensure_speed(int(what[1:]))
                 self.ensure_pause(False)
             elif what in ("P", "PH"):
+                self.ensure_pause(True)
+            elif what == "PW":                     # running until the weekly issuer is active, then pause at once
+                self.ensure_pause(False)
+                self.issuer_seen = 0
+                t0 = time.time()
+                while not self.issuer_seen and time.time() - t0 < 180:
+                    time.sleep(0.05)
+                sc3io.key(self.h, 0x50)
+                time.sleep(0.6)
                 self.ensure_pause(True)
             elif what == "H":
                 self.ensure_pause(False)

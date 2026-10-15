@@ -133,3 +133,19 @@ Predictions:
    (the vehicle update runs on real time, not sim days).
 10. In H and PH: `FUN_1001d2c0` = 0 after the first 3 s; `vt+0x1c(1)` once at the hold's start and `vt+0x1c(0)` once
    at its end; camera hold take caller = SIMSPR 0x1004402e.
+
+## Addendum 3 (2026-10-15, after F1, before F2)
+
+F1 (Berlin, full mods): every P phase after its first second had route_trip = 0 on every thread, but each pause landed in
+the same second as the tail of a small weekly group (<= 569 searches in that second), so it cannot tell whether the
+sc3perf workers keep routing queued trips after the clock has stopped. Prediction 7 is decided on F2 instead.
+
+Arm F2: `inst_pt_full` (same builds, perf.ini traffic_mt_smooth=1), city `MAIN\verify\perf1024\europolis1024_v2_test.sc3`
+(9ce07478), `--safe` probe, settle 150 s. Driver token `PW` (pt_run.py): run until a probe second reports
+`FUN_100097b9` calls (a weekly group being queued), then post P at once. Schedule `s3:60,PW:60,s3:60,PW:60,s3:60,PW:60`.
+Frida's JS hook on route_trip serialises the workers (one JS lock), which slows the drain; that lengthens any drain
+and is reported, not corrected.
+
+Prediction 7 (restated for F2): in at least one PW phase, route_trip calls on sc3perf worker threads (threads other than
+the one issuing `FUN_100097b9` calls) are > 0 in seconds where `+0x140` = 1 and day fires = 0 for the whole second, and
+they fall to 0 before the phase ends; calls from the issuing thread are 0 in those seconds.
