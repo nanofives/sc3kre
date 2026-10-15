@@ -395,6 +395,8 @@ def sprite_size(payload):
 
 DRAW_FLAGS_OFF = 0x12          # frame table header u32 after AnimFrames (+0x10), RegRects (+0x11); reader SIMSPR 0x10001c90
 FIRST_PASS = 0x80             # -> view cell flag bit 0 (0x100192aa): drawn in the pass before every other occupant (0x1000dc17)
+GROUND_UNDER = 0x40           # SIMSPR 0x100192aa: set -> FUN_1001a303 fetches the cell's terrain and the occupant draws it
+                              # under itself (curve 11203 ships 0xC0, road 29 / T 39 0x80; task roundabout4)
 
 
 def _finish_art(res, art, where):
@@ -404,6 +406,10 @@ def _finish_art(res, art, where):
     res["warnings"] = []
     cs = bytearray(res["cs"])
     flags, = struct.unpack_from("<I", cs, DRAW_FLAGS_OFF)
+    if "ground_under" in art:
+        flags = (flags | GROUND_UNDER) if art["ground_under"] else (flags & ~GROUND_UNDER)
+        struct.pack_into("<I", cs, DRAW_FLAGS_OFF, flags)
+        res["cs"] = bytes(cs)
     if "first_pass" in art:
         flags = (flags | FIRST_PASS) if art["first_pass"] else (flags & ~FIRST_PASS)
         struct.pack_into("<I", cs, DRAW_FLAGS_OFF, flags)
@@ -628,7 +634,14 @@ def compile_pack(stock, pack_dir, man):
         mn = a.get("min_arms", 3)
         if not isinstance(mn, int) or not 1 <= mn <= 4:
             raise NetpackError("%s: min_arms must be 1..4" % where)
-        out["auto_roundabouts"].append({"piece": v["id"], "min_arms": mn, "where": where})
+        cl = 0
+        if a.get("closed_piece") is not None:            # task roundabout4: the quarter whose exit holds no road
+            vc = vids.get(a["closed_piece"])
+            if vc is None or vc["base"] != 39 or vc["net"] != "ROAD" or vc["id"] == v["id"]:
+                raise NetpackError("%s: closed_piece must be another ROAD variant of T 39 declared in this package"
+                                   % where)
+            cl = vc["id"]
+        out["auto_roundabouts"].append({"piece": v["id"], "min_arms": mn, "closed": cl, "where": where})
     if len(out["auto_roundabouts"]) > 1:
         raise NetpackError("%s: at most one auto_roundabouts entry (sc3netmod applies one piece)" % pname)
     out["ramps"] = []
@@ -917,7 +930,8 @@ def merge(stock, packs):
             tables[c["name"]] = ("# netpack %s: <variant id> <base id>, read by sc3netmod.dll\r\n" % c["name"]).encode() + \
                 b"".join(b"%d %d\r\n" % (v["id"], v["base"]) for v in sorted(c["variants"], key=lambda v: v["id"])) + \
                 RAMP.table_lines(c["ramps"]) + TPL.table_lines(mine) + \
-                b"".join(b"rbt %d %d\r\n" % (a["piece"], a["min_arms"]) for a in c["auto_roundabouts"])
+                b"".join((b"rbt %d %d %d\r\n" % (a["piece"], a["min_arms"], a["closed"]) if a.get("closed") else
+                          b"rbt %d %d\r\n" % (a["piece"], a["min_arms"])) for a in c["auto_roundabouts"])
 
     # ---- report + checks that need the merged result
     placed = set()
@@ -932,6 +946,7 @@ def merge(stock, packs):
     placed |= {r["to"] >> 8 for r in ramps}                 # a table slot places it (netramp.py)
     placed |= {c[0] for t in templates for c in t["cells"].values()}   # a template places it (task multitile)
     placed |= {a["piece"] for a in autos}                    # sc3netmod RBT places it (task roundabout3)
+    placed |= {a["closed"] for a in autos if a.get("closed")}   # and the arm-less quarter (task roundabout4)
     for v in variants:
         if v["id"] not in placed:
             report["warnings"].append("%s: no rule RESULT places %d, so the tiler never builds it" % (v["where"], v["id"]))
@@ -941,7 +956,8 @@ def merge(stock, packs):
         for r in c["reskins"]:
             report["reskins"].append({"piece": r["piece"], "frames": len(r["art"]["frames"]), "sharers": r["sharers"]})
     report["ramps"] = [{"table": r["table"], "slot": r["slot"], "from": r["from"], "to": r["to"]} for r in ramps]
-    report["auto_roundabouts"] = [{"piece": a["piece"], "min_arms": a["min_arms"]} for a in autos]
+    report["auto_roundabouts"] = [{"piece": a["piece"], "min_arms": a["min_arms"], "closed": a.get("closed", 0)}
+                                  for a in autos]
     report["templates"] = [{"name": t["name"], "pack": t["pack"], "orientations": len(t["orients"]), "cost": t["cost"],
                             "cells": len(t["cells"]), "protect_add": t["protect_add"],
                             "picture": [TPL.render(t, k) for k in range(len(t["orients"]))]} for t in templates]
@@ -1271,7 +1287,8 @@ def _print_report(report):
         print("  ramp    %s slot %d  %d.%d -> %d.%d" % (r["table"], r["slot"], r["from"] >> 8, r["from"] & 0xFF,
                                                        r["to"] >> 8, r["to"] & 0xFF))
     for r in report.get("auto_roundabouts", []):                                # task roundabout3
-        print("  auto roundabout: piece %d, 2x2 road blocks with >= %d arm(s) (sc3netmod RBT)" % (r["piece"], r["min_arms"]))
+        print("  auto roundabout: piece %d, 2x2 road blocks with >= %d arm(s) (sc3netmod RBT)%s"
+              % (r["piece"], r["min_arms"], (", arm-less quarter %d" % r["closed"]) if r.get("closed") else ""))
     for t in report.get("templates", []):                                       # task multitile
         print("  template %s/%s  %d cell(s), %d orientation(s), cost %d, Protected += %s"
               % (t["pack"], t["name"], t["cells"], t["orientations"], t["cost"], t["protect_add"] or "-"))

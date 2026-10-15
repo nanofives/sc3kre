@@ -27,6 +27,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 
 ROUNDABOUT = 20400
+CLOSED_Q = 20401          # task roundabout4: the quarter whose exit holds no road (counts as either stock tile too)
 T, CURVE = 39, 11203
 CELLS = [((0, 0), 3), ((1, 0), 0), ((1, 1), 1), ((0, 1), 2)]       # block cell, its state (= the 20400 state)
 EXIT = {3: (-1, 0), 0: (1, -1), 1: (2, 1), 2: (0, 2)}                 # by the state of the block cell it serves
@@ -43,7 +44,7 @@ def check(road, X, Z, min_arms=3):
         if c is None:
             return False, 0, "block cell (%d,%d) not road" % (X + dx, Z + dz)
         pid, s = c
-        if s != st or pid not in (T, CURVE, ROUNDABOUT):
+        if s != st or pid not in (T, CURVE, ROUNDABOUT, CLOSED_Q):
             return False, 0, "block cell (%d,%d) is %d.%d, not the pinwheel (%d.%d / %d.%d)" % (
                 X + dx, Z + dz, pid, s, T, st, CURVE, st)
         cells.append((dx, dz, st, pid))
@@ -90,9 +91,19 @@ def road_of(city):
         p = lay.get((x, z))
         if p is None:
             return None
-        f = _RULES.flags(T if p.id == ROUNDABOUT else p.id)
+        f = _RULES.flags(T if p.id in (ROUNDABOUT, CLOSED_Q) else p.id)
         return (p.id, p.state) if (f & flags) == flags else None
     return road
+
+
+def pieces(road, X, Z):
+    """task roundabout4: the piece RBT writes per block cell, rows "(X,Z) (X+1,Z) / (X,Z+1) (X+1,Z+1)" as id.state:
+    20400 where the cell's exit holds road, 20401 where it does not"""
+    out = {}
+    for (dx, dz), st in CELLS:
+        ex, ez = EXIT[st]
+        out[(dx, dz)] = "%d.%d" % (ROUNDABOUT if road(X + ex, Z + ez) is not None else CLOSED_Q, st)
+    return "%s %s / %s %s" % (out[(0, 0)], out[(1, 0)], out[(0, 1)], out[(1, 1)])
 
 
 def blocks(city, min_arms=3):
@@ -100,7 +111,7 @@ def blocks(city, min_arms=3):
     road = road_of(city)
     out = []
     for (x, z), p in sorted(city.layers.get("surface", {}).items()):
-        if p.state == 3 and p.id in (T, CURVE, ROUNDABOUT):
+        if p.state == 3 and p.id in (T, CURVE, ROUNDABOUT, CLOSED_Q):
             ok, arms, why = check(road, x, z, min_arms)
             if ok or not why.startswith("block cell"):
                 out.append((x, z, ok, arms, why))
@@ -127,6 +138,9 @@ def main(argv):
                     reasons[k] = reasons.get(k, 0) + 1
             print("%-28s pinwheel blocks %3d, qualify %3d   not: %s" % (os.path.basename(s)[:28], len(bs), len(q),
                   ", ".join("%s %d" % kv for kv in sorted(reasons.items())) or "-"))
+            road = road_of(c)
+            for b in q:
+                print("    (%d,%d) %d arms -> %s" % (b[0], b[1], b[3], pieces(road, b[0], b[1])))
             if "--list" in argv:
                 for b in bs:
                     print("    (%d,%d) %s" % (b[0], b[1], b[4]))

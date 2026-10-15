@@ -212,8 +212,18 @@ line, so the bands join without a step. Markings (arrows, dashed give-way line) 
 29's frames at that zoom, at zoom >= 3. An arm edge strip at least one pixel row deep (1024 / W units) is 29 itself.
 
 - The engine draws NO terrain under a 20400 cell (base 39): transparent pixels showed the previous frame in game.
-  Paint every pixel of a full-tile piece. (Stock curve 11203 leaves its outer corner transparent and grass shows; the
-  difference was not traced.)
+  Paint every pixel of a full-tile piece. (Stock curve 11203 leaves its outer corner transparent and grass shows.)
+- **Terrain under a piece (task roundabout4).** SIMSPR `FUN_100192aa` (occupant -> view cell) reads the frame
+  table's draw flags (header +0x12, via `frameTable->vt+0x20`); with bit **0x40** set it calls `FUN_1001a303(x, z)`
+  for the cell's terrain object and attaches it to the occupant (`vt+0x5c`) before queuing the cell
+  [CONFIRMED @ SIMSPR 0x100192aa, 0x1001a303]. 11203 ships 0xC0, 39 and 29 ship 0x80: that is the difference above.
+  netpack `art.ground_under` sets / clears the bit. **Measured caveat:** with the bit set on 39's full 128x64 frames,
+  part of the cell outside the art still showed back-buffer pixels in 15 of 48 views (up to 811 px at zoom 4, some
+  stable, some dependent on camera history); with the same art written at 11203's frame sizes and anchors
+  (netpaint `frame_like`, `art.from` 11203) 0 in 47 of 48 views, the 48th equal to stock. Why the frame geometry
+  matters inside SIMSPR was not traced `[UNCERTAIN]`; a piece that needs terrain under it should copy the geometry
+  of a stock piece that has it. Grass noise is not identical between two game sessions (empty cells: 6% to 100%
+  equal pixels), so compare terrain by colour class, not pixel equality. Evidence `verify/roundabout4/`.
 - No stock network piece has plain grass to sample (395 exemplars scanned), hence the concrete island.
 - `netpaint.py seams PLAN DIR`: pixels within one pixel row of the arm edge vs 29's frame there (1320 / 1320 equal).
 - Give-way dashes (task roundabout3): the dash phase is the arc length at the band's middle radius, counted from

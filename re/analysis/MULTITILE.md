@@ -210,9 +210,18 @@ save: 7 blocks in the 16 shipped cities (Berlin 3, Craterville 1, Moscow 3).
 
 Opt-outs: `SC3NETMOD_RBT=0` (whole block), `SC3NETMOD_RBT_LOAD=0` (no pass after a load).
 
-Limits: one piece (one chirality: a mirrored pinwheel, arms on the other cell of each side, never converts). A 3-arm
-roundabout draws its fourth arm's mouth up to the block edge (no road beyond). Any retile that reaches the block
-re-places its cells (as stock does for every road nearby) and RBT converts them again.
+Limits: one piece (one chirality: a mirrored pinwheel, arms on the other cell of each side, never converts). Any
+retile that reaches the block re-places its cells (as stock does for every road nearby) and RBT converts them again.
+
+**Arm-less quarter (task roundabout4, `verify/roundabout4/`).** `"closed_piece": 20401` in the manifest entry (table
+line `rbt 20400 3 20401`): on a 3-arm block the cell whose exit holds no road becomes 20401 in its own state, the
+other three 20400, so the closed mouth always faces the missing arm. 20401 = base 39, ring and island as 20400, the
+ring's outer edge line, gutter and sidewalk continue round the block centre, terrain outside (frame table ground bit
+0x40 on stock 11203's frame geometry, NET_ART.md 11); lanes: the ring only (x- -> z+, path 1024) and the outer
+sidewalk walk (15,15) -> (240,240) path 768, both stock 11203 state 0's. (a) counts 20401 as either stock tile; a
+block is rewritten when any cell differs from the wanted piece, so adding the fourth road turns 20401 into 20400 and
+removing it turns it back. Saves write 20401 as 11203. A table line with two numbers keeps every quarter 20400; such a
+DLL reverts 20401 blocks on load (rule (a)) and converts them on the next load.
 
 ### 5.1 Rotondas automáticas (para el dueño)
 
@@ -222,3 +231,8 @@ molinete, igual que en la rotonda que ya viste: en cada lado sirve una de las do
 a un lado, si hay otra calle pegada a un lado cerrado o si hay otro cuadrado de 2x2 al lado. Si después pasa algo de
 eso, o si sacás una salida y quedan dos, vuelve a ser cruce normal solo. Al abrir una ciudad (también las del juego)
 se convierten los cuadrados que cumplen. La ciudad guardada abre sin el mod con el cruce normal del juego.
+
+Rotonda de tres salidas (roundabout4): el lado sin calle ya no queda abierto. Esa casilla usa una segunda pieza,
+20401, con el mismo anillo e isla; el cordón y la vereda del anillo siguen de largo por ese lado y afuera se ve el
+terreno. Si después le agregás la cuarta calle, esa casilla pasa a ser una entrada normal, y si la sacás vuelve a
+cerrarse.
