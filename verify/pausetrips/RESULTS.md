@@ -1,8 +1,8 @@
 # pausetrips: RESULTS (2026-10-15)
 
-Pre-registration: `PRE.md` (1b51925, addenda 1 2619d9b and 2 a22585c, each committed before the runs it covers).
+Pre-registration: `PRE.md` (1b51925, addenda 1 2619d9b, 2 a22585c, 3 7e9d3e6, each committed before the runs it covers).
 Raw data (per-second jsonl, per-phase summaries, backtraces) in the stock tree
-`C:\Users\maria\Desktop\Proyectos\Simcity_stock_pausetrips\re\harness\inst_pt_*\` (`S1`, `S2`, `X`, `F1`
+`C:\Users\maria\Desktop\Proyectos\Simcity_stock_pausetrips\re\harness\inst_pt_*\` (`S1`, `S2`, `X`, `F1`, `F2`
 `.jsonl` / `_summary.json` / `_detail.txt`). The per-phase summaries and detail files (backtraces, caller and thread
 buckets, timer lists) are copied to `data/` here; the per-second jsonl stay in the tree.
 
