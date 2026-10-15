@@ -165,3 +165,31 @@ Predictions:
   paused.
 - F4. 0 native faults; the game alive to the end.
 Not measured: trains, boats, planes and people (unchanged by construction, not probed).
+
+## Addendum 4 (2026-10-15, owner request "extend the freeze to trains, people and the rest of the street animation", before arms FS / FC)
+
+Census first (read-only, `re/tools/ct_hbenum.py`, Berlin running, `inst_ct_stock\HB_enum_running.json`): the heartbeat's
+four lists hold the agent loop SC3U `FUN_00425a10` (every call), three SIMGEOM `0x1000fc30` listeners, SIMSPR
+`0x1002b5e5` and the STRTSIM layer tick `FUN_10012e46`. The agent loop ticked 419 agents: STRTSIM cars `0x1002cd20`
+121, trains `0x1002bbe0` (ctor `FUN_1000e0ac`, lane class 1) 100, people `0x1002b7ac` (ctor `FUN_1000ab1d`, not a
+vehicle) 83, subway `0x1002c9bc` (`FUN_100171f7`, class 2) 55, aircraft `0x1002a330` 13 / `0x1002af90` 5 (type
+0x4001204), boats `0x1002a758` (Tick `0x1000570c` = cSSBoat::Tick `[LINUX-HINT]`) 12, other road vehicles `0x1002ad44`
+6, and 24 SIMSPR animated-sprite agents `0x100643d8` (map-placed by `FUN_10022734`; not street life).
+
+Change (replaces addendum 3's vtable-slot patch): sc3simrun FREEZE. The agent loop's tick call `call [edx+0x100]` at
+SC3U `0x00425a99` (bytes checked) becomes `call freeze_thunk; nop`; the thunk returns at once (`ret 4`) while city
+`+0x140` > 0 and the agent's vtable is in the frozen set, else jumps to the agent's Tick. Ini `[sim] freeze_on_pause`:
+`street` (default; any vtable inside the STRTSIM image), `cars` (vtable `0x1002cd20` only), `0` stock. Build SHA-256
+408194e5. Probe: `ct_probe.py` + group `ticks` (CModule counters on STRTSIM `0x1001d2c0` vehicles, `0x1000c460` people,
+`0x1000570c` boats, SIMSPR `0x10021199`, keyed by function and the agent's vtable).
+
+Arms (Berlin, schedule `s3:60,P:60,s3:60,P:30,s3:30`): **FS** = `inst_ct_freezes` (no ini: street); **FC** =
+`inst_ct_freezec` (`freeze_on_pause=cars`).
+
+Predictions:
+- S1. FS paused: Tick calls 0 for every STRTSIM class; SIMSPR `0x10021199` calls within 25% of the s3 phases; car cell
+  moves, removals and spawns 0.
+- S2. FC paused: car (`0x1002cd20`) Ticks, car moves, removals, spawns 0; trains, subway, people Tick rates within 25%
+  of the s3 phases.
+- S3. Both, running phases: per-class Tick rates and car cell moves within 30% of the first s3 phase; 0 faults; game
+  alive to the end; sc3simrun.log `armed=1`.

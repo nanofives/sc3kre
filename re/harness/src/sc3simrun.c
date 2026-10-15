@@ -12,17 +12,24 @@
  * counts stay balanced. Zoom/rotate (FUN_10042d8a, FUN_10042f27, ...) keep their own momentary
  * hold/release brackets, untouched.
  *
- * FREEZECARS (owner 2026-10-15, task cartrips P1): the street cars keep driving, and keep being deleted by the
- * density despawn, while the game is paused, because their tick is real time (STRTSIM.md 8, CAR_TRIPS.md 1.4:
- * ~35 visible deletions a minute paused in Berlin). While the user pause depth city +0x140 is non-zero, the car
- * vtable's Tick slot (STRTSIM 0x1002ce20 -> FUN_1001d2c0, car vt+0x100) returns at once for cars of the street
- * sim's car producer (car +0x44 == layer +0x100, layer = STRTSIM DAT_10033208). Nothing of the car runs: no
- * move, no animation frame, no despawn test, no WaitForPathClearance timer; on resume it continues where it
- * stopped. Trains, boats, planes, people and emergency vehicles of other producers are not touched. The camera
- * hold already freezes them (SIMSPR view tick). City = *(SC3U.exe+0xfa86c) +0x48, as sc3perf / sc3resize read it.
+ * FREEZE (owner 2026-10-15, task cartrips P1 + extension): the street animation keeps running while the game is
+ * paused, because its tick is real time (STRTSIM.md 8): cars keep driving and being deleted by the density
+ * despawn (CAR_TRIPS.md 1.4: ~35 visible deletions a minute paused in Berlin), trains, subway cars, people, boats
+ * and aircraft keep moving. The SC3U.exe agent loop FUN_00425a10 ticks every animated agent through one
+ * instruction, `call [edx+0x100]` at 0x00425a99 (ecx = agent, edx = its vtable, one stack arg the callee pops).
+ * That instruction is replaced by a call to freeze_thunk: while the user pause depth city +0x140 is non-zero and
+ * the agent is in the frozen set, it returns at once (ret 4); otherwise it jumps to the agent's own Tick. Nothing
+ * of a frozen agent runs (no move, no animation frame, no despawn test, no wait timer); on resume it continues
+ * where it stopped. Frozen set, ini [sim] freeze_on_pause:
+ *   street (default) = every agent whose class (vtable) lives in STRTSIM.DLL: cars, trains, subway, people,
+ *                      boats, aircraft, other street vehicles. SIMSPR's animated sprites keep running.
+ *   cars             = only the street sim's cars (vtable STRTSIM 0x1002cd20, the class FUN_10019750 builds).
+ *   0                = stock.
+ * The camera hold already freezes all of them (SIMSPR view tick). City = *(SC3U.exe+0xfa86c) +0x48, as sc3perf /
+ * sc3resize read it. Measured: verify/cartrips/RESULTS.md addenda 3 and 4.
  *
  * Config: simrun.ini beside the DLL:  [sim] run_while_scrolling=1   (0 = stock, the A/B control)
- *                                     [sim] freeze_cars_on_pause=1  (0 = stock: cars drive while paused)
+ *                                     [sim] freeze_on_pause=street  (cars = cars only, 0 = stock)
  * Env:    SC3SIMRUN_LOG=<abs path>  SC3SIMRUN_TRACE=1 (20 Hz sampler + hold/pause caller log)
  *         SC3SIMRUN_RESUME=1 (test only: post 0xc2a35d80 once per unit of +0x140 after load)
  * Build:  re/harness/build_simrun.ps1. Ships via mods_launch.exe.
@@ -204,22 +211,26 @@ static int gz_post(DWORD msgid, DWORD a0) {
 /* ============================================================ the patch */
 
 static int g_run = 1;
-static int g_freeze = 1;
+static int g_freeze = 2;                         /* 0 stock, 1 cars, 2 street */
 
 static void ini_read(void) {
     char path[MAX_PATH];
     self_path(path, sizeof(path), "simrun.ini");
     if (path[0]) g_run = GetPrivateProfileIntA("sim", "run_while_scrolling", 1, path) ? 1 : 0;
-    if (path[0]) g_freeze = GetPrivateProfileIntA("sim", "freeze_cars_on_pause", 1, path) ? 1 : 0;
+    if (path[0]) {
+        char v[16];
+        GetPrivateProfileStringA("sim", "freeze_on_pause", "street", v, sizeof(v), path);
+        g_freeze = !lstrcmpiA(v, "cars") ? 1 : (!lstrcmpiA(v, "0") || !lstrcmpiA(v, "off")) ? 0 : 2;
+    }
 }
 
-/* ============================================================ FREEZECARS */
+/* ============================================================ FREEZE */
 
-typedef int (__fastcall *PFN_CarTick)(void *self, void *edx, DWORD dt);   /* __thiscall(this, dt), ret 4 */
-static PFN_CarTick g_car_tick;
-static BYTE *g_exe, *g_strt;
+static BYTE *g_exe;
 static DWORD g_city_vt;                          /* SIMCITY+0x13260, the city / coordinator vtable */
-static volatile LONG g_frozen_ticks, g_car_ticks;
+static DWORD g_vt_lo, g_vt_hi;                   /* frozen vtable range: STRTSIM image, or the car vtable alone */
+static volatile LONG g_frozen_ticks, g_agent_ticks;
+static int g_freeze_armed;
 
 static __inline int user_paused(void) {
     BYTE *app = *(BYTE **)(g_exe + 0xfa86c), *city;
@@ -229,33 +240,57 @@ static __inline int user_paused(void) {
     return *(LONG *)(city + 0x140) > 0;
 }
 
-static int __fastcall car_tick(void *self, void *edx, DWORD dt) {
-    BYTE *layer;
-    g_car_ticks++;                               /* game thread only; a statistic */
-    if (user_paused()) {
-        layer = *(BYTE **)(g_strt + 0x33208);
-        if (layer && *(DWORD *)((BYTE *)self + 0x44) == *(DWORD *)(layer + 0x100)) {
-            g_frozen_ticks++;
-            return 0;
-        }
+/* game thread only (the agent loop); the counters are statistics */
+static int __cdecl freeze_skip(DWORD vt) {
+    g_agent_ticks++;
+    if (vt >= g_vt_lo && vt < g_vt_hi && user_paused()) { g_frozen_ticks++; return 1; }
+    return 0;
+}
+
+/* replaces `call dword ptr [edx+0x100]` at SC3U.exe 0x00425a99: ecx = agent, edx = vtable, [esp+4] = time delta */
+static __declspec(naked) void freeze_thunk(void) {
+    __asm {
+        push ecx
+        push edx
+        push edx
+        call freeze_skip
+        add esp, 4
+        pop edx
+        pop ecx
+        test eax, eax
+        jnz skip
+        jmp dword ptr [edx + 0x100]
+    skip:
+        ret 4
     }
-    return g_car_tick(self, edx, dt);
 }
 
 static int freeze_arm(HMODULE strt, HMODULE simcity) {
-    DWORD *slot = (DWORD *)((BYTE *)strt + 0x2ce20), old;   /* car vtable 0x1002cd20 + 0x100 */
-    if (IsBadReadPtr(slot, 4) || *slot != (DWORD)strt + 0x1d2c0) {
-        logf("### FREEZECARS: STRTSIM+0x2ce20 holds 0x%08lX, expected 0x%08lX - NOT armed",
-             IsBadReadPtr(slot, 4) ? 0 : *slot, (DWORD)strt + 0x1d2c0);
+    static const BYTE expect[] = { 0x8b, 0x11, 0xff, 0x92, 0x00, 0x01, 0x00, 0x00, 0x8b, 0xc6 };
+    BYTE *p, *exe = (BYTE *)GetModuleHandleA(NULL);
+    IMAGE_NT_HEADERS *nt;
+    DWORD old;
+    p = exe + 0x25a97;                           /* mov edx,[ecx] / call [edx+0x100] / mov eax,esi */
+    if (IsBadReadPtr(p, sizeof(expect)) || memcmp(p, expect, sizeof(expect))) {
+        logf("### FREEZE: SC3U.exe+0x25a97 differs from shipped - NOT armed");
         return 0;
     }
-    g_exe = (BYTE *)GetModuleHandleA(NULL);
-    g_strt = (BYTE *)strt;
+    g_exe = exe;
     g_city_vt = (DWORD)simcity + 0x13260;
-    g_car_tick = (PFN_CarTick)*slot;
-    if (!VirtualProtect(slot, 4, PAGE_READWRITE, &old)) return 0;
-    *slot = (DWORD)car_tick;
-    VirtualProtect(slot, 4, old, &old);
+    if (g_freeze == 1) {
+        g_vt_lo = (DWORD)strt + 0x2cd20; g_vt_hi = g_vt_lo + 1;
+    } else {
+        nt = (IMAGE_NT_HEADERS *)((BYTE *)strt + ((IMAGE_DOS_HEADER *)strt)->e_lfanew);
+        g_vt_lo = (DWORD)strt; g_vt_hi = (DWORD)strt + nt->OptionalHeader.SizeOfImage;
+    }
+    p += 2;
+    if (!VirtualProtect(p, 6, PAGE_EXECUTE_READWRITE, &old)) return 0;
+    p[0] = 0xE8;                                 /* call rel32 freeze_thunk */
+    *(DWORD *)(p + 1) = (DWORD)freeze_thunk - (DWORD)(p + 5);
+    p[5] = 0x90;
+    VirtualProtect(p, 6, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), p, 6);
+    g_freeze_armed = 1;
     return 1;
 }
 
@@ -297,16 +332,16 @@ static DWORD WINAPI sampler(LPVOID param) {
     if (g_freeze) {
         HMODULE strt;
         while (!(strt = GetModuleHandleA("STRTSIM.DLL"))) Sleep(5);
-        logf("### FREEZECARS: freeze_cars_on_pause=1, armed=%d", freeze_arm(strt, simcity));
-    } else logf("### FREEZECARS: freeze_cars_on_pause=0 (stock)");
+        logf("### FREEZE: freeze_on_pause=%s, armed=%d", g_freeze == 1 ? "cars" : "street", freeze_arm(strt, simcity));
+    } else logf("### FREEZE: freeze_on_pause=0 (stock)");
     if (!trace && !resume) {
         int paused, was = -1;
-        if (!g_freeze || !g_car_tick) return 0;
+        if (!g_freeze_armed) return 0;
         for (;;) {                                   /* log pause edges with the frozen-tick count */
             Sleep(250);
             __try { paused = user_paused(); } __except (EXCEPTION_EXECUTE_HANDLER) { paused = was; }
             if (paused != was) {
-                logf("FREEZECARS> %s: car ticks %ld, frozen %ld", paused ? "paused" : "running", g_car_ticks, g_frozen_ticks);
+                logf("FREEZE> %s: agent ticks %ld, frozen %ld", paused ? "paused" : "running", g_agent_ticks, g_frozen_ticks);
                 was = paused;
             }
         }

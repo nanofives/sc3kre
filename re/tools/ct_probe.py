@@ -153,6 +153,21 @@ void acc3(GumInvocationContext *ic) { acc(ic, 3); }
 /* JS: last agent-loop number per accessor for a vehicle (0 = never) */
 u32 acc_last(u32 veh, int k) { u32 *p = hfind(veh, 0); return p ? p[k] : 0; }
 void acc_forget(u32 veh) { u32 *p = hfind(veh, 0); if (p) { p[0] = p[1] = p[2] = p[3] = 0; } }
+/* agent Tick calls by (function, vtable of this): STRTSIM 0x1001d2c0 vehicles, 0x1000c460 people, 0x1000570c boats,
+   SIMSPR 0x10021199 animated sprites (PRE addendum 4) */
+typedef struct { u32 key[64]; u32 n[64]; u32 fn[64]; } TK;
+extern TK tk;
+static void tick_count(GumInvocationContext *ic, u32 fn) {
+  u32 vt = *(u32 *)ic->cpu_context->ecx, i;
+  for (i = 0; i < 64; i++) {
+    if (tk.key[i] == vt && tk.fn[i] == fn) { tk.n[i]++; return; }
+    if (tk.key[i] == 0) { tk.fn[i] = fn; tk.key[i] = vt; tk.n[i]++; return; }
+  }
+}
+void tick0(GumInvocationContext *ic) { tick_count(ic, 1); }
+void tick1(GumInvocationContext *ic) { tick_count(ic, 2); }
+void tick2(GumInvocationContext *ic) { tick_count(ic, 3); }
+void tick3(GumInvocationContext *ic) { tick_count(ic, 4); }
 /* struct offsets for the JS reader */
 void layout(int *o) {
   Slot *s = 0; Sample *m = 0;
@@ -202,13 +217,13 @@ function install() {
   if (!on || on.indexOf('acc') >= 0) attachAcc();
 }
 var MEM = {
-  slots: Memory.alloc(512 * 1024), rect: Memory.alloc(16), sample_every: Memory.alloc(4), pop_ret: Memory.alloc(4), g: Memory.alloc(64),
+  slots: Memory.alloc(512 * 1024), rect: Memory.alloc(16), sample_every: Memory.alloc(4), pop_ret: Memory.alloc(4), g: Memory.alloc(64), tk: Memory.alloc(768),
   hkey: Memory.alloc(65536 * 4), hlast: Memory.alloc(65536 * 16)
 };
 MEM.pop_ret.writeU32(A(TR, 0x100072fd).toUInt32());
 var cm = new CModule(CSRC, {
   QueryPerformanceCounter: k32.getExportByName('QueryPerformanceCounter'),
-  slots: MEM.slots, rect: MEM.rect, sample_every: MEM.sample_every, pop_ret: MEM.pop_ret, g: MEM.g, hkey: MEM.hkey, hlast: MEM.hlast
+  slots: MEM.slots, rect: MEM.rect, sample_every: MEM.sample_every, pop_ret: MEM.pop_ret, g: MEM.g, tk: MEM.tk, hkey: MEM.hkey, hlast: MEM.hlast
 });
 var accLast = new NativeFunction(cm.acc_last, 'uint32', ['uint32', 'int']);
 var accForget = new NativeFunction(cm.acc_forget, 'void', ['uint32']);
@@ -359,6 +374,24 @@ H('path', A(ST, 0x10011e4e), { onLeave: function (r) { if (cur && cur.st === 'c7
 H('path', A(ST, 0x1001ac90), { onLeave: function (r) { if (cur && cur.st === 'c750') cur.inclRes = r.toInt32() & 0xff; } });
 H('path', A(ST, 0x10020108), { onLeave: function (r) { if (cur && cur.st === 'c750') cur.nodeRes = r.isNull() ? 0 : 1; } });
 
+// agent Tick counters (PRE addendum 4): function index 1..4 in the key's top nibble, vtable below
+var SPR = mod('SIMSPR.DLL');
+H('ticks', A(ST, 0x1001d2c0), { onEnter: cm.tick0 });
+H('ticks', A(ST, 0x1000c460), { onEnter: cm.tick1 });
+H('ticks', A(ST, 0x1000570c), { onEnter: cm.tick2 });
+H('ticks', A(SPR, 0x10021199), { onEnter: cm.tick3 });
+var prevTk = {};
+function readTicks() {
+  var out = {}, FN = ['', 'veh', 'people', 'boat', 'simspr'];
+  for (var i = 0; i < 64; i++) {
+    var key = MEM.tk.add(4 * i).readU32();
+    if (key === 0) break;
+    var n = MEM.tk.add(256 + 4 * i).readU32(), fn = MEM.tk.add(512 + 4 * i).readU32(), vt = ptr(key);
+    var name = FN[fn] + ' ' + where(vt);
+    out[name] = n - (prevTk[name] || 0); prevTk[name] = n;
+  }
+  return out;
+}
 // view / zoom contexts
 H('view', A(ST, 0x10015415), { onEnter: function () { CTX.push('view-update'); inc('view_update'); }, onLeave: function () { CTX.pop(); } });
 H('view', A(ST, 0x100146b2), { onEnter: function () { CTX.push('produce-off'); inc('produce_off'); }, onLeave: function () { CTX.pop(); } });
@@ -473,7 +506,7 @@ setInterval(function () {
   var dbg = [0, 1, 2, 3].map(function (k) { return MEM.g.add(G_RT + 4 * k).readU32(); });
   send({ t: 'tick', c: C, by: BY, st: s, trips: sl.cum, samples: sl.samples, dbg: dbg,
          ag: { calls: agNow - prevAg, ms: (agT - prevAgT) * 1000 / QPF }, acc: accD,
-         rem: REM, spawns: SPAWNS, cells: CELLS });
+         rem: REM, spawns: SPAWNS, cells: CELLS, ticks: readTicks() });
   prevAcc = accNow; prevAg = agNow; prevAgT = agT;
   C = {}; BY = {}; REM = []; SPAWNS = []; CELLS = [];
 }, 1000);
