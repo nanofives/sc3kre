@@ -30,6 +30,7 @@ var VEH = {};          // vehicle this-pointer set this second (STRTSIM 0x1001c7
 var TH = {};           // name -> {tid: count} this second
 var BT = [];           // backtrace samples this second
 var btLeft = {};       // name -> samples left in this phase
+var VEHP = {}, vehpN = 0; // vehicles moved since the phase started (distinct this)
 var simTid = null;
 
 function inc(n, k) { C[n] = (C[n] || 0) + (k === undefined ? 1 : k); }
@@ -46,7 +47,7 @@ function bt(n, ctx) {
 Interceptor.attach(A(TR, 0x100070d0), {          // route_trip (thiscall layer)
   onEnter: function () {
     this.tid = Process.getCurrentThreadId();
-    inc('route_trip'); incBy('route_trip.caller', where(this.returnAddress)); incTh('route_trip', this.tid);
+    inc('route_trip'); incBy('route_trip.caller', where(this.context.esp.readPointer())); incTh('route_trip', this.tid);
   },
   onLeave: function (r) { inc((r.toInt32() & 0xff) ? 'route_trip.arrive' : 'route_trip.fail'); }
 });
@@ -59,10 +60,10 @@ function attachUnsafe() {
   safeHooksDone = true;
   if (cfg.safe) return;
   Interceptor.attach(A(TR, 0x10006fe3), function () {                               // trip function
-    inc('trip_6fe3'); incBy('trip_6fe3.caller', where(this.returnAddress)); bt('trip_6fe3', this.context);
+    inc('trip_6fe3'); incBy('trip_6fe3.caller', where(this.context.esp.readPointer())); bt('trip_6fe3', this.context);
   });
   Interceptor.attach(A(TR, 0x1000706a), function () {                               // trip from a cell
-    inc('trip_706a'); incBy('trip_706a.caller', where(this.returnAddress)); incTh('trip_706a', Process.getCurrentThreadId());
+    inc('trip_706a'); incBy('trip_706a.caller', where(this.context.esp.readPointer())); incTh('trip_706a', Process.getCurrentThreadId());
     bt('trip_706a', this.context);
   });
   Interceptor.attach(A(TR, 0x10006edd), function () { inc('deposit_6edd'); });        // congestion deposit
@@ -76,8 +77,8 @@ Interceptor.attach(A(SC, 0x1000aa4d), function () { inc('day_aa4d'); simTid = Pr
 
 // --- STRTSIM: cell move
 Interceptor.attach(A(ST, 0x1001c750), function () {
-  inc('strt_c750'); VEH[this.context.ecx.toString()] = 1; incTh('strt_c750', Process.getCurrentThreadId());
-  incBy('strt_c750.caller', where(this.returnAddress));
+  var v = this.context.ecx.toString(); inc('strt_c750'); VEH[v] = 1; if (!VEHP[v]) { VEHP[v] = 1; vehpN++; } incTh('strt_c750', Process.getCurrentThreadId());
+  incBy('strt_c750.caller', where(this.context.esp.readPointer()));
   bt('strt_c750', this.context);
 });
 
@@ -125,13 +126,13 @@ function timers() {
 
 setInterval(function () {
   var nveh = Object.keys(VEH).length;
-  send({ t: 'tick', c: C, by: BY, th: TH, steps: stepCount, veh: nveh, st: state(), bt: BT });
+  send({ t: 'tick', c: C, by: BY, th: TH, steps: stepCount, veh: nveh, vehp: vehpN, st: state(), bt: BT });
   C = {}; BY = {}; VEH = {}; TH = {}; BT = []; stepCount = 0;
 }, 1000);
 
 rpc.exports = {
   config: function (c) { for (var k in c) cfg[k] = c[k]; attachUnsafe(); return cfg; },
-  phase: function (name) { btLeft = { trip_6fe3: cfg.bt_per_phase, trip_706a: cfg.bt_per_phase, strt_c750: cfg.bt_per_phase }; return name; },
+  phase: function (name) { VEHP = {}; vehpN = 0; btLeft = { trip_6fe3: cfg.bt_per_phase, trip_706a: cfg.bt_per_phase, strt_c750: cfg.bt_per_phase }; return name; },
   timers: function () { return timers(); },
   state: function () { return state(); }
 };

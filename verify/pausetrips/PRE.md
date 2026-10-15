@@ -99,3 +99,16 @@ Full mods (F1):
 
 Anything not covered by a prediction (timer list contents, STRTSIM tick, what drives `FUN_1000706a`, rates per day) is
 recorded and reported as found.
+
+## Addendum 1 (2026-10-15, after the smoke run, before any arm)
+
+Smoke run done (`inst_pt_stock\smoke.jsonl`, pid 16912, killed). Probe loaded, P and 1-4 set `+0x140` / `+0x150` as
+intended, days advanced at speed 3 (53 days in 37 s) and speed 1 (3 in 28 s). Tooling changes from it (no change to
+arms, schedule or predictions):
+- Caller buckets read the return address from `[esp]` at entry: Frida's `this.returnAddress` came back as the hooked
+  function's own address for the plain-function hooks (`trip_6fe3.caller` = 0x10006fe3). Backtraces were right.
+- The seconds in which the next phase's keys are being posted are labelled `sw>PHASE` and not counted (one smoke
+  second at the end of `s1` already carried the next pause and would have failed the validity rule).
+- The summary reports backtraces from every second of a phase (the 3 per phase are taken in its first second, which
+  the 3 s skip dropped), and a new per-phase count: distinct STRTSIM vehicles moved since the phase started (`vehp`).
+Smoke counts are not used in RESULTS beyond this note.

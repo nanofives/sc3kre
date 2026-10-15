@@ -115,6 +115,7 @@ class Arm:
         for tok in self.a.schedule.split(","):
             what, secs = tok.split(":")
             secs = float(secs)
+            self.phase = "sw>" + tok              # seconds while the keys of the next phase are posted: not counted
             if what.startswith("s"):
                 self.ensure_speed(int(what[1:]))
                 self.ensure_pause(False)
