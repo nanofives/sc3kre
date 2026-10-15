@@ -40,7 +40,11 @@ def main():
     ap.add_argument("city")
     ap.add_argument("--lang", default="ENGLISH")
     ap.add_argument("--json")
+    ap.add_argument("--rect", help="x0,z0,x1,z1: count only steps whose middle cell is inside (the vehicle sim rect)")
+    ap.add_argument("--skip-avenue-sideways", action="store_true",
+                    help="count a step that enters or leaves 11204 sideways as a corridor step, not a failure")
     a = ap.parse_args()
+    R = [int(v) for v in a.rect.split(",")] if a.rect else None
 
     tiles = {}
     for x, y, z, state, piece, props in network_layer.read_networks(a.city)[0][1]:
@@ -83,6 +87,8 @@ def main():
             if pb[2] not in ROAD:
                 continue
             b = (pb[0], pb[1])
+            if R and not (R[0] <= b[0] <= R[2] and R[1] <= b[1] <= R[3]):
+                continue
             s_in = side_towards(b, (pa[0], pa[1]))
             s_out = side_towards(b, (pc[0], pc[1]))
             if pa[2] not in ROAD or pc[2] not in ROAD:
@@ -109,6 +115,9 @@ def main():
             elif (s_in, s_out) in tt:
                 st["steps_ok"] += 1
             else:
+                if a.skip_avenue_sideways and t[0] == 11204:
+                    st["steps_avenue_corridor"] += 1
+                    continue
                 st["steps_no_turn"] += 1
                 bad_pieces[(t[0], "turn %d->%d" % (s_in, s_out))] += 1
                 ok_path = False
