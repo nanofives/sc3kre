@@ -125,3 +125,7 @@ second, all still ticking.
 
 The frozen-tick counts also grew during the pause the game loads with (FS: 5.85 M of 6.39 M agent ticks before the
 first unpause), so street animation now stays still from load until the first unpause, as it does in any later pause.
+
+**Owner hand test PASSED 2026-10-15** (round/1012 46ee81a, `sc3simrun.dll` SHA-256 7ba79a07 with the full mod set:
+resize, bigcity, overscroll, perf; Berlin; run from `Simcity_stock_pausetrips\re\harness\inst_ht_freeze`). FREEZE is
+closed; default `freeze_on_pause=street`.
