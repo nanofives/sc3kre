@@ -13,7 +13,7 @@
   pwsh re/scripts/build_mod.ps1 -Mod mods_launch -Src re\harness\src -Out re\harness\inst_query
 #>
 param(
-    [Parameter(Mandatory)] [ValidateSet('sc3resize', 'sc3bigcity', 'sc3overscroll', 'sc3simrun', 'sc3perf', 'sc3netmod', 'mods_launch')]
+    [Parameter(Mandatory)] [ValidateSet('sc3resize', 'sc3bigcity', 'sc3overscroll', 'sc3simrun', 'sc3perf', 'sc3netmod', 'sc3cartrips', 'mods_launch')]
     [string] $Mod,
     [Parameter(Mandatory)] [string] $Src,
     [Parameter(Mandatory)] [string] $Out
