@@ -261,8 +261,9 @@ def compare_sources(graphs_path, city, lang="ENGLISH"):
             st["one_none"] += 1
             diff[("dll " + DumpGraphs.STATUS[status], "save piece %s/%s" % (gs[1], gs[2]))] += 1
         else:
-            a = (gd.cls, gd.x, gd.z, gd.edges)
-            b = (gs[0].cls, gs[0].x, gs[0].z, gs[0].edges)
+            # internal edges: memory +0x16 holds the curve's exit heading, the record stores 0; only exit codes matter
+            norm = lambda g: (g.cls, g.x, g.z, [[(t, c if t is None else 0) for t, c in es] for es in g.edges])
+            a, b = norm(gd), norm(gs[0])
             st["same" if a == b else "different"] += 1
             if a != b:
                 diff[("graph differs", "save piece %s/%s" % (gs[1], gs[2]))] += 1
