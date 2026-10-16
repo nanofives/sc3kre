@@ -15,3 +15,12 @@ Task: street agents keep animating while the camera moves (owner request 2026-10
   street thins during long drags (known limit, reported).
 - Hand test: `MAIN\re\harness\handtest_carscroll\`; pictures `MAIN\verify\carscroll\owner_shots\`.
 - Not merged (orchestrator integrates). Docs touched: SIM_WHILE_SCROLLING.md, STRTSIM.md section 8.
+
+## State 2026-10-16 17:25: route-car thinning fix (owner decision), arms running
+
+- Decode + baseline B0 (addenda 7, 8): routes end at the old view edge; spawns pop and waste routes; the 2-cell car
+  rect deletes cars just off screen on every camera step; supply 3 routes/s cannot refill.
+- Fix: sc3simrun CARMARGIN (car rect = view + 8, build 74901709) + sc3cartrips scroll_fill (margin capture, route
+  history, strip quotas off screen, roaming cut routes; build 053963fa). Run-time switch X0/X1 for the A/B.
+- Queue `Simcity_stock_pausetrips\re\harness\cs_qR.sh`: R1 (Berlin), R2 (1024), C4 (FPS), L5 (soak), V4 (pictures).
+  Harness claimed by carscroll until ~23:20; keep-awake helper running (stop it when done).
