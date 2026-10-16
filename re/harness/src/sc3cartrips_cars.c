@@ -496,6 +496,9 @@ static void spawn_tick(BYTE *prod) {
             if (spawn_one(prod, r, e)) g_c3[C3_FILL_OK]++;
         }
         alive = *(DWORD *)(prod + 0xc);
+        /* while the camera moves (and 3 s after), stock-rate spawns do not lift the route cars above the still count
+           either (R1: arrows ended at 1.3-1.4 x the still-camera count) */
+        if (moving && g_ncars >= (int)(g_still * 1.05 + 0.5)) { cyc_add(__rdtsc() - t0); return; }
     }
     if (alive >= target || alive >= 200) return;
     n = (int)((target - alive) / 10);

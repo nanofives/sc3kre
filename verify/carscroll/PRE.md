@@ -352,3 +352,25 @@ the move; no single move below 0.60. Cars drawn per frame reported the same way 
 decisions; `need_true` <= ended + lost + roam ends (no density deletion); FREEZE (`P`, `PH`): 0 car cell moves, 0 spawns
 and 0 route-car ends. Frame rate (C4, owner setup): X1 >= 90% of X0 during moves and at idle, mean longest gap <= 1.25x.
 0 faults everywhere; L5 alive.
+
+## Addendum 9 (2026-10-16 18:00, after R1; before R1b, R2b, L6)
+
+R1 (053963fa), route cars in the view box, fix on: gentle drag 1.08 during / 1.16 after (worst 0.71 / 0.90) and held
+button 1.04 / 1.00 (worst 0.93 / 0.87), inside the bound; arrows 1.38 / 1.29, above it; extreme drag 0.76 / 0.46
+(worst 0.34 / 0.39), below it. 0 faults; pause phases 0 car moves, 0 spawns. **But the camera sat at the map's west
+corner (view box x0 = 0, z 156-180) before most drag and arrow moves**: the extreme drag swings 15-30 cells a second,
+hits the map edge and clamps there, so before / after compared different, half off-map places. R1 is reported as run.
+
+Changes for the rerun:
+- cs_run token `C`: re-centre the camera with a posted left click on the minimap centre (718, 508 at 800 x 600); the
+  view before and after is logged. Each move is preceded by `C` and 30 s of still camera (the cars settle at the
+  centre), then 15 s still (the "before" window), the move, 10 s still ("after").
+- The warm-up `W` after a switch is a gentle drag (no drift) instead of the extreme one.
+- sc3cartrips **cb74f872**: while the camera moves (and 3 s after) stock-rate route spawns stop at 1.05 x the still
+  count too (R1's arrows overfilled through them; the strip fill already stopped there).
+
+Arms (inst_cf_*: sc3simrun 74901709, sc3cartrips cb74f872): **R1b** Berlin, per move `X?,W:3,C,I:30,I:15,K:20,I:10`,
+ABBA, 2 blocks each of H and AR, 1 block each of HG and HB, then `X1,P:15,PH:20,P:10`; **R2b** Europolis 1024 (full
+set), 1 block each of HG, H, AR, OS the same way; **L6** lite soak, full set, Europolis 1024, speed 4, X1, the L5 cycle
+x 3. Bound and other predictions as addendum 8; R1b / R2b replace R1 / R2 for the bound; C4 (frame rate) and L5 (soak)
+stand on 053963fa (the change only stops spawns).

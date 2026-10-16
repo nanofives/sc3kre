@@ -8,7 +8,8 @@ Tokens (seconds after the colon):
   sN    run at speed N                       P    user pause                    I    idle (no input), state unchanged
   A0/A1 sc3simrun_animate(0/1) (in-game A/B switch, takes no time)
   X0/X1 the route-car fix off / on: sc3cartrips_fill(0/1) and sc3simrun_carmargin(2 / CS_MARGIN, default 8)
-  W     warm-up drag after X0/X1 (as H, its own kind), so the sim rect is rebuilt with the new margin
+  C     re-centre the camera: left click on the minimap centre (CS_MINIMAP=x,y, default 718,508 at 800 x 600)
+  W     warm-up after X0/X1: a gentle drag (as HG, its own kind), so the sim rect is rebuilt with the new margin
   F0/F1 sc3cartrips_fill(0/1): route-car scroll_fill off / on (recorded as the A/B state; use one switch per arm)
   H     right-drag: right button down at the view centre, moves with MK_RBUTTON back and forth every 50 ms
   HB    right button held still at the view centre
@@ -174,6 +175,14 @@ class CsArm(pt_run.Arm):
                 self.ensure_pause(False)
             elif what in ("P", "PH"):
                 self.ensure_pause(True)
+            elif what == "C":                          # re-centre: left click on the minimap's centre (CS_MINIMAP, 800 x 600)
+                mx, my = (int(v) for v in os.environ.get("CS_MINIMAP", "718,508").split(","))
+                v0 = self.st().get("view")
+                sc3io.click(self.h, mx, my)
+                time.sleep(1.5)
+                self.write({"t": time.time(), "phase": tok, "mark": "recentre", "from": v0, "to": self.st().get("view")})
+                print("%s recentre %s -> %s" % (time.strftime("%H:%M:%S"), v0, self.st().get("view")), flush=True)
+                continue
             elif what in ("X0", "X1"):                 # whole route-car fix off / on: sc3cartrips fill + sc3simrun car margin
                 on = what == "X1"
                 r = self.sc.exports_sync.fill(on)
@@ -205,8 +214,10 @@ class CsArm(pt_run.Arm):
                 th = threading.Thread(target=self.frames, args=("%s_%02d_%s" % (self.a.arm, idx, what), stop), daemon=True)
                 th.start()
             try:
-                if what in ("H", "PH", "W"):          # W = warm-up drag after a switch (its own kind: not counted as H)
+                if what in ("H", "PH"):
                     self.hold(secs)
+                elif what == "W":                     # warm-up after a switch: a gentle drag (no drift), its own kind
+                    self.gentle(secs)
                 elif what == "HB":
                     self.held(secs)
                 elif what == "HG":
