@@ -437,3 +437,15 @@ measure that this adds no pop-ins.
 Queue: R2d (3f9a2c82, already running) finishes as data; then **R1d** = R1c's schedule, **R2e** Europolis 1024 with one
 block each of H, AR, OS, HG, **L7** lite soak (1024, speed 4, X1, the L5 cycle x 3) and **V6** pictures, all on
 sc3simrun 0b903bb6 + sc3cartrips 268d6676. Bound and predictions as addendum 11 (location-matched).
+
+## Addendum 13 (2026-10-16 20:50, before R3)
+
+The overscroll blocks of R2 / R2c / R2d (and R2e, already queued) used `OS:20`: a 20 s arrow hold flew the camera
+~570 cells from the centre past the far corner of the 1024 map (28 cells / s) and the return flight filled the whole
+"after" window; both fix states read ~0 cars in the box (off-map ground). Those blocks are reported as a cross-map flight,
+not as overscroll.
+
+**R3** (overscroll as meant): full instance (sc3overscroll loaded), Berlin, final builds, per move
+`X?,W:3,C,I:3,MV:2,I:20,I:15,OS:3,I:10,I:30`: re-centre, a 2 s one-way arrow move toward the west edge (new token `MV`,
+no return), still, then a 3 s arrow hold past the edge (`OS`), whose 3 s return runs at the start of the following
+"after" window. ABBA, 2 blocks. Bound as addendum 11 (location-matched), on-screen pop-ins as addendum 8.

@@ -23,6 +23,7 @@ Tokens (seconds after the colon):
   ED    edge scroll: posted mouse moves on the left / right edge bands of the 800 x 600 view, alternating every 0.4 s
   OS    overscroll: spoofed arrow held in one direction for the whole phase (CS_OS_DIR, default left), then the
         opposite direction for the same time in the following idle, so the camera returns
+  MV    one-way arrow move in CS_OS_DIR for the phase, no return (to approach the map edge before OS)
   PH    user pause + right-drag (FREEZE must still win)
   Z     Z:n = n clicks on the zoom-in button
 A token ending in '*' also writes presented frames (sc3resize SC3RESIZE_FRAMEDUMP, set CS_FRAMEDUMP=<abs prefix>
@@ -230,6 +231,8 @@ class CsArm(pt_run.Arm):
                     self.arrows(secs)
                 elif what == "ED":
                     self.edge(secs)
+                elif what == "MV":                    # one-way arrow move (CS_OS_DIR), no return (approach for OS)
+                    self.arrows(secs, dirs=(os_dir,), period=secs + 1)
                 elif what == "OS":
                     self.arrows(secs, dirs=(os_dir,), period=secs + 1)
                     os_pending = secs
