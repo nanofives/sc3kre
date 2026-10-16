@@ -121,3 +121,52 @@ London (149,210)->(148,210) 73, (100,204)->(100,205) 64, (134,197)<->(135,197) 8
 unconnected step: Berlin 75.8%, Moscow 28.2%, London 49.7%, Europolis 0 (the router's road ring scan ignores lanes,
 LANE_DENSITY 1). Most such routes still solve in the corridor; they fail where the hop is to the half or road that the
 rest of the route needs and no lane joins them inside the corridor.
+
+## M1 long runs and cost (build 7adfb2e2, addendum 1)
+
+### F2: Europolis 1024, sc3perf traffic_mt=8 + smoothing, capture + solve, 30 minutes
+
+| phase | seconds | paths/s | nodes/s | viewport paths/s | drops | routing threads |
+|---|---|---|---|---|---|---|
+| speed 3 | 892 | 3,540 | 336,582 | 9.7 | 0 | 9 |
+| speed 4 | 892 | 6,774 | 595,200 | 11.5 | 0 | 9 |
+
+About 9.2 million paths captured on 9 threads; **0 faults, game alive to the end**; solver: 4,158 routes, all solved,
+graph lookups 246,595 ok, 0 faults, 10 budget-skipped.
+
+### F1: Berlin, stock threading, capture + solve, 30 minutes
+
+| phase | seconds | paths/s | nodes/s | viewport paths/s | drops | routing threads |
+|---|---|---|---|---|---|---|
+| speed 3 | 592 | 171.8 | 7,005 | 6.5 | 0 | 2 |
+| speed 4 | 1,195 | 630.3 | 24,924 | 25.5 | 0 | 2 |
+
+858,666 paths captured; **0 faults, game alive to the end**; solver: 29,080 routes, corridor 25,138 (86.4%), exact 7,018
+(24.1%), graph lookups 1,131,191 ok, 0 faults, 0 budget-skipped, mean 30 us per route, max 801 us.
+
+### C1 / C2: routing cost, capture on vs off inside one game (ctm_alt.py, ABBA, 10 blocks x 4 windows of 30 s)
+
+TSC cycles inside route_trip per call (time_route wrapper, every routing thread; TSC 3,593 MHz):
+
+| arm | calls off / on | cycles per call off / on (pooled) | on / off pooled | per-block on / off | median / mean / sd |
+|---|---|---|---|---|---|
+| C1 Berlin, speed 4, stock threading | 378,256 / 383,378 | 140,900 (39.2 us) / 143,900 | **1.0216** | 1.150 1.031 1.000 0.938 0.978 1.035 1.022 1.003 0.975 1.085 | 1.013 / 1.022 / 0.060 |
+| C2 Europolis 1024, speed 3, 8 workers + smoothing | 2,315,173 / 2,313,966 | 2,568,000 (715 us) / 2,443,000 | **0.951** | 0.759 1.002 0.961 0.944 0.991 0.995 0.988 0.961 0.992 1.033 | 0.989 / 0.963 / 0.076 |
+
+Prediction 7 (pooled on/off <= 1.05): **met in both**. Against the design's A2 bound (+2%): C1 pooled +2.2% with a
+median of +1.3% and a block-to-block sd of 6%, so the +2% bound is not resolved by this run; C2 shows no cost. The
+offline estimate (`capbench.c`, 10-10.5 ns per node, ~41 nodes per trip at speed 4) is +1.1% in Berlin. sc3perf's own
+TRAFFIC_MT counters (`--perf`) did not advance under traffic_mt_smooth, so C2's second witness is empty.
+0 faults in C1 and C2; both games alive to the end.
+
+## M1 predictions, all arms
+
+| # | prediction | result |
+|---|---|---|
+| 1 | A1 viewport rate within 5% of ct_probe | not met as written (timebase of ct_probe), met per routed trip (above) |
+| 2 | A1 samples found | met, 410 / 410 |
+| 3 | deposits exact (A1, V2) | met |
+| 4 | 0 faults, alive, armed | **met in every arm**: K, A1, V2, M2B, M2B2, M2M, M2L, M2E, M2R, F1, F2, C1, C2 |
+| 5 | threads | met: 9 on the 1024 city (V2, F2, C2), 2 in Berlin |
+| 6 | drops 0 in A1 / F1 | met (and 0 in V2, F2) |
+| 7 | cost <= 1.05 | met: 1.0216 (C1), 0.951 (C2) |

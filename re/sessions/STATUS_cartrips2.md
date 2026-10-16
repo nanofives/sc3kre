@@ -1,16 +1,16 @@
-# STATUS cartrips2 (M1 trip tap + M2 lane routes), 2026-10-15
+# STATUS cartrips2 (M1 trip tap + M2 lane routes), 2026-10-15: DONE, reported to the orchestrator
 
-Branch `child/cartrips2` (worktree `Simcity_wt\cartrips2`), from child/cartrips + round/1012. Harness claimed by
-`cartrips2`. Games run in `Simcity_stock_pausetrips` (inst_ct2_stock, inst_ct2_full) and `Simcity_stock_roundabout4`
-(inst_ct2_rbt). Arm queue: `verify/cartrips2/tools/ct2_queue.sh`, log `Simcity_stock_pausetrips\re\harness\ct2_queue.log`.
+Branch `child/cartrips2` (worktree `Simcity_wt\cartrips2`), from child/cartrips + round/1012. Not merged (the
+orchestrator integrates). Harness claim released. No game left running.
 
-| step | state |
-|---|---|
-| PRE + addenda 1, 2 | committed (119c695, 08464a5, 52cce78) |
-| sc3cartrips.dll M1 (c392ccbc) | K smoke, A1, V2 done: 0 faults, deposits exact, A1 410/410 samples matched |
-| M2 solver in DLL (a3038ce4 -> 7adfb2e2) | M2B on a3038ce4 running; queue M2B2 M2M M2L M2E M2R F2 next, then F1 C1 C2 |
-| offline twin `re/tools/ctm_lanes.py` | analyse / match / sources |
-| RESULTS.md, CAR_TRIPS.md update | after the queue |
+- Evidence: `verify/cartrips2/PRE.md` (+ addenda 1, 2) -> `RESULTS.md`, data in `verify/cartrips2/data/`.
+- Analysis: `re/analysis/CAR_TRIPS.md` section 6 (M1 / M2 results, open questions answered, revised M3 plan, decisions).
+- Code: `re/harness/src/sc3cartrips.c`, `sc3cartrips_lanes.c`; build_mod.ps1 `-Mod sc3cartrips`; mods_launch lists
+  `sc3cartrips.dll`. Tested build 7adfb2e2 (`Simcity_stock_pausetrips\re\harness\build_ct2m2b`).
+- Tools: `re/tools/ctm_read.py`, `ctm_summary.py`, `ctm_lanes.py`, `ctm_m2report.py`, `ctm_alt.py`; queue
+  `verify/cartrips2/tools/ct2_queue.sh`.
+- Raw runs: `Simcity_stock_pausetrips\re\harness\inst_ct2_stock`, `inst_ct2_full`;
+  `Simcity_stock_roundabout4\re\harness\inst_ct2_rbt`.
 
-If resuming after a usage limit: check `harness_claim.ps1`, `tasklist SC3U.exe`, `ct2_queue.log`; only kill PIDs in
-`pid_<arm>.txt` of this task's instances.
+Known, not fixed: the drain-latency maximum in the log wraps when a trip is committed after the tick read its clock
+(log only). M2's debug overlay of solved lane paths (CAR_TRIPS 4.5) was not built.

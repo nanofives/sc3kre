@@ -27,6 +27,10 @@ task), whose code shape matches the Windows functions cited next to them.
    game thread, keep the newest viewport trips, spawn one car per trip up to the stock count, drive it by answering
    SelectAnEdge from the solved lane route, never density-despawn it, end it at its destination or the view edge;
    freeze cars while paused. Milestones M1-M4 (4.5), owner decisions D1-D5 (4.6).
+6. **M1 and M2 done (task cartrips2, section 6)**: `sc3cartrips.dll` captures every final path at `0x100072f8` with
+   0 faults in 13 games (sc3perf workers included), equal to the router's own deposits, at no cost measurable beyond
+   the +5% bound; its in-game corridor solver turns 88.7% (Berlin) to 100% (Europolis 1024) of in-view routes into
+   drivable lane paths (exact as routed: 21.7% to 99.3%). The rest are router hops between roads the lanes never join.
 
 ## 1. Car lifecycle
 
@@ -401,8 +405,8 @@ Acceptance A2 bounds both in game.
 
 | milestone | delivers | needs from the owner |
 |---|---|---|
-| M1 trip tap | `sc3cartrips.dll`: capture stub, ring, game-thread queue, counters in its log (optional overlay of queued routes); no visible change. A1, and A2's routing half | nothing |
-| M2 lane routes | the corridor lane-route solver in game, a per-city drivable-route report (Berlin, Europolis, the 1024 city), a debug overlay of solved lane paths; classifies the unflagged trips by caller (D5) | nothing |
+| M1 trip tap (DONE, 6.1) | `sc3cartrips.dll`: capture stub, ring, game-thread queue, counters in its log (optional overlay of queued routes); no visible change. A1, and A2's routing half | nothing |
+| M2 lane routes (DONE, 6.2; overlay not built) | the corridor lane-route solver in game, a per-city drivable-route report (Berlin, Europolis, the 1024 city), a debug overlay of solved lane paths; classifies the unflagged trips by caller (D5) | nothing |
 | M3 route cars | spawn on the route, SelectAnEdge and NeedVehicleDisappear hooks, end at destination / rect edge, replace / filler switch. A3, A4, A6 | D1, D3, D4, D5; a hand test |
 | M4 pause, polish, release | pause freeze (or the alternative), camera checks, A2 in full, A5, packaging into the release set | D2; hand test and release approval |
 
@@ -431,7 +435,7 @@ list; `cartrips.ini` `[cartrips] mode=capture|off`, default capture; measurement
 ### 6.1 M1: the trip tap
 
 - **The plain patch works where Frida's listener faulted.** `0x100072f8` `call 0x10009eed` -> `call pop_stub` (one
-  locked 8-byte exchange; pushad / pushfd, append to a TLS buffer, jmp `0x10009eed`). __FAULTS__
+  locked 8-byte exchange; pushad / pushfd, append to a TLS buffer, jmp `0x10009eed`). 0 faults in 13 games, including 30 minutes in Berlin (858,666 paths) and 30 minutes on the 1024 city with sc3perf's 8 workers and smoothing (about 9.2 million paths on 9 threads).
 - **Captured paths equal the router's own deposits.** The five deposit calls of the pop loop (`0x100073b2`,
   `0x100073f8`, `0x10007463`, `0x100074be`, `0x10007500`) went through a witness stub: 75,539 trips in Berlin and
   1,778,795 on the 1024 city (9 routing threads), 0 deposits outside the node popped last, every depositing node
@@ -443,7 +447,11 @@ list; `cartrips.ini` `[cartrips] mode=capture|off`, default capture; measurement
 - **Rates** (paths / nodes / viewport paths per second): Berlin speed 1 27 / 1,022 / 0.96, speed 4 624 / 26,283 /
   23.0; Europolis 1024 with 8 workers, speed 3, 6,377 / 789,631 / 46.6 (virtual 33 x 28 view). Ring drops 0 in every
   arm.
-- **Cost**: __COST__
+- **Cost**: inside one game, capture switched off / on in 10 ABBA blocks (routing cycles per route_trip call): Berlin speed 4
+  **+2.2%** pooled (median +1.3%, block sd 6%; offline estimate +1.1%), 1024 city speed 3 **-4.9%** pooled (median -1.1%):
+  within the +5% bound in both; the design's +2% (A2) is not resolved in Berlin. The M2 solver runs on the game
+  thread, not in routing: 22-68 us median per route, max 4.7 ms; about 1 ms of game-thread time per second in Berlin at
+  speed 4.
 
 ### 6.2 M2: lane routes
 
