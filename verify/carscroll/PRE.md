@@ -189,3 +189,29 @@ K0c, K0d, K0e, K0f, K0g (stock instance, Berlin), K1 (full instance, Berlin, rep
   inside the previous box); on-screen removals and pop-ins of any context during A1 moves <= the A1 idle rate + 50%
   (the stock churn that runs while the camera is still: tick spawns, density despawn, route-car ends). A0 reported.
 - P6: also `PH` frozen ticks > 0 and agent passes continue (the heartbeat runs, FREEZE skips the street agents).
+
+## Addendum 2 (2026-10-16, after S1; before S1b, S3b, L3 and V1, which run after the queued arms)
+
+S1 (stock cars, f3d94920) showed one effect left: during the drag, on-screen pop-ins 219 a minute against 98 with the
+camera still, all in context `tick`. Cause: the strip cars leave in their own tick, so the stock producer tick
+`FUN_1001f44a` sees alive < target during a move and places cars with PutAVehicleInRect `FUN_1001ef25` at random cells
+of the producer's rect `+0x24..+0x30` `[CONFIRMED @ STRTSIM 0x1001f44a, 0x1001ef25]`.
+
+**TICKSTRIP** (same switch, build **sc3simrun ede5732a**): while the camera is moving (a scroll frame in the last 300 ms)
+and a strip was revealed in the last 300 ms, the producer tick runs with the producer's rect set to that strip, and the
+rect is restored when it returns. Hooked at `FUN_1001f44a`'s entry (6 bytes, expect-or-refuse on 12); sc3cartrips
+replace mode never calls the function, so the queued replace arms (S2, C1, F1, F2, C2, L1, L2 on f3d94920) measure code
+that is identical in what runs. `sc3simrun_stats` gains `out[4]` = ticks run on the strip. cs_probe allocates 32 bytes
+for the stats and zero-fills them (old builds leave `out[4]` at 0); the queued arms after S1 load this probe.
+
+New arms (after the queue, final build ede5732a in both instances):
+
+| arm | instance | city | cartrips | schedule |
+|---|---|---|---|---|
+| S1b | stock | Berlin | off | as S1 |
+| S3b | stock | Berlin | filler | as S3 |
+| L3 soak lite | stock | Berlin | off | `s4:10` + the L1 cycle x 4 (~11 min) |
+| V1 pictures | stock | Berlin | off, then replace | `s3:10,A0:0,H*:6,I:4,A1:0,H*:6,I:4,A0:0,AR*:3,I:4,A1:0,AR*:3,I:4` with CS_FRAMEDUMP |
+
+Prediction for S1b and S3b: P5 as revised in addendum 1 for every kind (on-screen pop-ins and removals of any context
+during A1 moves <= the A1 idle rate + 50%); everything else as S1 / S3.

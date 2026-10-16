@@ -76,7 +76,7 @@ Process.setExceptionHandler(function (d) {
   return false;
 });
 
-var MEM = { g: Memory.alloc(128), hkey: Memory.alloc(65536 * 4), hval: Memory.alloc(65536 * 8), stats: Memory.alloc(16) };
+var MEM = { g: Memory.alloc(128), hkey: Memory.alloc(65536 * 4), hval: Memory.alloc(65536 * 8), stats: Memory.alloc(32) };
 var cm = new CModule(CSRC, { QueryPerformanceCounter: k32.getExportByName('QueryPerformanceCounter'),
                              g: MEM.g, hkey: MEM.hkey, hval: MEM.hval });
 var drawFirst = new NativeFunction(cm.draw_first, 'uint32', ['uint32']);
@@ -168,9 +168,10 @@ var QPF = (function () { var f = Memory.alloc(8); new NativeFunction(k32.getExpo
 if (QPF !== 10000000) throw new Error('cs_probe assumes QueryPerformanceFrequency = 10 MHz, got ' + QPF);
 var prev = null;
 function snap() {
-  var st = [0, 0, 0, 0];
-  if (simStats) { simStats(MEM.stats); st = [MEM.stats.readU32(), MEM.stats.add(4).readU32(), MEM.stats.add(8).readU32(), MEM.stats.add(12).readU32()]; }
-  return { frames: gU(16), scroll: gU(20), ag: gU(24), moves: gU(28), agt: gU(32), sf: st[0], at: st[1], ft: st[2], sr: st[3] };
+  MEM.stats.writeByteArray(new Array(32).fill(0));
+  var st = [0, 0, 0, 0, 0];
+  if (simStats) { simStats(MEM.stats); st = [MEM.stats.readU32(), MEM.stats.add(4).readU32(), MEM.stats.add(8).readU32(), MEM.stats.add(12).readU32(), MEM.stats.add(16).readU32()]; }
+  return { frames: gU(16), scroll: gU(20), ag: gU(24), moves: gU(28), agt: gU(32), sf: st[0], at: st[1], ft: st[2], sr: st[3], ts: st[4] };
 }
 setInterval(function () {
   var s = state(), n = snap(), gap = gU(36);
@@ -187,7 +188,7 @@ setInterval(function () {
   PEND = keep;
   var d = prev ? { frames: n.frames - prev.frames, scroll: n.scroll - prev.scroll, ag: n.ag - prev.ag, moves: n.moves - prev.moves,
                    ag_ms: ((n.agt - prev.agt) >>> 0) / 1000, scroll_stub: n.sf - prev.sf, agent_ticks: n.at - prev.at,
-                   frozen_ticks: n.ft - prev.ft, strip_refills: n.sr - prev.sr, maxgap_ms: gap / 1000 } : null;
+                   frozen_ticks: n.ft - prev.ft, strip_refills: n.sr - prev.sr, tick_swaps: n.ts - prev.ts, maxgap_ms: gap / 1000 } : null;
   prev = n;
   if (d) send({ k: 'tick', d: d, c: C, st: s, spawns: sp, rem: RM, faults: FAULTS });
   C = {}; RM = []; FAULTS = [];

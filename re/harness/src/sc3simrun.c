@@ -49,12 +49,18 @@
  * (return address 0x10015578) gets strip number edi instead of the whole rect, so new cars appear only on the ground
  * the camera has just revealed. Hooked at FUN_1001f040's entry: sc3cartrips patches (and checks) the call site and, in
  * filler / off, jumps to the function with the return address intact.
+ * TICKSTRIP (same switch): the strip cars leave in their own tick, so the stock producer tick FUN_1001f44a sees
+ * alive < target during a move and places cars with PutAVehicleInRect FUN_1001ef25 at random cells of the producer's
+ * rect +0x24..+0x30 `[CONFIRMED @ STRTSIM 0x1001f44a, 0x1001ef25]`. Measured (carscroll S1, drag): on-screen pop-ins
+ * 219 a minute against 98 with the camera still, all from that tick. While the camera is moving (a scroll frame in the
+ * last 300 ms) the tick runs with the producer's rect set to the strip most recently revealed, and the rect is put back
+ * as soon as it returns. Hooked at FUN_1001f44a's entry (reached in stock and filler modes; replace mode never calls it).
  *
  * Config: simrun.ini beside the DLL:  [sim] run_while_scrolling=1   (0 = stock, the A/B control)
  *                                     [sim] freeze_on_pause=street  (cars = cars only, 0 = stock)
  *                                     [sim] animate_while_scrolling=1 (0 = agents freeze during camera moves, stock)
  * Exports (measurement): sc3simrun_animate(on) switches the scroll-frame rate at run time (returns the old state),
- *         sc3simrun_stats(DWORD out[4]) = scroll frames seen by the stub, agent ticks, frozen agent ticks, strip refills.
+ *         sc3simrun_stats(DWORD out[5]) = scroll frames seen by the stub, agent ticks, frozen agent ticks, strip refills, producer ticks run on the revealed strip.
  * Env:    SC3SIMRUN_LOG=<abs path>  SC3SIMRUN_TRACE=1 (20 Hz sampler + hold/pause caller log)
  *         SC3SIMRUN_RESUME=1 (test only: post 0xc2a35d80 once per unit of +0x140 after load)
  * Build:  re/harness/build_simrun.ps1. Ships via mods_launch.exe.
@@ -393,6 +399,14 @@ static int patch_scroll_anim(HMODULE spr) {
 static DWORD g_strip_ret, g_strip_cont;          /* STRTSIM+0x15578 (return into the refill loop), +0x1f046 */
 static volatile LONG g_strip_calls;
 static int g_strip_armed;
+static LONG g_last_strip[4];                     /* x0 z0 x1 z1 of the strip revealed last (game thread) */
+static DWORD g_last_strip_ms, g_last_scroll_ms, g_scroll_seen;
+static volatile LONG g_tick_swaps;
+
+static void __cdecl strip_note(LONG *r) {
+    memcpy(g_last_strip, r, sizeof(g_last_strip));
+    g_last_strip_ms = GetTickCount();
+}
 
 static __declspec(naked) void strip_entry(void) {
     __asm {
@@ -406,6 +420,11 @@ static __declspec(naked) void strip_entry(void) {
         lea eax, [ebp + eax - 0x44]              ; &strips[edi]
         mov [esp + 4], eax
         lock inc dword ptr [g_strip_calls]
+        pushad
+        push eax
+        call strip_note
+        add esp, 4
+        popad
     stock:
         push ebp
         mov ebp, esp
@@ -438,6 +457,68 @@ static int patch_strips(HMODULE strt) {
     return 1;
 }
 
+/* TICKSTRIP: jmp at STRTSIM FUN_1001f44a's entry (thiscall, 1 stack arg, ret 4; push ebp / mov ebp,esp / push ecx /
+   push ecx / push esi = 6 bytes, moved to g_tick_tramp). */
+static BYTE *g_tick_tramp;
+static LONG g_tick_saved[4];
+
+static int __cdecl tick_swap(BYTE *prod) {
+    DWORD now = GetTickCount();
+    LONG *r = (LONG *)(prod + 0x24);
+    if (g_scroll_frames != (LONG)g_scroll_seen) { g_scroll_seen = (DWORD)g_scroll_frames; g_last_scroll_ms = now; }
+    if (now - g_last_scroll_ms > 300 || now - g_last_strip_ms > 300) return 0;
+    if (g_last_strip[2] < g_last_strip[0] || g_last_strip[3] < g_last_strip[1]) return 0;
+    if (g_last_strip[0] < r[0] || g_last_strip[1] < r[1] || g_last_strip[2] > r[2] || g_last_strip[3] > r[3]) return 0;
+    memcpy(g_tick_saved, r, sizeof(g_tick_saved));
+    memcpy(r, g_last_strip, sizeof(g_last_strip));
+    g_tick_swaps++;
+    return 1;
+}
+static void __cdecl tick_restore(BYTE *prod) { memcpy(prod + 0x24, g_tick_saved, sizeof(g_tick_saved)); }
+
+static __declspec(naked) void tick_entry(void) {
+    __asm {
+        cmp dword ptr [g_scroll_rate], 0
+        je stock
+        push ecx
+        push ecx
+        call tick_swap
+        add esp, 4
+        pop ecx
+        test eax, eax
+        je stock
+        push ecx                                 ; producer
+        push dword ptr [esp + 8]                 ; the caller's stack argument
+        call dword ptr [g_tick_tramp]            ; FUN_1001f44a, pops its argument
+        pop ecx
+        push ecx
+        call tick_restore
+        add esp, 4
+        ret 4
+    stock:
+        jmp dword ptr [g_tick_tramp]
+    }
+}
+
+static int patch_tickstrip(HMODULE strt) {
+    static const BYTE entry[] = { 0x55, 0x8b, 0xec, 0x51, 0x51, 0x56, 0x8b, 0xf1, 0x80, 0x7e, 0x35, 0x00 };
+    BYTE *p = (BYTE *)strt + 0x1f44a;
+    DWORD old;
+    if (memcmp(p, entry, sizeof(entry))) { logf("### TICKSTRIP: STRTSIM+0x1f44a differs from shipped - NOT armed"); return 0; }
+    g_tick_tramp = (BYTE *)VirtualAlloc(NULL, 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!g_tick_tramp) return 0;
+    memcpy(g_tick_tramp, p, 6);
+    g_tick_tramp[6] = 0xE9;
+    *(DWORD *)(g_tick_tramp + 7) = (DWORD)(p + 6) - (DWORD)(g_tick_tramp + 11);
+    if (!VirtualProtect(p, 6, PAGE_EXECUTE_READWRITE, &old)) return 0;
+    p[0] = 0xE9;
+    *(DWORD *)(p + 1) = (DWORD)tick_entry - (DWORD)(p + 5);
+    p[5] = 0x90;
+    VirtualProtect(p, 6, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), p, 6);
+    return 1;
+}
+
 __declspec(dllexport) int __cdecl sc3simrun_animate(int on) {
     int was = g_scroll_rate != 0;
     g_scroll_rate = on ? RATE_ON : 0;
@@ -450,6 +531,7 @@ __declspec(dllexport) void __cdecl sc3simrun_stats(DWORD *out) {
     out[1] = (DWORD)g_agent_ticks;
     out[2] = (DWORD)g_frozen_ticks;
     out[3] = (DWORD)g_strip_calls;
+    out[4] = (DWORD)g_tick_swaps;
 }
 
 /* ============================================================ sampler */
@@ -477,6 +559,7 @@ static DWORD WINAPI sampler(LPVOID param) {
         HMODULE strt;
         while (!(strt = GetModuleHandleA("STRTSIM.DLL"))) Sleep(5);
         logf("### STRIPS: armed=%d", patch_strips(strt));
+        logf("### TICKSTRIP: armed=%d", patch_tickstrip(strt));
     }
     if (g_freeze) {
         HMODULE strt;
