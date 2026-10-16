@@ -94,10 +94,11 @@ class Arm:
         raise SystemExit("could not set pause=%s: %s" % (want, self.st()))
 
     def ensure_speed(self, n):
-        for _ in range(3):
+        for _ in range(8):                         # 3 tries missed once right after a pause (cartrips3 R1)
             if self.st().get("speed_last") == n:
                 return
             self.key(0x30 + n)
+            time.sleep(0.6)
         raise SystemExit("could not set speed %d: %s" % (n, self.st()))
 
     def hold(self, secs):

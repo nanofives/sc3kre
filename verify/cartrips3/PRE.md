@@ -106,3 +106,11 @@ counted. Hand-test build staged in `MAIN\re\harness\handtest_cartrips\` when the
 - R1's probe groups: `rem,acc,ag` (the removal records need the agent-loop count for "visible", as phase 1).
 - Owner pictures: an extra arm **SH** (not counted): inst_ct3_stock, Berlin, replace, `s2:240`, screenshots and a short
   GIF taken with `sc3io.grab_to`.
+
+## Addendum 2 (2026-10-16, after R1; before FL, L1, L2, CA and the new arm PZ)
+
+R1 ran s1, s2, s3, s4 and P as registered; the driver then stopped (`could not set speed 3`: pt_run's
+ensure_speed tried 3 times without waiting after the last key, the third key had worked). R1's last phase (s3 after the
+pause) is missing, so prediction 5's resume half is measured in a new arm **PZ** (inst_ct3_stock, Berlin, replace,
+`log_s=1`, CT_GROUPS=none, `s3:90,P:30,s3:60`). pt_run's ensure_speed now tries 8 times, 0.6 s apart. Nothing else
+changes; R2 runs on the old driver (already started).
