@@ -267,3 +267,15 @@ New arms (5eaa8a2e in inst_cs_stock, after V2o / V2r): **S1d** = S1's schedule (
 (filler), **L4** lite soak, stock cars, speed 4, `s4:10` + the L1 cycle x 3.
 Prediction for S1d and S3d: P5 (addendum 1, on-screen rule of addendum 4) for every kind; everything else as S1 / S3.
 L4: alive, 0 faults.
+
+## Addendum 6 (2026-10-16 14:45, after S1d; before S1e)
+
+S1d is void. From its second 160 the game ran at 1,200-4,600 frames per second in every phase, idle included, with
+agent passes at the same rate: the monitor had gone to sleep (Win32_DesktopMonitor Availability 8, workstation not
+locked), and with nothing presented the frame loop spins. That breaks the frame rate columns and also the visibility
+rules, which count frames (3 frames ~ 2 ms there). From 14:41 a helper keeps the display on
+(`SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED)`, released when it exits, 2 h);
+S3d's first minute read 69-161 frames per second. Every arm is checked for this from now (frames per second at idle in
+the range of the arm's first phase).
+
+**S1e** = S1d rerun (5eaa8a2e, stock cars, S1's schedule), after V3o / V3r. Same predictions as S1d.
