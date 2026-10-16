@@ -127,7 +127,7 @@ if (!LITE) Interceptor.attach(A(ST, 0x10015415), { onEnter: function () { CTX.pu
 if (!LITE) Interceptor.attach(A(ST, 0x100146b2), { onEnter: function () { CTX.push('produce-off'); }, onLeave: function () { CTX.pop(); } });
 if (!LITE) Interceptor.attach(A(ST, 0x1001f112), { onEnter: function () { CTX.push('tile'); }, onLeave: function () { CTX.pop(); } });
 
-var C = {}, SP = [], RM = [], PEND = [];
+var C = {}, SP = [], RM = [], PEND = [], PMAP = {};
 function cell(vp) { try { return [vp.add(0xc).readS32() >> 8, vp.add(0x14).readS32() >> 8]; } catch (e) { return [null, null]; } }
 // SetProducer FUN_1001c990(this = car, producer): every car of the producer, stock (FUN_1001f112) or sc3cartrips'
 if (!LITE) Interceptor.attach(A(ST, 0x1001c990), function () {
@@ -141,7 +141,8 @@ if (!LITE) Interceptor.attach(A(ST, 0x1001c990), function () {
   // intersected with the box after it (equals the current box when the camera has not moved)
   var sw = 0;
   try { var L = layer(); for (var q = 0; q < 4; q++) if (PROD.add(0x24 + 4 * q).readS32() !== L.add(0xb0 + 4 * q).readS32()) sw = 1; } catch (e) {}
-  PEND.push({ v: v, f: gU(16), ctx: ctx, t: Date.now(), b: isect(BOX_PREV, BOX_LAST) || box(), sw: sw });
+  var pe = { v: v, f: gU(16), ctx: ctx, t: Date.now(), b: isect(BOX_PREV, BOX_LAST) || box(), sw: sw };
+  PEND.push(pe); PMAP[v.toString()] = pe;
 });
 // VehicleDisappears FUN_1001f610(this = producer, car + 0x18)
 if (!LITE) Interceptor.attach(A(ST, 0x1001f610), function () {
@@ -151,7 +152,8 @@ if (!LITE) Interceptor.attach(A(ST, 0x1001f610), function () {
   var ctx = CTX.indexOf('view') >= 0 ? 'view' : (CTX.indexOf('produce-off') >= 0 ? 'produce-off' : 'drive');
   var vis = last > 0 && f - last <= 2 ? 1 : 0;
   RM.push({ f: f, last: last, vis: vis, vbox: vis && inb(box(), xz[0], xz[1]) ? 1 : 0, ctx: ctx, x: xz[0], z: xz[1] });
-  for (var i = 0; i < PEND.length; i++) if (PEND[i].v.equals(vp)) { PEND[i].gone = f; PEND[i].xz = xz; }
+  var pe = PMAP[vp.toString()];
+  if (pe) { pe.gone = f; pe.xz = xz; }
   drawForget(u);
 });
 
@@ -192,6 +194,7 @@ setInterval(function () {
   for (var i = 0; i < PEND.length; i++) {                 // decide pop-in visibility once 3 frames have passed
     var p = PEND[i];
     if (fnow - p.f < 4 && !p.gone) { keep.push(p); continue; }
+    if (PMAP[p.v.toString()] === p) delete PMAP[p.v.toString()];
     var first = drawFirst(p.v.toUInt32()), xz = p.gone ? (p.xz || [null, null]) : cell(p.v);   // the car's cell 3 frames in (placement sets it after SetProducer)
     if (p.gone && first === 0) first = 0;
     var pv = first > 0 && first - p.f <= 3 ? 1 : 0;

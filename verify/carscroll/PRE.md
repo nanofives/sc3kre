@@ -374,3 +374,17 @@ ABBA, 2 blocks each of H and AR, 1 block each of HG and HB, then `X1,P:15,PH:20,
 set), 1 block each of HG, H, AR, OS the same way; **L6** lite soak, full set, Europolis 1024, speed 4, X1, the L5 cycle
 x 3. Bound and other predictions as addendum 8; R1b / R2b replace R1 / R2 for the bound; C4 (frame rate) and L5 (soak)
 stand on 053963fa (the change only stops spawns).
+
+## Addendum 10 (2026-10-16 18:25, after R2; before R1b, R2b, L6)
+
+R2 (Europolis 1024, full set, 053963fa, full probe): during the fix-on phases the game thread stopped for up to 16-20 s
+at a time (0 frames, sc3cartrips counters frozen), which the fix-off phases did not show. Measured costs that grew
+with the fix: the route solver's slowest trip 260 ms (F1r without the wider capture: 8 ms), average ~5 x; route
+scans walk every step of up to 256 routes per spawn attempt. Also suspect: the probe's car hooks run in JavaScript on
+the game thread and each removal scanned the list of pending placements (quadratic under heavy churn). C4 (lite probe,
+same build) tells the probe's share apart.
+
+Changes, **sc3cartrips dba17e77** (replaces cb74f872 for R1b, R2b, L6): capture margin 8 -> **4** (the car rect is
+already view + 8); solver state limit 200000 -> 40000 while scroll_fill is on; each route keeps its path's bounding box
+and the scans skip routes whose box misses the rect or strip. cs_probe: pending placements looked up by car address.
+Predictions unchanged (addendum 8 / 9); added: no frame gap above 1 s in R1b / R2b / L6 fix-on phases.

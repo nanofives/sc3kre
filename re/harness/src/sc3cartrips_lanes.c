@@ -163,6 +163,7 @@ static void dump_cell(int x, int z, int status, BYTE *g) {
 #define MAXS 65536                               /* states */
 #define HS 131072                                /* state hash */
 #define LIMIT 200000
+#define LIMIT_FIX 40000                          /* scroll_fill (wider capture): no single solve may stall a frame (R2: 260 ms) */
 #define SKIPC 3
 #define OFFC 1
 #define BACK 2
@@ -322,7 +323,7 @@ static void solve(const short (*cells)[2], int ncell, const short *rect, int wid
         BYTE *g, *nd, *eb;
         int ne, q, cell = s->cell, n = s->node, j = s->j;
         if (s->cost < e.cost) continue;
-        if (++R->expanded > LIMIT) { R->reason = SR_LIMIT; break; }
+        if (++R->expanded > (DWORD)(g_fix ? LIMIT_FIX : LIMIT)) { R->reason = SR_LIMIT; break; }
         if (j > R->jmax) R->jmax = j;
         if (j == k) { goal = e.s; break; }
         g = g_c[cell].g;

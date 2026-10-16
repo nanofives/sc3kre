@@ -88,7 +88,7 @@ static int g_verify, g_time, g_dump, g_choice, g_log_s = 10;
 static int g_solve, g_time_agents;
 static int g_rect_ovr, g_ovr[4];                 /* [cartrips] rect=x0,z0,x1,z1: measurement region instead of the sim rect */
 static volatile LONG g_fix = 1;                  /* [cartrips] scroll_fill=1: route cars hold their count while the camera moves */
-static int g_margin = 8;                         /* [cartrips] margin=8: cells added around the sim rect for capture (scroll_fill) */
+static int g_margin = 4;                         /* [cartrips] margin=4: cells added around the sim rect for capture (scroll_fill) */
 
 static void ini_read(void) {
     char path[MAX_PATH], v[32];
@@ -108,7 +108,7 @@ static void ini_read(void) {
     if (v[0] && sscanf(v, "%d,%d,%d,%d", &g_ovr[0], &g_ovr[1], &g_ovr[2], &g_ovr[3]) == 4) g_rect_ovr = 1;
     g_log_s = GetPrivateProfileIntA("cartrips", "log_s", 10, path);
     g_fix = GetPrivateProfileIntA("cartrips", "scroll_fill", 1, path) ? 1 : 0;
-    g_margin = GetPrivateProfileIntA("cartrips", "margin", 8, path);
+    g_margin = GetPrivateProfileIntA("cartrips", "margin", 4, path);
     if (g_margin < 0) g_margin = 0;
     if (g_margin > 32) g_margin = 32;
     if (g_log_s < 1) g_log_s = 1;

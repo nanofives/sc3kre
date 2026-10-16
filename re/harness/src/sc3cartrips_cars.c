@@ -27,7 +27,7 @@ enum { MODE_OFF = 0, MODE_CAPTURE = 1, MODE_REPLACE = 2, MODE_FILLER = 3 };
 #define MAXCARS 256
 
 typedef struct { short x, z; BYTE *node, *g; } LStep;
-typedef struct { DWORD seq; int n; LARGE_INTEGER t; int used, cut; LStep s[MAXLP]; } Route;
+typedef struct { DWORD seq; int n; LARGE_INTEGER t; int used, cut; short bx0, bz0, bx1, bz1; LStep s[MAXLP]; } Route;
 typedef struct {
     BYTE *car;                                   /* 0 = free */
     int n, idx, ended, lost, followed, crossings, spawned_tick, placing;
@@ -112,6 +112,7 @@ static void route_push(DWORD seq, int npath, int cut) {
     if (g_rq_len < RQN) g_rq_len++; else g_c3[C3_ROUTES_DROPPED_OLD]++;
     r->seq = seq;
     r->used = 0; r->cut = cut;
+    r->bx0 = r->bz0 = 0x7fff; r->bx1 = r->bz1 = -1;
     QueryPerformanceCounter(&r->t);
     r->n = npath > MAXLP ? MAXLP : npath;
     for (q = 0; q < r->n; q++) {
@@ -120,6 +121,10 @@ static void route_push(DWORD seq, int npath, int cut) {
         r->s[q].x = g_path[q][0]; r->s[q].z = g_path[q][1];
         r->s[q].g = g;
         r->s[q].node = g ? GNODE(g, g_pathn[q]) : NULL;
+        if (r->s[q].x < r->bx0) r->bx0 = r->s[q].x;
+        if (r->s[q].x > r->bx1) r->bx1 = r->s[q].x;
+        if (r->s[q].z < r->bz0) r->bz0 = r->s[q].z;
+        if (r->s[q].z > r->bz1) r->bz1 = r->s[q].z;
     }
     g_c3[C3_ROUTES_QUEUED]++;
 }
@@ -142,6 +147,7 @@ static double route_age_s(Route *r) {
 /* first path step inside the producer's rect (the car enters the route there), -1 if none */
 static int route_entry(Route *r, BYTE *prod) {
     int px0 = *(int *)(prod + 0x24), pz0 = *(int *)(prod + 0x28), px1 = *(int *)(prod + 0x2c), pz1 = *(int *)(prod + 0x30), s;
+    if (r->bx1 < px0 || r->bx0 > px1 || r->bz1 < pz0 || r->bz0 > pz1) return -1;     /* path box misses the rect */
     for (s = 0; s + 1 < r->n; s++)
         if (r->s[s].x >= px0 && r->s[s].x <= px1 && r->s[s].z >= pz0 && r->s[s].z <= pz1) return s;
     return -1;
@@ -175,6 +181,7 @@ static Route *route_strip(Strip *st, int *entry) {
         Route *r = &g_rq[(g_rq_head + RQN - 1 - k) % RQN];
         if (r->used >= 3) continue;
         if (route_age_s(r) > 60.0) break;
+        if (r->bx1 < st->x0 || r->bx0 > st->x1 || r->bz1 < st->z0 || r->bz0 > st->z1) continue;   /* misses the strip */
         for (s = 0; s + 1 < r->n; s++) {
             int x = r->s[s].x, z = r->s[s].z;
             if (x >= st->x0 && x <= st->x1 && z >= st->z0 && z <= st->z1 && !box_has(x, z)) {
