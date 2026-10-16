@@ -493,7 +493,7 @@ def classify(G, r, jmax):
     """why a route has no lane path: the first step from route index jmax - 1 on that is not lane-linked, else a
     reversal (U-turn) after it, else 'turn'"""
     cells = r["cells"]
-    lo = max(0, jmax - 3)
+    lo = max(0, jmax - 8)
     for i in range(lo, len(cells) - 1):
         stt = step_status(G, cells[i], cells[i + 1])
         if stt not in ("linked", "same-cell"):

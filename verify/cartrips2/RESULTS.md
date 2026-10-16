@@ -75,3 +75,49 @@ the building occupant answers `vt+0x54() == 1`, QIs `0xe0faadc7`, has bit 1 in `
 `random(100)` is at or below `ftol(f(x, z) * DAT_1001f12d)`, `f` from `DAT_1001fdb8[0x27]->vt+0x24(x, z)` at the
 building's cell. What `layer+0x31`, `f` and `DAT_1001f12d` hold is `[UNCERTAIN]`. Every viewport trip in A1 is a
 building trip.
+
+## M2: lane routes (build 7adfb2e2 unless named; PRE addenda 1-2)
+
+A route = the in-view road run of a viewport trip (types 1-3, inside the trip's rect, travel order, repeats merged).
+**Exact** = a lane path through the route cells and only them, in order (w = 0): "fully drivable as routed".
+**Corridor** = the in-game solver (w = 1): within one cell of the route, progress by proximity, route cells may be
+skipped at a cost, start on r0 or a cell beside it. **No skip** = solved with 0 skipped route cells; **cov90** = <= 10%
+skipped. In-game columns from the DLL's last `M2>` line; literal (phase-1 rule) and w = 2 offline (`ctm_lanes.py`,
+graphs from the save + TrBlkAtt, equal to the in-memory graphs on all 256 cells compared in M2B).
+
+| arm, city | routes | exact (w0) | literal (phase 1 rule) | corridor (w1) | ... no skip | ... cov90 | w2 (offline) | budget-skipped | solve time per route, median / p99 / max |
+|---|---|---|---|---|---|---|---|---|---|
+| M2B2 Berlin | 3,053 | 21.7% | 22.5% | **88.7%** | 72.1% | 83.6% | 94.6% | 0 | 26 / 112 / 1,242 us |
+| M2M Moscow | 3,607 | 67.1% | 66.7% | **96.7%** | 94.3% | 95.8% | 99.6% | 60 (1.6%) | 22 / 138 / 4,742 us |
+| M2L London (most avenues) | 4,916 | 49.7% | 50.5% | **92.7%** | 86.4% | 88.7% | 93.5% | 0 | 24 / 122 / 1,232 us |
+| M2E Europolis 1024 (sc3perf 8 workers) | 1,030 | 99.3% | 99.3% | **100%** | 100% | 100% | 100% | 21 (2.0%) | 68 / 248 / 1,257 us |
+| M2R Berlin + RBT, box 45-70 / 155-180 | 1,405 | 38.6% | 40.5% (dump graphs) | **100%** | 93.2% | 96.8% | 100% | 45 (3.1%) | 35 / 133 / 3,954 us |
+| M2B Berlin, a3038ce4 (start on r0 only) | 3,196 | 25.4% | | 87.0% | 76.1% | 80.5% | | 0 | mean 29 us |
+
+**Roundabouts (M2R).** RBT converted Berlin's 3 qualifying blocks at load (`3 qualify, 3 converted`); the four cells
+of block (57,167) read different graphs in memory than the save's stock pieces (39, 39, 11203, 39 -> 4, 4, 2, 4 car
+nodes: 20400 x 3 and the closed quarter 20401 at (57,168)). 379 routes enter the block: corridor 379 (342 no skip),
+exact 14; 369 of the solved lane paths pass through block cells.
+
+**Match (prediction 1)**: the DLL's result equals `ctm_lanes.py match` on the dumped graphs for **every route of every
+arm**: M2B 3,196 / 3,196, M2B2 3,195, M2M 3,720, M2L 4,916, M2E 1,043, M2R 1,408 (w1: ok, cost, skipped, off-route
+cells and the full lane path; w0: ok and cost). Met.
+
+**Faults / budget (prediction 2)**: 0 faults, `fault=0` graph lookups in every arm: met. Budget-skipped <= 1% in the
+Berlin-size arms: **not met in Moscow (1.6%)**; Berlin and London 0. (Europolis 1024 2.0%, M2R 3.1%: the 4 ms
+per-tick cap is shared by every trip drained in that tick; M3 can carry unsolved trips to the next tick instead.)
+
+**Failure reasons (corridor, offline, 8-step look-back)**:
+
+| city | failed | router step with no lane link either way (`unconnected`) | against the lanes | other |
+|---|---|---|---|---|
+| Berlin | 368 | 362: avenue half to avenue half 259, avenue <-> T 39, curve 11203, road 29 and others 103 | 0 | turn 6 |
+| Moscow | 121 | 25 (avenue halves at (134-141, 90-91)) | **95 at (85,127) -> (85,128), piece 11211/0 -> 11213/0** | u-turn 1 |
+| London | 357 | 341: avenue 11204 <-> T 39 247, 11203 -> 11204 45, avenue halves 40, others 9 | 0 | turn 16 |
+| Europolis 1024 | 0 | | | |
+
+Top places: Berlin (70,105)-(70,106) 84 both ways, (72,105)->(72,106) 35, (90,98)->(90,99) 24, (92,99)->(92,98) 21;
+London (149,210)->(148,210) 73, (100,204)->(100,205) 64, (134,197)<->(135,197) 85. Share of routes with at least one
+unconnected step: Berlin 75.8%, Moscow 28.2%, London 49.7%, Europolis 0 (the router's road ring scan ignores lanes,
+LANE_DENSITY 1). Most such routes still solve in the corridor; they fail where the hop is to the half or road that the
+rest of the route needs and no lane joins them inside the corridor.
