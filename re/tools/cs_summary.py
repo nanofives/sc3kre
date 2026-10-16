@@ -43,6 +43,7 @@ def main():
             if cur and r.get("phase") == cur["tok"] and r["t"] - cur["t0"] >= a.drop + 1:
                 cur["ticks"].append(r)
     faults = sum(len(r.get("faults") or []) for r in recs)
+    # a frame gap >= 10 s is a counter artifact (2^32 us, seen 2 times in 400 s in C1), not a frame: excluded, counted
     rows = []
     for i, p in enumerate(phases):
         ts = p["ticks"]
@@ -59,7 +60,9 @@ def main():
             "stub_s": mean([d["scroll_stub"] for d in D]), "passes_s": mean([d["ag"] for d in D]),
             "agent_ticks_s": mean([d["agent_ticks"] for d in D]), "frozen_s": mean([d["frozen_ticks"] for d in D]), "strips_s": mean([d.get("strip_refills", 0) for d in D]), "tickswap_s": mean([d.get("tick_swaps", 0) for d in D]),
             "moves_s": mean([d["moves"] for d in D]), "ag_ms_s": mean([d["ag_ms"] for d in D]),
-            "maxgap_ms_mean": mean([d["maxgap_ms"] for d in D]), "maxgap_ms_max": max(d["maxgap_ms"] for d in D),
+            "maxgap_ms_mean": mean([d["maxgap_ms"] for d in D if d["maxgap_ms"] < 10000]),
+            "maxgap_ms_max": max([d["maxgap_ms"] for d in D if d["maxgap_ms"] < 10000] or [0]),
+            "maxgap_artifacts": sum(1 for d in D if d["maxgap_ms"] >= 10000),
             "cars": mean([s.get("p_count") or 0 for s in st]), "target": mean([s.get("p_target") or 0 for s in st]),
             "spawn_min": len(sp) * 60.0 / n, "spawn_vis_min": sum(s["vis"] for s in sp) * 60.0 / n,
             "spawn_box_min": sum(s.get("vbox", 0) for s in sp) * 60.0 / n, "rem_box_min": sum(x.get("vbox", 0) for x in rm) * 60.0 / n,

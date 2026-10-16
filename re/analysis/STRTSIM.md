@@ -321,6 +321,15 @@ SIMSPR view tick `FUN_10042a95` -> `[view+0xb4]->vt+0x20` at `0x10042b04` -> SIM
   heartbeat call whenever a camera-busy byte `+0x1dd..+0x1e2` is set and runs the scroll step `FUN_10043daf` instead
   `[CONFIRMED @ SIMSPR 0x10042ad5..0x10042b04]`. So with sc3simrun (no hold) days and trips run during a camera move
   but vehicles still freeze. The user pause (`FUN_100056bb`, `+0x140`) touches neither.
+  Refined (task carscroll 2026-10-16): the scroll step renders its own frame through the same render-view slot
+  `+0x20` (`FUN_1001cab9`), which calls the heartbeat only while render-view `+0x2b` (= rate >= 0.1, set by slot
+  `+0x7c` `FUN_1001d65d`) is set; the idle tick passes 60.0, the scroll step 0.0 (three copies of the write at
+  `0x10043de7`, `0x10043f60`, `0x10044003`) `[CONFIRMED @ SIMSPR 0x1001cab9, 0x1001d65d, 0x10043daf]`. sc3simrun
+  `animate_while_scrolling` passes 60.0 there (`formats/SIM_WHILE_SCROLLING.md`).
+- Camera moves and cars (task carscroll): UpdateVehicleView `FUN_10015415` queues the cars on strips that left the sim
+  rect for removal through AnimOccMan `vt+0x58`; the removal happens in each car's next tick, so while the agents are
+  frozen (stock camera move) nothing is removed and the count climbs above target until the camera stops. The refill
+  `FUN_1001f040` is called on the whole new rect once per new strip `[CONFIRMED @ STRTSIM 0x10015415]`.
 - Vehicles never deposit traffic density; density comes only from SimTransit trips (NET_LANES verdict table), which
   stop entirely while paused (`verify/pausetrips/RESULTS.md`).
 

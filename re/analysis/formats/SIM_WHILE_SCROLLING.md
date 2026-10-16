@@ -68,6 +68,30 @@ Soak with the mod: 180 s of continuous drag at 0.50 ticks/s, process alive, fram
 - The stock hold may have been there to keep a full-speed sim from competing with scroll redraws on
   2000-era CPUs. No race showed in 3.5 min of drag at the default speed. Fastest speed not soaked.
 - ~~`+0x148` driver~~: the month pass (above). The cursor jumps seen during it are still unexplained.
-- **Vehicles still freeze while scrolling with the mod.** Days and trips keep running (pausetrips F1: 5.7 days/s and
-  trips during the camera move), but the SIMSPR view tick skips the heartbeat that animates the vehicles whenever a
-  camera-busy byte is set (`0x10042ad5`), independent of the hold this mod removes. STRTSIM.md section 8.
+- ~~Vehicles still freeze while scrolling with the mod~~: fixed by `animate_while_scrolling` (below, task carscroll).
+
+## Street agents keep moving while the camera moves (`animate_while_scrolling`, task carscroll 2026-10-16)
+
+Evidence `verify/carscroll/PRE.md` (+ addenda 1, 2) -> `RESULTS.md`. With the hold gone, days and trips ran during a
+camera move but every street agent still froze. Cause, decoded:
+
+- The scroll step `FUN_10043daf` does render a frame each tick: it moves the camera (`vt+0x34`), then calls the render
+  view's frame `[+0xb8]->vt+0x20` = `FUN_1001cab9` itself (`0x1004403d`). The frame calls the heartbeat
+  `[+0x15c]->vt+0x18` (SC3U `FUN_00426140`, which ticks every agent) **only while render-view byte `+0x2b` is set**.
+  `+0x2b` is written by render-view `vt+0x7c` = `FUN_1001d65d(&rate)`: `+0x70 = rate`, `+0x2b = rate >= 0.1f`
+  (`0x10063504`) `[CONFIRMED @ SIMSPR 0x1001cab9, 0x1001d65d]`. The idle view tick passes 60.0 before every frame; the
+  scroll step passes **0.0** before its frame. The compiler kept three copies of that write, one per branch
+  (`0x10043de7` drag / held button, `0x10043f60` one direction, `0x10044003` two directions; Ghidra's text shows one).
+- Zoom and rotate (`FUN_10042d8a` ...) pass 0.0 then 60.0 inside one call with no frame between: nothing to change.
+- Edge scroll and overscroll are the same scroll step (busy bytes outer `+0x1e1..+0x1e6`).
+
+The mod (sc3simrun, `[sim] animate_while_scrolling=1`, default on; needs `run_while_scrolling=1`):
+1. **ANIMATE**: the three `fldz; fstp [ebp-8]` become calls that write 60.0, so scroll frames run the heartbeat.
+2. **STRIPS**: once agents tick during a move, the camera's car churn shows. UpdateVehicleView (STRTSIM `FUN_10015415`)
+   queues the cars on strips leaving the sim rect for removal, carried out in their next tick (so today nothing is
+   removed until the camera stops), and refills with PutVehiclesInRect `FUN_1001f040` on the **whole** new rect once
+   per new strip. While animating, that refill gets the strip instead, so new cars land on ground just revealed.
+3. **TICKSTRIP**: the stock producer tick `FUN_1001f44a` then fills the deficit at random cells of the producer rect;
+   while the camera is moving it runs with the rect set to the last revealed strip.
+FREEZE (user pause) still wins: it skips the street agents inside the agent loop whatever drives the heartbeat.
+Measured results: `verify/carscroll/RESULTS.md`.
