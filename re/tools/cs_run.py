@@ -7,7 +7,7 @@ probe (cs_probe.py) and camera-move tokens.
 Tokens (seconds after the colon):
   sN    run at speed N                       P    user pause                    I    idle (no input), state unchanged
   A0/A1 sc3simrun_animate(0/1) (in-game A/B switch, takes no time)
-  X0/X1 the route-car fix off / on: sc3cartrips_fill(0/1) and sc3simrun_carmargin(2 / CS_MARGIN, default 8)
+  X0/X1 the route-car fix off / on: sc3cartrips_fill(0/1) and sc3simrun_carmargin(2 / CS_MARGIN, default 5)
   C     re-centre the camera: left click on the minimap centre (CS_MINIMAP=x,y, default 718,508 at 800 x 600)
   W     warm-up after X0/X1: a gentle drag (as HG, its own kind), so the sim rect is rebuilt with the new margin
   F0/F1 sc3cartrips_fill(0/1): route-car scroll_fill off / on (recorded as the A/B state; use one switch per arm)
@@ -186,7 +186,7 @@ class CsArm(pt_run.Arm):
             elif what in ("X0", "X1"):                 # whole route-car fix off / on: sc3cartrips fill + sc3simrun car margin
                 on = what == "X1"
                 r = self.sc.exports_sync.fill(on)
-                m = self.sc.exports_sync.carmargin(int(os.environ.get("CS_MARGIN", "8")) if on else 2)
+                m = self.sc.exports_sync.carmargin(int(os.environ.get("CS_MARGIN", "5")) if on else 2)
                 self.write({"t": time.time(), "phase": tok, "mark": "animate", "on": on, "was": [r, m], "fix": True})
                 print("%s fix %s (was fill %s margin %s)" % (time.strftime("%H:%M:%S"), what, r, m), flush=True)
                 continue

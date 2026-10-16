@@ -46,6 +46,7 @@ def main():
         if p["kind"] not in ("H", "HB", "HG", "AR", "OS") or i == 0 or i + 1 >= len(phases):
             continue
         b, f = phases[i - 1], phases[i + 1]
+        g = phases[i + 2] if i + 2 < len(phases) and phases[i + 2]["kind"] == "I" else None   # settle at the end location
         if b["kind"] != "I" or f["kind"] != "I":
             continue
         mv = [v for t, v, _ in p["sec"] if t >= a.drop + 1]
@@ -63,6 +64,11 @@ def main():
         row["r_after"] = row["after"] / mb if mb else None
         if box:
             bb, bm, ba = boxmed(b, a.drop), boxmed(p, a.drop), boxmed(f, 0)
+            if g and g["sec"]:
+                gs = [n for t, n in box if g["t0"] + max(0, g["sec"][-1][0] - 19) <= t < g["t0"] + g["sec"][-1][0] + 1]
+                ge = statistics.median(gs) if gs else None
+                row.update({"box_end": ge, "re_after": ba / ge if ge and ba is not None else None,
+                            "re_move": bm / ((bb + ge) / 2.0) if ge and bb and bm is not None else None})
             row.update({"box_before": bb, "box_move": bm, "box_after": ba,
                         "rb_move": bm / bb if bb and bm is not None else None, "rb_after": ba / bb if bb and ba is not None else None})
         rows.append(row)
@@ -84,6 +90,10 @@ def main():
              "r_move": statistics.median(rm), "r_move_min": min(rm), "r_after": statistics.median(ra), "r_after_min": min(ra)}
         rbm = [r["rb_move"] for r in rs if r.get("rb_move") is not None]
         rba = [r["rb_after"] for r in rs if r.get("rb_after") is not None]
+        rea = [r["re_after"] for r in rs if r.get("re_after") is not None]
+        rem = [r["re_move"] for r in rs if r.get("re_move") is not None]
+        if rea:
+            g.update({"re_after": statistics.median(rea), "re_after_min": min(rea), "re_move": statistics.median(rem), "re_move_min": min(rem)})
         if rbm:
             g.update({"rb_move": statistics.median(rbm), "rb_move_min": min(rbm), "rb_after": statistics.median(rba) if rba else None,
                       "rb_after_min": min(rba) if rba else None,
@@ -92,7 +102,8 @@ def main():
         print("%s\t%d\t%d\t%.1f\t%.1f\t%.1f\t%.2f (%.2f)\t%.2f (%.2f)" % (k, s, g["moves"], g["before"], g["move"], g["after"],
               g["r_move"], g["r_move_min"], g["r_after"], g["r_after_min"]) +
               ("	box: before %.1f, move %.2f (%.2f), after %.2f (%.2f)" % (g["box_before"], g["rb_move"], g["rb_move_min"],
-               g["rb_after"] or 0, g["rb_after_min"] or 0) if "rb_move" in g else ""))
+               g["rb_after"] or 0, g["rb_after_min"] or 0) if "rb_move" in g else "") +
+              ("	end-location ref: move %.2f (%.2f), after %.2f (%.2f)" % (g["re_move"], g["re_move_min"], g["re_after"], g["re_after_min"]) if "re_after" in g else ""))
     if a.json:
         json.dump({"rows": rows, "pooled": out}, open(a.json, "w"), indent=1)
 

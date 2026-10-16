@@ -57,7 +57,7 @@
  * rect), and the rect is put back as soon as it returns; with no such strip the tick is skipped (carscroll S1c: every
  * remaining on-screen pop-in during a drag came from ticks run on the full rect between strips). Once the camera has
  * been still for 300 ms the tick runs as stock.
- * CARMARGIN (same switch, ini [sim] car_margin, default 8; 2 = stock): ProcessViewChange STRTSIM FUN_10013e66 grows the
+ * CARMARGIN (same switch, ini [sim] car_margin, default 5; 2 = stock): ProcessViewChange STRTSIM FUN_10013e66 grows the
  * view's cell box by 2 cells into the street agents' sim rect (`push 2` at 0x10013fc9, FUN_100120b7(box, +0x90, 2))
  * `[CONFIRMED @ STRTSIM 0x10013fc9, 0x100120b7]`. Every camera step deletes the agents on the strips that leave that rect,
  * so a back-and-forth drag keeps deleting the cars just off screen and the ground they leave is empty when the camera
@@ -252,14 +252,14 @@ static int gz_post(DWORD msgid, DWORD a0) {
 static int g_run = 1;
 static int g_freeze = 2;                         /* 0 stock, 1 cars, 2 street */
 static int g_anim = 1;                           /* animate street agents while the camera moves */
-static int g_car_margin = 8;                     /* sim rect = view box + this many cells (stock 2) */
+static int g_car_margin = 5;                     /* sim rect = view box + this many cells (stock 2) */
 
 static void ini_read(void) {
     char path[MAX_PATH];
     self_path(path, sizeof(path), "simrun.ini");
     if (path[0]) g_run = GetPrivateProfileIntA("sim", "run_while_scrolling", 1, path) ? 1 : 0;
     if (path[0]) g_anim = GetPrivateProfileIntA("sim", "animate_while_scrolling", 1, path) ? 1 : 0;
-    if (path[0]) g_car_margin = GetPrivateProfileIntA("sim", "car_margin", 8, path);
+    if (path[0]) g_car_margin = GetPrivateProfileIntA("sim", "car_margin", 5, path);
     if (g_car_margin < 2) g_car_margin = 2;
     if (g_car_margin > 24) g_car_margin = 24;
     if (path[0]) {

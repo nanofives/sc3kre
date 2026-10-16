@@ -24,6 +24,10 @@ enum { MODE_OFF = 0, MODE_CAPTURE = 1, MODE_REPLACE = 2, MODE_FILLER = 3 };
 #define MAXLP 2048
 #define RQN 256                                  /* solved routes, newest kept: a history (scroll_fill reuses them) */
 #define RQN_OLD 64                               /* scroll_fill off: only the 64 newest, each used once (as before) */
+#define ROUTE_USES 8                             /* scroll_fill: cars per route at most (strips and top-up) */
+#define ROUTE_AGE_S 120.0                        /* scroll_fill: routes older than this are not reused */
+#define STRIP_PER_TICK 24                        /* scroll_fill: strip placements per tick at most */
+#define MOVE_TAIL_MS 8000                        /* scroll_fill: the top-up keeps going this long after the camera stops */
 #define MAXCARS 256
 
 typedef struct { short x, z; BYTE *node, *g; } LStep;
@@ -179,8 +183,8 @@ static Route *route_strip(Strip *st, int *entry) {
     int k, s;
     for (k = 0; k < g_rq_len; k++) {
         Route *r = &g_rq[(g_rq_head + RQN - 1 - k) % RQN];
-        if (r->used >= 3) continue;
-        if (route_age_s(r) > 60.0) break;
+        if (r->used >= ROUTE_USES) continue;
+        if (route_age_s(r) > ROUTE_AGE_S) break;
         if (r->bx1 < st->x0 || r->bx0 > st->x1 || r->bz1 < st->z0 || r->bz0 > st->z1) continue;   /* misses the strip */
         for (s = 0; s + 1 < r->n; s++) {
             int x = r->s[s].x, z = r->s[s].z;
@@ -201,7 +205,7 @@ static Route *route_fill(BYTE *prod, int *entry) {
     for (k = 0; k < g_rq_len; k++) {
         int j = (g_fill_cur + k) % g_rq_len, e;
         Route *r = &g_rq[(g_rq_head + RQN - 1 - j) % RQN];
-        if (r->used >= 3 || route_age_s(r) > 60.0) continue;
+        if (r->used >= ROUTE_USES || route_age_s(r) > ROUTE_AGE_S) continue;
         e = route_entry(r, prod);
         if (e < 0 || box_has(r->s[e].x, r->s[e].z)) continue;
         g_fill_cur = (j + 1) % g_rq_len;
@@ -468,8 +472,8 @@ static void spawn_tick(BYTE *prod) {
            still, placing at most 2 a tick from recent routes, each entering off screen */
         static DWORD last_ema;
         DWORD now = GetTickCount();
-        int moving = now - g_last_move_ms < 3000, k;
-        if (!moving && now - last_ema >= 250) {
+        int moving = now - g_last_move_ms < MOVE_TAIL_MS, k;
+        if (now - g_last_move_ms >= MOVE_TAIL_MS && now - last_ema >= 250) {
             int px0 = *(int *)(prod + 0x24), pz0 = *(int *)(prod + 0x28), px1 = *(int *)(prod + 0x2c), pz1 = *(int *)(prod + 0x30);
             double area = (double)(px1 - px0 + 1) * (pz1 - pz0 + 1);
             last_ema = now;
@@ -478,7 +482,7 @@ static void spawn_tick(BYTE *prod) {
         }
         {   /* the strips the rect took in: up to 8 placements a tick, each on a route that crosses the strip */
             int placed = 0;
-            while (g_nstrip && placed < 8 && *(DWORD *)(prod + 0xc) < target && *(DWORD *)(prod + 0xc) < 200 &&
+            while (g_nstrip && placed < STRIP_PER_TICK && *(DWORD *)(prod + 0xc) < target && *(DWORD *)(prod + 0xc) < 200 &&
                    g_ncars < (int)(g_still * 1.05 + 0.5)) {   /* never above the still-camera count */
                 Strip *st = &g_strip[0];
                 int px0 = *(int *)(prod + 0x24), pz0 = *(int *)(prod + 0x28), px1 = *(int *)(prod + 0x2c), pz1 = *(int *)(prod + 0x30), e;

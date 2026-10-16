@@ -388,3 +388,33 @@ Changes, **sc3cartrips dba17e77** (replaces cb74f872 for R1b, R2b, L6): capture 
 already view + 8); solver state limit 200000 -> 40000 while scroll_fill is on; each route keeps its path's bounding box
 and the scans skip routes whose box misses the rect or strip. cs_probe: pending placements looked up by car address.
 Predictions unchanged (addendum 8 / 9); added: no frame gap above 1 s in R1b / R2b / L6 fix-on phases.
+
+## Addendum 11 (2026-10-16, after R1b; before R1c, R2d, L6, V5)
+
+**Disk:** C: filled up during R1b (the machine's drive is ~99% used; my frame dumps were ~2.3 GB). R1b's log write
+failed in its last block (held button), and R2b, L6 and V5 failed at launch. The frame BMPs already turned into GIFs
+were deleted; cs_arm.sh now refuses to start an arm with less than 3 GB free. R1b's drag, arrows and gentle-drag blocks
+are complete (its sc3cartrips log was rescued from the instance folder). R2c (1024 city, dba17e77) re-runs R2b.
+
+**R1b (dba17e77, Berlin centre after each re-centre), route cars in the view box, fix on:** extreme drag 0.31 during /
+0.34 after, arrows 0.83 / 0.36, gentle drag 0.76 / 0.66; fix off 0.00-0.64. Findings: (1) at the dense centre the
+fix-on still count reached the producer's hard cap (200 route cars) and the 8-cell margin spreads them over twice the
+area: still-camera route cars in the box 43 with the fix against 50 without (the fix-off rect holds 54 cars, almost
+all in the box); (2) the strips asked for 80-300 cars per second during fast moves and 15-35 per second found no
+route (each route usable 3 times, 60 s); (3) every move ends somewhere else (re-centring fixes the start, not the end)
+and the producer's own target follows the local density (200 -> 147-160 in one gentle drag), so "after / before"
+compares two places.
+
+**Changes:** sc3simrun **0b903bb6**: car margin 8 -> **5**. sc3cartrips **3f9a2c82**: a route may carry 8 cars (was 3)
+over a 120 s history (was 60 s); strip fill up to 24 placements per tick (was 8); the top-up runs until 8 s after the
+camera stops (was 3 s), and the still-camera count is only updated after that. cs_run's `X1` uses car margin 5.
+
+**Metric added (location-matched reference):** each move is followed by its 10 s "after" window and a 30 s settle at
+the end location; reference_end = median of route cars in the box over the last 20 s of that settle. Reported per
+kind: after / reference_end, and move / mean(before, reference_end). The addendum-8 bound (before-based) is reported
+unchanged; **the bound applied for the verdict on R1c / R2d is the same interval [0.75, 1.25] and worst move >= 0.60 on
+the location-matched ratios**, chosen here before those arms run.
+
+Arms: **R1c** Berlin (stock instance), per move `X?,W:3,C,I:20,I:15,K:20,I:10,I:30`, ABBA, one block each of H, AR,
+HG, HB, then `X1,P:15,PH:20,P:10`; **R2d** Europolis 1024 (full set), one block each of HG, H, AR, OS; **L6** soak (lite,
+1024, speed 4, X1); **V5** pictures. Other predictions as addendum 8.
