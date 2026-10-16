@@ -21,7 +21,7 @@ on 5 vtables), +4/+8/+0xc/+0x10 cell rect x0, z0, x1, z1, +0x14 type, +0x15 prev
 
 | type | branch | neighbours |
 |---|---|---|
-| 1 road, 4 rail, 8 subway, 0x14 / 0x18 / 0x30 stations, 0x41 bus | ring scan `0x10007a63` | every cell of the rect grown by one, corners excluded, CENTRE INCLUDED. A cell is a candidate when the visited byte lacks the node type's bits and the flags grid `+0x5c` gives a step: for type 1, `& 0x10` (stations: 0x50 / 0x30 / 0x14 / 0x18 by the trip's mode flags) or `& 1` (road: next type 1, or 3 when `& 0x40`). Non-candidates get the type's bits in the visited grid. Selection, mechanically: a candidate whose `+0x6c` byte is below `DAT_1001f0c0` replaces the kept one unless its byte is lower than the kept one's (decompilation lines 150-166 of the export); one at or above it is kept only when nothing is kept yet. PERFORMANCE.md Finding 22 says "keep the least congested"; this read says the opposite and was not checked live `[UNCERTAIN]`. |
+| 1 road, 4 rail, 8 subway, 0x14 / 0x18 / 0x30 stations, 0x41 bus | ring scan `0x10007a63` | every cell of the rect grown by one, corners excluded, CENTRE INCLUDED. A cell is a candidate when the visited byte lacks the node type's bits and the flags grid `+0x5c` gives a step: for type 1, `& 0x10` (stations: 0x50 / 0x30 / 0x14 / 0x18 by the trip's mode flags) or `& 1` (road: next type 1, or 3 when `& 0x40`). Non-candidates get the type's bits in the visited grid. Selection, mechanically: a candidate whose `+0x6c` byte is below `DAT_1001f0c0` replaces the kept one unless its byte is lower than the kept one's (decompilation lines 150-166 of the export); one at or above it is kept only when nothing is kept yet. PERFORMANCE.md Finding 22 said "keep the least congested"; this read says the opposite, and so does the game: measured 2026-10-15 (CAR_TRIPS 6.3) the chosen road cell held the highest byte of its candidates in 95.7% (Berlin) / 97.3% (1024 city) of scored steps, **most congested below the cap**. |
 | 2 highway, 3 ramp-road, 0x42 / 0x43 bus | matrix `0x10007881` | QI the occupant, piece `vt+0x4c(0, *(u8*)(layer+0x54), entry side)` -> four bools for x-1, z-1, x+1, z+1, each checked by `FUN_100086e7` (same visited grid, same flags) |
 | 0x80 start | radius scan | cells within the per-kind radius of the lot |
 
@@ -92,7 +92,7 @@ stop.
 ## 5. Open
 
 - Stations (flag 0x10) beside an honoured piece stay reachable from any side: lanes are not applied to mode changes.
-- `[UNCERTAIN]` the selection order of the ring scan (section 1 table) against PERFORMANCE.md Finding 22.
+- ~~the selection order of the ring scan~~ RESOLVED 2026-10-15: most congested below the cap (CAR_TRIPS 6.3).
 - English-UK: the block passes `layer+0x54` as the game does for highways; an English-UK run was not done.
 - `ld_paths.py` needs `--mask 0x35` wherever another network (subway, highway) runs under the watched cells; without
   it those deposits pair too (Berlin's subway under block (57,167)).

@@ -420,12 +420,108 @@ Acceptance A2 bounds both in game.
 - **D5 which trips**: all routed trips, or only those that deposit congestion (the flag, ~40% of routed trips). What the
   unflagged routed trips are is not decoded yet (3.2); recommended: decide after M2 classifies them by caller.
 
+## 6. M1 and M2 results (task cartrips2, 2026-10-15)
+
+Branch `child/cartrips2`. Evidence: `verify/cartrips2/PRE.md` (+ addenda 1, 2) -> `RESULTS.md`. Code:
+`re/harness/src/sc3cartrips.c` + `sc3cartrips_lanes.c` (`sc3cartrips.dll`, in `build_mod.ps1` and mods_launch's mod
+list; `cartrips.ini` `[cartrips] mode=capture|off`, default capture; measurement switches `verify`, `time_route`,
+`choice`, `dump`, `solve`, `rect`). Offline twin `re/tools/ctm_lanes.py`; readers `ctm_read.py`, `ctm_summary.py`,
+`ctm_m2report.py`; in-game A/B `ctm_alt.py`.
+
+### 6.1 M1: the trip tap
+
+- **The plain patch works where Frida's listener faulted.** `0x100072f8` `call 0x10009eed` -> `call pop_stub` (one
+  locked 8-byte exchange; pushad / pushfd, append to a TLS buffer, jmp `0x10009eed`). __FAULTS__
+- **Captured paths equal the router's own deposits.** The five deposit calls of the pop loop (`0x100073b2`,
+  `0x100073f8`, `0x10007463`, `0x100074be`, `0x10007500`) went through a witness stub: 75,539 trips in Berlin and
+  1,778,795 on the 1024 city (9 routing threads), 0 deposits outside the node popped last, every depositing node
+  covered cell for cell, 0 unflagged trips with a deposit. Deposits by node type, read from the switch and confirmed:
+  1, 4, 0x14, 0x50 once per cell (mask 0x15), 2 (mask 2), 8 (mask 8), 0x18 / 0x30 twice (0x15 then 8); 0x80, ramp 3,
+  bus 0x41-0x43 none.
+- **Counts match the phase-1 probe in the same game**: 410 of 410 of ct_probe's complete samples found in the dump
+  with identical cells and types; viewport share per routed trip within 2% at every speed (A1).
+- **Rates** (paths / nodes / viewport paths per second): Berlin speed 1 27 / 1,022 / 0.96, speed 4 624 / 26,283 /
+  23.0; Europolis 1024 with 8 workers, speed 3, 6,377 / 789,631 / 46.6 (virtual 33 x 28 view). Ring drops 0 in every
+  arm.
+- **Cost**: __COST__
+
+### 6.2 M2: lane routes
+
+The solver (in the DLL, game thread, after each drained trip; its offline twin gives the identical result on every
+route of every arm): lane graph per cell read as `FUN_1001c750` reads it, arrival nodes as `FUN_10020108`; state
+(cell, lane node, route index reached); corridor = one cell around the route inside the rect; progress by proximity,
+skipped route cells cost 3, off-route cells 1; start on r0 or a cell beside it (an avenue's other half); Dijkstra.
+Graph lookups: 0 faults.
+
+| city | exact (lanes through the route cells only) | corridor | corridor, no route cell skipped | solve time median / p99 |
+|---|---|---|---|---|
+| Berlin | 21.7% | 88.7% | 72.1% | 26 / 112 us |
+| Moscow | 67.1% | 96.7% | 94.3% | 22 / 138 us |
+| London (most avenues) | 49.7% | 92.7% | 86.4% | 24 / 122 us |
+| Europolis 1024 | 99.3% | 100% | 100% | 68 / 248 us |
+| Berlin with RBT roundabouts (box at (57,167)) | 38.6% | 100% | 93.2% | 35 / 133 us |
+
+- **Why routes fail**: the router steps between adjacent road cells that share no lane link (75.8% of Berlin's routes
+  have such a step, London 49.7%, Moscow 28.2%, Europolis 0; LANE_DENSITY 1: the road ring scan ignores lanes). The
+  corridor absorbs most of them. The failures left (Berlin 362 of 368, London 341 of 357) are hops onto the other
+  avenue half or onto a road that meets an avenue's side, where the rest of the route needs that half or road and
+  nothing joins them within one cell. Moscow's main failure is a trip stream against the lanes of piece 11211 -> 11213
+  at (85,127) (95 routes). Two cells of corridor raise Berlin to 94.6% (offline).
+- Avenue 11204: each half is a two-way straight road in the lane graph (4 car nodes, one lane each way); the halves
+  never link. Starting on the other half fixes routes that need it from the start (Berlin 87.0% -> 88.7%).
+- Roundabouts 20400 / 20401: their lane graphs come from the package's records in memory and are driven like any
+  other piece: all 379 routes through Berlin's (57,167) block solved.
+- The save's network layer + TrBlkAtt give the same graphs as game memory (256 of 256 cells compared), so offline
+  analysis of a stock city needs no game.
+
+### 6.3 Answers to the phase-1 open questions
+
+- **The ~60% of routed trips without the deposit flag** are two things (A1, CALLER): zone development's trip-from-cell
+  probes (SIMRCI `+0x1AA6C` -> `FUN_1000706a`, dest kind 3, 21% of routed trips, never flagged, never in the view) and
+  monthly building trips (`FUN_100097b9` -> `FUN_10006fe3`) that lose a random draw in the issuer (49% of building
+  trips; the draw: `random(100)` against `layer+0x31`, then the building's `vt+0x54` / QI `0xe0faadc7` /
+  `vt+0x4c & 1` and a second `random(100)` against a per-cell factor) `[CONFIRMED @ SimTransit 0x100097b9]`. Every
+  viewport trip in Berlin is a building trip.
+- **Least or most congested**: the ring scan keeps the **most** congested road neighbour below the cap 150: of the
+  scored unflagged road steps, the chosen cell held the highest byte in 95.7% (Berlin, 337,572 steps) and 97.3% (1024
+  city, 1,249,155), the lowest in 3.6% / 1.7%. PERFORMANCE.md Finding 22's "least congested" is wrong.
+
+### 6.4 Revised M3 plan (route cars)
+
+1. **Spawn on a solved lane path.** The solver gives (cell, lane node) steps and the DLL holds each cell's graph
+   pointer. Decode the position overload SelectPath(x, y, z) `[LINUX-HINT]` on Windows and place the car on the path's
+   first node, or build its first path with `FUN_10018630` as the crossing does at `0x1001c8f8`. First M3 task, static.
+2. **Drive it**: hook SelectAnEdge `FUN_1001c290` (car `vt+0x158`, called from SelectNextPath and from the crossing at
+   `0x1001c878`): for a route car return the edge whose target is the next path node (internal edge) or the exit edge
+   whose crossing lands on it; a table car -> (route, index). The crossing's own conditions (sim rect, road predicate,
+   arrival node) are the ones the solver used, so a solved path is drivable by construction.
+3. **No early despawn**: NeedVehicleDisappear `FUN_1001eec4` false for route cars, true at the path's last node.
+4. **Unsolved routes** (Berlin 11%, London 7%, Moscow 3%): no car; take the next trip.
+5. **Solver scheduling**: carry trips to the next tick instead of skipping them past the 4 ms budget (1.6-3.1% were
+   skipped in the Moscow, 1024 and RBT arms).
+6. **Pause**: FREEZE (round/1012, owner-tested) stops every STRTSIM agent while paused, route cars included (same car
+   vtable). M3 needs no pause code.
+7. Acceptance A3-A6 as in 4.4.
+
+### 6.5 Decisions for the owner (status)
+
+- **D1** replace / filler: open (recommended: replace, filler as a switch).
+- **D2** pause: follows FREEZE (cars frozen while paused, `freeze_on_pause=street` default). Nothing to decide unless
+  the owner wants route cars to behave differently from the rest of the street.
+- **D3** car count: open (recommended: the stock count formula).
+- **D4** mixed trips: open. In Berlin's view 94% of viewport trips are road-only (21.7 of 23.0 per second at speed 4);
+  on the 1024 test city 12% (5.4 of 46.6 at speed 3).
+- **D5** which trips: the flag only says whether a trip deposits congestion; flagged and unflagged building trips are
+  routed the same way and both cross the view. Recommended: all building trips (the zone probes never appear in view).
+- **D6 (new)** corridor width: 1 cell (in game now; Berlin 88.7%) or 2 cells (Berlin 94.6%, cars further from the
+  router's cells). Recommended: 1.
+
 ## 5. Open
 
 - What triggers the target recompute `FUN_1001f556` while the view is still (its caller `FUN_100155a0` is only in a
   table); measured, the target follows traffic.
 - The unattributed removals (3%): WaitForPathClearance's give-up `0x1001d553` is the one removal path not hooked.
-- Which routed trips run without the deposit flag (60% in Berlin) and what the arrival kind grids `+0x84/+0x88/+0x8c`
-  hold.
-- Avenue steps: whether every sideways or turning step on 11204 can be driven through the paired cell (M2's solver).
+- ~~Which routed trips run without the deposit flag~~ RESOLVED (6.3). Still open: what the arrival kind grids
+  `+0x84/+0x88/+0x8c` hold.
+- ~~Avenue steps~~ RESOLVED (6.2): the two halves never link; the corridor solver drives most such routes.
 - `FUN_004758e3` (the heartbeat's time source, STRTSIM 8) is still not decoded.
