@@ -174,9 +174,9 @@ if (QPF !== 10000000) throw new Error('cs_probe assumes QueryPerformanceFrequenc
 var prev = null;
 function snap() {
   MEM.stats.writeByteArray(new Array(32).fill(0));
-  var st = [0, 0, 0, 0, 0];
-  if (simStats) { simStats(MEM.stats); st = [MEM.stats.readU32(), MEM.stats.add(4).readU32(), MEM.stats.add(8).readU32(), MEM.stats.add(12).readU32(), MEM.stats.add(16).readU32()]; }
-  return { frames: gU(16), scroll: gU(20), ag: gU(24), moves: gU(28), agt: gU(32), sf: st[0], at: st[1], ft: st[2], sr: st[3], ts: st[4] };
+  var st = [0, 0, 0, 0, 0, 0];
+  if (simStats) { simStats(MEM.stats); st = [MEM.stats.readU32(), MEM.stats.add(4).readU32(), MEM.stats.add(8).readU32(), MEM.stats.add(12).readU32(), MEM.stats.add(16).readU32(), MEM.stats.add(20).readU32()]; }
+  return { frames: gU(16), scroll: gU(20), ag: gU(24), moves: gU(28), agt: gU(32), sf: st[0], at: st[1], ft: st[2], sr: st[3], ts: st[4], tk: st[5] };
 }
 setInterval(function () {
   var s = state(), n = snap(), gap = gU(36);
@@ -193,7 +193,7 @@ setInterval(function () {
   PEND = keep;
   var d = prev ? { frames: n.frames - prev.frames, scroll: n.scroll - prev.scroll, ag: n.ag - prev.ag, moves: n.moves - prev.moves,
                    ag_ms: ((n.agt - prev.agt) >>> 0) / 1000, scroll_stub: n.sf - prev.sf, agent_ticks: n.at - prev.at,
-                   frozen_ticks: n.ft - prev.ft, strip_refills: n.sr - prev.sr, tick_swaps: n.ts - prev.ts, maxgap_ms: gap / 1000 } : null;
+                   frozen_ticks: n.ft - prev.ft, strip_refills: n.sr - prev.sr, tick_swaps: n.ts - prev.ts, tick_skips: n.tk - prev.tk, maxgap_ms: gap / 1000 } : null;
   prev = n;
   if (d) send({ k: 'tick', d: d, c: C, st: s, spawns: sp, rem: RM, faults: FAULTS });
   C = {}; RM = []; FAULTS = [];

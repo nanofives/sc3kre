@@ -250,3 +250,20 @@ New arms (final build, after C3): **S1c** = S1b's schedule (stock cars), **S3c**
 Prediction for S1c and S3c: P5 as in addendum 1 (on-screen pop-ins and removals of any context during A1 moves <=
 the A1 idle rate + 50%), with on-screen pop-ins on a strip-run tick (`sw` = 1) reported separately; everything else
 as S1 / S3.
+
+## Addendum 5 (2026-10-16 14:20, after S1c; before S1d, S3d, L4)
+
+S1c (new on-screen rule): of 49 placements made by a tick run on a strip, 0 popped in on screen. Every on-screen
+pop-in during the drag (118 a minute against 72 idle) came from ticks run on the full rect, i.e. the camera was
+moving but no strip had been revealed in the last 300 ms (the drag reverses; `H` moves the press offset back and
+forth).
+
+**TICKSTRIP change, build sc3simrun 5eaa8a2e:** while the camera is moving (a scroll frame in the last 300 ms) the
+producer tick runs on the last revealed strip if that strip still lies inside the producer's rect, whatever its age,
+and is skipped otherwise; after 300 ms without a scroll frame it runs as stock. `sc3simrun_stats` `out[5]` = ticks
+skipped; the probe reads it (zero on older builds). Replace mode never calls the tick: replace-mode arms stand.
+
+New arms (5eaa8a2e in inst_cs_stock, after V2o / V2r): **S1d** = S1's schedule (stock cars), **S3d** = S3's schedule
+(filler), **L4** lite soak, stock cars, speed 4, `s4:10` + the L1 cycle x 3.
+Prediction for S1d and S3d: P5 (addendum 1, on-screen rule of addendum 4) for every kind; everything else as S1 / S3.
+L4: alive, 0 faults.

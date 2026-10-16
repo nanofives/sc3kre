@@ -9,6 +9,8 @@ Tokens (seconds after the colon):
   A0/A1 sc3simrun_animate(0/1) (in-game A/B switch, takes no time)
   H     right-drag: right button down at the view centre, moves with MK_RBUTTON back and forth every 50 ms
   HB    right button held still at the view centre
+  HS    slow pan (pictures): right button down at the centre, then held 22 px to the right of it (past the 12 px drag
+        dead zone), moves re-posted at the same point every 50 ms
   HD    slow one-way drag: right button down left of centre, moves 8 px per 50 ms to the right for half the phase,
         then back for the other half (a hand pan, not pt_run's +-60 px shake)
   AR    arrows: spoofed arrow state (sc3io.scroll's GZWIND hook), left / right alternating every 0.4 s
@@ -62,6 +64,18 @@ class CsArm(pt_run.Arm):
         sc3io._post(self.h, sc3io.WM_RBUTTONDOWN, sc3io.MK_RBUTTON, self.lp(cx, cy))
         time.sleep(secs)
         sc3io._post(self.h, sc3io.WM_RBUTTONUP, 0, self.lp(cx, cy))
+
+    def slow_pan(self, secs, off=22):
+        w, h = self.rect()
+        x, y = w // 2, h // 2
+        sc3io._post(self.h, sc3io.WM_MOUSEMOVE, 0, self.lp(x, y))
+        time.sleep(0.08)
+        sc3io._post(self.h, sc3io.WM_RBUTTONDOWN, sc3io.MK_RBUTTON, self.lp(x, y))
+        t0 = time.time()
+        while time.time() - t0 < secs:
+            sc3io._post(self.h, sc3io.WM_MOUSEMOVE, sc3io.MK_RBUTTON, self.lp(x + off, y))
+            time.sleep(0.05)
+        sc3io._post(self.h, sc3io.WM_RBUTTONUP, 0, self.lp(x + off, y))
 
     def slow_drag(self, secs):
         w, h = self.rect()
@@ -164,6 +178,8 @@ class CsArm(pt_run.Arm):
                     self.held(secs)
                 elif what == "HD":
                     self.slow_drag(secs)
+                elif what == "HS":
+                    self.slow_pan(secs)
                 elif what == "AR":
                     self.arrows(secs)
                 elif what == "ED":
