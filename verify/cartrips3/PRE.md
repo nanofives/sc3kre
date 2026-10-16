@@ -124,3 +124,9 @@ changes; R2 runs on the old driver (already started).
   (client 666, 547 at 800 x 600) gave zoom 1, 2, 3 and a sim rect (500-533 / 542-569). pt_run's `Z:n` is now n clicks
   on that button.
 - **R2b** = R2 with `Z:3` in place of `Z:2` (`Z:3,s3:120,s4:120,P:30,s3:60`); **L2** uses `Z:3`. Predictions unchanged.
+
+## Addendum 4 (2026-10-16, after L2; before L2b, CA, SH)
+
+L2 did not start its schedule: 90 s after launch the 1024 city ignored the zoom clicks and the speed keys
+(`could not set speed 3`, zoom 0, producing off; killed by its PID after 2 minutes, 0 faults). R2b, with the same
+start, had worked. **L2b** = L2 with `--settle 150`. Predictions unchanged.
