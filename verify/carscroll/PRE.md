@@ -215,3 +215,17 @@ New arms (after the queue, final build ede5732a in both instances):
 
 Prediction for S1b and S3b: P5 as revised in addendum 1 for every kind (on-screen pop-ins and removals of any context
 during A1 moves <= the A1 idle rate + 50%); everything else as S1 / S3.
+
+## Addendum 3 (2026-10-16, after L1; before C3)
+
+L1 (lite, Berlin, replace, speed 4, A1 only, 17 min): alive, 0 faults, but the frame rate fell from 113 fps in its
+first seconds to 18-27 fps pooled for the rest of the run, idle phases included (26.6 fps), with single seconds at 0-3
+frames, agent passes up to 290 ms and frame gaps up to 9 s, while the sim ran ~5 days per second. L1 has no A0 side,
+so it cannot say whether animating during moves adds to that. New arm, final build ede5732a:
+
+| arm | instance | city | cartrips | schedule |
+|---|---|---|---|---|
+| C3 lite | stock | Berlin | replace | `s4:10` + ABBA blocks H, AR (as S1's blocks), speed 4 |
+
+Prediction (P4 at speed 4): pooled per kind, A1 frames per second during moves >= 90% of A0; mean longest frame gap
+A1 <= 1.25 x A0. Also reported: idle A0 vs A1 (same code; the spread is the noise floor of the arm).
