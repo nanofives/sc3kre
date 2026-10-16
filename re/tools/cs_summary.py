@@ -67,6 +67,7 @@ def main():
             "spawn_min": len(sp) * 60.0 / n, "spawn_vis_min": sum(s["vis"] for s in sp) * 60.0 / n,
             "spawn_box_min": sum(s.get("vbox", 0) for s in sp) * 60.0 / n, "rem_box_min": sum(x.get("vbox", 0) for x in rm) * 60.0 / n,
             "spawn_box_by": dict(collections.Counter(s["ctx"] for s in sp if s.get("vbox"))),
+            "spawn_box_strip": sum(1 for s in sp if s.get("vbox") and s.get("sw")), "spawn_strip": sum(1 for s in sp if s.get("sw")),
             "rem_box_by": dict(collections.Counter(x["ctx"] for x in rm if x.get("vbox"))),
             "spawn_by": dict(collections.Counter(s["ctx"] for s in sp)),
             "spawn_vis_by": dict(collections.Counter(s["ctx"] for s in sp if s["vis"])),

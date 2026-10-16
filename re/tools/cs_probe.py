@@ -113,6 +113,7 @@ var CTX = [];
 // already stored the new box when it calls UpdateVehicleView, so the previous update's box is kept here
 var BOX_LAST = null, BOX_PREV = null;
 function box() { var L = layer(); try { return L ? [L.add(0x27b0).readS32(), L.add(0x27b4).readS32(), L.add(0x27b8).readS32(), L.add(0x27bc).readS32()] : null; } catch (e) { return null; } }
+function isect(a, b) { return a && b ? [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.min(a[2], b[2]), Math.min(a[3], b[3])] : (a || b); }
 function inb(b, x, z) { return b && x !== null && x >= b[0] && x <= b[2] && z >= b[1] && z <= b[3] ? 1 : 0; }
 if (!LITE) Interceptor.attach(A(ST, 0x10015415), { onEnter: function () { CTX.push('view'); C.view_update = (C.view_update || 0) + 1;
                                                                BOX_PREV = BOX_LAST; BOX_LAST = box(); }, onLeave: function () { CTX.pop(); } });
@@ -129,7 +130,11 @@ if (!LITE) Interceptor.attach(A(ST, 0x1001c990), function () {
   var v = this.context.ecx;
   drawForget(v.toUInt32());
   var ctx = CTX.indexOf('view') >= 0 ? 'view' : (CTX.length ? 'tick' : 'mod');
-  PEND.push({ v: v, f: gU(16), ctx: ctx, t: Date.now(), b: ctx === 'view' ? BOX_PREV : box() });
+  // addendum 4: ground on screen both before and after the last camera step = the box before the last view update
+  // intersected with the box after it (equals the current box when the camera has not moved)
+  var sw = 0;
+  try { var L = layer(); for (var q = 0; q < 4; q++) if (PROD.add(0x24 + 4 * q).readS32() !== L.add(0xb0 + 4 * q).readS32()) sw = 1; } catch (e) {}
+  PEND.push({ v: v, f: gU(16), ctx: ctx, t: Date.now(), b: isect(BOX_PREV, BOX_LAST) || box(), sw: sw });
 });
 // VehicleDisappears FUN_1001f610(this = producer, car + 0x18)
 if (!LITE) Interceptor.attach(A(ST, 0x1001f610), function () {
@@ -183,7 +188,7 @@ setInterval(function () {
     var first = drawFirst(p.v.toUInt32()), xz = p.gone ? (p.xz || [null, null]) : cell(p.v);   // the car's cell 3 frames in (placement sets it after SetProducer)
     if (p.gone && first === 0) first = 0;
     var pv = first > 0 && first - p.f <= 3 ? 1 : 0;
-    sp.push({ f: p.f, first: first, vis: pv, vbox: pv && inb(p.b, xz[0], xz[1]) ? 1 : 0, ctx: p.ctx, x: xz[0], z: xz[1] });
+    sp.push({ f: p.f, first: first, vis: pv, vbox: pv && inb(p.b, xz[0], xz[1]) ? 1 : 0, ctx: p.ctx, sw: p.sw, x: xz[0], z: xz[1] });
   }
   PEND = keep;
   var d = prev ? { frames: n.frames - prev.frames, scroll: n.scroll - prev.scroll, ag: n.ag - prev.ag, moves: n.moves - prev.moves,

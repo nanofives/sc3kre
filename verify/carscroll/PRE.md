@@ -229,3 +229,24 @@ so it cannot say whether animating during moves adds to that. New arm, final bui
 
 Prediction (P4 at speed 4): pooled per kind, A1 frames per second during moves >= 90% of A0; mean longest frame gap
 A1 <= 1.25 x A0. Also reported: idle A0 vs A1 (same code; the spread is the noise floor of the arm).
+
+## Addendum 4 (2026-10-16 13:20, after S1b; before V1o, V1r, F1r, C3 and the new arms S1c, S3c)
+
+S1b (final build ede5732a, stock cars): on-screen pop-ins during the drag 187 a minute against 87 with the camera
+still, all in context `tick`, while the producer tick ran on the strip 15 times a second. Two things the instrument
+could not separate: (a) the on-screen rule judged a `tick` placement against the **current** view box, and after a
+camera step the current box already contains part of the strip just revealed (the strip runs from the old rect's edge,
+old box + 3, to the new rect's edge, new box + 2), so a car placed on just-revealed ground counted as a pop-in; (b) a
+producer tick that ran on the full rect (no strip within 300 ms) can place anywhere.
+
+Probe change (applies to every arm launched from now: V1o, V1r, F1r, S1c, S3c; L3 and C3 are lite and record no
+placements): each placement records `sw` = the producer's rect differed from the layer's sim rect at that moment (the
+tick ran on a strip), and the on-screen rule for placements of every context uses the ground that was inside the view
+box both before and after the last camera step (box before the last view update intersected with the box after it;
+the current box when the camera has not moved). Removals unchanged. The S1, S2, S3, S1b, F2 tables keep the old rule
+and are reported with it.
+
+New arms (final build, after C3): **S1c** = S1b's schedule (stock cars), **S3c** = S3b's schedule (filler).
+Prediction for S1c and S3c: P5 as in addendum 1 (on-screen pop-ins and removals of any context during A1 moves <=
+the A1 idle rate + 50%), with on-screen pop-ins on a strip-run tick (`sw` = 1) reported separately; everything else
+as S1 / S3.
