@@ -391,6 +391,9 @@ done:
 
 /* ------------------------------------------------------------ per drained trip */
 
+static void route_push(DWORD seq, int npath);
+static volatile LONG g_mode_now;
+
 static volatile DWORD g_m2[16];  /* routes, w0 ok, w1 ok, w1 full, w1 cov90, w1 fail no-path, w1 start fails, w1 limit/too big,
                                     routes skipped by the tick budget, solve us total (w1), max us, routes_1cell, trips */
 
@@ -417,7 +420,7 @@ static void solve_trip(TripRec *t, LONGLONG *budget_end) {
             BYTE hdr[24];
             int o = 0, q;
             QueryPerformanceCounter(&a);
-            if (a.QuadPart > *budget_end) { g_m2[8]++; nc = 0; ridx++; continue; }
+            (void)budget_end;                    /* the budget is checked per trip by the caller (carry-over) */
             g_m2[0]++;
             solve(cells, nc, t->rect, 1, &r1);
             QueryPerformanceCounter(&b);
@@ -448,6 +451,8 @@ static void solve_trip(TripRec *t, LONGLONG *budget_end) {
                     out_put(&g_or, pe, 5);
                 }
             }
+            if (r1.ok && g_mode_now >= 2) route_push(t->seq, r1.npath);       /* M3: a car may drive it */
+            if (!g_dump) { nc = 0; ridx++; continue; }                     /* w0 is a measurement */
             solve(cells, nc, t->rect, 0, &r0);
             if (r0.ok) g_m2[1]++;
             if (g_dump) {

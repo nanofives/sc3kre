@@ -83,22 +83,25 @@ static unsigned __int64 epoch_ms(void) {
 
 /* ============================================================ config */
 
-static int g_mode = 1;                           /* 0 off, 1 capture */
+static int g_mode = 2;                           /* 0 off, 1 capture, 2 replace (default), 3 filler */
 static int g_verify, g_time, g_dump, g_choice, g_log_s = 10;
-static int g_solve;
+static int g_solve, g_time_agents;
 static int g_rect_ovr, g_ovr[4];                 /* [cartrips] rect=x0,z0,x1,z1: measurement region instead of the sim rect */
 
 static void ini_read(void) {
     char path[MAX_PATH], v[32];
     self_path(path, sizeof(path), "cartrips.ini");
     if (!path[0]) return;
-    GetPrivateProfileStringA("cartrips", "mode", "capture", v, sizeof(v), path);
-    g_mode = (!lstrcmpiA(v, "off") || !lstrcmpiA(v, "0")) ? 0 : 1;
+    GetPrivateProfileStringA("cartrips", "mode", "replace", v, sizeof(v), path);
+    g_mode = (!lstrcmpiA(v, "off") || !lstrcmpiA(v, "0")) ? 0 : !lstrcmpiA(v, "capture") ? 1 :
+             !lstrcmpiA(v, "filler") ? 3 : 2;
     g_verify = GetPrivateProfileIntA("cartrips", "verify", 0, path) ? 1 : 0;
     g_time = GetPrivateProfileIntA("cartrips", "time_route", 0, path) ? 1 : 0;
     g_dump = GetPrivateProfileIntA("cartrips", "dump", 0, path) ? 1 : 0;
     g_choice = GetPrivateProfileIntA("cartrips", "choice", 0, path) ? 1 : 0;
     g_solve = GetPrivateProfileIntA("cartrips", "solve", 0, path) ? 1 : 0;
+    if (g_mode >= 2) g_solve = 1;                 /* route cars need the solver */
+    g_time_agents = GetPrivateProfileIntA("cartrips", "time_agents", 0, path) ? 1 : 0;
     GetPrivateProfileStringA("cartrips", "rect", "", v, sizeof(v), path);
     if (v[0] && sscanf(v, "%d,%d,%d,%d", &g_ovr[0], &g_ovr[1], &g_ovr[2], &g_ovr[3]) == 4) g_rect_ovr = 1;
     g_log_s = GetPrivateProfileIntA("cartrips", "log_s", 10, path);
@@ -556,6 +559,12 @@ static int g_dlen;
 static volatile DWORD g_dump_drop;
 
 #include "sc3cartrips_lanes.c"
+static int write_q(BYTE *at, const BYTE *bytes, int len);
+static void call_bytes(BYTE *out, BYTE *at, void *to);
+#include "sc3cartrips_cars.c"
+
+/* trips drained but not solved yet (M3: carried to the next tick instead of dropped past the budget) */
+static DWORD g_q_total, g_q_done;
 
 static void __cdecl on_tick(BYTE *layer8) {
     BYTE *L = layer8 - 8;
@@ -598,7 +607,7 @@ static void __cdecl on_tick(BYTE *layer8) {
         s->seq = g_rpos + RN;
         g_rpos++;
         g_drained++;
-        if (g_solve && g_strt_base) solve_trip(q, &budget_end);
+        g_q_total++;
         if (g_dump) {
             int sz = (int)(sizeof(TripRec) - (MAXSTORE - q->nstore) * sizeof(Node));
             EnterCriticalSection(&g_dlock);
@@ -607,8 +616,23 @@ static void __cdecl on_tick(BYTE *layer8) {
             LeaveCriticalSection(&g_dlock);
         }
     }
+    if (g_solve && g_strt_base) {
+        if (g_q_total - g_q_done > QN) { g_c3[C3_TRIPS_DROPPED] += g_q_total - g_q_done - QN; g_q_done = g_q_total - QN; }
+        while (g_q_done < g_q_total) {
+            LARGE_INTEGER t;
+            TripRec *q = &g_queue[(g_qhead + QN - (g_q_total - g_q_done)) % QN];
+            QueryPerformanceCounter(&t);
+            if (t.QuadPart > budget_end) { g_c3[C3_TRIPS_CARRIED]++; break; }
+            g_q_done++;
+            if (q->c1 == g_pop_target - 0x9eed + 0x70b3) { g_c3[C3_ZONE_EXCLUDED]++; continue; }   /* D5: zone probes */
+            solve_trip(q, &budget_end);
+        }
+    }
+    {   BYTE *prod = *(BYTE **)(layer8 + 0xf8);
+        spawn_tick(prod);
+        g_skip_tick = g_mode_now == MODE_REPLACE;
+    }
 }
-
 static __declspec(naked) void tick_stub(void) {
     __asm {
         pushad
@@ -618,7 +642,11 @@ static __declspec(naked) void tick_stub(void) {
         add esp, 4
         popfd
         popad
+        cmp dword ptr [g_skip_tick], 0
+        jne skip
         jmp dword ptr [g_tick_target]
+    skip:
+        ret 4                                    /* replace mode: no random cars (FUN_1001f44a, ret 4) */
     }
 }
 
@@ -858,6 +886,10 @@ static DWORD WINAPI logger(LPVOID param) {
         int c = arm_capture(st), v = g_verify ? arm_verify(st) : 0, tm = g_time ? arm_time(st) : 0, d = arm_tick(strt);
         logf("### ARMED: capture=%d verify=%d/5 time_route=%d drain=%d (SimTransit 0x%08lX, STRTSIM 0x%08lX) dump=%d choice=%d cap=%u",
              c, v, tm, d, (DWORD)st, (DWORD)strt, g_dump, g_choice, g_cap);
+        int cars = g_mode >= MODE_REPLACE ? arm_cars(strt) : 0, ag = g_time_agents ? arm_agtimer() : 0;
+        g_mode_now = g_mode >= MODE_REPLACE ? (cars ? g_mode : MODE_CAPTURE) : MODE_CAPTURE;
+        logf("### CARS: mode=%s armed=%d (route cars %s) time_agents=%d", g_mode == 3 ? "filler" : g_mode == 2 ? "replace" :
+             "capture", cars, g_mode_now >= MODE_REPLACE ? "on" : "off", ag);
     }
     if (g_dump) {
         static const DWORD hdr[4] = { 0x31544354 /* "TCT1" */, sizeof(TripRec), sizeof(Node), MAXSTORE };
@@ -933,6 +965,24 @@ static DWORD WINAPI logger(LPVOID param) {
                      g_m2[12], g_m2[0], g_m2[11], g_m2[1], g_m2[2], g_m2[3], g_m2[4], g_m2[5], g_m2[6], g_m2[7], g_m2[8],
                      g_m2[9], g_m2[10], g_gs[GS_OK], g_gs[GS_OFFMAP], g_gs[GS_NOOCC], g_gs[GS_NOTROAD], g_gs[GS_NOQI],
                      g_gs[GS_NOGRAPH], g_gs[GS_FAULT], g_og.drop, g_or.drop);
+            if (g_mode >= MODE_REPLACE) {
+                BYTE *L = *(BYTE **)(g_strt_base + 0x33208), *prod = L ? *(BYTE **)(L + 0x100) : NULL;
+                DWORD alive = 0, target = 0;
+                __try { if (prod) { alive = *(DWORD *)(prod + 0xc); target = *(DWORD *)(prod + 0x10); } }
+                __except (EXCEPTION_EXECUTE_HANDLER) { alive = target = 0; }
+                logf("CARS> epoch=%I64u mode=%ld alive=%lu target=%lu route_cars=%d queued_routes=%d routes_in=%lu routes_old=%lu "
+                     "spawn_try=%lu spawn_ok=%lu initfail=%lu placefail=%lu noocc=%lu noedge=%lu outrect=%lu paused_ticks=%lu "
+                     "end_arrived=%lu end_lost=%lu end_other=%lu end_other_edge=%lu decisions=%lu followed=%lu cross_followed=%lu "
+                     "lost_events=%lu need_route=%lu need_true=%lu steps_covered=%lu steps_total=%lu zone_excluded=%lu "
+                     "carried=%lu dropped=%lu cyc=%I64u ag_calls=%lu ag_cyc=%I64u",
+                     epoch_ms(), g_mode_now, alive, target, g_ncars, g_rq_len, g_c3[C3_ROUTES_QUEUED], g_c3[C3_ROUTES_DROPPED_OLD],
+                     g_c3[C3_SPAWN_TRY], g_c3[C3_SPAWN_OK], g_c3[C3_SPAWN_INITFAIL], g_c3[C3_SPAWN_PLACEFAIL], g_c3[C3_SPAWN_NOOCC],
+                     g_c3[C3_SPAWN_NOEDGE], g_c3[C3_SPAWN_OUTRECT], g_c3[C3_PAUSED_TICKS], g_c3[C3_END_ARRIVED], g_c3[C3_END_LOST],
+                     g_c3[C3_END_OTHER], g_c3[C3_END_OTHER_EDGE], g_c3[C3_DECISIONS], g_c3[C3_FOLLOWED], g_c3[C3_CROSS_FOLLOWED],
+                     g_c3[C3_LOST_EVENTS], g_c3[C3_NEED_CALLS_ROUTE], g_c3[C3_NEED_TRUE_ROUTE], g_c3[C3_STEPS_COVERED],
+                     g_c3[C3_STEPS_TOTAL], g_c3[C3_ZONE_EXCLUDED], g_c3[C3_TRIPS_CARRIED], g_c3[C3_TRIPS_DROPPED],
+                     (unsigned __int64)g_c3_cyc_hi << 32 | g_c3_cyc_lo, g_ag_calls, (unsigned __int64)g_ag_cyc_hi << 32 | g_ag_cyc_lo);
+            }
             if (g_time) {
                 sc3cartrips_stats(stats, 16);
                 logf("TIME> calls=%lu cycles=%I64u", stats[7], (unsigned __int64)stats[9] << 32 | stats[8]);
@@ -942,6 +992,7 @@ static DWORD WINAPI logger(LPVOID param) {
         }
         if (++k % 6 == 0) log_callers();
     }
+    return 0;
 }
 
 BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {

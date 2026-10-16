@@ -14,6 +14,7 @@ Schedule tokens (seconds after the colon):
   H   camera hold while running: right button down at the view centre, mouse moves with MK_RBUTTON back and forth
       every 50 ms for the whole phase, button up at the end (the SIMSPR 0x10043daf scroll hold, SIM_WHILE_SCROLLING.md)
   PH  user pause, then the same camera hold
+  Z   Z:n = n mouse-wheel notches at the view centre (negative: out), then 2 s
 
 Output: <out>.jsonl, one line per second: wall time, phase, counters and state from pt_probe.py; plus 'timers' lines.
 """
@@ -136,6 +137,13 @@ class Arm:
                 self.ensure_pause(True)
             elif what == "H":
                 self.ensure_pause(False)
+            elif what == "Z":                      # Z:n = n mouse-wheel notches at the view centre (zoom), no wait
+                r = wintypes.RECT()
+                user32.GetClientRect(wintypes.HWND(self.h), ctypes.byref(r))
+                for _ in range(abs(int(secs))):
+                    sc3io.wheel(self.h, r.right // 2, r.bottom // 2, 1 if secs > 0 else -1)
+                    time.sleep(1.5)
+                secs = 2
             self.phase = tok
             self.sc.exports_sync.phase(tok)
             self.write({"t": time.time(), "phase": tok, "mark": "start", "st": self.st()})
