@@ -580,6 +580,37 @@ placement tries per placed car); everything else met.
 - The 1024 city loads below the cars' birth zoom; at Europolis 1024's centre view the street carries 6-13 cars (mostly
   subway trips cross that view).
 
+## 8. Route cars during camera moves (task carscroll, 2026-10-16)
+
+Evidence `verify/carscroll/PRE.md` addenda 7-11 -> `RESULTS.md`. With the street agents animating while the camera
+moves (sc3simrun `animate_while_scrolling`), route cars thinned out during camera moves (baseline B0: 8-12 route cars
+against 31 with the camera still, during arrows and drags).
+
+**Where the loss came from** (sc3cartrips source and STRTSIM, cited):
+- Every camera step deletes the agents on the strips that leave the sim rect, which was the view box + 2 cells
+  (`push 2` at STRTSIM `0x10013fc9` into `FUN_100120b7`) `[CONFIRMED @ STRTSIM 0x10013fc9, 0x10015415]`; a back-and-forth
+  drag keeps deleting the cars just off screen.
+- Capture kept a trip only if it met the sim rect, and `solve_trip` kept only the road cells inside it: every route
+  ended at the old view edge; spawns popped the newest route and discarded it when its start was outside the current
+  rect (`outrect`); with replace mode's random cars off, nothing else refilled the ground the camera revealed.
+- Measured (B0, per second): camera-edge removals 1.7-2.8 / s during moves (0.05 still), refills 1.3-2.7 / s from an
+  empty queue fed by 2.4-4.7 routes / s.
+
+**The fix (`[cartrips] scroll_fill=1 margin=4`, with sc3simrun `[sim] car_margin=5`):**
+- The car area is the view box + 5 cells (sc3simrun CARMARGIN, the imm8 at `0x10013fca`), so short camera steps delete
+  nothing visible-adjacent and new ground is taken in before it shows. 8 cells was tried first: at a dense view the
+  producer's hard cap of 200 cars then spread the cars over twice the area and fewer showed on screen (R1b).
+- Capture and solve over the car area + 4 cells; solved routes stay in a 256-route history (a route may carry 8 cars,
+  120 s); spawns take the newest unused route that has a step in the rect and enter it there.
+- When the rect takes in new ground, each strip gets a quota at the still-camera density, filled from recent routes
+  crossing the strip, the car entering mid-path at the first step inside the strip and outside the view box (off
+  screen); while the camera moves and 8 s after, the count is topped up to the still-camera count the same way.
+- A car whose route was cut by the capture rect keeps driving on stock choices past its end and leaves once off screen.
+- Costs controlled: a solver state limit while scroll_fill is on (a single trip took 260 ms with the wider capture at
+  first), route bounding boxes for the scans.
+
+Results: `verify/carscroll/RESULTS.md`, section "Route cars during camera moves".
+
 ## 5. Open
 
 - What triggers the target recompute `FUN_1001f556` while the view is still (its caller `FUN_100155a0` is only in a

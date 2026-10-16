@@ -418,3 +418,22 @@ the location-matched ratios**, chosen here before those arms run.
 Arms: **R1c** Berlin (stock instance), per move `X?,W:3,C,I:20,I:15,K:20,I:10,I:30`, ABBA, one block each of H, AR,
 HG, HB, then `X1,P:15,PH:20,P:10`; **R2d** Europolis 1024 (full set), one block each of HG, H, AR, OS; **L6** soak (lite,
 1024, speed 4, X1); **V5** pictures. Other predictions as addendum 8.
+
+## Addendum 12 (2026-10-16 20:15, after R1c; before R1d, R2e, L7, V6)
+
+R1c (sc3simrun 0b903bb6, sc3cartrips 3f9a2c82, Berlin centre), route cars in the view box against the end-location
+reference, fix on: held button 1.10 during / 0.97 after, gentle drag 0.91 / 0.93 (worst 0.84 / 0.80): inside the
+bound; arrows 0.51 / 1.02 and extreme drag 0.33 / 0.37: outside it. On-screen pop-ins during fix-on moves 5-72 a
+minute (<= 76); P / PH: 0 car moves; 0 faults; frames during moves 86-106 % of fix off.
+
+Cause for the fast moves: one camera step of those moves is longer than the 5-cell car margin, so part of each
+revealed strip is already inside the new view box, and the strip fill refused every cell inside the current box.
+But a strip is new rect minus old rect and the old rect contains the old view box: no strip cell was on screen in the
+frame before. **sc3cartrips 268d6676:** the strip fill takes the first route step inside the strip, wherever it is in
+the strip (the car arrives with the ground the camera reveals, as stock cars do). The top-up outside strips still
+places off screen only. The addendum-4 on-screen rule (ground inside the box before and after the last step) is the
+measure that this adds no pop-ins.
+
+Queue: R2d (3f9a2c82, already running) finishes as data; then **R1d** = R1c's schedule, **R2e** Europolis 1024 with one
+block each of H, AR, OS, HG, **L7** lite soak (1024, speed 4, X1, the L5 cycle x 3) and **V6** pictures, all on
+sc3simrun 0b903bb6 + sc3cartrips 268d6676. Bound and predictions as addendum 11 (location-matched).
