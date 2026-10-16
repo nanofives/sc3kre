@@ -974,13 +974,13 @@ static DWORD WINAPI logger(LPVOID param) {
                      "spawn_try=%lu spawn_ok=%lu initfail=%lu placefail=%lu noocc=%lu noedge=%lu outrect=%lu paused_ticks=%lu "
                      "end_arrived=%lu end_lost=%lu end_other=%lu end_other_edge=%lu decisions=%lu followed=%lu cross_followed=%lu "
                      "lost_events=%lu need_route=%lu need_true=%lu steps_covered=%lu steps_total=%lu zone_excluded=%lu "
-                     "carried=%lu dropped=%lu cyc=%I64u ag_calls=%lu ag_cyc=%I64u",
+                     "carried=%lu dropped=%lu spawn_fault=%lu decisions_after_end=%lu retry_ok=%lu cyc=%I64u ag_calls=%lu ag_cyc=%I64u",
                      epoch_ms(), g_mode_now, alive, target, g_ncars, g_rq_len, g_c3[C3_ROUTES_QUEUED], g_c3[C3_ROUTES_DROPPED_OLD],
                      g_c3[C3_SPAWN_TRY], g_c3[C3_SPAWN_OK], g_c3[C3_SPAWN_INITFAIL], g_c3[C3_SPAWN_PLACEFAIL], g_c3[C3_SPAWN_NOOCC],
                      g_c3[C3_SPAWN_NOEDGE], g_c3[C3_SPAWN_OUTRECT], g_c3[C3_PAUSED_TICKS], g_c3[C3_END_ARRIVED], g_c3[C3_END_LOST],
                      g_c3[C3_END_OTHER], g_c3[C3_END_OTHER_EDGE], g_c3[C3_DECISIONS], g_c3[C3_FOLLOWED], g_c3[C3_CROSS_FOLLOWED],
                      g_c3[C3_LOST_EVENTS], g_c3[C3_NEED_CALLS_ROUTE], g_c3[C3_NEED_TRUE_ROUTE], g_c3[C3_STEPS_COVERED],
-                     g_c3[C3_STEPS_TOTAL], g_c3[C3_ZONE_EXCLUDED], g_c3[C3_TRIPS_CARRIED], g_c3[C3_TRIPS_DROPPED],
+                     g_c3[C3_STEPS_TOTAL], g_c3[C3_ZONE_EXCLUDED], g_c3[C3_TRIPS_CARRIED], g_c3[C3_TRIPS_DROPPED], g_c3[C3_SPAWN_FAULT], g_c3[C3_DECISIONS_AFTER], g_c3[C3_SPAWN_RETRY_OK],
                      (unsigned __int64)g_c3_cyc_hi << 32 | g_c3_cyc_lo, g_ag_calls, (unsigned __int64)g_ag_cyc_hi << 32 | g_ag_cyc_lo);
             }
             if (g_time) {

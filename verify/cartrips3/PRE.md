@@ -18,7 +18,7 @@ Addresses are Ghidra VAs; STRTSIM unless named.
 - **`FUN_1001c510`** (the Windows place-at-position building block): QI `0x41658d28` -> piece, `holder = piece->vt+0x54()`,
   `occ->vt+0xbc(&x, &z)`, `rot = occ->vt+0xc0() - [[holder + 4] + r * 4 + 0x14]` with `r` from
   `occ->vt+0xa0()->vt+0x1c(&r)`, a random node and internal edge `FUN_1002034d(graph; &node, &edge, class)`, path =
-  `FUN_10018630(holder, x, rot, z, edge)` (cdecl; the same call the crossing makes at `0x1001c8f8`), piece Released
+  `FUN_10018630(holder, x, rot, z, edge)` (stdcall, `ret 0x14`; the same call the crossing makes at `0x1001c8f8`), piece Released
   `[CONFIRMED @ 0x1001c510]`. The Linux overload `SelectPath(int, int, int)` (node by position) has no separate slot
   here: a route car is placed by answering `vt+0x154` with the same steps and the solved path's internal edge.
 - SelectAnEdge `FUN_1001c290` = car `vt+0x158`, thiscall `(node, x, z)`, `ret 0xc`; the crossing (`0x1001c878`) reads
@@ -93,3 +93,16 @@ Tree `Simcity_stock_pausetrips` (SC3U 49dd55e1, SimTransit b478ded4, STRTSIM c02
 
 Owner pictures: `MAIN\verify\cartrips3\owner_shots\` (screenshots / short GIF clips of route cars, captions.md), not
 counted. Hand-test build staged in `MAIN\re\harness\handtest_cartrips\` when the arms pass.
+
+## Addendum 1 (2026-10-16, after smokes K3, K3b, K3c; before every counted arm)
+
+- K3 (182db562) faulted on every spawn (first-chance AV caught by the spawn's own handler, 153 events, cars never
+  moved): `FUN_10018630` is **stdcall** (`ret 0x14`), not cdecl. Fixed. A fault during a spawn now unregisters the car.
+- K3b: 0 faults, 158 route cars arrived, 0 lost, 0 other ends; but 441 of 741 placements failed (PlaceOnTransitTile's
+  path test, the start lane taken). Change: up to 3 starts along the path, each in a later cell (`retry_ok`).
+- `decisions` now counts only route-steered decisions (after `ended` / `lost`: `decisions_after_end`).
+- K3c (build **33ef673e**): 0 faults, 272 placed (109 on a retry), 171 arrived, 0 lost, 0 other, 100% of path steps.
+- **Build under test: 33ef673e** for every arm. Counted short arms use `log_s=1`; L1 / L2 `log_s=5`.
+- R1's probe groups: `rem,acc,ag` (the removal records need the agent-loop count for "visible", as phase 1).
+- Owner pictures: an extra arm **SH** (not counted): inst_ct3_stock, Berlin, replace, `s2:240`, screenshots and a short
+  GIF taken with `sc3io.grab_to`.

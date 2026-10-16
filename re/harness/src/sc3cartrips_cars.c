@@ -10,7 +10,7 @@
  *  - FUN_1001bc70 takes the car's first path from car vt+0x154 = FUN_1001c510 SelectPath(occ): QI 0x41658d28 -> piece,
  *    holder = piece->vt+0x54(), occ->vt+0xbc(&x, &z), rot = occ->vt+0xc0() - [[holder+4] + r*4 + 0x14] with r from
  *    occ->vt+0xa0()->vt+0x1c(&r), a random node + internal edge (FUN_1002034d), path = FUN_10018630(holder, x, rot, z,
- *    edge) (cdecl), piece Released. A route car gets the same with the edge of its solved lane path.
+ *    edge) (stdcall, ret 0x14), piece Released. A route car gets the same with the edge of its solved lane path.
  *  - car vt+0x158 = FUN_1001c290 SelectAnEdge(node, x, z), thiscall, ret 0xc: every lane decision (SelectNextPath and
  *    the crossing FUN_1001c750 at 0x1001c878, whose caller reads [edge+4] so it must never get NULL).
  *  - producer vtable 0x1002d1d0: +0x10 VehicleDisappears FUN_1001f610 (arg car+0x18, ret 4), +0x14 NeedVehicleDisappear
@@ -46,7 +46,7 @@ enum { C3_ROUTES_QUEUED, C3_ROUTES_DROPPED_OLD, C3_SPAWN_TRY, C3_SPAWN_OK, C3_SP
        C3_SPAWN_NOOCC, C3_SPAWN_NOEDGE, C3_SPAWN_OUTRECT, C3_END_ARRIVED, C3_END_LOST, C3_END_OTHER, C3_END_OTHER_EDGE,
        C3_DECISIONS, C3_FOLLOWED, C3_CROSS_FOLLOWED, C3_LOST_EVENTS, C3_NEED_CALLS_ROUTE, C3_NEED_TRUE_ROUTE,
        C3_ZONE_EXCLUDED, C3_PAUSED_TICKS, C3_STEPS_COVERED, C3_STEPS_TOTAL, C3_SPAWN_PAUSED, C3_RQ_STALE,
-       C3_TRIPS_CARRIED, C3_TRIPS_DROPPED };
+       C3_TRIPS_CARRIED, C3_TRIPS_DROPPED, C3_SPAWN_FAULT, C3_DECISIONS_AFTER, C3_SPAWN_RETRY_OK };
 static volatile DWORD g_c3_cyc_lo, g_c3_cyc_hi;  /* rdtsc spent in this file's hooks + spawning (game thread) */
 
 static void cyc_add(unsigned __int64 c) {
@@ -118,7 +118,7 @@ typedef BYTE *(__fastcall *PFN_SelPath)(BYTE *car, void *edx, void *occ);
 typedef BYTE *(__fastcall *PFN_SelEdge)(BYTE *car, void *edx, BYTE *node, int x, int z);
 typedef char (__fastcall *PFN_Need)(BYTE *prod, void *edx, BYTE *car18, WORD *counter);
 typedef void (__fastcall *PFN_Gone)(BYTE *prod, void *edx, BYTE *car18);
-typedef BYTE *(__cdecl *PFN_Build)(BYTE *holder, int x, DWORD rot, int z, BYTE *edge);
+typedef BYTE *(__stdcall *PFN_Build)(BYTE *holder, int x, DWORD rot, int z, BYTE *edge);   /* ret 0x14 */
 typedef void (__fastcall *PFN_XZ)(void *occ, void *edx, int *x, int *z);
 typedef BYTE (__fastcall *PFN_B)(void *occ, void *edx);
 typedef void *(__fastcall *PFN_P)(void *occ, void *edx);
@@ -157,8 +157,8 @@ static BYTE *__fastcall my_seledge(BYTE *car, void *edx, BYTE *node, int x, int 
     int i, hi;
     BYTE *e;
     if (!c) return g_o_seledge(car, edx, node, x, z);
+    if (c->ended || c->lost) { g_c3[C3_DECISIONS_AFTER]++; cyc_add(__rdtsc() - t0); return g_o_seledge(car, edx, node, x, z); }
     g_c3[C3_DECISIONS]++;
-    if (c->ended || c->lost) { cyc_add(__rdtsc() - t0); return g_o_seledge(car, edx, node, x, z); }
     hi = c->idx + 8 < c->n ? c->idx + 8 : c->n - 1;
     for (i = c->idx; i <= hi; i++)
         if (c->s[i].node == node && c->s[i].x == x && c->s[i].z == z) break;
@@ -233,17 +233,22 @@ static int user_paused_city(void) {
     } __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
 }
 
-static int spawn_one(BYTE *prod, Route *r) {
+static int spawn_at(BYTE *prod, Route *r, int s0, int *next) {
     BYTE *S = g_strt_base, *car, *edge = NULL;
     void *obj, *occ = NULL;
     int s, x = 0, z = 0, ok = 0;
+    *next = -1;
     RCar *c = NULL;
     DWORD key[3], inst = 0;
     g_c3[C3_SPAWN_TRY]++;
-    for (s = 0; s + 1 < r->n; s++)
+    for (s = s0; s + 1 < r->n; s++)
         if (r->s[s].node && r->s[s].x == r->s[s + 1].x && r->s[s].z == r->s[s + 1].z &&
             (edge = edge_toward(&r->s[s], &r->s[s + 1])) != NULL) break;
     if (!edge) { g_c3[C3_SPAWN_NOEDGE]++; return 0; }
+    {   int q = s + 1;                               /* a retry starts in a later cell */
+        while (q < r->n && r->s[q].x == r->s[s].x && r->s[q].z == r->s[s].z) q++;
+        *next = q < r->n - 1 ? q : -1;
+    }
     {   int px0 = *(int *)(prod + 0x24), pz0 = *(int *)(prod + 0x28), px1 = *(int *)(prod + 0x2c), pz1 = *(int *)(prod + 0x30);
         if (r->s[s].x < px0 || r->s[s].x > px1 || r->s[s].z < pz0 || r->s[s].z > pz1) { g_c3[C3_SPAWN_OUTRECT]++; return 0; }
     }
@@ -282,8 +287,25 @@ static int spawn_one(BYTE *prod, Route *r) {
         } else g_c3[C3_SPAWN_INITFAIL]++;
         ((PFN_Rel)(*(DWORD **)car)[2])(car, NULL);                      /* vt+8 Release: a failed car dies here */
         ((PFN_Rel)(*(DWORD **)occ)[2])(occ, NULL);
-    } __except (EXCEPTION_EXECUTE_HANDLER) { g_spawn_car = NULL; g_spawn_edge = NULL; return 0; }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        g_spawn_car = NULL; g_spawn_edge = NULL;
+        if (c && c->car) { c->car = NULL; g_ncars--; }
+        g_c3[C3_SPAWN_FAULT]++;
+        return 0;
+    }
     return ok;
+}
+
+/* a placement fails when the start lane is taken (FUN_1001bc70's path test): try up to 3 starts along the path */
+static int spawn_one(BYTE *prod, Route *r) {
+    int s0 = 0, k, next;
+    for (k = 0; k < 3 && s0 >= 0; k++) {
+        int before = g_c3[C3_SPAWN_PLACEFAIL];
+        if (spawn_at(prod, r, s0, &next)) { if (k) g_c3[C3_SPAWN_RETRY_OK]++; return 1; }
+        if ((int)g_c3[C3_SPAWN_PLACEFAIL] == before) return 0;   /* failed for another reason: no retry */
+        s0 = next;
+    }
+    return 0;
 }
 
 /* producer tick: route cars first while alive < target (stock rate: max(1, (target - alive) / 10) per tick) */
