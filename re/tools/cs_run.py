@@ -9,6 +9,8 @@ Tokens (seconds after the colon):
   A0/A1 sc3simrun_animate(0/1) (in-game A/B switch, takes no time)
   H     right-drag: right button down at the view centre, moves with MK_RBUTTON back and forth every 50 ms
   HB    right button held still at the view centre
+  HD    slow one-way drag: right button down left of centre, moves 8 px per 50 ms to the right for half the phase,
+        then back for the other half (a hand pan, not pt_run's +-60 px shake)
   AR    arrows: spoofed arrow state (sc3io.scroll's GZWIND hook), left / right alternating every 0.4 s
   ED    edge scroll: posted mouse moves on the left / right edge bands of the 800 x 600 view, alternating every 0.4 s
   OS    overscroll: spoofed arrow held in one direction for the whole phase (CS_OS_DIR, default left), then the
@@ -30,7 +32,7 @@ import pt_run  # noqa: E402
 import sc3io  # noqa: E402
 from cs_probe import CSRC, JS  # noqa: E402
 
-pt_run.JS = "var CSRC = " + json.dumps(CSRC) + ";\n" + JS
+pt_run.JS = "var CSRC = " + json.dumps(CSRC) + ";\n" + JS.replace("__CS_LITE__", os.environ.get("CS_LITE", "0"))
 
 if os.environ.get("CS_FRAMEDUMP"):
     os.environ["SC3RESIZE_FRAMEDUMP"] = os.environ["CS_FRAMEDUMP"]
@@ -60,6 +62,19 @@ class CsArm(pt_run.Arm):
         sc3io._post(self.h, sc3io.WM_RBUTTONDOWN, sc3io.MK_RBUTTON, self.lp(cx, cy))
         time.sleep(secs)
         sc3io._post(self.h, sc3io.WM_RBUTTONUP, 0, self.lp(cx, cy))
+
+    def slow_drag(self, secs):
+        w, h = self.rect()
+        x, y = w // 2, h // 2
+        sc3io._post(self.h, sc3io.WM_MOUSEMOVE, 0, self.lp(x, y))
+        time.sleep(0.08)
+        sc3io._post(self.h, sc3io.WM_RBUTTONDOWN, sc3io.MK_RBUTTON, self.lp(x, y))
+        t0 = time.time()
+        while time.time() - t0 < secs:
+            x += 8 if time.time() - t0 < secs / 2 else -8
+            sc3io._post(self.h, sc3io.WM_MOUSEMOVE, sc3io.MK_RBUTTON, self.lp(x, y))
+            time.sleep(0.05)
+        sc3io._post(self.h, sc3io.WM_RBUTTONUP, 0, self.lp(x, y))
 
     def arrows(self, secs, dirs=("left", "right"), period=0.4):
         sc = sc3io._scroll_script_get()
@@ -109,6 +124,10 @@ class CsArm(pt_run.Arm):
         os_dir = os.environ.get("CS_OS_DIR", "left")
         back = {"left": "right", "right": "left", "up": "down", "down": "up"}
         os_pending = 0.0
+        t0 = time.time()                           # city load time varies (60-120 s): wait for the city and its view
+        while time.time() - t0 < 240 and not (self.st().get("speed_last") and self.st().get("view")):
+            time.sleep(2)
+        time.sleep(5)
         for idx, tok in enumerate(self.a.schedule.split(",")):
             what, secs = tok.split(":")
             dump = what.endswith("*")
@@ -143,6 +162,8 @@ class CsArm(pt_run.Arm):
                     self.hold(secs)
                 elif what == "HB":
                     self.held(secs)
+                elif what == "HD":
+                    self.slow_drag(secs)
                 elif what == "AR":
                     self.arrows(secs)
                 elif what == "ED":

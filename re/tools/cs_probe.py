@@ -16,7 +16,7 @@ holds whether the agents animate or not (ct_probe's rule counted agent-loop pass
 CSRC = r"""
 #include <gum/guminterceptor.h>
 typedef unsigned int u32;
-typedef struct { long long last, ag_t0, ag_ticks, maxgap; u32 frames, scroll, ag_calls, moves; } G;   /* 64-bit fields first: no padding question */
+typedef struct { long long last, ag_t0; u32 frames, scroll, ag_calls, moves, ag_us, maxgap_us; } G;   /* JS reads only the u32 fields (no torn reads) */
 extern G g;
 extern u32 hkey[];          /* open-addressing table: vehicle -> slot */
 extern u32 hval[];          /* per slot: first frame drawn, last frame drawn */
@@ -25,13 +25,13 @@ extern int __attribute__((stdcall)) QueryPerformanceCounter(long long *);
 void vt_enter(GumInvocationContext *ic) {
   long long now, d;
   QueryPerformanceCounter(&now);
-  if (g.last) { d = now - g.last; if (d > g.maxgap) g.maxgap = d; }
+  if (g.last) { d = (now - g.last) / 10; if (d > (long long)g.maxgap_us) g.maxgap_us = (u32)d; }   /* QPF 10 MHz */
   g.last = now;
   g.frames++;
 }
 void scroll_enter(GumInvocationContext *ic) { g.scroll++; }
 void ag_enter(GumInvocationContext *ic) { QueryPerformanceCounter(&g.ag_t0); }
-void ag_leave(GumInvocationContext *ic) { long long t; QueryPerformanceCounter(&t); g.ag_ticks += t - g.ag_t0; g.ag_calls++; }
+void ag_leave(GumInvocationContext *ic) { long long t; QueryPerformanceCounter(&t); g.ag_us += (u32)((t - g.ag_t0) / 10); g.ag_calls++; }
 void move_leave(GumInvocationContext *ic) { if (gum_invocation_context_get_return_value(ic)) g.moves++; }
 
 #define HN 65536
@@ -45,7 +45,7 @@ static u32 *hfind(u32 v, int add) {
   return 0;
 }
 static void drawn(GumInvocationContext *ic) {
-  u32 *p = hfind((u32)ic->cpu_context->ecx, 1);
+  u32 *p = hfind((u32)ic->cpu_context->ecx - 0x1c, 1);   /* Draw runs on the car's third vtable, car + 0x1c */
   if (!p) return;
   if (!p[0]) p[0] = g.frames;
   p[1] = g.frames;
@@ -82,7 +82,7 @@ var cm = new CModule(CSRC, { QueryPerformanceCounter: k32.getExportByName('Query
 var drawFirst = new NativeFunction(cm.draw_first, 'uint32', ['uint32']);
 var drawLast = new NativeFunction(cm.draw_last, 'uint32', ['uint32']);
 var drawForget = new NativeFunction(cm.draw_forget, 'void', ['uint32']);
-// G layout: last 0, ag_t0 8, ag_ticks 16, maxgap 24, frames 32, scroll 36, ag_calls 40, moves 44
+// G layout: last 0, ag_t0 8, frames 16, scroll 20, ag_calls 24, moves 28, ag_us 32, maxgap_us 36
 function gU(o) { return MEM.g.add(o).readU32(); }
 function gS64(o) { return MEM.g.add(o).readS64().toNumber(); }
 
@@ -96,9 +96,12 @@ try {
 Interceptor.attach(A(SPR, 0x10042a95), { onEnter: cm.vt_enter });
 Interceptor.attach(A(SPR, 0x10043daf), { onEnter: cm.scroll_enter });
 Interceptor.attach(EXE.base.add(0x25a10), { onEnter: cm.ag_enter, onLeave: cm.ag_leave });
-Interceptor.attach(A(ST, 0x1001c750), { onLeave: cm.move_leave });
-Interceptor.attach(A(ST, 0x100199b0), { onEnter: cm.draw0 });
-Interceptor.attach(A(ST, 0x10019a30), { onEnter: cm.draw1 });
+var LITE = '__CS_LITE__' === '1';   // cs_run.py (env CS_LITE=1): frames, gaps, scroll frames, agent passes only
+if (!LITE) {
+  Interceptor.attach(A(ST, 0x1001c750), { onLeave: cm.move_leave });
+  Interceptor.attach(A(ST, 0x100199b0), { onEnter: cm.draw0 });
+  Interceptor.attach(A(ST, 0x10019a30), { onEnter: cm.draw1 });
+}
 
 var LAYER = null, PROD = null;
 function layer() {
@@ -106,30 +109,37 @@ function layer() {
   return LAYER;
 }
 var CTX = [];
-Interceptor.attach(A(ST, 0x10015415), { onEnter: function () { CTX.push('view'); C.view_update = (C.view_update || 0) + 1; }, onLeave: function () { CTX.pop(); } });
-Interceptor.attach(A(ST, 0x100146b2), { onEnter: function () { CTX.push('produce-off'); }, onLeave: function () { CTX.pop(); } });
-Interceptor.attach(A(ST, 0x1001f112), { onEnter: function () { CTX.push('tile'); }, onLeave: function () { CTX.pop(); } });
+// view box (layer +0x27b0..+0x27bc, cells) shown before the current view update: ProcessViewChange FUN_10013e66 has
+// already stored the new box when it calls UpdateVehicleView, so the previous update's box is kept here
+var BOX_LAST = null, BOX_PREV = null;
+function box() { var L = layer(); try { return L ? [L.add(0x27b0).readS32(), L.add(0x27b4).readS32(), L.add(0x27b8).readS32(), L.add(0x27bc).readS32()] : null; } catch (e) { return null; } }
+function inb(b, x, z) { return b && x !== null && x >= b[0] && x <= b[2] && z >= b[1] && z <= b[3] ? 1 : 0; }
+if (!LITE) Interceptor.attach(A(ST, 0x10015415), { onEnter: function () { CTX.push('view'); C.view_update = (C.view_update || 0) + 1;
+                                                               BOX_PREV = BOX_LAST; BOX_LAST = box(); }, onLeave: function () { CTX.pop(); } });
+if (!LITE) Interceptor.attach(A(ST, 0x100146b2), { onEnter: function () { CTX.push('produce-off'); }, onLeave: function () { CTX.pop(); } });
+if (!LITE) Interceptor.attach(A(ST, 0x1001f112), { onEnter: function () { CTX.push('tile'); }, onLeave: function () { CTX.pop(); } });
 
 var C = {}, SP = [], RM = [], PEND = [];
 function cell(vp) { try { return [vp.add(0xc).readS32() >> 8, vp.add(0x14).readS32() >> 8]; } catch (e) { return [null, null]; } }
 // SetProducer FUN_1001c990(this = car, producer): every car of the producer, stock (FUN_1001f112) or sc3cartrips'
-Interceptor.attach(A(ST, 0x1001c990), function () {
+if (!LITE) Interceptor.attach(A(ST, 0x1001c990), function () {
   layer();
   var pr = this.context.esp.add(4).readPointer();
   if (!PROD || !pr.equals(PROD)) return;
   var v = this.context.ecx;
   drawForget(v.toUInt32());
   var ctx = CTX.indexOf('view') >= 0 ? 'view' : (CTX.length ? 'tick' : 'mod');
-  PEND.push({ v: v, f: gU(32), ctx: ctx, t: Date.now() });
+  PEND.push({ v: v, f: gU(16), ctx: ctx, t: Date.now(), b: ctx === 'view' ? BOX_PREV : box() });
 });
 // VehicleDisappears FUN_1001f610(this = producer, car + 0x18)
-Interceptor.attach(A(ST, 0x1001f610), function () {
+if (!LITE) Interceptor.attach(A(ST, 0x1001f610), function () {
   layer();
   if (!PROD || !this.context.ecx.equals(PROD)) return;
-  var vp = this.context.esp.add(4).readPointer().sub(0x18), u = vp.toUInt32(), f = gU(32), last = drawLast(u), xz = cell(vp);
+  var vp = this.context.esp.add(4).readPointer().sub(0x18), u = vp.toUInt32(), f = gU(16), last = drawLast(u), xz = cell(vp);
   var ctx = CTX.indexOf('view') >= 0 ? 'view' : (CTX.indexOf('produce-off') >= 0 ? 'produce-off' : 'drive');
-  RM.push({ f: f, last: last, vis: last > 0 && f - last <= 2 ? 1 : 0, ctx: ctx, x: xz[0], z: xz[1] });
-  for (var i = 0; i < PEND.length; i++) if (PEND[i].v.equals(vp)) { PEND[i].gone = f; }
+  var vis = last > 0 && f - last <= 2 ? 1 : 0;
+  RM.push({ f: f, last: last, vis: vis, vbox: vis && inb(box(), xz[0], xz[1]) ? 1 : 0, ctx: ctx, x: xz[0], z: xz[1] });
+  for (var i = 0; i < PEND.length; i++) if (PEND[i].v.equals(vp)) { PEND[i].gone = f; PEND[i].xz = xz; }
   drawForget(u);
 });
 
@@ -155,27 +165,29 @@ function state() {
 }
 
 var QPF = (function () { var f = Memory.alloc(8); new NativeFunction(k32.getExportByName('QueryPerformanceFrequency'), 'int', ['pointer'], 'stdcall')(f); return f.readS64().toNumber(); })();
+if (QPF !== 10000000) throw new Error('cs_probe assumes QueryPerformanceFrequency = 10 MHz, got ' + QPF);
 var prev = null;
 function snap() {
-  var st = [0, 0, 0];
-  if (simStats) { simStats(MEM.stats); st = [MEM.stats.readU32(), MEM.stats.add(4).readU32(), MEM.stats.add(8).readU32()]; }
-  return { frames: gU(32), scroll: gU(36), ag: gU(40), moves: gU(44), agt: gS64(16), sf: st[0], at: st[1], ft: st[2] };
+  var st = [0, 0, 0, 0];
+  if (simStats) { simStats(MEM.stats); st = [MEM.stats.readU32(), MEM.stats.add(4).readU32(), MEM.stats.add(8).readU32(), MEM.stats.add(12).readU32()]; }
+  return { frames: gU(16), scroll: gU(20), ag: gU(24), moves: gU(28), agt: gU(32), sf: st[0], at: st[1], ft: st[2], sr: st[3] };
 }
 setInterval(function () {
-  var s = state(), n = snap(), gap = gS64(24);
-  MEM.g.add(24).writeS64(0);
+  var s = state(), n = snap(), gap = gU(36);
+  MEM.g.add(36).writeU32(0);
   var fnow = n.frames, sp = [], keep = [];
   for (var i = 0; i < PEND.length; i++) {                 // decide pop-in visibility once 3 frames have passed
     var p = PEND[i];
     if (fnow - p.f < 4 && !p.gone) { keep.push(p); continue; }
-    var first = drawFirst(p.v.toUInt32()), xz = cell(p.v);
+    var first = drawFirst(p.v.toUInt32()), xz = p.gone ? (p.xz || [null, null]) : cell(p.v);   // the car's cell 3 frames in (placement sets it after SetProducer)
     if (p.gone && first === 0) first = 0;
-    sp.push({ f: p.f, first: first, vis: first > 0 && first - p.f <= 3 ? 1 : 0, ctx: p.ctx, x: p.gone ? null : xz[0], z: p.gone ? null : xz[1] });
+    var pv = first > 0 && first - p.f <= 3 ? 1 : 0;
+    sp.push({ f: p.f, first: first, vis: pv, vbox: pv && inb(p.b, xz[0], xz[1]) ? 1 : 0, ctx: p.ctx, x: xz[0], z: xz[1] });
   }
   PEND = keep;
   var d = prev ? { frames: n.frames - prev.frames, scroll: n.scroll - prev.scroll, ag: n.ag - prev.ag, moves: n.moves - prev.moves,
-                   ag_ms: (n.agt - prev.agt) * 1000 / QPF, scroll_stub: n.sf - prev.sf, agent_ticks: n.at - prev.at,
-                   frozen_ticks: n.ft - prev.ft, maxgap_ms: gap * 1000 / QPF } : null;
+                   ag_ms: ((n.agt - prev.agt) >>> 0) / 1000, scroll_stub: n.sf - prev.sf, agent_ticks: n.at - prev.at,
+                   frozen_ticks: n.ft - prev.ft, strip_refills: n.sr - prev.sr, maxgap_ms: gap / 1000 } : null;
   prev = n;
   if (d) send({ k: 'tick', d: d, c: C, st: s, spawns: sp, rem: RM, faults: FAULTS });
   C = {}; RM = []; FAULTS = [];

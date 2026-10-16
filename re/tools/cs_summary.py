@@ -57,11 +57,14 @@ def main():
             "i": i, "tok": p["tok"], "kind": p["tok"].split(":")[0].rstrip("*"), "anim": p["anim"], "secs": n,
             "frames_s": mean([d["frames"] for d in D]), "scroll_s": mean([d["scroll"] for d in D]),
             "stub_s": mean([d["scroll_stub"] for d in D]), "passes_s": mean([d["ag"] for d in D]),
-            "agent_ticks_s": mean([d["agent_ticks"] for d in D]), "frozen_s": mean([d["frozen_ticks"] for d in D]),
+            "agent_ticks_s": mean([d["agent_ticks"] for d in D]), "frozen_s": mean([d["frozen_ticks"] for d in D]), "strips_s": mean([d.get("strip_refills", 0) for d in D]),
             "moves_s": mean([d["moves"] for d in D]), "ag_ms_s": mean([d["ag_ms"] for d in D]),
             "maxgap_ms_mean": mean([d["maxgap_ms"] for d in D]), "maxgap_ms_max": max(d["maxgap_ms"] for d in D),
             "cars": mean([s.get("p_count") or 0 for s in st]), "target": mean([s.get("p_target") or 0 for s in st]),
             "spawn_min": len(sp) * 60.0 / n, "spawn_vis_min": sum(s["vis"] for s in sp) * 60.0 / n,
+            "spawn_box_min": sum(s.get("vbox", 0) for s in sp) * 60.0 / n, "rem_box_min": sum(x.get("vbox", 0) for x in rm) * 60.0 / n,
+            "spawn_box_by": dict(collections.Counter(s["ctx"] for s in sp if s.get("vbox"))),
+            "rem_box_by": dict(collections.Counter(x["ctx"] for x in rm if x.get("vbox"))),
             "spawn_by": dict(collections.Counter(s["ctx"] for s in sp)),
             "spawn_vis_by": dict(collections.Counter(s["ctx"] for s in sp if s["vis"])),
             "rem_min": len(rm) * 60.0 / n, "rem_vis_min": sum(x["vis"] for x in rm) * 60.0 / n,
@@ -75,7 +78,7 @@ def main():
         row["view_moved"] = (abs(v1[0] - v0[0]) + abs(v1[1] - v0[1])) if v0 and v1 else None
         rows.append(row)
     keys = ["i", "tok", "anim", "secs", "frames_s", "scroll_s", "passes_s", "agent_ticks_s", "frozen_s", "moves_s",
-            "maxgap_ms_mean", "maxgap_ms_max", "cars", "spawn_vis_min", "rem_vis_min", "spawn_min", "rem_min", "view_updates_s"]
+            "maxgap_ms_mean", "maxgap_ms_max", "cars", "strips_s", "spawn_vis_min", "spawn_box_min", "rem_vis_min", "rem_box_min", "spawn_min", "rem_min", "view_updates_s"]
     print("\t".join(keys))
     for r in rows:
         print("\t".join(("%.1f" % r[k]) if isinstance(r[k], float) else str(r[k]) for k in keys))
@@ -86,7 +89,8 @@ def main():
     print("\npooled (seconds-weighted)")
     agg = {}
     pk = ["frames_s", "scroll_s", "passes_s", "agent_ticks_s", "frozen_s", "moves_s", "maxgap_ms_mean", "ag_ms_s",
-          "cars", "spawn_vis_min", "rem_vis_min", "spawn_min", "rem_min", "view_updates_s"]
+          "cars", "strips_s", "spawn_vis_min", "spawn_box_min", "rem_vis_min", "rem_box_min", "spawn_min", "rem_min",
+          "view_updates_s"]
     print("\t".join(["kind", "anim", "secs"] + pk + ["maxgap_ms_max"]))
     for (k, an), rs in sorted(pool.items()):
         n = sum(r["secs"] for r in rs)
@@ -95,6 +99,8 @@ def main():
         g["secs"] = n
         g["spawn_vis_by"] = dict(sum((collections.Counter(r["spawn_vis_by"]) for r in rs), collections.Counter()))
         g["rem_vis_by"] = dict(sum((collections.Counter(r["rem_vis_by"]) for r in rs), collections.Counter()))
+        g["spawn_box_by"] = dict(sum((collections.Counter(r["spawn_box_by"]) for r in rs), collections.Counter()))
+        g["rem_box_by"] = dict(sum((collections.Counter(r["rem_box_by"]) for r in rs), collections.Counter()))
         agg["%s/%d" % (k, an)] = g
         print("\t".join([k, str(an), str(n)] + ["%.1f" % g[q] for q in pk] + ["%.1f" % g["maxgap_ms_max"]]))
     print("\nfaults:", faults)

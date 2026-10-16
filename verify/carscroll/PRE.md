@@ -116,3 +116,76 @@ Block for kind K: `A0, I:15, K:20, I:10, A1, I:15, K:20, I:10` and the same with
 Owner material (not counted): GIF before/after from V1 frames in `MAIN\verify\carscroll\owner_shots\` + captions.md;
 the frames are also inspected for smears/ghosts (agents drawn off their roads, trails) and the finding is written down
 either way. Hand-test build staged in `MAIN\re\harness\handtest_carscroll\` with a README when the arms pass.
+
+## Addendum 1 (2026-10-16, after smokes K0..K0g and K1; before every counted arm)
+
+Smokes (tooling and build checks, not counted): K0 (relative city path: game stayed at the menu, then a slow load),
+K0c, K0d, K0e, K0f, K0g (stock instance, Berlin), K1 (full instance, Berlin, replace).
+
+**Build changes (both found by the smokes):**
+1. **Three rate writes, not one.** K0: with build 291dcec9 the stub ran 0 times while the scroll step ran 20-80 times a
+   second, and agent passes stayed 0 during every A1 move. The compiler kept three copies of the 16-byte block
+   `mov ecx,[esi+0xb8] / lea edx,[ebp-8] / fldz / fstp [ebp-8] / mov eax,[ecx]` before `call [eax+0x7c]` at
+   `0x1004400b`: drag / held button at `0x10043dde` (then `jmp 0x1004400a`), one direction at `0x10043f57` (`jmp
+   0x1004400a`), two directions at `0x10043ffa` `[CONFIRMED @ SIMSPR bytes]`. Ghidra's text shows one. All three are
+   patched (expect-or-refuse on all three, or none). K0c: agent passes = frames during A1 drag (106 / s).
+2. **STRIPS** (same switch). K0c/K0d: with the agents ticking during a move, the camera's car churn became visible.
+   UpdateVehicleView queues the cars on the strips leaving the sim rect for removal (AnimOccMan `vt+0x58`), and the
+   removal happens in each car's next tick, so today (frozen agents) nothing is removed until the camera stops and
+   the count climbs (K0c A0 drag 159 cars). Then it refills with PutVehiclesInRect on the **whole** new rect once per
+   new strip (loop `0x1001556c..0x1001557c`, `edi` = index, strips `[ebp-0x44]`, count `[ebp-4]`) `[CONFIRMED @
+   STRTSIM 0x10015415]`. Measured with animation on (K0d, arrows): ~50 placements / s over the whole rect, 52 of 197
+   drawn within 3 frames. Change: while animating, a refill called from that loop (return address `0x10015578`) gets
+   strip `edi` instead of the whole rect, so cars are placed only on ground the camera has just revealed. Hooked at
+   FUN_1001f040's entry (6 bytes): sc3cartrips patches and checks the call site, and in filler / off jumps to the
+   function with the return address intact; in replace mode the call never reaches it. Expect-or-refuse on the entry,
+   the loop and the strip computation bytes. `sc3simrun_stats` gains `out[3]` = strip refills.
+   **Build under test from here: sc3simrun f3d94920** (both instances).
+
+**Instrument changes:**
+- Draw runs on the car's third vtable: the per-car draw history is keyed on `ecx - 0x1c` (K0..K0c read 0 visible).
+- Counters the JS reads are u32 (a torn 64-bit read gave a 2^32-tick "frame gap" in K0c).
+- **On-screen rule (primary for prediction 5):** a placement is an on-screen pop-in when the car is drawn within 3
+  frames **and** its cell lies inside the view box shown before the placement (for a `view` placement the box of the
+  previous view update, since ProcessViewChange stores the new box before UpdateVehicleView runs; otherwise the
+  current box). A removal is on screen when the car was drawn in one of the 2 frames before it and its cell is inside
+  the current view box. Reason (K0e): at arrow speed (~2,500 px/s, sc3io) a car placed off screen is scrolled into view
+  within 3 frames, so "drawn within 3 frames" alone counts cars the camera reaches, not pop-ins. The view box contains
+  the screen (it is the screen's cell bounding box), so the rule can over-count, not miss. The raw draw-only counts are
+  reported too.
+- `CS_LITE=1`: only the native counters (frames, longest frame gap, scroll frames, agent passes and time, agent ticks
+  from sc3simrun); no JS hooks. The car-event hooks run only when cars are placed or removed, which happens almost
+  only in A1 moves, so the full probe slows A1 moves more than A0 ones (K0e: A1 frames 25-38% below A0; lite K0g: drag
+  29.1 vs 28.0, held 45.2 vs 31.2, arrows 41.9 vs 56.6). Frame rate is measured in lite arms only.
+- cs_run waits for the city (state with speed and view) before the schedule; `--settle 90`.
+- Token `HD` (slow one-way drag) dropped: the right-drag pans by offset from the press point, and the one-way drag ran
+  the camera to the map edge in A0 and produced 5.6 scroll frames / s. `H` (pt_run's +-60 px drag) and `HB` stay.
+- **`ED` dropped from the arms:** posted edge-band moves gave 0 scroll frames in K0 and K1 (stock and full set),
+  as `verify/resize_edgescroll` Finding 2 predicts. Prediction 3's fallback applies: edge scroll is the same scroll step
+  (outer `+0x1e1..+0x1e4`), covered by the code path only, and listed for the owner's hand test.
+
+**Revised arms** (ABBA block for K as before; full probe unless lite):
+
+| arm | instance | city | cartrips | schedule |
+|---|---|---|---|---|
+| S1 | stock | Berlin | off | `s3:10` + blocks H, HB, AR + `A1:0,P:15,PH:20,P:10,s3:15` |
+| S2 | stock | Berlin | replace | as S1 |
+| S3 | stock | Berlin | filler | `s3:10` + blocks H, AR |
+| C1 lite | stock | Berlin | replace | `s3:10` + 3 x (`A0` H:10,I:8,AR:8,I:8,HB:8,I:8; `A1` same; `A1` same; `A0` same) |
+| C2 lite | full | Europolis 1024 | replace | `Z:2,s3:20` + 2 x the C1 cycle |
+| F1 | full | Europolis 1024 | replace | `Z:2,s3:20` + blocks H, AR + (`A1` OS:5,I:8 x 3; `A0` OS:5,I:8 x 3; `A0` x 3; `A1` x 3) |
+| F2 | full | Berlin | replace | `s3:10` + blocks H, AR + the same OS blocks |
+| N0 | stock, `animate_while_scrolling=0` | Berlin | off | `s3:15,H:20,I:15,AR:20,I:15` |
+| L1 soak lite | stock | Berlin | replace | `s4:10` + (`H:60,I:5,AR:60,I:5,HB:30,I:5`) x 6 |
+| L2 soak lite | full | Europolis 1024 | replace | `Z:2,s4:10` + the same x 6 |
+| V1 pictures | stock | Berlin | off / replace | frames during A0 and A1 drag and arrows |
+
+**Revised predictions** (others unchanged):
+- P1 adds agent ticks per frame (moves vs idle, within 10%) next to per second, because ticks per second follow the
+  frame rate.
+- P4 (frame rate, C1 / C2 only): pooled per kind, A1 frames per second during moves >= 90% of A0; mean longest frame
+  gap A1 <= 1.25 x A0.
+- P5: on-screen pop-ins in context `view` <= 2 per minute during A1 moves (by construction of STRIPS, none should be
+  inside the previous box); on-screen removals and pop-ins of any context during A1 moves <= the A1 idle rate + 50%
+  (the stock churn that runs while the camera is still: tick spawns, density despawn, route-car ends). A0 reported.
+- P6: also `PH` frozen ticks > 0 and agent passes continue (the heartbeat runs, FREEZE skips the street agents).
