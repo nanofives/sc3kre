@@ -130,3 +130,12 @@ changes; R2 runs on the old driver (already started).
 L2 did not start its schedule: 90 s after launch the 1024 city ignored the zoom clicks and the speed keys
 (`could not set speed 3`, zoom 0, producing off; killed by its PID after 2 minutes, 0 faults). R2b, with the same
 start, had worked. **L2b** = L2 with `--settle 150`. Predictions unchanged.
+
+## Addendum 5 (2026-10-16, after L2b, CA, SH; before L2c)
+
+L2b's game exited ~2.75 s after launch, during startup: every mod log stops there; sc3cartrips had only logged
+`loaded` (it arms nothing before SimTransit and STRTSIM load); no Windows error event. Together with ZT's first
+launch (died at ~0.15 s) that is two startup deaths of the full set on the 1024 city today. **L2c** = L2b again. If L2c
+dies at startup too, three launches of the full set without sc3cartrips and three with it are compared before any
+conclusion. CA ran 19 of its 24 windows (the game's 1,500 s schedule ended first; ctm_modealt's 6 x 4 x 75 s = 1,800 s
+was mis-sized): the 4 complete blocks are reported.
