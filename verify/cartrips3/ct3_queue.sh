@@ -34,7 +34,7 @@ for arm in "$@"; do case $arm in
   R2) ini $S/inst_ct3_full $'mode=replace\r\nlog_s=1\r\n'; run $S/inst_ct3_full "$E1K" R2 "Z:2,s3:120,s4:120,P:30,s3:60" none "--safe --settle 90";;
   FL) ini $S/inst_ct3_stock $'mode=filler\r\nlog_s=1\r\n'; run $S/inst_ct3_stock "$BER" FL "s3:120,s4:60" none "";;
   L1) ini $S/inst_ct3_stock $'mode=replace\r\nlog_s=5\r\n'; run $S/inst_ct3_stock "$BER" L1 "s3:600,s4:1200" none "";;
-  L2) ini $S/inst_ct3_full $'mode=replace\r\nlog_s=5\r\n'; run $S/inst_ct3_full "$E1K" L2 "Z:2,s3:900,s4:900" none "--safe --settle 90";;
+  L2) ini $S/inst_ct3_full $'mode=replace\r\nlog_s=5\r\n'; run $S/inst_ct3_full "$E1K" L2 "Z:3,s3:900,s4:900" none "--safe --settle 90";;
   PZ) ini $S/inst_ct3_stock $'mode=replace\r\nlog_s=1\r\n'; run $S/inst_ct3_stock "$BER" PZ "s3:90,P:30,s3:60" none "";;
   CA) ini $S/inst_ct3_stock $'mode=replace\r\nlog_s=5\r\ntime_agents=1\r\n'; alt $S/inst_ct3_stock "$BER" CA "s3:1500" "";;
 esac; done

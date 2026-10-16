@@ -114,3 +114,13 @@ ensure_speed tried 3 times without waiting after the last key, the third key had
 pause) is missing, so prediction 5's resume half is measured in a new arm **PZ** (inst_ct3_stock, Berlin, replace,
 `log_s=1`, CT_GROUPS=none, `s3:90,P:30,s3:60`). pt_run's ensure_speed now tries 8 times, 0.6 s apart. Nothing else
 changes; R2 runs on the old driver (already started).
+
+## Addendum 3 (2026-10-16, after R2, FL and a zoom test; before PZ, R2b, L1, L2, CA, SH)
+
+- **R2 is void for the car side**: posted wheel messages did not zoom (zoom stayed 0, no sim rect, no cars), and the
+  old driver then stopped at `could not set speed 4`. Its trip side ran (0 faults while it ran).
+- Zoom test ZT (not counted): the first launch died ~0.15 s after start in every mod's log (the startup death
+  LANE_DENSITY 5 records for sc3perf, seen before this task); the relaunch loaded. Three clicks on the zoom-in button
+  (client 666, 547 at 800 x 600) gave zoom 1, 2, 3 and a sim rect (500-533 / 542-569). pt_run's `Z:n` is now n clicks
+  on that button.
+- **R2b** = R2 with `Z:3` in place of `Z:2` (`Z:3,s3:120,s4:120,P:30,s3:60`); **L2** uses `Z:3`. Predictions unchanged.
