@@ -407,7 +407,7 @@ Acceptance A2 bounds both in game.
 |---|---|---|
 | M1 trip tap (DONE, 6.1) | `sc3cartrips.dll`: capture stub, ring, game-thread queue, counters in its log (optional overlay of queued routes); no visible change. A1, and A2's routing half | nothing |
 | M2 lane routes (DONE, 6.2; overlay not built) | the corridor lane-route solver in game, a per-city drivable-route report (Berlin, Europolis, the 1024 city), a debug overlay of solved lane paths; classifies the unflagged trips by caller (D5) | nothing |
-| M3 route cars | spawn on the route, SelectAnEdge and NeedVehicleDisappear hooks, end at destination / rect edge, replace / filler switch. A3, A4, A6 | D1, D3, D4, D5; a hand test |
+| M3 route cars (DONE, 7; owner hand test pending) | spawn on the route, SelectAnEdge and NeedVehicleDisappear hooks, end at destination / rect edge, replace / filler switch. A3, A4, A6 | D1, D3, D4, D5; a hand test |
 | M4 pause, polish, release | pause freeze (or the alternative), camera checks, A2 in full, A5, packaging into the release set | D2; hand test and release approval |
 
 ### 4.6 Decisions for the owner
@@ -523,6 +523,62 @@ Graph lookups: 0 faults.
   routed the same way and both cross the view. Recommended: all building trips (the zone probes never appear in view).
 - **D6 (new)** corridor width: 1 cell (in game now; Berlin 88.7%) or 2 cells (Berlin 94.6%, cars further from the
   router's cells). Recommended: 1.
+
+## 7. M3: route cars (task cartrips3, 2026-10-16)
+
+Owner decisions 2026-10-16: D1 replace (filler behind `[cartrips] mode=replace|filler|capture|off`, default
+replace), D2 FREEZE, D3 stock count, D4 road part of mixed trips, D5 building trips (zone probes excluded), D6 corridor
+1 cell. Code `re/harness/src/sc3cartrips_cars.c`; evidence `verify/cartrips3/PRE.md` -> `RESULTS.md`.
+
+### 7.1 How a route car is made and driven (decoded for this, STRTSIM)
+
+- **Placing a car on a chosen lane.** Windows has no separate SelectPath(x, y, z) slot: PlaceOnTransitTile
+  (`FUN_1001bc70`, the car's second vtable `0x1002ccb4` `+0x10`) takes the first path from car `vt+0x154` =
+  `FUN_1001c510` SelectPath(occupant), which picks a random node and internal edge (`FUN_1002034d`) and builds the path
+  with `FUN_10018630(holder, x, rot, z, edge)` (**stdcall, `ret 0x14`**; the crossing calls it the same way at
+  `0x1001c8f8`) `[CONFIRMED @ 0x1001bc70, 0x1001c510, 0x10018630]`. The mod swaps that vtable slot and, for the car it is
+  spawning, runs the same steps with the solved path's first internal edge.
+- **Making the car**: as `FUN_1001f112` (roster pick `FUN_1001ed36`, `new(0x15c)`, ctor `FUN_10019750`, Init
+  `vt+0x13c`, alive `+= 1`, SetProducer `vt+0x140`, PlaceOnTransitTile, Release). A placement fails when the start lane
+  is taken (stock cars fail the same way); the mod tries up to 3 starts along the path.
+- **Driving**: car `vt+0x158` SelectAnEdge swapped: a route car gets the edge toward its next lane step (internal: the
+  edge to the next node; crossing: the exit edge whose arrival node is the next node). **Despawn**: producer
+  `vt+0x14` NeedVehicleDisappear returns false for route cars until the path's last node, then true; producer `vt+0x10`
+  VehicleDisappears is wrapped to count how each route car ended.
+- **Replace mode**: the producer tick call (`0x10012e8a`) returns without `FUN_1001f44a`, and both PutVehiclesInRect calls
+  (`0x100154a0`, `0x10015573`) return at once: no random cars at all. **Count**: route cars are spawned in the producer
+  tick while `alive < target` (the stock formula, untouched), at the stock rate `max(1, (target - alive) / 10)` per tick,
+  never while user-paused.
+
+### 7.2 Results
+
+Build 33ef673e, `verify/cartrips3/RESULTS.md`:
+
+| | Berlin (stock threading) | Europolis 1024 (sc3perf 8 workers + smoothing) |
+|---|---|---|
+| long run | L1 30 min: 5,372 route cars placed, 5,232 arrived, **0 lost**, 38 other | L2c 30 min: 817 placed, 773 arrived, 0 lost, 10 other (all at the view edge) |
+| faults | 0 (R1, FL, PZ, L1, CA) | 0 (R2b, L2c; 11.2 million paths on 9 threads) |
+| route cars / all cars (replace) | 100% every second | 100% |
+| lane decisions answered from the path | 96.5-97.7% (the rest: the decision at a path's last node) | 96.2-97.6% |
+| path steps covered | 97.3-100% | 97.1-100% |
+| cars / stock target | speed 2 28 / 133, speed 3 100-110 / 129-133, speed 4 130-141 / 129-143 | 6-13 / 6-13 |
+| visible removals per minute (R1) | 12.8 at speed 3, 17.8 at speed 4 (stock 53 / 41-50), arrivals and view edge | |
+| pause (FREEZE) | 0 decisions, 0 spawns, 0 ends; the same cars continue on resume | same |
+| cost, route vs stock cars in one game (CA) | agent loop 1.010x (per car 0.967x); the mod's game-thread time 0.13 ms per second | |
+| filler mode (FL) | count within 10% of target in 99% / 91% of seconds; route cars 54-71% | |
+
+Predictions missed: the car count at speeds 2-3 in Berlin (route supply: 1.8 / 5.9 viewport trips per second and 2.5-3
+placement tries per placed car); everything else met.
+
+### 7.3 Known limits
+
+- **Too few trips at low speed**: Berlin's view gets 0.7 / 1.8 viewport trips per second at speeds 1 / 2, so replace
+  mode shows 6 / 28 cars where stock shows 42 / 133. Filler mode keeps the stock count (54-71% route cars).
+- **Arrival is a vanish** (risk 6): a car disappears at its destination road cell or where its route leaves the view.
+- **Long-lived graph pointers**: a route car keeps the lane-graph pointers of its cells for its life; an edit of those
+  cells while it drives (bulldozing a road under a car) is not handled and not tested.
+- The 1024 city loads below the cars' birth zoom; at Europolis 1024's centre view the street carries 6-13 cars (mostly
+  subway trips cross that view).
 
 ## 5. Open
 
