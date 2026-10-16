@@ -87,6 +87,8 @@ static int g_mode = 2;                           /* 0 off, 1 capture, 2 replace 
 static int g_verify, g_time, g_dump, g_choice, g_log_s = 10;
 static int g_solve, g_time_agents;
 static int g_rect_ovr, g_ovr[4];                 /* [cartrips] rect=x0,z0,x1,z1: measurement region instead of the sim rect */
+static volatile LONG g_fix = 1;                  /* [cartrips] scroll_fill=1: route cars hold their count while the camera moves */
+static int g_margin = 8;                         /* [cartrips] margin=8: cells added around the sim rect for capture (scroll_fill) */
 
 static void ini_read(void) {
     char path[MAX_PATH], v[32];
@@ -105,6 +107,10 @@ static void ini_read(void) {
     GetPrivateProfileStringA("cartrips", "rect", "", v, sizeof(v), path);
     if (v[0] && sscanf(v, "%d,%d,%d,%d", &g_ovr[0], &g_ovr[1], &g_ovr[2], &g_ovr[3]) == 4) g_rect_ovr = 1;
     g_log_s = GetPrivateProfileIntA("cartrips", "log_s", 10, path);
+    g_fix = GetPrivateProfileIntA("cartrips", "scroll_fill", 1, path) ? 1 : 0;
+    g_margin = GetPrivateProfileIntA("cartrips", "margin", 8, path);
+    if (g_margin < 0) g_margin = 0;
+    if (g_margin > 32) g_margin = 32;
     if (g_log_s < 1) g_log_s = 1;
 }
 
@@ -206,6 +212,10 @@ static __forceinline TS *ts_get(void) {
 /* ============================================================ the sim rect, written by the game thread */
 
 static volatile LONG g_rect_xz0 = 0x7fff7fff, g_rect_xz1 = 0;   /* (x << 16 | z): empty until the first tick */
+static volatile LONG g_sim_xz0 = 0x7fff7fff, g_sim_xz1 = 0;     /* the sim rect itself (g_rect_xz* add the capture margin) */
+static LONG g_box[4];                                           /* view box, cells (layer +0x27b0..+0x27bc), game thread */
+static DWORD g_last_move_ms;                                    /* last tick the sim rect changed (game thread) */
+static void strips_add(int ox0, int oz0, int ox1, int oz1, int nx0, int nz0, int nx1, int nz1);   /* sc3cartrips_cars.c */
 static volatile LONG g_rect_virtual;
 
 /* ============================================================ the ring (MPSC) */
@@ -582,6 +592,28 @@ static void __cdecl on_tick(BYTE *layer8) {
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) { return; }
     if (g_rect_ovr) { x0 = g_ovr[0]; z0 = g_ovr[1]; x1 = g_ovr[2]; z1 = g_ovr[3]; virt = 2; }
+    {   LONG s0 = (LONG)((x0 & 0xffff) << 16 | (z0 & 0xffff)), s1 = (LONG)((x1 & 0xffff) << 16 | (z1 & 0xffff));
+        if (s0 != g_sim_xz0 || s1 != g_sim_xz1) {
+            LONG a = g_sim_xz0, b = g_sim_xz1;
+            g_last_move_ms = GetTickCount();
+            if (b) strips_add((short)(a >> 16), (short)a, (short)(b >> 16), (short)b, x0, z0, x1, z1);
+        }
+        g_sim_xz0 = s0; g_sim_xz1 = s1;
+    }
+    __try {
+        g_box[0] = *(int *)(L + 0x27b0); g_box[1] = *(int *)(L + 0x27b4); g_box[2] = *(int *)(L + 0x27b8); g_box[3] = *(int *)(L + 0x27bc);
+    } __except (EXCEPTION_EXECUTE_HANDLER) { }
+    if (g_fix && g_margin && g_mode_now >= MODE_REPLACE && !virt) {
+        /* scroll_fill: capture and solve over the sim rect plus a margin, so routes reach past the view edge */
+        int mx = *(int *)(g_strt_base + 0x33204), mz = *(int *)(g_strt_base + 0x33114);
+        if (mx <= 0 || mx > 4096) mx = 1024;
+        if (mz <= 0 || mz > 4096) mz = 1024;
+        x0 -= g_margin; z0 -= g_margin; x1 += g_margin; z1 += g_margin;
+        if (x0 < 0) x0 = 0;
+        if (z0 < 0) z0 = 0;
+        if (x1 > mx - 1) x1 = mx - 1;
+        if (z1 > mz - 1) z1 = mz - 1;
+    }
     g_rect_xz0 = (LONG)((x0 & 0xffff) << 16 | (z0 & 0xffff));
     g_rect_xz1 = (LONG)((x1 & 0xffff) << 16 | (z1 & 0xffff));
     g_rect_virtual = virt;
@@ -888,8 +920,8 @@ static DWORD WINAPI logger(LPVOID param) {
              c, v, tm, d, (DWORD)st, (DWORD)strt, g_dump, g_choice, g_cap);
         int cars = g_mode >= MODE_REPLACE ? arm_cars(strt) : 0, ag = g_time_agents ? arm_agtimer() : 0;
         g_mode_now = g_mode >= MODE_REPLACE ? (cars ? g_mode : MODE_CAPTURE) : MODE_CAPTURE;
-        logf("### CARS: mode=%s armed=%d (route cars %s) time_agents=%d", g_mode == 3 ? "filler" : g_mode == 2 ? "replace" :
-             "capture", cars, g_mode_now >= MODE_REPLACE ? "on" : "off", ag);
+        logf("### CARS: mode=%s armed=%d (route cars %s) time_agents=%d scroll_fill=%ld margin=%d", g_mode == 3 ? "filler" :
+             g_mode == 2 ? "replace" : "capture", cars, g_mode_now >= MODE_REPLACE ? "on" : "off", ag, g_fix, g_margin);
     }
     if (g_dump) {
         static const DWORD hdr[4] = { 0x31544354 /* "TCT1" */, sizeof(TripRec), sizeof(Node), MAXSTORE };
@@ -974,14 +1006,19 @@ static DWORD WINAPI logger(LPVOID param) {
                      "spawn_try=%lu spawn_ok=%lu initfail=%lu placefail=%lu noocc=%lu noedge=%lu outrect=%lu paused_ticks=%lu "
                      "end_arrived=%lu end_lost=%lu end_other=%lu end_other_edge=%lu decisions=%lu followed=%lu cross_followed=%lu "
                      "lost_events=%lu need_route=%lu need_true=%lu steps_covered=%lu steps_total=%lu zone_excluded=%lu "
-                     "carried=%lu dropped=%lu spawn_fault=%lu decisions_after_end=%lu retry_ok=%lu cyc=%I64u ag_calls=%lu ag_cyc=%I64u",
+                     "carried=%lu dropped=%lu spawn_fault=%lu decisions_after_end=%lu retry_ok=%lu cyc=%I64u ag_calls=%lu ag_cyc=%I64u "
+                     "fix=%ld fresh_routes=%d fill_try=%lu fill_ok=%lu free=%lu free_gone=%lu still=%d take_skip=%lu inbox=%ld "
+                     "strips=%lu strip_quota=%lu strip_try=%lu strip_ok=%lu strip_noroute=%lu",
                      epoch_ms(), g_mode_now, alive, target, g_ncars, g_rq_len, g_c3[C3_ROUTES_QUEUED], g_c3[C3_ROUTES_DROPPED_OLD],
                      g_c3[C3_SPAWN_TRY], g_c3[C3_SPAWN_OK], g_c3[C3_SPAWN_INITFAIL], g_c3[C3_SPAWN_PLACEFAIL], g_c3[C3_SPAWN_NOOCC],
                      g_c3[C3_SPAWN_NOEDGE], g_c3[C3_SPAWN_OUTRECT], g_c3[C3_PAUSED_TICKS], g_c3[C3_END_ARRIVED], g_c3[C3_END_LOST],
                      g_c3[C3_END_OTHER], g_c3[C3_END_OTHER_EDGE], g_c3[C3_DECISIONS], g_c3[C3_FOLLOWED], g_c3[C3_CROSS_FOLLOWED],
                      g_c3[C3_LOST_EVENTS], g_c3[C3_NEED_CALLS_ROUTE], g_c3[C3_NEED_TRUE_ROUTE], g_c3[C3_STEPS_COVERED],
                      g_c3[C3_STEPS_TOTAL], g_c3[C3_ZONE_EXCLUDED], g_c3[C3_TRIPS_CARRIED], g_c3[C3_TRIPS_DROPPED], g_c3[C3_SPAWN_FAULT], g_c3[C3_DECISIONS_AFTER], g_c3[C3_SPAWN_RETRY_OK],
-                     (unsigned __int64)g_c3_cyc_hi << 32 | g_c3_cyc_lo, g_ag_calls, (unsigned __int64)g_ag_cyc_hi << 32 | g_ag_cyc_lo);
+                     (unsigned __int64)g_c3_cyc_hi << 32 | g_c3_cyc_lo, g_ag_calls, (unsigned __int64)g_ag_cyc_hi << 32 | g_ag_cyc_lo,
+                     g_fix, routes_fresh(), g_c3[C3_FILL_TRY], g_c3[C3_FILL_OK], g_c3[C3_FREE], g_c3[C3_FREE_GONE],
+                     (int)(g_still + 0.5), g_c3[C3_TAKE_SKIP], g_inbox, g_c3[C3_STRIPS], g_c3[C3_STRIP_QUOTA],
+                     g_c3[C3_STRIP_TRY], g_c3[C3_STRIP_OK], g_c3[C3_STRIP_NOROUTE]);
             }
             if (g_time) {
                 sc3cartrips_stats(stats, 16);

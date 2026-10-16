@@ -13,7 +13,7 @@ import collections
 import json
 import re
 
-GAUGES = ("alive", "target", "route_cars", "queued_routes")
+GAUGES = ("alive", "target", "route_cars", "queued_routes", "fresh_routes", "still", "fix", "inbox")
 
 
 def main():
@@ -61,10 +61,11 @@ def main():
             elif k in prev:
                 P["d_" + k] += v - prev[k]
     out = {}
-    cols = ["route_cars", "queued_routes", "target", "d_spawn_try", "d_spawn_ok", "d_placefail", "d_outrect", "d_noedge",
+    cols = ["route_cars", "inbox", "queued_routes", "target", "fresh_routes", "still", "d_fill_try", "d_fill_ok", "d_free",
+            "d_free_gone", "d_take_skip", "d_strip_quota", "d_strip_ok", "d_strip_noroute", "d_spawn_try", "d_spawn_ok", "d_placefail", "d_outrect", "d_noedge",
             "d_noocc", "d_end_arrived", "d_end_other", "d_end_other_edge", "d_end_lost", "d_routes_in", "d_routes_old",
             "d_spawn_fault"]
-    print("kind\tanim\tsecs\t" + "\t".join(c.replace("d_", "") + ("/s" if c.startswith("d_") else "") for c in cols))
+    print("kind	state	secs	" + "	".join((c[2:] + "/s") if c.startswith("d_") else c for c in cols))
     for (k, an), P in sorted(pool.items()):
         row = {}
         for c in cols:

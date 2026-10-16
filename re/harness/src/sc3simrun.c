@@ -56,7 +56,13 @@
  * last 300 ms) the tick runs with the producer's rect set to the strip most recently revealed (if it still lies in the
  * rect), and the rect is put back as soon as it returns; with no such strip the tick is skipped (carscroll S1c: every
  * remaining on-screen pop-in during a drag came from ticks run on the full rect between strips). Once the camera has
- * been still for 300 ms the tick runs as stock. Hooked at FUN_1001f44a's entry (reached in stock and filler modes; replace mode never calls it).
+ * been still for 300 ms the tick runs as stock.
+ * CARMARGIN (same switch, ini [sim] car_margin, default 8; 2 = stock): ProcessViewChange STRTSIM FUN_10013e66 grows the
+ * view's cell box by 2 cells into the street agents' sim rect (`push 2` at 0x10013fc9, FUN_100120b7(box, +0x90, 2))
+ * `[CONFIRMED @ STRTSIM 0x10013fc9, 0x100120b7]`. Every camera step deletes the agents on the strips that leave that rect,
+ * so a back-and-forth drag keeps deleting the cars just off screen and the ground they leave is empty when the camera
+ * comes back (carscroll R0). A wider margin keeps them while the camera moves less than the margin, and fills new ground
+ * before the camera reaches it. The byte is written once at arming; sc3simrun_carmargin(n) changes it at run time. Hooked at FUN_1001f44a's entry (reached in stock and filler modes; replace mode never calls it).
  *
  * Config: simrun.ini beside the DLL:  [sim] run_while_scrolling=1   (0 = stock, the A/B control)
  *                                     [sim] freeze_on_pause=street  (cars = cars only, 0 = stock)
@@ -246,12 +252,16 @@ static int gz_post(DWORD msgid, DWORD a0) {
 static int g_run = 1;
 static int g_freeze = 2;                         /* 0 stock, 1 cars, 2 street */
 static int g_anim = 1;                           /* animate street agents while the camera moves */
+static int g_car_margin = 8;                     /* sim rect = view box + this many cells (stock 2) */
 
 static void ini_read(void) {
     char path[MAX_PATH];
     self_path(path, sizeof(path), "simrun.ini");
     if (path[0]) g_run = GetPrivateProfileIntA("sim", "run_while_scrolling", 1, path) ? 1 : 0;
     if (path[0]) g_anim = GetPrivateProfileIntA("sim", "animate_while_scrolling", 1, path) ? 1 : 0;
+    if (path[0]) g_car_margin = GetPrivateProfileIntA("sim", "car_margin", 8, path);
+    if (g_car_margin < 2) g_car_margin = 2;
+    if (g_car_margin > 24) g_car_margin = 24;
     if (path[0]) {
         char v[16];
         GetPrivateProfileStringA("sim", "freeze_on_pause", "street", v, sizeof(v), path);
@@ -531,6 +541,41 @@ static int patch_tickstrip(HMODULE strt) {
     return 1;
 }
 
+/* CARMARGIN: the imm8 of `push 2` at STRTSIM 0x10013fc9 */
+static BYTE *g_margin_at;
+
+static int set_car_margin(int m) {
+    DWORD old;
+    int was;
+    if (!g_margin_at) return -1;
+    if (m < 2) m = 2;
+    if (m > 24) m = 24;
+    was = g_margin_at[0];
+    if (!VirtualProtect(g_margin_at, 1, PAGE_EXECUTE_READWRITE, &old)) return -1;
+    g_margin_at[0] = (BYTE)m;
+    VirtualProtect(g_margin_at, 1, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), g_margin_at, 1);
+    return was;
+}
+
+static int patch_carmargin(HMODULE strt) {
+    static const BYTE expect[] = { 0x8d, 0xbe, 0x90, 0x00, 0x00, 0x00, 0x6a, 0x02, 0xd1, 0xe8 };   /* lea edi,[esi+0x90] / push 2 / shr eax,1 */
+    BYTE *p = (BYTE *)strt + 0x13fc3;
+    if (memcmp(p, expect, sizeof(expect)) || p[0x20] != 0xe8) {
+        logf("### CARMARGIN: STRTSIM+0x13fc3 differs from shipped - NOT armed (sim rect stays view + 2)");
+        return 0;
+    }
+    g_margin_at = p + 7;
+    set_car_margin(g_car_margin);
+    return 1;
+}
+
+__declspec(dllexport) int __cdecl sc3simrun_carmargin(int m) {
+    int was = set_car_margin(m);
+    logf("CARMARGIN> %d -> %d", was, m);
+    return was;
+}
+
 __declspec(dllexport) int __cdecl sc3simrun_animate(int on) {
     int was = g_scroll_rate != 0;
     g_scroll_rate = on ? RATE_ON : 0;
@@ -573,6 +618,7 @@ static DWORD WINAPI sampler(LPVOID param) {
         while (!(strt = GetModuleHandleA("STRTSIM.DLL"))) Sleep(5);
         logf("### STRIPS: armed=%d", patch_strips(strt));
         logf("### TICKSTRIP: armed=%d", patch_tickstrip(strt));
+        logf("### CARMARGIN: armed=%d car_margin=%d", patch_carmargin(strt), g_car_margin);
     }
     if (g_freeze) {
         HMODULE strt;

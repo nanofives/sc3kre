@@ -7,8 +7,13 @@ probe (cs_probe.py) and camera-move tokens.
 Tokens (seconds after the colon):
   sN    run at speed N                       P    user pause                    I    idle (no input), state unchanged
   A0/A1 sc3simrun_animate(0/1) (in-game A/B switch, takes no time)
+  X0/X1 the route-car fix off / on: sc3cartrips_fill(0/1) and sc3simrun_carmargin(2 / CS_MARGIN, default 8)
+  W     warm-up drag after X0/X1 (as H, its own kind), so the sim rect is rebuilt with the new margin
+  F0/F1 sc3cartrips_fill(0/1): route-car scroll_fill off / on (recorded as the A/B state; use one switch per arm)
   H     right-drag: right button down at the view centre, moves with MK_RBUTTON back and forth every 50 ms
   HB    right button held still at the view centre
+  HG    gentle back-and-forth drag: right button down at the centre, the mouse moves 1 px per 50 ms in a triangle wave of
+        +-30 px around the press point (H moves 3 px per 50 ms over +-60 px; +-18 px stayed inside the drag dead zone)
   HS    slow pan (pictures): right button down at the centre, then 3 px to the left every 50 ms for the whole phase
         (the right-drag pans by mouse movement; a held offset does not move the camera, V2)
   HD    slow one-way drag: right button down left of centre, moves 8 px per 50 ms to the right for half the phase,
@@ -63,6 +68,21 @@ class CsArm(pt_run.Arm):
         time.sleep(0.08)
         sc3io._post(self.h, sc3io.WM_RBUTTONDOWN, sc3io.MK_RBUTTON, self.lp(cx, cy))
         time.sleep(secs)
+        sc3io._post(self.h, sc3io.WM_RBUTTONUP, 0, self.lp(cx, cy))
+
+    def gentle(self, secs, amp=30):
+        w, h = self.rect()
+        cx, cy = w // 2, h // 2
+        sc3io._post(self.h, sc3io.WM_MOUSEMOVE, 0, self.lp(cx, cy))
+        time.sleep(0.08)
+        sc3io._post(self.h, sc3io.WM_RBUTTONDOWN, sc3io.MK_RBUTTON, self.lp(cx, cy))
+        t0, k = time.time(), 0
+        while time.time() - t0 < secs:
+            k += 1
+            ph = k % (4 * amp)
+            dx = ph if ph < amp else (2 * amp - ph if ph < 3 * amp else ph - 4 * amp)
+            sc3io._post(self.h, sc3io.WM_MOUSEMOVE, sc3io.MK_RBUTTON, self.lp(cx + dx, cy))
+            time.sleep(0.05)
         sc3io._post(self.h, sc3io.WM_RBUTTONUP, 0, self.lp(cx, cy))
 
     def slow_pan(self, secs, off=22):
@@ -154,6 +174,18 @@ class CsArm(pt_run.Arm):
                 self.ensure_pause(False)
             elif what in ("P", "PH"):
                 self.ensure_pause(True)
+            elif what in ("X0", "X1"):                 # whole route-car fix off / on: sc3cartrips fill + sc3simrun car margin
+                on = what == "X1"
+                r = self.sc.exports_sync.fill(on)
+                m = self.sc.exports_sync.carmargin(int(os.environ.get("CS_MARGIN", "8")) if on else 2)
+                self.write({"t": time.time(), "phase": tok, "mark": "animate", "on": on, "was": [r, m], "fix": True})
+                print("%s fix %s (was fill %s margin %s)" % (time.strftime("%H:%M:%S"), what, r, m), flush=True)
+                continue
+            elif what in ("F0", "F1"):                 # sc3cartrips scroll_fill off / on (summaries key on it like A0/A1)
+                r = self.sc.exports_sync.fill(what == "F1")
+                self.write({"t": time.time(), "phase": tok, "mark": "animate", "on": what == "F1", "was": r, "fill": True})
+                print("%s fill %s (was %s)" % (time.strftime("%H:%M:%S"), what, r), flush=True)
+                continue
             elif what in ("A0", "A1"):
                 r = self.sc.exports_sync.animate(what == "A1")
                 self.write({"t": time.time(), "phase": tok, "mark": "animate", "on": what == "A1", "was": r})
@@ -173,10 +205,12 @@ class CsArm(pt_run.Arm):
                 th = threading.Thread(target=self.frames, args=("%s_%02d_%s" % (self.a.arm, idx, what), stop), daemon=True)
                 th.start()
             try:
-                if what in ("H", "PH"):
+                if what in ("H", "PH", "W"):          # W = warm-up drag after a switch (its own kind: not counted as H)
                     self.hold(secs)
                 elif what == "HB":
                     self.held(secs)
+                elif what == "HG":
+                    self.gentle(secs)
                 elif what == "HD":
                     self.slow_drag(secs)
                 elif what == "HS":

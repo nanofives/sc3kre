@@ -95,6 +95,10 @@ try {
   simAnimate = new NativeFunction(SR.getExportByName('sc3simrun_animate'), 'int', ['int'], 'mscdecl');
   simStats = new NativeFunction(SR.getExportByName('sc3simrun_stats'), 'void', ['pointer'], 'mscdecl');
 } catch (e) { SR = null; }
+var simMargin = null;
+try { simMargin = SR ? new NativeFunction(SR.getExportByName('sc3simrun_carmargin'), 'int', ['int'], 'mscdecl') : null; } catch (e) { simMargin = null; }
+var ctFill = null;
+try { ctFill = new NativeFunction(Process.getModuleByName('sc3cartrips.dll').getExportByName('sc3cartrips_fill'), 'int', ['int'], 'mscdecl'); } catch (e) { ctFill = null; }
 
 Interceptor.attach(A(SPR, 0x10042a95), { onEnter: cm.vt_enter });
 Interceptor.attach(A(SPR, 0x10043daf), { onEnter: cm.scroll_enter });
@@ -205,6 +209,8 @@ setInterval(function () {
 rpc.exports = {
   config: function () { layer(); return { simrun: !!SR, prod: PROD ? PROD.toString() : null, qpf: QPF }; },
   animate: function (on) { return simAnimate ? simAnimate(on ? 1 : 0) : -1; },
+  fill: function (on) { return ctFill ? ctFill(on ? 1 : 0) : -1; },
+  carmargin: function (m) { return simMargin ? simMargin(m) : -1; },
   phase: function (name) { return name; },
   timers: function () { return null; },
   state: function () { return state(); }

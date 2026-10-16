@@ -305,3 +305,50 @@ counters (`log_s=1`) to phases.
 `log_s=1`, `s3:10` + ABBA blocks H, HB, AR (A0 = animation off = today, A1 = on). Reported, no prediction: on-screen
 route cars per second during each move and in the 10 s after it, against the 15 s of still camera before it; loss and
 supply counters per second.
+
+## Addendum 8 (2026-10-16, after B0 and smokes R0-R0d; before every counted route-car arm)
+
+**B0 (baseline, counted as reported data):** route cars, animation on, current builds. During arrows and the test drag
+the route-car count fell to 8-12 against 31 still; cars drawn per frame fell to 8-25% of the still-camera value. Losses
+during moves were camera-edge removals at 1.7-2.8 / s (0.05 still), refilled at 1.3-2.7 / s from an empty route queue.
+With animation off (today) the count stays up because nothing is removed until the camera stops.
+
+**Instrument findings (smokes):** (1) with frozen cars the car Draw functions are hardly called during scroll frames
+(B0 A0: 0.4-0.8 cars per frame): the scroll path moves the drawn picture and redraws only cars that move or appear, so
+"cars drawn per frame" counts moving visible cars, with the same meaning at idle and in animated moves. A geometric
+count is added: route cars whose cell lies inside the view box (sc3cartrips `inbox`, every 250 ms, CARS> line). (2)
+pt_run's drag `H` swings the view 15-30 cells a second (most of a screen width) and drifts; a gentler drag `HG` (+-30
+px triangle wave, 1 px per 50 ms) moves it +-3-6 cells (R0d). Both are kept: `HG` as a hand drag, `H` as the extreme.
+
+**The fix (both switchable at run time, `X0` / `X1` in cs_run, a warm-up drag `W:3` after each switch, not counted):**
+- sc3simrun **CARMARGIN** (`[sim] car_margin=8`, 2 = stock; build **74901709**): the sim rect = view box + 8 cells
+  instead of + 2 (`push 2` at STRTSIM `0x10013fc9`), so camera steps under 6 extra cells delete no car, and new ground
+  is taken in 8 cells before it shows.
+- sc3cartrips **scroll_fill** (`[cartrips] scroll_fill=1 margin=8`; build **053963fa**): capture and solve over the sim
+  rect + 8 cells; solved routes kept as a 256-route history; stock-rate spawns take the newest unused route of the last
+  30 s that has a step in the rect and enter it there; when the rect takes in new ground, each new strip gets a quota at
+  the still-camera route-car density, filled (<= 8 a tick, never above the still-camera count) from recent routes
+  crossing the strip, entering mid-path at the first step inside the strip and outside the view box (off screen); while
+  the camera moves and 3 s after, cars are topped up to the still-camera count the same way (<= 2 a tick); a car whose
+  route was cut by the capture rect keeps driving on stock choices past its end and leaves once it is off screen.
+  Replace-mode random cars stay off; no density despawn for route cars.
+
+**Bound (pre-registered, fix on = X1, per kind):** route cars inside the view box: the median over the moves of
+(median during the move / median over the 15 s still before it) in [0.75, 1.25], and the same for the 10 s right after
+the move; no single move below 0.60. Cars drawn per frame reported the same way (secondary). On-screen pop-ins
+(addendum 4 rule) during X1 moves <= 76 a minute (stock cars with the camera still, S1e). X0 reported as the reference.
+
+**Arms (inst_cf_*: sc3simrun 74901709, sc3cartrips 053963fa, `log_s=1` unless lite):**
+
+| arm | instance | city | schedule |
+|---|---|---|---|
+| R1 | stock | Berlin | `s3:10` + 2 blocks each of HG, H, HB, AR, block = `X0,W:3,I:15,K:20,I:10,X1,W:3,I:15,K:20,I:10,X1,...,X0,...` + `X1:0,P:15,PH:20,P:10,s3:15` |
+| R2 | full | Europolis 1024 | `Z:2,s3:20` + 1 block each of HG, H, AR, OS |
+| C4 lite | full | Europolis 1024 | `Z:2,s3:20` + 2 x (`X0` W:3,I:8,HG:10,I:8,H:10,I:8,AR:8,I:8; `X1` same; `X1` same; `X0` same) |
+| L5 soak lite | full | Europolis 1024 | `Z:2,s4:10` + `X1` + (`HG:60,I:5,H:60,I:5,AR:60,I:5,HB:30,I:5`) x 4, `log_s=5` |
+| V4 pictures | stock | Berlin | frames of the same drag: today (A0), animation without the fix (A1 X0), fixed (A1 X1) |
+
+**Other predictions:** cartrips' own tests in R1/R2 (X1): lane decisions answered from the path >= 95% of route-car
+decisions; `need_true` <= ended + lost + roam ends (no density deletion); FREEZE (`P`, `PH`): 0 car cell moves, 0 spawns
+and 0 route-car ends. Frame rate (C4, owner setup): X1 >= 90% of X0 during moves and at idle, mean longest gap <= 1.25x.
+0 faults everywhere; L5 alive.

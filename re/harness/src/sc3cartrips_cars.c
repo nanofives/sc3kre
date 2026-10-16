@@ -22,14 +22,16 @@
 enum { MODE_OFF = 0, MODE_CAPTURE = 1, MODE_REPLACE = 2, MODE_FILLER = 3 };
 
 #define MAXLP 2048
-#define RQN 64                                   /* solved routes waiting for a car (newest kept) */
+#define RQN 256                                  /* solved routes, newest kept: a history (scroll_fill reuses them) */
+#define RQN_OLD 64                               /* scroll_fill off: only the 64 newest, each used once (as before) */
 #define MAXCARS 256
 
 typedef struct { short x, z; BYTE *node, *g; } LStep;
-typedef struct { DWORD seq; int n; LARGE_INTEGER t; LStep s[MAXLP]; } Route;
+typedef struct { DWORD seq; int n; LARGE_INTEGER t; int used, cut; LStep s[MAXLP]; } Route;
 typedef struct {
     BYTE *car;                                   /* 0 = free */
     int n, idx, ended, lost, followed, crossings, spawned_tick, placing;
+    int cut, roam;                               /* path cut by the capture rect; roaming past its end (scroll_fill) */
     DWORD seq;
     LStep s[MAXLP];
 } RCar;
@@ -41,12 +43,50 @@ static int g_ncars;
 static BYTE *g_spawn_car, *g_spawn_edge;
 
 /* counters for CARS> */
-static volatile DWORD g_c3[32];
+static volatile DWORD g_c3[48];
 enum { C3_ROUTES_QUEUED, C3_ROUTES_DROPPED_OLD, C3_SPAWN_TRY, C3_SPAWN_OK, C3_SPAWN_INITFAIL, C3_SPAWN_PLACEFAIL,
        C3_SPAWN_NOOCC, C3_SPAWN_NOEDGE, C3_SPAWN_OUTRECT, C3_END_ARRIVED, C3_END_LOST, C3_END_OTHER, C3_END_OTHER_EDGE,
        C3_DECISIONS, C3_FOLLOWED, C3_CROSS_FOLLOWED, C3_LOST_EVENTS, C3_NEED_CALLS_ROUTE, C3_NEED_TRUE_ROUTE,
        C3_ZONE_EXCLUDED, C3_PAUSED_TICKS, C3_STEPS_COVERED, C3_STEPS_TOTAL, C3_SPAWN_PAUSED, C3_RQ_STALE,
-       C3_TRIPS_CARRIED, C3_TRIPS_DROPPED, C3_SPAWN_FAULT, C3_DECISIONS_AFTER, C3_SPAWN_RETRY_OK };
+       C3_TRIPS_CARRIED, C3_TRIPS_DROPPED, C3_SPAWN_FAULT, C3_DECISIONS_AFTER, C3_SPAWN_RETRY_OK,
+       C3_FILL_TRY, C3_FILL_OK, C3_FREE, C3_FREE_GONE, C3_TAKE_SKIP,
+       C3_STRIPS, C3_STRIP_QUOTA, C3_STRIP_TRY, C3_STRIP_OK, C3_STRIP_NOROUTE };
+static double g_still;                           /* route cars with the camera still (scroll_fill's goal), game thread */
+static double g_still_area = 1.0;                /* sim rect area (cells) while g_still was measured */
+
+/* scroll_fill strips: ground the sim rect has just taken in, each with a car quota at the still-camera density */
+#define NSTRIP 16
+typedef struct { int x0, z0, x1, z1, quota; } Strip;
+static Strip g_strip[NSTRIP];
+static int g_nstrip;
+
+static void strips_add(int ox0, int oz0, int ox1, int oz1, int nx0, int nz0, int nx1, int nz1) {
+    int r[4][4], n = 0, k;
+    double dens;
+    if (!g_fix || g_still < 1.0) return;
+    if (nx1 < ox0 || nx0 > ox1 || nz1 < oz0 || nz0 > oz1) { r[n][0] = nx0; r[n][1] = nz0; r[n][2] = nx1; r[n][3] = nz1; n++; }
+    else {                                          /* new minus old, as STRTSIM FUN_10014d85 cuts it */
+        int cx0 = nx0, cx1 = nx1;
+        if (nx0 < ox0) { r[n][0] = nx0; r[n][1] = nz0; r[n][2] = ox0 - 1; r[n][3] = nz1; n++; cx0 = ox0; }
+        if (nx1 > ox1) { r[n][0] = ox1 + 1; r[n][1] = nz0; r[n][2] = nx1; r[n][3] = nz1; n++; cx1 = ox1; }
+        if (nz0 < oz0) { r[n][0] = cx0; r[n][1] = nz0; r[n][2] = cx1; r[n][3] = oz0 - 1; n++; }
+        if (nz1 > oz1) { r[n][0] = cx0; r[n][1] = oz1 + 1; r[n][2] = cx1; r[n][3] = nz1; n++; }
+    }
+    dens = g_still / g_still_area;
+    for (k = 0; k < n; k++) {
+        int area = (r[k][2] - r[k][0] + 1) * (r[k][3] - r[k][1] + 1), q;
+        if (area <= 0) continue;
+        q = (int)(dens * area + 0.5);
+        if (q < 1) continue;
+        if (q > 40) q = 40;
+        if (g_nstrip == NSTRIP) { memmove(&g_strip[0], &g_strip[1], sizeof(Strip) * (NSTRIP - 1)); g_nstrip--; }
+        g_strip[g_nstrip].x0 = r[k][0]; g_strip[g_nstrip].z0 = r[k][1]; g_strip[g_nstrip].x1 = r[k][2]; g_strip[g_nstrip].z1 = r[k][3];
+        g_strip[g_nstrip].quota = q;
+        g_nstrip++;
+        g_c3[C3_STRIPS]++; g_c3[C3_STRIP_QUOTA] += q;
+    }
+}
+static volatile LONG g_inbox;                    /* route cars whose cell is inside the view box (sampled every 250 ms) */
 static volatile DWORD g_c3_cyc_lo, g_c3_cyc_hi;  /* rdtsc spent in this file's hooks + spawning (game thread) */
 
 static void cyc_add(unsigned __int64 c) {
@@ -63,7 +103,7 @@ static RCar *car_find(BYTE *car) {
 
 /* ------------------------------------------------------------ routes from the solver */
 
-static void route_push(DWORD seq, int npath) {
+static void route_push(DWORD seq, int npath, int cut) {
     Route *r;
     int q;
     if (!g_rq || npath < 2) return;
@@ -71,6 +111,7 @@ static void route_push(DWORD seq, int npath) {
     g_rq_head = (g_rq_head + 1) % RQN;
     if (g_rq_len < RQN) g_rq_len++; else g_c3[C3_ROUTES_DROPPED_OLD]++;
     r->seq = seq;
+    r->used = 0; r->cut = cut;
     QueryPerformanceCounter(&r->t);
     r->n = npath > MAXLP ? MAXLP : npath;
     for (q = 0; q < r->n; q++) {
@@ -83,11 +124,84 @@ static void route_push(DWORD seq, int npath) {
     g_c3[C3_ROUTES_QUEUED]++;
 }
 
-static Route *route_pop(void) {
-    if (!g_rq_len) return NULL;
-    g_rq_head = (g_rq_head + RQN - 1) % RQN;
-    g_rq_len--;
-    return &g_rq[g_rq_head];
+static int routes_fresh(void) {                  /* unused routes (logger: a racy statistic) */
+    int k, n = 0;
+    if (!g_rq) return 0;
+    for (k = 0; k < g_rq_len; k++) n += !g_rq[(g_rq_head + RQN - 1 - k) % RQN].used;
+    return n;
+}
+
+static int box_has(int x, int z) { return x >= g_box[0] && x <= g_box[2] && z >= g_box[1] && z <= g_box[3]; }
+
+static double route_age_s(Route *r) {
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+    return (double)(now.QuadPart - r->t.QuadPart) / (double)g_freq.QuadPart;
+}
+
+/* first path step inside the producer's rect (the car enters the route there), -1 if none */
+static int route_entry(Route *r, BYTE *prod) {
+    int px0 = *(int *)(prod + 0x24), pz0 = *(int *)(prod + 0x28), px1 = *(int *)(prod + 0x2c), pz1 = *(int *)(prod + 0x30), s;
+    for (s = 0; s + 1 < r->n; s++)
+        if (r->s[s].x >= px0 && r->s[s].x <= px1 && r->s[s].z >= pz0 && r->s[s].z <= pz1) return s;
+    return -1;
+}
+
+/* the route for the next stock-rate spawn. scroll_fill off: the newest unused route, used once whatever happens (the
+   M3 behaviour; spawn_at refuses a start outside the rect). On: the newest unused route of the last 30 s with a step
+   inside the rect, entered there; routes with no step inside stay for later. */
+static Route *route_take(BYTE *prod, int *entry) {
+    int k, lim = g_fix ? g_rq_len : (g_rq_len < RQN_OLD ? g_rq_len : RQN_OLD);
+    *entry = 0;
+    for (k = 0; k < lim; k++) {
+        Route *r = &g_rq[(g_rq_head + RQN - 1 - k) % RQN];
+        int e;
+        if (r->used) continue;
+        if (!g_fix) { r->used = 1; return r; }
+        if (route_age_s(r) > 30.0) break;
+        e = route_entry(r, prod);
+        if (e < 0) { g_c3[C3_TAKE_SKIP]++; continue; }
+        r->used = 1; *entry = e;
+        return r;
+    }
+    return NULL;
+}
+
+/* scroll_fill strip: a recent route (60 s, at most 3 cars per route) with a step inside the strip and off screen (outside the
+   view box): the car enters the route there, mid-path; newest routes first */
+static Route *route_strip(Strip *st, int *entry) {
+    int k, s;
+    for (k = 0; k < g_rq_len; k++) {
+        Route *r = &g_rq[(g_rq_head + RQN - 1 - k) % RQN];
+        if (r->used >= 3) continue;
+        if (route_age_s(r) > 60.0) break;
+        for (s = 0; s + 1 < r->n; s++) {
+            int x = r->s[s].x, z = r->s[s].z;
+            if (x >= st->x0 && x <= st->x1 && z >= st->z0 && z <= st->z1 && !box_has(x, z)) {
+                r->used++; *entry = s;
+                return r;
+            }
+        }
+    }
+    return NULL;
+}
+
+/* scroll_fill: a recent route (60 s, at most 3 cars per route) whose first step inside the rect is off screen (outside the
+   view box, which contains the screen): the car enters there and drives in, nothing appears on screen */
+static int g_fill_cur;
+static Route *route_fill(BYTE *prod, int *entry) {
+    int k;
+    for (k = 0; k < g_rq_len; k++) {
+        int j = (g_fill_cur + k) % g_rq_len, e;
+        Route *r = &g_rq[(g_rq_head + RQN - 1 - j) % RQN];
+        if (r->used >= 3 || route_age_s(r) > 60.0) continue;
+        e = route_entry(r, prod);
+        if (e < 0 || box_has(r->s[e].x, r->s[e].z)) continue;
+        g_fill_cur = (j + 1) % g_rq_len;
+        r->used++; *entry = e;
+        return r;
+    }
+    return NULL;
 }
 
 /* ------------------------------------------------------------ edge choice along a lane path */
@@ -157,6 +271,7 @@ static BYTE *__fastcall my_seledge(BYTE *car, void *edx, BYTE *node, int x, int 
     int i, hi;
     BYTE *e;
     if (!c) return g_o_seledge(car, edx, node, x, z);
+    if (c->roam) { cyc_add(__rdtsc() - t0); return g_o_seledge(car, edx, node, x, z); }
     if (c->ended || c->lost) { g_c3[C3_DECISIONS_AFTER]++; cyc_add(__rdtsc() - t0); return g_o_seledge(car, edx, node, x, z); }
     g_c3[C3_DECISIONS]++;
     hi = c->idx + 8 < c->n ? c->idx + 8 : c->n - 1;
@@ -171,6 +286,11 @@ static BYTE *__fastcall my_seledge(BYTE *car, void *edx, BYTE *node, int x, int 
     if (c->s[i].x != c->s[c->idx].x || c->s[i].z != c->s[c->idx].z) { c->crossings++; c->followed++; g_c3[C3_CROSS_FOLLOWED]++; }
     c->idx = i;
     if (i == c->n - 1) {                             /* destination / view-edge end: one more edge, then removed */
+        if (g_fix && c->cut) {                       /* cut by the capture rect: drive on, removed once off screen */
+            c->roam = 1; g_c3[C3_FREE]++;
+            cyc_add(__rdtsc() - t0);
+            return g_o_seledge(car, edx, node, x, z);
+        }
         c->ended = 1;
         cyc_add(__rdtsc() - t0);
         return g_o_seledge(car, edx, node, x, z);
@@ -187,6 +307,11 @@ static char __fastcall my_need(BYTE *prod, void *edx, BYTE *car18, WORD *counter
     if (!c) return g_o_need(prod, edx, car18, counter);
     g_c3[C3_NEED_CALLS_ROUTE]++;
     if (c->ended || c->lost) { g_c3[C3_NEED_TRUE_ROUTE]++; return 1; }
+    if (c->roam) {                                   /* never the density despawn; leaves once it is off screen */
+        BYTE *car = c->car;
+        if (!box_has(*(int *)(car + 0xc) >> 8, *(int *)(car + 0x14) >> 8)) { g_c3[C3_NEED_TRUE_ROUTE]++; return 1; }
+        return 0;
+    }
     return 0;                                        /* never the density despawn */
 }
 
@@ -195,12 +320,13 @@ static void __fastcall my_gone(BYTE *prod, void *edx, BYTE *car18) {
     if (c) {
         BYTE *car = c->car;
         int cx = *(int *)(car + 0xc) >> 8, cz = *(int *)(car + 0x14) >> 8;
-        if (c->ended) g_c3[C3_END_ARRIVED]++;
+        if (c->roam) g_c3[C3_FREE_GONE]++;
+        else if (c->ended) g_c3[C3_END_ARRIVED]++;
         else if (c->lost) g_c3[C3_END_LOST]++;
         else if (c->placing) ;                     /* placement failed: counted at the spawn */
         else {
             g_c3[C3_END_OTHER]++;
-            {   LONG a = g_rect_xz0, b = g_rect_xz1;
+            {   LONG a = g_sim_xz0, b = g_sim_xz1;
                 int x0 = (short)(a >> 16), z0 = (short)a, x1 = (short)(b >> 16), z1 = (short)b;
                 if (cx <= x0 || cx >= x1 || cz <= z0 || cz >= z1) g_c3[C3_END_OTHER_EDGE]++;
             }
@@ -276,6 +402,7 @@ static int spawn_at(BYTE *prod, Route *r, int s0, int *next) {
             *(DWORD *)(prod + 0xc) += 1;
             ((PFN_SetProd)(*(DWORD **)car)[0x140 / 4])(car, NULL, prod);
             c->car = car; c->n = r->n - s; c->idx = 0; c->ended = c->lost = 0; c->followed = c->crossings = 0;
+            c->cut = r->cut; c->roam = 0;
             c->seq = r->seq; c->spawned_tick = g_ticks; c->placing = 1;
             for (q = 0; q < c->n; q++) c->s[q] = r->s[s + q];
             g_ncars++;
@@ -297,8 +424,8 @@ static int spawn_at(BYTE *prod, Route *r, int s0, int *next) {
 }
 
 /* a placement fails when the start lane is taken (FUN_1001bc70's path test): try up to 3 starts along the path */
-static int spawn_one(BYTE *prod, Route *r) {
-    int s0 = 0, k, next;
+static int spawn_one(BYTE *prod, Route *r, int s0) {
+    int k, next;
     for (k = 0; k < 3 && s0 >= 0; k++) {
         int before = g_c3[C3_SPAWN_PLACEFAIL];
         if (spawn_at(prod, r, s0, &next)) { if (k) g_c3[C3_SPAWN_RETRY_OK]++; return 1; }
@@ -315,15 +442,69 @@ static void spawn_tick(BYTE *prod) {
     unsigned __int64 t0 = __rdtsc();
     if (g_mode_now < MODE_REPLACE || !prod || !g_cars) return;
     if (!*(BYTE *)(prod + 0x35)) return;
+    {   static DWORD last_box;                    /* measurement: route cars inside the view box */
+        DWORD now = GetTickCount();
+        if (now - last_box >= 250) {
+            int i, n = 0;
+            last_box = now;
+            for (i = 0; i < MAXCARS; i++) {
+                BYTE *car = g_cars[i].car;
+                if (car && !g_cars[i].placing && box_has(*(int *)(car + 0xc) >> 8, *(int *)(car + 0x14) >> 8)) n++;
+            }
+            g_inbox = n;
+        }
+    }
     if (user_paused_city()) { g_c3[C3_PAUSED_TICKS]++; return; }
     alive = *(DWORD *)(prod + 0xc); target = *(DWORD *)(prod + 0x10);
+    if (g_fix) {
+        /* scroll_fill: while the camera moves (and 3 s after) keep the route cars at the count they had with the camera
+           still, placing at most 2 a tick from recent routes, each entering off screen */
+        static DWORD last_ema;
+        DWORD now = GetTickCount();
+        int moving = now - g_last_move_ms < 3000, k;
+        if (!moving && now - last_ema >= 250) {
+            int px0 = *(int *)(prod + 0x24), pz0 = *(int *)(prod + 0x28), px1 = *(int *)(prod + 0x2c), pz1 = *(int *)(prod + 0x30);
+            double area = (double)(px1 - px0 + 1) * (pz1 - pz0 + 1);
+            last_ema = now;
+            g_still = g_still * 0.9 + g_ncars * 0.1;
+            if (area > 0) g_still_area = g_still_area * 0.9 + area * 0.1;
+        }
+        {   /* the strips the rect took in: up to 8 placements a tick, each on a route that crosses the strip */
+            int placed = 0;
+            while (g_nstrip && placed < 8 && *(DWORD *)(prod + 0xc) < target && *(DWORD *)(prod + 0xc) < 200 &&
+                   g_ncars < (int)(g_still * 1.05 + 0.5)) {   /* never above the still-camera count */
+                Strip *st = &g_strip[0];
+                int px0 = *(int *)(prod + 0x24), pz0 = *(int *)(prod + 0x28), px1 = *(int *)(prod + 0x2c), pz1 = *(int *)(prod + 0x30), e;
+                Route *r;
+                if (st->quota <= 0 || st->x1 < px0 || st->x0 > px1 || st->z1 < pz0 || st->z0 > pz1) {   /* done, or left the rect */
+                    memmove(&g_strip[0], &g_strip[1], sizeof(Strip) * (g_nstrip - 1)); g_nstrip--; continue;
+                }
+                r = route_strip(st, &e);
+                if (!r) { g_c3[C3_STRIP_NOROUTE]++; st->quota = 0; continue; }
+                g_c3[C3_STRIP_TRY]++;
+                st->quota--;
+                if (spawn_one(prod, r, e)) g_c3[C3_STRIP_OK]++;
+                placed++;
+            }
+        }
+        for (k = 0; moving && k < 2 && g_ncars < (int)(g_still + 0.5) && *(DWORD *)(prod + 0xc) < target &&
+                    *(DWORD *)(prod + 0xc) < 200; k++) {
+            int e;
+            Route *r = route_fill(prod, &e);
+            if (!r) break;
+            g_c3[C3_FILL_TRY]++;
+            if (spawn_one(prod, r, e)) g_c3[C3_FILL_OK]++;
+        }
+        alive = *(DWORD *)(prod + 0xc);
+    }
     if (alive >= target || alive >= 200) return;
     n = (int)((target - alive) / 10);
     if (n < 1) n = 1;
     while (n-- > 0 && *(DWORD *)(prod + 0xc) < target) {
-        Route *r = route_pop();
+        int e;
+        Route *r = route_take(prod, &e);
         if (!r) break;
-        spawn_one(prod, r);
+        spawn_one(prod, r, e);
     }
     cyc_add(__rdtsc() - t0);
 }
@@ -378,6 +559,11 @@ static int arm_cars(HMODULE strt) {
         }
     }
     return ok;
+}
+
+/* runtime scroll_fill switch (A/B, measurement): 1 on, 0 off; returns the previous state */
+__declspec(dllexport) int __cdecl sc3cartrips_fill(int on) {
+    return (int)InterlockedExchange(&g_fix, on ? 1 : 0);
 }
 
 /* runtime mode switch (A/B): 2 replace, 3 filler, 1 capture only (stock cars); returns the previous mode */

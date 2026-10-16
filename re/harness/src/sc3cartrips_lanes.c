@@ -391,7 +391,7 @@ done:
 
 /* ------------------------------------------------------------ per drained trip */
 
-static void route_push(DWORD seq, int npath);
+static void route_push(DWORD seq, int npath, int cut);
 static volatile LONG g_mode_now;
 
 static volatile DWORD g_m2[16];  /* routes, w0 ok, w1 ok, w1 full, w1 cov90, w1 fail no-path, w1 start fails, w1 limit/too big,
@@ -451,7 +451,14 @@ static void solve_trip(TripRec *t, LONGLONG *budget_end) {
                     out_put(&g_or, pe, 5);
                 }
             }
-            if (r1.ok && g_mode_now >= 2) route_push(t->seq, r1.npath);       /* M3: a car may drive it */
+            if (r1.ok && g_mode_now >= 2) {                                   /* M3: a car may drive it */
+                /* the route was cut by the capture rect when the trip goes on along a road cell outside it (or past the
+                   stored window), rather than ending at its destination or changing to transit */
+                int cut = n ? ((n->type == 1 || n->type == 2 || n->type == 3) &&
+                               (n->x0 < t->rect[0] || n->x0 > t->rect[2] || n->z0 < t->rect[1] || n->z0 > t->rect[3]))
+                            : t->first > 0;
+                route_push(t->seq, r1.npath, cut);
+            }
             if (!g_dump) { nc = 0; ridx++; continue; }                     /* w0 is a measurement */
             solve(cells, nc, t->rect, 0, &r0);
             if (r0.ok) g_m2[1]++;
