@@ -32,6 +32,7 @@ alt() {   # inst city arm schedule extra
 for arm in "$@"; do case $arm in
   R1) ini $S/inst_ct3_stock $'mode=replace\r\nlog_s=1\r\n'; run $S/inst_ct3_stock "$BER" R1 "s1:60,s2:60,s3:120,s4:120,P:40,s3:60" rem,acc,ag "";;
   R2) ini $S/inst_ct3_full $'mode=replace\r\nlog_s=1\r\n'; run $S/inst_ct3_full "$E1K" R2 "Z:2,s3:120,s4:120,P:30,s3:60" none "--safe --settle 90";;
+  R2b) ini $S/inst_ct3_full $'mode=replace\r\nlog_s=1\r\n'; run $S/inst_ct3_full "$E1K" R2b "Z:3,s3:120,s4:120,P:30,s3:60" none "--safe --settle 90";;
   FL) ini $S/inst_ct3_stock $'mode=filler\r\nlog_s=1\r\n'; run $S/inst_ct3_stock "$BER" FL "s3:120,s4:60" none "";;
   L1) ini $S/inst_ct3_stock $'mode=replace\r\nlog_s=5\r\n'; run $S/inst_ct3_stock "$BER" L1 "s3:600,s4:1200" none "";;
   L2) ini $S/inst_ct3_full $'mode=replace\r\nlog_s=5\r\n'; run $S/inst_ct3_full "$E1K" L2 "Z:3,s3:900,s4:900" none "--safe --settle 90";;
