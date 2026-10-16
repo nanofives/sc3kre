@@ -16,7 +16,7 @@ holds whether the agents animate or not (ct_probe's rule counted agent-loop pass
 CSRC = r"""
 #include <gum/guminterceptor.h>
 typedef unsigned int u32;
-typedef struct { long long last, ag_t0; u32 frames, scroll, ag_calls, moves, ag_us, maxgap_us; } G;   /* JS reads only the u32 fields (no torn reads) */
+typedef struct { long long last, ag_t0; u32 frames, scroll, ag_calls, moves, ag_us, maxgap_us, uniq, uniq_sum; } G;   /* JS reads only the u32 fields (no torn reads) */
 extern G g;
 extern u32 hkey[];          /* open-addressing table: vehicle -> slot */
 extern u32 hval[];          /* per slot: first frame drawn, last frame drawn */
@@ -27,6 +27,8 @@ void vt_enter(GumInvocationContext *ic) {
   QueryPerformanceCounter(&now);
   if (g.last) { d = (now - g.last) / 10; if (d > (long long)g.maxgap_us) g.maxgap_us = (u32)d; }   /* QPF 10 MHz */
   g.last = now;
+  g.uniq_sum += g.uniq;   /* cars drawn in the frame that just ended (each car counted once) */
+  g.uniq = 0;
   g.frames++;
 }
 void scroll_enter(GumInvocationContext *ic) { g.scroll++; }
@@ -48,6 +50,7 @@ static void drawn(GumInvocationContext *ic) {
   u32 *p = hfind((u32)ic->cpu_context->ecx - 0x1c, 1);   /* Draw runs on the car's third vtable, car + 0x1c */
   if (!p) return;
   if (!p[0]) p[0] = g.frames;
+  if (p[1] != g.frames) g.uniq++;
   p[1] = g.frames;
 }
 void draw0(GumInvocationContext *ic) { drawn(ic); }
@@ -82,7 +85,7 @@ var cm = new CModule(CSRC, { QueryPerformanceCounter: k32.getExportByName('Query
 var drawFirst = new NativeFunction(cm.draw_first, 'uint32', ['uint32']);
 var drawLast = new NativeFunction(cm.draw_last, 'uint32', ['uint32']);
 var drawForget = new NativeFunction(cm.draw_forget, 'void', ['uint32']);
-// G layout: last 0, ag_t0 8, frames 16, scroll 20, ag_calls 24, moves 28, ag_us 32, maxgap_us 36
+// G layout: last 0, ag_t0 8, frames 16, scroll 20, ag_calls 24, moves 28, ag_us 32, maxgap_us 36, uniq 40, uniq_sum 44
 function gU(o) { return MEM.g.add(o).readU32(); }
 function gS64(o) { return MEM.g.add(o).readS64().toNumber(); }
 
@@ -176,7 +179,7 @@ function snap() {
   MEM.stats.writeByteArray(new Array(32).fill(0));
   var st = [0, 0, 0, 0, 0, 0];
   if (simStats) { simStats(MEM.stats); st = [MEM.stats.readU32(), MEM.stats.add(4).readU32(), MEM.stats.add(8).readU32(), MEM.stats.add(12).readU32(), MEM.stats.add(16).readU32(), MEM.stats.add(20).readU32()]; }
-  return { frames: gU(16), scroll: gU(20), ag: gU(24), moves: gU(28), agt: gU(32), sf: st[0], at: st[1], ft: st[2], sr: st[3], ts: st[4], tk: st[5] };
+  return { frames: gU(16), scroll: gU(20), ag: gU(24), moves: gU(28), agt: gU(32), us: gU(44), sf: st[0], at: st[1], ft: st[2], sr: st[3], ts: st[4], tk: st[5] };
 }
 setInterval(function () {
   var s = state(), n = snap(), gap = gU(36);
@@ -193,7 +196,7 @@ setInterval(function () {
   PEND = keep;
   var d = prev ? { frames: n.frames - prev.frames, scroll: n.scroll - prev.scroll, ag: n.ag - prev.ag, moves: n.moves - prev.moves,
                    ag_ms: ((n.agt - prev.agt) >>> 0) / 1000, scroll_stub: n.sf - prev.sf, agent_ticks: n.at - prev.at,
-                   frozen_ticks: n.ft - prev.ft, strip_refills: n.sr - prev.sr, tick_swaps: n.ts - prev.ts, tick_skips: n.tk - prev.tk, maxgap_ms: gap / 1000 } : null;
+                   frozen_ticks: n.ft - prev.ft, strip_refills: n.sr - prev.sr, tick_swaps: n.ts - prev.ts, tick_skips: n.tk - prev.tk, maxgap_ms: gap / 1000, onscreen: (n.frames - prev.frames) ? ((n.us - prev.us) >>> 0) / (n.frames - prev.frames) : 0 } : null;
   prev = n;
   if (d) send({ k: 'tick', d: d, c: C, st: s, spawns: sp, rem: RM, faults: FAULTS });
   C = {}; RM = []; FAULTS = [];

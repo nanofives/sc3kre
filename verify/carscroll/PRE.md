@@ -279,3 +279,29 @@ S3d's first minute read 69-161 frames per second. Every arm is checked for this 
 the range of the arm's first phase).
 
 **S1e** = S1d rerun (5eaa8a2e, stock cars, S1's schedule), after V3o / V3r. Same predictions as S1d.
+
+## Addendum 7 (2026-10-16, owner decision: fix route-car thinning; before B0)
+
+Owner decision (orchestrator, 2026-10-16): with cartrips `mode=replace`, the number of route cars on screen during and
+right after any camera move must stay close to the still-camera count, with no visible mid-screen pop-ins beyond what
+stock cars show, 0 faults, no frame-rate regression in the owner's setup, cartrips' own tests kept.
+
+**Decode (sc3cartrips source, cited functions in this branch):**
+- Capture keeps a trip only if a node meets the sim rect published at routing time (`on_pop`, rect from `on_tick`);
+  `solve_trip` keeps only the road cells inside that rect, so **every route ends at the old view edge**.
+- `spawn_tick` pops the newest route (`route_pop`, consumed whether it places or not); `spawn_at` refuses a route whose
+  first drivable cell is outside the current producer rect (`outrect`); placements fail when the start lane is taken
+  (`placefail`, up to 3 starts per route).
+- Route cars end at their path's last node (`my_seledge` -> `ended`, then `my_need` true), at the current rect edge
+  (STRTSIM `FUN_1001c750`), or when their strip leaves the rect (AnimOccMan).
+- From S2's CARS> lines (5 s intervals), back-and-forth drag with animation: route cars 7.9 vs 32 still; edge ends
+  2.4 / s; spawns 2.05 / s; queue empty; routes in 3.1 / s; placefail 2.0 / s; outrect 0.43 / s.
+
+**Instrument additions:** cs_probe counts the cars drawn in each frame (each car once per frame) and reports the mean
+per second (`onscreen`; in replace mode every car is a route car). `re/tools/cs_ctlog.py` assigns sc3cartrips' CARS>
+counters (`log_s=1`) to phases.
+
+**Arm B0 (baseline, current builds: sc3simrun 5eaa8a2e, sc3cartrips 33ef673e):** inst_cs_stock, Berlin, replace,
+`log_s=1`, `s3:10` + ABBA blocks H, HB, AR (A0 = animation off = today, A1 = on). Reported, no prediction: on-screen
+route cars per second during each move and in the 10 s after it, against the 15 s of still camera before it; loss and
+supply counters per second.
