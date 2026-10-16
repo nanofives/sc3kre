@@ -28,8 +28,22 @@
  * The camera hold already freezes all of them (SIMSPR view tick). City = *(SC3U.exe+0xfa86c) +0x48, as sc3perf /
  * sc3resize read it. Measured: verify/cartrips/RESULTS.md addenda 3 and 4.
  *
+ * ANIMATE (owner 2026-10-16, task carscroll): with the hold gone the street agents still froze while the camera moved.
+ * The heartbeat that ticks them (SC3U FUN_00426140, STRTSIM.md 8) is called from the render view's frame FUN_1001cab9
+ * (SIMSPR vtable 0x10063390 slot +0x20) only while its byte +0x2b is set, and +0x2b = (rate >= 0.1) is written by
+ * slot +0x7c FUN_1001d65d(&rate) `[CONFIRMED @ SIMSPR 0x1001cab9, 0x1001d65d, 0x10063504 = 0.1f]`. The idle view tick
+ * FUN_10042a95 passes 60.0 before every frame; the scroll step FUN_10043daf passes 0.0 (`fldz; fstp [ebp-8]` at
+ * 0x10044003) before its own frame, so every scroll frame renders without the heartbeat. Zoom and rotate
+ * (FUN_10042d8a, ...) pass 0.0 and 60.0 inside one call, with no frame between: nothing to change there.
+ * The 5 bytes at SIMSPR 0x10044003 become a call to anim_stub, which writes g_scroll_rate (60.0, the idle tick's value)
+ * into [ebp-8]. Needs run_while_scrolling=1: the stock camera hold suspends the heartbeat itself (+0xb0).
+ * FREEZE still wins: it skips frozen agents inside the heartbeat's agent loop whatever drives the heartbeat.
+ *
  * Config: simrun.ini beside the DLL:  [sim] run_while_scrolling=1   (0 = stock, the A/B control)
  *                                     [sim] freeze_on_pause=street  (cars = cars only, 0 = stock)
+ *                                     [sim] animate_while_scrolling=1 (0 = agents freeze during camera moves, stock)
+ * Exports (measurement): sc3simrun_animate(on) switches the scroll-frame rate at run time (returns the old state),
+ *         sc3simrun_stats(DWORD out[3]) = scroll frames seen by the stub, agent ticks, frozen agent ticks.
  * Env:    SC3SIMRUN_LOG=<abs path>  SC3SIMRUN_TRACE=1 (20 Hz sampler + hold/pause caller log)
  *         SC3SIMRUN_RESUME=1 (test only: post 0xc2a35d80 once per unit of +0x140 after load)
  * Build:  re/harness/build_simrun.ps1. Ships via mods_launch.exe.
@@ -212,11 +226,13 @@ static int gz_post(DWORD msgid, DWORD a0) {
 
 static int g_run = 1;
 static int g_freeze = 2;                         /* 0 stock, 1 cars, 2 street */
+static int g_anim = 1;                           /* animate street agents while the camera moves */
 
 static void ini_read(void) {
     char path[MAX_PATH];
     self_path(path, sizeof(path), "simrun.ini");
     if (path[0]) g_run = GetPrivateProfileIntA("sim", "run_while_scrolling", 1, path) ? 1 : 0;
+    if (path[0]) g_anim = GetPrivateProfileIntA("sim", "animate_while_scrolling", 1, path) ? 1 : 0;
     if (path[0]) {
         char v[16];
         GetPrivateProfileStringA("sim", "freeze_on_pause", "street", v, sizeof(v), path);
@@ -311,6 +327,59 @@ static int patch_scroll_hold(HMODULE spr) {
     return 1;
 }
 
+/* ============================================================ ANIMATE */
+
+#define RATE_ON  0x42700000                      /* 60.0f, what the idle view tick passes */
+static volatile DWORD g_scroll_rate = RATE_ON;   /* float bits the scroll step passes to the render view's +0x7c */
+static volatile LONG g_scroll_frames;
+static int g_anim_armed;
+
+/* replaces `fldz; fstp dword ptr [ebp-8]` at SIMSPR 0x10044003 (ebp = the scroll step's frame); keeps every register.
+   The next instructions (mov eax,[ecx] / push edx / call [eax+0x7c]) read no flags. */
+static __declspec(naked) void anim_stub(void) {
+    __asm {
+        push eax
+        mov eax, g_scroll_rate
+        mov dword ptr [ebp - 8], eax
+        pop eax
+        lock inc dword ptr [g_scroll_frames]
+        ret
+    }
+}
+
+/* SIMSPR+0x43ffa: mov ecx,[esi+0xb8] / lea edx,[ebp-8] / fldz / fstp [ebp-8] / mov eax,[ecx] / push edx / call [eax+0x7c] */
+static int patch_scroll_anim(HMODULE spr) {
+    static const BYTE expect[] = { 0x8b, 0x8e, 0xb8, 0x00, 0x00, 0x00, 0x8d, 0x55, 0xf8, 0xd9, 0xee, 0xd9, 0x5d, 0xf8,
+                                   0x8b, 0x01, 0x52, 0xff, 0x50, 0x7c };
+    BYTE *p = (BYTE *)spr + 0x43ffa, *q;
+    DWORD old;
+    if (IsBadReadPtr(p, sizeof(expect)) || memcmp(p, expect, sizeof(expect))) {
+        logf("### ANIMATE: SIMSPR+0x43ffa differs from shipped - NOT patched (agents freeze while scrolling)");
+        return 0;
+    }
+    q = p + 9;
+    if (!VirtualProtect(q, 5, PAGE_EXECUTE_READWRITE, &old)) return 0;
+    q[0] = 0xE8;
+    *(DWORD *)(q + 1) = (DWORD)anim_stub - (DWORD)(q + 5);
+    VirtualProtect(q, 5, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), q, 5);
+    g_anim_armed = 1;
+    return 1;
+}
+
+__declspec(dllexport) int __cdecl sc3simrun_animate(int on) {
+    int was = g_scroll_rate != 0;
+    g_scroll_rate = on ? RATE_ON : 0;
+    logf("ANIMATE> switched %s (armed=%d)", on ? "on" : "off", g_anim_armed);
+    return was;
+}
+
+__declspec(dllexport) void __cdecl sc3simrun_stats(DWORD *out) {
+    out[0] = (DWORD)g_scroll_frames;
+    out[1] = (DWORD)g_agent_ticks;
+    out[2] = (DWORD)g_frozen_ticks;
+}
+
 /* ============================================================ sampler */
 
 static DWORD WINAPI sampler(LPVOID param) {
@@ -323,10 +392,13 @@ static DWORD WINAPI sampler(LPVOID param) {
     if (GetEnvironmentVariableA("SC3SIMRUN_TRACE", env, sizeof(env)) && env[0] == '1') trace = 1;
 
     {   HMODULE spr;
-        int ok = 0;
+        int ok = 0, anim = 0;
         while (!(spr = GetModuleHandleA("SIMSPR.DLL"))) Sleep(1);
         if (g_run) ok = patch_scroll_hold(spr);
+        if (g_run && g_anim) anim = patch_scroll_anim(spr);
         logf("### READY: run_while_scrolling=%d patched=%d trace=%d", g_run, ok, trace);
+        logf("### ANIMATE: animate_while_scrolling=%d armed=%d%s", g_anim, anim,
+             g_anim && !g_run ? " (needs run_while_scrolling=1: the stock camera hold suspends the heartbeat)" : "");
     }
     while (!(simcity = GetModuleHandleA("SIMCITY.DLL"))) Sleep(5);
     if (g_freeze) {
