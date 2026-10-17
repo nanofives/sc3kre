@@ -478,3 +478,10 @@ is restored in the branch (sc3cartrips.c / _cars.c as of aa436d3); a rebuild fro
 Remaining arms on 3f9a2c82 + 0b903bb6: **R3b** = R3 (overscroll as meant, addendum 13), **L8** lite soak (1024,
 speed 4, X1, the L5 cycle x 3), **V6** pictures. The verdict per kind uses R1c (Berlin) and R2d (1024) for drag, held
 button, arrows and gentle drag, and R3b for overscroll.
+
+## Addendum 16 (2026-10-16 22:50, after R3b; before R3c)
+
+R3b did not reach the map edge: the arrow moves the view diagonally ~15 cells a second per axis, so the 2 s approach
+and 3 s hold ended at z = 27 (still on the map); and a 3 s move phase has no counted seconds under the 2 s drop. R3b is
+reported as a short one-way arrow scroll. **R3c**: approach `MV:5`, hold `OS:4` (from z ~103 this passes z = 0 by
+~30 cells into the overscroll area), otherwise as R3b; analysed with `--drop 0`. Same builds and bound.
