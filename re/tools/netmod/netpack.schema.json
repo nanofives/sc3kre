@@ -114,14 +114,26 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["inner", "inner_start", "inner_end"],
+        "required": ["middle"],
         "properties": {
-          "inner": {"$ref": "#/$defs/piece_id", "description": "A ROAD variant of diagonal road 35 in this package: 35's road half plus the median half."},
-          "inner_start": {"$ref": "#/$defs/piece_id", "description": "A ROAD variant of the diagonal start cap 18004: its road quarter plus the median half."},
-          "inner_end": {"$ref": "#/$defs/piece_id", "description": "A ROAD variant of the diagonal end cap 1999: its road quarter plus the median half."}
+          "middle": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["piece", "a", "b", "delta"],
+              "properties": {
+                "piece": {"$ref": "#/$defs/piece_id", "description": "A ROAD variant of stock piece `a` in this package: piece a at the cell's state plus piece b at state + delta on one tile, with both pieces' lanes."},
+                "a": {"enum": [35, 18004, 1999], "description": "Staircase A's piece in the shared cell (35 diagonal, 18004 start cap, 1999 end cap)."},
+                "b": {"enum": [35, 18004, 1999], "description": "Staircase B's piece in the shared cell."},
+                "delta": {"type": "integer", "minimum": 0, "maximum": 3, "description": "B's state minus A's state, mod 4."}
+              }
+            }
+          }
         }
       },
-      "description": "Task diagave: sc3netmod turns two diagonal road drags laid side by side (an isolated band of rows of four road cells, each row shifted by one) into an avenue: every cell gets the piece the stock tiler gives a lone diagonal, and the cells beside the median get these variants. After each road retile and after a city load; back to stock when it stops qualifying. Rule and tool: re/tools/netmod/diagave.py, verify/diagave/."
+      "description": "Task diagave: sc3netmod turns two diagonal road drags JOINED side by side (an isolated band of rows of three road cells, each row shifted by one) into one avenue: each cell gets the piece the stock tiler gives a lone diagonal, and the middle cells, which hold both roads, get the declared middle piece. After each road retile and after a city load; back to stock when it stops qualifying. Rule and tool: re/tools/netmod/diagave.py, verify/diagave/."
     }
   },
   "$defs": {

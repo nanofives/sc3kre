@@ -1,31 +1,35 @@
 #!/usr/bin/env python3
-r"""diagave.py - diagonal avenues (task diagave phase 1, 2026-10-17): the band rule, its art, offline checks.
+r"""diagave.py - diagonal avenues (task diagave, 2026-10-17): the band rule, its pieces, art and lanes, offline checks.
 
-A diagonal avenue is two diagonal road drags laid side by side. The stock tiler turns that into a ladder of 4-ways
-(verify/diagave/RESULTS.md 2); sc3netmod's DAV block applies the rule below after every road retile instead, and this
-file is its offline twin plus the art builder.
+A diagonal avenue is two diagonal road drags JOINED side by side: the second drag one cell over, so the two
+staircases share their middle diagonal. The stock tiler turns that into a ladder of 3 pieces per row (curve, 4-way,
+curve: verify/diagave/RESULTS_phase1.md); sc3netmod's DAV block applies the rule below after every road retile
+instead, and this file is its offline twin plus the builder of the pieces it places.
+
+Why it works: stock diagonal 35 draws only HALF its diamond, the road strip (verify/diagave/RESULTS.md). In a band of
+three cells per row the middle cell holds the inner half of BOTH roads, so it is road all over; the outer cells keep
+the stock pieces. The middle cell becomes a variant whose art is the two stock halves on one tile and whose lanes are
+both halves' lanes.
 
 The rule (down-right axis; the other axis is the same with x mirrored):
-  band row  z, left a: ROAD cells (a..a+3, z), no ROAD at (a-1, z) and (a+4, z)
-  linked    row z (left a) and row z+1 (left a+1) both band rows
-  band      a maximal chain of linked rows, at least MIN_ROWS rows, plus its ends: the rows above (z_top-k, left
-            a_top-k) and below (z_bot+k, left a_bot+k) while they hold ROAD at any of their d 0..3 cells
-  d         x - (row left); staircase A = d 0,1, staircase B = d 2,3
+  band row  z, left a: ROAD cells (a..a+2, z), no ROAD at (a-1, z) and (a+3, z)
+  band      a chain of band rows, each the next row's left - 1, at least MIN_ROWS rows, plus the rows above
+            (z_top-k, left a_top-k) and below (z_bot+k, left a_bot+k) while they hold ROAD at d 0..2 (the drags' ends)
+  d         x - (row left). Staircase A = d 0,1 and staircase B = d 1,2 in band rows; in end rows d 0 is A, d 2 is B and
+            d 1 is A, B or both, whichever keeps every cell of both staircases a lone-staircase mask (fewest "both")
   isolated  no ROAD cell outside the band touches a band cell (8 neighbours); else the band is left to the stock tiler
-            (phase 1: junctions at the ends are later work)
-  piece     each cell gets what the stock tiler gives a LONE staircase of 3+ steps, by the cell's mask inside its own
-            staircase (LONE, measured with tiler.py, verify/diagave/RESULTS.md); a cell at d 1 or 2 whose row or a row
-            next to it holds the other staircase takes the INNER variant of that piece (35 / 18004 / 1999): the half
-            of the cell away from its road is the median.
+  piece     a cell of one staircase gets the piece the stock tiler gives a LONE staircase of 3+ steps, by its mask
+            inside that staircase (LONE); a cell of both gets the MID variant of (A's piece, B's piece, state offset)
 
-  py -3 diagave.py art OUT_DIR [--ids 20500,20501,20502]      png dirs (z*_r*.png + anchors.json) of the 3 inner pieces
-  py -3 diagave.py plan SAVE [--rect x0,z0,x1,z1]             bands + wanted pieces on a save (read-only)
-  py -3 diagave.py scan [SAVE ...]                            bands per save (default: the shipped Cities)
-  py -3 diagave.py preview OUT.png ART_DIR [--rows 6] [--zoom 4] [--axis 0|1] [--rot 0..3]
-                                                              a seeded band (game drag footprint), tiled + converted
+  py -3 diagave.py combos                     the MID combinations every drag footprint needs (ids are assigned here)
+  py -3 diagave.py build PACK_DIR             art/<id>/ (z*_r*.png + anchors.json) and mid_<id>.lanes.json per MID variant
+  py -3 diagave.py scan [SAVE ...]            bands per save (default: the shipped Cities) and whether they convert
+  py -3 diagave.py plan SAVE                  bands + wanted pieces on a save (read-only)
+  py -3 diagave.py preview OUT.png PACK_DIR [--rows 6] [--zoom 4] [--axis 0|1] [--rot 0..3] [--offset x|z]
 """
 import argparse
 import glob
+import itertools
 import json
 import os
 import sys
@@ -34,24 +38,28 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 
 MIN_ROWS = 3
-INNER = {35: 20500, 18004: 20501, 1999: 20502}          # stock piece -> its inner (median-side) variant
 DIRS = [(-1, 0), (0, -1), (1, 0), (0, 1), (-1, -1), (1, -1), (1, 1), (-1, 1)]   # mask bit k (tiler.py:41)
 # lone staircase (3+ steps): own-footprint mask -> (piece, state); tiler.py on the stock rules, both axes, both phases
 LONE = {17: (18004, 2), 18: (1999, 2), 22: (35, 2), 25: (35, 0), 34: (18004, 3), 35: (35, 1), 36: (1999, 3),
         44: (35, 3), 68: (18004, 0), 70: (35, 2), 72: (1999, 0), 73: (35, 0), 86: (35, 2), 89: (35, 0),
         129: (1999, 1), 131: (35, 1), 136: (18004, 1), 140: (35, 3), 163: (35, 1), 172: (35, 3)}
+# MID variants: (A's piece, B's piece, (B state - A state) mod 4) -> id; the cell's state is A's. Filled from `combos`.
+MID = {(35, 35, 2): 20500, (35, 18004, 0): 20501, (18004, 35, 0): 20502, (35, 1999, 2): 20503, (1999, 35, 2): 20504}
 
 
 # ------------------------------------------------------------------------------------------------ the rule
+def _mask(c, cells):
+    return sum(1 << k for k, (dx, dz) in enumerate(DIRS) if (c[0] + dx, c[1] + dz) in cells)
+
+
 def bands(road):
-    """road: set of (x, z) ROAD cells. -> list of bands {axis, rows: [(z, a)], cells: {(x, z): (staircase, d)},
-    ok, why}. axis 0: rows x = a..a+3 shifting +1 per row (down-right); axis 1: the mirror (x -> -x)."""
+    """road: set of (x, z) ROAD cells. -> list of {axis, rows: [(z, a)], A: set, B: set, ok, why} (real coords)."""
     out = []
     for axis in (0, 1):
         R = road if axis == 0 else {(-x, z) for (x, z) in road}
         rows = {}
         for (x, z) in R:
-            if (x - 1, z) not in R and all((x + k, z) in R for k in range(4)) and (x + 4, z) not in R:
+            if (x - 1, z) not in R and all((x + k, z) in R for k in range(3)) and (x + 3, z) not in R:
                 rows.setdefault(z, set()).add(x)
         seen = set()
         for z in sorted(rows):
@@ -64,175 +72,210 @@ def bands(road):
                 seen.update(chain)
                 if len(chain) < MIN_ROWS:
                     continue
-                cells = {}
+                A, B, amb = set(), set(), []
                 for (zz, aa) in chain:
-                    for d in range(4):
-                        cells[(aa + d, zz)] = ("A" if d < 2 else "B", d)
-                for (z0, a0), step in ((chain[0], -1), (chain[-1], 1)):
+                    A |= {(aa, zz), (aa + 1, zz)}
+                    B |= {(aa + 1, zz), (aa + 2, zz)}
+                for (z0, a0), step, pref in ((chain[0], -1, "A"), (chain[-1], 1, "B")):
                     k = 1
                     while True:
-                        got = [d for d in range(4) if (a0 + step * k + d, z0 + step * k) in R]
+                        zr, ar = z0 + step * k, a0 + step * k
+                        got = [d for d in range(3) if (ar + d, zr) in R]
                         if not got:
                             break
                         for d in got:
-                            cells[(a0 + step * k + d, z0 + step * k)] = ("A" if d < 2 else "B", d)
+                            c = (ar + d, zr)
+                            if d == 0:
+                                A.add(c)
+                            elif d == 2:
+                                B.add(c)
+                            else:
+                                amb.append((c, pref))
                         k += 1
+                cells = A | B | {c for c, _ in amb}
                 why = ""
-                for (x, z2) in cells:
+                for c in cells:
                     for dx, dz in DIRS:
-                        q = (x + dx, z2 + dz)
+                        q = (c[0] + dx, c[1] + dz)
                         if q in R and q not in cells:
                             why = "touches road at (%d,%d)" % ((-q[0] if axis else q[0]), q[1])
-                            break
                     if why:
                         break
+                pick = None
+                if not why:
+                    best = None                      # same order as sc3netmod_dav.c: cost 100 per both + 1 per other,
+                    for combo in range(3 ** len(amb)):  # first lowest-cost combination (cell 0 = least digit)
+                        choice = [("pref", "other", "both")[(combo // 3 ** i) % 3] for i in range(len(amb))]
+                        cost = 100 * choice.count("both") + choice.count("other")
+                        if best is not None and cost >= best[0]:
+                            continue
+                        a2, b2 = set(A), set(B)
+                        for (c, pref), ch in zip(amb, choice):
+                            side = pref if ch == "pref" else ("B" if pref == "A" else "A") if ch == "other" else "AB"
+                            if "A" in side:
+                                a2.add(c)
+                            if "B" in side:
+                                b2.add(c)
+                        if all(_mask(c, a2) in LONE for c in a2) and all(_mask(c, b2) in LONE for c in b2):
+                            best = (cost, a2, b2)
+                    pick = best[1:] if best else None
+                    if pick is None:
+                        why = "no split into two lone staircases"
+                A2, B2 = pick if pick else (A, B)
                 if axis == 1:
-                    cells = {(-x, z2): v for (x, z2), v in cells.items()}
+                    A2, B2 = {(-x, z2) for x, z2 in A2}, {(-x, z2) for x, z2 in B2}
                     chain = [(zz, -aa) for (zz, aa) in chain]
-                out.append({"axis": axis, "rows": chain, "cells": cells, "ok": not why, "why": why})
+                out.append({"axis": axis, "rows": chain, "A": A2, "B": B2, "ok": not why, "why": why})
     return out
 
 
-def wanted(band):
-    """-> {(x, z): (piece id, state)} for one isolated band, or None (not isolated, or a cell's own mask is not a
-    lone-staircase mask)."""
+def wanted(band, mids=None):
+    """-> {(x, z): (piece id, state)} for one band, or None (not isolated / no valid split / a MID combo has no id)."""
+    mids = MID if mids is None else mids
     if not band["ok"]:
         return None
-    own, rows_of = {}, {}
-    for c, (st, d) in band["cells"].items():
-        own.setdefault(st, set()).add(c)
-        rows_of.setdefault(st, set()).add(c[1])
+    A, B = band["A"], band["B"]
     out = {}
-    for c, (st, d) in band["cells"].items():
-        m = sum(1 << k for k, (dx, dz) in enumerate(DIRS) if (c[0] + dx, c[1] + dz) in own[st])
-        if m not in LONE:
-            band["why"] = "own mask %d at %s not a lone-staircase mask" % (m, c)
-            return None
-        pid, s = LONE[m]
-        other = rows_of["B" if st == "A" else "A"]
-        inner = d in (1, 2) and any(c[1] + k in other for k in (-1, 0, 1))
-        out[c] = (INNER[pid] if inner else pid, s)
+    for c in A | B:
+        pa = LONE.get(_mask(c, A)) if c in A else None
+        pb = LONE.get(_mask(c, B)) if c in B else None
+        if pa and pb:
+            key = (pa[0], pb[0], (pb[1] - pa[1]) % 4)
+            if key not in mids:
+                band["why"] = "no MID piece for %s at %s" % (key, c)
+                return None
+            out[c] = (mids[key], pa[1])
+        else:
+            out[c] = pa or pb
     return out
 
 
-# ------------------------------------------------------------------------------------------------ art
-def tree_sprites(z):
-    """The two trees of avenue 11204 (slot 0) at zoom z, cut above the ground diamond's upper edges.
-    -> [(RGBA image, (bx, by) = trunk base inside the image)]"""
-    from PIL import Image
-    from netmod import netart
-    im, (L, T) = netart.stock_frames(11204)[(z, 0)]
-    W = netart.TILE_W[z]
-    px = im.load()
-    keep = Image.new("RGBA", im.size, (0, 0, 0, 0))
-    kp = keep.load()
-    for y in range(im.height):
-        for x in range(im.width):
-            gx = x - (0 - L)            # ground x from the left vertex
-            if gx < 0 or gx > W:
-                continue
-            top = T - (gx / 2.0 if gx <= W / 2 else (W - gx) / 2.0)
-            if y < top and px[x, y][3] > 0:
-                kp[x, y] = px[x, y]
-    # 8-connected components of the kept pixels
-    seen, comps = set(), []
-    for y in range(im.height):
-        for x in range(im.width):
-            if kp[x, y][3] == 0 or (x, y) in seen:
-                continue
-            stack, comp = [(x, y)], []
-            seen.add((x, y))
-            while stack:
-                p = stack.pop()
-                comp.append(p)
-                for dx in (-1, 0, 1):
-                    for dy in (-1, 0, 1):
-                        q = (p[0] + dx, p[1] + dy)
-                        if 0 <= q[0] < im.width and 0 <= q[1] < im.height and q not in seen and kp[q][3]:
-                            seen.add(q)
-                            stack.append(q)
-            if len(comp) >= max(3, 2 ** z):
-                comps.append(comp)
-    out = []
-    for comp in sorted(comps, key=lambda c: min(p[0] for p in c)):
-        xs = [p[0] for p in comp]
-        ys = [p[1] for p in comp]
-        x0, y0, x1, y1 = min(xs), min(ys), max(xs), max(ys)
-        spr = Image.new("RGBA", (x1 - x0 + 1, y1 - y0 + 1), (0, 0, 0, 0))
-        sp = spr.load()
-        for (x, y) in comp:
-            sp[x - x0, y - y0] = px[x, y]
-        base = max(comp, key=lambda p: (p[1], -abs(p[0] - (x0 + x1) / 2.0)))
-        out.append((spr, (base[0] - x0, base[1] - y0 + 1)))
-    return out
+def mid_combos(band):
+    A, B = band["A"], band["B"]
+    for c in A & B:
+        pa, pb = LONE[_mask(c, A)], LONE[_mask(c, B)]
+        yield (pa[0], pb[0], (pb[1] - pa[1]) % 4)
 
 
-def inner_frames(pid, z, slot, trees, tree_pick):
-    """Stock piece `pid`'s frame (road half / cap quarter) on a full-tile canvas, a tree on the other half's centre
-    line. -> (RGBA image, (L, T))"""
+# ------------------------------------------------------------------------------------------------ footprints
+def drag(x0, z0, n, sx, first):
+    """The cells of a diagonal drag of n steps from (x0, z0): x by sx and z by +1, alternating, `first` first."""
+    cells = [(x0, z0)]
+    x, z = x0, z0
+    for i in range(2 * n):
+        if (i % 2 == 0) == (first == "x"):
+            x += sx
+        else:
+            z += 1
+        cells.append((x, z))
+    return cells
+
+
+def footprints():
+    """Two joined drags in every way a player makes them: both axes, both step phases of each drag, the second drag
+    one cell along x or one cell up, the same length or one step shorter / longer."""
+    for sx in (1, -1):
+        for fa, fb in itertools.product("xz", repeat=2):
+            for ox, oz in ((sx, 0), (0, -1)):
+                for m in (4, 5, 6):
+                    yield (sx, fa, fb, ox, oz, m), set(drag(0, 0, 5, sx, fa)) | set(drag(ox, oz, m, sx, fb))
+
+
+def cmd_combos(a):
+    need, fails = {}, []
+    for key, road in footprints():
+        bs = bands(road)
+        if not bs:
+            fails.append((key, "no band"))
+            continue
+        for b in bs:
+            if not b["ok"]:
+                fails.append((key, b["why"]))
+                continue
+            for c in mid_combos(b):
+                need[c] = need.get(c, 0) + 1
+    for c, n in sorted(need.items(), key=lambda t: -t[1]):
+        print("  %-22s %3d footprint(s)  id %s" % (c, n, MID.get(c, "MISSING")))
+    print("footprints without a converting band: %d of %d" % (len(fails), len(list(footprints()))))
+    for k, w in fails[:16]:
+        print("  ", k, w)
+
+
+# ------------------------------------------------------------------------------------------------ art + lanes
+def mid_frame(pa, pb, delta, z, slot):
+    """A's piece frame (slot) + B's piece frame (slot + delta) on one full tile. -> (RGBA, (L, T))"""
     from PIL import Image
     from netmod import netart
-    im, (L, T) = netart.stock_frames(pid)[(z, slot)]
     W = netart.TILE_W[z]
     H = W // 2
-    up = max([t.height for t, _ in trees] + [0]) + 2
-    Tc = up + H // 2 - 1
-    canvas = Image.new("RGBA", (W, up + H), (0, 0, 0, 0))
-    canvas.alpha_composite(im, (0 - L, Tc - T))
-    a = canvas.getchannel("A").load()
-    xs, ys = [], []
-    for y in range(canvas.height):
-        for x in range(W):
-            if a[x, y]:
-                xs.append(x)
-                ys.append(y)
-    cx, cy = sum(xs) / len(xs), sum(ys) / len(ys)
-    if slot % 2 == 0:                                   # strip vertical on screen: median = the other W/E half
-        bx, by = (W // 4 if cx > W / 2 else 3 * W // 4), Tc
-    else:                                               # strip horizontal: median = the other N/S half
-        bx, by = W // 2, (Tc - H // 4 if cy > Tc else Tc + H // 4) + H // 8   # nearer the front edge: less of the far road hidden
-    if tree_pick is not None and trees:
-        spr, (tx, ty) = trees[tree_pick % len(trees)]
-        canvas.alpha_composite(spr, (bx - tx, by - ty)) if bx - tx >= 0 and bx - tx + spr.width <= W else \
-            _paste_clipped(canvas, spr, bx - tx, by - ty)
-    return canvas, (0, Tc)
+    T = H // 2 - 1
+    canvas = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    for pid, s in ((pa, slot), (pb, (slot + delta) % 4)):
+        im, (L, Tt) = netart.stock_frames(pid)[(z, s)]
+        canvas.alpha_composite(im, (0 - L, T - Tt))
+    return canvas, (0, T)
 
 
-def _paste_clipped(canvas, spr, x, y):
-    from PIL import Image
-    tmp = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    tmp.paste(spr, (x, y))
-    canvas.alpha_composite(tmp)
+def _side(p):
+    return "x-" if p[0] == 0 else "x+" if p[0] == 255 else "z-" if p[1] == 0 else "z+"
 
 
-def cmd_art(a):
+def _describe(pid, state):
+    import subprocess
+    out = subprocess.run([sys.executable, "-m", "netmod.lanekit", "describe", str(pid), "--state", str(state)],
+                         capture_output=True, text=True, cwd=os.path.dirname(HERE), check=True).stdout
+    return json.loads(out)
+
+
+def mid_spec(pa, pb, delta, vid):
+    """Lane spec (lanekit authoring format) of a MID variant: A's piece at state 0 + B's piece at state delta, the
+    state-0 record; lanekit makes states 1..3 by rotation."""
+    sa, sb = _describe(pa, 0), _describe(pb, delta)
+    spec = {"_": "diagave.py: lanes of %d (state 0) + %d (state %d), the two roads that share this cell" % (pa, pb, delta),
+            "piece": vid, "states": [0, 1, 2, 3], "flag": sa.get("flag", 0), "alt": sa.get("alt", [0, 0, 0, 0])}
+    veh = {"class": sa["vehicle"]["class"], "speed": sa["vehicle"]["speed"], "lanes": [], "exits": []}
+    ped = {"walks": [], "exits": []}
+    for s in (sa, sb):
+        veh["lanes"] += s.get("vehicle", {}).get("lanes", [])
+        veh["exits"] += [e for e in s.get("vehicle", {}).get("exits", []) if e not in veh["exits"]]
+        ped["walks"] += s.get("pedestrian", {}).get("walks", [])
+        ped["exits"] += [e for e in s.get("pedestrian", {}).get("exits", []) if e not in ped["exits"]]
+    spec["vehicle"], spec["pedestrian"] = veh, ped
+    pairs = []
+    for ln in veh["lanes"]:
+        p = [_side(ln["from"]), _side(ln["to"])]
+        if p not in pairs:
+            pairs.append(p)
+    spec["connects"] = {"road": pairs}
+    return spec
+
+
+def cmd_build(a):
     from netmod import netart
-    ids = [int(t) for t in a.ids.split(",")]
-    for pid, vid in zip((35, 18004, 1999), ids):
-        d = os.path.join(a.out, str(vid))
+    for (pa, pb, delta), vid in sorted(MID.items(), key=lambda t: t[1]):
+        d = os.path.join(a.pack, "art", str(vid))
         os.makedirs(d, exist_ok=True)
-        anchors = {"_": "diagave.py art: stock %d frame + a tree from 11204 on the median half" % pid}
+        anchors = {"_": "diagave.py build: %d (slot) + %d (slot + %d) on one tile" % (pa, pb, delta)}
         for z in range(netart.ZOOMS):
-            trees = tree_sprites(z)
             for s in range(netart.ROTS):
-                # one tree per piece: the 35 inner gets tree 0 on states 0/1 (the A side) and tree 1 on 2/3 (B side);
-                # the caps get none (the median ends there)
-                pick = (0 if s in (0, 1) else 1) if pid == 35 else None
-                im, anc = inner_frames(pid, z, s, trees, pick)
+                im, anc = mid_frame(pa, pb, delta, z, s)
                 im.save(os.path.join(d, netart.frame_name(z, s)))
                 anchors[netart.frame_name(z, s)] = list(anc)
         json.dump(anchors, open(os.path.join(d, "anchors.json"), "w"), indent=1)
-        print("built", d)
+        spec = mid_spec(pa, pb, delta, vid)
+        with open(os.path.join(a.pack, "mid_%d.lanes.json" % vid), "w", newline="\n") as fh:
+            json.dump(spec, fh, indent=1)
+        print("built %d: art %s, lanes mid_%d.lanes.json (%d vehicle lane(s), connects %s)"
+              % (vid, d, vid, len(spec["vehicle"]["lanes"]), spec["connects"]["road"]))
 
 
 # ------------------------------------------------------------------------------------------------ checks
 def road_cells(save):
-    from netmod import tiler
     import re
-    from netmod import paths
+    from netmod import tiler, paths
     g = paths.game_root()
     ids = {int(v) for v in re.findall(r"\d+", open(os.path.join(g, "Apps", "Res", "TilingRules",
-                                                                "ROAD_GRND_Set.txt")).read())} | set(INNER.values())
+                                                                "ROAD_GRND_Set.txt")).read())} | set(MID.values())
     lay = tiler.City.load(save).layers["surface"]
     return lay, {c for c, p in lay.items() if p.id in ids and p.flags is None}
 
@@ -252,55 +295,29 @@ def cmd_plan(a):
     for b in bands(road):
         w = wanted(b)
         print("band axis %d rows %d from %s: %s" % (b["axis"], len(b["rows"]), b["rows"][0], "converts" if w else b["why"]))
-        for c in sorted(b["cells"], key=lambda c: (c[1], c[0])):
+        for c in sorted(b["A"] | b["B"], key=lambda c: (c[1], c[0])):
             p = lay.get(c)
-            print("  (%d,%d) %s d%d  now %s  want %s" % (c[0], c[1], b["cells"][c][0], b["cells"][c][1],
-                                                         "%d.%d" % (p.id, p.state) if p else "-",
-                                                         "%d.%d" % w[c] if w else "NO LONE MASK"))
-
-
-def seeded_band(rows, axis, square=False):
-    """Two drags like the 2026-10-17 game run (A from (x0,z0), B two cells along x; square: B one cell along the
-    other diagonal, so both ends are cut square to the avenue), as cell sets."""
-    def drag(x0, z0, n):
-        cells = [(x0, z0)]
-        x, z = x0, z0
-        for i in range(2 * n):
-            if i % 2 == 0:
-                x += 1
-            else:
-                z += 1
-            cells.append((x, z))
-        return cells
-    A, B = drag(0, 0, rows), (drag(2, 0, rows) if not square else drag(1, -1, rows))
-    if axis == 1:
-        A, B = [(-x, z) for x, z in A], [(-x, z) for x, z in B]
-    return A, B
+            print("  (%d,%d) %-2s now %-8s want %s" % (c[0], c[1], ("A" if c in b["A"] else "") + ("B" if c in b["B"] else ""),
+                                                      "%d.%d" % (p.id, p.state) if p else "-",
+                                                      "%d.%d" % w[c] if w else "-"))
 
 
 def cmd_preview(a):
     from netmod import netart
-    A, B = seeded_band(a.rows, a.axis, a.square)
-    road = set(A) | set(B)
-    bs = bands(road)
-    want = {}
-    for b in bs:
-        w = wanted(b)
-        if w:
-            want.update(w)
+    sx = 1 if a.axis == 0 else -1
+    road = set(drag(0, 0, a.rows, sx, "x")) | set(drag(sx, 0, a.rows, sx, "x") if a.offset == "x" else
+                                                 drag(0, -1, a.rows, sx, "x"))
     cells = []
-    for c in sorted(road):
-        pid, s = want.get(c, (None, None))
-        if pid is None:
-            print("not converted:", c)
-            continue
-        cell = {"at": [-c[0], c[1]], "slot": s}
-        if pid in INNER.values():
-            cell["dir"] = os.path.join(a.art, str(pid))
-        else:
-            cell["piece"] = pid
-        cells.append(cell)
-    print("bands", [(b["axis"], len(b["rows"])) for b in bs], "cells", len(cells))
+    for b in bands(road):
+        w = wanted(b) or {}
+        for c, (pid, s) in w.items():
+            cell = {"at": [-c[0], c[1]], "slot": s}
+            if pid in MID.values():
+                cell["dir"] = os.path.join(a.pack, "art", str(pid))
+            else:
+                cell["piece"] = pid
+            cells.append(cell)
+        print("band axis %d rows %d: %s" % (b["axis"], len(b["rows"]), "converts" if w else b["why"]))
     shot = netart.preview({"cells": cells}, None, zooms=[a.zoom], rots=[a.rot])[(a.zoom, a.rot)]
     shot.convert("RGB").save(a.out)
     print(a.out, shot.size)
@@ -309,23 +326,23 @@ def cmd_preview(a):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    s = sub.add_parser("art")
-    s.add_argument("out")
-    s.add_argument("--ids", default="%d,%d,%d" % (INNER[35], INNER[18004], INNER[1999]))
+    sub.add_parser("combos")
+    s = sub.add_parser("build")
+    s.add_argument("pack")
     s = sub.add_parser("scan")
     s.add_argument("saves", nargs="*")
     s = sub.add_parser("plan")
     s.add_argument("save")
     s = sub.add_parser("preview")
     s.add_argument("out")
-    s.add_argument("art")
+    s.add_argument("pack")
     s.add_argument("--rows", type=int, default=6)
     s.add_argument("--zoom", type=int, default=4)
     s.add_argument("--axis", type=int, default=0)
     s.add_argument("--rot", type=int, default=0)
-    s.add_argument("--square", action="store_true")
+    s.add_argument("--offset", default="x", choices=("x", "z"))
     a = ap.parse_args(argv)
-    {"art": cmd_art, "scan": cmd_scan, "plan": cmd_plan, "preview": cmd_preview}[a.cmd](a)
+    {"combos": cmd_combos, "build": cmd_build, "scan": cmd_scan, "plan": cmd_plan, "preview": cmd_preview}[a.cmd](a)
     return 0
 
 

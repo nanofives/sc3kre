@@ -64,6 +64,7 @@ static int g_dav_on, g_rb_off;
 static void dav_line(const char *path, const char *line);
 static void dav_init_table(void);
 static void dav_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who);
+static int dav_is_mid(WORD id);
 
 /* ---------------------------------------------------------------- table line */
 static void rb_file(const char *path) {
@@ -296,6 +297,7 @@ static LRESULT CALLBACK rb_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
    is always 11203) */
 static WORD rb_save_id(DWORD w0, WORD id) {
     DWORD x = w0 & 0x7ff, z = (w0 >> 11) & 0x7ff;
+    if (g_dav_on && dav_is_mid(id)) return 43;   /* task diagave: a middle cell holds both roads; stock 35 draws one */
     if (g_rb_on && g_rb_closed && id == g_rb_closed) return 11203;
     if (!g_rb_on || id != g_rb_piece || !g_rb_stock || x >= 1024 || z >= 1024) return 0;
     return g_rb_stock[z * 1024 + x] == 2 ? 11203 : 0;

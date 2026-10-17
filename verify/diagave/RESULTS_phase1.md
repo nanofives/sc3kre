@@ -1,50 +1,64 @@
 # diagave phase 1: the straight diagonal avenue (2026-10-17)
 
 Built: sc3netmod DAV block (`re/harness/src/sc3netmod_dav.c`, on RBT's retile-pass and city-load hooks), netpack key
-`auto_diagonal_avenues` (writes `dav <inner35> <inner18004> <inner1999>`), package
-`re/tools/netmod/examples/diagonal_avenue` (variants 20500 / 20501 / 20502), offline twin + art builder
-`re/tools/netmod/diagave.py`. Light test per owner rule: one game run with the mod, one without, pictures. Owner sheet:
-`MAIN\verify\diagave\owner_shots\diagave_phase1.png` (untracked).
+`auto_diagonal_avenues` (one `dav <piece> <a> <b> <delta>` line per middle piece), package
+`re/tools/netmod/examples/diagonal_avenue` (middle pieces 20500..20504), offline twin + art and lane builder
+`re/tools/netmod/diagave.py`. Light test per owner rule: game runs with and without the mod, pictures. Owner sheets:
+`MAIN\verify\diagave\owner_shots\diagave_joined.png` (current), `diagave_phase1.png` (round 1, superseded).
 
-## Design (from phase 0, RESULTS.md)
+## Round 1 (superseded): two carriageways with a tree median, 4 cells per row
 
-- Stock 35 draws only HALF its diamond (the road strip); the other half shows terrain (frame table 0xC0: first pass +
-  ground under). Two touching diagonal drags therefore give two carriageways with a terrain strip between them, once
-  each cell holds the piece a lone diagonal gets. The inner cells (beside that strip) take a variant: the same stock
-  frame on a full-tile canvas plus one tree cut from avenue 11204 (slot 0, pixels above the ground diamond) on the
-  strip's centre line. `first_pass` cleared (frames are taller than the tile), ground-under kept.
-- Lone-staircase table (own-footprint mask -> piece.state), stock rules via tiler.py, staircases of 3+ steps, both
-  axes and both step phases: 20 masks, one piece each. Two-step staircases get curves, so bands need 3+ rows.
-- Tiling-rule route rejected: the band masks (118/127/223/217 and 236/239/191/179) with no conditions changed 1,118
-  tiles in Berlin, 773 in London (16 cities, `netrules preview`); Simple-stage conditions only see 3x3 cells already
-  placed this pass. The hook checks the exact band shape instead.
+The first build treated a band of four cells per row (second drag two cells over) as the avenue: stock 35 on every
+cell plus a tree on the terrain strip between the roads. Owner, 2026-10-17: "those two diagonal pieces are not joint,
+the ladder should be 3 pieces, not 4". The avenue is the second drag ONE cell over; the stock tiler draws that as a
+ladder of 3 pieces per row (11203 curve, 43 4-way, 11203 curve: `diag_probe.py band --shift 1`).
+
+## Design (round 2, joined)
+
+- Stock 35 draws only HALF its diamond (the road strip); the other half shows terrain (frame table 0xC0). In a band of
+  three cells per row the middle cell holds the inner half of BOTH roads. Outer cells keep the stock pieces; the
+  middle cell becomes a variant: the two stock halves on one tile (seams are stock pixels), and both halves' lane
+  records merged into one spec (`lanekit describe` of each, lanes / exits / walks concatenated, connects from the lane
+  end sides), rotated by lanekit for states 1..3. Where their sidewalks meet they read as a concrete median.
+- Split of the band into staircase A (d 0,1) and B (d 1,2); in the end rows the d 1 cell can be A, B or both: the
+  first choice with the fewest "both", then the fewest against the end's preference, that keeps every cell of both
+  staircases a lone-staircase mask. Same order in C and Python.
+- Middle combinations every drag footprint needs (`diagave.py combos`, 48 footprints: both axes, both step phases of
+  each drag, second drag one cell along x or one cell up, lengths 4..6): (35,35,+2) in 92, (18004,35,+0) 4,
+  (1999,35,+2) 4, (35,18004,+0) 3, (35,1999,+2) 3. The 24 footprints with no band are drags that land on top of each
+  other (different step phases, same staircase), not avenues.
+- Tiling-rule route rejected (round 1 measurement): band masks with no conditions changed 1,118 tiles in Berlin and
+  773 in London; Simple-stage conditions only see 3x3 cells already placed this pass. The hook checks the exact shape.
+- Saves: the middle pieces save as 4-way 43 (`rb_save_id`), not their base 35: a stock 35 there shows only one of
+  the two roads (measured: a sawtooth carriageway without the mod), 43 keeps the road continuous.
 
 ## Shipped cities (offline, `diagave.py scan`)
 
-4 bands match the shape: Berlin 2, Moscow 2 (existing double diagonals drawn as the 4-way ladder). All 4 touch other
-roads at their ends, so none converts: 0 tiles change in the 16 shipped cities.
+37 three-cell diagonal bands (Berlin 16, Frankfurt 9, Madrid 5, Moscow 5, Liverpool 1, Seoul 1): Maxis's city
+builders drew joined diagonals often, and the stock tiler shows them as the ladder. All 37 touch other roads, so none
+converts and 0 tiles change. They are the case for the junction phase.
 
-## Game run (Simcity_stock_diagave = hard links of the stock tree, overlay install, inst_dav: sc3netmod + sc3resize)
+## Game runs (Simcity_stock_diagave = hard links of the stock tree, overlay install, inst_dav: sc3netmod + sc3resize)
 
 | Step | Result |
 |---|---|
-| Load | `dav: ... inner pieces 20500 (35) 20501 (18004) 20502 (1999)`, hooks on, load pass ran, 0 faults |
-| Two drags (102,92)-(110,100), (104,92)-(112,100) | `band axis 0, 8 full row(s), 34 cell(s), 34 written`; rows 35.2 / 20500.0 / 20500.2 / 35.0, top 18004.0 20500.0 20501.0 35.0, ends 1999.2 . 20502.2 |
-| Two drags on the other axis, square ends (22,45)-(14,53), (23,46)-(15,54) | `band axis 1, 7 full row(s), 34 cell(s), 34 written` |
-| Pictures | zoom 3 and 4, view rotations 0 to 3: median with terrain and trees, no holes. One frame after a camera jump near the map edge showed dark stale tiles; a one-cell camera move redrew them clean (harness artifact) |
-| Bulldoze (106,96) | carriageway A broken: band no longer qualifies, the stock retile re-placed the ladder, `(112,100) inner piece 20502 no longer in a band -> stock retile` |
-| Rebuild (106,96) | `band axis 0 ... 34 written`, the same 34 pieces as before |
-| Save (menu 0x10009002) | `save: 34 variant tile(s) written as base, section 0x4E56 written`; the file's tile words read 35 / 18004 / 1999; `diagave.py plan` finds both bands again |
-| Same save, game WITHOUT sc3netmod | loads; two plain diagonals per avenue (terrain between, no trees), no ladder |
+| Load | 5 `dav: middle piece ...` lines, READY, load pass ran, 0 exceptions |
+| Drags (102,92)-(110,100) and (103,92)-(111,100) | `band axis 0, 8 full row(s), 26 cell(s), 26 written`: rows 35.2 / 20500.0 / 35.0, top 18004.0 20501.0 35.0, ends 1999.2 1999.2 |
+| Drags (22,45)-(14,53) and (22,44)-(14,52) (other axis, second drag one cell up) | `band axis 1, 7 full row(s), 26 cell(s), 26 written`; B ends half a step before A at one end (the split's cheaper choice) |
+| Pictures | zoom 3 and 4, two view rotations: joined carriageways, seamless; pedestrians walk the median sidewalks |
+| Save (menu 0x10009002) | `save: 15 variant tile(s) written as base, section 0x4E56 written` |
+| Reload with the mod | `load: all 15 variant tiles restored`; load pass `0 written` on both bands |
+| Save with the 43 override, open WITHOUT sc3netmod | loads; middle cells 43.x: a continuous road, the stock ladder look |
 
 Logs: sc3resize carries only its usual startup entry (0xC0000096 at SC3U.exe+0x84122); sc3netmod logged no exception.
+Bulldoze / rebuild was run on round 1 (same code path: a broken carriageway sends the band back to the stock ladder,
+the rebuilt cell brings it back); not repeated on round 2.
 
 ## Open (later phases)
 
 - Junctions: a band that touches any other road is left to the stock tiler (crossings with roads, avenue x avenue,
-  joining the straight avenue 11204). The Berlin / Moscow ladders are the natural showcase.
+  joining the straight avenue 11204). The Berlin / Moscow double diagonals are 4-cell bands with junctions.
+- The two carriageways end half a step apart (the second drag is one cell over; a square end needs a half cell).
 - A cut carriageway reverts the whole band to the ladder; splitting it into two shorter avenues is not done.
-- Traffic: inner cells keep 35's lane records (copy_base), so animated cars stay on their carriageway; trip routing
-  steps between 4-adjacent road cells and can cross the median. Not measured.
-- Trees in the views where the avenue runs across the screen overlap the far carriageway (stock 11204 trees do the
-  same); smaller trees or one per row are options if the owner wants.
+- Traffic: middle cells carry both roads' lanes (animated cars keep to their carriageway); trip routing steps between
+  4-adjacent road cells and is not measured. The lab city has no population.
