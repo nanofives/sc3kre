@@ -280,9 +280,9 @@ class StraightAvenue:
 class Merge(StraightAvenue):
     """One carriageway ends: `ends` = 'B' (A continues) or 'A'. Its outer edge moves linearly from full width at q_s to
     nothing at q_e, keeping a curb band `curb` wide (x - z units) sampled from the stock outer edge; the median ends at
-    q_s and the other carriageway's inner sidewalk is asphalt until q_e. Lane dividers (owner, 2026-10-17): the ending
-    carriageway's yellow centre line runs on down the middle of what is left of it, and a yellow line takes the
-    median's place between the two carriageways; both are stock 35's own centre-line pixels, moved across."""
+    q_s and the other carriageway's inner sidewalk is asphalt until q_e. Lane divider (owner sketch, 2026-10-17): the
+    continuing carriageway's yellow centre line branches off at q_e and runs straight to the median nose at q_s
+    (the ending carriageway's own line stops at the nose); stock 35's own centre-line pixels, moved across."""
 
     def __init__(self, ends, q_s, q_e, curb=0.17, inner=0.2):
         self.ends, self.q_s, self.q_e, self.curb, self.inner = ends, q_s, q_e, curb, inner
@@ -304,7 +304,7 @@ class Merge(StraightAvenue):
                     return CLEAR
                 if edge - p < self.curb:
                     return diag_at(1, 1.0 - (edge - p), q, z, r)
-                c = self.divider(1, edge, p, q, z, r)
+                c = self.divider(t, p, q, z, r)
                 if c is not None:
                     return c
                 if p >= 1.0:
@@ -315,7 +315,7 @@ class Merge(StraightAvenue):
                     return CLEAR
                 if p - edge < self.curb:
                     return diag_at(0, p - edge, q, z, r)
-                c = self.divider(0, edge, p, q, z, r)
+                c = self.divider(t, p, q, z, r)
                 if c is not None:
                     return c
                 if p < 1.0:
@@ -329,18 +329,19 @@ class Merge(StraightAvenue):
             return diag(int(kp[0]), wx, wz, z, r)
         return CLEAR
 
-    def divider(self, strip, edge, p, q, z, r):
-        """The yellow lines of the taper, or None: the ending strip's centre line at the middle of what is left of it
-        ((1 + edge) / 2, both strips meet at p 1) and the line in the median's place at p 1."""
+    def divider(self, t, p, q, z, r):
+        """The taper's yellow line, or None: from the median nose (p 1, t 0) to the continuing carriageway's centre
+        line (t 1), straight."""
         cl = centre_line(z, r)
         if cl is None:
             return None
         cy, hw = cl
-        for pc in ((1.0 + edge) / 2.0, 1.0):
-            if abs(p - pc) <= hw:
-                c = diag_at(strip, cy + (p - pc), q, z, r)
-                if c[3]:
-                    return c
+        ks = 0 if self.ends == "B" else 1                    # the strip that goes on
+        pc = 1.0 + (ks + cy - 1.0) * t
+        if abs(p - pc) <= hw:
+            c = diag_at(ks, cy + (p - pc), q, z, r)
+            if c[3]:
+                return c
         return None
 
 

@@ -57,6 +57,15 @@ stock line is a double yellow and the copy is too; none at zoom 0 or 1, where th
 |---|---|
 | Same two layouts, rebuilt art (`m3_z4.png`, `m4_z4.png`) | both dividers drawn at every taper; DAV log unchanged (1 merge, then 2 merges) |
 
+Second owner review, a sketch over image 2: both lines of that version marked red (remove), one green line to add
+from the continuing road's centre line to the median nose. Now the taper has that single line: it branches off the
+continuing carriageway's centre line where the taper closes (q_e) and runs straight to the nose (p 1 at q_s); the
+ending carriageway's own centre line stops at the nose.
+
+| Check | Result |
+|---|---|
+| Same two layouts, rebuilt art (`m5_z4.png`, `m6_z3/z4.png`) | one branching line at each taper, as sketched; DAV log unchanged |
+
 ## Bend: diagonal avenue into the straight avenue
 
 Two parallel straight roads side by side are the stock avenue 11204. When both drags go on that way, the band's end
