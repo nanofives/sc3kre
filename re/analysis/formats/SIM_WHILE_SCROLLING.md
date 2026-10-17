@@ -93,5 +93,8 @@ The mod (sc3simrun, `[sim] animate_while_scrolling=1`, default on; needs `run_wh
    per new strip. While animating, that refill gets the strip instead, so new cars land on ground just revealed.
 3. **TICKSTRIP**: the stock producer tick `FUN_1001f44a` then fills the deficit at random cells of the producer rect;
    while the camera is moving it runs with the rect set to the last revealed strip.
+4. **CARMARGIN** (`[sim] car_margin=5`, 2 = stock): the street agents' sim rect = view box + 5 cells instead of + 2
+   (`push 2` at STRTSIM `0x10013fc9`), so short camera steps delete nothing next to the screen (route-car work, task
+   carscroll; `CAR_TRIPS.md` 8).
 FREEZE (user pause) still wins: it skips the street agents inside the agent loop whatever drives the heartbeat.
 Measured results: `verify/carscroll/RESULTS.md`.

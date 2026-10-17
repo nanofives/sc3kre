@@ -188,3 +188,248 @@ cars speed 4: 18-27 fps pooled with gaps to 9 s, idle included (a slow game stat
   arrows or slow drag.
 - Hand-test build: `MAIN\re\harness\handtest_carscroll\` (sc3simrun.dll 5eaa8a2e = the build of S1e / S3d / L4 /
   V3, and README.txt with what to check, edge scroll included).
+
+## Route cars during camera moves (owner decision 2026-10-16; PRE addenda 7-15)
+
+### Answer for the owner
+
+**Partly.** With route cars on (cartrips replace) the street now keeps its cars during ordinary camera moves:
+holding the right button and a gentle back-and-forth drag keep 0.9-1.1 of the still-camera count, in Berlin's busy
+centre and on the 1024 city (without the fix those moves emptied the street to 0.1-0.5). Arrow scrolling holds on the
+1024 city (0.95) and in Berlin it is back to the still count right after the scroll (1.0), but during the scroll
+Berlin's centre shows about half its route cars. A very fast drag that swings the view a screen width every second
+still thins the street to 0.3-0.65 during the move, and it fills back over the next 10-30 s (without the fix 0-0.25).
+
+New route cars come in from the screen edge or with the ground the camera uncovers: on-screen pop-ins during moves stay
+at or under what stock cars show with the camera still (76 a minute). The pause still stops everything, no faults in any
+arm or soak, route cars still follow their routes (99%) and are never density-deleted. Frame rate during moves with the
+fix: 86-116% of fix off, except arrows on the 1024 city under the heavy probe (68%). Side effect: somewhat more route cars
+at a still camera (Berlin centre 58 -> 72 in view), because trips are now collected a little beyond the view.
+
+### What was decoded and changed
+
+Where the loss came from (B0, the build before this fix, animation on): during arrows and drags the route cars fell
+to 8-12 against 31 with the camera still. Each camera step deletes the cars on the ground that leaves the car area
+(the view box + 2 cells), and replace mode had nothing to refill the ground the camera reveals: routes were only
+collected and solved inside the old view, every route ended at the old view edge, and spawns discarded routes that
+started outside the current view. Camera-edge removals ran at 1.7-2.8 a second during moves (0.05 still) against
+refills of 1.3-2.7 a second from an empty route queue.
+
+Staged build: **sc3simrun 0b903bb6** (CARMARGIN: car area = view box + 5 cells, `[sim] car_margin=5`) + **sc3cartrips
+3f9a2c82** (`[cartrips] scroll_fill=1 margin=4`): trips collected and solved over the car area + 4 cells; a 256-route
+history (up to 8 cars per route, 120 s); spawns enter a route at its first step inside the car area; each strip of
+ground the car area takes in gets a quota at the still-camera density, filled from routes crossing it, the car
+entering mid-path off screen (<= 24 a tick, never above the still-camera count); a top-up to the still-camera count
+until 8 s after the camera stops; a car whose route was cut by the collection area drives on and leaves once off
+screen; no density despawn for route cars, as before. Both switch off (`X0`) to the old behaviour byte for byte.
+The builds tried on the way (053963fa, cb74f872, dba17e77, 268d6676, d5e98b81) and why each changed are in addenda
+8-15; the last two did no better and put cars on visible ground, so the staged build is the R1c / R2d one.
+
+### Verdict per camera move (staged build; route cars in the view box, ratio to the still-camera count; fix on vs off)
+
+The reference is the still count at the place the move ends (addendum 11), since the game's own car target follows
+the local density; the before-the-move ratio is in the tables. Bound: median 0.75-1.25, worst move >= 0.60.
+
+| move | Berlin centre (R1c) during / after | 1024 city (R2d) during / after | fix off (R1c / R2d) | on-screen pop-ins / min (fix on, bound 76) | verdict |
+|---|---|---|---|---|---|
+| held right button | 1.10 / 0.97 | (not in R2d) | 1.06 / 0.90 | 5 | **holds** |
+| gentle back-and-forth drag | 0.91 / 0.93 | 0.90 / 1.00 | 0.42 / 0.53, 0.14 / 0.39 | 72, 79 | **holds** (1024 pop-ins 79, at the bound) |
+| arrows | 0.51 / 1.02 | 0.95 / 0.94 | 0.16 / 0.27, 0.77 / 0.65 | 67, 7 | **holds on the 1024 city; in Berlin's centre half the cars during the scroll, back after** |
+| extreme drag (view swings a screen width a second) | 0.33 / 0.37 | 0.65 / 0.40 | 0.00 / 0.24, 0.01 / 0.12 | 64, 76 | **does not hold** (better than off) |
+| overscroll past the map edge (R3c, Berlin, full set) | during: ~0 for both (the view shows the ground past the edge: no roads) / after the return: 0.82 (worst 0.69) | | after: 0.19 | 0 | **holds after the move**; nothing to hold during it |
+| edge scroll | not drivable by the tools | | | | owner check |
+
+Other checks: FREEZE: every pause and pause + drag phase 0 car moves, 0 spawns (R1c, R1e). Faults: 0 in every arm.
+Soak: L5 (first fix build, 1024, speed 4, 15 min of moves) alive, 0 faults, 0 spawn faults, 0 lost route cars, 99.4% of
+lane decisions answered from the route; L8 (staged build, 1024, speed 4, ~11 min of moves, lite probe) alive, 0 faults, 0 spawn faults, 0 lost route cars, 99.1% of lane decisions from the route, 103-115 fps. Frame rate, fix on vs off, during moves: R1c (Berlin, full probe)
+86-106%; C4 (1024, lite probe, first fix build) 86-116%; R2d (1024, full probe) 68% for arrows (70 vs 103 fps; other
+kinds 89-100%). Still-camera on-screen pop-ins fell with the fix (Berlin 52 -> 25 a minute) and still-camera route
+cars in the view rose (Berlin centre 58 -> 72), because trips are now collected a little beyond the view.
+
+### Tables (all route-car arms; "fix" = X1 / X0, except B0 where it is animation on / off)
+
+**B0**
+
+| move | fix | in box before | box move / before | box after / before | box move / end-ref | box after / end-ref | drawn move / before | on-screen pop-ins / min | frames / s |
+|---|---|---|---|---|---|---|---|---|---|
+| held button | off | 0 | - (-) | - (-) | - (-) | - (-) | 0.00 | 0 | 96 |
+| held button | on | 0 | - (-) | - (-) | - (-) | - (-) | 1.16 | 0 | 109 |
+| extreme drag | off | 0 | - (-) | - (-) | - (-) | - (-) | 0.02 | 0 | 87 |
+| extreme drag | on | 0 | - (-) | - (-) | - (-) | - (-) | 0.25 | 111 | 60 |
+| arrows | off | 0 | - (-) | - (-) | - (-) | - (-) | 0.04 | 0 | 99 |
+| arrows | on | 0 | - (-) | - (-) | - (-) | - (-) | 0.08 | 32 | 78 |
+
+still camera (I phases): pop-ins / min off 59, on 40; frames off 94, on 85; faults 0
+
+**R1**
+
+| move | fix | in box before | box move / before | box after / before | box move / end-ref | box after / end-ref | drawn move / before | on-screen pop-ins / min | frames / s |
+|---|---|---|---|---|---|---|---|---|---|
+| gentle drag | off | 26 | 1.13 (0.93) | 1.20 (1.00) | - (-) | - (-) | 1.42 | 45 | 52 |
+| gentle drag | on | 34 | 1.08 (0.71) | 1.16 (0.90) | - (-) | - (-) | 0.89 | 35 | 33 |
+| held button | off | 66 | 0.99 (0.97) | 1.12 (0.83) | - (-) | - (-) | 1.84 | 16 | 73 |
+| held button | on | 81 | 1.04 (0.93) | 1.00 (0.87) | - (-) | - (-) | 1.01 | 40 | 58 |
+| extreme drag | off | 34 | 0.34 (0.06) | 0.88 (0.20) | - (-) | - (-) | 0.44 | 78 | 76 |
+| extreme drag | on | 48 | 0.76 (0.34) | 0.46 (0.39) | - (-) | - (-) | 0.87 | 52 | 82 |
+| arrows | off | 37 | 0.47 (0.19) | 0.28 (0.05) | - (-) | - (-) | 0.92 | 117 | 91 |
+| arrows | on | 56 | 1.38 (1.02) | 1.29 (1.08) | - (-) | - (-) | 1.30 | 37 | 55 |
+
+still camera (I phases): pop-ins / min off 47, on 41; frames off 89, on 80; faults 0
+
+**R1b**
+
+| move | fix | in box before | box move / before | box after / before | box move / end-ref | box after / end-ref | drawn move / before | on-screen pop-ins / min | frames / s |
+|---|---|---|---|---|---|---|---|---|---|
+| gentle drag | off | 59 | 0.64 (0.61) | 0.71 (0.64) | - (-) | - (-) | 0.58 | 99 | 88 |
+| gentle drag | on | 86 | 0.76 (0.74) | 0.66 (0.60) | - (-) | - (-) | 0.97 | 51 | 80 |
+| held button | off | 61 | 1.39 (1.39) | 1.34 (1.34) | - (-) | - (-) | 1.05 | 0 | 165 |
+| extreme drag | off | 79 | 0.00 (0.00) | 0.04 (0.00) | - (-) | - (-) | 0.01 | 118 | 103 |
+| extreme drag | on | 44 | 0.31 (0.15) | 0.34 (0.17) | - (-) | - (-) | 0.28 | 45 | 104 |
+| arrows | off | 78 | 0.08 (0.02) | 0.18 (0.15) | - (-) | - (-) | 0.09 | 56 | 108 |
+| arrows | on | 51 | 0.83 (0.44) | 0.36 (0.26) | - (-) | - (-) | 1.00 | 48 | 100 |
+
+still camera (I phases): pop-ins / min off 33, on 19; frames off 144, on 138; faults 0
+
+**R1c**
+
+| move | fix | in box before | box move / before | box after / before | box move / end-ref | box after / end-ref | drawn move / before | on-screen pop-ins / min | frames / s |
+|---|---|---|---|---|---|---|---|---|---|
+| gentle drag | off | 72 | 0.43 (0.37) | 0.57 (0.52) | 0.42 (0.34) | 0.53 (0.52) | 0.42 | 74 | 125 |
+| gentle drag | on | 104 | 0.88 (0.83) | 0.84 (0.72) | 0.91 (0.84) | 0.93 (0.80) | 0.44 | 72 | 124 |
+| held button | off | 92 | 1.14 (1.06) | 1.04 (0.90) | 1.06 (1.01) | 0.90 (0.83) | 1.18 | 7 | 134 |
+| held button | on | 103 | 1.13 (1.11) | 1.02 (0.99) | 1.10 (1.09) | 0.97 (0.89) | 1.14 | 5 | 142 |
+| extreme drag | off | 56 | 0.00 (0.00) | 0.25 (0.16) | 0.00 (0.00) | 0.24 (0.21) | 0.00 | 90 | 109 |
+| extreme drag | on | 66 | 0.28 (0.26) | 0.27 (0.18) | 0.33 (0.31) | 0.37 (0.27) | 0.59 | 64 | 94 |
+| arrows | off | 68 | 0.12 (0.06) | 0.10 (0.06) | 0.16 (0.10) | 0.27 (0.10) | 0.16 | 118 | 104 |
+| arrows | on | 56 | 0.69 (0.20) | 1.11 (0.59) | 0.51 (0.28) | 1.02 (0.73) | 0.78 | 67 | 107 |
+
+still camera (I phases): pop-ins / min off 52, on 25; frames off 151, on 147; faults 0
+
+**R1d**
+
+| move | fix | in box before | box move / before | box after / before | box move / end-ref | box after / end-ref | drawn move / before | on-screen pop-ins / min | frames / s |
+|---|---|---|---|---|---|---|---|---|---|
+| gentle drag | off | 79 | 0.26 (0.11) | 0.34 (0.33) | 0.28 (0.14) | 0.51 (0.33) | 0.26 | 41 | 173 |
+| gentle drag | on | 62 | 1.30 (1.18) | 0.89 (0.60) | 1.16 (0.89) | 0.65 (0.60) | 0.91 | 152 | 168 |
+| held button | off | 96 | 1.16 (1.03) | 1.16 (0.90) | 1.05 (1.04) | 0.97 (0.96) | 1.02 | 0 | 157 |
+| held button | on | 121 | 0.99 (0.98) | 1.01 (0.99) | 1.02 (1.00) | 1.07 (1.02) | 0.98 | 21 | 167 |
+| extreme drag | off | 66 | 0.00 (0.00) | 0.02 (0.00) | 0.00 (0.00) | 0.03 (0.00) | 0.00 | 69 | 128 |
+| extreme drag | on | 56 | 0.38 (0.22) | 0.54 (0.40) | 0.34 (0.17) | 0.42 (0.27) | 0.42 | 535 | 102 |
+| arrows | off | 74 | 0.01 (0.01) | 0.19 (0.07) | 0.01 (0.01) | 0.38 (0.14) | 0.06 | 183 | 152 |
+| arrows | on | 72 | 0.64 (0.23) | 0.81 (0.32) | 0.66 (0.32) | 0.95 (0.68) | 0.78 | 697 | 125 |
+
+still camera (I phases): pop-ins / min off 39, on 34; frames off 194, on 186; faults 0
+
+**R1e**
+
+| move | fix | in box before | box move / before | box after / before | box move / end-ref | box after / end-ref | drawn move / before | on-screen pop-ins / min | frames / s |
+|---|---|---|---|---|---|---|---|---|---|
+| gentle drag | off | 58 | 0.16 (0.15) | 0.48 (0.40) | 0.17 (0.15) | 0.54 (0.49) | 0.09 | 118 | 212 |
+| gentle drag | on | 58 | 0.86 (0.81) | 0.87 (0.50) | 0.81 (0.71) | 0.74 (0.52) | 0.85 | 34 | 202 |
+| held button | off | 78 | 1.03 (1.00) | 1.06 (0.92) | 0.97 (0.92) | 0.93 (0.91) | 0.82 | 16 | 221 |
+| held button | on | 100 | 1.03 (0.95) | 1.04 (0.94) | 1.00 (0.99) | 1.00 (0.94) | 0.96 | 7 | 212 |
+| extreme drag | off | 67 | 0.00 (0.00) | 0.01 (0.00) | 0.00 (0.00) | 0.01 (0.00) | 0.00 | 28 | 204 |
+| extreme drag | on | 50 | 0.13 (0.04) | 0.28 (0.16) | 0.19 (0.04) | 0.44 (0.37) | 0.25 | 44 | 190 |
+| arrows | off | 70 | 0.07 (0.03) | 0.11 (0.04) | 0.10 (0.04) | 0.19 (0.12) | 0.04 | 58 | 196 |
+| arrows | on | 92 | 0.31 (0.21) | 0.24 (0.14) | 0.41 (0.31) | 0.48 (0.40) | 0.37 | 147 | 183 |
+
+still camera (I phases): pop-ins / min off 46, on 22; frames off 261, on 255; faults 0
+
+**R2**
+
+| move | fix | in box before | box move / before | box after / before | box move / end-ref | box after / end-ref | drawn move / before | on-screen pop-ins / min | frames / s |
+|---|---|---|---|---|---|---|---|---|---|
+| gentle drag | off | 45 | 0.32 (0.32) | 0.32 (0.32) | - (-) | - (-) | 0.57 | 53 | 42 |
+| gentle drag | on | 38 | 1.16 (1.16) | 1.34 (1.34) | - (-) | - (-) | 0.00 | 2 | 0 |
+| extreme drag | off | 26 | 0.33 (0.00) | 0.89 (0.59) | - (-) | - (-) | 0.92 | 33 | 69 |
+| extreme drag | on | 20 | 5.29 (0.58) | 6.55 (1.34) | - (-) | - (-) | 2.10 | 159 | 62 |
+| arrows | off | 28 | 1.22 (1.17) | 1.98 (1.58) | - (-) | - (-) | 1.74 | 83 | 89 |
+| arrows | on | 16 | 4.43 (3.78) | 5.81 (4.61) | - (-) | - (-) | 4.41 | 96 | 75 |
+| overscroll | off | 24 | 0.00 (0.00) | 0.00 (0.00) | - (-) | - (-) | 0.02 | 28 | 87 |
+| overscroll | on | 16 | 0.41 (0.41) | 0.44 (0.44) | - (-) | - (-) | 0.41 | 35 | 93 |
+
+still camera (I phases): pop-ins / min off 57, on 34; frames off 85, on 75; faults 0
+
+**R2c**
+
+| move | fix | in box before | box move / before | box after / before | box move / end-ref | box after / end-ref | drawn move / before | on-screen pop-ins / min | frames / s |
+|---|---|---|---|---|---|---|---|---|---|
+| gentle drag | off | 110 | 0.68 (0.51) | 1.00 (0.76) | - (-) | - (-) | 0.74 | 159 | 76 |
+| gentle drag | on | 132 | 1.04 (0.97) | 0.81 (0.71) | - (-) | - (-) | 1.55 | 90 | 67 |
+| extreme drag | off | 160 | 0.32 (0.31) | 0.28 (0.11) | - (-) | - (-) | 0.34 | 96 | 21 |
+| extreme drag | on | 104 | 0.92 (0.86) | 0.96 (0.92) | - (-) | - (-) | 0.55 | 14 | 11 |
+| arrows | off | 150 | 0.91 (0.89) | 1.04 (0.91) | - (-) | - (-) | 1.13 | 108 | 56 |
+| arrows | on | 156 | 0.93 (0.82) | 0.89 (0.79) | - (-) | - (-) | 1.00 | 0 | 62 |
+| overscroll | off | 142 | 0.00 (0.00) | 0.02 (0.00) | - (-) | - (-) | 0.00 | 23 | 56 |
+| overscroll | on | 70 | 0.18 (0.12) | 0.17 (0.12) | - (-) | - (-) | 0.12 | 56 | 37 |
+
+still camera (I phases): pop-ins / min off 39, on 6; frames off 61, on 62; faults 0
+
+**R2d**
+
+| move | fix | in box before | box move / before | box after / before | box move / end-ref | box after / end-ref | drawn move / before | on-screen pop-ins / min | frames / s |
+|---|---|---|---|---|---|---|---|---|---|
+| gentle drag | off | 78 | 0.20 (0.13) | 0.68 (0.47) | 0.14 (0.12) | 0.39 (0.36) | 0.20 | 92 | 119 |
+| gentle drag | on | 137 | 1.00 (0.86) | 1.18 (1.05) | 0.90 (0.89) | 1.00 (0.87) | 1.21 | 79 | 117 |
+| extreme drag | off | 100 | 0.01 (0.00) | 0.10 (0.03) | 0.01 (0.00) | 0.12 (0.04) | 0.01 | 34 | 113 |
+| extreme drag | on | 124 | 0.71 (0.47) | 0.61 (0.07) | 0.65 (0.59) | 0.40 (0.11) | 0.49 | 76 | 100 |
+| arrows | off | 126 | 0.90 (0.87) | 0.87 (0.80) | 0.77 (0.72) | 0.65 (0.58) | 1.06 | 50 | 103 |
+| arrows | on | 157 | 0.96 (0.95) | 0.96 (0.89) | 0.95 (0.93) | 0.94 (0.86) | 1.08 | 7 | 70 |
+| overscroll | off | 104 | 0.00 (0.00) | 0.00 (0.00) | 0.00 (0.00) | 0.00 (0.00) | 0.00 | 34 | 109 |
+| overscroll | on | 107 | 0.03 (0.00) | 0.00 (0.00) | 0.03 (0.00) | 0.00 (0.00) | 0.03 | 51 | 108 |
+
+still camera (I phases): pop-ins / min off 41, on 21; frames off 117, on 113; faults 0
+
+**R2e**
+
+| move | fix | in box before | box move / before | box after / before | box move / end-ref | box after / end-ref | drawn move / before | on-screen pop-ins / min | frames / s |
+|---|---|---|---|---|---|---|---|---|---|
+| gentle drag | off | 78 | 0.26 (0.22) | 0.65 (0.52) | 0.22 (0.21) | 0.49 (0.47) | 0.32 | 58 | 120 |
+| gentle drag | on | 126 | 1.09 (1.07) | 1.17 (1.15) | 0.94 (0.93) | 0.88 (0.87) | 1.33 | 211 | 119 |
+| extreme drag | off | 93 | 0.01 (0.00) | 0.63 (0.28) | 0.00 (0.00) | 0.45 (0.34) | 0.01 | 58 | 120 |
+| extreme drag | on | 112 | 0.37 (0.28) | 0.27 (0.22) | 0.39 (0.37) | 0.33 (0.25) | 0.48 | 491 | 119 |
+| arrows | off | 142 | 0.74 (0.74) | 0.87 (0.75) | 0.66 (0.62) | 0.68 (0.67) | 1.05 | 51 | 118 |
+| arrows | on | 162 | 0.95 (0.93) | 1.07 (0.95) | 0.94 (0.93) | 1.05 (1.02) | 1.12 | 118 | 115 |
+| overscroll | off | 108 | 0.00 (0.00) | 0.00 (0.00) | 0.00 (0.00) | 0.00 (0.00) | 0.00 | 51 | 120 |
+| overscroll | on | 95 | 0.00 (0.00) | 0.01 (0.00) | 0.00 (0.00) | 0.02 (0.00) | 0.02 | 43 | 120 |
+
+still camera (I phases): pop-ins / min off 40, on 17; frames off 120, on 120; faults 0
+
+**R2f**
+
+| move | fix | in box before | box move / before | box after / before | box move / end-ref | box after / end-ref | drawn move / before | on-screen pop-ins / min | frames / s |
+|---|---|---|---|---|---|---|---|---|---|
+| gentle drag | off | 113 | 0.36 (0.24) | 0.43 (0.25) | 0.36 (0.27) | 0.44 (0.31) | 0.33 | 48 | 114 |
+| gentle drag | on | 110 | 1.12 (0.98) | 0.52 (0.51) | 1.01 (0.85) | 0.42 (0.39) | 1.47 | 35 | 112 |
+| extreme drag | off | 84 | 0.01 (0.01) | 0.14 (0.14) | 0.01 (0.01) | 0.16 (0.16) | 0.01 | 92 | 107 |
+| extreme drag | on | 162 | 0.33 (0.33) | 0.25 (0.16) | 0.40 (0.40) | 0.39 (0.24) | 0.38 | 79 | 112 |
+| arrows | off | 140 | 0.85 (0.77) | 0.96 (0.95) | 0.80 (0.64) | 0.85 (0.69) | 1.04 | 51 | 110 |
+| arrows | on | 168 | 0.91 (0.86) | 0.90 (0.87) | 0.93 (0.88) | 0.95 (0.94) | 1.06 | 16 | 107 |
+
+still camera (I phases): pop-ins / min off 38, on 12; frames off 119, on 119; faults 0
+
+**R3b**
+
+| move | fix | in box before | box move / before | box after / before | box move / end-ref | box after / end-ref | drawn move / before | on-screen pop-ins / min | frames / s |
+|---|---|---|---|---|---|---|---|---|---|
+| overscroll | off | 30 | 0.09 (0.04) | 0.14 (0.06) | 0.11 (0.04) | 0.24 (0.06) | 0.19 | 0 | 120 |
+| overscroll | on | 51 | 0.19 (0.10) | 0.58 (0.40) | 0.18 (0.10) | 0.53 (0.42) | 0.36 | - | - |
+
+still camera (I phases): pop-ins / min off 12, on 14; frames off 120, on 120; faults 0
+
+
+Builds per arm: B0 sc3cartrips 33ef673e (before the fix; its switch is animation); R1 / R2 053963fa; R1b / R2c dba17e77;
+R1c / R2d / R3b 3f9a2c82 (staged); R1d / R2e 268d6676; R1e / R2f d5e98b81; sc3simrun 74901709 (margin 8) up to R1b /
+R2c, 0b903bb6 (margin 5) from R1c on. R1 / R2 / R1b did not re-centre (R1 / R1b at the map corner); R2 / R2c / R2d / R2e
+overscroll rows are a 20 s cross-map flight (addendum 13); R3b's are a 3 s one-way arrow scroll (addendum 16, drop 0).
+**R3c**
+
+| move | fix | in box before | box move / before | box after / before | box move / end-ref | box after / end-ref | drawn move / before | on-screen pop-ins / min | frames / s |
+|---|---|---|---|---|---|---|---|---|---|
+| overscroll | off | 26 | 0.00 (0.00) | 0.20 (0.00) | 0.00 (0.00) | 0.19 (0.00) | 0.05 | 0 | 120 |
+| overscroll | on | 48 | 0.01 (0.00) | 0.56 (0.33) | 0.02 (0.00) | 0.82 (0.69) | 0.07 | 0 | 120 |
+
+still camera (I phases): pop-ins / min off 41, on 40; frames off 120, on 120; faults 0
+
+R3c: staged build; the approach `MV:5` and the hold `OS:4` took the view box to x 241-255, z 0-6 (the map corner and past it); analysed with drop 0; its "after" window includes the 4 s return.
+

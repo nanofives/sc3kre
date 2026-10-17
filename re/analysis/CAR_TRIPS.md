@@ -609,7 +609,16 @@ against 31 with the camera still, during arrows and drags).
 - Costs controlled: a solver state limit while scroll_fill is on (a single trip took 260 ms with the wider capture at
   first), route bounding boxes for the scans.
 
-Results: `verify/carscroll/RESULTS.md`, section "Route cars during camera moves".
+Results (`verify/carscroll/RESULTS.md`, section "Route cars during camera moves"; staged sc3cartrips 3f9a2c82 with
+sc3simrun 0b903bb6): route cars in the view box against the still-camera count at the place the move ends, fix on (off):
+held button 1.10 / 0.97 (1.06 / 0.90); gentle drag 0.91 / 0.93 Berlin, 0.90 / 1.00 1024 city (0.14-0.53); arrows 0.51 /
+1.02 Berlin, 0.95 / 0.94 1024 (0.16-0.77); a drag that swings the view a screen width a second 0.33-0.65 / 0.37-0.40
+(0.00-0.24); after an overscroll 0.82 (0.19). On-screen pop-ins during moves <= 79 a minute; 0 faults; route decisions
+99% from the route; FREEZE unchanged.
+
+Known limits: very fast camera moves (arrow scrolling in a dense centre, the swinging drag) outrun the route supply:
+each strip needs routes that cross it, at most 8 cars per route over 120 s. The producer's hard cap of 200 cars is
+reached at dense views with the wider car area.
 
 ## 5. Open
 

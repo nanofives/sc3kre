@@ -142,3 +142,136 @@ killed pid 16344
 killed pid 18668
 15:14:58 end S1e
 15:14:58 QUEUE9 DONE
+16:34:59 start B0
+arm B0 pid 25476
+SC3U not running (SC3_PID=25476 is not a running SC3U.exe.)
+16:36:41 start B0
+16:47:12 phase AR:20 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476823, 'clk_pause': 0, 'view': [0, 179, 22, 202], 'simrect': [0, 177, 24, 204], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 73, 'p_target': 96}
+16:47:32 phase I:10 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476852, 'clk_pause': 0, 'view': [0, 175, 26, 198], 'simrect': [0, 173, 28, 200], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 73, 'p_target': 100}
+killed pid 8928
+16:47:47 end B0
+17:22:36 start R1
+17:51:01 phase P:10 {'user_pause': 1, 'cam_hold': 0, 'speed_last': 3, 'day': 2478341, 'clk_pause': 1, 'view': [7, 163, 35, 186], 'simrect': [0, 155, 43, 194], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 25, 'p_target': 199}
+17:51:11 phase s3:15 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2478342, 'clk_pause': 0, 'view': [7, 163, 35, 186], 'simrect': [0, 155, 43, 194], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 47, 'p_target': 199}
+killed pid 25628
+17:51:30 end R1
+17:51:31 start R2
+18:06:43 phase OS:20 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2489024, 'clk_pause': 0, 'view': [446, 896, 502, 942], 'simrect': [444, 894, 504, 944], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 82, 'p_target': 200}
+18:07:03 phase I:10 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2489050, 'clk_pause': 0, 'view': [865, 477, 921, 523], 'simrect': [863, 475, 923, 525], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 1, 'p_target': 200}
+killed pid 1968
+18:07:27 end R2
+18:07:27 start C4
+18:17:51 phase AR:8 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2488710, 'clk_pause': 0, 'view': [165, 740, 222, 786], 'simrect': [163, 738, 224, 788], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 33, 'p_target': 125}
+18:17:59 phase I:8 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2488722, 'clk_pause': 0, 'view': [175, 732, 231, 778], 'simrect': [173, 730, 233, 780], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 34, 'p_target': 102}
+killed pid 2332
+18:18:11 end C4
+18:18:11 start L5
+18:35:03 phase HB:30 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 4, 'day': 2489905, 'clk_pause': 0, 'view': [432, 741, 488, 788], 'simrect': [424, 733, 496, 796], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 149, 'p_target': 142}
+18:35:33 phase I:5 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 4, 'day': 2489992, 'clk_pause': 0, 'view': [432, 741, 488, 788], 'simrect': [424, 733, 496, 796], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 192, 'p_target': 192}
+killed pid 25812
+18:35:41 end L5
+18:35:41 start V4
+18:39:08 phase HG*:6 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476206, 'clk_pause': 0, 'view': [29, 136, 57, 160], 'simrect': [21, 128, 65, 168], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 57, 'p_target': 134}
+18:39:14 phase I:5 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476215, 'clk_pause': 0, 'view': [29, 137, 57, 161], 'simrect': [21, 129, 65, 169], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 85, 'p_target': 135}
+killed pid 19944
+18:39:23 end V4
+18:39:23 QUEUE R DONE
+18:39:44 inst_cf now sc3cartrips dba17e77
+18:39:50 start R1b
+cp: error writing '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_stock/R1b_sc3cartrips.log': No space left on device
+cp: error writing '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_stock/R1b_sc3simrun.log': No space left on device
+cp: error writing '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_stock/R1b_sc3resize.log': No space left on device
+  File "C:\Users\maria\Desktop\Proyectos\Simcity_wt\carscroll\re\tools\pt_run.py", line 68, in write
+    self.out.write(json.dumps(rec) + "\n")
+OSError: [Errno 28] No space left on device
+19:09:52 end R1b
+19:09:53 start R2b
+cp: error writing '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_full/R2b_sc3cartrips.log': No space left on device
+cp: error writing '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_full/R2b_sc3simrun.log': No space left on device
+cp: error writing '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_full/R2b_sc3resize.log': No space left on device
+cp: error writing '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_full/R2b_sc3perf.log': No space left on device
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python312\Lib\shutil.py", line 194, in _copyfileobj_readinto
+    fdst_write(mv)
+OSError: [Errno 28] No space left on device
+19:09:58 end R2b
+19:09:58 start L6
+cp: error writing '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_full/L6_sc3cartrips.log': No space left on device
+cp: cannot create regular file '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_full/L6_sc3simrun.log': No space left on device
+cp: cannot create regular file '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_full/L6_sc3resize.log': No space left on device
+cp: cannot create regular file '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_full/L6_sc3perf.log': No space left on device
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python312\Lib\shutil.py", line 194, in _copyfileobj_readinto
+    fdst_write(mv)
+OSError: [Errno 28] No space left on device
+19:10:03 end L6
+19:10:03 QUEUE R2 DONE
+19:10:18 start V5
+cp: error writing '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_stock/V5_sc3cartrips.log': No space left on device
+cp: error writing '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_stock/V5_sc3simrun.log': No space left on device
+cp: error writing '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_stock/V5_sc3resize.log': No space left on device
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python312\Lib\shutil.py", line 194, in _copyfileobj_readinto
+    fdst_write(mv)
+OSError: [Errno 28] No space left on device
+19:10:23 end V5
+19:10:23 QUEUE V5 DONE
+19:13:45 start R2c
+19:37:23 phase OS:20 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2489621, 'clk_pause': 2, 'view': [429, 433, 486, 479], 'simrect': [427, 431, 488, 481], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 117, 'p_target': 200}
+19:37:43 phase I:10 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2489644, 'clk_pause': 0, 'view': [576, 285, 632, 332], 'simrect': [574, 283, 634, 334], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 35, 'p_target': 189}
+killed pid 8604
+19:38:08 end R2c
+19:38:08 QUEUE R3 DONE
+19:38:57 inst_cf now sc3cartrips 3f9a2c82 sc3simrun 0b903bb6
+19:38:58 start R1c
+20:08:15 phase P:10 {'user_pause': 1, 'cam_hold': 0, 'speed_last': 3, 'day': 2478435, 'clk_pause': 1, 'view': [85, 122, 113, 145], 'simrect': [80, 117, 118, 150], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 144, 'p_target': 136}
+20:08:26 phase s3:15 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2478436, 'clk_pause': 0, 'view': [85, 122, 113, 145], 'simrect': [80, 117, 118, 150], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 136, 'p_target': 136}
+killed pid 19304
+20:08:44 end R1c
+20:08:44 start R2d
+20:37:32 phase I:10 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2490181, 'clk_pause': 0, 'view': [985, 0, 1023, 12], 'simrect': [983, 0, 1023, 14], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 2, 'p_target': 19}
+20:37:52 phase I:30 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2490206, 'clk_pause': 0, 'view': [461, 492, 518, 539], 'simrect': [459, 490, 520, 541], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 0, 'p_target': 24}
+killed pid 16792
+20:38:30 end R2d (logs copied by cs_qG)
+20:38:55 inst_cf now sc3cartrips 268d6676 sc3simrun 0b903bb6
+20:38:56 start R1d
+21:08:08 phase P:10 {'user_pause': 1, 'cam_hold': 0, 'speed_last': 3, 'day': 2478440, 'clk_pause': 1, 'view': [85, 122, 113, 145], 'simrect': [80, 117, 118, 150], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 121, 'p_target': 130}
+21:08:19 phase s3:15 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2478441, 'clk_pause': 0, 'view': [85, 122, 113, 145], 'simrect': [80, 117, 118, 150], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 127, 'p_target': 130}
+killed pid 20536
+21:08:38 end R1d
+21:08:38 start R2e
+21:37:30 phase I:10 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2490283, 'clk_pause': 0, 'view': [403, 459, 459, 505], 'simrect': [401, 457, 461, 507], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 20, 'p_target': 200}
+21:37:40 phase I:30 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2490295, 'clk_pause': 0, 'view': [403, 459, 459, 505], 'simrect': [401, 457, 461, 507], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 60, 'p_target': 200}
+killed pid 25284
+21:38:24 end R2e (logs copied by cs_qI)
+21:38:34 inst_cf now sc3cartrips d5e98b81 sc3simrun 0b903bb6
+21:38:35 start R1e
+22:07:44 phase P:10 {'user_pause': 1, 'cam_hold': 0, 'speed_last': 3, 'day': 2478447, 'clk_pause': 1, 'view': [91, 116, 119, 139], 'simrect': [86, 111, 124, 144], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 131, 'p_target': 150}
+22:07:55 phase s3:15 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2478448, 'clk_pause': 0, 'view': [91, 116, 119, 139], 'simrect': [86, 111, 124, 144], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 135, 'p_target': 150}
+killed pid 23872
+22:08:13 end R1e
+22:08:14 start R2f
+22:29:43 phase I:10 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2489603, 'clk_pause': 0, 'view': [412, 450, 468, 496], 'simrect': [410, 448, 470, 498], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 56, 'p_target': 200}
+22:29:53 phase I:30 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2489618, 'clk_pause': 0, 'view': [412, 450, 468, 496], 'simrect': [410, 448, 470, 498], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 80, 'p_target': 200}
+killed pid 8056
+22:30:37 end R2f (logs copied by cs_qJ)
+22:30:47 inst_cf now sc3cartrips 3f9a2c82 sc3simrun 0b903bb6
+22:30:47 start R3b
+22:43:46 phase I:10 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2477068, 'clk_pause': 0, 'view': [178, 27, 206, 50], 'simrect': [176, 25, 208, 52], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 0, 'p_target': 69}
+22:43:56 phase I:30 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2477083, 'clk_pause': 0, 'view': [133, 72, 160, 96], 'simrect': [131, 70, 162, 98], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 11, 'p_target': 88}
+killed pid 19312
+22:44:30 end R3b
+22:44:30 start L8
+22:57:26 phase HB:30 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 4, 'day': 2489450, 'clk_pause': 1, 'view': [339, 787, 396, 833], 'simrect': [334, 782, 401, 838], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 200, 'p_target': 200}
+22:57:57 phase I:5 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 4, 'day': 2489528, 'clk_pause': 1, 'view': [339, 787, 396, 833], 'simrect': [334, 782, 401, 838], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 200, 'p_target': 200}
+killed pid 24280
+22:58:05 end L8
+22:58:05 start V6
+23:02:41 phase HG*:6 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476310, 'clk_pause': 0, 'view': [85, 120, 113, 143], 'simrect': [80, 115, 118, 148], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 99, 'p_target': 111}
+23:02:47 phase I:5 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476319, 'clk_pause': 0, 'view': [84, 121, 112, 144], 'simrect': [79, 116, 117, 149], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 98, 'p_target': 105}
+killed pid 1420
+23:02:55 end V6
+23:02:55 QUEUE J DONE
+23:03:11 start R3c
+23:16:44 phase I:10 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2477118, 'clk_pause': 0, 'view': [241, 0, 255, 6], 'simrect': [239, 0, 255, 8], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 0, 'p_target': 0}
+23:16:54 phase I:30 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2477133, 'clk_pause': 0, 'view': [181, 45, 210, 68], 'simrect': [179, 43, 212, 70], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 31, 'p_target': 62}
+killed pid 19228
+23:17:27 end R3c
+23:17:27 QUEUE K DONE

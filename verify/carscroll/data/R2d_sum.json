@@ -1,0 +1,4671 @@
+{
+ "rows": [
+  {
+   "i": 1,
+   "tok": "s3:20",
+   "kind": "s3",
+   "anim": 1,
+   "secs": 17,
+   "frames_s": 120.11764705882354,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 120.11764705882354,
+   "agent_ticks_s": 424970.4117647059,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 400,
+   "ag_ms_s": 287.71123529411767,
+   "maxgap_ms_mean": 10.568,
+   "maxgap_ms_max": 27.025,
+   "maxgap_artifacts": 0,
+   "cars": 0,
+   "target": 0,
+   "spawn_min": 0.0,
+   "spawn_vis_min": 0.0,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 0.0,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {},
+   "spawn_by": {},
+   "spawn_vis_by": {},
+   "rem_min": 0.0,
+   "rem_vis_min": 0.0,
+   "rem_by": {},
+   "rem_vis_by": {},
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 3,
+   "tok": "I:20",
+   "kind": "I",
+   "anim": 0,
+   "secs": 17,
+   "frames_s": 118.82352941176471,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 118.82352941176471,
+   "agent_ticks_s": 508068.17647058825,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 466.52941176470586,
+   "ag_ms_s": 421.6180588235294,
+   "maxgap_ms_mean": 17.462529411764706,
+   "maxgap_ms_max": 76.946,
+   "maxgap_artifacts": 0,
+   "cars": 1.8823529411764706,
+   "target": 11.764705882352942,
+   "spawn_min": 240.0,
+   "spawn_vis_min": 70.58823529411765,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 0.0,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {},
+   "spawn_by": {
+    "mod": 68
+   },
+   "spawn_vis_by": {
+    "mod": 20
+   },
+   "rem_min": 165.88235294117646,
+   "rem_vis_min": 0.0,
+   "rem_by": {
+    "drive": 47
+   },
+   "rem_vis_by": {},
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 4,
+   "tok": "I:15",
+   "kind": "I",
+   "anim": 0,
+   "secs": 12,
+   "frames_s": 120.08333333333333,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 120.08333333333333,
+   "agent_ticks_s": 354316.25,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 316.8333333333333,
+   "ag_ms_s": 282.82191666666665,
+   "maxgap_ms_mean": 9.503,
+   "maxgap_ms_max": 10.687,
+   "maxgap_artifacts": 0,
+   "cars": 62.916666666666664,
+   "target": 200,
+   "spawn_min": 720.0,
+   "spawn_vis_min": 125.0,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 45.0,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 9
+   },
+   "spawn_by": {
+    "mod": 144
+   },
+   "spawn_vis_by": {
+    "mod": 25
+   },
+   "rem_min": 505.0,
+   "rem_vis_min": 50.0,
+   "rem_by": {
+    "drive": 101
+   },
+   "rem_vis_by": {
+    "drive": 10
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 5,
+   "tok": "HG:20",
+   "kind": "HG",
+   "anim": 0,
+   "secs": 17,
+   "frames_s": 119.58823529411765,
+   "scroll_s": 119.58823529411765,
+   "stub_s": 119.6470588235294,
+   "passes_s": 119.6470588235294,
+   "agent_ticks_s": 344457.5294117647,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 287.4117647058824,
+   "ag_ms_s": 267.74270588235294,
+   "maxgap_ms_mean": 13.622294117647058,
+   "maxgap_ms_max": 53.102,
+   "maxgap_artifacts": 0,
+   "cars": 24.11764705882353,
+   "target": 200,
+   "spawn_min": 540.0,
+   "spawn_vis_min": 116.47058823529412,
+   "spawn_box_min": 88.23529411764706,
+   "rem_box_min": 3.5294117647058822,
+   "spawn_box_by": {
+    "mod": 25
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 1
+   },
+   "spawn_by": {
+    "mod": 153
+   },
+   "spawn_vis_by": {
+    "mod": 33
+   },
+   "rem_min": 642.3529411764706,
+   "rem_vis_min": 10.588235294117647,
+   "rem_by": {
+    "drive": 182
+   },
+   "rem_vis_by": {
+    "drive": 3
+   },
+   "view_updates_s": 10.705882352941176,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 21
+  },
+  {
+   "i": 6,
+   "tok": "I:10",
+   "kind": "I",
+   "anim": 0,
+   "secs": 7,
+   "frames_s": 120.14285714285714,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 120.14285714285714,
+   "agent_ticks_s": 385131.85714285716,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 357.7142857142857,
+   "ag_ms_s": 309.23614285714285,
+   "maxgap_ms_mean": 10.400571428571428,
+   "maxgap_ms_max": 11.42,
+   "maxgap_artifacts": 0,
+   "cars": 70.28571428571429,
+   "target": 200,
+   "spawn_min": 1431.4285714285713,
+   "spawn_vis_min": 197.14285714285714,
+   "spawn_box_min": 128.57142857142858,
+   "rem_box_min": 8.571428571428571,
+   "spawn_box_by": {
+    "mod": 15
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 1
+   },
+   "spawn_by": {
+    "mod": 167
+   },
+   "spawn_vis_by": {
+    "mod": 23
+   },
+   "rem_min": 925.7142857142857,
+   "rem_vis_min": 8.571428571428571,
+   "rem_by": {
+    "drive": 108
+   },
+   "rem_vis_by": {
+    "drive": 1
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 7,
+   "tok": "I:30",
+   "kind": "I",
+   "anim": 0,
+   "secs": 27,
+   "frames_s": 119.88888888888889,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 119.85185185185185,
+   "agent_ticks_s": 445354,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 456.8888888888889,
+   "ag_ms_s": 357.2353703703704,
+   "maxgap_ms_mean": 11.584962962962964,
+   "maxgap_ms_max": 52.421,
+   "maxgap_artifacts": 0,
+   "cars": 130.77777777777777,
+   "target": 200,
+   "spawn_min": 1033.3333333333333,
+   "spawn_vis_min": 171.11111111111111,
+   "spawn_box_min": 117.77777777777777,
+   "rem_box_min": 51.111111111111114,
+   "spawn_box_by": {
+    "mod": 53
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 23
+   },
+   "spawn_by": {
+    "mod": 465
+   },
+   "spawn_vis_by": {
+    "mod": 77
+   },
+   "rem_min": 768.8888888888889,
+   "rem_vis_min": 62.22222222222222,
+   "rem_by": {
+    "drive": 346
+   },
+   "rem_vis_by": {
+    "drive": 28
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 9,
+   "tok": "I:20",
+   "kind": "I",
+   "anim": 1,
+   "secs": 17,
+   "frames_s": 119.82352941176471,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 119.82352941176471,
+   "agent_ticks_s": 429259.23529411765,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 427,
+   "ag_ms_s": 300.7201764705882,
+   "maxgap_ms_mean": 11.877470588235294,
+   "maxgap_ms_max": 44.268,
+   "maxgap_artifacts": 0,
+   "cars": 97.3529411764706,
+   "target": 200,
+   "spawn_min": 840.0,
+   "spawn_vis_min": 120.0,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 35.294117647058826,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 10
+   },
+   "spawn_by": {
+    "mod": 238
+   },
+   "spawn_vis_by": {
+    "mod": 34
+   },
+   "rem_min": 596.4705882352941,
+   "rem_vis_min": 35.294117647058826,
+   "rem_by": {
+    "drive": 169
+   },
+   "rem_vis_by": {
+    "drive": 10
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 10,
+   "tok": "I:15",
+   "kind": "I",
+   "anim": 1,
+   "secs": 12,
+   "frames_s": 119.75,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 119.83333333333333,
+   "agent_ticks_s": 413396.5833333333,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 456,
+   "ag_ms_s": 308.4095,
+   "maxgap_ms_mean": 12.327166666666667,
+   "maxgap_ms_max": 40.998,
+   "maxgap_artifacts": 0,
+   "cars": 165.25,
+   "target": 200,
+   "spawn_min": 990.0,
+   "spawn_vis_min": 130.0,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 40.0,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 8
+   },
+   "spawn_by": {
+    "mod": 198
+   },
+   "spawn_vis_by": {
+    "mod": 26
+   },
+   "rem_min": 730.0,
+   "rem_vis_min": 40.0,
+   "rem_by": {
+    "drive": 146
+   },
+   "rem_vis_by": {
+    "drive": 8
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 11,
+   "tok": "HG:20",
+   "kind": "HG",
+   "anim": 1,
+   "secs": 17,
+   "frames_s": 116.47058823529412,
+   "scroll_s": 116.47058823529412,
+   "stub_s": 116.41176470588235,
+   "passes_s": 116.41176470588235,
+   "agent_ticks_s": 385476.64705882355,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 423,
+   "ag_ms_s": 279.60435294117644,
+   "maxgap_ms_mean": 13.530411764705882,
+   "maxgap_ms_max": 39.223,
+   "maxgap_artifacts": 0,
+   "cars": 170.58823529411765,
+   "target": 200,
+   "spawn_min": 3818.823529411765,
+   "spawn_vis_min": 201.1764705882353,
+   "spawn_box_min": 98.82352941176471,
+   "rem_box_min": 7.0588235294117645,
+   "spawn_box_by": {
+    "mod": 28
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 2
+   },
+   "spawn_by": {
+    "mod": 1082
+   },
+   "spawn_vis_by": {
+    "mod": 57
+   },
+   "rem_min": 3727.0588235294117,
+   "rem_vis_min": 10.588235294117647,
+   "rem_by": {
+    "drive": 1056
+   },
+   "rem_vis_by": {
+    "drive": 3
+   },
+   "view_updates_s": 10.058823529411764,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 42
+  },
+  {
+   "i": 12,
+   "tok": "I:10",
+   "kind": "I",
+   "anim": 1,
+   "secs": 7,
+   "frames_s": 120.14285714285714,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 120,
+   "agent_ticks_s": 408619.5714285714,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 460,
+   "ag_ms_s": 298.78985714285716,
+   "maxgap_ms_mean": 9.795,
+   "maxgap_ms_max": 10.249,
+   "maxgap_artifacts": 0,
+   "cars": 182.42857142857142,
+   "target": 200,
+   "spawn_min": 642.8571428571429,
+   "spawn_vis_min": 68.57142857142857,
+   "spawn_box_min": 17.142857142857142,
+   "rem_box_min": 17.142857142857142,
+   "spawn_box_by": {
+    "mod": 2
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 2
+   },
+   "spawn_by": {
+    "mod": 75
+   },
+   "spawn_vis_by": {
+    "mod": 8
+   },
+   "rem_min": 377.14285714285717,
+   "rem_vis_min": 17.142857142857142,
+   "rem_by": {
+    "drive": 44
+   },
+   "rem_vis_by": {
+    "drive": 2
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 13,
+   "tok": "I:30",
+   "kind": "I",
+   "anim": 1,
+   "secs": 27,
+   "frames_s": 119.96296296296296,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 119.92592592592592,
+   "agent_ticks_s": 446075.2962962963,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 502,
+   "ag_ms_s": 298.41237037037035,
+   "maxgap_ms_mean": 11.117037037037036,
+   "maxgap_ms_max": 36.972,
+   "maxgap_artifacts": 0,
+   "cars": 200,
+   "target": 200,
+   "spawn_min": 108.88888888888889,
+   "spawn_vis_min": 31.11111111111111,
+   "spawn_box_min": 17.77777777777778,
+   "rem_box_min": 2.2222222222222223,
+   "spawn_box_by": {
+    "mod": 8
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 1
+   },
+   "spawn_by": {
+    "mod": 49
+   },
+   "spawn_vis_by": {
+    "mod": 14
+   },
+   "rem_min": 108.88888888888889,
+   "rem_vis_min": 8.88888888888889,
+   "rem_by": {
+    "drive": 49
+   },
+   "rem_vis_by": {
+    "drive": 4
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 15,
+   "tok": "I:20",
+   "kind": "I",
+   "anim": 1,
+   "secs": 17,
+   "frames_s": 120.05882352941177,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 120,
+   "agent_ticks_s": 423480.23529411765,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 469.6470588235294,
+   "ag_ms_s": 291.12617647058823,
+   "maxgap_ms_mean": 9.51235294117647,
+   "maxgap_ms_max": 12.271,
+   "maxgap_artifacts": 0,
+   "cars": 172.52941176470588,
+   "target": 200,
+   "spawn_min": 2954.1176470588234,
+   "spawn_vis_min": 165.88235294117646,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 31.764705882352942,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 9
+   },
+   "spawn_by": {
+    "mod": 837
+   },
+   "spawn_vis_by": {
+    "mod": 47
+   },
+   "rem_min": 2692.9411764705883,
+   "rem_vis_min": 84.70588235294117,
+   "rem_by": {
+    "drive": 763
+   },
+   "rem_vis_by": {
+    "drive": 24
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 16,
+   "tok": "I:15",
+   "kind": "I",
+   "anim": 1,
+   "secs": 12,
+   "frames_s": 120.08333333333333,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 120.08333333333333,
+   "agent_ticks_s": 422068.5833333333,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 491.9166666666667,
+   "ag_ms_s": 289.5756666666667,
+   "maxgap_ms_mean": 9.618,
+   "maxgap_ms_max": 10.458,
+   "maxgap_artifacts": 0,
+   "cars": 200,
+   "target": 200,
+   "spawn_min": 275.0,
+   "spawn_vis_min": 45.0,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 50.0,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 10
+   },
+   "spawn_by": {
+    "mod": 55
+   },
+   "spawn_vis_by": {
+    "mod": 9
+   },
+   "rem_min": 275.0,
+   "rem_vis_min": 50.0,
+   "rem_by": {
+    "drive": 55
+   },
+   "rem_vis_by": {
+    "drive": 10
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 17,
+   "tok": "HG:20",
+   "kind": "HG",
+   "anim": 1,
+   "secs": 17,
+   "frames_s": 117.94117647058823,
+   "scroll_s": 117.94117647058823,
+   "stub_s": 117.94117647058823,
+   "passes_s": 117.94117647058823,
+   "agent_ticks_s": 402638.4117647059,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 446.94117647058823,
+   "ag_ms_s": 237.50435294117648,
+   "maxgap_ms_mean": 12.22864705882353,
+   "maxgap_ms_max": 37.826,
+   "maxgap_artifacts": 0,
+   "cars": 189.47058823529412,
+   "target": 200,
+   "spawn_min": 5837.64705882353,
+   "spawn_vis_min": 296.47058823529414,
+   "spawn_box_min": 60.0,
+   "rem_box_min": 28.235294117647058,
+   "spawn_box_by": {
+    "mod": 17
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 8
+   },
+   "spawn_by": {
+    "mod": 1654
+   },
+   "spawn_vis_by": {
+    "mod": 84
+   },
+   "rem_min": 5802.35294117647,
+   "rem_vis_min": 45.88235294117647,
+   "rem_by": {
+    "drive": 1644
+   },
+   "rem_vis_by": {
+    "drive": 13
+   },
+   "view_updates_s": 10.352941176470589,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 36
+  },
+  {
+   "i": 18,
+   "tok": "I:10",
+   "kind": "I",
+   "anim": 1,
+   "secs": 7,
+   "frames_s": 119.57142857142857,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 119.57142857142857,
+   "agent_ticks_s": 423044.14285714284,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 492.7142857142857,
+   "ag_ms_s": 326.5632857142857,
+   "maxgap_ms_mean": 14.354,
+   "maxgap_ms_max": 41.937,
+   "maxgap_artifacts": 0,
+   "cars": 200,
+   "target": 200,
+   "spawn_min": 188.57142857142858,
+   "spawn_vis_min": 8.571428571428571,
+   "spawn_box_min": 8.571428571428571,
+   "rem_box_min": 17.142857142857142,
+   "spawn_box_by": {
+    "mod": 1
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 2
+   },
+   "spawn_by": {
+    "mod": 22
+   },
+   "spawn_vis_by": {
+    "mod": 1
+   },
+   "rem_min": 188.57142857142858,
+   "rem_vis_min": 42.857142857142854,
+   "rem_by": {
+    "drive": 22
+   },
+   "rem_vis_by": {
+    "drive": 5
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 19,
+   "tok": "I:30",
+   "kind": "I",
+   "anim": 1,
+   "secs": 27,
+   "frames_s": 119.85185185185185,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 119.85185185185185,
+   "agent_ticks_s": 434424.55555555556,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 493.48148148148147,
+   "ag_ms_s": 303.56125925925926,
+   "maxgap_ms_mean": 11.269846153846153,
+   "maxgap_ms_max": 46.947,
+   "maxgap_artifacts": 1,
+   "cars": 200,
+   "target": 200,
+   "spawn_min": 175.55555555555554,
+   "spawn_vis_min": 28.88888888888889,
+   "spawn_box_min": 17.77777777777778,
+   "rem_box_min": 2.2222222222222223,
+   "spawn_box_by": {
+    "mod": 8
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 1
+   },
+   "spawn_by": {
+    "mod": 79
+   },
+   "spawn_vis_by": {
+    "mod": 13
+   },
+   "rem_min": 175.55555555555554,
+   "rem_vis_min": 11.11111111111111,
+   "rem_by": {
+    "drive": 79
+   },
+   "rem_vis_by": {
+    "drive": 5
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 21,
+   "tok": "I:20",
+   "kind": "I",
+   "anim": 0,
+   "secs": 17,
+   "frames_s": 119.94117647058823,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 119.88235294117646,
+   "agent_ticks_s": 401246.5882352941,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 377.94117647058823,
+   "ag_ms_s": 302.67635294117645,
+   "maxgap_ms_mean": 11.827411764705882,
+   "maxgap_ms_max": 45.26,
+   "maxgap_artifacts": 0,
+   "cars": 48.705882352941174,
+   "target": 200,
+   "spawn_min": 370.5882352941176,
+   "spawn_vis_min": 70.58823529411765,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 0.0,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {},
+   "spawn_by": {
+    "mod": 105
+   },
+   "spawn_vis_by": {
+    "mod": 20
+   },
+   "rem_min": 243.52941176470588,
+   "rem_vis_min": 3.5294117647058822,
+   "rem_by": {
+    "drive": 69
+   },
+   "rem_vis_by": {
+    "drive": 1
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 22,
+   "tok": "I:15",
+   "kind": "I",
+   "anim": 0,
+   "secs": 12,
+   "frames_s": 119.58333333333333,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 119.58333333333333,
+   "agent_ticks_s": 405811.1666666667,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 416.9166666666667,
+   "ag_ms_s": 311.25775,
+   "maxgap_ms_mean": 13.691583333333334,
+   "maxgap_ms_max": 48.65,
+   "maxgap_artifacts": 0,
+   "cars": 101.33333333333333,
+   "target": 200,
+   "spawn_min": 520.0,
+   "spawn_vis_min": 115.0,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 20.0,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 4
+   },
+   "spawn_by": {
+    "mod": 104
+   },
+   "spawn_vis_by": {
+    "mod": 23
+   },
+   "rem_min": 400.0,
+   "rem_vis_min": 45.0,
+   "rem_by": {
+    "drive": 80
+   },
+   "rem_vis_by": {
+    "drive": 9
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 23,
+   "tok": "HG:20",
+   "kind": "HG",
+   "anim": 0,
+   "secs": 17,
+   "frames_s": 118.94117647058823,
+   "scroll_s": 118.94117647058823,
+   "stub_s": 118.94117647058823,
+   "passes_s": 118.88235294117646,
+   "agent_ticks_s": 401828.5882352941,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 353.6470588235294,
+   "ag_ms_s": 289.75123529411763,
+   "maxgap_ms_mean": 13.062,
+   "maxgap_ms_max": 39.98,
+   "maxgap_artifacts": 0,
+   "cars": 19.764705882352942,
+   "target": 200,
+   "spawn_min": 367.05882352941177,
+   "spawn_vis_min": 123.52941176470588,
+   "spawn_box_min": 95.29411764705883,
+   "rem_box_min": 3.5294117647058822,
+   "spawn_box_by": {
+    "mod": 27
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 1
+   },
+   "spawn_by": {
+    "mod": 104
+   },
+   "spawn_vis_by": {
+    "mod": 35
+   },
+   "rem_min": 504.70588235294116,
+   "rem_vis_min": 7.0588235294117645,
+   "rem_by": {
+    "drive": 143
+   },
+   "rem_vis_by": {
+    "drive": 2
+   },
+   "view_updates_s": 10.176470588235293,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 19
+  },
+  {
+   "i": 24,
+   "tok": "I:10",
+   "kind": "I",
+   "anim": 0,
+   "secs": 7,
+   "frames_s": 120.14285714285714,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 120.14285714285714,
+   "agent_ticks_s": 407646.28571428574,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 377.57142857142856,
+   "ag_ms_s": 318.46785714285716,
+   "maxgap_ms_mean": 9.685142857142857,
+   "maxgap_ms_max": 10.213,
+   "maxgap_artifacts": 0,
+   "cars": 48.857142857142854,
+   "target": 200,
+   "spawn_min": 445.7142857142857,
+   "spawn_vis_min": 137.14285714285714,
+   "spawn_box_min": 85.71428571428571,
+   "rem_box_min": 0.0,
+   "spawn_box_by": {
+    "mod": 10
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {},
+   "spawn_by": {
+    "mod": 52
+   },
+   "spawn_vis_by": {
+    "mod": 16
+   },
+   "rem_min": 231.42857142857142,
+   "rem_vis_min": 0.0,
+   "rem_by": {
+    "drive": 27
+   },
+   "rem_vis_by": {},
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 25,
+   "tok": "I:30",
+   "kind": "I",
+   "anim": 0,
+   "secs": 27,
+   "frames_s": 119.92592592592592,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 119.96296296296296,
+   "agent_ticks_s": 416772.51851851854,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 422.0740740740741,
+   "ag_ms_s": 283.88666666666666,
+   "maxgap_ms_mean": 11.11811111111111,
+   "maxgap_ms_max": 48.682,
+   "maxgap_artifacts": 0,
+   "cars": 101.07407407407408,
+   "target": 200,
+   "spawn_min": 400.0,
+   "spawn_vis_min": 104.44444444444444,
+   "spawn_box_min": 51.111111111111114,
+   "rem_box_min": 8.88888888888889,
+   "spawn_box_by": {
+    "mod": 23
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 4
+   },
+   "spawn_by": {
+    "mod": 180
+   },
+   "spawn_vis_by": {
+    "mod": 47
+   },
+   "rem_min": 215.55555555555554,
+   "rem_vis_min": 15.555555555555555,
+   "rem_by": {
+    "drive": 97
+   },
+   "rem_vis_by": {
+    "drive": 7
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 27,
+   "tok": "I:20",
+   "kind": "I",
+   "anim": 0,
+   "secs": 17,
+   "frames_s": 119.88235294117646,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 119.88235294117646,
+   "agent_ticks_s": 411656.29411764705,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 391.88235294117646,
+   "ag_ms_s": 267.77876470588234,
+   "maxgap_ms_mean": 11.276882352941177,
+   "maxgap_ms_max": 43.933,
+   "maxgap_artifacts": 0,
+   "cars": 64.88235294117646,
+   "target": 200,
+   "spawn_min": 416.47058823529414,
+   "spawn_vis_min": 109.41176470588235,
+   "spawn_box_min": 7.0588235294117645,
+   "rem_box_min": 21.176470588235293,
+   "spawn_box_by": {
+    "mod": 2
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 6
+   },
+   "spawn_by": {
+    "mod": 118
+   },
+   "spawn_vis_by": {
+    "mod": 31
+   },
+   "rem_min": 257.6470588235294,
+   "rem_vis_min": 28.235294117647058,
+   "rem_by": {
+    "drive": 73
+   },
+   "rem_vis_by": {
+    "drive": 8
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 28,
+   "tok": "I:15",
+   "kind": "I",
+   "anim": 0,
+   "secs": 12,
+   "frames_s": 120.08333333333333,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 120.16666666666667,
+   "agent_ticks_s": 409398.5,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 422.1666666666667,
+   "ag_ms_s": 323.6936666666667,
+   "maxgap_ms_mean": 9.6385,
+   "maxgap_ms_max": 10.85,
+   "maxgap_artifacts": 0,
+   "cars": 115.16666666666667,
+   "target": 200,
+   "spawn_min": 515.0,
+   "spawn_vis_min": 180.0,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 15.0,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 3
+   },
+   "spawn_by": {
+    "mod": 103
+   },
+   "spawn_vis_by": {
+    "mod": 36
+   },
+   "rem_min": 285.0,
+   "rem_vis_min": 20.0,
+   "rem_by": {
+    "drive": 57
+   },
+   "rem_vis_by": {
+    "drive": 4
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 29,
+   "tok": "H:20",
+   "kind": "H",
+   "anim": 0,
+   "secs": 17,
+   "frames_s": 119.47058823529412,
+   "scroll_s": 119.47058823529412,
+   "stub_s": 119.52941176470588,
+   "passes_s": 119.52941176470588,
+   "agent_ticks_s": 409691.1176470588,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 350.1764705882353,
+   "ag_ms_s": 265.29347058823527,
+   "maxgap_ms_mean": 12.80564705882353,
+   "maxgap_ms_max": 40.219,
+   "maxgap_artifacts": 0,
+   "cars": 4.352941176470588,
+   "target": 195.23529411764707,
+   "spawn_min": 218.8235294117647,
+   "spawn_vis_min": 49.411764705882355,
+   "spawn_box_min": 35.294117647058826,
+   "rem_box_min": 0.0,
+   "spawn_box_by": {
+    "mod": 10
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {},
+   "spawn_by": {
+    "mod": 62
+   },
+   "spawn_vis_by": {
+    "mod": 14
+   },
+   "rem_min": 314.11764705882354,
+   "rem_vis_min": 0.0,
+   "rem_by": {
+    "drive": 89
+   },
+   "rem_vis_by": {},
+   "view_updates_s": 24.941176470588236,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 89
+  },
+  {
+   "i": 30,
+   "tok": "I:10",
+   "kind": "I",
+   "anim": 0,
+   "secs": 7,
+   "frames_s": 119.57142857142857,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 119.57142857142857,
+   "agent_ticks_s": 407793,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 356.42857142857144,
+   "ag_ms_s": 294.81257142857146,
+   "maxgap_ms_mean": 14.711,
+   "maxgap_ms_max": 39.316,
+   "maxgap_artifacts": 0,
+   "cars": 8.714285714285714,
+   "target": 185,
+   "spawn_min": 334.2857142857143,
+   "spawn_vis_min": 17.142857142857142,
+   "spawn_box_min": 8.571428571428571,
+   "rem_box_min": 0.0,
+   "spawn_box_by": {
+    "mod": 1
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {},
+   "spawn_by": {
+    "mod": 39
+   },
+   "spawn_vis_by": {
+    "mod": 2
+   },
+   "rem_min": 222.85714285714286,
+   "rem_vis_min": 0.0,
+   "rem_by": {
+    "drive": 26
+   },
+   "rem_vis_by": {},
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 31,
+   "tok": "I:30",
+   "kind": "I",
+   "anim": 0,
+   "secs": 27,
+   "frames_s": 118.48148148148148,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 118.48148148148148,
+   "agent_ticks_s": 407180.6666666667,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 381.81481481481484,
+   "ag_ms_s": 334.34503703703706,
+   "maxgap_ms_mean": 13.37874074074074,
+   "maxgap_ms_max": 48.413,
+   "maxgap_artifacts": 0,
+   "cars": 57.074074074074076,
+   "target": 172.96296296296296,
+   "spawn_min": 337.77777777777777,
+   "spawn_vis_min": 42.22222222222222,
+   "spawn_box_min": 17.77777777777778,
+   "rem_box_min": 0.0,
+   "spawn_box_by": {
+    "mod": 8
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {},
+   "spawn_by": {
+    "mod": 152
+   },
+   "spawn_vis_by": {
+    "mod": 19
+   },
+   "rem_min": 186.66666666666666,
+   "rem_vis_min": 2.2222222222222223,
+   "rem_by": {
+    "drive": 84
+   },
+   "rem_vis_by": {
+    "drive": 1
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 33,
+   "tok": "I:20",
+   "kind": "I",
+   "anim": 1,
+   "secs": 17,
+   "frames_s": 112.11764705882354,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 112.11764705882354,
+   "agent_ticks_s": 388621.5882352941,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 471.8235294117647,
+   "ag_ms_s": 391.3900588235294,
+   "maxgap_ms_mean": 17.201588235294118,
+   "maxgap_ms_max": 44.99,
+   "maxgap_artifacts": 0,
+   "cars": 173.52941176470588,
+   "target": 200,
+   "spawn_min": 1051.764705882353,
+   "spawn_vis_min": 67.05882352941177,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 7.0588235294117645,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 2
+   },
+   "spawn_by": {
+    "mod": 298
+   },
+   "spawn_vis_by": {
+    "mod": 19
+   },
+   "rem_min": 843.5294117647059,
+   "rem_vis_min": 7.0588235294117645,
+   "rem_by": {
+    "drive": 239
+   },
+   "rem_vis_by": {
+    "drive": 2
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 34,
+   "tok": "I:15",
+   "kind": "I",
+   "anim": 1,
+   "secs": 12,
+   "frames_s": 112.16666666666667,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 112.25,
+   "agent_ticks_s": 394628.3333333333,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 495.8333333333333,
+   "ag_ms_s": 402.5083333333333,
+   "maxgap_ms_mean": 17.904333333333334,
+   "maxgap_ms_max": 51.914,
+   "maxgap_artifacts": 0,
+   "cars": 196.58333333333334,
+   "target": 200,
+   "spawn_min": 160.0,
+   "spawn_vis_min": 20.0,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 15.0,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 3
+   },
+   "spawn_by": {
+    "mod": 32
+   },
+   "spawn_vis_by": {
+    "mod": 4
+   },
+   "rem_min": 120.0,
+   "rem_vis_min": 30.0,
+   "rem_by": {
+    "drive": 24
+   },
+   "rem_vis_by": {
+    "drive": 6
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 35,
+   "tok": "H:20",
+   "kind": "H",
+   "anim": 1,
+   "secs": 17,
+   "frames_s": 101.70588235294117,
+   "scroll_s": 101.70588235294117,
+   "stub_s": 101.70588235294117,
+   "passes_s": 101.76470588235294,
+   "agent_ticks_s": 349238.8823529412,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 392.11764705882354,
+   "ag_ms_s": 321.35341176470587,
+   "maxgap_ms_mean": 16.077058823529413,
+   "maxgap_ms_max": 35.08,
+   "maxgap_artifacts": 0,
+   "cars": 153.52941176470588,
+   "target": 200,
+   "spawn_min": 11205.882352941177,
+   "spawn_vis_min": 1288.235294117647,
+   "spawn_box_min": 105.88235294117646,
+   "rem_box_min": 3.5294117647058822,
+   "spawn_box_by": {
+    "mod": 30
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 1
+   },
+   "spawn_by": {
+    "mod": 3175
+   },
+   "spawn_vis_by": {
+    "mod": 365
+   },
+   "rem_min": 11456.470588235294,
+   "rem_vis_min": 10.588235294117647,
+   "rem_by": {
+    "drive": 3246
+   },
+   "rem_vis_by": {
+    "drive": 3
+   },
+   "view_updates_s": 20.176470588235293,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 79
+  },
+  {
+   "i": 36,
+   "tok": "I:10",
+   "kind": "I",
+   "anim": 1,
+   "secs": 7,
+   "frames_s": 120.42857142857143,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 120.42857142857143,
+   "agent_ticks_s": 415605,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 378,
+   "ag_ms_s": 378.79457142857143,
+   "maxgap_ms_mean": 9.695,
+   "maxgap_ms_max": 10.386,
+   "maxgap_artifacts": 0,
+   "cars": 50,
+   "target": 200,
+   "spawn_min": 3882.8571428571427,
+   "spawn_vis_min": 42.857142857142854,
+   "spawn_box_min": 8.571428571428571,
+   "rem_box_min": 0.0,
+   "spawn_box_by": {
+    "mod": 1
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {},
+   "spawn_by": {
+    "mod": 453
+   },
+   "spawn_vis_by": {
+    "mod": 5
+   },
+   "rem_min": 3488.5714285714284,
+   "rem_vis_min": 25.714285714285715,
+   "rem_by": {
+    "drive": 407
+   },
+   "rem_vis_by": {
+    "drive": 3
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 37,
+   "tok": "I:30",
+   "kind": "I",
+   "anim": 1,
+   "secs": 27,
+   "frames_s": 117.33333333333333,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 117.33333333333333,
+   "agent_ticks_s": 414183.48148148146,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 431.8888888888889,
+   "ag_ms_s": 415.4170740740741,
+   "maxgap_ms_mean": 14.214333333333334,
+   "maxgap_ms_max": 51.544,
+   "maxgap_artifacts": 0,
+   "cars": 131.7037037037037,
+   "target": 200,
+   "spawn_min": 524.4444444444445,
+   "spawn_vis_min": 35.55555555555556,
+   "spawn_box_min": 31.11111111111111,
+   "rem_box_min": 0.0,
+   "spawn_box_by": {
+    "mod": 14
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {},
+   "spawn_by": {
+    "mod": 236
+   },
+   "spawn_vis_by": {
+    "mod": 16
+   },
+   "rem_min": 337.77777777777777,
+   "rem_vis_min": 0.0,
+   "rem_by": {
+    "drive": 152
+   },
+   "rem_vis_by": {},
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 39,
+   "tok": "I:20",
+   "kind": "I",
+   "anim": 1,
+   "secs": 17,
+   "frames_s": 110.41176470588235,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 110.47058823529412,
+   "agent_ticks_s": 374557,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 402.6470588235294,
+   "ag_ms_s": 400.73405882352944,
+   "maxgap_ms_mean": 16.824411764705882,
+   "maxgap_ms_max": 41.73,
+   "maxgap_artifacts": 0,
+   "cars": 79.88235294117646,
+   "target": 200,
+   "spawn_min": 1302.3529411764705,
+   "spawn_vis_min": 42.35294117647059,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 24.705882352941178,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 7
+   },
+   "spawn_by": {
+    "mod": 369
+   },
+   "spawn_vis_by": {
+    "mod": 12
+   },
+   "rem_min": 1097.6470588235295,
+   "rem_vis_min": 24.705882352941178,
+   "rem_by": {
+    "drive": 311
+   },
+   "rem_vis_by": {
+    "drive": 7
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 40,
+   "tok": "I:15",
+   "kind": "I",
+   "anim": 1,
+   "secs": 12,
+   "frames_s": 114.33333333333333,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 114.33333333333333,
+   "agent_ticks_s": 392765.0833333333,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 438.4166666666667,
+   "ag_ms_s": 405.4915,
+   "maxgap_ms_mean": 17.28275,
+   "maxgap_ms_max": 54.496,
+   "maxgap_artifacts": 0,
+   "cars": 128.75,
+   "target": 200,
+   "spawn_min": 455.0,
+   "spawn_vis_min": 50.0,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 40.0,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 8
+   },
+   "spawn_by": {
+    "mod": 91
+   },
+   "spawn_vis_by": {
+    "mod": 10
+   },
+   "rem_min": 375.0,
+   "rem_vis_min": 40.0,
+   "rem_by": {
+    "drive": 75
+   },
+   "rem_vis_by": {
+    "drive": 8
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 41,
+   "tok": "H:20",
+   "kind": "H",
+   "anim": 1,
+   "secs": 17,
+   "frames_s": 98.94117647058823,
+   "scroll_s": 98.94117647058823,
+   "stub_s": 98.94117647058823,
+   "passes_s": 98.94117647058823,
+   "agent_ticks_s": 342927.8823529412,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 401.47058823529414,
+   "ag_ms_s": 351.8411176470588,
+   "maxgap_ms_mean": 17.37958823529412,
+   "maxgap_ms_max": 54.69,
+   "maxgap_artifacts": 0,
+   "cars": 130.11764705882354,
+   "target": 200,
+   "spawn_min": 6472.941176470588,
+   "spawn_vis_min": 300.0,
+   "spawn_box_min": 45.88235294117647,
+   "rem_box_min": 0.0,
+   "spawn_box_by": {
+    "mod": 13
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {},
+   "spawn_by": {
+    "mod": 1834
+   },
+   "spawn_vis_by": {
+    "mod": 85
+   },
+   "rem_min": 6501.176470588235,
+   "rem_vis_min": 0.0,
+   "rem_by": {
+    "drive": 1842
+   },
+   "rem_vis_by": {},
+   "view_updates_s": 18.88235294117647,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 31
+  },
+  {
+   "i": 42,
+   "tok": "I:10",
+   "kind": "I",
+   "anim": 1,
+   "secs": 7,
+   "frames_s": 119.57142857142857,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 119.57142857142857,
+   "agent_ticks_s": 407253.71428571426,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 439.57142857142856,
+   "ag_ms_s": 449.4681428571429,
+   "maxgap_ms_mean": 11.886,
+   "maxgap_ms_max": 13.55,
+   "maxgap_artifacts": 0,
+   "cars": 143.14285714285714,
+   "target": 200,
+   "spawn_min": 265.7142857142857,
+   "spawn_vis_min": 77.14285714285714,
+   "spawn_box_min": 51.42857142857143,
+   "rem_box_min": 17.142857142857142,
+   "spawn_box_by": {
+    "mod": 6
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 2
+   },
+   "spawn_by": {
+    "mod": 31
+   },
+   "spawn_vis_by": {
+    "mod": 9
+   },
+   "rem_min": 300.0,
+   "rem_vis_min": 51.42857142857143,
+   "rem_by": {
+    "drive": 35
+   },
+   "rem_vis_by": {
+    "drive": 6
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 43,
+   "tok": "I:30",
+   "kind": "I",
+   "anim": 1,
+   "secs": 27,
+   "frames_s": 115.44444444444444,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 115.44444444444444,
+   "agent_ticks_s": 410231.25925925927,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 478.14814814814815,
+   "ag_ms_s": 446.1564814814815,
+   "maxgap_ms_mean": 15.834740740740742,
+   "maxgap_ms_max": 51.606,
+   "maxgap_artifacts": 0,
+   "cars": 187.7037037037037,
+   "target": 200,
+   "spawn_min": 568.8888888888889,
+   "spawn_vis_min": 111.11111111111111,
+   "spawn_box_min": 84.44444444444444,
+   "rem_box_min": 33.333333333333336,
+   "spawn_box_by": {
+    "mod": 38
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 15
+   },
+   "spawn_by": {
+    "mod": 256
+   },
+   "spawn_vis_by": {
+    "mod": 50
+   },
+   "rem_min": 497.77777777777777,
+   "rem_vis_min": 46.666666666666664,
+   "rem_by": {
+    "drive": 224
+   },
+   "rem_vis_by": {
+    "drive": 21
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 45,
+   "tok": "I:20",
+   "kind": "I",
+   "anim": 0,
+   "secs": 17,
+   "frames_s": 120,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 120,
+   "agent_ticks_s": 411422.35294117645,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 376.6470588235294,
+   "ag_ms_s": 25671.71376470588,
+   "maxgap_ms_mean": 13.561625,
+   "maxgap_ms_max": 50.437,
+   "maxgap_artifacts": 1,
+   "cars": 35.8235294117647,
+   "target": 200,
+   "spawn_min": 377.6470588235294,
+   "spawn_vis_min": 116.47058823529412,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 28.235294117647058,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 8
+   },
+   "spawn_by": {
+    "mod": 107
+   },
+   "spawn_vis_by": {
+    "mod": 33
+   },
+   "rem_min": 247.05882352941177,
+   "rem_vis_min": 28.235294117647058,
+   "rem_by": {
+    "drive": 70
+   },
+   "rem_vis_by": {
+    "drive": 8
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 46,
+   "tok": "I:15",
+   "kind": "I",
+   "anim": 0,
+   "secs": 12,
+   "frames_s": 116.33333333333333,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 116.33333333333333,
+   "agent_ticks_s": 396144.1666666667,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 406.9166666666667,
+   "ag_ms_s": 413.2149166666667,
+   "maxgap_ms_mean": 13.74925,
+   "maxgap_ms_max": 40.867,
+   "maxgap_artifacts": 0,
+   "cars": 88.91666666666667,
+   "target": 200,
+   "spawn_min": 420.0,
+   "spawn_vis_min": 130.0,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 15.0,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 3
+   },
+   "spawn_by": {
+    "mod": 84
+   },
+   "spawn_vis_by": {
+    "mod": 26
+   },
+   "rem_min": 175.0,
+   "rem_vis_min": 15.0,
+   "rem_by": {
+    "drive": 35
+   },
+   "rem_vis_by": {
+    "drive": 3
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 47,
+   "tok": "H:20",
+   "kind": "H",
+   "anim": 0,
+   "secs": 17,
+   "frames_s": 106.29411764705883,
+   "scroll_s": 106.29411764705883,
+   "stub_s": 106.29411764705883,
+   "passes_s": 106.23529411764706,
+   "agent_ticks_s": 348934.64705882355,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 340.52941176470586,
+   "ag_ms_s": 350.759,
+   "maxgap_ms_mean": 18.084411764705884,
+   "maxgap_ms_max": 46.131,
+   "maxgap_artifacts": 0,
+   "cars": 4.9411764705882355,
+   "target": 198.05882352941177,
+   "spawn_min": 183.52941176470588,
+   "spawn_vis_min": 38.8235294117647,
+   "spawn_box_min": 31.764705882352942,
+   "rem_box_min": 0.0,
+   "spawn_box_by": {
+    "mod": 9
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {},
+   "spawn_by": {
+    "mod": 52
+   },
+   "spawn_vis_by": {
+    "mod": 11
+   },
+   "rem_min": 264.70588235294116,
+   "rem_vis_min": 0.0,
+   "rem_by": {
+    "drive": 75
+   },
+   "rem_vis_by": {},
+   "view_updates_s": 21.11764705882353,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 86
+  },
+  {
+   "i": 48,
+   "tok": "I:10",
+   "kind": "I",
+   "anim": 0,
+   "secs": 7,
+   "frames_s": 109.57142857142857,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 109.42857142857143,
+   "agent_ticks_s": 375158.28571428574,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 359.85714285714283,
+   "ag_ms_s": 392.7388571428571,
+   "maxgap_ms_mean": 22.08442857142857,
+   "maxgap_ms_max": 48.6,
+   "maxgap_artifacts": 0,
+   "cars": 14,
+   "target": 176,
+   "spawn_min": 0.0,
+   "spawn_vis_min": 0.0,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 0.0,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {},
+   "spawn_by": {},
+   "spawn_vis_by": {},
+   "rem_min": 8.571428571428571,
+   "rem_vis_min": 0.0,
+   "rem_by": {
+    "drive": 1
+   },
+   "rem_vis_by": {},
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 49,
+   "tok": "I:30",
+   "kind": "I",
+   "anim": 0,
+   "secs": 26,
+   "frames_s": 121.84615384615384,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 121.8076923076923,
+   "agent_ticks_s": 416797.07692307694,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 397.5769230769231,
+   "ag_ms_s": 376.23676923076926,
+   "maxgap_ms_mean": 14.5365,
+   "maxgap_ms_max": 54.46,
+   "maxgap_artifacts": 0,
+   "cars": 67.73076923076923,
+   "target": 155.84615384615384,
+   "spawn_min": 290.7692307692308,
+   "spawn_vis_min": 60.0,
+   "spawn_box_min": 11.538461538461538,
+   "rem_box_min": 2.3076923076923075,
+   "spawn_box_by": {
+    "mod": 5
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 1
+   },
+   "spawn_by": {
+    "mod": 126
+   },
+   "spawn_vis_by": {
+    "mod": 26
+   },
+   "rem_min": 143.07692307692307,
+   "rem_vis_min": 4.615384615384615,
+   "rem_by": {
+    "drive": 62
+   },
+   "rem_vis_by": {
+    "drive": 2
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 51,
+   "tok": "I:20",
+   "kind": "I",
+   "anim": 0,
+   "secs": 16,
+   "frames_s": 123.125,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 123.125,
+   "agent_ticks_s": 425673.9375,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 400.1875,
+   "ag_ms_s": 390.2994375,
+   "maxgap_ms_mean": 11.9710625,
+   "maxgap_ms_max": 51.404,
+   "maxgap_artifacts": 0,
+   "cars": 51.4375,
+   "target": 200,
+   "spawn_min": 491.25,
+   "spawn_vis_min": 127.5,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 18.75,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 5
+   },
+   "spawn_by": {
+    "mod": 131
+   },
+   "spawn_vis_by": {
+    "mod": 34
+   },
+   "rem_min": 277.5,
+   "rem_vis_min": 18.75,
+   "rem_by": {
+    "drive": 74
+   },
+   "rem_vis_by": {
+    "drive": 5
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 52,
+   "tok": "I:15",
+   "kind": "I",
+   "anim": 0,
+   "secs": 12,
+   "frames_s": 125.5,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 125.41666666666667,
+   "agent_ticks_s": 432185.4166666667,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 443.5833333333333,
+   "ag_ms_s": 405.60241666666667,
+   "maxgap_ms_mean": 13.46475,
+   "maxgap_ms_max": 51.608,
+   "maxgap_artifacts": 0,
+   "cars": 103.25,
+   "target": 200,
+   "spawn_min": 1185.0,
+   "spawn_vis_min": 70.0,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 25.0,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 5
+   },
+   "spawn_by": {
+    "mod": 237
+   },
+   "spawn_vis_by": {
+    "mod": 14
+   },
+   "rem_min": 1025.0,
+   "rem_vis_min": 40.0,
+   "rem_by": {
+    "drive": 205
+   },
+   "rem_vis_by": {
+    "drive": 8
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 53,
+   "tok": "AR:20",
+   "kind": "AR",
+   "anim": 0,
+   "secs": 20,
+   "frames_s": 109.8,
+   "scroll_s": 100.7,
+   "stub_s": 100.7,
+   "passes_s": 109.8,
+   "agent_ticks_s": 376311.1,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 445.05,
+   "ag_ms_s": 317.24625000000003,
+   "maxgap_ms_mean": 17.91585,
+   "maxgap_ms_max": 56.58,
+   "maxgap_artifacts": 0,
+   "cars": 102.75,
+   "target": 200,
+   "spawn_min": 762.0,
+   "spawn_vis_min": 81.0,
+   "spawn_box_min": 33.0,
+   "rem_box_min": 18.0,
+   "spawn_box_by": {
+    "mod": 11
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 6
+   },
+   "spawn_by": {
+    "mod": 254
+   },
+   "spawn_vis_by": {
+    "mod": 27
+   },
+   "rem_min": 891.0,
+   "rem_vis_min": 48.0,
+   "rem_by": {
+    "drive": 297
+   },
+   "rem_vis_by": {
+    "drive": 16
+   },
+   "view_updates_s": 25.1,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 6
+  },
+  {
+   "i": 54,
+   "tok": "I:10",
+   "kind": "I",
+   "anim": 0,
+   "secs": 6,
+   "frames_s": 126.16666666666667,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 126.16666666666667,
+   "agent_ticks_s": 421291.8333333333,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 428.5,
+   "ag_ms_s": 374.226,
+   "maxgap_ms_mean": 11.6695,
+   "maxgap_ms_max": 23.577,
+   "maxgap_artifacts": 0,
+   "cars": 104,
+   "target": 200,
+   "spawn_min": 1150.0,
+   "spawn_vis_min": 280.0,
+   "spawn_box_min": 190.0,
+   "rem_box_min": 30.0,
+   "spawn_box_by": {
+    "mod": 19
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 3
+   },
+   "spawn_by": {
+    "mod": 115
+   },
+   "spawn_vis_by": {
+    "mod": 28
+   },
+   "rem_min": 690.0,
+   "rem_vis_min": 40.0,
+   "rem_by": {
+    "drive": 69
+   },
+   "rem_vis_by": {
+    "drive": 4
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 55,
+   "tok": "I:30",
+   "kind": "I",
+   "anim": 0,
+   "secs": 27,
+   "frames_s": 114.48148148148148,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 114.48148148148148,
+   "agent_ticks_s": 400087.4074074074,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 466.74074074074076,
+   "ag_ms_s": 355.3191111111111,
+   "maxgap_ms_mean": 14.92362962962963,
+   "maxgap_ms_max": 51.654,
+   "maxgap_artifacts": 0,
+   "cars": 162.92592592592592,
+   "target": 200,
+   "spawn_min": 580.0,
+   "spawn_vis_min": 191.11111111111111,
+   "spawn_box_min": 135.55555555555554,
+   "rem_box_min": 66.66666666666667,
+   "spawn_box_by": {
+    "mod": 61
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 30
+   },
+   "spawn_by": {
+    "mod": 261
+   },
+   "spawn_vis_by": {
+    "mod": 86
+   },
+   "rem_min": 395.55555555555554,
+   "rem_vis_min": 75.55555555555556,
+   "rem_by": {
+    "drive": 178
+   },
+   "rem_vis_by": {
+    "drive": 34
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 57,
+   "tok": "I:20",
+   "kind": "I",
+   "anim": 1,
+   "secs": 17,
+   "frames_s": 101.58823529411765,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 101.52941176470588,
+   "agent_ticks_s": 368685.1176470588,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 505.4117647058824,
+   "ag_ms_s": 434.3529411764706,
+   "maxgap_ms_mean": 17.57735294117647,
+   "maxgap_ms_max": 41.45,
+   "maxgap_artifacts": 0,
+   "cars": 196.47058823529412,
+   "target": 200,
+   "spawn_min": 412.94117647058823,
+   "spawn_vis_min": 56.470588235294116,
+   "spawn_box_min": 3.5294117647058822,
+   "rem_box_min": 112.94117647058823,
+   "spawn_box_by": {
+    "mod": 1
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 32
+   },
+   "spawn_by": {
+    "mod": 117
+   },
+   "spawn_vis_by": {
+    "mod": 16
+   },
+   "rem_min": 402.3529411764706,
+   "rem_vis_min": 123.52941176470588,
+   "rem_by": {
+    "drive": 114
+   },
+   "rem_vis_by": {
+    "drive": 35
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 58,
+   "tok": "I:15",
+   "kind": "I",
+   "anim": 1,
+   "secs": 12,
+   "frames_s": 107.91666666666667,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 108,
+   "agent_ticks_s": 383043,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 506.1666666666667,
+   "ag_ms_s": 469.85425,
+   "maxgap_ms_mean": 13.43675,
+   "maxgap_ms_max": 20.52,
+   "maxgap_artifacts": 0,
+   "cars": 200,
+   "target": 200,
+   "spawn_min": 160.0,
+   "spawn_vis_min": 25.0,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 5.0,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 1
+   },
+   "spawn_by": {
+    "mod": 32
+   },
+   "spawn_vis_by": {
+    "mod": 5
+   },
+   "rem_min": 160.0,
+   "rem_vis_min": 10.0,
+   "rem_by": {
+    "drive": 32
+   },
+   "rem_vis_by": {
+    "drive": 2
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 59,
+   "tok": "AR:20",
+   "kind": "AR",
+   "anim": 1,
+   "secs": 17,
+   "frames_s": 69.88235294117646,
+   "scroll_s": 69.88235294117646,
+   "stub_s": 69.88235294117646,
+   "passes_s": 69.82352941176471,
+   "agent_ticks_s": 240925.82352941178,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 475.52941176470586,
+   "ag_ms_s": 303.9215882352941,
+   "maxgap_ms_mean": 21.634176470588237,
+   "maxgap_ms_max": 59.38,
+   "maxgap_artifacts": 0,
+   "cars": 199.7058823529412,
+   "target": 200,
+   "spawn_min": 1087.0588235294117,
+   "spawn_vis_min": 151.76470588235293,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 14.117647058823529,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 4
+   },
+   "spawn_by": {
+    "mod": 308
+   },
+   "spawn_vis_by": {
+    "mod": 43
+   },
+   "rem_min": 1087.0588235294117,
+   "rem_vis_min": 42.35294117647059,
+   "rem_by": {
+    "drive": 308
+   },
+   "rem_vis_by": {
+    "drive": 12
+   },
+   "view_updates_s": 17.705882352941178,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 6
+  },
+  {
+   "i": 60,
+   "tok": "I:10",
+   "kind": "I",
+   "anim": 1,
+   "secs": 7,
+   "frames_s": 95.42857142857143,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 95.42857142857143,
+   "agent_ticks_s": 339865.14285714284,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 497.7142857142857,
+   "ag_ms_s": 396.7731428571429,
+   "maxgap_ms_mean": 18.608428571428572,
+   "maxgap_ms_max": 37.072,
+   "maxgap_artifacts": 0,
+   "cars": 199.85714285714286,
+   "target": 200,
+   "spawn_min": 480.0,
+   "spawn_vis_min": 85.71428571428571,
+   "spawn_box_min": 17.142857142857142,
+   "rem_box_min": 8.571428571428571,
+   "spawn_box_by": {
+    "mod": 2
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 1
+   },
+   "spawn_by": {
+    "mod": 56
+   },
+   "spawn_vis_by": {
+    "mod": 10
+   },
+   "rem_min": 480.0,
+   "rem_vis_min": 8.571428571428571,
+   "rem_by": {
+    "drive": 56
+   },
+   "rem_vis_by": {
+    "drive": 1
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 61,
+   "tok": "I:30",
+   "kind": "I",
+   "anim": 1,
+   "secs": 27,
+   "frames_s": 93.11111111111111,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 93.11111111111111,
+   "agent_ticks_s": 333479.74074074073,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 504.6666666666667,
+   "ag_ms_s": 427.05414814814816,
+   "maxgap_ms_mean": 20.637925925925927,
+   "maxgap_ms_max": 56.172,
+   "maxgap_artifacts": 0,
+   "cars": 199.96296296296296,
+   "target": 200,
+   "spawn_min": 286.6666666666667,
+   "spawn_vis_min": 66.66666666666667,
+   "spawn_box_min": 24.444444444444443,
+   "rem_box_min": 46.666666666666664,
+   "spawn_box_by": {
+    "mod": 11
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 21
+   },
+   "spawn_by": {
+    "mod": 129
+   },
+   "spawn_vis_by": {
+    "mod": 30
+   },
+   "rem_min": 286.6666666666667,
+   "rem_vis_min": 75.55555555555556,
+   "rem_by": {
+    "drive": 129
+   },
+   "rem_vis_by": {
+    "drive": 34
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 63,
+   "tok": "I:20",
+   "kind": "I",
+   "anim": 1,
+   "secs": 17,
+   "frames_s": 91.88235294117646,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 91.88235294117646,
+   "agent_ticks_s": 332133.82352941175,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 506.47058823529414,
+   "ag_ms_s": 456.6950588235294,
+   "maxgap_ms_mean": 20.28358823529412,
+   "maxgap_ms_max": 57.367,
+   "maxgap_artifacts": 0,
+   "cars": 199.88235294117646,
+   "target": 200,
+   "spawn_min": 540.0,
+   "spawn_vis_min": 24.705882352941178,
+   "spawn_box_min": 7.0588235294117645,
+   "rem_box_min": 67.05882352941177,
+   "spawn_box_by": {
+    "mod": 2
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 19
+   },
+   "spawn_by": {
+    "mod": 153
+   },
+   "spawn_vis_by": {
+    "mod": 7
+   },
+   "rem_min": 540.0,
+   "rem_vis_min": 81.17647058823529,
+   "rem_by": {
+    "drive": 153
+   },
+   "rem_vis_by": {
+    "drive": 23
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 64,
+   "tok": "I:15",
+   "kind": "I",
+   "anim": 1,
+   "secs": 12,
+   "frames_s": 95.58333333333333,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 95.66666666666667,
+   "agent_ticks_s": 339685.9166666667,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 503.8333333333333,
+   "ag_ms_s": 445.7905,
+   "maxgap_ms_mean": 18.169916666666666,
+   "maxgap_ms_max": 40.453,
+   "maxgap_artifacts": 0,
+   "cars": 199.75,
+   "target": 200,
+   "spawn_min": 325.0,
+   "spawn_vis_min": 30.0,
+   "spawn_box_min": 25.0,
+   "rem_box_min": 50.0,
+   "spawn_box_by": {
+    "mod": 5
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 10
+   },
+   "spawn_by": {
+    "mod": 65
+   },
+   "spawn_vis_by": {
+    "mod": 6
+   },
+   "rem_min": 320.0,
+   "rem_vis_min": 60.0,
+   "rem_by": {
+    "drive": 64
+   },
+   "rem_vis_by": {
+    "drive": 12
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 65,
+   "tok": "AR:20",
+   "kind": "AR",
+   "anim": 1,
+   "secs": 17,
+   "frames_s": 70.41176470588235,
+   "scroll_s": 70.41176470588235,
+   "stub_s": 70.41176470588235,
+   "passes_s": 70.41176470588235,
+   "agent_ticks_s": 241604.4705882353,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 471.05882352941177,
+   "ag_ms_s": 319.4591764705882,
+   "maxgap_ms_mean": 21.841941176470588,
+   "maxgap_ms_max": 58.725,
+   "maxgap_artifacts": 0,
+   "cars": 199.64705882352942,
+   "target": 200,
+   "spawn_min": 2276.470588235294,
+   "spawn_vis_min": 123.52941176470588,
+   "spawn_box_min": 14.117647058823529,
+   "rem_box_min": 31.764705882352942,
+   "spawn_box_by": {
+    "mod": 4
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 9
+   },
+   "spawn_by": {
+    "mod": 645
+   },
+   "spawn_vis_by": {
+    "mod": 35
+   },
+   "rem_min": 2262.3529411764707,
+   "rem_vis_min": 56.470588235294116,
+   "rem_by": {
+    "drive": 641
+   },
+   "rem_vis_by": {
+    "drive": 16
+   },
+   "view_updates_s": 18.058823529411764,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 66,
+   "tok": "I:10",
+   "kind": "I",
+   "anim": 1,
+   "secs": 6,
+   "frames_s": 113.83333333333333,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 113.66666666666667,
+   "agent_ticks_s": 396556,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 508,
+   "ag_ms_s": 473.7438333333333,
+   "maxgap_ms_mean": 20.986666666666668,
+   "maxgap_ms_max": 52.956,
+   "maxgap_artifacts": 0,
+   "cars": 200,
+   "target": 200,
+   "spawn_min": 580.0,
+   "spawn_vis_min": 10.0,
+   "spawn_box_min": 10.0,
+   "rem_box_min": 0.0,
+   "spawn_box_by": {
+    "mod": 1
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {},
+   "spawn_by": {
+    "mod": 58
+   },
+   "spawn_vis_by": {
+    "mod": 1
+   },
+   "rem_min": 580.0,
+   "rem_vis_min": 0.0,
+   "rem_by": {
+    "drive": 58
+   },
+   "rem_vis_by": {},
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 67,
+   "tok": "I:30",
+   "kind": "I",
+   "anim": 1,
+   "secs": 27,
+   "frames_s": 107.44444444444444,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 107.4074074074074,
+   "agent_ticks_s": 388996.44444444444,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 514.4074074074074,
+   "ag_ms_s": 470.31214814814814,
+   "maxgap_ms_mean": 16.478666666666665,
+   "maxgap_ms_max": 53.224,
+   "maxgap_artifacts": 0,
+   "cars": 199.96296296296296,
+   "target": 200,
+   "spawn_min": 293.3333333333333,
+   "spawn_vis_min": 33.333333333333336,
+   "spawn_box_min": 31.11111111111111,
+   "rem_box_min": 53.333333333333336,
+   "spawn_box_by": {
+    "mod": 14
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 24
+   },
+   "spawn_by": {
+    "mod": 132
+   },
+   "spawn_vis_by": {
+    "mod": 15
+   },
+   "rem_min": 295.55555555555554,
+   "rem_vis_min": 55.55555555555556,
+   "rem_by": {
+    "drive": 133
+   },
+   "rem_vis_by": {
+    "drive": 25
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 69,
+   "tok": "I:20",
+   "kind": "I",
+   "anim": 0,
+   "secs": 17,
+   "frames_s": 112.94117647058823,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 112.94117647058823,
+   "agent_ticks_s": 398788.9411764706,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 441.1764705882353,
+   "ag_ms_s": 400.96158823529413,
+   "maxgap_ms_mean": 17.49276470588235,
+   "maxgap_ms_max": 53.607,
+   "maxgap_artifacts": 0,
+   "cars": 111.6470588235294,
+   "target": 200,
+   "spawn_min": 638.8235294117648,
+   "spawn_vis_min": 123.52941176470588,
+   "spawn_box_min": 21.176470588235293,
+   "rem_box_min": 10.588235294117647,
+   "spawn_box_by": {
+    "mod": 6
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 3
+   },
+   "spawn_by": {
+    "mod": 181
+   },
+   "spawn_vis_by": {
+    "mod": 35
+   },
+   "rem_min": 420.0,
+   "rem_vis_min": 21.176470588235293,
+   "rem_by": {
+    "drive": 119
+   },
+   "rem_vis_by": {
+    "drive": 6
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 70,
+   "tok": "I:15",
+   "kind": "I",
+   "anim": 0,
+   "secs": 12,
+   "frames_s": 118.91666666666667,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 118.91666666666667,
+   "agent_ticks_s": 397256,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 453.0833333333333,
+   "ag_ms_s": 387.42775,
+   "maxgap_ms_mean": 15.53709090909091,
+   "maxgap_ms_max": 51.587,
+   "maxgap_artifacts": 1,
+   "cars": 166.08333333333334,
+   "target": 200,
+   "spawn_min": 585.0,
+   "spawn_vis_min": 155.0,
+   "spawn_box_min": 20.0,
+   "rem_box_min": 5.0,
+   "spawn_box_by": {
+    "mod": 4
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 1
+   },
+   "spawn_by": {
+    "mod": 117
+   },
+   "spawn_vis_by": {
+    "mod": 31
+   },
+   "rem_min": 410.0,
+   "rem_vis_min": 5.0,
+   "rem_by": {
+    "drive": 82
+   },
+   "rem_vis_by": {
+    "drive": 1
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 71,
+   "tok": "AR:20",
+   "kind": "AR",
+   "anim": 0,
+   "secs": 17,
+   "frames_s": 95.82352941176471,
+   "scroll_s": 95.82352941176471,
+   "stub_s": 95.76470588235294,
+   "passes_s": 95.76470588235294,
+   "agent_ticks_s": 328517.9411764706,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 449.4117647058824,
+   "ag_ms_s": 309.97217647058824,
+   "maxgap_ms_mean": 15.007941176470588,
+   "maxgap_ms_max": 20.585,
+   "maxgap_artifacts": 0,
+   "cars": 137.52941176470588,
+   "target": 200,
+   "spawn_min": 314.11764705882354,
+   "spawn_vis_min": 88.23529411764706,
+   "spawn_box_min": 70.58823529411765,
+   "rem_box_min": 17.647058823529413,
+   "spawn_box_by": {
+    "mod": 20
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 5
+   },
+   "spawn_by": {
+    "mod": 89
+   },
+   "spawn_vis_by": {
+    "mod": 25
+   },
+   "rem_min": 437.6470588235294,
+   "rem_vis_min": 28.235294117647058,
+   "rem_by": {
+    "drive": 124
+   },
+   "rem_vis_by": {
+    "drive": 8
+   },
+   "view_updates_s": 24,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 12
+  },
+  {
+   "i": 72,
+   "tok": "I:10",
+   "kind": "I",
+   "anim": 0,
+   "secs": 7,
+   "frames_s": 119.14285714285714,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 119.14285714285714,
+   "agent_ticks_s": 413795,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 441.2857142857143,
+   "ag_ms_s": 422.55614285714285,
+   "maxgap_ms_mean": 16.701285714285714,
+   "maxgap_ms_max": 48.245,
+   "maxgap_artifacts": 0,
+   "cars": 130.71428571428572,
+   "target": 200,
+   "spawn_min": 634.2857142857143,
+   "spawn_vis_min": 128.57142857142858,
+   "spawn_box_min": 60.0,
+   "rem_box_min": 25.714285714285715,
+   "spawn_box_by": {
+    "mod": 7
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 3
+   },
+   "spawn_by": {
+    "mod": 74
+   },
+   "spawn_vis_by": {
+    "mod": 15
+   },
+   "rem_min": 411.42857142857144,
+   "rem_vis_min": 25.714285714285715,
+   "rem_by": {
+    "drive": 48
+   },
+   "rem_vis_by": {
+    "drive": 3
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 73,
+   "tok": "I:30",
+   "kind": "I",
+   "anim": 0,
+   "secs": 26,
+   "frames_s": 110.5,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 110.46153846153847,
+   "agent_ticks_s": 397603.6153846154,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 487.5769230769231,
+   "ag_ms_s": 421.38384615384615,
+   "maxgap_ms_mean": 16.8595,
+   "maxgap_ms_max": 53.272,
+   "maxgap_artifacts": 0,
+   "cars": 171.76923076923077,
+   "target": 200,
+   "spawn_min": 480.0,
+   "spawn_vis_min": 90.0,
+   "spawn_box_min": 73.84615384615384,
+   "rem_box_min": 48.46153846153846,
+   "spawn_box_by": {
+    "mod": 32
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 21
+   },
+   "spawn_by": {
+    "mod": 208
+   },
+   "spawn_vis_by": {
+    "mod": 39
+   },
+   "rem_min": 410.7692307692308,
+   "rem_vis_min": 53.07692307692308,
+   "rem_by": {
+    "drive": 178
+   },
+   "rem_vis_by": {
+    "drive": 23
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 74,
+   "tok": "W:3",
+   "kind": "W",
+   "anim": 0,
+   "secs": 1,
+   "frames_s": 108,
+   "scroll_s": 104,
+   "stub_s": 104,
+   "passes_s": 108,
+   "agent_ticks_s": 382294,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 435,
+   "ag_ms_s": 461.347,
+   "maxgap_ms_mean": 17.287,
+   "maxgap_ms_max": 17.287,
+   "maxgap_artifacts": 0,
+   "cars": 75,
+   "target": 200,
+   "spawn_min": 0.0,
+   "spawn_vis_min": 0.0,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 0.0,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {},
+   "spawn_by": {},
+   "spawn_vis_by": {},
+   "rem_min": 3180.0,
+   "rem_vis_min": 0.0,
+   "rem_by": {
+    "drive": 53
+   },
+   "rem_vis_by": {},
+   "view_updates_s": 3,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 49
+  },
+  {
+   "i": 75,
+   "tok": "I:20",
+   "kind": "I",
+   "anim": 0,
+   "secs": 17,
+   "frames_s": 111,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 111.05882352941177,
+   "agent_ticks_s": 377786.5882352941,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 416.6470588235294,
+   "ag_ms_s": 409.6519411764706,
+   "maxgap_ms_mean": 17.551058823529413,
+   "maxgap_ms_max": 47.954,
+   "maxgap_artifacts": 0,
+   "cars": 101.70588235294117,
+   "target": 200,
+   "spawn_min": 338.8235294117647,
+   "spawn_vis_min": 63.529411764705884,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 42.35294117647059,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 12
+   },
+   "spawn_by": {
+    "mod": 96
+   },
+   "spawn_vis_by": {
+    "mod": 18
+   },
+   "rem_min": 243.52941176470588,
+   "rem_vis_min": 45.88235294117647,
+   "rem_by": {
+    "drive": 69
+   },
+   "rem_vis_by": {
+    "drive": 13
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 76,
+   "tok": "I:15",
+   "kind": "I",
+   "anim": 0,
+   "secs": 12,
+   "frames_s": 118.16666666666667,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 118.16666666666667,
+   "agent_ticks_s": 410789.6666666667,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 443.5,
+   "ag_ms_s": 425.11133333333333,
+   "maxgap_ms_mean": 15.08175,
+   "maxgap_ms_max": 49.842,
+   "maxgap_artifacts": 0,
+   "cars": 133.66666666666666,
+   "target": 200,
+   "spawn_min": 545.0,
+   "spawn_vis_min": 135.0,
+   "spawn_box_min": 5.0,
+   "rem_box_min": 35.0,
+   "spawn_box_by": {
+    "mod": 1
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 7
+   },
+   "spawn_by": {
+    "mod": 109
+   },
+   "spawn_vis_by": {
+    "mod": 27
+   },
+   "rem_min": 500.0,
+   "rem_vis_min": 45.0,
+   "rem_by": {
+    "drive": 100
+   },
+   "rem_vis_by": {
+    "drive": 9
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 77,
+   "tok": "OS:20",
+   "kind": "OS",
+   "anim": 0,
+   "secs": 17,
+   "frames_s": 112.76470588235294,
+   "scroll_s": 112.82352941176471,
+   "stub_s": 112.82352941176471,
+   "passes_s": 112.82352941176471,
+   "agent_ticks_s": 371364.64705882355,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 342.11764705882354,
+   "ag_ms_s": 311.92111764705885,
+   "maxgap_ms_mean": 18.11664705882353,
+   "maxgap_ms_max": 47.104,
+   "maxgap_artifacts": 0,
+   "cars": 6,
+   "target": 164.05882352941177,
+   "spawn_min": 250.58823529411765,
+   "spawn_vis_min": 67.05882352941177,
+   "spawn_box_min": 42.35294117647059,
+   "rem_box_min": 0.0,
+   "spawn_box_by": {
+    "mod": 12
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {},
+   "spawn_by": {
+    "mod": 71
+   },
+   "spawn_vis_by": {
+    "mod": 19
+   },
+   "rem_min": 250.58823529411765,
+   "rem_vis_min": 0.0,
+   "rem_by": {
+    "drive": 71
+   },
+   "rem_vis_by": {},
+   "view_updates_s": 26.058823529411764,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 1001
+  },
+  {
+   "i": 78,
+   "tok": "I:10",
+   "kind": "I",
+   "anim": 0,
+   "secs": 17,
+   "frames_s": 109.23529411764706,
+   "scroll_s": 109.23529411764706,
+   "stub_s": 109.23529411764706,
+   "passes_s": 109.23529411764706,
+   "agent_ticks_s": 370166,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 353.29411764705884,
+   "ag_ms_s": 346.2344705882353,
+   "maxgap_ms_mean": 15.243294117647059,
+   "maxgap_ms_max": 34.433,
+   "maxgap_artifacts": 0,
+   "cars": 9.529411764705882,
+   "target": 131.94117647058823,
+   "spawn_min": 501.1764705882353,
+   "spawn_vis_min": 169.41176470588235,
+   "spawn_box_min": 148.23529411764707,
+   "rem_box_min": 0.0,
+   "spawn_box_by": {
+    "mod": 42
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {},
+   "spawn_by": {
+    "mod": 142
+   },
+   "spawn_vis_by": {
+    "mod": 48
+   },
+   "rem_min": 525.8823529411765,
+   "rem_vis_min": 0.0,
+   "rem_by": {
+    "drive": 149
+   },
+   "rem_vis_by": {},
+   "view_updates_s": 27.294117647058822,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 1072
+  },
+  {
+   "i": 79,
+   "tok": "I:30",
+   "kind": "I",
+   "anim": 0,
+   "secs": 27,
+   "frames_s": 117.5925925925926,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 117.62962962962963,
+   "agent_ticks_s": 402424.6666666667,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 381.7037037037037,
+   "ag_ms_s": 407.1872222222222,
+   "maxgap_ms_mean": 13.126259259259259,
+   "maxgap_ms_max": 49.732,
+   "maxgap_artifacts": 0,
+   "cars": 55.25925925925926,
+   "target": 183.22222222222223,
+   "spawn_min": 846.6666666666666,
+   "spawn_vis_min": 157.77777777777777,
+   "spawn_box_min": 71.11111111111111,
+   "rem_box_min": 31.11111111111111,
+   "spawn_box_by": {
+    "mod": 32
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 14
+   },
+   "spawn_by": {
+    "mod": 381
+   },
+   "spawn_vis_by": {
+    "mod": 71
+   },
+   "rem_min": 628.8888888888889,
+   "rem_vis_min": 31.11111111111111,
+   "rem_by": {
+    "drive": 283
+   },
+   "rem_vis_by": {
+    "drive": 14
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 81,
+   "tok": "I:20",
+   "kind": "I",
+   "anim": 1,
+   "secs": 17,
+   "frames_s": 116.52941176470588,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 116.52941176470588,
+   "agent_ticks_s": 399358.64705882355,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 409.3529411764706,
+   "ag_ms_s": 386.27505882352943,
+   "maxgap_ms_mean": 13.294823529411765,
+   "maxgap_ms_max": 46.555,
+   "maxgap_artifacts": 0,
+   "cars": 98.58823529411765,
+   "target": 200,
+   "spawn_min": 1425.8823529411766,
+   "spawn_vis_min": 109.41176470588235,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 42.35294117647059,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 12
+   },
+   "spawn_by": {
+    "mod": 404
+   },
+   "spawn_vis_by": {
+    "mod": 31
+   },
+   "rem_min": 1125.8823529411766,
+   "rem_vis_min": 42.35294117647059,
+   "rem_by": {
+    "drive": 319
+   },
+   "rem_vis_by": {
+    "drive": 12
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 82,
+   "tok": "I:15",
+   "kind": "I",
+   "anim": 1,
+   "secs": 12,
+   "frames_s": 113,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 113.08333333333333,
+   "agent_ticks_s": 403146.3333333333,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 470,
+   "ag_ms_s": 405.8781666666667,
+   "maxgap_ms_mean": 14.866333333333333,
+   "maxgap_ms_max": 36.099,
+   "maxgap_artifacts": 0,
+   "cars": 157.66666666666666,
+   "target": 200,
+   "spawn_min": 655.0,
+   "spawn_vis_min": 135.0,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 60.0,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 12
+   },
+   "spawn_by": {
+    "mod": 131
+   },
+   "spawn_vis_by": {
+    "mod": 27
+   },
+   "rem_min": 415.0,
+   "rem_vis_min": 60.0,
+   "rem_by": {
+    "drive": 83
+   },
+   "rem_vis_by": {
+    "drive": 12
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 83,
+   "tok": "OS:20",
+   "kind": "OS",
+   "anim": 1,
+   "secs": 17,
+   "frames_s": 105.05882352941177,
+   "scroll_s": 105.05882352941177,
+   "stub_s": 105.05882352941177,
+   "passes_s": 105.05882352941177,
+   "agent_ticks_s": 359447.5882352941,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 354.7647058823529,
+   "ag_ms_s": 346.3642941176471,
+   "maxgap_ms_mean": 17.74111764705882,
+   "maxgap_ms_max": 54.013,
+   "maxgap_artifacts": 0,
+   "cars": 40.11764705882353,
+   "target": 178.94117647058823,
+   "spawn_min": 2904.705882352941,
+   "spawn_vis_min": 236.47058823529412,
+   "spawn_box_min": 70.58823529411765,
+   "rem_box_min": 0.0,
+   "spawn_box_by": {
+    "mod": 20
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {},
+   "spawn_by": {
+    "mod": 823
+   },
+   "spawn_vis_by": {
+    "mod": 67
+   },
+   "rem_min": 3091.764705882353,
+   "rem_vis_min": 3.5294117647058822,
+   "rem_by": {
+    "drive": 876
+   },
+   "rem_vis_by": {
+    "drive": 1
+   },
+   "view_updates_s": 24.88235294117647,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 985
+  },
+  {
+   "i": 84,
+   "tok": "I:10",
+   "kind": "I",
+   "anim": 1,
+   "secs": 17,
+   "frames_s": 106.58823529411765,
+   "scroll_s": 106.58823529411765,
+   "stub_s": 106.58823529411765,
+   "passes_s": 106.6470588235294,
+   "agent_ticks_s": 365401.23529411765,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 349.7647058823529,
+   "ag_ms_s": 346.2833529411765,
+   "maxgap_ms_mean": 18.417235294117646,
+   "maxgap_ms_max": 48.089,
+   "maxgap_artifacts": 0,
+   "cars": 35.35294117647059,
+   "target": 156.11764705882354,
+   "spawn_min": 3600.0,
+   "spawn_vis_min": 211.76470588235293,
+   "spawn_box_min": 49.411764705882355,
+   "rem_box_min": 0.0,
+   "spawn_box_by": {
+    "mod": 14
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {},
+   "spawn_by": {
+    "mod": 1020
+   },
+   "spawn_vis_by": {
+    "mod": 60
+   },
+   "rem_min": 3571.764705882353,
+   "rem_vis_min": 7.0588235294117645,
+   "rem_by": {
+    "drive": 1012
+   },
+   "rem_vis_by": {
+    "drive": 2
+   },
+   "view_updates_s": 26.529411764705884,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 1040
+  },
+  {
+   "i": 85,
+   "tok": "I:30",
+   "kind": "I",
+   "anim": 1,
+   "secs": 27,
+   "frames_s": 115.48148148148148,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 115.44444444444444,
+   "agent_ticks_s": 400415.55555555556,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 408.037037037037,
+   "ag_ms_s": 414.9058148148148,
+   "maxgap_ms_mean": 18.020222222222223,
+   "maxgap_ms_max": 53.103,
+   "maxgap_artifacts": 0,
+   "cars": 103.66666666666667,
+   "target": 122.74074074074075,
+   "spawn_min": 1928.888888888889,
+   "spawn_vis_min": 168.88888888888889,
+   "spawn_box_min": 86.66666666666667,
+   "rem_box_min": 31.11111111111111,
+   "spawn_box_by": {
+    "mod": 39
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 14
+   },
+   "spawn_by": {
+    "mod": 868
+   },
+   "spawn_vis_by": {
+    "mod": 76
+   },
+   "rem_min": 1688.888888888889,
+   "rem_vis_min": 42.22222222222222,
+   "rem_by": {
+    "drive": 760
+   },
+   "rem_vis_by": {
+    "drive": 19
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 87,
+   "tok": "I:20",
+   "kind": "I",
+   "anim": 1,
+   "secs": 17,
+   "frames_s": 117.17647058823529,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 117.11764705882354,
+   "agent_ticks_s": 398555.76470588235,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 415.7647058823529,
+   "ag_ms_s": 395.7865294117647,
+   "maxgap_ms_mean": 15.286470588235295,
+   "maxgap_ms_max": 49.897,
+   "maxgap_artifacts": 0,
+   "cars": 102.6470588235294,
+   "target": 200,
+   "spawn_min": 1154.1176470588234,
+   "spawn_vis_min": 77.6470588235294,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 28.235294117647058,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 8
+   },
+   "spawn_by": {
+    "mod": 327
+   },
+   "spawn_vis_by": {
+    "mod": 22
+   },
+   "rem_min": 967.0588235294117,
+   "rem_vis_min": 28.235294117647058,
+   "rem_by": {
+    "drive": 274
+   },
+   "rem_vis_by": {
+    "drive": 8
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 88,
+   "tok": "I:15",
+   "kind": "I",
+   "anim": 1,
+   "secs": 12,
+   "frames_s": 120,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 120.08333333333333,
+   "agent_ticks_s": 405692.5833333333,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 441.9166666666667,
+   "ag_ms_s": 332.35866666666664,
+   "maxgap_ms_mean": 13.372666666666667,
+   "maxgap_ms_max": 44.588,
+   "maxgap_artifacts": 0,
+   "cars": 145.41666666666666,
+   "target": 200,
+   "spawn_min": 570.0,
+   "spawn_vis_min": 80.0,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 55.0,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 11
+   },
+   "spawn_by": {
+    "mod": 114
+   },
+   "spawn_vis_by": {
+    "mod": 16
+   },
+   "rem_min": 360.0,
+   "rem_vis_min": 55.0,
+   "rem_by": {
+    "drive": 72
+   },
+   "rem_vis_by": {
+    "drive": 11
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 89,
+   "tok": "OS:20",
+   "kind": "OS",
+   "anim": 1,
+   "secs": 18,
+   "frames_s": 110.44444444444444,
+   "scroll_s": 110.16666666666667,
+   "stub_s": 110.22222222222223,
+   "passes_s": 110.5,
+   "agent_ticks_s": 384817.3888888889,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 362.22222222222223,
+   "ag_ms_s": 316.2635,
+   "maxgap_ms_mean": 16.31983333333333,
+   "maxgap_ms_max": 49.376,
+   "maxgap_artifacts": 0,
+   "cars": 48.5,
+   "target": 166.77777777777777,
+   "spawn_min": 3886.6666666666665,
+   "spawn_vis_min": 136.66666666666666,
+   "spawn_box_min": 33.333333333333336,
+   "rem_box_min": 0.0,
+   "spawn_box_by": {
+    "mod": 10
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {},
+   "spawn_by": {
+    "mod": 1166
+   },
+   "spawn_vis_by": {
+    "mod": 41
+   },
+   "rem_min": 4246.666666666667,
+   "rem_vis_min": 0.0,
+   "rem_by": {
+    "drive": 1274
+   },
+   "rem_vis_by": {},
+   "view_updates_s": 24.666666666666668,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 1001
+  },
+  {
+   "i": 90,
+   "tok": "I:10",
+   "kind": "I",
+   "anim": 1,
+   "secs": 17,
+   "frames_s": 118.76470588235294,
+   "scroll_s": 118.76470588235294,
+   "stub_s": 118.70588235294117,
+   "passes_s": 118.76470588235294,
+   "agent_ticks_s": 406642.64705882355,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 352.7647058823529,
+   "ag_ms_s": 303.10205882352943,
+   "maxgap_ms_mean": 14.704176470588235,
+   "maxgap_ms_max": 43.886,
+   "maxgap_artifacts": 0,
+   "cars": 36.1764705882353,
+   "target": 160,
+   "spawn_min": 3158.823529411765,
+   "spawn_vis_min": 158.8235294117647,
+   "spawn_box_min": 14.117647058823529,
+   "rem_box_min": 0.0,
+   "spawn_box_by": {
+    "mod": 4
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {},
+   "spawn_by": {
+    "mod": 895
+   },
+   "spawn_vis_by": {
+    "mod": 45
+   },
+   "rem_min": 3098.823529411765,
+   "rem_vis_min": 0.0,
+   "rem_by": {
+    "drive": 878
+   },
+   "rem_vis_by": {},
+   "view_updates_s": 29.705882352941178,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 1154
+  },
+  {
+   "i": 91,
+   "tok": "I:30",
+   "kind": "I",
+   "anim": 1,
+   "secs": 27,
+   "frames_s": 120,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 120,
+   "agent_ticks_s": 412763.962962963,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 423.1111111111111,
+   "ag_ms_s": 313.7577777777778,
+   "maxgap_ms_mean": 11.470074074074073,
+   "maxgap_ms_max": 45.653,
+   "maxgap_artifacts": 0,
+   "cars": 121.37037037037037,
+   "target": 200,
+   "spawn_min": 1671.111111111111,
+   "spawn_vis_min": 102.22222222222223,
+   "spawn_box_min": 24.444444444444443,
+   "rem_box_min": 4.444444444444445,
+   "spawn_box_by": {
+    "mod": 11
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 2
+   },
+   "spawn_by": {
+    "mod": 752
+   },
+   "spawn_vis_by": {
+    "mod": 46
+   },
+   "rem_min": 1377.7777777777778,
+   "rem_vis_min": 4.444444444444445,
+   "rem_by": {
+    "drive": 620
+   },
+   "rem_vis_by": {
+    "drive": 2
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 93,
+   "tok": "I:20",
+   "kind": "I",
+   "anim": 0,
+   "secs": 17,
+   "frames_s": 119.52941176470588,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 119.47058823529412,
+   "agent_ticks_s": 406372.0588235294,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 372.05882352941177,
+   "ag_ms_s": 349.8924705882353,
+   "maxgap_ms_mean": 12.076294117647059,
+   "maxgap_ms_max": 38.992,
+   "maxgap_artifacts": 0,
+   "cars": 42.64705882352941,
+   "target": 200,
+   "spawn_min": 642.3529411764706,
+   "spawn_vis_min": 180.0,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 17.647058823529413,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 5
+   },
+   "spawn_by": {
+    "mod": 182
+   },
+   "spawn_vis_by": {
+    "mod": 51
+   },
+   "rem_min": 388.2352941176471,
+   "rem_vis_min": 24.705882352941178,
+   "rem_by": {
+    "drive": 110
+   },
+   "rem_vis_by": {
+    "drive": 7
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 94,
+   "tok": "I:15",
+   "kind": "I",
+   "anim": 0,
+   "secs": 12,
+   "frames_s": 111.33333333333333,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 111.33333333333333,
+   "agent_ticks_s": 392191.4166666667,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 421.75,
+   "ag_ms_s": 36141.77691666666,
+   "maxgap_ms_mean": 17.42818181818182,
+   "maxgap_ms_max": 45.043,
+   "maxgap_artifacts": 1,
+   "cars": 84.25,
+   "target": 200,
+   "spawn_min": 360.0,
+   "spawn_vis_min": 75.0,
+   "spawn_box_min": 0.0,
+   "rem_box_min": 15.0,
+   "spawn_box_by": {},
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 3
+   },
+   "spawn_by": {
+    "mod": 72
+   },
+   "spawn_vis_by": {
+    "mod": 15
+   },
+   "rem_min": 215.0,
+   "rem_vis_min": 15.0,
+   "rem_by": {
+    "drive": 43
+   },
+   "rem_vis_by": {
+    "drive": 3
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  },
+  {
+   "i": 95,
+   "tok": "OS:20",
+   "kind": "OS",
+   "anim": 0,
+   "secs": 18,
+   "frames_s": 104.77777777777777,
+   "scroll_s": 104.16666666666667,
+   "stub_s": 104.16666666666667,
+   "passes_s": 104.77777777777777,
+   "agent_ticks_s": 349612.3333333333,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 343.5,
+   "ag_ms_s": 336.20816666666667,
+   "maxgap_ms_mean": 17.6095,
+   "maxgap_ms_max": 56.653,
+   "maxgap_artifacts": 0,
+   "cars": 6.388888888888889,
+   "target": 170.22222222222223,
+   "spawn_min": 273.3333333333333,
+   "spawn_vis_min": 40.0,
+   "spawn_box_min": 26.666666666666668,
+   "rem_box_min": 0.0,
+   "spawn_box_by": {
+    "mod": 8
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {},
+   "spawn_by": {
+    "mod": 82
+   },
+   "spawn_vis_by": {
+    "mod": 12
+   },
+   "rem_min": 303.3333333333333,
+   "rem_vis_min": 3.3333333333333335,
+   "rem_by": {
+    "drive": 91
+   },
+   "rem_vis_by": {
+    "drive": 1
+   },
+   "view_updates_s": 24.333333333333332,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 989
+  },
+  {
+   "i": 96,
+   "tok": "I:10",
+   "kind": "I",
+   "anim": 0,
+   "secs": 17,
+   "frames_s": 103.3529411764706,
+   "scroll_s": 103.3529411764706,
+   "stub_s": 103.29411764705883,
+   "passes_s": 103.3529411764706,
+   "agent_ticks_s": 338509.1176470588,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 342.05882352941177,
+   "ag_ms_s": 347.2379411764706,
+   "maxgap_ms_mean": 18.75929411764706,
+   "maxgap_ms_max": 55.7,
+   "maxgap_artifacts": 0,
+   "cars": 5.0588235294117645,
+   "target": 151.64705882352942,
+   "spawn_min": 183.52941176470588,
+   "spawn_vis_min": 74.11764705882354,
+   "spawn_box_min": 42.35294117647059,
+   "rem_box_min": 0.0,
+   "spawn_box_by": {
+    "mod": 12
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {},
+   "spawn_by": {
+    "mod": 52
+   },
+   "spawn_vis_by": {
+    "mod": 21
+   },
+   "rem_min": 183.52941176470588,
+   "rem_vis_min": 0.0,
+   "rem_by": {
+    "drive": 52
+   },
+   "rem_vis_by": {},
+   "view_updates_s": 25.823529411764707,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 1016
+  },
+  {
+   "i": 97,
+   "tok": "I:30",
+   "kind": "I",
+   "anim": 0,
+   "secs": 27,
+   "frames_s": 118.37037037037037,
+   "scroll_s": 0,
+   "stub_s": 0,
+   "passes_s": 118.37037037037037,
+   "agent_ticks_s": 396360.22222222225,
+   "frozen_s": 0,
+   "strips_s": 0,
+   "tickswap_s": 0,
+   "tickskip_s": 0,
+   "moves_s": 352,
+   "ag_ms_s": 408.4446296296296,
+   "maxgap_ms_mean": 13.344296296296296,
+   "maxgap_ms_max": 46.746,
+   "maxgap_artifacts": 0,
+   "cars": 19.074074074074073,
+   "target": 23.48148148148148,
+   "spawn_min": 71.11111111111111,
+   "spawn_vis_min": 53.333333333333336,
+   "spawn_box_min": 53.333333333333336,
+   "rem_box_min": 4.444444444444445,
+   "spawn_box_by": {
+    "mod": 24
+   },
+   "spawn_box_strip": 0,
+   "spawn_strip": 0,
+   "rem_box_by": {
+    "drive": 2
+   },
+   "spawn_by": {
+    "mod": 32
+   },
+   "spawn_vis_by": {
+    "mod": 24
+   },
+   "rem_min": 22.22222222222222,
+   "rem_vis_min": 4.444444444444445,
+   "rem_by": {
+    "drive": 10
+   },
+   "rem_vis_by": {
+    "drive": 2
+   },
+   "view_updates_s": 0,
+   "pause": 0,
+   "hold": 0,
+   "zoom": 2,
+   "view_moved": 0
+  }
+ ],
+ "pooled": {
+  "AR/0": {
+   "frames_s": 103.37837837837837,
+   "scroll_s": 98.45945945945945,
+   "passes_s": 103.35135135135135,
+   "agent_ticks_s": 354352.08108108107,
+   "frozen_s": 0.0,
+   "moves_s": 447.05405405405406,
+   "maxgap_ms_mean": 16.579783783783785,
+   "ag_ms_s": 313.9041081081081,
+   "cars": 118.72972972972973,
+   "strips_s": 0.0,
+   "tickswap_s": 0.0,
+   "spawn_vis_min": 84.32432432432432,
+   "spawn_box_min": 50.270270270270274,
+   "rem_vis_min": 38.91891891891892,
+   "rem_box_min": 17.83783783783784,
+   "spawn_min": 556.2162162162163,
+   "rem_min": 682.7027027027027,
+   "view_updates_s": 24.594594594594593,
+   "maxgap_ms_max": 56.58,
+   "secs": 37,
+   "spawn_vis_by": {
+    "mod": 52
+   },
+   "rem_vis_by": {
+    "drive": 24
+   },
+   "spawn_box_by": {
+    "mod": 31
+   },
+   "rem_box_by": {
+    "drive": 11
+   }
+  },
+  "AR/1": {
+   "frames_s": 70.1470588235294,
+   "scroll_s": 70.1470588235294,
+   "passes_s": 70.11764705882354,
+   "agent_ticks_s": 241265.14705882352,
+   "frozen_s": 0.0,
+   "moves_s": 473.29411764705884,
+   "maxgap_ms_mean": 21.738058823529414,
+   "ag_ms_s": 311.6903823529411,
+   "cars": 199.6764705882353,
+   "strips_s": 0.0,
+   "tickswap_s": 0.0,
+   "spawn_vis_min": 137.64705882352942,
+   "spawn_box_min": 7.0588235294117645,
+   "rem_vis_min": 49.411764705882355,
+   "rem_box_min": 22.941176470588236,
+   "spawn_min": 1681.764705882353,
+   "rem_min": 1674.7058823529412,
+   "view_updates_s": 17.88235294117647,
+   "maxgap_ms_max": 59.38,
+   "secs": 34,
+   "spawn_vis_by": {
+    "mod": 78
+   },
+   "rem_vis_by": {
+    "drive": 28
+   },
+   "spawn_box_by": {
+    "mod": 4
+   },
+   "rem_box_by": {
+    "drive": 13
+   }
+  },
+  "H/0": {
+   "frames_s": 112.88235294117646,
+   "scroll_s": 112.88235294117646,
+   "passes_s": 112.88235294117646,
+   "agent_ticks_s": 379312.8823529412,
+   "frozen_s": 0.0,
+   "moves_s": 345.3529411764706,
+   "maxgap_ms_mean": 15.445029411764706,
+   "ag_ms_s": 308.02623529411767,
+   "cars": 4.647058823529412,
+   "strips_s": 0.0,
+   "tickswap_s": 0.0,
+   "spawn_vis_min": 44.11764705882353,
+   "spawn_box_min": 33.529411764705884,
+   "rem_vis_min": 0.0,
+   "rem_box_min": 0.0,
+   "spawn_min": 201.1764705882353,
+   "rem_min": 289.4117647058824,
+   "view_updates_s": 23.029411764705884,
+   "maxgap_ms_max": 46.131,
+   "secs": 34,
+   "spawn_vis_by": {
+    "mod": 25
+   },
+   "rem_vis_by": {},
+   "spawn_box_by": {
+    "mod": 19
+   },
+   "rem_box_by": {}
+  },
+  "H/1": {
+   "frames_s": 100.32352941176471,
+   "scroll_s": 100.32352941176471,
+   "passes_s": 100.3529411764706,
+   "agent_ticks_s": 346083.3823529412,
+   "frozen_s": 0.0,
+   "moves_s": 396.79411764705884,
+   "maxgap_ms_mean": 16.728323529411767,
+   "ag_ms_s": 336.59726470588237,
+   "cars": 141.8235294117647,
+   "strips_s": 0.0,
+   "tickswap_s": 0.0,
+   "spawn_vis_min": 794.1176470588235,
+   "spawn_box_min": 75.88235294117646,
+   "rem_vis_min": 5.294117647058823,
+   "rem_box_min": 1.7647058823529411,
+   "spawn_min": 8839.411764705883,
+   "rem_min": 8978.823529411764,
+   "view_updates_s": 19.529411764705884,
+   "maxgap_ms_max": 54.69,
+   "secs": 34,
+   "spawn_vis_by": {
+    "mod": 450
+   },
+   "rem_vis_by": {
+    "drive": 3
+   },
+   "spawn_box_by": {
+    "mod": 43
+   },
+   "rem_box_by": {
+    "drive": 1
+   }
+  },
+  "HG/0": {
+   "frames_s": 119.26470588235294,
+   "scroll_s": 119.26470588235294,
+   "passes_s": 119.26470588235294,
+   "agent_ticks_s": 373143.0588235294,
+   "frozen_s": 0.0,
+   "moves_s": 320.52941176470586,
+   "maxgap_ms_mean": 13.34214705882353,
+   "ag_ms_s": 278.74697058823534,
+   "cars": 21.941176470588236,
+   "strips_s": 0.0,
+   "tickswap_s": 0.0,
+   "spawn_vis_min": 120.0,
+   "spawn_box_min": 91.76470588235294,
+   "rem_vis_min": 8.823529411764707,
+   "rem_box_min": 3.5294117647058822,
+   "spawn_min": 453.52941176470586,
+   "rem_min": 573.5294117647059,
+   "view_updates_s": 10.441176470588236,
+   "maxgap_ms_max": 53.102,
+   "secs": 34,
+   "spawn_vis_by": {
+    "mod": 68
+   },
+   "rem_vis_by": {
+    "drive": 5
+   },
+   "spawn_box_by": {
+    "mod": 52
+   },
+   "rem_box_by": {
+    "drive": 2
+   }
+  },
+  "HG/1": {
+   "frames_s": 117.20588235294117,
+   "scroll_s": 117.20588235294117,
+   "passes_s": 117.17647058823529,
+   "agent_ticks_s": 394057.5294117647,
+   "frozen_s": 0.0,
+   "moves_s": 434.97058823529414,
+   "maxgap_ms_mean": 12.879529411764706,
+   "ag_ms_s": 258.5543529411765,
+   "cars": 180.02941176470588,
+   "strips_s": 0.0,
+   "tickswap_s": 0.0,
+   "spawn_vis_min": 248.8235294117647,
+   "spawn_box_min": 79.41176470588235,
+   "rem_vis_min": 28.235294117647058,
+   "rem_box_min": 17.647058823529413,
+   "spawn_min": 4828.235294117647,
+   "rem_min": 4764.705882352941,
+   "view_updates_s": 10.205882352941176,
+   "maxgap_ms_max": 39.223,
+   "secs": 34,
+   "spawn_vis_by": {
+    "mod": 141
+   },
+   "rem_vis_by": {
+    "drive": 16
+   },
+   "spawn_box_by": {
+    "mod": 45
+   },
+   "rem_box_by": {
+    "drive": 10
+   }
+  },
+  "I/0": {
+   "frames_s": 117.33461538461539,
+   "scroll_s": 6.95,
+   "passes_s": 117.32884615384616,
+   "agent_ticks_s": 405895.8730769231,
+   "frozen_s": 0.0,
+   "moves_s": 407.1884615384615,
+   "maxgap_ms_mean": 14.002265187937063,
+   "ag_ms_s": 2016.2291192307691,
+   "cars": 79.28461538461538,
+   "strips_s": 0.0,
+   "tickswap_s": 0.0,
+   "spawn_vis_min": 113.1923076923077,
+   "spawn_box_min": 41.19230769230769,
+   "rem_vis_min": 24.692307692307693,
+   "rem_box_min": 20.307692307692307,
+   "spawn_min": 508.15384615384613,
+   "rem_min": 352.15384615384613,
+   "view_updates_s": 1.7365384615384616,
+   "maxgap_ms_max": 76.946,
+   "secs": 520,
+   "spawn_vis_by": {
+    "mod": 981
+   },
+   "rem_vis_by": {
+    "drive": 214
+   },
+   "spawn_box_by": {
+    "mod": 357
+   },
+   "rem_box_by": {
+    "drive": 176
+   }
+  },
+  "I/1": {
+   "frames_s": 112.868068833652,
+   "scroll_s": 7.325047801147227,
+   "passes_s": 112.868068833652,
+   "agent_ticks_s": 397251.2122370937,
+   "frozen_s": 0.0,
+   "moves_s": 457.47418738049714,
+   "maxgap_ms_mean": 14.969085747904105,
+   "ag_ms_s": 380.3863843212237,
+   "cars": 152.80688336520078,
+   "strips_s": 0.0,
+   "tickswap_s": 0.0,
+   "spawn_vis_min": 79.1586998087954,
+   "spawn_box_min": 20.879541108986615,
+   "rem_vis_min": 36.59655831739962,
+   "rem_box_min": 28.336520076481836,
+   "spawn_min": 983.4034416826004,
+   "rem_min": 866.2715105162524,
+   "view_updates_s": 1.8279158699808795,
+   "maxgap_ms_max": 57.367,
+   "secs": 523,
+   "spawn_vis_by": {
+    "mod": 690
+   },
+   "rem_vis_by": {
+    "drive": 319
+   },
+   "spawn_box_by": {
+    "mod": 182
+   },
+   "rem_box_by": {
+    "drive": 247
+   }
+  },
+  "OS/0": {
+   "frames_s": 108.65714285714286,
+   "scroll_s": 108.37142857142857,
+   "passes_s": 108.68571428571428,
+   "agent_ticks_s": 360177.7428571429,
+   "frozen_s": 0.0,
+   "moves_s": 342.8285714285714,
+   "maxgap_ms_mean": 17.855828571428574,
+   "ag_ms_s": 324.4116,
+   "cars": 6.2,
+   "strips_s": 0.0,
+   "tickswap_s": 0.0,
+   "spawn_vis_min": 53.142857142857146,
+   "spawn_box_min": 34.285714285714285,
+   "rem_vis_min": 1.7142857142857142,
+   "rem_box_min": 0.0,
+   "spawn_min": 262.2857142857143,
+   "rem_min": 277.7142857142857,
+   "view_updates_s": 25.17142857142857,
+   "maxgap_ms_max": 56.653,
+   "secs": 35,
+   "spawn_vis_by": {
+    "mod": 31
+   },
+   "rem_vis_by": {
+    "drive": 1
+   },
+   "spawn_box_by": {
+    "mod": 20
+   },
+   "rem_box_by": {}
+  },
+  "OS/1": {
+   "frames_s": 107.82857142857142,
+   "scroll_s": 107.68571428571428,
+   "passes_s": 107.85714285714286,
+   "agent_ticks_s": 372494.9142857143,
+   "frozen_s": 0.0,
+   "moves_s": 358.6,
+   "maxgap_ms_mean": 17.01017142857143,
+   "ag_ms_s": 330.8838857142858,
+   "cars": 44.42857142857143,
+   "strips_s": 0.0,
+   "tickswap_s": 0.0,
+   "spawn_vis_min": 185.14285714285714,
+   "spawn_box_min": 51.42857142857143,
+   "rem_vis_min": 1.7142857142857142,
+   "rem_box_min": 0.0,
+   "spawn_min": 3409.714285714286,
+   "rem_min": 3685.714285714286,
+   "view_updates_s": 24.771428571428572,
+   "maxgap_ms_max": 54.013,
+   "secs": 35,
+   "spawn_vis_by": {
+    "mod": 108
+   },
+   "rem_vis_by": {
+    "drive": 1
+   },
+   "spawn_box_by": {
+    "mod": 30
+   },
+   "rem_box_by": {}
+  },
+  "W/0": {
+   "frames_s": 108.0,
+   "scroll_s": 104.0,
+   "passes_s": 108.0,
+   "agent_ticks_s": 382294.0,
+   "frozen_s": 0.0,
+   "moves_s": 435.0,
+   "maxgap_ms_mean": 17.287,
+   "ag_ms_s": 461.347,
+   "cars": 75.0,
+   "strips_s": 0.0,
+   "tickswap_s": 0.0,
+   "spawn_vis_min": 0.0,
+   "spawn_box_min": 0.0,
+   "rem_vis_min": 0.0,
+   "rem_box_min": 0.0,
+   "spawn_min": 0.0,
+   "rem_min": 3180.0,
+   "view_updates_s": 3.0,
+   "maxgap_ms_max": 17.287,
+   "secs": 1,
+   "spawn_vis_by": {},
+   "rem_vis_by": {},
+   "spawn_box_by": {},
+   "rem_box_by": {}
+  },
+  "s3/1": {
+   "frames_s": 120.11764705882354,
+   "scroll_s": 0.0,
+   "passes_s": 120.11764705882354,
+   "agent_ticks_s": 424970.4117647059,
+   "frozen_s": 0.0,
+   "moves_s": 400.0,
+   "maxgap_ms_mean": 10.568,
+   "ag_ms_s": 287.71123529411767,
+   "cars": 0.0,
+   "strips_s": 0.0,
+   "tickswap_s": 0.0,
+   "spawn_vis_min": 0.0,
+   "spawn_box_min": 0.0,
+   "rem_vis_min": 0.0,
+   "rem_box_min": 0.0,
+   "spawn_min": 0.0,
+   "rem_min": 0.0,
+   "view_updates_s": 0.0,
+   "maxgap_ms_max": 27.025,
+   "secs": 17,
+   "spawn_vis_by": {},
+   "rem_vis_by": {},
+   "spawn_box_by": {},
+   "rem_box_by": {}
+  }
+ },
+ "faults": 0
+}
