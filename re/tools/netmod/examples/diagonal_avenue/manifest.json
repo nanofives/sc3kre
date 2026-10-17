@@ -1,0 +1,19 @@
+{
+  "netpack": 1,
+  "name": "diagonal_avenue",
+  "version": "0.1.0",
+  "author": "netmod (task diagave)",
+  "description": "Diagonal avenues: draw two diagonal roads side by side and sc3netmod's DAV block turns them into one avenue with a tree median (each cell becomes the piece a lone diagonal would get; the cells beside the median become these variants). Art: stock 35 / 18004 / 1999 road half plus a median half with a tree from avenue 11204, built by `diagave.py art art` in this folder before install (the png folders are not shipped). Phase 1: straight bands with no other road touching them; junctions are later work.",
+  "game": {
+    "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+  },
+  "variants": [
+    {"id": 20500, "base": 35, "network": "ROAD", "name": {"*": "Diagonal avenue", "ENGLISH": "Avenida diagonal"},
+     "art": {"from": 35, "png_dir": "art/20500", "first_pass": false}, "trblkatt": "copy_base"},
+    {"id": 20501, "base": 18004, "network": "ROAD", "name": {"*": "Diagonal avenue end", "ENGLISH": "Final de avenida diagonal"},
+     "art": {"from": 18004, "png_dir": "art/20501", "first_pass": false}, "trblkatt": "copy_base"},
+    {"id": 20502, "base": 1999, "network": "ROAD", "name": {"*": "Diagonal avenue end", "ENGLISH": "Final de avenida diagonal"},
+     "art": {"from": 1999, "png_dir": "art/20502", "first_pass": false}, "trblkatt": "copy_base"}
+  ],
+  "auto_diagonal_avenues": [{"inner": 20500, "inner_start": 20501, "inner_end": 20502}]
+}

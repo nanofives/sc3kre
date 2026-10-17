@@ -58,6 +58,13 @@ static const signed char RB_CORNER[4][2] = { { 2, -1 }, { 2, 2 }, { -1, 2 }, { -
 static const signed char RB_OUT[4][2] = { { 0, -1 }, { 1, 0 }, { 0, 1 }, { -1, 0 } };
 static const signed char RB_CLOSED[4][2] = { { -1, 1 }, { 0, -1 }, { 2, 0 }, { 1, 2 } };
 
+/* task diagave: the DAV block (sc3netmod_dav.c, #included after this file) shares these hooks */
+static WORD g_dav_inner[3];
+static int g_dav_on, g_rb_off;
+static void dav_line(const char *path, const char *line);
+static void dav_init_table(void);
+static void dav_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who);
+
 /* ---------------------------------------------------------------- table line */
 static void rb_file(const char *path) {
     char line[256];
@@ -66,7 +73,8 @@ static void rb_file(const char *path) {
     while (fgets(line, sizeof(line), f)) {
         unsigned long p, n, c = 0;
         int k;
-        if (strncmp(line, "rbt ", 4)) continue;
+        if (!strncmp(line, "dav ", 4)) { dav_line(path, line); continue; }        /* task diagave */
+        if (strncmp(line, "rbt ", 4) || g_rb_off) continue;
         k = sscanf(line + 4, "%lu %lu %lu", &p, &n, &c);
         if (k < 2 || !p || p > 0xffff || n < 1 || n > 4 || g_base[p] != 39 ||
             (k == 3 && (!c || c > 0xffff || c == p || g_base[c] != 39))) {
@@ -235,7 +243,8 @@ static void __fastcall rb_pass(BYTE *mgr, void *edx, DWORD list, int net, int *b
     InterlockedIncrement(&g_rb_n_pass);
     InterlockedIncrement(&g_rb_busy);
     __try {
-        rb_run(mgr, x0 - 3, z0 - 3, x1 + 2, z1 + 2, "edit");    /* every block whose cells/ring/beyond touch the box */
+        if (g_rb_piece) rb_run(mgr, x0 - 3, z0 - 3, x1 + 2, z1 + 2, "edit");   /* blocks whose cells/ring/beyond touch the box */
+        if (g_dav_on) dav_run(mgr, x0, z0, x1, z1, "edit");                  /* task diagave */
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         InterlockedIncrement(&g_rb_n_fault);
         logf("### rbt: exception 0x%08lX in the edit pass", GetExceptionCode());
@@ -250,7 +259,8 @@ static void rb_load_pass(void) {
     InterlockedIncrement(&g_rb_n_load);
     InterlockedIncrement(&g_rb_busy);
     __try {
-        rb_run(mgr, 0, 0, 0x7fffffff, 0x7fffffff, "load");
+        if (g_rb_piece) rb_run(mgr, 0, 0, 0x7fffffff, 0x7fffffff, "load");
+        if (g_dav_on) dav_run(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");        /* task diagave */
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         InterlockedIncrement(&g_rb_n_fault);
         logf("### rbt: exception 0x%08lX in the load pass", GetExceptionCode());
@@ -299,7 +309,7 @@ static int rbt_install(BYTE *m) {
     BYTE *e = m + 0x1547b;
     DWORD *s_load = (DWORD *)(m + 0x2c7bc + 0x1c), v;
     IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(m + ((IMAGE_DOS_HEADER *)m)->e_lfanew);
-    if (env_off("SC3NETMOD_RBT")) { logf("rbt: off (SC3NETMOD_RBT=0)"); return 0; }
+    if (env_off("SC3NETMOD_RBT")) { g_rb_off = 1; logf("rbt: off (SC3NETMOD_RBT=0)"); }
     if (GetEnvironmentVariableA("SC3NETMOD_TABLE", path, sizeof(path))) rb_file(path);
     else if (g_rootlen) {
         static char names[64][MAX_PATH];
@@ -323,13 +333,16 @@ static int rbt_install(BYTE *m) {
             rb_file(path);
         }
     }
-    if (!g_rb_piece) { logf("rbt: no automatic roundabout in the tables"); return 0; }
+    if (g_dav_inner[0] && env_off("SC3NETMOD_DAV")) { g_dav_inner[0] = 0; logf("dav: off (SC3NETMOD_DAV=0)"); }
+    if (!g_rb_piece) logf("rbt: no automatic roundabout in the tables");
+    if (!g_dav_inner[0]) logf("dav: no automatic diagonal avenue in the tables");
+    if (!g_rb_piece && !g_dav_inner[0]) return 0;
     g_rb_m = m;
     g_rb_msize = nt->OptionalHeader.SizeOfImage;
     if (IsBadReadPtr(e, 10) || e[0] != 0xb8 || *(DWORD *)(e + 1) != (DWORD)m + 0x27a52 || e[5] != 0xe8 ||
         (DWORD)(e + 10) + *(DWORD *)(e + 6) != (DWORD)m + 0x266d4 || *s_load != (DWORD)m + 0x130e9) {
-        logf("### rbt: FUN_1001547b entry or manager vt+0x1c differ from shipped - RBT OFF");
-        g_rb_piece = 0;
+        logf("### rbt: FUN_1001547b entry or manager vt+0x1c differ from shipped - RBT and DAV OFF");
+        g_rb_piece = 0; g_dav_inner[0] = 0;
         return 0;
     }
     g_rb_stock = (BYTE *)VirtualAlloc(NULL, 1024 * 1024, MEM_COMMIT, PAGE_READWRITE);
@@ -338,13 +351,15 @@ static int rbt_install(BYTE *m) {
     g_rb_orig_load = *s_load;
     v = (DWORD)rb_load;
     if (!write_code((BYTE *)s_load, &v, 4) || !write_rel(e, 0xE9, (void *)rb_pass, 5)) {
-        logf("### rbt: patch failed - RBT OFF");
-        g_rb_piece = 0;
+        logf("### rbt: patch failed - RBT and DAV OFF");
+        g_rb_piece = 0; g_dav_inner[0] = 0;
         return 0;
     }
     g_rb_on = 1;
+    if (g_dav_inner[0]) { dav_init_table(); g_dav_on = 1; }
     logf("rbt: hooked the retile pass FUN_1001547b (entry) and the city load (manager vt+0x1c); piece %u, min %d arm(s), "
-         "arm-less quarter %u", g_rb_piece, g_rb_min, g_rb_closed);
+         "arm-less quarter %u; diagonal avenues %s (inner %u %u %u)", g_rb_piece, g_rb_min, g_rb_closed,
+         g_dav_on ? "on" : "off", g_dav_inner[0], g_dav_inner[1], g_dav_inner[2]);
     return 1;
 }
 

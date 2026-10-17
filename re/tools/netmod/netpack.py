@@ -569,7 +569,8 @@ def compile_pack(stock, pack_dir, man):
            "bridges": [dict(e, _pack=pname) for e in man.get("bridges", [])],              # task netbridge
            "crossings": list(man.get("crossings", [])),
            "templates": list(man.get("templates", [])),                                     # task multitile
-           "auto_roundabouts": []}                                                          # task roundabout3
+           "auto_roundabouts": [],                                                          # task roundabout3
+           "auto_diagonal_avenues": []}                                                     # task diagave
     for n, v in enumerate(man.get("variants", [])):
         where = "%s variant %d (id %s)" % (pname, n + 1, v.get("id"))
         vid, base, net = v["id"], v["base"], v["network"]
@@ -644,6 +645,18 @@ def compile_pack(stock, pack_dir, man):
         out["auto_roundabouts"].append({"piece": v["id"], "min_arms": mn, "closed": cl, "where": where})
     if len(out["auto_roundabouts"]) > 1:
         raise NetpackError("%s: at most one auto_roundabouts entry (sc3netmod applies one piece)" % pname)
+    for n, a in enumerate(man.get("auto_diagonal_avenues", [])):     # task diagave: sc3netmod DAV block
+        where = "%s auto_diagonal_avenues %d" % (pname, n + 1)
+        ids = []
+        for key, base in (("inner", 35), ("inner_start", 18004), ("inner_end", 1999)):
+            v = vids.get(a.get(key))
+            if v is None or v["base"] != base or v["net"] != "ROAD":
+                raise NetpackError("%s: %s must be a ROAD variant of %d declared in this package" % (where, key, base))
+            ids.append(v["id"])
+        out["auto_diagonal_avenues"].append({"inner": ids[0], "inner_start": ids[1], "inner_end": ids[2],
+                                             "where": where})
+    if len(out["auto_diagonal_avenues"]) > 1:
+        raise NetpackError("%s: at most one auto_diagonal_avenues entry (sc3netmod applies one set)" % pname)
     out["ramps"] = []
     if man.get("ramps"):                                 # hardcoded SIMNTWRK tables (netramp.py, NET_RAMPS.md)
         try:
@@ -800,6 +813,10 @@ def merge(stock, packs):
     if len(autos) > 1:
         raise NetpackError("auto_roundabouts: %s and %s both declare one; sc3netmod applies a single piece" %
                            (autos[0]["where"], autos[1]["where"]))
+    davs = [a for c in comp for a in c["auto_diagonal_avenues"]]                        # task diagave
+    if len(davs) > 1:
+        raise NetpackError("auto_diagonal_avenues: %s and %s both declare one; sc3netmod applies a single set" %
+                           (davs[0]["where"], davs[1]["where"]))
     # ---- task multitile: templates (netpack_templates.py, MULTITILE.md). Their cell pieces go into the Protected
     # list of their network so a later re-tile never replaces a template cell.
     try:
@@ -926,12 +943,14 @@ def merge(stock, packs):
     # ---- variant tables for sc3netmod.dll, one per package
     for c in comp:
         mine = [t for t in templates if t["pack"] == c["name"]]
-        if c["variants"] or c["ramps"] or mine or c["auto_roundabouts"]:
+        if c["variants"] or c["ramps"] or mine or c["auto_roundabouts"] or c["auto_diagonal_avenues"]:
             tables[c["name"]] = ("# netpack %s: <variant id> <base id>, read by sc3netmod.dll\r\n" % c["name"]).encode() + \
                 b"".join(b"%d %d\r\n" % (v["id"], v["base"]) for v in sorted(c["variants"], key=lambda v: v["id"])) + \
                 RAMP.table_lines(c["ramps"]) + TPL.table_lines(mine) + \
                 b"".join((b"rbt %d %d %d\r\n" % (a["piece"], a["min_arms"], a["closed"]) if a.get("closed") else
-                          b"rbt %d %d\r\n" % (a["piece"], a["min_arms"])) for a in c["auto_roundabouts"])
+                          b"rbt %d %d\r\n" % (a["piece"], a["min_arms"])) for a in c["auto_roundabouts"]) + \
+                b"".join(b"dav %d %d %d\r\n" % (a["inner"], a["inner_start"], a["inner_end"])
+                         for a in c["auto_diagonal_avenues"])                                  # task diagave
 
     # ---- report + checks that need the merged result
     placed = set()
@@ -947,6 +966,7 @@ def merge(stock, packs):
     placed |= {c[0] for t in templates for c in t["cells"].values()}   # a template places it (task multitile)
     placed |= {a["piece"] for a in autos}                    # sc3netmod RBT places it (task roundabout3)
     placed |= {a["closed"] for a in autos if a.get("closed")}   # and the arm-less quarter (task roundabout4)
+    placed |= {a[k] for a in davs for k in ("inner", "inner_start", "inner_end")}   # sc3netmod DAV (task diagave)
     for v in variants:
         if v["id"] not in placed:
             report["warnings"].append("%s: no rule RESULT places %d, so the tiler never builds it" % (v["where"], v["id"]))
@@ -958,6 +978,7 @@ def merge(stock, packs):
     report["ramps"] = [{"table": r["table"], "slot": r["slot"], "from": r["from"], "to": r["to"]} for r in ramps]
     report["auto_roundabouts"] = [{"piece": a["piece"], "min_arms": a["min_arms"], "closed": a.get("closed", 0)}
                                   for a in autos]
+    report["auto_diagonal_avenues"] = [{k: a[k] for k in ("inner", "inner_start", "inner_end")} for a in davs]
     report["templates"] = [{"name": t["name"], "pack": t["pack"], "orientations": len(t["orients"]), "cost": t["cost"],
                             "cells": len(t["cells"]), "protect_add": t["protect_add"],
                             "picture": [TPL.render(t, k) for k in range(len(t["orients"]))]} for t in templates]
@@ -1286,6 +1307,9 @@ def _print_report(report):
     for r in report.get("ramps", []):
         print("  ramp    %s slot %d  %d.%d -> %d.%d" % (r["table"], r["slot"], r["from"] >> 8, r["from"] & 0xFF,
                                                        r["to"] >> 8, r["to"] & 0xFF))
+    for r in report.get("auto_diagonal_avenues", []):                           # task diagave
+        print("  auto diagonal avenue: inner pieces %d (35) %d (18004) %d (1999), two diagonal drags side by side "
+              "(sc3netmod DAV)" % (r["inner"], r["inner_start"], r["inner_end"]))
     for r in report.get("auto_roundabouts", []):                                # task roundabout3
         print("  auto roundabout: piece %d, 2x2 road blocks with >= %d arm(s) (sc3netmod RBT)%s"
               % (r["piece"], r["min_arms"], (", arm-less quarter %d" % r["closed"]) if r.get("closed") else ""))

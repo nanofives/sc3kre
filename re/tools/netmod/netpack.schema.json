@@ -107,6 +107,21 @@
         }
       },
       "description": "Task roundabout3: sc3netmod turns every qualifying 2x2 road block into this piece by itself (after each road retile and after a city load) and back into stock road when it stops qualifying. Rule: re/analysis/MULTITILE.md section 5. One piece across all installed packages."
+    },
+    "auto_diagonal_avenues": {
+      "type": "array",
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["inner", "inner_start", "inner_end"],
+        "properties": {
+          "inner": {"$ref": "#/$defs/piece_id", "description": "A ROAD variant of diagonal road 35 in this package: 35's road half plus the median half."},
+          "inner_start": {"$ref": "#/$defs/piece_id", "description": "A ROAD variant of the diagonal start cap 18004: its road quarter plus the median half."},
+          "inner_end": {"$ref": "#/$defs/piece_id", "description": "A ROAD variant of the diagonal end cap 1999: its road quarter plus the median half."}
+        }
+      },
+      "description": "Task diagave: sc3netmod turns two diagonal road drags laid side by side (an isolated band of rows of four road cells, each row shifted by one) into an avenue: every cell gets the piece the stock tiler gives a lone diagonal, and the cells beside the median get these variants. After each road retile and after a city load; back to stock when it stops qualifying. Rule and tool: re/tools/netmod/diagave.py, verify/diagave/."
     }
   },
   "$defs": {

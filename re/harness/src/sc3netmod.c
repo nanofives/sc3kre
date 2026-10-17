@@ -43,6 +43,8 @@
 etmod\cross\*.txt. SC3NETMOD_INHERIT=0 / SC3NETMOD_XCROSS=0 turn them off.
  * 5. RBT (task roundabout3, sc3netmod_rbt.c): automatic 2x2 roundabouts from `rbt` table lines, after every road
  *    retile (FUN_1001547b entry) and after a city load. SC3NETMOD_RBT=0 / SC3NETMOD_RBT_LOAD=0 turn it off.
+ * 6. DAV (task diagave, sc3netmod_dav.c): automatic diagonal avenues from `dav` table lines, on RBT's two hooks: two
+ *    diagonal drags side by side get a median. SC3NETMOD_DAV=0 turns it off.
  * Env: SC3NETMOD_LOG=<path> (default sc3netmod.log beside the DLL), SC3NETMOD_TABLE=<path> (variant table, only that
  * file), SC3NETMOD_FILELOG=1 (log every hooked file call under Apps\Res).
  */
@@ -130,6 +132,7 @@ static int table_read(const char *path) {
         if (*p == '#' || *p == ';' || *p == '\r' || *p == '\n' || !*p) continue;
         if (!strncmp(p, "ramp ", 5)) continue;                 /* NETRAMP lines, read by netramp_install */
         if (!strncmp(p, "rbt ", 4)) continue;                  /* RBT lines, read by rbt_install */
+        if (!strncmp(p, "dav ", 4)) continue;                  /* DAV lines, read by rbt_install (task diagave) */
         if (p[0] == 't' && (!strncmp(p, "tmpl ", 5) || !strncmp(p, "tori ", 5) || !strncmp(p, "tcel ", 5) ||
                             !strncmp(p, "tedg ", 5) || !strncmp(p, "tend", 4))) continue;   /* TMPL lines */
         if (sscanf(p, "%lu %lu", &v, &b) != 2 || v == 0 || v > 0xffff || b == 0 || b > 0xffff || v == b) {
@@ -1296,6 +1299,7 @@ static int netramp_install(BYTE *m) {
 /* ==== NETRAMP end ======================================================================================= */
 #include "sc3netmod_tmpl.c"         /* task multitile: TMPL, multi-cell templates (SC3NETMOD_TMPL=0) */
 #include "sc3netmod_rbt.c"          /* task roundabout3: RBT, automatic 2x2 roundabouts (SC3NETMOD_RBT=0) */
+#include "sc3netmod_dav.c"          /* task diagave: DAV, automatic diagonal avenues on RBT's hooks (SC3NETMOD_DAV=0) */
 #include "sc3netmod_lanes.c"        /* task lanedensity: road density honours turn matrices (SC3NETMOD_LANEDENSITY) */
 
 /* ============================================================ arming */
@@ -1330,6 +1334,7 @@ static DWORD WINAPI watcher(LPVOID param) {
         if (k % 20 != 19) continue;
         tmpl_stats();
         rbt_stats();
+        dav_stats();                     /* task diagave */
         if (g_n_cross_map || g_n_pred_map || g_n_saved_base)
             logf("stats: crossing-switch lookups mapped=%ld, predicate id reads mapped=%ld, tiles saved as base (last save)=%ld",
                  g_n_cross_map, g_n_pred_map, g_n_saved_base);
