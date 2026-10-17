@@ -132,7 +132,7 @@ static int table_read(const char *path) {
         if (*p == '#' || *p == ';' || *p == '\r' || *p == '\n' || !*p) continue;
         if (!strncmp(p, "ramp ", 5)) continue;                 /* NETRAMP lines, read by netramp_install */
         if (!strncmp(p, "rbt ", 4)) continue;                  /* RBT lines, read by rbt_install */
-        if (!strncmp(p, "dav ", 4)) continue;                  /* DAV lines, read by rbt_install (task diagave) */
+        if (!strncmp(p, "dav ", 4) || !strncmp(p, "davj ", 5)) continue;   /* DAV lines, read by rbt_install (task diagave) */
         if (p[0] == 't' && (!strncmp(p, "tmpl ", 5) || !strncmp(p, "tori ", 5) || !strncmp(p, "tcel ", 5) ||
                             !strncmp(p, "tedg ", 5) || !strncmp(p, "tend", 4))) continue;   /* TMPL lines */
         if (sscanf(p, "%lu %lu", &v, &b) != 2 || v == 0 || v > 0xffff || b == 0 || b > 0xffff || v == b) {

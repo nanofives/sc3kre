@@ -116,6 +116,21 @@
         "additionalProperties": false,
         "required": ["middle"],
         "properties": {
+          "junction": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["piece", "halves", "road"],
+              "properties": {
+                "piece": {"$ref": "#/$defs/piece_id", "description": "A ROAD variant in this package drawn as road 29 (orientation `road`) with the avenue's 35 halves (states `halves`) over it as asphalt, at state 0."},
+                "halves": {"type": "array", "minItems": 1, "maxItems": 2, "items": {"type": "integer", "minimum": 0, "maximum": 3}, "description": "States of the stock 35 halves the junction cell holds (one at the avenue's edge, two in its middle)."},
+                "road": {"type": "integer", "minimum": 0, "maximum": 1, "description": "The crossing road: 0 along x, 1 along z (road 29's state)."},
+                "far": {"type": "integer", "minimum": -1, "maximum": 3, "default": -1, "description": "A stem (the avenue ends on the road): the curb kept on the far side, 0 N 1 E 2 S 3 W; -1 none."}
+              }
+            },
+            "description": "Task diagave: junction pieces where a straight road crosses the avenue, meets it from one side, or the avenue ends on it. Each one serves its descriptor in all four rotations."
+          },
           "middle": {
             "type": "array",
             "minItems": 1,

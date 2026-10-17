@@ -664,7 +664,23 @@ def compile_pack(stock, pack_dir, man):
             mids.append({"piece": v["id"], "a": key[0], "b": key[1], "delta": key[2]})
         if not mids:
             raise NetpackError("%s: no middle pieces" % where)
-        out["auto_diagonal_avenues"].append({"middle": mids, "where": where})
+        juncs, jseen = [], set()
+        for j in a.get("junction", []):                  # junction pieces: road 29 + the avenue's halves as asphalt
+            v = vids.get(j.get("piece"))
+            halves = sorted(j.get("halves", []))
+            road, far = j.get("road"), j.get("far", -1)
+            if v is None or v["net"] != "ROAD":
+                raise NetpackError("%s: junction piece %s must be a ROAD variant declared in this package"
+                                   % (where, j.get("piece")))
+            if not 1 <= len(halves) <= 2 or any(h not in (0, 1, 2, 3) for h in halves) or road not in (0, 1) \
+                    or far not in (-1, 0, 1, 2, 3):
+                raise NetpackError("%s: junction %s: halves 1..2 states 0..3, road 0/1, far -1..3" % (where, j))
+            key = (tuple(halves), road, far)
+            if key in jseen:
+                raise NetpackError("%s: junction %s declared twice" % (where, key))
+            jseen.add(key)
+            juncs.append({"piece": v["id"], "halves": halves, "road": road, "far": far})
+        out["auto_diagonal_avenues"].append({"middle": mids, "junction": juncs, "where": where})
     if len(out["auto_diagonal_avenues"]) > 1:
         raise NetpackError("%s: at most one auto_diagonal_avenues entry (sc3netmod applies one set)" % pname)
     out["ramps"] = []
@@ -960,7 +976,11 @@ def merge(stock, packs):
                 b"".join((b"rbt %d %d %d\r\n" % (a["piece"], a["min_arms"], a["closed"]) if a.get("closed") else
                           b"rbt %d %d\r\n" % (a["piece"], a["min_arms"])) for a in c["auto_roundabouts"]) + \
                 b"".join(b"dav %d %d %d %d\r\n" % (m["piece"], m["a"], m["b"], m["delta"])
-                         for a in c["auto_diagonal_avenues"] for m in a["middle"])            # task diagave
+                         for a in c["auto_diagonal_avenues"] for m in a["middle"]) + \
+                b"".join(b"davj %d %d %d %d %d %d\r\n" % (j["piece"], len(j["halves"]), j["halves"][0],
+                                                        j["halves"][-1] if len(j["halves"]) == 2 else 0, j["road"],
+                                                        255 if j["far"] < 0 else j["far"])
+                         for a in c["auto_diagonal_avenues"] for j in a.get("junction", []))  # task diagave
 
     # ---- report + checks that need the merged result
     placed = set()
@@ -977,6 +997,7 @@ def merge(stock, packs):
     placed |= {a["piece"] for a in autos}                    # sc3netmod RBT places it (task roundabout3)
     placed |= {a["closed"] for a in autos if a.get("closed")}   # and the arm-less quarter (task roundabout4)
     placed |= {m["piece"] for a in davs for m in a["middle"]}   # sc3netmod DAV places them (task diagave)
+    placed |= {j["piece"] for a in davs for j in a.get("junction", [])}
     for v in variants:
         if v["id"] not in placed:
             report["warnings"].append("%s: no rule RESULT places %d, so the tiler never builds it" % (v["where"], v["id"]))
@@ -988,7 +1009,7 @@ def merge(stock, packs):
     report["ramps"] = [{"table": r["table"], "slot": r["slot"], "from": r["from"], "to": r["to"]} for r in ramps]
     report["auto_roundabouts"] = [{"piece": a["piece"], "min_arms": a["min_arms"], "closed": a.get("closed", 0)}
                                   for a in autos]
-    report["auto_diagonal_avenues"] = [{"middle": a["middle"]} for a in davs]
+    report["auto_diagonal_avenues"] = [{"middle": a["middle"], "junction": a.get("junction", [])} for a in davs]
     report["templates"] = [{"name": t["name"], "pack": t["pack"], "orientations": len(t["orients"]), "cost": t["cost"],
                             "cells": len(t["cells"]), "protect_add": t["protect_add"],
                             "picture": [TPL.render(t, k) for k in range(len(t["orients"]))]} for t in templates]
@@ -1320,6 +1341,10 @@ def _print_report(report):
     for r in report.get("auto_diagonal_avenues", []):                           # task diagave
         print("  auto diagonal avenue (sc3netmod DAV), middle pieces: %s" % ", ".join(
             "%d = %d + %d (+%d)" % (m["piece"], m["a"], m["b"], m["delta"]) for m in r["middle"]))
+        if r.get("junction"):
+            print("  auto diagonal avenue junction pieces: %s" % ", ".join(
+                "%d = road %d + 35 at %s%s" % (j["piece"], j["road"], j["halves"],
+                                               "" if j["far"] < 0 else ", far curb %d" % j["far"]) for j in r["junction"]))
     for r in report.get("auto_roundabouts", []):                                # task roundabout3
         print("  auto roundabout: piece %d, 2x2 road blocks with >= %d arm(s) (sc3netmod RBT)%s"
               % (r["piece"], r["min_arms"], (", arm-less quarter %d" % r["closed"]) if r.get("closed") else ""))

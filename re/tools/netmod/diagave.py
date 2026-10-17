@@ -48,6 +48,11 @@ MID = {(35, 35, 2): 20500, (35, 18004, 0): 20501, (18004, 35, 0): 20502, (35, 19
 # OUTER: a cell of one staircase holding 35 with the other road beside it in its row: its median-side sidewalk tip
 # becomes grass too (the median strip runs past the middle cell's corners into the outer cells). Key (35, 0, 0).
 OUTER = {(35, 0, 0): 20505}
+# JUNC: canonical junction descriptor (35 half states, road 29 orientation 0 x / 1 z, far curb edge N0 E1 S2 W3 or -1)
+# -> variant id. Filled from `combos` (junction footprints).
+JUNC = {((0,), 0, -1): 20510, ((0,), 1, -1): 20511, ((0, 2), 0, -1): 20512, ((0, 2), 1, -1): 20513,
+        ((0,), 0, 0): 20514, ((0,), 0, 2): 20515, ((0,), 1, 1): 20516, ((0,), 1, 3): 20517,
+        ((0, 2), 0, 0): 20518, ((0, 2), 1, 1): 20519}
 
 
 # ------------------------------------------------------------------------------------------------ the rule
@@ -56,38 +61,99 @@ def _mask(c, cells):
 
 
 def bands(road):
-    """road: set of (x, z) ROAD cells. -> list of {axis, rows: [(z, a)], A: set, B: set, ok, why} (real coords)."""
+    """road: set of (x, z) ROAD cells. -> list of {axis, rows: [(z, a)], A, B, junc: {cell: key}, arms: {cell: state},
+    ok, why} in real coordinates. junc keys are junction descriptors (JKEY); arms are straight road cells next to the
+    avenue that become road 29 in that state."""
     out = []
     for axis in (0, 1):
         R = road if axis == 0 else {(-x, z) for (x, z) in road}
-        rows = {}
+        full = {}
         for (x, z) in R:
-            if (x - 1, z) not in R and all((x + k, z) in R for k in range(3)) and (x + 3, z) not in R:
-                rows.setdefault(z, set()).add(x)
+            if (x, z) in R and (x + 1, z) in R and (x + 2, z) in R:
+                full.setdefault(z, set()).add(x)
+        clean = lambda a, z: (a - 1, z) not in R and (a + 3, z) not in R      # noqa: E731
         seen = set()
-        for z in sorted(rows):
-            for a in sorted(rows[z]):
-                if (z, a) in seen or a - 1 in rows.get(z - 1, ()):
+        for z in sorted(full):
+            for a in sorted(full[z]):
+                if (z, a) in seen or a - 1 in full.get(z - 1, ()):
                     continue
                 chain = [(z, a)]
-                while chain[-1][1] + 1 in rows.get(chain[-1][0] + 1, ()):
+                while chain[-1][1] + 1 in full.get(chain[-1][0] + 1, ()):
                     chain.append((chain[-1][0] + 1, chain[-1][1] + 1))
                 seen.update(chain)
-                if len(chain) < MIN_ROWS:
+                if sum(1 for (zz, aa) in chain if clean(aa, zz)) < MIN_ROWS:   # anchored by MIN_ROWS clean rows
                     continue
+                band = {(aa + d, zz) for (zz, aa) in chain for d in range(3)}
                 A, B, amb = set(), set(), []
                 for (zz, aa) in chain:
                     A |= {(aa, zz), (aa + 1, zz)}
                     B |= {(aa + 1, zz), (aa + 2, zz)}
+                # side cells of each row: straight road arms along the row (W / E) or along a column (N / S)
+                why, junc, arms = "", {}, {}
+                colN, colS = {}, {}                      # column x -> row where its arm touches the band
+                rowarm = {}
+                outside = lambda c: c in R and c not in band     # noqa: E731
+                for (zz, aa) in chain:
+                    w, e = (aa - 1, zz), (aa + 3, zz)
+                    sides = []
+                    if w in R:
+                        if (aa - 2, zz) in R and not any(outside(c) for c in ((aa - 1, zz + 1), (aa - 2, zz + 1), (aa - 2, zz - 1))):
+                            sides.append("W")
+                            arms[w], arms[(aa - 2, zz)] = 0, 0
+                        elif (aa - 1, zz + 1) in R and not any(outside(c) for c in ((aa - 2, zz), (aa, zz + 1), (aa - 2, zz + 1))):
+                            colS[aa - 1] = zz
+                            arms[w], arms[(aa - 1, zz + 1)] = 1, 1
+                        else:
+                            why = why or "road beside the avenue at (%d,%d) is not a straight arm" % ((-w[0] if axis else w[0]), w[1])
+                    if e in R:
+                        if (aa + 4, zz) in R and not any(outside(c) for c in ((aa + 3, zz - 1), (aa + 4, zz + 1), (aa + 4, zz - 1))):
+                            sides.append("E")
+                            arms[e], arms[(aa + 4, zz)] = 0, 0
+                        elif (aa + 3, zz - 1) in R and not any(outside(c) for c in ((aa + 4, zz), (aa + 2, zz - 1), (aa + 4, zz - 1))):
+                            colN[aa + 3] = zz
+                            arms[e], arms[(aa + 3, zz - 1)] = 1, 1
+                        else:
+                            why = why or "road beside the avenue at (%d,%d) is not a straight arm" % ((-e[0] if axis else e[0]), e[1])
+                    rowarm[zz] = (aa, sides)
+                first, last = chain[0][0], chain[-1][0]
+                for zz, (aa, sides) in rowarm.items():
+                    if not sides:
+                        continue
+                    stem = -1
+                    if sides == ["W", "E"] and zz in (first, last):
+                        stem = 0 if zz == first else 2            # the far curb: N above the first row, S below the last
+                    ds = [0, 1, 2] if sides == ["W", "E"] else [0] if sides == ["W"] else [2]
+                    for d in ds:
+                        junc[(aa + d, zz)] = ("x", d, stem)
+                for x0, zz in colN.items():                       # enters the band at (x0, zz+1), its d2 cell
+                    cells = [(x0, zz + 1)]
+                    if colS.get(x0) == zz + 4:                    # and leaves it at (x0, zz+3): a crossing
+                        cells = [(x0, zz + 1), (x0, zz + 2), (x0, zz + 3)]
+                    for c in cells:
+                        if c not in band:
+                            why = why or "column road at x=%d leaves the avenue's rows" % x0
+                        junc[c] = ("z", c[0] - [aa for (zr, aa) in chain if zr == c[1]][0] if c in band else 0, -1)
+                for x0, zz in colS.items():                       # leaves the band from (x0, zz-1), its d0 cell
+                    if colN.get(x0) == zz - 4:
+                        continue
+                    c = (x0, zz - 1)
+                    if c not in band:
+                        why = why or "column road at x=%d leaves the avenue's rows" % x0
+                    else:
+                        junc[c] = ("z", 0, -1)
+                # the drags' ends beyond the full rows (as before)
                 for (z0, a0), step, pref in ((chain[0], -1, "A"), (chain[-1], 1, "B")):
+                    if rowarm[z0][1]:                             # a junction row ends the chain: no drag stub beyond
+                        continue
                     k = 1
                     while True:
                         zr, ar = z0 + step * k, a0 + step * k
-                        got = [d for d in range(3) if (ar + d, zr) in R]
+                        got = [d for d in range(3) if (ar + d, zr) in R and (ar + d, zr) not in arms]
                         if not got:
                             break
                         for d in got:
                             c = (ar + d, zr)
+                            band.add(c)
                             if d == 0:
                                 A.add(c)
                             elif d == 2:
@@ -95,15 +161,15 @@ def bands(road):
                             else:
                                 amb.append((c, pref))
                         k += 1
-                cells = A | B | {c for c, _ in amb}
-                why = ""
-                for c in cells:
-                    for dx, dz in DIRS:
-                        q = (c[0] + dx, c[1] + dz)
-                        if q in R and q not in cells:
-                            why = "touches road at (%d,%d)" % ((-q[0] if axis else q[0]), q[1])
-                    if why:
-                        break
+                if not why:
+                    for c in band:
+                        for dx, dz in DIRS:
+                            q = (c[0] + dx, c[1] + dz)
+                            if q in R and q not in band and q not in arms:
+                                why = "touches road at (%d,%d)" % ((-q[0] if axis else q[0]), q[1])
+                                break
+                        if why:
+                            break
                 pick = None
                 if not why:
                     best = None                      # same order as sc3netmod_dav.c: cost 100 per both + 1 per other,
@@ -125,21 +191,54 @@ def bands(road):
                     if pick is None:
                         why = "no split into two lone staircases"
                 A2, B2 = pick if pick else (A, B)
+                st = AXIS_STATES[axis]
+                jk = {}
+                for c, (o, d, stem) in junc.items():
+                    halves = tuple(sorted({0: (st["A0"],), 1: (st["A1"], st["B1"]), 2: (st["B2"],)}[d]))
+                    jk[c] = (halves, 0 if o == "x" else 1, stem)
                 if axis == 1:
-                    A2, B2 = {(-x, z2) for x, z2 in A2}, {(-x, z2) for x, z2 in B2}
+                    m = lambda c: (-c[0], c[1])                   # noqa: E731
+                    A2, B2 = {m(c) for c in A2}, {m(c) for c in B2}
+                    jk = {m(c): v for c, v in jk.items()}
+                    arms = {m(c): v for c, v in arms.items()}
                     chain = [(zz, -aa) for (zz, aa) in chain]
-                out.append({"axis": axis, "rows": chain, "A": A2, "B": B2, "ok": not why, "why": why})
+                out.append({"axis": axis, "rows": chain, "A": A2, "B": B2, "junc": jk, "arms": arms,
+                            "ok": not why, "why": why})
     return out
 
 
+# 35's state in each band position (real coordinates): staircase A at d 0 / 1, B at d 1 / 2 (measured in game, axis 1
+# in its mirrored frame: d 0 is the real rightmost cell)
+AXIS_STATES = {0: {"A0": 2, "A1": 0, "B1": 2, "B2": 0}, 1: {"A0": 1, "A1": 3, "B1": 1, "B2": 3}}
+
+
+def jrot(key, k):
+    """a junction descriptor turned by k states: 35 states + k, road 29 orientation + k (mod 2), far curb + k"""
+    halves, o, edge = key
+    return (tuple(sorted((s + k) % 4 for s in halves)), (o + k) % 2, edge if edge < 0 else (edge + k) % 4)
+
+
+def jcanon(key):
+    """-> (canonical descriptor, state k with jrot(canonical, k) == key)"""
+    best = min((jrot(key, -k % 4), k) for k in range(4))
+    return best
+
+
 def wanted(band, mids=None):
-    """-> {(x, z): (piece id, state)} for one band, or None (not isolated / no valid split / a MID combo has no id)."""
+    """-> {(x, z): (piece id, state)} for one band, or None (not isolated / no valid split / a piece has no id)."""
     mids = MID if mids is None else mids
     if not band["ok"]:
         return None
     A, B = band["A"], band["B"]
     out = {}
     for c in A | B:
+        if c in band["junc"]:
+            canon, k = jcanon(band["junc"][c])
+            if canon not in JUNC:
+                band["why"] = "no junction piece for %s at %s" % (canon, c)
+                return None
+            out[c] = (JUNC[canon], k)
+            continue
         pa = LONE.get(_mask(c, A)) if c in A else None
         pb = LONE.get(_mask(c, B)) if c in B else None
         if pa and pb:
@@ -153,12 +252,16 @@ def wanted(band, mids=None):
             other = B if c in A else A
             beside = any((c[0] + dx, c[1]) in other for dx in (-2, -1, 1, 2))
             out[c] = (OUTER[(35, 0, 0)], p[1]) if p[0] == 35 and beside and (35, 0, 0) in OUTER else p
+    for c, o in band["arms"].items():
+        out[c] = (29, o)
     return out
 
 
 def mid_combos(band):
     A, B = band["A"], band["B"]
     for c in A & B:
+        if c in band["junc"]:
+            continue
         pa, pb = LONE[_mask(c, A)], LONE[_mask(c, B)]
         yield (pa[0], pb[0], (pb[1] - pa[1]) % 4)
 
@@ -187,6 +290,41 @@ def footprints():
                     yield (sx, fa, fb, ox, oz, m), set(drag(0, 0, 5, sx, fa)) | set(drag(ox, oz, m, sx, fb))
 
 
+JUNCTION_KINDS = ("cross-x", "T-W", "T-E", "stem-top", "stem-bottom", "cross-z", "T-N", "T-S")
+
+
+def junction_road(kind, sx, n, ox, oz):
+    """A straight road for one junction kind, drawn against the avenue drag(0,0,n) + drag(ox,oz,n) (sx = x step):
+    a row road (z fixed) through / into the avenue, or a column road (x fixed). Axis 1 is the x mirror of axis 0."""
+    m = n // 2
+    av = set(drag(0, 0, n, sx, "x")) | set(drag(ox, oz, n, sx, "x"))
+    zs = [z for _, z in av]
+    row_cells = lambda z: sorted(x for x, zz in av if zz == z)                       # noqa: E731
+    if kind in ("cross-x", "T-W", "T-E"):
+        xs = row_cells(m)
+        lo, hi = min(xs), max(xs)
+        span = {"cross-x": (lo - 5, hi + 5), "T-W": (lo - 5, lo), "T-E": (hi, hi + 5)}[kind]
+        if sx < 0:                                         # mirrored: west is +x in real space
+            span = {"cross-x": (lo - 5, hi + 5), "T-W": (hi, hi + 5), "T-E": (lo - 5, lo)}[kind]
+        return {(x, m) for x in range(span[0], span[1] + 1)}
+    if kind in ("stem-top", "stem-bottom"):                # the drags run up to the road: its row holds their ends
+        z = max(min(z for x, z in drag(0, 0, n, sx, "x")), min(z for x, z in drag(ox, oz, n, sx, "x")))             if kind == "stem-top" else min(max(z for x, z in drag(0, 0, n, sx, "x")), max(z for x, z in drag(ox, oz, n, sx, "x")))
+        xs = [x for x, _ in av]
+        return {(x, z) for x in range(min(xs) - 5, max(xs) + 6)}
+    xs = row_cells(m)
+    x0 = max(xs) if sx > 0 else min(xs)                    # the column through the row's d2 cell (axis space)
+    span = {"cross-z": (min(zs) - 5, max(zs) + 5), "T-N": (min(zs) - 5, m), "T-S": (m, max(zs) + 5)}[kind]
+    return {(x0, z) for z in range(span[0], span[1] + 1)}
+
+
+def jfootprints():
+    for sx in (1, -1):
+        for ox, oz in ((sx, 0), (0, -1)):
+            for kind in JUNCTION_KINDS:
+                av = set(drag(0, 0, 9, sx, "x")) | set(drag(ox, oz, 9, sx, "x"))
+                yield (kind, sx, ox, oz), av | junction_road(kind, sx, 9, ox, oz)
+
+
 def cmd_combos(a):
     need, fails = {}, []
     for key, road in footprints():
@@ -204,6 +342,25 @@ def cmd_combos(a):
         print("  %-22s %3d footprint(s)  id %s" % (c, n, MID.get(c, "MISSING")))
     print("footprints without a converting band: %d of %d" % (len(fails), len(list(footprints()))))
     for k, w in fails[:16]:
+        print("  ", k, w)
+    jneed, jfails = {}, []
+    for key, road in jfootprints():
+        bs = [b for b in bands(road) if b["ok"]]
+        if not bs:
+            jfails.append((key, [b["why"] for b in bands(road)]))
+            continue
+        for b in bs:
+            for c, k in b["junc"].items():
+                canon, st = jcanon(k)
+                jneed.setdefault(canon, set()).add(key[0])
+            for c in mid_combos(b):
+                if c not in MID:
+                    jfails.append((key, "middle %s" % (c,)))
+    print("junction pieces (canonical descriptor: 35 half states, road 29 orientation, far curb):")
+    for c, kinds in sorted(jneed.items()):
+        print("  %-28s id %-8s %s" % (c, JUNC.get(c, "MISSING"), sorted(kinds)))
+    print("junction footprints without a converting band: %d of %d" % (len(jfails), len(list(jfootprints()))))
+    for k, w in jfails[:16]:
         print("  ", k, w)
 
 
@@ -377,6 +534,93 @@ def outer_frame(z, slot):
     return im, (L, T)
 
 
+FAR_KEEP = 0.22             # tile units: a stem keeps road 29's sidewalk pixels this close to its far curb
+
+
+def _asphalt(c):
+    return c[3] and max(c[:3]) < 135 and max(c[:3]) - min(c[:3]) < 22
+
+
+def asphalt_palette(z):
+    """Asphalt pixels of road 29 (dark, grey, not the yellow line)."""
+    from netmod import netart
+    out = []
+    for s in range(4):
+        im, _ = netart.stock_frames(29)[(z, s)]
+        for (r, g, b, a) in im.getdata():
+            if a and max(r, g, b) < 135 and max(r, g, b) - min(r, g, b) < 22:
+                out.append((r, g, b, 255))
+    return out or [(90, 93, 98, 255)]
+
+
+def tile_uv(px, py, W, H, T):
+    """pixel of a full-tile frame (left vertex at (0, T)) -> view-0 cell coordinates (U along x, V along z), 0..1"""
+    dx = px + 0.5 - W / 2.0
+    dy = py + 0.5 - (T + 1 - H / 2.0)
+    return dy / H - dx / W, dy / H + dx / W
+
+
+def junction_frame(canon, z, slot):
+    """A junction cell: road 29 (orientation o) with the avenue's road halves (35 at the listed states) over it as plain
+    asphalt; a stem keeps 29's sidewalk along its far curb. Art at slot k = the canonical descriptor turned by k."""
+    from PIL import Image
+    from netmod import netart
+    halves, o, edge = canon
+    W = netart.TILE_W[z]
+    H = W // 2
+    T = H // 2 - 1
+    canvas = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    im29, (L, Tt) = netart.stock_frames(29)[(z, (o + slot) % 4)]
+    canvas.alpha_composite(im29, (0 - L, T - Tt))
+    mask = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    for s in halves:
+        im, (L, Tt) = netart.stock_frames(35)[(z, (s + slot) % 4)]
+        mask.alpha_composite(im, (0 - L, T - Tt))
+    px, mk = canvas.load(), mask.load()
+    pal = asphalt_palette(z)
+    e = -1 if edge < 0 else (edge + slot) % 4
+    for y in range(H):
+        for x in range(W):
+            if not mk[x, y][3] or not px[x, y][3]:
+                continue
+            if e >= 0:
+                U, V = tile_uv(x, y, W, H, T)
+                dist = (V, 1 - U, 1 - V, U)[e]
+                if dist < FAR_KEEP and _light(px[x, y]):
+                    continue                                # the far curb stays
+            if _asphalt(px[x, y]):
+                continue                                    # road 29's own asphalt stays
+            if _asphalt(mk[x, y]):
+                px[x, y] = mk[x, y]                         # else the diagonal's asphalt at this pixel
+                continue
+            h = (x * 73856093) ^ (y * 19349663) ^ (z * 83492791)
+            px[x, y] = pal[h % len(pal)]                    # sidewalk / lane line of both: plain asphalt
+    return canvas, (0, T)
+
+
+def junction_spec(canon, vid):
+    """Lanes of a junction piece: road 29's (orientation o) plus each avenue half's (35 at its state)."""
+    halves, o, edge = canon
+    parts = [_describe(29, o)] + [_describe(35, s) for s in halves]
+    spec = {"_": "diagave.py: junction %s: lanes of 29 (state %d) + 35 at %s" % (canon, o, list(halves)),
+            "piece": vid, "states": [0, 1, 2, 3], "flag": parts[0].get("flag", 0), "alt": parts[0].get("alt", [0, 0, 0, 0])}
+    veh = {"class": parts[0]["vehicle"]["class"], "speed": parts[0]["vehicle"]["speed"], "lanes": [], "exits": []}
+    ped = {"walks": [], "exits": []}
+    for s in parts:
+        veh["lanes"] += s.get("vehicle", {}).get("lanes", [])
+        veh["exits"] += [e for e in s.get("vehicle", {}).get("exits", []) if e not in veh["exits"]]
+        ped["walks"] += s.get("pedestrian", {}).get("walks", [])
+        ped["exits"] += [e for e in s.get("pedestrian", {}).get("exits", []) if e not in ped["exits"]]
+    spec["vehicle"], spec["pedestrian"] = veh, ped
+    pairs = []
+    for ln in veh["lanes"]:
+        p = [_side(ln["from"]), _side(ln["to"])]
+        if p not in pairs:
+            pairs.append(p)
+    spec["connects"] = {"road": pairs}
+    return spec
+
+
 def _side(p):
     return "x-" if p[0] == 0 else "x+" if p[0] == 255 else "z-" if p[1] == 0 else "z+"
 
@@ -433,6 +677,20 @@ def cmd_build(a):
             json.dump(spec, fh, indent=1)
         print("built %d: art %s, lanes mid_%d.lanes.json (%d vehicle lane(s), connects %s)"
               % (vid, d, vid, len(spec["vehicle"]["lanes"]), spec["connects"]["road"]))
+    for canon, vid in sorted(JUNC.items(), key=lambda t: t[1]):      # junction cells: road 29 + the avenue as asphalt
+        d = os.path.join(a.pack, "art", str(vid))
+        os.makedirs(d, exist_ok=True)
+        anchors = {"_": "diagave.py build: junction %s" % (canon,)}
+        for z in range(netart.ZOOMS):
+            for s in range(netart.ROTS):
+                im, anc = junction_frame(canon, z, s)
+                im.save(os.path.join(d, netart.frame_name(z, s)))
+                anchors[netart.frame_name(z, s)] = list(anc)
+        json.dump(anchors, open(os.path.join(d, "anchors.json"), "w"), indent=1)
+        spec = junction_spec(canon, vid)
+        with open(os.path.join(a.pack, "junc_%d.lanes.json" % vid), "w", newline="\n") as fh:
+            json.dump(spec, fh, indent=1)
+        print("built %d (junction %s): %d vehicle lane(s)" % (vid, canon, len(spec["vehicle"]["lanes"])))
     for key, vid in OUTER.items():                    # outer cells: 35's frame with the median tip; 35's own lanes
         d = os.path.join(a.pack, "art", str(vid))
         os.makedirs(d, exist_ok=True)
@@ -482,19 +740,25 @@ def cmd_plan(a):
 def cmd_preview(a):
     from netmod import netart
     sx = 1 if a.axis == 0 else -1
-    road = set(drag(0, 0, a.rows, sx, "x")) | set(drag(sx, 0, a.rows, sx, "x") if a.offset == "x" else
-                                                 drag(0, -1, a.rows, sx, "x"))
+    ox, oz = (sx, 0) if a.offset == "x" else (0, -1)
+    road = set(drag(0, 0, a.rows, sx, "x")) | set(drag(ox, oz, a.rows, sx, "x"))
+    if a.junction:
+        road |= junction_road(a.junction, sx, a.rows, ox, oz)
     cells = []
     for b in bands(road):
         w = wanted(b) or {}
         for c, (pid, s) in w.items():
             cell = {"at": [-c[0], c[1]], "slot": s}
-            if pid in MID.values() or pid in OUTER.values():
+            if pid in MID.values() or pid in OUTER.values() or pid in JUNC.values():
                 cell["dir"] = os.path.join(a.pack, "art", str(pid))
             else:
                 cell["piece"] = pid
             cells.append(cell)
         print("band axis %d rows %d: %s" % (b["axis"], len(b["rows"]), "converts" if w else b["why"]))
+    done = {tuple(c["at"]) for c in cells}
+    for (x, z) in road:                                 # the rest of a test road: straight 29 along its run
+        if (-x, z) not in done:
+            cells.append({"at": [-x, z], "piece": 29, "slot": 0 if ((x - 1, z) in road or (x + 1, z) in road) else 1})
     shot = netart.preview({"cells": cells}, None, zooms=[a.zoom], rots=[a.rot])[(a.zoom, a.rot)]
     shot.convert("RGB").save(a.out)
     print(a.out, shot.size)
@@ -518,6 +782,7 @@ def main(argv=None):
     s.add_argument("--axis", type=int, default=0)
     s.add_argument("--rot", type=int, default=0)
     s.add_argument("--offset", default="x", choices=("x", "z"))
+    s.add_argument("--junction", choices=JUNCTION_KINDS)
     a = ap.parse_args(argv)
     {"combos": cmd_combos, "build": cmd_build, "scan": cmd_scan, "plan": cmd_plan, "preview": cmd_preview}[a.cmd](a)
     return 0

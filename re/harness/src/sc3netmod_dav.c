@@ -71,10 +71,12 @@ static void dav_init_table(void) {
     for (k = 0; k < 20; k++) g_dav_lone[t[k][0]] = (((DWORD)t[k][1] << 8) | t[k][2]) + 1;
 }
 
-static int dav_is_mid(WORD id) {
+static int dav_is_junc(WORD id);
+
+static int dav_is_mid(WORD id) {                 /* any avenue piece: middle, outer or junction */
     int k;
     for (k = 0; k < g_dav_nmid; k++) if (g_dav_mid[k].piece == id) return 1;
-    return 0;
+    return dav_is_junc(id);
 }
 
 /* save as 43: a cell holding both roads (stock 35 draws one); the OUTER piece (b == 0) saves as its base 35 */
@@ -94,18 +96,75 @@ static WORD dav_mid_of(WORD a, WORD b, int delta) {
 /* road test in axis space: axis 1 mirrors x */
 static int dav_road(RbBuf *b, int axis, int x, int z) { return rb_at(b, axis ? -x : x, z) != 0; }
 
-static int dav_band_row(RbBuf *b, int axis, int a, int z) {
-    return !dav_road(b, axis, a - 1, z) && dav_road(b, axis, a, z) && dav_road(b, axis, a + 1, z) &&
-           dav_road(b, axis, a + 2, z) && !dav_road(b, axis, a + 3, z);
+static int dav_full(RbBuf *b, int axis, int a, int z) {
+    return dav_road(b, axis, a, z) && dav_road(b, axis, a + 1, z) && dav_road(b, axis, a + 2, z);
+}
+
+static int dav_clean(RbBuf *b, int axis, int a, int z) {
+    return !dav_road(b, axis, a - 1, z) && !dav_road(b, axis, a + 3, z);
+}
+
+/* junction pieces: `davj <piece> <n> <s1> <s2> <road> <far>` = the piece at state 0 draws road 29 in orientation
+   <road> (0 along x, 1 along z) with the avenue's 35 halves at states s1 (and s2 when n == 2) over it as asphalt, and
+   keeps its far curb <far> (0 N, 1 E, 2 S, 3 W; 255 none) for a stem. */
+#define DAV_MAX_JUNC 32
+typedef struct { WORD piece; BYTE n, s1, s2, o, e; } DavJunc;
+static DavJunc g_dav_junc[DAV_MAX_JUNC];
+static int g_dav_njunc;
+
+static void dav_jline(const char *path, const char *line) {
+    unsigned long v, n, s1, s2, o, e;
+    if (sscanf(line + 5, "%lu %lu %lu %lu %lu %lu", &v, &n, &s1, &s2, &o, &e) != 6 || !v || v > 0xffff || n < 1 ||
+        n > 2 || s1 > 3 || (n == 2 && s2 > 3) || o > 1 || (e > 3 && e != 255) || !g_base[v]) {
+        logf("### dav: %s: bad junction line or piece not a variant: '%s'", path, line);
+        return;
+    }
+    if (g_dav_njunc >= DAV_MAX_JUNC) { logf("### dav: %s: too many junction pieces - ignored", path); return; }
+    if (n == 2 && s2 < s1) { unsigned long t = s1; s1 = s2; s2 = t; }
+    g_dav_junc[g_dav_njunc].piece = (WORD)v; g_dav_junc[g_dav_njunc].n = (BYTE)n;
+    g_dav_junc[g_dav_njunc].s1 = (BYTE)s1; g_dav_junc[g_dav_njunc].s2 = (BYTE)(n == 2 ? s2 : 0);
+    g_dav_junc[g_dav_njunc].o = (BYTE)o; g_dav_junc[g_dav_njunc].e = (BYTE)e;
+    g_dav_njunc++;
+    logf("dav: %s: junction piece %lu = road %lu + 35 at %lu%s%lu, far curb %lu", path, v, o, s1, n == 2 ? "," : " ",
+         n == 2 ? s2 : 0UL, e);
+}
+
+static int dav_is_junc(WORD id) {
+    int k;
+    for (k = 0; k < g_dav_njunc; k++) if (g_dav_junc[k].piece == id) return 1;
+    return 0;
+}
+
+/* a cell's junction descriptor -> (piece << 8 | state), 0 = none declared. The table holds each piece's state-0
+   descriptor; turning it by k states (35 states + k, road + k mod 2, far curb + k) gives state k. Smallest k first. */
+static DWORD dav_junc_of(int n, int s1, int s2, int o, int e) {
+    int k, j;
+    for (k = 0; k < 4; k++) {
+        int r = (4 - k) % 4, a = (s1 + r) % 4, b = (s2 + r) % 4, oo = (o + r) % 2, ee = e == 255 ? 255 : (e + r) % 4;
+        if (n == 2 && b < a) { int t = a; a = b; b = t; }
+        for (j = 0; j < g_dav_njunc; j++) {
+            DavJunc *q = &g_dav_junc[j];
+            if (q->n == n && q->s1 == a && (n == 1 || q->s2 == b) && q->o == oo && q->e == ee)
+                return ((DWORD)q->piece << 8) | (DWORD)k;
+        }
+    }
+    return 0;
 }
 
 typedef struct { int x, z; BYTE pref; } DavCell;    /* x in real space; pref: ambiguous end cell, 1 = A, 2 = B */
+typedef struct { int x, z; BYTE o; } DavArm;         /* a straight road cell beside the avenue -> 29 in state o */
+typedef struct { int x, z; BYTE n, s1, s2, o, e; } DavJ;   /* a junction cell and its descriptor */
+
+#define DAV_MAX_ARMS 256
+#define DAV_MAX_COLS 64
 
 typedef struct {                                      /* one pass: the read buffer and per-band scratch */
     RbBuf b;
-    BYTE *mark;                                       /* [cell]: bit 0 staircase A, bit 1 B, bit 2 in the band */
+    BYTE *mark;                                       /* [cell]: 1 A, 2 B, 4 band, 8 arm, 16 junction */
     DavCell *cell;
     DWORD *want;
+    DavArm *arm;
+    DavJ *junc;
 } DavPass;
 
 static int dav_mark(DavPass *p, int x, int z) {
@@ -114,16 +173,30 @@ static int dav_mark(DavPass *p, int x, int z) {
     return p->mark[z * p->b.w + x];
 }
 
-static BYTE *dav_markp(DavPass *p, int x, int z) { return &p->mark[(z - p->b.z0) * p->b.w + (x - p->b.x0)]; }
+static BYTE *dav_markp(DavPass *p, int x, int z) {
+    static BYTE dummy;
+    x -= p->b.x0; z -= p->b.z0;
+    if (x < 0 || z < 0 || x >= p->b.w || z >= p->b.h) { dummy = 0; return &dummy; }
+    return &p->mark[z * p->b.w + x];
+}
 
 /* add a band cell; st: 1 A, 2 B, 3 both, 0 ambiguous (pref 1 / 2) */
 static void dav_add(DavPass *p, int *n, int axis, int ax, int z, int st, int pref) {
     int x = axis ? -ax : ax;
     BYTE *m = dav_markp(p, x, z);
-    if (*n >= DAV_MAX_CELLS || *m) return;
+    if (*n >= DAV_MAX_CELLS || (*m & 4)) return;
     p->cell[*n].x = x; p->cell[*n].z = z; p->cell[*n].pref = (BYTE)(st ? 0 : pref);
-    *m = (BYTE)(4 | st);
+    *m = (BYTE)((*m & 8) | 4 | st);
     (*n)++;
+}
+
+static void dav_add_arm(DavPass *p, int *na, int axis, int ax, int z, int o) {
+    int x = axis ? -ax : ax;
+    BYTE *m = dav_markp(p, x, z);
+    if (*na >= DAV_MAX_ARMS || (*m & 8)) return;
+    p->arm[*na].x = x; p->arm[*na].z = z; p->arm[*na].o = (BYTE)o;
+    *m |= 8;
+    (*na)++;
 }
 
 static int dav_own_mask(DavPass *p, int x, int z, int bit) {
@@ -143,6 +216,9 @@ static int dav_valid(DavPass *p, int n) {
     return 1;
 }
 
+/* 35's state in each band position, staircase A at d 0 / 1 and B at d 1 / 2 (diagave.py AXIS_STATES) */
+static const BYTE DAV_AX_ST[2][4] = { { 2, 0, 2, 0 }, { 1, 3, 1, 3 } };     /* A0, A1, B1, B2 */
+
 /* one pass over the cells in [x0..x1] x [z0..z1]; -> 1 when a band reached the read border (the caller re-runs it
    over the whole map). keep[cell] = 1 for every cell of a converted band (the revert skips them). */
 static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, const char *who, BYTE *keep) {
@@ -153,49 +229,124 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
     int axis, x, z, n, k, j, border = 0, nb = 0, nwall = 0, nrev = 0;
     P.b.x0 = x0; P.b.z0 = z0; P.b.w = x1 - x0 + 1; P.b.h = z1 - z0 + 1;
     nbuf = (SIZE_T)P.b.w * P.b.h;
-    mem = (BYTE *)VirtualAlloc(NULL, nbuf * 5 + DAV_MAX_CELLS * (sizeof(DavCell) + 4), MEM_COMMIT, PAGE_READWRITE);
+    mem = (BYTE *)VirtualAlloc(NULL, nbuf * 5 + DAV_MAX_CELLS * (sizeof(DavCell) + 4 + sizeof(DavJ)) +
+                               DAV_MAX_ARMS * sizeof(DavArm), MEM_COMMIT, PAGE_READWRITE);
     if (!mem) return 0;
     P.b.c = (DWORD *)mem;
     P.cell = (DavCell *)(mem + nbuf * 4);
     P.want = (DWORD *)(P.cell + DAV_MAX_CELLS);
-    P.mark = (BYTE *)(P.want + DAV_MAX_CELLS);
+    P.junc = (DavJ *)(P.want + DAV_MAX_CELLS);
+    P.arm = (DavArm *)(P.junc + DAV_MAX_CELLS);
+    P.mark = (BYTE *)(P.arm + DAV_MAX_ARMS);
     for (z = 0; z < P.b.h; z++)
         for (x = 0; x < P.b.w; x++) P.b.c[z * P.b.w + x] = rb_read(mgr, lay, x0 + x, z0 + z, W, H);
     for (axis = 0; axis < 2; axis++) {
         int ax0 = axis ? -x1 : x0, ax1 = axis ? -x0 : x1;
+#define RD(a, zq) dav_road(&P.b, axis, (a), (zq))
+#define MK(a, zq) dav_mark(&P, axis ? -(a) : (a), (zq))
+#define DOUT(a, zq) (RD(a, zq) && !(MK(a, zq) & 4))
         for (z = z0; z <= z1; z++)
             for (x = ax0; x <= ax1; x++) {
-                int rows = 0, zz, aa, ok = 1, step, nw = 0, namb = 0, amb[DAV_MAX_AMB], combo, ncombo, best = -1;
-                int bestcost = 0x7fffffff;
-                if (!dav_band_row(&P.b, axis, x, z) || dav_band_row(&P.b, axis, x - 1, z - 1)) continue;
-                for (zz = z, aa = x; dav_band_row(&P.b, axis, aa, zz); zz++, aa++) rows++;
-                if (rows < DAV_MIN_ROWS) continue;
+                int rows = 0, ok = 1, step, nw = 0, namb = 0, amb[DAV_MAX_AMB], combo, ncombo, best = -1, run, brun;
+                int bestcost = 0x7fffffff, na = 0, nj = 0, ncn = 0, ncs = 0, colN[DAV_MAX_COLS][2], colS[DAV_MAX_COLS][2];
+                BYTE side[1024];
+                const char *why = "";
+                if (!dav_full(&P.b, axis, x, z) || dav_full(&P.b, axis, x - 1, z - 1)) continue;
+                while (dav_full(&P.b, axis, x + rows, z + rows)) rows++;
+                for (k = 0, run = brun = 0; k < rows; k++)        /* anchored by MIN_ROWS clean rows (no road beside) */
+                    brun += dav_clean(&P.b, axis, x + k, z + k);
+                if (brun < DAV_MIN_ROWS || rows > 1024) continue;
                 n = 0;
                 for (k = 0; k < rows; k++) {
                     dav_add(&P, &n, axis, x + k, z + k, 1, 0);
                     dav_add(&P, &n, axis, x + k + 1, z + k, 3, 0);
                     dav_add(&P, &n, axis, x + k + 2, z + k, 2, 0);
                 }
-                for (step = -1; step <= 1; step += 2) {           /* the drags' ends above and below the full rows */
+                /* side cells: straight road arms along the row (W / E) or along a column (N / S) */
+                for (k = 0; k < rows && ok; k++) {
+                    int aa = x + k, zz = z + k;
+                    side[k] = 0;
+                    if (RD(aa - 1, zz)) {
+                        if (RD(aa - 2, zz) && !DOUT(aa - 1, zz + 1) && !DOUT(aa - 2, zz + 1) && !DOUT(aa - 2, zz - 1)) {
+                            side[k] |= 1;
+                            dav_add_arm(&P, &na, axis, aa - 1, zz, 0); dav_add_arm(&P, &na, axis, aa - 2, zz, 0);
+                        } else if (RD(aa - 1, zz + 1) && !DOUT(aa - 2, zz) && !DOUT(aa, zz + 1) && !DOUT(aa - 2, zz + 1) &&
+                                   ncs < DAV_MAX_COLS) {
+                            colS[ncs][0] = aa - 1; colS[ncs][1] = zz; ncs++;
+                            dav_add_arm(&P, &na, axis, aa - 1, zz, 1); dav_add_arm(&P, &na, axis, aa - 1, zz + 1, 1);
+                        } else { ok = 0; why = "road beside the avenue is not a straight arm"; }
+                    }
+                    if (ok && RD(aa + 3, zz)) {
+                        if (RD(aa + 4, zz) && !DOUT(aa + 3, zz - 1) && !DOUT(aa + 4, zz + 1) && !DOUT(aa + 4, zz - 1)) {
+                            side[k] |= 2;
+                            dav_add_arm(&P, &na, axis, aa + 3, zz, 0); dav_add_arm(&P, &na, axis, aa + 4, zz, 0);
+                        } else if (RD(aa + 3, zz - 1) && !DOUT(aa + 4, zz) && !DOUT(aa + 2, zz - 1) && !DOUT(aa + 4, zz - 1) &&
+                                   ncn < DAV_MAX_COLS) {
+                            colN[ncn][0] = aa + 3; colN[ncn][1] = zz; ncn++;
+                            dav_add_arm(&P, &na, axis, aa + 3, zz, 1); dav_add_arm(&P, &na, axis, aa + 3, zz - 1, 1);
+                        } else { ok = 0; why = "road beside the avenue is not a straight arm"; }
+                    }
+                }
+                /* junction cells (axis-space d, then real descriptor) */
+#define JADD(AX, ZQ, D, O, E) do { if (nj < DAV_MAX_CELLS) { int d_ = (D); \
+                    P.junc[nj].x = axis ? -(AX) : (AX); P.junc[nj].z = (ZQ); P.junc[nj].o = (BYTE)(O); P.junc[nj].e = (BYTE)(E); \
+                    if (d_ == 1) { P.junc[nj].n = 2; P.junc[nj].s1 = DAV_AX_ST[axis][1]; P.junc[nj].s2 = DAV_AX_ST[axis][2]; } \
+                    else { P.junc[nj].n = 1; P.junc[nj].s1 = DAV_AX_ST[axis][d_ == 0 ? 0 : 3]; P.junc[nj].s2 = 0; } \
+                    if (P.junc[nj].n == 2 && P.junc[nj].s2 < P.junc[nj].s1) { BYTE t_ = P.junc[nj].s1; \
+                        P.junc[nj].s1 = P.junc[nj].s2; P.junc[nj].s2 = t_; } \
+                    nj++; } } while (0)
+                for (k = 0; k < rows && ok; k++) {
+                    int aa = x + k, zz = z + k, e = 255;
+                    if (!side[k]) continue;
+                    if (side[k] == 3 && (k == 0 || k == rows - 1)) e = k == 0 ? 0 : 2;   /* stem: the far curb */
+                    if (side[k] & 1) JADD(aa, zz, 0, 0, e);
+                    if (side[k] == 3) JADD(aa + 1, zz, 1, 0, e);
+                    if (side[k] & 2) JADD(aa + 2, zz, 2, 0, e);
+                }
+                for (k = 0; k < ncn && ok; k++) {                    /* a column enters at (x0, zz+1), its d2 cell */
+                    int x0c = colN[k][0], zz = colN[k][1], cross = 0, t;
+                    for (j = 0; j < ncs; j++) if (colS[j][0] == x0c && colS[j][1] == zz + 4) cross = 1;
+                    for (t = 1; t <= (cross ? 3 : 1); t++) {
+                        int zr = zz + t, kr = zr - z;
+                        if (kr < 0 || kr >= rows) { ok = 0; why = "column road leaves the avenue's rows"; break; }
+                        JADD(x0c, zr, x0c - (x + kr), 1, 255);
+                    }
+                }
+                for (k = 0; k < ncs && ok; k++) {                    /* a column leaves from (x0, zz-1), its d0 cell */
+                    int x0c = colS[k][0], zz = colS[k][1], crossed = 0, kr = zz - 1 - z;
+                    for (j = 0; j < ncn; j++) if (colN[j][0] == x0c && colN[j][1] == zz - 4) crossed = 1;
+                    if (crossed) continue;
+                    if (kr < 0 || kr >= rows) { ok = 0; why = "column road leaves the avenue's rows"; break; }
+                    JADD(x0c, zz - 1, 0, 1, 255);
+                }
+#undef JADD
+                for (k = 0; k < nj; k++) *dav_markp(&P, P.junc[k].x, P.junc[k].z) |= 16;
+                /* the drags' ends beyond the full rows; not past a junction row */
+                for (step = -1; step <= 1 && ok; step += 2) {
                     int zr = step < 0 ? z : z + rows - 1, ar = step < 0 ? x : x + rows - 1;
+                    if (side[step < 0 ? 0 : rows - 1] & 3) continue;
                     for (k = 1;; k++) {
                         int got = 0;
-                        for (j = 0; j < 3; j++)
-                            if (dav_road(&P.b, axis, ar + step * k + j, zr + step * k)) {
-                                dav_add(&P, &n, axis, ar + step * k + j, zr + step * k, j == 0 ? 1 : j == 2 ? 2 : 0,
-                                        step < 0 ? 1 : 2);
+                        for (j = 0; j < 3; j++) {
+                            int axj = ar + step * k + j, zj = zr + step * k;
+                            if (RD(axj, zj) && !(MK(axj, zj) & 8)) {
+                                dav_add(&P, &n, axis, axj, zj, j == 0 ? 1 : j == 2 ? 2 : 0, step < 0 ? 1 : 2);
                                 got = 1;
                             }
+                        }
                         if (!got) break;
                     }
                 }
+#undef RD
+#undef MK
+#undef DOUT
                 for (k = 0; k < n && ok; k++) {
                     int cx = P.cell[k].x, cz = P.cell[k].z;
                     if ((cx <= x0 && x0 > 0) || (cz <= z0 && z0 > 0) || (cx >= x1 && x1 < W - 1) || (cz >= z1 && z1 < H - 1))
                         border = 1;
                     for (j = 0; j < 8 && ok; j++) {                /* isolated: no other road touches the band */
                         int qx = cx + DAV_DIR[j][0], qz = cz + DAV_DIR[j][1];
-                        if (rb_at(&P.b, qx, qz) && !dav_mark(&P, qx, qz)) ok = 0;
+                        if (rb_at(&P.b, qx, qz) && !(dav_mark(&P, qx, qz) & 12)) { ok = 0; why = "touches road"; }
                     }
                     if (P.cell[k].pref) {
                         if (namb < DAV_MAX_AMB) amb[namb++] = k; else ok = 0;
@@ -207,28 +358,40 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                     int c = combo, cost = 0;
                     for (k = 0; k < namb; k++, c /= 3) {
                         int ch = c % 3, pref = P.cell[amb[k]].pref;
-                        *dav_markp(&P, P.cell[amb[k]].x, P.cell[amb[k]].z) = (BYTE)(4 | (ch == 2 ? 3 : ch == 0 ? pref : 3 - pref));
+                        BYTE *m = dav_markp(&P, P.cell[amb[k]].x, P.cell[amb[k]].z);
+                        *m = (BYTE)((*m & 0xf8) | 4 | (ch == 2 ? 3 : ch == 0 ? pref : 3 - pref));
                         cost += ch == 2 ? 100 : ch;
                     }
                     if (cost < bestcost && dav_valid(&P, n)) { best = combo; bestcost = cost; }
                 }
-                if (ok && best < 0) ok = 0;
+                if (ok && best < 0) { ok = 0; why = "no split into two lone staircases"; }
                 if (ok) {
                     int c = best;
                     for (k = 0; k < namb; k++, c /= 3) {
                         int ch = c % 3, pref = P.cell[amb[k]].pref;
-                        *dav_markp(&P, P.cell[amb[k]].x, P.cell[amb[k]].z) = (BYTE)(4 | (ch == 2 ? 3 : ch == 0 ? pref : 3 - pref));
+                        BYTE *m = dav_markp(&P, P.cell[amb[k]].x, P.cell[amb[k]].z);
+                        *m = (BYTE)((*m & 0xf8) | 4 | (ch == 2 ? 3 : ch == 0 ? pref : 3 - pref));
                     }
                 }
                 for (k = 0; k < n && ok; k++) {                    /* pieces */
                     int cx = P.cell[k].x, cz = P.cell[k].z, m = dav_mark(&P, cx, cz);
-                    DWORD va = (m & 1) ? g_dav_lone[dav_own_mask(&P, cx, cz, 1)] : 0;
-                    DWORD vb = (m & 2) ? g_dav_lone[dav_own_mask(&P, cx, cz, 2)] : 0;
+                    DWORD va, vb;
+                    if (m & 16) {
+                        for (j = 0; j < nj; j++)
+                            if (P.junc[j].x == cx && P.junc[j].z == cz) {
+                                P.want[k] = dav_junc_of(P.junc[j].n, P.junc[j].s1, P.junc[j].s2, P.junc[j].o, P.junc[j].e);
+                                break;
+                            }
+                        if (j == nj || !P.want[k]) { ok = 0; why = "no junction piece declared"; }
+                        continue;
+                    }
+                    va = (m & 1) ? g_dav_lone[dav_own_mask(&P, cx, cz, 1)] : 0;
+                    vb = (m & 2) ? g_dav_lone[dav_own_mask(&P, cx, cz, 2)] : 0;
                     if (va && vb) {
                         WORD mid;
                         va--; vb--;
                         mid = dav_mid_of((WORD)(va >> 8), (WORD)(vb >> 8), (int)((vb - va) & 3));
-                        if (!mid) { ok = 0; break; }
+                        if (!mid) { ok = 0; why = "no middle piece declared"; break; }
                         P.want[k] = ((DWORD)mid << 8) | (va & 0xff);
                     } else if (va || vb) {
                         DWORD v = (va ? va : vb) - 1;
@@ -241,24 +404,30 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                 }
                 if (ok) {
                     nb++;
-                    for (k = 0; k < n; k++) {
-                        DWORD cur = rb_at(&P.b, P.cell[k].x, P.cell[k].z);
+                    for (k = 0; k < n + na; k++) {
+                        int cx = k < n ? P.cell[k].x : P.arm[k - n].x, cz = k < n ? P.cell[k].z : P.arm[k - n].z;
+                        DWORD want = k < n ? P.want[k] : ((DWORD)29 << 8) | P.arm[k - n].o;
+                        DWORD cur = rb_at(&P.b, cx, cz);
                         int pos[3];
-                        if (keep) keep[(P.cell[k].z - z0) * P.b.w + (P.cell[k].x - x0)] = 1;
-                        if ((((cur & 0xffff) << 8) | ((cur >> 16) & 3)) == P.want[k]) continue;
-                        pos[0] = P.cell[k].x << 8; pos[1] = P.cell[k].z << 8; pos[2] = 0;
-                        ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, lay, pos, P.want[k], -1, 8, 0);
+                        if (keep && k < n) keep[(cz - z0) * P.b.w + (cx - x0)] = 1;
+                        if ((((cur & 0xffff) << 8) | ((cur >> 16) & 3)) == want) continue;
+                        pos[0] = cx << 8; pos[1] = cz << 8; pos[2] = 0;
+                        ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, lay, pos, want, -1, 8, 0);
                         nw++;
                     }
                     if (nw || !strcmp(who, "load"))
-                        logf("dav: %s: band axis %d, %d full row(s) from (%d,%d), %d cell(s), %d written", who, axis,
-                             rows, axis ? -x : x, z, n, nw);
+                        logf("dav: %s: band axis %d, %d row(s) from (%d,%d), %d cell(s), %d junction cell(s), %d arm "
+                             "cell(s), %d written", who, axis, rows, axis ? -x : x, z, n, nj, na, nw);
                     nwall += nw;
+                } else if (nj || na) {
+                    logf("dav: %s: band axis %d from (%d,%d) with %d junction cell(s) left to the stock tiler: %s", who,
+                         axis, axis ? -x : x, z, nj, why);
                 }
                 for (k = 0; k < n; k++) *dav_markp(&P, P.cell[k].x, P.cell[k].z) = 0;   /* clear this band's scratch */
+                for (k = 0; k < na; k++) *dav_markp(&P, P.arm[k].x, P.arm[k].z) = 0;
             }
     }
-    /* middle pieces in the area (one cell in from the read border) that no band kept: back to the stock tiles */
+    /* middle and junction pieces in the area (one cell in from the read border) that no band kept: back to stock */
     if (keep)
         for (z = z0 + 1; z < z1; z++)
             for (x = x0 + 1; x < x1; x++) {
@@ -268,7 +437,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                 rect[0] = x << 8; rect[1] = z << 8; rect[2] = 0; rect[3] = x << 8; rect[4] = z << 8; rect[5] = 0;
                 ((PFN_Retile)VT(mgr, 0xb0))(mgr, 0, rect, 3);
                 nrev++;
-                logf("dav: %s: (%d,%d) middle piece %lu no longer in a band -> stock retile", who, x, z, v & 0xffff);
+                logf("dav: %s: (%d,%d) avenue piece %lu no longer in a band -> stock retile", who, x, z, v & 0xffff);
             }
     VirtualFree(mem, 0, MEM_RELEASE);
     InterlockedExchangeAdd(&g_dav_n_bands, nb);

@@ -1,39 +1,426 @@
 {
-  "netpack": 1,
-  "name": "diagonal_avenue",
-  "version": "0.3.0",
-  "author": "netmod (task diagave)",
-  "description": "Diagonal avenues: draw two diagonal roads joined side by side (the second one cell over) and sc3netmod's DAV block makes them one avenue, four lanes wide. Stock diagonal 35 draws only the road half of its cell, so the middle cell of each row holds both roads: it becomes one of these middle pieces (two stock halves on one tile, both halves' lanes); the main one, 20500, has the median of avenue 11204 (grass and its trees, art table from 11204: road layer + tree layer) and the outer cells beside it become 20505 (stock 35 with the median-side tip as grass). Built by `diagave.py build .` in this folder before install (art/ is made from the game's frames and is not shipped). Junctions with other roads are later work.",
-  "game": {
-    "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+ "netpack": 1,
+ "name": "diagonal_avenue",
+ "version": "0.4.0",
+ "author": "netmod (task diagave)",
+ "description": "Diagonal avenues: draw two diagonal roads joined side by side (the second one cell over) and sc3netmod's DAV block makes them one avenue, four lanes wide. Stock diagonal 35 draws only the road half of its cell, so the middle cell of each row holds both roads: it becomes one of these middle pieces (two stock halves on one tile, both halves' lanes); the main one, 20500, has the median of avenue 11204 (grass and its trees, art table from 11204: road layer + tree layer) and the outer cells beside it become 20505 (stock 35 with the median-side tip as grass). Built by `diagave.py build .` in this folder before install (art/ is made from the game's frames and is not shipped). Junctions: a straight road crossing the avenue, meeting it from one side, or the avenue ending on it (pieces 20510..20519: road 29 with the avenue's halves as asphalt).",
+ "game": {
+  "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+ },
+ "variants": [
+  {
+   "id": 20500,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue",
+    "ENGLISH": "Avenida diagonal"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20500"
+   },
+   "trblkatt": "copy_base"
   },
-  "variants": [
-    {"id": 20500, "base": 35, "network": "ROAD", "name": {"*": "Diagonal avenue", "ENGLISH": "Avenida diagonal"},
-     "art": {"from": 11204, "png_dir": "art/20500"}, "trblkatt": "copy_base"},
-    {"id": 20501, "base": 35, "network": "ROAD", "name": {"*": "Diagonal avenue", "ENGLISH": "Avenida diagonal"},
-     "art": {"from": 35, "png_dir": "art/20501"}, "trblkatt": "copy_base"},
-    {"id": 20502, "base": 18004, "network": "ROAD", "name": {"*": "Diagonal avenue", "ENGLISH": "Avenida diagonal"},
-     "art": {"from": 18004, "png_dir": "art/20502"}, "trblkatt": "copy_base"},
-    {"id": 20503, "base": 35, "network": "ROAD", "name": {"*": "Diagonal avenue", "ENGLISH": "Avenida diagonal"},
-     "art": {"from": 35, "png_dir": "art/20503"}, "trblkatt": "copy_base"},
-    {"id": 20504, "base": 1999, "network": "ROAD", "name": {"*": "Diagonal avenue", "ENGLISH": "Avenida diagonal"},
-     "art": {"from": 1999, "png_dir": "art/20504"}, "trblkatt": "copy_base"},
-    {"id": 20505, "base": 35, "network": "ROAD", "name": {"*": "Diagonal avenue", "ENGLISH": "Avenida diagonal"},
-     "art": {"from": 35, "png_dir": "art/20505"}, "trblkatt": "copy_base"}
-  ],
-  "lanes": [
-    {"piece": 20500, "spec": "mid_20500.lanes.json"},
-    {"piece": 20501, "spec": "mid_20501.lanes.json"},
-    {"piece": 20502, "spec": "mid_20502.lanes.json"},
-    {"piece": 20503, "spec": "mid_20503.lanes.json"},
-    {"piece": 20504, "spec": "mid_20504.lanes.json"}
-  ],
-  "auto_diagonal_avenues": [{"middle": [
-    {"piece": 20500, "a": 35, "b": 35, "delta": 2},
-    {"piece": 20501, "a": 35, "b": 18004, "delta": 0},
-    {"piece": 20502, "a": 18004, "b": 35, "delta": 0},
-    {"piece": 20503, "a": 35, "b": 1999, "delta": 2},
-    {"piece": 20504, "a": 1999, "b": 35, "delta": 2},
-    {"piece": 20505, "a": 35, "b": 0, "delta": 0}
-  ]}]
+  {
+   "id": 20501,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue",
+    "ENGLISH": "Avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20501"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20502,
+   "base": 18004,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue",
+    "ENGLISH": "Avenida diagonal"
+   },
+   "art": {
+    "from": 18004,
+    "png_dir": "art/20502"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20503,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue",
+    "ENGLISH": "Avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20503"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20504,
+   "base": 1999,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue",
+    "ENGLISH": "Avenida diagonal"
+   },
+   "art": {
+    "from": 1999,
+    "png_dir": "art/20504"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20505,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue",
+    "ENGLISH": "Avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20505"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20510,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue junction",
+    "ENGLISH": "Cruce de avenida diagonal"
+   },
+   "art": {
+    "from": 29,
+    "png_dir": "art/20510"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20511,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue junction",
+    "ENGLISH": "Cruce de avenida diagonal"
+   },
+   "art": {
+    "from": 29,
+    "png_dir": "art/20511"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20512,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue junction",
+    "ENGLISH": "Cruce de avenida diagonal"
+   },
+   "art": {
+    "from": 29,
+    "png_dir": "art/20512"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20513,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue junction",
+    "ENGLISH": "Cruce de avenida diagonal"
+   },
+   "art": {
+    "from": 29,
+    "png_dir": "art/20513"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20514,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue junction",
+    "ENGLISH": "Cruce de avenida diagonal"
+   },
+   "art": {
+    "from": 29,
+    "png_dir": "art/20514"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20515,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue junction",
+    "ENGLISH": "Cruce de avenida diagonal"
+   },
+   "art": {
+    "from": 29,
+    "png_dir": "art/20515"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20516,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue junction",
+    "ENGLISH": "Cruce de avenida diagonal"
+   },
+   "art": {
+    "from": 29,
+    "png_dir": "art/20516"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20517,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue junction",
+    "ENGLISH": "Cruce de avenida diagonal"
+   },
+   "art": {
+    "from": 29,
+    "png_dir": "art/20517"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20518,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue junction",
+    "ENGLISH": "Cruce de avenida diagonal"
+   },
+   "art": {
+    "from": 29,
+    "png_dir": "art/20518"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20519,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue junction",
+    "ENGLISH": "Cruce de avenida diagonal"
+   },
+   "art": {
+    "from": 29,
+    "png_dir": "art/20519"
+   },
+   "trblkatt": "copy_base"
+  }
+ ],
+ "lanes": [
+  {
+   "piece": 20500,
+   "spec": "mid_20500.lanes.json"
+  },
+  {
+   "piece": 20501,
+   "spec": "mid_20501.lanes.json"
+  },
+  {
+   "piece": 20502,
+   "spec": "mid_20502.lanes.json"
+  },
+  {
+   "piece": 20503,
+   "spec": "mid_20503.lanes.json"
+  },
+  {
+   "piece": 20504,
+   "spec": "mid_20504.lanes.json"
+  },
+  {
+   "piece": 20510,
+   "spec": "junc_20510.lanes.json"
+  },
+  {
+   "piece": 20511,
+   "spec": "junc_20511.lanes.json"
+  },
+  {
+   "piece": 20512,
+   "spec": "junc_20512.lanes.json"
+  },
+  {
+   "piece": 20513,
+   "spec": "junc_20513.lanes.json"
+  },
+  {
+   "piece": 20514,
+   "spec": "junc_20514.lanes.json"
+  },
+  {
+   "piece": 20515,
+   "spec": "junc_20515.lanes.json"
+  },
+  {
+   "piece": 20516,
+   "spec": "junc_20516.lanes.json"
+  },
+  {
+   "piece": 20517,
+   "spec": "junc_20517.lanes.json"
+  },
+  {
+   "piece": 20518,
+   "spec": "junc_20518.lanes.json"
+  },
+  {
+   "piece": 20519,
+   "spec": "junc_20519.lanes.json"
+  }
+ ],
+ "auto_diagonal_avenues": [
+  {
+   "middle": [
+    {
+     "piece": 20500,
+     "a": 35,
+     "b": 35,
+     "delta": 2
+    },
+    {
+     "piece": 20501,
+     "a": 35,
+     "b": 18004,
+     "delta": 0
+    },
+    {
+     "piece": 20502,
+     "a": 18004,
+     "b": 35,
+     "delta": 0
+    },
+    {
+     "piece": 20503,
+     "a": 35,
+     "b": 1999,
+     "delta": 2
+    },
+    {
+     "piece": 20504,
+     "a": 1999,
+     "b": 35,
+     "delta": 2
+    },
+    {
+     "piece": 20505,
+     "a": 35,
+     "b": 0,
+     "delta": 0
+    }
+   ],
+   "junction": [
+    {
+     "piece": 20510,
+     "halves": [
+      0
+     ],
+     "road": 0,
+     "far": -1
+    },
+    {
+     "piece": 20511,
+     "halves": [
+      0
+     ],
+     "road": 1,
+     "far": -1
+    },
+    {
+     "piece": 20512,
+     "halves": [
+      0,
+      2
+     ],
+     "road": 0,
+     "far": -1
+    },
+    {
+     "piece": 20513,
+     "halves": [
+      0,
+      2
+     ],
+     "road": 1,
+     "far": -1
+    },
+    {
+     "piece": 20514,
+     "halves": [
+      0
+     ],
+     "road": 0,
+     "far": 0
+    },
+    {
+     "piece": 20515,
+     "halves": [
+      0
+     ],
+     "road": 0,
+     "far": 2
+    },
+    {
+     "piece": 20516,
+     "halves": [
+      0
+     ],
+     "road": 1,
+     "far": 1
+    },
+    {
+     "piece": 20517,
+     "halves": [
+      0
+     ],
+     "road": 1,
+     "far": 3
+    },
+    {
+     "piece": 20518,
+     "halves": [
+      0,
+      2
+     ],
+     "road": 0,
+     "far": 0
+    },
+    {
+     "piece": 20519,
+     "halves": [
+      0,
+      2
+     ],
+     "road": 1,
+     "far": 1
+    }
+   ]
+  }
+ ]
 }
