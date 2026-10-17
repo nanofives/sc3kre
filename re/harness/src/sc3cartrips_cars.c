@@ -177,10 +177,13 @@ static Route *route_take(BYTE *prod, int *entry) {
     return NULL;
 }
 
-/* scroll_fill strip: a recent route with a step inside the strip: the car enters the route there, mid-path; newest routes
-   first. A strip is new rect minus old rect and the old rect contains the old view box, so no strip cell was on screen in
-   the frame before: a car placed there arrives with the ground the camera reveals (also when one camera step is longer
-   than the car margin and part of the strip is already on screen, R1c). */
+/* scroll_fill strip: a recent route with a step inside the strip that is not on ground shown both before and after the
+   latest camera step (inside g_box_prev and g_box): the car enters the route there, mid-path, and arrives with ground
+   the camera reveals or off screen; newest routes first. A strip filled a few steps after it was taken in may already
+   be on screen: those cells are refused (R1d: allowing every strip cell put 150-700 cars a minute on visible ground). */
+static int shown_twice(int x, int z) {
+    return box_has(x, z) && x >= g_box_prev[0] && x <= g_box_prev[2] && z >= g_box_prev[1] && z <= g_box_prev[3];
+}
 static Route *route_strip(Strip *st, int *entry) {
     int k, s;
     for (k = 0; k < g_rq_len; k++) {
@@ -190,7 +193,7 @@ static Route *route_strip(Strip *st, int *entry) {
         if (r->bx1 < st->x0 || r->bx0 > st->x1 || r->bz1 < st->z0 || r->bz0 > st->z1) continue;   /* misses the strip */
         for (s = 0; s + 1 < r->n; s++) {
             int x = r->s[s].x, z = r->s[s].z;
-            if (x >= st->x0 && x <= st->x1 && z >= st->z0 && z <= st->z1) {
+            if (x >= st->x0 && x <= st->x1 && z >= st->z0 && z <= st->z1 && !shown_twice(x, z)) {
                 r->used++; *entry = s;
                 return r;
             }

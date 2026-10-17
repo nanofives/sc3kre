@@ -449,3 +449,18 @@ not as overscroll.
 `X?,W:3,C,I:3,MV:2,I:20,I:15,OS:3,I:10,I:30`: re-centre, a 2 s one-way arrow move toward the west edge (new token `MV`,
 no return), still, then a 3 s arrow hold past the edge (`OS`), whose 3 s return runs at the start of the following
 "after" window. ABBA, 2 blocks. Bound as addendum 11 (location-matched), on-screen pop-ins as addendum 8.
+
+## Addendum 14 (2026-10-16 21:15, after R1d; before R1e, R2f, R3, L7, V6)
+
+R1d (268d6676, Berlin centre), fix on, end-location reference: held button 1.02 / 1.07 inside the bound; gentle drag
+1.16 / 0.65, arrows 0.66 / 0.95, extreme drag 0.34 / 0.42 outside it; **and the strip fill now put cars on visible
+ground: on-screen pop-ins during fix-on moves 697 (arrows), 535 (extreme drag), 152 (gentle drag) a minute against
+the 76 bound.** Cause: under fast moves the strips wait in the queue (16 strips, <= 24 placements a tick) and are filled
+a few camera steps after they were taken in, when part of them is already on screen.
+
+**sc3cartrips d5e98b81:** a strip cell is accepted unless it lies inside both the view box before the latest camera
+step and the current one (sc3cartrips keeps the box from before each sim-rect change), which is the addendum-4
+on-screen rule itself; the top-up keeps its off-screen-only rule. R2e (268d6676, running) finishes as data; queue G /
+H are stopped. New queue on sc3simrun 0b903bb6 + sc3cartrips d5e98b81: **R1e** (R1c's schedule), **R2f** (Europolis
+1024, one block each of H, AR, HG), **R3** (overscroll, addendum 13), **L7** (lite soak, 1024, speed 4), **V6**
+(pictures). Bound as addendum 11, pop-ins as addendum 8.
