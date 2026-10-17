@@ -43,6 +43,20 @@ Pieces 20520, 20530 and 20533 hold both roads and save as 43 (`davs` lines); the
 | A shorter at the bottom and B starting later at the top (`m2_z3/z4.png`) | `band axis 0, 4 row(s) from (104,94), 22 cell(s), ... 2 merge(s), 12 written`; both tapers, a short median island between |
 | Art table | first build used road 29's table: the cut-away corner of the taper showed cyan at zoom 3 (no ground drawn under). Back on 35's table: ground drawn, no cyan |
 
+Owner review of the sheet: "crossings are fine but merging lanes are off, there should be yellow lines for lane
+divider" (images 1 and 2; the bends, images 3 and 4, "perfect"). The first build turned the ending carriageway's
+markings into asphalt, so its yellow line stopped at the median nose. Now the taper keeps two dividers, both made of
+stock 35's own centre-line pixels moved across the cut (measured per zoom and view, `centre_line`; at zoom 4 the
+stock line is a double yellow and the copy is too; none at zoom 0 or 1, where the line is under a pixel):
+
+- the ending carriageway's centre line runs down the middle of what is left of it, (1 + edge) / 2, and meets the
+  curb where the taper closes;
+- a yellow line takes the median's place between the two carriageways, from the median nose to the curb.
+
+| Check | Result |
+|---|---|
+| Same two layouts, rebuilt art (`m3_z4.png`, `m4_z4.png`) | both dividers drawn at every taper; DAV log unchanged (1 merge, then 2 merges) |
+
 ## Bend: diagonal avenue into the straight avenue
 
 Two parallel straight roads side by side are the stock avenue 11204. When both drags go on that way, the band's end

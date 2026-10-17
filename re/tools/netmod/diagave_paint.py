@@ -216,13 +216,35 @@ def mirror(prof, sample, t0):
     return opaque(max(t, right + 0.5 * w), 1.0)
 
 
+def strip_prof(z, r):
+    """lane_bins of stock 35 across its strip (p_rel 0..1)"""
+    return lane_bins((35, z, r), lambda t, a: diag_at(0, t, a, z, r), 0.0, 1.0, 128,
+                     [0.05 + 4.0 * k / 97.0 for k in range(97)])
+
+
+def centre_line(z, r):
+    """(centre, half width) in p_rel of stock 35's yellow centre line at this zoom and view: the non-lane run of the
+    strip profile nearest its middle. None when no such run (the line is under a pixel)."""
+    lo, w, lane = strip_prof(z, r)
+    n = len(lane)
+    mids = [i for i in range(n) if not lane[i] and 0.3 < lo + (i + 0.5) * w < 0.7]
+    if not mids:
+        return None
+    a = b = min(mids, key=lambda i: abs(i + 0.5 - n / 2.0))
+    while a > 0 and not lane[a - 1]:
+        a -= 1
+    while b < n - 1 and not lane[b + 1]:
+        b += 1
+    if (b - a + 1) * w > 0.3:
+        return None                                     # no lane in the profile at all (zoom 0): no line to move
+    return lo + (a + b + 1) * w / 2.0, (b - a + 1) * w / 2.0
+
+
 def lane_fill(strip, wx, wz, z, r):
     """Stock asphalt for a point of a strip whose own pixel is a marking, curb or sidewalk (same q, so the 2D texture
     along the strip is kept); a lane pixel (specks included) stays."""
     p, q = wx - wz, wx + wz
-    prof = lane_bins((35, z, r), lambda t, a: diag_at(0, t, a, z, r), 0.0, 1.0, 128,
-                     [0.05 + 4.0 * k / 97.0 for k in range(97)])
-    c = mirror(prof, lambda t: diag_at(strip, t, q, z, r), p - strip)
+    c = mirror(strip_prof(z, r), lambda t: diag_at(strip, t, q, z, r), p - strip)
     return c if c is not None else diag(strip, wx, wz, z, r)
 
 
@@ -258,7 +280,9 @@ class StraightAvenue:
 class Merge(StraightAvenue):
     """One carriageway ends: `ends` = 'B' (A continues) or 'A'. Its outer edge moves linearly from full width at q_s to
     nothing at q_e, keeping a curb band `curb` wide (x - z units) sampled from the stock outer edge; the median ends at
-    q_s and the other carriageway's inner sidewalk is asphalt until q_e."""
+    q_s and the other carriageway's inner sidewalk is asphalt until q_e. Lane dividers (owner, 2026-10-17): the ending
+    carriageway's yellow centre line runs on down the middle of what is left of it, and a yellow line takes the
+    median's place between the two carriageways; both are stock 35's own centre-line pixels, moved across."""
 
     def __init__(self, ends, q_s, q_e, curb=0.17, inner=0.2):
         self.ends, self.q_s, self.q_e, self.curb, self.inner = ends, q_s, q_e, curb, inner
@@ -280,6 +304,9 @@ class Merge(StraightAvenue):
                     return CLEAR
                 if edge - p < self.curb:
                     return diag_at(1, 1.0 - (edge - p), q, z, r)
+                c = self.divider(1, edge, p, q, z, r)
+                if c is not None:
+                    return c
                 if p >= 1.0:
                     return lane_fill(1, wx, wz, z, r)            # B's lanes, markings dropped: they merge
             else:
@@ -288,6 +315,9 @@ class Merge(StraightAvenue):
                     return CLEAR
                 if p - edge < self.curb:
                     return diag_at(0, p - edge, q, z, r)
+                c = self.divider(0, edge, p, q, z, r)
+                if c is not None:
+                    return c
                 if p < 1.0:
                     return lane_fill(0, wx, wz, z, r)
             if kp[0] <= p < kp[1]:                               # the continuing carriageway: inner side opens
@@ -298,6 +328,20 @@ class Merge(StraightAvenue):
         if kp[0] <= p < kp[1]:
             return diag(int(kp[0]), wx, wz, z, r)
         return CLEAR
+
+    def divider(self, strip, edge, p, q, z, r):
+        """The yellow lines of the taper, or None: the ending strip's centre line at the middle of what is left of it
+        ((1 + edge) / 2, both strips meet at p 1) and the line in the median's place at p 1."""
+        cl = centre_line(z, r)
+        if cl is None:
+            return None
+        cy, hw = cl
+        for pc in ((1.0 + edge) / 2.0, 1.0):
+            if abs(p - pc) <= hw:
+                c = diag_at(strip, cy + (p - pc), q, z, r)
+                if c[3]:
+                    return c
+        return None
 
 
 class Junction:

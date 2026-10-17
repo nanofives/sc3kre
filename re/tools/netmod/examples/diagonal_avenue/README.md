@@ -20,7 +20,8 @@ median of the stock two-road avenue.
     avenue at the road's edges.
   - 20520..20524 (B ends) and 20530..20534 (A ends) = merges: one drag shorter than the other, so one carriageway
     ends and the other goes on as a single road. The ending carriageway's outer curb tapers into the other over three
-    rows, the median stops with a concrete nose.
+    rows, the median stops with a concrete nose, and yellow dividers carry on through the taper (the ending lane's
+    centre line, and a line in the median's place).
 - **Bends:** when both drags go on as two parallel straight roads (the stock avenue 11204), the diagonal avenue turns
   into the straight one. No extra pieces: the carriageways' edges meet the straight avenue's on one cell line, so the
   diagonal cells keep their middle-of-band pieces and the straight cells stay stock.
