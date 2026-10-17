@@ -66,6 +66,14 @@ ending carriageway's own centre line stops at the nose.
 |---|---|
 | Same two layouts, rebuilt art (`m5_z4.png`, `m6_z3/z4.png`) | one branching line at each taper, as sketched; DAV log unchanged |
 
+Third owner sketch ("almost there"): red over the continuing carriageway's own centre line between the branch and the
+nose. Inside the taper that line is now asphalt too, so the single road's centre line jogs straight to the median nose
+and both carriageways' own centre lines start at the nose.
+
+| Check | Result |
+|---|---|
+| Same two layouts, rebuilt art (`m7_z4.png`, `m8_z4.png`) | the jog only, no line beside it; DAV log unchanged |
+
 ## Bend: diagonal avenue into the straight avenue
 
 Two parallel straight roads side by side are the stock avenue 11204. When both drags go on that way, the band's end

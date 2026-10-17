@@ -281,8 +281,8 @@ class Merge(StraightAvenue):
     """One carriageway ends: `ends` = 'B' (A continues) or 'A'. Its outer edge moves linearly from full width at q_s to
     nothing at q_e, keeping a curb band `curb` wide (x - z units) sampled from the stock outer edge; the median ends at
     q_s and the other carriageway's inner sidewalk is asphalt until q_e. Lane divider (owner sketch, 2026-10-17): the
-    continuing carriageway's yellow centre line branches off at q_e and runs straight to the median nose at q_s
-    (the ending carriageway's own line stops at the nose); stock 35's own centre-line pixels, moved across."""
+    continuing carriageway's yellow centre line leaves its lane at q_e and runs straight to the median nose at q_s,
+    so both carriageways' own centre lines start at the nose; stock 35's own centre-line pixels, moved across."""
 
     def __init__(self, ends, q_s, q_e, curb=0.17, inner=0.2):
         self.ends, self.q_s, self.q_e, self.curb, self.inner = ends, q_s, q_e, curb, inner
@@ -323,7 +323,9 @@ class Merge(StraightAvenue):
             if kp[0] <= p < kp[1]:                               # the continuing carriageway: inner side opens
                 s = int(kp[0])
                 near = (kp[1] - p) < self.inner if keep == "A" else (p - kp[0]) < self.inner
-                return lane_fill(s, wx, wz, z, r) if near else diag(s, wx, wz, z, r)
+                cl = centre_line(z, r)
+                on_line = cl is not None and abs(p - s - cl[0]) <= cl[1]
+                return lane_fill(s, wx, wz, z, r) if near or on_line else diag(s, wx, wz, z, r)
             return CLEAR
         if kp[0] <= p < kp[1]:
             return diag(int(kp[0]), wx, wz, z, r)
