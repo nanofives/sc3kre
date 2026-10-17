@@ -40,8 +40,10 @@ static const signed char DAV_DIR[8][2] = { { -1, 0 }, { 0, -1 }, { 1, 0 }, { 0, 
 static void dav_line(const char *path, const char *line) {
     unsigned long v, a, b, d;
     int k;
+    /* b == 0: the OUTER piece (a = 35, delta 0), placed on a one-road 35 cell with the other road beside it */
     if (sscanf(line + 4, "%lu %lu %lu %lu", &v, &a, &b, &d) != 4 || !v || v > 0xffff || d > 3 ||
-        (a != 35 && a != 18004 && a != 1999) || (b != 35 && b != 18004 && b != 1999) || g_base[v] != (WORD)a) {
+        (a != 35 && a != 18004 && a != 1999) || (b != 0 && b != 35 && b != 18004 && b != 1999) ||
+        (b == 0 && (a != 35 || d != 0)) || g_base[v] != (WORD)a) {
         logf("### dav: %s: bad line or piece not a variant of its first stock piece: '%s'", path, line);
         return;
     }
@@ -72,6 +74,13 @@ static void dav_init_table(void) {
 static int dav_is_mid(WORD id) {
     int k;
     for (k = 0; k < g_dav_nmid; k++) if (g_dav_mid[k].piece == id) return 1;
+    return 0;
+}
+
+/* save as 43: a cell holding both roads (stock 35 draws one); the OUTER piece (b == 0) saves as its base 35 */
+static int dav_save_43(WORD id) {
+    int k;
+    for (k = 0; k < g_dav_nmid; k++) if (g_dav_mid[k].piece == id) return g_dav_mid[k].b != 0;
     return 0;
 }
 
@@ -222,7 +231,12 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                         if (!mid) { ok = 0; break; }
                         P.want[k] = ((DWORD)mid << 8) | (va & 0xff);
                     } else if (va || vb) {
-                        P.want[k] = (va ? va : vb) - 1;
+                        DWORD v = (va ? va : vb) - 1;
+                        int other = va ? 2 : 1, beside = 0, dx;
+                        WORD outer = (v >> 8) == 35 ? dav_mid_of(35, 0, 0) : 0;
+                        for (dx = -2; dx <= 2 && outer && !beside; dx++)  /* the other road beside it in its row */
+                            if (dx) beside = (dav_mark(&P, cx + dx, cz) & other) != 0;
+                        P.want[k] = beside ? (((DWORD)outer << 8) | (v & 0xff)) : v;
                     } else { ok = 0; break; }
                 }
                 if (ok) {

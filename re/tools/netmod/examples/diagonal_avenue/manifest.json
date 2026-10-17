@@ -1,15 +1,15 @@
 {
   "netpack": 1,
   "name": "diagonal_avenue",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "netmod (task diagave)",
-  "description": "Diagonal avenues: draw two diagonal roads joined side by side (the second one cell over) and sc3netmod's DAV block makes them one avenue, four lanes wide. Stock diagonal 35 draws only the road half of its cell, so the middle cell of each row holds both roads: it becomes one of these middle pieces (two stock halves on one tile, both halves' lanes). Built by `diagave.py build .` in this folder before install (art/ is made from the game's frames and is not shipped). Junctions with other roads are later work.",
+  "description": "Diagonal avenues: draw two diagonal roads joined side by side (the second one cell over) and sc3netmod's DAV block makes them one avenue, four lanes wide. Stock diagonal 35 draws only the road half of its cell, so the middle cell of each row holds both roads: it becomes one of these middle pieces (two stock halves on one tile, both halves' lanes); the main one, 20500, has the median of avenue 11204 (grass and its trees, art table from 11204: road layer + tree layer) and the outer cells beside it become 20505 (stock 35 with the median-side tip as grass). Built by `diagave.py build .` in this folder before install (art/ is made from the game's frames and is not shipped). Junctions with other roads are later work.",
   "game": {
     "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
   },
   "variants": [
     {"id": 20500, "base": 35, "network": "ROAD", "name": {"*": "Diagonal avenue", "ENGLISH": "Avenida diagonal"},
-     "art": {"from": 35, "png_dir": "art/20500"}, "trblkatt": "copy_base"},
+     "art": {"from": 11204, "png_dir": "art/20500"}, "trblkatt": "copy_base"},
     {"id": 20501, "base": 35, "network": "ROAD", "name": {"*": "Diagonal avenue", "ENGLISH": "Avenida diagonal"},
      "art": {"from": 35, "png_dir": "art/20501"}, "trblkatt": "copy_base"},
     {"id": 20502, "base": 18004, "network": "ROAD", "name": {"*": "Diagonal avenue", "ENGLISH": "Avenida diagonal"},
@@ -17,7 +17,9 @@
     {"id": 20503, "base": 35, "network": "ROAD", "name": {"*": "Diagonal avenue", "ENGLISH": "Avenida diagonal"},
      "art": {"from": 35, "png_dir": "art/20503"}, "trblkatt": "copy_base"},
     {"id": 20504, "base": 1999, "network": "ROAD", "name": {"*": "Diagonal avenue", "ENGLISH": "Avenida diagonal"},
-     "art": {"from": 1999, "png_dir": "art/20504"}, "trblkatt": "copy_base"}
+     "art": {"from": 1999, "png_dir": "art/20504"}, "trblkatt": "copy_base"},
+    {"id": 20505, "base": 35, "network": "ROAD", "name": {"*": "Diagonal avenue", "ENGLISH": "Avenida diagonal"},
+     "art": {"from": 35, "png_dir": "art/20505"}, "trblkatt": "copy_base"}
   ],
   "lanes": [
     {"piece": 20500, "spec": "mid_20500.lanes.json"},
@@ -31,6 +33,7 @@
     {"piece": 20501, "a": 35, "b": 18004, "delta": 0},
     {"piece": 20502, "a": 18004, "b": 35, "delta": 0},
     {"piece": 20503, "a": 35, "b": 1999, "delta": 2},
-    {"piece": 20504, "a": 1999, "b": 35, "delta": 2}
+    {"piece": 20504, "a": 1999, "b": 35, "delta": 2},
+    {"piece": 20505, "a": 35, "b": 0, "delta": 0}
   ]}]
 }

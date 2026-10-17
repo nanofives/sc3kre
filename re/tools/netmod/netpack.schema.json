@@ -126,7 +126,7 @@
               "properties": {
                 "piece": {"$ref": "#/$defs/piece_id", "description": "A ROAD variant of stock piece `a` in this package: piece a at the cell's state plus piece b at state + delta on one tile, with both pieces' lanes."},
                 "a": {"enum": [35, 18004, 1999], "description": "Staircase A's piece in the shared cell (35 diagonal, 18004 start cap, 1999 end cap)."},
-                "b": {"enum": [35, 18004, 1999], "description": "Staircase B's piece in the shared cell."},
+                "b": {"enum": [0, 35, 18004, 1999], "description": "Staircase B's piece in the shared cell; 0 = the OUTER piece (a 35, delta 0): a one-road 35 cell beside the other road, with its median-side sidewalk tip as median."},
                 "delta": {"type": "integer", "minimum": 0, "maximum": 3, "description": "B's state minus A's state, mod 4."}
               }
             }

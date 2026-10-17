@@ -651,8 +651,10 @@ def compile_pack(stock, pack_dir, man):
         for m in a.get("middle", []):
             v = vids.get(m.get("piece"))
             key = (m.get("a"), m.get("b"), m.get("delta"))
-            if key[0] not in (35, 18004, 1999) or key[1] not in (35, 18004, 1999) or key[2] not in (0, 1, 2, 3):
-                raise NetpackError("%s: middle %s: a and b must be 35, 18004 or 1999 and delta 0..3" % (where, m))
+            if key[0] not in (35, 18004, 1999) or key[1] not in (0, 35, 18004, 1999) or key[2] not in (0, 1, 2, 3) \
+                    or (key[1] == 0 and (key[0] != 35 or key[2] != 0)):
+                raise NetpackError("%s: middle %s: a and b must be 35, 18004 or 1999 and delta 0..3 (b 0 = the outer "
+                                   "piece: a 35, delta 0)" % (where, m))
             if v is None or v["base"] != key[0] or v["net"] != "ROAD":
                 raise NetpackError("%s: middle piece %s must be a ROAD variant of %d declared in this package"
                                    % (where, m.get("piece"), key[0]))

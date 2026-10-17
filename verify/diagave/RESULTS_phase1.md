@@ -54,6 +54,22 @@ Logs: sc3resize carries only its usual startup entry (0xC0000096 at SC3U.exe+0x8
 Bulldoze / rebuild was run on round 1 (same code path: a broken carriageway sends the band back to the stock ladder,
 the rebuilt cell brings it back); not repeated on round 2.
 
+## Round 3: the avenue median (owner: "it needs the trees of the regular 2 road avenues")
+
+- 20500 takes avenue 11204's frame table (`art.from` 11204: two layers, the stock ground / tree split) and keeps base
+  35. Layer 0: the two 35 halves, with the light sidewalk pixels within the seam's half-width of the diagonal repainted
+  from 11204's median grass (curb pixel each side kept). Layer 1: 11204's two trees (its tree layer, slot 1, cut at the
+  emptiest column), two per cell on the diagonal, back to front.
+- The median strip runs past the middle cell's corners into the outer cells, whose stock 35 tips are sidewalk (a
+  sawtooth of light triangles in the game, rotation 1). New piece 20505 = stock 35 frame (own size and anchor, so
+  ground-under is stock) with those tip pixels as grass; DAV places it on a one-road 35 cell when the other road has a
+  cell beside it in its row (`dav 20505 35 0 0`). It saves as its base 35; middle pieces still save as 43.
+- Cap combinations (20501..20504) keep the concrete seam: the grass median ends in a concrete nose.
+- Game (Simcity_stock_diagave, inst_dav): both avenues `26 cell(s), 26 written`; zoom 3 and 4, all four rotations:
+  grass median with the tree row, no clipped tree tops; trees overlap the far carriageway in the two views where the
+  avenue runs across the screen, as 11204's do. Save: `43 variant tile(s) written as base`, file holds 43 on middle
+  cells and 35 on outer cells. 0 exceptions.
+
 ## Open (later phases)
 
 - Junctions: a band that touches any other road is left to the stock tiler (crossings with roads, avenue x avenue,

@@ -45,6 +45,9 @@ LONE = {17: (18004, 2), 18: (1999, 2), 22: (35, 2), 25: (35, 0), 34: (18004, 3),
         129: (1999, 1), 131: (35, 1), 136: (18004, 1), 140: (35, 3), 163: (35, 1), 172: (35, 3)}
 # MID variants: (A's piece, B's piece, (B state - A state) mod 4) -> id; the cell's state is A's. Filled from `combos`.
 MID = {(35, 35, 2): 20500, (35, 18004, 0): 20501, (18004, 35, 0): 20502, (35, 1999, 2): 20503, (1999, 35, 2): 20504}
+# OUTER: a cell of one staircase holding 35 with the other road beside it in its row: its median-side sidewalk tip
+# becomes grass too (the median strip runs past the middle cell's corners into the outer cells). Key (35, 0, 0).
+OUTER = {(35, 0, 0): 20505}
 
 
 # ------------------------------------------------------------------------------------------------ the rule
@@ -146,7 +149,10 @@ def wanted(band, mids=None):
                 return None
             out[c] = (mids[key], pa[1])
         else:
-            out[c] = pa or pb
+            p = pa or pb
+            other = B if c in A else A
+            beside = any((c[0] + dx, c[1]) in other for dx in (-2, -1, 1, 2))
+            out[c] = (OUTER[(35, 0, 0)], p[1]) if p[0] == 35 and beside and (35, 0, 0) in OUTER else p
     return out
 
 
@@ -216,6 +222,161 @@ def mid_frame(pa, pb, delta, z, slot):
     return canvas, (0, T)
 
 
+TREE_PIECE = 20500           # the middle piece that gets the avenue median: art from 11204's two-layer table
+
+
+def _light(c):
+    """a sidewalk pixel of stock 35: light and grey (the measured seam is 156..205 per channel, curbs 115..131)"""
+    return c[3] and min(c[:3]) >= 140 and max(c[:3]) - min(c[:3]) <= 40
+
+
+def grass_palette(z):
+    """Grass pixels of avenue 11204's median (layer 0, slot 0: the strip between the trees and the road)."""
+    from netmod import netart
+    im, (L, T) = netart.stock_frames(11204, 0)[(z, 0)]
+    W = netart.TILE_W[z]
+    px = im.load()
+    out = []
+    for y in range(im.height):
+        for x in range(im.width):
+            gx = x - (0 - L)
+            if gx < 0 or gx > W or y < T - (gx / 2.0 if gx <= W / 2 else (W - gx) / 2.0):
+                continue                                    # outside the ground diamond: tree crowns
+            r, g, b, a = px[x, y]
+            if a and g > r + 12 and g > b + 8 and g < 150:
+                out.append((r, g, b, 255))
+    return out or [(74, 105, 57, 255)]
+
+
+def tree_sprites(z):
+    """The two trees of 11204's tree layer (layer 1, slot 1), each as (RGBA image, base point in the image)."""
+    from PIL import Image
+    from netmod import netart
+    im = netart.stock_frames(11204, 1)[(z, 1)][0]
+    px = im.load()
+    seen, comps = set(), []
+    for y in range(im.height):
+        for x in range(im.width):
+            if not px[x, y][3] or (x, y) in seen:
+                continue
+            stack, comp = [(x, y)], []
+            seen.add((x, y))
+            while stack:
+                p = stack.pop()
+                comp.append(p)
+                for dx in (-1, 0, 1):
+                    for dy in (-1, 0, 1):
+                        q = (p[0] + dx, p[1] + dy)
+                        if 0 <= q[0] < im.width and 0 <= q[1] < im.height and q not in seen and px[q][3]:
+                            seen.add(q)
+                            stack.append(q)
+            comps.append(comp)
+    comps = [c for c in comps if len(c) >= max(2, len(max(comps, key=len)) // 5)]
+    if len(comps) == 1:                  # the two trees overlap: cut at the emptiest column of the middle half
+        comp = comps[0]
+        xs = [p[0] for p in comp]
+        x0, x1 = min(xs), max(xs)
+        if x1 - x0 >= 3:
+            count = {x: 0 for x in range(x0, x1 + 1)}
+            for p in comp:
+                count[p[0]] += 1
+            mid = range(x0 + (x1 - x0) // 4, x1 - (x1 - x0) // 4 + 1)
+            cut = min(mid, key=lambda x: (count[x], abs(x - (x0 + x1) / 2.0)))
+            comps = [[p for p in comp if p[0] < cut], [p for p in comp if p[0] >= cut]]
+    out = []
+    for comp in sorted(comps, key=lambda c: min(p[0] for p in c)):
+        xs, ys = [p[0] for p in comp], [p[1] for p in comp]
+        spr = Image.new("RGBA", (max(xs) - min(xs) + 1, max(ys) - min(ys) + 1), (0, 0, 0, 0))
+        for (x, y) in comp:
+            spr.putpixel((x - min(xs), y - min(ys)), px[x, y])
+        base = max(comp, key=lambda p: p[1])
+        out.append((spr, (base[0] - min(xs), base[1] - min(ys))))
+    if len(out) == 1:                    # tiny zooms: one blob for both trees
+        out = out * 2
+    return out
+
+
+def median_frames(z, slot):
+    """20500 with the avenue median: layer 0 = the two 35 halves with the sidewalk seam along the cell's diagonal
+    repainted as 11204's median grass (the curb pixel on each side kept); layer 1 = two trees from 11204's tree layer
+    on the diagonal. -> ((ground, anchor), (trees, anchor))"""
+    from PIL import Image
+    from netmod import netart
+    ground, (L, T) = mid_frame(35, 35, 2, z, slot)
+    W, H = ground.size
+    px = ground.load()
+    pal = grass_palette(z)
+    vertical = slot % 2 == 0                           # the diagonal is x = W/2 (slots 0, 2) or y = T (slots 1, 3)
+    hw, off = seam_halfwidth(z, vertical)              # light pixels nearer the diagonal than the curb -> grass
+    for y in range(H):
+        for x in range(W):
+            d = abs(x - (W // 2 + off)) if vertical else abs(y - (T + 1 + off))
+            if d < hw and _light(px[x, y]):
+                h = (x * 73856093) ^ (y * 19349663) ^ (z * 83492791)
+                px[x, y] = pal[h % len(pal)]
+    trees = tree_sprites(z)
+    up = max(t.height for t, _ in trees) + 2
+    Tc = up + T
+    layer = Image.new("RGBA", (W, up + H), (0, 0, 0, 0))
+    spots = [(W // 2, Tc - H // 4), (W // 2, Tc + H // 4)] if vertical else [(W // 4, Tc), (3 * W // 4, Tc)]
+    for k, (bx, by) in enumerate(sorted(spots, key=lambda p: p[1])):   # back to front
+        spr, (tx, ty) = trees[k % len(trees)]
+        tmp = Image.new("RGBA", layer.size, (0, 0, 0, 0))
+        tmp.paste(spr, (bx - tx, by - ty))
+        layer.alpha_composite(tmp)
+    return (ground, (L, T)), (layer, (0, Tc))
+
+
+def seam_halfwidth(z, vertical):
+    """(half width, centre offset) of the light sidewalk run on the middle cell's diagonal (centre row / column of
+    35 + 35); the offset is the run's centre minus the diagonal's pixel (W/2, or T + 1)."""
+    from netmod import netart
+    im, (L, T) = mid_frame(35, 35, 2, z, 0 if vertical else 1)
+    W, H = im.size
+    px = im.load()
+    c = W // 2 if vertical else T + 1
+    at = (lambda t: (t, T)) if vertical else (lambda t: (W // 2, t))
+    lim = W if vertical else H
+    if not _light(px[at(c)]):
+        return 0, 0
+    lo, hi = c, c
+    while lo - 1 >= 0 and _light(px[at(lo - 1)]):
+        lo -= 1
+    while hi + 1 < lim and _light(px[at(hi + 1)]):
+        hi += 1
+    return (hi - lo) / 2.0, (lo + hi) / 2.0 - c
+
+
+def outer_frame(z, slot):
+    """OUTER: stock 35's frame (its own size and anchor, so the ground-under bit behaves as stock) with the light
+    pixels within the median's half-width of its tip repainted as median grass: the tip is the corner where the
+    median line runs (x = 0 / W on a vertical strip, y = top / bottom on a horizontal one)."""
+    from netmod import netart
+    im, (L, T) = netart.stock_frames(35)[(z, slot)]
+    im = im.copy()
+    W = netart.TILE_W[z]
+    H = W // 2
+    Tt = H // 2 - 1
+    ox, oy = 0 - L, Tt - T                       # frame top-left in tile coordinates (left vertex at (0, Tt))
+    px = im.load()
+    pal = grass_palette(z)
+    vertical = slot % 2 == 0
+    hw, off = seam_halfwidth(z, vertical)
+    xs = [x for y in range(im.height) for x in range(im.width) if px[x, y][3]]
+    ys = [y for y in range(im.height) for x in range(im.width) if px[x, y][3]]
+    if vertical:
+        line = (W if (sum(xs) / len(xs) + ox) > W / 2 else 0) + off   # the road half's outer corner = its tip
+    else:
+        line = (Tt + 1 - H // 2 if (sum(ys) / len(ys) + oy) < Tt else Tt + 1 + H // 2) + off
+    for y in range(im.height):
+        for x in range(im.width):
+            d = abs((x + ox) - line) if vertical else abs((y + oy) - line)
+            if d < hw and _light(px[x, y]):
+                h = ((x + ox) * 73856093) ^ ((y + oy) * 19349663) ^ (z * 83492791)
+                px[x, y] = pal[h % len(pal)]
+    return im, (L, T)
+
+
 def _side(p):
     return "x-" if p[0] == 0 else "x+" if p[0] == 255 else "z-" if p[1] == 0 else "z+"
 
@@ -258,7 +419,12 @@ def cmd_build(a):
         anchors = {"_": "diagave.py build: %d (slot) + %d (slot + %d) on one tile" % (pa, pb, delta)}
         for z in range(netart.ZOOMS):
             for s in range(netart.ROTS):
-                im, anc = mid_frame(pa, pb, delta, z, s)
+                if vid == TREE_PIECE:                  # two layers (art from 11204): grass median, trees
+                    (im, anc), (im1, anc1) = median_frames(z, s)
+                    im1.save(os.path.join(d, netart.frame_name(z, s, 1)))
+                    anchors[netart.frame_name(z, s, 1)] = list(anc1)
+                else:
+                    im, anc = mid_frame(pa, pb, delta, z, s)
                 im.save(os.path.join(d, netart.frame_name(z, s)))
                 anchors[netart.frame_name(z, s)] = list(anc)
         json.dump(anchors, open(os.path.join(d, "anchors.json"), "w"), indent=1)
@@ -267,6 +433,17 @@ def cmd_build(a):
             json.dump(spec, fh, indent=1)
         print("built %d: art %s, lanes mid_%d.lanes.json (%d vehicle lane(s), connects %s)"
               % (vid, d, vid, len(spec["vehicle"]["lanes"]), spec["connects"]["road"]))
+    for key, vid in OUTER.items():                    # outer cells: 35's frame with the median tip; 35's own lanes
+        d = os.path.join(a.pack, "art", str(vid))
+        os.makedirs(d, exist_ok=True)
+        anchors = {"_": "diagave.py build: stock 35 with the median-side sidewalk tip as grass"}
+        for z in range(netart.ZOOMS):
+            for s in range(netart.ROTS):
+                im, anc = outer_frame(z, s)
+                im.save(os.path.join(d, netart.frame_name(z, s)))
+                anchors[netart.frame_name(z, s)] = list(anc)
+        json.dump(anchors, open(os.path.join(d, "anchors.json"), "w"), indent=1)
+        print("built %d (outer): art %s" % (vid, d))
 
 
 # ------------------------------------------------------------------------------------------------ checks
@@ -275,7 +452,7 @@ def road_cells(save):
     from netmod import tiler, paths
     g = paths.game_root()
     ids = {int(v) for v in re.findall(r"\d+", open(os.path.join(g, "Apps", "Res", "TilingRules",
-                                                                "ROAD_GRND_Set.txt")).read())} | set(MID.values())
+                                                                "ROAD_GRND_Set.txt")).read())} | set(MID.values()) | set(OUTER.values())
     lay = tiler.City.load(save).layers["surface"]
     return lay, {c for c, p in lay.items() if p.id in ids and p.flags is None}
 
@@ -312,7 +489,7 @@ def cmd_preview(a):
         w = wanted(b) or {}
         for c, (pid, s) in w.items():
             cell = {"at": [-c[0], c[1]], "slot": s}
-            if pid in MID.values():
+            if pid in MID.values() or pid in OUTER.values():
                 cell["dir"] = os.path.join(a.pack, "art", str(pid))
             else:
                 cell["piece"] = pid
