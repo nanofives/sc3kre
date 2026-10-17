@@ -214,7 +214,6 @@ static __forceinline TS *ts_get(void) {
 static volatile LONG g_rect_xz0 = 0x7fff7fff, g_rect_xz1 = 0;   /* (x << 16 | z): empty until the first tick */
 static volatile LONG g_sim_xz0 = 0x7fff7fff, g_sim_xz1 = 0;     /* the sim rect itself (g_rect_xz* add the capture margin) */
 static LONG g_box[4];                                           /* view box, cells (layer +0x27b0..+0x27bc), game thread */
-static LONG g_box_prev[4];                                      /* the view box before the latest sim-rect change */
 static DWORD g_last_move_ms;                                    /* last tick the sim rect changed (game thread) */
 static void strips_add(int ox0, int oz0, int ox1, int oz1, int nx0, int nz0, int nx1, int nz1);   /* sc3cartrips_cars.c */
 static volatile LONG g_rect_virtual;
@@ -597,7 +596,6 @@ static void __cdecl on_tick(BYTE *layer8) {
         if (s0 != g_sim_xz0 || s1 != g_sim_xz1) {
             LONG a = g_sim_xz0, b = g_sim_xz1;
             g_last_move_ms = GetTickCount();
-            memcpy(g_box_prev, g_box, sizeof(g_box_prev));      /* g_box still holds the box shown before this step */
             if (b) strips_add((short)(a >> 16), (short)a, (short)(b >> 16), (short)b, x0, z0, x1, z1);
         }
         g_sim_xz0 = s0; g_sim_xz1 = s1;

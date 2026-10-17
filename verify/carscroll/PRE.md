@@ -464,3 +464,17 @@ on-screen rule itself; the top-up keeps its off-screen-only rule. R2e (268d6676,
 H are stopped. New queue on sc3simrun 0b903bb6 + sc3cartrips d5e98b81: **R1e** (R1c's schedule), **R2f** (Europolis
 1024, one block each of H, AR, HG), **R3** (overscroll, addendum 13), **L7** (lite soak, 1024, speed 4), **V6**
 (pictures). Bound as addendum 11, pop-ins as addendum 8.
+
+## Addendum 15 (2026-10-16 22:15, after R1e; before R3b, L8, V6)
+
+R1e (d5e98b81, Berlin centre), fix on, end-location reference: held button 1.00 / 1.00; gentle drag 0.81 / 0.74
+(worst 0.52); arrows 0.41 / 0.48 with 147 on-screen pop-ins a minute; extreme drag 0.19 / 0.44. Against R1c
+(3f9a2c82: gentle drag 0.91 / 0.93, held button 1.10 / 0.97, arrows 0.51 / 1.02, extreme drag 0.33 / 0.37, every kind
+<= 76 pop-ins a minute) the two strip-rule changes after 3f9a2c82 bought no count and cost pop-ins (R1d, R1e).
+**Decision (post hoc, stated as such): the staged build is sc3cartrips 3f9a2c82 with sc3simrun 0b903bb6.** Its source
+is restored in the branch (sc3cartrips.c / _cars.c as of aa436d3); a rebuild from it (f3163dd0) has a byte-identical
+`.text` (sha256 a248924d) and differs only in PE timestamps. R2f (d5e98b81, running) finishes as data; queue I stopped.
+
+Remaining arms on 3f9a2c82 + 0b903bb6: **R3b** = R3 (overscroll as meant, addendum 13), **L8** lite soak (1024,
+speed 4, X1, the L5 cycle x 3), **V6** pictures. The verdict per kind uses R1c (Berlin) and R2d (1024) for drag, held
+button, arrows and gentle drag, and R3b for overscroll.
