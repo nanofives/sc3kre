@@ -48,6 +48,20 @@ MID = {(35, 35, 2): 20500, (35, 18004, 0): 20501, (18004, 35, 0): 20502, (35, 19
 # OUTER: a cell of one staircase holding 35 with the other road beside it in its row: its median-side sidewalk tip
 # becomes grass too (the median strip runs past the middle cell's corners into the outer cells). Key (35, 0, 0).
 OUTER = {(35, 0, 0): 20505}
+# MERGE: one carriageway ends and the other goes on as a single road. Canonical cells (diagave_paint.MERGES, axis 0,
+# bottom end at row 0) -> piece; MERGE_TABLE: (axis, end 0 bottom / 1 top, continuing 'A'/'B') -> [(dx, dz, piece,
+# state)] relative to the end row's left cell in axis space (diagave_paint.merge_table, rotation search).
+MERGE_PIECES = {"L": [((1, 0), 20520), ((1, 1), 20521), ((2, 0), 20522), ((2, 1), 20523), ((2, 2), 20524)],
+                "R": [((0, -1), 20530), ((0, 0), 20531), ((1, -1), 20532), ((1, 0), 20533), ((2, 0), 20534)]}
+MERGE_TABLE = {
+    (0, 0, "A"): [(1, 0, 20520, 0), (1, 1, 20521, 0), (2, 0, 20522, 0), (2, 1, 20523, 0), (2, 2, 20524, 0)],
+    (0, 0, "B"): [(0, -1, 20530, 0), (0, 0, 20531, 0), (1, -1, 20532, 0), (1, 0, 20533, 0), (2, 0, 20534, 0)],
+    (0, 1, "A"): [(2, 1, 20530, 2), (2, 0, 20531, 2), (1, 1, 20532, 2), (1, 0, 20533, 2), (0, 0, 20534, 2)],
+    (0, 1, "B"): [(1, 0, 20520, 2), (1, -1, 20521, 2), (0, 0, 20522, 2), (0, -1, 20523, 2), (0, -2, 20524, 2)],
+    (1, 0, "A"): [(1, 0, 20530, 1), (2, 0, 20531, 1), (1, 1, 20532, 1), (2, 1, 20533, 1), (2, 2, 20534, 1)],
+    (1, 0, "B"): [(0, -1, 20520, 1), (1, -1, 20521, 1), (0, 0, 20522, 1), (1, 0, 20523, 1), (2, 0, 20524, 1)],
+    (1, 1, "A"): [(2, 1, 20520, 3), (1, 1, 20521, 3), (2, 0, 20522, 3), (1, 0, 20523, 3), (0, 0, 20524, 3)],
+    (1, 1, "B"): [(1, 0, 20530, 3), (0, 0, 20531, 3), (1, -1, 20532, 3), (0, -1, 20533, 3), (0, -2, 20534, 3)]}
 # JUNC: canonical junction descriptor (35 half states, road 29 orientation 0 x / 1 z, far curb edge N0 E1 S2 W3 or -1)
 # -> variant id. Filled from `combos` (junction footprints).
 JUNC = {((0,), 0, -1): 20510, ((0,), 1, -1): 20511, ((0, 2), 0, -1): 20512, ((0, 2), 1, -1): 20513,
@@ -83,7 +97,11 @@ def bands(road):
                 seen.update(chain)
                 if sum(1 for (zz, aa) in chain if clean(aa, zz)) < MIN_ROWS:   # anchored by MIN_ROWS clean rows
                     continue
-                band = {(aa + d, zz) for (zz, aa) in chain for d in range(3)}
+                bend = [bend_kind(R, chain, e) for e in (0, 1)]
+                n = len(chain)
+                band = {(aa + d, zz) for k, (zz, aa) in enumerate(chain) for d in range(3)
+                        if not (bend[0] == 1 and ((k == 0 and d < 2) or (k == 1 and d == 0)))
+                        and not (bend[1] == 1 and ((k == n - 1 and d > 0) or (k == n - 2 and d == 2)))}
                 A, B, amb = set(), set(), []
                 for (zz, aa) in chain:
                     A |= {(aa, zz), (aa + 1, zz)}
@@ -93,9 +111,13 @@ def bands(road):
                 colN, colS = {}, {}                      # column x -> row where its arm touches the band
                 rowarm = {}
                 outside = lambda c: c in R and c not in band     # noqa: E731
-                for (zz, aa) in chain:
+                for k, (zz, aa) in enumerate(chain):
                     w, e = (aa - 1, zz), (aa + 3, zz)
                     sides = []
+                    if bend[0] == 1 and k <= 1:
+                        w = None                                  # the straight avenue, not an arm
+                    if bend[1] == 1 and k >= n - 2:
+                        e = None
                     if w in R:
                         if (aa - 2, zz) in R and not any(outside(c) for c in ((aa - 1, zz + 1), (aa - 2, zz + 1), (aa - 2, zz - 1))):
                             sides.append("W")
@@ -141,9 +163,37 @@ def bands(road):
                         why = why or "column road at x=%d leaves the avenue's rows" % x0
                     else:
                         junc[c] = ("z", 0, -1)
-                # the drags' ends beyond the full rows (as before)
+                # the drags' ends beyond the full rows: a merge (one carriageway goes on as a single road) or stubs
+                merges, path, real = [], set(), set()
                 for (z0, a0), step, pref in ((chain[0], -1, "A"), (chain[-1], 1, "B")):
+                    ee = 1 if step > 0 else 0
+                    if bend[ee]:                                  # straight cells: path; two virtual rows beyond
+                        for c, bits, is_real in bend_cells(a0, z0, ee, bend[ee]):
+                            path.add(c)
+                            if is_real:
+                                real.add(c)
+                            if bits & 1:
+                                A.add(c)
+                            if bits & 2:
+                                B.add(c)
+                        continue
                     if rowarm[z0][1]:                             # a junction row ends the chain: no drag stub beyond
+                        continue
+                    cont = merge_cont(R, arms, z0, a0, step)
+                    if cont:
+                        S = A if cont == "A" else B
+                        off = (0, 1) if cont == "A" else (1, 2)
+                        for k in range(1, MERGE_ROWS + 2):
+                            zr, ar = z0 + step * k, a0 + step * k
+                            cs = [(ar + d, zr) for d in off if (ar + d, zr) in R]
+                            for c in cs:
+                                S.add(c)
+                                if k <= MERGE_ROWS:
+                                    band.add(c)
+                                else:
+                                    path.add(c)                   # the single road goes on: stock territory
+                                real.add(c)
+                        merges.append((0 if step > 0 else 1, cont, z0, a0))
                         continue
                     k = 1
                     while True:
@@ -165,7 +215,7 @@ def bands(road):
                     for c in band:
                         for dx, dz in DIRS:
                             q = (c[0] + dx, c[1] + dz)
-                            if q in R and q not in band and q not in arms:
+                            if q in R and q not in band and q not in arms and q not in real:
                                 why = "touches road at (%d,%d)" % ((-q[0] if axis else q[0]), q[1])
                                 break
                         if why:
@@ -185,7 +235,7 @@ def bands(road):
                                 a2.add(c)
                             if "B" in side:
                                 b2.add(c)
-                        if all(_mask(c, a2) in LONE for c in a2) and all(_mask(c, b2) in LONE for c in b2):
+                        if all(_mask(c, a2) in LONE for c in a2 if c not in path) and                                 all(_mask(c, b2) in LONE for c in b2 if c not in path):
                             best = (cost, a2, b2)
                     pick = best[1:] if best else None
                     if pick is None:
@@ -196,15 +246,82 @@ def bands(road):
                 for c, (o, d, stem) in junc.items():
                     halves = tuple(sorted({0: (st["A0"],), 1: (st["A1"], st["B1"]), 2: (st["B2"],)}[d]))
                     jk[c] = (halves, 0 if o == "x" else 1, stem)
+                mk = {}
+                for (end, cont, z0, a0) in merges:                # merge cells: (piece, state) from the case table
+                    for (dx, dz, piece, state) in MERGE_TABLE.get((axis, end, cont), []):
+                        c = (a0 + dx, z0 + dz)
+                        if c not in band:
+                            why = why or "merge cell (%d,%d) is not road" % ((-c[0] if axis else c[0]), c[1])
+                        mk[c] = (piece, state)
                 if axis == 1:
                     m = lambda c: (-c[0], c[1])                   # noqa: E731
                     A2, B2 = {m(c) for c in A2}, {m(c) for c in B2}
                     jk = {m(c): v for c, v in jk.items()}
                     arms = {m(c): v for c, v in arms.items()}
+                    mk = {m(c): v for c, v in mk.items()}
+                    path = {m(c) for c in path}
                     chain = [(zz, -aa) for (zz, aa) in chain]
                 out.append({"axis": axis, "rows": chain, "A": A2, "B": B2, "junc": jk, "arms": arms,
-                            "ok": not why, "why": why})
+                            "merge": mk, "path": path, "bend": bend, "ok": not why, "why": why})
     return out
+
+
+MERGE_ROWS = 3              # rows of the single road past a merge that the avenue still writes (then stock)
+
+
+def _bend_xz(a0, z0, e, u, v):
+    """(u, v) at a chain end: u cells right of the end row's left cell, v rows past it; the top end (e 0) turned half
+    a circle (u -> 2 - u, v up), so one rule serves both ends"""
+    return (a0 + u, z0 + v) if e else (a0 + 2 - u, z0 - v)
+
+
+def bend_kind(R, chain, e):
+    """End e (0 top, 1 bottom) of a chain: 1 when the avenue goes on along x as two straight roads (rows v -1 and 0 run
+    on past their d2), 2 when it goes on along z (columns u 1 and 2 below), else 0. The carriageways' edges meet the
+    straight ones on one cell line, so the diagonal cells keep their middle-of-band pieces and the straight cells stay
+    stock (11204)."""
+    z0, a0 = chain[-1] if e else chain[0]
+    rd = lambda u, v: _bend_xz(a0, z0, e, u, v) in R                               # noqa: E731
+    if len(chain) >= 3 and rd(3, 0) and rd(2, -1) and rd(3, -1) and not any(rd(u, 1) for u in (1, 2, 3)):
+        return 1
+    if rd(1, 1) and rd(2, 1) and rd(1, 2) and rd(2, 2) and not rd(0, 1) and not rd(3, 1):
+        return 2
+    return 0
+
+
+def bend_cells(a0, z0, e, kind):
+    """-> [(cell, staircase bits 1 A / 2 B, real straight road)] at a bend end: the straight cells beside the band and
+    two virtual rows of both staircases past the end (their masks make the end cells middle-of-band pieces)"""
+    out = []
+    for v in range(-1, 3):
+        for u in range(v, v + 4):
+            d, bits, real = u - v, 0, False
+            if v >= 1 and d <= 2:
+                bits = (1, 3, 2)[d]
+            if kind == 1 and v in (-1, 0) and u in (1, 2):
+                real = True
+                bits = (2 if u == 1 else 0) if v == -1 else (3 if u == 1 else 2)
+            if kind == 2 and v == 1 and u in (1, 2):
+                real = True
+            if not e:
+                bits = ((bits & 1) << 1) | ((bits & 2) >> 1)        # turned: d 0 is B's side
+            if bits or real:
+                out.append((_bend_xz(a0, z0, e, u, v), bits, real))
+    return out
+
+
+def merge_cont(R, arms, z0, a0, step):
+    """At a chain end row (z0, left a0), going `step`: 'A' / 'B' when only that staircase's two cells hold road in the
+    next two rows (one carriageway ends, the other goes on as a single road), else None."""
+    def row(k):
+        zr, ar = z0 + step * k, a0 + step * k
+        return [((ar + d, zr) in R and (ar + d, zr) not in arms) for d in range(3)]
+    r1, r2 = row(1), row(2)
+    if r1 == [True, True, False] and r2 == [True, True, False]:
+        return "A"
+    if r1 == [False, True, True] and r2 == [False, True, True]:
+        return "B"
+    return None
 
 
 # 35's state in each band position (real coordinates): staircase A at d 0 / 1, B at d 1 / 2 (measured in game, axis 1
@@ -232,6 +349,11 @@ def wanted(band, mids=None):
     A, B = band["A"], band["B"]
     out = {}
     for c in A | B:
+        if c in band.get("path", ()):
+            continue                                       # the single road past a merge: left to the stock tiler
+        if c in band.get("merge", {}):
+            out[c] = band["merge"][c]
+            continue
         if c in band["junc"]:
             canon, k = jcanon(band["junc"][c])
             if canon not in JUNC:
@@ -655,53 +777,119 @@ def mid_spec(pa, pb, delta, vid):
     return spec
 
 
+def parts_spec(parts, vid, note):
+    """Lanes of the stock pieces (piece, state) that share one cell, as the state-0 record of piece `vid`."""
+    specs = [_describe(p, s) for p, s in parts]
+    spec = {"_": "diagave.py: %s" % note, "piece": vid, "states": [0, 1, 2, 3], "flag": specs[0].get("flag", 0),
+            "alt": specs[0].get("alt", [0, 0, 0, 0])}
+    veh = {"class": specs[0]["vehicle"]["class"], "speed": specs[0]["vehicle"]["speed"], "lanes": [], "exits": []}
+    ped = {"walks": [], "exits": []}
+    for sp in specs:
+        veh["lanes"] += sp.get("vehicle", {}).get("lanes", [])
+        veh["exits"] += [e for e in sp.get("vehicle", {}).get("exits", []) if e not in veh["exits"]]
+        ped["walks"] += sp.get("pedestrian", {}).get("walks", [])
+        ped["exits"] += [e for e in sp.get("pedestrian", {}).get("exits", []) if e not in ped["exits"]]
+    spec["vehicle"], spec["pedestrian"] = veh, ped
+    pairs = []
+    for ln in veh["lanes"]:
+        pr = [_side(ln["from"]), _side(ln["to"])]
+        if pr not in pairs:
+            pairs.append(pr)
+    spec["connects"] = {"road": pairs}
+    return spec
+
+
+def merge_parts(kind):
+    """canonical merge cell -> [(piece, state)] of the lone staircases that hold it (lanes), and whether it holds both
+    carriageways inside the band (it then saves as 4-way 43, as the middle pieces do)"""
+    from netmod import diagave_paint as P
+    F = P.merge_footprint(kind)
+    ends = P.MERGES[kind][0]
+    A = {c for c in F if c[0] - c[1] in (0, 1) and (ends == "B" or c[1] <= 0)}
+    B = {c for c in F if c[0] - c[1] in (1, 2) and (ends == "A" or c[1] <= 0)}
+    out = {}
+    for c, vid in MERGE_PIECES[kind]:
+        parts = []
+        for S in (A, B):
+            if c in S and _mask(c, S) in LONE:
+                parts.append(LONE[_mask(c, S)])
+        out[c] = (parts, c in A and c in B)
+    return out
+
+
+def _write_anchors(d, anchors, note):
+    anchors = dict(anchors)
+    anchors["_"] = note
+    json.dump(anchors, open(os.path.join(d, "anchors.json"), "w"), indent=1)
+
+
 def cmd_build(a):
+    """All pieces' art (png_dir per id) and lane specs. Ground art comes from the world scenes of diagave_paint, so the
+    middle, edge, junction and merge pieces meet exactly; the middle piece's tree layer is 11204's trees."""
     from netmod import netart
+    from netmod import diagave_paint as P
+    report = {"save_43": []}
+    art = lambda vid: os.path.join(a.pack, "art", str(vid))                       # noqa: E731
+    # the middle piece of the straight avenue: ground from the scene, trees on layer 1
+    d = art(TREE_PIECE)
+    anc = P.paint_cell(P.StraightAvenue(), (1, 0), d)
+    for z in range(netart.ZOOMS):
+        for s in range(netart.ROTS):
+            _g, (im1, anc1) = median_frames(z, s)
+            im1.save(os.path.join(d, netart.frame_name(z, s, 1)))
+            anc[netart.frame_name(z, s, 1)] = list(anc1)
+    _write_anchors(d, anc, "diagave.py build: straight avenue middle cell + 11204 trees")
+    spec = mid_spec(35, 35, 2, TREE_PIECE)
+    json.dump(spec, open(os.path.join(a.pack, "mid_%d.lanes.json" % TREE_PIECE), "w", newline="\n"), indent=1)
+    report["save_43"].append(TREE_PIECE)
+    print("built %d (middle, scene + trees)" % TREE_PIECE)
+    # the cap combinations at the avenue's ends: the two stock pieces on one tile (concrete seam: the median's nose)
     for (pa, pb, delta), vid in sorted(MID.items(), key=lambda t: t[1]):
-        d = os.path.join(a.pack, "art", str(vid))
+        if vid == TREE_PIECE:
+            continue
+        d = art(vid)
         os.makedirs(d, exist_ok=True)
-        anchors = {"_": "diagave.py build: %d (slot) + %d (slot + %d) on one tile" % (pa, pb, delta)}
+        anchors = {}
         for z in range(netart.ZOOMS):
             for s in range(netart.ROTS):
-                if vid == TREE_PIECE:                  # two layers (art from 11204): grass median, trees
-                    (im, anc), (im1, anc1) = median_frames(z, s)
-                    im1.save(os.path.join(d, netart.frame_name(z, s, 1)))
-                    anchors[netart.frame_name(z, s, 1)] = list(anc1)
-                else:
-                    im, anc = mid_frame(pa, pb, delta, z, s)
+                im, ac = mid_frame(pa, pb, delta, z, s)
                 im.save(os.path.join(d, netart.frame_name(z, s)))
-                anchors[netart.frame_name(z, s)] = list(anc)
-        json.dump(anchors, open(os.path.join(d, "anchors.json"), "w"), indent=1)
+                anchors[netart.frame_name(z, s)] = list(ac)
+        _write_anchors(d, anchors, "diagave.py build: %d (slot) + %d (slot + %d) on one tile" % (pa, pb, delta))
         spec = mid_spec(pa, pb, delta, vid)
-        with open(os.path.join(a.pack, "mid_%d.lanes.json" % vid), "w", newline="\n") as fh:
-            json.dump(spec, fh, indent=1)
-        print("built %d: art %s, lanes mid_%d.lanes.json (%d vehicle lane(s), connects %s)"
-              % (vid, d, vid, len(spec["vehicle"]["lanes"]), spec["connects"]["road"]))
-    for canon, vid in sorted(JUNC.items(), key=lambda t: t[1]):      # junction cells: road 29 + the avenue as asphalt
-        d = os.path.join(a.pack, "art", str(vid))
-        os.makedirs(d, exist_ok=True)
-        anchors = {"_": "diagave.py build: junction %s" % (canon,)}
-        for z in range(netart.ZOOMS):
-            for s in range(netart.ROTS):
-                im, anc = junction_frame(canon, z, s)
-                im.save(os.path.join(d, netart.frame_name(z, s)))
-                anchors[netart.frame_name(z, s)] = list(anc)
-        json.dump(anchors, open(os.path.join(d, "anchors.json"), "w"), indent=1)
+        json.dump(spec, open(os.path.join(a.pack, "mid_%d.lanes.json" % vid), "w", newline="\n"), indent=1)
+        report["save_43"].append(vid)
+        print("built %d (cap combination)" % vid)
+    # the edge cells beside the median: stock 35's own frame size (ground-under as stock)
+    for key, vid in OUTER.items():
+        d = art(vid)
+        anc = P.paint_cell(P.StraightAvenue(), (2, 0), d, canvas=(35, 0))
+        _write_anchors(d, anc, "diagave.py build: straight avenue edge cell (35 state 0)")
+        print("built %d (edge, scene)" % vid)
+    # junctions: road 29 + the avenue as asphalt + crosswalks
+    for canon, vid in sorted(JUNC.items(), key=lambda t: t[1]):
+        d = art(vid)
+        anc = P.paint_cell(P.Junction(canon[0], canon[1], canon[2]), (0, 0), d)
+        _write_anchors(d, anc, "diagave.py build: junction %s" % (canon,))
         spec = junction_spec(canon, vid)
-        with open(os.path.join(a.pack, "junc_%d.lanes.json" % vid), "w", newline="\n") as fh:
-            json.dump(spec, fh, indent=1)
-        print("built %d (junction %s): %d vehicle lane(s)" % (vid, canon, len(spec["vehicle"]["lanes"])))
-    for key, vid in OUTER.items():                    # outer cells: 35's frame with the median tip; 35's own lanes
-        d = os.path.join(a.pack, "art", str(vid))
-        os.makedirs(d, exist_ok=True)
-        anchors = {"_": "diagave.py build: stock 35 with the median-side sidewalk tip as grass"}
-        for z in range(netart.ZOOMS):
-            for s in range(netart.ROTS):
-                im, anc = outer_frame(z, s)
-                im.save(os.path.join(d, netart.frame_name(z, s)))
-                anchors[netart.frame_name(z, s)] = list(anc)
-        json.dump(anchors, open(os.path.join(d, "anchors.json"), "w"), indent=1)
-        print("built %d (outer): art %s" % (vid, d))
+        json.dump(spec, open(os.path.join(a.pack, "junc_%d.lanes.json" % vid), "w", newline="\n"), indent=1)
+        print("built %d (junction %s)" % (vid, canon))
+    # merges: one carriageway tapers into the other
+    for kind, cells in MERGE_PIECES.items():
+        ends, q_s, q_e = P.MERGES[kind]
+        scene = P.Merge(ends, q_s, q_e)
+        parts = merge_parts(kind)
+        for c, vid in cells:
+            d = art(vid)
+            anc = P.paint_cell(scene, c, d)
+            _write_anchors(d, anc, "diagave.py build: merge %s cell %s" % (kind, c))
+            ps, both = parts[c]
+            spec = parts_spec(ps, vid, "merge %s cell %s: lanes of %s" % (kind, c, ps))
+            json.dump(spec, open(os.path.join(a.pack, "merge_%d.lanes.json" % vid), "w", newline="\n"), indent=1)
+            if both:
+                report["save_43"].append(vid)
+            print("built %d (merge %s cell %s, lanes of %s)" % (vid, kind, c, ps))
+    json.dump(report, open(os.path.join(a.pack, "art", "build.json"), "w"), indent=1)
 
 
 # ------------------------------------------------------------------------------------------------ checks
@@ -710,7 +898,7 @@ def road_cells(save):
     from netmod import tiler, paths
     g = paths.game_root()
     ids = {int(v) for v in re.findall(r"\d+", open(os.path.join(g, "Apps", "Res", "TilingRules",
-                                                                "ROAD_GRND_Set.txt")).read())} | set(MID.values()) | set(OUTER.values())
+                                                                "ROAD_GRND_Set.txt")).read())} | set(MID.values()) | set(OUTER.values()) |         set(JUNC.values()) | {v for cs in MERGE_PIECES.values() for _, v in cs}
     lay = tiler.City.load(save).layers["surface"]
     return lay, {c for c, p in lay.items() if p.id in ids and p.flags is None}
 
@@ -734,7 +922,8 @@ def cmd_plan(a):
             p = lay.get(c)
             print("  (%d,%d) %-2s now %-8s want %s" % (c[0], c[1], ("A" if c in b["A"] else "") + ("B" if c in b["B"] else ""),
                                                       "%d.%d" % (p.id, p.state) if p else "-",
-                                                      "%d.%d" % w[c] if w else "-"))
+                                                      "%d.%d" % w[c] if w and c in w else
+                                                      "(stock)" if c in b["path"] else "-"))
 
 
 def cmd_preview(a):
@@ -749,7 +938,7 @@ def cmd_preview(a):
         w = wanted(b) or {}
         for c, (pid, s) in w.items():
             cell = {"at": [-c[0], c[1]], "slot": s}
-            if pid in MID.values() or pid in OUTER.values() or pid in JUNC.values():
+            if pid in MID.values() or pid in OUTER.values() or pid in JUNC.values() or                     pid in {v for cs in MERGE_PIECES.values() for _, v in cs}:
                 cell["dir"] = os.path.join(a.pack, "art", str(pid))
             else:
                 cell["piece"] = pid

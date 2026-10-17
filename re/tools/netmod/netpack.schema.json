@@ -131,6 +131,22 @@
             },
             "description": "Task diagave: junction pieces where a straight road crosses the avenue, meets it from one side, or the avenue ends on it. Each one serves its descriptor in all four rotations."
           },
+          "merge": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["axis", "end", "cont", "cells"],
+              "properties": {
+                "axis": {"type": "integer", "minimum": 0, "maximum": 1, "description": "0 the down-right diagonal, 1 the other one (x mirrored)."},
+                "end": {"type": "integer", "minimum": 0, "maximum": 1, "description": "0: the band's last row, the single road goes on down; 1: its first row, going on up."},
+                "cont": {"enum": ["A", "B"], "description": "The staircase that goes on as a single road."},
+                "cells": {"type": "array", "minItems": 1, "items": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "integer"}}, "description": "[dx, dz, piece, state]: the cell dx, dz from the end row's left cell (axis space) gets a ROAD variant of this package at that state."}
+              }
+            },
+            "description": "Task diagave: merge cases, where one carriageway ends and the other goes on as a single road (diagave.py MERGE_TABLE)."
+          },
+          "save_43": {"type": "array", "items": {"$ref": "#/$defs/piece_id"}, "description": "Merge pieces that hold both roads: saved as 43 so a game without the mod keeps the road joined."},
           "middle": {
             "type": "array",
             "minItems": 1,

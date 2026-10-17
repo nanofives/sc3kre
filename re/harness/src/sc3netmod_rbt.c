@@ -63,6 +63,8 @@ static WORD g_dav_inner[3];
 static int g_dav_on, g_rb_off;
 static void dav_line(const char *path, const char *line);
 static void dav_jline(const char *path, const char *line);
+static void dav_mline(const char *path, const char *line);
+static void dav_sline(const char *path, const char *line);
 static void dav_init_table(void);
 static void dav_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who);
 static int dav_is_mid(WORD id);
@@ -77,6 +79,8 @@ static void rb_file(const char *path) {
         unsigned long p, n, c = 0;
         int k;
         if (!strncmp(line, "davj ", 5)) { dav_jline(path, line); continue; }      /* task diagave: junctions */
+        if (!strncmp(line, "davm ", 5)) { dav_mline(path, line); continue; }      /* task diagave: merges */
+        if (!strncmp(line, "davs ", 5)) { dav_sline(path, line); continue; }      /* task diagave: save as 43 */
         if (!strncmp(line, "dav ", 4)) { dav_line(path, line); continue; }        /* task diagave */
         if (strncmp(line, "rbt ", 4) || g_rb_off) continue;
         k = sscanf(line + 4, "%lu %lu %lu", &p, &n, &c);
