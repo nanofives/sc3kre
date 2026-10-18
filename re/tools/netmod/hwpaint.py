@@ -77,6 +77,8 @@ SLAB = 5.0                # bridge slab thickness (zoom-3 px)
 DASH_ON = 0.5             # painted share of the 0.25-cell dash period on the stock deck (73 / 15051 zoom 4: 8 of 16)
 RAMP_W = 0.62             # one-lane ramp width, cells: the stock ramp (15127 fit 0.64); program width (hwx W 0.31)
 W_DIAG = 0.63             # stock diagonal carriageway width across (11223/11224, 15052/15106 bands; zoom 4, at H)
+RAMP_DASH_MARGIN = 0.04   # th either side of the stock dash band a one-lane ramp never samples
+DIAG_DASH = (0.49, 0.57)  # the stock diagonal bands' dash line, th from the outer parapet (73's is 0.566..0.605)
 GAP_OUT, GAP_IN = 0.28, 0.93   # th past which a parapet gap turns the stock edge (parapet, edge line / curb) to lane
 CLEAR = (0, 0, 0, 0)
 
@@ -560,7 +562,7 @@ def dash_on(along):
     return abs((along / LL.DASH_PERIOD) % 1.0 - 0.5) < DASH_ON / 2.0
 
 
-def _profile_th(deck, to, prof, s=None):
+def _profile_th(deck, to, prof, s=None, dash=None):
     """distance from the outer parapet (cells) -> share th of the stock carriageway's width it samples. The ramp's
     split (outer parapet + edge line | lane | inner curb) is the zoom-4 profile of 73 (the same world widths at every
     zoom), squeezed when the deck is too narrow for it; a parapet gap at s turns the edge into lane"""
@@ -576,7 +578,13 @@ def _profile_th(deck, to, prof, s=None):
             th = 1.0 - (deck.w - to)
         else:                                            # the one lane: the stock lane span squeezed into it
             f = (to - a) / max(1e-6, deck.w - a - b)
-            th = lane[0] + f * (lane[1] - lane[0])
+            # the one lane: the stock lane span with the carriageway's dash line (and a margin) left out, so a
+            # one-lane ramp shows no centre dashes on axis or diagonal decks (stock 15127 has none)
+            dash = dash or deck_profile(4, (1, 0))["dash"] or (0.566, 0.605)
+            d0, d1 = dash[0] - RAMP_DASH_MARGIN, dash[1] + RAMP_DASH_MARGIN
+            th = lane[0] + f * (lane[1] - lane[0] - (d1 - d0))
+            if th >= d0:
+                th += d1 - d0
     else:
         th = to / deck.w
     if s is not None and deck.gaps:
@@ -630,7 +638,7 @@ def _diag_colour(nd, deck, to, z, r, wx, wz, s=None):
     share th across and the same along-band coordinate, so a deck on a stock band position reads the band unchanged
     (its dashes included)"""
     fam, sg = DIAGS[nd]
-    th = _profile_th(deck, to, None, s)
+    th = _profile_th(deck, to, None, s, DIAG_DASH)
     d, a = _band_d_a(fam, wx, wz)
     for k in range(6):
         t2 = min(0.995, max(0.005, th + (0.0 if k == 0 else (0.012 * k if th < 0.5 else -0.012 * k))))
