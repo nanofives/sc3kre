@@ -687,14 +687,44 @@ def _axis_colour(ax, deck, to, z, r, wx, wz, smooth=False, s=None):
     return c, th, band
 
 
+def _axis_plain(ax, deck, to, z, r, wx, wz, s=None):
+    """a straight hw carriageway on an axis: the stock deck AXES[ax] at the same share across and the same world
+    along-coordinate, its own dashes included, so the deck equals 73 / 15051 pixel for pixel and meets a stock
+    neighbour with the same dash shape and phase (task hwseam 2026-10-18)"""
+    pid, st = AXES[ax]
+    th = _profile_th(deck, to, None, s)
+    along = _frac256(wz) if ax[0] != 0 else _frac256(wx)
+
+    def sample(th2, al=along):
+        acr = _across(ax, th2)
+        return STOCK(pid, st, z, r, acr, al, H) if ax[0] != 0 else STOCK(pid, st, z, r, al, acr, H)
+
+    c = sample(th)
+    if not c[3]:
+        # a frame-border pixel: step inward along the deck (the stock frame stops short of the cell's cut edge, which
+        # left 1 px holes across the deck at a painted | stock border); across too, except on the outer parapet's
+        # edge, past which the stock frame is empty on purpose (stepping there raised the parapet's top edge 1 px; at
+        # the inner curb it must step, or the median shows 1 px dots in game)
+        ths = (th, min(0.99, max(0.01, th + (0.02 if th < 0.5 else -0.02)))) if th > 0.05 else (th,)
+        for al in (along, along + (2.0 if along < 128.0 else -2.0), along + (4.0 if along < 128.0 else -4.0)):
+            for t2 in ths:
+                c = sample(t2, al)
+                if c[3]:
+                    return c
+    return c
+
+
 def deck_top_colour(deck, z, r, wx, wz, s, t):
     """deck surface: the two stock decks running nearest the deck's heading, blended by angle (one alone on an axis
-    deck, so 73 / 15051 come back unchanged); dashes from the world arc length on the hw profile"""
+    deck, so 73 / 15051 come back unchanged); a straight hw deck reads the stock frame with its dashes, a curving one
+    gets its dashes re-drawn from the world arc length"""
     p, d, n = deck.frame_at(s)
     to = deck.t_out(t)
     ws = _dir_weights(n)                                 # the axis / diagonal stock decks nearest the heading
     ax0 = ws[0][1]
     smooth = ws[0][0] < 0.9997                           # off its stock direction by over about 1 degree: a curve
+    if deck.profile == "hw" and ax0 in AXES and not smooth:
+        return _axis_plain(ax0, deck, to, z, r, wx, wz, s)
     if deck.profile == "hw" and z >= LL.MIN_ZOOM and ax0 in AXES:
         c0, th0, band0 = _axis_colour(ax0, deck, to, z, r, wx, wz, s=s)
         if band0 and dash_on(deck.along(s)):
