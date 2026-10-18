@@ -47,14 +47,33 @@ warnings. Every ramp starts and ends on a carriageway's outer lane at a cell bor
 | restart on the saved city | `load: all 204 variant tiles restored`; load pass `0 written, 0 reverted`; `kept=3` |
 | shots | views 0..3, zooms 3 / 4, before and after the reload: grass under the slab ramps, no stale patches seen on the cloverleaf. One fallback shot right after the reload caught a half-drawn frame (dark stepped terrain); the same view a few seconds later is clean |
 
+## Rebuild on hwcore 6ff62ab (ground rule + per-state save table, 2026-10-18; `sc3netmod.log` of x2.sc3)
+
+- Every piece's art takes its frame table from stock 15127 (`"from": 15127`, `ground_under`, padded frames): the
+  HWY_BASE.md ground rule (73's table can lose the terrain under the piece and its empty neighbours). Pixels and
+  anchors unchanged.
+- `hwys` lines for the 14 on-highway pieces: a junction saves as the stock straight highway of its cell's heading
+  turned by its state, a core piece as its stock X piece at the same state (checked for all 28 placements per X).
+- In game, on a copy of the first save: `load: all 204 variant tiles restored`, load pass 0 written / 0 reverted;
+  shots in views 2 and 3 clean; save `204 variant tile(s) written as base`. Read back offline from that save: at both
+  cloverleafs the 28 on-highway cells hold exactly the stock X pieces and plain straight highway in the stock states
+  (28 / 28), the 68 ramp cells hold 15099. A game without the mod was not run.
+
+## Without the mod (`x3_nomod.sc3` = a copy of the hwys save, sc3netmod.dll moved aside; only sc3resize injected)
+
+The city loads. Live grid of the cloverleaf at (57,27): the 12 core cells are the stock X (15107 / 15108 / 15113 /
+15114 / 15150 / 15153 in the stock states) and every arm and junction cell is plain stock 15051 / 73 in the stock
+states, so the two highways and their crossing are exactly the stock X (`hwys` works). The 68 ramp cells load as
+stock 15099 (a highway slope piece) at states 0..3 and draw as slope blocks on flat land around the X (shot
+`inst_hwx
+_c1_z3r0.png`). The sim was not run in that game. Better land save ids (the nearest stock one-lane
+ramp piece per cell, HWY_BASE.md) would only change how those 68 cells look without the mod; not done.
+
 ## Not measured / open
 
 - Highway trips through the cloverleaf and animated cars (the lab city has no population); only the turn matrices
   and lane specs were checked.
-- A stock game (no mod) loading the save: pieces save as their bases (15099 for ramp cells, 15051 / 73 for junction
-  cells, the stock X pieces for the core). hwt found that a piece's saved state is its own, not the stock one; for hwx
-  the junction ids sit at states 0 / 2, the same as the plain highway they replace, and the core keeps the stock
-  states, so only the 68 ramp cells (15099 in states 0..3) would show as stock slope pieces. Not run.
+- Without the mod the 68 ramp cells show as 15099 slope blocks (section above); land save ids not done.
 - Bulldozing in game (twin only): a bulldozed ramp cell is rebuilt; cutting the X or an arm removes the ramps.
 - hwcore's frame rule for ground under open decks (pending): applied as `ground_under` + padding for now.
 - The X on a slope (stock 15149) is not handled (ids 21170..21189 reserved).

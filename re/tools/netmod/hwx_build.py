@@ -28,7 +28,9 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 
 LAND_BASE = 15099            # Protected highway slope piece (hwcore's and hwt's land base)
-LAND_ART_FROM = 15127        # frame table of the land pieces: stock 15127 sits in all four states (hwt)
+ART_FROM = 15127             # frame table of EVERY piece: 15127's sprite class draws the terrain under the piece
+                             # (HWY_BASE.md "ground under a piece": 73's table loses it in some views; ramps, joins
+                             # and the core's underpass all leave ground visible)
 SHAPE0, SHAPE_END = 22500, 22799
 CLS = {"main": 0, "land": 1, "core": 2}
 
@@ -47,6 +49,23 @@ def pieces():
             p["base"] = v["base"][0]
         p["cells"].append((c, v["put"]))
     return out
+
+
+HEAD_STOCK = {(1, 0): (15051, 2), (-1, 0): (15051, 0), (0, 1): (73, 0), (0, -1): (73, 2)}
+
+
+def saved_as(p, k):
+    """(id, state) an on-highway piece at state k saves as (hwys): a junction = the stock straight highway of its
+    ref cell's heading turned k quarter turns; a core piece = its stock X piece at state k (the stock X's two copies
+    of a piece are 180 degrees apart, as ours)"""
+    import hwx
+    if p["cls"] == "core":
+        return p["base"], k
+    pid, st = hwx.carriageway(p["ref"])[1]
+    hx, hz = {(15051, 2): (1, 0), (15051, 0): (-1, 0), (73, 0): (0, 1), (73, 2): (0, -1)}[(pid, st)]
+    for _ in range(k):
+        hx, hz = -hz, hx
+    return HEAD_STOCK[(hx, hz)]
 
 
 def _near(sc, boxes, c):
@@ -130,7 +149,7 @@ def cmd_manifest(pkg):
               "core": "Clean flyover %+d,%+d"}[p["cls"]] % p["ref"]
         variants.append({"id": pid, "base": p["base"], "network": "HWAY",
                          "name": {"*": nm, "ENGLISH": "Highway Interchange"},
-                         "art": {"from": LAND_ART_FROM if p["cls"] == "land" else 73, "png_dir": "art/%d" % pid,
+                         "art": {"from": ART_FROM, "png_dir": "art/%d" % pid,
                                  "ground_under": True},
                          "trblkatt": "copy_base"})
         if os.path.isfile(os.path.join(pkg, "hwx_%d.lanes.json" % pid)):
@@ -138,6 +157,9 @@ def cmd_manifest(pkg):
         else:
             connects.append({"piece": pid, "road": {"low": [], "high": []}})          # no lane: no turn
         lines.append("hwyp %d %d" % (pid, 1 if p["cls"] == "land" else 0))
+    for pid, p in sorted(ps.items()):                         # save table: what a game without the mod reads
+        if p["cls"] != "land":
+            lines.append("hwys %d %s" % (pid, " ".join("%d %d" % saved_as(p, k) for k in range(4))))
     for pid, p in sorted(ps.items()):
         for (c, put) in sorted(p["cells"]):
             lines.append("hwx %d %d %d %d %d" % (pid, put, c[0], c[1], CLS[p["cls"]]))

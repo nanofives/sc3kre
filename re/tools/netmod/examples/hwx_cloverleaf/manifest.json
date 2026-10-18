@@ -272,7 +272,7 @@
     "ENGLISH": "Highway Interchange"
    },
    "art": {
-    "from": 73,
+    "from": 15127,
     "png_dir": "art/21150",
     "ground_under": true
    },
@@ -287,7 +287,7 @@
     "ENGLISH": "Highway Interchange"
    },
    "art": {
-    "from": 73,
+    "from": 15127,
     "png_dir": "art/21151",
     "ground_under": true
    },
@@ -302,7 +302,7 @@
     "ENGLISH": "Highway Interchange"
    },
    "art": {
-    "from": 73,
+    "from": 15127,
     "png_dir": "art/21152",
     "ground_under": true
    },
@@ -317,7 +317,7 @@
     "ENGLISH": "Highway Interchange"
    },
    "art": {
-    "from": 73,
+    "from": 15127,
     "png_dir": "art/21153",
     "ground_under": true
    },
@@ -332,7 +332,7 @@
     "ENGLISH": "Highway Interchange"
    },
    "art": {
-    "from": 73,
+    "from": 15127,
     "png_dir": "art/21154",
     "ground_under": true
    },
@@ -347,7 +347,7 @@
     "ENGLISH": "Highway Interchange"
    },
    "art": {
-    "from": 73,
+    "from": 15127,
     "png_dir": "art/21155",
     "ground_under": true
    },
@@ -362,7 +362,7 @@
     "ENGLISH": "Highway Interchange"
    },
    "art": {
-    "from": 73,
+    "from": 15127,
     "png_dir": "art/21156",
     "ground_under": true
    },
@@ -377,7 +377,7 @@
     "ENGLISH": "Highway Interchange"
    },
    "art": {
-    "from": 73,
+    "from": 15127,
     "png_dir": "art/21157",
     "ground_under": true
    },
@@ -392,7 +392,7 @@
     "ENGLISH": "Highway Interchange"
    },
    "art": {
-    "from": 73,
+    "from": 15127,
     "png_dir": "art/21160",
     "ground_under": true
    },
@@ -407,7 +407,7 @@
     "ENGLISH": "Highway Interchange"
    },
    "art": {
-    "from": 73,
+    "from": 15127,
     "png_dir": "art/21161",
     "ground_under": true
    },
@@ -422,7 +422,7 @@
     "ENGLISH": "Highway Interchange"
    },
    "art": {
-    "from": 73,
+    "from": 15127,
     "png_dir": "art/21162",
     "ground_under": true
    },
@@ -437,7 +437,7 @@
     "ENGLISH": "Highway Interchange"
    },
    "art": {
-    "from": 73,
+    "from": 15127,
     "png_dir": "art/21163",
     "ground_under": true
    },
@@ -452,7 +452,7 @@
     "ENGLISH": "Highway Interchange"
    },
    "art": {
-    "from": 73,
+    "from": 15127,
     "png_dir": "art/21164",
     "ground_under": true
    },
@@ -467,7 +467,7 @@
     "ENGLISH": "Highway Interchange"
    },
    "art": {
-    "from": 73,
+    "from": 15127,
     "png_dir": "art/21165",
     "ground_under": true
    },
@@ -640,6 +640,20 @@
   "hwyp 21163 0",
   "hwyp 21164 0",
   "hwyp 21165 0",
+  "hwys 21150 15051 2 73 0 15051 0 73 2",
+  "hwys 21151 15051 2 73 0 15051 0 73 2",
+  "hwys 21152 15051 0 73 2 15051 2 73 0",
+  "hwys 21153 15051 0 73 2 15051 2 73 0",
+  "hwys 21154 73 0 15051 0 73 2 15051 2",
+  "hwys 21155 73 0 15051 0 73 2 15051 2",
+  "hwys 21156 73 0 15051 0 73 2 15051 2",
+  "hwys 21157 73 0 15051 0 73 2 15051 2",
+  "hwys 21160 15113 0 15113 1 15113 2 15113 3",
+  "hwys 21161 15114 0 15114 1 15114 2 15114 3",
+  "hwys 21162 15107 0 15107 1 15107 2 15107 3",
+  "hwys 21163 15108 0 15108 1 15108 2 15108 3",
+  "hwys 21164 15150 0 15150 1 15150 2 15150 3",
+  "hwys 21165 15153 0 15153 1 15153 2 15153 3",
   "hwx 21120 2 -3 1 1",
   "hwx 21120 3 -2 -3 1",
   "hwx 21120 1 1 2 1",
