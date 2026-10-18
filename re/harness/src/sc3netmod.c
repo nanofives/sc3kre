@@ -141,6 +141,7 @@ static int table_read(const char *path) {
         if (!strncmp(p, "rbt9 ", 5)) continue;           /* RBT9 lines, read by rbt_install (task bigrbt) */
         if (!strncmp(p, "bvxb ", 5) || !strncmp(p, "bvxa ", 5)) continue;   /* task bvx: read by rbt_install */
         if (!strncmp(p, "dbvb ", 5) || !strncmp(p, "dbvs ", 5)) continue;   /* task diagbv: DBV lines, read by rbt_install */
+        if (p[0] == 'h' && p[1] == 'w') continue;       /* task hwcore: highway program lines (hwy*, hwx, hwt, hwd*) */
         if (p[0] == 't' && (!strncmp(p, "tmpl ", 5) || !strncmp(p, "tori ", 5) || !strncmp(p, "tcel ", 5) ||
                             !strncmp(p, "tedg ", 5) || !strncmp(p, "tend", 4))) continue;   /* TMPL lines */
         if (sscanf(p, "%lu %lu", &v, &b) != 2 || v == 0 || v > 0xffff || b == 0 || b > 0xffff || v == b) {
@@ -461,6 +462,7 @@ static void sv_add(DWORD w0, DWORD w1, DWORD id) {
 }
 
 static WORD rb_save_id(DWORD w0, WORD id);       /* RBT block (sc3netmod_rbt.c): stock id of a roundabout cell */
+static int hwy_save_override(WORD id, int st, WORD *sid, int *sst);   /* task hwcore: saved id / state of a piece */
 
 /* record = the 8-byte tile record object; +4 word0 (coord, state), +8 word1 (id, props) */
 static void __stdcall save_rec(BYTE *rec) {
@@ -469,6 +471,17 @@ static void __stdcall save_rec(BYTE *rec) {
     if (!g_base[id]) return;
     rb = rb_save_id(*(DWORD *)(rec + 4), (WORD)id);
     *(DWORD *)(rec + 8) = (w1 & 0xffff0000) | (rb ? rb : g_base[id]);
+    {   /* task hwcore: saved id / state (word0 bits 30-31) per piece and state; the file only. The variant section
+           keeps the original state (id bits 16-17, flag bit 18; an older DLL skips such entries and keeps the base) */
+        DWORD w0 = *(DWORD *)(rec + 4);
+        WORD sid = 0;
+        int sst = 0;
+        if (hwy_save_override((WORD)id, (int)(w0 >> 30), &sid, &sst)) {
+            if (sid) *(DWORD *)(rec + 8) = (*(DWORD *)(rec + 8) & 0xffff0000) | sid;
+            *(DWORD *)(rec + 4) = (w0 & 0x3fffffffUL) | ((DWORD)(sst & 3) << 30);
+            id |= 0x40000UL | ((w0 >> 30) << 16);
+        }
+    }
     sv_add(*(DWORD *)(rec + 4), *(DWORD *)(rec + 8), id);
     InterlockedIncrement(&g_n_saved_base);
 }
@@ -586,8 +599,8 @@ static void __stdcall load_begin(void *p1, void *p2) {
               && ((PFN_R32)(*(DWORD **)s)[0x38 / 4])(s, NULL, &w1)
               && ((PFN_R32)(*(DWORD **)s)[0x38 / 4])(s, NULL, &id);
             if (!ok) { logf("### load: variant section short at %lu of %lu", i, n); break; }
-            if (id == 0 || id > 0xffff) continue;
-            if (!g_base[id]) { unknown++; continue; }   /* variant not installed: keep the base tile */
+            if ((id & 0xffff) == 0 || (id >> 16) & ~7UL) continue;   /* task hwcore: bits 16-18 = original state */
+            if (!g_base[id & 0xffff]) { unknown++; continue; }   /* variant not installed: keep the base tile */
             ld_put(w0, w1, id);
             g_nld++;
         }
@@ -615,7 +628,9 @@ static void __stdcall load_rec(BYTE *rec, DWORD ok) {
     if (!(ok & 0xff) || !g_nld) return;
     id = ld_get(*(DWORD *)(rec + 4), *(DWORD *)(rec + 8));
     if (!id) return;
-    *(DWORD *)(rec + 8) = (*(DWORD *)(rec + 8) & 0xffff0000) | id;
+    *(DWORD *)(rec + 8) = (*(DWORD *)(rec + 8) & 0xffff0000) | (id & 0xffff);
+    if (id & 0x40000UL)                              /* task hwcore: the state the piece had before the save turned it */
+        *(DWORD *)(rec + 4) = (*(DWORD *)(rec + 4) & 0x3fffffffUL) | (((id >> 16) & 3) << 30);
     if (++g_nld_hit == g_nld) logf("load: all %d variant tiles restored", g_nld);
 }
 
@@ -1313,6 +1328,11 @@ static int netramp_install(BYTE *m) {
 #include "sc3netmod_rbt9.c"         /* task bigrbt: RBT9, automatic 3x3 roundabouts on RBT's hooks (SC3NETMOD_RBT9=0) */
 #include "sc3netmod_bvx.c"          /* task bvx: boulevard x avenue / boulevard junctions in BV's runs (SC3NETMOD_BVX=0) */
 #include "sc3netmod_dbv.c"          /* task diagbv: DBV, diagonal boulevards on RBT's hooks (SC3NETMOD_DBV=0) */
+#include "sc3netmod_hwy.c"          /* task hwcore: HWY, highway program base on RBT's hooks (SC3NETMOD_HWY=0) */
+#include "sc3netmod_hwt.c"          /* task hwt: HWT, the connecting highway T on HWY (SC3NETMOD_HWT=0) */
+#include "sc3netmod_hwx.c"          /* task hwx: HWX, the cloverleaf at a highway X on HWY (SC3NETMOD_HWX=0) */
+#include "sc3netmod_hwdd.c"         /* task hwdd: HWDD, diagonal x diagonal highway cloverleaf (SC3NETMOD_HWDD=0) */
+#include "sc3netmod_hwdx.c"         /* task hwdx: HWDX, diagonal x straight highway cloverleaf (SC3NETMOD_HWDX=0) */
 #include "sc3netmod_lanes.c"        /* task lanedensity: road density honours turn matrices (SC3NETMOD_LANEDENSITY) */
 
 /* ============================================================ arming */

@@ -81,12 +81,18 @@ def _spec_of(pack_dir, e, where):
 def compile_entries(stock_root, pack_dir, man):
     """-> {"lanes": [...], "connects": [...], "warnings": [...], "info": [...]} for one package."""
     g = LK.Game(stock_root)
-    out = {"lanes": [], "connects": [], "warnings": [], "info": []}
+    out = {"lanes": [], "connects": [], "warnings": [], "info": [], "curves": {}}   # curves: task hwcore
     for n, e in enumerate(man.get("lanes", [])):
         where = "%s lanes %d (piece %s)" % (man["name"], n + 1, e.get("piece"))
         pid = e["piece"]
         spec = _spec_of(pack_dir, e, where)
         spec["piece"] = pid
+        if spec.get("curves"):                           # task hwcore: new VPATHATT curves (hwlanes.py)
+            from netmod import hwlanes as HL
+            try:
+                out["curves"].update(HL.inject(g, spec))
+            except LK.LaneError as ex:
+                raise LanesError("%s: %s" % (where, ex))
         langs = e.get("langs") or g.langs()
         recs, masks = {}, None
         for lang in langs:
@@ -234,6 +240,18 @@ def merge(stock, comps, variants, files, report):
             raise LanesError("%s: piece %d has no exemplar (stock or variant), so it has no turn matrix" % (e["where"], pid))
     for rel, recs in sorted(stock_trb.items()):
         files[rel] = replace_records(files.get(rel) or stock.read(rel), recs)
+    curves = {}                                          # task hwcore: new curves into VPATHATT (hwlanes.py)
+    for name, c in comps:
+        for s, pts in c.get("curves", {}).items():
+            if s in curves and curves[s][1] != pts:
+                raise LanesError("curve shape %d: defined differently by %s and %s" % (s, curves[s][0], name))
+            curves[s] = (name, pts)
+    if curves:
+        from netmod import hwlanes as HL
+        cr = HL.curve_records({s: v[1] for s, v in curves.items()})
+        for rel, kind in HL.vpath_rels(stock).items():
+            files[rel] = replace_records(files.get(rel) or stock.read(rel), cr[kind])
+        report["info"].append("new VPATHATT curves: %d shape(s), %d record(s) per file" % (len(curves), len(cr["en"])))
     by_rel = {}
     for (rel, pid), payload in stock_ex.items():
         by_rel.setdefault(rel, []).append((EX_GROUP, pid, EX_TYPE, payload))
