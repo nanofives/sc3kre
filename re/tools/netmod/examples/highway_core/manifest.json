@@ -12,16 +12,28 @@
       "id": 21100,
       "base": 15099,
       "network": "HWAY",
-      "name": {"*": "Highway ramp down (outer +x)", "ENGLISH": "Highway ramp down"},
-      "art": {"from": 73, "png_dir": "art/21100"},
+      "name": {
+        "*": "Highway ramp down (outer +x)",
+        "ENGLISH": "Highway ramp down"
+      },
+      "art": {
+        "from": 73,
+        "png_dir": "art/21100"
+      },
       "trblkatt": "copy_base"
     },
     {
       "id": 21101,
       "base": 15099,
       "network": "HWAY",
-      "name": {"*": "Highway ramp down (outer -x)", "ENGLISH": "Highway ramp down"},
-      "art": {"from": 73, "png_dir": "art/21101"},
+      "name": {
+        "*": "Highway ramp down (outer -x)",
+        "ENGLISH": "Highway ramp down"
+      },
+      "art": {
+        "from": 73,
+        "png_dir": "art/21101"
+      },
       "trblkatt": "copy_base"
     }
   ],
@@ -29,5 +41,15 @@
     "hwyp 21100 1",
     "hwyp 21101 1",
     "hwyt 21100 21101"
+  ],
+  "lanes": [
+    {
+      "piece": 21100,
+      "spec": "hwcore_21100.lanes.json"
+    },
+    {
+      "piece": 21101,
+      "spec": "hwcore_21101.lanes.json"
+    }
   ]
 }

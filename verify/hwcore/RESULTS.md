@@ -39,3 +39,20 @@ terrain object (+0x30, the same city vt+0x13c object, FUN_10012609) and surface 
 Not tested: a zoned empty cell (`hwy_free` passes it; what terrain vt+0xd0 tests is not decoded), a building next to a
 highway end (buildings are occupants of the surface layer, TMPL reads them the same way, so `hwy_free` refuses them; not
 run), map-edge cells (refused by rule).
+
+## 3. hwlanes.py (offline + load check)
+
+- Stock facts read with lanekit (`hwlanes.py stock`): carriageway lanes 73.0 x 61 / 145 (+z), 73.2 x 194 / 110 (-z),
+  y 1024, speed 110,000; one-lane ramps 15123..15141 speed 74,999 / 65,000; X decks at y 512 / 1536 / 1792; curve
+  headings = direction of travel at each end; English-UK curves = same key, points reversed, headings + 16 (checked on
+  15104, 67840, 67841, 70145, 15360).
+- `hwlanes.py demo`: lane specs for every cell of the painter's three demo scenes (bridge 34 cells, loop 9, ramp 16)
+  compile with lanekit in all 7 language folders; the bridge's crossing cells get both movements in their matrix
+  (`x- -> x+` and `z+ -> z-`), the loop cells one turn each.
+- `hwlanes.py core`: lanes of 21100 / 21101 land exactly on stock 73's lane points (61 / 145 at y 1024, 194 / 110 on
+  the 73.2 side). netpack install writes 4 new curve shapes = 16 records into every language's VPathAtt.IXF (overlay):
+  read back, the 908 stock records are unchanged and the 16 new ones decode with the intended points and headings
+  (English-UK reversed). The game loads the extended files through the overlay (`GZResourceD.dll` opens them) and
+  restores the city; animated cars on the new lanes were not watched (no population in the lab city).
+
+Owner sheet: `MAIN\verify\hwcore\owner_shots\hwcore_sheet.png`. How-to for the shape streams: `re/analysis/HWY_BASE.md`.

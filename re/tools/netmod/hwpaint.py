@@ -28,12 +28,14 @@ is 73.2 (low x) + 73.0 (high x); along x 15051.2 (low z) + 15051.0 (high z).
 API (all a sibling needs):
     P = Path.line((x0, z0), (x1, z1)) | Path.arc((cx, cz), R, a0_deg, sweep_deg) | Path([seg, ...]) (chain)
         .offset(d)  -> the path moved d cells to its LEFT (left of the direction of travel = normal (-dz, dx))
+        .reversed() -> the same centreline run the other way
     Deck(path, width=1.0, profile="hw" | "ramp", outer="right" | "left",
          height=H | ramp(h0, h1, s0, s1) | callable(s ndarray) -> ndarray,
          support="wall" | "slab", thick=SLAB, pillars=[(x, z), ...], pillar_w=0.14, clip=callable(wx, wz) -> bool
          ndarray, ends=(True, True) draw end faces at s = 0 / length, name="")
     highway(path, height=H, **kw) -> [Deck, Deck]: the two carriageways (1 cell each) either side of `path`, outer
-         parapets outward (the stock two-cell highway when `path` runs along a cell edge)
+         parapets outward (the stock two-cell highway when `path` runs along a cell edge); the right-hand one runs
+         along `path`, the left-hand one against it (traffic keeps right; hwlanes reads the decks' directions)
     ramp_deck(path, **kw) -> Deck: one-lane ramp (RAMP_W wide)
     Scene(decks)                      later decks win where two tops coincide (a ramp merging onto a deck)
     paint_cell(scene, (X, Z), out_dir, zooms=range(5), canvas=None) -> anchors dict (also written as anchors.json)
@@ -119,6 +121,11 @@ class Line:
     def at(self, s):
         return (self.p0[0] + s * self.d[0], self.p0[1] + s * self.d[1]), self.d
 
+    def reversed(self):
+        a, _ = self.at(0.0)
+        b, _ = self.at(self.length)
+        return Line(b, a)
+
     def offset(self, o):
         n = (-self.d[1], self.d[0])
         a, _ = self.at(0.0)
@@ -149,6 +156,9 @@ class Arc:
         th = self.a0 + self.sg * s / self.R
         p = (self.c[0] + self.R * math.cos(th), self.c[1] + self.R * math.sin(th))
         return p, (-self.sg * math.sin(th), self.sg * math.cos(th))
+
+    def reversed(self):
+        return Arc(self.c, self.R, self.a0 + self.sweep, -self.sweep)
 
     def offset(self, o):
         return Arc(self.c, self.R - self.sg * o, self.a0, self.sweep)
@@ -191,6 +201,10 @@ class Path:
 
     def offset(self, o):
         return Path([g.offset(o) for g in self.segs])
+
+    def reversed(self):
+        """the same centreline run the other way (a height function of s must be mirrored by the caller)"""
+        return Path([g.reversed() for g in reversed(self.segs)])
 
     def project(self, wx, wz):
         """-> (s, t) arrays: nearest segment whose span holds the point (t = signed offset, left positive); points
@@ -348,9 +362,18 @@ class Deck:
 
 
 def highway(path, height=H, **kw):
-    """the two carriageways either side of `path` (each 1 cell, outer parapets outward)"""
-    return [Deck(path.offset(0.5), 1.0, "hw", "left", height, name="hw_left", **kw),
-            Deck(path.offset(-0.5), 1.0, "hw", "right", height, name="hw_right", **kw)]
+    """the two carriageways either side of `path` (each 1 cell, outer parapets outward). Traffic keeps right (stock
+    73.0 drives +z with its outer parapet on +x): the right-hand deck runs along `path`, the left-hand one along
+    path.reversed(), each with its outer parapet on its own right. `height` (and `slab` spans) are given along `path`;
+    the left deck reads them mirrored (s -> length - s)."""
+    L = path.length
+    hf = _hfun(height)
+    kw_l = dict(kw)
+    if kw.get("slab"):
+        kw_l["slab"] = [(L - b, L - a) for a, b in kw["slab"]]
+    return [Deck(path.offset(-0.5), 1.0, "hw", "right", height, name="hw_right", **kw),
+            Deck(path.offset(0.5).reversed(), 1.0, "hw", "right", lambda s: hf(L - np.asarray(s, dtype=float)),
+                 name="hw_left", **kw_l)]
 
 
 def ramp_deck(path, outer="right", **kw):
