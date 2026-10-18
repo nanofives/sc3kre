@@ -1,0 +1,57 @@
+{
+  "netpack": 1,
+  "name": "highway_core",
+  "version": "1.0.0",
+  "author": "sc3kre",
+  "description": "Task hwcore: proof of the highway program base (sc3netmod_hwy.c). The free cell past a highway end gets a ramp-down piece (one carriageway descending to the ground), written into an empty cell, kept through retiles and saves.",
+  "game": {
+    "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+  },
+  "variants": [
+    {
+      "id": 21100,
+      "base": 15099,
+      "network": "HWAY",
+      "name": {
+        "*": "Highway ramp down (outer +x)",
+        "ENGLISH": "Highway ramp down"
+      },
+      "art": {
+        "from": 73,
+        "png_dir": "art/21100",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 21101,
+      "base": 15099,
+      "network": "HWAY",
+      "name": {
+        "*": "Highway ramp down (outer -x)",
+        "ENGLISH": "Highway ramp down"
+      },
+      "art": {
+        "from": 73,
+        "png_dir": "art/21101",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    }
+  ],
+  "highway_lines": [
+    "hwyp 21100 1",
+    "hwyp 21101 1",
+    "hwyt 21100 21101"
+  ],
+  "lanes": [
+    {
+      "piece": 21100,
+      "spec": "hwcore_21100.lanes.json"
+    },
+    {
+      "piece": 21101,
+      "spec": "hwcore_21101.lanes.json"
+    }
+  ]
+}

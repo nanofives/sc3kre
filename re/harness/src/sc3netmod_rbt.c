@@ -93,6 +93,14 @@ static int g_dbv_on;                                                         /* 
 static void dbv_line(const char *path, const char *line);                    /* task diagbv */
 static void dbv_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who); /* task diagbv */
 static int dbv_claimed(int x, int z);                                        /* task diagbv: DAV / BV stop there */
+struct HwyPass;                                                              /* task hwcore: HWY base (sc3netmod_hwy.c) */
+static int g_hwy_np;                                                         /* task hwcore */
+static void hwy_line(const char *path, const char *line);                    /* task hwcore */
+static struct HwyPass *hwy_begin(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who);   /* task hwcore */
+static void hwy_end(struct HwyPass *hp);                                     /* task hwcore */
+static WORD hwy_save_id(WORD id);                                            /* task hwcore */
+static int hwy_install(void);                                                /* task hwcore */
+static void hwy_stats(void);                                                 /* task hwcore */
 
 /* ---------------------------------------------------------------- table line */
 static void rb_file(const char *path) {
@@ -114,6 +122,7 @@ static void rb_file(const char *path) {
         if (!strncmp(line, "bv", 2) && line[3] == ' ') { bv_line(path, line); continue; }   /* task boulevard */
         if (!strncmp(line, "rbt9 ", 5)) { r9_line(path, line); continue; }       /* task bigrbt */
         if (!strncmp(line, "dbvb ", 5) || !strncmp(line, "dbvs ", 5)) { dbv_line(path, line); continue; } /* task diagbv */
+        if (!strncmp(line, "hwy", 3)) { hwy_line(path, line); continue; }  /* task hwcore */
         if (strncmp(line, "rbt ", 4) || g_rb_off) continue;
         k = sscanf(line + 4, "%lu %lu %lu", &p, &n, &c);
         if (k < 2 || !p || p > 0xffff || n < 1 || n > 4 || g_base[p] != 39 ||
@@ -267,9 +276,30 @@ static __declspec(naked) void rb_tramp(void) {
     }
 }
 
+/* task hwcore: a highway retile (net 4) or the load pass: the HWY base, then every highway shape block */
+static void rb_hwy(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) {
+    struct HwyPass *hp = hwy_begin(mgr, x0, z0, x1, z1, who);
+    if (!hp) return;
+    /* highway shape blocks, one line each (task hwx, hwt, hwdx, hwdd): <block>_run(hp); */
+    hwy_end(hp);
+}
+
 static void __fastcall rb_pass(BYTE *mgr, void *edx, DWORD list, int net, int *box) {
     int x0, z0, x1, z1;
     ((PFN_Pass)(void *)rb_tramp)(mgr, edx, list, net, box);
+    if (net == 4 && box && !g_rb_busy && g_hwy_np && box[0] != 0x7fffffff && box[1] != 0x7fffffff) {  /* task hwcore */
+        g_rb_mgr = mgr;
+        InterlockedIncrement(&g_rb_busy);
+        __try {
+            rb_hwy(mgr, min(box[0], box[3]) >> 8, min(box[1], box[4]) >> 8, max(box[0], box[3]) >> 8,
+                   max(box[1], box[4]) >> 8, "edit");
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            InterlockedIncrement(&g_rb_n_fault);
+            logf("### hwy: exception 0x%08lX in the highway pass", GetExceptionCode());
+        }
+        InterlockedDecrement(&g_rb_busy);
+        return;
+    }
     if (net != 1 || !box || g_rb_busy) return;
     g_rb_mgr = mgr;
     if (box[0] == 0x7fffffff || box[1] == 0x7fffffff || box[3] == 0x7fffffff || box[4] == 0x7fffffff) return;
@@ -309,6 +339,7 @@ static void rb_load_pass(void) {
         if (g_avx_on) avx_run(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");        /* task avx */
         if (g_bv_p[0]) bv_run(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");        /* task boulevard */
         if (g_r9_centre) r9_run(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");      /* task bigrbt */
+        if (g_hwy_np) rb_hwy(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");         /* task hwcore */
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         InterlockedIncrement(&g_rb_n_fault);
         logf("### rbt: exception 0x%08lX in the load pass", GetExceptionCode());
@@ -346,6 +377,7 @@ static WORD rb_save_id(DWORD w0, WORD id) {
     DWORD x = w0 & 0x7ff, z = (w0 >> 11) & 0x7ff;
     if (g_dav_on && dav_save_43(id)) return 43;  /* task diagave: a middle cell holds both roads; stock 35 draws one */
     if (g_avx_on && avx_save_id(id)) return avx_save_id(id);   /* task avx: a T's far half saves as 11204 */
+    if (g_hwy_np && hwy_save_id(id)) return hwy_save_id(id);  /* task hwcore: a highway-program piece's save id */
     if (g_rb_on && g_rb_closed && id == g_rb_closed) return 11203;
     if (!g_rb_on || id != g_rb_piece || !g_rb_stock || x >= 1024 || z >= 1024) return 0;
     return g_rb_stock[z * 1024 + x] == 2 ? 11203 : 0;
@@ -395,14 +427,16 @@ static int rbt_install(BYTE *m) {
     }
     if (g_bvx_nbox && env_off("SC3NETMOD_BVX")) { g_bvx_nbox = 0; logf("bvx: off (SC3NETMOD_BVX=0)"); }   /* task bvx */
     if (g_dbv_out && env_off("SC3NETMOD_DBV")) { g_dbv_out = 0; logf("dbv: off (SC3NETMOD_DBV=0)"); }  /* task diagbv */
-    if (!g_rb_piece && !g_dav_inner[0] && !g_avx_nbox && !g_bv_p[0] && !g_r9_centre && !g_dbv_out)
-        return 0;                                    /* avx, boulevard, bigrbt, diagbv (bvx runs in BV) */
+    hwy_install();                                                                                  /* task hwcore */
+    if (!g_rb_piece && !g_dav_inner[0] && !g_avx_nbox && !g_bv_p[0] && !g_r9_centre && !g_dbv_out && !g_hwy_np)
+        return 0;                                    /* avx, boulevard, bigrbt, diagbv, hwcore (bvx runs in BV) */
     g_rb_m = m;
     g_rb_msize = nt->OptionalHeader.SizeOfImage;
     if (IsBadReadPtr(e, 10) || e[0] != 0xb8 || *(DWORD *)(e + 1) != (DWORD)m + 0x27a52 || e[5] != 0xe8 ||
         (DWORD)(e + 10) + *(DWORD *)(e + 6) != (DWORD)m + 0x266d4 || *s_load != (DWORD)m + 0x130e9) {
         logf("### rbt: FUN_1001547b entry or manager vt+0x1c differ from shipped - RBT and DAV OFF");
         g_rb_piece = 0; g_dav_inner[0] = 0; g_avx_nbox = 0; g_bv_p[0] = 0; g_r9_centre = 0;   /* avx, boulevard, bigrbt */
+        g_hwy_np = 0;                                                                         /* task hwcore */
         return 0;
     }
     g_rb_stock = (BYTE *)VirtualAlloc(NULL, 1024 * 1024, MEM_COMMIT, PAGE_READWRITE);
@@ -413,6 +447,7 @@ static int rbt_install(BYTE *m) {
     if (!write_code((BYTE *)s_load, &v, 4) || !write_rel(e, 0xE9, (void *)rb_pass, 5)) {
         logf("### rbt: patch failed - RBT and DAV OFF");
         g_rb_piece = 0; g_dav_inner[0] = 0; g_avx_nbox = 0; g_bv_p[0] = 0; g_r9_centre = 0;   /* avx, boulevard, bigrbt */
+        g_hwy_np = 0;                                                                         /* task hwcore */
         return 0;
     }
     g_rb_on = 1;
@@ -440,6 +475,7 @@ static void rbt_window(void) {
 static void rbt_stats(void) {
     static LONG last;
     r9_stats();                                                              /* task bigrbt */
+    hwy_stats();                                                             /* task hwcore */
     LONG n = g_rb_n_pass + g_rb_n_conv + g_rb_n_rev + g_rb_n_load + g_rb_n_fault;
     if (!g_rb_on || n == last) return;
     last = n;
