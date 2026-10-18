@@ -592,7 +592,8 @@ def compile_pack(stock, pack_dir, man):
            "auto_boulevards": [],                                                           # task boulevard
            "auto_big_roundabouts": [],                                                      # task bigrbt
            "auto_boulevard_junctions": [],                                                  # task bvx
-           "auto_diagonal_boulevards": []}                                                  # task diagbv
+           "auto_diagonal_boulevards": [],                                                  # task diagbv
+           "highway_lines": []}                                                             # task hwcore
     for n, v in enumerate(man.get("variants", [])):
         where = "%s variant %d (id %s)" % (pname, n + 1, v.get("id"))
         vid, base, net = v["id"], v["base"], v["network"]
@@ -791,6 +792,12 @@ def compile_pack(stock, pack_dir, man):
             if p not in (29, 35) and (p not in vids or vids[p]["net"] != "ROAD"):
                 raise NetpackError("%s: piece %s must be a ROAD variant declared in this package (or 29 / 35)" % (where, p))
         out["auto_diagonal_boulevards"].append({"band": list(a["band"]), "stamps": a["stamps"], "where": where})
+    for n, ln in enumerate(man.get("highway_lines", [])):            # task hwcore: sc3netmod HWY block (raw lines)
+        tok = ln.split()
+        if tok[0] == "hwyp" and (len(tok) < 3 or int(tok[1]) not in vids or vids[int(tok[1])]["net"] != "HWAY"):
+            raise NetpackError("%s highway_lines %d: hwyp names a piece that is not a HWAY variant of this package" %
+                               (pname, n + 1))
+        out["highway_lines"].append(ln)
     out["ramps"] = []
     if man.get("ramps"):                                 # hardcoded SIMNTWRK tables (netramp.py, NET_RAMPS.md)
         try:
@@ -1094,7 +1101,8 @@ def merge(stock, packs):
         mine = [t for t in templates if t["pack"] == c["name"]]
         if c["variants"] or c["ramps"] or mine or c["auto_roundabouts"] or c["auto_diagonal_avenues"] or \
                 c.get("auto_avenue_junctions") or c.get("auto_boulevards") or c.get("auto_big_roundabouts") or \
-                c.get("auto_boulevard_junctions") or c.get("auto_diagonal_boulevards"):          # avx, bv, bigrbt, bvx, diagbv
+                c.get("auto_boulevard_junctions") or c.get("auto_diagonal_boulevards") or \
+                c.get("highway_lines"):                         # avx, bv, bigrbt, bvx, diagbv, hwcore
             tables[c["name"]] = ("# netpack %s: <variant id> <base id>, read by sc3netmod.dll\r\n" % c["name"]).encode() + \
                 b"".join(b"%d %d\r\n" % (v["id"], v["base"]) for v in sorted(c["variants"], key=lambda v: v["id"])) + \
                 RAMP.table_lines(c["ramps"]) + TPL.table_lines(mine) + \
@@ -1123,7 +1131,8 @@ def merge(stock, packs):
                          b"".join(b"dbvs %d %d %d %d %d\r\n" % ((DBV_KIND_NO[k],) + tuple(cell))
                                   for k, cells in sorted(a["stamps"].items(), key=lambda t: DBV_KIND_NO[t[0]])
                                   for cell in cells)
-                         for a in c.get("auto_diagonal_boulevards", []))                       # task diagbv
+                         for a in c.get("auto_diagonal_boulevards", [])) + \
+                b"".join(b"%s\r\n" % ln.encode() for ln in c.get("highway_lines", []))              # task hwcore
                 # task diagave, avx, boulevard, bigrbt, diagx, bvx, diagbv
 
     # ---- report + checks that need the merged result

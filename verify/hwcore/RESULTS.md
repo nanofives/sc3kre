@@ -1,0 +1,41 @@
+# hwcore results (highway program shared base, 2026-10-18)
+
+## 1. hwpaint.py (offline)
+
+`py -3.12 re/tools/netmod/hwpaint.py proof <out>`: stock pieces rebuilt from scratch by the painter, every zoom 3 and 4
+frame, all four views, compared pixel by pixel with the stock frame (tolerance 24 per channel):
+
+| stock piece | within tolerance | exact | silhouette overlap |
+|---|---|---|---|
+| 73.0, 73.2, 15051.0, 15051.2 (straight highway, both carriageways, both axes) | 96.4..97.0% | 96.2..96.5% | 97.2..97.5% |
+| 15127.0 (On-ramp corner: one-lane slab arc, geometry fitted) | 52..55% | 0.7% | 84..87% |
+
+The straight pieces miss only a one-pixel rim along the silhouette. 15127's shape is reproduced; its slab fascia is a
+smooth blue-grey that no 73 / 15051 face carries, and the painter draws slab edges with the stock plain-wall concrete,
+which is most of the colour gap. Demo (`hwpaint.py demo`): a highway rising over another on a slab bridge, a 270 degree
+one-lane loop on pillars, a one-lane ramp rising beside a carriageway.
+
+## 2. sc3netmod_hwy.c (in game)
+
+Instance `Simcity_stock_hwcore\re\harness\inst_hwcore`, package `examples/highway_core` (pieces 21100 / 21101), lab
+city copy `lab2.sc3`. Log lines quoted from `sc3netmod.log`.
+
+| step | result |
+|---|---|
+| highway drag (58,22)-(58,32) | `hwy: edit: highway end at (57,21) -> proof piece 21100.2 in (57,20)` and three more: 4 variants written into 4 empty (tree) cells past both ends, each with the parapet on the outer side |
+| second highway drag beside it | its pass box held the first highway's ramps: kept, `4 written, 0 reverted` (the second highway's own) |
+| drag again over the first highway (the stock flood retiles all of it) | the end caps 11235 / 11237 became 73 running into the ramps (read as their Protected base 15099); the ramps stayed |
+| save (menu 0x10009002) | `save: 8 variant tile(s) written as base, section 0x4E56 written` |
+| restart on the saved city | `load: all 8 variant tiles restored`; load pass `0 written, 0 reverted`; cells identical |
+| bulldoze the two cells in front of one ramp pair | `(61,37) piece 21101.0 kept by no block -> removed (land), 3x3 retile` (and 62,37); new ramps written at the new end (61,36), (62,36) |
+
+Shots: `verify/hwcore/art/game/g01_written.png`, `g02_after_retile.png`, `g03_reloaded.png`, `g04_revert.png` (game art,
+not committed). No exceptions after the fix below.
+
+First launch: `### hwy: exception 0xC0000005 in the highway pass`. Cause: FUN_10009c65 is a method of the On-ramp
+selection object (its +0x54 = the terrain object), not of the manager; the free-cell test now reads the manager's own
+terrain object (+0x30, the same city vt+0x13c object, FUN_10012609) and surface layer.
+
+Not tested: a zoned empty cell (`hwy_free` passes it; what terrain vt+0xd0 tests is not decoded), a building next to a
+highway end (buildings are occupants of the surface layer, TMPL reads them the same way, so `hwy_free` refuses them; not
+run), map-edge cells (refused by rule).
