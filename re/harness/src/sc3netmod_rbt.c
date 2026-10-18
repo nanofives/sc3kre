@@ -77,6 +77,12 @@ static WORD avx_save_id(WORD id);
 static WORD g_bv_p[7];                                                       /* task boulevard: BV block */
 static void bv_line(const char *path, const char *line);                     /* task boulevard */
 static void bv_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who);  /* task boulevard */
+/* task bigrbt: the RBT9 block (sc3netmod_rbt9.c, #included after DAV) runs on these hooks too */
+static WORD g_r9_centre;
+static void r9_line(const char *path, const char *line);
+static int r9_complete(void);
+static void r9_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who);
+static void r9_stats(void);
 
 /* ---------------------------------------------------------------- table line */
 static void rb_file(const char *path) {
@@ -92,6 +98,7 @@ static void rb_file(const char *path) {
         if (!strncmp(line, "dav ", 4)) { dav_line(path, line); continue; }        /* task diagave */
         if (!strncmp(line, "avx", 3)) { avx_line(path, line); continue; }         /* task avx */
         if (!strncmp(line, "bv", 2) && line[3] == ' ') { bv_line(path, line); continue; }   /* task boulevard */
+        if (!strncmp(line, "rbt9 ", 5)) { r9_line(path, line); continue; }       /* task bigrbt */
         if (strncmp(line, "rbt ", 4) || g_rb_off) continue;
         k = sscanf(line + 4, "%lu %lu %lu", &p, &n, &c);
         if (k < 2 || !p || p > 0xffff || n < 1 || n > 4 || g_base[p] != 39 ||
@@ -265,6 +272,7 @@ static void __fastcall rb_pass(BYTE *mgr, void *edx, DWORD list, int net, int *b
         if (g_dav_on) dav_run(mgr, x0, z0, x1, z1, "edit");                  /* task diagave */
         if (g_avx_on) avx_run(mgr, x0, z0, x1, z1, "edit");                  /* task avx */
         if (g_bv_p[0]) bv_run(mgr, x0, z0, x1, z1, "edit");                  /* task boulevard */
+        if (g_r9_centre) r9_run(mgr, x0, z0, x1, z1, "edit");                /* task bigrbt */
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         InterlockedIncrement(&g_rb_n_fault);
         logf("### rbt: exception 0x%08lX in the edit pass", GetExceptionCode());
@@ -283,6 +291,7 @@ static void rb_load_pass(void) {
         if (g_dav_on) dav_run(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");        /* task diagave */
         if (g_avx_on) avx_run(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");        /* task avx */
         if (g_bv_p[0]) bv_run(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");        /* task boulevard */
+        if (g_r9_centre) r9_run(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");      /* task bigrbt */
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         InterlockedIncrement(&g_rb_n_fault);
         logf("### rbt: exception 0x%08lX in the load pass", GetExceptionCode());
@@ -364,12 +373,22 @@ static int rbt_install(BYTE *m) {
     if (!g_dav_inner[0]) logf("dav: no automatic diagonal avenue in the tables");
     if (g_bv_p[0] && env_off("SC3NETMOD_BV")) { g_bv_p[0] = 0; logf("bv: off (SC3NETMOD_BV=0)"); }  /* task boulevard */
     if (!g_rb_piece && !g_dav_inner[0] && !g_avx_nbox && !g_bv_p[0]) return 0;   /* task avx, task boulevard */
+    if (g_r9_centre && (env_off("SC3NETMOD_RBT9") || !r9_complete())) {    /* task bigrbt */
+        logf("rbt9: off (%s)", r9_complete() ? "SC3NETMOD_RBT9=0" : "a piece role is missing in the tables");
+        g_r9_centre = 0;
+    }
+    if (!g_rb_piece && !g_dav_inner[0] && !g_r9_centre) return 0;           /* task bigrbt: + RBT9 */
     g_rb_m = m;
     g_rb_msize = nt->OptionalHeader.SizeOfImage;
     if (IsBadReadPtr(e, 10) || e[0] != 0xb8 || *(DWORD *)(e + 1) != (DWORD)m + 0x27a52 || e[5] != 0xe8 ||
         (DWORD)(e + 10) + *(DWORD *)(e + 6) != (DWORD)m + 0x266d4 || *s_load != (DWORD)m + 0x130e9) {
         logf("### rbt: FUN_1001547b entry or manager vt+0x1c differ from shipped - RBT and DAV OFF");
-        g_rb_piece = 0; g_dav_inner[0] = 0; g_avx_nbox = 0; g_bv_p[0] = 0;   /* task avx, task boulevard */
+    if (g_bv_p[0] && env_off("SC3NETMOD_BV")) { g_bv_p[0] = 0; logf("bv: off (SC3NETMOD_BV=0)"); }  /* task boulevard */
+    if (g_r9_centre && (env_off("SC3NETMOD_RBT9") || !r9_complete())) {    /* task bigrbt */
+        logf("rbt9: off (%s)", r9_complete() ? "SC3NETMOD_RBT9=0" : "a piece role is missing in the tables");
+        g_r9_centre = 0;
+    }
+    if (!g_rb_piece && !g_dav_inner[0] && !g_avx_nbox && !g_bv_p[0] && !g_r9_centre) return 0;   /* task avx, boulevard, bigrbt */
         return 0;
     }
     g_rb_stock = (BYTE *)VirtualAlloc(NULL, 1024 * 1024, MEM_COMMIT, PAGE_READWRITE);
@@ -379,12 +398,12 @@ static int rbt_install(BYTE *m) {
     v = (DWORD)rb_load;
     if (!write_code((BYTE *)s_load, &v, 4) || !write_rel(e, 0xE9, (void *)rb_pass, 5)) {
         logf("### rbt: patch failed - RBT and DAV OFF");
-        g_rb_piece = 0; g_dav_inner[0] = 0; g_avx_nbox = 0; g_bv_p[0] = 0;   /* task avx, task boulevard */
+        g_rb_piece = 0; g_dav_inner[0] = 0; g_avx_nbox = 0; g_bv_p[0] = 0; g_r9_centre = 0;   /* task avx, boulevard, bigrbt */
         return 0;
     }
     g_rb_on = 1;
     if (g_dav_inner[0]) { dav_init_table(); g_dav_on = 1; }
-    if (g_avx_nbox) { g_avx_on = 1; logf("avx: avenue junctions on, %d box piece(s)", g_avx_nbox); }   /* task avx */
+        g_rb_piece = 0; g_dav_inner[0] = 0; g_avx_nbox = 0; g_bv_p[0] = 0; g_r9_centre = 0;   /* task avx, boulevard, bigrbt */
     logf("rbt: hooked the retile pass FUN_1001547b (entry) and the city load (manager vt+0x1c); piece %u, min %d arm(s), "
          "arm-less quarter %u; diagonal avenues %s (inner %u %u %u)", g_rb_piece, g_rb_min, g_rb_closed,
          g_dav_on ? "on" : "off", g_dav_inner[0], g_dav_inner[1], g_dav_inner[2]);
@@ -404,6 +423,7 @@ static void rbt_window(void) {
 
 static void rbt_stats(void) {
     static LONG last;
+    r9_stats();                                                              /* task bigrbt */
     LONG n = g_rb_n_pass + g_rb_n_conv + g_rb_n_rev + g_rb_n_load + g_rb_n_fault;
     if (!g_rb_on || n == last) return;
     last = n;

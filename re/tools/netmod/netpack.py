@@ -572,7 +572,8 @@ def compile_pack(stock, pack_dir, man):
            "auto_roundabouts": [],                                                          # task roundabout3
            "auto_diagonal_avenues": [],                                                     # task diagave
            "auto_avenue_junctions": [],                                                     # task avx
-           "auto_boulevards": []}                                                           # task boulevard
+           "auto_boulevards": [],                                                           # task boulevard
+           "auto_big_roundabouts": []}                                                      # task bigrbt
     for n, v in enumerate(man.get("variants", [])):
         where = "%s variant %d (id %s)" % (pname, n + 1, v.get("id"))
         vid, base, net = v["id"], v["base"], v["network"]
@@ -727,6 +728,21 @@ def compile_pack(stock, pack_dir, man):
                                        "taper": {int(k): list(v) for k, v in a.get("taper", {}).items()},
                                        "avenue_narrow": {int(k): list(v) for k, v in a.get("avenue_narrow", {}).items()},
                                        "where": where})
+    for n, a in enumerate(man.get("auto_big_roundabouts", [])):      # task bigrbt: sc3netmod RBT9 block
+        where = "%s auto_big_roundabouts %d" % (pname, n + 1)
+        if len(a.get("side", [])) != 4 or len(a.get("corner", [])) != 9:
+            raise NetpackError("%s: side needs 4 pieces and corner 9" % where)
+        roles = [("c", 0, a.get("centre"))] + [("s", k, p) for k, p in enumerate(a["side"])] + \
+                [("k", k, p) for k, p in enumerate(a["corner"])]
+        for role, k, p in roles:
+            v = vids.get(p)
+            if v is None or v["net"] != "ROAD":
+                raise NetpackError("%s: piece %s must be a ROAD variant declared in this package" % (where, p))
+        if len({p for _r, _k, p in roles}) != len(roles):
+            raise NetpackError("%s: every role needs its own piece" % where)
+        out["auto_big_roundabouts"].append({"roles": [(r, k, vids[p]["id"]) for r, k, p in roles], "where": where})
+    if len(out["auto_big_roundabouts"]) > 1:
+        raise NetpackError("%s: at most one auto_big_roundabouts entry (sc3netmod applies one set)" % pname)
     out["ramps"] = []
     if man.get("ramps"):                                 # hardcoded SIMNTWRK tables (netramp.py, NET_RAMPS.md)
         try:
@@ -884,6 +900,9 @@ def merge(stock, packs):
         raise NetpackError("auto_roundabouts: %s and %s both declare one; sc3netmod applies a single piece" %
                            (autos[0]["where"], autos[1]["where"]))
     davs = [a for c in comp for a in c["auto_diagonal_avenues"]]                        # task diagave
+    big9 = [a for c in comp for a in c.get("auto_big_roundabouts", [])]                  # task bigrbt
+    if len(big9) > 1:
+        raise NetpackError("auto_big_roundabouts: %s and %s both declare one" % (big9[0]["where"], big9[1]["where"]))
     if len(davs) > 1:
         raise NetpackError("auto_diagonal_avenues: %s and %s both declare one; sc3netmod applies a single set" %
                            (davs[0]["where"], davs[1]["where"]))
@@ -1018,7 +1037,7 @@ def merge(stock, packs):
     for c in comp:
         mine = [t for t in templates if t["pack"] == c["name"]]
         if c["variants"] or c["ramps"] or mine or c["auto_roundabouts"] or c["auto_diagonal_avenues"] or \
-                c.get("auto_avenue_junctions") or c.get("auto_boulevards"):                     # task avx, boulevard
+                c.get("auto_avenue_junctions") or c.get("auto_boulevards") or c.get("auto_big_roundabouts"):   # avx, boulevard, bigrbt
             tables[c["name"]] = ("# netpack %s: <variant id> <base id>, read by sc3netmod.dll\r\n" % c["name"]).encode() + \
                 b"".join(b"%d %d\r\n" % (v["id"], v["base"]) for v in sorted(c["variants"], key=lambda v: v["id"])) + \
                 RAMP.table_lines(c["ramps"]) + TPL.table_lines(mine) + \
@@ -1038,8 +1057,10 @@ def merge(stock, packs):
                          (b"bvc %d %d %d\r\n" % tuple(a["cap"]) if a["cap"] else b"") +
                          b"".join(b"bvt %d %s\r\n" % (k, b" ".join(b"%d" % q for q in v)) for k, v in sorted(a["taper"].items())) +
                          b"".join(b"bva %d %s\r\n" % (k, b" ".join(b"%d" % q for q in v)) for k, v in sorted(a.get("avenue_narrow", {}).items()))
-                         for a in c.get("auto_boulevards", []))                                # task boulevard
-                # task diagave, task avx, task boulevard
+                         for a in c.get("auto_boulevards", [])) + \
+                b"".join(b"rbt9 %s %d %d\r\n" % (r.encode(), k, p) for a in c.get("auto_big_roundabouts", [])
+                         for r, k, p in a["roles"])                                          # task bigrbt
+                # task diagave, task avx, task boulevard, task bigrbt
 
     # ---- report + checks that need the merged result
     placed = set()
@@ -1059,6 +1080,7 @@ def merge(stock, packs):
     placed |= {j["piece"] for a in davs for j in a.get("junction", [])}
     placed |= {cell[2] for a in davs for m in a.get("merge", []) for cell in m["cells"]}
     placed |= {b["piece"] for a in avxs for b in a["box"]} | {b["piece"] for a in avxs for b in a["arm"]}   # task avx
+    placed |= {p for a in big9 for _r, _k, p in a["roles"]}     # sc3netmod RBT9 places them (task bigrbt)
     for v in variants:
         if v["id"] not in placed:
             report["warnings"].append("%s: no rule RESULT places %d, so the tiler never builds it" % (v["where"], v["id"]))
@@ -1073,6 +1095,7 @@ def merge(stock, packs):
     report["auto_diagonal_avenues"] = [{"middle": a["middle"], "junction": a.get("junction", []),
                                         "merge": a.get("merge", []), "save_43": a.get("save_43", [])} for a in davs]
     report["auto_avenue_junctions"] = [{"box": a["box"], "arm": a["arm"]} for a in avxs]            # task avx
+    report["auto_big_roundabouts"] = [{"roles": a["roles"]} for a in big9]                # task bigrbt
     report["templates"] = [{"name": t["name"], "pack": t["pack"], "orientations": len(t["orients"]), "cost": t["cost"],
                             "cells": len(t["cells"]), "protect_add": t["protect_add"],
                             "picture": [TPL.render(t, k) for k in range(len(t["orients"]))]} for t in templates]
@@ -1450,6 +1473,8 @@ def _print_report(report):
         print("  auto avenue junctions (sc3netmod AVX): box %s; arm %s" % (
             ", ".join("%d %s%s" % (b["piece"], b["edges"], " (saves as 11204)" if b["save_11204"] else "")
                       for b in r["box"]), ", ".join("%d nose %s" % (b["piece"], b["nose"]) for b in r["arm"])))
+    for r in report.get("auto_big_roundabouts", []):                            # task bigrbt
+        print("  auto 3x3 roundabout (sc3netmod RBT9): %d pieces, centre %d" % (len(r["roles"]), r["roles"][0][2]))
     for r in report.get("auto_roundabouts", []):                                # task roundabout3
         print("  auto roundabout: piece %d, 2x2 road blocks with >= %d arm(s) (sc3netmod RBT)%s"
               % (r["piece"], r["min_arms"], (", arm-less quarter %d" % r["closed"]) if r.get("closed") else ""))
