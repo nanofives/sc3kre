@@ -32,6 +32,8 @@
  *                            3x3 rect retile; wins over keep. Any map cell: one outside the read box (or on its border
  *                            row) is queued (HWY_XDROP per pass) and read fresh at hwy_end, so a block can clear the
  *                            far side of a broken interchange the box did not reach
+ * Kept cells are re-placed at hwy_end when a revert's rect retile changed them (the stock tiler re-places the cells
+ * around a removed land piece, kept on-highway pieces included).
  * Revert (hwy_end): every cell of the read box (one cell in from its border) holding a declared piece (hwyp) that no
  * block kept in this pass goes back: a LAND piece (written into a free cell) is removed with the manager's own remover
  * vt+0xb8 = FUN_1000909f (vt+0x108 = FUN_100090f4 checks map-edge neighbour links, then layer vt+0x48), then the rect
@@ -44,7 +46,14 @@
  * back from section 0x4E56, without it the city holds the bases.
  *
  * Table lines (netpack manifest "highway_lines", raw):
- *   hwyp <piece> <land 0|1> [<save id>]   a highway-program piece (any stream's): land = written into free cells
+ *   hwyp <piece> <land 0|1> [<save id> [<state delta>]]   a highway-program piece (any stream's): land = written into
+ *                                         free cells; save id 0 = its base; the saved state is (state + delta) & 3
+ *                                         (a game without the mod reads the base turned that way), undone on load
+ *                                         (the variant section keeps the original state)
+ *   hwys <piece> <id0> <st0> <id1> <st1> <id2> <st2> <id3> <st3>
+ *                                         saved (id, state) of the piece at each of its states 0..3 (id 0 = its save id
+ *                                         / base), e.g. a rewritten highway cell saves as the stock straight or band piece
+ *                                         for its heading. Needs the piece's hwyp line before it. Overrides the delta.
  *   hwyt <pieceA> <pieceB>                the hwcore proof rule: the free cell past a highway END gets a ramp-down
  *                                         piece (art: deck descending from H to the ground toward the cell's +z at
  *                                         state 0; A has the outer parapet on +x, B on -x), so the end of a two-cell
@@ -57,17 +66,20 @@
 #define HWY_MARGIN 8
 #define HWY_CLAIM 16384                       /* claims hash slots (power of two) */
 #define HWY_XDROP 1024                        /* hwy_drop cells outside the read box, per pass */
+#define HWY_KEEP 4096                         /* kept cells re-checked after the reverts, per pass */
 
-typedef struct { WORD piece, save; BYTE land; } HwyPiece;
+typedef struct { WORD piece, save; BYTE land, sdelta, tab; WORD tid[4]; BYTE tst[4]; } HwyPiece;
 struct HwyPass {
     BYTE *mgr;
     void *lay;
     int W, H, x0, z0, x1, z1;                 /* map size; the read box (cells) */
     RbBuf b;                                  /* hwy_at values of the read box */
-    BYTE *flag;                               /* [cell]: 1 kept, 2 free tested, 4 free, 8 drop */
+    BYTE *flag;                               /* [cell]: 1 kept, 2 free tested, 4 free, 8 drop, 16 in kp[] */
     const char *who;
     int nput, nrev;
     int nx;                                   /* hwy_drop cells outside the read box (or on its border row) */
+    int nk;                                   /* kept cells: what a block wants there, re-placed if a revert retile moved it */
+    struct { short x, z; WORD id; BYTE st; } kp[HWY_KEEP];
     int xd[HWY_XDROP][2];
 };
 typedef struct HwyPass HwyPass;
@@ -84,20 +96,40 @@ typedef char (__fastcall *PFN_HwyPos)(void *mgr, void *edx, int *pos);          
 typedef DWORD (__fastcall *PFN_HwyRemove)(void *mgr, void *edx, void *lay, void *occ); /* vt+0xb8 FUN_1000909f ret 8 */
 typedef char (__fastcall *PFN_HwyAt)(void *lay, void *edx, int x, int z, void **out); /* layer vt+0x7c ret 0xc */
 
+static int hwy_piece(WORD id);
+
 static void hwy_line(const char *path, const char *line) {
-    unsigned long p, l, s = 0, a, b;
+    unsigned long p, l, s = 0, a, b, sd = 0;
     int k;
     if (g_hwy_off) return;
     if (!strncmp(line, "hwyp ", 5)) {
-        k = sscanf(line + 5, "%lu %lu %lu", &p, &l, &s);
-        if (k < 2 || !p || p > 0xffff || l > 1 || s > 0xffff || !g_base[p]) {
+        k = sscanf(line + 5, "%lu %lu %lu %lu", &p, &l, &s, &sd);
+        if (k < 2 || !p || p > 0xffff || l > 1 || s > 0xffff || sd > 3 || !g_base[p]) {
             logf("### hwy: %s: bad piece line (or not a variant) '%s'", path, line);
             return;
         }
         if (g_hwy_np >= HWY_MAXP) { logf("### hwy: %s: too many pieces - '%s' ignored", path, line); return; }
         g_hwy_p[g_hwy_np].piece = (WORD)p; g_hwy_p[g_hwy_np].land = (BYTE)l; g_hwy_p[g_hwy_np].save = (WORD)s;
+        g_hwy_p[g_hwy_np].sdelta = (BYTE)sd;
         g_hwy_np++;
-        logf("hwy: %s: piece %lu (%s), saves as %lu", path, p, l ? "land" : "on highway", s ? s : g_base[p]);
+        logf("hwy: %s: piece %lu (%s), saves as %lu, state + %lu", path, p, l ? "land" : "on highway", s ? s : g_base[p], sd);
+        return;
+    }
+    if (!strncmp(line, "hwys ", 5)) {            /* hwys <piece> <id0> <st0> .. <id3> <st3>: saved (id, state) per state */
+        unsigned long v[9];
+        int j;
+        if (sscanf(line + 5, "%lu %lu %lu %lu %lu %lu %lu %lu %lu", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6], &v[7],
+                   &v[8]) != 9 || (k = hwy_piece((WORD)v[0])) < 0) {
+            logf("### hwy: %s: bad save-table line (or its piece has no hwyp line before it) '%s'", path, line);
+            return;
+        }
+        for (j = 0; j < 4; j++) {
+            if (v[1 + 2 * j] > 0xffff || v[2 + 2 * j] > 3) { logf("### hwy: %s: bad save-table entry '%s'", path, line); return; }
+            g_hwy_p[k].tid[j] = (WORD)v[1 + 2 * j]; g_hwy_p[k].tst[j] = (BYTE)v[2 + 2 * j];
+        }
+        g_hwy_p[k].tab = 1;
+        logf("hwy: %s: piece %lu saves as %lu.%lu / %lu.%lu / %lu.%lu / %lu.%lu at states 0..3", path, v[0], v[1], v[2], v[3],
+             v[4], v[5], v[6], v[7], v[8]);
         return;
     }
     if (!strncmp(line, "hwyt ", 5)) {
@@ -117,6 +149,18 @@ static int hwy_piece(WORD id) {
     if (!id) return -1;
     for (k = 0; k < g_hwy_np; k++) if (g_hwy_p[k].piece == id) return k;
     return -1;
+}
+
+/* SAVEBASE: what a declared piece at state `st` is saved as, so a game without the mod reads the stock piece the stock
+   tiler would have placed there: from its hwys table (id, state per state; id 0 = keep the save id / base), else its
+   hwyp state delta ((st + delta) & 3). -> 1 when it overrides; the saver records the original state in the variant
+   section and the load side puts it back (sc3netmod.c save_rec / load_rec). */
+static int hwy_save_override(WORD id, int st, WORD *sid, int *sst) {
+    int k = hwy_piece(id);
+    if (k < 0) return 0;
+    if (g_hwy_p[k].tab) { *sid = g_hwy_p[k].tid[st & 3]; *sst = g_hwy_p[k].tst[st & 3]; return 1; }
+    if (g_hwy_p[k].sdelta) { *sid = 0; *sst = (st + g_hwy_p[k].sdelta) & 3; return 1; }
+    return 0;
 }
 
 /* SAVEBASE: the save id of a declared piece, 0 = its base */
@@ -195,8 +239,20 @@ static int hwy_free(HwyPass *hp, int x, int z) {
 
 /* ---------------------------------------------------------------- writing */
 static void hwy_keep(HwyPass *hp, int x, int z) {
-    *hwy_flag(hp, x, z) |= 1;
+    BYTE *f = hwy_flag(hp, x, z);
+    DWORD v = hwy_at(hp, x, z);
+    int k;
+    *f |= 1;
     hwy_claim(hp, x, z);
+    if (!v) return;
+    if (*f & 16) {                                    /* recorded already: keep the latest piece */
+        for (k = 0; k < hp->nk; k++)
+            if (hp->kp[k].x == x && hp->kp[k].z == z) { hp->kp[k].id = hwy_id(v); hp->kp[k].st = (BYTE)hwy_st(v); return; }
+    }
+    if (hp->nk >= HWY_KEEP) return;
+    hp->kp[hp->nk].x = (short)x; hp->kp[hp->nk].z = (short)z; hp->kp[hp->nk].id = hwy_id(v); hp->kp[hp->nk].st = (BYTE)hwy_st(v);
+    hp->nk++;
+    *f |= 16;
 }
 
 static void hwy_drop(HwyPass *hp, int x, int z) {
@@ -343,6 +399,21 @@ static void hwy_end(HwyPass *hp) {
             logf("hwy: %s: (%d,%d) piece %u.%d dropped by a block (outside the box) -> removed, 3x3 retile", hp->who, x, z,
                  hwy_id(v), hwy_st(v));
         }
+    }
+    if (hp->nrev) {   /* a revert's rect retile can re-place kept cells next to it with stock pieces: put them back */
+        int k, nre = 0;
+        for (k = 0; k < hp->nk; k++) {
+            int x = hp->kp[k].x, z = hp->kp[k].z, pos[3];
+            DWORD v = hwy_read(hp->mgr, hp->lay, x, z, hp->W, hp->H);
+            if (*hwy_flag(hp, x, z) & 8) continue;    /* dropped later in the pass */
+            if (v && hwy_id(v) == hp->kp[k].id && hwy_st(v) == hp->kp[k].st) continue;
+            pos[0] = x << 8; pos[1] = z << 8; pos[2] = 0;
+            ((PFN_Put)(g_rb_m + 0x8919))(hp->mgr, 0, hp->lay, pos, ((DWORD)hp->kp[k].id << 8) | hp->kp[k].st, -1, 8, 0);
+            nre++;
+            logf("hwy: %s: (%d,%d) kept piece %u.%d re-placed after a revert retile (cell held %u.%d)", hp->who, x, z,
+                 hp->kp[k].id, hp->kp[k].st, hwy_id(v), hwy_st(v));
+        }
+        hp->nput += nre;
     }
     InterlockedExchangeAdd(&g_hwy_n_put, hp->nput);
     InterlockedExchangeAdd(&g_hwy_n_rev, hp->nrev);

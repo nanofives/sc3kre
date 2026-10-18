@@ -462,6 +462,7 @@ static void sv_add(DWORD w0, DWORD w1, DWORD id) {
 }
 
 static WORD rb_save_id(DWORD w0, WORD id);       /* RBT block (sc3netmod_rbt.c): stock id of a roundabout cell */
+static int hwy_save_override(WORD id, int st, WORD *sid, int *sst);   /* task hwcore: saved id / state of a piece */
 
 /* record = the 8-byte tile record object; +4 word0 (coord, state), +8 word1 (id, props) */
 static void __stdcall save_rec(BYTE *rec) {
@@ -470,6 +471,17 @@ static void __stdcall save_rec(BYTE *rec) {
     if (!g_base[id]) return;
     rb = rb_save_id(*(DWORD *)(rec + 4), (WORD)id);
     *(DWORD *)(rec + 8) = (w1 & 0xffff0000) | (rb ? rb : g_base[id]);
+    {   /* task hwcore: saved id / state (word0 bits 30-31) per piece and state; the file only. The variant section
+           keeps the original state (id bits 16-17, flag bit 18; an older DLL skips such entries and keeps the base) */
+        DWORD w0 = *(DWORD *)(rec + 4);
+        WORD sid = 0;
+        int sst = 0;
+        if (hwy_save_override((WORD)id, (int)(w0 >> 30), &sid, &sst)) {
+            if (sid) *(DWORD *)(rec + 8) = (*(DWORD *)(rec + 8) & 0xffff0000) | sid;
+            *(DWORD *)(rec + 4) = (w0 & 0x3fffffffUL) | ((DWORD)(sst & 3) << 30);
+            id |= 0x40000UL | ((w0 >> 30) << 16);
+        }
+    }
     sv_add(*(DWORD *)(rec + 4), *(DWORD *)(rec + 8), id);
     InterlockedIncrement(&g_n_saved_base);
 }
@@ -587,8 +599,8 @@ static void __stdcall load_begin(void *p1, void *p2) {
               && ((PFN_R32)(*(DWORD **)s)[0x38 / 4])(s, NULL, &w1)
               && ((PFN_R32)(*(DWORD **)s)[0x38 / 4])(s, NULL, &id);
             if (!ok) { logf("### load: variant section short at %lu of %lu", i, n); break; }
-            if (id == 0 || id > 0xffff) continue;
-            if (!g_base[id]) { unknown++; continue; }   /* variant not installed: keep the base tile */
+            if ((id & 0xffff) == 0 || (id >> 16) & ~7UL) continue;   /* task hwcore: bits 16-18 = original state */
+            if (!g_base[id & 0xffff]) { unknown++; continue; }   /* variant not installed: keep the base tile */
             ld_put(w0, w1, id);
             g_nld++;
         }
@@ -616,7 +628,9 @@ static void __stdcall load_rec(BYTE *rec, DWORD ok) {
     if (!(ok & 0xff) || !g_nld) return;
     id = ld_get(*(DWORD *)(rec + 4), *(DWORD *)(rec + 8));
     if (!id) return;
-    *(DWORD *)(rec + 8) = (*(DWORD *)(rec + 8) & 0xffff0000) | id;
+    *(DWORD *)(rec + 8) = (*(DWORD *)(rec + 8) & 0xffff0000) | (id & 0xffff);
+    if (id & 0x40000UL)                              /* task hwcore: the state the piece had before the save turned it */
+        *(DWORD *)(rec + 4) = (*(DWORD *)(rec + 4) & 0x3fffffffUL) | (((id >> 16) & 3) << 30);
     if (++g_nld_hit == g_nld) logf("load: all %d variant tiles restored", g_nld);
 }
 
