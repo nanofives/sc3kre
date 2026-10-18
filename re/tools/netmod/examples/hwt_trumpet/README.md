@@ -11,8 +11,9 @@ block (`re/harness/src/sc3netmod_hwt.c`, on hwcore's HWY base) replaces it with 
 - stem side: two right-turn ramps (stem -> near direction, near direction -> stem);
 - every exit and entry is on the right, exits before entries; the through highway stays level and straight.
 
-When the far side is built up the block builds the right-in / right-out set (the two stem-side ramps only, the stem
-keeps its caps). The T goes away when its stem or through highway is cut: plain stock highway goes back, the stem stub
+When the far side is built up the stem keeps its stock caps and nothing is built (owner call 2026-10-18). The
+right-in / right-out set (the two stem-side ramps only) is still in the package and the code, switched off
+(`HWT_RIO 0` in sc3netmod_hwt.c, `RIO = False` in hwt_twin.py). The T goes away when its stem or through highway is cut: plain stock highway goes back, the stem stub
 left against the through highway is removed.
 
 - **Pieces:** 54 variants 21200..21253 (50 for the full T, 4 more for the fallback; 14 cells shared). 30 + 8 land
