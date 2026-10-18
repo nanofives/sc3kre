@@ -1,0 +1,3352 @@
+{
+ "netpack": 1,
+ "name": "highway_diagonal_cloverleaf",
+ "version": "0.1.0",
+ "author": "sc3kre",
+ "description": "Task hwdx: a diagonal highway crossing a straight highway at 45 degrees becomes a skewed cloverleaf (the straight bridges over the diagonal; four loops for the left turns, four outer ramps for the right turns), per quadrant where the land is free. Rule in sc3netmod_hwdx.c, tables from re/tools/netmod/hwdx.py, art from hwdx_paint.py.",
+ "game": {
+  "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+ },
+ "variants": [
+  {
+   "id": 21260,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21260",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21261,
+   "base": 11224,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21261",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21262,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21262",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21263,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21263",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21264,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21264",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21265,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21265",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21266,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21266",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21267,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21267",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21268,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21268",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21269,
+   "base": 15106,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21269",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21270,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21270",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21271,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21271",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21272,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21272",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21273,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21273",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21274,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21274",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21275,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21275",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21276,
+   "base": 11224,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21276",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21277,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21277",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21278,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21278",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21279,
+   "base": 11224,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21279",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21280,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21280",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21281,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21281",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21282,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21282",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21283,
+   "base": 11224,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21283",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21284,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21284",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21285,
+   "base": 11224,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21285",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21286,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21286",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21287,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21287",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21288,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21288",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21289,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21289",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21290,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21290",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21291,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21291",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21292,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21292",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21293,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21293",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21294,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21294",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21295,
+   "base": 15106,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21295",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21296,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21296",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21297,
+   "base": 15106,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21297",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21298,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21298",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21299,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21299",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21300,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21300",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21301,
+   "base": 15106,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21301",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21302,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21302",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21303,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21303",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21304,
+   "base": 15106,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21304",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21305,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21305",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21306,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21306",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21307,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21307",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21308,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21308",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21309,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21309",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21310,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21310",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21311,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21311",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21312,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21312",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21313,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21313",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21314,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21314",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21315,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21315",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21316,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21316",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21317,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21317",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21318,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21318",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21319,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21319",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21320,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21320",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21321,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21321",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21322,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21322",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21323,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21323",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21324,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21324",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21325,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21325",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21326,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21326",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21327,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21327",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21328,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21328",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21329,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21329",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21330,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21330",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21331,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21331",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21332,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21332",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21333,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21333",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21334,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21334",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21335,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21335",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21336,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21336",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21337,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21337",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21338,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21338",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21339,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21339",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21340,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21340",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21341,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21341",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21342,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21342",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21343,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21343",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21344,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21344",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21345,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21345",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21346,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21346",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21347,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21347",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21348,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21348",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21349,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21349",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21350,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21350",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21351,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21351",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21352,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21352",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21353,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21353",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21354,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21354",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21355,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21355",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21356,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21356",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21357,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21357",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21358,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21358",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21359,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21359",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21460,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21460",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21461,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21461",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21462,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21462",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21463,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21463",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21464,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21464",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21465,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21465",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21466,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21466",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21467,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21467",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21468,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21468",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21469,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21469",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21470,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21470",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21471,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21471",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21472,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21472",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21473,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21473",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21474,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21474",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21475,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21475",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21476,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21476",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21477,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21477",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21478,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21478",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21479,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21479",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21480,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21480",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21481,
+   "base": 15106,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21481",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21482,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21482",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21483,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21483",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21484,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21484",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21485,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21485",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21486,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21486",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21487,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21487",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21488,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21488",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21489,
+   "base": 11224,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21489",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21490,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21490",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21491,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21491",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21492,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21492",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21493,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21493",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21494,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21494",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21495,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (crossing)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21495",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21496,
+   "base": 15106,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21496",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21497,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21497",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21498,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21498",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21499,
+   "base": 15106,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21499",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21500,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21500",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21501,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21501",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21502,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21502",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21503,
+   "base": 15106,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21503",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21504,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21504",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21505,
+   "base": 15106,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21505",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21506,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21506",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21507,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21507",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21508,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21508",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21509,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21509",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21510,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21510",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21511,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21511",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21512,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21512",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21513,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21513",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21514,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21514",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21515,
+   "base": 11224,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21515",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21516,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21516",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21517,
+   "base": 11224,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21517",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21518,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21518",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21519,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21519",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21520,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21520",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21521,
+   "base": 11224,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21521",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21522,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21522",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21523,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21523",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21524,
+   "base": 11224,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21524",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21525,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21525",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21526,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21526",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21527,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21527",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21528,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21528",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21529,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21529",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21530,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21530",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21531,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21531",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  }
+ ],
+ "lanes": [
+  {
+   "piece": 21260,
+   "spec": "lanes/21260.json"
+  },
+  {
+   "piece": 21261,
+   "spec": "lanes/21261.json"
+  },
+  {
+   "piece": 21262,
+   "spec": "lanes/21262.json"
+  },
+  {
+   "piece": 21263,
+   "spec": "lanes/21263.json"
+  },
+  {
+   "piece": 21264,
+   "spec": "lanes/21264.json"
+  },
+  {
+   "piece": 21265,
+   "spec": "lanes/21265.json"
+  },
+  {
+   "piece": 21266,
+   "spec": "lanes/21266.json"
+  },
+  {
+   "piece": 21267,
+   "spec": "lanes/21267.json"
+  },
+  {
+   "piece": 21268,
+   "spec": "lanes/21268.json"
+  },
+  {
+   "piece": 21269,
+   "spec": "lanes/21269.json"
+  },
+  {
+   "piece": 21270,
+   "spec": "lanes/21270.json"
+  },
+  {
+   "piece": 21271,
+   "spec": "lanes/21271.json"
+  },
+  {
+   "piece": 21272,
+   "spec": "lanes/21272.json"
+  },
+  {
+   "piece": 21273,
+   "spec": "lanes/21273.json"
+  },
+  {
+   "piece": 21274,
+   "spec": "lanes/21274.json"
+  },
+  {
+   "piece": 21275,
+   "spec": "lanes/21275.json"
+  },
+  {
+   "piece": 21276,
+   "spec": "lanes/21276.json"
+  },
+  {
+   "piece": 21277,
+   "spec": "lanes/21277.json"
+  },
+  {
+   "piece": 21278,
+   "spec": "lanes/21278.json"
+  },
+  {
+   "piece": 21279,
+   "spec": "lanes/21279.json"
+  },
+  {
+   "piece": 21280,
+   "spec": "lanes/21280.json"
+  },
+  {
+   "piece": 21281,
+   "spec": "lanes/21281.json"
+  },
+  {
+   "piece": 21282,
+   "spec": "lanes/21282.json"
+  },
+  {
+   "piece": 21283,
+   "spec": "lanes/21283.json"
+  },
+  {
+   "piece": 21284,
+   "spec": "lanes/21284.json"
+  },
+  {
+   "piece": 21285,
+   "spec": "lanes/21285.json"
+  },
+  {
+   "piece": 21286,
+   "spec": "lanes/21286.json"
+  },
+  {
+   "piece": 21287,
+   "spec": "lanes/21287.json"
+  },
+  {
+   "piece": 21288,
+   "spec": "lanes/21288.json"
+  },
+  {
+   "piece": 21289,
+   "spec": "lanes/21289.json"
+  },
+  {
+   "piece": 21290,
+   "spec": "lanes/21290.json"
+  },
+  {
+   "piece": 21291,
+   "spec": "lanes/21291.json"
+  },
+  {
+   "piece": 21292,
+   "spec": "lanes/21292.json"
+  },
+  {
+   "piece": 21293,
+   "spec": "lanes/21293.json"
+  },
+  {
+   "piece": 21294,
+   "spec": "lanes/21294.json"
+  },
+  {
+   "piece": 21295,
+   "spec": "lanes/21295.json"
+  },
+  {
+   "piece": 21296,
+   "spec": "lanes/21296.json"
+  },
+  {
+   "piece": 21297,
+   "spec": "lanes/21297.json"
+  },
+  {
+   "piece": 21298,
+   "spec": "lanes/21298.json"
+  },
+  {
+   "piece": 21299,
+   "spec": "lanes/21299.json"
+  },
+  {
+   "piece": 21300,
+   "spec": "lanes/21300.json"
+  },
+  {
+   "piece": 21301,
+   "spec": "lanes/21301.json"
+  },
+  {
+   "piece": 21302,
+   "spec": "lanes/21302.json"
+  },
+  {
+   "piece": 21303,
+   "spec": "lanes/21303.json"
+  },
+  {
+   "piece": 21304,
+   "spec": "lanes/21304.json"
+  },
+  {
+   "piece": 21305,
+   "spec": "lanes/21305.json"
+  },
+  {
+   "piece": 21306,
+   "spec": "lanes/21306.json"
+  },
+  {
+   "piece": 21307,
+   "spec": "lanes/21307.json"
+  },
+  {
+   "piece": 21308,
+   "spec": "lanes/21308.json"
+  },
+  {
+   "piece": 21309,
+   "spec": "lanes/21309.json"
+  },
+  {
+   "piece": 21310,
+   "spec": "lanes/21310.json"
+  },
+  {
+   "piece": 21311,
+   "spec": "lanes/21311.json"
+  },
+  {
+   "piece": 21312,
+   "spec": "lanes/21312.json"
+  },
+  {
+   "piece": 21313,
+   "spec": "lanes/21313.json"
+  },
+  {
+   "piece": 21314,
+   "spec": "lanes/21314.json"
+  },
+  {
+   "piece": 21315,
+   "spec": "lanes/21315.json"
+  },
+  {
+   "piece": 21316,
+   "spec": "lanes/21316.json"
+  },
+  {
+   "piece": 21317,
+   "spec": "lanes/21317.json"
+  },
+  {
+   "piece": 21318,
+   "spec": "lanes/21318.json"
+  },
+  {
+   "piece": 21319,
+   "spec": "lanes/21319.json"
+  },
+  {
+   "piece": 21320,
+   "spec": "lanes/21320.json"
+  },
+  {
+   "piece": 21321,
+   "spec": "lanes/21321.json"
+  },
+  {
+   "piece": 21322,
+   "spec": "lanes/21322.json"
+  },
+  {
+   "piece": 21323,
+   "spec": "lanes/21323.json"
+  },
+  {
+   "piece": 21324,
+   "spec": "lanes/21324.json"
+  },
+  {
+   "piece": 21325,
+   "spec": "lanes/21325.json"
+  },
+  {
+   "piece": 21326,
+   "spec": "lanes/21326.json"
+  },
+  {
+   "piece": 21327,
+   "spec": "lanes/21327.json"
+  },
+  {
+   "piece": 21328,
+   "spec": "lanes/21328.json"
+  },
+  {
+   "piece": 21329,
+   "spec": "lanes/21329.json"
+  },
+  {
+   "piece": 21330,
+   "spec": "lanes/21330.json"
+  },
+  {
+   "piece": 21331,
+   "spec": "lanes/21331.json"
+  },
+  {
+   "piece": 21332,
+   "spec": "lanes/21332.json"
+  },
+  {
+   "piece": 21333,
+   "spec": "lanes/21333.json"
+  },
+  {
+   "piece": 21334,
+   "spec": "lanes/21334.json"
+  },
+  {
+   "piece": 21335,
+   "spec": "lanes/21335.json"
+  },
+  {
+   "piece": 21336,
+   "spec": "lanes/21336.json"
+  },
+  {
+   "piece": 21337,
+   "spec": "lanes/21337.json"
+  },
+  {
+   "piece": 21338,
+   "spec": "lanes/21338.json"
+  },
+  {
+   "piece": 21339,
+   "spec": "lanes/21339.json"
+  },
+  {
+   "piece": 21340,
+   "spec": "lanes/21340.json"
+  },
+  {
+   "piece": 21341,
+   "spec": "lanes/21341.json"
+  },
+  {
+   "piece": 21342,
+   "spec": "lanes/21342.json"
+  },
+  {
+   "piece": 21343,
+   "spec": "lanes/21343.json"
+  },
+  {
+   "piece": 21344,
+   "spec": "lanes/21344.json"
+  },
+  {
+   "piece": 21345,
+   "spec": "lanes/21345.json"
+  },
+  {
+   "piece": 21346,
+   "spec": "lanes/21346.json"
+  },
+  {
+   "piece": 21347,
+   "spec": "lanes/21347.json"
+  },
+  {
+   "piece": 21348,
+   "spec": "lanes/21348.json"
+  },
+  {
+   "piece": 21349,
+   "spec": "lanes/21349.json"
+  },
+  {
+   "piece": 21350,
+   "spec": "lanes/21350.json"
+  },
+  {
+   "piece": 21351,
+   "spec": "lanes/21351.json"
+  },
+  {
+   "piece": 21352,
+   "spec": "lanes/21352.json"
+  },
+  {
+   "piece": 21353,
+   "spec": "lanes/21353.json"
+  },
+  {
+   "piece": 21354,
+   "spec": "lanes/21354.json"
+  },
+  {
+   "piece": 21355,
+   "spec": "lanes/21355.json"
+  },
+  {
+   "piece": 21356,
+   "spec": "lanes/21356.json"
+  },
+  {
+   "piece": 21357,
+   "spec": "lanes/21357.json"
+  },
+  {
+   "piece": 21358,
+   "spec": "lanes/21358.json"
+  },
+  {
+   "piece": 21359,
+   "spec": "lanes/21359.json"
+  },
+  {
+   "piece": 21460,
+   "spec": "lanes/21460.json"
+  },
+  {
+   "piece": 21461,
+   "spec": "lanes/21461.json"
+  },
+  {
+   "piece": 21462,
+   "spec": "lanes/21462.json"
+  },
+  {
+   "piece": 21463,
+   "spec": "lanes/21463.json"
+  },
+  {
+   "piece": 21464,
+   "spec": "lanes/21464.json"
+  },
+  {
+   "piece": 21465,
+   "spec": "lanes/21465.json"
+  },
+  {
+   "piece": 21466,
+   "spec": "lanes/21466.json"
+  },
+  {
+   "piece": 21467,
+   "spec": "lanes/21467.json"
+  },
+  {
+   "piece": 21468,
+   "spec": "lanes/21468.json"
+  },
+  {
+   "piece": 21469,
+   "spec": "lanes/21469.json"
+  },
+  {
+   "piece": 21470,
+   "spec": "lanes/21470.json"
+  },
+  {
+   "piece": 21471,
+   "spec": "lanes/21471.json"
+  },
+  {
+   "piece": 21472,
+   "spec": "lanes/21472.json"
+  },
+  {
+   "piece": 21473,
+   "spec": "lanes/21473.json"
+  },
+  {
+   "piece": 21474,
+   "spec": "lanes/21474.json"
+  },
+  {
+   "piece": 21475,
+   "spec": "lanes/21475.json"
+  },
+  {
+   "piece": 21476,
+   "spec": "lanes/21476.json"
+  },
+  {
+   "piece": 21477,
+   "spec": "lanes/21477.json"
+  },
+  {
+   "piece": 21478,
+   "spec": "lanes/21478.json"
+  },
+  {
+   "piece": 21479,
+   "spec": "lanes/21479.json"
+  },
+  {
+   "piece": 21480,
+   "spec": "lanes/21480.json"
+  },
+  {
+   "piece": 21481,
+   "spec": "lanes/21481.json"
+  },
+  {
+   "piece": 21482,
+   "spec": "lanes/21482.json"
+  },
+  {
+   "piece": 21483,
+   "spec": "lanes/21483.json"
+  },
+  {
+   "piece": 21484,
+   "spec": "lanes/21484.json"
+  },
+  {
+   "piece": 21485,
+   "spec": "lanes/21485.json"
+  },
+  {
+   "piece": 21486,
+   "spec": "lanes/21486.json"
+  },
+  {
+   "piece": 21487,
+   "spec": "lanes/21487.json"
+  },
+  {
+   "piece": 21488,
+   "spec": "lanes/21488.json"
+  },
+  {
+   "piece": 21489,
+   "spec": "lanes/21489.json"
+  },
+  {
+   "piece": 21490,
+   "spec": "lanes/21490.json"
+  },
+  {
+   "piece": 21491,
+   "spec": "lanes/21491.json"
+  },
+  {
+   "piece": 21492,
+   "spec": "lanes/21492.json"
+  },
+  {
+   "piece": 21493,
+   "spec": "lanes/21493.json"
+  },
+  {
+   "piece": 21494,
+   "spec": "lanes/21494.json"
+  },
+  {
+   "piece": 21495,
+   "spec": "lanes/21495.json"
+  },
+  {
+   "piece": 21496,
+   "spec": "lanes/21496.json"
+  },
+  {
+   "piece": 21497,
+   "spec": "lanes/21497.json"
+  },
+  {
+   "piece": 21498,
+   "spec": "lanes/21498.json"
+  },
+  {
+   "piece": 21499,
+   "spec": "lanes/21499.json"
+  },
+  {
+   "piece": 21500,
+   "spec": "lanes/21500.json"
+  },
+  {
+   "piece": 21501,
+   "spec": "lanes/21501.json"
+  },
+  {
+   "piece": 21502,
+   "spec": "lanes/21502.json"
+  },
+  {
+   "piece": 21503,
+   "spec": "lanes/21503.json"
+  },
+  {
+   "piece": 21504,
+   "spec": "lanes/21504.json"
+  },
+  {
+   "piece": 21505,
+   "spec": "lanes/21505.json"
+  },
+  {
+   "piece": 21506,
+   "spec": "lanes/21506.json"
+  },
+  {
+   "piece": 21507,
+   "spec": "lanes/21507.json"
+  },
+  {
+   "piece": 21508,
+   "spec": "lanes/21508.json"
+  },
+  {
+   "piece": 21509,
+   "spec": "lanes/21509.json"
+  },
+  {
+   "piece": 21510,
+   "spec": "lanes/21510.json"
+  },
+  {
+   "piece": 21511,
+   "spec": "lanes/21511.json"
+  },
+  {
+   "piece": 21512,
+   "spec": "lanes/21512.json"
+  },
+  {
+   "piece": 21513,
+   "spec": "lanes/21513.json"
+  },
+  {
+   "piece": 21514,
+   "spec": "lanes/21514.json"
+  },
+  {
+   "piece": 21515,
+   "spec": "lanes/21515.json"
+  },
+  {
+   "piece": 21516,
+   "spec": "lanes/21516.json"
+  },
+  {
+   "piece": 21517,
+   "spec": "lanes/21517.json"
+  },
+  {
+   "piece": 21518,
+   "spec": "lanes/21518.json"
+  },
+  {
+   "piece": 21519,
+   "spec": "lanes/21519.json"
+  },
+  {
+   "piece": 21520,
+   "spec": "lanes/21520.json"
+  },
+  {
+   "piece": 21521,
+   "spec": "lanes/21521.json"
+  },
+  {
+   "piece": 21522,
+   "spec": "lanes/21522.json"
+  },
+  {
+   "piece": 21523,
+   "spec": "lanes/21523.json"
+  },
+  {
+   "piece": 21524,
+   "spec": "lanes/21524.json"
+  },
+  {
+   "piece": 21525,
+   "spec": "lanes/21525.json"
+  },
+  {
+   "piece": 21526,
+   "spec": "lanes/21526.json"
+  },
+  {
+   "piece": 21527,
+   "spec": "lanes/21527.json"
+  },
+  {
+   "piece": 21528,
+   "spec": "lanes/21528.json"
+  },
+  {
+   "piece": 21529,
+   "spec": "lanes/21529.json"
+  },
+  {
+   "piece": 21530,
+   "spec": "lanes/21530.json"
+  },
+  {
+   "piece": 21531,
+   "spec": "lanes/21531.json"
+  }
+ ],
+ "highway_lines": [
+  "hwyp 21260 0",
+  "hwyp 21261 0",
+  "hwyp 21262 0",
+  "hwyp 21263 0",
+  "hwyp 21264 0",
+  "hwyp 21265 0",
+  "hwyp 21266 0",
+  "hwyp 21267 0",
+  "hwyp 21268 0",
+  "hwyp 21269 0",
+  "hwyp 21270 0",
+  "hwyp 21271 0",
+  "hwyp 21272 0",
+  "hwyp 21273 0",
+  "hwyp 21274 0",
+  "hwyp 21275 0",
+  "hwyp 21276 0",
+  "hwyp 21277 0",
+  "hwyp 21278 0",
+  "hwyp 21279 0",
+  "hwyp 21280 0",
+  "hwyp 21281 0",
+  "hwyp 21282 0",
+  "hwyp 21283 0",
+  "hwyp 21284 0",
+  "hwyp 21285 0",
+  "hwyp 21286 0",
+  "hwyp 21287 0",
+  "hwyp 21288 0",
+  "hwyp 21289 0",
+  "hwyp 21290 0",
+  "hwyp 21291 0",
+  "hwyp 21292 0",
+  "hwyp 21293 0",
+  "hwyp 21294 0",
+  "hwyp 21295 0",
+  "hwyp 21296 0",
+  "hwyp 21297 0",
+  "hwyp 21298 0",
+  "hwyp 21299 0",
+  "hwyp 21300 0",
+  "hwyp 21301 0",
+  "hwyp 21302 0",
+  "hwyp 21303 0",
+  "hwyp 21304 0",
+  "hwyp 21305 0",
+  "hwyp 21306 0",
+  "hwyp 21307 0",
+  "hwyp 21308 0",
+  "hwyp 21309 0",
+  "hwyp 21310 0",
+  "hwyp 21311 0",
+  "hwyp 21312 1",
+  "hwys 21312 15123 0 15124 2 15123 2 15124 0",
+  "hwyp 21313 1",
+  "hwys 21313 15134 0 15136 0 15134 0 15136 0",
+  "hwyp 21314 1",
+  "hwys 21314 15134 0 15136 0 15134 0 15136 0",
+  "hwyp 21315 1",
+  "hwys 21315 15134 2 15136 2 15134 0 15136 0",
+  "hwyp 21316 1",
+  "hwys 21316 15134 2 15136 2 15134 0 15136 0",
+  "hwyp 21317 1",
+  "hwys 21317 15134 2 15136 2 15134 0 15136 0",
+  "hwyp 21318 1",
+  "hwys 21318 15134 2 15136 2 15134 0 15136 0",
+  "hwyp 21319 1",
+  "hwys 21319 15134 2 15136 2 15134 0 15136 0",
+  "hwyp 21320 1",
+  "hwys 21320 15134 2 15136 2 15134 0 15136 0",
+  "hwyp 21321 1",
+  "hwys 21321 15123 0 15124 2 15123 2 15124 0",
+  "hwyp 21322 1",
+  "hwys 21322 15134 0 15136 0 15134 0 15136 0",
+  "hwyp 21323 1",
+  "hwys 21323 15134 2 15136 2 15134 0 15136 0",
+  "hwyp 21324 1",
+  "hwys 21324 15134 0 15136 0 15134 0 15136 0",
+  "hwyp 21325 1",
+  "hwys 21325 15128 2 15127 0 15128 0 15127 2",
+  "hwyp 21326 1",
+  "hwys 21326 15136 2 15134 0 15136 0 15134 2",
+  "hwyp 21327 1",
+  "hwys 21327 15134 2 15136 2 15134 0 15136 0",
+  "hwyp 21328 1",
+  "hwys 21328 15128 0 15127 0 15128 0 15127 0",
+  "hwyp 21329 1",
+  "hwys 21329 15123 0 15124 2 15123 2 15124 0",
+  "hwyp 21330 1",
+  "hwys 21330 15124 2 15123 2 15124 0 15123 0",
+  "hwyp 21331 1",
+  "hwys 21331 15128 0 15127 0 15128 0 15127 0",
+  "hwyp 21332 1",
+  "hwys 21332 15136 2 15134 0 15136 0 15134 2",
+  "hwyp 21333 1",
+  "hwys 21333 15136 2 15134 0 15136 0 15134 2",
+  "hwyp 21334 1",
+  "hwys 21334 15134 0 15136 0 15134 0 15136 0",
+  "hwyp 21335 1",
+  "hwys 21335 15134 0 15136 0 15134 2 15136 2",
+  "hwyp 21336 1",
+  "hwys 21336 15136 2 15134 0 15136 0 15134 2",
+  "hwyp 21337 1",
+  "hwys 21337 15134 2 15136 2 15134 0 15136 0",
+  "hwyp 21338 1",
+  "hwys 21338 15136 2 15134 0 15136 0 15134 2",
+  "hwyp 21339 1",
+  "hwys 21339 15134 0 15136 0 15134 0 15136 0",
+  "hwyp 21340 1",
+  "hwys 21340 15134 2 15136 2 15134 0 15136 0",
+  "hwyp 21341 1",
+  "hwys 21341 15136 2 15134 0 15136 0 15134 2",
+  "hwyp 21342 1",
+  "hwys 21342 15123 0 15124 2 15123 2 15124 0",
+  "hwyp 21343 1",
+  "hwys 21343 15128 2 15127 0 15128 0 15127 2",
+  "hwyp 21344 1",
+  "hwys 21344 15128 2 15127 0 15128 0 15127 2",
+  "hwyp 21345 1",
+  "hwys 21345 15123 0 15124 2 15123 2 15124 0",
+  "hwyp 21346 1",
+  "hwys 21346 15124 0 15123 0 15124 2 15123 2",
+  "hwyp 21347 1",
+  "hwys 21347 15136 2 15134 0 15136 0 15134 2",
+  "hwyp 21348 1",
+  "hwys 21348 15127 2 15128 2 15127 0 15128 0",
+  "hwyp 21349 1",
+  "hwys 21349 15128 2 15127 0 15128 0 15127 2",
+  "hwyp 21350 1",
+  "hwys 21350 15123 0 15124 2 15123 2 15124 0",
+  "hwyp 21351 1",
+  "hwys 21351 15134 0 15136 0 15134 0 15136 0",
+  "hwyp 21352 1",
+  "hwys 21352 15124 0 15123 0 15124 2 15123 2",
+  "hwyp 21353 1",
+  "hwys 21353 15123 0 15124 2 15123 2 15124 0",
+  "hwyp 21354 1",
+  "hwys 21354 15134 0 15136 0 15134 2 15136 2",
+  "hwyp 21355 1",
+  "hwys 21355 15134 2 15136 2 15134 0 15136 0",
+  "hwyp 21356 1",
+  "hwys 21356 15134 2 15136 2 15134 0 15136 0",
+  "hwyp 21357 1",
+  "hwys 21357 15134 2 15136 2 15134 0 15136 0",
+  "hwyp 21358 1",
+  "hwys 21358 15123 0 15124 2 15123 2 15124 0",
+  "hwyp 21359 1",
+  "hwys 21359 15128 0 15127 0 15128 0 15127 0",
+  "hwyp 21460 1",
+  "hwys 21460 15136 2 15134 0 15136 0 15134 2",
+  "hwyp 21461 1",
+  "hwys 21461 15128 2 15127 0 15128 0 15127 2",
+  "hwyp 21462 1",
+  "hwys 21462 15134 0 15136 0 15134 0 15136 0",
+  "hwyp 21463 1",
+  "hwys 21463 15136 0 15134 2 15136 2 15134 0",
+  "hwyp 21464 1",
+  "hwys 21464 15136 2 15134 0 15136 0 15134 2",
+  "hwyp 21465 1",
+  "hwys 21465 15134 2 15136 2 15134 0 15136 0",
+  "hwyp 21466 1",
+  "hwys 21466 15136 2 15134 0 15136 0 15134 2",
+  "hwyp 21467 1",
+  "hwys 21467 15136 2 15134 0 15136 0 15134 2",
+  "hwyp 21468 1",
+  "hwys 21468 15124 0 15123 0 15124 2 15123 2",
+  "hwyp 21469 1",
+  "hwys 21469 15136 0 15134 2 15136 2 15134 0",
+  "hwyp 21470 1",
+  "hwys 21470 15134 0 15136 0 15134 0 15136 0",
+  "hwyp 21471 1",
+  "hwys 21471 15134 2 15136 2 15134 0 15136 0",
+  "hwyp 21472 1",
+  "hwys 21472 15123 0 15124 2 15123 2 15124 0",
+  "hwyp 21473 1",
+  "hwys 21473 15128 2 15127 0 15128 0 15127 2",
+  "hwyp 21474 1",
+  "hwys 21474 15134 2 15136 2 15134 0 15136 0",
+  "hwyp 21475 1",
+  "hwys 21475 15123 0 15124 2 15123 2 15124 0",
+  "hwyp 21476 1",
+  "hwys 21476 15124 0 15123 0 15124 2 15123 2",
+  "hwyp 21477 1",
+  "hwys 21477 15128 2 15127 0 15128 0 15127 2",
+  "hwyp 21478 1",
+  "hwys 21478 15128 0 15127 2 15128 2 15127 0",
+  "hwyp 21479 1",
+  "hwys 21479 15123 0 15124 2 15123 2 15124 0",
+  "hwyp 21480 0",
+  "hwyp 21481 0",
+  "hwyp 21482 0",
+  "hwyp 21483 0",
+  "hwyp 21484 0",
+  "hwyp 21485 0",
+  "hwyp 21486 0",
+  "hwyp 21487 0",
+  "hwyp 21488 0",
+  "hwyp 21489 0",
+  "hwyp 21490 0",
+  "hwyp 21491 0",
+  "hwyp 21492 0",
+  "hwyp 21493 0",
+  "hwyp 21494 0",
+  "hwyp 21495 0",
+  "hwyp 21496 0",
+  "hwyp 21497 0",
+  "hwyp 21498 0",
+  "hwyp 21499 0",
+  "hwyp 21500 0",
+  "hwyp 21501 0",
+  "hwyp 21502 0",
+  "hwyp 21503 0",
+  "hwyp 21504 0",
+  "hwyp 21505 0",
+  "hwyp 21506 0",
+  "hwyp 21507 0",
+  "hwyp 21508 0",
+  "hwyp 21509 0",
+  "hwyp 21510 0",
+  "hwyp 21511 0",
+  "hwyp 21512 0",
+  "hwyp 21513 0",
+  "hwyp 21514 0",
+  "hwyp 21515 0",
+  "hwyp 21516 0",
+  "hwyp 21517 0",
+  "hwyp 21518 0",
+  "hwyp 21519 0",
+  "hwyp 21520 0",
+  "hwyp 21521 0",
+  "hwyp 21522 0",
+  "hwyp 21523 0",
+  "hwyp 21524 0",
+  "hwyp 21525 0",
+  "hwyp 21526 0",
+  "hwyp 21527 0",
+  "hwyp 21528 0",
+  "hwyp 21529 0",
+  "hwyp 21530 0",
+  "hwyp 21531 0"
+ ]
+}
