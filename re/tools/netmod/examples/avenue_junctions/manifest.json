@@ -1,0 +1,173 @@
+{
+ "netpack": 1,
+ "name": "avenue_junctions",
+ "version": "0.1.0",
+ "author": "netmod (task avx)",
+ "description": "Straight avenue intersections: where two avenues (two parallel roads each) cross, an avenue ends on another, or a single road crosses or meets an avenue, sc3netmod's AVX block re-pieces the stock patch of 4-way and T tiles as one paved box: crosswalks across every arm at the box edge, curbs round the outer corners and along a closed side, and each avenue arm's median ending in a concrete nose on the cell beside the box. Box cells 20800..20804 (one per edge pattern, base 43, lanes of 43 or of T 39 where a side is closed), nose cells 20810 / 20811 (base 11204). Built by `avx.py build .` in this folder before install (art/ is made from the game's frames and is not shipped).",
+ "game": {
+  "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+ },
+ "variants": [
+  {
+   "id": 20800,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue crossing",
+    "ENGLISH": "Cruce de avenidas"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20800"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20801,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue crossing",
+    "ENGLISH": "Cruce de avenidas"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20801"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20802,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue crossing",
+    "ENGLISH": "Cruce de avenidas"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20802"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20803,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue crossing",
+    "ENGLISH": "Cruce de avenidas"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20803"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20804,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue crossing",
+    "ENGLISH": "Cruce de avenidas"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20804"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20810,
+   "base": 11204,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue",
+    "ENGLISH": "Avenida"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20810"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20811,
+   "base": 11204,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue",
+    "ENGLISH": "Avenida"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20811"
+   },
+   "trblkatt": "copy_base"
+  }
+ ],
+ "lanes": [
+  {
+   "piece": 20800,
+   "spec": "box_20800.lanes.json"
+  },
+  {
+   "piece": 20801,
+   "spec": "box_20801.lanes.json"
+  },
+  {
+   "piece": 20802,
+   "spec": "box_20802.lanes.json"
+  },
+  {
+   "piece": 20803,
+   "spec": "box_20803.lanes.json"
+  },
+  {
+   "piece": 20804,
+   "spec": "box_20804.lanes.json"
+  }
+ ],
+ "auto_avenue_junctions": [
+  {
+   "box": [
+    {
+     "piece": 20800,
+     "edges": "AIIA",
+     "save_11204": false
+    },
+    {
+     "piece": 20801,
+     "edges": "AAIA",
+     "save_11204": false
+    },
+    {
+     "piece": 20802,
+     "edges": "IACA",
+     "save_11204": true
+    },
+    {
+     "piece": 20803,
+     "edges": "IACI",
+     "save_11204": true
+    },
+    {
+     "piece": 20804,
+     "edges": "IICA",
+     "save_11204": true
+    }
+   ],
+   "arm": [
+    {
+     "piece": 20810,
+     "nose": "E"
+    },
+    {
+     "piece": 20811,
+     "nose": "W"
+    }
+   ]
+  }
+ ]
+}
