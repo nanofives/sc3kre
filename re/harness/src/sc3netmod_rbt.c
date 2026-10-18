@@ -101,6 +101,9 @@ static void hwy_end(struct HwyPass *hp);                                     /* 
 static WORD hwy_save_id(WORD id);                                            /* task hwcore */
 static int hwy_install(void);                                                /* task hwcore */
 static void hwy_stats(void);                                                 /* task hwcore */
+static void hwt_line(const char *path, const char *line);                    /* task hwt */
+static void hwt_run(struct HwyPass *hp);                                     /* task hwt */
+static void hwt_stats(void);                                                 /* task hwt */
 
 /* ---------------------------------------------------------------- table line */
 static void rb_file(const char *path) {
@@ -122,6 +125,7 @@ static void rb_file(const char *path) {
         if (!strncmp(line, "bv", 2) && line[3] == ' ') { bv_line(path, line); continue; }   /* task boulevard */
         if (!strncmp(line, "rbt9 ", 5)) { r9_line(path, line); continue; }       /* task bigrbt */
         if (!strncmp(line, "dbvb ", 5) || !strncmp(line, "dbvs ", 5)) { dbv_line(path, line); continue; } /* task diagbv */
+        if (!strncmp(line, "hwt ", 4)) { hwt_line(path, line); continue; } /* task hwt */
         if (!strncmp(line, "hwy", 3)) { hwy_line(path, line); continue; }  /* task hwcore */
         if (strncmp(line, "rbt ", 4) || g_rb_off) continue;
         k = sscanf(line + 4, "%lu %lu %lu", &p, &n, &c);
@@ -281,6 +285,7 @@ static void rb_hwy(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) {
     struct HwyPass *hp = hwy_begin(mgr, x0, z0, x1, z1, who);
     if (!hp) return;
     /* highway shape blocks, one line each (task hwx, hwt, hwdx, hwdd): <block>_run(hp); */
+    hwt_run(hp);                                                                 /* task hwt */
     hwy_end(hp);
 }
 
@@ -476,6 +481,7 @@ static void rbt_stats(void) {
     static LONG last;
     r9_stats();                                                              /* task bigrbt */
     hwy_stats();                                                             /* task hwcore */
+    hwt_stats();                                                             /* task hwt */
     LONG n = g_rb_n_pass + g_rb_n_conv + g_rb_n_rev + g_rb_n_load + g_rb_n_fault;
     if (!g_rb_on || n == last) return;
     last = n;
