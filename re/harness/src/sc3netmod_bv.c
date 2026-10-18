@@ -20,8 +20,9 @@
  *            next to a junction or an end region; junction column JN / JM / JF; cap CAP[row]; taper TAPER[keep][col*3+row].
  *            The -x end is the +x end turned half a circle (rows 2 - row, state + 2, kept row 2 - keep).
  * Shapes refused (other streams own them): a diagonal touching the run, 3x3 blocks (any run shorter than
- * BV_MIN_RUN = 4 columns, whatever its arms: bigrbt's), an avenue or a boulevard crossing (its arm is not a single
- * road: wave 2), the two OUTER rows going on at an end (two separate roads).
+ * BV_MIN_RUN = 4 columns, whatever its arms: bigrbt's), the two OUTER rows going on at an end (two separate roads).
+ * Avenue and boulevard junctions (2- or 3-wide spans, and a run ending on one): sc3netmod_bvx.c (task bvx), without
+ * its `bvxb` lines refused as not a straight single road.
  * Write = FUN_10008919 per cell (as RBT / DAV). Revert = rect retile of a boulevard piece no run kept. Save: every
  * piece saves as its base (OUTER 11204 and MIDDLE 29 in the stock states, junction / end pieces 43), so a game without
  * the mod keeps the roads joined. Off: SC3NETMOD_BV=0.
@@ -89,6 +90,7 @@ static void bv_line(const char *path, const char *line) {
     }
 }
 
+static int bvx_is_piece(WORD id);                                        /* task bvx: sc3netmod_bvx.c */
 static int bv_is_piece(WORD id) {
     int k, j;
     if (!id || !g_bv_p[0]) return 0;
@@ -96,6 +98,7 @@ static int bv_is_piece(WORD id) {
     for (k = 0; k < 3; k++) if (g_bv_cap[k] == id) return 1;
     for (k = 0; k < 3; k++) for (j = 0; j < 9; j++) if (g_bv_tap[k][j] == id) return 1;
     for (k = 0; k < 2; k++) for (j = 0; j < 9; j++) if (g_bv_av[k][j] == id) return 1;
+    if (bvx_is_piece(id)) return 1;                       /* task bvx */
     return 0;
 }
 
@@ -107,6 +110,8 @@ typedef struct {
     BvCell *cell;
     int n;
 } BvPass;
+static int bvx_spans(BvPass *p, int sa, int sb, int w0, BYTE *kind, const char **why);            /* task bvx */
+static int bvx_boxes(BvPass *p, int sa, int sb, int w0, const BYTE *kind, int lo_tee, int hi_tee); /* task bvx */
 
 /* axis space -> real */
 static int bv_rx(int axis, int s, int w) { return axis ? -w : s; }
@@ -124,16 +129,18 @@ static void bv_put(BvPass *p, int s, int w, WORD piece, int st) {
 
 /* one run starting at column sa, rows w0..w0+2. -> 1 accepted (cells in p->cell), 0 refused (*why) */
 static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *kind) {
-    int sb = sa, s, k, e, n, ncl = 0, endtyp[2], endkeep[2], endlo, endhi, normlo, normhi;
+    int sb = sa, s, k, e, n, ncl = 0, endtyp[2], endkeep[2], endlo, endhi, normlo, normhi, teew[2] = { 0, 0 };
     *why = "";
     while (bv_full(p, sb + 1, w0) && sb - sa < BV_MAX_RUN - 1) sb++;
     *psb = sb;
     n = sb - sa + 1;
     if (n < BV_MIN_COLS) return 0;
     if (n < BV_MIN_RUN) { *why = "3-column run: a 3x3 block (bigrbt's)"; return 0; }
-    /* kind: 0 clean, 1 arm N, 2 arm S, 3 both */
+    /* kind: 0 clean, 1 arm N, 2 arm S, 3 both; | 4 = a wide span column (task bvx: an avenue / boulevard arm) */
+    if (!bvx_spans(p, sa, sb, w0, kind, why)) return 0;  /* task bvx */
     for (s = sa; s <= sb; s++) {
         int no = bv_road(p, s, w0 - 1), so = bv_road(p, s, w0 + 3);
+        if (kind[s - sa] & 4) continue;                  /* task bvx */
         kind[s - sa] = (BYTE)(no | (so << 1));
         if (no && !(bv_road(p, s, w0 - 2) && !bv_road(p, s - 1, w0 - 1) && !bv_road(p, s + 1, w0 - 1)))
             { *why = "road beside the boulevard is not a straight single road"; return 0; }
@@ -144,7 +151,12 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
     for (e = 0; e < 2; e++) {
         int se = e ? sa : sb, st = e ? -1 : 1, got = 0, row = -1, first = -1;
         for (k = 0; k < 3; k++) if (bv_road(p, se + st, w0 + k)) { got++; row = k; if (first < 0) first = k; }
-        if (!got) { endtyp[e] = 1; endkeep[e] = -1; }
+        if (!got && (kind[se - sa] & 4)) {                 /* task bvx: the run ends on an avenue / boulevard (T) */
+            if ((kind[se - sa] & 3) != 3) { *why = "an end on a corner (road on one side only)"; return 0; }
+            for (k = 0; k < 3 && se - st * k >= sa && se - st * k <= sb && (kind[se - st * k - sa] & 4); k++) ;
+            endtyp[e] = 4; endkeep[e] = -9; teew[e] = k;
+        }
+        else if (!got) { endtyp[e] = 1; endkeep[e] = -1; }
         else if (got == 1 && bv_road(p, se + 2 * st, w0 + row)) { endtyp[e] = 2; endkeep[e] = row; }
         else if (got == 2 && row == first + 1 && bv_road(p, se + 2 * st, w0 + first) && bv_road(p, se + 2 * st, w0 + row))
             { endtyp[e] = 3; endkeep[e] = first; }          /* task boulevard: two rows go on = the avenue */
@@ -153,15 +165,15 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
         if (endtyp[e] == 2 && !g_bv_tap[e ? 2 - row : row][0]) { *why = "no taper pieces declared"; return 0; }
         if (endtyp[e] == 3 && !g_bv_av[e ? 1 - first : first][0]) { *why = "no avenue-narrowing pieces declared"; return 0; }
     }
-    endhi = endtyp[0] == 1 ? 1 : BV_TAPER;                 /* end-region widths */
-    endlo = endtyp[1] == 1 ? 1 : BV_TAPER;
+    endhi = endtyp[0] == 1 ? 1 : endtyp[0] == 4 ? teew[0] : BV_TAPER;   /* end-region widths (task bvx: 4 = T) */
+    endlo = endtyp[1] == 1 ? 1 : endtyp[1] == 4 ? teew[1] : BV_TAPER;
     normlo = sa + endlo;
     normhi = sb - endhi;
     if (normhi < normlo) { *why = "run too short for its ends"; return 0; }
     for (s = normlo; s <= normhi; s++) ncl += kind[s - sa] == 0;
     if (ncl < BV_MIN_COLS) { *why = "fewer than 3 boulevard columns"; return 0; }
-    for (s = sa; s < normlo; s++) if (kind[s - sa]) { *why = "a junction inside an end region"; return 0; }
-    for (s = normhi + 1; s <= sb; s++) if (kind[s - sa]) { *why = "a junction inside an end region"; return 0; }
+    for (s = sa; s < normlo; s++) if (kind[s - sa] && endtyp[1] != 4) { *why = "a junction inside an end region"; return 0; }
+    for (s = normhi + 1; s <= sb; s++) if (kind[s - sa] && endtyp[0] != 4) { *why = "a junction inside an end region"; return 0; }
     if (kind[normlo - sa] || kind[normhi - sa]) { *why = "a junction next to an end region"; return 0; }
     /* isolated: every ROAD cell 8-touching the run is the run, a junction arm or the road a taper goes on into */
     for (s = sa - 1; s <= sb + 1; s++)
@@ -177,6 +189,7 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
     p->n = 0;
     for (e = 0; e < 2; e++) {
         int col, row;
+        if (endtyp[e] == 4) continue;                      /* task bvx: the T's box comes with bvx_boxes */
         if (endtyp[e] == 1) {
             for (row = 0; row < 3; row++)
                 bv_put(p, e ? sa : sb, w0 + (e ? 2 - row : row), g_bv_cap[row], e ? 2 : 0);
@@ -197,6 +210,7 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
             bv_put(p, s, w0, g_bv_p[BV_OUTER], 2);
             bv_put(p, s, w0 + 2, g_bv_p[BV_OUTER], 0);
             bv_put(p, s, w0 + 1, g_bv_p[hi && lo ? BV_NOSE2 : hi || lo ? BV_NOSE : BV_MIDDLE], lo && !hi ? 2 : 0);
+        } else if (kd & 4) {                                /* task bvx: the box, below */
         } else {
             bv_put(p, s, w0 + 1, g_bv_p[BV_JM], 0);
             if (kd == 1) { bv_put(p, s, w0, g_bv_p[BV_JN], 0); bv_put(p, s, w0 + 2, g_bv_p[BV_JF], 0); }
@@ -204,6 +218,8 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
             else { bv_put(p, s, w0, g_bv_p[BV_JN], 0); bv_put(p, s, w0 + 2, g_bv_p[BV_JN], 2); }
         }
     }
+    if (!bvx_boxes(p, sa, sb, w0, kind, endtyp[1] == 4, endtyp[0] == 4))   /* task bvx */
+        { *why = "a box cell with no declared piece"; return 0; }
     return 1;
 }
 

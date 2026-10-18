@@ -77,6 +77,8 @@ static WORD avx_save_id(WORD id);
 static WORD g_bv_p[7];                                                       /* task boulevard: BV block */
 static void bv_line(const char *path, const char *line);                     /* task boulevard */
 static void bv_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who);  /* task boulevard */
+static int g_bvx_nbox;                                                       /* task bvx: sc3netmod_bvx.c */
+static void bvx_line(const char *path, const char *line);                    /* task bvx */
 
 /* ---------------------------------------------------------------- table line */
 static void rb_file(const char *path) {
@@ -91,6 +93,7 @@ static void rb_file(const char *path) {
         if (!strncmp(line, "davs ", 5)) { dav_sline(path, line); continue; }      /* task diagave: save as 43 */
         if (!strncmp(line, "dav ", 4)) { dav_line(path, line); continue; }        /* task diagave */
         if (!strncmp(line, "avx", 3)) { avx_line(path, line); continue; }         /* task avx */
+        if (!strncmp(line, "bvx", 3)) { bvx_line(path, line); continue; }         /* task bvx */
         if (!strncmp(line, "bv", 2) && line[3] == ' ') { bv_line(path, line); continue; }   /* task boulevard */
         if (strncmp(line, "rbt ", 4) || g_rb_off) continue;
         k = sscanf(line + 4, "%lu %lu %lu", &p, &n, &c);
@@ -363,6 +366,7 @@ static int rbt_install(BYTE *m) {
     if (!g_rb_piece) logf("rbt: no automatic roundabout in the tables");
     if (!g_dav_inner[0]) logf("dav: no automatic diagonal avenue in the tables");
     if (g_bv_p[0] && env_off("SC3NETMOD_BV")) { g_bv_p[0] = 0; logf("bv: off (SC3NETMOD_BV=0)"); }  /* task boulevard */
+    if (g_bvx_nbox && env_off("SC3NETMOD_BVX")) { g_bvx_nbox = 0; logf("bvx: off (SC3NETMOD_BVX=0)"); }   /* task bvx */
     if (!g_rb_piece && !g_dav_inner[0] && !g_avx_nbox && !g_bv_p[0]) return 0;   /* task avx, task boulevard */
     g_rb_m = m;
     g_rb_msize = nt->OptionalHeader.SizeOfImage;

@@ -1,0 +1,178 @@
+{
+ "netpack": 1,
+ "name": "boulevard_junctions",
+ "version": "0.1.0",
+ "author": "netmod (task bvx)",
+ "description": "Boulevard junctions with avenues and with other boulevards: where an avenue (two parallel roads) or another boulevard (three) crosses a boulevard, ends on it, or the boulevard ends on it, sc3netmod's BV block makes the crossing one paved box: crosswalks across every arm at the box edge, curbs round the outer corners and along the far side of a T, every median ending in a concrete nose with its trees. Needs the boulevard package (its pieces next to the box). Box cells 20900..20905 (one per edge pattern, base 43), avenue nose cells 20910 / 20911 (base 11204). Built by `bvx.py build .` in this folder before install (art/ is made from the game's frames and is not shipped).",
+ "game": {
+  "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+ },
+ "variants": [
+  {
+   "id": 20900,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20900"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20901,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20901"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20902,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20902"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20903,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20903"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20904,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20904"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20905,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20905"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20910,
+   "base": 11204,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue",
+    "ENGLISH": "Avenida"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20910"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20911,
+   "base": 11204,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue",
+    "ENGLISH": "Avenida"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20911"
+   },
+   "trblkatt": "copy_base"
+  }
+ ],
+ "lanes": [
+  {
+   "piece": 20901,
+   "spec": "box_20901.lanes.json"
+  },
+  {
+   "piece": 20902,
+   "spec": "box_20902.lanes.json"
+  },
+  {
+   "piece": 20904,
+   "spec": "box_20904.lanes.json"
+  }
+ ],
+ "auto_boulevard_junctions": [
+  {
+   "box": [
+    {
+     "piece": 20900,
+     "edges": "AIIA"
+    },
+    {
+     "piece": 20901,
+     "edges": "IACI"
+    },
+    {
+     "piece": 20902,
+     "edges": "IICA"
+    },
+    {
+     "piece": 20903,
+     "edges": "IIAI"
+    },
+    {
+     "piece": 20904,
+     "edges": "IICI"
+    },
+    {
+     "piece": 20905,
+     "edges": "IIII"
+    }
+   ],
+   "arm": [
+    {
+     "piece": 20910,
+     "nose": "E"
+    },
+    {
+     "piece": 20911,
+     "nose": "W"
+    }
+   ]
+  }
+ ]
+}
