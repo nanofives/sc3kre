@@ -16,8 +16,9 @@
  *              four arms continue: agreed 2026-10-18)
  * and then: the stem straight from dz -2 to one past the T's last stem cell, the through highway straight one past the
  * T's cells both ways, every cell of the T inside the pass's read box, its land cells hwy_free and unclaimed, no other
- * highway touching a land cell from outside the T. Full T first; when only that fails, gesture 1 builds the
- * right-in / right-out set (the cells tagged set 2: NB -> EB and EB -> SB only, the stem keeps its caps).
+ * highway touching a land cell from outside the T. Full T only: when the far side is not free the stem keeps its caps
+ * and nothing is built (owner call 2026-10-18). The right-in / right-out set (cells tagged set 2: NB -> EB and EB -> SB
+ * only) stays in the tables and in the code behind HWT_RIO = 0; Ts already built with it are still recognised.
  * A built T is recognised by vote: each of its pieces names an anchor (id -> frame cell, state -> r); an anchor with
  * HWT_MINVOTE agreeing pieces is a T (a stock retile can leave a rewritten highway cell in another state). Each of its
  * cells inside the box must
@@ -32,6 +33,7 @@
  */
 
 #define HWT_MAXC 96
+#define HWT_RIO 0        /* owner 2026-10-18: far side built up -> leave the T stock; 1 = build right-in / right-out */
 
 typedef struct { WORD piece; short dx, dz; BYTE land, sets; } HwtCell;
 
@@ -337,7 +339,7 @@ static void hwt_run(HwyPass *hp) {
                 hwy_rot(r, &dx, &dz);
                 ax = x - dx; az = z - dz;
                 if (hwt_check(hp, ax, az, r, gesture, 1, &why)) { hwt_build(hp, ax, az, r, gesture, 1); break; }
-                if (gesture == 1 && (!strcmp(why, "far side not free") || !strcmp(why, "far side touches other highway"))) {
+                if (HWT_RIO && gesture == 1 && (!strcmp(why, "far side not free") || !strcmp(why, "far side touches other highway"))) {
                     const char *why2;
                     if (hwt_check(hp, ax, az, r, gesture, 2, &why2)) { hwt_build(hp, ax, az, r, gesture, 2); break; }
                     why = why2;

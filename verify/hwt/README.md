@@ -74,8 +74,9 @@ Refused (stock result stays): a footprint cell that is not free (building, zone,
 not plain straight highway; slope cells; diagonals (not this wave); an X whose four arms all continue (hwx); a stem
 shorter than 3 cells; another junction or T inside the footprint; 15149 blocks.
 
-Fallback when the far side is blocked but the stem side is free: a right-in / right-out T (NB -> EB and EB -> SB only,
-4 new cells), the stem keeps a cap. `[UNCERTAIN]` whether the owner wants that or plain stock there.
+Far side blocked: OWNER CALL 2026-10-18 "leave it stock when the far side is built up". The stem keeps its caps and
+nothing is built. The right-in / right-out T (NB -> EB and EB -> SB only, 4 new cells) built earlier stays in the
+package and the code behind `HWT_RIO 0` (C) / `RIO = False` (twin); Ts already built with it are still recognised.
 
 ## 4. Rule twin (offline, `re/tools/netmod/hwt_layout.py`)
 
