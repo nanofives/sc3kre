@@ -107,6 +107,8 @@ static void hwt_stats(void);                                                 /* 
 static void hwx_line(const char *path, const char *line);                    /* task hwx */
 static void hwx_run(struct HwyPass *hp);                                     /* task hwx */
 static void hwx_stats(void);                                                 /* task hwx */
+static void hwdd_run(struct HwyPass *hp);                                    /* task hwdd */
+static void hwdd_stats(void);                                                /* task hwdd */
 
 /* ---------------------------------------------------------------- table line */
 static void rb_file(const char *path) {
@@ -291,6 +293,7 @@ static void rb_hwy(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) {
     /* highway shape blocks, one line each (task hwx, hwt, hwdx, hwdd): <block>_run(hp); */
     hwt_run(hp);                                                                 /* task hwt */
     hwx_run(hp);                                                                 /* task hwx */
+    hwdd_run(hp);                                                            /* task hwdd */
     hwy_end(hp);
 }
 
@@ -488,6 +491,7 @@ static void rbt_stats(void) {
     hwy_stats();                                                             /* task hwcore */
     hwt_stats();                                                             /* task hwt */
     hwx_stats();                                                             /* task hwx */
+    hwdd_stats();                                                            /* task hwdd */
     LONG n = g_rb_n_pass + g_rb_n_conv + g_rb_n_rev + g_rb_n_load + g_rb_n_fault;
     if (!g_rb_on || n == last) return;
     last = n;

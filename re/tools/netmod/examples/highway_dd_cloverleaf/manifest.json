@@ -1,0 +1,1816 @@
+{
+ "netpack": 1,
+ "name": "highway_dd_cloverleaf",
+ "version": "1.0.0",
+ "author": "sc3kre",
+ "description": "Task hwdd: two diagonal highways of the two families that cross become a cloverleaf turned 45 degrees (A over B, four loops, four outer ramps), or a flyover when the quadrants are not free. Placed by sc3netmod's HWDD block (sc3netmod_hwdd.c).",
+ "game": {
+  "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+ },
+ "variants": [
+  {
+   "id": 21360,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21360",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21361,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21361",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21362,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21362",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21363,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21363",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21364,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21364",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21365,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21365",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21366,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21366",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21367,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21367",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21368,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21368",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21369,
+   "base": 11224,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21369",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21370,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21370",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21371,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21371",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21372,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21372",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21373,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21373",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21374,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21374",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21375,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21375",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21376,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21376",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21377,
+   "base": 15106,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21377",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21378,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21378",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21379,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21379",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21380,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21380",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21381,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21381",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21382,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21382",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21383,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21383",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21384,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21384",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21385,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21385",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21386,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21386",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21387,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21387",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21388,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21388",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21389,
+   "base": 11224,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21389",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21390,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21390",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21391,
+   "base": 15106,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21391",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21392,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21392",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21393,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21393",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21394,
+   "base": 15149,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21394",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21395,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21395",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21396,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21396",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21397,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21397",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21398,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21398",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21399,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21399",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21400,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21400",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21401,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21401",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21402,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21402",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21403,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21403",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21404,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21404",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21405,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21405",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21406,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21406",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21407,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21407",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21408,
+   "base": 11224,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21408",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21409,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21409",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21410,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21410",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21411,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21411",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21412,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21412",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21413,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21413",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21414,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21414",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21415,
+   "base": 15106,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21415",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21416,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21416",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21417,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21417",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21418,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21418",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21419,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21419",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21420,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal ramp)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21420",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21421,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21421",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21422,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21422",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21423,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21423",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21424,
+   "base": 11224,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21424",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21425,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21425",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21426,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21426",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21427,
+   "base": 15106,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21427",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21428,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21428",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21429,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21429",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21430,
+   "base": 15149,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21430",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21431,
+   "base": 15149,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21431",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21432,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal cloverleaf)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21432",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21433,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal flyover)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21433",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21434,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal flyover)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21434",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21435,
+   "base": 11223,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal flyover)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21435",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21436,
+   "base": 11224,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal flyover)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21436",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21437,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal flyover)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21437",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21438,
+   "base": 15106,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal flyover)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21438",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21439,
+   "base": 15052,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal flyover)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21439",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21440,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal flyover)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21440",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21441,
+   "base": 15149,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal flyover)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21441",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21442,
+   "base": 11224,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal flyover)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21442",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21443,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal flyover)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21443",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21444,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal flyover)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21444",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21445,
+   "base": 15106,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal flyover)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21445",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21446,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal flyover)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21446",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21447,
+   "base": 15149,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal flyover)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21447",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21448,
+   "base": 15149,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal flyover)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21448",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21449,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (diagonal flyover)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21449",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  }
+ ],
+ "lanes": [
+  {
+   "piece": 21360,
+   "spec": "hwdd_21360.lanes.json"
+  },
+  {
+   "piece": 21361,
+   "spec": "hwdd_21361.lanes.json"
+  },
+  {
+   "piece": 21362,
+   "spec": "hwdd_21362.lanes.json"
+  },
+  {
+   "piece": 21363,
+   "spec": "hwdd_21363.lanes.json"
+  },
+  {
+   "piece": 21364,
+   "spec": "hwdd_21364.lanes.json"
+  },
+  {
+   "piece": 21365,
+   "spec": "hwdd_21365.lanes.json"
+  },
+  {
+   "piece": 21366,
+   "spec": "hwdd_21366.lanes.json"
+  },
+  {
+   "piece": 21367,
+   "spec": "hwdd_21367.lanes.json"
+  },
+  {
+   "piece": 21368,
+   "spec": "hwdd_21368.lanes.json"
+  },
+  {
+   "piece": 21369,
+   "spec": "hwdd_21369.lanes.json"
+  },
+  {
+   "piece": 21370,
+   "spec": "hwdd_21370.lanes.json"
+  },
+  {
+   "piece": 21371,
+   "spec": "hwdd_21371.lanes.json"
+  },
+  {
+   "piece": 21372,
+   "spec": "hwdd_21372.lanes.json"
+  },
+  {
+   "piece": 21373,
+   "spec": "hwdd_21373.lanes.json"
+  },
+  {
+   "piece": 21374,
+   "spec": "hwdd_21374.lanes.json"
+  },
+  {
+   "piece": 21375,
+   "spec": "hwdd_21375.lanes.json"
+  },
+  {
+   "piece": 21376,
+   "spec": "hwdd_21376.lanes.json"
+  },
+  {
+   "piece": 21377,
+   "spec": "hwdd_21377.lanes.json"
+  },
+  {
+   "piece": 21378,
+   "spec": "hwdd_21378.lanes.json"
+  },
+  {
+   "piece": 21379,
+   "spec": "hwdd_21379.lanes.json"
+  },
+  {
+   "piece": 21380,
+   "spec": "hwdd_21380.lanes.json"
+  },
+  {
+   "piece": 21381,
+   "spec": "hwdd_21381.lanes.json"
+  },
+  {
+   "piece": 21382,
+   "spec": "hwdd_21382.lanes.json"
+  },
+  {
+   "piece": 21383,
+   "spec": "hwdd_21383.lanes.json"
+  },
+  {
+   "piece": 21384,
+   "spec": "hwdd_21384.lanes.json"
+  },
+  {
+   "piece": 21385,
+   "spec": "hwdd_21385.lanes.json"
+  },
+  {
+   "piece": 21386,
+   "spec": "hwdd_21386.lanes.json"
+  },
+  {
+   "piece": 21387,
+   "spec": "hwdd_21387.lanes.json"
+  },
+  {
+   "piece": 21388,
+   "spec": "hwdd_21388.lanes.json"
+  },
+  {
+   "piece": 21389,
+   "spec": "hwdd_21389.lanes.json"
+  },
+  {
+   "piece": 21390,
+   "spec": "hwdd_21390.lanes.json"
+  },
+  {
+   "piece": 21391,
+   "spec": "hwdd_21391.lanes.json"
+  },
+  {
+   "piece": 21392,
+   "spec": "hwdd_21392.lanes.json"
+  },
+  {
+   "piece": 21393,
+   "spec": "hwdd_21393.lanes.json"
+  },
+  {
+   "piece": 21394,
+   "spec": "hwdd_21394.lanes.json"
+  },
+  {
+   "piece": 21395,
+   "spec": "hwdd_21395.lanes.json"
+  },
+  {
+   "piece": 21396,
+   "spec": "hwdd_21396.lanes.json"
+  },
+  {
+   "piece": 21397,
+   "spec": "hwdd_21397.lanes.json"
+  },
+  {
+   "piece": 21398,
+   "spec": "hwdd_21398.lanes.json"
+  },
+  {
+   "piece": 21399,
+   "spec": "hwdd_21399.lanes.json"
+  },
+  {
+   "piece": 21400,
+   "spec": "hwdd_21400.lanes.json"
+  },
+  {
+   "piece": 21401,
+   "spec": "hwdd_21401.lanes.json"
+  },
+  {
+   "piece": 21402,
+   "spec": "hwdd_21402.lanes.json"
+  },
+  {
+   "piece": 21403,
+   "spec": "hwdd_21403.lanes.json"
+  },
+  {
+   "piece": 21404,
+   "spec": "hwdd_21404.lanes.json"
+  },
+  {
+   "piece": 21405,
+   "spec": "hwdd_21405.lanes.json"
+  },
+  {
+   "piece": 21406,
+   "spec": "hwdd_21406.lanes.json"
+  },
+  {
+   "piece": 21407,
+   "spec": "hwdd_21407.lanes.json"
+  },
+  {
+   "piece": 21408,
+   "spec": "hwdd_21408.lanes.json"
+  },
+  {
+   "piece": 21409,
+   "spec": "hwdd_21409.lanes.json"
+  },
+  {
+   "piece": 21410,
+   "spec": "hwdd_21410.lanes.json"
+  },
+  {
+   "piece": 21411,
+   "spec": "hwdd_21411.lanes.json"
+  },
+  {
+   "piece": 21412,
+   "spec": "hwdd_21412.lanes.json"
+  },
+  {
+   "piece": 21413,
+   "spec": "hwdd_21413.lanes.json"
+  },
+  {
+   "piece": 21414,
+   "spec": "hwdd_21414.lanes.json"
+  },
+  {
+   "piece": 21415,
+   "spec": "hwdd_21415.lanes.json"
+  },
+  {
+   "piece": 21416,
+   "spec": "hwdd_21416.lanes.json"
+  },
+  {
+   "piece": 21417,
+   "spec": "hwdd_21417.lanes.json"
+  },
+  {
+   "piece": 21418,
+   "spec": "hwdd_21418.lanes.json"
+  },
+  {
+   "piece": 21419,
+   "spec": "hwdd_21419.lanes.json"
+  },
+  {
+   "piece": 21420,
+   "spec": "hwdd_21420.lanes.json"
+  },
+  {
+   "piece": 21421,
+   "spec": "hwdd_21421.lanes.json"
+  },
+  {
+   "piece": 21422,
+   "spec": "hwdd_21422.lanes.json"
+  },
+  {
+   "piece": 21423,
+   "spec": "hwdd_21423.lanes.json"
+  },
+  {
+   "piece": 21424,
+   "spec": "hwdd_21424.lanes.json"
+  },
+  {
+   "piece": 21425,
+   "spec": "hwdd_21425.lanes.json"
+  },
+  {
+   "piece": 21426,
+   "spec": "hwdd_21426.lanes.json"
+  },
+  {
+   "piece": 21427,
+   "spec": "hwdd_21427.lanes.json"
+  },
+  {
+   "piece": 21428,
+   "spec": "hwdd_21428.lanes.json"
+  },
+  {
+   "piece": 21429,
+   "spec": "hwdd_21429.lanes.json"
+  },
+  {
+   "piece": 21430,
+   "spec": "hwdd_21430.lanes.json"
+  },
+  {
+   "piece": 21431,
+   "spec": "hwdd_21431.lanes.json"
+  },
+  {
+   "piece": 21432,
+   "spec": "hwdd_21432.lanes.json"
+  },
+  {
+   "piece": 21433,
+   "spec": "hwdd_21433.lanes.json"
+  },
+  {
+   "piece": 21434,
+   "spec": "hwdd_21434.lanes.json"
+  },
+  {
+   "piece": 21435,
+   "spec": "hwdd_21435.lanes.json"
+  },
+  {
+   "piece": 21436,
+   "spec": "hwdd_21436.lanes.json"
+  },
+  {
+   "piece": 21437,
+   "spec": "hwdd_21437.lanes.json"
+  },
+  {
+   "piece": 21438,
+   "spec": "hwdd_21438.lanes.json"
+  },
+  {
+   "piece": 21439,
+   "spec": "hwdd_21439.lanes.json"
+  },
+  {
+   "piece": 21440,
+   "spec": "hwdd_21440.lanes.json"
+  },
+  {
+   "piece": 21441,
+   "spec": "hwdd_21441.lanes.json"
+  },
+  {
+   "piece": 21442,
+   "spec": "hwdd_21442.lanes.json"
+  },
+  {
+   "piece": 21443,
+   "spec": "hwdd_21443.lanes.json"
+  },
+  {
+   "piece": 21444,
+   "spec": "hwdd_21444.lanes.json"
+  },
+  {
+   "piece": 21445,
+   "spec": "hwdd_21445.lanes.json"
+  },
+  {
+   "piece": 21446,
+   "spec": "hwdd_21446.lanes.json"
+  },
+  {
+   "piece": 21447,
+   "spec": "hwdd_21447.lanes.json"
+  },
+  {
+   "piece": 21448,
+   "spec": "hwdd_21448.lanes.json"
+  },
+  {
+   "piece": 21449,
+   "spec": "hwdd_21449.lanes.json"
+  }
+ ],
+ "highway_lines": [
+  "hwyp 21360 1",
+  "hwys 21360 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21361 1",
+  "hwys 21361 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21362 1",
+  "hwys 21362 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21363 1",
+  "hwys 21363 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21364 1",
+  "hwys 21364 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21365 1",
+  "hwys 21365 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21366 1",
+  "hwys 21366 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21367 0",
+  "hwys 21367 15052 0 15052 1 15052 2 15052 3",
+  "hwyp 21368 0",
+  "hwys 21368 11223 0 11223 1 11223 2 11223 3",
+  "hwyp 21369 0",
+  "hwys 21369 11224 0 11224 1 11224 0 11224 3",
+  "hwyp 21370 0",
+  "hwys 21370 11223 0 11223 1 11223 2 11223 3",
+  "hwyp 21371 1",
+  "hwys 21371 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21372 1",
+  "hwys 21372 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21373 1",
+  "hwys 21373 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21374 1",
+  "hwys 21374 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21375 1",
+  "hwys 21375 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21376 0",
+  "hwys 21376 15052 0 15052 1 15052 2 15052 3",
+  "hwyp 21377 0",
+  "hwys 21377 15106 0 15106 1 15106 0 15106 3",
+  "hwyp 21378 0",
+  "hwys 21378 11223 0 11223 1 11223 2 11223 3",
+  "hwyp 21379 0",
+  "hwys 21379 11223 0 11223 1 11223 2 11223 3",
+  "hwyp 21380 1",
+  "hwys 21380 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21381 1",
+  "hwys 21381 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21382 0",
+  "hwys 21382 15052 0 15052 1 15052 2 15052 3",
+  "hwyp 21383 0",
+  "hwys 21383 15052 0 15052 1 15052 2 15052 3",
+  "hwyp 21384 0",
+  "hwys 21384 11223 0 11223 1 11223 2 11223 3",
+  "hwyp 21385 0",
+  "hwys 21385 11223 0 11223 1 11223 2 11223 3",
+  "hwyp 21386 0",
+  "hwys 21386 15052 0 15052 1 15052 2 15052 3",
+  "hwyp 21387 0",
+  "hwys 21387 15052 0 15052 1 15052 2 15052 3",
+  "hwyp 21388 0",
+  "hwys 21388 11223 0 11223 1 11223 2 11223 3",
+  "hwyp 21389 0",
+  "hwys 21389 11224 0 11224 1 11224 0 11224 3",
+  "hwyp 21390 0",
+  "hwys 21390 15051 0 15051 1 15051 2 15051 3",
+  "hwyp 21391 0",
+  "hwys 21391 15106 0 15106 1 15106 0 15106 3",
+  "hwyp 21392 0",
+  "hwys 21392 15052 0 15052 1 15052 2 15052 3",
+  "hwyp 21393 0",
+  "hwys 21393 73 0 73 1 73 2 73 3",
+  "hwyp 21394 0",
+  "hwys 21394 15149 0 15149 1 15149 2 15149 3",
+  "hwyp 21395 1",
+  "hwys 21395 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21396 1",
+  "hwys 21396 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21397 1",
+  "hwys 21397 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21398 1",
+  "hwys 21398 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21399 0",
+  "hwys 21399 11223 0 11223 1 11223 2 11223 3",
+  "hwyp 21400 1",
+  "hwys 21400 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21401 1",
+  "hwys 21401 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21402 1",
+  "hwys 21402 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21403 1",
+  "hwys 21403 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21404 1",
+  "hwys 21404 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21405 1",
+  "hwys 21405 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21406 0",
+  "hwys 21406 15052 0 15052 1 15052 2 15052 3",
+  "hwyp 21407 0",
+  "hwys 21407 11223 0 11223 1 11223 2 11223 3",
+  "hwyp 21408 0",
+  "hwys 21408 11224 0 11224 1 11224 0 11224 3",
+  "hwyp 21409 0",
+  "hwys 21409 11223 0 11223 1 11223 2 11223 3",
+  "hwyp 21410 1",
+  "hwys 21410 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21411 1",
+  "hwys 21411 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21412 1",
+  "hwys 21412 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21413 1",
+  "hwys 21413 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21414 0",
+  "hwys 21414 15052 0 15052 1 15052 2 15052 3",
+  "hwyp 21415 0",
+  "hwys 21415 15106 0 15106 1 15106 0 15106 3",
+  "hwyp 21416 0",
+  "hwys 21416 15052 0 15052 1 15052 2 15052 3",
+  "hwyp 21417 0",
+  "hwys 21417 11223 0 11223 1 11223 2 11223 3",
+  "hwyp 21418 0",
+  "hwys 21418 11223 0 11223 1 11223 2 11223 3",
+  "hwyp 21419 1",
+  "hwys 21419 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21420 1",
+  "hwys 21420 15127 0 15128 0 15127 2 15128 2",
+  "hwyp 21421 0",
+  "hwys 21421 15052 0 15052 1 15052 2 15052 3",
+  "hwyp 21422 0",
+  "hwys 21422 15052 0 15052 1 15052 2 15052 3",
+  "hwyp 21423 0",
+  "hwys 21423 11223 0 11223 1 11223 2 11223 3",
+  "hwyp 21424 0",
+  "hwys 21424 11224 0 11224 1 11224 0 11224 3",
+  "hwyp 21425 0",
+  "hwys 21425 15051 0 15051 1 15051 2 15051 3",
+  "hwyp 21426 0",
+  "hwys 21426 15051 0 15051 1 15051 2 15051 3",
+  "hwyp 21427 0",
+  "hwys 21427 15106 0 15106 1 15106 0 15106 3",
+  "hwyp 21428 0",
+  "hwys 21428 15052 0 15052 1 15052 2 15052 3",
+  "hwyp 21429 0",
+  "hwys 21429 73 0 73 1 73 2 73 3",
+  "hwyp 21430 0",
+  "hwys 21430 15149 0 15149 1 15149 0 15149 3",
+  "hwyp 21431 0",
+  "hwys 21431 15149 0 15149 1 15149 0 15149 3",
+  "hwyp 21432 0",
+  "hwys 21432 73 0 73 1 73 2 73 3",
+  "hwyp 21433 0",
+  "hwys 21433 11223 0 11223 1 11223 2 11223 3",
+  "hwyp 21434 0",
+  "hwys 21434 15052 0 15052 1 15052 2 15052 3",
+  "hwyp 21435 0",
+  "hwys 21435 11223 0 11223 1 11223 2 11223 3",
+  "hwyp 21436 0",
+  "hwys 21436 11224 0 11224 1 11224 0 11224 3",
+  "hwyp 21437 0",
+  "hwys 21437 15051 0 15051 1 15051 2 15051 3",
+  "hwyp 21438 0",
+  "hwys 21438 15106 0 15106 1 15106 0 15106 3",
+  "hwyp 21439 0",
+  "hwys 21439 15052 0 15052 1 15052 2 15052 3",
+  "hwyp 21440 0",
+  "hwys 21440 73 0 73 1 73 2 73 3",
+  "hwyp 21441 0",
+  "hwys 21441 15149 0 15149 1 15149 2 15149 3",
+  "hwyp 21442 0",
+  "hwys 21442 11224 0 11224 1 11224 0 11224 3",
+  "hwyp 21443 0",
+  "hwys 21443 15051 0 15051 1 15051 2 15051 3",
+  "hwyp 21444 0",
+  "hwys 21444 15051 0 15051 1 15051 2 15051 3",
+  "hwyp 21445 0",
+  "hwys 21445 15106 0 15106 1 15106 0 15106 3",
+  "hwyp 21446 0",
+  "hwys 21446 73 0 73 1 73 2 73 3",
+  "hwyp 21447 0",
+  "hwys 21447 15149 0 15149 1 15149 0 15149 3",
+  "hwyp 21448 0",
+  "hwys 21448 15149 0 15149 1 15149 0 15149 3",
+  "hwyp 21449 0",
+  "hwys 21449 73 0 73 1 73 2 73 3"
+ ]
+}
