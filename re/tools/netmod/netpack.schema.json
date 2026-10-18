@@ -108,6 +108,45 @@
       },
       "description": "Task roundabout3: sc3netmod turns every qualifying 2x2 road block into this piece by itself (after each road retile and after a city load) and back into stock road when it stops qualifying. Rule: re/analysis/MULTITILE.md section 5. One piece across all installed packages."
     },
+    "auto_avenue_junctions": {
+      "type": "array",
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["box", "arm"],
+        "properties": {
+          "box": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["piece", "edges"],
+              "properties": {
+                "piece": {"$ref": "#/$defs/piece_id", "description": "A ROAD variant in this package: one cell of the paved box, drawn at state 0 with these edges."},
+                "edges": {"type": "string", "pattern": "^[IAC]{4}$", "description": "The cell's edges N E S W at state 0: I another box cell, A an arm cell (crosswalk), C closed (curb). Each pattern serves all four rotations."},
+                "save_11204": {"type": "boolean", "default": false, "description": "Save the cell as stock 11204 in its own state (a T's far half; needs the closed edge on S)."}
+              }
+            }
+          },
+          "arm": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["piece", "nose"],
+              "properties": {
+                "piece": {"$ref": "#/$defs/piece_id", "description": "A ROAD variant of 11204 in this package: the avenue cell beside the box, its median ending in a concrete nose."},
+                "nose": {"enum": ["E", "W"], "description": "The end of the 11204 half (state 0: median N, outer sidewalk S) that faces the box."}
+              }
+            }
+          }
+        }
+      },
+      "description": "Task avx: sc3netmod's AVX block re-pieces straight avenue intersections (avenue x avenue, avenue T, road x avenue, road T) as one paved box after each road retile and after a city load. Rule: re/tools/netmod/avx.py. One set across all installed packages."
+    },
     "auto_diagonal_avenues": {
       "type": "array",
       "maxItems": 1,

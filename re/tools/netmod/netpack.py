@@ -570,7 +570,8 @@ def compile_pack(stock, pack_dir, man):
            "crossings": list(man.get("crossings", [])),
            "templates": list(man.get("templates", [])),                                     # task multitile
            "auto_roundabouts": [],                                                          # task roundabout3
-           "auto_diagonal_avenues": []}                                                     # task diagave
+           "auto_diagonal_avenues": [],                                                     # task diagave
+           "auto_avenue_junctions": []}                                                     # task avx
     for n, v in enumerate(man.get("variants", [])):
         where = "%s variant %d (id %s)" % (pname, n + 1, v.get("id"))
         vid, base, net = v["id"], v["base"], v["network"]
@@ -708,6 +709,10 @@ def compile_pack(stock, pack_dir, man):
                                              "where": where})
     if len(out["auto_diagonal_avenues"]) > 1:
         raise NetpackError("%s: at most one auto_diagonal_avenues entry (sc3netmod applies one set)" % pname)
+    for n, a in enumerate(man.get("auto_avenue_junctions", [])):     # task avx: sc3netmod AVX block (avx.py)
+        out["auto_avenue_junctions"].append(compile_avx(a, vids, "%s auto_avenue_junctions %d" % (pname, n + 1)))
+    if len(out["auto_avenue_junctions"]) > 1:
+        raise NetpackError("%s: at most one auto_avenue_junctions entry (sc3netmod applies one set)" % pname)
     out["ramps"] = []
     if man.get("ramps"):                                 # hardcoded SIMNTWRK tables (netramp.py, NET_RAMPS.md)
         try:
@@ -868,6 +873,10 @@ def merge(stock, packs):
     if len(davs) > 1:
         raise NetpackError("auto_diagonal_avenues: %s and %s both declare one; sc3netmod applies a single set" %
                            (davs[0]["where"], davs[1]["where"]))
+    avxs = [a for c in comp for a in c.get("auto_avenue_junctions", [])]               # task avx
+    if len(avxs) > 1:
+        raise NetpackError("auto_avenue_junctions: %s and %s both declare one; sc3netmod applies a single set" %
+                           (avxs[0]["where"], avxs[1]["where"]))
     # ---- task multitile: templates (netpack_templates.py, MULTITILE.md). Their cell pieces go into the Protected
     # list of their network so a later re-tile never replaces a template cell.
     try:
@@ -994,7 +1003,8 @@ def merge(stock, packs):
     # ---- variant tables for sc3netmod.dll, one per package
     for c in comp:
         mine = [t for t in templates if t["pack"] == c["name"]]
-        if c["variants"] or c["ramps"] or mine or c["auto_roundabouts"] or c["auto_diagonal_avenues"]:
+        if c["variants"] or c["ramps"] or mine or c["auto_roundabouts"] or c["auto_diagonal_avenues"] or \
+                c.get("auto_avenue_junctions"):
             tables[c["name"]] = ("# netpack %s: <variant id> <base id>, read by sc3netmod.dll\r\n" % c["name"]).encode() + \
                 b"".join(b"%d %d\r\n" % (v["id"], v["base"]) for v in sorted(c["variants"], key=lambda v: v["id"])) + \
                 RAMP.table_lines(c["ramps"]) + TPL.table_lines(mine) + \
@@ -1008,8 +1018,9 @@ def merge(stock, packs):
                          for a in c["auto_diagonal_avenues"] for j in a.get("junction", [])) + \
                 b"".join(b"davm %d %d %d %d %d %d %d\r\n" % (m["axis"], m["end"], 1 if m["cont"] == "A" else 2, *cell)
                          for a in c["auto_diagonal_avenues"] for m in a.get("merge", []) for cell in m["cells"]) + \
-                b"".join(b"davs %d\r\n" % p for a in c["auto_diagonal_avenues"] for p in a.get("save_43", []))
-                # task diagave
+                b"".join(b"davs %d\r\n" % p for a in c["auto_diagonal_avenues"] for p in a.get("save_43", [])) + \
+                avx_table_lines(c.get("auto_avenue_junctions", []))
+                # task diagave, task avx
 
     # ---- report + checks that need the merged result
     placed = set()
@@ -1028,6 +1039,7 @@ def merge(stock, packs):
     placed |= {m["piece"] for a in davs for m in a["middle"]}   # sc3netmod DAV places them (task diagave)
     placed |= {j["piece"] for a in davs for j in a.get("junction", [])}
     placed |= {cell[2] for a in davs for m in a.get("merge", []) for cell in m["cells"]}
+    placed |= {b["piece"] for a in avxs for b in a["box"]} | {b["piece"] for a in avxs for b in a["arm"]}   # task avx
     for v in variants:
         if v["id"] not in placed:
             report["warnings"].append("%s: no rule RESULT places %d, so the tiler never builds it" % (v["where"], v["id"]))
@@ -1041,10 +1053,46 @@ def merge(stock, packs):
                                   for a in autos]
     report["auto_diagonal_avenues"] = [{"middle": a["middle"], "junction": a.get("junction", []),
                                         "merge": a.get("merge", []), "save_43": a.get("save_43", [])} for a in davs]
+    report["auto_avenue_junctions"] = [{"box": a["box"], "arm": a["arm"]} for a in avxs]            # task avx
     report["templates"] = [{"name": t["name"], "pack": t["pack"], "orientations": len(t["orients"]), "cost": t["cost"],
                             "cells": len(t["cells"]), "protect_add": t["protect_add"],
                             "picture": [TPL.render(t, k) for k in range(len(t["orients"]))]} for t in templates]
     return files, tables, report
+
+
+def compile_avx(a, vids, where):
+    """task avx: one auto_avenue_junctions entry -> {"box": [...], "arm": [...], "where"} (sc3netmod_avx.c, avx.py)"""
+    box, arm, pats = [], [], set()
+    for b in a.get("box", []):
+        v, e = vids.get(b.get("piece")), b.get("edges", "")
+        if v is None or v["net"] != "ROAD":
+            raise NetpackError("%s: box piece %s must be a ROAD variant declared in this package" % (where, b.get("piece")))
+        if len(e) != 4 or any(ch not in "IAC" for ch in e):
+            raise NetpackError("%s: box %s: edges = 4 letters N E S W, each I, A or C" % (where, b))
+        if any(e[k:] + e[:k] in pats for k in range(4)):
+            raise NetpackError("%s: box edges %s declared twice (as a rotation)" % (where, e))
+        pats.add(e)
+        if b.get("save_11204") and e[2] != "C":
+            raise NetpackError("%s: box %s: save_11204 needs the closed edge on S (edges[2] == 'C')" % (where, b))
+        box.append({"piece": v["id"], "edges": e, "save_11204": bool(b.get("save_11204"))})
+    for b in a.get("arm", []):
+        v = vids.get(b.get("piece"))
+        if v is None or v["base"] != 11204 or v["net"] != "ROAD":
+            raise NetpackError("%s: arm piece %s must be a ROAD variant of 11204 declared in this package"
+                               % (where, b.get("piece")))
+        if b.get("nose") not in ("E", "W") or any(x["nose"] == b["nose"] for x in arm):
+            raise NetpackError("%s: arm %s: nose E or W, one piece each" % (where, b))
+        arm.append({"piece": v["id"], "nose": b["nose"]})
+    if not box or len(arm) != 2:
+        raise NetpackError("%s: needs box pieces and both arm pieces (nose E and W)" % where)
+    return {"box": box, "arm": arm, "where": where}
+
+
+def avx_table_lines(entries):
+    """task avx: `avxb <piece> <NESW> <save 11204>` and `avxa <piece> <1 E / 3 W>` lines"""
+    return b"".join(b"avxb %d %s %d\r\n" % (b["piece"], b["edges"].encode(), 1 if b["save_11204"] else 0)
+                    for a in entries for b in a["box"]) + \
+        b"".join(b"avxa %d %d\r\n" % (b["piece"], 1 if b["nose"] == "E" else 3) for a in entries for b in a["arm"])
 
 
 def apply_ini(pak, edits):
@@ -1379,6 +1427,10 @@ def _print_report(report):
         if r.get("merge"):
             print("  auto diagonal avenue merges: %d case(s), pieces %s, saved as 43: %s" % (
                 len(r["merge"]), sorted({cell[2] for m in r["merge"] for cell in m["cells"]}), r.get("save_43", [])))
+    for r in report.get("auto_avenue_junctions", []):                           # task avx
+        print("  auto avenue junctions (sc3netmod AVX): box %s; arm %s" % (
+            ", ".join("%d %s%s" % (b["piece"], b["edges"], " (saves as 11204)" if b["save_11204"] else "")
+                      for b in r["box"]), ", ".join("%d nose %s" % (b["piece"], b["nose"]) for b in r["arm"])))
     for r in report.get("auto_roundabouts", []):                                # task roundabout3
         print("  auto roundabout: piece %d, 2x2 road blocks with >= %d arm(s) (sc3netmod RBT)%s"
               % (r["piece"], r["min_arms"], (", arm-less quarter %d" % r["closed"]) if r.get("closed") else ""))
