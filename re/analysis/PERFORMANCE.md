@@ -574,7 +574,7 @@ would wait for a whole batch. Worker profile after it: no lock waits left; the b
 
 The DFS router (`route_trip 0x100070d0`) does per step: arrival test `FUN_10008a94`, push a 32-byte cell record,
 `select_next_cell 0x1000755e` (scan the ring around the current piece: marker grid, network flags +0x5c, congestion
-bytes; keep the least congested; GetOccupantAtCell on the pick; mark its footprint visited; step cost), backtrack with
+bytes; keep the most congested below the cap 150, measured in CAR_TRIPS 6.3, this said "least" until 2026-10-15; GetOccupantAtCell on the pick; mark its footprint visited; step cost), backtrack with
 Release of the piece on failure. The step cost ends with `ftol(ceil((double)cost))` `[CONFIRMED @ 0x100083a6]`, and
 msvcrt's ceil switches the x87 rounding mode with fldcw and back (msvcrt+0xa9024, the same helper FAST_FTOL removed
 from _ftol) - it was the largest single item in the workers' routing samples.

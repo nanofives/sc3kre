@@ -1,0 +1,11 @@
+{
+  "netpack": 1, "name": "ab_nocollapse", "version": "1.0.0", "author": "multitile A/B fixture",
+  "description": "A/B arm B0: the rotonda4 template protected but with collapse off (its pieces in no Collapse.txt group).",
+  "game": {"Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"},
+  "variants": [
+    {"id": 21239, "base": 39, "network": "ROAD", "name": {"*": "Rotonda A/B sin grupo"}, "art": {"from": 39, "recolor": "yellow"}}
+  ],
+  "templates": [
+    {"name": "nocollapse4", "size": [2, 2], "rows": [[[21239, 3], [21239, 0]], [[21239, 2], [21239, 1]]], "cost": 400, "collapse": false}
+  ]
+}

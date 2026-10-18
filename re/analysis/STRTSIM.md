@@ -286,10 +286,54 @@ rva,subsystem,confidence,new_name,evidence
 - **Byte-packed date semantics** in `FUN_10009b35` are mechanically derived but the field
   ordering (which byte is year/month/day) is not proven against a real
   `SC3StrtSimLayer.INI` schedule. Missing evidence: a sample INI/PAK schedule block.
-- **63-byte table @ 0x10032660** (`"$$$$%%%%…////,,,,"`): purpose undetermined; reported
-  raw. Missing evidence: an xref reading it as an index/LUT (not located in functions read).
-- **The layer’s per-frame tick / simulate method** (vtable `PTR_FUN_1002c600` slots) was
-  not resolved to a concrete function here. Missing evidence: decode the vtable at
-  `0x1002c600` and read its slot targets.
+- ~~**63-byte table @ 0x10032660**~~ RESOLVED 2026-10-15 (task cartrips): the vehicle sprite-frame offset table,
+  `sPitchAndOrientationOffset` `[LINUX-HINT]`. The car's Draw pair `FUN_100199b0` / `FUN_10019a30` and the frame
+  accessors `FUN_1001a950` / `FUN_1001aa10` / `FUN_1001aa80` / `FUN_1001ab60` / `FUN_1001ae30` index it with
+  `((DAT_1003265c[rotation] + car[+0x38]) & 0x1f) + car[+0x40] * 0x20` (orientation, pitch) and add the action
+  descriptor's frame and the zoom offset `DAT_1003320c[zoom]` `[CONFIRMED @ 0x100199b0]`.
+- ~~**The layer’s per-frame tick / simulate method**~~ RESOLVED 2026-10-15 (task pausetrips): the vehicles are
+  driven per vehicle from SC3U.exe's heartbeat, not from a layer simulate slot. See section 8.
 - **External GZCLSID → owning module** mapping (§5). Missing evidence: cross-module
   director registration tables (SIMTRANSIT / SIMGEOM / resource modules).
+
+## 8. Vehicle tick (task pausetrips, 2026-10-15)
+
+Evidence: `verify/pausetrips/RESULTS.md` ("What drives what"), backtraces and per-second counts on stock Berlin.
+
+**The visible vehicles are a real-time animation, separate from the trip simulation.** Chain (game thread):
+SIMSPR view tick `FUN_10042a95` -> `[view+0xb4]->vt+0x20` at `0x10042b04` -> SIMSPR `0x1001cb09` -> SC3U.exe heartbeat
+`FUN_00426140` -> SC3U.exe `FUN_00425a10` -> each agent's `vt+0x100` -> STRTSIM `FUN_1001d2c0` (per-vehicle update)
+-> `vt+0x14c` = `FUN_10019ab0` -> `FUN_1001b340` -> `FUN_1001c440` -> `FUN_1001c750` (next cell).
+
+- SC3U.exe `FUN_00426140` (heartbeat): stores `FUN_004758e3(this+0xbc)` into `+0x9c` on every call and, only when its
+  suspend count `+0xb0` is 0, calls every listener on list `+0x88` with the difference from the previous value (capped
+  at 250000) `[CONFIRMED @ SC3U 0x00426140]`. What `FUN_004758e3` reads is `[UNCERTAIN]`; measured, the time the
+  vehicles receive per second is the same paused and running, so it follows real time, not game time.
+- STRTSIM `FUN_1001d2c0` adds that time to the vehicle's `+0x30`, steps its animation frame against `+0x34`, and runs
+  its behaviour `vt+0x14c` until it reports done. It reads no city pause counter or clock field
+  `[CONFIRMED @ STRTSIM 0x1001d2c0]`.
+- Measured (vehicle cell moves `FUN_1001c750` per second, stock Berlin): speed 1 75.5, speed 2 71.5, speed 3 76.6,
+  speed 4 82.7, **user pause 75.1**, camera move 0. The vehicles keep moving while the game is paused and do not
+  speed up with game speed.
+- **What stops them:** (1) the stock camera hold suspends the heartbeat: SIMCITY `FUN_100058ac` calls
+  `FUN_1000ee96()->vt+0x1c(1)` = SC3U.exe `FUN_004263d0` (`+0xb0 += 1`), released by `FUN_1000590e`
+  `[CONFIRMED @ SIMCITY 0x100058ac, 0x1000590e; SC3U 0x004263d0]`; (2) independently, the SIMSPR view tick skips the
+  heartbeat call whenever a camera-busy byte `+0x1dd..+0x1e2` is set and runs the scroll step `FUN_10043daf` instead
+  `[CONFIRMED @ SIMSPR 0x10042ad5..0x10042b04]`. So with sc3simrun (no hold) days and trips run during a camera move
+  but vehicles still freeze. The user pause (`FUN_100056bb`, `+0x140`) touches neither.
+  Refined (task carscroll 2026-10-16): the scroll step renders its own frame through the same render-view slot
+  `+0x20` (`FUN_1001cab9`), which calls the heartbeat only while render-view `+0x2b` (= rate >= 0.1, set by slot
+  `+0x7c` `FUN_1001d65d`) is set; the idle tick passes 60.0, the scroll step 0.0 (three copies of the write at
+  `0x10043de7`, `0x10043f60`, `0x10044003`) `[CONFIRMED @ SIMSPR 0x1001cab9, 0x1001d65d, 0x10043daf]`. sc3simrun
+  `animate_while_scrolling` passes 60.0 there (`formats/SIM_WHILE_SCROLLING.md`).
+- Camera moves and cars (task carscroll): UpdateVehicleView `FUN_10015415` queues the cars on strips that left the sim
+  rect for removal through AnimOccMan `vt+0x58`; the removal happens in each car's next tick, so while the agents are
+  frozen (stock camera move) nothing is removed and the count climbs above target until the camera stops. The refill
+  `FUN_1001f040` is called on the whole new rect once per new strip `[CONFIRMED @ STRTSIM 0x10015415]`.
+- Vehicles never deposit traffic density; density comes only from SimTransit trips (NET_LANES verdict table), which
+  stop entirely while paused (`verify/pausetrips/RESULTS.md`).
+
+Still open: what `FUN_004758e3` reads. ~~How vehicles are spawned and removed~~ RESOLVED 2026-10-15 (task
+cartrips): the car producer (layer `+0x100`) keeps a density-derived count in a sim rect around the view, and cars
+are removed by a density test, a failed next-cell move, view changes and zoom; decoded and measured in
+`re/analysis/CAR_TRIPS.md` sections 1-2.

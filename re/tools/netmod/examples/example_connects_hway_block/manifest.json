@@ -1,0 +1,17 @@
+{
+ "netpack": 1,
+ "name": "example_connects_hway_block",
+ "version": "1.0.0",
+ "author": "lanekit test fixture",
+ "description": "Turn matrices of the two straight highway pieces (73 along z, 15051 along x) set to empty: the SimTransit router cannot continue along them. Test fixture for NET_LANES.md arm H.",
+ "connects": [
+  {
+   "piece": 73,
+   "road": []
+  },
+  {
+   "piece": 15051,
+   "road": []
+  }
+ ]
+}

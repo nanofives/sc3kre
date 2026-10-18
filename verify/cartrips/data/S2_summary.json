@@ -1,0 +1,762 @@
+{
+ "arm": "S2",
+ "pid": 10136,
+ "schedule": "s1:90,s2:90,s3:90,s4:90,P:60,H:20,s3:60",
+ "faults": 0,
+ "phases": [
+  {
+   "phase": "s1:90",
+   "seconds": 86,
+   "days_per_s": 0.11764705882352941,
+   "cars_mean": 77.53488372093024,
+   "target_mean": 77.55813953488372,
+   "avg_density_mean": 35.83720930232558,
+   "simrect": [
+    64,
+    97,
+    96,
+    124
+   ],
+   "zoom": 3,
+   "count_over_target_plus1": 0,
+   "spawn_per_s": 4.616279069767442,
+   "removed_per_s": 2.9302325581395348,
+   "cell_moves_per_s": 31.790697674418606,
+   "nvd_calls_per_s": 33.627906976744185,
+   "nvd_true_per_s": 0.7093023255813954,
+   "nopath_per_s": 1.127906976744186,
+   "view_update_per_s": 0.0,
+   "produce_off_per_s": 0.0,
+   "day_per_s": 0.11627906976744186,
+   "spawn_by_caller": {
+    "STRTSIM.DLL:0x1001efc9": 304
+   },
+   "removed_by": {
+    "placement-failed": 93,
+    "nopath:next-cell-outside-sim-rect": 97,
+    "density": 61,
+    "no-mark": 1
+   },
+   "nopath_why": {
+    "next-cell-outside-sim-rect": 97
+   },
+   "movenstages": {
+    "10000/0": 479
+   },
+   "removed_visible": 29,
+   "removed_visible_by": {
+    "density": 29
+   },
+   "removed_visible_loose": 31,
+   "removed_visible_loose_by": {
+    "density": 30,
+    "nopath:next-cell-outside-sim-rect": 1
+   },
+   "age_s_median_tracked": 15.481,
+   "cells_median_tracked": 7,
+   "agent_loop_per_s": 216.67441860465115,
+   "agent_loop_ms_per_s": 80.67097209302325,
+   "draw_calls_per_s": 10070.453488372093,
+   "trip_calls_per_s": 16.74418604651163,
+   "trip_arrived_per_s": 16.732558139534884,
+   "trip_nodes_per_s": 661.2790697674419,
+   "trip_flagged_per_s": 6.290697674418604,
+   "trip_vp_per_s": 0.6511627906976745,
+   "trip_vpnodes_per_s": 16.569767441860463,
+   "trip_vpflag_per_s": 0.19767441860465115,
+   "trip_roadonly_per_s": 15.94186046511628,
+   "trip_vproadonly_per_s": 0.6511627906976745,
+   "trip_threads_max": 1,
+   "route_ms_per_s": 0.8914325581395349,
+   "route_ms_per_trip": 0.05323833333333334,
+   "nodes_per_arrived": 39.52050034746352,
+   "path_len_hist": [
+    455,
+    25,
+    154,
+    144,
+    322,
+    270,
+    64,
+    5
+   ],
+   "vp_innodes_hist": [
+    11,
+    0,
+    2,
+    23,
+    20,
+    0,
+    0,
+    0
+   ],
+   "node_types": {
+    "0x80": 1439,
+    "1": 50898,
+    "2": 462,
+    "3": 43,
+    "4": 1321,
+    "8": 2569,
+    "0x14": 30,
+    "0x18": 95,
+    "0x30": 13,
+    "0x41": 0,
+    "0x42": 0,
+    "0x43": 0,
+    "0x50": 0,
+    "other": 0
+   }
+  },
+  {
+   "phase": "s2:90",
+   "seconds": 86,
+   "days_per_s": 0.49411764705882355,
+   "cars_mean": 143.82558139534885,
+   "target_mean": 143.8372093023256,
+   "avg_density_mean": 66.4186046511628,
+   "simrect": [
+    64,
+    97,
+    96,
+    124
+   ],
+   "zoom": 3,
+   "count_over_target_plus1": 0,
+   "spawn_per_s": 4.430232558139535,
+   "removed_per_s": 4.406976744186046,
+   "cell_moves_per_s": 47.895348837209305,
+   "nvd_calls_per_s": 51.44186046511628,
+   "nvd_true_per_s": 1.255813953488372,
+   "nopath_per_s": 2.2906976744186047,
+   "view_update_per_s": 0.0,
+   "produce_off_per_s": 0.0,
+   "day_per_s": 0.5,
+   "spawn_by_caller": {
+    "STRTSIM.DLL:0x1001efc9": 313
+   },
+   "removed_by": {
+    "density": 108,
+    "nopath:next-cell-outside-sim-rect": 197,
+    "placement-failed": 68,
+    "no-mark": 6
+   },
+   "nopath_why": {
+    "next-cell-outside-sim-rect": 197
+   },
+   "movenstages": {
+    "10000/0": 494
+   },
+   "removed_visible": 75,
+   "removed_visible_by": {
+    "density": 68,
+    "no-mark": 1,
+    "nopath:next-cell-outside-sim-rect": 6
+   },
+   "removed_visible_loose": 80,
+   "removed_visible_loose_by": {
+    "density": 71,
+    "no-mark": 3,
+    "nopath:next-cell-outside-sim-rect": 6
+   },
+   "age_s_median_tracked": 26.914,
+   "cells_median_tracked": 11,
+   "agent_loop_per_s": 209.6860465116279,
+   "agent_loop_ms_per_s": 104.77916976744186,
+   "draw_calls_per_s": 17220.95348837209,
+   "trip_calls_per_s": 45.47674418604651,
+   "trip_arrived_per_s": 45.30232558139535,
+   "trip_nodes_per_s": 1723.7441860465117,
+   "trip_flagged_per_s": 17.209302325581394,
+   "trip_vp_per_s": 1.744186046511628,
+   "trip_vpnodes_per_s": 42.48837209302326,
+   "trip_vpflag_per_s": 0.813953488372093,
+   "trip_roadonly_per_s": 41.674418604651166,
+   "trip_vproadonly_per_s": 1.7209302325581395,
+   "trip_threads_max": 1,
+   "route_ms_per_s": 2.542317441860465,
+   "route_ms_per_trip": 0.055903681922781896,
+   "nodes_per_arrived": 38.049794661190965,
+   "path_len_hist": [
+    1152,
+    95,
+    462,
+    531,
+    852,
+    638,
+    149,
+    17
+   ],
+   "vp_innodes_hist": [
+    27,
+    5,
+    28,
+    23,
+    66,
+    1,
+    0,
+    0
+   ],
+   "node_types": {
+    "0x80": 3896,
+    "1": 121942,
+    "2": 2519,
+    "3": 201,
+    "4": 8350,
+    "8": 10682,
+    "0x14": 212,
+    "0x18": 366,
+    "0x30": 74,
+    "0x41": 0,
+    "0x42": 0,
+    "0x43": 0,
+    "0x50": 0,
+    "other": 0
+   }
+  },
+  {
+   "phase": "s3:90",
+   "seconds": 86,
+   "days_per_s": 1.4941176470588236,
+   "cars_mean": 140.09302325581396,
+   "target_mean": 139.87209302325581,
+   "avg_density_mean": 64.86046511627907,
+   "simrect": [
+    64,
+    97,
+    96,
+    124
+   ],
+   "zoom": 3,
+   "count_over_target_plus1": 4,
+   "spawn_per_s": 3.5930232558139537,
+   "removed_per_s": 3.744186046511628,
+   "cell_moves_per_s": 44.63953488372093,
+   "nvd_calls_per_s": 47.7093023255814,
+   "nvd_true_per_s": 1.186046511627907,
+   "nopath_per_s": 1.8837209302325582,
+   "view_update_per_s": 0.0,
+   "produce_off_per_s": 0.0,
+   "day_per_s": 1.4883720930232558,
+   "spawn_by_caller": {
+    "STRTSIM.DLL:0x1001efc9": 260
+   },
+   "removed_by": {
+    "nopath:next-cell-outside-sim-rect": 162,
+    "density": 102,
+    "placement-failed": 49,
+    "no-mark": 9
+   },
+   "nopath_why": {
+    "next-cell-outside-sim-rect": 162
+   },
+   "movenstages": {
+    "10000/0": 437
+   },
+   "removed_visible": 77,
+   "removed_visible_by": {
+    "density": 74,
+    "no-mark": 1,
+    "nopath:next-cell-outside-sim-rect": 2
+   },
+   "removed_visible_loose": 79,
+   "removed_visible_loose_by": {
+    "density": 74,
+    "no-mark": 2,
+    "nopath:next-cell-outside-sim-rect": 3
+   },
+   "age_s_median_tracked": 26.095,
+   "cells_median_tracked": 11,
+   "agent_loop_per_s": 218.80232558139534,
+   "agent_loop_ms_per_s": 109.73657325581395,
+   "draw_calls_per_s": 20490.29069767442,
+   "trip_calls_per_s": 174.74418604651163,
+   "trip_arrived_per_s": 173.6627906976744,
+   "trip_nodes_per_s": 6925.2441860465115,
+   "trip_flagged_per_s": 71.8953488372093,
+   "trip_vp_per_s": 6.1395348837209305,
+   "trip_vpnodes_per_s": 138.51162790697674,
+   "trip_vpflag_per_s": 2.895348837209302,
+   "trip_roadonly_per_s": 158.93023255813952,
+   "trip_vproadonly_per_s": 5.8604651162790695,
+   "trip_threads_max": 1,
+   "route_ms_per_s": 10.55305465116279,
+   "route_ms_per_trip": 0.060391449294649985,
+   "nodes_per_arrived": 39.87753598928691,
+   "path_len_hist": [
+    4413,
+    350,
+    1702,
+    1812,
+    3347,
+    2520,
+    730,
+    61
+   ],
+   "vp_innodes_hist": [
+    133,
+    17,
+    67,
+    102,
+    206,
+    3,
+    0,
+    0
+   ],
+   "node_types": {
+    "0x80": 14935,
+    "1": 490971,
+    "2": 9095,
+    "3": 1147,
+    "4": 30341,
+    "8": 46336,
+    "0x14": 805,
+    "0x18": 1540,
+    "0x30": 401,
+    "0x41": 0,
+    "0x42": 0,
+    "0x43": 0,
+    "0x50": 0,
+    "other": 0
+   }
+  },
+  {
+   "phase": "s4:90",
+   "seconds": 86,
+   "days_per_s": 5.447058823529412,
+   "cars_mean": 132.93023255813952,
+   "target_mean": 131.47674418604652,
+   "avg_density_mean": 61.04651162790697,
+   "simrect": [
+    64,
+    97,
+    96,
+    124
+   ],
+   "zoom": 3,
+   "count_over_target_plus1": 15,
+   "spawn_per_s": 3.5348837209302326,
+   "removed_per_s": 3.5348837209302326,
+   "cell_moves_per_s": 43.23255813953488,
+   "nvd_calls_per_s": 46.16279069767442,
+   "nvd_true_per_s": 1.197674418604651,
+   "nopath_per_s": 1.7325581395348837,
+   "view_update_per_s": 0.0,
+   "produce_off_per_s": 0.0,
+   "day_per_s": 5.453488372093023,
+   "spawn_by_caller": {
+    "STRTSIM.DLL:0x1001efc9": 264
+   },
+   "removed_by": {
+    "nopath:next-cell-outside-sim-rect": 147,
+    "density": 103,
+    "no-mark": 12,
+    "placement-failed": 40,
+    "nopath:no-arrival-node-at-position": 2
+   },
+   "nopath_why": {
+    "next-cell-outside-sim-rect": 147,
+    "no-arrival-node-at-position": 2
+   },
+   "movenstages": {
+    "10000/0": 435
+   },
+   "removed_visible": 72,
+   "removed_visible_by": {
+    "density": 68,
+    "nopath:no-arrival-node-at-position": 2,
+    "nopath:next-cell-outside-sim-rect": 2
+   },
+   "removed_visible_loose": 73,
+   "removed_visible_loose_by": {
+    "density": 68,
+    "nopath:no-arrival-node-at-position": 2,
+    "nopath:next-cell-outside-sim-rect": 3
+   },
+   "age_s_median_tracked": 27.0485,
+   "cells_median_tracked": 13.0,
+   "agent_loop_per_s": 220.59302325581396,
+   "agent_loop_ms_per_s": 118.78222790697674,
+   "draw_calls_per_s": 16344.43023255814,
+   "trip_calls_per_s": 634.4186046511628,
+   "trip_arrived_per_s": 629.2906976744187,
+   "trip_nodes_per_s": 25549.058139534885,
+   "trip_flagged_per_s": 249.74418604651163,
+   "trip_vp_per_s": 24.046511627906977,
+   "trip_vpnodes_per_s": 501.45348837209303,
+   "trip_vpflag_per_s": 10.546511627906977,
+   "trip_roadonly_per_s": 582.4302325581396,
+   "trip_vproadonly_per_s": 23.058139534883722,
+   "trip_threads_max": 1,
+   "route_ms_per_s": 43.20708023255814,
+   "route_ms_per_trip": 0.06810500183284457,
+   "nodes_per_arrived": 40.59977087529334,
+   "path_len_hist": [
+    16209,
+    1366,
+    5820,
+    6588,
+    11866,
+    9256,
+    2642,
+    372
+   ],
+   "vp_innodes_hist": [
+    552,
+    119,
+    246,
+    526,
+    584,
+    41,
+    0,
+    0
+   ],
+   "node_types": {
+    "0x80": 54119,
+    "1": 1803052,
+    "2": 41766,
+    "3": 4234,
+    "4": 141074,
+    "8": 144189,
+    "0x14": 2841,
+    "0x18": 4673,
+    "0x30": 1271,
+    "0x41": 0,
+    "0x42": 0,
+    "0x43": 0,
+    "0x50": 0,
+    "other": 0
+   }
+  },
+  {
+   "phase": "P:60",
+   "seconds": 57,
+   "days_per_s": 0.0,
+   "cars_mean": 131.98245614035088,
+   "target_mean": 132,
+   "avg_density_mean": 61,
+   "simrect": [
+    64,
+    97,
+    96,
+    124
+   ],
+   "zoom": 3,
+   "count_over_target_plus1": 0,
+   "spawn_per_s": 3.175438596491228,
+   "removed_per_s": 3.175438596491228,
+   "cell_moves_per_s": 41.1578947368421,
+   "nvd_calls_per_s": 43.78947368421053,
+   "nvd_true_per_s": 0.9649122807017544,
+   "nopath_per_s": 1.6666666666666667,
+   "view_update_per_s": 0.0,
+   "produce_off_per_s": 0.0,
+   "day_per_s": 0.0,
+   "spawn_by_caller": {
+    "STRTSIM.DLL:0x1001efc9": 159
+   },
+   "removed_by": {
+    "density": 55,
+    "placement-failed": 22,
+    "nopath:next-cell-outside-sim-rect": 95,
+    "no-mark": 9
+   },
+   "nopath_why": {
+    "next-cell-outside-sim-rect": 95
+   },
+   "movenstages": {
+    "10000/0": 277
+   },
+   "removed_visible": 34,
+   "removed_visible_by": {
+    "density": 33,
+    "nopath:next-cell-outside-sim-rect": 1
+   },
+   "removed_visible_loose": 37,
+   "removed_visible_loose_by": {
+    "density": 34,
+    "nopath:next-cell-outside-sim-rect": 2,
+    "no-mark": 1
+   },
+   "age_s_median_tracked": 31.68,
+   "cells_median_tracked": 13,
+   "agent_loop_per_s": 217.35087719298247,
+   "agent_loop_ms_per_s": 125.27591228070176,
+   "draw_calls_per_s": 16092,
+   "trip_calls_per_s": 0.0,
+   "trip_arrived_per_s": 0.0,
+   "trip_nodes_per_s": 0.0,
+   "trip_flagged_per_s": 0.0,
+   "trip_vp_per_s": 0.0,
+   "trip_vpnodes_per_s": 0.0,
+   "trip_vpflag_per_s": 0.0,
+   "trip_roadonly_per_s": 0.0,
+   "trip_vproadonly_per_s": 0.0,
+   "trip_threads_max": 1,
+   "route_ms_per_s": 0.0,
+   "route_ms_per_trip": null,
+   "nodes_per_arrived": null,
+   "path_len_hist": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "vp_innodes_hist": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "node_types": {
+    "0x80": 0,
+    "1": 0,
+    "2": 0,
+    "3": 0,
+    "4": 0,
+    "8": 0,
+    "0x14": 0,
+    "0x18": 0,
+    "0x30": 0,
+    "0x41": 0,
+    "0x42": 0,
+    "0x43": 0,
+    "0x50": 0,
+    "other": 0
+   }
+  },
+  {
+   "phase": "H:20",
+   "seconds": 17,
+   "days_per_s": 0.0,
+   "cars_mean": 154.1764705882353,
+   "target_mean": 108.82352941176471,
+   "avg_density_mean": 48.76470588235294,
+   "simrect": [
+    52,
+    109,
+    84,
+    137
+   ],
+   "zoom": 3,
+   "count_over_target_plus1": 13,
+   "spawn_per_s": 0.058823529411764705,
+   "removed_per_s": 0.0,
+   "cell_moves_per_s": 0.0,
+   "nvd_calls_per_s": 0.0,
+   "nvd_true_per_s": 0.0,
+   "nopath_per_s": 0.0,
+   "view_update_per_s": 13.0,
+   "produce_off_per_s": 0.0,
+   "day_per_s": 0.0,
+   "spawn_by_caller": {
+    "STRTSIM.DLL:0x1001f0ed": 1
+   },
+   "removed_by": {},
+   "nopath_why": {},
+   "movenstages": {},
+   "removed_visible": 0,
+   "removed_visible_by": {},
+   "removed_visible_loose": 0,
+   "removed_visible_loose_by": {},
+   "age_s_median_tracked": null,
+   "cells_median_tracked": 0,
+   "agent_loop_per_s": 0,
+   "agent_loop_ms_per_s": 0,
+   "draw_calls_per_s": 100.41176470588235,
+   "trip_calls_per_s": 0.0,
+   "trip_arrived_per_s": 0.0,
+   "trip_nodes_per_s": 0.0,
+   "trip_flagged_per_s": 0.0,
+   "trip_vp_per_s": 0.0,
+   "trip_vpnodes_per_s": 0.0,
+   "trip_vpflag_per_s": 0.0,
+   "trip_roadonly_per_s": 0.0,
+   "trip_vproadonly_per_s": 0.0,
+   "trip_threads_max": 1,
+   "route_ms_per_s": 0.0,
+   "route_ms_per_trip": null,
+   "nodes_per_arrived": null,
+   "path_len_hist": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "vp_innodes_hist": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "node_types": {
+    "0x80": 0,
+    "1": 0,
+    "2": 0,
+    "3": 0,
+    "4": 0,
+    "8": 0,
+    "0x14": 0,
+    "0x18": 0,
+    "0x30": 0,
+    "0x41": 0,
+    "0x42": 0,
+    "0x43": 0,
+    "0x50": 0,
+    "other": 0
+   }
+  },
+  {
+   "phase": "s3:60",
+   "seconds": 56,
+   "days_per_s": 1.509090909090909,
+   "cars_mean": 119.875,
+   "target_mean": 119.91071428571429,
+   "avg_density_mean": 56.732142857142854,
+   "simrect": [
+    63,
+    99,
+    95,
+    126
+   ],
+   "zoom": 3,
+   "count_over_target_plus1": 0,
+   "spawn_per_s": 4.125,
+   "removed_per_s": 3.9642857142857144,
+   "cell_moves_per_s": 41.892857142857146,
+   "nvd_calls_per_s": 45.17857142857143,
+   "nvd_true_per_s": 1.5,
+   "nopath_per_s": 1.7857142857142858,
+   "view_update_per_s": 0.0,
+   "produce_off_per_s": 0.0,
+   "day_per_s": 1.5178571428571428,
+   "spawn_by_caller": {
+    "STRTSIM.DLL:0x1001efc9": 199
+   },
+   "removed_by": {
+    "density": 84,
+    "nopath:next-cell-outside-sim-rect": 100,
+    "placement-failed": 32,
+    "no-mark": 6
+   },
+   "nopath_why": {
+    "next-cell-outside-sim-rect": 100
+   },
+   "movenstages": {
+    "10000/0": 323
+   },
+   "removed_visible": 51,
+   "removed_visible_by": {
+    "density": 48,
+    "no-mark": 1,
+    "nopath:next-cell-outside-sim-rect": 2
+   },
+   "removed_visible_loose": 55,
+   "removed_visible_loose_by": {
+    "density": 51,
+    "no-mark": 2,
+    "nopath:next-cell-outside-sim-rect": 2
+   },
+   "age_s_median_tracked": 32.3045,
+   "cells_median_tracked": 10.0,
+   "agent_loop_per_s": 194.35714285714286,
+   "agent_loop_ms_per_s": 130.9539107142857,
+   "draw_calls_per_s": 13246.017857142857,
+   "trip_calls_per_s": 180.48214285714286,
+   "trip_arrived_per_s": 179.16071428571428,
+   "trip_nodes_per_s": 7324.214285714285,
+   "trip_flagged_per_s": 66.05357142857143,
+   "trip_vp_per_s": 8.071428571428571,
+   "trip_vpnodes_per_s": 174.73214285714286,
+   "trip_vpflag_per_s": 2.9642857142857144,
+   "trip_roadonly_per_s": 167.57142857142858,
+   "trip_vproadonly_per_s": 7.928571428571429,
+   "trip_threads_max": 1,
+   "route_ms_per_s": 14.293589285714287,
+   "route_ms_per_trip": 0.07919669535965174,
+   "nodes_per_arrived": 40.88069371075451,
+   "path_len_hist": [
+    3058,
+    271,
+    829,
+    1414,
+    2010,
+    1935,
+    441,
+    75
+   ],
+   "vp_innodes_hist": [
+    124,
+    40,
+    35,
+    97,
+    156,
+    0,
+    0,
+    0
+   ],
+   "node_types": {
+    "0x80": 10033,
+    "1": 337863,
+    "2": 8917,
+    "3": 794,
+    "4": 28211,
+    "8": 22847,
+    "0x14": 494,
+    "0x18": 718,
+    "0x30": 279,
+    "0x41": 0,
+    "0x42": 0,
+    "0x43": 0,
+    "0x50": 0,
+    "other": 0
+   }
+  }
+ ],
+ "p3_density_removals": 513,
+ "p3_density_counter_ge1": 513,
+ "p4_outside_rect_removals": 798,
+ "p4_on_rect_edge": 798,
+ "p7_samples": 491,
+ "p7_last_is_origin_first_not": 465,
+ "p7_single_node": 90,
+ "p8_car_cells": 281,
+ "p8_car_cells_in_sampled_paths": 246,
+ "p8_transposed_check": 17,
+ "removals": 1660,
+ "removals_by_cause": {
+  "placement-failed": 304,
+  "nopath:next-cell-outside-sim-rect": 798,
+  "density": 513,
+  "no-mark": 43,
+  "nopath:no-arrival-node-at-position": 2
+ },
+ "removals_visible_by_cause": {
+  "density": 320,
+  "no-mark": 3,
+  "nopath:next-cell-outside-sim-rect": 13,
+  "nopath:no-arrival-node-at-position": 2
+ },
+ "passes_since_draw_at_removal": {
+  "never": 814,
+  "0-3": 338,
+  ">250": 491,
+  "51-250": 12,
+  "4-50": 5
+ }
+}

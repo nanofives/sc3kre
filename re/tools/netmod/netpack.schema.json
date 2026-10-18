@@ -1,0 +1,1144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nanofives/sc3kre/re/tools/netmod/netpack.schema.json",
+  "title": "netpack manifest (SimCity 3000 network mod package)",
+  "description": "One folder per package; this is its manifest.json. Guide: re/analysis/NETPACK.md. Tool: re/tools/netmod/netpack.py.",
+  "type": "object",
+  "required": [
+    "netpack",
+    "name",
+    "version"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "netpack": {
+      "const": 1,
+      "description": "Schema version."
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,47}$",
+      "description": "Unique package name; also its folder under mods\\netmod\\packs and its variant table name."
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "author": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "game": {
+      "type": "object",
+      "description": "Anchors: game-root-relative path -> sha256 of the stock file the package was made against. install and validate refuse a tree whose file differs.",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[0-9a-fA-F]{64}$"
+      }
+    },
+    "variants": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/variant"
+      }
+    },
+    "reskins": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/reskin"
+      }
+    },
+    "rule_edits": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/rule_edit"
+      },
+      "description": "TilingRules edits, format agreed with the netrules session (re/tools/netmod/netpack_rules.py). Indexes are 0-based in the STOCK file."
+    },
+    "ini": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ini_edit"
+      }
+    },
+    "bridges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/bridge_edit"
+      },
+      "description": "Task netbridge: records of <NET>_GRND_Bridges.txt (ROAD, RAIL, HWAY, POWR). Road/rail/power builders take the FIRST record whose axis matches and min_len <= the crossing length; the highway builder takes the first whose axis (0..3, two lanes) matches. Indexes are 0-based in the STOCK file."
+    },
+    "crossings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/crossing"
+      },
+      "description": "Task netbridge: crossing art for variants (sc3netmod.dll XCROSS). When the existing piece is `over`, the crossing the matrix gives (`crossing`) is built as `piece`, a variant of that crossing."
+    },
+    "ramps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ramp_edit"
+      },
+      "description": "Hardcoded SIMNTWRK piece tables (on-ramps, tunnels, slope pieces): which piece a table slot places. netramp.py tables lists every table and slot. Guide: re/analysis/NET_RAMPS.md."
+    },
+    "lanes": {"type": "array", "items": {"$ref": "#/$defs/lanes_entry"}, "description": "Task lanekit: street-sim lane graphs (TrBlkAtt) for a variant or stock piece, written in lanekit's authoring format (re/tools/netmod/lanekit.py, guide re/analysis/NET_LANES.md). Records for every language folder; English-UK gets the mirrored lanes unless the spec says mirror_uk false."},
+    "connects": {"type": "array", "items": {"$ref": "#/$defs/connects_entry"}, "description": "Task lanekit: turn matrices (exemplar props 310 road / 311 rail / 312 subway): which (entry side, exit side) pairs a piece connects. Read by the tiler (final stage) and by the SimTransit router for highway and bus nodes. low = ENGLISH-side lanes, high = English-UK-side lanes; a plain list sets both."},
+    "templates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/template"
+      },
+      "description": "Multi-cell templates the player places in one click (task multitile): a fixed block of pieces that keeps its cells (Protected list) and connects to the networks around it. Guide: re/analysis/MULTITILE.md."
+    },
+    "auto_roundabouts": {
+      "type": "array",
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["piece"],
+        "properties": {
+          "piece": {"$ref": "#/$defs/piece_id", "description": "A ROAD variant of T 39 declared in this package, with art and lanes for the pinwheel states 3,0 / 2,1."},
+          "min_arms": {"type": "integer", "minimum": 1, "maximum": 4, "default": 3, "description": "Exits (one per block side) that must hold a single road."},
+          "closed_piece": {"$ref": "#/$defs/piece_id", "description": "Task roundabout4: another ROAD variant of T 39 in this package, placed (same state) on the quarter whose exit holds no road; art and lanes for a quarter without an arm. Absent: every quarter is `piece`."}
+        }
+      },
+      "description": "Task roundabout3: sc3netmod turns every qualifying 2x2 road block into this piece by itself (after each road retile and after a city load) and back into stock road when it stops qualifying. Rule: re/analysis/MULTITILE.md section 5. One piece across all installed packages."
+    },
+    "auto_big_roundabouts": {
+      "type": "array",
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["centre", "side", "corner"],
+        "properties": {
+          "centre": {"$ref": "#/$defs/piece_id", "description": "The centre cell (the island), a ROAD variant in this package."},
+          "side": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"$ref": "#/$defs/piece_id"}, "description": "The side-middle cell at state 0 (the E cell, outer side x+) by its arm: none, road, avenue half with the median toward z-, toward z+."},
+          "corner": {"type": "array", "minItems": 9, "maxItems": 9, "items": {"$ref": "#/$defs/piece_id"}, "description": "The corner cell at state 0 (the NE cell, outer sides z- and x+), index 3 * kN + kE by the arm on z- (kN) and on x+ (kE): 0 none, 1 road, 2 avenue half."}
+        }
+      },
+      "description": "Task bigrbt: sc3netmod (RBT9 block) turns every exactly-3x3 road block with arms (at most two per side: one avenue or up to two single roads, no road on the four diagonal cells) into a big roundabout made of these pieces, after each road retile and after a city load, and back into stock road when it stops qualifying. Rule and tool: re/tools/netmod/bigrbt.py, verify/bigrbt/."
+    },
+    "auto_avenue_junctions": {
+      "type": "array",
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["box", "arm"],
+        "properties": {
+          "box": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["piece", "edges"],
+              "properties": {
+                "piece": {"$ref": "#/$defs/piece_id", "description": "A ROAD variant in this package: one cell of the paved box, drawn at state 0 with these edges."},
+                "edges": {"type": "string", "pattern": "^[IAC]{4}$", "description": "The cell's edges N E S W at state 0: I another box cell, A an arm cell (crosswalk), C closed (curb). Each pattern serves all four rotations."},
+                "save_11204": {"type": "boolean", "default": false, "description": "Save the cell as stock 11204 in its own state (a T's far half; needs the closed edge on S)."}
+              }
+            }
+          },
+          "arm": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["piece", "nose"],
+              "properties": {
+                "piece": {"$ref": "#/$defs/piece_id", "description": "A ROAD variant of 11204 in this package: the avenue cell beside the box, its median ending in a concrete nose."},
+                "nose": {"enum": ["E", "W"], "description": "The end of the 11204 half (state 0: median N, outer sidewalk S) that faces the box."}
+              }
+            }
+          }
+        }
+      },
+      "description": "Task avx: sc3netmod's AVX block re-pieces straight avenue intersections (avenue x avenue, avenue T, road x avenue, road T) as one paved box after each road retile and after a city load. Rule: re/tools/netmod/avx.py. One set across all installed packages."
+    },
+    "auto_diagonal_avenues": {
+      "type": "array",
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["middle"],
+        "properties": {
+          "junction": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["piece", "halves", "road"],
+              "properties": {
+                "piece": {"$ref": "#/$defs/piece_id", "description": "A ROAD variant in this package drawn as road 29 (orientation `road`) with the avenue's 35 halves (states `halves`) over it as asphalt, at state 0."},
+                "halves": {"type": "array", "minItems": 1, "maxItems": 2, "items": {"type": "integer", "minimum": 0, "maximum": 3}, "description": "States of the stock 35 halves the junction cell holds (one at the avenue's edge, two in its middle)."},
+                "road": {"type": "integer", "minimum": 0, "maximum": 1, "description": "The crossing road: 0 along x, 1 along z (road 29's state)."},
+                "far": {"type": "integer", "minimum": -1, "maximum": 3, "default": -1, "description": "A stem (the avenue ends on the road): the curb kept on the far side, 0 N 1 E 2 S 3 W; -1 none."}
+              }
+            },
+            "description": "Task diagave: junction pieces where a straight road crosses the avenue, meets it from one side, or the avenue ends on it. Each one serves its descriptor in all four rotations."
+          },
+          "merge": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["axis", "end", "cont", "cells"],
+              "properties": {
+                "axis": {"type": "integer", "minimum": 0, "maximum": 1, "description": "0 the down-right diagonal, 1 the other one (x mirrored)."},
+                "end": {"type": "integer", "minimum": 0, "maximum": 1, "description": "0: the band's last row, the single road goes on down; 1: its first row, going on up."},
+                "cont": {"enum": ["A", "B"], "description": "The staircase that goes on as a single road."},
+                "cells": {"type": "array", "minItems": 1, "items": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "integer"}}, "description": "[dx, dz, piece, state]: the cell dx, dz from the end row's left cell (axis space) gets a ROAD variant of this package at that state."}
+              }
+            },
+            "description": "Task diagave: merge cases, where one carriageway ends and the other goes on as a single road (diagave.py MERGE_TABLE)."
+          },
+          "save_43": {"type": "array", "items": {"$ref": "#/$defs/piece_id"}, "description": "Merge pieces that hold both roads: saved as 43 so a game without the mod keeps the road joined."},
+          "crossing": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "axis", "x0", "z0", "w", "h", "grid", "writes"],
+              "properties": {
+                "id": {"type": "integer", "minimum": 0, "maximum": 65535},
+                "axis": {"type": "integer", "minimum": 0, "maximum": 1, "description": "The axis of the band row the template is anchored on."},
+                "x0": {"type": "integer"}, "z0": {"type": "integer"},
+                "w": {"type": "integer", "minimum": 1, "maximum": 120}, "h": {"type": "integer", "minimum": 1},
+                "grid": {"type": "string", "pattern": "^[r.-]+$", "description": "The window, w x h cells from (x0, z0) relative to the anchor row's left cell in axis space, row by row: r ROAD, . no ROAD, - either."},
+                "partner": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "integer"}, "description": "[axis, dx, dz]: the window holds a band of that axis (a row's left cell at dx, dz) that must convert too; axis -1 none."},
+                "writes": {"type": "array", "items": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "integer"}}, "description": "[dx, dz, piece, state]: a cell the crossing writes (a ROAD variant of this package, or stock road such as 11204)."}
+              }
+            },
+            "description": "Task diagx: crossing templates of a diagonal avenue with a diagonal avenue or the straight avenue 11204, or ending on one (diagave.py xbuild, recipe_crossings.json)."
+          },
+          "middle": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["piece", "a", "b", "delta"],
+              "properties": {
+                "piece": {"$ref": "#/$defs/piece_id", "description": "A ROAD variant of stock piece `a` in this package: piece a at the cell's state plus piece b at state + delta on one tile, with both pieces' lanes."},
+                "a": {"enum": [35, 18004, 1999], "description": "Staircase A's piece in the shared cell (35 diagonal, 18004 start cap, 1999 end cap)."},
+                "b": {"enum": [0, 35, 18004, 1999], "description": "Staircase B's piece in the shared cell; 0 = the OUTER piece (a 35, delta 0): a one-road 35 cell beside the other road, with its median-side sidewalk tip as median."},
+                "delta": {"type": "integer", "minimum": 0, "maximum": 3, "description": "B's state minus A's state, mod 4."}
+              }
+            }
+          }
+        }
+      },
+      "description": "Task diagave: sc3netmod turns two diagonal road drags JOINED side by side (an isolated band of rows of three road cells, each row shifted by one) into one avenue: each cell gets the piece the stock tiler gives a lone diagonal, and the middle cells, which hold both roads, get the declared middle piece. After each road retile and after a city load; back to stock when it stops qualifying. Rule and tool: re/tools/netmod/diagave.py, verify/diagave/."
+    },
+    "auto_boulevard_junctions": {"$ref": "#/properties/auto_avenue_junctions", "description": "Task bvx: box and avenue-arm pieces for the junctions of a boulevard (auto_boulevards) with avenues and other boulevards, same shape as auto_avenue_junctions (save_11204 unused). sc3netmod places them inside the boulevard runs. Rule and tool: re/tools/netmod/bvx.py, verify/bvx/."},
+    "auto_diagonal_boulevards": {
+      "type": "array",
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["band", "stamps"],
+        "properties": {
+          "band": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/piece_id"}, "description": "Band pieces: the outer cell (canonical d3 at state 0; d0 = state 2) and the inner cell (d2 at state 0; d1 = state 2)."},
+          "stamps": {
+            "type": "object",
+            "additionalProperties": false,
+            "patternProperties": {"^(jrow-both|jrow-A|jrow-stem|jcol-both|jcol-A|narrow-C|narrow-A|taper-[012]s?|cap-square|cap-part|cap-x4z[34])$": {
+              "type": "array", "maxItems": 40,
+              "items": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "integer"}}}},
+            "description": "Per junction / end kind, the cells it writes: [dx, dz, piece, state] in its canonical frame (diagbv.py: row family relative to a band row's left cell, column family relative to the column road's d0 cell). Pieces are variants of this package, or 29 / 35."
+          }
+        }
+      },
+      "description": "Task diagbv: sc3netmod turns three diagonal road drags joined side by side (rows of four road cells, each row shifted by one) into one 3-wide diagonal boulevard, with its junctions, ends and bends (re/tools/netmod/diagbv.py, verify/diagbv/). Its cells are claimed before the DAV and BV blocks run."
+    },
+    "auto_boulevards": {
+      "type": "array",
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["pieces"],
+        "properties": {
+          "pieces": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["outer", "middle", "nose", "nose2", "junction_entry", "junction_middle", "junction_far"],
+            "properties": {
+              "outer": {"$ref": "#/$defs/piece_id", "description": "An outer row (carriageway + its extra lane), canonical south row at state 0."},
+              "middle": {"$ref": "#/$defs/piece_id", "description": "The middle row: the extra lanes' far parts, curbs, median, trees."},
+              "nose": {"$ref": "#/$defs/piece_id", "description": "Middle row whose median ends in a nose at +x (state 0)."},
+              "nose2": {"$ref": "#/$defs/piece_id", "description": "Middle row with a nose at both ends."},
+              "junction_entry": {"$ref": "#/$defs/piece_id", "description": "Junction column, the outer row a crossing road enters by (north row at state 0)."},
+              "junction_middle": {"$ref": "#/$defs/piece_id", "description": "Junction column, middle row."},
+              "junction_far": {"$ref": "#/$defs/piece_id", "description": "Junction column, the far outer row of a T (south row at state 0, closed side S)."}
+            }
+          },
+          "cap": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"$ref": "#/$defs/piece_id"}, "description": "End column where all three roads stop, rows 0 / 1 / 2 at the +x end (state 0)."},
+          "taper": {
+            "type": "object",
+            "additionalProperties": false,
+            "patternProperties": {"^[012]$": {"type": "array", "minItems": 9, "maxItems": 9, "items": {"$ref": "#/$defs/piece_id"}}},
+            "description": "Narrowing to row 0 / 1 / 2: nine pieces, column-major (3 * column + row), the last three columns at the +x end (state 0)."
+          },
+          "avenue_narrow": {
+            "type": "object",
+            "additionalProperties": false,
+            "patternProperties": {"^[01]$": {"type": "array", "minItems": 9, "maxItems": 9, "items": {"$ref": "#/$defs/piece_id"}}},
+            "description": "Narrowing to the avenue on rows k, k + 1 (key k = 0 / 1): nine pieces, column-major, the last three columns at the +x end (state 0)."
+          }
+        }
+      },
+      "description": "Task boulevard: sc3netmod turns three parallel straight roads (a run of at least 3 clean columns, along x or z) into one boulevard: carriageways on the outer rows, extra lanes and a tree median on the middle one; junctions with single straight roads, end caps and tapers. After each road retile and after a city load; back to stock when it stops qualifying. Rule and tool: re/tools/netmod/boulevard.py, verify/boulevard/."
+    }
+  },
+  "$defs": {
+    "piece_id": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "network": {
+      "enum": [
+        "ROAD",
+        "RAIL",
+        "POWR",
+        "HWAY",
+        "PIPE",
+        "SUBW"
+      ]
+    },
+    "recolor": {
+      "oneOf": [
+        {
+          "enum": [
+            "blue",
+            "green",
+            "red",
+            "gray",
+            "yellow"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mul": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0
+              },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "add": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": -255,
+                "maximum": 255
+              },
+              "minItems": 3,
+              "maxItems": 3
+            }
+          }
+        }
+      ]
+    },
+    "art": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Start from the frames of piece `from` (variants: default = base; reskins: always the piece itself), optionally recolour them, then replace any frame that has a PNG in png_dir (file names zZ_rR.png, layer > 0: lL_zZ_rR.png; same size as the frame, or any size with its registration point in png_dir/anchors.json) or that a compose recipe builds.",
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/piece_id"
+        },
+        "recolor": {
+          "$ref": "#/$defs/recolor"
+        },
+        "png_dir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "first_pass": {
+          "type": "boolean",
+          "description": "artkit: set (true) or clear (false) the frame table's first-pass draw bit (header +0x12, 0x80). Road pieces ship it set: they draw before every other occupant, so art taller than the base frame gets its top overdrawn in some rotations. Clear it for pieces with tall props. NET_ART.md 8."
+        },
+        "ground_under": {
+          "type": "boolean",
+          "description": "roundabout4: set (true) or clear (false) the frame table's ground bit (header +0x12, 0x40). With it set the engine draws the cell's terrain under the piece (SIMSPR 0x100192aa -> 0x1001a303), so transparent pixels show grass; curve 11203 ships it set, road 29 and T 39 do not (their transparent pixels show the previous frame). NET_ART.md 11."
+        },
+        "recipe": {
+          "type": "string",
+          "minLength": 1,
+          "description": "artkit: a netart.py compose recipe (JSON) in the package; the frames are composed from the stock install at build time into a png_dir (both may not be given). NET_ART.md 6."
+        }
+      }
+    },
+    "names": {
+      "description": "Piece name: one string for every language folder, or {folder or \"*\": text} (folders of Apps\\Res\\Text; the Spanish GOG install keeps Spanish in ENGLISH).",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minProperties": 1
+        }
+      ]
+    },
+    "variant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "base",
+        "network"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/piece_id",
+          "description": "New piece id: no stock exemplar, not 15130..15141."
+        },
+        "base": {
+          "$ref": "#/$defs/piece_id",
+          "description": "Stock piece the variant behaves as (exemplar, cost, traffic, crossings, the id written to saves)."
+        },
+        "network": {
+          "$ref": "#/$defs/network"
+        },
+        "name": {
+          "$ref": "#/$defs/names"
+        },
+        "art": {
+          "$ref": "#/$defs/art"
+        },
+        "trblkatt": {
+          "enum": [
+            "copy_base",
+            "none"
+          ],
+          "default": "copy_base"
+        },
+        "inherit": {
+          "type": "boolean",
+          "default": true,
+          "description": "Task netbridge: the variant joins every Set, DIAG_Set and Protected list that holds the base, and gets Convert / Complex_Convert rows (variant, s) -> what the base reads as, so rule conditions that test for the base also match it (re/analysis/NETBRIDGE.md)."
+        },
+        "replace_base": {
+          "type": "boolean",
+          "default": false,
+          "description": "Task netbridge: every RESULT that places the base in the variant's network's stage rule files places the variant instead (one set_results edit per rule, generated at install)."
+        }
+      }
+    },
+    "reskin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "piece",
+        "art"
+      ],
+      "properties": {
+        "piece": {
+          "$ref": "#/$defs/piece_id"
+        },
+        "art": {
+          "$ref": "#/$defs/art"
+        }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selector",
+        "results"
+      ],
+      "properties": {
+        "selector": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "conds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/record"
+          }
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/record"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "rule_edit": {
+      "type": "object",
+      "required": [
+        "op",
+        "file"
+      ],
+      "properties": {
+        "op": {
+          "enum": [
+            "set_results",
+            "insert_rule",
+            "delete_rule",
+            "list_add",
+            "list_remove",
+            "convert_add",
+            "convert_remove"
+          ]
+        },
+        "file": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_]+\\.txt$",
+          "description": "A file name in Apps\\Res\\TilingRules (case-insensitive)."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "const": "set_results"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "rule",
+              "expect",
+              "results"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "op": {},
+              "file": {},
+              "rule": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "0-based index into the STOCK file's rules"
+              },
+              "expect": {
+                "$ref": "#/$defs/rule"
+              },
+              "results": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/record"
+                },
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "const": "insert_rule"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "at",
+              "rule"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "op": {},
+              "file": {},
+              "at": {
+                "oneOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "0-based index into the STOCK file's rules"
+                  },
+                  {
+                    "const": "end"
+                  }
+                ]
+              },
+              "rule": {
+                "$ref": "#/$defs/rule"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "const": "delete_rule"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "rule",
+              "expect"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "op": {},
+              "file": {},
+              "rule": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "0-based index into the STOCK file's rules"
+              },
+              "expect": {
+                "$ref": "#/$defs/rule"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "enum": [
+                  "list_add",
+                  "list_remove"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "ids"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "op": {},
+              "file": {},
+              "ids": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "enum": [
+                  "convert_add",
+                  "convert_remove"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "from",
+              "to"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "op": {},
+              "file": {},
+              "from": {
+                "$ref": "#/$defs/piece_state"
+              },
+              "to": {
+                "$ref": "#/$defs/piece_state"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "ini_edit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "section",
+        "key",
+        "value"
+      ],
+      "description": "A key inside a SYS.PAK member (the archive wins over loose files, SC3U 0x004872e8). set = change an existing key, add = a new key at the end of the section.",
+      "properties": {
+        "file": {
+          "type": "string",
+          "description": "SYS.PAK member name, e.g. Occupant.ini"
+        },
+        "section": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": "string"
+        },
+        "op": {
+          "enum": [
+            "set",
+            "add",
+            "append"
+          ],
+          "default": "set",
+          "description": "set = change the one existing key; add = new key, refused if it exists; append = add the line even if the key exists (list sections such as [DBSegments])"
+        }
+      }
+    },
+    "piece_state": {
+      "description": "[id, state]: id 1..65535 with state 0..3, or id 0 with state 5 (empty), 1 (pending), 0 (foreign).",
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        }
+      ]
+    },
+    "record": {
+      "description": "[dir, id, state]: dir 0..23 (5x5 neighbourhood table, SIMNTWRK 0x10032134) or 255 (the tile itself).",
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        {
+          "type": "integer",
+          "anyOf": [
+            {
+              "minimum": 0,
+              "maximum": 23
+            },
+            {
+              "const": 255
+            }
+          ]
+        },
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        }
+      ]
+    },
+    "bridge_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "axis",
+        "a",
+        "b",
+        "span",
+        "d",
+        "e"
+      ],
+      "properties": {
+        "axis": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "description": "Road/rail/power: 0 = run along x, 1 = along z. Highway: 0..3, one record per lane (0/2 x run, 3/1 z run)."
+        },
+        "min_len": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 255,
+          "default": 1,
+          "description": "Road/rail/power: the record is a candidate when the crossing length L >= min_len. The highway builder never reads it."
+        },
+        "a": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/piece_tok"
+          },
+          "minItems": 1,
+          "maxItems": 5,
+          "description": "Start ramp, A[0] at position -1 (5-slot stack buffer)."
+        },
+        "b": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/piece_tok"
+          },
+          "minItems": 1,
+          "maxItems": 5,
+          "description": "Pad, B[0] repeated (r >> 1) times, r = L - k * len(span)."
+        },
+        "span": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/piece_tok"
+          },
+          "minItems": 1,
+          "maxItems": 20,
+          "description": "The span, repeated k = L // len(span) times (20-slot stack buffer)."
+        },
+        "d": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/piece_tok"
+          },
+          "minItems": 1,
+          "maxItems": 5,
+          "description": "Pad, D[0] repeated r - (r >> 1) times."
+        },
+        "e": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/piece_tok"
+          },
+          "minItems": 1,
+          "maxItems": 5,
+          "description": "End ramp, E[0] at position L."
+        }
+      }
+    },
+    "bridge_edit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "op",
+        "network"
+      ],
+      "properties": {
+        "op": {
+          "enum": [
+            "insert",
+            "delete"
+          ]
+        },
+        "network": {
+          "enum": [
+            "ROAD",
+            "RAIL",
+            "HWAY",
+            "POWR"
+          ]
+        },
+        "at": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "enum": [
+                "start",
+                "end"
+              ]
+            }
+          ],
+          "description": "insert: before stock record N, or start / end."
+        },
+        "record": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/bridge_record"
+            },
+            {
+              "type": "integer",
+              "minimum": 0
+            }
+          ],
+          "description": "insert: the new record. delete: the stock record index."
+        },
+        "expect": {
+          "$ref": "#/$defs/bridge_record",
+          "description": "delete: the stock record's content."
+        }
+      }
+    },
+    "crossing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "over",
+        "crossing",
+        "piece"
+      ],
+      "properties": {
+        "over": {
+          "$ref": "#/$defs/piece_id"
+        },
+        "crossing": {
+          "$ref": "#/$defs/piece_id"
+        },
+        "piece": {
+          "$ref": "#/$defs/piece_id"
+        }
+      }
+    },
+    "piece_tok": {
+      "description": "Task netbridge: a bridge list entry [piece id, state 0..3] (file value id << 8 | state).",
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        }
+      ]
+    },
+    "ramp_edit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "table",
+        "from",
+        "to"
+      ],
+      "properties": {
+        "table": {
+          "type": "string",
+          "pattern": "^(onramp|onramp_corner|slope[.][A-Za-z_]+|tunnel[.][A-Za-z_]+)$"
+        },
+        "from": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/piece_id"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 65535
+              },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          ],
+          "description": "Stock piece id (every slot holding it, state kept) or [id, state] (one slot)."
+        },
+        "to": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/piece_id"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 65535
+              },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          ],
+          "description": "A variant whose base is the from id (keep its inherit on), or a stock piece in the same Set files."
+        },
+        "slots": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 63
+          },
+          "description": "Restrict to these slot numbers."
+        }
+      }
+    },
+    "lanes_entry": {"type": "object", "required": ["piece", "spec"], "additionalProperties": false, "properties": {"piece": {"$ref": "#/$defs/piece_id"}, "spec": {"oneOf": [{"type": "string", "minLength": 1}, {"type": "object"}], "description": "lanekit spec: a file in the package folder or inline."}, "langs": {"type": "array", "items": {"type": "string"}, "description": "Language folders to write (default: all)."}}},
+    "connects_entry": {"type": "object", "required": ["piece"], "additionalProperties": false, "properties": {"piece": {"$ref": "#/$defs/piece_id"}, "road": {"oneOf": [{"const": "auto"}, {"type": "array", "items": {"type": "array", "items": {"enum": ["x-", "z-", "x+", "z+", "d0", "d1", "d2", "d3"]}, "minItems": 2, "maxItems": 2}}, {"type": "object", "additionalProperties": false, "properties": {"low": {"type": "array", "items": {"type": "array", "items": {"enum": ["x-", "z-", "x+", "z+", "d0", "d1", "d2", "d3"]}, "minItems": 2, "maxItems": 2}}, "high": {"type": "array", "items": {"type": "array", "items": {"enum": ["x-", "z-", "x+", "z+", "d0", "d1", "d2", "d3"]}, "minItems": 2, "maxItems": 2}}}}]}, "rail": {"oneOf": [{"const": "auto"}, {"type": "array", "items": {"type": "array", "items": {"enum": ["x-", "z-", "x+", "z+", "d0", "d1", "d2", "d3"]}, "minItems": 2, "maxItems": 2}}, {"type": "object", "additionalProperties": false, "properties": {"low": {"type": "array", "items": {"type": "array", "items": {"enum": ["x-", "z-", "x+", "z+", "d0", "d1", "d2", "d3"]}, "minItems": 2, "maxItems": 2}}, "high": {"type": "array", "items": {"type": "array", "items": {"enum": ["x-", "z-", "x+", "z+", "d0", "d1", "d2", "d3"]}, "minItems": 2, "maxItems": 2}}}}]}, "subway": {"oneOf": [{"const": "auto"}, {"type": "array", "items": {"type": "array", "items": {"enum": ["x-", "z-", "x+", "z+", "d0", "d1", "d2", "d3"]}, "minItems": 2, "maxItems": 2}}, {"type": "object", "additionalProperties": false, "properties": {"low": {"type": "array", "items": {"type": "array", "items": {"enum": ["x-", "z-", "x+", "z+", "d0", "d1", "d2", "d3"]}, "minItems": 2, "maxItems": 2}}, "high": {"type": "array", "items": {"type": "array", "items": {"enum": ["x-", "z-", "x+", "z+", "d0", "d1", "d2", "d3"]}, "minItems": 2, "maxItems": 2}}}}]}}},
+    "template_cell": {
+      "oneOf": [
+        {
+          "type": "null",
+          "description": "a hole: the cell is not part of the template"
+        },
+        {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            {
+              "$ref": "#/$defs/piece_id"
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            }
+          ],
+          "description": "[piece, state] on the template's network"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "piece"
+          ],
+          "properties": {
+            "piece": {
+              "$ref": "#/$defs/piece_id"
+            },
+            "state": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            },
+            "network": {
+              "$ref": "#/$defs/network"
+            }
+          }
+        }
+      ]
+    },
+    "template": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "size",
+        "rows",
+        "cost"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]{1,24}$"
+        },
+        "label": {
+          "$ref": "#/$defs/names"
+        },
+        "size": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16
+          },
+          "description": "[W, H]: W cells along x, H along z"
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/template_cell"
+            }
+          },
+          "description": "H rows (z = 0..H-1), each W cells (x = 0..W-1), base orientation"
+        },
+        "network": {
+          "$ref": "#/$defs/network"
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "at",
+              "dir"
+            ],
+            "properties": {
+              "at": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "dir": {
+                "enum": [
+                  "W",
+                  "N",
+                  "E",
+                  "S"
+                ]
+              },
+              "need": {
+                "enum": [
+                  "optional",
+                  "required"
+                ]
+              }
+            }
+          },
+          "description": "The exits (arms pointing out of the footprint). Omitted: every outward arm, optional."
+        },
+        "terrain": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "flat": {
+              "type": "boolean"
+            },
+            "water": {
+              "type": "boolean"
+            }
+          }
+        },
+        "cost": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000000
+        },
+        "rotate": {
+          "enum": [
+            "generate",
+            "none"
+          ]
+        },
+        "protect": {
+          "type": "boolean"
+        },
+        "collapse": {
+          "type": "boolean",
+          "description": "true (default): the package's template pieces form one Collapse.txt group, so removing one cell removes the template (and any template of the same package touching it)"
+        }
+      }
+    }
+  }
+}

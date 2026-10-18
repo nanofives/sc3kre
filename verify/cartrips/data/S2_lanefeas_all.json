@@ -1,0 +1,42 @@
+{
+ "samples": 465,
+ "counts": {
+  "road_nodes": 24561,
+  "tile_xy": 24561,
+  "tile_transposed": 10320,
+  "steps_mode_change": 386,
+  "steps_same_cell": 311,
+  "steps_ok": 20119,
+  "steps_no_turn": 3387,
+  "steps_no_lanes": 2
+ },
+ "paths_all_steps_drivable": 124,
+ "paths_with_road_steps": 365,
+ "undrivable_by_piece": {
+  "11204 turn 3->0": 462,
+  "11204 turn 2->1": 451,
+  "11204 turn 0->1": 393,
+  "11204 turn 3->2": 385,
+  "11204 turn 0->3": 310,
+  "11204 turn 1->0": 301,
+  "11204 turn 1->2": 257,
+  "11204 turn 2->3": 247,
+  "11203 turn 2->0": 45,
+  "39 turn 1->3": 40,
+  "39 turn 3->1": 32,
+  "39 turn 0->2": 30,
+  "39 turn 3->0": 30,
+  "39 turn 2->0": 29,
+  "29 turn 0->1": 29,
+  "11214 turn 2->1": 23,
+  "11203 turn 3->1": 23,
+  "14030 turn 1->3": 22,
+  "39 turn 2->3": 21,
+  "11214 turn 1->2": 21,
+  "39 turn 2->1": 21,
+  "11203 turn 3->2": 19,
+  "11213 turn 0->2": 15,
+  "11203 turn 0->2": 14,
+  "11211 turn 1->2": 13
+ }
+}

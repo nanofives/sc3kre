@@ -1,0 +1,79 @@
+{
+ "piece": 20702,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 0,
+ "alt": [
+  0,
+  0,
+  0,
+  0
+ ],
+ "vehicle": {
+  "class": "car",
+  "speed": 64000,
+  "lanes": [
+   {
+    "from": [
+     0,
+     241
+    ],
+    "to": [
+     255,
+     241
+    ],
+    "path": 512,
+    "exit": false
+   },
+   {
+    "from": [
+     255,
+     14
+    ],
+    "to": [
+     0,
+     14
+    ],
+    "path": 256,
+    "exit": false
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     0,
+     14
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     255,
+     241
+    ],
+    "code": 16
+   }
+  ]
+ },
+ "pedestrian": {
+  "walks": [],
+  "exits": []
+ },
+ "connects": {
+  "road": [
+   [
+    "x-",
+    "x+"
+   ],
+   [
+    "x+",
+    "x-"
+   ]
+  ]
+ },
+ "_": "boulevard.py: lanes of piece 20702"
+}

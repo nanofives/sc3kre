@@ -1,0 +1,307 @@
+{
+ "meta": {
+  "t": 1792090581.5776775,
+  "phase": "meta",
+  "arm": "F2",
+  "pid": 2276,
+  "game_tid": 15296,
+  "safe": true,
+  "schedule": "s3:60,PW:60,s3:60,PW:60,s3:60,PW:60",
+  "city": "C:\\Users\\maria\\Desktop\\Proyectos\\Simcity\\verify\\perf1024\\europolis1024_v2_test.sc3",
+  "inst": "C:\\Users\\maria\\Desktop\\Proyectos\\Simcity_stock_pausetrips\\re\\harness\\inst_pt_full"
+ },
+ "phases": [
+  {
+   "phase": "02 s3:60",
+   "n": 57,
+   "bad": 0,
+   "sum": {
+    "route_trip.arrive": 41272,
+    "route_trip": 42892,
+    "issuer_97b9": 1574828,
+    "route_trip.fail": 1620,
+    "day_aa4d": 29,
+    "steps": 43376315,
+    "veh": 0
+   },
+   "cam_hold_secs": 0,
+   "clk_pause_secs": 38,
+   "veh_phase": 0,
+   "day0": 2488076,
+   "day1": 2488104,
+   "att0": 2654,
+   "att1": 33550,
+   "fail0": 195,
+   "fail1": 1679,
+   "route_trip.caller": {
+    "SimTransit.dll:0x10007064": 41220,
+    "SimTransit.dll:0x100070b3": 1672
+   },
+   "th.route_trip": {
+    "368": 5134,
+    "4892": 5176,
+    "7876": 5296,
+    "11168": 1672,
+    "18264": 5037,
+    "18928": 5222,
+    "18980": 5086,
+    "20068": 5070,
+    "21048": 5199
+   },
+   "bt": []
+  },
+  {
+   "phase": "04 PW:60",
+   "n": 57,
+   "bad": 0,
+   "sum": {
+    "route_trip.arrive": 33334,
+    "route_trip": 35852,
+    "route_trip.fail": 2518,
+    "steps": 48198750,
+    "veh": 0
+   },
+   "cam_hold_secs": 0,
+   "clk_pause_secs": 57,
+   "veh_phase": 0,
+   "day0": 2488104,
+   "day1": 2488104,
+   "att0": 33550,
+   "att1": 33550,
+   "fail0": 1679,
+   "fail1": 1679,
+   "route_trip.caller": {
+    "SimTransit.dll:0x10007064": 35852
+   },
+   "th.route_trip": {
+    "368": 4557,
+    "4892": 4255,
+    "7876": 4535,
+    "18264": 4695,
+    "18928": 4665,
+    "18980": 4409,
+    "20068": 4280,
+    "21048": 4456
+   },
+   "bt": []
+  },
+  {
+   "phase": "06 s3:60",
+   "n": 57,
+   "bad": 0,
+   "sum": {
+    "route_trip": 36774,
+    "route_trip.arrive": 34267,
+    "steps": 48119431,
+    "veh": 0,
+    "route_trip.fail": 2506
+   },
+   "cam_hold_secs": 0,
+   "clk_pause_secs": 57,
+   "veh_phase": 0,
+   "day0": 2488104,
+   "day1": 2488104,
+   "att0": 33550,
+   "att1": 33550,
+   "fail0": 1679,
+   "fail1": 1679,
+   "route_trip.caller": {
+    "SimTransit.dll:0x10007064": 36774
+   },
+   "th.route_trip": {
+    "368": 4643,
+    "4892": 4932,
+    "7876": 4485,
+    "18264": 4579,
+    "18928": 4305,
+    "18980": 4937,
+    "20068": 4357,
+    "21048": 4536
+   },
+   "bt": []
+  },
+  {
+   "phase": "08 PW:60",
+   "n": 57,
+   "bad": 0,
+   "sum": {
+    "route_trip.arrive": 25,
+    "route_trip": 22,
+    "route_trip.fail": 1,
+    "steps": 19135,
+    "veh": 0
+   },
+   "cam_hold_secs": 0,
+   "clk_pause_secs": 57,
+   "veh_phase": 0,
+   "day0": 2488109,
+   "day1": 2488109,
+   "att0": 244,
+   "att1": 244,
+   "fail0": 1,
+   "fail1": 1,
+   "route_trip.caller": {
+    "SimTransit.dll:0x10007064": 22
+   },
+   "th.route_trip": {
+    "368": 9,
+    "4892": 9,
+    "18928": 3,
+    "18980": 1
+   },
+   "bt": []
+  },
+  {
+   "phase": "10 s3:60",
+   "n": 57,
+   "bad": 0,
+   "sum": {
+    "issuer_97b9": 1122825,
+    "route_trip.arrive": 40849,
+    "route_trip": 44824,
+    "steps": 46878153,
+    "veh": 0,
+    "route_trip.fail": 3975,
+    "veh_update": 30367,
+    "veh_delta": 253070789,
+    "day_aa4d": 17
+   },
+   "cam_hold_secs": 0,
+   "clk_pause_secs": 44,
+   "veh_phase": 0,
+   "day0": 2488112,
+   "day1": 2488129,
+   "att0": 4353,
+   "att1": 20705,
+   "fail0": 34,
+   "fail1": 129,
+   "route_trip.caller": {
+    "SimTransit.dll:0x10007064": 43768,
+    "SimTransit.dll:0x100070b3": 1056
+   },
+   "th.route_trip": {
+    "368": 5535,
+    "4892": 5378,
+    "7876": 5311,
+    "18264": 5831,
+    "18928": 5905,
+    "18980": 5496,
+    "20068": 4999,
+    "21048": 5313,
+    "11168": 1056
+   },
+   "bt": [
+    {
+     "fn": "veh_update",
+     "tid": 15296,
+     "frames": [
+      "SC3U.exe:0x425a9f",
+      "SC3U.exe:0x42626b",
+      "SIMSPR.DLL:0x1001cb09",
+      "ntdll.dll:0x10061451",
+      "SIMSPR.DLL:0x10042b07",
+      "USER32.dll:0x10074775",
+      "USER32.dll:0x100282c3",
+      "sc3overscroll.dll:0x100018fc",
+      "sc3overscroll.dll:0x100018fc",
+      "sc3overscroll.dll:0x10001df3",
+      "0x31b004f",
+      "SIMSPR.DLL:0x1004e188",
+      "SC3U.exe:0x441456",
+      "GZWIND.DLL:0x1001edaa",
+      "GZWIND.DLL:0x100200f2",
+      "GZWIND.DLL:0x10021689"
+     ]
+    },
+    {
+     "fn": "veh_update",
+     "tid": 15296,
+     "frames": [
+      "SC3U.exe:0x425a9f",
+      "SC3U.exe:0x42626b",
+      "SIMSPR.DLL:0x1001cb09",
+      "ntdll.dll:0x10061451",
+      "SIMSPR.DLL:0x10042b07",
+      "USER32.dll:0x10074775",
+      "USER32.dll:0x100282c3",
+      "sc3overscroll.dll:0x100018fc",
+      "sc3overscroll.dll:0x100018fc",
+      "sc3overscroll.dll:0x10001df3",
+      "0x31b004f",
+      "SIMSPR.DLL:0x1004e188",
+      "SC3U.exe:0x441456",
+      "GZWIND.DLL:0x1001edaa",
+      "GZWIND.DLL:0x100200f2",
+      "GZWIND.DLL:0x10021689"
+     ]
+    }
+   ]
+  },
+  {
+   "phase": "12 PW:60",
+   "n": 57,
+   "bad": 0,
+   "sum": {
+    "veh_update": 34200,
+    "veh_delta": 285169180,
+    "steps": 0,
+    "veh": 0
+   },
+   "cam_hold_secs": 0,
+   "clk_pause_secs": 57,
+   "veh_phase": 0,
+   "day0": 2488136,
+   "day1": 2488136,
+   "att0": 244,
+   "att1": 244,
+   "fail0": 3,
+   "fail1": 3,
+   "bt": [
+    {
+     "fn": "veh_update",
+     "tid": 15296,
+     "frames": [
+      "SC3U.exe:0x425a9f",
+      "SC3U.exe:0x42626b",
+      "SIMSPR.DLL:0x1001cb09",
+      "ntdll.dll:0x10061451",
+      "SIMSPR.DLL:0x10042b07",
+      "USER32.dll:0x10074775",
+      "USER32.dll:0x100282c3",
+      "sc3overscroll.dll:0x100018fc",
+      "sc3overscroll.dll:0x100018fc",
+      "sc3overscroll.dll:0x10001df3",
+      "0x31b004f",
+      "SIMSPR.DLL:0x1004e188",
+      "SC3U.exe:0x441456",
+      "GZWIND.DLL:0x1001edaa",
+      "GZWIND.DLL:0x100200f2",
+      "GZWIND.DLL:0x10021689"
+     ]
+    },
+    {
+     "fn": "veh_update",
+     "tid": 15296,
+     "frames": [
+      "SC3U.exe:0x425a9f",
+      "SC3U.exe:0x42626b",
+      "SIMSPR.DLL:0x1001cb09",
+      "ntdll.dll:0x10061451",
+      "SIMSPR.DLL:0x10042b07",
+      "USER32.dll:0x10074775",
+      "USER32.dll:0x100282c3",
+      "sc3overscroll.dll:0x100018fc",
+      "sc3overscroll.dll:0x100018fc",
+      "sc3overscroll.dll:0x10001df3",
+      "0x31b004f",
+      "SIMSPR.DLL:0x1004e188",
+      "SC3U.exe:0x441456",
+      "GZWIND.DLL:0x1001edaa",
+      "GZWIND.DLL:0x100200f2",
+      "GZWIND.DLL:0x10021689"
+     ]
+    }
+   ]
+  }
+ ]
+}

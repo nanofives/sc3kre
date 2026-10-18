@@ -1,0 +1,79 @@
+{
+ "_": "bigrbt.py: 3x3 roundabout piece 20610 (corner cell, arms [])",
+ "piece": 20610,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 1,
+ "vehicle": {
+  "class": "car",
+  "lanes": [
+   {
+    "from": [
+     0,
+     80
+    ],
+    "to": [
+     175,
+     255
+    ],
+    "path": 1024
+   }
+  ]
+ },
+ "pedestrian": {
+  "walks": [
+   {
+    "from": [
+     15,
+     15
+    ],
+    "to": [
+     240,
+     15
+    ],
+    "path": 256,
+    "crosswalk": false
+   },
+   {
+    "from": [
+     240,
+     15
+    ],
+    "to": [
+     240,
+     240
+    ],
+    "path": 257,
+    "crosswalk": false
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     15,
+     15
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     240,
+     240
+    ],
+    "code": 24
+   }
+  ]
+ },
+ "connects": {
+  "road": [
+   [
+    "x-",
+    "z+"
+   ]
+  ]
+ }
+}

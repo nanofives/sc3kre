@@ -12,7 +12,63 @@
  * counts stay balanced. Zoom/rotate (FUN_10042d8a, FUN_10042f27, ...) keep their own momentary
  * hold/release brackets, untouched.
  *
+ * FREEZE (owner 2026-10-15, task cartrips P1 + extension): the street animation keeps running while the game is
+ * paused, because its tick is real time (STRTSIM.md 8): cars keep driving and being deleted by the density
+ * despawn (CAR_TRIPS.md 1.4: ~35 visible deletions a minute paused in Berlin), trains, subway cars, people, boats
+ * and aircraft keep moving. The SC3U.exe agent loop FUN_00425a10 ticks every animated agent through one
+ * instruction, `call [edx+0x100]` at 0x00425a99 (ecx = agent, edx = its vtable, one stack arg the callee pops).
+ * That instruction is replaced by a call to freeze_thunk: while the user pause depth city +0x140 is non-zero and
+ * the agent is in the frozen set, it returns at once (ret 4); otherwise it jumps to the agent's own Tick. Nothing
+ * of a frozen agent runs (no move, no animation frame, no despawn test, no wait timer); on resume it continues
+ * where it stopped. Frozen set, ini [sim] freeze_on_pause:
+ *   street (default) = every agent whose class (vtable) lives in STRTSIM.DLL: cars, trains, subway, people,
+ *                      boats, aircraft, other street vehicles. SIMSPR's animated sprites keep running.
+ *   cars             = only the street sim's cars (vtable STRTSIM 0x1002cd20, the class FUN_10019750 builds).
+ *   0                = stock.
+ * The camera hold already freezes all of them (SIMSPR view tick). City = *(SC3U.exe+0xfa86c) +0x48, as sc3perf /
+ * sc3resize read it. Measured: verify/cartrips/RESULTS.md addenda 3 and 4.
+ *
+ * ANIMATE (owner 2026-10-16, task carscroll): with the hold gone the street agents still froze while the camera moved.
+ * The heartbeat that ticks them (SC3U FUN_00426140, STRTSIM.md 8) is called from the render view's frame FUN_1001cab9
+ * (SIMSPR vtable 0x10063390 slot +0x20) only while its byte +0x2b is set, and +0x2b = (rate >= 0.1) is written by
+ * slot +0x7c FUN_1001d65d(&rate) `[CONFIRMED @ SIMSPR 0x1001cab9, 0x1001d65d, 0x10063504 = 0.1f]`. The idle view tick
+ * FUN_10042a95 passes 60.0 before every frame; the scroll step FUN_10043daf passes 0.0 (`fldz; fstp [ebp-8]` at
+ * 0x10043de7, 0x10043f60 and 0x10044003, one per branch) before its own frame, so every scroll frame renders without
+ * the heartbeat. Zoom and rotate
+ * (FUN_10042d8a, ...) pass 0.0 and 60.0 inside one call, with no frame between: nothing to change there.
+ * The 5 bytes at each of the three sites become a call to anim_stub, which writes g_scroll_rate (60.0, the idle tick's value)
+ * into [ebp-8]. Needs run_while_scrolling=1: the stock camera hold suspends the heartbeat itself (+0xb0).
+ * FREEZE still wins: it skips frozen agents inside the heartbeat's agent loop whatever drives the heartbeat.
+ * STRIPS (same switch): once the agents tick during a move, the camera's car churn shows. UpdateVehicleView STRTSIM
+ * FUN_10015415 queues the cars on the strips that left the sim rect for removal (AnimOccMan vt+0x58, carried out in
+ * their next tick, so today, with frozen agents, nothing is removed until the camera stops) and then refills by calling
+ * PutVehiclesInRect FUN_1001f040 on the WHOLE new rect once per new strip (loop at 0x1001556c..0x1001557c: edi = index,
+ * strips at [ebp-0x44], count at [ebp-4]); the refill scans the rect row by row from its first corner and places cars
+ * until alive > target `[CONFIRMED @ STRTSIM 0x10015415, 0x10014d85, 0x1001f040]`. Measured (carscroll K0d): arrow
+ * scrolling then placed ~50 cars/s, 26% of them popping in on screen. While animating, the refill from that loop
+ * (return address 0x10015578) gets strip number edi instead of the whole rect, so new cars appear only on the ground
+ * the camera has just revealed. Hooked at FUN_1001f040's entry: sc3cartrips patches (and checks) the call site and, in
+ * filler / off, jumps to the function with the return address intact.
+ * TICKSTRIP (same switch): the strip cars leave in their own tick, so the stock producer tick FUN_1001f44a sees
+ * alive < target during a move and places cars with PutAVehicleInRect FUN_1001ef25 at random cells of the producer's
+ * rect +0x24..+0x30 `[CONFIRMED @ STRTSIM 0x1001f44a, 0x1001ef25]`. Measured (carscroll S1, drag): on-screen pop-ins
+ * 219 a minute against 98 with the camera still, all from that tick. While the camera is moving (a scroll frame in the
+ * last 300 ms) the tick runs with the producer's rect set to the strip most recently revealed (if it still lies in the
+ * rect), and the rect is put back as soon as it returns; with no such strip the tick is skipped (carscroll S1c: every
+ * remaining on-screen pop-in during a drag came from ticks run on the full rect between strips). Once the camera has
+ * been still for 300 ms the tick runs as stock.
+ * CARMARGIN (same switch, ini [sim] car_margin, default 5; 2 = stock): ProcessViewChange STRTSIM FUN_10013e66 grows the
+ * view's cell box by 2 cells into the street agents' sim rect (`push 2` at 0x10013fc9, FUN_100120b7(box, +0x90, 2))
+ * `[CONFIRMED @ STRTSIM 0x10013fc9, 0x100120b7]`. Every camera step deletes the agents on the strips that leave that rect,
+ * so a back-and-forth drag keeps deleting the cars just off screen and the ground they leave is empty when the camera
+ * comes back (carscroll R0). A wider margin keeps them while the camera moves less than the margin, and fills new ground
+ * before the camera reaches it. The byte is written once at arming; sc3simrun_carmargin(n) changes it at run time. Hooked at FUN_1001f44a's entry (reached in stock and filler modes; replace mode never calls it).
+ *
  * Config: simrun.ini beside the DLL:  [sim] run_while_scrolling=1   (0 = stock, the A/B control)
+ *                                     [sim] freeze_on_pause=street  (cars = cars only, 0 = stock)
+ *                                     [sim] animate_while_scrolling=1 (0 = agents freeze during camera moves, stock)
+ * Exports (measurement): sc3simrun_animate(on) switches the scroll-frame rate at run time (returns the old state),
+ *         sc3simrun_stats(DWORD out[6]) = scroll frames seen by the stub, agent ticks, frozen agent ticks, strip refills, producer ticks run on the revealed strip, producer ticks skipped.
  * Env:    SC3SIMRUN_LOG=<abs path>  SC3SIMRUN_TRACE=1 (20 Hz sampler + hold/pause caller log)
  *         SC3SIMRUN_RESUME=1 (test only: post 0xc2a35d80 once per unit of +0x140 after load)
  * Build:  re/harness/build_simrun.ps1. Ships via mods_launch.exe.
@@ -194,11 +250,93 @@ static int gz_post(DWORD msgid, DWORD a0) {
 /* ============================================================ the patch */
 
 static int g_run = 1;
+static int g_freeze = 2;                         /* 0 stock, 1 cars, 2 street */
+static int g_anim = 1;                           /* animate street agents while the camera moves */
+static int g_car_margin = 5;                     /* sim rect = view box + this many cells (stock 2) */
 
 static void ini_read(void) {
     char path[MAX_PATH];
     self_path(path, sizeof(path), "simrun.ini");
     if (path[0]) g_run = GetPrivateProfileIntA("sim", "run_while_scrolling", 1, path) ? 1 : 0;
+    if (path[0]) g_anim = GetPrivateProfileIntA("sim", "animate_while_scrolling", 1, path) ? 1 : 0;
+    if (path[0]) g_car_margin = GetPrivateProfileIntA("sim", "car_margin", 5, path);
+    if (g_car_margin < 2) g_car_margin = 2;
+    if (g_car_margin > 24) g_car_margin = 24;
+    if (path[0]) {
+        char v[16];
+        GetPrivateProfileStringA("sim", "freeze_on_pause", "street", v, sizeof(v), path);
+        g_freeze = !lstrcmpiA(v, "cars") ? 1 : (!lstrcmpiA(v, "0") || !lstrcmpiA(v, "off")) ? 0 : 2;
+    }
+}
+
+/* ============================================================ FREEZE */
+
+static BYTE *g_exe;
+static DWORD g_city_vt;                          /* SIMCITY+0x13260, the city / coordinator vtable */
+static DWORD g_vt_lo, g_vt_hi;                   /* frozen vtable range: STRTSIM image, or the car vtable alone */
+static volatile LONG g_frozen_ticks, g_agent_ticks;
+static int g_freeze_armed;
+
+static __inline int user_paused(void) {
+    BYTE *app = *(BYTE **)(g_exe + 0xfa86c), *city;
+    if (!app) return 0;
+    city = *(BYTE **)(app + 0x48);
+    if (!city || *(DWORD *)city != g_city_vt) return 0;
+    return *(LONG *)(city + 0x140) > 0;
+}
+
+/* game thread only (the agent loop); the counters are statistics */
+static int __cdecl freeze_skip(DWORD vt) {
+    g_agent_ticks++;
+    if (vt >= g_vt_lo && vt < g_vt_hi && user_paused()) { g_frozen_ticks++; return 1; }
+    return 0;
+}
+
+/* replaces `call dword ptr [edx+0x100]` at SC3U.exe 0x00425a99: ecx = agent, edx = vtable, [esp+4] = time delta */
+static __declspec(naked) void freeze_thunk(void) {
+    __asm {
+        push ecx
+        push edx
+        push edx
+        call freeze_skip
+        add esp, 4
+        pop edx
+        pop ecx
+        test eax, eax
+        jnz skip
+        jmp dword ptr [edx + 0x100]
+    skip:
+        ret 4
+    }
+}
+
+static int freeze_arm(HMODULE strt, HMODULE simcity) {
+    static const BYTE expect[] = { 0x8b, 0x11, 0xff, 0x92, 0x00, 0x01, 0x00, 0x00, 0x8b, 0xc6 };
+    BYTE *p, *exe = (BYTE *)GetModuleHandleA(NULL);
+    IMAGE_NT_HEADERS *nt;
+    DWORD old;
+    p = exe + 0x25a97;                           /* mov edx,[ecx] / call [edx+0x100] / mov eax,esi */
+    if (IsBadReadPtr(p, sizeof(expect)) || memcmp(p, expect, sizeof(expect))) {
+        logf("### FREEZE: SC3U.exe+0x25a97 differs from shipped - NOT armed");
+        return 0;
+    }
+    g_exe = exe;
+    g_city_vt = (DWORD)simcity + 0x13260;
+    if (g_freeze == 1) {
+        g_vt_lo = (DWORD)strt + 0x2cd20; g_vt_hi = g_vt_lo + 1;
+    } else {
+        nt = (IMAGE_NT_HEADERS *)((BYTE *)strt + ((IMAGE_DOS_HEADER *)strt)->e_lfanew);
+        g_vt_lo = (DWORD)strt; g_vt_hi = (DWORD)strt + nt->OptionalHeader.SizeOfImage;
+    }
+    p += 2;
+    if (!VirtualProtect(p, 6, PAGE_EXECUTE_READWRITE, &old)) return 0;
+    p[0] = 0xE8;                                 /* call rel32 freeze_thunk */
+    *(DWORD *)(p + 1) = (DWORD)freeze_thunk - (DWORD)(p + 5);
+    p[5] = 0x90;
+    VirtualProtect(p, 6, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), p, 6);
+    g_freeze_armed = 1;
+    return 1;
 }
 
 /* SIMSPR+0x4400e: cmp [esi+0x174],bl / lea eax,[esi+0x174] / jne +0x12 / mov byte [eax],1 */
@@ -218,6 +356,242 @@ static int patch_scroll_hold(HMODULE spr) {
     return 1;
 }
 
+/* ============================================================ ANIMATE */
+
+#define RATE_ON  0x42700000                      /* 60.0f, what the idle view tick passes */
+static volatile DWORD g_scroll_rate = RATE_ON;   /* float bits the scroll step passes to the render view's +0x7c */
+static volatile LONG g_scroll_frames;
+static int g_anim_armed;
+
+/* replaces `fldz; fstp dword ptr [ebp-8]` at SIMSPR 0x10043de7 / 0x10043f60 / 0x10044003 (ebp = the scroll step's frame); keeps every register.
+   The next instructions (mov eax,[ecx] / push edx / call [eax+0x7c]) read no flags. */
+static __declspec(naked) void anim_stub(void) {
+    __asm {
+        push eax
+        mov eax, g_scroll_rate
+        mov dword ptr [ebp - 8], eax
+        pop eax
+        lock inc dword ptr [g_scroll_frames]
+        ret
+    }
+}
+
+/* The compiler kept three copies of the rate write, one per branch, each the same 16 bytes
+   (mov ecx,[esi+0xb8] / lea edx,[ebp-8] / fldz / fstp [ebp-8] / mov eax,[ecx]) before `call [eax+0x7c]` at 0x1004400b:
+   drag / held button 0x10043dde (jmp 0x1004400a), one direction 0x10043f57 (jmp 0x1004400a), two directions
+   0x10043ffa (falls through). Ghidra's text shows one. All three are patched, or none. */
+static int patch_scroll_anim(HMODULE spr) {
+    static const BYTE expect[] = { 0x8b, 0x8e, 0xb8, 0x00, 0x00, 0x00, 0x8d, 0x55, 0xf8, 0xd9, 0xee, 0xd9, 0x5d, 0xf8,
+                                   0x8b, 0x01 };
+    static const DWORD sites[3] = { 0x43dde, 0x43f57, 0x43ffa };
+    BYTE *q;
+    DWORD old;
+    int i;
+    for (i = 0; i < 3; i++) {
+        BYTE *p = (BYTE *)spr + sites[i];
+        if (IsBadReadPtr(p, sizeof(expect)) || memcmp(p, expect, sizeof(expect))) {
+            logf("### ANIMATE: SIMSPR+0x%lx differs from shipped - NOT patched (agents freeze while scrolling)", sites[i]);
+            return 0;
+        }
+    }
+    for (i = 0; i < 3; i++) {
+        q = (BYTE *)spr + sites[i] + 9;          /* the fldz */
+        if (!VirtualProtect(q, 5, PAGE_EXECUTE_READWRITE, &old)) return 0;
+        q[0] = 0xE8;
+        *(DWORD *)(q + 1) = (DWORD)anim_stub - (DWORD)(q + 5);
+        VirtualProtect(q, 5, old, &old);
+        FlushInstructionCache(GetCurrentProcess(), q, 5);
+    }
+    g_anim_armed = 1;
+    return 1;
+}
+
+/* STRIPS: jmp at STRTSIM FUN_1001f040's entry (push ebp / mov ebp,esp / sub esp,0x18 = 6 bytes). At entry ebp and edi
+   are still the caller's. */
+static DWORD g_strip_ret, g_strip_cont;          /* STRTSIM+0x15578 (return into the refill loop), +0x1f046 */
+static volatile LONG g_strip_calls;
+static int g_strip_armed;
+static LONG g_last_strip[4];                     /* x0 z0 x1 z1 of the strip revealed last (game thread) */
+static DWORD g_last_strip_ms, g_last_scroll_ms, g_scroll_seen;
+static volatile LONG g_tick_swaps;
+
+static void __cdecl strip_note(LONG *r) {
+    memcpy(g_last_strip, r, sizeof(g_last_strip));
+    g_last_strip_ms = GetTickCount();
+}
+
+static __declspec(naked) void strip_entry(void) {
+    __asm {
+        mov eax, [esp]
+        cmp eax, g_strip_ret
+        jne stock
+        cmp dword ptr [g_scroll_rate], 0
+        je stock
+        mov eax, edi
+        shl eax, 4
+        lea eax, [ebp + eax - 0x44]              ; &strips[edi]
+        mov [esp + 4], eax
+        lock inc dword ptr [g_strip_calls]
+        pushad
+        push eax
+        call strip_note
+        add esp, 4
+        popad
+    stock:
+        push ebp
+        mov ebp, esp
+        sub esp, 0x18
+        jmp dword ptr [g_strip_cont]
+    }
+}
+
+static int patch_strips(HMODULE strt) {
+    static const BYTE entry[] = { 0x55, 0x8b, 0xec, 0x83, 0xec, 0x18, 0x80, 0x79, 0x35, 0x00 };
+    static const BYTE loop[] = { 0x8b, 0x8b, 0x00, 0x01, 0x00, 0x00, 0x56, 0xe8 };   /* 0x1001556c: mov ecx,[ebx+0x100] / push esi / call */
+    static const BYTE tail[] = { 0x47, 0x3b, 0x7d, 0xfc, 0x7c, 0xee };               /* 0x10015578: inc edi / cmp edi,[ebp-4] / jl */
+    static const BYTE strips[] = { 0x8d, 0x45, 0xbc, 0x50, 0x57, 0x56, 0xe8 };       /* 0x10015541: lea eax,[ebp-0x44] / push eax / push edi / push esi / call FUN_10014d85 */
+    BYTE *S = (BYTE *)strt, *p = S + 0x1f040;
+    DWORD old;
+    if (memcmp(p, entry, sizeof(entry)) || memcmp(S + 0x1556c, loop, sizeof(loop)) || memcmp(S + 0x15578, tail, sizeof(tail))
+        || memcmp(S + 0x15541, strips, sizeof(strips))) {
+        logf("### STRIPS: STRTSIM differs from shipped - NOT armed (camera moves refill the whole sim rect)");
+        return 0;
+    }
+    g_strip_ret = (DWORD)S + 0x15578;
+    g_strip_cont = (DWORD)S + 0x1f046;
+    if (!VirtualProtect(p, 6, PAGE_EXECUTE_READWRITE, &old)) return 0;
+    p[0] = 0xE9;
+    *(DWORD *)(p + 1) = (DWORD)strip_entry - (DWORD)(p + 5);
+    p[5] = 0x90;
+    VirtualProtect(p, 6, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), p, 6);
+    g_strip_armed = 1;
+    return 1;
+}
+
+/* TICKSTRIP: jmp at STRTSIM FUN_1001f44a's entry (thiscall, 1 stack arg, ret 4; push ebp / mov ebp,esp / push ecx /
+   push ecx / push esi = 6 bytes, moved to g_tick_tramp). */
+static BYTE *g_tick_tramp;
+static LONG g_tick_saved[4];
+
+static volatile LONG g_tick_skips;
+
+/* 0 = run stock, 1 = run on the strip (rect swapped), 2 = skip this tick */
+static int __cdecl tick_swap(BYTE *prod) {
+    DWORD now = GetTickCount();
+    LONG *r = (LONG *)(prod + 0x24);
+    if (g_scroll_frames != (LONG)g_scroll_seen) { g_scroll_seen = (DWORD)g_scroll_frames; g_last_scroll_ms = now; }
+    if (now - g_last_scroll_ms > 300) return 0;
+    if (!g_last_strip_ms || g_last_strip[2] < g_last_strip[0] || g_last_strip[3] < g_last_strip[1]
+        || g_last_strip[0] < r[0] || g_last_strip[1] < r[1] || g_last_strip[2] > r[2] || g_last_strip[3] > r[3]) {
+        g_tick_skips++;
+        return 2;
+    }
+    memcpy(g_tick_saved, r, sizeof(g_tick_saved));
+    memcpy(r, g_last_strip, sizeof(g_last_strip));
+    g_tick_swaps++;
+    return 1;
+}
+static void __cdecl tick_restore(BYTE *prod) { memcpy(prod + 0x24, g_tick_saved, sizeof(g_tick_saved)); }
+
+static __declspec(naked) void tick_entry(void) {
+    __asm {
+        cmp dword ptr [g_scroll_rate], 0
+        je stock
+        push ecx
+        push ecx
+        call tick_swap
+        add esp, 4
+        pop ecx
+        test eax, eax
+        je stock
+        cmp eax, 2
+        je skip
+        push ecx                                 ; producer
+        push dword ptr [esp + 8]                 ; the caller's stack argument
+        call dword ptr [g_tick_tramp]            ; FUN_1001f44a, pops its argument
+        pop ecx
+        push ecx
+        call tick_restore
+        add esp, 4
+        ret 4
+    skip:
+        ret 4
+    stock:
+        jmp dword ptr [g_tick_tramp]
+    }
+}
+
+static int patch_tickstrip(HMODULE strt) {
+    static const BYTE entry[] = { 0x55, 0x8b, 0xec, 0x51, 0x51, 0x56, 0x8b, 0xf1, 0x80, 0x7e, 0x35, 0x00 };
+    BYTE *p = (BYTE *)strt + 0x1f44a;
+    DWORD old;
+    if (memcmp(p, entry, sizeof(entry))) { logf("### TICKSTRIP: STRTSIM+0x1f44a differs from shipped - NOT armed"); return 0; }
+    g_tick_tramp = (BYTE *)VirtualAlloc(NULL, 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!g_tick_tramp) return 0;
+    memcpy(g_tick_tramp, p, 6);
+    g_tick_tramp[6] = 0xE9;
+    *(DWORD *)(g_tick_tramp + 7) = (DWORD)(p + 6) - (DWORD)(g_tick_tramp + 11);
+    if (!VirtualProtect(p, 6, PAGE_EXECUTE_READWRITE, &old)) return 0;
+    p[0] = 0xE9;
+    *(DWORD *)(p + 1) = (DWORD)tick_entry - (DWORD)(p + 5);
+    p[5] = 0x90;
+    VirtualProtect(p, 6, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), p, 6);
+    return 1;
+}
+
+/* CARMARGIN: the imm8 of `push 2` at STRTSIM 0x10013fc9 */
+static BYTE *g_margin_at;
+
+static int set_car_margin(int m) {
+    DWORD old;
+    int was;
+    if (!g_margin_at) return -1;
+    if (m < 2) m = 2;
+    if (m > 24) m = 24;
+    was = g_margin_at[0];
+    if (!VirtualProtect(g_margin_at, 1, PAGE_EXECUTE_READWRITE, &old)) return -1;
+    g_margin_at[0] = (BYTE)m;
+    VirtualProtect(g_margin_at, 1, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), g_margin_at, 1);
+    return was;
+}
+
+static int patch_carmargin(HMODULE strt) {
+    static const BYTE expect[] = { 0x8d, 0xbe, 0x90, 0x00, 0x00, 0x00, 0x6a, 0x02, 0xd1, 0xe8 };   /* lea edi,[esi+0x90] / push 2 / shr eax,1 */
+    BYTE *p = (BYTE *)strt + 0x13fc3;
+    if (memcmp(p, expect, sizeof(expect)) || p[0x20] != 0xe8) {
+        logf("### CARMARGIN: STRTSIM+0x13fc3 differs from shipped - NOT armed (sim rect stays view + 2)");
+        return 0;
+    }
+    g_margin_at = p + 7;
+    set_car_margin(g_car_margin);
+    return 1;
+}
+
+__declspec(dllexport) int __cdecl sc3simrun_carmargin(int m) {
+    int was = set_car_margin(m);
+    logf("CARMARGIN> %d -> %d", was, m);
+    return was;
+}
+
+__declspec(dllexport) int __cdecl sc3simrun_animate(int on) {
+    int was = g_scroll_rate != 0;
+    g_scroll_rate = on ? RATE_ON : 0;
+    logf("ANIMATE> switched %s (armed=%d)", on ? "on" : "off", g_anim_armed);
+    return was;
+}
+
+__declspec(dllexport) void __cdecl sc3simrun_stats(DWORD *out) {
+    out[0] = (DWORD)g_scroll_frames;
+    out[1] = (DWORD)g_agent_ticks;
+    out[2] = (DWORD)g_frozen_ticks;
+    out[3] = (DWORD)g_strip_calls;
+    out[4] = (DWORD)g_tick_swaps;
+    out[5] = (DWORD)g_tick_skips;
+}
+
 /* ============================================================ sampler */
 
 static DWORD WINAPI sampler(LPVOID param) {
@@ -230,14 +604,40 @@ static DWORD WINAPI sampler(LPVOID param) {
     if (GetEnvironmentVariableA("SC3SIMRUN_TRACE", env, sizeof(env)) && env[0] == '1') trace = 1;
 
     {   HMODULE spr;
-        int ok = 0;
+        int ok = 0, anim = 0;
         while (!(spr = GetModuleHandleA("SIMSPR.DLL"))) Sleep(1);
         if (g_run) ok = patch_scroll_hold(spr);
+        if (g_run && g_anim) anim = patch_scroll_anim(spr);
         logf("### READY: run_while_scrolling=%d patched=%d trace=%d", g_run, ok, trace);
+        logf("### ANIMATE: animate_while_scrolling=%d armed=%d%s", g_anim, anim,
+             g_anim && !g_run ? " (needs run_while_scrolling=1: the stock camera hold suspends the heartbeat)" : "");
     }
-    if (!trace && !resume) return 0;
-
     while (!(simcity = GetModuleHandleA("SIMCITY.DLL"))) Sleep(5);
+    if (g_anim_armed) {
+        HMODULE strt;
+        while (!(strt = GetModuleHandleA("STRTSIM.DLL"))) Sleep(5);
+        logf("### STRIPS: armed=%d", patch_strips(strt));
+        logf("### TICKSTRIP: armed=%d", patch_tickstrip(strt));
+        logf("### CARMARGIN: armed=%d car_margin=%d", patch_carmargin(strt), g_car_margin);
+    }
+    if (g_freeze) {
+        HMODULE strt;
+        while (!(strt = GetModuleHandleA("STRTSIM.DLL"))) Sleep(5);
+        logf("### FREEZE: freeze_on_pause=%s, armed=%d", g_freeze == 1 ? "cars" : "street", freeze_arm(strt, simcity));
+    } else logf("### FREEZE: freeze_on_pause=0 (stock)");
+    if (!trace && !resume) {
+        int paused, was = -1;
+        if (!g_freeze_armed) return 0;
+        for (;;) {                                   /* log pause edges with the frozen-tick count */
+            Sleep(250);
+            __try { paused = user_paused(); } __except (EXCEPTION_EXECUTE_HANDLER) { paused = was; }
+            if (paused != was) {
+                logf("FREEZE> %s: agent ticks %ld, frozen %ld", paused ? "paused" : "running", g_agent_ticks, g_frozen_ticks);
+                was = paused;
+            }
+        }
+    }
+
     g_simcity = (DWORD)simcity;
     logf("### SIMCITY.DLL at 0x%08lX, coord hook %s, clock hook %s, hold hook %s", (DWORD)simcity,
          coord_arm(simcity) ? "ARMED" : "FAILED", trace && clock_arm(simcity) ? "ARMED" : "off",

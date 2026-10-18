@@ -1,0 +1,93 @@
+phase          n    bad     day_aa4d  issuer_97b9    trip_6fe3    trip_706a           rt    rt.arrive      rt.fail        steps deposit_6edd   stats_9242 publish_93e9    strt_c750          veh   veh_update    veh_delta cam_hold_take cam_hold_release
+02 s3:60      57      0           29      1574828            0            0        42892        41272         1620     43376315            0            0            0            0            0            0            0            0            0  hold0 clkp38 day 2488076->2488104 vehphase 0
+04 PW:60      57      0            0            0            0            0        35852        33334         2518     48198750            0            0            0            0            0            0            0            0            0  hold0 clkp57 day 2488104->2488104 vehphase 0
+06 s3:60      57      0            0            0            0            0        36774        34267         2506     48119431            0            0            0            0            0            0            0            0            0  hold0 clkp57 day 2488104->2488104 vehphase 0
+08 PW:60      57      0            0            0            0            0           22           25            1        19135            0            0            0            0            0            0            0            0            0  hold0 clkp57 day 2488109->2488109 vehphase 0
+10 s3:60      57      0           17      1122825            0            0        44824        40849         3975     46878153            0            0            0            0            0        30367    253070789            0            0  hold0 clkp44 day 2488112->2488129 vehphase 0
+12 PW:60      57      0            0            0            0            0            0            0            0            0            0            0            0            0            0        34200    285169180            0            0  hold0 clkp57 day 2488136->2488136 vehphase 0
+
+== 02 s3:60
+  cam_hold_secs: 0
+  clk_pause_secs: 38
+  veh_phase: 0
+  day0: 2488076
+  day1: 2488104
+  att0: 2654
+  att1: 33550
+  fail0: 195
+  fail1: 1679
+  route_trip.caller: {'SimTransit.dll:0x10007064': 41220, 'SimTransit.dll:0x100070b3': 1672}
+  th.route_trip: {'368': 5134, '4892': 5176, '7876': 5296, '11168': 1672, '18264': 5037, '18928': 5222, '18980': 5086, '20068': 5070, '21048': 5199}
+
+== 04 PW:60
+  cam_hold_secs: 0
+  clk_pause_secs: 57
+  veh_phase: 0
+  day0: 2488104
+  day1: 2488104
+  att0: 33550
+  att1: 33550
+  fail0: 1679
+  fail1: 1679
+  route_trip.caller: {'SimTransit.dll:0x10007064': 35852}
+  th.route_trip: {'368': 4557, '4892': 4255, '7876': 4535, '18264': 4695, '18928': 4665, '18980': 4409, '20068': 4280, '21048': 4456}
+
+== 06 s3:60
+  cam_hold_secs: 0
+  clk_pause_secs: 57
+  veh_phase: 0
+  day0: 2488104
+  day1: 2488104
+  att0: 33550
+  att1: 33550
+  fail0: 1679
+  fail1: 1679
+  route_trip.caller: {'SimTransit.dll:0x10007064': 36774}
+  th.route_trip: {'368': 4643, '4892': 4932, '7876': 4485, '18264': 4579, '18928': 4305, '18980': 4937, '20068': 4357, '21048': 4536}
+
+== 08 PW:60
+  cam_hold_secs: 0
+  clk_pause_secs: 57
+  veh_phase: 0
+  day0: 2488109
+  day1: 2488109
+  att0: 244
+  att1: 244
+  fail0: 1
+  fail1: 1
+  route_trip.caller: {'SimTransit.dll:0x10007064': 22}
+  th.route_trip: {'368': 9, '4892': 9, '18928': 3, '18980': 1}
+
+== 10 s3:60
+  cam_hold_secs: 0
+  clk_pause_secs: 44
+  veh_phase: 0
+  day0: 2488112
+  day1: 2488129
+  att0: 4353
+  att1: 20705
+  fail0: 34
+  fail1: 129
+  route_trip.caller: {'SimTransit.dll:0x10007064': 43768, 'SimTransit.dll:0x100070b3': 1056}
+  th.route_trip: {'368': 5535, '4892': 5378, '7876': 5311, '18264': 5831, '18928': 5905, '18980': 5496, '20068': 4999, '21048': 5313, '11168': 1056}
+  bt veh_update tid 15296: SC3U.exe:0x425a9f < SC3U.exe:0x42626b < SIMSPR.DLL:0x1001cb09 < ntdll.dll:0x10061451 < SIMSPR.DLL:0x10042b07 < USER32.dll:0x10074775 < USER32.dll:0x100282c3 < sc3overscroll.dll:0x100018fc
+  bt veh_update tid 15296: SC3U.exe:0x425a9f < SC3U.exe:0x42626b < SIMSPR.DLL:0x1001cb09 < ntdll.dll:0x10061451 < SIMSPR.DLL:0x10042b07 < USER32.dll:0x10074775 < USER32.dll:0x100282c3 < sc3overscroll.dll:0x100018fc
+
+== 12 PW:60
+  cam_hold_secs: 0
+  clk_pause_secs: 57
+  veh_phase: 0
+  day0: 2488136
+  day1: 2488136
+  att0: 244
+  att1: 244
+  fail0: 3
+  fail1: 3
+  bt veh_update tid 15296: SC3U.exe:0x425a9f < SC3U.exe:0x42626b < SIMSPR.DLL:0x1001cb09 < ntdll.dll:0x10061451 < SIMSPR.DLL:0x10042b07 < USER32.dll:0x10074775 < USER32.dll:0x100282c3 < sc3overscroll.dll:0x100018fc
+  bt veh_update tid 15296: SC3U.exe:0x425a9f < SC3U.exe:0x42626b < SIMSPR.DLL:0x1001cb09 < ntdll.dll:0x10061451 < SIMSPR.DLL:0x10042b07 < USER32.dll:0x10074775 < USER32.dll:0x100282c3 < sc3overscroll.dll:0x100018fc
+
+timers @ s3:60
+   {'node': '0x104eb398', 'f2': '0x1', 'f3': 'SIMCITY.DLL:0x1000c0a5', 'f4': '0x5839e0', 'oneshot': 0, 'period': 50, 'due': 201186, 'fixed': 0}
+
+timers @ end
+   {'node': '0x104eb398', 'f2': '0x1', 'f3': 'SIMCITY.DLL:0x1000c0a5', 'f4': '0x5839e0', 'oneshot': 0, 'period': 50, 'due': 999074, 'fixed': 0}

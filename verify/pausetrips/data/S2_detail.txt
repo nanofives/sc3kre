@@ -1,0 +1,318 @@
+phase          n    bad     day_aa4d  issuer_97b9    trip_6fe3    trip_706a           rt    rt.arrive      rt.fail        steps deposit_6edd   stats_9242 publish_93e9    strt_c750          veh   veh_update    veh_delta cam_hold_take cam_hold_release
+02 s3:60      56      0           82       136328         7547         1915         9462         9359          103       786340       150548            3            3         4132         4099            0            0            0            0  hold0 clkp4 day 2476062->2476142 vehphase 273
+04 s1:120    116      0           14        22757         1931          446         2377         2373            4       231462        42397            0            0         8648         8579            0            0            0            0  hold0 clkp2 day 2476143->2476157 vehphase 346
+05 P:90       87      0            0            0            0            0            0            0            0            0            0            0            0         6184         6115            0            0            0            0  hold0 clkp87 day 2476157->2476157 vehphase 321
+07 s2:90      86      0           43        79636         3731          954         4685         4642           43       382137        81535            2            2         6279         6208            0            0            0            0  hold0 clkp3 day 2476159->2476201 vehphase 335
+09 P:90       86      0            0            0            0            0            0            0            0            0            0            0            0         5905         5842            0            0            0            0  hold0 clkp86 day 2476202->2476202 vehphase 343
+11 s3:90      86      0          126       204227        11527         3077        14604        14526           78      1362787       264227            4            4         6624         6542            0            0            0            0  hold0 clkp9 day 2476209->2476333 vehphase 331
+13 P:90       86      0            0            0            0            0            0            0            0            0            0            0            0         7621         7548            0            0            0            0  hold0 clkp86 day 2476333->2476333 vehphase 341
+15 s4:90      86      0          419       682354        39152         9974        49126        48698          427      4476122       834282           13           13         7334         7262            0            0            0            0  hold0 clkp56 day 2476356->2476770 vehphase 369
+17 P:90       86      0            0            0            0            0            0            0            0            0            0            0            0         7353         7283            0            0            0            0  hold0 clkp86 day 2476770->2476770 vehphase 356
+19 H:60       56      0            0            0            0            0            0            0            0            0            0            0            0            0            0            0            0            0            0  hold56 clkp56 day 2476776->2476776 vehphase 10
+20 s4:30      27      0          131       204712        12138         2961        15099        14972          127      1517621       272950            4            4         2547         2521            0            0            0            0  hold0 clkp18 day 2476794->2476920 vehphase 325
+21 PH:45      42      0            0            0            0            0            0            0            0            0            0            0            0            0            0            0            0            0            0  hold42 clkp42 day 2476920->2476920 vehphase 3
+23 s3:60      57      0           84       136042         7566         2057         9623         9541           82       977255       179180            3            3         4582         4545            0            0            0            0  hold0 clkp5 day 2476925->2477007 vehphase 342
+25 P:60       56      0            0            0            0            0            0            0            0            0            0            0            0         4435         4404            0            0            0            0  hold0 clkp56 day 2477007->2477007 vehphase 342
+
+== 02 s3:60
+  cam_hold_secs: 0
+  clk_pause_secs: 4
+  veh_phase: 273
+  day0: 2476062
+  day1: 2476142
+  att0: 2033
+  att1: 411
+  fail0: 2
+  fail1: 3
+  route_trip.caller: {'SimTransit.dll:0x10007064': 7547, 'SimTransit.dll:0x100070b3': 1915}
+  trip_6fe3.caller: {'SimTransit.dll:0x100099e0': 5869, 'SimTransit.dll:0x100098cb': 1666, 'SIMMISC.DLL:0x1000a5bc': 6, 'SIMMISC.DLL:0x1000ae43': 6}
+  trip_706a.caller: {'SIMRCI.DLL:0x1001aa6c': 1915}
+  strt_c750.caller: {'STRTSIM.DLL:0x1001c4f9': 4132}
+  th.route_trip: {'5552': 9462}
+  th.trip_706a: {'5552': 1915}
+  th.strt_c750: {'21212': 4132}
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt trip_706a tid 5552: SIMRCI.DLL:0x1001aa6c < SimTransit.dll:0x1000706a < SIMRCI.DLL:0x10019e21 < SIMRCI.DLL:0x1003378b < SIMRCI.DLL:0x100314a9 < SIMCITY.DLL:0x100016a9 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_706a tid 5552: SIMRCI.DLL:0x1001aa6c < SimTransit.dll:0x1000706a < SIMRCI.DLL:0x10019e21 < SIMRCI.DLL:0x1003378b < SIMRCI.DLL:0x100314a9 < SIMCITY.DLL:0x100016a9 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_706a tid 5552: SIMRCI.DLL:0x1001aa6c < SimTransit.dll:0x1000706a < SIMRCI.DLL:0x10019e21 < SIMRCI.DLL:0x1003378b < SIMRCI.DLL:0x100314a9 < SIMCITY.DLL:0x100016a9 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_6fe3 tid 5552: SimTransit.dll:0x100099e0 < SimTransit.dll:0x10006fe3 < SIMCITY.DLL:0x1000e9a3 < SIMCITY.DLL:0x100016bb < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71 < KERNEL32.DLL:0x10015d49 < ntdll.dll:0x1006c75b
+  bt trip_6fe3 tid 5552: SimTransit.dll:0x100099e0 < SimTransit.dll:0x10006fe3 < SIMCITY.DLL:0x1000e9a3 < SIMCITY.DLL:0x100016bb < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71 < KERNEL32.DLL:0x10015d49 < ntdll.dll:0x1006c75b
+  bt trip_6fe3 tid 5552: SimTransit.dll:0x100099e0 < SimTransit.dll:0x10006fe3 < SIMCITY.DLL:0x1000e9a3 < SIMCITY.DLL:0x100016bb < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71 < KERNEL32.DLL:0x10015d49 < ntdll.dll:0x1006c75b
+
+== 04 s1:120
+  cam_hold_secs: 0
+  clk_pause_secs: 2
+  veh_phase: 346
+  day0: 2476143
+  day1: 2476157
+  att0: 425
+  att1: 2802
+  fail0: 3
+  fail1: 7
+  route_trip.caller: {'SimTransit.dll:0x10007064': 1931, 'SimTransit.dll:0x100070b3': 446}
+  trip_6fe3.caller: {'SimTransit.dll:0x100099e0': 1482, 'SimTransit.dll:0x100098cb': 449}
+  trip_706a.caller: {'SIMRCI.DLL:0x1001aa6c': 446}
+  strt_c750.caller: {'STRTSIM.DLL:0x1001c4f9': 8648}
+  th.route_trip: {'5552': 2377}
+  th.trip_706a: {'5552': 446}
+  th.strt_c750: {'21212': 8648}
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt trip_706a tid 5552: SIMRCI.DLL:0x1001aa6c < SimTransit.dll:0x1000706a < SIMRCI.DLL:0x10019e21 < SIMRCI.DLL:0x1003378b < SIMRCI.DLL:0x100314a9 < SIMCITY.DLL:0x100016a9 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_706a tid 5552: SIMRCI.DLL:0x1001aa6c < SimTransit.dll:0x1000706a < SIMRCI.DLL:0x10019e21 < SIMRCI.DLL:0x1003378b < SIMRCI.DLL:0x100314a9 < SIMCITY.DLL:0x100016a9 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_706a tid 5552: SIMRCI.DLL:0x1001aa6c < SimTransit.dll:0x1000706a < SIMRCI.DLL:0x10019e21 < SIMRCI.DLL:0x1003378b < SIMRCI.DLL:0x100314a9 < SIMCITY.DLL:0x100016a9 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_6fe3 tid 5552: SimTransit.dll:0x100099e0 < SimTransit.dll:0x10006fe3 < SIMCITY.DLL:0x1000e9a3 < SIMCITY.DLL:0x100016bb < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71 < KERNEL32.DLL:0x10015d49 < ntdll.dll:0x1006c75b
+  bt trip_6fe3 tid 5552: SimTransit.dll:0x100098cb < SimTransit.dll:0x10006fe3 < SIMCITY.DLL:0x1000e9a3 < SIMCITY.DLL:0x100016bb < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71 < KERNEL32.DLL:0x10015d49 < ntdll.dll:0x1006c75b
+  bt trip_6fe3 tid 5552: SimTransit.dll:0x100098cb < SimTransit.dll:0x10006fe3 < SIMCITY.DLL:0x1000e9a3 < SIMCITY.DLL:0x100016bb < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71 < KERNEL32.DLL:0x10015d49 < ntdll.dll:0x1006c75b
+
+== 05 P:90
+  cam_hold_secs: 0
+  clk_pause_secs: 87
+  veh_phase: 321
+  day0: 2476157
+  day1: 2476157
+  att0: 2802
+  att1: 2802
+  fail0: 7
+  fail1: 7
+  strt_c750.caller: {'STRTSIM.DLL:0x1001c4f9': 6184}
+  th.strt_c750: {'21212': 6184}
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+
+== 07 s2:90
+  cam_hold_secs: 0
+  clk_pause_secs: 3
+  veh_phase: 335
+  day0: 2476159
+  day1: 2476201
+  att0: 3307
+  att1: 400
+  fail0: 20
+  fail1: 3
+  route_trip.caller: {'SimTransit.dll:0x10007064': 3731, 'SimTransit.dll:0x100070b3': 954}
+  trip_6fe3.caller: {'SimTransit.dll:0x100099e0': 2917, 'SimTransit.dll:0x100098cb': 806, 'SIMMISC.DLL:0x1000a5bc': 4, 'SIMMISC.DLL:0x1000ae43': 4}
+  trip_706a.caller: {'SIMRCI.DLL:0x1001aa6c': 954}
+  strt_c750.caller: {'STRTSIM.DLL:0x1001c4f9': 6279}
+  th.route_trip: {'5552': 4685}
+  th.trip_706a: {'5552': 954}
+  th.strt_c750: {'21212': 6279}
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt trip_706a tid 5552: SIMRCI.DLL:0x1001aa6c < SimTransit.dll:0x1000706a < SIMRCI.DLL:0x10019e21 < SIMRCI.DLL:0x1003378b < SIMRCI.DLL:0x100314a9 < SIMCITY.DLL:0x100016a9 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_706a tid 5552: SIMRCI.DLL:0x1001aa6c < SimTransit.dll:0x1000706a < SIMRCI.DLL:0x10019e21 < SIMRCI.DLL:0x1003378b < SIMRCI.DLL:0x100314a9 < SIMCITY.DLL:0x100016a9 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_706a tid 5552: SIMRCI.DLL:0x1001aa6c < SimTransit.dll:0x1000706a < SIMRCI.DLL:0x10019e21 < SIMRCI.DLL:0x1003378b < SIMRCI.DLL:0x100314a9 < SIMCITY.DLL:0x100016a9 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_6fe3 tid 5552: SimTransit.dll:0x100099e0 < SimTransit.dll:0x10006fe3 < SIMCITY.DLL:0x1000e9a3 < SIMCITY.DLL:0x100016bb < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71 < KERNEL32.DLL:0x10015d49 < ntdll.dll:0x1006c75b
+  bt trip_6fe3 tid 5552: SimTransit.dll:0x100099e0 < SimTransit.dll:0x10006fe3 < SIMCITY.DLL:0x1000e9a3 < SIMCITY.DLL:0x100016bb < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71 < KERNEL32.DLL:0x10015d49 < ntdll.dll:0x1006c75b
+  bt trip_6fe3 tid 5552: SimTransit.dll:0x100099e0 < SimTransit.dll:0x10006fe3 < SIMCITY.DLL:0x1000e9a3 < SIMCITY.DLL:0x100016bb < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71 < KERNEL32.DLL:0x10015d49 < ntdll.dll:0x1006c75b
+
+== 09 P:90
+  cam_hold_secs: 0
+  clk_pause_secs: 86
+  veh_phase: 343
+  day0: 2476202
+  day1: 2476202
+  att0: 414
+  att1: 414
+  fail0: 3
+  fail1: 3
+  strt_c750.caller: {'STRTSIM.DLL:0x1001c4f9': 5905}
+  th.strt_c750: {'21212': 5905}
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+
+== 11 s3:90
+  cam_hold_secs: 0
+  clk_pause_secs: 9
+  veh_phase: 331
+  day0: 2476209
+  day1: 2476333
+  att0: 1076
+  att1: 1091
+  fail0: 3
+  fail1: 2
+  route_trip.caller: {'SimTransit.dll:0x10007064': 11527, 'SimTransit.dll:0x100070b3': 3077}
+  trip_6fe3.caller: {'SimTransit.dll:0x100099e0': 9144, 'SimTransit.dll:0x100098cb': 2367, 'SIMMISC.DLL:0x1000a5bc': 8, 'SIMMISC.DLL:0x1000ae43': 8}
+  trip_706a.caller: {'SIMRCI.DLL:0x1001aa6c': 3077}
+  strt_c750.caller: {'STRTSIM.DLL:0x1001c4f9': 6624}
+  th.route_trip: {'5552': 14604}
+  th.trip_706a: {'5552': 3077}
+  th.strt_c750: {'21212': 6624}
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt trip_706a tid 5552: SIMRCI.DLL:0x1001aa6c < SimTransit.dll:0x1000706a < SIMRCI.DLL:0x10019e21 < SIMRCI.DLL:0x1003378b < SIMRCI.DLL:0x100314a9 < SIMCITY.DLL:0x100016a9 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_706a tid 5552: SIMRCI.DLL:0x1001aa6c < SimTransit.dll:0x1000706a < SIMRCI.DLL:0x10019e21 < SIMRCI.DLL:0x1003378b < SIMRCI.DLL:0x100314a9 < SIMCITY.DLL:0x100016a9 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_706a tid 5552: SIMRCI.DLL:0x1001aa6c < SimTransit.dll:0x1000706a < SIMRCI.DLL:0x10019e21 < SIMRCI.DLL:0x1003378b < SIMRCI.DLL:0x100314a9 < SIMCITY.DLL:0x100016a9 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_6fe3 tid 5552: SimTransit.dll:0x100099e0 < SimTransit.dll:0x10006fe3 < SIMCITY.DLL:0x1000e9a3 < SIMCITY.DLL:0x100016bb < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71 < KERNEL32.DLL:0x10015d49 < ntdll.dll:0x1006c75b
+  bt trip_6fe3 tid 5552: SimTransit.dll:0x100099e0 < SimTransit.dll:0x10006fe3 < SIMCITY.DLL:0x1000e9a3 < SIMCITY.DLL:0x100016bb < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71 < KERNEL32.DLL:0x10015d49 < ntdll.dll:0x1006c75b
+  bt trip_6fe3 tid 5552: SimTransit.dll:0x100098cb < SimTransit.dll:0x10006fe3 < SIMCITY.DLL:0x1000e9a3 < SIMCITY.DLL:0x100016bb < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71 < KERNEL32.DLL:0x10015d49 < ntdll.dll:0x1006c75b
+
+== 13 P:90
+  cam_hold_secs: 0
+  clk_pause_secs: 86
+  veh_phase: 341
+  day0: 2476333
+  day1: 2476333
+  att0: 1091
+  att1: 1091
+  fail0: 2
+  fail1: 2
+  strt_c750.caller: {'STRTSIM.DLL:0x1001c4f9': 7621}
+  th.strt_c750: {'21212': 7621}
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+
+== 15 s4:90
+  cam_hold_secs: 0
+  clk_pause_secs: 56
+  veh_phase: 369
+  day0: 2476356
+  day1: 2476770
+  att0: 354
+  att1: 2811
+  fail0: 1
+  fail1: 48
+  route_trip.caller: {'SimTransit.dll:0x10007064': 39152, 'SimTransit.dll:0x100070b3': 9974}
+  trip_6fe3.caller: {'SimTransit.dll:0x100099e0': 30805, 'SimTransit.dll:0x100098cb': 8293, 'SIMMISC.DLL:0x1000a5bc': 27, 'SIMMISC.DLL:0x1000ae43': 27}
+  trip_706a.caller: {'SIMRCI.DLL:0x1001aa6c': 9974}
+  strt_c750.caller: {'STRTSIM.DLL:0x1001c4f9': 7334}
+  th.route_trip: {'5552': 49126}
+  th.trip_706a: {'5552': 9974}
+  th.strt_c750: {'21212': 7334}
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt trip_706a tid 5552: SIMRCI.DLL:0x1001aa6c < SimTransit.dll:0x1000706a < SIMRCI.DLL:0x10019e21 < SIMRCI.DLL:0x1003378b < SIMRCI.DLL:0x100314a9 < SIMCITY.DLL:0x100016a9 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_706a tid 5552: SIMRCI.DLL:0x1001aa6c < SimTransit.dll:0x1000706a < SIMRCI.DLL:0x10019e21 < SIMRCI.DLL:0x1003378b < SIMRCI.DLL:0x100314a9 < SIMCITY.DLL:0x100016a9 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_706a tid 5552: SIMRCI.DLL:0x1001aa6c < SimTransit.dll:0x1000706a < SIMRCI.DLL:0x10019e21 < SIMRCI.DLL:0x1003378b < SIMRCI.DLL:0x100314a9 < SIMCITY.DLL:0x100016a9 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_6fe3 tid 5552: SimTransit.dll:0x100099e0 < SimTransit.dll:0x10006fe3 < SIMCITY.DLL:0x1000e9a3 < SIMCITY.DLL:0x100016bb < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71 < KERNEL32.DLL:0x10015d49 < ntdll.dll:0x1006c75b
+  bt trip_6fe3 tid 5552: SimTransit.dll:0x100099e0 < SimTransit.dll:0x10006fe3 < SIMCITY.DLL:0x1000e9a3 < SIMCITY.DLL:0x100016bb < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71 < KERNEL32.DLL:0x10015d49 < ntdll.dll:0x1006c75b
+  bt trip_6fe3 tid 5552: SimTransit.dll:0x100099e0 < SimTransit.dll:0x10006fe3 < SIMCITY.DLL:0x1000e9a3 < SIMCITY.DLL:0x100016bb < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71 < KERNEL32.DLL:0x10015d49 < ntdll.dll:0x1006c75b
+
+== 17 P:90
+  cam_hold_secs: 0
+  clk_pause_secs: 86
+  veh_phase: 356
+  day0: 2476770
+  day1: 2476770
+  att0: 2925
+  att1: 2925
+  fail0: 48
+  fail1: 48
+  strt_c750.caller: {'STRTSIM.DLL:0x1001c4f9': 7353}
+  th.strt_c750: {'21212': 7353}
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+
+== 19 H:60
+  cam_hold_secs: 56
+  clk_pause_secs: 56
+  veh_phase: 10
+  day0: 2476776
+  day1: 2476776
+  att0: 3045
+  att1: 3045
+  fail0: 48
+  fail1: 48
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+
+== 20 s4:30
+  cam_hold_secs: 0
+  clk_pause_secs: 18
+  veh_phase: 325
+  day0: 2476794
+  day1: 2476920
+  att0: 1456
+  att1: 1774
+  fail0: 2
+  fail1: 18
+  route_trip.caller: {'SimTransit.dll:0x10007064': 12138, 'SimTransit.dll:0x100070b3': 2961}
+  trip_6fe3.caller: {'SimTransit.dll:0x100099e0': 9531, 'SimTransit.dll:0x100098cb': 2591, 'SIMMISC.DLL:0x1000a5bc': 8, 'SIMMISC.DLL:0x1000ae43': 8}
+  trip_706a.caller: {'SIMRCI.DLL:0x1001aa6c': 2961}
+  strt_c750.caller: {'STRTSIM.DLL:0x1001c4f9': 2547}
+  th.route_trip: {'5552': 15099}
+  th.trip_706a: {'5552': 2961}
+  th.strt_c750: {'21212': 2547}
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt trip_706a tid 5552: SIMRCI.DLL:0x1001aa6c < SimTransit.dll:0x1000706a < SIMRCI.DLL:0x10019e21 < SIMRCI.DLL:0x1003378b < SIMRCI.DLL:0x100314a9 < SIMCITY.DLL:0x100016a9 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_706a tid 5552: SIMRCI.DLL:0x1001aa6c < SimTransit.dll:0x1000706a < SIMRCI.DLL:0x10019e21 < SIMRCI.DLL:0x1003378b < SIMRCI.DLL:0x100314a9 < SIMCITY.DLL:0x100016a9 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_706a tid 5552: SIMRCI.DLL:0x1001aa6c < SimTransit.dll:0x1000706a < SIMRCI.DLL:0x10019e21 < SIMRCI.DLL:0x1003378b < SIMRCI.DLL:0x100314a9 < SIMCITY.DLL:0x100016a9 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_6fe3 tid 5552: SIMMISC.DLL:0x1000a5bc < SimTransit.dll:0x10006fe3 < SIMADV.DLL:0x100062d2 < SIMMISC.DLL:0x10007ec1 < SIMMISC.DLL:0x10009612 < SIMCITY.DLL:0x100016d8 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_6fe3 tid 5552: SIMMISC.DLL:0x1000ae43 < SimTransit.dll:0x10006fe3 < SIMADV.DLL:0x100062d2 < SIMMISC.DLL:0x10007ec1 < SIMMISC.DLL:0x10009612 < SIMCITY.DLL:0x100016d8 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_6fe3 tid 5552: SimTransit.dll:0x100099e0 < SimTransit.dll:0x10006fe3 < SIMCITY.DLL:0x1000e9a3 < SIMCITY.DLL:0x100016bb < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71 < KERNEL32.DLL:0x10015d49 < ntdll.dll:0x1006c75b
+
+== 21 PH:45
+  cam_hold_secs: 42
+  clk_pause_secs: 42
+  veh_phase: 3
+  day0: 2476920
+  day1: 2476920
+  att0: 2619
+  att1: 2619
+  fail0: 19
+  fail1: 19
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+
+== 23 s3:60
+  cam_hold_secs: 0
+  clk_pause_secs: 5
+  veh_phase: 342
+  day0: 2476925
+  day1: 2477007
+  att0: 3251
+  att1: 2414
+  fail0: 30
+  fail1: 11
+  route_trip.caller: {'SimTransit.dll:0x10007064': 7566, 'SimTransit.dll:0x100070b3': 2057}
+  trip_6fe3.caller: {'SimTransit.dll:0x100099e0': 5994, 'SimTransit.dll:0x100098cb': 1560, 'SIMMISC.DLL:0x1000a5bc': 6, 'SIMMISC.DLL:0x1000ae43': 6}
+  trip_706a.caller: {'SIMRCI.DLL:0x1001aa6c': 2057}
+  strt_c750.caller: {'STRTSIM.DLL:0x1001c4f9': 4582}
+  th.route_trip: {'5552': 9623}
+  th.trip_706a: {'5552': 2057}
+  th.strt_c750: {'21212': 4582}
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt trip_706a tid 5552: SIMRCI.DLL:0x1001aa6c < SimTransit.dll:0x1000706a < SIMRCI.DLL:0x10019e21 < SIMRCI.DLL:0x1003378b < SIMRCI.DLL:0x100314a9 < SIMCITY.DLL:0x100016a9 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_706a tid 5552: SIMRCI.DLL:0x1001aa6c < SimTransit.dll:0x1000706a < SIMRCI.DLL:0x10019e21 < SIMRCI.DLL:0x1003378b < SIMRCI.DLL:0x100314a9 < SIMCITY.DLL:0x100016a9 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_706a tid 5552: SIMRCI.DLL:0x1001aa6c < SimTransit.dll:0x1000706a < SIMRCI.DLL:0x10019e21 < SIMRCI.DLL:0x1003378b < SIMRCI.DLL:0x100314a9 < SIMCITY.DLL:0x100016a9 < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71
+  bt trip_6fe3 tid 5552: SimTransit.dll:0x100099e0 < SimTransit.dll:0x10006fe3 < SIMCITY.DLL:0x1000e9a3 < SIMCITY.DLL:0x100016bb < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71 < KERNEL32.DLL:0x10015d49 < ntdll.dll:0x1006c75b
+  bt trip_6fe3 tid 5552: SimTransit.dll:0x100099e0 < SimTransit.dll:0x10006fe3 < SIMCITY.DLL:0x1000e9a3 < SIMCITY.DLL:0x100016bb < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71 < KERNEL32.DLL:0x10015d49 < ntdll.dll:0x1006c75b
+  bt trip_6fe3 tid 5552: SimTransit.dll:0x100099e0 < SimTransit.dll:0x10006fe3 < SIMCITY.DLL:0x1000e9a3 < SIMCITY.DLL:0x100016bb < SIMCITY.DLL:0x1000d0a5 < msvcrt.dll:0x10068d71 < KERNEL32.DLL:0x10015d49 < ntdll.dll:0x1006c75b
+
+== 25 P:60
+  cam_hold_secs: 0
+  clk_pause_secs: 56
+  veh_phase: 342
+  day0: 2477007
+  day1: 2477007
+  att0: 2414
+  att1: 2414
+  fail0: 11
+  fail1: 11
+  strt_c750.caller: {'STRTSIM.DLL:0x1001c4f9': 4435}
+  th.strt_c750: {'21212': 4435}
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+  bt strt_c750 tid 21212: STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001c750 < STRTSIM.DLL:0x1001c4f9 < STRTSIM.DLL:0x1001b40b < STRTSIM.DLL:0x10019adf < STRTSIM.DLL:0x1001d3b5
+
+timers @ s3:60
+   {'node': '0xe6d4d70', 'f2': '0x1', 'f3': 'SIMCITY.DLL:0x1000c0a5', 'f4': '0xd85e420', 'oneshot': 0, 'period': 1000, 'due': 125077, 'fixed': 0}
+
+timers @ end
+   {'node': '0xe6d4d70', 'f2': '0x1', 'f3': 'SIMCITY.DLL:0x1000c0a5', 'f4': '0xd85e420', 'oneshot': 0, 'period': 1000, 'due': 1141153, 'fixed': 0}

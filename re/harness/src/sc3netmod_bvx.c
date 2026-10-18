@@ -1,0 +1,158 @@
+/* sc3netmod_bvx.c - boulevard junctions with avenues and with other boulevards (task bvx, 2026-10-17).
+ * #included by sc3netmod.c after sc3netmod_bv.c; called from the BV block's run rule (bv_run1, lines marked task bvx).
+ * Offline twin, art and lanes: re/tools/netmod/bvx.py (spans(), box_want()) with boulevard.py runs(); evidence
+ * verify/bvx/.
+ *
+ * Along a boulevard run, a junction span is a group of consecutive columns with road beside the run. One column wide
+ * = a single road (BV's own junction pieces, unchanged). Two or three wide, each side road over the whole span or
+ * empty, every arm straight and clean for BVX_ARM_LEN cells = a WIDE span: an avenue (2) or a boulevard (3) crossing
+ * the boulevard or ending on it. A wide span at the very end of the run with nothing beyond and arms on both sides =
+ * the boulevard ends on that avenue / boulevard (end type 4 in bv_run1). The box (span columns x the three rows) gets
+ * one piece per cell from its REAL edge pattern N E S W (I another box cell, A an arm, C closed), so the two runs that
+ * cross in a boulevard x boulevard box write the same pieces. Each avenue arm's first cell gets 11204 with the median
+ * nose (`bvxa`, as avx's arm pieces); a boulevard arm's first column comes from that boulevard's own run.
+ * Table lines (netpack manifest "auto_boulevard_junctions"):
+ *  `bvxb <piece> <NESW>`   a box cell piece whose edges at state 0 are N E S W (I / A / C)
+ *  `bvxa <piece> <side>`   11204 (state 0) with the median nose at <side> (1 E, 3 W); placed in the cell's 11204 state
+ * Saves: as their bases (box 43, noses 11204). Revert: BV's (bv_is_piece knows these pieces). Off: SC3NETMOD_BVX=0
+ * (wide spans are then refused by BV as before: "not a straight single road").
+ */
+
+#define BVX_ARM_LEN 2
+#define BVX_MAX_BOX 8
+
+typedef struct { WORD piece; char e[4]; } BvxBox;
+static BvxBox g_bvx_box[BVX_MAX_BOX];
+static WORD g_bvx_arm[4];                               /* by the box side at state 0: [1] E, [3] W */
+/* axis-space direction (0 -s, 1 +s, 2 -w, 3 +w) -> real edge N E S W; axis 0 real (s, w), axis 1 real (-w, s) */
+static const BYTE BVX_REAL[2][4] = { { 3, 1, 0, 2 }, { 0, 2, 1, 3 } };
+
+static void bvx_line(const char *path, const char *line) {
+    unsigned long v, s;
+    char e[8];
+    int k;
+    if (!strncmp(line, "bvxa ", 5)) {
+        if (sscanf(line + 5, "%lu %lu", &v, &s) != 2 || !v || v > 0xffff || (s != 1 && s != 3) || g_base[v] != 11204) {
+            logf("### bvx: %s: bad arm line or piece not a variant of 11204: '%s'", path, line);
+            return;
+        }
+        g_bvx_arm[s] = (WORD)v;
+        logf("bvx: %s: avenue arm piece %lu = 11204 with the median nose at its %s end", path, v, s == 1 ? "E" : "W");
+        return;
+    }
+    if (strncmp(line, "bvxb ", 5)) return;
+    if (sscanf(line + 5, "%lu %4s", &v, e) != 2 || !v || v > 0xffff || strlen(e) != 4 || !g_base[v]) {
+        logf("### bvx: %s: bad box line or piece not a variant: '%s'", path, line);
+        return;
+    }
+    for (k = 0; k < 4; k++)
+        if (e[k] != 'I' && e[k] != 'A' && e[k] != 'C') { logf("### bvx: %s: edges must be I/A/C: '%s'", path, line); return; }
+    if (g_bvx_nbox >= BVX_MAX_BOX) { logf("### bvx: %s: too many box pieces - ignored", path); return; }
+    g_bvx_box[g_bvx_nbox].piece = (WORD)v;
+    memcpy(g_bvx_box[g_bvx_nbox].e, e, 4);
+    g_bvx_nbox++;
+    logf("bvx: %s: boulevard junction box piece %lu, edges N E S W %.4s at state 0", path, v, e);
+}
+
+static int bvx_is_piece(WORD id) {
+    int k;
+    if (!id || !g_bvx_nbox) return 0;
+    for (k = 0; k < g_bvx_nbox; k++) if (g_bvx_box[k].piece == id) return 1;
+    return id == g_bvx_arm[1] || id == g_bvx_arm[3];
+}
+
+/* edge pattern (N E S W) -> piece << 8 | state, 0 = none (avx_box_of) */
+static DWORD bvx_box_of(const char *d) {
+    int k, j, e;
+    for (k = 0; k < 4; k++)
+        for (j = 0; j < g_bvx_nbox; j++) {
+            for (e = 0; e < 4 && g_bvx_box[j].e[e] == d[(e + k) % 4]; e++) ;
+            if (e == 4) return ((DWORD)g_bvx_box[j].piece << 8) | (DWORD)k;
+        }
+    return 0;
+}
+
+/* kind[] of columns sa..sb: 0, or 4 | arm N (1) | arm S (2) for a wide span column. -> 0 = the run is refused (*why) */
+static int bvx_spans(BvPass *p, int sa, int sb, int w0, BYTE *kind, const char **why) {
+    int s = sa, ja, jb, m, c, k, side, got[2], arm[2];
+    for (c = sa; c <= sb; c++) kind[c - sa] = 0;
+    if (!g_bvx_nbox) return 1;
+    while (s <= sb) {
+        if (!bv_road(p, s, w0 - 1) && !bv_road(p, s, w0 + 3)) { s++; continue; }
+        ja = s;
+        while (s + 1 <= sb && (bv_road(p, s + 1, w0 - 1) || bv_road(p, s + 1, w0 + 3))) s++;
+        jb = s++;
+        m = jb - ja + 1;
+        if (m < 2) continue;
+        for (side = 0; side < 2; side++) {
+            int w = side ? w0 + 3 : w0 - 1;
+            got[side] = 0;
+            for (c = ja; c <= jb; c++) got[side] += bv_road(p, c, w);
+        }
+        if ((got[0] && got[0] != m) || (got[1] && got[1] != m)) continue;        /* staggered: BV's per-column rule */
+        if (m > 3) { *why = "road more than 3 wide beside the boulevard"; return 0; }
+        for (side = 0; side < 2; side++) {
+            int w = side ? w0 + 3 : w0 - 1, d = side ? 1 : -1;
+            arm[side] = got[side] == m;
+            if (!arm[side]) continue;
+            for (k = 0; k < BVX_ARM_LEN; k++) {
+                for (c = ja; c <= jb; c++)
+                    if (!bv_road(p, c, w + d * k)) { *why = "avenue / boulevard arm shorter than 2"; return 0; }
+                if (bv_road(p, ja - 1, w + d * k) || bv_road(p, jb + 1, w + d * k))
+                    { *why = "avenue / boulevard arm has road beside it"; return 0; }
+            }
+        }
+        for (c = ja; c <= jb; c++) kind[c - sa] = (BYTE)(4 | arm[0] | (arm[1] << 1));
+    }
+    return 1;
+}
+
+static void bvx_put(BvPass *p, int x, int z, DWORD want) {
+    if (p->n >= DAV_MAX_CELLS) return;
+    p->cell[p->n].x = x;
+    p->cell[p->n].z = z;
+    p->cell[p->n].want = want;
+    p->n++;
+}
+
+/* the boxes of every wide span of run sa..sb (+ avenue noses). lo_tee / hi_tee: the run ends on the crossing road at
+   its -s / +s end (that box side is closed). -> 0 when a pattern has no piece */
+static int bvx_boxes(BvPass *p, int sa, int sb, int w0, const BYTE *kind, int lo_tee, int hi_tee) {
+    int ja, jb, s, w, dir, i;
+    for (ja = sa; ja <= sb; ja++) {
+        char side[4];
+        if (!(kind[ja - sa] & 4) || (ja > sa && (kind[ja - 1 - sa] & 4))) continue;
+        for (jb = ja; jb + 1 <= sb && (kind[jb + 1 - sa] & 4); jb++) ;
+        side[0] = lo_tee && ja == sa ? 'C' : 'A';
+        side[1] = hi_tee && jb == sb ? 'C' : 'A';
+        side[2] = (kind[ja - sa] & 1) ? 'A' : 'C';
+        side[3] = (kind[ja - sa] & 2) ? 'A' : 'C';
+        for (s = ja; s <= jb; s++)
+            for (w = w0; w <= w0 + 2; w++) {
+                char d[4];
+                DWORD v;
+                d[BVX_REAL[p->axis][0]] = s > ja ? 'I' : side[0];
+                d[BVX_REAL[p->axis][1]] = s < jb ? 'I' : side[1];
+                d[BVX_REAL[p->axis][2]] = w > w0 ? 'I' : side[2];
+                d[BVX_REAL[p->axis][3]] = w < w0 + 2 ? 'I' : side[3];
+                if (!(v = bvx_box_of(d))) return 0;
+                bvx_put(p, bv_rx(p->axis, s, w), bv_rz(p->axis, s, w), v);
+            }
+        if (jb - ja != 1) continue;
+        for (dir = 2; dir < 4; dir++) {                     /* an avenue arm: its two cells beside the box */
+            int e = BVX_REAL[p->axis][dir], wa = dir == 2 ? w0 - 1 : w0 + 3;
+            if (side[dir] != 'A') continue;
+            for (i = 0; i < 2; i++) {
+                int x0 = bv_rx(p->axis, ja, wa), z0 = bv_rz(p->axis, ja, wa), x1 = bv_rx(p->axis, jb, wa),
+                    z1 = bv_rz(p->axis, jb, wa), cx = i ? x1 : x0, cz = i ? z1 : z0, first, st, d0;
+                /* "first" = the smaller x (arm along z, e N / S) or the smaller z (arm along x): avx.py half_state */
+                first = (e == 0 || e == 2) ? cx == (x0 < x1 ? x0 : x1) : cz == (z0 < z1 ? z0 : z1);
+                st = (e == 1 || e == 3) ? (first ? 2 : 0) : (first ? 1 : 3);
+                d0 = (((e + 2) % 4) - st + 4) % 4;
+                if (!g_bvx_arm[d0]) return 0;
+                bvx_put(p, cx, cz, ((DWORD)g_bvx_arm[d0] << 8) | (DWORD)st);
+            }
+        }
+    }
+    return 1;
+}

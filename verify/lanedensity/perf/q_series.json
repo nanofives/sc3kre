@@ -1,0 +1,92 @@
+{
+ "arms": [
+  {
+   "arm": "Q_off1",
+   "batches": 5963,
+   "trips": 1335720,
+   "routing_ms": 65700,
+   "faults": 0,
+   "ms_per_trip": 0.049186955349923636,
+   "census_before": 0,
+   "census_samples": 30,
+   "census_max": 1,
+   "lanedensity": null,
+   "rbt": null,
+   "valid": true
+  },
+  {
+   "arm": "Q_on1",
+   "batches": 4549,
+   "trips": 1082753,
+   "routing_ms": 121704,
+   "faults": 0,
+   "ms_per_trip": 0.11240236692948438,
+   "census_before": 0,
+   "census_samples": 30,
+   "census_max": 1,
+   "lanedensity": "evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=16 vtables=1 refused-transition closes=0 trip list full=0",
+   "rbt": null,
+   "valid": true
+  },
+  {
+   "arm": "Q_off2",
+   "batches": 4198,
+   "trips": 1015228,
+   "routing_ms": 135811,
+   "faults": 0,
+   "ms_per_trip": 0.1337738911850343,
+   "census_before": 0,
+   "census_samples": 28,
+   "census_max": 1,
+   "lanedensity": null,
+   "rbt": null,
+   "valid": true
+  },
+  {
+   "arm": "Q_on2",
+   "batches": 5599,
+   "trips": 1273581,
+   "routing_ms": 75460,
+   "faults": 0,
+   "ms_per_trip": 0.05925025577485845,
+   "census_before": 0,
+   "census_samples": 30,
+   "census_max": 1,
+   "lanedensity": "evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=16 vtables=1 refused-transition closes=0 trip list full=0",
+   "rbt": null,
+   "valid": true
+  },
+  {
+   "arm": "Q_off3",
+   "batches": 5828,
+   "trips": 1321853,
+   "routing_ms": 73766,
+   "faults": 0,
+   "ms_per_trip": 0.0558049949578357,
+   "census_before": 0,
+   "census_samples": 29,
+   "census_max": 1,
+   "lanedensity": null,
+   "rbt": null,
+   "valid": true
+  },
+  {
+   "arm": "Q_on3",
+   "batches": 4308,
+   "trips": 1063596,
+   "routing_ms": 122737,
+   "faults": 0,
+   "ms_per_trip": 0.11539813989522338,
+   "census_before": 0,
+   "census_samples": 25,
+   "census_max": 1,
+   "lanedensity": "evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=16 vtables=1 refused-transition closes=0 trip list full=0",
+   "rbt": null,
+   "valid": true
+  }
+ ],
+ "off_mean": 0.07958861383093122,
+ "off_max": 0.1337738911850343,
+ "on_over_off": 1.202227089121665,
+ "bound_met": true
+}

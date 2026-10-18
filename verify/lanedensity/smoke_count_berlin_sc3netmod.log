@@ -1,0 +1,351 @@
+[    0.264 ms][tid 9788] ### sc3netmod loaded
+[    0.402 ms][tid 9788] overlay: C:\Users\maria\Desktop\Proyectos\Simcity_stock_lanedensity\mods\netmod\overlay\, 0 file(s)
+[  581.774 ms][tid 2690] table: 0 table file(s), 0 variant(s)
+[  581.904 ms][tid 2690] ramp: 0 slot(s) changed, 0 line(s) refused, 0 variant id(s) classified as their base
+[  581.983 ms][tid 2690] tmpl: no templates in the tables
+[  582.075 ms][tid 2690] ### READY: no variants in the table, nothing patched
+[  597.761 ms][tid a9dc] lanedensity: ON, mode count only (nothing filtered) (SimTransit at 0x038F0000: step 0x1000755e, arrival call 0x100071eb)
+[10604.214 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[10604.699 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[20605.072 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[20605.156 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[30605.251 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[30605.359 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[40606.584 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[40606.668 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[50606.872 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[50606.947 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[60607.116 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[60607.203 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[70607.562 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[70607.635 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[80608.122 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[80608.196 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[90608.478 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[90608.549 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[100609.108 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[100609.323 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[110609.567 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[110609.651 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[120609.874 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[120609.961 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[130610.296 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[130610.402 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[140610.696 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[140610.760 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[150611.114 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[150611.216 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[160612.156 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[160612.283 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[170613.196 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[170613.348 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[180613.634 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[180613.743 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[190614.410 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[190614.512 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[200615.391 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[200615.514 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[210616.469 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[210616.528 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[220616.897 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[220616.974 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[230618.005 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[230618.090 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[240619.043 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[240619.143 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[250619.651 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[250619.723 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[260619.879 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[260620.006 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[270620.230 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[270620.321 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[280621.252 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[280621.383 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[290621.643 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[290621.708 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[300621.986 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[300622.086 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[310623.200 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[310623.303 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[320624.256 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[320624.336 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[330624.762 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[330624.914 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[340625.373 ms][tid a9dc] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0
+[340625.529 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=0, forbidden by their matrix=0, entered against it=0
+[350626.169 ms][tid a9dc] lanedensity: evals=134663 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=134663 vtables=0
+[350626.276 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=100968, forbidden by their matrix=4219, entered against it=4858
+[350626.299 ms][tid a9dc] lanedensity: count: id 29 steps=44182 forbidden=560 against=128
+[350626.309 ms][tid a9dc] lanedensity: count: id 31 steps=267 forbidden=1 against=1
+[350626.315 ms][tid a9dc] lanedensity: count: id 32 steps=331 forbidden=3 against=0
+[350626.320 ms][tid a9dc] lanedensity: count: id 35 steps=9557 forbidden=56 against=77
+[350626.324 ms][tid a9dc] lanedensity: count: id 39 steps=14823 forbidden=682 against=528
+[350626.329 ms][tid a9dc] lanedensity: count: id 43 steps=6342 forbidden=38 against=0
+[350626.333 ms][tid a9dc] lanedensity: count: id 69 steps=203 forbidden=20 against=32
+[350626.345 ms][tid a9dc] lanedensity: count: id 11201 steps=266 forbidden=1 against=1
+[350626.349 ms][tid a9dc] lanedensity: count: id 11202 steps=313 forbidden=2 against=0
+[350626.354 ms][tid a9dc] lanedensity: count: id 11203 steps=3427 forbidden=123 against=140
+[350626.358 ms][tid a9dc] lanedensity: count: id 11204 steps=15531 forbidden=2344 against=3731
+[350626.363 ms][tid a9dc] lanedensity: count: id 11210 steps=17 forbidden=0 against=10
+[350626.367 ms][tid a9dc] lanedensity: count: id 11211 steps=197 forbidden=73 against=1
+[350626.371 ms][tid a9dc] lanedensity: count: id 11212 steps=114 forbidden=23 against=0
+[350626.376 ms][tid a9dc] lanedensity: count: id 11213 steps=260 forbidden=3 against=61
+[350626.380 ms][tid a9dc] lanedensity: count: id 11214 steps=191 forbidden=46 against=80
+[350626.384 ms][tid a9dc] lanedensity: count: id 11225 steps=16 forbidden=1 against=10
+[350626.388 ms][tid a9dc] lanedensity: count: id 11258 steps=218 forbidden=49 against=5
+[350626.394 ms][tid a9dc] lanedensity: count: id 14011 steps=542 forbidden=39 against=4
+[350626.399 ms][tid a9dc] lanedensity: count: id 14013 steps=525 forbidden=15 against=13
+[350626.403 ms][tid a9dc] lanedensity: count: id 14015 steps=63 forbidden=11 against=21
+[350626.407 ms][tid a9dc] lanedensity: count: id 14017 steps=63 forbidden=16 against=15
+[350626.416 ms][tid a9dc] lanedensity: count: id 14030 steps=290 forbidden=80 against=0
+[350626.422 ms][tid a9dc] lanedensity: count: id 14031 steps=119 forbidden=8 against=0
+[350626.427 ms][tid a9dc] lanedensity: count: id 15045 steps=30 forbidden=7 against=0
+[350626.431 ms][tid a9dc] lanedensity: count: id 15047 steps=55 forbidden=15 against=0
+[350626.436 ms][tid a9dc] lanedensity: count: id 15098 steps=201 forbidden=3 against=0
+[360627.057 ms][tid a9dc] lanedensity: evals=587420 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=587420 vtables=0
+[360627.130 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=425585, forbidden by their matrix=19627, entered against it=24493
+[360627.137 ms][tid a9dc] lanedensity: count: id 29 steps=181399 forbidden=2138 against=592
+[360627.142 ms][tid a9dc] lanedensity: count: id 31 steps=923 forbidden=5 against=5
+[360627.147 ms][tid a9dc] lanedensity: count: id 32 steps=1409 forbidden=7 against=0
+[360627.151 ms][tid a9dc] lanedensity: count: id 35 steps=37174 forbidden=250 against=440
+[360627.156 ms][tid a9dc] lanedensity: count: id 39 steps=61354 forbidden=3091 against=2756
+[360627.160 ms][tid a9dc] lanedensity: count: id 43 steps=29889 forbidden=176 against=0
+[360627.164 ms][tid a9dc] lanedensity: count: id 69 steps=1110 forbidden=158 against=238
+[360627.180 ms][tid a9dc] lanedensity: count: id 11201 steps=911 forbidden=1 against=1
+[360627.185 ms][tid a9dc] lanedensity: count: id 11202 steps=1385 forbidden=9 against=0
+[360627.189 ms][tid a9dc] lanedensity: count: id 11203 steps=13890 forbidden=555 against=725
+[360627.193 ms][tid a9dc] lanedensity: count: id 11204 steps=73212 forbidden=11313 against=18403
+[360627.198 ms][tid a9dc] lanedensity: count: id 11210 steps=97 forbidden=13 against=46
+[360627.202 ms][tid a9dc] lanedensity: count: id 11211 steps=1047 forbidden=481 against=4
+[360627.206 ms][tid a9dc] lanedensity: count: id 11212 steps=457 forbidden=75 against=0
+[360627.211 ms][tid a9dc] lanedensity: count: id 11213 steps=1256 forbidden=80 against=482
+[360627.215 ms][tid a9dc] lanedensity: count: id 11214 steps=932 forbidden=118 against=443
+[360627.219 ms][tid a9dc] lanedensity: count: id 11225 steps=71 forbidden=8 against=45
+[360627.223 ms][tid a9dc] lanedensity: count: id 11258 steps=950 forbidden=140 against=46
+[360627.229 ms][tid a9dc] lanedensity: count: id 14011 steps=2013 forbidden=157 against=47
+[360627.234 ms][tid a9dc] lanedensity: count: id 14013 steps=1954 forbidden=86 against=48
+[360627.238 ms][tid a9dc] lanedensity: count: id 14015 steps=244 forbidden=49 against=90
+[360627.242 ms][tid a9dc] lanedensity: count: id 14017 steps=240 forbidden=62 against=62
+[360627.246 ms][tid a9dc] lanedensity: count: id 14030 steps=1121 forbidden=478 against=0
+[360627.251 ms][tid a9dc] lanedensity: count: id 14031 steps=448 forbidden=46 against=0
+[360627.255 ms][tid a9dc] lanedensity: count: id 15045 steps=166 forbidden=50 against=0
+[360627.260 ms][tid a9dc] lanedensity: count: id 15046 steps=320 forbidden=3 against=1
+[360627.264 ms][tid a9dc] lanedensity: count: id 15047 steps=181 forbidden=43 against=8
+[360627.268 ms][tid a9dc] lanedensity: count: id 15098 steps=911 forbidden=24 against=8
+[360627.272 ms][tid a9dc] lanedensity: count: id 15141 steps=8 forbidden=8 against=0
+[360627.279 ms][tid a9dc] lanedensity: count: id 18050 steps=662 forbidden=2 against=2
+[360627.283 ms][tid a9dc] lanedensity: count: id 18053 steps=199 forbidden=1 against=1
+[370627.471 ms][tid a9dc] lanedensity: evals=1087524 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=1087524 vtables=0
+[370627.579 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=775965, forbidden by their matrix=36372, entered against it=46802
+[370627.589 ms][tid a9dc] lanedensity: count: id 29 steps=327119 forbidden=3634 against=1043
+[370627.596 ms][tid a9dc] lanedensity: count: id 31 steps=1631 forbidden=6 against=6
+[370627.602 ms][tid a9dc] lanedensity: count: id 32 steps=2697 forbidden=10 against=0
+[370627.646 ms][tid a9dc] lanedensity: count: id 35 steps=64963 forbidden=451 against=748
+[370627.655 ms][tid a9dc] lanedensity: count: id 39 steps=112643 forbidden=5817 against=5265
+[370627.662 ms][tid a9dc] lanedensity: count: id 43 steps=56041 forbidden=314 against=0
+[370627.668 ms][tid a9dc] lanedensity: count: id 69 steps=2147 forbidden=350 against=558
+[370627.673 ms][tid a9dc] lanedensity: count: id 83 steps=388 forbidden=3 against=0
+[370627.693 ms][tid a9dc] lanedensity: count: id 11201 steps=1560 forbidden=5 against=3
+[370627.699 ms][tid a9dc] lanedensity: count: id 11202 steps=2632 forbidden=11 against=0
+[370627.705 ms][tid a9dc] lanedensity: count: id 11203 steps=25631 forbidden=1027 against=1379
+[370627.711 ms][tid a9dc] lanedensity: count: id 11204 steps=138007 forbidden=21243 against=35251
+[370627.717 ms][tid a9dc] lanedensity: count: id 11210 steps=152 forbidden=17 against=68
+[370627.723 ms][tid a9dc] lanedensity: count: id 11211 steps=1794 forbidden=852 against=5
+[370627.729 ms][tid a9dc] lanedensity: count: id 11212 steps=687 forbidden=102 against=0
+[370627.734 ms][tid a9dc] lanedensity: count: id 11213 steps=2139 forbidden=179 against=952
+[370627.740 ms][tid a9dc] lanedensity: count: id 11214 steps=1678 forbidden=221 against=739
+[370627.746 ms][tid a9dc] lanedensity: count: id 11225 steps=123 forbidden=22 against=85
+[370627.752 ms][tid a9dc] lanedensity: count: id 11258 steps=1854 forbidden=293 against=154
+[370627.758 ms][tid a9dc] lanedensity: count: id 11265 steps=829 forbidden=1 against=1
+[370627.767 ms][tid a9dc] lanedensity: count: id 14011 steps=3484 forbidden=258 against=142
+[370627.773 ms][tid a9dc] lanedensity: count: id 14013 steps=3377 forbidden=175 against=78
+[370627.779 ms][tid a9dc] lanedensity: count: id 14014 steps=225 forbidden=0 against=1
+[370627.785 ms][tid a9dc] lanedensity: count: id 14015 steps=418 forbidden=87 against=142
+[370627.791 ms][tid a9dc] lanedensity: count: id 14017 steps=408 forbidden=104 against=105
+[370627.797 ms][tid a9dc] lanedensity: count: id 14030 steps=1944 forbidden=790 against=0
+[370627.802 ms][tid a9dc] lanedensity: count: id 14031 steps=774 forbidden=85 against=0
+[370627.810 ms][tid a9dc] lanedensity: count: id 15045 steps=325 forbidden=115 against=0
+[370627.815 ms][tid a9dc] lanedensity: count: id 15046 steps=600 forbidden=5 against=1
+[370627.822 ms][tid a9dc] lanedensity: count: id 15047 steps=365 forbidden=80 against=26
+[370627.828 ms][tid a9dc] lanedensity: count: id 15098 steps=1845 forbidden=77 against=43
+[370627.834 ms][tid a9dc] lanedensity: count: id 15140 steps=2 forbidden=1 against=0
+[370627.839 ms][tid a9dc] lanedensity: count: id 15141 steps=26 forbidden=26 against=0
+[370627.849 ms][tid a9dc] lanedensity: count: id 18050 steps=1128 forbidden=3 against=3
+[370627.855 ms][tid a9dc] lanedensity: count: id 18051 steps=1760 forbidden=2 against=0
+[370627.861 ms][tid a9dc] lanedensity: count: id 18052 steps=769 forbidden=2 against=0
+[370627.866 ms][tid a9dc] lanedensity: count: id 18053 steps=357 forbidden=4 against=4
+[380628.055 ms][tid a9dc] lanedensity: evals=1568896 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=1568896 vtables=0
+[380628.180 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=1115451, forbidden by their matrix=52263, entered against it=68163
+[380628.189 ms][tid a9dc] lanedensity: count: id 29 steps=470812 forbidden=5120 against=1504
+[380628.194 ms][tid a9dc] lanedensity: count: id 31 steps=2400 forbidden=9 against=9
+[380628.199 ms][tid a9dc] lanedensity: count: id 32 steps=3982 forbidden=11 against=0
+[380628.203 ms][tid a9dc] lanedensity: count: id 35 steps=92563 forbidden=677 against=1092
+[380628.208 ms][tid a9dc] lanedensity: count: id 39 steps=162245 forbidden=8296 against=7734
+[380628.212 ms][tid a9dc] lanedensity: count: id 43 steps=79966 forbidden=454 against=0
+[380628.217 ms][tid a9dc] lanedensity: count: id 69 steps=3282 forbidden=541 against=874
+[380628.221 ms][tid a9dc] lanedensity: count: id 83 steps=545 forbidden=3 against=0
+[380628.285 ms][tid a9dc] lanedensity: count: id 11201 steps=2327 forbidden=6 against=4
+[380628.301 ms][tid a9dc] lanedensity: count: id 11202 steps=3901 forbidden=15 against=0
+[380628.315 ms][tid a9dc] lanedensity: count: id 11203 steps=37286 forbidden=1411 against=1963
+[380628.321 ms][tid a9dc] lanedensity: count: id 11204 steps=197492 forbidden=30491 against=50797
+[380628.326 ms][tid a9dc] lanedensity: count: id 11210 steps=198 forbidden=20 against=95
+[380628.330 ms][tid a9dc] lanedensity: count: id 11211 steps=2469 forbidden=1170 against=6
+[380628.335 ms][tid a9dc] lanedensity: count: id 11212 steps=932 forbidden=133 against=0
+[380628.339 ms][tid a9dc] lanedensity: count: id 11213 steps=3069 forbidden=267 against=1342
+[380628.343 ms][tid a9dc] lanedensity: count: id 11214 steps=2503 forbidden=318 against=1093
+[380628.348 ms][tid a9dc] lanedensity: count: id 11225 steps=179 forbidden=33 against=132
+[380628.352 ms][tid a9dc] lanedensity: count: id 11258 steps=2807 forbidden=461 against=280
+[380628.357 ms][tid a9dc] lanedensity: count: id 11265 steps=1219 forbidden=5 against=5
+[380628.361 ms][tid a9dc] lanedensity: count: id 11269 steps=543 forbidden=2 against=0
+[380628.368 ms][tid a9dc] lanedensity: count: id 14010 steps=4200 forbidden=0 against=5
+[380628.372 ms][tid a9dc] lanedensity: count: id 14011 steps=4907 forbidden=539 against=210
+[380628.376 ms][tid a9dc] lanedensity: count: id 14013 steps=4945 forbidden=259 against=494
+[380628.381 ms][tid a9dc] lanedensity: count: id 14014 steps=351 forbidden=0 against=1
+[380628.385 ms][tid a9dc] lanedensity: count: id 14015 steps=681 forbidden=146 against=238
+[380628.389 ms][tid a9dc] lanedensity: count: id 14017 steps=654 forbidden=177 against=168
+[380628.394 ms][tid a9dc] lanedensity: count: id 14030 steps=2748 forbidden=1133 against=0
+[380628.398 ms][tid a9dc] lanedensity: count: id 14031 steps=1098 forbidden=127 against=0
+[380628.403 ms][tid a9dc] lanedensity: count: id 15045 steps=415 forbidden=145 against=0
+[380628.407 ms][tid a9dc] lanedensity: count: id 15046 steps=851 forbidden=9 against=3
+[380628.412 ms][tid a9dc] lanedensity: count: id 15047 steps=518 forbidden=110 against=38
+[380628.416 ms][tid a9dc] lanedensity: count: id 15098 steps=2711 forbidden=119 against=68
+[380628.420 ms][tid a9dc] lanedensity: count: id 15140 steps=4 forbidden=2 against=0
+[380628.425 ms][tid a9dc] lanedensity: count: id 15141 steps=38 forbidden=38 against=0
+[380628.431 ms][tid a9dc] lanedensity: count: id 18050 steps=1646 forbidden=3 against=3
+[380628.435 ms][tid a9dc] lanedensity: count: id 18051 steps=2642 forbidden=2 against=0
+[380628.440 ms][tid a9dc] lanedensity: count: id 18052 steps=1125 forbidden=2 against=0
+[380628.444 ms][tid a9dc] lanedensity: count: id 18053 steps=550 forbidden=5 against=5
+[380628.448 ms][tid a9dc] lanedensity: count: id 18059 steps=587 forbidden=4 against=0
+[390628.851 ms][tid a9dc] lanedensity: evals=2096969 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=2096969 vtables=0
+[390628.945 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=1485620, forbidden by their matrix=69229, entered against it=90791
+[390628.953 ms][tid a9dc] lanedensity: count: id 29 steps=630486 forbidden=6804 against=2043
+[390628.959 ms][tid a9dc] lanedensity: count: id 31 steps=3172 forbidden=18 against=18
+[390628.963 ms][tid a9dc] lanedensity: count: id 32 steps=5146 forbidden=11 against=0
+[390628.968 ms][tid a9dc] lanedensity: count: id 35 steps=121411 forbidden=899 against=1532
+[390628.973 ms][tid a9dc] lanedensity: count: id 39 steps=216949 forbidden=11074 against=10295
+[390628.978 ms][tid a9dc] lanedensity: count: id 43 steps=107385 forbidden=594 against=0
+[390628.982 ms][tid a9dc] lanedensity: count: id 69 steps=4129 forbidden=645 against=1063
+[390628.987 ms][tid a9dc] lanedensity: count: id 83 steps=699 forbidden=3 against=0
+[390628.991 ms][tid a9dc] lanedensity: count: id 88 steps=3287 forbidden=1 against=0
+[390629.004 ms][tid a9dc] lanedensity: count: id 11201 steps=3072 forbidden=10 against=8
+[390629.051 ms][tid a9dc] lanedensity: count: id 11202 steps=5057 forbidden=21 against=0
+[390629.058 ms][tid a9dc] lanedensity: count: id 11203 steps=49659 forbidden=1807 against=2480
+[390629.062 ms][tid a9dc] lanedensity: count: id 11204 steps=261034 forbidden=40329 against=67822
+[390629.067 ms][tid a9dc] lanedensity: count: id 11210 steps=256 forbidden=22 against=135
+[390629.072 ms][tid a9dc] lanedensity: count: id 11211 steps=3375 forbidden=1618 against=8
+[390629.076 ms][tid a9dc] lanedensity: count: id 11212 steps=1225 forbidden=180 against=0
+[390629.081 ms][tid a9dc] lanedensity: count: id 11213 steps=4192 forbidden=363 against=1849
+[390629.085 ms][tid a9dc] lanedensity: count: id 11214 steps=3316 forbidden=376 against=1424
+[390629.090 ms][tid a9dc] lanedensity: count: id 11225 steps=221 forbidden=46 against=157
+[390629.094 ms][tid a9dc] lanedensity: count: id 11258 steps=3821 forbidden=702 against=403
+[390629.099 ms][tid a9dc] lanedensity: count: id 11265 steps=1593 forbidden=5 against=5
+[390629.103 ms][tid a9dc] lanedensity: count: id 11269 steps=696 forbidden=2 against=0
+[390629.109 ms][tid a9dc] lanedensity: count: id 14010 steps=5508 forbidden=0 against=5
+[390629.114 ms][tid a9dc] lanedensity: count: id 14011 steps=6418 forbidden=655 against=316
+[390629.118 ms][tid a9dc] lanedensity: count: id 14013 steps=6417 forbidden=366 against=554
+[390629.123 ms][tid a9dc] lanedensity: count: id 14014 steps=479 forbidden=0 against=1
+[390629.127 ms][tid a9dc] lanedensity: count: id 14015 steps=917 forbidden=203 against=302
+[390629.132 ms][tid a9dc] lanedensity: count: id 14017 steps=879 forbidden=238 against=224
+[390629.136 ms][tid a9dc] lanedensity: count: id 14030 steps=3614 forbidden=1472 against=0
+[390629.140 ms][tid a9dc] lanedensity: count: id 14031 steps=1453 forbidden=184 against=0
+[390629.146 ms][tid a9dc] lanedensity: count: id 15045 steps=589 forbidden=201 against=0
+[390629.150 ms][tid a9dc] lanedensity: count: id 15046 steps=1082 forbidden=11 against=3
+[390629.154 ms][tid a9dc] lanedensity: count: id 15047 steps=673 forbidden=141 against=44
+[390629.159 ms][tid a9dc] lanedensity: count: id 15098 steps=3720 forbidden=161 against=90
+[390629.163 ms][tid a9dc] lanedensity: count: id 15140 steps=6 forbidden=3 against=0
+[390629.168 ms][tid a9dc] lanedensity: count: id 15141 steps=44 forbidden=44 against=0
+[390629.174 ms][tid a9dc] lanedensity: count: id 18050 steps=2153 forbidden=4 against=4
+[390629.178 ms][tid a9dc] lanedensity: count: id 18051 steps=3439 forbidden=2 against=0
+[390629.183 ms][tid a9dc] lanedensity: count: id 18052 steps=1444 forbidden=2 against=0
+[390629.187 ms][tid a9dc] lanedensity: count: id 18053 steps=762 forbidden=5 against=5
+[390629.192 ms][tid a9dc] lanedensity: count: id 18059 steps=738 forbidden=6 against=0
+[390629.196 ms][tid a9dc] lanedensity: count: id 18070 steps=544 forbidden=1 against=1
+[400629.577 ms][tid a9dc] lanedensity: evals=2656318 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=2656318 vtables=0
+[400629.689 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=1860724, forbidden by their matrix=86477, entered against it=114846
+[400629.708 ms][tid a9dc] lanedensity: count: id 29 steps=784579 forbidden=8503 against=2451
+[400629.718 ms][tid a9dc] lanedensity: count: id 31 steps=4007 forbidden=21 against=20
+[400629.723 ms][tid a9dc] lanedensity: count: id 32 steps=6578 forbidden=13 against=0
+[400629.727 ms][tid a9dc] lanedensity: count: id 35 steps=149041 forbidden=1062 against=1785
+[400629.731 ms][tid a9dc] lanedensity: count: id 39 steps=273897 forbidden=13728 against=12936
+[400629.736 ms][tid a9dc] lanedensity: count: id 43 steps=137586 forbidden=722 against=0
+[400629.741 ms][tid a9dc] lanedensity: count: id 69 steps=5183 forbidden=739 against=1248
+[400629.745 ms][tid a9dc] lanedensity: count: id 83 steps=894 forbidden=3 against=0
+[400629.749 ms][tid a9dc] lanedensity: count: id 88 steps=4185 forbidden=5 against=0
+[400629.761 ms][tid a9dc] lanedensity: count: id 11201 steps=3898 forbidden=12 against=10
+[400629.771 ms][tid a9dc] lanedensity: count: id 11202 steps=6467 forbidden=24 against=0
+[400629.780 ms][tid a9dc] lanedensity: count: id 11203 steps=62580 forbidden=2258 against=3222
+[400629.788 ms][tid a9dc] lanedensity: count: id 11204 steps=328277 forbidden=50644 against=86184
+[400629.792 ms][tid a9dc] lanedensity: count: id 11210 steps=334 forbidden=24 against=180
+[400629.797 ms][tid a9dc] lanedensity: count: id 11211 steps=4201 forbidden=2008 against=9
+[400629.801 ms][tid a9dc] lanedensity: count: id 11212 steps=1570 forbidden=250 against=0
+[400629.805 ms][tid a9dc] lanedensity: count: id 11213 steps=5173 forbidden=423 against=2295
+[400629.810 ms][tid a9dc] lanedensity: count: id 11214 steps=4159 forbidden=444 against=1872
+[400629.817 ms][tid a9dc] lanedensity: count: id 11225 steps=254 forbidden=51 against=168
+[400629.824 ms][tid a9dc] lanedensity: count: id 11258 steps=4967 forbidden=883 against=556
+[400629.832 ms][tid a9dc] lanedensity: count: id 11265 steps=2072 forbidden=5 against=5
+[400629.839 ms][tid a9dc] lanedensity: count: id 11269 steps=892 forbidden=3 against=0
+[400629.845 ms][tid a9dc] lanedensity: count: id 14010 steps=6844 forbidden=0 against=5
+[400629.850 ms][tid a9dc] lanedensity: count: id 14011 steps=7932 forbidden=782 against=390
+[400629.854 ms][tid a9dc] lanedensity: count: id 14013 steps=7908 forbidden=461 against=620
+[400629.858 ms][tid a9dc] lanedensity: count: id 14014 steps=590 forbidden=0 against=1
+[400629.862 ms][tid a9dc] lanedensity: count: id 14015 steps=1156 forbidden=265 against=391
+[400629.867 ms][tid a9dc] lanedensity: count: id 14017 steps=1113 forbidden=307 against=295
+[400629.871 ms][tid a9dc] lanedensity: count: id 14030 steps=4428 forbidden=1854 against=0
+[400629.875 ms][tid a9dc] lanedensity: count: id 14031 steps=1855 forbidden=261 against=0
+[400629.881 ms][tid a9dc] lanedensity: count: id 15045 steps=693 forbidden=232 against=0
+[400629.885 ms][tid a9dc] lanedensity: count: id 15046 steps=1447 forbidden=17 against=3
+[400629.889 ms][tid a9dc] lanedensity: count: id 15047 steps=904 forbidden=191 against=56
+[400629.895 ms][tid a9dc] lanedensity: count: id 15098 steps=4915 forbidden=202 against=134
+[400629.902 ms][tid a9dc] lanedensity: count: id 15140 steps=6 forbidden=3 against=0
+[400629.907 ms][tid a9dc] lanedensity: count: id 15141 steps=56 forbidden=56 against=0
+[400629.913 ms][tid a9dc] lanedensity: count: id 18050 steps=2784 forbidden=4 against=4
+[400629.918 ms][tid a9dc] lanedensity: count: id 18051 steps=4397 forbidden=2 against=0
+[400629.922 ms][tid a9dc] lanedensity: count: id 18052 steps=1867 forbidden=2 against=0
+[400629.927 ms][tid a9dc] lanedensity: count: id 18053 steps=927 forbidden=5 against=5
+[400629.931 ms][tid a9dc] lanedensity: count: id 18059 steps=970 forbidden=7 against=0
+[400629.936 ms][tid a9dc] lanedensity: count: id 18070 steps=640 forbidden=1 against=1
+[410630.009 ms][tid a9dc] lanedensity: evals=3231088 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=3231088 vtables=0
+[410630.171 ms][tid a9dc] lanedensity: count: road steps on pieces with lane data=2257918, forbidden by their matrix=105345, entered against it=141028
+[410630.184 ms][tid a9dc] lanedensity: count: id 29 steps=950277 forbidden=10177 against=3030
+[410630.190 ms][tid a9dc] lanedensity: count: id 31 steps=4887 forbidden=21 against=20
+[410630.195 ms][tid a9dc] lanedensity: count: id 32 steps=7789 forbidden=14 against=0
+[410630.199 ms][tid a9dc] lanedensity: count: id 35 steps=180101 forbidden=1298 against=2185
+[410630.204 ms][tid a9dc] lanedensity: count: id 39 steps=332669 forbidden=16773 against=15652
+[410630.208 ms][tid a9dc] lanedensity: count: id 43 steps=167084 forbidden=830 against=0
+[410630.213 ms][tid a9dc] lanedensity: count: id 69 steps=6108 forbidden=872 against=1445
+[410630.217 ms][tid a9dc] lanedensity: count: id 81 steps=1059 forbidden=1 against=0
+[410630.221 ms][tid a9dc] lanedensity: count: id 83 steps=1031 forbidden=3 against=0
+[410630.226 ms][tid a9dc] lanedensity: count: id 88 steps=4935 forbidden=7 against=0
+[410630.241 ms][tid a9dc] lanedensity: count: id 11201 steps=4746 forbidden=13 against=10
+[410630.246 ms][tid a9dc] lanedensity: count: id 11202 steps=7667 forbidden=24 against=0
+[410630.251 ms][tid a9dc] lanedensity: count: id 11203 steps=76020 forbidden=2685 against=3917
+[410630.255 ms][tid a9dc] lanedensity: count: id 11204 steps=401021 forbidden=61816 against=106123
+[410630.259 ms][tid a9dc] lanedensity: count: id 11210 steps=404 forbidden=30 against=222
+[410630.263 ms][tid a9dc] lanedensity: count: id 11211 steps=5238 forbidden=2580 against=10
+[410630.268 ms][tid a9dc] lanedensity: count: id 11212 steps=1907 forbidden=309 against=0
+[410630.272 ms][tid a9dc] lanedensity: count: id 11213 steps=6415 forbidden=511 against=2990
+[410630.276 ms][tid a9dc] lanedensity: count: id 11214 steps=5148 forbidden=578 against=2319
+[410630.280 ms][tid a9dc] lanedensity: count: id 11225 steps=296 forbidden=65 against=181
+[410630.285 ms][tid a9dc] lanedensity: count: id 11258 steps=6365 forbidden=1113 against=746
+[410630.289 ms][tid a9dc] lanedensity: count: id 11265 steps=2555 forbidden=5 against=5
+[410630.293 ms][tid a9dc] lanedensity: count: id 11269 steps=1029 forbidden=4 against=0
+[410630.299 ms][tid a9dc] lanedensity: count: id 14010 steps=8174 forbidden=0 against=5
+[410630.303 ms][tid a9dc] lanedensity: count: id 14011 steps=9498 forbidden=919 against=452
+[410630.307 ms][tid a9dc] lanedensity: count: id 14013 steps=9385 forbidden=544 against=671
+[410630.312 ms][tid a9dc] lanedensity: count: id 14014 steps=697 forbidden=0 against=1
+[410630.316 ms][tid a9dc] lanedensity: count: id 14015 steps=1368 forbidden=339 against=436
+[410630.320 ms][tid a9dc] lanedensity: count: id 14017 steps=1322 forbidden=351 against=367
+[410630.325 ms][tid a9dc] lanedensity: count: id 14030 steps=5494 forbidden=2277 against=0
+[410630.329 ms][tid a9dc] lanedensity: count: id 14031 steps=2217 forbidden=315 against=2
+[410630.334 ms][tid a9dc] lanedensity: count: id 15045 steps=854 forbidden=281 against=0
+[410630.338 ms][tid a9dc] lanedensity: count: id 15046 steps=1749 forbidden=21 against=3
+[410630.342 ms][tid a9dc] lanedensity: count: id 15047 steps=1103 forbidden=227 against=72
+[410630.346 ms][tid a9dc] lanedensity: count: id 15098 steps=6063 forbidden=243 against=154
+[410630.351 ms][tid a9dc] lanedensity: count: id 15140 steps=10 forbidden=5 against=0
+[410630.355 ms][tid a9dc] lanedensity: count: id 15141 steps=72 forbidden=72 against=0
+[410630.361 ms][tid a9dc] lanedensity: count: id 18050 steps=3442 forbidden=4 against=4
+[410630.366 ms][tid a9dc] lanedensity: count: id 18051 steps=5190 forbidden=2 against=0
+[410630.370 ms][tid a9dc] lanedensity: count: id 18052 steps=2244 forbidden=2 against=0
+[410630.374 ms][tid a9dc] lanedensity: count: id 18053 steps=1110 forbidden=5 against=5
+[410630.378 ms][tid a9dc] lanedensity: count: id 18059 steps=1183 forbidden=7 against=0
+[410630.382 ms][tid a9dc] lanedensity: count: id 18070 steps=776 forbidden=2 against=1

@@ -1,0 +1,61 @@
+{
+ "hb": "0xda3911c",
+ "hb_vt": "SC3U.exe:0x4d1030",
+ "susp": 0,
+ "lists": {
+  "+0x88": [
+   {
+    "listener": "0xda39114",
+    "vt": "SC3U.exe:0x4d1074",
+    "fn": "SC3U.exe:0x425a10",
+    "agents": {
+     "buckets": 769,
+     "total": 419,
+     "ticked": 419,
+     "by": {
+      "STRTSIM.DLL:0x1002af90 tick=STRTSIM.DLL:0x1001d2c0 [ticked]": 5,
+      "STRTSIM.DLL:0x1002b7ac tick=STRTSIM.DLL:0x1000c460 [ticked]": 83,
+      "STRTSIM.DLL:0x1002cd20 tick=STRTSIM.DLL:0x1001d2c0 [ticked]": 121,
+      "STRTSIM.DLL:0x1002bbe0 tick=STRTSIM.DLL:0x1001d2c0 [ticked]": 100,
+      "STRTSIM.DLL:0x1002c9bc tick=STRTSIM.DLL:0x1001d2c0 [ticked]": 55,
+      "SIMSPR.DLL:0x100643d8 tick=SIMSPR.DLL:0x10021199 [ticked]": 24,
+      "STRTSIM.DLL:0x1002a330 tick=STRTSIM.DLL:0x1001d2c0 [ticked]": 13,
+      "STRTSIM.DLL:0x1002a758 tick=STRTSIM.DLL:0x1000570c [ticked]": 12,
+      "STRTSIM.DLL:0x1002ad44 tick=STRTSIM.DLL:0x1001d2c0 [ticked]": 6
+     }
+    }
+   }
+  ],
+  "+0x8c": [
+   {
+    "listener": "0xec1b474",
+    "vt": "SIMGEOM.DLL:0x10029e10",
+    "fn": "SIMGEOM.DLL:0x1000fc30"
+   }
+  ],
+  "+0x90": [
+   {
+    "listener": "0xe8d3df4",
+    "vt": "SIMGEOM.DLL:0x10029e10",
+    "fn": "SIMGEOM.DLL:0x1000fc30"
+   },
+   {
+    "listener": "0xec1b6e4",
+    "vt": "SIMGEOM.DLL:0x10029e10",
+    "fn": "SIMGEOM.DLL:0x1000fc30"
+   }
+  ],
+  "+0x94": [
+   {
+    "listener": "0xee175e4",
+    "vt": "SIMSPR.DLL:0x100659a0",
+    "fn": "SIMSPR.DLL:0x1002b5e5"
+   },
+   {
+    "listener": "0xec75750",
+    "vt": "STRTSIM.DLL:0x1002c5c4",
+    "fn": "STRTSIM.DLL:0x10012e46"
+   }
+  ]
+ }
+}

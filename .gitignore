@@ -65,6 +65,32 @@
 !/re/tools/
 /re/tools/*
 !/re/tools/*.py
+# 4b) re/tools/netmod — the network-modding suite package (netcat etc.), Python only.
+#     Its catalog/HTML/PNG output goes to re/netcat_out/ (ignored by /re/*): game art never published.
+!/re/tools/netmod/
+/re/tools/netmod/*
+!/re/tools/netmod/*.py
+# netpack (2026-10-13): the manifest JSON Schema, and the example packages' manifest + README ONLY. Examples derive
+# their art from the stock pieces at build time; a PNG, DAT or IXF in a package folder is game art and stays ignored.
+!/re/tools/netmod/netpack.schema.json
+# artkit (2026-10-13): the Blender calibration (numbers only) and the example packages' art RECIPES (compositor JSON:
+# the art is built from the stock frames at build time, never shipped).
+!/re/tools/netmod/netart_calib.json
+!/re/tools/netmod/examples/
+/re/tools/netmod/examples/*
+!/re/tools/netmod/examples/*/
+/re/tools/netmod/examples/*/*
+!/re/tools/netmod/examples/*/manifest.json
+!/re/tools/netmod/examples/*/README.md
+!/re/tools/netmod/examples/*/recipe.json
+!/re/tools/netmod/examples/*/layout.json
+# lanekit (2026-10-13): lane specs are text descriptions (side, slot, curve key), no game art
+!/re/tools/netmod/examples/*/*.lanes.json
+# roundabout2 (2026-10-13): netpaint plans are geometry + parameters; colours come from the game at build time
+!/re/tools/netmod/examples/*/paint.json
+# roundabout4 (2026-10-14): the closed-quarter plan and recipe (JSON parameters, no game art)
+!/re/tools/netmod/examples/*/paint_*.json
+!/re/tools/netmod/examples/*/recipe_*.json
 
 # 5) re/scripts — .py / .ps1 / .java only.
 #    Explicitly NOT the .log / .txt Ghidra run artifacts (absolute-path leaks)

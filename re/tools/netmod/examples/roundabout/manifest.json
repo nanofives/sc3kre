@@ -1,0 +1,58 @@
+{
+  "netpack": 1,
+  "name": "roundabout",
+  "version": "4.0.0",
+  "author": "netmod demo (artkit + lanekit + multitile, unified by task roundabout)",
+  "description": "A 2x2 one-way mini roundabout as ONE new piece id, 20400, used in four states (pinwheel 3,0 / 2,1), with four exits. Behaves as road T 39 (exemplar, cost) except for its own lanes. Art: built at install time by recipe.json -> paint.json (netpaint.py: stock road 29's profile bent along the ring, entries and exits; seamless arms, splitter islands, concrete island, yellow island edge line, give-way dashes, no arrows), no game art in the package. Lanes: quarter.lanes.json (ring counter-clockwise on radius 175 for right-hand traffic, entries straight, exits right turns; pedestrians on the outer sidewalks; turn matrix from those lanes). A 3-arm block puts a second piece, 20401, on the quarter whose exit holds no road: the same ring and island, the ring's outer curb and sidewalk run on round the closed side and the terrain shows outside it (frame table ground bit), lanes only round the ring (closed.lanes.json). Placement: automatic (sc3netmod RBT, auto_roundabouts): a 2x2 road block with at least 3 single-road arms on the pinwheel exits, no road on a closed side and no 2-wide road or second block at an exit becomes the roundabout by itself, also in loaded cities, and turns back into stock road when that stops holding. No key, no cost. layout.json is the netart preview of the block with roads on the exits.",
+  "game": {
+    "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+  },
+  "variants": [
+    {
+      "id": 20400,
+      "base": 39,
+      "network": "ROAD",
+      "name": {
+        "*": "Roundabout",
+        "ENGLISH": "Rotonda"
+      },
+      "art": {
+        "from": 39,
+        "recipe": "recipe.json"
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 20401,
+      "base": 39,
+      "network": "ROAD",
+      "name": {
+        "*": "Roundabout (closed side)",
+        "ENGLISH": "Rotonda (lado cerrado)"
+      },
+      "art": {
+        "from": 11203,
+        "recipe": "recipe_closed.json",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    }
+  ],
+  "lanes": [
+    {
+      "piece": 20400,
+      "spec": "quarter.lanes.json"
+    },
+    {
+      "piece": 20401,
+      "spec": "closed.lanes.json"
+    }
+  ],
+  "auto_roundabouts": [
+    {
+      "piece": 20400,
+      "min_arms": 3,
+      "closed_piece": 20401
+    }
+  ]
+}

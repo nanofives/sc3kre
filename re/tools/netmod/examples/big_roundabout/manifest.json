@@ -1,0 +1,288 @@
+{
+ "netpack": 1,
+ "name": "big_roundabout",
+ "version": "0.1.0",
+ "author": "netmod (task bigrbt)",
+ "description": "Automatic 3x3 roundabouts: draw a 3x3 square of road cells with roads or avenues leaving it (at most two per side: an avenue on two neighbouring cells, or two single roads on the outer cells) and sc3netmod's RBT9 block turns it into one big roundabout: circular grass island, one-lane ring running counter-clockwise, give-way lines at the entries, avenue medians ending in a nose at the ring. 14 pieces (20600 centre, 20601..20604 side cells, 20610..20618 corner cells by their arms), all painted from stock road 29's frames by `bigrbt.py build .` in this folder before install (art/ is made from the game's frames and is not shipped). Lanes: stock curves only. A game without the mod opens the block as stock 43 / 39 / 11203 road.",
+ "game": {
+  "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+ },
+ "variants": [
+  {
+   "id": 20600,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20600"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20601,
+   "base": 39,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20601"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20602,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20602"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20603,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20603"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20604,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20604"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20610,
+   "base": 11203,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20610"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20611,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20611"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20612,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20612"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20613,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20613"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20614,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20614"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20615,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20615"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20616,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20616"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20617,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20617"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20618,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20618"
+   },
+   "trblkatt": "copy_base"
+  }
+ ],
+ "lanes": [
+  {
+   "piece": 20600,
+   "spec": "20600.lanes.json"
+  },
+  {
+   "piece": 20601,
+   "spec": "20601.lanes.json"
+  },
+  {
+   "piece": 20602,
+   "spec": "20602.lanes.json"
+  },
+  {
+   "piece": 20603,
+   "spec": "20603.lanes.json"
+  },
+  {
+   "piece": 20604,
+   "spec": "20604.lanes.json"
+  },
+  {
+   "piece": 20610,
+   "spec": "20610.lanes.json"
+  },
+  {
+   "piece": 20611,
+   "spec": "20611.lanes.json"
+  },
+  {
+   "piece": 20612,
+   "spec": "20612.lanes.json"
+  },
+  {
+   "piece": 20613,
+   "spec": "20613.lanes.json"
+  },
+  {
+   "piece": 20614,
+   "spec": "20614.lanes.json"
+  },
+  {
+   "piece": 20615,
+   "spec": "20615.lanes.json"
+  },
+  {
+   "piece": 20616,
+   "spec": "20616.lanes.json"
+  },
+  {
+   "piece": 20617,
+   "spec": "20617.lanes.json"
+  },
+  {
+   "piece": 20618,
+   "spec": "20618.lanes.json"
+  }
+ ],
+ "auto_big_roundabouts": [
+  {
+   "centre": 20600,
+   "side": [
+    20601,
+    20602,
+    20603,
+    20604
+   ],
+   "corner": [
+    20610,
+    20611,
+    20612,
+    20613,
+    20614,
+    20615,
+    20616,
+    20617,
+    20618
+   ]
+  }
+ ]
+}

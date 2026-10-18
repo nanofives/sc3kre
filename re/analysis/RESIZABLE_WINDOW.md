@@ -267,6 +267,23 @@ enable by default.
    A/B PASS). The city view's local AND hit rects now follow the client (`SC3RESIZE_VIEWFIX`, default 1),
    so the cascade can no longer reset the hit rect. Moves and right-drag pan work past the old area,
    and the control arm reproduces the dead zone. Zoning past 800x600 is for the owner's hand test.
+2b. ✅ **FIXED 2026-10-12: left click centres on the visible map area** (`verify/leftclick/RESULTS.md`, A/B PASS on
+   MAIN and on a stock tree, `SC3RESIZE_LCENTER`, default 1). Every left-click camera move is one call: a map click
+   with the default tool (`SIMSPR FUN_10043540`, return `+0x435b0`), a left-drag (one call on the press, no pan) and a
+   minimap click (`SIMUI+0x5090c`) all reach `FUN_1001d039` = iso view vt+0x54 CenterOnTile, which subtracts
+   `+0x20 >> 1`, `+0x24 >> 1` = the stored 704x544 `[CONFIRMED @ SIMSPR 0x1001d09c]`. So the tile always landed at
+   (352, 272): maximized at 1680x979 a click on the map-area centre moved the camera (+448, +192). The stub at
+   `0x1001d09c` (25 bytes) subtracts half the visible map area instead (side panel left edge x bar top, with the
+   HUDSCALE enlargement mapped). At 800x600 it is the stock numbers.
+2c. ✅ **FIXED 2026-10-12: zoom and rotate keep the map-area centre tile** (`verify/leftclick/ZOOMCENTER_RESULTS.md`,
+   `SC3RESIZE_ZOOMCENTER`, default 1, owner design call). The zoom keys, rotate keys (PageDown/PageUp) and the four minimap
+   buttons call iso view vt+0x60/+0x64/+0x70/+0x74 (`FUN_1001d2d6`, `FUN_1001d365`, `FUN_1001d3f3`, `FUN_1001d47b`), which
+   pass the stored centre tile `+0xb0/+0xb4` to the camera. The camera (`FUN_10006752` zoom, `FUN_10006a55` rotate) put it
+   at the centre of its own rect `+0x64..+0x70` = the WHOLE client `[CONFIRMED @ SIMSPR 0x1000688d, 0x10006b0f]`: (400,300)
+   at 800x600, (840,489) maximized, so the centre tile changed on every stock zoom, at 800x600 too. Now both sites use
+   half the map area, and the four methods first re-pick the tile at the map-area centre (stale after a window resize,
+   measured). `FUN_1001d1d9` (+0x6c) keeps its tile (no re-pick): it runs at city load with the saved centre (re-picking
+   there moved the loaded view). `=2` keeps stock numbers at exactly 800x600.
 3. **Edge-scroll band:** `EDGEFIX` (`03ca3c3`) rebuilds the bands from native + delta, measured
    correct at 1920x1009 and back at 800x600. But `+0x177` is "scroll in progress", and every SIMSPR
    starter of a scroll is keyboard-driven, so the bands may never start a scroll from the mouse
@@ -818,6 +835,12 @@ stretched to the client exactly like a player's picture. `SC3RESIZE_MENUBGSTOCK=
 (MENUBG off without a picture). A `menu_bg.bmp` that is present but not an uncompressed 24-bit BMP still turns
 MENUBG off, as before.
 
+**Owner calls 2026-10-14 (task menucrop, `verify/menucrop/`).** (1) The picture is CROPPED, not stretched: scaled to
+cover the client with its proportions kept, overflow cut evenly (maximized 3840x1984: source rows 169..917 of the
+owner's 1448x1086). `SC3RESIZE_MENUBGFIT=0` gives the old stretch. (2) A `menu_bg.bmp` that is present but unusable
+(not a BMP, not uncompressed 24-bit, truncated) now falls back to the stock picture like a missing one, so MENUBG stays
+on and the clicks stay right. This replaces the "still turns MENUBG off" sentence above.
+
 Measured 2026-10-11, 1680x979 client (maximized on a 1680x1050 display), instances `re\harness\inst_menubg*`:
 
 | arm | files beside the DLL | result |
@@ -833,6 +856,35 @@ is broken when maximized. Log swap counts on the first menu frame agree across t
 
 Harness note from these runs: twice, killing the Python process that had started `mods_launch.exe` left that game
 showing its quit dialog ("Salir") before any input was sent. Cause not established.
+
+### MENUSCALE: the menu frame scaled to the largest 4:3 rect (2026-10-14, task menuscale)
+
+Owner request 2026-10-14: "the main menu has to scale on the viewable 4:3 area, despite textures not scaling". On a
+client larger than 800x600 the frame is no longer presented 1:1 in the centre. `rz_ms_*` in `sc3resize.c`, called
+from `rz_mb_present` after `rz_mb_prepare` has built the cover picture:
+
+- rect = largest 4:3 that fits, floor, centred (`rz_ms_rect`). 3840x1984 -> `[597 0 3242 1984]`, 1000x900 ->
+  `[0 75 1000 825]`. Exactly 800x600 keeps the native path.
+- the source frame is READ only (never written, unlike the 1:1 path). Each pixel is background when it equals the
+  stock background, `g_mb_last`, or `g_mb_native`, the same three classes `rz_mb_patch_src` uses. When the native or
+  1:1 path rewrites `g_mb_last`, the MENUSCALE cache is invalidated so no class goes stale.
+- each rect pixel resamples the frame at pixel centres (8-bit weights, `rz_ms_axis`), bilinear by default,
+  `SC3RESIZE_MENUSCALE_FILTER=0` nearest. A tap on a background pixel takes the cover picture at the DEST pixel, so the
+  picture stays at client resolution behind the buttons and button edges blend into it.
+- only the dest box fed by changed source pixels is recomposed and sent (GDI BitBlt to the window DC). The whole client
+  goes out on a new size, the first scaled present, and after a paint / size / activation message. The ddraw present
+  of the frame is not called, so the window holds exactly what was composed (desktop grab = dump, except the live FPS
+  text and the rounded window corners).
+- mouse: client -> frame = `floor((2(c - r0) + 1) * 800 / (2 rw))`, the pixel the nearest filter draws there. Left
+  alone: a message carrying exactly our last frame point within 500 ms, a move at any depth (the game re-posts a move
+  at the point it received after every click, also at the menu) or a button message at depth > 0. Depth alone is not
+  usable at the menu: "Preferencias" runs a modal loop inside its button handler, so its clicks come from the queue at
+  depth 1.
+- `SC3RESIZE_MENUSCALE=0` = the 1:1 centred frame. `SC3RESIZE_MENUSCALE_DUMP=<abs prefix>`: on `<prefix>req` the next
+  scaled present writes the client, frame, picture and background mask as BMP. `re/tools/menuscale_check.py`
+  recomputes the rect from those and compares (0 mismatches on every dump taken).
+- cost, 3840x1984: about 0.15 ms per static present, one present of about 32 ms when a dialog opens (whole rect).
+  Evidence and arms: `verify/menuscale/RESULTS.md`.
 
 ## New City / Load City while already maximized (fixed 2026-10-07)
 

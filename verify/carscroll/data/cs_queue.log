@@ -1,0 +1,277 @@
+11:12:48 start S1
+11:24:27 phase P:10 {'user_pause': 1, 'cam_hold': 0, 'speed_last': 3, 'day': 2476870, 'clk_pause': 1, 'view': [0, 184, 17, 208], 'simrect': [0, 182, 19, 210], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 157, 'p_target': 91}
+11:24:38 phase s3:15 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476870, 'clk_pause': 0, 'view': [0, 184, 17, 208], 'simrect': [0, 182, 19, 210], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 138, 'p_target': 91}
+killed pid 24244
+11:25:03 end S1
+11:25:03 start S2
+11:37:04 phase P:10 {'user_pause': 1, 'cam_hold': 0, 'speed_last': 3, 'day': 2476870, 'clk_pause': 1, 'view': [25, 148, 54, 172], 'simrect': [23, 146, 56, 174], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 12, 'p_target': 120}
+11:37:15 phase s3:15 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476870, 'clk_pause': 0, 'view': [25, 148, 54, 172], 'simrect': [23, 146, 56, 174], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 6, 'p_target': 120}
+killed pid 3316
+11:37:34 end S2
+11:37:34 start S3
+11:45:15 phase AR:20 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476559, 'clk_pause': 0, 'view': [0, 172, 22, 195], 'simrect': [0, 170, 24, 197], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 126, 'p_target': 127}
+11:45:35 phase I:10 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476589, 'clk_pause': 0, 'view': [1, 165, 29, 188], 'simrect': [0, 163, 31, 190], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 145, 'p_target': 129}
+killed pid 23484
+11:45:49 end S3
+11:45:50 start N0
+11:49:05 phase AR:20 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476131, 'clk_pause': 0, 'view': [55, 111, 83, 134], 'simrect': [53, 109, 85, 136], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 47, 'p_target': 47}
+11:49:27 phase I:15 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476163, 'clk_pause': 0, 'view': [35, 131, 63, 153], 'simrect': [33, 129, 65, 155], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 122, 'p_target': 31}
+killed pid 23436
+11:49:48 end N0
+11:49:50 start C1
+12:02:07 phase HB:8 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476946, 'clk_pause': 0, 'view': [101, 87, 129, 110], 'simrect': [99, 85, 131, 112], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 39, 'p_target': 138}
+12:02:15 phase I:8 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476958, 'clk_pause': 0, 'view': [101, 87, 129, 110], 'simrect': [99, 85, 131, 112], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 52, 'p_target': 138}
+killed pid 20232
+12:02:28 end C1
+12:02:28 start F2
+12:13:08 phase OS:5 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476832, 'clk_pause': 0, 'view': [60, 134, 89, 158], 'simrect': [58, 132, 91, 160], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 6, 'p_target': 88}
+12:13:13 phase I:8 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476839, 'clk_pause': 0, 'view': [98, 96, 126, 120], 'simrect': [96, 94, 128, 122], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 5, 'p_target': 151}
+killed pid 22300
+12:13:25 end F2
+12:13:25 start F1
+game did not start
+12:15:50 end F1
+12:15:50 start C2
+12:24:29 phase HB:8 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2488586, 'clk_pause': 2, 'view': [564, 410, 620, 457], 'simrect': [562, 408, 622, 459], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 92, 'p_target': 149}
+12:24:37 phase I:8 {'user_pause': 0, 'cam_hold': 1, 'speed_last': 3, 'day': 2488597, 'clk_pause': 1, 'view': [564, 410, 620, 457], 'simrect': [562, 408, 622, 459], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 92, 'p_target': 148}
+killed pid 18588
+12:24:51 end C2
+12:24:52 start L1
+12:42:55 phase HB:30 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 4, 'day': 2480728, 'clk_pause': 0, 'view': [6, 168, 35, 191], 'simrect': [4, 166, 37, 193], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 107, 'p_target': 112}
+12:43:25 phase I:5 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 4, 'day': 2480881, 'clk_pause': 1, 'view': [6, 170, 35, 193], 'simrect': [4, 168, 37, 195], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 98, 'p_target': 94}
+killed pid 5284
+12:43:35 end L1
+12:43:36 start L2
+13:01:44 phase HB:30 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 4, 'day': 2490044, 'clk_pause': 1, 'view': [638, 117, 694, 164], 'simrect': [636, 115, 696, 166], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 146, 'p_target': 146}
+13:02:14 phase I:5 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 4, 'day': 2490110, 'clk_pause': 2, 'view': [638, 120, 694, 167], 'simrect': [636, 118, 696, 169], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 151, 'p_target': 158}
+killed pid 23384
+13:02:23 end L2
+13:02:23 QUEUE DONE
+13:02:35 instances now sc3simrun ede5732a
+13:02:37 start S1b
+13:14:30 phase P:10 {'user_pause': 1, 'cam_hold': 0, 'speed_last': 3, 'day': 2476897, 'clk_pause': 1, 'view': [0, 177, 25, 200], 'simrect': [0, 175, 27, 202], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 141, 'p_target': 107}
+13:14:41 phase s3:15 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476898, 'clk_pause': 0, 'view': [0, 177, 25, 200], 'simrect': [0, 175, 27, 202], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 112, 'p_target': 107}
+killed pid 1828
+13:15:00 end S1b
+13:15:01 start S3b
+13:22:32 phase AR:20 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476559, 'clk_pause': 0, 'view': [19, 147, 47, 170], 'simrect': [17, 145, 49, 172], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 94, 'p_target': 94}
+13:22:52 phase I:10 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476589, 'clk_pause': 0, 'view': [11, 155, 39, 178], 'simrect': [9, 153, 41, 180], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 126, 'p_target': 98}
+killed pid 16676
+13:23:07 end S3b
+13:23:07 start L3
+13:35:30 phase HB:30 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 4, 'day': 2479419, 'clk_pause': 1, 'view': [0, 172, 27, 196], 'simrect': [0, 170, 29, 198], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 49, 'p_target': 49}
+13:36:00 phase I:5 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 4, 'day': 2479578, 'clk_pause': 0, 'view': [0, 172, 27, 196], 'simrect': [0, 170, 29, 198], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 51, 'p_target': 51}
+killed pid 4092
+13:36:09 end L3
+13:36:09 start V1o
+13:38:32 phase AR*:3 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476112, 'clk_pause': 0, 'view': [59, 107, 87, 130], 'simrect': [57, 105, 89, 132], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 101, 'p_target': 100}
+13:38:35 phase I:4 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476117, 'clk_pause': 0, 'view': [72, 94, 100, 117], 'simrect': [70, 92, 102, 119], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 129, 'p_target': 121}
+killed pid 23664
+13:38:43 end V1o
+13:38:43 start V1r
+13:41:06 phase AR*:3 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476112, 'clk_pause': 0, 'view': [58, 108, 86, 131], 'simrect': [56, 106, 88, 133], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 28, 'p_target': 81}
+13:41:09 phase I:4 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476117, 'clk_pause': 0, 'view': [68, 98, 96, 121], 'simrect': [66, 96, 98, 123], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 8, 'p_target': 129}
+killed pid 376
+13:41:16 end V1r
+13:41:16 QUEUE2 DONE
+13:41:25 start F1r
+13:52:04 phase OS:5 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2488707, 'clk_pause': 0, 'view': [490, 594, 547, 641], 'simrect': [488, 592, 549, 643], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 28, 'p_target': 200}
+13:52:10 phase I:8 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2488713, 'clk_pause': 0, 'view': [565, 519, 622, 566], 'simrect': [563, 517, 624, 568], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 8, 'p_target': 200}
+killed pid 22408
+13:52:21 end F1r
+13:52:21 QUEUE3 DONE
+13:52:35 start C3
+14:00:04 phase AR:20 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 4, 'day': 2477864, 'clk_pause': 0, 'view': [42, 124, 70, 147], 'simrect': [40, 122, 72, 149], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 31, 'p_target': 31}
+14:00:24 phase I:10 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 4, 'day': 2477968, 'clk_pause': 0, 'view': [46, 120, 74, 143], 'simrect': [44, 118, 76, 145], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 32, 'p_target': 39}
+killed pid 8204
+14:00:39 end C3
+14:00:39 QUEUE4 DONE
+14:00:54 start S1c
+14:12:29 phase P:10 {'user_pause': 1, 'cam_hold': 0, 'speed_last': 3, 'day': 2476867, 'clk_pause': 1, 'view': [53, 120, 81, 144], 'simrect': [51, 118, 83, 146], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 155, 'p_target': 34}
+14:12:40 phase s3:15 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476868, 'clk_pause': 0, 'view': [53, 120, 81, 144], 'simrect': [51, 118, 83, 146], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 140, 'p_target': 34}
+killed pid 17276
+14:12:59 end S1c
+14:12:59 start S3c
+14:20:30 phase AR:20 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476560, 'clk_pause': 0, 'view': [31, 135, 59, 158], 'simrect': [29, 133, 61, 160], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 45, 'p_target': 45}
+14:20:50 phase I:10 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476589, 'clk_pause': 0, 'view': [29, 137, 57, 160], 'simrect': [27, 135, 59, 162], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 129, 'p_target': 68}
+killed pid 16096
+14:21:04 end S3c
+14:21:04 QUEUE5 DONE
+14:21:14 start V2o
+14:23:37 phase HS*:5 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476112, 'clk_pause': 0, 'view': [66, 105, 95, 128], 'simrect': [64, 103, 97, 130], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 112, 'p_target': 103}
+14:23:42 phase I:4 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476119, 'clk_pause': 0, 'view': [67, 107, 95, 130], 'simrect': [65, 105, 97, 132], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 105, 'p_target': 104}
+killed pid 12404
+14:23:50 end V2o
+14:23:50 start V2r
+14:26:14 phase HS*:5 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476111, 'clk_pause': 0, 'view': [66, 105, 95, 128], 'simrect': [64, 103, 97, 130], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 78, 'p_target': 111}
+14:26:19 phase I:4 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476118, 'clk_pause': 0, 'view': [67, 107, 95, 130], 'simrect': [65, 105, 97, 132], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 70, 'p_target': 115}
+killed pid 18820
+14:26:28 end V2r
+14:26:28 QUEUE6 DONE
+14:26:35 instances now sc3simrun 5eaa8a2e
+14:26:36 start S1d
+14:38:18 phase P:10 {'user_pause': 1, 'cam_hold': 0, 'speed_last': 3, 'day': 2476878, 'clk_pause': 1, 'view': [0, 184, 17, 208], 'simrect': [0, 182, 19, 210], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 183, 'p_target': 86}
+14:38:28 phase s3:15 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476878, 'clk_pause': 0, 'view': [0, 184, 17, 208], 'simrect': [0, 182, 19, 210], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 171, 'p_target': 86}
+killed pid 23928
+14:38:47 end S1d
+14:38:47 start S3d
+14:46:16 phase AR:20 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476558, 'clk_pause': 0, 'view': [10, 155, 39, 178], 'simrect': [8, 153, 41, 180], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 86, 'p_target': 86}
+14:46:36 phase I:10 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476587, 'clk_pause': 0, 'view': [0, 170, 24, 193], 'simrect': [0, 168, 26, 195], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 128, 'p_target': 120}
+killed pid 13264
+14:46:50 end S3d
+14:46:50 start L4
+14:56:28 phase HB:30 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 4, 'day': 2478473, 'clk_pause': 0, 'view': [43, 127, 71, 150], 'simrect': [41, 125, 73, 152], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 31, 'p_target': 32}
+14:56:58 phase I:5 {'user_pause': 0, 'cam_hold': 1, 'speed_last': 4, 'day': 2478626, 'clk_pause': 2, 'view': [43, 127, 71, 150], 'simrect': [41, 125, 73, 152], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 23, 'p_target': 22}
+killed pid 24340
+14:57:08 end L4
+14:57:08 QUEUE7 DONE
+14:57:17 start V3o
+14:59:42 phase HS*:4 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476106, 'clk_pause': 0, 'view': [175, 0, 202, 13], 'simrect': [173, 0, 204, 15], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 0, 'p_target': 0}
+14:59:46 phase I:4 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476113, 'clk_pause': 0, 'view': [175, 0, 202, 13], 'simrect': [173, 0, 204, 15], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 0, 'p_target': 0}
+killed pid 9464
+14:59:54 end V3o
+14:59:54 start V3r
+15:02:20 phase HS*:4 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476107, 'clk_pause': 0, 'view': [175, 0, 202, 13], 'simrect': [173, 0, 204, 15], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 0, 'p_target': 0}
+15:02:24 phase I:4 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476112, 'clk_pause': 0, 'view': [175, 0, 202, 13], 'simrect': [173, 0, 204, 15], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 0, 'p_target': 0}
+killed pid 16344
+15:02:32 end V3r
+15:02:32 QUEUE8 DONE
+15:02:46 start S1e
+15:14:28 phase P:10 {'user_pause': 1, 'cam_hold': 0, 'speed_last': 3, 'day': 2476868, 'clk_pause': 1, 'view': [0, 184, 17, 208], 'simrect': [0, 182, 19, 210], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 136, 'p_target': 88}
+15:14:38 phase s3:15 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476869, 'clk_pause': 0, 'view': [0, 184, 17, 208], 'simrect': [0, 182, 19, 210], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 109, 'p_target': 88}
+killed pid 18668
+15:14:58 end S1e
+15:14:58 QUEUE9 DONE
+16:34:59 start B0
+arm B0 pid 25476
+SC3U not running (SC3_PID=25476 is not a running SC3U.exe.)
+16:36:41 start B0
+16:47:12 phase AR:20 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476823, 'clk_pause': 0, 'view': [0, 179, 22, 202], 'simrect': [0, 177, 24, 204], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 73, 'p_target': 96}
+16:47:32 phase I:10 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476852, 'clk_pause': 0, 'view': [0, 175, 26, 198], 'simrect': [0, 173, 28, 200], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 73, 'p_target': 100}
+killed pid 8928
+16:47:47 end B0
+17:22:36 start R1
+17:51:01 phase P:10 {'user_pause': 1, 'cam_hold': 0, 'speed_last': 3, 'day': 2478341, 'clk_pause': 1, 'view': [7, 163, 35, 186], 'simrect': [0, 155, 43, 194], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 25, 'p_target': 199}
+17:51:11 phase s3:15 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2478342, 'clk_pause': 0, 'view': [7, 163, 35, 186], 'simrect': [0, 155, 43, 194], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 47, 'p_target': 199}
+killed pid 25628
+17:51:30 end R1
+17:51:31 start R2
+18:06:43 phase OS:20 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2489024, 'clk_pause': 0, 'view': [446, 896, 502, 942], 'simrect': [444, 894, 504, 944], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 82, 'p_target': 200}
+18:07:03 phase I:10 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2489050, 'clk_pause': 0, 'view': [865, 477, 921, 523], 'simrect': [863, 475, 923, 525], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 1, 'p_target': 200}
+killed pid 1968
+18:07:27 end R2
+18:07:27 start C4
+18:17:51 phase AR:8 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2488710, 'clk_pause': 0, 'view': [165, 740, 222, 786], 'simrect': [163, 738, 224, 788], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 33, 'p_target': 125}
+18:17:59 phase I:8 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2488722, 'clk_pause': 0, 'view': [175, 732, 231, 778], 'simrect': [173, 730, 233, 780], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 34, 'p_target': 102}
+killed pid 2332
+18:18:11 end C4
+18:18:11 start L5
+18:35:03 phase HB:30 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 4, 'day': 2489905, 'clk_pause': 0, 'view': [432, 741, 488, 788], 'simrect': [424, 733, 496, 796], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 149, 'p_target': 142}
+18:35:33 phase I:5 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 4, 'day': 2489992, 'clk_pause': 0, 'view': [432, 741, 488, 788], 'simrect': [424, 733, 496, 796], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 192, 'p_target': 192}
+killed pid 25812
+18:35:41 end L5
+18:35:41 start V4
+18:39:08 phase HG*:6 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476206, 'clk_pause': 0, 'view': [29, 136, 57, 160], 'simrect': [21, 128, 65, 168], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 57, 'p_target': 134}
+18:39:14 phase I:5 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476215, 'clk_pause': 0, 'view': [29, 137, 57, 161], 'simrect': [21, 129, 65, 169], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 85, 'p_target': 135}
+killed pid 19944
+18:39:23 end V4
+18:39:23 QUEUE R DONE
+18:39:44 inst_cf now sc3cartrips dba17e77
+18:39:50 start R1b
+cp: error writing '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_stock/R1b_sc3cartrips.log': No space left on device
+cp: error writing '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_stock/R1b_sc3simrun.log': No space left on device
+cp: error writing '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_stock/R1b_sc3resize.log': No space left on device
+  File "C:\Users\maria\Desktop\Proyectos\Simcity_wt\carscroll\re\tools\pt_run.py", line 68, in write
+    self.out.write(json.dumps(rec) + "\n")
+OSError: [Errno 28] No space left on device
+19:09:52 end R1b
+19:09:53 start R2b
+cp: error writing '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_full/R2b_sc3cartrips.log': No space left on device
+cp: error writing '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_full/R2b_sc3simrun.log': No space left on device
+cp: error writing '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_full/R2b_sc3resize.log': No space left on device
+cp: error writing '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_full/R2b_sc3perf.log': No space left on device
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python312\Lib\shutil.py", line 194, in _copyfileobj_readinto
+    fdst_write(mv)
+OSError: [Errno 28] No space left on device
+19:09:58 end R2b
+19:09:58 start L6
+cp: error writing '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_full/L6_sc3cartrips.log': No space left on device
+cp: cannot create regular file '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_full/L6_sc3simrun.log': No space left on device
+cp: cannot create regular file '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_full/L6_sc3resize.log': No space left on device
+cp: cannot create regular file '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_full/L6_sc3perf.log': No space left on device
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python312\Lib\shutil.py", line 194, in _copyfileobj_readinto
+    fdst_write(mv)
+OSError: [Errno 28] No space left on device
+19:10:03 end L6
+19:10:03 QUEUE R2 DONE
+19:10:18 start V5
+cp: error writing '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_stock/V5_sc3cartrips.log': No space left on device
+cp: error writing '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_stock/V5_sc3simrun.log': No space left on device
+cp: error writing '/c/Users/maria/Desktop/Proyectos/Simcity_stock_pausetrips/re/harness/inst_cf_stock/V5_sc3resize.log': No space left on device
+  File "C:\Users\maria\AppData\Local\Programs\Python\Python312\Lib\shutil.py", line 194, in _copyfileobj_readinto
+    fdst_write(mv)
+OSError: [Errno 28] No space left on device
+19:10:23 end V5
+19:10:23 QUEUE V5 DONE
+19:13:45 start R2c
+19:37:23 phase OS:20 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2489621, 'clk_pause': 2, 'view': [429, 433, 486, 479], 'simrect': [427, 431, 488, 481], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 117, 'p_target': 200}
+19:37:43 phase I:10 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2489644, 'clk_pause': 0, 'view': [576, 285, 632, 332], 'simrect': [574, 283, 634, 334], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 35, 'p_target': 189}
+killed pid 8604
+19:38:08 end R2c
+19:38:08 QUEUE R3 DONE
+19:38:57 inst_cf now sc3cartrips 3f9a2c82 sc3simrun 0b903bb6
+19:38:58 start R1c
+20:08:15 phase P:10 {'user_pause': 1, 'cam_hold': 0, 'speed_last': 3, 'day': 2478435, 'clk_pause': 1, 'view': [85, 122, 113, 145], 'simrect': [80, 117, 118, 150], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 144, 'p_target': 136}
+20:08:26 phase s3:15 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2478436, 'clk_pause': 0, 'view': [85, 122, 113, 145], 'simrect': [80, 117, 118, 150], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 136, 'p_target': 136}
+killed pid 19304
+20:08:44 end R1c
+20:08:44 start R2d
+20:37:32 phase I:10 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2490181, 'clk_pause': 0, 'view': [985, 0, 1023, 12], 'simrect': [983, 0, 1023, 14], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 2, 'p_target': 19}
+20:37:52 phase I:30 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2490206, 'clk_pause': 0, 'view': [461, 492, 518, 539], 'simrect': [459, 490, 520, 541], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 0, 'p_target': 24}
+killed pid 16792
+20:38:30 end R2d (logs copied by cs_qG)
+20:38:55 inst_cf now sc3cartrips 268d6676 sc3simrun 0b903bb6
+20:38:56 start R1d
+21:08:08 phase P:10 {'user_pause': 1, 'cam_hold': 0, 'speed_last': 3, 'day': 2478440, 'clk_pause': 1, 'view': [85, 122, 113, 145], 'simrect': [80, 117, 118, 150], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 121, 'p_target': 130}
+21:08:19 phase s3:15 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2478441, 'clk_pause': 0, 'view': [85, 122, 113, 145], 'simrect': [80, 117, 118, 150], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 127, 'p_target': 130}
+killed pid 20536
+21:08:38 end R1d
+21:08:38 start R2e
+21:37:30 phase I:10 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2490283, 'clk_pause': 0, 'view': [403, 459, 459, 505], 'simrect': [401, 457, 461, 507], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 20, 'p_target': 200}
+21:37:40 phase I:30 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2490295, 'clk_pause': 0, 'view': [403, 459, 459, 505], 'simrect': [401, 457, 461, 507], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 60, 'p_target': 200}
+killed pid 25284
+21:38:24 end R2e (logs copied by cs_qI)
+21:38:34 inst_cf now sc3cartrips d5e98b81 sc3simrun 0b903bb6
+21:38:35 start R1e
+22:07:44 phase P:10 {'user_pause': 1, 'cam_hold': 0, 'speed_last': 3, 'day': 2478447, 'clk_pause': 1, 'view': [91, 116, 119, 139], 'simrect': [86, 111, 124, 144], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 131, 'p_target': 150}
+22:07:55 phase s3:15 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2478448, 'clk_pause': 0, 'view': [91, 116, 119, 139], 'simrect': [86, 111, 124, 144], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 135, 'p_target': 150}
+killed pid 23872
+22:08:13 end R1e
+22:08:14 start R2f
+22:29:43 phase I:10 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2489603, 'clk_pause': 0, 'view': [412, 450, 468, 496], 'simrect': [410, 448, 470, 498], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 56, 'p_target': 200}
+22:29:53 phase I:30 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2489618, 'clk_pause': 0, 'view': [412, 450, 468, 496], 'simrect': [410, 448, 470, 498], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 80, 'p_target': 200}
+killed pid 8056
+22:30:37 end R2f (logs copied by cs_qJ)
+22:30:47 inst_cf now sc3cartrips 3f9a2c82 sc3simrun 0b903bb6
+22:30:47 start R3b
+22:43:46 phase I:10 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2477068, 'clk_pause': 0, 'view': [178, 27, 206, 50], 'simrect': [176, 25, 208, 52], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 0, 'p_target': 69}
+22:43:56 phase I:30 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2477083, 'clk_pause': 0, 'view': [133, 72, 160, 96], 'simrect': [131, 70, 162, 98], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 11, 'p_target': 88}
+killed pid 19312
+22:44:30 end R3b
+22:44:30 start L8
+22:57:26 phase HB:30 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 4, 'day': 2489450, 'clk_pause': 1, 'view': [339, 787, 396, 833], 'simrect': [334, 782, 401, 838], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 200, 'p_target': 200}
+22:57:57 phase I:5 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 4, 'day': 2489528, 'clk_pause': 1, 'view': [339, 787, 396, 833], 'simrect': [334, 782, 401, 838], 'zoom': 2, 'rot': 0, 'veh_on': 1, 'p_count': 200, 'p_target': 200}
+killed pid 24280
+22:58:05 end L8
+22:58:05 start V6
+23:02:41 phase HG*:6 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476310, 'clk_pause': 0, 'view': [85, 120, 113, 143], 'simrect': [80, 115, 118, 148], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 99, 'p_target': 111}
+23:02:47 phase I:5 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2476319, 'clk_pause': 0, 'view': [84, 121, 112, 144], 'simrect': [79, 116, 117, 149], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 98, 'p_target': 105}
+killed pid 1420
+23:02:55 end V6
+23:02:55 QUEUE J DONE
+23:03:11 start R3c
+23:16:44 phase I:10 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2477118, 'clk_pause': 0, 'view': [241, 0, 255, 6], 'simrect': [239, 0, 255, 8], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 0, 'p_target': 0}
+23:16:54 phase I:30 {'user_pause': 0, 'cam_hold': 0, 'speed_last': 3, 'day': 2477133, 'clk_pause': 0, 'view': [181, 45, 210, 68], 'simrect': [179, 43, 212, 70], 'zoom': 3, 'rot': 0, 'veh_on': 1, 'p_count': 31, 'p_target': 62}
+killed pid 19228
+23:17:27 end R3c
+23:17:27 QUEUE K DONE

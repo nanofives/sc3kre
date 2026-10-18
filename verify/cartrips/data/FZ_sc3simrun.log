@@ -1,0 +1,10 @@
+[    1.204 ms][tid 5030] ### sc3simrun loaded
+[   59.306 ms][tid 4380] ### READY: run_while_scrolling=1 patched=1 trace=0
+[   59.769 ms][tid 4380] ### FREEZECARS: freeze_cars_on_pause=1, armed=1
+[  312.147 ms][tid 4380] FREEZECARS> running: car ticks 0, frozen 0
+[ 2107.220 ms][tid 4380] FREEZECARS> paused: car ticks 0, frozen 0
+[66216.193 ms][tid 4380] FREEZECARS> running: car ticks 0, frozen 0
+[126746.335 ms][tid 4380] FREEZECARS> paused: car ticks 2204734, frozen 1430
+[187560.352 ms][tid 4380] FREEZECARS> running: car ticks 4982183, frozen 2771080
+[248104.358 ms][tid 4380] FREEZECARS> paused: car ticks 7465809, frozen 2773915
+[278733.423 ms][tid 4380] FREEZECARS> running: car ticks 8880339, frozen 4186555

@@ -124,7 +124,12 @@ Option A behind `SC3RESIZE_HUDSCALE`, off by default:
 Risk 1 did show (city in the minimap's transparent corner) and is solved with the city-layer mask, so option B
 is not needed for it. `SC3RESIZE_HUDSCALE_KEY=0` turns the mask off for an A/B.
 
-## Needs owner
+## Needs owner (all answered, owner 2026-10-14)
+
+**Decided.** (1) and (2) were answered by the hudopt and hudfix rounds: the scale is picked in Preferencias
+(Off / Fit / 125% / 150% / 200%) and Smooth is on by default (`[hud] smooth` missing = 1). Owner calls 2026-10-14:
+(3) dialogs stay native size, (4) the bar keeps the full width and the panel the full height, and a fresh install
+starts at Off. All three are what the code already does, so no code change. The questions as first asked:
 
 1. Size: HUD at the largest factor that fits (`min(cw/800, ch/600)`, 1.8 at a maximized 2048x1081), or a fixed
    percent (for example 150), or whole steps only (2x and up, crisp, but 1x until the window is 1600x1200)?
@@ -174,6 +179,13 @@ second time, so a guard now leaves game-sent nested mouse messages unmapped. Aft
 misfired, and the guard logged no nested message, so the cause is `[UNCERTAIN]` (the first build differed only
 in that guard and in not handling tooltips). Logged in the status file for the owner's hand test.
 
+**Update 2026-10-11 (task hudopt, `OPTIONS_DIALOG.md` section 5):** the second mapping was measured. A mouse move
+comes back through the QUEUE (not nested) about 15 ms later carrying the native point the mod produced, with the
+same message time, and was mapped again (`(1100,332) -> (1120,446) -> (1120,537)`, the enlarged "Preferencias"
+flyout icon hovered and clicked as "Guardar como"). Fixed with the REPOST guard (`SC3RESIZE_HUDSCALE_REPOST=0` to
+disable). Also found there and NOT fixed: an open flyout during a window resize with the HUD enlarged leaves a
+stale enlarged side panel.
+
 Not yet checked: drag on the minimap (pan) starting on it and leaving it, right-click on the HUD, the terrain
 editor / New City while enlarged, Load City while enlarged, 1024 maps with sc3bigcity, maximized at the owner's
 2048x1081 (factor 1.8), live resize drags with HUDSCALE on, the main menu (excluded by design, MENUBG owns it).
@@ -181,3 +193,124 @@ editor / New City while enlarged, Load City while enlarged, 1024 maps with sc3bi
 Also seen: blits onto the presented surface with client-coordinate dests right after a resize (the bar fields
 redrawn, `src` = the bar's field surfaces). They happen in the frame after a size change only and did not show
 in any grab. Where they go is `[UNCERTAIN]`.
+
+## Defects after the owner's hand test (task hudfix, 2026-10-11)
+
+Owner report on the hudopt build: (1) smoothing should be on by default, (2) the minimap looks pixelated with
+Suavizado on, (3) while the camera moves, city shows over the bars and around buttons. Code: the HUDFIX block in
+`sc3resize.c` (`rz_hs_record`, `rz_hs_coverage`, `rz_hs_resolve`, `rz_hs_epx`, the HUDFIX resample loop in
+`rz_hs_pre`). `SC3RESIZE_HUDFIX=0` restores the hudopt behaviour. A/B: `verify/hudfix/PRE.md`, `RESULTS.md`.
+
+**Frame structure (measured, HSSEQ Blt dump, 1200x900).** Per frame the game Blts the city layer (iso+0x74's surface)
+into a composite surface with dest `[0 0 cw ch]`, then each HUD window into the composite (bar tiles, bar fields,
+side panel opaque with `DDBLT_WAIT`; minimap, RCI, corner widget and ticker with `DDBLT_KEYSRCOVERRIDE`, flags
+`0x01010000`), then the composite into the primary (caps `0x1000E200`) at screen coordinates. The camera scroll is a
+Blt of the city layer onto itself (`[0 3 1200 900]`). The hudopt code treated every Blt with a client-sized dest as
+the present, so the enlarge pass ran twice per frame, once on the city -> composite Blt (a no-op with the mask).
+No present was skipped by the pass (HSDIAG census: 0 skips in every 1-s window).
+
+**(3) mechanism.** The see-through test was `snapshot pixel == city-layer pixel at the same spot`. An opaque HUD pixel
+that happens to equal the city pixel under it passed as see-through and showed the city at the dest instead. While
+the camera moves the city under the HUD changes every frame, so those pixels flicker: specks along the side-panel
+button outlines, in the RCI's white columns, around the minimap buttons (`verify/hudfix/armA/heat_hud.png`). Second
+source: bilinear taps at the outer edge of an enlarged rect read the snapshot just outside the native rect, which is
+city from a different spot of the map, and that moved too (a 1-px line along the bar top and the panel's left edge).
+Fix: every Blt onto the composite after the frame's city Blt is recorded (dest, source rect, flags, colour key); a
+pixel covered by an opaque Blt, or by a keyed Blt whose source pixel is outside the key range, is HUD regardless of
+colour. The equality test is kept only for pixels no recorded Blt covers (HUD drawn some other way, if any). Each tap
+that is not HUD takes the city at the DEST pixel, so edges are blended with the city they sit on. Result: changed HUD
+pixels during a scroll 3553 -> 0 (panel), 1385 -> 0 (bar + RCI), also 0 maximized.
+
+**(2) mechanism.** The minimap does go through the bilinear path (in-process dump: 88 interpolated colours in a 40x40
+block of the enlarged map). Its native picture is plain pixel data with hard stair-step edges and 1-px dots
+(`verify/hudfix/dump3/mini_before_x3.png`), while the rest of the HUD is pre-anti-aliased art. Bilinear cannot remove
+steps that are in the source, so at 125% to 150% the map reads as pixelated next to soft buttons. Fix: in smooth mode
+the minimap window's source (class `SIMUI+0xaa180`) is doubled with Scale2x (EPX), softened with one `[1 2 1]` tent in
+2x space using only HUD neighbours, and the bilinear tap reads that buffer. Chosen from five filters compared offline
+(`verify/hudfix/minimap_filters_x2.png`): Scale2x alone barely changes the shallow isometric diagonals, a plain blur
+loses the dots. The 2x buffer is rebuilt only when the minimap's snapshot or coverage changes.
+`SC3RESIZE_HUDSCALE_MINISMOOTH=0` turns it off.
+
+**(1)** `[hud] smooth` now defaults to 1 when the key is missing (no ini). An explicit `smooth=0` or
+`SC3RESIZE_HUDSCALE_FILTER=0` still wins. `g_hs_filter`'s static default stays 0, so `SC3RESIZE_HUDOPT=0` (no ini read)
+is unchanged.
+
+Cost (B3 build): 3.9 to 4.1 ms per frame at 1200x900, 5.0 ms maximized (2048x1081), one pass per frame, ~82 fps,
+same as hudopt (2.6 to 3.1 ms per pass, two passes per frame).
+
+Owner's frame (black/white junk in the RCI columns) is the same mechanism and is reproduced by the control arm; the
+fixed build also stays clean with the sim running at speed 4 (`verify/hudfix/RESULTS.md`, follow-up section).
+A black 4-px line that scrolls through the city during scrolls shows with HUD scale off too, so it is not this code.
+
+Not addressed here, seen in the logs: while the sim is paused the cluster re-assert runs SRCRECT + SIDEKIDS every
+~125 ms (the game resets the bar's source rect to 600 and the panel buttons to native, the mod pushes them back). The
+owner's `inst_hudopt` log has 963 such passes in 2 minutes after a maximize. No frame in the scroll runs showed a
+layout change from it. Why the game resets them is `[UNCERTAIN]`.
+
+## Cost of the enlarged HUD (task hudperf, 2026-10-12)
+
+Owner report: "hay bajones de FPS cuando aumento el escalado, es proporcional a la cantidad de escalado". Owner log at
+2560x1351: 11.23 ms per frame in the pre-present pass at 200%, 12.5 to 14.6 ms at Fit. Code: the HUDPERF and
+LAZYRESTORE blocks in `sc3resize.c`. A/B: `verify/hudperf/PRE.md`, `RESULTS.md`.
+
+**Where the time went (measured, Fit 2.252x, 2560x1351, round/1012 build).** Stage times per frame: snapshot 0.6 to 1.4 ms,
+coverage 0.4 to 1.2, resolve 0.3 to 0.85, minimap 2x 0.03 to 1.56, and the rest of the 12 to 22 ms in the per-pixel
+resample of every enlarged dest pixel (about 690,000 at Fit). The restore after the present was not in that number:
+1.7 to 4.3 ms more, with no lock wait (the copy itself), 4.1 to 5.0 M thread cycles per frame. Both scale with the dest
+area, so with s^2.
+
+**What changed (all bit-identical to the hudfix pass):**
+1. Cached resample. Each dest pixel is decided by the coverage of its source taps: all taps HUD (value from the snapshot
+   or the minimap 2x buffer only), no tap HUD (the city at the dest), or mixed (edges of see-through parts). The first
+   kind is kept per window in a dest-sized cache keyed by the window's class and rects. Each window keeps a copy of its
+   snapshot and coverage over its source rect + 1 px; per frame only the changed native rows are found, and only the
+   dest pixels whose taps can reach them (+-4 native px) are recomputed. Per dest row a run list: cached runs and city
+   runs are memcpy'd, mixed pixels recomputed with the same arithmetic (`rz_hp_px`). Typical rebuild with the sim
+   running: 10,000 to 20,000 px per frame (the scrolling news ticker, date, funds, RCI); while scrolling 40,000 to
+   78,000 (the minimap's view frame); mixed pixels 3,700 per frame.
+2. Lazy restore. Every frame the game first Blts its city layer over the whole composite (one client-sized Blt onto it
+   per present: 313 of 313, 543 of 543, 771 of 771 frames), which overwrites everything the restore puts back. The
+   restore is now owed and paid only if something touches that surface first: any other Blt or BltFast onto or from
+   it, a Lock or GetDC of it, the next present. Hooks for BltFast/GetDC/Lock go on the shared ddraw vtable on top of
+   sc3perf's (sc3perf's FPS overlay calls its saved Lock directly and must not pay it every frame). Measured: all owed
+   restores cancelled in every window except one Fit hover window, 131 paid before a Blt onto the frame with dest
+   `[0 0 800 599]` (what the game draws there is `[UNCERTAIN]`).
+3. Coverage: an opaque recorded Blt sets 2 on its intersection with each HUD rect (inside a HUD rect the old "nonzero"
+   test is always true), keyed Blts read 1:1 without a divide per pixel, resolve skips to cov 1 with memchr. Same values
+   inside every HUD rect + 1 px, the only part anything reads (CHECK compares it every frame).
+4. Snapshot and restore copy a native rect + 1 px only when it is not inside its own enlarged rect.
+
+**Result (thread cycles per frame, pass + restore, the CPU was shared so wall clock is secondary):** round/1012 22.6 M at
+125% rising to 37.1 M at Fit (static), HUDPERF 3.9 to 4.5 M at every scale (static), 8.4 to 11.8 M while scrolling.
+29,209 frames compared in CHECK with 0 differing pixels.
+
+**Opt-outs and diagnostics:** `SC3RESIZE_HUDPERF=0` (the hudfix pass, restore right after the present),
+`SC3RESIZE_HUDPERF_LAZY=0` (cached pass, restore right after the present), `SC3RESIZE_HUDPERF_CHECK=1` (both passes every
+frame, differing pixels counted, the hudfix result shows). Every 10 s, with HUD scale on: `HUDPERF> thread cycles per
+frame`, the resample/restore split, rebuilt and mixed px, and the lazy-restore counters next to the existing
+`ms per frame in the pre-present pass` line.
+
+**Not explained:** one arm-B launch of ten at Fit showed a 7-row black line in the city about 53 px above the enlarged
+bar for the whole run; 0 of 7 arm-A launches, 0 of 9 further arm-B launches (`verify/hudperf/RESULTS.md`).
+
+**Also measured, not changed:** sc3perf's fps counts every client-sized Blt as a frame, and there are two per frame
+(city layer -> composite, composite -> screen), so its overlay reads about twice the presents (93 shown vs 45/s).
+
+## Clicks while a dialog is up (task hudclick, 2026-10-15)
+
+Question from menuscale: its first build mapped only depth-0 mouse messages, and "Preferencias" at the main menu runs its
+modal loop inside the button handler, so its clicks came at depth 1 and missed. HUDSCALE has the same depth-0 rule.
+Measured in a city (N / Fit / 200%, `verify/hudclick/RESULTS.md`): no miss.
+- Dialogs opened from the HUD (Preferencias, Presupuesto, Ordenanzas, Mapa de vecinos, Reunirse, Guardar ciudad, the
+  Load save question, Salir) get every message at depth 0: the HUD click returns before the dialog opens. Only the query
+  dialog (opened by a city click with the query tool) nests at depth 1.
+- Dialogs are drawn native, so their clicks need no mapping at any depth. All dialog-control clicks hit in all arms.
+- The modal loop is GZWIND `FUN_10020971` (window-manager vtable `0x1002db80` slot `+0xa0`), closed by
+  `vt+0x44(0xd, win, id)` = `FUN_10020f08` `[CONFIRMED @ GZWIND 0x10020971, 0x10020f08]`; while it runs, the mouse
+  dispatcher `FUN_10020818` drops clicks outside the dialog `[CONFIRMED @ GZWIND 0x10020818]`. Reunirse is not modal for
+  the HUD in the stock game: the side panel works with it open, and with HUDSCALE too.
+- `g_hs_capture` is set by a mapped press and cleared only by a release that reaches `rz_hs_mouse` (or the HUDOPT OK). A
+  HUD control that opened a nested modal on the press would leave it set after the dialog. None does: every opener's
+  release was logged at depth 0 and mapped.
+Diag added: `SC3RESIZE_FRAMEDUMP=<prefix>` writes the presented frame to `<prefix><tag>.bmp` when `<prefix>req` exists
+(tag = its first line). Needed because background desktop grabs of this game are black/white.
