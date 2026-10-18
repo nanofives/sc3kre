@@ -1329,6 +1329,7 @@ static int netramp_install(BYTE *m) {
 #include "sc3netmod_bvx.c"          /* task bvx: boulevard x avenue / boulevard junctions in BV's runs (SC3NETMOD_BVX=0) */
 #include "sc3netmod_dbv.c"          /* task diagbv: DBV, diagonal boulevards on RBT's hooks (SC3NETMOD_DBV=0) */
 #include "sc3netmod_hwy.c"          /* task hwcore: HWY, highway program base on RBT's hooks (SC3NETMOD_HWY=0) */
+#include "sc3netmod_hwt.c"          /* task hwt: HWT, the connecting highway T on HWY (SC3NETMOD_HWT=0) */
 #include "sc3netmod_lanes.c"        /* task lanedensity: road density honours turn matrices (SC3NETMOD_LANEDENSITY) */
 
 /* ============================================================ arming */
