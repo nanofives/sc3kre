@@ -9,6 +9,12 @@ frame, all four views, compared pixel by pixel with the stock frame (tolerance 2
 |---|---|---|---|
 | 73.0, 73.2, 15051.0, 15051.2 (straight highway, both carriageways, both axes) | 96.4..97.0% | 96.2..96.5% | 97.2..97.5% |
 | 15127.0 (On-ramp corner: one-lane slab arc, geometry fitted) | 52..55% | 0.7% | 84..87% |
+| diagonal bands (highway_diag, update 2026-10-18): 11224.0 / 15106.0 middle cells | 96.1..96.5% (zoom 4) | 95.4..95.8% | |
+| 11223.0 / 11223.2 / 15052.0 / 15052.2 side cells | 90.1..90.3% (zoom 4) | 89.7..90.0% | |
+
+Update 2026-10-18 (sibling requests): 45-degree decks and outer walls read the stock diagonal bands (the head-on wall
+of 11223 view 1 now matches stock, buttresses included); the hit refinement stays inside the cell's column (the straight
+pieces went from 96.7% to 97.0%); `gaps=` parapet openings; RAMP_W 0.44.
 
 The straight pieces miss only a one-pixel rim along the silhouette. 15127's shape is reproduced; its slab fascia is a
 smooth blue-grey that no 73 / 15051 face carries, and the painter draws slab edges with the stock plain-wall concrete,

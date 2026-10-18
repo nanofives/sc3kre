@@ -8,11 +8,12 @@ cells, e = height in zoom-3 pixels, the unit netart.project uses; the stock high
 pixel of each zoom x rotation frame of a cell is a ray; it is marched down through the cell's column (the volume over
 the cell's diamond) and the first solid point it meets is coloured by sampling the STOCK highway frames at the same
 point and view:
-  * deck top   -> stock 73 (deck running along z) or 15051 (along x), whichever runs nearest the deck's own heading,
-                  at the same across-offset from the outer parapet and the same world along-coordinate; the lane
-                  dashes are re-drawn from the world arc length (lanelines.py pattern, measured on 73);
-  * walls      -> the stock outer wall (buttresses) or inner wall (plain) of the stock piece whose wall faces that
-                  way; a wall facing between two axes blends the two visible stock faces by angle;
+  * deck top   -> stock 73 (deck running along z) or 15051 (along x), or the stock diagonal band (11223/11224,
+                  15052/15106) for a 45-degree heading, whichever runs nearest the deck's own heading (blended between
+                  two), at the same across share from the outer parapet and the same world along-coordinate; on axis
+                  decks the lane dashes are re-drawn from the world arc length (lanelines.py pattern, measured on 73);
+  * walls      -> the stock outer wall (buttresses) of the axis piece or diagonal band facing that way (blended
+                  between the two nearest), or the plain inner wall blended between the two visible axis faces;
   * cell-edge cuts, deck ends, abutments -> the stock end face (across the road);
   * slab decks (bridges, loop ramps) have a fascia (the top band of the stock wall) and open space under them,
     optional pillars (boxes with the stock inner-wall texture); a surface under another deck is shaded.
@@ -32,11 +33,14 @@ API (all a sibling needs):
     Deck(path, width=1.0, profile="hw" | "ramp", outer="right" | "left",
          height=H | ramp(h0, h1, s0, s1) | callable(s ndarray) -> ndarray,
          support="wall" | "slab", thick=SLAB, pillars=[(x, z), ...], pillar_w=0.14, clip=callable(wx, wz) -> bool
-         ndarray, ends=(True, True) draw end faces at s = 0 / length, name="")
+         ndarray, ends=(True, True) draw end faces at s = 0 / length, name="", slab=[(s0, s1)] bridge spans,
+         gaps=[(s0, s1[, "outer" | "inner" | "both"])] parapet openings where a ramp joins: the top runs to the edge)
+    highway_diag(path, ...) -> [Deck, Deck]: highway() on a 45-degree stock band median (x - z or x + z an
+         integer): W_DIAG-wide carriageways read from the stock band pieces, meeting stock 11223/11224 or 15052/15106
     highway(path, height=H, **kw) -> [Deck, Deck]: the two carriageways (1 cell each) either side of `path`, outer
          parapets outward (the stock two-cell highway when `path` runs along a cell edge); the right-hand one runs
          along `path`, the left-hand one against it (traffic keeps right; hwlanes reads the decks' directions)
-    ramp_deck(path, **kw) -> Deck: one-lane ramp (RAMP_W wide)
+    ramp_deck(path, **kw) -> Deck: one-lane ramp (RAMP_W = 0.44 wide unless width= is given)
     Scene(decks)                      later decks win where two tops coincide (a ramp merging onto a deck)
     paint_cell(scene, (X, Z), out_dir, zooms=range(5), canvas=None) -> anchors dict (also written as anchors.json)
     paint_cells(scene, cells, root) -> {(X, Z): dir}   root/<X>_<Z>/z{z}_r{r}.png + anchors.json
@@ -71,10 +75,19 @@ H_LOW = 16.0              # the stock X's lower highway (15107 arms: frame top 3
 H_HIGH = 47.5             # the stock X's upper highway (15150 arms: 95 zoom-4 px)
 SLAB = 5.0                # bridge slab thickness (zoom-3 px)
 DASH_ON = 0.5             # painted share of the 0.25-cell dash period on the stock deck (73 / 15051 zoom 4: 8 of 16)
-RAMP_W = 0.62             # one-lane ramp width, cells (outer parapet + edge line + one lane + inner curb)
+RAMP_W = 0.44             # one-lane ramp width, cells (program decision 2026-10-18: hwx's geometry, W = 0.22)
+W_DIAG = 0.63             # stock diagonal carriageway width across (11223/11224, 15052/15106 bands; zoom 4, at H)
+GAP_OUT, GAP_IN = 0.28, 0.93   # th past which a parapet gap turns the stock edge (parapet, edge line / curb) to lane
 CLEAR = (0, 0, 0, 0)
 
 AXES = {(1, 0): (73, 0), (-1, 0): (73, 2), (0, 1): (15051, 0), (0, -1): (15051, 2)}   # outer normal -> stock piece
+# stock diagonal bands (measured, `hwpaint.py proof`): family xmz = the line x - z = m (m integer), cells by role
+# X - Z - m = -1 / 0 / +1; family xpz = the line x + z = m, role X + Z + 1 - m. Outer normal (unscaled) -> (family, side)
+DIAG_PIECES = {"xmz": {-1: (11223, 2), 0: (11224, 0), 1: (11223, 0)},
+               "xpz": {-1: (15052, 2), 0: (15106, 0), 1: (15052, 0)}}
+DIAGS = {(1, -1): ("xmz", 1), (-1, 1): ("xmz", -1), (1, 1): ("xpz", 1), (-1, -1): ("xpz", -1)}
+SQ2 = math.sqrt(2.0)
+C45 = math.cos(math.pi / 4.0)
 
 
 # ------------------------------------------------------------------------------------------------ stock sampling
@@ -304,12 +317,16 @@ def deck_profile(z, ax=(1, 0)):
 
 class Deck:
     def __init__(self, path, width=1.0, profile="hw", outer="right", height=H, support="wall", thick=SLAB,
-                 pillars=(), pillar_w=0.14, clip=None, ends=(True, True), name="", fascia="inner", slab=()):
+                 pillars=(), pillar_w=0.14, clip=None, ends=(True, True), name="", fascia="inner", slab=(),
+                 gaps=()):
         self.path, self.w, self.profile, self.outer = path, float(width), profile, outer
         self.fascia = fascia                             # slab edge material: 'inner' (plain concrete), 'outer', 'end'
         self.h = _hfun(height)
         self.support, self.thick = support, float(thick)
         self.slab = list(slab)                           # (s0, s1) spans that are slab on a wall deck: bridges
+        # (s0, s1[, "outer" | "inner" | "both"]) spans where the deck's parapet / curb is open: the top runs to its
+        # edge as lane (a ramp joins there; the ramp deck drawn after it goes on from that edge)
+        self.gaps = [(g[0], g[1], g[2] if len(g) > 2 else "outer") for g in gaps]
         self.pillars, self.pw = list(pillars), pillar_w
         self.clip, self.ends, self.name = clip, ends, name
         self.phase = None
@@ -336,6 +353,14 @@ class Deck:
                 on = on | ((s >= s0) & (s <= s1))
             b = np.where(on, top - self.thick, b)
         return b
+
+    def gap_at(self, s):
+        """-> set of sides ("outer", "inner") open at arc length s"""
+        out = set()
+        for s0, s1, side in self.gaps:
+            if s0 <= s <= s1:
+                out |= {"outer", "inner"} if side == "both" else {side}
+        return out
 
     def is_slab(self, s):
         return self.support != "wall" or any(s0 <= s <= s1 for s0, s1 in self.slab)
@@ -371,9 +396,27 @@ def highway(path, height=H, **kw):
     kw_l = dict(kw)
     if kw.get("slab"):
         kw_l["slab"] = [(L - b, L - a) for a, b in kw["slab"]]
+    if kw.get("gaps"):
+        kw_l["gaps"] = [(L - g[1], L - g[0]) + tuple(g[2:]) for g in kw["gaps"]]
     return [Deck(path.offset(-0.5), 1.0, "hw", "right", height, name="hw_right", **kw),
             Deck(path.offset(0.5).reversed(), 1.0, "hw", "right", lambda s: hf(L - np.asarray(s, dtype=float)),
                  name="hw_left", **kw_l)]
+
+
+def highway_diag(path, height=H, **kw):
+    """highway() for a 45-degree `path` on a stock band median (x - z or x + z an integer): two carriageways W_DIAG
+    wide, as stock 11223 / 11224 (x - z) or 15052 / 15106 (x + z), so a painted cell meets a stock band cell"""
+    L = path.length
+    hf = _hfun(height)
+    kw_l = dict(kw)
+    if kw.get("slab"):
+        kw_l["slab"] = [(L - b, L - a) for a, b in kw["slab"]]
+    if kw.get("gaps"):
+        kw_l["gaps"] = [(L - g[1], L - g[0]) + tuple(g[2:]) for g in kw["gaps"]]
+    h = W_DIAG / 2.0
+    return [Deck(path.offset(-h), W_DIAG, "hw", "right", height, name="hwd_right", **kw),
+            Deck(path.offset(h).reversed(), W_DIAG, "hw", "right", lambda s: hf(L - np.asarray(s, dtype=float)),
+                 name="hwd_left", **kw_l)]
 
 
 def ramp_deck(path, outer="right", **kw):
@@ -437,11 +480,65 @@ def wall_sample(kind, N, z, r, wx, wz, es, outer=None):
     return STOCK(pid, st, z, r, lx, lz, es)
 
 
+def _band_d_a(fam, wx, wz):
+    """(across, along) coordinates of a diagonal band family: across = x - z (xmz) or x + z (xpz)"""
+    return (wx - wz, wx + wz) if fam == "xmz" else (wx + wz, wx - wz)
+
+
+def _band_pt(fam, d, a):
+    return ((a + d) / 2.0, (a - d) / 2.0) if fam == "xmz" else ((d + a) / 2.0, (d - a) / 2.0)
+
+
+def band_colour(fam, m, wx, wz, z, r, e=None):
+    """the stock diagonal band whose median is m, at world point (wx, wz), height e (default the deck H)"""
+    X, Z = math.floor(wx), math.floor(wz)
+    role = (X - Z - m) if fam == "xmz" else (X + Z + 1 - m)
+    pc = DIAG_PIECES[fam].get(role)
+    if pc is None:
+        return CLEAR
+    return STOCK(pc[0], pc[1], z, r, (wx - X) * 256.0, (wz - Z) * 256.0, H if e is None else e)
+
+
+def diag_wall_sample(nd, z, r, wx, wz, es):
+    """the stock band's outer wall facing the diagonal nd (unscaled (+-1, +-1)), at the world point's along-band
+    coordinate, stock height es"""
+    fam, sg = DIAGS[nd]
+    d, a = _band_d_a(fam, wx, wz)
+    off = sg * W_DIAG * SQ2 * 0.996
+    m = round(d - off)
+    qx, qz = _band_pt(fam, m + off, a)
+    return band_colour(fam, m, qx, qz, z, r, es)
+
+
+def _dir_weights(n, diag=True, visible=None):
+    """-> [(w, key)] of the stock directions nearest the unit normal n: the four axes (AXES keys) and, with diag, the
+    four diagonals (DIAGS keys); w falls to 0 at 45 degrees, so an axis or diagonal heading reads its own piece alone"""
+    out = []
+    keys = list(AXES) + (list(DIAGS) if diag else [])
+    for k in keys:
+        L = math.hypot(k[0], k[1])
+        if visible is not None and (k[0] * visible[0] + k[1] * visible[1]) <= 0:
+            continue
+        c = (k[0] * n[0] + k[1] * n[1]) / L
+        if c > C45 + 1e-9:
+            out.append((((c - C45) / (1.0 - C45)) ** 2, k))
+    return sorted(out, reverse=True)[:2]
+
+
 def face_colour(kind, n, z, r, wx, wz, es, outer=None):
     """a vertical face with outward normal n (unit, any heading): the visible axis faces blended by angle (the stock
     faces carry the scene's lighting: in view 0 a face toward +x reads about 150 grey-beige, one toward +z about 80)"""
     V = VIEW[r]
     acc, wsum = [0.0, 0.0, 0.0], 0.0
+    if kind == "outer":                                  # an outer wall: the stock axis or diagonal face nearest it
+        for w, k in _dir_weights(n, True, V):
+            c = diag_wall_sample(k, z, r, wx, wz, es) if k in DIAGS else wall_sample(kind, k, z, r, wx, wz, es, outer)
+            if c[3]:
+                acc = [acc[i] + w * c[i] for i in range(3)]
+                wsum += w
+        if wsum > 0:
+            return (int(acc[0] / wsum + 0.5), int(acc[1] / wsum + 0.5), int(acc[2] / wsum + 0.5), 255)
+        acc, wsum = [0.0, 0.0, 0.0], 0.0
     for ax in AXES:
         if ax[0] * V[0] + ax[1] * V[1] <= 0:
             continue                                     # that stock face is turned away in this view
@@ -463,11 +560,16 @@ def dash_on(along):
     return abs((along / LL.DASH_PERIOD) % 1.0 - 0.5) < DASH_ON / 2.0
 
 
-def _profile_th(deck, to, prof):
-    """distance from the outer parapet (cells) -> share th of the stock carriageway's width it samples"""
+def _profile_th(deck, to, prof, s=None):
+    """distance from the outer parapet (cells) -> share th of the stock carriageway's width it samples. The ramp's
+    split (outer parapet + edge line | lane | inner curb) is the zoom-4 profile of 73 (the same world widths at every
+    zoom), squeezed when the deck is too narrow for it; a parapet gap at s turns the edge into lane"""
     if deck.profile == "ramp":
-        lane = prof["lane"]
+        lane = deck_profile(4, (1, 0))["lane"]
         a, b = lane[0], 1.0 - lane[1]                    # outer part and inner part widths, from the stock profile
+        if a + b > 0.8 * deck.w:
+            k = 0.8 * deck.w / (a + b)
+            a, b = a * k, b * k
         if to <= a:
             th = to
         elif to >= deck.w - b:
@@ -477,6 +579,12 @@ def _profile_th(deck, to, prof):
             th = lane[0] + f * (lane[1] - lane[0])
     else:
         th = to / deck.w
+    if s is not None and deck.gaps:
+        open_ = deck.gap_at(s)
+        if "outer" in open_ and th < GAP_OUT:
+            th = GAP_OUT + (GAP_OUT - th) * 0.6
+        if "inner" in open_ and th > GAP_IN:
+            th = GAP_IN - (th - GAP_IN) * 0.6
     return min(0.999, max(0.001, th))
 
 
@@ -517,12 +625,30 @@ def cross_profile(ax, z, r):
     return _XPROF[k]
 
 
-def _axis_colour(ax, deck, to, z, r, wx, wz, smooth=False):
+def _diag_colour(nd, deck, to, z, r, wx, wz, s=None):
+    """the stock diagonal band (DIAGS[nd]) at the point: the band carriageway on the deck's outer side, at the same
+    share th across and the same along-band coordinate, so a deck on a stock band position reads the band unchanged
+    (its dashes included)"""
+    fam, sg = DIAGS[nd]
+    th = _profile_th(deck, to, None, s)
+    d, a = _band_d_a(fam, wx, wz)
+    for k in range(6):
+        t2 = min(0.995, max(0.005, th + (0.0 if k == 0 else (0.012 * k if th < 0.5 else -0.012 * k))))
+        off = sg * (1.0 - t2) * W_DIAG * SQ2
+        m = round(d - off)
+        qx, qz = _band_pt(fam, m + off, a)
+        c = band_colour(fam, m, qx, qz, z, r)
+        if c[3]:
+            return c
+    return CLEAR
+
+
+def _axis_colour(ax, deck, to, z, r, wx, wz, smooth=False, s=None):
     """the stock deck AXES[ax] at the point: -> (colour, th, on_dash_band); a pixel on the stock dash band comes back
     as the lane asphalt beside it (reflected about the band edge), the caller draws the dashes"""
     pid, st = AXES[ax]
     prof = deck_profile(z, ax)
-    th = _profile_th(deck, to, prof)
+    th = _profile_th(deck, to, prof, s)
     along = _frac256(wz) if ax[0] != 0 else _frac256(wx)
 
     def sample(th2):
@@ -558,12 +684,11 @@ def deck_top_colour(deck, z, r, wx, wz, s, t):
     deck, so 73 / 15051 come back unchanged); dashes from the world arc length on the hw profile"""
     p, d, n = deck.frame_at(s)
     to = deck.t_out(t)
-    ws = sorted(((max(0.0, a[0] * n[0] + a[1] * n[1]) ** 2, a) for a in AXES), reverse=True)[:2]
-    ws = [(w, a) for w, a in ws if w > 1e-4]
+    ws = _dir_weights(n)                                 # the axis / diagonal stock decks nearest the heading
     ax0 = ws[0][1]
-    smooth = ws[0][0] < 0.9997                           # off an axis by more than about 1 degree: a curve or slant
-    if deck.profile == "hw" and z >= LL.MIN_ZOOM:
-        c0, th0, band0 = _axis_colour(ax0, deck, to, z, r, wx, wz)
+    smooth = ws[0][0] < 0.9997                           # off its stock direction by over about 1 degree: a curve
+    if deck.profile == "hw" and z >= LL.MIN_ZOOM and ax0 in AXES:
+        c0, th0, band0 = _axis_colour(ax0, deck, to, z, r, wx, wz, s=s)
         if band0 and dash_on(deck.along(s)):
             pid, st = AXES[ax0]
             acr = _across(ax0, th0)
@@ -572,7 +697,10 @@ def deck_top_colour(deck, z, r, wx, wz, s, t):
             return own if own[3] and min(own[:3]) >= 120 else LL.white(z, wx, wz)
     acc, wsum = [0.0, 0.0, 0.0], 0.0
     for w, a in ws:
-        c, _, _ = _axis_colour(a, deck, to, z, r, wx, wz, smooth)
+        if a in DIAGS:
+            c = _diag_colour(a, deck, to, z, r, wx, wz, s)
+        else:
+            c, _, _ = _axis_colour(a, deck, to, z, r, wx, wz, smooth, s)
         if not c[3]:
             continue
         acc = [acc[i] + w * c[i] for i in range(3)]
@@ -704,8 +832,9 @@ def render_cell(scene, cell, z, r, canvas=None, mask_only=False):
     b = a + de                                           # free: above the hit, or outside the column
     for _ in range(7):
         m = (a + b) / 2.0
-        sid = scene.solid(x0[ys, xs] + m * dx[ys, xs], z0[ys, xs] + m * dz[ys, xs], m)
-        sol = sid >= 0
+        mx, mz = x0[ys, xs] + m * dx[ys, xs], z0[ys, xs] + m * dz[ys, xs]
+        sid = scene.solid(mx, mz, m)
+        sol = (sid >= 0) & (mx >= X) & (mx <= X + 1) & (mz >= Z) & (mz <= Z + 1)    # inside this cell's column
         a = np.where(sol, m, a)
         b = np.where(sol, b, m)
     out = np.zeros((h, w, 4), dtype=np.uint8)
@@ -768,7 +897,20 @@ def colour_hit(scene, rec, z, r, X, Z):
             return deck_top_colour(d, z, r, wx, wz, s, t)
         if not scene.cut_faces:
             return None
-        oax = _nearest_axis(d.frame_at(s)[2])
+        nd = d.frame_at(s)[2]
+        wd = _dir_weights(nd)
+        if wd and wd[0][1] in DIAGS:                     # a diagonal deck: the stock band's own cell-edge face
+            fam, sg = DIAGS[wd[0][1]]
+            th = _profile_th(d, d.t_out(t), None)
+            dd, aa = _band_d_a(fam, wx, wz)
+            off = sg * (1.0 - th) * W_DIAG * SQ2
+            m = round(dd - off)
+            qx, qz = _band_pt(fam, m + off, aa)
+            qx, qz = qx - 0.002 * n[0], qz - 0.002 * n[1]     # into the cell the face belongs to
+            c = band_colour(fam, m, qx, qz, z, r, _stretch_e(e, top))
+            if c[3]:
+                return c
+        oax = _nearest_axis(nd)
         c = wall_sample("end", n, z, r, wx, wz, _stretch_e(e, top), oax)
         if not c[3]:
             c = face_colour("end", n, z, r, wx, wz, _stretch_e(e, top), oax)
@@ -902,6 +1044,15 @@ def proof_scenes():
     # the result): centre (1.375, 1.375), radius 1.136, width 0.64, deck at e 31.9, slab 10.25 thick, parapet on the
     # concave side.
     arc = Path.arc((1.375, 1.375), 1.136, -195.0, 120.0)
+    # stock diagonal bands, repainted with highway_diag on their medians (x - z = 0; x + z = 1)
+    bx = highway_diag(Path.line((-3.0, -3.0), (4.0, 4.0)))
+    bp = highway_diag(Path.line((4.5, -3.5), (-3.5, 4.5)))
+    out["11224.0"] = (Scene(bx), (0, 0), 11224, 0)
+    out["11223.0"] = (Scene(bx), (1, 0), 11223, 0)
+    out["11223.2"] = (Scene(bx), (0, 1), 11223, 2)
+    out["15106.0"] = (Scene(bp), (0, 0), 15106, 0)
+    out["15052.0"] = (Scene(bp), (1, 0), 15052, 0)
+    out["15052.2"] = (Scene(bp), (-1, 0), 15052, 2)
     out["15127.0"] = (Scene([ramp_deck(arc, outer="left", width=0.64, height=31.875, support="slab", thick=10.25)],
                             cut_faces=False), (0, 0), 15127, 0)
     return out
@@ -923,7 +1074,7 @@ def cmd_proof(a):
     os.makedirs(a.out, exist_ok=True)
     rep = {}
     pairs = {z: [] for z in (3, 4)}
-    curve = []
+    curve, diag = [], []
     for name, (sc, cell, pid, st) in proof_scenes().items():
         for z in range(NA.ZOOMS):
             for r in range(4):
@@ -931,16 +1082,19 @@ def cmd_proof(a):
                 ref, _ = NA.stock_frames(pid)[(z, (st + r) & 3)]
                 m = compare(im, ref)
                 rep["%s z%d r%d" % (name, z, r)] = m
-                if z in pairs and name != "15127.0":
+                if z in pairs and name[:2] in ("73", "15") and name[:5] not in ("15127", "15106", "15052"):
                     pairs[z].append((ref, im))
                 if z == 4 and name == "15127.0":
                     curve.append((ref, im))
+                if z == 4 and name[:5] in ("11224", "11223", "15106", "15052"):
+                    diag.append((ref, im))
         print(name, "near %.3f exact %.3f (z4 mean)" % (
             np.mean([rep["%s z4 r%d" % (name, r)]["near"] for r in range(4)]),
             np.mean([rep["%s z4 r%d" % (name, r)]["exact"] for r in range(4)])))
     for z in pairs:
         _side_by_side(pairs[z], 2 if z == 3 else 1).save(os.path.join(a.out, "proof_straight_z%d.png" % z))
     _side_by_side(curve, 2).save(os.path.join(a.out, "proof_curve15127_z4.png"))
+    _side_by_side(diag, 1).save(os.path.join(a.out, "proof_diagonal_z4.png"))
     with open(os.path.join(a.out, "proof.json"), "w", encoding="utf-8") as f:
         json.dump(rep, f, indent=1)
 
