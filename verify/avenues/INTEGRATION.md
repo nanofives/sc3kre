@@ -1,7 +1,7 @@
 # Avenue program: integration on round/avenues (2026-10-18)
 
 Branch `round/avenues` (worktree `Simcity_wt_avenues`): child/diagave + child/avx + child/boulevard + child/bigrbt
-+ child/diagx + child/bvx.
++ child/diagx + child/bvx + child/diagbv: the full first and second waves.
 Streams and protocol: `re/sessions/CHILD_PROTOCOL_2026-10-17.md`; each stream's evidence in `verify/<stream>/RESULTS.md`.
 
 ## Merge notes
@@ -52,3 +52,24 @@ all added hook lines present (the BV rule lines bvx rewrote are its newer versio
 
 Look difference to settle with the owner: avx boxes use a mirror fill of 43 (faint crease at zoom 4), bvx boxes a
 per-pixel palette of 43's asphalt (no crease, grainier than the road).
+
+## After merging child/diagbv (21f51a0)
+
+29 conflict blocks over 8 files, three of them real logic clashes:
+- DAV (C and twin): diagx's crossing exclusions and diagbv's claimed-cell exclusions combined in the side,
+  isolation and write checks.
+- BV (C and twin): both branches used end type 4 (bvx: T into an avenue / boulevard; diagbv: bend into a diagonal
+  boulevard). The DBV bend is 5 now; the T keeps 4 and its median nose.
+- diagave.py: diagx split the band search into two axis loops; diagbv's per-axis claimed set was only defined in the
+  first, so axis 0 used axis 1's set and 4 narrowing cases failed `diagbv.py check`. Defined in both: 0 off.
+
+| Check | Result |
+|---|---|
+| `diagbv.py check` / `diagave.py xcheck` | 0 off (70 footprints) / 0 failures |
+| Seven packages validate and install | yes |
+| DLL start | avx on, rbt9 on, dbv on, diagonal avenues on |
+| Three equal diagonal drags | `dbv: edit: diagonal boulevard axis 0, 11 row(s) ..., 47 cell(s), 47 written` (`integration_4_diagbv.png`) |
+| Exceptions | 0 |
+
+Not seen in game on the merged build: the narrowing of a diagonal boulevard into a diagonal avenue (offline only on the
+stream's branch too; a test drag landed off-target after a camera error and the rule rightly left the shape alone).
