@@ -317,7 +317,10 @@ def sheet(shots, out):
 PACK = os.path.join(HERE, "examples", "highway_dd_cloverleaf")
 MATS = {}
 HWYS, SAVE_AT = False, {}
-LAND_SAVE = 15127                      # what a ramp piece on land saves as (hwcore: stock ramp curve, no "empty" save)
+# what a ramp piece on land saves as, per piece state (no "empty" save exists): the stock arcs only occur at states 0
+# and 2 in the shipped cities (hwcore), and 15128.0 is 15127 turned once (turn x+ -> z+ becomes z+ -> x-), so a piece at
+# state s saves as the arc turned s times
+LAND_SAVE = {0: (15127, 0), 1: (15128, 0), 2: (15127, 2), 3: (15128, 2)}
 SHAPE0, SHAPE1 = 23000, 23299          # this stream's lane curve shapes (protocol section 5)
 
 
@@ -430,8 +433,8 @@ def cmd_build(a):
         if HWYS:
             sv = []
             for st in range(4):
-                if land:                            # a ramp on land saves as the stock one-lane ramp arc (Protected,
-                    sv += [LAND_SAVE, st]           # partial-cell slab): no mod -> ramp fragments, not 15099 blocks
+                if land:                            # a ramp on land saves as a stock one-lane ramp arc (Protected,
+                    sv += list(LAND_SAVE[st])       # partial-cell slab): no mod -> ramp fragments, not 15099 blocks
                 else:                               # on the highway: the stock piece the cell held, at its state
                     c = SAVE_AT.get((pid, st))
                     sv += [base, c if c is not None else st]

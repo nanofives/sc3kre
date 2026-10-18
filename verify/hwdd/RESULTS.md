@@ -47,18 +47,21 @@ Plan and stock aftermath: `RESULTS_plan.md`. Mockup: `owner_shots\hwdd_mockup.pn
 | ground under the ramps | slate back-buffer patches with 73's frame table; grass in every shot after `"from": 15127` | g2_z3_r0 vs fin_c_z3_r0 |
 | arm cut 12 cells out (stock retile reaches the interchange corner) | first DLL: whole interchange reverted (tests too strict: the tiler re-places band cells next to the 15099 ramps); fixed DLL: kept, 7 band cells written back | sc3netmod_run3.log |
 | out-of-box drop (hwcore d8617ac) | 8 ramp cells outside the pass box `dropped by a block (outside the box)` | sc3netmod_run2.log |
-| bulldozed ramp cell (57,22) | `no cloverleaf: 58 of 64 ramp cells hold their piece`, `built flyover`; then hwy_end's revert retiles re-placed the flyover cells with the stock stub (hwcore bug, fix pending merge) | sc3netmod.log run 3 |
-| saved city loaded WITHOUT the mod | highway cells = the stock stub and bands; ramp cells = 15099 blocks (ramp-down decks on the ground) | nomod_h_z3_r0.png |
+| bulldozed ramp cell (57,22), first DLL | `no cloverleaf: 58 of 64 ramp cells hold their piece`, `built flyover`; then hwy_end's revert retiles re-placed the flyover cells with the stock stub (hwcore bug) | sc3netmod_run3.log |
+| same, on hwcore 6ff62ab (re-put of kept cells) | `built flyover`, 16 kept cells "re-placed after a revert retile": the flyover stays (21442..21449 on the crossing cells, every ramp gone) | flyover_z3_r0.png, g5_cells.txt |
+| saved city loaded WITHOUT the mod, before `hwys` | highway cells = the stock stub and bands (middle twins at state 2); ramp cells = 15099 blocks (ramp-down decks on the ground) | nomod_h_z3_r0.png |
+| same, with `hwys` (flyover + centre cloverleaf saved) | flyover cells = the exact stock stub at stock states; band cells at their stock states (twins now .0); ramp cells = 15127 arcs (ramp fragments to bulldoze) | inst_hwdd_nomod/nomod2_c_z3_r0.png |
 
 Logs and shots: `Simcity_stock_hwdd\re\harness\inst_hwdd\` and `inst_hwdd_nomod\` (game art, not committed).
 
-## Open
+## Saves without the mod (`hwys`)
 
-- Bulldoze -> flyover in game: hwcore's hwy_end re-put of kept cells (re-placed by a revert's 3x3 retile) is
-  written, not merged; re-test then. Until then a bulldozed ramp leaves the stock stub and the next pass rebuilds the
-  cloverleaf.
-- Saves without the mod: ramp cells show as 15099 ramp-down blocks (asked the program whether land pieces can save as
-  no occupant). `hwys` saved states (hwcore, pending merge): the builder emits them when the base carries them; only
-  the symmetric middle twins (11224 / 15106 / 15149 at state 2) change.
+On-highway pieces save as the stock piece the cell held at its stock state. Ramp pieces on land save as a stock
+one-lane arc turned like the piece: state 0 15127.0, 1 15128.0, 2 15127.2, 3 15128.2 (the stock arcs occur only at
+states 0 / 2 in the shipped cities, hwcore; 15128.0 = 15127 turned once). The no-mod load above used 15127 at the
+piece's own state (before this mapping); the mapping itself was not re-loaded without the mod. A real "no occupant"
+save would need a patch in SIMNTWRK FUN_10012fc3's tile counter (hwcore, not done; low priority).
+
+## Open
 - Animated cars were not watched (the lab city has no population); routing is checked offline (turn matrices).
 - Small wall fragments remain at some ramp joins (painter).
