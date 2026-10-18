@@ -179,3 +179,21 @@ What would settle it: which trips the router lets onto highway nodes (the mode a
 `re/tools/netmod/hwtraffic_probe.py`, `hwtraffic_edit.py`, `hwtraffic_twin.py`, `hwtraffic_sheet.py`,
 `verify/hwtraffic/RESULTS.md`, `verify/hwtraffic/data/` (Berlin at the top level, plus `seoul/` and `survey/`). Shots and
 saves stay in the test tree (`inst_highways\hwtraffic\` and `inst_highways\hwtraffic\seoul\`, b2 / a2 each).
+
+## Open item: Seoul quadrant A1 refused in game (twin builds it)
+
+Crossing O (245,109) case A r 0. Quadrant A1 is the south-east quadrant, nearest the east map edge. Its own cells,
+those that belong to no other quadrant (23, from `hwdx.case_table('A')` turned to the world), are:
+- 12 ramp cells, all empty, flat and dry in the save: (249,110), (250,110), (250,112), (251,110), (251,111),
+  (251,112), (251,113), (252,110), (252,111), (252,112), (252,113), (253,110).
+- 11 joining cells, which must hold the plain stock highway: (249,109), (250,108), (250,109), (253,109), (254,109) on
+  the straight, and (248,112), (249,112), (250,113), (250,114), (251,114), (251,115) on the diagonal's south arm.
+
+Likely cause, from the code and the live cell read, not tested by a re-run: `hwdx_quad` (sc3netmod_hwdx.c) refuses
+a quadrant when a joining cell does not hold exactly its base piece (11223 / 11224 at the right state). The drag
+ends at (251,115), and the game put the diagonal's end cap there: the cells read after the edit show `14999.2` at
+(251,115) in both games. The offline tiler places no end caps (its drag ends come out as 15149 / 15051), so the twin
+saw a band cell there and built A1. If this is the cause, a drag one row longer would give A1, but (253,116) is water
+here. All 23 cells lie inside the pass's read box (226,93)-(255,123), and they reach x 254 at most.
+Open: confirm with one drag that ends past the joining cells, and have the twin model the end cap (check that every
+joining cell is at least one cell inside the drag).
