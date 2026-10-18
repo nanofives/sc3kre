@@ -1,6 +1,7 @@
 # Avenue program: integration on round/avenues (2026-10-18)
 
-Branch `round/avenues` (worktree `Simcity_wt_avenues`): child/diagave + child/avx + child/boulevard + child/bigrbt.
+Branch `round/avenues` (worktree `Simcity_wt_avenues`): child/diagave + child/avx + child/boulevard + child/bigrbt
++ child/diagx.
 Streams and protocol: `re/sessions/CHILD_PROTOCOL_2026-10-17.md`; each stream's evidence in `verify/<stream>/RESULTS.md`.
 
 ## Merge notes
@@ -23,3 +24,16 @@ Streams and protocol: `re/sessions/CHILD_PROTOCOL_2026-10-17.md`; each stream's 
 | Boulevard along x with a crossing road | `bv: edit: boulevard axis 0, columns 11..23 at row 47, 39 cell(s), 30 written` |
 | Save, reload | 48 variant tiles written as base / all 48 restored; every block's load pass wrote 0 |
 | Exceptions | 0 in both games |
+
+## After merging child/diagx (0bed815)
+
+Only `netpack.py` and the schema conflicted (diagx rewrote the schema with LF line ends, so the whole file
+conflicted; its only change was the `crossing` property, added to the integration file). The crossing art needs
+`diagave.py xbuild .` after `build .`; `diagave.py xcheck`: 0 failures.
+
+| Check | Result |
+|---|---|
+| Install all five packages | TrBlkAtt 1,289 slots, first payload 0xa004 |
+| DLL start | avx on, rbt9 on, diagonal avenues on (inner 20500) |
+| Two diagonal avenues crossing (axis 0 and axis 1 bands) | `band axis 0 ... 1 crossing(s), 35 written`, `band axis 1 ... 1 crossing(s), 33 written`; dashes, median trees and crosswalks on all four arms (`int3_xx_z4.png`) |
+| Exceptions | 0 |
