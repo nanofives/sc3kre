@@ -1,0 +1,877 @@
+{
+ "netpack": 1,
+ "name": "boulevard",
+ "version": "0.2.0",
+ "author": "netmod (task boulevard)",
+ "description": "Boulevards: draw three parallel straight roads side by side (at least three columns) and sc3netmod's BV block makes them one boulevard. The outer roads are the carriageways (stock road look, yellow centre line), the middle road gives each one an extra lane and holds a grass median with avenue 11204's trees, about twice as wide as the stock avenue's. Single straight roads crossing it or meeting it from one side get junctions with crosswalks (the median ends in a nose); where all three roads stop the end column closes it with a round curb; where only one goes on, the boulevard tapers into it over its last three columns; where two neighbouring roads go on, it narrows back into the stock avenue. Lane lines are white dashes. Built by `boulevard.py build .` in this folder before install (art/ is made from the game's frames and is not shipped).",
+ "game": {
+  "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+ },
+ "variants": [
+  {
+   "id": 20700,
+   "base": 11204,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 29,
+    "png_dir": "art/20700"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20701,
+   "base": 29,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20701"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20702,
+   "base": 29,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20702"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20703,
+   "base": 29,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20703"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20704,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20704"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20705,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20705"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20706,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20706"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20710,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20710"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20711,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20711"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20712,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20712"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20720,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20720"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20721,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20721"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20722,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20722"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20723,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20723"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20724,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20724"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20725,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20725"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20726,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20726"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20727,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20727"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20728,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20728"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20730,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20730"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20731,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20731"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20732,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20732"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20733,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20733"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20734,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20734"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20735,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20735"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20736,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20736"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20737,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20737"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20738,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20738"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20740,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20740"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20741,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20741"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20742,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20742"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20743,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20743"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20744,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20744"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20745,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20745"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20746,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20746"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20747,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20747"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20748,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20748"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20750,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20750"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20751,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20751"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20752,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20752"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20753,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20753"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20754,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20754"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20755,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20755"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20756,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20756"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20757,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20757"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20758,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20758"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20760,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20760"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20761,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20761"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20762,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20762"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20763,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20763"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20764,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20764"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20765,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20765"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20766,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20766"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20767,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20767"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20768,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 11203,
+    "png_dir": "art/20768"
+   },
+   "trblkatt": "none"
+  }
+ ],
+ "lanes": [
+  {
+   "piece": 20700,
+   "spec": "bv_20700.lanes.json"
+  },
+  {
+   "piece": 20701,
+   "spec": "bv_20701.lanes.json"
+  },
+  {
+   "piece": 20702,
+   "spec": "bv_20702.lanes.json"
+  },
+  {
+   "piece": 20703,
+   "spec": "bv_20703.lanes.json"
+  }
+ ],
+ "auto_boulevards": [
+  {
+   "pieces": {
+    "outer": 20700,
+    "middle": 20701,
+    "nose": 20702,
+    "nose2": 20703,
+    "junction_entry": 20710,
+    "junction_middle": 20711,
+    "junction_far": 20712
+   },
+   "cap": [
+    20704,
+    20705,
+    20706
+   ],
+   "taper": {
+    "0": [
+     20730,
+     20731,
+     20732,
+     20733,
+     20734,
+     20735,
+     20736,
+     20737,
+     20738
+    ],
+    "1": [
+     20720,
+     20721,
+     20722,
+     20723,
+     20724,
+     20725,
+     20726,
+     20727,
+     20728
+    ],
+    "2": [
+     20740,
+     20741,
+     20742,
+     20743,
+     20744,
+     20745,
+     20746,
+     20747,
+     20748
+    ]
+   },
+   "avenue_narrow": {
+    "0": [
+     20750,
+     20751,
+     20752,
+     20753,
+     20754,
+     20755,
+     20756,
+     20757,
+     20758
+    ],
+    "1": [
+     20760,
+     20761,
+     20762,
+     20763,
+     20764,
+     20765,
+     20766,
+     20767,
+     20768
+    ]
+   }
+  }
+ ]
+}

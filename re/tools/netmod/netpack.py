@@ -571,7 +571,8 @@ def compile_pack(stock, pack_dir, man):
            "templates": list(man.get("templates", [])),                                     # task multitile
            "auto_roundabouts": [],                                                          # task roundabout3
            "auto_diagonal_avenues": [],                                                     # task diagave
-           "auto_avenue_junctions": []}                                                     # task avx
+           "auto_avenue_junctions": [],                                                     # task avx
+           "auto_boulevards": []}                                                           # task boulevard
     for n, v in enumerate(man.get("variants", [])):
         where = "%s variant %d (id %s)" % (pname, n + 1, v.get("id"))
         vid, base, net = v["id"], v["base"], v["network"]
@@ -713,6 +714,19 @@ def compile_pack(stock, pack_dir, man):
         out["auto_avenue_junctions"].append(compile_avx(a, vids, "%s auto_avenue_junctions %d" % (pname, n + 1)))
     if len(out["auto_avenue_junctions"]) > 1:
         raise NetpackError("%s: at most one auto_avenue_junctions entry (sc3netmod applies one set)" % pname)
+    for n, a in enumerate(man.get("auto_boulevards", [])):          # task boulevard: sc3netmod BV block
+        where = "%s auto_boulevards %d" % (pname, n + 1)
+        roles = ("outer", "middle", "nose", "nose2", "junction_entry", "junction_middle", "junction_far")
+        ids = [a.get("pieces", {}).get(r) for r in roles] + list(a.get("cap", [])) + \
+            [p for k in a.get("taper", {}) for p in a["taper"][k]] + \
+            [p for k in a.get("avenue_narrow", {}) for p in a["avenue_narrow"][k]]
+        for p in ids:
+            if p not in vids or vids[p]["net"] != "ROAD":
+                raise NetpackError("%s: piece %s must be a ROAD variant declared in this package" % (where, p))
+        out["auto_boulevards"].append({"pieces": [a["pieces"][r] for r in roles], "cap": list(a.get("cap", [])),
+                                       "taper": {int(k): list(v) for k, v in a.get("taper", {}).items()},
+                                       "avenue_narrow": {int(k): list(v) for k, v in a.get("avenue_narrow", {}).items()},
+                                       "where": where})
     out["ramps"] = []
     if man.get("ramps"):                                 # hardcoded SIMNTWRK tables (netramp.py, NET_RAMPS.md)
         try:
@@ -1004,7 +1018,7 @@ def merge(stock, packs):
     for c in comp:
         mine = [t for t in templates if t["pack"] == c["name"]]
         if c["variants"] or c["ramps"] or mine or c["auto_roundabouts"] or c["auto_diagonal_avenues"] or \
-                c.get("auto_avenue_junctions"):
+                c.get("auto_avenue_junctions") or c.get("auto_boulevards"):                     # task avx, boulevard
             tables[c["name"]] = ("# netpack %s: <variant id> <base id>, read by sc3netmod.dll\r\n" % c["name"]).encode() + \
                 b"".join(b"%d %d\r\n" % (v["id"], v["base"]) for v in sorted(c["variants"], key=lambda v: v["id"])) + \
                 RAMP.table_lines(c["ramps"]) + TPL.table_lines(mine) + \
@@ -1019,8 +1033,13 @@ def merge(stock, packs):
                 b"".join(b"davm %d %d %d %d %d %d %d\r\n" % (m["axis"], m["end"], 1 if m["cont"] == "A" else 2, *cell)
                          for a in c["auto_diagonal_avenues"] for m in a.get("merge", []) for cell in m["cells"]) + \
                 b"".join(b"davs %d\r\n" % p for a in c["auto_diagonal_avenues"] for p in a.get("save_43", [])) + \
-                avx_table_lines(c.get("auto_avenue_junctions", []))
-                # task diagave, task avx
+                avx_table_lines(c.get("auto_avenue_junctions", [])) + \
+                b"".join(b"bvp %d %d %d %d %d %d %d\r\n" % tuple(a["pieces"]) +
+                         (b"bvc %d %d %d\r\n" % tuple(a["cap"]) if a["cap"] else b"") +
+                         b"".join(b"bvt %d %s\r\n" % (k, b" ".join(b"%d" % q for q in v)) for k, v in sorted(a["taper"].items())) +
+                         b"".join(b"bva %d %s\r\n" % (k, b" ".join(b"%d" % q for q in v)) for k, v in sorted(a.get("avenue_narrow", {}).items()))
+                         for a in c.get("auto_boulevards", []))                                # task boulevard
+                # task diagave, task avx, task boulevard
 
     # ---- report + checks that need the merged result
     placed = set()
