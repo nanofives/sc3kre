@@ -137,6 +137,7 @@ static int table_read(const char *path) {
         if (!strncmp(p, "avxb ", 5) || !strncmp(p, "avxa ", 5)) continue;   /* task avx: AVX lines, read by rbt_install */
         if (!strncmp(p, "bvp ", 4) || !strncmp(p, "bvc ", 4) || !strncmp(p, "bvt ", 4) ||
             !strncmp(p, "bva ", 4)) continue;   /* task boulevard */
+        if (!strncmp(p, "dbvb ", 5) || !strncmp(p, "dbvs ", 5)) continue;   /* task diagbv: DBV lines, read by rbt_install */
         if (p[0] == 't' && (!strncmp(p, "tmpl ", 5) || !strncmp(p, "tori ", 5) || !strncmp(p, "tcel ", 5) ||
                             !strncmp(p, "tedg ", 5) || !strncmp(p, "tend", 4))) continue;   /* TMPL lines */
         if (sscanf(p, "%lu %lu", &v, &b) != 2 || v == 0 || v > 0xffff || b == 0 || b > 0xffff || v == b) {
@@ -1306,6 +1307,7 @@ static int netramp_install(BYTE *m) {
 #include "sc3netmod_dav.c"          /* task diagave: DAV, automatic diagonal avenues on RBT's hooks (SC3NETMOD_DAV=0) */
 #include "sc3netmod_avx.c"          /* task avx: AVX, straight avenue intersections on RBT's hooks (SC3NETMOD_AVX=0) */
 #include "sc3netmod_bv.c"           /* task boulevard: BV, automatic boulevards on RBT's hooks (SC3NETMOD_BV=0) */
+#include "sc3netmod_dbv.c"          /* task diagbv: DBV, diagonal boulevards on RBT's hooks (SC3NETMOD_DBV=0) */
 #include "sc3netmod_lanes.c"        /* task lanedensity: road density honours turn matrices (SC3NETMOD_LANEDENSITY) */
 
 /* ============================================================ arming */
@@ -1343,6 +1345,7 @@ static DWORD WINAPI watcher(LPVOID param) {
         dav_stats();                     /* task diagave */
         avx_stats();                     /* task avx */
         bv_stats();                      /* task boulevard */
+        dbv_stats();                     /* task diagbv */
         if (g_n_cross_map || g_n_pred_map || g_n_saved_base)
             logf("stats: crossing-switch lookups mapped=%ld, predicate id reads mapped=%ld, tiles saved as base (last save)=%ld",
                  g_n_cross_map, g_n_pred_map, g_n_saved_base);

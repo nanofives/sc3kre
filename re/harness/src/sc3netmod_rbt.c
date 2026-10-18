@@ -77,6 +77,11 @@ static WORD avx_save_id(WORD id);
 static WORD g_bv_p[7];                                                       /* task boulevard: BV block */
 static void bv_line(const char *path, const char *line);                     /* task boulevard */
 static void bv_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who);  /* task boulevard */
+static WORD g_dbv_out;                                                       /* task diagbv: DBV block */
+static int g_dbv_on;                                                         /* task diagbv */
+static void dbv_line(const char *path, const char *line);                    /* task diagbv */
+static void dbv_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who); /* task diagbv */
+static int dbv_claimed(int x, int z);                                        /* task diagbv: DAV / BV stop there */
 
 /* ---------------------------------------------------------------- table line */
 static void rb_file(const char *path) {
@@ -92,6 +97,7 @@ static void rb_file(const char *path) {
         if (!strncmp(line, "dav ", 4)) { dav_line(path, line); continue; }        /* task diagave */
         if (!strncmp(line, "avx", 3)) { avx_line(path, line); continue; }         /* task avx */
         if (!strncmp(line, "bv", 2) && line[3] == ' ') { bv_line(path, line); continue; }   /* task boulevard */
+        if (!strncmp(line, "dbvb ", 5) || !strncmp(line, "dbvs ", 5)) { dbv_line(path, line); continue; } /* task diagbv */
         if (strncmp(line, "rbt ", 4) || g_rb_off) continue;
         k = sscanf(line + 4, "%lu %lu %lu", &p, &n, &c);
         if (k < 2 || !p || p > 0xffff || n < 1 || n > 4 || g_base[p] != 39 ||
@@ -262,6 +268,7 @@ static void __fastcall rb_pass(BYTE *mgr, void *edx, DWORD list, int net, int *b
     InterlockedIncrement(&g_rb_busy);
     __try {
         if (g_rb_piece) rb_run(mgr, x0 - 3, z0 - 3, x1 + 2, z1 + 2, "edit");   /* blocks whose cells/ring/beyond touch the box */
+        dbv_run(mgr, x0, z0, x1, z1, "edit");                  /* task diagbv: first, its claims stop DAV / BV */
         if (g_dav_on) dav_run(mgr, x0, z0, x1, z1, "edit");                  /* task diagave */
         if (g_avx_on) avx_run(mgr, x0, z0, x1, z1, "edit");                  /* task avx */
         if (g_bv_p[0]) bv_run(mgr, x0, z0, x1, z1, "edit");                  /* task boulevard */
@@ -280,6 +287,7 @@ static void rb_load_pass(void) {
     InterlockedIncrement(&g_rb_busy);
     __try {
         if (g_rb_piece) rb_run(mgr, 0, 0, 0x7fffffff, 0x7fffffff, "load");
+        dbv_run(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");        /* task diagbv: first, its claims stop DAV / BV */
         if (g_dav_on) dav_run(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");        /* task diagave */
         if (g_avx_on) avx_run(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");        /* task avx */
         if (g_bv_p[0]) bv_run(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");        /* task boulevard */
@@ -363,7 +371,8 @@ static int rbt_install(BYTE *m) {
     if (!g_rb_piece) logf("rbt: no automatic roundabout in the tables");
     if (!g_dav_inner[0]) logf("dav: no automatic diagonal avenue in the tables");
     if (g_bv_p[0] && env_off("SC3NETMOD_BV")) { g_bv_p[0] = 0; logf("bv: off (SC3NETMOD_BV=0)"); }  /* task boulevard */
-    if (!g_rb_piece && !g_dav_inner[0] && !g_avx_nbox && !g_bv_p[0]) return 0;   /* task avx, task boulevard */
+    if (g_dbv_out && env_off("SC3NETMOD_DBV")) { g_dbv_out = 0; logf("dbv: off (SC3NETMOD_DBV=0)"); }  /* task diagbv */
+    if (!g_rb_piece && !g_dav_inner[0] && !g_avx_nbox && !g_bv_p[0] && !g_dbv_out) return 0;   /* task avx, boulevard, diagbv */
     g_rb_m = m;
     g_rb_msize = nt->OptionalHeader.SizeOfImage;
     if (IsBadReadPtr(e, 10) || e[0] != 0xb8 || *(DWORD *)(e + 1) != (DWORD)m + 0x27a52 || e[5] != 0xe8 ||
@@ -385,6 +394,7 @@ static int rbt_install(BYTE *m) {
     g_rb_on = 1;
     if (g_dav_inner[0]) { dav_init_table(); g_dav_on = 1; }
     if (g_avx_nbox) { g_avx_on = 1; logf("avx: avenue junctions on, %d box piece(s)", g_avx_nbox); }   /* task avx */
+    if (g_dbv_out) { g_dbv_on = 1; logf("dbv: diagonal boulevards on"); }                           /* task diagbv */
     logf("rbt: hooked the retile pass FUN_1001547b (entry) and the city load (manager vt+0x1c); piece %u, min %d arm(s), "
          "arm-less quarter %u; diagonal avenues %s (inner %u %u %u)", g_rb_piece, g_rb_min, g_rb_closed,
          g_dav_on ? "on" : "off", g_dav_inner[0], g_dav_inner[1], g_dav_inner[2]);

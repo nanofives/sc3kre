@@ -74,16 +74,19 @@ def _mask(c, cells):
     return sum(1 << k for k, (dx, dz) in enumerate(DIRS) if (c[0] + dx, c[1] + dz) in cells)
 
 
-def bands(road):
+def bands(road, claimed=frozenset()):
     """road: set of (x, z) ROAD cells. -> list of {axis, rows: [(z, a)], A, B, junc: {cell: key}, arms: {cell: state},
     ok, why} in real coordinates. junc keys are junction descriptors (JKEY); arms are straight road cells next to the
-    avenue that become road 29 in that state."""
+    avenue that become road 29 in that state. claimed: cells a diagonal boulevard holds (task diagbv, diagbv.py), which
+    are never avenue rows; an end that runs into them is a bend (kind 3: virtual rows past it, nothing written)."""
     out = []
     for axis in (0, 1):
         R = road if axis == 0 else {(-x, z) for (x, z) in road}
+        C = claimed if axis == 0 else {(-x, z) for (x, z) in claimed}                  # task diagbv
         full = {}
         for (x, z) in R:
-            if (x, z) in R and (x + 1, z) in R and (x + 2, z) in R:
+            if (x, z) in R and (x + 1, z) in R and (x + 2, z) in R and \
+                    not all((x + k, z) in C for k in range(3)):                         # task diagbv
                 full.setdefault(z, set()).add(x)
         clean = lambda a, z: (a - 1, z) not in R and (a + 3, z) not in R      # noqa: E731
         seen = set()
@@ -97,7 +100,7 @@ def bands(road):
                 seen.update(chain)
                 if sum(1 for (zz, aa) in chain if clean(aa, zz)) < MIN_ROWS:   # anchored by MIN_ROWS clean rows
                     continue
-                bend = [bend_kind(R, chain, e) for e in (0, 1)]
+                bend = [bend_kind(R, chain, e, C) for e in (0, 1)]                  # task diagbv: C
                 n = len(chain)
                 band = {(aa + d, zz) for k, (zz, aa) in enumerate(chain) for d in range(3)
                         if not (bend[0] == 1 and ((k == 0 and d < 2) or (k == 1 and d == 0)))
@@ -110,7 +113,7 @@ def bands(road):
                 why, junc, arms = "", {}, {}
                 colN, colS = {}, {}                      # column x -> row where its arm touches the band
                 rowarm = {}
-                outside = lambda c: c in R and c not in band     # noqa: E731
+                outside = lambda c: c in R and c not in band and c not in C     # noqa: E731  (task diagbv: C)
                 for k, (zz, aa) in enumerate(chain):
                     w, e = (aa - 1, zz), (aa + 3, zz)
                     sides = []
@@ -118,7 +121,7 @@ def bands(road):
                         w = None                                  # the straight avenue, not an arm
                     if bend[1] == 1 and k >= n - 2:
                         e = None
-                    if w in R:
+                    if w in R and w not in C:                    # task diagbv: a boulevard's cell is not beside
                         if (aa - 2, zz) in R and not any(outside(c) for c in ((aa - 1, zz + 1), (aa - 2, zz + 1), (aa - 2, zz - 1))):
                             sides.append("W")
                             arms[w], arms[(aa - 2, zz)] = 0, 0
@@ -127,7 +130,7 @@ def bands(road):
                             arms[w], arms[(aa - 1, zz + 1)] = 1, 1
                         else:
                             why = why or "road beside the avenue at (%d,%d) is not a straight arm" % ((-w[0] if axis else w[0]), w[1])
-                    if e in R:
+                    if e in R and e not in C:
                         if (aa + 4, zz) in R and not any(outside(c) for c in ((aa + 3, zz - 1), (aa + 4, zz + 1), (aa + 4, zz - 1))):
                             sides.append("E")
                             arms[e], arms[(aa + 4, zz)] = 0, 0
@@ -215,7 +218,7 @@ def bands(road):
                     for c in band:
                         for dx, dz in DIRS:
                             q = (c[0] + dx, c[1] + dz)
-                            if q in R and q not in band and q not in arms and q not in real:
+                            if q in R and q not in band and q not in arms and q not in real and q not in C:
                                 why = "touches road at (%d,%d)" % ((-q[0] if axis else q[0]), q[1])
                                 break
                         if why:
@@ -262,7 +265,8 @@ def bands(road):
                     path = {m(c) for c in path}
                     chain = [(zz, -aa) for (zz, aa) in chain]
                 out.append({"axis": axis, "rows": chain, "A": A2, "B": B2, "junc": jk, "arms": arms,
-                            "merge": mk, "path": path, "bend": bend, "ok": not why, "why": why})
+                            "merge": mk, "path": path, "bend": bend, "ok": not why, "why": why,
+                            "claimed": claimed})                     # task diagbv: written by DBV, not here
     return out
 
 
@@ -275,13 +279,15 @@ def _bend_xz(a0, z0, e, u, v):
     return (a0 + u, z0 + v) if e else (a0 + 2 - u, z0 - v)
 
 
-def bend_kind(R, chain, e):
+def bend_kind(R, chain, e, C=frozenset()):
     """End e (0 top, 1 bottom) of a chain: 1 when the avenue goes on along x as two straight roads (rows v -1 and 0 run
     on past their d2), 2 when it goes on along z (columns u 1 and 2 below), else 0. The carriageways' edges meet the
     straight ones on one cell line, so the diagonal cells keep their middle-of-band pieces and the straight cells stay
     stock (11204)."""
     z0, a0 = chain[-1] if e else chain[0]
     rd = lambda u, v: _bend_xz(a0, z0, e, u, v) in R                               # noqa: E731
+    if any(_bend_xz(a0, z0, e, u, 1) in C for u in range(4)):
+        return 3                                     # task diagbv: the end runs into a diagonal boulevard
     if len(chain) >= 3 and rd(3, 0) and rd(2, -1) and rd(3, -1) and not any(rd(u, 1) for u in (1, 2, 3)):
         return 1
     if rd(1, 1) and rd(2, 1) and rd(1, 2) and rd(2, 2) and not rd(0, 1) and not rd(3, 1):
@@ -349,7 +355,7 @@ def wanted(band, mids=None):
     A, B = band["A"], band["B"]
     out = {}
     for c in A | B:
-        if c in band.get("path", ()):
+        if c in band.get("path", ()) or c in band.get("claimed", ()):
             continue                                       # the single road past a merge: left to the stock tiler
         if c in band.get("merge", {}):
             out[c] = band["merge"][c]

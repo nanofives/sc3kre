@@ -205,6 +205,27 @@
       },
       "description": "Task diagave: sc3netmod turns two diagonal road drags JOINED side by side (an isolated band of rows of three road cells, each row shifted by one) into one avenue: each cell gets the piece the stock tiler gives a lone diagonal, and the middle cells, which hold both roads, get the declared middle piece. After each road retile and after a city load; back to stock when it stops qualifying. Rule and tool: re/tools/netmod/diagave.py, verify/diagave/."
     },
+    "auto_diagonal_boulevards": {
+      "type": "array",
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["band", "stamps"],
+        "properties": {
+          "band": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/piece_id"}, "description": "Band pieces: the outer cell (canonical d3 at state 0; d0 = state 2) and the inner cell (d2 at state 0; d1 = state 2)."},
+          "stamps": {
+            "type": "object",
+            "additionalProperties": false,
+            "patternProperties": {"^(jrow-both|jrow-A|jrow-stem|jcol-both|jcol-A|narrow-C|narrow-A|taper-[012]s?|cap-square|cap-part|cap-x4z[34])$": {
+              "type": "array", "maxItems": 40,
+              "items": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "integer"}}}},
+            "description": "Per junction / end kind, the cells it writes: [dx, dz, piece, state] in its canonical frame (diagbv.py: row family relative to a band row's left cell, column family relative to the column road's d0 cell). Pieces are variants of this package, or 29 / 35."
+          }
+        }
+      },
+      "description": "Task diagbv: sc3netmod turns three diagonal road drags joined side by side (rows of four road cells, each row shifted by one) into one 3-wide diagonal boulevard, with its junctions, ends and bends (re/tools/netmod/diagbv.py, verify/diagbv/). Its cells are claimed before the DAV and BV blocks run."
+    },
     "auto_boulevards": {
       "type": "array",
       "maxItems": 1,

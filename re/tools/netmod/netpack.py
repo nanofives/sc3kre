@@ -71,6 +71,9 @@ import netpack_templates as TPL  # noqa: E402  task multitile: multi-cell templa
 
 SCHEMA_VERSION = 1
 SCHEMA_FILE = os.path.join(HERE, "netpack.schema.json")
+DBV_KIND_NO = {"jrow-both": 1, "jrow-A": 2, "jrow-stem": 3, "jcol-both": 4, "jcol-A": 5, "narrow-C": 6, "narrow-A": 7,
+               "taper-0": 8, "taper-1": 9, "taper-2": 10, "cap-square": 11, "cap-part": 12, "taper-0s": 13,
+               "taper-1s": 14, "taper-2s": 15, "cap-x4z3": 16, "cap-x4z4": 17}   # task diagbv: = diagbv.KIND_NO, sc3netmod_dbv.c
 
 NETMOD = "mods/netmod"
 LEDGER = NETMOD + "/ledger.json"
@@ -572,7 +575,8 @@ def compile_pack(stock, pack_dir, man):
            "auto_roundabouts": [],                                                          # task roundabout3
            "auto_diagonal_avenues": [],                                                     # task diagave
            "auto_avenue_junctions": [],                                                     # task avx
-           "auto_boulevards": []}                                                           # task boulevard
+           "auto_boulevards": [],                                                           # task boulevard
+           "auto_diagonal_boulevards": []}                                                  # task diagbv
     for n, v in enumerate(man.get("variants", [])):
         where = "%s variant %d (id %s)" % (pname, n + 1, v.get("id"))
         vid, base, net = v["id"], v["base"], v["network"]
@@ -727,6 +731,12 @@ def compile_pack(stock, pack_dir, man):
                                        "taper": {int(k): list(v) for k, v in a.get("taper", {}).items()},
                                        "avenue_narrow": {int(k): list(v) for k, v in a.get("avenue_narrow", {}).items()},
                                        "where": where})
+    for n, a in enumerate(man.get("auto_diagonal_boulevards", [])):  # task diagbv: sc3netmod DBV block (diagbv.py)
+        where = "%s auto_diagonal_boulevards %d" % (pname, n + 1)
+        for p in list(a["band"]) + [c[2] for cells in a["stamps"].values() for c in cells]:
+            if p not in (29, 35) and (p not in vids or vids[p]["net"] != "ROAD"):
+                raise NetpackError("%s: piece %s must be a ROAD variant declared in this package (or 29 / 35)" % (where, p))
+        out["auto_diagonal_boulevards"].append({"band": list(a["band"]), "stamps": a["stamps"], "where": where})
     out["ramps"] = []
     if man.get("ramps"):                                 # hardcoded SIMNTWRK tables (netramp.py, NET_RAMPS.md)
         try:
@@ -887,6 +897,10 @@ def merge(stock, packs):
     if len(davs) > 1:
         raise NetpackError("auto_diagonal_avenues: %s and %s both declare one; sc3netmod applies a single set" %
                            (davs[0]["where"], davs[1]["where"]))
+    dbvs = [a for c in comp for a in c.get("auto_diagonal_boulevards", [])]            # task diagbv
+    if len(dbvs) > 1:
+        raise NetpackError("auto_diagonal_boulevards: %s and %s both declare one; sc3netmod applies a single set" %
+                           (dbvs[0]["where"], dbvs[1]["where"]))
     avxs = [a for c in comp for a in c.get("auto_avenue_junctions", [])]               # task avx
     if len(avxs) > 1:
         raise NetpackError("auto_avenue_junctions: %s and %s both declare one; sc3netmod applies a single set" %
@@ -1018,7 +1032,7 @@ def merge(stock, packs):
     for c in comp:
         mine = [t for t in templates if t["pack"] == c["name"]]
         if c["variants"] or c["ramps"] or mine or c["auto_roundabouts"] or c["auto_diagonal_avenues"] or \
-                c.get("auto_avenue_junctions") or c.get("auto_boulevards"):                     # task avx, boulevard
+                c.get("auto_avenue_junctions") or c.get("auto_boulevards") or c.get("auto_diagonal_boulevards"):  # task avx, boulevard, diagbv
             tables[c["name"]] = ("# netpack %s: <variant id> <base id>, read by sc3netmod.dll\r\n" % c["name"]).encode() + \
                 b"".join(b"%d %d\r\n" % (v["id"], v["base"]) for v in sorted(c["variants"], key=lambda v: v["id"])) + \
                 RAMP.table_lines(c["ramps"]) + TPL.table_lines(mine) + \
@@ -1038,7 +1052,12 @@ def merge(stock, packs):
                          (b"bvc %d %d %d\r\n" % tuple(a["cap"]) if a["cap"] else b"") +
                          b"".join(b"bvt %d %s\r\n" % (k, b" ".join(b"%d" % q for q in v)) for k, v in sorted(a["taper"].items())) +
                          b"".join(b"bva %d %s\r\n" % (k, b" ".join(b"%d" % q for q in v)) for k, v in sorted(a.get("avenue_narrow", {}).items()))
-                         for a in c.get("auto_boulevards", []))                                # task boulevard
+                         for a in c.get("auto_boulevards", [])) + \
+                b"".join(b"dbvb %d %d\r\n" % tuple(a["band"]) +
+                         b"".join(b"dbvs %d %d %d %d %d\r\n" % ((DBV_KIND_NO[k],) + tuple(cell))
+                                  for k, cells in sorted(a["stamps"].items(), key=lambda t: DBV_KIND_NO[t[0]])
+                                  for cell in cells)
+                         for a in c.get("auto_diagonal_boulevards", []))                       # task diagbv
                 # task diagave, task avx, task boulevard
 
     # ---- report + checks that need the merged result
@@ -1059,6 +1078,7 @@ def merge(stock, packs):
     placed |= {j["piece"] for a in davs for j in a.get("junction", [])}
     placed |= {cell[2] for a in davs for m in a.get("merge", []) for cell in m["cells"]}
     placed |= {b["piece"] for a in avxs for b in a["box"]} | {b["piece"] for a in avxs for b in a["arm"]}   # task avx
+    placed |= {p for a in dbvs for p in a["band"]} | {c[2] for a in dbvs for cs in a["stamps"].values() for c in cs}  # task diagbv
     for v in variants:
         if v["id"] not in placed:
             report["warnings"].append("%s: no rule RESULT places %d, so the tiler never builds it" % (v["where"], v["id"]))

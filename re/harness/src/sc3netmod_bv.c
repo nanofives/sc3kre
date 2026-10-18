@@ -112,7 +112,11 @@ typedef struct {
 static int bv_rx(int axis, int s, int w) { return axis ? -w : s; }
 static int bv_rz(int axis, int s, int w) { return axis ? s : w; }
 static int bv_road(BvPass *p, int s, int w) { return rb_at(&p->b, bv_rx(p->axis, s, w), bv_rz(p->axis, s, w)) != 0; }
-static int bv_full(BvPass *p, int s, int w) { return bv_road(p, s, w) && bv_road(p, s, w + 1) && bv_road(p, s, w + 2); }
+static int bv_cl(BvPass *p, int s, int w) { return dbv_claimed(bv_rx(p->axis, s, w), bv_rz(p->axis, s, w)); } /* task diagbv */
+static int bv_full(BvPass *p, int s, int w) {
+    return bv_road(p, s, w) && bv_road(p, s, w + 1) && bv_road(p, s, w + 2) &&
+           !bv_cl(p, s, w) && !bv_cl(p, s, w + 1) && !bv_cl(p, s, w + 2);   /* task diagbv: a diagonal boulevard's */
+}
 
 static void bv_put(BvPass *p, int s, int w, WORD piece, int st) {
     if (p->n >= DAV_MAX_CELLS) return;
@@ -142,8 +146,10 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
     }
     /* ends: e 0 = the +s end (column sb), e 1 = the -s end (column sa) */
     for (e = 0; e < 2; e++) {
-        int se = e ? sa : sb, st = e ? -1 : 1, got = 0, row = -1, first = -1;
+        int se = e ? sa : sb, st = e ? -1 : 1, got = 0, row = -1, first = -1, nclm = 0;
         for (k = 0; k < 3; k++) if (bv_road(p, se + st, w0 + k)) { got++; row = k; if (first < 0) first = k; }
+        for (k = 0; k < 3; k++) nclm += bv_road(p, se + st, w0 + k) && bv_cl(p, se + st, w0 + k);   /* task diagbv */
+        if (got && nclm == got) { endtyp[e] = 4; endkeep[e] = -1; continue; }   /* task diagbv: bends into a DBV */
         if (!got) { endtyp[e] = 1; endkeep[e] = -1; }
         else if (got == 1 && bv_road(p, se + 2 * st, w0 + row)) { endtyp[e] = 2; endkeep[e] = row; }
         else if (got == 2 && row == first + 1 && bv_road(p, se + 2 * st, w0 + first) && bv_road(p, se + 2 * st, w0 + row))
@@ -153,8 +159,8 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
         if (endtyp[e] == 2 && !g_bv_tap[e ? 2 - row : row][0]) { *why = "no taper pieces declared"; return 0; }
         if (endtyp[e] == 3 && !g_bv_av[e ? 1 - first : first][0]) { *why = "no avenue-narrowing pieces declared"; return 0; }
     }
-    endhi = endtyp[0] == 1 ? 1 : BV_TAPER;                 /* end-region widths */
-    endlo = endtyp[1] == 1 ? 1 : BV_TAPER;
+    endhi = endtyp[0] == 1 ? 1 : endtyp[0] == 4 ? 0 : BV_TAPER;   /* end-region widths (task diagbv: 4 = none) */
+    endlo = endtyp[1] == 1 ? 1 : endtyp[1] == 4 ? 0 : BV_TAPER;
     normlo = sa + endlo;
     normhi = sb - endhi;
     if (normhi < normlo) { *why = "run too short for its ends"; return 0; }
@@ -170,13 +176,15 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
             if (in || !bv_road(p, s, w0 + k)) continue;
             ok = (s >= sa && s <= sb && k == -1 && (kind[s - sa] & 1)) || (s >= sa && s <= sb && k == 3 && (kind[s - sa] & 2)) ||
                  (s == sb + 1 && endtyp[0] >= 2 && (k == endkeep[0] || (endtyp[0] == 3 && k == endkeep[0] + 1))) ||
-                 (s == sa - 1 && endtyp[1] >= 2 && (k == endkeep[1] || (endtyp[1] == 3 && k == endkeep[1] + 1)));
+                 (s == sa - 1 && endtyp[1] >= 2 && (k == endkeep[1] || (endtyp[1] == 3 && k == endkeep[1] + 1))) ||
+                 bv_cl(p, s, w0 + k);                                /* task diagbv */
             if (!ok) { *why = "touches road"; return 0; }
         }
     /* pieces */
     p->n = 0;
     for (e = 0; e < 2; e++) {
         int col, row;
+        if (endtyp[e] == 4) continue;                          /* task diagbv */
         if (endtyp[e] == 1) {
             for (row = 0; row < 3; row++)
                 bv_put(p, e ? sa : sb, w0 + (e ? 2 - row : row), g_bv_cap[row], e ? 2 : 0);
@@ -193,7 +201,8 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
         int kd = kind[s - sa];
         if (!kd) {
             /* the median ends in a nose next to a junction, a cap or a taper; it goes on into an avenue narrowing */
-            int hi = (s == normhi && endtyp[0] != 3) || kind[s + 1 - sa], lo = (s == normlo && endtyp[1] != 3) || kind[s - 1 - sa];
+            int hi = (s == normhi && endtyp[0] != 3 && endtyp[0] != 4) || (s < sb && kind[s + 1 - sa]),
+                lo = (s == normlo && endtyp[1] != 3 && endtyp[1] != 4) || (s > sa && kind[s - 1 - sa]);   /* task diagbv */
             bv_put(p, s, w0, g_bv_p[BV_OUTER], 2);
             bv_put(p, s, w0 + 2, g_bv_p[BV_OUTER], 0);
             bv_put(p, s, w0 + 1, g_bv_p[hi && lo ? BV_NOSE2 : hi || lo ? BV_NOSE : BV_MIDDLE], lo && !hi ? 2 : 0);
