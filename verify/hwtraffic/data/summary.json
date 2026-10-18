@@ -1,0 +1,302 @@
+{
+ "before": {
+  "months": 17,
+  "trips": {
+   "mean": 3506.882,
+   "min": 3069,
+   "max": 3800,
+   "sd": 219.948,
+   "sum": 59617
+  },
+  "arrived": {
+   "mean": 3483.118,
+   "min": 3049,
+   "max": 3778,
+   "sd": 221.587,
+   "sum": 59213
+  },
+  "failed_game": {
+   "mean": 23.765,
+   "min": 16,
+   "max": 42,
+   "sd": 6.664,
+   "sum": 404
+  },
+  "fail_ratio_game": {
+   "mean": 0.007,
+   "min": 0.0043,
+   "max": 0.012,
+   "sd": 0.002,
+   "sum": null
+  },
+  "arrived_hwy": {
+   "mean": 15.882,
+   "min": 5,
+   "max": 26,
+   "sd": 5.109,
+   "sum": 270
+  },
+  "hwy_snap_total": {
+   "mean": 15794.941,
+   "min": 11623,
+   "max": 18978,
+   "sd": 2321.513,
+   "sum": 268514
+  },
+  "avg_c0": {
+   "mean": 40.588,
+   "min": 39,
+   "max": 44,
+   "sd": 1.239,
+   "sum": 690
+  },
+  "trips_west": {
+   "mean": 0,
+   "min": 0,
+   "max": 0,
+   "sd": 0.0,
+   "sum": 0
+  },
+  "snap_west": {
+   "mean": 206.294,
+   "min": 0,
+   "max": 1134,
+   "sd": 335.183,
+   "sum": 3507
+  },
+  "trips_core": {
+   "mean": 0,
+   "min": 0,
+   "max": 0,
+   "sd": 0.0,
+   "sum": 0
+  },
+  "snap_core": {
+   "mean": 0,
+   "min": 0,
+   "max": 0,
+   "sd": 0.0,
+   "sum": 0
+  },
+  "trips_east": {
+   "mean": 0,
+   "min": 0,
+   "max": 0,
+   "sd": 0.0,
+   "sum": 0
+  },
+  "snap_east": {
+   "mean": 68.647,
+   "min": 0,
+   "max": 375,
+   "sd": 111.308,
+   "sum": 1167
+  },
+  "trips_joins": {
+   "mean": 0,
+   "min": 0,
+   "max": 0,
+   "sd": 0.0,
+   "sum": 0
+  },
+  "snap_joins": {
+   "mean": 0,
+   "min": 0,
+   "max": 0,
+   "sd": 0.0,
+   "sum": 0
+  },
+  "trips_ramps": {
+   "mean": 0,
+   "min": 0,
+   "max": 0,
+   "sd": 0.0,
+   "sum": 0
+  },
+  "snap_ramps": {
+   "mean": 0,
+   "min": 0,
+   "max": 0,
+   "sd": 0.0,
+   "sum": 0
+  },
+  "trips_diag_s": {
+   "mean": 0,
+   "min": 0,
+   "max": 0,
+   "sd": 0.0,
+   "sum": 0
+  },
+  "snap_diag_s": {
+   "mean": 0,
+   "min": 0,
+   "max": 0,
+   "sd": 0.0,
+   "sum": 0
+  },
+  "trips_diag_n": {
+   "mean": 0,
+   "min": 0,
+   "max": 0,
+   "sd": 0.0,
+   "sum": 0
+  },
+  "snap_diag_n": {
+   "mean": 0,
+   "min": 0,
+   "max": 0,
+   "sd": 0.0,
+   "sum": 0
+  }
+ },
+ "after": {
+  "months": 17,
+  "trips": {
+   "mean": 3477.353,
+   "min": 3081,
+   "max": 3811,
+   "sd": 199.71,
+   "sum": 59115
+  },
+  "arrived": {
+   "mean": 3453.353,
+   "min": 3058,
+   "max": 3793,
+   "sd": 200.611,
+   "sum": 58707
+  },
+  "failed_game": {
+   "mean": 24,
+   "min": 15,
+   "max": 36,
+   "sd": 5.445,
+   "sum": 408
+  },
+  "fail_ratio_game": {
+   "mean": 0.007,
+   "min": 0.0041,
+   "max": 0.0097,
+   "sd": 0.002,
+   "sum": null
+  },
+  "arrived_hwy": {
+   "mean": 21.882,
+   "min": 12,
+   "max": 33,
+   "sd": 5.476,
+   "sum": 372
+  },
+  "hwy_snap_total": {
+   "mean": 30406.529,
+   "min": 20387,
+   "max": 42060,
+   "sd": 6475.659,
+   "sum": 516911
+  },
+  "avg_c0": {
+   "mean": 42.118,
+   "min": 39,
+   "max": 44,
+   "sd": 1.367,
+   "sum": 716
+  },
+  "trips_west": {
+   "mean": 1.882,
+   "min": 0,
+   "max": 5,
+   "sd": 1.49,
+   "sum": 32
+  },
+  "snap_west": {
+   "mean": 2420.941,
+   "min": 1198,
+   "max": 3984,
+   "sd": 691.958,
+   "sum": 41156
+  },
+  "trips_core": {
+   "mean": 1.882,
+   "min": 0,
+   "max": 5,
+   "sd": 1.49,
+   "sum": 32
+  },
+  "snap_core": {
+   "mean": 367.765,
+   "min": 204,
+   "max": 666,
+   "sd": 105.013,
+   "sum": 6252
+  },
+  "trips_east": {
+   "mean": 1.882,
+   "min": 0,
+   "max": 5,
+   "sd": 1.49,
+   "sum": 32
+  },
+  "snap_east": {
+   "mean": 881.706,
+   "min": 452,
+   "max": 1495,
+   "sd": 260.908,
+   "sum": 14989
+  },
+  "trips_joins": {
+   "mean": 1.882,
+   "min": 0,
+   "max": 5,
+   "sd": 1.49,
+   "sum": 32
+  },
+  "snap_joins": {
+   "mean": 156.588,
+   "min": 52,
+   "max": 356,
+   "sd": 88.417,
+   "sum": 2662
+  },
+  "trips_ramps": {
+   "mean": 0,
+   "min": 0,
+   "max": 0,
+   "sd": 0.0,
+   "sum": 0
+  },
+  "snap_ramps": {
+   "mean": 0,
+   "min": 0,
+   "max": 0,
+   "sd": 0.0,
+   "sum": 0
+  },
+  "trips_diag_s": {
+   "mean": 0,
+   "min": 0,
+   "max": 0,
+   "sd": 0.0,
+   "sum": 0
+  },
+  "snap_diag_s": {
+   "mean": 0,
+   "min": 0,
+   "max": 0,
+   "sd": 0.0,
+   "sum": 0
+  },
+  "trips_diag_n": {
+   "mean": 0,
+   "min": 0,
+   "max": 0,
+   "sd": 0.0,
+   "sum": 0
+  },
+  "snap_diag_n": {
+   "mean": 0,
+   "min": 0,
+   "max": 0,
+   "sd": 0.0,
+   "sum": 0
+  }
+ }
+}
