@@ -26,6 +26,9 @@ The rule (down-right axis; the other axis is the same with x mirrored):
   py -3 diagave.py scan [SAVE ...]            bands per save (default: the shipped Cities) and whether they convert
   py -3 diagave.py plan SAVE                  bands + wanted pieces on a save (read-only)
   py -3 diagave.py preview OUT.png PACK_DIR [--rows 6] [--zoom 4] [--axis 0|1] [--rot 0..3] [--offset x|z]
+  py -3 diagave.py xbuild PACK_DIR [--fresh]  crossing pieces + templates (recipe_crossings.json, manifest.json) (task diagx)
+  py -3 diagave.py xcheck                     every crossing kind, turned 0..3, through the rule
+  py -3 diagave.py xpreview OUT.png PACK_DIR --kind XX0 [--turn k] [--zooms 3,4] [--rots 0,1]
 """
 import argparse
 import glob
@@ -79,12 +82,16 @@ def bands(road):
     ok, why} in real coordinates. junc keys are junction descriptors (JKEY); arms are straight road cells next to the
     avenue that become road 29 in that state."""
     out = []
+    fulls = {}
     for axis in (0, 1):
         R = road if axis == 0 else {(-x, z) for (x, z) in road}
-        full = {}
+        full = fulls[axis] = {}
         for (x, z) in R:
             if (x, z) in R and (x + 1, z) in R and (x + 2, z) in R:
                 full.setdefault(z, set()).add(x)
+    for axis in (0, 1):
+        R = road if axis == 0 else {(-x, z) for (x, z) in road}
+        full = fulls[axis]
         clean = lambda a, z: (a - 1, z) not in R and (a + 3, z) not in R      # noqa: E731
         seen = set()
         for z in sorted(full):
@@ -95,9 +102,30 @@ def bands(road):
                 while chain[-1][1] + 1 in full.get(chain[-1][0] + 1, ()):
                     chain.append((chain[-1][0] + 1, chain[-1][1] + 1))
                 seen.update(chain)
+                start = chain[0]                             # (z, a) in axis space: the band's key
                 if sum(1 for (zz, aa) in chain if clean(aa, zz)) < MIN_ROWS:   # anchored by MIN_ROWS clean rows
                     continue
-                bend = [bend_kind(R, chain, e) for e in (0, 1)]
+                # task diagx: crossing templates, tried at every row with road beside it (anchor = that row)
+                xm, xcov, xw, partners, why = [], set(), {}, [], ""
+                for (zz, aa) in chain:
+                    if not clean(aa, zz):
+                        xm += [(t, aa, zz) for t in x_tables()
+                               if t["axis"] == axis and x_match(t, lambda x, z: (x, z) in R, aa, zz)]
+                for (t, aa, zz) in xm:
+                    xcov |= x_window(t, aa, zz)
+                    for (dx, dz, p, s) in t["writes"]:
+                        c = (aa + dx, zz + dz)
+                        if xw.get(c, (p, s)) != (p, s):
+                            why = why or "two crossings claim (%d,%d)" % ((-c[0] if axis else c[0]), c[1])
+                        xw[c] = (p, s)
+                    if t["pax"] >= 0:                          # the other diagonal's chain: its start row
+                        X = -(aa + t["pdx"]) if axis else aa + t["pdx"]
+                        xp, zp = (-X if t["pax"] else X), zz + t["pdz"]
+                        while xp - 1 in fulls[t["pax"]].get(zp - 1, ()):
+                            xp, zp = xp - 1, zp - 1
+                        partners.append((t["pax"], zp, xp))
+                xend = [any((chain[i][1] + d, chain[i][0]) in xcov for d in range(3)) for i in (0, -1)]
+                bend = [0 if xend[e] else bend_kind(R, chain, e) for e in (0, 1)]
                 n = len(chain)
                 band = {(aa + d, zz) for k, (zz, aa) in enumerate(chain) for d in range(3)
                         if not (bend[0] == 1 and ((k == 0 and d < 2) or (k == 1 and d == 0)))
@@ -107,7 +135,7 @@ def bands(road):
                     A |= {(aa, zz), (aa + 1, zz)}
                     B |= {(aa + 1, zz), (aa + 2, zz)}
                 # side cells of each row: straight road arms along the row (W / E) or along a column (N / S)
-                why, junc, arms = "", {}, {}
+                junc, arms = {}, {}
                 colN, colS = {}, {}                      # column x -> row where its arm touches the band
                 rowarm = {}
                 outside = lambda c: c in R and c not in band     # noqa: E731
@@ -118,7 +146,7 @@ def bands(road):
                         w = None                                  # the straight avenue, not an arm
                     if bend[1] == 1 and k >= n - 2:
                         e = None
-                    if w in R:
+                    if w in R and w not in xcov:                  # task diagx: a crossing's cells are not arms
                         if (aa - 2, zz) in R and not any(outside(c) for c in ((aa - 1, zz + 1), (aa - 2, zz + 1), (aa - 2, zz - 1))):
                             sides.append("W")
                             arms[w], arms[(aa - 2, zz)] = 0, 0
@@ -127,7 +155,7 @@ def bands(road):
                             arms[w], arms[(aa - 1, zz + 1)] = 1, 1
                         else:
                             why = why or "road beside the avenue at (%d,%d) is not a straight arm" % ((-w[0] if axis else w[0]), w[1])
-                    if e in R:
+                    if e in R and e not in xcov:
                         if (aa + 4, zz) in R and not any(outside(c) for c in ((aa + 3, zz - 1), (aa + 4, zz + 1), (aa + 4, zz - 1))):
                             sides.append("E")
                             arms[e], arms[(aa + 4, zz)] = 0, 0
@@ -177,7 +205,7 @@ def bands(road):
                             if bits & 2:
                                 B.add(c)
                         continue
-                    if rowarm[z0][1]:                             # a junction row ends the chain: no drag stub beyond
+                    if rowarm[z0][1] or xend[ee]:                 # a junction row / a crossing ends the chain: no stub
                         continue
                     cont = merge_cont(R, arms, z0, a0, step)
                     if cont:
@@ -215,7 +243,7 @@ def bands(road):
                     for c in band:
                         for dx, dz in DIRS:
                             q = (c[0] + dx, c[1] + dz)
-                            if q in R and q not in band and q not in arms and q not in real:
+                            if q in R and q not in band and q not in arms and q not in real and q not in xcov:
                                 why = "touches road at (%d,%d)" % ((-q[0] if axis else q[0]), q[1])
                                 break
                         if why:
@@ -235,7 +263,8 @@ def bands(road):
                                 a2.add(c)
                             if "B" in side:
                                 b2.add(c)
-                        if all(_mask(c, a2) in LONE for c in a2 if c not in path) and                                 all(_mask(c, b2) in LONE for c in b2 if c not in path):
+                        if all(_mask(c, a2) in LONE for c in a2 if c not in path and c not in xw) and \
+                                all(_mask(c, b2) in LONE for c in b2 if c not in path and c not in xw):
                             best = (cost, a2, b2)
                     pick = best[1:] if best else None
                     if pick is None:
@@ -260,9 +289,24 @@ def bands(road):
                     arms = {m(c): v for c, v in arms.items()}
                     mk = {m(c): v for c, v in mk.items()}
                     path = {m(c) for c in path}
+                    xw = {m(c): v for c, v in xw.items()}
                     chain = [(zz, -aa) for (zz, aa) in chain]
                 out.append({"axis": axis, "rows": chain, "A": A2, "B": B2, "junc": jk, "arms": arms,
-                            "merge": mk, "path": path, "bend": bend, "ok": not why, "why": why})
+                            "merge": mk, "path": path, "bend": bend, "ok": not why, "why": why,
+                            "xw": xw, "partners": partners, "start": (axis, start[0], start[1])})
+    # task diagx: a crossing of two diagonal avenues converts only when both bands do (sc3netmod_dav.c: dry rounds
+    # until no band changes, then the write round)
+    ok = {b["start"]: wanted(b) is not None for b in out}
+    changed = True
+    while changed:
+        changed = False
+        for b in out:
+            if ok[b["start"]] and not all(ok.get(p, False) for p in b["partners"]):
+                ok[b["start"]], b["ok"], changed = False, False, True
+                b["why"] = "the crossing diagonal avenue does not convert"
+    for b in out:
+        b["ok"] = b["ok"] and ok[b["start"]]
+        b["why"] = b["why"] if not b["ok"] else ""
     return out
 
 
@@ -349,6 +393,9 @@ def wanted(band, mids=None):
     A, B = band["A"], band["B"]
     out = {}
     for c in A | B:
+        if c in band.get("xw", {}):
+            out[c] = band["xw"][c]                         # task diagx: a crossing's piece
+            continue
         if c in band.get("path", ()):
             continue                                       # the single road past a merge: left to the stock tiler
         if c in band.get("merge", {}):
@@ -376,6 +423,7 @@ def wanted(band, mids=None):
             out[c] = (OUTER[(35, 0, 0)], p[1]) if p[0] == 35 and beside and (35, 0, 0) in OUTER else p
     for c, o in band["arms"].items():
         out[c] = (29, o)
+    out.update(band.get("xw", {}))                         # task diagx: the crossing's other cells
     return out
 
 
@@ -886,6 +934,321 @@ def cmd_build(a):
     json.dump(report, open(os.path.join(a.pack, "art", "build.json"), "w"), indent=1)
 
 
+# ------------------------------------------------------------------------------------------------ crossings (task diagx)
+# A diagonal avenue crossing another diagonal avenue or the straight avenue 11204, or ending on one (a T). Each kind is
+# one canonical layout of two ELEMENTS (diagave_paint: ("diag", c, k) = the axis-0 avenue on strips c..c+2 turned k
+# states, ("straight", m, k) = 11204 along x on rows m, m+1 turned k states) and, for a T, the stem (element i ends at
+# the other's edge e). Every other drawing of the kind is a turn by k states (cells and piece states turn together)
+# moved by whole cells. The two diagonal kinds differ by where the bands meet: XX0 / TX0 share a plus of 5 cells, XX1 /
+# TX1 a 2x2 block.
+XKINDS = {
+    "XX0": ([("diag", 0, 0), ("diag", 1, 1)], None),
+    "XX1": ([("diag", 0, 0), ("diag", 2, 1)], None),
+    "XSX": ([("diag", 0, 0), ("straight", 0, 0)], None),
+    "XSZ": ([("diag", 0, 0), ("straight", -2, 1)], None),
+    "TSX": ([("diag", 0, 0), ("straight", 0, 0)], (0, 1)),
+    "TSZ": ([("diag", 0, 0), ("straight", -2, 1)], (0, 0)),
+    "TX0": ([("diag", 0, 0), ("diag", 1, 1)], (0, 1)),
+    "TX1": ([("diag", 0, 0), ("diag", 2, 1)], (0, 1)),
+}
+XIDS = (20540, 20599)              # this stream's netpack variant ids
+XBOX = (-7, -7, 10, 9)             # canonical cells examined around the crossing
+XWIN = 2                           # template window: the special cells grown by this many cells (8-neighbourhood)
+XJSON = os.path.join(HERE, "examples", "diagonal_avenue", "recipe_crossings.json")   # recipe_*: tracked
+_XT = None
+
+
+def x_scene(kind):
+    from netmod import diagave_paint as P
+    els, stem = XKINDS[kind]
+    return P.Crossing([P.Placed(P.DiagEl(e[1]) if e[0] == "diag" else P.StraightEl(e[1]), e[2]) for e in els], stem)
+
+
+def x_footprint(sc, box=XBOX):
+    """-> {cell: set of element indices} of the canonical layout: an element's cells (band rows / avenue rows), a
+    stem's cells only where its road reaches (sampled)"""
+    x0, z0, x1, z1 = box
+    out = {}
+    for X in range(x0, x1 + 1):
+        for Z in range(z0, z1 + 1):
+            for i in (0, 1):
+                if sc.els[i].has_cell(X, Z) and any(sc.has(i, X + (a + .5) / 5, Z + (b + .5) / 5)
+                                                    for a in range(5) for b in range(5)):
+                    out.setdefault((X, Z), set()).add(i)
+    return out
+
+
+def x_special(sc, F, zooms=(3, 4), n=12):
+    """cells whose art in the crossing scene differs from what the elements' own pieces draw there"""
+    out = []
+    for c in sorted(F, key=lambda c: (c[1], c[0])):
+        if len(F[c]) > 1:
+            out.append(c)
+            continue
+        i = next(iter(F[c]))
+        diff = False
+        for z in zooms:
+            for r in range(4):
+                for a in range(n):
+                    for b in range(n):
+                        wx, wz = c[0] + (a + .5) / n, c[1] + (b + .5) / n
+                        if sc.colour(z, r, wx, wz) != sc.plain(z, r, wx, wz, i):
+                            diff = True
+                            break
+                    if diff:
+                        break
+                if diff:
+                    break
+            if diff:
+                break
+        if diff:
+            out.append(c)
+    return out
+
+
+def x_staircases(sc, F, i):
+    """element i (a diagonal): (A, B) world cell sets inside the footprint"""
+    import math
+    e = sc.els[i]
+    A, B = set(), set()
+    for c, els in F.items():
+        if i not in els:
+            continue
+        cx, cz = e.canon(c[0] + .5, c[1] + .5)
+        d = math.floor(cx) - math.floor(cz) - e.el.c
+        if d in (0, 1):
+            A.add(c)
+        if d in (1, 2):
+            B.add(c)
+    return A, B
+
+
+def x_parts(sc, F, c):
+    """[(stock piece, world state)] of the road parts in cell c: each diagonal staircase that holds it (its lone-
+    staircase piece by mask, as the plain avenue has it), the straight avenue's 11204"""
+    import math
+    parts = []
+    for i in sorted(F[c]):
+        e = sc.els[i]
+        if e.el.kind == "diag":
+            for S in x_staircases(sc, F, i):
+                if c in S and _mask(c, S) in LONE:
+                    parts.append(LONE[_mask(c, S)])
+        else:
+            cz = math.floor(e.canon(c[0] + .5, c[1] + .5)[1])
+            parts.append((11204, ((2 if cz == e.el.m else 0) + e.k) % 4))
+    return parts
+
+
+def _xrot(c, k):
+    """world cell turned k states (one state: (x, z) -> (-z - 1, x))"""
+    x, z = c
+    for _ in range(k % 4):
+        x, z = -z - 1, x
+    return (x, z)
+
+
+def _grow(cells, n):
+    out = set(cells)
+    for _ in range(n):
+        out |= {(x + dx, z + dz) for (x, z) in out for dx in (-1, 0, 1) for dz in (-1, 0, 1)}
+    return out
+
+
+def x_templates(kind, sc, F, special, place):
+    """Templates of one kind, one per turn k and diagonal element of the turned layout. A template is anchored on a
+    band row of its element (axis space: x mirrored for axis 1; the row's left cell), lists the window (the special
+    cells grown by XWIN) as road 'r' / no road '.', and the cells to write: the special cells' pieces (place[cell] =
+    (piece, state)) and the straight avenue's plain cells (11204). pax / pdx / pdz: the other diagonal's band, which
+    must convert too (a row's left cell, relative to the anchor in this axis space)."""
+    import math
+    out = []
+    W0 = _grow(special, XWIN)
+    shapes = []
+    for k in range(4):
+        Fk = {_xrot(c, k): els for c, els in F.items()}
+        Wk = {_xrot(c, k) for c in W0}
+        mx, mz = min(c[0] for c in Wk), min(c[1] for c in Wk)
+        shape = {((c[0] - mx, c[1] - mz), c in Fk) for c in Wk}
+        if shape in shapes:
+            continue           # a symmetric kind: this turn is an earlier one moved; its templates would match twice
+        shapes.append(shape)
+        writes = {}
+        for c in W0:
+            if c in place:
+                p, s = place[c]
+                writes[_xrot(c, k)] = (p, (s + k) % 4)
+            elif c in F and any(sc.els[i].el.kind == "straight" for i in F[c]):
+                i = next(i for i in F[c] if sc.els[i].el.kind == "straight")
+                cz = math.floor(sc.els[i].canon(c[0] + .5, c[1] + .5)[1])
+                writes[_xrot(c, k)] = (11204, ((2 if cz == sc.els[i].el.m else 0) + sc.els[i].k + k) % 4)
+        for ie, e in enumerate(sc.els):
+            if e.el.kind != "diag":
+                continue
+            axis = (e.k + k) % 2
+            ax = (lambda X: -X) if axis else (lambda X: X)                      # noqa: E731
+            mine = {(ax(c[0]), c[1]) for c, els in Fk.items() if ie in els}
+            road = {(ax(c[0]), c[1]) for c in Fk}
+            win = {(ax(c[0]), c[1]) for c in Wk}
+            rows = sorted((z, a) for (a, z) in mine if (a + 1, z) in mine and (a + 2, z) in mine)
+            anchor = next(((a, z) for (z, a) in rows if any((a + d, z) in win for d in range(3)) and
+                           ((a - 1, z) in road or (a + 3, z) in road)), None)
+            if anchor is None:
+                raise SystemExit("%s turn %d element %d: no band row with a road beside it in the window" % (kind, k, ie))
+            a0, z0 = anchor
+            xs, zs = [c[0] for c in win], [c[1] for c in win]
+            gx0, gz0, gx1, gz1 = min(xs), min(zs), max(xs), max(zs)
+            grid = "".join("-" if (x, z) not in win else "r" if (x, z) in road else "."
+                           for z in range(gz0, gz1 + 1) for x in range(gx0, gx1 + 1))
+            wl = sorted((ax(c[0]) - a0, c[1] - z0, p, s) for c, (p, s) in writes.items())
+            t = {"kind": kind, "turn": k, "element": ie, "axis": axis, "x0": gx0 - a0, "z0": gz0 - z0,
+                 "w": gx1 - gx0 + 1, "h": gz1 - gz0 + 1, "grid": grid, "writes": [list(v) for v in wl], "pax": -1,
+                 "pdx": 0, "pdz": 0}
+            io = 1 - ie
+            o = sc.els[io]
+            if o.el.kind == "diag":
+                pax = (o.k + k) % 2
+                pa = (lambda X: -X) if pax else (lambda X: X)                  # noqa: E731
+                theirs = {(pa(c[0]), c[1]) for c, els in Fk.items() if io in els}
+                prow = next(((a, z) for (a, z) in sorted(theirs, key=lambda c: (c[1], c[0])) if
+                             (a + 1, z) in theirs and (a + 2, z) in theirs and (pa(a), z) in Wk), None)
+                if prow is None:
+                    raise SystemExit("%s turn %d: no partner band row in the window" % (kind, k))
+                t["pax"], t["pdx"], t["pdz"] = pax, ax(pa(prow[0])) - a0, prow[1] - z0
+            out.append(t)
+    return out
+
+
+def x_tables():
+    """the crossing templates (recipe_crossings.json, written by `xbuild`); [] when not built"""
+    global _XT
+    if _XT is None:
+        _XT = json.load(open(XJSON))["templates"] if os.path.exists(XJSON) else []
+    return _XT
+
+
+def x_match(t, road_ax, a, z):
+    """template t anchored at axis-space row (a, z)? road_ax(x, z) tests ROAD in that axis space"""
+    w = t["w"]
+    for j in range(t["h"]):
+        for i in range(w):
+            g = t["grid"][j * w + i]
+            if g == "-":
+                continue
+            if (g == "r") != road_ax(a + t["x0"] + i, z + t["z0"] + j):
+                return False
+    return True
+
+
+def x_window(t, a, z):
+    """axis-space road cells of a matched template's window"""
+    w = t["w"]
+    return {(a + t["x0"] + i, z + t["z0"] + j) for j in range(t["h"]) for i in range(w) if t["grid"][j * w + i] == "r"}
+
+
+def cmd_xbuild(a):
+    """The crossing pieces: special cells per kind (cached in recipe_crossings.json unless --fresh), art (one painted cell
+    per piece, deduplicated over turns), lanes (the road parts' stock lanes), templates; updates manifest.json."""
+    from netmod import netart
+    from netmod import diagave_paint as P
+    import hashlib
+    import shutil
+    old = json.load(open(XJSON)) if os.path.exists(XJSON) and not a.fresh else {}
+    cache = old.get("special", {})
+    tmp = os.path.join(a.pack, "art", "x_cells")
+    pieces, keys, place_all, templates, special_all = [], {}, {}, [], {}
+    nid = XIDS[0]
+    for kind in (a.kinds.split(",") if a.kinds else XKINDS):
+        sc = x_scene(kind)
+        F = x_footprint(sc)
+        special = [tuple(c) for c in cache[kind]] if kind in cache else x_special(sc, F)
+        special_all[kind] = [list(c) for c in special]
+        place = {}
+        for c in special:
+            d = os.path.join(tmp, kind, "%d_%d" % c)
+            if not os.path.exists(os.path.join(d, "anchors.json")) or a.fresh:
+                anc = P.paint_cell(sc, c, d)
+                _write_anchors(d, anc, "diagave.py xbuild: %s cell %s" % (kind, c))
+            parts = x_parts(sc, F, c)
+            frames = {}
+            for z in range(netart.ZOOMS):
+                for r in range(netart.ROTS):
+                    frames[(z, r)] = open(os.path.join(d, netart.frame_name(z, r)), "rb").read()
+
+            def key(s):
+                return hashlib.sha1(b"".join(frames[(z, (sl - s) % 4)] for z in range(netart.ZOOMS)
+                                             for sl in range(netart.ROTS))).hexdigest()
+            if len(parts) == 1:
+                states = [parts[0][1]]
+                base = parts[0][0]
+            else:
+                states = [0, 1, 2, 3]
+                base = 43
+            hit = next(((keys[(base, key(s))], s) for s in states if (base, key(s)) in keys), None)
+            if hit:
+                place[c] = hit
+                continue
+            s = states[0]
+            if nid > XIDS[1]:
+                raise SystemExit("out of piece ids (%d..%d)" % XIDS)
+            vid, nid = nid, nid + 1
+            keys[(base, key(s))] = vid
+            place[c] = (vid, s)
+            out = os.path.join(a.pack, "art", str(vid))
+            os.makedirs(out, exist_ok=True)
+            src_anc = json.load(open(os.path.join(d, "anchors.json")))
+            anc = {}
+            for z in range(netart.ZOOMS):
+                for r in range(netart.ROTS):
+                    shutil.copyfile(os.path.join(d, netart.frame_name(z, r)),
+                                    os.path.join(out, netart.frame_name(z, (r + s) % 4)))
+                    anc[netart.frame_name(z, (r + s) % 4)] = src_anc[netart.frame_name(z, r)]
+            _write_anchors(out, anc, "diagave.py xbuild: %s cell %s placed at state %d" % (kind, c, s))
+            rel = [(p, (st - s) % 4) for p, st in parts]
+            spec = parts_spec(rel, vid, "crossing %s cell %s: lanes of %s" % (kind, c, rel))
+            json.dump(spec, open(os.path.join(a.pack, "xing_%d.lanes.json" % vid), "w", newline="\n"), indent=1)
+            pieces.append({"id": vid, "base": base, "kind": kind, "cell": list(c), "parts": [list(p) for p in parts],
+                           "save_43": len(parts) > 1})
+            print("built %d (%s cell %s, base %d, parts %s)" % (vid, kind, c, base, parts))
+        place_all[kind] = {"%d,%d" % c: list(v) for c, v in place.items()}
+        templates += x_templates(kind, sc, F, special, place)
+    seen, uniq = set(), []
+    for t in templates:
+        k = json.dumps({kk: v for kk, v in t.items() if kk not in ("kind", "turn", "element")}, sort_keys=True)
+        if k not in seen:
+            seen.add(k)
+            uniq.append(t)
+    for n, t in enumerate(uniq):
+        t["id"] = n
+    json.dump({"_": "diagave.py xbuild (task diagx): crossing pieces, their placement per kind, templates",
+               "special": special_all, "pieces": pieces, "place": place_all, "templates": uniq},
+              open(XJSON, "w", newline="\n"), indent=1)
+    print("%d crossing pieces (%d..%d), %d templates -> %s" % (len(pieces), XIDS[0], nid - 1, len(uniq), XJSON))
+    if not a.no_manifest:
+        x_manifest(a.pack, pieces, uniq)
+
+
+def x_manifest(pack, pieces, templates):
+    """crossing pieces into manifest.json: variants, lanes, auto_diagonal_avenues[0].crossing and save_43"""
+    path = os.path.join(pack, "manifest.json")
+    m = json.load(open(path, encoding="utf-8"))
+    lo, hi = XIDS
+    m["variants"] = [v for v in m["variants"] if not lo <= v["id"] <= hi]
+    m["lanes"] = [v for v in m["lanes"] if not lo <= v["piece"] <= hi]
+    for p in pieces:
+        m["variants"].append({"id": p["id"], "base": p["base"], "network": "ROAD",
+                              "name": {"*": "Diagonal avenue crossing", "ENGLISH": "Cruce de avenidas"},
+                              "art": {"from": 35, "png_dir": "art/%d" % p["id"]}, "trblkatt": "copy_base"})
+        m["lanes"].append({"piece": p["id"], "spec": "xing_%d.lanes.json" % p["id"]})
+    dav = m["auto_diagonal_avenues"][0]
+    dav["save_43"] = [v for v in dav.get("save_43", []) if not lo <= v <= hi] + [p["id"] for p in pieces if p["save_43"]]
+    dav["crossing"] = [{"id": t["id"], "axis": t["axis"], "x0": t["x0"], "z0": t["z0"], "w": t["w"], "h": t["h"],
+                        "grid": t["grid"], "partner": [t["pax"], t["pdx"], t["pdz"]], "writes": t["writes"]}
+                       for t in templates]
+    json.dump(m, open(path, "w", encoding="utf-8", newline="\n"), indent=1, ensure_ascii=False)
+    print("manifest: %d crossing variants, %d templates" % (len(pieces), len(templates)))
+
+
 # ------------------------------------------------------------------------------------------------ checks
 def road_cells(save):
     import re
@@ -947,6 +1310,115 @@ def cmd_preview(a):
     print(a.out, shot.size)
 
 
+def x_layout(kind, k, box=(-14, -14, 16, 16)):
+    """a drawing of the kind turned k states, long arms: the road cells"""
+    return {_xrot(c, k) for c in x_footprint(x_scene(kind), box)}
+
+
+def cmd_xcheck(a):
+    """every kind turned 0..3: does the rule convert every band and give each special cell its art? A symmetric kind
+    uses the templates of an earlier turn, so a cell may get another piece / state that draws the same frames: the
+    check compares the frames each (piece, state) shows per view."""
+    from netmod import netart
+    data = json.load(open(XJSON))
+    bad = 0
+    art = os.path.join(os.path.dirname(XJSON), "art")
+    cache = {}
+
+    def look(v):
+        if v is None or not XIDS[0] <= v[0] <= XIDS[1]:
+            return v
+        p, s = v
+        if p not in cache:
+            cache[p] = {(z, sl): open(os.path.join(art, str(p), netart.frame_name(z, sl)), "rb").read()
+                        for z in range(netart.ZOOMS) for sl in range(netart.ROTS)}
+        return tuple(cache[p][(z, (r + s) % 4)] for z in range(netart.ZOOMS) for r in range(netart.ROTS))
+    for kind in (a.kinds.split(",") if a.kinds else XKINDS):
+        place = {tuple(int(v) for v in c.split(",")): tuple(p) for c, p in data["place"][kind].items()}
+        nb = 1 if kind in ("XSX", "XSZ", "TSX", "TSZ") else 2
+        for k in range(4):
+            bs = bands(x_layout(kind, k))
+            w = {}
+            for b in bs:
+                w.update(wanted(b) or {})
+            # the turn whose templates serve this one (a symmetric kind: an earlier turn, moved)
+            W0 = _grow([tuple(c) for c in data["special"][kind]], XWIN)
+            F0 = x_footprint(x_scene(kind))
+            corner, shapes = [], []
+            for kk in range(k + 1):
+                Wk = {_xrot(c, kk) for c in W0}
+                mx, mz = min(c[0] for c in Wk), min(c[1] for c in Wk)
+                corner.append((mx, mz))
+                shapes.append({((c[0] - mx, c[1] - mz), _xrot(c, -kk % 4) in F0) for c in Wk})
+            k0 = shapes.index(shapes[k])
+            dx, dz = corner[k][0] - corner[k0][0], corner[k][1] - corner[k0][1]
+            exp = {(_xrot(c, k0)[0] + dx, _xrot(c, k0)[1] + dz): (p, (s + k0) % 4) for c, (p, s) in place.items()}
+            miss = sorted(c for c, v in exp.items() if look(w.get(c)) != look(v))
+            good = sum(1 for b in bs if b["ok"]) == nb == len(bs) and not miss
+            bad += not good
+            print("%s turn %d: %d band(s), %d convert, special cells placed %d/%d %s %s" % (
+                kind, k, len(bs), sum(1 for b in bs if b["ok"]), len(exp) - len(miss), len(exp),
+                "OK" if good else "FAIL", [b["why"] for b in bs if not b["ok"]][:2] + miss[:4]))
+    print("failures: %d" % bad)
+
+
+def cmd_xpreview(a):
+    """one drawing of a kind with the built pieces (stock 11204 on the straight avenue outside the crossing), as
+    netart.preview shows it, cropped to --crop W,H about the crossing's centre"""
+    import math
+    from netmod import netart
+    sc = x_scene(a.kind)
+    data = json.load(open(XJSON))
+    sp = [tuple(c) for c in data["special"][a.kind]]
+    cx = (min(c[0] for c in sp) + max(c[0] for c in sp) + 1) / 2.0     # canonical centre of the special cells
+    cz = (min(c[1] for c in sp) + max(c[1] for c in sp) + 1) / 2.0
+    for _ in range(a.turn % 4):
+        cx, cz = -cz, cx
+    r = a.r
+    X0, X1 = int(math.ceil(cx - 0.5)) - r, int(math.floor(cx - 0.5)) + r
+    Z0, Z1 = int(math.ceil(cz - 0.5)) - r, int(math.floor(cz - 0.5)) + r
+    F = x_footprint(sc, (-r - 6, -r - 6, r + 8, r + 8))
+    road, stock = set(), {}
+    for c, els in F.items():
+        w = _xrot(c, a.turn)
+        if not (X0 <= w[0] <= X1 and Z0 <= w[1] <= Z1):
+            continue
+        road.add(w)
+        for i in els:
+            e = sc.els[i]
+            if e.el.kind == "straight":
+                cz2 = math.floor(e.canon(c[0] + .5, c[1] + .5)[1])
+                stock[w] = (11204, ((2 if cz2 == e.el.m else 0) + e.k + a.turn) % 4)
+    want = {}
+    for b in bands(road):
+        print("band axis %d rows %d: %s" % (b["axis"], len(b["rows"]), "converts" if b["ok"] else b["why"]))
+        want.update(wanted(b) or {})
+    ours = set(MID.values()) | set(OUTER.values()) | set(JUNC.values()) | \
+        {v for cs in MERGE_PIECES.values() for _, v in cs} | set(range(XIDS[0], XIDS[1] + 1))
+    cells = []
+    for c in road:
+        pid, st = want.get(c) or stock.get(c) or (35, 0)
+        cell = {"at": [-c[0], c[1]], "slot": st}
+        if pid in ours:
+            cell["dir"] = os.path.join(a.pack, "art", str(pid))
+        else:
+            cell["piece"] = pid
+        cells.append(cell)
+    for (mx, mz) in ((X0 - 1, Z0 - 1), (X1 + 1, Z0 - 1), (X0 - 1, Z1 + 1), (X1 + 1, Z1 + 1)):
+        cells.append({"at": [-mx, mz], "piece": 29, "slot": 0})     # markers: the crop box is symmetric about the centre
+    shots = netart.preview({"cells": cells}, None, zooms=[int(z) for z in a.zooms.split(",")],
+                           rots=[int(v) for v in a.rots.split(",")])
+    for (z, rr), im in shots.items():
+        if a.crop:
+            cw, ch = [int(v) for v in a.crop.split(",")]
+            cw, ch = cw >> (4 - z), ch >> (4 - z)
+            im = im.crop((im.width // 2 - cw // 2, im.height // 2 - ch // 2, im.width // 2 + cw // 2,
+                          im.height // 2 + ch // 2))
+        out = a.out % {"z": z, "r": rr, "kind": a.kind, "turn": a.turn} if "%" in a.out else a.out
+        im.convert("RGB").save(out)
+        print(out, im.size)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -966,8 +1438,25 @@ def main(argv=None):
     s.add_argument("--rot", type=int, default=0)
     s.add_argument("--offset", default="x", choices=("x", "z"))
     s.add_argument("--junction", choices=JUNCTION_KINDS)
+    s = sub.add_parser("xbuild")                                   # task diagx
+    s.add_argument("pack")
+    s.add_argument("--kinds")
+    s.add_argument("--fresh", action="store_true")
+    s.add_argument("--no-manifest", action="store_true")
+    s = sub.add_parser("xcheck")
+    s.add_argument("--kinds")
+    s = sub.add_parser("xpreview")
+    s.add_argument("out")
+    s.add_argument("pack")
+    s.add_argument("--kind", default="XX0", choices=sorted(XKINDS))
+    s.add_argument("--turn", type=int, default=0)
+    s.add_argument("--r", type=int, default=7)
+    s.add_argument("--zooms", default="4")
+    s.add_argument("--rots", default="0")
+    s.add_argument("--crop", help="W,H at zoom 4 (halved per zoom below)")
     a = ap.parse_args(argv)
-    {"combos": cmd_combos, "build": cmd_build, "scan": cmd_scan, "plan": cmd_plan, "preview": cmd_preview}[a.cmd](a)
+    {"combos": cmd_combos, "build": cmd_build, "scan": cmd_scan, "plan": cmd_plan, "preview": cmd_preview,
+     "xbuild": cmd_xbuild, "xcheck": cmd_xcheck, "xpreview": cmd_xpreview}[a.cmd](a)
     return 0
 
 

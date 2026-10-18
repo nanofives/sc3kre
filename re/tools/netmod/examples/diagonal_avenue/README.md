@@ -25,9 +25,15 @@ median of the stock two-road avenue.
 - **Bends:** when both drags go on as two parallel straight roads (the stock avenue 11204), the diagonal avenue turns
   into the straight one. No extra pieces: the carriageways' edges meet the straight avenue's on one cell line, so the
   diagonal cells keep their middle-of-band pieces and the straight cells stay stock.
-- **Limits:** other roads may touch the band only as straight arms (junctions); anything else leaves it to the stock
-  tiler (e.g. the existing double diagonals in Berlin and Moscow). Avenue x avenue is not handled. Bulldozing a cell
-  breaks a carriageway: the avenue goes back to the stock ladder until the cell is rebuilt.
+- **Crossings (task diagx):** a diagonal avenue crossing another diagonal avenue or the straight avenue (11204), or
+  ending on one (a T). The crossing is paved with stock 43's asphalt, crosswalks (two white lines) on every arm, each
+  median ends in a concrete nose, a T keeps the through road's far curb. Pieces 20540..20594 (`xing_*.lanes.json`:
+  the lanes of every road part in the cell, straight through on both avenues). `recipe_crossings.json` holds the 32
+  templates (`diagave.py xbuild .` writes it and the manifest entries, `diagave.py xcheck` runs every kind through the
+  rule). A crossing of two diagonal avenues converts only when both avenues do.
+- **Limits:** other roads may touch the band only as straight arms (junctions) or as one of the crossings above;
+  anything else leaves it to the stock tiler (e.g. the existing double diagonals in Berlin and Moscow). Bulldozing a
+  cell breaks a carriageway: the avenue goes back to the stock ladder until the cell is rebuilt.
 - **Saves:** the pieces that hold both roads save as 4-way 43, the others as their stock base, so a game without the
   mod still loads and keeps the roads joined (the stock ladder look).
 
@@ -36,9 +42,13 @@ Build and install (the art is made from the game's own frames, so it is not ship
 ```
 cd re/tools/netmod/examples/diagonal_avenue
 py -3 ../../diagave.py build .                       # art/<id>/ and the *.lanes.json specs
+py -3 ../../diagave.py xbuild .                      # crossing art (art/<id>/), reuses recipe_crossings.json
 cd ../../../../..
 py -3.12 re/tools/netmod/netpack.py install re/tools/netmod/examples/diagonal_avenue --tree <game tree>
 ```
+
+81 variants with lanes add 324 TrBlkAtt records per language (the crossings 220 of them); the stock index has room for
+161, so ixf_insert grows it by one 0x5000-byte block (first payload 0x5004 -> 0xA004), as the game's own writer does.
 
 The art is painted per world scene by `diagave_paint.py` (straight avenue, junction, merge): every pixel samples the
 stock pieces' own frames at the same screen position, so neighbouring pieces meet exactly.

@@ -132,7 +132,8 @@ static int table_read(const char *path) {
         if (*p == '#' || *p == ';' || *p == '\r' || *p == '\n' || !*p) continue;
         if (!strncmp(p, "ramp ", 5)) continue;                 /* NETRAMP lines, read by netramp_install */
         if (!strncmp(p, "rbt ", 4)) continue;                  /* RBT lines, read by rbt_install */
-        if (!strncmp(p, "dav ", 4) || !strncmp(p, "davj ", 5) || !strncmp(p, "davm ", 5) || !strncmp(p, "davs ", 5))
+        if (!strncmp(p, "dav ", 4) || !strncmp(p, "davj ", 5) || !strncmp(p, "davm ", 5) || !strncmp(p, "davs ", 5) ||
+            !strncmp(p, "davx", 4))                    /* task diagx: davx / davxg / davxw */
             continue;                                    /* DAV lines, read by rbt_install (task diagave) */
         if (!strncmp(p, "avxb ", 5) || !strncmp(p, "avxa ", 5)) continue;   /* task avx: AVX lines, read by rbt_install */
         if (!strncmp(p, "bvp ", 4) || !strncmp(p, "bvc ", 4) || !strncmp(p, "bvt ", 4) ||
