@@ -1,0 +1,1 @@
+{"piece": 21387, "states": [0, 2], "flag": 0, "vehicle": {"class": "car", "speed": 110000, "lanes": [{"from": [143, 1024, 0], "to": [0, 1024, 143], "path": 5888768, "speed": 110000}, {"from": [61, 1024, 0], "to": [0, 1024, 61], "path": 5889024, "speed": 110000}]}, "connects": {"road": {"low": [["z-", "x-"]], "high": [["x-", "z-"]]}}, "curves": []}

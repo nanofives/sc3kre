@@ -1,0 +1,1 @@
+{"piece": 21395, "states": [0, 1, 2, 3], "flag": 0, "vehicle": {"class": "car", "speed": 110000, "lanes": []}, "curves": [], "connects": {"road": {"low": [], "high": []}}}
