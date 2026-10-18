@@ -27,6 +27,9 @@
  *                            a cell that already holds piece.state is only kept. Works on a highway cell and on a
  *                            free cell. -> 1 written, 0 already there, -1 refused (cell neither highway nor free)
  *   hwy_keep(hp, x, z)       keep an hwyp piece that is right as it is
+ *   hwy_drop(hp, x, z)       remove whatever highway occupant the cell holds at hwy_end (a declared piece or a stock
+ *                            highway cell, e.g. a T's stem stub when the T breaks): manager remover vt+0xb8, then the
+ *                            3x3 rect retile; wins over keep. Cells one in from the read box border only
  * Revert (hwy_end): every cell of the read box (one cell in from its border) holding a declared piece (hwyp) that no
  * block kept in this pass goes back: a LAND piece (written into a free cell) is removed with the manager's own remover
  * vt+0xb8 = FUN_1000909f (vt+0x108 = FUN_100090f4 checks map-edge neighbour links, then layer vt+0x48), then the rect
@@ -58,7 +61,7 @@ struct HwyPass {
     void *lay;
     int W, H, x0, z0, x1, z1;                 /* map size; the read box (cells) */
     RbBuf b;                                  /* hwy_at values of the read box */
-    BYTE *flag;                               /* [cell]: 1 kept, 2 free tested, 4 free */
+    BYTE *flag;                               /* [cell]: 1 kept, 2 free tested, 4 free, 8 drop */
     const char *who;
     int nput, nrev;
 };
@@ -191,6 +194,11 @@ static void hwy_keep(HwyPass *hp, int x, int z) {
     hwy_claim(hp, x, z);
 }
 
+static void hwy_drop(HwyPass *hp, int x, int z) {
+    BYTE *f = hwy_flag(hp, x, z);
+    *f = (BYTE)((*f & ~1) | 8);
+}
+
 static int hwy_put(HwyPass *hp, int x, int z, WORD piece, int state) {
     DWORD cur = hwy_at(hp, x, z);
     int pos[3];
@@ -285,9 +293,9 @@ static void hwy_end(HwyPass *hp) {
     for (z = hp->z0 + 1; z < hp->z1; z++)
         for (x = hp->x0 + 1; x < hp->x1; x++) {
             DWORD v = hwy_at(hp, x, z);
-            int k = v ? hwy_piece(hwy_id(v)) : -1, rect[6];
-            if (k < 0 || (*hwy_flag(hp, x, z) & 1)) continue;
-            if (g_hwy_p[k].land) {
+            int k = v ? hwy_piece(hwy_id(v)) : -1, rect[6], drop = v && (*hwy_flag(hp, x, z) & 8);
+            if (!drop && (k < 0 || (*hwy_flag(hp, x, z) & 1))) continue;
+            if (drop || g_hwy_p[k].land) {
                 void *occ = NULL;
                 if (((PFN_HwyAt)VT(hp->lay, 0x7c))(hp->lay, 0, x, z, &occ) && occ) {
                     ((PFN_HwyRemove)VT(hp->mgr, 0xb8))(hp->mgr, 0, hp->lay, occ);
@@ -300,8 +308,9 @@ static void hwy_end(HwyPass *hp) {
             rect[2] = 0; rect[5] = 0;
             ((PFN_Retile)VT(hp->mgr, 0xb0))(hp->mgr, 0, rect, 3);
             hp->nrev++;
-            logf("hwy: %s: (%d,%d) piece %u.%d kept by no block -> %s", hp->who, x, z, hwy_id(v), hwy_st(v),
-                 g_hwy_p[k].land ? "removed (land), 3x3 retile" : "stock retile");
+            logf("hwy: %s: (%d,%d) piece %u.%d %s", hp->who, x, z, hwy_id(v), hwy_st(v),
+                 drop ? "dropped by a block -> removed, 3x3 retile" :
+                 g_hwy_p[k].land ? "kept by no block -> removed (land), 3x3 retile" : "kept by no block -> stock retile");
         }
     InterlockedExchangeAdd(&g_hwy_n_put, hp->nput);
     InterlockedExchangeAdd(&g_hwy_n_rev, hp->nrev);
