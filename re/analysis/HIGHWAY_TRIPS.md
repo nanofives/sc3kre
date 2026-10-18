@@ -122,7 +122,7 @@ SYS.PAK goes through the overlay hook was not checked here `[UNCERTAIN]`: the te
 | ramp-cell road density (Frida data write) | the ramp wins the ring-scan ranking more often | 120: pooled 5.93% -> 8.37%; 164: 4.93% -> 8.99% |
 | `TrafficAnnoyanceLevel` (INI) | lowers the level a road must stay under to keep its rank; a ramp at 0 then beats every road at or above it | not tested. It changes all road routing (trips move to quiet roads), so it is a blunt lever |
 | deposit on type-3 nodes (code patch) | add the missing case in route_trip's deposit switch (type 3 -> mask 0x15 / 2), so ramps gain density from their own use like roads | not built. Expected inside the measured 1.4x..1.8x, because ramps would compete by the game's own rule |
-| prefer ramps outright in the ring scan (code patch, e.g. score 0x40 candidates like stations, 0xff) | a ramp is taken whenever it is offered | upper bound measured with density 164: 1.8x |
+| **prefer ramps outright (BUILT: sc3netmod RAMPFIRST, `re/harness/src/sc3netmod_rampfirst.c`, owner pick B)** | when a road / bus step has an open road-side ramp candidate, the other road candidates are closed in the visited grid for that one call, so the ramp is taken; on a later retry the stock order applies | measured in one game, live off / on ABBA: 4.69% -> 9.53% pooled (2.0x), failed trips unchanged (`verify/hwtrips/RESULTS.md`) |
 | more on-ramps (player / template) | more entry cells, so more searches pass one | not tested. hwtraffic: on-ramp count alone does not order cities |
 | destination-aware routing (replace the DFS with a cost-ordered search to a chosen destination) | costs start to matter, and highways win on long trips | a rewrite of route_trip and its callers. Large experiment, not attempted |
 

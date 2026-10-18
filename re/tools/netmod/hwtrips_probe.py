@@ -19,6 +19,7 @@ Levers (--lever, applied by rpc on a timer; window schedule ABBA... of --secs ea
   rampd:N   in B windows, every 0.5 s set the road density +0x6c of every type-3 cell (flags & 0x41 == 0x41, not 0x10)
             to N; in A windows set them back to the value read at the start of the run.
   hwcost:N  write DAT_1001f0b2 (TripCellCostBaseHighway, INI 2) = N in B windows.
+  rf:1      sc3netmod RAMPFIRST block (sc3netmod_rampfirst.c) on in B windows, off in A (sc3netmod_rf_set); left off.
 
   py -3.12 hwtrips_probe.py census --out census.json
   py -3.12 hwtrips_probe.py run --secs 20 --windows 8 [--lever rampd:120] [--start 4] --out run.json
@@ -158,6 +159,8 @@ rpc.exports = {
   lever: function (kind, v) {
     if (kind === 'annoy') A(0x1001f0c0).writeU8(v < 0 ? annoyOrig : v);
     else if (kind === 'hwcost') A(0x1001f0b2).writeU8(v < 0 ? hwcOrig : v);
+    else if (kind === 'rf') return new NativeFunction(Process.getModuleByName('sc3netmod.dll').getExportByName('sc3netmod_rf_set'),
+      'int', ['int'])(v < 0 ? 0 : 1);
     else if (kind === 'rampd') {
       if (!ramps) findRamps();
       if (v < 0) { rampVal = -1; for (var i = 0; i < ramps.length; i++) wb(0x6c, ramps[i][0], ramps[i][1], rampOrig[i]); }

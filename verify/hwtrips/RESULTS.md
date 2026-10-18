@@ -69,3 +69,40 @@ Reading:
 `re/tools/netmod/hwtrips_probe.py`, `re/tools/netmod/hwtrips_sheet.py`, `verify/hwtrips/RESULTS.md`,
 `verify/hwtrips/data/*.json`, `re/analysis/HIGHWAY_TRIPS.md`. Save copy and logs:
 `Simcity_stock_highways\re\harness\inst_highways\hwtrips\`.
+
+## The mod: sc3netmod RAMPFIRST (owner pick B, 2026-10-18)
+
+Owner choice between "small ramp patch" and "routing rewrite": B, rank ramps first. Built as a new sc3netmod block,
+`re/harness/src/sc3netmod_rampfirst.c`, on LANEDENSITY's entry detour of `FUN_1000755e` (edits in
+`sc3netmod_lanes.c` marked `/* task hwtrips */`, 14 lines).
+
+- Rule: for a 1x1 road (type 1) or bus (0x41) node whose ring candidates (four sides and the centre) include an
+  unvisited road-side ramp cell (flags `& 0x51 == 0x41`), every other road candidate gets the node type's bits in the
+  visited grid for that one call, so the stock scan takes the ramp. The bits are cleared after the call (LANEDENSITY's
+  existing restore). On a retry from the same node the ramp is visited, so the stock busiest-road order applies.
+  Stations are left alone. It writes neither traffic density nor the save.
+- Install: on by default. `SC3NETMOD_RAMPFIRST=0` turns it off. When LANEDENSITY is off or no variants are installed,
+  the detour still installs in a "ramp-first only" mode (4) that applies no lane rules. Export `sc3netmod_rf_set(0|1)`
+  switches it live (probe lever `rf:1`). Stats every 10 s in `sc3netmod.log` (`rampfirst: ... ramp offers=, other road
+  candidates closed=`).
+- Check: test tree `Simcity_stock_highways`, instance `re\harness\inst_hwtrips\` (own sc3netmod.dll build, 302,080
+  bytes), fresh copy of shipped Sacramento `sac2.sc3`, one game (PID 39588, stopped). Log: `rampfirst: on`,
+  `lanedensity: ON, mode variants`, 0 faults. `hwtrips_probe.py run --nostep --lever rf:1`, ABBA ABBA, 20 s windows
+  (90..97 sim days each), data `data/sac_rf.json`, sheet `MAIN\verify\hwtrips\owner_shots\hwtrips_rampfirst_sheet.png`.
+
+| | A: RAMPFIRST off (stock routing) | B: RAMPFIRST on |
+|---|---|---|
+| highway share of arrived trips, per window | 4.33..5.43% | 8.40..10.35% |
+| pooled | 4.69% | 9.53% |
+| failed trips | 0.47..0.80% | 0.41..0.82% |
+| trips with a ramp node in the final path, per window | 388..570 | 679..977 |
+| mean final path length | 43.4 nodes | 48.9 nodes |
+| trips routed per 30 sim days | 4,140 | 4,193 |
+
+Every B window is above every A window. The rise (2.0x) matches the density-164 upper-bound lever (1.8x) measured
+earlier in another game. Over the run (B windows, about 80 s with the block on) it counted 14,511 ramp offers and closed 19,702 other road candidates.
+
+Not measured: routing time per trip. With the block on, every road / bus step goes through the C path `ld_select`
+instead of the asm pass-through. Also not checked: a big city with sc3perf `traffic_mt`, and Seoul. The block keeps
+no state across calls (per-call locals and two interlocked counters) and writes only the calling trip's visited
+grid, the same terms LANEDENSITY runs on with sc3perf workers.
