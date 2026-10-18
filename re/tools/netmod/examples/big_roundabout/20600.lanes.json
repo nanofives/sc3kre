@@ -1,0 +1,22 @@
+{
+ "_": "bigrbt.py: 3x3 roundabout piece 20600 (centre cell, arms [])",
+ "piece": 20600,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 1,
+ "vehicle": {
+  "class": "car",
+  "lanes": []
+ },
+ "pedestrian": {
+  "walks": [],
+  "exits": []
+ },
+ "connects": {
+  "road": []
+ }
+}

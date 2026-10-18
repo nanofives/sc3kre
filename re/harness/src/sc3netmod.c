@@ -134,6 +134,7 @@ static int table_read(const char *path) {
         if (!strncmp(p, "rbt ", 4)) continue;                  /* RBT lines, read by rbt_install */
         if (!strncmp(p, "dav ", 4) || !strncmp(p, "davj ", 5) || !strncmp(p, "davm ", 5) || !strncmp(p, "davs ", 5))
             continue;                                    /* DAV lines, read by rbt_install (task diagave) */
+        if (!strncmp(p, "rbt9 ", 5)) continue;           /* RBT9 lines, read by rbt_install (task bigrbt) */
         if (p[0] == 't' && (!strncmp(p, "tmpl ", 5) || !strncmp(p, "tori ", 5) || !strncmp(p, "tcel ", 5) ||
                             !strncmp(p, "tedg ", 5) || !strncmp(p, "tend", 4))) continue;   /* TMPL lines */
         if (sscanf(p, "%lu %lu", &v, &b) != 2 || v == 0 || v > 0xffff || b == 0 || b > 0xffff || v == b) {
@@ -1301,6 +1302,7 @@ static int netramp_install(BYTE *m) {
 #include "sc3netmod_tmpl.c"         /* task multitile: TMPL, multi-cell templates (SC3NETMOD_TMPL=0) */
 #include "sc3netmod_rbt.c"          /* task roundabout3: RBT, automatic 2x2 roundabouts (SC3NETMOD_RBT=0) */
 #include "sc3netmod_dav.c"          /* task diagave: DAV, automatic diagonal avenues on RBT's hooks (SC3NETMOD_DAV=0) */
+#include "sc3netmod_rbt9.c"         /* task bigrbt: RBT9, automatic 3x3 roundabouts on RBT's hooks (SC3NETMOD_RBT9=0) */
 #include "sc3netmod_lanes.c"        /* task lanedensity: road density honours turn matrices (SC3NETMOD_LANEDENSITY) */
 
 /* ============================================================ arming */
