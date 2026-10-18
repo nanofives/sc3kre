@@ -18,6 +18,7 @@ import os
 from PIL import Image
 
 from netmod import netart as NA
+from netmod import lanelines as LL
 
 DIAG_STATE = {0: 2, 1: 0}          # axis 0: a cell at d (x - z - strip offset) 0 / 1 of a strip holds 35 in this state
 WHITE_LINES = ((8.0, 15.0), (32.0, 38.0))     # crosswalk lines, lane units in from the edge (stock 43, zoom 4)
@@ -26,12 +27,13 @@ WHITE_LINES = ((8.0, 15.0), (32.0, 38.0))     # crosswalk lines, lane units in f
 class Stock:
     """Colour of a stock piece at a lane-frame point (x, z in 0..256 of the cell) in view rotation r."""
 
-    def __init__(self):
+    def __init__(self, layer=0):
         self.fr = {}
+        self.layer = layer
 
     def frames(self, pid):
         if pid not in self.fr:
-            self.fr[pid] = {k: (im, im.load(), LT) for k, (im, LT) in NA.stock_frames(pid).items()}
+            self.fr[pid] = {k: (im, im.load(), LT) for k, (im, LT) in NA.stock_frames(pid, self.layer).items()}
         return self.fr[pid]
 
     def __call__(self, pid, state, z, r, x, zl):
@@ -45,6 +47,7 @@ class Stock:
 
 
 STOCK = Stock()
+STOCK1 = Stock(1)                  # task diagx: layer 1 (11204's front trees)
 CLEAR = (0, 0, 0, 0)
 
 
@@ -83,6 +86,9 @@ def palette(kind, z):
             im, _ = NA.stock_frames(29)[(z, s)]
             out += [c for c in im.getdata() if asphaltish(c)]
         out = [(c[0], c[1], c[2], 255) for c in out] or [(90, 93, 98, 255)]
+    elif kind == "concrete":                            # task diagx: stock 35's light sidewalk pixels (median noses)
+        im, _ = NA.stock_frames(35)[(z, 0)]
+        out = [(c[0], c[1], c[2], 255) for c in im.getdata() if light(c)] or [(170, 170, 165, 255)]
     else:
         best = (0, 0, 0, 0)
         for s in range(4):
@@ -553,3 +559,313 @@ def merge_table(ids):
                     rows.append((ax, z, ids[kind][i], k))
                 out[(axis, end, cont)] = rows
     return out
+
+
+# ------------------------------------------------------------------------------------------------ crossings (task diagx)
+# Two roads crossing, or one ending on the other (a T). Each road is an ELEMENT in its own canonical frame (DiagEl: the
+# diagonal avenue of axis 0, strips c .. c+2 in x - z; StraightEl: stock avenue 11204 along x, rows m and m+1), placed
+# in the world turned by k states and moved by whole cells. Measured 2026-10-17 (diagx, 4,000 random points, 0
+# mismatches): a scene turned one state shows at view r what the unturned scene shows at view r + 1 at the point
+# (wz, -wx), because a piece at state s + 1 in view r draws the frame slot of state s in view r + 1. So an axis-1
+# diagonal is DiagEl turned one state, and an avenue along z is StraightEl turned one state.
+
+SQ2 = math.sqrt(2.0)
+NOSE_CELLS = 0.12 / SQ2            # the median nose, as long as StraightAvenue.NOSE (q units), measured along the road
+
+
+def _rinv(wx, wz, k):
+    """world point -> the point it came from before k turns (one turn: (x, z) -> (-z, x))"""
+    for _ in range(k % 4):
+        wx, wz = wz, -wx
+    return wx, wz
+
+
+def _rot(wx, wz, k):
+    for _ in range(k % 4):
+        wx, wz = -wz, wx
+    return wx, wz
+
+
+def _yellow(c):
+    """a stock yellow centre-line pixel or its anti-aliased edge (asphalt is bluish: blue above red)"""
+    return c[3] and c[0] - c[2] > 15
+
+
+def _grassy(c):
+    """11204's median grass (the test grass_palette uses)"""
+    return c[3] and c[1] > c[0] + 12 and c[1] > c[2] + 8 and c[1] < 150
+
+
+PAVE_IN = (48.0, 208.0)            # stock 43's clean asphalt, lane units (its crosswalks end at 38, corners at 40)
+
+
+def paved(z, r, wx, wz):
+    """Asphalt for a paved crossing: stock 4-way 43's own interior, at the world point folded into PAVE_IN (a
+    triangle wave of the world lane coordinate, so it is continuous across cells)."""
+    lo, hi = PAVE_IN
+    span = hi - lo
+
+    def fold(t):
+        u = (t / span) % 2.0
+        return lo + span * (u if u < 1.0 else 2.0 - u)
+    return STOCK(43, 0, z, r, fold(wx * 256.0), fold(wz * 256.0))
+
+
+def _first_lane(prof, from_hi=False):
+    """cut position where the first lane bin starts, from the low (or high) end of a lane_bins profile"""
+    lo, w, lane = prof
+    n = len(lane)
+    for i in (range(n - 1, -1, -1) if from_hi else range(n)):
+        if lane[i]:
+            return lo + (i + 1) * w if from_hi else lo + i * w
+    return lo if from_hi else lo + n * w
+
+
+class DiagEl:
+    """Canonical diagonal avenue: strips c <= x - z < c + 2 (A then B), as the DAV pieces draw it (StraightAvenue)."""
+
+    kind = "diag"
+    width = 2.0 / SQ2              # cells across
+    direction = (1.0 / SQ2, 1.0 / SQ2)
+    normal = (1.0 / SQ2, -1.0 / SQ2)
+
+    def __init__(self, c=0):
+        self.c = c
+        self.av = StraightAvenue()
+
+    def across(self, wx, wz):
+        return (wx - wz - self.c) / SQ2
+
+    def colour(self, z, r, wx, wz):
+        """the plain avenue, its carriageway lines white and dashed (owner, 2026-10-17; lanelines.py): a yellow pixel
+        on the stock centre line's footprint becomes a dash at the along-coordinate (x + z) / sqrt 2 of the avenue's
+        own frame, as the diagonal avenue scenes phase it, else lane asphalt (already-white pixels pass)"""
+        c = self.av.colour(z, r, wx - self.c, wz)
+        if not _yellow(c):
+            return c
+        p = wx - wz - self.c
+        st = 0 if p < 1.0 else 1
+        fill = lambda: lane_fill(st, wx - self.c, wz, z, r)                     # noqa: E731
+        cl = centre_line(z, r)
+        if cl is not None and abs(p - st - cl[0]) <= cl[1]:
+            return LL.dashed(z, wx, wz, LL.along_diag(wx - self.c, wz), True, fill)
+        return fill()
+
+    def median(self, z, r, wx, wz):
+        """the stock pixel where the plain avenue draws median grass, else None"""
+        p = wx - wz - self.c
+        if not (0.0 <= p < 2.0):
+            return None
+        col = diag(0 if p < 1.0 else 1, wx - self.c, wz, z, r)
+        cen, hw = seam(z, r)
+        return col if light(col) and abs(p - cen) < hw else None
+
+    def fill(self, z, r, wx, wz):
+        p = wx - wz - self.c
+        return lane_fill(0 if p < 1.0 else 1, wx - self.c, wz, z, r)
+
+    def own(self, z, r, wx, wz):
+        p = wx - wz - self.c
+        return diag(0 if p < 1.0 else 1, wx - self.c, wz, z, r)
+
+    def sidewalk(self, z, r):
+        """(low edge, high edge) sidewalk + curb widths in cells, from stock 35's lane profile"""
+        prof = strip_prof(z, r)
+        return _first_lane(prof) / SQ2, (1.0 - _first_lane(prof, True)) / SQ2
+
+    def cells(self):
+        return lambda X, Z: X - Z - self.c in (0, 1, 2)
+
+
+class StraightEl:
+    """Canonical stock avenue 11204 along x: row m at state 2, row m + 1 at state 0 (measured with tiler.py)."""
+
+    kind = "straight"
+    width = 2.0
+    direction = (1.0, 0.0)
+    normal = (0.0, 1.0)
+    PID = 11204
+
+    def __init__(self, m=0):
+        self.m = m
+
+    def across(self, wx, wz):
+        return wz - self.m
+
+    def ground(self, z, r, wx, wz):
+        """11204's ground without its trees. Its layer 0 carries the trees too; in slots 1 and 2 they stand in front
+        of the road (layer 1 holds the same trees alone). A pixel under them is read from the nearest point along the
+        road (x, wrapping: every cell draws the same frame) that no tree covers, so the lane lines stay put; from the
+        opposite view (slot + 2, the trees behind) only when the whole line is covered, as its texture differs (10%
+        of pixels equal at the same ground point, measured 2026-10-17)."""
+        if not (self.m <= wz < self.m + 2):
+            return CLEAR
+        X, Z = math.floor(wx), math.floor(wz)
+        st, lx, lz = 2 if Z == self.m else 0, (wx - X) * 256.0, (wz - Z) * 256.0
+        if (st + r) & 3 in (1, 2) and STOCK1(self.PID, st, z, r, lx, lz)[3]:
+            for k in range(1, 65):
+                for sgn in (1, -1):
+                    l2 = (lx + sgn * 2.0 * k) % 256.0
+                    if not STOCK1(self.PID, st, z, r, l2, lz)[3]:
+                        return STOCK(self.PID, st, z, r, l2, lz)
+            return STOCK(self.PID, st, z, (r + 2) % 4, lx, lz)
+        return STOCK(self.PID, st, z, r, lx, lz)
+
+    def grass_band(self, z, r):
+        """half width (cells) of the median grass about row m + 1: the farthest offset (up to 0.35) where both sides
+        are grass in most samples along the road (the stock median has a dark line of trunk bases at its centre)"""
+        k = (self.PID, "grass", z, r)
+        if k not in _PROF:
+            alongs = [0.03 + 0.94 * j / 31.0 for j in range(32)]
+            hw = 0.0
+            for i in range(1, 46):
+                t = i / 128.0
+                if all(sum(1 for a in alongs if _grassy(self.ground(z, r, a, self.m + 1 + sgn * t))) >= len(alongs) // 2
+                       for sgn in (-1, 1)):
+                    hw = t + 0.5 / 128.0
+            _PROF[k] = hw
+        return _PROF[k]
+
+    def colour(self, z, r, wx, wz):
+        """the tree-free ground; on the median strip the trunk bases become grass (no tree stands on these cells); the
+        yellow centre line of each carriageway white and dashed, phased by x as the 11204 reskin (avenue_markings.py:
+        4 centred dashes per cell)"""
+        c = self.ground(z, r, wx, wz)
+        if c[3] and abs(wz - (self.m + 1)) < self.grass_band(z, r) and not _grassy(c):
+            return pick("grass", z, wx, wz)
+        t = wz - self.m
+        if _yellow(c) and min(abs(t - 0.5), abs(t - 1.5)) < 0.25:
+            return LL.dashed(z, wx, wz, wx, True, lambda: self.fill(z, r, wx, wz))
+        return c
+
+    own = colour
+
+    def median(self, z, r, wx, wz):
+        if abs(wz - (self.m + 1)) > 0.4:
+            return None
+        c = self.colour(z, r, wx, wz)
+        return c if _grassy(c) else None
+
+    def prof(self, z, r):
+        return lane_bins((self.PID, "x", z, r), lambda t, a: self.ground(z, r, a, self.m + t), 0.0, 2.0, 256,
+                         [0.03 + 0.94 * k / 63.0 for k in range(64)])
+
+    def fill(self, z, r, wx, wz):
+        c = mirror(self.prof(z, r), lambda t: self.ground(z, r, wx, self.m + t), wz - self.m)
+        return c if c is not None else pick("asphalt", z, wx, wz)
+
+    def sidewalk(self, z, r):
+        prof = self.prof(z, r)
+        return _first_lane(prof), 2.0 - _first_lane(prof, True)
+
+    def cells(self):
+        return lambda X, Z: Z in (self.m, self.m + 1)
+
+
+class Placed:
+    """An element turned k states, then moved by (tx, tz) whole cells."""
+
+    def __init__(self, el, k=0, t=(0, 0)):
+        self.el, self.k, self.t = el, k % 4, t
+
+    def canon(self, wx, wz):
+        return _rinv(wx - self.t[0], wz - self.t[1], self.k)
+
+    def call(self, fn, z, r, wx, wz):
+        cx, cz = self.canon(wx, wz)
+        return getattr(self.el, fn)(z, (r + self.k) % 4, cx, cz)
+
+    def across(self, wx, wz):
+        return self.el.across(*self.canon(wx, wz))
+
+    def inside(self, wx, wz, margin=0.0):
+        a = self.across(wx, wz)
+        return -margin <= a < self.el.width + margin
+
+    def edge_dist(self, wx, wz):
+        """(distance to the low edge, to the high edge) in cells"""
+        a = self.across(wx, wz)
+        return a, self.el.width - a
+
+    def direction(self):
+        return _rot(self.el.direction[0], self.el.direction[1], self.k)
+
+    def along_dist(self, wx, wz, d):
+        """distance along d (either way) from (wx, wz) to this element's band; 0 inside"""
+        if self.inside(wx, wz):
+            return 0.0
+        n = _rot(self.el.normal[0], self.el.normal[1], self.k)
+        nd = n[0] * d[0] + n[1] * d[1]
+        if abs(nd) < 1e-9:
+            return 1e9
+        a = self.across(wx, wz)
+        return min(abs(a / nd), abs((a - self.el.width) / nd))
+
+    def sidewalk(self, z, r):
+        return self.el.sidewalk(z, (r + self.k) % 4)
+
+    def has_cell(self, X, Z):
+        cx, cz = self.canon(X + 0.5, Z + 0.5)
+        return self.el.cells()(math.floor(cx), math.floor(cz))
+
+
+class Crossing:
+    """Two placed elements. Where both are: the crossing, paved (stock 43s interior asphalt, `paved`),
+    corner sidewalks where both outer sidewalks meet (the element whose edge is relatively farther is sampled, so each
+    side keeps its own curb), two white crosswalk lines (WHITE_LINES, lane units from the edge) along every edge where
+    an arm leaves the crossing. Where one is: that element as stock, its median ending NOSE_CELLS before the other
+    element with a concrete nose. stem = (i, e): element i ends at the other element's edge e (0 low, 1 high): nothing
+    of i past it, the other's sidewalk along it kept, no crosswalk there (a T)."""
+
+    def __init__(self, els, stem=None):
+        self.els, self.stem = els, stem
+
+    def has(self, i, wx, wz, margin=0.0):
+        e = self.els[i]
+        if not e.inside(wx, wz, margin):
+            return False
+        if self.stem and self.stem[0] == i:
+            o = self.els[1 - i]
+            a = o.across(wx, wz)
+            if (self.stem[1] == 1 and a >= o.el.width) or (self.stem[1] == 0 and a < 0.0):
+                return False
+        return True
+
+    def colour(self, z, r, wx, wz):
+        ins = [self.has(i, wx, wz) for i in (0, 1)]
+        if not any(ins):
+            for i in (0, 1):                        # the stock frames' own edge pixels just outside the band
+                if self.has(i, wx, wz, 0.36) and not self.has(1 - i, wx, wz, 0.02):
+                    return self.els[i].call("colour", z, r, wx, wz)
+            return CLEAR
+        if ins[0] != ins[1]:
+            i = 0 if ins[0] else 1
+            e, o = self.els[i], self.els[1 - i]
+            m = e.call("median", z, r, wx, wz)
+            if m is not None and o.along_dist(wx, wz, e.direction()) < NOSE_CELLS:
+                return m if e.el.kind == "diag" else pick("concrete", z, wx, wz)
+            return e.call("colour", z, r, wx, wz)
+        if self.stem:                                       # a T: the through road's far sidewalk and curb go on
+            o = self.els[1 - self.stem[0]]
+            if o.edge_dist(wx, wz)[self.stem[1]] < o.sidewalk(z, r)[self.stem[1]]:
+                return o.call("colour", z, r, wx, wz)
+        rel = []
+        for e in self.els:
+            lo, hi = e.edge_dist(wx, wz)
+            sw = e.sidewalk(z, r)
+            rel.append(min(lo / sw[0] if sw[0] else 9.0, hi / sw[1] if sw[1] else 9.0))
+        if rel[0] < 1.0 and rel[1] < 1.0:                   # corner: both outer sidewalks
+            return self.els[0 if rel[0] >= rel[1] else 1].call("colour", z, r, wx, wz)
+        if z >= 2:
+            for i in (0, 1):                               # element i's arms leave through the other's edges
+                o = self.els[1 - i]
+                for side, dist in enumerate(o.edge_dist(wx, wz)):
+                    if self.stem and self.stem[0] == i and side == self.stem[1]:
+                        continue                           # the stem does not go on past the far edge
+                    if any(a <= dist * 256.0 < b for a, b in WHITE_LINES):
+                        return pick("white", z, wx, wz)
+        return paved(z, r, wx, wz)
+
+    def plain(self, z, r, wx, wz, i):
+        """element i alone, as its own pieces draw it"""
+        return self.els[i].call("colour", z, r, wx, wz) if self.els[i].inside(wx, wz, 0.36) else CLEAR

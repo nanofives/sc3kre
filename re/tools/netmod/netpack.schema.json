@@ -147,6 +147,24 @@
             "description": "Task diagave: merge cases, where one carriageway ends and the other goes on as a single road (diagave.py MERGE_TABLE)."
           },
           "save_43": {"type": "array", "items": {"$ref": "#/$defs/piece_id"}, "description": "Merge pieces that hold both roads: saved as 43 so a game without the mod keeps the road joined."},
+          "crossing": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "axis", "x0", "z0", "w", "h", "grid", "writes"],
+              "properties": {
+                "id": {"type": "integer", "minimum": 0, "maximum": 65535},
+                "axis": {"type": "integer", "minimum": 0, "maximum": 1, "description": "The axis of the band row the template is anchored on."},
+                "x0": {"type": "integer"}, "z0": {"type": "integer"},
+                "w": {"type": "integer", "minimum": 1, "maximum": 120}, "h": {"type": "integer", "minimum": 1},
+                "grid": {"type": "string", "pattern": "^[r.-]+$", "description": "The window, w x h cells from (x0, z0) relative to the anchor row's left cell in axis space, row by row: r ROAD, . no ROAD, - either."},
+                "partner": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "integer"}, "description": "[axis, dx, dz]: the window holds a band of that axis (a row's left cell at dx, dz) that must convert too; axis -1 none."},
+                "writes": {"type": "array", "items": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "integer"}}, "description": "[dx, dz, piece, state]: a cell the crossing writes (a ROAD variant of this package, or stock road such as 11204)."}
+              }
+            },
+            "description": "Task diagx: crossing templates of a diagonal avenue with a diagonal avenue or the straight avenue 11204, or ending on one (diagave.py xbuild, recipe_crossings.json)."
+          },
           "middle": {
             "type": "array",
             "minItems": 1,

@@ -105,6 +105,20 @@ class NetpackError(Exception):
     pass
 
 
+def stock_road(pid):
+    """task diagx: a crossing may write stock road pieces (11204 on the straight avenue's plain cells)"""
+    return pid in (29, 35, 39, 43, 11203, 11204, 18004, 1999)
+
+
+def davx_lines(t):
+    """task diagx: one crossing template as sc3netmod table lines (each under the readers' 256 characters)"""
+    out = b"davx %d %d %d %d %d %d %d %d %d\r\n" % (t["id"], t["axis"], t["pax"], t["pdx"], t["pdz"], t["x0"], t["z0"],
+                                                 t["w"], t["h"])
+    out += b"".join(b"davxg %d %d %s\r\n" % (t["id"], r, t["grid"][r * t["w"]:(r + 1) * t["w"]].encode())
+                    for r in range(t["h"]))
+    return out + b"".join(b"davxw %d %d %d %d %d\r\n" % (t["id"], *cell) for cell in t["writes"])
+
+
 def sha(b):
     return hashlib.sha256(b).hexdigest()
 
@@ -699,13 +713,32 @@ def compile_pack(stock, pack_dir, man):
                 cells.append([cell[0], cell[1], v["id"], cell[3]])
                 mpieces.add(v["id"])
             merges.append({"axis": key[0], "end": key[1], "cont": key[2], "cells": cells})
+        xings, xpieces = [], set()                       # task diagx: crossing templates (davx / davxg / davxw lines)
+        for t in a.get("crossing", []):
+            w, h, grid = t.get("w"), t.get("h"), t.get("grid", "")
+            pax, pdx, pdz = (t.get("partner") or [-1, 0, 0])[:3]
+            if t.get("axis") not in (0, 1) or not isinstance(w, int) or not isinstance(h, int) or not 1 <= w <= 120 \
+                    or w * h > 400 or len(grid) != w * h or set(grid) - set("r.-") or pax not in (-1, 0, 1):
+                raise NetpackError("%s: crossing %s: axis 0/1, w x h <= 400, grid of w*h 'r' '.' '-', partner axis "
+                                   "-1/0/1" % (where, t.get("id")))
+            writes = []
+            for cell in t.get("writes", []):
+                v = vids.get(cell[2]) if len(cell) == 4 else None
+                if len(cell) != 4 or cell[3] not in (0, 1, 2, 3) or (v is None and not stock_road(cell[2])):
+                    raise NetpackError("%s: crossing %s cell %s: [dx, dz, piece of this package or stock road, state]"
+                                       % (where, t.get("id"), cell))
+                if v is not None:
+                    xpieces.add(v["id"])
+                writes.append(list(cell))
+            xings.append({"id": t["id"], "axis": t["axis"], "pax": 255 if pax < 0 else pax, "pdx": pdx, "pdz": pdz,
+                          "x0": t["x0"], "z0": t["z0"], "w": w, "h": h, "grid": grid, "writes": writes})
         s43 = []
         for p in a.get("save_43", []):
-            if p not in mpieces:
-                raise NetpackError("%s: save_43 piece %s is not a merge piece" % (where, p))
+            if p not in mpieces and p not in xpieces:
+                raise NetpackError("%s: save_43 piece %s is not a merge or crossing piece" % (where, p))
             s43.append(vids[p]["id"])
         out["auto_diagonal_avenues"].append({"middle": mids, "junction": juncs, "merge": merges, "save_43": s43,
-                                             "where": where})
+                                             "crossing": xings, "where": where})
     if len(out["auto_diagonal_avenues"]) > 1:
         raise NetpackError("%s: at most one auto_diagonal_avenues entry (sc3netmod applies one set)" % pname)
     out["ramps"] = []
@@ -1008,8 +1041,9 @@ def merge(stock, packs):
                          for a in c["auto_diagonal_avenues"] for j in a.get("junction", [])) + \
                 b"".join(b"davm %d %d %d %d %d %d %d\r\n" % (m["axis"], m["end"], 1 if m["cont"] == "A" else 2, *cell)
                          for a in c["auto_diagonal_avenues"] for m in a.get("merge", []) for cell in m["cells"]) + \
-                b"".join(b"davs %d\r\n" % p for a in c["auto_diagonal_avenues"] for p in a.get("save_43", []))
-                # task diagave
+                b"".join(b"davs %d\r\n" % p for a in c["auto_diagonal_avenues"] for p in a.get("save_43", [])) + \
+                b"".join(davx_lines(t) for a in c["auto_diagonal_avenues"] for t in a.get("crossing", []))
+                # task diagave, task diagx
 
     # ---- report + checks that need the merged result
     placed = set()
@@ -1028,6 +1062,7 @@ def merge(stock, packs):
     placed |= {m["piece"] for a in davs for m in a["middle"]}   # sc3netmod DAV places them (task diagave)
     placed |= {j["piece"] for a in davs for j in a.get("junction", [])}
     placed |= {cell[2] for a in davs for m in a.get("merge", []) for cell in m["cells"]}
+    placed |= {cell[2] for a in davs for t in a.get("crossing", []) for cell in t["writes"]}   # task diagx
     for v in variants:
         if v["id"] not in placed:
             report["warnings"].append("%s: no rule RESULT places %d, so the tiler never builds it" % (v["where"], v["id"]))
@@ -1040,7 +1075,8 @@ def merge(stock, packs):
     report["auto_roundabouts"] = [{"piece": a["piece"], "min_arms": a["min_arms"], "closed": a.get("closed", 0)}
                                   for a in autos]
     report["auto_diagonal_avenues"] = [{"middle": a["middle"], "junction": a.get("junction", []),
-                                        "merge": a.get("merge", []), "save_43": a.get("save_43", [])} for a in davs]
+                                        "merge": a.get("merge", []), "save_43": a.get("save_43", []),
+                                        "crossing": len(a.get("crossing", []))} for a in davs]
     report["templates"] = [{"name": t["name"], "pack": t["pack"], "orientations": len(t["orients"]), "cost": t["cost"],
                             "cells": len(t["cells"]), "protect_add": t["protect_add"],
                             "picture": [TPL.render(t, k) for k in range(len(t["orients"]))]} for t in templates]
@@ -1379,6 +1415,8 @@ def _print_report(report):
         if r.get("merge"):
             print("  auto diagonal avenue merges: %d case(s), pieces %s, saved as 43: %s" % (
                 len(r["merge"]), sorted({cell[2] for m in r["merge"] for cell in m["cells"]}), r.get("save_43", [])))
+        if r.get("crossing"):
+            print("  auto diagonal avenue crossings: %d template(s) (task diagx)" % r["crossing"])
     for r in report.get("auto_roundabouts", []):                                # task roundabout3
         print("  auto roundabout: piece %d, 2x2 road blocks with >= %d arm(s) (sc3netmod RBT)%s"
               % (r["piece"], r["min_arms"], (", arm-less quarter %d" % r["closed"]) if r.get("closed") else ""))
