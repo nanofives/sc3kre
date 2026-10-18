@@ -20,7 +20,8 @@ RUNS = [("sac_hwcost0.json", "Highway trip cost 2 -> 0\n(STTraffic.ini TripCellC
 RUNS_PATCH = [("sac_rampd164.json", "Test: ramp cells get road traffic 164\n(written by the probe, upper-bound lever)"),
               ("sac_rf.json", "The mod: sc3netmod RAMPFIRST\n(road and bus steps take an offered ramp first)")]
 NOTES_PATCH = [
-    "Ramp-first patch (owner pick B), Sacramento, one game, block switched off (A) and on (B) live, ABBA, about 93 sim days per window:",
+    "Ramp-first patch (owner picked option B of the ramp patch, rank ramps first, 2026-10-18), Sacramento, one game,",
+    "   block switched off (A) and on (B) live, ABBA, about 93 sim days per window:",
     "1. When a road or bus step has an unused on-ramp beside it, the other road cells are hidden for that one step,",
     "   so the trip takes the ramp. If the search comes back to that cell, the stock busiest-road order applies.",
     "2. Highway share of arrived trips doubles: 4.7% -> 9.5% pooled, every on window above every off window.",

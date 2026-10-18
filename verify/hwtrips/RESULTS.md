@@ -70,9 +70,10 @@ Reading:
 `verify/hwtrips/data/*.json`, `re/analysis/HIGHWAY_TRIPS.md`. Save copy and logs:
 `Simcity_stock_highways\re\harness\inst_highways\hwtrips\`.
 
-## The mod: sc3netmod RAMPFIRST (owner pick B, 2026-10-18)
+## The mod: sc3netmod RAMPFIRST (owner picked option B of the ramp patch, rank ramps first, in this chat, 2026-10-18)
 
-Owner choice between "small ramp patch" and "routing rewrite": B, rank ramps first. Built as a new sc3netmod block,
+The owner picked option B of the ramp patch (rank ramps first; option A was a deposit case for ramp nodes), in this
+chat, 2026-10-18. Built as a new sc3netmod block,
 `re/harness/src/sc3netmod_rampfirst.c`, on LANEDENSITY's entry detour of `FUN_1000755e` (edits in
 `sc3netmod_lanes.c` marked `/* task hwtrips */`, 14 lines).
 
