@@ -17,6 +17,7 @@ import os
 
 from PIL import Image
 
+from netmod import lanelines as LL
 from netmod import netart as NA
 
 DIAG_STATE = {0: 2, 1: 0}          # axis 0: a cell at d (x - z - strip offset) 0 / 1 of a strip holds 35 in this state
@@ -253,6 +254,23 @@ def lane_grey(c):
     return c[3] and max(c[:3]) < 118 and max(c[:3]) - min(c[:3]) < 22
 
 
+def yellowish(c):
+    """a stock yellow centre-line pixel or its anti-aliased edge (asphalt is bluish: blue above red)"""
+    return c[3] and c[0] - c[2] > 15
+
+
+def avenue_line(c, s, p, wx, wz, z, r):
+    """Owner, 2026-10-17: avenues carry white dashed lane lines, no yellow. A yellow pixel of strip s becomes a white
+    dash where the stock centre line's footprint meets a dash (lanelines.py), else the lane asphalt."""
+    if not yellowish(c):
+        return c
+    fill = lambda: lane_fill(s, wx, wz, z, r)                                    # noqa: E731
+    cl = centre_line(z, r)
+    if cl is not None and abs(p - s - cl[0]) <= cl[1]:
+        return LL.dashed(z, wx, wz, LL.along_diag(wx, wz), True, fill)
+    return fill()
+
+
 class StraightAvenue:
     """The joined avenue: A (0 <= p < 1) and B (1 <= p < 2) as stock 35, median grass on the inner sidewalks; with
     `median_end` set, the median stops there with a concrete nose (the stock sidewalk pixels) NOSE long."""
@@ -268,7 +286,7 @@ class StraightAvenue:
             if self.median_end is not None and q >= self.median_end - self.NOSE:
                 return col                                      # the nose: concrete
             return pick("grass", z, wx, wz)
-        return col
+        return avenue_line(col, s, p, wx, wz, z, r)
 
     def colour(self, z, r, wx, wz):
         p, q = wx - wz, wx + wz
@@ -345,6 +363,25 @@ class Merge(StraightAvenue):
             if c[3]:
                 return c
         return None
+
+
+class CapCombo:
+    """A shared cell where one carriageway starts or ends (cap piece 18004 / 1999) beside the other one: stock piece
+    `pa` at state 0 (staircase A, strip 0) under stock piece `pb` at state `delta` (B, strip 1), as diagave.mid_frame
+    stacked them, with the avenue's dashed lane lines. Paint it at cell (1, 0)."""
+
+    def __init__(self, pa, pb, delta):
+        self.pa, self.pb, self.delta = pa, pb, delta
+
+    def colour(self, z, r, wx, wz):
+        x, zl = (wx % 1.0) * 256.0, (wz % 1.0) * 256.0
+        c = STOCK(self.pb, self.delta, z, r, x, zl)
+        if not c[3]:
+            c = STOCK(self.pa, 0, z, r, x, zl)
+        if not c[3]:
+            return CLEAR
+        p = wx - wz
+        return avenue_line(c, 0 if p < 1.0 else 1, p, wx, wz, z, r)
 
 
 class Junction:

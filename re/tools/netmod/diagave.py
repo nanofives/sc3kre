@@ -848,14 +848,8 @@ def cmd_build(a):
         if vid == TREE_PIECE:
             continue
         d = art(vid)
-        os.makedirs(d, exist_ok=True)
-        anchors = {}
-        for z in range(netart.ZOOMS):
-            for s in range(netart.ROTS):
-                im, ac = mid_frame(pa, pb, delta, z, s)
-                im.save(os.path.join(d, netart.frame_name(z, s)))
-                anchors[netart.frame_name(z, s)] = list(ac)
-        _write_anchors(d, anchors, "diagave.py build: %d (slot) + %d (slot + %d) on one tile" % (pa, pb, delta))
+        anchors = P.paint_cell(P.CapCombo(pa, pb, delta), (1, 0), d)
+        _write_anchors(d, anchors, "diagave.py build: %d (slot) + %d (slot + %d) on one tile, dashed lanes" % (pa, pb, delta))
         spec = mid_spec(pa, pb, delta, vid)
         json.dump(spec, open(os.path.join(a.pack, "mid_%d.lanes.json" % vid), "w", newline="\n"), indent=1)
         report["save_43"].append(vid)

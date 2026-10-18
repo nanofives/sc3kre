@@ -103,3 +103,21 @@ staircases past the end make their masks) and the straight cells stay stock.
   the bottom going south, merges loaded without the mod.
 - The bend joint shows the diagonal's and the straight avenue's own lane markings meeting at the joint line.
 - Avenue x avenue, turning lanes at junctions, bulldozing a junction cell: unchanged from RESULTS_junctions.md.
+
+## White dashed lanes on avenues (owner change, 2026-10-17)
+
+Owner: "on avenues instead of yellow lines they should be white striped lines for every lane". Single roads keep yellow.
+
+- `re/tools/netmod/lanelines.py` (shared by every avenue-program painter): white dashes measured on stock highway 73
+  (zoom 4: one every 16 px = 4 per cell, so period 0.25 cell, dash 0.375 of it, centred in the period), phase from the
+  world coordinate along the road ((x + z) / sqrt 2 on diagonals), white from 73's dash pixels, none at zoom 0 / 1.
+- Diagonal avenue: every yellow pixel of a carriageway becomes a dash (inside the stock line's footprint) or lane
+  asphalt (`diagave_paint.avenue_line`); the cap pieces 20501..20504 are now painted from a scene (`CapCombo`) so
+  they get it too. At a merge the single road's yellow line still jogs to the median nose.
+- Stock straight avenue: new package `examples/avenue_markings` reskins 11204 and its U-turn end 11203
+  (`avenue_markings.py`: per frame the yellow paint is fitted as a straight line or a circle, the dash phase follows
+  the line or the arc length; the tree layer is untouched).
+
+| Check | Result |
+|---|---|
+| Diagonal avenue bending into the straight avenue at both ends, merge, crossing (`w1_z3.png`, `w1_east_z4.png`, `w2_z4.png`) | dashes on the diagonal, the straight avenue and both U-turn ends; single roads yellow; DAV log as before (bends 2/1, 1 merge); 0 exceptions |
