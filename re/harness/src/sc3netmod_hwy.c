@@ -29,7 +29,9 @@
  *   hwy_keep(hp, x, z)       keep an hwyp piece that is right as it is
  *   hwy_drop(hp, x, z)       remove whatever highway occupant the cell holds at hwy_end (a declared piece or a stock
  *                            highway cell, e.g. a T's stem stub when the T breaks): manager remover vt+0xb8, then the
- *                            3x3 rect retile; wins over keep. Cells one in from the read box border only
+ *                            3x3 rect retile; wins over keep. Any map cell: one outside the read box (or on its border
+ *                            row) is queued (HWY_XDROP per pass) and read fresh at hwy_end, so a block can clear the
+ *                            far side of a broken interchange the box did not reach
  * Revert (hwy_end): every cell of the read box (one cell in from its border) holding a declared piece (hwyp) that no
  * block kept in this pass goes back: a LAND piece (written into a free cell) is removed with the manager's own remover
  * vt+0xb8 = FUN_1000909f (vt+0x108 = FUN_100090f4 checks map-edge neighbour links, then layer vt+0x48), then the rect
@@ -54,6 +56,7 @@
 #define HWY_MAXP 256
 #define HWY_MARGIN 8
 #define HWY_CLAIM 16384                       /* claims hash slots (power of two) */
+#define HWY_XDROP 1024                        /* hwy_drop cells outside the read box, per pass */
 
 typedef struct { WORD piece, save; BYTE land; } HwyPiece;
 struct HwyPass {
@@ -64,6 +67,8 @@ struct HwyPass {
     BYTE *flag;                               /* [cell]: 1 kept, 2 free tested, 4 free, 8 drop */
     const char *who;
     int nput, nrev;
+    int nx;                                   /* hwy_drop cells outside the read box (or on its border row) */
+    int xd[HWY_XDROP][2];
 };
 typedef struct HwyPass HwyPass;
 
@@ -195,8 +200,16 @@ static void hwy_keep(HwyPass *hp, int x, int z) {
 }
 
 static void hwy_drop(HwyPass *hp, int x, int z) {
-    BYTE *f = hwy_flag(hp, x, z);
-    *f = (BYTE)((*f & ~1) | 8);
+    int k;
+    if (x < 1 || z < 1 || x >= hp->W - 1 || z >= hp->H - 1) return;
+    if (x > hp->x0 && x < hp->x1 && z > hp->z0 && z < hp->z1) {
+        BYTE *f = hwy_flag(hp, x, z);
+        *f = (BYTE)((*f & ~1) | 8);
+        return;
+    }
+    for (k = 0; k < hp->nx; k++) if (hp->xd[k][0] == x && hp->xd[k][1] == z) return;
+    if (hp->nx >= HWY_XDROP) { logf("### hwy: %s: more than %d drops outside the box - (%d,%d) skipped", hp->who, HWY_XDROP, x, z); return; }
+    hp->xd[hp->nx][0] = x; hp->xd[hp->nx][1] = z; hp->nx++;
 }
 
 static int hwy_put(HwyPass *hp, int x, int z, WORD piece, int state) {
@@ -312,6 +325,25 @@ static void hwy_end(HwyPass *hp) {
                  drop ? "dropped by a block -> removed, 3x3 retile" :
                  g_hwy_p[k].land ? "kept by no block -> removed (land), 3x3 retile" : "kept by no block -> stock retile");
         }
+    {   /* drops outside the read box: read now, remove any highway occupant */
+        int k;
+        for (k = 0; k < hp->nx; k++) {
+            int x = hp->xd[k][0], z = hp->xd[k][1], rect[6];
+            DWORD v = hwy_read(hp->mgr, hp->lay, x, z, hp->W, hp->H);
+            void *occ = NULL;
+            if (!v) continue;
+            if (((PFN_HwyAt)VT(hp->lay, 0x7c))(hp->lay, 0, x, z, &occ) && occ) {
+                ((PFN_HwyRemove)VT(hp->mgr, 0xb8))(hp->mgr, 0, hp->lay, occ);
+                ((PFN_B0)VT(occ, 8))(occ);
+            }
+            rect[0] = (x - 1) << 8; rect[1] = (z - 1) << 8; rect[2] = 0; rect[3] = (x + 1) << 8; rect[4] = (z + 1) << 8;
+            rect[5] = 0;
+            ((PFN_Retile)VT(hp->mgr, 0xb0))(hp->mgr, 0, rect, 3);
+            hp->nrev++;
+            logf("hwy: %s: (%d,%d) piece %u.%d dropped by a block (outside the box) -> removed, 3x3 retile", hp->who, x, z,
+                 hwy_id(v), hwy_st(v));
+        }
+    }
     InterlockedExchangeAdd(&g_hwy_n_put, hp->nput);
     InterlockedExchangeAdd(&g_hwy_n_rev, hp->nrev);
     if (hp->nput || hp->nrev || !strcmp(hp->who, "load"))
