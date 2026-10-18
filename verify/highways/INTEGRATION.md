@@ -39,6 +39,12 @@ Shots (not committed): `Simcity_stock_highways\re\harness\inst_highways\c_x1.png
   second highway does not switch carriageways under the crossing; all 16 movements reach offline; animated cars follow
   the drawn lanes. Collapse "group full" warnings: harmless with the DLL (INHERIT maps variants at removal).
 
+## Owner calls applied
+- 2026-10-18 "Trumpet OK, 3x3 loop, leave it stock when the far side is built up": hwt cda8a28 switches the right-in /
+  right-out fallback off (HWT_RIO 0, twin RIO False, selftest PASSED). In game (DLL from fed040b, fresh lab): a road
+  across the far side, then the T drags -> `hwt: T at anchor (105,86) turn 2 refused: far side not free`, the stem
+  keeps its stock caps 11237 / 11235, nothing written.
+
 ## Open
 - Not measured anywhere: cars on the ramps (the lab city has no population).
 - Known limitation: without the mod, ramp cells on open land load as stock ramp / slope pieces.
