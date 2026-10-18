@@ -86,6 +86,8 @@ static void r9_line(const char *path, const char *line);
 static int r9_complete(void);
 static void r9_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who);
 static void r9_stats(void);
+static int g_bvx_nbox;                                                       /* task bvx: sc3netmod_bvx.c */
+static void bvx_line(const char *path, const char *line);                    /* task bvx */
 
 /* ---------------------------------------------------------------- table line */
 static void rb_file(const char *path) {
@@ -103,6 +105,7 @@ static void rb_file(const char *path) {
         if (!strncmp(line, "davxw ", 6)) { dav_xwline(path, line); continue; }    /* task diagx */
         if (!strncmp(line, "dav ", 4)) { dav_line(path, line); continue; }        /* task diagave */
         if (!strncmp(line, "avx", 3)) { avx_line(path, line); continue; }         /* task avx */
+        if (!strncmp(line, "bvx", 3)) { bvx_line(path, line); continue; }         /* task bvx */
         if (!strncmp(line, "bv", 2) && line[3] == ' ') { bv_line(path, line); continue; }   /* task boulevard */
         if (!strncmp(line, "rbt9 ", 5)) { r9_line(path, line); continue; }       /* task bigrbt */
         if (strncmp(line, "rbt ", 4) || g_rb_off) continue;
@@ -382,7 +385,8 @@ static int rbt_install(BYTE *m) {
         logf("rbt9: off (%s)", r9_complete() ? "SC3NETMOD_RBT9=0" : "a piece role is missing in the tables");
         g_r9_centre = 0;
     }
-    if (!g_rb_piece && !g_dav_inner[0] && !g_avx_nbox && !g_bv_p[0] && !g_r9_centre) return 0;   /* avx, boulevard, bigrbt */
+    if (g_bvx_nbox && env_off("SC3NETMOD_BVX")) { g_bvx_nbox = 0; logf("bvx: off (SC3NETMOD_BVX=0)"); }   /* task bvx */
+    if (!g_rb_piece && !g_dav_inner[0] && !g_avx_nbox && !g_bv_p[0] && !g_r9_centre) return 0;   /* avx, boulevard, bigrbt (bvx runs in BV) */
     g_rb_m = m;
     g_rb_msize = nt->OptionalHeader.SizeOfImage;
     if (IsBadReadPtr(e, 10) || e[0] != 0xb8 || *(DWORD *)(e + 1) != (DWORD)m + 0x27a52 || e[5] != 0xe8 ||

@@ -18,6 +18,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
+from netmod import bvx as BX                                     # noqa: E402  task bvx: wide junctions
 
 # piece ids (20700..20749, CHILD_PROTOCOL section 6). Canonical frame: boulevard along x, rows z 0 / 1 / 2.
 OUTER = 20700            # an outer row: painted as the SOUTH row in state 0 (= stock 11204.0's state there)
@@ -70,8 +71,12 @@ def runs(road, have_cap=True, have_taper=True):
                 out.append({"axis": axis, "w0": w0, "sa": sa, "sb": sb, "ok": False, "want": {}, "ends": {},
                             "why": "3-column run: a 3x3 block (bigrbt's)"})
                 continue
-            kind, why = {}, ""
+            wide, why = BX.spans(R, sa, sb, w0)                 # task bvx: avenue / boulevard arms (bvx.py)
+            kind = {}
             for s in range(sa, sb + 1):
+                if s in wide:                                   # task bvx
+                    kind[s] = wide[s]["kind"]
+                    continue
                 n, so = (s, w0 - 1) in R, (s, w0 + 3) in R
                 if not n and not so:
                     kind[s] = "C"
@@ -83,7 +88,14 @@ def runs(road, have_cap=True, have_taper=True):
             ends, extra = {}, set()
             for e, (se, step) in enumerate(((sb, 1), (sa, -1))):
                 beyond = [k for k in range(3) if (se + step, w0 + k) in R]
-                if not beyond:
+                if not beyond and se in wide:                   # task bvx: the run ends on an avenue / boulevard
+                    sp = wide[se]
+                    if not (sp["n"] and sp["s"]):
+                        why = why or "end at column %d: a corner (road on one side only)" % se
+                        ends[e] = ("bad", None, [])
+                    else:
+                        ends[e] = ("tee", None, [se - step * i for i in range(sp["jb"] - sp["ja"] + 1)])
+                elif not beyond:
                     ends[e] = ("cap", None, [se])
                 elif len(beyond) == 1 and (se + 2 * step, w0 + beyond[0]) in R:
                     k = beyond[0]
@@ -101,7 +113,8 @@ def runs(road, have_cap=True, have_taper=True):
                 why = "run too short for its two ends"
             if not why and sum(1 for s in normal if kind[s] == "C") < MIN_COLS:
                 why = "fewer than %d boulevard columns" % MIN_COLS
-            if not why and any(kind[s] != "C" for s in endcols):
+            tee = {c for (typ, _, cs) in ends.values() if typ == "tee" for c in cs}       # task bvx
+            if not why and any(kind[s] != "C" for s in endcols - tee):
                 why = "a junction inside an end region"
             if not why and normal and (kind[normal[0]] != "C" or kind[normal[-1]] != "C"):
                 why = "a junction next to an end region"
@@ -122,6 +135,8 @@ def runs(road, have_cap=True, have_taper=True):
                 def put(s, row, piece, st):
                     want[_to_real(axis, s, w0 + row)] = (piece, (st + axis) & 3)
                 for e, (typ, k, cs) in ends.items():
+                    if typ == "tee":                            # task bvx: its box comes with the spans below
+                        continue
                     if typ == "cap":
                         for row in range(3):
                             put(cs[0], row if e == 0 else 2 - row, CAP[row], 0 if e == 0 else 2)
@@ -142,6 +157,8 @@ def runs(road, have_cap=True, have_taper=True):
                         hi = s + 1 in nosed or kind.get(s + 1, "C") != "C"           # goes on into an avenue end
                         lo = s - 1 in nosed or kind.get(s - 1, "C") != "C"
                         put(s, 1, NOSE2 if hi and lo else NOSE if hi or lo else MIDDLE, 2 if lo and not hi else 0)
+                    elif s in wide:                             # task bvx: the box, below
+                        continue
                     else:
                         j = kind[s][1:]
                         if j == "N":
@@ -150,6 +167,9 @@ def runs(road, have_cap=True, have_taper=True):
                             put(s, 0, JUNC_F, 2); put(s, 1, JUNC_M, 0); put(s, 2, JUNC_N, 2)        # noqa: E702
                         else:
                             put(s, 0, JUNC_N, 0); put(s, 1, JUNC_M, 0); put(s, 2, JUNC_N, 2)        # noqa: E702
+                for sp in {id(v): v for v in wide.values()}.values():          # task bvx: one paved box per span
+                    want.update(BX.box_want(axis, w0, sp, ends[1][0] == "tee" and sp["ja"] == sa,
+                                            ends[0][0] == "tee" and sp["jb"] == sb, _to_real))
             out.append({"axis": axis, "w0": w0, "sa": sa, "sb": sb, "ok": not why, "why": why, "want": want,
                         "ends": ends})
     return out

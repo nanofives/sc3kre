@@ -238,6 +238,7 @@
       },
       "description": "Task diagave: sc3netmod turns two diagonal road drags JOINED side by side (an isolated band of rows of three road cells, each row shifted by one) into one avenue: each cell gets the piece the stock tiler gives a lone diagonal, and the middle cells, which hold both roads, get the declared middle piece. After each road retile and after a city load; back to stock when it stops qualifying. Rule and tool: re/tools/netmod/diagave.py, verify/diagave/."
     },
+    "auto_boulevard_junctions": {"$ref": "#/properties/auto_avenue_junctions", "description": "Task bvx: box and avenue-arm pieces for the junctions of a boulevard (auto_boulevards) with avenues and other boulevards, same shape as auto_avenue_junctions (save_11204 unused). sc3netmod places them inside the boulevard runs. Rule and tool: re/tools/netmod/bvx.py, verify/bvx/."},
     "auto_boulevards": {
       "type": "array",
       "maxItems": 1,
