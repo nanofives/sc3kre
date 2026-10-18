@@ -165,6 +165,45 @@
         }
       },
       "description": "Task diagave: sc3netmod turns two diagonal road drags JOINED side by side (an isolated band of rows of three road cells, each row shifted by one) into one avenue: each cell gets the piece the stock tiler gives a lone diagonal, and the middle cells, which hold both roads, get the declared middle piece. After each road retile and after a city load; back to stock when it stops qualifying. Rule and tool: re/tools/netmod/diagave.py, verify/diagave/."
+    },
+    "auto_boulevards": {
+      "type": "array",
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["pieces"],
+        "properties": {
+          "pieces": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["outer", "middle", "nose", "nose2", "junction_entry", "junction_middle", "junction_far"],
+            "properties": {
+              "outer": {"$ref": "#/$defs/piece_id", "description": "An outer row (carriageway + its extra lane), canonical south row at state 0."},
+              "middle": {"$ref": "#/$defs/piece_id", "description": "The middle row: the extra lanes' far parts, curbs, median, trees."},
+              "nose": {"$ref": "#/$defs/piece_id", "description": "Middle row whose median ends in a nose at +x (state 0)."},
+              "nose2": {"$ref": "#/$defs/piece_id", "description": "Middle row with a nose at both ends."},
+              "junction_entry": {"$ref": "#/$defs/piece_id", "description": "Junction column, the outer row a crossing road enters by (north row at state 0)."},
+              "junction_middle": {"$ref": "#/$defs/piece_id", "description": "Junction column, middle row."},
+              "junction_far": {"$ref": "#/$defs/piece_id", "description": "Junction column, the far outer row of a T (south row at state 0, closed side S)."}
+            }
+          },
+          "cap": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"$ref": "#/$defs/piece_id"}, "description": "End column where all three roads stop, rows 0 / 1 / 2 at the +x end (state 0)."},
+          "taper": {
+            "type": "object",
+            "additionalProperties": false,
+            "patternProperties": {"^[012]$": {"type": "array", "minItems": 9, "maxItems": 9, "items": {"$ref": "#/$defs/piece_id"}}},
+            "description": "Narrowing to row 0 / 1 / 2: nine pieces, column-major (3 * column + row), the last three columns at the +x end (state 0)."
+          },
+          "avenue_narrow": {
+            "type": "object",
+            "additionalProperties": false,
+            "patternProperties": {"^[01]$": {"type": "array", "minItems": 9, "maxItems": 9, "items": {"$ref": "#/$defs/piece_id"}}},
+            "description": "Narrowing to the avenue on rows k, k + 1 (key k = 0 / 1): nine pieces, column-major, the last three columns at the +x end (state 0)."
+          }
+        }
+      },
+      "description": "Task boulevard: sc3netmod turns three parallel straight roads (a run of at least 3 clean columns, along x or z) into one boulevard: carriageways on the outer rows, extra lanes and a tree median on the middle one; junctions with single straight roads, end caps and tapers. After each road retile and after a city load; back to stock when it stops qualifying. Rule and tool: re/tools/netmod/boulevard.py, verify/boulevard/."
     }
   },
   "$defs": {
