@@ -35,7 +35,7 @@ place them at state 0 from the block (`hwy_put(hp, x, z, piece, 0)`).
 | carriageway | 1 cell, outer parapet on the driver's right; 73.0 drives +z on lanes x 61 / 145; 73.2 drives -z on 194 / 110 |
 | diagonal highway | `highway_diag(path)` on a band median (x - z or x + z an integer): carriageways W_DIAG = 0.63 wide, read from the stock bands (x - z: 11223.2 / 11224.0 / 11223.0 at roles -1 / 0 / +1; x + z: 15052.2 / 15106.0 / 15052.0); repaint of the stock band cells 90..96% |
 | ramps | `ramp_deck` default width RAMP_W = 0.62 = the stock ramp and the program width (hwx: W 0.31, ramp line 1.25 off the median, loop R 1.25, gap 0.19, turn arcs 0.75, tapers 0.62); the parapet / lane / curb split also holds on narrower decks |
-| ground under a piece | a painted piece whose art leaves ground visible (slab ramps, pillars, gaps, a carriageway opened for a ramp) must take its frame table from stock **15127**: `"art": {"from": 15127, "png_dir": ..., "ground_under": true}`. 73's table (class 29440, draw flags 0) draws no terrain under the piece, and with 0x40 forced on it the terrain under it and under EMPTY cells next to it still goes missing in some views (back-buffer grey / slate). 15127's table (class 1650, flags 0x440) gave grass in all 16 shots (4 highway ends x 4 views, pieces at states 0..3, same art, 2026-10-18, verify/hwcore/RESULTS.md); confirmed by hwt in its own game (state-1 T in view 3 grass after reload, live rebuild grass at once). Frame shape does not matter with 15127's table: cropped, full-column and padded frames all passed (padding optional). Pieces whose art covers the whole cell (walls to the ground) may stay `from` 73. The mechanism in SIMSPR is not traced |
+| ground under a piece | a painted piece whose art leaves ground visible (slab ramps, pillars, gaps, a carriageway opened for a ramp) must take its frame table from stock **15127**: `"art": {"from": 15127, "png_dir": ..., "ground_under": true}`. 73's table (class 29440, draw flags 0) draws no terrain under the piece, and with 0x40 forced on it the terrain under it and under EMPTY cells next to it still goes missing in some views (back-buffer grey / slate). 15127's table (class 1650, flags 0x440) gave grass in all 16 shots (4 highway ends x 4 views, pieces at states 0..3, same art, 2026-10-18, verify/hwcore/RESULTS.md); confirmed by hwt in its own game (state-1 T in view 3 grass after reload, live rebuild grass at once). Frame shape does not matter with 15127's table: cropped, full-column and padded frames all passed (padding optional). Pieces whose art covers the whole cell (walls to the ground) may stay `from` 73. Mechanism (SIMSPR, traced): a frame table's class id picks the sprite class; 15127's 1650 = 0x672 draws the attached terrain, then the piece; 73's 29440 = 0x7300 ignores the attached terrain, so 0x40 has no effect on it |
 | ramp joins | `Deck(..., gaps=[(s0, s1)])` opens the outer parapet over that span (`(s0, s1, "inner")` / `"both"` for the other side): the deck top runs to its edge as lane, so the ramp deck beside it reads as one road |
 | traffic | keeps right: hwlanes drives a deck along its path for outer "right", against it for outer "left"; draw ramps in their direction of travel with outer "right" |
 | turn matrix | low half = the ENGLISH lanes (side entered -> side left), high half its transpose; the router reads it for every highway node, so a missing turn blocks highway trips |
@@ -54,6 +54,14 @@ place them at state 0 from the block (`hwy_put(hp, x, z, piece, 0)`).
   15130..15141), so the stock tiler keeps them and connects the highway beside them. Pieces on the player's highway
   cells: a plain base (73 / 15051) so a retile re-places them.
 - Save ids: a piece saves as its base unless `hwyp` gives a save id; pick a base a game without the mod can show.
+  `hwyp <piece> <land> <save id> <state delta>` also turns the saved state by delta (a piece painted for one direction
+  that a game without the mod should read as its base at another state). `hwys <piece> <id0> <st0> .. <id3> <st3>`
+  gives the saved (id, state) for each state the piece can sit at: a rewritten highway cell saves as the stock straight
+  (15051.2 +x, 15051.0 -x, 73.0 +z, 73.2 -z, its heading turned by the state) or the stock band piece for its role; a
+  land piece as the nearest stock one-lane ramp piece (15123..15141). The variant section keeps the original state, so
+  loading with the mod puts every piece back as it was (also with SC3NETMOD_HWY=0). The save cannot leave a tile out
+  (the writer counts tiles before writing each one).
+- Kept cells are safe from your own reverts: hwy_end re-places any kept cell a revert's 3x3 rect retile changed.
 
 ## 4. Not done / open
 

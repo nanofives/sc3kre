@@ -77,6 +77,33 @@ plain empty cells next to such pieces, in some views.
 | frames 1 px wider than the tile (hwt's), from 73 + flag | no change from the from-73 result |
 
 Also: hwt's window-1 grey right after its pass was gone after save + reload (pixels left on screen, not stored state).
-Rule (HWY_BASE.md): every painted piece that can leave ground visible takes its frame table from 15127. Not traced:
-why the frame table class changes the terrain drawing (SIMSPR FUN_100192aa reads the draw flags; the class is the
-CSATTRIB header class id).
+Rule (HWY_BASE.md): every painted piece that can leave ground visible takes its frame table from 15127. Mechanism,
+traced statically in SIMSPR: the frame table's class id (CSATTRIB header) selects the sprite class built by the factory
+(FUN_10002088 / FUN_1004c611). Class 0x672 (= 1650, 15127 and 11203) stores the terrain attached by vt+0x5c at +0xc
+(FUN_10015e72) and draws it before the piece with the same draw point and clip (FUN_10015dd0); class 0x7300 (= 29440,
+73's table) has a no-op vt+0x5c (FUN_10054c75), so FUN_100192aa's 0x40 path attaches nothing and no terrain is drawn
+under the piece.
+
+## 5. Saved state turn for declared pieces (hwt request, 2026-10-18)
+
+`hwyp <piece> <land> <save id> <state delta>`: SAVEBASE writes the state as (state + delta) & 3 (save word0 bits
+30-31, QUERY_ID.md), so a game without the mod reads the base turned the way the stock tiler would place it; the load
+side (load_rec, after the variant id is put back) turns it back by the same delta. In game with `hwyp 21100 1 0 2` /
+`hwyp 21101 1 0 2`: live 21100.2 at (57,20) and 21101.0 at (57,33) were saved as 15099.0 and 15099.2 (read with
+tiler.City.load); reloaded with the mod: `load: all 4 variant tiles restored`, cells 21100.2 / 21101.2 / 21101.0 /
+21100.0 as before, load pass 0 written, 0 reverted. With SC3NETMOD_HWY=0 the load side does not know the delta and the
+restored variants stay turned.
+
+Superseded the same day by the general form: `hwys <piece> <id0> <st0> .. <id3> <st3>` (saved id and state per state),
+and the variant section now records the original state (id bits 16-17, flag bit 18; an older DLL skips such entries and
+keeps the base), so the load side no longer needs the table. In game: `hwys 21100 73 0 73 2 15051 0 15051 2` plus
+`hwyp 21101 1 0 2`: live 21100.2 / 21101.2 / 21101.0 / 21100.0 saved as 15051.0 / 15099.0 / 15099.2 / 73.0 (read
+without the mod), reloaded with the mod: all 4 restored at their original states, load pass 0 written, 0 reverted.
+
+## 6. Kept cells after reverts (hwdd report, 2026-10-18)
+
+hwdd measured a block's freshly written flyover being replaced by the stock stub: hwy_end's 3x3 rect retiles around
+removed land pieces re-tiled neighbouring kept on-highway cells (nested passes are blocked, so no block re-applied).
+Fix: hwy_keep / hwy_put record (x, z, piece, state) per pass; after the reverts hwy_end re-reads each kept cell and
+writes it again (FUN_10008919) when it changed, logged "re-placed after a revert retile". Builds; first in-game run
+will be hwdd's re-test.
