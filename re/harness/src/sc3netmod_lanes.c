@@ -147,6 +147,7 @@ static DWORD ld_eval(BYTE *layer, BYTE *node, DWORD *pid, int any) {
     BYTE *piece;
     DWORD id, state, rows, allow;
     *pid = 0;
+    if (g_ld_mode == 4) return 0;                                  /* task hwtrips: ramp-first only, no lane rules */
     if (t != 1 && t != 0x41) return 0;
     if (*(DWORD *)(node + 4) != *(DWORD *)(node + 0xc) || *(DWORD *)(node + 8) != *(DWORD *)(node + 0x10)) return 0;
     piece = ld_piece(*(BYTE **)node);
@@ -217,9 +218,11 @@ static void ld_close(BYTE *layer, DWORD x, DWORD z, BYTE t, BYTE **added, BYTE *
     *m |= t;
 }
 
+#include "sc3netmod_rampfirst.c"   /* task hwtrips: road / bus steps take an offered on-ramp first (SC3NETMOD_RAMPFIRST) */
+
 static BYTE __fastcall ld_select(BYTE *layer, void *edx, BYTE *node, BYTE *out, DWORD budget, DWORD p4, DWORD p5, DWORD p6) {
     DWORD id, ev, x, z, s;
-    BYTE *added[4 + LD_TRIPMAX], addb[4 + LD_TRIPMAX], t = node[0x14], r;
+    BYTE *added[10 + LD_TRIPMAX], addb[10 + LD_TRIPMAX], t = node[0x14], r;   /* task hwtrips: +6 for rf_close */
     int nadd = 0, k, honoured, selfcopy = 0;
     LdCell *c = NULL;
     LdTrip *tr;
@@ -247,6 +250,7 @@ static BYTE __fastcall ld_select(BYTE *layer, void *edx, BYTE *node, BYTE *out, 
                 InterlockedIncrement(&g_ld_n_tripmark);
             }
     }
+    if (!ev) rf_close(layer, node, added, addb, &nadd);            /* task hwtrips */
     if (!ev && !nadd) return ((LD_SEL)g_ld_tramp)(layer, NULL, node, out, budget, p4, p5, p6);
     honoured = g_ld_mode != 3;
     if (ev && id < 65536 && g_base[id]) c = ld_cell(x, z, id);
@@ -280,6 +284,7 @@ static BYTE __fastcall ld_select(BYTE *layer, void *edx, BYTE *node, BYTE *out, 
            (the else branch at SimTransit 0x100083e4 sets 2 for a same rect) and would read as a wrong-way entry. Close the centre. */
         ld_close(layer, x, z, t, added, addb, &nadd);
         if (nadd > before) InterlockedExchangeAdd(&g_ld_n_premark, nadd - before);
+        rf_close(layer, node, added, addb, &nadd);                 /* task hwtrips: after the lane closes */
     }
     r = ((LD_SEL)g_ld_tramp)(layer, NULL, node, out, budget, p4, p5, p6);
     for (k = 0; k < nadd; k++) *added[k] &= (BYTE)~addb[k];
@@ -322,6 +327,8 @@ static __declspec(naked) void ld_stub(void) {
         je   road
         jmp  dword ptr [g_ld_tramp]
     road:
+        cmp  g_rf_on, 0          /* task hwtrips: ramp-first looks at every road / bus step */
+        jne  slow
         mov  eax, [eax]
         test eax, eax
         jz   pass
@@ -394,6 +401,8 @@ static void lanedensity_install(void) {
     if (got && v[0] == '0') g_ld_mode = 0;
     else if (got && !lstrcmpiA(v, "all")) g_ld_mode = 2;
     else if (got && !lstrcmpiA(v, "count")) g_ld_mode = 3;
+    rf_init();                                                     /* task hwtrips */
+    if (g_rf_on && (!g_ld_mode || (g_ld_mode == 1 && !g_nvariants))) g_ld_mode = 4;   /* task hwtrips: ramp-first only */
     if (!g_ld_mode) { logf("lanedensity: off (SC3NETMOD_LANEDENSITY=0)"); return; }
     if (g_ld_mode == 1 && !g_nvariants) { logf("lanedensity: no variants, nothing to honour - not patched"); g_ld_mode = 0; return; }
     while (!(st = (BYTE *)GetModuleHandleA("SimTransit.dll")) && ms++ < 300000) Sleep(1);
@@ -420,7 +429,7 @@ static void lanedensity_install(void) {
     *(DWORD *)(g_ld_tramp + 7) = (DWORD)(e + 6) - (DWORD)(g_ld_tramp + 11);
     FlushInstructionCache(GetCurrentProcess(), g_ld_tramp, 16);
     {   DWORD i;
-        for (i = 0; i < 65536; i++) g_ld_hon[i] = (BYTE)(g_ld_mode == 2 || g_base[i]);
+        for (i = 0; i < 65536; i++) g_ld_hon[i] = (BYTE)(g_ld_mode == 2 || (g_ld_mode != 4 && g_base[i]));   /* task hwtrips: != 4 */
         g_ld_force = g_ld_mode == 3;
     }
     g_ld_st = (DWORD)st;
@@ -439,7 +448,8 @@ static void lanedensity_install(void) {
     *(DWORD *)(g_ld_orig_a + 1) = (st + 0x8a94) - (st + 0x71f0);
     if (!write_code(e, jmp, 6)) { logf("lanedensity: entry not patched"); g_ld_mode = 0; return; }
     logf("lanedensity: ON, mode %s (SimTransit at 0x%08lX: step 0x1000755e, arrival call 0x100071eb)",
-         g_ld_mode == 1 ? "variants" : g_ld_mode == 2 ? "all pieces" : "count only (nothing filtered)", (DWORD)st);
+         g_ld_mode == 1 ? "variants" : g_ld_mode == 2 ? "all pieces" : g_ld_mode == 4 ? "ramp-first only (no lane rules)" /* task hwtrips */
+         : "count only (nothing filtered)", (DWORD)st);
 }
 
 /* ALT (perf measurement, verify/lanedensity PRE addendum 7): sc3netmod_ld_set(0) puts both patch sites back to the
@@ -508,6 +518,7 @@ __declspec(dllexport) int __cdecl sc3netmod_ld_set(int on) {
 static void lanedensity_stats(void) {
     int i, j, n = 0;
     if (!g_ld_mode) return;
+    rampfirst_stats();                                             /* task hwtrips */
     if (g_ld_n_toggle) logf("lanedensity: ALT state %s, %ld switch(es), %ld retr(ies)", g_ld_on ? "ON" : "OFF", g_ld_n_toggle, g_ld_n_toggle_retry);
     logf("lanedensity: evals=%ld honoured steps=%ld neighbours closed=%ld wrong-way fails=%ld arrivals refused=%ld slow QI=%ld vtables=%ld refused-transition closes=%ld trip list full=%ld",
          g_ld_n_eval, g_ld_n_hon, g_ld_n_premark, g_ld_n_wrong, g_ld_n_arrblock, g_ld_n_slowqi, g_ld_nvt, g_ld_n_tripmark, g_ld_n_tripfull);

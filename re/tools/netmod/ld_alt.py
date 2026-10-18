@@ -30,8 +30,8 @@ import sc3io  # noqa: E402
 JS = r"""
 var P = Process.getModuleByName('sc3perf.dll');
 var N = Process.getModuleByName('sc3netmod.dll');
-var setp = N.findExportByName('sc3netmod_ld_set');
-if (setp === null) throw new Error('sc3netmod_ld_set not exported (build without ALT)');
+var setp = N.findExportByName('%EXPORT%');   // task hwtrips: --export
+if (setp === null) throw new Error('%EXPORT% not exported (build without ALT)');
 var ldset = new NativeFunction(setp, 'int', ['int']);
 // find the log call: push imm32 (the format string) followed by call
 var fmt = null, site = null;
@@ -68,9 +68,10 @@ def main():
     ap.add_argument("--settle", type=float, default=2)
     ap.add_argument("--blocks", type=int, default=10, help="ABBA blocks (4 windows each)")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--export", default="sc3netmod_ld_set", help="toggle export (task hwtrips: sc3netmod_rf_set)")
     a = ap.parse_args()
     s = frida.attach(sc3io.game_pid())
-    sc = s.create_script(JS)
+    sc = s.create_script(JS.replace("%EXPORT%", a.export))
     got = []
     sc.on("message", lambda m, d: got.append(m))
     sc.load()
