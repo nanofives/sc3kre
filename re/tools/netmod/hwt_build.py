@@ -207,6 +207,26 @@ def cmd_pad(pkg):
     print("pad: %d frames grown to their full cell diamond" % n)
 
 
+STOCK_STRAIGHT = {(1, 0): (15051, 2), (-1, 0): (15051, 0), (0, 1): (73, 0), (0, -1): (73, 2)}
+
+
+def save_table(r):
+    """hwys line of a rewritten highway cell: at each state s it saves as the stock straight highway for its heading
+    turned s quarter turns ((x, z) -> (-z, x)), so a game without the mod loads plain highway running the right way.
+    Heading at state 0 (stem frame): through row 0 +x, row 1 -x, stem column 0 -z, column 1 +z."""
+    if r["dz"] == 0:
+        h = (1, 0)
+    elif r["dz"] == 1:
+        h = (-1, 0)
+    else:
+        h = (0, -1) if r["dx"] == 0 else (0, 1)
+    out = []
+    for s in range(4):
+        out += list(STOCK_STRAIGHT[h])
+        h = (-h[1], h[0])
+    return "hwys %d %s" % (r["id"], " ".join(str(v) for v in out))
+
+
 def cmd_manifest(pkg):
     import hwt_cells
     variants, connects, lines, lanes = [], [], [], []
@@ -222,6 +242,8 @@ def cmd_manifest(pkg):
         else:
             connects.append({"piece": r["id"], "road": {"low": [], "high": []}})          # no lane: no turn
         lines.append("hwyp %d %d" % (r["id"], 1 if r["kind"] == "new" else 0))
+        if r["kind"] != "new":
+            lines.append(save_table(r))
     for r in hwt_cells.CELLS:
         lines.append("hwt %d %d %d %d %d" % (r["id"], r["dx"], r["dz"], 1 if r["kind"] == "new" else 0, r["sets"]))
     man = {

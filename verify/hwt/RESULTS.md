@@ -59,15 +59,26 @@ Fixed on the way (all in `sc3netmod_hwt.c`):
 - **Self-overlapping deck.** The NB ramp's tail passes under its own bridge, and hwpaint takes a point's height from
   the nearest segment of its path. One self-crossing deck cut a notch in the bridge, so it is now two decks.
 
-## Without the mod (the save-id path; `t18_nomod.sc3` = a copy of `t13_saved.sc3`, sc3netmod.dll moved aside)
+## Without the mod (the save-id path)
 
-The city loads. Every piece shows as its base: the 30 land cells of each T are stock 15099 highway slope pieces, a
-field of stepped blocks (`nomod_t1_z3r0.png`); the through highway and the stem show as plain 15051 / 73. But the
-saved STATE is the piece's own (its turn r), not the stock one. In the T at (54,30) (turn 0) the through row that
-runs +x reads 15051.0 (stock: 15051.2), and the stem's SB column reads 73.0 (stock: 73.2). So a game without the mod
-gets those cells pointing the wrong way. hwy's save path gives a piece a save id but no state correction. Fixing it
-needs one of two things: a per-piece state offset in `hwyp` (an ask for hwcore), or one piece id per direction for
-the rewritten highway cells.
+First run (`t18_nomod.sc3`, saved before hwcore's save table): every piece came back as its base, but at its OWN
+state. In the T at turn 0, the through row that runs +x read 15051.0 (stock: 15051.2) and the stem's SB column 73.0
+(stock: 73.2), so those cells pointed the wrong way.
+
+Fixed with hwcore's per-state save table (6ff62ab, merged as 6c2038e). Every rewritten highway cell now has a
+`hwys <piece> <id0> <st0> .. <id3> <st3>` line (`hwt_build.save_table`): at each state it saves as the stock straight
+highway for its heading turned by that state. Second run: the save was re-saved with the mod (`t21_saved.sc3`), then
+loaded with sc3netmod moved aside (`t22_nomod.sc3`), cells read in game:
+- T at (54,30) turn 0: the through rows 15051.2 / 15051.0 and the stem 73.2 / 73.0 all the way through, the same as
+  the plain highway beside the T.
+- turned T at (131,19) turn 1: the through highway (along z) 73.2 / 73.0 and the stem (along x) 15051.2 / 15051.0.
+  No odd-state 15051 is left.
+- The land cells still show as stock 15099 slope pieces, a field of stepped blocks (`nomod2_t1_z3r0.png`,
+  `nomod2_t2_z3r0.png`). They load and the highway through them is whole, but they are ugly. A different land save id
+  would only change which stock piece shows; cells can't be emptied through the save.
+
+Trap found on the way: `nr_drive.py save` returns before the game has written the file. Copy the save only after its
+mtime changes (my first re-save was copied before the write, so it still held the old states).
 
 ## Open
 
