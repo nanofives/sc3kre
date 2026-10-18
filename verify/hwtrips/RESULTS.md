@@ -107,3 +107,50 @@ Not measured: routing time per trip. With the block on, every road / bus step go
 instead of the asm pass-through. Also not checked: a big city with sc3perf `traffic_mt`, and Seoul. The block keeps
 no state across calls (per-call locals and two interlocked counters) and writes only the calling trip's visited
 grid, the same terms LANEDENSITY runs on with sc3perf workers.
+
+## Routing speed (owner: "Run the quick speed check, then merge to main", 2026-10-18)
+
+Verdict: **no noticeable cost.** Without sc3perf, routing takes about 7% longer per trip with RAMPFIRST on (about 5 us
+more per trip, about 0.3% of one core at speed 4), and sim days per real minute do not move. With sc3perf's 8-worker
+routing, no difference is measurable, and there were 0 faults over 730,000 trips routed on the workers.
+
+### 1. Stock threading (no sc3perf), one game
+
+Instance `inst_hwtrips` (sc3resize + sc3netmod), fresh Sacramento copy `sac3.sc3`, PID 69028 (stopped), speed 4.
+`hwtrips_probe.py run --timing --lever rf:1`: each route_trip call is timed with QueryPerformanceCounter inside a
+Frida hook (the per-node path hook is dropped so its own cost does not grow with path length). Windows of 20 s,
+ABBA, live toggle `sc3netmod_rf_set`. The hook's own cost (two QPC calls) is inside both arms, so the relative cost
+is a slight underestimate. Data `data/sac_speed.json` (8 windows) and `data/sac_speed2.json` (16 windows, same game).
+
+| | RAMPFIRST off | RAMPFIRST on |
+|---|---|---|
+| route_trip time per trip, run 2, per window | 61.6..70.8 us | 66.0..71.5 us |
+| pooled, run 2 | 65.0 us | 69.6 us |
+| on / off per ABBA block, run 2 | | 1.065, 1.081, 1.070, 1.068 |
+| sim days per real minute, run 2 | 306 | 310 |
+| trips routed per real second, run 2 | 721 | 736 |
+
+Run 1 (first 8 windows after the load): blocks 1.571 and 1.060. Its first on block read 101.8 and 117.5 us against
+76.1 and 63.5 off. The cause was not traced `[UNCERTAIN]`. Every later block (5 of 6) sits at 1.06..1.08.
+Load: about 730 trips/s x 65 us = 47 ms of routing per real second; the patch adds about 3.4 ms per second.
+
+### 2. sc3perf TRAFFIC_MT (8 workers), one game
+
+Instance `inst_hwtrips_perf` (sc3resize + sc3perf built from this worktree + the same sc3netmod.dll). This needed no
+setup beyond copying the DLLs. `perf.ini` `traffic_mt_smooth=0` (batch mode, so ld_alt can read per-batch time).
+Fresh copy `sac5.sc3`, PID 8204 (stopped). `ld_alt.py --export sc3netmod_rf_set --warmup 60 --window 30 --blocks 3`
+(ld_alt got an `--export` option for this). Metric = sc3perf's own counters: batch wall time / trips routed on the
+workers. Data `data/sac_mt_alt.json`.
+
+| | RAMPFIRST off | RAMPFIRST on |
+|---|---|---|
+| ms per trip, per window | 0.02951..0.03423 | 0.02940..0.03283 |
+| pooled | 0.03181 | 0.03147 (on / off 0.989) |
+| on / off per ABBA block | | 1.012, 0.932, 1.026 |
+
+The spread between blocks (0.93..1.03) is larger than any effect, so none is measurable here. Thread safety: sc3perf
+logged 0 faults in this game (2,274 batches, 337,336 worker trips) and in an earlier game of the same build in its
+default background mode (TRAFFIC_SMOOTH: 390,282 trips, 0 faults, RAMPFIRST on for most of it and toggled by the
+first ld_alt attempt, whose batch counters stayed at 0 in that mode).
+
+Not covered: a 1024 city (Europolis), where routing load is far higher (CAR_TRIPS 3.2: about 650,000 nodes/s).

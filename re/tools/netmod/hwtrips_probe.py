@@ -41,6 +41,10 @@ JS = r"""
 var TR = Process.getModuleByName('SimTransit.dll').base;
 function A(va) { return TR.add(va - 0x10000000); }
 var L = null;
+var K32 = Process.getModuleByName('kernel32.dll');
+var QPC = new NativeFunction(K32.getExportByName('QueryPerformanceCounter'), 'int', ['pointer']), QB = Memory.alloc(8);
+var QPF = new NativeFunction(K32.getExportByName('QueryPerformanceFrequency'), 'int', ['pointer']), QF = Memory.alloc(8);
+QPF(QF); var QFREQ = QF.readU64().toNumber();
 function rows(off) { return L.add(off).readPointer().add(0xc).readPointer(); }
 function rowp(off, x) { return rows(off).add(4 * x).readPointer(); }
 function u16(x, z) { return rowp(0x5c, x).add(2 * z).readU16(); }
@@ -48,13 +52,14 @@ function b(off, x, z) { return rowp(off, x).add(z).readU8(); }
 function wb(off, x, z, v) { rowp(off, x).add(z).writeU8(v); }
 var S = null;
 function fresh() { return {trips: 0, arrived: 0, arr_hwy: 0, arr_ramp: 0, arr_hwy_nodes: 0, path_nodes: 0,
-  arr_dep: 0, arr_dep_hwy: 0, trips_off: 0, arr_off: 0, arr_off_hwy: 0, plen: {}, args: {}, trans: {}, pred_ok: 0, pred_bad: 0, pred_bad3: 0, pred3: 0, steps1: 0, offer3: 0, took3_when_offered: 0, took3: 0, offer3_only: 0,
+  arr_dep: 0, arr_dep_hwy: 0, trips_off: 0, arr_off: 0, arr_off_hwy: 0, plen: {}, args: {}, trans: {}, qt: 0, qt_arr: 0, pred_ok: 0, pred_bad: 0, pred_bad3: 0, pred3: 0, steps1: 0, offer3: 0, took3_when_offered: 0, took3: 0, offer3_only: 0,
   d3_lt_best: 0, d3_eq_best: 0, d3_gt_best: 0, d3_hist: {}, dbest_hist: {}}; }
 S = fresh();
 var cur = {};
 Interceptor.attach(A(0x100070d0), {
   onEnter: function (a) {
     L = this.context.ecx;
+    if (%TIMING%) { QPC(QB); this.q0 = QB.readU64().toNumber(); }
     var k = [a[1].toInt32(), a[2].toInt32(), a[3].toInt32() & 0xff, a[4].toInt32() & 0xff, a[5].toInt32() & 0xff,
              a[6].toInt32() & 0xff].join(',');
     S.args[k] = (S.args[k] || 0) + 1;
@@ -62,6 +67,7 @@ Interceptor.attach(A(0x100070d0), {
   },
   onLeave: function (r) {
     var c = cur[this.threadId]; delete cur[this.threadId];
+    if (%TIMING%) { QPC(QB); var dq = QB.readU64().toNumber() - this.q0; S.qt += dq; if ((r.toInt32() & 0xff) !== 0) S.qt_arr += dq; }
     S.trips++;
     if (c && c.off) S.trips_off++;
     if ((r.toInt32() & 0xff) === 0 || !c) return;
@@ -75,7 +81,7 @@ Interceptor.attach(A(0x100070d0), {
   }
 });
 var BACK_LO = A(0x100072d8), BACK_HI = A(0x100072f3);
-Interceptor.attach(A(0x10009e8e), {
+if (!%TIMING%) Interceptor.attach(A(0x10009e8e), {
   onLeave: function (r) {
     var ra = this.returnAddress;
     if (ra.compare(BACK_LO) < 0 || ra.compare(BACK_HI) > 0) return;
@@ -153,7 +159,7 @@ setInterval(function () {
 }, 500);
 rpc.exports = {
   ready: function () { return L !== null; },
-  take: function () { var o = S; S = fresh(); o.days = days; days = 0; return o; },
+  take: function () { var o = S; S = fresh(); o.days = days; days = 0; o.qfreq = QFREQ; return o; },
   consts: function () { return {annoy: annoyOrig, hwcost: hwcOrig, road: A(0x1001f0b0).readU8(), adder: A(0x1001f0be).readU8(),
     maxd: A(0x1001f0bf).readU8(), divroad: A(0x1001f0c1).readU8(), divhwy: A(0x1001f0c3).readU8()}; },
   lever: function (kind, v) {
@@ -191,12 +197,13 @@ rpc.exports = {
 
 
 NOSTEP = False
+TIMING = False
 
 
 def attach():
     pid = int(os.environ.get("SC3_PID") or sc3io.game_pid())
     s = frida.attach(pid)
-    sc = s.create_script(JS.replace("%STEP%", "false" if NOSTEP else "true"))
+    sc = s.create_script(JS.replace("%STEP%", "false" if NOSTEP else "true").replace("%TIMING%", "true" if TIMING else "false"))
     sc.on("message", lambda m, d: print(m, flush=True))
     sc.load()
     return pid, s, sc
@@ -219,9 +226,12 @@ def main():
     ap.add_argument("--lever", default="")
     ap.add_argument("--start", type=int, default=0)
     ap.add_argument("--nostep", action="store_true", help="skip the select_next hook (fast; no offer stats)")
+    ap.add_argument("--timing", action="store_true", help="time each route_trip call (QueryPerformanceCounter); implies "
+                    "--nostep and drops the path hook, so the share columns read 0")
     a = ap.parse_args()
-    global NOSTEP
-    NOSTEP = a.nostep
+    global NOSTEP, TIMING
+    NOSTEP = a.nostep or a.timing
+    TIMING = a.timing
     pid, s, sc = attach()
     if a.start:
         h = sc3io.game_hwnd(pid)
@@ -245,6 +255,11 @@ def main():
             o["arm"] = arm
             o["args"] = dict(sorted(o["args"].items(), key=lambda kv: -kv[1])[:40])
             wins.append(o)
+            if TIMING:
+                print("win %d %s: days %d trips %d arrived %d  us/trip %.2f  us/arrived %.2f" % (
+                    i, arm, o["days"], o["trips"], o["arrived"], 1e6 * o["qt"] / o["qfreq"] / max(1, o["trips"]),
+                    1e6 * o["qt_arr"] / o["qfreq"] / max(1, o["arrived"])), flush=True)
+                continue
             print("win %d %s: days %d trips %d arrived %d hwy %d (%.2f%%) ramp %d dep %d dephwy %d pred ok/bad %d/%d | steps1 %d offer3 %d took3|offer %d "
                   "d3<best %d =%d >%d only3 %d" % (
                       i, arm, o["days"], o["trips"], o["arrived"], o["arr_hwy"],
