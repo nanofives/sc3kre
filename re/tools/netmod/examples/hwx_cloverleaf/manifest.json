@@ -1,0 +1,740 @@
+{
+ "netpack": 1,
+ "name": "hwx_cloverleaf",
+ "version": "1.0.0",
+ "author": "sc3kre",
+ "description": "Task hwx: a cloverleaf at a straight highway X. When two straight highways cross on flat ground with room around them, four loops (left turns) and four outer ramps (right turns) connect every movement; the X itself becomes a clean flyover (straight full-width decks). With a quadrant built up, only the clean flyover.",
+ "game": {
+  "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+ },
+ "variants": [
+  {
+   "id": 21120,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf ramp +2,-2",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21120",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21121,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf ramp +3,-2",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21121",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21122,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf ramp +3,-3",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21122",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21123,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf ramp +3,-4",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21123",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21124,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf ramp +2,-4",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21124",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21125,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf ramp +1,-4",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21125",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21126,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf ramp +1,-3",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21126",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21127,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf ramp +1,-6",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21127",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21128,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf ramp +1,-5",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21128",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21129,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf ramp +2,-5",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21129",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21130,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf ramp +3,-5",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21130",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21131,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf ramp +4,-4",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21131",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21132,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf ramp +4,-3",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21132",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21133,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf ramp +4,-2",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21133",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21134,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf ramp +5,-2",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21134",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21135,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf ramp +1,-2",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21135",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21136,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf ramp +4,-5",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21136",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21150,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf junction +2,-1",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/21150",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21151,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf junction +5,-1",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/21151",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21152,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf junction +2,+0",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/21152",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21153,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf junction +5,+0",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/21153",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21154,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf junction +0,+2",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/21154",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21155,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf junction +0,+5",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/21155",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21156,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf junction +0,-3",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/21156",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21157,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf junction +0,-6",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/21157",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21160,
+   "base": 15113,
+   "network": "HWAY",
+   "name": {
+    "*": "Clean flyover +0,+0",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/21160",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21161,
+   "base": 15114,
+   "network": "HWAY",
+   "name": {
+    "*": "Clean flyover +0,-1",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/21161",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21162,
+   "base": 15107,
+   "network": "HWAY",
+   "name": {
+    "*": "Clean flyover -2,-1",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/21162",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21163,
+   "base": 15108,
+   "network": "HWAY",
+   "name": {
+    "*": "Clean flyover -2,+0",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/21163",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21164,
+   "base": 15150,
+   "network": "HWAY",
+   "name": {
+    "*": "Clean flyover +0,+1",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/21164",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21165,
+   "base": 15153,
+   "network": "HWAY",
+   "name": {
+    "*": "Clean flyover -1,+1",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/21165",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  }
+ ],
+ "lanes": [
+  {
+   "piece": 21120,
+   "spec": "hwx_21120.lanes.json"
+  },
+  {
+   "piece": 21121,
+   "spec": "hwx_21121.lanes.json"
+  },
+  {
+   "piece": 21122,
+   "spec": "hwx_21122.lanes.json"
+  },
+  {
+   "piece": 21123,
+   "spec": "hwx_21123.lanes.json"
+  },
+  {
+   "piece": 21124,
+   "spec": "hwx_21124.lanes.json"
+  },
+  {
+   "piece": 21125,
+   "spec": "hwx_21125.lanes.json"
+  },
+  {
+   "piece": 21126,
+   "spec": "hwx_21126.lanes.json"
+  },
+  {
+   "piece": 21127,
+   "spec": "hwx_21127.lanes.json"
+  },
+  {
+   "piece": 21128,
+   "spec": "hwx_21128.lanes.json"
+  },
+  {
+   "piece": 21129,
+   "spec": "hwx_21129.lanes.json"
+  },
+  {
+   "piece": 21130,
+   "spec": "hwx_21130.lanes.json"
+  },
+  {
+   "piece": 21131,
+   "spec": "hwx_21131.lanes.json"
+  },
+  {
+   "piece": 21132,
+   "spec": "hwx_21132.lanes.json"
+  },
+  {
+   "piece": 21133,
+   "spec": "hwx_21133.lanes.json"
+  },
+  {
+   "piece": 21134,
+   "spec": "hwx_21134.lanes.json"
+  },
+  {
+   "piece": 21150,
+   "spec": "hwx_21150.lanes.json"
+  },
+  {
+   "piece": 21151,
+   "spec": "hwx_21151.lanes.json"
+  },
+  {
+   "piece": 21152,
+   "spec": "hwx_21152.lanes.json"
+  },
+  {
+   "piece": 21153,
+   "spec": "hwx_21153.lanes.json"
+  },
+  {
+   "piece": 21154,
+   "spec": "hwx_21154.lanes.json"
+  },
+  {
+   "piece": 21155,
+   "spec": "hwx_21155.lanes.json"
+  },
+  {
+   "piece": 21156,
+   "spec": "hwx_21156.lanes.json"
+  },
+  {
+   "piece": 21157,
+   "spec": "hwx_21157.lanes.json"
+  },
+  {
+   "piece": 21160,
+   "spec": "hwx_21160.lanes.json"
+  },
+  {
+   "piece": 21161,
+   "spec": "hwx_21161.lanes.json"
+  },
+  {
+   "piece": 21162,
+   "spec": "hwx_21162.lanes.json"
+  },
+  {
+   "piece": 21163,
+   "spec": "hwx_21163.lanes.json"
+  },
+  {
+   "piece": 21164,
+   "spec": "hwx_21164.lanes.json"
+  },
+  {
+   "piece": 21165,
+   "spec": "hwx_21165.lanes.json"
+  }
+ ],
+ "connects": [
+  {
+   "piece": 21135,
+   "road": {
+    "low": [],
+    "high": []
+   }
+  },
+  {
+   "piece": 21136,
+   "road": {
+    "low": [],
+    "high": []
+   }
+  }
+ ],
+ "highway_lines": [
+  "hwyp 21120 1",
+  "hwyp 21121 1",
+  "hwyp 21122 1",
+  "hwyp 21123 1",
+  "hwyp 21124 1",
+  "hwyp 21125 1",
+  "hwyp 21126 1",
+  "hwyp 21127 1",
+  "hwyp 21128 1",
+  "hwyp 21129 1",
+  "hwyp 21130 1",
+  "hwyp 21131 1",
+  "hwyp 21132 1",
+  "hwyp 21133 1",
+  "hwyp 21134 1",
+  "hwyp 21135 1",
+  "hwyp 21136 1",
+  "hwyp 21150 0",
+  "hwyp 21151 0",
+  "hwyp 21152 0",
+  "hwyp 21153 0",
+  "hwyp 21154 0",
+  "hwyp 21155 0",
+  "hwyp 21156 0",
+  "hwyp 21157 0",
+  "hwyp 21160 0",
+  "hwyp 21161 0",
+  "hwyp 21162 0",
+  "hwyp 21163 0",
+  "hwyp 21164 0",
+  "hwyp 21165 0",
+  "hwx 21120 2 -3 1 1",
+  "hwx 21120 3 -2 -3 1",
+  "hwx 21120 1 1 2 1",
+  "hwx 21120 0 2 -2 1",
+  "hwx 21121 2 -4 1 1",
+  "hwx 21121 3 -2 -4 1",
+  "hwx 21121 1 1 3 1",
+  "hwx 21121 0 3 -2 1",
+  "hwx 21122 2 -4 2 1",
+  "hwx 21122 3 -3 -4 1",
+  "hwx 21122 1 2 3 1",
+  "hwx 21122 0 3 -3 1",
+  "hwx 21123 3 -4 -4 1",
+  "hwx 21123 2 -4 3 1",
+  "hwx 21123 0 3 -4 1",
+  "hwx 21123 1 3 3 1",
+  "hwx 21124 3 -4 -3 1",
+  "hwx 21124 2 -3 3 1",
+  "hwx 21124 0 2 -4 1",
+  "hwx 21124 1 3 2 1",
+  "hwx 21125 3 -4 -2 1",
+  "hwx 21125 2 -2 3 1",
+  "hwx 21125 0 1 -4 1",
+  "hwx 21125 1 3 1 1",
+  "hwx 21126 3 -3 -2 1",
+  "hwx 21126 2 -2 2 1",
+  "hwx 21126 0 1 -3 1",
+  "hwx 21126 1 2 1 1",
+  "hwx 21127 3 -6 -2 1",
+  "hwx 21127 2 -2 5 1",
+  "hwx 21127 0 1 -6 1",
+  "hwx 21127 1 5 1 1",
+  "hwx 21128 3 -5 -2 1",
+  "hwx 21128 2 -2 4 1",
+  "hwx 21128 0 1 -5 1",
+  "hwx 21128 1 4 1 1",
+  "hwx 21129 3 -5 -3 1",
+  "hwx 21129 2 -3 4 1",
+  "hwx 21129 0 2 -5 1",
+  "hwx 21129 1 4 2 1",
+  "hwx 21130 3 -5 -4 1",
+  "hwx 21130 2 -4 4 1",
+  "hwx 21130 0 3 -5 1",
+  "hwx 21130 1 4 3 1",
+  "hwx 21131 2 -5 3 1",
+  "hwx 21131 3 -4 -5 1",
+  "hwx 21131 1 3 4 1",
+  "hwx 21131 0 4 -4 1",
+  "hwx 21132 2 -5 2 1",
+  "hwx 21132 3 -3 -5 1",
+  "hwx 21132 1 2 4 1",
+  "hwx 21132 0 4 -3 1",
+  "hwx 21133 2 -5 1 1",
+  "hwx 21133 3 -2 -5 1",
+  "hwx 21133 1 1 4 1",
+  "hwx 21133 0 4 -2 1",
+  "hwx 21134 2 -6 1 1",
+  "hwx 21134 3 -2 -6 1",
+  "hwx 21134 1 1 5 1",
+  "hwx 21134 0 5 -2 1",
+  "hwx 21135 3 -2 -2 1",
+  "hwx 21135 2 -2 1 1",
+  "hwx 21135 0 1 -2 1",
+  "hwx 21135 1 1 1 1",
+  "hwx 21136 3 -5 -5 1",
+  "hwx 21136 2 -5 4 1",
+  "hwx 21136 0 4 -5 1",
+  "hwx 21136 1 4 4 1",
+  "hwx 21150 2 -3 0 0",
+  "hwx 21150 0 2 -1 0",
+  "hwx 21151 2 -6 0 0",
+  "hwx 21151 0 5 -1 0",
+  "hwx 21152 2 -3 -1 0",
+  "hwx 21152 0 2 0 0",
+  "hwx 21153 2 -6 -1 0",
+  "hwx 21153 0 5 0 0",
+  "hwx 21154 2 -1 -3 0",
+  "hwx 21154 0 0 2 0",
+  "hwx 21155 2 -1 -6 0",
+  "hwx 21155 0 0 5 0",
+  "hwx 21156 2 -1 2 0",
+  "hwx 21156 0 0 -3 0",
+  "hwx 21157 2 -1 5 0",
+  "hwx 21157 0 0 -6 0",
+  "hwx 21160 2 -1 -1 2",
+  "hwx 21160 0 0 0 2",
+  "hwx 21161 2 -1 0 2",
+  "hwx 21161 0 0 -1 2",
+  "hwx 21162 0 -2 -1 2",
+  "hwx 21162 2 1 0 2",
+  "hwx 21163 0 -2 0 2",
+  "hwx 21163 2 1 -1 2",
+  "hwx 21164 2 -1 -2 2",
+  "hwx 21164 0 0 1 2",
+  "hwx 21165 0 -1 1 2",
+  "hwx 21165 2 0 -2 2"
+ ]
+}
