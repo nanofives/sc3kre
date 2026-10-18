@@ -62,7 +62,7 @@
  */
 
 #define HWY_ON 0x80000000UL
-#define HWY_MAXP 256
+#define HWY_MAXP 4096                         /* declared pieces (all streams together; 347 in the combined program) */
 #define HWY_MARGIN 8
 #define HWY_CLAIM 16384                       /* claims hash slots (power of two) */
 #define HWY_XDROP 1024                        /* hwy_drop cells outside the read box, per pass */
@@ -85,6 +85,7 @@ struct HwyPass {
 typedef struct HwyPass HwyPass;
 
 static HwyPiece g_hwy_p[HWY_MAXP];
+static WORD g_hwy_idx[65536];                 /* piece id -> index in g_hwy_p + 1, 0 = not declared */
 static int g_hwy_np, g_hwy_off;
 static WORD g_hwy_t[2];                       /* hwyt proof rule pieces A, B */
 static DWORD *g_hwy_claim;
@@ -108,10 +109,15 @@ static void hwy_line(const char *path, const char *line) {
             logf("### hwy: %s: bad piece line (or not a variant) '%s'", path, line);
             return;
         }
+        if (g_hwy_idx[p]) {
+            logf("### hwy: %s: piece %lu declared twice - the later line '%s' ignored", path, p, line);
+            return;
+        }
         if (g_hwy_np >= HWY_MAXP) { logf("### hwy: %s: too many pieces - '%s' ignored", path, line); return; }
         g_hwy_p[g_hwy_np].piece = (WORD)p; g_hwy_p[g_hwy_np].land = (BYTE)l; g_hwy_p[g_hwy_np].save = (WORD)s;
         g_hwy_p[g_hwy_np].sdelta = (BYTE)sd;
         g_hwy_np++;
+        g_hwy_idx[p] = (WORD)g_hwy_np;
         logf("hwy: %s: piece %lu (%s), saves as %lu, state + %lu", path, p, l ? "land" : "on highway", s ? s : g_base[p], sd);
         return;
     }
@@ -144,11 +150,9 @@ static void hwy_line(const char *path, const char *line) {
     logf("### hwy: %s: unknown line '%s'", path, line);
 }
 
-static int hwy_piece(WORD id) {
-    int k;
-    if (!id) return -1;
-    for (k = 0; k < g_hwy_np; k++) if (g_hwy_p[k].piece == id) return k;
-    return -1;
+static int hwy_piece(WORD id) {                 /* per cell and per save record: an id-indexed lookup */
+    int k = g_hwy_idx[id] - 1;
+    return (id && k >= 0 && k < g_hwy_np) ? k : -1;   /* k < g_hwy_np: SC3NETMOD_HWY=0 / install errors set np 0 */
 }
 
 /* SAVEBASE: what a declared piece at state `st` is saved as, so a game without the mod reads the stock piece the stock
