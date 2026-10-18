@@ -62,3 +62,21 @@ run), map-edge cells (refused by rule).
   restores the city; animated cars on the new lanes were not watched (no population in the lab city).
 
 Owner sheet: `MAIN\verify\hwcore\owner_shots\hwcore_sheet.png`. How-to for the shape streams: `re/analysis/HWY_BASE.md`.
+
+## 4. Ground under painted pieces (2026-10-18, sibling reports from hwt and hwdx)
+
+Symptom: grey or slate-blue patches where a land piece's art is transparent (under slab ramps, between decks), and on
+plain empty cells next to such pieces, in some views.
+
+| test (lab city, same narrow slab-ramp art, highway ends along z and x, zoom 3, all four views) | result |
+|---|---|
+| art "from" 15127 (frame table class 1650, draw flags 0x440), pieces at states 0 / 2 | grass in all shots |
+| art "from" 73 (class 29440, flags 0), "ground_under": true forced, states 0..3 | slate patches under the slabs at the x-axis ends in views 2 / 3 |
+| hwt's save (t8) with its package forced to 0x40 on all 54 tables | slate patches still in window 3, view 3 |
+| art "from" 15127, states 0..3, both full-column and cropped frames | grass in all 16 shots (4 ends x 4 views) |
+| frames 1 px wider than the tile (hwt's), from 73 + flag | no change from the from-73 result |
+
+Also: hwt's window-1 grey right after its pass was gone after save + reload (pixels left on screen, not stored state).
+Rule (HWY_BASE.md): every painted piece that can leave ground visible takes its frame table from 15127. Not traced:
+why the frame table class changes the terrain drawing (SIMSPR FUN_100192aa reads the draw flags; the class is the
+CSATTRIB header class id).

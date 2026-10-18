@@ -18,7 +18,8 @@
       },
       "art": {
         "from": 73,
-        "png_dir": "art/21100"
+        "png_dir": "art/21100",
+        "ground_under": true
       },
       "trblkatt": "copy_base"
     },
@@ -32,7 +33,8 @@
       },
       "art": {
         "from": 73,
-        "png_dir": "art/21101"
+        "png_dir": "art/21101",
+        "ground_under": true
       },
       "trblkatt": "copy_base"
     }
