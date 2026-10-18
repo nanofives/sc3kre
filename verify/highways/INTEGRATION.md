@@ -1,0 +1,33 @@
+# Highway program integration (round/highways, 2026-10-18)
+
+`round/highways` = main (d960b2c) + child/hwcore (86a12e3) + child/hwt (35e5dea) + child/hwx (ff71859) +
+child/hwdd (68609a9). child/hwdx (diagonal x straight) is still being finished and merges last.
+
+## Merges
+Every conflict was two blocks adding lines at the same spot in `sc3netmod.c` (include) and `sc3netmod_rbt.c`
+(prototypes, `hw?` table-line routing, `<block>_run(hp)` in `rb_hwy()`, stats). Resolved by keeping both sides
+(scratch resolver that refuses any conflict line without a `task` tag). No logic clash: the blocks own disjoint
+shapes (hwx = X with four continuing arms, hwt = T and the stub X, hwdd = diagonal x diagonal).
+Combined DLL builds (292,864 bytes). `netpack validate`: 0 errors on all four packages; warnings are the expected
+"no rule RESULT places" (pieces placed by the DLL), Collapse groups full (INHERIT maps at removal) and, on
+highway_dd_cloverleaf only, lane-vs-matrix warnings under review by hwcore.
+
+## Combined game check
+Tree `Simcity_stock_highways` (hard links), packages hwt_trumpet + hwx_cloverleaf + highway_dd_cloverleaf (not the
+proof package highway_core), DLL from this branch, lab city.
+- Load: 175 variants, no `###` errors, `hwdd: on`.
+- Straight X dragged (44..72 x 28, 58 x 14..42): `hwt` refused both anchors ("far arm continues: a full X (hwx)"),
+  `hwx: cloverleaf at (58,28): 96 cells written`.
+- T (through 95..115 x 86, stem 105 x 99..88): `hwt: full T at anchor (105,86) turn 2 from the stem's end caps:
+  50 cells written`.
+- Diagonal x diagonal (121,9)-(141,29) and (141,9)-(121,29): `hwdd: built cloverleaf at frame (131,19)`, 108 cells.
+- Save: 254 variant tiles written as base (= 96 + 50 + 108). Reload: 254 restored, every block `kept`, load pass
+  0 written / 0 reverted, 0 exceptions.
+Shots (not committed): `Simcity_stock_highways\re\harness\inst_highways\c_x1.png`, `c_t1.png`, `c_dd1.png`,
+`c_reload_x_r1.png`.
+
+## Open
+- hwdx to merge, then repeat the combined check with its package.
+- hwdd lane-vs-matrix warnings (hwcore reviewing).
+- Not measured anywhere: cars on the ramps (the lab city has no population).
+- Known limitation: without the mod, ramp cells on open land load as stock ramp / slope pieces.
