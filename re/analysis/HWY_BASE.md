@@ -58,7 +58,7 @@ place them at state 0 from the block (`hwy_put(hp, x, z, piece, 0)`).
   that a game without the mod should read as its base at another state). `hwys <piece> <id0> <st0> .. <id3> <st3>`
   gives the saved (id, state) for each state the piece can sit at: a rewritten highway cell saves as the stock straight
   (15051.2 +x, 15051.0 -x, 73.0 +z, 73.2 -z, its heading turned by the state) or the stock band piece for its role; a
-  land piece as the nearest stock one-lane ramp piece (15123..15141). The variant section keeps the original state, so
+  land piece as the nearest stock one-lane ramp piece (15123..15141; stock places them only at states 0 and 2, measured over the 16 shipped cities, so use the family's id for each direction rather than states 1 / 3). The variant section keeps the original state, so
   loading with the mod puts every piece back as it was (also with SC3NETMOD_HWY=0). The save cannot leave a tile out
   (the writer counts tiles before writing each one).
 - Kept cells are safe from your own reverts: hwy_end re-places any kept cell a revert's 3x3 rect retile changed.
