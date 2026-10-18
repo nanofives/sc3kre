@@ -65,6 +65,14 @@ place them at state 0 from the block (`hwy_put(hp, x, z, piece, 0)`).
 
 ## 4. Not done / open
 
+- Known limitation (orchestrator decision 2026-10-18, revisit if the owner asks): without the mod a land piece loads as
+  whatever stock piece it saved as (its base, or its `hwys` choice, best a stock one-lane ramp piece), so an
+  interchange's ramp cells show stock ramp fragments a player has to bulldoze. Saving them as empty ground would mean
+  skipping their records in the save writer: SIMNTWRK FUN_10012fc3 loops over the layer, increments the tile count
+  (its param_5) and then calls FUN_1000d688 per tile, so a skipped write needs that count corrected too, and the load
+  side would have to recreate the cells from the variant section. Not done: the riskiest place to change, for a case that
+  only matters after uninstalling the mod.
+
 - `hwy_free` passes zoned empty land (what terrain vt+0xd0 tests is not decoded); buildings fail it (surface-layer
   occupants), not tried in game.
 - New curves and lanes were checked offline (records decode back, every language compiles) and the game loads the

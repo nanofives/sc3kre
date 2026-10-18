@@ -107,3 +107,11 @@ removed land pieces re-tiled neighbouring kept on-highway cells (nested passes a
 Fix: hwy_keep / hwy_put record (x, z, piece, state) per pass; after the reverts hwy_end re-reads each kept cell and
 writes it again (FUN_10008919) when it changed, logged "re-placed after a revert retile". Builds; first in-game run
 will be hwdd's re-test.
+
+## 7. Known limitation: land pieces without the mod
+
+Measured by hwdx and hwdd (no-mod loads, 2026-10-18): on-highway pieces come back as the right stock straight and band
+pieces (with `hwys` where needed); land pieces come back as their base 15099 (slope blocks / ramp-down staircases) unless
+`hwys` saves them as stock one-lane ramp pieces (15123..15141, which stock places only at states 0 / 2, counted over the
+16 shipped cities). Saving them as empty ground is not done (orchestrator decision): FUN_10012fc3 counts each tile
+before FUN_1000d688 writes it, so skipping a record means correcting that count and recreating the cells on load.
