@@ -60,6 +60,7 @@ EXTRA = 2                           # the curve record's trailing u32 on elevate
 HW_SPEED = 110000                   # stock 73 / 15051 lanes
 RAMP_SPEED = 74999                  # stock one-lane ramp corners 15123..15133
 HW_LANES = (1 - 145 / 255.0, 1 - 61 / 255.0)   # 73.0's lanes (x 145, 61) as shares of the width from its outer parapet
+DIAG_LANES = (0.396, 0.170)         # stock diagonal band lanes (11224 / 11223, 15106 / 15052), cells from the median
 MAX_PTS = 9                         # stock curves carry 2..9 points
 
 
@@ -174,8 +175,13 @@ def driven(deck):
 
 def deck_lanes(deck):
     """-> [(t, speed)]: lane offsets (cells, left of the direction of travel of driven(deck)) of a hwpaint Deck: a "hw"
-    carriageway has 73's two lanes, a "ramp" one lane in the middle of its width"""
-    if deck.profile == "hw":
+    carriageway has 73's two lanes (a W_DIAG-wide one, from highway_diag, the stock diagonal band's: 0.396 and 0.170
+    from the median, so its border points meet stock 11223 / 11224 / 15052 / 15106 cells), a "ramp" one lane in the
+    middle of its width"""
+    from netmod import hwpaint as HP
+    if deck.profile == "hw" and abs(deck.w - HP.W_DIAG) < 1e-6:     # a highway_diag carriageway: the stock band's lanes
+        tos, sp = [deck.w - m for m in DIAG_LANES], HW_SPEED
+    elif deck.profile == "hw":
         tos, sp = [f * deck.w for f in HW_LANES], HW_SPEED
     else:
         tos, sp = [deck.w / 2.0], RAMP_SPEED
