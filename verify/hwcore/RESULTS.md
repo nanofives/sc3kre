@@ -14,7 +14,7 @@ frame, all four views, compared pixel by pixel with the stock frame (tolerance 2
 
 Update 2026-10-18 (sibling requests): 45-degree decks and outer walls read the stock diagonal bands (the head-on wall
 of 11223 view 1 now matches stock, buttresses included); the hit refinement stays inside the cell's column (the straight
-pieces went from 96.7% to 97.0%); `gaps=` parapet openings; RAMP_W 0.44.
+pieces went from 96.7% to 97.0%); `gaps=` parapet openings; the ramp profile split holds on narrow decks (RAMP_W stays 0.62, the program width).
 
 The straight pieces miss only a one-pixel rim along the silhouette. 15127's shape is reproduced; its slab fascia is a
 smooth blue-grey that no 73 / 15051 face carries, and the painter draws slab edges with the stock plain-wall concrete,

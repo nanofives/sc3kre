@@ -18,7 +18,7 @@ cells = HP.scene_cells(scene)
 piece_of = {c: 21120 + i for i, c in enumerate(cells)}                       # your id range
 for c in cells:
     HP.paint_cell(scene, c, "art/%d" % piece_of[c])                          # z*_r*.png + anchors.json
-specs, _ = HL.build_cells(scene.decks, cells, 21120, piece_of)               # curve shapes = your id range
+specs, _ = HL.build_cells(scene.decks, cells, 22500, piece_of)               # your curve shape range (protocol 5)
 ```
 
 Each spec is a lanekit spec (state-0 frame, "connects": {"road": "auto"}, new curves under "curves"); save it next to
@@ -34,11 +34,11 @@ place them at state 0 from the block (`hwy_put(hp, x, z, piece, 0)`).
 | heights | hwpaint e (zoom-3 px): stock deck H = 31.75, X lower 16, upper 47.5 (55.5 at the centre); lane node y = 32 e, snapped to the stock multiples of 256 (1024, 512, 1536, 1792) |
 | carriageway | 1 cell, outer parapet on the driver's right; 73.0 drives +z on lanes x 61 / 145; 73.2 drives -z on 194 / 110 |
 | diagonal highway | `highway_diag(path)` on a band median (x - z or x + z an integer): carriageways W_DIAG = 0.63 wide, read from the stock bands (x - z: 11223.2 / 11224.0 / 11223.0 at roles -1 / 0 / +1; x + z: 15052.2 / 15106.0 / 15052.0); repaint of the stock band cells 90..96% |
-| ramps | `ramp_deck` default width RAMP_W = 0.44 (hwx's geometry); the parapet / lane / curb split holds down to that width at every zoom |
+| ramps | `ramp_deck` default width RAMP_W = 0.62 = the stock ramp and the program width (hwx: W 0.31, ramp line 1.25 off the median, loop R 1.25, gap 0.19, turn arcs 0.75, tapers 0.62); the parapet / lane / curb split also holds on narrower decks |
 | ramp joins | `Deck(..., gaps=[(s0, s1)])` opens the outer parapet over that span (`(s0, s1, "inner")` / `"both"` for the other side): the deck top runs to its edge as lane, so the ramp deck beside it reads as one road |
 | traffic | keeps right: hwlanes drives a deck along its path for outer "right", against it for outer "left"; draw ramps in their direction of travel with outer "right" |
 | turn matrix | low half = the ENGLISH lanes (side entered -> side left), high half its transpose; the router reads it for every highway node, so a missing turn blocks highway trips |
-| curves | a lane links only if its curve key exists; stock shapes are fixed, so hwlanes writes one new curve per lane cut (keys = shape * 256 + rotation). Use your piece-id range as shape numbers |
+| curves | a lane links only if its curve key exists; stock shapes are fixed, so hwlanes writes one new curve per lane cut (keys = shape * 256 + rotation). Shape numbers: your stream's range in the protocol's section 5 table (`CHILD_PROTOCOL_2026-10-18_highways.md`, "Lane curve shape numbers"), not your piece ids |
 | neighbours | the street sim finds the next cell's entry node by position (72-unit buckets): lanes of two cells meet when both are cut from one deck (same border point and height) |
 
 ## 3. Placing pieces (sc3netmod_hwy.c)

@@ -27,8 +27,9 @@ Measured on the stock highway records (`hwlanes.py stock`):
 
 New curves: a lane spec may carry "curves": [{"shape": S, "pts": [[x, y, z], ...]}] (state-0 frame); hwlanes writes
 the four rotations (keys S*256 + r) into every language folder's VPathAtt.IXF (English-UK: the reversed copies)
-(netpack_lanes calls inject() / curve_records()). Use your stream's piece-id range as shape numbers (hwcore 21100..21119,
-hwx 21120..21199, ...): keys 5,401,600 and up, clear of the stock set.
+(netpack_lanes calls inject() / curve_records()). Shape numbers: your stream's range in the protocol's section 5 table
+(CHILD_PROTOCOL_2026-10-18_highways.md, "Lane curve shape numbers": hwcore 21100..21119 + 23300..23399, hwdx
+22000..22499, hwx 22500..22799, hwt 22800..22999, hwdd 23000..23299), all clear of the stock shapes (up to 20002).
 
 API:
     deck_lanes(deck) -> [(t, speed)]                  lane offsets of a hwpaint Deck (left of travel, cells)
@@ -115,7 +116,7 @@ def spec_curves(spec):
     for c in spec.get("curves", []):
         s = int(c["shape"])
         if not 20003 <= s <= 0xFFFFFF:
-            raise LK.LaneError("curve shape %d: use your stream's piece-id range (stock shapes reach 20002)" % s)
+            raise LK.LaneError("curve shape %d: use your stream's shape range (protocol section 5; stock reaches 20002)" % s)
         out[s] = [[int(v) for v in p] for p in c["pts"]]
     return out
 
@@ -318,7 +319,7 @@ def cmd_core(a):
 def cmd_demo(a):
     from netmod import hwpaint as HP
     os.makedirs(a.out, exist_ok=True)
-    shape = 21100
+    shape = 23300                                        # hwcore's second shape range (protocol section 5)
     for name, sc in HP.demo_scenes().items():
         cells = HP.scene_cells(sc)
         piece_of = {c: 21100 + i for i, c in enumerate(cells)}

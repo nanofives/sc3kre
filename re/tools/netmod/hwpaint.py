@@ -40,7 +40,7 @@ API (all a sibling needs):
     highway(path, height=H, **kw) -> [Deck, Deck]: the two carriageways (1 cell each) either side of `path`, outer
          parapets outward (the stock two-cell highway when `path` runs along a cell edge); the right-hand one runs
          along `path`, the left-hand one against it (traffic keeps right; hwlanes reads the decks' directions)
-    ramp_deck(path, **kw) -> Deck: one-lane ramp (RAMP_W = 0.44 wide unless width= is given)
+    ramp_deck(path, **kw) -> Deck: one-lane ramp (RAMP_W = 0.62 wide unless width= is given)
     Scene(decks)                      later decks win where two tops coincide (a ramp merging onto a deck)
     paint_cell(scene, (X, Z), out_dir, zooms=range(5), canvas=None) -> anchors dict (also written as anchors.json)
     paint_cells(scene, cells, root) -> {(X, Z): dir}   root/<X>_<Z>/z{z}_r{r}.png + anchors.json
@@ -75,7 +75,7 @@ H_LOW = 16.0              # the stock X's lower highway (15107 arms: frame top 3
 H_HIGH = 47.5             # the stock X's upper highway (15150 arms: 95 zoom-4 px)
 SLAB = 5.0                # bridge slab thickness (zoom-3 px)
 DASH_ON = 0.5             # painted share of the 0.25-cell dash period on the stock deck (73 / 15051 zoom 4: 8 of 16)
-RAMP_W = 0.44             # one-lane ramp width, cells (program decision 2026-10-18: hwx's geometry, W = 0.22)
+RAMP_W = 0.62             # one-lane ramp width, cells: the stock ramp (15127 fit 0.64); program width (hwx W 0.31)
 W_DIAG = 0.63             # stock diagonal carriageway width across (11223/11224, 15052/15106 bands; zoom 4, at H)
 GAP_OUT, GAP_IN = 0.28, 0.93   # th past which a parapet gap turns the stock edge (parapet, edge line / curb) to lane
 CLEAR = (0, 0, 0, 0)
