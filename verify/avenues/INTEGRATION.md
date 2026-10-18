@@ -1,7 +1,7 @@
 # Avenue program: integration on round/avenues (2026-10-18)
 
 Branch `round/avenues` (worktree `Simcity_wt_avenues`): child/diagave + child/avx + child/boulevard + child/bigrbt
-+ child/diagx.
++ child/diagx + child/bvx.
 Streams and protocol: `re/sessions/CHILD_PROTOCOL_2026-10-17.md`; each stream's evidence in `verify/<stream>/RESULTS.md`.
 
 ## Merge notes
@@ -37,3 +37,18 @@ conflicted; its only change was the `crossing` property, added to the integratio
 | DLL start | avx on, rbt9 on, diagonal avenues on (inner 20500) |
 | Two diagonal avenues crossing (axis 0 and axis 1 bands) | `band axis 0 ... 1 crossing(s), 35 written`, `band axis 1 ... 1 crossing(s), 33 written`; dashes, median trees and crosswalks on all four arms (`int3_xx_z4.png`) |
 | Exceptions | 0 |
+
+## After merging child/bvx (a30470e)
+
+Conflicts only on the shared hook lines; bvx runs inside BV, so the install gate needed no new term. Survival check:
+all added hook lines present (the BV rule lines bvx rewrote are its newer version).
+
+| Check | Result |
+|---|---|
+| Install six packages (+ boulevard_junctions) | validates, installs |
+| DLL start | bvx box pieces read; avx, rbt9, DAV on |
+| Boulevard along x crossed by an avenue along z | `bv: edit: ... 43 cell(s), 34 written`; paved box, noses, dashes (`integration_3_bvx.png`) |
+| Exceptions | 0 |
+
+Look difference to settle with the owner: avx boxes use a mirror fill of 43 (faint crease at zoom 4), bvx boxes a
+per-pixel palette of 43's asphalt (no crease, grainier than the road).
