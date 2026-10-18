@@ -86,8 +86,14 @@ HUD play button, pause = the pause button (or sc3resize keys P, 1-4). Your DLL l
 | `hwcore` | the SHARED base: net-4 dispatch on RBT's hooks (`sc3netmod_hwy.c`: read highway cells, write a highway variant into a cell that holds highway AND into an EMPTY cell (claim rule: no building, zone or other network; trees are cleared), revert, save ids, a `hwy_claimed()` like `dbv_claimed()`), the elevated-highway painter `hwpaint.py` (deck, walls, curves and arcs of any radius, 45-degree runs, a deck bridging over a lower carriageway, ramps that rise or fall), and highway lanes / turn matrices for one-lane ramps. Proof: stock 73 / 15051 / a stock curve repainted by `hwpaint.py` match the stock frames; one variant written into an empty cell next to a highway in game, kept through a retile and a save + reload. | 21100..21119 |
 | `hwx` | straight highway x straight highway (the stock 4x4 flyover, `STOCK.md`): a CLOVERLEAF (four loop ramps for the left turns, outer ramps for the right turns, every movement connected) when the quadrants are free, else a cleaned-up flyover in the stock 4x4. Also the X on a slope (stock leaves 15149 forever) if it fits. | 21120..21199 |
 | `hwt` | straight highway ending on a straight highway (a T): the stem's end next to the through highway's side, and the side hit that stock leaves as 15149. Every movement connects (stem to both directions, both directions to the stem); a ramp that crosses the near carriageway bridges over it. | 21200..21259 |
-| `hwdx` | diagonal highway x straight highway (45 degrees; stock leaves two 15149 blocks and breaks the diagonal): a flyover with connecting ramps for every movement. | 21260..21359 |
+| `hwdx` | diagonal highway x straight highway (45 degrees; stock leaves two 15149 blocks and breaks the diagonal): a flyover with connecting ramps for every movement. | 21260..21359 + 21460..21559 (granted 2026-10-18) |
 | `hwdd` | diagonal highway x diagonal highway (the two diagonal families meet at 90 degrees; stock makes a straight stub + 15149): a flyover with connecting ramps, a cloverleaf turned 45 degrees if that reads best. | 21360..21459 |
+**Lane curve shape numbers** (hwlanes.py writes one new VPathAtt curve per lane cut, key = shape * 256 + rotation;
+granted 2026-10-18, clear of the stock shapes, which end at 20002, and of every piece id): hwcore its piece ids
+21100..21119 plus 23300..23399, hwdx 22000..22499, hwx 22500..22799, hwt 22800..22999, hwdd 23000..23299.
+**Ramp geometry** (program rule 2026-10-18): ramp deck 0.62 (stock ramp width), hwx.py's W 0.31, loop R 1.25, outer
+ramp radius 2.06, turn arcs 0.75, 0.19 cell of ground between decks; open the highway parapet at every join (Deck gaps).
+
 Not in this wave (say so if your rule meets them, refuse them): T's involving a diagonal, highway x avenue, highway
 merges / splits, interchanges closer than their footprint. If your rule would match another stream's shape, refuse it.
 
