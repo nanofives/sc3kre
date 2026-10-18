@@ -1332,6 +1332,7 @@ static int netramp_install(BYTE *m) {
 #include "sc3netmod_hwt.c"          /* task hwt: HWT, the connecting highway T on HWY (SC3NETMOD_HWT=0) */
 #include "sc3netmod_hwx.c"          /* task hwx: HWX, the cloverleaf at a highway X on HWY (SC3NETMOD_HWX=0) */
 #include "sc3netmod_hwdd.c"         /* task hwdd: HWDD, diagonal x diagonal highway cloverleaf (SC3NETMOD_HWDD=0) */
+#include "sc3netmod_hwdx.c"         /* task hwdx: HWDX, diagonal x straight highway cloverleaf (SC3NETMOD_HWDX=0) */
 #include "sc3netmod_lanes.c"        /* task lanedensity: road density honours turn matrices (SC3NETMOD_LANEDENSITY) */
 
 /* ============================================================ arming */
