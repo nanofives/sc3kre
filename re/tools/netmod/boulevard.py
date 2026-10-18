@@ -46,7 +46,7 @@ def _to_real(axis, s, w):
     return (s, w) if axis == 0 else (-w, s)
 
 
-def runs(road, have_cap=True, have_taper=True):
+def runs(road, have_cap=True, have_taper=True, claimed=frozenset()):
     """road: set of real ROAD cells -> [{axis, w0, sa, sb, ok, why, want: {cell: (piece, state)}}]
 
     column    s with ROAD at (s, w0..w0+2); clean: no ROAD at (s, w0-1) and (s, w0+3); junction: a straight single road
@@ -59,7 +59,8 @@ def runs(road, have_cap=True, have_taper=True):
     out = []
     for axis in (0, 1):
         R = {((x, z) if axis == 0 else (z, -x)) for (x, z) in road}
-        full = lambda s, w: all((s, w + k) in R for k in range(3))     # noqa: E731
+        C = {((x, z) if axis == 0 else (z, -x)) for (x, z) in claimed}                 # task diagbv
+        full = lambda s, w: all((s, w + k) in R and (s, w + k) not in C for k in range(3))     # noqa: E731
         starts = sorted((s, w) for (s, w) in R if full(s, w) and not full(s - 1, w))
         for (sa, w0) in starts:
             sb = sa
@@ -95,6 +96,8 @@ def runs(road, have_cap=True, have_taper=True):
                         ends[e] = ("bad", None, [])
                     else:
                         ends[e] = ("tee", None, [se - step * i for i in range(sp["jb"] - sp["ja"] + 1)])
+                elif beyond and all((se + step, w0 + k) in C for k in beyond):
+                    ends[e] = ("dbv", None, [])          # task diagbv: bends into a diagonal boulevard
                 elif not beyond:
                     ends[e] = ("cap", None, [se])
                 elif len(beyond) == 1 and (se + 2 * step, w0 + beyond[0]) in R:
@@ -128,15 +131,15 @@ def runs(road, have_cap=True, have_taper=True):
                     for ds in (-1, 0, 1):
                         for dw in (-1, 0, 1):
                             q = (s + ds, w + dw)
-                            if q in R and q not in cells and q not in arms and q not in extra:
+                            if q in R and q not in cells and q not in arms and q not in extra and q not in C:
                                 why = why or "touches road at %s" % (_to_real(axis, *q),)
             want = {}
             if not why:
                 def put(s, row, piece, st):
                     want[_to_real(axis, s, w0 + row)] = (piece, (st + axis) & 3)
                 for e, (typ, k, cs) in ends.items():
-                    if typ == "tee":                            # task bvx: its box comes with the spans below
-                        continue
+                    if typ in ("tee", "dbv"):                   # task bvx: its box comes with the spans below;
+                        continue                                # task diagbv: DBV writes that end
                     if typ == "cap":
                         for row in range(3):
                             put(cs[0], row if e == 0 else 2 - row, CAP[row], 0 if e == 0 else 2)

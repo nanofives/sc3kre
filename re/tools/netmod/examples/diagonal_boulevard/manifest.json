@@ -1,0 +1,2522 @@
+{
+ "netpack": 1,
+ "name": "diagonal_boulevard",
+ "version": "0.1.0",
+ "author": "netmod (task diagbv)",
+ "description": "Diagonal boulevards: draw three diagonal roads joined side by side (each one cell over: along x on the down-right diagonal, one cell up on the other) and sc3netmod's DBV block makes them one 3-wide boulevard, the straight boulevard's cross-section turned 45 degrees: the outer roads are the carriageways, the middle one gives each an extra lane and holds a grass median with avenue 11204's trees. Straight single roads crossing it, meeting it from one side or closing its end get junctions with crosswalks; it narrows into the diagonal avenue or tapers into one of its three roads, closes with a round curb where all three stop, and turns into the straight boulevard where its drags go on straight. Lane lines are white dashes. Built by `diagbv.py build .` in this folder before install (art/ is made from the game's frames and is not shipped). Needs sc3netmod.dll with the DBV block.",
+ "game": {
+  "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+ },
+ "variants": [
+  {
+   "id": 20950,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20950"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20951,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20951"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20952,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20952"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20953,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20953"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20954,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20954"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20955,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20955"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20956,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20956"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20957,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20957"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20958,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20958"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20959,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20959"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20960,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20960"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20961,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20961"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20962,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20962"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20963,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20963"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20964,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20964"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20965,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20965"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20966,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20966"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20967,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20967"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20968,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20968"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20969,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20969"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20970,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20970"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20971,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20971"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20972,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20972"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20973,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20973"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20974,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20974"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20975,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20975"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20976,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20976"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20977,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20977"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20978,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20978"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20979,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20979"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20980,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20980"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20981,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20981"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20982,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20982"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20983,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20983"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20984,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20984"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20985,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20985"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20986,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20986"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20987,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20987"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20988,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20988"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20989,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20989"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20990,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20990"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20991,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20991"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20992,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20992"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20993,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20993"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20994,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20994"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20995,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20995"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20996,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20996"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20997,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20997"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20998,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20998"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20999,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20999"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21000,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21000"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21001,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21001"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21002,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21002"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21003,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21003"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21004,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21004"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21005,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21005"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21006,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21006"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21007,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21007"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21008,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21008"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21009,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21009"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21010,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21010"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21011,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21011"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21012,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21012"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21013,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21013"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21014,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21014"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21015,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21015"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21016,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21016"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21017,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21017"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21018,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21018"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21019,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21019"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21020,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21020"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21021,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21021"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21022,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21022"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21023,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21023"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21024,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21024"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21025,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21025"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21026,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21026"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21027,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21027"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21028,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/21028"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21029,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21029"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21030,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21030"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21031,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21031"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21032,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21032"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21033,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21033"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21034,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21034"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21035,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/21035"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21036,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21036"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21037,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21037"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21038,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21038"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21039,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21039"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21040,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21040"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21041,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21041"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21042,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/21042"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21043,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21043"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21044,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21044"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21045,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21045"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21046,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21046"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21047,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21047"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21048,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21048"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21049,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21049"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21050,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21050"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21051,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21051"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21052,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21052"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21053,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21053"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21054,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21054"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21055,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21055"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21056,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21056"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21057,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21057"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21058,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21058"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21059,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21059"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21060,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21060"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21061,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21061"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21062,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21062"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21063,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21063"
+   },
+   "trblkatt": "copy_base"
+  }
+ ],
+ "lanes": [
+  {
+   "piece": 20951,
+   "spec": "dbv_20951.lanes.json"
+  }
+ ],
+ "auto_diagonal_boulevards": [
+  {
+   "band": [
+    20950,
+    20951
+   ],
+   "stamps": {
+    "jrow-both": [
+     [
+      1,
+      -1,
+      20952,
+      0
+     ],
+     [
+      0,
+      0,
+      20953,
+      0
+     ],
+     [
+      1,
+      0,
+      20954,
+      0
+     ],
+     [
+      2,
+      0,
+      20955,
+      0
+     ],
+     [
+      3,
+      0,
+      20956,
+      0
+     ],
+     [
+      2,
+      1,
+      20957,
+      0
+     ]
+    ],
+    "jrow-A": [
+     [
+      1,
+      -1,
+      20952,
+      0
+     ],
+     [
+      0,
+      0,
+      20953,
+      0
+     ],
+     [
+      1,
+      0,
+      20954,
+      0
+     ],
+     [
+      2,
+      0,
+      20958,
+      0
+     ],
+     [
+      3,
+      0,
+      20959,
+      0
+     ],
+     [
+      2,
+      1,
+      20957,
+      0
+     ]
+    ],
+    "jrow-stem": [
+     [
+      1,
+      -1,
+      20952,
+      0
+     ],
+     [
+      0,
+      0,
+      20960,
+      0
+     ],
+     [
+      1,
+      0,
+      20961,
+      0
+     ],
+     [
+      2,
+      0,
+      20962,
+      0
+     ],
+     [
+      3,
+      0,
+      20963,
+      0
+     ]
+    ],
+    "jcol-both": [
+     [
+      0,
+      -3,
+      20964,
+      0
+     ],
+     [
+      -1,
+      -2,
+      20965,
+      0
+     ],
+     [
+      0,
+      -2,
+      20966,
+      0
+     ],
+     [
+      0,
+      -1,
+      20967,
+      0
+     ],
+     [
+      1,
+      -1,
+      20968,
+      0
+     ],
+     [
+      0,
+      0,
+      20969,
+      0
+     ]
+    ],
+    "jcol-A": [
+     [
+      0,
+      -3,
+      20970,
+      0
+     ],
+     [
+      -1,
+      -2,
+      20965,
+      0
+     ],
+     [
+      0,
+      -2,
+      20971,
+      0
+     ],
+     [
+      0,
+      -1,
+      20967,
+      0
+     ],
+     [
+      1,
+      -1,
+      20968,
+      0
+     ],
+     [
+      0,
+      0,
+      20969,
+      0
+     ]
+    ],
+    "narrow-C": [
+     [
+      1,
+      -1,
+      20972,
+      0
+     ],
+     [
+      2,
+      -1,
+      20973,
+      0
+     ],
+     [
+      1,
+      0,
+      20974,
+      0
+     ],
+     [
+      2,
+      0,
+      20975,
+      0
+     ],
+     [
+      3,
+      0,
+      20976,
+      0
+     ],
+     [
+      1,
+      1,
+      20977,
+      0
+     ],
+     [
+      2,
+      1,
+      20978,
+      0
+     ],
+     [
+      3,
+      1,
+      20979,
+      0
+     ],
+     [
+      2,
+      2,
+      20980,
+      0
+     ],
+     [
+      3,
+      2,
+      20981,
+      0
+     ],
+     [
+      4,
+      2,
+      20982,
+      0
+     ]
+    ],
+    "narrow-A": [
+     [
+      -1,
+      -2,
+      20983,
+      0
+     ],
+     [
+      0,
+      -2,
+      20984,
+      0
+     ],
+     [
+      -1,
+      -1,
+      20985,
+      0
+     ],
+     [
+      0,
+      -1,
+      20986,
+      0
+     ],
+     [
+      1,
+      -1,
+      20987,
+      0
+     ],
+     [
+      2,
+      -1,
+      20988,
+      0
+     ],
+     [
+      0,
+      0,
+      20989,
+      0
+     ],
+     [
+      1,
+      0,
+      20990,
+      0
+     ],
+     [
+      2,
+      0,
+      20991,
+      0
+     ],
+     [
+      3,
+      0,
+      20992,
+      0
+     ]
+    ],
+    "taper-0": [
+     [
+      2,
+      0,
+      20993,
+      0
+     ],
+     [
+      3,
+      0,
+      20994,
+      0
+     ],
+     [
+      1,
+      1,
+      20977,
+      0
+     ],
+     [
+      2,
+      1,
+      20995,
+      0
+     ],
+     [
+      2,
+      2,
+      20996,
+      0
+     ],
+     [
+      3,
+      2,
+      20997,
+      0
+     ]
+    ],
+    "taper-1": [
+     [
+      -1,
+      -2,
+      20998,
+      0
+     ],
+     [
+      0,
+      -2,
+      20999,
+      0
+     ],
+     [
+      1,
+      -2,
+      21000,
+      0
+     ],
+     [
+      -1,
+      -1,
+      21001,
+      0
+     ],
+     [
+      0,
+      -1,
+      21002,
+      0
+     ],
+     [
+      1,
+      -1,
+      21003,
+      0
+     ],
+     [
+      2,
+      -1,
+      21004,
+      0
+     ],
+     [
+      0,
+      0,
+      21005,
+      0
+     ],
+     [
+      1,
+      0,
+      21006,
+      0
+     ],
+     [
+      2,
+      0,
+      21007,
+      0
+     ],
+     [
+      3,
+      0,
+      21008,
+      0
+     ],
+     [
+      2,
+      1,
+      21009,
+      0
+     ],
+     [
+      3,
+      1,
+      21010,
+      0
+     ],
+     [
+      3,
+      2,
+      21011,
+      0
+     ],
+     [
+      4,
+      2,
+      21012,
+      0
+     ]
+    ],
+    "taper-2": [
+     [
+      1,
+      -2,
+      21013,
+      0
+     ],
+     [
+      0,
+      -1,
+      21014,
+      0
+     ],
+     [
+      1,
+      -1,
+      21015,
+      0
+     ],
+     [
+      2,
+      -1,
+      21016,
+      0
+     ],
+     [
+      0,
+      0,
+      21017,
+      0
+     ],
+     [
+      1,
+      0,
+      21018,
+      0
+     ],
+     [
+      2,
+      0,
+      21019,
+      0
+     ],
+     [
+      3,
+      0,
+      21020,
+      0
+     ],
+     [
+      3,
+      1,
+      21021,
+      0
+     ],
+     [
+      4,
+      1,
+      21022,
+      0
+     ]
+    ],
+    "cap-square": [
+     [
+      1,
+      -1,
+      20952,
+      0
+     ],
+     [
+      0,
+      0,
+      21023,
+      0
+     ],
+     [
+      1,
+      0,
+      21024,
+      0
+     ],
+     [
+      2,
+      0,
+      21025,
+      0
+     ],
+     [
+      3,
+      0,
+      21026,
+      0
+     ]
+    ],
+    "cap-part": [
+     [
+      0,
+      0,
+      21027,
+      0
+     ],
+     [
+      1,
+      0,
+      21028,
+      0
+     ],
+     [
+      2,
+      0,
+      21029,
+      0
+     ],
+     [
+      3,
+      0,
+      21030,
+      0
+     ],
+     [
+      1,
+      1,
+      21031,
+      0
+     ],
+     [
+      2,
+      1,
+      21032,
+      0
+     ],
+     [
+      3,
+      1,
+      21033,
+      0
+     ]
+    ],
+    "taper-0s": [
+     [
+      2,
+      -1,
+      21034,
+      0
+     ],
+     [
+      1,
+      0,
+      21035,
+      0
+     ],
+     [
+      2,
+      0,
+      21036,
+      0
+     ],
+     [
+      3,
+      0,
+      21037,
+      0
+     ],
+     [
+      1,
+      1,
+      21038,
+      0
+     ],
+     [
+      2,
+      1,
+      21039,
+      0
+     ],
+     [
+      3,
+      1,
+      21040,
+      0
+     ],
+     [
+      2,
+      2,
+      21038,
+      0
+     ],
+     [
+      3,
+      2,
+      21041,
+      0
+     ]
+    ],
+    "taper-1s": [
+     [
+      0,
+      -1,
+      21042,
+      0
+     ],
+     [
+      1,
+      -1,
+      21043,
+      0
+     ],
+     [
+      2,
+      -1,
+      21004,
+      0
+     ],
+     [
+      0,
+      0,
+      21044,
+      0
+     ],
+     [
+      1,
+      0,
+      21045,
+      0
+     ],
+     [
+      2,
+      0,
+      21046,
+      0
+     ],
+     [
+      3,
+      0,
+      21008,
+      0
+     ],
+     [
+      1,
+      1,
+      21005,
+      0
+     ],
+     [
+      2,
+      1,
+      21006,
+      0
+     ],
+     [
+      3,
+      1,
+      21047,
+      0
+     ],
+     [
+      3,
+      2,
+      21011,
+      0
+     ],
+     [
+      4,
+      2,
+      21012,
+      0
+     ]
+    ],
+    "taper-2s": [
+     [
+      1,
+      -2,
+      21013,
+      0
+     ],
+     [
+      0,
+      -1,
+      21048,
+      0
+     ],
+     [
+      1,
+      -1,
+      21049,
+      0
+     ],
+     [
+      2,
+      -1,
+      21016,
+      0
+     ],
+     [
+      0,
+      0,
+      21050,
+      0
+     ],
+     [
+      1,
+      0,
+      21051,
+      0
+     ],
+     [
+      2,
+      0,
+      21052,
+      0
+     ],
+     [
+      3,
+      0,
+      21053,
+      0
+     ],
+     [
+      2,
+      1,
+      21054,
+      0
+     ],
+     [
+      3,
+      1,
+      21055,
+      0
+     ],
+     [
+      4,
+      1,
+      21056,
+      0
+     ]
+    ],
+    "cap-x4z3": [
+     [
+      0,
+      0,
+      21027,
+      0
+     ],
+     [
+      1,
+      0,
+      21028,
+      0
+     ],
+     [
+      2,
+      0,
+      21029,
+      0
+     ],
+     [
+      3,
+      0,
+      21030,
+      0
+     ],
+     [
+      1,
+      1,
+      21057,
+      0
+     ],
+     [
+      2,
+      1,
+      21058,
+      0
+     ],
+     [
+      3,
+      1,
+      21059,
+      0
+     ],
+     [
+      2,
+      2,
+      21023,
+      0
+     ],
+     [
+      3,
+      2,
+      21060,
+      0
+     ]
+    ],
+    "cap-x4z4": [
+     [
+      0,
+      0,
+      21027,
+      0
+     ],
+     [
+      1,
+      0,
+      21028,
+      0
+     ],
+     [
+      2,
+      0,
+      21029,
+      0
+     ],
+     [
+      3,
+      0,
+      21030,
+      0
+     ],
+     [
+      1,
+      1,
+      21057,
+      0
+     ],
+     [
+      2,
+      1,
+      21058,
+      0
+     ],
+     [
+      3,
+      1,
+      21059,
+      0
+     ],
+     [
+      2,
+      2,
+      21061,
+      0
+     ],
+     [
+      3,
+      2,
+      21062,
+      0
+     ],
+     [
+      3,
+      3,
+      21063,
+      0
+     ]
+    ]
+   }
+  }
+ ]
+}

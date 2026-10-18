@@ -108,7 +108,9 @@ static WORD dav_mid_of(WORD a, WORD b, int delta) {
 static int dav_road(RbBuf *b, int axis, int x, int z) { return rb_at(b, axis ? -x : x, z) != 0; }
 
 static int dav_full(RbBuf *b, int axis, int a, int z) {
-    return dav_road(b, axis, a, z) && dav_road(b, axis, a + 1, z) && dav_road(b, axis, a + 2, z);
+    return dav_road(b, axis, a, z) && dav_road(b, axis, a + 1, z) && dav_road(b, axis, a + 2, z) &&
+           !(dbv_claimed(axis ? -a : a, z) && dbv_claimed(axis ? -(a + 1) : a + 1, z) &&
+             dbv_claimed(axis ? -(a + 2) : a + 2, z));        /* task diagbv: a row a diagonal boulevard holds */
 }
 
 static int dav_clean(RbBuf *b, int axis, int a, int z) {
@@ -439,7 +441,8 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
         int ax0 = axis ? -x1 : x0, ax1 = axis ? -x0 : x1;
 #define RD(a, zq) dav_road(&P.b, axis, (a), (zq))
 #define MK(a, zq) dav_mark(&P, axis ? -(a) : (a), (zq))
-#define DOUT(a, zq) (RD(a, zq) && !(MK(a, zq) & 4))
+#define DCL(a, zq) dbv_claimed(axis ? -(a) : (a), (zq))      /* task diagbv: a diagonal boulevard's cell */
+#define DOUT(a, zq) (RD(a, zq) && !(MK(a, zq) & 4) && !DCL(a, zq))
         for (z = z0; z <= z1; z++)
             for (x = ax0; x <= ax1; x++) {
                 int rows = 0, ok = 1, step, nw = 0, namb = 0, amb[DAV_MAX_AMB], combo, ncombo, best = -1, run, brun;
@@ -515,6 +518,9 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                 for (e = 0; e < 2; e++) {
                     bend[e] = 0;
                     if (xend[e]) continue;                         /* task diagx: the band ends in a crossing */
+                    for (j = 0; j < 4 && !bend[e]; j++)          /* task diagbv: the end runs into a diagonal boulevard */
+                        if (dbv_claimed(axis ? -BX(j) : BX(j), BZ(1))) bend[e] = 3;
+                    if (bend[e]) continue;
                     if (rows >= 3 && RD(BX(3), BZ(0)) && RD(BX(2), BZ(-1)) && RD(BX(3), BZ(-1)) && !RD(BX(1), BZ(1)) &&
                         !RD(BX(2), BZ(1)) && !RD(BX(3), BZ(1)))
                         bend[e] = 1;
@@ -537,7 +543,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                     int aa = x + k, zz = z + k;
                     side[k] = 0;
                     if (bend[0] == 1 && k <= 1 && RD(aa - 1, zz)) side[k] |= 4;     /* the straight avenue, not an arm */
-                    else if (RD(aa - 1, zz) && !(XC(aa - 1, zz) & 1)) {             /* task diagx: crossing, no arm */
+                    else if (RD(aa - 1, zz) && !(XC(aa - 1, zz) & 1) && !DCL(aa - 1, zz)) {   /* diagx, diagbv */
                         if (RD(aa - 2, zz) && !DOUT(aa - 1, zz + 1) && !DOUT(aa - 2, zz + 1) && !DOUT(aa - 2, zz - 1)) {
                             side[k] |= 1;
                             dav_add_arm(&P, &na, axis, aa - 1, zz, 0); dav_add_arm(&P, &na, axis, aa - 2, zz, 0);
@@ -548,7 +554,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                         } else { ok = 0; why = "road beside the avenue is not a straight arm"; }
                     }
                     if (bend[1] == 1 && k >= rows - 2 && RD(aa + 3, zz)) side[k] |= 4;
-                    else if (ok && RD(aa + 3, zz) && !(XC(aa + 3, zz) & 1)) {
+                    else if (ok && RD(aa + 3, zz) && !(XC(aa + 3, zz) & 1) && !DCL(aa + 3, zz)) {
                         if (RD(aa + 4, zz) && !DOUT(aa + 3, zz - 1) && !DOUT(aa + 4, zz + 1) && !DOUT(aa + 4, zz - 1)) {
                             side[k] |= 2;
                             dav_add_arm(&P, &na, axis, aa + 3, zz, 0); dav_add_arm(&P, &na, axis, aa + 4, zz, 0);
@@ -652,6 +658,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
 #undef RD
 #undef MK
 #undef DOUT
+#undef DCL
 #undef BX
 #undef BZ
 #undef XC
@@ -661,7 +668,8 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                         border = 1;
                     for (j = 0; j < 8 && ok; j++) {                /* isolated: no other road touches the band */
                         int qx = cx + DAV_DIR[j][0], qz = cz + DAV_DIR[j][1];
-                        if (rb_at(&P.b, qx, qz) && !(dav_mark(&P, qx, qz) & 44) && !(dav_xm(&P, qx, qz) & 1)) {
+                        if (rb_at(&P.b, qx, qz) && !(dav_mark(&P, qx, qz) & 44) && !(dav_xm(&P, qx, qz) & 1) &&
+                            !dbv_claimed(qx, qz)) {                  /* task diagx, task diagbv */
                             ok = 0; why = "touches road";
                         }
                     }
@@ -757,6 +765,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                         cur = rb_at(&P.b, cx, cz);
                         if (keep && (k < n || k >= n + na) && cx >= x0 && cz >= z0 && cx <= x1 && cz <= z1)
                             keep[(cz - z0) * P.b.w + (cx - x0)] = 1;
+                        if (dbv_claimed(cx, cz)) continue;          /* task diagbv: DBV writes its own cells */
                         if ((((cur & 0xffff) << 8) | ((cur >> 16) & 3)) == want) continue;
                         pos[0] = cx << 8; pos[1] = cz << 8; pos[2] = 0;
                         ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, lay, pos, want, -1, 8, 0);
@@ -804,7 +813,8 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
             for (x = x0 + 1; x < x1; x++) {
                 DWORD v = rb_at(&P.b, x, z);
                 int rect[6];
-                if (!v || !dav_is_mid((WORD)(v & 0xffff)) || keep[(z - z0) * P.b.w + (x - x0)]) continue;
+                if (!v || !dav_is_mid((WORD)(v & 0xffff)) || keep[(z - z0) * P.b.w + (x - x0)] || dbv_claimed(x, z))
+                    continue;                                    /* task diagbv: claimed cells are DBV's */
                 rect[0] = x << 8; rect[1] = z << 8; rect[2] = 0; rect[3] = x << 8; rect[4] = z << 8; rect[5] = 0;
                 ((PFN_Retile)VT(mgr, 0xb0))(mgr, 0, rect, 3);
                 nrev++;

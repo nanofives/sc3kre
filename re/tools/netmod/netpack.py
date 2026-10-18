@@ -71,6 +71,9 @@ import netpack_templates as TPL  # noqa: E402  task multitile: multi-cell templa
 
 SCHEMA_VERSION = 1
 SCHEMA_FILE = os.path.join(HERE, "netpack.schema.json")
+DBV_KIND_NO = {"jrow-both": 1, "jrow-A": 2, "jrow-stem": 3, "jcol-both": 4, "jcol-A": 5, "narrow-C": 6, "narrow-A": 7,
+               "taper-0": 8, "taper-1": 9, "taper-2": 10, "cap-square": 11, "cap-part": 12, "taper-0s": 13,
+               "taper-1s": 14, "taper-2s": 15, "cap-x4z3": 16, "cap-x4z4": 17}   # task diagbv: = diagbv.KIND_NO, sc3netmod_dbv.c
 
 NETMOD = "mods/netmod"
 LEDGER = NETMOD + "/ledger.json"
@@ -588,7 +591,8 @@ def compile_pack(stock, pack_dir, man):
            "auto_avenue_junctions": [],                                                     # task avx
            "auto_boulevards": [],                                                           # task boulevard
            "auto_big_roundabouts": [],                                                      # task bigrbt
-           "auto_boulevard_junctions": []}                                                  # task bvx
+           "auto_boulevard_junctions": [],                                                  # task bvx
+           "auto_diagonal_boulevards": []}                                                  # task diagbv
     for n, v in enumerate(man.get("variants", [])):
         where = "%s variant %d (id %s)" % (pname, n + 1, v.get("id"))
         vid, base, net = v["id"], v["base"], v["network"]
@@ -781,6 +785,12 @@ def compile_pack(stock, pack_dir, man):
         out["auto_boulevard_junctions"].append(compile_avx(a, vids, "%s auto_boulevard_junctions %d" % (pname, n + 1)))
     if len(out["auto_boulevard_junctions"]) > 1:
         raise NetpackError("%s: at most one auto_boulevard_junctions entry (sc3netmod applies one set)" % pname)
+    for n, a in enumerate(man.get("auto_diagonal_boulevards", [])):  # task diagbv: sc3netmod DBV block (diagbv.py)
+        where = "%s auto_diagonal_boulevards %d" % (pname, n + 1)
+        for p in list(a["band"]) + [c[2] for cells in a["stamps"].values() for c in cells]:
+            if p not in (29, 35) and (p not in vids or vids[p]["net"] != "ROAD"):
+                raise NetpackError("%s: piece %s must be a ROAD variant declared in this package (or 29 / 35)" % (where, p))
+        out["auto_diagonal_boulevards"].append({"band": list(a["band"]), "stamps": a["stamps"], "where": where})
     out["ramps"] = []
     if man.get("ramps"):                                 # hardcoded SIMNTWRK tables (netramp.py, NET_RAMPS.md)
         try:
@@ -944,6 +954,10 @@ def merge(stock, packs):
     if len(davs) > 1:
         raise NetpackError("auto_diagonal_avenues: %s and %s both declare one; sc3netmod applies a single set" %
                            (davs[0]["where"], davs[1]["where"]))
+    dbvs = [a for c in comp for a in c.get("auto_diagonal_boulevards", [])]            # task diagbv
+    if len(dbvs) > 1:
+        raise NetpackError("auto_diagonal_boulevards: %s and %s both declare one; sc3netmod applies a single set" %
+                           (dbvs[0]["where"], dbvs[1]["where"]))
     avxs = [a for c in comp for a in c.get("auto_avenue_junctions", [])]               # task avx
     if len(avxs) > 1:
         raise NetpackError("auto_avenue_junctions: %s and %s both declare one; sc3netmod applies a single set" %
@@ -1080,7 +1094,7 @@ def merge(stock, packs):
         mine = [t for t in templates if t["pack"] == c["name"]]
         if c["variants"] or c["ramps"] or mine or c["auto_roundabouts"] or c["auto_diagonal_avenues"] or \
                 c.get("auto_avenue_junctions") or c.get("auto_boulevards") or c.get("auto_big_roundabouts") or \
-                c.get("auto_boulevard_junctions"):                                              # avx, boulevard, bigrbt, bvx
+                c.get("auto_boulevard_junctions") or c.get("auto_diagonal_boulevards"):          # avx, bv, bigrbt, bvx, diagbv
             tables[c["name"]] = ("# netpack %s: <variant id> <base id>, read by sc3netmod.dll\r\n" % c["name"]).encode() + \
                 b"".join(b"%d %d\r\n" % (v["id"], v["base"]) for v in sorted(c["variants"], key=lambda v: v["id"])) + \
                 RAMP.table_lines(c["ramps"]) + TPL.table_lines(mine) + \
@@ -1104,8 +1118,13 @@ def merge(stock, packs):
                 b"".join(b"rbt9 %s %d %d\r\n" % (r.encode(), k, p) for a in c.get("auto_big_roundabouts", [])
                          for r, k, p in a["roles"]) + \
                 b"".join(davx_lines(t) for a in c["auto_diagonal_avenues"] for t in a.get("crossing", [])) + \
-                bvx_table_lines(c.get("auto_boulevard_junctions", []))                           # task bvx
-                # task diagave, task avx, task boulevard, task bigrbt, task diagx, task bvx
+                bvx_table_lines(c.get("auto_boulevard_junctions", [])) + \
+                b"".join(b"dbvb %d %d\r\n" % tuple(a["band"]) +
+                         b"".join(b"dbvs %d %d %d %d %d\r\n" % ((DBV_KIND_NO[k],) + tuple(cell))
+                                  for k, cells in sorted(a["stamps"].items(), key=lambda t: DBV_KIND_NO[t[0]])
+                                  for cell in cells)
+                         for a in c.get("auto_diagonal_boulevards", []))                       # task diagbv
+                # task diagave, avx, boulevard, bigrbt, diagx, bvx, diagbv
 
     # ---- report + checks that need the merged result
     placed = set()
@@ -1128,6 +1147,7 @@ def merge(stock, packs):
     placed |= {p for a in big9 for _r, _k, p in a["roles"]}     # sc3netmod RBT9 places them (task bigrbt)
     placed |= {cell[2] for a in davs for t in a.get("crossing", []) for cell in t["writes"]}   # task diagx
     placed |= {b["piece"] for a in bvxs for b in a["box"]} | {b["piece"] for a in bvxs for b in a["arm"]}   # task bvx
+    placed |= {p for a in dbvs for p in a["band"]} | {c[2] for a in dbvs for cs in a["stamps"].values() for c in cs}  # task diagbv
     for v in variants:
         if v["id"] not in placed:
             report["warnings"].append("%s: no rule RESULT places %d, so the tiler never builds it" % (v["where"], v["id"]))
