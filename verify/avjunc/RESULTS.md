@@ -79,6 +79,16 @@ The single-run bisect first pointed at the radius-80 left-turn curve; 15660 (sam
 unpause deadlock is [UNCERTAIN]. Rule: attach Frida probes after the sim is running, not with `--start` from paused.
 The delivered lanes are the original ones (left lane to left lane).
 
+## Rebuild on child/avcore 0b189f8 (merge 2936359): curve sort ids
+
+hwlanes now writes the curve record's trailing u32 (path sort id) by height. Rebuilt and reinstalled avenue_lanes +
+avenue_junctions in the test tree: avjunc_build check PASSED; installed overlay VPATHATT, ENGLISH and English-UK: my
+shapes 23700..23707 (32 records each) all sort id 0 (stock flat curves: 0); 16 records with 2 are avcore's slope
+shapes 23604..23607 (heights -512 / -256 to 0). No change to any tracked avjunc file (the sort id is written at
+install). Seoul, PID 17124, nothing hooked, speed 2 by keys, 180 s: 150 boxes / 1,482 avcore cells on load, no hang,
+LANEDENSITY 620,983 honoured steps, trips through box cells (20813 at (33,130): exits on several sides, 0 wrong-way)
+and noses.
+
 ## Not done / open
 
 - Cars keeping their lane through a box was not traced car by car (the shots show traffic on converted avenues and
