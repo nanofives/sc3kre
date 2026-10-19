@@ -119,10 +119,10 @@ lines = [("What changes", FB, (0, 0, 0)),
  ("  parallel roads, rare stock junctions) stays as today, so one-way and two-way lanes never meet.", F, (0, 0, 0)),
  ("- A game without the mod sees stock avenues again (the saved pieces stay stock).", F, (0, 0, 0)),
  ("", F, 0),
- ("First step, then your calls", FB, (150, 0, 0)),
- ("- One test before any art: failed trips in Seoul with one-way halves in routing only.", F, (0, 0, 0)),
- ("- Boulevards: keep their lanes, or 2 lanes one way per outer row too?", F, (0, 0, 0)),
- ("- English-UK: drive on the left there (mirrored), or on the right everywhere?", F, (0, 0, 0))]
+ ("Decided / measured", FB, (0, 110, 0)),
+ ("- Right-hand everywhere, English-UK included. Unconverted avenues stay two-way.", F, (0, 0, 0)),
+ ("- Test done (Seoul): one-way halves in routing did not raise failed trips (2.01% -> 1.95% a month).", F, (0, 0, 0)),
+ ("- Boulevards follow the same logic: 3 lanes each way (second sheet).", F, (0, 0, 0))]
 for t, f, c in lines:
     if t: d.text((tx, ty), t, font=f, fill=c)
     ty += 26 if f is FB else 22

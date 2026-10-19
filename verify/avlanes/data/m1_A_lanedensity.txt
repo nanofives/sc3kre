@@ -1,0 +1,1 @@
+[382369.079 ms][tid 76c8] lanedensity: evals=6285070 honoured steps=6254506 neighbours closed=1035798 wrong-way fails=6924 arrivals refused=36 slow QI=80 vtables=5 refused-transition closes=8340 trip list full=0
