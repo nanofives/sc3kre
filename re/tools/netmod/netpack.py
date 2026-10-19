@@ -819,9 +819,10 @@ def compile_pack(stock, pack_dir, man):
         tok = ln.split()                                             # avls / avlu / avlc <piece> ..., avlj <piece> <NESW>
         if not tok or tok[0] not in ("avls", "avlu", "avlc", "avlj") or len(tok) < 2 or not tok[1].isdigit():
             raise NetpackError("%s avenue_lines %d: '%s' is not an avls / avlu / avlc / avlj line" % (pname, n + 1, ln))
-        if int(tok[1]) not in vids or vids[int(tok[1])]["net"] != "ROAD":
-            raise NetpackError("%s avenue_lines %d: %s names a piece that is not a ROAD variant of this package" %
-                               (pname, n + 1, tok[0]))
+        nets = ("ROAD", "HWAY") if tok[0] == "avlj" else ("ROAD",)     # avlj: hwave's ground row is HWAY (avmisc)
+        if int(tok[1]) not in vids or vids[int(tok[1])]["net"] not in nets:
+            raise NetpackError("%s avenue_lines %d: %s names a piece that is not a %s variant of this package" %
+                               (pname, n + 1, tok[0], " / ".join(nets)))
         out["avenue_lines"].append(ln)
     out["ramps"] = []
     if man.get("ramps"):                                 # hardcoded SIMNTWRK tables (netramp.py, NET_RAMPS.md)

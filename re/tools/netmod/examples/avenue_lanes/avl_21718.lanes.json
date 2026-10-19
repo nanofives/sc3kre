@@ -1,0 +1,157 @@
+{
+ "piece": 21718,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 0,
+ "alt": [
+  0,
+  -2,
+  -2,
+  0
+ ],
+ "_comment": "AVENUE_LANES.md 3: base 31 on a one-way half, road lanes toward z+ at state 0 (both in every language: uk_keep), the other network's lanes as stock",
+ "vehicle": {
+  "class": "car",
+  "speed": 64000,
+  "lanes": [
+   {
+    "from": [
+     80,
+     0,
+     0
+    ],
+    "to": [
+     80,
+     -512,
+     255
+    ],
+    "uk_keep": true
+   },
+   {
+    "from": [
+     175,
+     0,
+     0
+    ],
+    "to": [
+     175,
+     -512,
+     255
+    ],
+    "uk_keep": true
+   }
+  ]
+ },
+ "pedestrian": {
+  "walks": [
+   {
+    "from": [
+     15,
+     -512,
+     240
+    ],
+    "to": [
+     15,
+     15
+    ],
+    "path": 1536
+   },
+   {
+    "from": [
+     240,
+     15
+    ],
+    "to": [
+     240,
+     -512,
+     240
+    ],
+    "path": 1280
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     15,
+     -512,
+     240
+    ],
+    "code": 24
+   },
+   {
+    "at": [
+     15,
+     15
+    ],
+    "code": 8
+   },
+   {
+    "at": [
+     240,
+     -512,
+     240
+    ],
+    "code": 24
+   },
+   {
+    "at": [
+     240,
+     15
+    ],
+    "code": 8
+   }
+  ]
+ },
+ "connects": {
+  "road": {
+   "low": [
+    [
+     "z-",
+     "z+"
+    ]
+   ],
+   "high": [
+    [
+     "z+",
+     "z-"
+    ]
+   ]
+  }
+ },
+ "curves": [
+  {
+   "shape": 23604,
+   "pts": [
+    [
+     80,
+     0,
+     0
+    ],
+    [
+     80,
+     -512,
+     255
+    ]
+   ]
+  },
+  {
+   "shape": 23605,
+   "pts": [
+    [
+     175,
+     -512,
+     255
+    ],
+    [
+     175,
+     0,
+     0
+    ]
+   ]
+  }
+ ]
+}

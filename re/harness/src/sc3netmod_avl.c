@@ -25,13 +25,14 @@
  *              traffic flows into the piece and O where it flows out
  *   guard      every cell written holds a stock id (< 20000) or one of ours; never a cell dbv_claimed / hwave_claimed
  * Write = the game's piece writer FUN_10008919 per cell (as AVX / DAV). Our pieces in a band that no longer converts,
- * and in no band, get the rect retile FUN_100151f1 (not Protected) BEFORE the writes (AVX's order). Save: every piece
+ * and in no band, get their base back at the same state BEFORE the writes (the stock piece they replaced; a rect
+ * retile would keep a Protected base such as rail crossing 69, measured in the lab). Save: every piece
  * saves as its base at its own state (g_base, SAVEBASE), so a game without the mod loads the stock avenue.
  * Routing: LANEDENSITY enforces the variants' one-way matrices (default mode). Off: SC3NETMOD_AVL=0.
  */
 
 #define AVL_MAXC 32
-#define AVL_MAXJ 64
+#define AVL_MAXJ 4096                                       /* every package's avlj lines together */
 #define AVL_MAXLEN 4096                                     /* longest band walked, rows */
 
 typedef struct { WORD piece, base; BYTE side; } AvlC;
@@ -112,6 +113,7 @@ typedef struct { BYTE *mgr; void *lay; int W, H; DWORD *c; BYTE *rd, *seen; } Av
 static DWORD avl_at(AvlPass *p, int x, int z) {
     int i;
     if (x < 0 || z < 0 || x >= p->W || z >= p->H) return 0;
+    if (!p->rd) return rb_read(p->mgr, p->lay, x, z, p->W, p->H);   /* avl_band_ok: no cache */
     i = z * p->W + x;
     if (!p->rd[i]) { p->c[i] = rb_read(p->mgr, p->lay, x, z, p->W, p->H); p->rd[i] = 1; }
     return p->c[i];
@@ -165,6 +167,9 @@ static int avl_row(AvlPass *p, int axis, int ax, int az, int k) {
 }
 
 /* letter of join piece `id` at state `st` on world side `w`; 0 = not a join piece */
+/* avl_band_ok: the end on the caller's side counts as a valid declared join (-1 = the back end, 1 = the forward end) */
+static int g_avl_assume;
+
 static char avl_letter(WORD id, int st, int w) {
     int k;
     for (k = 0; k < g_avl_nj; k++) if (g_avl_j[k].piece == id) return g_avl_j[k].e[(w - st) & 3];
@@ -185,6 +190,7 @@ static int avl_end(AvlPass *p, int axis, int ax, int az, int k, int end, int *u)
     if (x < 0 || z < 0 || bx < 0 || bz < 0 || x >= p->W || z >= p->H || bx >= p->W || bz >= p->H) return 1;   /* map edge */
     a = avl_at(p, x, z); b = avl_at(p, bx, bz);
     if (!a && !b) return 0;
+    if (g_avl_assume && g_avl_assume == end) return 1;            /* avl_band_ok: the caller's end, whatever is on it now */
     if ((AVL_ID(a) == 11203 || (g_avl_uturn && AVL_ID(a) == g_avl_uturn)) &&
         (AVL_ID(b) == 11203 || (g_avl_uturn && AVL_ID(b) == g_avl_uturn)) &&
         AVL_ST(a) == USTATE[axis][fwd][0] && AVL_ST(b) == USTATE[axis][fwd][1] &&
@@ -201,16 +207,15 @@ static int avl_end(AvlPass *p, int axis, int ax, int az, int k, int end, int *u)
 typedef struct { int x, z; DWORD want; } AvlW;
 
 /* one band from the seed (ax, az): walk, decide, collect writes (accepted) or reverts (refused) */
-static void avl_band(AvlPass *p, int axis, int ax, int az, AvlW *w, int *nw, int cap, int *rv, int *nrv, int rcap,
-                     const char *who) {
-    int dx = axis ? 1 : 0, dz = axis ? 0 : 1, k0 = 0, k1 = 0, k, ub = 0, uf = 0, ok;
+/* the decision for the band through first-half cell (ax, az): rows k0..k1, U-turn ends ub / uf; nothing written */
+static int avl_decide(AvlPass *p, int axis, int ax, int az, int *pk0, int *pk1, int *pub, int *puf) {
+    int dx = axis ? 1 : 0, dz = axis ? 0 : 1, k0 = 0, k1 = 0, k, ok;
     while (k0 > -AVL_MAXLEN && avl_row(p, axis, ax, az, k0 - 1)) k0--;
     while (k1 < AVL_MAXLEN && avl_row(p, axis, ax, az, k1 + 1)) k1++;
-    for (k = k0; k <= k1; k++) {                                  /* mark every row seen: one walk per band per pass */
-        int x = ax + dx * k, z = az + dz * k;
-        p->seen[z * p->W + x] = 1;
+    {   /* both ends always: a refused band must also give back its U-turn cells */
+        int okb = avl_end(p, axis, ax, az, k0 - 1, -1, pub), okf = avl_end(p, axis, ax, az, k1 + 1, 1, puf);
+        ok = okb && okf;
     }
-    ok = avl_end(p, axis, ax, az, k0 - 1, -1, &ub) && avl_end(p, axis, ax, az, k1 + 1, 1, &uf);
     for (k = k0; ok && k <= k1; k++) {                             /* every crossing row needs a variant per direction */
         int c;
         for (c = 0; c < 2 && ok; c++) {
@@ -219,6 +224,19 @@ static void avl_band(AvlPass *p, int axis, int ax, int az, AvlW *w, int *nw, int
             int ci = avl_cross_of(AVL_ID(v)), dir = axis ? (c ? 3 : 1) : (c ? 2 : 0);
             if (!avl_is_straight(AVL_ID(v)) && (ci < 0 || !avl_cross_want(g_avl_c[ci].base, AVL_ST(v), dir))) ok = 0;
         }
+    }
+    *pk0 = k0; *pk1 = k1;
+    return ok;
+}
+
+static void avl_band(AvlPass *p, int axis, int ax, int az, AvlW *w, int *nw, int cap, int *rv, int *nrv, int rcap,
+                     const char *who) {
+    int dx = axis ? 1 : 0, dz = axis ? 0 : 1, k0, k1, k, ub = 0, uf = 0, ok;
+    ok = avl_decide(p, axis, ax, az, &k0, &k1, &ub, &uf);
+    for (k = k0; k <= k1; k++) {                                  /* mark both cells of every row: one walk per band */
+        int x = ax + dx * k, z = az + dz * k;
+        p->seen[z * p->W + x] = 1;
+        p->seen[(z + (axis ? 1 : 0)) * p->W + x + (axis ? 0 : 1)] = 1;
     }
     for (k = k0 - 1; k <= k1 + 1; k++) {
         int x = ax + dx * k, z = az + dz * k, c;
@@ -248,6 +266,80 @@ static void avl_band(AvlPass *p, int axis, int ax, int az, AvlW *w, int *nw, int
         if (InterlockedIncrement(&nlog) <= 200 || strcmp(who, "load"))
             logf("avl: %s: band along %s from (%d,%d) rows %d..%d -> one-way (ends: %s / %s)", who, axis ? "x" : "z",
                  ax, az, k0, k1, ub ? "U-turn" : "join or edge", uf ? "U-turn" : "join or edge");
+    }
+}
+
+/* AVENUE_LANES.md 5: would the avenue band through (x, z) (any cell of it, either half, stock or ours), running away from
+   the caller toward world side `away` (0 N 1 E 2 S 3 W), convert if the end on the caller's side counted as a declared
+   join? Evaluated on the current road grid with the pass rules; nothing written, no cache. 0 when AVL is off, when
+   (x, z) is not a band cell, or when `away` does not run along the band. The same answer whatever stands at the
+   caller's end. */
+static int avl_band_ok(int x, int z, int away) {
+    AvlPass P;
+    BYTE *mgr = (BYTE *)g_rb_mgr;
+    int k0, k1, ub = 0, uf = 0, ok = 0, t;
+    static const int TRY[4][3] = { { 0, 0, 0 }, { 0, -1, 0 }, { 1, 0, 0 }, { 1, 0, -1 } };   /* axis, dx, dz */
+    if (!g_avl_on || !mgr || away < 0 || away > 3) return 0;
+    P.mgr = mgr; P.lay = *(void **)(mgr + 0x3c);
+    P.W = (*(int *)(mgr + 0x5c) >> 8) + 1; P.H = (*(int *)(mgr + 0x60) >> 8) + 1;
+    P.c = NULL; P.rd = NULL; P.seen = NULL;
+    if (!avl_at(&P, x, z)) return 0;
+    for (t = 0; t < 4; t++) {                                      /* the cell as either half of either axis */
+        int axis = TRY[t][0], ax = x + TRY[t][1], az = z + TRY[t][2];
+        if (!avl_row(&P, axis, ax, az, 0)) continue;
+        /* along z the forward step is S (2), along x it is E (1); away from the caller = toward that end */
+        if (axis == 0 && away != 0 && away != 2) return 0;
+        if (axis == 1 && away != 1 && away != 3) return 0;
+        g_avl_assume = (away == (axis ? 1 : 2)) ? -1 : 1;          /* the caller sits at the other end */
+        ok = avl_decide(&P, axis, ax, az, &k0, &k1, &ub, &uf);
+        g_avl_assume = 0;
+        break;
+    }
+    return ok;
+}
+
+/* post-AVL phase (AVENUE_LANES.md 5), fixed slots:
+     AVL_POST_DAV  avdiag's diagonal put-back: runs after every avl_run of the pass; may ask for a re-run
+     AVL_POST_BV   bvlanes (if it needs one): same
+     AVL_POST_AVX  avjunc's avx_post: runs ONCE, after the last avl_run, on avl's final band map; returns 0
+   A hook asking for a re-run returns 1 with rbox = x0 z0 x1 z1: avl_run then re-decides the union of the asked boxes
+   and the re-run hooks run again, at most AVL_ROUNDS times per pass (program rule: all-or-nothing per connected group).
+   A sibling sets its slot once with avl_post_set(slot, fn), e.g. from its table-line handler. */
+typedef int (*AvlPostFn)(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who, int *rbox);
+enum { AVL_POST_DAV, AVL_POST_BV, AVL_POST_AVX, AVL_NPOST };
+#define AVL_ROUNDS 4
+static AvlPostFn g_avl_post[AVL_NPOST];
+
+static int avl_post_set(int slot, AvlPostFn f) {
+    if (slot < 0 || slot >= AVL_NPOST) return 0;
+    g_avl_post[slot] = f;
+    return 1;
+}
+
+static void avl_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who);
+
+/* what rb_pass / rb_load_pass call: avl_run, then the post hooks, re-runs as they ask */
+static void avl_pass(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) {
+    int round, k, want, rb[4], u[4] = { 0, 0, 0, 0 };
+    avl_run(mgr, x0, z0, x1, z1, who);
+    for (round = 0; round <= AVL_ROUNDS; round++) {
+        want = 0;
+        for (k = 0; k < AVL_POST_AVX; k++) {                       /* the re-run hooks */
+            if (!g_avl_post[k]) continue;
+            rb[0] = rb[1] = 0x7fffffff; rb[2] = rb[3] = -1;
+            if (g_avl_post[k](mgr, x0, z0, x1, z1, who, rb) && rb[2] >= rb[0] && rb[3] >= rb[1]) {
+                if (!want) { u[0] = rb[0]; u[1] = rb[1]; u[2] = rb[2]; u[3] = rb[3]; }
+                else { u[0] = min(u[0], rb[0]); u[1] = min(u[1], rb[1]); u[2] = max(u[2], rb[2]); u[3] = max(u[3], rb[3]); }
+                want = 1;
+            }
+        }
+        if (!want) break;
+        if (round == AVL_ROUNDS) { logf("### avl: %s: post hooks still asking after %d re-runs - stopped", who, AVL_ROUNDS); break; }
+        avl_run(mgr, u[0], u[1], u[2], u[3], who);
+    }
+    if (g_avl_post[AVL_POST_AVX]) {                                /* last, on the final band map */
+        rb[0] = rb[1] = 0x7fffffff; rb[2] = rb[3] = -1;
+        g_avl_post[AVL_POST_AVX](mgr, x0, z0, x1, z1, who, rb);
     }
 }
 
@@ -304,11 +396,12 @@ static void avl_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) 
             DWORD v = avl_at(&P, x, z);
             if (v && avl_own(AVL_ID(v)) && !avl_claimed(x, z) && nrv < rcap) { rv[2 * nrv] = x; rv[2 * nrv + 1] = z; nrv++; }
         }
-    for (k = 0; k < nrv; k++) {
-        int rect[6];
-        rect[0] = rv[2 * k] << 8; rect[1] = rv[2 * k + 1] << 8; rect[2] = 0;
-        rect[3] = rv[2 * k] << 8; rect[4] = rv[2 * k + 1] << 8; rect[5] = 0;
-        ((PFN_Retile)VT(mgr, 0xb0))(mgr, 0, rect, 3);
+    for (k = 0; k < nrv; k++) {                                   /* back to the base at the same state: what stock had */
+        DWORD v = avl_at(&P, rv[2 * k], rv[2 * k + 1]);           /* (a rect retile keeps a Protected base, e.g. 69) */
+        int pos[3];
+        if (!v || !avl_own(AVL_ID(v))) continue;
+        pos[0] = rv[2 * k] << 8; pos[1] = rv[2 * k + 1] << 8; pos[2] = 0;
+        ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, P.lay, pos, ((DWORD)g_base[AVL_ID(v)] << 8) | AVL_ST(v), -1, 8, 0);
     }
     if (nrv) ZeroMemory(P.rd, (SIZE_T)P.W * P.H);                 /* a retile may have changed neighbours: read again */
     for (k = 0; k < nw; k++) {

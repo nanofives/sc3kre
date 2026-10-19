@@ -52,13 +52,13 @@ Boulevards (bvlanes): each outer cell is a one-way half as above; the middle cel
 (beside row 0) and z 241 (beside row 2) in the state-0 frame of the middle piece, running with the outer row beside it
 (PLAN.md 9.2). bvlanes owns those numbers; the outer-cell edges follow this section.
 
-## 3. avcore's pieces [published: 21700 / 21701 lanes in examples/avenue_lanes; crossings / slopes coming]
+## 3. avcore's pieces [published: all 18 in examples/avenue_lanes]
 
 | id | base | what | saved as |
 |---|---|---|---|
 | 21700 | 11204 | straight one-way half (section 2), art = 11204's, state = the half's 11204 state | 11204, same state |
 | 21701 | 11203 | avenue end U-turn quarter: one cell of the 2-cell U (see below), art = 11203's | 11203, same state |
-| 21710..21725 | 69, 67, 11258, 15098, 31, 32, 11201, 11202 | a stock crossing / slope piece on a half, one-way: two ids per base (21710 + 2k = lanes running toward the piece's x+ / z+ end at its own state 0, + 1 = the other way); the other network's lanes (rail, power, highway) unchanged | the base, same state |
+| 21710..21725 | 69, 67, 11258, 15098, 31, 32, 11201, 11202 (k = 0..7 in that order) | a stock crossing / slope piece on a half, one-way: two ids per base (21710 + 2k = lanes toward the piece's x+ / z+ end at its own state 0, + 1 = the other way; `avlc` lines carry the side); the other network's lanes (rail, highway) and the pedestrians as stock; road lanes `uk_keep` (right-hand in English-UK too, the other lanes mirrored there as stock); matrix: the stock turns of the other network kept, the road's replaced by the one-way turn | the base, same state |
 
 End U-turn: a stock avenue end is a pair of 11203 bends. Measured on the 15 shipped cities: 9 clean ends, all in
 one of four patterns (band along z, ending to the N: x- cell 11203.3, x+ cell 11203.0; to the S: x- 11203.2, x+
@@ -73,7 +73,12 @@ pieces are declared (section 5).
 
 Curve shapes: avcore 23600..23699. 23600 straight inner (255,80)->(0,80); 23601 English (175,255)->(0,80) on r 175
 (for English-UK's U-turn outer lane); 23602 U-turn inner (0,175)->(80,255) on r 80; 23603 English (0,175)->(255,175)
-(for English-UK's straight outer lane); 23604..23620 reserved for the slope / crossing pieces. Siblings may use any avcore curve key by number; they
+(for English-UK's straight outer lane); 23604..23607 the slope pieces' missing same-direction lanes (31 / 32 share
+23604 / 23605 by rotation, 11201 / 11202 share 23606 / 23607); 23608..23620 free.
+
+lanekit: a vehicle lane may carry `"uk_keep": true`: `mirror_spec` leaves it as written, so in a spec with the default
+`mirror_uk` only that lane stays right-hand in English-UK (avcore's crossings: the road lanes; the rail / highway lanes
+keep the stock English-UK mirror so they meet their stock neighbours). Siblings may use any avcore curve key by number; they
 write their own curves in their own ranges.
 
 ## 4. The band rule (sc3netmod_avl.c) [published]
@@ -91,7 +96,8 @@ be one-way; otherwise it leaves the whole band stock two-way (owner decision).
   3. the map edge.
   Anything else (a stock T 39 / X 43 on a half, a plain road continuing a half, an undeclared variant) refuses the band.
 - **Write / revert:** the game's piece writer FUN_10008919 per cell, as AVX / DAV. An avcore piece in a band that no
-  longer qualifies goes back to stock with the rect retile FUN_100151f1 before the writes (AVX's order). Runs on every
+  longer qualifies gets its base back at the same state (the stock piece it replaced) before the writes; a rect retile
+  would keep a Protected base (measured: rail crossing 69 stayed the one-way variant). Runs on every
   ROAD retile pass and on the city-load pass, AFTER every other road block (DBV, DAV, AVX, BV, RBT9, the hwave road
   pass), so siblings' pieces are already in place when a band end is checked.
 - **Save:** every avcore piece saves as its base at its own state (no state change), so a game without the mod loads
@@ -113,14 +119,36 @@ cell on the x- half of a band along z, where that half runs -z (north) and meets
 `I` on its S side at that state. The piece's lanes on an `I` / `O` side must be exactly section 2's nodes in that
 direction. avcore checks the letters; it never looks inside the piece.
 
-C side for siblings (all blocks are #included into sc3netmod.c, so these are plain static functions):
+C side for siblings (all blocks are #included into sc3netmod.c, so these are plain static functions; no per-sibling
+pointers):
 
-    int avl_dir(int x, int z);      /* -1: (x, z) is not a cell of a converted band; else the half's travel side 0..3 (N E S W) */
-    int avl_claimed(int x, int z);  /* 1: avcore holds the cell (do not write it) */
+    int avl_dir(int x, int z);       /* -1: (x, z) is not a cell of a converted band; else the half's travel side 0..3
+                                        (N E S W). Answers for straight halves AND crossing / slope variants; -1 on
+                                        U-turn cells. Valid as soon as avl_run returns (the map is updated while each
+                                        band is decided, before the writes). */
+    int avl_claimed(int x, int z);   /* 1: avcore holds the cell (a band cell or its U-turn): do not write it */
+    int avl_own(WORD id);            /* 1: id is one of avcore's pieces */
+    int avl_band_ok(int x, int z, int away);
+                                     /* pure predicate, call it BEFORE you write: would the avenue band through (x, z)
+                                        (any cell of it, either half, stock or ours), running away from you toward
+                                        world side `away` (0 N 1 E 2 S 3 W), convert if the end on your side counted
+                                        as a declared avlj join? Current road grid, the pass rules, nothing written;
+                                        the same answer whatever stands at your end now. 0 when AVL is off, (x, z) is
+                                        not a band cell or `away` does not run along the band. Program rule: a piece
+                                        whose attached avenue would not convert stays in its pre-rework stock state. */
+    int avl_post_set(int slot, AvlPostFn f);   /* the post-AVL phase, below */
 
-Both answer from the last pass's result (the band map avcore keeps for the whole map, rebuilt per pass over the pass box).
-avcore runs LAST in every ROAD retile pass and in the load pass, so a sibling block cannot call these for cells of the
-same pass; use them to leave converted cells alone on the next pass, and rely on the `avlj` letters for the ends.
+Post-AVL phase: `rb_pass` / `rb_load_pass` call `avl_pass` = avl_run, then the slots:
+`AVL_POST_DAV` (avdiag's diagonal put-back) and `AVL_POST_BV` (bvlanes, if it needs one) after every avl_run, may ask
+for a re-run; `AVL_POST_AVX` (avjunc's avx_post) ONCE at the end, on avl's final band map.
+
+    typedef int (*AvlPostFn)(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who, int *rbox);
+
+Set your slot once (e.g. from your table-line handler: `avl_post_set(AVL_POST_AVX, avx_post_hook);`). A re-run hook that
+put something back returns 1 with rbox = the box to re-decide (x0 z0 x1 z1); the phase runs avl_run over the union of
+the asked boxes and the re-run hooks again, at most 4 re-runs per pass; avx_post's return value is ignored. A second
+avl_run on a smaller box in the same pass is safe: it re-walks every band through that box whole. Declarations (`avlj`): up to 4096 for all packages together;
+an `avlj` line may name a ROAD or a HWAY variant (hwave's ground row).
 
 In game (lab, 2026-10-19): two parallel road drags (x 50 / 51, z 20..36) -> `avl: edit: band along z from (50,21)
 rows 0..14 -> one-way (ends: U-turn / U-turn)`, 34 cells (21700.1 / 21700.3, 21701 at 3 / 0 and 2 / 1); save
@@ -133,7 +161,10 @@ package folder).
 - Right-hand everywhere: every lane spec sets `"mirror_uk": false` so English-UK gets the same lanes (the stock
   mirrored copy would disagree with the single turn matrix all languages share).
 - Turn matrices explicit and one-way where the lanes are one-way; high half = transpose of low.
-- No `path` keys in lane specs (section 2): curves by end points in each language.
+- No `path` keys in lane specs (section 2): curves by end points in each language. lanekit.compile_spec then (a)
+  prefers the spec's OWN new curves among curves with the same end points (bvlanes' change, adopted here) and (b) keeps
+  only curves whose end heights match the nodes (avcore: Paths.find matches x / z only, so a flat curve could be picked
+  for a slope lane; it was, for half of avcore's slope lanes, before this fix).
 - Check every edge your piece shares with a one-way half against section 2 offline before the game: avcore's
   `re/tools/netmod/avlanes.py` [published] has `edge_nodes(state, side)` (the two nodes a one-way half at `state` puts on
   `side`, in travel order) and `check(a, state_a, b, state_b, side, lang=...)` (every exit of one piece meets an entry

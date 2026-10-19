@@ -121,9 +121,130 @@ def specs(game=None):
     return {PIECE_STRAIGHT: straight, PIECE_UTURN: uturn}
 
 
+# ----------------------------------------------------------------- crossings / slopes on a half (AVENUE_LANES.md 3)
+CROSS_BASES = [69, 67, 11258, 15098, 31, 32, 11201, 11202]     # ids 21710 + 2k (toward x+ / z+), + 1 (the other way)
+CROSS_ID0 = 21710
+SHAPE_CROSS0 = 23604                                          # new curves for these pieces, allocated in order
+
+
+def _road_lanes(d):
+    """the stock road car lanes of a described spec: class car, never at the highway deck height 1024"""
+    out = []
+    for i, ln in enumerate(d["vehicle"]["lanes"]):
+        if ln.get("class", d["vehicle"].get("class", "car")) != "car":
+            continue
+        a, b = LK._pty(ln["from"]), LK._pty(ln["to"])
+        if a[1] == 1024 or b[1] == 1024:
+            continue
+        out.append(i)
+    return out
+
+
+def _curve_pts(P, key):
+    return [list(p) for p in P.veh[key]["pts"]]
+
+
+def cross_specs(game=None):
+    """-> {piece: spec}, [(piece, base, side)] for every one-way crossing / slope variant, plus the new curves used"""
+    game = game or LK.Game()
+    from netmod import hwlanes as HL
+    for sp0 in specs(game).values():                          # avcore's own curves first: reuse them
+        if id(sp0) not in _CUR:
+            HL.inject(game, sp0)
+    P = game.paths("ENGLISH")
+    specs_out, lines, shape = {}, [], SHAPE_CROSS0
+    for k, base in enumerate(CROSS_BASES):
+        rec = LK.decode(game.trblkatt("ENGLISH")[base * 256])
+        d, _ = LK.describe(rec, P, piece=base, exact=False)
+        ri = _road_lanes(d)
+        road = [d["vehicle"]["lanes"][i] for i in ri]
+        if len(road) != 2:
+            raise SystemExit("base %d: %d road lanes, expected 2" % (base, len(road)))
+        pts = [(LK._pty(ln["from"]), LK._pty(ln["to"])) for ln in road]
+        axis_x = pts[0][0][0] != pts[0][1][0]                       # the lane moves along x
+        pos = lambda p: p[2] if axis_x else p[0]
+        # the height at each end of the road, from either stock lane: along-coordinate 0 / 255 -> y
+        yat = {}
+        for a, b in pts:
+            for q in (a, b):
+                yat[q[0] if axis_x else q[2]] = q[1]
+        curves = []
+        new_lanes = {}
+        for fwd in (1, 0):
+            lanes = []
+            for slot in (80, 175):
+                s0, s1 = (0, 255) if fwd else (255, 0)
+                a = (s0, yat[s0], slot) if axis_x else (slot, yat[s0], s0)
+                b = (s1, yat[s1], slot) if axis_x else (slot, yat[s1], s1)
+                lanes.append({"from": list(a), "to": list(b), "uk_keep": True})
+            new_lanes[fwd] = lanes
+        # every geometry the four lanes need, in both orientations (English finds L, English-UK the reverse of L):
+        need = []
+        for fwd in (1, 0):
+            for ln in new_lanes[fwd]:
+                a, b = tuple(ln["from"]), tuple(ln["to"])
+                need += [(a, b), (b, a)]
+        for a, b in need:
+            if P.find("veh", (a[0], a[2]), (b[0], b[2])):
+                hits = [kk for kk in P.find("veh", (a[0], a[2]), (b[0], b[2]))
+                        if P.veh[kk]["pts"][0][1] == a[1] and P.veh[kk]["pts"][-1][1] == b[1]]
+                if hits:
+                    continue
+            # make it from the stock road curve at the same slot (reversed, or the other slot's moved over)
+            src = None
+            for ln, (sa, sb) in zip(road, pts):
+                if pos(sa) == pos(a) and ln.get("path") is not None:
+                    src = _curve_pts(P, ln["path"])
+                    if (src[0][0], src[0][2]) != (a[0], a[2]):
+                        src = src[::-1]
+            if src is None:
+                for ln, (sa, sb) in zip(road, pts):
+                    if ln.get("path") is None:
+                        continue
+                    c = _curve_pts(P, ln["path"])
+                    dz = pos(a) - pos(sa)
+                    c = [[q[0], q[1], q[2] + dz] if axis_x else [q[0] + dz, q[1], q[2]] for q in c]
+                    if (c[0][0], c[0][2]) != (a[0], a[2]):
+                        c = c[::-1]
+                    src = c
+                    break
+            curves.append({"shape": shape, "pts": [list(q) for q in src]})
+            HL.inject(game, {"curves": [curves[-1]]})          # findable for the next lanes, in every language
+            shape += 1
+        keep = [ln for i, ln in enumerate(d["vehicle"]["lanes"]) if i not in ri]
+        drop = {tuple(LK._pty(road[j][e])[i] for i in (0, 2)) for j in range(2) for e in ("from", "to")}
+        exits = [x for x in d["vehicle"].get("exits", []) if tuple(x["at"][:1] + x["at"][-1:]) not in drop]
+        m = (game.masks(base) or {}).get("road", 0)             # the stock matrix, as lanekit describe reads it
+        lo = [[LK.SIDES[a], LK.SIDES[b]] for a, b in LK.mask_turns(m & 0xFFFF)]
+        hi = [[LK.SIDES[a], LK.SIDES[b]] for a, b in LK.mask_turns(m >> 16)]
+        ax = ("x-", "x+") if axis_x else ("z-", "z+")
+        strip = lambda m: [t for t in m if not (t[0] in ax and t[1] in ax)]
+        for fwd in (1, 0):
+            pid = CROSS_ID0 + 2 * k + (0 if fwd else 1)
+            turn = [ax[0], ax[1]] if fwd else [ax[1], ax[0]]
+            sp = {"piece": pid, "states": [0, 1, 2, 3], "flag": d["flag"], "alt": d.get("alt", [0, 0, 0, 0]),
+                  "_comment": "AVENUE_LANES.md 3: base %d on a one-way half, road lanes toward %s at state 0 (both in "
+                              "every language: uk_keep), the other network's lanes as stock" % (base, ax[1] if fwd else ax[0]),
+                  "vehicle": {"class": d["vehicle"].get("class", "car"), "speed": d["vehicle"].get("speed", 64000),
+                              "lanes": keep + new_lanes[fwd], "exits": exits},
+                  "pedestrian": d.get("pedestrian"),
+                  "connects": {"road": {"low": strip(lo) + [turn], "high": strip(hi) + [[turn[1], turn[0]]]}},
+                  "curves": curves}
+            if not exits:
+                sp["vehicle"].pop("exits")
+            specs_out[pid] = sp
+            side = (1 if fwd else 3) if axis_x else (2 if fwd else 0)
+            lines.append((pid, base, side))
+    return specs_out, lines
+
+
 def build(out_dir):
     out = []
-    for pid, sp in specs().items():
+    game = LK.Game()
+    allspecs = dict(specs(game))
+    cs, lines = cross_specs(game)
+    allspecs.update(cs)
+    for pid, sp in allspecs.items():
         p = os.path.join(out_dir, "avl_%d.lanes.json" % pid)
         with open(p, "w", newline="\n") as f:
             json.dump(sp, f, indent=1)
@@ -208,8 +329,16 @@ def selftest():
     sp = specs(game)
     S, U = sp[PIECE_STRAIGHT], sp[PIECE_UTURN]
     bad = []
+    cs, lines = cross_specs(game)
     for lang in ("ENGLISH", "English-UK"):
         bad += _selftest_lang(game, S, U, lang)
+        for pid, base, side in lines:                    # each crossing between two one-way halves, every state
+            for st in range(4):
+                t = (side + st) % 4
+                s_half = (t + 1) % 4                     # the half state whose traffic runs toward t
+                back = SIDES[(t + 2) % 4]
+                bad += ["%s: %s" % (lang, b) for b in check(cs[pid], st, S, s_half, SIDES[t], game, lang)]
+                bad += ["%s: %s" % (lang, b) for b in check(S, s_half, cs[pid], st, SIDES[t], game, lang)]
     for s in range(4):
         assert len(edge_nodes(s, SIDES[half_dir(s)])) == 2
     print("selftest:", "PASSED" if not bad else "FAILED")

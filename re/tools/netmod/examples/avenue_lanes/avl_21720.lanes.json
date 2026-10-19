@@ -1,0 +1,126 @@
+{
+ "piece": 21720,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 0,
+ "alt": [
+  0,
+  0,
+  -2,
+  -2
+ ],
+ "_comment": "AVENUE_LANES.md 3: base 32 on a one-way half, road lanes toward x+ at state 0 (both in every language: uk_keep), the other network's lanes as stock",
+ "vehicle": {
+  "class": "car",
+  "speed": 64000,
+  "lanes": [
+   {
+    "from": [
+     0,
+     0,
+     80
+    ],
+    "to": [
+     255,
+     -512,
+     80
+    ],
+    "uk_keep": true
+   },
+   {
+    "from": [
+     0,
+     0,
+     175
+    ],
+    "to": [
+     255,
+     -512,
+     175
+    ],
+    "uk_keep": true
+   }
+  ]
+ },
+ "pedestrian": {
+  "walks": [
+   {
+    "from": [
+     15,
+     15
+    ],
+    "to": [
+     240,
+     -512,
+     15
+    ],
+    "path": 1283
+   },
+   {
+    "from": [
+     240,
+     -512,
+     240
+    ],
+    "to": [
+     15,
+     240
+    ],
+    "path": 1539
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     15,
+     15
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     15,
+     240
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     240,
+     -512,
+     15
+    ],
+    "code": 16
+   },
+   {
+    "at": [
+     240,
+     -512,
+     240
+    ],
+    "code": 16
+   }
+  ]
+ },
+ "connects": {
+  "road": {
+   "low": [
+    [
+     "x-",
+     "x+"
+    ]
+   ],
+   "high": [
+    [
+     "x+",
+     "x-"
+    ]
+   ]
+  }
+ },
+ "curves": []
+}
