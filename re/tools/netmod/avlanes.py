@@ -16,6 +16,9 @@ CLI (run from re/tools):
   py -3.12 -m netmod.avlanes build <package dir>
   py -3.12 -m netmod.avlanes check <piece|spec> <state> <piece|spec> <state> <side N|E|S|W>
   py -3.12 -m netmod.avlanes selftest               the avcore pieces against each other and a straight band
+  py -3.12 -m netmod.avlanes tightleft <package dir> [...]
+                                                    REPORT (not a gate): every car lane (ENGLISH and English-UK) whose
+                                                    curve, as driven, has a left bend of radius <= 80 (by geometry)
 """
 import json
 import math
@@ -42,6 +45,7 @@ SHAPE_UTURN_OUTER_UK = 23601  # English geometry (175, 255) -> (0, 80): its UK c
 SHAPE_OUTER_UK = 23603        # English geometry (0, 175) -> (255, 175): its UK copy is the straight outer lane
 KEY_OUTER_STRAIGHT = 256      # stock (255, 175) -> (0, 175)
 KEY_UTURN_OUTER = 1024        # stock 11203 (0, 80) -> (175, 255) radius 175 about (0, 255)
+TIGHT_LEFT = 80               # the report radius of tightleft
 MATRIX_STRAIGHT = {"low": [["x+", "x-"]], "high": [["x-", "x+"]]}
 MATRIX_UTURN = {"low": [["x-", "z+"]], "high": [["z+", "x-"]]}
 
@@ -341,6 +345,8 @@ def selftest():
                 bad += ["%s: %s" % (lang, b) for b in check(S, s_half, cs[pid], st, SIDES[t], game, lang)]
     for s in range(4):
         assert len(edge_nodes(s, SIDES[half_dir(s)])) == 2
+    from netmod import hwlanes as HL
+    bad += ["hwlanes curve sort id: %s" % b for b in HL.selftest_extra()]   # flat curve 0, deck curve 2
     print("selftest:", "PASSED" if not bad else "FAILED")
     for b in bad:
         print("  ", b)
@@ -364,6 +370,102 @@ def _selftest_lang(game, S, U, lang):
     return ["%s: %s" % (lang, b) for b in bad]
 
 
+# ----------------------------------------------------------------- tight left turns (by geometry)
+def curve_left_radius(pts, min_chord=80):
+    """Smallest radius of a LEFT bend along a curve as driven (points in order), or None. Left as avjunc counts it:
+    (0,175) -> (80,255), heading +x then +z, is a left turn (cross product of the headings > 0); stock 769 (0,80) ->
+    (80,0) is a right turn. Radius = circumradius of point triples p[i], p[m], p[j] whose chord p[i]p[j] is at least
+    `min_chord` (shorter chords are dominated by the curve files' integer rounding)."""
+    xz = [(float(p[0]), float(p[-1])) for p in pts]
+    best = None
+    for i in range(len(xz)):
+        for j in range(i + 2, len(xz)):
+            (x1, z1), (x3, z3) = xz[i], xz[j]
+            if math.hypot(x3 - x1, z3 - z1) < min_chord:
+                continue
+            m = (i + j) // 2
+            x2, z2 = xz[m]
+            cross = (x2 - x1) * (z3 - z2) - (z2 - z1) * (x3 - x2)
+            if cross <= 0:
+                continue
+            a, b, c = math.hypot(x2 - x1, z2 - z1), math.hypot(x3 - x2, z3 - z2), math.hypot(x3 - x1, z3 - z1)
+            r = a * b * c / (2.0 * abs(cross))
+            best = r if best is None else min(best, r)
+    return best
+
+
+def _lane_hits(rec, P, limit):
+    out = []
+    for n in rec["veh"]:
+        for e in n["edges"]:
+            if e["to"] is None or not e.get("path") or e["path"] not in P.veh:
+                continue
+            c = P.veh[e["path"]]
+            r = curve_left_radius(c["pts"])
+            if r is not None and r <= limit:
+                t = rec["veh"][e["to"]]
+                out.append({"from": (n["x"], n["z"]), "to": (t["x"], t["z"]), "key": e["path"], "radius": r,
+                            "y": max(p[1] for p in c["pts"]), "new": e["path"] >= 20003 * 256})
+    return out
+
+
+def tight_lefts(spec, game, lang, limit=TIGHT_LEFT * 1.1):
+    """-> [{"from", "to", "key", "radius", "y", "new"}] for every car lane of a spec (compiled for `lang`, curves found
+    as the game would) whose curve has a left bend of radius <= limit (default 88: 80 plus the rounding margin)."""
+    from netmod import hwlanes as HL
+    if spec.get("curves") and id(spec) not in _CUR:
+        HL.inject(game, spec)
+        _CUR[id(spec)] = 1
+    rec = LK.compile_spec(dict(spec, states=[0]), game, lang)["rec0"]
+    return _lane_hits(rec, game.paths(lang), limit)
+
+
+def scan_packages(dirs, game=None, langs=("ENGLISH", "English-UK")):
+    """every lanes entry of every package dir; the curves of ALL the packages are injected first (as netpack merges)"""
+    from netmod import hwlanes as HL
+    from netmod import netpack_lanes as NL
+    game = game or LK.Game()
+    packs = []
+    for d in dirs:
+        mp = os.path.join(d, "manifest.json")
+        if not os.path.isfile(mp):
+            continue
+        man = json.load(open(mp, encoding="utf-8"))
+        specs_ = []
+        for n, e in enumerate(man.get("lanes", [])):
+            try:
+                sp = NL._spec_of(d, e, "%s lanes %d" % (man.get("name"), n + 1))
+            except NL.LanesError as ex:
+                specs_.append((e.get("piece"), None, str(ex)))
+                continue
+            sp["piece"] = e["piece"]
+            specs_.append((e["piece"], sp, None))
+        packs.append((man.get("name", os.path.basename(d)), specs_))
+    clash = []
+    for name, specs_ in packs:
+        for pid, sp, _err in specs_:
+            if sp and sp.get("curves"):
+                try:
+                    HL.inject(game, sp)
+                except LK.LaneError as ex:
+                    clash.append((name, pid, "*", "curve inject: %s" % ex))
+    hits, errors = [], clash
+    for name, specs_ in packs:
+        for pid, sp, err in specs_:
+            if sp is None:
+                errors.append((name, pid, "*", err))
+                continue
+            for lang in langs:
+                try:
+                    rec = LK.compile_spec(dict(sp, states=[0]), game, lang)["rec0"]
+                except (LK.LaneError, KeyError, ValueError, TypeError) as ex:
+                    errors.append((name, pid, lang, str(ex)))
+                    continue
+                for h in _lane_hits(rec, game.paths(lang), TIGHT_LEFT * 1.1):
+                    hits.append(dict(h, pack=name, piece=pid, lang=lang, radius=round(h["radius"])))
+    return hits, errors
+
+
 def main(argv):
     if len(argv) < 2:
         print(__doc__); return 2
@@ -378,6 +480,16 @@ def main(argv):
         return 0 if not probs else 1
     if argv[1] == "selftest":
         return 0 if selftest() else 1
+    if argv[1] == "tightleft":
+        hits, errors = scan_packages(argv[2:])
+        for h in hits:
+            print("HIT %s piece %s %s lane %s -> %s curve %d (shape %d rot %d) left radius %d y %d %s" %
+                  (h["pack"], h["piece"], h["lang"], h["from"], h["to"], h["key"], h["key"] >> 8, h["key"] & 255,
+                   h["radius"], h["y"], "new curve" if h["new"] else "stock curve"))
+        for name, pid, lang, err in errors:
+            print("NOT COMPILED %s piece %s %s: %s" % (name, pid, lang, err))
+        print("tightleft: %d hit(s), %d spec(s) not compiled" % (len(hits), len(errors)))
+        return 0
     print(__doc__); return 2
 
 

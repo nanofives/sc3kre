@@ -170,3 +170,22 @@ package folder).
   `side`, in travel order) and `check(a, state_a, b, state_b, side, lang=...)` (every exit of one piece meets an entry
   of the other at the same position and direction; a / b = a piece id or a lanes.json path; run it for ENGLISH and
   English-UK). `py -3.12 -m netmod.avlanes selftest` checks avcore's own pieces (PASSED in both languages).
+- Curve sort id: new curves follow the stock rule (2026-10-19). A curve record's trailing u32 is the path's sort id:
+  STRTSIM SerialReadBinary 0x1001e673 stores it at +0x34 as file value + 1 (Linux oracle accessor `SortId`); a car
+  taking a path whose sort id differs from its current one copies it to vehicle +0x150 and sends it to the anim
+  occupant manager (DAT_10033218 vt+0x6c, property 0x80) at STRTSIM 0x1001b030, 0x10018820 and 0x1001bc70. What it
+  controls downstream is [UNCERTAIN]: the consumer behind that call (SC3U.exe vtable 0x004d1088, slot +0x6c) is not
+  traced. Stock: all 192 flat ground curves carry 0, all 408 deck curves 2. `hwlanes.extra_for` writes the same: 0 when
+  every point is at y 0, else 2 (ramps / mixed heights stay 2 until measured); curve_set, curve_records and inject agree
+  (`py -3.12 -m netmod.hwlanes selftest`, also run by avlanes selftest). Until 2026-10-19 hwlanes wrote 2 on every new
+  curve. It was briefly the lead for a game hang; that hang was retracted (next item), so this is a stock-matching
+  rule, not a fix.
+- Lab trap (avjunc 2026-10-19): installing Frida hooks (hwtraffic_probe, a segment tracer) while the game is PAUSED and
+  letting the probe's `--start` unpause it, with one-way pieces on screen at zoom 4, deadlocked SC3 every time; it was
+  first misread as "a car on a radius-80 left turn (23602) hangs the game". Without a probe: the U-turn end at Seoul
+  (51, 62..63) 5 min, a junction ring 7 min, no hang. Attach probes after the sim is running. Why that sequence
+  deadlocks is [UNCERTAIN].
+- Report tool, not a rule: `py -3.12 -m netmod.avlanes tightleft <package dir> [...]` lists every car lane whose curve,
+  as driven, has a left bend of radius <= 80 (cut at 88 for the curve files' rounding), English and English-UK, with
+  the curve key, height and stock / new. Stock itself drives such bends (English 11225, 1999, 18004, 15045 at r 42..65;
+  every English-UK road corner on 768..771 at r 80), and so does avcore's U-turn inner lane (23602).
