@@ -25,7 +25,16 @@ Build and install:
 ```
 py -3.12 re/tools/netmod/hwave_build.py art re/tools/netmod/examples/highway_avenue
 py -3.12 re/tools/netmod/hwave_build.py lanes re/tools/netmod/examples/highway_avenue
+py -3.12 re/tools/netmod/hwave_build.py dart re/tools/netmod/examples/highway_avenue
+py -3.12 re/tools/netmod/hwave_build.py dlanes re/tools/netmod/examples/highway_avenue
 py -3.12 re/tools/netmod/netpack.py install re/tools/netmod/examples/highway_avenue --tree <game tree>
 ```
 
-Needs an sc3netmod.dll built with `sc3netmod_hwave.c`. Results: `verify/hwave/RESULTS.md`.
+**Diagonal** (phase 2): a diagonal highway ending at the end of a diagonal avenue (package `diagonal_avenue`, DAV) on
+the same middle line, both families, either drag order. Pieces 21604..21609 (the cap, the cells either side of it and the
+avenue's first middle cell; the j+1 far cell is empty land in stock), one set at four states. Art `hwave_build.py dart`,
+lanes `hwave_build.py dlanes`. The rule is the `hwavd` line; DAV leaves the cells alone (`dbv_claimed` asks HWAVE). Saved as
+the stock highway end plus DAV's own save ids (35 / 43) on the avenue side.
+
+Needs an sc3netmod.dll built with `sc3netmod_hwave.c`, and for the diagonal one the `diagonal_avenue` package. Results:
+`verify/hwave/RESULTS.md`.

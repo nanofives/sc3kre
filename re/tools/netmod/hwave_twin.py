@@ -2,6 +2,8 @@
 r"""hwave_twin.py - offline twin of the HWAVE block (re/harness/src/sc3netmod_hwave.c, task hwave 2026-10-19).
 
   py -3.12 hwave_twin.py match SAVE.sc3            every highway end beside a road: built / refused (why), as the DLL
+  py -3.12 hwave_twin.py dmatch SAVE.sc3           the diagonal rule (phase 2): every diagonal end with road past it
+  py -3.12 hwave_twin.py nomod SAVE.sc3            the same save as a game without sc3netmod reads it
   py -3.12 hwave_twin.py retile SAVE.sc3           build every match with the pieces' BASES, run the stock HWAY + ROAD
                                                    rect retile over each (tiler.py) and print the rows before / after
 Same rule, turns and stock pieces as the C block (its header). Heights: the save's vertex grid (tiler City.h). Claims
@@ -86,10 +88,13 @@ def matches(lay, city):
     out = []
     for (x, z), p in sorted(lay.items()):
         d = CAP_DIR.get(ident(p))
-        if not d:
-            continue
-        k = [j for j in range(4) if rot(j, (0, 1)) == d][0]
-        if ident(p) != cap(k, 0):
+        if d:
+            k = [j for j in range(4) if rot(j, (0, 1)) == d][0]
+            if ident(p) != cap(k, 0):
+                continue
+        elif p.id == PIECES[1]:                             # a built one: the entry column's T1 names the turn
+            k = p.state
+        else:
             continue
         past = lay.get(cell((x, z), k, 0, 1))
         if past is None or past.id not in (11203, 11204, 11225, 29, 39, 43) and past.flags is not None:
@@ -100,11 +105,24 @@ def matches(lay, city):
     return out
 
 
-def load(path):
+def load(path, variants=True):
+    """the save as the tiler reads it; variants=True puts back the variant ids sc3netmod saved in section 0x4E56
+    (the tile words hold the stock-loadable ids; an entry's id carries the original state when bit 0x40000 is set,
+    sc3netmod.c save_rec / load_rec), i.e. the city as a game WITH the mod shows it"""
     from netmod import tiler, netrules, paths
     g = paths.Game()
     opts = tiler.Options()
     city = netrules.prepared(tiler.City.load(path), opts)
+    if variants:
+        import city_write
+        import netvariant
+        ents = netvariant.section_entries(city_write.City.load(path)) or []
+        lay = city.layers["surface"]
+        for w0, w1, vid in ents:
+            xy = netvariant.xy(w0)
+            if xy in lay:
+                st = (vid >> 16) & 3 if vid & 0x40000 else w0 >> 30
+                lay[xy] = tiler.Piece(vid & 0xffff, st, lay[xy].z, lay[xy].props)
     return g, tiler, netrules, opts, city
 
 
@@ -153,9 +171,101 @@ def cmd_retile(path):
     return 1 if bad else 0
 
 
+# ------------------------------------------------------------------ diagonal (phase 2, sc3netmod_hwave.c hwavd_*)
+DPIECES = (21604, 21605, 21606, 21607, 21608, 21609)   # j-1 high, j-1 low, j0, j+1 high, j+1 low, j+2
+DBASES = {21604: 15134, 21605: 15134, 21606: 15134, 21607: 15134, 21608: 15134, 21609: 15138}
+DOFF = ((0, -1), (-1, 0), (0, 0), (1, 0), (0, 1), (1, 1))
+DAV_ROAD = {35, 18004, 1999} | set(range(20500, 20506))
+DAV_OUTER, DAV_MIDDLE = 20505, 20500
+DCAP = {(14999, 2): 0, (15059, 2): 1, (14999, 0): 2, (15059, 0): 3}   # cap -> turn k (outward step rot_k(1, 1))
+
+
+def dcell(a, k, off):
+    d = rot(k, off)
+    return a[0] + d[0], a[1] + d[1]
+
+
+def dplain(k, high):
+    return (15052 if k & 1 else 11223), (0 if (k < 2) == bool(high) else 2)
+
+
+def dcheck(lay, city, a, k):
+    def at(off):
+        return lay.get(dcell(a, k, off))
+    if ident(at((-1, -1))) != ((15106 if k & 1 else 11224), 0):
+        return "no plain highway band behind the cap"
+    for side in (0, 1):
+        if ident(at(DOFF[side])) not in (dplain(k, side == 0), (DPIECES[side], k)):
+            return "no plain highway band beside the cap"
+    if ident(at((0, 0))) not in (((15059 if k & 1 else 14999), 2 if k < 2 else 0), (DPIECES[2], k)):
+        return "cap"
+    p = at((1, 0))
+    if p is not None and ident(p) != (DPIECES[3], k):
+        return "the cell past the cap is taken"
+    p = at((0, 1))
+    if p is not None and p.id not in DAV_ROAD and ident(p) != (DPIECES[4], k):
+        return "the avenue's end cell beside the cap is taken"
+    p = at((1, 1))
+    if p is None or (p.id not in DAV_ROAD and ident(p) != (DPIECES[5], k)):
+        return "no avenue end past the cap"
+    for off in ((2, 1), (1, 2)):
+        p = at(off)
+        if p is None or p.id not in DAV_ROAD:
+            return "no avenue band two cells past the cap"
+    p = at((2, 2))
+    if p is None or p.id != DAV_MIDDLE:
+        return "no plain avenue band (DAV middle piece) past the end"
+    h0 = None
+    for off in ((-1, -1), (0, -1), (-1, 0), (0, 0), (1, 0), (0, 1), (1, 1), (2, 1), (1, 2), (2, 2)):
+        x, z = dcell(a, k, off)
+        hs = {city.h(x, z), city.h(x + 1, z), city.h(x, z + 1), city.h(x + 1, z + 1)}
+        if len(hs) != 1:
+            return "not flat"
+        h = hs.pop()
+        if h0 is not None and h != h0:
+            return "height step"
+        h0 = h
+    return None
+
+
+def dmatches(lay, city):
+    out = []
+    for xz, p in sorted(lay.items()):
+        k = DCAP.get(ident(p))
+        if k is None and p.id == DPIECES[2]:              # a built one: our j0 piece names the turn
+            k = p.state
+        if k is None or lay.get(dcell(xz, k, (1, 1))) is None:
+            continue
+        out.append((xz, k, dcheck(lay, city, xz, k)))
+    return out
+
+
+def cmd_dmatch(path, variants=True):
+    g, tiler, netrules, opts, city = load(path, variants)
+    lay = city.layers["surface"]
+    res = dmatches(lay, city)
+    for a, k, why in res:
+        print("diagonal highway end at %s turn %d: %s" % (a, k, "transition" if why is None else "refused (%s)" % why))
+    print("%d diagonal end(s) with road past them, %d transition(s)" % (len(res), sum(1 for r in res if r[2] is None)))
+    return 0
+
+
+
+def cmd_match_raw(path):
+    g, tiler, netrules, opts, city = load(path, False)
+    lay = city.layers["surface"]
+    n = sum(1 for p in lay.values() if p.id in DPIECES or p.id in PIECES or p.id in range(20500, 20600))
+    print("tile words holding a variant id (must be 0 for a stock-loadable save): %d" % n)
+    return 0
+
+
 def main(argv):
     if len(argv) == 3 and argv[1] == "match":
         return cmd_match(argv[2])
+    if len(argv) == 3 and argv[1] == "dmatch":
+        return cmd_dmatch(argv[2])
+    if len(argv) == 3 and argv[1] == "nomod":                # what a game WITHOUT sc3netmod reads: the tile words
+        return cmd_dmatch(argv[2], False) or cmd_match_raw(argv[2])
     if len(argv) == 3 and argv[1] == "retile":
         return cmd_retile(argv[2])
     print(__doc__)
