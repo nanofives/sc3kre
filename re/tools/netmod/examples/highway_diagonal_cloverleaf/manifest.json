@@ -2471,6 +2471,118 @@
     "ground_under": true
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 21536,
+   "base": 15053,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join, highway end)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21536",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21537,
+   "base": 11235,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join, highway end)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21537",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21538,
+   "base": 15054,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join, highway end)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21538",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21539,
+   "base": 11237,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join, highway end)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21539",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21540,
+   "base": 15054,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join, highway end)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21540",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21541,
+   "base": 11237,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join, highway end)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21541",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21542,
+   "base": 15053,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join, highway end)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21542",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21543,
+   "base": 11235,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join, highway end)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21543",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
   }
  ],
  "lanes": [
@@ -3177,6 +3289,38 @@
   {
    "piece": 21535,
    "spec": "lanes/21535.json"
+  },
+  {
+   "piece": 21536,
+   "spec": "lanes/21536.json"
+  },
+  {
+   "piece": 21537,
+   "spec": "lanes/21537.json"
+  },
+  {
+   "piece": 21538,
+   "spec": "lanes/21538.json"
+  },
+  {
+   "piece": 21539,
+   "spec": "lanes/21539.json"
+  },
+  {
+   "piece": 21540,
+   "spec": "lanes/21540.json"
+  },
+  {
+   "piece": 21541,
+   "spec": "lanes/21541.json"
+  },
+  {
+   "piece": 21542,
+   "spec": "lanes/21542.json"
+  },
+  {
+   "piece": 21543,
+   "spec": "lanes/21543.json"
   }
  ],
  "highway_lines": [
@@ -3423,6 +3567,14 @@
   "hwyp 21532 0",
   "hwyp 21533 0",
   "hwyp 21534 0",
-  "hwyp 21535 0"
+  "hwyp 21535 0",
+  "hwyp 21536 0",
+  "hwyp 21537 0",
+  "hwyp 21538 0",
+  "hwyp 21539 0",
+  "hwyp 21540 0",
+  "hwyp 21541 0",
+  "hwyp 21542 0",
+  "hwyp 21543 0"
  ]
 }

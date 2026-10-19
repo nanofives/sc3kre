@@ -8,8 +8,9 @@ what the block and the package need, and checks the rule against the stock tiler
   py -3.12 -m netmod.hwdx ids                    id allocation (classes x flavours)
   py -3.12 -m netmod.hwdx check                  offline twin: the four drags on Roadless Paradise -> stock
                                                  aftermath -> detect -> place -> claim / plain checks -> movements;
-                                                 then the end-cap cases (task hwcap): each arm ending on its last
-                                                 joining cell, stock caps placed as the game does -> carried on
+                                                 then the end-cap cases (tasks hwcap / hwcap2): each arm ending on
+                                                 its last joining cell, stock caps placed as the game does -> capped
+                                                 joins; ending earlier -> that quadrant refused; never extended
 Run from re/tools.
 
 Frames. A crossing is found in the world as (O, case, r): O = the cell corner where the medians cross, case A or B,
@@ -382,9 +383,9 @@ def to_world(O, r, c):
 
 def place(lay, city, O, case, r, cut=None):
     """-> dict(placements {world cell: (id, state, cls, kind, base)}, quadrants built, refused {quadrant: why}, core_ok,
-    carried [(cap, rows, new cap)]). A joining cell that holds the arm's end cap, or nothing past it, counts when the
-    arm can be carried on (hwcap, task hwcap); the arm's cells are placed as kind 'ext' (stock pieces) unless the
-    table writes them."""
+    carried [] and ext set() (kept for callers; task hwcap2 never carries an arm on). A joining cell that holds the
+    arm's own stock end cap gets its class's capped join (kind 'capjoin', at the cap's state); a joining cell that holds
+    nothing (the arm ended before it) refuses its quadrant."""
     tab = case_table(case)
     cmap, info = classes()
     idm, _, _ = ids()
@@ -403,8 +404,6 @@ def place(lay, city, O, case, r, cut=None):
             why["core"] = "core cell %s holds %s" % (w, p)
     if not core_ok:
         return dict(placements={}, built=[], refused=why, core_ok=False, carried=[], ext=set())
-    plan = hwcap.Plan()
-    free = lambda w: flat(city, w) and not (cut and w in cut)      # noqa: E731
     capm = {(cp["cls"], cp["flavour"]): cp for cp in capped_list()}
     capped = {}
     for q in quads:
@@ -414,14 +413,13 @@ def place(lay, city, O, case, r, cut=None):
             w = to_world(O, r, c)
             p = lay.get(w)
             if d["kind"] == "att":
-                if p is None or p.id in hwcap.CAP_IDS:              # the arm ends here or before (task hwcap)
-                    if hwcap.need(plan, lay, w, arm_step(c, case, r), q, free):
-                        continue
+                if p is None or p.id in hwcap.CAP_IDS:              # the arm ends here or before (hwcap / hwcap2)
                     cp = capm.get((cmap[(case, c)][0], fl))
                     if cp and p is not None and hwcap.cap_dir(p) == arm_step(c, case, r) and p.id == cp["base"]:
                         capped[w] = (cp["id"], p.state, cp["base"])     # the arm ends on it: the capped join
                         continue
-                    why[q] = "joining cell %s: %s" % (w, plan.why)
+                    why[q] = "joining cell %s: %s" % (w, "the arm ends before it" if p is None else
+                                                      "end cap %s with no capped join" % (p,))
                     break
                 if p.id not in STRAIGHT | BAND:
                     why[q] = "joining cell %s holds %s, wants plain highway" % (w, p)
@@ -434,8 +432,7 @@ def place(lay, city, O, case, r, cut=None):
                     why[q] = "ramp cell %s is not flat" % (w,)
                     break
     built = [q for q in quads if q not in why]
-    ext, carried = hwcap.commit(plan, set(built))
-    out = {w: (pid, st, None, "ext", pid) for w, (pid, st) in ext.items()}
+    out = {}
     for c, d in tab.items():
         if d["kind"] != "core" and not (d["quadrant"] & set(built)):
             continue
@@ -448,7 +445,7 @@ def place(lay, city, O, case, r, cut=None):
             out[w] = (capped[w][0], capped[w][1], cls, "capjoin", capped[w][2])
             continue
         out[w] = (pid, (cs + STATE_DIR * r + off) % 4, cls, d["kind"], bid)
-    return dict(placements=out, built=built, refused=why, core_ok=True, carried=carried, ext=set(ext))
+    return dict(placements=out, built=built, refused=why, core_ok=True, carried=[], ext=set())
 
 
 def flat(city, c):
@@ -637,19 +634,23 @@ CAP_ARMS = {"+x": dict(s=(-14, 9)), "-x": dict(s=(-10, 14)), "+d": dict(d=(-14, 
 
 
 def check_caps(tabs):
-    """task hwcap: the end-cap cases (stock caps placed on the footprint ends, as the game does). -> failures"""
+    """tasks hwcap / hwcap2: the end-cap cases (stock caps placed on the footprint ends, as the game does). Owner
+    2026-10-18: never extend. An arm ending ON its last joining cell -> that cell's capped join, every quadrant built;
+    an arm ending a row earlier -> that quadrant refused; the straight arm ending on O2's / O1's last joining column
+    (i 6 / -7) -> O2 / O1 with a capped join, A1 / A2 refused. Never a highway piece in a cell the drags left empty.
+    -> failures"""
     bad = 0
-    print("--- end caps (task hwcap)")
+    print("--- end caps (tasks hwcap / hwcap2)")
     need = [(x, y) for x in ("-x", "+x", "-d", "+d") for y in ("-x", "+x", "-d", "+d") if x != y]
     runs = [(O, case, r, arms, None, 4) for O, case, r in [((58, 28), "A", 0), ((58, 28), "B", 0), ((58, 28), "A", 1),
                                                          ((58, 28), "B", 1)]
             for arms in (["+x"], ["-x"], ["+d"], ["-d"], ["+x", "-x", "+d", "-d"])]
-    runs.append(((58, 28), "A", 0, ["+d"], "short", 4))           # the arm ends 2 rows earlier: carried on 3 rows
-    for case, r in (("A", 0), ("B", 1)):                           # the cell past the cap taken: the capped join
-        runs.append(((58, 28), case, r, ["+d"], "blocked", 4))
-        runs.append(((58, 28), case, r, ["-d"], "blocked", 4))
-    runs.append(((58, 28), "A", 0, ["+d"], "blocked short", 3))   # ends 2 rows earlier, not carried on: A1 refused
-    runs.append(((58, 28), "A", 0, ["+x"], "blocked", 3))         # a straight arm has no capped join: A1 refused
+    for case, r in (("A", 0), ("B", 0), ("A", 1), ("B", 1)):
+        runs.append(((58, 28), case, r, ["+d"], "short", 2))      # the arm ends a row earlier: A1 refused, and O1
+                                                                   # (its joining outer cell lies past the new cap)
+        runs.append(((58, 28), case, r, ["+x"], "short", 3))
+        runs.append(((58, 28), case, r, ["+x"], "O2", 3))         # S ends on column 6: O2 capped, A1 refused
+        runs.append(((58, 28), case, r, ["-x"], "O1", 3))         # S ends on column -7: O1 capped, A2 refused
     for O, case, r, arms, mode, want in runs:
         T, city = new_tiler()
         lim = {}
@@ -657,8 +658,15 @@ def check_caps(tabs):
             for key, (lo, hi) in CAP_ARMS[a].items():
                 plo, phi = lim.get(key, (-14, 14))
                 lim[key] = (max(lo, plo), min(hi, phi))
-        if mode in ("short", "blocked short"):
-            lim["d"] = (-14, 4)
+        if mode == "short":                                       # one row short of the last joining cell
+            if arms[0] == "+d":
+                lim["d"] = (-14, 5)
+            else:
+                lim["s"] = (-14, 8)
+        if mode == "O2":
+            lim["s"] = (-14, 6)
+        if mode == "O1":
+            lim["s"] = (-7, 14)
         S, D = world_drags(O, case, r, s=lim.get("s"), d=lim.get("d"))
         drag(T, city, S)
         drag(T, city, D)
@@ -672,26 +680,22 @@ def check_caps(tabs):
             print("FAIL %s: detect -> %s" % (tag, found))
             bad += 1
             continue
-        cut = None
-        if mode and mode.startswith("blocked"):                   # the cell one row past the last joining middle
-            past = {"+d": (7, 7), "-d": (-8, -8), "+x": (10, 0)}[arms[0]]
-            if case == "B" and arms[0] in ("+d", "-d"):
-                past = (past[0], -1 - past[1])
-            cut = {to_world(O, r, past)} | ({to_world(O, r, (10, -1))} if arms[0] == "+x" else set())
-        res = place(lay, city, O, case, r, cut=cut)
+        res = place(lay, city, O, case, r)
         pl = res["placements"]
         mv = movements(pl, O, case, r, tabs)
         miss = [k for k in need if not mv[k]]
-        caps_in = [w for w, v in pl.items() if v[3] not in ("ext", "capjoin") and lay.get(w) is not None and
-                   lay[w].id in hwcap.CAP_IDS and w not in res["ext"]]
+        caps_in = [w for w, v in pl.items() if v[3] != "capjoin" and lay.get(w) is not None and
+                   lay[w].id in hwcap.CAP_IDS]
+        grown = [w for w, v in pl.items() if v[3] in ("att", "capjoin", "core") and lay.get(w) is None]
         capj = [(w, v[0], v[1]) for w, v in pl.items() if v[3] == "capjoin"]
-        ok = len(res["built"]) == want and (want < 4 or not miss) and not caps_in and \
-            (mode != "blocked" or want < 4 or len(capj) == 1)
-        print("%s %-58s built %s refused %s; carried %s; capped joins %s; %d cells (%d stock)%s" % (
-            "ok  " if ok else "FAIL", tag, ",".join(res["built"]), sorted(res["refused"]) or "-",
-            ["%s +%d -> cap %s" % c for c in res["carried"]], capj or "-", len(pl),
-            sum(1 for v in pl.values() if v[3] == "ext"), (" MISSING " + ", ".join("%s->%s" % k for k in miss))
-            if miss and want == 4 else ""))
+        want_cap = len(arms) if mode is None else 0 if mode == "short" else 1
+        qs = {"O2": "O2", "O1": "O1"}.get(mode)
+        ok = len(res["built"]) == want and (want < 4 or not miss) and not caps_in and not grown and \
+            len(capj) == want_cap and (qs is None or any(b.startswith(qs) for b in res["built"]))
+        print("%s %-58s built %s refused %s; capped joins %s; %d cells%s%s" % (
+            "ok  " if ok else "FAIL", tag, ",".join(res["built"]), sorted(res["refused"]) or "-", capj or "-",
+            len(pl), (" MISSING " + ", ".join("%s->%s" % k for k in miss)) if miss and want == 4 else "",
+            " WROTE INTO EMPTY CELLS %s" % grown if grown else ""))
         if res["refused"]:
             print("       why: %s" % res["refused"])
         bad += 0 if ok else 1
@@ -709,29 +713,64 @@ def check_caps(tabs):
 # flat 60 x 31 tile), so a straight arm that cannot be carried on still drops the quadrant.
 CAP_CELLS = {"A": (6, 6), "B": (6, -7)}        # (-7, -7) / (-7, 6): the same class turned twice
 CAP_ID0 = 21532
+# task hwcap2: the straight arms' last joining cells (the +x side; the -x side is the same class turned twice): case A
+# A1's (9, 0) and O2's (6, -1), case B A1''s (9, -1) and O2''s (6, 0). The cap row there is both lanes; only the joining
+# lane's cell gets a capped join (the other lane's cell is plain highway and keeps the stock cap).
+CAP_CELLS_S = {"A": ((9, 0), (6, -1)), "B": ((9, -1), (6, 0))}
+
+
+def _lane_lower(c, case, r):
+    """is the straight-arm cell c (case frame, row -1 / 0) the lower lane in the world at rotation r"""
+    w = to_world((0, 0), r, c)
+    p = to_world((0, 0), r, (c[0], -1 - c[1]))
+    st = arm_step(c, case, r)
+    return w[1] < p[1] if st[1] == 0 else w[0] < p[0]
 
 
 def capped_list():
-    """[dict(id, cls, flavour, case, cell, r, base)] - one capped join per diagonal family and flavour. r = the crossing
-    rotation (parity = flavour) at which the stock cap on the rep cell has state 0 (paint and cut lanes there)"""
+    """[dict(id, cls, flavour, case, cell, r, base, scap)] - one capped join per class and flavour whose cell can hold
+    an arm's end: the diagonal families' (task hwcap, ids 21532..21535) and the straight arms' (task hwcap2, from
+    21536). r = the crossing rotation (parity = flavour) at which the stock cap on the rep cell has state 0 (paint and
+    cut lanes there). scap = how the painted scene ends that arm: True = the diagonal on its cap line, ("S", e) = the
+    straight's +x end at x = e"""
     cmap, info = classes()
     idm, n, pool = ids()
     out = []
     k = 0
-    for fl in (0, 1):
-        for case in ("A", "B"):
-            c = CAP_CELLS[case]
-            cls = cmap[(case, c)][0]
-            for r in (fl, fl + 2):
-                cap = hwcap.CAP_OF[arm_step(c, case, r)][0]
-                if cap[1] == 0:
-                    break
-            pid = CAP_ID0 + k
-            if pid > ID_RANGES[-1][1] or pid in idm.values():
-                raise SystemExit("capped join id %d is not free" % pid)
-            out.append(dict(id=pid, cls=cls, flavour=fl, case=case, cell=c, r=r, base=cap[0]))
-            k += 1
+    cells = [(fl, case, c, True) for fl in (0, 1) for case in ("A", "B") for c in (CAP_CELLS[case],)] + \
+        [(fl, case, c, ("S", c[0] + 1)) for case in ("A", "B") for c in CAP_CELLS_S[case] for fl in (0, 1)]
+    for fl, case, c, scap in cells:
+        cls = cmap[(case, c)][0]
+        for r in (fl, fl + 2):
+            step = arm_step(c, case, r)
+            cap = hwcap.cap_of(step, True if scap is True else _lane_lower(c, case, r))
+            if cap[1] == 0:
+                break
+        pid = CAP_ID0 + k
+        if pid > ID_RANGES[-1][1] or pid in idm.values():
+            raise SystemExit("capped join id %d is not free" % pid)
+        out.append(dict(id=pid, cls=cls, flavour=fl, case=case, cell=c, r=r, base=cap[0], scap=scap))
+        k += 1
     return out
+
+
+def capped_flows(cp, tabs=None):
+    """task hwcap2: a straight capped join's turns at state 0 (the rep cell at rotation r): the join's turns with the
+    outward side replaced by the side toward the row's other lane (the stock cap's U-turn)"""
+    tabs = tabs or {"A": case_table("A"), "B": case_table("B")}
+    c, case, r = cp["cell"], cp["case"], cp["r"]
+    out_side = {v: k_ for k_, v in SIDE_D.items()}[arm_step(c, case, r)]
+    w, p = to_world((0, 0), r, c), to_world((0, 0), r, (c[0], -1 - c[1]))
+    part = {v: k_ for k_, v in SIDE_D.items()}[(p[0] - w[0], p[1] - w[1])]
+    fl = set()
+    for n_, e, l_ in tabs[case][c]["flows"]:
+        if not (e and l_):
+            continue
+        e, l_ = rot_side(e, r), rot_side(l_, r)
+        e, l_ = (part if e == out_side else e), (part if l_ == out_side else l_)
+        if e != l_:
+            fl.add((e, l_))
+    return sorted(fl)
 
 
 QUAD_IX = {"A1": 0, "A2": 1, "O1": 2, "O2": 3, "A1'": 0, "A2'": 1, "O1'": 2, "O2'": 3}
@@ -756,10 +795,10 @@ def pieces_list():
         fl = [(rot_side(e, k), rot_side(l, k)) for n, e, l in tabs[case][c]["flows"] if e and l]
         out.append(dict(id=pid, cls=cls, flavour=f, base=bid, land=info[cls]["kind"] == "ramp", rep=(case, c), r=r,
                         flows=sorted(set(fl)), kind=info[cls]["kind"]))
-    for cp in capped_list():                                 # task hwcap: capped joins, painted at their own turn
+    for cp in capped_list():                                 # tasks hwcap / hwcap2: capped joins, painted at their own turn
+        fl = list(CAP_MATRIX[cp["base"]]) if cp["scap"] is True else capped_flows(cp, tabs)
         out.append(dict(id=cp["id"], cls=cp["cls"], flavour=cp["flavour"], base=cp["base"], land=False,
-                        rep=(cp["case"], cp["cell"]), r=cp["r"], flows=list(CAP_MATRIX[cp["base"]]), kind="capjoin",
-                        capped=True))
+                        rep=(cp["case"], cp["cell"]), r=cp["r"], flows=fl, kind="capjoin", capped=cp["scap"]))
     return out
 
 

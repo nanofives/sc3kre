@@ -817,6 +817,51 @@
     "ground_under": true
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 21256,
+   "base": 11237,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction, highway end +0,-4)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/21256",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21254,
+   "base": 15053,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction, highway end -2,+0)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/21254",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21255,
+   "base": 15053,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction, highway end +7,+1)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/21255",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
   }
  ],
  "lanes": [
@@ -1023,6 +1068,18 @@
   {
    "piece": 21253,
    "spec": "hwt_21253.lanes.json"
+  },
+  {
+   "piece": 21256,
+   "spec": "hwt_21256.lanes.json"
+  },
+  {
+   "piece": 21254,
+   "spec": "hwt_21254.lanes.json"
+  },
+  {
+   "piece": 21255,
+   "spec": "hwt_21255.lanes.json"
   }
  ],
  "connects": [
@@ -1127,6 +1184,12 @@
   "hwys 21252 73 2 15051 2 73 0 15051 0",
   "hwyp 21253 0",
   "hwys 21253 73 0 15051 0 73 2 15051 2",
+  "hwyp 21256 0",
+  "hwys 21256 11237 2 15054 2 11237 0 15054 0",
+  "hwyp 21254 0",
+  "hwys 21254 15053 0 11235 2 15053 2 11235 0",
+  "hwyp 21255 0",
+  "hwys 21255 15053 2 11235 0 15053 0 11235 2",
   "hwt 21200 0 -4 0 3",
   "hwt 21201 -1 -3 1 3",
   "hwt 21202 0 -3 0 1",
@@ -1180,6 +1243,9 @@
   "hwt 21250 0 -3 0 2",
   "hwt 21251 1 -3 0 2",
   "hwt 21252 0 -2 0 2",
-  "hwt 21253 1 -2 0 2"
+  "hwt 21253 1 -2 0 2",
+  "hwtc 21256 0 -4",
+  "hwtc 21254 -2 0",
+  "hwtc 21255 7 1"
  ]
 }

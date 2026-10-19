@@ -472,6 +472,66 @@
     "ground_under": true
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 21166,
+   "base": 15054,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf junction, highway end -6,+0",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21166",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21167,
+   "base": 15053,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf junction, highway end -6,-1",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21167",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21168,
+   "base": 11237,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf junction, highway end +0,+5",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21168",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21169,
+   "base": 11235,
+   "network": "HWAY",
+   "name": {
+    "*": "Cloverleaf junction, highway end -1,+5",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21169",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
   }
  ],
  "lanes": [
@@ -590,6 +650,22 @@
   {
    "piece": 21165,
    "spec": "hwx_21165.lanes.json"
+  },
+  {
+   "piece": 21166,
+   "spec": "hwx_21166.lanes.json"
+  },
+  {
+   "piece": 21167,
+   "spec": "hwx_21167.lanes.json"
+  },
+  {
+   "piece": 21168,
+   "spec": "hwx_21168.lanes.json"
+  },
+  {
+   "piece": 21169,
+   "spec": "hwx_21169.lanes.json"
   }
  ],
  "connects": [
@@ -640,6 +716,10 @@
   "hwyp 21163 0",
   "hwyp 21164 0",
   "hwyp 21165 0",
+  "hwyp 21166 0",
+  "hwyp 21167 0",
+  "hwyp 21168 0",
+  "hwyp 21169 0",
   "hwys 21150 15051 2 73 0 15051 0 73 2",
   "hwys 21151 15051 2 73 0 15051 0 73 2",
   "hwys 21152 15051 0 73 2 15051 2 73 0",
@@ -749,6 +829,14 @@
   "hwx 21164 2 -1 -2 2",
   "hwx 21164 0 0 1 2",
   "hwx 21165 0 -1 1 2",
-  "hwx 21165 2 0 -2 2"
+  "hwx 21165 2 0 -2 2",
+  "hwx 21166 0 -6 0 3",
+  "hwx 21166 2 5 -1 3",
+  "hwx 21167 0 -6 -1 3",
+  "hwx 21167 2 5 0 3",
+  "hwx 21168 2 -1 -6 3",
+  "hwx 21168 0 0 5 3",
+  "hwx 21169 0 -1 5 3",
+  "hwx 21169 2 0 -6 3"
  ]
 }

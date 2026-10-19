@@ -4,6 +4,16 @@ r"""hwcap_art.py - task hwcap (2026-10-18): the capped joins' end face taken fro
   py -3.12 netmod/hwcap_art.py compose PKG_DIR        after `hwdx_paint.py art PKG_DIR 21532 ...`, before `pad`
   py -3.12 netmod/hwcap_art.py sheet PKG_DIR OUT.png  stock cap / capped join / plain join, zoom 3 and 4, views 0..3
 
+Task hwcap2: compose_straight(art_dir, keep_dir, base) does the same for a capped join on a STRAIGHT arm (stock caps
+15053 / 15054 / 11235 / 11237, used by hwx, hwt and hwdx's straight arms). The piece is painted from a scene whose
+highway ends on the cell's outer edge and sits at the cap's own state, so slot r of the piece and of the cap match. A
+pixel is taken from the stock cap when the cap draws one there and its point at deck height lies past the end edge
+(the end facade) or within END_STRIP of it inside the cell (the parapet across the end); every other pixel is the
+painting's. The stock caps leave some faces undrawn in some views (frame 0 of 15053 is a bare 60 x 31 deck): there
+the painted wall stays, so a capped join never shows a hole. Edge per cap from its state-0 outward step
+(hwcap.CAP_DIR; cell point (fx, fz) = world-local (x, z), checked on the four caps' frames: their end facades lie past
+that edge in exactly the two views that face it).
+
 A capped join (hwdx.capped_list) is painted by hwdx_paint.py from the hwdx scene with the diagonal ending on the cap
 line; hwpaint draws that end with its generic end face, while the stock caps 14999 / 15059 have their own (a facade
 with columns, seen in view slot 2 of 14999.0). The piece sits at the stock cap's own state, so slot r of the piece and
@@ -80,8 +90,71 @@ def compose_one(painted, stock, z, r, side, base):
     return im.crop(bb), (L - bb[0], T - bb[1])
 
 
+END_STRIP = 0.1          # cells inside the end edge taken from the stock cap (its end parapet)
+
+
+def _end_face(z, r, w, h, L, T, ox, oz):
+    """pixels showing the end face of a cell whose arm leaves it by (ox, oz): the vertical face on the end edge when it
+    faces the viewer (the ray meets that plane between the ground and the deck, inside the edge) or the deck top
+    within END_STRIP of it"""
+    def coords(e):
+        fx, fz = cell_points(z, r, w, h, L, T, e)
+        out_d = (fx - 0.5) * ox + (fz - 0.5) * oz + 0.5           # 1 on the end edge
+        lat = fz if ox else fx                                    # along the end edge
+        return out_d, lat
+    d0, l0 = coords(0.0)
+    d1, l1 = coords(HP.H)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        t = (1.0 - d0) / (d1 - d0)                                # share of H where the ray crosses the end plane
+    lt = l0 + (l1 - l0) * t
+    face = (t >= 0.0) & (t <= 1.0) & (lt >= 0.0) & (lt <= 1.0) & (d0 < d1)   # d0 < d1: the face looks at the viewer
+    strip = (d1 > 1.0 - END_STRIP) & (d1 <= 1.0) & (l1 >= 0.0) & (l1 <= 1.0)
+    return face | strip
+
+
+def compose_straight(art_dir, keep_dir, base, state=0):
+    """task hwcap2: end face of a straight capped join from stock cap `base`, which the painted cell (at state 0) shows
+    at `state` (0 or 2: the piece sits at the cap's state, as hwx's, or at the T's turn, as hwt's). art_dir holds the
+    painted frames; they are kept in keep_dir first (so this can be re-run), then art_dir is rewritten"""
+    from netmod import hwcap
+    if state not in (0, 2):
+        raise SystemExit("compose_straight: cap state %d (only 0 / 2 are placed by the stock game)" % state)
+    if not os.path.isdir(keep_dir):
+        shutil.copytree(art_dir, keep_dir)
+    ox, oz = hwcap.CAP_DIR[(base, state)]
+    painted = NA.load_dir(keep_dir)
+    stock = NA.stock_frames(base)
+    anchors = {}
+    for z in range(NA.ZOOMS):
+        for r in range(NA.ROTS):
+            pim, (pL, pT) = painted[(z, r)]
+            sim, (sL, sT) = stock[(z, (r + state) % 4)]
+            left, top = min(-pL, -sL), min(-pT, -sT)
+            right, bottom = max(pim.width - pL, sim.width - sL), max(pim.height - pT, sim.height - sT)
+            w, h = right - left, bottom - top
+            L, T = -left, -top
+            P = np.zeros((h, w, 4), dtype=np.uint8)
+            S = np.zeros((h, w, 4), dtype=np.uint8)
+            P[T - pT:T - pT + pim.height, L - pL:L - pL + pim.width] = np.array(pim)
+            S[T - sT:T - sT + sim.height, L - sL:L - sL + sim.width] = np.array(sim)
+            take = _end_face(z, r, w, h, L, T, ox, oz) & (S[:, :, 3] > 0)
+            im = Image.fromarray(np.where(take[:, :, None], S, P), "RGBA")
+            bb = im.getbbox() or (0, 0, 1, 1)
+            name = NA.frame_name(z, r)
+            im.crop(bb).save(os.path.join(art_dir, name))
+            anchors[name] = [int(L - bb[0]), int(T - bb[1])]
+    with open(os.path.join(art_dir, "anchors.json"), "w", encoding="utf-8") as fh:
+        json.dump(anchors, fh, indent=1)
+    return len(anchors)
+
+
 def cmd_compose(pkg):
     for cp in H.capped_list():
+        if cp["scap"] is not True:                                # task hwcap2: a straight arm's capped join
+            d = os.path.join(pkg, "art", str(cp["id"]))
+            n = compose_straight(d, os.path.join(pkg, "art_painted", str(cp["id"])), cp["base"])
+            print("capped join %d: end face from stock %d (straight), %d frames" % (cp["id"], cp["base"], n))
+            continue
         d = os.path.join(pkg, "art", str(cp["id"]))
         keep = os.path.join(pkg, "art_painted", str(cp["id"]))
         if not os.path.isdir(keep):

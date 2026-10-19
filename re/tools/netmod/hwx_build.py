@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 r"""hwx_build.py - builds the cloverleaf package (task hwx, highway program 2026-10-18) from hwx.py's scene.
 
-  py -3.12 hwx_build.py art PKG [--jobs 8]      paint every piece at its ref cell, every zoom -> PKG/art/<id>/
+  py -3.12 hwx_build.py art PKG [--jobs 8] [--only ID,ID]   paint every piece (or those) at its ref cell, every zoom
+                                                -> PKG/art/<id>/ (capped junctions: + the stock end face)
   py -3.12 hwx_build.py pad PKG                 grow every frame to its full cell diamond (ground_under draws the
                                                 terrain only under the frame's rectangle: hwt measured it)
   py -3.12 hwx_build.py lanes PKG               PKG/hwx_<id>.lanes.json (hwlanes, curve shapes 22500..22799)
@@ -15,8 +16,17 @@ quadrant), 8 mainline ids (a carriageway cell with a ramp join, base 15051 / 73,
 = the stock X piece, same states). Each id is painted and has its lanes cut at its ref cell, at state 0; any other cell
 of the id is the ref cell turned `put` quarter turns about the X centre, so the scene's 4-fold symmetry (the ramps)
 and 2-fold symmetry (the core) make the frames and lanes right there.
-Table lines for the block (sc3netmod_hwx.c): `hwx <piece> <state> <dx> <dz> <cls>`, cls 0 main / 1 land / 2 core,
-(dx, dz) from the X centre cell (0, 0) = stock 15113.0.
+Table lines for the block (sc3netmod_hwx.c): `hwx <piece> <state> <dx> <dz> <cls>`, cls 0 main / 1 land / 2 core /
+3 capped, (dx, dz) from the X centre cell (0, 0) = stock 15113.0.
+
+Task hwcap2 (owner 2026-10-18, "never extend"): 4 CAPPED junctions 21166..21169, one per outer junction 21151 / 21153
+/ 21155 / 21157 (the junctions on the last row of each arm, dx / dz 5 and -6). A drag that ends ON that row leaves the
+stock end caps on both of its cells; the block writes the capped junction there instead of the junction. Base = the
+stock cap, written at the cap's own state (each capped id has one cap id at both of its cells: checked), so a save
+and the stock tiler see the stock end. Art: the scene with both highways ending on the box edge (hwx.scene(ext=6)),
+painted at the cell where the cap is state 0, then the end face from the stock cap (hwcap_art.compose_straight).
+Turn matrix: the junction's turns with the outward side replaced by the side toward the other lane of the row (the
+stock cap's U-turn: 15054.0 x+ => z-), no animated lanes (as hwdx's capped joins).
 """
 import json
 import os
@@ -32,12 +42,32 @@ ART_FROM = 15127             # frame table of EVERY piece: 15127's sprite class 
                              # (HWY_BASE.md "ground under a piece": 73's table loses it in some views; ramps, joins
                              # and the core's underpass all leave ground visible)
 SHAPE0, SHAPE_END = 22500, 22799
-CLS = {"main": 0, "land": 1, "core": 2}
+CLS = {"main": 0, "land": 1, "core": 2, "capped": 3}
+CAP_IDS = {21151: 21166, 21153: 21167, 21155: 21168, 21157: 21169}     # task hwcap2: outer junction -> capped junction
+CAP_EXT = 6                  # the capped scene: both highways end on the 12x12 box's edge (cells -6..5)
+SIDE = {"x-": 0, "z-": 1, "x+": 2, "z+": 3}
+SIDE_NAME = {v: k for k, v in SIDE.items()}
 
 
-def pieces():
-    """{id: dict(cls, ref, base, cells=[(cell, put)])} from hwx.table()"""
+def cap_step(c):
+    """outward step of the arm a carriageway cell lies on"""
+    dx, dz = c
+    return ((1 if dx > 0 else -1), 0) if dz in (-1, 0) else (0, (1 if dz > 0 else -1))
+
+
+def cap_partner(c):
+    """side (0..3) toward the other lane of the cell's row"""
+    dx, dz = c
+    if dz in (-1, 0):
+        return 3 if dz == -1 else 1
+    return 2 if dx == -1 else 0
+
+
+def pieces(capped=True):
+    """{id: dict(cls, ref, base, cells=[(cell, put)])} from hwx.table(); capped pieces (task hwcap2) also carry
+    junction = the id they replace"""
     import hwx
+    import hwcap
     out = {}
     for c, v in hwx.table().items():
         if not v["id"]:
@@ -48,7 +78,42 @@ def pieces():
         else:
             p["base"] = v["base"][0]
         p["cells"].append((c, v["put"]))
+    if capped:
+        for jid, cid in sorted(CAP_IDS.items()):
+            cells = []
+            for c, put in out[jid]["cells"]:
+                dx, dz = c
+                lower = dz == -1 if dz in (-1, 0) else dx == -1
+                cells.append((c, hwcap.cap_of(cap_step(c), lower)))
+            bases = {cp[0] for c, cp in cells}
+            if len(bases) != 1:
+                raise SystemExit("capped junction %d: its cells end in different caps %s" % (cid, cells))
+            ref = [c for c, cp in cells if cp[1] == 0][0]
+            out[cid] = dict(cls="capped", ref=ref, base=bases.pop(), junction=jid,
+                            cells=[(c, cp[1]) for c, cp in cells])
     return out
+
+
+def capped_turns(pkg, cid, p):
+    """task hwcap2: the capped junction's turns at state 0 (= at its ref cell, where the cap is state 0): the
+    junction's turns there (its lanes, put state) with the outward side replaced by the side toward the row's other
+    lane"""
+    from netmod import lanekit as LK
+    jid = p["junction"]
+    put = dict(pieces(capped=False)[jid]["cells"])[p["ref"]]
+    spec = json.load(open(os.path.join(pkg, "hwx_%d.lanes.json" % jid)))
+    out_side = {(-1, 0): 0, (0, -1): 1, (1, 0): 2, (0, 1): 3}[cap_step(p["ref"])]
+    part = cap_partner(p["ref"])
+    turns = set()
+    for ln in spec["vehicle"]["lanes"]:
+        a, b = ln["from"], ln["to"]
+        e = (min(LK.boundary_sides(a[0], a[2])) + put) % 4
+        l_ = (min(LK.boundary_sides(b[0], b[2])) + put) % 4
+        e = part if e == out_side else e
+        l_ = part if l_ == out_side else l_
+        if e != l_:
+            turns.add((SIDE_NAME[e], SIDE_NAME[l_]))
+    return sorted(turns)
 
 
 HEAD_STOCK = {(1, 0): (15051, 2), (-1, 0): (15051, 0), (0, 1): (73, 0), (0, -1): (73, 2)}
@@ -74,22 +139,35 @@ def _near(sc, boxes, c):
                      if bb[0] < c[0] + 1.5 and bb[2] > c[0] - 0.5 and bb[1] < c[1] + 1.5 and bb[3] > c[1] - 0.5])
 
 
-def cmd_art(pkg, jobs):
-    procs = [subprocess.Popen([sys.executable, os.path.abspath(__file__), "_paint", pkg, "%d/%d" % (i, jobs)])
+def cmd_art(pkg, jobs, only=None):
+    extra = [str(x) for x in sorted(only)] if only else []
+    procs = [subprocess.Popen([sys.executable, os.path.abspath(__file__), "_paint", pkg, "%d/%d" % (i, jobs)] + extra)
              for i in range(jobs)]
     rc = [p.wait() for p in procs]
     print("art: shard exit codes", rc)
     return 0 if not any(rc) else 1
 
 
-def cmd_paint_shard(pkg, shard):
+def cmd_paint_shard(pkg, shard, only=None):
     import hwpaint as HP
     import hwx
+    from netmod import hwcap_art as CA
     i, n = map(int, shard.split("/"))
     sc = hwx.scene()
     boxes = [hwx._deck_box(dk) for dk in sc.decks]
-    for pid, p in sorted(pieces().items())[i::n]:
+    scc = hwx.scene(ext=CAP_EXT)                                  # task hwcap2: both highways end on the box edge
+    boxc = [hwx._deck_box(dk) for dk in scc.decks]
+    for pid, p in [t for t in sorted(pieces().items()) if not only or t[0] in only][i::n]:
         d = os.path.join(pkg, "art", str(pid))
+        if p["cls"] == "capped":
+            keep = os.path.join(pkg, "art_painted", str(pid))
+            if os.path.isdir(keep):
+                import shutil
+                shutil.rmtree(keep)
+            HP.paint_cell(_near(scc, boxc, p["ref"]), p["ref"], d)
+            CA.compose_straight(d, keep, p["base"])
+            print("capped piece", pid, "ref", p["ref"], "end face from stock", p["base"], flush=True)
+            continue
         HP.paint_cell(_near(sc, boxes, p["ref"]), p["ref"], d)
         print("piece", pid, "ref", p["ref"], flush=True)
 
@@ -136,6 +214,15 @@ def cmd_lanes(pkg):
             json.dump(spec, open(os.path.join(pkg, "hwx_%d.lanes.json" % spec["piece"]), "w", encoding="utf-8"),
                       indent=1)
             n += 1
+    for cid, p in sorted(ps.items()):                         # task hwcap2: capped junctions, turn matrix only
+        if p["cls"] != "capped":
+            continue
+        low = [list(t) for t in capped_turns(pkg, cid, p)]
+        spec = {"piece": cid, "states": sorted({st for c, st in p["cells"]}), "flag": 0,
+                "vehicle": {"class": "car", "lanes": []},
+                "connects": {"road": {"low": low, "high": [[l_, e] for e, l_ in low]}}}
+        json.dump(spec, open(os.path.join(pkg, "hwx_%d.lanes.json" % cid), "w", encoding="utf-8"), indent=1)
+        n += 1
     if shape - 1 > SHAPE_END:
         raise SystemExit("lane curves need shapes up to %d, hwx's range ends at %d" % (shape - 1, SHAPE_END))
     print("lanes: %d specs, curve shapes %d..%d" % (n, SHAPE0, shape - 1))
@@ -146,7 +233,7 @@ def cmd_manifest(pkg):
     ps = pieces()
     for pid, p in sorted(ps.items()):
         nm = {"land": "Cloverleaf ramp %+d,%+d", "main": "Cloverleaf junction %+d,%+d",
-              "core": "Clean flyover %+d,%+d"}[p["cls"]] % p["ref"]
+              "core": "Clean flyover %+d,%+d", "capped": "Cloverleaf junction, highway end %+d,%+d"}[p["cls"]] % p["ref"]
         variants.append({"id": pid, "base": p["base"], "network": "HWAY",
                          "name": {"*": nm, "ENGLISH": "Highway Interchange"},
                          "art": {"from": ART_FROM, "png_dir": "art/%d" % pid,
@@ -158,7 +245,7 @@ def cmd_manifest(pkg):
             connects.append({"piece": pid, "road": {"low": [], "high": []}})          # no lane: no turn
         lines.append("hwyp %d %d" % (pid, 1 if p["cls"] == "land" else 0))
     for pid, p in sorted(ps.items()):                         # save table: what a game without the mod reads
-        if p["cls"] != "land":
+        if p["cls"] not in ("land", "capped"):                # capped: its base (the stock cap) at its state
             lines.append("hwys %d %s" % (pid, " ".join("%d %d" % saved_as(p, k) for k in range(4))))
     for pid, p in sorted(ps.items()):
         for (c, put) in sorted(p["cells"]):
@@ -240,9 +327,10 @@ def main(argv):
         print(__doc__)
         return 2
     if argv[1] == "art":
-        return cmd_art(argv[2], int(argv[argv.index("--jobs") + 1]) if "--jobs" in argv else 8)
+        only = {int(x) for x in argv[argv.index("--only") + 1].split(",")} if "--only" in argv else None
+        return cmd_art(argv[2], int(argv[argv.index("--jobs") + 1]) if "--jobs" in argv else 8, only)
     if argv[1] == "_paint":
-        return cmd_paint_shard(argv[2], argv[3])
+        return cmd_paint_shard(argv[2], argv[3], {int(x) for x in argv[4:]} or None)
     if argv[1] == "pad":
         return cmd_pad(argv[2])
     if argv[1] == "lanes":
