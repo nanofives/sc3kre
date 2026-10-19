@@ -113,6 +113,10 @@ static void hwdx_run(struct HwyPass *hp);                                    /* 
 static void hwdx_stats(void);                                                /* task hwdx */
 static void hwask_line(const char *path, const char *line);                  /* task hwask */
 static void hwask_stats(void);                                               /* task hwask */
+static void hwave_line(const char *path, const char *line);                  /* task hwave */
+static void hwave_run(struct HwyPass *hp);                                   /* task hwave */
+static void hwave_road(BYTE *mgr, int x0, int z0, int x1, int z1);           /* task hwave */
+static void hwave_stats(void);                                               /* task hwave */
 
 /* ---------------------------------------------------------------- table line */
 static void rb_file(const char *path) {
@@ -137,6 +141,8 @@ static void rb_file(const char *path) {
         if (!strncmp(line, "hwt ", 4) || !strncmp(line, "hwtc ", 5)) { hwt_line(path, line); continue; } /* task hwt (hwtc: task hwcap2) */
         if (!strncmp(line, "hwx ", 4)) { hwx_line(path, line); continue; } /* task hwx */
         if (!strncmp(line, "hwask ", 6)) { hwask_line(path, line); continue; } /* task hwask */
+        if (!strncmp(line, "hwave ", 6)) { hwave_line(path, line); continue; } /* task hwave */
+        if (!strncmp(line, "hwrc ", 5)) continue;                            /* task hwave: read by NETRAMP */
         if (!strncmp(line, "hwy", 3)) { hwy_line(path, line); continue; }  /* task hwcore */
         if (strncmp(line, "rbt ", 4) || g_rb_off) continue;
         k = sscanf(line + 4, "%lu %lu %lu", &p, &n, &c);
@@ -300,6 +306,7 @@ static void rb_hwy(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) {
     hwx_run(hp);                                                                 /* task hwx */
     hwdd_run(hp);                                                            /* task hwdd */
     hwdx_run(hp);                                                            /* task hwdx */
+    hwave_run(hp);                                                           /* task hwave */
     hwy_end(hp);
 }
 
@@ -336,6 +343,7 @@ static void __fastcall rb_pass(BYTE *mgr, void *edx, DWORD list, int net, int *b
         dbv_run(mgr, x0, z0, x1, z1, "edit");                  /* task diagbv: first, its claims stop DAV / BV */
         if (g_dav_on) dav_run(mgr, x0, z0, x1, z1, "edit");                  /* task diagave */
         if (g_avx_on) avx_run(mgr, x0, z0, x1, z1, "edit");                  /* task avx */
+        if (g_hwy_np) hwave_road(mgr, x0, z0, x1, z1);                       /* task hwave: avenue drags */
         if (g_bv_p[0]) bv_run(mgr, x0, z0, x1, z1, "edit");                  /* task boulevard */
         if (g_r9_centre) r9_run(mgr, x0, z0, x1, z1, "edit");                /* task bigrbt */
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -499,6 +507,7 @@ static void rbt_stats(void) {
     hwx_stats();                                                             /* task hwx */
     hwdd_stats();                                                            /* task hwdd */
     hwdx_stats();                                                            /* task hwdx */
+    hwave_stats();                                                           /* task hwave */
     hwask_stats();                                                           /* task hwask */
     LONG n = g_rb_n_pass + g_rb_n_conv + g_rb_n_rev + g_rb_n_load + g_rb_n_fault;
     if (!g_rb_on || n == last) return;
