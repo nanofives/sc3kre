@@ -1,0 +1,158 @@
+11204 ? | prop 310 = 0x01040104  both: x-=>x+ x+=>x- | state0 car nodes 4
+      veh 0 (0,0,80) car: ->2 path 512
+      veh 1 (0,0,175) car: exit 0
+      veh 2 (255,0,80) car: exit 16
+      veh 3 (255,0,175) car: ->1 path 256
+11203 Road | prop 310 = 0x10081008  both: x-=>z+ z+=>x- | state0 car nodes 4
+      veh 0 (0,0,80) car: ->3 path 1024
+      veh 1 (0,0,175) car: exit 0
+      veh 2 (80,0,255) car: ->1 path 768
+      veh 3 (175,0,255) car: exit 24
+11201 Road | prop 310 = 0x20802080  both: z-=>z+ z+=>z- | state0 car nodes 4
+      veh 0 (80,-256,255) car: ->1 path 1793
+      veh 1 (80,0,0) car: exit 8
+      veh 2 (175,-256,255) car: exit 24
+      veh 3 (175,0,0) car: ->2 path 2049
+11202 Road | prop 310 = 0x01040104  both: x-=>x+ x+=>x- | state0 car nodes 4
+      veh 0 (0,0,80) car: ->2 path 2048
+      veh 1 (0,0,175) car: exit 0
+      veh 2 (255,-256,80) car: exit 16
+      veh 3 (255,-256,175) car: ->1 path 1792
+11258 Highway Road Crossing | prop 310 = 0x21040184  low: x-=>x+ z-=>z+ x+=>x- | high: x-=>x+ x+=>x- z+=>z- | state0 car nodes 8
+      veh 0 (0,0,80) car: ->6 path 512
+      veh 1 (0,0,175) car: exit 0
+      veh 2 (61,1024,0) car: ->3 path 71424
+      veh 3 (61,1024,255) car: exit 24
+      veh 4 (145,1024,0) car: ->5 path 71168
+      veh 5 (145,1024,255) car: exit 24
+      veh 6 (255,0,80) car: exit 16
+      veh 7 (255,0,175) car: ->1 path 256
+43 Road | prop 310 = 0x7bde7bde  both: x-=>z- x-=>x+ x-=>z+ z-=>x- z-=>x+ z-=>z+ x+=>x- x+=>z- x+=>z+ z+=>x- z+=>z- z+=>x+ | state0 car nodes 8
+      veh 0 (0,0,80) car: ->2 path 769, ->5 path 1024, ->6 path 512
+      veh 1 (0,0,175) car: exit 0, exit 0, exit 0
+      veh 2 (80,0,0) car: exit 8, exit 8, exit 8
+      veh 3 (80,0,255) car: ->2 path 257, ->1 path 768, ->6 path 1027
+      veh 4 (175,0,0) car: ->5 path 259, ->1 path 1025, ->6 path 770
+      veh 5 (175,0,255) car: exit 24, exit 24, exit 24
+      veh 6 (255,0,80) car: exit 16, exit 16, exit 16
+      veh 7 (255,0,175) car: ->1 path 256, ->5 path 771, ->2 path 1026
+39 Road | prop 310 = 0x309a309a  both: x-=>z- x-=>z+ z-=>x- z-=>z+ z+=>x- z+=>z- | state0 car nodes 6
+      veh 0 (0,0,80) car: ->2 path 769, ->5 path 1024
+      veh 1 (0,0,175) car: exit 0, exit 0
+      veh 2 (80,0,0) car: exit 8, exit 8
+      veh 3 (80,0,255) car: ->2 path 257, ->1 path 768
+      veh 4 (175,0,0) car: ->5 path 259, ->1 path 1025
+      veh 5 (175,0,255) car: exit 24, exit 24
+69 Train Crossing Road | prop 310 = 0x01040104  both: x-=>x+ x+=>x- | state0 car nodes 8
+      veh 0 (0,0,80) car: ->6 path 57344
+      veh 1 (0,0,175) car: exit 0
+      veh 2 (80,79,0) train: exit 8
+      veh 3 (80,79,255) train: ->2 path 48641
+      veh 4 (175,79,0) train: ->5 path 48897
+      veh 5 (175,79,255) train: exit 24
+      veh 6 (255,0,80) car: exit 16
+      veh 7 (255,0,175) car: ->1 path 57088
+31 Road | prop 310 = 0x20802080  both: z-=>z+ z+=>z- | state0 car nodes 4
+      veh 0 (80,-512,255) car: ->1 path 1281
+      veh 1 (80,0,0) car: exit 8
+      veh 2 (175,-512,255) car: exit 24
+      veh 3 (175,0,0) car: ->2 path 1537
+32 Road | prop 310 = 0x01040104  both: x-=>x+ x+=>x- | state0 car nodes 4
+      veh 0 (0,0,80) car: ->2 path 1536
+      veh 1 (0,0,175) car: exit 0
+      veh 2 (255,-512,80) car: exit 16
+      veh 3 (255,-512,175) car: ->1 path 1280
+29 Road | prop 310 = 0x01040104  both: x-=>x+ x+=>x- | state0 car nodes 4
+      veh 0 (0,0,80) car: ->2 path 512
+      veh 1 (0,0,175) car: exit 0
+      veh 2 (255,0,80) car: exit 16
+      veh 3 (255,0,175) car: ->1 path 256
+44 Railroad | no road matrix | state0 car nodes 4
+      veh 0 (0,79,80) train: ->2 path 48896
+      veh 1 (0,79,175) train: exit 0
+      veh 2 (255,79,80) train: exit 16
+      veh 3 (255,79,175) train: ->1 path 48640
+67 Wire Crossing Road | prop 310 = 0x01040104  both: x-=>x+ x+=>x- | state0 car nodes 4
+      veh 0 (0,0,80) car: ->2 path 512
+      veh 1 (0,0,175) car: exit 0
+      veh 2 (255,0,80) car: exit 16
+      veh 3 (255,0,175) car: ->1 path 256
+92 Inclined Power Lines | no road matrix | state0 car nodes 0
+16036 Railroad | no road matrix | state0 car nodes 4
+      veh 0 (0,79,80) train: ->3 path 50688
+      veh 1 (0,79,175) train: exit 0
+      veh 2 (80,79,255) train: ->1 path 50944
+      veh 3 (175,79,255) train: exit 24
+15098 Highway | prop 310 = 0x20842180  low: z-=>z+ x+=>x- z+=>z- | high: x-=>x+ z-=>z+ z+=>z- | state0 car nodes 8
+      veh 0 (0,1024,61) car: exit 0
+      veh 1 (0,1024,145) car: exit 0
+      veh 2 (80,0,0) car: exit 8
+      veh 3 (80,0,255) car: ->2 path 257
+      veh 4 (175,0,0) car: ->5 path 513
+      veh 5 (175,0,255) car: exit 24
+      veh 6 (255,1024,61) car: ->0 path 71425
+      veh 7 (255,1024,145) car: ->1 path 71169
+11211 Road | prop 310 = 0x010c1104  low: x-=>x+ x+=>x- z+=>x- | high: x-=>x+ x-=>z+ x+=>x- | state0 car nodes 5
+      veh 0 (0,0,80) car: ->3 path 512
+      veh 1 (0,0,175) car: exit 0, exit 0
+      veh 2 (112,0,255) car: ->1 path 3328
+      veh 3 (255,0,80) car: exit 16
+      veh 4 (255,0,175) car: ->1 path 256
+11213 Road | prop 310 = 0x48806800  low: x+=>z+ z+=>z- z+=>x+ | high: z-=>z+ x+=>z+ z+=>x+ | state0 car nodes 5
+      veh 0 (80,0,255) car: ->3 path 2307, ->1 path 3840
+      veh 1 (112,0,0) car: exit 8
+      veh 2 (175,0,255) car: exit 24
+      veh 3 (255,0,80) car: exit 16
+      veh 4 (255,0,175) car: ->2 path 2563
+11214 Road | prop 310 = 0x228020c0  low: z-=>x+ z-=>z+ z+=>z- | high: z-=>z+ x+=>z- z+=>z- | state0 car nodes 5
+      veh 0 (80,0,0) car: exit 8
+      veh 1 (80,0,255) car: ->0 path 257
+      veh 2 (175,0,0) car: ->3 path 513, ->4 path 3584
+      veh 3 (175,0,255) car: exit 24
+      veh 4 (255,0,112) car: exit 16
+14030 ? | prop 310 = 0x49004804  low: x-=>x+ x+=>z+ z+=>x+ | high: x+=>x- x+=>z+ z+=>x+ | state0 car nodes 5
+      veh 0 (0,0,112) car: ->3 path 4096
+      veh 1 (80,0,255) car: ->3 path 2307
+      veh 2 (175,0,255) car: exit 24
+      veh 3 (255,0,80) car: exit 16, exit 16
+      veh 4 (255,0,175) car: ->2 path 2563
+14031 ? | prop 310 = 0x68806880  both: z-=>z+ x+=>z+ z+=>z- z+=>x+ | state0 car nodes 6
+      veh 0 (80,0,0) car: exit 8
+      veh 1 (80,0,255) car: ->0 path 257, ->4 path 2307
+      veh 2 (175,0,0) car: ->3 path 513
+      veh 3 (175,0,255) car: exit 24, exit 24
+      veh 4 (255,0,80) car: exit 16
+      veh 5 (255,0,175) car: ->3 path 2563
+11207 Road | prop 310 = 0x48004800  both: x+=>z+ z+=>x+ | state0 car nodes 4
+      veh 0 (80,0,255) car: ->2 path 2307
+      veh 1 (175,0,255) car: exit 24
+      veh 2 (255,0,80) car: exit 16
+      veh 3 (255,0,175) car: ->1 path 2563
+11208 Road | prop 310 = 0x02140142  low: x-=>z- z-=>x+ x+=>x- | high: x-=>x+ z-=>x- x+=>z- | state0 car nodes 6
+      veh 0 (0,0,80) car: ->2 path 2561
+      veh 1 (0,0,175) car: exit 0
+      veh 2 (80,0,0) car: exit 8
+      veh 3 (184,0,0) car: ->4 path 37376
+      veh 4 (255,0,80) car: exit 16
+      veh 5 (255,0,175) car: ->1 path 9472
+11209 Road | prop 310 = 0x00120012  both: x-=>z- z-=>x- | state0 car nodes 6
+      veh 0 (0,0,57) car: ->4 path 38144
+      veh 1 (0,0,80) car: ->4 path 2561
+      veh 2 (0,0,123) car: exit 0
+      veh 3 (0,0,175) car: exit 0
+      veh 4 (80,0,0) car: exit 8, exit 8
+      veh 5 (175,0,0) car: ->3 path 2305, ->2 path 12544
+11210 Road | prop 310 = 0x02802040  low: z-=>x+ z+=>z- | high: z-=>z+ x+=>z- | state0 car nodes 6
+      veh 0 (80,0,0) car: exit 8
+      veh 1 (80,0,255) car: ->0 path 13056
+      veh 2 (175,0,0) car: ->4 path 37888
+      veh 3 (175,0,255) car: exit 24
+      veh 4 (255,0,56) car: exit 16
+      veh 5 (255,0,175) car: ->3 path 2563
+11212 Road | prop 310 = 0x49044904  both: x-=>x+ x+=>x- x+=>z+ z+=>x+ | state0 car nodes 6
+      veh 0 (0,0,80) car: ->4 path 512
+      veh 1 (0,0,175) car: exit 0
+      veh 2 (80,0,255) car: ->4 path 2307
+      veh 3 (175,0,255) car: exit 24
+      veh 4 (255,0,80) car: exit 16, exit 16
+      veh 5 (255,0,175) car: ->1 path 256, ->3 path 2563
