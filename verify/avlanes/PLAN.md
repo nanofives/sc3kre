@@ -138,8 +138,74 @@ known highway / avenue traffic from hwcars).
   (avjunc) carry the fix and M1 repeats after them.
 This test package is a measurement tool only; it must not ship (it would make every avenue one-way, see section 3).
 
-## 8. Owner calls
+## 8. Owner decisions (2026-10-19, relayed by the orchestrator)
 
-1. Right-hand traffic like the highways (default). 2. Boulevards: keep their own lanes, or also two lanes one way per
-outer row? 3. A band the rule cannot convert (avenue turning into two parallel roads, rare junction pieces) stays
-two-way: acceptable? 4. English-UK: drive on the left there too (mirror) or right everywhere?
+1. **Right-hand traffic everywhere, English-UK included.** No mirrored lane set: every lane spec of this rework sets
+   `"mirror_uk": false` (lanekit / netpack_lanes write one record per language, and by default English-UK gets the
+   mirrored copy), so the English-UK TrBlkAtt records carry the same right-hand lanes as every other language and agree
+   with the one turn matrix all languages share. Stock pieces that are not converted keep their own per-language lanes.
+2. **An avenue the block cannot convert whole stays stock two-way** (the all-or-nothing band rule, section 4).
+3. **3-wide avenues (boulevards) follow the same real-life logic** ("3 wide avenues need replanning as well"):
+   section 9.
+
+## 9. 3-wide avenues (boulevards: BV, BVX, DBV)
+
+### 9.1 What a boulevard is today (packages boulevard / boulevard_junctions / diagonal_boulevard)
+
+Three parallel straight roads drawn side by side become a boulevard (README boulevard): row 0 and row 2 are the
+carriageways (outer piece 20700, base 11204, states 2 / 0 for a band along x, the 11204 half convention), row 1 the
+middle (20701 plain, 20702 / 20703 with median noses, base 29). The art already paints the target: white dashes on every
+lane line, each carriageway with an extra lane along its inner side, and a grass median in the middle cell about twice
+the avenue's. The LANES do not match it:
+
+| piece | lanes today (state-0 frame) | turn matrix |
+|---|---|---|
+| 20700 outer | +x at z 80, -x at z 175: a two-way road in each outer cell | two-way |
+| 20701..20703 middle | +x at z 241 (beside row 2), -x at z 14 (beside row 0) | two-way |
+| 20704..20706 caps, 20720..20748 tapers, 20750..20768 narrowing to an avenue | none: road 29's straight fallback | base 43 |
+| 20710..20712 junction, BVX 20900..20905 boxes | 43's / T 39's lanes | 43 / 39 |
+| BVX noses 20910 / 20911 | copy of stock 11204 (two-way) | 11204's |
+| DBV 20950..21063 (diagonal band, bends to the straight boulevard, caps, junctions, tapers, narrowing to a diagonal avenue) | copy_base (two-way), 20951 own spec | base |
+
+Under a boulevard the save holds 11204 | 29 | 11204 (+ 43 at junctions, BV saves every piece as its base), so a game
+without the mod sees an avenue's two halves with a plain road between them. No shipped city has a 3-wide band (scan of
+the 15 cities: 0 cells of 11204 | 29 | 11204), so every boulevard is player-drawn with the mod. BV converts on load;
+the avenue block (avcore) must leave BV / DBV cells alone (claim check, as DAV does with `dbv_claimed`).
+
+### 9.2 Target: 3 lanes each way, right-hand, the wide median in the middle cell
+
+Each direction = the outer cell's 2 lanes + the middle cell's lane next to it; the grass median between the two middle
+lanes. The lane positions do not move, only directions: across the band the lanes sit at z 80 / 175 (row 0), 270 /
+497 (row 1: z 14 / 241), 592 / 687 (row 2), every 95 units, the same spacing as two stock lanes. For a band along x:
+row 0 (z- side) runs +x on all three lanes, row 2 (z+ side) runs -x; along z by the same rotation as the avenue (section
+2). New lanes per piece:
+
+| piece set | new lanes | matrix |
+|---|---|---|
+| outer 20700 | both lanes one way (as the avenue half variant) | one-way (low x+ => x- at state 0) |
+| middle 20701..20703 | z 14 lane runs WITH row 0, z 241 WITH row 2 (both lanes flip direction from today) | two-way (one lane each way in one cell, median between) |
+| caps 20704..20706 | a 3-lane U-turn: lane k of one side to lane k of the other, around the median nose | U-turn |
+| narrowing to an avenue 20750..20768 (rows 0,1 or 1,2 go on) | 3 -> 2 per direction: the middle-cell lane merges into the outer lane of its side; the side that loses its outer row shifts one cell over the 3 columns into the avenue half | per cell |
+| tapers to a single road 20720..20748 | 3 -> 1 per direction (two merges each side) into the road's one lane each way | per cell |
+| junctions 20710..20712, BVX 20900..20905 (boulevard x road / avenue / boulevard) | median opening with every turn; 3 lanes in / out per boulevard edge, 2 per avenue edge, 1 per road edge | per box |
+| BVX noses 20910 / 20911 | avenue arm next to a boulevard box: one-way avenue half | one-way |
+| DBV diagonal boulevard (band, bend-x / bend-z to the straight boulevard, caps, junctions, tapers, narrowing to a diagonal avenue) | the same rule turned 45 degrees: 3 lanes each way, the middle staircase cells carry the inner lane of each side | per cell |
+
+Not present: big roundabout boulevard arms (RBT9 refuses any side with three arm cells, verify/bigrbt), a highway <->
+boulevard transition (hwave refuses boulevards, verify/hwave/RESULTS.md line 86). A highway -> boulevard piece would be 2 -> 3 lanes per
+direction (a lane added): later, if the owner wants it.
+
+Routing: outer cells one-way (as avenue halves); the middle cell stays two-way in the router, which is consistent with
+its lanes (one each way), and LANEDENSITY's straight-only rows stop trips from hopping sideways between the rows.
+Risks: as section 5, plus the middle row being usable both ways means a trip may run along the middle row against the
+direction of the outer row beside it, which is legal here (that lane runs that way).
+
+### 9.3 Stream split with boulevards
+
+One more stream, after avcore (it reuses avcore's one-way half and lane curves):
+
+| stream | owns | ids / shapes | depends on |
+|---|---|---|---|
+| `bvlanes` | BV 20700..20768 lane rework (outer, middle, caps, tapers, narrowing to an avenue), BV junctions 20710..20712, BVX boxes and noses 20900..20911, DBV 20950..21063 (with the narrowing to a diagonal avenue: shared edge with avdiag) | BV / BVX / DBV own ranges (BV 20707..20709 / 20713..20719, BVX 20906..20949 free) + 21900..21949, shapes 24000..24199 | avcore (one-way half, curves), avjunc (box lane conventions), avdiag (diagonal avenue edge) |
+
+Owner sheet: `MAIN\verify\avlanes\owner_shots\avlanes_3wide_plan.png`.
