@@ -1,0 +1,96 @@
+thread 64840 pc ntdll.dll+0x7a08c
+   0:ntdll.dll+0x957a1 13:ntdll.dll+0x68ff0 53:ntdll.dll+0x9050c 65:ntdll.dll+0x52643 70:SIMCITY.DLL+0xd31d 73:SIMSPR.DLL+0x19ea9 76:SIMSPR.DLL+0x630e4 77:SIMSPR.DLL+0x628e8 80:SIMSPR.DLL+0x5df78 83:SC3U.exe+0x24c75 99:SC3U.exe+0xd0fa4 107:SC3U.exe+0xc3e64 109:STRTSIM.DLL+0x18768 114:STRTSIM.DLL+0x1b8cc 119:nvd3dum.dll+0x34094ea 123:STRTSIM.DLL+0x1b95b 130:STRTSIM.DLL+0x19adf 134:STRTSIM.DLL+0x1d3b5 141:SC3U.exe+0x25a9e 147:SC3U.exe+0xd0fa4 150:SC3U.exe+0xc3f30 152:SC3U.exe+0x2626b 161:SC3U.exe+0xd0fa4 164:SC3U.exe+0xc3f78 166:SIMSPR.DLL+0x1cb09 170:KERNEL32.DLL+0x18640 174:SIMSPR.DLL+0x42b07 180:KERNEL32.DLL+0x1ca7c 190:KERNEL32.DLL+0x1dff0 193:KERNEL32.DLL+0x1ca70 194:sc3resize.dll+0xb3c4 217:GZGraphicD.dll+0x18c89 237:KERNEL32.DLL+0x1ca7c 240:KERNEL32.DLL+0x1ca70 245:sc3resize.dll+0xa047 255:SIMSPR.DLL+0x5ee14 258:SIMSPR.DLL+0x4e188 263:SC3U.exe+0x41456 268:GZWIND.DLL+0x1edaa 273:GZWIND.DLL+0x200f2 275:GZWIND.DLL+0x21689 276:GZGraphicD.dll+0x15aff 279:GZGraphicD.dll+0x11eb4 283:GZServiceD.dll+0x41e1 292:GZGraphicD.dll+0x1596a 293:SC3U.exe+0x5d9c5 295:USER32.dll+0xc7d60 297:SC3U.exe+0x5d9e3 299:USER32.dll+0xc7d60 301:SC3U.exe+0x613b4 302:SC3U.exe+0xb4b54 314:SC3U.exe+0x5e866 315:SC3U.exe+0x5e6a7 316:SC3U.exe+0x2e61 320:SC3U.exe+0xd7750 325:SC3U.exe+0xcf4c4 330:SC3U.exe+0xcf4c4 336:SC3U.exe+0xb4c88 337:SC3U.exe+0x0 341:SC3U.exe+0xb4b54
+thread 69620 pc ntdll.dll+0x7858c
+   0:ntdll.dll+0x93dc9 8:KERNELBASE.dll+0x16a1f0 14:sc3simrun.dll+0x157b0 30:KERNELBASE.dll+0x172f70 34:KERNELBASE.dll+0x16a18f 38:sc3simrun.dll+0x1deb 40:sc3simrun.dll+0x16e0 41:sc3simrun.dll+0x16e0 48:SC3U.exe+0x0 57:sc3simrun.dll+0x3490 58:sc3simrun.dll+0x1b778 61:KERNEL32.DLL+0x15d49 63:KERNEL32.DLL+0x15d30 65:ntdll.dll+0x6c75b 83:ntdll.dll+0x80c30 87:ntdll.dll+0x6c6e1 89:ntdll.dll+0xb6339 92:sc3simrun.dll+0x16e0
+thread 45600 pc ntdll.dll+0x7858c
+   0:ntdll.dll+0x93dc9 9:KERNELBASE.dll+0x16a1f0 13:USER32.dll+0x7be00 15:USER32.dll+0xc8200 31:KERNELBASE.dll+0x172f70 35:KERNELBASE.dll+0x16a18f 38:USER32.dll+0xb94b0 39:sc3netmod.dll+0x216b0 41:sc3netmod.dll+0x21330 42:sc3netmod.dll+0x21330 51:KERNEL32.DLL+0x15d49 53:KERNEL32.DLL+0x15d30 55:ntdll.dll+0x6c75b 73:ntdll.dll+0x80c30 77:ntdll.dll+0x6c6e1 79:ntdll.dll+0xb6339 82:sc3netmod.dll+0x21330
+thread 63184 pc ntdll.dll+0x7858c
+   0:ntdll.dll+0x93dc9 8:KERNELBASE.dll+0x16a1f0 12:ntdll.dll+0x525e0 14:KERNEL32.DLL+0x1ef20 30:KERNELBASE.dll+0x172f70 34:KERNELBASE.dll+0x16a18f 38:sc3cartrips.dll+0x359b 40:sc3cartrips.dll+0x2d20 41:sc3cartrips.dll+0x2d20 43:ntdll.dll+0x390bc 44:ntdll.dll+0x390fd 46:ntdll.dll+0xb1192 48:shcore.dll+0x53bd0 50:shcore.dll+0x53bd0 51:ntdll.dll+0x13836c 56:ntdll.dll+0x80c30 59:ntdll.dll+0x79f8c 60:ntdll.dll+0x3269f 64:ntdll.dll+0x0 69:ntdll.dll+0x0 76:ntdll.dll+0x80c30 80:ntdll.dll+0xb154b 88:ntdll.dll+0x7867c 89:ntdll.dll+0x323b9 96:ntdll.dll+0x0 222:sc3cartrips.dll+0x8bf0 223:sc3cartrips.dll+0x265d0 247:KERNEL32.DLL+0x15d49 249:KERNEL32.DLL+0x15d30 251:ntdll.dll+0x6c75b 269:ntdll.dll+0x80c30 273:ntdll.dll+0x6c6e1 275:ntdll.dll+0xb6339 278:sc3cartrips.dll+0x2d20 300:nvgpucomp32.dll+0x12521cd 303:nvd3dum.dll+0x166d61 305:nvd3dum.dll+0x2582074 309:nvd3dum.dll+0x25a6f6d 339:nvgpucomp32.dll+0x1346952 356:UV.dll+0x0 425:ntmarta.dll+0x2642e
+thread 32832 pc ntdll.dll+0x7858c
+   0:ntdll.dll+0x93dc9 8:KERNELBASE.dll+0x16a1f0 12:sc3netmod.dll+0x19ad0 13:KERNEL32.DLL+0x1d770 28:sc3netmod.dll+0x45c60 30:KERNELBASE.dll+0x172f70 34:KERNELBASE.dll+0x16a18f 38:sc3netmod.dll+0x19aec 40:sc3netmod.dll+0x19ad0 41:KERNEL32.DLL+0x15d49 43:KERNEL32.DLL+0x15d30 45:ntdll.dll+0x6c75b 63:ntdll.dll+0x80c30 67:ntdll.dll+0x6c6e1 69:ntdll.dll+0xb6339 72:sc3netmod.dll+0x19ad0
+thread 45892 pc ntdll.dll+0x7a0bc
+   0:ntdll.dll+0x550b7 7:ntdll.dll+0x54d70 8:ntdll.dll+0x54d70 10:ntdll.dll+0x7a6b0 109:ntdll.dll+0x80c30 113:KERNEL32.DLL+0x15d49 115:KERNEL32.DLL+0x15d30 117:ntdll.dll+0x6c75b 135:ntdll.dll+0x80c30 139:ntdll.dll+0x6c6e1 141:ntdll.dll+0xb6339 144:ntdll.dll+0x54d70 178:UV.dll+0x1e91e 208:SC3U.exe+0x70045 212:SC3U.exe+0x1004d 213:SC3U.exe+0x80043 214:SC3U.exe+0xe0049 216:SC3U.exe+0xf0053 218:SC3U.exe+0x10057 219:SC3U.exe+0x50052 220:SC3U.exe+0xd005c 225:SC3U.exe+0x1005c 226:SC3U.exe+0xc0050 242:SC3U.exe+0xd005c 247:SC3U.exe+0xd005c 259:SC3U.exe+0x40000 261:SC3U.exe+0x30031 264:SC3U.exe+0x30030 266:SC3U.exe+0x10030 272:SC3U.exe+0x10005c
+thread 31160 pc ntdll.dll+0x787fc
+   0:KERNELBASE.dll+0x15f67f 30:CoreMessaging.dll+0x41700 33:CoreMessaging.dll+0xa8daf 35:CoreMessaging.dll+0x41302 36:CoreMessaging.dll+0x41713 40:CoreMessaging.dll+0x8efae 43:CoreMessaging.dll+0x8efd0 46:CoreMessaging.dll+0x19ac6 52:CoreMessaging.dll+0x8f21f 54:CoreMessaging.dll+0x8f210 55:CoreMessaging.dll+0x2486c 58:CoreMessaging.dll+0x19ac6 64:CoreMessaging.dll+0x8f21f 66:CoreMessaging.dll+0x8f210 67:CoreMessaging.dll+0x2486c 70:CoreMessaging.dll+0x24616 79:CoreMessaging.dll+0xa9cf5 81:CoreMessaging.dll+0x24616 82:CoreMessaging.dll+0x8cb91 86:ntdll.dll+0x95f9e 88:ntdll.dll+0x51719 96:KERNELBASE.dll+0x172f70 100:CoreMessaging.dll+0x70aea 114:CoreMessaging.dll+0x8c5d0 115:CoreMessaging.dll+0x2458f 119:CoreMessaging.dll+0xa7f57 120:CoreMessaging.dll+0x2930e 132:CoreMessaging.dll+0xa5d09 134:CoreMessaging.dll+0xa6f10 138:CoreMessaging.dll+0x2b002 146:CoreMessaging.dll+0x2a700 167:CoreMessaging.dll+0xaa84d 170:CoreMessaging.dll+0x2a7e7 178:CoreMessaging.dll+0x2a700 183:CoreMessaging.dll+0xad377 185:CoreMessaging.dll+0xaa745 188:CoreMessaging.dll+0x62b73 214:CoreMessaging.dll+0xb00dd 217:CoreMessaging.dll+0x63d0a 225:CoreMessaging.dll+0x63c80 239:CoreMessaging.dll+0xaa785 242:CoreMessaging.dll+0x294ab 250:CoreMessaging.dll+0x1ef27 256:CoreMessaging.dll+0xaa5a5 259:CoreMessaging.dll+0x28d50 262:CoreMessaging.dll+0x2ac30 271:CoreMessaging.dll+0xa8e00 274:CoreMessaging.dll+0x1f840 278:CoreMessaging.dll+0xaa4b0 281:CoreMessaging.dll+0x1e842 296:CoreMessaging.dll+0xa93f7 299:CoreMessaging.dll+0x2a425 302:CoreMessaging.dll+0x2a380 305:CoreMessaging.dll+0x82400 317:CoreMessaging.dll+0xaa6b5 320:CoreMessaging.dll+0x1e6d6 323:CoreMessaging.dll+0x4f2c 341:CoreMessaging.dll+0xa93af 344:CoreMessaging.dll+0x57314 349:CoreMessaging.dll+0x4f2c
+thread 53096 pc ntdll.dll+0x787fc
+   0:KERNELBASE.dll+0x15f67f 28:ntdll.dll+0x5f368 40:ntdll.dll+0x95f9e 59:ntdll.dll+0x40ee2 66:ntdll.dll+0x40ee2 79:ntdll.dll+0x787fc 80:KERNELBASE.dll+0x15f67f 85:KERNELBASE.dll+0x15f589 96:KERNELBASE.dll+0x172f70 100:KERNELBASE.dll+0x15f4d8 107:DSOUND.dll+0x4308a 117:ntdll.dll+0x3db49 126:ntdll.dll+0x80c30 129:ntdll.dll+0x93b5e 147:ntdll.dll+0x3d0fa 156:ntdll.dll+0x80c30 160:KERNELBASE.dll+0x141ef7 162:DSOUND.dll+0x6bbb0 164:DSOUND.dll+0x25bb9 165:DSOUND.dll+0x6bbb0 166:DSOUND.dll+0x58fc 169:DSOUND.dll+0x25a22 170:DSOUND.dll+0x58fc 174:DSOUND.dll+0x1c340 176:KERNELBASE.dll+0x172f70 180:KERNELBASE.dll+0x15f4d8 183:DSOUND.dll+0x54d78 188:DSOUND.dll+0x54d50 191:DSOUND.dll+0x42f35 197:DSOUND.dll+0x42b6f 198:DSOUND.dll+0x42f60 199:DSOUND.dll+0x42f60 201:DSOUND.dll+0x42f80 202:DSOUND.dll+0x42f60 203:DSOUND.dll+0x42f60 206:KERNEL32.DLL+0x15d49 208:KERNEL32.DLL+0x15d30 210:ntdll.dll+0x6c75b 228:ntdll.dll+0x80c30 232:ntdll.dll+0x6c6e1 234:ntdll.dll+0xb6339 237:DSOUND.dll+0x42f60
+thread 43132 pc ntdll.dll+0x787fc
+   0:KERNELBASE.dll+0x15f67f 46:ntdll.dll+0x40ee2 59:ntdll.dll+0x40c3e 73:ntdll.dll+0x40c3e 82:ntdll.dll+0x924e6 84:ntdll.dll+0x92677 91:ntdll.dll+0x787fc 96:KERNELBASE.dll+0x172f70 100:KERNELBASE.dll+0x15f4d8 107:DSOUND.dll+0x4308a 113:DSOUND.dll+0x2baf0 124:DSOUND.dll+0x2abc3 126:ntdll.dll+0x80c30 130:DSOUND.dll+0x163d3 134:DSOUND.dll+0x2af40 135:DSOUND.dll+0x2af20 137:DSOUND.dll+0x1c870 139:DSOUND.dll+0x16620 141:DSOUND.dll+0x15e30 143:DSOUND.dll+0x15df0 145:rasapi32.dll+0xf30 147:DSOUND.dll+0x2b5a2 150:DSOUND.dll+0x582c 155:DSOUND.dll+0x23747 157:rasapi32.dll+0xf00 159:DSOUND.dll+0x2bd60 161:DSOUND.dll+0x582c 163:DSOUND.dll+0x2baf0 164:DSOUND.dll+0x2bd6f 170:DSOUND.dll+0x6bbb0 172:DSOUND.dll+0x25bb9 173:DSOUND.dll+0x6bbb0 174:DSOUND.dll+0x58fc 177:DSOUND.dll+0x25a22 178:DSOUND.dll+0x58fc 180:DSOUND.dll+0x6bbb0 181:rasapi32.dll+0x590 183:DSOUND.dll+0x2bb2b 189:DSOUND.dll+0x2baf0 192:KERNELBASE.dll+0x15f4d8 199:DSOUND.dll+0x42f20 201:rasapi32.dll+0x474 203:DSOUND.dll+0x42f35 209:DSOUND.dll+0x42b6f 210:DSOUND.dll+0x42f60 211:DSOUND.dll+0x42f60 213:DSOUND.dll+0x42f80 214:DSOUND.dll+0x42f60 215:DSOUND.dll+0x42f60 218:KERNEL32.DLL+0x15d49 220:KERNEL32.DLL+0x15d30 222:ntdll.dll+0x6c75b 240:ntdll.dll+0x80c30 244:ntdll.dll+0x6c6e1 246:ntdll.dll+0xb6339 249:DSOUND.dll+0x42f60
+thread 26192 pc ntdll.dll+0x7858c
+   0:ntdll.dll+0x93dc9 9:KERNELBASE.dll+0x16a1f0 14:AUDIO.DLL+0x27298 23:KERNELBASE.dll+0x16a236 29:AUDIO.DLL+0x19f8a 31:KERNELBASE.dll+0x172f70 35:AUDIO.DLL+0x1b468 38:AUDIO.DLL+0x1b0e3 40:msvcrt.dll+0x68d10 41:AUDIO.DLL+0x27298 51:AUDIO.DLL+0x1afa1 53:AUDIO.DLL+0x1fae8 56:AUDIO.DLL+0x1b506 58:AUDIO.DLL+0x1b4f0 59:msvcrt.dll+0x68ca5 62:msvcrt.dll+0x68d10 63:msvcrt.dll+0x68d10 69:msvcrt.dll+0x5ea50 73:msvcrt.dll+0x68d71 75:KERNEL32.DLL+0x15d49 77:KERNEL32.DLL+0x15d30 79:ntdll.dll+0x6c75b 97:ntdll.dll+0x80c30 101:ntdll.dll+0x6c6e1 103:ntdll.dll+0xb6339 106:msvcrt.dll+0x68d10
+thread 66312 pc ntdll.dll+0x787fc
+   0:KERNELBASE.dll+0x15f67f 21:ntdll.dll+0x697e3 22:ntdll.dll+0x139128 31:ntdll.dll+0x139178 33:SIMRCI.DLL+0xbe89 39:KERNELBASE.dll+0x18085e 40:SIMRCI.DLL+0xbe89 44:SIMRCI.DLL+0xbe89 46:KERNELBASE.dll+0x1808da 50:SIMRCI.DLL+0xbe89 55:KERNELBASE.dll+0x18079e 58:SIMRCI.DLL+0xbe89 59:KERNELBASE.dll+0x2876e8 61:apphelp.dll+0x36540 62:nvldumd.dll+0x8df0e 65:KERNELBASE.dll+0x1855d7 69:ntdll.dll+0x86540 74:KERNELBASE.dll+0x2891b8 78:ntdll.dll+0x95f9e 80:ntdll.dll+0x41ccf 81:KERNELBASE.dll+0x2891b8 83:KERNELBASE.dll+0x287490 85:KERNELBASE.dll+0x184127 86:KERNELBASE.dll+0x287494 87:KERNELBASE.dll+0x1877ad 90:KERNELBASE.dll+0x1877ba 94:KERNELBASE.dll+0x287494 96:KERNELBASE.dll+0x172f70 100:KERNELBASE.dll+0x15f4d8 107:nvd3dum.dll+0x16123d4 119:KERNELBASE.dll+0x19dd09 151:KERNELBASE.dll+0x2278d4 156:nvd3dum.dll+0x17cfd70 160:nvd3dum.dll+0x14da717 162:nvd3dum.dll+0x14da6e0 164:nvd3dum.dll+0x17eac40 167:nvd3dum.dll+0x17eabe8 168:nvd3dum.dll+0x17eabe8 174:nvd3dum.dll+0x17cfd70 178:KERNEL32.DLL+0x15d49 180:KERNEL32.DLL+0x15d30 182:ntdll.dll+0x6c75b 200:ntdll.dll+0x80c30 204:ntdll.dll+0x6c6e1 206:ntdll.dll+0xb6339 209:nvd3dum.dll+0x17eabe8
+thread 73304 pc ntdll.dll+0x787fc
+   0:KERNELBASE.dll+0x15f67f 22:ntdll.dll+0x95f9e 30:KERNELBASE.dll+0x14e6a4 31:AUDIOSES.DLL+0x149974 36:AUDIOSES.DLL+0x149974 38:ntdll.dll+0x95f9e 40:ntdll.dll+0x51719 49:DSOUND.dll+0x5bf95 51:AUDIOSES.DLL+0x4b0e0 52:AUDIOSES.DLL+0x4b24c 55:AUDIOSES.DLL+0x4a590 57:AUDIOSES.DLL+0x4a400 63:Windows.UI.dll+0x77c84 67:Windows.UI.dll+0x77c84 72:DSOUND.dll+0x626f3 74:DSOUND.dll+0x5df55 78:DSOUND.dll+0x5df20 82:DSOUND.dll+0x605fa 87:DSOUND.dll+0x60480 96:KERNELBASE.dll+0x172f70 100:KERNELBASE.dll+0x15f4d8 107:DSOUND.dll+0x5cf6d 113:DSOUND.dll+0x5cdf0 121:DSOUND.dll+0x5cc46 122:DSOUND.dll+0x5cc20 123:DSOUND.dll+0x5cc20 126:KERNEL32.DLL+0x15d49 128:KERNEL32.DLL+0x15d30 130:ntdll.dll+0x6c75b 148:ntdll.dll+0x80c30 152:ntdll.dll+0x6c6e1 154:ntdll.dll+0xb6339 157:DSOUND.dll+0x5cc20
+thread 15828 pc ntdll.dll+0x7858c
+   0:ntdll.dll+0x93dc9 7:SC3U.exe+0xa0abc 9:KERNELBASE.dll+0x16a1f0 14:SIMCITY.DLL+0x17518 23:KERNELBASE.dll+0x16a236 29:SIMCITY.DLL+0xcc70 31:KERNELBASE.dll+0x172f70 35:SIMCITY.DLL+0xd007 38:SIMCITY.DLL+0xca27 40:msvcrt.dll+0x68d10 41:SIMCITY.DLL+0x17518 51:SIMCITY.DLL+0xc8e5 53:SIMCITY.DLL+0x11f98 56:SIMCITY.DLL+0xd0a5 58:SIMCITY.DLL+0xd08f 59:msvcrt.dll+0x68ca5 62:msvcrt.dll+0x68d10 63:msvcrt.dll+0x68d10 69:msvcrt.dll+0x5ea50 73:msvcrt.dll+0x68d71 75:KERNEL32.DLL+0x15d49 77:KERNEL32.DLL+0x15d30 79:ntdll.dll+0x6c75b 97:ntdll.dll+0x80c30 101:ntdll.dll+0x6c6e1 103:ntdll.dll+0xb6339 106:msvcrt.dll+0x68d10
+thread 23676 pc ntdll.dll+0x7a08c
+   0:ntdll.dll+0x957a1 13:ntdll.dll+0x68ff0 39:SIMDIRT.DLL+0x16ba2 40:SIMDIRT.DLL+0x24a2c 42:SIMDIRT.DLL+0x12dc2 53:ntdll.dll+0x9050c 65:ntdll.dll+0x52643 70:SIMSPR.DLL+0x54f3d 73:SIMSPR.DLL+0x7e0c 80:SIMSPR.DLL+0x1a2cf 83:SIMDIRT.DLL+0x20c01 88:SIMSPR.DLL+0x1a281 96:SIMSPR.DLL+0x197ff 111:SIMSPR.DLL+0x628e8 118:SIMSPR.DLL+0x5ded8 121:SIMSPR.DLL+0x188e7 124:SIMGEOM.DLL+0xe44b 139:SIMGEOM.DLL+0x30b30 142:SIMGEOM.DLL+0x1aed2 144:SIMGEOM.DLL+0x1d3f6 147:SIMGEOM.DLL+0xe2e8 155:SIMRCI.DLL+0x32fab 162:ntdll.dll+0x80c30 167:ntdll.dll+0x95f9e 168:SIMGEOM.DLL+0x30adc 169:ntdll.dll+0x51719 170:SIMGEOM.DLL+0x30ad8 178:SIMGEOM.DLL+0x1bab4 182:SIMRCI.DLL+0x330a5 189:SIMRCI.DLL+0x4d1e0 191:SIMRCI.DLL+0x1929d 203:SC3U.exe+0x7eee4 205:SIMRCI.DLL+0x1841f 231:ntdll.dll+0x95f01 240:SIMRCI.DLL+0x3378b 241:SC3U.exe+0x7eee4 245:ntdll.dll+0x95f9e 254:SIMRCI.DLL+0x314a9 255:SIMCITY.DLL+0x19cb 264:SIMCITY.DLL+0x16a9 267:SIMCITY.DLL+0x152f 269:msvcrt.dll+0x68d10 279:SIMCITY.DLL+0x114dc 282:SIMCITY.DLL+0xd0a5 284:SIMCITY.DLL+0xd08f 285:msvcrt.dll+0x68ca5 288:msvcrt.dll+0x68d10 289:msvcrt.dll+0x68d10 295:msvcrt.dll+0x5ea50 299:msvcrt.dll+0x68d71 301:KERNEL32.DLL+0x15d49 303:KERNEL32.DLL+0x15d30 305:ntdll.dll+0x6c75b 323:ntdll.dll+0x80c30 327:ntdll.dll+0x6c6e1 329:ntdll.dll+0xb6339 332:msvcrt.dll+0x68d10
+thread 62472 pc ntdll.dll+0x7a08c
+   0:ntdll.dll+0x957a1 13:ntdll.dll+0x68ff0 53:ntdll.dll+0x9050c 65:ntdll.dll+0x52643 70:SIMSPR.DLL+0x54f3d 73:SIMSPR.DLL+0x8aa8 76:SIMSPR.DLL+0x867f 80:SIMSPR.DLL+0x8688 81:SIMSPR.DLL+0x54c9e 83:msvcrt.dll+0x68d10 84:SIMSPR.DLL+0x54c89 85:msvcrt.dll+0x68ca5 88:msvcrt.dll+0x68d10 89:msvcrt.dll+0x68d10 95:msvcrt.dll+0x5ea50 99:msvcrt.dll+0x68d71 101:KERNEL32.DLL+0x15d49 103:KERNEL32.DLL+0x15d30 105:ntdll.dll+0x6c75b 123:ntdll.dll+0x80c30 127:ntdll.dll+0x6c6e1 129:ntdll.dll+0xb6339 132:msvcrt.dll+0x68d10
+thread 46232 pc ntdll.dll+0x787fc
+   0:WINMM.dll+0x7546 6:WINMM.dll+0x74f0 7:WINMM.dll+0x74f0 51:KERNEL32.DLL+0x15d49 53:KERNEL32.DLL+0x15d30 55:ntdll.dll+0x6c75b 73:ntdll.dll+0x80c30 77:ntdll.dll+0x6c6e1 79:ntdll.dll+0xb6339 82:WINMM.dll+0x74f0
+thread 73956 pc ntdll.dll+0x7a0bc
+   0:ntdll.dll+0x550b7 7:ntdll.dll+0x54d70 8:ntdll.dll+0x54d70 109:ntdll.dll+0x80c30 113:KERNEL32.DLL+0x15d49 115:KERNEL32.DLL+0x15d30 117:ntdll.dll+0x6c75b 135:ntdll.dll+0x80c30 139:ntdll.dll+0x6c6e1 141:ntdll.dll+0xb6339 144:ntdll.dll+0x54d70
+thread 36932 pc ntdll.dll+0x7a0bc
+   0:ntdll.dll+0x550b7 7:ntdll.dll+0x54d70 8:ntdll.dll+0x54d70 10:ntdll.dll+0x7a6b0 109:ntdll.dll+0x80c30 113:KERNEL32.DLL+0x15d49 115:KERNEL32.DLL+0x15d30 117:ntdll.dll+0x6c75b 135:ntdll.dll+0x80c30 139:ntdll.dll+0x6c6e1 141:ntdll.dll+0xb6339 144:ntdll.dll+0x54d70 207:CoreMessaging.dll+0x3b8c 208:CoreMessaging.dll+0x5988 245:sc3resize.dll+0x444f 252:nvd3dum.dll+0x158342d 253:nvd3dum.dll+0x582d31 255:nvd3dum.dll+0x2573239 261:profapi.dll+0xcd60 270:SC3U.exe+0xcbea7 279:CoreMessaging.dll+0x3b8c 280:CoreMessaging.dll+0x5988 297:CoreMessaging.dll+0x1168 298:CoreMessaging.dll+0x495c 304:SC3U.exe+0x9005c 369:CoreMessaging.dll+0x3b8c 370:CoreMessaging.dll+0x5988 401:nvd3dum.dll+0x2e660d0 405:inputhost.dll+0x6660 406:inputhost.dll+0x65e4 423:CoreMessaging.dll+0x332c 424:CoreMessaging.dll+0x5968 441:SIMUI.DLL+0x8509d 442:profapi.dll+0x18728 479:SC3U.exe+0xe0049 480:SC3U.exe+0xf0044 484:SC3U.exe+0x50054 487:SC3U.exe+0x90044 488:SC3U.exe+0x10004e 490:SC3U.exe+0x4002e 491:SC3U.exe+0xc004c 513:profapi.dll+0xcd80 514:profapi.dll+0x18148 515:rsaenh.dll+0xa3e0 516:rsaenh.dll+0x1f480 517:rsaenh.dll+0xd400 518:rsaenh.dll+0xabe0 519:rsaenh.dll+0x7a80 520:rsaenh.dll+0x1c5c0 521:rsaenh.dll+0xe8a0 522:rsaenh.dll+0x1e310 531:CoreMessaging.dll+0x3b8c 532:CoreMessaging.dll+0x5988 585:inputhost.dll+0xd28c
+23676 pc ntdll.dll+0x7a08c
+  0: ntdll.dll+0x957a1
+  1: CS? 0x103fcee8 LockCount -10 Recursion 2 Owner 64840
+  3: CS? 0x103fcee8 LockCount -10 Recursion 2 Owner 64840
+  13: ntdll.dll+0x68ff0
+  16: CS? 0x103fcee8 LockCount -10 Recursion 2 Owner 64840
+  17: CS? 0x103fcee8 LockCount -10 Recursion 2 Owner 64840
+  35: CS? 0x103fcee8 LockCount -10 Recursion 2 Owner 64840
+  39: SIMDIRT.DLL+0x16ba2
+  40: SIMDIRT.DLL+0x24a2c
+  42: SIMDIRT.DLL+0x12dc2
+  43: CS? 0x103fcee8 LockCount -10 Recursion 2 Owner 64840
+  53: ntdll.dll+0x9050c
+  55: CS? 0x103fcee8 LockCount -10 Recursion 2 Owner 64840
+  60: CS? 0x103fcee8 LockCount -10 Recursion 2 Owner 64840
+  65: ntdll.dll+0x52643
+  70: SIMSPR.DLL+0x54f3d
+  71: CS? 0x103fcee8 LockCount -10 Recursion 2 Owner 64840
+  73: SIMSPR.DLL+0x7e0c
+  80: SIMSPR.DLL+0x1a2cf
+  83: SIMDIRT.DLL+0x20c01
+  88: SIMSPR.DLL+0x1a281
+  96: SIMSPR.DLL+0x197ff
+  111: SIMSPR.DLL+0x628e8
+  118: SIMSPR.DLL+0x5ded8
+  121: SIMSPR.DLL+0x188e7
+  124: SIMGEOM.DLL+0xe44b
+  139: SIMGEOM.DLL+0x30b30
+  142: SIMGEOM.DLL+0x1aed2
+  144: SIMGEOM.DLL+0x1d3f6
+  147: SIMGEOM.DLL+0xe2e8
+  155: SIMRCI.DLL+0x32fab
+  162: ntdll.dll+0x80c30
+  167: ntdll.dll+0x95f9e
+  168: SIMGEOM.DLL+0x30adc
+  169: ntdll.dll+0x51719
+  170: SIMGEOM.DLL+0x30ad8
+  178: SIMGEOM.DLL+0x1bab4
+  182: SIMRCI.DLL+0x330a5
+  189: SIMRCI.DLL+0x4d1e0
+  191: SIMRCI.DLL+0x1929d
+  203: SC3U.exe+0x7eee4
+  205: SIMRCI.DLL+0x1841f
+  231: ntdll.dll+0x95f01
+  240: SIMRCI.DLL+0x3378b
+  241: SC3U.exe+0x7eee4
+  245: ntdll.dll+0x95f9e
+  254: SIMRCI.DLL+0x314a9
+  255: SIMCITY.DLL+0x19cb
+  264: SIMCITY.DLL+0x16a9
+  267: SIMCITY.DLL+0x152f
+  269: msvcrt.dll+0x68d10
+  279: SIMCITY.DLL+0x114dc
+  282: SIMCITY.DLL+0xd0a5
+  284: SIMCITY.DLL+0xd08f
+  285: msvcrt.dll+0x68ca5
+  288: msvcrt.dll+0x68d10
+  289: msvcrt.dll+0x68d10
+  295: msvcrt.dll+0x5ea50
+  299: msvcrt.dll+0x68d71
