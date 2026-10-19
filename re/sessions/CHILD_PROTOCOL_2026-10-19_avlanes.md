@@ -26,7 +26,7 @@ boulevard_paint, avenue_markings, lanelines), hwtraffic_probe.py / hwtrips_probe
 | `avjunc` | road x avenue X, road T on one side (a box across both halves), T on both halves, avenue x avenue: median openings with every turn; AVX 20800..20804 / 20810..20811 lanes; stock junction pieces refused today | 21750..21799 + AVX free 20805..20849 | 23700..23799 |
 | `avdiag` | the diagonal avenue family (DAV 20500..20594, diagx crossings), the hwave diagonal transition 21604..21609 | 21800..21849 + DAV free sub-ranges | 23800..23899 |
 | `avmisc` | big roundabout (rbt9) avenue arms, the hwave straight transition 21600..21603 (no lane swap any more) | 21850..21899 + bigrbt free 20605..20649 | 23900..23999 |
-| `bvlanes` | ALL boulevard pieces: BV 20700..20768 (outer, middle, caps, tapers, junctions 20710..20712, narrowing to an avenue 20750..20768), BVX 20900..20911, DBV 20950..21063 (its narrowing to a diagonal avenue meets avdiag's pieces: agree the edge with avdiag) | 21900..21949 + BV / BVX / DBV free sub-ranges | 24000..24199 |
+| `bvlanes` | ALL boulevard pieces: BV 20700..20768 (outer, middle, caps, tapers, junctions 20710..20712, narrowing to an avenue 20750..20768), BVX 20900..20911, DBV 20950..21063 (its narrowing to a diagonal avenue meets avdiag's pieces: agree the edge with avdiag) | 21900..21949 + BV / BVX / DBV free sub-ranges | 24000..24999 (24200..24999 granted 2026-10-19) |
 
 **avcore publishes, the others merge.** avcore states its base API (how a block asks "is this avenue converted, which
 direction does this half run", how other blocks' pieces join the one-way convention, the lane positions and curve
