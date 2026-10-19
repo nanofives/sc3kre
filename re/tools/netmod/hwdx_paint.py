@@ -4,6 +4,7 @@ per-cell art of the package.
 
   py -3.12 hwdx_paint.py mockup OUT.png [--art DIR]    zoom 3 and 4, views 0 and 1, case A (plan clover)
   py -3.12 hwdx_paint.py art PKG_DIR [id ...]          the package art: PKG_DIR/art/<id>/ (gitignored)
+  py -3.12 hwdx_paint.py lanes PKG_DIR SHAPE0 [id ...] lane specs PKG_DIR/lanes/<id>.json, curve shapes from SHAPE0
   py -3.12 hwdx_paint.py pad PKG_DIR                   grow every frame to its full cell diamond (after art)
 
 The geometry is hwdx_plan.py (case frame = world frame of case A with O at (0, 0)); hwpaint.py is hwcore's painter,
@@ -84,7 +85,13 @@ def _gaps(ramps):
     return out
 
 
-def scene_A():
+CAP_END = 6.5             # task hwcap: the capped scene's +d arm ends here, on the median (the anti-diagonal of
+                          # cell (6, 6), where stock cap 14999.2 ends the band)
+
+
+def scene_A(capped=False):
+    """case A's cloverleaf; capped (task hwcap) = the diagonal's +d arm ends at (CAP_END, CAP_END) with hwpaint's stock
+    end faces, as a drag that ends on cell (6, 6) leaves it (stock cap 14999.2 there)"""
     ramps = [(t, False) for t in G.ramps_north("clover").values()] +             [(t, True) for t in G.ramps_north("clover").values()]
     gaps = _gaps(ramps)
     decks = []
@@ -99,8 +106,10 @@ def scene_A():
     # runs at H_LOW under S; s along the median = (z + N) * sqrt 2
     zs = lambda z: (z + N) * R2                                    # noqa: E731
     dn = lambda s: np.maximum(HP.ramp(HP.H, HP.H_LOW, zs(-2), zs(-1))(s), HP.ramp(HP.H_LOW, HP.H, zs(1), zs(2))(s))  # noqa
-    d_up, d_down = HP.highway_diag(HP.Path.line((-N, -N), (N, N)), height=dn, gaps=gaps.get("D+", []))
-    d_down.gaps = [(g0, g1, sd) for g0, g1, sd in gaps.get("D-", [])]
+    E = CAP_END if capped else N
+    d_up, d_down = HP.highway_diag(HP.Path.line((-N, -N), (E, E)), height=dn, gaps=gaps.get("D+", []))
+    sh = (N - E) * R2                                              # D- starts at E, not N: its s moves back
+    d_down.gaps = [(g0 - sh, g1 - sh, sd) for g0, g1, sd in gaps.get("D-", []) if g1 - sh > 0]
     d_up.name, d_down.name = "D+", "D-"
     decks += [d_up, d_down]
     for name, t in G.ramps_north("clover").items():
@@ -195,9 +204,10 @@ def xdeck(d, rot, mirror):
                    d.pw, None, d.ends[::-1] if mirror else d.ends, d.name, d.fascia, slab, gaps=gaps)
 
 
-def scene(case="A", rot=0):
-    """the cloverleaf of `case` (B = A mirrored, directions reversed) turned `rot` quarter turns about O = (0, 0)"""
-    base = scene_A()
+def scene(case="A", rot=0, capped=False):
+    """the cloverleaf of `case` (B = A mirrored, directions reversed) turned `rot` quarter turns about O = (0, 0);
+    capped = the arm through case cell (6, 6) / B's (6, -7) ends there (task hwcap)"""
+    base = scene_A(capped)
     if case == "A" and rot % 4 == 0:
         return base
     return HP.Scene([xdeck(d, rot, case == "B") for d in base.decks])
@@ -297,9 +307,9 @@ def cmd_art(pkg, only=None):
                 os.path.exists(os.path.join(d, "z%d_r%d.png" % (z, r))) for z in range(5) for r in range(4)):
             continue
         case, c = p["rep"]
-        key = (case, p["r"])
+        key = (case, p["r"], p.get("capped", False))
         if key not in cache:
-            cache[key] = scene(case, p["r"])
+            cache[key] = scene(case, p["r"], p.get("capped", False))
         w = H.to_world((0, 0), p["r"], c)
         HP.paint_cell(cache[key], w, d, crop=os.environ.get("HWDX_FULL") != "1")   # HWDX_FULL=1: full-column frames
         done += 1
@@ -308,7 +318,7 @@ def cmd_art(pkg, only=None):
     print("painted %d pieces" % done)
 
 
-def cmd_lanes(pkg, shape0):
+def cmd_lanes(pkg, shape0, only=None):
     """lane specs for every piece: <pkg>/lanes/<id>.json. Lanes are cut by hwcore's hwlanes from the same decks the art
     is painted from (rep cell, crossing turned so it sits at state 0), records for all four states; the turn matrix is
     hwdx's own table (hwdx.pieces_list flows), not "auto": in the core the true-geometry lanes would merge S and D
@@ -321,10 +331,12 @@ def cmd_lanes(pkg, shape0):
     shape = shape0
     nl = 0
     for p in H.pieces_list():
+        if only and p["id"] not in only:
+            continue
         case, c = p["rep"]
-        key = (case, p["r"])
+        key = (case, p["r"], p.get("capped", False))
         if key not in cache:
-            cache[key] = scene(case, p["r"])
+            cache[key] = scene(case, p["r"], p.get("capped", False))
         w = H.to_world((0, 0), p["r"], c)
         specs, shape = HL.build_cells(cache[key].decks, [w], shape, {w: p["id"]}, states=(0, 1, 2, 3))
         spec = specs.get(w)
@@ -380,7 +392,7 @@ if __name__ == "__main__":
         os.makedirs(art, exist_ok=True)
         cmd_mockup(a[1], art)
     elif a and a[0] == "lanes":
-        cmd_lanes(a[1], int(a[2]))
+        cmd_lanes(a[1], int(a[2]), {int(x) for x in a[3:]} or None)
     elif a and a[0] == "pad":
         cmd_pad(a[1])
     elif a and a[0] == "art":

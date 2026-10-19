@@ -33,6 +33,11 @@ import math
 import os
 import sys
 
+try:
+    from . import hwcap                  # task hwcap: stock end caps, arms carried on
+except ImportError:
+    import hwcap
+
 SQ2 = math.sqrt(2.0)
 LANE_IN, LANE_OUT = 0.17, 0.40       # stock diagonal highway lanes, |offset| from the centreline, true cells
 LANE_MID = (LANE_IN + LANE_OUT) / 2  # where the carriageway arrows are drawn
@@ -928,12 +933,23 @@ def twin_pass(lab, box, T):
 
     def test(o, par, kind):
         rows = T[par][kind]
-        nland = have = free = 0
+        nland = have = free = ncap = 0
         allin = True
+        plan[0] = hwcap.Plan()
         for (dx, dz, role, pid, st, base, bst, land) in rows:
             c = (o[0] + dx, o[1] + dz)
             v = lab.at(c)
             m = bool(v) and v == (pid, st)
+            if role in (2, 4) and not m and (not v or v[0] in CAPS):    # task hwcap: the arm ends here or before
+                ncap += 1
+                if base in (11223, 11224):
+                    step = (1, 1) if dx + dz > 0 else (-1, -1)
+                else:
+                    step = (1, -1) if dx - dz > 0 else (-1, 1)
+                free_c = lambda q: inbox(q) and q not in lab.blocked      # noqa: E731
+                if not hwcap.need(plan[0], lab.lay, c, step, 0, free_c):
+                    return 0
+                continue
             if role in (1, 2):
                 if not v:                             # any highway: a stock retile may have re-placed the cell
                     return 0
@@ -959,15 +975,16 @@ def twin_pass(lab, box, T):
         if nland:
             hl = sum(1 for r in rows if r[2] == 3 and lab.at((o[0] + r[0], o[1] + r[1])) == (r[3], r[4]))
             if hl == nland:
-                return 1
+                return 0 if ncap else 1
             if hl or free != nland or not allin:
                 return 0
             return 2
         if have:
-            return 1
+            return 0 if ncap else 1
         return 2 if allin else 0
 
     res, writes, kept = [], {}, set()
+    plan = [None]
     for o, par in cands:
         r, kind = test(o, par, "clover"), "clover"
         if not r:                                           # hwdd_unbuild: clover cells outside the box go back
@@ -980,6 +997,14 @@ def twin_pass(lab, box, T):
             res.append((o, par, "none"))
             continue
         res.append((o, par, ("built " if r == 2 else "kept ") + kind))
+        if r == 2:                                          # task hwcap: arms first, the pieces over them
+            ext, carried = hwcap.commit(plan[0], {0})
+            for c, v in ext.items():
+                writes[c] = v
+                kept.add(c)
+                lab.lay[c] = v
+            if carried:
+                res[-1] = (o, par, res[-1][2] + " (arm carried on %s)" % ", ".join("%s +%d" % (a, n) for a, n, _ in carried))
         for (dx, dz, role, pid, st, base, bst, land) in T[par][kind]:
             if role <= 3:
                 c = (o[0] + dx, o[1] + dz)
@@ -1073,8 +1098,20 @@ def cmd_check():
         fails += r6 not in (["built fly"], ["kept fly"])
         short = Lab(aftermath(par, O, cut=("N", 4)))
         r5 = [r[2] for r in twin_pass(short, box, T)[0]]
-        print("   north arm only 4 cells past O -> %s" % r5)
+        print("   north arm only 4 cells past O (no stock cap) -> %s" % r5)
         fails += r5 not in (["none"], ["built fly"])
+        for blockd in (False, True):                        # task hwcap: the same arm with its stock end cap
+            lay = aftermath(par, O, cut=("N", 4))
+            band = [c for c, v in lay.items() if v[0] in (11223, 11224)]
+            ends = hwcap.stock_ends(lay, band, lambda i, s_, c: (i, s_))
+            nend = min(ends, key=lambda e: to_pq(e[0][0] - O[0] + 0.5, e[0][1] - O[1] + 0.5, Geo(par).o)[1])
+            capc, step = nend
+            blk = [(capc[0] + step[0], capc[1] + step[1])] if blockd else []
+            r7 = [r[2] for r in twin_pass(Lab(lay, blocked=blk), box, T)[0]]
+            print("   north arm capped 4 cells past O (stock cap %s at %s)%s -> %s" % (
+                lay[capc], capc, ", the cell past the cap taken" if blockd else "", r7))
+            fails += (not r7 or not r7[0].startswith("built clover (arm carried on")) if not blockd else \
+                r7 not in (["none"], ["built fly"])
     print("FAIL %d" % fails if fails else "all checks pass")
     return fails
 

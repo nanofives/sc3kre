@@ -19,7 +19,12 @@
  *    read with hwy_read);
  *  - FRESH: the core is written; each quadrant whose joining cells hold the plain stock highway and whose ramp cells
  *    are hwy_free and unclaimed (all inside the read box) is written too. Quadrants are independent: each joins only
- *    its own two carriageways;
+ *    its own two carriageways. A joining cell that holds the arm's stock end cap, or nothing past it (the player's
+ *    drag ends inside the joining zone), counts when the arm can be carried on (sc3netmod_hwcap.c, task hwcap): the
+ *    arm is then extended with stock pieces to one row past the quadrant's last joining cell, its cap moved there.
+ *    When it cannot be (the land past the end takes no highway, e.g. Seoul's lake) and the cap sits on a diagonal arm's
+ *    last joining cell, that cell gets the CAPPED JOIN (g_hwdx_cap: the join with the stock end face, base = the stock
+ *    cap, written at the cap's own state); a straight arm has none, so its quadrant still drops;
  *  - EXISTING: the core is kept; a quadrant is kept while every one of its ramp cells holds its piece (its joining
  *    cells are re-written if a stock retile put the plain highway back). A player who bulldozes a ramp cell loses
  *    that quadrant (hwy_end reverts the rest); quadrants are only added on a fresh build.
@@ -33,7 +38,7 @@
 
 typedef struct { int ox, oz, cs, r, fresh; } HwdxFound;
 
-static int g_hwdx_off = -1;
+static int g_hwdx_off = -1, g_hwdx_capon = 1;
 static WORD g_hwdx_lo = 0xffff, g_hwdx_hi;
 static volatile LONG g_hwdx_n_new, g_hwdx_n_keep, g_hwdx_n_q, g_hwdx_n_drop;
 
@@ -115,9 +120,32 @@ static void hwdx_add(HwdxFound *f, int *nf, int ox, int oz, int cs, int r, int f
     (*nf)++;
 }
 
+/* outward step of the arm a table cell lies on (case frame turned r times): the straight's rows j -1 / 0 run along x,
+ * the band is (k + d, k) in case A and (k + d, -1 - k) in case B (task hwcap) */
+static void hwdx_arm_step(const HwdxCell *c, const HwdxFound *F, int *sx, int *sz) {
+    if (c->j == -1 || c->j == 0) { *sx = c->i >= 0 ? 1 : -1; *sz = 0; }
+    else if (!F->cs) *sx = *sz = c->j > 0 ? 1 : -1;
+    else { *sx = c->j < 0 ? 1 : -1; *sz = -*sx; }
+    hwy_rot(F->r, sx, sz);
+}
+
+/* task hwcap: the capped join of a table cell (0 = none), and whether v is the stock cap it stands for: the arm's own
+ * end (outward step = the arm's) with the capped join's base id */
+static WORD hwdx_capid(const HwdxCell *c, const HwdxFound *F) {
+    return g_hwdx_capon ? g_hwdx_cap[c->cls][F->r & 1][0] : 0;
+}
+
+static int hwdx_capok(const HwdxCell *c, const HwdxFound *F, DWORD v) {
+    int sx, sz, dx, dz;
+    if (!hwdx_capid(c, F) || !hwcap_dir(v, &dx, &dz) || hwy_id(v) != g_hwdx_cap[c->cls][F->r & 1][1]) return 0;
+    hwdx_arm_step(c, F, &sx, &sz);
+    return dx == sx && dz == sz;
+}
+
 /* one quadrant: 2 = keep / write it (every ramp cell holds its piece, every joining cell holds its piece or the plain
- * stock highway), 1 = buildable on a fresh crossing (ramp cells hold their piece or are free), 0 = neither */
-static int hwdx_quad(HwyPass *hp, const HwdxFound *F, int q) {
+ * stock highway), 1 = buildable on a fresh crossing (ramp cells hold their piece or are free; a joining cell past the
+ * arm's end cap counts when hwcap can carry the arm on: recorded in `cap` under tag q), 0 = neither */
+static int hwdx_quad(HwyPass *hp, const HwdxFound *F, int q, HwcapSet *cap) {
     int n, k, st, ramp_have = 1, can = 1;
     const HwdxCell *t = hwdx_tab(F->cs, &n);
     for (k = 0; k < n; k++) {
@@ -131,9 +159,17 @@ static int hwdx_quad(HwyPass *hp, const HwdxFound *F, int q) {
         v = hwdx_rd(hp, x, z);
         mine = hwy_id(v) == id && hwy_st(v) == st;
         if (mine) continue;
+        if (t[k].kind == 1 && v && hwy_id(v) == hwdx_capid(&t[k], F)) continue;   /* its capped join (task hwcap) */
         if (!hwdx_inbox(hp, x, z) || hwy_claimed(x, z)) return 0;        /* would have to be written */
         if (t[k].kind == 1) {                            /* joins a highway: the plain stock piece there */
-            int sym = base == 11224 || base == 15106;
+            int sym = base == 11224 || base == 15106, sx, sz;
+            if (!v || hwcap_is(v)) {                     /* task hwcap: the arm ends here or before */
+                hwdx_arm_step(&t[k], F, &sx, &sz);
+                if (F->fresh && hwcap_need(hp, cap, x, z, sx, sz, q)) continue;
+                if (hwdx_capok(&t[k], F, v)) continue;   /* it ends on this cell: the capped join */
+                if (F->fresh) logf("hwdx: %s: crossing O (%d,%d) quadrant %d: %s", hp->who, F->ox, F->oz, q, g_hwcap_why);
+                return 0;
+            }
             if (hwy_id(v) != base || (hwy_st(v) != st && !(sym && ((hwy_st(v) ^ st) & 1) == 0))) return 0;
         } else {                                         /* ramp alone */
             ramp_have = 0;
@@ -152,6 +188,13 @@ static void hwdx_write(HwyPass *hp, const HwdxFound *F, int q) {    /* q = 255: 
         if (t[k].quad != q) continue;
         id = hwdx_want(&t[k], F->r, &st, NULL);
         hwdx_cell(t[k].i, t[k].j, F->r, &x, &z);
+        if (t[k].kind == 1) {                            /* task hwcap: the arm ends on it -> its capped join */
+            DWORD v = hwdx_rd(hp, F->ox + x, F->oz + z);
+            if (v && (hwy_id(v) == hwdx_capid(&t[k], F) || hwdx_capok(&t[k], F, v))) {
+                id = hwdx_capid(&t[k], F);
+                st = hwy_st(v);
+            }
+        }
         if (hwy_put(hp, F->ox + x, F->oz + z, id, st) < 0)
             logf("### hwdx: %s: cell (%d,%d) refused piece %u.%d", hp->who, F->ox + x, F->oz + z, id, st);
     }
@@ -172,6 +215,13 @@ static void hwdx_run(HwyPass *hp) {
                 if (id > g_hwdx_hi) g_hwdx_hi = id;
             }
         }
+        for (k = 0; k < HWDX_NCLS && g_hwdx_capon; k++)  /* task hwcap: an older package without the capped joins */
+            if ((g_hwdx_cap[k][0][0] && hwy_piece(g_hwdx_cap[k][0][0]) < 0) ||
+                (g_hwdx_cap[k][1][0] && hwy_piece(g_hwdx_cap[k][1][0]) < 0)) {
+                logf("hwdx: capped joins not declared (package older than task hwcap) - an arm that cannot be carried on "
+                     "drops its quadrant");
+                g_hwdx_capon = 0;
+            }
         logf("hwdx: %s (%d classes, ids %u..%u)", g_hwdx_off ? "off" : "on", HWDX_NCLS, g_hwdx_lo, g_hwdx_hi);
     }
     if (g_hwdx_off) return;
@@ -208,7 +258,10 @@ static void hwdx_run(HwyPass *hp) {
     for (k = 0; k < nf; k++) {
         HwdxFound *f = &F[k];
         int st[4], n, j, ok = 1;
+        unsigned use = 0;
+        HwcapSet cap;
         const HwdxCell *t = hwdx_tab(f->cs, &n);
+        cap.n = cap.nn = 0;
         if (f->fresh)
             for (j = 0; j < n && t[j].kind == 0; j++) {  /* the core: unclaimed */
                 int cx, cz;
@@ -216,8 +269,12 @@ static void hwdx_run(HwyPass *hp) {
                 if (hwy_claimed(f->ox + cx, f->oz + cz)) ok = 0;
             }
         if (!ok) continue;
-        for (q = 0; q < 4; q++) st[q] = hwdx_quad(hp, f, q);
+        for (q = 0; q < 4; q++) {
+            st[q] = hwdx_quad(hp, f, q, &cap);
+            if (st[q] == 2 || (f->fresh && st[q] == 1)) use |= 1u << q;
+        }
         hwdx_write(hp, f, 255);
+        hwcap_commit(hp, &cap, use);                     /* task hwcap: arms the built quadrants need, before them */
         for (q = 0; q < 4; q++) {
             if (st[q] == 2 || (f->fresh && st[q] == 1)) {
                 hwdx_write(hp, f, q);

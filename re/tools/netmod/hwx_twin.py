@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 
 import hwx                      # noqa: E402
 import hwx_build as B           # noqa: E402
+import hwcap                    # noqa: E402  task hwcap: stock end caps, arms carried on
 
 DIRS = [(-1, 0), (0, -1), (1, 0), (0, 1)]
 ARM_IN = [(2, -1), (2, 0), (-3, -1), (-3, 0), (-1, 2), (0, 2), (-1, -3), (0, -3)]   # just outside the 4x4
@@ -126,7 +127,16 @@ def run(m, who="edit"):
         if who == "load":
             continue
         why = []
-        ok = _clover_ok(m, ax, az, L, existing=False, why=why)
+        plan = hwcap.Plan()
+        ok = _clover_ok(m, ax, az, L, existing=False, why=why, plan=plan)
+        if ok:                                         # task hwcap: arms that end in the junction cells, carried on
+            ext, carried = hwcap.commit(plan, {0})
+            for c, ps in ext.items():
+                m.hw[c] = ps
+                m.free_set.discard(c)
+                m.claimed.add(c)
+            for cap, rows, new in carried:
+                m.log.append("arm end %s carried on %d row(s), cap now at %s" % (cap, rows, new))
         for dx, dz, pid, put, cls in L:
             if cls == "core" or ok:
                 m.put(ax + dx, az + dz, pid, put)
@@ -135,13 +145,19 @@ def run(m, who="edit"):
     return m
 
 
-def _clover_ok(m, ax, az, L, existing, why=None):
+def _clover_ok(m, ax, az, L, existing, why=None, plan=None):
     why = why if why is not None else []
     cells = {(dx, dz) for dx, dz, _, _, _ in L}
     for dx, dz in arm_cells():
         v = m.at(ax + dx, az + dz)
         plain = hwx.carriageway((dx, dz))[1]
         mine = [(pid, put) for ddx, ddz, pid, put, cls in L if (ddx, ddz) == (dx, dz)]
+        if v != plain and not existing and plan is not None and (v is None or v[0] in hwcap.CAP_IDS):
+            step = ((1 if dx > 0 else -1), 0) if dx not in (-1, 0) else (0, (1 if dz > 0 else -1))
+            if hwcap.need(plan, m.hw, (ax + dx, az + dz), step, 0, lambda c: m.free(*c), m.claimed):
+                continue                               # task hwcap: the arm ends here or before, carried on
+            why.append(plan.why)
+            return False
         if v != plain and not (existing and v in mine):
             why.append("arm cell (%d,%d) is not plain straight highway" % (dx, dz))
             return False
@@ -167,8 +183,9 @@ def _clover_ok(m, ax, az, L, existing, why=None):
     return True
 
 
-def drag_city(save, order):
-    """the lab city with two crossing straight highway drags (tiler.py), x first or z first -> (Map, centre)"""
+def drag_city(save, order, x1=74):
+    """the lab city with two crossing straight highway drags (tiler.py), x first or z first -> (Map, centre).
+    x1 = one past the x drag's last column; the drags' ends get the stock caps (hwcap.stock_ends, task hwcap)"""
     from netmod import tiler, netrules, paths
     g = paths.Game()
     rules = tiler.Rules(g.tiling)
@@ -183,13 +200,15 @@ def drag_city(save, order):
             if c not in lay:
                 lay[c] = tiler.Piece(pid, s, city.h(*c))
         T.retile(4, cells)
-    xa = [(x, zc) for x in range(43, 74)] + [(x, zc + 1) for x in range(43, 74)]
+    xa = [(x, zc) for x in range(43, x1)] + [(x, zc + 1) for x in range(43, x1)]
     za = [(xc, z) for z in range(13, 44)] + [(xc + 1, z) for z in range(13, 44)]
-    xd = (xa, 15051, [2] * 31 + [0] * 31)
+    xd = (xa, 15051, [2] * (x1 - 43) + [0] * (x1 - 43))
     zd = (za, 73, [2] * 31 + [0] * 31)
     for d in ((xd, zd) if order == "xz" else (zd, xd)):
         drag(*d)
     hw = {c: (p.id, p.state) for c, p in lay.items() if p.id and T.predA(4, p)}
+    if x1 != 74:                                       # the stock caps on a drag that ends near the X
+        hwcap.stock_ends(hw, xa, lambda i, s, c: (i, s))
     free = {(x, z) for x in range(city.n) for z in range(city.n) if (x, z) not in lay}
     return Map(hw, free, city.n), (xc + 1, zc + 1)
 
@@ -232,6 +251,22 @@ def cmd_rule(save):
         v[0] < 21160 and v[0] >= 21120 for v in m.hw.values())
     print("arm cut at dx 4 -> %s  [%s]" % (m.log[-1], "ok" if ok else "FAIL"))
     fails += not ok
+    for blocked in (False, True):                                 # task hwcap: the +x arm capped on dx 5
+        m4, (cx, cz) = drag_city(save, "xz", x1=58 + 6)
+        if blocked:
+            m4.free_set.discard((cx + 6, cz - 1))
+        cap = m4.at(cx + 5, cz - 1), m4.at(cx + 5, cz)
+        run(m4)
+        got = " | ".join(m4.log)
+        if blocked:
+            ok = "new clean flyover" in got
+        else:
+            ok = "new cloverleaf" in got and "carried on 1 row(s)" in got and m4.at(cx + 6, cz - 1) == cap[0] and \
+                m4.at(cx + 6, cz) == cap[1] and not [1 for dx, dz, pid, put, cls in layout()
+                                                     if m4.at(cx + dx, cz + dz) != (pid, put)]
+        print("+x arm capped on its last junction cell %s%s -> %s  [%s]" % (
+            cap, " (the cell past it taken)" if blocked else "", got, "ok" if ok else "FAIL"))
+        fails += not ok
     m3, _ = drag_city(save, "xz")
     run(m3, who="load")
     ok = not any(v[0] >= 21120 for v in m3.hw.values())

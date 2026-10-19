@@ -20,6 +20,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 import hwt_cells  # noqa: E402
+import hwcap      # noqa: E402  task hwcap: stock end caps, arms carried on
 from hwt_layout import (Grid, heading, rot, world, stock_cap_from_minus_z, stock_stub_x, synth_cap,  # noqa: E402
                         PIECE_OF)
 
@@ -47,12 +48,25 @@ def in_set(dx, dz, s):
     return any(c["sets"] & s and c["dx"] == dx and c["dz"] == dz for c in CELLS)
 
 
-def check(g, a, r, gesture, s, claimed):
+def straight_or_cap(g, a, r, cell, step, plan, claimed):
+    """a straight cell, or (task hwcap) one at / past that highway's stock end cap that it can be carried on to;
+    step = the frame step away from the T"""
+    if straight(g, a, r, *cell):
+        return True
+    w = world(a, r, cell)
+    v = g.get(w)
+    if (v and v[0] not in hwcap.CAP_IDS) or w in claimed or plan is None:
+        return False
+    return bool(hwcap.need(plan, g.c, w, rot(*step, r), 0, g.free, claimed))
+
+
+def check(g, a, r, gesture, s, claimed, plan=None):
     sel = [c for c in CELLS if c["sets"] & s]
     tx = [c["dx"] for c in sel if c["dz"] in (0, 1)]
     sz0 = min([c["dz"] for c in sel if c["dz"] < 0 and c["dx"] in (0, 1)] + [0])
     for dz in range(-2, sz0 - 2, -1):
-        if not (straight(g, a, r, 0, dz) and straight(g, a, r, 1, dz)):
+        if not (straight_or_cap(g, a, r, (0, dz), (0, -1), plan, claimed) and
+                straight_or_cap(g, a, r, (1, dz), (0, -1), plan, claimed)):
             return "stem"
     if gesture == 1:
         p0, p1 = g.get(world(a, r, (0, -1))), g.get(world(a, r, (1, -1)))
@@ -73,7 +87,11 @@ def check(g, a, r, gesture, s, claimed):
     for dx in range(min(tx) - 1, max(tx) + 2):
         if gesture == 2 and -1 <= dx <= 2:
             continue
-        if not (straight(g, a, r, dx, 0) and straight(g, a, r, dx, 1)):
+        if 0 <= dx <= 1:                                   # where the stem meets it: never carried on
+            if not (straight(g, a, r, dx, 0) and straight(g, a, r, dx, 1)):
+                return "through highway"
+        elif not (straight_or_cap(g, a, r, (dx, 0), (-1 if dx < 0 else 1, 0), plan, claimed) and
+                  straight_or_cap(g, a, r, (dx, 1), (-1 if dx < 0 else 1, 0), plan, claimed)):
             return "through highway"
     for c in sel:
         w = world(a, r, (c["dx"], c["dz"]))
@@ -160,11 +178,18 @@ def run(g):
         for r in range(4):
             d = rot(0, -1 if gesture == 1 else 0, r)
             a = (xz[0] - d[0], xz[1] - d[1])
-            why = check(g, a, r, gesture, 1, claimed)
+            plan = hwcap.Plan()
+            why = check(g, a, r, gesture, 1, claimed, plan)
             s = 1
             if RIO and why in ("far side not free", "far side touches other highway") and gesture == 1:
-                why, s = check(g, a, r, gesture, 2, claimed), 2
+                plan = hwcap.Plan()
+                why, s = check(g, a, r, gesture, 2, claimed, plan), 2
             if why is None:
+                ext, carried = hwcap.commit(plan, {0})             # task hwcap: arms first, the T over them
+                g.c.update(ext)
+                claimed |= set(ext)
+                for cap, rows, new in carried:
+                    out.append(("carried", cap, rows, new))
                 cells = place(a, r, s)
                 if gesture == 2:
                     for cell in ((-1, 0), (-1, 1), (2, 0), (2, 1)):
@@ -224,6 +249,27 @@ def selftest():
     run(g)
     del g.c[(60, 57)]                                                       # frame (0, -3): a stem cell
     t(run(g) == [("broken", 0, (60, 60), 0, 1)], "a stem cell cut -> broken")
+    # task hwcap: the through highway / the stem ends inside what the T needs (through dx -3..8, stem dz -2..-5), with
+    # the stock end caps on both ends of every drag (hwcap.stock_ends)
+    for r in (0, 1):
+        for name, thr, stem, blk, want in (
+                ("through highway capped on dx 8", (-8, 8), (-10, -1), None, ["carried", "built"]),
+                ("through highway capped on dx -3", (-3, 10), (-10, -1), None, ["carried", "built"]),
+                ("stem capped on dz -5", (-8, 10), (-5, -1), None, ["carried", "built"]),
+                ("through highway capped on dx 8, dx 9 taken", (-8, 8), (-10, -1), (9, 0), [])):
+            a = (60, 60)
+            c = {}
+            th = [world(a, r, (x, z)) for x in range(thr[0], thr[1] + 1) for z in (0, 1)]
+            st = [world(a, r, (x, z)) for z in range(stem[0], stem[1] + 1) for x in (0, 1)]
+            full = synth_cap(a, r)
+            for w in th + st:
+                c[w] = full.get(w) or c.get(w)
+            hwcap.stock_ends(c, th, lambda i, s_, w: (i, s_))
+            hwcap.stock_ends(c, st, lambda i, s_, w: (i, s_))
+            bw = world(a, r, blk) if blk else None
+            res = run(Grid(c, buildings=[(bw[0], bw[1], 1, 1)] if bw else []))
+            kinds = [e[0] for e in res]
+            t(kinds == want, "%s, turn %d -> %s" % (name, r, res))
     print("selftest", "PASSED" if ok else "FAILED")
     return 0 if ok else 1
 

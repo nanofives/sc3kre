@@ -16,7 +16,9 @@
  *              four arms continue: agreed 2026-10-18)
  * and then: the stem straight from dz -2 to one past the T's last stem cell, the through highway straight one past the
  * T's cells both ways, every cell of the T inside the pass's read box, its land cells hwy_free and unclaimed, no other
- * highway touching a land cell from outside the T. Full T only: when the far side is not free the stem keeps its caps
+ * highway touching a land cell from outside the T. A stem or through-highway cell there holding that highway's stock
+ * end cap, or nothing past it (the drag ends inside the T), counts when hwcap can carry the highway on to one past it
+ * (sc3netmod_hwcap.c, task hwcap: stock pieces, the cap moved out); a T already built never grows them. Full T only: when the far side is not free the stem keeps its caps
  * and nothing is built (owner call 2026-10-18). The right-in / right-out set (cells tagged set 2: NB -> EB and EB -> SB
  * only) stays in the tables and in the code behind HWT_RIO = 0; Ts already built with it are still recognised.
  * A built T is recognised by vote: each of its pieces names an anchor (id -> frame cell, state -> r); an anchor with
@@ -110,9 +112,23 @@ static void hwt_plain(int hx, int hz, WORD *id, int *st) {
     else { *id = 73; *st = hz > 0 ? 0 : 2; }
 }
 
-/* the strict check of a NEW T at (ax, az, r): 1 = build it */
-static int hwt_check(HwyPass *hp, int ax, int az, int r, int gesture, int set, const char **why) {
+/* a straight cell of the stem / through highway, or (task hwcap) one past that highway's end that hwcap can carry
+ * it on to: (sx, sz) = the frame step away from the T */
+static int hwt_straight_or_cap(HwyPass *hp, HwcapSet *cap, int ax, int az, int r, int dx, int dz, int sx, int sz) {
+    int x, z;
+    DWORD v;
+    if (hwt_straight(hp, ax, az, r, dx, dz)) return 1;
+    hwt_world(ax, az, r, dx, dz, &x, &z);
+    v = hwt_inbox(hp, x, z) ? hwy_at(hp, x, z) : 0;
+    if (!hwt_inbox(hp, x, z) || (v && !hwcap_is(v)) || hwy_claimed(x, z)) return 0;
+    hwy_rot(r, &sx, &sz);
+    return hwcap_need(hp, cap, x, z, sx, sz, 0) != 0;
+}
+
+/* the strict check of a NEW T at (ax, az, r): 1 = build it (arms to carry on recorded in `cap`) */
+static int hwt_check(HwyPass *hp, int ax, int az, int r, int gesture, int set, const char **why, HwcapSet *cap) {
     int k, x, z, dx, dz, tx0 = 99, tx1 = -99, sz0 = 0;
+    cap->n = cap->nn = 0;
     for (k = 0; k < g_hwt_n; k++) {
         HwtCell *c = &g_hwt_c[k];
         if (!(c->sets & set)) continue;
@@ -123,7 +139,9 @@ static int hwt_check(HwyPass *hp, int ax, int az, int r, int gesture, int set, c
     }
     if (tx0 > tx1) { *why = "no cells in this set"; return 0; }
     for (dz = -2; dz >= sz0 - 1; dz--)                                    /* the stem behind the end */
-        if (!hwt_straight(hp, ax, az, r, 0, dz) || !hwt_straight(hp, ax, az, r, 1, dz)) { *why = "stem"; return 0; }
+        if (!hwt_straight_or_cap(hp, cap, ax, az, r, 0, dz, 0, -1) || !hwt_straight_or_cap(hp, cap, ax, az, r, 1, dz, 0, -1)) {
+            *why = "stem"; return 0;
+        }
     if (gesture == 1) {
         hwt_world(ax, az, r, 0, -1, &x, &z);
         if (!hwt_is_id(hwy_at(hp, x, z), 11235, 15053)) { *why = "no cap"; return 0; }
@@ -147,7 +165,10 @@ static int hwt_check(HwyPass *hp, int ax, int az, int r, int gesture, int set, c
     }
     for (dx = tx0 - 1; dx <= tx1 + 1; dx++) {                            /* the through highway */
         if (gesture == 2 && dx >= -1 && dx <= 2) continue;
-        if (!hwt_straight(hp, ax, az, r, dx, 0) || !hwt_straight(hp, ax, az, r, dx, 1)) { *why = "through highway"; return 0; }
+        if (dx >= 0 && dx <= 1) {                                        /* where the stem meets it: never carried on */
+            if (!hwt_straight(hp, ax, az, r, dx, 0) || !hwt_straight(hp, ax, az, r, dx, 1)) { *why = "through highway"; return 0; }
+        } else if (!hwt_straight_or_cap(hp, cap, ax, az, r, dx, 0, dx < 0 ? -1 : 1, 0) ||
+                   !hwt_straight_or_cap(hp, cap, ax, az, r, dx, 1, dx < 0 ? -1 : 1, 0)) { *why = "through highway"; return 0; }
     }
     for (k = 0; k < g_hwt_n; k++) {                                      /* the cells */
         HwtCell *c = &g_hwt_c[k];
@@ -169,8 +190,9 @@ static int hwt_check(HwyPass *hp, int ax, int az, int r, int gesture, int set, c
     return 1;
 }
 
-static void hwt_build(HwyPass *hp, int ax, int az, int r, int gesture, int set) {
+static void hwt_build(HwyPass *hp, int ax, int az, int r, int gesture, int set, HwcapSet *cap) {
     int k, x, z, n = 0, bad = 0;
+    hwcap_commit(hp, cap, 1);                                            /* task hwcap: arms first, the T over them */
     for (k = 0; k < g_hwt_n; k++) {
         HwtCell *c = &g_hwt_c[k];
         if (!(c->sets & set)) continue;
@@ -330,6 +352,7 @@ static void hwt_run(HwyPass *hp) {
         for (x = hp->x0 + 1; x < hp->x1; x++) {
             DWORD v = hwy_at(hp, x, z);
             int gesture, ax, az;
+            HwcapSet cap;
             if (hwt_is_id(v, 11235, 15053)) gesture = 1;
             else if (hwt_is_id(v, 15113, 15114)) gesture = 2;
             else continue;
@@ -338,10 +361,10 @@ static void hwt_run(HwyPass *hp) {
                 int dx = 0, dz = gesture == 1 ? -1 : 0;
                 hwy_rot(r, &dx, &dz);
                 ax = x - dx; az = z - dz;
-                if (hwt_check(hp, ax, az, r, gesture, 1, &why)) { hwt_build(hp, ax, az, r, gesture, 1); break; }
+                if (hwt_check(hp, ax, az, r, gesture, 1, &why, &cap)) { hwt_build(hp, ax, az, r, gesture, 1, &cap); break; }
                 if (HWT_RIO && gesture == 1 && (!strcmp(why, "far side not free") || !strcmp(why, "far side touches other highway"))) {
                     const char *why2;
-                    if (hwt_check(hp, ax, az, r, gesture, 2, &why2)) { hwt_build(hp, ax, az, r, gesture, 2); break; }
+                    if (hwt_check(hp, ax, az, r, gesture, 2, &why2, &cap)) { hwt_build(hp, ax, az, r, gesture, 2, &cap); break; }
                     why = why2;
                 }
                 if (strcmp(why, "no cap") && strcmp(why, "no cap pair") && strcmp(why, "not a stock X") &&
