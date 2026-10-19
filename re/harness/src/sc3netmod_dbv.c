@@ -94,6 +94,7 @@ static void dbv_claim(int x, int z) {
 
 static int dbv_claimed(int x, int z) {
     DWORD key, h;
+    if (hwave_claimed(x, z)) return 1;                                   /* task hwave: diagonal transitions */
     if (!g_dbv_claim || !g_dbv_nclaim || x < 0 || z < 0) return 0;
     key = ((DWORD)(x & 0xfff) << 12 | (DWORD)(z & 0xfff)) + 1;
     h = dbv_hash(x, z);

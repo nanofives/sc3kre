@@ -115,7 +115,9 @@ static void hwask_line(const char *path, const char *line);                  /* 
 static void hwask_stats(void);                                               /* task hwask */
 static void hwave_line(const char *path, const char *line);                  /* task hwave */
 static void hwave_run(struct HwyPass *hp);                                   /* task hwave */
-static void hwave_road(BYTE *mgr, int x0, int z0, int x1, int z1);           /* task hwave */
+static void hwave_road(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who, int pre);   /* task hwave */
+static void hwavd_line(const char *path, const char *line);                  /* task hwave */
+static int hwave_claimed(int x, int z);                                      /* task hwave: DAV skips them */
 static void hwave_stats(void);                                               /* task hwave */
 
 /* ---------------------------------------------------------------- table line */
@@ -142,6 +144,7 @@ static void rb_file(const char *path) {
         if (!strncmp(line, "hwx ", 4)) { hwx_line(path, line); continue; } /* task hwx */
         if (!strncmp(line, "hwask ", 6)) { hwask_line(path, line); continue; } /* task hwask */
         if (!strncmp(line, "hwave ", 6)) { hwave_line(path, line); continue; } /* task hwave */
+        if (!strncmp(line, "hwavd ", 6)) { hwavd_line(path, line); continue; } /* task hwave */
         if (!strncmp(line, "hwrc ", 5)) continue;                            /* task hwave: read by NETRAMP */
         if (!strncmp(line, "hwy", 3)) { hwy_line(path, line); continue; }  /* task hwcore */
         if (strncmp(line, "rbt ", 4) || g_rb_off) continue;
@@ -340,12 +343,13 @@ static void __fastcall rb_pass(BYTE *mgr, void *edx, DWORD list, int net, int *b
     InterlockedIncrement(&g_rb_busy);
     __try {
         if (g_rb_piece) rb_run(mgr, x0 - 3, z0 - 3, x1 + 2, z1 + 2, "edit");   /* blocks whose cells/ring/beyond touch the box */
+        if (g_hwy_np) hwave_road(mgr, x0, z0, x1, z1, "road", 1);            /* task hwave: before DAV, claims */
         dbv_run(mgr, x0, z0, x1, z1, "edit");                  /* task diagbv: first, its claims stop DAV / BV */
         if (g_dav_on) dav_run(mgr, x0, z0, x1, z1, "edit");                  /* task diagave */
         if (g_avx_on) avx_run(mgr, x0, z0, x1, z1, "edit");                  /* task avx */
-        if (g_hwy_np) hwave_road(mgr, x0, z0, x1, z1);                       /* task hwave: avenue drags */
         if (g_bv_p[0]) bv_run(mgr, x0, z0, x1, z1, "edit");                  /* task boulevard */
         if (g_r9_centre) r9_run(mgr, x0, z0, x1, z1, "edit");                /* task bigrbt */
+        if (g_hwy_np) hwave_road(mgr, x0, z0, x1, z1, "road", 0);            /* task hwave: after DAV, builds */
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         InterlockedIncrement(&g_rb_n_fault);
         logf("### rbt: exception 0x%08lX in the edit pass", GetExceptionCode());
@@ -361,6 +365,7 @@ static void rb_load_pass(void) {
     InterlockedIncrement(&g_rb_busy);
     __try {
         if (g_rb_piece) rb_run(mgr, 0, 0, 0x7fffffff, 0x7fffffff, "load");
+        if (g_hwy_np) hwave_road(mgr, 0, 0, 0x7fffff, 0x7fffff, "load", 1);  /* task hwave: before DAV, claims */
         dbv_run(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");        /* task diagbv: first, its claims stop DAV / BV */
         if (g_dav_on) dav_run(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");        /* task diagave */
         if (g_avx_on) avx_run(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");        /* task avx */

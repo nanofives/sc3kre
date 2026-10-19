@@ -85,3 +85,55 @@ through 21603 (first run's walk). The ground pieces now carry explicit matrices 
   matrix (NET_LANES.md), so they should still drive; not watched.
 - Diagonal version: assessed only (plan sheet). Single road, boulevard, avenue one column off, slopes: refused (stock).
 - Owner call open: automatic (built that way) vs asking like the interchanges.
+
+## 6. Diagonal (phase 2, owner 2026-10-19 "Keep it automatic and build the diagonal version")
+
+Owner pictures: `MAIN\verify\hwave\owner_shots\hwave_diag_plan.png`, `hwave_diag_mockup.png`, `hwave_diag_sheet.png`.
+Test tree as above plus `diagonal_avenue` (art copied from `Simcity_wt_avenues`). j = cells along the band from the cap.
+
+### Stock + DAV (in game, lab, before this block)
+
+| case | highway end | avenue end (DAV) |
+|---|---|---|
+| x-z, highway (122,4) -> (130,12), roads (130,13) -> (138,21) and (131,13) -> (139,21) | (129,12) 11223.2, cap (130,12) 14999.2, (131,12) empty | (130,13) 18004.0, (131,13) 20501.0, (132,13) 20505.0 |
+| x-z, roads dragged toward the end: (103,86) -> (97,80), (104,86) -> (98,80) | (no highway) | (97,80) 1999.0, (98,80) 1999.0, (96,80) empty |
+| x+z, roads (66,33) -> (58,41), (66,34) -> (58,42), then highway (73,27) -> (68,32) | (67,31) 15052.2, cap (67,32) 15059.2, (68,32) 15052.0, (67,33) empty | (65,33) 18004.1, (66,33) 18004.1 |
+
+The highway end is the same shape in both families (a quarter turn apart). The avenue end depends on its drag
+direction. The plain 20500 starts at j+4 in all three. Bands one cell off the highway's middle line (two of my first
+drags) are not connected and stay refused. The x-z avenue-first order was not measured stock (the drag fell outside the
+flat window); it is case C below.
+
+### Design
+
+Six pieces, one set at four states (k odd = x+z): 21604 / 21605 j-1 (highway outer cells), 21606 the cap, 21607 / 21608
+j+1 (the far one empty land), 21609 j+2 (the avenue's first middle cell, the only cell beside the avenue). Bases 15134
+(kind 15) and 15138 (kind 14). DAV's plain 20505 is written at j+3 where DAV left an end cap. Deck H from the cap's start
+to the ground at j+3 (eased, 2.1 cells). Offline tiler (`d1.sc3`, stock rules): the bases are kept and the band behind
+stays plain in all 8 base x state tries.
+
+Art: `hwave_paint.py` (deck = hwpaint highway_diag; past the landing, in the median nose and in a sidewalk shoulder at
+the deck's height: the DAV pieces' own frames for the piece each cell would hold). Lanes: `hwave_build.py dlanes` (shapes
+23420..23435), compile clean in every language; the two crossing lanes use different cells so no two border points share a
+72-unit bucket, highway-side points match the stock band (111/195 vs 112/194).
+
+Block (`sc3netmod_hwave.c`, `hwavd_*`): the set of cells the transitions hold (`hwave_claimed`, asked by `dbv_claimed`,
+one marked line in `sc3netmod_dbv.c`) keeps DAV's writer and revert off them. In road passes HWAVE runs before DAV (claims
+only: the stock road retile of that pass has just re-tiled DAV's cells) and after it (checks, builds, reverts); in the load
+pass before DAV (claims) and in the highway pass with the other blocks.
+
+### In game (PIDs 57276, 57388)
+
+| case | log |
+|---|---|
+| A x-z, highway first, avenue from its end | the run before DAV waited (band still stock), then `diagonal highway end at (130,12) turn 0 -> transition ... 6 cell(s) written`, 8 cells held |
+| B x+z, avenue first, highway drawn to it | `edit: diagonal highway end at (67,32) turn 1 -> transition ... 7 cell(s)` |
+| C x-z, avenue dragged toward the end first (1999 end), highway drawn to it | `edit: diagonal highway end at (53,26) turn 0 -> transition ... 7 cell(s)` |
+| D x+z, highway first, avenue from its end | refused while the avenue was one road, then `road: ... (107,86) turn 1 -> transition ... 7 cell(s)` |
+| first DLL: a highway drag also runs a road pass; the stock road retile reset DAV's cells and the run before DAV reverted, the run after rebuilt (B, C) | fixed: the run before DAV only claims; a highway drag next to D afterwards logged nothing |
+| router (live flags + matrices) | A and B before the save, C and D after the reload: highway band (2) -> 21604 -> 21606 -> 21607 -> 21609 (3) -> 20505 (1); from both avenue strips -> 21609 (3) -> 21607 or 21608 -> 21606 -> 21605 (3) -> band (2) (`dprobe_*.txt` in the instance) |
+| save + reload | `save: 106 variant tile(s)`, `load: all 106 variant tiles restored`, DAV load pass `0 written` on the four bands; twin `dmatch e1_saved.sc3`: 4 transitions; `nomod`: 0 variant ids in the tile words |
+| a road drawn against case A's avenue (my mistake) | DAV: `column road leaves the avenue's rows` -> band to the stock tiler; HWAVE: case A back to the stock ends (intended) |
+
+Not covered: animated cars, `SC3NETMOD_HWAVE=0`, a game without sc3netmod (offline only), diagonal + straight bends next
+to the transition, DAV merges / junctions near the end (refused by the rule, not tried).

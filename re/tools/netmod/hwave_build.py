@@ -108,9 +108,9 @@ def cmd_lanes(a):
     return 0
 
 
-def cmd_check(a):
+def cmd_check(a, pieces=None):
     bad = 0
-    for pid in sorted(WP.CELLS.values()):
+    for pid in sorted(pieces or WP.CELLS.values()):
         spec = json.load(open(os.path.join(a.pkg, "hwave_%d.lanes.json" % pid)))
         masks, warns = HL.compile_check(spec)
         print(pid, "masks", masks)
@@ -120,12 +120,110 @@ def cmd_check(a):
     return 1 if bad else 0
 
 
+# ================================================================================================ diagonal (phase 2)
+# hwave_paint.py's diagonal frame (state 0): band middle line x - z = 0 (p = x - z), cap cell (10, 10), q = x + z.
+# Highway band lanes (hwlanes DIAG_LANES, cells across from the median, p = across * sqrt 2): exit carriageway (high p,
+# drives +x +z) outer 0.396 / inner 0.170, entry (low p) the same mirrored. DAV avenue (each strip = stock 35, both
+# directions): lane points on the borders of the j+3 cells (lanekit show 35, states 0 / 2 for the high / low cell):
+#   high strip, cell (12, 11) x- side: in (away from the highway) at z 80, out at z 175
+#   low strip,  cell (11, 12) z- side: in at x 175, out at x 80
+# So the exit's outer lane goes on in the high strip, its inner lane crosses to the low strip, and the avenue's two
+# outgoing lanes climb onto the entry carriageway (the high strip's crossing). The two crossings use different cells:
+# the exit's inner lane crosses through 21608 / 21609, the high strip's outgoing lane stays high through 21607 and
+# crosses in the cap 21606, so no two lane points share a cell border within the street sim's 72-unit buckets.
+SHAPE_D = 23420                   # this phase's curve shapes (stream range 23400..23599)
+CONNECTS_D = {}                   # filled after the router check (hwave_probe.py walk)
+
+
+def d_lane(points):
+    segs = [HP.Line(points[i], points[i + 1]) for i in range(len(points) - 1)]
+    path = HP.Path(segs)
+
+    def h(s):
+        s = np.atleast_1d(np.asarray(s, dtype=float))
+        out = []
+        for v in s:
+            p, _ = path.at(float(v))
+            out.append(WP.d_height(p[0] + p[1]))
+        return np.array(out)
+    return HP.ramp_deck(path, height=h, width=0.2)
+
+
+def _pq(p, q):
+    return ((q + p) / 2.0, (q - p) / 2.0)
+
+
+def _across(p0, p1, q0, q1, n=8):
+    out = []
+    for k in range(n + 1):
+        t = k / float(n)
+        out.append(_pq(p0 + (p1 - p0) * t * t * (3 - 2 * t), q0 + (q1 - q0) * t))
+    return out
+
+
+def d_lane_decks():
+    r2 = 2 ** 0.5
+    ex_o, ex_i, en_o, en_i = 0.396 * r2, 0.170 * r2, -0.396 * r2, -0.170 * r2
+    hi_in, hi_out = (12.0, 11.0 + 80 / 255.0), (12.0, 11.0 + 175 / 255.0)
+    lo_in, lo_out = (11.0 + 175 / 255.0, 12.0), (11.0 + 80 / 255.0, 12.0)
+
+    def p_of(pt):
+        return pt[0] - pt[1]
+
+    def q_of(pt):
+        return pt[0] + pt[1]
+
+    def beyond(pt, k):                      # a little further along the band, into the DAV cell (+x+z / -x-z)
+        return (pt[0] + k * 0.3, pt[1] + k * 0.3)
+    q0 = 14.0
+    return [
+        # exit outer -> high strip in
+        d_lane([_pq(ex_o, q0)] + _across(ex_o, p_of(hi_in), 20.5, q_of(hi_in)) + [beyond(hi_in, 1)]),
+        # exit inner -> low strip in (crosses the median early)
+        d_lane([_pq(ex_i, q0)] + _across(ex_i, p_of(lo_in), 19.8, 22.0) + [lo_in, beyond(lo_in, 1)]),
+        # low strip out -> entry outer
+        d_lane([beyond(lo_out, 1), lo_out] + _across(p_of(lo_out), en_o, q_of(lo_out), 20.5) + [_pq(en_o, q0)]),
+        # high strip out -> entry inner (crosses the median late)
+        d_lane([beyond(hi_out, 1), hi_out] + _across(p_of(hi_out), en_i, 21.4, 20.1) + [_pq(en_i, q0)]),
+    ]
+
+
+def cmd_dart(a):
+    sc = WP.diag_scene()
+    for cell, pid in sorted(WP.DCELLS.items(), key=lambda kv: kv[1]):
+        d = os.path.join(a.pkg, "art", str(pid))
+        WP.diag_paint_cell(sc, cell, d)
+        print("art", pid, "<-", cell, d)
+    return 0
+
+
+def cmd_dlanes(a):
+    specs, nxt = HL.build_cells(d_lane_decks(), list(WP.DCELLS), SHAPE_D, WP.DCELLS, states=(0, 1, 2, 3))
+    if nxt > 23600:
+        raise SystemExit("curve shapes past this stream's range: %d" % nxt)
+    for cell, spec in sorted(specs.items(), key=lambda kv: kv[1]["piece"]):
+        if spec["piece"] in CONNECTS_D:
+            spec["connects"] = {"road": CONNECTS_D[spec["piece"]]}
+        p = os.path.join(a.pkg, "hwave_%d.lanes.json" % spec["piece"])
+        json.dump(spec, open(p, "w"), indent=1)
+        print(spec["piece"], cell, "%d lanes" % len(spec["vehicle"]["lanes"]),
+              [(l["from"], l["to"]) for l in spec["vehicle"]["lanes"]])
+    missing = sorted(set(WP.DCELLS.values()) - {s["piece"] for s in specs.values()})
+    print("curve shapes %d..%d%s" % (SHAPE_D, nxt - 1, ("  NO LANES: %s" % missing) if missing else ""))
+    return 0
+
+
+def cmd_dcheck(a):
+    return cmd_check(a, WP.DCELLS.values())
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="hwave_build.py")
-    ap.add_argument("cmd", choices=("art", "lanes", "check"))
+    ap.add_argument("cmd", choices=("art", "lanes", "check", "dart", "dlanes", "dcheck"))
     ap.add_argument("pkg")
     a = ap.parse_args(argv)
-    return {"art": cmd_art, "lanes": cmd_lanes, "check": cmd_check}[a.cmd](a)
+    return {"art": cmd_art, "lanes": cmd_lanes, "check": cmd_check, "dart": cmd_dart, "dlanes": cmd_dlanes,
+            "dcheck": cmd_dcheck}[a.cmd](a)
 
 
 if __name__ == "__main__":

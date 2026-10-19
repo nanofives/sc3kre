@@ -3,7 +3,7 @@
  "name": "highway_avenue",
  "version": "1.0.0",
  "author": "sc3kre",
- "description": "Task hwave: where a straight highway ends right at the end of a straight avenue (either drag order), the highway's cap row and the avenue's U-turn row become a ramp: the deck lowers to the ground over the two rows and goes on as the avenue, both directions connected (the pieces carry the stock on-ramp classes, so trips step road <-> highway through them).",
+ "description": "Task hwave: where a straight highway ends right at the end of a straight avenue (either drag order), the highway's cap row and the avenue's U-turn row become a ramp: the deck lowers to the ground over the two rows and goes on as the avenue, both directions connected (the pieces carry the stock on-ramp classes, so trips step road <-> highway through them). Diagonal too (task hwave phase 2): a diagonal highway ending at the end of a diagonal avenue (DAV), both families.",
  "game": {
   "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
  },
@@ -67,6 +67,96 @@
     "ground_under": true
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 21604,
+   "base": 15134,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to diagonal avenue (exit, deck)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21604",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21605,
+   "base": 15134,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to diagonal avenue (entry, deck)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21605",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21606,
+   "base": 15134,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to diagonal avenue (end, deck)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21606",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21607,
+   "base": 15134,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to diagonal avenue (exit, ramp)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21607",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21608,
+   "base": 15134,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to diagonal avenue (entry, ramp)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21608",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21609,
+   "base": 15138,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to diagonal avenue (ground)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21609",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
   }
  ],
  "lanes": [
@@ -85,6 +175,30 @@
   {
    "piece": 21603,
    "spec": "hwave_21603.lanes.json"
+  },
+  {
+   "piece": 21604,
+   "spec": "hwave_21604.lanes.json"
+  },
+  {
+   "piece": 21605,
+   "spec": "hwave_21605.lanes.json"
+  },
+  {
+   "piece": 21606,
+   "spec": "hwave_21606.lanes.json"
+  },
+  {
+   "piece": 21607,
+   "spec": "hwave_21607.lanes.json"
+  },
+  {
+   "piece": 21608,
+   "spec": "hwave_21608.lanes.json"
+  },
+  {
+   "piece": 21609,
+   "spec": "hwave_21609.lanes.json"
   }
  ],
  "highway_lines": [
@@ -100,6 +214,25 @@
   "hwrc 21601",
   "hwrc 21602",
   "hwrc 21603",
-  "hwave 21600 21601 21602 21603"
+  "hwyp 21604 0",
+  "hwys 21604 11223 0 15052 0 11223 2 15052 2",
+  "hwyp 21605 0",
+  "hwys 21605 11223 2 15052 2 11223 0 15052 0",
+  "hwyp 21606 0",
+  "hwys 21606 14999 2 15059 2 14999 0 15059 0",
+  "hwyp 21607 1",
+  "hwys 21607 35 0 35 1 35 2 35 3",
+  "hwyp 21608 1",
+  "hwys 21608 35 2 35 3 35 0 35 1",
+  "hwyp 21609 1",
+  "hwys 21609 43 0 43 0 43 0 43 0",
+  "hwrc 21604",
+  "hwrc 21605",
+  "hwrc 21606",
+  "hwrc 21607",
+  "hwrc 21608",
+  "hwrc 21609",
+  "hwave 21600 21601 21602 21603",
+  "hwavd 21604 21605 21606 21607 21608 21609"
  ]
 }
