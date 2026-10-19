@@ -5,11 +5,47 @@
  "author": "netmod (task avcore)",
  "description": "One-way avenue halves (owner 2026-10-19: 2 lanes each way, right-hand traffic everywhere). sc3netmod's AVL block writes these on an avenue band it can convert whole (re/analysis/AVENUE_LANES.md): 21700 the straight half (base 11204, both lanes in the half's direction), 21701 the avenue end U-turn quarter (base 11203). Both save as their base at the same state, so a game without the mod loads the stock avenue.",
  "variants": [
-  {"id": 21700, "base": 11204, "network": "ROAD", "name": {"*": "Avenue (one way)", "ENGLISH": "Avenida (un sentido)"}, "trblkatt": "copy_base"},
-  {"id": 21701, "base": 11203, "network": "ROAD", "name": {"*": "Avenue end", "ENGLISH": "Fin de avenida"}, "trblkatt": "copy_base"}
+  {
+   "id": 21700,
+   "base": 11204,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way)",
+    "ENGLISH": "Avenida (un sentido)"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11204,
+    "png_dir": "art/11204"
+   }
+  },
+  {
+   "id": 21701,
+   "base": 11203,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue end",
+    "ENGLISH": "Fin de avenida"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11203,
+    "png_dir": "art/11203"
+   }
+  }
  ],
  "lanes": [
-  {"piece": 21700, "spec": "avl_21700.lanes.json"},
-  {"piece": 21701, "spec": "avl_21701.lanes.json"}
+  {
+   "piece": 21700,
+   "spec": "avl_21700.lanes.json"
+  },
+  {
+   "piece": 21701,
+   "spec": "avl_21701.lanes.json"
+  }
+ ],
+ "avenue_lines": [
+  "avls 21700",
+  "avlu 21701"
  ]
 }

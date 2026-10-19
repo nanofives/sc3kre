@@ -258,6 +258,11 @@
       "items": {"type": "string", "pattern": "^hw[a-z0-9]* [-0-9 ]+$"},
       "description": "Task hwcore: raw sc3netmod table lines of the highway program (sc3netmod_hwy.c and the shape blocks on it): `hwyp <piece> <land 0|1> [<save id>]` declares a piece, `hwyt <A> <B>` the hwcore proof rule; each shape stream adds its own keyword (hwx, hwt, hwdx, hwdd). Pieces named in hwyp must be HWAY variants of this package."
     },
+    "avenue_lines": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^avl[a-z] [0-9]+( [-0-9A-Za-z.]+)*$"},
+      "description": "Task avcore: raw sc3netmod table lines of the one-way avenue base (sc3netmod_avl.c, re/analysis/AVENUE_LANES.md): `avls <piece>` the one-way straight half, `avlu <piece>` the end U-turn quarter, `avlc <piece> <base> <side>` a one-way crossing / slope variant whose lanes run toward world side <side> (0 N 1 E 2 S 3 W) at state 0, `avlj <piece> <NESW>` a sibling piece a one-way band may end on (I = traffic enters the piece across that side, O = leaves, . = none, at state 0). Pieces must be ROAD variants of this package."
+    },
     "auto_diagonal_boulevards": {
       "type": "array",
       "maxItems": 1,

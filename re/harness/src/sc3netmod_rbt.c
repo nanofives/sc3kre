@@ -118,6 +118,11 @@ static void hwave_run(struct HwyPass *hp);                                   /* 
 static void hwave_road(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who, int pre);   /* task hwave */
 static void hwavd_line(const char *path, const char *line);                  /* task hwave */
 static int hwave_claimed(int x, int z);                                      /* task hwave: DAV skips them */
+static int g_avl_on;                                                         /* task avcore: AVL block (sc3netmod_avl.c) */
+static WORD g_avl_straight;                                                  /* task avcore */
+static void avl_line(const char *path, const char *line);                    /* task avcore */
+static void avl_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who);   /* task avcore */
+static void avl_stats(void);                                                 /* task avcore */
 static void hwave_stats(void);                                               /* task hwave */
 
 /* ---------------------------------------------------------------- table line */
@@ -138,6 +143,7 @@ static void rb_file(const char *path) {
         if (!strncmp(line, "avx", 3)) { avx_line(path, line); continue; }         /* task avx */
         if (!strncmp(line, "bvx", 3)) { bvx_line(path, line); continue; }         /* task bvx */
         if (!strncmp(line, "bv", 2) && line[3] == ' ') { bv_line(path, line); continue; }   /* task boulevard */
+        if (!strncmp(line, "avl", 3) && line[4] == ' ') { avl_line(path, line); continue; }   /* task avcore */
         if (!strncmp(line, "rbt9 ", 5)) { r9_line(path, line); continue; }       /* task bigrbt */
         if (!strncmp(line, "dbvb ", 5) || !strncmp(line, "dbvs ", 5)) { dbv_line(path, line); continue; } /* task diagbv */
         if (!strncmp(line, "hwt ", 4) || !strncmp(line, "hwtc ", 5)) { hwt_line(path, line); continue; } /* task hwt (hwtc: task hwcap2) */
@@ -350,6 +356,7 @@ static void __fastcall rb_pass(BYTE *mgr, void *edx, DWORD list, int net, int *b
         if (g_bv_p[0]) bv_run(mgr, x0, z0, x1, z1, "edit");                  /* task boulevard */
         if (g_r9_centre) r9_run(mgr, x0, z0, x1, z1, "edit");                /* task bigrbt */
         if (g_hwy_np) hwave_road(mgr, x0, z0, x1, z1, "road", 0);            /* task hwave: after DAV, builds */
+        if (g_avl_on) avl_run(mgr, x0, z0, x1, z1, "edit");                  /* task avcore: last, sees every block's pieces */
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         InterlockedIncrement(&g_rb_n_fault);
         logf("### rbt: exception 0x%08lX in the edit pass", GetExceptionCode());
@@ -372,6 +379,7 @@ static void rb_load_pass(void) {
         if (g_bv_p[0]) bv_run(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");        /* task boulevard */
         if (g_r9_centre) r9_run(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");      /* task bigrbt */
         if (g_hwy_np) rb_hwy(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");         /* task hwcore */
+        if (g_avl_on) avl_run(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");        /* task avcore: last */
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         InterlockedIncrement(&g_rb_n_fault);
         logf("### rbt: exception 0x%08lX in the load pass", GetExceptionCode());
@@ -460,7 +468,9 @@ static int rbt_install(BYTE *m) {
     if (g_bvx_nbox && env_off("SC3NETMOD_BVX")) { g_bvx_nbox = 0; logf("bvx: off (SC3NETMOD_BVX=0)"); }   /* task bvx */
     if (g_dbv_out && env_off("SC3NETMOD_DBV")) { g_dbv_out = 0; logf("dbv: off (SC3NETMOD_DBV=0)"); }  /* task diagbv */
     hwy_install();                                                                                  /* task hwcore */
-    if (!g_rb_piece && !g_dav_inner[0] && !g_avx_nbox && !g_bv_p[0] && !g_r9_centre && !g_dbv_out && !g_hwy_np)
+    if (g_avl_straight && env_off("SC3NETMOD_AVL")) { g_avl_straight = 0; logf("avl: off (SC3NETMOD_AVL=0)"); }   /* task avcore */
+    if (!g_rb_piece && !g_dav_inner[0] && !g_avx_nbox && !g_bv_p[0] && !g_r9_centre && !g_dbv_out && !g_hwy_np &&
+        !g_avl_straight)                                                                            /* task avcore */
         return 0;                                    /* avx, boulevard, bigrbt, diagbv, hwcore (bvx runs in BV) */
     g_rb_m = m;
     g_rb_msize = nt->OptionalHeader.SizeOfImage;
@@ -469,6 +479,7 @@ static int rbt_install(BYTE *m) {
         logf("### rbt: FUN_1001547b entry or manager vt+0x1c differ from shipped - RBT and DAV OFF");
         g_rb_piece = 0; g_dav_inner[0] = 0; g_avx_nbox = 0; g_bv_p[0] = 0; g_r9_centre = 0;   /* avx, boulevard, bigrbt */
         g_hwy_np = 0;                                                                         /* task hwcore */
+        g_avl_straight = 0;                                                                   /* task avcore */
         return 0;
     }
     g_rb_stock = (BYTE *)VirtualAlloc(NULL, 1024 * 1024, MEM_COMMIT, PAGE_READWRITE);
@@ -480,6 +491,7 @@ static int rbt_install(BYTE *m) {
         logf("### rbt: patch failed - RBT and DAV OFF");
         g_rb_piece = 0; g_dav_inner[0] = 0; g_avx_nbox = 0; g_bv_p[0] = 0; g_r9_centre = 0;   /* avx, boulevard, bigrbt */
         g_hwy_np = 0;                                                                         /* task hwcore */
+        g_avl_straight = 0;                                                                   /* task avcore */
         return 0;
     }
     g_rb_on = 1;
@@ -487,6 +499,7 @@ static int rbt_install(BYTE *m) {
     if (g_avx_nbox) { g_avx_on = 1; logf("avx: avenue junctions on, %d box piece(s)", g_avx_nbox); }   /* task avx */
     if (g_r9_centre) logf("rbt9: automatic 3x3 roundabouts on (centre piece %u)", g_r9_centre);   /* task bigrbt */
     if (g_dbv_out) { g_dbv_on = 1; logf("dbv: diagonal boulevards on"); }                           /* task diagbv */
+    if (g_avl_straight) { g_avl_on = 1; logf("avl: one-way avenue halves on (straight %u)", g_avl_straight); }   /* task avcore */
     logf("rbt: hooked the retile pass FUN_1001547b (entry) and the city load (manager vt+0x1c); piece %u, min %d arm(s), "
          "arm-less quarter %u; diagonal avenues %s (inner %u %u %u)", g_rb_piece, g_rb_min, g_rb_closed,
          g_dav_on ? "on" : "off", g_dav_inner[0], g_dav_inner[1], g_dav_inner[2]);
@@ -514,6 +527,7 @@ static void rbt_stats(void) {
     hwdx_stats();                                                            /* task hwdx */
     hwave_stats();                                                           /* task hwave */
     hwask_stats();                                                           /* task hwask */
+    avl_stats();                                                             /* task avcore */
     LONG n = g_rb_n_pass + g_rb_n_conv + g_rb_n_rev + g_rb_n_load + g_rb_n_fault;
     if (!g_rb_on || n == last) return;
     last = n;

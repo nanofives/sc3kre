@@ -76,7 +76,7 @@ Curve shapes: avcore 23600..23699. 23600 straight inner (255,80)->(0,80); 23601 
 (for English-UK's straight outer lane); 23604..23620 reserved for the slope / crossing pieces. Siblings may use any avcore curve key by number; they
 write their own curves in their own ranges.
 
-## 4. The band rule (sc3netmod_avl.c) [coming]
+## 4. The band rule (sc3netmod_avl.c) [published]
 
 An avenue band = the two halves running side by side along an axis. avcore converts a band only when ALL of it can
 be one-way; otherwise it leaves the whole band stock two-way (owner decision).
@@ -99,11 +99,11 @@ be one-way; otherwise it leaves the whole band stock two-way (owner decision).
 - **Routing:** LANEDENSITY (default mode) enforces the variants' one-way matrices; nothing to add per piece.
 - Off: `SC3NETMOD_AVL=0`. Stats line `stats: avl ...` every 10 s.
 
-## 5. How a sibling piece joins a one-way band [coming: table line read by avcore]
+## 5. How a sibling piece joins a one-way band [published]
 
 A sibling's block writes its own pieces as today. To let avcore end a band on a piece, the sibling's package declares
-the piece's avenue edges (netpack manifest key `avenue_lines`, raw lines, like `highway_lines`; netpack support for the
-key comes with avcore's block):
+the piece's avenue edges (netpack manifest key `avenue_lines`, raw lines, like `highway_lines`; the lines must name ROAD variants of the same
+package):
 
     avlj <piece> <N><E><S><W>
 
@@ -119,6 +119,14 @@ C side for siblings (all blocks are #included into sc3netmod.c, so these are pla
     int avl_claimed(int x, int z);  /* 1: avcore holds the cell (do not write it) */
 
 Both answer from the last pass's result (the band map avcore keeps for the whole map, rebuilt per pass over the pass box).
+avcore runs LAST in every ROAD retile pass and in the load pass, so a sibling block cannot call these for cells of the
+same pass; use them to leave converted cells alone on the next pass, and rely on the `avlj` letters for the ends.
+
+In game (lab, 2026-10-19): two parallel road drags (x 50 / 51, z 20..36) -> `avl: edit: band along z from (50,21)
+rows 0..14 -> one-way (ends: U-turn / U-turn)`, 34 cells (21700.1 / 21700.3, 21701 at 3 / 0 and 2 / 1); save
+`34 variant tile(s) written as base`; reload `load: all 34 variant tiles restored`; a game without sc3netmod loads
+stock 11203 / 11204 at the same states. Art: avenue_markings' white dashes (`avenue_markings.py build` into the
+package folder).
 
 ## 6. Rules for every stream's lanes [published]
 
