@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 
 import hwx                      # noqa: E402
 import hwx_build as B           # noqa: E402
-import hwcap                    # noqa: E402  task hwcap: stock end caps, arms carried on
+import hwcap                    # noqa: E402  tasks hwcap / hwcap2: stock end caps
 
 DIRS = [(-1, 0), (0, -1), (1, 0), (0, 1)]
 ARM_IN = [(2, -1), (2, 0), (-3, -1), (-3, 0), (-1, 2), (0, 2), (-1, -3), (0, -3)]   # just outside the 4x4
@@ -33,6 +33,35 @@ def layout():
         for c, put in sorted(p["cells"]):
             out.append((c[0], c[1], pid, put, p["cls"]))
     return out
+
+
+def capped_cells(L):
+    """task hwcap2: {junction cell: (capped id, its state = the stock cap's)}"""
+    return {(dx, dz): (pid, put) for dx, dz, pid, put, cls in L if cls == "capped"}
+
+
+def cap_stock(c):
+    """the stock end cap a drag ending on carriageway cell c leaves there"""
+    dx, dz = c
+    return hwcap.cap_of(B.cap_step(c), dz == -1 if dz in (-1, 0) else dx == -1)
+
+
+def capped_here(m, ax, az, c, L):
+    """task hwcap2 (sc3netmod_hwx.c hwx_capped): junction cell c holds its arm's stock end cap or its capped junction"""
+    cp = capped_cells(L).get(c)
+    v = m.at(ax + c[0], az + c[1])
+    return cp is not None and v is not None and (v == cp or (v == cap_stock(c) and v[1] == cp[1]))
+
+
+def put_cells(m, ax, az, L, classes):
+    """hwx_put_all: the cells of `classes`; a junction where its arm ends gets its capped junction"""
+    cp = capped_cells(L)
+    for dx, dz, pid, put, cls in L:
+        if cls not in classes:
+            continue
+        if cls == "main" and capped_here(m, ax, az, (dx, dz), L):
+            pid, put = cp[(dx, dz)]
+        m.put(ax + dx, az + dz, pid, put)
 
 
 def arm_cells():
@@ -89,12 +118,12 @@ def run(m, who="edit"):
         clover = any(m.at(ax + dx, az + dz) == (pid, put) for dx, dz, pid, put, cls in L if cls != "core")
         if intact and arms:
             ok = clover and _clover_ok(m, ax, az, L, existing=True)
+            put_cells(m, ax, az, L, ("core", "main", "land") if ok else ("core",))
             for dx, dz, pid, put, cls in L:
-                if cls == "core" or ok:
-                    m.put(ax + dx, az + dz, pid, put)
-                elif cls == "main" and m.at(ax + dx, az + dz):
-                    m.put(ax + dx, az + dz, *hwx.carriageway((dx, dz))[1])
-                elif cls == "land" and m.at(ax + dx, az + dz) == (pid, put):
+                if not ok and cls == "main" and m.at(ax + dx, az + dz):
+                    m.put(ax + dx, az + dz, *(cap_stock((dx, dz)) if capped_here(m, ax, az, (dx, dz), L) else
+                                              hwx.carriageway((dx, dz))[1]))
+                elif not ok and cls == "land" and m.at(ax + dx, az + dz) == (pid, put):
                     del m.hw[(ax + dx, az + dz)]                      # not kept: hwy_end removes it
             m.log.append("kept %s at (%d,%d)" % ("cloverleaf" if ok else "clean flyover", ax, az))
             if clover and not ok:
@@ -106,7 +135,8 @@ def run(m, who="edit"):
                 if cls == "core" and v == (pid, put):
                     m.hw[(ax + dx, az + dz)] = stock[(dx, dz)]
                 elif cls == "main" and v:
-                    m.hw[(ax + dx, az + dz)] = hwx.carriageway((dx, dz))[1]
+                    m.hw[(ax + dx, az + dz)] = cap_stock((dx, dz)) if capped_here(m, ax, az, (dx, dz), L) else \
+                        hwx.carriageway((dx, dz))[1]
                 elif cls == "land" and v == (pid, put):
                     del m.hw[(ax + dx, az + dz)]
             m.log.append("X at (%d,%d) broken: stock pieces back" % (ax, az))
@@ -127,42 +157,34 @@ def run(m, who="edit"):
         if who == "load":
             continue
         why = []
-        plan = hwcap.Plan()
-        ok = _clover_ok(m, ax, az, L, existing=False, why=why, plan=plan)
-        if ok:                                         # task hwcap: arms that end in the junction cells, carried on
-            ext, carried = hwcap.commit(plan, {0})
-            for c, ps in ext.items():
-                m.hw[c] = ps
-                m.free_set.discard(c)
-                m.claimed.add(c)
-            for cap, rows, new in carried:
-                m.log.append("arm end %s carried on %d row(s), cap now at %s" % (cap, rows, new))
-        for dx, dz, pid, put, cls in L:
-            if cls == "core" or ok:
-                m.put(ax + dx, az + dz, pid, put)
+        ok = _clover_ok(m, ax, az, L, existing=False, why=why)
+        ncap = sum(1 for c in capped_cells(L) if capped_here(m, ax, az, c, L)) if ok else 0
+        put_cells(m, ax, az, L, ("core", "main", "land") if ok else ("core",))
+        if ncap:
+            m.log.append("%d capped junction(s) at (%d,%d)" % (ncap, ax, az))
         m.log.append("new %s at (%d,%d)%s" % ("cloverleaf" if ok else "clean flyover", ax, az,
                                               "" if ok else " (" + why[0] + ")"))
     return m
 
 
-def _clover_ok(m, ax, az, L, existing, why=None, plan=None):
+def _clover_ok(m, ax, az, L, existing, why=None):
     why = why if why is not None else []
     cells = {(dx, dz) for dx, dz, _, _, _ in L}
     for dx, dz in arm_cells():
         v = m.at(ax + dx, az + dz)
         plain = hwx.carriageway((dx, dz))[1]
-        mine = [(pid, put) for ddx, ddz, pid, put, cls in L if (ddx, ddz) == (dx, dz)]
-        if v != plain and not existing and plan is not None and (v is None or v[0] in hwcap.CAP_IDS):
-            step = ((1 if dx > 0 else -1), 0) if dx not in (-1, 0) else (0, (1 if dz > 0 else -1))
-            if hwcap.need(plan, m.hw, (ax + dx, az + dz), step, 0, lambda c: m.free(*c), m.claimed):
-                continue                               # task hwcap: the arm ends here or before, carried on
-            why.append(plan.why)
-            return False
+        mine = [(pid, put) for ddx, ddz, pid, put, cls in L if (ddx, ddz) == (dx, dz) and cls != "capped"]
+        if v != plain and capped_here(m, ax, az, (dx, dz), L):
+            continue                                   # task hwcap2: the arm ends on its last junction row
         if v != plain and not (existing and v in mine):
-            why.append("arm cell (%d,%d) is not plain straight highway" % (dx, dz))
+            why.append("arm cell (%d,%d): %s" % (dx, dz, "an arm ends inside the junction cells" if v is None else
+                                                 "an arm ends before its last junction row" if v[0] in hwcap.CAP_IDS
+                                                 else "an arm is not plain straight highway"))
             return False
     for dx, dz, pid, put, cls in L:
         x, z = ax + dx, az + dz
+        if cls == "capped":
+            continue
         if (x, z) in m.claimed and m.at(x, z) != (pid, put):
             why.append("cell (%d,%d) claimed by another block" % (dx, dz))
             return False
@@ -229,7 +251,7 @@ def cmd_rule(save):
             got = " | ".join(m.log)
             ok = want in got
             if case == "free" and ok:                            # every table cell holds its piece
-                miss = [(dx, dz) for dx, dz, pid, put, cls in layout() if m.at(cx + dx, cz + dz) != (pid, put)]
+                miss = [(dx, dz) for dx, dz, pid, put, cls in layout() if cls != "capped" and m.at(cx + dx, cz + dz) != (pid, put)]
                 ok = not miss
                 got += "" if ok else " | missing %s" % miss
                 m2 = run(m, who="load")                          # the load pass keeps it, writes nothing new
@@ -251,21 +273,31 @@ def cmd_rule(save):
         v[0] < 21160 and v[0] >= 21120 for v in m.hw.values())
     print("arm cut at dx 4 -> %s  [%s]" % (m.log[-1], "ok" if ok else "FAIL"))
     fails += not ok
-    for blocked in (False, True):                                 # task hwcap: the +x arm capped on dx 5
-        m4, (cx, cz) = drag_city(save, "xz", x1=58 + 6)
-        if blocked:
-            m4.free_set.discard((cx + 6, cz - 1))
-        cap = m4.at(cx + 5, cz - 1), m4.at(cx + 5, cz)
+    # task hwcap2 ("never extend"): the x drag ends ON the +x arm's last junction row (dx 5: stock caps there), one row
+    # earlier (dx 4), and one row past it (dx 6: the cap outside the box); never a cell written past the drag
+    L = layout()
+    for end, want in ((5, "capped"), (4, "flyover"), (6, "cloverleaf")):
+        m4, (cx, cz) = drag_city(save, "xz", x1=58 + end + 1)
+        before = {c for c, v in m4.hw.items()}
+        cap = m4.at(cx + end, cz - 1), m4.at(cx + end, cz)
         run(m4)
         got = " | ".join(m4.log)
-        if blocked:
-            ok = "new clean flyover" in got
+        past = [c for c in m4.hw if c not in before and c[0] > cx + end and cz - 1 <= c[1] <= cz]
+        if want == "capped":
+            cp = capped_cells(L)
+            ok = "new cloverleaf" in got and "2 capped junction(s)" in got and \
+                m4.at(cx + 5, cz - 1) == cp[(5, -1)] and m4.at(cx + 5, cz) == cp[(5, 0)] and not [
+                    1 for dx, dz, pid, put, cls in L if cls not in ("capped",) and (dx, dz) not in cp and
+                    m4.at(cx + dx, cz + dz) != (pid, put)]
+            m5 = run(m4, who="load")                             # a load keeps it, capped junctions included
+            ok = ok and any("kept cloverleaf" in s for s in m5.log) and m5.at(cx + 5, cz - 1) == cp[(5, -1)]
+        elif want == "flyover":
+            ok = "new clean flyover" in got and "ends before its last junction row" in got
         else:
-            ok = "new cloverleaf" in got and "carried on 1 row(s)" in got and m4.at(cx + 6, cz - 1) == cap[0] and \
-                m4.at(cx + 6, cz) == cap[1] and not [1 for dx, dz, pid, put, cls in layout()
-                                                     if m4.at(cx + dx, cz + dz) != (pid, put)]
-        print("+x arm capped on its last junction cell %s%s -> %s  [%s]" % (
-            cap, " (the cell past it taken)" if blocked else "", got, "ok" if ok else "FAIL"))
+            ok = "new cloverleaf" in got and "capped" not in got and m4.at(cx + 6, cz - 1) == cap[0]
+        ok = ok and not past
+        print("x drag ends on dx %d (caps %s) -> %s%s  [%s]" % (end, cap, got, " | WROTE PAST THE DRAG %s" % past if past
+                                                                else "", "ok" if ok else "FAIL"))
         fails += not ok
     m3, _ = drag_city(save, "xz")
     run(m3, who="load")
@@ -298,6 +330,8 @@ def cmd_routes(pkg):
     T = turns_of(pkg)
     world = {}
     for dx, dz, pid, put, cls in layout():
+        if cls == "capped":                                      # task hwcap2: only where an arm ends
+            continue
         world[(dx, dz)] = {((e + put) % 4, (l + put) % 4) for e, l in T[pid]}
     for k in range(-12, 12):
         for c in ((k, -1), (k, 0), (-1, k), (0, k)):

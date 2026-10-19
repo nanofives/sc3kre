@@ -22,9 +22,11 @@
  *    (an existing interchange) or NONE does and all are hwy_free, unclaimed and inside the read box (a fresh build,
  *    which also needs every written row inside the box). Then every row is written / kept (hwy_put).
  *  - else FLYOVER (its own table: the crossing cells only, A's deck over B, no ramps) on the same tests.
- *  - a FRESH build (either) whose arm ends inside its joining / plain-band rows (a row holds the arm's stock end cap,
- *    or nothing past it) still counts when hwcap can carry that arm on to one row past them (sc3netmod_hwcap.c, task
- *    hwcap: stock band pieces, the cap moved out). An interchange already built never grows its arms.
+ *  - task hwcap2 (owner 2026-10-18, "never extend"): an arm may END in its plain-band rows: a band row may hold the
+ *    arm's own stock end cap or lie past it (sc3netmod_hwcap.c hwcap_end), on a fresh build and on a built one. An arm
+ *    that ends in a joining row refuses the cloverleaf (the flyover, whose rows are crossing and band rows only, is
+ *    tried next). No capped join here: a cap on the last joining middle row leaves that row's outer joining cell
+ *    past the end, empty (stock end rule), so one capped cell cannot carry the ramp (verify/hwcap2/RESULTS.md).
  *  - else nothing: hwy_end reverts the HWDD pieces of the box (land ones removed, on-highway ones re-tiled).
  *  A broken cloverleaf (a ramp cell bulldozed) becomes the flyover: hwy_end reverts its cells inside the read box,
  *  hwdd_unbuild the ones outside (ramps on land: hwy_drop, which takes any map cell; on-highway cells: their stock
@@ -107,29 +109,25 @@ static void hwdd_arm_step(const HwddRow *r, int *sx, int *sz) {
 /* -> 2 build (fresh), 1 keep (existing), 0 no. On-highway and plain-band rows take ANY highway occupant: a stock
  * retile that reaches the interchange (an edit on an arm within the tiler's flood radius) re-places them, and next to
  * the ramp pieces (Protected base 15099) the tiler picks pieces other than the plain band; the block writes them back.
- * A joining or plain-band row holding the arm's end cap or nothing (the arm ends there or before) counts on a fresh
- * build when hwcap can carry the arm on (recorded in `cap`, task hwcap). */
-static int hwdd_test(HwyPass *hp, int ox, int oz, int par, int fly, HwcapSet *cap) {
-    int n, k, nland = 0, have = 0, freec = 0, allin = 1, ncap = 0;
-    char capwhy[96];
+ * A plain-band row may hold the arm's own end cap or lie past it (task hwcap2); a joining row may not. */
+static int hwdd_test(HwyPass *hp, int ox, int oz, int par, int fly) {
+    int n, k, nland = 0, have = 0, freec = 0, allin = 1;
     const HwddRow *t = hwdd_tab(par, fly, &n);
     g_hwdd_why[0] = 0;
-    cap->n = cap->nn = 0;
     for (k = 0; k < n; k++) {
         const HwddRow *r = &t[k];
         int x = ox + r->dx, z = oz + r->dz;
         DWORD v = hwdd_rd(hp, x, z);
         int mine = v && hwy_id(v) == r->id && hwy_st(v) == r->st;
-        if ((r->role == HWDD_JOIN || r->role == HWDD_BAND) && !mine && (!v || hwdd_cap(hwy_id(v)))) {
-            int sx, sz;                                                  /* task hwcap: the arm ends here or before */
-            if (!ncap++)
-                _snprintf(capwhy, sizeof(capwhy), "arm cell (%d,%d) holds %s (the arm ends)", x, z,
-                          v ? "an end cap" : "no highway");
+        if (r->role == HWDD_BAND && (!v || hwdd_cap(hwy_id(v)))) {      /* task hwcap2: the arm ends here or before */
+            int sx, sz;
             hwdd_arm_step(r, &sx, &sz);
-            if (hwy_claimed(x, z)) HWDD_NO("(%d,%d) claimed by another block%s", x, z, "");
-            if (!hwcap_need(hp, cap, x, z, sx, sz, 0)) HWDD_NO("%s%s%s", g_hwcap_why, "", "");
+            if (!hwcap_end(hp, x, z, sx, sz))
+                HWDD_NO("arm cell (%d,%d) holds %s, not that arm's end", x, z, v ? "an end cap" : "no highway");
             continue;
         }
+        if (r->role == HWDD_JOIN && !mine && (!v || hwdd_cap(hwy_id(v))))
+            HWDD_NO("the arm ends at (%d,%d), inside the joining rows (%s)", x, z, v ? "end cap" : "no highway");
         switch (r->role) {
         case HWDD_CROSS: case HWDD_JOIN:
             if (!v) HWDD_NO("(%d,%d) on the highway holds no highway%s", x, z, "");
@@ -161,14 +159,12 @@ static int hwdd_test(HwyPass *hp, int ox, int oz, int par, int fly, HwcapSet *ca
                 DWORD v = hwdd_rd(hp, ox + t[k].dx, oz + t[k].dz);
                 if (v && hwy_id(v) == t[k].id && hwy_st(v) == t[k].st) hl++;
             }
-        if (hl == nland && ncap) HWDD_NO("%s%s%s", capwhy, "", "");
         if (hl == nland) return 1;
         if (hl) HWDD_NO("%d of %d ramp cells hold their piece (a ramp was removed)%s", hl, nland, "");
         if (freec != nland) HWDD_NO("%d of %d ramp cells free%s", freec, nland, "");
         if (!allin) HWDD_NO("a fresh build reaches past the pass box%s%s%s", "", "", "");
         return 2;
     }
-    if (have && ncap) HWDD_NO("%s%s%s", capwhy, "", "");
     if (have) return 1;                                                  /* flyover: existing, or fresh in the box */
     if (!allin) HWDD_NO("a fresh flyover reaches past the pass box%s%s%s", "", "", "");
     return 2;
@@ -182,7 +178,7 @@ static void hwdd_write(HwyPass *hp, int ox, int oz, int par, int fly) {
         int x = ox + r->dx, z = oz + r->dz;
         if (r->role == HWDD_BAND) {                                      /* a plain arm cell the tiler re-placed */
             DWORD v = hwdd_rd(hp, x, z);
-            if (v && !hwdd_is(v, r->base, r->bst) && !hwdd_mine(hwy_id(v)) && hwdd_inbox(hp, x, z))
+            if (v && !hwdd_cap(hwy_id(v)) && !hwdd_is(v, r->base, r->bst) && !hwdd_mine(hwy_id(v)) && hwdd_inbox(hp, x, z))
                 hwy_put(hp, x, z, r->base, r->bst);
             continue;
         }
@@ -246,13 +242,12 @@ static void hwdd_run(HwyPass *hp) {
             }
         }
     for (k = 0; k < nc; k++) {
-        HwcapSet cap;
-        int r = hwdd_test(hp, c[k].ox, c[k].oz, c[k].par, 0, &cap), fly = 0;
+        int r = hwdd_test(hp, c[k].ox, c[k].oz, c[k].par, 0), fly = 0;
         if (!r) {
             logf("hwdd: %s: frame (%d,%d) %c: no cloverleaf: %s", hp->who, c[k].ox, c[k].oz, c[k].par ? 'h' : 'c',
                  g_hwdd_why);
             hwdd_unbuild(hp, c[k].ox, c[k].oz, c[k].par);
-            r = hwdd_test(hp, c[k].ox, c[k].oz, c[k].par, 1, &cap); fly = 1;
+            r = hwdd_test(hp, c[k].ox, c[k].oz, c[k].par, 1); fly = 1;
         }
         if (!r) {
             InterlockedIncrement(&g_hwdd_n_none);
@@ -260,7 +255,6 @@ static void hwdd_run(HwyPass *hp) {
                  c[k].par ? 'h' : 'c', g_hwdd_why);
             continue;
         }
-        if (r == 2) hwcap_commit(hp, &cap, 1);                          /* task hwcap: arms first, the pieces over them */
         hwdd_write(hp, c[k].ox, c[k].oz, c[k].par, fly);
         InterlockedIncrement(r == 2 ? &g_hwdd_n_new : &g_hwdd_n_keep);
         if (fly) InterlockedIncrement(&g_hwdd_n_fly);

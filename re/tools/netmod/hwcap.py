@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-r"""hwcap.py - task hwcap (highway program 2026-10-18): stock highway end caps in the offline twins, and the rule that
-carries an arm on when the player's drag ends inside an interchange's joining zone. Twin of
-re/harness/src/sc3netmod_hwcap.c (read its header for the measured stock ends).
+r"""hwcap.py - tasks hwcap / hwcap2 (highway program 2026-10-18): stock highway end caps in the offline twins, and where
+an arm ends (owner 2026-10-18: "never extend", so no arm is carried on any more). Twin of
+re/harness/src/sc3netmod_hwcap.c (read its header for the measured stock ends and the rule).
 
   py -3.12 -m netmod.hwcap ends        print the measured stock end patterns this module emulates      (run from re/tools)
 
@@ -11,7 +11,8 @@ Steps are world vectors (x, z).
   stock_ends(lay, cells, mk)     turn the two ends of one drag's footprint (a 2-lane straight or a 3-cell diagonal band)
                                  into the stock end rows: straight = both lanes capped, diagonal = the middle capped and
                                  the band cells past it removed. The offline tiler places no caps; the game does.
-  Plan / need / commit           the C helper's hwcap_need / hwcap_commit over a layer.
+  end(lay, cell, step)           hwcap_end: 1 the arm's own cap is on the cell, 2 the cell lies past the arm's end, 0 no
+  cap_of(step, lower)            hwcap_cap_of: the stock cap of an end
 """
 import sys
 
@@ -91,46 +92,15 @@ def stock_ends(lay, cells, mk):
 
 
 # ------------------------------------------------------------------------------------------------ the rule
-class Plan:
-    def __init__(self):
-        self.arms = []           # dict(cap, step, diag, perp, caps)
-        self.needs = []          # (arm index, tag, rows)
-        self.why = ""
-
-
-def _walk(arm, rows):
-    """[(cell, (id, state), new)] the arm carried on to `rows` (row 0 = the cap row), cap one row further"""
-    out = []
-    (cx, cz), (sx, sz) = arm["cap"], arm["step"]
-    if not arm["diag"]:
-        px, pz = arm["perp"]
-        low0 = (px + pz) > 0
-        for n in range(rows + 2):
-            for lane in (0, 1):
-                c = (cx + n * sx + lane * px, cz + n * sz + lane * pz)
-                pc = plain((sx, sz), c, lane_low=(low0 if lane == 0 else not low0)) if n <= rows else arm["caps"][lane]
-                out.append((c, pc, n > 0))
-        return out
-    for n in range(rows + 2):
-        m = (cx + n * sx, cz + n * sz)
-        if n <= rows:
-            out.append((m, plain((sx, sz), m, mid=m), n > 0))
-            for c in ((m[0] + sx, m[1]), (m[0], m[1] + sz)):
-                out.append((c, plain((sx, sz), c, mid=m), True))
-        else:
-            out.append((m, arm["caps"][0], True))
-    return out
-
-
-def need(plan, lay, cell, step, tag, free, claimed=frozenset()):
-    """cell of an arm (outward `step`) must be whole highway. free(cell) -> the land may take a piece.
-    -> 1 already highway (no cap), 2 the arm will be carried on (recorded), 0 no (plan.why)"""
+def end(lay, cell, step):
+    """sc3netmod_hwcap.c hwcap_end: cell of an arm whose outward step is `step`. -> 1 it holds that arm's own end cap
+    (the arm ends ON it), 2 it holds nothing and the arm's own cap lies behind it (only empty cells between; diagonal:
+    the cap's band row reaches the cell), 0 neither"""
     p = lay.get(cell)
     sx, sz = step
     diag = bool(sx and sz)
-    if p is not None and cap_dir(p) is None:
-        return 1
-    found = None
+    if p is not None:
+        return 1 if cap_dir(p) == (sx, sz) else 0
     cands = [cell] + ([(cell[0] - sx, cell[1]), (cell[0], cell[1] - sz)] if diag else [])
     for b in cands:
         for k in range(REACH + 1):
@@ -141,60 +111,15 @@ def need(plan, lay, cell, step, tag, free, claimed=frozenset()):
             if cap_dir(w) == (sx, sz):
                 across = (cell[0] - q[0]) * sx - (cell[1] - q[1]) * sz
                 if not diag or -1 <= across <= 1:
-                    found = q
+                    return 2
             break
-        if found:
-            break
-    if not found:
-        plan.why = "%s holds %s and no end cap of its arm lies behind it" % (cell, "an end cap of another arm" if p else
-                                                                            "no highway")
-        return 0
-    arm = dict(cap=found, step=(sx, sz), diag=diag, perp=None, caps=[ident(lay[found])])
-    if not diag:
-        for j in (-1, 1):
-            o = (0, j) if sx else (j, 0)
-            w = lay.get((found[0] + o[0], found[1] + o[1]))
-            if w is not None and cap_dir(w) == (sx, sz):
-                arm["perp"] = o
-                arm["caps"].append(ident(w))
-                break
-        if arm["perp"] is None:
-            plan.why = "end cap %s has no second lane cap beside it" % (found,)
-            return 0
-        if sum(arm["perp"]) < 0:                                 # key the arm on its lower lane: one per arm
-            o = arm["perp"]
-            found = (found[0] + o[0], found[1] + o[1])
-            arm.update(cap=found, perp=(-o[0], -o[1]), caps=arm["caps"][::-1])
-        rows = (cell[0] - found[0]) * sx + (cell[1] - found[1]) * sz
-    else:
-        rows = ((cell[0] - found[0]) * sx + (cell[1] - found[1]) * sz) // 2
-    for c, pc, new in _walk(arm, rows):
-        if c in claimed:
-            plan.why = "carrying the arm on needs %s, claimed" % (c,)
-            return 0
-        if new and (c in lay or not free(c)):
-            plan.why = "carrying the arm on needs %s, which is not free (%s)" % (c, lay.get(c))
-            return 0
-    ai = next((i for i, a in enumerate(plan.arms) if a["cap"] == found), None)
-    if ai is None:
-        plan.arms.append(arm)
-        ai = len(plan.arms) - 1
-    plan.needs.append((ai, tag, rows))
-    return 2
+    return 0
 
 
-def commit(plan, tags):
-    """-> {cell: (id, state)} the arms the needs under `tags` ask for (farthest need per arm), [(cap, rows, new cap)]"""
-    out, log = {}, []
-    for ai, arm in enumerate(plan.arms):
-        rows = max((r for a, t, r in plan.needs if a == ai and t in tags), default=-1)
-        if rows < 0:
-            continue
-        for c, pc, new in _walk(arm, rows):
-            out[c] = pc
-        log.append((arm["cap"], rows + 1, (arm["cap"][0] + (rows + 1) * arm["step"][0],
-                                           arm["cap"][1] + (rows + 1) * arm["step"][1])))
-    return out, log
+def cap_of(step, lower=True):
+    """the stock cap (id, state) of an end with outward `step`: straight = the lane's (lower = lower z along x / lower
+    x along z), diagonal = the middle cell's (sc3netmod_hwcap.c hwcap_cap_of)"""
+    return CAP_OF[step][0 if (lower or (step[0] and step[1])) else 1]
 
 
 def main(argv=None):

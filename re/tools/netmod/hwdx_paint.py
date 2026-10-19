@@ -91,17 +91,24 @@ CAP_END = 6.5             # task hwcap: the capped scene's +d arm ends here, on 
 
 def scene_A(capped=False):
     """case A's cloverleaf; capped (task hwcap) = the diagonal's +d arm ends at (CAP_END, CAP_END) with hwpaint's stock
-    end faces, as a drag that ends on cell (6, 6) leaves it (stock cap 14999.2 there)"""
+    end faces, as a drag that ends on cell (6, 6) leaves it (stock cap 14999.2 there); capped = ("S", e) (task hwcap2)
+    = the straight's +x arm ends at x = e (both carriageways), as a drag that ends on column e - 1 leaves it"""
+    s_end = capped[1] if isinstance(capped, tuple) else N
+    capped = capped is True
     ramps = [(t, False) for t in G.ramps_north("clover").values()] +             [(t, True) for t in G.ramps_north("clover").values()]
     gaps = _gaps(ramps)
     decks = []
     # S: +x-bound in row -1 (bridge over cells -2..0, arms -3 and 1), -x-bound in row 0 (bridge -1..1, arms -2, 2)
-    eb = HP.Path.line((-N, -0.5), (N, -0.5))                       # s = x + N
+    eb = HP.Path.line((-N, -0.5), (s_end, -0.5))                   # s = x + N
     decks.append(HP.Deck(eb, 1.0, "hw", "right", height=s_height(N - 2, N + 1), slab=[(N - 2, N + 1)],
-                         gaps=gaps.get("S+x", []), name="S+x"))
-    wb = HP.Path.line((N, 0.5), (-N, 0.5))                         # s = N - x
-    decks.append(HP.Deck(wb, 1.0, "hw", "right", height=s_height(N - 2, N + 1), slab=[(N - 2, N + 1)],
-                         gaps=gaps.get("S-x", []), name="S-x"))
+                         gaps=[g for g in gaps.get("S+x", []) if g[0] < s_end + N], name="S+x"))
+    sh = N - s_end                                                 # S-x starts at s_end, not N: its s moves back
+    wb = HP.Path.line((s_end, 0.5), (-N, 0.5))                     # s = s_end - x
+    hw0 = s_height(N - 2, N + 1)
+    decks.append(HP.Deck(wb, 1.0, "hw", "right", height=(lambda s: hw0(np.asarray(s, dtype=float) + sh)),
+                         slab=[(N - 2 - sh, N + 1 - sh)],
+                         gaps=[(g0 - sh, g1 - sh) + tuple(g[2:]) for g in gaps.get("S-x", []) for g0, g1 in [g[:2]]
+                               if g1 - sh > 0], name="S-x"))
     # D (hwpaint.highway_diag: stock band width, tops and walls from the stock band pieces): dips over rows -2 and 1,
     # runs at H_LOW under S; s along the median = (z + N) * sqrt 2
     zs = lambda z: (z + N) * R2                                    # noqa: E731
@@ -338,8 +345,11 @@ def cmd_lanes(pkg, shape0, only=None):
         if key not in cache:
             cache[key] = scene(case, p["r"], p.get("capped", False))
         w = H.to_world((0, 0), p["r"], c)
-        specs, shape = HL.build_cells(cache[key].decks, [w], shape, {w: p["id"]}, states=(0, 1, 2, 3))
-        spec = specs.get(w)
+        if p["kind"] == "capjoin":                        # tasks hwcap / hwcap2: the turn matrix only, no lane
+            spec = None
+        else:
+            specs, shape = HL.build_cells(cache[key].decks, [w], shape, {w: p["id"]}, states=(0, 1, 2, 3))
+            spec = specs.get(w)
         low = [list(f) for f in p["flows"]]
         if spec is None:                                  # no lane crosses the cell (a deck edge): matrix only
             spec = {"piece": p["id"], "states": [0, 1, 2, 3], "flag": 0, "vehicle": {"class": "car", "lanes": []}}

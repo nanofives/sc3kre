@@ -19,6 +19,14 @@ claims (land piece, base 15099: Protected highway slope piece, as hwcore's), "hi
 Lanes and turn matrices: hwcore's hwlanes (lanes cut per cell from the scene's lane decks, one new curve per cut in
 hwt's shape range 22800..22999, turn matrix "auto" = derived from the lanes); they equal hwt_paint.routes() on every
 cell (checked when built). A cell with no lane gets an empty turn matrix.
+
+Task hwcap2 (owner 2026-10-18, "never extend"): 3 CAPPED twins 21254..21256 of the T's end cells 21215 (through
+highway, dx -2), 21227 (dx 7) and 21200 (stem, dz -4): where the player's drag ends ON that row, the stock caps are
+there and the block writes the twin (`hwtc` line) instead of the cell's piece, at the same state r. Art: the T scene
+with the through highway cut at x -2 / 8 and the stem at z -4, painted at the cell, the end face from the stock cap
+(hwcap_art.compose_straight). Turn matrix: the cell's turns with the outward side replaced by the side toward the row's
+other lane (the stock caps' U-turn), no animated lanes. Saves (hwys): the stock cap of that end at each turn.
+  py -3.12 hwt_build.py capart PKG                   paint the capped twins (after `art`; before `pad`)
 """
 import json
 import os
@@ -35,6 +43,51 @@ LAND_ART_FROM = 15127       # frame table of the land pieces: stock 15127 (the O
 SIDES = ["x-", "z-", "x+", "z+"]
 LAND_BASE = 15099                     # Protected highway slope piece, as hwcore's (15110 tested 2026-10-18: same ground under open decks)
 WINDOW = (-4, 7, -5, 7)
+CAP_TWINS = {21215: 21254, 21227: 21255, 21200: 21256}      # task hwcap2: T end cell -> its capped twin
+CAP_EXTENT = (-2.0, 8.0, -4.0, 8.0)                        # the capped scene: highways cut on those end cells
+SIDE_V = {0: (-1, 0), 1: (0, -1), 2: (1, 0), 3: (0, 1)}
+V_SIDE = {v: k for k, v in SIDE_V.items()}
+
+
+def _rot(v, r):
+    x, z = v
+    for _ in range(r % 4):
+        x, z = -z, x
+    return (x, z)
+
+
+def cap_out(dx, dz):
+    """frame step out of the T along the highway a T highway cell lies on (sc3netmod_hwt.c hwt_out)"""
+    return ((-1 if dx < 0 else 1), 0) if dz in (0, 1) else (0, -1)
+
+
+def cap_partner(dx, dz):
+    """frame step toward the other lane of the cell's row (hwt_cap_stock)"""
+    if dz in (0, 1):
+        return (0, 1 if dz == 0 else -1)
+    return (1 if dx == 0 else -1, 0)
+
+
+def cap_stock(dx, dz, r):
+    """the stock end cap (id, state) of T highway cell (dx, dz) at turn r"""
+    import hwcap
+    p = _rot(cap_partner(dx, dz), r)
+    return hwcap.cap_of(_rot(cap_out(dx, dz), r), p[0] + p[1] > 0)
+
+
+def capped():
+    """task hwcap2: [dict(id, of, dx, dz, base, base_st, connects)] the capped twins (state-0 turns, sides 0..3)"""
+    import hwt_cells
+    rows = {c["id"]: c for c in hwt_cells.CELLS}
+    out = []
+    for jid, cid in sorted(CAP_TWINS.items()):
+        c = rows[jid]
+        o, p = V_SIDE[cap_out(c["dx"], c["dz"])], V_SIDE[cap_partner(c["dx"], c["dz"])]
+        conn = sorted({(p if e == o else e, p if l_ == o else l_) for e, l_ in c["connects"]})
+        base, bst = cap_stock(c["dx"], c["dz"], 0)
+        out.append(dict(id=cid, of=jid, dx=c["dx"], dz=c["dz"], base=base, base_st=bst,
+                        connects=[list(t) for t in conn if t[0] != t[1]]))
+    return out
 
 
 def build_table():
@@ -152,6 +205,25 @@ def cmd_paint_shard(pkg, shard, reuse):
 SHAPE0, SHAPE_END = 22800, 22999     # hwt's lane curve shape range (protocol section 5)
 
 
+def cmd_capart(pkg):
+    """task hwcap2: paint the capped twins from the cut scene, then their end face from the stock cap"""
+    import shutil
+    import hwpaint as HP
+    import hwt_paint as T
+    from netmod import hwcap_art as CA
+    sc = T.scene(extent=CAP_EXTENT)[0]
+    for cp in capped():
+        d = os.path.join(pkg, "art", str(cp["id"]))
+        keep = os.path.join(pkg, "art_painted", str(cp["id"]))
+        for p in (d, keep):
+            if os.path.isdir(p):
+                shutil.rmtree(p)
+        HP.paint_cell(sc, (cp["dx"], cp["dz"]), d)
+        CA.compose_straight(d, keep, cp["base"], cp["base_st"])
+        print("capped twin %d of %d at (%d,%d): end face from stock %d.%d" % (cp["id"], cp["of"], cp["dx"], cp["dz"],
+                                                                             cp["base"], cp["base_st"]), flush=True)
+
+
 def cmd_lanes(pkg):
     """hwlanes specs for every table cell (lanes cut per cell from the scene's lane decks, one new curve per cut, turn
     matrix auto), written as PKG/hwt_<id>.lanes.json; cells without a lane get an empty turn matrix in the manifest"""
@@ -170,6 +242,12 @@ def cmd_lanes(pkg):
             json.dump(spec, open(os.path.join(pkg, "hwt_%d.lanes.json" % spec["piece"]), "w", encoding="utf-8"),
                       indent=1)
             n += 1
+    for cp in capped():                                       # task hwcap2: turn matrix only, no animated lane
+        low = [[SIDES[e], SIDES[l_]] for e, l_ in cp["connects"]]
+        spec = {"piece": cp["id"], "states": [0, 1, 2, 3], "flag": 0, "vehicle": {"class": "car", "lanes": []},
+                "connects": {"road": {"low": low, "high": [[l_, e] for e, l_ in low]}}}
+        json.dump(spec, open(os.path.join(pkg, "hwt_%d.lanes.json" % cp["id"]), "w", encoding="utf-8"), indent=1)
+        n += 1
     if shape - 1 > SHAPE_END:
         raise SystemExit("lane curves need shapes up to %d, hwt's range ends at %d" % (shape - 1, SHAPE_END))
     print("lanes: %d specs, curve shapes %d..%d" % (n, SHAPE0, shape - 1))
@@ -244,8 +322,19 @@ def cmd_manifest(pkg):
         lines.append("hwyp %d %d" % (r["id"], 1 if r["kind"] == "new" else 0))
         if r["kind"] != "new":
             lines.append(save_table(r))
+    for cp in capped():                                       # task hwcap2: the capped twins
+        variants.append({"id": cp["id"], "base": cp["base"], "network": "HWAY",
+                         "name": {"*": "Highway T (junction, highway end %+d,%+d)" % (cp["dx"], cp["dz"]),
+                                  "ENGLISH": "Highway Interchange"},
+                         "art": {"from": 73, "png_dir": "art/%d" % cp["id"], "ground_under": True},
+                         "trblkatt": "copy_base"})
+        lanes.append({"piece": cp["id"], "spec": "hwt_%d.lanes.json" % cp["id"]})
+        lines.append("hwyp %d 0" % cp["id"])
+        lines.append("hwys %d %s" % (cp["id"], " ".join("%d %d" % cap_stock(cp["dx"], cp["dz"], s) for s in range(4))))
     for r in hwt_cells.CELLS:
         lines.append("hwt %d %d %d %d %d" % (r["id"], r["dx"], r["dz"], 1 if r["kind"] == "new" else 0, r["sets"]))
+    for cp in capped():
+        lines.append("hwtc %d %d %d" % (cp["id"], cp["dx"], cp["dz"]))
     man = {
         "netpack": 1, "name": "hwt_trumpet", "version": "1.0.0", "author": "sc3kre",
         "description": "Task hwt: a highway T that connects every movement (a trumpet). A stem that ends beside a "
@@ -298,6 +387,8 @@ def main(argv):
         return cmd_art(argv[2], int(argv[argv.index("--jobs") + 1]) if "--jobs" in argv else 8, reuse)
     elif argv[1] == "_paint":
         cmd_paint_shard(argv[2], argv[3], reuse)
+    elif argv[1] == "capart":
+        cmd_capart(argv[2])
     elif argv[1] == "preview":
         cmd_preview(argv[2], argv[3], 2 if "--rio" in argv else 1)
     elif argv[1] == "lanes":

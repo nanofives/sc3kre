@@ -111,7 +111,6 @@ static void hwdd_run(struct HwyPass *hp);                                    /* 
 static void hwdd_stats(void);                                                /* task hwdd */
 static void hwdx_run(struct HwyPass *hp);                                    /* task hwdx */
 static void hwdx_stats(void);                                                /* task hwdx */
-static void hwcap_stats(void);                                               /* task hwcap */
 
 /* ---------------------------------------------------------------- table line */
 static void rb_file(const char *path) {
@@ -133,7 +132,7 @@ static void rb_file(const char *path) {
         if (!strncmp(line, "bv", 2) && line[3] == ' ') { bv_line(path, line); continue; }   /* task boulevard */
         if (!strncmp(line, "rbt9 ", 5)) { r9_line(path, line); continue; }       /* task bigrbt */
         if (!strncmp(line, "dbvb ", 5) || !strncmp(line, "dbvs ", 5)) { dbv_line(path, line); continue; } /* task diagbv */
-        if (!strncmp(line, "hwt ", 4)) { hwt_line(path, line); continue; } /* task hwt */
+        if (!strncmp(line, "hwt ", 4) || !strncmp(line, "hwtc ", 5)) { hwt_line(path, line); continue; } /* task hwt (hwtc: task hwcap2) */
         if (!strncmp(line, "hwx ", 4)) { hwx_line(path, line); continue; } /* task hwx */
         if (!strncmp(line, "hwy", 3)) { hwy_line(path, line); continue; }  /* task hwcore */
         if (strncmp(line, "rbt ", 4) || g_rb_off) continue;
@@ -497,7 +496,6 @@ static void rbt_stats(void) {
     hwx_stats();                                                             /* task hwx */
     hwdd_stats();                                                            /* task hwdd */
     hwdx_stats();                                                            /* task hwdx */
-    hwcap_stats();                                                           /* task hwcap */
     LONG n = g_rb_n_pass + g_rb_n_conv + g_rb_n_rev + g_rb_n_load + g_rb_n_fault;
     if (!g_rb_on || n == last) return;
     last = n;

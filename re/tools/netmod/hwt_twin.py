@@ -20,12 +20,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 import hwt_cells  # noqa: E402
-import hwcap      # noqa: E402  task hwcap: stock end caps, arms carried on
+import hwcap      # noqa: E402  tasks hwcap / hwcap2: stock end caps, where a highway ends
+import hwt_build  # noqa: E402  task hwcap2: the capped twins
 from hwt_layout import (Grid, heading, rot, world, stock_cap_from_minus_z, stock_stub_x, synth_cap,  # noqa: E402
                         PIECE_OF)
 
 CELLS = hwt_cells.CELLS
 BY_ID = {c["id"]: c for c in CELLS}
+TWIN = dict(hwt_build.CAP_TWINS)                     # task hwcap2: T cell id -> capped twin id
+BY_ID.update({tw: BY_ID[jid] for jid, tw in TWIN.items()})
 MINVOTE = 4
 RIO = False      # owner 2026-10-18: far side built up -> leave the T stock (C: HWT_RIO 0)
 CAPS0, CAPS1 = (11235, 15053), (11237, 15054)
@@ -48,25 +51,42 @@ def in_set(dx, dz, s):
     return any(c["sets"] & s and c["dx"] == dx and c["dz"] == dz for c in CELLS)
 
 
-def straight_or_cap(g, a, r, cell, step, plan, claimed):
-    """a straight cell, or (task hwcap) one at / past that highway's stock end cap that it can be carried on to;
-    step = the frame step away from the T"""
+def capped(c, r, v):
+    """task hwcap2 (sc3netmod_hwt.c hwt_capped): T highway cell c at turn r holds its capped twin or its highway's
+    stock end cap -> the twin id, else None"""
+    tw = TWIN.get(c["id"])
+    if not tw or not v:
+        return None
+    if v == (tw, r):
+        return tw
+    return tw if hwcap.cap_dir(v) == rot(*hwt_build.cap_out(c["dx"], c["dz"]), r) else None
+
+
+def straight_or_end(g, a, r, cell, step, s, claimed):
+    """a straight cell, or (task hwcap2) where that highway ends: a cell that is not one of the T's own may hold the
+    stock end cap or lie past it, a T cell only the cap and only with a capped twin; step = the frame step away from
+    the T"""
     if straight(g, a, r, *cell):
         return True
     w = world(a, r, cell)
-    v = g.get(w)
-    if (v and v[0] not in hwcap.CAP_IDS) or w in claimed or plan is None:
+    if w in claimed:
         return False
-    return bool(hwcap.need(plan, g.c, w, rot(*step, r), 0, g.free, claimed))
+    e = hwcap.end(g.c, w, rot(*step, r))
+    if not e:
+        return False
+    for c in CELLS:
+        if c["sets"] & s and c["kind"] != "new" and (c["dx"], c["dz"]) == cell:
+            return e == 1 and capped(c, r, g.get(w)) is not None
+    return True
 
 
-def check(g, a, r, gesture, s, claimed, plan=None):
+def check(g, a, r, gesture, s, claimed):
     sel = [c for c in CELLS if c["sets"] & s]
     tx = [c["dx"] for c in sel if c["dz"] in (0, 1)]
     sz0 = min([c["dz"] for c in sel if c["dz"] < 0 and c["dx"] in (0, 1)] + [0])
     for dz in range(-2, sz0 - 2, -1):
-        if not (straight_or_cap(g, a, r, (0, dz), (0, -1), plan, claimed) and
-                straight_or_cap(g, a, r, (1, dz), (0, -1), plan, claimed)):
+        if not (straight_or_end(g, a, r, (0, dz), (0, -1), s, claimed) and
+                straight_or_end(g, a, r, (1, dz), (0, -1), s, claimed)):
             return "stem"
     if gesture == 1:
         p0, p1 = g.get(world(a, r, (0, -1))), g.get(world(a, r, (1, -1)))
@@ -90,8 +110,8 @@ def check(g, a, r, gesture, s, claimed, plan=None):
         if 0 <= dx <= 1:                                   # where the stem meets it: never carried on
             if not (straight(g, a, r, dx, 0) and straight(g, a, r, dx, 1)):
                 return "through highway"
-        elif not (straight_or_cap(g, a, r, (dx, 0), (-1 if dx < 0 else 1, 0), plan, claimed) and
-                  straight_or_cap(g, a, r, (dx, 1), (-1 if dx < 0 else 1, 0), plan, claimed)):
+        elif not (straight_or_end(g, a, r, (dx, 0), (-1 if dx < 0 else 1, 0), s, claimed) and
+                  straight_or_end(g, a, r, (dx, 1), (-1 if dx < 0 else 1, 0), s, claimed)):
             return "through highway"
     for c in sel:
         w = world(a, r, (c["dx"], c["dz"]))
@@ -123,7 +143,7 @@ def existing(g, a, r, s, claimed):
         if w in claimed:
             return False
         v = g.get(w)
-        if v and v[0] == c["id"] and v[1] == r:
+        if v and v[0] in (c["id"], TWIN.get(c["id"])) and v[1] == r:
             mine += 1
             continue
         if c["kind"] != "new" and v:
@@ -136,8 +156,15 @@ def existing(g, a, r, s, claimed):
     return mine > 0
 
 
-def place(a, r, s):
-    return {world(a, r, (c["dx"], c["dz"])): (c["id"], r) for c in CELLS if c["sets"] & s}
+def place(g, a, r, s):
+    """the T's pieces; a highway cell where its highway ends gets its capped twin (task hwcap2)"""
+    out = {}
+    for c in CELLS:
+        if c["sets"] & s:
+            w = world(a, r, (c["dx"], c["dz"]))
+            tw = capped(c, r, g.get(w)) if c["kind"] != "new" else None
+            out[w] = (tw or c["id"], r)
+    return out
 
 
 def run(g):
@@ -159,7 +186,7 @@ def run(g):
             continue
         for s in (1, 2):
             if existing(g, (ax, az), r, s, claimed):
-                cells = place((ax, az), r, s)
+                cells = place(g, (ax, az), r, s)
                 g.c.update(cells)
                 claimed |= set(cells)
                 out.append(("kept", 0, (ax, az), r, s))
@@ -178,19 +205,15 @@ def run(g):
         for r in range(4):
             d = rot(0, -1 if gesture == 1 else 0, r)
             a = (xz[0] - d[0], xz[1] - d[1])
-            plan = hwcap.Plan()
-            why = check(g, a, r, gesture, 1, claimed, plan)
+            why = check(g, a, r, gesture, 1, claimed)
             s = 1
             if RIO and why in ("far side not free", "far side touches other highway") and gesture == 1:
-                plan = hwcap.Plan()
-                why, s = check(g, a, r, gesture, 2, claimed, plan), 2
+                why, s = check(g, a, r, gesture, 2, claimed), 2
             if why is None:
-                ext, carried = hwcap.commit(plan, {0})             # task hwcap: arms first, the T over them
-                g.c.update(ext)
-                claimed |= set(ext)
-                for cap, rows, new in carried:
-                    out.append(("carried", cap, rows, new))
-                cells = place(a, r, s)
+                cells = place(g, a, r, s)
+                ncap = sum(1 for v in cells.values() if v[0] in TWIN.values())
+                if ncap:
+                    out.append(("capped", ncap))
                 if gesture == 2:
                     for cell in ((-1, 0), (-1, 1), (2, 0), (2, 1)):
                         if not in_set(cell[0], cell[1], s):
@@ -249,14 +272,21 @@ def selftest():
     run(g)
     del g.c[(60, 57)]                                                       # frame (0, -3): a stem cell
     t(run(g) == [("broken", 0, (60, 60), 0, 1)], "a stem cell cut -> broken")
-    # task hwcap: the through highway / the stem ends inside what the T needs (through dx -3..8, stem dz -2..-5), with
-    # the stock end caps on both ends of every drag (hwcap.stock_ends)
-    for r in (0, 1):
+    # task hwcap2 ("never extend"): the through highway / the stem ends inside or next to the T (its own end cells:
+    # through dx -2 / 7, stem dz -4), with the stock end caps on both ends of every drag (hwcap.stock_ends). On the T's
+    # end cell -> its capped twin; one past it -> the plain T next to the stock cap; one short -> refused. Nothing is
+    # ever written past a drag.
+    for r in range(4):
         for name, thr, stem, blk, want in (
-                ("through highway capped on dx 8", (-8, 8), (-10, -1), None, ["carried", "built"]),
-                ("through highway capped on dx -3", (-3, 10), (-10, -1), None, ["carried", "built"]),
-                ("stem capped on dz -5", (-8, 10), (-5, -1), None, ["carried", "built"]),
-                ("through highway capped on dx 8, dx 9 taken", (-8, 8), (-10, -1), (9, 0), [])):
+                ("through highway ends on dx 7 (T end cell)", (-8, 7), (-10, -1), None, ["capped", "built"]),
+                ("through highway ends on dx -2 (T end cell)", (-2, 10), (-10, -1), None, ["capped", "built"]),
+                ("stem ends on dz -4 (T end cell)", (-8, 10), (-4, -1), None, ["capped", "built"]),
+                ("all three end on the T's end cells", (-2, 7), (-4, -1), None, ["capped", "built"]),
+                ("through highway ends on dx 8 (one past)", (-8, 8), (-10, -1), None, ["built"]),
+                ("through highway ends on dx -3 (one past)", (-3, 10), (-10, -1), None, ["built"]),
+                ("stem ends on dz -5 (one past)", (-8, 10), (-5, -1), None, ["built"]),
+                ("through highway ends on dx 6 (a T cell past it)", (-8, 6), (-10, -1), None, []),
+                ("stem ends on dz -3 (a T cell past it)", (-8, 10), (-3, -1), None, [])):
             a = (60, 60)
             c = {}
             th = [world(a, r, (x, z)) for x in range(thr[0], thr[1] + 1) for z in (0, 1)]
@@ -267,9 +297,18 @@ def selftest():
             hwcap.stock_ends(c, th, lambda i, s_, w: (i, s_))
             hwcap.stock_ends(c, st, lambda i, s_, w: (i, s_))
             bw = world(a, r, blk) if blk else None
-            res = run(Grid(c, buildings=[(bw[0], bw[1], 1, 1)] if bw else []))
+            before = set(c)
+            grid = Grid(c, buildings=[(bw[0], bw[1], 1, 1)] if bw else [])
+            res = run(grid)
             kinds = [e[0] for e in res]
-            t(kinds == want, "%s, turn %d -> %s" % (name, r, res))
+            on_hw = [w for w in grid.c if w not in before and
+                     (w in th or w in st or any(world(a, r, (x, z)) == w for x in range(-12, 14) for z in (0, 1)) or
+                      any(world(a, r, (x, z)) == w for x in (0, 1) for z in range(-12, 0)))]
+            past = [w for w in on_hw if w not in th and w not in st]
+            n3 = sum(1 for e in res if e[0] == "capped" and e[1] == 3)
+            ok3 = name != "all three end on the T's end cells" or n3 == 1
+            t(kinds == want and not past and ok3, "%s, turn %d -> %s%s" % (name, r, res, " WROTE PAST THE DRAG %s" %
+                                                                          past if past else ""))
     print("selftest", "PASSED" if ok else "FAILED")
     return 0 if ok else 1
 

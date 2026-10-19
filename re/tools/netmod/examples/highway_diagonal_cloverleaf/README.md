@@ -9,21 +9,25 @@ A diagonal highway that crosses a straight highway at 45 degrees becomes a skewe
 - **Orientations:** both diagonal families, with the straight along x or along z.
 - **Fallback:** each quadrant joins only its own two carriageways, so a built-up quadrant drops its two ramps and the
   rest still builds.
-- **Arm ending at the interchange (task hwcap):** a highway dragged so that it ends inside the joining zone (its stock
-  end cap on a joining cell, or before it) is carried on with stock pieces to one row past the zone, its cap moved
-  there (`sc3netmod_hwcap.c`). When the land past the end takes no highway (Seoul's lake), a diagonal arm whose cap
-  sits on its last joining cell gets a capped join instead (below). Results: `verify/hwcap/RESULTS.md`.
+- **Arm ending at the interchange (tasks hwcap / hwcap2):** a highway never grows past the player's drag (owner
+  2026-10-18: "never extend"). An arm dragged so that it ends ON a quadrant's last joining cell (its stock end cap
+  there) gets the CAPPED JOIN there (below) and the quadrant builds. An arm that ends earlier leaves a joining cell
+  empty: that quadrant drops. Results: `verify/hwcap/RESULTS.md`, `verify/hwcap2/RESULTS.md`.
 
 Rule and pieces are placed by the HWDX block of sc3netmod.dll (`re/harness/src/sc3netmod_hwdx.c`, on hwcore's
 `sc3netmod_hwy.c`). Design, rule and offline checks: `verify/hwdx/README.md`; in-game results:
 `verify/hwdx/RESULTS.md`.
 
-- **Pieces:** 176 ids in 21260..21359 and 21460..21535. That is 120 classes; every class that sits on highway comes
+- **Pieces:** 184 ids in 21260..21359 and 21460..21543. That is 120 classes; every class that sits on highway comes
   in two versions, one for a straight along x and one along z.
-  - **Capped joins** 21532..21535 (task hwcap): the last joining cell of a diagonal arm with the stock end there, one
-    per diagonal family and flavour. Base = the stock cap (14999 / 15059), placed at the cap's own state, so saves
-    and the stock tiler see the stock end. Turn matrix = the stock cap's (a U-turn between its two open sides). No
-    lanes (the carriageway lanes end inside the cell).
+  - **Capped joins** (a quadrant's last joining cell of an arm, with the stock end there): 21532..21535 (task hwcap)
+    on the diagonal arms, one per diagonal family and flavour; 21536..21543 (task hwcap2) on the straight arms, one
+    per joining class (A1's / O2's last joining column 9 / 6 of case A, 9 / 6 of case B) and flavour. Base = the
+    stock cap (14999 / 15059, 15053 / 15054 / 11235 / 11237), placed at the cap's own state, so saves and the stock
+    tiler see the stock end. Turn matrix: the diagonal ones the stock cap's (a U-turn between its two open sides);
+    the straight ones the join's turns with the outward side replaced by the side toward the other lane (the stock
+    cap's U-turn, plus the ramp's turn into or out of it). No lanes. Art: the scene with that arm ending there,
+    the end face taken from the stock cap (`hwcap_art.py`).
   - **On-highway pieces** (core and ramp joins) have a plain base: 15051 / 73, or 11223 / 11224 / 15052 / 15106.
     Their state is the stock state of that cell.
   - **Land pieces** (ramp-only cells, written into empty cells) have the Protected base 15099.

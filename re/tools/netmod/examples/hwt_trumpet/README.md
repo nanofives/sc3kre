@@ -16,7 +16,14 @@ right-in / right-out set (the two stem-side ramps only) is still in the package 
 (`HWT_RIO 0` in sc3netmod_hwt.c, `RIO = False` in hwt_twin.py). The T goes away when its stem or through highway is cut: plain stock highway goes back, the stem stub
 left against the through highway is removed.
 
-- **Pieces:** 54 variants 21200..21253 (50 for the full T, 4 more for the fallback; 14 cells shared). 30 + 8 land
+- **Arm ending at the T (task hwcap2, owner 2026-10-18: "never extend"):** the through highway may end on the T's
+  own end cell (dx -2 or 7 in the stem frame) and the stem on dz -4: the stock caps are there, and the block writes
+  the capped twin of that cell (21254 / 21255 / 21256 for 21215 / 21227 / 21200: the cell with the stock end face,
+  same state as the T, saved as the stock cap through `hwys`; turn matrix = the cell's turns with the outward side
+  replaced by the side toward the other lane, no lanes; `hwtc <twin> <dx> <dz>` lines). Ending one cell past those
+  leaves the stock cap beside the T, as it is. Ending earlier leaves a T cell empty: no T. Nothing is ever added
+  past the player's drag.
+- **Pieces:** 57 variants 21200..21256 (50 for the full T, 4 more for the fallback; 14 cells shared; 3 capped twins). 30 + 8 land
   cells (base 15099, Protected), the rest rewritten highway cells (base 15051 through, 73 stem). Each cell has its own
   art, painted by `hwt_paint.py` with hwcore's `hwpaint.py` (stock highway frames as the material).
 - **Lanes and turn matrices:** hwcore's `hwlanes.py`: `hwt_<id>.lanes.json` (51 specs, new curves 22800..22883,
@@ -32,6 +39,8 @@ Build and install (art is not shipped; ~10 min with 10 jobs):
 ```
 py -3.12 re/tools/netmod/hwt_build.py table
 py -3.12 re/tools/netmod/hwt_build.py art re/tools/netmod/examples/hwt_trumpet --jobs 10
+py -3.12 re/tools/netmod/hwt_build.py capart re/tools/netmod/examples/hwt_trumpet     # the 3 capped twins
+py -3.12 re/tools/netmod/hwt_build.py pad re/tools/netmod/examples/hwt_trumpet
 py -3.12 re/tools/netmod/hwt_build.py lanes re/tools/netmod/examples/hwt_trumpet
 py -3.12 re/tools/netmod/hwt_build.py manifest re/tools/netmod/examples/hwt_trumpet
 py -3.12 re/tools/netmod/netpack.py install re/tools/netmod/examples/hwt_trumpet --tree <game tree>
