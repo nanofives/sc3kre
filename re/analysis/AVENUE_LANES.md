@@ -25,10 +25,15 @@ Frame = the half at state 0 (a band along x, this cell is the z+ half, median on
 
 | lane | entry node | exit node | curve |
 |---|---|---|---|
-| inner (median side) | (255, 0, 80) | (0, 0, 80) | NEW shape 23600 (no stock curve runs (255,80) -> (0,80)) |
-| outer (curb side) | (255, 0, 175) | (0, 0, 175) | stock key 256 ((255,175) -> (0,175), road 29's -x lane) |
+| inner (median side) | (255, 0, 80) | (0, 0, 80) | found by end points: new 23600 in English etc., stock 512's reversed copy in English-UK |
+| outer (curb side) | (255, 0, 175) | (0, 0, 175) | found by end points: stock 256 in English etc., new 23603's copy in English-UK |
 
-Coordinates are lanekit's (x, y, z) in 0..255 cell units. Other states by lanekit's rotation (`lanekit.rotate`: the
+Coordinates are lanekit's (x, y, z) in 0..255 cell units. **Lane specs carry no `path` keys**: lanekit then searches
+each language's own curve library by end points. That matters because English-UK's VPathAtt holds every curve REVERSED
+under the same key (lanekit MIRROR_LANGS): with right-hand lanes in every language (`"mirror_uk": false`), a fixed key
+would make UK cars drive the curve backwards. Where a language has no curve with the right end points, add a new shape
+in your range; a shape whose English geometry is the REVERSE of the lane gives English-UK the forward copy (hwlanes
+writes UK copies reversed). avcore's 23601 and 23603 exist only for that. Other states by lanekit's rotation (`lanekit.rotate`: the
 shipped rule; one state step maps sides x- -> z- -> x+ -> z+ -> x-, measured on 11203's records). So at any state the
 inner lane runs 80 units from the median edge and the outer lane 175, both in the half's direction. Both nodes sit at
 the stock slots 80 / 175, so where a one-way half meets a piece, the arrival node is found by position as for stock
@@ -37,13 +42,17 @@ positions, with the same direction**, or cars that reach it vanish (verify/hwcar
 
 Turn matrix (props 310) of a straight one-way half at state 0: low half x+ => x- only, high half its transpose x- => x+
 (the tiler counts a side as an arm if either half has a bit there; every stock mask has high = transpose(low)). The
-router reads the low half; sc3netmod LANEDENSITY enforces it on every variant (default mode). Packed: `0x00040100`.
+router reads the low half in this install (layer +0x54 = 1, NET_LANES.md 1.3); sc3netmod LANEDENSITY enforces it on
+every variant (default mode). Packed: `0x00040100`.
+**English-UK routing [UNCERTAIN]:** lanekit notes the high half serves English-UK's lanes. If the router reads the high
+half in an English-UK install, UK trips would route left-hand on these pieces while their cars drive right-hand. Not
+tested (no English-UK install here). Making high = low would drop the downstream side as a tiler arm.
 
 Boulevards (bvlanes): each outer cell is a one-way half as above; the middle cell carries its side's third lane at z 14
 (beside row 0) and z 241 (beside row 2) in the state-0 frame of the middle piece, running with the outer row beside it
 (PLAN.md 9.2). bvlanes owns those numbers; the outer-cell edges follow this section.
 
-## 3. avcore's pieces [published ids; lanes coming]
+## 3. avcore's pieces [published: 21700 / 21701 lanes in examples/avenue_lanes; crossings / slopes coming]
 
 | id | base | what | saved as |
 |---|---|---|---|
@@ -57,12 +66,14 @@ one of four patterns (band along z, ending to the N: x- cell 11203.3, x+ cell 11
 pair of 11203 next to a band is a bend that turns a half into a road (2 such cells), not an end: the band rule refuses
 it. Right-hand traffic always turns the same way through an end, so one piece covers both cells of every pattern: at
 state 0, traffic enters across x- and leaves across z+; outer lane (0, 0, 80) -> (175, 0, 255) on a radius-175 quarter
-circle about (0, 255), inner lane (0, 0, 175) -> (80, 0, 255) on radius 80. Curves 23601 (outer), 23602 (inner). Clean
+circle about (0, 255), inner lane (0, 0, 175) -> (80, 0, 255) on radius 80. Curves: outer = stock 1024 (11203's own) in English etc., new 23601's UK copy in English-UK; inner = new
+23602 in English etc., stock 768's reversed copy in English-UK. Clean
 ends are rare in the shipped cities: most avenues there end in a road junction, so they convert only once avjunc's
 pieces are declared (section 5).
 
-Curve shapes: avcore 23600..23699. 23600..23602 as above; 23603..23620 reserved for the slope / crossing pieces'
-second same-direction lane (slopes change y along the lane). Siblings may use any avcore curve key by number; they
+Curve shapes: avcore 23600..23699. 23600 straight inner (255,80)->(0,80); 23601 English (175,255)->(0,80) on r 175
+(for English-UK's U-turn outer lane); 23602 U-turn inner (0,175)->(80,255) on r 80; 23603 English (0,175)->(255,175)
+(for English-UK's straight outer lane); 23604..23620 reserved for the slope / crossing pieces. Siblings may use any avcore curve key by number; they
 write their own curves in their own ranges.
 
 ## 4. The band rule (sc3netmod_avl.c) [coming]
@@ -114,7 +125,9 @@ Both answer from the last pass's result (the band map avcore keeps for the whole
 - Right-hand everywhere: every lane spec sets `"mirror_uk": false` so English-UK gets the same lanes (the stock
   mirrored copy would disagree with the single turn matrix all languages share).
 - Turn matrices explicit and one-way where the lanes are one-way; high half = transpose of low.
+- No `path` keys in lane specs (section 2): curves by end points in each language.
 - Check every edge your piece shares with a one-way half against section 2 offline before the game: avcore's
-  `re/tools/netmod/avlanes.py` [coming] has `edge_nodes(state, side)` (the two nodes a one-way half at `state` puts on
-  `side`, in travel order) and `check(spec_a, state_a, spec_b, state_b, side)` (every exit of one piece meets an entry
-  of the other at the same position and direction).
+  `re/tools/netmod/avlanes.py` [published] has `edge_nodes(state, side)` (the two nodes a one-way half at `state` puts on
+  `side`, in travel order) and `check(a, state_a, b, state_b, side, lang=...)` (every exit of one piece meets an entry
+  of the other at the same position and direction; a / b = a piece id or a lanes.json path; run it for ENGLISH and
+  English-UK). `py -3.12 -m netmod.avlanes selftest` checks avcore's own pieces (PASSED in both languages).
