@@ -2415,6 +2415,62 @@
     "ground_under": true
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 21532,
+   "base": 14999,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join, highway end)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21532",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21533,
+   "base": 15059,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join, highway end)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21533",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21534,
+   "base": 15059,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join, highway end)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21534",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21535,
+   "base": 14999,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway interchange (ramp join, highway end)"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21535",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
   }
  ],
  "lanes": [
@@ -3105,6 +3161,22 @@
   {
    "piece": 21531,
    "spec": "lanes/21531.json"
+  },
+  {
+   "piece": 21532,
+   "spec": "lanes/21532.json"
+  },
+  {
+   "piece": 21533,
+   "spec": "lanes/21533.json"
+  },
+  {
+   "piece": 21534,
+   "spec": "lanes/21534.json"
+  },
+  {
+   "piece": 21535,
+   "spec": "lanes/21535.json"
   }
  ],
  "highway_lines": [
@@ -3347,6 +3419,10 @@
   "hwyp 21528 0",
   "hwyp 21529 0",
   "hwyp 21530 0",
-  "hwyp 21531 0"
+  "hwyp 21531 0",
+  "hwyp 21532 0",
+  "hwyp 21533 0",
+  "hwyp 21534 0",
+  "hwyp 21535 0"
  ]
 }

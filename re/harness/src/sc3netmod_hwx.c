@@ -14,7 +14,9 @@
  *             interchange ring (15115..15128, Berlin's) in its 6x6. In an edit pass only (a city load never takes
  *             land). Cloverleaf when every table cell is inside the read box, the arm cells (dx / dz 2..5, -6..-3) are
  *             plain straight stock highway, every ramp cell is hwy_free and unclaimed and has no other highway beside
- *             it from outside the layout; else the clean flyover (the 12 core cells only).
+ *             it from outside the layout; else the clean flyover (the 12 core cells only). An arm cell holding the
+ *             arm's stock end cap, or nothing past it (the drag ends inside the junction cells), counts when hwcap can
+ *             carry the arm on to one past them (sc3netmod_hwcap.c, task hwcap; stock pieces, the cap moved out).
  *   built     every piece names its anchor (each (piece, state) is one table cell). Per anchor, over its cells inside
  *             the read box: the X still whole (core cells hold the stock or the clean piece, the eight cells past the
  *             4x4 hold highway) -> the core is kept as the clean flyover, and the ramps too when the arm cells hold
@@ -84,8 +86,9 @@ static int hwx_is_core(int dx, int dz) {
     return 0;
 }
 
-/* the cloverleaf's check at anchor (ax, az); existing = it is built (ramp cells may hold their piece) */
-static int hwx_clover(HwyPass *hp, int ax, int az, int existing, const char **why) {
+/* the cloverleaf's check at anchor (ax, az); existing = it is built (ramp cells may hold their piece). cap (fresh
+ * only): arms that end inside the junction cells are recorded there to be carried on (task hwcap) */
+static int hwx_clover(HwyPass *hp, int ax, int az, int existing, const char **why, HwcapSet *cap) {
     int k, j, d, x, z, st;
     for (k = 0; k < g_hwx_n; k++) {
         HwxCell *c = &g_hwx_c[k];
@@ -117,6 +120,10 @@ static int hwx_clover(HwyPass *hp, int ax, int az, int existing, const char **wh
             if (hwx_is(v, id, st)) continue;
             k = hwx_cell_at(dx, dz);
             if (existing && k >= 0 && hwx_is(v, g_hwx_c[k].piece, g_hwx_c[k].put)) continue;
+            if (cap && (!v || hwcap_is(v))) {                         /* task hwcap: the arm ends here or before */
+                if (hwcap_need(hp, cap, x, z, j < 2 ? (d > 0 ? 1 : -1) : 0, j < 2 ? 0 : (d > 0 ? 1 : -1), 0)) continue;
+                *why = g_hwcap_why; return 0;
+            }
             *why = "an arm is not plain straight highway"; return 0;
         }
     }
@@ -210,7 +217,7 @@ static void hwx_run(HwyPass *hp) {
             if (g_hwx_c[k].cls != 2 && hwx_in(hp, ax + g_hwx_c[k].dx, az + g_hwx_c[k].dz) &&
                 hwx_is(hwy_at(hp, ax + g_hwx_c[k].dx, az + g_hwx_c[k].dz), g_hwx_c[k].piece, g_hwx_c[k].put)) ramps++;
         if (hwx_x_ok(hp, ax, az, 1)) {
-            if (ramps && hwx_clover(hp, ax, az, 1, &why)) {
+            if (ramps && hwx_clover(hp, ax, az, 1, &why, NULL)) {
                 hwx_put_all(hp, ax, az, 7);
                 InterlockedIncrement(&g_hwx_n_kept);
                 continue;
@@ -233,6 +240,8 @@ static void hwx_run(HwyPass *hp) {
     for (z = hp->z0 + 1; z < hp->z1; z++)
         for (x = hp->x0 + 1; x < hp->x1; x++) {
             int ring = 0, dx, dz;
+            HwcapSet cap;
+            cap.n = cap.nn = 0;
             if (!hwx_is(hwy_at(hp, x, z), 15113, 0) || hwy_claimed(x, z)) continue;
             ax = x; az = z;
             for (k = 0; k < 12; k++)
@@ -251,8 +260,8 @@ static void hwx_run(HwyPass *hp) {
                     if (v && hwy_id(v) >= 15115 && hwy_id(v) <= 15128) { ring = 1; break; }
                 }
             if (ring) { logf("hwx: %s: X at (%d,%d) refused: a stock interchange ring", hp->who, ax, az); continue; }
-            if (hwx_clover(hp, ax, az, 0, &why)) {
-                int n = hwx_put_all(hp, ax, az, 7);
+            if (hwx_clover(hp, ax, az, 0, &why, &cap)) {
+                int n = (hwcap_commit(hp, &cap, 1), hwx_put_all(hp, ax, az, 7));
                 InterlockedIncrement(&g_hwx_n_clover);
                 logf("hwx: %s: cloverleaf at (%d,%d): %d cells written", hp->who, ax, az, n);
             } else {

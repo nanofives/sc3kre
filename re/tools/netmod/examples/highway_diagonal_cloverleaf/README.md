@@ -9,13 +9,21 @@ A diagonal highway that crosses a straight highway at 45 degrees becomes a skewe
 - **Orientations:** both diagonal families, with the straight along x or along z.
 - **Fallback:** each quadrant joins only its own two carriageways, so a built-up quadrant drops its two ramps and the
   rest still builds.
+- **Arm ending at the interchange (task hwcap):** a highway dragged so that it ends inside the joining zone (its stock
+  end cap on a joining cell, or before it) is carried on with stock pieces to one row past the zone, its cap moved
+  there (`sc3netmod_hwcap.c`). When the land past the end takes no highway (Seoul's lake), a diagonal arm whose cap
+  sits on its last joining cell gets a capped join instead (below). Results: `verify/hwcap/RESULTS.md`.
 
 Rule and pieces are placed by the HWDX block of sc3netmod.dll (`re/harness/src/sc3netmod_hwdx.c`, on hwcore's
 `sc3netmod_hwy.c`). Design, rule and offline checks: `verify/hwdx/README.md`; in-game results:
 `verify/hwdx/RESULTS.md`.
 
-- **Pieces:** 172 ids in 21260..21359 and 21460..21531. That is 120 classes; every class that sits on highway comes
+- **Pieces:** 176 ids in 21260..21359 and 21460..21535. That is 120 classes; every class that sits on highway comes
   in two versions, one for a straight along x and one along z.
+  - **Capped joins** 21532..21535 (task hwcap): the last joining cell of a diagonal arm with the stock end there, one
+    per diagonal family and flavour. Base = the stock cap (14999 / 15059), placed at the cap's own state, so saves
+    and the stock tiler see the stock end. Turn matrix = the stock cap's (a U-turn between its two open sides). No
+    lanes (the carriageway lanes end inside the cell).
   - **On-highway pieces** (core and ramp joins) have a plain base: 15051 / 73, or 11223 / 11224 / 15052 / 15106.
     Their state is the stock state of that cell.
   - **Land pieces** (ramp-only cells, written into empty cells) have the Protected base 15099.
@@ -43,6 +51,7 @@ py -3.12 -m netmod.hwdx package netmod/examples/highway_diagonal_cloverleaf     
 py -3.12 netmod/hwdx_paint.py lanes netmod/examples/highway_diagonal_cloverleaf 22000
 py -3.12 netmod/hwdx_paint.py art netmod/examples/highway_diagonal_cloverleaf     # all pieces, all zooms (slow:
                                                                                      # split ids over processes)
+py -3.12 netmod/hwcap_art.py compose netmod/examples/highway_diagonal_cloverleaf  # capped joins: stock end face
 py -3.12 netmod/hwdx_paint.py pad netmod/examples/highway_diagonal_cloverleaf
 py -3.12 netmod/netpack.py install netmod/examples/highway_diagonal_cloverleaf --tree <game tree>
 ```

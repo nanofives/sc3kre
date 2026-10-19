@@ -1,0 +1,30 @@
+{
+ "piece": 21532,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 0,
+ "vehicle": {
+  "class": "car",
+  "lanes": []
+ },
+ "connects": {
+  "road": {
+   "low": [
+    [
+     "z+",
+     "x+"
+    ]
+   ],
+   "high": [
+    [
+     "x+",
+     "z+"
+    ]
+   ]
+  }
+ }
+}
