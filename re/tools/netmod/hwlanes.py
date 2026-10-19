@@ -56,7 +56,7 @@ sys.path.insert(0, os.path.join(HERE, "..", ".."))
 from netmod import lanekit as LK  # noqa: E402
 
 Y_PER_E = 32.0                      # node y per hwpaint height unit (1024 / 32 = the stock deck)
-EXTRA = 2                           # the curve record's trailing u32 on elevated stock curves (meaning UNKNOWN)
+EXTRA = 2                           # the curve record's trailing u32 (the path SORT ID) on the deck; see extra_for
 HW_SPEED = 110000                   # stock 73 / 15051 lanes
 RAMP_SPEED = 74999                  # stock one-lane ramp corners 15123..15133
 HW_LANES = (1 - 145 / 255.0, 1 - 61 / 255.0)   # 73.0's lanes (x 145, 61) as shares of the width from its outer parapet
@@ -90,7 +90,18 @@ def _rot(pts, r):
     return out
 
 
-def _payload(pts, hin, hout, extra=EXTRA):
+def extra_for(pts):
+    """The curve record's trailing u32, by height as stock (task avcore 2026-10-19): 0 when every point is at y 0, else
+    EXTRA (2). It is the path's sort id [UNCERTAIN as a hang cause]: STRTSIM SerialReadBinary 0x1001e673 stores it at
+    +0x34 (file value + 1; Linux accessor SortId), and a car whose sort id changes sends it to the anim occupant manager
+    (0x1001b030 / 0x10018820 / 0x1001bc70, property 0x80). Stock: all 192 flat ground curves 0, all 408 deck curves 2.
+    Ramps and mixed heights stay 2 until measured (stock mixes 0 / 1 / 2 there)."""
+    return 0 if all(int(p[1]) == 0 for p in pts) else EXTRA
+
+
+def _payload(pts, hin, hout, extra=None):
+    if extra is None:
+        extra = extra_for(pts)
     return (b"BIN\r" + struct.pack("<I", len(pts)) + b"".join(struct.pack("<iii", *p) for p in pts) +
             bytes([hin & 0xff, hout & 0xff]) + struct.pack("<I", extra))
 
@@ -130,7 +141,7 @@ def inject(game, spec):
         for s, pts in cs.items():
             for key, (p, hin, hout) in curve_set(s, pts)["uk" if _uk(lang) else "en"].items():
                 old = P.veh.get(key)
-                new = {"pts": [tuple(v) for v in p], "in": hin, "out": hout, "extra": EXTRA}
+                new = {"pts": [tuple(v) for v in p], "in": hin, "out": hout, "extra": extra_for(p)}
                 if old is not None and (old["pts"], old["in"], old["out"]) != (new["pts"], hin, hout):
                     raise LK.LaneError("curve key %d is already taken by another curve" % key)
                 P.veh[key] = new
@@ -351,8 +362,58 @@ def main(argv=None):
     p.add_argument("out")
     p = sub.add_parser("core")
     p.add_argument("pkg")
+    sub.add_parser("selftest")
     a = ap.parse_args(argv)
-    {"stock": cmd_stock, "demo": cmd_demo, "core": cmd_core}[a.cmd](a)
+    {"stock": cmd_stock, "demo": cmd_demo, "core": cmd_core, "selftest": cmd_selftest}[a.cmd](a)
+
+
+def selftest_extra():
+    """task avcore: curve_set / curve_records / inject agree on the trailing u32: a flat curve 0, a deck curve 2, both
+    languages. -> list of problems"""
+    bad = []
+    flat = [[255, 0, 80], [128, 0, 80], [0, 0, 80]]
+    deck = [[255, 1024, 80], [128, 1024, 80], [0, 1024, 80]]
+    for shape, pts, want in ((0xFFFF00, flat, 0), (0xFFFF01, deck, EXTRA)):
+        for kind, recs in curve_records({shape: pts}).items():
+            for _g, key, _t, b in recs:
+                n = struct.unpack_from("<I", b, 4)[0]
+                got = struct.unpack_from("<I", b, 8 + 12 * n + 2)[0]
+                if got != want:
+                    bad.append("curve_records %s key %d: extra %d, want %d" % (kind, key, got, want))
+        for kind, d in curve_set(shape, pts).items():
+            for key, (p, _hi, _ho) in d.items():
+                if extra_for(p) != want:
+                    bad.append("curve_set %s key %d: extra %d, want %d" % (kind, key, extra_for(p), want))
+
+    class _P:
+        def __init__(self):
+            self.veh = {}
+
+    class _G:
+        def __init__(self):
+            self.p = {"ENGLISH": _P(), "English-UK": _P()}
+
+        def langs(self):
+            return list(self.p)
+
+        def paths(self, lang):
+            return self.p[lang]
+    g = _G()
+    inject(g, {"curves": [{"shape": 0xFFFF00, "pts": flat}, {"shape": 0xFFFF01, "pts": deck}]})
+    for lang, P in g.p.items():
+        for key, c in P.veh.items():
+            want = 0 if key >> 8 == 0xFFFF00 else EXTRA
+            if c["extra"] != want:
+                bad.append("inject %s key %d: extra %d, want %d" % (lang, key, c["extra"], want))
+    return bad
+
+
+def cmd_selftest(a):
+    bad = selftest_extra()
+    print("hwlanes selftest:", "PASSED" if not bad else "FAILED")
+    for b in bad:
+        print("  ", b)
+    sys.exit(1 if bad else 0)
 
 
 if __name__ == "__main__":

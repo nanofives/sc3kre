@@ -9,7 +9,12 @@
  *
  * Table lines (netpack manifest key `avenue_lines`):
  *   avls <piece>                 the one-way straight half (a variant of 11204), written at the cell's 11204 state
- *   avlu <piece>                 the end U-turn quarter (a variant of 11203), written at the cell's 11203 state
+ *   avlu <piece>                 the end U-turn quarter (a variant of 11203), written at the cell's 11203 state; ONE lane
+ *                                (the outer, radius 175): a car on a radius-80 left turn deadlocks SC3 (avjunc 2026-10-19)
+ *   avlm <piece>                 the merge half (a variant of 11204): the straight row next to a U-turn end, on the half
+ *                                running into the end; its inner lane merges into the outer lane
+ *   avlp <piece>                 the split half (a variant of 11204): the same row, on the half leaving the end; the one
+ *                                lane out of the U-turn splits into two
  *   avlc <piece> <base> <side>   a one-way variant of a crossing / slope piece; at the base's state 0 its lanes run
  *                                toward world side <side>; at state s toward (side + s) % 4
  *   avlj <piece> <NESW>          a sibling's piece a band may END on: per side at state 0, I = a half's traffic
@@ -23,6 +28,8 @@
  *              x+ 11203.0, to the S x- 2 x+ 1; along x to the E z- 0 z+ 1, to the W z- 3 z+ 2, measured on the 15
  *              shipped cities); or two avlj pieces whose letters on the side facing the band say I where the half's
  *              traffic flows into the piece and O where it flows out
+ *   U row      the band row next to a U-turn end holds plain straight halves (no crossing / slope), and a band with two
+ *              U-turn ends has at least two rows; else the band stays stock (the merge / split pieces go there)
  *   guard      every cell written holds a stock id (< 20000) or one of ours; never a cell dbv_claimed / hwave_claimed
  * Write = the game's piece writer FUN_10008919 per cell (as AVX / DAV). Our pieces in a band that no longer converts,
  * and in no band, get their base back at the same state BEFORE the writes (the stock piece they replaced; a rect
@@ -37,7 +44,7 @@
 
 typedef struct { WORD piece, base; BYTE side; } AvlC;
 typedef struct { WORD piece; char e[4]; } AvlJ;
-static WORD g_avl_uturn;                                    /* g_avl_straight, g_avl_on: sc3netmod_rbt.c */
+static WORD g_avl_uturn, g_avl_merge, g_avl_split;          /* g_avl_straight, g_avl_on: sc3netmod_rbt.c */
 static AvlC g_avl_c[AVL_MAXC];
 static AvlJ g_avl_j[AVL_MAXJ];
 static int g_avl_nc, g_avl_nj;
@@ -49,14 +56,20 @@ static const signed char AVL_D[4][2] = { { 0, -1 }, { 1, 0 }, { 0, 1 }, { -1, 0 
 static void avl_line(const char *path, const char *line) {
     unsigned long v, b, s;
     char e[8];
-    if (!strncmp(line, "avls ", 5) || !strncmp(line, "avlu ", 5)) {
-        int u = line[3] == 'u';
+    if (!strncmp(line, "avls ", 5) || !strncmp(line, "avlu ", 5) || !strncmp(line, "avlm ", 5) ||
+        !strncmp(line, "avlp ", 5)) {
+        char t = line[3];
+        int u = t == 'u';
         if (sscanf(line + 5, "%lu", &v) != 1 || !v || v > 0xffff || g_base[v] != (u ? 11203 : 11204)) {
             logf("### avl: %s: bad line or piece not a variant of %s: '%s'", path, u ? "11203" : "11204", line);
             return;
         }
-        if (u) g_avl_uturn = (WORD)v; else g_avl_straight = (WORD)v;
-        logf("avl: %s: %s piece %lu", path, u ? "end U-turn" : "one-way straight half", v);
+        if (u) g_avl_uturn = (WORD)v;
+        else if (t == 'm') g_avl_merge = (WORD)v;
+        else if (t == 'p') g_avl_split = (WORD)v;
+        else g_avl_straight = (WORD)v;
+        logf("avl: %s: %s piece %lu", path, u ? "end U-turn" : t == 'm' ? "merge half" : t == 'p' ? "split half" :
+             "one-way straight half", v);
         return;
     }
     if (!strncmp(line, "avlc ", 5)) {
@@ -89,7 +102,7 @@ static void avl_line(const char *path, const char *line) {
 static int avl_own(WORD id) {
     int k;
     if (!id) return 0;
-    if (id == g_avl_straight || id == g_avl_uturn) return 1;
+    if (id == g_avl_straight || id == g_avl_uturn || id == g_avl_merge || id == g_avl_split) return 1;
     for (k = 0; k < g_avl_nc; k++) if (g_avl_c[k].piece == id) return 1;
     return 0;
 }
@@ -122,7 +135,17 @@ static DWORD avl_at(AvlPass *p, int x, int z) {
 #define AVL_ID(v) ((WORD)((v) & 0xffff))
 #define AVL_ST(v) ((int)(((v) >> 16) & 3))
 
-static int avl_is_straight(WORD id) { return id == 11204 || (g_avl_straight && id == g_avl_straight); }
+static int avl_is_straight(WORD id) {
+    return id == 11204 || (g_avl_straight && id == g_avl_straight) || (g_avl_merge && id == g_avl_merge) ||
+           (g_avl_split && id == g_avl_split);
+}
+
+/* the straight piece for a half of row k heading toward world side dir: merge / split next to a U-turn end */
+static WORD avl_half_piece(int axis, int k, int k0, int k1, int ub, int uf, int dir) {
+    if (ub && k == k0) return dir == (axis ? 3 : 0) ? g_avl_merge : g_avl_split;     /* back end: N / W */
+    if (uf && k == k1) return dir == (axis ? 1 : 2) ? g_avl_merge : g_avl_split;     /* forward end: S / E */
+    return g_avl_straight;
+}
 
 /* the crossing table entry for a cell id (stock base or one of our variants), -1 none */
 static int avl_cross_of(WORD id) {
@@ -216,6 +239,18 @@ static int avl_decide(AvlPass *p, int axis, int ax, int az, int *pk0, int *pk1, 
         int okb = avl_end(p, axis, ax, az, k0 - 1, -1, pub), okf = avl_end(p, axis, ax, az, k1 + 1, 1, puf);
         ok = okb && okf;
     }
+    if (ok && (*pub || *puf)) {                                    /* the U rows: plain halves, merge / split installed */
+        int e;
+        if (!g_avl_merge || !g_avl_split || (*pub && *puf && k1 <= k0)) ok = 0;
+        for (e = 0; e < 2 && ok; e++) {
+            int c;
+            k = e ? k1 : k0;
+            if (!(e ? *puf : *pub)) continue;
+            for (c = 0; c < 2; c++)
+                if (!avl_is_straight(AVL_ID(avl_at(p, ax + dx * k + (c && !axis ? 1 : 0), az + dz * k + (c && axis ? 1 : 0)))))
+                    ok = 0;
+        }
+    }
     for (k = k0; ok && k <= k1; k++) {                             /* every crossing row needs a variant per direction */
         int c;
         for (c = 0; c < 2 && ok; c++) {
@@ -250,7 +285,7 @@ static void avl_band(AvlPass *p, int axis, int ax, int az, AvlW *w, int *nw, int
             if (!v) continue;
             if (ok) {
                 if (isu) want = ((DWORD)g_avl_uturn << 8) | st;
-                else if (avl_is_straight(id)) want = ((DWORD)g_avl_straight << 8) | st;
+                else if (avl_is_straight(id)) want = ((DWORD)avl_half_piece(axis, k, k0, k1, ub, uf, dir) << 8) | st;
                 else want = ((DWORD)avl_cross_want(g_avl_c[avl_cross_of(id)].base, st, dir) << 8) | st;
                 if (*nw < cap) { w[*nw].x = cx; w[*nw].z = cz; w[*nw].want = want; (*nw)++; }
                 if (g_avl_map && cx < g_avl_mw && cz < g_avl_mh) g_avl_map[cz * g_avl_mw + cx] = isu ? 0xff : (BYTE)(1 + dir);

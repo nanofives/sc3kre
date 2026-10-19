@@ -68,6 +68,26 @@ overflows. Different games, so this is not a paired comparison.
 
 The M1 test package was uninstalled afterwards and must never ship.
 
+## U-turn deadlock fix (2026-10-19, after avjunc's bisect)
+
+avjunc measured a hang (4/4, Seoul, zoom 4, sim running) with a car on 23602, the U-turn's inner lane (radius-80 left
+turn). An inner lane cannot be widened inside the U-turn cell (it gains only 80 while turning 90 degrees). So now:
+
+| part | change |
+|---|---|
+| 21701 U-turn | one lane, the outer (stock 1024, r 175); 23602 retired |
+| 21702 merge / 21703 split (base 11204) | the band row next to a U end: the half running into the end merges inner into outer (S-curve 23608, r about 195), the half leaving it splits (23609) |
+| AVL block | `avlm` / `avlp` lines; `avl_half_piece` picks merge / split by travel side; a band whose U row is a crossing / slope, or with two U ends and one row, stays stock |
+| check | `avlanes tightleft <pack dirs>` (left bends r <= 80 by geometry, both languages); selftest runs it on avcore's pieces |
+
+- Offline: selftest PASSED in ENGLISH and English-UK (straight -> merge -> U -> U -> split -> straight at all four end patterns, every crossing / slope, no tight left). netpack validate OK.
+- Lab (hill copy, own PID 524): 58-cell band, row 19 x 96 21702.1 / x 97 21703.3 (N end), row 45 x 96 21703.1 / x 97 21702.3 (S end), slopes as before; save 58 as base.
+- Scan over main's examples + avenue_lanes (`data/tightleft_main.txt`): 94 hits. Ground hits all on STOCK curves (English-UK shape 3 = 768..771 in avenue_junctions, big_roundabout, boulevard_junctions, roundabout, example_lanes_t_exit_only; English shapes 41 / 296 r 48 in diagonal_avenue). New-curve hits all on the deck (y 1024): highway_avenue, highway_dd_cloverleaf, highway_diagonal_cloverleaf, hwt_trumpet, hwx_cloverleaf. avenue_lanes 0.
+- Stock baseline: stock pieces drive ground left bends of r 42..65 in English (11225, 1999, 18004, 15045) and every road corner as an r-80 left in English-UK. So geometry alone does not hang stock.
+- Sort id: the curve record's trailing u32 is the path sort id (STRTSIM 0x1001e673 -> +0x34; Linux SortId; sent to the anim occupant manager on a change, 0x1001b030). Stock: 192/192 flat ground curves 0, 408/408 deck curves 2. hwlanes writes 2 on every new curve. Whether this is the hang's cause is [UNCERTAIN]; test proposed to avjunc / orchestrator.
+- Sort id fix (orchestrator-approved, hwcore closed): `hwlanes.extra_for` writes 0 when every point is at y 0, else 2; curve_set / curve_records / inject agree (`netmod.hwlanes selftest` PASSED, also in avlanes selftest). Installed in my tree: 20 new flat curves 0, 16 new curves with height 2, stock untouched. The deciding A/B (sort id 2 vs 0 on the same tight-left ring lanes) is avjunc's.
+- Not yet: the Seoul in-game check with cars on a U-turn (needs avjunc's junction package in my tree).
+
 ## Not done / open
 
 - **No car has driven a converted avenue yet.** Before avjunc's junction pieces exist, no converted band connects to

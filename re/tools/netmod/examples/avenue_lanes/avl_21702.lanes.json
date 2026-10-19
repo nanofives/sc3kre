@@ -1,0 +1,148 @@
+{
+ "piece": 21702,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 0,
+ "mirror_uk": false,
+ "_comment": "AVENUE_LANES.md 3: the half running into a U-turn end (the band row next to it); traffic -x as 21700; the inner lane (z 80) merges into the outer (z 175) on new 23608, so the U-turn runs one lane.",
+ "vehicle": {
+  "class": "car",
+  "speed": 64000,
+  "lanes": [
+   {
+    "from": [
+     255,
+     80
+    ],
+    "to": [
+     0,
+     175
+    ],
+    "exit": false
+   },
+   {
+    "from": [
+     255,
+     175
+    ],
+    "to": [
+     0,
+     175
+    ]
+   }
+  ]
+ },
+ "pedestrian": {
+  "walks": [
+   {
+    "from": [
+     240,
+     240
+    ],
+    "to": [
+     15,
+     240
+    ],
+    "path": 512
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     15,
+     240
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     240,
+     240
+    ],
+    "code": 16
+   }
+  ]
+ },
+ "connects": {
+  "road": {
+   "low": [
+    [
+     "x+",
+     "x-"
+    ]
+   ],
+   "high": [
+    [
+     "x-",
+     "x+"
+    ]
+   ]
+  }
+ },
+ "curves": [
+  {
+   "shape": 23608,
+   "pts": [
+    [
+     255,
+     0,
+     80
+    ],
+    [
+     230,
+     0,
+     82
+    ],
+    [
+     204,
+     0,
+     87
+    ],
+    [
+     178,
+     0,
+     96
+    ],
+    [
+     153,
+     0,
+     109
+    ],
+    [
+     128,
+     0,
+     128
+    ],
+    [
+     102,
+     0,
+     146
+    ],
+    [
+     76,
+     0,
+     159
+    ],
+    [
+     51,
+     0,
+     168
+    ],
+    [
+     26,
+     0,
+     173
+    ],
+    [
+     0,
+     0,
+     175
+    ]
+   ]
+  }
+ ]
+}

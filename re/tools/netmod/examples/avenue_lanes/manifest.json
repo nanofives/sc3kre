@@ -3,7 +3,7 @@
  "name": "avenue_lanes",
  "version": "0.1.0",
  "author": "netmod (task avcore)",
- "description": "One-way avenue halves (owner 2026-10-19: 2 lanes each way, right-hand traffic everywhere). sc3netmod's AVL block writes these on an avenue band it can convert whole (re/analysis/AVENUE_LANES.md): 21700 the straight half (base 11204, both lanes in the half's direction), 21701 the avenue end U-turn quarter (base 11203). 21710..21725 a stock rail / power line / highway crossing or a road slope on a half, one way (two ids per base, one per direction). All save as their base at the same state, so a game without the mod loads the stock avenue.",
+ "description": "One-way avenue halves (owner 2026-10-19: 2 lanes each way, right-hand traffic everywhere). sc3netmod's AVL block writes these on an avenue band it can convert whole (re/analysis/AVENUE_LANES.md): 21700 the straight half (base 11204, both lanes in the half's direction), 21701 the avenue end U-turn quarter (base 11203), one lane; 21702 / 21703 the halves next to a U-turn end (base 11204), where the two lanes merge before the U-turn and split after it (a radius-80 left turn deadlocks SC3). 21710..21725 a stock rail / power line / highway crossing or a road slope on a half, one way (two ids per base, one per direction). All save as their base at the same state, so a game without the mod loads the stock avenue.",
  "variants": [
   {
    "id": 21700,
@@ -31,6 +31,32 @@
    "art": {
     "from": 11203,
     "png_dir": "art/11203"
+   }
+  },
+  {
+   "id": 21702,
+   "base": 11204,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way), merge before the end"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11204,
+    "png_dir": "art/11204"
+   }
+  },
+  {
+   "id": 21703,
+   "base": 11204,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way), split after the end"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11204,
+    "png_dir": "art/11204"
    }
   },
   {
@@ -188,6 +214,14 @@
    "spec": "avl_21701.lanes.json"
   },
   {
+   "piece": 21702,
+   "spec": "avl_21702.lanes.json"
+  },
+  {
+   "piece": 21703,
+   "spec": "avl_21703.lanes.json"
+  },
+  {
    "piece": 21710,
    "spec": "avl_21710.lanes.json"
   },
@@ -255,6 +289,8 @@
  "avenue_lines": [
   "avls 21700",
   "avlu 21701",
+  "avlm 21702",
+  "avlp 21703",
   "avlc 21710 69 1",
   "avlc 21711 69 3",
   "avlc 21712 67 1",
