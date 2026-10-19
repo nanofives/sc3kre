@@ -111,6 +111,8 @@ static void hwdd_run(struct HwyPass *hp);                                    /* 
 static void hwdd_stats(void);                                                /* task hwdd */
 static void hwdx_run(struct HwyPass *hp);                                    /* task hwdx */
 static void hwdx_stats(void);                                                /* task hwdx */
+static void hwask_line(const char *path, const char *line);                  /* task hwask */
+static void hwask_stats(void);                                               /* task hwask */
 
 /* ---------------------------------------------------------------- table line */
 static void rb_file(const char *path) {
@@ -134,6 +136,7 @@ static void rb_file(const char *path) {
         if (!strncmp(line, "dbvb ", 5) || !strncmp(line, "dbvs ", 5)) { dbv_line(path, line); continue; } /* task diagbv */
         if (!strncmp(line, "hwt ", 4) || !strncmp(line, "hwtc ", 5)) { hwt_line(path, line); continue; } /* task hwt (hwtc: task hwcap2) */
         if (!strncmp(line, "hwx ", 4)) { hwx_line(path, line); continue; } /* task hwx */
+        if (!strncmp(line, "hwask ", 6)) { hwask_line(path, line); continue; } /* task hwask */
         if (!strncmp(line, "hwy", 3)) { hwy_line(path, line); continue; }  /* task hwcore */
         if (strncmp(line, "rbt ", 4) || g_rb_off) continue;
         k = sscanf(line + 4, "%lu %lu %lu", &p, &n, &c);
@@ -496,6 +499,7 @@ static void rbt_stats(void) {
     hwx_stats();                                                             /* task hwx */
     hwdd_stats();                                                            /* task hwdd */
     hwdx_stats();                                                            /* task hwdx */
+    hwask_stats();                                                           /* task hwask */
     LONG n = g_rb_n_pass + g_rb_n_conv + g_rb_n_rev + g_rb_n_load + g_rb_n_fault;
     if (!g_rb_on || n == last) return;
     last = n;

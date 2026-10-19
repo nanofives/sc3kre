@@ -413,6 +413,7 @@ static void hwt_run(HwyPass *hp) {
         hwt_break(hp, ax, az, r, (cand[best][4] & 1) ? 1 : 2);
     }
     /* 2. new Ts: the stem's end caps (gesture 1) or a stub X (gesture 2) */
+    hwask_prune(hp);                                                 /* task hwask: forget declines whose T is gone */
     for (z = hp->z0 + 1; z < hp->z1; z++)
         for (x = hp->x0 + 1; x < hp->x1; x++) {
             DWORD v = hwy_at(hp, x, z);
@@ -425,7 +426,12 @@ static void hwt_run(HwyPass *hp) {
                 int dx = 0, dz = gesture == 1 ? -1 : 0;
                 hwy_rot(r, &dx, &dz);
                 ax = x - dx; az = z - dz;
-                if (hwt_check(hp, ax, az, r, gesture, 1, &why)) { hwt_build(hp, ax, az, r, gesture, 1); break; }
+                if (hwt_check(hp, ax, az, r, gesture, 1, &why)) {
+                    int nl = 0;                                      /* task hwask: the player decides; no = stock */
+                    for (k = 0; k < g_hwt_n; k++) nl += g_hwt_c[k].land && (g_hwt_c[k].sets & 1);
+                    if (hwask_ok(hp, HWASK_T, x, z, r, hwy_id(v), nl)) hwt_build(hp, ax, az, r, gesture, 1);
+                    break;
+                }
                 if (HWT_RIO && gesture == 1 && (!strcmp(why, "far side not free") || !strcmp(why, "far side touches other highway"))) {
                     const char *why2;
                     if (hwt_check(hp, ax, az, r, gesture, 2, &why2)) { hwt_build(hp, ax, az, r, gesture, 2); break; }
