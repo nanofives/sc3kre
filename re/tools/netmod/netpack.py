@@ -609,6 +609,7 @@ def compile_pack(stock, pack_dir, man):
            "auto_diagonal_boulevards": [],                                                  # task diagbv
            "highway_lines": [],                                                             # task hwcore
            "avenue_lines": [],                                                              # task avcore
+           "avenue_junction_lines": [],                                                     # task avjunc
            "texts": [_text(t, langs_text, "%s texts %d" % (pname, n + 1))                   # task hwask
                      for n, t in enumerate(man.get("texts", []))]}
     for n, v in enumerate(man.get("variants", [])):
@@ -824,6 +825,14 @@ def compile_pack(stock, pack_dir, man):
             raise NetpackError("%s avenue_lines %d: %s names a piece that is not a %s variant of this package" %
                                (pname, n + 1, tok[0], " / ".join(nets)))
         out["avenue_lines"].append(ln)
+    for n, ln in enumerate(man.get("avenue_junction_lines", [])):    # task avjunc: sc3netmod AVX block (raw lines)
+        tok = ln.split()                                             # avxm <piece> <outline> <modes>, avxn <piece> <ends> <0|1>
+        if not tok or tok[0] not in ("avxm", "avxn") or len(tok) != 4 or not tok[1].isdigit():
+            raise NetpackError("%s avenue_junction_lines %d: '%s' is not an avxm / avxn line" % (pname, n + 1, ln))
+        if int(tok[1]) not in vids or vids[int(tok[1])]["net"] != "ROAD":
+            raise NetpackError("%s avenue_junction_lines %d: %s names a piece that is not a ROAD variant of this package"
+                               % (pname, n + 1, tok[0]))
+        out["avenue_junction_lines"].append(ln)
     out["ramps"] = []
     if man.get("ramps"):                                 # hardcoded SIMNTWRK tables (netramp.py, NET_RAMPS.md)
         try:
@@ -1152,7 +1161,8 @@ def merge(stock, packs):
         if c["variants"] or c["ramps"] or mine or c["auto_roundabouts"] or c["auto_diagonal_avenues"] or \
                 c.get("auto_avenue_junctions") or c.get("auto_boulevards") or c.get("auto_big_roundabouts") or \
                 c.get("auto_boulevard_junctions") or c.get("auto_diagonal_boulevards") or \
-                c.get("highway_lines") or c.get("avenue_lines"):  # avx, bv, bigrbt, bvx, diagbv, hwcore, avcore
+                c.get("highway_lines") or c.get("avenue_lines") or \
+                c.get("avenue_junction_lines"):  # avx, bv, bigrbt, bvx, diagbv, hwcore, avcore, avjunc
             tables[c["name"]] = ("# netpack %s: <variant id> <base id>, read by sc3netmod.dll\r\n" % c["name"]).encode() + \
                 b"".join(b"%d %d\r\n" % (v["id"], v["base"]) for v in sorted(c["variants"], key=lambda v: v["id"])) + \
                 RAMP.table_lines(c["ramps"]) + TPL.table_lines(mine) + \
@@ -1183,7 +1193,8 @@ def merge(stock, packs):
                                   for cell in cells)
                          for a in c.get("auto_diagonal_boulevards", [])) + \
                 b"".join(b"%s\r\n" % ln.encode() for ln in c.get("highway_lines", [])) + \
-                b"".join(b"%s\r\n" % ln.encode() for ln in c.get("avenue_lines", []))               # task hwcore, avcore
+                b"".join(b"%s\r\n" % ln.encode() for ln in c.get("avenue_lines", [])) + \
+                b"".join(b"%s\r\n" % ln.encode() for ln in c.get("avenue_junction_lines", []))      # task hwcore, avcore, avjunc
                 # task diagave, avx, boulevard, bigrbt, diagx, bvx, diagbv
 
     # ---- report + checks that need the merged result

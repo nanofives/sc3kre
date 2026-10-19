@@ -136,6 +136,7 @@ static int table_read(const char *path) {
             !strncmp(p, "davx", 4))                    /* task diagx: davx / davxg / davxw */
             continue;                                    /* DAV lines, read by rbt_install (task diagave) */
         if (!strncmp(p, "avxb ", 5) || !strncmp(p, "avxa ", 5)) continue;   /* task avx: AVX lines, read by rbt_install */
+        if (!strncmp(p, "avxm ", 5) || !strncmp(p, "avxn ", 5)) continue;   /* task avjunc: AVX lines, read by rbt_install */
         if (!strncmp(p, "bvp ", 4) || !strncmp(p, "bvc ", 4) || !strncmp(p, "bvt ", 4) ||
             !strncmp(p, "bva ", 4)) continue;   /* task boulevard */
         if (!strncmp(p, "rbt9 ", 5)) continue;           /* RBT9 lines, read by rbt_install (task bigrbt) */

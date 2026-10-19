@@ -1,0 +1,107 @@
+{
+ "_": "avjunc_build.py: box cell outline CCAI modes CCTT (N E S W, state 0), saved as 11203",
+ "piece": 21760,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 1,
+ "mirror_uk": false,
+ "vehicle": {
+  "class": "car",
+  "speed": 64000,
+  "lanes": [
+   {
+    "from": [
+     0,
+     80
+    ],
+    "to": [
+     175,
+     255
+    ]
+   },
+   {
+    "from": [
+     80,
+     255
+    ],
+    "to": [
+     0,
+     175
+    ]
+   }
+  ]
+ },
+ "pedestrian": {
+  "walks": [
+   {
+    "from": [
+     15,
+     15
+    ],
+    "to": [
+     240,
+     240
+    ],
+    "path": 768
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     15,
+     15
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     15,
+     240
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     15,
+     240
+    ],
+    "code": 24
+   },
+   {
+    "at": [
+     240,
+     240
+    ],
+    "code": 24
+   }
+  ]
+ },
+ "connects": {
+  "road": {
+   "low": [
+    [
+     "x-",
+     "z+"
+    ],
+    [
+     "z+",
+     "x-"
+    ]
+   ],
+   "high": [
+    [
+     "z+",
+     "x-"
+    ],
+    [
+     "x-",
+     "z+"
+    ]
+   ]
+  }
+ }
+}

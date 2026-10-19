@@ -1,33 +1,29 @@
-# avenue_junctions (task avx)
+# avenue_junctions (task avx, reworked by task avjunc 2026-10-19)
 
-Where straight avenues meet, the junction becomes one paved box instead of the stock patch of small crossings.
+Where a road or another avenue meets a straight avenue, the junction becomes one paved box across both halves, and
+since the avenue lane rework (2 lanes each way, right-hand traffic, avcore's package `avenue_lanes`) the box carries
+one-way lanes: every turn and U-turn works inside it, so the box is the median opening.
 
-- **What converts:** two avenues crossing (avenue x avenue), an avenue ending on another (avenue T), a single road
-  crossing an avenue (road x avenue), a single road ending on an avenue (road T). Along x and along z, all rotations.
-  An avenue here is the stock two-road avenue (11204): draw two parallel roads side by side.
-- **Look:** a paved box made from stock 43's asphalt, 43's own crosswalk lines across every arm at the box edge, 43's
-  corner sidewalk at the outer corners, road 29's curb along a side with no arm (the far side of a T), and each avenue
-  arm's median ending in a concrete nose on the cell next to the box, its lane line white and dashed (owner,
-  2026-10-17: `lanelines.py`; road arms keep their yellow line). Plain avenue and road cells stay stock.
-- **Pieces:** box cells 20800..20804, one per edge pattern (N E S W, each I another box cell, A an arm, C closed):
-  20800 AIIA, 20801 AAIA, 20802 IACA, 20803 IACI, 20804 IICA; base 43, lanes of 43 (or of T 39 for the three with a
-  closed side). Nose cells 20810 / 20811 = 11204 with the median nose at its E / W end (base 11204, its lanes and trees).
-- **Rule** (sc3netmod's AVX block, `re/harness/src/sc3netmod_avx.c`; offline twin `re/tools/netmod/avx.py`): a 2x2,
-  1x2 or 2x1 box of road whose corner cells are empty, each side either all road or empty, every arm straight and
-  clean (no road beside it) for 2 cells. It leaves alone the 2x2 roundabout (one road per side), 3x3 blocks, three
-  parallel roads, diagonal shapes, junctions closer than 2 cells apart along an avenue, and cells holding another
-  block's pieces.
-- **Saves:** box cells save as 43, the far half of a T as 11204, nose cells as 11204, so a game without the mod loads
-  the stock avenue and crossings with the roads joined.
+- **What converts:** road x avenue, a road T on one side, two T's offset by a cell, roads at adjacent cells (runs up to
+  4 cells), avenue x avenue (the four box cells form a one-way ring), avenue T, an avenue ending on a road. Along x and
+  z, every rotation. Rule: `re/tools/netmod/avjunc_rule.py` (offline twin of sc3netmod's AVX block,
+  `re/harness/src/sc3netmod_avx.c`); plan `verify/avjunc/PLAN.md`, results `verify/avjunc/RESULTS.md`.
+- **Lanes:** each box cell has, per edge, 2 lanes in, 2 out, two-way or closed (`avjunc.py`): straight lane by lane,
+  right turns from the right lane, left turns from the left lane. The halves next to a box get the median nose
+  (one-way: avcore's 21700 lanes). An arm whose avenue avcore leaves two-way gets two-way edges and a two-way nose.
+- **Look:** AVX's paved box (43's asphalt, crosswalks on the arms, curbs on closed sides), noses with the white dashes.
+- **Pieces:** box cells 20805..20809, 20812..20849, 21750..21767 (`avjunc_pieces.json`), one-way noses 20800..20803,
+  two-way noses 20804, 20810, 20811. Each saves as its base (box cells 43 / 39 / 11203 / 29, noses 11204), so a game
+  without the mod loads stock junctions.
 
-Build and install (the art is made from the game's own frames, so it is not shipped):
+Build and install (art is made from the game's frames, not shipped; run from re/tools):
 
 ```
-py -3.12 re/tools/netmod/avx.py build re/tools/netmod/examples/avenue_junctions
-py -3.12 re/tools/netmod/netpack.py install re/tools/netmod/examples/avenue_junctions --tree <game tree>
+py -3.12 -m netmod.avjunc_build pieces netmod/examples/avenue_junctions   # only to regenerate the piece table
+py -3.12 -m netmod.avjunc_build build netmod/examples/avenue_junctions    # specs, curves, art, manifest
+py -3.12 -m netmod.avjunc_build check netmod/examples/avenue_junctions    # lanes in ENGLISH + English-UK
+py -3.12 netmod/netpack.py install netmod/examples/avenue_junctions --tree <game tree>
 ```
 
-The game needs an sc3netmod.dll built from a tree that has `sc3netmod_avx.c`. Off switch: `SC3NETMOD_AVX=0`.
-
-Offline: `avx.py check --tiler` (every kind x rotation on the stock tiler, the shapes it must refuse, RBT's rule on
-its boxes), `avx.py mockup OUT.png PACK` (stock vs avx sheet), `avx.py scan [SAVE ...]` (junctions per city).
+Needs an sc3netmod.dll with the AVX and AVL blocks; install `avenue_lanes` too (without it every box is two-way).
+Off switch: `SC3NETMOD_AVX=0`.
