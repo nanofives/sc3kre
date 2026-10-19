@@ -239,6 +239,20 @@
       "description": "Task diagave: sc3netmod turns two diagonal road drags JOINED side by side (an isolated band of rows of three road cells, each row shifted by one) into one avenue: each cell gets the piece the stock tiler gives a lone diagonal, and the middle cells, which hold both roads, get the declared middle piece. After each road retile and after a city load; back to stock when it stops qualifying. Rule and tool: re/tools/netmod/diagave.py, verify/diagave/."
     },
     "auto_boulevard_junctions": {"$ref": "#/properties/auto_avenue_junctions", "description": "Task bvx: box and avenue-arm pieces for the junctions of a boulevard (auto_boulevards) with avenues and other boulevards, same shape as auto_avenue_junctions (save_11204 unused). sc3netmod places them inside the boulevard runs. Rule and tool: re/tools/netmod/bvx.py, verify/bvx/."},
+    "texts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["group", "id", "text"],
+        "additionalProperties": false,
+        "properties": {
+          "group": {"type": ["integer", "string"], "description": "string table group, e.g. \"0x029541F4\" (SC3StringsWindow, the dialog texts)"},
+          "id": {"type": ["integer", "string"], "description": "instance id inside the group (pick one no stock container uses)"},
+          "text": {"type": ["string", "object"], "additionalProperties": {"type": "string"}, "description": "one string, or {language folder or \"*\": text}"}
+        }
+      },
+      "description": "Task hwask: free-standing strings {0x2026960B, group, id}, written per Apps\\Res\\Text\\<folder> into SC3StringsNetpack_<group>.IXF and listed in SYS.PAK Default.ini [DBSegments] under the group's key. Identical entries in two packages merge; different ones are an error."
+    },
     "highway_lines": {
       "type": "array",
       "items": {"type": "string", "pattern": "^hw[a-z0-9]* [-0-9 ]+$"},

@@ -93,6 +93,7 @@ TEXT_TYPE, TEXT_GROUP = 0x2026960B, 0xA1096A4F  # exemplar prop 0x6D key {type, 
 ART_GROUP0 = 0x4E3D0001                         # first group of the merged art containers (newpiece's group)
 ART_MAX_RECORDS = 1022                          # per container: the shipped 0x5000-byte index holds 1,024 slots
 NAME_FILE = "SC3StringsNetpack.IXF"
+TEXTS_FILE = "SC3StringsNetpack_%08X.IXF"   # task hwask: "texts" records of one group (one file per group and language)
 SYSPAK = "Apps/Sys/SYS.PAK"
 NETS = ("ROAD", "RAIL", "POWR", "HWAY", "PIPE", "SUBW")
 RESERVED_IDS = range(15130, 15142)              # special-cased by the classifier FUN_1001a5f2 (NEW_PIECE.md 3)
@@ -577,6 +578,19 @@ def _names(v, langs):
     return out
 
 
+def _text(t, langs, where):                        # task hwask: one free-standing string {0x2026960B, group, id}
+    g, i = int(str(t["group"]), 0), int(str(t["id"]), 0)
+    if not (0 < g <= 0xFFFFFFFF and 0 < i <= 0xFFFFFFFF):
+        raise NetpackError("%s: group and id must be 1..0xFFFFFFFF" % where)
+    tx = _names({"name": t["text"]}, langs)
+    for lang, s in tx.items():
+        try:
+            s.encode("cp1252")
+        except UnicodeEncodeError:
+            raise NetpackError("%s: the %s text is not cp1252" % (where, lang))
+    return {"group": g, "id": i, "text": tx}
+
+
 def compile_pack(stock, pack_dir, man):
     """-> dict of everything this package contributes, checked against the stock files only."""
     pname = man["name"]
@@ -593,7 +607,9 @@ def compile_pack(stock, pack_dir, man):
            "auto_big_roundabouts": [],                                                      # task bigrbt
            "auto_boulevard_junctions": [],                                                  # task bvx
            "auto_diagonal_boulevards": [],                                                  # task diagbv
-           "highway_lines": []}                                                             # task hwcore
+           "highway_lines": [],                                                             # task hwcore
+           "texts": [_text(t, langs_text, "%s texts %d" % (pname, n + 1))                   # task hwask
+                     for n, t in enumerate(man.get("texts", []))]}
     for n, v in enumerate(man.get("variants", [])):
         where = "%s variant %d (id %s)" % (pname, n + 1, v.get("id"))
         vid, base, net = v["id"], v["base"], v["network"]
@@ -928,6 +944,27 @@ def merge(stock, packs):
             if stock.exists("Apps/Res/Text/%s/%s" % (lang, NAME_FILE)):
                 raise NetpackError("Apps\\Res\\Text\\%s\\%s exists in the stock tree" % (lang, NAME_FILE))
             files["Apps/Res/Text/%s/%s" % (lang, NAME_FILE)] = ixf_insert.new_container(recs)
+    # ---- task hwask: "texts" (free-standing strings, e.g. dialog texts of group 0x029541F4), one container per group
+    texts = {}
+    for c in comp:
+        for t in c["texts"]:
+            k = (t["group"], t["id"])
+            if k in texts and texts[k][1] != t["text"]:
+                raise NetpackError("text %08X:%d is declared differently by %s and %s" % (k + (texts[k][0], c["name"])))
+            texts[k] = (c["name"], t["text"])
+    text_groups = sorted({g for g, _ in texts})
+    for g in text_groups:
+        for lang in langs:
+            recs = []
+            for (tg, ti), (_, tx) in sorted(texts.items()):
+                if tg == g and tx.get(lang) is not None:
+                    b = tx[lang].encode("cp1252")
+                    recs.append((g, ti, TEXT_TYPE, struct.pack("<I", len(b)) + b))
+            rel = "Apps/Res/Text/%s/%s" % (lang, TEXTS_FILE % g)
+            if recs:
+                if stock.exists(rel):
+                    raise NetpackError("%s exists in the stock tree" % rel.replace("/", "\\"))
+                files[rel] = ixf_insert.new_container(recs)
 
     # ---- TilingRules: Set membership for every variant, then the packages' edits (one parse per file)
     edits = {}
@@ -1092,6 +1129,9 @@ def merge(stock, packs):
     if any(v["names"] for v in variants):
         ini.append({"file": "Default.ini", "section": "DBSegments", "key": "0xa1096a4f", "op": "append",
                     "value": r"0x80c381d7;Res\Text\%%Language%%\%s" % NAME_FILE, "_pack": "(variant names)"})
+    for g in text_groups:                                             # task hwask: one list line per texts group
+        ini.append({"file": "Default.ini", "section": "DBSegments", "key": "0x%08x" % g, "op": "append",
+                    "value": r"0x80c381d7;Res\Text\%%Language%%\%s" % (TEXTS_FILE % g), "_pack": "(texts)"})
     ini += [e for c in comp for e in c["ini"]]
     if ini:
         files[SYSPAK] = apply_ini(stock.read(SYSPAK), ini)

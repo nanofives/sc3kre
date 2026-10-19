@@ -268,6 +268,12 @@ static void hwdx_run(HwyPass *hp) {
         for (q = 0; q < 4; q++) {
             st[q] = hwdx_quad(hp, f, q);
         }
+        if (f->fresh) {                                  /* task hwask: the player decides for every buildable quadrant */
+            int nr = 0;
+            for (j = 0; j < n; j++) nr += t[j].quad < 4 && st[t[j].quad] == 1 && t[j].kind == 2;
+            if (nr && !hwask_ok(hp, HWASK_DX, f->ox, f->oz, f->r, 15149, nr))
+                for (q = 0; q < 4; q++) if (st[q] == 1) st[q] = 0;
+        }
         hwdx_write(hp, f, 255);
         for (q = 0; q < 4; q++) {
             if (st[q] == 2 || (f->fresh && st[q] == 1)) {

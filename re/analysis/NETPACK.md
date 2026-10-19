@@ -34,6 +34,7 @@ One folder, one `manifest.json`, optional PNG art. Nothing else.
 | `variants[]` | a NEW piece id that behaves as `base` (exemplar, cost, traffic, crossings, saved id) and draws its own art | id 1..65535, no stock exemplar, not 15130..15141 (`FUN_1001a5f2`), not in the Set; base has an exemplar and is in `<network>_GRND_Set.txt`; no other installed package declares the id |
 | `variants[].art` | start from the frames of `from` (default `base`), optional `recolor`, then any `png_dir` PNG replaces its frame | PNG size must equal the frame (`sprite_patch.image_to_surface`); a PNG that names no frame is refused |
 | `variants[].name` | piece name, one string or `{language folder or "*": text}` | written per `Apps\Res\Text\<folder>` |
+| `texts[]` (task hwask) | free-standing strings `{group, id, text}`, text one string or `{language folder or "*": text}`; identical entries in two packages merge | `Apps\Res\Text\<folder>\SC3StringsNetpack_<GROUP>.IXF` per group + a SYS.PAK `[DBSegments]` line under the group's key (HWY_ASK.md 2) |
 | `variants[].trblkatt` | `copy_base` (default): the base's TrBlkAtt records re-keyed to the new id, every language; `none` | the reserved index must have room (161 free slots per language) |
 | `reskins[]` | new art for the frames of an EXISTING piece | no two packages reskin the same frame table; pieces that share the table are reported |
 | `rule_edits[]` | TilingRules edits, section 4 (format agreed with netrules) | stock rule N must exist and equal `expect`; `rulecheck` ERROR refuses, WARNING / INFO reported (4.1) |

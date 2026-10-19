@@ -290,7 +290,13 @@ static void hwx_run(HwyPass *hp) {
                     if (v && hwy_id(v) >= 15115 && hwy_id(v) <= 15128) { ring = 1; break; }
                 }
             if (ring) { logf("hwx: %s: X at (%d,%d) refused: a stock interchange ring", hp->who, ax, az); continue; }
-            if (hwx_clover(hp, ax, az, 0, &why)) {
+            k = hwx_clover(hp, ax, az, 0, &why);
+            if (k) {                                    /* task hwask: the player decides (charged per ramp cell) */
+                int nr = 0;
+                for (j = 0; j < g_hwx_n; j++) nr += g_hwx_c[j].cls == 1;
+                if (!hwask_ok(hp, HWASK_X, ax, az, 0, 15113, nr)) { k = 0; why = "the player chose the bridge"; }
+            }
+            if (k) {
                 int n = hwx_put_all(hp, ax, az, 7);
                 InterlockedIncrement(&g_hwx_n_clover);
                 logf("hwx: %s: cloverleaf at (%d,%d): %d cells written", hp->who, ax, az, n);

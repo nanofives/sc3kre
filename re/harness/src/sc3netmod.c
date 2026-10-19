@@ -463,6 +463,10 @@ static void sv_add(DWORD w0, DWORD w1, DWORD id) {
 
 static WORD rb_save_id(DWORD w0, WORD id);       /* RBT block (sc3netmod_rbt.c): stock id of a roundabout cell */
 static int hwy_save_override(WORD id, int st, WORD *sid, int *sst);   /* task hwcore: saved id / state of a piece */
+static int hwask_nsave(void);                                         /* task hwask: remembered T declines */
+static void hwask_save_rec(int k, DWORD *w0, DWORD *w1, DWORD *id);
+static int hwask_load_rec(DWORD w0, DWORD w1, DWORD id);
+static void hwask_reset(void);
 
 /* record = the 8-byte tile record object; +4 word0 (coord, state), +8 word1 (id, props) */
 static void __stdcall save_rec(BYTE *rec) {
@@ -517,22 +521,30 @@ static void __stdcall save_end(void *p1, void *p2) {
     BYTE frame[0x40];
     void *s;
     int i, ok;
-    if (!g_nsv) { logf("save: no variant tiles, no section"); return; }
+    int nask = hwask_nsave();                                           /* task hwask */
+    if (!g_nsv && !nask) { logf("save: no variant tiles, no section"); return; }
     memset(frame, 0, sizeof(frame));
     __try {
         g_wopen(frame, NULL, p1, p2, NV_TYPE, NV_GROUP, NV_INST, 1, 0);
         s = frame[0x10] ? g_stream(frame) : NULL;
         ok = s != NULL;
         if (ok) ok = ((PFN_W32)(*(DWORD **)s)[0x88 / 4])(s, NULL, NV_MAGIC);
-        if (ok) ok = ((PFN_W32)(*(DWORD **)s)[0x88 / 4])(s, NULL, (DWORD)g_nsv);
+        if (ok) ok = ((PFN_W32)(*(DWORD **)s)[0x88 / 4])(s, NULL, (DWORD)(g_nsv + nask));   /* task hwask: + declines */
         for (i = 0; ok && i < g_nsv; i++) {
             ok = ((PFN_W32)(*(DWORD **)s)[0x88 / 4])(s, NULL, g_sv[i].w0)
               && ((PFN_W32)(*(DWORD **)s)[0x88 / 4])(s, NULL, g_sv[i].w1)
               && ((PFN_W32)(*(DWORD **)s)[0x88 / 4])(s, NULL, g_sv[i].id);
         }
+        for (i = 0; ok && i < nask; i++) {                              /* task hwask: id word 0, older DLLs skip */
+            DWORD w0, w1, id;
+            hwask_save_rec(i, &w0, &w1, &id);
+            ok = ((PFN_W32)(*(DWORD **)s)[0x88 / 4])(s, NULL, w0) && ((PFN_W32)(*(DWORD **)s)[0x88 / 4])(s, NULL, w1)
+              && ((PFN_W32)(*(DWORD **)s)[0x88 / 4])(s, NULL, id);
+        }
         if (!ok) g_fail(frame);
         g_close(frame);
-        logf("save: %d variant tile(s) written as base, section 0x%lX %s", g_nsv, NV_INST, ok ? "written" : "FAILED");
+        logf("save: %d variant tile(s) written as base, %d T decline(s), section 0x%lX %s", g_nsv, nask, NV_INST,
+             ok ? "written" : "FAILED");                                 /* task hwask: declines */
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         logf("### save: exception 0x%08lX writing the variant section", GetExceptionCode());
     }
@@ -580,6 +592,7 @@ static void __stdcall load_begin(void *p1, void *p2) {
     DWORD magic = 0, n = 0, i, w0, w1, id;
     int ok, unknown = 0;
     free(g_ld); g_ld = NULL; g_capld = g_nld = g_nld_hit = 0;
+    hwask_reset();                                                      /* task hwask: declines are per city */
     memset(frame, 0, sizeof(frame));
     __try {
         g_ropen(frame, NULL, p1, p2, NV_TYPE, NV_GROUP, NV_INST);
@@ -599,6 +612,7 @@ static void __stdcall load_begin(void *p1, void *p2) {
               && ((PFN_R32)(*(DWORD **)s)[0x38 / 4])(s, NULL, &w1)
               && ((PFN_R32)(*(DWORD **)s)[0x38 / 4])(s, NULL, &id);
             if (!ok) { logf("### load: variant section short at %lu of %lu", i, n); break; }
+            if (hwask_load_rec(w0, w1, id)) continue;                  /* task hwask: a remembered T decline */
             if ((id & 0xffff) == 0 || (id >> 16) & ~7UL) continue;   /* task hwcore: bits 16-18 = original state */
             if (!g_base[id & 0xffff]) { unknown++; continue; }   /* variant not installed: keep the base tile */
             ld_put(w0, w1, id);
@@ -1330,6 +1344,7 @@ static int netramp_install(BYTE *m) {
 #include "sc3netmod_dbv.c"          /* task diagbv: DBV, diagonal boulevards on RBT's hooks (SC3NETMOD_DBV=0) */
 #include "sc3netmod_hwy.c"          /* task hwcore: HWY, highway program base on RBT's hooks (SC3NETMOD_HWY=0) */
 #include "sc3netmod_hwcap.c"        /* task hwcap (hwcap2): highway arm ends, read by the interchange blocks */
+#include "sc3netmod_hwask.c"        /* task hwask: ask before building an interchange (SC3NETMOD_HWASK=0) */
 #include "sc3netmod_hwt.c"          /* task hwt: HWT, the connecting highway T on HWY (SC3NETMOD_HWT=0) */
 #include "sc3netmod_hwx.c"          /* task hwx: HWX, the cloverleaf at a highway X on HWY (SC3NETMOD_HWX=0) */
 #include "sc3netmod_hwdd.c"         /* task hwdd: HWDD, diagonal x diagonal highway cloverleaf (SC3NETMOD_HWDD=0) */

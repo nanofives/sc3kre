@@ -1,0 +1,40 @@
+{
+  "netpack": 1,
+  "name": "highway_ask",
+  "version": "1.0.0",
+  "author": "sc3kre",
+  "description": "Task hwask (owner 2026-10-19): a highway crossing gets the bridge by default and the game asks, with its own Engineer's Report dialog (manager vt+0x140, the tunnel builders' question), whether to build the full interchange; yes charges the ramp cells. Without this package (or with SC3NETMOD_HWASK=0) the four highway interchange packages build automatically. Texts are two new strings of group 0x029541F4 (SC3StringsWindow); %s is the cost the game formats. re/analysis/HWY_ASK.md.",
+  "texts": [
+    {
+      "group": "0x029541F4",
+      "id": "0x4E560001",
+      "text": {
+        "*": "Do you want to build a highway interchange for %s? If you choose No, only a bridge is built.",
+        "English-UK": "Do you want to build a highway interchange for %s? If you choose No, only a bridge is built.",
+        "ENGLISH": "¿Quieres construir un enlace de autopista por %s? Si eliges No, solo se construye un puente.",
+        "FRENCH": "Souhaitez-vous construire un échangeur autoroutier pour %s ? Si vous choisissez Non, seul un pont est construit.",
+        "GERMAN": "Wollen Sie für %s ein Autobahnkreuz bauen? Bei Nein wird nur eine Brücke gebaut.",
+        "ITALIAN": "Vuoi costruire uno svincolo autostradale per %s? Se scegli No, viene costruito solo un ponte.",
+        "DUTCH": "Wilt u voor %s een knooppunt bouwen? Kiest u Nee, dan wordt alleen een brug gebouwd.",
+        "SWEDISH": "Vill du bygga en motorvägskorsning för %s? Om du väljer Nej byggs bara en bro."
+      }
+    },
+    {
+      "group": "0x029541F4",
+      "id": "0x4E560002",
+      "text": {
+        "*": "Do you want to build a highway interchange for %s? If you choose No, the highway ends here.",
+        "English-UK": "Do you want to build a highway interchange for %s? If you choose No, the highway ends here.",
+        "ENGLISH": "¿Quieres construir un enlace de autopista por %s? Si eliges No, la autopista acaba aquí.",
+        "FRENCH": "Souhaitez-vous construire un échangeur autoroutier pour %s ? Si vous choisissez Non, l'autoroute s'arrête ici.",
+        "GERMAN": "Wollen Sie für %s ein Autobahndreieck bauen? Bei Nein endet die Autobahn hier.",
+        "ITALIAN": "Vuoi costruire uno svincolo autostradale per %s? Se scegli No, l'autostrada finisce qui.",
+        "DUTCH": "Wilt u voor %s een knooppunt bouwen? Kiest u Nee, dan eindigt de snelweg hier.",
+        "SWEDISH": "Vill du bygga en motorvägskorsning för %s? Om du väljer Nej slutar motorvägen här."
+      }
+    }
+  ],
+  "highway_lines": [
+    "hwask 1314258945 1314258946"
+  ]
+}

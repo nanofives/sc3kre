@@ -243,6 +243,16 @@ static void hwdd_run(HwyPass *hp) {
         }
     for (k = 0; k < nc; k++) {
         int r = hwdd_test(hp, c[k].ox, c[k].oz, c[k].par, 0), fly = 0;
+        if (r == 2 && hwask_active()) {                  /* task hwask: a fresh cloverleaf only on the player's yes */
+            int n, nl = 0;
+            const HwddRow *t = hwdd_tab(c[k].par, 0, &n);
+            for (j = 0; j < n; j++) nl += t[j].role == HWDD_LAND;
+            if (!hwdd_stub(hp, c[k].ox, c[k].oz, c[k].par)) {
+                r = 0; strcpy(g_hwdd_why, "a built flyover is not upgraded (hwask)");
+            } else if (!hwask_ok(hp, HWASK_DD, c[k].ox, c[k].oz, c[k].par, 15149, nl)) {
+                r = 0; strcpy(g_hwdd_why, "the player chose the flyover (hwask)");
+            }
+        }
         if (!r) {
             logf("hwdd: %s: frame (%d,%d) %c: no cloverleaf: %s", hp->who, c[k].ox, c[k].oz, c[k].par ? 'h' : 'c',
                  g_hwdd_why);
