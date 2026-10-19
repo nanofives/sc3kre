@@ -8,7 +8,7 @@
  ],
  "flag": 0,
  "mirror_uk": false,
- "_comment": "AVENUE_LANES.md 3: avenue end quarter, traffic enters across x- and leaves across z+ at state 0; ONE lane, the outer (0,80) -> (175,255) = stock 11203's curve 1024 (radius 175). No inner lane: (0,175) -> (80,255) is a radius-80 left turn, which deadlocks SC3; 21702 / 21703 merge and split.",
+ "_comment": "AVENUE_LANES.md 3: avenue end quarter, traffic enters across x- and leaves across z+ at state 0; outer lane (0,80) -> (175,255) = stock 11203's curve 1024, inner (0,175) -> (80,255) new 23602.",
  "vehicle": {
   "class": "car",
   "speed": 48000,
@@ -20,6 +20,16 @@
     ],
     "to": [
      175,
+     255
+    ]
+   },
+   {
+    "from": [
+     0,
+     175
+    ],
+    "to": [
+     80,
      255
     ]
    }
@@ -87,6 +97,56 @@
   }
  },
  "curves": [
+  {
+   "shape": 23602,
+   "pts": [
+    [
+     0,
+     0,
+     175
+    ],
+    [
+     16,
+     0,
+     177
+    ],
+    [
+     31,
+     0,
+     181
+    ],
+    [
+     44,
+     0,
+     188
+    ],
+    [
+     57,
+     0,
+     198
+    ],
+    [
+     67,
+     0,
+     211
+    ],
+    [
+     74,
+     0,
+     224
+    ],
+    [
+     78,
+     0,
+     239
+    ],
+    [
+     80,
+     0,
+     255
+    ]
+   ]
+  },
   {
    "shape": 23601,
    "pts": [

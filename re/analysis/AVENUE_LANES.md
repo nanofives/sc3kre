@@ -52,14 +52,12 @@ Boulevards (bvlanes): each outer cell is a one-way half as above; the middle cel
 (beside row 0) and z 241 (beside row 2) in the state-0 frame of the middle piece, running with the outer row beside it
 (PLAN.md 9.2). bvlanes owns those numbers; the outer-cell edges follow this section.
 
-## 3. avcore's pieces [published: all 20 in examples/avenue_lanes]
+## 3. avcore's pieces [published: all 18 in examples/avenue_lanes]
 
 | id | base | what | saved as |
 |---|---|---|---|
 | 21700 | 11204 | straight one-way half (section 2), art = 11204's, state = the half's 11204 state | 11204, same state |
-| 21701 | 11203 | avenue end U-turn quarter: one cell of the 2-cell U (see below), ONE lane, art = 11203's | 11203, same state |
-| 21702 | 11204 | merge half: the band row next to a U-turn end, on the half running INTO the end; the inner lane merges into the outer (S-curve 23608), so the U-turn runs one lane; art = 11204's | 11204, same state |
-| 21703 | 11204 | split half: the same row, on the half LEAVING the end; the one lane out of the U-turn splits back into two (S-curve 23609); art = 11204's | 11204, same state |
+| 21701 | 11203 | avenue end U-turn quarter: one cell of the 2-cell U (see below), art = 11203's | 11203, same state |
 | 21710..21725 | 69, 67, 11258, 15098, 31, 32, 11201, 11202 (k = 0..7 in that order) | a stock crossing / slope piece on a half, one-way: two ids per base (21710 + 2k = lanes toward the piece's x+ / z+ end at its own state 0, + 1 = the other way; `avlc` lines carry the side); the other network's lanes (rail, highway) and the pedestrians as stock; road lanes `uk_keep` (right-hand in English-UK too, the other lanes mirrored there as stock); matrix: the stock turns of the other network kept, the road's replaced by the one-way turn | the base, same state |
 
 End U-turn: a stock avenue end is a pair of 11203 bends. Measured on the 15 shipped cities: 9 clean ends, all in
@@ -67,31 +65,16 @@ one of four patterns (band along z, ending to the N: x- cell 11203.3, x+ cell 11
 11203.1; band along x, ending to the E: z- cell 11203.0, z+ cell 11203.1; to the W: z- 11203.3, z+ 11203.2). Any other
 pair of 11203 next to a band is a bend that turns a half into a road (2 such cells), not an end: the band rule refuses
 it. Right-hand traffic always turns the same way through an end, so one piece covers both cells of every pattern: at
-state 0, traffic enters across x- and leaves across z+ on ONE lane, the outer (0, 0, 80) -> (175, 0, 255) on a
-radius-175 quarter circle about (0, 255). Curve: stock 1024 (11203's own) in English etc., new 23601's UK copy in
-English-UK. **No inner lane (2026-10-19):** (0, 0, 175) -> (80, 0, 255) is a radius-80 LEFT turn, and a car on it
-deadlocked SC3 in Seoul once the cell was on screen at zoom 4 with the sim running (avjunc, 4/4). A U-turn inner lane
-cannot be widened inside the cell: it enters at z 175 and must leave at z 255, and a 90-degree turn that gains only 80
-has a radius of 80 or less somewhere. So the row next to each end merges (21702, the half running into the end) and
-splits (21703, the half leaving it) the two lanes. Which half is which follows its travel side, not the cell order: on a
-band along z ending N the x- half (runs N) merges and the x+ half splits; ending S the other way round. Whether the
-radius itself is the trigger is [UNCERTAIN]: stock drives ground left bends of radius 42..65 in English (11225, 1999,
-18004, 15045) and every stock road corner as a radius-80 left in English-UK (768..771), and until 2026-10-19 new
-ground curves carried the elevated sort id (section 6). Clean
+state 0, traffic enters across x- and leaves across z+; outer lane (0, 0, 80) -> (175, 0, 255) on a radius-175 quarter
+circle about (0, 255), inner lane (0, 0, 175) -> (80, 0, 255) on radius 80. Curves: outer = stock 1024 (11203's own) in English etc., new 23601's UK copy in English-UK; inner = new
+23602 in English etc., stock 768's reversed copy in English-UK. Clean
 ends are rare in the shipped cities: most avenues there end in a road junction, so they convert only once avjunc's
 pieces are declared (section 5).
 
 Curve shapes: avcore 23600..23699. 23600 straight inner (255,80)->(0,80); 23601 English (175,255)->(0,80) on r 175
-(for English-UK's U-turn outer lane); 23602 RETIRED (was the U-turn inner lane on r 80, no longer written); 23603
-English (0,175)->(255,175) (for English-UK's straight outer lane); 23604..23607 the slope pieces' missing same-direction
-lanes (31 / 32 share 23604 / 23605 by rotation, 11201 / 11202 share 23606 / 23607); 23608 merge (255,80)->(0,175) and
-23609 split (255,175)->(0,80), each two tangent arcs of radius about 195, point-symmetric (rotation 2 = the reverse, so
-English-UK finds a forward copy without a second shape); 23610..23620 free.
-
-Tight left check: `py -3.12 -m netmod.avlanes tightleft <package dir> [...]` compiles every lanes entry in English and
-English-UK (the curves of all the listed packages injected first) and prints every car lane whose curve, as driven, has
-a left bend of radius <= 80 (cut at 88 for the curve files' rounding), by geometry, with the curve key, the height and
-stock / new. `selftest` runs it on avcore's own pieces.
+(for English-UK's U-turn outer lane); 23602 U-turn inner (0,175)->(80,255) on r 80; 23603 English (0,175)->(255,175)
+(for English-UK's straight outer lane); 23604..23607 the slope pieces' missing same-direction lanes (31 / 32 share
+23604 / 23605 by rotation, 11201 / 11202 share 23606 / 23607); 23608..23620 free.
 
 lanekit: a vehicle lane may carry `"uk_keep": true`: `mirror_spec` leaves it as written, so in a spec with the default
 `mirror_uk` only that lane stays right-hand in English-UK (avcore's crossings: the road lanes; the rail / highway lanes
@@ -103,8 +86,8 @@ write their own curves in their own ranges.
 An avenue band = the two halves running side by side along an axis. avcore converts a band only when ALL of it can
 be one-way; otherwise it leaves the whole band stock two-way (owner decision).
 
-- **Band cells avcore may write:** stock 11204 (-> 21700, or 21702 / 21703 on the row next to a U-turn end), the
-  crossings and slopes of section 3, and the 11203 pair of an end (-> 21701). Only stock pieces (id < 20000) and avcore's own pieces; never a cell another block claims
+- **Band cells avcore may write:** stock 11204 (-> 21700), the crossings and slopes of section 3, and the 11203 pair of
+  an end (-> 21701). Only stock pieces (id < 20000) and avcore's own pieces; never a cell another block claims
   (`dbv_claimed`, `hwave_claimed`, any other variant).
 - **A band ends** (both halves at the same row) at one of:
   1. its stock end: the 11203 pair, which becomes the U-turn;
@@ -112,8 +95,6 @@ be one-way; otherwise it leaves the whole band stock two-way (owner decision).
      band carries the band's direction (traffic of the half that flows into the piece = `I`, out of it = `O`);
   3. the map edge.
   Anything else (a stock T 39 / X 43 on a half, a plain road continuing a half, an undeclared variant) refuses the band.
-  A U-turn end also needs plain straight halves on the row next to it (the merge / split row; a crossing or slope
-  there refuses the band), and a band with U-turns at both ends at least two rows.
 - **Write / revert:** the game's piece writer FUN_10008919 per cell, as AVX / DAV. An avcore piece in a band that no
   longer qualifies gets its base back at the same state (the stock piece it replaced) before the writes; a rect retile
   would keep a Protected base (measured: rail crossing 69 stayed the one-way variant). Runs on every
@@ -189,14 +170,22 @@ package folder).
   `side`, in travel order) and `check(a, state_a, b, state_b, side, lang=...)` (every exit of one piece meets an entry
   of the other at the same position and direction; a / b = a piece id or a lanes.json path; run it for ENGLISH and
   English-UK). `py -3.12 -m netmod.avlanes selftest` checks avcore's own pieces (PASSED in both languages).
-- No car lane on a left bend of radius <= 80 (2026-10-19, section 3: a car on 23602 deadlocked SC3). Run
-  `py -3.12 -m netmod.avlanes tightleft <your package dir>` and expect 0 hits on new ground curves.
-- Curve sort id [UNCERTAIN as the hang's cause until avjunc's A/B: the same tight-left ring lanes as new curves with
-  sort id 2 vs 0, ring on screen at zoom 4, sim running]. A curve record's trailing u32 is the path's sort id: STRTSIM
-  SerialReadBinary 0x1001e673 stores it at +0x34 as file value + 1 (Linux oracle accessor `SortId`). A car taking a
-  path whose sort id differs from its current one copies it to vehicle +0x150 and sends it to the anim occupant manager
-  (DAT_10033218 vt+0x6c, property 0x80) at STRTSIM 0x1001b030, 0x10018820 and 0x1001bc70. The consumer behind that
-  call (SC3U.exe vtable 0x004d1088, slot +0x6c) is not traced. Stock: all 192 flat ground curves carry 0, all 408 deck
-  curves 2. Until 2026-10-19 hwlanes.py wrote 2 on every new curve, ground curves included. Now `hwlanes.extra_for`
-  writes it by height as stock: 0 when every point is at y 0, else 2 (ramps / mixed heights stay 2 until measured);
-  curve_set, curve_records and inject agree (`py -3.12 -m netmod.hwlanes selftest`, also run by avlanes selftest).
+- Curve sort id: new curves follow the stock rule (2026-10-19). A curve record's trailing u32 is the path's sort id:
+  STRTSIM SerialReadBinary 0x1001e673 stores it at +0x34 as file value + 1 (Linux oracle accessor `SortId`); a car
+  taking a path whose sort id differs from its current one copies it to vehicle +0x150 and sends it to the anim
+  occupant manager (DAT_10033218 vt+0x6c, property 0x80) at STRTSIM 0x1001b030, 0x10018820 and 0x1001bc70. What it
+  controls downstream is [UNCERTAIN]: the consumer behind that call (SC3U.exe vtable 0x004d1088, slot +0x6c) is not
+  traced. Stock: all 192 flat ground curves carry 0, all 408 deck curves 2. `hwlanes.extra_for` writes the same: 0 when
+  every point is at y 0, else 2 (ramps / mixed heights stay 2 until measured); curve_set, curve_records and inject agree
+  (`py -3.12 -m netmod.hwlanes selftest`, also run by avlanes selftest). Until 2026-10-19 hwlanes wrote 2 on every new
+  curve. It was briefly the lead for a game hang; that hang was retracted (next item), so this is a stock-matching
+  rule, not a fix.
+- Lab trap (avjunc 2026-10-19): installing Frida hooks (hwtraffic_probe, a segment tracer) while the game is PAUSED and
+  letting the probe's `--start` unpause it, with one-way pieces on screen at zoom 4, deadlocked SC3 every time; it was
+  first misread as "a car on a radius-80 left turn (23602) hangs the game". Without a probe: the U-turn end at Seoul
+  (51, 62..63) 5 min, a junction ring 7 min, no hang. Attach probes after the sim is running. Why that sequence
+  deadlocks is [UNCERTAIN].
+- Report tool, not a rule: `py -3.12 -m netmod.avlanes tightleft <package dir> [...]` lists every car lane whose curve,
+  as driven, has a left bend of radius <= 80 (cut at 88 for the curve files' rounding), English and English-UK, with
+  the curve key, height and stock / new. Stock itself drives such bends (English 11225, 1999, 18004, 15045 at r 42..65;
+  every English-UK road corner on 768..771 at r 80), and so does avcore's U-turn inner lane (23602).

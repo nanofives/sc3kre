@@ -68,7 +68,17 @@ overflows. Different games, so this is not a paired comparison.
 
 The M1 test package was uninstalled afterwards and must never ship.
 
-## U-turn deadlock fix (2026-10-19, after avjunc's bisect)
+## U-turn deadlock detour (2026-10-19: built, then RETRACTED and REVERTED the same day)
+
+**Retraction (avjunc):** the game does not hang without a Frida probe. Every hang had hooks installed while paused and
+the probe's `--start` unpausing it, with a one-way piece on screen at zoom 4. Without a probe: the ring view 7 min, the
+U-turn end at Seoul (51, 62..63) 5 min, 3.3 M routing evaluations, no hang; attaching hwtraffic_probe to a running game
+was fine for 2 months. The "curve" bisect was noise (single control runs).
+
+**Reverted (orchestrator decision):** 21701 is back to two lanes (outer stock 1024, inner 23602); 21702 / 21703, the
+`avlm` / `avlp` lines and the U-row rule are gone (package, AVL block, netpack, schema back to ed5465d). Kept:
+`hwlanes.extra_for` (stock-matching sort id: flat 0, deck 2) and `avlanes tightleft` as a report tool. The record of
+what was built and measured during the detour follows (committed in 3559939).
 
 avjunc measured a hang (4/4, Seoul, zoom 4, sim running) with a car on 23602, the U-turn's inner lane (radius-80 left
 turn). An inner lane cannot be widened inside the U-turn cell (it gains only 80 while turning 90 degrees). So now:

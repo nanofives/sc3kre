@@ -17,12 +17,8 @@ CLI (run from re/tools):
   py -3.12 -m netmod.avlanes check <piece|spec> <state> <piece|spec> <state> <side N|E|S|W>
   py -3.12 -m netmod.avlanes selftest               the avcore pieces against each other and a straight band
   py -3.12 -m netmod.avlanes tightleft <package dir> [...]
-                                                    every car lane (ENGLISH and English-UK) whose curve, as driven, has
-                                                    a LEFT bend of radius <= 80 somewhere (by geometry, not by curve id)
-
-Tight left turns (2026-10-19): a car on a radius-80 left turn deadlocks SC3 once the cell is on screen at zoom 4 with the
-sim running (avjunc, measured in Seoul on 23602). The U-turn therefore runs on ONE lane (the outer, radius 175), and the
-row next to it merges (21702, the half running into the end) or splits (21703, the half leaving it) the two lanes.
+                                                    REPORT (not a gate): every car lane (ENGLISH and English-UK) whose
+                                                    curve, as driven, has a left bend of radius <= 80 (by geometry)
 """
 import json
 import math
@@ -39,14 +35,9 @@ SIDES = "NESW"
 LK_SIDE = {"W": 0, "N": 1, "E": 2, "S": 3}
 
 PIECE_STRAIGHT = 21700        # base 11204: one-way half
-PIECE_UTURN = 21701           # base 11203: avenue end quarter, one lane
-PIECE_MERGE = 21702           # base 11204: the half running into a U-turn end, inner lane merges into the outer
-PIECE_SPLIT = 21703           # base 11204: the half leaving a U-turn end, the one lane splits into two
+PIECE_UTURN = 21701           # base 11203: avenue end quarter
 SHAPE_INNER = 23600           # (255, 80) -> (0, 80), y 0
-# 23602 (the U-turn inner lane (0, 175) -> (80, 255) on radius 80) is RETIRED: a radius-80 left turn deadlocks SC3
-SHAPE_MERGE = 23608           # (255, 80) -> (0, 175): two tangent arcs of radius 195; point-symmetric, so its rotation 2
-SHAPE_SPLIT = 23609           # (255, 175) -> (0, 80)   is its own reverse and English-UK finds a forward copy there
-TIGHT_LEFT = 80               # the flag radius of tight_lefts() / tightleft
+SHAPE_UTURN_INNER = 23602     # (0, 175) -> (80, 255) radius 80 about (0, 255)
 # English-UK holds every curve reversed under the same key (lanekit MIRROR_LANGS). With right-hand lanes in every
 # language, a UK lane needs a curve that runs forward in the UK file: a new shape whose ENGLISH geometry is the
 # reverse gets exactly that UK copy. Lanes carry no path key: each language's library is searched by end points.
@@ -54,6 +45,7 @@ SHAPE_UTURN_OUTER_UK = 23601  # English geometry (175, 255) -> (0, 80): its UK c
 SHAPE_OUTER_UK = 23603        # English geometry (0, 175) -> (255, 175): its UK copy is the straight outer lane
 KEY_OUTER_STRAIGHT = 256      # stock (255, 175) -> (0, 175)
 KEY_UTURN_OUTER = 1024        # stock 11203 (0, 80) -> (175, 255) radius 175 about (0, 255)
+TIGHT_LEFT = 80               # the report radius of tightleft
 MATRIX_STRAIGHT = {"low": [["x+", "x-"]], "high": [["x-", "x+"]]}
 MATRIX_UTURN = {"low": [["x-", "z+"]], "high": [["z+", "x-"]]}
 
@@ -94,19 +86,6 @@ def _arc(cx, cz, r, a0, a1, n=9):
     return out
 
 
-def _scurve(a, b, n=11):
-    """lane change along x from a (x, z) to b: two tangent arcs of equal radius, sampled evenly along x"""
-    L, d = abs(b[0] - a[0]), b[1] - a[1]
-    r = ((L / 2.0) ** 2 + (d / 2.0) ** 2) / abs(d)
-    sx, sz = (1 if b[0] > a[0] else -1), (1 if d > 0 else -1)
-    out = []
-    for t in range(n):
-        u = L * t / (n - 1.0)
-        v = r - math.sqrt(r * r - u * u) if u <= L / 2.0 else abs(d) - (r - math.sqrt(r * r - (L - u) ** 2))
-        out.append([round(a[0] + sx * u), 0, round(a[1] + sz * v)])
-    return out
-
-
 def _stock_ped(game, piece):
     rec = LK.decode(game.trblkatt("ENGLISH")[piece * 256])
     d, _probs = LK.describe(rec, game.paths("ENGLISH"), piece=piece, exact=False)
@@ -130,41 +109,20 @@ def specs(game=None):
         "curves": [{"shape": SHAPE_INNER, "pts": _line((255, 80), (0, 80))},
                    {"shape": SHAPE_OUTER_UK, "pts": _line((0, 175), (255, 175))}],
     }
-    # quarter circle about (0, 255): angle measured from +x toward +z, (0, 255 - r) is angle -90
+    # quarter circles about (0, 255): angle measured from +x toward +z, (0, 255 - r) is angle -90
     uturn = {
         "piece": PIECE_UTURN, "states": [0, 1, 2, 3], "flag": 0, "mirror_uk": False,
         "_comment": "AVENUE_LANES.md 3: avenue end quarter, traffic enters across x- and leaves across z+ at state 0; "
-                    "ONE lane, the outer (0,80) -> (175,255) = stock 11203's curve 1024 (radius 175). No inner lane: "
-                    "(0,175) -> (80,255) is a radius-80 left turn, which deadlocks SC3; 21702 / 21703 merge and split.",
+                    "outer lane (0,80) -> (175,255) = stock 11203's curve 1024, inner (0,175) -> (80,255) new 23602.",
         "vehicle": {"class": "car", "speed": 48000, "lanes": [
-            {"from": [0, 80], "to": [175, 255]}]},
+            {"from": [0, 80], "to": [175, 255]},
+            {"from": [0, 175], "to": [80, 255]}]},
         "pedestrian": _stock_ped(game, 11203),
         "connects": {"road": MATRIX_UTURN},
-        "curves": [{"shape": SHAPE_UTURN_OUTER_UK, "pts": _arc(0, 255, 175, -90, 0)[::-1]}],
+        "curves": [{"shape": SHAPE_UTURN_INNER, "pts": _arc(0, 255, 80, -90, 0)},
+                   {"shape": SHAPE_UTURN_OUTER_UK, "pts": _arc(0, 255, 175, -90, 0)[::-1]}],
     }
-    merge = {
-        "piece": PIECE_MERGE, "states": [0, 1, 2, 3], "flag": 0, "mirror_uk": False,
-        "_comment": "AVENUE_LANES.md 3: the half running into a U-turn end (the band row next to it); traffic -x as "
-                    "21700; the inner lane (z 80) merges into the outer (z 175) on new 23608, so the U-turn runs one lane.",
-        "vehicle": {"class": "car", "speed": 64000, "lanes": [
-            {"from": [255, 80], "to": [0, 175], "exit": False},
-            {"from": [255, 175], "to": [0, 175]}]},
-        "pedestrian": _stock_ped(game, 11204),
-        "connects": {"road": MATRIX_STRAIGHT},
-        "curves": [{"shape": SHAPE_MERGE, "pts": _scurve((255, 80), (0, 175))}],
-    }
-    split = {
-        "piece": PIECE_SPLIT, "states": [0, 1, 2, 3], "flag": 0, "mirror_uk": False,
-        "_comment": "AVENUE_LANES.md 3: the half leaving a U-turn end (the band row next to it); traffic -x as 21700; "
-                    "the one lane out of the U-turn (z 175) splits into the outer and, on new 23609, the inner (z 80).",
-        "vehicle": {"class": "car", "speed": 64000, "lanes": [
-            {"from": [255, 175], "to": [0, 175]},
-            {"from": [255, 175], "to": [0, 80]}]},
-        "pedestrian": _stock_ped(game, 11204),
-        "connects": {"road": MATRIX_STRAIGHT},
-        "curves": [{"shape": SHAPE_SPLIT, "pts": _scurve((255, 175), (0, 80))}],
-    }
-    return {PIECE_STRAIGHT: straight, PIECE_UTURN: uturn, PIECE_MERGE: merge, PIECE_SPLIT: split}
+    return {PIECE_STRAIGHT: straight, PIECE_UTURN: uturn}
 
 
 # ----------------------------------------------------------------- crossings / slopes on a half (AVENUE_LANES.md 3)
@@ -373,15 +331,11 @@ def check(a, sa, b, sb, side, game=None, lang="ENGLISH"):
 def selftest():
     game = LK.Game()
     sp = specs(game)
-    S, U, M, X = sp[PIECE_STRAIGHT], sp[PIECE_UTURN], sp[PIECE_MERGE], sp[PIECE_SPLIT]
+    S, U = sp[PIECE_STRAIGHT], sp[PIECE_UTURN]
     bad = []
     cs, lines = cross_specs(game)
     for lang in ("ENGLISH", "English-UK"):
-        bad += _selftest_lang(game, S, U, lang, M, X)
-        for pid, spec in list(sp.items()) + list(cs.items()):      # no tight left turn in any of avcore's lanes
-            for h in tight_lefts(spec, game, lang):
-                bad.append("%s: piece %d lane %s -> %s: left bend radius %.0f on curve %d" %
-                           (lang, pid, h["from"], h["to"], h["radius"], h["key"]))
+        bad += _selftest_lang(game, S, U, lang)
         for pid, base, side in lines:                    # each crossing between two one-way halves, every state
             for st in range(4):
                 t = (side + st) % 4
@@ -399,7 +353,7 @@ def selftest():
     return not bad
 
 
-def _selftest_lang(game, S, U, lang, M, X):
+def _selftest_lang(game, S, U, lang):
     bad = []
     # a straight run: state s next to state s along the travel axis (both directions of travel)
     for s in range(4):
@@ -410,13 +364,9 @@ def _selftest_lang(game, S, U, lang, M, X):
     ends = [("N", 3, 0, 1, 3, "E"), ("S", 2, 1, 1, 3, "E"), ("E", 0, 1, 2, 0, "S"), ("W", 3, 2, 2, 0, "S")]
     for end, ua, ub, ha, hb, across in ends:
         opp = {"N": "S", "S": "N", "E": "W", "W": "E"}[end]
-        # the row next to the end: the half running into it merges, the other splits (A / B = cell order, not travel)
-        ma, mb = (M, X) if SIDES[half_dir(ha)] == end else (X, M)
-        bad += check(S, ha, ma, ha, end, game, lang)    # straight half A - its merge / split half
-        bad += check(ma, ha, U, ua, end, game, lang)    # that half - end cell A
-        bad += check(U, ua, U, ub, across, game, lang)   # end cell A - end cell B
-        bad += check(U, ub, mb, hb, opp, game, lang)     # end cell B - half B's merge / split half
-        bad += check(mb, hb, S, hb, opp, game, lang)     # that half - straight half B
+        bad += check(S, ha, U, ua, end, game, lang)     # straight half A runs into its end cell
+        bad += check(U, ua, U, ub, across, game, lang)   # end cell A -> end cell B
+        bad += check(U, ub, S, hb, opp, game, lang)      # end cell B -> straight half B
     return ["%s: %s" % (lang, b) for b in bad]
 
 
