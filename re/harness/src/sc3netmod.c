@@ -1276,6 +1276,17 @@ static void ramp_line(BYTE *m, const char *path, const char *line) {
     g_n_ramp_bad++;
 }
 
+/* task hwave: `hwrc <variant>` = classify a highway-program variant as its base (an on-ramp class: road <-> highway
+   steps for the trip router) without a table slot. The variant must be in the table (g_base). */
+static void ramp_cls_line(const char *path, const char *line) {
+    unsigned long v;
+    if (sscanf(line + 5, "%lu", &v) != 1 || !v || v > 0xffff || !g_base[v]) {
+        logf("### ramp: %s: bad class line (or not a variant) '%s'", path, line); g_n_ramp_bad++; return;
+    }
+    g_rampcls[v] = 1;
+    logf("ramp: %s: variant %lu classified as its base %u", path, v, g_base[v]);
+}
+
 static void ramp_file(BYTE *m, const char *path) {
     char line[256];
     FILE *f = fopen(path, "r");
@@ -1284,6 +1295,7 @@ static void ramp_file(BYTE *m, const char *path) {
         char *e = line + strlen(line);
         while (e > line && (e[-1] == '\r' || e[-1] == '\n')) *--e = 0;
         if (!strncmp(line, "ramp ", 5)) ramp_line(m, path, line);
+        else if (!strncmp(line, "hwrc ", 5)) ramp_cls_line(path, line);         /* task hwave */
     }
     fclose(f);
 }
@@ -1349,6 +1361,7 @@ static int netramp_install(BYTE *m) {
 #include "sc3netmod_hwx.c"          /* task hwx: HWX, the cloverleaf at a highway X on HWY (SC3NETMOD_HWX=0) */
 #include "sc3netmod_hwdd.c"         /* task hwdd: HWDD, diagonal x diagonal highway cloverleaf (SC3NETMOD_HWDD=0) */
 #include "sc3netmod_hwdx.c"         /* task hwdx: HWDX, diagonal x straight highway cloverleaf (SC3NETMOD_HWDX=0) */
+#include "sc3netmod_hwave.c"        /* task hwave: HWAVE, highway <-> avenue transition (SC3NETMOD_HWAVE=0) */
 #include "sc3netmod_lanes.c"        /* task lanedensity: road density honours turn matrices (SC3NETMOD_LANEDENSITY) */
 
 /* ============================================================ arming */

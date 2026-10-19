@@ -1,0 +1,105 @@
+{
+ "netpack": 1,
+ "name": "highway_avenue",
+ "version": "1.0.0",
+ "author": "sc3kre",
+ "description": "Task hwave: where a straight highway ends right at the end of a straight avenue (either drag order), the highway's cap row and the avenue's U-turn row become a ramp: the deck lowers to the ground over the two rows and goes on as the avenue, both directions connected (the pieces carry the stock on-ramp classes, so trips step road <-> highway through them).",
+ "game": {
+  "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+ },
+ "variants": [
+  {
+   "id": 21600,
+   "base": 15137,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to avenue (exit, deck)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21600",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21601,
+   "base": 15136,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to avenue (entry, deck)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21601",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21602,
+   "base": 15141,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to avenue (exit, ground)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21602",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21603,
+   "base": 15140,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to avenue (entry, ground)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21603",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  }
+ ],
+ "lanes": [
+  {
+   "piece": 21600,
+   "spec": "hwave_21600.lanes.json"
+  },
+  {
+   "piece": 21601,
+   "spec": "hwave_21601.lanes.json"
+  },
+  {
+   "piece": 21602,
+   "spec": "hwave_21602.lanes.json"
+  },
+  {
+   "piece": 21603,
+   "spec": "hwave_21603.lanes.json"
+  }
+ ],
+ "highway_lines": [
+  "hwyp 21600 0",
+  "hwys 21600 11237 0 15054 0 11237 2 15054 2",
+  "hwyp 21601 0",
+  "hwys 21601 11235 0 15053 0 11235 2 15053 2",
+  "hwyp 21602 0",
+  "hwys 21602 11203 0 11203 1 11203 2 11203 3",
+  "hwyp 21603 0",
+  "hwys 21603 11203 3 11203 0 11203 1 11203 2",
+  "hwrc 21600",
+  "hwrc 21601",
+  "hwrc 21602",
+  "hwrc 21603",
+  "hwave 21600 21601 21602 21603"
+ ]
+}
