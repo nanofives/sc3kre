@@ -1,0 +1,45 @@
+{
+ "lone_11204": {
+  "Berlin, Germany.sc3": 442,
+  "Craterville.sc3": 15,
+  "Frankfurt, Germany.sc3": 323,
+  "Liverpool, England.sc3": 311,
+  "London, England.sc3": 667,
+  "Madison, WI.sc3": 21,
+  "Madrid, Spain.sc3": 237,
+  "Moscow, Russia.sc3": 138,
+  "Sacramento, CA.sc3": 74,
+  "Seoul, Korea.sc3": 82
+ },
+ "lone_partner": {
+  "39": 1850,
+  "empty": 2216,
+  "29": 10,
+  "11203": 438,
+  "15133": 2,
+  "50": 2,
+  "44": 69,
+  "73": 2,
+  "15052": 1,
+  "69": 2,
+  "15054": 1,
+  "15053": 2,
+  "16036": 6,
+  "15047": 7,
+  "15092": 1,
+  "15074": 1,
+  "92": 1,
+  "15098": 1,
+  "10036": 2,
+  "11204": 4,
+  "18000": 1,
+  "15022": 1
+ },
+ "c11203": {
+  "plain corner": 2735,
+  "pair only": 643,
+  "next to 11204": 670,
+  "pair+11204": 35
+ },
+ "n11204": 26752
+}
