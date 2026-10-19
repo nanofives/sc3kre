@@ -33,7 +33,7 @@ base). New curves 23600..23607.
   keys (curves are found by end points per language), and two curves (23601, 23603) exist only to give English-UK
   forward copies.
 
-## In game (lab, own PIDs 46296, 58144, 32000, 58080, 23804, 34960, 71188, 69260)
+## In game (lab, own PIDs 46296, 58144, 32000, 58080, 23804, 34960, 71188, 69260; slope rows: hill copy)
 
 | step | result |
 |---|---|
@@ -43,6 +43,8 @@ base). New curves 23600..23607.
 | game without sc3netmod (only sc3resize) | the avenue loads as stock 11203 / 11204, same states |
 | rail line across the avenue first, then the avenue | the band converts through the crossing: (50,30) 21711.1 runs N, (51,30) 21710.1 runs S |
 | a road meeting the x 50 half (a stock T 39) | the band is refused and every cell goes back to stock: 11204, the four 11203, and the rail crossing 69 |
+| slope (Roadless Paradise copy, own PIDs 9240, 41756; build 4c7e510 with the post-AVL hook slots empty) | two parallel roads x 96 / 97, z 18..46 over a hill. The game lays the avenue with slope pieces 31 (z 33, z 39) and 11201 (z 40, 41) on both halves. `avl: edit: band along z ... rows -14..12 -> one-way (ends: U-turn / U-turn)`, 58 cells: x 96 (runs N) 21719.0, 21718.2, 21723.0; x 97 (runs S) 21718.0, 21719.2, 21722.0, as the table's sides require |
+| slope save / reload / revert | save: 58 tiles written as base; reload: `all 58 variant tiles restored`, the load pass finds the band (rows 0..26); a side road at (98,36) makes a T and the band goes back to stock, slopes included (31, 11201 at their states) |
 | look | white dashed lane lines on the straight and the U-turn (avenue_markings' frames); the rail crossing keeps stock 69's art |
 
 Two bugs found in the lab and fixed: a rect retile does not revert a Protected base (rail crossing 69 stayed the
@@ -73,6 +75,6 @@ The M1 test package was uninstalled afterwards and must never ship.
 - **English-UK routing [UNCERTAIN]** (AVENUE_LANES.md 2): lanekit says the matrix's high half serves English-UK's
   lanes, and the high half is the transpose here (needed for the tiler's arms). Not testable without an English-UK
   install.
-- The slope variants were checked offline only (the lab is flat).
+- Slope variants 21718/21719 (base 31) and 21722/21723 (base 11201) passed in game. 21720/21721 (base 32) and 21724/21725 (base 11202) are offline only: the game did not lay 32 or 11202 under this avenue. The slope cells keep the base art (stock yellow centre line), as the rail crossing does.
 - Stock cities: only 9 clean U-turn ends exist in the 15 shipped cities. Their avenues convert once avjunc declares its
   junction pieces (`avlj`).
