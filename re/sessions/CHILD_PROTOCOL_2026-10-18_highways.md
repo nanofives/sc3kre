@@ -91,6 +91,7 @@ HUD play button, pause = the pause button (or sc3resize keys P, 1-4). Your DLL l
 **Lane curve shape numbers** (hwlanes.py writes one new VPathAtt curve per lane cut, key = shape * 256 + rotation;
 granted 2026-10-18, clear of the stock shapes, which end at 20002, and of every piece id): hwcore its piece ids
 21100..21119 plus 23300..23399, hwdx 22000..22499, hwx 22500..22799, hwt 22800..22999, hwdd 23000..23299.
+**Wave 2 grant (2026-10-19):** `hwave` (highway <-> avenue transition) piece ids 21600..21699, lane curve shapes 23400..23599.
 **Ramp geometry** (program rule 2026-10-18): ramp deck 0.62 (stock ramp width), hwx.py's W 0.31, loop R 1.25, outer
 ramp radius 2.06, turn arcs 0.75, 0.19 cell of ground between decks; open the highway parapet at every join (Deck gaps).
 
