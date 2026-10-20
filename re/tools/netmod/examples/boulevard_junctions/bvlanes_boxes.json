@@ -1,0 +1,220 @@
+{
+ "_": "bvlanes.py build: box cells by (box w, h, sides NESW, cell i j) -> piece, state; the piece art = bvx Box(edges) at state 0",
+ "pieces": [
+  {
+   "piece": 20900,
+   "edges": "AIIA"
+  },
+  {
+   "piece": 20901,
+   "edges": "IIIA"
+  },
+  {
+   "piece": 20902,
+   "edges": "IIAA"
+  },
+  {
+   "piece": 20903,
+   "edges": "AIIA"
+  },
+  {
+   "piece": 20904,
+   "edges": "IIIA"
+  },
+  {
+   "piece": 20905,
+   "edges": "IICA"
+  },
+  {
+   "piece": 20912,
+   "edges": "AAII"
+  },
+  {
+   "piece": 20913,
+   "edges": "IAII"
+  },
+  {
+   "piece": 20914,
+   "edges": "IACI"
+  },
+  {
+   "piece": 20915,
+   "edges": "AIIA"
+  },
+  {
+   "piece": 20916,
+   "edges": "IIIA"
+  },
+  {
+   "piece": 20917,
+   "edges": "IIAA"
+  },
+  {
+   "piece": 20918,
+   "edges": "ACII"
+  },
+  {
+   "piece": 20919,
+   "edges": "ICII"
+  },
+  {
+   "piece": 20920,
+   "edges": "ICAI"
+  },
+  {
+   "piece": 20921,
+   "edges": "AIIA"
+  },
+  {
+   "piece": 20922,
+   "edges": "IIIA"
+  },
+  {
+   "piece": 20923,
+   "edges": "IIII"
+  },
+  {
+   "piece": 20924,
+   "edges": "AIIA"
+  },
+  {
+   "piece": 20925,
+   "edges": "IIIA"
+  },
+  {
+   "piece": 20926,
+   "edges": "IICA"
+  },
+  {
+   "piece": 20927,
+   "edges": "AIII"
+  },
+  {
+   "piece": 20928,
+   "edges": "IIII"
+  },
+  {
+   "piece": 20929,
+   "edges": "IICI"
+  },
+  {
+   "piece": 20930,
+   "edges": "AAII"
+  },
+  {
+   "piece": 20931,
+   "edges": "IAII"
+  },
+  {
+   "piece": 20932,
+   "edges": "IACI"
+  }
+ ],
+ "lines": [
+  "bvxc 2 3 AAAA 0 0 20900 0",
+  "bvxc 2 3 AAAA 0 1 20901 0",
+  "bvxc 2 3 AAAA 0 2 20902 0",
+  "bvxc 2 3 AAAA 1 0 20902 2",
+  "bvxc 2 3 AAAA 1 1 20901 2",
+  "bvxc 2 3 AAAA 1 2 20900 2",
+  "bvxc 2 3 AAAC 0 0 20920 2",
+  "bvxc 2 3 AAAC 0 1 20919 2",
+  "bvxc 2 3 AAAC 0 2 20918 2",
+  "bvxc 2 3 AAAC 1 0 20917 2",
+  "bvxc 2 3 AAAC 1 1 20916 2",
+  "bvxc 2 3 AAAC 1 2 20915 2",
+  "bvxc 2 3 AACA 0 0 20903 0",
+  "bvxc 2 3 AACA 0 1 20904 0",
+  "bvxc 2 3 AACA 0 2 20905 0",
+  "bvxc 2 3 AACA 1 0 20912 0",
+  "bvxc 2 3 AACA 1 1 20913 0",
+  "bvxc 2 3 AACA 1 2 20914 0",
+  "bvxc 2 3 ACAA 0 0 20915 0",
+  "bvxc 2 3 ACAA 0 1 20916 0",
+  "bvxc 2 3 ACAA 0 2 20917 0",
+  "bvxc 2 3 ACAA 1 0 20918 0",
+  "bvxc 2 3 ACAA 1 1 20919 0",
+  "bvxc 2 3 ACAA 1 2 20920 0",
+  "bvxc 2 3 CAAA 0 0 20914 2",
+  "bvxc 2 3 CAAA 0 1 20913 2",
+  "bvxc 2 3 CAAA 0 2 20912 2",
+  "bvxc 2 3 CAAA 1 0 20905 2",
+  "bvxc 2 3 CAAA 1 1 20904 2",
+  "bvxc 2 3 CAAA 1 2 20903 2",
+  "bvxc 3 2 AAAA 0 0 20902 1",
+  "bvxc 3 2 AAAA 0 1 20900 3",
+  "bvxc 3 2 AAAA 1 0 20901 1",
+  "bvxc 3 2 AAAA 1 1 20901 3",
+  "bvxc 3 2 AAAA 2 0 20900 1",
+  "bvxc 3 2 AAAA 2 1 20902 3",
+  "bvxc 3 2 AAAC 0 0 20905 1",
+  "bvxc 3 2 AAAC 0 1 20914 1",
+  "bvxc 3 2 AAAC 1 0 20904 1",
+  "bvxc 3 2 AAAC 1 1 20913 1",
+  "bvxc 3 2 AAAC 2 0 20903 1",
+  "bvxc 3 2 AAAC 2 1 20912 1",
+  "bvxc 3 2 AACA 0 0 20917 1",
+  "bvxc 3 2 AACA 0 1 20920 1",
+  "bvxc 3 2 AACA 1 0 20916 1",
+  "bvxc 3 2 AACA 1 1 20919 1",
+  "bvxc 3 2 AACA 2 0 20915 1",
+  "bvxc 3 2 AACA 2 1 20918 1",
+  "bvxc 3 2 ACAA 0 0 20912 3",
+  "bvxc 3 2 ACAA 0 1 20903 3",
+  "bvxc 3 2 ACAA 1 0 20913 3",
+  "bvxc 3 2 ACAA 1 1 20904 3",
+  "bvxc 3 2 ACAA 2 0 20914 3",
+  "bvxc 3 2 ACAA 2 1 20905 3",
+  "bvxc 3 2 CAAA 0 0 20918 3",
+  "bvxc 3 2 CAAA 0 1 20915 3",
+  "bvxc 3 2 CAAA 1 0 20919 3",
+  "bvxc 3 2 CAAA 1 1 20916 3",
+  "bvxc 3 2 CAAA 2 0 20920 3",
+  "bvxc 3 2 CAAA 2 1 20917 3",
+  "bvxc 3 3 AAAA 0 0 20921 0",
+  "bvxc 3 3 AAAA 0 1 20922 0",
+  "bvxc 3 3 AAAA 0 2 20921 3",
+  "bvxc 3 3 AAAA 1 0 20922 1",
+  "bvxc 3 3 AAAA 1 1 20923 3",
+  "bvxc 3 3 AAAA 1 2 20922 3",
+  "bvxc 3 3 AAAA 2 0 20921 1",
+  "bvxc 3 3 AAAA 2 1 20922 2",
+  "bvxc 3 3 AAAA 2 2 20921 2",
+  "bvxc 3 3 AAAC 0 0 20926 1",
+  "bvxc 3 3 AAAC 0 1 20929 1",
+  "bvxc 3 3 AAAC 0 2 20932 1",
+  "bvxc 3 3 AAAC 1 0 20925 1",
+  "bvxc 3 3 AAAC 1 1 20928 1",
+  "bvxc 3 3 AAAC 1 2 20931 1",
+  "bvxc 3 3 AAAC 2 0 20924 1",
+  "bvxc 3 3 AAAC 2 1 20927 1",
+  "bvxc 3 3 AAAC 2 2 20930 1",
+  "bvxc 3 3 AACA 0 0 20924 0",
+  "bvxc 3 3 AACA 0 1 20925 0",
+  "bvxc 3 3 AACA 0 2 20926 0",
+  "bvxc 3 3 AACA 1 0 20927 0",
+  "bvxc 3 3 AACA 1 1 20928 0",
+  "bvxc 3 3 AACA 1 2 20929 0",
+  "bvxc 3 3 AACA 2 0 20930 0",
+  "bvxc 3 3 AACA 2 1 20931 0",
+  "bvxc 3 3 AACA 2 2 20932 0",
+  "bvxc 3 3 ACAA 0 0 20930 3",
+  "bvxc 3 3 ACAA 0 1 20927 3",
+  "bvxc 3 3 ACAA 0 2 20924 3",
+  "bvxc 3 3 ACAA 1 0 20931 3",
+  "bvxc 3 3 ACAA 1 1 20928 3",
+  "bvxc 3 3 ACAA 1 2 20925 3",
+  "bvxc 3 3 ACAA 2 0 20932 3",
+  "bvxc 3 3 ACAA 2 1 20929 3",
+  "bvxc 3 3 ACAA 2 2 20926 3",
+  "bvxc 3 3 CAAA 0 0 20932 2",
+  "bvxc 3 3 CAAA 0 1 20931 2",
+  "bvxc 3 3 CAAA 0 2 20930 2",
+  "bvxc 3 3 CAAA 1 0 20929 2",
+  "bvxc 3 3 CAAA 1 1 20928 2",
+  "bvxc 3 3 CAAA 1 2 20927 2",
+  "bvxc 3 3 CAAA 2 0 20926 2",
+  "bvxc 3 3 CAAA 2 1 20925 2",
+  "bvxc 3 3 CAAA 2 2 20924 2"
+ ]
+}

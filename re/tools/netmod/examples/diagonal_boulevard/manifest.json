@@ -1,9 +1,9 @@
 {
  "netpack": 1,
  "name": "diagonal_boulevard",
- "version": "0.1.0",
+ "version": "0.2.0",
  "author": "netmod (task diagbv)",
- "description": "Diagonal boulevards: draw three diagonal roads joined side by side (each one cell over: along x on the down-right diagonal, one cell up on the other) and sc3netmod's DBV block makes them one 3-wide boulevard, the straight boulevard's cross-section turned 45 degrees: the outer roads are the carriageways, the middle one gives each an extra lane and holds a grass median with avenue 11204's trees. Straight single roads crossing it, meeting it from one side or closing its end get junctions with crosswalks; it narrows into the diagonal avenue or tapers into one of its three roads, closes with a round curb where all three stop, and turns into the straight boulevard where its drags go on straight. Lane lines are white dashes. Built by `diagbv.py build .` in this folder before install (art/ is made from the game's frames and is not shipped). Needs sc3netmod.dll with the DBV block.",
+ "description": "Diagonal boulevards: draw three diagonal roads joined side by side (each one cell over: along x on the down-right diagonal, one cell up on the other) and sc3netmod's DBV block makes them one 3-wide boulevard, the straight boulevard's cross-section turned 45 degrees: the outer roads are the carriageways, the middle one gives each an extra lane and holds a grass median with avenue 11204's trees. Straight single roads crossing it, meeting it from one side or closing its end get junctions with crosswalks; it narrows into the diagonal avenue or tapers into one of its three roads, closes with a round curb where all three stop, and turns into the straight boulevard where its drags go on straight. Lane lines are white dashes. Built by `diagbv.py build .` in this folder before install (art/ is made from the game's frames and is not shipped). Needs sc3netmod.dll with the DBV block. Traffic (task bvlanes): 3 lanes each way, right-hand, one way per side, every turn at the junctions; own lane specs (bvl_*.lanes.json, dbvlanes.py / bvlanes.py).",
  "game": {
   "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
  },
@@ -20,7 +20,7 @@
     "from": 35,
     "png_dir": "art/20950"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20951,
@@ -48,7 +48,7 @@
     "from": 11204,
     "png_dir": "art/20952"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20953,
@@ -62,7 +62,7 @@
     "from": 43,
     "png_dir": "art/20953"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20954,
@@ -76,7 +76,7 @@
     "from": 43,
     "png_dir": "art/20954"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20955,
@@ -90,7 +90,7 @@
     "from": 43,
     "png_dir": "art/20955"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20956,
@@ -104,7 +104,7 @@
     "from": 43,
     "png_dir": "art/20956"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20957,
@@ -118,7 +118,7 @@
     "from": 11204,
     "png_dir": "art/20957"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20958,
@@ -132,7 +132,7 @@
     "from": 43,
     "png_dir": "art/20958"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20959,
@@ -146,7 +146,7 @@
     "from": 35,
     "png_dir": "art/20959"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20960,
@@ -160,7 +160,7 @@
     "from": 43,
     "png_dir": "art/20960"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20961,
@@ -174,7 +174,7 @@
     "from": 43,
     "png_dir": "art/20961"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20962,
@@ -188,7 +188,7 @@
     "from": 43,
     "png_dir": "art/20962"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20963,
@@ -202,7 +202,7 @@
     "from": 43,
     "png_dir": "art/20963"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20964,
@@ -216,7 +216,7 @@
     "from": 43,
     "png_dir": "art/20964"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20965,
@@ -230,7 +230,7 @@
     "from": 11204,
     "png_dir": "art/20965"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20966,
@@ -244,7 +244,7 @@
     "from": 43,
     "png_dir": "art/20966"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20967,
@@ -258,7 +258,7 @@
     "from": 43,
     "png_dir": "art/20967"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20968,
@@ -272,7 +272,7 @@
     "from": 11204,
     "png_dir": "art/20968"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20969,
@@ -286,7 +286,7 @@
     "from": 43,
     "png_dir": "art/20969"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20970,
@@ -300,7 +300,7 @@
     "from": 35,
     "png_dir": "art/20970"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20971,
@@ -314,7 +314,7 @@
     "from": 43,
     "png_dir": "art/20971"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20972,
@@ -328,7 +328,7 @@
     "from": 11204,
     "png_dir": "art/20972"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20973,
@@ -342,7 +342,7 @@
     "from": 35,
     "png_dir": "art/20973"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20974,
@@ -356,7 +356,7 @@
     "from": 11204,
     "png_dir": "art/20974"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20975,
@@ -370,7 +370,7 @@
     "from": 35,
     "png_dir": "art/20975"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20976,
@@ -384,7 +384,7 @@
     "from": 35,
     "png_dir": "art/20976"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20977,
@@ -398,7 +398,7 @@
     "from": 35,
     "png_dir": "art/20977"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20978,
@@ -412,7 +412,7 @@
     "from": 11204,
     "png_dir": "art/20978"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20979,
@@ -426,7 +426,7 @@
     "from": 35,
     "png_dir": "art/20979"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20980,
@@ -440,7 +440,7 @@
     "from": 35,
     "png_dir": "art/20980"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20981,
@@ -454,7 +454,7 @@
     "from": 35,
     "png_dir": "art/20981"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20982,
@@ -468,7 +468,7 @@
     "from": 35,
     "png_dir": "art/20982"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20983,
@@ -482,7 +482,7 @@
     "from": 11204,
     "png_dir": "art/20983"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20984,
@@ -496,7 +496,7 @@
     "from": 11204,
     "png_dir": "art/20984"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20985,
@@ -510,7 +510,7 @@
     "from": 35,
     "png_dir": "art/20985"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20986,
@@ -524,7 +524,7 @@
     "from": 35,
     "png_dir": "art/20986"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20987,
@@ -538,7 +538,7 @@
     "from": 11204,
     "png_dir": "art/20987"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20988,
@@ -552,7 +552,7 @@
     "from": 35,
     "png_dir": "art/20988"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20989,
@@ -566,7 +566,7 @@
     "from": 35,
     "png_dir": "art/20989"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20990,
@@ -580,7 +580,7 @@
     "from": 35,
     "png_dir": "art/20990"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20991,
@@ -594,7 +594,7 @@
     "from": 35,
     "png_dir": "art/20991"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20992,
@@ -608,7 +608,7 @@
     "from": 35,
     "png_dir": "art/20992"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20993,
@@ -622,7 +622,7 @@
     "from": 11204,
     "png_dir": "art/20993"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20994,
@@ -636,7 +636,7 @@
     "from": 35,
     "png_dir": "art/20994"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20995,
@@ -650,7 +650,7 @@
     "from": 43,
     "png_dir": "art/20995"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20996,
@@ -664,7 +664,7 @@
     "from": 35,
     "png_dir": "art/20996"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20997,
@@ -678,7 +678,7 @@
     "from": 35,
     "png_dir": "art/20997"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20998,
@@ -692,7 +692,7 @@
     "from": 11204,
     "png_dir": "art/20998"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20999,
@@ -706,7 +706,7 @@
     "from": 43,
     "png_dir": "art/20999"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21000,
@@ -720,7 +720,7 @@
     "from": 35,
     "png_dir": "art/21000"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21001,
@@ -734,7 +734,7 @@
     "from": 35,
     "png_dir": "art/21001"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21002,
@@ -748,7 +748,7 @@
     "from": 35,
     "png_dir": "art/21002"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21003,
@@ -762,7 +762,7 @@
     "from": 43,
     "png_dir": "art/21003"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21004,
@@ -776,7 +776,7 @@
     "from": 35,
     "png_dir": "art/21004"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21005,
@@ -790,7 +790,7 @@
     "from": 35,
     "png_dir": "art/21005"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21006,
@@ -804,7 +804,7 @@
     "from": 35,
     "png_dir": "art/21006"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21007,
@@ -818,7 +818,7 @@
     "from": 35,
     "png_dir": "art/21007"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21008,
@@ -832,7 +832,7 @@
     "from": 35,
     "png_dir": "art/21008"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21009,
@@ -846,7 +846,7 @@
     "from": 35,
     "png_dir": "art/21009"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21010,
@@ -860,7 +860,7 @@
     "from": 35,
     "png_dir": "art/21010"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21011,
@@ -874,7 +874,7 @@
     "from": 35,
     "png_dir": "art/21011"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21012,
@@ -888,7 +888,7 @@
     "from": 35,
     "png_dir": "art/21012"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21013,
@@ -902,7 +902,7 @@
     "from": 35,
     "png_dir": "art/21013"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21014,
@@ -916,7 +916,7 @@
     "from": 43,
     "png_dir": "art/21014"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21015,
@@ -930,7 +930,7 @@
     "from": 43,
     "png_dir": "art/21015"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21016,
@@ -944,7 +944,7 @@
     "from": 35,
     "png_dir": "art/21016"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21017,
@@ -958,7 +958,7 @@
     "from": 35,
     "png_dir": "art/21017"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21018,
@@ -972,7 +972,7 @@
     "from": 35,
     "png_dir": "art/21018"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21019,
@@ -986,7 +986,7 @@
     "from": 35,
     "png_dir": "art/21019"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21020,
@@ -1000,7 +1000,7 @@
     "from": 35,
     "png_dir": "art/21020"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21021,
@@ -1014,7 +1014,7 @@
     "from": 35,
     "png_dir": "art/21021"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21022,
@@ -1028,7 +1028,7 @@
     "from": 35,
     "png_dir": "art/21022"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21023,
@@ -1042,7 +1042,7 @@
     "from": 35,
     "png_dir": "art/21023"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21024,
@@ -1056,7 +1056,7 @@
     "from": 35,
     "png_dir": "art/21024"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21025,
@@ -1070,7 +1070,7 @@
     "from": 43,
     "png_dir": "art/21025"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21026,
@@ -1084,7 +1084,7 @@
     "from": 35,
     "png_dir": "art/21026"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21027,
@@ -1098,7 +1098,7 @@
     "from": 35,
     "png_dir": "art/21027"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21028,
@@ -1112,7 +1112,7 @@
     "from": 11204,
     "png_dir": "art/21028"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21029,
@@ -1126,7 +1126,7 @@
     "from": 43,
     "png_dir": "art/21029"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21030,
@@ -1140,7 +1140,7 @@
     "from": 35,
     "png_dir": "art/21030"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21031,
@@ -1154,7 +1154,7 @@
     "from": 35,
     "png_dir": "art/21031"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21032,
@@ -1168,7 +1168,7 @@
     "from": 35,
     "png_dir": "art/21032"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21033,
@@ -1182,7 +1182,7 @@
     "from": 35,
     "png_dir": "art/21033"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21034,
@@ -1196,7 +1196,7 @@
     "from": 35,
     "png_dir": "art/21034"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21035,
@@ -1210,7 +1210,7 @@
     "from": 11204,
     "png_dir": "art/21035"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21036,
@@ -1224,7 +1224,7 @@
     "from": 35,
     "png_dir": "art/21036"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21037,
@@ -1238,7 +1238,7 @@
     "from": 35,
     "png_dir": "art/21037"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21038,
@@ -1252,7 +1252,7 @@
     "from": 35,
     "png_dir": "art/21038"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21039,
@@ -1266,7 +1266,7 @@
     "from": 43,
     "png_dir": "art/21039"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21040,
@@ -1280,7 +1280,7 @@
     "from": 35,
     "png_dir": "art/21040"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21041,
@@ -1294,7 +1294,7 @@
     "from": 35,
     "png_dir": "art/21041"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21042,
@@ -1308,7 +1308,7 @@
     "from": 11204,
     "png_dir": "art/21042"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21043,
@@ -1322,7 +1322,7 @@
     "from": 43,
     "png_dir": "art/21043"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21044,
@@ -1336,7 +1336,7 @@
     "from": 35,
     "png_dir": "art/21044"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21045,
@@ -1350,7 +1350,7 @@
     "from": 35,
     "png_dir": "art/21045"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21046,
@@ -1364,7 +1364,7 @@
     "from": 35,
     "png_dir": "art/21046"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21047,
@@ -1378,7 +1378,7 @@
     "from": 35,
     "png_dir": "art/21047"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21048,
@@ -1392,7 +1392,7 @@
     "from": 43,
     "png_dir": "art/21048"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21049,
@@ -1406,7 +1406,7 @@
     "from": 43,
     "png_dir": "art/21049"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21050,
@@ -1420,7 +1420,7 @@
     "from": 35,
     "png_dir": "art/21050"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21051,
@@ -1434,7 +1434,7 @@
     "from": 35,
     "png_dir": "art/21051"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21052,
@@ -1448,7 +1448,7 @@
     "from": 43,
     "png_dir": "art/21052"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21053,
@@ -1462,7 +1462,7 @@
     "from": 35,
     "png_dir": "art/21053"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21054,
@@ -1476,7 +1476,7 @@
     "from": 35,
     "png_dir": "art/21054"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21055,
@@ -1490,7 +1490,7 @@
     "from": 35,
     "png_dir": "art/21055"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21056,
@@ -1504,7 +1504,7 @@
     "from": 35,
     "png_dir": "art/21056"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21057,
@@ -1518,7 +1518,7 @@
     "from": 35,
     "png_dir": "art/21057"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21058,
@@ -1532,7 +1532,7 @@
     "from": 43,
     "png_dir": "art/21058"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21059,
@@ -1546,7 +1546,7 @@
     "from": 35,
     "png_dir": "art/21059"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21060,
@@ -1560,7 +1560,7 @@
     "from": 35,
     "png_dir": "art/21060"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21061,
@@ -1574,7 +1574,7 @@
     "from": 35,
     "png_dir": "art/21061"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21062,
@@ -1588,7 +1588,7 @@
     "from": 43,
     "png_dir": "art/21062"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 21063,
@@ -1602,13 +1602,825 @@
     "from": 35,
     "png_dir": "art/21063"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
+  },
+  {
+   "id": 21900,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21900"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 21901,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/21901"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 21902,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21902"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 21903,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21903"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 21904,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21904"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 21905,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21905"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 21906,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21906"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 21907,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21907"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 21908,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21908"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 21909,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21909"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 21910,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21910"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 21911,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21911"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 21912,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21912"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 21913,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21913"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 21914,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21914"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 21915,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21915"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 21916,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21916"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 21917,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/21917"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 21918,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21918"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 21919,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard",
+    "ENGLISH": "Diagonal boulevard"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/21919"
+   },
+   "trblkatt": "none"
   }
  ],
  "lanes": [
   {
+   "piece": 20950,
+   "spec": "bvl_20950.lanes.json"
+  },
+  {
    "piece": 20951,
-   "spec": "dbv_20951.lanes.json"
+   "spec": "bvl_20951.lanes.json"
+  },
+  {
+   "piece": 20952,
+   "spec": "bvl_20952.lanes.json"
+  },
+  {
+   "piece": 20953,
+   "spec": "bvl_20953.lanes.json"
+  },
+  {
+   "piece": 20954,
+   "spec": "bvl_20954.lanes.json"
+  },
+  {
+   "piece": 20955,
+   "spec": "bvl_20955.lanes.json"
+  },
+  {
+   "piece": 20956,
+   "spec": "bvl_20956.lanes.json"
+  },
+  {
+   "piece": 20957,
+   "spec": "bvl_20957.lanes.json"
+  },
+  {
+   "piece": 20958,
+   "spec": "bvl_20958.lanes.json"
+  },
+  {
+   "piece": 20959,
+   "spec": "bvl_20959.lanes.json"
+  },
+  {
+   "piece": 20960,
+   "spec": "bvl_20960.lanes.json"
+  },
+  {
+   "piece": 20961,
+   "spec": "bvl_20961.lanes.json"
+  },
+  {
+   "piece": 20962,
+   "spec": "bvl_20962.lanes.json"
+  },
+  {
+   "piece": 20963,
+   "spec": "bvl_20963.lanes.json"
+  },
+  {
+   "piece": 20964,
+   "spec": "bvl_20964.lanes.json"
+  },
+  {
+   "piece": 20965,
+   "spec": "bvl_20965.lanes.json"
+  },
+  {
+   "piece": 20966,
+   "spec": "bvl_20966.lanes.json"
+  },
+  {
+   "piece": 20967,
+   "spec": "bvl_20967.lanes.json"
+  },
+  {
+   "piece": 20968,
+   "spec": "bvl_20968.lanes.json"
+  },
+  {
+   "piece": 20969,
+   "spec": "bvl_20969.lanes.json"
+  },
+  {
+   "piece": 20970,
+   "spec": "bvl_20970.lanes.json"
+  },
+  {
+   "piece": 20971,
+   "spec": "bvl_20971.lanes.json"
+  },
+  {
+   "piece": 20972,
+   "spec": "bvl_20972.lanes.json"
+  },
+  {
+   "piece": 20973,
+   "spec": "bvl_20973.lanes.json"
+  },
+  {
+   "piece": 20974,
+   "spec": "bvl_20974.lanes.json"
+  },
+  {
+   "piece": 20975,
+   "spec": "bvl_20975.lanes.json"
+  },
+  {
+   "piece": 20976,
+   "spec": "bvl_20976.lanes.json"
+  },
+  {
+   "piece": 20977,
+   "spec": "bvl_20977.lanes.json"
+  },
+  {
+   "piece": 20978,
+   "spec": "bvl_20978.lanes.json"
+  },
+  {
+   "piece": 20979,
+   "spec": "bvl_20979.lanes.json"
+  },
+  {
+   "piece": 20980,
+   "spec": "bvl_20980.lanes.json"
+  },
+  {
+   "piece": 20981,
+   "spec": "bvl_20981.lanes.json"
+  },
+  {
+   "piece": 20982,
+   "spec": "bvl_20982.lanes.json"
+  },
+  {
+   "piece": 20983,
+   "spec": "bvl_20983.lanes.json"
+  },
+  {
+   "piece": 20984,
+   "spec": "bvl_20984.lanes.json"
+  },
+  {
+   "piece": 20985,
+   "spec": "bvl_20985.lanes.json"
+  },
+  {
+   "piece": 20986,
+   "spec": "bvl_20986.lanes.json"
+  },
+  {
+   "piece": 20987,
+   "spec": "bvl_20987.lanes.json"
+  },
+  {
+   "piece": 20988,
+   "spec": "bvl_20988.lanes.json"
+  },
+  {
+   "piece": 20989,
+   "spec": "bvl_20989.lanes.json"
+  },
+  {
+   "piece": 20990,
+   "spec": "bvl_20990.lanes.json"
+  },
+  {
+   "piece": 20991,
+   "spec": "bvl_20991.lanes.json"
+  },
+  {
+   "piece": 20992,
+   "spec": "bvl_20992.lanes.json"
+  },
+  {
+   "piece": 20993,
+   "spec": "bvl_20993.lanes.json"
+  },
+  {
+   "piece": 20994,
+   "spec": "bvl_20994.lanes.json"
+  },
+  {
+   "piece": 20995,
+   "spec": "bvl_20995.lanes.json"
+  },
+  {
+   "piece": 20996,
+   "spec": "bvl_20996.lanes.json"
+  },
+  {
+   "piece": 20997,
+   "spec": "bvl_20997.lanes.json"
+  },
+  {
+   "piece": 20998,
+   "spec": "bvl_20998.lanes.json"
+  },
+  {
+   "piece": 20999,
+   "spec": "bvl_20999.lanes.json"
+  },
+  {
+   "piece": 21000,
+   "spec": "bvl_21000.lanes.json"
+  },
+  {
+   "piece": 21001,
+   "spec": "bvl_21001.lanes.json"
+  },
+  {
+   "piece": 21002,
+   "spec": "bvl_21002.lanes.json"
+  },
+  {
+   "piece": 21003,
+   "spec": "bvl_21003.lanes.json"
+  },
+  {
+   "piece": 21004,
+   "spec": "bvl_21004.lanes.json"
+  },
+  {
+   "piece": 21005,
+   "spec": "bvl_21005.lanes.json"
+  },
+  {
+   "piece": 21006,
+   "spec": "bvl_21006.lanes.json"
+  },
+  {
+   "piece": 21007,
+   "spec": "bvl_21007.lanes.json"
+  },
+  {
+   "piece": 21008,
+   "spec": "bvl_21008.lanes.json"
+  },
+  {
+   "piece": 21009,
+   "spec": "bvl_21009.lanes.json"
+  },
+  {
+   "piece": 21010,
+   "spec": "bvl_21010.lanes.json"
+  },
+  {
+   "piece": 21011,
+   "spec": "bvl_21011.lanes.json"
+  },
+  {
+   "piece": 21012,
+   "spec": "bvl_21012.lanes.json"
+  },
+  {
+   "piece": 21013,
+   "spec": "bvl_21013.lanes.json"
+  },
+  {
+   "piece": 21014,
+   "spec": "bvl_21014.lanes.json"
+  },
+  {
+   "piece": 21015,
+   "spec": "bvl_21015.lanes.json"
+  },
+  {
+   "piece": 21016,
+   "spec": "bvl_21016.lanes.json"
+  },
+  {
+   "piece": 21017,
+   "spec": "bvl_21017.lanes.json"
+  },
+  {
+   "piece": 21018,
+   "spec": "bvl_21018.lanes.json"
+  },
+  {
+   "piece": 21019,
+   "spec": "bvl_21019.lanes.json"
+  },
+  {
+   "piece": 21020,
+   "spec": "bvl_21020.lanes.json"
+  },
+  {
+   "piece": 21021,
+   "spec": "bvl_21021.lanes.json"
+  },
+  {
+   "piece": 21022,
+   "spec": "bvl_21022.lanes.json"
+  },
+  {
+   "piece": 21023,
+   "spec": "bvl_21023.lanes.json"
+  },
+  {
+   "piece": 21024,
+   "spec": "bvl_21024.lanes.json"
+  },
+  {
+   "piece": 21025,
+   "spec": "bvl_21025.lanes.json"
+  },
+  {
+   "piece": 21026,
+   "spec": "bvl_21026.lanes.json"
+  },
+  {
+   "piece": 21027,
+   "spec": "bvl_21027.lanes.json"
+  },
+  {
+   "piece": 21028,
+   "spec": "bvl_21028.lanes.json"
+  },
+  {
+   "piece": 21029,
+   "spec": "bvl_21029.lanes.json"
+  },
+  {
+   "piece": 21030,
+   "spec": "bvl_21030.lanes.json"
+  },
+  {
+   "piece": 21031,
+   "spec": "bvl_21031.lanes.json"
+  },
+  {
+   "piece": 21032,
+   "spec": "bvl_21032.lanes.json"
+  },
+  {
+   "piece": 21033,
+   "spec": "bvl_21033.lanes.json"
+  },
+  {
+   "piece": 21034,
+   "spec": "bvl_21034.lanes.json"
+  },
+  {
+   "piece": 21035,
+   "spec": "bvl_21035.lanes.json"
+  },
+  {
+   "piece": 21036,
+   "spec": "bvl_21036.lanes.json"
+  },
+  {
+   "piece": 21037,
+   "spec": "bvl_21037.lanes.json"
+  },
+  {
+   "piece": 21038,
+   "spec": "bvl_21038.lanes.json"
+  },
+  {
+   "piece": 21039,
+   "spec": "bvl_21039.lanes.json"
+  },
+  {
+   "piece": 21040,
+   "spec": "bvl_21040.lanes.json"
+  },
+  {
+   "piece": 21041,
+   "spec": "bvl_21041.lanes.json"
+  },
+  {
+   "piece": 21042,
+   "spec": "bvl_21042.lanes.json"
+  },
+  {
+   "piece": 21043,
+   "spec": "bvl_21043.lanes.json"
+  },
+  {
+   "piece": 21044,
+   "spec": "bvl_21044.lanes.json"
+  },
+  {
+   "piece": 21045,
+   "spec": "bvl_21045.lanes.json"
+  },
+  {
+   "piece": 21046,
+   "spec": "bvl_21046.lanes.json"
+  },
+  {
+   "piece": 21047,
+   "spec": "bvl_21047.lanes.json"
+  },
+  {
+   "piece": 21048,
+   "spec": "bvl_21048.lanes.json"
+  },
+  {
+   "piece": 21049,
+   "spec": "bvl_21049.lanes.json"
+  },
+  {
+   "piece": 21050,
+   "spec": "bvl_21050.lanes.json"
+  },
+  {
+   "piece": 21051,
+   "spec": "bvl_21051.lanes.json"
+  },
+  {
+   "piece": 21052,
+   "spec": "bvl_21052.lanes.json"
+  },
+  {
+   "piece": 21053,
+   "spec": "bvl_21053.lanes.json"
+  },
+  {
+   "piece": 21054,
+   "spec": "bvl_21054.lanes.json"
+  },
+  {
+   "piece": 21055,
+   "spec": "bvl_21055.lanes.json"
+  },
+  {
+   "piece": 21056,
+   "spec": "bvl_21056.lanes.json"
+  },
+  {
+   "piece": 21057,
+   "spec": "bvl_21057.lanes.json"
+  },
+  {
+   "piece": 21058,
+   "spec": "bvl_21058.lanes.json"
+  },
+  {
+   "piece": 21059,
+   "spec": "bvl_21059.lanes.json"
+  },
+  {
+   "piece": 21060,
+   "spec": "bvl_21060.lanes.json"
+  },
+  {
+   "piece": 21061,
+   "spec": "bvl_21061.lanes.json"
+  },
+  {
+   "piece": 21062,
+   "spec": "bvl_21062.lanes.json"
+  },
+  {
+   "piece": 21063,
+   "spec": "bvl_21063.lanes.json"
+  },
+  {
+   "piece": 21900,
+   "spec": "bvl_21900.lanes.json"
+  },
+  {
+   "piece": 21901,
+   "spec": "bvl_21901.lanes.json"
+  },
+  {
+   "piece": 21902,
+   "spec": "bvl_21902.lanes.json"
+  },
+  {
+   "piece": 21903,
+   "spec": "bvl_21903.lanes.json"
+  },
+  {
+   "piece": 21904,
+   "spec": "bvl_21904.lanes.json"
+  },
+  {
+   "piece": 21905,
+   "spec": "bvl_21905.lanes.json"
+  },
+  {
+   "piece": 21906,
+   "spec": "bvl_21906.lanes.json"
+  },
+  {
+   "piece": 21907,
+   "spec": "bvl_21907.lanes.json"
+  },
+  {
+   "piece": 21908,
+   "spec": "bvl_21908.lanes.json"
+  },
+  {
+   "piece": 21909,
+   "spec": "bvl_21909.lanes.json"
+  },
+  {
+   "piece": 21910,
+   "spec": "bvl_21910.lanes.json"
+  },
+  {
+   "piece": 21911,
+   "spec": "bvl_21911.lanes.json"
+  },
+  {
+   "piece": 21912,
+   "spec": "bvl_21912.lanes.json"
+  },
+  {
+   "piece": 21913,
+   "spec": "bvl_21913.lanes.json"
+  },
+  {
+   "piece": 21914,
+   "spec": "bvl_21914.lanes.json"
+  },
+  {
+   "piece": 21915,
+   "spec": "bvl_21915.lanes.json"
+  },
+  {
+   "piece": 21916,
+   "spec": "bvl_21916.lanes.json"
+  },
+  {
+   "piece": 21917,
+   "spec": "bvl_21917.lanes.json"
+  },
+  {
+   "piece": 21918,
+   "spec": "bvl_21918.lanes.json"
+  },
+  {
+   "piece": 21919,
+   "spec": "bvl_21919.lanes.json"
   }
  ],
  "auto_diagonal_boulevards": [
@@ -1622,7 +2434,7 @@
      [
       1,
       -1,
-      20952,
+      21917,
       0
      ],
      [
@@ -1660,19 +2472,19 @@
      [
       1,
       -1,
-      20952,
+      21917,
       0
      ],
      [
       0,
       0,
-      20953,
+      21902,
       0
      ],
      [
       1,
       0,
-      20954,
+      21903,
       0
      ],
      [
@@ -1698,7 +2510,7 @@
      [
       1,
       -1,
-      20952,
+      21917,
       0
      ],
      [
@@ -1762,6 +2574,18 @@
       0,
       20969,
       0
+     ],
+     [
+      -1,
+      -3,
+      21901,
+      0
+     ],
+     [
+      1,
+      0,
+      21901,
+      2
      ]
     ],
     "jcol-A": [
@@ -1786,7 +2610,7 @@
      [
       0,
       -1,
-      20967,
+      21904,
       0
      ],
      [
@@ -1798,7 +2622,7 @@
      [
       0,
       0,
-      20969,
+      21905,
       0
      ]
     ],
@@ -1930,6 +2754,12 @@
       0,
       20992,
       0
+     ],
+     [
+      1,
+      -2,
+      21900,
+      0
      ]
     ],
     "taper-0": [
@@ -1948,7 +2778,7 @@
      [
       1,
       1,
-      20977,
+      21906,
       0
      ],
      [
@@ -2010,19 +2840,19 @@
      [
       2,
       -1,
-      21004,
+      21907,
       0
      ],
      [
       0,
       0,
-      21005,
+      21908,
       0
      ],
      [
       1,
       0,
-      21006,
+      21909,
       0
      ],
      [
@@ -2052,7 +2882,7 @@
      [
       3,
       2,
-      21011,
+      21915,
       0
      ],
      [
@@ -2122,6 +2952,12 @@
       1,
       21022,
       0
+     ],
+     [
+      -1,
+      -1,
+      21914,
+      2
      ]
     ],
     "cap-square": [
@@ -2153,6 +2989,12 @@
       3,
       0,
       21026,
+      0
+     ],
+     [
+      2,
+      -1,
+      21916,
       0
      ]
     ],
@@ -2246,7 +3088,7 @@
      [
       2,
       2,
-      21038,
+      21910,
       0
      ],
      [
@@ -2334,7 +3176,7 @@
      [
       1,
       -2,
-      21013,
+      21911,
       0
      ],
      [
@@ -2352,7 +3194,7 @@
      [
       2,
       -1,
-      21016,
+      21912,
       0
      ],
      [
@@ -2396,6 +3238,12 @@
       1,
       21056,
       0
+     ],
+     [
+      -1,
+      -1,
+      21914,
+      2
      ]
     ],
     "cap-x4z3": [
@@ -2414,13 +3262,13 @@
      [
       2,
       0,
-      21029,
+      21918,
       0
      ],
      [
       3,
       0,
-      21030,
+      21919,
       0
      ],
      [
@@ -2444,7 +3292,7 @@
      [
       2,
       2,
-      21023,
+      21913,
       0
      ],
      [
@@ -2470,13 +3318,13 @@
      [
       2,
       0,
-      21029,
+      21918,
       0
      ],
      [
       3,
       0,
-      21030,
+      21919,
       0
      ],
      [

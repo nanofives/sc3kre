@@ -45,6 +45,24 @@ BOX = {"AIIA": 20900,       # corner between two arms
 ARM = {1: 20910, 3: 20911}  # 11204 (state 0: median N, outer sidewalk S) with the median nose at its E / W end
 LANES_OF = {"IACI": (39, 1), "IICA": (39, 1), "IICI": (39, 1)}     # closed side: T 39's lanes; the rest copy 43's
 OWN = set(BOX.values()) | set(ARM.values())
+# task bvlanes: with one-way lanes the box cells are chosen by (real box w, h, sides N E S W, cell i j) from the table
+# bvlanes.py build writes into the package (bvlanes_boxes.json); None = choose by edge pattern (bvlanes builds the
+# table from those placements, so it calls box_want with TABLE None)
+TABLE = None
+TABLE_PATH = os.path.join(HERE, "examples", "boulevard_junctions", "bvlanes_boxes.json")
+
+
+def load_table(path=TABLE_PATH):
+    """-> {(w, h, sides, i, j): (piece, state)} and the box pieces [{"piece", "edges"}], or (None, []) without a table"""
+    global TABLE
+    if not os.path.isfile(path):
+        return None, []
+    d = json.load(open(path))
+    TABLE = {}
+    for ln in d["lines"]:
+        t = ln.split()
+        TABLE[(int(t[1]), int(t[2]), t[3], int(t[4]), int(t[5]))] = (int(t[6]), int(t[7]))
+    return TABLE, d["pieces"]
 EDGES = "NESW"
 # axis-space direction -> real edge: axis 0 real (s, w), axis 1 real (-w, s) (boulevard.py _to_real)
 REAL_EDGE = {0: {"-w": 0, "+s": 1, "+w": 2, "-s": 3}, 1: {"-s": 0, "-w": 1, "+s": 2, "+w": 3}}
@@ -119,7 +137,19 @@ def box_want(axis, w0, sp, lo_closed, hi_closed, to_real):
             "-w": "A" if sp["n"] else "C", "+w": "A" if sp["s"] else "C"}
     E = REAL_EDGE[axis]
     want = {}
-    for s in range(ja, jb + 1):
+    if TABLE is not None:                                       # task bvlanes: by box kind and position
+        re_ = [None] * 4
+        for key in ("-s", "+s", "-w", "+w"):
+            re_[E[key]] = side[key]
+        cells = [to_real(axis, s, w) for s in range(ja, jb + 1) for w in range(w0, w0 + 3)]
+        x0, z0 = min(c[0] for c in cells), min(c[1] for c in cells)
+        bw, bh = max(c[0] for c in cells) - x0 + 1, max(c[1] for c in cells) - z0 + 1
+        for c in cells:
+            v = TABLE.get((bw, bh, "".join(re_), c[0] - x0, c[1] - z0))
+            if not v:
+                return None
+            want[c] = v
+    for s in range(ja, jb + 1) if TABLE is None else ():
         for w in range(w0, w0 + 3):
             d = [None] * 4
             for key, (ns, nw) in (("-s", (s - 1, w)), ("+s", (s + 1, w)), ("-w", (s, w - 1)), ("+w", (s, w + 1))):
@@ -207,13 +237,15 @@ def cmd_build(a):
     from netmod import avx
     art = lambda vid: os.path.join(a.pack, "art", str(vid))                       # noqa: E731
     only = set(int(v) for v in a.only.split(",")) if a.only else None
-    for desc, vid in sorted(BOX.items(), key=lambda t: t[1]):
+    _tab, groups = load_table(os.path.join(a.pack, "bvlanes_boxes.json"))     # task bvlanes
+    boxes = sorted(BOX.items(), key=lambda t: t[1]) if not groups else [(g["edges"], g["piece"]) for g in groups]
+    for desc, vid in boxes:
         if only and vid not in only:
             continue
         d = art(vid)
         anc = P.paint_cell(Box(desc), (0, 0), d)
         D._write_anchors(d, anc, "bvx.py build: box cell %s" % desc)
-        if desc in LANES_OF:
+        if desc in LANES_OF and not groups:
             pid, st = LANES_OF[desc]
             spec = D.parts_spec([(pid, st)], vid, "bvx box cell %s: lanes of %d state %d" % (desc, pid, st))
             json.dump(spec, open(os.path.join(a.pack, "box_%d.lanes.json" % vid), "w", newline="\n"), indent=1)
@@ -236,13 +268,17 @@ def cmd_build(a):
 
 def write_manifest(pack):
     variants = []
-    for desc, vid in sorted(BOX.items(), key=lambda t: t[1]):
+    _tab, groups = load_table(os.path.join(pack, "bvlanes_boxes.json"))        # task bvlanes: one-way lanes
+    bvl = lambda vid: os.path.isfile(os.path.join(pack, "bvl_%d.lanes.json" % vid))   # noqa: E731
+    boxes = sorted(BOX.items(), key=lambda t: t[1]) if not groups else [(g["edges"], g["piece"]) for g in groups]
+    for desc, vid in boxes:
         variants.append({"id": vid, "base": 43, "network": "ROAD", "name": NAMES,
                          "art": {"from": 43, "png_dir": "art/%d" % vid},
-                         "trblkatt": "none" if desc in LANES_OF else "copy_base"})
+                         "trblkatt": "none" if desc in LANES_OF or bvl(vid) else "copy_base"})
     for d0, vid in sorted(ARM.items(), key=lambda t: t[1]):
         variants.append({"id": vid, "base": 11204, "network": "ROAD", "name": {"*": "Avenue", "ENGLISH": "Avenida"},
-                         "art": {"from": 11204, "png_dir": "art/%d" % vid}, "trblkatt": "copy_base"})
+                         "art": {"from": 11204, "png_dir": "art/%d" % vid},
+                         "trblkatt": "none" if bvl(vid) else "copy_base"})
     man = {"netpack": 1, "name": "boulevard_junctions", "version": "0.1.0", "author": "netmod (task bvx)",
            "description": "Boulevard junctions with avenues and with other boulevards: where an avenue (two parallel "
                           "roads) or another boulevard (three) crosses a boulevard, ends on it, or the boulevard ends on "
@@ -254,12 +290,19 @@ def write_manifest(pack):
                           "the game's frames and is not shipped).",
            "game": {"Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"},
            "variants": variants,
-           "lanes": [{"piece": vid, "spec": "box_%d.lanes.json" % vid} for desc, vid in sorted(BOX.items(),
+           "lanes": [{"piece": v["id"], "spec": "bvl_%d.lanes.json" % v["id"]} for v in variants if bvl(v["id"])]
+           if groups else
+                    [{"piece": vid, "spec": "box_%d.lanes.json" % vid} for desc, vid in sorted(BOX.items(),
                                                                                            key=lambda t: t[1])
                      if desc in LANES_OF],
            "auto_boulevard_junctions": [{"box": [{"piece": vid, "edges": desc} for desc, vid in
                                                  sorted(BOX.items(), key=lambda t: t[1])],
-                                         "arm": [{"piece": ARM[1], "nose": "E"}, {"piece": ARM[3], "nose": "W"}]}]}
+                                         "arm": [{"piece": ARM[1], "nose": "E"}, {"piece": ARM[3], "nose": "W"}],
+                                         "cells": json.load(open(os.path.join(pack, "bvlanes_boxes.json")))["lines"]
+                                         if groups else []}]}
+    if groups:                                                  # task bvlanes: the noses end one-way avenue bands
+        man["version"] = "0.2.0"
+        man["avenue_lines"] = ["avlj %d ...O" % ARM[1], "avlj %d .I.." % ARM[3]]
     json.dump(man, open(os.path.join(pack, "manifest.json"), "w", newline="\n"), indent=1)
     print("manifest: %d variants, %d lane specs" % (len(variants), len(man["lanes"])))
 

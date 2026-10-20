@@ -28,6 +28,8 @@ NOSE2 = 20703            # middle row, nose at both ends (one cell between two j
 JUNC_N = 20710           # junction column, the outer row the crossing road enters by (state 0: north row)
 JUNC_M = 20711           # junction column, middle row
 JUNC_F = 20712           # junction column, the far outer row of a T (state 0: south row, closed side S)
+JUNC_N_T = 20707         # task bvlanes: the entry row of a T (one-way lanes differ from a crossing's)
+JUNC_M_T = 20708         # task bvlanes: the middle row of a T (state 0 from the north, state 2 from the south)
 TAPER = {1: 20720, 0: 20730, 2: 20740}   # + 3 * column + row: taper cells, canonical +x end, kept row 0 / 1 / 2
 AVNARROW = {(0, 1): 20750, (1, 2): 20760}   # + 3 * column + row: narrowing to an avenue (two rows go on)
 
@@ -46,7 +48,12 @@ def _to_real(axis, s, w):
     return (s, w) if axis == 0 else (-w, s)
 
 
-def runs(road, have_cap=True, have_taper=True, claimed=frozenset()):
+def _side(axis, d):
+    """task bvlanes: real side (0 N 1 E 2 S 3 W) of an axis-space direction +s / -s / +w / -w"""
+    return {0: {"+s": 1, "-s": 3, "+w": 2, "-w": 0}, 1: {"+s": 2, "-s": 0, "+w": 3, "-w": 1}}[axis][d]
+
+
+def runs(road, have_cap=True, have_taper=True, claimed=frozenset(), band_ok=None):
     """road: set of real ROAD cells -> [{axis, w0, sa, sb, ok, why, want: {cell: (piece, state)}}]
 
     column    s with ROAD at (s, w0..w0+2); clean: no ROAD at (s, w0-1) and (s, w0+3); junction: a straight single road
@@ -55,6 +62,9 @@ def runs(road, have_cap=True, have_taper=True, claimed=frozenset()):
               row going on straight -> taper to that row over the last TAPER_COLS columns, else refused
     accepted  at least MIN_COLS columns besides junction / taper / cap columns, junctions not next to an end region,
               no ROAD 8-touching the run except junction arms and the road a taper goes on into
+    band_ok   task bvlanes: band_ok(real cell, away side) = sc3netmod's avl_band_ok (would the avenue band through
+              that cell convert, counting this end as a join); None = assume it would. A narrowing or a BVX avenue arm
+              whose avenue would stay two-way refuses the run (AVENUE_LANES.md program rule).
     """
     out = []
     for axis in (0, 1):
@@ -73,6 +83,12 @@ def runs(road, have_cap=True, have_taper=True, claimed=frozenset()):
                             "why": "3-column run: a 3x3 block (bigrbt's)"})
                 continue
             wide, why = BX.spans(R, sa, sb, w0)                 # task bvx: avenue / boulevard arms (bvx.py)
+            if band_ok and not why:                             # task bvlanes: avenue arms must convert
+                for sp in {id(v): v for v in wide.values()}.values():
+                    if sp["jb"] - sp["ja"] == 1:
+                        for key, w, d in (("n", w0 - 2, "-w"), ("s", w0 + 4, "+w")):
+                            if sp[key] and not band_ok(_to_real(axis, sp["ja"], w), _side(axis, d)):
+                                why = why or "an avenue arm that would stay two-way"
             kind = {}
             for s in range(sa, sb + 1):
                 if s in wide:                                   # task bvx
@@ -107,6 +123,9 @@ def runs(road, have_cap=True, have_taper=True, claimed=frozenset()):
                 elif len(beyond) == 2 and beyond[1] == beyond[0] + 1 and                         all((se + 2 * step, w0 + k) in R for k in beyond):
                     ends[e] = ("avenue", tuple(beyond), [se - step * i for i in range(TAPER_COLS)])
                     extra |= {(se + step, w0 + k) for k in beyond}
+                    if band_ok and not band_ok(_to_real(axis, se + step, w0 + beyond[0]),
+                                               _side(axis, "+s" if step > 0 else "-s")):      # task bvlanes
+                        why = why or "the avenue it narrows into would stay two-way"
                 else:
                     why = why or "end at column %d: roads %s go on (not one road, not an avenue)" % (se, beyond)
                     ends[e] = ("bad", None, [])
@@ -164,10 +183,10 @@ def runs(road, have_cap=True, have_taper=True, claimed=frozenset()):
                         continue
                     else:
                         j = kind[s][1:]
-                        if j == "N":
-                            put(s, 0, JUNC_N, 0); put(s, 1, JUNC_M, 0); put(s, 2, JUNC_F, 0)        # noqa: E702
+                        if j == "N":                    # task bvlanes: the T's own entry / middle pieces
+                            put(s, 0, JUNC_N_T, 0); put(s, 1, JUNC_M_T, 0); put(s, 2, JUNC_F, 0)    # noqa: E702
                         elif j == "S":
-                            put(s, 0, JUNC_F, 2); put(s, 1, JUNC_M, 0); put(s, 2, JUNC_N, 2)        # noqa: E702
+                            put(s, 0, JUNC_F, 2); put(s, 1, JUNC_M_T, 2); put(s, 2, JUNC_N_T, 2)    # noqa: E702
                         else:
                             put(s, 0, JUNC_N, 0); put(s, 1, JUNC_M, 0); put(s, 2, JUNC_N, 2)        # noqa: E702
                 for sp in {id(v): v for v in wide.values()}.values():          # task bvx: one paved box per span
@@ -189,6 +208,8 @@ def pieces():
         JUNC_N: (P.Junction("N"), (0, 0), 43, False, "junction, entry row (north row, state 0)"),
         JUNC_M: (P.Junction("M"), (0, 1), 43, False, "junction, middle row"),
         JUNC_F: (P.Junction("F"), (0, 2), 39, False, "junction, far row of a T (south row, state 0)"),
+        JUNC_N_T: (P.Junction("N"), (0, 0), 43, False, "T junction, entry row (task bvlanes: own lanes)"),
+        JUNC_M_T: (P.Junction("M"), (0, 1), 43, False, "T junction, middle row (task bvlanes: own lanes)"),
     }
     for row in range(3):
         out[CAP[row]] = (P.Cap(), (0, row), 11203, False, "end cap (all three stop), row %d" % row)
@@ -271,17 +292,21 @@ def write_manifest(pack):
         # sidewalk only: the inner one is a lane) have specs; junctions copy 43's one record. FULL_LANES (env
         # BV_FULL_LANES=1) writes a spec for every non-junction piece: the index-growth test of 2026-10-17.
         own = vid in (OUTER, MIDDLE, NOSE, NOSE2) or FULL_LANES
+        bvl = os.path.isfile(os.path.join(pack, "bvl_%d.lanes.json" % vid))     # task bvlanes: one-way lanes
         variants.append({"id": vid, "base": BASE.get(vid, 43), "network": "ROAD",
                          "name": {"*": "Boulevard", "ENGLISH": "Bulevar"},
                          "art": {"from": src, "png_dir": "art/%d" % vid},
-                         "trblkatt": "copy_base" if vid in (JUNC_N, JUNC_M, JUNC_F) else "none"})
+                         "trblkatt": "none" if bvl or vid not in (JUNC_N, JUNC_M, JUNC_F) else "copy_base"})
+        if bvl:
+            lanes.append({"piece": vid, "spec": "bvl_%d.lanes.json" % vid})
+            continue
         if own and vid in (JUNC_N, JUNC_M, JUNC_F):
             own = False
         if own:
             fn = "bv_%d.lanes.json" % vid
             json.dump(lane_spec(vid), open(os.path.join(pack, fn), "w", newline="\n"), indent=1)
             lanes.append({"piece": vid, "spec": fn})
-    man = {"netpack": 1, "name": "boulevard", "version": "0.2.0", "author": "netmod (task boulevard)",
+    man = {"netpack": 1, "name": "boulevard", "version": "0.3.0", "author": "netmod (task boulevard, bvlanes)",
            "description": "Boulevards: draw three parallel straight roads side by side (at least three columns) and "
                           "sc3netmod's BV block makes them one boulevard. The outer roads are the carriageways (stock "
                           "road look, yellow centre line), the middle road gives each one an extra lane and holds a "
@@ -290,6 +315,8 @@ def write_manifest(pack):
                           "median ends in a nose); where all three roads stop the end column closes it with a round "
                           "curb; where only one goes on, the boulevard tapers into it over its last three columns; where two "
                           "neighbouring roads go on, it narrows back into the stock avenue. Lane lines are white dashes. "
+                          "Traffic (task bvlanes): 3 lanes each way, right-hand, one way per side; the narrowing meets "
+                          "the one-way avenue halves of avenue_lanes. "
                           "Built by `boulevard.py build .` in this folder before install (art/ is made from the game's "
                           "frames and is not shipped).",
            "game": {"Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"},
@@ -299,7 +326,12 @@ def write_manifest(pack):
                                            "junction_far": JUNC_F},
                                 "cap": list(CAP),
                                 "taper": {str(k): [TAPER[k] + i for i in range(9)] for k in (0, 1, 2)},
-                                "avenue_narrow": {str(k[0]): [AVNARROW[k] + i for i in range(9)] for k in AVNARROW}}]}
+                                "avenue_narrow": {str(k[0]): [AVNARROW[k] + i for i in range(9)] for k in AVNARROW},
+                                "junction_t": [JUNC_N_T, JUNC_M_T]}],
+           # task bvlanes: the narrowing's last column ends a one-way avenue band (AVENUE_LANES.md 5): its avenue
+           # rows carry the half's traffic out of (O) / into (I) the piece across their E side at state 0
+           "avenue_lines": ["avlj %d .O.." % (AVNARROW[(0, 1)] + 6), "avlj %d .I.." % (AVNARROW[(0, 1)] + 7),
+                            "avlj %d .O.." % (AVNARROW[(1, 2)] + 7), "avlj %d .I.." % (AVNARROW[(1, 2)] + 8)]}
     json.dump(man, open(os.path.join(pack, "manifest.json"), "w", newline="\n"), indent=1)
     print("manifest: %d variants, %d lane specs" % (len(variants), len(lanes)))
 

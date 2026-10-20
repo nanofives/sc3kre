@@ -1,9 +1,9 @@
 {
  "netpack": 1,
  "name": "boulevard",
- "version": "0.2.0",
- "author": "netmod (task boulevard)",
- "description": "Boulevards: draw three parallel straight roads side by side (at least three columns) and sc3netmod's BV block makes them one boulevard. The outer roads are the carriageways (stock road look, yellow centre line), the middle road gives each one an extra lane and holds a grass median with avenue 11204's trees, about twice as wide as the stock avenue's. Single straight roads crossing it or meeting it from one side get junctions with crosswalks (the median ends in a nose); where all three roads stop the end column closes it with a round curb; where only one goes on, the boulevard tapers into it over its last three columns; where two neighbouring roads go on, it narrows back into the stock avenue. Lane lines are white dashes. Built by `boulevard.py build .` in this folder before install (art/ is made from the game's frames and is not shipped).",
+ "version": "0.3.0",
+ "author": "netmod (task boulevard, bvlanes)",
+ "description": "Boulevards: draw three parallel straight roads side by side (at least three columns) and sc3netmod's BV block makes them one boulevard. The outer roads are the carriageways (stock road look, yellow centre line), the middle road gives each one an extra lane and holds a grass median with avenue 11204's trees, about twice as wide as the stock avenue's. Single straight roads crossing it or meeting it from one side get junctions with crosswalks (the median ends in a nose); where all three roads stop the end column closes it with a round curb; where only one goes on, the boulevard tapers into it over its last three columns; where two neighbouring roads go on, it narrows back into the stock avenue. Lane lines are white dashes. Traffic (task bvlanes): 3 lanes each way, right-hand, one way per side; the narrowing meets the one-way avenue halves of avenue_lanes. Built by `boulevard.py build .` in this folder before install (art/ is made from the game's frames and is not shipped).",
  "game": {
   "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
  },
@@ -107,6 +107,34 @@
    "trblkatt": "none"
   },
   {
+   "id": 20707,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20707"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20708,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard",
+    "ENGLISH": "Bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20708"
+   },
+   "trblkatt": "none"
+  },
+  {
    "id": 20710,
    "base": 43,
    "network": "ROAD",
@@ -118,7 +146,7 @@
     "from": 43,
     "png_dir": "art/20710"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20711,
@@ -132,7 +160,7 @@
     "from": 43,
     "png_dir": "art/20711"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20712,
@@ -146,7 +174,7 @@
     "from": 39,
     "png_dir": "art/20712"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20720,
@@ -782,19 +810,231 @@
  "lanes": [
   {
    "piece": 20700,
-   "spec": "bv_20700.lanes.json"
+   "spec": "bvl_20700.lanes.json"
   },
   {
    "piece": 20701,
-   "spec": "bv_20701.lanes.json"
+   "spec": "bvl_20701.lanes.json"
   },
   {
    "piece": 20702,
-   "spec": "bv_20702.lanes.json"
+   "spec": "bvl_20702.lanes.json"
   },
   {
    "piece": 20703,
-   "spec": "bv_20703.lanes.json"
+   "spec": "bvl_20703.lanes.json"
+  },
+  {
+   "piece": 20704,
+   "spec": "bvl_20704.lanes.json"
+  },
+  {
+   "piece": 20705,
+   "spec": "bvl_20705.lanes.json"
+  },
+  {
+   "piece": 20706,
+   "spec": "bvl_20706.lanes.json"
+  },
+  {
+   "piece": 20707,
+   "spec": "bvl_20707.lanes.json"
+  },
+  {
+   "piece": 20708,
+   "spec": "bvl_20708.lanes.json"
+  },
+  {
+   "piece": 20710,
+   "spec": "bvl_20710.lanes.json"
+  },
+  {
+   "piece": 20711,
+   "spec": "bvl_20711.lanes.json"
+  },
+  {
+   "piece": 20712,
+   "spec": "bvl_20712.lanes.json"
+  },
+  {
+   "piece": 20720,
+   "spec": "bvl_20720.lanes.json"
+  },
+  {
+   "piece": 20721,
+   "spec": "bvl_20721.lanes.json"
+  },
+  {
+   "piece": 20722,
+   "spec": "bvl_20722.lanes.json"
+  },
+  {
+   "piece": 20723,
+   "spec": "bvl_20723.lanes.json"
+  },
+  {
+   "piece": 20724,
+   "spec": "bvl_20724.lanes.json"
+  },
+  {
+   "piece": 20725,
+   "spec": "bvl_20725.lanes.json"
+  },
+  {
+   "piece": 20726,
+   "spec": "bvl_20726.lanes.json"
+  },
+  {
+   "piece": 20727,
+   "spec": "bvl_20727.lanes.json"
+  },
+  {
+   "piece": 20728,
+   "spec": "bvl_20728.lanes.json"
+  },
+  {
+   "piece": 20730,
+   "spec": "bvl_20730.lanes.json"
+  },
+  {
+   "piece": 20731,
+   "spec": "bvl_20731.lanes.json"
+  },
+  {
+   "piece": 20732,
+   "spec": "bvl_20732.lanes.json"
+  },
+  {
+   "piece": 20733,
+   "spec": "bvl_20733.lanes.json"
+  },
+  {
+   "piece": 20734,
+   "spec": "bvl_20734.lanes.json"
+  },
+  {
+   "piece": 20735,
+   "spec": "bvl_20735.lanes.json"
+  },
+  {
+   "piece": 20736,
+   "spec": "bvl_20736.lanes.json"
+  },
+  {
+   "piece": 20737,
+   "spec": "bvl_20737.lanes.json"
+  },
+  {
+   "piece": 20738,
+   "spec": "bvl_20738.lanes.json"
+  },
+  {
+   "piece": 20740,
+   "spec": "bvl_20740.lanes.json"
+  },
+  {
+   "piece": 20741,
+   "spec": "bvl_20741.lanes.json"
+  },
+  {
+   "piece": 20742,
+   "spec": "bvl_20742.lanes.json"
+  },
+  {
+   "piece": 20743,
+   "spec": "bvl_20743.lanes.json"
+  },
+  {
+   "piece": 20744,
+   "spec": "bvl_20744.lanes.json"
+  },
+  {
+   "piece": 20745,
+   "spec": "bvl_20745.lanes.json"
+  },
+  {
+   "piece": 20746,
+   "spec": "bvl_20746.lanes.json"
+  },
+  {
+   "piece": 20747,
+   "spec": "bvl_20747.lanes.json"
+  },
+  {
+   "piece": 20748,
+   "spec": "bvl_20748.lanes.json"
+  },
+  {
+   "piece": 20750,
+   "spec": "bvl_20750.lanes.json"
+  },
+  {
+   "piece": 20751,
+   "spec": "bvl_20751.lanes.json"
+  },
+  {
+   "piece": 20752,
+   "spec": "bvl_20752.lanes.json"
+  },
+  {
+   "piece": 20753,
+   "spec": "bvl_20753.lanes.json"
+  },
+  {
+   "piece": 20754,
+   "spec": "bvl_20754.lanes.json"
+  },
+  {
+   "piece": 20755,
+   "spec": "bvl_20755.lanes.json"
+  },
+  {
+   "piece": 20756,
+   "spec": "bvl_20756.lanes.json"
+  },
+  {
+   "piece": 20757,
+   "spec": "bvl_20757.lanes.json"
+  },
+  {
+   "piece": 20758,
+   "spec": "bvl_20758.lanes.json"
+  },
+  {
+   "piece": 20760,
+   "spec": "bvl_20760.lanes.json"
+  },
+  {
+   "piece": 20761,
+   "spec": "bvl_20761.lanes.json"
+  },
+  {
+   "piece": 20762,
+   "spec": "bvl_20762.lanes.json"
+  },
+  {
+   "piece": 20763,
+   "spec": "bvl_20763.lanes.json"
+  },
+  {
+   "piece": 20764,
+   "spec": "bvl_20764.lanes.json"
+  },
+  {
+   "piece": 20765,
+   "spec": "bvl_20765.lanes.json"
+  },
+  {
+   "piece": 20766,
+   "spec": "bvl_20766.lanes.json"
+  },
+  {
+   "piece": 20767,
+   "spec": "bvl_20767.lanes.json"
+  },
+  {
+   "piece": 20768,
+   "spec": "bvl_20768.lanes.json"
   }
  ],
  "auto_boulevards": [
@@ -871,7 +1111,17 @@
      20767,
      20768
     ]
-   }
+   },
+   "junction_t": [
+    20707,
+    20708
+   ]
   }
+ ],
+ "avenue_lines": [
+  "avlj 20756 .O..",
+  "avlj 20757 .I..",
+  "avlj 20767 .O..",
+  "avlj 20768 .I.."
  ]
 }

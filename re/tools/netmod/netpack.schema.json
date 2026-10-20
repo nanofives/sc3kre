@@ -131,6 +131,7 @@
         "additionalProperties": false,
         "required": ["box", "arm"],
         "properties": {
+          "cells": {"type": "array", "items": {"type": "string", "pattern": "^bvxc [1-3] [1-3] [AC]{4} [0-2] [0-2] [0-9]+ [0-3]$"}, "description": "Task bvlanes (auto_boulevard_junctions only): box cells chosen by real box width, height, sides N E S W (A arm / C closed) and cell i j from its x- z- corner -> piece and state (bvlanes.py build). Present: the edge patterns no longer choose the cells."},
           "box": {
             "type": "array",
             "items": {
@@ -313,6 +314,7 @@
             "patternProperties": {"^[012]$": {"type": "array", "minItems": 9, "maxItems": 9, "items": {"$ref": "#/$defs/piece_id"}}},
             "description": "Narrowing to row 0 / 1 / 2: nine pieces, column-major (3 * column + row), the last three columns at the +x end (state 0)."
           },
+          "junction_t": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/piece_id"}, "description": "Task bvlanes: a T junction's entry row and middle row (their one-way lanes differ from a crossing's); the middle row is placed at state 2 for a T from +w."},
           "avenue_narrow": {
             "type": "object",
             "additionalProperties": false,

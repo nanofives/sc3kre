@@ -1,0 +1,28 @@
+{
+ "piece": 20743,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 0,
+ "mirror_uk": false,
+ "vehicle": {
+  "class": "car",
+  "speed": 64000,
+  "lanes": []
+ },
+ "pedestrian": {
+  "walks": [],
+  "exits": []
+ },
+ "connects": {
+  "road": {
+   "low": [],
+   "high": []
+  }
+ },
+ "curves": [],
+ "_": "bvlanes.py: 3 lanes each way, right-hand (verify/bvlanes/PLAN.md); no path keys; a taper corner the curb cuts off: no lane"
+}
