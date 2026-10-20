@@ -517,6 +517,7 @@ def compile_spec(spec, game, lang="ENGLISH", mirror=None):
                 # share end points)
                 own = {int(c["shape"]) * 256 + r for c in spec.get("curves", []) for r in range(4)}
                 hits = P.find("veh", xz[j], xz[j + 1], prefer=own)
+                hits = sorted(hits, key=lambda k: (k not in own or k % 256 != 0, k not in own, k))   # task avdiag: own state-0 shapes before their rotated copies
                 # task avcore: Paths.find matches x / z only; on a slope keep the curves whose end heights are the
                 # nodes' (a flat curve on a sloped lane makes the car jump)
                 ya, yb = (_pty(pts[j], y)[1], _pty(pts[j + 1], y)[1])

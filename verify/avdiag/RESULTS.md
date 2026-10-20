@@ -216,3 +216,61 @@ point consistently on both sides), plus a check that no border point is both an 
 clear the matrix warnings; (b) U-turn: a lab city with traffic plus car tracks at zoom 4, compared with avcore's
 21701 lane graph. Then repeat this run on `seoul_avdiag_band.sc3`. Data (gitignored, 4 MB):
 `verify/avdiag/data/seoul_tracks.json`, `seoul_grid.json`, `seoul_tracks_an.json`.
+
+## 10. Fix of section 9's defects, and the Seoul rerun (2026-10-20)
+
+**Cause (STRTSIM, traced for this task):** a car may enter a lane edge only when no edge in that edge's intersect
+list holds a car (`cSSStrtSimTrBlock::EnterVehicle` FUN_10016520, called through the path's vtable +0x48 =
+0x1001de36, re-tried each heartbeat by WaitForPathClearance, given up after 40,000,000 units at 0x1001d553). The
+list is built from the edges' straight chords (FUN_1001ff93 -> FUN_10020063 -> FUN_10020904 / FUN_100167fe): two
+chords intersect unless they share their START point or have equal slopes, end points inclusive; the asking car is
+not excluded `[CONFIRMED @ STRTSIM 0x10016520, 0x1001ff93, 0x100167fe, 0x1001d553]`. A car keeps its previous edge
+until its tail leaves it `[UNCERTAIN on Windows: rests on the Linux build's MoveToPointMoveDist]`. So:
+- a lane chained through an interior node where the chords bend (a via split, a turn that leaves or joins a through
+  lane inside the cell) blocks the car that drives it: 66 of 100 DAV specs had one, every U-turn among them (the
+  cars stopped exactly on the via node, 40 s, removed). Stock lanes, avcore's and bvlanes' are single
+  border-to-border edges: 0 of their 306 specs have one.
+- a border point shared by an entering and an exiting lane (section 9, 26 specs) merges two lanes into one node.
+
+**Fix (`avdiag_build.py`, `selfblock.py` new, one marked line in `lanekit.py`):**
+1. `unshare`: a lane that crosses another exactly on a cell border gets a small bump across its own direction
+   (12..28 lane units) so the crossing lies inside a cell; it must still cross that border once.
+2. Every car lane is one edge from a border entry to a border exit (`border_paths`: every path through the piece's
+   lane graph, concatenated), with its own curve: a stock or own curve within 12 lane units of the plan, else a new
+   shape. No via nodes are left (0 of 100 specs).
+3. A turn off a lane that stops at a T end starts at that end only when it runs on forward from it (else it bent
+   back over the border, a sliver lane in the opening's far cell); a through stretch that runs to a T end no turn
+   meets is dropped (no dead stub).
+4. `lanekit.compile_spec` takes a spec's own state-0 shapes before their rotated copies (a rotated copy of one
+   lane's curve can have another lane's end points). Checked on the 320 lane segments of every other example
+   package: 0 change.
+5. The build refuses to write when a car would block itself (`selfblock.py`, the game's rule offline), two lanes of a
+   piece share end points, the curve the compiler takes (ENGLISH and English-UK) runs more than 12 units off the
+   plan, or a lane leaves by the side it came in.
+
+Offline: 19,400 joins 0 problems (stubs gone), `selfblock.py` 0 of 406 specs (all example packages), no border point
+used both ways, `netpack validate` diagonal_avenue 0 warnings besides the tiler-rule note, 207 new shapes
+23800..25106, turns per kind unchanged (crossings 8, T / stem / opening 4).
+
+**Seoul rerun** (PID 13004, the saved band city, same safe order; the camera by `rb_lab.py cam` at the zoom the save
+holds, so no zoom change):
+
+| check | before (section 9) | after |
+|---|---|---|
+| road cars on DAV pieces / in the box | 36 / 63 | 57 / 122 |
+| carriageway visits on the wrong side | 0 of 78 | 0 of 257 |
+| stalls of 5 s or more in the box | 16 (crossing, opening, both U-turns) | 0 |
+| U-turns driven through | 0 | 12 (10 top 20503, 2 bottom 21800) |
+| crossing median moves | 7 stalls at its median cell | 41 moves, no stall |
+| opening | 3 stalls at 21819 | all four movements used (street -> median -> far, median -> near -> street, ...), no stall |
+| failed trips, months 2..4 (game counters) | 231 / 11,381 = 2.03% | 210 / 11,601 = 1.81% (1.95%, 1.97%, 1.52%) vs 1.95% baseline |
+
+An intermediate run (PID 60196, `seoul_tracks_fix2.json`: crossing fix and border-to-border lanes, before the sliver
+fix) still stalled 12 cars round the opening, in waits on the far cell's sliver lanes; that led to item 3.
+
+Owner pictures (MAIN, not committed): `verify/avdiag/owner_shots/avdiag_built.png` (regenerated),
+`avdiag_seoul_band.png`. Data (gitignored): `verify/avdiag/data/seoul_tracks_fix3.json`, `seoul_grid_fix3.json`,
+`seoul_traffic_fix3.json`.
+
+Not checked again in the lab: the other crossing kinds (XX, XS, TS) and the hwave transition on the new lanes.
+The offline checks cover them; only the Seoul band's cells saw cars.

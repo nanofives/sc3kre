@@ -13,6 +13,7 @@ it agree. A piece at state s shows rot^s of its state-0 frame (lanekit.rot_pt: (
   py -3.12 avdiag_build.py cuts [--scenes ends,junctions,merges,crossings]   per-piece lane sets + consistency report
 """
 import argparse
+import collections
 import json
 import math
 import os
@@ -26,6 +27,7 @@ from netmod import avdiag as AV           # noqa: E402
 from netmod import diagave as DA          # noqa: E402
 from netmod import diagave_paint as DP    # noqa: E402
 from netmod import lanekit as LK          # noqa: E402
+from netmod import selfblock as SB        # noqa: E402
 
 U = 255.0
 OURS = range(20500, 20600)
@@ -390,11 +392,13 @@ def plan_lanes(want, road, cors, L, special=None):
                         ua = min(max(ua, min(lo1 * sgn1, hi1 * sgn1)), max(lo1 * sgn1, hi1 * sgn1))   # on the lane
                         ub = min(max(ub, min(lo2 * sgn2, hi2 * sgn2)), max(lo2 * sgn2, hi2 * sgn2))
                         # a lane that stops at a T is met at its very end / start (no dead stub beside the turn)
+                        # (task avdiag: only when the turn runs on forward from that end; a crossing behind the
+                        # end would make the turn start heading away and bend back over the border, a sliver)
                         e1 = max(lo1 * sgn1, hi1 * sgn1)
-                        if round(e1 * sgn1, 9) in tend.get((id(c1), round(r1, 9)), ()):
+                        if round(e1 * sgn1, 9) in tend.get((id(c1), round(r1, 9)), ()) and s1x * sgn1 >= e1 - 0.25:
                             ua = e1
                         b0 = min(lo2 * sgn2, hi2 * sgn2)
-                        if round(b0 * sgn2, 9) in tend.get((id(c2), round(r2, 9)), ()):
+                        if round(b0 * sgn2, 9) in tend.get((id(c2), round(r2, 9)), ()) and s2x * sgn2 <= b0 + 0.25:
                             ub = b0
                         a, b2 = _snap(c1, r1, ua * sgn1, lo1, hi1), _snap(c2, r2, ub * sgn2, lo2, hi2)
                         P0, P3 = c1.at(a, r1), c2.at(b2, r2)
@@ -461,11 +465,151 @@ def plan_lanes(want, road, cors, L, special=None):
                     TURNS.append((m[0].kind, c.kind, "right (shared)"))
     # ---- through lanes, split at every turn node on them
     for c, r, lo, hi, sg in straight:
-        cuts = sorted({round(sv, 9) for (cc, rr, sv) in nodes if cc is c and abs(rr - r) < 1e-9 and lo + 1e-6 < sv < hi - 1e-6})
+        on = [sv for (cc, rr, sv) in nodes if cc is c and abs(rr - r) < 1e-9]
+        cuts = sorted({round(sv, 9) for sv in on if lo + 1e-6 < sv < hi - 1e-6})
         pts = [lo] + cuts + [hi]
+        te = tend.get((id(c), round(r, 9)), ())            # task avdiag: a stretch running to a T end that no turn
+        if cuts and round(hi, 9) in te and not any(abs(sv - hi) < 1e-6 for sv in on):     # meets is a dead stub
+            pts = pts[:-1]
+        if cuts and round(lo, 9) in te and not any(abs(sv - lo) < 1e-6 for sv in on):
+            pts = pts[1:]
         for s0, s1 in zip(pts, pts[1:]):
             seg = [c.at(s0, r), c.at(s1, r)]
             polys.append(seg if sg > 0 else seg[::-1])
+    return unshare(polys)
+
+
+UNSHARE_D = (12, -12, 20, -20, 28, -28)          # lane units along the border, tried in order
+
+
+def _crossings(poly):
+    """-> [(arc length, border axis, world point)] where the polyline crosses a cell border (not at its own ends)"""
+    out, acc = [], 0.0
+    for p, q in zip(poly, poly[1:]):
+        a = p
+        while True:
+            h = _border_hit(a, q)
+            if h is None:
+                break
+            d = acc + math.dist(p, h)
+            ax = 0 if abs(h[0] - round(h[0])) < 1e-9 else 1
+            last = abs(h[0] - poly[-1][0]) < 1e-9 and abs(h[1] - poly[-1][1]) < 1e-9
+            if d > 1e-6 and not last:
+                out.append((d, ax, h))
+            if abs(h[0] - q[0]) < 1e-12 and abs(h[1] - q[1]) < 1e-12:
+                break
+            a = h
+        acc += math.dist(p, q)
+    return out
+
+
+def _arclen(poly):
+    out, acc = [0.0], 0.0
+    for p, q in zip(poly, poly[1:]):
+        acc += math.dist(p, q)
+        out.append(acc)
+    return out
+
+
+def _at_len(poly, lens, s):
+    for k in range(len(poly) - 1):
+        if lens[k + 1] >= s - 1e-12:
+            u = 0.0 if lens[k + 1] - lens[k] < 1e-12 else (s - lens[k]) / (lens[k + 1] - lens[k])
+            p, q = poly[k], poly[k + 1]
+            return (p[0] + (q[0] - p[0]) * u, p[1] + (q[1] - p[1]) * u)
+    return tuple(poly[-1])
+
+
+def _bumped(poly, s, w, dvec, n=12):
+    """the polyline with its points within arc length w of s moved by dvec * (1 + cos(pi * ds / w)) / 2"""
+    lens = _arclen(poly)
+    head = [p for p, l in zip(poly, lens) if l < s - w - 1e-9]
+    tail = [p for p, l in zip(poly, lens) if l > s + w + 1e-9]
+    mid = []
+    for k in range(-n, n + 1):
+        ds = w * k / n
+        p = _at_len(poly, lens, s + ds)
+        f = (1 + math.cos(math.pi * ds / w)) / 2
+        mid.append((p[0] + dvec[0] * f, p[1] + dvec[1] * f))
+    return [tuple(p) for p in head] + mid + [tuple(p) for p in tail]
+
+
+def _bkey(p):
+    return (int(round(p[0] * U)), int(round(p[1] * U)))
+
+
+def unshare(polys):
+    """task avdiag (Seoul car run 2026-10-20): no cell-border point may carry two different lanes. A lane crossing
+    another exactly on a border (a 45-degree band lane over a road lane at 80 / 175) compiles to ONE node there, with
+    an internal edge in and a lane out: cars stall at it. The crossing moves off the border: a lane that passes
+    THROUGH the point (an axis-aligned one first; a lane that ends at the point never moves) gets a smooth bump along
+    the border, UNSHARE_D lane units, kept clear of its own ends and other border crossings."""
+    polys = [[tuple(q) for q in p] for p in polys]
+
+    def on_border(p):
+        return abs(p[0] - round(p[0])) < 1e-9 or abs(p[1] - round(p[1])) < 1e-9
+
+    def table():
+        t = {}
+        for i, p in enumerate(polys):
+            for end in (p[0], p[-1]):
+                if on_border(end):
+                    t.setdefault(_bkey(end), []).append((i, None))
+            for d, ax, h in _crossings(p):
+                t.setdefault(_bkey(h), []).append((i, (d, ax, h)))
+        return t
+
+    def axis_aligned(i):
+        p = polys[i]
+        return abs(p[-1][0] - p[0][0]) < 1e-9 or abs(p[-1][1] - p[0][1]) < 1e-9
+
+    for _ in range(400):
+        t, moved = table(), False
+        for key in sorted(t):
+            us = t[key]
+            inner = [(i, x) for i, x in us if x is not None]
+            if len({i for i, _ in us}) < 2 or not inner:
+                continue
+            if any(x is None for _, x in us):
+                move = inner
+            else:
+                inner.sort(key=lambda ix: (not axis_aligned(ix[0]), ix[0]))
+                move = inner[:1]
+            for i, (d, ax, h) in move:
+                p = polys[i]
+                total = _arclen(p)[-1]
+                others = [dd for dd, _, _ in _crossings(p) if abs(dd - d) > 1e-6]
+                w = min([0.3, d - 0.02, total - d - 0.02] + [abs(dd - d) - 0.02 for dd in others])
+                if w < 0.04:
+                    continue
+                lens = _arclen(p)
+                q0, q1 = _at_len(p, lens, max(0.0, d - 0.01)), _at_len(p, lens, min(total, d + 0.01))
+                tx, tz = q1[0] - q0[0], q1[1] - q0[1]
+                tl = math.hypot(tx, tz) or 1.0
+                nx, nz = -tz / tl, tx / tl                   # the lane's normal: the bump runs across the lane, so
+                o = 1 - ax                                   # the lane stays monotone and crosses the border once
+                frac = h[o] - math.floor(h[o])
+                toward = 1 if frac < 0.5 else -1             # move the crossing toward the middle of the border
+                if (nx if o == 0 else nz) * toward < 0:
+                    nx, nz = -nx, -nz
+                n_cross = len(_crossings(p))
+                for dv in UNSHARE_D:
+                    dvec = (nx * dv / U, nz * dv / U)
+                    cand = _bumped(p, d, w, dvec)
+                    cr = _crossings(cand)
+                    if len(cr) != n_cross:
+                        continue
+                    hn = min(cr, key=lambda c: abs(c[0] - d))[2]
+                    if _bkey(hn) not in t and _bkey(hn) != key:
+                        polys[i] = cand
+                        moved = True
+                        break
+                if moved:
+                    break
+            if moved:
+                break
+        if not moved:
+            break
     return polys
 
 
@@ -951,6 +1095,22 @@ class Curves:
             return (hits[0] >> 8) if (hits[0] >> 8) in self.new else None   # ours: the spec carries it as well
         return self._add(pts)
 
+    def lane(self, a, b, pts, who):
+        """task avdiag: the curve for a whole border-to-border lane. The compiler takes the spec's own shapes first,
+        then the lowest key: a fitting curve of ours -> its shape (the spec carries it), the first stock hit within
+        12 units -> None (the compiler takes it when the spec has no own shape with these end points), else a new
+        shape. -> shape number or None."""
+        hits = self.P.find("veh", a, b)
+        ours = [h for h in hits if (h >> 8) in self.new]
+        for h in ours:
+            if _dev([(p[0], p[2]) for p in self.P.veh[h]["pts"]], pts) <= 12:
+                self.reused += 1
+                return h >> 8
+        if hits and not ours and _dev([(p[0], p[2]) for p in self.P.veh[hits[0]]["pts"]], pts) <= 12:
+            self.reused += 1
+            return None
+        return self._add(pts)
+
     def _add(self, pts):
         s = self.free.pop(0)
         p3 = [[int(p[0]), 0, int(p[1])] for p in pts]
@@ -998,6 +1158,32 @@ def lane_curves(C, a, b, pts, who, depth=0):
     v1, s1 = lane_curves(C, a, m, first, who, depth + 1)
     v2, s2 = lane_curves(C, m, b, second, who, depth + 1)
     return v1 + [list(m)] + v2, s1 + s2
+
+
+def border_paths(ls, geo):
+    """task avdiag (Seoul car run 2026-10-20): the lane graph of one piece (segments between border and interior
+    nodes) -> every path from a border entry to a border exit, as ([nodes], [points]). The game builds its blocking
+    lists from each edge's straight chord and does not exclude the asking car, so a car at an interior node where the
+    chords bend blocks itself (selfblock.py); stock lanes are single border-to-border edges, and so are these."""
+    nxt = {}
+    for a, b in sorted(ls):
+        nxt.setdefault(a, []).append(b)
+    out = []
+
+    def walk(nodes, pts):
+        n = nodes[-1]
+        if len(nodes) > 1 and _side(n):
+            out.append((list(nodes), list(pts)))
+            return
+        for m in nxt.get(n, []):
+            if m in nodes:
+                continue
+            seg = [tuple(p) for p in geo[(n, m)]]
+            walk(nodes + [m], pts + seg[1:])
+    for a in sorted(nxt):
+        if _side(a):
+            walk([a], [tuple(geo[(a, nxt[a][0])][0])])
+    return out
 
 
 def _side(p):
@@ -1084,19 +1270,33 @@ def cmd_build(a):
         art = NEW_ART.get(pid, pid)
         ped, flag = _ped_of(art, L, specs_old)
         lanes, seen_exit, shapes = [], set(), []
-        for ab in sorted(ls):
-            ga, gb = ab
-            pts = [tuple(p) for p in geo[ab]]
-            via, ss = lane_curves(C, ga, gb, pts, pid)          # English-UK's copy of each reverse runs forward
-            shapes += [x for x in ss if x not in shapes]
-            ex = bool(_side(gb)) and gb not in seen_exit
-            if _side(gb):
-                seen_exit.add(gb)
-            ln = {"from": list(ga), "to": list(gb), "exit": ex}
-            if via:
-                ln["via"] = via
-            lanes.append(ln)
         gprobs += graph_problems(pid, ls)
+        paths = border_paths(ls, geo)
+        ends = collections.Counter((p[0], p[-1]) for p, _ in paths)
+        gprobs += ["%d: two lanes from %s to %s (curves are found by end points)" % (pid, a_, b_)
+                   for (a_, b_), k in ends.items() if k > 1]
+        for nodes, pts in paths:                            # task avdiag: ONE edge per lane, border to border
+            ga, gb = nodes[0], nodes[-1]
+            ss = [C.lane(ga, gb, pts, pid), C.lane(gb, ga, pts[::-1], pid)]   # English-UK's copy of the reverse
+            shapes += [x for x in ss if x is not None and x not in shapes]
+            ex = gb not in seen_exit
+            seen_exit.add(gb)
+            lanes.append({"from": list(ga), "to": list(gb), "exit": ex})
+        own = {s * 256 + r for s in shapes for r in range(4)}   # what the compiler will take: own state-0 shapes,
+        for nodes, pts in paths:                                # own rotated copies, then the lowest key (lanekit)
+            ga, gb = nodes[0], nodes[-1]
+            for uk in (False, True):                            # English-UK reads each key's curve reversed
+                hits = C.P.find("veh", gb, ga) if uk else C.P.find("veh", ga, gb)
+                hits = sorted(hits, key=lambda k: (k not in own or k % 256 != 0, k not in own, k))
+                cp = [(q[0], q[2]) for q in C.P.veh[hits[0]]["pts"]] if hits else None
+                dv = _dev(cp[::-1] if uk else cp, pts) if hits else 999
+                if dv > 12:
+                    gprobs.append("%d: lane %s -> %s: the compiler takes curve %s%s, %.0f units off the plan"
+                                  % (pid, ga, gb, hits[0] if hits else None, " (English-UK)" if uk else "", dv))
+        gprobs += ["%d: a lane leaves by the side it came in, %s -> %s (a sliver)" % (pid, n_[0], n_[-1])
+                   for n_, _ in paths if _side(n_[0]) == _side(n_[-1])]
+        sb = SB.self_blocks({"vehicle": {"lanes": lanes}})
+        gprobs += ["%d: a car blocks itself at %s (selfblock.py)" % (pid, e[1]) for e, _ in sb]
         spec = {"_": "avdiag_build.py: one-way diagonal avenue lanes (right-hand, verify/avdiag/PLAN.md), no path keys",
                 "piece": pid, "states": [0, 1, 2, 3], "flag": flag, "alt": [0, 0, 0, 0], "mirror_uk": False,
                 "vehicle": {"class": "car", "speed": 64000, "lanes": lanes},
@@ -1108,6 +1308,8 @@ def cmd_build(a):
         out[pid] = (fname, spec)
     for g in gprobs:
         print("GRAPH", g)
+    if any(w_ in g for g in gprobs for w_ in ("blocks itself", "two lanes from", "the compiler takes", "a sliver")):
+        raise SystemExit("lane graph: a car would block itself or two lanes share end points, nothing written")
     for c in C.conflicts:
         print("CURVE", c)
     print("pieces %d, curves reused %d, new shapes %d (%d..%d), conflicts %d" % (
@@ -1321,7 +1523,7 @@ def cmd_sheet(a):
            "package's specs were cut from. Red / blue = the two directions, green = turns, U-turns, tapers. "
            "Game x to the left, z down.", font=F, fill=(40, 40, 40))
     d.text((20, 74), "Offline check: every lane end on a border meets a lane of the next cell at the same point and "
-           "direction, every drag shape, junction and crossing kind, 4 turns each (19,512 joins, 0 problems).",
+           "direction, every drag shape, junction and crossing kind, 4 turns each (19,400 joins, 0 problems; every car lane one edge border to border, selfblock.py clean).",
            font=F, fill=(40, 40, 40))
     y = 112
     for k in range(0, len(panels), NC):
