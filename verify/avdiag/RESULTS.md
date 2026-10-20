@@ -103,3 +103,31 @@ Update, same day: the rule was RETRACTED (avjunc's hang was its own Frida probe)
 tried first and the wider U-turn (inner reverse curve 84, outer 124) stays. Rebuilt after avcore's hwlanes extra_for
 (3559939): new flat curves carry sort id 0 like stock. 19,304 joins 0 problems, 394 new shapes 23800..25293,
 validate OK; `avlanes tightleft` flags lefts up to 88 (informational now).
+
+## 6. Lab run on 9737e13 (avcore 49ddf65 merged), final lane rebuild
+
+Packages avenue_lanes + diagonal_avenue + highway_avenue, DLL from 9737e13 + one line in `sc3netmod_hwave.c`
+(PIDs 18824, 70272, 48280; no Frida).
+
+| case | result |
+|---|---|
+| diagonal highway (122,4)-(130,12) into a diagonal avenue (130,13)-(138,21) + (131,13)-(139,21) | first DLL: `hwave: ... refused (the avenue's end cell beside the cap is taken)`: the avenue's end now holds DAV's no-lane cap 21803, not stock 18004. Fix: `hwavd_dav_road` also accepts DAV's role pieces (`dav_is_role`, marked line). Then: 21604..21609 built, `stats: hwave ... diagonal built=1`, the avenue's far end a U-turn (21801 / 21802 / 21804) |
+| diagonal x diagonal (96,80)-(112,96) + (97,80)-(113,96), (113,80)-(97,96) + (114,80)-(98,96) | `dav: edit: band axis 0 ... 1 crossing(s), 52 written` and the same for axis 1: crossing 20540..20548, U-turn ends on all four arms (20501 / 20503 / 21800 / 21801, no-lane caps 21802..21804) |
+| save | `save: 125 variant tile(s) written as base`; the file holds 0 variant ids |
+| reload | `load: all 125 variant tiles restored`; DAV load passes 0 written (the transition band as bend kind 3) |
+
+Screenshots: `MAIN\verify\avdiag\owner_shots\avdiag_game_crossing_xx.png`, `avdiag_game_hwave_diag.png`.
+
+## 7. Owner call: median opening where a road meets one carriageway (estimate)
+
+Today: the T row has one junction cell (the near carriageway's, 21806 / 21807): right in, right out.
+An opening = the road goes on across the median and stops at the far carriageway's outer curb:
+- near cell: the existing crossing piece 20510 / 20511 (the road goes on into the median cell);
+- median cell: the existing 20512 / 20513 (road across the median, no trees);
+- far cell: NEW, the far half (35) with its outer curb kept and road 29 only up to that curb. 2 pieces (row road,
+  column road), 20 frames each (as every DAV piece), 40 frames.
+Art: `diagave.junction_frame` cannot draw the far cell (it lays road 29 across the whole cell and keeps a curb only
+along the road's side). `diagave_paint` (the world-scene painter the merges and crossings use) can, with one addition:
+clip the road element at the far curb line. No hand drawing. Rule: two junction descriptors and the T row's median
+and far cells marked as junction cells in `sc3netmod_dav.c` and its twin; the lane builder then gives 4 movements
+(the lefts through the opening) with no new lane code. Estimate: half a day including a lab check.
