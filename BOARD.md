@@ -31,6 +31,7 @@ was tested with `sc3resize` on the 1024 Europolis city (2026-10-09/11).
 | 4 | `sc3simrun` at the fastest speed: not soaked | `formats/SIM_WHILE_SCROLLING.md` |
 | 5 | ~~`sc3overscroll` with click-to-place tools~~: owner call 2026-10-14, leave as is (closed) | `formats/CAMERA_OVERSCROLL.md` |
 | 6 | The 10-12 package as downloaded from GitHub: smoke test run by the session, not by the owner | `verify/mods_release_1012/RESULTS.md` |
+| 7 | Alt+Enter borderless fullscreen, window size/maximize/fullscreen remembered, resolution dropdown hidden, start forced to 800x600 (2026-10-20, branch `child/fullscreen`): session run passed, owner hand test | `verify/fullscreen/RESULTS.md` |
 
 Known limits, not bugs to chase: changing monitors while running can crash (DirectDraw), the DWM8And16BitMitigation
 compat layer needs `mods_launch.exe -exe <renamed copy>`, traffic on dense 1024 maps is the throughput ceiling.
