@@ -84,6 +84,14 @@ English-UK), outer bend -> 21701 (the U-turn quarter is the same left turn), the
 new art. Every lane keeps its side through the block (the inner bend's median lane takes the wide arc, the outer bend's
 the tight one).
 
+Corner with a road on its outside (2026-10-19, orchestrator: T + one road 110 ends, X 30 ends; "T next to T" and the
+rest stay stock): the outer cell may hold a piece DECLARED with `avlj` (avjunc's box piece) instead of the bend. It
+fits when its letters say I on the side the incoming half flows in from and O on the side the outgoing half leaves by.
+In the outer cell's own frame at the corner's 11203 state that is always W = I, S = O (the U-turn quarter's own turn);
+by world side per pattern: `py -3.12 -m netmod.avlanes corner-letters`. A declared outer cell is the declaring
+stream's: avcore neither writes nor claims it, and joins the two bands through it as through a bend (all or nothing).
+Before the box exists, `avl_corner_ok` (section 5) answers whether the group would convert with it.
+
 Curve shapes: avcore 23600..23699. 23600 straight inner (255,80)->(0,80); 23601 English (175,255)->(0,80) on r 175
 (for English-UK's U-turn outer lane); 23602 U-turn inner (0,175)->(80,255) on r 80; 23603 English (0,175)->(255,175)
 (for English-UK's straight outer lane); 23604..23607 the slope pieces' missing same-direction lanes (31 / 32 share
@@ -146,6 +154,13 @@ pointers):
     int avl_claimed(int x, int z);   /* 1: avcore holds the cell (a band cell, its U-turn or a corner block cell): do
                                         not write it */
     int avl_own(WORD id);            /* 1: id is one of avcore's pieces */
+    int avl_corner_ok(int x, int z);
+                                     /* pure predicate for the stream that declares corner OUTER pieces: would the
+                                        corner group through the outer cell (x, z) of a stock corner block (inner bend
+                                        11203 / 21726, two halves) convert if (x, z) held a fitting avlj piece, whatever
+                                        stands there now (stock T 39 / X 43 or the piece)? Nothing written, no cache. 0
+                                        when AVL is off or (x, z) is not such an outer cell (a corner whose outer cell is
+                                        a bend: use avl_band_ok on a band cell). */
     int avl_band_ok(int x, int z, int away);
                                      /* pure predicate, call it BEFORE you write: would the avenue band through (x, z)
                                         (any cell of it, either half, stock or ours), running away from you toward
