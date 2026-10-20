@@ -229,9 +229,24 @@ static volatile LONG g_in_present;
    bits +0x24, pixel format +0x48 (RGB bit count at +0x54). Lock = the real (next) Lock, Unlock vt+0x80. */
 #define OV_W 800
 #define OV_H 92
-static BYTE  g_ov_save[OV_W * 4 * OV_H];
+/* UISCALE (owner hand test 2026-10-20: "the profiling indicator/FPS should scale with interface too"): with sc3resize's
+   HUD scale on, the text is drawn with the stock font's face at the HUD factor (sc3resize_ui_scale, percent) and the
+   saved area grows with it. At 100 the stock font and the 800x92 area are used, as before. */
+static BYTE *g_ov_save;
+static LONG  g_ov_cap;
 static int   g_ov_saved;
-static LONG  g_ov_x, g_ov_y, g_ov_w, g_ov_h, g_ov_bpp;
+static LONG  g_ov_x, g_ov_y, g_ov_w, g_ov_h, g_ov_bpp, g_ov_aw = OV_W, g_ov_ah = OV_H;
+static int ov_scale(void) {   /* percent, 100 = native */
+    static int (*f)(void);
+    static int tried;
+    int s;
+    if (!tried) {
+        HMODULE rz = GetModuleHandleA("sc3resize.dll");
+        if (rz) { f = (int (*)(void))GetProcAddress(rz, "sc3resize_ui_scale"); tried = 1; }
+    }
+    s = f ? f() : 100;
+    return s < 100 ? 100 : s > 800 ? 800 : s;
+}
 
 static int ov_copy(void *src, int restore) {
     DWORD d[0x6c / 4], *vt = *(DWORD **)src;
@@ -246,13 +261,13 @@ static int ov_copy(void *src, int restore) {
         LONG sw = (LONG)d[0x0c / 4], sh = (LONG)d[0x08 / 4];
         g_ov_bpp = (LONG)d[0x54 / 4] / 8;
         if (g_ov_bpp < 1 || g_ov_bpp > 4) g_ov_bpp = 0;
-        g_ov_w = g_ov_x + OV_W <= sw ? OV_W : sw - g_ov_x;
-        g_ov_h = g_ov_y + OV_H <= sh ? OV_H : sh - g_ov_y;
+        g_ov_w = g_ov_x + g_ov_aw <= sw ? g_ov_aw : sw - g_ov_x;
+        g_ov_h = g_ov_y + g_ov_ah <= sh ? g_ov_ah : sh - g_ov_y;
     }
     rowbytes = g_ov_w * g_ov_bpp;
     if (bits && g_ov_bpp && g_ov_w > 0 && g_ov_h > 0)
         for (y = 0; y < g_ov_h; y++) {
-            BYTE *row = bits + (g_ov_y + y) * pitch + g_ov_x * g_ov_bpp, *buf = g_ov_save + y * OV_W * 4;
+            BYTE *row = bits + (g_ov_y + y) * pitch + g_ov_x * g_ov_bpp, *buf = g_ov_save + y * g_ov_aw * 4;
             if (restore) memcpy(row, buf, rowbytes); else memcpy(buf, row, rowbytes);
         }
     ((HRESULT (WINAPI *)(void *, void *))vt[0x80 / 4])(src, NULL);
@@ -262,47 +277,127 @@ static int ov_copy(void *src, int restore) {
 static char g_busy_text[512];
 static CRITICAL_SECTION g_busycs;
 
-static void draw_overlay(void *src, RECT *sr) {
-    HDC dc = NULL;
-    HGDIOBJ of;
-    DWORD *vt;
-    char busy[512];
-    int x0 = (sr ? sr->left : 0) + 4, y0 = (sr ? sr->top : 0) + 4;
-    EnterCriticalSection(&g_busycs);
-    memcpy(busy, g_busy_text, sizeof(busy));
-    LeaveCriticalSection(&g_busycs);
-    busy[sizeof(busy) - 1] = 0;
-    if (!g_busy_show) busy[0] = 0;
-    if (!g_overlay && !busy[0]) return;
-    if (!src || IsBadReadPtr(src, 4)) return;
-    vt = *(DWORD **)src;
-    g_ov_x = sr ? sr->left : 0; g_ov_y = sr ? sr->top : 0;
-    g_ov_saved = ov_copy(src, 0);
-    if (!g_ov_saved) return;   /* never draw what we cannot take back */
-    if (((HRESULT (WINAPI *)(void *, HDC *))vt[0x44 / 4])(src, &dc) != 0 || !dc) { g_ov_saved = 0; return; }
-    of = SelectObject(dc, GetStockObject(ANSI_FIXED_FONT));
+/* UISCALE: the overlay font at s percent (NULL = the stock font, at 100). The stock font is a raster font that Windows
+   can only widen, which looked stretched (owner hand test 2026-10-20), so a TrueType monospace at the scaled cell
+   height keeps the proportions. Cached for the last s. */
+static HFONT ov_font(int s) {
+    static HFONT big;
+    static int big_s;
+    if (s == big_s) return big;
+    if (big) DeleteObject(big);
+    big = NULL; big_s = s;
+    if (s > 100) {
+        LOGFONTA lf;
+        TEXTMETRICA tm;
+        HDC sdc = GetDC(NULL);
+        HGDIOBJ o = SelectObject(sdc, GetStockObject(ANSI_FIXED_FONT));
+        LONG ch = GetTextMetricsA(sdc, &tm) ? tm.tmHeight : 13;
+        SelectObject(sdc, o); ReleaseDC(NULL, sdc);
+        memset(&lf, 0, sizeof(lf));
+        lf.lfHeight = -(ch * s / 100);   /* character height, natural width */
+        lf.lfWeight = FW_BOLD;
+        lf.lfCharSet = ANSI_CHARSET;
+        lf.lfQuality = ANTIALIASED_QUALITY;
+        lf.lfPitchAndFamily = FIXED_PITCH | FF_MODERN;
+        lstrcpyA(lf.lfFaceName, "Consolas");
+        big = CreateFontIndirectA(&lf);
+        logf("UISCALE> overlay text at %d%% (%s)", s, big ? "scaled font" : "font FAILED, stock size");
+    }
+    return big;
+}
+
+/* the FPS line and the busy lines at (x0, y0), s percent */
+static void ov_paint(HDC dc, int x0, int y0, int s, const char *busy) {
+    HFONT f = ov_font(s);
+    int step = f ? 16 * s / 100 : 16;
+    HGDIOBJ of = SelectObject(dc, f ? (HGDIOBJ)f : GetStockObject(ANSI_FIXED_FONT));
     SetBkMode(dc, OPAQUE);
     if (g_overlay) {
         SetBkColor(dc, RGB(0, 0, 0));
         SetTextColor(dc, RGB(255, 255, 0));
         TextOutA(dc, x0, y0, g_text, (int)strlen(g_text));
-        y0 += 16;
+        y0 += step;
     }
     if (busy[0]) {
-        char *ln = busy, *nl;
+        const char *ln = busy, *nl;
         int first = 1;
         SetTextColor(dc, RGB(255, 255, 255));
         while (ln && *ln) {
             nl = strchr(ln, '\n');
             SetBkColor(dc, first ? RGB(160, 0, 0) : RGB(90, 0, 0));
             TextOutA(dc, x0, y0, ln, nl ? (int)(nl - ln) : (int)strlen(ln));
-            y0 += 16;
+            y0 += step;
             first = 0;
             ln = nl ? nl + 1 : NULL;
         }
     }
     SelectObject(dc, of);
+}
+
+static int ov_text(char *busy) {   /* 1 = something to draw */
+    EnterCriticalSection(&g_busycs);
+    memcpy(busy, g_busy_text, 512);
+    LeaveCriticalSection(&g_busycs);
+    busy[511] = 0;
+    if (!g_busy_show) busy[0] = 0;
+    return g_overlay || busy[0];
+}
+
+/* UISCALE: the main menu's scaled 4:3 rect from sc3resize, or 0 (not the menu, or no sc3resize) */
+static int ov_menu_rect(LONG *r) {
+    static int (*f)(LONG *);
+    static int tried;
+    if (!tried) {
+        HMODULE rz = GetModuleHandleA("sc3resize.dll");
+        if (rz) { f = (int (*)(LONG *))GetProcAddress(rz, "sc3resize_menu_rect"); tried = 1; }
+    }
+    return f ? f(r) : 0;
+}
+static int g_ov_menu;   /* this present is the scaled main menu: draw on the window after it, not into the frame */
+
+static void draw_overlay(void *src, RECT *sr) {
+    HDC dc = NULL;
+    DWORD *vt;
+    char busy[512];
+    int s, x0, y0;
+    LONG mr[4];
+    g_ov_menu = 0;
+    if (!ov_text(busy)) return;
+    if (!src || IsBadReadPtr(src, 4)) return;
+    if (ov_menu_rect(mr)) { g_ov_menu = 1; return; }
+    vt = *(DWORD **)src;
+    s = ov_scale();
+    {   /* UISCALE: the area the scaled text can cover */
+        LONG aw = OV_W * s / 100, ah = OV_H * s / 100;
+        if (g_ov_cap < aw * ah * 4) {
+            BYTE *nb = (BYTE *)malloc((size_t)aw * ah * 4);
+            if (!nb) return;
+            free(g_ov_save); g_ov_save = nb; g_ov_cap = aw * ah * 4;
+        }
+        g_ov_aw = aw; g_ov_ah = ah;
+    }
+    x0 = (sr ? sr->left : 0) + 4 * s / 100; y0 = (sr ? sr->top : 0) + 4 * s / 100;
+    g_ov_x = sr ? sr->left : 0; g_ov_y = sr ? sr->top : 0;
+    g_ov_saved = ov_copy(src, 0);
+    if (!g_ov_saved) return;   /* never draw what we cannot take back */
+    if (((HRESULT (WINAPI *)(void *, HDC *))vt[0x44 / 4])(src, &dc) != 0 || !dc) { g_ov_saved = 0; return; }
+    ov_paint(dc, x0, y0, s, busy);
     ((HRESULT (WINAPI *)(void *, HDC))vt[0x68 / 4])(src, dc);
+}
+
+/* UISCALE, main menu: after the present, on the window itself, at its top-left, at the menu's scale (rect width / 800).
+   MENUSCALE only sends changed parts of the frame, so the text stays until the next present draws it again. */
+static void draw_overlay_menu(void) {
+    char busy[512];
+    LONG mr[4];
+    HDC dc;
+    int s;
+    if (!g_hwnd || !ov_text(busy) || !ov_menu_rect(mr)) return;
+    s = (int)((mr[2] - mr[0]) * 100 / 800);
+    if (s < 100) s = 100;
+    if (!(dc = GetDC(g_hwnd))) return;
+    ov_paint(dc, 4 * s / 100, 4 * s / 100, s, busy);
+    ReleaseDC(g_hwnd, dc);
 }
 
 /* FRAME CAP: hold each final present until 1000/cap ms after the previous one. Sleep for all but the
@@ -361,6 +456,7 @@ static HRESULT WINAPI perf_blt(void *self, RECT *dr, void *src, RECT *sr, DWORD 
     a = now_ms();
     hr = g_next_blt(self, dr, src, sr, fl, fx);
     if (final && g_ov_saved) { ov_copy(src, 1); g_ov_saved = 0; }   /* give the game its pixels back */
+    if (final && g_ov_menu) { draw_overlay_menu(); g_ov_menu = 0; }   /* UISCALE: the menu's text, on the window */
     b = now_ms();
     if (final) {   /* a frame ends here */
         double ft = g_last_present > 0 ? b - g_last_present : 0;
