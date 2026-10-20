@@ -12,6 +12,7 @@ import sys
 import time
 
 import frida
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 DUMPS = os.path.join(ROOT, "verify", "resize_clicklab", "dumps")
@@ -68,6 +69,7 @@ out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq SC3U.exe", "/FO", "CSV", 
                      capture_output=True, text=True).stdout
 pid = int(out.split(",")[1].strip('" '))
 dev = frida.get_local_device()
+sc3pause.require_running(pid, "invalidate")
 s = dev.attach(pid)
 sc = s.create_script(JS)
 sc.load()

@@ -18,6 +18,7 @@ import frida
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import sc3io  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 function where(p) {
@@ -79,6 +80,7 @@ def main():
     ap.add_argument("--out")
     a = ap.parse_args()
     pid = sc3io.game_pid()
+    sc3pause.require_running(pid, "ct_hbenum")
     s = frida.attach(pid)
     sc = s.create_script(JS)
     sc.load()

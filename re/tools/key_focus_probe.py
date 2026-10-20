@@ -33,6 +33,7 @@ from PIL import Image
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import sc3io  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 OUT = pathlib.Path("verify/offscreen/keyprobe")
@@ -118,6 +119,7 @@ def main(argv) -> int:
     keys = [int(k, 0) for k in a.keys.split(",")] if a.keys else DEFAULT_KEYS
 
     h = sc3io.game_hwnd()
+    sc3pause.require_running(sc3io.game_pid(), "key_focus_probe")
     sess = frida.attach(sc3io.game_pid())
     sc = sess.create_script(JS)
     sc.load()

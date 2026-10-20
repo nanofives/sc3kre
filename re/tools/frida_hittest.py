@@ -39,6 +39,7 @@ import sys
 import time
 
 import frida
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 'use strict';
@@ -269,6 +270,7 @@ def main():
         return 1
     print(f"[+] attaching to {args.process} pid {pid}")
 
+    sc3pause.require_running(pid, "frida_hittest")
     session = dev.attach(pid)
     messages = []
 

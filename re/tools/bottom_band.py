@@ -2,6 +2,7 @@
 fields, where only painted text should be) - these are the misplaced control widgets."""
 import subprocess, frida, ctypes
 from ctypes import wintypes
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 u=ctypes.WinDLL("user32")
 out=subprocess.run(["tasklist","/FI","IMAGENAME eq SC3U.exe","/FO","CSV","/NH"],capture_output=True,text=True).stdout
 pid=int(out.split(",")[1].strip('" '))
@@ -38,6 +39,7 @@ function walk(w,depth){
 }
 rpc.exports={scan:function(){OUT=[];walk(root(),0);return OUT;}};
 """
+sc3pause.require_running(pid, "bottom_band")
 s=frida.attach(pid);sc=s.create_script(JS);sc.load()
 res=sc.exports_sync.scan()
 print(f"client {CW}x{CH}; windows in bottom band (y2>{CH-70}) with middle x (120..{CW-200}):")

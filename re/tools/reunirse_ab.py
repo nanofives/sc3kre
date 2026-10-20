@@ -18,6 +18,7 @@ import frida
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import sc3io  # noqa: E402
 from uiwin_dump import JS as TREE_JS  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 SLOT_JS = r"""
 rpc.exports.slots = function(){
@@ -44,6 +45,7 @@ def main(argv) -> int:
     out = pathlib.Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     h = sc3io.game_hwnd()
+    sc3pause.require_running(sc3io.game_pid(), "reunirse_ab")
     s = frida.attach(sc3io.game_pid())
     sc = s.create_script(TREE_JS + SLOT_JS)
     sc.load()

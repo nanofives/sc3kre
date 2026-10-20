@@ -21,6 +21,7 @@ import time
 from ctypes import wintypes
 
 import frida
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 function ri(p,o){return p.add(o).readS32();}
@@ -81,6 +82,7 @@ if not found:
 hwnd = found[0][0]
 
 dev = frida.get_local_device()
+sc3pause.require_running(pid, "dismiss_tips")
 s = dev.attach(pid)
 sc = s.create_script(JS)
 sc.load()

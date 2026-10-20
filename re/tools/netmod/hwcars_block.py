@@ -13,6 +13,9 @@ highway grid = [[layer + 0x70] + 0xc][x] + z (bytes), as the road grid +0x6c tha
 """
 import os, sys, time
 import frida
+import os as _os  # noqa: E402
+sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), ".."))
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 var TR = Process.getModuleByName('SimTransit.dll').base;
@@ -27,6 +30,7 @@ rpc.exports = {
 """
 cells = [tuple(map(int, c.split(","))) for c in sys.argv[1].split(";")]
 v, secs = int(sys.argv[2]), float(sys.argv[3])
+sc3pause.require_running(int(os.environ["SC3_PID"]), "hwcars_block")
 s = frida.attach(int(os.environ["SC3_PID"]))
 sc = s.create_script(JS); sc.load(); api = sc.exports_sync
 t0 = time.time()

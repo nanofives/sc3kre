@@ -11,6 +11,7 @@ from ctypes import wintypes
 
 import frida
 import sys as _s, pathlib as _p; _s.path.insert(0, str(_p.Path(__file__).resolve().parent)); import sc3io as _sc3io
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 function ri(p,o){return p.add(o).readS32();}
@@ -67,6 +68,7 @@ found.sort(key=lambda t: t[1] * t[2], reverse=True)
 hwnd = found[0][0]
 
 dev = frida.get_local_device()
+sc3pause.require_running(pid, "bar_cycle")
 s = dev.attach(pid)
 sc = s.create_script(JS)
 sc.load()

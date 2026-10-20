@@ -25,6 +25,7 @@ import frida
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import sc3io  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 var ss = Process.getModuleByName("SIMSPR.DLL").base;
@@ -61,6 +62,7 @@ def main(argv) -> int:
     ap.add_argument("--out", default=None)
     a = ap.parse_args(argv)
     out = open(a.out, "a", encoding="utf-8") if a.out else None
+    sc3pause.require_running(sc3io.game_pid(), "leftclick_trace")
     sess = frida.attach(sc3io.game_pid())
     scr = sess.create_script(JS)
 

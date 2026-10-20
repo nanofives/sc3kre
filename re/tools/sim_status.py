@@ -13,6 +13,7 @@ import frida
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import sc3io
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 var exe = Process.getModuleByName('SC3U.exe').base;
@@ -23,6 +24,7 @@ send({pause: c.add(0x140).readU32(), hold: c.add(0x144).readU32(), bracket: c.ad
       funds: bud.add(0x38).readS64().toString()});
 """
 
+sc3pause.require_running(sc3io.game_pid(), "sim_status")
 s = frida.attach(sc3io.game_pid())
 sc = s.create_script(JS)
 out = []

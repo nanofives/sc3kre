@@ -26,6 +26,7 @@ import frida
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import sc3io  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 function mods(){ return Process.enumerateModules(); }
@@ -99,6 +100,7 @@ def main(argv) -> int:
     keys = [int(k, 0) for k in a.keys.split(",")]
 
     h = sc3io.game_hwnd()
+    sc3pause.require_running(sc3io.game_pid(), "key_sink_probe")
     sess = frida.attach(sc3io.game_pid())
     sc = sess.create_script(JS)
     sc.load()

@@ -24,6 +24,7 @@ import frida
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import sc3io  # noqa: E402
 from key_state_spoof import translation  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 function mb(w){var m=Process.enumerateModules();
@@ -88,6 +89,7 @@ def main(argv) -> int:
     out.mkdir(parents=True, exist_ok=True)
 
     hwnd = sc3io.game_hwnd()
+    sc3pause.require_running(sc3io.game_pid(), "edge_probe")
     sess = frida.attach(sc3io.game_pid())
     sc = sess.create_script(JS)
     sc.load()

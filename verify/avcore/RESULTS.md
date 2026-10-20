@@ -98,13 +98,172 @@ turn). An inner lane cannot be widened inside the U-turn cell (it gains only 80 
 - Sort id fix (orchestrator-approved, hwcore closed): `hwlanes.extra_for` writes 0 when every point is at y 0, else 2; curve_set / curve_records / inject agree (`netmod.hwlanes selftest` PASSED, also in avlanes selftest). Installed in my tree: 20 new flat curves 0, 16 new curves with height 2, stock untouched. The deciding A/B (sort id 2 vs 0 on the same tight-left ring lanes) is avjunc's.
 - Not yet: the Seoul in-game check with cars on a U-turn (needs avjunc's junction package in my tree).
 
+## Seoul, two-lane U-turn end with avjunc's junctions (2026-10-19, own PIDs 58616, 71560)
+
+Build: avjunc's uncommitted Simcity_wt_avjunc (sc3netmod src with sc3netmod_avx.c, avenue_junctions built by
+avjunc_build into a scratch copy, their netpack) plus avcore's 0b189f8 hwlanes.py / avlanes.py / avenue_lanes; avjunc's
+tree left untouched. Stock Seoul copy: avx load run 150 junction boxes / 1,015 cells, AVL load pass 124 bands / 1,482
+cells, 5 U-turn ends (incl. (51, 62..63)).
+
+| run | sequence | result |
+|---|---|---|
+| 1 (trap) | paused: rb_lab cam (Frida attach, camera hook, DETACH) to (51,63) zoom 4; then P + 2 by keys, nothing attached | deadlock within 30 s: IsHungAppWindow 18/18 over 9 min, CPU time flat; main thread STRTSIM+0x18768 -> SC3U+0x24c75 -> SIMSPR+0x19ea9 -> SIMCITY+0xd31d (EnterCriticalSection), two SIMSPR threads on locks (`data/seoul_uturn_trap_stacks.txt`) |
+| 2 (clean) | P + 2 by keys first, sim running 20 s; then rb_lab cam (attach, detach) to (51,63) zoom 4; watched with no key and nothing attached | no hang: 18/18 samples responsive over 9 min, routing evaluations 380,166 -> 1,272,467, game date 1/3/1999 -> 9/23/1999 (over 6 months); cars on the U-turn curve in the frames (`owner_shots/avcore_seoul_uturn.png`) |
+
+So the two-lane U-turn (inner 23602, r 80) runs clean. The trap is wider than avjunc's wording: a Frida attach that is
+already DETACHED before the unpause still deadlocks when it happened while paused. Cars' lane direction on the band was
+not tracked (the track tools attach Frida); visually the frames show cars on the curve only.
+
+## Seoul, two-lane U-turn on the branch build with car tracks (2026-10-19, own PID 7376)
+
+Build: child/avcore d3cd8f8 (avjunc 1152e03 merged) + the slope sort id change below; avenue_junctions built by
+avjunc_build. Sequence: P + 2 by keys first, then rb_lab cam (51,63) zoom 4 and hwcars_tracks attached to the RUNNING
+game (box 44,56..62,70, 180 s), then 6 min with nothing attached.
+
+| check | result |
+|---|---|
+| hang | none: responsive throughout (20 s + 3 min tracked + 12/12 samples over 6 min), routing evaluations 0.94 M -> 1.50 M, game date 1/3/1999 -> 12/8/1999 |
+| direction | every car visit to an avcore cell runs the half's direction: (52,63) 21700.0 W 27, (51,63) 21701.2 W 25 + N 1 (inside the curve), (51,62) 21701.3 E 24, (52,62) 21700.2 E 23, (56/57,62) E 105, (56/57,63) W 15, (60,59) N 14, (61,59) S 24; none the wrong way |
+| U-turns | 17 cars drove the whole U: 52,63 > 51,63 > 51,62 > 52,62 (8 of them on to 56,62 > 57,62) |
+| lanes | both lanes used: lateral samples at z ~80 and ~175 in (52,63), (52,62), (56,62), (57,62) |
+
+Cells with opposite directions in the box (18) are all stock two-way roads (29, unconverted 11204) or avjunc's junction
+pieces (20805 / 20810 / 20811 / 20819). Data: `data/seoul_uturn_tracks_an.json`, `seoul_uturn_grid.json`,
+`seoul_uturn_watch_tracks.txt`.
+
+Slope sort id (orchestrator item): stock's own slope lanes carry 2 on 31 / 32 (y -512..0) and 0 on 11201 / 11202
+(y -256..0), so no height rule. Spec curves may now carry `"sort_id"` (hwlanes CurvePts / sort_id_of; selftest
+row added) and avcore's slope curves copy their stock source's: 23604 / 23605 = 2, 23606 / 23607 = 0.
+
+## Avenue corners (2026-10-19, own PIDs 26372, 46112, 29228)
+
+Scope (`py -3.12 -m netmod.avcorner_scan --groups`, 15 shipped cities, crossings / slopes counted as band rows):
+
+| item | count |
+|---|---|
+| band ends | junction 4,126, corner whose outer cell is a T 39 / X 43 214, clean corner 169, other 96, half-bend 37, corner without a band beside 19, U-turn 9, map edge 2 |
+| clean corner ends per city | London 74, Frankfurt 44, Berlin 16, Madrid 10, Liverpool 6, Moscow 4, Sacramento 4, Craterville 2, Madison 2, Seoul 2 |
+| groups of bands joined by clean corners | 43 whose other ends are all junctions (1,188 cells: convert where avjunc's boxes declare those ends), 24 that also have another blocker (724 cells) |
+
+The stock corner: inner and outer 11203 at one state, diagonal, plus two 11204 (8 patterns, `AVL_CST`). Pieces: inner
+bend -> new 21726 (one id; no new curve, no new art: lanes on 23601 / stock 768 in English, stock 1024 / 23602's copies
+in English-UK), outer bend -> 21701 (the U-turn quarter is the same left turn), halves -> 21700. Block: `avlk` line;
+`avl_end` accepts a corner when the band beyond converts (recursive decide, that band's corner end assumed, a loop of
+bands closes on itself, depth <= 64); the band beyond is processed in the same run, even outside the pass box.
+
+| check | result |
+|---|---|
+| offline | selftest PASSED in ENGLISH and English-UK: every adjacent cell pair of all 8 measured patterns (band row, block, other band's row). A negative control (corner lanes reversed) gives 64 problems |
+| lab: build | Roadless Paradise copy, two L-shaped roads: the game laid a stock corner at (96..97, 52..53) (11203.2 inner / outer, pattern along z forward, inner on B). Both bands converted in one run: `band along z from (96,35) rows 0..16 (ends: U-turn / corner)`, `band along x from (98,52) rows 0..11 (ends: corner / U-turn)`; block 21700.1 / 21726.2 / 21701.2 / 21700.0; the x band lay outside the edit box |
+| lab: save | 66 variant tiles written as base (34 + 2 + 4 + 24 + 2) |
+| lab: junction | a side road on the x band: avjunc's block made a junction box there and the group stayed one-way (a declared join); demolishing the far U-turn cell then reverted only the cells past the junction |
+| lab: revert through the corner | demolishing a cell of the north U-turn: `0 written, 48 reverted` in a pass box of (94,32)-(99,41): the z band, the corner block (back to 11203.2 / 11204) and the x band up to the junction |
+| lab: reload | `load: all 66 variant tiles restored`; the load pass finds both bands through the corner, 0 rewritten |
+| London (stock city, with avjunc) | load: 8 corners converted (21726 x 8, their outer bends 21701 x 8), 1,270 avcore cells |
+
+Sheet: `MAIN\verify\avcore\owner_shots\avcore_corner_sheet.png` (`netmod.avcorner_sheet`: lanes of one pattern as
+compiled, plus the lab shot). Not done: cars driving a corner (no traffic in the lab; London not watched); corners whose
+outer cell is a T / X (214 ends) need a corner-junction piece.
+
+## Cars through a corner (London, 2026-10-19, own PID 54788)
+
+Branch 25ae1b3 build, both packages. P + 2 by keys first; then rb_lab cam and hwcars_tracks attached to the running
+game, 240 s per box. Analysis: `py -3.12 -m netmod.avl_tracks_an TRACKS GRID` (new: per avcore cell the car visits'
+direction, lateral positions, paths; WRONG = a visit against a straight half's travel side).
+
+| corner | result |
+|---|---|
+| (157..158, 157..158): z band x 157 / 158 z 152..156 + x band z 157 / 158 x 159..160, junction boxes at both far ends | 0 wrong-way visits. Inner bend 21726.2: southbound cars turn east (paths 158,152 > ... > 158,157 > 159,157 > 160,157), both lanes in and out (lateral samples ~80 and ~175 in (158,152..156) and (159,157), (160,157)). Outer bend 21701.2: westbound cars turn north (160,158 > 159,158 > 158,158 > 157,158 > 157,157 > ... 157,153). On that side only the median lane carried traffic past the bend: (158,158) all at z ~80; the one curb-lane car seen at (159,158) ended its trip there (Shutdown) |
+| (109..110, 157..158), 11-row x band | no car entered the group in 240 s (62 cars in the box, all on other roads) |
+
+So: direction through both bends PASS; both lanes through the inner bend PASS; both lanes through the outer bend not
+observed (no curb-lane car reached it). Data: `data/london_corner_tracks_an.txt`, `london_corner_grid.json`,
+`london_corner2_tracks_an.txt`; shot `owner_shots/avcore_london_corner.png`. No hang (sim running throughout).
+
+## Scope: corners whose outer cell is a T 39 / X 43 (not built)
+
+Same scan, with those corners also joining bands (15 shipped cities; ok = every other end is a U-turn, the map edge
+or a junction; a junction end converts only when avjunc's box declares it, so ok is an upper bound):
+
+| | groups ok | cells | groups blocked otherwise | cells |
+|---|---|---|---|---|
+| clean corners only (built) | 43 | 1,188 | 24 | 724 |
+| clean + T / X corners | 124 | 3,666 | 25 | 890 |
+
+Calibration: in London the clean-corner bound is 25 corners in 20 groups; the load converted 8 corners (about 1 in 3).
+If T / X corners realise the same share, handling them adds about 800 cells of the 2,478-cell bound [estimate].
+The 214 ends: London 84, Frankfurt 37, Berlin 34, Liverpool 31, Moscow 10, Madrid 8, Sacramento 7, Seoul 3. What touches
+the outer cell's outside: T 39 + one road 29: 110; X 43 + two roads: 30; T next to another T: 28; T + 11203: 12; T +
+35: 6; others 28.
+
+What it takes: the outer cell is a junction (the avenue turns through it, a road leaves it), so it is avjunc's box
+machinery: a box piece per arm pattern with one-way avenue lanes in and out plus the road's two-way lanes, declared
+with `avlj` so the AVL block can end the band there. avcore's side is small: `avl_corner_at` accepts an outer cell
+that is an avlj-declared piece whose letters fit the turn (both bands then join through it as today). Ids: avjunc's
+range, one per outer pattern and lane mode (the two largest patterns, T + road and X + 2 roads, cover 140 of 214).
+Art: whatever avjunc's box pieces use (its build makes the nose art from stock frames); not measured here.
+Owner: avjunc (box lanes, art, avx rule), avcore for the corner-block change.
+
+## Corner outer cell declared by avlj (2026-10-19, avcore's side of the T / X corners)
+
+Orchestrator decision: build T + one road (110 ends) and X (30 ends); avjunc makes the box pieces. avcore's side:
+`avl_corner_at` accepts an outer cell holding an avlj-declared piece whose letters fit the turn (`avl_outer_join`: I on
+the side the incoming half flows in from, O on the outgoing side, from the halves' travel); such a cell is not written,
+not claimed, its avl_free guard skipped (it is the declaring stream's). New `avl_corner_ok(x, z)` for avjunc: the dry
+run with (x, z) taken as a fitting piece. `avlanes corner-letters` prints the requirement per pattern (always W = I,
+S = O in the outer's own frame at the corner's 11203 state).
+
+| check | result |
+|---|---|
+| build | sc3netmod.dll compiles (347,648 bytes) |
+| offline | avlanes selftest PASSED in both languages, with a new row: a fake avlj outer piece carrying 21701's own turn ("..OI") fits all 8 patterns at their outer state, the swapped letters ("..IO") fit none. This tests the Python mirror of the rule (`outer_fits`), not the C itself |
+| avjunc's letters (21768 `I..O`, 21769 `..OI` on base 39; 21770 `I..O` on base 43) vs the rule, each at the outer cell's STOCK state over the shipped cities | T: 164 / 164 fit (64 -> 21768, 100 -> 21769). X: 24 fit, 24 do not (the X is symmetric, its stock state is arbitrary): 21770 must sit at k = (inner bend's 11203 state - 1) & 3. avjunc's writer already picks the state from the in / out pattern: over the 73 shipped corners every X lands at that k (15 / 15) and every T at its stock state (58 / 58); London after save + reload: X corners (144,57), (157,102), (194,125) are 21770.0 with 21726.1 diagonal, both bands one-way (avjunc). 2 ends hold a stock 11204 on the outer cell: stay stock |
+| in game (lab, own PIDs 71608, 64988; avjunc's uncommitted tree built from a scratch copy, avjunc's worktree untouched) | L avenue as before + a road off the outer cell (96,54..60): `avx: edit run: 1 corner junction(s)`, outer (96,53) = 21769.2, both bands stay one-way through it (`ends: U-turn / corner`, `corner / U-turn`), inner 21726.2 and halves 21700 avcore's. Save: 66 tiles as base. Reload: all 66 restored, avx load run keeps the corner junction, the load pass finds both bands, 0 rewritten. Shot `owner_shots/avcore_tcorner_lab.png` |
+
+
+
+## Pause guard for Frida attaches (2026-10-19, own PID 74672)
+
+The Frida-while-paused trap cost three investigations (avjunc, avcore, bvlanes). `re/tools/sc3pause.py` reads the
+user-pause depth with ReadProcessMemory only: app = *(SC3U 0x004fa86c) (FUN_00402e74 stores the app singleton there
+[CONFIRMED @ 0x00402e74]); city = *(app + 0x48), checked on every read against the city vtable SIMCITY+0x13260 (no
+static writer of app+0x48 was found in the export, so a mismatch reads as "unknown", never guessed); depth =
+city+0x140 (SIMCITY FUN_100056bb increments it and posts 0xc2a35d7f at 1, FUN_10005773 decrements it and posts
+0xc2a35d81 at 0 [CONFIRMED @ 0x100056bb, 0x10005773]). `require_running(pid)` exits 3 when paused or unknown, unless
+`--force-paused` (stripped from argv at import) or SC3_FORCE_PAUSED=1 (inherited by subprocesses). It runs before every
+frida.attach in rb_lab (cam), np_drive (frida_job: rb_lab's commands, hwcars_grid, hwcars_drag), nramp_cam and
+hwcars_block / deposits / mode / removals / stacks / tracks / uicam. avl_tracks_an and the other hwcars_* do not attach.
+
+| step | result |
+|---|---|
+| reader, Seoul copy just loaded | PAUSED (depth 1); P by keys -> running (depth 0); P again -> PAUSED. The vtable check passed and city+0x140 follows the pause key |
+| paused, nothing attached | rb_lab cam, hwcars_tracks, np_drive cells each print `game is paused: unpause by keys (sc3io) first, then attach (pause depth 1; ...)` and exit 3, before frida.attach |
+| --force-paused logic (no attach made) | the flag is removed from argv; require_running returns |
+| unpause by keys (P, 2), then attach | sc3pause reads running; rb_lab cam attached and moved the camera; not hung 60 s later |
+
+The evidence that nothing attached in the paused step is the code path (the guard exits before frida.attach). A module
+list check proves nothing: the Frida agent does not show in EnumProcessModules even after a real attach.
+
+## Pause guard on every Frida attach in re/tools (2026-10-19)
+
+`grep` over re/tools and re/scripts for `frida.attach(`, `<device>.attach(`, `get_local_device().attach`, `frida -p`
+and `spawn(`: 93 Python files attach (one attach each), no spawn, none in re/scripts or as `frida -p`. 11 were guarded
+in 9b0263d; the other 82 now call `sc3pause.require_running(<the attach's pid>, "<tool>")` on the line before the
+attach, with a module-level `import sc3pause` in the header (netmod files without a path to re/tools get one first;
+sc3io imports it inside the scroll helper, since sc3pause's CLI imports sc3io). Out of scope: verify/ and scratch
+scripts. Change in sc3pause: no city loaded (SIMCITY.DLL absent, app or app+0x48 still 0) now counts as not paused,
+so menu and dialog probes still attach; an unreadable chain or a vtable mismatch is still refused. Check: py_compile
+on all 83 files (0 failures); in the netmod files a path to re/tools always precedes `import sc3pause`. No live run
+(orchestrator). Behaviour change for tools that used to attach to a paused game on purpose (e.g. set_funds,
+place_direct, sim_status, pt_run, nb_drive lab builds): they now need `--force-paused`. For the pause state itself,
+`py -3.12 re/tools/sc3pause.py PID` reads it without Frida.
+
 ## Not done / open
 
-- **No car has driven a converted avenue yet.** Before avjunc's junction pieces exist, no converted band connects to
-  any road, so no trip or stock car reaches one. Cars come with the first sibling build.
 - **English-UK routing [UNCERTAIN]** (AVENUE_LANES.md 2): lanekit says the matrix's high half serves English-UK's
-  lanes, and the high half is the transpose here (needed for the tiler's arms). Not testable without an English-UK
-  install.
+  lanes, and the high half is the transpose here (needed for the tiler's arms). No English-UK install here. English-UK
+  stays mismatched as a known limitation (owner 2026-10-19, AVENUE_LANES.md 2).
 - Slope variants 21718/21719 (base 31) and 21722/21723 (base 11201) passed in game. 21720/21721 (base 32) and 21724/21725 (base 11202) are offline only: the game did not lay 32 or 11202 under this avenue. The slope cells keep the base art (stock yellow centre line), as the rail crossing does.
-- Stock cities: only 9 clean U-turn ends exist in the 15 shipped cities. Their avenues convert once avjunc declares its
-  junction pieces (`avlj`).
+- Corner outer bend (21701 as a corner): the curb lane carrying cars through it was not observed (London: no curb-lane
+  car reached it); direction through both bends and both lanes through the inner bend did pass.
+- Corners stay stock when the outer cell is a T next to another T or another pattern (74 of the 214 T / X ends).

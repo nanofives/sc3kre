@@ -18,6 +18,7 @@ import frida
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import sc3io  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 var mods = Process.enumerateModules();
@@ -59,6 +60,7 @@ def main(argv) -> int:
     def log(s):
         f.write(f"[{time.time() - t0:8.2f}] {s}\n")
 
+    sc3pause.require_running(sc3io.game_pid(), "dlg_watch")
     s = frida.attach(sc3io.game_pid())
     sc = s.create_script(JS)
     sc.on("message", lambda m, d: log(m.get("payload", m)))

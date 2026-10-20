@@ -37,6 +37,7 @@ from PIL import Image
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import sc3io  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 VK = {"up": 0x26, "down": 0x28, "left": 0x25, "right": 0x27}
 OUT = pathlib.Path("verify/offscreen/scroll")
@@ -114,6 +115,7 @@ class Spoof:
         self.script = None
 
     def __enter__(self):
+        sc3pause.require_running(sc3io.game_pid(), "key_state_spoof")
         self.session = frida.attach(sc3io.game_pid())
         self.script = self.session.create_script(JS)
         self.script.load()

@@ -23,6 +23,7 @@ import frida
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 var exe = Process.getModuleByName('SC3U.exe').base;
@@ -82,6 +83,7 @@ def main(argv):
     ap.add_argument("--walk", nargs="*", default=[])
     a = ap.parse_args(argv)
     x0, z0, x1, z1 = map(int, a.box.split(","))
+    sc3pause.require_running(int(os.environ["SC3_PID"]), "hwave_probe")
     s = frida.attach(int(os.environ["SC3_PID"]))
     sc = s.create_script(JS)
     sc.load()

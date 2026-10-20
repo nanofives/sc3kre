@@ -23,6 +23,7 @@ import time
 from ctypes import wintypes
 
 import frida
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 DUMPS = os.path.join(ROOT, "verify", "resize_clicklab", "dumps")
@@ -76,6 +77,7 @@ found.sort(key=lambda t: t[1] * t[2], reverse=True)
 hwnd = found[0][0]
 
 dev = frida.get_local_device()
+sc3pause.require_running(pid, "hud_click")
 s = dev.attach(pid)
 sc = s.create_script(JS)
 sc.load()

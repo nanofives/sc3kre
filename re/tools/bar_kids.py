@@ -1,5 +1,6 @@
 """Enumerate the bottom-bar object's children with class (vt RVA) and rect, to find misplaced ones."""
 import subprocess, frida
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 JS = r"""
 function modBase(w){var m=Process.enumerateModules();for(var i=0;i<m.length;i++)if(m[i].name.toLowerCase()===w.toLowerCase())return m[i].base;return null;}
 function rp(p,o){return p.add(o).readPointer();}
@@ -37,6 +38,7 @@ rpc.exports={ kids:function(){
 """
 out=subprocess.run(["tasklist","/FI","IMAGENAME eq SC3U.exe","/FO","CSV","/NH"],capture_output=True,text=True).stdout
 pid=int(out.split(",")[1].strip('" '))
+sc3pause.require_running(pid, "bar_kids")
 s=frida.attach(pid); sc=s.create_script(JS); sc.load()
 r=sc.exports_sync.kids()
 if not r.get("ok"): print("FAIL",r); 
