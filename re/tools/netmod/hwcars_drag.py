@@ -17,7 +17,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import rb_lab  # noqa: E402
 
-CMDS = {"road": 0x10004001, "hway": 0x10004301}
+CMDS = {"road": 0x10004001, "hway": 0x10004301, "rail": 0x10004101}
 
 
 def safe_cam(cx, cz, zoom, rot=0, tries=5):

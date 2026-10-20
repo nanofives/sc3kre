@@ -39,9 +39,12 @@
 static WORD g_bv_cap[3];
 static WORD g_bv_tap[3][9];
 static WORD g_bv_av[2][9];                     /* narrowing to the avenue on rows k, k+1 (k 0 / 1), column-major */
+static WORD g_bv_jt[2];                        /* task bvlanes: a T's entry row / middle row (`bvj`), 0 = jn / jm */
 static volatile LONG g_bv_n_runs, g_bv_n_cells, g_bv_n_rev;
 
 enum { BV_OUTER, BV_MIDDLE, BV_NOSE, BV_NOSE2, BV_JN, BV_JM, BV_JF };
+static int bv_post_avl(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who, int *rbox);   /* task bvlanes */
+static int avl_post_set(int slot, int (*f)(BYTE *, int, int, int, int, const char *, int *));    /* task bvlanes */
 
 static int bv_variant(unsigned long v) { return v && v <= 0xffff && g_base[v]; }
 
@@ -57,6 +60,7 @@ static void bv_line(const char *path, const char *line) {
             if (!bv_variant(v[k])) { logf("### bv: %s: piece %lu is not a variant: '%s'", path, v[k], line); return; }
         if (g_bv_p[0]) { logf("### bv: %s: a second boulevard set - ignored", path); return; }
         for (k = 0; k < 7; k++) g_bv_p[k] = (WORD)v[k];
+        avl_post_set(1 /* AVL_POST_BV */, bv_post_avl);                           /* task bvlanes */
         logf("bv: %s: boulevard pieces outer %u, middle %u, nose %u / %u, junction %u %u %u", path, g_bv_p[0], g_bv_p[1],
              g_bv_p[2], g_bv_p[3], g_bv_p[4], g_bv_p[5], g_bv_p[6]);
     } else if (!strncmp(line, "bvc ", 4)) {
@@ -77,6 +81,14 @@ static void bv_line(const char *path, const char *line) {
             if (!bv_variant(v[k])) { logf("### bv: %s: taper piece %lu is not a variant", path, v[k]); return; }
         for (k = 0; k < 9; k++) g_bv_tap[v[0]][k] = (WORD)v[k + 1];
         logf("bv: %s: taper to row %lu = pieces %lu..%lu", path, v[0], v[1], v[9]);
+    } else if (!strncmp(line, "bvj ", 4)) {                                        /* task bvlanes */
+        if (sscanf(line + 4, "%lu %lu", &v[0], &v[1]) != 2 || !bv_variant(v[0]) || !bv_variant(v[1])) {
+            logf("### bv: %s: bad T junction line '%s'", path, line);
+            return;
+        }
+        g_bv_jt[0] = (WORD)v[0];
+        g_bv_jt[1] = (WORD)v[1];
+        logf("bv: %s: T junction pieces entry %u, middle %u", path, g_bv_jt[0], g_bv_jt[1]);
     } else if (!strncmp(line, "bva ", 4)) {
         if (sscanf(line + 4, "%lu %lu %lu %lu %lu %lu %lu %lu %lu %lu", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6],
                    &v[7], &v[8], &v[9]) != 10 || v[0] > 1) {
@@ -91,11 +103,43 @@ static void bv_line(const char *path, const char *line) {
 }
 
 static int bvx_is_piece(WORD id);                                        /* task bvx: sc3netmod_bvx.c */
+/* task bvlanes: the post-AVL phase (AVENUE_LANES.md 5, slot AVL_POST_BV = 1 in sc3netmod_avl.c). After each avl_run:
+   (1) the box of every cell BV wrote or reverted since the last call goes back to AVL as a re-run box, so the avenue
+   a narrowing / avenue arm meets is re-decided with the boulevard as it now stands; (2) every recorded attachment
+   (boulevard end cell, avenue cell beyond it) whose avenue AVL left two-way (avl_dir -1) while the boulevard piece is
+   still there gets its run re-decided (avl_band_ok then refuses it -> stock, program rule), e.g. after a T drawn far
+   down the avenue, outside BV's own pass box. */
+static int avl_dir(int x, int z);
+#define BV_ATT_MAX 512
+static int g_bv_att[BV_ATT_MAX][5], g_bv_natt;   /* boulevard end x z, avenue cell x z, side toward the avenue */
+static int g_bv_dirty[4] = { 0x7fffffff, 0x7fffffff, -1, -1 };
+static void bv_dirty(int x, int z) {
+    if (x - 2 < g_bv_dirty[0]) g_bv_dirty[0] = x - 2;
+    if (z - 2 < g_bv_dirty[1]) g_bv_dirty[1] = z - 2;
+    if (x + 2 > g_bv_dirty[2]) g_bv_dirty[2] = x + 2;
+    if (z + 2 > g_bv_dirty[3]) g_bv_dirty[3] = z + 2;
+}
+static void bv_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who);
+static void bv_att_add(const int *a) {
+    int k;
+    for (k = 0; k < g_bv_natt; k++)
+        if (g_bv_att[k][0] == a[0] && g_bv_att[k][1] == a[1] && g_bv_att[k][2] == a[2] && g_bv_att[k][3] == a[3]) return;
+    if (g_bv_natt < BV_ATT_MAX) { memcpy(g_bv_att[g_bv_natt], a, sizeof g_bv_att[0]); g_bv_natt++; }
+}
+static int avl_band_ok(int x, int z, int away);                          /* task bvlanes: sc3netmod_avl.c */
+/* task bvlanes: the real side (0 N 1 E 2 S 3 W) of axis-space direction +s (dir 1) / -s (-1) / +w (2) / -w (-2) */
+static int bv_side(int axis, int dir) {
+    if (dir == 1) return axis ? 2 : 1;
+    if (dir == -1) return axis ? 0 : 3;
+    if (dir == 2) return axis ? 3 : 2;
+    return axis ? 1 : 0;
+}
 static int bv_is_piece(WORD id) {
     int k, j;
     if (!id || !g_bv_p[0]) return 0;
     for (k = 0; k < 7; k++) if (g_bv_p[k] == id) return 1;
     for (k = 0; k < 3; k++) if (g_bv_cap[k] == id) return 1;
+    if (g_bv_jt[0] == id || g_bv_jt[1] == id) return 1;                    /* task bvlanes */
     for (k = 0; k < 3; k++) for (j = 0; j < 9; j++) if (g_bv_tap[k][j] == id) return 1;
     for (k = 0; k < 2; k++) for (j = 0; j < 9; j++) if (g_bv_av[k][j] == id) return 1;
     if (bvx_is_piece(id)) return 1;                       /* task bvx */
@@ -109,6 +153,7 @@ typedef struct {
     int axis;
     BvCell *cell;
     int n;
+    int natt, att[8][5];        /* task bvlanes: (boulevard end cell, attached avenue cell, side) of the run decided */
 } BvPass;
 static int bvx_spans(BvPass *p, int sa, int sb, int w0, BYTE *kind, const char **why);            /* task bvx */
 static int bvx_boxes(BvPass *p, int sa, int sb, int w0, const BYTE *kind, int lo_tee, int hi_tee); /* task bvx */
@@ -135,6 +180,7 @@ static void bv_put(BvPass *p, int s, int w, WORD piece, int st) {
 static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *kind) {
     int sb = sa, s, k, e, n, ncl = 0, endtyp[2], endkeep[2], endlo, endhi, normlo, normhi, teew[2] = { 0, 0 };
     *why = "";
+    p->natt = 0;                                                         /* task bvlanes */
     while (bv_full(p, sb + 1, w0) && sb - sa < BV_MAX_RUN - 1) sb++;
     *psb = sb;
     n = sb - sa + 1;
@@ -170,6 +216,17 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
         if (endtyp[e] == 1 && !g_bv_cap[0]) { *why = "no cap pieces declared"; return 0; }
         if (endtyp[e] == 2 && !g_bv_tap[e ? 2 - row : row][0]) { *why = "no taper pieces declared"; return 0; }
         if (endtyp[e] == 3 && !g_bv_av[e ? 1 - first : first][0]) { *why = "no avenue-narrowing pieces declared"; return 0; }
+        /* task bvlanes (AVENUE_LANES.md program rule): the narrowing is one-way, so the avenue it goes on into must
+           convert; else the whole run stays stock */
+        if (endtyp[e] == 3 && !avl_band_ok(bv_rx(p->axis, se + st, w0 + first), bv_rz(p->axis, se + st, w0 + first),
+                                           bv_side(p->axis, st)))
+            { *why = "the avenue it narrows into would stay two-way"; return 0; }
+        if (endtyp[e] == 3 && p->natt < 8) {
+            p->att[p->natt][0] = bv_rx(p->axis, se, w0 + first); p->att[p->natt][1] = bv_rz(p->axis, se, w0 + first);
+            p->att[p->natt][2] = bv_rx(p->axis, se + st, w0 + first); p->att[p->natt][3] = bv_rz(p->axis, se + st, w0 + first);
+            p->att[p->natt][4] = bv_side(p->axis, st);
+            p->natt++;
+        }
     }
     endhi = endtyp[0] == 1 ? 1 : endtyp[0] == 4 ? teew[0] : endtyp[0] == 5 ? 0 : BV_TAPER;   /* bvx: 4 = T, diagbv: 5 = DBV */
     endlo = endtyp[1] == 1 ? 1 : endtyp[1] == 4 ? teew[1] : endtyp[1] == 5 ? 0 : BV_TAPER;
@@ -220,10 +277,14 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
             bv_put(p, s, w0 + 1, g_bv_p[hi && lo ? BV_NOSE2 : hi || lo ? BV_NOSE : BV_MIDDLE], lo && !hi ? 2 : 0);
         } else if (kd & 4) {                                /* task bvx: the box, below */
         } else {
-            bv_put(p, s, w0 + 1, g_bv_p[BV_JM], 0);
-            if (kd == 1) { bv_put(p, s, w0, g_bv_p[BV_JN], 0); bv_put(p, s, w0 + 2, g_bv_p[BV_JF], 0); }
-            else if (kd == 2) { bv_put(p, s, w0, g_bv_p[BV_JF], 2); bv_put(p, s, w0 + 2, g_bv_p[BV_JN], 2); }
-            else { bv_put(p, s, w0, g_bv_p[BV_JN], 0); bv_put(p, s, w0 + 2, g_bv_p[BV_JN], 2); }
+            /* task bvlanes: a T's entry and middle rows carry their own one-way lanes; the T from +w is the T from -w
+               turned half a circle */
+            WORD jn = kd == 3 || !g_bv_jt[0] ? g_bv_p[BV_JN] : g_bv_jt[0];
+            WORD jm = kd == 3 || !g_bv_jt[1] ? g_bv_p[BV_JM] : g_bv_jt[1];
+            bv_put(p, s, w0 + 1, jm, kd == 2 && g_bv_jt[1] ? 2 : 0);
+            if (kd == 1) { bv_put(p, s, w0, jn, 0); bv_put(p, s, w0 + 2, g_bv_p[BV_JF], 0); }
+            else if (kd == 2) { bv_put(p, s, w0, g_bv_p[BV_JF], 2); bv_put(p, s, w0 + 2, jn, 2); }
+            else { bv_put(p, s, w0, jn, 0); bv_put(p, s, w0 + 2, jn, 2); }
         }
     }
     if (!bvx_boxes(p, sa, sb, w0, kind, endtyp[1] == 4, endtyp[0] == 4))   /* task bvx */
@@ -268,6 +329,7 @@ static int bv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, cons
                 }
                 if (k < P.n) { border = 1; continue; }
                 nruns++;
+                for (k = 0; k < P.natt; k++) bv_att_add(P.att[k]);                      /* task bvlanes */
                 for (k = 0; k < P.n; k++) {
                     int cx = P.cell[k].x, cz = P.cell[k].z, pos[3];
                     DWORD cur = rb_at(&P.b, cx, cz);
@@ -276,6 +338,7 @@ static int bv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, cons
                     pos[0] = cx << 8; pos[1] = cz << 8; pos[2] = 0;
                     ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, lay, pos, P.cell[k].want, -1, 8, 0);
                     nw++;
+                    bv_dirty(cx, cz);                                                   /* task bvlanes */
                 }
                 if (nw || !strcmp(who, "load"))
                     logf("bv: %s: boulevard axis %d, columns %d..%d at row %d, %d cell(s), %d written", who, axis, s, sb,
@@ -293,6 +356,7 @@ static int bv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, cons
                 rect[0] = x << 8; rect[1] = z << 8; rect[2] = 0; rect[3] = x << 8; rect[4] = z << 8; rect[5] = 0;
                 ((PFN_Retile)VT(mgr, 0xb0))(mgr, 0, rect, 3);
                 nrev++;
+                bv_dirty(x, z);                                                         /* task bvlanes */
                 logf("bv: %s: (%d,%d) boulevard piece %lu no longer in a run -> stock retile", who, x, z, v & 0xffff);
             }
     VirtualFree(mem, 0, MEM_RELEASE);
@@ -322,6 +386,33 @@ static void bv_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) {
         bv_pass(mgr, 0, 0, W - 1, H - 1, W, H, who, keep);
     }
     VirtualFree(keep, 0, MEM_RELEASE);
+}
+
+/* task bvlanes: AVL_POST_BV (see bv_dirty above). -> 1 with rbox = the box AVL must re-decide */
+static int bv_post_avl(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who, int *rbox) {
+    int W = (*(int *)(mgr + 0x5c) >> 8) + 1, H = (*(int *)(mgr + 0x60) >> 8) + 1, k, n0 = g_bv_natt;
+    void *lay = *(void **)(mgr + 0x3c);
+    static int redo[BV_ATT_MAX][2];
+    int nredo = 0;
+    (void)x0; (void)z0; (void)x1; (void)z1;
+    if (!g_bv_p[0]) return 0;
+    for (k = n0 - 1; k >= 0; k--) {                 /* only the entries there at entry (bv_run below adds new ones) */
+        int *a = g_bv_att[k];
+        DWORD v = rb_read(mgr, lay, a[0], a[1], W, H);
+        if (!v || !bv_is_piece((WORD)(v & 0xffff))) { memcpy(a, g_bv_att[--g_bv_natt], sizeof g_bv_att[0]); continue; }
+        if (avl_dir(a[2], a[3]) >= 0) continue;
+        if (avl_band_ok(a[2], a[3], a[4])) { bv_dirty(a[2], a[3]); continue; }   /* it would convert: AVL decides it */
+        logf("bv: %s: post-avl: the avenue at (%d,%d) would stay two-way - re-deciding the boulevard at (%d,%d)", who,
+             a[2], a[3], a[0], a[1]);
+        redo[nredo][0] = a[0]; redo[nredo][1] = a[1]; nredo++;
+        memcpy(a, g_bv_att[--g_bv_natt], sizeof g_bv_att[0]);
+    }
+    for (k = 0; k < nredo; k++) bv_run(mgr, redo[k][0], redo[k][1], redo[k][0], redo[k][1], who);   /* -> stock */
+    if (g_bv_dirty[2] < g_bv_dirty[0]) return 0;
+    memcpy(rbox, g_bv_dirty, sizeof g_bv_dirty);
+    g_bv_dirty[0] = g_bv_dirty[1] = 0x7fffffff;
+    g_bv_dirty[2] = g_bv_dirty[3] = -1;
+    return 1;
 }
 
 static void bv_stats(void) {

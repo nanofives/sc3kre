@@ -139,6 +139,21 @@ static int dbv_full(DbvPass *p, int a, int z) {
 #define DBV_RDE(dx, dz) dbv_rd(p, DBV_CELLX(dx, dz), DBV_CELLZ(dx, dz))
 #define DM(a) (1u << ((a) + 2))
 
+/* task bvlanes (AVENUE_LANES.md program rule): the narrowing's lanes are one-way, so the diagonal avenue it goes on
+   into must convert; else the whole band stays stock. Asks avdiag's dry-run dav_band_ok with a cell of the avenue's
+   first full row past the claim (narrow-C claims 2 rows, narrow-A none). Built only once DAV has the predicate
+   (DAV_HAS_BAND_OK, set in sc3netmod_dav.c next to dav_band_ok); before that a narrowing converts unchecked. */
+static int dbv_narrow_ok(DbvPass *p, int z_e, int a_e, int e, int kind) {
+#ifdef DAV_HAS_BAND_OK
+    int j = kind == DK_NARROW_C ? 3 : 1, d = kind == DK_NARROW_C ? 0 : 1;
+    int cx = DBV_CELLX(j + d, j), cz = DBV_CELLZ(j + d, j);
+    return dav_band_ok(DBV_RX(p, cx, cz), DBV_RZ(p, cx, cz));
+#else
+    (void)p; (void)z_e; (void)a_e; (void)e; (void)kind;
+    return 1;
+#endif
+}
+
 static int dbv_end_kind(DbvPass *p, int z_e, int a_e, int e, int nrows) {
     unsigned rr[6];
     int j, d, dz, ok;
@@ -154,8 +169,9 @@ static int dbv_end_kind(DbvPass *p, int z_e, int a_e, int e, int nrows) {
 #define R123 (DM(1) | DM(2) | DM(3))
     if (rr[0] == R012 && rr[1] == (DM(-1) | DM(0) | DM(1))) return DK_BEND_Z;
     for (j = 0, ok = 1; j < 5; j++) ok = ok && rr[j] == R012;
-    if (ok) return DK_NARROW_C;
-    if (rr[0] == R123 && rr[1] == R123 && rr[2] == R123) return DK_NARROW_A;
+    if (ok) return dbv_narrow_ok(p, z_e, a_e, e, DK_NARROW_C) ? DK_NARROW_C : DK_NONE;              /* task bvlanes */
+    if (rr[0] == R123 && rr[1] == R123 && rr[2] == R123)
+        return dbv_narrow_ok(p, z_e, a_e, e, DK_NARROW_A) ? DK_NARROW_A : DK_NONE;                  /* task bvlanes */
     for (d = 0; d <= 2; d++) if (rr[0] == (DM(d) | DM(d + 1)) && rr[1] == rr[0]) return DK_TAPER0 + d;
     if (rr[0] == R012 && rr[1] == (DM(0) | DM(1)) && rr[2] == (DM(0) | DM(1))) return DK_TAPER0S;
     if (rr[0] == R012 && rr[1] == (DM(1) | DM(2)) && rr[2] == (DM(1) | DM(2))) return DK_TAPER1S;

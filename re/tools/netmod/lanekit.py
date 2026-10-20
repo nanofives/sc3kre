@@ -441,6 +441,8 @@ def mirror_spec(spec):
     m = json.loads(json.dumps(spec))
     v = m.get("vehicle") or {}
     for lane in v.get("lanes", []):
+        if lane.get("uk_keep"):            # task avcore: a right-hand lane in every language (one-way avenue halves)
+            continue
         lane["from"], lane["to"] = lane["to"], lane["from"]
         if "via" in lane:
             lane["via"] = lane["via"][::-1]
@@ -511,7 +513,15 @@ def compile_spec(spec, game, lang="ENGLISH", mirror=None):
         for j in range(len(pts) - 1):
             key = given[j] if isinstance(given, list) else given
             if key is None:
-                hits = P.find("veh", xz[j], xz[j + 1])
+                # task bvlanes (adopted into the base by avcore): the spec's own new curves first (several curves may
+                # share end points)
+                own = {int(c["shape"]) * 256 + r for c in spec.get("curves", []) for r in range(4)}
+                hits = P.find("veh", xz[j], xz[j + 1], prefer=own)
+                # task avcore: Paths.find matches x / z only; on a slope keep the curves whose end heights are the
+                # nodes' (a flat curve on a sloped lane makes the car jump)
+                ya, yb = (_pty(pts[j], y)[1], _pty(pts[j + 1], y)[1])
+                hy = [h for h in hits if P.veh[h]["pts"][0][1] == ya and P.veh[h]["pts"][-1][1] == yb]
+                hits = hy or hits
                 if not hits:
                     raise LaneError("vehicle lane %d (%s -> %s): no VPATHATT curve from %s to %s; give \"via\" points "
                                     "or a \"path\" key" % (li + 1, lane["from"], lane["to"], pts[j], pts[j + 1]))

@@ -608,6 +608,7 @@ def compile_pack(stock, pack_dir, man):
            "auto_boulevard_junctions": [],                                                  # task bvx
            "auto_diagonal_boulevards": [],                                                  # task diagbv
            "highway_lines": [],                                                             # task hwcore
+           "avenue_lines": [],                                                              # task avcore
            "texts": [_text(t, langs_text, "%s texts %d" % (pname, n + 1))                   # task hwask
                      for n, t in enumerate(man.get("texts", []))]}
     for n, v in enumerate(man.get("variants", [])):
@@ -775,14 +776,17 @@ def compile_pack(stock, pack_dir, man):
         roles = ("outer", "middle", "nose", "nose2", "junction_entry", "junction_middle", "junction_far")
         ids = [a.get("pieces", {}).get(r) for r in roles] + list(a.get("cap", [])) + \
             [p for k in a.get("taper", {}) for p in a["taper"][k]] + \
-            [p for k in a.get("avenue_narrow", {}) for p in a["avenue_narrow"][k]]
+            [p for k in a.get("avenue_narrow", {}) for p in a["avenue_narrow"][k]] + \
+            list(a.get("junction_t", []))                               # task bvlanes: T entry / middle rows
         for p in ids:
             if p not in vids or vids[p]["net"] != "ROAD":
                 raise NetpackError("%s: piece %s must be a ROAD variant declared in this package" % (where, p))
+        if a.get("junction_t") and len(a["junction_t"]) != 2:
+            raise NetpackError("%s: junction_t = [entry row, middle row] of a T" % where)      # task bvlanes
         out["auto_boulevards"].append({"pieces": [a["pieces"][r] for r in roles], "cap": list(a.get("cap", [])),
                                        "taper": {int(k): list(v) for k, v in a.get("taper", {}).items()},
                                        "avenue_narrow": {int(k): list(v) for k, v in a.get("avenue_narrow", {}).items()},
-                                       "where": where})
+                                       "junction_t": list(a.get("junction_t", [])), "where": where})
     for n, a in enumerate(man.get("auto_big_roundabouts", [])):      # task bigrbt: sc3netmod RBT9 block
         where = "%s auto_big_roundabouts %d" % (pname, n + 1)
         if len(a.get("side", [])) != 4 or len(a.get("corner", [])) != 9:
@@ -800,6 +804,13 @@ def compile_pack(stock, pack_dir, man):
         raise NetpackError("%s: at most one auto_big_roundabouts entry (sc3netmod applies one set)" % pname)
     for n, a in enumerate(man.get("auto_boulevard_junctions", [])):  # task bvx: sc3netmod BVX (bvx.py), avx's shape
         out["auto_boulevard_junctions"].append(compile_avx(a, vids, "%s auto_boulevard_junctions %d" % (pname, n + 1)))
+        cells = []                                                   # task bvlanes: `bvxc w h NESW i j piece state`
+        for ln in a.get("cells", []):
+            t = ln.split()
+            if len(t) != 8 or t[0] != "bvxc" or int(t[6]) not in vids or vids[int(t[6])]["net"] != "ROAD":
+                raise NetpackError("%s auto_boulevard_junctions: bad cell line '%s'" % (pname, ln))
+            cells.append(ln)
+        out["auto_boulevard_junctions"][-1]["cells"] = cells
     if len(out["auto_boulevard_junctions"]) > 1:
         raise NetpackError("%s: at most one auto_boulevard_junctions entry (sc3netmod applies one set)" % pname)
     for n, a in enumerate(man.get("auto_diagonal_boulevards", [])):  # task diagbv: sc3netmod DBV block (diagbv.py)
@@ -814,6 +825,15 @@ def compile_pack(stock, pack_dir, man):
             raise NetpackError("%s highway_lines %d: hwyp names a piece that is not a HWAY variant of this package" %
                                (pname, n + 1))
         out["highway_lines"].append(ln)
+    for n, ln in enumerate(man.get("avenue_lines", [])):             # task avcore: sc3netmod AVL block (raw lines)
+        tok = ln.split()                                             # avls / avlu / avlc <piece> ..., avlj <piece> <NESW>
+        if not tok or tok[0] not in ("avls", "avlu", "avlc", "avlj") or len(tok) < 2 or not tok[1].isdigit():
+            raise NetpackError("%s avenue_lines %d: '%s' is not an avls / avlu / avlc / avlj line" % (pname, n + 1, ln))
+        nets = ("ROAD", "HWAY") if tok[0] == "avlj" else ("ROAD",)     # avlj: hwave's ground row is HWAY (avmisc)
+        if int(tok[1]) not in vids or vids[int(tok[1])]["net"] not in nets:
+            raise NetpackError("%s avenue_lines %d: %s names a piece that is not a %s variant of this package" %
+                               (pname, n + 1, tok[0], " / ".join(nets)))
+        out["avenue_lines"].append(ln)
     out["ramps"] = []
     if man.get("ramps"):                                 # hardcoded SIMNTWRK tables (netramp.py, NET_RAMPS.md)
         try:
@@ -1142,7 +1162,7 @@ def merge(stock, packs):
         if c["variants"] or c["ramps"] or mine or c["auto_roundabouts"] or c["auto_diagonal_avenues"] or \
                 c.get("auto_avenue_junctions") or c.get("auto_boulevards") or c.get("auto_big_roundabouts") or \
                 c.get("auto_boulevard_junctions") or c.get("auto_diagonal_boulevards") or \
-                c.get("highway_lines"):                         # avx, bv, bigrbt, bvx, diagbv, hwcore
+                c.get("highway_lines") or c.get("avenue_lines"):  # avx, bv, bigrbt, bvx, diagbv, hwcore, avcore
             tables[c["name"]] = ("# netpack %s: <variant id> <base id>, read by sc3netmod.dll\r\n" % c["name"]).encode() + \
                 b"".join(b"%d %d\r\n" % (v["id"], v["base"]) for v in sorted(c["variants"], key=lambda v: v["id"])) + \
                 RAMP.table_lines(c["ramps"]) + TPL.table_lines(mine) + \
@@ -1161,7 +1181,8 @@ def merge(stock, packs):
                 b"".join(b"bvp %d %d %d %d %d %d %d\r\n" % tuple(a["pieces"]) +
                          (b"bvc %d %d %d\r\n" % tuple(a["cap"]) if a["cap"] else b"") +
                          b"".join(b"bvt %d %s\r\n" % (k, b" ".join(b"%d" % q for q in v)) for k, v in sorted(a["taper"].items())) +
-                         b"".join(b"bva %d %s\r\n" % (k, b" ".join(b"%d" % q for q in v)) for k, v in sorted(a.get("avenue_narrow", {}).items()))
+                         b"".join(b"bva %d %s\r\n" % (k, b" ".join(b"%d" % q for q in v)) for k, v in sorted(a.get("avenue_narrow", {}).items())) +
+                         (b"bvj %d %d\r\n" % tuple(a["junction_t"]) if a.get("junction_t") else b"")   # task bvlanes
                          for a in c.get("auto_boulevards", [])) + \
                 b"".join(b"rbt9 %s %d %d\r\n" % (r.encode(), k, p) for a in c.get("auto_big_roundabouts", [])
                          for r, k, p in a["roles"]) + \
@@ -1172,7 +1193,8 @@ def merge(stock, packs):
                                   for k, cells in sorted(a["stamps"].items(), key=lambda t: DBV_KIND_NO[t[0]])
                                   for cell in cells)
                          for a in c.get("auto_diagonal_boulevards", [])) + \
-                b"".join(b"%s\r\n" % ln.encode() for ln in c.get("highway_lines", []))              # task hwcore
+                b"".join(b"%s\r\n" % ln.encode() for ln in c.get("highway_lines", [])) + \
+                b"".join(b"%s\r\n" % ln.encode() for ln in c.get("avenue_lines", []))               # task hwcore, avcore
                 # task diagave, avx, boulevard, bigrbt, diagx, bvx, diagbv
 
     # ---- report + checks that need the merged result
@@ -1258,7 +1280,8 @@ def avx_table_lines(entries):
 def bvx_table_lines(entries):
     """task bvx: `bvxb <piece> <NESW>` and `bvxa <piece> <1 E / 3 W>` lines (sc3netmod_bvx.c)"""
     return b"".join(b"bvxb %d %s\r\n" % (b["piece"], b["edges"].encode()) for a in entries for b in a["box"]) + \
-        b"".join(b"bvxa %d %d\r\n" % (b["piece"], 1 if b["nose"] == "E" else 3) for a in entries for b in a["arm"])
+        b"".join(b"bvxa %d %d\r\n" % (b["piece"], 1 if b["nose"] == "E" else 3) for a in entries for b in a["arm"]) + \
+        b"".join(b"%s\r\n" % ln.encode() for a in entries for ln in a.get("cells", []))     # task bvlanes
 
 
 def apply_ini(pak, edits):

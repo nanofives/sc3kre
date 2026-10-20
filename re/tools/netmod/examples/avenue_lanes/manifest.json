@@ -1,0 +1,275 @@
+{
+ "netpack": 1,
+ "name": "avenue_lanes",
+ "version": "0.1.0",
+ "author": "netmod (task avcore)",
+ "description": "One-way avenue halves (owner 2026-10-19: 2 lanes each way, right-hand traffic everywhere). sc3netmod's AVL block writes these on an avenue band it can convert whole (re/analysis/AVENUE_LANES.md): 21700 the straight half (base 11204, both lanes in the half's direction), 21701 the avenue end U-turn quarter (base 11203). 21710..21725 a stock rail / power line / highway crossing or a road slope on a half, one way (two ids per base, one per direction). All save as their base at the same state, so a game without the mod loads the stock avenue.",
+ "variants": [
+  {
+   "id": 21700,
+   "base": 11204,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way)",
+    "ENGLISH": "Avenida (un sentido)"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11204,
+    "png_dir": "art/11204"
+   }
+  },
+  {
+   "id": 21701,
+   "base": 11203,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue end",
+    "ENGLISH": "Fin de avenida"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11203,
+    "png_dir": "art/11203"
+   }
+  },
+  {
+   "id": 21710,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way), rail crossing"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21711,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way), rail crossing"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21712,
+   "base": 67,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way), power line crossing"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21713,
+   "base": 67,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way), power line crossing"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21714,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way), highway crossing"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21715,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way), highway crossing"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21716,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way), under a highway"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21717,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way), under a highway"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21718,
+   "base": 31,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way), slope"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21719,
+   "base": 31,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way), slope"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21720,
+   "base": 32,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way), slope"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21721,
+   "base": 32,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way), slope"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21722,
+   "base": 11201,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way), slope"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21723,
+   "base": 11201,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way), slope"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21724,
+   "base": 11202,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way), slope"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21725,
+   "base": 11202,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way), slope"
+   },
+   "trblkatt": "copy_base"
+  }
+ ],
+ "lanes": [
+  {
+   "piece": 21700,
+   "spec": "avl_21700.lanes.json"
+  },
+  {
+   "piece": 21701,
+   "spec": "avl_21701.lanes.json"
+  },
+  {
+   "piece": 21710,
+   "spec": "avl_21710.lanes.json"
+  },
+  {
+   "piece": 21711,
+   "spec": "avl_21711.lanes.json"
+  },
+  {
+   "piece": 21712,
+   "spec": "avl_21712.lanes.json"
+  },
+  {
+   "piece": 21713,
+   "spec": "avl_21713.lanes.json"
+  },
+  {
+   "piece": 21714,
+   "spec": "avl_21714.lanes.json"
+  },
+  {
+   "piece": 21715,
+   "spec": "avl_21715.lanes.json"
+  },
+  {
+   "piece": 21716,
+   "spec": "avl_21716.lanes.json"
+  },
+  {
+   "piece": 21717,
+   "spec": "avl_21717.lanes.json"
+  },
+  {
+   "piece": 21718,
+   "spec": "avl_21718.lanes.json"
+  },
+  {
+   "piece": 21719,
+   "spec": "avl_21719.lanes.json"
+  },
+  {
+   "piece": 21720,
+   "spec": "avl_21720.lanes.json"
+  },
+  {
+   "piece": 21721,
+   "spec": "avl_21721.lanes.json"
+  },
+  {
+   "piece": 21722,
+   "spec": "avl_21722.lanes.json"
+  },
+  {
+   "piece": 21723,
+   "spec": "avl_21723.lanes.json"
+  },
+  {
+   "piece": 21724,
+   "spec": "avl_21724.lanes.json"
+  },
+  {
+   "piece": 21725,
+   "spec": "avl_21725.lanes.json"
+  }
+ ],
+ "avenue_lines": [
+  "avls 21700",
+  "avlu 21701",
+  "avlc 21710 69 1",
+  "avlc 21711 69 3",
+  "avlc 21712 67 1",
+  "avlc 21713 67 3",
+  "avlc 21714 11258 1",
+  "avlc 21715 11258 3",
+  "avlc 21716 15098 2",
+  "avlc 21717 15098 0",
+  "avlc 21718 31 2",
+  "avlc 21719 31 0",
+  "avlc 21720 32 1",
+  "avlc 21721 32 3",
+  "avlc 21722 11201 2",
+  "avlc 21723 11201 0",
+  "avlc 21724 11202 1",
+  "avlc 21725 11202 3"
+ ]
+}

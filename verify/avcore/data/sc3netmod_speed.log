@@ -1,0 +1,529 @@
+[    0.691 ms][tid bed0] ### sc3netmod loaded
+[   16.090 ms][tid bed0] overlay: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\, 43 file(s)
+[   20.037 ms][tid bed0] overlay: 21 import slot(s) hooked over 38 module(s)
+[   20.107 ms][tid bed0] overlay: ON (43 file(s))
+[   37.871 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Sys\SYS.PAK" -> overlay exists (SC3U.exe)
+[   38.066 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SC3U.exe)
+[   47.569 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Sys\SYS.PAK" -> overlay exists (SC3U.exe)
+[   58.236 ms][tid 9d1c] overlay: FindFirstFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\Sprites\*.DAT" -> merged listing, 31 entries incl. 1 from the overlay (SC3U.exe)
+[   58.836 ms][tid 9d1c] overlay: FindFirstFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\Sprites\*.DAT" -> merged listing, 31 entries incl. 1 from the overlay (SC3U.exe)
+[   59.138 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Sys\SYS.PAK" -> overlay exists (SC3U.exe)
+[   73.043 ms][tid 9d1c] overlay: 3 import slot(s) hooked over 39 module(s)
+[   84.958 ms][tid 9d1c] overlay: 1 import slot(s) hooked over 41 module(s)
+[  105.823 ms][tid 9d1c] overlay: 1 import slot(s) hooked over 46 module(s)
+[  111.634 ms][tid 9d1c] overlay: 6 import slot(s) hooked over 47 module(s)
+[  116.840 ms][tid 9d1c] overlay: 3 import slot(s) hooked over 48 module(s)
+[  123.603 ms][tid 9d1c] overlay: 2 import slot(s) hooked over 49 module(s)
+[  135.238 ms][tid 9d1c] overlay: 3 import slot(s) hooked over 51 module(s)
+[  142.414 ms][tid 9d1c] overlay: 6 import slot(s) hooked over 52 module(s)
+[  173.966 ms][tid 9d1c] overlay: 6 import slot(s) hooked over 55 module(s)
+[  183.586 ms][tid 9d1c] overlay: 3 import slot(s) hooked over 55 module(s)
+[  192.283 ms][tid 9d1c] overlay: 3 import slot(s) hooked over 56 module(s)
+[  198.999 ms][tid 9d1c] overlay: 6 import slot(s) hooked over 57 module(s)
+[  207.811 ms][tid 9d1c] overlay: 1 import slot(s) hooked over 58 module(s)
+[  214.316 ms][tid 9d1c] overlay: 1 import slot(s) hooked over 59 module(s)
+[  222.922 ms][tid 9d1c] overlay: 3 import slot(s) hooked over 60 module(s)
+[  231.183 ms][tid 9d1c] overlay: 3 import slot(s) hooked over 61 module(s)
+[  240.381 ms][tid 9d1c] overlay: 3 import slot(s) hooked over 62 module(s)
+[  247.864 ms][tid 9d1c] overlay: 6 import slot(s) hooked over 63 module(s)
+[  256.856 ms][tid 9d1c] overlay: 3 import slot(s) hooked over 64 module(s)
+[  264.558 ms][tid 9d1c] overlay: 3 import slot(s) hooked over 65 module(s)
+[  264.687 ms][tid 6424] table: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: variant 21700 -> base 11204
+[  264.711 ms][tid 6424] table: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: variant 21701 -> base 11203
+[  264.719 ms][tid 6424] table: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: variant 21710 -> base 69
+[  264.726 ms][tid 6424] table: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: variant 21711 -> base 69
+[  264.739 ms][tid 6424] table: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: variant 21712 -> base 67
+[  264.746 ms][tid 6424] table: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: variant 21713 -> base 67
+[  264.753 ms][tid 6424] table: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: variant 21714 -> base 11258
+[  264.761 ms][tid 6424] table: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: variant 21715 -> base 11258
+[  265.018 ms][tid 6424] table: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: variant 21716 -> base 15098
+[  265.032 ms][tid 6424] table: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: variant 21717 -> base 15098
+[  265.041 ms][tid 6424] table: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: variant 21718 -> base 31
+[  265.049 ms][tid 6424] table: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: variant 21719 -> base 31
+[  265.063 ms][tid 6424] table: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: variant 21720 -> base 32
+[  265.075 ms][tid 6424] table: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: variant 21721 -> base 32
+[  265.083 ms][tid 6424] table: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: variant 21722 -> base 11201
+[  265.091 ms][tid 6424] table: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: variant 21723 -> base 11201
+[  265.102 ms][tid 6424] table: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: variant 21724 -> base 11202
+[  265.109 ms][tid 6424] table: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: variant 21725 -> base 11202
+[  265.297 ms][tid 6424] table: 1 table file(s), 18 variant(s)
+[  265.849 ms][tid 6424] ramp: 0 slot(s) changed, 0 line(s) refused, 0 variant id(s) classified as their base
+[  266.655 ms][tid 6424] tmpl: no templates in the tables
+[  267.611 ms][tid 6424] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: one-way straight half piece 21700
+[  267.611 ms][tid 900c] rampfirst: on
+[  267.651 ms][tid 6424] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: end U-turn piece 21701
+[  267.680 ms][tid 6424] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: one-way 21710 on base 69, lanes toward side 1 at state 0
+[  267.692 ms][tid 6424] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: one-way 21711 on base 69, lanes toward side 3 at state 0
+[  267.700 ms][tid 6424] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: one-way 21712 on base 67, lanes toward side 1 at state 0
+[  267.710 ms][tid 6424] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: one-way 21713 on base 67, lanes toward side 3 at state 0
+[  267.719 ms][tid 6424] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: one-way 21714 on base 11258, lanes toward side 1 at state 0
+[  267.727 ms][tid 6424] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: one-way 21715 on base 11258, lanes toward side 3 at state 0
+[  267.735 ms][tid 6424] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: one-way 21716 on base 15098, lanes toward side 2 at state 0
+[  267.744 ms][tid 6424] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: one-way 21717 on base 15098, lanes toward side 0 at state 0
+[  267.752 ms][tid 6424] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: one-way 21718 on base 31, lanes toward side 2 at state 0
+[  267.760 ms][tid 6424] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: one-way 21719 on base 31, lanes toward side 0 at state 0
+[  267.769 ms][tid 6424] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: one-way 21720 on base 32, lanes toward side 1 at state 0
+[  267.888 ms][tid 6424] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: one-way 21721 on base 32, lanes toward side 3 at state 0
+[  267.901 ms][tid 6424] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: one-way 21722 on base 11201, lanes toward side 2 at state 0
+[  267.908 ms][tid 6424] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: one-way 21723 on base 11201, lanes toward side 0 at state 0
+[  267.917 ms][tid 6424] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: one-way 21724 on base 11202, lanes toward side 1 at state 0
+[  267.925 ms][tid 6424] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: one-way 21725 on base 11202, lanes toward side 3 at state 0
+[  267.956 ms][tid 6424] avx: no avenue junctions in the tables
+[  267.964 ms][tid 6424] rbt: no automatic roundabout in the tables
+[  267.971 ms][tid 6424] dav: no automatic diagonal avenue in the tables
+[  267.988 ms][tid 6424] hwy: no highway-program pieces in the tables
+[  268.080 ms][tid 6424] avl: one-way avenue halves on (straight 21700)
+[  268.091 ms][tid 6424] rbt: hooked the retile pass FUN_1001547b (entry) and the city load (manager vt+0x1c); piece 0, min 3 arm(s), arm-less quarter 0; diagonal avenues off (inner 0 0 0)
+[  268.228 ms][tid 6424] CROSS: wrapped FUN_1001ab26 road  id list (DAT_10032400, idx 0x0a)
+[  268.290 ms][tid 6424] CROSS: wrapped FUN_1001ac2b rail  id list (DAT_10032404, idx 0x0c)
+[  268.324 ms][tid 6424] CROSS: wrapped FUN_1001abb2 power id list (DAT_10032408, idx 0x0f)
+[  268.355 ms][tid 6424] CROSS: wrapped FUN_1001acbe hway  id list (DAT_1003240c, idx 0x0b)
+[  268.379 ms][tid 6424] CROSS: wrapped FUN_1001ad60 flags 0x8800 or id 0xe/0xf (DAT_10032418)
+[  268.402 ms][tid 6424] CROSS: wrapped FUN_1001ade7 flags 0x20800 or id 0xe/0xf (DAT_1003241c)
+[  268.426 ms][tid 6424] CROSS: wrapped FUN_1001ae36 flags 0x10800 or id 0xe/0xf (DAT_10032424)
+[  268.453 ms][tid 6424] CROSS: wrapped FUN_1001ae85 rotation list (DAT_10032430, idx 0x10)
+[  268.478 ms][tid 6424] CROSS: wrapped FUN_1001afc7 rotation list (DAT_1003243c, idx 0x11)
+[  268.501 ms][tid 6424] CROSS: wrapped FUN_1001af19 rotation list (DAT_10032434, idx 0x12)
+[  268.523 ms][tid 6424] CROSS: wrapped FUN_1001b07c rotation list (DAT_10032438, idx 0x15)
+[  268.544 ms][tid 6424] CROSS: wrapped FUN_1001b10c rotation list (DAT_10032448, idx 0x16)
+[  268.566 ms][tid 6424] CROSS: wrapped FUN_1001b248 rotation list (DAT_10032454, idx 0x17)
+[  268.588 ms][tid 6424] CROSS: wrapped FUN_1001b1a1 rotation list (DAT_1003244c, idx 0x18)
+[  268.609 ms][tid 6424] CROSS: wrapped FUN_1001b2e0 rotation list (DAT_10032450, idx 0x1b)
+[  269.529 ms][tid 6424] INHERIT: highway id sites 29/29, removal id sites 7/7, collapse arg wrapped
+[  269.668 ms][tid 6424] XCROSS: no crossing table entries, not patched
+[  269.683 ms][tid 6424] ### READY: SIMNTWRK at 0x03B90000, variants=18, cross=1 (16 site(s)), savebase=1 (patched), load=patched
+[  272.916 ms][tid 9d1c] overlay: 3 import slot(s) hooked over 66 module(s)
+[  281.808 ms][tid 9d1c] overlay: 3 import slot(s) hooked over 67 module(s)
+[  296.895 ms][tid 9d1c] overlay: 6 import slot(s) hooked over 68 module(s)
+[  303.472 ms][tid 900c] lanedensity: ON, mode all pieces (SimTransit at 0x02740000: step 0x1000755e, arrival call 0x100071eb)
+[  305.582 ms][tid 9d1c] overlay: 3 import slot(s) hooked over 69 module(s)
+[  315.992 ms][tid 9d1c] overlay: 6 import slot(s) hooked over 70 module(s)
+[  324.709 ms][tid 9d1c] overlay: 3 import slot(s) hooked over 71 module(s)
+[  333.005 ms][tid 9d1c] overlay: 3 import slot(s) hooked over 72 module(s)
+[  343.346 ms][tid 9d1c] overlay: 3 import slot(s) hooked over 73 module(s)
+[  844.200 ms][tid 9d1c] overlay: 19 import slot(s) hooked over 99 module(s)
+[ 1607.352 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (simvariables.dll)
+[ 1607.556 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (simvariables.dll)
+[ 1698.294 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\SSimData\English\VPathAtt.IXF" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\SSimData\ENGLISH\VPATHATT.IXF" ok (GZResourceD.dll)
+[ 1704.571 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\SSimData\English\VPathAtt.IXF" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\SSimData\ENGLISH\VPATHATT.IXF" ok (GZResourceD.dll)
+[ 1709.946 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\SSimData\English\TrBlkAtt.IXF" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\SSimData\ENGLISH\TRBLKATT.IXF" ok (GZResourceD.dll)
+[ 1743.587 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\SSimData\English\TrBlkAtt.IXF" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\SSimData\ENGLISH\TRBLKATT.IXF" ok (GZResourceD.dll)
+[ 1776.665 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\Sprites\CSAttrib_Korea.IXF" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\Sprites\CSAttrib_Korea.IXF" ok (GZResourceD.dll)
+[ 1799.078 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\Sprites\CSAttrib_Korea.IXF" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\Sprites\CSAttrib_Korea.IXF" ok (GZResourceD.dll)
+[ 1799.706 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\Occupant\OccupantAttribs.IXF" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\Occupant\OccupantAttribs.IXF" ok (GZResourceD.dll)
+[ 1814.204 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\Occupant\OccupantAttribs.IXF" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\Occupant\OccupantAttribs.IXF" ok (GZResourceD.dll)
+[ 1816.286 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\Occupant\OccupantAttribs_Korea.IXF" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\Occupant\OccupantAttribs_Korea.IXF" ok (GZResourceD.dll)
+[ 1818.562 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\Occupant\OccupantAttribs_Korea.IXF" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\Occupant\OccupantAttribs_Korea.IXF" ok (GZResourceD.dll)
+[ 1819.004 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\Text\English\SC3StringsNetpack.IXF" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\Text\ENGLISH\SC3StringsNetpack.IXF" ok (GZResourceD.dll)
+[ 1823.215 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\Text\English\SC3StringsNetpack.IXF" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\Text\ENGLISH\SC3StringsNetpack.IXF" ok (GZResourceD.dll)
+[ 1845.385 ms][tid 9d1c] overlay: 14 import slot(s) hooked over 110 module(s)
+[ 1893.711 ms][tid 9d1c] overlay: FindFirstFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\Text\English\*.*" -> merged listing, 82 entries incl. 1 from the overlay (SC3U.exe)
+[ 2318.559 ms][tid 6424] rbt: window 0x045F0434 subclassed for the load pass
+[ 2911.769 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\Sprites\4E3D0001_netpack.DAT" -> overlay exists (SIMSPR.DLL)
+[ 2911.921 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\Sprites\4E3D0001_netpack.DAT" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\Sprites\4E3D0001_netpack.DAT" ok (SIMSPR.DLL)
+[ 2920.287 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\Sprites\4E3D0001_netpack.DAT" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\Sprites\4E3D0001_netpack.DAT" ok (SIMSPR.DLL)
+[ 2920.637 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMINIT.DLL)
+[ 2920.686 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMINIT.DLL)
+[ 2923.684 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMINIT.DLL)
+[ 2923.747 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMINIT.DLL)
+[ 2929.725 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Sys\SYS.PAK" -> overlay exists (SIMINIT.DLL)
+[ 2929.778 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMINIT.DLL)
+[ 3421.390 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\sys\SYS.PAK" -> overlay exists (SIMGEOM.DLL)
+[ 3421.734 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMGEOM.DLL)
+[ 3423.125 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Sys\SYS.PAK" -> overlay exists (SIMGEOM.DLL)
+[ 3423.206 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMGEOM.DLL)
+[ 3424.332 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\ROAD_GRND_Set.txt" -> overlay exists (SIMNTWRK.DLL)
+[ 3424.415 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\ROAD_GRND_Set.txt" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\TilingRules\ROAD_GRND_Set.txt" ok (SIMNTWRK.DLL)
+[ 3425.649 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\HWAY_GRND_Set.txt" -> overlay exists (SIMNTWRK.DLL)
+[ 3425.869 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\HWAY_GRND_Set.txt" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\TilingRules\HWAY_GRND_Set.txt" ok (SIMNTWRK.DLL)
+[ 3427.224 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\RAIL_GRND_Set.txt" -> overlay exists (SIMNTWRK.DLL)
+[ 3427.323 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\RAIL_GRND_Set.txt" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\TilingRules\RAIL_GRND_Set.txt" ok (SIMNTWRK.DLL)
+[ 3429.535 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\POWR_GRND_Set.txt" -> overlay exists (SIMNTWRK.DLL)
+[ 3429.784 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\POWR_GRND_Set.txt" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\TilingRules\POWR_GRND_Set.txt" ok (SIMNTWRK.DLL)
+[ 3431.250 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\ROAD_GRND_Convert.txt" -> overlay exists (SIMNTWRK.DLL)
+[ 3431.317 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\ROAD_GRND_Convert.txt" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\TilingRules\ROAD_GRND_Convert.txt" ok (SIMNTWRK.DLL)
+[ 3431.931 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\HWAY_GRND_Convert.txt" -> overlay exists (SIMNTWRK.DLL)
+[ 3431.993 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\HWAY_GRND_Convert.txt" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\TilingRules\HWAY_GRND_Convert.txt" ok (SIMNTWRK.DLL)
+[ 3432.471 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\RAIL_GRND_Convert.txt" -> overlay exists (SIMNTWRK.DLL)
+[ 3432.529 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\RAIL_GRND_Convert.txt" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\TilingRules\RAIL_GRND_Convert.txt" ok (SIMNTWRK.DLL)
+[ 3433.943 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\POWR_GRND_Convert.txt" -> overlay exists (SIMNTWRK.DLL)
+[ 3434.009 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\POWR_GRND_Convert.txt" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\TilingRules\POWR_GRND_Convert.txt" ok (SIMNTWRK.DLL)
+[ 3434.930 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\ROAD_GRND_Complex_Convert.txt" -> overlay exists (SIMNTWRK.DLL)
+[ 3435.034 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\ROAD_GRND_Complex_Convert.txt" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\TilingRules\ROAD_GRND_Complex_Convert.txt" ok (SIMNTWRK.DLL)
+[ 3435.689 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\HWAY_GRND_Complex_Convert.txt" -> overlay exists (SIMNTWRK.DLL)
+[ 3435.796 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\HWAY_GRND_Complex_Convert.txt" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\TilingRules\HWAY_GRND_Complex_Convert.txt" ok (SIMNTWRK.DLL)
+[ 3436.401 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\RAIL_GRND_Complex_Convert.txt" -> overlay exists (SIMNTWRK.DLL)
+[ 3436.481 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\RAIL_GRND_Complex_Convert.txt" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\TilingRules\RAIL_GRND_Complex_Convert.txt" ok (SIMNTWRK.DLL)
+[ 3437.551 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\POWR_GRND_Complex_Convert.txt" -> overlay exists (SIMNTWRK.DLL)
+[ 3437.675 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\POWR_GRND_Complex_Convert.txt" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\TilingRules\POWR_GRND_Complex_Convert.txt" ok (SIMNTWRK.DLL)
+[ 3438.718 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\Collapse.txt" -> overlay exists (SIMNTWRK.DLL)
+[ 3438.823 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\Collapse.txt" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\TilingRules\Collapse.txt" ok (SIMNTWRK.DLL)
+[ 3439.597 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\Road_GRND_Protected.txt" -> overlay exists (SIMNTWRK.DLL)
+[ 3439.731 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\Road_GRND_Protected.txt" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\TilingRules\ROAD_GRND_Protected.txt" ok (SIMNTWRK.DLL)
+[ 3440.099 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\HWAY_GRND_Protected.txt" -> overlay exists (SIMNTWRK.DLL)
+[ 3440.167 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\HWAY_GRND_Protected.txt" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\TilingRules\HWAY_GRND_Protected.txt" ok (SIMNTWRK.DLL)
+[ 3440.722 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\RAIL_GRND_Protected.txt" -> overlay exists (SIMNTWRK.DLL)
+[ 3440.792 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\RAIL_GRND_Protected.txt" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\TilingRules\RAIL_GRND_Protected.txt" ok (SIMNTWRK.DLL)
+[ 3441.613 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\POWR_GRND_Protected.txt" -> overlay exists (SIMNTWRK.DLL)
+[ 3441.689 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\TilingRules\POWR_GRND_Protected.txt" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Res\TilingRules\POWR_GRND_Protected.txt" ok (SIMNTWRK.DLL)
+[ 3464.896 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMDSTR.DLL)
+[ 3465.111 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMDSTR.DLL)
+[ 3466.063 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMDSTR.DLL)
+[ 3466.296 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMDSTR.DLL)
+[ 3467.488 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMDSTR.DLL)
+[ 3467.635 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMDSTR.DLL)
+[ 3469.045 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMDSTR.DLL)
+[ 3469.160 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMDSTR.DLL)
+[ 3469.910 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMDSTR.DLL)
+[ 3470.272 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMDSTR.DLL)
+[ 3476.435 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMDSTR.DLL)
+[ 3476.517 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMDSTR.DLL)
+[ 3487.330 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMDSTR.DLL)
+[ 3487.488 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMDSTR.DLL)
+[ 3495.461 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMDSTR.DLL)
+[ 3495.754 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMDSTR.DLL)
+[ 3505.763 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMMISC.DLL)
+[ 3505.967 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMMISC.DLL)
+[ 3510.312 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 3510.456 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 3514.203 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMMISC.DLL)
+[ 3514.291 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMMISC.DLL)
+[ 3516.735 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMECO.DLL)
+[ 3516.780 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMECO.DLL)
+[ 3522.793 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMECO.DLL)
+[ 3522.876 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMECO.DLL)
+[ 3523.836 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMECO.DLL)
+[ 3524.415 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMSERV.DLL)
+[ 3524.476 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMSERV.DLL)
+[ 3526.291 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMSERV.DLL)
+[ 3526.451 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMSERV.DLL)
+[ 3527.843 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMSERV.DLL)
+[ 3527.953 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMSERV.DLL)
+[ 3528.790 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 3528.887 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 3536.866 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 3537.350 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 3539.102 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 3539.187 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 3539.809 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 3539.871 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 3544.778 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (STRTSIM.DLL)
+[ 3545.158 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (STRTSIM.DLL)
+[ 3547.982 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (STRTSIM.DLL)
+[ 3548.088 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (STRTSIM.DLL)
+[ 3550.639 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Sys\SYS.PAK" -> overlay exists (SimTransit.dll)
+[ 3550.776 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SimTransit.dll)
+[ 3563.951 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMMISC.DLL)
+[ 3564.344 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMMISC.DLL)
+[ 3571.949 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Sys\SYS.PAK" -> overlay exists (SIMMISC.DLL)
+[ 3572.666 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMMISC.DLL)
+[ 3573.951 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMUTIL.DLL)
+[ 3574.034 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMUTIL.DLL)
+[ 3574.592 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMUTIL.DLL)
+[ 3574.663 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMUTIL.DLL)
+[ 3575.122 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMUTIL.DLL)
+[ 3575.171 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMUTIL.DLL)
+[ 3578.021 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMSERV.DLL)
+[ 3578.086 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMSERV.DLL)
+[ 3580.170 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SCENARIO.DLL)
+[ 3580.244 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SCENARIO.DLL)
+[ 3582.775 ms][tid 9d1c] overlay: FindFirstFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\Sprites\*.DAT" -> merged listing, 31 entries incl. 1 from the overlay (SIMSPR.DLL)
+[ 3583.079 ms][tid 9d1c] overlay: FindFirstFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Res\Sprites\*.DAT" -> merged listing, 31 entries incl. 1 from the overlay (SIMSPR.DLL)
+[ 4244.346 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\Sys.pak" -> overlay exists (SIMGEOM.DLL)
+[ 4244.548 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\Sys.pak" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMGEOM.DLL)
+[ 4871.366 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 4871.529 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 4872.469 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 4872.664 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 4875.506 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 4875.626 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 4878.253 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 4878.319 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 4897.658 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 4897.788 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 4920.891 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 4921.139 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 4926.826 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 4926.922 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 4931.620 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 4931.882 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 4939.156 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 4939.320 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 4944.177 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 4944.319 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 4947.072 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 4947.322 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 4953.071 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 4953.468 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 4956.920 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 4956.983 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 4963.270 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 4963.539 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 4968.885 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 4969.090 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 4976.687 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 4976.837 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 5232.365 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Sys\SYS.PAK" -> overlay exists (SIMMISC.DLL)
+[ 5232.593 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMMISC.DLL)
+[ 6489.729 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMADV.DLL)
+[ 6489.868 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMADV.DLL)
+[ 6545.229 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMADV.DLL)
+[ 6545.408 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMADV.DLL)
+[ 6607.579 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMADV.DLL)
+[ 6607.700 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMADV.DLL)
+[ 6667.074 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMADV.DLL)
+[ 6667.288 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMADV.DLL)
+[ 6728.249 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMADV.DLL)
+[ 6728.437 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMADV.DLL)
+[ 6800.475 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMADV.DLL)
+[ 6800.663 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMADV.DLL)
+[ 6868.279 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMADV.DLL)
+[ 6868.427 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMADV.DLL)
+[ 6927.563 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMADV.DLL)
+[ 6927.796 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMADV.DLL)
+[ 7154.076 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMUTIL.DLL)
+[ 7154.626 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMUTIL.DLL)
+[ 7195.106 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMUTIL.DLL)
+[ 7195.225 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMUTIL.DLL)
+[ 7208.867 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SimTransit.dll)
+[ 7209.088 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SimTransit.dll)
+[ 7239.975 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 7240.117 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 7274.189 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 7274.408 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 7284.910 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 7285.136 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 7316.089 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMSERV.DLL)
+[ 7316.291 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMSERV.DLL)
+[ 7330.609 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMSERV.DLL)
+[ 7330.723 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMSERV.DLL)
+[ 7363.184 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 7363.366 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 7391.549 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SimTransit.dll)
+[ 7391.673 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SimTransit.dll)
+[ 7398.778 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMUTIL.DLL)
+[ 7398.910 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMUTIL.DLL)
+[ 7414.111 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SimTransit.dll)
+[ 7414.532 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SimTransit.dll)
+[ 7421.883 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMRCI.DLL)
+[ 7422.023 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMRCI.DLL)
+[ 7548.152 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMECO.DLL)
+[ 7548.328 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMECO.DLL)
+[ 7566.725 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMUTIL.DLL)
+[ 7566.848 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMUTIL.DLL)
+[ 7633.869 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMSERV.DLL)
+[ 7634.049 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMSERV.DLL)
+[ 8355.705 ms][tid 9d1c] rbt: city load (manager vt+0x1c) [tid 9d1c]
+[ 8355.810 ms][tid 9d1c] load: no variant section
+[ 8640.210 ms][tid 9d1c] rbt: city load returned 1 [tid 9d1c]; full-map pass posted to the game window 0x045F0434
+[10318.349 ms][tid 900c] rampfirst: on, ramp offers=0, other road candidates closed=0
+[10318.463 ms][tid 900c] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0 refused-transition closes=0 trip list full=0
+[11011.316 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SC3U.exe)
+[11011.475 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SC3U.exe)
+[11012.585 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SC3U.exe)
+[11012.762 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SC3U.exe)
+[11032.219 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SC3U.exe)
+[11032.378 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SC3U.exe)
+[11033.066 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SC3U.exe)
+[11033.127 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SC3U.exe)
+[11039.848 ms][tid 9d1c] overlay: GetFileAttributesA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> overlay exists (SIMUI.DLL)
+[11039.982 ms][tid 9d1c] overlay: CreateFileA "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\Apps\\Sys\SYS.PAK" -> "C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\overlay\Apps\Sys\SYS.PAK" ok (SIMUI.DLL)
+[11413.948 ms][tid 9d1c] rbt: load pass message [tid 9d1c]
+[11443.900 ms][tid 9d1c] avl: load pass over (-2,-2)-(257,257): 0 cell(s) written, 0 reverted
+[20319.072 ms][tid 900c] rampfirst: on, ramp offers=0, other road candidates closed=0
+[20319.254 ms][tid 900c] lanedensity: evals=0 honoured steps=0 neighbours closed=0 wrong-way fails=0 arrivals refused=0 slow QI=0 vtables=0 refused-transition closes=0 trip list full=0
+[20405.732 ms][tid 6424] stats: avl bands converted=0, refused=185, cells written=0, reverted=0
+[20405.980 ms][tid 6424] stats: rbt ROAD passes=0, blocks converted=0, reverted=0, load passes=1, faults=0
+[25463.753 ms][tid 14e8] lanedensity: vtable 0x03BBB5DC -> piece at -4 (cached)
+[25466.050 ms][tid f6d4] lanedensity: vtable 0x03BBAA28 -> piece at -4 (cached)
+[25488.457 ms][tid 67d8] lanedensity: vtable 0x03BBABD4 -> piece at -4 (cached)
+[25530.448 ms][tid f6d4] lanedensity: vtable 0x03BBA524 -> piece at -4 (cached)
+[27869.716 ms][tid 67d8] lanedensity: vtable 0x03BBA020 -> piece at -4 (cached)
+[30130.609 ms][tid c010] lanedensity: ALT OFF (shipped bytes) (37 thread(s) suspended, 0 retries)
+[30319.998 ms][tid 900c] rampfirst: on, ramp offers=8600, other road candidates closed=11774
+[30320.048 ms][tid 900c] lanedensity: ALT state OFF, 1 switch(es), 0 retr(ies)
+[30320.059 ms][tid 900c] lanedensity: evals=1845599 honoured steps=1805104 neighbours closed=304367 wrong-way fails=34688 arrivals refused=17 slow QI=80 vtables=5 refused-transition closes=54960 trip list full=6
+[32253.741 ms][tid fd34] overlay: 4 import slot(s) hooked over 130 module(s)
+[40321.188 ms][tid 900c] rampfirst: on, ramp offers=8600, other road candidates closed=11774
+[40321.321 ms][tid 900c] lanedensity: ALT state OFF, 1 switch(es), 0 retr(ies)
+[40321.331 ms][tid 900c] lanedensity: evals=1845599 honoured steps=1805104 neighbours closed=304367 wrong-way fails=34688 arrivals refused=17 slow QI=80 vtables=5 refused-transition closes=54960 trip list full=6
+[50321.795 ms][tid 900c] rampfirst: on, ramp offers=8600, other road candidates closed=11774
+[50321.895 ms][tid 900c] lanedensity: ALT state OFF, 1 switch(es), 0 retr(ies)
+[50321.907 ms][tid 900c] lanedensity: evals=1845599 honoured steps=1805104 neighbours closed=304367 wrong-way fails=34688 arrivals refused=17 slow QI=80 vtables=5 refused-transition closes=54960 trip list full=6
+[60323.017 ms][tid 900c] rampfirst: on, ramp offers=8600, other road candidates closed=11774
+[60323.063 ms][tid 900c] lanedensity: ALT state OFF, 1 switch(es), 0 retr(ies)
+[60323.074 ms][tid 900c] lanedensity: evals=1845599 honoured steps=1805104 neighbours closed=304367 wrong-way fails=34688 arrivals refused=17 slow QI=80 vtables=5 refused-transition closes=54960 trip list full=6
+[70323.576 ms][tid 900c] rampfirst: on, ramp offers=8600, other road candidates closed=11774
+[70323.678 ms][tid 900c] lanedensity: ALT state OFF, 1 switch(es), 0 retr(ies)
+[70323.692 ms][tid 900c] lanedensity: evals=1845599 honoured steps=1805104 neighbours closed=304367 wrong-way fails=34688 arrivals refused=17 slow QI=80 vtables=5 refused-transition closes=54960 trip list full=6
+[80323.920 ms][tid 900c] rampfirst: on, ramp offers=8600, other road candidates closed=11774
+[80323.969 ms][tid 900c] lanedensity: ALT state OFF, 1 switch(es), 0 retr(ies)
+[80323.982 ms][tid 900c] lanedensity: evals=1845599 honoured steps=1805104 neighbours closed=304367 wrong-way fails=34688 arrivals refused=17 slow QI=80 vtables=5 refused-transition closes=54960 trip list full=6
+[90324.352 ms][tid 900c] rampfirst: on, ramp offers=8600, other road candidates closed=11774
+[90324.857 ms][tid 900c] lanedensity: ALT state OFF, 1 switch(es), 0 retr(ies)
+[90324.889 ms][tid 900c] lanedensity: evals=1845599 honoured steps=1805104 neighbours closed=304367 wrong-way fails=34688 arrivals refused=17 slow QI=80 vtables=5 refused-transition closes=54960 trip list full=6
+[100325.606 ms][tid 900c] rampfirst: on, ramp offers=8600, other road candidates closed=11774
+[100325.782 ms][tid 900c] lanedensity: ALT state OFF, 1 switch(es), 0 retr(ies)
+[100325.792 ms][tid 900c] lanedensity: evals=1845599 honoured steps=1805104 neighbours closed=304367 wrong-way fails=34688 arrivals refused=17 slow QI=80 vtables=5 refused-transition closes=54960 trip list full=6
+[110326.789 ms][tid 900c] rampfirst: on, ramp offers=8600, other road candidates closed=11774
+[110326.909 ms][tid 900c] lanedensity: ALT state OFF, 1 switch(es), 0 retr(ies)
+[110326.920 ms][tid 900c] lanedensity: evals=1845599 honoured steps=1805104 neighbours closed=304367 wrong-way fails=34688 arrivals refused=17 slow QI=80 vtables=5 refused-transition closes=54960 trip list full=6
+[117246.061 ms][tid c010] lanedensity: ALT ON (35 thread(s) suspended, 0 retries)
+[120327.527 ms][tid 900c] rampfirst: on, ramp offers=10388, other road candidates closed=14250
+[120327.646 ms][tid 900c] lanedensity: ALT state ON, 2 switch(es), 0 retr(ies)
+[120327.661 ms][tid 900c] lanedensity: evals=2268839 honoured steps=2218441 neighbours closed=378154 wrong-way fails=43040 arrivals refused=28 slow QI=80 vtables=5 refused-transition closes=68276 trip list full=6
+[130328.827 ms][tid 900c] rampfirst: on, ramp offers=14714, other road candidates closed=20249
+[130328.928 ms][tid 900c] lanedensity: ALT state ON, 2 switch(es), 0 retr(ies)
+[130329.000 ms][tid 900c] lanedensity: evals=3223941 honoured steps=3152432 neighbours closed=538180 wrong-way fails=60258 arrivals refused=35 slow QI=80 vtables=5 refused-transition closes=95950 trip list full=6
+[140330.818 ms][tid 900c] rampfirst: on, ramp offers=18957, other road candidates closed=26168
+[140330.864 ms][tid 900c] lanedensity: ALT state ON, 2 switch(es), 0 retr(ies)
+[140330.876 ms][tid 900c] lanedensity: evals=4176277 honoured steps=4084092 neighbours closed=695784 wrong-way fails=76814 arrivals refused=52 slow QI=80 vtables=5 refused-transition closes=122564 trip list full=44
+[150331.751 ms][tid 900c] rampfirst: on, ramp offers=23028, other road candidates closed=32032
+[150331.842 ms][tid 900c] lanedensity: ALT state ON, 2 switch(es), 0 retr(ies)
+[150331.863 ms][tid 900c] lanedensity: evals=5099645 honoured steps=4987616 neighbours closed=847699 wrong-way fails=92612 arrivals refused=52 slow QI=80 vtables=5 refused-transition closes=147650 trip list full=56
+[160332.147 ms][tid 900c] rampfirst: on, ramp offers=27024, other road candidates closed=37674
+[160332.278 ms][tid 900c] lanedensity: ALT state ON, 2 switch(es), 0 retr(ies)
+[160332.291 ms][tid 900c] lanedensity: evals=5989717 honoured steps=5858704 neighbours closed=992121 wrong-way fails=107452 arrivals refused=52 slow QI=80 vtables=5 refused-transition closes=170652 trip list full=68
+[170334.484 ms][tid 900c] rampfirst: on, ramp offers=31450, other road candidates closed=43745
+[170334.569 ms][tid 900c] lanedensity: ALT state ON, 2 switch(es), 0 retr(ies)
+[170334.587 ms][tid 900c] lanedensity: evals=7008635 honoured steps=6857025 neighbours closed=1156949 wrong-way fails=124110 arrivals refused=68 slow QI=80 vtables=5 refused-transition closes=196216 trip list full=82
+[171406.986 ms][tid c010] lanedensity: ALT OFF (shipped bytes) (35 thread(s) suspended, 0 retries)
+[180335.622 ms][tid 900c] rampfirst: on, ramp offers=31650, other road candidates closed=43998
+[180335.654 ms][tid 900c] lanedensity: ALT state OFF, 3 switch(es), 0 retr(ies)
+[180335.665 ms][tid 900c] lanedensity: evals=7052708 honoured steps=6900167 neighbours closed=1164008 wrong-way fails=124800 arrivals refused=68 slow QI=80 vtables=5 refused-transition closes=197232 trip list full=82
+[190336.418 ms][tid 900c] rampfirst: on, ramp offers=31650, other road candidates closed=43998
+[190336.470 ms][tid 900c] lanedensity: ALT state OFF, 3 switch(es), 0 retr(ies)
+[190336.481 ms][tid 900c] lanedensity: evals=7052708 honoured steps=6900167 neighbours closed=1164008 wrong-way fails=124800 arrivals refused=68 slow QI=80 vtables=5 refused-transition closes=197232 trip list full=82
+[200338.109 ms][tid 900c] rampfirst: on, ramp offers=31650, other road candidates closed=43998
+[200338.369 ms][tid 900c] lanedensity: ALT state OFF, 3 switch(es), 0 retr(ies)
+[200338.416 ms][tid 900c] lanedensity: evals=7052708 honoured steps=6900167 neighbours closed=1164008 wrong-way fails=124800 arrivals refused=68 slow QI=80 vtables=5 refused-transition closes=197232 trip list full=82
+[210339.888 ms][tid 900c] rampfirst: on, ramp offers=31650, other road candidates closed=43998
+[210339.953 ms][tid 900c] lanedensity: ALT state OFF, 3 switch(es), 0 retr(ies)
+[210339.967 ms][tid 900c] lanedensity: evals=7052708 honoured steps=6900167 neighbours closed=1164008 wrong-way fails=124800 arrivals refused=68 slow QI=80 vtables=5 refused-transition closes=197232 trip list full=82
+[220341.099 ms][tid 900c] rampfirst: on, ramp offers=31650, other road candidates closed=43998
+[220341.267 ms][tid 900c] lanedensity: ALT state OFF, 3 switch(es), 0 retr(ies)
+[220341.279 ms][tid 900c] lanedensity: evals=7052708 honoured steps=6900167 neighbours closed=1164008 wrong-way fails=124800 arrivals refused=68 slow QI=80 vtables=5 refused-transition closes=197232 trip list full=82
+[225584.589 ms][tid c010] lanedensity: ALT ON (35 thread(s) suspended, 0 retries)
+[230342.203 ms][tid 900c] rampfirst: on, ramp offers=33147, other road candidates closed=46079
+[230342.287 ms][tid 900c] lanedensity: ALT state ON, 4 switch(es), 0 retr(ies)
+[230342.310 ms][tid 900c] lanedensity: evals=7379825 honoured steps=7219983 neighbours closed=1218102 wrong-way fails=130394 arrivals refused=80 slow QI=80 vtables=5 refused-transition closes=206018 trip list full=82
+[240345.156 ms][tid 900c] rampfirst: on, ramp offers=37925, other road candidates closed=52722
+[240345.223 ms][tid 900c] lanedensity: ALT state ON, 4 switch(es), 0 retr(ies)
+[240345.237 ms][tid 900c] lanedensity: evals=8455909 honoured steps=8272640 neighbours closed=1398986 wrong-way fails=149480 arrivals refused=112 slow QI=80 vtables=5 refused-transition closes=236262 trip list full=106
+[250345.465 ms][tid 900c] rampfirst: on, ramp offers=42675, other road candidates closed=59395
+[250345.608 ms][tid 900c] lanedensity: ALT state ON, 4 switch(es), 0 retr(ies)
+[250345.653 ms][tid 900c] lanedensity: evals=9479608 honoured steps=9274987 neighbours closed=1563935 wrong-way fails=166782 arrivals refused=138 slow QI=80 vtables=5 refused-transition closes=263182 trip list full=114
+[260348.424 ms][tid 900c] rampfirst: on, ramp offers=45565, other road candidates closed=63516
+[260348.576 ms][tid 900c] lanedensity: ALT state ON, 4 switch(es), 0 retr(ies)
+[260348.594 ms][tid 900c] lanedensity: evals=10149915 honoured steps=9930649 neighbours closed=1675427 wrong-way fails=178336 arrivals refused=154 slow QI=80 vtables=5 refused-transition closes=280610 trip list full=150
+[270349.499 ms][tid 900c] rampfirst: on, ramp offers=50103, other road candidates closed=69988
+[270349.657 ms][tid 900c] lanedensity: ALT state ON, 4 switch(es), 0 retr(ies)
+[270349.671 ms][tid 900c] lanedensity: evals=11152094 honoured steps=10911625 neighbours closed=1835152 wrong-way fails=195216 arrivals refused=184 slow QI=80 vtables=5 refused-transition closes=305908 trip list full=168
+[279745.256 ms][tid c010] lanedensity: ALT OFF (shipped bytes) (35 thread(s) suspended, 0 retries)
+[280350.716 ms][tid 900c] rampfirst: on, ramp offers=55310, other road candidates closed=77393
+[280350.787 ms][tid 900c] lanedensity: ALT state OFF, 5 switch(es), 0 retr(ies)
+[280350.798 ms][tid 900c] lanedensity: evals=12288806 honoured steps=12024702 neighbours closed=2016712 wrong-way fails=214510 arrivals refused=216 slow QI=80 vtables=5 refused-transition closes=334352 trip list full=174
+[290351.335 ms][tid 900c] rampfirst: on, ramp offers=55310, other road candidates closed=77393
+[290351.374 ms][tid 900c] lanedensity: ALT state OFF, 5 switch(es), 0 retr(ies)
+[290351.386 ms][tid 900c] lanedensity: evals=12288806 honoured steps=12024702 neighbours closed=2016712 wrong-way fails=214510 arrivals refused=216 slow QI=80 vtables=5 refused-transition closes=334352 trip list full=174
+[300351.839 ms][tid 900c] rampfirst: on, ramp offers=55310, other road candidates closed=77393
+[300351.970 ms][tid 900c] lanedensity: ALT state OFF, 5 switch(es), 0 retr(ies)
+[300352.006 ms][tid 900c] lanedensity: evals=12288806 honoured steps=12024702 neighbours closed=2016712 wrong-way fails=214510 arrivals refused=216 slow QI=80 vtables=5 refused-transition closes=334352 trip list full=174
+[310354.081 ms][tid 900c] rampfirst: on, ramp offers=55310, other road candidates closed=77393
+[310354.232 ms][tid 900c] lanedensity: ALT state OFF, 5 switch(es), 0 retr(ies)
+[310354.281 ms][tid 900c] lanedensity: evals=12288806 honoured steps=12024702 neighbours closed=2016712 wrong-way fails=214510 arrivals refused=216 slow QI=80 vtables=5 refused-transition closes=334352 trip list full=174
+[320354.332 ms][tid 900c] rampfirst: on, ramp offers=55310, other road candidates closed=77393
+[320354.384 ms][tid 900c] lanedensity: ALT state OFF, 5 switch(es), 0 retr(ies)
+[320354.396 ms][tid 900c] lanedensity: evals=12288806 honoured steps=12024702 neighbours closed=2016712 wrong-way fails=214510 arrivals refused=216 slow QI=80 vtables=5 refused-transition closes=334352 trip list full=174
+[330355.452 ms][tid 900c] rampfirst: on, ramp offers=55310, other road candidates closed=77393
+[330355.560 ms][tid 900c] lanedensity: ALT state OFF, 5 switch(es), 0 retr(ies)
+[330355.569 ms][tid 900c] lanedensity: evals=12288806 honoured steps=12024702 neighbours closed=2016712 wrong-way fails=214510 arrivals refused=216 slow QI=80 vtables=5 refused-transition closes=334352 trip list full=174
+[333866.501 ms][tid c010] lanedensity: ALT ON (35 thread(s) suspended, 0 retries)
+[340356.441 ms][tid 900c] rampfirst: on, ramp offers=58672, other road candidates closed=82231
+[340356.570 ms][tid 900c] lanedensity: ALT state ON, 6 switch(es), 0 retr(ies)
+[340356.589 ms][tid 900c] lanedensity: evals=13032811 honoured steps=12752480 neighbours closed=2143816 wrong-way fails=227536 arrivals refused=225 slow QI=80 vtables=5 refused-transition closes=354610 trip list full=174
+[350357.043 ms][tid 900c] rampfirst: on, ramp offers=62893, other road candidates closed=88208
+[350357.135 ms][tid 900c] lanedensity: ALT state ON, 6 switch(es), 0 retr(ies)
+[350357.148 ms][tid 900c] lanedensity: evals=13944385 honoured steps=13644561 neighbours closed=2294743 wrong-way fails=243204 arrivals refused=229 slow QI=80 vtables=5 refused-transition closes=379260 trip list full=184
+[360357.824 ms][tid 900c] rampfirst: on, ramp offers=66889, other road candidates closed=93916
+[360357.867 ms][tid 900c] lanedensity: ALT state ON, 6 switch(es), 0 retr(ies)
+[360357.880 ms][tid 900c] lanedensity: evals=14854159 honoured steps=14534629 neighbours closed=2446399 wrong-way fails=258914 arrivals refused=229 slow QI=80 vtables=5 refused-transition closes=403750 trip list full=184
+[370358.585 ms][tid 900c] rampfirst: on, ramp offers=70290, other road candidates closed=98770
+[370358.703 ms][tid 900c] lanedensity: ALT state ON, 6 switch(es), 0 retr(ies)
+[370358.731 ms][tid 900c] lanedensity: evals=15638758 honoured steps=15302122 neighbours closed=2575425 wrong-way fails=272422 arrivals refused=234 slow QI=80 vtables=5 refused-transition closes=424756 trip list full=188
+[380359.187 ms][tid 900c] rampfirst: on, ramp offers=75158, other road candidates closed=105725
+[380359.266 ms][tid 900c] lanedensity: ALT state ON, 6 switch(es), 0 retr(ies)
+[380359.296 ms][tid 900c] lanedensity: evals=16735386 honoured steps=16375518 neighbours closed=2751199 wrong-way fails=290988 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=453182 trip list full=188
+[388020.438 ms][tid c010] lanedensity: ALT OFF (shipped bytes) (34 thread(s) suspended, 0 retries)
+[390359.716 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[390359.810 ms][tid 900c] lanedensity: ALT state OFF, 7 switch(es), 0 retr(ies)
+[390359.823 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188
+[400360.785 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[400360.825 ms][tid 900c] lanedensity: ALT state OFF, 7 switch(es), 0 retr(ies)
+[400360.844 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188
+[410361.278 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[410361.389 ms][tid 900c] lanedensity: ALT state OFF, 7 switch(es), 0 retr(ies)
+[410361.413 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188
+[420363.929 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[420363.984 ms][tid 900c] lanedensity: ALT state OFF, 7 switch(es), 0 retr(ies)
+[420363.996 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188
+[430365.710 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[430365.765 ms][tid 900c] lanedensity: ALT state OFF, 7 switch(es), 0 retr(ies)
+[430365.777 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188
+[440375.968 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[440376.020 ms][tid 900c] lanedensity: ALT state OFF, 7 switch(es), 0 retr(ies)
+[440376.033 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188
+[442342.381 ms][tid c010] lanedensity: ALT ON (34 thread(s) suspended, 0 retries)
+[450376.552 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[450376.646 ms][tid 900c] lanedensity: ALT state ON, 8 switch(es), 0 retr(ies)
+[450376.660 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188
+[460378.690 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[460378.752 ms][tid 900c] lanedensity: ALT state ON, 8 switch(es), 0 retr(ies)
+[460378.763 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188
+[470379.324 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[470379.513 ms][tid 900c] lanedensity: ALT state ON, 8 switch(es), 0 retr(ies)
+[470379.535 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188
+[480381.171 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[480381.270 ms][tid 900c] lanedensity: ALT state ON, 8 switch(es), 0 retr(ies)
+[480381.282 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188
+[490381.551 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[490381.702 ms][tid 900c] lanedensity: ALT state ON, 8 switch(es), 0 retr(ies)
+[490381.717 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188
+[496465.343 ms][tid c010] lanedensity: ALT OFF (shipped bytes) (34 thread(s) suspended, 0 retries)
+[500382.079 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[500382.251 ms][tid 900c] lanedensity: ALT state OFF, 9 switch(es), 0 retr(ies)
+[500382.276 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188
+[510396.487 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[510396.539 ms][tid 900c] lanedensity: ALT state OFF, 9 switch(es), 0 retr(ies)
+[510396.551 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188
+[520400.959 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[520401.147 ms][tid 900c] lanedensity: ALT state OFF, 9 switch(es), 0 retr(ies)
+[520401.163 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188
+[523591.232 ms][tid c010] lanedensity: ALT ON (34 thread(s) suspended, 0 retries)
+[530401.353 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[530401.429 ms][tid 900c] lanedensity: ALT state ON, 10 switch(es), 0 retr(ies)
+[530401.441 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188
+[540406.301 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[540406.383 ms][tid 900c] lanedensity: ALT state ON, 10 switch(es), 0 retr(ies)
+[540406.402 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188
+[550406.942 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[550407.013 ms][tid 900c] lanedensity: ALT state ON, 10 switch(es), 0 retr(ies)
+[550407.025 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188
+[560410.294 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[560410.407 ms][tid 900c] lanedensity: ALT state ON, 10 switch(es), 0 retr(ies)
+[560410.432 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188
+[570415.999 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[570416.052 ms][tid 900c] lanedensity: ALT state ON, 10 switch(es), 0 retr(ies)
+[570416.063 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188
+[580417.002 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[580417.076 ms][tid 900c] lanedensity: ALT state ON, 10 switch(es), 0 retr(ies)
+[580417.098 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188
+[590417.538 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[590417.691 ms][tid 900c] lanedensity: ALT state ON, 10 switch(es), 0 retr(ies)
+[590417.703 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188
+[600419.253 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[600419.356 ms][tid 900c] lanedensity: ALT state ON, 10 switch(es), 0 retr(ies)
+[600419.377 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188
+[610433.855 ms][tid 900c] rampfirst: on, ramp offers=78162, other road candidates closed=110037
+[610433.921 ms][tid 900c] lanedensity: ALT state ON, 10 switch(es), 0 retr(ies)
+[610433.934 ms][tid 900c] lanedensity: evals=17439064 honoured steps=17064429 neighbours closed=2863034 wrong-way fails=302802 arrivals refused=242 slow QI=80 vtables=5 refused-transition closes=470934 trip list full=188

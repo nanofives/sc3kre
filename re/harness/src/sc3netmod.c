@@ -140,6 +140,8 @@ static int table_read(const char *path) {
             !strncmp(p, "bva ", 4)) continue;   /* task boulevard */
         if (!strncmp(p, "rbt9 ", 5)) continue;           /* RBT9 lines, read by rbt_install (task bigrbt) */
         if (!strncmp(p, "bvxb ", 5) || !strncmp(p, "bvxa ", 5)) continue;   /* task bvx: read by rbt_install */
+        if (!strncmp(p, "bvxc ", 5) || !strncmp(p, "bvj ", 4)) continue;   /* task bvlanes: read by rbt_install */
+        if (!strncmp(p, "avl", 3) && p[4] == ' ') continue;   /* task avcore: AVL lines, read by rbt_install */
         if (!strncmp(p, "dbvb ", 5) || !strncmp(p, "dbvs ", 5)) continue;   /* task diagbv: DBV lines, read by rbt_install */
         if (p[0] == 'h' && p[1] == 'w') continue;       /* task hwcore: highway program lines (hwy*, hwx, hwt, hwd*) */
         if (p[0] == 't' && (!strncmp(p, "tmpl ", 5) || !strncmp(p, "tori ", 5) || !strncmp(p, "tcel ", 5) ||
@@ -1362,6 +1364,7 @@ static int netramp_install(BYTE *m) {
 #include "sc3netmod_hwdd.c"         /* task hwdd: HWDD, diagonal x diagonal highway cloverleaf (SC3NETMOD_HWDD=0) */
 #include "sc3netmod_hwdx.c"         /* task hwdx: HWDX, diagonal x straight highway cloverleaf (SC3NETMOD_HWDX=0) */
 #include "sc3netmod_hwave.c"        /* task hwave: HWAVE, highway <-> avenue transition (SC3NETMOD_HWAVE=0) */
+#include "sc3netmod_avl.c"          /* task avcore: AVL, one-way avenue halves on RBT's hooks (SC3NETMOD_AVL=0) */
 #include "sc3netmod_lanes.c"        /* task lanedensity: road density honours turn matrices (SC3NETMOD_LANEDENSITY) */
 
 /* ============================================================ arming */

@@ -191,7 +191,7 @@ static const int g_ld_dx[4] = {-1, 0, 1, 0}, g_ld_dz[4] = {0, -1, 0, 1};
    again, for ever (measured: 6e8 refusals, the trip never ended). With it, every later scan from A in the same trip
    treats B as visited. Cleared when the trip's start node (type 0x80) is scanned: the DFS never re-pushes a cell it
    has visited, so A cannot come back after its stack frame is gone. Full list: B simply stays visited. */
-#define LD_TRIPMAX 32
+#define LD_TRIPMAX 128     /* task avcore: 32 overflowed 26,224 times with one-way avenue halves (verify/avlanes M1) */
 typedef struct { int n; DWORD from[LD_TRIPMAX], to[LD_TRIPMAX]; DWORD selfkey; } LdTrip;
 static DWORD g_ld_tls = TLS_OUT_OF_INDEXES;
 static volatile LONG g_ld_n_tripfull, g_ld_n_tripmark;

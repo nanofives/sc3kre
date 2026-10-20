@@ -1,0 +1,14 @@
+/c/Users/maria/Desktop/Proyectos/Simcity_stock_avlanes/re/harness/inst_avlanes/sc3netmod_hill1.log:[  423.742 ms][tid 8f44] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: one-way straight half piece 21700
+/c/Users/maria/Desktop/Proyectos/Simcity_stock_avlanes/re/harness/inst_avlanes/sc3netmod_hill1.log:[  423.759 ms][tid 8f44] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: end U-turn piece 21701
+/c/Users/maria/Desktop/Proyectos/Simcity_stock_avlanes/re/harness/inst_avlanes/sc3netmod_hill1.log:[ 5926.985 ms][tid 7ef4] load: no variant section
+/c/Users/maria/Desktop/Proyectos/Simcity_stock_avlanes/re/harness/inst_avlanes/sc3netmod_hill1.log:[ 7521.445 ms][tid 7ef4] avl: load pass over (-2,-2)-(193,193): 0 cell(s) written, 0 reverted
+/c/Users/maria/Desktop/Proyectos/Simcity_stock_avlanes/re/harness/inst_avlanes/sc3netmod_hill1.log:[499501.053 ms][tid 7ef4] avl: edit: band along z from (96,33) rows -14..12 -> one-way (ends: U-turn / U-turn)
+/c/Users/maria/Desktop/Proyectos/Simcity_stock_avlanes/re/harness/inst_avlanes/sc3netmod_hill1.log:[499513.171 ms][tid 7ef4] avl: edit pass over (94,33)-(99,48): 58 cell(s) written, 0 reverted
+/c/Users/maria/Desktop/Proyectos/Simcity_stock_avlanes/re/harness/inst_avlanes/sc3netmod_hill1.log:[764552.369 ms][tid 7ef4] save: 58 variant tile(s) written as base, 0 T decline(s), section 0x4E56 written
+/c/Users/maria/Desktop/Proyectos/Simcity_stock_avlanes/re/harness/inst_avlanes/sc3netmod_hill1.log:[787828.249 ms][tid 7ef4] avl: edit pass over (94,29)-(103,42): 0 cell(s) written, 46 reverted
+/c/Users/maria/Desktop/Proyectos/Simcity_stock_avlanes/re/harness/inst_avlanes/sc3netmod.log:[  653.599 ms][tid 3fac] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: one-way straight half piece 21700
+/c/Users/maria/Desktop/Proyectos/Simcity_stock_avlanes/re/harness/inst_avlanes/sc3netmod.log:[  653.615 ms][tid 3fac] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: end U-turn piece 21701
+/c/Users/maria/Desktop/Proyectos/Simcity_stock_avlanes/re/harness/inst_avlanes/sc3netmod.log:[17054.338 ms][tid e9c4] load: variant section 58 entries, 58 to restore, 0 not installed (stay base)
+/c/Users/maria/Desktop/Proyectos/Simcity_stock_avlanes/re/harness/inst_avlanes/sc3netmod.log:[17069.628 ms][tid e9c4] load: all 58 variant tiles restored
+/c/Users/maria/Desktop/Proyectos/Simcity_stock_avlanes/re/harness/inst_avlanes/sc3netmod.log:[20769.661 ms][tid e9c4] avl: load: band along z from (96,19) rows 0..26 -> one-way (ends: U-turn / U-turn)
+/c/Users/maria/Desktop/Proyectos/Simcity_stock_avlanes/re/harness/inst_avlanes/sc3netmod.log:[20772.517 ms][tid e9c4] avl: load pass over (-2,-2)-(193,193): 0 cell(s) written, 0 reverted

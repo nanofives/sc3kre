@@ -494,6 +494,13 @@ def bands(road, stamps=None):
     return out
 
 
+DAV_BAND_OK = None      # task bvlanes: twin of sc3netmod's dav_band_ok(canonical cell) -> bool; None = assume it converts
+
+
+def _dav_ok(c):
+    return DAV_BAND_OK is None or bool(DAV_BAND_OK(c))
+
+
 def classify_end(R, z_e, a_e, e, nrows):
     """end e (1 bottom = the chain's last row, 0 top = its first row, turned) -> (kind or None, cell function)"""
     def cell(dx, dz):                     # bottom-oriented coordinates of this end -> canonical cell
@@ -509,9 +516,9 @@ def classify_end(R, z_e, a_e, e, nrows):
     if r1 == (0, 1, 2) and r2 == (-1, 0, 1):
         return "bend-z", cell
     if all(r == (0, 1, 2) for r in rr[:5]):                         # DAV gets at least 3 rows past the claim
-        return "narrow-C", cell
+        return ("narrow-C" if _dav_ok(cell(3, 3)) else None), cell   # task bvlanes: the avenue must convert
     if all(r == (1, 2, 3) for r in rr[:3]):
-        return "narrow-A", cell
+        return ("narrow-A" if _dav_ok(cell(2, 1)) else None), cell
     if r1 == r2 and r1 in ((0, 1), (1, 2), (2, 3)):
         return "taper-%d" % r1[0], cell
     if (r1, r2) == ((0, 1, 2), (0, 1)) and r3 == (0, 1):

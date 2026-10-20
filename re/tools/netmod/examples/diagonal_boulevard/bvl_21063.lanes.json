@@ -1,0 +1,69 @@
+{
+ "piece": 21063,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 0,
+ "mirror_uk": false,
+ "vehicle": {
+  "class": "car",
+  "speed": 64000,
+  "lanes": []
+ },
+ "pedestrian": {
+  "walks": [
+   {
+    "from": [
+     0,
+     22
+    ],
+    "to": [
+     233,
+     255
+    ],
+    "path": 2304
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     0,
+     22
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     15,
+     240
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     15,
+     240
+    ],
+    "code": 24
+   },
+   {
+    "at": [
+     233,
+     255
+    ],
+    "code": 24
+   }
+  ]
+ },
+ "connects": {
+  "road": {
+   "low": [],
+   "high": []
+  }
+ },
+ "curves": [],
+ "_": "bvlanes.py: 3 lanes each way, right-hand (verify/bvlanes/PLAN.md); no path keys; a taper corner the curb cuts off: no lane"
+}

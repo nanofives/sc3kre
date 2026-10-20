@@ -1,0 +1,174 @@
+{
+ "piece": 21711,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 1,
+ "alt": [
+  0,
+  0,
+  0,
+  0
+ ],
+ "_comment": "AVENUE_LANES.md 3: base 69 on a one-way half, road lanes toward x- at state 0 (both in every language: uk_keep), the other network's lanes as stock",
+ "vehicle": {
+  "class": "car",
+  "speed": 64000,
+  "lanes": [
+   {
+    "from": [
+     80,
+     79,
+     255
+    ],
+    "to": [
+     80,
+     79,
+     0
+    ],
+    "path": 48641,
+    "exit": false,
+    "class": "train"
+   },
+   {
+    "from": [
+     175,
+     79,
+     0
+    ],
+    "to": [
+     175,
+     79,
+     255
+    ],
+    "path": 48897,
+    "exit": false,
+    "class": "train"
+   },
+   {
+    "from": [
+     255,
+     0,
+     80
+    ],
+    "to": [
+     0,
+     0,
+     80
+    ],
+    "uk_keep": true
+   },
+   {
+    "from": [
+     255,
+     0,
+     175
+    ],
+    "to": [
+     0,
+     0,
+     175
+    ],
+    "uk_keep": true
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     80,
+     79,
+     0
+    ],
+    "code": 8,
+    "class": "train"
+   },
+   {
+    "at": [
+     175,
+     79,
+     255
+    ],
+    "code": 24,
+    "class": "train"
+   }
+  ]
+ },
+ "pedestrian": {
+  "walks": [
+   {
+    "from": [
+     15,
+     15
+    ],
+    "to": [
+     240,
+     15
+    ],
+    "path": 27648,
+    "crosswalk": true
+   },
+   {
+    "from": [
+     240,
+     240
+    ],
+    "to": [
+     15,
+     240
+    ],
+    "path": 27392,
+    "crosswalk": true
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     15,
+     15
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     15,
+     240
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     240,
+     15
+    ],
+    "code": 16
+   },
+   {
+    "at": [
+     240,
+     240
+    ],
+    "code": 16
+   }
+  ]
+ },
+ "connects": {
+  "road": {
+   "low": [
+    [
+     "x+",
+     "x-"
+    ]
+   ],
+   "high": [
+    [
+     "x-",
+     "x+"
+    ]
+   ]
+  }
+ },
+ "curves": []
+}

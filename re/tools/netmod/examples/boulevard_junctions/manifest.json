@@ -1,7 +1,7 @@
 {
  "netpack": 1,
  "name": "boulevard_junctions",
- "version": "0.1.0",
+ "version": "0.2.0",
  "author": "netmod (task bvx)",
  "description": "Boulevard junctions with avenues and with other boulevards: where an avenue (two parallel roads) or another boulevard (three) crosses a boulevard, ends on it, or the boulevard ends on it, sc3netmod's BV block makes the crossing one paved box: crosswalks across every arm at the box edge, curbs round the outer corners and along the far side of a T, every median ending in a concrete nose with its trees. Needs the boulevard package (its pieces next to the box). Box cells 20900..20905 (one per edge pattern, base 43), avenue nose cells 20910 / 20911 (base 11204). Built by `bvx.py build .` in this folder before install (art/ is made from the game's frames and is not shipped).",
  "game": {
@@ -20,7 +20,7 @@
     "from": 43,
     "png_dir": "art/20900"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20901,
@@ -62,7 +62,7 @@
     "from": 43,
     "png_dir": "art/20903"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20904,
@@ -90,7 +90,301 @@
     "from": 43,
     "png_dir": "art/20905"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
+  },
+  {
+   "id": 20912,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20912"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20913,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20913"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20914,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20914"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20915,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20915"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20916,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20916"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20917,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20917"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20918,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20918"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20919,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20919"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20920,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20920"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20921,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20921"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20922,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20922"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20923,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20923"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20924,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20924"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20925,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20925"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20926,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20926"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20927,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20927"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20928,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20928"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20929,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20929"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20930,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20930"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20931,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20931"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 20932,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20932"
+   },
+   "trblkatt": "none"
   },
   {
    "id": 20910,
@@ -104,7 +398,7 @@
     "from": 11204,
     "png_dir": "art/20910"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   },
   {
    "id": 20911,
@@ -118,21 +412,125 @@
     "from": 11204,
     "png_dir": "art/20911"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "none"
   }
  ],
  "lanes": [
   {
+   "piece": 20900,
+   "spec": "bvl_20900.lanes.json"
+  },
+  {
    "piece": 20901,
-   "spec": "box_20901.lanes.json"
+   "spec": "bvl_20901.lanes.json"
   },
   {
    "piece": 20902,
-   "spec": "box_20902.lanes.json"
+   "spec": "bvl_20902.lanes.json"
+  },
+  {
+   "piece": 20903,
+   "spec": "bvl_20903.lanes.json"
   },
   {
    "piece": 20904,
-   "spec": "box_20904.lanes.json"
+   "spec": "bvl_20904.lanes.json"
+  },
+  {
+   "piece": 20905,
+   "spec": "bvl_20905.lanes.json"
+  },
+  {
+   "piece": 20912,
+   "spec": "bvl_20912.lanes.json"
+  },
+  {
+   "piece": 20913,
+   "spec": "bvl_20913.lanes.json"
+  },
+  {
+   "piece": 20914,
+   "spec": "bvl_20914.lanes.json"
+  },
+  {
+   "piece": 20915,
+   "spec": "bvl_20915.lanes.json"
+  },
+  {
+   "piece": 20916,
+   "spec": "bvl_20916.lanes.json"
+  },
+  {
+   "piece": 20917,
+   "spec": "bvl_20917.lanes.json"
+  },
+  {
+   "piece": 20918,
+   "spec": "bvl_20918.lanes.json"
+  },
+  {
+   "piece": 20919,
+   "spec": "bvl_20919.lanes.json"
+  },
+  {
+   "piece": 20920,
+   "spec": "bvl_20920.lanes.json"
+  },
+  {
+   "piece": 20921,
+   "spec": "bvl_20921.lanes.json"
+  },
+  {
+   "piece": 20922,
+   "spec": "bvl_20922.lanes.json"
+  },
+  {
+   "piece": 20923,
+   "spec": "bvl_20923.lanes.json"
+  },
+  {
+   "piece": 20924,
+   "spec": "bvl_20924.lanes.json"
+  },
+  {
+   "piece": 20925,
+   "spec": "bvl_20925.lanes.json"
+  },
+  {
+   "piece": 20926,
+   "spec": "bvl_20926.lanes.json"
+  },
+  {
+   "piece": 20927,
+   "spec": "bvl_20927.lanes.json"
+  },
+  {
+   "piece": 20928,
+   "spec": "bvl_20928.lanes.json"
+  },
+  {
+   "piece": 20929,
+   "spec": "bvl_20929.lanes.json"
+  },
+  {
+   "piece": 20930,
+   "spec": "bvl_20930.lanes.json"
+  },
+  {
+   "piece": 20931,
+   "spec": "bvl_20931.lanes.json"
+  },
+  {
+   "piece": 20932,
+   "spec": "bvl_20932.lanes.json"
+  },
+  {
+   "piece": 20910,
+   "spec": "bvl_20910.lanes.json"
+  },
+  {
+   "piece": 20911,
+   "spec": "bvl_20911.lanes.json"
   }
  ],
  "auto_boulevard_junctions": [
@@ -172,7 +570,118 @@
      "piece": 20911,
      "nose": "W"
     }
+   ],
+   "cells": [
+    "bvxc 2 3 AAAA 0 0 20900 0",
+    "bvxc 2 3 AAAA 0 1 20901 0",
+    "bvxc 2 3 AAAA 0 2 20902 0",
+    "bvxc 2 3 AAAA 1 0 20902 2",
+    "bvxc 2 3 AAAA 1 1 20901 2",
+    "bvxc 2 3 AAAA 1 2 20900 2",
+    "bvxc 2 3 AAAC 0 0 20920 2",
+    "bvxc 2 3 AAAC 0 1 20919 2",
+    "bvxc 2 3 AAAC 0 2 20918 2",
+    "bvxc 2 3 AAAC 1 0 20917 2",
+    "bvxc 2 3 AAAC 1 1 20916 2",
+    "bvxc 2 3 AAAC 1 2 20915 2",
+    "bvxc 2 3 AACA 0 0 20903 0",
+    "bvxc 2 3 AACA 0 1 20904 0",
+    "bvxc 2 3 AACA 0 2 20905 0",
+    "bvxc 2 3 AACA 1 0 20912 0",
+    "bvxc 2 3 AACA 1 1 20913 0",
+    "bvxc 2 3 AACA 1 2 20914 0",
+    "bvxc 2 3 ACAA 0 0 20915 0",
+    "bvxc 2 3 ACAA 0 1 20916 0",
+    "bvxc 2 3 ACAA 0 2 20917 0",
+    "bvxc 2 3 ACAA 1 0 20918 0",
+    "bvxc 2 3 ACAA 1 1 20919 0",
+    "bvxc 2 3 ACAA 1 2 20920 0",
+    "bvxc 2 3 CAAA 0 0 20914 2",
+    "bvxc 2 3 CAAA 0 1 20913 2",
+    "bvxc 2 3 CAAA 0 2 20912 2",
+    "bvxc 2 3 CAAA 1 0 20905 2",
+    "bvxc 2 3 CAAA 1 1 20904 2",
+    "bvxc 2 3 CAAA 1 2 20903 2",
+    "bvxc 3 2 AAAA 0 0 20902 1",
+    "bvxc 3 2 AAAA 0 1 20900 3",
+    "bvxc 3 2 AAAA 1 0 20901 1",
+    "bvxc 3 2 AAAA 1 1 20901 3",
+    "bvxc 3 2 AAAA 2 0 20900 1",
+    "bvxc 3 2 AAAA 2 1 20902 3",
+    "bvxc 3 2 AAAC 0 0 20905 1",
+    "bvxc 3 2 AAAC 0 1 20914 1",
+    "bvxc 3 2 AAAC 1 0 20904 1",
+    "bvxc 3 2 AAAC 1 1 20913 1",
+    "bvxc 3 2 AAAC 2 0 20903 1",
+    "bvxc 3 2 AAAC 2 1 20912 1",
+    "bvxc 3 2 AACA 0 0 20917 1",
+    "bvxc 3 2 AACA 0 1 20920 1",
+    "bvxc 3 2 AACA 1 0 20916 1",
+    "bvxc 3 2 AACA 1 1 20919 1",
+    "bvxc 3 2 AACA 2 0 20915 1",
+    "bvxc 3 2 AACA 2 1 20918 1",
+    "bvxc 3 2 ACAA 0 0 20912 3",
+    "bvxc 3 2 ACAA 0 1 20903 3",
+    "bvxc 3 2 ACAA 1 0 20913 3",
+    "bvxc 3 2 ACAA 1 1 20904 3",
+    "bvxc 3 2 ACAA 2 0 20914 3",
+    "bvxc 3 2 ACAA 2 1 20905 3",
+    "bvxc 3 2 CAAA 0 0 20918 3",
+    "bvxc 3 2 CAAA 0 1 20915 3",
+    "bvxc 3 2 CAAA 1 0 20919 3",
+    "bvxc 3 2 CAAA 1 1 20916 3",
+    "bvxc 3 2 CAAA 2 0 20920 3",
+    "bvxc 3 2 CAAA 2 1 20917 3",
+    "bvxc 3 3 AAAA 0 0 20921 0",
+    "bvxc 3 3 AAAA 0 1 20922 0",
+    "bvxc 3 3 AAAA 0 2 20921 3",
+    "bvxc 3 3 AAAA 1 0 20922 1",
+    "bvxc 3 3 AAAA 1 1 20923 3",
+    "bvxc 3 3 AAAA 1 2 20922 3",
+    "bvxc 3 3 AAAA 2 0 20921 1",
+    "bvxc 3 3 AAAA 2 1 20922 2",
+    "bvxc 3 3 AAAA 2 2 20921 2",
+    "bvxc 3 3 AAAC 0 0 20926 1",
+    "bvxc 3 3 AAAC 0 1 20929 1",
+    "bvxc 3 3 AAAC 0 2 20932 1",
+    "bvxc 3 3 AAAC 1 0 20925 1",
+    "bvxc 3 3 AAAC 1 1 20928 1",
+    "bvxc 3 3 AAAC 1 2 20931 1",
+    "bvxc 3 3 AAAC 2 0 20924 1",
+    "bvxc 3 3 AAAC 2 1 20927 1",
+    "bvxc 3 3 AAAC 2 2 20930 1",
+    "bvxc 3 3 AACA 0 0 20924 0",
+    "bvxc 3 3 AACA 0 1 20925 0",
+    "bvxc 3 3 AACA 0 2 20926 0",
+    "bvxc 3 3 AACA 1 0 20927 0",
+    "bvxc 3 3 AACA 1 1 20928 0",
+    "bvxc 3 3 AACA 1 2 20929 0",
+    "bvxc 3 3 AACA 2 0 20930 0",
+    "bvxc 3 3 AACA 2 1 20931 0",
+    "bvxc 3 3 AACA 2 2 20932 0",
+    "bvxc 3 3 ACAA 0 0 20930 3",
+    "bvxc 3 3 ACAA 0 1 20927 3",
+    "bvxc 3 3 ACAA 0 2 20924 3",
+    "bvxc 3 3 ACAA 1 0 20931 3",
+    "bvxc 3 3 ACAA 1 1 20928 3",
+    "bvxc 3 3 ACAA 1 2 20925 3",
+    "bvxc 3 3 ACAA 2 0 20932 3",
+    "bvxc 3 3 ACAA 2 1 20929 3",
+    "bvxc 3 3 ACAA 2 2 20926 3",
+    "bvxc 3 3 CAAA 0 0 20932 2",
+    "bvxc 3 3 CAAA 0 1 20931 2",
+    "bvxc 3 3 CAAA 0 2 20930 2",
+    "bvxc 3 3 CAAA 1 0 20929 2",
+    "bvxc 3 3 CAAA 1 1 20928 2",
+    "bvxc 3 3 CAAA 1 2 20927 2",
+    "bvxc 3 3 CAAA 2 0 20926 2",
+    "bvxc 3 3 CAAA 2 1 20925 2",
+    "bvxc 3 3 CAAA 2 2 20924 2"
    ]
   }
+ ],
+ "avenue_lines": [
+  "avlj 20910 ...O",
+  "avlj 20911 .I.."
  ]
 }
