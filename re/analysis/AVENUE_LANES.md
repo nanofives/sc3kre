@@ -48,6 +48,21 @@ every variant (default mode). Packed: `0x00040100`.
 half in an English-UK install, UK trips would route left-hand on these pieces while their cars drive right-hand. Not
 tested (no English-UK install here). Making high = low would drop the downstream side as a tiler arm.
 
+**English-UK: known limitation (owner decision 2026-10-19).** English-UK stays mismatched; there is no job to make it
+fully right-hand. What differs in an English-UK game:
+- Right-hand (the same as in English): every piece the avenue rework adds. That is the converted one-way halves
+  (21700), their U-turn ends and corner bends (21701, 21726), the road lanes of the one-way crossings and slopes
+  (21710..21725, `uk_keep`), and the siblings' pieces, which follow the same rule (section 6: `"mirror_uk": false`).
+  Each half runs the same way as in English.
+- Left-hand (stock English-UK, mirrored): everything else. That is every two-lane road and its bends, T and X
+  junctions, every avenue that does not convert (it stays stock two-way), the highways and ramps, and the rail /
+  highway lanes on a one-way crossing.
+- What a player sees: on a converted avenue, traffic keeps to the right; on the roads, unconverted avenues and
+  highways of the same city, it keeps to the left. A car swaps sides where it passes between the two, in a junction
+  box or at a crossing. The lanes still meet there (avcore's selftest and avjunc's seam checks run in English-UK
+  too), so cars are not meant to stop or leave the road. That has only been checked offline.
+- Routing in English-UK stays [UNCERTAIN] (the paragraph above). No English-UK game has run with these pieces.
+
 Boulevards (bvlanes): each outer cell is a one-way half as above; the middle cell carries its side's third lane at z 14
 (beside row 0) and z 241 (beside row 2) in the state-0 frame of the middle piece, running with the outer row beside it
 (PLAN.md 9.2). bvlanes owns those numbers; the outer-cell edges follow this section.
