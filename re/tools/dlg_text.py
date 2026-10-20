@@ -15,6 +15,7 @@ import frida
 
 sys.path.insert(0, r"C:\Users\maria\Desktop\Proyectos\Simcity\re\tools")
 import sc3io  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 var mods=Process.enumerateModules();
@@ -41,6 +42,7 @@ rpc.exports={d:function(){var gz=mb("GZGraphicD.dll"),su=mb("SIMUI.DLL");var win
 
 
 def main() -> int:
+    sc3pause.require_running(sc3io.game_pid(), "dlg_text")
     s = frida.attach(sc3io.game_pid())
     sc = s.create_script(JS)
     sc.load()

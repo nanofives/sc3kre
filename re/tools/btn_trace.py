@@ -2,6 +2,7 @@
 in the bottom-right corner resolves to. Run this, then click the minimize button several times -
 both when it works and when it's dead - and compare what consumed the click."""
 import subprocess, frida, sys, time
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 JS=r"""
 function mb(w){var m=Process.enumerateModules();for(var i=0;i<m.length;i++)if(m[i].name.toLowerCase()===w.toLowerCase())return m[i].base;return null;}
 function rp(p,o){return p.add(o).readPointer();}
@@ -27,6 +28,7 @@ Interceptor.attach(fn,{
 """
 out=subprocess.run(["tasklist","/FI","IMAGENAME eq SC3U.exe","/FO","CSV","/NH"],capture_output=True,text=True).stdout
 pid=int(out.split(",")[1].strip('" '))
+sc3pause.require_running(pid, "btn_trace")
 s=frida.attach(pid);sc=s.create_script(JS)
 seen={}
 def on(m,d):

@@ -24,6 +24,7 @@ import frida
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import sc3io  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 CM = r"""
 #include <gum/guminterceptor.h>
@@ -199,6 +200,7 @@ def main() -> int:
         else:
             emit("%s %s" % (p["t"].upper(), p))
 
+    sc3pause.require_running(pid, "dirtprobe")
     sess = frida.attach(pid)
     js = "var CM_SRC = " + json.dumps(CM) + ";\n" + JS
     sc = sess.create_script(js)

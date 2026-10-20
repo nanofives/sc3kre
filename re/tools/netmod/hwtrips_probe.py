@@ -36,6 +36,7 @@ import frida
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
 import sc3io  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 var TR = Process.getModuleByName('SimTransit.dll').base;
@@ -202,6 +203,7 @@ TIMING = False
 
 def attach():
     pid = int(os.environ.get("SC3_PID") or sc3io.game_pid())
+    sc3pause.require_running(pid, "hwtrips_probe")
     s = frida.attach(pid)
     sc = s.create_script(JS.replace("%STEP%", "false" if NOSTEP else "true").replace("%TIMING%", "true" if TIMING else "false"))
     sc.on("message", lambda m, d: print(m, flush=True))

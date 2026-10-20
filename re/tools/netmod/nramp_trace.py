@@ -21,6 +21,7 @@ import frida
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
 import sc3io  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 var m = Process.getModuleByName('SIMNTWRK.DLL'); var B = m.base;
@@ -65,6 +66,7 @@ send({ev: 'ready', base: '' + B});
 def main(argv):
     secs = float(argv[argv.index("--secs") + 1]) if "--secs" in argv else 1e9
     pid = sc3io.game_pid()
+    sc3pause.require_running(pid, "nramp_trace")
     s = frida.attach(pid)
     sc = s.create_script(JS)
     sc.on("message", lambda m, d: print(json.dumps(m.get("payload", m)), flush=True))

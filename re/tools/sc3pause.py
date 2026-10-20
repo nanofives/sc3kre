@@ -15,7 +15,9 @@ The pause state, ReadProcessMemory only:
   depth = *(int *)(city + 0x140)       the user-pause depth: SIMCITY FUN_100056bb increments it and posts 0xc2a35d7f when
                                        it reaches 1, FUN_10005773 decrements it (not below 0) and posts 0xc2a35d81 at 0
                                        [CONFIRMED @ 0x100056bb, 0x10005773]
-paused = depth > 0. A DLL's runtime base comes from the process's module list (EnumProcessModulesEx).
+paused = depth > 0. No city loaded (SIMCITY.DLL absent, app or app+0x48 still 0) counts as not paused: there is no sim
+to deadlock, and the menu / dialog probes attach there. A DLL's runtime base comes from the process's module list
+(EnumProcessModulesEx).
 
   py -3.12 sc3pause.py [PID]          print the state (exit 0 running, 1 paused, 2 unknown)
 
@@ -85,14 +87,20 @@ def pause_state(pid):
     try:
         mods = _modules(h)
         exe, simcity = mods.get("sc3u.exe"), mods.get("simcity.dll")
-        if not exe or not simcity:
-            return None, "SC3U.exe / SIMCITY.DLL not in pid %s's modules (still loading?)" % pid
+        if not exe:
+            return None, "SC3U.exe not in pid %s's modules" % pid
+        if not simcity:                                   # no sim yet: nothing to deadlock
+            return False, "SIMCITY.DLL not loaded yet (no city)"
         app = _u32(h, exe + (APP_GLOBAL - 0x00400000))
+        if app is None:
+            return None, "DAT_004fa86c unreadable"
         if not app:
-            return None, "no app object yet (DAT_004fa86c = 0)"
+            return False, "no app object yet (DAT_004fa86c = 0, no city)"
         city = _u32(h, app + APP_CITY)
+        if city is None:
+            return None, "app+0x48 unreadable"
         if not city:
-            return None, "no city loaded (app+0x48 = 0)"
+            return False, "no city loaded (app+0x48 = 0)"
         vt = _u32(h, city)
         if vt != simcity + CITY_VTABLE_RVA:
             return None, "app+0x48 does not hold the city (vtable 0x%08x, expected SIMCITY+0x%x = 0x%08x)" % (

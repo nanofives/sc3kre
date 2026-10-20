@@ -25,6 +25,7 @@ import frida
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import sc3io  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 var M = Process.getModuleByName('sc3cartrips.dll');
@@ -81,6 +82,7 @@ def main():
     ap.add_argument("--perf", action="store_true", help="also read sc3perf TRAFFIC_MT counters")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
+    sc3pause.require_running(sc3io.game_pid(), "ctm_alt")
     s = frida.attach(sc3io.game_pid())
     sc = s.create_script(JS)
     sc.load()

@@ -19,6 +19,7 @@ import time
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import sc3io  # noqa: E402
 import reunirse2_probe as rp  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 CAT = "SIMUI.DLL+0xa8f60"
 ADV = "SIMUI.DLL+0xa3ad8"
@@ -106,6 +107,7 @@ def main(argv) -> int:
     rec["client"] = s["client"]
     import frida  # category buttons: same class lookup as reunirse_ab.py
     from uiwin_dump import JS as TREE_JS
+    sc3pause.require_running(sc3io.game_pid(), "reunirse2_chain")
     fs = frida.attach(sc3io.game_pid()); sc = fs.create_script(TREE_JS); sc.load()
     cats = sorted([n for n in sc.exports_sync.d(6, False)["nodes"] if n.get("cls") == CAT and n.get("vis")],
                   key=lambda n: n["abs"][1])

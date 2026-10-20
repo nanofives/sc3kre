@@ -18,6 +18,7 @@ import frida
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import sc3io  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 var mods=Process.enumerateModules();
@@ -48,6 +49,7 @@ def main(argv) -> int:
     ap.add_argument("--maxdepth", type=int, default=3)
     ap.add_argument("--all", action="store_true")
     a = ap.parse_args(argv)
+    sc3pause.require_running(sc3io.game_pid(), "uiwin_dump")
     s = frida.attach(sc3io.game_pid())
     sc = s.create_script(JS)
     sc.load()

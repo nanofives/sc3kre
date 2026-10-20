@@ -38,6 +38,7 @@ import frida
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import sc3io  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 CITY_VIEW_VTABLE_RVA = 0x100676AC     # SIMSPR; the class that owns the +0x224 delegate field
 
@@ -129,6 +130,7 @@ def main(argv) -> int:
         print(f"STOP: {e}", file=sys.stderr)
         return 2
 
+    sc3pause.require_running(pid, "tool_delegate_probe")
     sess = frida.attach(pid)
     sc = sess.create_script(JS)
     sc.load()

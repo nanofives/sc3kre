@@ -2,6 +2,7 @@
 import subprocess, frida, ctypes, time
 from ctypes import wintypes
 import sys as _s, pathlib as _p; _s.path.insert(0, str(_p.Path(__file__).resolve().parent)); import sc3io as _sc3io
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 u=ctypes.WinDLL("user32")
 out=subprocess.run(["tasklist","/FI","IMAGENAME eq SC3U.exe","/FO","CSV","/NH"],capture_output=True,text=True).stdout
 pid=int(out.split(",")[1].strip('" '))
@@ -34,6 +35,7 @@ rpc.exports={
  stat:function(){var h=HITS;HITS=0;return {hits:h,pos:POS};}
 };
 """
+sc3pause.require_running(pid, "btn_hook")
 s=frida.attach(pid);sc=s.create_script(JS);sc.load()
 h=sc.exports_sync.hook(CW,CH)
 if not h.get("ok"): print("btn not found"); raise SystemExit

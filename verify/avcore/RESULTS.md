@@ -244,6 +244,20 @@ hwcars_block / deposits / mode / removals / stacks / tracks / uicam. avl_tracks_
 The evidence that nothing attached in the paused step is the code path (the guard exits before frida.attach). A module
 list check proves nothing: the Frida agent does not show in EnumProcessModules even after a real attach.
 
+## Pause guard on every Frida attach in re/tools (2026-10-19)
+
+`grep` over re/tools and re/scripts for `frida.attach(`, `<device>.attach(`, `get_local_device().attach`, `frida -p`
+and `spawn(`: 93 Python files attach (one attach each), no spawn, none in re/scripts or as `frida -p`. 11 were guarded
+in 9b0263d; the other 82 now call `sc3pause.require_running(<the attach's pid>, "<tool>")` on the line before the
+attach, with a module-level `import sc3pause` in the header (netmod files without a path to re/tools get one first;
+sc3io imports it inside the scroll helper, since sc3pause's CLI imports sc3io). Out of scope: verify/ and scratch
+scripts. Change in sc3pause: no city loaded (SIMCITY.DLL absent, app or app+0x48 still 0) now counts as not paused,
+so menu and dialog probes still attach; an unreadable chain or a vtable mismatch is still refused. Check: py_compile
+on all 83 files (0 failures); in the netmod files a path to re/tools always precedes `import sc3pause`. No live run
+(orchestrator). Behaviour change for tools that used to attach to a paused game on purpose (e.g. set_funds,
+place_direct, sim_status, pt_run, nb_drive lab builds): they now need `--force-paused`. For the pause state itself,
+`py -3.12 re/tools/sc3pause.py PID` reads it without Frida.
+
 ## Not done / open
 
 - **English-UK routing [UNCERTAIN]** (AVENUE_LANES.md 2): lanekit says the matrix's high half serves English-UK's

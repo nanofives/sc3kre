@@ -26,6 +26,7 @@ import frida
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
 import sc3io  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 var P = Process.getModuleByName('sc3perf.dll');
@@ -70,6 +71,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--export", default="sc3netmod_ld_set", help="toggle export (task hwtrips: sc3netmod_rf_set)")
     a = ap.parse_args()
+    sc3pause.require_running(sc3io.game_pid(), "ld_alt")
     s = frida.attach(sc3io.game_pid())
     sc = s.create_script(JS.replace("%EXPORT%", a.export))
     got = []

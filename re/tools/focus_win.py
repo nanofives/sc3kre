@@ -8,6 +8,7 @@ import json
 import subprocess
 
 import frida
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 function ri(p,o){return p.add(o).readS32();}
@@ -43,6 +44,7 @@ out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq SC3U.exe", "/FO", "CSV", 
                      capture_output=True, text=True).stdout
 pid = int(out.split(",")[1].strip('" '))
 dev = frida.get_local_device()
+sc3pause.require_running(pid, "focus_win")
 s = dev.attach(pid)
 sc = s.create_script(JS)
 sc.load()

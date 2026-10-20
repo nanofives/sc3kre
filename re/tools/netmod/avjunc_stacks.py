@@ -1,5 +1,10 @@
 import frida, sys, json, time
+import os as _os  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
+import sys as _sys  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), ".."))
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 pid = int(sys.argv[1])
+sc3pause.require_running(pid, "avjunc_stacks")
 s = frida.attach(pid)
 js = r"""
 var out = [];

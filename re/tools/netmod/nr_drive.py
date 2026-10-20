@@ -20,6 +20,7 @@ import ctypes
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
 import sc3io  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 WM_JOB = 0x8000 + 0x5C6
 
@@ -108,6 +109,7 @@ rpc.exports = {
 
 def frida_job(job, timeout=60):
     import frida
+    sc3pause.require_running(sc3io.game_pid(), "nr_drive")
     s = frida.attach(sc3io.game_pid())
     sc = s.create_script(JS)
     errs = []

@@ -20,6 +20,10 @@ import sys
 import time
 
 import frida
+import os as _os  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
+import sys as _sys  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), ".."))
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 var SS = Process.getModuleByName('STRTSIM.DLL').base;
@@ -76,6 +80,7 @@ def main(argv=None):
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
     X0, Z0 = map(int, a.anchor.split(","))
+    sc3pause.require_running(int(os.environ["SC3_PID"]), "rb_island")
     s = frida.attach(int(os.environ["SC3_PID"]))
     sc = s.create_script(JS.replace("%X0%", str(X0)).replace("%Z0%", str(Z0)).replace("%EVERY%", str(a.every_ms)))
     sc.load()

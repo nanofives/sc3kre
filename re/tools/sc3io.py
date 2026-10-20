@@ -746,6 +746,8 @@ def _scroll_script_get():
     global _scroll_session, _scroll_script
     if _scroll_script is None:
         import frida                      # only needed for scrolling; keep sc3io importable without it
+        import sc3pause
+        sc3pause.require_running(game_pid(), "sc3io")
         _scroll_session = frida.attach(game_pid())
         _scroll_script = _scroll_session.create_script(_SCROLL_JS)
         _scroll_script.load()

@@ -29,6 +29,7 @@ import frida
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import sc3io  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 
@@ -77,6 +78,7 @@ def fg() -> tuple[int, str]:
 def main() -> int:
     hwnd = sc3io.game_hwnd()
     pid = sc3io.game_pid()
+    sc3pause.require_running(pid, "input_reaches_game")
     sess = frida.attach(pid)
     sc = sess.create_script(JS)
     sc.load()

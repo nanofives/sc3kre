@@ -25,6 +25,7 @@ import frida
 
 TOOLS = pathlib.Path(r"C:\Users\maria\Desktop\Proyectos\Simcity\re\tools")
 sys.path.insert(0, str(TOOLS))
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 var ss = Process.getModuleByName("SIMSPR.DLL").base;
@@ -104,6 +105,7 @@ def main(argv):
     def emit(d):
         rec.write(json.dumps(d) + "\n"); rec.flush()
 
+    sc3pause.require_running(pid, "zoomcenter_run_arm")
     sess = frida.attach(pid)
     scr = sess.create_script(JS)
     scr.on("message", lambda m, _d: emit(m.get("payload", m)))

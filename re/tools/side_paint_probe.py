@@ -31,6 +31,7 @@ import subprocess
 import sys
 
 import frida
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 OUT = pathlib.Path("verify/resize_sidekidfix/probe")
 
@@ -113,6 +114,7 @@ def panel_ptr_from_log() -> str:
 
 def snapshot(panel: str) -> dict:
     pid = game_pid()
+    sc3pause.require_running(pid, "side_paint_probe")
     s = frida.attach(pid)
     sc = s.create_script(JS)
     sc.load()
