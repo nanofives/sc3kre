@@ -8,6 +8,7 @@ import json
 import subprocess
 
 import frida
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 function ri(p,o){return p.add(o).readS32();}
@@ -50,6 +51,7 @@ if "SC3U" not in out:
     raise SystemExit(1)
 pid = int(out.split(",")[1].strip('" '))
 dev = frida.get_local_device()
+sc3pause.require_running(pid, "overlay_state")
 s = dev.attach(pid)
 sc = s.create_script(JS)
 sc.load()

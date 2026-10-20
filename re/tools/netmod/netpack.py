@@ -609,6 +609,7 @@ def compile_pack(stock, pack_dir, man):
            "auto_diagonal_boulevards": [],                                                  # task diagbv
            "highway_lines": [],                                                             # task hwcore
            "avenue_lines": [],                                                              # task avcore
+           "avenue_junction_lines": [],                                                     # task avjunc
            "texts": [_text(t, langs_text, "%s texts %d" % (pname, n + 1))                   # task hwask
                      for n, t in enumerate(man.get("texts", []))]}
     for n, v in enumerate(man.get("variants", [])):
@@ -763,8 +764,13 @@ def compile_pack(stock, pack_dir, man):
             if p not in mpieces and p not in xpieces:
                 raise NetpackError("%s: save_43 piece %s is not a merge or crossing piece" % (where, p))
             s43.append(vids[p]["id"])
+        ow = a.get("oneway") or {}                       # task avdiag: one-way lane roles (davu / davn / davt lines)
+        for p in list(ow.get("uturn", [])) + list(ow.get("none", {}).values()) + list(ow.get("junction_t", {}).values()) + \
+                list(ow.get("opening", {}).values()):                                             # task avdiag
+            if vids.get(p) is None or vids[p]["net"] != "ROAD":                                  # task avdiag
+                raise NetpackError("%s: oneway piece %s must be a ROAD variant of this package" % (where, p))  # task avdiag
         out["auto_diagonal_avenues"].append({"middle": mids, "junction": juncs, "merge": merges, "save_43": s43,
-                                             "crossing": xings, "where": where})
+                                             "crossing": xings, "where": where, "oneway": ow})  # task avdiag: oneway
     if len(out["auto_diagonal_avenues"]) > 1:
         raise NetpackError("%s: at most one auto_diagonal_avenues entry (sc3netmod applies one set)" % pname)
     for n, a in enumerate(man.get("auto_avenue_junctions", [])):     # task avx: sc3netmod AVX block (avx.py)
@@ -793,6 +799,8 @@ def compile_pack(stock, pack_dir, man):
             raise NetpackError("%s: side needs 4 pieces and corner 9" % where)
         roles = [("c", 0, a.get("centre"))] + [("s", k, p) for k, p in enumerate(a["side"])] + \
                 [("k", k, p) for k, p in enumerate(a["corner"])]
+        roles += [("o", i, p) for i, p in enumerate(a.get("side_oneway", []))]                         # task avmisc
+        roles += [("w", int(k), p) for k, p in sorted(a.get("corner_oneway", {}).items(), key=lambda t: int(t[0]))]
         for role, k, p in roles:
             v = vids.get(p)
             if v is None or v["net"] != "ROAD":
@@ -827,13 +835,21 @@ def compile_pack(stock, pack_dir, man):
         out["highway_lines"].append(ln)
     for n, ln in enumerate(man.get("avenue_lines", [])):             # task avcore: sc3netmod AVL block (raw lines)
         tok = ln.split()                                             # avls / avlu / avlc <piece> ..., avlj <piece> <NESW>
-        if not tok or tok[0] not in ("avls", "avlu", "avlc", "avlj") or len(tok) < 2 or not tok[1].isdigit():
-            raise NetpackError("%s avenue_lines %d: '%s' is not an avls / avlu / avlc / avlj line" % (pname, n + 1, ln))
+        if not tok or tok[0] not in ("avls", "avlu", "avlk", "avlc", "avlj") or len(tok) < 2 or not tok[1].isdigit():
+            raise NetpackError("%s avenue_lines %d: '%s' is not an avls / avlu / avlk / avlc / avlj line" % (pname, n + 1, ln))
         nets = ("ROAD", "HWAY") if tok[0] == "avlj" else ("ROAD",)     # avlj: hwave's ground row is HWAY (avmisc)
         if int(tok[1]) not in vids or vids[int(tok[1])]["net"] not in nets:
             raise NetpackError("%s avenue_lines %d: %s names a piece that is not a %s variant of this package" %
                                (pname, n + 1, tok[0], " / ".join(nets)))
         out["avenue_lines"].append(ln)
+    for n, ln in enumerate(man.get("avenue_junction_lines", [])):    # task avjunc: sc3netmod AVX block (raw lines)
+        tok = ln.split()                                             # avxm <piece> <outline> <modes>, avxn <piece> <ends> <0|1>
+        if not tok or tok[0] not in ("avxm", "avxn", "avxk") or len(tok) not in (4, 5) or not tok[1].isdigit():
+            raise NetpackError("%s avenue_junction_lines %d: '%s' is not an avxm / avxn / avxk line" % (pname, n + 1, ln))
+        if int(tok[1]) not in vids or vids[int(tok[1])]["net"] != "ROAD":
+            raise NetpackError("%s avenue_junction_lines %d: %s names a piece that is not a ROAD variant of this package"
+                               % (pname, n + 1, tok[0]))
+        out["avenue_junction_lines"].append(ln)
     out["ramps"] = []
     if man.get("ramps"):                                 # hardcoded SIMNTWRK tables (netramp.py, NET_RAMPS.md)
         try:
@@ -1162,7 +1178,8 @@ def merge(stock, packs):
         if c["variants"] or c["ramps"] or mine or c["auto_roundabouts"] or c["auto_diagonal_avenues"] or \
                 c.get("auto_avenue_junctions") or c.get("auto_boulevards") or c.get("auto_big_roundabouts") or \
                 c.get("auto_boulevard_junctions") or c.get("auto_diagonal_boulevards") or \
-                c.get("highway_lines") or c.get("avenue_lines"):  # avx, bv, bigrbt, bvx, diagbv, hwcore, avcore
+                c.get("highway_lines") or c.get("avenue_lines") or \
+                c.get("avenue_junction_lines"):  # avx, bv, bigrbt, bvx, diagbv, hwcore, avcore, avjunc
             tables[c["name"]] = ("# netpack %s: <variant id> <base id>, read by sc3netmod.dll\r\n" % c["name"]).encode() + \
                 b"".join(b"%d %d\r\n" % (v["id"], v["base"]) for v in sorted(c["variants"], key=lambda v: v["id"])) + \
                 RAMP.table_lines(c["ramps"]) + TPL.table_lines(mine) + \
@@ -1177,6 +1194,11 @@ def merge(stock, packs):
                 b"".join(b"davm %d %d %d %d %d %d %d\r\n" % (m["axis"], m["end"], 1 if m["cont"] == "A" else 2, *cell)
                          for a in c["auto_diagonal_avenues"] for m in a.get("merge", []) for cell in m["cells"]) + \
                 b"".join(b"davs %d\r\n" % p for a in c["auto_diagonal_avenues"] for p in a.get("save_43", [])) + \
+                b"".join((b"davu %d %d\r\n" % tuple(a["oneway"]["uturn"]) if a.get("oneway", {}).get("uturn") else b"") +  # task avdiag
+                         b"".join(b"davn %s %d\r\n" % (k.encode(), v) for k, v in sorted(a.get("oneway", {}).get("none", {}).items())) +
+                         b"".join(b"davt %s %d\r\n" % (k.encode(), v) for k, v in sorted(a.get("oneway", {}).get("junction_t", {}).items())) +
+                         b"".join(b"davo %s %d\r\n" % (k.encode(), v) for k, v in sorted(a.get("oneway", {}).get("opening", {}).items()))  # task avdiag
+                         for a in c["auto_diagonal_avenues"]) + \
                 avx_table_lines(c.get("auto_avenue_junctions", [])) + \
                 b"".join(b"bvp %d %d %d %d %d %d %d\r\n" % tuple(a["pieces"]) +
                          (b"bvc %d %d %d\r\n" % tuple(a["cap"]) if a["cap"] else b"") +
@@ -1194,7 +1216,8 @@ def merge(stock, packs):
                                   for cell in cells)
                          for a in c.get("auto_diagonal_boulevards", [])) + \
                 b"".join(b"%s\r\n" % ln.encode() for ln in c.get("highway_lines", [])) + \
-                b"".join(b"%s\r\n" % ln.encode() for ln in c.get("avenue_lines", []))               # task hwcore, avcore
+                b"".join(b"%s\r\n" % ln.encode() for ln in c.get("avenue_lines", [])) + \
+                b"".join(b"%s\r\n" % ln.encode() for ln in c.get("avenue_junction_lines", []))      # task hwcore, avcore, avjunc
                 # task diagave, avx, boulevard, bigrbt, diagx, bvx, diagbv
 
     # ---- report + checks that need the merged result

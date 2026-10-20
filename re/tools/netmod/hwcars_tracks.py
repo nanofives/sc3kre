@@ -14,6 +14,9 @@ at that address (a car address is reused after a removal). Analyse with hwcars_t
 """
 import json, os, sys, time
 import frida
+import os as _os  # noqa: E402
+sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), ".."))
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 var B = %s;
@@ -49,6 +52,7 @@ rpc.exports = { take: function () { return {cars: cars, ends: ends}; } };
 
 def main(a):
     box = list(map(int, a[1].split(","))); secs = float(a[2])
+    sc3pause.require_running(int(os.environ["SC3_PID"]), "hwcars_tracks")
     s = frida.attach(int(os.environ["SC3_PID"]))
     sc = s.create_script(JS % json.dumps(box)); sc.load()
     t0 = time.time()

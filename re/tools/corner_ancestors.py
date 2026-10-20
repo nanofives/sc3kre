@@ -1,5 +1,6 @@
 import subprocess, frida, ctypes
 from ctypes import wintypes
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 u=ctypes.WinDLL("user32")
 out=subprocess.run(["tasklist","/FI","IMAGENAME eq SC3U.exe","/FO","CSV","/NH"],capture_output=True,text=True).stdout
 pid=int(out.split(",")[1].strip('" '))
@@ -24,6 +25,7 @@ rpc.exports={f:function(CW,CH){var rr=root();var head=rp(rr,0x34);var n=rp(head,
  return {ok:true, chain:chain};
 }};
 """
+sc3pause.require_running(pid, "corner_ancestors")
 s=frida.attach(pid);sc=s.create_script(JS);sc.load();res=sc.exports_sync.f(CW,CH)
 if not res.get("ok"): print("button not found")
 else:

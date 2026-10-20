@@ -28,6 +28,22 @@
  */
 
 static WORD g_r9_side[4], g_r9_corner[9];       /* g_r9_centre: declared in sc3netmod_rbt.c */
+/* task avmisc (avenue lane rework): the same pieces for arms whose avenue halves are one-way (`rbt9 o <2|3> <piece>`
+ * side by arm kind 0..3 as `s`, `rbt9 w <k> <piece>` corner, k = 3 * kN + kE: the whole set, ring-only cells too, since
+ * a block's cells must all be unmirrored in English-UK). A block takes them when EVERY avenue
+ * arm reports avl_band_ok() (avcore: the band converts with this block as its declared end); else the two-way
+ * pieces above, as before. Blocks built one-way are remembered (r9_resync) so a band avcore later turns back to stock
+ * flips them back on the next road pass. Lanes: bigrbt.py lane_spec(oneway), rules in verify/avmisc/RESULTS.md. */
+static WORD g_r9_ow_side[4], g_r9_ow_corner[9];
+#define R9_MAXOW 128
+static struct { short x, z; BYTE narm; short ax[8], az[8]; BYTE aw[8]; } g_r9_owb[R9_MAXOW];
+static int g_r9_nowb, g_r9_in_resync;
+/* task avmisc: avcore's sibling API (sc3netmod_avl.c, #included later; AVENUE_LANES.md 5) */
+static int avl_dir(int x, int z);
+static int avl_own(WORD id);
+static int avl_band_ok(int x, int z, int away);
+static const BYTE R9_AWAY[4] = { 3, 0, 1, 2 };            /* block side x- z- x+ z+ -> avcore's N E S W (W N E S) */
+static BYTE g_r9_chk_away[8];                   /* r9_check: each avenue arm's outward side, NESW */
 static volatile LONG g_r9_n_blocks, g_r9_n_cells, g_r9_n_rev;
 
 /* cells by index cx + 3 * cz: 0 centre / 1 side / 2 corner, and the state */
@@ -44,12 +60,15 @@ static void r9_line(const char *path, const char *line) {
     unsigned long k, p;
     if (sscanf(line + 5, " %c %lu %lu", &role, &k, &p) != 3 || !p || p > 0xffff || !g_base[p] ||
         (role == 'c' && k != 0) || (role == 's' && k > 3) || (role == 'k' && k > 8) ||
-        (role != 'c' && role != 's' && role != 'k')) {
+        (role == 'o' && k > 3) || (role == 'w' && k > 8) ||
+        (role != 'c' && role != 's' && role != 'k' && role != 'o' && role != 'w')) {
         logf("### rbt9: %s: bad line or piece not a variant: '%s'", path, line);
         return;
     }
     if (role == 'c') g_r9_centre = (WORD)p;
     else if (role == 's') g_r9_side[k] = (WORD)p;
+    else if (role == 'o') g_r9_ow_side[k] = (WORD)p;          /* task avmisc */
+    else if (role == 'w') g_r9_ow_corner[k] = (WORD)p;            /* task avmisc */
     else g_r9_corner[k] = (WORD)p;
 }
 
@@ -68,7 +87,16 @@ static int r9_is_ours(WORD id) {
     if (id == g_r9_centre) return 1;
     for (k = 0; k < 4; k++) if (g_r9_side[k] == id) return 1;
     for (k = 0; k < 9; k++) if (g_r9_corner[k] == id) return 1;
+    for (k = 0; k < 4; k++) if (g_r9_ow_side[k] == id) return 1;       /* task avmisc */
+    for (k = 0; k < 9; k++) if (g_r9_ow_corner[k] == id) return 1;
     return 0;
+}
+
+static int r9_ow_ready(void) {                  /* task avmisc: the one-way set is complete */
+    int k;
+    for (k = 0; k < 4; k++) if (!g_r9_ow_side[k]) return 0;
+    for (k = 0; k < 9; k++) if (!g_r9_ow_corner[k]) return 0;
+    return 1;
 }
 
 static int r9_flat(DWORD v) {
@@ -76,9 +104,13 @@ static int r9_flat(DWORD v) {
     return v && (id == 29 || id == 39 || id == 43 || id == 11203 || id == 11204);
 }
 
+/* task avmisc: an avenue arm cell the block may keep: a flat stock piece, or a cell of a band avcore has converted */
+static int r9_armflat(DWORD v, int x, int z) { return r9_flat(v) || (v && (avl_dir(x, z) >= 0 || avl_own((WORD)(v & 0xffff)))); }
+
 /* the rule for origin (X, Z). -> 1 and want[0..8] (piece << 8 | state per cell, index cx + 3 cz), arm[0..7]
    (x, z, 11204 << 8 | state; *narm of them) when it qualifies; else 0 and *why */
-static int r9_check(RbBuf *b, int X, int Z, DWORD *want, int *arm, int *narm, const char **why) {
+static int r9_check(RbBuf *b, int X, int Z, DWORD *want, int *arm, int *narm, const char **why, int *owp) {
+    int ow = 0;
     BYTE kind[9][4];                              /* per block cell and world side: 0 none, 1 road, 2 + partner */
     int cx, cz, s, i, k;
     *narm = 0;
@@ -103,16 +135,22 @@ static int r9_check(RbBuf *b, int X, int Z, DWORD *want, int *arm, int *narm, co
             {
                 int ax = X + R9_SIDE[s][i][0] + dx, az = Z + R9_SIDE[s][i][1] + dz, partner;
                 if (!rb_at(b, ax + dx, az + dz)) { *why = "d (a 2-wide arm that does not go on as an avenue)"; return 0; }
-                if (!r9_flat(rb_at(b, ax, az))) { *why = "d (avenue arm cell is not a flat road piece)"; return 0; }
+                if (!r9_armflat(rb_at(b, ax, az), ax, az)) { *why = "d (avenue arm cell is not a flat road piece)"; return 0; }
                 partner = j > i ? R9_ALONG[s] : (R9_ALONG[s] + 2) & 3;
                 kind[c][s] = (BYTE)(2 + partner);
                 if (*narm < 8) {
                     arm[*narm * 3] = ax; arm[*narm * 3 + 1] = az;
+                    g_r9_chk_away[*narm] = R9_AWAY[s];                     /* task avmisc */
                     arm[*narm * 3 + 2] = (int)((11204UL << 8) | ((partner + 3) & 3));
                     (*narm)++;
                 }
             }
         }
+    }
+    {                                                 /* task avmisc: one-way pieces when every avenue arm's band converts */
+        int a;
+        ow = r9_ow_ready() && *narm > 0;
+        for (a = 0; ow && a < *narm; a++) ow = avl_band_ok(arm[a * 3], arm[a * 3 + 1], g_r9_chk_away[a]);
     }
     for (cz = 0; cz < 3; cz++)
         for (cx = 0; cx < 3; cx++) {
@@ -121,14 +159,53 @@ static int r9_check(RbBuf *b, int X, int Z, DWORD *want, int *arm, int *narm, co
             if (R9_TYPE[c] == 0) p = g_r9_centre;
             else if (R9_TYPE[c] == 1) {
                 int o = (2 + st) & 3, kd = kind[c][o], code = kd < 2 ? kd : (((kd - 2 - st) & 3) == 1 ? 2 : 3);
-                p = g_r9_side[code];
+                p = ow ? g_r9_ow_side[code] : g_r9_side[code];
             } else {
-                int n = kind[c][(1 + st) & 3], e = kind[c][(2 + st) & 3];
-                p = g_r9_corner[3 * (n < 2 ? n : 2) + (e < 2 ? e : 2)];
+                int n = kind[c][(1 + st) & 3], e = kind[c][(2 + st) & 3], kk = 3 * (n < 2 ? n : 2) + (e < 2 ? e : 2);
+                p = ow ? g_r9_ow_corner[kk] : g_r9_corner[kk];
             }
             want[c] = ((DWORD)p << 8) | (DWORD)st;
         }
+    *owp = ow;
     return 1;
+}
+
+/* task avmisc: every block with avenue arms is remembered with the choice it got (ow = one-way pieces), so a later pass
+   anywhere can notice that avcore's answer for its bands changed and run the block again (r9_resync) */
+static void r9_forget(int x, int z) {
+    int i;
+    for (i = 0; i < g_r9_nowb; i++)
+        if (g_r9_owb[i].x == x && g_r9_owb[i].z == z) { g_r9_owb[i] = g_r9_owb[--g_r9_nowb]; return; }
+}
+
+static void r9_remember(int x, int z, int ow, const int *arm, int narm) {
+    int i, a;
+    if (narm <= 0 || !r9_ow_ready()) { r9_forget(x, z); return; }
+    for (i = 0; i < g_r9_nowb && !(g_r9_owb[i].x == x && g_r9_owb[i].z == z); i++) ;
+    if (i == g_r9_nowb) {
+        if (g_r9_nowb >= R9_MAXOW) return;
+        g_r9_nowb++;
+    }
+    g_r9_owb[i].x = (short)x; g_r9_owb[i].z = (short)z; g_r9_owb[i].narm = (BYTE)(ow ? 0x80 | narm : narm);
+    for (a = 0; a < narm && a < 8; a++) {
+        g_r9_owb[i].ax[a] = (short)arm[a * 3]; g_r9_owb[i].az[a] = (short)arm[a * 3 + 1]; g_r9_owb[i].aw[a] = g_r9_chk_away[a];
+    }
+}
+
+static void r9_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who);
+
+/* blocks whose bands' avl_band_ok() no longer matches the pieces they hold are run again */
+static void r9_resync(BYTE *mgr) {
+    int i, a, todo[R9_MAXOW][2], n = 0;
+    if (g_r9_in_resync || !g_r9_nowb) return;
+    for (i = 0; i < g_r9_nowb; i++) {
+        int ok = 1, na = g_r9_owb[i].narm & 0x7f, ow = (g_r9_owb[i].narm & 0x80) != 0;
+        for (a = 0; ok && a < na; a++) ok = avl_band_ok(g_r9_owb[i].ax[a], g_r9_owb[i].az[a], g_r9_owb[i].aw[a]);
+        if (ok != ow) { todo[n][0] = g_r9_owb[i].x; todo[n][1] = g_r9_owb[i].z; n++; }
+    }
+    g_r9_in_resync = 1;
+    for (i = 0; i < n; i++) r9_run(mgr, todo[i][0], todo[i][1], todo[i][0] + 2, todo[i][1] + 2, "resync");
+    g_r9_in_resync = 0;
 }
 
 /* cells [x0..x1] x [z0..z1] were edited (the retile pass's work box) or the whole map (load) */
@@ -154,14 +231,16 @@ static void r9_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) {
     for (z = oz0; z <= oz1; z++)
         for (x = ox0; x <= ox1; x++) {
             DWORD want[9];
-            int arm[24], narm, n = 0;
+            int arm[24], narm, n = 0, ow = 0;
             const char *why = "";
-            if (!r9_check(&b, x, z, want, arm, &narm, &why)) continue;
+            if (!r9_check(&b, x, z, want, arm, &narm, &why, &ow)) { r9_forget(x, z); continue; }
+            r9_remember(x, z, ow, arm, narm);
             nb++;
             for (k = 0; k < 9 + narm; k++) {
                 int cx = k < 9 ? x + k % 3 : arm[(k - 9) * 3], cz = k < 9 ? z + k / 3 : arm[(k - 9) * 3 + 1], pos[3];
                 DWORD w = k < 9 ? want[k] : (DWORD)arm[(k - 9) * 3 + 2], cur = rb_at(&b, cx, cz);
                 keep[(cz - b.z0) * b.w + (cx - b.x0)] = 1;
+                if (k >= 9 && (avl_dir(cx, cz) >= 0 || avl_own((WORD)(cur & 0xffff)))) continue;              /* task avmisc: a converted band's cell is avcore's */
                 if ((((cur & 0xffff) << 8) | ((cur >> 16) & 3)) == w) continue;
                 pos[0] = cx << 8; pos[1] = cz << 8; pos[2] = 0;
                 ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, lay, pos, w, -1, 8, 0);
@@ -195,6 +274,7 @@ static void r9_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) {
                 }
         }
     VirtualFree(b.c, 0, MEM_RELEASE);
+    if (!g_r9_in_resync && g_avl_on) r9_resync(mgr);                    /* task avmisc */
     InterlockedExchangeAdd(&g_r9_n_blocks, nb);
     InterlockedExchangeAdd(&g_r9_n_cells, nw);
     InterlockedExchangeAdd(&g_r9_n_rev, nrev);

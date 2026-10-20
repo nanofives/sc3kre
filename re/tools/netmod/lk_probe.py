@@ -27,6 +27,7 @@ import frida
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
 import sc3io  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 function mod(n) { return Process.getModuleByName(n); }
@@ -100,6 +101,7 @@ def main(argv=None):
     watch = json.load(open(a.watch)) if a.watch else []
     js = JS.replace("%ALLW%", "true" if a.all else "false").replace("%CELLS%", json.dumps(cells)).replace("%WATCH%", json.dumps(watch))
     pid = sc3io.game_pid()
+    sc3pause.require_running(pid, "lk_probe")
     s = frida.attach(pid)
     sc = s.create_script(js)
     got = []

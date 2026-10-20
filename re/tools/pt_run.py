@@ -36,6 +36,7 @@ TOOLS = HERE
 sys.path.insert(0, TOOLS)
 import sc3io  # noqa: E402
 from pt_probe import JS  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 
@@ -198,6 +199,7 @@ def main():
     arm = Arm(a)
     arm.h = sc3io.game_hwnd(pid)
     tid = user32.GetWindowThreadProcessId(wintypes.HWND(arm.h), None)
+    sc3pause.require_running(pid, "pt_run")
     s = frida.attach(pid)
     arm.sc = s.create_script(JS)
     arm.sc.on("message", arm.on_msg)

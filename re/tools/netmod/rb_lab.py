@@ -28,6 +28,7 @@ sys.path.insert(0, os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 import sc3io  # noqa: E402
 import nramp_cam  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 NP = os.path.join(HERE, "np_drive.py")
 STATE = os.path.join(os.environ.get("SC3_LAB_DIR", os.getcwd()), "rb_lab_cam.json")
@@ -42,6 +43,7 @@ def np(*a, capture=False):
 def cam(x, z, zoom, rot):
     pid = sc3io.game_pid()
     h = sc3io.game_hwnd(pid)
+    sc3pause.require_running(pid, "rb_lab")
     s = frida.attach(pid)
     sc = s.create_script(nramp_cam.JS)
     sc.load()

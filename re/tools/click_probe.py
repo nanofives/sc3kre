@@ -19,6 +19,7 @@ from ctypes import wintypes
 import frida
 from PIL import Image, ImageChops
 import sys as _s, pathlib as _p; _s.path.insert(0, str(_p.Path(__file__).resolve().parent)); import sc3io as _sc3io
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 DUMPS = os.path.join(ROOT, "verify", "resize_clicklab", "dumps")
@@ -87,6 +88,7 @@ if not hwnd:
     raise SystemExit(1)
 
 dev = frida.get_local_device()
+sc3pause.require_running(pid, "click_probe")
 s = dev.attach(pid)
 sc = s.create_script(JS)
 sc.load()

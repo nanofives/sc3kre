@@ -1,0 +1,130 @@
+{
+ "cities": {
+  "Berlin, Germany": {
+   "segments": 587,
+   "covered": 210,
+   "avx_junctions": {
+    "AvT": 14,
+    "RT": 119,
+    "RxA": 43,
+    "AxA": 12
+   }
+  },
+  "Big One": {
+   "segments": 0,
+   "covered": 0,
+   "avx_junctions": {}
+  },
+  "Craterville": {
+   "segments": 28,
+   "covered": 8,
+   "avx_junctions": {
+    "RT": 4,
+    "RxA": 4
+   }
+  },
+  "Europolis": {
+   "segments": 0,
+   "covered": 0,
+   "avx_junctions": {}
+  },
+  "Farmsville": {
+   "segments": 2,
+   "covered": 0,
+   "avx_junctions": {}
+  },
+  "Frankfurt, Germany": {
+   "segments": 403,
+   "covered": 124,
+   "avx_junctions": {
+    "RxA": 6,
+    "RT": 97,
+    "AxA": 3,
+    "AvT": 12
+   }
+  },
+  "Liverpool, England": {
+   "segments": 377,
+   "covered": 185,
+   "avx_junctions": {
+    "RT": 103,
+    "AvT": 20,
+    "RxA": 19,
+    "AxA": 13
+   }
+  },
+  "London, England": {
+   "segments": 672,
+   "covered": 216,
+   "avx_junctions": {
+    "RT": 138,
+    "AvT": 22,
+    "RxA": 29,
+    "AxA": 3
+   }
+  },
+  "Madison, WI": {
+   "segments": 48,
+   "covered": 6,
+   "avx_junctions": {
+    "RxA": 2,
+    "RT": 6
+   }
+  },
+  "Madrid, Spain": {
+   "segments": 360,
+   "covered": 167,
+   "avx_junctions": {
+    "RT": 95,
+    "RxA": 42,
+    "AxA": 9,
+    "AvT": 7
+   }
+  },
+  "Moscow, Russia": {
+   "segments": 222,
+   "covered": 107,
+   "avx_junctions": {
+    "AvT": 9,
+    "RT": 47,
+    "RxA": 36,
+    "AxA": 8
+   }
+  },
+  "Mount Herrang": {
+   "segments": 2,
+   "covered": 0,
+   "avx_junctions": {}
+  },
+  "Roadless Paradise": {
+   "segments": 0,
+   "covered": 0,
+   "avx_junctions": {}
+  },
+  "Sacramento, CA": {
+   "segments": 131,
+   "covered": 57,
+   "avx_junctions": {
+    "RT": 29,
+    "AxA": 1,
+    "RxA": 8,
+    "AvT": 9
+   }
+  },
+  "Seoul, Korea": {
+   "segments": 214,
+   "covered": 128,
+   "avx_junctions": {
+    "RT": 40,
+    "RxA": 57,
+    "AxA": 12,
+    "AvT": 5
+   }
+  },
+  "TUTORIAL": {
+   "segments": 0,
+   "covered": 0,
+   "avx_junctions": {}
+  }
+ }
+}

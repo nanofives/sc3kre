@@ -8,6 +8,9 @@ are printed as module+offset (candidate return addresses, not a verified unwind)
 """
 import os, sys
 import frida
+import os as _os  # noqa: E402
+sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), ".."))
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 N = int(sys.argv[sys.argv.index("--words") + 1]) if "--words" in sys.argv else 64
 JS = r"""
@@ -22,6 +25,7 @@ rpc.exports = { run: function (n) {
   return out;
 } };
 """
+sc3pause.require_running(int(os.environ["SC3_PID"]), "hwcars_stacks")
 s = frida.attach(int(os.environ["SC3_PID"]))
 sc = s.create_script(JS); sc.load()
 for t in sc.exports_sync.run(N):

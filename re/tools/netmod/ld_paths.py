@@ -24,6 +24,7 @@ import frida
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
 import sc3io  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 var TR = Process.getModuleByName('SimTransit.dll').base;
@@ -57,6 +58,7 @@ def main():
                     help="keep only deposits whose mask (arg 4 of FUN_10006edd) has these bits, e.g. 0x35 = the surface grid +0x6c; 0 = all")
     a = ap.parse_args()
     rects = [[int(v) for v in c.split(",")] for c in a.cells]
+    sc3pause.require_running(sc3io.game_pid(), "ld_paths")
     s = frida.attach(sc3io.game_pid())
     sc = s.create_script(JS.replace("%RECTS%", json.dumps(rects)).replace("%MASK%", str(a.mask)))
     sc.load()

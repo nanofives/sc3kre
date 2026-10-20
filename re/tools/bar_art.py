@@ -1,5 +1,6 @@
 """Read the bottom-bar object's paint rects: +0x120 console, +0x130 filler, +0x140/150/160/170 info."""
 import subprocess, frida
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 JS=r"""
 function modBase(w){var m=Process.enumerateModules();for(var i=0;i<m.length;i++)if(m[i].name.toLowerCase()===w.toLowerCase())return m[i].base;return null;}
 function rp(p,o){return p.add(o).readPointer();}
@@ -21,6 +22,7 @@ rpc.exports={art:function(){
 """
 out=subprocess.run(["tasklist","/FI","IMAGENAME eq SC3U.exe","/FO","CSV","/NH"],capture_output=True,text=True).stdout
 pid=int(out.split(",")[1].strip('" '))
+sc3pause.require_running(pid, "bar_art")
 s=frida.attach(pid);sc=s.create_script(JS);sc.load()
 r=sc.exports_sync.art()
 if not r.get("ok"): print("bar not found")

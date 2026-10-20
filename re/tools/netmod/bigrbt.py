@@ -41,6 +41,15 @@ CENTRE = 20600
 SIDE_IDS = {0: 20601, 1: 20602, 2: 20603, 3: 20604}          # side kind: none, road, avenue median z-, median z+
 CORNER0 = 20610                                              # + 3 * kN + kE
 FLAT = {29, 39, 43, 11203, 11204}
+# task avmisc: the pieces of a block whose avenue arms are one-way (avcore, AVENUE_LANES.md): side 20605 / 20606 for the
+# two-way 20603 / 20604, corner 20620 + k for the avenue corners k = 3 * kN + kE in {2, 5, 6, 7, 8} (= the old id + 10)
+# The ring-only cells of such a block (no arm, a road arm) get one-way twins too: every piece of a block that has
+# English-UK lanes unmirrored (owner: right-hand everywhere) must be unmirrored, and unmirrored lanes need their own
+# curves (the UK curve file stores the stock ones reversed), so each ow piece carries all its lanes as new curves.
+OW_SIDE = {0: 20607, 1: 20608, 2: 20605, 3: 20606}          # by side kind: none, road, avenue median z-, median z+
+OW_CORNER0 = 20620
+OW_CORNER_K = tuple(range(9))
+OW_BASE = {**{OW_SIDE[k]: SIDE_IDS[k] for k in range(4)}, **{OW_CORNER0 + k: CORNER0 + k for k in OW_CORNER_K}}
 
 # block cells by world side, index 0..2 along the side; the arm cell is one step out
 SIDE_CELLS = {0: [(0, 0), (0, 1), (0, 2)], 1: [(0, 0), (1, 0), (2, 0)],
@@ -121,7 +130,7 @@ def check(road, ids, X, Z):
 
 
 def is_ours(pid):
-    return pid is not None and (pid == CENTRE or pid in SIDE_IDS.values() or CORNER0 <= pid < CORNER0 + 9)
+    return pid is not None and (pid == CENTRE or pid in SIDE_IDS.values() or CORNER0 <= pid < CORNER0 + 9 or pid in OW_BASE)
 
 
 def kind_code(kind, partner, state, cell_type):
@@ -169,6 +178,7 @@ def scene_arms(arms):
 def canon_arms(pid):
     """the canonical piece pid at state 0 -> (block cell, arms dict holding only its own edges)"""
     from netmod import bigrbt_paint as BP  # noqa: F401
+    pid = OW_BASE.get(pid, pid)                                  # task avmisc: same cell, same arms, other lanes
     if pid == CENTRE:
         return (1, 1), {}
     for code, v in SIDE_IDS.items():
@@ -189,7 +199,7 @@ def canon_arms(pid):
     return c, arms
 
 
-ALL_PIECES = [CENTRE] + sorted(SIDE_IDS.values()) + list(range(CORNER0, CORNER0 + 9))
+ALL_PIECES = [CENTRE] + sorted(SIDE_IDS.values()) + list(range(CORNER0, CORNER0 + 9)) + sorted(OW_BASE)
 
 DEMO = {"W": "av01", "N": "av12", "E": "r1", "S": "r0,r2"}
 
@@ -260,12 +270,68 @@ ARM_LANES = {                       # (cell type, local side) -> (inbound lane, 
     ("corner", 2): ({"from": [255, 175], "to": [175, 255], "path": 771},
                     {"from": [0, 80], "to": [255, 80], "path": 512}),
 }
+# task avmisc: one-way avenue arms. A half's two lanes sit at the stock slots 80 / 175 of the arm edge and run the same
+# way (AVENUE_LANES.md 2). Which way follows from the avenue rule (avmisc_plan.py check): side 20603 and a corner's
+# z- arm take the half INTO the block, side 20604 and a corner's x+ arm take it OUT. The stock slot keeps its stock
+# curve, the other slot gets a new one (shapes 23900..23903, one per kind, shared by every piece that uses it).
+OW_SHAPE = {"side_in": 23900, "side_out": 23901, "corner_in": 23902, "corner_out": 23903}
+# avcore's rule (AVENUE_LANES.md 2): lane specs carry NO path keys; each language's curve library is searched by end
+# points. English-UK holds every curve reversed under the same key, so with unmirrored lanes a UK lane needs a curve
+# whose ENGLISH geometry is the REVERSE of the lane (its UK copy runs forward). So: a stock lane keeps its stock curve for
+# English and gets one reverse shape for UK; a new lane gets its forward shape plus a reverse shape.
+STOCK_REV = {259: 23904, 1024: 23905, 771: 23906, 770: 23907, 769: 23908, 512: 23909}   # stock keys used by RING / ARM_LANES
+NEW_REV = {23900: 23910, 23901: 23911, 23902: 23912, 23903: 23913}
+
+
+def _fix_curves(lanes, curves):
+    """task avmisc: strip the path keys, add the reverse shapes (see above)"""
+    from netmod import lanekit as LK
+    P = LK.Game().paths()
+    have = {c["shape"]: c for c in curves}
+    for ln in lanes:
+        key = ln.pop("path")
+        if key in STOCK_REV:
+            pts = [[int(v) for v in q] for q in P.veh[key]["pts"]]
+            rev = STOCK_REV[key]
+        else:
+            pts = have[key // 256]["pts"]
+            rev = NEW_REV[key // 256]
+        if rev not in {c["shape"] for c in curves}:
+            curves.append({"shape": rev, "pts": [list(q) for q in reversed(pts)]})
+        for e in ("from", "to"):
+            if len(ln[e]) == 2:
+                ln[e] = [ln[e][0], 0, ln[e][1]]
+
+
+def _bez(p0, p1, p2, p3, n=8):
+    out = []
+    for i in range(n + 1):
+        t = i / float(n)
+        u = 1 - t
+        out.append([int(round(u ** 3 * p0[k] + 3 * u * u * t * p1[k] + 3 * u * t * t * p2[k] + t ** 3 * p3[k]))
+                    for k in (0, 1)])
+    return [[x, 0, z] for x, z in out]
+
+
+OW_CURVES = {                      # kind -> (from, to, control points) in the state-0 frame, lanekit (x, z)
+    "side_in": ((255, 80), (175, 255), (205, 80), (175, 130)),
+    "side_out": ((175, 0), (255, 175), (175, 60), (205, 175)),
+    "corner_in": ((80, 0), (175, 255), (80, 90), (175, 120)),
+    "corner_out": ((0, 80), (255, 175), (90, 80), (160, 175)),
+}
 SIDE_NAME = {0: "x-", 1: "z-", 2: "x+", 3: "z+"}
 PED_EDGE = {1: ([15, 15], [240, 15], 256), 2: ([240, 15], [240, 240], 257)}     # walk along an outer edge (local side)
 
 
+def _ow_lane(kind):
+    a, b, c1, c2 = OW_CURVES[kind]
+    pts = _bez(a, c1, c2, b)
+    return {"from": [a[0], 0, a[1]], "to": [b[0], 0, b[1]], "path": OW_SHAPE[kind] * 256},            {"shape": OW_SHAPE[kind], "pts": pts}
+
+
 def lane_spec(pid):
     """lanekit authoring spec of a piece (state-0 frame)"""
+    ow = pid in OW_BASE
     cell, arms = canon_arms(pid)
     t, _st = cell_state(cell)
     spec = {"_": "bigrbt.py: 3x3 roundabout piece %d (%s cell, arms %s)" % (
@@ -278,14 +344,28 @@ def lane_spec(pid):
         return spec
     lanes = [dict(RING[t])]
     ends = {tuple(lanes[0]["to"])}
-    for (c, s), _k in sorted(arms.items()):
-        for ln in ARM_LANES[(t, s)]:
+    curves = []
+    for (c, s), k in sorted(arms.items()):
+        arm_lanes = list(ARM_LANES[(t, s)])
+        if ow and k[0] == "avenue":                      # inbound = arm_lanes[0], outbound = arm_lanes[1]
+            into = (s == 2) if t == "side" and pid == OW_SIDE[2] else (s == 1) if t == "corner" else False
+            if t == "side" and pid == OW_SIDE[3]:
+                into = False
+            second, cv = _ow_lane(("side_" if t == "side" else "corner_") + ("in" if into else "out"))
+            curves.append(cv)
+            arm_lanes = [arm_lanes[0 if into else 1], second]
+        for ln in arm_lanes:
             ln = dict(ln)
-            if tuple(ln["to"]) in ends:
+            if tuple(ln["to"][::2] if len(ln["to"]) == 3 else ln["to"]) in ends:
                 ln["exit"] = False          # merges into the ring: the ring lane's own exit edge leaves that node
-            ends.add(tuple(ln["to"]))
+            ends.add(tuple(ln["to"][::2] if len(ln["to"]) == 3 else ln["to"]))
             lanes.append(ln)
     spec["vehicle"] = {"class": "car", "lanes": lanes}
+    if ow:
+        spec["mirror_uk"] = False                        # task avmisc: right-hand in English-UK too (owner 2026-10-19)
+    if ow:
+        _fix_curves(lanes, curves)
+        spec["curves"] = curves
     walks, exits = [], []
     for ls in ([2] if t == "side" else [1, 2]):     # the block's outer sidewalk; a crosswalk over an arm
         a, b, path = PED_EDGE[ls]
@@ -302,7 +382,8 @@ def lane_spec(pid):
     # lanekit's "auto" would leave its turn out of the matrix)
     pairs = []
     for ln in lanes:
-        pr = [_edge_side(ln["from"]), _edge_side(ln["to"])]
+        pr = [_edge_side(ln["from"][::2] if len(ln["from"]) == 3 else ln["from"]),
+              _edge_side(ln["to"][::2] if len(ln["to"]) == 3 else ln["to"])]
         if pr not in pairs:
             pairs.append(pr)
     spec["connects"] = {"road": pairs}
@@ -316,6 +397,7 @@ def _edge_side(p):
 def base_of(pid):
     """the variant's base = the piece a game without the mod loads (SAVEBASE): 43 where the cell holds several
     roads, the stock T 39 / curve 11203 for an arm-less side / corner (their stock connections in that state)"""
+    pid = OW_BASE.get(pid, pid)
     if pid == SIDE_IDS[0]:
         return 39
     if pid == CORNER0:
@@ -324,6 +406,18 @@ def base_of(pid):
 
 
 NAMES = {"*": "Roundabout (3x3)", "ENGLISH": "Rotonda grande"}
+
+
+def avlj_lines():
+    """avcore's band-end declarations (AVENUE_LANES.md 5): per side N E S W at state 0, I = a one-way half's traffic enters
+    the piece across that side, O = leaves. An avenue arm on side x+ (E) is OUT of the ring (corner kE = 2, side 20606),
+    on z- (N) IN (corner kN = 2); side 20605 takes the half in on E (avmisc_plan.py check)."""
+    out = ["avlj %d .I.." % OW_SIDE[2], "avlj %d .O.." % OW_SIDE[3]]
+    for k in OW_CORNER_K:
+        n, e = k // 3, k % 3
+        if n == 2 or e == 2:
+            out.append("avlj %d %s%s.." % (OW_CORNER0 + k, "I" if n == 2 else ".", "O" if e == 2 else "."))
+    return out
 
 
 def manifest():
@@ -345,7 +439,10 @@ def manifest():
         "game": {"Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"},
         "variants": variants, "lanes": lanes,
         "auto_big_roundabouts": [{"centre": CENTRE, "side": [SIDE_IDS[k] for k in range(4)],
-                                  "corner": list(range(CORNER0, CORNER0 + 9))}]}
+                                  "corner": list(range(CORNER0, CORNER0 + 9)),
+                                  "side_oneway": [OW_SIDE[k] for k in range(4)],
+                                  "corner_oneway": {str(k): OW_CORNER0 + k for k in OW_CORNER_K}}],
+        "avenue_lines": avlj_lines()}
 
 
 def cmd_build(a):

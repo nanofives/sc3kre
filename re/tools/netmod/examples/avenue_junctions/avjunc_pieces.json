@@ -1,0 +1,649 @@
+{
+ "_": "avjunc_build.py pieces: box cells by outline (I another box cell, A arm, C closed) and edge modes (I 2 lanes in, O 2 out, T two-way, C closed), N E S W at state 0; cells_all_oneway = cells in the 15 shipped cities with every avenue arm one-way (0: needed only when an arm stays two-way)",
+ "box": [
+  {
+   "id": 20805,
+   "outline": "AAAI",
+   "modes": "ITOT",
+   "base": 43,
+   "cells_all_oneway": 1672
+  },
+  {
+   "id": 20806,
+   "outline": "ACAI",
+   "modes": "ICOT",
+   "base": 39,
+   "cells_all_oneway": 1026
+  },
+  {
+   "id": 20807,
+   "outline": "AAII",
+   "modes": "IOOI",
+   "base": 43,
+   "cells_all_oneway": 586
+  },
+  {
+   "id": 20808,
+   "outline": "ICAI",
+   "modes": "ICOO",
+   "base": 39,
+   "cells_all_oneway": 184
+  },
+  {
+   "id": 20809,
+   "outline": "ACII",
+   "modes": "ICOI",
+   "base": 39,
+   "cells_all_oneway": 171
+  },
+  {
+   "id": 20812,
+   "outline": "ICAA",
+   "modes": "TCTO",
+   "base": 39,
+   "cells_all_oneway": 162
+  },
+  {
+   "id": 20813,
+   "outline": "ACIA",
+   "modes": "TCTI",
+   "base": 39,
+   "cells_all_oneway": 140
+  },
+  {
+   "id": 20814,
+   "outline": "AAII",
+   "modes": "TOTI",
+   "base": 43,
+   "cells_all_oneway": 112
+  },
+  {
+   "id": 20815,
+   "outline": "AAII",
+   "modes": "ITOT",
+   "base": 43,
+   "cells_all_oneway": 88
+  },
+  {
+   "id": 20816,
+   "outline": "ACII",
+   "modes": "ICOT",
+   "base": 39,
+   "cells_all_oneway": 85
+  },
+  {
+   "id": 20817,
+   "outline": "ICAI",
+   "modes": "ICOT",
+   "base": 39,
+   "cells_all_oneway": 63
+  },
+  {
+   "id": 20818,
+   "outline": "ICAI",
+   "modes": "TCTO",
+   "base": 39,
+   "cells_all_oneway": 49
+  },
+  {
+   "id": 20819,
+   "outline": "AAAI",
+   "modes": "ITTT",
+   "base": 43,
+   "cells_all_oneway": 37
+  },
+  {
+   "id": 20820,
+   "outline": "AAII",
+   "modes": "ITOI",
+   "base": 43,
+   "cells_all_oneway": 35
+  },
+  {
+   "id": 20821,
+   "outline": "AIII",
+   "modes": "IOOI",
+   "base": 43,
+   "cells_all_oneway": 34
+  },
+  {
+   "id": 20822,
+   "outline": "ACII",
+   "modes": "TCOI",
+   "base": 39,
+   "cells_all_oneway": 33
+  },
+  {
+   "id": 20823,
+   "outline": "ACII",
+   "modes": "TCTI",
+   "base": 39,
+   "cells_all_oneway": 32
+  },
+  {
+   "id": 20824,
+   "outline": "AIII",
+   "modes": "OOII",
+   "base": 43,
+   "cells_all_oneway": 30
+  },
+  {
+   "id": 20825,
+   "outline": "AAII",
+   "modes": "TOOI",
+   "base": 43,
+   "cells_all_oneway": 29
+  },
+  {
+   "id": 20826,
+   "outline": "AIII",
+   "modes": "TOTI",
+   "base": 43,
+   "cells_all_oneway": 27
+  },
+  {
+   "id": 20827,
+   "outline": "ICII",
+   "modes": "ICOI",
+   "base": 39,
+   "cells_all_oneway": 24
+  },
+  {
+   "id": 20828,
+   "outline": "ICII",
+   "modes": "ICOT",
+   "base": 39,
+   "cells_all_oneway": 23
+  },
+  {
+   "id": 20829,
+   "outline": "ACAI",
+   "modes": "ICTT",
+   "base": 39,
+   "cells_all_oneway": 22
+  },
+  {
+   "id": 20830,
+   "outline": "ICAI",
+   "modes": "ICTO",
+   "base": 39,
+   "cells_all_oneway": 22
+  },
+  {
+   "id": 20831,
+   "outline": "AAAI",
+   "modes": "TTOT",
+   "base": 43,
+   "cells_all_oneway": 21
+  },
+  {
+   "id": 20832,
+   "outline": "ICII",
+   "modes": "ICOO",
+   "base": 39,
+   "cells_all_oneway": 21
+  },
+  {
+   "id": 20833,
+   "outline": "ACAI",
+   "modes": "TCOT",
+   "base": 39,
+   "cells_all_oneway": 18
+  },
+  {
+   "id": 20834,
+   "outline": "ICAI",
+   "modes": "ICTT",
+   "base": 39,
+   "cells_all_oneway": 12
+  },
+  {
+   "id": 20835,
+   "outline": "ACII",
+   "modes": "TCOT",
+   "base": 39,
+   "cells_all_oneway": 9
+  },
+  {
+   "id": 20836,
+   "outline": "AAII",
+   "modes": "TTTI",
+   "base": 43,
+   "cells_all_oneway": 8
+  },
+  {
+   "id": 20837,
+   "outline": "CCIA",
+   "modes": "CCTI",
+   "base": 11203,
+   "cells_all_oneway": 8
+  },
+  {
+   "id": 20838,
+   "outline": "CCII",
+   "modes": "CCTI",
+   "base": 11203,
+   "cells_all_oneway": 6
+  },
+  {
+   "id": 20839,
+   "outline": "AAII",
+   "modes": "TTOI",
+   "base": 43,
+   "cells_all_oneway": 4
+  },
+  {
+   "id": 20840,
+   "outline": "AIII",
+   "modes": "TOII",
+   "base": 43,
+   "cells_all_oneway": 4
+  },
+  {
+   "id": 20841,
+   "outline": "CCAI",
+   "modes": "CCOT",
+   "base": 11203,
+   "cells_all_oneway": 4
+  },
+  {
+   "id": 20842,
+   "outline": "AIII",
+   "modes": "TOOI",
+   "base": 43,
+   "cells_all_oneway": 3
+  },
+  {
+   "id": 20843,
+   "outline": "CCII",
+   "modes": "CCOI",
+   "base": 11203,
+   "cells_all_oneway": 2
+  },
+  {
+   "id": 20844,
+   "outline": "AAII",
+   "modes": "TTOT",
+   "base": 43,
+   "cells_all_oneway": 1
+  },
+  {
+   "id": 20845,
+   "outline": "AIII",
+   "modes": "IOII",
+   "base": 43,
+   "cells_all_oneway": 1
+  },
+  {
+   "id": 20846,
+   "outline": "AIII",
+   "modes": "OOOI",
+   "base": 43,
+   "cells_all_oneway": 1
+  },
+  {
+   "id": 20847,
+   "outline": "CCII",
+   "modes": "CCOT",
+   "base": 11203,
+   "cells_all_oneway": 1
+  },
+  {
+   "id": 20848,
+   "outline": "AAAI",
+   "modes": "TTTT",
+   "base": 43,
+   "cells_all_oneway": 0
+  },
+  {
+   "id": 20849,
+   "outline": "AAII",
+   "modes": "TTTT",
+   "base": 43,
+   "cells_all_oneway": 0
+  },
+  {
+   "id": 21750,
+   "outline": "ACAI",
+   "modes": "TCTT",
+   "base": 39,
+   "cells_all_oneway": 0
+  },
+  {
+   "id": 21751,
+   "outline": "ACIA",
+   "modes": "TCTT",
+   "base": 39,
+   "cells_all_oneway": 0
+  },
+  {
+   "id": 21752,
+   "outline": "ACII",
+   "modes": "TCTT",
+   "base": 39,
+   "cells_all_oneway": 0
+  },
+  {
+   "id": 21753,
+   "outline": "AIII",
+   "modes": "ITIT",
+   "base": 43,
+   "cells_all_oneway": 0
+  },
+  {
+   "id": 21754,
+   "outline": "AIII",
+   "modes": "ITOT",
+   "base": 43,
+   "cells_all_oneway": 0
+  },
+  {
+   "id": 21755,
+   "outline": "AIII",
+   "modes": "OTIT",
+   "base": 43,
+   "cells_all_oneway": 0
+  },
+  {
+   "id": 21756,
+   "outline": "AIII",
+   "modes": "OTOT",
+   "base": 43,
+   "cells_all_oneway": 0
+  },
+  {
+   "id": 21757,
+   "outline": "AIII",
+   "modes": "TTIT",
+   "base": 43,
+   "cells_all_oneway": 0
+  },
+  {
+   "id": 21758,
+   "outline": "AIII",
+   "modes": "TTOT",
+   "base": 43,
+   "cells_all_oneway": 0
+  },
+  {
+   "id": 21759,
+   "outline": "AIII",
+   "modes": "TTTT",
+   "base": 43,
+   "cells_all_oneway": 0
+  },
+  {
+   "id": 21760,
+   "outline": "CCAI",
+   "modes": "CCTT",
+   "base": 11203,
+   "cells_all_oneway": 0
+  },
+  {
+   "id": 21761,
+   "outline": "CCIA",
+   "modes": "CCTT",
+   "base": 11203,
+   "cells_all_oneway": 0
+  },
+  {
+   "id": 21762,
+   "outline": "CCII",
+   "modes": "CCTT",
+   "base": 11203,
+   "cells_all_oneway": 0
+  },
+  {
+   "id": 21763,
+   "outline": "ICAA",
+   "modes": "TCTT",
+   "base": 39,
+   "cells_all_oneway": 0
+  },
+  {
+   "id": 21764,
+   "outline": "ICAI",
+   "modes": "TCTT",
+   "base": 39,
+   "cells_all_oneway": 0
+  },
+  {
+   "id": 21765,
+   "outline": "ICII",
+   "modes": "TCTI",
+   "base": 39,
+   "cells_all_oneway": 0
+  },
+  {
+   "id": 21766,
+   "outline": "ICII",
+   "modes": "TCTO",
+   "base": 39,
+   "cells_all_oneway": 0
+  },
+  {
+   "id": 21767,
+   "outline": "ICII",
+   "modes": "TCTT",
+   "base": 39,
+   "cells_all_oneway": 0
+  }
+ ],
+ "nose_oneway": {
+  "": 20800,
+  "E": 20801,
+  "W": 20802,
+  "EW": 20803
+ },
+ "nose_twoway": {
+  "E": 20810,
+  "W": 20811,
+  "EW": 20804
+ },
+ "scan": {
+  "Berlin, Germany.sc3": {
+   "boxes": 425,
+   "cells": 1090,
+   "noses": 1774,
+   "band cells": 2404,
+   "converted": 1318,
+   "refused": {
+    "no outside arm": 23,
+    "piece 11203 in the segment": 104,
+    "segment longer than 6": 31,
+    "piece 11214 in the segment": 1,
+    "box dropped: edges do not meet": 7,
+    "run longer than 4": 1,
+    "piece 35 in the segment": 1
+   },
+   "no_canonical": 0
+  },
+  "Big One.sc3": {
+   "boxes": 0,
+   "cells": 0,
+   "noses": 0,
+   "band cells": 0,
+   "converted": 0,
+   "refused": {},
+   "no_canonical": 0
+  },
+  "Craterville.sc3": {
+   "boxes": 20,
+   "cells": 42,
+   "noses": 46,
+   "band cells": 544,
+   "converted": 310,
+   "refused": {
+    "piece 11203 in the segment": 4,
+    "no outside arm": 6,
+    "segment longer than 6": 1
+   },
+   "no_canonical": 0
+  },
+  "Europolis.sc3": {
+   "boxes": 0,
+   "cells": 0,
+   "noses": 0,
+   "band cells": 0,
+   "converted": 0,
+   "refused": {},
+   "no_canonical": 0
+  },
+  "Farmsville.sc3": {
+   "boxes": 1,
+   "cells": 2,
+   "noses": 2,
+   "band cells": 20,
+   "converted": 16,
+   "refused": {
+    "no outside arm": 1
+   },
+   "no_canonical": 0
+  },
+  "Frankfurt, Germany.sc3": {
+   "boxes": 179,
+   "cells": 418,
+   "noses": 707,
+   "band cells": 3112,
+   "converted": 1102,
+   "refused": {
+    "no outside arm": 86,
+    "piece 11203 in the segment": 113,
+    "segment longer than 6": 18,
+    "piece 35 in the segment": 1,
+    "box dropped: edges do not meet": 1
+   },
+   "no_canonical": 0
+  },
+  "Liverpool, England.sc3": {
+   "boxes": 264,
+   "cells": 662,
+   "noses": 1263,
+   "band cells": 2086,
+   "converted": 1314,
+   "refused": {
+    "no outside arm": 25,
+    "piece 11203 in the segment": 64,
+    "piece 35 in the segment": 1,
+    "box dropped: edges do not meet": 3,
+    "segment longer than 6": 1
+   },
+   "no_canonical": 0
+  },
+  "London, England.sc3": {
+   "boxes": 395,
+   "cells": 1084,
+   "noses": 1631,
+   "band cells": 3166,
+   "converted": 1252,
+   "refused": {
+    "segment longer than 6": 16,
+    "piece 11203 in the segment": 192,
+    "box dropped: edges do not meet": 10,
+    "no outside arm": 39,
+    "piece 35 in the segment": 1,
+    "run longer than 4": 2
+   },
+   "no_canonical": 0
+  },
+  "Madison, WI.sc3": {
+   "boxes": 12,
+   "cells": 24,
+   "noses": 42,
+   "band cells": 588,
+   "converted": 174,
+   "refused": {
+    "no outside arm": 28,
+    "piece 11203 in the segment": 7,
+    "piece 11213 in the segment": 1
+   },
+   "no_canonical": 0
+  },
+  "Madrid, Spain.sc3": {
+   "boxes": 260,
+   "cells": 608,
+   "noses": 1111,
+   "band cells": 2234,
+   "converted": 1448,
+   "refused": {
+    "piece 11203 in the segment": 45,
+    "no outside arm": 34,
+    "segment longer than 6": 8,
+    "box dropped: edges do not meet": 2,
+    "piece 35 in the segment": 2
+   },
+   "no_canonical": 0
+  },
+  "Moscow, Russia.sc3": {
+   "boxes": 166,
+   "cells": 392,
+   "noses": 729,
+   "band cells": 1976,
+   "converted": 1202,
+   "refused": {
+    "piece 11203 in the segment": 24,
+    "no outside arm": 18,
+    "segment longer than 6": 4,
+    "box dropped: edges do not meet": 5
+   },
+   "no_canonical": 0
+  },
+  "Mount Herrang.sc3": {
+   "boxes": 0,
+   "cells": 0,
+   "noses": 0,
+   "band cells": 70,
+   "converted": 64,
+   "refused": {
+    "piece 11203 in the segment": 1,
+    "no outside arm": 1
+   },
+   "no_canonical": 0
+  },
+  "Roadless Paradise.sc3": {
+   "boxes": 0,
+   "cells": 0,
+   "noses": 0,
+   "band cells": 0,
+   "converted": 0,
+   "refused": {},
+   "no_canonical": 0
+  },
+  "Sacramento, CA.sc3": {
+   "boxes": 66,
+   "cells": 154,
+   "noses": 282,
+   "band cells": 1646,
+   "converted": 1012,
+   "refused": {
+    "no outside arm": 41,
+    "segment longer than 6": 2,
+    "piece 11203 in the segment": 15
+   },
+   "no_canonical": 0
+  },
+  "Seoul, Korea.sc3": {
+   "boxes": 150,
+   "cells": 334,
+   "noses": 672,
+   "band cells": 2330,
+   "converted": 1538,
+   "refused": {
+    "no outside arm": 26,
+    "piece 11203 in the segment": 16,
+    "segment longer than 6": 15,
+    "box dropped: edges do not meet": 1
+   },
+   "no_canonical": 0
+  },
+  "TUTORIAL.SC3": {
+   "boxes": 0,
+   "cells": 0,
+   "noses": 0,
+   "band cells": 0,
+   "converted": 0,
+   "refused": {},
+   "no_canonical": 0
+  }
+ }
+}

@@ -1,0 +1,19 @@
+[1/18] t=30s hung=False evals=1198117 PASS 
+[2/18] t=60s hung=False evals=1734361 PASS 
+[3/18] t=90s hung=False evals=2249906 PASS 
+[4/18] t=120s hung=False evals=2753042 PASS C:\Users\maria\Desktop\Proyectos\Simcity_stock_avint\re\harness\inst_avint\uJ_04.png
+[5/18] t=150s hung=False evals=3306623 PASS 
+[6/18] t=180s hung=False evals=3855261 PASS 
+[7/18] t=210s hung=False evals=4372997 PASS 
+[8/18] t=240s hung=False evals=4902642 PASS C:\Users\maria\Desktop\Proyectos\Simcity_stock_avint\re\harness\inst_avint\uJ_08.png
+[9/18] t=270s hung=False evals=5370173 PASS 
+[10/18] t=300s hung=False evals=5922138 PASS 
+[11/18] t=330s hung=False evals=6277440 PASS 
+[12/18] t=360s hung=False evals=6277440 PASS C:\Users\maria\Desktop\Proyectos\Simcity_stock_avint\re\harness\inst_avint\uJ_12.png
+[13/18] t=390s hung=False evals=6277440 PASS 
+[14/18] t=420s hung=False evals=6277440 PASS 
+[15/18] t=450s hung=False evals=6277440 PASS 
+[16/18] t=480s hung=False evals=6277440 PASS C:\Users\maria\Desktop\Proyectos\Simcity_stock_avint\re\harness\inst_avint\uJ_16.png
+[17/18] t=510s hung=False evals=6277440 PASS 
+[18/18] t=540s hung=False evals=6277440 PASS 
+done: 0 hung sample(s) of 18

@@ -38,3 +38,13 @@ the stock highway end plus DAV's own save ids (35 / 43) on the avenue side.
 
 Needs an sc3netmod.dll built with `sc3netmod_hwave.c`, and for the diagonal one the `diagonal_avenue` package. Results:
 `verify/hwave/RESULTS.md`.
+
+## Straight ground row for one-way avenues (task avmisc, avenue lane rework)
+
+Pieces 21850 (exit) / 21851 (entry), same art / bases (15141 / 15140) / `hwrc` classes as 21602 / 21603, replace the
+ground row where the avenue band is converted to one-way halves (avcore, `re/analysis/AVENUE_LANES.md`): no lane swap, each
+highway lane goes on straight into the avenue lane of its half (exit +z: 61 -> 80, 145 -> 175; entry -z: 194 -> 175,
+110 -> 80), the cap row 21600 / 21601 is unchanged. `hwave_build.py slanes | scheck | sart` (curve shapes 23950..23953 + reverses 23954..23957,
+no path keys, `mirror_uk: false`), table line `hwavs 21850 21851`. The block (`sc3netmod_hwave.c`) picks the set per transition from
+avcore's `avl_band_ok(first avenue cell, highway -> avenue side)`; the crossover set 21600..21603 stays for avenues that remain two-way. avcore band-end declarations
+(pending the `avenue_lines` netpack key): `avlj 21850 ..O.`, `avlj 21851 ..I.`.

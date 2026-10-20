@@ -1,0 +1,5 @@
+month 1: days 14 trips 2767 arrived 2693 (game 3812 / failed 93, ratio 0.0244) hwy 72 snap 64341 | none=0/0/0
+month 2: days 45 trips 3755 arrived 3674 (game 3755 / failed 81, ratio 0.0216) hwy 100 snap 73900 | none=0/0/0
+month 3: days 77 trips 3364 arrived 3292 (game 3364 / failed 72, ratio 0.0214) hwy 77 snap 72016 | none=0/0/0
+month 4: days 108 trips 3661 arrived 3595 (game 3661 / failed 66, ratio 0.0180) hwy 76 snap 70064 | none=0/0/0
+wrote C:\Users\maria\Desktop\Proyectos\Simcity_stock_avint\re\harness\inst_avint\traffic_seoul.json (4 months, 21 s)

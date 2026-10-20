@@ -13,6 +13,7 @@ divergence source directly. Read-only: it only reads the args, never writes.
 Open a flyout first, then run this. Captures for `secs` seconds.
 """
 import subprocess, sys, time, frida
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 secs = int(sys.argv[1]) if len(sys.argv) > 1 else 3
 XLO, XHI = 1930, 2000          # side-panel column x-band (maximized 2048 client)
@@ -56,6 +57,7 @@ rpc.exports = { stop:function(){ on=false;
 out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq SC3U.exe", "/FO", "CSV", "/NH"],
                      capture_output=True, text=True).stdout
 pid = int(out.split(",")[1].strip('" '))
+sc3pause.require_running(pid, "flyout_paint")
 s = frida.attach(pid)
 sc = s.create_script(JS)
 sc.load()

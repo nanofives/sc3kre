@@ -41,6 +41,7 @@ import sys
 import time
 
 import frida
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 'use strict';
@@ -295,6 +296,7 @@ def main():
     hwnd, cw, ch = wins[0]
     print(f"[+] pid {pid} hwnd 0x{hwnd:X} client {cw}x{ch}")
 
+    sc3pause.require_running(pid, "frida_route3")
     session = dev.attach(pid)
     script = session.create_script(JS)
     script.load()

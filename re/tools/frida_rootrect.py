@@ -21,6 +21,7 @@ import json
 import sys
 
 import frida
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 'use strict';
@@ -89,6 +90,7 @@ def main():
         print("[-] process not found", file=sys.stderr)
         return 1
 
+    sc3pause.require_running(pid, "frida_rootrect")
     session = dev.attach(pid)
     script = session.create_script(JS)
     script.load()

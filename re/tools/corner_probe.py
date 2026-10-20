@@ -2,6 +2,7 @@
 and hit (+0x80) rects, to confirm they stay in sync after a resize."""
 import subprocess, frida, ctypes
 from ctypes import wintypes
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 u=ctypes.WinDLL("user32")
 out=subprocess.run(["tasklist","/FI","IMAGENAME eq SC3U.exe","/FO","CSV","/NH"],capture_output=True,text=True).stdout
 pid=int(out.split(",")[1].strip('" '))
@@ -31,6 +32,7 @@ rpc.exports={find:function(CW,CH){
   return out;
 }};
 """
+sc3pause.require_running(pid, "corner_probe")
 s=frida.attach(pid);sc=s.create_script(JS);sc.load()
 res=sc.exports_sync.find(CW,CH)
 print(f"client {CW}x{CH}; bottom-right small widgets:")

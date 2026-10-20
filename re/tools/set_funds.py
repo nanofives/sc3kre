@@ -12,6 +12,7 @@ import frida
 
 sys.path.insert(0, __import__("os").path.dirname(__import__("os").path.abspath(__file__)))
 import sc3io
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 var m = Process.getModuleByName('SIMMISC.DLL');
@@ -34,6 +35,7 @@ rpc.exports = {
 
 def main():
     amount = sys.argv[1]
+    sc3pause.require_running(sc3io.game_pid(), "set_funds")
     s = frida.attach(sc3io.game_pid())
     sc = s.create_script(JS)
     sc.load()

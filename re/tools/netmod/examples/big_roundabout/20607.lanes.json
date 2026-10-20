@@ -1,0 +1,86 @@
+{
+ "_": "bigrbt.py: 3x3 roundabout piece 20607 (side cell, arms [])",
+ "piece": 20607,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 1,
+ "vehicle": {
+  "class": "car",
+  "lanes": [
+   {
+    "from": [
+     175,
+     0,
+     0
+    ],
+    "to": [
+     175,
+     0,
+     255
+    ]
+   }
+  ]
+ },
+ "mirror_uk": false,
+ "curves": [
+  {
+   "shape": 23904,
+   "pts": [
+    [
+     175,
+     0,
+     255
+    ],
+    [
+     175,
+     0,
+     0
+    ]
+   ]
+  }
+ ],
+ "pedestrian": {
+  "walks": [
+   {
+    "from": [
+     240,
+     15
+    ],
+    "to": [
+     240,
+     240
+    ],
+    "path": 257,
+    "crosswalk": false
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     240,
+     15
+    ],
+    "code": 8
+   },
+   {
+    "at": [
+     240,
+     240
+    ],
+    "code": 24
+   }
+  ]
+ },
+ "connects": {
+  "road": [
+   [
+    "z-",
+    "z+"
+   ]
+  ]
+ }
+}

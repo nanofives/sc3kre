@@ -25,6 +25,7 @@ from PIL import Image, ImageDraw
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import sc3io  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 function mb(w){var m=Process.enumerateModules();
@@ -107,6 +108,7 @@ def main(argv) -> int:
     if abs(g.scale - 1.0) > 1e-6:
         print(f"STOP: scaling {g.scale}", file=sys.stderr)
         return 2
+    sc3pause.require_running(sc3io.game_pid(), "panel_shots")
     sess = frida.attach(sc3io.game_pid())
     sc = sess.create_script(JS)
     sc.load()

@@ -1,7 +1,7 @@
 {
  "netpack": 1,
  "name": "highway_avenue",
- "version": "1.0.0",
+ "version": "1.1.0",
  "author": "sc3kre",
  "description": "Task hwave: where a straight highway ends right at the end of a straight avenue (either drag order), the highway's cap row and the avenue's U-turn row become a ramp: the deck lowers to the ground over the two rows and goes on as the avenue, both directions connected (the pieces carry the stock on-ramp classes, so trips step road <-> highway through them). Diagonal too (task hwave phase 2): a diagonal highway ending at the end of a diagonal avenue (DAV), both families.",
  "game": {
@@ -157,6 +157,36 @@
     "ground_under": true
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 21850,
+   "base": 15141,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to avenue (exit, ground, one-way avenue)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21850",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21851,
+   "base": 15140,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to avenue (entry, ground, one-way avenue)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/21851",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
   }
  ],
  "lanes": [
@@ -199,6 +229,14 @@
   {
    "piece": 21609,
    "spec": "hwave_21609.lanes.json"
+  },
+  {
+   "piece": 21850,
+   "spec": "hwave_21850.lanes.json"
+  },
+  {
+   "piece": 21851,
+   "spec": "hwave_21851.lanes.json"
   }
  ],
  "highway_lines": [
@@ -210,6 +248,10 @@
   "hwys 21602 11203 0 11203 1 11203 2 11203 3",
   "hwyp 21603 0",
   "hwys 21603 11203 3 11203 0 11203 1 11203 2",
+  "hwyp 21850 0",
+  "hwys 21850 11203 0 11203 1 11203 2 11203 3",
+  "hwyp 21851 0",
+  "hwys 21851 11203 3 11203 0 11203 1 11203 2",
   "hwrc 21600",
   "hwrc 21601",
   "hwrc 21602",
@@ -233,6 +275,13 @@
   "hwrc 21608",
   "hwrc 21609",
   "hwave 21600 21601 21602 21603",
-  "hwavd 21604 21605 21606 21607 21608 21609"
+  "hwavd 21604 21605 21606 21607 21608 21609",
+  "hwrc 21850",
+  "hwrc 21851",
+  "hwavs 21850 21851"
+ ],
+ "avenue_lines": [
+  "avlj 21850 ..O.",
+  "avlj 21851 ..I."
  ]
 }

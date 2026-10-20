@@ -92,11 +92,27 @@ def _rot(pts, r):
 
 def extra_for(pts):
     """The curve record's trailing u32, by height as stock (task avcore 2026-10-19): 0 when every point is at y 0, else
-    EXTRA (2). It is the path's sort id [UNCERTAIN as a hang cause]: STRTSIM SerialReadBinary 0x1001e673 stores it at
+    EXTRA (2); a spec curve's explicit "sort_id" wins (sort_id_of). It is the path's sort id (what it controls is
+    [UNCERTAIN]; the hang it was suspected of was a Frida-probe trap): STRTSIM SerialReadBinary 0x1001e673 stores it at
     +0x34 (file value + 1; Linux accessor SortId), and a car whose sort id changes sends it to the anim occupant manager
     (0x1001b030 / 0x10018820 / 0x1001bc70, property 0x80). Stock: all 192 flat ground curves 0, all 408 deck curves 2.
-    Ramps and mixed heights stay 2 until measured (stock mixes 0 / 1 / 2 there)."""
+    Ramps and mixed heights stay 2 until measured (stock mixes 0 / 1 / 2 there; ground slopes too: stock 31 / 32's lanes,
+    y -512..0, carry 2, 11201 / 11202's, y -256..0, carry 0), so a curve copied from a stock one gives its "sort_id"."""
     return 0 if all(int(p[1]) == 0 for p in pts) else EXTRA
+
+
+class CurvePts(list):
+    """a spec curve's points with an explicit sort id (spec key "sort_id"), e.g. a slope lane copied from a stock curve
+    keeps that curve's own value (stock 31 / 32 slope lanes carry 2, 11201 / 11202 carry 0: no rule by height)"""
+    def __init__(self, pts, sort_id):
+        list.__init__(self, pts)
+        self.sort_id = int(sort_id)
+
+
+def sort_id_of(pts, p=None):
+    """the sort id to write: the spec's explicit "sort_id", else extra_for (rotation does not change heights)"""
+    sid = getattr(pts, "sort_id", None)
+    return sid if sid is not None else extra_for(p if p is not None else pts)
 
 
 def _payload(pts, hin, hout, extra=None):
@@ -130,6 +146,8 @@ def spec_curves(spec):
         if not 20003 <= s <= 0xFFFFFF:
             raise LK.LaneError("curve shape %d: use your stream's shape range (protocol section 5; stock reaches 20002)" % s)
         out[s] = [[int(v) for v in p] for p in c["pts"]]
+        if c.get("sort_id") is not None:                 # task avcore: explicit sort id (CurvePts)
+            out[s] = CurvePts(out[s], c["sort_id"])
     return out
 
 
@@ -141,7 +159,7 @@ def inject(game, spec):
         for s, pts in cs.items():
             for key, (p, hin, hout) in curve_set(s, pts)["uk" if _uk(lang) else "en"].items():
                 old = P.veh.get(key)
-                new = {"pts": [tuple(v) for v in p], "in": hin, "out": hout, "extra": extra_for(p)}
+                new = {"pts": [tuple(v) for v in p], "in": hin, "out": hout, "extra": sort_id_of(pts, p)}
                 if old is not None and (old["pts"], old["in"], old["out"]) != (new["pts"], hin, hout):
                     raise LK.LaneError("curve key %d is already taken by another curve" % key)
                 P.veh[key] = new
@@ -154,7 +172,7 @@ def curve_records(shapes):
     for s, pts in sorted(shapes.items()):
         for kind, d in curve_set(s, pts).items():
             for key, (p, hin, hout) in sorted(d.items()):
-                out[kind].append((LK.VPA_GROUP, key, LK.VPA_TYPE, _payload(p, hin, hout)))
+                out[kind].append((LK.VPA_GROUP, key, LK.VPA_TYPE, _payload(p, hin, hout, sort_id_of(pts, p))))
     return out
 
 
@@ -373,7 +391,8 @@ def selftest_extra():
     bad = []
     flat = [[255, 0, 80], [128, 0, 80], [0, 0, 80]]
     deck = [[255, 1024, 80], [128, 1024, 80], [0, 1024, 80]]
-    for shape, pts, want in ((0xFFFF00, flat, 0), (0xFFFF01, deck, EXTRA)):
+    slope = CurvePts([[255, -256, 80], [128, -128, 80], [0, 0, 80]], 0)     # explicit: stock 11201's slope lanes carry 0
+    for shape, pts, want in ((0xFFFF00, flat, 0), (0xFFFF01, deck, EXTRA), (0xFFFF02, slope, 0)):
         for kind, recs in curve_records({shape: pts}).items():
             for _g, key, _t, b in recs:
                 n = struct.unpack_from("<I", b, 4)[0]
@@ -382,8 +401,8 @@ def selftest_extra():
                     bad.append("curve_records %s key %d: extra %d, want %d" % (kind, key, got, want))
         for kind, d in curve_set(shape, pts).items():
             for key, (p, _hi, _ho) in d.items():
-                if extra_for(p) != want:
-                    bad.append("curve_set %s key %d: extra %d, want %d" % (kind, key, extra_for(p), want))
+                if sort_id_of(pts, p) != want:
+                    bad.append("curve_set %s key %d: extra %d, want %d" % (kind, key, sort_id_of(pts, p), want))
 
     class _P:
         def __init__(self):
@@ -399,10 +418,12 @@ def selftest_extra():
         def paths(self, lang):
             return self.p[lang]
     g = _G()
-    inject(g, {"curves": [{"shape": 0xFFFF00, "pts": flat}, {"shape": 0xFFFF01, "pts": deck}]})
+    inject(g, {"curves": [{"shape": 0xFFFF00, "pts": flat}, {"shape": 0xFFFF01, "pts": deck},
+                          {"shape": 0xFFFF02, "pts": list(slope), "sort_id": 0},
+                          {"shape": 0xFFFF03, "pts": list(slope)}]})
     for lang, P in g.p.items():
         for key, c in P.veh.items():
-            want = 0 if key >> 8 == 0xFFFF00 else EXTRA
+            want = {0xFFFF00: 0, 0xFFFF01: EXTRA, 0xFFFF02: 0, 0xFFFF03: EXTRA}[key >> 8]
             if c["extra"] != want:
                 bad.append("inject %s key %d: extra %d, want %d" % (lang, key, c["extra"], want))
     return bad

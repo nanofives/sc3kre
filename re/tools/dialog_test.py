@@ -18,6 +18,7 @@ import numpy as np
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import sc3io  # noqa: E402
 from uiwin_dump import JS  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 CAT, SUB, DLG = "SIMUI.DLL+0xa8f60", "SIMUI.DLL+0xa917c", "SIMUI.DLL+0xa4d64"
 
@@ -29,6 +30,7 @@ def main(argv) -> int:
     out = pathlib.Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     h = sc3io.game_hwnd()
+    sc3pause.require_running(sc3io.game_pid(), "dialog_test")
     s = frida.attach(sc3io.game_pid())
     sc = s.create_script(JS)
     sc.load()

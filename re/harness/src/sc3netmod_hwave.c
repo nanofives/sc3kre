@@ -54,6 +54,12 @@
  * Table line: hwavd <j-1 high> <j-1 low> <j0> <j+1 high> <j+1 low> <j+2>   (hwyp lines first)
  */
 
+/* task avmisc: avcore's sibling API (sc3netmod_avl.c, #included later; AVENUE_LANES.md 5) */
+static int avl_dir(int x, int z);
+static int avl_own(WORD id);
+static int avl_band_ok(int x, int z, int away);
+
+static WORD g_hwave_s[2];                      /* task avmisc: the straight ground row, 0 exit, 1 entry (one-way avenue) */
 static WORD g_hwave_p[4];                      /* 0 T1 exit, 1 T1 entry, 2 T2 exit, 3 T2 entry */
 static int g_hwave_off;
 static int g_hwave_pre;                        /* the ROAD / load pass run before DAV: claim only */
@@ -79,6 +85,21 @@ static void hwave_line(const char *path, const char *line) {
          g_hwave_p[3], g_hwave_off ? " - OFF (SC3NETMOD_HWAVE=0): built ones go back to stock" : "");
 }
 
+/* task avmisc: `hwavs <exit ground> <entry ground>` = the ground row for an avenue whose halves are one-way (no lane
+   swap, AVENUE_LANES.md): used where avl_band_ok() says the avenue band converts, else the crossover set above */
+static void hwavs_line(const char *path, const char *line) {
+    unsigned long v[2];
+    int k;
+    if (sscanf(line + 6, "%lu %lu", &v[0], &v[1]) != 2) { logf("### hwave: %s: bad line '%s'", path, line); return; }
+    for (k = 0; k < 2; k++)
+        if (!v[k] || v[k] > 0xffff || hwy_piece((WORD)v[k]) < 0) {
+            logf("### hwave: %s: piece %lu has no hwyp line before this one - '%s' ignored", path, v[k], line);
+            return;
+        }
+    for (k = 0; k < 2; k++) g_hwave_s[k] = (WORD)v[k];
+    logf("hwave: %s: straight ground row pieces %u %u (one-way avenue)", path, g_hwave_s[0], g_hwave_s[1]);
+}
+
 /* the stock piece of each pattern cell at turn k, column c (0 entry, 1 exit): measured, see the header */
 static void hwave_plain(int k, int c, WORD *id, int *st) { *id = (k & 1) ? 15051 : 73; *st = ((k < 2) == (c == 1)) ? 0 : 2; }
 static void hwave_cap(int k, int c, WORD *id, int *st) {
@@ -91,6 +112,12 @@ static int hwave_ave_st(int k, int c) { return c ? (k + 3) & 3 : (k + 1) & 3; }
 static DWORD hwave_road_at(HwyPass *hp, int x, int z) { return rb_read(hp->mgr, hp->lay, x, z, hp->W, hp->H); }
 
 static int hwave_is(DWORD v, WORD id, int st) { return v && hwy_id(v) == id && hwy_st(v) == st; }
+
+/* task avmisc: the stock piece `base` at state st, or avcore's one-way variant of it (a converted avenue: 21700 for 11204,
+   the U-turn quarter 21701 for 11203; written at the same state, saved as the base) */
+static int hwave_isb(DWORD v, WORD base, int st) {
+    return v && hwy_st(v) == st && (hwy_id(v) == base || (avl_own(hwy_id(v)) && g_base[hwy_id(v)] == base));
+}
 
 static int hwave_height(HwyPass *hp, int x, int z) {
     void *ter = *(void **)(hp->mgr + 0x30);
@@ -122,11 +149,12 @@ static const char *hwave_check(HwyPass *hp, int ax, int az, int k) {
         if (!hwave_is(hwy_at(hp, x, z), id, st) && !hwave_is(hwy_at(hp, x, z), g_hwave_p[1 - c], k))
             return "cap row";
         hwave_cell(ax, az, k, c, 1, &x, &z);
-        if (!hwave_is(hwave_road_at(hp, x, z), 11203, hwave_uturn_st(k, c)) &&
-            !hwave_is(hwy_at(hp, x, z), g_hwave_p[3 - c], k))
+        if (!hwave_isb(hwave_road_at(hp, x, z), 11203, hwave_uturn_st(k, c)) &&
+            !hwave_is(hwy_at(hp, x, z), g_hwave_p[3 - c], k) &&
+            !(g_hwave_s[0] && hwave_is(hwy_at(hp, x, z), g_hwave_s[1 - c], k)))      /* task avmisc */
             return "no avenue U-turn row past the cap";
         hwave_cell(ax, az, k, c, 2, &x, &z);
-        if (!hwave_is(hwave_road_at(hp, x, z), 11204, hwave_ave_st(k, c))) return "no straight avenue past the U-turn row";
+        if (!hwave_isb(hwave_road_at(hp, x, z), 11204, hwave_ave_st(k, c))) return "no straight avenue past the U-turn row";
     }
     for (c = 0; c < 2; c++)
         for (r = -1; r <= 2; r++) {
@@ -175,7 +203,8 @@ static void hwave_revert(HwyPass *hp, int ax, int az, int k, const char *why) {
     for (c = 0; c < 2; c++)
         for (r = 0; r <= 1; r++) {
             hwave_cell(ax, az, k, c, r, &x, &z);
-            if (!hwave_is(hwy_at(hp, x, z), g_hwave_p[r * 2 + (1 - c)], k)) continue;
+            if (!hwave_is(hwy_at(hp, x, z), g_hwave_p[r * 2 + (1 - c)], k) &&
+                !(r && g_hwave_s[0] && hwave_is(hwy_at(hp, x, z), g_hwave_s[1 - c], k))) continue;     /* task avmisc */
             hwave_cell(ax, az, k, c, r ? 2 : -1, &nx, &nz);
             if (r == 0 && hwy_at(hp, nx, nz)) { hwave_cap(k, c, &id, &st); hwave_write(hp, x, z, id, st, 0); }
             else if (r == 1 && hwave_road_at(hp, nx, nz)) hwave_write(hp, x, z, 11203, hwave_uturn_st(k, c), 0);
@@ -196,11 +225,17 @@ static void hwave_revert(HwyPass *hp, int ax, int az, int k, const char *why) {
 }
 
 static int hwave_build(HwyPass *hp, int ax, int az, int k) {
-    int c, r, x, z, n = 0;
+    int c, r, x, z, n = 0, ow = 0, dx, dz;
+    if (g_hwave_s[0]) {                           /* task avmisc: a converted avenue band takes the straight ground row */
+        hwave_cell(ax, az, k, 1, 2, &x, &z);
+        dx = 0; dz = 1;                           /* highway -> avenue step, as avcore's N E S W */
+        hwy_rot(k, &dx, &dz);
+        ow = avl_band_ok(x, z, dz < 0 ? 0 : dx > 0 ? 1 : dz > 0 ? 2 : 3);
+    }
     for (c = 0; c < 2; c++)
         for (r = 0; r <= 1; r++) {
             hwave_cell(ax, az, k, c, r, &x, &z);
-            n += hwave_write(hp, x, z, g_hwave_p[r * 2 + (1 - c)], k, 1);
+            n += hwave_write(hp, x, z, (r && ow) ? g_hwave_s[1 - c] : g_hwave_p[r * 2 + (1 - c)], k, 1);
         }
     for (c = 0; c < 2; c++)                       /* the rows either side stay as they are: claim them for this pass */
         for (r = -1; r <= 2; r += 3) { hwave_cell(ax, az, k, c, r, &x, &z); hwy_claim(hp, x, z); }
@@ -223,6 +258,10 @@ static void hwave_run(HwyPass *hp) {
             int role, ax, az, seen = 0;
             if (!v) continue;
             for (role = 0; role < 4 && hwy_id(v) != g_hwave_p[role]; role++) ;
+            if (role == 4 && g_hwave_s[0]) {          /* task avmisc: the straight ground row: roles 2 (exit) / 3 (entry) */
+                if (hwy_id(v) == g_hwave_s[0]) role = 2;
+                else if (hwy_id(v) == g_hwave_s[1]) role = 3;
+            }
             if (role == 4) continue;
             k = hwy_st(v);
             ex = 1; ez = 0; dx = 0; dz = 1;
@@ -347,7 +386,7 @@ static int hwavd_dav_road(WORD id) {
     int k;
     if (id == 35 || id == 18004 || id == 1999) return 1;
     for (k = 0; k < g_dav_nmid; k++) if (g_dav_mid[k].piece == id) return 1;
-    return 0;
+    return dav_is_role(id);          /* task avdiag: DAV's one-way end pieces (U-turn / no-lane cells) */
 }
 
 static WORD g_hwavd_outer, g_hwavd_middle;     /* DAV's plain outer / middle pieces (20505 / 20500 in its package) */

@@ -37,6 +37,7 @@ import frida
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import sc3io
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 WM_PLACE = 0x8000 + 0x5C4
 
@@ -168,6 +169,7 @@ def main():
     else:
         x0, z0, x1, z1 = (int(v) for v in a.rect.split(","))
         jobs = [{"kind": "zone", "type": a.type, "x0": x0, "z0": z0, "x1": x1, "z1": z1}]
+    sc3pause.require_running(sc3io.game_pid(), "place_direct")
     s = frida.attach(sc3io.game_pid())
     sc = s.create_script(JS)
     streamed, done = [], []

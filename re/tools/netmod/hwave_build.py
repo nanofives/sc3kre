@@ -84,6 +84,65 @@ def lane_decks():
     ]
 
 
+# ---------------------------------------------------------------------------------------------- straight lanes
+# task avmisc (avenue lane rework): where the avenue is one-way per half (avcore: AVENUE_LANES.md 2) the ground row has
+# no lane swap: every highway lane goes on straight into the avenue lane of its own half. Exit carriageway (cell 47,
+# drives +z) 61 -> 80 (inner), 145 -> 175 (outer); entry carriageway (cell 46, drives -z) the avenue's 80 -> 110
+# (outer) and 175 -> 194 (inner). Only the ground row differs: pieces 21850 / 21851 replace 21602 / 21603 (same art,
+# same bases) when the avenue band is converted; the cap row 21600 / 21601 is unchanged.
+SHAPE_S = 23950                   # avmisc hwave straight ground row: shapes 23950..23999 (23900..23949 = rbt9); reverse shapes +4: 23954..23957
+S_CELLS = {(47, 30): 21850, (46, 30): 21851}
+S_CONNECTS = {21850: [["z-", "z+"]], 21851: [["z+", "z-"]]}
+ART_COPY = {21602: 21850, 21603: 21851}
+
+
+def straight_decks():
+    zt, zg = WP.Z_TOP, WP.Z_GROUND
+    zm = (zt + zg) / 2.0
+    out = []
+    for a, b in ((47 + EXIT_IN, 47 + 80 / 255.0), (47 + EXIT_OUT, 47 + AVE_UP)):          # exit, drives +z
+        out.append(lane([(a, zt - 0.5)] + smooth(a, b, zm, zg) + [(b, zg + 0.5)]))
+    for b, a in ((46 + AVE_DOWN, 46 + ENTRY_OUT), (46 + AVE_UP, 46 + ENTRY_IN)):           # entry, drives -z
+        out.append(lane([(b, zg + 0.5)] + smooth(b, a, zg, zm) + [(a, zt - 0.5)]))
+    return out
+
+
+def cmd_sart(a):
+    import shutil
+    for src, dst in ART_COPY.items():
+        s, d = os.path.join(a.pkg, "art", str(src)), os.path.join(a.pkg, "art", str(dst))
+        if os.path.isdir(d):
+            shutil.rmtree(d)
+        shutil.copytree(s, d)
+        print("art", dst, "<-", s)
+    return 0
+
+
+def cmd_slanes(a):
+    specs, nxt = HL.build_cells(straight_decks(), list(S_CELLS), SHAPE_S, S_CELLS, states=(0, 1, 2, 3))
+    if nxt + (nxt - SHAPE_S) > 24000:
+        raise SystemExit("curve shapes past this stream's range: %d" % nxt)
+    n = nxt - SHAPE_S
+    for cell, spec in sorted(specs.items(), key=lambda kv: kv[1]["piece"]):
+        # avcore's rule: no path keys (curves found by end points per language); English-UK's curve file holds every
+        # curve reversed, so each curve also gets a reverse shape whose UK copy is the forward lane
+        for ln in spec["vehicle"]["lanes"]:
+            ln.pop("path")
+        spec["curves"] += [{"shape": c["shape"] + n, "pts": [list(q) for q in reversed(c["pts"])]} for c in spec["curves"]]
+        spec["connects"] = {"road": S_CONNECTS[spec["piece"]]}
+        spec["mirror_uk"] = False
+        p = os.path.join(a.pkg, "hwave_%d.lanes.json" % spec["piece"])
+        json.dump(spec, open(p, "w"), indent=1)
+        print(spec["piece"], cell, "%d lanes" % len(spec["vehicle"]["lanes"]),
+              [(l["from"], l["to"]) for l in spec["vehicle"]["lanes"]])
+    print("curve shapes %d..%d" % (SHAPE_S, nxt - 1))
+    return 0
+
+
+def cmd_scheck(a):
+    return cmd_check(a, S_CELLS.values())
+
+
 def cmd_art(a):
     sc = WP.scene()
     for cell, pid in sorted(WP.CELLS.items(), key=lambda kv: kv[1]):
@@ -219,11 +278,11 @@ def cmd_dcheck(a):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="hwave_build.py")
-    ap.add_argument("cmd", choices=("art", "lanes", "check", "dart", "dlanes", "dcheck"))
+    ap.add_argument("cmd", choices=("art", "lanes", "check", "dart", "dlanes", "dcheck", "sart", "slanes", "scheck"))
     ap.add_argument("pkg")
     a = ap.parse_args(argv)
     return {"art": cmd_art, "lanes": cmd_lanes, "check": cmd_check, "dart": cmd_dart, "dlanes": cmd_dlanes,
-            "dcheck": cmd_dcheck}[a.cmd](a)
+            "dcheck": cmd_dcheck, "sart": cmd_sart, "slanes": cmd_slanes, "scheck": cmd_scheck}[a.cmd](a)
 
 
 if __name__ == "__main__":

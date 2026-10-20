@@ -9,6 +9,7 @@ parent = `this+0x3c`, byte-proven: the base class `vt+0x2c` is `8b 41 3c c3` =
 """
 import argparse, json, sys, time
 import frida
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 'use strict';
@@ -81,6 +82,7 @@ def main():
             time.sleep(0.5)
     if not pid:
         print("[-] not found", file=sys.stderr); return 1
+    sc3pause.require_running(pid, "frida_parent")
     s = dev.attach(pid); sc = s.create_script(JS); sc.load()
     d = sc.exports_sync.dump()
     json.dump(d, open(a.out, "w", encoding="utf-8"), indent=2)

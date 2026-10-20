@@ -22,6 +22,10 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import rb_lab  # noqa: E402
+import os as _os  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
+import sys as _sys  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), ".."))
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 FUNDS_JS = r"""
 rpc.exports = {
@@ -51,6 +55,7 @@ rpc.exports = {
 
 def funds(now, new):
     import frida
+    sc3pause.require_running(int(os.environ["SC3_PID"]), "hw_lab")
     s = frida.attach(int(os.environ["SC3_PID"]))
     sc = s.create_script(FUNDS_JS)
     sc.load()

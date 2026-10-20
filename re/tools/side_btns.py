@@ -1,4 +1,5 @@
 import subprocess, frida
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 JS=r"""
 function mb(w){var m=Process.enumerateModules();for(var i=0;i<m.length;i++)if(m[i].name.toLowerCase()===w.toLowerCase())return m[i].base;return null;}
 function rp(p,o){return p.add(o).readPointer();}
@@ -13,6 +14,7 @@ rpc.exports={b:function(){var sui=mb("SIMUI.DLL");var panel=findvt(root(),sui.ad
 """
 o=subprocess.run(["tasklist","/FI","IMAGENAME eq SC3U.exe","/FO","CSV","/NH"],capture_output=True,text=True).stdout
 pid=int(o.split(",")[1].strip('" '))
+sc3pause.require_running(pid, "side_btns")
 s=frida.attach(pid);sc=s.create_script(JS);sc.load();r=sc.exports_sync.b()
 if not r.get("ok"): print("panel not found")
 else:

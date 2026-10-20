@@ -20,6 +20,7 @@ import frida
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
 import sc3io  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 WM_CAM = 0x8000 + 0x5C7
 
@@ -71,6 +72,7 @@ def main(argv):
     os.makedirs(out, exist_ok=True)
     pid = sc3io.game_pid()
     h = sc3io.game_hwnd(pid)
+    sc3pause.require_running(pid, "nramp_cam")
     s = frida.attach(pid)
     sc = s.create_script(JS)
     sc.load()

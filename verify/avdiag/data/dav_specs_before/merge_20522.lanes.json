@@ -1,0 +1,83 @@
+{
+ "_": "diagave.py: merge L cell (2, 0): lanes of [(18004, 2)]",
+ "piece": 20522,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 0,
+ "alt": [
+  0,
+  0,
+  0,
+  0
+ ],
+ "vehicle": {
+  "class": "car",
+  "speed": 64000,
+  "lanes": [
+   {
+    "from": [
+     0,
+     80
+    ],
+    "to": [
+     0,
+     175
+    ],
+    "path": 75778,
+    "exit": false
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     0,
+     175
+    ],
+    "code": 0
+   }
+  ]
+ },
+ "pedestrian": {
+  "walks": [
+   {
+    "from": [
+     0,
+     15
+    ],
+    "to": [
+     0,
+     240
+    ],
+    "path": 27906
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     0,
+     15
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     0,
+     240
+    ],
+    "code": 0
+   }
+  ]
+ },
+ "connects": {
+  "road": [
+   [
+    "x-",
+    "x-"
+   ]
+  ]
+ }
+}
