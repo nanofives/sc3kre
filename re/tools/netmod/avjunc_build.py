@@ -29,6 +29,19 @@ from netmod import avjunc_rule as R     # noqa: E402
 BOX_IDS = list(range(20805, 20810)) + list(range(20812, 20850)) + list(range(21750, 21800))
 NOSE_OW = {"": 20800, "E": 20801, "W": 20802, "EW": 20803}     # one-way half, median nose at those ends (state 0)
 NOSE_TW = {"E": 20810, "W": 20811, "EW": 20804}                # two-way (stock 11204 lanes)
+# link noses: the same, written on a LINK cell of a segment (a stock 39 / 43 joining the two halves). Own ids so a
+# reloaded layout segments as the stock one: a nose on a straight pair stays a band row, a link nose stays a link
+NOSE_OW_LINK = {"": 21771, "E": 21772, "W": 21773, "EW": 21774}
+NOSE_TW_LINK = {"": 21778, "E": 21775, "W": 21776, "EW": 21777}
+
+
+def all_noses(T):
+    """-> [(ends, piece, oneway, link)]"""
+    out = [(e, p, 1, 0) for e, p in sorted(T["nose_oneway"].items())]
+    out += [(e, p, 0, 0) for e, p in sorted(T["nose_twoway"].items())]
+    out += [(e, p, 1, 1) for e, p in sorted(NOSE_OW_LINK.items())]
+    out += [(e, p, 0, 1) for e, p in sorted(NOSE_TW_LINK.items())]
+    return out
 SHAPE0 = 23700
 FLAG = 1                                            # TrBlkAtt flag of box cells, as stock junctions (use UNKNOWN)
 SHAPE_MAX = 23799
@@ -73,9 +86,14 @@ def table(pack):
 
 # ------------------------------------------------------------------------------------------------ lanes
 
-def box_lanes(outline, modes):
+# corner junctions (task avjunc corners): the outer cell of an avenue corner that is a T / X with roads (avjunc_rule
+# corner_at). (id, outline, modes) at state 0, base = the stock piece (its art too: no new art)
+CORNERS = [(21768, "ACAA", "ICTO", 39), (21769, "ACAA", "TCOI", 39), (21770, "AAAA", "ITTO", 43)]
+
+
+def box_lanes(outline, modes, corner=False):
     """-> [(e, a, f, b, kind)] in SIMNTWRK sides, lanekit coords, state 0"""
-    return M.cell_lanes(nesw_to_d(modes))
+    return M.cell_lanes(nesw_to_d(modes), corner)
 
 
 def lane_pts(e, a, f, b):
@@ -134,8 +152,8 @@ class CurvePlan:
             HL.inject(self.g, {"curves": [{"shape": s, "pts": geom}]})
 
 
-def box_spec(pid, outline, modes, base, game, plan, ped):
-    lanes = box_lanes(outline, modes)
+def box_spec(pid, outline, modes, base, game, plan, ped, corner=False):
+    lanes = box_lanes(outline, modes, corner)
     veh = []
     for e, a, f, b, kind in lanes:
         plan.need(e, a, f, b)
@@ -228,16 +246,18 @@ def table_lines(T):
     out = []
     for r in T["box"]:
         out.append("avxm %d %s %s" % (r["id"], r["outline"], r["modes"]))
-    for ends, pid in sorted(T["nose_oneway"].items()):
-        out.append("avxn %d %s 1" % (pid, "".join("1" if s in ends else "0" for s in "NESW")))
-    for ends, pid in sorted(T["nose_twoway"].items()):
-        out.append("avxn %d %s 0" % (pid, "".join("1" if s in ends else "0" for s in "NESW")))
+    for ends, pid, ow, link in all_noses(T):
+        out.append("avxn %d %s %d %d" % (pid, "".join("1" if s in ends else "0" for s in "NESW"), ow, link))
     for r in T["box"]:                                  # AVENUE_LANES.md 5: the avenue edges (I / O) of each piece
         lj = "".join(m if (o == "A" and m in "IO") else "." for o, m in zip(r["outline"], r["modes"]))
         if lj != "....":
             out.append("avlj %d %s" % (r["id"], lj))
-    for pid in T["nose_oneway"].values():               # state 0: traffic -x, enters across E, leaves across W
-        out.append("avlj %d .I.O" % pid)
+    for ends, pid, ow, link in all_noses(T):            # state 0: traffic -x, enters across E, leaves across W
+        if ow:
+            out.append("avlj %d .I.O" % pid)
+    for pid, o, m, base in CORNERS:                     # corner junctions
+        out.append("avxk %d %s %s" % (pid, o, m))
+        out.append("avlj %d %s" % (pid, "".join(c if c in "IO" else "." for c in m)))
     return out
 
 
@@ -262,23 +282,34 @@ def cmd_build(a):
                          "name": {"*": "Avenue crossing", "ENGLISH": "Cruce de avenidas"},
                          "art": {"from": 43, "png_dir": "art/%d" % r["id"]}, "trblkatt": "copy_base"})
         outlines.setdefault(r["outline"], []).append(r["id"])
+    for pid, o, m, base in CORNERS:                     # corner junctions: stock art of the T / X
+        spec, ln = box_spec(pid, o, m, base, game, plan, peds[base], corner=True)
+        spec["_"] = "avjunc_build.py: avenue corner outer cell outline %s modes %s (N E S W, state 0), saved as %d" % (o, m, base)
+        nlanes += len(ln)
+        fn = "corner_%d.lanes.json" % pid
+        json.dump(spec, open(os.path.join(a.pack, fn), "w", newline="\n"), indent=1)
+        lanes_entries.append({"piece": pid, "spec": fn})
+        variants.append({"id": pid, "base": base, "network": "ROAD",
+                         "name": {"*": "Avenue corner junction", "ENGLISH": "Esquina de avenida"},
+                         "art": {"from": base}, "trblkatt": "copy_base"})
     # curves: one spec carries every new shape (netpack_lanes collects curves from all specs)
     if plan.shapes:
         first = os.path.join(a.pack, lanes_entries[0]["spec"])
         sp = json.load(open(first))
         sp["curves"] = [{"shape": s, "pts": p} for s, p in sorted(plan.shapes.items())]
         json.dump(sp, open(first, "w", newline="\n"), indent=1)
-    for ends, pid in sorted(T["nose_oneway"].items()):
-        sp = nose_spec(pid, True, game)
-        fn = "nose_%d.lanes.json" % pid
-        json.dump(sp, open(os.path.join(a.pack, fn), "w", newline="\n"), indent=1)
-        lanes_entries.append({"piece": pid, "spec": fn})
-        variants.append({"id": pid, "base": 11204, "network": "ROAD",
-                         "name": {"*": "Avenue (one way)", "ENGLISH": "Avenida (un sentido)"},
-                         "art": {"from": 11204, "png_dir": "art/%d" % pid}, "trblkatt": "copy_base"})
-    for ends, pid in sorted(T["nose_twoway"].items()):
-        variants.append({"id": pid, "base": 11204, "network": "ROAD", "name": {"*": "Avenue", "ENGLISH": "Avenida"},
-                         "art": {"from": 11204, "png_dir": "art/%d" % pid}, "trblkatt": "copy_base"})
+    for ends, pid, ow, link in all_noses(T):
+        if ow:
+            sp = nose_spec(pid, True, game)
+            fn = "nose_%d.lanes.json" % pid
+            json.dump(sp, open(os.path.join(a.pack, fn), "w", newline="\n"), indent=1)
+            lanes_entries.append({"piece": pid, "spec": fn})
+            variants.append({"id": pid, "base": 11204, "network": "ROAD",
+                             "name": {"*": "Avenue (one way)", "ENGLISH": "Avenida (un sentido)"},
+                             "art": {"from": 11204, "png_dir": "art/%d" % pid}, "trblkatt": "copy_base"})
+        else:
+            variants.append({"id": pid, "base": 11204, "network": "ROAD", "name": {"*": "Avenue", "ENGLISH": "Avenida"},
+                             "art": {"from": 11204, "png_dir": "art/%d" % pid}, "trblkatt": "copy_base"})
     variants.sort(key=lambda v: v["id"])
     man_p = os.path.join(a.pack, "manifest.json")
     man = json.load(open(man_p))
@@ -318,8 +349,16 @@ def cmd_build(a):
                 shutil.rmtree(d)
             shutil.copytree(d0, d)
         print("art: outline %s -> %s" % (outline, ids))
-    for ends, pid in list(T["nose_oneway"].items()) + list(T["nose_twoway"].items()):
-        paint_nose(os.path.join(art_root, str(pid)), ends)
+    done = {}
+    for ends, pid, ow, link in all_noses(T):
+        d = os.path.join(art_root, str(pid))
+        if ends in done:                                 # a link nose looks like the nose with the same ends
+            if os.path.exists(d):
+                shutil.rmtree(d)
+            shutil.copytree(done[ends], d)
+        else:
+            paint_nose(d, ends)
+            done[ends] = d
         print("art: nose %s -> %d" % (ends or "-", pid))
 
 
@@ -365,7 +404,7 @@ def cmd_check(a):
                     print("%s %d: node (%d,%d) has no edge" % (lang, pid, n["x"], n["z"]))
                     bad += 1
     # noses against avcore's straight half, both languages, every state, both along sides
-    for ends, pid in T["nose_oneway"].items():
+    for ends, pid in list(T["nose_oneway"].items()) + list(NOSE_OW_LINK.items()):
         for lang in ("ENGLISH", "English-UK"):
             for s in range(4):
                 d = "NESW"[AL.half_dir(s)]

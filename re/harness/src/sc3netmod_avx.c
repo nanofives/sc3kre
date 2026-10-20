@@ -8,8 +8,16 @@
  * Table lines (package avenue_junctions, netpack key avenue_junction_lines):
  *   avxm <piece> <outline> <modes>   a box cell piece at state 0, per side N E S W: outline I (another box cell),
  *                                    A (an arm), C (closed); modes I (2 lanes in), O (2 out), T (two-way), C
- *   avxn <piece> <ends> <oneway>     a half cell next to a box (base 11204, at the half's 11204 state): ends = 4 digits
- *                                    N E S W at state 0, 1 where the median nose is; oneway 1 = avcore's one-way lanes
+ *   avxn <piece> <ends> <oneway> [<link>]  a half cell next to a box (base 11204, at the half's 11204 state): ends =
+ *                                    4 digits N E S W at state 0, 1 where the median nose is; oneway 1 = avcore's
+ *                                    one-way lanes; link 1 = written on a LINK cell of a segment (a stock T / X joining
+ *                                    the halves): kept apart so a reloaded layout segments as the stock one did (a nose
+ *                                    on a straight pair stays a band row, a link nose stays a link)
+ *   avxk <piece> <outline> <modes>   corner junctions (2026-10-19): the OUTER cell of an avenue corner (avcore's inner
+ *                                    bend diagonal to it, the two halves beside it) that is a stock T 39 / X 43 with
+ *                                    plain roads (29) leaving its outside: the avenue turns through it on both lanes,
+ *                                    the road keeps two-way lanes (twin avjunc_rule.corner_at). Written one-way;
+ *                                    avx_post puts the stock T / X back when avcore leaves the bands two-way
  * The rule (twin avjunc_rule.find), sides N E S W, "road" = a ROAD cell:
  *   straight pair  the two halves side by side, each 11204 / avcore's straight / our nose piece, in its half state
  *                  (along x: (x, z) state 2 + (x, z + 1) state 0; along z: (x, z) state 1 + (x + 1, z) state 3)
@@ -41,7 +49,10 @@
 
 typedef struct { WORD piece; char ol[4], md[4]; } AvxM;
 static AvxM g_avx_m[AVX_MAXM];
+static AvxM g_avx_k[8];                                  /* corner junction pieces (avxk) */
+static int g_avx_nk;
 static WORD g_avx_now[16], g_avx_ntw[16];               /* noses by ends mask (bit N 1, E 2, S 4, W 8) at state 0 */
+static WORD g_avx_nowl[16], g_avx_ntwl[16];             /* link noses */
 static volatile LONG g_avx_n_j, g_avx_n_cells, g_avx_n_rev, g_avx_n_dem, g_avx_n_drop;
 static const signed char AVX_DIR[4][2] = { { 0, -1 }, { 1, 0 }, { 0, 1 }, { -1, 0 } };     /* N E S W */
 static int avl_own(WORD id);                             /* task avjunc: sc3netmod_avl.c (avcore) */
@@ -51,19 +62,34 @@ static int avl_post_set(int slot, int (*f)(BYTE *, int, int, int, int, const cha
 static int avx_post_hook(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who, int *rbox);
 
 static void avx_line(const char *path, const char *line) {
-    unsigned long v, ow;
+    unsigned long v, ow, lk = 0;
     char o[8], m[8], e[8];
     int k;
     if (!strncmp(line, "avxn ", 5)) {
         int mk = 0;
-        if (sscanf(line + 5, "%lu %4s %lu", &v, e, &ow) != 3 || !v || v > 0xffff || strlen(e) != 4 || ow > 1 ||
-            g_base[v] != 11204) {
+        if (sscanf(line + 5, "%lu %4s %lu %lu", &v, e, &ow, &lk) < 3 || !v || v > 0xffff || strlen(e) != 4 || ow > 1 ||
+            lk > 1 || g_base[v] != 11204) {
             logf("### avx: %s: bad nose line or piece not a variant of 11204: '%s'", path, line);
             return;
         }
         for (k = 0; k < 4; k++) if (e[k] == '1') mk |= 1 << k;
-        if (ow) g_avx_now[mk] = (WORD)v; else g_avx_ntw[mk] = (WORD)v;
-        logf("avx: %s: %s nose piece %lu, nose ends N E S W %.4s at state 0", path, ow ? "one-way" : "two-way", v, e);
+        if (lk) { if (ow) g_avx_nowl[mk] = (WORD)v; else g_avx_ntwl[mk] = (WORD)v; }
+        else if (ow) g_avx_now[mk] = (WORD)v; else g_avx_ntw[mk] = (WORD)v;
+        logf("avx: %s: %s%s nose piece %lu, nose ends N E S W %.4s at state 0", path, ow ? "one-way" : "two-way",
+             lk ? " link" : "", v, e);
+        return;
+    }
+    if (!strncmp(line, "avxk ", 5)) {
+        if (sscanf(line + 5, "%lu %4s %4s", &v, o, m) != 3 || !v || v > 0xffff || strlen(o) != 4 || strlen(m) != 4 ||
+            !g_base[v] || g_avx_nk >= 8) {
+            logf("### avx: %s: bad corner line, piece not a variant, or too many: '%s'", path, line);
+            return;
+        }
+        g_avx_k[g_avx_nk].piece = (WORD)v;
+        memcpy(g_avx_k[g_avx_nk].ol, o, 4);
+        memcpy(g_avx_k[g_avx_nk].md, m, 4);
+        g_avx_nk++;
+        logf("avx: %s: corner junction piece %lu, outline %.4s modes %.4s at state 0", path, v, o, m);
         return;
     }
     if (strncmp(line, "avxm ", 5)) {
@@ -97,10 +123,18 @@ static int avx_is_nose(WORD id) {
     int k;
     if (!id) return 0;
     for (k = 0; k < 16; k++) if (g_avx_now[k] == id || g_avx_ntw[k] == id) return 1;
+    for (k = 0; k < 16; k++) if (g_avx_nowl[k] == id || g_avx_ntwl[k] == id) return 2;   /* link nose */
     return 0;
 }
 
-static int avx_own(WORD id) { return avx_is_box(id) || avx_is_nose(id); }
+static int avx_is_corner(WORD id) {
+    int k;
+    if (!id) return 0;
+    for (k = 0; k < g_avx_nk; k++) if (g_avx_k[k].piece == id) return k + 1;
+    return 0;
+}
+
+static int avx_own(WORD id) { return avx_is_box(id) || avx_is_nose(id) || avx_is_corner(id); }
 
 static WORD avx_save_id(WORD id) { (void)id; return 0; }  /* every piece saves as its base (task avjunc) */
 
@@ -149,12 +183,18 @@ static int avx_arms(DWORD v) {
         return avx_rotm(a, st);
     }
     if (avx_is_nose(id)) return avx_rotm(0x2 | 0x8, st);  /* E and W at state 0 */
+    if ((k = avx_is_corner(id)) != 0) {
+        for (a = 0, e = 0; e < 4; e++) if (g_avx_k[k - 1].ol[e] != 'C') a |= 1 << e;
+        return avx_rotm(a, st);
+    }
     if (!avx_stock_of(id)) return -1;
     a = avx_stock_arms(avx_stock_of(id));
     return a < 0 ? -1 : avx_rotm(a, st);
 }
 
 static int avx_is_half(WORD id) { return id == 11204 || (g_avl_straight && id == g_avl_straight) || avx_is_nose(id); }
+/* a band row cell: stock 11204, avcore's straight, a nose on a straight pair (NOT a link nose) */
+static int avx_is_row(WORD id) { return id == 11204 || (g_avl_straight && id == g_avl_straight) || avx_is_nose(id) == 1; }
 
 /* ---------------------------------------------------------------- one pass */
 typedef struct {
@@ -166,6 +206,8 @@ typedef struct {
     BYTE dem;                                            /* demoted arms (bits) */
 } AvxBox;
 
+typedef struct { int x, z, hx, hz, ox, oz; DWORD want, orig; } AvxCorner;   /* corner cell and its two halves */
+
 typedef struct {
     BYTE *mgr; void *lay; int W, H;
     RbBuf b;
@@ -174,6 +216,8 @@ typedef struct {
     signed char *nst;                                    /* nose state */
     AvxBox *bx; int nb, cap;
     int rx0, rz0, rx1, rz1;                              /* cells a revert may touch: the edit box + 2 (whole map on load) */
+    BYTE *kmap;                                          /* 1: a corner junction cell this pass keeps */
+    AvxCorner *kc; int nk, kcap;
 } AvxPass;
 
 static AvxPass g_avx_p;                                   /* the last avx_run's result, for avx_post */
@@ -195,7 +239,7 @@ static const int AVX_ALONG[2][2] = { { 3, 1 }, { 0, 2 } };
 
 static int avx_pair(AvxPass *p, int ax, int az, int axis) {
     DWORD a = avx_at(p, ax, az), b = avx_at(p, ax + AVX_ACROSS[axis][0], az + AVX_ACROSS[axis][1]);
-    if (!a || !b || !avx_is_half((WORD)(a & 0xffff)) || !avx_is_half((WORD)(b & 0xffff))) return 0;
+    if (!a || !b || !avx_is_row((WORD)(a & 0xffff)) || !avx_is_row((WORD)(b & 0xffff))) return 0;
     return (int)((a >> 16) & 3) == AVX_HST[axis][0] && (int)((b >> 16) & 3) == AVX_HST[axis][1];
 }
 
@@ -352,7 +396,7 @@ static char avx_nb_mode(AvxPass *p, int x, int z, int e) {
     }
     if (avx_avcore_band((WORD)(v & 0xffff))) return '?';
     a = avx_arms(v);
-    if (a < 0) return '?';
+    if (a < 0) return 'X';                                /* unknown connections (a diagonal road piece, ...): refuse */
     return (a & (1 << e)) ? 'T' : 'C';
 }
 
@@ -369,13 +413,20 @@ static void avx_noses(AvxPass *p) {
                     int e = AVX_ALONG[bx->axis][s], x = bx->x[i][h], z = bx->z[i][h], ix;
                     if (bx->ek[i][h][e] != 'B') continue;
                     x += AVX_DIR[e][0]; z += AVX_DIR[e][1];
-                    while ((ix = avx_ix(p, x, z)) >= 0 && p->link[ix] && !p->nose[ix] && !p->own[ix]) {
-                        p->nose[ix] = (BYTE)(1 + ((p->link[ix] - 1) >> 1));
-                        p->nst[ix] = (signed char)AVX_HST[(p->link[ix] - 1) >> 1][(p->link[ix] - 1) & 1];
+                    while ((ix = avx_ix(p, x, z)) >= 0 && !p->nose[ix] && !p->own[ix] &&
+                           (p->link[ix] || avx_is_nose((WORD)(avx_at(p, x, z) & 0xffff)) == 2)) {
+                        /* links and our link noses (nose 3 + axis) */
+                        if (p->link[ix]) {
+                            p->nose[ix] = (BYTE)(3 + ((p->link[ix] - 1) >> 1));
+                            p->nst[ix] = (signed char)AVX_HST[(p->link[ix] - 1) >> 1][(p->link[ix] - 1) & 1];
+                        } else {
+                            p->nose[ix] = (BYTE)(3 + bx->axis);
+                            p->nst[ix] = (signed char)((avx_at(p, x, z) >> 16) & 3);
+                        }
                         x += AVX_DIR[e][0]; z += AVX_DIR[e][1];
                     }
                     ix = avx_ix(p, x, z);
-                    if (ix >= 0 && !p->own[ix] && !p->nose[ix] && avx_is_half((WORD)(avx_at(p, x, z) & 0xffff))) {
+                    if (ix >= 0 && !p->own[ix] && !p->nose[ix] && avx_is_row((WORD)(avx_at(p, x, z) & 0xffff))) {
                         p->nose[ix] = (BYTE)(1 + bx->axis);
                         p->nst[ix] = (signed char)((avx_at(p, x, z) >> 16) & 3);
                     }
@@ -385,13 +436,19 @@ static void avx_noses(AvxPass *p) {
                 int e = AVX_OUT[bx->axis][h], x = bx->x[i][h], z = bx->z[i][h], ix;
                 if (bx->span[i][h] < 0) continue;
                 x += AVX_DIR[e][0]; z += AVX_DIR[e][1];
-                while ((ix = avx_ix(p, x, z)) >= 0 && p->link[ix] && !p->nose[ix] && !p->own[ix]) {
-                    p->nose[ix] = (BYTE)(1 + ((p->link[ix] - 1) >> 1));
-                    p->nst[ix] = (signed char)AVX_HST[(p->link[ix] - 1) >> 1][(p->link[ix] - 1) & 1];
+                while ((ix = avx_ix(p, x, z)) >= 0 && !p->nose[ix] && !p->own[ix] &&
+                       (p->link[ix] || avx_is_nose((WORD)(avx_at(p, x, z) & 0xffff)) == 2)) {
+                    if (p->link[ix]) {
+                        p->nose[ix] = (BYTE)(3 + ((p->link[ix] - 1) >> 1));
+                        p->nst[ix] = (signed char)AVX_HST[(p->link[ix] - 1) >> 1][(p->link[ix] - 1) & 1];
+                    } else {
+                        p->nose[ix] = (BYTE)(3 + (bx->axis ^ 1));
+                        p->nst[ix] = (signed char)((avx_at(p, x, z) >> 16) & 3);
+                    }
                     x += AVX_DIR[e][0]; z += AVX_DIR[e][1];
                 }
                 ix = avx_ix(p, x, z);
-                if (ix >= 0 && !p->own[ix] && !p->nose[ix] && avx_is_half((WORD)(avx_at(p, x, z) & 0xffff))) {
+                if (ix >= 0 && !p->own[ix] && !p->nose[ix] && avx_is_row((WORD)(avx_at(p, x, z) & 0xffff))) {
                     p->nose[ix] = (BYTE)(1 + (bx->axis ^ 1));
                     p->nst[ix] = (signed char)((avx_at(p, x, z) >> 16) & 3);
                 }
@@ -532,6 +589,7 @@ static void avx_validate(AvxPass *p) {
                             b = avx_nb_mode(p, nx, nz, (e + 2) & 3);
                             if (a == 'C' && b == 'T') continue;            /* a stub that does not connect (stock too) */
                         }
+                        if (b == 'X') { ok = 0; continue; }
                         if (b == '?') continue;
                         if (!((a == 'I' && b == 'O') || (a == 'O' && b == 'I') || (a == 'T' && b == 'T') ||
                               (a == 'C' && b == 'C') || (a == 'C' && !avx_road(p, nx, nz)))) ok = 0;
@@ -543,6 +601,56 @@ static void avx_validate(AvxPass *p) {
     }
     avx_noses(p);
     if (ndrop) InterlockedExchangeAdd(&g_avx_n_drop, ndrop);
+}
+
+/* corner junctions (twin avjunc_rule.corner_at): the avenue enters the cell across e_in from a half running into it
+   and leaves across e_out = e_in - 1 into a half running away; both halves' medians face the inner bend diagonal to
+   the cell; each of the other two sides is a connected plain road (29) or closed, at least one road */
+static void avx_corners(AvxPass *p, int ox0, int oz0, int ox1, int oz1) {
+    int x, z, ein, e;
+    if (!g_avx_nk) return;
+    for (z = oz0; z <= oz1; z++)
+        for (x = ox0; x <= ox1; x++) {
+            DWORD v = avx_at(p, x, z);
+            WORD id = (WORD)(v & 0xffff);
+            int st = (int)((v >> 16) & 3), ix = avx_ix(p, x, z);
+            if (!v || ix < 0 || !(id == 39 || id == 43 || avx_is_corner(id))) continue;
+            for (ein = 0; ein < 4; ein++) {
+                int eout = (ein + 3) & 3, hx = x + AVX_DIR[ein][0], hz = z + AVX_DIR[ein][1];
+                int ox = x + AVX_DIR[eout][0], oz = z + AVX_DIR[eout][1];
+                int nx = hx + AVX_DIR[eout][0], nz = hz + AVX_DIR[eout][1], si, so, nroad = 0, ok = 1, j, k, q;
+                DWORD qi = avx_at(p, hx, hz), qo = avx_at(p, ox, oz), qn = avx_at(p, nx, nz), w = 0;
+                WORD ii = (WORD)(qi & 0xffff), io = (WORD)(qo & 0xffff), inn = (WORD)(qn & 0xffff);
+                char ol[4], md[4];
+                if (!qi || !qo || !qn) continue;
+                if (!(inn == 11203 || (avl_own(inn) && g_base[inn] == 11203))) continue;
+                if (!(ii == 11204 || ii == g_avl_straight) || !(io == 11204 || io == g_avl_straight)) continue;
+                si = (int)((qi >> 16) & 3); so = (int)((qo >> 16) & 3);
+                if (((si + 3) & 3) != ((ein + 2) & 3) || ((so + 3) & 3) != eout) continue;
+                if (hx + AVX_DIR[si][0] != nx || hz + AVX_DIR[si][1] != nz) continue;
+                if (ox + AVX_DIR[so][0] != nx || oz + AVX_DIR[so][1] != nz) continue;
+                for (e = 0; e < 4; e++) { ol[e] = 'C'; md[e] = 'C'; }
+                ol[ein] = 'A'; md[ein] = 'I'; ol[eout] = 'A'; md[eout] = 'O';
+                for (e = 0; e < 4; e++) {
+                    if (e == ein || e == eout || !avx_conn(p, x, z, e)) continue;
+                    if ((WORD)(avx_at(p, x + AVX_DIR[e][0], z + AVX_DIR[e][1]) & 0xffff) != 29) ok = 0;
+                    ol[e] = 'A'; md[e] = 'T'; nroad++;
+                }
+                if (!ok || !nroad) continue;
+                for (j = 0; j < g_avx_nk && !w; j++)       /* the declared piece whose pattern turned by k matches */
+                    for (k = 0; k < 4 && !w; k++) {
+                        for (q = 0; q < 4 && g_avx_k[j].ol[q] == ol[(q + k) & 3] && g_avx_k[j].md[q] == md[(q + k) & 3]; q++) ;
+                        if (q == 4) w = ((DWORD)g_avx_k[j].piece << 8) | (DWORD)k;
+                    }
+                if (!w || p->nk >= p->kcap) break;
+                p->kc[p->nk].x = x; p->kc[p->nk].z = z; p->kc[p->nk].hx = hx; p->kc[p->nk].hz = hz;
+                p->kc[p->nk].ox = ox; p->kc[p->nk].oz = oz; p->kc[p->nk].want = w;
+                p->kc[p->nk].orig = avx_is_corner(id) ? (((DWORD)g_base[id] << 8) | (DWORD)st) : (((DWORD)id << 8) | (DWORD)st);
+                p->nk++;
+                p->kmap[ix] = 1;
+                break;
+            }
+        }
 }
 
 static void avx_free_pass(void) {
@@ -576,7 +684,7 @@ static int avx_arm_oneway(AvxPass *p, AvxBox *bx, int k) {
 }
 
 static int avx_nose_oneway(AvxPass *p, int x0, int z0) {
-    int ix0 = avx_ix(p, x0, z0), axis = p->nose[ix0] - 1, s;
+    int ix0 = avx_ix(p, x0, z0), axis = (p->nose[ix0] - 1) & 1, s;
     for (s = 0; s < 2; s++) {
         int e = AVX_ALONG[axis][s], x = x0 + AVX_DIR[e][0], z = z0 + AVX_DIR[e][1], ix, guard = 0;
         while ((ix = avx_ix(p, x, z)) >= 0 && p->nose[ix] && guard++ < 64) { x += AVX_DIR[e][0]; z += AVX_DIR[e][1]; }
@@ -587,7 +695,7 @@ static int avx_nose_oneway(AvxPass *p, int x0, int z0) {
 }
 
 static int avx_nose_ends(AvxPass *p, int x, int z) {
-    int ix = avx_ix(p, x, z), axis = p->nose[ix] - 1, st = p->nst[ix], s, m = 0;
+    int ix = avx_ix(p, x, z), axis = (p->nose[ix] - 1) & 1, st = p->nst[ix], s, m = 0;
     for (s = 0; s < 2; s++) {
         int e = AVX_ALONG[axis][s], j = avx_ix(p, x + AVX_DIR[e][0], z + AVX_DIR[e][1]);
         if (j >= 0 && p->own[j]) m |= 1 << ((e - st) & 3);
@@ -630,11 +738,19 @@ static int avx_write(AvxPass *p, int final, const char *who) {
             if (!p->nose[ix]) continue;
             ow = g_avl_on && (!final || avx_nose_oneway(p, x, z));
             ends = avx_nose_ends(p, x, z);
-            pc = ow ? g_avx_now[ends] : g_avx_ntw[ends];
-            if (!pc && final) pc = 11204;                 /* post: a two-way link with no nose end = stock 11204, no retile */
+            if (p->nose[ix] >= 3) pc = ow ? g_avx_nowl[ends] : g_avx_ntwl[ends];   /* a link nose */
+            else pc = ow ? g_avx_now[ends] : g_avx_ntw[ends];
             if (pc && nw < wcap) { wx[nw] = x; wz[nw] = z; ww[nw] = ((DWORD)pc << 8) | (DWORD)p->nst[ix]; nw++; }
             else p->nose[ix] = 0;                         /* a two-way link with no nose piece: back to stock below */
         }
+    for (t = 0; t < p->nk; t++) {                        /* corner junctions: one-way, or the stock T / X back */
+        AvxCorner *k = &p->kc[t];
+        DWORD w = k->want;
+        /* no avl_corner_ok() dry run here: in avx_run the boxes and noses that end the corner group's other bands
+           are not written yet (a load pass would refuse every corner); avx_post decides on avl's final map */
+        if (!g_avl_on || (final && (avl_dir(k->hx, k->hz) < 0 || avl_dir(k->ox, k->oz) < 0))) w = k->orig;
+        if (nw < wcap) { wx[nw] = k->x; wz[nw] = k->z; ww[nw] = w; nw++; }
+    }
     /* our pieces no box or nose keeps: back to stock first (a revert's retile reaches the neighbours). Only near the
        edit: a box or nose farther out may belong to a band whose seeds lie outside this pass, and a needless revert's
        retile spreads into avcore's cells, which its own pass box (the edit + 2) does not rewrite */
@@ -642,7 +758,7 @@ static int avx_write(AvxPass *p, int final, const char *who) {
         for (x = max(p->rx0, p->b.x0); x <= p->rx1 && x < p->b.x0 + p->b.w; x++) {
             DWORD v = avx_at(p, x, z);
             int ix = avx_ix(p, x, z), rect[6];
-            if (!v || !avx_own((WORD)(v & 0xffff)) || p->own[ix] || p->nose[ix]) continue;
+            if (!v || !avx_own((WORD)(v & 0xffff)) || p->own[ix] || p->nose[ix] || p->kmap[ix]) continue;
             rect[0] = x << 8; rect[1] = z << 8; rect[2] = 0; rect[3] = x << 8; rect[4] = z << 8; rect[5] = 0;
             ((PFN_Retile)VT(p->mgr, 0xb0))(p->mgr, 0, rect, 3);
             if (nrev < 8) logf("avx: %s: (%d,%d) piece %lu kept by no box or nose -> stock retile", who, x, z, v & 0xffff);
@@ -658,7 +774,8 @@ static int avx_write(AvxPass *p, int final, const char *who) {
         n++;
     }
     if (n || nrev || !strcmp(who, "load"))
-        logf("avx: %s %s: %d junction box(es), %d cell(s) written, %d reverted", who, final ? "post" : "run", live, n, nrev);
+        logf("avx: %s %s: %d junction box(es), %d corner junction(s), %d cell(s) written, %d reverted", who,
+             final ? "post" : "run", live, p->nk, n, nrev);
     VirtualFree(wx, 0, MEM_RELEASE);
     InterlockedExchangeAdd(&g_avx_n_cells, n);
     InterlockedExchangeAdd(&g_avx_n_rev, nrev);
@@ -689,16 +806,20 @@ static void avx_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) 
     if (p->b.w <= 0 || p->b.h <= 0) return;
     n = p->b.w * p->b.h;
     p->cap = strcmp(who, "load") ? 512 : 16384;
-    p->b.c = (DWORD *)VirtualAlloc(NULL, (SIZE_T)n * 12 + 16 + (SIZE_T)p->cap * sizeof(AvxBox), MEM_COMMIT,
-                                   PAGE_READWRITE);
+    p->kcap = strcmp(who, "load") ? 64 : 4096;
+    p->b.c = (DWORD *)VirtualAlloc(NULL, (SIZE_T)n * 13 + 32 + (SIZE_T)p->cap * sizeof(AvxBox) +
+                                   (SIZE_T)p->kcap * sizeof(AvxCorner), MEM_COMMIT, PAGE_READWRITE);
     if (!p->b.c) return;
     p->own = (int *)(p->b.c + n);
     p->link = (BYTE *)(p->own + n); p->nose = p->link + n; p->segm = p->nose + n; p->nst = (signed char *)(p->segm + n);
-    p->bx = (AvxBox *)(((ULONG_PTR)(p->nst + n) + 15) & ~(ULONG_PTR)15);
+    p->kmap = (BYTE *)(p->nst + n);
+    p->bx = (AvxBox *)(((ULONG_PTR)(p->kmap + n) + 15) & ~(ULONG_PTR)15);
+    p->kc = (AvxCorner *)(p->bx + p->cap);
     g_avx_have = 1;
     avx_read(p);
     avx_find(p, ox0, oz0, ox1, oz1);
     avx_validate(p);
+    avx_corners(p, ox0, oz0, ox1, oz1);
     for (t = 0; t < p->nb; t++) live += !p->bx[t].dead;
     InterlockedExchangeAdd(&g_avx_n_j, live);
     avx_write(p, !g_avl_on, who);                         /* without avcore every arm is two-way already */

@@ -260,8 +260,8 @@
     },
     "avenue_junction_lines": {
       "type": "array",
-      "items": {"type": "string", "pattern": "^avx[mn] [0-9]+ [A-Z01]{4} [A-Z01]{1,4}$"},
-      "description": "Task avjunc: raw sc3netmod table lines of the AVX block (sc3netmod_avx.c, verify/avjunc/PLAN.md): `avxm <piece> <outline> <modes>` a junction box cell at state 0, per side N E S W outline I (another box cell) / A (an arm) / C (closed) and modes I (2 lanes in) / O (2 out) / T (two-way) / C; `avxn <piece> <ends> <oneway>` a half beside a box (a variant of 11204), ends = 4 digits N E S W with 1 where the median nose is, oneway 1 = one-way lanes. Pieces must be ROAD variants of this package."
+      "items": {"type": "string", "pattern": "^avx[mnk] [0-9]+ [A-Z01]{4} [A-Z01]{1,4}( [01])?$"},
+      "description": "Task avjunc: raw sc3netmod table lines of the AVX block (sc3netmod_avx.c, verify/avjunc/PLAN.md): `avxm <piece> <outline> <modes>` a junction box cell at state 0, per side N E S W outline I (another box cell) / A (an arm) / C (closed) and modes I (2 lanes in) / O (2 out) / T (two-way) / C; `avxn <piece> <ends> <oneway>` a half beside a box (a variant of 11204), ends = 4 digits N E S W with 1 where the median nose is, oneway 1 = one-way lanes; `avxk <piece> <outline> <modes>` the outer cell of an avenue corner that is a T / X (task avjunc corners). Pieces must be ROAD variants of this package."
     },
     "avenue_lines": {
       "type": "array",

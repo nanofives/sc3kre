@@ -100,8 +100,10 @@ def turn(e, f):
     return "u"
 
 
-def cell_lanes(modes):
-    """modes: 4 chars (sides x- z- x+ z+) -> [(e, p_in, f, p_out, kind)], state-0 frame"""
+def cell_lanes(modes, corner=False):
+    """modes: 4 chars (sides x- z- x+ z+) -> [(e, p_in, f, p_out, kind)], state-0 frame. corner: the outer cell of an
+    avenue corner (task avjunc corners): a 2-lane edge with no 2-lane straight exit turns lane by lane (the avenue
+    follows the corner on both lanes), the other movements as usual"""
     out = []
     for e in range(4):
         ins = in_lanes(modes, e)
@@ -123,6 +125,8 @@ def cell_lanes(modes):
                     pairs = [(ins[0], outs[0]), (ins[1], outs[0])]
                 else:
                     pairs = [(ins[0], outs[0]), (ins[0], outs[1])]
+            elif corner and len(ins) == 2 and len(outs) == 2 and                     len(moves.get("straight", (None, []))[1]) < 2:
+                pairs = list(zip(ins, outs))                    # the avenue turning through the corner
             elif kind == "right":
                 pairs = [(ins[0], outs[0])]
             else:
@@ -143,9 +147,9 @@ def cell_lanes(modes):
     return out
 
 
-def matrix(modes):
+def matrix(modes, corner=False):
     """-> sorted [(entry side, exit side)] that carry a lane (props 310 low half)"""
-    return sorted({(e, f) for e, _, f, _, _ in cell_lanes(modes)})
+    return sorted({(e, f) for e, _, f, _, _ in cell_lanes(modes, corner)})
 
 
 def mask(modes):
@@ -501,13 +505,13 @@ PLAN_TEXT = [
 ]
 
 
-def draw_cell_zoom(im, modes, ox, oy, size):
+def draw_cell_zoom(im, modes, ox, oy, size, corner=False):
     """one box cell, large, with what each edge carries (as seen in game: lane z up the screen)"""
     from PIL import ImageDraw
     d = ImageDraw.Draw(im)
     P = lambda lx, lz: (ox + lx / 256.0 * size, oy + (1 - lz / 256.0) * size)        # noqa: E731
     d.rectangle([ox, oy, ox + size, oy + size], fill=BOXC)
-    for e, a, f, b, kind in cell_lanes(modes):
+    for e, a, f, b, kind in cell_lanes(modes, corner):
         xy = [P(p[0], p[2]) for p in bezier(a, opp(e), b, f, 17)]
         col = COL[opp(e)]
         d.line(xy, fill=col, width=3)
@@ -579,6 +583,37 @@ def cmd_plan(a):
     print("wrote", a.out, im.size, "types", {v: "".join(a + m for a, m in k) for k, v in names.items()})
 
 
+def cmd_corners(a):
+    """owner sheet for the corner junction pieces: each piece's lanes (as seen in game) + a game shot"""
+    from PIL import Image, ImageDraw
+    from netmod import avjunc_build as AB
+    im = Image.new("RGB", (1520, 900), BG)
+    d = ImageDraw.Draw(im)
+    d.text((16, 10), "Avenue corners whose outer cell is a T or an X (stream avjunc)", fill=(0, 0, 0), font=_font(24, True))
+    d.text((16, 44), "The avenue turns through the corner's outer cell on both lanes; a road leaving it keeps two-way lanes. "
+           "Lane colour = where it heads entering the cell (red right, blue left, orange up, purple down).",
+           fill=(40, 40, 40), font=_font(15))
+    names = {21768: "T, road on one side", 21769: "T, road on the other side", 21770: "X, two roads"}
+    for i, (pid, o, m, base) in enumerate(AB.CORNERS):
+        x = 70 + i * 300
+        d.text((x, 90), "%d: %s" % (pid, names[pid]), fill=(0, 0, 0), font=_font(16, True))
+        draw_cell_zoom(im, AB.nesw_to_d(m), x + 15, 150, 180, corner=True)
+    if a.shot and os.path.exists(a.shot):
+        sh = Image.open(a.shot).convert("RGB").crop((0, 0, 700, 545)).resize((560, 436))
+        im.paste(sh, (940, 90))
+        d.text((940, 532), "London (144, 57): X corner, one-way avenue turning, roads two-way", fill=(0, 0, 0), font=_font(14))
+    ty = 560
+    for t in ["- 3 pieces (variants of the stock T 39 / X 43, stock art), declared to avcore with avlj; avcore writes the inner",
+              "  bend and the two halves, both avenues of the corner convert together or stay stock.",
+              "- Shipped cities: 73 such corners (London 28); a load of London converts 10 (the rest belong to avenue groups",
+              "  with another blocker). Save + reload of London: every cell the same as after the first load.",
+              "- If the avenues stay two-way, the stock T / X is put back."]:
+        d.text((16, ty), t, fill=(30, 30, 30), font=_font(15)); ty += 22
+    im = im.crop((0, 0, 1520, ty + 16))
+    im.save(a.out)
+    print("wrote", a.out)
+
+
 def cmd_cell(a):
     m = a.modes.upper()
     for e, p, f, q, kind in cell_lanes(m):
@@ -602,8 +637,11 @@ def main(argv=None):
     s = sub.add_parser("cell")
     s.add_argument("modes")
     sub.add_parser("curves")
+    s = sub.add_parser("corners")
+    s.add_argument("out")
+    s.add_argument("--shot")
     a = ap.parse_args(argv)
-    return {"plan": cmd_plan, "cell": cmd_cell, "curves": cmd_curves}[a.cmd](a) or 0
+    return {"plan": cmd_plan, "cell": cmd_cell, "curves": cmd_curves, "corners": cmd_corners}[a.cmd](a) or 0
 
 
 if __name__ == "__main__":

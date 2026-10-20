@@ -827,8 +827,8 @@ def compile_pack(stock, pack_dir, man):
         out["avenue_lines"].append(ln)
     for n, ln in enumerate(man.get("avenue_junction_lines", [])):    # task avjunc: sc3netmod AVX block (raw lines)
         tok = ln.split()                                             # avxm <piece> <outline> <modes>, avxn <piece> <ends> <0|1>
-        if not tok or tok[0] not in ("avxm", "avxn") or len(tok) != 4 or not tok[1].isdigit():
-            raise NetpackError("%s avenue_junction_lines %d: '%s' is not an avxm / avxn line" % (pname, n + 1, ln))
+        if not tok or tok[0] not in ("avxm", "avxn", "avxk") or len(tok) not in (4, 5) or not tok[1].isdigit():
+            raise NetpackError("%s avenue_junction_lines %d: '%s' is not an avxm / avxn / avxk line" % (pname, n + 1, ln))
         if int(tok[1]) not in vids or vids[int(tok[1])]["net"] != "ROAD":
             raise NetpackError("%s avenue_junction_lines %d: %s names a piece that is not a ROAD variant of this package"
                                % (pname, n + 1, tok[0]))

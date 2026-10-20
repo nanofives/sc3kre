@@ -87,6 +87,10 @@ class Pieces:
             loc = mask_arms_nesw(STOCK_MASK[b])
         return {(e + state) % 4 for e in loc}
 
+    def is_row(self, pid):
+        """a band row cell: stock 11204, avcore's straight, our nose on a straight pair (not a link nose)"""
+        return pid in (11204, AVL_STRAIGHT) or (pid in self.own and self.own[pid]["kind"] in ("nose", "half"))
+
     def is_half(self, pid):
         return pid in (11204, AVL_STRAIGHT) or (pid in self.own and self.own[pid]["kind"] in ("nose", "half"))
 
@@ -95,8 +99,10 @@ class Pieces:
 
 
 def straight_pair(L, P, a, b, axis):
+    """a band row: stock 11204 / avcore's straight half on both cells. NOT our noses: a reloaded layout (noses saved
+    and restored) must segment exactly as the stock one did"""
     pa, pb = L.get(a), L.get(b)
-    if not (pa and pb and P.is_half(pa[0]) and P.is_half(pb[0])):
+    if not (pa and pb and P.is_row(pa[0]) and P.is_row(pb[0])):
         return False
     return (pa[1] & 3, pb[1] & 3) == ((2, 0) if axis == "x" else (1, 3))
 
@@ -239,14 +245,17 @@ def find(L, P, roads, drop=frozenset()):
     for k, bx in boxes.items():
         for c in bx["cells"]:
             boxcell[c] = k
+    def own_nose(n):                                    # a saved link chain reads back as our LINK nose pieces
+        q = L.get(n)
+        return bool(q and q[0] in P.own and P.own[q[0]]["kind"] == "link")
     for k, bx in boxes.items():
         for c, side in bx["along_out"]:
             n = (c[0] + DIRV[side][0], c[1] + DIRV[side][1])
-            while n in links and n not in noses:         # link cells chained to this box
-                noses[n] = links[n]
+            while n not in noses and n not in boxcell and (n in links or own_nose(n)):   # links / link noses
+                noses[n] = dict(links[n] if n in links else {"axis": bx["axis_of"][c], "h": None}, link=True)
                 n = (n[0] + DIRV[side][0], n[1] + DIRV[side][1])
             p = L.get(n)
-            if p and P.is_half(p[0]) and n not in boxcell:
+            if p and P.is_row(p[0]) and n not in boxcell:
                 noses.setdefault(n, {"axis": bx["axis_of"][c], "h": None})
         B = bx["band"]                                   # the crossing avenue's side: its links and first halves
         other = "z" if B.axis == "x" else "x"
@@ -254,11 +263,11 @@ def find(L, P, roads, drop=frozenset()):
             c = bx["pos"][i][h]
             side = B.out[h]
             n = (c[0] + DIRV[side][0], c[1] + DIRV[side][1])
-            while n in links and n not in noses and n not in boxcell:
-                noses[n] = links[n]
+            while n not in noses and n not in boxcell and (n in links or own_nose(n)):
+                noses[n] = dict(links[n] if n in links else {"axis": other, "h": None}, link=True)
                 n = (n[0] + DIRV[side][0], n[1] + DIRV[side][1])
             p = L.get(n)
-            if p and P.is_half(p[0]) and n not in boxcell:
+            if p and P.is_row(p[0]) and n not in boxcell:
                 noses.setdefault(n, {"axis": other, "h": None})
     for n, d in list(noses.items()):
         p = L[n]
@@ -666,11 +675,11 @@ def other_modes(L, P, bands, c):
         return "CCCC"
     if bands.get(c) and P.is_half(p[0]):
         return half_modes(p[1] & 3, True)
+    if P.stock_of(p[0]) in AVCORE_BAND:                 # avcore's crossing / slope pieces: skipped
+        return None
     A = P.arms(p[0], p[1] & 3)
     if A is None:
-        return None
-    if bands.get(c):                                     # avcore's crossing / slope pieces on a converted band
-        return None
+        return "XXXX"                                   # unknown connections (a diagonal road piece, ...): refuse
     return "".join("T" if e in A else "C" for e in range(4))
 
 
@@ -727,7 +736,8 @@ def find_valid(L, P, roads, bands_fn=None, rounds=6):
                             continue
                     if b == "?":
                         continue
-                    if (a, b) not in (("I", "O"), ("O", "I"), ("T", "T"), ("C", "C")) and not (a == "C" and n not in roads):
+                    if b == "X" or ((a, b) not in (("I", "O"), ("O", "I"), ("T", "T"), ("C", "C")) and
+                                    not (a == "C" and n not in roads)):
                         bad.add(frozenset(bx["cells"]))
         if not bad:
             break
@@ -793,3 +803,62 @@ def main(argv=None):
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+# ------------------------------------------------------------------------------------------------ corner junctions
+# task avjunc corners (2026-10-19): an avenue corner (avcore: inner bend 21726, outer bend 21701, two halves 21700)
+# whose OUTER cell is a T 39 / X 43 with plain roads (29) leaving its outside. The outer cell becomes a corner piece:
+# the avenue's two lanes turn through it, the road keeps two-way lanes. Seen in the corner's own frame the avenue
+# always enters across one side (e_in) and leaves across the next side anticlockwise (e_out = e_in - 1), a left turn.
+
+CORNER_ROAD_IDS = {29}
+INNER_BENDS = {11203, 21726}
+
+
+def corner_at(L, P, roads, c):
+    """-> dict (cell, e_in, e_out, outline, modes NESW, roads) or None"""
+    p = L.get(c)
+    if not p or not (p[0] in (39, 43) or (p[0] in P.own and P.own[p[0]]["kind"] == "corner")):
+        return None
+    for e_in in range(4):
+        e_out = (e_in + 3) % 4
+        hi = (c[0] + DIRV[e_in][0], c[1] + DIRV[e_in][1])
+        ho = (c[0] + DIRV[e_out][0], c[1] + DIRV[e_out][1])
+        inner = (hi[0] + DIRV[e_out][0], hi[1] + DIRV[e_out][1])
+        qi, qo, qn = L.get(hi), L.get(ho), L.get(inner)
+        if not (qi and qo and qn and qn[0] in INNER_BENDS):
+            continue
+        if not (qi[0] in (11204, AVL_STRAIGHT) and qo[0] in (11204, AVL_STRAIGHT)):
+            continue
+        si, so = qi[1] & 3, qo[1] & 3
+        if half_dir(si) != opp(e_in) or half_dir(so) != e_out:
+            continue
+        if (hi[0] + DIRV[si][0], hi[1] + DIRV[si][1]) != inner or (ho[0] + DIRV[so][0], ho[1] + DIRV[so][1]) != inner:
+            continue
+        outline, modes, rds = [None] * 4, [None] * 4, []
+        outline[e_in], modes[e_in] = "A", "I"
+        outline[e_out], modes[e_out] = "A", "O"
+        ok = True
+        for e in (opp(e_in), opp(e_out)):
+            n = (c[0] + DIRV[e][0], c[1] + DIRV[e][1])
+            if conn(L, P, c, e):
+                if L[n][0] not in CORNER_ROAD_IDS:
+                    ok = False
+                outline[e], modes[e] = "A", "T"
+                rds.append(e)
+            else:
+                outline[e], modes[e] = "C", "C"
+        if ok and rds:
+            return {"cell": c, "e_in": e_in, "e_out": e_out, "outline": "".join(outline), "modes": "".join(modes),
+                    "roads": rds}
+    return None
+
+
+def find_corners(L, P, roads):
+    out = []
+    for c, p in L.items():
+        if p[0] in (39, 43) or p[0] in P.own:
+            k = corner_at(L, P, roads, c)
+            if k:
+                out.append(k)
+    return out

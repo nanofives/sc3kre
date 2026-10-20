@@ -959,6 +959,157 @@
     "png_dir": "art/21767"
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 21768,
+   "base": 39,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue corner junction",
+    "ENGLISH": "Esquina de avenida"
+   },
+   "art": {
+    "from": 39
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21769,
+   "base": 39,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue corner junction",
+    "ENGLISH": "Esquina de avenida"
+   },
+   "art": {
+    "from": 39
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21770,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue corner junction",
+    "ENGLISH": "Esquina de avenida"
+   },
+   "art": {
+    "from": 43
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21771,
+   "base": 11204,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way)",
+    "ENGLISH": "Avenida (un sentido)"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/21771"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21772,
+   "base": 11204,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way)",
+    "ENGLISH": "Avenida (un sentido)"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/21772"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21773,
+   "base": 11204,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way)",
+    "ENGLISH": "Avenida (un sentido)"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/21773"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21774,
+   "base": 11204,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way)",
+    "ENGLISH": "Avenida (un sentido)"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/21774"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21775,
+   "base": 11204,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue",
+    "ENGLISH": "Avenida"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/21775"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21776,
+   "base": 11204,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue",
+    "ENGLISH": "Avenida"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/21776"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21777,
+   "base": 11204,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue",
+    "ENGLISH": "Avenida"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/21777"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21778,
+   "base": 11204,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue",
+    "ENGLISH": "Avenida"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/21778"
+   },
+   "trblkatt": "copy_base"
   }
  ],
  "lanes": [
@@ -1207,6 +1358,18 @@
    "spec": "box_21767.lanes.json"
   },
   {
+   "piece": 21768,
+   "spec": "corner_21768.lanes.json"
+  },
+  {
+   "piece": 21769,
+   "spec": "corner_21769.lanes.json"
+  },
+  {
+   "piece": 21770,
+   "spec": "corner_21770.lanes.json"
+  },
+  {
    "piece": 20800,
    "spec": "nose_20800.lanes.json"
   },
@@ -1221,6 +1384,22 @@
   {
    "piece": 20802,
    "spec": "nose_20802.lanes.json"
+  },
+  {
+   "piece": 21771,
+   "spec": "nose_21771.lanes.json"
+  },
+  {
+   "piece": 21772,
+   "spec": "nose_21772.lanes.json"
+  },
+  {
+   "piece": 21774,
+   "spec": "nose_21774.lanes.json"
+  },
+  {
+   "piece": 21773,
+   "spec": "nose_21773.lanes.json"
   }
  ],
  "avenue_junction_lines": [
@@ -1285,13 +1464,24 @@
   "avxm 21765 ICII TCTI",
   "avxm 21766 ICII TCTO",
   "avxm 21767 ICII TCTT",
-  "avxn 20800 0000 1",
-  "avxn 20801 0100 1",
-  "avxn 20803 0101 1",
-  "avxn 20802 0001 1",
-  "avxn 20810 0100 0",
-  "avxn 20804 0101 0",
-  "avxn 20811 0001 0"
+  "avxn 20800 0000 1 0",
+  "avxn 20801 0100 1 0",
+  "avxn 20803 0101 1 0",
+  "avxn 20802 0001 1 0",
+  "avxn 20810 0100 0 0",
+  "avxn 20804 0101 0 0",
+  "avxn 20811 0001 0 0",
+  "avxn 21771 0000 1 1",
+  "avxn 21772 0100 1 1",
+  "avxn 21774 0101 1 1",
+  "avxn 21773 0001 1 1",
+  "avxn 21778 0000 0 1",
+  "avxn 21775 0100 0 1",
+  "avxn 21777 0101 0 1",
+  "avxn 21776 0001 0 1",
+  "avxk 21768 ACAA ICTO",
+  "avxk 21769 ACAA TCOI",
+  "avxk 21770 AAAA ITTO"
  ],
  "avenue_lines": [
   "avlj 20805 I.O.",
@@ -1323,7 +1513,14 @@
   "avlj 21756 O...",
   "avlj 20800 .I.O",
   "avlj 20801 .I.O",
+  "avlj 20803 .I.O",
   "avlj 20802 .I.O",
-  "avlj 20803 .I.O"
+  "avlj 21771 .I.O",
+  "avlj 21772 .I.O",
+  "avlj 21774 .I.O",
+  "avlj 21773 .I.O",
+  "avlj 21768 I..O",
+  "avlj 21769 ..OI",
+  "avlj 21770 I..O"
  ]
 }
