@@ -47,10 +47,10 @@ print("    %s publish: %d of %d file(s) to send, %.1f MB" % ("incremental" if re
 EOF
 
 if [ -s "$list" ]; then
-    tar --hard-dereference -czf - -C "$STAGE" -T "$list" | $SSH_CMD "$PI_HOST" "tar -xzf - -C '$REMOTE_DIR'"
+    tar --hard-dereference -czf - -C "$STAGE" -T "$list" | $SSH_CMD "$PI_HOST" "tar -xzmf - -C '$REMOTE_DIR'"
 fi
-tar -czf - -C "$STAGE" manifest.json | $SSH_CMD "$PI_HOST" "tar -xzf - -C '$REMOTE_DIR'"
+tar -czf - -C "$STAGE" manifest.json | $SSH_CMD "$PI_HOST" "tar -xzmf - -C '$REMOTE_DIR'"
 
 echo "[+] Verifying through nginx on the Pi ..."
-$SSH_CMD "$PI_HOST" "curl -fsS http://localhost:$FILES_PORT/simcity/manifest.json | head -c 200 >/dev/null && echo '    OK: http://mariano-server.local:$FILES_PORT/simcity/manifest.json'"
+$SSH_CMD "$PI_HOST" "curl -fsS -o /dev/null http://localhost:$FILES_PORT/simcity/manifest.json && echo '    OK: http://mariano-server.local:$FILES_PORT/simcity/manifest.json'"
 echo "[+] Done. On each PC: copy update.bat + sc3_update.ps1 into an empty folder (first time) and run update.bat."
