@@ -1270,7 +1270,7 @@ BUILT_ROWS = [
     ("merge", "Merge into a single road", "the ending side's 2 lanes join the single road's lane; its other lane widens to 2"),
     ("bend", "Bend into the straight avenue", "no new lanes: each lane meets avcore's one-way half on the joint line"),
     ("cross-x", "Road crossing the avenue", "median opening: 8 turns (right from the outer lane, left from the inner)"),
-    ("T-W", "Road meeting one side", "right in, right out (the median has no opening there)"),
+    ("T-W", "Road meeting one side", "median opening: 4 turns, the road crosses the median and stops at the far curb"),
     ("stem-top", "Avenue ending on a road", "4 turns: the arriving side turns left / right, the road feeds the leaving side"),
     ("XSX", "Diagonal x straight avenue", "through on both + 8 turns"),
     ("TSX", "Diagonal ending on the straight avenue", "4 turns"),
@@ -1321,7 +1321,7 @@ def cmd_sheet(a):
            "package's specs were cut from. Red / blue = the two directions, green = turns, U-turns, tapers. "
            "Game x to the left, z down.", font=F, fill=(40, 40, 40))
     d.text((20, 74), "Offline check: every lane end on a border meets a lane of the next cell at the same point and "
-           "direction, every drag shape, junction and crossing kind, 4 turns each (19,336 joins, 0 problems).",
+           "direction, every drag shape, junction and crossing kind, 4 turns each (19,512 joins, 0 problems).",
            font=F, fill=(40, 40, 40))
     y = 112
     for k in range(0, len(panels), NC):
