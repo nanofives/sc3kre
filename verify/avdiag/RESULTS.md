@@ -186,6 +186,11 @@ z 222 and met by street x 15 (a dead end at (15,225) before), 6 houses demolishe
 | car tracks, zoom 3, box (8,214)-(28,234), 180 s (`hwcars_tracks.py`) | 75 tracks: 63 road cars (height 18176 = 71 x 256), 10 subway, 2 class-0 tracks at height 23296 flying straight over empty cells (not road traffic). 36 road cars on DAV pieces |
 | direction | road cars on the carriageway pieces, per cell visit (>= 1/4 cell along the band): NE-going 40 visits / 14 cars, all on the NW side of the median line (x + z < 243); SW-going 38 / 14, all on the SE side; 0 the other way. Seen on screen, SW-going cars move right with the SE side below them: right-hand |
 | save | `save: 35 variant tile(s) written as base`; city kept as `inst_avdiag\seoul_avdiag_band.sc3` for the fix |
+| failed trips (third game, PID 32892: the saved band city, `load: all 35 variant tiles restored`, P + 3 by keys, then `hwtraffic_probe.py` attached, no --start) | per sim month, game counters: month 1 (partial, not counted) 67 / 3,677 = 1.82%; month 2 72 / 3,681 = 1.96%; month 3 74 / 3,715 = 1.99%; month 4 85 / 3,985 = 2.13%; months 2..4 231 / 11,381 = 2.03% against the 1.95% baseline (avjunc's Seoul months 1.59..2.12%). Data `verify/avdiag/data/seoul_traffic.json` |
+
+Against the orchestrator's pass bar: cars keep their half's direction through the band (0 of 78 visits wrong) and
+cars use the crossing and the opening; failed trips 2.03% for months 2..4, inside the baseline's monthly spread. The
+stalls below are not caught by the trip counter: a car removed after a stall is not a failed route.
 
 **Defects found (not fixed):**
 
