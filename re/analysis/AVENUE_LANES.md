@@ -231,7 +231,9 @@ package folder).
 - Lab trap (avjunc 2026-10-19): installing Frida hooks (hwtraffic_probe, a segment tracer) while the game is PAUSED and
   letting the probe's `--start` unpause it, with one-way pieces on screen at zoom 4, deadlocked SC3 every time; it was
   first misread as "a car on a radius-80 left turn (23602) hangs the game". Without a probe: the U-turn end at Seoul
-  (51, 62..63) 5 min, a junction ring 7 min, no hang. Attach probes after the sim is running. avcore
+  (51, 62..63) 5 min, a junction ring 7 min, no hang. Attach probes after the sim is running. Guard (2026-10-19): `re/tools/sc3pause.py` reads the pause depth
+  without Frida and `require_running(pid)` refuses (exit 3) a Frida attach while paused in rb_lab, np_drive, nramp_cam
+  and the hwcars helpers; `--force-paused` (or SC3_FORCE_PAUSED=1) overrides it. avcore
   2026-10-19: a Frida attach made while paused and DETACHED before the keys unpaused the game deadlocked too (same
   stacks); unpausing first and attaching after was clean for 6 game months. Why that sequence deadlocks is [UNCERTAIN].
 - Report tool, not a rule: `py -3.12 -m netmod.avlanes tightleft <package dir> [...]` lists every car lane whose curve,

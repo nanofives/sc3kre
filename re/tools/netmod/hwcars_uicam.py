@@ -11,11 +11,13 @@ import os, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..")); sys.path.insert(0, HERE)
 import frida, sc3io, nramp_cam  # noqa: E402
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 tx, tz = int(sys.argv[1]), int(sys.argv[2])
 want = int(sys.argv[3]) if len(sys.argv) > 3 else 4
 W = 256
 pid = sc3io.game_pid(); h = sc3io.game_hwnd(pid)
+sc3pause.require_running(pid, "hwcars_uicam")
 s = frida.attach(pid); sc = s.create_script(nramp_cam.JS); sc.load(); api = sc.exports_sync
 sc3io.click(h, 772, 546); time.sleep(1.5)
 st = api.hascam(); print("state", st)

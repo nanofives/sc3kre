@@ -12,6 +12,9 @@ The cause recorded for a Shutdown is the last of these events the car had (withi
 """
 import json, os, sys, time
 import frida
+import os as _os  # noqa: E402
+sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), ".."))
+import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 JS = r"""
 var B = %s;
@@ -39,6 +42,7 @@ Interceptor.attach(A(0x1001c9e0), { onEnter: function () {
 rpc.exports = { take: function () { return out; } };
 """
 box = list(map(int, sys.argv[1].split(","))); secs = float(sys.argv[2])
+sc3pause.require_running(int(os.environ["SC3_PID"]), "hwcars_removals")
 s = frida.attach(int(os.environ["SC3_PID"]))
 sc = s.create_script(JS % json.dumps(box)); sc.load()
 time.sleep(secs)

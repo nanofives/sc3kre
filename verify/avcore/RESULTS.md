@@ -222,11 +222,34 @@ S = O in the outer's own frame at the corner's 11203 state).
 
 
 
-- **No car has driven a converted avenue yet.** Before avjunc's junction pieces exist, no converted band connects to
-  any road, so no trip or stock car reaches one. Cars come with the first sibling build.
+## Pause guard for Frida attaches (2026-10-19, own PID 74672)
+
+The Frida-while-paused trap cost three investigations (avjunc, avcore, bvlanes). `re/tools/sc3pause.py` reads the
+user-pause depth with ReadProcessMemory only: app = *(SC3U 0x004fa86c) (FUN_00402e74 stores the app singleton there
+[CONFIRMED @ 0x00402e74]); city = *(app + 0x48), checked on every read against the city vtable SIMCITY+0x13260 (no
+static writer of app+0x48 was found in the export, so a mismatch reads as "unknown", never guessed); depth =
+city+0x140 (SIMCITY FUN_100056bb increments it and posts 0xc2a35d7f at 1, FUN_10005773 decrements it and posts
+0xc2a35d81 at 0 [CONFIRMED @ 0x100056bb, 0x10005773]). `require_running(pid)` exits 3 when paused or unknown, unless
+`--force-paused` (stripped from argv at import) or SC3_FORCE_PAUSED=1 (inherited by subprocesses). It runs before every
+frida.attach in rb_lab (cam), np_drive (frida_job: rb_lab's commands, hwcars_grid, hwcars_drag), nramp_cam and
+hwcars_block / deposits / mode / removals / stacks / tracks / uicam. avl_tracks_an and the other hwcars_* do not attach.
+
+| step | result |
+|---|---|
+| reader, Seoul copy just loaded | PAUSED (depth 1); P by keys -> running (depth 0); P again -> PAUSED. The vtable check passed and city+0x140 follows the pause key |
+| paused, nothing attached | rb_lab cam, hwcars_tracks, np_drive cells each print `game is paused: unpause by keys (sc3io) first, then attach (pause depth 1; ...)` and exit 3, before frida.attach |
+| --force-paused logic (no attach made) | the flag is removed from argv; require_running returns |
+| unpause by keys (P, 2), then attach | sc3pause reads running; rb_lab cam attached and moved the camera; not hung 60 s later |
+
+The evidence that nothing attached in the paused step is the code path (the guard exits before frida.attach). A module
+list check proves nothing: the Frida agent does not show in EnumProcessModules even after a real attach.
+
+## Not done / open
+
 - **English-UK routing [UNCERTAIN]** (AVENUE_LANES.md 2): lanekit says the matrix's high half serves English-UK's
-  lanes, and the high half is the transpose here (needed for the tiler's arms). Not testable without an English-UK
-  install.
+  lanes, and the high half is the transpose here (needed for the tiler's arms). No English-UK install here. English-UK
+  stays mismatched as a known limitation (owner 2026-10-19, AVENUE_LANES.md 2).
 - Slope variants 21718/21719 (base 31) and 21722/21723 (base 11201) passed in game. 21720/21721 (base 32) and 21724/21725 (base 11202) are offline only: the game did not lay 32 or 11202 under this avenue. The slope cells keep the base art (stock yellow centre line), as the rail crossing does.
-- Stock cities: only 9 clean U-turn ends exist in the 15 shipped cities. Their avenues convert once avjunc declares its
-  junction pieces (`avlj`).
+- Corner outer bend (21701 as a corner): the curb lane carrying cars through it was not observed (London: no curb-lane
+  car reached it); direction through both bends and both lanes through the inner bend did pass.
+- Corners stay stock when the outer cell is a T next to another T or another pattern (74 of the 214 T / X ends).
