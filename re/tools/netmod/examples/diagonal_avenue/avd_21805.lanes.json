@@ -1,0 +1,71 @@
+{
+ "_": "avdiag_build.py: one-way diagonal avenue lanes (right-hand, verify/avdiag/PLAN.md), no path keys",
+ "piece": 21805,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 0,
+ "alt": [
+  0,
+  0,
+  0,
+  0
+ ],
+ "mirror_uk": false,
+ "vehicle": {
+  "class": "car",
+  "speed": 64000,
+  "lanes": []
+ },
+ "pedestrian": {
+  "walks": [
+   {
+    "from": [
+     0,
+     22
+    ],
+    "to": [
+     233,
+     255
+    ],
+    "path": 2304
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     0,
+     22
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     15,
+     240
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     15,
+     240
+    ],
+    "code": 24
+   },
+   {
+    "at": [
+     233,
+     255
+    ],
+    "code": 24
+   }
+  ]
+ },
+ "connects": {
+  "road": []
+ }
+}

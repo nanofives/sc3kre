@@ -1,5 +1,5 @@
 {
- "_": "diagave.py: crossing XSX cell (1, -1): lanes of [(35, 0)]",
+ "_": "avdiag_build.py: one-way diagonal avenue lanes (right-hand, verify/avdiag/PLAN.md), no path keys",
  "piece": 20554,
  "states": [
   0,
@@ -14,6 +14,7 @@
   0,
   0
  ],
+ "mirror_uk": false,
  "vehicle": {
   "class": "car",
   "speed": 64000,
@@ -27,36 +28,18 @@
      175,
      255
     ],
-    "path": 2304,
-    "exit": false
+    "exit": true
    },
    {
     "from": [
+     0,
+     175
+    ],
+    "to": [
      80,
      255
     ],
-    "to": [
-     0,
-     175
-    ],
-    "path": 2560,
-    "exit": false
-   }
-  ],
-  "exits": [
-   {
-    "at": [
-     0,
-     175
-    ],
-    "code": 0
-   },
-   {
-    "at": [
-     175,
-     255
-    ],
-    "code": 24
+    "exit": true
    }
   ]
  },
@@ -110,11 +93,69 @@
    [
     "x-",
     "z+"
-   ],
-   [
-    "z+",
-    "x-"
    ]
   ]
- }
+ },
+ "curves": [
+  {
+   "shape": 23801,
+   "pts": [
+    [
+     255,
+     0,
+     175
+    ],
+    [
+     80,
+     0,
+     0
+    ]
+   ]
+  },
+  {
+   "shape": 23800,
+   "pts": [
+    [
+     80,
+     0,
+     0
+    ],
+    [
+     255,
+     0,
+     175
+    ]
+   ]
+  },
+  {
+   "shape": 23803,
+   "pts": [
+    [
+     0,
+     0,
+     175
+    ],
+    [
+     80,
+     0,
+     255
+    ]
+   ]
+  },
+  {
+   "shape": 23802,
+   "pts": [
+    [
+     80,
+     0,
+     255
+    ],
+    [
+     0,
+     0,
+     175
+    ]
+   ]
+  }
+ ]
 }

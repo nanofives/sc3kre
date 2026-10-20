@@ -386,7 +386,7 @@ static int hwavd_dav_road(WORD id) {
     int k;
     if (id == 35 || id == 18004 || id == 1999) return 1;
     for (k = 0; k < g_dav_nmid; k++) if (g_dav_mid[k].piece == id) return 1;
-    return 0;
+    return dav_is_role(id);          /* task avdiag: DAV's one-way end pieces (U-turn / no-lane cells) */
 }
 
 static WORD g_hwavd_outer, g_hwavd_middle;     /* DAV's plain outer / middle pieces (20505 / 20500 in its package) */

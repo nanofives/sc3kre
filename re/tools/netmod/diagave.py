@@ -41,6 +41,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 
 MIN_ROWS = 3
+OPENING = True       # task avdiag: a road meeting one carriageway goes on through a median opening to the far curb
 DIRS = [(-1, 0), (0, -1), (1, 0), (0, 1), (-1, -1), (1, -1), (1, 1), (-1, 1)]   # mask bit k (tiler.py:41)
 # lone staircase (3+ steps): own-footprint mask -> (piece, state); tiler.py on the stock rules, both axes, both phases
 LONE = {17: (18004, 2), 18: (1999, 2), 22: (35, 2), 25: (35, 0), 34: (18004, 3), 35: (35, 1), 36: (1999, 3),
@@ -69,7 +70,9 @@ MERGE_TABLE = {
 # -> variant id. Filled from `combos` (junction footprints).
 JUNC = {((0,), 0, -1): 20510, ((0,), 1, -1): 20511, ((0, 2), 0, -1): 20512, ((0, 2), 1, -1): 20513,
         ((0,), 0, 0): 20514, ((0,), 0, 2): 20515, ((0,), 1, 1): 20516, ((0,), 1, 3): 20517,
-        ((0, 2), 0, 0): 20518, ((0, 2), 1, 1): 20519}
+        ((0, 2), 0, 0): 20518, ((0, 2), 1, 1): 20519,
+        ((0,), 0, 1): 20506, ((0,), 1, 0): 20507}           # task avdiag: a median opening's far cell (road stops at the curb)
+OPENING_PIECES = (20506, 20507)
 
 
 # ------------------------------------------------------------------------------------------------ the rule
@@ -177,22 +180,45 @@ def bands(road, claimed=frozenset()):
                     if sides == ["W", "E"] and zz in (first, last):
                         stem = 0 if zz == first else 2            # the far curb: N above the first row, S below the last
                     ds = [0, 1, 2] if sides == ["W", "E"] else [0] if sides == ["W"] else [2]
+                    if OPENING and len(sides) == 1 and zz in (first, last):
+                        why = why or "a road meets one carriageway in the avenue's end row"     # task avdiag
+                        continue
+                    if OPENING and len(sides) == 1:
+                        # task avdiag: a median opening: the road goes on across the median and stops at the far
+                        # carriageway's outer curb (axis-space edge E 1 / W 3 of the far cell)
+                        far, end = (2, 1) if sides == ["W"] else (0, 3)
+                        for d in (0, 1, 2):
+                            junc[(aa + d, zz)] = ("x", d, end if d == far else -1)
+                        continue
                     for d in ds:
                         junc[(aa + d, zz)] = ("x", d, stem)
+                rows_z = {zr: aa for (zr, aa) in chain}
                 for x0, zz in colN.items():                       # enters the band at (x0, zz+1), its d2 cell
                     cells = [(x0, zz + 1)]
+                    endc = None
                     if colS.get(x0) == zz + 4:                    # and leaves it at (x0, zz+3): a crossing
                         cells = [(x0, zz + 1), (x0, zz + 2), (x0, zz + 3)]
+                    elif OPENING and all((x0, zz + t) in band and zz + t in rows_z for t in (1, 2, 3)) and                             zz + 3 not in (first, last) and zz + 1 not in (first, last):
+                        cells = [(x0, zz + 1), (x0, zz + 2), (x0, zz + 3)]   # task avdiag: a median opening, the
+                        endc = (x0, zz + 3)                                   # road stops at the far curb (S)
+                    elif OPENING:
+                        why = why or "a column road meets one carriageway near the avenue's end"     # task avdiag
                     for c in cells:
                         if c not in band:
                             why = why or "column road at x=%d leaves the avenue's rows" % x0
-                        junc[c] = ("z", c[0] - [aa for (zr, aa) in chain if zr == c[1]][0] if c in band else 0, -1)
+                        junc[c] = ("z", c[0] - rows_z[c[1]] if c in band else 0, 2 if c == endc else -1)
                 for x0, zz in colS.items():                       # leaves the band from (x0, zz-1), its d0 cell
                     if colN.get(x0) == zz - 4:
                         continue
                     c = (x0, zz - 1)
                     if c not in band:
                         why = why or "column road at x=%d leaves the avenue's rows" % x0
+                    elif OPENING and all((x0, zz - t) in band and zz - t in rows_z for t in (1, 2, 3)) and                             zz - 3 not in (first, last) and zz - 1 not in (first, last):
+                        for t in (1, 2, 3):                       # task avdiag: a median opening (far curb N)
+                            cc = (x0, zz - t)
+                            junc[cc] = ("z", cc[0] - rows_z[cc[1]], 0 if t == 3 else -1)
+                    elif OPENING:
+                        why = why or "a column road meets one carriageway near the avenue's end"     # task avdiag
                     else:
                         junc[c] = ("z", 0, -1)
                 # the drags' ends beyond the full rows: a merge (one carriageway goes on as a single road) or stubs
@@ -279,6 +305,8 @@ def bands(road, claimed=frozenset()):
                 jk = {}
                 for c, (o, d, stem) in junc.items():
                     halves = tuple(sorted({0: (st["A0"],), 1: (st["A1"], st["B1"]), 2: (st["B2"],)}[d]))
+                    if axis == 1 and stem in (1, 3):
+                        stem = 4 - stem                           # task avdiag: axis 1 mirrors x: E <-> W
                     jk[c] = (halves, 0 if o == "x" else 1, stem)
                 mk = {}
                 for (end, cont, z0, a0) in merges:                # merge cells: (piece, state) from the case table
@@ -919,7 +947,10 @@ def cmd_build(a):
     # junctions: road 29 + the avenue as asphalt + crosswalks
     for canon, vid in sorted(JUNC.items(), key=lambda t: t[1]):
         d = art(vid)
-        anc = P.paint_cell(P.Junction(canon[0], canon[1], canon[2]), (0, 0), d)
+        if vid in OPENING_PIECES:                         # task avdiag: on 35's frames (ground drawn under)
+            anc = P.paint_cell(P.Opening(canon[0], canon[1], canon[2]), (0, 0), d, canvas=(35, canon[0][0]))
+        else:
+            anc = P.paint_cell(P.Junction(canon[0], canon[1], canon[2]), (0, 0), d)
         _write_anchors(d, anc, "diagave.py build: junction %s" % (canon,))
         spec = junction_spec(canon, vid)
         json.dump(spec, open(os.path.join(a.pack, "junc_%d.lanes.json" % vid), "w", newline="\n"), indent=1)
