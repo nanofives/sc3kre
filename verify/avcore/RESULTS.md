@@ -165,6 +165,45 @@ Sheet: `MAIN\verify\avcore\owner_shots\avcore_corner_sheet.png` (`netmod.avcorne
 compiled, plus the lab shot). Not done: cars driving a corner (no traffic in the lab; London not watched); corners whose
 outer cell is a T / X (214 ends) need a corner-junction piece.
 
+## Cars through a corner (London, 2026-10-19, own PID 54788)
+
+Branch 25ae1b3 build, both packages. P + 2 by keys first; then rb_lab cam and hwcars_tracks attached to the running
+game, 240 s per box. Analysis: `py -3.12 -m netmod.avl_tracks_an TRACKS GRID` (new: per avcore cell the car visits'
+direction, lateral positions, paths; WRONG = a visit against a straight half's travel side).
+
+| corner | result |
+|---|---|
+| (157..158, 157..158): z band x 157 / 158 z 152..156 + x band z 157 / 158 x 159..160, junction boxes at both far ends | 0 wrong-way visits. Inner bend 21726.2: southbound cars turn east (paths 158,152 > ... > 158,157 > 159,157 > 160,157), both lanes in and out (lateral samples ~80 and ~175 in (158,152..156) and (159,157), (160,157)). Outer bend 21701.2: westbound cars turn north (160,158 > 159,158 > 158,158 > 157,158 > 157,157 > ... 157,153). On that side only the median lane carried traffic past the bend: (158,158) all at z ~80; the one curb-lane car seen at (159,158) ended its trip there (Shutdown) |
+| (109..110, 157..158), 11-row x band | no car entered the group in 240 s (62 cars in the box, all on other roads) |
+
+So: direction through both bends PASS; both lanes through the inner bend PASS; both lanes through the outer bend not
+observed (no curb-lane car reached it). Data: `data/london_corner_tracks_an.txt`, `london_corner_grid.json`,
+`london_corner2_tracks_an.txt`; shot `owner_shots/avcore_london_corner.png`. No hang (sim running throughout).
+
+## Scope: corners whose outer cell is a T 39 / X 43 (not built)
+
+Same scan, with those corners also joining bands (15 shipped cities; ok = every other end is a U-turn, the map edge
+or a junction; a junction end converts only when avjunc's box declares it, so ok is an upper bound):
+
+| | groups ok | cells | groups blocked otherwise | cells |
+|---|---|---|---|---|
+| clean corners only (built) | 43 | 1,188 | 24 | 724 |
+| clean + T / X corners | 124 | 3,666 | 25 | 890 |
+
+Calibration: in London the clean-corner bound is 25 corners in 20 groups; the load converted 8 corners (about 1 in 3).
+If T / X corners realise the same share, handling them adds about 800 cells of the 2,478-cell bound [estimate].
+The 214 ends: London 84, Frankfurt 37, Berlin 34, Liverpool 31, Moscow 10, Madrid 8, Sacramento 7, Seoul 3. What touches
+the outer cell's outside: T 39 + one road 29: 110; X 43 + two roads: 30; T next to another T: 28; T + 11203: 12; T +
+35: 6; others 28.
+
+What it takes: the outer cell is a junction (the avenue turns through it, a road leaves it), so it is avjunc's box
+machinery: a box piece per arm pattern with one-way avenue lanes in and out plus the road's two-way lanes, declared
+with `avlj` so the AVL block can end the band there. avcore's side is small: `avl_corner_at` accepts an outer cell
+that is an avlj-declared piece whose letters fit the turn (both bands then join through it as today). Ids: avjunc's
+range, one per outer pattern and lane mode (the two largest patterns, T + road and X + 2 roads, cover 140 of 214).
+Art: whatever avjunc's box pieces use (its build makes the nose art from stock frames); not measured here.
+Owner: avjunc (box lanes, art, avx rule), avcore for the corner-block change.
+
 ## Not done / open
 
 - **No car has driven a converted avenue yet.** Before avjunc's junction pieces exist, no converted band connects to
