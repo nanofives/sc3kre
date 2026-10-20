@@ -98,6 +98,112 @@ turn). An inner lane cannot be widened inside the U-turn cell (it gains only 80 
 - Sort id fix (orchestrator-approved, hwcore closed): `hwlanes.extra_for` writes 0 when every point is at y 0, else 2; curve_set / curve_records / inject agree (`netmod.hwlanes selftest` PASSED, also in avlanes selftest). Installed in my tree: 20 new flat curves 0, 16 new curves with height 2, stock untouched. The deciding A/B (sort id 2 vs 0 on the same tight-left ring lanes) is avjunc's.
 - Not yet: the Seoul in-game check with cars on a U-turn (needs avjunc's junction package in my tree).
 
+## Seoul, two-lane U-turn end with avjunc's junctions (2026-10-19, own PIDs 58616, 71560)
+
+Build: avjunc's uncommitted Simcity_wt_avjunc (sc3netmod src with sc3netmod_avx.c, avenue_junctions built by
+avjunc_build into a scratch copy, their netpack) plus avcore's 0b189f8 hwlanes.py / avlanes.py / avenue_lanes; avjunc's
+tree left untouched. Stock Seoul copy: avx load run 150 junction boxes / 1,015 cells, AVL load pass 124 bands / 1,482
+cells, 5 U-turn ends (incl. (51, 62..63)).
+
+| run | sequence | result |
+|---|---|---|
+| 1 (trap) | paused: rb_lab cam (Frida attach, camera hook, DETACH) to (51,63) zoom 4; then P + 2 by keys, nothing attached | deadlock within 30 s: IsHungAppWindow 18/18 over 9 min, CPU time flat; main thread STRTSIM+0x18768 -> SC3U+0x24c75 -> SIMSPR+0x19ea9 -> SIMCITY+0xd31d (EnterCriticalSection), two SIMSPR threads on locks (`data/seoul_uturn_trap_stacks.txt`) |
+| 2 (clean) | P + 2 by keys first, sim running 20 s; then rb_lab cam (attach, detach) to (51,63) zoom 4; watched with no key and nothing attached | no hang: 18/18 samples responsive over 9 min, routing evaluations 380,166 -> 1,272,467, game date 1/3/1999 -> 9/23/1999 (over 6 months); cars on the U-turn curve in the frames (`owner_shots/avcore_seoul_uturn.png`) |
+
+So the two-lane U-turn (inner 23602, r 80) runs clean. The trap is wider than avjunc's wording: a Frida attach that is
+already DETACHED before the unpause still deadlocks when it happened while paused. Cars' lane direction on the band was
+not tracked (the track tools attach Frida); visually the frames show cars on the curve only.
+
+## Seoul, two-lane U-turn on the branch build with car tracks (2026-10-19, own PID 7376)
+
+Build: child/avcore d3cd8f8 (avjunc 1152e03 merged) + the slope sort id change below; avenue_junctions built by
+avjunc_build. Sequence: P + 2 by keys first, then rb_lab cam (51,63) zoom 4 and hwcars_tracks attached to the RUNNING
+game (box 44,56..62,70, 180 s), then 6 min with nothing attached.
+
+| check | result |
+|---|---|
+| hang | none: responsive throughout (20 s + 3 min tracked + 12/12 samples over 6 min), routing evaluations 0.94 M -> 1.50 M, game date 1/3/1999 -> 12/8/1999 |
+| direction | every car visit to an avcore cell runs the half's direction: (52,63) 21700.0 W 27, (51,63) 21701.2 W 25 + N 1 (inside the curve), (51,62) 21701.3 E 24, (52,62) 21700.2 E 23, (56/57,62) E 105, (56/57,63) W 15, (60,59) N 14, (61,59) S 24; none the wrong way |
+| U-turns | 17 cars drove the whole U: 52,63 > 51,63 > 51,62 > 52,62 (8 of them on to 56,62 > 57,62) |
+| lanes | both lanes used: lateral samples at z ~80 and ~175 in (52,63), (52,62), (56,62), (57,62) |
+
+Cells with opposite directions in the box (18) are all stock two-way roads (29, unconverted 11204) or avjunc's junction
+pieces (20805 / 20810 / 20811 / 20819). Data: `data/seoul_uturn_tracks_an.json`, `seoul_uturn_grid.json`,
+`seoul_uturn_watch_tracks.txt`.
+
+Slope sort id (orchestrator item): stock's own slope lanes carry 2 on 31 / 32 (y -512..0) and 0 on 11201 / 11202
+(y -256..0), so no height rule. Spec curves may now carry `"sort_id"` (hwlanes CurvePts / sort_id_of; selftest
+row added) and avcore's slope curves copy their stock source's: 23604 / 23605 = 2, 23606 / 23607 = 0.
+
+## Avenue corners (2026-10-19, own PIDs 26372, 46112, 29228)
+
+Scope (`py -3.12 -m netmod.avcorner_scan --groups`, 15 shipped cities, crossings / slopes counted as band rows):
+
+| item | count |
+|---|---|
+| band ends | junction 4,126, corner whose outer cell is a T 39 / X 43 214, clean corner 169, other 96, half-bend 37, corner without a band beside 19, U-turn 9, map edge 2 |
+| clean corner ends per city | London 74, Frankfurt 44, Berlin 16, Madrid 10, Liverpool 6, Moscow 4, Sacramento 4, Craterville 2, Madison 2, Seoul 2 |
+| groups of bands joined by clean corners | 43 whose other ends are all junctions (1,188 cells: convert where avjunc's boxes declare those ends), 24 that also have another blocker (724 cells) |
+
+The stock corner: inner and outer 11203 at one state, diagonal, plus two 11204 (8 patterns, `AVL_CST`). Pieces: inner
+bend -> new 21726 (one id; no new curve, no new art: lanes on 23601 / stock 768 in English, stock 1024 / 23602's copies
+in English-UK), outer bend -> 21701 (the U-turn quarter is the same left turn), halves -> 21700. Block: `avlk` line;
+`avl_end` accepts a corner when the band beyond converts (recursive decide, that band's corner end assumed, a loop of
+bands closes on itself, depth <= 64); the band beyond is processed in the same run, even outside the pass box.
+
+| check | result |
+|---|---|
+| offline | selftest PASSED in ENGLISH and English-UK: every adjacent cell pair of all 8 measured patterns (band row, block, other band's row). A negative control (corner lanes reversed) gives 64 problems |
+| lab: build | Roadless Paradise copy, two L-shaped roads: the game laid a stock corner at (96..97, 52..53) (11203.2 inner / outer, pattern along z forward, inner on B). Both bands converted in one run: `band along z from (96,35) rows 0..16 (ends: U-turn / corner)`, `band along x from (98,52) rows 0..11 (ends: corner / U-turn)`; block 21700.1 / 21726.2 / 21701.2 / 21700.0; the x band lay outside the edit box |
+| lab: save | 66 variant tiles written as base (34 + 2 + 4 + 24 + 2) |
+| lab: junction | a side road on the x band: avjunc's block made a junction box there and the group stayed one-way (a declared join); demolishing the far U-turn cell then reverted only the cells past the junction |
+| lab: revert through the corner | demolishing a cell of the north U-turn: `0 written, 48 reverted` in a pass box of (94,32)-(99,41): the z band, the corner block (back to 11203.2 / 11204) and the x band up to the junction |
+| lab: reload | `load: all 66 variant tiles restored`; the load pass finds both bands through the corner, 0 rewritten |
+| London (stock city, with avjunc) | load: 8 corners converted (21726 x 8, their outer bends 21701 x 8), 1,270 avcore cells |
+
+Sheet: `MAIN\verify\avcore\owner_shots\avcore_corner_sheet.png` (`netmod.avcorner_sheet`: lanes of one pattern as
+compiled, plus the lab shot). Not done: cars driving a corner (no traffic in the lab; London not watched); corners whose
+outer cell is a T / X (214 ends) need a corner-junction piece.
+
+## Cars through a corner (London, 2026-10-19, own PID 54788)
+
+Branch 25ae1b3 build, both packages. P + 2 by keys first; then rb_lab cam and hwcars_tracks attached to the running
+game, 240 s per box. Analysis: `py -3.12 -m netmod.avl_tracks_an TRACKS GRID` (new: per avcore cell the car visits'
+direction, lateral positions, paths; WRONG = a visit against a straight half's travel side).
+
+| corner | result |
+|---|---|
+| (157..158, 157..158): z band x 157 / 158 z 152..156 + x band z 157 / 158 x 159..160, junction boxes at both far ends | 0 wrong-way visits. Inner bend 21726.2: southbound cars turn east (paths 158,152 > ... > 158,157 > 159,157 > 160,157), both lanes in and out (lateral samples ~80 and ~175 in (158,152..156) and (159,157), (160,157)). Outer bend 21701.2: westbound cars turn north (160,158 > 159,158 > 158,158 > 157,158 > 157,157 > ... 157,153). On that side only the median lane carried traffic past the bend: (158,158) all at z ~80; the one curb-lane car seen at (159,158) ended its trip there (Shutdown) |
+| (109..110, 157..158), 11-row x band | no car entered the group in 240 s (62 cars in the box, all on other roads) |
+
+So: direction through both bends PASS; both lanes through the inner bend PASS; both lanes through the outer bend not
+observed (no curb-lane car reached it). Data: `data/london_corner_tracks_an.txt`, `london_corner_grid.json`,
+`london_corner2_tracks_an.txt`; shot `owner_shots/avcore_london_corner.png`. No hang (sim running throughout).
+
+## Scope: corners whose outer cell is a T 39 / X 43 (not built)
+
+Same scan, with those corners also joining bands (15 shipped cities; ok = every other end is a U-turn, the map edge
+or a junction; a junction end converts only when avjunc's box declares it, so ok is an upper bound):
+
+| | groups ok | cells | groups blocked otherwise | cells |
+|---|---|---|---|---|
+| clean corners only (built) | 43 | 1,188 | 24 | 724 |
+| clean + T / X corners | 124 | 3,666 | 25 | 890 |
+
+Calibration: in London the clean-corner bound is 25 corners in 20 groups; the load converted 8 corners (about 1 in 3).
+If T / X corners realise the same share, handling them adds about 800 cells of the 2,478-cell bound [estimate].
+The 214 ends: London 84, Frankfurt 37, Berlin 34, Liverpool 31, Moscow 10, Madrid 8, Sacramento 7, Seoul 3. What touches
+the outer cell's outside: T 39 + one road 29: 110; X 43 + two roads: 30; T next to another T: 28; T + 11203: 12; T +
+35: 6; others 28.
+
+What it takes: the outer cell is a junction (the avenue turns through it, a road leaves it), so it is avjunc's box
+machinery: a box piece per arm pattern with one-way avenue lanes in and out plus the road's two-way lanes, declared
+with `avlj` so the AVL block can end the band there. avcore's side is small: `avl_corner_at` accepts an outer cell
+that is an avlj-declared piece whose letters fit the turn (both bands then join through it as today). Ids: avjunc's
+range, one per outer pattern and lane mode (the two largest patterns, T + road and X + 2 roads, cover 140 of 214).
+Art: whatever avjunc's box pieces use (its build makes the nose art from stock frames); not measured here.
+Owner: avjunc (box lanes, art, avx rule), avcore for the corner-block change.
+
 ## Not done / open
 
 - **No car has driven a converted avenue yet.** Before avjunc's junction pieces exist, no converted band connects to

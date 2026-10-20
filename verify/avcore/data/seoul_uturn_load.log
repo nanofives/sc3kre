@@ -1,0 +1,12 @@
+[  185.142 ms][tid 4a1c] avl: C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\mods\netmod\tables\avenue_lanes.txt: end U-turn piece 21701
+[ 1203.923 ms][tid 4a1c] rbt: window 0x00D40142 subclassed for the load pass
+[ 4968.666 ms][tid 5be0] rbt: load pass message [tid 5be0]
+[ 4994.503 ms][tid 5be0] avx: load run: 150 junction box(es), 1015 cell(s) written, 0 reverted
+[ 4995.776 ms][tid 5be0] avl: load: band along z from (224,35) rows 0..3 -> one-way (ends: join or edge / U-turn)
+[ 4996.546 ms][tid 5be0] avl: load: band along x from (52,62) rows 0..0 -> one-way (ends: U-turn / join or edge)
+[ 4998.159 ms][tid 5be0] avl: load: band along z from (224,122) rows 0..0 -> one-way (ends: join or edge / U-turn)
+[ 4999.218 ms][tid 5be0] avl: load: band along x from (195,161) rows 0..4 -> one-way (ends: join or edge / U-turn)
+[ 5001.113 ms][tid 5be0] avl: load: band along z from (129,228) rows 0..4 -> one-way (ends: U-turn / join or edge)
+[ 5018.979 ms][tid 5be0] avl: load pass over (-2,-2)-(257,257): 1482 cell(s) written, 0 reverted
+[ 5030.733 ms][tid 5be0] avx: load post: 150 junction box(es), 193 cell(s) written, 0 reverted
+[10350.703 ms][tid 4a1c] stats: rbt ROAD passes=0, blocks converted=0, reverted=0, load passes=1, faults=0

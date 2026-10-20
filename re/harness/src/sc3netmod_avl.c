@@ -9,7 +9,10 @@
  *
  * Table lines (netpack manifest key `avenue_lines`):
  *   avls <piece>                 the one-way straight half (a variant of 11204), written at the cell's 11204 state
- *   avlu <piece>                 the end U-turn quarter (a variant of 11203), written at the cell's 11203 state
+ *   avlu <piece>                 the end U-turn quarter (a variant of 11203), written at the cell's 11203 state; also
+ *                                the OUTER bend of a corner (the same left turn)
+ *   avlk <piece>                 the INNER bend of an avenue corner (a variant of 11203, a right turn), written at the
+ *                                cell's 11203 state
  *   avlc <piece> <base> <side>   a one-way variant of a crossing / slope piece; at the base's state 0 its lanes run
  *                                toward world side <side>; at state s toward (side + s) % 4
  *   avlj <piece> <NESW>          a sibling's piece a band may END on: per side at state 0, I = a half's traffic
@@ -23,6 +26,8 @@
  *              x+ 11203.0, to the S x- 2 x+ 1; along x to the E z- 0 z+ 1, to the W z- 3 z+ 2, measured on the 15
  *              shipped cities); or two avlj pieces whose letters on the side facing the band say I where the half's
  *              traffic flows into the piece and O where it flows out
+ *              ; or a corner block (avl_corner_at): acceptable when the band beyond the corner converts (decided with
+ *              it, recursively; a loop of bands closes on itself), so bands joined by corners convert all or nothing
  *   guard      every cell written holds a stock id (< 20000) or one of ours; never a cell dbv_claimed / hwave_claimed
  * Write = the game's piece writer FUN_10008919 per cell (as AVX / DAV). Our pieces in a band that no longer converts,
  * and in no band, get their base back at the same state BEFORE the writes (the stock piece they replaced; a rect
@@ -37,7 +42,7 @@
 
 typedef struct { WORD piece, base; BYTE side; } AvlC;
 typedef struct { WORD piece; char e[4]; } AvlJ;
-static WORD g_avl_uturn;                                    /* g_avl_straight, g_avl_on: sc3netmod_rbt.c */
+static WORD g_avl_uturn, g_avl_corner;                      /* g_avl_straight, g_avl_on: sc3netmod_rbt.c */
 static AvlC g_avl_c[AVL_MAXC];
 static AvlJ g_avl_j[AVL_MAXJ];
 static int g_avl_nc, g_avl_nj;
@@ -49,14 +54,14 @@ static const signed char AVL_D[4][2] = { { 0, -1 }, { 1, 0 }, { 0, 1 }, { -1, 0 
 static void avl_line(const char *path, const char *line) {
     unsigned long v, b, s;
     char e[8];
-    if (!strncmp(line, "avls ", 5) || !strncmp(line, "avlu ", 5)) {
-        int u = line[3] == 'u';
-        if (sscanf(line + 5, "%lu", &v) != 1 || !v || v > 0xffff || g_base[v] != (u ? 11203 : 11204)) {
-            logf("### avl: %s: bad line or piece not a variant of %s: '%s'", path, u ? "11203" : "11204", line);
+    if (!strncmp(line, "avls ", 5) || !strncmp(line, "avlu ", 5) || !strncmp(line, "avlk ", 5)) {
+        int u = line[3] == 'u', kc = line[3] == 'k';
+        if (sscanf(line + 5, "%lu", &v) != 1 || !v || v > 0xffff || g_base[v] != (u || kc ? 11203 : 11204)) {
+            logf("### avl: %s: bad line or piece not a variant of %s: '%s'", path, u || kc ? "11203" : "11204", line);
             return;
         }
-        if (u) g_avl_uturn = (WORD)v; else g_avl_straight = (WORD)v;
-        logf("avl: %s: %s piece %lu", path, u ? "end U-turn" : "one-way straight half", v);
+        if (u) g_avl_uturn = (WORD)v; else if (kc) g_avl_corner = (WORD)v; else g_avl_straight = (WORD)v;
+        logf("avl: %s: %s piece %lu", path, u ? "end U-turn" : kc ? "corner inner bend" : "one-way straight half", v);
         return;
     }
     if (!strncmp(line, "avlc ", 5)) {
@@ -89,7 +94,7 @@ static void avl_line(const char *path, const char *line) {
 static int avl_own(WORD id) {
     int k;
     if (!id) return 0;
-    if (id == g_avl_straight || id == g_avl_uturn) return 1;
+    if (id == g_avl_straight || id == g_avl_uturn || (g_avl_corner && id == g_avl_corner)) return 1;
     for (k = 0; k < g_avl_nc; k++) if (g_avl_c[k].piece == id) return 1;
     return 0;
 }
@@ -167,36 +172,98 @@ static int avl_row(AvlPass *p, int axis, int ax, int az, int k) {
 }
 
 /* letter of join piece `id` at state `st` on world side `w`; 0 = not a join piece */
-/* avl_band_ok: the end on the caller's side counts as a valid declared join (-1 = the back end, 1 = the forward end) */
-static int g_avl_assume;
-
 static char avl_letter(WORD id, int st, int w) {
     int k;
     for (k = 0; k < g_avl_nj; k++) if (g_avl_j[k].piece == id) return g_avl_j[k].e[(w - st) & 3];
     return 0;
 }
 
-/* the row past the run at offset k (end = -1 the back end, +1 the forward end): acceptable? *u = 1 when it is the U */
-static int avl_end(AvlPass *p, int axis, int ax, int az, int k, int end, int *u) {
+/* Corners (task avcore, 2026-10-19): a stock avenue corner is a 2 x 2 block past a band's last row. The end row holds
+   the INNER bend (11203) and a half of the other axis (11204); the next row holds that half's partner (11204) and the
+   OUTER bend (11203), diagonal to the inner one and at the SAME 11203 state (169 corner ends over the 15 shipped cities,
+   8 patterns). Beside the block, on the inner bend's side, the other axis's band begins. One-way: the inner bend becomes
+   the corner piece (avlk, a right turn whose median lane takes the wide arc), the outer bend the U-turn quarter (avlu,
+   the same left turn), the two halves avls. The two bands join into one: both convert or neither does. */
+/* [axis][fwd][inner on B] = 11203 / 11204 states of A, B (end row) and A2, B2 (next row, A2 beside A) */
+static const signed char AVL_CST[2][2][2][4] = {
+    { { { 0, 3, 2, 0 }, { 1, 3, 3, 2 } }, { { 1, 3, 0, 1 }, { 1, 2, 2, 0 } } },
+    { { { 2, 0, 1, 2 }, { 2, 3, 3, 1 } }, { { 1, 0, 3, 1 }, { 2, 0, 0, 3 } } } };
+
+typedef struct { int axis, x, z, n; } AvlSeed;                   /* a band being decided: first-half cell of row k0, rows */
+#define AVL_DEPTH 64
+typedef struct { AvlSeed s[AVL_DEPTH]; int n; } AvlStack;
+
+static int avl_decide_r(AvlPass *p, int axis, int ax, int az, int *pk0, int *pk1, int *pub, int *puf, int assume,
+                        AvlStack *stk);
+
+static int avl_is_bend(WORD id, WORD ours) { return id == 11203 || (ours && id == ours); }
+
+/* the corner block past the row at offset k: 0 none, 1 inner bend on A, 2 inner bend on B; *ox *oz = the other band's
+   first-half cell beside the block, *oaxis its axis, *oass the end of it that faces the corner */
+static int avl_corner_at(AvlPass *p, int axis, int ax, int az, int k, int end, int *oaxis, int *ox, int *oz, int *oass) {
+    int dx = axis ? 1 : 0, dz = axis ? 0 : 1, fwd = end > 0, ib;
+    int x = ax + dx * k, z = az + dz * k, bx = x + (axis ? 0 : 1), bz = z + (axis ? 1 : 0);
+    int x2 = x + dx * end, z2 = z + dz * end, bx2 = bx + dx * end, bz2 = bz + dz * end;
+    DWORD a = avl_at(p, x, z), b = avl_at(p, bx, bz), a2 = avl_at(p, x2, z2), b2 = avl_at(p, bx2, bz2);
+    if (!a || !b || !a2 || !b2) return 0;
+    for (ib = 0; ib < 2; ib++) {
+        const signed char *S = AVL_CST[axis][fwd][ib];
+        DWORD in = ib ? b : a, mid = ib ? a : b, mid2 = ib ? b2 : a2, out = ib ? a2 : b2;
+        if (!avl_is_bend(AVL_ID(in), g_avl_corner) || !avl_is_bend(AVL_ID(out), g_avl_uturn)) continue;
+        if (!avl_is_straight(AVL_ID(mid)) || !avl_is_straight(AVL_ID(mid2))) continue;
+        if (AVL_ST(a) != S[0] || AVL_ST(b) != S[1] || AVL_ST(a2) != S[2] || AVL_ST(b2) != S[3]) continue;
+        if (!avl_free(p, x, z, a) || !avl_free(p, bx, bz, b) || !avl_free(p, x2, z2, a2) || !avl_free(p, bx2, bz2, b2))
+            return 0;
+        *oaxis = 1 - axis;
+        if (axis == 0) { *ox = ib ? bx + 1 : x - 1; *oz = min(z, z2); *oass = ib ? -1 : 1; }   /* along x: W / E */
+        else { *ox = min(x, x2); *oz = ib ? bz + 1 : z - 1; *oass = ib ? -1 : 1; }            /* along z: N / S */
+        if (!avl_row(p, *oaxis, *ox, *oz, 0)) return 0;
+        return ib + 1;
+    }
+    return 0;
+}
+
+static int avl_on_stack(AvlStack *stk, int axis, int x, int z) {
+    int i;
+    for (i = 0; i < stk->n; i++) {
+        AvlSeed *s = &stk->s[i];
+        if (s->axis != axis) continue;
+        if (axis == 0 ? (x == s->x && z >= s->z && z < s->z + s->n) : (z == s->z && x >= s->x && x < s->x + s->n)) return 1;
+    }
+    return 0;
+}
+
+/* the row past the run at offset k (end = -1 the back end, +1 the forward end): acceptable? *u = 1 U-turn, 2 / 3 a
+   corner (inner bend on A / B). assume == end: the caller's end, accepted whatever stands on it (avl_band_ok, and the
+   band beyond a corner, which is being decided by the caller) */
+static int avl_end(AvlPass *p, int axis, int ax, int az, int k, int end, int *u, int assume, AvlStack *stk) {
     static const int USTATE[2][2][2] = { { { 3, 0 }, { 2, 1 } }, { { 3, 2 }, { 0, 1 } } };   /* [axis][fwd][A/B] */
     int dx = axis ? 1 : 0, dz = axis ? 0 : 1;
     int x = ax + dx * k, z = az + dz * k, bx = x + (axis ? 0 : 1), bz = z + (axis ? 1 : 0);
     int fwd = end > 0, da = axis ? 1 : 0, db = axis ? 3 : 2;     /* travel: along z A runs N, B runs S; along x A E, B W */
     int face = axis ? (fwd ? 3 : 1) : (fwd ? 0 : 2);             /* the end piece's side facing the band */
     int toward = axis ? (fwd ? 1 : 3) : (fwd ? 2 : 0);           /* travel side that points into this end */
+    int c, oaxis, ox, oz, oass;
     DWORD a, b;
     char la, lb;
     *u = 0;
     if (x < 0 || z < 0 || bx < 0 || bz < 0 || x >= p->W || z >= p->H || bx >= p->W || bz >= p->H) return 1;   /* map edge */
     a = avl_at(p, x, z); b = avl_at(p, bx, bz);
     if (!a && !b) return 0;
-    if (g_avl_assume && g_avl_assume == end) return 1;            /* avl_band_ok: the caller's end, whatever is on it now */
+    if (assume && assume == end) return 1;
     if ((AVL_ID(a) == 11203 || (g_avl_uturn && AVL_ID(a) == g_avl_uturn)) &&
         (AVL_ID(b) == 11203 || (g_avl_uturn && AVL_ID(b) == g_avl_uturn)) &&
         AVL_ST(a) == USTATE[axis][fwd][0] && AVL_ST(b) == USTATE[axis][fwd][1] &&
         avl_free(p, x, z, a) && avl_free(p, bx, bz, b)) {
         *u = g_avl_uturn != 0;
         return g_avl_uturn != 0;
+    }
+    if (g_avl_corner && g_avl_uturn && (c = avl_corner_at(p, axis, ax, az, k, end, &oaxis, &ox, &oz, &oass))) {
+        int k0, k1, ub, uf;
+        *u = 1 + c;
+        if (avl_on_stack(stk, oaxis, ox, oz)) return 1;          /* a loop of bands: that band is being decided above */
+        if (stk->n >= AVL_DEPTH) return 0;
+        return avl_decide_r(p, oaxis, ox, oz, &k0, &k1, &ub, &uf, oass, stk);
     }
     la = avl_letter(AVL_ID(a), AVL_ST(a), face);
     lb = avl_letter(AVL_ID(b), AVL_ST(b), face);
@@ -206,14 +273,19 @@ static int avl_end(AvlPass *p, int axis, int ax, int az, int k, int end, int *u)
 
 typedef struct { int x, z; DWORD want; } AvlW;
 
-/* one band from the seed (ax, az): walk, decide, collect writes (accepted) or reverts (refused) */
-/* the decision for the band through first-half cell (ax, az): rows k0..k1, U-turn ends ub / uf; nothing written */
-static int avl_decide(AvlPass *p, int axis, int ax, int az, int *pk0, int *pk1, int *pub, int *puf) {
+/* the decision for the band through first-half cell (ax, az): rows k0..k1, end kinds ub / uf (avl_end's *u); nothing
+   written. Through a corner the band beyond is decided too (recursively, its corner end assumed): all or nothing. */
+static int avl_decide_r(AvlPass *p, int axis, int ax, int az, int *pk0, int *pk1, int *pub, int *puf, int assume,
+                        AvlStack *stk) {
     int dx = axis ? 1 : 0, dz = axis ? 0 : 1, k0 = 0, k1 = 0, k, ok;
     while (k0 > -AVL_MAXLEN && avl_row(p, axis, ax, az, k0 - 1)) k0--;
     while (k1 < AVL_MAXLEN && avl_row(p, axis, ax, az, k1 + 1)) k1++;
-    {   /* both ends always: a refused band must also give back its U-turn cells */
-        int okb = avl_end(p, axis, ax, az, k0 - 1, -1, pub), okf = avl_end(p, axis, ax, az, k1 + 1, 1, puf);
+    stk->s[stk->n].axis = axis; stk->s[stk->n].x = ax + dx * k0; stk->s[stk->n].z = az + dz * k0;
+    stk->s[stk->n].n = k1 - k0 + 1;
+    stk->n++;
+    {   /* both ends always: a refused band must also give back its U-turn / corner cells */
+        int okb = avl_end(p, axis, ax, az, k0 - 1, -1, pub, assume, stk);
+        int okf = avl_end(p, axis, ax, az, k1 + 1, 1, puf, assume, stk);
         ok = okb && okf;
     }
     for (k = k0; ok && k <= k1; k++) {                             /* every crossing row needs a variant per direction */
@@ -225,48 +297,93 @@ static int avl_decide(AvlPass *p, int axis, int ax, int az, int *pk0, int *pk1, 
             if (!avl_is_straight(AVL_ID(v)) && (ci < 0 || !avl_cross_want(g_avl_c[ci].base, AVL_ST(v), dir))) ok = 0;
         }
     }
+    stk->n--;
     *pk0 = k0; *pk1 = k1;
     return ok;
 }
 
+static int avl_decide(AvlPass *p, int axis, int ax, int az, int *pk0, int *pk1, int *pub, int *puf, int assume) {
+    AvlStack *stk = (AvlStack *)HeapAlloc(GetProcessHeap(), 0, sizeof(AvlStack));
+    int ok;
+    if (!stk) return 0;
+    stk->n = 0;
+    ok = avl_decide_r(p, axis, ax, az, pk0, pk1, pub, puf, assume, stk);
+    HeapFree(GetProcessHeap(), 0, stk);
+    return ok;
+}
+
+static void avl_band(AvlPass *p, int axis, int ax, int az, AvlW *w, int *nw, int cap, int *rv, int *nrv, int rcap,
+                     const char *who);
+
+/* one cell of an accepted band's write list, or (refused) of the revert list */
+static void avl_cell(AvlPass *p, int ok, int cx, int cz, WORD piece, int mapv, AvlW *w, int *nw, int cap, int *rv,
+                     int *nrv, int rcap) {
+    DWORD v = avl_at(p, cx, cz);
+    if (!v) return;
+    if (ok) {
+        if (*nw < cap) { w[*nw].x = cx; w[*nw].z = cz; w[*nw].want = ((DWORD)piece << 8) | AVL_ST(v); (*nw)++; }
+        if (g_avl_map && cx < g_avl_mw && cz < g_avl_mh) g_avl_map[cz * g_avl_mw + cx] = (BYTE)mapv;
+    } else {
+        if (avl_own(AVL_ID(v)) && *nrv < rcap) { rv[2 * *nrv] = cx; rv[2 * *nrv + 1] = cz; (*nrv)++; }
+        if (g_avl_map && cx < g_avl_mw && cz < g_avl_mh) g_avl_map[cz * g_avl_mw + cx] = 0;
+    }
+}
+
+/* one band from the seed (ax, az): walk, decide, collect writes (accepted) or reverts (refused); through a corner the
+   band beyond is processed in the same run (it may lie outside the pass box) */
 static void avl_band(AvlPass *p, int axis, int ax, int az, AvlW *w, int *nw, int cap, int *rv, int *nrv, int rcap,
                      const char *who) {
-    int dx = axis ? 1 : 0, dz = axis ? 0 : 1, k0, k1, k, ub = 0, uf = 0, ok;
-    ok = avl_decide(p, axis, ax, az, &k0, &k1, &ub, &uf);
+    int dx = axis ? 1 : 0, dz = axis ? 0 : 1, k0, k1, k, ub = 0, uf = 0, ok, e;
+    int next[2][3], nnext = 0;
+    ok = avl_decide(p, axis, ax, az, &k0, &k1, &ub, &uf, 0);
     for (k = k0; k <= k1; k++) {                                  /* mark both cells of every row: one walk per band */
         int x = ax + dx * k, z = az + dz * k;
         p->seen[z * p->W + x] = 1;
         p->seen[(z + (axis ? 1 : 0)) * p->W + x + (axis ? 0 : 1)] = 1;
     }
-    for (k = k0 - 1; k <= k1 + 1; k++) {
+    for (k = k0; k <= k1; k++) {                                  /* the rows */
         int x = ax + dx * k, z = az + dz * k, c;
-        int end = k < k0 || k > k1, isu = (k < k0 && ub) || (k > k1 && uf);
-        if (end && !isu) continue;                                /* a sibling's piece or the map edge: not ours */
         for (c = 0; c < 2; c++) {
-            int cx = x + (c && !axis ? 1 : 0), cz = z + (c && axis ? 1 : 0);
-            DWORD v = avl_at(p, cx, cz), want;
-            WORD id = AVL_ID(v);
-            int st = AVL_ST(v), dir = axis ? (c ? 3 : 1) : (c ? 2 : 0);
+            int cx = x + (c && !axis ? 1 : 0), cz = z + (c && axis ? 1 : 0), dir = axis ? (c ? 3 : 1) : (c ? 2 : 0);
+            DWORD v = avl_at(p, cx, cz);
+            WORD id = AVL_ID(v), piece;
             if (!v) continue;
-            if (ok) {
-                if (isu) want = ((DWORD)g_avl_uturn << 8) | st;
-                else if (avl_is_straight(id)) want = ((DWORD)g_avl_straight << 8) | st;
-                else want = ((DWORD)avl_cross_want(g_avl_c[avl_cross_of(id)].base, st, dir) << 8) | st;
-                if (*nw < cap) { w[*nw].x = cx; w[*nw].z = cz; w[*nw].want = want; (*nw)++; }
-                if (g_avl_map && cx < g_avl_mw && cz < g_avl_mh) g_avl_map[cz * g_avl_mw + cx] = isu ? 0xff : (BYTE)(1 + dir);
-            } else {
-                if (avl_own(id) && *nrv < rcap) { rv[2 * *nrv] = cx; rv[2 * *nrv + 1] = cz; (*nrv)++; }
-                if (g_avl_map && cx < g_avl_mw && cz < g_avl_mh) g_avl_map[cz * g_avl_mw + cx] = 0;
+            piece = avl_is_straight(id) ? g_avl_straight : ok ? avl_cross_want(g_avl_c[avl_cross_of(id)].base, AVL_ST(v), dir) : 0;
+            avl_cell(p, ok, cx, cz, piece, 1 + dir, w, nw, cap, rv, nrv, rcap);
+        }
+    }
+    for (e = 0; e < 2; e++) {                                     /* the ends that are ours: U-turn pair, corner block */
+        int end = e ? 1 : -1, kind = e ? uf : ub, kk = e ? k1 + 1 : k0 - 1;
+        int x = ax + dx * kk, z = az + dz * kk, bx = x + (axis ? 0 : 1), bz = z + (axis ? 1 : 0);
+        if (kind == 1) {
+            avl_cell(p, ok, x, z, g_avl_uturn, 0xff, w, nw, cap, rv, nrv, rcap);
+            avl_cell(p, ok, bx, bz, g_avl_uturn, 0xff, w, nw, cap, rv, nrv, rcap);
+        } else if (kind >= 2) {
+            int ib = kind == 3, x2 = x + dx * end, z2 = z + dz * end, bx2 = bx + dx * end, bz2 = bz + dz * end;
+            int oaxis, ox, oz, oass;
+            /* inner bend, its partner half, the other half, the outer bend */
+            int ix = ib ? bx : x, iz = ib ? bz : z, mx = ib ? x : bx, mz = ib ? z : bz;
+            int m2x = ib ? bx2 : x2, m2z = ib ? bz2 : z2, ox2 = ib ? x2 : bx2, oz2 = ib ? z2 : bz2;
+            avl_cell(p, ok, ix, iz, g_avl_corner, 0xff, w, nw, cap, rv, nrv, rcap);
+            avl_cell(p, ok, mx, mz, g_avl_straight, 1 + ((AVL_ST(avl_at(p, mx, mz)) + 3) & 3), w, nw, cap, rv, nrv, rcap);
+            avl_cell(p, ok, m2x, m2z, g_avl_straight, 1 + ((AVL_ST(avl_at(p, m2x, m2z)) + 3) & 3), w, nw, cap, rv, nrv, rcap);
+            avl_cell(p, ok, ox2, oz2, g_avl_uturn, 0xff, w, nw, cap, rv, nrv, rcap);
+            if (avl_corner_at(p, axis, ax, az, kk, end, &oaxis, &ox, &oz, &oass) && !p->seen[oz * p->W + ox] && nnext < 2) {
+                next[nnext][0] = oaxis; next[nnext][1] = ox; next[nnext][2] = oz; nnext++;
             }
         }
     }
     if (ok) InterlockedIncrement(&g_avl_n_bands); else InterlockedIncrement(&g_avl_n_refused);
     if (ok && k1 - k0 + 1 >= 1) {
         static volatile LONG nlog;
+        static const char *KIND[4] = { "join or edge", "U-turn", "corner", "corner" };
         if (InterlockedIncrement(&nlog) <= 200 || strcmp(who, "load"))
             logf("avl: %s: band along %s from (%d,%d) rows %d..%d -> one-way (ends: %s / %s)", who, axis ? "x" : "z",
-                 ax, az, k0, k1, ub ? "U-turn" : "join or edge", uf ? "U-turn" : "join or edge");
+                 ax, az, k0, k1, KIND[ub & 3], KIND[uf & 3]);
     }
+    for (e = 0; e < nnext; e++)                                   /* the band beyond each corner, same run */
+        if (!p->seen[next[e][2] * p->W + next[e][1]])
+            avl_band(p, next[e][0], next[e][1], next[e][2], w, nw, cap, rv, nrv, rcap, who);
 }
 
 /* AVENUE_LANES.md 5: would the avenue band through (x, z) (any cell of it, either half, stock or ours), running away from
@@ -290,9 +407,7 @@ static int avl_band_ok(int x, int z, int away) {
         /* along z the forward step is S (2), along x it is E (1); away from the caller = toward that end */
         if (axis == 0 && away != 0 && away != 2) return 0;
         if (axis == 1 && away != 1 && away != 3) return 0;
-        g_avl_assume = (away == (axis ? 1 : 2)) ? -1 : 1;          /* the caller sits at the other end */
-        ok = avl_decide(&P, axis, ax, az, &k0, &k1, &ub, &uf);
-        g_avl_assume = 0;
+        ok = avl_decide(&P, axis, ax, az, &k0, &k1, &ub, &uf, (away == (axis ? 1 : 2)) ? -1 : 1);
         break;
     }
     return ok;
