@@ -4258,8 +4258,36 @@ static int    g_hs_float[HS_MAX];          /* 1 = not edge-anchored (a tooltip):
 static volatile LONG g_hs_n;            /* dest rects in use (0 = inactive): read by the wndproc */
 static volatile LONG g_hs_cw, g_hs_ch;
 static double g_hs_s = 1.0;
-static LONG   g_hs_dlg[16][4];
+static LONG   g_hs_dlg[16][4];          /* dialogs kept native this frame (DLGSCALE off, or no room to enlarge) */
 static int    g_hs_ndlg;
+/* DLGSCALE (owner 2026-10-20: "the Reunirse popup is not scaled, neither any other menu"; design call the same day:
+ * scale dialogs with the HUD factor, capped to fit). Supersedes the 2026-10-14 "dialogs stay native" call. Each visible
+ * dialog (SIMUI+0xa4d64 root child >= 120x80) is enlarged about its own centre by min(HUD factor, cw / w, ch / h),
+ * then shifted inside the client. The enlarged image is cached per dialog window and only the dest box fed by the
+ * source pixels that changed since the last frame is recomputed, so a still dialog costs one copy per frame and a drag
+ * costs nothing (the cache is keyed by size, not position). Mouse messages inside an enlarged dialog map back to its
+ * native rect at any depth (the query dialog's modal loop runs at depth 1). SC3RESIZE_DLGSCALE=0 keeps them native. */
+#define HD_MAX 8
+typedef struct {
+    void *win; DWORD used;
+    LONG nat[4], dst[4], w, h, dw, dh;
+    LONG kw, kh, kdw, kdh, kf;          /* geometry the cache below was built for */
+    WORD *cur, *prev, *out;             /* native w*h this frame / last frame, enlarged dw*dh */
+    LONG capn, capo, capt;
+    LONG *xs, *ys;                      /* per dest column/row: source index << 9 | weight of the next one (0..256) */
+    int valid;
+} HD_SLOT;
+static int     g_dlgscale = 1;
+static HD_SLOT g_hd[HD_MAX];
+static int     g_hd_list[HD_MAX], g_hd_nc;      /* this pass: slots collected */
+static volatile LONG g_hd_n;                    /* published with g_hs_n: dialogs drawn enlarged, read by the wndproc */
+static LONG    g_hd_pdst[HD_MAX][4], g_hd_pnat[HD_MAX][4];
+static int     g_hd_pslot[HD_MAX];
+static int     g_hd_capture = -1;               /* slot pressed on, until the release */
+static int     g_hd_cap_drag;                   /* that dialog moved since the press: map the cursor 1:1 from it */
+static LONG    g_hd_cap_q[2], g_hd_cap_p[2], g_hd_cap_nat[2];
+static DWORD   g_hd_stamp, g_hd_px, g_hd_full, g_hd_frames;
+static int     rz_hd_add(void *win, const LONG *r, LONG cw, LONG ch, double s);   /* fwd */
 static int    g_hs_capture, g_hs_depth, g_hs_nestlog;
 static int    g_hs_repost = 1, g_hs_repost_log, g_hs_last_ok;   /* SC3RESIZE_HUDSCALE_REPOST=0 disables the guard */
 static LPARAM g_hs_last_out;
@@ -4405,6 +4433,7 @@ static int rz_hs_collect(LONG cw, LONG ch, double s, int can_erase) {
     char skipped[400];
     int sk = 0;
     g_hs_ndlg = 0;
+    g_hd_nc = 0; g_hd_stamp++;
     skipped[0] = 0;
     if (!root) return 0;
     lvl[0] = root;
@@ -4424,8 +4453,9 @@ static int rz_hs_collect(LONG cw, LONG ch, double s, int can_erase) {
             if (spr && vt == spr + 0x676ac) continue;                                 /* city view */
             r[0] = (LONG)c[0x14 / 4]; r[1] = (LONG)c[0x18 / 4]; r[2] = (LONG)c[0x1c / 4]; r[3] = (LONG)c[0x20 / 4];
             w = r[2] - r[0]; h = r[3] - r[1];
-            if (sui && vt == sui + 0xa4d64 && w >= 120 && h >= 80) {                  /* dialog: stays native, on top */
-                if (g_hs_ndlg < 16) { memcpy(g_hs_dlg[g_hs_ndlg], r, sizeof(r)); g_hs_ndlg++; }
+            if (sui && vt == sui + 0xa4d64 && w >= 120 && h >= 80) {                  /* dialog */
+                if (!rz_hd_add(c, r, cw, ch, s) && g_hs_ndlg < 16) { memcpy(g_hs_dlg[g_hs_ndlg], r, sizeof(r)); g_hs_ndlg++; }
+                sig = (sig ^ (DWORD)(r[0] * 7 + r[1] * 131 + r[2] * 8191 + r[3] * 524287) ^ 0xd1a1) * 16777619u;
                 continue;
             }
             if (r[0] < 0) r[0] = 0;
@@ -4472,8 +4502,13 @@ static int rz_hs_collect(LONG cw, LONG ch, double s, int can_erase) {
     if (sig != g_hs_sig && g_hs_logs < 60) {
         int i;
         g_hs_sig = sig; g_hs_logs++;
-        logf("HUDSCALE> %d window(s) enlarged %.3fx about (%ld,%ld), %d dialog(s) kept native%s%s",
-             n, s, cw, ch, g_hs_ndlg, sk ? "; not scaled (floating):" : "", skipped);
+        logf("HUDSCALE> %d window(s) enlarged %.3fx about (%ld,%ld), %d dialog(s) kept native, %d enlarged%s%s",
+             n, s, cw, ch, g_hs_ndlg, g_hd_nc, sk ? "; not scaled (floating):" : "", skipped);
+        for (i = 0; i < g_hd_nc; i++) {
+            const HD_SLOT *d = &g_hd[g_hd_list[i]];
+            logf("DLGSCALE>   dialog [%ld %ld %ld %ld] -> [%ld %ld %ld %ld] %.3fx", d->nat[0], d->nat[1], d->nat[2], d->nat[3],
+                 d->dst[0], d->dst[1], d->dst[2], d->dst[3], (double)d->dw / d->w);
+        }
         for (i = 0; i < n; i++)
             logf("HUDSCALE>   [%ld %ld %ld %ld] -> [%ld %ld %ld %ld]%s", g_hs_src[i][0], g_hs_src[i][1], g_hs_src[i][2],
                  g_hs_src[i][3], g_hs_dst[i][0], g_hs_dst[i][1], g_hs_dst[i][2], g_hs_dst[i][3],
@@ -4511,6 +4546,125 @@ static WORD rz_hs_lerp(WORD a, WORD b, LONG f, int g6) {   /* f 0..256 toward b 
     else    { ra = (a >> 10) & 31; rb = (b >> 10) & 31; ga = (a >> 5) & 31; gb = (b >> 5) & 31; }
     ra += ((rb - ra) * f) >> 8; ga += ((gb - ga) * f) >> 8; ba += ((bb - ba) * f) >> 8;
     return g6 ? (WORD)((ra << 11) | (ga << 5) | ba) : (WORD)((ra << 10) | (ga << 5) | ba);
+}
+
+/* DLGSCALE: take a dialog into this pass's enlarged list. 0 = keep it native (off, no room, off the client, list full). */
+static int rz_hd_add(void *win, const LONG *r, LONG cw, LONG ch, double s) {
+    LONG w = r[2] - r[0], h = r[3] - r[1], dw, dh, x0, y0;
+    double sd = s;
+    int i, k = -1;
+    HD_SLOT *d;
+    if (!g_dlgscale || g_hd_nc >= HD_MAX || r[0] < 0 || r[1] < 0 || r[2] > cw || r[3] > ch) return 0;
+    if (sd > (double)cw / w) sd = (double)cw / w;
+    if (sd > (double)ch / h) sd = (double)ch / h;
+    if (sd < 1.01) return 0;
+    dw = (LONG)(w * sd); dh = (LONG)(h * sd);
+    if (dw > cw) dw = cw;
+    if (dh > ch) dh = ch;
+    x0 = (LONG)((r[0] + r[2] - dw) / 2.0 + 0.5); y0 = (LONG)((r[1] + r[3] - dh) / 2.0 + 0.5);
+    if (x0 + dw > cw) x0 = cw - dw;
+    if (y0 + dh > ch) y0 = ch - dh;
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    for (i = 0; i < HD_MAX; i++) if (g_hd[i].win == win) { k = i; break; }
+    if (k < 0)   /* reuse the slot unused for longest (never one already in this pass) */
+        for (i = 0; i < HD_MAX; i++) {
+            if (g_hd[i].used == g_hd_stamp) continue;
+            if (k < 0 || g_hd[i].used < g_hd[k].used) k = i;
+        }
+    if (k < 0 || g_hd[k].used == g_hd_stamp) return 0;
+    d = &g_hd[k];
+    if (d->win != win) { d->win = win; d->valid = 0; }
+    d->used = g_hd_stamp;
+    memcpy(d->nat, r, sizeof(d->nat));
+    d->dst[0] = x0; d->dst[1] = y0; d->dst[2] = x0 + dw; d->dst[3] = y0 + dh;
+    d->w = w; d->h = h; d->dw = dw; d->dh = dh;
+    g_hd_list[g_hd_nc++] = k;
+    return 1;
+}
+
+/* DLGSCALE: make sure the slot's buffers and tables fit its geometry; 0 on allocation failure. */
+static int rz_hd_ready(HD_SLOT *d) {
+    LONG i;
+    if (d->valid && d->kw == d->w && d->kh == d->h && d->kdw == d->dw && d->kdh == d->dh && d->kf == g_hs_filter) return 1;
+    d->valid = 0;
+    if (d->capn < d->w * d->h) {
+        free(d->cur); free(d->prev);
+        d->cur = (WORD *)malloc((size_t)d->w * d->h * 2); d->prev = (WORD *)malloc((size_t)d->w * d->h * 2);
+        d->capn = d->cur && d->prev ? d->w * d->h : 0;
+    }
+    if (d->capo < d->dw * d->dh) {
+        free(d->out);
+        d->out = (WORD *)malloc((size_t)d->dw * d->dh * 2);
+        d->capo = d->out ? d->dw * d->dh : 0;
+    }
+    if (d->capt < d->dw + d->dh) {
+        free(d->xs);
+        d->xs = (LONG *)malloc((size_t)(d->dw + d->dh) * sizeof(LONG));
+        d->capt = d->xs ? d->dw + d->dh : 0;
+    }
+    if (!d->capn || !d->capo || !d->capt) { d->capn = d->capo = d->capt = 0; return 0; }
+    d->ys = d->xs + d->dw;
+    for (i = 0; i < d->dw + d->dh; i++) {   /* source of dest pixel j: (j + 0.5) * n / dn - 0.5 */
+        int isx = i < d->dw;
+        LONG n = isx ? d->w : d->h, dn = isx ? d->dw : d->dh, j = isx ? i : i - d->dw, bb, f;
+        double u = (j + 0.5) * n / dn - 0.5;
+        if (!g_hs_filter) { bb = (LONG)((j + 0.5) * n / dn); if (bb > n - 1) bb = n - 1; f = 0; }
+        else {
+            if (u < 0) u = 0;
+            bb = (LONG)u; f = (LONG)((u - bb) * 256.0 + 0.5);
+            if (bb >= n - 1) { bb = n - 1; f = 0; }
+        }
+        d->xs[i] = (bb << 9) | f;   /* f is 0..256: 9 bits */
+    }
+    d->kw = d->w; d->kh = d->h; d->kdw = d->dw; d->kdh = d->dh; d->kf = g_hs_filter;
+    return 1;
+}
+
+/* DLGSCALE: enlarge one dialog from its native pixels (d->cur) into the frame. Only the dest box fed by the source
+   pixels that differ from the last frame is recomputed into the cache; the whole cache is then copied to the frame. */
+static void rz_hd_draw(HD_SLOT *d, BYTE *bits, LONG pitch, LONG ox, LONG oy, int g6) {
+    LONG x0 = d->w, x1 = -1, y0 = d->h, y1 = -1, x, y, dx0, dx1, dy0, dy1;
+    WORD *t;
+    if (!d->valid) { x0 = 0; y0 = 0; x1 = d->w - 1; y1 = d->h - 1; g_hd_full++; }
+    else
+        for (y = 0; y < d->h; y++) {
+            const WORD *a = d->cur + y * d->w, *p = d->prev + y * d->w;
+            LONG l = 0, rr = d->w - 1;
+            if (!memcmp(a, p, d->w * 2)) continue;
+            while (a[l] == p[l]) l++;
+            while (a[rr] == p[rr]) rr--;
+            if (l < x0) x0 = l;
+            if (rr > x1) x1 = rr;
+            if (y < y0) y0 = y;
+            y1 = y;
+        }
+    if (x1 >= x0) {   /* dest pixels whose taps (b, b + 1) can reach source [x0, x1] x [y0, y1] */
+        dx0 = (LONG)((double)(x0 - 1) * d->dw / d->w) - 1; dx1 = (LONG)((double)(x1 + 2) * d->dw / d->w) + 2;
+        dy0 = (LONG)((double)(y0 - 1) * d->dh / d->h) - 1; dy1 = (LONG)((double)(y1 + 2) * d->dh / d->h) + 2;
+        if (dx0 < 0) dx0 = 0;
+        if (dy0 < 0) dy0 = 0;
+        if (dx1 > d->dw) dx1 = d->dw;
+        if (dy1 > d->dh) dy1 = d->dh;
+        for (y = dy0; y < dy1; y++) {
+            LONG yb = d->ys[y] >> 9, fy = d->ys[y] & 511, yb1 = yb + 1 < d->h ? yb + 1 : yb;
+            const WORD *r0 = d->cur + yb * d->w, *r1 = d->cur + yb1 * d->w;
+            WORD *o = d->out + y * d->dw;
+            if (!g_hs_filter) for (x = dx0; x < dx1; x++) o[x] = r0[d->xs[x] >> 9];
+            else
+                for (x = dx0; x < dx1; x++) {
+                    LONG xb = d->xs[x] >> 9, fx = d->xs[x] & 511, xb1 = xb + 1 < d->w ? xb + 1 : xb;
+                    WORD a = fx ? rz_hs_lerp(r0[xb], r0[xb1], fx, g6) : r0[xb];
+                    WORD c = fx ? rz_hs_lerp(r1[xb], r1[xb1], fx, g6) : r1[xb];
+                    o[x] = fy ? rz_hs_lerp(a, c, fy, g6) : a;
+                }
+        }
+        g_hd_px += (DWORD)((dx1 - dx0) * (dy1 - dy0));
+    }
+    d->valid = 1;
+    t = d->prev; d->prev = d->cur; d->cur = t;   /* this frame's pixels are the next frame's "last" */
+    for (y = 0; y < d->dh; y++)
+        memcpy((WORD *)(bits + (oy + d->dst[1] + y) * pitch) + ox + d->dst[0], d->out + y * d->dw, d->dw * 2);
 }
 
 /* Is this ddraw surface the primary (DDSCAPS_PRIMARYSURFACE 0x200, GetCaps = vt+0x38)? Per frame the game Blts the
@@ -5216,7 +5370,7 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
     ULONG64 cy0;
     DWORD sui_base = (DWORD)GetModuleHandleA("SIMUI.DLL");
     static int logged_fmt;
-    g_hs_n = 0; g_hs_why = 1;
+    g_hs_n = 0; g_hd_n = 0; g_hs_why = 1;
     if (!g_hudscale || g_mb_active || cw <= 0 || ch <= 0) return 0;
     g_hs_why = 2;
     if (sr->right - sr->left != cw || sr->bottom - sr->top != ch) return 0;   /* only a 1:1 present */
@@ -5269,6 +5423,14 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
         if (!(g_hudperf && rz_hp_inside(m, g_hs_dst[i], cw))) rz_hs_copy(bits, pitch, ox, oy, cw, m, 1);   /* HUDPERF: not twice */
         rz_hs_copy(bits, pitch, ox, oy, cw, g_hs_dst[i], 1);
     }
+    for (k = 0; k < g_hd_nc; k++) {   /* DLGSCALE: the dest is restored after the present; keep the native pixels */
+        HD_SLOT *d = &g_hd[g_hd_list[k]];
+        LONG y;
+        if (!rz_hd_ready(d)) { d->dw = 0; continue; }
+        rz_hs_copy(bits, pitch, ox, oy, cw, d->dst, 1);
+        for (y = 0; y < d->h; y++)
+            memcpy(d->cur + y * d->w, (WORD *)(bits + (oy + d->nat[1] + y) * pitch) + ox + d->nat[0], d->w * 2);
+    }
     { LARGE_INTEGER tq = t0; rz_hs_tick(0, &tq); }
     if (city && g_hudfix) {   /* HUDFIX: what the game drew into the composite this frame */
         LARGE_INTEGER tq; QueryPerformanceCounter(&tq);
@@ -5298,6 +5460,19 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
                 WORD *f = (WORD *)(bits + (oy + y) * pitch) + ox;
                 const WORD *cd = (const WORD *)(city + y * cpitch);
                 for (x = g_hs_src[i][0]; x < g_hs_src[i][2]; x++) f[x] = cd[x];
+            }
+        }
+    if (city)   /* DLGSCALE: a dialog shifted to fit can leave part of its native copy outside the enlarged one */
+        for (k = 0; k < g_hd_nc; k++) {
+            const HD_SLOT *d = &g_hd[g_hd_list[k]];
+            LONG x, y;
+            if (!d->dw) continue;
+            for (y = d->nat[1]; y < d->nat[3]; y++) {
+                WORD *f = (WORD *)(bits + (oy + y) * pitch) + ox;
+                const WORD *cd = (const WORD *)(city + y * cpitch);
+                int iny = y >= d->dst[1] && y < d->dst[3];
+                for (x = d->nat[0]; x < d->nat[2]; x++)
+                    if (!iny || x < d->dst[0] || x >= d->dst[2]) f[x] = cd[x];
             }
         }
     if (city && city_fix) {   /* HUDFIX resample (HUDPERF: through the per-window caches) */
@@ -5355,6 +5530,17 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
             q[2] = min(g_hs_dlg[k][2], g_hs_dst[i][2]); q[3] = min(g_hs_dlg[k][3], g_hs_dst[i][3]);
             if (q[2] > q[0] && q[3] > q[1]) rz_hs_copy(bits, pitch, ox, oy, cw, q, 0);
         }
+    {   int nd = 0;   /* DLGSCALE: enlarged dialogs on top of everything, in the game's order */
+        for (k = 0; k < g_hd_nc; k++) {
+            HD_SLOT *d = &g_hd[g_hd_list[k]];
+            if (!d->dw) continue;
+            rz_hd_draw(d, bits, pitch, ox, oy, g6);
+            memcpy(g_hd_pdst[nd], d->dst, sizeof(d->dst)); memcpy(g_hd_pnat[nd], d->nat, sizeof(d->nat));
+            g_hd_pslot[nd] = g_hd_list[k]; nd++;
+        }
+        g_hd_n = nd;
+        if (nd) g_hd_frames++;
+    }
     if (dump) { rz_hs_dumpraw("frame_after", bits, pitch, ox, oy, cw, ch); g_hs_dump[0] = 0; }
     ((RZ_UNLOCK)(*(DWORD **)src)[0x80 / 4])(src, NULL);
     rz_hs_city_unlock(csub);
@@ -5428,6 +5614,7 @@ static void rz_hs_post(void *src, const RECT *sr) {
         if (!(g_hudperf && rz_hp_inside(mm, g_hs_dst[i], g_hs_cw))) rz_hs_copy(bits, pitch, sr->left, sr->top, g_hs_cw, mm, 0);
         rz_hs_copy(bits, pitch, sr->left, sr->top, g_hs_cw, g_hs_dst[i], 0);
     }
+    for (i = 0; i < g_hd_n; i++) rz_hs_copy(bits, pitch, sr->left, sr->top, g_hs_cw, g_hd_pdst[i], 0);   /* DLGSCALE */
     ((RZ_UNLOCK)(*(DWORD **)src)[0x80 / 4])(src, NULL);
     QueryPerformanceCounter(&t1); g_hpd_post += t1.QuadPart - t0.QuadPart;
     rz_hp_cyc(&cy1); g_hpd_cycpost += cy1 - cy0;
@@ -5525,6 +5712,68 @@ static int rz_hs_mouse(UINT m, LPARAM *lp) {
     py = rz_hs_src_coord(qy, g_hs_ch, g_hs_s);
     if ((down || up) && logged < 40) { logged++; logf("HUDSCALE> %s (%ld,%ld) -> native (%ld,%ld)", down ? "down" : "up", qx, qy, px, py); }
     *lp = MAKELPARAM((WORD)(short)px, (WORD)(short)py);
+    return 1;
+}
+
+/* UISCALE export (owner hand test 2026-10-20: "the profiling indicator/FPS should scale with interface too"): the HUD
+   factor of the last enlarged present in percent, 100 when HUD scale is off or nothing was enlarged. sc3perf reads it
+   (GetProcAddress) to draw its FPS line and busy lines at the same size. */
+__declspec(dllexport) int sc3resize_ui_scale(void) {
+    return g_hs_n > 0 && g_hs_s > 1.0 ? (int)(g_hs_s * 100.0 + 0.5) : 100;
+}
+
+/* UISCALE export: while the main menu frame is presented scaled (MENUSCALE), its 4:3 rect in client coordinates;
+   0 otherwise. sc3perf then draws its text on the window at the top-left instead of into the frame (owner 2026-10-20:
+   "top-left of the window on the menu too"), because the frame does not reach the window corner. */
+__declspec(dllexport) int sc3resize_menu_rect(LONG *r) {
+    if (!g_ms_on || g_ms_rw <= 0 || !r) return 0;
+    r[0] = g_ms_rx; r[1] = g_ms_ry; r[2] = g_ms_rx + g_ms_rw; r[3] = g_ms_ry + g_ms_rh;
+    return 1;
+}
+
+/* DLGSCALE: map a mouse point on an enlarged dialog to its native rect. 1 = lp changed, 2 = already native (the
+   game's repost of our last point, or a message it sends while handling ours), 0 = not on a dialog. */
+static int rz_hd_mouse(UINT m, LPARAM *lp) {
+    LONG qx = (LONG)(short)LOWORD(*lp), qy = (LONG)(short)HIWORD(*lp), n = g_hd_n, i, k = -1, px, py, w, h;
+    int down = (m == WM_LBUTTONDOWN || m == WM_RBUTTONDOWN || m == WM_MBUTTONDOWN),
+        up = (m == WM_LBUTTONUP || m == WM_RBUTTONUP || m == WM_MBUTTONUP);
+    static int logged, dlogged;
+    if (n <= 0) { g_hd_capture = -1; return 0; }
+    if (g_hs_last_ok && *lp == g_hs_last_out && GetTickCount() - g_hs_last_t < 500 && (m == WM_MOUSEMOVE || g_hs_depth > 0))
+        return 2;
+    if (g_hd_capture >= 0)   /* a press on a dialog keeps the release (and the drag between) on that dialog */
+        for (i = 0; i < n; i++) if (g_hd_pslot[i] == g_hd_capture) { k = i; break; }
+    if (k < 0) {
+        g_hd_capture = -1;
+        for (i = n - 1; i >= 0 && k < 0; i--)
+            if (qx >= g_hd_pdst[i][0] && qx < g_hd_pdst[i][2] && qy >= g_hd_pdst[i][1] && qy < g_hd_pdst[i][3]) k = i;
+    }
+    if (k < 0) return 0;
+    if (g_hd_capture >= 0 && !down && !g_hd_cap_drag &&
+        (g_hd_pnat[k][0] != g_hd_cap_nat[0] || g_hd_pnat[k][1] != g_hd_cap_nat[1])) {
+        g_hd_cap_drag = 1;   /* the game moves a dialog by the native distance from the press: give it the cursor's */
+        if (dlogged++ < 10) logf("DLGSCALE> dialog moved during the press: cursor mapped 1:1 from the press point");
+    }
+    if (g_hd_capture >= 0 && !down && g_hd_cap_drag) {
+        px = g_hd_cap_p[0] + (qx - g_hd_cap_q[0]);
+        py = g_hd_cap_p[1] + (qy - g_hd_cap_q[1]);
+    } else {
+        w = g_hd_pnat[k][2] - g_hd_pnat[k][0]; h = g_hd_pnat[k][3] - g_hd_pnat[k][1];
+        px = g_hd_pnat[k][0] + (LONG)floor((qx - g_hd_pdst[k][0] + 0.5) * w / (g_hd_pdst[k][2] - g_hd_pdst[k][0]));
+        py = g_hd_pnat[k][1] + (LONG)floor((qy - g_hd_pdst[k][1] + 0.5) * h / (g_hd_pdst[k][3] - g_hd_pdst[k][1]));
+    }
+    if (down) {
+        g_hd_capture = g_hd_pslot[k]; g_hd_cap_drag = 0;
+        g_hd_cap_q[0] = qx; g_hd_cap_q[1] = qy; g_hd_cap_p[0] = px; g_hd_cap_p[1] = py;
+        g_hd_cap_nat[0] = g_hd_pnat[k][0]; g_hd_cap_nat[1] = g_hd_pnat[k][1];
+    }
+    if (up) g_hd_capture = -1;
+    if ((down || up) && logged < 40) {
+        logged++;
+        logf("DLGSCALE> %s (%ld,%ld) -> native (%ld,%ld) depth %d", down ? "down" : "up", qx, qy, px, py, g_hs_depth);
+    }
+    *lp = MAKELPARAM((WORD)(short)px, (WORD)(short)py);
+    g_hs_last_out = *lp; g_hs_last_ok = 1; g_hs_last_t = GetTickCount();
     return 1;
 }
 
@@ -9670,7 +9919,9 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             logf("HSMLOG> in  msg 0x%04X (%d,%d) wp 0x%lx depth %d n %ld t %lu", m, (int)(short)LOWORD(lp),
                  (int)(short)HIWORD(lp), (DWORD)wp, g_hs_depth, g_hs_n, GetMessageTime());
         }
-        if (g_hs_depth == 0 && g_hs_n > 0) {
+        if (g_hd_n > 0 && rz_hd_mouse(m, &lp)) {
+            /* DLGSCALE: on an enlarged dialog (mapped, or already native): the HUD map below is not for it */
+        } else if (g_hs_depth == 0 && g_hs_n > 0) {
             /* REPOST (task hudopt 2026-10-11): a WM_MOUSEMOVE carrying exactly the native point we produced for the
                previous message comes back through the queue ~15 ms later (measured: in (1100,332) -> native
                (1120,446), then a queued move at (1120,446); the physical cursor never moved). Mapping it again
@@ -11881,6 +12132,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           g_bltbeat = GetEnvironmentVariableA("SC3RESIZE_BLTBEAT", v, sizeof(v)) && atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_THICKFRAME", v, sizeof(v))) g_thickframe = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_FSKEY", v, sizeof(v))) g_fskey = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_DLGSCALE", v, sizeof(v))) g_dlgscale = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_WINMEM", v, sizeof(v))) g_winmem = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_RESROW", v, sizeof(v))) g_resrow = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_STARTRES", v, sizeof(v))) g_startres = atoi(v);

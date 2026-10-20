@@ -314,3 +314,31 @@ Measured in a city (N / Fit / 200%, `verify/hudclick/RESULTS.md`): no miss.
   release was logged at depth 0 and mapped.
 Diag added: `SC3RESIZE_FRAMEDUMP=<prefix>` writes the presented frame to `<prefix><tag>.bmp` when `<prefix>req` exists
 (tag = its first line). Needed because background desktop grabs of this game are black/white.
+
+## Dialogs enlarged too (task dlgscale, 2026-10-20)
+
+Owner, 2026-10-20: "the Reunirse popup is not scaled, neither any other menu". Design call the same day: scale dialogs
+with the HUD factor, capped to fit. This supersedes decision (3) of 2026-10-14 (dialogs native). Code: the DLGSCALE
+block in `sc3resize.c` (`rz_hd_add`, `rz_hd_ready`, `rz_hd_draw`, `rz_hd_mouse`), `SC3RESIZE_DLGSCALE=0` turns it off.
+
+- Which: every visible `SIMUI+0xa4d64` root child >= 120x80 (the set kept native before), fully inside the client.
+- Size and place: `sd = min(HUD factor, cw / w, ch / h)`, below 1.01 the dialog stays native. Centred on the native
+  dialog, shifted inside the client. Where a shift leaves native pixels outside the enlarged copy they get the city layer.
+- Pixels: the native dialog is copied before the HUD pass, enlarged after it, on top of everything. Per dialog window a
+  cache of the enlarged image; per frame only the dest box whose taps reach the source pixels that changed since the
+  last frame is recomputed (`(b, b + 1)` taps, nearest or bilinear as the HUD). The cache is keyed by size and filter,
+  not position, so a drag costs nothing. The dest is snapshotted with the HUD rects and restored with them.
+- Mouse: inside an enlarged dialog, at any depth, `native = nat0 + (q - dst0 + 0.5) * w / dw`. A message equal to the
+  last mapped point within 500 ms (a move, or a button at depth > 0) is left as is, the MENUSCALE rule. A press keeps
+  the release on its dialog. Once the dialog's native origin changes during a press (a title-bar drag) the cursor maps
+  1:1 from the press point: the game moves a dialog by the native distance from the press, so a proportional map moved
+  it 118 px for a 300 px drag at 5 fps; 1:1 moved it exactly (300, 200) for (300, 200).
+
+Measured 2026-10-20, Europolis, 3840x1984 maximized, Fit 3.307x (`verify/dlgscale/RESULTS.md`): Reunirse 383x354 ->
+1266x1170 (3.305x), Preferencias 480x472 -> 1587x1560, Indagar 423x320 -> 1398x1058. Clicks hit at depth 0 (advisor,
+close box, checkbox), inside the Discutir dropdown's own loop at depth 1, and in the query dialog at depth 1. Pass cost
+with Reunirse open 9.9 to 10.6 ms per frame against 6.2 to 6.4 without.
+
+**The Reunirse frame-rate drop is not this code.** With the dialog open the game's Blts per second drop about 3.5x at
+every size and with HUD scale off: 4,883 -> 1,373 at native 800x600, 1,070 -> 277 at 4K scale off, 891 -> 265 at 4K Fit;
+time inside Blt drops too (809 -> 135 ms/s native). With sc3perf (`sysmem=1`) there is no drop: 60 fps open and closed; the dialog adds ~3,300 surface Locks per second, cheap in system memory, slow in video memory (`verify/dlgscale/RESULTS.md`).
