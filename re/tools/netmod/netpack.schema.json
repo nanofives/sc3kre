@@ -118,7 +118,9 @@
         "properties": {
           "centre": {"$ref": "#/$defs/piece_id", "description": "The centre cell (the island), a ROAD variant in this package."},
           "side": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"$ref": "#/$defs/piece_id"}, "description": "The side-middle cell at state 0 (the E cell, outer side x+) by its arm: none, road, avenue half with the median toward z-, toward z+."},
-          "corner": {"type": "array", "minItems": 9, "maxItems": 9, "items": {"$ref": "#/$defs/piece_id"}, "description": "The corner cell at state 0 (the NE cell, outer sides z- and x+), index 3 * kN + kE by the arm on z- (kN) and on x+ (kE): 0 none, 1 road, 2 avenue half."}
+          "corner": {"type": "array", "minItems": 9, "maxItems": 9, "items": {"$ref": "#/$defs/piece_id"}, "description": "The corner cell at state 0 (the NE cell, outer sides z- and x+), index 3 * kN + kE by the arm on z- (kN) and on x+ (kE): 0 none, 1 road, 2 avenue half."},
+          "side_oneway": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"$ref": "#/$defs/piece_id"}, "description": "Task avmisc: the side cells of a block whose avenue arms are one-way, by arm kind none, road, avenue median toward z-, toward z+ (an unmirrored English-UK block needs twins of the ring cells too); used where sc3netmod's avenue band block converts the arm's band."},
+          "corner_oneway": {"type": "object", "additionalProperties": {"$ref": "#/$defs/piece_id"}, "description": "Task avmisc: the corner cells of such a block, keyed by 3 * kN + kE (0..8)."}
         }
       },
       "description": "Task bigrbt: sc3netmod (RBT9 block) turns every exactly-3x3 road block with arms (at most two per side: one avenue or up to two single roads, no road on the four diagonal cells) into a big roundabout made of these pieces, after each road retile and after a city load, and back into stock road when it stops qualifying. Rule and tool: re/tools/netmod/bigrbt.py, verify/bigrbt/."

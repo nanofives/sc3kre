@@ -794,6 +794,8 @@ def compile_pack(stock, pack_dir, man):
             raise NetpackError("%s: side needs 4 pieces and corner 9" % where)
         roles = [("c", 0, a.get("centre"))] + [("s", k, p) for k, p in enumerate(a["side"])] + \
                 [("k", k, p) for k, p in enumerate(a["corner"])]
+        roles += [("o", i, p) for i, p in enumerate(a.get("side_oneway", []))]                         # task avmisc
+        roles += [("w", int(k), p) for k, p in sorted(a.get("corner_oneway", {}).items(), key=lambda t: int(t[0]))]
         for role, k, p in roles:
             v = vids.get(p)
             if v is None or v["net"] != "ROAD":

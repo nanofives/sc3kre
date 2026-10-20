@@ -203,6 +203,188 @@
     "png_dir": "art/20618"
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 20605,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20605"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20606,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20606"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20607,
+   "base": 39,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20607"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20608,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20608"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20620,
+   "base": 11203,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20620"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20621,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20621"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20622,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20622"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20623,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20623"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20624,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20624"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20625,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20625"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20626,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20626"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20627,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20627"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20628,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Roundabout (3x3)",
+    "ENGLISH": "Rotonda grande"
+   },
+   "art": {
+    "from": 39,
+    "png_dir": "art/20628"
+   },
+   "trblkatt": "copy_base"
   }
  ],
  "lanes": [
@@ -261,6 +443,58 @@
   {
    "piece": 20618,
    "spec": "20618.lanes.json"
+  },
+  {
+   "piece": 20605,
+   "spec": "20605.lanes.json"
+  },
+  {
+   "piece": 20606,
+   "spec": "20606.lanes.json"
+  },
+  {
+   "piece": 20607,
+   "spec": "20607.lanes.json"
+  },
+  {
+   "piece": 20608,
+   "spec": "20608.lanes.json"
+  },
+  {
+   "piece": 20620,
+   "spec": "20620.lanes.json"
+  },
+  {
+   "piece": 20621,
+   "spec": "20621.lanes.json"
+  },
+  {
+   "piece": 20622,
+   "spec": "20622.lanes.json"
+  },
+  {
+   "piece": 20623,
+   "spec": "20623.lanes.json"
+  },
+  {
+   "piece": 20624,
+   "spec": "20624.lanes.json"
+  },
+  {
+   "piece": 20625,
+   "spec": "20625.lanes.json"
+  },
+  {
+   "piece": 20626,
+   "spec": "20626.lanes.json"
+  },
+  {
+   "piece": 20627,
+   "spec": "20627.lanes.json"
+  },
+  {
+   "piece": 20628,
+   "spec": "20628.lanes.json"
   }
  ],
  "auto_big_roundabouts": [
@@ -282,7 +516,33 @@
     20616,
     20617,
     20618
-   ]
+   ],
+   "side_oneway": [
+    20607,
+    20608,
+    20605,
+    20606
+   ],
+   "corner_oneway": {
+    "0": 20620,
+    "1": 20621,
+    "2": 20622,
+    "3": 20623,
+    "4": 20624,
+    "5": 20625,
+    "6": 20626,
+    "7": 20627,
+    "8": 20628
+   }
   }
+ ],
+ "avenue_lines": [
+  "avlj 20605 .I..",
+  "avlj 20606 .O..",
+  "avlj 20622 .O..",
+  "avlj 20625 .O..",
+  "avlj 20626 I...",
+  "avlj 20627 I...",
+  "avlj 20628 IO.."
  ]
 }
