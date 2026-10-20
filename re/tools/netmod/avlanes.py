@@ -16,6 +16,7 @@ CLI (run from re/tools):
   py -3.12 -m netmod.avlanes build <package dir>
   py -3.12 -m netmod.avlanes check <piece|spec> <state> <piece|spec> <state> <side N|E|S|W>
   py -3.12 -m netmod.avlanes selftest               the avcore pieces against each other and a straight band
+  py -3.12 -m netmod.avlanes corner-letters          the letters an avlj piece on a corner's outer cell must show
   py -3.12 -m netmod.avlanes tightleft <package dir> [...]
                                                     REPORT (not a gate): every car lane (ENGLISH and English-UK) whose
                                                     curve, as driven, has a left bend of radius <= 80 (by geometry)
@@ -367,6 +368,7 @@ def selftest():
                 bad += ["%s: %s" % (lang, b) for b in check(S, s_half, cs[pid], st, SIDES[t], game, lang)]
     for s in range(4):
         assert len(edge_nodes(s, SIDES[half_dir(s)])) == 2
+    bad += _selftest_outer_avlj()
     from netmod import hwlanes as HL
     bad += ["hwlanes curve sort id: %s" % b for b in HL.selftest_extra()]   # flat curve 0, deck curve 2
     print("selftest:", "PASSED" if not bad else "FAILED")
@@ -396,6 +398,45 @@ def corner_grid(axis, end, ib):
     g[A2] = ("S", a2) if not ib else ("U", a2)
     g[B2] = ("U", b2) if not ib else ("S", b2)
     return g
+
+
+AVL_D = [(0, -1), (1, 0), (0, 1), (-1, 0)]                    # N E S W, as sc3netmod_avl.c
+
+
+def corner_outer_requirement(axis, end, ib):
+    """The letters a declared avlj piece on a corner's OUTER cell must show, by WORLD side: {side index: 'I' | 'O'} for
+    the two sides facing the block's halves (I = that half's traffic flows into the piece). Mirrors avl_outer_join."""
+    g = corner_grid(axis, end, ib)
+    (ox, oz), = [c for c, (r, _st) in g.items() if r == "U"]
+    need = {}
+    for w, (dx, dz) in enumerate(AVL_D):
+        n = g.get((ox + dx, oz + dz))
+        if n is None or n[0] != "S":
+            continue
+        t = half_dir(n[1])
+        into = (ox + dx + AVL_D[t][0], oz + dz + AVL_D[t][1]) == (ox, oz)
+        need[w] = "I" if into else "O"
+    return need
+
+
+def outer_fits(axis, end, ib, letters, state):
+    """avl_outer_join's test on one pattern: a piece with avlj `letters` (N E S W at its state 0) at `state` on the
+    outer cell; letter on world side w = letters[(w - state) & 3]"""
+    return all(letters[(w - state) & 3] == want for w, want in corner_outer_requirement(axis, end, ib).items())
+
+
+def _selftest_outer_avlj():
+    """a fake avlj-declared outer cell: 21701's own turn declared as letters (enters x- = W, leaves z+ = S at state 0:
+    "..OI") must fit every pattern at the pattern's outer state; the swapped letters ("..IO") must fit none"""
+    bad = []
+    for key, sts in sorted(CORNER_PATTERNS.items()):
+        st = sts[2] if key[2] else sts[3]
+        if not outer_fits(*key, letters="..OI", state=st):
+            bad.append("outer avlj: pattern %s: the U-turn's letters ..OI at state %d do not fit %s"
+                       % (key, st, corner_outer_requirement(*key)))
+        if outer_fits(*key, letters="..IO", state=st):
+            bad.append("outer avlj: pattern %s: swapped letters ..IO fit" % (key,))
+    return bad
 
 
 def _selftest_corners(game, pieces, lang):
@@ -539,6 +580,14 @@ def main(argv):
         return 0 if not probs else 1
     if argv[1] == "selftest":
         return 0 if selftest() else 1
+    if argv[1] == "corner-letters":
+        for key in sorted(CORNER_PATTERNS):
+            sts = CORNER_PATTERNS[key]
+            req = corner_outer_requirement(*key)
+            print("pattern axis %d end %+d inner on %s: outer cell stock state %d, needs %s" %
+                  (key[0], key[1], "B" if key[2] else "A", sts[2] if key[2] else sts[3],
+                   ", ".join("%s=%s" % (SIDES[w], l) for w, l in sorted(req.items()))))
+        return 0
     if argv[1] == "tightleft":
         hits, errors = scan_packages(argv[2:])
         for h in hits:

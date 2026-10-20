@@ -204,7 +204,22 @@ range, one per outer pattern and lane mode (the two largest patterns, T + road a
 Art: whatever avjunc's box pieces use (its build makes the nose art from stock frames); not measured here.
 Owner: avjunc (box lanes, art, avx rule), avcore for the corner-block change.
 
-## Not done / open
+## Corner outer cell declared by avlj (2026-10-19, avcore's side of the T / X corners)
+
+Orchestrator decision: build T + one road (110 ends) and X (30 ends); avjunc makes the box pieces. avcore's side:
+`avl_corner_at` accepts an outer cell holding an avlj-declared piece whose letters fit the turn (`avl_outer_join`: I on
+the side the incoming half flows in from, O on the outgoing side, from the halves' travel); such a cell is not written,
+not claimed, its avl_free guard skipped (it is the declaring stream's). New `avl_corner_ok(x, z)` for avjunc: the dry
+run with (x, z) taken as a fitting piece. `avlanes corner-letters` prints the requirement per pattern (always W = I,
+S = O in the outer's own frame at the corner's 11203 state).
+
+| check | result |
+|---|---|
+| build | sc3netmod.dll compiles (347,648 bytes) |
+| offline | avlanes selftest PASSED in both languages, with a new row: a fake avlj outer piece carrying 21701's own turn ("..OI") fits all 8 patterns at their outer state, the swapped letters ("..IO") fit none. This tests the Python mirror of the rule (`outer_fits`), not the C itself |
+| in game | not run: needs avjunc's declared pieces |
+
+
 
 - **No car has driven a converted avenue yet.** Before avjunc's junction pieces exist, no converted band connects to
   any road, so no trip or stock car reaches one. Cars come with the first sibling build.
