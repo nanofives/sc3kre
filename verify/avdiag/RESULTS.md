@@ -274,3 +274,35 @@ Owner pictures (MAIN, not committed): `verify/avdiag/owner_shots/avdiag_built.pn
 
 Not checked again in the lab: the other crossing kinds (XX, XS, TS) and the hwave transition on the new lanes.
 The offline checks cover them; only the Seoul band's cells saw cars.
+
+## 11. Lab run on the new lanes: XS, TS, XX, hwave diagonal (2026-10-20, orchestrator's last step)
+
+Build: 09fd4fb + one fix below. Lab copy `t4.sc3` (PID 57024, reload PID 18572), packages avenue_lanes +
+diagonal_avenue + highway_avenue; P + 1 by keys first, nothing attached before the sim ran. Drags placed from the
+twin's own XS / TS scenes on flat lab land (`lab_plan.py` in the scratchpad: the twin converts each drag set).
+
+**Found and fixed: DAV never converted a crossing with a straight avenue (XS, TS).** The pre-check asked
+`avl_band_ok` at the template's straight-avenue cell beside the crossing. Where the diagonal crosses the two avenue
+rows at a skew, that cell's other half is a stock T (39), so AVL finds no avenue row there and answers 0, the same
+as a refusal: `left to the stock tiler: the straight avenue it crosses stays two-way`, every time. The probe now
+steps out along the avenue, away from the crossing, up to 3 cells, to the first row AVL sees (a refused band still
+answers 0 at every step). `sc3netmod_dav.c`, marked block. XS / TS had never been run in game before.
+
+| case | drags | result |
+|---|---|---|
+| XS | avenue (125,38)-(145,38) + (125,39)-(145,39), diagonal (125,29)-(144,48) + (126,29)-(145,48) | `dav: edit: band axis 0, 19 row(s) ... 1 crossing(s)`; `avl: ... from (126,38) -> one-way (ends: U-turn / join or edge)` and `from (138,38) -> one-way (ends: join or edge / U-turn)` |
+| TS | avenue (47,38)-(67,38) + (47,39)-(67,39), diagonal (47,29)-(57,39) + (48,29)-(58,39) | `band axis 0, 11 row(s) ... 1 crossing(s), 36 written`; both avenue halves one-way, join at the T |
+| XX | (96,80)-(112,96) + (97,80)-(113,96), (113,80)-(97,96) + (114,80)-(98,96) | both bands, `1 crossing(s)` each (52 / 32 written) |
+| hwave diagonal | highway (122,4)-(130,12), avenue (130,13)-(138,21) + (131,13)-(139,21) | `hwave: road: diagonal highway end at (130,12) turn 0 -> transition to the diagonal avenue, 6 cell(s) written`; avenue band 26 written |
+| stats | | `dav bands seen=42 ... crossings=36, left two-way for a straight avenue=0` |
+| save | | `save: 273 variant tile(s) written as base`; the file holds 0 variant ids |
+| reload | | AVL load re-converts the four XS / TS halves, DAV load passes rebuild every band; the four boxes (XS 95 cells, 87 of them variants; TS 69 / 61; XX 95 / 95; hwave 55 / 30) identical before save and after reload |
+
+No cars (the lab has no traffic).
+
+**Camera trap, cost two games here (PIDs 67140, 56488 deadlocked, before and between cases):** `rb_lab.py cam` first
+captures the camera with a minimap zoom click ('-', or '+' when '-' does nothing at zoom 0) and then queues a zoom
+job. When the requested zoom differs from the zoom the capture click landed on, the zoom job returns
+`Error: system error` and the running game deadlocks (CPU flat, not responding). A request equal to that zoom works
+but does not move the view. Safe use on a running game: move the view with a minimap click, then `cam` with the
+landed zoom (current - 1, or 1 from zoom 0) to read the origin.

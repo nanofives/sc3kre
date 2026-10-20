@@ -856,9 +856,15 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                         if ((P.xww[j] >> 8) != 11204) continue;
                         if (st % 2 == 0) away = P.xwx[j] * ns > sx_ ? 1 : 3;          /* band along x: E / W */
                         else away = P.xwz[j] * ns > sz_ ? 2 : 0;                     /* along z: S / N */
-                        if (!STRAIGHT_OK(P.xwx[j], P.xwz[j], away)) {
-                            ok = 0; why = "the straight avenue it crosses stays two-way";
-                            InterlockedIncrement(&g_dav_n_avl);
+                        {   /* task avdiag: beside a skewed crossing the cell's other half is a stock T (no AVL row
+                               there); step out along the avenue, away from the crossing, to the first row AVL sees */
+                            int q, sok = 0, sx = away == 1 ? 1 : away == 3 ? -1 : 0, sz = away == 2 ? 1 : away == 0 ? -1 : 0;
+                            for (q = 0; q <= 3 && !sok; q++)
+                                sok = STRAIGHT_OK(P.xwx[j] + sx * q, P.xwz[j] + sz * q, away);
+                            if (!sok) {
+                                ok = 0; why = "the straight avenue it crosses stays two-way";
+                                InterlockedIncrement(&g_dav_n_avl);
+                            }
                         }
                     }
                 }
