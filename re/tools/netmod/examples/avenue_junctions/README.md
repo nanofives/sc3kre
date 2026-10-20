@@ -13,13 +13,15 @@ one-way lanes: every turn and U-turn works inside it, so the box is the median o
   (one-way: avcore's 21700 lanes). An arm whose avenue avcore leaves two-way gets two-way edges and a two-way nose.
 - **Look:** AVX's paved box (43's asphalt, crosswalks on the arms, curbs on closed sides), noses with the white dashes.
 - **Pieces:** box cells 20805..20809, 20812..20849, 21750..21767 (`avjunc_pieces.json`), one-way noses 20800..20803,
-  two-way noses 20804, 20810, 20811. Each saves as its base (box cells 43 / 39 / 11203 / 29, noses 11204), so a game
+  two-way noses 20804, 20810, 20811; link noses (on a stock T / X that joined the halves) 21771..21774 one-way,
+  21775..21778 two-way; corner junctions 21768..21770 (an avenue corner whose outer cell is a T / X with roads: the
+  avenue turns through it, the road keeps two-way lanes, stock T / X art; avcore converts the corner's other cells). Each saves as its base (box cells 43 / 39 / 11203 / 29, noses 11204), so a game
   without the mod loads stock junctions.
 
 Build and install (art is made from the game's frames, not shipped; run from re/tools):
 
 ```
-py -3.12 -m netmod.avjunc_build pieces netmod/examples/avenue_junctions   # only to regenerate the piece table
+py -3.12 -m netmod.avjunc_build pieces netmod/examples/avenue_junctions   # regenerates the piece table AND renumbers ids: keep the committed one (saves store ids)
 py -3.12 -m netmod.avjunc_build build netmod/examples/avenue_junctions    # specs, curves, art, manifest
 py -3.12 -m netmod.avjunc_build check netmod/examples/avenue_junctions    # lanes in ENGLISH + English-UK
 py -3.12 netmod/netpack.py install netmod/examples/avenue_junctions --tree <game tree>

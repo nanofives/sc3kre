@@ -79,6 +79,16 @@ The single-run bisect first pointed at the radius-80 left-turn curve; 15660 (sam
 unpause deadlock is [UNCERTAIN]. Rule: attach Frida probes after the sim is running, not with `--start` from paused.
 The delivered lanes are the original ones (left lane to left lane).
 
+## Rebuild on child/avcore 0b189f8 (merge 2936359): curve sort ids
+
+hwlanes now writes the curve record's trailing u32 (path sort id) by height. Rebuilt and reinstalled avenue_lanes +
+avenue_junctions in the test tree: avjunc_build check PASSED; installed overlay VPATHATT, ENGLISH and English-UK: my
+shapes 23700..23707 (32 records each) all sort id 0 (stock flat curves: 0); 16 records with 2 are avcore's slope
+shapes 23604..23607 (heights -512 / -256 to 0). No change to any tracked avjunc file (the sort id is written at
+install). Seoul, PID 17124, nothing hooked, speed 2 by keys, 180 s: 150 boxes / 1,482 avcore cells on load, no hang,
+LANEDENSITY 620,983 honoured steps, trips through box cells (20813 at (33,130): exits on several sides, 0 wrong-way)
+and noses.
+
 ## Not done / open
 
 - Cars keeping their lane through a box was not traced car by car (the shots show traffic on converted avenues and
@@ -86,3 +96,64 @@ The delivered lanes are the original ones (left lane to left lane).
 - English-UK not run (no English-UK install here); lane specs compile there.
 - Avenue corners (PLAN 6.3) and diagonal joins (avdiag) still refuse the bands that touch them.
 - Owner calls: the box look (AVX's), the one-way ring for avenue x avenue.
+
+## Corner junctions (2026-10-19, on child/avjunc 5af604d = avcore ea549c3)
+
+Avenue corners whose OUTER cell is a stock T 39 / X 43 with plain roads (29) leaving its outside (avcore's scope:
+"T with one road" 110 ends, "X with two roads" 30). avcore writes the inner bend 21726 and the two halves 21700 and
+accepts the outer cell when it holds an avlj-declared piece; AVX owns the outer cell.
+
+| piece | outline / modes (N E S W, state 0) | base, art | avlj |
+|---|---|---|---|
+| 21768 | ACAA / ICTO (T) | 39, stock 39's | I..O |
+| 21769 | ACAA / TCOI (T) | 39, stock 39's | ..OI |
+| 21770 | AAAA / ITTO (X) | 43, stock 43's | I..O |
+
+Lanes (`avjunc.cell_lanes(corner=True)`): the avenue's two lanes turn through the cell lane by lane, the curb lane also
+turns onto the road, the road keeps two-way lanes. No new curves, no new art. Rule (`avjunc_rule.corner_at`, C
+`avx_corners`): the avenue enters the cell from a half running into it and leaves into a half running away, both
+halves' medians toward the inner bend diagonal to the cell; the other sides a connected 29 or closed, at least one
+road. The state comes from matching the in / out pattern (not the stock state). avx_run writes it; avx_post keeps it
+when avl_dir() is set on both halves, else writes the original stock T / X back (no retile). No avl_corner_ok() dry run
+in avx_run: there the boxes and noses ending the group's other bands are not written yet, so a load pass refused
+every corner (measured: 0 of 28 in London with it, 10 without).
+
+Offline: 73 such outer cells in the 15 cities (London 28, Frankfurt 15, Liverpool 11, Berlin 9, Moscow 4, Madrid 3,
+Sacramento 3) = 141 of avcore's 212 T / X ends (two ends per corner; the rest are "T next to T", bends, others: stock).
+Lane check PASSED (ENGLISH + English-UK); 48 seam checks against 21700 (3 pieces x 4 states x both avenue sides x 2
+languages): 0 problems. avcore's own check of the letters against its rule: every T fits; the X fits at the state the
+writer computes.
+
+In game (London, test tree Simcity_stock_avjunc, sim started by keys, no Frida while paused except the reads noted):
+
+| PID | step | result |
+|---|---|---|
+| 73196 | before avcore accepted outer cells | 28 corners found and written, all put back to stock in post (fallback works) |
+| 32692 | load | 10 of 28 converted (2 x 21768, 5 x 21769, 3 x 21770), each with 21700 halves and 21726 diagonal; avl 1,484 cells (1,302 without the corners); the final build (with the refusal below) 1,468 |
+| 63124 | run 5 min, nothing hooked | no hang; LANEDENSITY 2.54 M honoured steps; trips through corner (67,174) 21769: 208 / 136 steps on its two entry sides, 0 wrong-way |
+| 55716 / 44956 | load, save at once, reload (full-map reads with a long timeout) | 10 corners, 18 inner bends after reload; every cell present in both reads identical; `load: all 3931 variant tiles restored`; avx run / post 0 reverted |
+
+Two fixes found on the way (both for the whole AVX block, not only corners):
+- A reload changed the result: the noses chained from link cells (stock T / X joining the halves) were saved and
+  restored as ordinary noses, which then counted as band rows, so segments, boxes and noses changed (London: 104 cells
+  reverted on reload, avl 157, corners lost through their all-or-nothing groups). Link noses now have their own ids
+  (one-way 21771..21774, two-way 21775..21778, same art and lanes) and stay links; a nose on a straight pair stays a
+  band row. Offline reload check (`avjunc_reload.py`): London, Berlin, Liverpool, Madrid, Seoul, Frankfurt: 0 boxes
+  lost, 0 cells changing on the second pass (before: London 2 lost, 680 cells).
+- A box cell next to a piece whose connections the rule does not know (diagonal road pieces 35, 11211..11214, 14030,
+  15138..15141 ...) is now refused (left stock) instead of skipped in validation.
+
+Trap noted again: a Frida camera move with the sim RUNNING also deadlocked one game (PID 32692); avcore saw the same with
+a camera call while paused followed by an unpause. Run checks with no Frida attached; move the camera and read cells
+only as the last steps, and expect a possible hang there.
+
+Piece table: `pieces` regenerated 57 patterns (all inside the committed 61); the committed table is kept so every id
+stays where it was (saved cities store variant ids).
+
+Sheet: `MAIN\verify\avjunc\owner_shots\avjunc_corner_sheet.png` (lanes of the three pieces + London (144,57)).
+
+Corner piece states (avcore's check, 49ddf65): the writer takes the state from the in / out pattern. Over the 73 shipped
+corners: every T at its stock state (58 of 58, so the stock 39 art lines up), every X at avcore's k = (inner 11203
+state - 1) & 3 (15 of 15). London X corners after reload (final build, full-map read): (144,57), (157,102), (194,125) =
+21770.0 with inner 21726.1 diagonal, both bands one-way (21700 runs of 5+ cells, two of them ending at our boxes /
+noses). Cars through an X corner were not traced one by one (routing counts were read for the T at (67,174) only).
