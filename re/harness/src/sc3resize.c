@@ -864,6 +864,7 @@ static void rz_input_geometry(LONG cw, LONG ch, LONG dx, LONG dy);
 static void rz_side_children_bottom(void);
 static void rz_bar_children_right(void);
 static void rz_make_resizable(void);
+static int g_fs_on;   /* FULLSCREEN: borderless fullscreen is on (rz_fs_enter) */
 /* NATIVE geometry of the bar's contents, captured once before anything moves.
  * The first version SHIFTED children incrementally, which works exactly once: dx
  * depends on the client size, so after a resize the already-moved children failed the
@@ -5918,12 +5919,29 @@ static void pp_close(void *win, DWORD id) {
     }
 }
 
+/* RESROW (owner 2026-10-20): the resolution follows the window, so the "Resolucion de pantalla" label 0x02F95AE3 and its
+   dropdown 0x02F95AEA (built by FUN_10058631 [CONFIRMED @ SIMUI 0x10058631]) are hidden, leaving a gap (owner call).
+   GZWIND vt+0xf4 SetFlags(1 = visible, 0), the call CLOSEFLY uses. Hidden, the dropdown is never picked, so its index
+   stays put and the OK handler FUN_10058f14 never asks to restart. SC3RESIZE_RESROW=1 shows it again. */
+static int g_resrow = 0;
+static void ho_hide_resrow(void *win) {
+    static const DWORD ids[2] = { 0x02F95AE3, 0x02F95AEA };
+    int i, hid = 0;
+    if (g_resrow) return;
+    for (i = 0; i < 2; i++) {
+        void *c = (void *)ho_v(win, 0x78, 1, ids[i], 0, 0, 0, 0);
+        if (c && !IsBadReadPtr(c, 0xa4)) { ho_v(c, 0xf4, 2, 1, 0, 0, 0, 0); hid += !(*(DWORD *)((BYTE *)c + 0xa0) & 1); }
+        else logf("RESROW> 0x%08lX not found in Preferences", ids[i]);
+    }
+    logf("RESROW> resolution row: %d of 2 hidden", hid);
+}
+
 static DWORD __fastcall ho_prefs_msg(void *self, void *edx, DWORD win, DWORD msg, DWORD p3, DWORD p4, DWORD p5) {
     DWORD a[5], r;
     (void)edx;
     a[0] = win; a[1] = msg; a[2] = p3; a[3] = p4; a[4] = p5;
     r = rz_thiscall_ret(self, g_orig_5e07, a, 5);
-    if (msg == 0xa2bf8ace && (r & 0xff) && win) { ho_add_controls((void *)win); pp_add_controls((void *)win); }
+    if (msg == 0xa2bf8ace && (r & 0xff) && win) { ho_add_controls((void *)win); pp_add_controls((void *)win); ho_hide_resrow((void *)win); }
     return r;
 }
 
@@ -9410,7 +9428,7 @@ static BOOL rz_adjust_rect(HWND h, RECT *r, DWORD style, DWORD ex) {
  * SC3RESIZE_THICKFRAME=0 opts out. */
 static void rz_make_resizable(void) {
     LONG st, want;
-    if (!g_hwnd || !IsWindow(g_hwnd)) return;
+    if (!g_hwnd || !IsWindow(g_hwnd) || g_fs_on) return;   /* FULLSCREEN: the frame stays off until Alt+Enter */
     st = GetWindowLongA(g_hwnd, GWL_STYLE);
     want = st | WS_THICKFRAME | WS_MAXIMIZEBOX;
     if (st == want) {
@@ -9456,6 +9474,116 @@ static void rz_set_stored_rect(DWORD w, DWORD h) {
          l, t, (LONG)win[0x40 / 4], (LONG)win[0x44 / 4], w, h);
 }
 
+/* FULLSCREEN + WINMEM (owner 2026-10-20: "remove the screen resolution dropdown selector, resolution is driven by
+ * size of the window and alt + enter should enter fullscreen and keep current refresh rate"; design calls the same
+ * day: borderless, remember size and fullscreen like the HUD scale, leave a gap where the dropdown was).
+ *   - Alt+Enter toggles BORDERLESS fullscreen: the frame styles come off and the window covers the whole monitor it
+ *     is on. The display mode is never changed (the game stays DDSCL_NORMAL), so the desktop resolution and refresh
+ *     rate are kept by construction. The game's own fullscreen is exclusive mode through DD1 SetDisplayMode(w,h,bpp),
+ *     which has no refresh-rate argument [GZGraphicD FUN_10011f73], and is not used. To the game this is an ordinary
+ *     WM_SIZE, the path the resize mod already services. Alt+Enter again restores the frame and the placement.
+ *   - sc3resize.ini [window]: left/top/right/bottom (the normal, restored rect), maximized, fullscreen. Written on
+ *     every change (end of a drag, maximize/restore, toggle), read at the subclass and applied once.
+ * The stock game has no Alt+Enter: its WndProc FUN_10017e2f turns WM_SYSKEYDOWN into its own key path and never calls
+ * DefWindowProc for it [CONFIRMED @ GZGraphicD 0x10017e2f]. SC3RESIZE_FSKEY=0 / SC3RESIZE_WINMEM=0 turn each off. */
+static int g_fskey = 1, g_winmem = 1;
+static int g_wm_restoring, g_wm_applied;   /* g_fs_on is declared beside rz_make_resizable's forward decl */
+static LONG g_fs_style, g_fs_exstyle;
+static WINDOWPLACEMENT g_fs_wp;
+
+static void wm_save(void) {
+    char p[MAX_PATH], v[16];
+    WINDOWPLACEMENT wp;
+    RECT *r;
+    if (!g_winmem || !g_wm_applied || g_wm_restoring || !g_hwnd) return;
+    if (g_fs_on) wp = g_fs_wp;   /* the placement to come back to, not the monitor-sized popup */
+    else {
+        wp.length = sizeof(wp);
+        if (!GetWindowPlacement(g_hwnd, &wp) || wp.showCmd == SW_SHOWMINIMIZED || IsIconic(g_hwnd)) return;
+    }
+    r = &wp.rcNormalPosition;
+    if (r->right - r->left < NAT_W || r->bottom - r->top < NAT_H) return;
+    ho_ini_path(p, sizeof(p));
+    wsprintfA(v, "%ld", r->left);   WritePrivateProfileStringA("window", "left", v, p);
+    wsprintfA(v, "%ld", r->top);    WritePrivateProfileStringA("window", "top", v, p);
+    wsprintfA(v, "%ld", r->right);  WritePrivateProfileStringA("window", "right", v, p);
+    wsprintfA(v, "%ld", r->bottom); WritePrivateProfileStringA("window", "bottom", v, p);
+    WritePrivateProfileStringA("window", "maximized", (wp.showCmd == SW_SHOWMAXIMIZED || (wp.flags & WPF_RESTORETOMAXIMIZED)) ? "1" : "0", p);
+    WritePrivateProfileStringA("window", "fullscreen", g_fs_on ? "1" : "0", p);
+}
+
+static void rz_fs_enter(HWND h) {
+    MONITORINFO mi;
+    LONG st;
+    if (g_fs_on) return;
+    g_fs_wp.length = sizeof(g_fs_wp);
+    if (!GetWindowPlacement(h, &g_fs_wp)) return;
+    mi.cbSize = sizeof(mi);
+    if (!GetMonitorInfoA(MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST), &mi)) return;
+    g_fs_style = GetWindowLongA(h, GWL_STYLE);
+    g_fs_exstyle = GetWindowLongA(h, GWL_EXSTYLE);
+    if (IsZoomed(h)) g_fs_wp.flags |= WPF_RESTORETOMAXIMIZED;
+    g_fs_on = 1;
+    st = (g_fs_style & ~(WS_CAPTION | WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_MAXIMIZE)) | WS_POPUP;
+    SetWindowLongA(h, GWL_STYLE, st);
+    SetWindowLongA(h, GWL_EXSTYLE, g_fs_exstyle & ~(WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_DLGMODALFRAME));
+    SetWindowPos(h, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left,
+                 mi.rcMonitor.bottom - mi.rcMonitor.top, SWP_NOOWNERZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+    logf("FULLSCREEN> on: style 0x%08lX -> 0x%08lX, monitor [%ld %ld %ld %ld], display mode untouched", g_fs_style,
+         GetWindowLongA(h, GWL_STYLE), mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right, mi.rcMonitor.bottom);
+    wm_save();
+}
+
+static void rz_fs_leave(HWND h) {
+    RECT cr;
+    if (!g_fs_on) return;
+    g_fs_on = 0;
+    SetWindowLongA(h, GWL_STYLE, g_fs_style & ~WS_MAXIMIZE);
+    SetWindowLongA(h, GWL_EXSTYLE, g_fs_exstyle);
+    SetWindowPos(h, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+    g_fs_wp.showCmd = (g_fs_wp.flags & WPF_RESTORETOMAXIMIZED) ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
+    SetWindowPlacement(h, &g_fs_wp);
+    GetClientRect(h, &cr);
+    logf("FULLSCREEN> off: style 0x%08lX, client %ldx%ld%s", GetWindowLongA(h, GWL_STYLE), cr.right, cr.bottom,
+         g_fs_wp.showCmd == SW_SHOWMAXIMIZED ? " (maximized)" : "");
+    wm_save();
+}
+
+/* Once, from the subclass: put the window back where the last session left it. */
+static void wm_restore(HWND h) {
+    char p[MAX_PATH];
+    WINDOWPLACEMENT wp;
+    RECT r;
+    int mx, fs;
+    if (g_wm_applied) return;
+    g_wm_applied = 1;
+    if (!g_winmem) return;
+    ho_ini_path(p, sizeof(p));
+    r.left   = (LONG)GetPrivateProfileIntA("window", "left", 0x7fffffff, p);
+    r.top    = (LONG)GetPrivateProfileIntA("window", "top", 0x7fffffff, p);
+    r.right  = (LONG)GetPrivateProfileIntA("window", "right", 0x7fffffff, p);
+    r.bottom = (LONG)GetPrivateProfileIntA("window", "bottom", 0x7fffffff, p);
+    mx = (int)GetPrivateProfileIntA("window", "maximized", 0, p);
+    fs = (int)GetPrivateProfileIntA("window", "fullscreen", 0, p);
+    if (r.left == 0x7fffffff || r.top == 0x7fffffff || r.right == 0x7fffffff || r.bottom == 0x7fffffff ||
+        r.right - r.left < NAT_W || r.bottom - r.top < NAT_H) {
+        logf("WINMEM> no saved window in sc3resize.ini - game default");
+        if (fs && g_fskey) rz_fs_enter(h);
+        return;
+    }
+    wp.length = sizeof(wp);
+    if (!GetWindowPlacement(h, &wp)) return;
+    g_wm_restoring = 1;
+    wp.rcNormalPosition = r;   /* SetWindowPlacement moves it onto a monitor if the saved one is gone */
+    wp.showCmd = mx ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
+    wp.flags = 0;
+    SetWindowPlacement(h, &wp);
+    g_wm_restoring = 0;
+    logf("WINMEM> restored [%ld %ld %ld %ld]%s%s", r.left, r.top, r.right, r.bottom, mx ? " maximized" : "",
+         fs && g_fskey ? ", fullscreen" : "");
+    if (fs && g_fskey) rz_fs_enter(h);
+}
+
 /* Subclass the game window so a real WM_SIZE publishes the REAL client size.
  * GZGraphicD's own handler (FUN_100185f5, reached via vt+0x30) republishes the window object's
  * STORED size and nothing in the engine updates it on a stock resize, so without the
@@ -9480,6 +9608,16 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         if (m == WM_SYSKEYDOWN && !(lp & 0x40000000)) rz_closex("Alt+F4");
         return 0;
     }
+    if (g_fskey && wp == VK_RETURN && (m == WM_SYSKEYDOWN || m == WM_SYSKEYUP) && (lp & 0x20000000)) {   /* FULLSCREEN */
+        if (m == WM_SYSKEYDOWN && !(lp & 0x40000000)) { if (g_fs_on) rz_fs_leave(h); else rz_fs_enter(h); }
+        return 0;
+    }
+    if (g_fskey && m == WM_SYSCHAR && wp == '\r') return 0;   /* the Alt+Enter char: no beep, not a game key */
+    if (g_fs_on && m == WM_SYSCOMMAND) {   /* no frame to drag or maximize while fullscreen (Win+Up, the Alt+Space menu) */
+        UINT sc = (UINT)(wp & 0xfff0);
+        if (sc == SC_MAXIMIZE || sc == SC_SIZE || sc == SC_MOVE || sc == SC_RESTORE) return 0;
+    }
+    if (m == WM_EXITSIZEMOVE) wm_save();   /* WINMEM: end of a drag */
     if (g_zoomkeys && (m == WM_KEYDOWN || m == WM_KEYUP)) {   /* ZOOMKEYS */
         if (wp == VK_OEM_PLUS) wp = VK_ADD;
         else if (wp == VK_OEM_MINUS) wp = VK_SUBTRACT;
@@ -9573,7 +9711,7 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
      * the DRAG. That points at WM_NCHITTEST: if the game answers HTCLIENT over the frame, Windows
      * never starts a sizing loop. Let the game answer first, and only when it says HTCLIENT and the
      * cursor is within the border margin of the window edge, substitute the proper edge code. */
-    if (m == WM_NCHITTEST && g_thickframe) {
+    if (m == WM_NCHITTEST && g_thickframe && !g_fs_on) {   /* FULLSCREEN: no sizing edges on the borderless window */
         LRESULT r = CallWindowProcA(g_oldproc, h, m, wp, lp);
         if (r == HTCLIENT) {
             RECT wr;
@@ -9698,6 +9836,10 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
            render thread - never resize from the message thread. */
         r = CallWindowProcA(g_oldproc, h, m, wp, lp);
         logf("RZ   WM_SIZE %lux%lu - poll will pick it up on the next frame", w, hh);
+        if (wp == SIZE_MAXIMIZED || wp == SIZE_RESTORED) {   /* WINMEM: a maximize or restore (a drag saves at its end) */
+            static WPARAM last = (WPARAM)-1;
+            if (wp != last) { last = wp; wm_save(); }
+        }
         return r;
     }
     /* ---- INPUT CLAMP PROBE (SC3RESIZE_INPUT=1) -------------------------------------------------
@@ -9847,6 +9989,7 @@ static void rz_subclass(void) {
     /* WINDOWED-EARLY block: if the style bytes could not be patched, the frame is still fixed here and the
        resize step that would add it never runs (no resize is possible). Add it now. */
     if (g_thickframe) rz_make_resizable();
+    wm_restore(h);   /* WINMEM: last session's size, maximize and fullscreen */
     /* One line that answers "what did this machine do" from a player's log: frame style, client size,
        DPI of the window and its monitor, and the process DPI awareness (0 = unaware: Windows scales the
        window bitmap on a >100% screen). Resolved dynamically, every call is Win10 1607+. */
@@ -10103,6 +10246,38 @@ static int install_one(DWORD va, void *base, DWORD rva, const char *name, int id
  * confound the owner caught. Both patches are carved VERBATIM from sc3probe.c (patch_windowed,
  * patch_surfacefmt) so the byte operations are not re-derived, resolved from the live GZGraphicD
  * base. Applied at watcher start, before the fnlog hooks and before the city loads. */
+/* STARTRES (owner 2026-10-20): with the Preferences dropdown gone, the game must not come up at a resolution saved
+   by an earlier pick of it. Every run of this mod was measured from an 800x600 start, and the HUD layout group is
+   picked from the root width (640 / 800 / >= 801, SIMUI FUN_100270e5). So SetResolution GZGraphicD FUN_10010ed1 (the
+   gfx vt+0xDC that SC3U FUN_0040586a calls with the saved prefs, stdcall, copies 7 dwords to +0x6cd90) is replaced
+   by the same copy with W/H forced to 800x600. The window then sizes the view. SC3RESIZE_STARTRES=0 keeps the
+   game's request. Fail-closed on the prologue, as sc3startsize.c (which hooks the same function, and loses). */
+static int   g_startres = 1;
+static DWORD g_sr_gz;
+static void __stdcall rz_startres_hook(DWORD *blk) {
+    DWORD *dst = (DWORD *)(g_sr_gz + 0x6cd90);
+    int i;
+    for (i = 0; i < 7; i++) dst[i] = blk[i];
+    logf("STARTRES> game asked %lux%lux%lu -> %dx%d", blk[0], blk[1], blk[2], NAT_W, NAT_H);
+    dst[0] = NAT_W;
+    dst[1] = NAT_H;
+}
+static void patch_startres(HMODULE gz) {
+    static const BYTE expect[] = { 0x56, 0x8b, 0x74, 0x24, 0x08, 0x57, 0x6a, 0x07, 0x59, 0xbf };
+    BYTE *t = (BYTE *)gz + 0x10ed1;
+    DWORD old;
+    if (!g_startres || g_sr_gz) return;
+    if (memcmp(t, expect, sizeof(expect)) || *(DWORD *)(t + 10) != (DWORD)gz + 0x6cd90) {
+        logf("STARTRES> FUN_10010ed1 differs from the anchor (another hook?) - NOT hooked"); return;
+    }
+    if (!VirtualProtect(t, 5, PAGE_EXECUTE_READWRITE, &old)) return;
+    g_sr_gz = (DWORD)gz;
+    t[0] = 0xE9; *(DWORD *)(t + 1) = (DWORD)rz_startres_hook - (DWORD)(t + 5);
+    VirtualProtect(t, 5, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), t, 5);
+    logf("STARTRES> FUN_10010ed1 hooked: the game starts at %dx%d", NAT_W, NAT_H);
+}
+
 static void patch_windowed(HMODULE gz) {
     BYTE *p = (BYTE *)gz + 0x6cdac;         /* the windowed flag Init reads */
     BYTE *q = (BYTE *)gz + 0x117d6;         /* the fullscreen re-force store */
@@ -10241,6 +10416,7 @@ static VOID CALLBACK rz_ldr_notify(ULONG reason, const RZ_LDR_DATA *d, PVOID ctx
     if (InterlockedExchange(&g_gz_early, 1)) return;
     logf("--- EARLY: GZGraphicD mapped at 0x%08lX, patching before its DllMain (loader notification)", (DWORD)d->DllBase);
     patch_windowed((HMODULE)d->DllBase);
+    patch_startres((HMODULE)d->DllBase);
     patch_surfacefmt((HMODULE)d->DllBase);
     if (g_thickframe) patch_frame_style((HMODULE)d->DllBase);
 }
@@ -11532,6 +11708,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
     /* Display-mode control FIRST, before any hook and before the surfaces/city are created -
        replicates the -windowed and -fix16 the routine was validated under. */
     patch_windowed(gz);
+    patch_startres(gz);   /* no-op when the loader notification ran */
     patch_surfacefmt(gz);
     if (g_thickframe) patch_frame_style(gz);   /* WINDOWED-EARLY block: no-op when the loader notification ran */
     patch_gridb_clamp(ss);   /* FIX A: clamp the grid-B bucket index (OOB AV root cause) */
@@ -11703,6 +11880,10 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_DIALOGS", v, sizeof(v))) g_dialogs = atoi(v);
           g_bltbeat = GetEnvironmentVariableA("SC3RESIZE_BLTBEAT", v, sizeof(v)) && atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_THICKFRAME", v, sizeof(v))) g_thickframe = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_FSKEY", v, sizeof(v))) g_fskey = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_WINMEM", v, sizeof(v))) g_winmem = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_RESROW", v, sizeof(v))) g_resrow = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_STARTRES", v, sizeof(v))) g_startres = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_EARLY", v, sizeof(v))) g_early = atoi(v);
           if (!GetEnvironmentVariableA("SC3RESIZE_DUMPDIR", g_dumpdir, sizeof(g_dumpdir)))
               lstrcpynA(g_dumpdir, ".", sizeof(g_dumpdir));
