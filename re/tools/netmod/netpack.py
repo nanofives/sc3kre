@@ -765,7 +765,8 @@ def compile_pack(stock, pack_dir, man):
                 raise NetpackError("%s: save_43 piece %s is not a merge or crossing piece" % (where, p))
             s43.append(vids[p]["id"])
         ow = a.get("oneway") or {}                       # task avdiag: one-way lane roles (davu / davn / davt lines)
-        for p in list(ow.get("uturn", [])) + list(ow.get("none", {}).values()) + list(ow.get("junction_t", {}).values()):
+        for p in list(ow.get("uturn", [])) + list(ow.get("none", {}).values()) + list(ow.get("junction_t", {}).values()) + \
+                list(ow.get("opening", {}).values()):                                             # task avdiag
             if vids.get(p) is None or vids[p]["net"] != "ROAD":                                  # task avdiag
                 raise NetpackError("%s: oneway piece %s must be a ROAD variant of this package" % (where, p))  # task avdiag
         out["auto_diagonal_avenues"].append({"middle": mids, "junction": juncs, "merge": merges, "save_43": s43,
@@ -1183,7 +1184,8 @@ def merge(stock, packs):
                 b"".join(b"davs %d\r\n" % p for a in c["auto_diagonal_avenues"] for p in a.get("save_43", [])) + \
                 b"".join((b"davu %d %d\r\n" % tuple(a["oneway"]["uturn"]) if a.get("oneway", {}).get("uturn") else b"") +  # task avdiag
                          b"".join(b"davn %s %d\r\n" % (k.encode(), v) for k, v in sorted(a.get("oneway", {}).get("none", {}).items())) +
-                         b"".join(b"davt %s %d\r\n" % (k.encode(), v) for k, v in sorted(a.get("oneway", {}).get("junction_t", {}).items()))
+                         b"".join(b"davt %s %d\r\n" % (k.encode(), v) for k, v in sorted(a.get("oneway", {}).get("junction_t", {}).items())) +
+                         b"".join(b"davo %s %d\r\n" % (k.encode(), v) for k, v in sorted(a.get("oneway", {}).get("opening", {}).items()))  # task avdiag
                          for a in c["auto_diagonal_avenues"]) + \
                 avx_table_lines(c.get("auto_avenue_junctions", [])) + \
                 b"".join(b"bvp %d %d %d %d %d %d %d\r\n" % tuple(a["pieces"]) +

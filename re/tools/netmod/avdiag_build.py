@@ -44,7 +44,15 @@ def _finish(road, stock, roads=()):
     cors = [AV.Cor.band(b, road) for b in bs if b["ok"]]
     cors += AV.Cor.avenues({c: v for c, v in stock.items() if want.get(c) == v})
     for r in roads:                                     # a road runs through plain road and junction cells only
-        rc = {q for q in r if want.get(q, (0,))[0] == 29 or 20510 <= want.get(q, (0,))[0] <= 20519}
+        rc = {q for q in r if want.get(q, (0,))[0] == 29 or 20506 <= want.get(q, (0,))[0] <= 20519}
+        if len({q[1] for q in rc}) == 1 or len({q[0] for q in rc}) == 1:   # task avdiag: on through a median
+            row = len({q[1] for q in rc}) == 1                              # opening's junction cells
+            for q in list(rc):
+                for d in (-1, 1):
+                    n = (q[0] + d, q[1]) if row else (q[0], q[1] + d)
+                    while n not in rc and 20506 <= want.get(n, (0,))[0] <= 20519:
+                        rc.add(n)
+                        n = (n[0] + d, n[1]) if row else (n[0], n[1] + d)
         if rc:
             cors.append(AV.Cor.road(rc))
     return want, road, cors, bs
@@ -154,7 +162,7 @@ def plan_lanes(want, road, cors, L, special=None):
     may use (default: our junction / crossing pieces)"""
     if special is None:
         special = {c for c, (p, s) in want.items() if isinstance(p, int) and
-                   (20510 <= p <= 20519 or 20540 <= p <= 20599 or 21806 <= p <= 21849)}
+                   (20506 <= p <= 20519 or 20540 <= p <= 20599 or 21806 <= p <= 21849)}
     polys = []
     straight = []                                        # (corridor, r, s lo, s hi, travel sign): split at turn nodes
     nodes = []                                           # (corridor, r, s) where a turn starts or ends
@@ -247,7 +255,7 @@ def plan_lanes(want, road, cors, L, special=None):
         if c.kind == "road":
             for q in c.cells:
                 sq = c.sr((q[0] + .5, q[1] + .5))[0]
-                if not 20510 <= want.get(q, (0,))[0] <= 20519:
+                if not 20506 <= want.get(q, (0,))[0] <= 20519:
                     continue
                 if abs(sq - c.s0) < 1e-6:
                     lo = sq + 0.5
@@ -343,6 +351,12 @@ def plan_lanes(want, road, cors, L, special=None):
                     if min(abs(s1x - v) for v in i1) > 1.6 and not i1[0] <= s1x <= i1[1]:
                         continue
                     if min(abs(s2x - v) for v in i2) > 1.6 and not i2[0] <= s2x <= i2[1]:
+                        continue
+                    # no turn into a lane that runs on to a T end (it would only dead-end there), none out of a lane
+                    # that starts at one (task avdiag: the median opening's road stops at the far curb)
+                    t2 = tend.get((id(c2), round(r2, 9)), ())
+                    t1 = tend.get((id(c1), round(r1, 9)), ())
+                    if round(max(lo2 * sgn2, hi2 * sgn2) * sgn2, 9) in t2 or round(min(lo1 * sgn1, hi1 * sgn1) * sgn1, 9) in t1:
                         continue
                     # no turn out of a lane before it begins, none into a lane after it ends (at a T: the leaving
                     # carriageway starts at the crossing, the arriving one stops there)
@@ -672,7 +686,8 @@ def collect(which, L=None, verbose=False):
 # New ids (PLAN.md 3): the last middle cell of a free end carries the two-lane U-turn; cells past it carry no lanes.
 ID_U = {-1: 21800, 1: 21801}              # 20500 as the last middle cell at the end toward -t / +t (art 20500)
 ID_NONE = {20505: 21802, 18004: 21803, 1999: 21804, 35: 21805}       # past a U-turn: no lanes (art of the base piece)
-ID_T = {20510: 21806, 20511: 21807}      # 20510 / 20511 where the road ends in the cell (a T touching one carriageway)
+ID_T = {}    # retired with the median opening (was 20510 / 20511 -> 21806 / 21807, right in / right out)
+ID_TO = {20510: 21817, 20511: 21818, 20512: 21819, 20513: 21820}   # the near / median cells of a median opening
 # crossing pieces whose art the X and the T of the same pair share, but whose lanes differ (the T's diagonal ends):
 # the T templates of recipe_crossings.json write these instead (art of the X piece)
 ID_XT = {"TSX": {20553: 21810, 20554: 21811}, "TSZ": {20565: 21812, 20568: 21813},
@@ -689,8 +704,8 @@ def t_templates():
 
 
 t_templates()
-NEW_ART = {21810: 20553, 21811: 20554, 21812: 20565, 21813: 20568, 21814: 20541, 21815: 20543, 21816: 20549,
-           21806: 20510, 21807: 20511, 21800: 20500, 21801: 20500, 21802: 20505, 21803: 18004, 21804: 1999, 21805: 35}
+NEW_ART = {21817: 20510, 21818: 20511, 21819: 20512, 21820: 20513, 21810: 20553, 21811: 20554, 21812: 20565, 21813: 20568, 21814: 20541, 21815: 20543, 21816: 20549,
+ 21800: 20500, 21801: 20500, 21802: 20505, 21803: 18004, 21804: 1999, 21805: 35}
 
 
 def roles(want, road, cors, L):
@@ -704,6 +719,25 @@ def roles(want, road, cors, L):
             arms = [q for q in nb if want.get(q, (0,))[0] in (29,) or 20510 <= want.get(q, (0,))[0] <= 20519]
             if len(arms) == 1:
                 out[c] = ID_T[p]
+    for c, (p, s) in want.items():                     # task avdiag: a median opening's near and median cells
+        if p in ID_TO:
+            vert = p in (20511, 20513)
+            step = ((0, 1) if (vert ^ (s % 2 == 1)) else (1, 0))
+            hit = 0
+            for d in (-1, 1):
+                q = (c[0] + d * step[0], c[1] + d * step[1])
+                while 20506 <= want.get(q, (0,))[0] <= 20519:
+                    if want[q][0] in (20506, 20507):
+                        hit = d
+                    q = (q[0] + d * step[0], q[1] + d * step[1])
+            if hit:
+                out[c] = ID_TO[p]
+                if p in (20512, 20513):                   # the median cell: the far end on local +x (row) / +z
+                    loc = (1, 0) if p == 20512 else (0, 1)  # (column) of its own frame, as the art and lanes have it
+                    for _ in range(s):
+                        loc = (-loc[1], loc[0])
+                    if (loc[0] * step[0] + loc[1] * step[1]) * hit < 0:
+                        want[c] = (p, (s + 2) % 4)
     for c in cors:
         if c.kind != "band":
             continue
@@ -1022,7 +1056,7 @@ def graph_problems(pid, lanes):
 def _ped_of(pid, L, specs):
     if pid in specs:
         return specs[pid].get("pedestrian"), specs[pid].get("flag", 0)
-    base = {21802: 35, 21803: 18004, 21804: 1999, 21805: 35, 20505: 35}.get(pid, pid)
+    base = {21802: 35, 21803: 18004, 21804: 1999, 21805: 35, 20505: 35, 20506: 35, 20507: 35}.get(pid, pid)
     blob = L.g.trblkatt().get(base * 256)
     sp, _ = LK.describe(LK.decode(blob), L.P, base, exact=False)
     return sp.get("pedestrian"), sp.get("flag", 0)
@@ -1104,7 +1138,8 @@ def write_manifest(pack, out):
         v["id"] = nid
         byid[nid] = v
     m["variants"] = [byid[k] for k in sorted(byid)]
-    m["lanes"] = [{"piece": pid, "spec": fname} for pid, (fname, spec) in out.items()]
+    prev = [e for e in m.get("lanes", []) if e["piece"] not in out and os.path.exists(os.path.join(pack, e["spec"]))]
+    m["lanes"] = prev + [{"piece": pid, "spec": fname} for pid, (fname, spec) in out.items()]   # unbuilt roles keep theirs
     a = m["auto_diagonal_avenues"][0]
     s43 = set(a["save_43"]) | {nid for nid, art in NEW_ART.items() if art in a["save_43"]}
     s43 -= {ID_U[-1], ID_U[1]}                           # the U-turn 20500s save as 43 through their davu line
@@ -1119,7 +1154,8 @@ def write_manifest(pack, out):
         mm = ID_XT.get(kinds[t["id"]], {})
         t["writes"] = [[dx, dz, mm.get(p, p), st] for dx, dz, p, st in t["writes"]]
     a["oneway"] = {"uturn": [ID_U[-1], ID_U[1]], "none": {str(k): v for k, v in sorted(ID_NONE.items())},
-                   "junction_t": {str(k): v for k, v in sorted(ID_T.items())}}
+                   "junction_t": {str(k): v for k, v in sorted(ID_T.items())},
+                   "opening": {str(k): v for k, v in sorted(ID_TO.items())}}
     m["avenue_lines"] = ["avlj %d %s" % (p, e) for p, e in sorted(AVLJ.items())]
     json.dump(rec, open(rp, "w", newline="\n"), indent=1)
     json.dump(m, open(mp, "w", newline="\n"), indent=1)

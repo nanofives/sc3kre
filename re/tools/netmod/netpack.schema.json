@@ -208,7 +208,8 @@
             "properties": {
               "uturn": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/piece_id"}},
               "none": {"type": "object", "additionalProperties": {"$ref": "#/$defs/piece_id"}},
-              "junction_t": {"type": "object", "additionalProperties": {"$ref": "#/$defs/piece_id"}}
+              "junction_t": {"type": "object", "additionalProperties": {"$ref": "#/$defs/piece_id"}},
+              "opening": {"type": "object", "additionalProperties": {"$ref": "#/$defs/piece_id"}}
             }
           },
           "crossing": {

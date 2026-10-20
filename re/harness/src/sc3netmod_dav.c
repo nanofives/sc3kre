@@ -90,12 +90,17 @@ static int dav_is_x(WORD id);
                      own frame); both save as 43
      `davn <p> <v>`  a lone / outer piece p in a cell past that U-turn: v (no lanes, p's art, saved as p's base)
      `davt <p> <v>`  junction piece p whose road arrives from one side only (a T touching one carriageway): v
+     `davo <p> <v>`  a median opening (any davo line turns it on): a road meeting one carriageway goes on across the
+                     median and stops at the far carriageway's outer curb (far cell: a junction piece with that curb);
+                     the near cell's piece p (20510 / 20511) and the median cell's (20512 / 20513) become v. Without
+                     davo lines that road is a T on the near carriageway (davt). Twin: diagave.OPENING
    And a diagonal avenue that bends into, or crosses, a straight avenue converts only when avcore's AVL would convert
    that straight band (avl_band_ok, before writing; avl_dir in the post-AVL put-back, AVENUE_LANES.md 5). */
 #define DAV_MAX_ROLE 16
+#define DAV_MAX_OPN 32
 static WORD g_dav_u[2];
-static WORD g_dav_n[DAV_MAX_ROLE][2], g_dav_t[DAV_MAX_ROLE][2];
-static int g_dav_nn, g_dav_nt;
+static WORD g_dav_n[DAV_MAX_ROLE][2], g_dav_t[DAV_MAX_ROLE][2], g_dav_o[DAV_MAX_ROLE][2];
+static int g_dav_nn, g_dav_nt, g_dav_no;
 static int g_dav_post;                          /* 1 while the post-AVL put-back pass runs: avl_dir, not avl_band_ok */
 static volatile LONG g_dav_n_avl;               /* bands left to the stock tiler: the straight avenue stays two-way */
 static int avl_band_ok(int x, int z, int away);                     /* sc3netmod_avl.c (included after this file) */
@@ -104,7 +109,7 @@ static int avl_post_set(int slot, int (*f)(BYTE *, int, int, int, int, const cha
 static int dav_post(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who, int *rbox);
 static int g_dav_probe, g_dav_pq[2], g_dav_pr;   /* dav_band_ok: a dry pass, the band through cell pq, its verdict */
 
-static void dav_oline(const char *path, const char *line) {      /* davu / davn / davt */
+static void dav_oline(const char *path, const char *line) {      /* davu / davn / davt / davo */
     unsigned long a, b;
     char k = line[3];
     if (sscanf(line + 5, "%lu %lu", &a, &b) != 2 || !a || !b || a > 0xffff || b > 0xffff) {
@@ -114,6 +119,7 @@ static void dav_oline(const char *path, const char *line) {      /* davu / davn 
     if (k == 'u') { g_dav_u[0] = (WORD)a; g_dav_u[1] = (WORD)b; }
     else if (k == 'n' && g_dav_nn < DAV_MAX_ROLE) { g_dav_n[g_dav_nn][0] = (WORD)a; g_dav_n[g_dav_nn][1] = (WORD)b; g_dav_nn++; }
     else if (k == 't' && g_dav_nt < DAV_MAX_ROLE) { g_dav_t[g_dav_nt][0] = (WORD)a; g_dav_t[g_dav_nt][1] = (WORD)b; g_dav_nt++; }
+    else if (k == 'o' && g_dav_no < DAV_MAX_ROLE) { g_dav_o[g_dav_no][0] = (WORD)a; g_dav_o[g_dav_no][1] = (WORD)b; g_dav_no++; }
     else { logf("### dav: %s: too many role lines - '%s' ignored", path, line); return; }
     avl_post_set(0 /* AVL_POST_DAV */, dav_post);
     logf("dav: %s: one-way role %c %lu -> %lu", path, k, a, b);
@@ -130,6 +136,7 @@ static int dav_is_role(WORD id) {
     if (id && (id == g_dav_u[0] || id == g_dav_u[1])) return 1;
     for (k = 0; k < g_dav_nn; k++) if (g_dav_n[k][1] == id) return 1;
     for (k = 0; k < g_dav_nt; k++) if (g_dav_t[k][1] == id) return 1;
+    for (k = 0; k < g_dav_no; k++) if (g_dav_o[k][1] == id) return 1;
     return 0;
 }
 
@@ -502,6 +509,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                 int nxm = 0, xmt[DAVX_MAX_M], xma[DAVX_MAX_M], xmz[DAVX_MAX_M], nxw = 0, xend[2], t, xout = 0;
                 DWORD mcw[16];
                 BYTE side[1024];
+                int nop = 0, opn[DAV_MAX_OPN][6];       /* task avdiag: median openings: near, median, far cell (real) */
                 const char *why = "";
                 if (!dav_full(&P.b, axis, x, z) || dav_full(&P.b, axis, x - 1, z - 1)) continue;
                 while (dav_full(&P.b, axis, x + rows, z + rows)) rows++;
@@ -624,9 +632,18 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                     if (P.junc[nj].n == 2 && P.junc[nj].s2 < P.junc[nj].s1) { BYTE t_ = P.junc[nj].s1; \
                         P.junc[nj].s1 = P.junc[nj].s2; P.junc[nj].s2 = t_; } \
                     nj++; } } while (0)
+#define OADD(AX, ZQ, D) do { opn[nop][2 * (D)] = axis ? -(AX) : (AX); opn[nop][2 * (D) + 1] = (ZQ); } while (0)
                 for (k = 0; k < rows && ok; k++) {
-                    int aa = x + k, zz = z + k, e = 255;
+                    int aa = x + k, zz = z + k, e = 255, s3 = side[k] & 3;
                     if (!side[k]) continue;
+                    if (g_dav_no && (s3 == 1 || s3 == 2)) {        /* task avdiag: a median opening (twin diagave) */
+                        int fc = s3 == 1 ? 2 : 0, end = s3 == 1 ? 1 : 3, d;
+                        if (k == 0 || k == rows - 1) { ok = 0; why = "a road meets one carriageway in the avenue's end row"; break; }
+                        if (nop >= DAV_MAX_OPN) { ok = 0; why = "too many median openings"; break; }
+                        for (d = 0; d < 3; d++) JADD(aa + d, zz, d, 0, d == fc ? (axis ? 4 - end : end) : 255);
+                        OADD(aa + 2 - fc, zz, 0); OADD(aa + 1, zz, 1); OADD(aa + fc, zz, 2); nop++;
+                        continue;
+                    }
                     if (side[k] == 3 && (k == 0 || k == rows - 1)) e = k == 0 ? 0 : 2;   /* stem: the far curb */
                     if (side[k] & 1) JADD(aa, zz, 0, 0, e);
                     if (side[k] == 3) JADD(aa + 1, zz, 1, 0, e);
@@ -635,6 +652,13 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                 for (k = 0; k < ncn && ok; k++) {                    /* a column enters at (x0, zz+1), its d2 cell */
                     int x0c = colN[k][0], zz = colN[k][1], cross = 0, t;
                     for (j = 0; j < ncs; j++) if (colS[j][0] == x0c && colS[j][1] == zz + 4) cross = 1;
+                    if (!cross && g_dav_no) {                    /* task avdiag: a median opening, far curb S */
+                        if (zz + 3 - z >= rows - 1) { ok = 0; why = "a column road meets one carriageway near the avenue's end"; break; }
+                        if (nop >= DAV_MAX_OPN) { ok = 0; why = "too many median openings"; break; }
+                        for (t = 1; t <= 3; t++) JADD(x0c, zz + t, x0c - (x + zz + t - z), 1, t == 3 ? 2 : 255);
+                        OADD(x0c, zz + 1, 0); OADD(x0c, zz + 2, 1); OADD(x0c, zz + 3, 2); nop++;
+                        continue;
+                    }
                     for (t = 1; t <= (cross ? 3 : 1); t++) {
                         int zr = zz + t, kr = zr - z;
                         if (kr < 0 || kr >= rows) { ok = 0; why = "column road leaves the avenue's rows"; break; }
@@ -645,9 +669,18 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                     int x0c = colS[k][0], zz = colS[k][1], crossed = 0, kr = zz - 1 - z;
                     for (j = 0; j < ncn; j++) if (colN[j][0] == x0c && colN[j][1] == zz - 4) crossed = 1;
                     if (crossed) continue;
+                    if (g_dav_no) {                              /* task avdiag: a median opening, far curb N */
+                        int t;
+                        if (kr - 2 < 1 || kr >= rows) { ok = 0; why = "a column road meets one carriageway near the avenue's end"; break; }
+                        if (nop >= DAV_MAX_OPN) { ok = 0; why = "too many median openings"; break; }
+                        for (t = 1; t <= 3; t++) JADD(x0c, zz - t, t - 1, 1, t == 3 ? 0 : 255);
+                        OADD(x0c, zz - 1, 0); OADD(x0c, zz - 2, 1); OADD(x0c, zz - 3, 2); nop++;
+                        continue;
+                    }
                     if (kr < 0 || kr >= rows) { ok = 0; why = "column road leaves the avenue's rows"; break; }
                     JADD(x0c, zz - 1, 0, 1, 255);
                 }
+#undef OADD
 #undef JADD
                 for (k = 0; k < nj; k++) *dav_markp(&P, P.junc[k].x, P.junc[k].z) |= 16;
                 /* the drags' ends beyond the full rows; not past a junction row. A merge when only one staircase's two
@@ -869,6 +902,26 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                         for (a2 = 0; a2 < na; a2++) if (P.arm[a2].x == nx && P.arm[a2].z == nz) { arms++; break; }
                     }
                     if (arms == 1) P.want[k] = ((DWORD)r << 8) | (P.want[k] & 0xff);
+                }
+                for (j = 0; j < nop && ok; j++) {                  /* task avdiag: a median opening's near / median cell */
+                    int c2;
+                    for (c2 = 0; c2 < 2; c2++)
+                        for (k = 0; k < n; k++) {
+                            WORD r;
+                            int s, lx = 1, lz = 0, t, fx, fz;
+                            if (P.cell[k].x != opn[j][2 * c2] || P.cell[k].z != opn[j][2 * c2 + 1]) continue;
+                            r = dav_role(g_dav_o, g_dav_no, (WORD)(P.want[k] >> 8));
+                            if (!r) break;
+                            s = (int)(P.want[k] & 0xff);
+                            if (c2 == 1) {                           /* the far end on local +x (20512) / +z (20513) */
+                                if ((P.want[k] >> 8) == 20513) { lx = 0; lz = 1; }   /* of its own frame (art, lanes) */
+                                for (t = 0; t < s; t++) { int q = lx; lx = -lz; lz = q; }
+                                fx = opn[j][4] - P.cell[k].x; fz = opn[j][5] - P.cell[k].z;
+                                if (lx * fx + lz * fz < 0) s = (s + 2) & 3;
+                            }
+                            P.want[k] = ((DWORD)r << 8) | (DWORD)s;
+                            break;
+                        }
                 }
                 if (nst[1] < DAV_MAX_ST) {                         /* task diagx: this round's status */
                     P.st[1][nst[1]].axis = (BYTE)axis; P.st[1][nst[1]].x = x; P.st[1][nst[1]].z = z;

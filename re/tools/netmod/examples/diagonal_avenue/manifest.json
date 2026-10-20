@@ -93,6 +93,34 @@
    "trblkatt": "copy_base"
   },
   {
+   "id": 20506,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue junction",
+    "ENGLISH": "Cruce de avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20506"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20507,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue junction",
+    "ENGLISH": "Cruce de avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20507"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
    "id": 20510,
    "base": 43,
    "network": "ROAD",
@@ -1224,34 +1252,6 @@
    "id": 21805
   },
   {
-   "id": 21806,
-   "base": 43,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue junction",
-    "ENGLISH": "Cruce de avenida diagonal"
-   },
-   "art": {
-    "from": 29,
-    "png_dir": "art/20510"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
-   "id": 21807,
-   "base": 43,
-   "network": "ROAD",
-   "name": {
-    "*": "Diagonal avenue junction",
-    "ENGLISH": "Cruce de avenida diagonal"
-   },
-   "art": {
-    "from": 29,
-    "png_dir": "art/20511"
-   },
-   "trblkatt": "copy_base"
-  },
-  {
    "id": 21810,
    "base": 43,
    "network": "ROAD",
@@ -1348,6 +1348,62 @@
     "png_dir": "art/20549"
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 21817,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue junction",
+    "ENGLISH": "Cruce de avenida diagonal"
+   },
+   "art": {
+    "from": 29,
+    "png_dir": "art/20510"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21818,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue junction",
+    "ENGLISH": "Cruce de avenida diagonal"
+   },
+   "art": {
+    "from": 29,
+    "png_dir": "art/20511"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21819,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue junction",
+    "ENGLISH": "Cruce de avenida diagonal"
+   },
+   "art": {
+    "from": 29,
+    "png_dir": "art/20512"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21820,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue junction",
+    "ENGLISH": "Cruce de avenida diagonal"
+   },
+   "art": {
+    "from": 29,
+    "png_dir": "art/20513"
+   },
+   "trblkatt": "copy_base"
   }
  ],
  "lanes": [
@@ -1374,6 +1430,14 @@
   {
    "piece": 20505,
    "spec": "mid_20505.lanes.json"
+  },
+  {
+   "piece": 20506,
+   "spec": "avd_20506.lanes.json"
+  },
+  {
+   "piece": 20507,
+   "spec": "avd_20507.lanes.json"
   },
   {
    "piece": 20510,
@@ -1700,14 +1764,6 @@
    "spec": "avd_21805.lanes.json"
   },
   {
-   "piece": 21806,
-   "spec": "avd_21806.lanes.json"
-  },
-  {
-   "piece": 21807,
-   "spec": "avd_21807.lanes.json"
-  },
-  {
    "piece": 21810,
    "spec": "avd_21810.lanes.json"
   },
@@ -1734,6 +1790,22 @@
   {
    "piece": 21816,
    "spec": "avd_21816.lanes.json"
+  },
+  {
+   "piece": 21817,
+   "spec": "avd_21817.lanes.json"
+  },
+  {
+   "piece": 21818,
+   "spec": "avd_21818.lanes.json"
+  },
+  {
+   "piece": 21819,
+   "spec": "avd_21819.lanes.json"
+  },
+  {
+   "piece": 21820,
+   "spec": "avd_21820.lanes.json"
   }
  ],
  "auto_diagonal_avenues": [
@@ -1860,6 +1932,22 @@
      ],
      "road": 1,
      "far": 1
+    },
+    {
+     "piece": 20506,
+     "halves": [
+      0
+     ],
+     "road": 0,
+     "far": 1
+    },
+    {
+     "piece": 20507,
+     "halves": [
+      0
+     ],
+     "road": 1,
+     "far": 0
     }
    ],
    "merge": [
@@ -4818,9 +4906,12 @@
      "18004": 21803,
      "20505": 21802
     },
-    "junction_t": {
-     "20510": 21806,
-     "20511": 21807
+    "junction_t": {},
+    "opening": {
+     "20510": 21817,
+     "20511": 21818,
+     "20512": 21819,
+     "20513": 21820
     }
    }
   }

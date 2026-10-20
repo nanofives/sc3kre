@@ -131,3 +131,40 @@ along the road's side). `diagave_paint` (the world-scene painter the merges and 
 clip the road element at the far curb line. No hand drawing. Rule: two junction descriptors and the T row's median
 and far cells marked as junction cells in `sc3netmod_dav.c` and its twin; the lane builder then gives 4 movements
 (the lefts through the opening) with no new lane code. Estimate: half a day including a lab check.
+
+## 8. Median opening (owner: "Build the median opening", 2026-10-19)
+
+A road that meets one carriageway now goes on across the median and stops at the far carriageway's outer curb.
+Right in / right out (21806 / 21807, `davt`) is retired: the ids and their specs are removed, the C `davt` path stays
+for a package without `davo` lines.
+
+- Pieces: far cell 20506 (row road, far curb E at state 0) and 20507 (column road, far curb N), art on 35's frames by
+  `diagave_paint.Opening` (35 half kept, outer curb kept, road 29 clipped at the curb), 20 frames each. Role variants
+  `davo 20510 21817`, `20511 21818` (near cell), `20512 21819`, `20513 21820` (median cell), lanes only differ.
+- Rule (`sc3netmod_dav.c` and the twin `diagave.py`, `OPENING`): a row arm on one side marks the row's 3 band cells
+  as junction cells, the far one with its outer curb (axis-space E / W, mirrored on axis 1); a column arm from N or S
+  marks 3 cells, the far one with curb S / N. Refused (the band is left to the stock tiler): a one-sided road in the
+  avenue's first or last row, a column opening that reaches the last two rows. The median cell's state turns by 2 when
+  the far end is not on its own local +x (21819) / +z (21820). Any `davo` line turns the rule on.
+- Offline: 19,512 joins, 0 problems; turns at an opening 4 (right in, right out, both lefts through the median);
+  418 new shapes 23800..25317, 0 conflicts. `netpack validate` diagonal_avenue: 0 errors. Warnings are of the same
+  kinds the committed package already had (each base piece's two-way road matrix against one-way lanes:
+  22 road-matrix warnings in the committed package, 27 now, the 5 new ones on 21817..21820; "no rule
+  RESULT places" 8 before, 10 now: the DLL places the role variants, no tiler rule does, by design). Correction to section 1:
+  the "0 warnings" line there was wrong, the committed package had warnings of these kinds too.
+- In game (lab, PIDs 61276 then 8124, no Frida): band (44,14)-(54,24) + (45,14)-(55,24), roads from the E at z 20,
+  from the W at z 22, from the N at x 48:
+
+  | opening | near | median | far |
+  |---|---|---|---|
+  | row z 20 (from E) | (52,20) 21817.0 | (51,20) 21819.2 | (50,20) 20506.2 |
+  | row z 22 (from W) | (52,22) 21817.2 | (53,22) 21819.0 | (54,22) 20506.0 |
+  | column x 48 (from N) | (48,16) 21818.0 | (48,17) 21820.0 | (48,18) 20507.2 |
+
+  `dav: edit: ... 9 junction cell(s), 6 arm cell(s)`. All 47 avenue cells (piece and state) equal the twin's
+  `roles()` run on the game's own road grid; the 3 differing cells are the side roads' stock dead-end stubs 11225.
+  Save `32 variant tile(s) written as base`, the file holds 0 variant ids; reload `load: all 32 variant tiles
+  restored`, DAV load pass 0 written, the cell box (40,6)-(62,28) identical before save and after reload.
+
+Screenshot: `MAIN\verify\avdiag\owner_shots\avdiag_game_opening.png`. Not done: cars through the opening (no traffic
+in the lab).

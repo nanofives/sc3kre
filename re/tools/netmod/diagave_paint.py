@@ -444,6 +444,30 @@ class Junction:
         return av if lane_grey(av) else pick("asphalt", z, wx, wz)
 
 
+class Opening(Junction):
+    """task avdiag: the far cell of a median opening (a road that meets one carriageway goes on across the median):
+    the far carriageway's stock 35 half (state halves[0]) with its outer curb kept along the cut diagonal, road 29
+    (state o) only inside the half, as asphalt with the avenue (Junction's rules); outside the half nothing (the
+    ground drawn under, on 35's frames)"""
+
+    def __init__(self, halves, o, end):
+        Junction.__init__(self, halves, o, -1)
+        self.end = end
+
+    def colour(self, z, r, wx, wz):
+        x, zl = (wx % 1.0) * 256.0, (wz % 1.0) * 256.0
+        s = self.halves[0]
+        av = STOCK(35, s, z, r, x, zl)
+        if not av[3]:
+            return CLEAR                                          # past the outer curb: no road
+        dd = abs(x - zl) / math.sqrt(2.0) if s % 2 == 0 else abs(x + zl - 256.0) / math.sqrt(2.0)
+        if dd < 0.16 * 256.0 and light(av):
+            return av                                             # the far carriageway's outer curb stays
+        if not STOCK(29, self.o, z, r, x, zl)[3]:
+            return av
+        return Junction.colour(self, z, r, wx, wz)
+
+
 # ------------------------------------------------------------------------------------------------ painting
 
 def paint_cell(scene, cell, out_dir, canvas=None, zooms=range(NA.ZOOMS)):
