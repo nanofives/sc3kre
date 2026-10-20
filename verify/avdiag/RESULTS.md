@@ -168,3 +168,46 @@ for a package without `davo` lines.
 
 Screenshot: `MAIN\verify\avdiag\owner_shots\avdiag_game_opening.png`. Not done: cars through the opening (no traffic
 in the lab).
+
+## 9. Seoul car run (2026-10-20, orchestrator cleared it; build b483236)
+
+Tree `Simcity_stock_avdiag`, packages avenue_lanes + diagonal_avenue + highway_avenue, `SC3NETMOD_LANEDENSITY=all`.
+Safe order: load, P + 2 by keys, nothing attached until the sim ran.
+
+Spot picked offline with the twin on Seoul's own roads (`seoul_pick.py` / `seoul_one.py` in the session scratchpad):
+axis-1 band from drags (22,220)-(11,231) + (23,220)-(12,231) in the city's south-west corner, crossing row road
+z 222 and met by street x 15 (a dead end at (15,225) before), 6 houses demolished at (16..18, 223..225).
+
+| step | result |
+|---|---|
+| first game (PID 72108) | DEADLOCK before any DAV piece existed: sim running 40 s, then `rb_lab.py cam` (Frida) with a zoom change returned `Error: system error` on the zoom job; routing evaluations froze at 1,884,114 and stayed there 8 min, CPU time flat, window not responding. The camera tool on a running game, not the pieces. Killed (own process) |
+| second game (PID 51664) | view moved by a minimap click and zoomed with the minimap + button (no scripted zoom change); `rb_lab.py cam` only at the zoom already in use. Responsive throughout, about 19 min, 10.8 M routing evaluations |
+| band | `dav: edit: band axis 1, 11 row(s) from (23,220), 35 cell(s), 6 junction cell(s), 6 arm cell(s) ... 38 written`; crossing at z 222 20511.3 / 20513.1 / 20511.1; opening from street x 15: near (15,226) 21817.3, median (15,227) 21819.1, far (15,228) 20506.1 (first axis-1 opening in game); U-turn ends 20503 (top), 21800 (bottom). All 35 avenue cells equal the twin on the live grid |
+| car tracks, zoom 3, box (8,214)-(28,234), 180 s (`hwcars_tracks.py`) | 75 tracks: 63 road cars (height 18176 = 71 x 256), 10 subway, 2 class-0 tracks at height 23296 flying straight over empty cells (not road traffic). 36 road cars on DAV pieces |
+| direction | road cars on the carriageway pieces, per cell visit (>= 1/4 cell along the band): NE-going 40 visits / 14 cars, all on the NW side of the median line (x + z < 243); SW-going 38 / 14, all on the SE side; 0 the other way. Seen on screen, SW-going cars move right with the SE side below them: right-hand |
+| save | `save: 35 variant tile(s) written as base`; city kept as `inst_avdiag\seoul_avdiag_band.sc3` for the fix |
+
+**Defects found (not fixed):**
+
+1. **Cars stall at the crossing and in the opening, and the game removes them after about 40 s.** Road-car stalls of 5 s
+   or more: 7 at the row-222 crossing (head car of each queue, at the border of the median cell (20,222) 20513.1, from
+   both sides: (21.17, 222.68) westbound, (19.83, 222.31) eastbound), 3 in the opening's median cell 21819.1 (two at
+   the same point (15.23, 227.09)). Cause in the specs: in 26 of the 100 DAV lane specs a border point is both the end
+   of an exiting lane and the start of an entering lane, always at the road's lane positions 80 / 175. A 45-degree band
+   lane crosses the perpendicular road lane exactly on the cell border, so the compiled node graph merges the two lanes
+   there, and the compiled lanes stop matching the turn matrix. The pieces: 20510..20513 (crossing, committed since
+   8e44a0e), 20541 / 20543..20545 / 20547 / 20555 / 20556 / 20561 / 20562 / 20566 / 20569 / 20572 / 20575 / 20589,
+   21814 / 21815, and the opening's 20506 / 20507 / 21817..21820. `netpack validate` reports exactly these as
+   "matrix allows ... but no car lane drives it" / "a car lane drives ... which the matrix does not allow". My section 8
+   reading of those warnings as harmless was wrong. My offline join check never tested for this.
+2. **The U-turn ends do not turn cars.** Bottom end 21800.3: 4 road cars arrived from the SW-going side. 3 stopped at
+   about (12.35, 230.68) for about 40 s and were removed, 1 was removed after 6 s; none came out NE. Top end 20503.3: 1
+   arrived, stalled 40 s, removed. The 2 tracks that start in 21800 heading NE are cars that appeared there. These
+   specs have no merged border node, so the cause is different and is [UNCERTAIN]. avcore's 21701 U-turn turned 17
+   cars in its Seoul run.
+
+Proposed fix: (a) in `avdiag_build.py`, keep lane crossings off cell borders (move the cut, or nudge one lane's border
+point consistently on both sides), plus a check that no border point is both an entry and an exit, which should
+clear the matrix warnings; (b) U-turn: a lab city with traffic plus car tracks at zoom 4, compared with avcore's
+21701 lane graph. Then repeat this run on `seoul_avdiag_band.sc3`. Data (gitignored, 4 MB):
+`verify/avdiag/data/seoul_tracks.json`, `seoul_grid.json`, `seoul_tracks_an.json`.
