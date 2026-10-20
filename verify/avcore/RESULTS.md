@@ -217,7 +217,8 @@ S = O in the outer's own frame at the corner's 11203 state).
 |---|---|
 | build | sc3netmod.dll compiles (347,648 bytes) |
 | offline | avlanes selftest PASSED in both languages, with a new row: a fake avlj outer piece carrying 21701's own turn ("..OI") fits all 8 patterns at their outer state, the swapped letters ("..IO") fit none. This tests the Python mirror of the rule (`outer_fits`), not the C itself |
-| in game | not run: needs avjunc's declared pieces |
+| avjunc's letters (21768 `I..O`, 21769 `..OI` on base 39; 21770 `I..O` on base 43) vs the rule, each at the outer cell's STOCK state over the shipped cities | T: 164 / 164 fit (64 -> 21768, 100 -> 21769). X: 24 fit, 24 do not (the X is symmetric, its stock state is arbitrary): avjunc must write 21770 at k = (inner bend's 11203 state - 1) & 3, which holds for all three pieces (told avjunc). 2 ends hold a stock 11204 on the outer cell: stay stock |
+| in game (lab, own PIDs 71608, 64988; avjunc's uncommitted tree built from a scratch copy, avjunc's worktree untouched) | L avenue as before + a road off the outer cell (96,54..60): `avx: edit run: 1 corner junction(s)`, outer (96,53) = 21769.2, both bands stay one-way through it (`ends: U-turn / corner`, `corner / U-turn`), inner 21726.2 and halves 21700 avcore's. Save: 66 tiles as base. Reload: all 66 restored, avx load run keeps the corner junction, the load pass finds both bands, 0 rewritten. Shot `owner_shots/avcore_tcorner_lab.png` |
 
 
 
