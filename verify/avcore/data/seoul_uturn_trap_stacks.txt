@@ -1,0 +1,24 @@
+16772 running ntdll.dll+0x7a08c
+     ntdll.dll+0x957a1 < ntdll.dll+0x68ff0 < ntdll.dll+0x9050c < ntdll.dll+0x52643 < SIMCITY.DLL+0xd31d < SIMSPR.DLL+0x19ea9 < SC3U.exe+0x24c75 < STRTSIM.DLL+0x18768 < STRTSIM.DLL+0x1b8cc < STRTSIM.DLL+0x1b95b < STRTSIM.DLL+0x19adf < STRTSIM.DLL+0x1d3b5
+26272 running ntdll.dll+0x7858c
+     ntdll.dll+0x93dc9 < KERNELBASE.dll+0x16a1f0 < KERNELBASE.dll+0x16a18f < sc3netmod.dll+0x25360 < KERNEL32.DLL+0x15d49 < ntdll.dll+0x6c75b < ntdll.dll+0x6c6e1
+62784 running ntdll.dll+0x7858c
+     ntdll.dll+0x93dc9 < KERNELBASE.dll+0x16a1f0 < KERNELBASE.dll+0x16a18f < sc3netmod.dll+0x1d64c < KERNEL32.DLL+0x15d49 < ntdll.dll+0x6c75b < ntdll.dll+0x6c6e1
+50012 running ntdll.dll+0x7a0bc
+     ntdll.dll+0x550b7 < KERNEL32.DLL+0x15d49 < ntdll.dll+0x6c75b < ntdll.dll+0x6c6e1
+47504 running ntdll.dll+0x787fc
+     KERNELBASE.dll+0x15f67f < CoreMessaging.dll+0x29dca < CoreMessaging.dll+0x2953c < CoreMessaging.dll+0x2957e < CoreMessaging.dll+0xaa5d5 < CoreMessaging.dll+0x28c67 < CoreMessaging.dll+0x28c67 < CoreMessaging.dll+0x64f51 < CoreMessaging.dll+0x64f5d < CoreMessaging.dll+0x29c0c < ntdll.dll+0x95f9e < ntdll.dll+0x51719
+56300 running ntdll.dll+0x7858c
+     ntdll.dll+0x93dc9 < KERNELBASE.dll+0x16a1f0 < KERNELBASE.dll+0x16a236 < AUDIO.DLL+0x19f8a < AUDIO.DLL+0x1b468 < AUDIO.DLL+0x1b0e3 < AUDIO.DLL+0x1afa1 < AUDIO.DLL+0x1fae8 < AUDIO.DLL+0x1b506 < msvcrt.dll+0x68ca5 < msvcrt.dll+0x68d71 < KERNEL32.DLL+0x15d49
+62772 running ntdll.dll+0x787fc
+     KERNELBASE.dll+0x15f67f < ntdll.dll+0x697e3 < KERNELBASE.dll+0x18085e < KERNELBASE.dll+0x1808da < KERNELBASE.dll+0x18079e < KERNELBASE.dll+0x1855d7 < ntdll.dll+0x86540 < ntdll.dll+0x95f9e < ntdll.dll+0x41ccf < KERNELBASE.dll+0x184127 < KERNELBASE.dll+0x1877ad < KERNELBASE.dll+0x1877ba
+58712 running ntdll.dll+0x7858c
+     ntdll.dll+0x93dc9 < KERNELBASE.dll+0x16a1f0 < KERNELBASE.dll+0x16a236 < SIMCITY.DLL+0xcc70 < SIMCITY.DLL+0xd007 < SIMCITY.DLL+0xca27 < SIMCITY.DLL+0xc8e5 < SIMCITY.DLL+0x11f98 < SIMCITY.DLL+0xd0a5 < msvcrt.dll+0x68ca5 < msvcrt.dll+0x68d71 < KERNEL32.DLL+0x15d49
+23768 running ntdll.dll+0x7a08c
+     ntdll.dll+0x957a1 < ntdll.dll+0x68ff0 < SIMDIRT.DLL+0x16ba2 < SIMDIRT.DLL+0x12dc2 < ntdll.dll+0x9050c < ntdll.dll+0x52643 < SIMSPR.DLL+0x54f3d < SIMSPR.DLL+0x7e0c < SIMSPR.DLL+0x1a2cf < SIMSPR.DLL+0x1a281 < SIMSPR.DLL+0x197ff < SIMSPR.DLL+0x188e7
+64936 running ntdll.dll+0x7a08c
+     ntdll.dll+0x957a1 < ntdll.dll+0x68ff0 < ntdll.dll+0x9050c < ntdll.dll+0x52643 < SIMSPR.DLL+0x54f3d < SIMSPR.DLL+0x8aa8 < SIMSPR.DLL+0x8688 < SIMSPR.DLL+0x54c9e < msvcrt.dll+0x68ca5 < msvcrt.dll+0x68d71 < KERNEL32.DLL+0x15d49 < ntdll.dll+0x6c75b
+18468 running ntdll.dll+0x7a0bc
+     ntdll.dll+0x550b7 < KERNEL32.DLL+0x15d49 < ntdll.dll+0x6c75b < ntdll.dll+0x6c6e1
+73636 running ntdll.dll+0x7a0bc
+     ntdll.dll+0x550b7 < KERNEL32.DLL+0x15d49 < ntdll.dll+0x6c75b < ntdll.dll+0x6c6e1 < KERNELBASE.dll+0x1505a3

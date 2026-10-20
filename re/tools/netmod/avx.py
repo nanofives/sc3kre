@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 r"""avx.py - straight avenue intersections (task avx, 2026-10-17): the junction rule, its pieces, art and lanes, offline
 checks. Offline twin of sc3netmod's AVX block (re/harness/src/sc3netmod_avx.c); package examples/avenue_junctions.
+SUPERSEDED for the rule, pieces and lanes by task avjunc (2026-10-19): avjunc_rule.py (the rule the C block now runs),
+avjunc.py (lanes), avjunc_build.py (package). The box painter (Box) and the nose helpers below are still used.
 
 Stock (offline tiler, verify/avx/RESULTS.md): two crossing avenues (11204, two parallel roads each) tile as a 2x2 of
 43 with T 39 on the four arm cells beside it (four small crossings, medians stop one cell early); a road crossing an

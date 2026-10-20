@@ -57,7 +57,8 @@ Boulevards (bvlanes): each outer cell is a one-way half as above; the middle cel
 | id | base | what | saved as |
 |---|---|---|---|
 | 21700 | 11204 | straight one-way half (section 2), art = 11204's, state = the half's 11204 state | 11204, same state |
-| 21701 | 11203 | avenue end U-turn quarter: one cell of the 2-cell U (see below), art = 11203's | 11203, same state |
+| 21701 | 11203 | avenue end U-turn quarter: one cell of the 2-cell U (see below); also a corner's OUTER bend (the same left turn), art = 11203's | 11203, same state |
+| 21726 | 11203 | avenue corner INNER bend (see Corners below): a right turn, art = 11203's | 11203, same state |
 | 21710..21725 | 69, 67, 11258, 15098, 31, 32, 11201, 11202 (k = 0..7 in that order) | a stock crossing / slope piece on a half, one-way: two ids per base (21710 + 2k = lanes toward the piece's x+ / z+ end at its own state 0, + 1 = the other way; `avlc` lines carry the side); the other network's lanes (rail, highway) and the pedestrians as stock; road lanes `uk_keep` (right-hand in English-UK too, the other lanes mirrored there as stock); matrix: the stock turns of the other network kept, the road's replaced by the one-way turn | the base, same state |
 
 End U-turn: a stock avenue end is a pair of 11203 bends. Measured on the 15 shipped cities: 9 clean ends, all in
@@ -70,6 +71,26 @@ circle about (0, 255), inner lane (0, 0, 175) -> (80, 0, 255) on radius 80. Curv
 23602 in English etc., stock 768's reversed copy in English-UK. Clean
 ends are rare in the shipped cities: most avenues there end in a road junction, so they convert only once avjunc's
 pieces are declared (section 5).
+
+Corners (2026-10-19): a stock avenue corner is a 2 x 2 block past a band's last row: the end row holds the inner bend
+(11203) and a half of the other axis (11204), the next row that half's partner (11204) and the outer bend (11203),
+diagonal to the inner one and at the SAME 11203 state. The other axis's band begins beside the block, on the inner bend's
+side. Measured with `py -3.12 -m netmod.avcorner_scan [--groups]` over the 15 shipped cities: 169 clean corner ends in 8
+patterns (the table `AVL_CST` in sc3netmod_avl.c, `CORNER_PATTERNS` in avlanes.py), plus 214 ends where the outer cell
+is a T 39 / X 43 (a road on the corner's outside; not handled, the band stays stock). One-way: inner bend -> 21726 (at
+state 0 traffic enters across z+ and leaves across x-; median lane (175,255) -> (0,80) on r 175 = 23601 in English,
+stock 1024's copy in English-UK; curb lane (80,255) -> (0,175) on r 80 = stock 768 in English, 23602's copy in
+English-UK), outer bend -> 21701 (the U-turn quarter is the same left turn), the two halves -> 21700. No new curve, no
+new art. Every lane keeps its side through the block (the inner bend's median lane takes the wide arc, the outer bend's
+the tight one).
+
+Corner with a road on its outside (2026-10-19, orchestrator: T + one road 110 ends, X 30 ends; "T next to T" and the
+rest stay stock): the outer cell may hold a piece DECLARED with `avlj` (avjunc's box piece) instead of the bend. It
+fits when its letters say I on the side the incoming half flows in from and O on the side the outgoing half leaves by.
+In the outer cell's own frame at the corner's 11203 state that is always W = I, S = O (the U-turn quarter's own turn);
+by world side per pattern: `py -3.12 -m netmod.avlanes corner-letters`. A declared outer cell is the declaring
+stream's: avcore neither writes nor claims it, and joins the two bands through it as through a bend (all or nothing).
+Before the box exists, `avl_corner_ok` (section 5) answers whether the group would convert with it.
 
 Curve shapes: avcore 23600..23699. 23600 straight inner (255,80)->(0,80); 23601 English (175,255)->(0,80) on r 175
 (for English-UK's U-turn outer lane); 23602 U-turn inner (0,175)->(80,255) on r 80; 23603 English (0,175)->(255,175)
@@ -86,11 +107,15 @@ write their own curves in their own ranges.
 An avenue band = the two halves running side by side along an axis. avcore converts a band only when ALL of it can
 be one-way; otherwise it leaves the whole band stock two-way (owner decision).
 
-- **Band cells avcore may write:** stock 11204 (-> 21700), the crossings and slopes of section 3, and the 11203 pair of
-  an end (-> 21701). Only stock pieces (id < 20000) and avcore's own pieces; never a cell another block claims
+- **Band cells avcore may write:** stock 11204 (-> 21700), the crossings and slopes of section 3, the 11203 pair of
+  an end (-> 21701), and a corner block (inner bend -> 21726, outer bend -> 21701, its two halves -> 21700). Only stock pieces (id < 20000) and avcore's own pieces; never a cell another block claims
   (`dbv_claimed`, `hwave_claimed`, any other variant).
 - **A band ends** (both halves at the same row) at one of:
   1. its stock end: the 11203 pair, which becomes the U-turn;
+  1b. a corner block (section 3, Corners): acceptable when the band beyond it converts. That band is decided with this
+     one, recursively, with its corner end taken as given; a loop of bands closes on itself (a band already being
+     decided up the chain counts as acceptable). So bands joined by corners convert all or nothing, and an accepted or
+     refused band processes the band beyond each corner in the same run, even outside the pass box;
   2. a cell on each half holding a piece DECLARED one-way by a sibling (`avlj` line, section 5), whose edge facing the
      band carries the band's direction (traffic of the half that flows into the piece = `I`, out of it = `O`);
   3. the map edge.
@@ -123,11 +148,19 @@ C side for siblings (all blocks are #included into sc3netmod.c, so these are pla
 pointers):
 
     int avl_dir(int x, int z);       /* -1: (x, z) is not a cell of a converted band; else the half's travel side 0..3
-                                        (N E S W). Answers for straight halves AND crossing / slope variants; -1 on
-                                        U-turn cells. Valid as soon as avl_run returns (the map is updated while each
+                                        (N E S W). Answers for straight halves AND crossing / slope variants, and
+                                        for a corner block's two halves; -1 on U-turn cells and corner bends. Valid as soon as avl_run returns (the map is updated while each
                                         band is decided, before the writes). */
-    int avl_claimed(int x, int z);   /* 1: avcore holds the cell (a band cell or its U-turn): do not write it */
+    int avl_claimed(int x, int z);   /* 1: avcore holds the cell (a band cell, its U-turn or a corner block cell): do
+                                        not write it */
     int avl_own(WORD id);            /* 1: id is one of avcore's pieces */
+    int avl_corner_ok(int x, int z);
+                                     /* pure predicate for the stream that declares corner OUTER pieces: would the
+                                        corner group through the outer cell (x, z) of a stock corner block (inner bend
+                                        11203 / 21726, two halves) convert if (x, z) held a fitting avlj piece, whatever
+                                        stands there now (stock T 39 / X 43 or the piece)? Nothing written, no cache. 0
+                                        when AVL is off or (x, z) is not such an outer cell (a corner whose outer cell is
+                                        a bend: use avl_band_ok on a band cell). */
     int avl_band_ok(int x, int z, int away);
                                      /* pure predicate, call it BEFORE you write: would the avenue band through (x, z)
                                         (any cell of it, either half, stock or ours), running away from you toward
@@ -183,8 +216,9 @@ package folder).
 - Lab trap (avjunc 2026-10-19): installing Frida hooks (hwtraffic_probe, a segment tracer) while the game is PAUSED and
   letting the probe's `--start` unpause it, with one-way pieces on screen at zoom 4, deadlocked SC3 every time; it was
   first misread as "a car on a radius-80 left turn (23602) hangs the game". Without a probe: the U-turn end at Seoul
-  (51, 62..63) 5 min, a junction ring 7 min, no hang. Attach probes after the sim is running. Why that sequence
-  deadlocks is [UNCERTAIN].
+  (51, 62..63) 5 min, a junction ring 7 min, no hang. Attach probes after the sim is running. avcore
+  2026-10-19: a Frida attach made while paused and DETACHED before the keys unpaused the game deadlocked too (same
+  stacks); unpausing first and attaching after was clean for 6 game months. Why that sequence deadlocks is [UNCERTAIN].
 - Report tool, not a rule: `py -3.12 -m netmod.avlanes tightleft <package dir> [...]` lists every car lane whose curve,
   as driven, has a left bend of radius <= 80 (cut at 88 for the curve files' rounding), English and English-UK, with
   the curve key, height and stock / new. Stock itself drives such bends (English 11225, 1999, 18004, 15045 at r 42..65;

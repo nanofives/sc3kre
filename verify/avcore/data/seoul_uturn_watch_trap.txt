@@ -1,0 +1,19 @@
+[1/18] t=30s hung=True evals=0 HANG 
+[2/18] t=60s hung=True evals=0 HANG 
+[3/18] t=90s hung=True evals=0 HANG 
+[4/18] t=120s hung=True evals=0 HANG 
+[5/18] t=150s hung=True evals=0 HANG 
+[6/18] t=180s hung=True evals=0 HANG 
+[7/18] t=210s hung=True evals=0 HANG 
+[8/18] t=240s hung=True evals=0 HANG 
+[9/18] t=270s hung=True evals=0 HANG 
+[10/18] t=300s hung=True evals=0 HANG 
+[11/18] t=330s hung=True evals=0 HANG 
+[12/18] t=360s hung=True evals=0 HANG 
+[13/18] t=390s hung=True evals=0 HANG 
+[14/18] t=420s hung=True evals=0 HANG 
+[15/18] t=450s hung=True evals=0 HANG 
+[16/18] t=480s hung=True evals=0 HANG 
+[17/18] t=510s hung=True evals=0 HANG 
+[18/18] t=540s hung=True evals=0 HANG 
+done: 18 hung sample(s) of 18
