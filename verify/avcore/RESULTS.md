@@ -98,6 +98,22 @@ turn). An inner lane cannot be widened inside the U-turn cell (it gains only 80 
 - Sort id fix (orchestrator-approved, hwcore closed): `hwlanes.extra_for` writes 0 when every point is at y 0, else 2; curve_set / curve_records / inject agree (`netmod.hwlanes selftest` PASSED, also in avlanes selftest). Installed in my tree: 20 new flat curves 0, 16 new curves with height 2, stock untouched. The deciding A/B (sort id 2 vs 0 on the same tight-left ring lanes) is avjunc's.
 - Not yet: the Seoul in-game check with cars on a U-turn (needs avjunc's junction package in my tree).
 
+## Seoul, two-lane U-turn end with avjunc's junctions (2026-10-19, own PIDs 58616, 71560)
+
+Build: avjunc's uncommitted Simcity_wt_avjunc (sc3netmod src with sc3netmod_avx.c, avenue_junctions built by
+avjunc_build into a scratch copy, their netpack) plus avcore's 0b189f8 hwlanes.py / avlanes.py / avenue_lanes; avjunc's
+tree left untouched. Stock Seoul copy: avx load run 150 junction boxes / 1,015 cells, AVL load pass 124 bands / 1,482
+cells, 5 U-turn ends (incl. (51, 62..63)).
+
+| run | sequence | result |
+|---|---|---|
+| 1 (trap) | paused: rb_lab cam (Frida attach, camera hook, DETACH) to (51,63) zoom 4; then P + 2 by keys, nothing attached | deadlock within 30 s: IsHungAppWindow 18/18 over 9 min, CPU time flat; main thread STRTSIM+0x18768 -> SC3U+0x24c75 -> SIMSPR+0x19ea9 -> SIMCITY+0xd31d (EnterCriticalSection), two SIMSPR threads on locks (`data/seoul_uturn_trap_stacks.txt`) |
+| 2 (clean) | P + 2 by keys first, sim running 20 s; then rb_lab cam (attach, detach) to (51,63) zoom 4; watched with no key and nothing attached | no hang: 18/18 samples responsive over 9 min, routing evaluations 380,166 -> 1,272,467, game date 1/3/1999 -> 9/23/1999 (over 6 months); cars on the U-turn curve in the frames (`owner_shots/avcore_seoul_uturn.png`) |
+
+So the two-lane U-turn (inner 23602, r 80) runs clean. The trap is wider than avjunc's wording: a Frida attach that is
+already DETACHED before the unpause still deadlocks when it happened while paused. Cars' lane direction on the band was
+not tracked (the track tools attach Frida); visually the frames show cars on the curve only.
+
 ## Not done / open
 
 - **No car has driven a converted avenue yet.** Before avjunc's junction pieces exist, no converted band connects to
