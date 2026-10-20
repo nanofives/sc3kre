@@ -35,7 +35,8 @@ SIDES = "NESW"
 LK_SIDE = {"W": 0, "N": 1, "E": 2, "S": 3}
 
 PIECE_STRAIGHT = 21700        # base 11204: one-way half
-PIECE_UTURN = 21701           # base 11203: avenue end quarter
+PIECE_UTURN = 21701           # base 11203: avenue end quarter; also a corner's OUTER bend (the same left turn)
+PIECE_CORNER = 21726          # base 11203: a corner's INNER bend (a right turn, the median lane on the wide arc)
 SHAPE_INNER = 23600           # (255, 80) -> (0, 80), y 0
 SHAPE_UTURN_INNER = 23602     # (0, 175) -> (80, 255) radius 80 about (0, 255)
 # English-UK holds every curve reversed under the same key (lanekit MIRROR_LANGS). With right-hand lanes in every
@@ -48,6 +49,12 @@ KEY_UTURN_OUTER = 1024        # stock 11203 (0, 80) -> (175, 255) radius 175 abo
 TIGHT_LEFT = 80               # the report radius of tightleft
 MATRIX_STRAIGHT = {"low": [["x+", "x-"]], "high": [["x-", "x+"]]}
 MATRIX_UTURN = {"low": [["x-", "z+"]], "high": [["z+", "x-"]]}
+MATRIX_CORNER = {"low": [["z+", "x-"]], "high": [["x-", "z+"]]}
+# the 8 stock corner patterns (avcorner_scan, 169 corner ends over the 15 shipped cities): (axis 0 along z / 1 along x,
+# end -1 back / +1 forward, inner bend on B) -> 11203 / 11204 states of A, B (end row) and A2, B2 (next row); the
+# inner and the outer bend always share one 11203 state. Same table as sc3netmod_avl.c AVL_CST.
+CORNER_PATTERNS = {(0, -1, 0): (0, 3, 2, 0), (0, -1, 1): (1, 3, 3, 2), (0, 1, 0): (1, 3, 0, 1), (0, 1, 1): (1, 2, 2, 0),
+                   (1, -1, 0): (2, 0, 1, 2), (1, -1, 1): (2, 3, 3, 1), (1, 1, 0): (1, 0, 3, 1), (1, 1, 1): (2, 0, 0, 3)}
 
 
 def half_dir(state):
@@ -122,7 +129,20 @@ def specs(game=None):
         "curves": [{"shape": SHAPE_UTURN_INNER, "pts": _arc(0, 255, 80, -90, 0)},
                    {"shape": SHAPE_UTURN_OUTER_UK, "pts": _arc(0, 255, 175, -90, 0)[::-1]}],
     }
-    return {PIECE_STRAIGHT: straight, PIECE_UTURN: uturn}
+    corner = {
+        "piece": PIECE_CORNER, "states": [0, 1, 2, 3], "flag": 0, "mirror_uk": False,
+        "_comment": "AVENUE_LANES.md 3: avenue corner, inner bend (2 x 2 block: inner and outer 11203 at one state, two "
+                    "11204 halves); traffic enters across z+ and leaves across x- at state 0, a right turn: median lane "
+                    "(175,255) -> (0,80) on r 175 (23601 in English, stock 1024's copy in English-UK), curb lane "
+                    "(80,255) -> (0,175) on r 80 (stock 768 in English, 23602's copy in English-UK). The outer bend is 21701.",
+        "vehicle": {"class": "car", "speed": 48000, "lanes": [
+            {"from": [175, 255], "to": [0, 80]},
+            {"from": [80, 255], "to": [0, 175]}]},
+        "pedestrian": _stock_ped(game, 11203),
+        "connects": {"road": MATRIX_CORNER},
+        "curves": [],
+    }
+    return {PIECE_STRAIGHT: straight, PIECE_UTURN: uturn, PIECE_CORNER: corner}
 
 
 # ----------------------------------------------------------------- crossings / slopes on a half (AVENUE_LANES.md 3)
@@ -195,10 +215,10 @@ def cross_specs(game=None):
                 if hits:
                     continue
             # make it from the stock road curve at the same slot (reversed, or the other slot's moved over)
-            src = None
+            src, skey = None, None
             for ln, (sa, sb) in zip(road, pts):
                 if pos(sa) == pos(a) and ln.get("path") is not None:
-                    src = _curve_pts(P, ln["path"])
+                    src, skey = _curve_pts(P, ln["path"]), ln["path"]
                     if (src[0][0], src[0][2]) != (a[0], a[2]):
                         src = src[::-1]
             if src is None:
@@ -210,9 +230,10 @@ def cross_specs(game=None):
                     c = [[q[0], q[1], q[2] + dz] if axis_x else [q[0] + dz, q[1], q[2]] for q in c]
                     if (c[0][0], c[0][2]) != (a[0], a[2]):
                         c = c[::-1]
-                    src = c
+                    src, skey = c, ln["path"]
                     break
-            curves.append({"shape": shape, "pts": [list(q) for q in src]})
+            # the source stock curve's own sort id (stock slopes: 31 / 32 carry 2, 11201 / 11202 carry 0)
+            curves.append({"shape": shape, "pts": [list(q) for q in src], "sort_id": P.veh[skey]["extra"]})
             HL.inject(game, {"curves": [curves[-1]]})          # findable for the next lanes, in every language
             shape += 1
         keep = [ln for i, ln in enumerate(d["vehicle"]["lanes"]) if i not in ri]
@@ -336,6 +357,7 @@ def selftest():
     cs, lines = cross_specs(game)
     for lang in ("ENGLISH", "English-UK"):
         bad += _selftest_lang(game, S, U, lang)
+        bad += ["%s: %s" % (lang, b) for b in _selftest_corners(game, {"S": S, "U": U, "K": sp[PIECE_CORNER]}, lang)]
         for pid, base, side in lines:                    # each crossing between two one-way halves, every state
             for st in range(4):
                 t = (side + st) % 4
@@ -351,6 +373,43 @@ def selftest():
     for b in bad:
         print("  ", b)
     return not bad
+
+
+def corner_grid(axis, end, ib):
+    """{(x, z): (role, state)} of one corner pattern: the band's last row, the 2 x 2 block, the other band's first row"""
+    a, b, a2, b2 = CORNER_PATTERNS[(axis, end, ib)]
+    g = {}
+    if axis == 0:
+        g[(0, -end)], g[(1, -end)] = ("S", 1), ("S", 3)
+        A, B, A2, B2 = (0, 0), (1, 0), (0, end), (1, end)
+        cx = 2 if ib else -1
+        zs = sorted((0, end))
+        g[(cx, zs[0])], g[(cx, zs[1])] = ("S", 2), ("S", 0)
+    else:
+        g[(-end, 0)], g[(-end, 1)] = ("S", 2), ("S", 0)
+        A, B, A2, B2 = (0, 0), (0, 1), (end, 0), (end, 1)
+        cz = 2 if ib else -1
+        xs = sorted((0, end))
+        g[(xs[0], cz)], g[(xs[1], cz)] = ("S", 1), ("S", 3)
+    g[A] = ("K", a) if not ib else ("S", a)
+    g[B] = ("K", b) if ib else ("S", b)
+    g[A2] = ("S", a2) if not ib else ("U", a2)
+    g[B2] = ("U", b2) if not ib else ("S", b2)
+    return g
+
+
+def _selftest_corners(game, pieces, lang):
+    bad = []
+    for (axis, end, ib) in sorted(CORNER_PATTERNS):
+        g = corner_grid(axis, end, ib)
+        for (x, z), (ra, sa) in g.items():
+            for side, (dx, dz) in (("E", (1, 0)), ("S", (0, 1))):
+                o = g.get((x + dx, z + dz))
+                if o is None:
+                    continue
+                for pr in check(pieces[ra], sa, pieces[o[0]], o[1], side, game, lang):
+                    bad.append("corner pattern %s: (%d,%d)-(%d,%d): %s" % ((axis, end, ib), x, z, x + dx, z + dz, pr))
+    return bad
 
 
 def _selftest_lang(game, S, U, lang):

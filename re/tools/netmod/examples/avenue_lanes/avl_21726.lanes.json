@@ -1,0 +1,100 @@
+{
+ "piece": 21726,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 0,
+ "mirror_uk": false,
+ "_comment": "AVENUE_LANES.md 3: avenue corner, inner bend (2 x 2 block: inner and outer 11203 at one state, two 11204 halves); traffic enters across z+ and leaves across x- at state 0, a right turn: median lane (175,255) -> (0,80) on r 175 (23601 in English, stock 1024's copy in English-UK), curb lane (80,255) -> (0,175) on r 80 (stock 768 in English, 23602's copy in English-UK). The outer bend is 21701.",
+ "vehicle": {
+  "class": "car",
+  "speed": 48000,
+  "lanes": [
+   {
+    "from": [
+     175,
+     255
+    ],
+    "to": [
+     0,
+     80
+    ]
+   },
+   {
+    "from": [
+     80,
+     255
+    ],
+    "to": [
+     0,
+     175
+    ]
+   }
+  ]
+ },
+ "pedestrian": {
+  "walks": [
+   {
+    "from": [
+     15,
+     15
+    ],
+    "to": [
+     240,
+     240
+    ],
+    "path": 768
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     15,
+     15
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     15,
+     240
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     15,
+     240
+    ],
+    "code": 24
+   },
+   {
+    "at": [
+     240,
+     240
+    ],
+    "code": 24
+   }
+  ]
+ },
+ "connects": {
+  "road": {
+   "low": [
+    [
+     "z+",
+     "x-"
+    ]
+   ],
+   "high": [
+    [
+     "x-",
+     "z+"
+    ]
+   ]
+  }
+ },
+ "curves": []
+}

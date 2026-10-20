@@ -1,0 +1,13 @@
+[1/12] t=30s hung=False evals=937554 PASS 
+[2/12] t=60s hung=False evals=947152 PASS 
+[3/12] t=90s hung=False evals=997272 PASS 
+[4/12] t=120s hung=False evals=1049046 PASS C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\re\harness\inst_avlanes\uJ_04.png
+[5/12] t=150s hung=False evals=1157256 PASS 
+[6/12] t=180s hung=False evals=1165562 PASS 
+[7/12] t=210s hung=False evals=1224965 PASS 
+[8/12] t=240s hung=False evals=1274765 PASS C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\re\harness\inst_avlanes\uJ_08.png
+[9/12] t=270s hung=False evals=1337339 PASS 
+[10/12] t=300s hung=False evals=1400987 PASS 
+[11/12] t=330s hung=False evals=1462213 PASS 
+[12/12] t=360s hung=False evals=1501882 PASS C:\Users\maria\Desktop\Proyectos\Simcity_stock_avlanes\re\harness\inst_avlanes\uJ_12.png
+done: 0 hung sample(s) of 12
