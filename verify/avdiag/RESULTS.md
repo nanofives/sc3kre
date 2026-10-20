@@ -1,0 +1,105 @@
+# avdiag results: diagonal avenues on one-way halves (2026-10-19)
+
+Plan: `verify/avdiag/PLAN.md`. Base: avcore's AVL (child/avcore 4c7e510, merged into child/avdiag). Test tree
+`Simcity_stock_avdiag`, instance `re\harness\inst_avdiag`, packages avenue_lanes (avcore) + diagonal_avenue, lab city
+copy `d1.sc3`.
+
+## 1. Lanes (offline, `re/tools/netmod/avdiag_build.py`)
+
+The builder draws each scene's planned lanes as world lines (one direction per carriageway, right-hand), cuts them
+per cell, keeps one lane set per piece, checks it everywhere the piece is used, and writes the curves and specs.
+
+| check | result |
+|---|---|
+| border joins (every lane end on a border meets a lane of the next cell, same point, same direction): the 48 drag footprints, the 8 merge cases, 32 junction scenes, 8 crossing kinds x 4 turns, both bends x 4 turns | 19,336 joins, 0 problems |
+| turns per kind | road crossing 8, avenue ending on a road 4, road meeting one carriageway 2 (right in, right out), diagonal x straight 8, diagonal x diagonal 8, either T 4 |
+| lane graph (interior nodes with a way in and a way on) | 0 problems |
+| curves | 1,016 lane segments on stock curves (within 12 lane units of the planned path), 352 new shapes 23800..25251; 0 conflicts. A lane whose end points a stock curve of another path already has is split at a via node |
+| `netpack validate` diagonal_avenue | OK, 0 warnings (96 variants, 96 lane specs, every language) |
+| avcore `avlanes.check`, bend joins with 21700 | clean in ENGLISH and English-UK |
+| hwave diagonal transition 21604..21609 | no crossing; 32 new shapes 25400..25431; package compiles, 0 warnings |
+
+Changes from the plan sheet, seen while building: the end U-turn fits inside the last middle cell (two semicircles
+on the median line, tangent to the diagonal lanes), so the cap cells past it carry no lanes; a drag one step longer
+ends the same way, its extra step is a dead stub; a road that meets one carriageway gets right in / right out (the art
+has no opening in the median there). Owner sheet of the built lanes: `MAIN\verify\avdiag\owner_shots\avdiag_built.png`.
+
+## 2. Block (`sc3netmod_dav.c`, marked lines in `sc3netmod_rbt.c`, `sc3netmod.c`, `netpack.py`, schema)
+
+- Table lines `davu 21800 21801`, `davn <piece> <variant>` (21802..21805), `davt <piece> <variant>` (21806, 21807)
+  from the package's `auto_diagonal_avenues[0].oneway`; the T crossing ids 21810..21816 come in the crossing templates.
+- Writer roles: at a free end (no bend, crossing, junction, merge) the last middle cell's 20500 becomes the U-turn
+  variant and the band cells past it their no-lane variants; a junction cell whose road arrives from one side only
+  becomes its T variant. Same rule as the twin `avdiag_build.roles`.
+- A diagonal that bends into or crosses a straight avenue converts only if `avl_band_ok` says that straight band
+  converts (before writing); the AVL_POST_DAV hook re-runs the pass with `avl_dir` and puts a band back to the stock
+  tiler if AVL left its straight avenue two-way. Stats line: `left two-way for a straight avenue=`.
+- 14 `avlj` lines in the package's `avenue_lines` (bend and XS / TS crossing faces).
+
+## 3. In game (lab, PIDs 41696 then 22120)
+
+| case | log / grid |
+|---|---|
+| two joined diagonal drags (44,14)-(54,24), (45,14)-(55,24) | `dav: edit: band axis 0, 10 row(s) ... 32 written`; top end 21803 (cap, no lanes) / 20501 (U-turn) / 20505; bottom end 21801 (20500 U-turn) / 21802, caps 21804 |
+| road across the band at z 17 | 20510.2 / 20512.0 / 20510.0 |
+| road from the east ending on the band at z 20 | 21806.0 (one-sided T) |
+| save | `save: 32 variant tile(s) written as base`; the save file holds stock ids only in the band area (29, 35, 43, 1999, 18004, 11225: 0 variant ids) |
+| reload | `load: all 32 variant tiles restored`; DAV load pass 0 written |
+| two straight drags (54,24)-(54,32), (55,24)-(55,32) from the band's bottom end | `dav: ... bends 0/2`; `avl: edit: band along z from (54,24) rows 0..7 -> one-way (ends: join or edge / U-turn)`: 21700.1 (runs N, beside the diagonal's north-going side) / 21700.3, U-turn 21701 |
+
+| rebuilt with `dav_band_ok` (PIDs 23024, 54544, 11896): the bend drawn on the reloaded city, saved, reloaded | save `48 variant tile(s) written as base` (30 DAV + 18 AVL); the file holds 0 variant ids (43 / 35 at the joint, 11204.1 / 11204.3 and 11203 on the straight band); reload `load: all 48 variant tiles restored`, DAV load pass `bends 0/2 ... 0 written`, `avl: load: band along z from (54,24) rows 0..7 -> one-way (ends: join or edge / U-turn)` |
+
+Screenshots: `MAIN\verify\avdiag\owner_shots\avdiag_game_band.png`, `avdiag_game_bend_junctions.png`.
+
+Trap: `nr_drive.py save` returns before the game writes the city file; stopping the game right after the DLL's
+`save:` line left the previous file. Wait for the file's time stamp to change.
+
+## 4. For bvlanes / DBV: `dav_band_ok`
+
+    static int dav_band_ok(int x, int z);   /* sc3netmod_dav.c, included before sc3netmod_dbv.c: call it directly */
+
+Would the diagonal avenue band through cell (x, z) convert to DAV's one-way pieces, on the current road grid with the
+full DAV rule (junctions, crossings, merges, ends, bends, and their straight avenues through `avl_band_ok`)? A dry pass
+over the cell's surroundings (+-40 cells, the whole map if the band reaches that box): nothing written, nothing
+reverted, no state kept. 1 = converts; 0 = it would be left to the stock tiler, or DAV is off, or (x, z) is not a cell
+of a diagonal band (a lone diagonal, a cell DBV claims). A DBV-claimed cell is never a band cell (DAV ends the band
+there, bend kind 3), so ask with a cell of the avenue part past DBV's claim, e.g. its first full row. Valid at any
+time (it reads the grid through g_rb_mgr); during DBV's own pass, cells DBV has not written yet read as they are.
+Not exercised in game yet (no DBV caller).
+
+Not done yet: animated cars and routing in a populated city (the lab has no traffic), crossings with another avenue
+in game, a game without the mod (checked offline on the save file only), hwave transition and the DBV edge in game.
+
+## 5. Owner rule: no left turn of radius <= 80 lane units (2026-10-19, avjunc's Seoul bisect)
+
+Measured on the planned lane lines (dense, before integer rounding) of every scene, before the fix:
+
+| lanes | smallest left radius |
+|---|---|
+| end U-turn inner lane (20501..20504, 21800, 21801): a semicircle on the median line | 55 |
+| median-opening left turns at a road crossing (20512, 20513) | 70 |
+| diagonal x straight avenue lefts (20556, 20557, 20560, 20561, 20569..20572) | 70 |
+| diagonal ending on a diagonal (TX0 / TX1) | 77..78 |
+| hwave diagonal transition 21604..21609 | none (no left turn) |
+
+Fix (`avdiag_build.py` LEFT_MIN = 88, UTURN_RHO):
+- end U-turn: the outer lane stays a semicircle of 124 (the end cell allows no wider one); the inner lane is a reverse
+  curve (a right arc away from the median, then a left arc of 84.2 round the end, then a right arc back), the widest
+  whose apex stays inside the outer lane (14 units apart) and inside the cell. 21701's inner lane is not copied.
+- turns: a left turn is first tried as a circular fillet of radius 92 at the lanes' crossing point, else as cubic
+  curves whose left stretches stay above 88; a left that fits neither is not built. Only one does not fit: at an avenue
+  ending on a road, the arriving carriageway's sharp (135 degree) left. Its inner lane then shares the right turn of
+  the outer lane (and on the other axis the leaving inner lane is fed from the road like the outer one), so no lane
+  is a dead end. Turns per kind otherwise unchanged (road crossing 8, diagonal crossings 8, T's 4).
+- smallest planned left radius now: 84.1 (the U-turn inner lane); every turn >= 88.
+- curve points: no two closer than 6 lane units (integer rounding on close points made the heading jitter).
+
+Not measured on the stored curves with a trustworthy metric: a 3-point or least-squares radius over the integer
+curve points reads stock 11203 curve 1024 (radius 175) as 54..144 depending on the window, so it cannot rank 84 vs
+80. avcore's geometric check (avlanes.py) is to be run on the package once merged.
+
+Update, same day: the rule was RETRACTED (avjunc's hang was its own Frida probe). LEFT_MIN is 0 again: the sharp
+135-degree left at an avenue ending on a road is built again (stem 4 turns, no shared right); 92-unit fillets are still
+tried first and the wider U-turn (inner reverse curve 84, outer 124) stays. Rebuilt after avcore's hwlanes extra_for
+(3559939): new flat curves carry sort id 0 like stock. 19,304 joins 0 problems, 394 new shapes 23800..25293,
+validate OK; `avlanes tightleft` flags lefts up to 88 (informational now).

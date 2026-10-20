@@ -201,6 +201,16 @@
             "description": "Task diagave: merge cases, where one carriageway ends and the other goes on as a single road (diagave.py MERGE_TABLE)."
           },
           "save_43": {"type": "array", "items": {"$ref": "#/$defs/piece_id"}, "description": "Merge pieces that hold both roads: saved as 43 so a game without the mod keeps the road joined."},
+          "oneway": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Task avdiag: the one-way lane roles the DAV writer places (verify/avdiag/PLAN.md): uturn = [piece for the end toward -t, piece for +t] standing for the middle piece 20500 at a free end (saved as 43); none = {lone or outer piece: its variant without lanes} for the cells past a U-turn; junction_t = {junction piece: variant} where the road arrives from one side only.",
+            "properties": {
+              "uturn": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/piece_id"}},
+              "none": {"type": "object", "additionalProperties": {"$ref": "#/$defs/piece_id"}},
+              "junction_t": {"type": "object", "additionalProperties": {"$ref": "#/$defs/piece_id"}}
+            }
+          },
           "crossing": {
             "type": "array",
             "items": {
