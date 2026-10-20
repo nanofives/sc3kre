@@ -1,0 +1,8 @@
+12:[ 4708.137 ms][tid 4370] RZ   *** VEH FAULT *** code=0xC0000096 at SC3U.exe+0x84122 (base 0x00400000)  (resize step at fault=0)
+13-[ 4708.216 ms][tid 4370] RZ   VEH regs eax=00000000 ecx=47C90000 edx=00000000 ebx=00000001 esi=7FFFFFFF edi=FFFFFFFF ebp=001AFD00 esp=001AFCFC
+14-[ 4708.239 ms][tid 4370] RZ   VEH [esp]=0x00000000 -> 0x00000000 (no module)
+--
+6801:[850821.916 ms][tid d704] RZ   *** VEH FAULT *** code=0xC0000005 at frida-agent.dll+0x177B34 (base 0x60850000)  (resize step at fault=0)
+6802-[850822.005 ms][tid d704] RZ   VEH access=WRITE addr=0x00000000
+6803-[850822.029 ms][tid d704] RZ   VEH regs eax=00000000 ecx=00000080 edx=00000000 ebx=00000000 esi=75A8B3B0 edi=614BF8F6 ebp=00000031 esp=03B5FBF0
+--

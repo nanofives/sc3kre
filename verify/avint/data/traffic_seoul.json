@@ -1,0 +1,106 @@
+{
+ "groups": {
+  "none": [
+   [
+    0,
+    0,
+    0,
+    0
+   ]
+  ]
+ },
+ "box": [
+  0,
+  0,
+  0,
+  0
+ ],
+ "secs": 21.125545024871826,
+ "months": [
+  {
+   "trips": 2767,
+   "arrived": 2693,
+   "arrived_hwy": 72,
+   "grp_trips": {
+    "none": 0
+   },
+   "grp_amt": {
+    "none": 0
+   },
+   "days": 14,
+   "game_trips": 3812,
+   "game_failed": 93,
+   "game_fail_ratio": 0.024396643042564392,
+   "game_avg_c0": 52,
+   "game_bc": 120,
+   "hwy_snap": {
+    "none": 0
+   },
+   "hwy_snap_total": 64341
+  },
+  {
+   "trips": 3755,
+   "arrived": 3674,
+   "arrived_hwy": 100,
+   "grp_trips": {
+    "none": 0
+   },
+   "grp_amt": {
+    "none": 0
+   },
+   "days": 45,
+   "game_trips": 3755,
+   "game_failed": 81,
+   "game_fail_ratio": 0.021571237593889236,
+   "game_avg_c0": 51,
+   "game_bc": 121,
+   "hwy_snap": {
+    "none": 0
+   },
+   "hwy_snap_total": 73900
+  },
+  {
+   "trips": 3364,
+   "arrived": 3292,
+   "arrived_hwy": 77,
+   "grp_trips": {
+    "none": 0
+   },
+   "grp_amt": {
+    "none": 0
+   },
+   "days": 77,
+   "game_trips": 3364,
+   "game_failed": 72,
+   "game_fail_ratio": 0.02140309102833271,
+   "game_avg_c0": 48,
+   "game_bc": 112,
+   "hwy_snap": {
+    "none": 0
+   },
+   "hwy_snap_total": 72016
+  },
+  {
+   "trips": 3661,
+   "arrived": 3595,
+   "arrived_hwy": 76,
+   "grp_trips": {
+    "none": 0
+   },
+   "grp_amt": {
+    "none": 0
+   },
+   "days": 108,
+   "game_trips": 3661,
+   "game_failed": 66,
+   "game_fail_ratio": 0.018027860671281815,
+   "game_avg_c0": 48,
+   "game_bc": 120,
+   "hwy_snap": {
+    "none": 0
+   },
+   "hwy_snap_total": 70064
+  }
+ ],
+ "cells": {}
+}

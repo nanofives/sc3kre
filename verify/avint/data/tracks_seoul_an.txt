@@ -1,0 +1,130 @@
+38,40    21700.1  visits {}  lateral {}
+38,41    21700.1  visits {}  lateral {}
+38,42    21700.1  visits {}  lateral {}
+38,43    21700.1  visits {}  lateral {}
+38,44    21700.1  visits {'E': 3}  WRONG {'E': 3}  lateral {0: 103, 32: 104, 64: 96, 96: 100}
+38,45    21700.1  visits {}  lateral {}
+38,46    21700.1  visits {'N': 19}  lateral {64: 2365, 160: 2284}
+38,50    21700.1  visits {'N': 15}  lateral {64: 2776, 160: 993}
+38,51    21700.1  visits {'N': 16}  lateral {64: 3306, 160: 763}
+38,55    21700.1  visits {'N': 32}  lateral {64: 4325, 160: 3469}
+38,56    21700.1  visits {'N': 30}  lateral {64: 4272, 160: 3605}
+38,57    21700.1  visits {'N': 31}  lateral {64: 4049, 160: 3849}
+38,58    21700.1  visits {'N': 29}  lateral {64: 3123, 160: 3907}
+38,59    21700.1  visits {'N': 17}  lateral {64: 2021, 160: 2234}
+38,63    21700.1  visits {}  lateral {}
+38,64    21700.1  visits {}  lateral {}
+38,65    21700.1  visits {}  lateral {}
+38,66    21700.1  visits {}  lateral {}
+38,67    21700.1  visits {}  lateral {}
+38,68    21700.1  visits {}  lateral {}
+38,69    21700.1  visits {}  lateral {}
+38,70    21700.1  visits {}  lateral {}
+38,71    21700.1  visits {}  lateral {}
+38,75    21716.2  visits {}  lateral {}
+38,76    21717.0  visits {}  lateral {}
+38,77    21700.1  visits {}  lateral {}
+38,78    21700.1  visits {}  lateral {}
+38,82    21700.1  visits {}  lateral {}
+38,83    21700.1  visits {}  lateral {}
+38,84    21700.1  visits {}  lateral {}
+38,85    21700.1  visits {}  lateral {}
+38,86    21700.1  visits {}  lateral {}
+38,87    21700.1  visits {}  lateral {}
+38,88    21700.1  visits {}  lateral {}
+38,89    21700.1  visits {}  lateral {}
+38,90    21700.1  visits {}  lateral {}
+39,40    21700.3  visits {}  lateral {}
+39,41    21700.3  visits {}  lateral {}
+39,42    21700.3  visits {}  lateral {}
+39,43    21700.3  visits {}  lateral {}
+39,44    21700.3  visits {}  lateral {}
+39,45    21700.3  visits {}  lateral {}
+39,46    21700.3  visits {'S': 1}  lateral {160: 253}
+39,50    21700.3  visits {'S': 9}  lateral {64: 838, 160: 1436}
+39,51    21700.3  visits {'S': 10}  lateral {64: 1539, 160: 1302}
+39,55    21700.3  visits {'S': 10}  lateral {64: 1234, 160: 1234}
+39,56    21700.3  visits {'S': 16}  lateral {64: 1782, 160: 2243}
+39,57    21700.3  visits {'S': 22}  lateral {64: 2008, 160: 3518}
+39,58    21700.3  visits {'S': 23}  lateral {64: 2291, 160: 3567}
+39,59    21700.3  visits {'S': 23}  lateral {64: 2407, 160: 3488}
+39,63    21700.3  visits {}  lateral {}
+39,64    21700.3  visits {}  lateral {}
+39,65    21700.3  visits {}  lateral {}
+39,66    21700.3  visits {}  lateral {}
+39,67    21700.3  visits {}  lateral {}
+39,68    21700.3  visits {}  lateral {}
+39,69    21700.3  visits {}  lateral {}
+39,70    21700.3  visits {}  lateral {}
+39,71    21700.3  visits {}  lateral {}
+39,75    21717.2  visits {}  lateral {}
+39,76    21716.0  visits {}  lateral {}
+39,77    21700.3  visits {}  lateral {}
+39,78    21700.3  visits {}  lateral {}
+39,82    21700.3  visits {}  lateral {}
+39,83    21700.3  visits {}  lateral {}
+39,84    21700.3  visits {}  lateral {}
+39,85    21700.3  visits {}  lateral {}
+39,86    21700.3  visits {}  lateral {}
+39,87    21700.3  visits {}  lateral {}
+39,88    21700.3  visits {}  lateral {}
+39,89    21700.3  visits {}  lateral {}
+39,90    21700.3  visits {}  lateral {}
+51,62    21701.3  visits {}  lateral {}
+51,63    21701.2  visits {}  lateral {}
+52,62    21700.2  visits {}  lateral {}
+52,63    21700.0  visits {}  lateral {}
+56,62    21700.2  visits {}  lateral {}
+56,63    21700.0  visits {}  lateral {}
+57,62    21700.2  visits {}  lateral {}
+57,63    21700.0  visits {}  lateral {}
+60,40    21700.1  visits {}  lateral {}
+60,41    21700.1  visits {}  lateral {}
+60,42    21700.1  visits {}  lateral {}
+60,43    21700.1  visits {}  lateral {}
+60,44    21700.1  visits {}  lateral {}
+60,45    21700.1  visits {}  lateral {}
+60,46    21700.1  visits {}  lateral {}
+60,59    21700.1  visits {}  lateral {}
+61,40    21700.3  visits {}  lateral {}
+61,41    21700.3  visits {}  lateral {}
+61,42    21700.3  visits {}  lateral {}
+61,43    21700.3  visits {}  lateral {}
+61,44    21700.3  visits {}  lateral {}
+61,45    21700.3  visits {}  lateral {}
+61,46    21700.3  visits {'N': 1}  WRONG {'N': 1}  lateral {128: 3, 160: 24, 192: 20, 224: 17}
+61,59    21700.3  visits {}  lateral {}
+64,62    21700.2  visits {}  lateral {}
+64,63    21700.0  visits {}  lateral {}
+65,62    21700.2  visits {}  lateral {}
+65,63    21700.0  visits {}  lateral {}
+66,62    21700.2  visits {}  lateral {}
+66,63    21700.0  visits {}  lateral {}
+67,62    21700.2  visits {}  lateral {}
+67,63    21700.0  visits {}  lateral {}
+68,62    21700.2  visits {}  lateral {}
+68,63    21700.0  visits {}  lateral {}
+69,62    21700.2  visits {}  lateral {}
+69,63    21700.0  visits {}  lateral {}
+73,62    21700.2  visits {}  lateral {}
+73,63    21700.0  visits {}  lateral {}
+74,62    21700.2  visits {}  lateral {}
+74,63    21700.0  visits {}  lateral {}
+75,62    21700.2  visits {}  lateral {}
+75,63    21700.0  visits {}  lateral {}
+79,62    21700.2  visits {}  lateral {}
+79,63    21700.0  visits {}  lateral {}
+80,62    21700.2  visits {}  lateral {}
+80,63    21700.0  visits {}  lateral {}
+paths:
+   14  38,46
+   10  39,55 > 39,56 > 39,57 > 39,58 > 39,59
+    7  39,50 > 39,51
+    7  38,59 > 38,58 > 38,57 > 38,56 > 38,55
+    6  39,57 > 39,58 > 39,59
+    6  39,56 > 39,57 > 39,58 > 39,59
+    6  38,58 > 38,57 > 38,56 > 38,55
+    4  38,51 > 38,50
+    3  38,57 > 38,56 > 38,55
+    3  39,51
+wrong-way visits on straight halves: 4
