@@ -84,3 +84,74 @@ One relaunch crashed 0xC0000005 at 438 ms, before the city load; the next launch
 - Tree prep for package installs: the release ships no netpack ledger, so `Simcity_stock_avint`'s `ledger.json` and
   `packs\` were copied into the test tree before reinstalling boulevard_junctions. A republish needs the same
   reinstall in the staging tree (avint) with this package.
+
+# img10 (owner report 2026-10-21, LAN build of main 67bd9ea): boulevard x avenue T, the avenue going into a highway
+
+Owner: "why is this 3 lane intersection like this?" (`MAIN\verify\ownerbugs_1021\owner_shots\img10_bv_avenue_T.png`): a
+boulevard with an avenue ending on its side, the avenue a few cells long and going up a highway ramp (hwave
+transition). The T is a 3x3 of plain stock crossings. Owner log `MAIN\verify\handtest_2026-10-21b\sc3netmod.log`, undo
+log beside it. Sheet: `MAIN\verify\avx32\owner_shots\img10_sheet.png`.
+
+## What the owner did (the two logs)
+576 s the T box DID build (`bv: ... 29 cell(s)` = 27 + the 2 avenue noses). 579 s a 4th parallel road beside the
+boulevard (`road more than 3 wide`). 586 s / 588 s demolishes: `an avenue arm that would stay two-way` from then on.
+594 s a demolish converted the boulevard again, and the 595 s undo reverted that, which left the grid in img10.
+
+## Cause (reproduced in game, lab shifted one cell: highway cap x=52, avenue x=53..56, boulevard x=57..59)
+Two "would this band convert if my end counted" queries (`avl_band_ok`) face each other on the short avenue:
+- BVX builds the box only if the avenue arm's band converts. The band's far end is hwave's ground row, and AVL takes
+  only the one-way row 21850 / 21851 (`avlj`) as a join, not the two-way T2 pair 21602 / 21603.
+- hwave writes the one-way row only if the band converts from its side. That band's far end is the box side, which
+  is a join only once BVX has built its noses.
+The 4th road made BV refuse, so the arm went stock, AVL reverted the band and hwave put T2 back. After the demolish,
+each side waits on the other and nothing converts. Same lines as the owner's log, frame `img10_repro_stuck.png`.
+
+## Fix (`sc3netmod_avl.c`, avl_end + avl_band, marked task avx32)
+A highway transition's ground row at a band end is the band's to choose. Either pair is read as the one-way pair
+(T2 exit 21602 -> 21850, T2 entry 21603 -> 21851, same state) when the end is checked, and it reports end kind 4.
+`avl_band` then writes 21850 / 21851 when the band converts and 21602 / 21603 when it does not, which is what
+`hwave_build` writes for the same answer. So the queries no longer deadlock, and the band and its ground row always
+agree, also when the edit is outside hwave's pass box (about 11 cells round the edit). No new ids, no table change.
+
+## In game (final DLL, tree Simcity_stock_avx32)
+| case | result |
+|---|---|
+| owner's sequence: highway, avenue, 3 roads, 4th road, demolish it | box 20910..20914 / 20903..20905, ground row 21850 / 21851, band one-way (`img10_final_owner_sequence.png`) |
+| the stuck save (made with the old code) loaded | load pass builds the box (29 written), hwave puts the one-way row back, band one-way |
+| other drag order: boulevard, highway, then the avenue, last cell at the boulevard | box + noses 20910 / 20911, 21850 / 21851; at that drag the transition was two-way, which the old check refused |
+| long avenue (16 band rows), break with a 4th road and demolish | break: band two-way and AVL writes 21602 / 21603 at the far transition (17 cells from the edit). Demolish: box, band one-way, 21850 / 21851 again |
+| save + reload | final build: 69 variant tiles restored (long avenue). Query-only build: 45 and 122 (both short Ts). Every load pass 0 written, grids identical |
+| the 122-tile save (query-only build, the same saved piece kinds) in a game without sc3netmod | stock ids only (11204 / 29 / 43, caps 15053 / 15054 and 11237 / 11235, U-turn rows 11203) |
+| first build of the query-only version, both T layouts | built, superseded by the final change above (the query-only version left a mismatch for long avenues) |
+
+## Behaviour changes beyond img10 (not reported by the owner, needed by the fix)
+- Any `avl_band_ok` caller (BV / BVX, DAV diagonal joins, RBT9 roundabout arms, hwave) now gets "converts" for a
+  band whose other end is a highway transition in its two-way state. Not tried in game for DAV / RBT9.
+- An avenue between two highway transitions can now convert (both ends read as the one-way row). Not tried in game.
+- AVL writes the two hwave ground row cells at the end of a band it decides. Before, only hwave did, so a band
+  decided outside hwave's pass box could keep the ground row of the other kind. Seen once in game with the old code:
+  one-way ground row next to a reverted two-way band.
+
+## Guard (orchestrator 2026-10-21): only a transition hwave would accept
+`sc3netmod_hwave.c` `hwave_row_ok` (new, marked task avx32): runs `hwave_check` (the conditions hwave uses to keep or
+build a transition) on a 7 x 7 window round the transition's anchor. It reads its own window because `avl_band_ok`
+can be called from inside a highway pass (`hwave_build`), where `hwy_begin`'s static pass must not be touched. Claims
+are not asked: after a ROAD pass the claim table still holds the cells hwave kept for this very transition, and
+inside a highway pass hwave has just run the same check with them. `avl_end` reads the ground row as the one-way pair
+(and takes it as the band's, end kind 4) only when both cells pass. Otherwise it keeps the old reading, so the band,
+and a box that asks about it, stay stock.
+
+In game (guard build, one lab game `labG`, then reload and no-mod load):
+| case | result |
+|---|---|
+| A: highway, avenue (4 cells), 3 boulevard roads | box + noses, ground row 21850 / 21851, band one-way |
+| A: undo of the 3rd boulevard road (drawn paused, sc3undo `UNDO> entry 1 (road): 127 op(s), 0 failed`) | grid identical to the 2-road grid before it (AVX road T, one-way avenue) |
+| A: owner's sequence, 3rd road again, 4th road (stock, T2 two-way), demolish it paused (box back), undo (`173 op(s), 0 failed`) | grid identical to the 4-road grid: stock roads and T2 two-way, nothing mixed |
+| A: demolish the 4th road again (not paused) | box + noses, 21850 / 21851, band one-way (`img10_guard_A_owner_sequence_z2.png`) |
+| B: 2-cell avenue (U-turn row + 1 cell) between highway cap and boulevard | hwave refuses (`no straight avenue past the U-turn row`), BV refuses (`an avenue arm that would stay two-way`): stock caps 15053 / 15054, stock 11203 row, stock 3-road block, no one-way piece |
+| C: other drag order: boulevard, highway, avenue | box + noses, 21850 / 21851, band one-way (`img10_guard_B_refused_C_order2.png`, bottom) |
+| save (78 variant tiles) + reload | all 78 restored, every load pass 0 written, A / B / C grids identical |
+| the same save without sc3netmod | stock ids only (11203, 11204, 15051, 15053, 15054, 29, 39, 43) |
+Undo note: sc3undo records only actions made while paused (unpausing clears the history), and a Frida attach while
+paused hangs the game. So the paused drags were posted mouse input with the tool picked before pausing, and the undo
+the sc3undo window message (WM_APP + 0x5d0, wParam 1).

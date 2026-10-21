@@ -281,7 +281,7 @@ static int avl_end(AvlPass *p, int axis, int ax, int az, int k, int end, int *u,
     int fwd = end > 0, da = axis ? 1 : 0, db = axis ? 3 : 2;     /* travel: along z A runs N, B runs S; along x A E, B W */
     int face = axis ? (fwd ? 3 : 1) : (fwd ? 0 : 2);             /* the end piece's side facing the band */
     int toward = axis ? (fwd ? 1 : 3) : (fwd ? 2 : 0);           /* travel side that points into this end */
-    int c, oaxis, ox, oz, oass;
+    int c, oaxis, ox, oz, oass, hw;
     DWORD a, b;
     char la, lb;
     *u = 0;
@@ -303,10 +303,27 @@ static int avl_end(AvlPass *p, int axis, int ax, int az, int k, int end, int *u,
         if (stk->n >= AVL_DEPTH) return 0;
         return avl_decide_r(p, oaxis, ox, oz, &k0, &k1, &ub, &uf, oass, stk);
     }
+    /* task avx32 (owner img10): a highway transition's ground row (hwave: the one-way hwavs pair, or the two-way T2
+       pair it holds while the avenue stays two-way) is read as the one-way pair (T2 exit -> hwavs exit, T2 entry ->
+       hwavs entry, same state) and is the band's to choose (*u = 4): avl_band writes the hwavs pair when the band
+       converts and the T2 pair when it does not, as hwave_build would. Else the box at an avenue's far end and the
+       ground row each wait on the other (both ask avl_band_ok) and neither converts once one went back to two-way,
+       and a band decided outside hwave's pass box keeps a ground row of the other kind */
+    /* orchestrator 2026-10-21: only a transition hwave_check accepts (hwave_row_ok, the same conditions), so a
+       transition hwave refuses leaves the band, and the box that asks about it, stock */
+    hw = g_hwave_s[0] && g_hwave_p[2] && hwave_row_ok(p->mgr, x, z, a) && hwave_row_ok(p->mgr, bx, bz, b);
+    if (hw) {
+        if (AVL_ID(a) == g_hwave_p[2] || AVL_ID(a) == g_hwave_p[3])
+            a = (a & ~0xffffUL) | g_hwave_s[AVL_ID(a) == g_hwave_p[2] ? 0 : 1];
+        if (AVL_ID(b) == g_hwave_p[2] || AVL_ID(b) == g_hwave_p[3])
+            b = (b & ~0xffffUL) | g_hwave_s[AVL_ID(b) == g_hwave_p[2] ? 0 : 1];
+    }
     la = avl_letter(AVL_ID(a), AVL_ST(a), face);
     lb = avl_letter(AVL_ID(b), AVL_ST(b), face);
     if (!la || !lb) return 0;
-    return la == (da == toward ? 'I' : 'O') && lb == (db == toward ? 'I' : 'O');
+    if (la != (da == toward ? 'I' : 'O') || lb != (db == toward ? 'I' : 'O')) return 0;
+    if (hw) *u = 4;
+    return 1;
 }
 
 typedef struct { int x, z; DWORD want; } AvlW;
@@ -396,7 +413,7 @@ static void avl_band(AvlPass *p, int axis, int ax, int az, AvlW *w, int *nw, int
         if (kind == 1) {
             avl_cell(p, ok, x, z, g_avl_uturn, 0xff, w, nw, cap, rv, nrv, rcap);
             avl_cell(p, ok, bx, bz, g_avl_uturn, 0xff, w, nw, cap, rv, nrv, rcap);
-        } else if (kind >= 2) {
+        } else if (kind == 2 || kind == 3) {
             int ib = kind == 3, x2 = x + dx * end, z2 = z + dz * end, bx2 = bx + dx * end, bz2 = bz + dz * end;
             int oaxis, ox, oz, oass;
             /* inner bend, its partner half, the other half, the outer bend */
@@ -409,6 +426,15 @@ static void avl_band(AvlPass *p, int axis, int ax, int az, AvlW *w, int *nw, int
                 avl_cell(p, ok, ox2, oz2, g_avl_uturn, 0xff, w, nw, cap, rv, nrv, rcap);
             if (avl_corner_at(p, axis, ax, az, kk, end, &oaxis, &ox, &oz, &oass) && !p->seen[oz * p->W + ox] && nnext < 2) {
                 next[nnext][0] = oaxis; next[nnext][1] = ox; next[nnext][2] = oz; nnext++;
+            }
+        } else if (kind == 4) {                                    /* task avx32: the ground row of a highway transition */
+            int c;
+            for (c = 0; c < 2; c++) {
+                int cx = c ? bx : x, cz = c ? bz : z;
+                DWORD v = avl_at(p, cx, cz);
+                WORD id = AVL_ID(v), ex = id == g_hwave_s[0] || id == g_hwave_p[2];
+                WORD want = ok ? g_hwave_s[ex ? 0 : 1] : g_hwave_p[ex ? 2 : 3];
+                if (v && *nw < cap) { w[*nw].x = cx; w[*nw].z = cz; w[*nw].want = ((DWORD)want << 8) | AVL_ST(v); (*nw)++; }
             }
         }
     }

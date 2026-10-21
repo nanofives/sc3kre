@@ -170,6 +170,36 @@ static const char *hwave_check(HwyPass *hp, int ax, int az, int k) {
     return NULL;
 }
 
+/* task avx32 (owner img10): is the ground-row piece v (T2 or hwavs, either column) at (x, z) part of a transition that
+   hwave_check accepts? For AVL's band ends (sc3netmod_avl.c avl_end), which may run inside a highway pass (hwave_build
+   -> avl_band_ok): reads its own 7 x 7 window round the anchor and leaves hwy_begin's pass alone. Claims are not
+   asked: after a ROAD pass the table still holds the cells hwave kept for this very transition, and inside a highway
+   pass hwave has just checked the transition with them */
+static int hwave_row_ok(BYTE *mgr, int x, int z, DWORD v) {
+    static HwyPass P;
+    static DWORD buf[7 * 7];
+    WORD id = hwy_id(v);
+    int k = hwy_st(v), ex = 1, ez = 0, dx = 0, dz = 1, ax, az, i, xc, ncl, ok;
+    if (!mgr || !g_hwave_p[0] || g_hwave_off || !v) return 0;
+    if (id == g_hwave_p[2] || (g_hwave_s[0] && id == g_hwave_s[0])) xc = 1;
+    else if (id == g_hwave_p[3] || (g_hwave_s[0] && id == g_hwave_s[1])) xc = 0;
+    else return 0;
+    hwy_rot(k, &ex, &ez);
+    hwy_rot(k, &dx, &dz);
+    ax = x - (xc ? ex : 0) - dx;                 /* as hwave_run: roles 2 / 3 sit in the U-turn row */
+    az = z - (xc ? ez : 0) - dz;
+    ZeroMemory(&P, sizeof(P));
+    P.mgr = mgr; P.lay = *(void **)(mgr + 0x3c);
+    P.W = (*(int *)(mgr + 0x5c) >> 8) + 1; P.H = (*(int *)(mgr + 0x60) >> 8) + 1; P.who = "avl";
+    P.x0 = P.b.x0 = ax - 3; P.z0 = P.b.z0 = az - 3; P.x1 = ax + 3; P.z1 = az + 3; P.b.w = P.b.h = 7; P.b.c = buf;
+    for (i = 0; i < 49; i++) buf[i] = hwy_read(mgr, P.lay, P.b.x0 + i % 7, P.b.z0 + i / 7, P.W, P.H);
+    ncl = g_hwy_nclaim;
+    g_hwy_nclaim = 0;
+    ok = hwave_check(&P, ax, az, k) == NULL;
+    g_hwy_nclaim = ncl;
+    return ok;
+}
+
 /* write piece.state into any cell (FUN_10008919 replaces the removable occupant, road or highway [CONFIRMED @
    0x10008919]) and refresh the pass buffer; keep = claim + keep it for hwy_end */
 static int hwave_write(HwyPass *hp, int x, int z, WORD id, int st, int keep) {
