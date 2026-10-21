@@ -36,7 +36,7 @@ APPS_STOCK_FROM_ORIGINAL = ["SIMSPR.DLL", "GZGraphicD.dll"]
 # per-PC state the game or a mod writes: shipped once, never overwritten by the updater
 SEED = {"apps/sc3.cfg", "apps/sc3net.cfg", "apps/sc3u.ini"}
 MOD_BINS = ["mods_launch.exe", "sc3resize.dll", "sc3bigcity.dll", "sc3overscroll.dll", "sc3simrun.dll", "sc3perf.dll",
-            "sc3netmod.dll"]
+            "sc3netmod.dll", "sc3undo.dll"]
 NETMOD_PARTS = ["overlay", "tables"]          # not ledger.json (dev-PC paths) nor packs (sources, reinstall only)
 
 
