@@ -32,6 +32,7 @@ was tested with `sc3resize` on the 1024 Europolis city (2026-10-09/11).
 | 5 | ~~`sc3overscroll` with click-to-place tools~~: owner call 2026-10-14, leave as is (closed) | `formats/CAMERA_OVERSCROLL.md` |
 | 6 | The 10-12 package as downloaded from GitHub: smoke test run by the session, not by the owner | `verify/mods_release_1012/RESULTS.md` |
 | 7 | Alt+Enter borderless fullscreen, window size/maximize/fullscreen remembered, resolution dropdown hidden, start forced to 800x600 (2026-10-20, branch `child/fullscreen`): session run passed, owner hand test | `verify/fullscreen/RESULTS.md` |
+| 8 | `sc3undo` (2026-10-21 leftovers round, on main): bulldoze and the lookup caches now undo byte-identically, network terrain fix no longer clears history, snapshot mode removed, buttons clear of the N label, maximized and 1024 checked. Open: owner hand test of real Ctrl+Z / Ctrl release (card in RESULTS), startup race fix PARKED by owner (U-085), landmark 1-byte zone residue (U-086), marina / on-ramp / multi-cell class not reached | `verify/undo_mod/RESULTS.md`, `verify/startup_death/RESULTS.md` |
 
 Known limits, not bugs to chase: changing monitors while running can crash (DirectDraw), the DWM8And16BitMitigation
 compat layer needs `mods_launch.exe -exe <renamed copy>`, traffic on dense 1024 maps is the throughput ceiling.
