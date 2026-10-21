@@ -826,9 +826,12 @@ static int patch_minimap_vtable(HMODULE sui) {
  * Left alone: SIMSERV FlammabilityLayer 0x61448030 (a re-inserted occupant stamps its value at once; the sim's scan
  * recomputes every cell anyway) and the crime / pollution module-global lookup caches (verify/undo_spike).
  *   TERRAIN TOOLS (raise, lower, level, water, trees): one entry per mouse press, see "TERRAIN TOOLS" below.
- * Not journaled: terrain levelled by a network drag whose ends are on an illegal slope (network manager vtable
- * 0x1002c7bc +0x118 FUN_100086c8). If that runs inside an action, the history is cleared instead (undoing the rest
- * would leave the terrain wrong). */
+ * Terrain levelled by a network drag whose ends are on an illegal slope (network manager vtable 0x1002c7bc +0x118
+ * FUN_100086c8, called from +0xf0 FUN_10014a23 when an end is unattached and FUN_10016d00 fails): FUN_100086c8 writes
+ * through DirtBag +0x120 FUN_1000c5d0, whose terrain writes are all DirtBag vtable calls, +0x84 per vertex (two sites)
+ * and +0x88 water table [CONFIRMED @ SIMDIRT 0x1000c5d0]; both are logged above, so the entry is kept (until
+ * 2026-10-21 the history was cleared). Not seen at runtime: 3 runs of roads over raised hills never reached it.
+ * SC3UNDO_TFIX=0 brings the old barrier back. */
 enum { OP_INS = 1, OP_REM = 2, OP_CELL = 3, OP_ALT = 4, OP_WATER = 5, OP_BLOCK = 6 };
 typedef struct { BYTE op, old, neu; short x, z; void *obj, *occ; } JOp;
 /* BULLDOZE EXACTNESS (2026-10-21, verify/undo_leftovers bd*): two kinds of write the occupant log does not cover.
@@ -853,6 +856,7 @@ static int g_jn, g_jcur;              /* entries 0..g_jn-1; the first g_jcur are
 static BYTE *g_jcity;
 static JEntry g_rec;                  /* the action being recorded */
 static volatile int g_recording, g_rec_barrier, g_replaying;
+static int g_rec_tfix, g_tfix_ok = 1; /* network terrain fixes inside the scope; SC3UNDO_TFIX=0 restores the old barrier */
 static int g_pend = -1;              /* entry whose deferred writes are still being collected (tr_finalize) */
 
 static void j_entry_free(JEntry *e) {
@@ -1150,6 +1154,7 @@ static int scope_open(const char *name) {
     memset(&g_rec, 0, sizeof(g_rec));
     g_rec.tool = name;
     g_rec_barrier = 0;
+    g_rec_tfix = 0;
     g_scope_budget = bu;
     g_scope_f0 = funds_of(bu);
     tr_snapshot(city);
@@ -1175,6 +1180,7 @@ static void scope_close(void) {
         logf("APPLY> %s: %d inserted, %d removed, %d zone cell(s), %d terrain op(s), %d retile(s) so far, $%lu -> entry %d of %d",
              g_rec.tool, ins, rem, cell, alt, g_j[g_jn - 1].nrt, g_j[g_jn - 1].money, g_jcur, g_jn);
         g_pend = g_jn - 1;
+        if (g_rec_tfix) logf("APPLY> %d network terrain fix(es) inside this action, kept in the entry", g_rec_tfix);
         memset(&g_rec, 0, sizeof(g_rec));
     } else {
         if (g_rec.money) logf("APPLY> %s: $%lu charged but no change recorded", g_rec.tool, g_rec.money);
@@ -1251,7 +1257,7 @@ static DWORD __fastcall terrain_fix(void *mgr, void *edx, DWORD a0, DWORD a1, DW
                                     DWORD a6, DWORD a7) {
     DWORD a[8];
     (void)edx;
-    if (g_recording) g_rec_barrier = 1;
+    if (g_recording) { g_rec_tfix++; if (!g_tfix_ok) g_rec_barrier = 1; }
     a[0] = a0; a[1] = a1; a[2] = a2; a[3] = a3; a[4] = a4; a[5] = a5; a[6] = a6; a[7] = a7;
     return tc(mgr, g_terrain_fix_orig, a, 8);
 }
@@ -1588,6 +1594,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
         g_log = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         ini_read();
         if (GetEnvironmentVariableA("SC3UNDO_TEST", path, sizeof(path))) g_test = atoi(path);
+        if (GetEnvironmentVariableA("SC3UNDO_TFIX", path, sizeof(path))) g_tfix_ok = atoi(path);
         logf("### sc3undo loaded, enabled=%d", g_enabled);
         if (!g_enabled) return TRUE;
         dir_init();
