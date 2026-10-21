@@ -80,6 +80,11 @@ def main() -> int:
                 applied.append(napply() > before)
         if died:
             break
+    t0 = time.time()                      # big cities: the last saves may still be running; wait for every TEST> save line
+    while not died and time.time() - t0 < 180:
+        if open(logp, encoding="utf-8", errors="replace").read().count("TEST> save") >= 4 * n:
+            break
+        time.sleep(1)
     log = open(os.path.join(out, "undo.log"), encoding="utf-8", errors="replace").read()
     m = re.search(r"snapshots in (.*)", log)
     if m:
