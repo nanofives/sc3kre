@@ -11,7 +11,10 @@ an EMPTY cell (no highway was drawn there), stays through retiles and saves, and
 - **Table lines** (manifest `highway_lines`): `hwyp 21100 1`, `hwyp 21101 1` (land pieces), `hwyt 21100 21101`
   (the proof rule).
 - **Saves:** both save as their base 15099; with the mod the variant ids come back from section 0x4E56.
-- **Off:** `SC3NETMOD_HWYT=0` (this rule only), `SC3NETMOD_HWY=0` (the whole highway block).
+- **On only with `SC3NETMOD_HWYT=1`** (since 2026-10-21, task hwlone): installed in the LAN release, the rule put a
+  ramp past every highway end, so a lone highway no longer looked like stock (owner bug img1 / img2). Without the
+  variable the pieces are "kept by no block" and the next pass (the load pass included) removes them. Do not
+  install this package in a release. `SC3NETMOD_HWY=0` still turns the whole highway block off.
 
 Build and install:
 

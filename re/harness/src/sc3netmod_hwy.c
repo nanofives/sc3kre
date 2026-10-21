@@ -58,7 +58,9 @@
  *                                         piece (art: deck descending from H to the ground toward the cell's +z at
  *                                         state 0; A has the outer parapet on +x, B on -x), so the end of a two-cell
  *                                         highway gets one A and one B. Both must be hwyp land pieces.
- * Off: SC3NETMOD_HWY=0 (the whole block, shape blocks included), SC3NETMOD_HWYT=0 (the proof rule only).
+ * Off: SC3NETMOD_HWY=0 (the whole block, shape blocks included). The proof rule runs only with SC3NETMOD_HWYT=1
+ * (task hwlone: with highway_core installed it put a ramp past every highway end, owner bug 2026-10-21; off, its
+ * pieces are "kept by no block" and removed by the next pass, the load pass included).
  */
 
 #define HWY_ON 0x80000000UL
@@ -296,7 +298,8 @@ static void hwy_rot(int k, int *dx, int *dz) {        /* one state: (x, z) -> (-
 
 static void hwyt_run(HwyPass *hp) {
     int x, z, k;
-    if (!g_hwy_t[0] || env_off("SC3NETMOD_HWYT")) return;
+    char on[8];
+    if (!g_hwy_t[0] || !GetEnvironmentVariableA("SC3NETMOD_HWYT", on, sizeof(on)) || on[0] != '1') return;   /* task hwlone: opt-in */
     for (z = hp->z0 + 1; z < hp->z1; z++)
         for (x = hp->x0 + 1; x < hp->x1; x++) {
             DWORD v = hwy_at(hp, x, z);
