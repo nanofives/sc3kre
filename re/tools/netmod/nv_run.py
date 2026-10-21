@@ -4,7 +4,7 @@ r"""nv_run.py - launch one netvariant test arm on a -multi instance and wait unt
   py -3.12 nv_run.py <instance dir> <city.sc3> <arm> [ENV=VAL ...]
 
 Copies the city to <instance>\nv_<arm>.sc3, starts <instance>\mods_launch.exe -multi -- <copy> with the given
-extra environment, reads the pid from the launcher's own "[+] created suspended, pid = N" line, waits 60 s for the
+extra environment, reads the pid from the launcher's own "[+] created, pid = N" line, waits 60 s for the
 load, dismisses the tips dialog and prints `PID=<n>`. It only ever touches the pid it started.
 """
 import os
@@ -34,7 +34,7 @@ def main(argv):
     pid = None
     for _ in range(60):
         time.sleep(0.5)
-        m = re.search(r"created suspended, pid = (\d+)", open(out).read())
+        m = re.search(r"pid = (\d+)", open(out).read())
         if m:
             pid = int(m.group(1))
             break

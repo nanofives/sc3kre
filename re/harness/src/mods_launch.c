@@ -1,93 +1,29 @@
 /* mods_launch.exe - one launcher for all the sc3kre game mods.
  *
- * Starts SC3U.exe suspended (cwd = the game's Apps dir), injects EVERY mod DLL from the list
- * below that sits beside the launcher, then resumes. Same injector as bigcity_launch.c /
- * resize_launch.c (copied from sc3launch.c). Each mod finds its own ini and log beside itself.
+ * No injection (2026-10-21). Windows Defender blocked the old launcher (start suspended + VirtualAllocEx +
+ * WriteProcessMemory + CreateRemoteThread(LoadLibraryA)) as "Behavior:Win32/DefenseEvasion.A!ml". Now the mods are
+ * loaded from INSIDE the game by version.dll (sc3modldr.c), which sits beside SC3U.exe in Apps and which the Windows
+ * loader maps because SC3U.exe imports VERSION.dll. This launcher only starts SC3U.exe normally (cwd = the game's
+ * Apps dir) with the mod list in its environment, waits for the loader's "mods loaded" event and prints the loader's
+ * log lines. It never opens the game process for writing. Each mod still finds its own ini and log beside itself.
  *
- *   mods_launch.exe [-delay <ms>] [-kill <seconds>] [-multi] [-exe <name>] [-- <args passed to the game>]
- *   -multi: per-instance mutex name, so several games can run at once (see unique_mutex).
+ *   mods_launch.exe [-delay <ms>] [-kill <seconds>] [-multi] [-exe <name>] [-nolease] [-- <args passed to the game>]
+ *   -multi: per-instance mutex name, so several games can run at once (the loader renames it, see sc3modldr.c).
  *   -nolease: skip the dev-PC game-lease gate (see lease_gate; exit 7 = refused).
+ *   -delay: the loader loads the mods from a thread <ms> after the game started (test option).
  *
- * Mods are independent: each one checks the game bytes it patches and refuses (logging why)
- * rather than half-patching, so a collision shows up in that mod's log, not as a crash.
+ * Exit codes: 2 = no SC3U.exe / no mod, 3 = CreateProcess failed, 4 = a mod failed to load (the loader ended the
+ * game), 6 = version.dll (the loader) missing or not ours beside SC3U.exe, 7 = lease refused.
+ *
+ * Mods are independent: each one checks the game bytes it patches and refuses (logging why) rather than
+ * half-patching, so a collision shows up in that mod's log, not as a crash.
  */
 
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
 
-static int inject(HANDLE proc, const char *dll) {
-    void *mem;
-    HANDLE thread;
-    SIZE_T len = lstrlenA(dll) + 1;
-    HMODULE k32;
-    FARPROC loadlib;
-    DWORD exitcode = 0;
-
-    k32 = GetModuleHandleA("kernel32.dll");
-    loadlib = GetProcAddress(k32, "LoadLibraryA");
-    if (!loadlib) { printf("[!] GetProcAddress(LoadLibraryA) failed\n"); return 0; }
-
-    mem = VirtualAllocEx(proc, NULL, len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    if (!mem) { printf("[!] VirtualAllocEx failed: %lu\n", GetLastError()); return 0; }
-
-    if (!WriteProcessMemory(proc, mem, dll, len, NULL)) {
-        printf("[!] WriteProcessMemory failed: %lu\n", GetLastError());
-        return 0;
-    }
-
-    thread = CreateRemoteThread(proc, NULL, 0, (LPTHREAD_START_ROUTINE)loadlib, mem, 0, NULL);
-    if (!thread) { printf("[!] CreateRemoteThread failed: %lu\n", GetLastError()); return 0; }
-
-    WaitForSingleObject(thread, 10000);
-    GetExitCodeThread(thread, &exitcode);
-    CloseHandle(thread);
-    VirtualFreeEx(proc, mem, 0, MEM_RELEASE);
-
-    if (!exitcode) { printf("[!] LoadLibraryA returned NULL in target\n"); return 0; }
-    printf("[+] injected %s (remote HMODULE = 0x%08lX)\n", dll, exitcode);
-    return 1;
-}
-
-/* -multi (2026-10-11): run several games at once. SC3U.exe refuses a second instance through the named mutex
-   "SimCity 3000 Mutex" (FUN_0040496d reads its name through the pointer at 0x004f4b10, string at 0x004f4b24;
-   a failed acquire without -restart focuses the other window and exits ~30 ms in, measured 2026-08-21). A named
-   mutex is session-wide, so a second install copy does not help. With the process still suspended, write
-   "SimCity 3000 Mutex <pid>" into it and point 0x004f4b10 at that copy: each instance owns its own mutex and the
-   restart path is never taken. The exe file is not touched. Refuses (returns 0) if the pointer is not the shipped
-   one, i.e. a different SC3U.exe build. */
-static int unique_mutex(HANDLE proc, DWORD pid) {
-    const DWORD slot = 0x004f4b10, shipped = 0x004f4b24;
-    DWORD cur = 0, newp, oldprot;
-    char name[64];
-    SIZE_T got = 0, len;
-    void *mem;
-    if (!ReadProcessMemory(proc, (void *)slot, &cur, 4, &got) || got != 4 || cur != shipped) {
-        printf("[!] -multi: mutex name pointer at 0x%08lX is 0x%08lX, expected 0x%08lX - not patched\n", slot, cur, shipped);
-        return 0;
-    }
-    _snprintf(name, sizeof(name), "SimCity 3000 Mutex %lu", pid);
-    len = lstrlenA(name) + 1;
-    mem = VirtualAllocEx(proc, NULL, len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    if (!mem || !WriteProcessMemory(proc, mem, name, len, NULL)) { printf("[!] -multi: cannot write the name\n"); return 0; }
-    newp = (DWORD)mem;
-    VirtualProtectEx(proc, (void *)slot, 4, PAGE_READWRITE, &oldprot);
-    if (!WriteProcessMemory(proc, (void *)slot, &newp, 4, NULL)) { printf("[!] -multi: cannot write the pointer\n"); return 0; }
-    VirtualProtectEx(proc, (void *)slot, 4, oldprot, &oldprot);
-    printf("[+] -multi: mutex renamed to \"%s\"\n", name);
-    return 1;
-}
-
-static int inject_all(HANDLE proc, const char *dir, const char **mods, int n) {
-    char dll[MAX_PATH];
-    int m;
-    for (m = 0; m < n; m++) {
-        _snprintf(dll, sizeof(dll), "%s\\%s", dir, mods[m]);
-        if (GetFileAttributesA(dll) == INVALID_FILE_ATTRIBUTES) continue;
-        if (!inject(proc, dll)) return 0;
-    }
-    return 1;
-}
+#define SC3MODS_EXIT_LOADFAIL 0x5C30004u   /* sc3modldr.c ends the game with this when a mod does not load */
 
 #include "lease_gate.h"
 
@@ -102,16 +38,62 @@ static void dirname_of(const char *full, char *dir, int cb) {
     dir[n] = 0;
 }
 
+/* 1 if `path` exists and contains the marker string sc3modldr.c carries (the system version.dll does not). */
+static int is_our_loader(const char *path) {
+    HANDLE f = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    static char buf[256 * 1024];
+    DWORD got = 0, i;
+    const char *mark = "sc3modldr ";
+    int ml = lstrlenA(mark), found = 0;
+    if (f == INVALID_HANDLE_VALUE) return 0;
+    ReadFile(f, buf, sizeof(buf), &got, NULL);
+    CloseHandle(f);
+    for (i = 0; i + ml <= got && !found; i++) if (!memcmp(buf + i, mark, ml)) found = 1;
+    return found;
+}
+
+/* Print the loader log lines that belong to `pid` (sc3modldr.log in the mod folder, "[pid N] " prefix). */
+static void print_loader_log(const char *dir, DWORD pid) {
+    char path[MAX_PATH], tag[32], *buf, *p, *e;
+    HANDLE f;
+    DWORD size, got = 0;
+    int tl;
+    _snprintf(path, sizeof(path), "%s\\sc3modldr.log", dir);
+    _snprintf(tag, sizeof(tag), "[pid %lu] ", pid);
+    tl = lstrlenA(tag);
+    f = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE) { printf("[!] no loader log at %s\n", path); return; }
+    size = GetFileSize(f, NULL);
+    if (size > 4u << 20) { SetFilePointer(f, (LONG)(size - (4u << 20)), NULL, FILE_BEGIN); size = 4u << 20; }
+    buf = (char *)HeapAlloc(GetProcessHeap(), 0, size + 1);
+    if (!buf) { CloseHandle(f); return; }
+    ReadFile(f, buf, size, &got, NULL);
+    CloseHandle(f);
+    buf[got] = 0;
+    for (p = buf; *p; p = e) {
+        e = strchr(p, '\n');
+        if (e) *e++ = 0; else e = p + lstrlenA(p);
+        if (!strncmp(p, tag, tl)) {
+            char *cr = strchr(p, '\r');
+            if (cr) *cr = 0;
+            printf("    loader: %s\n", p + tl);
+        }
+    }
+    HeapFree(GetProcessHeap(), 0, buf);
+}
+
 int main(int argc, char **argv) {
     const char *exename = "SC3U.exe";
-    char self[MAX_PATH], owndir[MAX_PATH], root[MAX_PATH];
-    char exe[MAX_PATH], workdir[MAX_PATH], dll[MAX_PATH];
+    char self[MAX_PATH], owndir[MAX_PATH], root[MAX_PATH], appsdir[MAX_PATH];
+    char exe[MAX_PATH], workdir[MAX_PATH], dll[MAX_PATH], loader[MAX_PATH];
     static const char *mods[] = { "sc3resize.dll", "sc3bigcity.dll", "sc3overscroll.dll", "sc3simrun.dll", "sc3startsize.dll", "sc3perf.dll", "sc3netmod.dll", "sc3cartrips.dll", "sc3undo.dll" };
     int nmods = 0, m;
     char cmdline[2048];
     char gameargs[1024];
+    char list[1024], evname[64], num[16];
     STARTUPINFOA si;
     PROCESS_INFORMATION pi;
+    HANDLE ev;
     int delayms = 0;
     int killsec = 0;
     int multi = 0;
@@ -122,11 +104,11 @@ int main(int argc, char **argv) {
     /* Unbuffered: piped to a script, a buffered stdout held the "pid = N" line until the game exited (2026-10-11). */
     setvbuf(stdout, NULL, _IONBF, 0);
     gameargs[0] = 0;
+    list[0] = 0;
 
-    /* Where we are, and the DLL that sits beside us. */
+    /* Where we are: the mod DLLs sit beside us. */
     GetModuleFileNameA(NULL, self, sizeof(self));
     dirname_of(self, owndir, sizeof(owndir));
-    _snprintf(dll, sizeof(dll), "%s\\sc3bigcity.dll", owndir);
 
     for (i = 1; i < argc; i++) {
         if (!lstrcmpiA(argv[i], "-delay") && i + 1 < argc) {
@@ -156,8 +138,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* SC3U.exe: ship layout is next to us (loader dropped in Apps); dev layout is
-       <root>\Apps\SC3U.exe reached by walking up 4 levels from bin\bigcity_launch.exe. */
+    /* SC3U.exe: ship layout is next to us (launcher in Apps); dev layout is <root>\Apps\SC3U.exe reached by
+       walking up 4 levels from re\harness\<bin or inst_x>\mods_launch.exe. */
     _snprintf(exe, sizeof(exe), "%s\\%s", owndir, exename);
     if (GetFileAttributesA(exe) != INVALID_FILE_ATTRIBUTES) {
         lstrcpynA(workdir, owndir, sizeof(workdir));
@@ -180,40 +162,62 @@ int main(int argc, char **argv) {
     }
     for (m = 0; m < (int)(sizeof(mods) / sizeof(mods[0])); m++) {
         _snprintf(dll, sizeof(dll), "%s\\%s", owndir, mods[m]);
-        if (GetFileAttributesA(dll) != INVALID_FILE_ATTRIBUTES) { printf("[*] mod : %s\n", mods[m]); nmods++; }
+        if (GetFileAttributesA(dll) != INVALID_FILE_ATTRIBUTES) {
+            printf("[*] mod : %s\n", mods[m]);
+            if (list[0]) lstrcatA(list, ";");
+            lstrcatA(list, mods[m]);
+            nmods++;
+        }
     }
     if (!nmods) {
-        printf("[!] no mod DLL beside the loader (sc3resize.dll, sc3bigcity.dll, sc3overscroll.dll)\n");
+        printf("[!] no mod DLL beside the launcher (sc3resize.dll, sc3bigcity.dll, ...)\n");
         return 2;
     }
 
+    /* The loader must be beside the exe that runs (the Windows loader looks for VERSION.dll there first). */
+    dirname_of(exe, appsdir, sizeof(appsdir));
+    _snprintf(loader, sizeof(loader), "%s\\version.dll", appsdir);
+    if (!is_our_loader(loader)) {
+        printf("[!] %s is %s.\n", loader, GetFileAttributesA(loader) == INVALID_FILE_ATTRIBUTES ? "missing" : "not the sc3kre mod loader");
+        printf("    The mods load through it (no injection since 2026-10-21). Put the version.dll built from\n");
+        printf("    re/harness/src/sc3modldr.c there (build_mod.ps1 -Mod sc3modldr -Out <that folder>).\n");
+        return 6;
+    }
+
+    /* Hand the work to the loader through the environment (inherited by the game only). */
+    _snprintf(evname, sizeof(evname), "Local\\sc3mods_ready_%lu", GetCurrentProcessId());
+    ev = CreateEventA(NULL, TRUE, FALSE, evname);
+    SetEnvironmentVariableA("SC3MODS_DIR", owndir);
+    SetEnvironmentVariableA("SC3MODS_LIST", list);
+    SetEnvironmentVariableA("SC3MODS_EVENT", evname);
+    SetEnvironmentVariableA("SC3MODS_MULTI", multi ? "1" : NULL);
+    _snprintf(num, sizeof(num), "%d", delayms);
+    SetEnvironmentVariableA("SC3MODS_DELAY", delayms > 0 ? num : NULL);
+
     _snprintf(cmdline, sizeof(cmdline), "\"%s\" %s", exe, gameargs);
     printf("[*] exe : %s\n", exe);
-    printf("[*] dll : %s\n", dll);
+    printf("[*] mods: %s (loaded by %s)\n", owndir, loader);
     printf("[*] args: %s\n", gameargs[0] ? gameargs : "(none)");
 
     ZeroMemory(&si, sizeof(si));
     si.cb = sizeof(si);
     ZeroMemory(&pi, sizeof(pi));
 
-    if (!CreateProcessA(NULL, cmdline, NULL, NULL, FALSE,
-                        CREATE_SUSPENDED, NULL, workdir, &si, &pi)) {
+    if (!CreateProcessA(NULL, cmdline, NULL, NULL, FALSE, 0, NULL, workdir, &si, &pi)) {
         printf("[!] CreateProcess failed: %lu\n", GetLastError());
         return 3;
     }
-    printf("[+] created suspended, pid = %lu\n", pi.dwProcessId);
-    if (multi && !unique_mutex(pi.hProcess, pi.dwProcessId)) { TerminateProcess(pi.hProcess, 1); return 5; }
+    printf("[+] created, pid = %lu\n", pi.dwProcessId);
 
-    if (delayms > 0) {
-        /* Inject after the process loader has run, not while still suspended (sc3launch.c note). */
-        ResumeThread(pi.hThread);
-        printf("[+] resumed first, injecting in %d ms\n", delayms);
-        Sleep(delayms);
-        if (!inject_all(pi.hProcess, owndir, mods, sizeof(mods) / sizeof(mods[0]))) { TerminateProcess(pi.hProcess, 1); return 4; }
-    } else {
-        if (!inject_all(pi.hProcess, owndir, mods, sizeof(mods) / sizeof(mods[0]))) { TerminateProcess(pi.hProcess, 1); return 4; }
-        ResumeThread(pi.hThread);
-        printf("[+] resumed\n");
+    /* Wait for the loader's event (mods loaded or refused) or the game's end, whichever first. */
+    {
+        HANDLE w[2];
+        DWORD r;
+        w[0] = ev; w[1] = pi.hProcess;
+        r = WaitForMultipleObjects(ev ? 2 : 1, ev ? w : &pi.hProcess, FALSE, 30000 + (delayms > 0 ? delayms : 0));
+        if (ev && r == WAIT_OBJECT_0) printf("[+] loader done\n");
+        else if (r == WAIT_TIMEOUT) printf("[!] loader did not report in 30 s\n");
+        print_loader_log(owndir, pi.dwProcessId);
     }
 
     if (killsec > 0) {
@@ -225,6 +229,7 @@ int main(int argc, char **argv) {
             DWORD code = 0;
             GetExitCodeProcess(pi.hProcess, &code);
             printf("[*] game exited on its own, code = %lu\n", code);
+            if (code == SC3MODS_EXIT_LOADFAIL) { printf("[!] a mod failed to load (see loader lines above)\n"); return 4; }
         }
     } else {
         /* Exit code + lifetime (2026-10-21): the intermittent ~0.3 s startup deaths printed only "game exited",
@@ -233,7 +238,9 @@ int main(int argc, char **argv) {
         WaitForSingleObject(pi.hProcess, INFINITE);
         GetExitCodeProcess(pi.hProcess, &code);
         printf("[*] game exited, code = 0x%08lX after %lu ms\n", code, GetTickCount() - t0);
+        if (code == SC3MODS_EXIT_LOADFAIL) { printf("[!] a mod failed to load (see loader lines above)\n"); return 4; }
     }
+    if (ev) CloseHandle(ev);
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
     return 0;

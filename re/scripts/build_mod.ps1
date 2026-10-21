@@ -13,7 +13,7 @@
   pwsh re/scripts/build_mod.ps1 -Mod mods_launch -Src re\harness\src -Out re\harness\inst_query
 #>
 param(
-    [Parameter(Mandatory)] [ValidateSet('sc3resize', 'sc3bigcity', 'sc3overscroll', 'sc3simrun', 'sc3perf', 'sc3netmod', 'sc3cartrips', 'sc3undo', 'mods_launch')]
+    [Parameter(Mandatory)] [ValidateSet('sc3resize', 'sc3bigcity', 'sc3overscroll', 'sc3simrun', 'sc3perf', 'sc3netmod', 'sc3cartrips', 'sc3undo', 'mods_launch', 'sc3modldr')]
     [string] $Mod,
     [Parameter(Mandatory)] [string] $Src,
     [Parameter(Mandatory)] [string] $Out
@@ -35,6 +35,9 @@ if (-not (Test-Path $vcvars)) { throw "vcvars32.bat not found at $vcvars" }
 $cl = '/nologo /W3 /O2 /MT /GS- /D_CRT_SECURE_NO_WARNINGS /DWIN32 /D_WIN32_WINNT=0x0501'
 if ($Mod -eq 'mods_launch') {
     $line = "cl $cl `"$Src\mods_launch.c`" /Fe`"$Out\mods_launch.exe`" /link /SUBSYSTEM:CONSOLE kernel32.lib"
+} elseif ($Mod -eq 'sc3modldr') {
+    # The no-injection mod loader (2026-10-21) is named version.dll: it must sit beside SC3U.exe (the tree's Apps\).
+    $line = "cl $cl /LD `"$Src\sc3modldr.c`" /Fe`"$Out\version.dll`" /link /SUBSYSTEM:WINDOWS /DEF:`"$Src\sc3modldr.def`" kernel32.lib"
 } else {
     $libs = 'kernel32.lib user32.lib' + $(if ($Mod -eq 'sc3perf') { ' gdi32.lib' } else { '' })
     $line = "cl $cl /LD `"$Src\$Mod.c`" /Fe`"$Out\$Mod.dll`" /link /SUBSYSTEM:WINDOWS $libs"
@@ -50,5 +53,5 @@ if errorlevel 1 exit /b 1
 "@
 & cmd.exe /c "`"$bat`""
 if ($LASTEXITCODE -ne 0) { throw "build failed (exit $LASTEXITCODE)" }
-$f = if ($Mod -eq 'mods_launch') { "$Out\mods_launch.exe" } else { "$Out\$Mod.dll" }
+$f = if ($Mod -eq 'mods_launch') { "$Out\mods_launch.exe" } elseif ($Mod -eq 'sc3modldr') { "$Out\version.dll" } else { "$Out\$Mod.dll" }
 Write-Host ("[+] built {0} ({1} bytes)" -f $f, (Get-Item $f).Length)
