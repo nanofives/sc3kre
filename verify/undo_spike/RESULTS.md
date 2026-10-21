@@ -179,6 +179,22 @@ logged none. Count so far: tool held 2/2 stalled; tool cleared 0/3 stalled, 1/3 
   step faulted on the half-loaded city.
 - Cause not investigated. Large-city timing is therefore NOT measured.
 
+**Resolved 2026-10-21 (verify/undo_leftovers/bigone_*): Big One is a 1024 x 1024 city, not a stock one.** The file
+in `Cities\` was written 2026-10-12 (a sc3bigcity session's save). Its payload decompresses to 24,134,602 B. The
+QFS stream header holds a 24-bit size, so it declares 7,357,386 B (= true size - 16 MB); sc3bigcity's QFS24 patch
+reports the true size (`sc3bigcity.log`: `QFS24: stream declares 7357386 bytes, true size 24134602`) and its 1024
+support does the rest (`TRAVERSE: 1024x1024 map`). The probe launcher injects no sc3bigcity, so the load cannot work.
+
+| launch | mods | result |
+|---|---|---|
+| sc3launch + probe, spike switches | probe only | exit 0xC0000005 at ~3.4 s; AV caught with `re/tools/av_catch.py`: SIMSPR `0x1001a2f8` `call [eax+0x244]` on the object at this+0x14, whose vtable pointer read 0x03230000 (not a vtable), eip 0x006ae44d |
+| mods_launch | sc3resize | exit 0xC0000005 at 4.8 s, VEH: SIMDIRT+0x12D3E |
+| mods_launch | sc3resize + sc3perf | exit 0xC0000005 at 5.2 s, VEH: SIMDIRT+0x12D3E |
+| mods_launch | sc3resize + sc3bigcity | loads in 11 s, paused |
+| mods_launch | full set (resize, bigcity, overscroll, simrun, startsize, perf, undo) | loads in 14 s, "Big One", $43,615, 1/1/2000, 592 MB (`bigone_mods/fd_bigone_loaded.png`) |
+
+Nothing to fix: load 1024 cities through mods_launch with sc3bigcity. Big One is also a 1024 fixture for item 10.
+
 ## What this means for an undo mod
 
 - Cost per action on a 256 city: about 1.0 to 1.2 s to snapshot, about 2.4 s to undo.
