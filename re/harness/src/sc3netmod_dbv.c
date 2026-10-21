@@ -13,7 +13,12 @@
  *  ends      the rows past the first / last row (the top end turned half a circle): a bend into three straight roads
  *            (along x: the last three rows run on to the right; along z: three columns go on below), a narrowing to
  *            the diagonal avenue, a taper to one of the three roads, a band ending on a row road, or a cap (all three
- *            stop); each end but the bends writes its stamp (dbvs lines), the bends write band pieces only
+ *            stop); each end but the bends writes its stamp (dbvs lines), the bends write band pieces only.
+ *            A cap needs only the rows its stamp writes plus one empty row (task avrbtfix: a road further away no
+ *            longer refuses the band; one that touches still does). Any other end shape (a drag one row longer
+ *            than the others, ...) is RAGGED (task avrbtfix): the band converts, the end's rows past it stay with the
+ *            stock tiler (owner 2026-10-21: an end that does not convert is fine, the whole band turning into the
+ *            stock ladder is not). Still refused: a narrowing whose avenue will not convert, a road beside the end row
  *  junctions a straight single road along x on a band row (both sides = crossing, one side = T) or along z through
  *            four rows (entering at a row's d3 from above, leaving at a row's d0 below); arms = two road cells -> 29
  *  pieces    band by d: d0 outer state 2, d1 inner state 2, d2 inner, d3 outer; then the stamps (a stamp's cells are
@@ -37,7 +42,7 @@
 
 enum { DK_NONE = 0, DK_JROW_BOTH = 1, DK_JROW_A, DK_JROW_STEM, DK_JCOL_BOTH, DK_JCOL_A, DK_NARROW_C, DK_NARROW_A,
        DK_TAPER0, DK_TAPER1, DK_TAPER2, DK_CAP_SQ, DK_CAP_PART, DK_TAPER0S, DK_TAPER1S, DK_TAPER2S, DK_CAP_X4Z3,
-       DK_CAP_X4Z4, DK_BEND_X = 100, DK_BEND_Z, DK_STEM };
+       DK_CAP_X4Z4, DK_BEND_X = 100, DK_BEND_Z, DK_STEM, DK_RAGGED };                /* DK_RAGGED: task avrbtfix */
 
 typedef struct { signed char dx, dz; WORD piece; BYTE state; } DbvStamp;
 static DbvStamp g_dbv_st[DBV_KINDS][DBV_MAX_STAMP];
@@ -115,6 +120,7 @@ typedef struct {
     BYTE *owner;                /* [real cell]: use index + 1 of the stamp that wrote it */
     DbvCell *cell;
     int n;
+    int ragged;                 /* task avrbtfix: ends of the last accepted band left to the stock tiler */
 } DbvPass;
 
 #define DBV_RX(p, cx, cz) ((p)->axis ? -(cz) - 1 : (cx))
@@ -178,11 +184,12 @@ static int dbv_end_kind(DbvPass *p, int z_e, int a_e, int e, int nrows) {
     if (rr[0] == R123 && rr[1] == (DM(2) | DM(3)) && rr[2] == (DM(2) | DM(3))) return DK_TAPER2S;
     if (!rr[0] && DBV_RDE(-1, 0) && DBV_RDE(4, 0)) return DK_STEM;
     if (DBV_RDE(-1, 0) || DBV_RDE(4, 0)) return DK_NONE;
-    if (!rr[0] && !rr[1] && !rr[2] && !rr[3] && !rr[4] && !rr[5]) return DK_CAP_SQ;
-    if (rr[0] == R012 && !rr[1] && !rr[2] && !rr[3] && !rr[4] && !rr[5]) return DK_CAP_PART;
-    if (rr[0] == R012 && rr[1] == (DM(0) | DM(1)) && !rr[2] && !rr[3] && !rr[4] && !rr[5]) return DK_CAP_X4Z3;
-    if (rr[0] == R012 && rr[1] == (DM(0) | DM(1)) && rr[2] == DM(0) && !rr[3] && !rr[4] && !rr[5]) return DK_CAP_X4Z4;
-    return DK_NONE;
+    /* task avrbtfix: caps need their stamp rows + one empty row (was: all six rows empty) */
+    if (!rr[0]) return DK_CAP_SQ;
+    if (rr[0] == R012 && !rr[1]) return DK_CAP_PART;
+    if (rr[0] == R012 && rr[1] == (DM(0) | DM(1)) && !rr[2]) return DK_CAP_X4Z3;
+    if (rr[0] == R012 && rr[1] == (DM(0) | DM(1)) && rr[2] == DM(0) && !rr[3]) return DK_CAP_X4Z4;
+    return DK_RAGGED;                                                    /* task avrbtfix (was DK_NONE) */
 #undef R012
 #undef R123
 }
@@ -214,6 +221,7 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
     int nu = 0, e, k, j, i, cx, cz, nclean = 0, armx[256], armz[256], armo[256], na = 0;
     *why = "";
     p->n = 0;
+    p->ragged = 0;                                                       /* task avrbtfix */
     memset(endrow, 0, n);
 #define IN_CHAIN(z) ((z) >= z0 && (z) < z0 + n)
 #define LEFT(z) (x0 + (z) - z0)
@@ -246,6 +254,12 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
                     if (DBV_RDE(dx, j)) { MARK(DBV_CELLX(dx, j), DBV_CELLZ(dx, j)) |= 2; got = 1; }
                 if (!got) break;
             }
+        } else if (kind == DK_RAGGED) {                                  /* task avrbtfix: rows past it stay stock */
+            endrow[z_e - z0] = 1;
+            p->ragged++;
+            for (j = 1; j <= 2; j++)
+                for (dx = -2; dx <= j + 5; dx++)
+                    if (DBV_RDE(dx, j)) MARK(DBV_CELLX(dx, j), DBV_CELLZ(dx, j)) |= 2;
         } else if (kind == DK_STEM) {
             endrow[z_e - z0] = 1;
             ADDUSE(DK_JROW_STEM, a_e, z_e, !e);
@@ -436,8 +450,9 @@ static int dbv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                     nw++;
                 }
                 if (nw || !strcmp(who, "load"))
-                    logf("dbv: %s: diagonal boulevard axis %d, %d row(s) from canonical (%d,%d), %d cell(s), %d written",
-                         who, axis, n, cx, cz, P.n, nw);
+                    logf("dbv: %s: diagonal boulevard axis %d, %d row(s) from canonical (%d,%d), %d cell(s), %d written%s",
+                         who, axis, n, cx, cz, P.n, nw, P.ragged == 2 ? ", both ends left to the stock tiler (shape not known)"
+                         : P.ragged ? ", one end left to the stock tiler (shape not known)" : "");   /* task avrbtfix */
                 nwall += nw;
                 dbv_clear(&P);
             }

@@ -531,10 +531,10 @@ def classify_end(R, z_e, a_e, e, nrows):
         return "stem", cell
     if rd(-1, 0) or rd(4, 0):
         return None, cell
-    for name in ("cap-square", "cap-part", "cap-x4z3", "cap-x4z4"):
-        if all(r == cont_row(name, j + 1) for j, r in enumerate(rr)):
+    for name in ("cap-square", "cap-part", "cap-x4z3", "cap-x4z4"):    # task avrbtfix: stamp rows + 1 empty row
+        if all(r == cont_row(name, j + 1) for j, r in enumerate(rr[:len(ENDS[name][0]) + 1])):
             return name, cell
-    return None, cell
+    return "ragged", cell                 # task avrbtfix: the band converts, this end's rows stay stock (was None)
 
 
 def _one_band(R, chain, stamps):
@@ -575,6 +575,12 @@ def _one_band(R, chain, stamps):
                 if not cs:
                     break
                 path |= set(cs)
+        elif kind == "ragged":                                          # task avrbtfix: rows past it stay stock
+            endrows.add(z_e)
+            for j in (1, 2):
+                for dx in range(-2, j + 6):
+                    if cell(dx, j) in R:
+                        path.add(cell(dx, j))
         elif kind == "stem":
             endrows.add(z_e)
             uses.append(("jrow-stem", (a_e, z_e), not e))
