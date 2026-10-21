@@ -60,3 +60,44 @@ dialogs look right.
 
 120 fps: not testable that evening. The only display is a Philips TV over HDMI; with the TV off Windows lists
 3840x2160@120 from the EDID but reverts to 60 Hz, so sc3perf's cap (-1 = monitor refresh) is 60.
+
+## Who issues the Reunirse Locks (task locks, 2026-10-20)
+
+sc3perf `SC3PERF_LOCKLOG=1` (new, off by default) logs Lock callers every 10 s. 4K maximized, HUD scale off, sc3perf
+sysmem=1: Reunirse closed ~1,160 Locks/s; open ~15,800/s, **97.6% returning to GZGraphicD 0x100148F8**, called from
+GZServiceD 0x10006EA2. The byte at 0x100148F2 is `ff 90 d4 01 00 00` = `call [eax+0x1d4]`: the branch of
+FUN_10014894 taken when the destination's format id (`this+0x10`) differs from the source's (`src->vt+0x50()`, `+4`)
+`[CONFIRMED @ GZGraphicD 0x10014894]`. That conversion copy locks per call.
+
+`re/tools/frida_fmtmismatch.py` (read-only, at the compare 0x100148DE) counted per second:
+
+| | dest id | src id | caller | calls/s |
+|---|---|---|---|---:|
+| closed | 0x10 | 0x10 | many | fast path |
+| closed | 0x10 | 8 | GZServiceD 0x10006EA2 | 18 |
+| open | 0x10 | 8 | GZServiceD 0x10006EA2 | 1,321 |
+
+GZServiceD FUN_10006e54 is a bitmap-font glyph draw: cell `param_4` of the rect table `this+0x14` (0x14 bytes each)
+from the font sheet surface `this+0x34` to (x, y) through the destination's vt+0x118 `[CONFIRMED @ GZServiceD
+0x10006e54]`; its callers FUN_100072e2 / FUN_1000736f / FUN_10007477 are text loops. So with Reunirse open some text
+is redrawn every frame (~22 glyphs per frame at 60 fps) from a font sheet in format 8, and every glyph goes through
+the converting copy. With system-memory surfaces (sc3perf sysmem=1, the published perf.ini) that costs little: 60 fps
+held. In video memory each Lock waits for the GPU. Which text, and why it is redrawn every frame, is not known yet
+`[UNCERTAIN]`; format id 8 being 8 bpp is `[UNCERTAIN]` (not read from the format object).
+
+### Tried and dropped: converting the font sheet once (FONTCACHE)
+
+A sc3perf build replaced GZServiceD FUN_10006e54 with a copy drawing from a cached 16-bit copy of each 8-bit font sheet
+(keyed on sheet, palette object and a hash of its 256 entries, since text colour is a palette rewrite: font slots
+0x34/0x38 rewrite entries 1..16). It worked as built: 4 copies (640x54, 640x54, 640x92, 640x42), Locks with Reunirse
+open ~440/s -> ~50/s. **Frame rate unchanged**, 4K maximized, `SC3PERF_SYSMEM=0` (video memory), HUD scale off:
+
+| Reunirse open | Lock ms/s | Blt ms/s | fps |
+|---|---:|---:|---:|
+| original | ~630 | ~85 | 7.9 |
+| cached 16-bit sheet | ~100 | ~620 | 7.9 |
+
+Closed: 55 to 60 fps in both. In video memory every small copy onto the dialog's surface waits for the GPU, Lock or
+Blt alike, so ~22 glyph copies per frame at 1.5 to 2 ms each is the 8 fps. What would help is fewer copies per frame
+(the text not redrawn every frame) or system-memory surfaces, which sc3perf `sysmem=1` (the published perf.ini) already
+gives: 60 fps held. The code was removed; nothing ships from it.
