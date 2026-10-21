@@ -134,7 +134,8 @@ FUN_100151f1) instead left 2 cells with other descriptors (bd3), so retiles are 
 | reg1, Roadless Paradise: zone, road, power, highway, pipe | zone byte-identical, others exact (benign only) | identical |
 - Tool classes tested 2026-10-21, see "Tool classes" below. Still not reached: on-ramp, shoreline (marina), the
   multi-cell building class.
-- Version 1 (full save / load) stays as `mode=snapshot`.
+- Version 1 (full save / load) was removed 2026-10-21 (`mode=snapshot` is gone; 188 lines). Regression after the removal
+  (verify/undo_leftovers/nosnap1-2): zone byte-identical, road and London bulldoze exact (flammability 1 B), redo byte-identical.
 - Real keyboard and mouse input still need the owner's hand test.
 
 ## Tool classes (2026-10-21, verify/undo_leftovers/tc*, picker*)

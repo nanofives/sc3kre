@@ -4,32 +4,13 @@
  * occupant Insert / Remove, zone cell and terrain writes are logged, and Undo / Redo replay them in 0-15 ms. Covers
  * zoning, every network tool, building plops and the bulldozer. Evidence: verify/undo_mod/RESULTS.md.
  *
- * mode=snapshot (undo.ini) keeps the first version, described next: undo by full save / load (~1.3 s per click,
- * ~2.4 s per undo). Evidence: verify/undo_spike/RESULTS.md.
- *
- *   - Before each tool click on the map while paused, the city is saved with the game's own Save command
- *     (CLSID 0x410438DD, one string arg; recipe of SC3U 0x004108f3) into a ring of temp files. A paused city
- *     serialises byte-identically, so a save equal to the newest snapshot is dropped (a click that changed
- *     nothing costs one save, not a ring slot).
- *   - Undo (Ctrl+Z): if the city changed since the newest snapshot it is saved first (so Redo can return to
- *     it), then the active tool is put down and the previous snapshot is loaded with the game's own Load
- *     command (CLSID 0x610438A4, args {0x83172ad7 type 3, false = no "save current city?" prompt, path};
- *     recipe of SC3U 0x0043e718). Redo (Ctrl+Y or Ctrl+Shift+Z) loads the next one.
- *   - The tool MUST be put down before the load: with Demolish still selected the next Blt fails 0x80070057
- *     and the game thread stalls (spike runs 4, 5). SetTool(NULL) = city view primary vt+0x58, SIMSPR 0x10048a08.
- *   - Unpausing, or a city change the mod did not make, empties the ring.
- *   - Save and Load both re-point the city's file name at the snapshot. The mod reads it before (city vt+0x254
- *     = SIMCITY 0x10007116 -> the string at city+0x15c, begin/end at +4/+8) and puts it back after (vt+0x258 =
- *     0x1000713b, which reads only its argument's vt+0x18 data and vt+0x1c length), so the player's Save still
- *     goes to their own file.
+ * Version 1 (undo by a full save / load per click, ~1.3 s per click, ~6 s on a live screen; owner rejected it
+ * 2026-10-20) was removed 2026-10-21. Its evidence stays in verify/undo_spike/RESULTS.md and git history.
+ * The game's own Save command (game_cmd) is kept for the SC3UNDO_TEST save command.
  *
  * Map click = the engine's own find-window-at-point (root = *(*(*(GZGraphicD+0x6cdb8)+0x30)+0x38), root
- * vt+0x8c(x, y), re/tools/frida_hittest.py) returns the city view window (vtable SIMSPR+0x676AC). Only tool
- * modes 2 (demolish) and 4 (a build tool) snapshot; mode 1 is the query tool / Ctrl.
- *
- * Known limits: the SIMSERV crime and SIMECO pollution modules keep a global lookup cache that a reload does
- * not reset (one zero entry per undone action; the stock Load does the same). A snapshot costs ~1 s and an
- * undo ~2.3 s on a 256 city (measured on London).
+ * vt+0x8c(x, y), re/tools/frida_hittest.py) returns the city view window (vtable SIMSPR+0x676AC); the test drag
+ * checks it. Tool modes: 2 demolish, 4 a build tool, 1 the query tool / Ctrl.
  *
  * Buttons: Undo / Redo, the minimap's rotate arrows shrunk to 18x20, in the minimap panel's bottom corners (default,
  *          "minimap placement" below) or full size in the bottom bar (placement=bar, "bottom-bar buttons").
@@ -37,7 +18,10 @@
  *         button_x=-1 button_y=-1 (parent-local, -1 = default) lang=es|en
  * Env:    SC3UNDO_LOG=<abs path>
  *         SC3UNDO_TEST=1: test commands on WM_APP+0x5d0 (wParam 10 = post GZ command lParam, i.e. pick a tool;
- *         11 = log city, name, tool mode, ring) and a log line per paused left click
+ *         11 = log city, name, tool mode, journal; 12 = GZ-event drag from lParam (y << 16 | x); 13 = save the city to
+ *         <tmp>	est_<lParam>.sc3) and a log line per paused left click. Driver: re/tools/undo/savecheck.py
+ *         SC3UNDO_OPLOG=1: log every op of an entry when it is replayed
+ *         SC3UNDO_TFIX=0: a network terrain fix inside an action clears the history again (the pre-2026-10-21 rule)
  * Build:  re/harness/build_undo.ps1. Ships via mods_launch.exe.
  */
 #include <windows.h>
@@ -81,7 +65,7 @@ static void self_path(char *out, int cap, const char *leaf) {
 /* ------------------------------------------------------------------ config */
 #define MAXSTEPS 50
 static int g_enabled = 1, g_steps = 10, g_keys = 1, g_test;
-static int g_buttons = 1, g_btn_x = -1, g_btn_y = -1, g_lang_es = 1, g_on_bar, g_mode_snapshot;
+static int g_buttons = 1, g_btn_x = -1, g_btn_y = -1, g_lang_es = 1, g_on_bar;
 
 static void ini_read(void) {
     char path[MAX_PATH];
@@ -94,7 +78,6 @@ static void ini_read(void) {
     g_btn_x   = GetPrivateProfileIntA("undo", "button_x", -1, path);
     g_btn_y   = GetPrivateProfileIntA("undo", "button_y", -1, path);
     {   char v[16]; GetPrivateProfileStringA("undo", "placement", "minimap", v, sizeof(v), path); g_on_bar = !lstrcmpiA(v, "bar"); }
-    {   char v[16]; GetPrivateProfileStringA("undo", "mode", "delta", v, sizeof(v), path); g_mode_snapshot = !lstrcmpiA(v, "snapshot"); }
     {   char v[8]; GetPrivateProfileStringA("undo", "lang", "es", v, sizeof(v), path); g_lang_es = lstrcmpiA(v, "en") != 0; }
     if (g_steps < 1) g_steps = 1;
     if (g_steps > MAXSTEPS - 1) g_steps = MAXSTEPS - 1;
@@ -179,14 +162,6 @@ static int point_on_map(int x, int y) {
         hit = (BYTE *)((PFN_Hit)vslot(root, 0x8c))(root, NULL, x, y);
         return hit && *(DWORD *)hit == (DWORD)spr + 0x676AC;
     } __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
-}
-
-static void tool_down(void) {
-    typedef void (__fastcall *PFN_SetTool)(void *, void *, void *);
-    BYTE *view = city_view();
-    if (!view || !tool_mode(view)) return;
-    __try { ((PFN_SetTool)vslot(view, 0x58))(view, NULL, NULL); }        /* SIMSPR 0x10048a08 SetTool(0) */
-    __except (EXCEPTION_EXECUTE_HANDLER) { logf("tool_down threw 0x%08lX", GetExceptionCode()); }
 }
 
 /* post {id, a0, 0, 0} through the framework message server (sc3resize rz_city_post) */
@@ -278,122 +253,9 @@ static int game_cmd(int is_load, const char *path) {
     return (int)ok;
 }
 
-/* ------------------------------------------------------------------ the ring */
+/* ------------------------------------------------------------------ test saves folder (%TEMP%\sc3undo_<pid>) */
 static char  g_dir[MAX_PATH];
-static int   g_n, g_cur = -1;                 /* snapshots 0..g_n-1; g_cur = the one the city matches */
-static int   g_slot[MAXSTEPS];                /* file number of each snapshot */
-static unsigned __int64 g_hash[MAXSTEPS];
-static DWORD g_size[MAXSTEPS];
-static int   g_next_file;
-static BYTE *g_city;                          /* the city the ring belongs to */
 static volatile LONG g_busy;
-/* 1 right after the mod loaded snapshot g_cur: the city IS that snapshot, but a save of it is not byte-identical
-   (save -> load -> save differs in ~45 bytes in 10 sections, spike run 1), so hashing cannot tell. Cleared by the
-   next tool click. */
-static int g_clean;
-
-static void slot_path(int file, char *out) { _snprintf(out, MAX_PATH, "%s\\u%03d.sc3", g_dir, file); out[MAX_PATH - 1] = 0; }
-
-static int file_hash(const char *path, unsigned __int64 *h, DWORD *size) {
-    HANDLE f = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
-    BYTE buf[65536];
-    DWORD got, i;
-    unsigned __int64 x = 1469598103934665603ULL;
-    if (f == INVALID_HANDLE_VALUE) return 0;
-    *size = 0;
-    while (ReadFile(f, buf, sizeof(buf), &got, NULL) && got) {
-        for (i = 0; i < got; i++) { x ^= buf[i]; x *= 1099511628211ULL; }
-        *size += got;
-    }
-    CloseHandle(f);
-    *h = x;
-    return 1;
-}
-
-static void ring_drop(int i) {                /* delete snapshot i's file and close the gap */
-    char p[MAX_PATH];
-    slot_path(g_slot[i], p);
-    DeleteFileA(p);
-    memmove(&g_slot[i], &g_slot[i + 1], (g_n - i - 1) * sizeof(g_slot[0]));
-    memmove(&g_hash[i], &g_hash[i + 1], (g_n - i - 1) * sizeof(g_hash[0]));
-    memmove(&g_size[i], &g_size[i + 1], (g_n - i - 1) * sizeof(g_size[0]));
-    g_n--;
-    if (g_cur >= i) g_cur--;
-}
-static void ring_clear(const char *why) {
-    if (g_n) logf("RING> cleared (%d snapshot(s)): %s", g_n, why);
-    while (g_n) ring_drop(g_n - 1);
-    g_cur = -1;
-    g_city = NULL;
-    g_clean = 0;
-}
-
-/* save the city as a new snapshot after g_cur (dropping the redo branch) unless it equals snapshot g_cur.
-   Returns 1 if the city now matches snapshot g_cur. */
-static int ring_push(BYTE *city, const char *why) {
-    char p[MAX_PATH];
-    unsigned __int64 h;
-    DWORD sz, t0 = GetTickCount();
-    int file, ok;
-    if (g_clean && g_cur >= 0) {
-        int dropped = 0;
-        if (!strcmp(why, "click"))                  /* a tool action after an undo ends the redo branch */
-            while (g_n > g_cur + 1) { ring_drop(g_n - 1); dropped++; }
-        logf("SNAP> %s: city is snapshot %d (just loaded), no save%s", why, g_cur, dropped ? ", redo branch dropped" : "");
-        return 1;
-    }
-    file = g_next_file++ % 1000;
-    slot_path(file, p);
-    DeleteFileA(p);
-    name_save(city);
-    ok = game_cmd(0, p);
-    name_restore(city);
-    if (!ok || !file_hash(p, &h, &sz)) { logf("SNAP> %s: save FAILED", why); DeleteFileA(p); return 0; }
-    if (g_cur >= 0 && h == g_hash[g_cur] && sz == g_size[g_cur]) {
-        DeleteFileA(p);
-        logf("SNAP> %s: unchanged (%lu ms)", why, GetTickCount() - t0);
-        return 1;
-    }
-    while (g_n > g_cur + 1) ring_drop(g_n - 1);     /* a new action ends the redo branch */
-    if (g_n >= g_steps + 1) ring_drop(0);           /* steps undos need steps+1 states */
-    g_slot[g_n] = file; g_hash[g_n] = h; g_size[g_n] = sz;
-    g_cur = g_n++;
-    g_city = city;
-    logf("SNAP> %s: snapshot %d of %d saved, %lu B, %lu ms", why, g_cur, g_n, sz, GetTickCount() - t0);
-    return 1;
-}
-
-static void ring_load(int i, const char *why) {
-    char p[MAX_PATH];
-    BYTE *city;
-    DWORD t0 = GetTickCount();
-    slot_path(g_slot[i], p);
-    city = city_get();
-    name_save(city);
-    tool_down();
-    if (!game_cmd(1, p)) { logf("%s> load of snapshot %d FAILED", why, i); return; }
-    city = city_get();
-    name_restore(city);
-    g_city = city;
-    g_cur = i;
-    g_clean = 1;
-    logf("%s> snapshot %d of %d loaded, city 0x%08lX, %lu ms", why, i, g_n, (DWORD)city, GetTickCount() - t0);
-}
-
-static void do_undo(void) {
-    BYTE *city = city_get();
-    if (!city_paused(city)) { logf("UNDO> ignored: not paused"); return; }
-    if (g_city && city != g_city) ring_clear("city changed");
-    if (!ring_push(city, "undo")) return;           /* keep the present state so Redo can come back */
-    if (g_cur <= 0) { logf("UNDO> nothing to undo (snapshot %d of %d)", g_cur, g_n); return; }
-    ring_load(g_cur - 1, "UNDO");
-}
-static void do_redo(void) {
-    BYTE *city = city_get();
-    if (!city_paused(city)) { logf("REDO> ignored: not paused"); return; }
-    if (city != g_city || g_cur < 0 || g_cur + 1 >= g_n) { logf("REDO> nothing to redo (snapshot %d of %d)", g_cur, g_n); return; }
-    ring_load(g_cur + 1, "REDO");
-}
 
 /* ------------------------------------------------------------------ text focus (sc3resize KEYFOCUS) */
 static int text_focus(void) {
@@ -1512,8 +1374,6 @@ static void j_redo(void) {
 
 /* ------------------------------------------------------------------ window hook */
 static WNDPROC g_oldproc;
-static int g_pending_up, g_pending_move;
-static LPARAM g_pending_up_lp, g_pending_move_lp;
 
 /* TEST ONLY (SC3UNDO_TEST=1, wParam 12): the click path, then a GZ-event drag like sc3probe gz_drag_step.
    Posted Win32 mouse input reaches undo_wndproc but does not make a tool act (measured 2026-10-20: posted clicks
@@ -1539,42 +1399,19 @@ static void test_drag_step(HWND h) {
 
 static LRESULT CALLBACK undo_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     if (!g_oldproc) return DefWindowProcA(h, m, wp, lp);
-    if (g_busy) {
-        /* the game runs frames inside Save/Load; hold the player's input until it is done */
-        if (m == WM_LBUTTONUP) { g_pending_up = 1; g_pending_up_lp = lp; return 0; }
-        if (m == WM_MOUSEMOVE) { g_pending_move = 1; g_pending_move_lp = lp; return 0; }
-        if ((m >= WM_MOUSEFIRST && m <= WM_MOUSELAST) || (m >= WM_KEYFIRST && m <= WM_KEYLAST))
-            return 0;
-        return CallWindowProcA(g_oldproc, h, m, wp, lp);
-    }
     if (m == WM_TIMER && wp == 0x5d1) { if (g_td_step >= 0) test_drag_step(h); return 0; }
     if (m == WM_UNDO_CMD) {
         InterlockedExchange(&g_busy, 1);
         if (wp == 5) { journal_install(); InterlockedExchange(&g_busy, 0); return 0; }
-        if (g_mode_snapshot) {
-            if (wp == 1) do_undo();
-            else if (wp == 2) do_redo();
-            else if (wp == 3) ring_clear("unpaused");
-        } else {
-            if (wp == 1) j_undo();
-            else if (wp == 2) j_redo();
-            else if (wp == 3) j_clear("unpaused");
-        }
-        if (wp <= 4) { BYTE *c = city_get();
-            if (g_mode_snapshot) { int p = city_paused(c) && c == g_city;
-                buttons_refresh(p && g_cur >= 0 && (g_cur > 0 || !g_clean), p && g_clean && g_cur + 1 < g_n); }
-            else { int p = city_paused(c) && c == g_jcity;
-                buttons_refresh(p && g_jcur > 0, p && g_jcur < g_jn); } }
+        if (wp == 1) j_undo();
+        else if (wp == 2) j_redo();
+        else if (wp == 3) j_clear("unpaused");
+        if (wp <= 4) { BYTE *c = city_get(); int p = city_paused(c) && c == g_jcity;
+            buttons_refresh(p && g_jcur > 0, p && g_jcur < g_jn); }
         else if (g_test && wp == 12) {
-            BYTE *c = city_get();
             long mode = tool_mode(city_view());
             g_td_x = (int)(short)LOWORD(lp); g_td_y = (int)(short)HIWORD(lp);
             logf("TEST> gz drag from (%d,%d) mode=%ld on_map=%d", g_td_x, g_td_y, mode, point_on_map(g_td_x, g_td_y));
-            if (city_paused(c) && (mode == 2 || mode == 4) && point_on_map(g_td_x, g_td_y)) {
-                if (g_city && c != g_city) ring_clear("city changed");
-                ring_push(c, "click");
-                g_clean = 0;
-            }
             g_td_step = 0;
             SetTimer(h, 0x5d1, 120, NULL);
         }
@@ -1586,8 +1423,8 @@ static LRESULT CALLBACK undo_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         else if (g_test && wp == 10) logf("TEST> post {0x025F0A91, 0x%08lX}: %d", (DWORD)lp, gz_post(0x025F0A91, (DWORD)lp));
         else if (g_test && wp == 11) { BYTE *c = city_get(); BYTE *v = city_view();
             if (c) name_save(c);
-            logf("TEST> city 0x%08lX paused=%d name='%s' tool mode=%ld ring %d of %d", (DWORD)c, city_paused(c),
-                 c ? g_name : "", tool_mode(v), g_cur, g_n); }
+            logf("TEST> city 0x%08lX paused=%d name='%s' tool mode=%ld journal %d of %d", (DWORD)c, city_paused(c),
+                 c ? g_name : "", tool_mode(v), g_jcur, g_jn); }
         InterlockedExchange(&g_busy, 0);
         return 0;
     }
@@ -1597,30 +1434,9 @@ static LRESULT CALLBACK undo_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         PostMessageA(h, WM_UNDO_CMD, redo ? 2 : 1, 0);
         return 0;
     }
-    if (m == WM_LBUTTONDOWN) {
-        BYTE *city = city_get();
-        long mode;
-        if (g_test && city_paused(city))
-            logf("TEST> LBUTTONDOWN (%d,%d) mode=%ld on_map=%d", (int)(short)LOWORD(lp), (int)(short)HIWORD(lp),
-                 tool_mode(city_view()), point_on_map((int)(short)LOWORD(lp), (int)(short)HIWORD(lp)));
-        if (g_mode_snapshot && city_paused(city) && ((mode = tool_mode(city_view())) == 2 || mode == 4) &&
-            point_on_map((int)(short)LOWORD(lp), (int)(short)HIWORD(lp))) {
-            LRESULT r;
-            if (g_city && city != g_city) ring_clear("city changed");
-            InterlockedExchange(&g_busy, 1);
-            g_pending_up = g_pending_move = 0;
-            ring_push(city, "click");
-            g_clean = 0;                                  /* this click may change the city */
-            InterlockedExchange(&g_busy, 0);
-            r = CallWindowProcA(g_oldproc, h, m, wp, lp);
-            /* input that arrived during the save goes back in the queue AFTER the press, so the game runs frames
-               between press, drag and release (delivered in-line, a drag collapsed into one frame and did nothing) */
-            if (g_pending_move) PostMessageA(h, WM_MOUSEMOVE, MK_LBUTTON, g_pending_move_lp);
-            if (g_pending_up) PostMessageA(h, WM_LBUTTONUP, 0, g_pending_up_lp);
-            g_pending_up = g_pending_move = 0;
-            return r;
-        }
-    }
+    if (m == WM_LBUTTONDOWN && g_test && city_paused(city_get()))
+        logf("TEST> LBUTTONDOWN (%d,%d) mode=%ld on_map=%d", (int)(short)LOWORD(lp), (int)(short)HIWORD(lp),
+             tool_mode(city_view()), point_on_map((int)(short)LOWORD(lp), (int)(short)HIWORD(lp)));
     return CallWindowProcA(g_oldproc, h, m, wp, lp);
 }
 
@@ -1658,8 +1474,8 @@ static DWORD WINAPI watcher(LPVOID unused) {
         Sleep(300);
         if (g_busy) continue;
         city = city_get();
-        if (!g_mode_snapshot && !g_journal_ready && city) PostMessageA(h, WM_UNDO_CMD, 5, 0);   /* install on the game thread */
-        if ((g_n || g_jn) && !city_paused(city)) PostMessageA(h, WM_UNDO_CMD, 3, 0);
+        if (!g_journal_ready && city) PostMessageA(h, WM_UNDO_CMD, 5, 0);   /* install on the game thread */
+        if (g_jn && !city_paused(city)) PostMessageA(h, WM_UNDO_CMD, 3, 0);
         else if (city) PostMessageA(h, WM_UNDO_CMD, 4, 0);   /* keep the buttons' greyed state current */
     }
 }
@@ -1723,9 +1539,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
         dir_init();
         logf("### snapshots in %s", g_dir);
         CreateThread(NULL, 0, watcher, NULL, 0, NULL);
-    } else if (reason == DLL_PROCESS_DETACH && g_n) {
-        while (g_n) ring_drop(g_n - 1);
-        RemoveDirectoryA(g_dir);
+    } else if (reason == DLL_PROCESS_DETACH && g_dir[0]) {
+        RemoveDirectoryA(g_dir);                      /* only if empty; dir_sweep removes the rest at the next start */
     }
     return TRUE;
 }
