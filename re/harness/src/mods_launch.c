@@ -6,6 +6,7 @@
  *
  *   mods_launch.exe [-delay <ms>] [-kill <seconds>] [-multi] [-exe <name>] [-- <args passed to the game>]
  *   -multi: per-instance mutex name, so several games can run at once (see unique_mutex).
+ *   -nolease: skip the dev-PC game-lease gate (see lease_gate; exit 7 = refused).
  *
  * Mods are independent: each one checks the game bytes it patches and refuses (logging why)
  * rather than half-patching, so a collision shows up in that mod's log, not as a crash.
@@ -13,6 +14,7 @@
 
 #include <windows.h>
 #include <stdio.h>
+#include <string.h>
 
 static int inject(HANDLE proc, const char *dll) {
     void *mem;
@@ -87,6 +89,8 @@ static int inject_all(HANDLE proc, const char *dir, const char **mods, int n) {
     return 1;
 }
 
+#include "lease_gate.h"
+
 /* Copy `dir` = everything up to (not including) the last backslash of `full`. */
 static void dirname_of(const char *full, char *dir, int cb) {
     const char *slash = NULL, *p;
@@ -111,6 +115,7 @@ int main(int argc, char **argv) {
     int delayms = 0;
     int killsec = 0;
     int multi = 0;
+    int nolease = 0;
     int i;
     char *p;
 
@@ -130,6 +135,8 @@ int main(int argc, char **argv) {
             exename = argv[++i];   /* test option: launch a renamed copy (compat layers are keyed by path) */
         } else if (!lstrcmpiA(argv[i], "-multi")) {
             multi = 1;
+        } else if (!lstrcmpiA(argv[i], "-nolease")) {
+            nolease = 1;
         } else if (!lstrcmpiA(argv[i], "-kill") && i + 1 < argc) {
             killsec = atoi(argv[++i]);
         } else if (!lstrcmpA(argv[i], "--")) {
@@ -165,6 +172,11 @@ int main(int argc, char **argv) {
         printf("[!] SC3U.exe not found next to the loader or at <root>\\Apps\\SC3U.exe\n");
         printf("    looked last at: %s\n", exe);
         return 2;
+    }
+    if (!nolease) {
+        char gameroot[MAX_PATH];
+        dirname_of(workdir, gameroot, sizeof(gameroot));                 /* <root>\Apps -> <root> */
+        if (!lease_gate(gameroot)) return 7;
     }
     for (m = 0; m < (int)(sizeof(mods) / sizeof(mods[0])); m++) {
         _snprintf(dll, sizeof(dll), "%s\\%s", owndir, mods[m]);
