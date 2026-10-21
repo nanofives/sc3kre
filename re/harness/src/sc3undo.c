@@ -738,8 +738,11 @@ static DWORD __fastcall mm_init(void *self, void *edx) {
         for (i = 0; i < 2; i++) {
             void *img = small_strip(art[i]);
             /* side by side under the bottom tip of the map diamond (~(80,144)), between the rotate buttons
-               (x 34..60 and 100..126): owner call 2026-10-20 "closer together near the bottom edge of the map" */
-            LONG x = i == 0 ? pw / 2 - 2 - SMALL_W : pw / 2 + 2, y = ph - 2 - SMALL_H;
+               (x 34..60 and 100..126): owner call 2026-10-20 "closer together near the bottom edge of the map".
+               An 18 px gap is left between them (x 70..88): with north at the bottom, SIMUI 0x10050cb3 re-centres the
+               "N" compass label at (79,142), and at 2 px apart it was drawn over the Undo button (measured 2026-10-21,
+               verify/undo_leftovers/rot). */
+            LONG x = i == 0 ? pw / 2 - 10 - SMALL_W : pw / 2 + 8, y = ph - 2 - SMALL_H;
             if (g_btn_x >= 0) x = g_btn_x + i * (SMALL_W + 4);
             if (g_btn_y >= 0) y = g_btn_y;
             if (!img) { DWORD key[3] = { 0, 0x2f78c6d, art[i] }, im = 0;   /* fall back to the full-size strip */

@@ -15,7 +15,7 @@ list). Evidence for the method: `verify/undo_spike/RESULTS.md`.
 - Buttons (owner calls 2026-10-20, "smaller buttons on the bottom of the minimap", then "closer together near the
   bottom edge of the map"): the minimap's rotate arrows shrunk at load from 26x29 to 18x20 frames (the game has no
   smaller arrow art; the image button blits 1:1), side by side under the map diamond's bottom tip, minimap-local
-  (60,142) and (82,142). Greyed when there is nothing to undo / redo. Tooltip "Deshacer (Ctrl+Z)" shown on hover.
+  (60,142) and (82,142); since 2026-10-21 (52,142) and (88,142), see the compass-label section. Greyed when there is nothing to undo / redo. Tooltip "Deshacer (Ctrl+Z)" shown on hover.
   `placement=bar` keeps the first version (full size, right end of the news ticker row).
 - `undo.ini` beside the DLL: `[undo] enabled=1 steps=10 keys=1 buttons=1 placement=minimap button_x=-1 button_y=-1 lang=es`.
 - Run t13: start (both greyed), one Demolish drag (Undo lit), click on the small Undo button (snapshot 0 loaded,
@@ -186,3 +186,10 @@ call. The `0x12c` entry of spike run U is not explained; with the keys erased it
 | power line | 6 | byte-identical | byte-identical |
 
 The only benign section left is SIMSERV flammability `0x61448030` (recomputed by the sim's scan).
+
+## Minimap buttons vs the compass label (2026-10-21, verify/undo_leftovers/rot, rot2)
+
+Four rotations (PageDown, frame dumps). With north at the bottom the "N" label (re-centred by SIMUI `0x10050cb3` at
+(79,142)) was drawn over the Undo button, which sat at (60,142) with Redo at (82,142) (`rot/rotations.png`, third panel).
+The buttons now sit at (52,142) and (88,142), leaving x 70..88 free: the label is clear of both in all four rotations
+(`rot2/rotations.png`). `button_x` / `button_y` in undo.ini still override.
