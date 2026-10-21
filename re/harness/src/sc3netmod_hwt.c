@@ -196,10 +196,6 @@ static int hwt_check(HwyPass *hp, int ax, int az, int r, int gesture, int set, c
         if (c->dz < 0 && (c->dx == 0 || c->dx == 1) && c->dz < sz0) sz0 = c->dz;
     }
     if (tx0 > tx1) { *why = "no cells in this set"; return 0; }
-    for (dz = -2; dz >= sz0 - 1; dz--)                                    /* the stem behind the end */
-        if (!hwt_straight_or_end(hp, ax, az, r, set, 0, dz, 0, -1) || !hwt_straight_or_end(hp, ax, az, r, set, 1, dz, 0, -1)) {
-            *why = "stem"; return 0;
-        }
     if (gesture == 1) {
         hwt_world(ax, az, r, 0, -1, &x, &z);
         if (!hwt_is_id(hwy_at(hp, x, z), 11235, 15053)) { *why = "no cap"; return 0; }
@@ -221,12 +217,23 @@ static int hwt_check(HwyPass *hp, int ax, int az, int r, int gesture, int set, c
             if (hwy_at(hp, x, z)) { *why = "far arm continues: a full X (hwx)"; return 0; }
         }
     }
-    for (dx = tx0 - 1; dx <= tx1 + 1; dx++) {                            /* the through highway */
-        if (gesture == 2 && dx >= -1 && dx <= 2) continue;
-        if (dx >= 0 && dx <= 1) {                                        /* where the stem meets it: never carried on */
-            if (!hwt_straight(hp, ax, az, r, dx, 0) || !hwt_straight(hp, ax, az, r, dx, 1)) { *why = "through highway"; return 0; }
-        } else if (!hwt_straight_or_end(hp, ax, az, r, set, dx, 0, dx < 0 ? -1 : 1, 0) ||
-                   !hwt_straight_or_end(hp, ax, az, r, set, dx, 1, dx < 0 ? -1 : 1, 0)) { *why = "through highway"; return 0; }
+    /* the through highway. task hwtee: where the stem meets it first (no through highway there = a lone end, silent),
+     * then along it: a through highway that ends inside the T's reach is logged (owner bug 3, 2026-10-21) */
+    for (dx = 0; dx <= 1 && gesture == 1; dx++)                          /* where the stem meets it: never carried on */
+        if (!hwt_straight(hp, ax, az, r, dx, 0) || !hwt_straight(hp, ax, az, r, dx, 1)) { *why = "through highway"; return 0; }
+    for (dz = -2; dz >= sz0 - 1; dz--)                                    /* the stem behind the end (task hwtee: moved) */
+        if (!hwt_straight_or_end(hp, ax, az, r, set, 0, dz, 0, -1) || !hwt_straight_or_end(hp, ax, az, r, set, 1, dz, 0, -1)) {
+            *why = gesture == 1 ? "the stem must run straight 4 cells back from the through highway, nothing past its end" : "stem";
+            return 0;
+        }
+    for (dx = tx0 - 1; dx <= tx1 + 1; dx++) {
+        if ((gesture == 2 && dx >= -1 && dx <= 2) || (dx >= 0 && dx <= 1)) continue;
+        if (!hwt_straight_or_end(hp, ax, az, r, set, dx, 0, dx < 0 ? -1 : 1, 0) ||
+            !hwt_straight_or_end(hp, ax, az, r, set, dx, 1, dx < 0 ? -1 : 1, 0)) {
+            *why = dx < 0 ? "the through highway must run on 2 cells left of the stem (seen from the stem), nothing past its end"
+                          : "the through highway must run on 6 cells right of the stem (seen from the stem), nothing past its end";
+            return 0;
+        }
     }
     for (k = 0; k < g_hwt_n; k++) {                                      /* the cells */
         HwtCell *c = &g_hwt_c[k];
