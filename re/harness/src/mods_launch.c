@@ -227,8 +227,12 @@ int main(int argc, char **argv) {
             printf("[*] game exited on its own, code = %lu\n", code);
         }
     } else {
+        /* Exit code + lifetime (2026-10-21): the intermittent ~0.3 s startup deaths printed only "game exited",
+           which cannot tell the single-instance exit (0xFFFFFFFF) from an NTSTATUS or a clean quit. */
+        DWORD code = 0, t0 = GetTickCount();
         WaitForSingleObject(pi.hProcess, INFINITE);
-        printf("[*] game exited\n");
+        GetExitCodeProcess(pi.hProcess, &code);
+        printf("[*] game exited, code = 0x%08lX after %lu ms\n", code, GetTickCount() - t0);
     }
     CloseHandle(pi.hThread);
     CloseHandle(pi.hProcess);
