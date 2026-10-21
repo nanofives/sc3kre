@@ -477,11 +477,76 @@ static HRESULT WINAPI perf_bltfast(void *self, DWORD x, DWORD y, void *src, RECT
     g_bltfast_ms += now_ms() - a;
     return hr;
 }
+/* LOCKLOG (task locks 2026-10-20, verify/dlgscale): SC3PERF_LOCKLOG=1 records who calls Lock - the return address and
+   two more frames (RtlCaptureStackBackTrace, EBP chain, 0 when it stops) - and every 10 s the stats thread logs the
+   top callers as module+offset with their share and lock time. The Reunirse dialog adds ~3,300 Locks per second
+   (verify/dlgscale/RESULTS.md); this names the code. Off by default: no cost then. */
+#define LL_N 512
+typedef struct { DWORD ra[3]; LONG n; double ms; } LL_ENT;
+static int    g_locklog;
+static LL_ENT g_ll[LL_N];
+static volatile LONG g_ll_lost;
+static CRITICAL_SECTION g_llcs;
+static void ll_note(const DWORD *ra, double ms) {
+    DWORD h = (ra[0] ^ (ra[1] * 31) ^ (ra[2] * 131)) * 2654435761u;
+    int i, k;
+    EnterCriticalSection(&g_llcs);
+    for (i = 0; i < 16; i++) {
+        k = (int)((h >> 23) + i) & (LL_N - 1);
+        if (!g_ll[k].n) { memcpy(g_ll[k].ra, ra, 12); }
+        if (!memcmp(g_ll[k].ra, ra, 12)) { g_ll[k].n++; g_ll[k].ms += ms; LeaveCriticalSection(&g_llcs); return; }
+    }
+    g_ll_lost++;
+    LeaveCriticalSection(&g_llcs);
+}
+static void ll_name(DWORD a, char *out, int cap) {
+    HMODULE m = NULL;
+    char path[MAX_PATH], *sl;
+    if (!a) { lstrcpynA(out, "-", cap); return; }
+    if (!GetModuleHandleExA(0x4 | 0x2 /* FROM_ADDRESS | UNCHANGED_REFCOUNT */, (LPCSTR)a, &m) || !m ||
+        !GetModuleFileNameA(m, path, sizeof(path))) { _snprintf(out, cap, "0x%08lX", a); out[cap - 1] = 0; return; }
+    sl = strrchr(path, '\\');
+    _snprintf(out, cap, "%s+0x%lX", sl ? sl + 1 : path, a - (DWORD)m);
+    out[cap - 1] = 0;
+}
+static void ll_dump(void) {
+    static LL_ENT snap[LL_N];
+    LONG total = 0, lost;
+    int i, j, shown = 0;
+    EnterCriticalSection(&g_llcs);
+    memcpy(snap, g_ll, sizeof(snap)); memset(g_ll, 0, sizeof(g_ll)); lost = g_ll_lost; g_ll_lost = 0;
+    LeaveCriticalSection(&g_llcs);
+    for (i = 0; i < LL_N; i++) total += snap[i].n;
+    if (!total) return;
+    logf("LOCKLOG> %ld Locks in 10 s (%ld not recorded: table full)", total, lost);
+    while (shown < 12) {
+        int best = -1;
+        char a0[96], a1[96], a2[96];
+        for (j = 0; j < LL_N; j++) if (snap[j].n && (best < 0 || snap[j].n > snap[best].n)) best = j;
+        if (best < 0) break;
+        ll_name(snap[best].ra[0], a0, sizeof(a0)); ll_name(snap[best].ra[1], a1, sizeof(a1)); ll_name(snap[best].ra[2], a2, sizeof(a2));
+        logf("LOCKLOG>   %6ld (%4.1f%%) %7.1f ms  %s <- %s <- %s", snap[best].n, 100.0 * snap[best].n / total, snap[best].ms, a0, a1, a2);
+        snap[best].n = 0; shown++;
+    }
+}
+
 static HRESULT WINAPI perf_lock(void *self, RECT *r, void *desc, DWORD fl, HANDLE ev) {
-    double a = now_ms();
+    double a = now_ms(), d;
     HRESULT hr = g_next_lock(self, r, desc, fl, ev);
     g_lock_n++;
-    g_lock_ms += now_ms() - a;
+    d = now_ms() - a;
+    g_lock_ms += d;
+    if (g_locklog) {
+        typedef USHORT (WINAPI *CSBT)(ULONG, ULONG, PVOID *, PULONG);
+        static CSBT cs;
+        PVOID fr[3] = { 0, 0, 0 };
+        DWORD ra[3];
+        if (!cs) cs = (CSBT)GetProcAddress(GetModuleHandleA("kernel32.dll"), "RtlCaptureStackBackTrace");
+        ra[0] = (DWORD)_ReturnAddress();
+        if (cs) cs(1, 3, fr, NULL);   /* frame 0 of that is our caller's return as seen from the EBP chain */
+        ra[1] = (DWORD)fr[1]; ra[2] = (DWORD)fr[2];
+        ll_note(ra, d);
+    }
     return hr;
 }
 
@@ -2875,6 +2940,7 @@ static DWORD WINAPI stats_thread(LPVOID p) {
         if (g_listfind && tick && tick % 240 == 0)
             logf("LIST_FIND> hits %ld walks %ld builds %ld drops %ld (table %lu slots)", g_lf_hits, g_lf_walks,
                  g_lf_builds, g_lf_drops, g_lfcap);
+        if (g_locklog && !(tick % 40)) ll_dump();   /* LOCKLOG: every 10 s (the loop ticks every 250 ms) */
         if (++tick % 4) continue;
         {
             double t = now_ms(), dt = t - t_last;
@@ -2998,6 +3064,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID r) {
         g_layerref = cfg("layer_refcount", 1);
         g_busy = cfg("busy", 1);
         g_busy_show = cfg("busy_show", 1);
+        g_locklog = cfg("locklog", 0);   /* LOCKLOG diag, SC3PERF_LOCKLOG=1 */
         g_listcount = cfg("list_count", 1);
         g_listfind = cfg("list_find", 1);
         {   /* default 8 workers (owner call 2026-10-09), never more than the logical processors minus one */
@@ -3016,6 +3083,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID r) {
         g_geomheld = cfg("geom_held", 0);
         if (g_mt_batch < 64) g_mt_batch = 64;
         InitializeCriticalSection(&g_busycs);
+        InitializeCriticalSection(&g_llcs);
         logf("sc3perf loaded: overlay=%d profile=%d sysmem=%d fps_cap=%d clock_ms=%d spr_budget=%.0f spr_sleep_us=%d busy=%d busy_show=%d",
              g_overlay, g_profile, g_sysmem, g_cap, g_clock_ms, g_spr_budget, g_spr_sleep_us, g_busy, g_busy_show);
         CreateThread(NULL, 0, watcher, NULL, 0, NULL);
