@@ -825,6 +825,7 @@ static int patch_minimap_vtable(HMODULE sui) {
  *        matter.
  * Left alone: SIMSERV FlammabilityLayer 0x61448030 (a re-inserted occupant stamps its value at once; the sim's scan
  * recomputes every cell anyway) and the crime / pollution module-global lookup caches (verify/undo_spike).
+ *   TERRAIN TOOLS (raise, lower, level, water, trees): one entry per mouse press, see "TERRAIN TOOLS" below.
  * Not journaled: terrain levelled by a network drag whose ends are on an illegal slope (network manager vtable
  * 0x1002c7bc +0x118 FUN_100086c8). If that runs inside an action, the history is cleared instead (undoing the rest
  * would leave the terrain wrong). */
@@ -1019,12 +1020,52 @@ static void j_push(JEntry *e) {
     g_jcity = city;
 }
 
+/* the recording scope: opened by a tool's Apply, or for the terrain tools by the button press (they commit on every
+   mouse move while held, so one press = one entry) */
+static void *g_scope_budget;
+static __int64 g_scope_f0;
+static int scope_open(const char *name) {
+    BYTE *city;
+    void *bu;
+    if (g_recording) return 0;
+    city = city_get();
+    if (!city_paused(city) || (bu = budget_of(city)) == NULL) return 0;
+    memset(&g_rec, 0, sizeof(g_rec));
+    g_rec.tool = name;
+    g_rec_barrier = 0;
+    g_scope_budget = bu;
+    g_scope_f0 = funds_of(bu);
+    g_recording = 1;
+    return 1;
+}
+static void scope_close(void) {
+    __int64 f1;
+    if (!g_recording) return;
+    f1 = funds_of(g_scope_budget);
+    g_recording = 0;
+    g_rec.budget = g_scope_budget;
+    g_rec.money = g_scope_f0 > f1 ? (DWORD)(g_scope_f0 - f1) : 0;
+    if (g_rec_barrier) {
+        logf("APPLY> %s: %d op(s) but the action also changed terrain (not journaled): history cleared", g_rec.tool, g_rec.n);
+        j_entry_free(&g_rec);
+        j_clear("terrain changed by a network drag");
+    } else if (g_rec.n) {
+        int ins = 0, rem = 0, cell = 0, alt = 0, k;
+        for (k = 0; k < g_rec.n; k++) { BYTE op = g_rec.ops[k].op;
+            if (op == OP_INS) ins++; else if (op == OP_REM) rem++; else if (op == OP_ALT || op == OP_WATER || op == OP_BLOCK) alt++; else cell++; }
+        j_push(&g_rec);
+        logf("APPLY> %s: %d inserted, %d removed, %d zone cell(s), %d terrain op(s), $%lu -> entry %d of %d", g_rec.tool, ins, rem,
+             cell, alt, g_j[g_jn - 1].money, g_jcur, g_jn);
+        memset(&g_rec, 0, sizeof(g_rec));
+    } else {
+        if (g_rec.money) logf("APPLY> %s: $%lu charged but no change recorded", g_rec.tool, g_rec.money);
+        j_entry_free(&g_rec);
+    }
+}
+
 static DWORD __fastcall tool_apply(void *tool, void *edx, DWORD arg) {
     DWORD a[1], r, vt = tool ? *(DWORD *)tool : 0;
     ToolHook *t = NULL;
-    BYTE *city;
-    void *bu = NULL;
-    __int64 f0 = 0;
     unsigned i;
     int scope;
     (void)edx;
@@ -1033,40 +1074,57 @@ static DWORD __fastcall tool_apply(void *tool, void *edx, DWORD arg) {
         if (m && g_tools[i].orig && vt == (DWORD)m + (g_tools[i].vt - 0x10000000)) { t = &g_tools[i]; break; }
     }
     if (!t) { logf("APPLY> unknown tool vtable 0x%08lX", vt); return 0; }
-    city = city_get();
-    scope = !g_recording && city_paused(city) && (bu = budget_of(city)) != NULL;
-    if (scope) {
-        memset(&g_rec, 0, sizeof(g_rec));
-        g_rec.tool = t->name;
-        g_rec_barrier = 0;
-        f0 = funds_of(bu);
-        g_recording = 1;
-    }
+    scope = scope_open(t->name);
     a[0] = arg;
     __try { r = tc(tool, t->orig, a, 1); }
     __except (EXCEPTION_EXECUTE_HANDLER) { logf("APPLY> %s threw 0x%08lX", t->name, GetExceptionCode()); r = 0; }
-    if (scope) {
-        __int64 f1 = funds_of(bu);
-        g_recording = 0;
-        g_rec.budget = bu;
-        g_rec.money = f0 > f1 ? (DWORD)(f0 - f1) : 0;
-        if (g_rec_barrier) {
-            logf("APPLY> %s: %d op(s) but the action also changed terrain (not journaled): history cleared", t->name, g_rec.n);
-            j_entry_free(&g_rec);
-            j_clear("terrain changed by a network drag");
-        } else if (g_rec.n) {
-            int ins = 0, rem = 0, cell = 0, alt = 0, k;
-            for (k = 0; k < g_rec.n; k++) { BYTE op = g_rec.ops[k].op;
-                if (op == OP_INS) ins++; else if (op == OP_REM) rem++; else if (op == OP_ALT || op == OP_WATER || op == OP_BLOCK) alt++; else cell++; }
-            j_push(&g_rec);
-            logf("APPLY> %s: %d inserted, %d removed, %d zone cell(s), %d terrain op(s), $%lu -> entry %d of %d", t->name, ins, rem, cell, alt,
-                 g_j[g_jn - 1].money, g_jcur, g_jn);
-            memset(&g_rec, 0, sizeof(g_rec));
-        } else {
-            if (g_rec.money) logf("APPLY> %s: $%lu charged but no change recorded", t->name, g_rec.money);
-            j_entry_free(&g_rec);
-        }
+    if (scope) scope_close();
+    return r;
+}
+
+/* TERRAIN TOOLS (SIMDIRT raise 0x100200e4, lower 0x1002018c, level 0x10020234, water 0x100202dc; SIMGEOM trees
+   0x100298f4): they commit through +0x48 / +0x4c on every mouse move while the button is held and once on release, so
+   the scope spans the press: button down +0x20 opens it, button up +0x28 closes it after the stock handler ran. Both
+   __thiscall(tool, x, y, flags), ret 0xc (raise / lower / water share 0x1001c334 / 0x1001c40e; level 0x1001c6bf /
+   0x1001c752; trees 0x100215a9 / 0x1002165e). Every write they make goes through slots logged above (DirtBag +0x84 /
+   +0x88, zone +0x3c, occupant +0x3c / +0x48 via DemolitionLayer +0x5c / +0x58 and FloraLayer SetDensity). */
+typedef struct { const char *mod; DWORD vt; DWORD down, up; const char *name; void *odown, *oup; } PressHook;
+static PressHook g_press[] = {
+    { "SIMDIRT.DLL", 0x100200e4, 0x1001c334, 0x1001c40e, "raise terrain", NULL, NULL },
+    { "SIMDIRT.DLL", 0x1002018c, 0x1001c334, 0x1001c40e, "lower terrain", NULL, NULL },
+    { "SIMDIRT.DLL", 0x10020234, 0x1001c6bf, 0x1001c752, "level terrain", NULL, NULL },
+    { "SIMDIRT.DLL", 0x100202dc, 0x1001c334, 0x1001c40e, "water",         NULL, NULL },
+    { "SIMGEOM.DLL", 0x100298f4, 0x100215a9, 0x1002165e, "trees",         NULL, NULL },
+};
+#define NPRESS (sizeof(g_press) / sizeof(g_press[0]))
+static PressHook *press_of(void *tool) {
+    DWORD vt = tool ? *(DWORD *)tool : 0;
+    unsigned i;
+    for (i = 0; i < NPRESS; i++) {
+        HMODULE m = GetModuleHandleA(g_press[i].mod);
+        if (m && g_press[i].odown && vt == (DWORD)m + (g_press[i].vt - 0x10000000)) return &g_press[i];
     }
+    return NULL;
+}
+static DWORD __fastcall press_down(void *tool, void *edx, DWORD x, DWORD y, DWORD flags) {
+    PressHook *ph = press_of(tool);
+    DWORD a[3];
+    (void)edx;
+    if (!ph) { logf("PRESS> unknown tool vtable 0x%08lX", tool ? *(DWORD *)tool : 0); return 0; }
+    if (g_recording) scope_close();               /* a press whose release never reached the tool */
+    scope_open(ph->name);
+    a[0] = x; a[1] = y; a[2] = flags;
+    return tc(tool, ph->odown, a, 3);
+}
+static DWORD __fastcall press_up(void *tool, void *edx, DWORD x, DWORD y, DWORD flags) {
+    PressHook *ph = press_of(tool);
+    DWORD a[3], r;
+    (void)edx;
+    if (!ph) { logf("PRESS> unknown tool vtable 0x%08lX", tool ? *(DWORD *)tool : 0); return 0; }
+    a[0] = x; a[1] = y; a[2] = flags;
+    __try { r = tc(tool, ph->oup, a, 3); }
+    __except (EXCEPTION_EXECUTE_HANDLER) { logf("PRESS> %s up threw 0x%08lX", ph->name, GetExceptionCode()); r = 0; }
+    scope_close();
     return r;
 }
 
@@ -1082,7 +1140,7 @@ static DWORD __fastcall terrain_fix(void *mgr, void *edx, DWORD a0, DWORD a1, DW
 static int patch_vt(HMODULE m, DWORD vt_va, DWORD slot, DWORD expect_va, void *hook, void **orig, const char *what) {
     DWORD *vt = (DWORD *)((BYTE *)m + (vt_va - 0x10000000));
     DWORD want = (DWORD)m + (expect_va - 0x10000000);
-    if (vt[slot / 4] == (DWORD)hook) return 1;
+    if (vt[slot / 4] == (DWORD)hook) { if (!*orig) *orig = (void *)want; return 1; }
     if (vt[slot / 4] != want) { logf("PATCH> REFUSED %s: slot = 0x%08lX, expected 0x%08lX", what, vt[slot / 4], want); return 0; }
     *orig = (void *)vt[slot / 4];
     if (!patch_slot(&vt[slot / 4], (DWORD)hook)) return 0;
@@ -1118,8 +1176,21 @@ static void journal_install(void) {
         if (m && patch_vt(m, g_tools[i].vt, 0x48, g_tools[i].fn, (void *)tool_apply, &g_tools[i].orig, g_tools[i].name)) continue;
         g_tools[i].orig = NULL;
     }
-    logf("JOURNAL> recorders on (occupant Insert/Remove, zone cells, terrain vertices, terrain-fix barrier), %u tool Apply slots wrapped",
-         (unsigned)NTOOLS);
+    {   unsigned np = 0;
+        for (i = 0; i < NPRESS; i++) {
+            HMODULE m = GetModuleHandleA(g_press[i].mod);
+            void *od = NULL, *ou = NULL;
+            if (!m) continue;
+            if (!patch_vt(m, g_press[i].vt, 0x20, g_press[i].down, (void *)press_down, &od, g_press[i].name)) continue;
+            g_press[i].odown = od;
+            if (!patch_vt(m, g_press[i].vt, 0x28, g_press[i].up, (void *)press_up, &ou, g_press[i].name)) {
+                logf("PATCH> %s: down wrapped but up refused", g_press[i].name); continue; }
+            g_press[i].oup = ou;
+            np++;
+        }
+        logf("JOURNAL> recorders on (occupant Insert/Remove, zone cells, terrain vertices, terrain-fix barrier), %u tool Apply "
+             "slots and %u terrain-tool presses wrapped", (unsigned)NTOOLS, np);
+    }
 }
 
 /* replay entry i backwards (undo) or forwards (redo) */
@@ -1169,6 +1240,7 @@ static int j_apply(int i, int forward) {
 }
 static void j_undo(void) {
     BYTE *city = city_get();
+    if (g_recording) scope_close();
     if (!city_paused(city)) { logf("UNDO> ignored: not paused"); return; }
     if (g_jcity && city != g_jcity) j_clear("city changed");
     if (g_jcur <= 0) { logf("UNDO> nothing to undo"); return; }
@@ -1176,6 +1248,7 @@ static void j_undo(void) {
 }
 static void j_redo(void) {
     BYTE *city = city_get();
+    if (g_recording) scope_close();
     if (!city_paused(city)) { logf("REDO> ignored: not paused"); return; }
     if (city != g_jcity || g_jcur >= g_jn) { logf("REDO> nothing to redo"); return; }
     if (j_apply(g_jcur, 1)) g_jcur++;

@@ -92,12 +92,20 @@ the stock Load either) and SIMSERV flammability (recomputed by the sim's scan; a
 | police station 3x3 | 1 ins, 9 zone cells | $500 | exact (benign only) | byte-identical | 0-15 ms |
 | small park 1x1 | 1 ins, 1 zone cell | $100 | exact (benign only) | byte-identical | 0 ms |
 | bulldoze (London) | 11-45 rem | $55-$335 | buildings back, render normal; SimTransit 64-180 B and network layer 23-26 B differ | byte-identical | 0 ms |
+| raise terrain, one drag (Roadless Paradise) | 20 terrain, 3 trees removed | $140 | exact (benign only) | byte-identical | 0 ms |
+| lower terrain, one drag | 20 terrain | $125 | byte-identical | byte-identical | 0 ms |
+| level terrain, one drag | 20 terrain | $187 | byte-identical | byte-identical | 0 ms |
+| place water, one drag | 16 water-table | $600 | byte-identical | byte-identical | 0 ms |
+| place tree | 1 ins | $3 | byte-identical | byte-identical | 0 ms |
+
+Terrain tools (added 2026-10-20 night): raise, lower, water and trees commit on every mouse move while the button is
+held, so for them the recording scope spans the press (button down +0x20 opens it, button up +0x28 closes it); one
+drag = one undo entry. Level commits once on release. Every write they make already went through logged slots.
 
 Not covered / open:
 - Terrain levelled by a network drag on an illegal slope (network manager +0x118): the history is cleared instead.
 - Bulldoze undo leaves SimTransit (traffic data) and 23-26 B of the network layer different from before. Cause not read.
 - Not tested: subway, on-ramp, shoreline / plumbing / multi-cell buildings, buildings from the power / water /
-  landmark / reward picker (they use the same tool classes), terrain tools (raise / lower / level, water, trees).
-  Terrain tools are not wrapped yet.
+  landmark / reward picker (they use the same tool classes).
 - Version 1 (full save / load) stays as `mode=snapshot`.
 - Real keyboard and mouse input still need the owner's hand test.
