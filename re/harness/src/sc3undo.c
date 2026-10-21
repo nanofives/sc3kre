@@ -856,6 +856,7 @@ static int g_jn, g_jcur;              /* entries 0..g_jn-1; the first g_jcur are
 static BYTE *g_jcity;
 static JEntry g_rec;                  /* the action being recorded */
 static volatile int g_recording, g_rec_barrier, g_replaying;
+static int g_oplog;                  /* SC3UNDO_OPLOG=1: log every op of an entry when it is replayed */
 static int g_rec_tfix, g_tfix_ok = 1; /* network terrain fixes inside the scope; SC3UNDO_TFIX=0 restores the old barrier */
 static int g_pend = -1;              /* entry whose deferred writes are still being collected (tr_finalize) */
 
@@ -1011,7 +1012,7 @@ static DWORD __fastcall occ_remove(void *mgr, void *edx, void *occ) {
 static DWORD cell_set_common(void *orig, void *grid, LONG x, LONG z, BYTE *in) {
     DWORD a[3], r;
     BYTE old = 0;
-    int rec = g_recording && !g_replaying && in;
+    int rec = rec_target() && !g_replaying && in;
     if (rec) vc(grid, 0x34, 3, (DWORD)x, (DWORD)z, (DWORD)&old, 0, 0);
     a[0] = (DWORD)x; a[1] = (DWORD)z; a[2] = (DWORD)in;
     r = tc(grid, orig, a, 3);
@@ -1021,7 +1022,7 @@ static DWORD cell_set_common(void *orig, void *grid, LONG x, LONG z, BYTE *in) {
 static DWORD __fastcall alt_set(void *d, void *edx, LONG x, LONG z, DWORD h) {
     DWORD a[3], r;
     BYTE old = 0;
-    int rec = g_recording && !g_replaying && !g_in_alt_rect;
+    int rec = rec_target() && !g_replaying && !g_in_alt_rect;
     (void)edx;
     if (rec) vc(d, 0x4c, 3, (DWORD)x, (DWORD)z, (DWORD)&old, 0, 0);
     a[0] = (DWORD)x; a[1] = (DWORD)z; a[2] = h;
@@ -1034,7 +1035,7 @@ static DWORD __fastcall alt_rect(void *d, void *edx, LONG x0, LONG z0, LONG x1, 
     DWORD a[5], r;
     BYTE *old = NULL;
     LONG lx = min(x0, x1), hx = max(x0, x1), lz = min(z0, z1), hz = max(z0, z1), x, z, w = hx - lx + 1, hh = hz - lz + 1;
-    int rec = g_recording && !g_replaying && w > 0 && hh > 0 && w <= 1025 && hh <= 1025;
+    int rec = rec_target() && !g_replaying && w > 0 && hh > 0 && w <= 1025 && hh <= 1025;
     (void)edx;
     if (rec && (old = (BYTE *)HeapAlloc(GetProcessHeap(), 0, w * hh)) != NULL)
         for (x = 0; x < w; x++) for (z = 0; z < hh; z++) vc(d, 0x4c, 3, (DWORD)(lx + x), (DWORD)(lz + z), (DWORD)&old[x * hh + z], 0, 0);
@@ -1057,7 +1058,7 @@ static DWORD rect_common(BYTE op, void *orig, void *obj, DWORD getter, LONG x0, 
     DWORD a[5], r;
     BYTE *old = NULL;
     LONG lx = min(x0, x1), hx = max(x0, x1), lz = min(z0, z1), hz = max(z0, z1), x, z, w = hx - lx + 1, hh = hz - lz + 1;
-    int rec = g_recording && !g_replaying && w > 0 && hh > 0 && w <= 1025 && hh <= 1025 && lx >= 0 && lz >= 0;
+    int rec = rec_target() && !g_replaying && w > 0 && hh > 0 && w <= 1025 && hh <= 1025 && lx >= 0 && lz >= 0;
     if (rec && (old = (BYTE *)HeapAlloc(GetProcessHeap(), 0, w * hh)) != NULL)
         for (x = 0; x < w; x++) for (z = 0; z < hh; z++) vc(obj, getter, 3, (DWORD)(lx + x), (DWORD)(lz + z), (DWORD)&old[x * hh + z], 0, 0);
     a[0] = (DWORD)x0; a[1] = (DWORD)z0; a[2] = (DWORD)x1; a[3] = (DWORD)z1; a[4] = v;
@@ -1080,7 +1081,7 @@ static DWORD __fastcall water_rect(void *d, void *edx, LONG x0, LONG z0, LONG x1
     (void)edx; return rect_common(OP_WATER, g_water_rect_orig, d, 0x50, x0, z0, x1, z1, v); }
 static DWORD __fastcall block_cell(void *d, void *edx, LONG x, LONG z, DWORD on) {
     DWORD a[3], r, b0 = 0;
-    int rec = g_recording && !g_replaying;
+    int rec = rec_target() && !g_replaying;
     (void)edx;
     if (rec) b0 = vc(d, 0x160, 2, (DWORD)x, (DWORD)z, 0, 0, 0) & 0xff;
     a[0] = (DWORD)x; a[1] = (DWORD)z; a[2] = on;
@@ -1330,6 +1331,9 @@ static int j_apply(int i, int forward) {
     }
     g_replaying = 1;
     city_hold(1);
+    if (g_oplog) for (k = 0; k < e->n; k++)
+        logf("OPLOG> %d op %d obj 0x%08lX occ 0x%08lX (%d,%d) %02X -> %02X", k, e->ops[k].op, (DWORD)e->ops[k].obj,
+             (DWORD)e->ops[k].occ, e->ops[k].x, e->ops[k].z, e->ops[k].old, e->ops[k].neu);
     for (k = 0; k < e->n; k++) {
         JOp *o = &e->ops[forward ? k : e->n - 1 - k];
         __try {
@@ -1595,6 +1599,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
         ini_read();
         if (GetEnvironmentVariableA("SC3UNDO_TEST", path, sizeof(path))) g_test = atoi(path);
         if (GetEnvironmentVariableA("SC3UNDO_TFIX", path, sizeof(path))) g_tfix_ok = atoi(path);
+        if (GetEnvironmentVariableA("SC3UNDO_OPLOG", path, sizeof(path))) g_oplog = atoi(path);
         logf("### sc3undo loaded, enabled=%d", g_enabled);
         if (!g_enabled) return TRUE;
         dir_init();

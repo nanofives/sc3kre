@@ -54,6 +54,14 @@ def main() -> int:
         step(*p.split())
     n = len(a.actions)
     died = None
+    applied = []
+    logp = os.path.join(out, "undo.log")
+
+    def napply() -> int:
+        try:
+            return open(logp, encoding="utf-8", errors="replace").read().count("APPLY> ")
+        except OSError:
+            return 0
     for i, act in enumerate(a.actions):
         name, tool, lp = act.split(":")
         k = 4 * i
@@ -62,11 +70,14 @@ def main() -> int:
         seq += [("cmd", "13", str(k + 1)), ("cmd", "1")]
         seq += [("dump", name + "_undo")] if a.dump else []
         seq += [("cmd", "13", str(k + 2)), ("cmd", "2"), ("cmd", "13", str(k + 3))]
+        before = napply()
         for s in seq:
             if not alive():
                 died = f"{name} before {' '.join(s)}"
                 break
             step(*s)
+            if s[:2] == ("cmd", "12"):
+                applied.append(napply() > before)
         if died:
             break
     log = open(os.path.join(out, "undo.log"), encoding="utf-8", errors="replace").read()
@@ -84,8 +95,8 @@ def main() -> int:
                            capture_output=True, text=True)
         lines = r.stdout.strip().splitlines()
         ok = len(lines) == 2 and all("byte-identical" in l or "EXACT" in l for l in lines)
-        applies = [l for l in log.splitlines() if "APPLY" in l]
-        print(f"[{i + 1}/{n}] {name} {'PASS' if ok else 'FAIL'}")
+        did = applied[i] if i < len(applied) else False
+        print(f"[{i + 1}/{n}] {name} {'NOT APPLIED (the drag changed nothing, test says nothing)' if not did else 'PASS' if ok else 'FAIL'}")
         for l in lines + r.stderr.strip().splitlines()[-3:]:
             print("     ", l)
     print("\n".join("   log: " + l[:200] for l in log.splitlines()

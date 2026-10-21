@@ -132,7 +132,37 @@ FUN_100151f1) instead left 2 cells with other descriptors (bd3), so retiles are 
 | bd3 (traffic copy + retile re-run) | network 6 B | identical |
 | bd4 (traffic copy + pending occupant log), 2 drags | exact (benign only); second drag byte-identical | identical |
 | reg1, Roadless Paradise: zone, road, power, highway, pipe | zone byte-identical, others exact (benign only) | identical |
-- Not tested: subway, on-ramp, shoreline / plumbing / multi-cell buildings, buildings from the power / water /
-  landmark / reward picker (they use the same tool classes).
+- Tool classes tested 2026-10-21, see "Tool classes" below. Still not reached: on-ramp, shoreline (marina), the
+  multi-cell building class.
 - Version 1 (full save / load) stays as `mode=snapshot`.
 - Real keyboard and mouse input still need the owner's hand test.
+
+## Tool classes (2026-10-21, verify/undo_leftovers/tc*, picker*)
+
+One fresh launch per tool (Roadless Paradise, drag (480,40) -> (630,140) on open grass; the placement lands at the drag's
+END point). Picker buildings: the picker dialog was opened with the palette command, the item and OK clicked with posted
+clicks (they work on dialogs), then the GZ-event drag. `re/tools/undo/savecheck.py` now prints NOT APPLIED when a drag
+changed nothing (earlier FAIL rows of that kind were drags on water or illegal spots).
+
+| tool (id) | class wrapped | ops | money | undo vs before | redo vs after |
+|---|---|---|---:|---|---|
+| subway (0x10004201) | subway | 40 ins, 15 rem | $3,750 | exact | byte-identical |
+| rail (0x10004101) | rail | 5 ins, 2 rem | $260 | exact (benign only) | byte-identical |
+| subway station (0x10004202) | subway building | 2 ins, 1 zone | $500 | byte-identical | byte-identical |
+| train station (0x10004102) | building | 1 ins, 4 zone | $250 | byte-identical | byte-identical |
+| big park 3x3 (0x10006602) | building | 1 ins, 9 zone | $1,000 | exact (benign only) | byte-identical |
+| zoo 4x4 (0x10006604) | building | 1 ins, 16 zone | $5,000 | exact (benign only) | byte-identical |
+| school (0x10006402) | building | 1 ins, 9 zone | $500 | byte-identical | byte-identical |
+| hospital (0x10006401) | building | 1 ins, 9 zone | $500 | exact (benign only) | byte-identical |
+| power picker: wind turbine (0x10005002) | building | 1 ins, 1 zone | $250 | exact (benign only) | byte-identical |
+| water picker: pumping station (0x10005009) | plumbing building | 2 ins, 1 zone | $300 | exact (benign only) | byte-identical |
+| landmark picker: SF City Hall (0x10006008) | building | 1 ins, 25 zone, 2 terrain | $12 | **SC3ZoneLayer 1 B differs** | byte-identical |
+
+Landmark residue [UNCERTAIN]: two zone-layer cells far from the 5x5 footprint (index z*192+x: (33,159) and (121,159))
+hold 0x10 / 0x40 before, 0x00 / 0x59 after placing, 0x19 / 0x40 after undo. Neither was written through a logged slot,
+inside the scope or in the pending window (op dump `SC3UNDO_OPLOG=1`, picker6). Missing evidence: the writer of those
+two bytes (a TTD `writers` run on the zone grid during a landmark placement).
+
+Not reached: the marina (shoreline class): 8 placements on and near the Roadless Paradise shore all previewed red. On-ramp
+and the multi-cell building class: not tried (the on-ramp needs a highway end; the tool that uses the multi-cell class is
+not identified). Garbage and reward pickers use the same dialog and the building class; not run.
