@@ -219,3 +219,14 @@ replays ops; only snapshot mode put the tool down).
 4. Repeat with the bulldozer selected instead of the road tool.
 
 Report anything else: the tool stuck on "?", a click that queries instead of building, or a road built on Ctrl release.
+
+## 1024 map (2026-10-21, verify/undo_leftovers/big1, big2)
+
+`Cities\Big One.sc3` (1024 x 1024, 24 MB payload, needs sc3bigcity: `verify/undo_spike/RESULTS.md`), full mod set.
+
+| action | ops | money | undo vs before | redo vs after | undo / redo |
+|---|---|---:|---|---|---|
+| road | 4 ins, 1 rem | $40 | exact (flammability 1 B) | byte-identical | 0 ms |
+| residential zone | 4 cells | $40 | byte-identical | byte-identical | 0 ms |
+| raise terrain | 20 terrain, 1 rem | $130 | exact (flammability 1 B) | byte-identical | 0 ms |
+| bulldoze that road | 4 rem + 1 retile | $20 | byte-identical | byte-identical | 0 ms |
