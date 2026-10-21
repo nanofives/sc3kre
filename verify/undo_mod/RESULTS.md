@@ -166,3 +166,23 @@ two bytes (a TTD `writers` run on the zone grid during a landmark placement).
 Not reached: the marina (shoreline class): 8 placements on and near the Roadless Paradise shore all previewed red. On-ramp
 and the multi-cell building class: not tried (the on-ramp needs a highway end; the tool that uses the multi-cell class is
 not identified). Garbage and reward pickers use the same dialog and the building class; not run.
+
+## Crime / pollution lookup caches (2026-10-21, verify/undo_leftovers/cache1-2)
+
+Decision by reading SIMSERV `0x10007d35` [CONFIRMED]: on a miss for a building id it scans EVERY cached entry, keeps the
+one with the smallest `vt+0x20` distance and copies its modifier bytes into a new entry for that id. A key left by an
+undone action is a candidate in every later scan, so it can be the nearest match of a later id and give it its modifier
+(the leftover 0x3e80 holds zeros, so such an id would get no crime modifier). That is a gameplay difference from the city
+without the action, so the mod now removes them: the key sets of both maps are copied when a scope opens; when the entry
+is finalized the new keys and their values are kept; undo erases them with the game's own erase (SIMSERV `FUN_100087b2`
+by key, SIMECO `FUN_1000a88a` on the node and its successor); redo puts back any that the replay did not re-add (SIMSERV
+`FUN_10007f7e` / SIMECO `FUN_1000a80b` operator[], then the recorded value). Function prologues are checked before each
+call. The `0x12c` entry of spike run U is not explained; with the keys erased it no longer has a leftover to come from.
+
+| action | new keys | undo vs before | redo vs after |
+|---|---:|---|---|
+| bulldoze (London) | 2 | **byte-identical** | byte-identical |
+| road (Roadless Paradise) | 3 | exact except flammability 1 B | byte-identical |
+| power line | 6 | byte-identical | byte-identical |
+
+The only benign section left is SIMSERV flammability `0x61448030` (recomputed by the sim's scan).
