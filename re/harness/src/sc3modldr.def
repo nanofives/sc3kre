@@ -1,0 +1,20 @@
+LIBRARY version
+EXPORTS
+    GetFileVersionInfoA=x_GetFileVersionInfoA @1
+    GetFileVersionInfoByHandle=x_GetFileVersionInfoByHandle @2
+    GetFileVersionInfoExA=x_GetFileVersionInfoExA @3
+    GetFileVersionInfoExW=x_GetFileVersionInfoExW @4
+    GetFileVersionInfoSizeA=x_GetFileVersionInfoSizeA @5
+    GetFileVersionInfoSizeExA=x_GetFileVersionInfoSizeExA @6
+    GetFileVersionInfoSizeExW=x_GetFileVersionInfoSizeExW @7
+    GetFileVersionInfoSizeW=x_GetFileVersionInfoSizeW @8
+    GetFileVersionInfoW=x_GetFileVersionInfoW @9
+    VerFindFileA=x_VerFindFileA @10
+    VerFindFileW=x_VerFindFileW @11
+    VerInstallFileA=x_VerInstallFileA @12
+    VerInstallFileW=x_VerInstallFileW @13
+    VerLanguageNameA=x_VerLanguageNameA @14
+    VerLanguageNameW=x_VerLanguageNameW @15
+    VerQueryValueA=x_VerQueryValueA @16
+    VerQueryValueW=x_VerQueryValueW @17
+    sc3modldr_id DATA
