@@ -85,10 +85,10 @@ def runs(road, have_cap=True, have_taper=True, claimed=frozenset(), band_ok=None
             wide, why = BX.spans(R, sa, sb, w0)                 # task bvx: avenue / boulevard arms (bvx.py)
             if band_ok and not why:                             # task bvlanes: avenue arms must convert
                 for sp in {id(v): v for v in wide.values()}.values():
-                    if sp["jb"] - sp["ja"] == 1:
-                        for key, w, d in (("n", w0 - 2, "-w"), ("s", w0 + 4, "+w")):
-                            if sp[key] and not band_ok(_to_real(axis, sp["ja"], w), _side(axis, d)):
-                                why = why or "an avenue arm that would stay two-way"
+                    for key, w, d in (("n", w0 - 2, "-w"), ("s", w0 + 4, "+w")):      # task avx32: any 2-column arm
+                        cols = sp[key + "c"]
+                        if len(cols) == 2 and not band_ok(_to_real(axis, cols[0], w), _side(axis, d)):
+                            why = why or "an avenue arm that would stay two-way"
             kind = {}
             for s in range(sa, sb + 1):
                 if s in wide:                                   # task bvx
@@ -112,6 +112,20 @@ def runs(road, have_cap=True, have_taper=True, claimed=frozenset(), band_ok=None
                         ends[e] = ("bad", None, [])
                     else:
                         ends[e] = ("tee", None, [se - step * i for i in range(sp["jb"] - sp["ja"] + 1)])
+                elif se in wide and len(beyond) == 2 and beyond[1] == beyond[0] + 1 and \
+                        all((se + 2 * step, w0 + k) in R for k in beyond):
+                    # task avx32: the run ends in a box (the crossing road at its last columns) and an avenue goes on
+                    # past it: the crossing road is a boulevard on one side, an avenue on the other (owner img7)
+                    sp = wide[se]
+                    if not (sp["n"] and sp["s"]):
+                        why = why or "end at column %d: a corner (road on one side only)" % se
+                        ends[e] = ("bad", None, [])
+                    else:
+                        ends[e] = ("boxav", tuple(beyond), [se - step * i for i in range(sp["jb"] - sp["ja"] + 1)])
+                        extra |= {(se + step, w0 + k) for k in beyond}
+                        if band_ok and not band_ok(_to_real(axis, se + 2 * step, w0 + beyond[0]),
+                                                   _side(axis, "+s" if step > 0 else "-s")):
+                            why = why or "the avenue past the box would stay two-way"
                 elif beyond and all((se + step, w0 + k) in C for k in beyond):
                     ends[e] = ("dbv", None, [])          # task diagbv: bends into a diagonal boulevard
                 elif not beyond:
@@ -135,7 +149,7 @@ def runs(road, have_cap=True, have_taper=True, claimed=frozenset(), band_ok=None
                 why = "run too short for its two ends"
             if not why and sum(1 for s in normal if kind[s] == "C") < MIN_COLS:
                 why = "fewer than %d boulevard columns" % MIN_COLS
-            tee = {c for (typ, _, cs) in ends.values() if typ == "tee" for c in cs}       # task bvx
+            tee = {c for (typ, _, cs) in ends.values() if typ in ("tee", "boxav") for c in cs}   # task bvx, avx32
             if not why and any(kind[s] != "C" for s in endcols - tee):
                 why = "a junction inside an end region"
             if not why and normal and (kind[normal[0]] != "C" or kind[normal[-1]] != "C"):
@@ -157,7 +171,7 @@ def runs(road, have_cap=True, have_taper=True, claimed=frozenset(), band_ok=None
                 def put(s, row, piece, st):
                     want[_to_real(axis, s, w0 + row)] = (piece, (st + axis) & 3)
                 for e, (typ, k, cs) in ends.items():
-                    if typ in ("tee", "dbv"):                   # task bvx: its box comes with the spans below;
+                    if typ in ("tee", "dbv", "boxav"):          # task bvx: its box comes with the spans below;
                         continue                                # task diagbv: DBV writes that end
                     if typ == "cap":
                         for row in range(3):
@@ -190,8 +204,15 @@ def runs(road, have_cap=True, have_taper=True, claimed=frozenset(), band_ok=None
                         else:
                             put(s, 0, JUNC_N, 0); put(s, 1, JUNC_M, 0); put(s, 2, JUNC_N, 2)        # noqa: E702
                 for sp in {id(v): v for v in wide.values()}.values():          # task bvx: one paved box per span
-                    want.update(BX.box_want(axis, w0, sp, ends[1][0] == "tee" and sp["ja"] == sa,
-                                            ends[0][0] == "tee" and sp["jb"] == sb, _to_real))
+                    bw = BX.box_want(axis, w0, sp, ends[1][0] == "tee" and sp["ja"] == sa,
+                                     ends[0][0] == "tee" and sp["jb"] == sb, _to_real,
+                                     [w0 + k for k in ends[1][1]] if ends[1][0] == "boxav" and sp["ja"] == sa else None,
+                                     [w0 + k for k in ends[0][1]] if ends[0][0] == "boxav" and sp["jb"] == sb else None)
+                    if bw is None:                              # task avx32: a box cell with no declared piece
+                        why = why or "a box cell with no declared piece"
+                        want = {}
+                        break
+                    want.update(bw)
             out.append({"axis": axis, "w0": w0, "sa": sa, "sb": sb, "ok": not why, "why": why, "want": want,
                         "ends": ends})
     return out

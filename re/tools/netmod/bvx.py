@@ -87,8 +87,10 @@ def box_piece(desc):
 # ------------------------------------------------------------------------------------------------ hooks for runs()
 def spans(R, sa, sb, w0):
     """wide junction spans of the run columns sa..sb (axis space road set R, rows w0..w0+2) -> ({column: span}, why).
-    span = {"kind": "W" + "N"? + "S"?, "ja", "jb", "n": arm N, "s": arm S}. One-column groups and groups whose sides are
-    partly road are left to the boulevard's own per-column rule (single roads, as before)."""
+    span = {"kind": "W" + "N"? + "S"?, "ja", "jb", "n": arm N, "s": arm S, "nc" / "sc": the arm's columns}. One-column
+    groups and groups whose sides are partly road are left to the boulevard's own per-column rule (single roads, as
+    before), except (task avx32) a 3-column span with a 2-column avenue arm at one end of a side: the crossing road is
+    a boulevard on one side and an avenue on the other (owner img7), or an avenue crossing one column offset."""
     out, why, s = {}, "", sa
     while s <= sb:
         if (s, w0 - 1) not in R and (s, w0 + 3) not in R:
@@ -103,39 +105,61 @@ def spans(R, sa, sb, w0):
             continue
         side = {}
         for key, w, d in (("n", w0 - 1, -1), ("s", w0 + 3, 1)):
-            got = sum((c, w) in R for c in range(ja, jb + 1))
-            if got not in (0, m):
-                side = None
+            cols = [c for c in range(ja, jb + 1) if (c, w) in R]
+            if len(cols) not in (0, m) and not (m == 3 and len(cols) == 2 and cols in ([ja, ja + 1], [jb - 1, jb])):
+                side = None                                     # task avx32: partial arms at one end of a 3-span
                 break
-            side[key] = (got == m, w, d)
+            side[key] = (bool(cols), w, d, cols)
         if side is None:
             continue                                            # staggered single roads: the per-column rule
         if m > 3:
             why = why or "road %d wide beside the boulevard at columns %d..%d" % (m, ja, jb)
             continue
-        for key, (arm, w, d) in side.items():
+        for key, (arm, w, d, cols) in side.items():
             if not arm:
                 continue
+            c0, c1 = cols[0], cols[-1]
             for k in range(ARM_LEN):
-                if not all((c, w + d * k) in R for c in range(ja, jb + 1)):
-                    why = why or "arm at columns %d..%d shorter than %d" % (ja, jb, ARM_LEN)
-                if (ja - 1, w + d * k) in R or (jb + 1, w + d * k) in R:
-                    why = why or "arm at columns %d..%d has road beside it" % (ja, jb)
+                if not all((c, w + d * k) in R for c in cols):
+                    why = why or "arm at columns %d..%d shorter than %d" % (c0, c1, ARM_LEN)
+                if (c0 - 1, w + d * k) in R or (c1 + 1, w + d * k) in R:
+                    why = why or "arm at columns %d..%d has road beside it" % (c0, c1)
         sp = {"kind": "W" + ("N" if side["n"][0] else "") + ("S" if side["s"][0] else ""), "ja": ja, "jb": jb,
-              "n": side["n"][0], "s": side["s"][0]}
+              "n": side["n"][0], "s": side["s"][0], "nc": side["n"][3], "sc": side["s"][3]}
         for c in range(ja, jb + 1):
             out[c] = sp
     return out, why
 
 
-def box_want(axis, w0, sp, lo_closed, hi_closed, to_real):
+def partial_letter(cells, arm, e):
+    """task avx32: the letter of a box side (real edge e, N E S W) from the real cells beyond it and the ones an arm
+    holds: 'A' all, 'C' none, 'L' the arm holds the low end of the side (smaller x on N / S, smaller z on E / W),
+    'H' the high end (a 2-column avenue at one end of a 3-cell side)."""
+    if not arm:
+        return "C"
+    if len(arm) == len(cells):
+        return "A"
+    k = 0 if e in (0, 2) else 1
+    free = [c for c in cells if c not in arm]
+    return "L" if min(c[k] for c in free) > min(c[k] for c in arm) else "H"
+
+
+def box_want(axis, w0, sp, lo_closed, hi_closed, to_real, lo_arm=None, hi_arm=None):
     """the box of span sp (+ the avenue arms' nose cells) -> {real cell: (piece, state)}, or None if a pattern has no
-    piece. lo_closed / hi_closed: the -s / +s side is the far side of a T (the run ends on the crossing road)."""
+    piece. lo_closed / hi_closed: the -s / +s side is the far side of a T (the run ends on the crossing road).
+    lo_arm / hi_arm (task avx32): the rows w of an avenue going on past the run's -s / +s end, the box being that
+    end (the crossing road is this boulevard on one side of the box and an avenue on the other)."""
     from netmod import avx
-    ja, jb, m = sp["ja"], sp["jb"], sp["jb"] - sp["ja"] + 1
-    side = {"-s": "C" if lo_closed else "A", "+s": "C" if hi_closed else "A",
-            "-w": "A" if sp["n"] else "C", "+w": "A" if sp["s"] else "C"}
+    ja, jb = sp["ja"], sp["jb"]
     E = REAL_EDGE[axis]
+    beyond = {"-s": [(ja - 1, w) for w in range(w0, w0 + 3)], "+s": [(jb + 1, w) for w in range(w0, w0 + 3)],
+              "-w": [(c, w0 - 1) for c in range(ja, jb + 1)], "+w": [(c, w0 + 3) for c in range(ja, jb + 1)]}
+    arm = {"-s": [] if lo_closed else [(ja - 1, w) for w in (lo_arm or range(w0, w0 + 3))],
+           "+s": [] if hi_closed else [(jb + 1, w) for w in (hi_arm or range(w0, w0 + 3))],
+           "-w": [(c, w0 - 1) for c in sp.get("nc", range(ja, jb + 1) if sp["n"] else [])],
+           "+w": [(c, w0 + 3) for c in sp.get("sc", range(ja, jb + 1) if sp["s"] else [])]}
+    side = {k: partial_letter([to_real(axis, *c) for c in beyond[k]], [to_real(axis, *c) for c in arm[k]], E[k])
+            for k in beyond}
     want = {}
     if TABLE is not None:                                       # task bvlanes: by box kind and position
         re_ = [None] * 4
@@ -154,21 +178,20 @@ def box_want(axis, w0, sp, lo_closed, hi_closed, to_real):
             d = [None] * 4
             for key, (ns, nw) in (("-s", (s - 1, w)), ("+s", (s + 1, w)), ("-w", (s, w - 1)), ("+w", (s, w + 1))):
                 inside = ja <= ns <= jb and w0 <= nw <= w0 + 2
-                d[E[key]] = "I" if inside else side[key]
+                d[E[key]] = "I" if inside else "A" if (ns, nw) in arm[key] else "C"     # task avx32: per cell
             bp = box_piece("".join(d))
             if not bp:
                 return None
             want[to_real(axis, s, w)] = bp
-    if m == 2:                                                  # avenue arms: the nose cells
-        for key, w in (("-w", w0 - 1), ("+w", w0 + 3)):
-            if side[key] != "A":
-                continue
-            e = E[key]
-            cells = sorted((to_real(axis, s, w) for s in range(ja, jb + 1)), key=lambda c: (c[0], c[1]) if e in (0, 2)
-                           else (c[1], c[0]))
-            for i, c in enumerate(cells):
-                st = avx.half_state(e, i == 0)
-                want[c] = (ARM[((e + 2) % 4 - st) % 4], st)
+    for key in ("-w", "+w"):                                    # avenue arms (2 columns): the nose cells
+        if len(arm[key]) != 2:
+            continue
+        e = E[key]
+        cells = sorted((to_real(axis, *c) for c in arm[key]), key=lambda c: (c[0], c[1]) if e in (0, 2)
+                       else (c[1], c[0]))
+        for i, c in enumerate(cells):
+            st = avx.half_state(e, i == 0)
+            want[c] = (ARM[((e + 2) % 4 - st) % 4], st)
     return want
 
 
@@ -318,6 +341,12 @@ def shapes():
                {(x, z) for x in (0, 1) for z in range(-8, 11)},
         "BxB": A | {(x, z) for x in (0, 1, 2) for z in range(-9, 12)},                # boulevard crossing
         "BbT": A | {(x, z) for x in (0, 1, 2) for z in range(-9, 0)},                 # boulevard T
+        # task avx32: the crossing road is a boulevard on one side and an avenue on the other (owner img7), the
+        # avenue at the high / low end of the box; an avenue crossing one column offset (N low S high / N high S low)
+        "BxBAh": A | {(x, z) for x in (0, 1, 2) for z in range(-9, 0)} | {(x, z) for x in (1, 2) for z in range(3, 11)},
+        "BxBAl": A | {(x, z) for x in (0, 1, 2) for z in range(-9, 0)} | {(x, z) for x in (0, 1) for z in range(3, 11)},
+        "BxAlh": A | {(x, z) for x in (0, 1) for z in range(-8, 0)} | {(x, z) for x in (1, 2) for z in range(3, 11)},
+        "BxAhl": A | {(x, z) for x in (1, 2) for z in range(-8, 0)} | {(x, z) for x in (0, 1) for z in range(3, 11)},
     }
     return S
 
@@ -358,7 +387,7 @@ def cmd_check(a):
     from netmod import avx
     fails = 0
     S = shapes()
-    expect_runs = {"BxA": 1, "AvT": 1, "BvT": 1, "BxB": 2, "BbT": 2}
+    expect_runs = {"BxA": 1, "AvT": 1, "BvT": 1, "BxB": 2, "BbT": 2, "BxBAh": 2, "BxBAl": 2, "BxAlh": 1, "BxAhl": 1}
     ref = {}
     for name, cells in sorted(S.items()):
         for k in range(4):

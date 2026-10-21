@@ -108,6 +108,106 @@
   {
    "piece": 20932,
    "edges": "IACI"
+  },
+  {
+   "piece": 20933,
+   "edges": "AIIA"
+  },
+  {
+   "piece": 20934,
+   "edges": "IIIA"
+  },
+  {
+   "piece": 20935,
+   "edges": "AIII"
+  },
+  {
+   "piece": 20936,
+   "edges": "IIII"
+  },
+  {
+   "piece": 20937,
+   "edges": "IIAI"
+  },
+  {
+   "piece": 20938,
+   "edges": "AAII"
+  },
+  {
+   "piece": 20939,
+   "edges": "IAII"
+  },
+  {
+   "piece": 20940,
+   "edges": "IAAI"
+  },
+  {
+   "piece": 20941,
+   "edges": "AIIA"
+  },
+  {
+   "piece": 20942,
+   "edges": "IIIA"
+  },
+  {
+   "piece": 20943,
+   "edges": "IIAA"
+  },
+  {
+   "piece": 20944,
+   "edges": "AIII"
+  },
+  {
+   "piece": 20945,
+   "edges": "IIII"
+  },
+  {
+   "piece": 20946,
+   "edges": "IIAI"
+  },
+  {
+   "piece": 20947,
+   "edges": "IAII"
+  },
+  {
+   "piece": 20948,
+   "edges": "IACI"
+  },
+  {
+   "piece": 20949,
+   "edges": "AIIA"
+  },
+  {
+   "piece": 21920,
+   "edges": "IIIA"
+  },
+  {
+   "piece": 21921,
+   "edges": "AIII"
+  },
+  {
+   "piece": 21922,
+   "edges": "IIII"
+  },
+  {
+   "piece": 21923,
+   "edges": "CIIA"
+  },
+  {
+   "piece": 21924,
+   "edges": "IIIA"
+  },
+  {
+   "piece": 21925,
+   "edges": "IIAA"
+  },
+  {
+   "piece": 21926,
+   "edges": "AIII"
+  },
+  {
+   "piece": 21927,
+   "edges": "IIII"
   }
  ],
  "lines": [
@@ -189,6 +289,24 @@
   "bvxc 3 3 AAAC 2 0 20924 1",
   "bvxc 3 3 AAAC 2 1 20927 1",
   "bvxc 3 3 AAAC 2 2 20930 1",
+  "bvxc 3 3 AAAH 0 0 20926 1",
+  "bvxc 3 3 AAAH 0 1 20937 1",
+  "bvxc 3 3 AAAH 0 2 20940 1",
+  "bvxc 3 3 AAAH 1 0 20934 1",
+  "bvxc 3 3 AAAH 1 1 20936 1",
+  "bvxc 3 3 AAAH 1 2 20939 1",
+  "bvxc 3 3 AAAH 2 0 20933 1",
+  "bvxc 3 3 AAAH 2 1 20935 1",
+  "bvxc 3 3 AAAH 2 2 20938 1",
+  "bvxc 3 3 AAAL 0 0 20943 1",
+  "bvxc 3 3 AAAL 0 1 20946 1",
+  "bvxc 3 3 AAAL 0 2 20948 1",
+  "bvxc 3 3 AAAL 1 0 20942 1",
+  "bvxc 3 3 AAAL 1 1 20945 1",
+  "bvxc 3 3 AAAL 1 2 20947 1",
+  "bvxc 3 3 AAAL 2 0 20941 1",
+  "bvxc 3 3 AAAL 2 1 20944 1",
+  "bvxc 3 3 AAAL 2 2 20938 1",
   "bvxc 3 3 AACA 0 0 20924 0",
   "bvxc 3 3 AACA 0 1 20925 0",
   "bvxc 3 3 AACA 0 2 20926 0",
@@ -198,6 +316,24 @@
   "bvxc 3 3 AACA 2 0 20930 0",
   "bvxc 3 3 AACA 2 1 20931 0",
   "bvxc 3 3 AACA 2 2 20932 0",
+  "bvxc 3 3 AAHA 0 0 20933 0",
+  "bvxc 3 3 AAHA 0 1 20934 0",
+  "bvxc 3 3 AAHA 0 2 20926 0",
+  "bvxc 3 3 AAHA 1 0 20935 0",
+  "bvxc 3 3 AAHA 1 1 20936 0",
+  "bvxc 3 3 AAHA 1 2 20937 0",
+  "bvxc 3 3 AAHA 2 0 20938 0",
+  "bvxc 3 3 AAHA 2 1 20939 0",
+  "bvxc 3 3 AAHA 2 2 20940 0",
+  "bvxc 3 3 AALA 0 0 20941 0",
+  "bvxc 3 3 AALA 0 1 20942 0",
+  "bvxc 3 3 AALA 0 2 20943 0",
+  "bvxc 3 3 AALA 1 0 20944 0",
+  "bvxc 3 3 AALA 1 1 20945 0",
+  "bvxc 3 3 AALA 1 2 20946 0",
+  "bvxc 3 3 AALA 2 0 20938 0",
+  "bvxc 3 3 AALA 2 1 20947 0",
+  "bvxc 3 3 AALA 2 2 20948 0",
   "bvxc 3 3 ACAA 0 0 20930 3",
   "bvxc 3 3 ACAA 0 1 20927 3",
   "bvxc 3 3 ACAA 0 2 20924 3",
@@ -207,6 +343,42 @@
   "bvxc 3 3 ACAA 2 0 20932 3",
   "bvxc 3 3 ACAA 2 1 20929 3",
   "bvxc 3 3 ACAA 2 2 20926 3",
+  "bvxc 3 3 AHAA 0 0 20938 3",
+  "bvxc 3 3 AHAA 0 1 20944 3",
+  "bvxc 3 3 AHAA 0 2 20941 3",
+  "bvxc 3 3 AHAA 1 0 20947 3",
+  "bvxc 3 3 AHAA 1 1 20945 3",
+  "bvxc 3 3 AHAA 1 2 20942 3",
+  "bvxc 3 3 AHAA 2 0 20948 3",
+  "bvxc 3 3 AHAA 2 1 20946 3",
+  "bvxc 3 3 AHAA 2 2 20943 3",
+  "bvxc 3 3 AHAL 0 0 21925 1",
+  "bvxc 3 3 AHAL 0 1 21926 3",
+  "bvxc 3 3 AHAL 0 2 21923 3",
+  "bvxc 3 3 AHAL 1 0 21924 1",
+  "bvxc 3 3 AHAL 1 1 21927 3",
+  "bvxc 3 3 AHAL 1 2 21924 3",
+  "bvxc 3 3 AHAL 2 0 21923 1",
+  "bvxc 3 3 AHAL 2 1 21926 1",
+  "bvxc 3 3 AHAL 2 2 21925 3",
+  "bvxc 3 3 ALAA 0 0 20938 3",
+  "bvxc 3 3 ALAA 0 1 20935 3",
+  "bvxc 3 3 ALAA 0 2 20933 3",
+  "bvxc 3 3 ALAA 1 0 20939 3",
+  "bvxc 3 3 ALAA 1 1 20936 3",
+  "bvxc 3 3 ALAA 1 2 20934 3",
+  "bvxc 3 3 ALAA 2 0 20940 3",
+  "bvxc 3 3 ALAA 2 1 20937 3",
+  "bvxc 3 3 ALAA 2 2 20926 3",
+  "bvxc 3 3 ALAH 0 0 20905 1",
+  "bvxc 3 3 ALAH 0 1 21921 3",
+  "bvxc 3 3 ALAH 0 2 20949 3",
+  "bvxc 3 3 ALAH 1 0 21920 1",
+  "bvxc 3 3 ALAH 1 1 21922 3",
+  "bvxc 3 3 ALAH 1 2 21920 3",
+  "bvxc 3 3 ALAH 2 0 20949 1",
+  "bvxc 3 3 ALAH 2 1 21921 1",
+  "bvxc 3 3 ALAH 2 2 20905 3",
   "bvxc 3 3 CAAA 0 0 20932 2",
   "bvxc 3 3 CAAA 0 1 20931 2",
   "bvxc 3 3 CAAA 0 2 20930 2",
@@ -215,6 +387,42 @@
   "bvxc 3 3 CAAA 1 2 20927 2",
   "bvxc 3 3 CAAA 2 0 20926 2",
   "bvxc 3 3 CAAA 2 1 20925 2",
-  "bvxc 3 3 CAAA 2 2 20924 2"
+  "bvxc 3 3 CAAA 2 2 20924 2",
+  "bvxc 3 3 HAAA 0 0 20948 2",
+  "bvxc 3 3 HAAA 0 1 20947 2",
+  "bvxc 3 3 HAAA 0 2 20938 2",
+  "bvxc 3 3 HAAA 1 0 20946 2",
+  "bvxc 3 3 HAAA 1 1 20945 2",
+  "bvxc 3 3 HAAA 1 2 20944 2",
+  "bvxc 3 3 HAAA 2 0 20943 2",
+  "bvxc 3 3 HAAA 2 1 20942 2",
+  "bvxc 3 3 HAAA 2 2 20941 2",
+  "bvxc 3 3 HALA 0 0 21923 0",
+  "bvxc 3 3 HALA 0 1 21924 0",
+  "bvxc 3 3 HALA 0 2 21925 0",
+  "bvxc 3 3 HALA 1 0 21926 0",
+  "bvxc 3 3 HALA 1 1 21927 2",
+  "bvxc 3 3 HALA 1 2 21926 2",
+  "bvxc 3 3 HALA 2 0 21925 2",
+  "bvxc 3 3 HALA 2 1 21924 2",
+  "bvxc 3 3 HALA 2 2 21923 2",
+  "bvxc 3 3 LAAA 0 0 20940 2",
+  "bvxc 3 3 LAAA 0 1 20939 2",
+  "bvxc 3 3 LAAA 0 2 20938 2",
+  "bvxc 3 3 LAAA 1 0 20937 2",
+  "bvxc 3 3 LAAA 1 1 20936 2",
+  "bvxc 3 3 LAAA 1 2 20935 2",
+  "bvxc 3 3 LAAA 2 0 20926 2",
+  "bvxc 3 3 LAAA 2 1 20934 2",
+  "bvxc 3 3 LAAA 2 2 20933 2",
+  "bvxc 3 3 LAHA 0 0 20949 0",
+  "bvxc 3 3 LAHA 0 1 21920 0",
+  "bvxc 3 3 LAHA 0 2 20905 0",
+  "bvxc 3 3 LAHA 1 0 21921 0",
+  "bvxc 3 3 LAHA 1 1 21922 2",
+  "bvxc 3 3 LAHA 1 2 21921 2",
+  "bvxc 3 3 LAHA 2 0 20905 2",
+  "bvxc 3 3 LAHA 2 1 21920 2",
+  "bvxc 3 3 LAHA 2 2 20949 2"
  ]
 }

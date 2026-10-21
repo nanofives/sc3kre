@@ -68,6 +68,7 @@ class Pieces:
 
     def __init__(self, own=None, avl_base=None):
         self.own = own or {}                        # id -> {"outline": "NESW", "kind": "box" | "nose" | "half"}
+        self.virt = {}                              # task avx32: cell -> arm sides (cap_links), set by find()
         self.avl_base = avl_base or {AVL_STRAIGHT: 11204, 21701: 11203}
         for k in range(21710, 21726):
             self.avl_base.setdefault(k, [69, 67, 11258, 15098, 31, 32, 11201, 11202][(k - 21710) // 2])
@@ -104,6 +105,8 @@ def straight_pair(L, P, a, b, axis):
     pa, pb = L.get(a), L.get(b)
     if not (pa and pb and P.is_row(pa[0]) and P.is_row(pb[0])):
         return False
+    if a in P.virt or b in P.virt:                  # task avx32: a capped crossing avenue joins here (cap_links)
+        return False
     return (pa[1] & 3, pb[1] & 3) == ((2, 0) if axis == "x" else (1, 3))
 
 
@@ -111,15 +114,68 @@ def conn(L, P, c, side):
     p = L.get(c)
     if p is None:
         return False
-    A = P.arms(p[0], p[1] & 3)
+    A = P.virt.get(c) or P.arms(p[0], p[1] & 3)    # task avx32: cap_links' arms first
     if not A or side not in A:
         return False
     n = (c[0] + DIRV[side][0], c[1] + DIRV[side][1])
     q = L.get(n)
     if q is None:
         return False
-    B = P.arms(q[0], q[1] & 3)
+    B = P.virt.get(n) or P.arms(q[0], q[1] & 3)
     return bool(B) and opp(side) in B
+
+
+def plain(L, P, c):
+    """a cell a box or a nose may take: a plain stock piece, or (task avx32) a cell cap_links re-reads"""
+    return L[c][0] in PLAIN or c in P.virt
+
+
+def cap_links(L, P):
+    """task avx32 (owner hand test 2026-10-21, img8): an avenue that crosses an avenue but goes on past it as a single
+    road on one column only. The stock tiler caps the other half of the avenue at the crossing (11203) and joins the
+    going-on half with a T 39, so the avenue does not reach the box. Pattern: a straight pair of the crossing avenue,
+    then a row {11203, 39} (the T joining back and forward), then two road cells. Those cells are re-read: the cap and
+    the T as a plain link row (arms back and forward), the cell past the cap with an extra arm toward it (and it is no
+    longer a straight pair of the through avenue). -> {cell: arm sides}"""
+    P.virt = {}
+    out = {}
+    for (x, z), pc in L.items():
+        if not P.is_half(pc[0]) or (pc[1] & 3) not in (1, 2):
+            continue
+        axis = "z" if (pc[1] & 3) == 1 else "x"
+        B = Band(axis)
+        a0, b0 = B.cells(x, z)
+        if not straight_pair(L, P, a0, b0, axis):
+            continue
+        for sg in (1, -1):
+            d = (sg * B.step[0], sg * B.step[1])
+            fwd = DIRV.index(d)
+            back = opp(fwd)
+            a1, b1 = (a0[0] + d[0], a0[1] + d[1]), (b0[0] + d[0], b0[1] + d[1])
+            p1, q1 = L.get(a1), L.get(b1)
+            if not (p1 and q1) or {p1[0], q1[0]} != {11203, 39}:
+                continue
+            cap, tee = (a1, b1) if p1[0] == 11203 else (b1, a1)
+            ta = P.arms(L[tee][0], L[tee][1] & 3) or set()
+            if back not in ta or fwd not in ta:
+                continue
+            c2 = (cap[0] + d[0], cap[1] + d[1])
+            t2 = (tee[0] + d[0], tee[1] + d[1])
+            if c2 not in L or t2 not in L or not P.is_half(L[c2][0]):
+                continue
+            # past the through avenue (two rows) the road goes on in the T's column only (img8); both columns going
+            # on, or none, is another shape (an avenue ending on an avenue with a road beside it, London (141,170))
+            c3, c4 = (c2[0] + d[0], c2[1] + d[1]), (c2[0] + 2 * d[0], c2[1] + 2 * d[1])
+            t3, t4 = (t2[0] + d[0], t2[1] + d[1]), (t2[0] + 2 * d[0], t2[1] + 2 * d[1])
+            if c3 not in L or t3 not in L or t4 not in L or c4 in L:
+                continue
+            a2 = P.arms(L[c2][0], L[c2][1] & 3)
+            if not a2:
+                continue
+            out[cap] = {back, fwd}
+            out[tee] = {back, fwd}
+            out[c2] = set(a2) | {back}
+    return out
 
 
 class Band:
@@ -145,9 +201,27 @@ class Band:
         return (x, z), (x + self.across[0], z + self.across[1])
 
 
-def find(L, P, roads, drop=frozenset()):
+def bv_box(roads, B, pos, r, bvcells):
+    """task avx32: a run of 3 positions that BV's own rule (boulevard.runs, geometry only) takes as part of a boulevard;
+    BV builds that junction (sc3netmod_avx.c avx_bv_box -> bv_takes). bvcells: the cells of the accepted runs"""
+    return len(r) == 3 and pos[r[1]][0] in bvcells
+
+
+def bv_cells(roads):
+    """task avx32: every cell an accepted BV run writes (boulevard.runs, band checks taken as passed)"""
+    from netmod import boulevard as BVR
+    out = set()
+    for run in BVR.runs(roads):
+        if run["ok"]:
+            out |= set(run["want"])
+    return out
+
+
+def find(L, P, roads, drop=frozenset(), bv=True, caps=True):
     """L: layer {(x, z): (id, state)}; roads: the set of ROAD cells; drop: box cell sets to leave stock (the
     validation pass). -> dict with boxes, noses, refusals."""
+    P.virt = cap_links(L, P) if caps else {}         # task avx32
+    bvc = bv_cells(roads) if bv else set()            # task avx32
     segs = {}
     for (x, z), p in L.items():
         if not P.is_half(p[0]) or (p[1] & 3) not in (1, 2):
@@ -207,7 +281,7 @@ def find(L, P, roads, drop=frozenset()):
         if any(len(r) > MAXRUN for r in runs):
             refused["run longer than %d" % MAXRUN] += 1
             continue
-        bad = [c for pr in pos for c in pr if L[c][0] not in PLAIN and L[c][0] not in P.own and
+        bad = [c for pr in pos for c in pr if not plain(L, P, c) and L[c][0] not in P.own and
                P.stock_of(L[c][0]) not in AVCORE_BAND]
         if bad:
             refused["piece %d in the segment" % L[bad[0]][0]] += 1
@@ -215,8 +289,11 @@ def find(L, P, roads, drop=frozenset()):
         inrun = {i for r in runs for i in r}
         for r in runs:
             cells = [pos[i][h] for i in r for h in (0, 1)]
-            if any(L[c][0] not in PLAIN and L[c][0] not in P.own for c in cells):
+            if any(not plain(L, P, c) and L[c][0] not in P.own for c in cells):
                 refused["box over a crossing / slope piece"] += 1
+                continue
+            if bv and bv_box(roads, B, pos, r, bvc):       # task avx32: a boulevard's junction (BV / BVX)
+                refused["boulevard junction (BV's)"] += 1
                 continue
             bx = make_box(L, P, B, pos, r)
             key = frozenset(bx["cells"])
@@ -237,7 +314,7 @@ def find(L, P, roads, drop=frozenset()):
         for i, (a, b) in enumerate(pos):
             if i in inrun:
                 continue
-            if all(L[c][0] in PLAIN or L[c][0] in P.own for c in (a, b)):
+            if all(plain(L, P, c) or L[c][0] in P.own for c in (a, b)):
                 for c, h in ((a, 0), (b, 1)):
                     links.setdefault(c, {"axis": sg["axis"], "h": h})
     # straight pairs beside a box (along the band) become noses; record which sides face a box
@@ -306,7 +383,7 @@ def make_box(L, P, B, pos, r):
                         break
                     qa, qb = L.get(oa), L.get(ob)       # links, avcore's crossings / slopes, noses: keep going
                     if not (qa and qb and all(q[0] in PLAIN or q[0] in P.own or P.stock_of(q[0]) in AVCORE_BAND
-                                              for q in (qa, qb))):
+                                              or o in P.virt for q, o in ((qa, oa), (qb, ob)))):     # task avx32
                         break
                 if found:
                     spans[(i, h)] = 0

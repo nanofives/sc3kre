@@ -345,11 +345,44 @@ def box_scene(kind):
             "box": True}
 
 
+# task avx32 (owner hand test 2026-10-21, img7): 3-column boxes whose N or S side an avenue holds at one end only.
+# kind -> (N arm (first column, width), S arm (first column, width)); the box is columns 0..2 x rows 0..2
+ASYM = {"BxBAh": ((0, 3), (1, 2)),    # the crossing road: a boulevard N, an avenue S at the box's high-x end
+        "BxBAl": ((0, 3), (0, 2)),    # ... the avenue at the low-x end
+        "BxAlh": ((0, 2), (1, 2)),    # an avenue crossing one column offset: N at the low end, S at the high end
+        "BxAhl": ((1, 2), (0, 2))}    # ... N at the high end, S at the low end
+
+
+def box_scene_asym(kind):
+    """task avx32: the ASYM boxes (bvx.shapes): through boulevard along x on rows 0..2, the crossing road's N and S
+    arms of their own widths and columns; a lane that goes straight across between columns that do not line up
+    shifts over in the box (box_lanes)"""
+    from netmod import bvx as BX
+    (nx, nw), (sx, sw) = ASYM[kind]
+    road = BX.shapes()[kind]
+    arms = {0: arm_bv_x(0, 0), 2: arm_bv_x(2, 3), 1: arm_z(1, 0, nx, nw), 3: arm_z(3, 3, sx, sw)}
+    lanes = straights(-9, 0) + straights(3, 11)
+    lanes += arm_road_lanes(1, 0, nx, nw, 9 if nw == 3 else 8, True)
+    lanes += arm_road_lanes(3, 3, sx, sw, 8, True)
+    lanes += box_lanes(0, 3, 0, 3, arms)
+    med = []
+    if nw == 2:
+        med.append(rect(nx + AV_MED[0], nx + AV_MED[1], -9, -0.12))
+    med.append(rect(sx + AV_MED[0], sx + AV_MED[1], 3.12, 12))
+    names = {"BxBAh": "boulevard x (boulevard N | avenue S, high end)",
+             "BxBAl": "boulevard x (boulevard N | avenue S, low end)",
+             "BxAlh": "boulevard x avenue one column offset (N low, S high)",
+             "BxAhl": "boulevard x avenue one column offset (N high, S low)"}
+    return {"name": names[kind], "road": road, "lanes": lanes, "view": (-3.5, -3.6, 6.5, 6.6), "medians": med,
+            "box": True}
+
+
 def scenes():
     out = [scene_cap(), junction_scene("X"), junction_scene("TN"), junction_scene("TS"), scene_narrow(),
            scene_narrow12()]
     out += [scene_taper(k) for k in (1, 0, 2)]
     out += [box_scene(k) for k in ("BxA", "AvT", "BvT", "BxB", "BbT")]
+    out += [box_scene_asym(k) for k in ASYM]                   # task avx32: after the others, so ids / curves append
     return out
 
 
@@ -760,8 +793,9 @@ NOTES_BOX = [
 SHAPE0, SHAPE1 = 24000, 24999            # bvlanes curve shapes: 24000..24199 (protocol) + 24200..24999 (granted 2026-10-20)
 BV_JN_T, BV_JM_T = 20707, 20708          # T junction entry row / middle row (PLAN.md 2)
 BOX_OLD = (20900, 20901, 20902, 20903, 20904, 20905)
-BOX_NEW = tuple(range(20912, 20950))
+BOX_NEW = tuple(range(20912, 20950)) + tuple(range(21920, 21950))   # task avx32: + the bvlanes grant 21920..21949
 ARM_IDS = (20910, 20911)
+AVX32_IDS = set(range(20933, 20950)) | set(range(21920, 21950))   # task avx32: allocated last (curve shapes append)
 CAPS = (20704, 20705, 20706)
 AVCORE_SHAPES = {23600: [[255, 0, 80], [223, 0, 80], [191, 0, 80], [159, 0, 80], [128, 0, 80], [96, 0, 80], [64, 0, 80],
                          [32, 0, 80], [0, 0, 80]],
@@ -822,22 +856,26 @@ def _new_rule(sc, want, table):
 
 
 def box_config(cells, road):
-    """real box -> (wx, hz, sides NESW 'A'/'C', x0, z0)"""
+    """real box -> (wx, hz, sides NESW 'A'/'C' (task avx32: 'L' / 'H' = an arm at the low / high end only), x0, z0)"""
+    from netmod import bvx as BX
     xs, zs = [c[0] for c in cells], [c[1] for c in cells]
     x0, x1, z0, z1 = min(xs), max(xs), min(zs), max(zs)
     sides = ""
-    for beyond in ([(x, z0 - 1) for x in range(x0, x1 + 1)], [(x1 + 1, z) for z in range(z0, z1 + 1)],
-                   [(x, z1 + 1) for x in range(x0, x1 + 1)], [(x0 - 1, z) for z in range(z0, z1 + 1)]):
-        sides += "A" if all(b in road for b in beyond) else "C"
+    for e, beyond in enumerate(([(x, z0 - 1) for x in range(x0, x1 + 1)], [(x1 + 1, z) for z in range(z0, z1 + 1)],
+                                [(x, z1 + 1) for x in range(x0, x1 + 1)], [(x0 - 1, z) for z in range(z0, z1 + 1)])):
+        sides += BX.partial_letter(beyond, [b for b in beyond if b in road], e)
     return (x1 - x0 + 1, z1 - z0 + 1, sides, None, x0, z0)
 
 
 def _rot_cfg(wx, hz, sides, i, j, k):
     """the box configuration turned k states: cell (i, j) -> (hz - 1 - j, i), sides N -> E"""
+    swap = {"L": "H", "H": "L"}
     for _ in range(k % 4):
         i, j = hz - 1 - j, i
         wx, hz = hz, wx
         sides = sides[3] + sides[:3]
+        # task avx32: the low / high end of a side, in real coordinates, flips where W turns into N and E into S
+        sides = swap.get(sides[0], sides[0]) + sides[1] + swap.get(sides[2], sides[2]) + sides[3]
     return wx, hz, sides, i, j
 
 
@@ -976,7 +1014,7 @@ def piece_specs(root=None, dbv=False):
     states[20703] = {0, 2}
     cv = Curves(root)
     specs, rep = {}, []
-    for pid in sorted(seen):
+    for pid in sorted(seen, key=lambda q: (q in AVX32_IDS, q)):     # task avx32: new pieces' curves after the rest
         cuts = sorted(seen[pid][0])
         own, lanes = set(), []
         plan = []
