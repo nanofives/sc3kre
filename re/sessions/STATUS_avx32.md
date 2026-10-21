@@ -6,6 +6,7 @@ Boulevard (3-wide, BVX / bvlanes) x avenue (2-wide, AVX / avjunc) crossings, cen
 
 ## state
 2026-10-21: DONE. img6, img7, img8 fixed in game (+ offset crossing), save / reload identical, game stopped. Results: worktree verify/avx32/RESULTS.md, sheet MAIN verify/avx32/owner_shots/avx32_sheet.png.
+2026-10-21 (2nd round, owner img10, boulevard x avenue T with the avenue into a highway ramp): FIXED in game, game stopped. Results: worktree verify/avx32/RESULTS.md section img10, sheet MAIN verify/avx32/owner_shots/img10_sheet.png.
 
 ## cause (milestone 1, sent)
 - img6 (boulevard x avenue, centred): AVX runs before BV in the edit pass and saw the stock 11204 / 29 / 11204
@@ -77,3 +78,23 @@ startup crash 0xC0000005 at 438 ms before the city load on a relaunch (next laun
 
 ## asks of other streams
 (none)
+
+## img10 round (2026-10-21, LAN build of main 67bd9ea)
+- cause: BVX's arm query and hwave's ground-row query (`avl_band_ok`) each need the other's one-way piece. After the
+  owner's 4th parallel road (579 s) BV refused, AVL reverted the band, hwave put the two-way T2 21602 / 21603 back, and
+  from then on neither converted (`an avenue arm that would stay two-way`). Reproduced in game.
+- fix: `sc3netmod_avl.c` only (avl_end + avl_band, marked task avx32): a band end on hwave's ground row reads either
+  pair as the one-way pair and AVL writes 21850 / 21851 (converted) or 21602 / 21603 (refused). No ids, no tables.
+- in game: owner sequence, stuck save load, other drag order, long avenue (break + recover), 3 save / reloads, no-mod load.
+- behaviour changes beyond img10: every avl_band_ok caller (BV, DAV, RBT9, hwave) sees a two-way transition end as
+  converting; an avenue between two transitions can now convert; AVL writes the ground row cells. DAV / RBT9 / two
+  transitions not tried in game.
+- guard (orchestrator): new hwave_row_ok in sc3netmod_hwave.c, the ground row is read as one-way only when hwave_check
+  accepts the transition. In game: owner sequence + undo (paused) consistent, refused transition all stock, both drag orders,
+  save / reload, no-mod load.
+- files to commit (worktree Simcity_wt_avx32): re/harness/src/sc3netmod_avl.c, re/harness/src/sc3netmod_hwave.c,
+  verify/avx32/RESULTS.md.
+  The worktree also holds main's 67bd9ea copies of sc3netmod_dbv.c, sc3netmod_hwt.c, sc3netmod_hwy.c, diagbv.py,
+  highway_core/README.md, link_tree.py (synced so the build equals main): NOT mine, identical to main, do not commit.
+- MAIN pictures (not committed): verify/avx32/owner_shots/img10_*.png.
+- ids: none taken. 21928..21949 still unused, can be released.
