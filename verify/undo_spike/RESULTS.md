@@ -94,8 +94,7 @@ The other 9 differing sections are the same reload residue as in run 1.
 The lead above was wrong as written. The Load command (SIMINIT `0x10008bf8`) already calls
 cISC3App vt+0x28 before CreateCity, and that slot is the end-session function: vtable SC3U
 `0x004CF59C` (installed at app+0x30 by the app ctor `0x00402e74`), slot +0x28 = `0x00407f25`,
-which Sends `0x311FDAE5` [CONFIRMED in the PE and the decompilation; the runtime hit count is
-missing because the `-fnlog` table for SC3U did not install under this switch set].
+which Sends `0x311FDAE5` [CONFIRMED in the PE and the decompilation; runtime hit counts added 2026-10-21, below].
 
 Run 7 adds an explicit `endsession` step (new probe step, calls that slot) after `cleartool`.
 Pre-registered prediction: no change. Measured: end-session 731 ms and the city pointer goes to 0
@@ -209,3 +208,27 @@ Nothing to fix: load 1024 cities through mods_launch with sc3bigcity. Big One is
 
 Logs: `run1_probe.log` (London), `run2_probe.log` / `run2c_probe.log` (Big One cmdline + control),
 `run3_probe.log` (Big One in-session). Probe source backup before the change: `re/harness/spike_undo_backup/`.
+
+## -fnlog for SC3U functions (2026-10-21, verify/undo_leftovers/fnlog1, fnlog2)
+
+Why the SC3U table did not install: the probe's DllMain read `SC3PROBE_FNLOG` into `char v[32]` and tested `v[0]`. The
+table path is longer than 32 characters, and a too-small buffer makes `GetEnvironmentVariableA` return the needed size
+without filling it, so `v[0]` was stack garbage and the load was skipped with no log line (fnlog1: launcher printed the
+table, probe log had no `FNLOG[SC3U]`). Same class as the 512-byte `SC3PROBE_GZSEQ` buffer. Fixed in
+`re/harness/src/sc3probe.c` (gitignored, local): read straight into a MAX_PATH buffer and log when it does not fit. The
+other `v[32]` / `v[16]` reads hold numbers and ids.
+
+Run fnlog2 (London, spike switches, `-fnlog re/harness/undo_fnlog.txt`, one `loadpath:` step): `FNLOG[SC3U]: 3/3
+instrumented`.
+
+| t | function | hit | caller / argument |
+|---|---|---|---|
+| 1.7 s (startup load) | `app_end_session` 0x00407f25 | #1 | returns into SIMINIT 0x10008cbd (inside the Load 0x10008bf8) |
+| 2.0 s | `app_destroy_city` 0x00407fbf | #1 | arg 0x311FDAE5, returns to 0x00407fbb |
+| 2.1 s | `app_create_city` 0x00407b5e | #1 | returns into SIMINIT 0x10008fad |
+| 4.5 s (`loadpath`) | `app_end_session` | #2 | SIMINIT 0x10008cbd |
+| 4.8 s | `app_destroy_city` | #2 | arg 0x311FDAE5 |
+
+So every Load runs the end-session slot before the new city is made, as run 7 read from the code. That `loadpath`,
+issued 4.5 s in, then raised 0xC0000005 (caught) before `app_create_city`; the spike's loads ran later in the session.
+Not investigated further.
