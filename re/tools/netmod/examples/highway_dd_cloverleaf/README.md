@@ -29,3 +29,12 @@ py -3.12 re/tools/netmod/hwdd.py check                  # offline twin of the bl
 ```
 
 Notes: `verify/hwdd/RESULTS_plan.md` (stock, design), `verify/hwdd/RESULTS.md` (build and in-game check).
+
+## Lit twins (task hwlight, 2026-10-21)
+
+Stock wall shading follows the wall's world axis (73's walls light, 15051's dark in every view) and a piece's frame is
+shared by (state + view), so art painted at state 0 is lit wrong where the block writes it at state 1 or 3 (owner
+img11). The 30 pieces the block writes at odd states have twins 26180..26209 (`lit_twins.json`): same base, lanes and
+saves, art painted from the scene turned one state. sc3netmod writes the twin at odd states (`hwyl` lines) and every
+reader sees the piece. After the art: `py -3.12 re/tools/netmod/hwlight.py twart <this package>`, the pad step if the
+package has one, `hwlight.py manifest`, `hwlight.py check`. Notes: `verify/hwlight/RESULTS.md`.

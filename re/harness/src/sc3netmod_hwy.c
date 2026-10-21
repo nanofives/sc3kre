@@ -54,6 +54,11 @@
  *                                         saved (id, state) of the piece at each of its states 0..3 (id 0 = its save id
  *                                         / base), e.g. a rewritten highway cell saves as the stock straight or band piece
  *                                         for its heading. Needs the piece's hwyp line before it. Overrides the delta.
+ *   hwyl <piece> <twin>                   task hwlight: the LIT TWIN of a piece a block also writes at odd states (same
+ *                                         base, lanes and hwrc class; art from the scene turned one state, hwpaint.py
+ *                                         paint_twin). Every read sees the piece (rb_read / hwy_read via hwlt_read),
+ *                                         every write of the piece at an odd state puts the twin (hwlt_want), the save
+ *                                         uses the piece's hwyp / hwys entry. Needs the piece's hwyp line before it.
  *   hwyt <pieceA> <pieceB>                the hwcore proof rule: the free cell past a highway END gets a ramp-down
  *                                         piece (art: deck descending from H to the ground toward the cell's +z at
  *                                         state 0; A has the outer parapet on +x, B on -x), so the end of a two-cell
@@ -140,6 +145,17 @@ static void hwy_line(const char *path, const char *line) {
              v[4], v[5], v[6], v[7], v[8]);
         return;
     }
+    if (!strncmp(line, "hwyl ", 5)) {            /* task hwlight: hwyl <piece> <twin> */
+        if (sscanf(line + 5, "%lu %lu", &a, &b) != 2 || !a || a > 0xffff || !b || b > 0xffff || a == b || !g_base[b] ||
+            g_base[b] != g_base[a] || hwy_piece((WORD)a) < 0 || g_hwlt_p[a] || g_hwlt_t[b] ||
+            (g_hwlt_t[a] && g_hwlt_t[a] != b) || (g_hwlt_p[b] && g_hwlt_p[b] != a)) {
+            logf("### hwy: %s: bad lit-twin line (twin not a variant of the piece's base, piece without hwyp, or a twin "
+                 "named twice) '%s'", path, line);
+            return;
+        }
+        g_hwlt_t[a] = (WORD)b; g_hwlt_p[b] = (WORD)a;
+        return;
+    }
     if (!strncmp(line, "hwyt ", 5)) {
         if (sscanf(line + 5, "%lu %lu", &a, &b) != 2 || !a || a > 0xffff || !b || b > 0xffff || !g_base[a] || !g_base[b]) {
             logf("### hwy: %s: bad proof-rule line '%s'", path, line);
@@ -153,7 +169,9 @@ static void hwy_line(const char *path, const char *line) {
 }
 
 static int hwy_piece(WORD id) {                 /* per cell and per save record: an id-indexed lookup */
-    int k = g_hwy_idx[id] - 1;
+    int k;
+    if (g_hwlt_p[id]) id = g_hwlt_p[id];        /* task hwlight: a twin is its piece (saves included) */
+    k = g_hwy_idx[id] - 1;
     return (id && k >= 0 && k < g_hwy_np) ? k : -1;   /* k < g_hwy_np: SC3NETMOD_HWY=0 / install errors set np 0 */
 }
 
@@ -208,7 +226,7 @@ static DWORD hwy_read(BYTE *mgr, void *lay, int x, int z, int W, int H) {
     if (vt >= (DWORD)g_rb_m && vt < (DWORD)g_rb_m + g_rb_msize && ((PFN_Pred)VT(mgr, 0x14c))(mgr, 0, 4, occ))
         r = HWY_ON | ((*(DWORD *)((BYTE *)occ + 0x10) >> 30) << 16) | (*(DWORD *)((BYTE *)occ + 0x14) & 0xffff);
     ((PFN_B0)VT(occ, 8))(occ);
-    return r;
+    return hwlt_read(r);                        /* task hwlight */
 }
 
 static WORD hwy_id(DWORD v) { return (WORD)(v & 0xffff); }
@@ -277,10 +295,10 @@ static void hwy_drop(HwyPass *hp, int x, int z) {
 static int hwy_put(HwyPass *hp, int x, int z, WORD piece, int state) {
     DWORD cur = hwy_at(hp, x, z);
     int pos[3];
-    if (cur && hwy_id(cur) == piece && hwy_st(cur) == (state & 3)) { hwy_keep(hp, x, z); return 0; }
+    if (cur && hwy_id(cur) == piece && hwy_st(cur) == (state & 3) && !(cur & HWLT_LIT)) { hwy_keep(hp, x, z); return 0; }
     if (!cur && !hwy_free(hp, x, z)) return -1;
     pos[0] = x << 8; pos[1] = z << 8; pos[2] = 0;
-    ((PFN_Put)(g_rb_m + 0x8919))(hp->mgr, 0, hp->lay, pos, ((DWORD)piece << 8) | (DWORD)(state & 3), -1, 8, 0);
+    ((PFN_Put)(g_rb_m + 0x8919))(hp->mgr, 0, hp->lay, pos, hwlt_want(((DWORD)piece << 8) | (DWORD)(state & 3)), -1, 8, 0);
     {   /* re-read: the buffer must show what is there now (the next block reads it) */
         int bx = x - hp->b.x0, bz = z - hp->b.z0;
         if (bx >= 0 && bz >= 0 && bx < hp->b.w && bz < hp->b.h)
@@ -413,9 +431,9 @@ static void hwy_end(HwyPass *hp) {
             int x = hp->kp[k].x, z = hp->kp[k].z, pos[3];
             DWORD v = hwy_read(hp->mgr, hp->lay, x, z, hp->W, hp->H);
             if (*hwy_flag(hp, x, z) & 8) continue;    /* dropped later in the pass */
-            if (v && hwy_id(v) == hp->kp[k].id && hwy_st(v) == hp->kp[k].st) continue;
+            if (v && hwy_id(v) == hp->kp[k].id && hwy_st(v) == hp->kp[k].st && !(v & HWLT_LIT)) continue;
             pos[0] = x << 8; pos[1] = z << 8; pos[2] = 0;
-            ((PFN_Put)(g_rb_m + 0x8919))(hp->mgr, 0, hp->lay, pos, ((DWORD)hp->kp[k].id << 8) | hp->kp[k].st, -1, 8, 0);
+            ((PFN_Put)(g_rb_m + 0x8919))(hp->mgr, 0, hp->lay, pos, hwlt_want(((DWORD)hp->kp[k].id << 8) | hp->kp[k].st), -1, 8, 0);
             nre++;
             logf("hwy: %s: (%d,%d) kept piece %u.%d re-placed after a revert retile (cell held %u.%d)", hp->who, x, z,
                  hp->kp[k].id, hp->kp[k].st, hwy_id(v), hwy_st(v));

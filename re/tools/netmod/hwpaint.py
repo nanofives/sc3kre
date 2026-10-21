@@ -45,6 +45,8 @@ API (all a sibling needs):
     paint_cell(scene, (X, Z), out_dir, zooms=range(5), canvas=None) -> anchors dict (also written as anchors.json)
     paint_cells(scene, cells, root) -> {(X, Z): dir}   root/<X>_<Z>/z{z}_r{r}.png + anchors.json
     preview_cells(scene, cells, zoom, rot, extra=[{"at": [-X, Z], "piece": 73, "slot": 2}, ...]) -> PIL image
+    paint_twin(scene, cell, out_dir, render=None) -> anchors: the LIT TWIN of a cell a block also writes at odd states
+         (wall shading follows the world axis; see "lit twins" below, task hwlight); twin_check(piece_dir, twin_dir)
 Heights: H (stock deck), H_LOW / H_HIGH (the stock X's lower and upper decks), SLAB (bridge slab thickness).
 
 CLI:
@@ -52,6 +54,7 @@ CLI:
     py -3.12 hwpaint.py proof <out_dir>            73 / 15051 / curve 15127 repainted vs stock: match % + sheet
     py -3.12 hwpaint.py demo <out_dir>             demo sheet: one-lane loop arc, a bridge over a highway, a ramp
     py -3.12 hwpaint.py core <package_dir>         art of hwcore's proof pieces 21100 / 21101 (examples/highway_core)
+    py -3.12 hwpaint.py lit [<out_dir>]            stock wall shading per axis and view + the lit-twin proof (hwlight)
 Game art never goes in the repo: point <out_dir> at a gitignored path (verify/hwcore/art/...).
 """
 import argparse
@@ -1003,6 +1006,154 @@ def paint_cell(scene, cell, out_dir, zooms=range(NA.ZOOMS), canvas=None, crop=Tr
     return anchors
 
 
+# ------------------------------------------------------------------------------------------------ lit twins (task hwlight)
+# Stock wall shading follows the wall's WORLD axis, not the screen (measured on the stock frames, all four views: an
+# outer wall toward +-x, 73's, reads about 135 grey; toward +-z, 15051's, about 78; `hwpaint.py lit`). A piece's frame
+# is shared by (state + view), so art painted at state 0 is lit right at states 0 and 2 only: at 1 and 3 every wall
+# keeps the other axis' shade (owner img11, 2026-10-21: hwave's ramp walls light beside the dark 15051 walls).
+# A piece a block also writes at an odd state gets a LIT TWIN: the same cell painted from the scene turned one state
+# ((x, z) -> (-z, x), as hwy_rot), its frames relabelled r -> r + 1, so the twin at state s shows the piece's geometry
+# at state s with the shading of state s. sc3netmod writes the twin instead of the piece at odd states (`hwlt`).
+
+def turn_pt(p, k=1):
+    x, z = p
+    for _ in range(k % 4):
+        x, z = -z, x
+    return (x, z)
+
+
+def turn_cell(cell, k=1):
+    """the cell covering cell `cell` turned k states about the origin"""
+    X, Z = cell
+    for _ in range(k % 4):
+        X, Z = -Z - 1, X
+    return (X, Z)
+
+
+class TurnedPath:
+    """any path (Path, a sibling's sampled path) turned k states about the origin"""
+
+    def __init__(self, path, k=1):
+        self.base, self.k, self.length = path, k % 4, path.length
+
+    def project(self, wx, wz):
+        x, z = np.asarray(wx, dtype=float), np.asarray(wz, dtype=float)
+        for _ in range(self.k):
+            x, z = z, -x                                 # the inverse turn
+        return self.base.project(x, z)
+
+    def at(self, s):
+        p, d = self.base.at(s)
+        return turn_pt(p, self.k), turn_pt(d, self.k)
+
+
+def _turned_clip(clip, k):
+    if clip is None:
+        return None
+
+    def f(wx, wz):
+        x, z = np.asarray(wx, dtype=float), np.asarray(wz, dtype=float)
+        for _ in range(k % 4):
+            x, z = z, -x
+        return clip(x, z)
+    return f
+
+
+def turn_scene(scene, k=1):
+    """the scene turned k states about the origin (decks copied: heights, slabs, gaps, ends go with arc length)"""
+    import copy
+    decks = []
+    for d in scene.decks:
+        t = copy.copy(d)
+        t.path = TurnedPath(d.path, k)
+        t.pillars = [turn_pt(p, k) for p in d.pillars]
+        t.clip = _turned_clip(d.clip, k)
+        t.phase = None
+        decks.append(t)
+    out = copy.copy(scene)
+    out.decks = decks
+    return out
+
+
+def paint_twin(scene, cell, out_dir, zooms=range(NA.ZOOMS), render=None, crop=True):
+    """the lit twin of world cell `cell`: frames of turn_cell(cell) in turn_scene(scene), view g saved as frame g + 1.
+    render(scene, cell, z, r) -> (image, (L, T)) for a package's own renderer (default render_cell)"""
+    render = render or (lambda sc, c, z, r: render_cell(sc, c, z, r))
+    sc, c = turn_scene(scene, 1), turn_cell(cell, 1)
+    os.makedirs(out_dir, exist_ok=True)
+    anchors = {}
+    for z in zooms:
+        for g in range(NA.ROTS):
+            im, LT = render(sc, c, z, g)
+            if crop:
+                im, LT = _crop(im, LT)
+            name = NA.frame_name(z, (g + 1) % NA.ROTS)
+            im.save(os.path.join(out_dir, name))
+            anchors[name] = [int(LT[0]), int(LT[1])]
+    with open(os.path.join(out_dir, "anchors.json"), "w", encoding="utf-8") as f:
+        json.dump(anchors, f, indent=1)
+    return anchors
+
+
+def _dilate(m):
+    o = m.copy()
+    o[1:, :] |= m[:-1, :]
+    o[:-1, :] |= m[1:, :]
+    o[:, 1:] |= m[:, :-1]
+    o[:, :-1] |= m[:, 1:]
+    return o
+
+
+def twin_check(piece_dir, twin_dir, zooms=range(NA.ZOOMS), tol=0.05):
+    """the twin must show the piece's geometry: per frame, the share of pixels whose coverage (alpha, registered on the
+    anchors) differs -> {(z, r): share}; a share over tol means the turn is the wrong way or the frames are mislabelled"""
+    a, b = NA.load_dir(piece_dir), NA.load_dir(twin_dir)
+    out = {}
+    for z in zooms:
+        for r in range(NA.ROTS):
+            if (z, r) not in a or (z, r) not in b:
+                continue
+            (ia, la), (ib, lb) = a[(z, r)], b[(z, r)]
+            la, lb = la or (0, 0), lb or (0, 0)
+            x0, y0 = -max(la[0], lb[0]), -max(la[1], lb[1])
+            x1 = max(ia.size[0] - la[0], ib.size[0] - lb[0])
+            y1 = max(ia.size[1] - la[1], ib.size[1] - lb[1])
+            ca = Image.new("L", (x1 - x0, y1 - y0), 0)
+            cb = Image.new("L", (x1 - x0, y1 - y0), 0)
+            ca.paste(ia.getchannel("A"), (-la[0] - x0, -la[1] - y0))
+            cb.paste(ib.getchannel("A"), (-lb[0] - x0, -lb[1] - y0))
+            A, B = np.asarray(ca) > 0, np.asarray(cb) > 0
+            n = max(1, int((A | B).sum()))
+            # pixels covered by one and not within one pixel of the other's cover (the turned rays sample the edges
+            # a fraction of a pixel apart; a wrong turn or label moves whole faces)
+            out[(z, r)] = float(((A & ~_dilate(B)) | (B & ~_dilate(A))).sum()) / n
+    bad = {k: v for k, v in out.items() if v > tol}
+    return out, bad
+
+
+def lit_table(z=3, es=16.0):
+    """measured stock wall brightness (mean grey) per outer normal and view, outer and inner faces; '-' = turned away"""
+    rows = []
+    for kind in ("outer", "inner"):
+        for n in AXES:
+            row = []
+            for r in range(NA.ROTS):
+                V = VIEW[r]
+                if n[0] * V[0] + n[1] * V[1] <= 0:
+                    row.append(None)
+                    continue
+                cs = []
+                for t in np.linspace(0.1, 0.9, 17):
+                    wx = 0.999 if n == (1, 0) else 0.001 if n == (-1, 0) else t
+                    wz = 0.999 if n == (0, 1) else 0.001 if n == (0, -1) else t
+                    c = wall_sample(kind, n, z, r, wx, wz, es)
+                    if c[3]:
+                        cs.append(sum(c[:3]) / 3.0)
+                row.append(round(float(np.mean(cs))) if cs else None)
+            rows.append((kind, n, row))
+    return rows
+
+
 def paint_cells(scene, cells, root, zooms=range(NA.ZOOMS)):
     out = {}
     for c in cells:
@@ -1137,6 +1288,38 @@ def cmd_proof(a):
         json.dump(rep, f, indent=1)
 
 
+TURN1 = {(73, 0): (15051, 0), (73, 2): (15051, 2), (15051, 0): (73, 2), (15051, 2): (73, 0)}   # stock straight turned once
+
+
+def cmd_lit(a):
+    """task hwlight: the stock shading table, then the lit-twin proof: each straight proof scene turned one state
+    must repaint the stock piece the engine shows there (TURN1), while the piece's own frames at state 1 (what an
+    untwinned state-0 painting shows) carry the other axis' walls"""
+    for kind, n, row in lit_table():
+        print("%-5s wall toward %-8s views 0..3: %s" % (kind, n, "  ".join("%4s" % ("-" if v is None else v) for v in row)))
+    pairs = []
+    for name, (sc, cell, pid, st) in proof_scenes().items():
+        if (pid, st) not in TURN1:
+            continue
+        tp, ts = TURN1[(pid, st)]
+        tw, raw = [], []
+        for r in range(4):
+            ref, _ = NA.stock_frames(tp)[(4, (ts + r) & 3)]
+            im, _ = render_cell(turn_scene(sc), turn_cell(cell), 4, r, canvas=(tp, ts))
+            old, _ = NA.stock_frames(pid)[(4, (st + 1 + r) & 3)]     # the state-0 art written at state 1, view r
+            tw.append(compare(im, ref)["near"])
+            raw.append(compare(old, ref)["near"])
+            if r == 0 and a.out:
+                pairs.append((ref, im))
+                pairs.append((ref, old))
+        print("%s turned once = stock %d.%d: twin near %.3f | state-0 art at state 1 near %.3f (z4 mean of 4 views)" % (
+            name, tp, ts, np.mean(tw), np.mean(raw)))
+    if a.out:
+        os.makedirs(a.out, exist_ok=True)
+        _side_by_side(pairs, 1).save(os.path.join(a.out, "lit_twin_proof_z4.png"))
+        print(os.path.join(a.out, "lit_twin_proof_z4.png"))
+
+
 def core_scenes():
     """hwcore's proof pieces (examples/highway_core): one carriageway descending from H to the ground across the cell
     toward +z at state 0; 21100 has the outer parapet on +x (as 73.0), 21101 on -x (as 73.2)"""
@@ -1163,8 +1346,11 @@ def main(argv=None):
     p.add_argument("out")
     p = sub.add_parser("core")
     p.add_argument("pkg")
+    p = sub.add_parser("lit")
+    p.add_argument("out", nargs="?")
     a = ap.parse_args(argv)
-    {"profile": cmd_profile, "proof": cmd_proof, "demo": lambda a: cmd_demo(a), "core": lambda a: cmd_core(a)}[a.cmd](a)
+    {"profile": cmd_profile, "proof": cmd_proof, "demo": lambda a: cmd_demo(a), "core": lambda a: cmd_core(a),
+     "lit": cmd_lit}[a.cmd](a)
 
 
 def demo_scenes():

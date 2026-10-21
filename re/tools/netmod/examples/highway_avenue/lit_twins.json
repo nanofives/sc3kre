@@ -1,0 +1,17 @@
+{
+ "_note": "task hwlight: lit twins (hwlight.py). Every piece here is written at all four turns by sc3netmod_hwave.c, so each has a twin painted from the scene turned one state, written at odd turns.",
+ "pieces": {
+  "21600": 26000,
+  "21601": 26001,
+  "21602": 26002,
+  "21603": 26003,
+  "21604": 26004,
+  "21605": 26005,
+  "21606": 26006,
+  "21607": 26007,
+  "21608": 26008,
+  "21609": 26009,
+  "21850": 26010,
+  "21851": 26011
+ }
+}

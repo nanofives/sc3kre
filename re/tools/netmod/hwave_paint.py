@@ -156,12 +156,14 @@ def _world(z, r, X0, Z0, px, py, L, T, e):
     return lx, lz, X0 + lx / 256.0, Z0 + lz / 256.0
 
 
-def diag_render(scene, cell, z, r):
+def diag_render(scene, cell, z, r, base=None):
     """the deck (hwpaint); in the three cells next to the avenue the avenue's own DAV frames (the piece the cell would
     hold in a band): past the landing and in the median nose on the ground, and a sidewalk SHOULDER beside the deck at
     the deck's own height, widening from the deck's edge (W_DIAG) to the avenue's (W_AVE) over D_SIDE, so the avenue's
-    outer edge grows out of the deck instead of stepping out at the first avenue cell"""
-    im, (L, T) = HP.render_cell(scene, cell, z, r)
+    outer edge grows out of the deck instead of stepping out at the first avenue cell.
+    base = (image, (L, T)) to draw the DAV parts over instead of the deck render (task hwlight: the lit twin's deck,
+    the scene turned one state; the DAV parts are flat ground and sidewalk, the same pixels in both)"""
+    im, (L, T) = base if base is not None else HP.render_cell(scene, cell, z, r)
     role = D_ROLE.get(tuple(cell))
     if role is None:
         return im, (L, T)

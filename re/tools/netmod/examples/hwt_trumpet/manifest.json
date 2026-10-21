@@ -862,6 +862,861 @@
     "ground_under": true
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 26020,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction +0,-4) (lit twin of 21200)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26020",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26021,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp -1,-3) (lit twin of 21201)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26021",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26022,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction +0,-3) (lit twin of 21202)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26022",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26023,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction +1,-3) (lit twin of 21203)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26023",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26024,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +2,-3) (lit twin of 21204)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26024",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26025,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp -1,-2) (lit twin of 21205)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26025",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26026,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction +0,-2) (lit twin of 21206)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26026",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26027,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction +1,-2) (lit twin of 21207)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26027",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26028,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +2,-2) (lit twin of 21208)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26028",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26029,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp -2,-1) (lit twin of 21209)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26029",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26030,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp -1,-1) (lit twin of 21210)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26030",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26031,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction +0,-1) (lit twin of 21211)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26031",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26032,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction +1,-1) (lit twin of 21212)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26032",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26033,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +2,-1) (lit twin of 21213)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26033",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26034,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +3,-1) (lit twin of 21214)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26034",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26035,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction -2,+0) (lit twin of 21215)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26035",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26036,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction -1,+0) (lit twin of 21216)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26036",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26037,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction +0,+0) (lit twin of 21217)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26037",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26038,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction +1,+0) (lit twin of 21218)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26038",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26039,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction +2,+0) (lit twin of 21219)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26039",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26040,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction +3,+0) (lit twin of 21220)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26040",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26041,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction +4,+0) (lit twin of 21221)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26041",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26042,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction +0,+1) (lit twin of 21222)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26042",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26043,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction +1,+1) (lit twin of 21223)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26043",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26044,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction +2,+1) (lit twin of 21224)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26044",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26045,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction +5,+1) (lit twin of 21225)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26045",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26046,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction +6,+1) (lit twin of 21226)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26046",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26047,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction +7,+1) (lit twin of 21227)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26047",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26048,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +0,+2) (lit twin of 21228)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26048",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26049,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +1,+2) (lit twin of 21229)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26049",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26050,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +2,+2) (lit twin of 21230)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26050",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26051,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +3,+2) (lit twin of 21231)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26051",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26052,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +4,+2) (lit twin of 21232)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26052",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26053,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +5,+2) (lit twin of 21233)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26053",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26054,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +6,+2) (lit twin of 21234)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26054",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26055,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +0,+3) (lit twin of 21235)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26055",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26056,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +1,+3) (lit twin of 21236)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26056",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26057,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +3,+3) (lit twin of 21237)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26057",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26058,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +4,+3) (lit twin of 21238)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26058",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26059,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +5,+3) (lit twin of 21239)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26059",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26060,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +0,+4) (lit twin of 21240)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26060",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26061,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +1,+4) (lit twin of 21241)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26061",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26062,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +2,+4) (lit twin of 21242)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26062",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26063,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +3,+4) (lit twin of 21243)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26063",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26064,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +4,+4) (lit twin of 21244)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26064",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26065,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +0,+5) (lit twin of 21245)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26065",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26066,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +1,+5) (lit twin of 21246)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26066",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26067,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +2,+5) (lit twin of 21247)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26067",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26068,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +3,+5) (lit twin of 21248)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26068",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26069,
+   "base": 15099,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (ramp +4,+5) (lit twin of 21249)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26069",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26070,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction +0,-3) (lit twin of 21250)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26070",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26071,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction +1,-3) (lit twin of 21251)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26071",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26072,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction +0,-2) (lit twin of 21252)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26072",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26073,
+   "base": 73,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction +1,-2) (lit twin of 21253)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26073",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26074,
+   "base": 15053,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction, highway end -2,+0) (lit twin of 21254)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26074",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26075,
+   "base": 15053,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction, highway end +7,+1) (lit twin of 21255)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26075",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26076,
+   "base": 11237,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway T (junction, highway end +0,-4) (lit twin of 21256)",
+    "ENGLISH": "Highway Interchange"
+   },
+   "art": {
+    "from": 73,
+    "png_dir": "art/26076",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
   }
  ],
  "lanes": [
@@ -1080,6 +1935,222 @@
   {
    "piece": 21255,
    "spec": "hwt_21255.lanes.json"
+  },
+  {
+   "piece": 26020,
+   "spec": "hwt_21200.lanes.json"
+  },
+  {
+   "piece": 26021,
+   "spec": "hwt_21201.lanes.json"
+  },
+  {
+   "piece": 26022,
+   "spec": "hwt_21202.lanes.json"
+  },
+  {
+   "piece": 26023,
+   "spec": "hwt_21203.lanes.json"
+  },
+  {
+   "piece": 26024,
+   "spec": "hwt_21204.lanes.json"
+  },
+  {
+   "piece": 26025,
+   "spec": "hwt_21205.lanes.json"
+  },
+  {
+   "piece": 26026,
+   "spec": "hwt_21206.lanes.json"
+  },
+  {
+   "piece": 26027,
+   "spec": "hwt_21207.lanes.json"
+  },
+  {
+   "piece": 26028,
+   "spec": "hwt_21208.lanes.json"
+  },
+  {
+   "piece": 26029,
+   "spec": "hwt_21209.lanes.json"
+  },
+  {
+   "piece": 26030,
+   "spec": "hwt_21210.lanes.json"
+  },
+  {
+   "piece": 26031,
+   "spec": "hwt_21211.lanes.json"
+  },
+  {
+   "piece": 26032,
+   "spec": "hwt_21212.lanes.json"
+  },
+  {
+   "piece": 26033,
+   "spec": "hwt_21213.lanes.json"
+  },
+  {
+   "piece": 26034,
+   "spec": "hwt_21214.lanes.json"
+  },
+  {
+   "piece": 26035,
+   "spec": "hwt_21215.lanes.json"
+  },
+  {
+   "piece": 26036,
+   "spec": "hwt_21216.lanes.json"
+  },
+  {
+   "piece": 26037,
+   "spec": "hwt_21217.lanes.json"
+  },
+  {
+   "piece": 26038,
+   "spec": "hwt_21218.lanes.json"
+  },
+  {
+   "piece": 26039,
+   "spec": "hwt_21219.lanes.json"
+  },
+  {
+   "piece": 26040,
+   "spec": "hwt_21220.lanes.json"
+  },
+  {
+   "piece": 26041,
+   "spec": "hwt_21221.lanes.json"
+  },
+  {
+   "piece": 26042,
+   "spec": "hwt_21222.lanes.json"
+  },
+  {
+   "piece": 26043,
+   "spec": "hwt_21223.lanes.json"
+  },
+  {
+   "piece": 26044,
+   "spec": "hwt_21224.lanes.json"
+  },
+  {
+   "piece": 26045,
+   "spec": "hwt_21225.lanes.json"
+  },
+  {
+   "piece": 26046,
+   "spec": "hwt_21226.lanes.json"
+  },
+  {
+   "piece": 26047,
+   "spec": "hwt_21227.lanes.json"
+  },
+  {
+   "piece": 26048,
+   "spec": "hwt_21228.lanes.json"
+  },
+  {
+   "piece": 26049,
+   "spec": "hwt_21229.lanes.json"
+  },
+  {
+   "piece": 26050,
+   "spec": "hwt_21230.lanes.json"
+  },
+  {
+   "piece": 26051,
+   "spec": "hwt_21231.lanes.json"
+  },
+  {
+   "piece": 26052,
+   "spec": "hwt_21232.lanes.json"
+  },
+  {
+   "piece": 26053,
+   "spec": "hwt_21233.lanes.json"
+  },
+  {
+   "piece": 26055,
+   "spec": "hwt_21235.lanes.json"
+  },
+  {
+   "piece": 26056,
+   "spec": "hwt_21236.lanes.json"
+  },
+  {
+   "piece": 26057,
+   "spec": "hwt_21237.lanes.json"
+  },
+  {
+   "piece": 26058,
+   "spec": "hwt_21238.lanes.json"
+  },
+  {
+   "piece": 26060,
+   "spec": "hwt_21240.lanes.json"
+  },
+  {
+   "piece": 26061,
+   "spec": "hwt_21241.lanes.json"
+  },
+  {
+   "piece": 26062,
+   "spec": "hwt_21242.lanes.json"
+  },
+  {
+   "piece": 26063,
+   "spec": "hwt_21243.lanes.json"
+  },
+  {
+   "piece": 26064,
+   "spec": "hwt_21244.lanes.json"
+  },
+  {
+   "piece": 26066,
+   "spec": "hwt_21246.lanes.json"
+  },
+  {
+   "piece": 26067,
+   "spec": "hwt_21247.lanes.json"
+  },
+  {
+   "piece": 26068,
+   "spec": "hwt_21248.lanes.json"
+  },
+  {
+   "piece": 26069,
+   "spec": "hwt_21249.lanes.json"
+  },
+  {
+   "piece": 26070,
+   "spec": "hwt_21250.lanes.json"
+  },
+  {
+   "piece": 26071,
+   "spec": "hwt_21251.lanes.json"
+  },
+  {
+   "piece": 26072,
+   "spec": "hwt_21252.lanes.json"
+  },
+  {
+   "piece": 26073,
+   "spec": "hwt_21253.lanes.json"
+  },
+  {
+   "piece": 26076,
+   "spec": "hwt_21256.lanes.json"
+  },
+  {
+   "piece": 26074,
+   "spec": "hwt_21254.lanes.json"
+  },
+  {
+   "piece": 26075,
+   "spec": "hwt_21255.lanes.json"
   }
  ],
  "connects": [
@@ -1099,6 +2170,27 @@
   },
   {
    "piece": 21245,
+   "road": {
+    "low": [],
+    "high": []
+   }
+  },
+  {
+   "piece": 26054,
+   "road": {
+    "low": [],
+    "high": []
+   }
+  },
+  {
+   "piece": 26059,
+   "road": {
+    "low": [],
+    "high": []
+   }
+  },
+  {
+   "piece": 26065,
    "road": {
     "low": [],
     "high": []
@@ -1246,6 +2338,63 @@
   "hwt 21253 1 -2 0 2",
   "hwtc 21256 0 -4",
   "hwtc 21254 -2 0",
-  "hwtc 21255 7 1"
+  "hwtc 21255 7 1",
+  "hwyl 21200 26020",
+  "hwyl 21201 26021",
+  "hwyl 21202 26022",
+  "hwyl 21203 26023",
+  "hwyl 21204 26024",
+  "hwyl 21205 26025",
+  "hwyl 21206 26026",
+  "hwyl 21207 26027",
+  "hwyl 21208 26028",
+  "hwyl 21209 26029",
+  "hwyl 21210 26030",
+  "hwyl 21211 26031",
+  "hwyl 21212 26032",
+  "hwyl 21213 26033",
+  "hwyl 21214 26034",
+  "hwyl 21215 26035",
+  "hwyl 21216 26036",
+  "hwyl 21217 26037",
+  "hwyl 21218 26038",
+  "hwyl 21219 26039",
+  "hwyl 21220 26040",
+  "hwyl 21221 26041",
+  "hwyl 21222 26042",
+  "hwyl 21223 26043",
+  "hwyl 21224 26044",
+  "hwyl 21225 26045",
+  "hwyl 21226 26046",
+  "hwyl 21227 26047",
+  "hwyl 21228 26048",
+  "hwyl 21229 26049",
+  "hwyl 21230 26050",
+  "hwyl 21231 26051",
+  "hwyl 21232 26052",
+  "hwyl 21233 26053",
+  "hwyl 21234 26054",
+  "hwyl 21235 26055",
+  "hwyl 21236 26056",
+  "hwyl 21237 26057",
+  "hwyl 21238 26058",
+  "hwyl 21239 26059",
+  "hwyl 21240 26060",
+  "hwyl 21241 26061",
+  "hwyl 21242 26062",
+  "hwyl 21243 26063",
+  "hwyl 21244 26064",
+  "hwyl 21245 26065",
+  "hwyl 21246 26066",
+  "hwyl 21247 26067",
+  "hwyl 21248 26068",
+  "hwyl 21249 26069",
+  "hwyl 21250 26070",
+  "hwyl 21251 26071",
+  "hwyl 21252 26072",
+  "hwyl 21253 26073",
+  "hwyl 21254 26074",
+  "hwyl 21255 26075",
+  "hwyl 21256 26076"
  ]
 }

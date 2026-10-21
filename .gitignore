@@ -91,6 +91,8 @@
 # roundabout4 (2026-10-14): the closed-quarter plan and recipe (JSON parameters, no game art)
 !/re/tools/netmod/examples/*/paint_*.json
 !/re/tools/netmod/examples/*/recipe_*.json
+# hwlight (2026-10-21): the lit-twin id list of a highway package (piece -> twin ids, no game art)
+!/re/tools/netmod/examples/*/lit_twins.json
 
 # 5) re/scripts — .py / .ps1 / .java only.
 #    Explicitly NOT the .log / .txt Ghidra run artifacts (absolute-path leaks)

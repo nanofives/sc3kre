@@ -48,3 +48,12 @@ highway lane goes on straight into the avenue lane of its half (exit +z: 61 -> 8
 no path keys, `mirror_uk: false`), table line `hwavs 21850 21851`. The block (`sc3netmod_hwave.c`) picks the set per transition from
 avcore's `avl_band_ok(first avenue cell, highway -> avenue side)`; the crossover set 21600..21603 stays for avenues that remain two-way. avcore band-end declarations
 (pending the `avenue_lines` netpack key): `avlj 21850 ..O.`, `avlj 21851 ..I.`.
+
+## Lit twins (task hwlight, 2026-10-21)
+
+Stock wall shading follows the wall's world axis (73's walls light, 15051's dark in every view) and a piece's frame is
+shared by (state + view), so art painted at state 0 is lit wrong where the block writes it at state 1 or 3 (owner
+img11). The 12 pieces the block writes at odd states have twins 26000..26011 (`lit_twins.json`): same base, lanes and
+saves, art painted from the scene turned one state. sc3netmod writes the twin at odd states (`hwyl` lines) and every
+reader sees the piece. After the art: `py -3.12 re/tools/netmod/hwlight.py twart <this package>`, the pad step if the
+package has one, `hwlight.py manifest`, `hwlight.py check`. Notes: `verify/hwlight/RESULTS.md`.
