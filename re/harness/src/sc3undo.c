@@ -849,8 +849,9 @@ typedef struct { BYTE op, old, neu; short x, z; void *obj, *occ; } JOp;
  *        when the scope opens; at close the changed bytes are kept per entry and written back after the replay. */
 typedef struct { void *mgr; LONG box[6]; DWORD mask; } JRetile;
 typedef struct { BYTE *p; BYTE old, neu; } JByte;
+typedef struct { BYTE mod; DWORD key; BYTE val[8]; } JCache;   /* a lookup-cache key the action added (caches below) */
 typedef struct { int n, cap; JOp *ops; DWORD money; void *budget; const char *tool;
-                 int nrt; JRetile *rt; int ntb; JByte *tb; } JEntry;
+                 int nrt; JRetile *rt; int ntb; JByte *tb; int ncache; JCache *cache; } JEntry;
 static JEntry g_j[MAXSTEPS];
 static int g_jn, g_jcur;              /* entries 0..g_jn-1; the first g_jcur are applied */
 static BYTE *g_jcity;
@@ -866,6 +867,7 @@ static void j_entry_free(JEntry *e) {
     if (e->ops) HeapFree(GetProcessHeap(), 0, e->ops);
     if (e->rt) HeapFree(GetProcessHeap(), 0, e->rt);
     if (e->tb) HeapFree(GetProcessHeap(), 0, e->tb);
+    if (e->cache) HeapFree(GetProcessHeap(), 0, e->cache);
     memset(e, 0, sizeof(*e));
 }
 static void j_clear(const char *why) {
@@ -976,10 +978,121 @@ static void tr_diff(JEntry *e) {
         }
     }
 }
+/* --- module-global lookup caches (2026-10-21, item 6 of the leftovers; verify/undo_spike runs 8-10).
+ * SIMSERV crime modifiers DAT_10024968 and SIMECO pollution DAT_10020818 are std::map trees that no Load clears. On a
+ * miss for a building id, SIMSERV 0x10007d35 scans every entry for the smallest vt+0x20 distance and copies that
+ * entry's modifier bytes into a new entry for the id [CONFIRMED @ SIMSERV 0x10007d35]. A key added by an undone action
+ * can therefore become the nearest match of a later id and hand it its modifier, which the city without the action
+ * would not have done. So the keys an action added are erased on undo and put back on redo.
+ * Tree layout (both): the map global holds the head node; head+4 root, head+8 leftmost; node +8 left, +0xc right (NULL
+ * leaves, FUN_1000881b), +0x10 key, value from +0x14: SIMSERV {char modifier, byte radius} (2 bytes), SIMECO {short,
+ * short, byte, byte, short} (8 bytes, saver 0x10006abb). Calls, arity by capstone:
+ *   SIMSERV erase-by-key FUN_100087b2 __thiscall(map, uint *key) ret 4; operator[] FUN_10007f7e (map, uint *key) ret 4;
+ *   SIMECO erase-range FUN_1000a88a __thiscall(map, node first, node last) ret 8 (-> FUN_1000b422 erases [first, last));
+ *          operator[] FUN_1000a80b (map, uint *key) ret 4. */
+typedef struct { const char *mod; DWORD map, erase, index, vsize; BYTE pro_erase[8], pro_index[8]; } CacheMod;
+static const CacheMod g_cmod[2] = {
+    { "SIMSERV.DLL", 0x10024968, 0x100087b2, 0x10007f7e, 2, {0x55,0x8b,0xec,0x83,0xec,0x10,0x56,0x8d}, {0x55,0x8b,0xec,0x83,0xec,0x0c,0x56,0x57} },
+    { "SIMECO.DLL",  0x10020818, 0x1000a88a, 0x1000a80b, 8, {0x56,0x8b,0xf1,0x51,0x8b,0x4c,0x24,0x10}, {0x55,0x8b,0xec,0x83,0xec,0x14,0x56,0x57} },
+};
+#define MAXCKEYS 8192
+static DWORD g_ckeys[2][MAXCKEYS];
+static int g_nckeys[2];
+static BYTE *g_cnodes[2][MAXCKEYS];
+/* in-order walk of cache m into keys / nodes (sorted); returns the count, -1 if unusable */
+static int cache_walk(int m, DWORD *keys, BYTE **nodes) {
+    HMODULE h = GetModuleHandleA(g_cmod[m].mod);
+    BYTE *head, *stack[64], *n;
+    int sp = 0, cnt = 0, guard = 0;
+    if (!h) return -1;
+    __try {
+        head = *(BYTE **)((BYTE *)h + (g_cmod[m].map - 0x10000000));
+        if (!head) return -1;
+        n = *(BYTE **)(head + 4);
+        while ((n && n != head) || sp) {
+            if (++guard > 4 * MAXCKEYS) return -1;
+            if (n && n != head) { if (sp == 64) return -1; stack[sp++] = n; n = *(BYTE **)(n + 8); continue; }
+            n = stack[--sp];
+            if (cnt == MAXCKEYS) return -1;
+            keys[cnt] = *(DWORD *)(n + 0x10);
+            if (nodes) nodes[cnt] = n;
+            cnt++;
+            n = *(BYTE **)(n + 0xc);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return -1; }
+    return cnt;
+}
+static int cache_fn_ok(int m, DWORD va, const BYTE *pro) {
+    HMODULE h = GetModuleHandleA(g_cmod[m].mod);
+    return h && !memcmp((BYTE *)h + (va - 0x10000000), pro, 8);
+}
+static void cache_snapshot(void) {
+    int m;
+    for (m = 0; m < 2; m++) g_nckeys[m] = cache_walk(m, g_ckeys[m], NULL);
+}
+static int key_in(const DWORD *keys, int n, DWORD k) {
+    int lo = 0, hi = n - 1;
+    while (lo <= hi) { int mid = (lo + hi) / 2; if (keys[mid] == k) return 1; if (keys[mid] < k) lo = mid + 1; else hi = mid - 1; }
+    return 0;
+}
+static void cache_diff(JEntry *e) {
+    static DWORD now[MAXCKEYS];
+    int m, i, n;
+    for (m = 0; m < 2; m++) {
+        if (g_nckeys[m] < 0) continue;
+        n = cache_walk(m, now, g_cnodes[m]);
+        for (i = 0; i < n; i++) {
+            JCache *c;
+            if (key_in(g_ckeys[m], g_nckeys[m], now[i])) continue;
+            if (e->ncache % 16 == 0) {
+                JCache *p = e->cache ? (JCache *)HeapReAlloc(GetProcessHeap(), 0, e->cache, (e->ncache + 16) * sizeof(JCache))
+                                     : (JCache *)HeapAlloc(GetProcessHeap(), 0, 16 * sizeof(JCache));
+                if (!p) return;
+                e->cache = p;
+            }
+            c = &e->cache[e->ncache++];
+            c->mod = (BYTE)m; c->key = now[i];
+            memcpy(c->val, g_cnodes[m][i] + 0x14, g_cmod[m].vsize);
+        }
+    }
+}
+/* undo: erase the entry's new keys; redo: put them back with the recorded value */
+static int cache_apply(JEntry *e, int forward) {
+    static DWORD keys[MAXCKEYS];
+    int k, done = 0;
+    for (k = 0; k < e->ncache; k++) {
+        JCache *c = &e->cache[k];
+        const CacheMod *cm = &g_cmod[c->mod];
+        HMODULE h = GetModuleHandleA(cm->mod);
+        BYTE *map = h ? (BYTE *)h + (cm->map - 0x10000000) : NULL;
+        int n, i, at = -1;
+        if (!map) continue;
+        n = cache_walk(c->mod, keys, g_cnodes[c->mod]);
+        for (i = 0; i < n; i++) if (keys[i] == c->key) { at = i; break; }
+        __try {
+            if (!forward && at >= 0 && cache_fn_ok(c->mod, cm->erase, cm->pro_erase)) {
+                DWORD a[2];
+                if (c->mod == 0) { a[0] = (DWORD)&c->key; tc(map, (BYTE *)h + (cm->erase - 0x10000000), a, 1); }
+                else { a[0] = (DWORD)g_cnodes[1][at]; a[1] = at + 1 < n ? (DWORD)g_cnodes[1][at + 1] : *(DWORD *)map;
+                       tc(map, (BYTE *)h + (cm->erase - 0x10000000), a, 2); }
+                done++;
+            } else if (forward && at < 0 && cache_fn_ok(c->mod, cm->index, cm->pro_index)) {
+                DWORD a[1];
+                BYTE *v;
+                a[0] = (DWORD)&c->key;
+                v = (BYTE *)tc(map, (BYTE *)h + (cm->index - 0x10000000), a, 1);
+                if (v && !IsBadWritePtr(v, cm->vsize)) { memcpy(v, c->val, cm->vsize); done++; }
+            }
+        } __except (EXCEPTION_EXECUTE_HANDLER) { logf("CACHE> %s key 0x%08lX threw 0x%08lX", cm->mod, c->key, GetExceptionCode()); }
+    }
+    return done;
+}
 static void tr_finalize(void) {
     if (g_pend >= 0 && g_pend < g_jn) {
         tr_diff(&g_j[g_pend]);
-        logf("PENDING> entry %d (%s): %d op(s) in all, %d traffic byte(s), %d retile(s)", g_pend + 1, g_j[g_pend].tool, g_j[g_pend].n, g_j[g_pend].ntb, g_j[g_pend].nrt);
+        cache_diff(&g_j[g_pend]);
+        logf("PENDING> entry %d (%s): %d op(s) in all, %d traffic byte(s), %d retile(s), %d new cache key(s)", g_pend + 1,
+             g_j[g_pend].tool, g_j[g_pend].n, g_j[g_pend].ntb, g_j[g_pend].nrt, g_j[g_pend].ncache);
     }
     g_pend = -1;
 }
@@ -1159,6 +1272,7 @@ static int scope_open(const char *name) {
     g_scope_budget = bu;
     g_scope_f0 = funds_of(bu);
     tr_snapshot(city);
+    cache_snapshot();
     g_recording = 1;
     return 1;
 }
@@ -1367,6 +1481,7 @@ static int j_apply(int i, int forward) {
         __except (EXCEPTION_EXECUTE_HANDLER) { bad++; }
     }
     for (k = 0; k < e->ntb; k++) *e->tb[k].p = forward ? e->tb[k].neu : e->tb[k].old;
+    if (e->ncache) logf("CACHE> %d of %d lookup-cache key(s) %s", cache_apply(e, forward), e->ncache, forward ? "put back" : "erased");
     city_hold(0);
     g_replaying = 0;
     if (!forward && e->money) vc(e->budget, 0x18, 1, e->money, 0, 0, 0, 0);
