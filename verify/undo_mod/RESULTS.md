@@ -103,7 +103,10 @@ held, so for them the recording scope spans the press (button down +0x20 opens i
 drag = one undo entry. Level commits once on release. Every write they make already went through logged slots.
 
 Not covered / open:
-- Terrain levelled by a network drag on an illegal slope (network manager +0x118): the history is cleared instead.
+- Terrain levelled by a network drag on an illegal slope (network manager +0x118): since 2026-10-21 kept in the entry, no
+  longer clears the history. Its terrain writes (DirtBag +0x120 FUN_1000c5d0) are all vtable calls to +0x84 and +0x88,
+  both logged [CONFIRMED @ SIMDIRT 0x1000c5d0]. Runtime: not reached in 3 runs (verify/undo_leftovers/tf1-tf3, roads over
+  hills raised 3, 6 and 12 times; 8 roads that applied, all exact or byte-identical). `SC3UNDO_TFIX=0` restores the barrier.
 - ~~Bulldoze undo leaves SimTransit and 23-26 B of the network layer different.~~ Fixed 2026-10-21, see below.
 
 ## Bulldoze made exact (2026-10-21, verify/undo_leftovers/bd1-bd4)
