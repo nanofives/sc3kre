@@ -127,6 +127,9 @@ static void bv_att_add(const int *a) {
     if (g_bv_natt < BV_ATT_MAX) { memcpy(g_bv_att[g_bv_natt], a, sizeof g_bv_att[0]); g_bv_natt++; }
 }
 static int avl_band_ok(int x, int z, int away);                          /* task bvlanes: sc3netmod_avl.c */
+/* task avx32: bv_takes() runs bv_run1 as a dry run on the geometry only, with the AVL band checks taken as passed */
+static int g_bv_dry;
+#define BV_BAND_OK(x, z, away) (g_bv_dry || avl_band_ok((x), (z), (away)))
 /* task bvlanes: the real side (0 N 1 E 2 S 3 W) of axis-space direction +s (dir 1) / -s (-1) / +w (2) / -w (-2) */
 static int bv_side(int axis, int dir) {
     if (dir == 1) return axis ? 2 : 1;
@@ -156,7 +159,8 @@ typedef struct {
     int natt, att[8][5];        /* task bvlanes: (boulevard end cell, attached avenue cell, side) of the run decided */
 } BvPass;
 static int bvx_spans(BvPass *p, int sa, int sb, int w0, BYTE *kind, const char **why);            /* task bvx */
-static int bvx_boxes(BvPass *p, int sa, int sb, int w0, const BYTE *kind, int lo_tee, int hi_tee); /* task bvx */
+static int bvx_boxes(BvPass *p, int sa, int sb, int w0, const BYTE *kind, int lo_tee, int hi_tee, int lo_av,
+                     int hi_av);                                                       /* task bvx, avx32 */
 
 /* axis space -> real */
 static int bv_rx(int axis, int s, int w) { return axis ? -w : s; }
@@ -208,6 +212,26 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
             for (k = 0; k < 3 && se - st * k >= sa && se - st * k <= sb && (kind[se - st * k - sa] & 4); k++) ;
             endtyp[e] = 4; endkeep[e] = -9; teew[e] = k;
         }
+        else if (got == 2 && row == first + 1 && (kind[se - sa] & 4) && bv_road(p, se + 2 * st, w0 + first) &&
+                 bv_road(p, se + 2 * st, w0 + row)) {
+            /* task avx32: the run ends in a box and an avenue goes on past it (the crossing road is a boulevard on one
+               side, an avenue on the other: owner img7); the box side is 'L' / 'H'. Its noses come from the run that
+               has this avenue beside it (bvx_boxes, side arm) */
+            if ((kind[se - sa] & 3) != 3) { *why = "an end on a corner (road on one side only)"; return 0; }
+            for (k = 0; k < 3 && se - st * k >= sa && se - st * k <= sb && (kind[se - st * k - sa] & 4); k++) ;
+            endtyp[e] = 6; endkeep[e] = first; teew[e] = k;
+            if (!BV_BAND_OK(bv_rx(p->axis, se + 2 * st, w0 + first), bv_rz(p->axis, se + 2 * st, w0 + first),
+                             bv_side(p->axis, st)))
+                { *why = "the avenue past the box would stay two-way"; return 0; }
+            if (p->natt < 8) {
+                p->att[p->natt][0] = bv_rx(p->axis, se + st, w0 + first); p->att[p->natt][1] = bv_rz(p->axis, se + st, w0 + first);
+                p->att[p->natt][2] = bv_rx(p->axis, se + 2 * st, w0 + first);
+                p->att[p->natt][3] = bv_rz(p->axis, se + 2 * st, w0 + first);
+                p->att[p->natt][4] = bv_side(p->axis, st);
+                p->natt++;
+            }
+            continue;
+        }
         else if (!got) { endtyp[e] = 1; endkeep[e] = -1; }
         else if (got == 1 && bv_road(p, se + 2 * st, w0 + row)) { endtyp[e] = 2; endkeep[e] = row; }
         else if (got == 2 && row == first + 1 && bv_road(p, se + 2 * st, w0 + first) && bv_road(p, se + 2 * st, w0 + row))
@@ -218,7 +242,7 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
         if (endtyp[e] == 3 && !g_bv_av[e ? 1 - first : first][0]) { *why = "no avenue-narrowing pieces declared"; return 0; }
         /* task bvlanes (AVENUE_LANES.md program rule): the narrowing is one-way, so the avenue it goes on into must
            convert; else the whole run stays stock */
-        if (endtyp[e] == 3 && !avl_band_ok(bv_rx(p->axis, se + st, w0 + first), bv_rz(p->axis, se + st, w0 + first),
+        if (endtyp[e] == 3 && !BV_BAND_OK(bv_rx(p->axis, se + st, w0 + first), bv_rz(p->axis, se + st, w0 + first),
                                            bv_side(p->axis, st)))
             { *why = "the avenue it narrows into would stay two-way"; return 0; }
         if (endtyp[e] == 3 && p->natt < 8) {
@@ -228,15 +252,18 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
             p->natt++;
         }
     }
-    endhi = endtyp[0] == 1 ? 1 : endtyp[0] == 4 ? teew[0] : endtyp[0] == 5 ? 0 : BV_TAPER;   /* bvx: 4 = T, diagbv: 5 = DBV */
-    endlo = endtyp[1] == 1 ? 1 : endtyp[1] == 4 ? teew[1] : endtyp[1] == 5 ? 0 : BV_TAPER;
+    /* bvx: 4 = T, diagbv: 5 = DBV, avx32: 6 = box + avenue */
+    endhi = endtyp[0] == 1 ? 1 : endtyp[0] == 4 || endtyp[0] == 6 ? teew[0] : endtyp[0] == 5 ? 0 : BV_TAPER;
+    endlo = endtyp[1] == 1 ? 1 : endtyp[1] == 4 || endtyp[1] == 6 ? teew[1] : endtyp[1] == 5 ? 0 : BV_TAPER;
     normlo = sa + endlo;
     normhi = sb - endhi;
     if (normhi < normlo) { *why = "run too short for its ends"; return 0; }
     for (s = normlo; s <= normhi; s++) ncl += kind[s - sa] == 0;
     if (ncl < BV_MIN_COLS) { *why = "fewer than 3 boulevard columns"; return 0; }
-    for (s = sa; s < normlo; s++) if (kind[s - sa] && endtyp[1] != 4) { *why = "a junction inside an end region"; return 0; }
-    for (s = normhi + 1; s <= sb; s++) if (kind[s - sa] && endtyp[0] != 4) { *why = "a junction inside an end region"; return 0; }
+    for (s = sa; s < normlo; s++)
+        if (kind[s - sa] && endtyp[1] != 4 && endtyp[1] != 6) { *why = "a junction inside an end region"; return 0; }
+    for (s = normhi + 1; s <= sb; s++)
+        if (kind[s - sa] && endtyp[0] != 4 && endtyp[0] != 6) { *why = "a junction inside an end region"; return 0; }
     if (kind[normlo - sa] || kind[normhi - sa]) { *why = "a junction next to an end region"; return 0; }
     /* isolated: every ROAD cell 8-touching the run is the run, a junction arm or the road a taper goes on into */
     for (s = sa - 1; s <= sb + 1; s++)
@@ -244,8 +271,8 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
             int in = s >= sa && s <= sb && k >= 0 && k <= 2, ok;
             if (in || !bv_road(p, s, w0 + k)) continue;
             ok = (s >= sa && s <= sb && k == -1 && (kind[s - sa] & 1)) || (s >= sa && s <= sb && k == 3 && (kind[s - sa] & 2)) ||
-                 (s == sb + 1 && endtyp[0] >= 2 && (k == endkeep[0] || (endtyp[0] == 3 && k == endkeep[0] + 1))) ||
-                 (s == sa - 1 && endtyp[1] >= 2 && (k == endkeep[1] || (endtyp[1] == 3 && k == endkeep[1] + 1))) ||
+                 (s == sb + 1 && endtyp[0] >= 2 && (k == endkeep[0] || ((endtyp[0] == 3 || endtyp[0] == 6) && k == endkeep[0] + 1))) ||
+                 (s == sa - 1 && endtyp[1] >= 2 && (k == endkeep[1] || ((endtyp[1] == 3 || endtyp[1] == 6) && k == endkeep[1] + 1))) ||
                  bv_cl(p, s, w0 + k);                                /* task diagbv */
             if (!ok) { *why = "touches road"; return 0; }
         }
@@ -253,7 +280,7 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
     p->n = 0;
     for (e = 0; e < 2; e++) {
         int col, row;
-        if (endtyp[e] == 4 || endtyp[e] == 5) continue;    /* task bvx: the T's box comes with bvx_boxes; diagbv: DBV */
+        if (endtyp[e] >= 4) continue;  /* task bvx: the T's box comes with bvx_boxes; diagbv: DBV; avx32: box + avenue */
         if (endtyp[e] == 1) {
             for (row = 0; row < 3; row++)
                 bv_put(p, e ? sa : sb, w0 + (e ? 2 - row : row), g_bv_cap[row], e ? 2 : 0);
@@ -287,9 +314,55 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
             else { bv_put(p, s, w0, jn, 0); bv_put(p, s, w0 + 2, jn, 2); }
         }
     }
-    if (!bvx_boxes(p, sa, sb, w0, kind, endtyp[1] == 4, endtyp[0] == 4))   /* task bvx */
+    if (!bvx_boxes(p, sa, sb, w0, kind, endtyp[1] == 4, endtyp[0] == 4, endtyp[1] == 6 ? 1 + endkeep[1] : 0,
+                   endtyp[0] == 6 ? 1 + endkeep[0] : 0))                  /* task bvx, avx32 */
         { *why = "a box cell with no declared piece"; return 0; }
     return 1;
+}
+
+/* task avx32: would BV's run rule put one of its pieces on cell (x, z)? bv_run1 on the cells as they stand, the AVL
+   band checks taken as passed (geometry only: whatever a pass wrote into an avenue arm before must not change the
+   answer). For AVX, which runs before BV: a box whose crossing roads are a boulevard BV builds is BV's, so AVX and BV
+   use one definition of a boulevard. Reads a window of BV_TAKES_R cells round (x, z); a run longer than that is cut
+   at the window (an end there reads as a cap). */
+#define BV_TAKES_R 48
+static int bv_takes(BYTE *mgr, int x, int z) {
+    void *lay = *(void **)(mgr + 0x3c);
+    int W = (*(int *)(mgr + 0x5c) >> 8) + 1, H = (*(int *)(mgr + 0x60) >> 8) + 1;
+    int x0 = x - BV_TAKES_R, z0 = z - BV_TAKES_R, x1 = x + BV_TAKES_R, z1 = z + BV_TAKES_R, axis, k, hit = 0;
+    BvPass P;
+    BYTE *mem, *kind;
+    SIZE_T nbuf;
+    if (!g_bv_p[0] || !mgr || W < 4 || H < 4 || W > 4096 || H > 4096) return 0;
+    if (x0 < 0) x0 = 0;
+    if (z0 < 0) z0 = 0;
+    if (x1 > W - 1) x1 = W - 1;
+    if (z1 > H - 1) z1 = H - 1;
+    ZeroMemory(&P, sizeof(P));
+    P.b.x0 = x0; P.b.z0 = z0; P.b.w = x1 - x0 + 1; P.b.h = z1 - z0 + 1;
+    nbuf = (SIZE_T)P.b.w * P.b.h;
+    mem = (BYTE *)VirtualAlloc(NULL, nbuf * 4 + DAV_MAX_CELLS * sizeof(BvCell) + BV_MAX_RUN, MEM_COMMIT, PAGE_READWRITE);
+    if (!mem) return 0;
+    P.b.c = (DWORD *)mem;
+    P.cell = (BvCell *)(mem + nbuf * 4);
+    kind = (BYTE *)(P.cell + DAV_MAX_CELLS);
+    for (k = 0; k < (int)nbuf; k++) P.b.c[k] = rb_read(mgr, lay, x0 + k % P.b.w, z0 + k / P.b.w, W, H);
+    g_bv_dry = 1;
+    for (axis = 0; axis < 2 && !hit; axis++) {
+        int s = axis ? z : x, w = axis ? -x : z, w0;
+        P.axis = axis;
+        for (w0 = w - 2; w0 <= w && !hit; w0++) {
+            const char *why = "";
+            int sa = s, sb;
+            if (!bv_full(&P, s, w0)) continue;
+            while (bv_full(&P, sa - 1, w0) && s - sa < BV_MAX_RUN - 1) sa--;
+            if (!bv_run1(&P, sa, w0, &sb, &why, kind)) continue;
+            for (k = 0; k < P.n && !hit; k++) hit = P.cell[k].x == x && P.cell[k].z == z;
+        }
+    }
+    g_bv_dry = 0;
+    VirtualFree(mem, 0, MEM_RELEASE);
+    return hit;
 }
 
 /* -> 1 when an accepted run reached the read border (the caller re-runs over the whole map) */
