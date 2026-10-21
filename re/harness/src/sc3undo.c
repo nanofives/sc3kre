@@ -831,36 +831,152 @@ static int patch_minimap_vtable(HMODULE sui) {
  * would leave the terrain wrong). */
 enum { OP_INS = 1, OP_REM = 2, OP_CELL = 3, OP_ALT = 4, OP_WATER = 5, OP_BLOCK = 6 };
 typedef struct { BYTE op, old, neu; short x, z; void *obj, *occ; } JOp;
-typedef struct { int n, cap; JOp *ops; DWORD money; void *budget; const char *tool; } JEntry;
+/* BULLDOZE EXACTNESS (2026-10-21, verify/undo_leftovers bd*): two kinds of write the occupant log does not cover.
+ *   RETILE: the network manager's rectangle retile, SIMNTWRK vtable 0x1002c7bc +0xb0 = FUN_100151f1,
+ *        __thiscall(mgr, LONG bbox[6], DWORD netMask), ret 8 (capstone). The demolish path (SIMGEOM 0x1001408d) removes
+ *        each piece and collects a dirty bbox + mask; the retile then rewrites the neighbours' piece descriptors (save
+ *        section 0x2147c2dd: 8-byte {cell, u32 descriptor} records; after undo the neighbours kept the post-bulldoze
+ *        descriptors). Each call made inside an action is recorded and run again after the replay, both ways, so the
+ *        tiler recomputes the neighbours against the restored pieces.
+ *   TRAFFIC: the TrafficSimulator (city+0xac, primary vtable SimTransit 0x1001a368, QI 0x100051fc answers IID
+ *        0x29ca805 with itself) zeroes its per-cell grids under a removed piece and a re-insert does not put them back
+ *        (save section 0x029ca804, every differing byte KEPT at the bulldozed value). Its save FUN_10004c8d writes the
+ *        byte grids at +0x60 +0x64 +0x68 +0x6c +0x70 +0x74 (object: rows +4, row bytes +8, row pointers +0xc) and the
+ *        bit grids at +0x7c +0x80 (rows +4, bits +8, row pointers +0x10, rows of ceil(bits/32) dwords). They are copied
+ *        when the scope opens; at close the changed bytes are kept per entry and written back after the replay. */
+typedef struct { void *mgr; LONG box[6]; DWORD mask; } JRetile;
+typedef struct { BYTE *p; BYTE old, neu; } JByte;
+typedef struct { int n, cap; JOp *ops; DWORD money; void *budget; const char *tool;
+                 int nrt; JRetile *rt; int ntb; JByte *tb; } JEntry;
 static JEntry g_j[MAXSTEPS];
 static int g_jn, g_jcur;              /* entries 0..g_jn-1; the first g_jcur are applied */
 static BYTE *g_jcity;
 static JEntry g_rec;                  /* the action being recorded */
 static volatile int g_recording, g_rec_barrier, g_replaying;
+static int g_pend = -1;              /* entry whose deferred writes are still being collected (tr_finalize) */
 
 static void j_entry_free(JEntry *e) {
     int i;
     for (i = 0; i < e->n; i++) if (e->ops[i].occ) vc(e->ops[i].occ, 0x08, 0, 0, 0, 0, 0, 0);
     if (e->ops) HeapFree(GetProcessHeap(), 0, e->ops);
+    if (e->rt) HeapFree(GetProcessHeap(), 0, e->rt);
+    if (e->tb) HeapFree(GetProcessHeap(), 0, e->tb);
     memset(e, 0, sizeof(*e));
 }
 static void j_clear(const char *why) {
     if (g_jn) logf("JOURNAL> cleared (%d entr%s): %s", g_jn, g_jn == 1 ? "y" : "ies", why);
     while (g_jn) j_entry_free(&g_j[--g_jn]);
-    g_jcur = 0; g_jcity = NULL;
+    g_jcur = 0; g_jcity = NULL; g_pend = -1;
 }
+/* the entry being written: the open scope, else the PENDING entry (occupant swaps made by the deferred retile) */
+static JEntry *rec_target(void) { return g_recording ? &g_rec : g_pend >= 0 && g_pend < g_jn ? &g_j[g_pend] : NULL; }
 static void rec_add(BYTE op, void *obj, void *occ, LONG x, LONG z, BYTE old, BYTE neu) {
     JOp *o;
-    if (g_rec.n == g_rec.cap) {
-        int cap = g_rec.cap ? g_rec.cap * 2 : 256;
-        JOp *n = g_rec.ops ? (JOp *)HeapReAlloc(GetProcessHeap(), 0, g_rec.ops, cap * sizeof(JOp))
-                           : (JOp *)HeapAlloc(GetProcessHeap(), 0, cap * sizeof(JOp));
-        if (!n) { g_rec_barrier = 1; return; }
-        g_rec.ops = n; g_rec.cap = cap;
+    JEntry *e = rec_target();
+    if (!e) return;
+    if (e->n == e->cap) {
+        int cap = e->cap ? e->cap * 2 : 256;
+        JOp *n = e->ops ? (JOp *)HeapReAlloc(GetProcessHeap(), 0, e->ops, cap * sizeof(JOp))
+                        : (JOp *)HeapAlloc(GetProcessHeap(), 0, cap * sizeof(JOp));
+        if (!n) { if (e == &g_rec) g_rec_barrier = 1; else j_clear("out of memory for a pending entry"); return; }
+        e->ops = n; e->cap = cap;
     }
-    o = &g_rec.ops[g_rec.n++];
+    o = &e->ops[e->n++];
     o->op = op; o->obj = obj; o->occ = occ; o->x = (short)x; o->z = (short)z; o->old = old; o->neu = neu;
     if (occ) vc(occ, 0x04, 0, 0, 0, 0, 0, 0);
+}
+
+/* Both writes also land AFTER Apply returns (measured: 0 retiles and 18 of 74 traffic bytes inside the scope), from the
+   game's deferred processing on the next frames. While paused only actions change these grids, so the entry stays
+   PENDING after its scope closes: retiles keep being recorded into it, and its traffic diff is taken against the copy from
+   scope open when the next action opens a scope or an undo / redo runs (tr_finalize). */
+static void *g_retile_orig;
+static int g_retile_replay;           /* 0: retiles are logged only; the occupant swaps they cause are journaled instead */
+static DWORD __fastcall net_retile(void *mgr, void *edx, LONG *box, DWORD mask) {
+    DWORD a[2];
+    JEntry *e = g_recording ? &g_rec : g_pend >= 0 && g_pend < g_jn ? &g_j[g_pend] : NULL;
+    (void)edx;
+    if (e && !g_replaying && box && !IsBadReadPtr(box, 24)) {
+        int fail = 0;
+        if (e->nrt % 16 == 0) {
+            JRetile *n = e->rt ? (JRetile *)HeapReAlloc(GetProcessHeap(), 0, e->rt, (e->nrt + 16) * sizeof(JRetile))
+                               : (JRetile *)HeapAlloc(GetProcessHeap(), 0, 16 * sizeof(JRetile));
+            if (n) e->rt = n; else fail = 1;
+        }
+        if (!fail) { JRetile *r = &e->rt[e->nrt++]; r->mgr = mgr; memcpy(r->box, box, 24); r->mask = mask; }
+    }
+    a[0] = (DWORD)box; a[1] = mask;
+    return tc(mgr, g_retile_orig, a, 2);
+}
+
+/* --- traffic grids (BULLDOZE EXACTNESS above): rows of the TrafficSimulator's grids, copied at scope open */
+#define MAXTROWS 16384
+static BYTE *g_tr_rowp[MAXTROWS];
+static DWORD g_tr_rowlen[MAXTROWS];
+static int g_tr_nrows;
+static BYTE *g_tr_copy;
+static DWORD g_tr_bytes;
+static BYTE *traffic_of(BYTE *city) {
+    HMODULE st = GetModuleHandleA("SimTransit.dll");
+    BYTE *t;
+    if (!city || !st) return NULL;
+    __try {
+        t = *(BYTE **)(city + 0xac);
+        return t && *(DWORD *)t == (DWORD)st + 0x1a368 ? t : NULL;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return NULL; }
+}
+static void tr_snapshot(BYTE *city) {
+    static const int bgrid[] = { 0x60, 0x64, 0x68, 0x6c, 0x70, 0x74 }, bitgrid[] = { 0x7c, 0x80 };
+    BYTE *t = traffic_of(city), *dst;
+    int g, r;
+    g_tr_nrows = 0; g_tr_bytes = 0;
+    if (!t) return;
+    __try {
+        for (g = 0; g < 8; g++) {
+            BYTE *o = *(BYTE **)(t + (g < 6 ? bgrid[g] : bitgrid[g - 6]));
+            LONG rows, len;
+            BYTE **rp;
+            if (!o) continue;
+            rows = *(LONG *)(o + 4);
+            len = g < 6 ? *(LONG *)(o + 8) : ((*(LONG *)(o + 8) + 31) / 32) * 4;
+            rp = *(BYTE ***)(o + (g < 6 ? 0xc : 0x10));
+            if (rows <= 0 || len <= 0 || !rp || g_tr_nrows + rows > MAXTROWS) continue;
+            for (r = 0; r < rows; r++) { g_tr_rowp[g_tr_nrows] = rp[r]; g_tr_rowlen[g_tr_nrows++] = (DWORD)len; g_tr_bytes += (DWORD)len; }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { g_tr_nrows = 0; g_tr_bytes = 0; return; }
+    if (g_tr_copy) HeapFree(GetProcessHeap(), 0, g_tr_copy);
+    g_tr_copy = (BYTE *)HeapAlloc(GetProcessHeap(), 0, g_tr_bytes ? g_tr_bytes : 1);
+    if (!g_tr_copy) { g_tr_nrows = 0; return; }
+    for (dst = g_tr_copy, r = 0; r < g_tr_nrows; dst += g_tr_rowlen[r], r++) memcpy(dst, g_tr_rowp[r], g_tr_rowlen[r]);
+}
+/* the bytes that changed since tr_snapshot, into e->tb */
+static void tr_diff(JEntry *e) {
+    BYTE *src = g_tr_copy;
+    int r, cap = 0;
+    DWORD i;
+    if (!g_tr_copy || !g_tr_nrows) return;
+    for (r = 0; r < g_tr_nrows; src += g_tr_rowlen[r], r++) {
+        if (!memcmp(src, g_tr_rowp[r], g_tr_rowlen[r])) continue;
+        for (i = 0; i < g_tr_rowlen[r]; i++) {
+            if (src[i] == g_tr_rowp[r][i]) continue;
+            if (e->ntb == cap) {
+                JByte *n;
+                cap = cap ? cap * 2 : 256;
+                n = e->tb ? (JByte *)HeapReAlloc(GetProcessHeap(), 0, e->tb, cap * sizeof(JByte))
+                          : (JByte *)HeapAlloc(GetProcessHeap(), 0, cap * sizeof(JByte));
+                if (!n) { g_rec_barrier = 1; return; }
+                e->tb = n;
+            }
+            e->tb[e->ntb].p = &g_tr_rowp[r][i]; e->tb[e->ntb].old = src[i]; e->tb[e->ntb].neu = g_tr_rowp[r][i]; e->ntb++;
+        }
+    }
+}
+static void tr_finalize(void) {
+    if (g_pend >= 0 && g_pend < g_jn) {
+        tr_diff(&g_j[g_pend]);
+        logf("PENDING> entry %d (%s): %d op(s) in all, %d traffic byte(s), %d retile(s)", g_pend + 1, g_j[g_pend].tool, g_j[g_pend].n, g_j[g_pend].ntb, g_j[g_pend].nrt);
+    }
+    g_pend = -1;
 }
 
 /* --- recorder wrappers (pass-through unless an action is being recorded) */
@@ -872,12 +988,12 @@ static DWORD __fastcall occ_insert(void *mgr, void *edx, void *occ) {
     (void)edx;
     a[0] = (DWORD)occ;
     r = tc(mgr, g_occ_ins_orig, a, 1);
-    if (g_recording && !g_replaying && occ && (r & 0xff)) rec_add(OP_INS, mgr, occ, 0, 0, 0, 0);
+    if (rec_target() && !g_replaying && occ && (r & 0xff)) rec_add(OP_INS, mgr, occ, 0, 0, 0, 0);
     return r;
 }
 static DWORD __fastcall occ_remove(void *mgr, void *edx, void *occ) {
     DWORD a[1], r;
-    int rec = g_recording && !g_replaying && occ;
+    int rec = rec_target() && !g_replaying && occ;
     (void)edx;
     if (rec) vc(occ, 0x04, 0, 0, 0, 0, 0, 0);            /* keep it alive across the remove */
     a[0] = (DWORD)occ;
@@ -1030,11 +1146,13 @@ static int scope_open(const char *name) {
     if (g_recording) return 0;
     city = city_get();
     if (!city_paused(city) || (bu = budget_of(city)) == NULL) return 0;
+    tr_finalize();
     memset(&g_rec, 0, sizeof(g_rec));
     g_rec.tool = name;
     g_rec_barrier = 0;
     g_scope_budget = bu;
     g_scope_f0 = funds_of(bu);
+    tr_snapshot(city);
     g_recording = 1;
     return 1;
 }
@@ -1054,8 +1172,9 @@ static void scope_close(void) {
         for (k = 0; k < g_rec.n; k++) { BYTE op = g_rec.ops[k].op;
             if (op == OP_INS) ins++; else if (op == OP_REM) rem++; else if (op == OP_ALT || op == OP_WATER || op == OP_BLOCK) alt++; else cell++; }
         j_push(&g_rec);
-        logf("APPLY> %s: %d inserted, %d removed, %d zone cell(s), %d terrain op(s), $%lu -> entry %d of %d", g_rec.tool, ins, rem,
-             cell, alt, g_j[g_jn - 1].money, g_jcur, g_jn);
+        logf("APPLY> %s: %d inserted, %d removed, %d zone cell(s), %d terrain op(s), %d retile(s) so far, $%lu -> entry %d of %d",
+             g_rec.tool, ins, rem, cell, alt, g_j[g_jn - 1].nrt, g_j[g_jn - 1].money, g_jcur, g_jn);
+        g_pend = g_jn - 1;
         memset(&g_rec, 0, sizeof(g_rec));
     } else {
         if (g_rec.money) logf("APPLY> %s: $%lu charged but no change recorded", g_rec.tool, g_rec.money);
@@ -1162,6 +1281,7 @@ static void journal_install(void) {
     ok &= patch_vt(rci, 0x1004d274, 0x38, 0x10032afa, (void *)zone_rect, &g_zone_rect_orig, "zone rect set");
     ok &= patch_vt(rci, 0x1004d1e0, 0x38, 0x1003433a, (void *)zone_irect, &g_zone_irect_orig, "zone rect set (iface)");
     ok &= patch_vt(nt, 0x1002c7bc, 0x118, 0x100086c8, (void *)terrain_fix, &g_terrain_fix_orig, "network terrain fix");
+    ok &= patch_vt(nt, 0x1002c7bc, 0xb0, 0x100151f1, (void *)net_retile, &g_retile_orig, "network retile");
     {   HMODULE dirt = GetModuleHandleA("SIMDIRT.DLL");
         if (!dirt) { logf("PATCH> SIMDIRT.DLL not loaded"); ok = 0; }
         else {
@@ -1231,6 +1351,12 @@ static int j_apply(int i, int forward) {
             }
         } __except (EXCEPTION_EXECUTE_HANDLER) { bad++; }
     }
+    /* after every piece is back (or gone again): retile what the action retiled, then the traffic grid bytes */
+    for (k = 0; k < e->nrt && g_retile_replay; k++) {
+        __try { vc(e->rt[k].mgr, 0xb0, 2, (DWORD)e->rt[k].box, e->rt[k].mask, 0, 0, 0); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { bad++; }
+    }
+    for (k = 0; k < e->ntb; k++) *e->tb[k].p = forward ? e->tb[k].neu : e->tb[k].old;
     city_hold(0);
     g_replaying = 0;
     if (!forward && e->money) vc(e->budget, 0x18, 1, e->money, 0, 0, 0, 0);
@@ -1241,6 +1367,7 @@ static int j_apply(int i, int forward) {
 static void j_undo(void) {
     BYTE *city = city_get();
     if (g_recording) scope_close();
+    tr_finalize();
     if (!city_paused(city)) { logf("UNDO> ignored: not paused"); return; }
     if (g_jcity && city != g_jcity) j_clear("city changed");
     if (g_jcur <= 0) { logf("UNDO> nothing to undo"); return; }
@@ -1249,6 +1376,7 @@ static void j_undo(void) {
 static void j_redo(void) {
     BYTE *city = city_get();
     if (g_recording) scope_close();
+    tr_finalize();
     if (!city_paused(city)) { logf("REDO> ignored: not paused"); return; }
     if (city != g_jcity || g_jcur >= g_jn) { logf("REDO> nothing to redo"); return; }
     if (j_apply(g_jcur, 1)) g_jcur++;

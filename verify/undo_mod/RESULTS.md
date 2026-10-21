@@ -91,7 +91,7 @@ the stock Load either) and SIMSERV flammability (recomputed by the sim's scan; a
 | water pipe | 25 ins | $125 | exact | byte-identical | 0 ms |
 | police station 3x3 | 1 ins, 9 zone cells | $500 | exact (benign only) | byte-identical | 0-15 ms |
 | small park 1x1 | 1 ins, 1 zone cell | $100 | exact (benign only) | byte-identical | 0 ms |
-| bulldoze (London) | 11-45 rem | $55-$335 | buildings back, render normal; SimTransit 64-180 B and network layer 23-26 B differ | byte-identical | 0 ms |
+| bulldoze (London), since 2026-10-21 | 11-45 rem + 194-222 deferred occupant swaps | $55-$335 | exact (benign only), second drag byte-identical | byte-identical | 0-16 ms |
 | raise terrain, one drag (Roadless Paradise) | 20 terrain, 3 trees removed | $140 | exact (benign only) | byte-identical | 0 ms |
 | lower terrain, one drag | 20 terrain | $125 | byte-identical | byte-identical | 0 ms |
 | level terrain, one drag | 20 terrain | $187 | byte-identical | byte-identical | 0 ms |
@@ -104,7 +104,31 @@ drag = one undo entry. Level commits once on release. Every write they make alre
 
 Not covered / open:
 - Terrain levelled by a network drag on an illegal slope (network manager +0x118): the history is cleared instead.
-- Bulldoze undo leaves SimTransit (traffic data) and 23-26 B of the network layer different from before. Cause not read.
+- ~~Bulldoze undo leaves SimTransit and 23-26 B of the network layer different.~~ Fixed 2026-10-21, see below.
+
+## Bulldoze made exact (2026-10-21, verify/undo_leftovers/bd1-bd4)
+
+Bytes per save section across before / after / undo (`re/tools/undo/secbytes.py`):
+
+- SimTransit `029ca804`: every differing byte held its post-bulldoze value after undo. The TrafficSimulator
+  (city+0xac, vtable SimTransit `0x1001a368`) zeroes its per-cell grids under a removed piece, and a re-insert does not
+  put them back. Its save `0x10004c8d` names the grids: bytes at +0x60..+0x74, bits at +0x7c / +0x80.
+- Network `2147c2dd` instance 1: 8-byte {cell, u32 descriptor} records. The neighbours of the removed pieces kept their
+  post-bulldoze descriptors.
+- Both happen after Apply returns. Inside the scope: 0 retiles and 18 of 74 traffic bytes (bd2). The retile and the
+  occupant swaps it makes run from the game's deferred processing on the next frames.
+
+Fix: the entry stays PENDING after its scope closes, until the next action or an undo / redo. Occupant Insert / Remove
+calls in that window go into the same entry (194-222 per bulldoze), and the traffic grids are compared against a copy
+taken at scope open (64-180 changed bytes kept per entry). Re-running the recorded retile (SIMNTWRK `+0xb0`
+FUN_100151f1) instead left 2 cells with other descriptors (bd3), so retiles are logged only.
+
+| run | after undo vs before | redo vs after |
+|---|---|---|
+| bd1 (stock v2) | SimTransit 74 B, network 22 B | identical |
+| bd3 (traffic copy + retile re-run) | network 6 B | identical |
+| bd4 (traffic copy + pending occupant log), 2 drags | exact (benign only); second drag byte-identical | identical |
+| reg1, Roadless Paradise: zone, road, power, highway, pipe | zone byte-identical, others exact (benign only) | identical |
 - Not tested: subway, on-ramp, shoreline / plumbing / multi-cell buildings, buildings from the power / water /
   landmark / reward picker (they use the same tool classes).
 - Version 1 (full save / load) stays as `mode=snapshot`.
