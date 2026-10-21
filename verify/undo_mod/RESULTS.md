@@ -193,3 +193,29 @@ Four rotations (PageDown, frame dumps). With north at the bottom the "N" label (
 (79,142)) was drawn over the Undo button, which sat at (60,142) with Redo at (82,142) (`rot/rotations.png`, third panel).
 The buttons now sit at (52,142) and (88,142), leaving x 70..88 free: the label is clear of both in all four rotations
 (`rot2/rotations.png`). `button_x` / `button_y` in undo.ini still override.
+
+## Maximized window (2026-10-21, verify/undo_leftovers/max1, max2)
+
+Roadless Paradise, one road (Undo lit), window maximized with `sc3io.maximize_without_focus` to 3840x1984, frame dump,
+then posted clicks on the buttons where they are drawn.
+
+| HUD mode | minimap drawn at | Undo click | Redo click |
+|---|---|---|---|
+| HUDSCALE on (`[hud] scale=1`, factor 3.307) | [3311 1442 3840 1984], buttons ~60x66 at (3483,1912) / (3602,1912) | `BTN> click undo`, $272 refunded, greyed states follow | `BTN> click redo`, $272 charged |
+| HUDSCALE off (`SC3RESIZE_HUDSCALE=0`), BARKIDS slid the bar | native 160x164 at the bottom-right corner | same | same |
+
+DLGSCALE scales dialogs only; the minimap is not one, so it does not apply. No change needed.
+
+## Owner hand test card (item 7: Ctrl+Z, then releasing Ctrl)
+
+Posted keys cannot set `GetKeyState(VK_CONTROL)`, so only a real keyboard can test this. Holding Ctrl switches the city
+view to its temporary query tool and releasing it switches back. Undo itself does not touch the tool (the journal
+replays ops; only snapshot mode put the tool down).
+
+1. Pause, pick the road tool, build one road.
+2. Hold Ctrl (the pointer becomes the query "?"), press Z, release Z, release Ctrl.
+3. Expected: the road is gone and the money is back, and after Ctrl comes up the road tool is active again (the next
+   drag builds a road). Then Ctrl+Y: the road returns.
+4. Repeat with the bulldozer selected instead of the road tool.
+
+Report anything else: the tool stuck on "?", a click that queries instead of building, or a road built on Ctrl release.
