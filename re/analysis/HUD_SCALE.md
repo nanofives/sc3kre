@@ -342,3 +342,29 @@ with Reunirse open 9.9 to 10.6 ms per frame against 6.2 to 6.4 without.
 **The Reunirse frame-rate drop is not this code.** With the dialog open the game's Blts per second drop about 3.5x at
 every size and with HUD scale off: 4,883 -> 1,373 at native 800x600, 1,070 -> 277 at 4K scale off, 891 -> 265 at 4K Fit;
 time inside Blt drops too (809 -> 135 ms/s native). With sc3perf (`sysmem=1`) there is no drop: 60 fps open and closed; the dialog adds ~3,300 surface Locks per second, cheap in system memory, slow in video memory (`verify/dlgscale/RESULTS.md`).
+
+## City cost label pulled up-left (task costlabel, 2026-10-22)
+
+Owner report on the LAN build of main `4f780c5`, window 3840x1984 at 3.307x: "after placing some highway outside the
+screen the price marking is offset a lot" (`verify/ownerbugs_1021/owner_shots/img14_cost_label_offset.png`).
+
+- Cause: `rz_hs_collect` enlarged every small floating window inside the native HUD box (the bottom-right
+  `cw/s x ch/s` region) about the corner C, a rule meant for HUD tooltips. The road/highway cost label (vt
+  `exe+0xd3bcc`) is a floating window the game puts next to the cursor in the city. In that region it went to
+  `C + s * (p - C)`. The owner's `resize.log` line 510: `[3678 1522 3742 1538] -> [3304 456 3516 509] (floating: native
+  copy erased)` = 374 px left of and 1066 px above where the game put it. The same label outside the box is logged
+  `not scaled (floating): 004D3BCC[...]` and sits at the cursor. Not stock, not TIPCURSOR, not overscroll. A drag that
+  leaves the window only clamps the label into the client corner (stock), where the old rule moved it little.
+- Fix: a floating window is enlarged only if the last queued mouse message was mapped by `rz_hs_mouse`, i.e. the
+  game's cursor was on the enlarged HUD, so the game placed it next to the native point. Decided per window and rect
+  (latched), so a HUD tooltip keeps its place if the cursor leaves before it hides. Log: `COSTLABEL> floating ...`.
+  `SC3RESIZE_HUDSCALE_FLOATALL=1` restores the old rule.
+- No class check: `exe+0xd3bcc` is the game's one tooltip window. The side panel, bottom bar and minimap button
+  tooltips are that same window, moved (logged with their vtable, 2026-10-22). Excluding the class would stop every
+  HUD tooltip from enlarging. Second test instead: the floating rect must also touch a native HUD window (8 px
+  margin, the previous pass's edge-anchored rects). Every HUD tooltip measured overlaps one. Reason: with the real
+  mouse parked on the panel of a maximized window, Windows sends moves at its position between posted ones, and the
+  flag read "HUD" at the start of a city drag (`[2428 1178 2448 1194]` at 3840x1984). The second test refuses that.
+- Check (client 1584x851, 1.418x, `verify/costlabel/RESULTS.md`): highway drag held in the box, label native at the
+  cursor (before: enlarged, pulled up-left); top-left control unchanged; HUD button tooltip still enlarged beside its
+  button.

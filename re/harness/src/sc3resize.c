@@ -4247,7 +4247,19 @@ static int rz_mb_present(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, vo
  * The city-only target iso+0x74 is the see-through mask (SC3RESIZE_HUDSCALE_KEY=0 disables): a HUD-rect pixel
  * equal to the city layer is the city showing through, so the dest gets the city under it instead (without it,
  * the minimap's transparent corner showed a magnified piece of city). Small floating windows (tooltips) are
- * enlarged too, and their native copy is overwritten with the city layer.
+ * enlarged too, and their native copy is overwritten with the city layer, but only when the game's cursor was on the
+ * enlarged HUD as the window appeared (COSTLABEL, owner 2026-10-22: "the price marking is offset a lot"). The game
+ * puts a floating window next to the cursor it was told about: after a mapped (HUD) message that is the native point,
+ * after an unmapped (city) one it is the real cursor. The road/highway cost label (vt exe+0xd3bcc) dragged in the
+ * lower right of the city lay inside the native HUD box, so it was enlarged too and drawn at C + s * (p - C), at
+ * 3.307x 374 px left of and 1066 px above the drag end. The decision is latched per window and rect, so a HUD tooltip
+ * keeps its place when the cursor leaves the HUD before it hides. The class cannot tell them apart: every HUD tooltip
+ * measured (side panel, bottom bar, minimap buttons) is the same exe+0xd3bcc window, moved. So a second test: the
+ * floating rect must also touch a native HUD window (8 px margin, last frame's rects). Every HUD tooltip measured
+ * overlaps one, and it stops a stray message from enlarging a city label: with the real mouse parked on the HUD of
+ * a maximized window, Windows sends a move at its position when a press captures the mouse, so the flag read "HUD"
+ * for the label of a drag that started in the open city (measured 2026-10-22 at 3840x1984).
+ * SC3RESIZE_HUDSCALE_FLOATALL=1 = the old rule.
  * Mouse messages on an enlarged rect (or during a press that started on one) get the inverse map.
  * Measured 2026-10-11 at 1200x900 and 1600x960: re/analysis/HUD_SCALE.md, verify/hudscale/. */
 static int    g_hudscale;               /* 0 off, 1 auto, >= 100 percent */
@@ -4289,6 +4301,14 @@ static LONG    g_hd_cap_q[2], g_hd_cap_p[2], g_hd_cap_nat[2];
 static DWORD   g_hd_stamp, g_hd_px, g_hd_full, g_hd_frames;
 static int     rz_hd_add(void *win, const LONG *r, LONG cw, LONG ch, double s);   /* fwd */
 static int    g_hs_capture, g_hs_depth, g_hs_nestlog;
+static int    g_hs_mouse_hud;           /* COSTLABEL: the last queued mouse message was mapped (cursor on the enlarged HUD) */
+static int    g_hs_floatall;            /* SC3RESIZE_HUDSCALE_FLOATALL=1: enlarge every floating window in the box (old rule) */
+#define HS_FL_MAX 8
+static struct { void *win; LONG r[4]; int hud; DWORD stamp; } g_hs_fl[HS_FL_MAX];   /* COSTLABEL latch */
+static DWORD  g_hs_fl_stamp;
+static LONG   g_hs_hudr[HS_MAX][4];     /* COSTLABEL: native rects of the edge-anchored HUD windows, last pass */
+static int    g_hs_nhudr;
+static int    g_hs_fl_logs;
 static int    g_hs_repost = 1, g_hs_repost_log, g_hs_last_ok;   /* SC3RESIZE_HUDSCALE_REPOST=0 disables the guard */
 static LPARAM g_hs_last_out;
 static DWORD  g_hs_last_t;
@@ -4423,6 +4443,31 @@ static int rz_hs_tables(LONG cw, LONG ch, double s) {
     return 1;
 }
 
+/* COSTLABEL: was the game's cursor on the enlarged HUD when this floating window took this rect, and does the rect
+   touch a native HUD window? Latched per window and rect (a new rect = the game moved it, so decide again). */
+static int rz_hs_float_hud(void *win, const LONG *r, DWORD vt) {
+    int i, k = -1, old = 0, touch = 0;
+    DWORD exe = (DWORD)GetModuleHandleA(NULL);
+    g_hs_fl_stamp++;
+    for (i = 0; i < HS_FL_MAX; i++) if (g_hs_fl[i].win == win) { k = i; break; }
+    if (k >= 0 && !memcmp(g_hs_fl[k].r, r, sizeof(g_hs_fl[k].r))) { g_hs_fl[k].stamp = g_hs_fl_stamp; return g_hs_fl[k].hud; }
+    if (k >= 0) old = 1;
+    else {
+        for (i = 0, k = 0; i < HS_FL_MAX; i++) if (g_hs_fl[i].stamp < g_hs_fl[k].stamp) k = i;   /* oldest slot */
+    }
+    for (i = 0; i < g_hs_nhudr && !touch; i++)
+        touch = r[0] < g_hs_hudr[i][2] + 8 && r[2] > g_hs_hudr[i][0] - 8 && r[1] < g_hs_hudr[i][3] + 8 && r[3] > g_hs_hudr[i][1] - 8;
+    g_hs_fl[k].win = win; memcpy(g_hs_fl[k].r, r, sizeof(g_hs_fl[k].r));
+    g_hs_fl[k].hud = g_hs_mouse_hud && touch; g_hs_fl[k].stamp = g_hs_fl_stamp;
+    if (g_hs_fl_logs < 100) {
+        g_hs_fl_logs++;
+        logf("COSTLABEL> floating %08lX [%ld %ld %ld %ld] %s: cursor %s, %s a HUD window -> %s",
+             vt - (exe && vt > exe && vt < exe + 0x200000 ? exe : 0), r[0], r[1], r[2], r[3], old ? "moved" : "shown",
+             g_hs_mouse_hud ? "on the HUD" : "in the city", touch ? "touches" : "clear of", g_hs_fl[k].hud ? "enlarged" : "native");
+    }
+    return g_hs_fl[k].hud;
+}
+
 /* Collect visible HUD windows (root children, and children of the full-client HUD container). Returns count. */
 static int rz_hs_collect(LONG cw, LONG ch, double s, int can_erase) {
     DWORD exe = (DWORD)GetModuleHandleA(NULL), spr = (DWORD)GetModuleHandleA("SIMSPR.DLL");
@@ -4466,7 +4511,8 @@ static int rz_hs_collect(LONG cw, LONG ch, double s, int can_erase) {
             if ((r[2] - r[0]) * (r[3] - r[1]) > cw * ch / 2) continue;                 /* full-client layer */
             if (r[2] < cw - 2 && r[3] < ch - 2) {   /* floating (tooltips): enlarged only if it fits and can be erased */
                 LONG fx0 = rz_hs_dst_lo(r[0], cw, s), fy0 = rz_hs_dst_lo(r[1], ch, s);
-                if (can_erase && n < HS_MAX && fx0 >= 0 && fy0 >= 0 && (r[2] - r[0]) * (r[3] - r[1]) <= cw * ch / 16) {
+                int hud = g_hs_floatall || rz_hs_float_hud(c, r, vt);
+                if (hud && can_erase && n < HS_MAX && fx0 >= 0 && fy0 >= 0 && (r[2] - r[0]) * (r[3] - r[1]) <= cw * ch / 16) {
                     memcpy(g_hs_src[n], r, sizeof(r));
                     g_hs_dst[n][0] = fx0; g_hs_dst[n][1] = fy0;
                     g_hs_dst[n][2] = rz_hs_dst_lo(r[2], cw, s); g_hs_dst[n][3] = rz_hs_dst_lo(r[3], ch, s);
@@ -4499,6 +4545,11 @@ static int rz_hs_collect(LONG cw, LONG ch, double s, int can_erase) {
         }
     }
     sig ^= (DWORD)g_hs_ndlg * 0x9e3779b9u;
+    {   /* COSTLABEL: keep this pass's edge-anchored rects for the next pass's floating test */
+        int i;
+        for (i = 0, g_hs_nhudr = 0; i < n; i++)
+            if (!g_hs_float[i]) memcpy(g_hs_hudr[g_hs_nhudr++], g_hs_src[i], sizeof(g_hs_hudr[0]));
+    }
     if (sig != g_hs_sig && g_hs_logs < 60) {
         int i;
         g_hs_sig = sig; g_hs_logs++;
@@ -4510,9 +4561,10 @@ static int rz_hs_collect(LONG cw, LONG ch, double s, int can_erase) {
                  d->dst[0], d->dst[1], d->dst[2], d->dst[3], (double)d->dw / d->w);
         }
         for (i = 0; i < n; i++)
-            logf("HUDSCALE>   [%ld %ld %ld %ld] -> [%ld %ld %ld %ld]%s", g_hs_src[i][0], g_hs_src[i][1], g_hs_src[i][2],
+            logf("HUDSCALE>   [%ld %ld %ld %ld] -> [%ld %ld %ld %ld]%s %08lX", g_hs_src[i][0], g_hs_src[i][1], g_hs_src[i][2],
                  g_hs_src[i][3], g_hs_dst[i][0], g_hs_dst[i][1], g_hs_dst[i][2], g_hs_dst[i][3],
-                 g_hs_float[i] ? " (floating: native copy erased)" : "");
+                 g_hs_float[i] ? " (floating: native copy erased)" : "", g_hs_vt[i] -
+                 (exe && g_hs_vt[i] > exe && g_hs_vt[i] < exe + 0x200000 ? exe : sui && g_hs_vt[i] > sui && g_hs_vt[i] < sui + 0x200000 ? sui : 0));
     }
     return n;
 }
@@ -9934,7 +9986,8 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
                          (int)(short)LOWORD(lp), (int)(short)HIWORD(lp)); }
             } else if (rz_hs_mouse(m, &lp)) {
                 g_hs_last_out = lp; g_hs_last_ok = 1; g_hs_last_t = GetTickCount();
-            }
+                g_hs_mouse_hud = 1;
+            } else g_hs_mouse_hud = 0;
         }
         else if (m != WM_MOUSEMOVE && g_hs_nestlog < 20) {
             g_hs_nestlog++;
@@ -12100,6 +12153,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_HUDPERF_CHECK", v, sizeof(v))) g_hp_check = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDPERF_LAZY", v, sizeof(v))) g_hp_lazy = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_REPOST", v, sizeof(v))) g_hs_repost = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_FLOATALL", v, sizeof(v))) g_hs_floatall = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUBGSTOCK", v, sizeof(v))) g_menubg_stock = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUBGFIT", v, sizeof(v))) g_menubg_fit = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE", v, sizeof(v))) g_menuscale = atoi(v);
