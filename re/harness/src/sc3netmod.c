@@ -220,7 +220,9 @@ static int write_code(BYTE *p, const void *src, int n) {
     DWORD old;
     if (!VirtualProtect(p, n, PAGE_EXECUTE_READWRITE, &old)) return 0;
     memcpy(p, src, n);
-    VirtualProtect(p, n, old, &old);
+    /* task onramp: protection left RWX, as sc3perf does. LANEDENSITY patches SimTransit +0x755e while sc3perf's
+       TRANSIT_CLEAR writes +0x7158 on the same page from its own thread; our restore landed between sc3perf's
+       VirtualProtect and its write and the game died at startup (write AV at sc3perf+0x9FBE, 2026-10-22). */
     FlushInstructionCache(GetCurrentProcess(), p, n);
     return 1;
 }
