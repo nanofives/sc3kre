@@ -81,7 +81,18 @@ def box_piece(desc):
         for canon, pid in BOX.items():
             if rot(canon, k) == desc:
                 return pid, k
+    for k in range(4):                                  # task avx32: no legacy piece, the pattern itself stands in
+        for canon in NEWPAT:
+            if rot(canon, k) == desc:
+                return canon, k
     return None
+
+
+# task avx32 (owner img12): edge patterns of the 1-column box where a boulevard ends on a single road (canonical: the
+# boulevard comes in from W, the far side E closed, the road crosses N - S). They have no legacy edge piece: in the
+# edge-pattern mode (TABLE None, what bvlanes reads) box_piece returns the pattern string as the piece, and bvlanes
+# gives each cell its id from the BOX_NEW pool, the art from the pattern
+NEWPAT = ("ACIA", "ICIA", "ICAA")
 
 
 # ------------------------------------------------------------------------------------------------ hooks for runs()
@@ -347,6 +358,11 @@ def shapes():
         "BxBAl": A | {(x, z) for x in (0, 1, 2) for z in range(-9, 0)} | {(x, z) for x in (0, 1) for z in range(3, 11)},
         "BxAlh": A | {(x, z) for x in (0, 1) for z in range(-8, 0)} | {(x, z) for x in (1, 2) for z in range(3, 11)},
         "BxAhl": A | {(x, z) for x in (1, 2) for z in range(-8, 0)} | {(x, z) for x in (0, 1) for z in range(3, 11)},
+        # task avx32 (owner img12): the boulevard ends ON a single road (a T, 1-column box); a road / an avenue
+        # crossing it one column before its end (the junction next to the cap)
+        "BrT": {(x, z) for x in range(-9, 1) for z in range(3)} | {(0, z) for z in range(-8, 11)},
+        "BxR1": {(x, z) for x in range(-9, 2) for z in range(3)} | {(0, z) for z in range(-8, 11)},
+        "BxA1": {(x, z) for x in range(-9, 3) for z in range(3)} | {(x, z) for x in (0, 1) for z in range(-8, 11)},
     }
     return S
 
@@ -376,7 +392,8 @@ def junction_wants(road):
     return want, ok, bad, clash
 
 
-SYM = {20701: 2, 20703: 2, 20905: 1}     # boulevard MIDDLE / NOSE2 look the same turned half a circle, IIII any turn
+SYM = {20701: 2, 20703: 2, 20905: 1,     # boulevard MIDDLE / NOSE2 look the same turned half a circle, IIII any turn
+       20711: 2}                          # task avx32: a road crossing's middle row (BxR1)
 
 
 def norm(want):
@@ -387,13 +404,15 @@ def cmd_check(a):
     from netmod import avx
     fails = 0
     S = shapes()
-    expect_runs = {"BxA": 1, "AvT": 1, "BvT": 1, "BxB": 2, "BbT": 2, "BxBAh": 2, "BxBAl": 2, "BxAlh": 1, "BxAhl": 1}
+    expect_runs = {"BxA": 1, "AvT": 1, "BvT": 1, "BxB": 2, "BbT": 2, "BxBAh": 2, "BxBAl": 2, "BxAlh": 1, "BxAhl": 1,
+                   "BrT": 1, "BxR1": 1, "BxA1": 1}                      # task avx32
     ref = {}
     for name, cells in sorted(S.items()):
         for k in range(4):
             R = _rot_cells(cells, k)
             want, ok, bad, clash = junction_wants(R)
-            boxes = {c: v for c, v in want.items() if v[0] in OWN}
+            boxes = {c: v for c, v in want.items() if v[0] in OWN or isinstance(v[0], str) or
+                     (name == "BxR1" and v[0] in (20710, 20711))}          # task avx32: new patterns, BV's crossing
             good = len(ok) == expect_runs[name] and not clash and boxes and \
                 not [r for r in bad if r["sb"] - r["sa"] + 1 >= 4]
             # rotation invariance: the rotated canonical wants

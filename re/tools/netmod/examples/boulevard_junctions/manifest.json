@@ -737,6 +737,48 @@
    "trblkatt": "none"
   },
   {
+   "id": 21928,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21928"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 21929,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21929"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 21930,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard crossing",
+    "ENGLISH": "Cruce de bulevar"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21930"
+   },
+   "trblkatt": "none"
+  },
+  {
    "id": 20910,
    "base": 11204,
    "network": "ROAD",
@@ -975,6 +1017,18 @@
    "spec": "bvl_21927.lanes.json"
   },
   {
+   "piece": 21928,
+   "spec": "bvl_21928.lanes.json"
+  },
+  {
+   "piece": 21929,
+   "spec": "bvl_21929.lanes.json"
+  },
+  {
+   "piece": 21930,
+   "spec": "bvl_21930.lanes.json"
+  },
+  {
    "piece": 20910,
    "spec": "bvl_20910.lanes.json"
   },
@@ -1022,6 +1076,12 @@
     }
    ],
    "cells": [
+    "bvxc 1 3 AAAC 0 0 21930 2",
+    "bvxc 1 3 AAAC 0 1 21929 2",
+    "bvxc 1 3 AAAC 0 2 21928 2",
+    "bvxc 1 3 ACAA 0 0 21928 0",
+    "bvxc 1 3 ACAA 0 1 21929 0",
+    "bvxc 1 3 ACAA 0 2 21930 0",
     "bvxc 2 3 AAAA 0 0 20900 0",
     "bvxc 2 3 AAAA 0 1 20901 0",
     "bvxc 2 3 AAAA 0 2 20902 0",
@@ -1052,6 +1112,12 @@
     "bvxc 2 3 CAAA 1 0 20905 2",
     "bvxc 2 3 CAAA 1 1 20904 2",
     "bvxc 2 3 CAAA 1 2 20903 2",
+    "bvxc 3 1 AACA 0 0 21930 1",
+    "bvxc 3 1 AACA 1 0 21929 1",
+    "bvxc 3 1 AACA 2 0 21928 1",
+    "bvxc 3 1 CAAA 0 0 21928 3",
+    "bvxc 3 1 CAAA 1 0 21929 3",
+    "bvxc 3 1 CAAA 2 0 21930 3",
     "bvxc 3 2 AAAA 0 0 20902 1",
     "bvxc 3 2 AAAA 0 1 20900 3",
     "bvxc 3 2 AAAA 1 0 20901 1",

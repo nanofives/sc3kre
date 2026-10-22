@@ -13,7 +13,9 @@
  *            column closes the boulevard), exactly one row going on straight (two cells) -> taper to that row over
  *            the last BV_TAPER columns, two adjacent rows going on -> narrowing to that avenue over the last
  *            BV_TAPER columns (task boulevard, 20750..), anything else -> the run is left to the stock tiler
- *  accepted  at least BV_MIN_COLS clean columns besides the end regions, no junction in or next to an end region,
+ *  accepted  at least BV_MIN_COLS clean columns besides the end regions, no junction in or next to an end region
+ *            (task avx32: a road / avenue crossing may stand next to a cap; a run ending ON a single road makes its
+ *            last column a 1-column BVX box),
  *            no other ROAD 8-touching the run (junction arms and the road a taper goes on into excepted)
  *  pieces    canonical (boulevard along +x, rows 0 / 1 / 2): outer rows OUTER (row 0 state 2, row 2 state 0, = the
  *            states stock 11204 has there), middle MIDDLE / NOSE (median nose at +x, state 2 at -x) / NOSE2 (both)
@@ -161,6 +163,7 @@ typedef struct {
 static int bvx_spans(BvPass *p, int sa, int sb, int w0, BYTE *kind, const char **why);            /* task bvx */
 static int bvx_boxes(BvPass *p, int sa, int sb, int w0, const BYTE *kind, int lo_tee, int hi_tee, int lo_av,
                      int hi_av);                                                       /* task bvx, avx32 */
+static int bvx_cells_on(void);                                     /* task avx32: bvxc box cells declared */
 
 /* axis space -> real */
 static int bv_rx(int axis, int s, int w) { return axis ? -w : s; }
@@ -180,13 +183,19 @@ static void bv_put(BvPass *p, int s, int w, WORD piece, int st) {
     p->n++;
 }
 
-/* one run starting at column sa, rows w0..w0+2. -> 1 accepted (cells in p->cell), 0 refused (*why) */
-static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *kind) {
+/* one run starting at column sa, rows w0..w0+2. -> 1 accepted (cells in p->cell), 0 refused (*why; *bad_e = the end
+   the refusal is about, 0 +s / 1 -s, or -1). Task avx32: cut_hi / cut_lo > 0 = a RAGGED end: that many columns at the
+   +s / -s end stay with the stock tiler and the run ends on a plain column there, its median in a nose (end type 7) */
+static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *kind, int cut_hi, int cut_lo,
+                   int *bad_e) {
     int sb = sa, s, k, e, n, ncl = 0, endtyp[2], endkeep[2], endlo, endhi, normlo, normhi, teew[2] = { 0, 0 };
     *why = "";
+    *bad_e = -1;
     p->natt = 0;                                                         /* task bvlanes */
     while (bv_full(p, sb + 1, w0) && sb - sa < BV_MAX_RUN - 1) sb++;
     *psb = sb;
+    sa += cut_lo;                                                        /* task avx32 */
+    sb -= cut_hi;
     n = sb - sa + 1;
     if (n < BV_MIN_COLS) return 0;
     if (n < BV_MIN_RUN) { *why = "3-column run: a 3x3 block (bigrbt's)"; return 0; }
@@ -206,9 +215,14 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
         int se = e ? sa : sb, st = e ? -1 : 1, got = 0, row = -1, first = -1, nclm = 0;
         for (k = 0; k < 3; k++) if (bv_road(p, se + st, w0 + k)) { got++; row = k; if (first < 0) first = k; }
         for (k = 0; k < 3; k++) nclm += bv_road(p, se + st, w0 + k) && bv_cl(p, se + st, w0 + k);   /* task diagbv */
+        if (e ? cut_lo : cut_hi) {                                        /* task avx32: ragged end */
+            if (kind[se - sa]) { *why = "ragged end on a junction column"; *bad_e = e; return 0; }
+            endtyp[e] = 7; endkeep[e] = -1;
+            continue;
+        }
         if (got && nclm == got) { endtyp[e] = 5; endkeep[e] = -1; continue; }   /* task diagbv: 5 = bends into a DBV */
         if (!got && (kind[se - sa] & 4)) {                 /* task bvx: the run ends on an avenue / boulevard (T) */
-            if ((kind[se - sa] & 3) != 3) { *why = "an end on a corner (road on one side only)"; return 0; }
+            if ((kind[se - sa] & 3) != 3) { *why = "an end on a corner (road on one side only)"; *bad_e = e; return 0; }
             for (k = 0; k < 3 && se - st * k >= sa && se - st * k <= sb && (kind[se - st * k - sa] & 4); k++) ;
             endtyp[e] = 4; endkeep[e] = -9; teew[e] = k;
         }
@@ -217,7 +231,7 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
             /* task avx32: the run ends in a box and an avenue goes on past it (the crossing road is a boulevard on one
                side, an avenue on the other: owner img7); the box side is 'L' / 'H'. Its noses come from the run that
                has this avenue beside it (bvx_boxes, side arm) */
-            if ((kind[se - sa] & 3) != 3) { *why = "an end on a corner (road on one side only)"; return 0; }
+            if ((kind[se - sa] & 3) != 3) { *why = "an end on a corner (road on one side only)"; *bad_e = e; return 0; }
             for (k = 0; k < 3 && se - st * k >= sa && se - st * k <= sb && (kind[se - st * k - sa] & 4); k++) ;
             endtyp[e] = 6; endkeep[e] = first; teew[e] = k;
             if (!BV_BAND_OK(bv_rx(p->axis, se + 2 * st, w0 + first), bv_rz(p->axis, se + 2 * st, w0 + first),
@@ -232,14 +246,22 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
             }
             continue;
         }
+        else if (!got && kind[se - sa] == 3 && bvx_cells_on()) {
+            /* task avx32 (owner img12): the run ends ON a single road crossing its last column (a T, the boulevard
+               the stem): that column is a 1-column box, its far side closed (bvx_boxes, hi_tee / lo_tee) */
+            kind[se - sa] |= 4;
+            endtyp[e] = 4; endkeep[e] = -9; teew[e] = 1;
+        }
         else if (!got) { endtyp[e] = 1; endkeep[e] = -1; }
         else if (got == 1 && bv_road(p, se + 2 * st, w0 + row)) { endtyp[e] = 2; endkeep[e] = row; }
         else if (got == 2 && row == first + 1 && bv_road(p, se + 2 * st, w0 + first) && bv_road(p, se + 2 * st, w0 + row))
             { endtyp[e] = 3; endkeep[e] = first; }          /* task boulevard: two rows go on = the avenue */
-        else { *why = "an end where the roads going on are not one road or an avenue"; return 0; }
-        if (endtyp[e] == 1 && !g_bv_cap[0]) { *why = "no cap pieces declared"; return 0; }
-        if (endtyp[e] == 2 && !g_bv_tap[e ? 2 - row : row][0]) { *why = "no taper pieces declared"; return 0; }
-        if (endtyp[e] == 3 && !g_bv_av[e ? 1 - first : first][0]) { *why = "no avenue-narrowing pieces declared"; return 0; }
+        else { *why = "an end where the roads going on are not one road or an avenue"; *bad_e = e; return 0; }
+        if (endtyp[e] == 1 && !g_bv_cap[0]) { *why = "no cap pieces declared"; *bad_e = e; return 0; }
+        if (endtyp[e] == 2 && !g_bv_tap[e ? 2 - row : row][0])
+            { *why = "no taper pieces declared"; *bad_e = e; return 0; }
+        if (endtyp[e] == 3 && !g_bv_av[e ? 1 - first : first][0])
+            { *why = "no avenue-narrowing pieces declared"; *bad_e = e; return 0; }
         /* task bvlanes (AVENUE_LANES.md program rule): the narrowing is one-way, so the avenue it goes on into must
            convert; else the whole run stays stock */
         if (endtyp[e] == 3 && !BV_BAND_OK(bv_rx(p->axis, se + st, w0 + first), bv_rz(p->axis, se + st, w0 + first),
@@ -252,19 +274,29 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
             p->natt++;
         }
     }
-    /* bvx: 4 = T, diagbv: 5 = DBV, avx32: 6 = box + avenue */
-    endhi = endtyp[0] == 1 ? 1 : endtyp[0] == 4 || endtyp[0] == 6 ? teew[0] : endtyp[0] == 5 ? 0 : BV_TAPER;
-    endlo = endtyp[1] == 1 ? 1 : endtyp[1] == 4 || endtyp[1] == 6 ? teew[1] : endtyp[1] == 5 ? 0 : BV_TAPER;
+    /* bvx: 4 = T, diagbv: 5 = DBV, avx32: 6 = box + avenue, 7 = ragged */
+    endhi = endtyp[0] == 1 ? 1 : endtyp[0] == 4 || endtyp[0] == 6 ? teew[0] : endtyp[0] >= 5 ? 0 : BV_TAPER;
+    endlo = endtyp[1] == 1 ? 1 : endtyp[1] == 4 || endtyp[1] == 6 ? teew[1] : endtyp[1] >= 5 ? 0 : BV_TAPER;
     normlo = sa + endlo;
     normhi = sb - endhi;
     if (normhi < normlo) { *why = "run too short for its ends"; return 0; }
     for (s = normlo; s <= normhi; s++) ncl += kind[s - sa] == 0;
     if (ncl < BV_MIN_COLS) { *why = "fewer than 3 boulevard columns"; return 0; }
     for (s = sa; s < normlo; s++)
-        if (kind[s - sa] && endtyp[1] != 4 && endtyp[1] != 6) { *why = "a junction inside an end region"; return 0; }
+        if (kind[s - sa] && endtyp[1] != 4 && endtyp[1] != 6)
+            { *why = "a junction inside an end region"; *bad_e = 1; return 0; }
     for (s = normhi + 1; s <= sb; s++)
-        if (kind[s - sa] && endtyp[0] != 4 && endtyp[0] != 6) { *why = "a junction inside an end region"; return 0; }
-    if (kind[normlo - sa] || kind[normhi - sa]) { *why = "a junction next to an end region"; return 0; }
+        if (kind[s - sa] && endtyp[0] != 4 && endtyp[0] != 6)
+            { *why = "a junction inside an end region"; *bad_e = 0; return 0; }
+    /* task avx32: a road or an avenue crossing may stand next to a cap (the boulevard crosses it and stops one column
+       on). Not a boulevard (3 wide): its own run reads the one-column stub as an arm shorter than 2 */
+    for (e = 0; e < 2; e++) {
+        int s0 = e ? normlo : normhi, st = e ? 1 : -1, wd = 0;
+        if (!kind[s0 - sa]) continue;
+        if (kind[s0 - sa] & 4)
+            for (; s0 + st * wd >= sa && s0 + st * wd <= sb && (kind[s0 + st * wd - sa] & 4); wd++) ;
+        if (endtyp[e] != 1 || wd > 2) { *why = "a junction next to an end region"; *bad_e = e; return 0; }
+    }
     /* isolated: every ROAD cell 8-touching the run is the run, a junction arm or the road a taper goes on into */
     for (s = sa - 1; s <= sb + 1; s++)
         for (k = -1; k <= 3; k++) {
@@ -273,7 +305,8 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
             ok = (s >= sa && s <= sb && k == -1 && (kind[s - sa] & 1)) || (s >= sa && s <= sb && k == 3 && (kind[s - sa] & 2)) ||
                  (s == sb + 1 && endtyp[0] >= 2 && (k == endkeep[0] || ((endtyp[0] == 3 || endtyp[0] == 6) && k == endkeep[0] + 1))) ||
                  (s == sa - 1 && endtyp[1] >= 2 && (k == endkeep[1] || ((endtyp[1] == 3 || endtyp[1] == 6) && k == endkeep[1] + 1))) ||
-                 bv_cl(p, s, w0 + k);                                /* task diagbv */
+                 bv_cl(p, s, w0 + k) ||                              /* task diagbv */
+                 (s == sb + 1 && endtyp[0] == 7) || (s == sa - 1 && endtyp[1] == 7);   /* task avx32: the stock rest */
             if (!ok) { *why = "touches road"; return 0; }
         }
     /* pieces */
@@ -320,6 +353,34 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
     return 1;
 }
 
+/* task avx32 (orchestrator 2026-10-21): an end the rule cannot build does not take the whole run stock. Its columns stay
+   with the stock tiler (cut 1, 2, ... from that end until the run converts), the rest converts, middle boxes included.
+   Refusals not about one end (touching road, a bad arm, the AVL program rule) still refuse the run. -> as bv_run1;
+   cut[0] / cut[1] = the columns left at the +s / -s end, *why = the first refusal when an end was cut. Twin:
+   boulevard.runs() */
+#define BV_RAG_MAX 12
+static int bv_run_fb(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *kind, int *cut) {
+    int bad, r, round, e, c, sb2, b2;
+    const char *why0, *w2;
+    cut[0] = cut[1] = 0;
+    r = bv_run1(p, sa, w0, psb, why, kind, 0, 0, &bad);
+    why0 = *why;
+    for (round = 0; round < 2 && !r && bad >= 0; round++) {
+        int cc[2], next = 0;
+        e = bad;
+        for (c = 1; c <= BV_RAG_MAX; c++) {
+            cc[0] = cut[0]; cc[1] = cut[1]; cc[e] = c;
+            if (*psb - sa + 1 - cc[0] - cc[1] < BV_MIN_RUN) break;
+            r = bv_run1(p, sa, w0, &sb2, &w2, kind, cc[0], cc[1], &b2);
+            if (r || (b2 >= 0 && b2 != e)) { cut[0] = cc[0]; cut[1] = cc[1]; bad = b2; next = 1; break; }
+        }
+        if (!next) { r = 0; break; }
+    }
+    if (!r) { cut[0] = cut[1] = 0; *why = why0; return 0; }
+    *why = (cut[0] || cut[1]) ? why0 : "";
+    return 1;
+}
+
 /* task avx32: would BV's run rule put one of its pieces on cell (x, z)? bv_run1 on the cells as they stand, the AVL
    band checks taken as passed (geometry only: whatever a pass wrote into an avenue arm before must not change the
    answer). For AVX, which runs before BV: a box whose crossing roads are a boulevard BV builds is BV's, so AVX and BV
@@ -329,7 +390,7 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
 static int bv_takes(BYTE *mgr, int x, int z) {
     void *lay = *(void **)(mgr + 0x3c);
     int W = (*(int *)(mgr + 0x5c) >> 8) + 1, H = (*(int *)(mgr + 0x60) >> 8) + 1;
-    int x0 = x - BV_TAKES_R, z0 = z - BV_TAKES_R, x1 = x + BV_TAKES_R, z1 = z + BV_TAKES_R, axis, k, hit = 0;
+    int x0 = x - BV_TAKES_R, z0 = z - BV_TAKES_R, x1 = x + BV_TAKES_R, z1 = z + BV_TAKES_R, axis, k, hit = 0, cut[2];
     BvPass P;
     BYTE *mem, *kind;
     SIZE_T nbuf;
@@ -356,7 +417,7 @@ static int bv_takes(BYTE *mgr, int x, int z) {
             int sa = s, sb;
             if (!bv_full(&P, s, w0)) continue;
             while (bv_full(&P, sa - 1, w0) && s - sa < BV_MAX_RUN - 1) sa--;
-            if (!bv_run1(&P, sa, w0, &sb, &why, kind)) continue;
+            if (!bv_run_fb(&P, sa, w0, &sb, &why, kind, cut)) continue;          /* task avx32: + ragged ends */
             for (k = 0; k < P.n && !hit; k++) hit = P.cell[k].x == x && P.cell[k].z == z;
         }
     }
@@ -386,13 +447,28 @@ static int bv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, cons
         for (w = wl; w <= wh; w++)
             for (s = s0; s <= s1; s++) {
                 const char *why = "";
-                int sb, nw = 0;
+                int sb, nw = 0, cut[2];
                 if (!bv_full(&P, s, w) || bv_full(&P, s - 1, w)) continue;
-                if (!bv_run1(&P, s, w, &sb, &why, kind)) {
+                if (!bv_run_fb(&P, s, w, &sb, &why, kind, cut)) {                 /* task avx32: + ragged ends */
                     if (*why && sb - s + 1 >= 2 * BV_MIN_COLS)
                         logf("bv: %s: run axis %d from (%d,%d), %d column(s) left to the stock tiler: %s", who, axis,
                              bv_rx(axis, s, w), bv_rz(axis, s, w), sb - s + 1, why);
                     continue;
+                }
+                if (cut[0] || cut[1]) {
+                    /* task avx32: a ragged run whose full extent reaches the read border may be cut by the window,
+                       not by its own end: the whole-map pass decides it */
+                    int ec[2], j, hit = 0;
+                    ec[0] = s; ec[1] = sb;
+                    for (j = 0; j < 2 && !hit; j++)
+                        for (k = 0; k < 3 && !hit; k++) {
+                            int cx = bv_rx(axis, ec[j], w + k), cz = bv_rz(axis, ec[j], w + k);
+                            hit = (cx <= x0 + 1 && x0 > 0) || (cz <= z0 + 1 && z0 > 0) || (cx >= x1 - 1 && x1 < W - 1) ||
+                                  (cz >= z1 - 1 && z1 < H - 1);
+                        }
+                    if (hit) { border = 1; continue; }
+                    logf("bv: %s: run axis %d from (%d,%d): ragged end(s), %d column(s) at +s and %d at -s left to the "
+                         "stock tiler: %s", who, axis, bv_rx(axis, s, w), bv_rz(axis, s, w), cut[0], cut[1], why);
                 }
                 for (k = 0; k < P.n; k++) {          /* the run or its ring at the read border: seen cut, not written */
                     int cx = P.cell[k].x, cz = P.cell[k].z;

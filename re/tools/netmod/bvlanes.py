@@ -199,6 +199,8 @@ def box_lanes(x0, x1, z0, z1, arms):
             m = 2 if n >= 3 else 1
             if (ts + 2) % 4 not in arms:                   # no straight feeds that side (a T's stem / the run's end):
                 m = min(n, len(tgt))                       # turn into as many of its lanes as fit
+                if opp not in arms and n >= 3:             # task avx32: a boulevard ending on a single road: its
+                    m = max(m, 2)                          # middle lane merges into both turns (no dead lane)
             srcs = a["in"][:m] if which == "r" else a["in"][::-1][:m]
             outs = tgt if which == "r" else tgt[::-1]
             for k, p in enumerate(srcs):
@@ -377,12 +379,36 @@ def box_scene_asym(kind):
             "box": True}
 
 
+# task avx32 (owner img12): the boulevard's end on a crossing road. BrT: it ends ON a single road (a T, the boulevard
+# the stem): its last column is a 1-column box, far side closed. BxR1 / BxA1: a road / an avenue crosses it one column
+# before its end: the crossing's own pieces, then the cap (the cap's U-turns come back through the crossing).
+def end_scene(kind):
+    from netmod import bvx as BX
+    road = BX.shapes()[kind]
+    w = 2 if kind == "BxA1" else 1
+    arms = {0: arm_bv_x(0, 0), 1: arm_z(1, 0, 0, w), 3: arm_z(3, 3, 0, w)}
+    lanes = straights(-9, 0) + arm_road_lanes(1, 0, 0, w, 8, True) + arm_road_lanes(3, 3, 0, w, 8, True)
+    if kind != "BrT":
+        arms[2] = arm_bv_x(2, w)
+        lanes += cap_end(w)
+    lanes += box_lanes(0, w, 0, 3, arms)
+    med = [rect(AV_MED[0], AV_MED[1], -9, -0.12), rect(AV_MED[0], AV_MED[1], 3.12, 12)] if w == 2 else []
+    names = {"BrT": "boulevard ends on a road (T)", "BxR1": "road crossing, then the end (cap)",
+             "BxA1": "avenue crossing, then the end (cap)"}
+    return {"name": names[kind], "road": road, "lanes": lanes, "view": (-4.5, -3.6, w + 2.5, 6.6), "medians": med,
+            "box": kind != "BxR1"}
+
+
+END_KINDS = ("BrT", "BxR1", "BxA1")
+
+
 def scenes():
     out = [scene_cap(), junction_scene("X"), junction_scene("TN"), junction_scene("TS"), scene_narrow(),
            scene_narrow12()]
     out += [scene_taper(k) for k in (1, 0, 2)]
     out += [box_scene(k) for k in ("BxA", "AvT", "BvT", "BxB", "BbT")]
     out += [box_scene_asym(k) for k in ASYM]                   # task avx32: after the others, so ids / curves append
+    out += [end_scene(k) for k in END_KINDS]                   # task avx32 (img12): after those
     return out
 
 
@@ -527,11 +553,11 @@ def cmd_check(a):
             per_piece[pid].setdefault(s, []).append((sc["name"], c, st))
             turns[(pid, s)] |= turns_of(cs, st)
     nsplit = 0
-    for pid in sorted(per_piece):
+    for pid in sorted(per_piece, key=str):                 # task avx32: NEWPAT strings among the ids
         sigs = per_piece[pid]
         tag = "" if len(sigs) == 1 else "   <-- %d lane sets: needs %d more id(s)" % (len(sigs), len(sigs) - 1)
         nsplit += len(sigs) - 1
-        print("%d: %d placement(s)%s" % (pid, sum(len(v) for v in sigs.values()), tag))
+        print("%s: %d placement(s)%s" % (pid, sum(len(v) for v in sigs.values()), tag))
         for s, where in sigs.items():
             t = sorted(turns[(pid, s)])
             print("    lanes %2d, turns %s   e.g. %s cell %s state %d" % (
@@ -594,7 +620,7 @@ def draw_scene(sc, px=64, label=True, fonts=None):
     if label and fonts:
         for (cx, cz), (pid, st) in want.items():
             X, Y = P(cx + 0.04, cz + 0.97)
-            d.text((X, Y), "%d.%d" % (pid, st), fill=(0, 0, 0), font=fonts["s"])
+            d.text((X, Y), "%s.%d" % (pid, st), fill=(0, 0, 0), font=fonts["s"])
     return im
 
 
@@ -848,7 +874,7 @@ def _new_rule(sc, want, table):
             elif pid == 20711:
                 frm_hi = any(p == 20712 and s == 2 for (p, s) in want.values())       # far row at state 2: T from z+
                 want[c] = (BV_JM_T, 2 if frm_hi else 0)
-    boxes = [c for c, (pid, st) in want.items() if pid in BOX_OLD]
+    boxes = [c for c, (pid, st) in want.items() if pid in BOX_OLD or isinstance(pid, str)]   # task avx32: NEWPAT
     if boxes:
         cfg = box_config(set(boxes), sc["road"])
         for c in boxes:
@@ -890,7 +916,7 @@ def box_table():
         if not sc.get("box"):
             continue
         want, cuts, bad, clash = cut_scene(sc)
-        cells = {c for c, (pid, st) in want.items() if pid in BOX_OLD}
+        cells = {c for c, (pid, st) in want.items() if pid in BOX_OLD or isinstance(pid, str)}   # task avx32
         wx, hz, sides, _n, x0, z0 = box_config(cells, sc["road"])
         for c in sorted(cells):
             sig0 = sig_of(cuts.get(c, []), 0)
@@ -922,7 +948,7 @@ def _desc_at(pid, st):
     """the real edge pattern of an old box piece placed at state st, seen in a new piece's own state-0 frame (the new
     piece is placed at state 0 where it is first met): the old pattern turned by st"""
     from netmod import bvx as BX
-    canon = {v: k for k, v in BX.BOX.items()}[pid]
+    canon = pid if isinstance(pid, str) else {v: k for k, v in BX.BOX.items()}[pid]   # task avx32: NEWPAT strings
     return BX.rot(canon, st)
 
 
