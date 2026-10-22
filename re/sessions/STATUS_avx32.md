@@ -125,3 +125,34 @@ startup crash 0xC0000005 at 438 ms before the city load on a relaunch (next laun
 - seen, not changed: an edit whose window cuts another boulevard reverts + rewrites it (existing, a89ecef).
 - instance: Simcity_stock_avx32\re\harness\inst_avx32 (labF2.sc3 = final save), inst_avx32_nomod; mods_launch rebuilt
   from main d7d114b in both; all my PIDs stopped (31140, 41688, 34420, 44532, 27156).
+
+## img16 round (2026-10-22, LAN build of main 4f780c5): a short stub near one end refuses the whole boulevard
+- state: 2026-10-22 FIXED in game (both drag orders, undo, save / reload, no-mod load); my games stopped (PIDs 28764,
+  6172, 33404, 64208, 42864). Results: worktree verify/avx32/RESULTS.md section img16, sheet MAIN
+  verify/avx32/owner_shots/img16_sheet.png (+ img16_*.png).
+- cause: a 2x1 road stub beside the run 3 columns from its end reads as an avenue arm 1 cell long; bvx_spans refused
+  "arm shorter than 2" without naming an end, so the ragged fallback never ran and the T box at the other end went too.
+- fix: a bad 2- / 3-column arm (too short, road beside it) names the nearer end -> that end stays stock (cut up to 12),
+  rest converts. bv_run_fb 4 rounds, cuts grow; ragged-end column test moved before the spans. Twin mirrored.
+- still whole-run: 1x1 stub (1-column rule; making it end-only converts a London run over rail crossings 69), touching
+  road, 4+ wide, AVL program rule, and any bad arm more than 12 columns from both ends (the middle question, asked).
+- offline: 16 shipped cities 0 runs change; bvx.py check --tiler 0 failures; C build no warnings.
+- in game, 2nd pass (orchestrator checklist): 1x1 stub at an end = whole run stock (by design); demolish -> full
+  boulevard back; 2x1 stub next to the T end = that end (4 cols, crossing incl.) stock, rest converts. PID 37276 stopped.
+- ids: none.
+- files (worktree Simcity_wt_avx32, uncommitted): re/harness/src/sc3netmod_bv.c, sc3netmod_bvx.c;
+  re/tools/netmod/boulevard.py, bvx.py; verify/avx32/RESULTS.md.
+- instance: inst_avx32 / inst_avx32_nomod rebuilt (7 mods + mods_launch) from main 4f780c5 + this change; labH_saved.sc3.
+- round 2 (owner call 2026-10-22 "add the rail-crossing guard and make the 1x1 stub end-only"): DONE in game.
+  Protected guard bv_prot (FUN_1001a7f7(1, id): crossings, tunnel mouths, bridges never boulevard cells), 1x1 stub
+  names its end, bv_pass reverts BEFORE writing (a revert's retile overwrote freshly written cells, seen with a rail).
+  Checked: owner layout, 1x1 at the end, rail across (+ paused rail undo), paused 1x1 undo, save / reload, no-mod load.
+  16 cities 0 converting runs change; bvx check 0 failures; build clean. Sheet MAIN verify/avx32/owner_shots/
+  img16r2_sheet.png. Last PIDs 37744 / 45112 / 10572 / 10304 stopped.
+- round 3 (owner YES 2026-10-22, middle split): DONE in game. bv_parts: a run the end cuts cannot save, refused for a
+  bad arm, splits at the arm's columns into boulevards with ragged ends (each tried with the end-cut fallback, split
+  again if needed, <= 16 pieces, sides < 4 columns stock). Twin runs() segs. bv_takes uses it too.
+  In game (x 40..72, crossings at 46 / 66, 2x1 stub at 55..56): 41..54 + 57..70 with their own junctions; stub first /
+  last identical; paused demolish + 2 undos identical; save / reload (88 tiles, 0 written) identical; no-mod stock ids.
+  16 cities unchanged; bvx check 0 failures; build clean. Sheet MAIN verify/avx32/owner_shots/img16r3_sheet.png.
+  My last PIDs (69848, 49092, 42784, 73088) stopped.
