@@ -98,3 +98,30 @@ startup crash 0xC0000005 at 438 ms before the city load on a relaunch (next laun
   highway_core/README.md, link_tree.py (synced so the build equals main): NOT mine, identical to main, do not commit.
 - MAIN pictures (not committed): verify/avx32/owner_shots/img10_*.png.
 - ids: none taken. 21928..21949 still unused, can be released.
+
+## img12 round (2026-10-21, LAN build of main a89ecef): boulevard end on a crossing road
+- state: 2026-10-21 DONE. Plan owner approved; fixed in game (all 3 cases + the ragged fallback, both drag orders,
+  undo, save / reload, no-mod load); my games stopped. Results: worktree verify/avx32/RESULTS.md section img12, sheet
+  MAIN verify/avx32/owner_shots/img12_sheet.png.
+- cause: the crossing road runs through the run's LAST column (cap end, end region = that column) -> bv_run1 "a
+  junction inside an end region", and BV refused the whole run incl. the middle BVX box. Same family: any crossing
+  exactly 1 column before the end -> "a junction next to an end region".
+- fix 1: end on a single road = 1-column BVX box (end type 4, teew 1), pieces 21928 ACIA / 21929 ICIA / 21930 ICAA,
+  12 bvxc lines (1x3 / 3x1). fix 2: road / avenue crossing next to a cap allowed (existing pieces + cap).
+- fix 3 (fallback): a refusal about ONE end leaves that end's columns to the stock tiler (cut 1..12 until the run
+  converts, end type 7 ragged, median nose), rest converts. C bv_run_fb (bv_pass + bv_takes), twin runs(). Still
+  whole-run: touching road, bad arm, road 4+ wide, AVL program rule (avenue would stay two-way).
+- lanes: bvlanes end_scene (BrT / BxR1 / BxA1); box_lanes: a 3-lane stem into a 1-lane road turns 2 lanes each way.
+- offline: bvx.py check --tiler 0 failures; bvlanes rebuild (with the fallback) = package byte-identical (245 old specs
+  unchanged, +3); netpack validate exit 0; 16 shipped cities 0 runs change; C build no warnings.
+  Pictures: MAIN verify/avx32/owner_shots/img12_plan.png, img12_ragged.png.
+- ids: 21928..21930 used; 21931..21949 unused (can be released).
+- files (worktree Simcity_wt_avx32, uncommitted): re/harness/src/sc3netmod_bv.c, sc3netmod_bvx.c;
+  re/tools/netmod/boulevard.py, bvx.py, bvlanes.py; examples/boulevard_junctions/{README.md, manifest.json,
+  bvlanes_boxes.json, bvl_21928..21930.lanes.json} (+ art/21928..21930, not tracked); verify/avx32/RESULTS.md.
+- also: read-border guard in bv_pass (a ragged run reaching the pass window border goes to the whole-map pass).
+- in game: A1 / A2 T box both orders, B road X-then-cap, C avenue X-then-cap, D corner ragged; undo 99 ops 0 failed,
+  grid identical; save 213 tiles, reload all restored + 0 written + 279 cells identical; no-mod load stock ids only.
+- seen, not changed: an edit whose window cuts another boulevard reverts + rewrites it (existing, a89ecef).
+- instance: Simcity_stock_avx32\re\harness\inst_avx32 (labF2.sc3 = final save), inst_avx32_nomod; mods_launch rebuilt
+  from main d7d114b in both; all my PIDs stopped (31140, 41688, 34420, 44532, 27156).
