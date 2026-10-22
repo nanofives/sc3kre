@@ -321,6 +321,13 @@ static void visible_size(BYTE *view, int *w, int *h) {
         if (cw > 800) *w += cw - 800;
         if (ch > 600) *h += ch - 600;
     }
+    {   /* task cityzoom: sc3resize draws the city view at client / factor past the closest zoom */
+        static int (*vf)(void);
+        static int looked;
+        if (!looked) { HMODULE rm = GetModuleHandleA("sc3resize.dll"); looked = 1;
+                       if (rm) vf = (int (*)(void))GetProcAddress(rm, "sc3resize_view_factor"); }
+        if (vf) { int f = vf(); if (f > 1) { *w /= f; *h /= f; } }
+    }
 }
 
 static int __stdcall step_hook(BYTE *view, int x, int y, DWORD *tx, DWORD *ty, int *sdx, int *sdy) {

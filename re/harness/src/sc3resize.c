@@ -4377,6 +4377,296 @@ static char   g_hs_dump[MAX_PATH];      /* SC3RESIZE_HUDSCALE_DUMP=<abs prefix>:
 static int    g_hs_why;                 /* last rz_hs_pre exit: 0 enlarged, else the refusing check */
 static DWORD  g_hsd_beat, g_hsd_full, g_hsd_did, g_hsd_why[12], g_hsd_part, g_hsd_partc, g_hsd_null, g_hsd_logn;
 
+/* CITYZOOM (task cityzoom, owner 2026-10-22: "as we scale up, can you also scale the zoom levels? because on 4K
+ * screens the game looks too zoomed out on the highest zoom level"). Zooming in at the stock closest zoom (4) adds
+ * steps x2 and x3: the iso view is resized to ceil(client / f) by the Init-free resize routine (rz_poll ->
+ * rz_do_resize, the path a window resize takes), the game's one city layer -> composite Blt is replaced by a stretch
+ * of that view to the client (cz_stretch: nearest, or a linear blend when [hud] smooth is on), and city mouse messages
+ * get q / f. Zoom 0..4 are untouched. Steps: integer f up to floor(min(cw / 800, ch / 600)), at most 3 (x2 and x3 at
+ * 3840x1984, x2 at 2560x1351 and 1600x1200, none at 1920x1080). Owner calls 2026-10-22: x2 and x3, Auto default,
+ * filter follows the HUD smooth setting. sc3resize.ini [view] zoomextra = 0 off | 1 auto (missing = 1) | 2 at most x2;
+ * SC3RESIZE_CITYZOOM overrides. Plan and measurements: re/analysis/CITY_ZOOM.md. */
+static int  g_cz_mode = 1;
+static volatile LONG g_cz_req = 1;     /* factor the zoom keys asked for (game thread writes, the poll applies it) */
+static volatile LONG g_cz_f = 1;       /* factor the view is drawn at now (read by the Blt hook and the wndproc) */
+static LONG g_cz_vw, g_cz_vh;          /* view size at that factor */
+static void *g_cz_surf;                /* the render target iso+0x74 as an IDirectDrawSurface: src of the city Blt */
+static void *g_cz_devsurf;             /* the device surface iso+0x4ec: the frame (city + HUD), kept client-sized */
+static LONG g_cz_dev_w, g_cz_dev_h;    /* size rz_do_resize gives iso+0x4ec (0 = the view size, stock) */
+static int  g_cz_inblt;                /* inside the rewritten city Blt: rz_blt_hook_inner stretches instead */
+static WORD *g_cz_buf;                 /* client-sized stretched city, filled only where HUDSCALE reads it */
+static LONG g_cz_bufcap;
+static LONG *g_cz_xs, g_cz_xcap, g_cz_xf, g_cz_xw;   /* per dest column: view column | weight << 16, for f / width */
+static DWORD g_cz_nstretch; static __int64 g_cz_tstretch; /* 10-s stats */
+static DWORD g_cz_nother, g_cz_npart, g_cz_nfull[2];      /* view Blts: not onto the frame, partial (left alone), full by height */
+static DWORD g_cz_nrw, g_cz_nnest;                         /* rewritten city Blts; stretches entered inside another */
+static int   g_cz_instretch;
+static RECT  g_cz_lastpart;
+
+static void rz_lcenter_area(LONG cw, LONG ch, LONG w0, LONG h0, LONG *w, LONG *h);   /* fwd: LCENTER block */
+static int g_zoomcenter_on(void);   /* fwd: ZOOMCENTER block (the zoom steps ride on its wrappers) */
+
+static LONG cz_max(LONG cw, LONG ch) {   /* largest step this client allows */
+    LONG k = cw / NAT_W < ch / NAT_H ? cw / NAT_W : ch / NAT_H;
+    if (!g_cz_mode) return 1;
+    if (k > 3) k = 3;
+    if (g_cz_mode == 2 && k > 2) k = 2;
+    return k < 1 ? 1 : k;
+}
+
+/* The view image: the render target iso+0x74 (+0x24 w, +0x28 h, +0x44 sub, sub+0xf0 bits, sub+0xf4 pitch). Measured
+   2026-10-22: per frame the game Blts iso+0x74 [0 0 vw vh] into the device surface iso+0x4ec, draws the HUD into
+   iso+0x4ec, and presents iso+0x4ec to the screen. So iso+0x4ec is the frame (HUDSCALE's composite): it keeps the
+   client size (g_cz_dev_w/h in rz_do_resize step 6) and the city Blt into it is the one that stretches. */
+static BYTE *cz_view_bits(LONG *pitch, LONG *w, LONG *h, DWORD *sub_locked) {
+    DWORD iso, obj, sub, bits, pt, *svt;
+    HMODULE gz = GetModuleHandleA("GZGraphicD.dll");
+    *sub_locked = 0;
+    if (!g_bridge || IsBadReadPtr(g_bridge, 0x1c) || !gz) return NULL;
+    iso = ((DWORD *)g_bridge)[0x18 / 4];
+    if (!iso || IsBadReadPtr((void *)iso, 0x78)) return NULL;
+    obj = ((DWORD *)iso)[0x74 / 4];
+    if (!obj || IsBadReadPtr((void *)obj, 0x48)) return NULL;
+    sub = ((DWORD *)obj)[0x44 / 4];
+    if (!sub || IsBadReadPtr((void *)sub, 0xf8)) return NULL;
+    bits = ((DWORD *)sub)[0xf0 / 4]; pt = ((DWORD *)sub)[0xf4 / 4];
+    if (!bits || !pt) {
+        svt = *(DWORD **)sub;
+        if (!svt || IsBadReadPtr(svt, 0x14) || (DWORD)svt != (DWORD)gz + GZ_RVA_VT_SURFACE || !svt[0x0c / 4]) return NULL;
+        if (!(rz_thiscall((void *)sub, (void *)svt[0x0c / 4], NULL, 0) & 0xff)) return NULL;
+        *sub_locked = sub;
+        bits = ((DWORD *)sub)[0xf0 / 4]; pt = ((DWORD *)sub)[0xf4 / 4];
+    }
+    *w = (LONG)((DWORD *)obj)[0x24 / 4]; *h = (LONG)((DWORD *)obj)[0x28 / 4];
+    if (*h > g_cz_vh && g_cz_vh > 0) *h = g_cz_vh;   /* the slack rows are not part of the picture */
+    *pitch = (LONG)pt;
+    if (!bits && *sub_locked) {
+        svt = *(DWORD **)sub; rz_thiscall((void *)sub, (void *)svt[0x10 / 4], NULL, 0); *sub_locked = 0;
+    }
+    return (BYTE *)bits;
+}
+static void cz_view_unlock(DWORD sub) {
+    DWORD *svt;
+    if (!sub) return;
+    svt = *(DWORD **)sub;
+    if (svt && !IsBadReadPtr(svt, 0x14) && svt[0x10 / 4]) rz_thiscall((void *)sub, (void *)svt[0x10 / 4], NULL, 0);
+}
+
+/* Dest rect [x0,x1) x [y0,y1) of a client-sized 16-bpp image from the view image at factor f. Dest pixel (x, y) shows
+ * view pixel (x / f, y / f); smooth blends toward the next view pixel by (x % f) / f in each axis, on the same grid,
+ * so both filters show the city at the same place (and the mouse map q / f matches either). 565 or 555 by gmask.
+ * Large rects are split in row bands over a few worker threads (measured single-thread at 3840x1984: ~10 ms smooth). */
+typedef struct { DWORD *h0, *h1; LONG cap; } CZ_ROWS;
+static void cz_tables(LONG f, LONG sw, LONG x1) {   /* per dest column: view column | weight << 16 */
+    LONG x;
+    if (g_cz_xcap >= x1 && g_cz_xf == f && g_cz_xw == sw) return;
+    if (x1 > g_cz_xcap) { free(g_cz_xs); g_cz_xs = (LONG *)malloc((x1 + 64) * sizeof(LONG)); g_cz_xcap = g_cz_xs ? x1 + 64 : 0; }
+    if (!g_cz_xs) return;
+    for (x = 0; x < g_cz_xcap; x++) {
+        LONG i = x / f;
+        if (i > sw - 1) i = sw - 1;
+        g_cz_xs[x] = i | (((x % f) * 32 / f) << 16);
+    }
+    g_cz_xf = f; g_cz_xw = sw;
+}
+static void cz_stretch_rows(CZ_ROWS *rw, BYTE *dst, LONG dpitch, const BYTE *src, LONG spitch, LONG sw, LONG sh, LONG f,
+                            int smooth, DWORD gmask, LONG x0, LONG y0, LONG x1, LONG y1) {
+    const DWORD lane = gmask == 0x07E0 ? 0x07E0F81Fu : 0x03E07C1Fu;
+    LONG x, y, n = x1 - x0, ra = -1, rb = -1;
+    DWORD *h0, *h1;
+    if (smooth && rw->cap < n) {
+        free(rw->h0); free(rw->h1);
+        rw->h0 = (DWORD *)malloc(n * 4); rw->h1 = (DWORD *)malloc(n * 4);
+        rw->cap = rw->h0 && rw->h1 ? n : 0;
+        if (!rw->cap) smooth = 0;
+    }
+    h0 = rw->h0; h1 = rw->h1;
+    for (y = y0; y < y1; y++) {
+        LONG sy = y / f;
+        WORD *d = (WORD *)(dst + y * dpitch) + x0;
+        if (sy > sh - 1) sy = sh - 1;
+        if (!smooth) {
+            const WORD *s;
+            if (y > y0 && (y - 1) / f == y / f) { memcpy(d, (WORD *)(dst + (y - 1) * dpitch) + x0, n * 2); continue; }
+            s = (const WORD *)(src + sy * spitch);
+            if (f == 2 && !(x0 & 1)) {
+                DWORD *d2 = (DWORD *)d;
+                const WORD *s2 = s + x0 / 2;
+                LONG k, m = n / 2;
+                for (k = 0; k < m; k++) { DWORD p = s2[k]; d2[k] = p | (p << 16); }
+                if (n & 1) d[n - 1] = s[g_cz_xs[x1 - 1] & 0xffff];
+            } else
+                for (x = 0; x < n; x++) d[x] = s[g_cz_xs[x0 + x] & 0xffff];
+        } else {
+            LONG wy = (y % f) * 32 / f, sb = sy + 1 < sh ? sy + 1 : sy, r;
+            if (sy == rb && sy != ra) { DWORD *t = h0; h0 = h1; h1 = t; ra = rb; rb = -1; }   /* one view row down */
+            for (r = 0; r < 2; r++) {   /* horizontal pass for view rows sy (h0) and sb (h1), kept while in use */
+                LONG want = r ? sb : sy;
+                DWORD *hrow = r ? h1 : h0;
+                const WORD *s;
+                if (r ? want == rb : want == ra) continue;
+                s = (const WORD *)(src + want * spitch);
+                for (x = 0; x < n; x++) {
+                    LONG e = g_cz_xs[x0 + x], i = e & 0xffff, w = e >> 16, j = i + 1 < sw ? i + 1 : i;
+                    DWORD p = s[i], P = (p | (p << 16)) & lane;
+                    if (w) { DWORD q = s[j], Q = (q | (q << 16)) & lane; P = ((P * (32 - w) + Q * w) >> 5) & lane; }
+                    hrow[x] = P;
+                }
+                if (r) rb = want; else ra = want;
+            }
+            if (!wy) for (x = 0; x < n; x++) { DWORD v = h0[x]; d[x] = (WORD)(v | (v >> 16)); }
+            else for (x = 0; x < n; x++) {
+                DWORD v = ((h0[x] * (32 - wy) + h1[x] * wy) >> 5) & lane;
+                d[x] = (WORD)(v | (v >> 16));
+            }
+        }
+    }
+}
+#define CZ_THREADS 4
+static struct { BYTE *dst; LONG dpitch; const BYTE *src; LONG spitch, sw, sh, f; int smooth; DWORD gmask; LONG x0, x1;
+                LONG y[CZ_THREADS + 1]; } g_czj;
+static HANDLE  g_czw_go[CZ_THREADS], g_czw_done[CZ_THREADS];
+static CZ_ROWS g_czw_rows[CZ_THREADS];
+static int     g_czw_n = -1;               /* workers running (-1 = not started, 0 = none: single thread) */
+static DWORD WINAPI cz_worker(LPVOID p) {
+    int k = (int)(INT_PTR)p;
+    for (;;) {
+        if (WaitForSingleObject(g_czw_go[k], INFINITE) != WAIT_OBJECT_0) return 0;
+        cz_stretch_rows(&g_czw_rows[k], g_czj.dst, g_czj.dpitch, g_czj.src, g_czj.spitch, g_czj.sw, g_czj.sh, g_czj.f,
+                        g_czj.smooth, g_czj.gmask, g_czj.x0, g_czj.y[k + 1], g_czj.x1, g_czj.y[k + 2]);
+        SetEvent(g_czw_done[k]);
+    }
+}
+static void cz_stretch(BYTE *dst, LONG dpitch, const BYTE *src, LONG spitch, LONG sw, LONG sh, LONG f, int smooth,
+                       DWORD gmask, LONG x0, LONG y0, LONG x1, LONG y1) {
+    static CZ_ROWS main_rows;
+    int k, nb;
+    if (x1 <= x0 || y1 <= y0 || f < 1 || sw <= 0 || sh <= 0) return;
+    cz_tables(f, sw, x1);
+    if (!g_cz_xs) return;
+    if (g_czw_n < 0) {   /* start the workers once: CZ_THREADS - 1 of them, the caller takes a band too */
+        SYSTEM_INFO si;
+        GetSystemInfo(&si);
+        g_czw_n = 0;
+        for (k = 0; k < CZ_THREADS - 1 && (DWORD)k + 1 < si.dwNumberOfProcessors; k++) {
+            g_czw_go[k] = CreateEventA(NULL, FALSE, FALSE, NULL);
+            g_czw_done[k] = CreateEventA(NULL, FALSE, FALSE, NULL);
+            if (!g_czw_go[k] || !g_czw_done[k] || !CreateThread(NULL, 0, cz_worker, (LPVOID)(INT_PTR)k, 0, NULL)) break;
+            g_czw_n++;
+        }
+        logf("CITYZOOM> stretch on %d thread(s)", g_czw_n + 1);
+    }
+    nb = (x1 - x0) * (y1 - y0) >= 400000 ? g_czw_n + 1 : 1;
+    if (nb <= 1) { cz_stretch_rows(&main_rows, dst, dpitch, src, spitch, sw, sh, f, smooth, gmask, x0, y0, x1, y1); return; }
+    g_czj.dst = dst; g_czj.dpitch = dpitch; g_czj.src = src; g_czj.spitch = spitch; g_czj.sw = sw; g_czj.sh = sh;
+    g_czj.f = f; g_czj.smooth = smooth; g_czj.gmask = gmask; g_czj.x0 = x0; g_czj.x1 = x1;
+    for (k = 0; k <= nb; k++) {   /* band edges on view-row boundaries, so no band starts inside a repeated row */
+        LONG e = y0 + (LONG)((__int64)(y1 - y0) * k / nb);
+        if (k > 0 && k < nb) { e = (e / f) * f; if (e < y0) e = y0; }
+        g_czj.y[k] = k == nb ? y1 : e;
+    }
+    for (k = 0; k < nb - 1; k++) SetEvent(g_czw_go[k]);
+    cz_stretch_rows(&main_rows, dst, dpitch, src, spitch, sw, sh, f, smooth, gmask, x0, g_czj.y[0], x1, g_czj.y[1]);
+    WaitForMultipleObjects(nb - 1, g_czw_done, TRUE, INFINITE);
+}
+
+/* HUDSCALE reads "the city" at client coordinates (see-through mask, the city at the dest pixel, erased native copies).
+ * With a factor that is the stretched view, so fill the client-sized buffer with it on every rect this pass reads:
+ * each window's source and dest rect, each dialog's native and dest rect, +-2 px for the bilinear taps. */
+static void cz_fill_rect(const BYTE *v, LONG vp, LONG vw, LONG vh, LONG cw, LONG ch, DWORD gmask, const LONG *r) {
+    LONG x0 = r[0] - 2, y0 = r[1] - 2, x1 = r[2] + 2, y1 = r[3] + 2;
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > cw) x1 = cw;
+    if (y1 > ch) y1 = ch;
+    if (x1 > x0 && y1 > y0)
+        cz_stretch((BYTE *)g_cz_buf, cw * 2, v, vp, vw, vh, g_cz_f, g_hs_filter, gmask, x0, y0, x1, y1);
+}
+
+static void cz_fill_hs(int n, LONG cw, LONG ch, DWORD gmask) {
+    LONG vp, vw, vh;
+    DWORD sub;
+    const BYTE *v;
+    int i, k;
+    if (g_cz_f <= 1 || !g_cz_buf) return;
+    v = cz_view_bits(&vp, &vw, &vh, &sub);
+    if (!v) return;
+    for (i = 0; i < n; i++) {
+        cz_fill_rect(v, vp, vw, vh, cw, ch, gmask, g_hs_src[i]);
+        cz_fill_rect(v, vp, vw, vh, cw, ch, gmask, g_hs_dst[i]);
+    }
+    for (k = 0; k < g_hd_nc; k++) {
+        cz_fill_rect(v, vp, vw, vh, cw, ch, gmask, g_hd[g_hd_list[k]].nat);
+        cz_fill_rect(v, vp, vw, vh, cw, ch, gmask, g_hd[g_hd_list[k]].dst);
+    }
+    for (k = 0; k < g_hs_ndlg; k++) cz_fill_rect(v, vp, vw, vh, cw, ch, gmask, g_hs_dlg[k]);
+    cz_view_unlock(sub);
+}
+
+/* The city Blt itself: the whole client from the view, into the composite. 0 = done (DD_OK). */
+static HRESULT cz_stretch_blt(void *self) {
+    LONG pitch, sw, sh, vp, vw, vh, cw, ch;
+    DWORD bpp, gmask, sub;
+    BYTE *bits;
+    const BYTE *v;
+    RECT rc;
+    LARGE_INTEGER a, b;
+    if (!g_hwnd || !GetClientRect(g_hwnd, &rc)) return -1;
+    cw = rc.right; ch = rc.bottom;
+    if (g_cz_instretch) { g_cz_nnest++; return -1; }
+    QueryPerformanceCounter(&a);
+    v = cz_view_bits(&vp, &vw, &vh, &sub);
+    if (!v) return -1;
+    g_cz_instretch = 1;
+    {   DWORD *vt = *(DWORD **)self;
+        BYTE desc[124];
+        memset(desc, 0, sizeof(desc)); *(DWORD *)desc = 124;
+        if (((RZ_LOCK)vt[0x64 / 4])(self, NULL, desc, 1 /* DDLOCK_WAIT */, NULL)) { g_cz_instretch = 0; cz_view_unlock(sub); return -1; }
+        pitch = *(LONG *)(desc + 0x10); sh = *(LONG *)(desc + 0x08); sw = *(LONG *)(desc + 0x0c);
+        bpp = *(DWORD *)(desc + 0x54); gmask = *(DWORD *)(desc + 0x5c); bits = *(BYTE **)(desc + 0x24);
+    }
+    if (bits && bpp == 16 && sw >= cw && sh >= ch)
+        cz_stretch(bits, pitch, v, vp, vw, vh, g_cz_f, g_hs_filter, gmask, 0, 0, cw, ch);
+    ((RZ_UNLOCK)(*(DWORD **)self)[0x80 / 4])(self, NULL);
+    cz_view_unlock(sub);
+    g_cz_instretch = 0;
+    QueryPerformanceCounter(&b);
+    g_cz_tstretch += b.QuadPart - a.QuadPart; g_cz_nstretch++;
+    {   static DWORD t0;
+        DWORD now = GetTickCount();
+        if (!t0) t0 = now;
+        if (now - t0 >= 10000) {
+            logf("CITYZOOM> x%ld %s: %lu stretches in %lu ms, %.2f ms each (view %ldx%ld -> client %ldx%ld); view Blts: "
+                 "full %lu + %lu with slack rows, partial %lu (last [%ld %ld %ld %ld]), not onto the frame %lu; rewritten %lu, nested %lu", g_cz_f,
+                 g_hs_filter ? "smooth" : "nearest", g_cz_nstretch, now - t0,
+                 g_cz_nstretch ? 1000.0 * (double)g_cz_tstretch / (double)g_freq.QuadPart / g_cz_nstretch : 0.0,
+                 g_cz_vw, g_cz_vh, cw, ch, g_cz_nfull[0], g_cz_nfull[1], g_cz_npart, g_cz_lastpart.left, g_cz_lastpart.top,
+                 g_cz_lastpart.right, g_cz_lastpart.bottom, g_cz_nother, g_cz_nrw, g_cz_nnest);
+            g_cz_nrw = g_cz_nnest = 0;
+            t0 = now; g_cz_nstretch = 0; g_cz_tstretch = 0; g_cz_nother = g_cz_npart = g_cz_nfull[0] = g_cz_nfull[1] = 0;
+        }
+    }
+    if (!bits || bpp != 16 || sw < cw || sh < ch) {
+        static int logged;
+        if (logged++ < 3) logf("CITYZOOM> composite %ldx%ld bpp %lu refused for client %ldx%ld", sw, sh, bpp, cw, ch);
+        return -1;
+    }
+    return 0;
+}
+
+/* A view raster's IDirectDrawSurface, as rz_patch_ddblt finds iso+0x74's: *(*(iso+off)+0x44)+0x04. */
+static void *cz_find_surf_at(DWORD off) {
+    DWORD iso, R, sub;
+    if (!g_bridge || IsBadReadPtr(g_bridge, 0x1c)) return NULL;
+    iso = ((DWORD *)g_bridge)[0x18 / 4];
+    if (!iso || IsBadReadPtr((void *)iso, 0x4f0)) return NULL;
+    R = ((DWORD *)iso)[off / 4];
+    if (!R || IsBadReadPtr((void *)R, 0x48)) return NULL;
+    sub = ((DWORD *)R)[0x44 / 4];
+    if (!sub || IsBadReadPtr((void *)sub, 0x08)) return NULL;
+    return (void *)((DWORD *)sub)[0x04 / 4];
+}
+
 /* The city-only render target iso+0x74 (raster: +0x44 sub, sub+0xf0 bits, sub+0xf4 pitch, mapped by a
    balanced sub vt+0x0c / vt+0x10 lock as the surface dumper does). Used as the mask: a HUD-rect pixel that
    equals the city layer is the city showing through, not HUD. Returns bits or NULL; *sub_locked to unlock. */
@@ -4385,6 +4675,16 @@ static BYTE *rz_hs_city(LONG cw, LONG ch, LONG *pitch, DWORD *sub_locked) {
     HMODULE gz = GetModuleHandleA("GZGraphicD.dll");
     static int logged;
     *sub_locked = 0;
+    if (g_cz_f > 1) {   /* task cityzoom: the stretched view, filled by cz_fill_hs once the frame format is known */
+        if (g_cz_bufcap < cw * ch) {
+            free(g_cz_buf);
+            g_cz_buf = (WORD *)malloc((size_t)cw * ch * 2);
+            g_cz_bufcap = g_cz_buf ? cw * ch : 0;
+        }
+        if (!g_cz_buf) return NULL;
+        *pitch = cw * 2;
+        return (BYTE *)g_cz_buf;
+    }
     if (!g_bridge || IsBadReadPtr(g_bridge, 0x1c) || !gz) return NULL;
     iso = ((DWORD *)g_bridge)[0x18 / 4];
     if (!iso || IsBadReadPtr((void *)iso, 0x78)) return NULL;
@@ -4666,6 +4966,7 @@ static int rz_hl_add(void *win, const LONG *r, LONG cw, LONG ch, double s) {
     if (dw > cw / 2 || dh > ch / 4) return 0;   /* not a label */
     if (g_tip_seen) { mx = g_tip_mx; my = g_tip_my; P = g_tip_clr; }
     else { mx = (r[0] + r[2]) / 2 - 0x2c / 2; my = r[1] - 0x2c - 2; P = 32; derived = 1; }   /* stock layout */
+    if (g_cz_f > 1) { mx *= g_cz_f; my *= g_cz_f; }   /* task cityzoom: the game placed it at the view point q / f */
     if (P < 32) P = 32;
     gap = 2 + (LONG)(2.0 * s + 0.5);
     {   /* below the pointer, else above the hotspot (the pointer hangs below-right of it); each inside the client and off
@@ -5558,6 +5859,7 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
         return 0;
     }
     g6 = gmask == 0x07E0;
+    if (city && g_cz_f > 1) cz_fill_hs(n, cw, ch, gmask);   /* task cityzoom: the stretched city where this pass reads it */
     dump = g_hs_dump[0] && g_hs_frames >= 200 && self_is_screen;
     if (dump) {
         rz_hs_dumpraw("frame_before", bits, pitch, ox, oy, cw, ch);
@@ -5869,6 +6171,12 @@ static int rz_hs_mouse(UINT m, LPARAM *lp) {
    (GetProcAddress) to draw its FPS line and busy lines at the same size. */
 __declspec(dllexport) int sc3resize_ui_scale(void) {
     return g_hs_n > 0 && g_hs_s > 1.0 ? (int)(g_hs_s * 100.0 + 0.5) : 100;
+}
+
+/* CITYZOOM export (task cityzoom): the factor the city view is drawn at (1 = stock). sc3overscroll reads it
+   (GetProcAddress) to judge camera steps at the visible centre in view pixels. */
+__declspec(dllexport) int sc3resize_view_factor(void) {
+    return (int)g_cz_f;
 }
 
 /* UISCALE export: while the main menu frame is presented scaled (MENUSCALE), its 4:3 rect in client coordinates;
@@ -6327,6 +6635,37 @@ static void pp_close(void *win, DWORD id) {
     }
 }
 
+/* task cityzoom: "Zoom extra" checkbox on the same row, right of HUDOPT's "Suavizado" ([250 400 327 417]), inside
+   "Opciones generales" ([6 346 474 422]). On = zoomextra Auto (or the ini's 2 kept), off = 0. OK applies and writes
+   sc3resize.ini [view] zoomextra; every other close keeps the old value. Id above 0x02F95B11 like PERFPREFS'. */
+#define CZ_BOX   0x02F95B4A
+#define CZ_BOX_X 345
+static void cz_add_box(void *win) {
+    HMODULE sui = GetModuleHandleA("SIMUI.DLL");
+    void *fac;
+    DWORD col;
+    int ok;
+    if (!sui || !win || IsBadReadPtr(win, 0x90) || !g_zoomcenter_on()) return;
+    if (ho_v(win, 0x78, 1, CZ_BOX, 0, 0, 0, 0)) return;
+    fac = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85065))();
+    if (!fac || IsBadReadPtr(fac, 4)) return;
+    col = ho_v(fac, 0x80, 1, 0x62e56a2e, 0, 0, 0, 0);
+    ok = pp_add_checkbox(fac, win, CZ_BOX, ho_spanish() ? "Zoom extra" : "Extra zoom", g_cz_mode != 0, CZ_BOX_X, 120, col);
+    logf("CITYZOOM> Preferences 0x%08lX: zoom extra box %s (%d)", (DWORD)win, ok ? "added" : "FAILED", g_cz_mode != 0);
+}
+static void cz_close_box(void *win, DWORD id) {
+    char ip[MAX_PATH], v[8];
+    int b = pp_read_box(win, CZ_BOX), was = g_cz_mode;
+    if (b < 0) return;
+    if (id != 0x02F95AD8) { logf("CITYZOOM> Preferences closed with 0x%08lX (cancel): zoom extra kept %d", id, was); return; }
+    g_cz_mode = b ? (was ? was : 1) : 0;
+    if (!g_cz_mode) InterlockedExchange(&g_cz_req, 1);
+    ho_ini_path(ip, sizeof(ip));
+    wsprintfA(v, "%d", g_cz_mode);
+    WritePrivateProfileStringA("view", "zoomextra", v, ip);
+    logf("CITYZOOM> Preferences OK: zoomextra %d%s, saved to sc3resize.ini", g_cz_mode, g_cz_mode == was ? " (unchanged)" : "");
+}
+
 /* RESROW (owner 2026-10-20): the resolution follows the window, so the "Resolucion de pantalla" label 0x02F95AE3 and its
    dropdown 0x02F95AEA (built by FUN_10058631 [CONFIRMED @ SIMUI 0x10058631]) are hidden, leaving a gap (owner call).
    GZWIND vt+0xf4 SetFlags(1 = visible, 0), the call CLOSEFLY uses. Hidden, the dropdown is never picked, so its index
@@ -6349,7 +6688,7 @@ static DWORD __fastcall ho_prefs_msg(void *self, void *edx, DWORD win, DWORD msg
     (void)edx;
     a[0] = win; a[1] = msg; a[2] = p3; a[3] = p4; a[4] = p5;
     r = rz_thiscall_ret(self, g_orig_5e07, a, 5);
-    if (msg == 0xa2bf8ace && (r & 0xff) && win) { ho_add_controls((void *)win); pp_add_controls((void *)win); ho_hide_resrow((void *)win); }
+    if (msg == 0xa2bf8ace && (r & 0xff) && win) { ho_add_controls((void *)win); pp_add_controls((void *)win); cz_add_box((void *)win); ho_hide_resrow((void *)win); }
     return r;
 }
 
@@ -6373,6 +6712,7 @@ static DWORD __fastcall ho_prefs_close(void *self, void *edx, DWORD win, DWORD i
                  id, sc, sm, g_hudscale, g_hs_filter);
         }
         pp_close((void *)win, id);   /* PERFPREFS */
+        cz_close_box((void *)win, id);   /* task cityzoom */
     }
     a[0] = win; a[1] = id;
     return rz_thiscall_ret(self, g_orig_62b1, a, 2);
@@ -6932,7 +7272,9 @@ static HRESULT WINAPI rz_blt_hook_inner(void *self, RECT *dr, void *src, RECT *s
     if (g_fd_prefix[0] && dr && sr && src && g_hwnd && !IsBadReadPtr(dr, sizeof(RECT)) && !IsBadReadPtr(sr, sizeof(RECT)))
         rz_fd_maybe(self, dr, src, sr);   /* FRAMEDUMP diag: the frame as it goes to the screen */
     QueryPerformanceCounter(&a);
-    hr = g_orig_blt(self, dr, src, sr, fl, fx);
+    hr = -1;
+    if (g_cz_inblt && src == g_cz_surf) { g_cz_inblt = 0; hr = cz_stretch_blt(self); }   /* task cityzoom: stretched */
+    if (hr) hr = g_orig_blt(self, dr, src, sr, fl, fx);
     QueryPerformanceCounter(&b);
     if (hs_did) {
         if (g_hudperf && g_hudfix && g_hp_lazy && rz_hp_lazy_ready(src)) {   /* HUDPERF: owe the restore */
@@ -7111,7 +7453,7 @@ static HRESULT WINAPI rz_blt_hook_inner(void *self, RECT *dr, void *src, RECT *s
     return hr;
 }
 /* HUDPERF LAZYRESTORE: settle or cancel an owed restore before the Blt touches that surface. */
-static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, void *fx) {
+static HRESULT WINAPI rz_blt_hook_debt(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, void *fx) {
     void *p = g_hp_pend;
     if (p && (self == p || src == p)) {
         if (self == p && src != p && rz_hp_covers(dr, fl) &&
@@ -7132,6 +7474,42 @@ static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWO
         rz_hp_settle(p, self == p ? 0 : 1);
     }
     return rz_blt_hook_inner(self, dr, src, sr, fl, fx);
+}
+
+/* task cityzoom: with a factor, the game's Blt of the view (cw/f x ch/f) into the composite becomes a client-sized Blt
+   from the view's [0 0 cw/f ch/f], which rz_blt_hook_inner then does with cz_stretch. Everything downstream (HUDFIX
+   records, the lazy restore, the RCI fix, HUDPERF stats) sees the client-sized city Blt it sees without a factor. */
+static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, void *fx) {
+    HRESULT hr;
+    RECT cd, cs;
+    static LONG diag_f;
+    static int diag_n;
+    if (g_cz_f != diag_f) { diag_f = g_cz_f; diag_n = 0; }
+    if (g_cz_f > 1 && src && src != self && g_hwnd && (src == g_cz_surf || src == g_cz_devsurf) && diag_n < 8) {
+        diag_n++;
+        logf("CITYZOOM> Blt %s: dst 0x%08lX [%ld %ld %ld %ld] <- src 0x%08lX [%ld %ld %ld %ld] fl %08lX",
+             src == g_cz_surf ? "view -> frame" : "frame -> screen", (DWORD)self,
+             dr && !IsBadReadPtr(dr, sizeof(RECT)) ? dr->left : -1, dr && !IsBadReadPtr(dr, sizeof(RECT)) ? dr->top : -1,
+             dr && !IsBadReadPtr(dr, sizeof(RECT)) ? dr->right : -1, dr && !IsBadReadPtr(dr, sizeof(RECT)) ? dr->bottom : -1,
+             (DWORD)src, sr && !IsBadReadPtr(sr, sizeof(RECT)) ? sr->left : -1, sr && !IsBadReadPtr(sr, sizeof(RECT)) ? sr->top : -1,
+             sr && !IsBadReadPtr(sr, sizeof(RECT)) ? sr->right : -1, sr && !IsBadReadPtr(sr, sizeof(RECT)) ? sr->bottom : -1, fl);
+    }
+    if (g_cz_f > 1 && src && src != self && src == g_cz_surf) {   /* census for the 10-s line */
+        if (self != g_cz_devsurf) g_cz_nother++;
+        else if (dr && !IsBadReadPtr(dr, sizeof(RECT)) && (dr->left > 0 || dr->top > 0 || dr->right < g_cz_vw - 1 ||
+                 dr->bottom < g_cz_vh - 1)) { g_cz_npart++; g_cz_lastpart = *dr; }
+        else g_cz_nfull[dr && !IsBadReadPtr(dr, sizeof(RECT)) && dr->bottom > g_cz_vh ? 1 : 0]++;
+    }
+    if (g_cz_f > 1 && src && src != self && src == g_cz_surf && g_hwnd && GetClientRect(g_hwnd, &cd) &&
+        (!dr || (!IsBadReadPtr(dr, sizeof(RECT)) && dr->left <= 0 && dr->top <= 0 &&
+                 dr->right >= g_cz_vw - 1 && dr->bottom >= g_cz_vh - 1))) {
+        cs.left = 0; cs.top = 0; cs.right = cd.right / g_cz_f; cs.bottom = cd.bottom / g_cz_f;   /* ddraw fallback */
+        g_cz_inblt = 1; g_cz_nrw++;
+        hr = rz_blt_hook_debt(self, &cd, src, &cs, fl, fx);
+        g_cz_inblt = 0;
+        return hr;
+    }
+    return rz_blt_hook_debt(self, dr, src, sr, fl, fx);
 }
 
 /* Install the same Blt hook from any IDirectDrawSurface (the menu has no city view to find one through):
@@ -8033,7 +8411,8 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
     g_rz_step = 5;
     rz_recreate_raster(R, "render-target iso+0x74",  w, ht, gz);
     g_rz_step = 6;
-    rz_recreate_raster(B, "device-surface iso+0x4ec", w, ht, gz);
+    rz_recreate_raster(B, "device-surface iso+0x4ec", g_cz_dev_w > 0 ? (DWORD)g_cz_dev_w : w,   /* task cityzoom */
+                       g_cz_dev_h > 0 ? (DWORD)g_cz_dev_h : ht, gz);
 
     /* 7. the render lever. SKIPREFRESH: skipped by default (see g_skiprefresh). With SKIPREFRESH=2 it is skipped only
        when the active layer is the base layer, so step 11 runs once; with a non-base layer the original pair runs. */
@@ -9503,6 +9882,8 @@ static void rz_poll(void) {
     RECT cr;
     BYTE *lk;
     LARGE_INTEGER tp0, tp1, tp2;   /* SKIPREFRESH timing: sim-lock wait and the pass */
+    LONG cz_f = 1, cz_cw = 0, cz_ch = 0, cz_px = 0, cz_py = 0, cz_tx = 0, cz_ty = 0;   /* task cityzoom */
+    int cz_move = 0;
 
     if (!g_bridge || IsBadReadPtr(g_bridge, 0xf4)) return;
     iso = (void *)((DWORD *)g_bridge)[0x18 / 4];
@@ -9702,6 +10083,18 @@ static void rz_poll(void) {
     v = (DWORD *)iso;
     R = v[0x74 / 4];
     if (!R || IsBadReadPtr((void *)R, 0x2c)) return;
+    {   /* task cityzoom: the view is drawn at client / factor. A new city, a zoom away from 4 (any path) or a client
+           too small for the step drops the factor; the zoom keys raise and lower it (cz_zoom). */
+        static void *s_czb;
+        LONG mx = cz_max((LONG)w, (LONG)ht), want;
+        if (g_bridge != s_czb) { s_czb = g_bridge; InterlockedExchange(&g_cz_req, 1); }
+        if (v[0x28 / 4] != 4 && g_cz_req > 1) InterlockedExchange(&g_cz_req, 1);
+        if (g_cz_req > mx) InterlockedExchange(&g_cz_req, mx);
+        want = g_cz_req;
+        cz_f = want;
+        cz_cw = (LONG)w; cz_ch = (LONG)ht;
+        if (want > 1) { w = (w + want - 1) / want; ht = (ht + want - 1) / want; }
+    }
     /* SETTLED check. The render target is deliberately over-allocated by RZ_SURFACE_SLACK guard rows
        (zoom-blit overrun fix), so its height (+0x28) is ht..ht+SLACK, NOT exactly ht. Comparing
        == ht made the poll see a permanent mismatch and re-resize EVERY FRAME (churn -> black view +
@@ -9714,7 +10107,10 @@ static void rz_poll(void) {
            client size itself, so this check said "settled" and the rest of the routine (root window,
            HUD layout, input geometry) never ran - the terrain editor fought the dock every 100 ms
            and the city needed a de-maximize/maximize. Run the full routine once per new bridge. */
-        if (!g_bridge_fresh || (w == NAT_W && ht == NAT_H)) { g_bridge_fresh = 0; return; }
+        if (g_cz_f != cz_f || g_cz_vw != (LONG)w || g_cz_vh != (LONG)ht) {
+            g_cz_vw = (LONG)w; g_cz_vh = (LONG)ht; g_cz_f = cz_f; g_cz_surf = cz_find_surf_at(0x74); g_cz_devsurf = cz_find_surf_at(0x4ec);
+        }
+        if (!g_bridge_fresh || (cz_cw == NAT_W && cz_ch == NAT_H)) { g_bridge_fresh = 0; return; }
         if (!g_defer_logged) logf("RZ   fresh city view already at %lux%lu - running the layout once", w, ht);
     }
 
@@ -9757,6 +10153,15 @@ static void rz_poll(void) {
     }
     logf("RZ   size change: client %lux%lu vs render target %lux%lu", w, ht,
          ((DWORD *)R)[0x24 / 4], ((DWORD *)R)[0x28 / 4]);
+    if (cz_f > 1 || g_cz_f > 1)
+        logf("CITYZOOM> view %lux%lu = client %ldx%ld at x%ld (was x%ld)", w, ht, cz_cw, cz_ch, cz_f, g_cz_f);
+    if (cz_f != g_cz_f) {   /* keep the world point at the map-area centre where it is on screen */
+        LONG aw, ah;
+        rz_lcenter_area(cz_cw, cz_ch, NAT_W - 96, NAT_H - 56, &aw, &ah);
+        cz_px = (LONG)v[0x54 / 4] + aw / 2 / g_cz_f; cz_py = (LONG)v[0x58 / 4] + ah / 2 / g_cz_f;
+        cz_tx = cz_px - aw / 2 / cz_f; cz_ty = cz_py - ah / 2 / cz_f;
+        cz_move = 1;
+    }
     /* CRASH HUNT (2026-08-28): SEH around the routine so a fault becomes a DIAGNOSTIC (code +
        address resolved to MODULE+RVA + which of the 9 steps was executing) instead of a silent
        process death. This is how we catch WHERE the v3 crash actually is. */
@@ -9765,9 +10170,18 @@ static void rz_poll(void) {
     QueryPerformanceCounter(&tp0);
     lk = rz_sim_lock(NULL);
     QueryPerformanceCounter(&tp1);
+    g_cz_dev_w = cz_f > 1 ? cz_cw : 0; g_cz_dev_h = cz_f > 1 ? cz_ch : 0;   /* task cityzoom: the frame stays client-sized */
     __try {
         rz_do_resize(iso, w, ht);
         g_bridge_fresh = 0;
+        g_cz_vw = (LONG)w; g_cz_vh = (LONG)ht; g_cz_f = cz_f; g_cz_surf = cz_find_surf_at(0x74); g_cz_devsurf = cz_find_surf_at(0x4ec);   /* task cityzoom */
+        if (cz_move) {
+            DWORD *ivt = *(DWORD **)iso, a3[3];
+            a3[0] = (DWORD)cz_tx; a3[1] = (DWORD)cz_ty; a3[2] = 1;
+            if (ivt && !IsBadReadPtr(ivt, 0x34) && ivt[0x30 / 4]) rz_thiscall(iso, (void *)ivt[0x30 / 4], a3, 3);   /* ScrollTo */
+            logf("CITYZOOM> x%ld: centre (%ld,%ld) kept, origin -> (%ld,%ld) now (%ld,%ld)", cz_f, cz_px, cz_py, cz_tx, cz_ty,
+                 (LONG)v[0x54 / 4], (LONG)v[0x58 / 4]);
+        }
     } __except (rz_filter(GetExceptionInformation())) {
         char who[128];
         rz_modstr(g_exc_addr, who, sizeof(who));
@@ -9998,6 +10412,60 @@ static void wm_restore(HWND h) {
  * rz_set_stored_rect call below the engine never learns the new size and the primary Blt keeps
  * presenting the old rectangle. Doing it here in C is what makes the separate GZGraphicD
  * `wmsize_setrect` patch unnecessary under this mod. */
+/* task cityzoom: a client point on a visible UI window (HUD, dialog, flyout) rather than the city view. */
+static int cz_on_ui(LONG x, LONG y) {
+    DWORD exe = (DWORD)GetModuleHandleA(NULL), spr = (DWORD)GetModuleHandleA("SIMSPR.DLL");
+    void *lvl[2], *root = rz_ui_root();
+    int nl = 1, li;
+    if (!root) return 0;
+    lvl[0] = root;
+    for (li = 0; li < nl; li++) {
+        void *head = *(void **)((DWORD)lvl[li] + 0x34), *nd;
+        int g = 0;
+        if (!head || IsBadReadPtr(head, 4)) continue;
+        for (nd = *(void **)head; nd && nd != head && g++ < 300; nd = *(void **)nd) {
+            DWORD *c, vt;
+            if (IsBadReadPtr(nd, 0x0c)) break;
+            c = *(DWORD **)((DWORD)nd + 8);
+            if (!c || IsBadReadPtr(c, 0xa4)) continue;
+            vt = c[0];
+            if (exe && vt == exe + 0xd32d0) { if (nl < 2) lvl[nl++] = c; continue; }   /* HUD container */
+            if (!(c[0xa0 / 4] & 1)) continue;                                         /* hidden */
+            if (spr && vt == spr + 0x676ac) continue;                                 /* the city view */
+            if (exe && vt == exe + 0xd3bcc) continue;                                 /* the tooltip / cost label */
+            if (x >= (LONG)c[0x14 / 4] && x < (LONG)c[0x1c / 4] && y >= (LONG)c[0x18 / 4] && y < (LONG)c[0x20 / 4]) return 1;
+        }
+    }
+    return 0;
+}
+
+/* task cityzoom: a queued mouse message on the city goes to view point q / f. A press there keeps the map until its
+   release (a drag that ends on the HUD stays in the city). The game reposts a move at the point we produced ~15 ms later
+   (HUDSCALE's REPOST): such a move is left as is. 1 = mapped. */
+static LPARAM g_cz_last_out;
+static int    g_cz_last_ok, g_cz_cap, g_cz_depth, g_cz_mlog;
+static DWORD  g_cz_last_t;
+static LONG cz_div(LONG v, LONG f) { return v >= 0 ? v / f : -((-v + f - 1) / f); }
+static int cz_mouse(UINT m, LPARAM *lp) {
+    LONG f = g_cz_f, x, y, nx, ny;
+    if (f <= 1) { g_cz_cap = 0; return 0; }
+    if (m == WM_MOUSEMOVE && g_cz_last_ok && *lp == g_cz_last_out && GetTickCount() - g_cz_last_t < 500) return 0;
+    x = (LONG)(short)LOWORD(*lp); y = (LONG)(short)HIWORD(*lp);
+    if (!g_cz_cap && cz_on_ui(x, y)) return 0;
+    nx = cz_div(x, f); ny = cz_div(y, f);
+    if (m == WM_LBUTTONDOWN || m == WM_RBUTTONDOWN || m == WM_MBUTTONDOWN ||
+        m == WM_LBUTTONDBLCLK || m == WM_RBUTTONDBLCLK || m == WM_MBUTTONDBLCLK) g_cz_cap = 1;
+    else if (m == WM_LBUTTONUP || m == WM_RBUTTONUP || m == WM_MBUTTONUP) g_cz_cap = 0;
+    *lp = MAKELPARAM((WORD)(short)nx, (WORD)(short)ny);
+    g_cz_last_out = *lp; g_cz_last_ok = 1; g_cz_last_t = GetTickCount();
+    if (m != WM_MOUSEMOVE && g_cz_mlog < 40) {
+        g_cz_mlog++;
+        logf("CITYZOOM> msg 0x%04X client (%ld,%ld) -> view (%ld,%ld) at x%ld%s", m, x, y, nx, ny, f,
+             cz_on_ui(nx, ny) ? " (lands on a UI window)" : "");
+    }
+    return 1;
+}
+
 static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     if (m == WM_PAINT || m == WM_ERASEBKGND || m == WM_SIZE || m == WM_ACTIVATE || m == WM_ACTIVATEAPP ||
         m == WM_WINDOWPOSCHANGED || m == WM_DISPLAYCHANGE || m == WM_NCPAINT) g_ms_full_req = 1;   /* MENUSCALE */
@@ -10029,6 +10497,14 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     if (g_zoomkeys && (m == WM_KEYDOWN || m == WM_KEYUP)) {   /* ZOOMKEYS */
         if (wp == VK_OEM_PLUS) wp = VK_ADD;
         else if (wp == VK_OEM_MINUS) wp = VK_SUBTRACT;
+    }
+    if (m == WM_MOUSEWHEEL && g_cz_f > 1 && !g_mb_active) {   /* task cityzoom: GZGraphicD FUN_100178a6 takes its point */
+        POINT pt;
+        pt.x = (LONG)(short)LOWORD(lp); pt.y = (LONG)(short)HIWORD(lp);
+        if (ScreenToClient(h, &pt) && !cz_on_ui(pt.x, pt.y)) {
+            pt.x = cz_div(pt.x, g_cz_f); pt.y = cz_div(pt.y, g_cz_f);
+            if (ClientToScreen(h, &pt)) lp = MAKELPARAM((WORD)(short)pt.x, (WORD)(short)pt.y);
+        }
     }
     if (m == WM_RZ_DORESIZE) {   /* DEFERRESIZE: the resize pass, outside any drawing lock */
         InterlockedExchange(&g_resize_posted, 0);
@@ -10094,8 +10570,9 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             } else if (rz_hs_mouse(m, &lp)) {
                 g_hs_last_out = lp; g_hs_last_ok = 1; g_hs_last_t = GetTickCount();
                 g_hs_mouse_hud = 1;
-            } else g_hs_mouse_hud = 0;
+            } else { g_hs_mouse_hud = 0; cz_mouse(m, &lp); }   /* task cityzoom: the city at a factor */
         }
+        else if (g_hs_depth == 0) cz_mouse(m, &lp);   /* task cityzoom: HUD not enlarged this frame */
         else if (m != WM_MOUSEMOVE && g_hs_nestlog < 20) {
             g_hs_nestlog++;
             logf("HUDSCALE> nested mouse msg 0x%04X at (%d,%d) left as is (sent by the game while handling one)",
@@ -10105,6 +10582,15 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         g_hs_depth++;
         r = CallWindowProcA(g_oldproc, h, m, wp, lp);
         g_hs_depth--;
+        return r;
+    }
+    /* task cityzoom: the same map with HUD scale off (HUDSCALE's block above handles it when on) */
+    if (g_cz_f > 1 && !g_mb_active && m >= WM_MOUSEMOVE && m <= WM_MBUTTONDBLCLK) {
+        LRESULT r;
+        if (g_cz_depth == 0) cz_mouse(m, &lp);
+        g_cz_depth++;
+        r = CallWindowProcA(g_oldproc, h, m, wp, lp);
+        g_cz_depth--;
         return r;
     }
     /* ⭐ LET THE USER DRAG THE WINDOW TO ANY SIZE.
@@ -11217,6 +11703,7 @@ static void __stdcall lcenter_sub(BYTE *view, LONG *wx, LONG *wy) {
     RECT rc;
     if (g_hwnd && GetClientRect(g_hwnd, &rc)) { cw = rc.right - rc.left; ch = rc.bottom - rc.top; }
     rz_lcenter_area(cw, ch, w0, h0, &w, &h);
+    if (g_cz_f > 1) { w /= g_cz_f; h /= g_cz_f; }   /* task cityzoom: in view pixels */
     *wx -= (LONG)((DWORD)w >> 1);
     *wy -= (LONG)((DWORD)h >> 1);
     n = InterlockedIncrement(&g_lcenter_n);
@@ -11346,6 +11833,8 @@ static __declspec(naked) void tip_stub1(void) {
         mov  [g_tip_my], ecx
         mov  dword ptr [g_tip_flip], 0
         mov  dword ptr [g_tip_seen], 1
+        imul eax, dword ptr [g_cz_f]  /* task cityzoom: the box in client pixels (the view point is q / f); the flip */
+        imul ecx, dword ptr [g_cz_f]  /* test and tip_stub2 read these registers next. g_tip_mx/my stay view pixels */
         mov  edx, eax
         add  edx, [g_tip_box]
         mov  [esi], eax
@@ -11415,6 +11904,7 @@ static void patch_tipcursor(HMODULE ss) {
  * load-time set is NOT refreshed: its tile is the saved city centre (refreshing it moved the loaded view, measured).
  * SC3RESIZE_ZOOMCENTER=0 stock; 1 (default) at every size; 2 only when the client is not 800x600. */
 static int g_zoomcenter = 1;
+static int g_zoomcenter_on(void) { return g_zoomcenter; }
 static DWORD g_688d_ret, g_6b0f_ret, g_zc_orig[4];   /* original vt+0x60, +0x64, +0x70, +0x74 */
 typedef int (__fastcall *PFN_RzPick)(void *, void *, int, int, DWORD *, DWORD *, int, int *, int);
 static PFN_RzPick g_rz_pick;
@@ -11427,6 +11917,26 @@ static int rz_zc_area(LONG *w, LONG *h) {   /* 0 = leave this call stock */
     cw = rc.right - rc.left; ch = rc.bottom - rc.top;
     if (cw <= 0 || ch <= 0 || (g_zoomcenter == 2 && cw == NAT_W && ch == NAT_H)) return 0;
     rz_lcenter_area(cw, ch, NAT_W - 96, NAT_H - 56, w, h);   /* 704x544 = the view's stored size, read live */
+    if (g_cz_f > 1) { *w /= g_cz_f; *h /= g_cz_f; }   /* task cityzoom: in view pixels */
+    return 1;
+}
+
+/* task cityzoom: zoom in at zoom 4 goes to the next step (up to cz_max), zoom out above x1 to the step below. The
+   poll applies it on the next frame. 1 = handled, the game's own zoom method is skipped (at zoom 4 it would do nothing). */
+static int __stdcall cz_zoom(BYTE *view, int dir) {
+    DWORD *cam;
+    RECT rc;
+    LONG mx, cur, was;
+    if (!g_cz_mode || IsBadReadPtr(view, 0x160)) return 0;
+    cam = *(DWORD **)(view + 0x158);
+    if (!cam || IsBadReadPtr(cam, 0x30) || cam[0x28 / 4] != 4 || !g_hwnd || !GetClientRect(g_hwnd, &rc)) return 0;
+    mx = cz_max(rc.right, rc.bottom);
+    was = cur = g_cz_req;
+    if (dir == 0) { if (cur >= mx) return 0; cur++; }
+    else { if (cur <= 1) return 0; cur--; }
+    InterlockedExchange(&g_cz_req, cur);
+    logf("CITYZOOM> zoom %s at zoom 4: step x%ld -> x%ld (client %ldx%ld allows x%ld)", dir ? "out" : "in", was, cur,
+         rc.right, rc.bottom, mx);
     return 1;
 }
 
@@ -11481,8 +11991,45 @@ static __declspec(naked) void zc_rot_stub(void) {
 }
 /* Wrappers for iso view vt+0x60/+0x64/+0x70/+0x74 (thiscall, no stack args; the originals read ebx, kept by pushad). */
 #define ZC_WRAP(k) static __declspec(naked) void zc_wrap##k(void) { __asm { pushad } __asm { push ecx }     __asm { call zc_refresh_tile } __asm { popad } __asm { jmp dword ptr [g_zc_orig + 4 * k] } }
-ZC_WRAP(0)
-ZC_WRAP(1)
+/* zoom in / out: task cityzoom first (cz_zoom), then the ZOOMCENTER wrapper */
+static __declspec(naked) void zc_wrap0(void) {
+    __asm {
+        pushad
+        push 0
+        push ecx
+        call cz_zoom
+        test eax, eax
+        jnz  zin_done
+        popad
+        pushad
+        push ecx
+        call zc_refresh_tile
+        popad
+        jmp  dword ptr [g_zc_orig + 0]
+    zin_done:
+        popad
+        ret
+    }
+}
+static __declspec(naked) void zc_wrap1(void) {
+    __asm {
+        pushad
+        push 1
+        push ecx
+        call cz_zoom
+        test eax, eax
+        jnz  zout_done
+        popad
+        pushad
+        push ecx
+        call zc_refresh_tile
+        popad
+        jmp  dword ptr [g_zc_orig + 4]
+    zout_done:
+        popad
+        ret
+    }
+}
 ZC_WRAP(2)
 ZC_WRAP(3)
 
@@ -12264,6 +12811,14 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_DIAG", v, sizeof(v))) g_hs_diag = atoi(v);
           GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_DUMP", g_hs_dump, sizeof(g_hs_dump));
           GetEnvironmentVariableA("SC3RESIZE_FRAMEDUMP", g_fd_prefix, sizeof(g_fd_prefix));
+          {   char ip[MAX_PATH];   /* task cityzoom: sc3resize.ini [view] zoomextra, env wins */
+              ho_ini_path(ip, sizeof(ip));
+              g_cz_mode = GetPrivateProfileIntA("view", "zoomextra", 1, ip);
+              if (GetEnvironmentVariableA("SC3RESIZE_CITYZOOM", v, sizeof(v))) g_cz_mode = atoi(v);
+              logf("CITYZOOM> zoomextra=%d (%s): zoom past the closest level adds %s%s", g_cz_mode,
+                   g_cz_mode ? "on" : "off", g_cz_mode == 2 ? "x2" : "x2 and x3, as the window allows",
+                   g_zoomcenter ? "" : " - NOT AVAILABLE, it rides on ZOOMCENTER (SC3RESIZE_ZOOMCENTER=0)");
+          }
           if (GetEnvironmentVariableA("SC3RESIZE_HUDFIX", v, sizeof(v))) g_hudfix = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_MINISMOOTH", v, sizeof(v))) g_hs_minismooth = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDPERF", v, sizeof(v))) g_hudperf = atoi(v);
