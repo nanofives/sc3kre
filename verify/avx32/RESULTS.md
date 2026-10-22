@@ -235,3 +235,134 @@ stock with no BV write and reverted 37 / 38. Dragging a road over a boulevard co
 Traps: camera calls (rb_lab cam) failed once with `system error` on zoom and the game went Not Responding (killed, my
 PID); drags whose endpoints fall off the view or on the toolbar place partial roads (checked with a pixel pre-check
 after that); the shoreline area has another ground height.
+
+# img16 (owner report 2026-10-22, LAN build of main 4f780c5): a short stub near one end refuses the whole boulevard
+
+Owner: "why is this intersection not triggering the 3 road wide avenue" (`MAIN\verify\ownerbugs_1021\owner_shots\
+img16_boulevard_not_converted.png`), log `MAIN\verify\handtest_2026-10-22a\sc3netmod.log`: `bv: edit: run axis 0 from
+(51,37), 13 column(s) left to the stock tiler: avenue / boulevard arm shorter than 2`, then every piece of the run (the
+1-column T box 21928..21930 at x 63 included) `no longer in a run -> stock retile`.
+
+## Cause (twin reproduces the log)
+The stub is a 2x1 road (x 54..55, z 36) beside the boulevard x 51..63 z 37..39, 3 columns in from the x 51 end. Stock
+draws it as the U. bvx_spans reads the 2 columns as an avenue arm 1 cell long and refused with "arm shorter than 2"
+without naming an end, so the ragged-end fallback (img12) never tried that end and the whole run went stock. The log
+agrees: while the owner's stub was 2 deep the run converted (`41 cell(s)`), at 1 deep it was refused. Twin: 2x1 stub
+refused, 2x2 converts with 41 cells.
+
+## Fix
+1. A BAD ARM of a 2- / 3-column span (shorter than 2, or road beside it) names the run end nearer to the span
+   (`bvx_spans(..., bad_e)`, twin `bvx.spans()` third value), so `bv_run_fb` cuts that end: its columns, the stub's
+   included, stay stock (up to BV_RAG_MAX = 12 columns), the run ends on a plain column with the median nose, the rest
+   converts. Log: `ragged end(s), 0 column(s) at +s and 5 at -s left to the stock tiler: avenue / boulevard arm shorter
+   than 2`.
+2. `bv_run_fb`: up to 4 rounds, each cut starting from the current cut (was 2 rounds from 1). Needed when both ends
+   have a stub.
+3. `bv_run1`: a ragged end on a column with road beside it is refused before the spans (same test as before, earlier),
+   so a span further in is not read as the other end's refusal first.
+Still whole-run: road touching the run, road 4+ wide, the AVL program rule (an avenue arm that would stay two-way).
+The 1x1 stub was whole-run in the first pass of this round; owner call 2026-10-22 made it end-only too, with the
+Protected guard below.
+Middle: a bad arm more than 12 columns from both ends cannot be cut off; round 3 (owner yes, 2026-10-22) splits the
+run there.
+
+## Offline
+| check | result |
+|---|---|
+| twin: 2x1 stub 3 in (either side), 2x1 stub near the +s end, 2-wide arm with road beside it | ragged, 5 / 5 / 4 / 5 columns stock, rest converts |
+| twin: stubs near both ends | ragged both ends (4 + 5), 4 columns convert |
+| twin: 2x1 stub 11+ columns from both ends, run of 8 with a stub 3 in, 1x1 stub | whole run refused (as designed) |
+| twin: 2x2 stub (a real avenue arm) | converts, 41 cells (unchanged) |
+| 16 shipped cities, before vs after (boulevard.runs) | 0 runs change |
+| `bvx.py check --tiler` | 0 failures |
+| C build (`build_mod.ps1`, all 7 mods + mods_launch from main 4f780c5 + this change) | no warnings |
+
+## In game (tree Simcity_stock_avx32, inst_avx32, lab copies of lab.sc3)
+Sheet `MAIN verify\avx32\owner_shots\img16_sheet.png` (frames `img16_*.png` beside it).
+
+| case | result |
+|---|---|
+| A owner order: stub, crossing road, the three rows | `ragged end(s) ... 5 at -s: avenue / boulevard arm shorter than 2`, columns 57..64 written (24 cells): nose 20702 at 57, T box 21928 / 21929 / 21930 at 64; 52..56 stock with the U (11203 at (55,38) / (56,38)) |
+| B other order: crossing, rows (full boulevard 53..64, 36 written), stub last | same grid as A |
+| undo: stub drawn while paused, then sc3undo | `UNDO> entry 1 (road): 82 op(s), 0 failed`, grid 49..66 x 36..45 identical to before the stub |
+| save (sc3undo TEST save = the game's Save) | `28 variant tile(s) written as base` |
+| reload | `all 28 variant tiles restored`, BV load pass decides the same ragged run, 0 written; grid identical |
+| the same save without sc3netmod (inst_avx32_nomod) | stock ids only (11204 / 29 / 43 / 39 / 11203 / 11225), roads joined |
+| 1x1 stub 3 columns from the -s end (labJ) | whole run stock: `road beside the boulevard is not a straight single road` (kept whole-run on purpose, see Fix), T box gone too (`img16_C1_1x1_stub_whole_run.png`) |
+| demolish that stub | full boulevard back, T box 21928..21930 at 64, `36 written` |
+| 2x1 stub next to the T end (x 61..62, z 38) | `ragged end(s), 4 column(s) at +s ...: arm shorter than 2`: 61..64 stock with the crossing (stock T 39 / 43), 53..60 convert (`img16_D1_2x1_stub_at_T_end.png`) |
+
+In my drags the middle row overshoots one cell past x 52 (a 1-cell stub at (51,40)), so case B's full boulevard already
+had a 1-column ragged -s end (existing img12 fallback). Traps: the camera zoom call returned `system error` twice (once
+after a rotation, once on a save that loads at zoom 2); the first hung the game (my PID, killed). Note for reading
+frames: stock 11204 / 29 / 11204 also draws a tree median, so a stock stretch is told from a boulevard by its junction
+paving and missing nose, not by trees.
+
+## img16 round 2 (owner call 2026-10-22): Protected guard, 1x1 stub end-only, revert before write
+1. **Protected guard** (`bv_prot`, twin `runs(protected=...)`): a cell whose ROAD piece is Protected
+   (`FUN_1001a7f7(1, id)`: ROAD_GRND_Protected.txt = level crossings 67 / 69, road x highway 11258, tunnel mouths 63 / 64,
+   bridges 81..88 / 11265.., plus netpack variants of those and template pieces) is never a boulevard cell. A rail line
+   across a boulevard splits it into two runs, each with a 1-column ragged end beside the crossing; the crossing stays.
+   Without it, the first pass of this round converted a London run over crossings 69 (x 104..109 z 224..226).
+2. **1x1 stub end-only**: the 1-column "not a straight single road" refusal names the nearer end (like the 2x1).
+3. **Revert before write** (`bv_pass` = `bv_decide` keep-only, reverts, re-read, `bv_decide` write). Found in game: a
+   rail across the run, then a road edit: BV wrote 53..58, then reverted 59 / 61..64 with single-cell rect retiles, and a
+   read 2 s later had 55..58 back as stock 11204 / 29 until the next edit rewrote them (`12 written`). With the new order
+   the same edit leaves 53..58 converted at once; the re-read after the reverts found all 18 of those cells changed
+   (`18 written`), so the revert retiles do reach the run's own cells.
+
+| check | result |
+|---|---|
+| twin: 1x1 stub 3 in | ragged, 4 columns stock, rest converts |
+| twin: rail crossing at column 55 of 40..69 / at column 41 | two boulevards 41..53 + 57..69 / one 43..69, crossing cells never written |
+| 16 shipped cities with their Protected cells | 0 converting runs before and after (refused-run lists shorter in Berlin, Frankfurt, London, Moscow: columns over Protected pieces are no longer runs) |
+| `bvx.py check --tiler` | 0 failures |
+| C build | no warnings |
+
+In game (final DLL unless noted):
+
+| case | result |
+|---|---|
+| 1x1 stub at (55,38), full run 52..64 (guard DLL) | `ragged ... 4 at -s: road beside the boulevard is not a straight single road`, 56..64 convert with the T box |
+| final DLL: owner layout (2x1 first) | 57..64 convert, T box kept (as round 1) |
+| final DLL: 1x1 at (56,38) after demolishing the 2x1 | 57..64 convert (5 cut), then 1x1 at (55,38): 56..64 |
+| rail across the boulevard at x 60 (rail tool, no road pass) | game places level crossings 69 at (60,39..41) over the BV pieces |
+| then a road edit nearby | BV: 59 + 61..64 reverted, 53..58 converted with the nose 20702 at 58, crossing 69 intact |
+| rail drawn while paused, then undo | `UNDO> entry 1 (rail): 14 op(s), 0 failed`, grid identical |
+| 1x1 stub drawn while paused on the 8-column run, then undo | whole run stock (cutting 4 leaves 3 < 4), undo 51 ops 0 failed, grid identical |
+| save, reload | 22 variant tiles saved / restored, BV load pass same decision, 0 written, grid identical |
+| the same save without sc3netmod | stock pieces, crossings 69 intact |
+
+A rail drawn over a boulevard does not fire a ROAD retile pass, so BV re-decides at the next road edit near it; until
+then the crossing cells are the game's 69 between unchanged boulevard pieces (no nose).
+
+## img16 round 3 (owner yes 2026-10-22): a bad arm in the middle splits the run
+Rule (`bv_parts`, twin `runs()` segs): a run the end cuts cannot save, whose first refusal is a bad arm (2x1 / wider
+span too short or with road beside it, or a 1x1 side road), is split at the arm's columns. Each side is a run of its own
+(its base cut = the columns from the arm on, so the split ends are ragged with a median nose), tried with the end-cut
+fallback the same way, and split again if it has its own bad arm (at most 16 pieces per run). Sides shorter than 4
+columns stay stock. The arm's own columns always stay stock. The bad arm's columns come from `bv_run1` (`p->bja / bjb`).
+`bv_takes` (AVX's view of what BV builds) uses the same `bv_parts`.
+
+| check | result |
+|---|---|
+| twin: 2x1 stub mid of 45..70 | 45..55 + 58..70 convert, 56..57 stock |
+| twin: 2x1 / 1x1 stub mid of 40..75 with a crossing road at 48 | 40..55 (junction at 48) + 58..75 / 40..56 + 58..75 |
+| twin: two stubs in 40..95 | three boulevards |
+| twin: stubs 12 / 14 columns in on 51..90 (were whole-run) | split, both sides convert |
+| twin: all end-cut cases of rounds 1 / 2 | unchanged |
+| 16 shipped cities (with Protected cells) | run lists identical to round 2, 0 converting runs |
+| `bvx.py check --tiler` | 0 failures |
+| C build | no warnings |
+
+In game (zoom 2, `--alt 84` places drags on the exact cells; boulevard x 40..72 z 39..41, crossing roads at x 46 and
+x 66, 2x1 stub at x 55..56 z 38):
+
+| case | result |
+|---|---|
+| stub drawn first, then crossings, then the three rows | `split at a bad arm, columns 41..54 convert` + `columns 57..70 convert`: junction 20710 / 20711 at 46 and at 66, noses 20702 at 54 and 57, 55..56 stock with the U |
+| paused: demolish the stub cell by cell, then undo twice | after one cell (a 1x1 left at 56): split 41..55 + 57..70; after both: one boulevard 41..70 (90 cells); two undos 149 ops each, 0 failed, grid identical to the split state |
+| running: demolish the stub, then draw it again (stub last) | full boulevard 41..70, then the same split; grid identical to the stub-first grid |
+| save, reload | 88 variant tiles saved / restored, the load pass makes the same split, 0 written, grid identical |
+| the same save without sc3netmod | stock ids only (29 / 39 / 43 / 11203 / 11204 / 11225) |
+| final DLL, owner layout of round 1 (zoom 3) | unchanged: 57..64 convert with the T box |
