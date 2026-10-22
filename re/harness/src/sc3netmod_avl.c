@@ -613,9 +613,9 @@ static void avl_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) 
     for (k = 0; k < nw; k++) {
         DWORD cur = avl_at(&P, w[k].x, w[k].z);
         int pos[3];
-        if (((DWORD)AVL_ID(cur) << 8 | AVL_ST(cur)) == w[k].want) continue;
+        if (((DWORD)AVL_ID(cur) << 8 | AVL_ST(cur)) == w[k].want && !(cur & HWLT_LIT)) continue;
         pos[0] = w[k].x << 8; pos[1] = w[k].z << 8; pos[2] = 0;
-        ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, P.lay, pos, w[k].want, -1, 8, 0);
+        ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, P.lay, pos, hwlt_want(w[k].want), -1, 8, 0);   /* task hwlight */
         n++;
     }
     if (n || nrv || load)

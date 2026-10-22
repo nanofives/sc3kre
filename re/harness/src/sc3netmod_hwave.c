@@ -205,9 +205,9 @@ static int hwave_row_ok(BYTE *mgr, int x, int z, DWORD v) {
 static int hwave_write(HwyPass *hp, int x, int z, WORD id, int st, int keep) {
     int pos[3], bx = x - hp->b.x0, bz = z - hp->b.z0;
     DWORD cur = hwy_at(hp, x, z);
-    if (keep && hwave_is(cur, id, st)) { hwy_keep(hp, x, z); return 0; }
+    if (keep && hwave_is(cur, id, st) && !(cur & HWLT_LIT)) { hwy_keep(hp, x, z); return 0; }
     pos[0] = x << 8; pos[1] = z << 8; pos[2] = 0;
-    ((PFN_Put)(g_rb_m + 0x8919))(hp->mgr, 0, hp->lay, pos, ((DWORD)id << 8) | (DWORD)(st & 3), -1, 8, 0);
+    ((PFN_Put)(g_rb_m + 0x8919))(hp->mgr, 0, hp->lay, pos, hwlt_want(((DWORD)id << 8) | (DWORD)(st & 3)), -1, 8, 0);   /* task hwlight */
     if (bx >= 0 && bz >= 0 && bx < hp->b.w && bz < hp->b.h)
         hp->b.c[bz * hp->b.w + bx] = hwy_read(hp->mgr, hp->lay, x, z, hp->W, hp->H);
     if (keep) hwy_keep(hp, x, z);

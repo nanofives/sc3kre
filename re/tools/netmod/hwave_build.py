@@ -4,6 +4,10 @@ r"""hwave_build.py - art and lanes of the highway <-> avenue transition package 
   py -3.12 hwave_build.py art   <package_dir>    paint the four pieces into <package_dir>/art/<id> (game art, gitignored)
   py -3.12 hwave_build.py lanes <package_dir>    write hwave_<id>.lanes.json (lanes, new curves 23400.., turn matrix auto)
   py -3.12 hwave_build.py check <package_dir>    compile the lane specs with lanekit, print the turn matrices
+  py -3.12 hwave_build.py twart <package_dir>    task hwlight: art of the LIT TWINS (lit_twins.json) of every piece, the
+                                                 scene turned one state (the block writes each set at all four turns;
+                                                 at odd turns the twin goes in, so the walls get the stock shading).
+                                                 Run after art / dart / sart, then hwlight.py manifest + check
 
 World frame of state 0 (hwave_paint.py): highway at z <= 29 (cap row z 29), avenue U-turn row z 30, avenue from z 31;
 entry carriageway x 46 (drives -z, 73.2), exit carriageway x 47 (drives +z, 73.0).
@@ -276,13 +280,44 @@ def cmd_dcheck(a):
     return cmd_check(a, WP.DCELLS.values())
 
 
+def cmd_twart(a):
+    """task hwlight: the lit twins. Straight set: hwpaint.paint_twin of the same scene; the one-way ground row copies
+    the crossover row's twins (as sart copies the art); diagonal set: the deck from the turned scene, DAV's flat parts
+    drawn over it as diag_render draws them for the piece itself"""
+    import shutil
+    import hwlight
+    tw = hwlight.twins(a.pkg)
+    sc = WP.scene()
+    for cell, pid in sorted(WP.CELLS.items(), key=lambda kv: kv[1]):
+        d = os.path.join(a.pkg, "art", str(tw[pid]))
+        HP.paint_twin(sc, cell, d)
+        print("twin art", tw[pid], "of", pid, "<-", cell, d)
+    for src, dst in ART_COPY.items():
+        s, d = os.path.join(a.pkg, "art", str(tw[src])), os.path.join(a.pkg, "art", str(tw[dst]))
+        if os.path.isdir(d):
+            shutil.rmtree(d)
+        shutil.copytree(s, d)
+        print("twin art", tw[dst], "of", dst, "<-", s)
+    dsc = WP.diag_scene()
+    for cell, pid in sorted(WP.DCELLS.items(), key=lambda kv: kv[1]):
+        d = os.path.join(a.pkg, "art", str(tw[pid]))
+
+        def render(st, ct, z, g, cell=cell):
+            return WP.diag_render(dsc, cell, z, (g + 1) % 4, base=HP.render_cell(st, ct, z, g))
+        HP.paint_twin(dsc, cell, d, render=render)
+        print("twin art", tw[pid], "of", pid, "<-", cell, d)
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="hwave_build.py")
-    ap.add_argument("cmd", choices=("art", "lanes", "check", "dart", "dlanes", "dcheck", "sart", "slanes", "scheck"))
+    ap.add_argument("cmd", choices=("art", "lanes", "check", "dart", "dlanes", "dcheck", "sart", "slanes", "scheck",
+                                    "twart"))
     ap.add_argument("pkg")
     a = ap.parse_args(argv)
     return {"art": cmd_art, "lanes": cmd_lanes, "check": cmd_check, "dart": cmd_dart, "dlanes": cmd_dlanes,
-            "dcheck": cmd_dcheck, "sart": cmd_sart, "slanes": cmd_slanes, "scheck": cmd_scheck}[a.cmd](a)
+            "dcheck": cmd_dcheck, "sart": cmd_sart, "slanes": cmd_slanes, "scheck": cmd_scheck,
+            "twart": cmd_twart}[a.cmd](a)
 
 
 if __name__ == "__main__":

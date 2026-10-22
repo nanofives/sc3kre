@@ -179,6 +179,29 @@ static void rb_file(const char *path) {
 /* ---------------------------------------------------------------- reading cells */
 /* -> 0 = no road, else 0x80000000 | state << 16 | id. The occupant of a network piece: +0x10 word0 (state bits
    30-31), +0x14 low 16 = id (np_drive.py cells, QUERY_ID.md 2). */
+/* task hwlight: LIT TWINS (`hwyl <piece> <twin>`, read by hwy_line, sc3netmod_hwy.c). Stock wall shading follows the
+   wall's world axis and a frame is shared by (state + view), so a piece painted at state 0 is lit wrong at states 1 / 3
+   (owner img11, 2026-10-21; hwpaint.py "lit twins"). Its twin (same base, lanes, saves; art painted from the scene
+   turned one state) is what goes into the cell at an odd state: readers (rb_read, hwy_read) see the piece, writers
+   (hwlt_want) put the twin. HWLT_LIT on a read value = the cell holds the wrongly lit form, so writers re-put it. */
+static WORD g_hwlt_t[65536];                  /* piece -> its twin, 0 none */
+static WORD g_hwlt_p[65536];                  /* twin -> its piece, 0 not a twin */
+#define HWLT_LIT 0x40000000UL
+
+static DWORD hwlt_read(DWORD r) {
+    WORD id = (WORD)(r & 0xffff);
+    int odd = (int)((r >> 16) & 1);
+    if (!r) return r;
+    if (g_hwlt_p[id]) return (r & ~0xffffUL) | g_hwlt_p[id] | (odd ? 0 : HWLT_LIT);
+    if (g_hwlt_t[id] && odd) return r | HWLT_LIT;
+    return r;
+}
+
+static DWORD hwlt_want(DWORD w) {             /* a writer's (id << 8 | state) -> what goes into the cell */
+    WORD id = (WORD)(w >> 8);
+    return ((w & 1) && g_hwlt_t[id]) ? (((DWORD)g_hwlt_t[id] << 8) | (w & 0xff)) : w;
+}
+
 static DWORD rb_read(BYTE *mgr, void *lay, int x, int z, int W, int H) {
     void *occ = NULL;
     DWORD r = 0, vt;
@@ -188,7 +211,7 @@ static DWORD rb_read(BYTE *mgr, void *lay, int x, int z, int W, int H) {
     if (vt >= (DWORD)g_rb_m && vt < (DWORD)g_rb_m + g_rb_msize && ((PFN_Pred)VT(mgr, 0x14c))(mgr, 0, 1, occ))
         r = 0x80000000UL | ((*(DWORD *)((BYTE *)occ + 0x10) >> 30) << 16) | (*(DWORD *)((BYTE *)occ + 0x14) & 0xffff);
     ((PFN_B0)VT(occ, 8))(occ);
-    return r;
+    return hwlt_read(r);                      /* task hwlight */
 }
 
 typedef struct { int x0, z0, w, h; DWORD *c; } RbBuf;

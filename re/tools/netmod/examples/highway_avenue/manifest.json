@@ -187,6 +187,186 @@
     "ground_under": true
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 26000,
+   "base": 15137,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to avenue (exit, deck) (lit twin of 21600)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26000",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26001,
+   "base": 15136,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to avenue (entry, deck) (lit twin of 21601)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26001",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26002,
+   "base": 15141,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to avenue (exit, ground) (lit twin of 21602)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26002",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26003,
+   "base": 15140,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to avenue (entry, ground) (lit twin of 21603)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26003",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26004,
+   "base": 15134,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to diagonal avenue (exit, deck) (lit twin of 21604)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26004",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26005,
+   "base": 15134,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to diagonal avenue (entry, deck) (lit twin of 21605)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26005",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26006,
+   "base": 15134,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to diagonal avenue (end, deck) (lit twin of 21606)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26006",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26007,
+   "base": 15134,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to diagonal avenue (exit, ramp) (lit twin of 21607)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26007",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26008,
+   "base": 15134,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to diagonal avenue (entry, ramp) (lit twin of 21608)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26008",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26009,
+   "base": 15138,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to diagonal avenue (ground) (lit twin of 21609)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26009",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26010,
+   "base": 15141,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to avenue (exit, ground, one-way avenue) (lit twin of 21850)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26010",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 26011,
+   "base": 15140,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway to avenue (entry, ground, one-way avenue) (lit twin of 21851)",
+    "ENGLISH": "Highway Onramp"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/26011",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
   }
  ],
  "lanes": [
@@ -237,6 +417,54 @@
   {
    "piece": 21851,
    "spec": "hwave_21851.lanes.json"
+  },
+  {
+   "piece": 26000,
+   "spec": "hwave_21600.lanes.json"
+  },
+  {
+   "piece": 26001,
+   "spec": "hwave_21601.lanes.json"
+  },
+  {
+   "piece": 26002,
+   "spec": "hwave_21602.lanes.json"
+  },
+  {
+   "piece": 26003,
+   "spec": "hwave_21603.lanes.json"
+  },
+  {
+   "piece": 26004,
+   "spec": "hwave_21604.lanes.json"
+  },
+  {
+   "piece": 26005,
+   "spec": "hwave_21605.lanes.json"
+  },
+  {
+   "piece": 26006,
+   "spec": "hwave_21606.lanes.json"
+  },
+  {
+   "piece": 26007,
+   "spec": "hwave_21607.lanes.json"
+  },
+  {
+   "piece": 26008,
+   "spec": "hwave_21608.lanes.json"
+  },
+  {
+   "piece": 26009,
+   "spec": "hwave_21609.lanes.json"
+  },
+  {
+   "piece": 26010,
+   "spec": "hwave_21850.lanes.json"
+  },
+  {
+   "piece": 26011,
+   "spec": "hwave_21851.lanes.json"
   }
  ],
  "highway_lines": [
@@ -278,10 +506,36 @@
   "hwavd 21604 21605 21606 21607 21608 21609",
   "hwrc 21850",
   "hwrc 21851",
-  "hwavs 21850 21851"
+  "hwavs 21850 21851",
+  "hwrc 26000",
+  "hwrc 26001",
+  "hwrc 26002",
+  "hwrc 26003",
+  "hwrc 26004",
+  "hwrc 26005",
+  "hwrc 26006",
+  "hwrc 26007",
+  "hwrc 26008",
+  "hwrc 26009",
+  "hwrc 26010",
+  "hwrc 26011",
+  "hwyl 21600 26000",
+  "hwyl 21601 26001",
+  "hwyl 21602 26002",
+  "hwyl 21603 26003",
+  "hwyl 21604 26004",
+  "hwyl 21605 26005",
+  "hwyl 21606 26006",
+  "hwyl 21607 26007",
+  "hwyl 21608 26008",
+  "hwyl 21609 26009",
+  "hwyl 21850 26010",
+  "hwyl 21851 26011"
  ],
  "avenue_lines": [
   "avlj 21850 ..O.",
-  "avlj 21851 ..I."
+  "avlj 21851 ..I.",
+  "avlj 26010 ..O.",
+  "avlj 26011 ..I."
  ]
 }
