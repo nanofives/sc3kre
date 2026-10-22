@@ -4288,6 +4288,7 @@ typedef struct {
     LONG capn, capo, capt;
     LONG *xs, *ys;                      /* per dest column/row: source index << 9 | weight of the next one (0..256) */
     int valid;
+    int lbl;                            /* task uiscale: the city cost label, placed at the cursor, takes no mouse */
 } HD_SLOT;
 static int     g_dlgscale = 1;
 static HD_SLOT g_hd[HD_MAX];
@@ -4300,6 +4301,21 @@ static int     g_hd_cap_drag;                   /* that dialog moved since the p
 static LONG    g_hd_cap_q[2], g_hd_cap_p[2], g_hd_cap_nat[2];
 static DWORD   g_hd_stamp, g_hd_px, g_hd_full, g_hd_frames;
 static int     rz_hd_add(void *win, const LONG *r, LONG cw, LONG ch, double s);   /* fwd */
+/* task uiscale (owner 2026-10-22, img17: "price tag is hiding under the cursor and it's not scaling with the rest of the
+ * screen"). The city cost label (the game's tooltip window, vt exe+0xd3bcc, placed by SIMSPR 0x1004a3d7 from the view's
+ * mouse point) stayed native since COSTLABEL: a few px tall at 3.3x, under a pointer drawn 64 to 80 px. Now, when the
+ * COSTLABEL rule keeps a floating window of that class native (cursor in the city), it is drawn enlarged by the HUD
+ * factor through a DLGSCALE slot instead, placed from the cursor point the TIPCURSOR stubs record (g_tip_mx/my): centred
+ * under the pointer box, its top g_tip_clr + gap below the hotspot, or above the hotspot when that runs past the bottom,
+ * shifted inside the client. Its native copy is erased with the city layer (the DLGSCALE rule). It takes no mouse
+ * mapping (rz_hd_mouse skips it). HUD tooltips are untouched (the COSTLABEL "enlarged" branch). Without a TIPCURSOR
+ * record the cursor is derived from the stock layout (box 0x2c, label 2 px below). SC3RESIZE_COSTLABEL_SCALE=0: native. */
+static int     g_costscale = 1;
+static int     g_hd_plbl[HD_MAX];
+static volatile LONG g_tip_mx, g_tip_my, g_tip_flip, g_tip_seen;   /* written by tip_stub1/2: the anchor of the last label */
+static LONG    g_tip_clr = 32;                  /* drawn pointer size in game px, for the clearance (tip_update) */
+static int     g_hl_logs;
+static int     rz_hl_add(void *win, const LONG *r, LONG cw, LONG ch, double s);   /* fwd */
 static int    g_hs_capture, g_hs_depth, g_hs_nestlog;
 static int    g_hs_mouse_hud;           /* COSTLABEL: the last queued mouse message was mapped (cursor on the enlarged HUD) */
 static int    g_hs_floatall;            /* SC3RESIZE_HUDSCALE_FLOATALL=1: enlarge every floating window in the box (old rule) */
@@ -4307,6 +4323,7 @@ static int    g_hs_floatall;            /* SC3RESIZE_HUDSCALE_FLOATALL=1: enlarg
 static struct { void *win; LONG r[4]; int hud; DWORD stamp; } g_hs_fl[HS_FL_MAX];   /* COSTLABEL latch */
 static DWORD  g_hs_fl_stamp;
 static LONG   g_hs_hudr[HS_MAX][4];     /* COSTLABEL: native rects of the edge-anchored HUD windows, last pass */
+static LONG   g_hs_hudd[HS_MAX][4];     /* task uiscale: their enlarged rects, last pass (the cost label keeps off them) */
 static int    g_hs_nhudr;
 static int    g_hs_fl_logs;
 static int    g_hs_repost = 1, g_hs_repost_log, g_hs_last_ok;   /* SC3RESIZE_HUDSCALE_REPOST=0 disables the guard */
@@ -4522,6 +4539,7 @@ static int rz_hs_collect(LONG cw, LONG ch, double s, int can_erase) {
                     n++;
                     continue;
                 }
+                if (!hud && exe && vt == exe + 0xd3bcc && can_erase && rz_hl_add(c, r, cw, ch, s)) continue;   /* task uiscale */
                 if (sk < 6) {
                     char t[64];
                     wsprintfA(t, " %08lX[%ld %ld %ld %ld]", vt - (sui && vt > sui && vt < sui + 0x200000 ? sui : 0),
@@ -4548,7 +4566,10 @@ static int rz_hs_collect(LONG cw, LONG ch, double s, int can_erase) {
     {   /* COSTLABEL: keep this pass's edge-anchored rects for the next pass's floating test */
         int i;
         for (i = 0, g_hs_nhudr = 0; i < n; i++)
-            if (!g_hs_float[i]) memcpy(g_hs_hudr[g_hs_nhudr++], g_hs_src[i], sizeof(g_hs_hudr[0]));
+            if (!g_hs_float[i]) {
+                memcpy(g_hs_hudd[g_hs_nhudr], g_hs_dst[i], sizeof(g_hs_hudd[0]));   /* task uiscale */
+                memcpy(g_hs_hudr[g_hs_nhudr++], g_hs_src[i], sizeof(g_hs_hudr[0]));
+            }
     }
     if (sig != g_hs_sig && g_hs_logs < 60) {
         int i;
@@ -4627,11 +4648,79 @@ static int rz_hd_add(void *win, const LONG *r, LONG cw, LONG ch, double s) {
     if (k < 0 || g_hd[k].used == g_hd_stamp) return 0;
     d = &g_hd[k];
     if (d->win != win) { d->win = win; d->valid = 0; }
-    d->used = g_hd_stamp;
+    d->used = g_hd_stamp; d->lbl = 0;
     memcpy(d->nat, r, sizeof(d->nat));
     d->dst[0] = x0; d->dst[1] = y0; d->dst[2] = x0 + dw; d->dst[3] = y0 + dh;
     d->w = w; d->h = h; d->dw = dw; d->dh = dh;
     g_hd_list[g_hd_nc++] = k;
+    return 1;
+}
+
+/* task uiscale: the city cost label, enlarged by the HUD factor at the cursor. 0 = keep it native. */
+static int rz_hl_add(void *win, const LONG *r, LONG cw, LONG ch, double s) {
+    LONG w = r[2] - r[0], h = r[3] - r[1], dw, dh, x0, y0, mx, my, P, gap;
+    int i, k = -1, derived = 0;
+    HD_SLOT *d;
+    if (!g_costscale || g_hd_nc >= HD_MAX || w <= 0 || h <= 0 || s < 1.01) return 0;
+    dw = (LONG)(w * s + 0.5); dh = (LONG)(h * s + 0.5);
+    if (dw > cw / 2 || dh > ch / 4) return 0;   /* not a label */
+    if (g_tip_seen) { mx = g_tip_mx; my = g_tip_my; P = g_tip_clr; }
+    else { mx = (r[0] + r[2]) / 2 - 0x2c / 2; my = r[1] - 0x2c - 2; P = 32; derived = 1; }   /* stock layout */
+    if (P < 32) P = 32;
+    gap = 2 + (LONG)(2.0 * s + 0.5);
+    {   /* below the pointer, else above the hotspot (the pointer hangs below-right of it); each inside the client and off
+           the enlarged HUD (last pass's rects): shifted left of a window it would cover, if that still fits. The first
+           candidate that is clear wins; if none is, below when it fits the client, else above. */
+        LONG cy[2], cx = mx + P / 2 - dw / 2, bx = 0, by = 0;
+        int c, j, pass, ok = 0;
+        cy[0] = my + P + gap; cy[1] = my - gap - dh;
+        for (c = 0; c < 2 && !ok; c++) {
+            LONG x = cx, y = cy[c];
+            if (y < 0 || y + dh > ch) continue;
+            if (x + dw > cw) x = cw - dw;
+            if (x < 0) x = 0;
+            for (pass = 0; pass < 3; pass++) {
+                int hit = -1;
+                for (j = 0; j < g_hs_nhudr && hit < 0; j++)
+                    if (x < g_hs_hudd[j][2] && x + dw > g_hs_hudd[j][0] && y < g_hs_hudd[j][3] && y + dh > g_hs_hudd[j][1]) hit = j;
+                if (hit < 0) { ok = 1; break; }
+                if (g_hs_hudd[hit][0] - dw < 0 || g_hs_hudd[hit][0] - dw >= x) break;   /* cannot shift left of it */
+                x = g_hs_hudd[hit][0] - dw;
+            }
+            if (ok) { bx = x; by = y; }
+        }
+        if (!ok) {
+            by = cy[0] + dh <= ch ? cy[0] : cy[1];
+            bx = cx;
+            if (bx + dw > cw) bx = cw - dw;
+            if (by + dh > ch) by = ch - dh;
+            if (bx < 0) bx = 0;
+            if (by < 0) by = 0;
+        }
+        x0 = bx; y0 = by;
+    }
+    for (i = 0; i < HD_MAX; i++) if (g_hd[i].win == win) { k = i; break; }
+    if (k < 0)
+        for (i = 0; i < HD_MAX; i++) {
+            if (g_hd[i].used == g_hd_stamp) continue;
+            if (k < 0 || g_hd[i].used < g_hd[k].used) k = i;
+        }
+    if (k < 0 || g_hd[k].used == g_hd_stamp) return 0;
+    d = &g_hd[k];
+    if (d->win != win) { d->win = win; d->valid = 0; }
+    d->used = g_hd_stamp; d->lbl = 1;
+    memcpy(d->nat, r, sizeof(d->nat));
+    d->dst[0] = x0; d->dst[1] = y0; d->dst[2] = x0 + dw; d->dst[3] = y0 + dh;
+    d->w = w; d->h = h; d->dw = dw; d->dh = dh;
+    g_hd_list[g_hd_nc++] = k;
+    {   static LONG lr[4], lmx = -99999, lmy;
+        if (g_hl_logs < 300 && (memcmp(lr, r, sizeof(lr)) || lmx != mx || lmy != my)) {
+            g_hl_logs++; memcpy(lr, r, sizeof(lr)); lmx = mx; lmy = my;
+            logf("COSTLABEL> city label [%ld %ld %ld %ld] -> [%ld %ld %ld %ld] %.3fx, cursor (%ld,%ld)%s%s, pointer %ld px, %s",
+                 r[0], r[1], r[2], r[3], x0, y0, x0 + dw, y0 + dh, s, mx, my, derived ? " derived from the label" : "",
+                 g_tip_flip ? " (game flipped it)" : "", P, y0 >= my + P ? "below the pointer" : y0 + dh <= my ? "above the hotspot" : "SHIFTED onto the pointer rows");
+        }
+    }
     return 1;
 }
 
@@ -5430,6 +5519,13 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
     smax = (double)cw / NAT_W < (double)ch / NAT_H ? (double)cw / NAT_W : (double)ch / NAT_H;
     s = g_hudscale >= 100 ? (double)g_hudscale / 100.0 : smax;
     if (s > smax) s = smax;
+    {   static LONG lcw, lch; static int lmode = -1;   /* task uiscale: the factor the mode gives at this size */
+        if ((cw != lcw || ch != lch || g_hudscale != lmode) && !rz_menu_visible()) {
+            lcw = cw; lch = ch; lmode = g_hudscale;
+            logf("HUDSCALE> %s: client %ldx%ld -> factor %.3f%s", g_hudscale == 1 ? "Auto" : "fixed percent", cw, ch, s,
+                 s < 1.01 ? " (native size)" : "");
+        }
+    }
     if (s < 1.01) return 0;
     g_hs_why = 4;
     if (rz_menu_visible()) return 0;
@@ -5588,6 +5684,7 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
             if (!d->dw) continue;
             rz_hd_draw(d, bits, pitch, ox, oy, g6);
             memcpy(g_hd_pdst[nd], d->dst, sizeof(d->dst)); memcpy(g_hd_pnat[nd], d->nat, sizeof(d->nat));
+            g_hd_plbl[nd] = d->lbl;   /* task uiscale */
             g_hd_pslot[nd] = g_hd_list[k]; nd++;
         }
         g_hd_n = nd;
@@ -5790,7 +5887,8 @@ static int rz_hd_mouse(UINT m, LPARAM *lp) {
     int down = (m == WM_LBUTTONDOWN || m == WM_RBUTTONDOWN || m == WM_MBUTTONDOWN),
         up = (m == WM_LBUTTONUP || m == WM_RBUTTONUP || m == WM_MBUTTONUP);
     static int logged, dlogged;
-    if (n <= 0) { g_hd_capture = -1; return 0; }
+    for (i = 0; i < n && g_hd_plbl[i]; i++) ;   /* task uiscale: the cost label takes no mouse */
+    if (n <= 0 || i >= n) { g_hd_capture = -1; return 0; }
     if (g_hs_last_ok && *lp == g_hs_last_out && GetTickCount() - g_hs_last_t < 500 && (m == WM_MOUSEMOVE || g_hs_depth > 0))
         return 2;
     if (g_hd_capture >= 0)   /* a press on a dialog keeps the release (and the drag between) on that dialog */
@@ -5798,7 +5896,7 @@ static int rz_hd_mouse(UINT m, LPARAM *lp) {
     if (k < 0) {
         g_hd_capture = -1;
         for (i = n - 1; i >= 0 && k < 0; i--)
-            if (qx >= g_hd_pdst[i][0] && qx < g_hd_pdst[i][2] && qy >= g_hd_pdst[i][1] && qy < g_hd_pdst[i][3]) k = i;
+            if (!g_hd_plbl[i] && qx >= g_hd_pdst[i][0] && qx < g_hd_pdst[i][2] && qy >= g_hd_pdst[i][1] && qy < g_hd_pdst[i][3]) k = i;
     }
     if (k < 0) return 0;
     if (g_hd_capture >= 0 && !down && !g_hd_cap_drag &&
@@ -5845,7 +5943,13 @@ static int rz_hd_mouse(UINT m, LPARAM *lp) {
  * Our ids (0x02F95B40..47) fall outside every range the dialog's command handler acts on, so a click on them only
  * runs the widget's own behaviour (radio exclusivity, check toggle).
  * Persistence: sc3resize.ini [hud] scale = 0 off | 1 fit | 100..400 percent, smooth = 0 | 1 (missing = 1, owner
- * 2026-10-11). The env vars
+ * 2026-10-11). task uiscale (owner 2026-10-22: "auto-apply scaling according to the resolution of the computer, always
+ * leave it by default auto adjust on the options"): scale 1 is shown as "Auto", listed first, and is the default when
+ * the ini or its scale key is missing. The factor is the existing fit rule min(cw/800, ch/600), recomputed on every
+ * present, so it follows the window from the start and on every resize (1.0 = native at 800x600). An ini written
+ * before this build (no [hud] ver key) that holds scale=0 is read as Auto once: 0 was the old default and OK wrote it
+ * back unchanged, so it does not tell a choice from a default. Every save writes ver=2, so a Normal picked from now
+ * on persists. The env vars
  * SC3RESIZE_HUDSCALE / SC3RESIZE_HUDSCALE_FILTER still override the ini at startup. SC3RESIZE_HUDOPT=0 turns this
  * whole block off (no detours, ini not read): exactly the earlier env-only behaviour. */
 static int  g_hudopt = 1;
@@ -5871,11 +5975,13 @@ static int ho_valid_scale(int v) { return v == 0 || v == 1 || (v >= 100 && v <= 
 
 static void ho_load_ini(void) {
     char p[MAX_PATH];
-    int s, f;
+    int s, f, ver;
     ho_ini_path(p, sizeof(p));
-    s = (int)GetPrivateProfileIntA("hud", "scale", 0, p);
+    s = (int)GetPrivateProfileIntA("hud", "scale", 1, p);    /* task uiscale: missing = Auto */
     f = (int)GetPrivateProfileIntA("hud", "smooth", 1, p);   /* hudfix: smooth ON unless the ini says smooth=0 */
-    g_hudscale = ho_valid_scale(s) ? s : 0;
+    ver = (int)GetPrivateProfileIntA("hud", "ver", 0, p);
+    if (s == 0 && ver < 2) { s = 1; logf("HUDOPT> ini scale=0 from a build before Auto (no ver=2): read as Auto"); }   /* task uiscale */
+    g_hudscale = ho_valid_scale(s) ? s : 1;
     g_hs_filter = f ? 1 : 0;
 }
 
@@ -5885,6 +5991,7 @@ static void ho_save_ini(void) {
     wsprintfA(v, "%d", g_hudscale);
     WritePrivateProfileStringA("hud", "scale", v, p);
     WritePrivateProfileStringA("hud", "smooth", g_hs_filter ? "1" : "0", p);
+    WritePrivateProfileStringA("hud", "ver", "2", p);   /* task uiscale: scale=0 from here on is the player's Normal */
 }
 
 /* vtable call on a GZ object: __thiscall, slot byte offset, up to 5 dword args. 0 on a bad object. */
@@ -5989,11 +6096,11 @@ static void ho_add_controls(void *win) {
     BYTE s[0x20];
     LONG r[4];
     int es = ho_spanish(), okl, okg = 0, okc = 0, i;
-    static const DWORD ids[5] = { HO_OFF, HO_FIT, HO_P125, HO_P150, HO_P200 };
+    static const DWORD ids[5] = { HO_FIT, HO_OFF, HO_P125, HO_P150, HO_P200 };   /* task uiscale: Auto first */
     /* trailing spaces widen the auto-sized options: the group spaces its columns by the widest option so far
        (GZWIND FUN_1000337d), and without them the next column's radio touches the text before it */
-    const char *txt_es[5] = { "Normal   ", "Ajustar   ", "125%   ", "150%   ", "200%" };
-    const char *txt_en[5] = { "Normal   ", "Fit   ", "125%   ", "150%   ", "200%" };
+    const char *txt_es[5] = { "Auto   ", "Normal   ", "125%   ", "150%   ", "200%" };
+    const char *txt_en[5] = { "Auto   ", "Normal   ", "125%   ", "150%   ", "200%" };
     if (!sui || !win || IsBadReadPtr(win, 0x90)) return;
     if (ho_v(win, 0x78, 1, HO_GROUP, 0, 0, 0, 0)) { logf("HUDOPT> controls already in this window"); return; }
     fac = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85065))();
@@ -11212,13 +11319,18 @@ static void __stdcall tip_update(void) {
     scale = (double)mdy / (double)wdpi;                    /* physical px per game px */
     if (scale < 1.0) scale = 1.0;
     box = (LONG)((double)ptr / scale + 0.999) + 12;
+    {   /* task uiscale: clearance for the enlarged label. The drawn size is measured only at (base 80, dpi 120): take
+           the larger of the pointer above and the base size scaled to the monitor dpi, so the label errs clear. */
+        LONG big = (LONG)((double)base * mdy / 96.0 + 0.5);
+        g_tip_clr = (LONG)((double)(big > ptr ? big : ptr) / scale + 0.999);
+    }
     if (box <= 0x2c) { g_tip_box = 0x2c; g_tip_uptop = 0x20; g_tip_upbot = 0; }          /* shipped */
     else             { g_tip_box = box;  g_tip_uptop = 36;   g_tip_upbot = 20; }          /* label above-left */
     if (g_tip_logged != g_tip_box) {
         g_tip_logged = g_tip_box;
-        logf("TIPCURSOR> pointer %ld px (CursorBaseSize %lu%s), monitor dpi %u, window dpi %u -> anchor box %ld game px%s",
+        logf("TIPCURSOR> pointer %ld px (CursorBaseSize %lu%s), monitor dpi %u, window dpi %u -> anchor box %ld game px%s, enlarged label clearance %ld game px",
              ptr, base, g_tipcursor_px > 0 ? ", SC3RESIZE_TIPCURSOR_PX" : "", mdy, wdpi, g_tip_box,
-             g_tip_box == 0x2c ? " (shipped)" : "");
+             g_tip_box == 0x2c ? " (shipped)" : "", g_tip_clr);
     }
 }
 
@@ -11230,6 +11342,10 @@ static __declspec(naked) void tip_stub1(void) {
         call tip_update
         popad
         mov  ecx, [ebx+208h]
+        mov  [g_tip_mx], eax          /* task uiscale: the label's cursor point */
+        mov  [g_tip_my], ecx
+        mov  dword ptr [g_tip_flip], 0
+        mov  dword ptr [g_tip_seen], 1
         mov  edx, eax
         add  edx, [g_tip_box]
         mov  [esi], eax
@@ -11246,6 +11362,7 @@ static __declspec(naked) void tip_stub1(void) {
  * lea edx,[ecx-20h] / mov [ebx+14Ch],edx / mov [ebx+154h],ecx). eax = mx, ecx = my; edx is dead after it. */
 static __declspec(naked) void tip_stub2(void) {
     __asm {
+        mov  dword ptr [g_tip_flip], 1   /* task uiscale */
         mov  [ebx+150h], eax
         mov  edx, eax
         sub  edx, [g_tip_box]
@@ -12187,6 +12304,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_THICKFRAME", v, sizeof(v))) g_thickframe = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_FSKEY", v, sizeof(v))) g_fskey = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_DLGSCALE", v, sizeof(v))) g_dlgscale = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_COSTLABEL_SCALE", v, sizeof(v))) g_costscale = atoi(v);   /* task uiscale */
           if (GetEnvironmentVariableA("SC3RESIZE_WINMEM", v, sizeof(v))) g_winmem = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_RESROW", v, sizeof(v))) g_resrow = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_STARTRES", v, sizeof(v))) g_startres = atoi(v);

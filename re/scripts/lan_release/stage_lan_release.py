@@ -31,7 +31,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 GAME_DIRS = ["Apps", "Cities", "Buildings", "Scripts"]
 GAME_ROOT_FILES = ["SC3U.exe", "GameuxInstallHelper.dll", "Support.ico", "icon.ico", "EULA.txt", "README.TXT"]
 # dev-PC leftovers inside Apps (RE dumps, harness configs, the untouched originals kept beside patched DLLs)
-APPS_SKIP = {"sc3u_stkdmp.txt", "sc3portable.ini", "gzgraphicd.dll.shipped", "simspr.dll.shipped"}
+APPS_SKIP = {"sc3u_stkdmp.txt", "sc3portable.ini", "gzgraphicd.dll.shipped", "simspr.dll.shipped",
+             "sc3resize.ini"}   # task uiscale: the player's Preferencias choice (per PC); shipped, an update would reset it
 APPS_STOCK_FROM_ORIGINAL = ["SIMSPR.DLL", "GZGraphicD.dll"]
 # per-PC state the game or a mod writes: shipped once, never overwritten by the updater
 SEED = {"apps/sc3.cfg", "apps/sc3net.cfg", "apps/sc3u.ini"}

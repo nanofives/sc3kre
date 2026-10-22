@@ -368,3 +368,23 @@ screen the price marking is offset a lot" (`verify/ownerbugs_1021/owner_shots/im
 - Check (client 1584x851, 1.418x, `verify/costlabel/RESULTS.md`): highway drag held in the box, label native at the
   cursor (before: enlarged, pulled up-left); top-left control unchanged; HUD button tooltip still enlarged beside its
   button.
+
+## Auto by default, cost label at the HUD scale (task uiscale, 2026-10-22)
+
+Owner, on the LAN build of main `2564a08`: "auto-apply scaling according to the resolution of the computer, always leave
+it by default auto adjust on the options" and "price tag is hiding under the cursor and it's not scaling with the rest of
+the screen" (`verify/ownerbugs_1021/owner_shots/img17_price_tag_cursor.png`). This supersedes the 2026-10-14 call "a fresh
+install starts at Off".
+
+- Default: `[hud] scale` missing = 1, shown as "Auto" and listed first (the old Fit, same id and value, factor
+  `min(cw/800, ch/600)` per present). An ini written before this build (no `ver` key) with `scale=0` is read as Auto once,
+  since 0 was the old default and OK rewrote it unchanged. Saves write `ver=2`, so a later Normal persists.
+- Cost label: when the COSTLABEL rule keeps the floating tooltip window (vt exe+0xd3bcc) native because the cursor is in
+  the city, it is now drawn enlarged by the HUD factor in a DLGSCALE slot flagged `lbl` (no mouse mapping), placed from
+  the cursor point that the TIPCURSOR stubs record at SIMSPR 0x1004a475 / 0x1004a4d5 (`g_tip_mx/my`): centred under the
+  pointer box, top at `clearance + 2 + 2s` below the hotspot, clearance = max(pointer, CursorBaseSize x dpi / 96) in game
+  px. It moves left of an enlarged HUD window it would cover, then above the hotspot. HUD tooltips are unchanged.
+  `SC3RESIZE_COSTLABEL_SCALE=0` = native.
+- Measured (`verify/uiscale/RESULTS.md`): 1.5x at 1600x900 and 3.307x at 3840x1984, at the centre, the bar, the side panel,
+  the minimap corner and top-left: every decision logged `below the pointer` or `above the hotspot`.
+- `[UNCERTAIN]` drawn pointer size at (base 32, dpi 240): `SM_CYCURSOR` reads 64, and the clearance uses 80.
