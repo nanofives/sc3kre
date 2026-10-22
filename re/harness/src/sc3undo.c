@@ -463,12 +463,12 @@ static int patch_bar_vtable(HMODULE sui) {
     g_bar_notify_orig = (void *)vt[0x1e0 / 4];
     /* 4 bytes at a time: a wider protect restored with one 'old' value can hit a neighbouring page in another
        state (measured: patching while SIMUI was still loading killed the game at ~0.4 s) */
-    if (!VirtualProtect(&vt[0x24 / 4], 4, PAGE_READWRITE, &old)) return 0;
+    if (!VirtualProtect(&vt[0x24 / 4], 4, PAGE_EXECUTE_READWRITE, &old)) return 0;
     vt[0x24 / 4] = (DWORD)bar_init;
-    VirtualProtect(&vt[0x24 / 4], 4, old, &old);
-    if (!VirtualProtect(&vt[0x1e0 / 4], 4, PAGE_READWRITE, &old)) return 0;
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
+    if (!VirtualProtect(&vt[0x1e0 / 4], 4, PAGE_EXECUTE_READWRITE, &old)) return 0;
     vt[0x1e0 / 4] = (DWORD)bar_notify;
-    VirtualProtect(&vt[0x1e0 / 4], 4, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     logf("BTN> bar vtable SIMUI+0xa40ec: Init and child-notify wrapped");
     return 1;
 }
@@ -632,9 +632,9 @@ static DWORD __fastcall mm_notify(void *self, void *edx, DWORD type, DWORD id) {
 
 static int patch_slot(DWORD *slot, DWORD val) {
     DWORD old;
-    if (!VirtualProtect(slot, 4, PAGE_READWRITE, &old)) return 0;
+    if (!VirtualProtect(slot, 4, PAGE_EXECUTE_READWRITE, &old)) return 0;
     *slot = val;
-    VirtualProtect(slot, 4, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     return 1;
 }
 static int patch_minimap_vtable(HMODULE sui) {

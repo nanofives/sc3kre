@@ -70,6 +70,14 @@ different** (both strips, the 4 merge cells, both road cells).
 Every hover adds 1 or 3 points, so after about 500 hovers the On-ramp tool selects nothing (cost $0, click does
 nothing) until a road or rail drag tool is used. Measured during setup (a click with 0 points returned 0).
 
+Measured again 2026-10-21 (task onramp, the owner reported it as a bug: "after placing a ramp the light blue tiles
+disappear ... until I change the selector to something else and come back"). On the lab city, each posted mouse move
+over a valid ramp spot added about 9 points (counter 1 -> 30 after 3 moves, 91 -> 451 after 40), so the cap was
+reached after about 55 moves. At 512 the strip preview is gone, the cost label shows $0 and the click places nothing.
+Picking Demolish and then the On-ramp tool again leaves the counter at 512. Picking the Road tool (menu 0x10004001,
+no drag) resets it to 1 and the preview returns. The counts matched at every step with sc3resize alone and with all
+7 release mods (`verify/onramp/RESULTS.md`). So the symptom is stock.
+
 ## 2. The tables (all `netramp.py tables`)
 
 | table | slots | storage | read by |

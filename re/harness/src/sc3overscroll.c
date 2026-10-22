@@ -129,7 +129,7 @@ static int write_code(BYTE *p, const void *src, int n) {
     DWORD old;
     if (!VirtualProtect(p, n, PAGE_EXECUTE_READWRITE, &old)) return 0;
     memcpy(p, src, n);
-    VirtualProtect(p, n, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     FlushInstructionCache(GetCurrentProcess(), p, n);
     return 1;
 }
@@ -666,14 +666,14 @@ static void patch_windowed(HMODULE gz) {
     BYTE *p = (BYTE *)gz + 0x6cdac;         /* the windowed flag Init reads */
     BYTE *q = (BYTE *)gz + 0x117d6;         /* the fullscreen re-force store */
     DWORD old;
-    if (VirtualProtect(p, 1, PAGE_READWRITE, &old)) {
-        BYTE before = *p; *p = 1; VirtualProtect(p, 1, old, &old);
+    if (VirtualProtect(p, 1, PAGE_EXECUTE_READWRITE, &old)) {
+        BYTE before = *p; *p = 1; (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
         logf("--- WINDOWED: GZGraphicD+0x6cdac = %u -> 1", before);
     } else logf("--- WINDOWED: VirtualProtect failed at +0x6cdac (%lu)", GetLastError());
     if (q[0] == 0xC6 && q[1] == 0x43 && q[2] == 0x48 && q[3] == 0x01) {
         DWORD o2;
         if (VirtualProtect(q, 4, PAGE_EXECUTE_READWRITE, &o2)) {
-            q[0] = q[1] = q[2] = q[3] = 0x90; VirtualProtect(q, 4, o2, &o2);
+            q[0] = q[1] = q[2] = q[3] = 0x90; (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
             FlushInstructionCache(GetCurrentProcess(), q, 4);
             logf("--- WINDOWED: GZGraphicD+0x117D6 'mov [ebx+0x48],1' -> nop x4");
         }
@@ -723,7 +723,7 @@ static void patch_surfacefmt(HMODULE gz) {
     site[0] = 0xE9;
     { DWORD rel = (DWORD)cave - (DWORD)(site + 5); memcpy(site + 1, &rel, 4); }
     site[5]=site[6]=site[7]=site[8]=site[9]=0x90;
-    VirtualProtect(site, 10, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     FlushInstructionCache(GetCurrentProcess(), site, 10);
     logf("--- FIX16: 16bpp branch injected at 0x19349 -> cave 0x%08lX (5-6-5)", (DWORD)cave);
 }
@@ -766,10 +766,10 @@ static int patch_arrows(HMODULE spr) {
         logf("### ARROWS: vtable slot SIMSPR+0x678d4 differs from shipped - NOT installed");
         return 0;
     }
-    if (!VirtualProtect(slot, 4, PAGE_READWRITE, &old)) return 0;
+    if (!VirtualProtect(slot, 4, PAGE_EXECUTE_READWRITE, &old)) return 0;
     g_edge_orig = (PFN_Edge)*slot;
     *slot = (DWORD)edge_wrap;
-    VirtualProtect(slot, 4, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     return 1;
 }
 

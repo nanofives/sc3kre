@@ -289,7 +289,7 @@ static int fnlog_install_one(FNLOG *e, int idx) {
     t[0] = 0xE9;
     *(DWORD *)(t + 1) = (DWORD)stub - (DWORD)(t + 5);
     { int j; for (j = 5; j < len; j++) t[j] = 0x90; }
-    VirtualProtect(t, (SIZE_T)len, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     FlushInstructionCache(GetCurrentProcess(), t, (SIZE_T)len);
 
     e->tramp = tr;
@@ -1990,7 +1990,7 @@ static void *rz_detour_movimm(HMODULE mod, DWORD rva, DWORD imm_rva, void *det, 
     FlushInstructionCache(GetCurrentProcess(), tr, 16);
     if (!VirtualProtect(fn, 5, PAGE_EXECUTE_READWRITE, &old)) { VirtualFree(tr, 0, MEM_RELEASE); return NULL; }
     fn[0] = 0xE9; *(DWORD *)(fn + 1) = (DWORD)det - (DWORD)(fn + 5);
-    VirtualProtect(fn, 5, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     FlushInstructionCache(GetCurrentProcess(), fn, 5);
     logf("DLGSTAY> detour installed at %s", name);
     return tr;
@@ -2025,7 +2025,7 @@ static void *rz_detour6(HMODULE mod, DWORD rva, const BYTE *expect, void *det, c
     FlushInstructionCache(GetCurrentProcess(), tr, 16);
     if (!VirtualProtect(fn, 6, PAGE_EXECUTE_READWRITE, &old)) { VirtualFree(tr, 0, MEM_RELEASE); return NULL; }
     fn[0] = 0xE9; *(DWORD *)(fn + 1) = (DWORD)det - (DWORD)(fn + 5); fn[5] = 0x90;
-    VirtualProtect(fn, 6, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     FlushInstructionCache(GetCurrentProcess(), fn, 6);
     logf("DLGSTAY> detour installed at %s", name);
     return tr;
@@ -5675,11 +5675,11 @@ static int rz_hp_lazy_ready(void *surf) {
             return 0;
         }
     }
-    if (!VirtualProtect(&vt[0x1c / 4], 0x64 - 0x1c + 4, PAGE_READWRITE, &old)) { g_hp_lzinst = -1; return 0; }
+    if (!VirtualProtect(&vt[0x1c / 4], 0x64 - 0x1c + 4, PAGE_EXECUTE_READWRITE, &old)) { g_hp_lzinst = -1; return 0; }
     g_hp_next_bltfast = (RZ_BLTFAST)vt[0x1c / 4]; vt[0x1c / 4] = (DWORD)rz_hp_bltfast_hook;
     g_hp_next_getdc = (RZ_GETDC)vt[0x44 / 4];     vt[0x44 / 4] = (DWORD)rz_hp_getdc_hook;
     g_hp_next_lock = (RZ_LOCK)vt[0x64 / 4];       vt[0x64 / 4] = (DWORD)rz_hp_lock_hook;
-    VirtualProtect(&vt[0x1c / 4], 0x64 - 0x1c + 4, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     g_hp_lzinst = 1;
     logf("HUDPERF> lazy restore on: BltFast/GetDC/Lock hooked on vtable 0x%08lX over 0x%08lX 0x%08lX 0x%08lX%s", (DWORD)vt,
          (DWORD)g_hp_next_bltfast, (DWORD)g_hp_next_getdc, (DWORD)g_hp_next_lock, perf ? " (after sc3perf)" : "");
@@ -6240,7 +6240,7 @@ static int ho_hook(HMODULE sui, DWORD rva, const BYTE *expect, int len, void *de
     fn[0] = 0xE9;
     *(DWORD *)(fn + 1) = (DWORD)detour - (DWORD)(fn + 5);
     for (i = 5; i < len; i++) fn[i] = 0x90;
-    VirtualProtect(fn, len, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     FlushInstructionCache(GetCurrentProcess(), fn, len);
     logf("HUDOPT> detour on SIMUI+0x%lx (%s)", rva, name);
     return 1;
@@ -6986,10 +6986,10 @@ static void rz_patch_ddblt_surf(DWORD surf) {
     svt = *(DWORD **)surf;
     if (!svt || IsBadReadPtr(svt, 0x84)) return;
     if (svt[0x14 / 4] < ddbase || svt[0x14 / 4] >= ddbase + ddsize) return;
-    if (!VirtualProtect(&svt[0x14 / 4], 4, PAGE_READWRITE, &old)) return;
+    if (!VirtualProtect(&svt[0x14 / 4], 4, PAGE_EXECUTE_READWRITE, &old)) return;
     g_orig_blt = (RZ_BLT)svt[0x14 / 4];
     svt[0x14 / 4] = (DWORD)rz_blt_hook;
-    VirtualProtect(&svt[0x14 / 4], 4, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     g_blt_slot = &svt[0x14 / 4];
     logf("BLT> ddraw Blt hooked from the blit wrapper's surface (menu): slot 0x%08lX, original 0x%08lX",
          (DWORD)g_blt_slot, (DWORD)g_orig_blt);
@@ -7019,10 +7019,10 @@ static void rz_patch_ddblt(void) {
         g_blt_slot = (DWORD *)-1;                            /* do not retry every frame */
         return;
     }
-    if (!VirtualProtect(&svt[0x14 / 4], 4, PAGE_READWRITE, &old)) return;
+    if (!VirtualProtect(&svt[0x14 / 4], 4, PAGE_EXECUTE_READWRITE, &old)) return;
     g_orig_blt = (RZ_BLT)svt[0x14 / 4];
     svt[0x14 / 4] = (DWORD)rz_blt_hook;
-    VirtualProtect(&svt[0x14 / 4], 4, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     g_blt_slot = &svt[0x14 / 4];
     logf("BLT> ddraw Blt hooked: vt+0x14 slot at 0x%08lX, original 0x%08lX (ddraw+0x%lX)",
          (DWORD)g_blt_slot, (DWORD)g_orig_blt, (DWORD)g_orig_blt - ddbase);
@@ -10524,7 +10524,7 @@ static void patch_startres(HMODULE gz) {
     if (!VirtualProtect(t, 5, PAGE_EXECUTE_READWRITE, &old)) return;
     g_sr_gz = (DWORD)gz;
     t[0] = 0xE9; *(DWORD *)(t + 1) = (DWORD)rz_startres_hook - (DWORD)(t + 5);
-    VirtualProtect(t, 5, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     FlushInstructionCache(GetCurrentProcess(), t, 5);
     logf("STARTRES> FUN_10010ed1 hooked: the game starts at %dx%d", NAT_W, NAT_H);
 }
@@ -10533,14 +10533,14 @@ static void patch_windowed(HMODULE gz) {
     BYTE *p = (BYTE *)gz + 0x6cdac;         /* the windowed flag Init reads */
     BYTE *q = (BYTE *)gz + 0x117d6;         /* the fullscreen re-force store */
     DWORD old;
-    if (VirtualProtect(p, 1, PAGE_READWRITE, &old)) {
-        BYTE before = *p; *p = 1; VirtualProtect(p, 1, old, &old);
+    if (VirtualProtect(p, 1, PAGE_EXECUTE_READWRITE, &old)) {
+        BYTE before = *p; *p = 1; (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
         logf("--- WINDOWED: GZGraphicD+0x6cdac = %u -> 1", before);
     } else logf("--- WINDOWED: VirtualProtect failed at +0x6cdac (%lu)", GetLastError());
     if (q[0] == 0xC6 && q[1] == 0x43 && q[2] == 0x48 && q[3] == 0x01) {
         DWORD o2;
         if (VirtualProtect(q, 4, PAGE_EXECUTE_READWRITE, &o2)) {
-            q[0] = q[1] = q[2] = q[3] = 0x90; VirtualProtect(q, 4, o2, &o2);
+            q[0] = q[1] = q[2] = q[3] = 0x90; (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
             FlushInstructionCache(GetCurrentProcess(), q, 4);
             logf("--- WINDOWED: GZGraphicD+0x117D6 'mov [ebx+0x48],1' -> nop x4");
         }
@@ -10590,7 +10590,7 @@ static void patch_surfacefmt(HMODULE gz) {
     site[0] = 0xE9;
     { DWORD rel = (DWORD)cave - (DWORD)(site + 5); memcpy(site + 1, &rel, 4); }
     site[5]=site[6]=site[7]=site[8]=site[9]=0x90;
-    VirtualProtect(site, 10, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     FlushInstructionCache(GetCurrentProcess(), site, 10);
     logf("--- FIX16: 16bpp branch injected at 0x19349 -> cave 0x%08lX (5-6-5)", (DWORD)cave);
 }
@@ -10638,7 +10638,7 @@ static void patch_frame_style(HMODULE gz) {
         if (!VirtualProtect(p, 1, PAGE_EXECUTE_READWRITE, &old)) {
             logf("--- FRAME: VirtualProtect failed at +0x%lX (%lu)", s[i].rva + s[i].at, GetLastError()); return; }
         *p = s[i].want;
-        VirtualProtect(p, 1, old, &old);
+        (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
         FlushInstructionCache(GetCurrentProcess(), p, 1);
     }
     logf("--- FRAME: GZGraphicD create mask 0x1b->0x3b, or 0x10000->0x50000, live style 0x90C80000->0x90CD0000 "
@@ -10810,7 +10810,7 @@ static void patch_efa1_emptybucket(HMODULE ss) {
         logf("--- EFA1_GUARD: VirtualProtect failed (%lu)", GetLastError()); return;
     }
     site[1] = 0x35;                      /* je 0x1000efe3 -> je 0x1000eff9 */
-    VirtualProtect(site, 2, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     FlushInstructionCache(GetCurrentProcess(), site, 2);
     logf("--- EFA1_GUARD: empty-bucket branch 0xefc2 retargeted to the ret (was -> 0xefe3 deref)");
 }
@@ -11096,7 +11096,7 @@ static void patch_lcenter(HMODULE ss) {
     if (!VirtualProtect(f, sizeof(orig), PAGE_EXECUTE_READWRITE, &old)) return;
     f[0] = 0xE9; *(DWORD *)(f + 1) = (DWORD)lcenter_stub - (DWORD)(f + 5);
     for (i = 5; i < (int)sizeof(orig); i++) f[i] = 0x90;
-    VirtualProtect(f, sizeof(orig), old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     FlushInstructionCache(GetCurrentProcess(), f, sizeof(orig));
     logf("--- LCENTER: lcenter=1, CenterOnTile centres on the visible map area (SIMSPR+0x1d09c)");
 }
@@ -11227,7 +11227,7 @@ static void patch_tipcursor(HMODULE ss) {
     for (i = 5; i < (int)sizeof(o1); i++) f1[i] = 0x90;
     f2[0] = 0xE9; *(DWORD *)(f2 + 1) = (DWORD)tip_stub2 - (DWORD)(f2 + 5);
     for (i = 5; i < (int)sizeof(o2); i++) f2[i] = 0x90;
-    VirtualProtect(f1, 0x4a4ef - 0x4a475, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     FlushInstructionCache(GetCurrentProcess(), f1, 0x4a4ef - 0x4a475);
     logf("--- TIPCURSOR: tipcursor=1, the cost label's anchor box follows the drawn pointer size (SIMSPR+0x4a475, +0x4a4d5)");
 }
@@ -11322,7 +11322,7 @@ static void rz_jmp_patch(BYTE *f, int len, void *to) {
     if (!VirtualProtect(f, len, PAGE_EXECUTE_READWRITE, &old)) return;
     f[0] = 0xE9; *(DWORD *)(f + 1) = (DWORD)to - (DWORD)(f + 5);
     for (i = 5; i < len; i++) f[i] = 0x90;
-    VirtualProtect(f, len, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     FlushInstructionCache(GetCurrentProcess(), f, len);
 }
 
@@ -11348,9 +11348,9 @@ static void patch_zoomcenter(HMODULE ss) {
     for (k = 0; k < 4; k++) g_zc_orig[k] = (DWORD)ss + fn[k];
     rz_jmp_patch(fz, sizeof(zoom), zc_zoom_stub);
     rz_jmp_patch(fr, sizeof(rot), zc_rot_stub);
-    if (VirtualProtect(vt, 0x18, PAGE_READWRITE, &old)) {
+    if (VirtualProtect(vt, 0x18, PAGE_EXECUTE_READWRITE, &old)) {
         for (k = 0; k < 4; k++) *(DWORD *)((BYTE *)ss + slot[k]) = (DWORD)wrap[k];
-        VirtualProtect(vt, 0x18, old, &old);
+        (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     }
     logf("--- ZOOMCENTER: zoomcenter=%d, zoom/rotate keep the map-area centre tile (SIMSPR+0x688d, +0x6b0f, iso vt+0x60/64/70/74)%s",
          g_zoomcenter, g_zoomcenter == 2 ? ", stock at 800x600" : "");
@@ -11392,14 +11392,14 @@ static void patch_gridb_clamp(HMODULE ss) {
         if (!VirtualProtect(cave, c->nbytes, PAGE_EXECUTE_READWRITE, &old)) {
             logf("--- GRIDB_CLAMP %s: VP(cave) failed %lu", c->name, GetLastError()); continue; }
         memcpy(cave, c->bytes, c->nbytes);
-        VirtualProtect(cave, c->nbytes, old, &old);
+        (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
         FlushInstructionCache(GetCurrentProcess(), cave, c->nbytes);
         if (!VirtualProtect(hook, c->stolen, PAGE_EXECUTE_READWRITE, &old)) {
             logf("--- GRIDB_CLAMP %s: VP(hook) failed %lu", c->name, GetLastError()); continue; }
         rel = c->cave - (c->hook + 5);
         hook[0] = 0xe9; memcpy(hook + 1, &rel, 4);
         for (i = 5; i < c->stolen; i++) hook[i] = 0x90;
-        VirtualProtect(hook, c->stolen, old, &old);
+        (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
         FlushInstructionCache(GetCurrentProcess(), hook, c->stolen);
         logf("--- GRIDB_CLAMP %s: index clamped (hook 0x%X -> cave 0x%X, base 0x%08lX)",
              c->name, c->hook, c->cave, (DWORD)ss);
@@ -11461,7 +11461,7 @@ static void rz_hook_cdcd(HMODULE sui) {
     }
     fn[0] = 0xE9;                                      /* jmp rz_cdcd_detour */
     *(DWORD *)(fn + 1) = (DWORD)rz_cdcd_detour - (DWORD)(fn + 5);
-    VirtualProtect(fn, 5, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     FlushInstructionCache(GetCurrentProcess(), fn, 5);
     logf("CDCD> logging detour installed at SIMUI+0x4cdcd (trampoline 0x%08lX)", (DWORD)tr);
 }
@@ -11509,7 +11509,7 @@ static void rz_hook_e81c(HMODULE sui) {
     g_orig_e81c = (void *)tr;
     if (!VirtualProtect(fn, 5, PAGE_EXECUTE_READWRITE, &old)) { g_orig_e81c = NULL; return; }
     fn[0] = 0xE9; *(DWORD *)(fn + 1) = (DWORD)rz_e81c_detour - (DWORD)(fn + 5);
-    VirtualProtect(fn, 5, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     FlushInstructionCache(GetCurrentProcess(), fn, 5);
     logf("E81C> icon-draw logging detour installed at SIMUI+0x4e81c");
 }
@@ -11570,7 +11570,7 @@ static void rz_hook_cac8(HMODULE sui) {
     g_orig_cac8 = (void *)tr;
     if (!VirtualProtect(fn, 6, PAGE_EXECUTE_READWRITE, &old)) { g_orig_cac8 = NULL; return; }
     fn[0] = 0xE9; *(DWORD *)(fn + 1) = (DWORD)rz_cac8_detour - (DWORD)(fn + 5); fn[5] = 0x90;
-    VirtualProtect(fn, 6, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     FlushInstructionCache(GetCurrentProcess(), fn, 6);
     logf("CAC8> a917c icon-paint logging detour installed at SIMUI+0x4cac8");
 }
@@ -11711,7 +11711,7 @@ static void patch_hud_reflow(HMODULE sui) {
         logf("--- HUD: VirtualProtect failed (%lu)", GetLastError()); return; }
     t[0] = 0xE9; *(DWORD *)(t + 1) = (DWORD)cave - (DWORD)(t + 5);
     { int j; for (j = 5; j < len; j++) t[j] = 0x90; }
-    VirtualProtect(t, (SIZE_T)len, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     FlushInstructionCache(GetCurrentProcess(), t, (SIZE_T)len);
     logf("--- HUD: FUN_100270e5 wrapped (cave 0x%08lX tr 0x%08lX) - top-strip reflow armed", (DWORD)cave, (DWORD)tr);
 }
@@ -11754,7 +11754,7 @@ static void patch_fieldbg(HMODULE sui) {
     if (!VirtualProtect(t, 7, PAGE_EXECUTE_READWRITE, &old)) { logf("--- FIELDBG: VirtualProtect failed"); return; }
     t[0] = 0xE9; *(DWORD *)(t + 1) = (DWORD)cave - (DWORD)(t + 5);
     t[5] = 0x90; t[6] = 0x90;
-    VirtualProtect(t, 7, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     FlushInstructionCache(GetCurrentProcess(), t, 7);
     logf("--- FIELDBG: SIMUI FUN_10026a09 field erase reads the ART origin (cave 0x%08lX)", (DWORD)cave);
 }
@@ -11928,7 +11928,7 @@ static DWORD WINAPI intro_watcher(LPVOID param) {
         DWORD fn = i == 0 ? (DWORD)intro_w6900 : (DWORD)intro_w65a0;
         if (!VirtualProtect(s, 5, PAGE_EXECUTE_READWRITE, &old)) { logf("--- INTRO: VirtualProtect failed"); return 0; }
         *(LONG *)(s + 1) = (LONG)(fn - (DWORD)(s + 5));
-        VirtualProtect(s, 5, old, &old);
+        (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
         FlushInstructionCache(GetCurrentProcess(), s, 5);
     }
     logf("--- INTRO: armed (mode %d) - UV.DLL base 0x%08lX, writer calls at +0x5ef9/+0x5e2a re-targeted",

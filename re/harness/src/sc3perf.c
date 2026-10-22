@@ -1834,13 +1834,23 @@ static DWORD WINAPI rc_watcher(LPVOID p) {
         me.dwSize = sizeof(me);
         if (s != INVALID_HANDLE_VALUE && Module32First(s, &me)) do {
             DWORD b = (DWORD)me.modBaseAddr;
+            HMODULE pin = NULL;
             int j, seen = 0;
             for (j = 0; j < nd; j++) if (done[j] == b) seen = 1;
             if (seen || nd >= 128) continue;
-            done[nd++] = b;
             if (_strnicmp(me.szExePath, apps, strlen(apps)) || !lstrcmpiA(me.szModule, "SimTransit.dll") ||
-                !_strnicmp(me.szModule, "sc3", 3) || !lstrcmpiA(me.szModule, "SC3U.exe")) continue;
+                !_strnicmp(me.szModule, "sc3", 3) || !lstrcmpiA(me.szModule, "SC3U.exe")) { done[nd++] = b; continue; }
+            /* task onramp: a DLL the snapshot listed can be freed before we read it (startup crash, read of
+               0x7800003C at rc_scan_module's first load, 3 of 23 launches on 2026-10-22). Hold a reference while
+               scanning; a module already gone is skipped and not marked done, so a later load is still scanned. */
+            if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCSTR)b, &pin) || (DWORD)pin != b) {
+                if (pin) FreeLibrary(pin);
+                logf("LAYER_REFCOUNT> %s at 0x%08lX was freed after the module snapshot - skipped", me.szModule, b);
+                continue;
+            }
+            done[nd++] = b;
             rc_scan_module(b, me.szModule);
+            FreeLibrary(pin);
         } while (Module32Next(s, &me));
         if (s != INVALID_HANDLE_VALUE) CloseHandle(s);
         Sleep(50);
@@ -2273,9 +2283,16 @@ static void exec_ranges(void) {
     if (s == INVALID_HANDLE_VALUE) return;
     me.dwSize = sizeof(me);
     if (Module32First(s, &me)) do {
-        DWORD h = (DWORD)me.modBaseAddr, e = *(DWORD *)(h + 0x3c);
-        WORD ns = *(WORD *)(h + e + 6), opt = *(WORD *)(h + e + 0x14), k;
-        DWORD sec = h + e + 0x18 + opt;
+        DWORD h = (DWORD)me.modBaseAddr, e, sec;
+        WORD ns, opt, k;
+        HMODULE pin = NULL;                            /* task onramp: the module may be freed after the snapshot */
+        if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCSTR)h, &pin) || (DWORD)pin != h) {
+            if (pin) FreeLibrary(pin);
+            continue;
+        }
+        e = *(DWORD *)(h + 0x3c);
+        ns = *(WORD *)(h + e + 6); opt = *(WORD *)(h + e + 0x14);
+        sec = h + e + 0x18 + opt;
         for (k = 0; k < ns && g_nex < 512; k++) {
             DWORD sh = sec + (DWORD)k * 40;
             if (*(DWORD *)(sh + 0x24) & 0x20000000) {
@@ -2284,6 +2301,7 @@ static void exec_ranges(void) {
                 g_nex++;
             }
         }
+        FreeLibrary(pin);
     } while (Module32Next(s, &me));
     CloseHandle(s);
 }

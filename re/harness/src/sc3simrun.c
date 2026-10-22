@@ -159,10 +159,10 @@ static int coord_arm(HMODULE simcity) {
         logf("### COORD: slot +0x1326c holds 0x%08lX, expected 0x%08lX - not armed", *slot, want);
         return 0;
     }
-    if (!VirtualProtect(slot, 4, PAGE_READWRITE, &old)) return 0;
+    if (!VirtualProtect(slot, 4, PAGE_EXECUTE_READWRITE, &old)) return 0;
     g_coord_orig = (void *)*slot;
     *slot = (DWORD)coord_thunk;
-    VirtualProtect(slot, 4, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     return 1;
 }
 
@@ -192,10 +192,10 @@ static char __fastcall clk_resume(void *self) { who("RESUME", self, _ReturnAddre
 static int clock_arm(HMODULE simcity) {
     DWORD *slot = (DWORD *)((BYTE *)simcity + 0x139b4), old;
     if (slot[0] != (DWORD)simcity + 0xa0ec || slot[1] != (DWORD)simcity + 0xa145) return 0;
-    if (!VirtualProtect(slot, 8, PAGE_READWRITE, &old)) return 0;
+    if (!VirtualProtect(slot, 8, PAGE_EXECUTE_READWRITE, &old)) return 0;
     g_clk_pause = (PFN_Clk)slot[0]; g_clk_resume = (PFN_Clk)slot[1];
     slot[0] = (DWORD)clk_pause; slot[1] = (DWORD)clk_resume;
-    VirtualProtect(slot, 8, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     return 1;
 }
 
@@ -218,10 +218,10 @@ static DWORD __fastcall co_release(void *self) { who2("RELEASE", self, _ReturnAd
 static int cohold_arm(HMODULE simcity) {
     DWORD *slot = (DWORD *)((BYTE *)simcity + 0x1347c), old;
     if (slot[0] != (DWORD)simcity + 0x58ac || slot[1] != (DWORD)simcity + 0x590e) return 0;
-    if (!VirtualProtect(slot, 8, PAGE_READWRITE, &old)) return 0;
+    if (!VirtualProtect(slot, 8, PAGE_EXECUTE_READWRITE, &old)) return 0;
     g_co_hold = (PFN_Co)slot[0]; g_co_release = (PFN_Co)slot[1];
     slot[0] = (DWORD)co_hold; slot[1] = (DWORD)co_release;
-    VirtualProtect(slot, 8, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     return 1;
 }
 
@@ -333,7 +333,7 @@ static int freeze_arm(HMODULE strt, HMODULE simcity) {
     p[0] = 0xE8;                                 /* call rel32 freeze_thunk */
     *(DWORD *)(p + 1) = (DWORD)freeze_thunk - (DWORD)(p + 5);
     p[5] = 0x90;
-    VirtualProtect(p, 6, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     FlushInstructionCache(GetCurrentProcess(), p, 6);
     g_freeze_armed = 1;
     return 1;
@@ -351,7 +351,7 @@ static int patch_scroll_hold(HMODULE spr) {
     }
     if (!VirtualProtect(p + 12, 1, PAGE_EXECUTE_READWRITE, &old)) return 0;
     p[12] = 0xEB;
-    VirtualProtect(p + 12, 1, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     FlushInstructionCache(GetCurrentProcess(), p + 12, 1);
     return 1;
 }
@@ -399,7 +399,7 @@ static int patch_scroll_anim(HMODULE spr) {
         if (!VirtualProtect(q, 5, PAGE_EXECUTE_READWRITE, &old)) return 0;
         q[0] = 0xE8;
         *(DWORD *)(q + 1) = (DWORD)anim_stub - (DWORD)(q + 5);
-        VirtualProtect(q, 5, old, &old);
+        (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
         FlushInstructionCache(GetCurrentProcess(), q, 5);
     }
     g_anim_armed = 1;
@@ -463,7 +463,7 @@ static int patch_strips(HMODULE strt) {
     p[0] = 0xE9;
     *(DWORD *)(p + 1) = (DWORD)strip_entry - (DWORD)(p + 5);
     p[5] = 0x90;
-    VirtualProtect(p, 6, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     FlushInstructionCache(GetCurrentProcess(), p, 6);
     g_strip_armed = 1;
     return 1;
@@ -536,7 +536,7 @@ static int patch_tickstrip(HMODULE strt) {
     p[0] = 0xE9;
     *(DWORD *)(p + 1) = (DWORD)tick_entry - (DWORD)(p + 5);
     p[5] = 0x90;
-    VirtualProtect(p, 6, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     FlushInstructionCache(GetCurrentProcess(), p, 6);
     return 1;
 }
@@ -553,7 +553,7 @@ static int set_car_margin(int m) {
     was = g_margin_at[0];
     if (!VirtualProtect(g_margin_at, 1, PAGE_EXECUTE_READWRITE, &old)) return -1;
     g_margin_at[0] = (BYTE)m;
-    VirtualProtect(g_margin_at, 1, old, &old);
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     FlushInstructionCache(GetCurrentProcess(), g_margin_at, 1);
     return was;
 }

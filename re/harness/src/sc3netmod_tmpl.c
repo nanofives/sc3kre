@@ -21,6 +21,12 @@
  *     that retile and every later one keep them (FUN_1001547b, TILER_SIM.md 3).
  * Keys (game window subclass): T cycles the templates (off -> 1 -> 2 -> .. -> off) and selects the On-ramp tool
  * (menu command 0x10004302) when a template is chosen; R turns it a quarter. Both only without Ctrl / Alt.
+ * RAMPCAP (task onramp 2026-10-21, SC3NETMOD_RAMPCAP=0 turns it off): the same hover wrapper is installed even when no
+ * template is loaded, and resets DAT_100322a4 (the add-point cap of FUN_10004754, NET_RAMPS.md 1.2) before every
+ * On-ramp hover. Stock only resets it in the road / rail drag path builder FUN_1000488d, and the hover adds ~9 points
+ * per mouse move, so after ~55 moves the On-ramp preview vanished and clicks placed nothing until the Road tool was
+ * picked (owner report on 2cedb34, stock in an A/B: verify/onramp/RESULTS.md). The hover erases the selection's point
+ * vector before it adds, so the counter is the only state that grew.
  * Removal: netpack puts the template pieces of a package in one Collapse.txt group; g_tmpl_keep stops the INHERIT
  * block from mapping those ids to their base in the Collapse walk (sc3netmod_bridge.c), so the walk sees the group.
  */
@@ -41,6 +47,7 @@ static BYTE *g_tm_m;                                  /* SIMNTWRK base */
 static DWORD g_tm_orig_hover, g_tm_orig_cost, g_tm_orig_build;
 static int g_tm_hx = 0x7fffffff, g_tm_hz;             /* anchor of the last template hover */
 static volatile LONG g_tm_n_hover, g_tm_n_place, g_tm_n_refused;
+static int g_tm_capfix;                               /* task onramp: reset the add-point cap before each hover */
 static HWND g_tm_hwnd;
 static WNDPROC g_tm_oldproc;
 
@@ -200,6 +207,7 @@ static char __fastcall tm_hover(BYTE *sel, void *edx, DWORD a1, int *cell, DWORD
     TmOri *o;
     int k, X, Z, box[6], un[6], *old = (int *)(sel + 0x78);
     void *hl;
+    if (g_tm_capfix) *(DWORD *)(g_tm_m + 0x322a4) = 0;           /* task onramp: RAMPCAP */
     if (!tm_active() || !cell) return ((PFN_Hover)g_tm_orig_hover)(sel, edx, a1, cell, a3, a4);
     o = tm_ori(&t);
     X = (cell[0] >> 8) - (o->w - 1) / 2;
@@ -346,6 +354,18 @@ static int tmpl_install(BYTE *m) {
     static char names[64][MAX_PATH];
     DWORD *s_hover = (DWORD *)(m + 0x2c1bc), *s_cost = (DWORD *)(m + 0x2c7bc + 0x90),
           *s_build = (DWORD *)(m + 0x2c7bc + 0xac), v;
+    /* task onramp: RAMPCAP wraps the hover slot first, templates or not */
+    if (env_off("SC3NETMOD_RAMPCAP")) logf("rampcap: off (SC3NETMOD_RAMPCAP=0)");
+    else if (*s_hover != (DWORD)m + 0x9d20) logf("### rampcap: slot 0x1002c1bc does not hold FUN_10009d20 - RAMPCAP OFF");
+    else {
+        g_tm_m = m;
+        g_tm_orig_hover = *s_hover;
+        v = (DWORD)tm_hover;
+        if (write_code((BYTE *)s_hover, &v, 4)) {
+            g_tm_capfix = 1;
+            logf("rampcap: On-ramp hover 0x1002c1bc wrapped, add-point cap DAT_100322a4 reset before each hover");
+        }
+    }
     if (env_off("SC3NETMOD_TMPL")) { logf("tmpl: off (SC3NETMOD_TMPL=0)"); return 0; }
     g_tm = (Tmpl *)VirtualAlloc(NULL, sizeof(Tmpl) * TM_MAXT, MEM_COMMIT, PAGE_READWRITE);
     if (!g_tm) return 0;
@@ -372,13 +392,15 @@ static int tmpl_install(BYTE *m) {
     }
     if (!g_ntm) { logf("tmpl: no templates in the tables"); return 0; }
     g_tm_m = m;
-    if (*s_hover != (DWORD)m + 0x9d20 || *s_cost != (DWORD)m + 0x145aa || *s_build != (DWORD)m + 0xabde) {
+    if ((*s_hover != (DWORD)m + 0x9d20 && !g_tm_capfix) || *s_cost != (DWORD)m + 0x145aa ||
+        *s_build != (DWORD)m + 0xabde) {
         logf("### tmpl: vtable slots 0x1002c1bc / mgr+0x90 / mgr+0xac do not hold the shipped functions - TMPL OFF");
         g_ntm = 0;
         return 0;
     }
-    g_tm_orig_hover = *s_hover; g_tm_orig_cost = *s_cost; g_tm_orig_build = *s_build;
-    v = (DWORD)tm_hover; ok += write_code((BYTE *)s_hover, &v, 4);
+    if (g_tm_capfix) ok++;                                        /* task onramp: hover already wrapped by RAMPCAP */
+    else { g_tm_orig_hover = *s_hover; v = (DWORD)tm_hover; ok += write_code((BYTE *)s_hover, &v, 4); }
+    g_tm_orig_cost = *s_cost; g_tm_orig_build = *s_build;
     v = (DWORD)tm_cost;  ok += write_code((BYTE *)s_cost, &v, 4);
     v = (DWORD)tm_build; ok += write_code((BYTE *)s_build, &v, 4);
     logf("tmpl: %d template(s), %d of 3 slots wrapped (hover 0x1002c1bc, cost mgr+0x90, build mgr+0xac); keys: T cycle, "
