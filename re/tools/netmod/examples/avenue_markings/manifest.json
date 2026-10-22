@@ -3,7 +3,7 @@
  "name": "avenue_markings",
  "version": "0.1.0",
  "author": "netmod (task avenues)",
- "description": "The stock straight avenue (11204) and its end caps (11203) with white dashed lane lines instead of the yellow centre line (owner, 2026-10-17: on avenues every lane gets a white dashed line). Pattern from stock highway 73: four dashes per cell. Built by `py -3 ../../avenue_markings.py build .` in this folder before install (art/ is made from the game's frames and is not shipped). Layer 1 of 11204 (the median trees) stays stock.",
+ "description": "The stock straight avenue (11204) with white dashed lane lines instead of the yellow centre line (owner, 2026-10-17: on avenues every lane gets a white dashed line). Pattern from stock highway 73: four dashes per cell. Built by `py -3 ../../avenue_markings.py build .` in this folder before install (art/ is made from the game's frames and is not shipped). 11203 is the stock plain-road curve and is NOT reskinned (it leaked dashes onto every road corner, owner 2026-10-22); avenue ends and corners get their dashed 11203 art from avenue_lanes' 21701 / 21726. Layer 1 of 11204 (the median trees) stays stock.",
  "game": {
   "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
  },
@@ -12,12 +12,6 @@
    "piece": 11204,
    "art": {
     "png_dir": "art/11204"
-   }
-  },
-  {
-   "piece": 11203,
-   "art": {
-    "png_dir": "art/11203"
    }
   }
  ]
