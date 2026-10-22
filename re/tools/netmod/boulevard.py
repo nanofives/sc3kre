@@ -39,6 +39,7 @@ CAP = (20704, 20705, 20706)   # end column where all three roads stop, rows 0 / 
 MIN_COLS = 3             # boulevard columns (not junction, taper or cap columns) a run needs
 TAPER_COLS = 3
 RAG_MAX = 12             # task avx32: the most columns a ragged end leaves to the stock tiler
+SEG_MAX = 16             # task avx32 (img16 split): the most pieces one run is tried as
 MIN_RUN = 4              # columns of three parallel roads a run needs at all (orchestrator ruling 2026-10-17: an
                          # exactly-3x3 full road block belongs to bigrbt, whatever its arms)
 
@@ -54,7 +55,7 @@ def _side(axis, d):
     return {0: {"+s": 1, "-s": 3, "+w": 2, "-w": 0}, 1: {"+s": 2, "-s": 0, "+w": 3, "-w": 1}}[axis][d]
 
 
-def runs(road, have_cap=True, have_taper=True, claimed=frozenset(), band_ok=None):
+def runs(road, have_cap=True, have_taper=True, claimed=frozenset(), band_ok=None, protected=frozenset()):
     """road: set of real ROAD cells -> [{axis, w0, sa, sb, ok, why, want: {cell: (piece, state)}}]
 
     column    s with ROAD at (s, w0..w0+2); clean: no ROAD at (s, w0-1) and (s, w0+3); junction: a straight single road
@@ -68,12 +69,16 @@ def runs(road, have_cap=True, have_taper=True, claimed=frozenset(), band_ok=None
     band_ok   task bvlanes: band_ok(real cell, away side) = sc3netmod's avl_band_ok (would the avenue band through
               that cell convert, counting this end as a join); None = assume it would. A narrowing or a BVX avenue arm
               whose avenue would stay two-way refuses the run (AVENUE_LANES.md program rule).
+    protected task avx32 (img16): real cells holding a ROAD_GRND_Protected piece (level crossing, bridge, tunnel
+              mouth): never boulevard cells (sc3netmod_bv.c bv_prot), BV would overwrite them.
     """
     out = []
     for axis in (0, 1):
         R = {((x, z) if axis == 0 else (z, -x)) for (x, z) in road}
         C = {((x, z) if axis == 0 else (z, -x)) for (x, z) in claimed}                 # task diagbv
-        full = lambda s, w: all((s, w + k) in R and (s, w + k) not in C for k in range(3))     # noqa: E731
+        PR = {((x, z) if axis == 0 else (z, -x)) for (x, z) in protected}              # task avx32 (img16)
+        full = lambda s, w: all((s, w + k) in R and (s, w + k) not in C and (s, w + k) not in PR    # noqa: E731
+                                for k in range(3))
         starts = sorted((s, w) for (s, w) in R if full(s, w) and not full(s - 1, w))
         for (sa, w0) in starts:
             sb = sa
@@ -87,13 +92,22 @@ def runs(road, have_cap=True, have_taper=True, claimed=frozenset(), band_ok=None
                 continue
             def _one(sa, sb, cut):
                 why = ""
-                bad = [None]                                # task avx32: the end the first refusal is about
+                bad = [None, None]          # task avx32: the end the first refusal is about, its bad arm's columns
 
-                def fail(msg, e=None):
+                def fail(msg, e=None, span=None):
                     nonlocal why
                     if not why:
-                        why, bad[0] = msg, e
-                wide, why = BX.spans(R, sa, sb, w0)                 # task bvx: avenue / boulevard arms (bvx.py)
+                        why, bad[0], bad[1] = msg, e, span
+                # task avx32 (img16): a ragged end on a column with road beside it, before the spans (sc3netmod_bv.c)
+                for e, se in enumerate((sb, sa)):
+                    if cut[e] and ((se, w0 - 1) in R or (se, w0 + 3) in R):
+                        fail("ragged end at column %d: not a plain column" % se, e)
+                wide, why_s, bsp = BX.spans(R, sa, sb, w0)          # task bvx: avenue / boulevard arms (bvx.py)
+                # task avx32 (owner img16): a bad arm (2x1 here, 1x1 in the column rule below) is about the run's
+                # end nearer to it
+                near = lambda a, b: 1 if a - sa <= sb - b else 0    # noqa: E731
+                if why_s:
+                    fail(why_s, near(*bsp) if bsp else None, bsp)
                 if band_ok and not why:                             # task bvlanes: avenue arms must convert
                     for sp in {id(v): v for v in wide.values()}.values():
                         for key, w, d in (("n", w0 - 2, "-w"), ("s", w0 + 4, "+w")):      # task avx32: any 2-column arm
@@ -111,7 +125,8 @@ def runs(road, have_cap=True, have_taper=True, claimed=frozenset(), band_ok=None
                         continue
                     arm = lambda w, d: (s, w + d) in R and (s - 1, w) not in R and (s + 1, w) not in R  # noqa: E731
                     if (n and not arm(w0 - 1, -1)) or (so and not arm(w0 + 3, 1)):
-                        fail("road beside the boulevard at column %d is not a straight single road" % s)
+                        fail("road beside the boulevard at column %d is not a straight single road" % s, near(s, s),
+                             (s, s))
                     kind[s] = "J" + ("N" if n else "") + ("S" if so else "")
                 ends, extra = {}, set()
                 for e, (se, step) in enumerate(((sb, 1), (sa, -1))):
@@ -252,39 +267,62 @@ def runs(road, have_cap=True, have_taper=True, claimed=frozenset(), band_ok=None
                             break
                         want.update(bw)
                 return {"axis": axis, "w0": w0, "sa": sa, "sb": sb, "ok": not why, "why": why, "want": want,
-                        "ends": ends, "bad_end": bad[0] if why else None}
+                        "ends": ends, "bad_end": bad[0] if why else None, "bad_span": bad[1] if why else None}
             sa0, sb0 = sa, sb
 
             def run_of(cut):
                 return _one(sa0 + cut[1], sb0 - cut[0], cut)
-            r = run_of((0, 0))
             # task avx32 (orchestrator 2026-10-21): an end this rule cannot build does not take the whole run stock.
             # Its columns stay with the stock tiler (cut 1, 2, ... from that end until the run converts), the rest
-            # converts, middle boxes included. Refusals not about one end (touching road, a bad arm, the AVL program
-            # rule) still refuse the run
-            first, cut = r, [0, 0]
-            for _round in range(2):
-                e = r["bad_end"]
-                if r["ok"] or e is None:
-                    break
-                nxt = None
-                for c in range(1, RAG_MAX + 1):
-                    cc = list(cut)
-                    cc[e] = c
-                    if sb0 - sa0 + 1 - cc[0] - cc[1] < MIN_RUN:
+            # converts, middle boxes included. Refusals not about one end (touching road, road 4+ wide, the AVL program
+            # rule) still refuse the run; a bad arm is about the end nearer to it (task avx32, img16)
+            def fb(base):
+                r = run_of(base)
+                first, cut = r, list(base)
+                for _round in range(4):                     # task avx32 (img16): 4 rounds, each cut only grows
+                    e = r["bad_end"]
+                    if r["ok"] or e is None:
                         break
-                    r2 = run_of(tuple(cc))
-                    if r2["ok"] or (r2["bad_end"] is not None and r2["bad_end"] != e):
-                        nxt, cut = r2, cc
+                    nxt = None
+                    for c in range(cut[e] + 1, base[e] + RAG_MAX + 1):
+                        cc = list(cut)
+                        cc[e] = c
+                        if sb0 - sa0 + 1 - cc[0] - cc[1] < MIN_RUN:
+                            break
+                        r2 = run_of(tuple(cc))
+                        if r2["ok"] or (r2["bad_end"] is not None and r2["bad_end"] != e):
+                            nxt, cut = r2, cc
+                            break
+                    if nxt is None:
                         break
-                if nxt is None:
-                    break
-                r = nxt
-            if not r["ok"]:
-                r, cut = first, [0, 0]
-            r.update({"sa": sa0, "sb": sb0, "cut": tuple(cut),
-                      "why": r["why"] if not r["ok"] else (first["why"] if r is not first else "")})
-            out.append(r)
+                    r = nxt
+                return (r, tuple(cut), first["why"]) if r["ok"] else (first, None, first["why"])
+            # task avx32 (owner 2026-10-22, img16 middle split): a run the end cuts cannot save whose refusal is a bad
+            # arm is split at the arm's columns; each side is a run of its own (cut = the columns left stock at each
+            # side, so the split ends are ragged), tried the same way. Sides shorter than MIN_RUN stay stock.
+            # sc3netmod_bv.c bv_parts
+            segs, parts, firstfail, nseg = [(0, 0)], [], None, 0
+            while segs and nseg < SEG_MAX:
+                base = segs.pop(0)
+                nseg += 1
+                r, cut, why0 = fb(base)
+                if cut is not None:
+                    parts.append((r, cut, why0))
+                    continue
+                firstfail = firstfail or r
+                sp = r["bad_span"]
+                if not sp:
+                    continue
+                for nb in ((sb0 - sp[0] + 1, base[1]), (base[0], sp[1] - sa0 + 1)):
+                    if sb0 - sa0 + 1 - nb[0] - nb[1] >= MIN_RUN:
+                        segs.append(nb)
+            if not parts:
+                firstfail.update({"sa": sa0, "sb": sb0, "cut": (0, 0)})
+                out.append(firstfail)
+            for r, cut, why0 in parts:
+                r.update({"sa": sa0, "sb": sb0, "cut": cut, "split": firstfail is not None,
+                          "why": firstfail["why"] if firstfail else why0})
+                out.append(r)
     return out
 
 

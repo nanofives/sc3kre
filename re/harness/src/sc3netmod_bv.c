@@ -14,6 +14,9 @@
  *            the last BV_TAPER columns, two adjacent rows going on -> narrowing to that avenue over the last
  *            BV_TAPER columns (task boulevard, 20750..), anything else -> the run is left to the stock tiler
  *  accepted  at least BV_MIN_COLS clean columns besides the end regions, no junction in or next to an end region
+ *            (task avx32: a refusal about one end - incl. a bad arm, img16 - leaves that end stock, bv_run_fb;
+ *            a Protected ROAD piece - level crossing, bridge, tunnel mouth - is never a boulevard cell, bv_prot;
+ *            a bad arm the end cuts cannot reach splits the run there into two boulevards, bv_parts)
  *            (task avx32: a road / avenue crossing may stand next to a cap; a run ending ON a single road makes its
  *            last column a 1-column BVX box),
  *            no other ROAD 8-touching the run (junction arms and the road a taper goes on into excepted)
@@ -25,7 +28,8 @@
  * BV_MIN_RUN = 4 columns, whatever its arms: bigrbt's), the two OUTER rows going on at an end (two separate roads).
  * Avenue and boulevard junctions (2- or 3-wide spans, and a run ending on one): sc3netmod_bvx.c (task bvx), without
  * its `bvxb` lines refused as not a straight single road.
- * Write = FUN_10008919 per cell (as RBT / DAV). Revert = rect retile of a boulevard piece no run kept. Save: every
+ * Write = FUN_10008919 per cell (as RBT / DAV). Revert = rect retile of a boulevard piece no run kept, done BEFORE
+ * the writes (task avx32: a revert's retile reaches the run's own cells). Save: every
  * piece saves as its base (OUTER 11204 and MIDDLE 29 in the stock states, junction / end pieces 43), so a game without
  * the mod keeps the roads joined. Off: SC3NETMOD_BV=0.
  * Table lines: `bvp <outer> <middle> <nose> <nose2> <jn> <jm> <jf>`, `bvc <row0> <row1> <row2>`,
@@ -159,8 +163,9 @@ typedef struct {
     BvCell *cell;
     int n;
     int natt, att[8][5];        /* task bvlanes: (boulevard end cell, attached avenue cell, side) of the run decided */
+    int bja, bjb;               /* task avx32 (img16 split): columns of the bad arm bv_run1 refused, -1 none */
 } BvPass;
-static int bvx_spans(BvPass *p, int sa, int sb, int w0, BYTE *kind, const char **why);            /* task bvx */
+static int bvx_spans(BvPass *p, int sa, int sb, int w0, BYTE *kind, const char **why, int *bad_e);  /* task bvx */
 static int bvx_boxes(BvPass *p, int sa, int sb, int w0, const BYTE *kind, int lo_tee, int hi_tee, int lo_av,
                      int hi_av);                                                       /* task bvx, avx32 */
 static int bvx_cells_on(void);                                     /* task avx32: bvxc box cells declared */
@@ -170,9 +175,21 @@ static int bv_rx(int axis, int s, int w) { return axis ? -w : s; }
 static int bv_rz(int axis, int s, int w) { return axis ? s : w; }
 static int bv_road(BvPass *p, int s, int w) { return rb_at(&p->b, bv_rx(p->axis, s, w), bv_rz(p->axis, s, w)) != 0; }
 static int bv_cl(BvPass *p, int s, int w) { return dbv_claimed(bv_rx(p->axis, s, w), bv_rz(p->axis, s, w)); } /* task diagbv */
+/* task avx32 (img16): a ROAD piece the game keeps out of re-tiling (ROAD_GRND_Protected: level crossings 67 / 69,
+   road x highway 11258, tunnel mouths 63 / 64, bridges 81.. / 11265..; netpack variants inherit their base's
+   membership, templates are added) is never a boulevard cell: BV would overwrite it. FUN_1001a7f7(net 1 = ROAD, id),
+   answers cached per id (0 not asked, 1 no, 2 yes) */
+static BYTE g_bv_pk[65536];
+static int bv_prot(BvPass *p, int s, int w) {
+    DWORD v = rb_at(&p->b, bv_rx(p->axis, s, w), bv_rz(p->axis, s, w)), id = v & 0xffff;
+    if (!v) return 0;
+    if (!g_bv_pk[id]) g_bv_pk[id] = ((PFN_Prot)(g_rb_m + 0x1a7f7))(1, id) ? 2 : 1;
+    return g_bv_pk[id] == 2;
+}
 static int bv_full(BvPass *p, int s, int w) {
     return bv_road(p, s, w) && bv_road(p, s, w + 1) && bv_road(p, s, w + 2) &&
-           !bv_cl(p, s, w) && !bv_cl(p, s, w + 1) && !bv_cl(p, s, w + 2);   /* task diagbv: a diagonal boulevard's */
+           !bv_cl(p, s, w) && !bv_cl(p, s, w + 1) && !bv_cl(p, s, w + 2) &&   /* task diagbv: a diagonal boulevard's */
+           !bv_prot(p, s, w) && !bv_prot(p, s, w + 1) && !bv_prot(p, s, w + 2);              /* task avx32 (img16) */
 }
 
 static void bv_put(BvPass *p, int s, int w, WORD piece, int st) {
@@ -191,6 +208,7 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
     int sb = sa, s, k, e, n, ncl = 0, endtyp[2], endkeep[2], endlo, endhi, normlo, normhi, teew[2] = { 0, 0 };
     *why = "";
     *bad_e = -1;
+    p->bja = p->bjb = -1;                                                /* task avx32 (img16 split) */
     p->natt = 0;                                                         /* task bvlanes */
     while (bv_full(p, sb + 1, w0) && sb - sa < BV_MAX_RUN - 1) sb++;
     *psb = sb;
@@ -199,16 +217,26 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
     n = sb - sa + 1;
     if (n < BV_MIN_COLS) return 0;
     if (n < BV_MIN_RUN) { *why = "3-column run: a 3x3 block (bigrbt's)"; return 0; }
+    /* task avx32 (img16): a ragged end on a column with road beside it is refused before the spans, so bv_run_fb
+       keeps cutting that end (a span further in must not be read as the other end's refusal first) */
+    for (e = 0; e < 2; e++) {
+        int se = e ? sa : sb;
+        if ((e ? cut_lo : cut_hi) && (bv_road(p, se, w0 - 1) || bv_road(p, se, w0 + 3)))
+            { *why = "ragged end on a junction column"; *bad_e = e; return 0; }
+    }
     /* kind: 0 clean, 1 arm N, 2 arm S, 3 both; | 4 = a wide span column (task bvx: an avenue / boulevard arm) */
-    if (!bvx_spans(p, sa, sb, w0, kind, why)) return 0;  /* task bvx */
+    if (!bvx_spans(p, sa, sb, w0, kind, why, bad_e)) return 0;  /* task bvx; avx32: a bad arm names its end */
     for (s = sa; s <= sb; s++) {
         int no = bv_road(p, s, w0 - 1), so = bv_road(p, s, w0 + 3);
         if (kind[s - sa] & 4) continue;                  /* task bvx */
         kind[s - sa] = (BYTE)(no | (so << 1));
+        /* task avx32 (owner img16, a 1x1 stub): about the run end nearer to the column (bv_run_fb may leave it stock) */
         if (no && !(bv_road(p, s, w0 - 2) && !bv_road(p, s - 1, w0 - 1) && !bv_road(p, s + 1, w0 - 1)))
-            { *why = "road beside the boulevard is not a straight single road"; return 0; }
+            { *why = "road beside the boulevard is not a straight single road"; *bad_e = s - sa <= sb - s;
+              p->bja = p->bjb = s; return 0; }
         if (so && !(bv_road(p, s, w0 + 4) && !bv_road(p, s - 1, w0 + 3) && !bv_road(p, s + 1, w0 + 3)))
-            { *why = "road beside the boulevard is not a straight single road"; return 0; }
+            { *why = "road beside the boulevard is not a straight single road"; *bad_e = s - sa <= sb - s;
+              p->bja = p->bjb = s; return 0; }
     }
     /* ends: e 0 = the +s end (column sb), e 1 = the -s end (column sa) */
     for (e = 0; e < 2; e++) {
@@ -355,20 +383,24 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
 
 /* task avx32 (orchestrator 2026-10-21): an end the rule cannot build does not take the whole run stock. Its columns stay
    with the stock tiler (cut 1, 2, ... from that end until the run converts), the rest converts, middle boxes included.
-   Refusals not about one end (touching road, a bad arm, the AVL program rule) still refuse the run. -> as bv_run1;
-   cut[0] / cut[1] = the columns left at the +s / -s end, *why = the first refusal when an end was cut. Twin:
-   boulevard.runs() */
+   Refusals not about one end (touching road, road 4+ wide, the AVL program rule) still refuse the run; a bad arm (task
+   avx32, owner img16: a 2x1 or 1x1 stub beside the run) is about the end nearer to it. -> as bv_run1;
+   base[] = the columns already left stock at the +s / -s end (a piece of a split run, bv_parts), cut[] = base + the
+   ragged cuts, *why = the first refusal when an end was cut, *sja / *sjb = the bad arm of the first refusal (-1 none).
+   Twin: boulevard.runs() fb() */
 #define BV_RAG_MAX 12
-static int bv_run_fb(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *kind, int *cut) {
+static int bv_run_fb(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *kind, const int *base, int *cut,
+                     int *sja, int *sjb) {
     int bad, r, round, e, c, sb2, b2;
     const char *why0, *w2;
-    cut[0] = cut[1] = 0;
-    r = bv_run1(p, sa, w0, psb, why, kind, 0, 0, &bad);
+    cut[0] = base[0]; cut[1] = base[1];
+    r = bv_run1(p, sa, w0, psb, why, kind, base[0], base[1], &bad);
     why0 = *why;
-    for (round = 0; round < 2 && !r && bad >= 0; round++) {
+    *sja = p->bja; *sjb = p->bjb;
+    for (round = 0; round < 4 && !r && bad >= 0; round++) {           /* task avx32 (img16): 4 rounds, cuts grow */
         int cc[2], next = 0;
         e = bad;
-        for (c = 1; c <= BV_RAG_MAX; c++) {
+        for (c = cut[e] + 1; c <= base[e] + BV_RAG_MAX; c++) {
             cc[0] = cut[0]; cc[1] = cut[1]; cc[e] = c;
             if (*psb - sa + 1 - cc[0] - cc[1] < BV_MIN_RUN) break;
             r = bv_run1(p, sa, w0, &sb2, &w2, kind, cc[0], cc[1], &b2);
@@ -376,9 +408,41 @@ static int bv_run_fb(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE
         }
         if (!next) { r = 0; break; }
     }
-    if (!r) { cut[0] = cut[1] = 0; *why = why0; return 0; }
-    *why = (cut[0] || cut[1]) ? why0 : "";
+    if (!r) { cut[0] = base[0]; cut[1] = base[1]; *why = why0; return 0; }
+    *why = (cut[0] != base[0] || cut[1] != base[1]) ? why0 : "";
     return 1;
+}
+
+/* task avx32 (owner 2026-10-22, img16 middle split): a run the end cuts cannot save, refused for a bad arm, is split at
+   the arm's columns: each side is a run of its own (base cut = the columns from the arm on, so the split ends are
+   ragged), tried by bv_run_fb the same way; sides shorter than BV_MIN_RUN stay stock. part() is called for every piece
+   that converts, with p->cell / p->n / p->natt holding its cells and cut[] its stock columns at the +s / -s end of the
+   whole run sa..*psb; -> the number of pieces. *why = the first refusal (of the whole run). Twin: boulevard.runs() segs */
+#define BV_SEG_MAX 16
+typedef void (*BvPart)(void *ctx, BvPass *p, int sa, int sb, int w0, const int *cut, const char *why, int split);
+static int bv_parts(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *kind, BvPart part, void *ctx) {
+    int seg[BV_SEG_MAX][2], nseg = 1, head = 0, nparts = 0, failed = 0, cut[2], sja, sjb, k;
+    const char *w1, *first = "";
+    seg[0][0] = seg[0][1] = 0;
+    while (head < nseg) {
+        int *base = seg[head++];
+        if (!bv_run_fb(p, sa, w0, psb, &w1, kind, base, cut, &sja, &sjb)) {
+            if (!failed) first = w1;
+            failed = 1;
+            if (sja < 0) continue;
+            for (k = 0; k < 2; k++) {                       /* the -s side (arm and beyond cut at +s), the +s side */
+                int nb0 = k ? base[0] : *psb - sja + 1, nb1 = k ? sjb - sa + 1 : base[1];
+                if (*psb - sa + 1 - nb0 - nb1 < BV_MIN_RUN || nseg >= BV_SEG_MAX) continue;
+                seg[nseg][0] = nb0; seg[nseg][1] = nb1; nseg++;
+            }
+            continue;
+        }
+        if (!failed && !nparts) first = w1;
+        part(ctx, p, sa, *psb, w0, cut, failed ? first : w1, failed);
+        nparts++;
+    }
+    *why = first;
+    return nparts;
 }
 
 /* task avx32: would BV's run rule put one of its pieces on cell (x, z)? bv_run1 on the cells as they stand, the AVL
@@ -387,10 +451,18 @@ static int bv_run_fb(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE
    use one definition of a boulevard. Reads a window of BV_TAKES_R cells round (x, z); a run longer than that is cut
    at the window (an end there reads as a cap). */
 #define BV_TAKES_R 48
+typedef struct { int x, z, hit; } BvTakes;
+static void bv_takes_part(void *ctx, BvPass *p, int sa, int sb, int w0, const int *cut, const char *why, int split) {
+    BvTakes *t = (BvTakes *)ctx;
+    int k;
+    (void)sa; (void)sb; (void)w0; (void)cut; (void)why; (void)split;
+    for (k = 0; k < p->n && !t->hit; k++) t->hit = p->cell[k].x == t->x && p->cell[k].z == t->z;
+}
 static int bv_takes(BYTE *mgr, int x, int z) {
     void *lay = *(void **)(mgr + 0x3c);
     int W = (*(int *)(mgr + 0x5c) >> 8) + 1, H = (*(int *)(mgr + 0x60) >> 8) + 1;
-    int x0 = x - BV_TAKES_R, z0 = z - BV_TAKES_R, x1 = x + BV_TAKES_R, z1 = z + BV_TAKES_R, axis, k, hit = 0, cut[2];
+    int x0 = x - BV_TAKES_R, z0 = z - BV_TAKES_R, x1 = x + BV_TAKES_R, z1 = z + BV_TAKES_R, axis, k, hit = 0;
+    BvTakes T;
     BvPass P;
     BYTE *mem, *kind;
     SIZE_T nbuf;
@@ -417,8 +489,9 @@ static int bv_takes(BYTE *mgr, int x, int z) {
             int sa = s, sb;
             if (!bv_full(&P, s, w0)) continue;
             while (bv_full(&P, sa - 1, w0) && s - sa < BV_MAX_RUN - 1) sa--;
-            if (!bv_run_fb(&P, sa, w0, &sb, &why, kind, cut)) continue;          /* task avx32: + ragged ends */
-            for (k = 0; k < P.n && !hit; k++) hit = P.cell[k].x == x && P.cell[k].z == z;
+            T.x = x; T.z = z; T.hit = 0;
+            bv_parts(&P, sa, w0, &sb, &why, kind, bv_takes_part, &T);       /* task avx32: + ragged ends, splits */
+            hit = T.hit;
         }
     }
     g_bv_dry = 0;
@@ -426,13 +499,101 @@ static int bv_takes(BYTE *mgr, int x, int z) {
     return hit;
 }
 
-/* -> 1 when an accepted run reached the read border (the caller re-runs over the whole map) */
+typedef struct {
+    BYTE *mgr; void *lay; int x0, z0, x1, z1, W, H; const char *who; BYTE *keep; int write, border, nruns, nw;
+} BvDecide;
+
+/* one converting piece of a run (bv_parts): border check, then keep[] (write 0) or the pieces + log (write 1) */
+static void bv_decide_part(void *ctx, BvPass *P, int sa, int sb, int w, const int *cut, const char *why, int split) {
+    BvDecide *d = (BvDecide *)ctx;
+    int k, nw = 0, axis = P->axis;
+    if (cut[0] || cut[1]) {
+        /* task avx32: a ragged run whose full extent reaches the read border may be cut by the window, not by its own
+           end: the whole-map pass decides it */
+        int ec[2], j, hit = 0;
+        ec[0] = sa; ec[1] = sb;
+        for (j = 0; j < 2 && !hit; j++)
+            for (k = 0; k < 3 && !hit; k++) {
+                int cx = bv_rx(axis, ec[j], w + k), cz = bv_rz(axis, ec[j], w + k);
+                hit = (cx <= d->x0 + 1 && d->x0 > 0) || (cz <= d->z0 + 1 && d->z0 > 0) ||
+                      (cx >= d->x1 - 1 && d->x1 < d->W - 1) || (cz >= d->z1 - 1 && d->z1 < d->H - 1);
+            }
+        if (hit) { d->border = 1; return; }
+        if (d->write && split)
+            logf("bv: %s: run axis %d from (%d,%d): split at a bad arm, columns %d..%d convert, the rest of %d..%d left to "
+                 "the stock tiler: %s", d->who, axis, bv_rx(axis, sa, w), bv_rz(axis, sa, w), sa + cut[1], sb - cut[0],
+                 sa, sb, why);
+        else if (d->write)
+            logf("bv: %s: run axis %d from (%d,%d): ragged end(s), %d column(s) at +s and %d at -s left to the stock "
+                 "tiler: %s", d->who, axis, bv_rx(axis, sa, w), bv_rz(axis, sa, w), cut[0], cut[1], why);
+    }
+    for (k = 0; k < P->n; k++) {                     /* the run or its ring at the read border: seen cut, not written */
+        int cx = P->cell[k].x, cz = P->cell[k].z;
+        if ((cx <= d->x0 + 1 && d->x0 > 0) || (cz <= d->z0 + 1 && d->z0 > 0) || (cx >= d->x1 - 1 && d->x1 < d->W - 1) ||
+            (cz >= d->z1 - 1 && d->z1 < d->H - 1))
+            break;
+    }
+    if (k < P->n) { d->border = 1; return; }
+    if (!d->write) {
+        if (d->keep)
+            for (k = 0; k < P->n; k++) d->keep[(P->cell[k].z - d->z0) * P->b.w + (P->cell[k].x - d->x0)] = 1;
+        return;
+    }
+    d->nruns++;
+    for (k = 0; k < P->natt; k++) bv_att_add(P->att[k]);                                /* task bvlanes */
+    for (k = 0; k < P->n; k++) {
+        int cx = P->cell[k].x, cz = P->cell[k].z, pos[3];
+        DWORD cur = rb_at(&P->b, cx, cz);
+        if ((((cur & 0xffff) << 8) | ((cur >> 16) & 3)) == P->cell[k].want) continue;
+        pos[0] = cx << 8; pos[1] = cz << 8; pos[2] = 0;
+        ((PFN_Put)(g_rb_m + 0x8919))(d->mgr, 0, d->lay, pos, P->cell[k].want, -1, 8, 0);
+        nw++;
+        bv_dirty(cx, cz);                                                               /* task bvlanes */
+    }
+    if (nw || !strcmp(d->who, "load"))
+        logf("bv: %s: boulevard axis %d, columns %d..%d at row %d, %d cell(s), %d written", d->who, axis, sa, sb, w, P->n,
+             nw);
+    d->nw += nw;
+}
+
+/* every run of the read window, decided; write = 0: only mark keep[] and find the border; write = 1: put the pieces
+   (and log). -> 1 when an accepted run reached the read border (the caller re-runs over the whole map) */
+static int bv_decide(BvPass *P, BYTE *mgr, void *lay, int x0, int z0, int x1, int z1, int W, int H, const char *who,
+                     BYTE *keep, BYTE *kind, int write, int *pnruns, int *pnw) {
+    int axis;
+    BvDecide d;
+    d.mgr = mgr; d.lay = lay; d.x0 = x0; d.z0 = z0; d.x1 = x1; d.z1 = z1; d.W = W; d.H = H; d.who = who; d.keep = keep;
+    d.write = write; d.border = 0; d.nruns = 0; d.nw = 0;
+    for (axis = 0; axis < 2; axis++) {
+        int s0 = axis ? z0 : x0, s1 = axis ? z1 : x1, wl = axis ? -x1 : z0, wh = axis ? -x0 : z1, s, w;
+        P->axis = axis;
+        for (w = wl; w <= wh; w++)
+            for (s = s0; s <= s1; s++) {
+                const char *why = "";
+                int sb;
+                if (!bv_full(P, s, w) || bv_full(P, s - 1, w)) continue;
+                if (!bv_parts(P, s, w, &sb, &why, kind, bv_decide_part, &d)) {   /* task avx32: + ragged ends, splits */
+                    if (write && *why && sb - s + 1 >= 2 * BV_MIN_COLS)
+                        logf("bv: %s: run axis %d from (%d,%d), %d column(s) left to the stock tiler: %s", who, axis,
+                             bv_rx(axis, s, w), bv_rz(axis, s, w), sb - s + 1, why);
+                }
+            }
+    }
+    *pnruns += d.nruns;
+    *pnw += d.nw;
+    return d.border;
+}
+
+/* -> 1 when an accepted run reached the read border (the caller re-runs over the whole map).
+   task avx32 (img16): decide (keep), revert, re-read, THEN write. Writing first let a revert's stock retile overwrite
+   pieces just written (in game: a run cut by a rail crossing, its far side reverted, 4 written columns came back
+   stock until the next edit) */
 static int bv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, const char *who, BYTE *keep) {
     void *lay = *(void **)(mgr + 0x3c);
     BvPass P;
     BYTE *mem, kind[BV_MAX_RUN];
     SIZE_T nbuf;
-    int axis, x, z, k, border = 0, nruns = 0, nwall = 0, nrev = 0;
+    int x, z, border, nruns = 0, nwall = 0, nrev = 0;
     P.b.x0 = x0; P.b.z0 = z0; P.b.w = x1 - x0 + 1; P.b.h = z1 - z0 + 1;
     nbuf = (SIZE_T)P.b.w * P.b.h;
     mem = (BYTE *)VirtualAlloc(NULL, nbuf * 4 + DAV_MAX_CELLS * sizeof(BvCell), MEM_COMMIT, PAGE_READWRITE);
@@ -441,60 +602,7 @@ static int bv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, cons
     P.cell = (BvCell *)(mem + nbuf * 4);
     for (z = 0; z < P.b.h; z++)
         for (x = 0; x < P.b.w; x++) P.b.c[z * P.b.w + x] = rb_read(mgr, lay, x0 + x, z0 + z, W, H);
-    for (axis = 0; axis < 2; axis++) {
-        int s0 = axis ? z0 : x0, s1 = axis ? z1 : x1, wl = axis ? -x1 : z0, wh = axis ? -x0 : z1, s, w;
-        P.axis = axis;
-        for (w = wl; w <= wh; w++)
-            for (s = s0; s <= s1; s++) {
-                const char *why = "";
-                int sb, nw = 0, cut[2];
-                if (!bv_full(&P, s, w) || bv_full(&P, s - 1, w)) continue;
-                if (!bv_run_fb(&P, s, w, &sb, &why, kind, cut)) {                 /* task avx32: + ragged ends */
-                    if (*why && sb - s + 1 >= 2 * BV_MIN_COLS)
-                        logf("bv: %s: run axis %d from (%d,%d), %d column(s) left to the stock tiler: %s", who, axis,
-                             bv_rx(axis, s, w), bv_rz(axis, s, w), sb - s + 1, why);
-                    continue;
-                }
-                if (cut[0] || cut[1]) {
-                    /* task avx32: a ragged run whose full extent reaches the read border may be cut by the window,
-                       not by its own end: the whole-map pass decides it */
-                    int ec[2], j, hit = 0;
-                    ec[0] = s; ec[1] = sb;
-                    for (j = 0; j < 2 && !hit; j++)
-                        for (k = 0; k < 3 && !hit; k++) {
-                            int cx = bv_rx(axis, ec[j], w + k), cz = bv_rz(axis, ec[j], w + k);
-                            hit = (cx <= x0 + 1 && x0 > 0) || (cz <= z0 + 1 && z0 > 0) || (cx >= x1 - 1 && x1 < W - 1) ||
-                                  (cz >= z1 - 1 && z1 < H - 1);
-                        }
-                    if (hit) { border = 1; continue; }
-                    logf("bv: %s: run axis %d from (%d,%d): ragged end(s), %d column(s) at +s and %d at -s left to the "
-                         "stock tiler: %s", who, axis, bv_rx(axis, s, w), bv_rz(axis, s, w), cut[0], cut[1], why);
-                }
-                for (k = 0; k < P.n; k++) {          /* the run or its ring at the read border: seen cut, not written */
-                    int cx = P.cell[k].x, cz = P.cell[k].z;
-                    if ((cx <= x0 + 1 && x0 > 0) || (cz <= z0 + 1 && z0 > 0) || (cx >= x1 - 1 && x1 < W - 1) ||
-                        (cz >= z1 - 1 && z1 < H - 1))
-                        break;
-                }
-                if (k < P.n) { border = 1; continue; }
-                nruns++;
-                for (k = 0; k < P.natt; k++) bv_att_add(P.att[k]);                      /* task bvlanes */
-                for (k = 0; k < P.n; k++) {
-                    int cx = P.cell[k].x, cz = P.cell[k].z, pos[3];
-                    DWORD cur = rb_at(&P.b, cx, cz);
-                    if (keep) keep[(cz - z0) * P.b.w + (cx - x0)] = 1;
-                    if ((((cur & 0xffff) << 8) | ((cur >> 16) & 3)) == P.cell[k].want) continue;
-                    pos[0] = cx << 8; pos[1] = cz << 8; pos[2] = 0;
-                    ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, lay, pos, P.cell[k].want, -1, 8, 0);
-                    nw++;
-                    bv_dirty(cx, cz);                                                   /* task bvlanes */
-                }
-                if (nw || !strcmp(who, "load"))
-                    logf("bv: %s: boulevard axis %d, columns %d..%d at row %d, %d cell(s), %d written", who, axis, s, sb,
-                         w, P.n, nw);
-                nwall += nw;
-            }
-    }
+    border = bv_decide(&P, mgr, lay, x0, z0, x1, z1, W, H, who, keep, kind, 0, &nruns, &nwall);
     /* boulevard pieces (one cell in from the read border) that no run kept: back to stock */
     if (keep)
         for (z = z0 + 1; z < z1; z++)
@@ -508,6 +616,10 @@ static int bv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, cons
                 bv_dirty(x, z);                                                         /* task bvlanes */
                 logf("bv: %s: (%d,%d) boulevard piece %lu no longer in a run -> stock retile", who, x, z, v & 0xffff);
             }
+    if (nrev)                                        /* task avx32: the retiles may have changed cells: read again */
+        for (z = 0; z < P.b.h; z++)
+            for (x = 0; x < P.b.w; x++) P.b.c[z * P.b.w + x] = rb_read(mgr, lay, x0 + x, z0 + z, W, H);
+    bv_decide(&P, mgr, lay, x0, z0, x1, z1, W, H, who, NULL, kind, 1, &nruns, &nwall);
     VirtualFree(mem, 0, MEM_RELEASE);
     InterlockedExchangeAdd(&g_bv_n_runs, nruns);
     InterlockedExchangeAdd(&g_bv_n_cells, nwall);

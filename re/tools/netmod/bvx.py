@@ -101,8 +101,10 @@ def spans(R, sa, sb, w0):
     span = {"kind": "W" + "N"? + "S"?, "ja", "jb", "n": arm N, "s": arm S, "nc" / "sc": the arm's columns}. One-column
     groups and groups whose sides are partly road are left to the boulevard's own per-column rule (single roads, as
     before), except (task avx32) a 3-column span with a 2-column avenue arm at one end of a side: the crossing road is
-    a boulevard on one side and an avenue on the other (owner img7), or an avenue crossing one column offset."""
-    out, why, s = {}, "", sa
+    a boulevard on one side and an avenue on the other (owner img7), or an avenue crossing one column offset.
+    Task avx32 (owner img16): the third value is (ja, jb) of the span a BAD ARM (shorter than ARM_LEN, or road beside
+    it) refused, else None: runs() blames the run's end nearer to it, so the ragged-end fallback can leave it stock."""
+    out, why, s, bad = {}, "", sa, None
     while s <= sb:
         if (s, w0 - 1) not in R and (s, w0 + 3) not in R:
             s += 1
@@ -132,14 +134,16 @@ def spans(R, sa, sb, w0):
             c0, c1 = cols[0], cols[-1]
             for k in range(ARM_LEN):
                 if not all((c, w + d * k) in R for c in cols):
+                    bad = bad if why else (ja, jb)              # task avx32 (img16)
                     why = why or "arm at columns %d..%d shorter than %d" % (c0, c1, ARM_LEN)
                 if (c0 - 1, w + d * k) in R or (c1 + 1, w + d * k) in R:
+                    bad = bad if why else (ja, jb)
                     why = why or "arm at columns %d..%d has road beside it" % (c0, c1)
         sp = {"kind": "W" + ("N" if side["n"][0] else "") + ("S" if side["s"][0] else ""), "ja": ja, "jb": jb,
               "n": side["n"][0], "s": side["s"][0], "nc": side["n"][3], "sc": side["s"][3]}
         for c in range(ja, jb + 1):
             out[c] = sp
-    return out, why
+    return out, why, bad
 
 
 def partial_letter(cells, arm, e):

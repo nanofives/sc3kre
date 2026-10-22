@@ -116,8 +116,11 @@ static DWORD bvx_cell_of(int w, int h, const char *e, int i, int j) {
 }
 
 /* kind[] of columns sa..sb: 0, or 4 | arm N (1) | arm S (2) for a wide span column. -> 0 = the run is refused (*why).
-   task avx32: in a 3-column span a side may hold a 2-column arm at one end (the box's side letter 'L' / 'H') */
-static int bvx_spans(BvPass *p, int sa, int sb, int w0, BYTE *kind, const char **why) {
+   task avx32: in a 3-column span a side may hold a 2-column arm at one end (the box's side letter 'L' / 'H').
+   task avx32 (owner img16): a BAD ARM (too short, road beside it) sets *bad_e = the run end nearer to the span
+   (0 +s, 1 -s), so bv_run_fb can leave that end stock, and p->bja / bjb = the span (bv_parts splits there);
+   any other refusal leaves *bad_e as it is */
+static int bvx_spans(BvPass *p, int sa, int sb, int w0, BYTE *kind, const char **why, int *bad_e) {
     int s = sa, ja, jb, m, c, k, side, got[2], lo[2], hi[2], arm[2], ok;
     for (c = sa; c <= sb; c++) kind[c - sa] = 0;
     if (!g_bvx_nbox) return 1;
@@ -144,9 +147,12 @@ static int bvx_spans(BvPass *p, int sa, int sb, int w0, BYTE *kind, const char *
             if (!arm[side]) continue;
             for (k = 0; k < BVX_ARM_LEN; k++) {
                 for (c = lo[side]; c <= hi[side]; c++)
-                    if (!bv_road(p, c, w + d * k)) { *why = "avenue / boulevard arm shorter than 2"; return 0; }
+                    if (!bv_road(p, c, w + d * k))
+                        { *why = "avenue / boulevard arm shorter than 2"; *bad_e = ja - sa <= sb - jb;
+                          p->bja = ja; p->bjb = jb; return 0; }
                 if (bv_road(p, lo[side] - 1, w + d * k) || bv_road(p, hi[side] + 1, w + d * k))
-                    { *why = "avenue / boulevard arm has road beside it"; return 0; }
+                    { *why = "avenue / boulevard arm has road beside it"; *bad_e = ja - sa <= sb - jb;
+                          p->bja = ja; p->bjb = jb; return 0; }
             }
         }
         for (side = 0; side < 2; side++) {                  /* task bvlanes: an avenue arm must convert (program rule) */
