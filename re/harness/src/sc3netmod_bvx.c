@@ -20,6 +20,8 @@
  * (the crossing road is a boulevard on one side and an avenue on the other, or an avenue crossing one column offset),
  * and a run may end in a box with an avenue going on past it (bv_run1 end type 6). Such a side is 'L' / 'H' in the
  * bvxc lines: the arm holds the low / high end of the side in REAL coordinates (smaller x on N / S, smaller z on E / W).
+ * Task avx32 (owner img12): a run ending ON a single road that crosses its last column makes that column a 1-column
+ * box (bv_run1 marks it a wide T column; bvxc lines w 1 / h 1, pieces 21928..21930).
  */
 
 #define BVX_ARM_LEN 2
@@ -80,6 +82,8 @@ static void bvx_line(const char *path, const char *line) {
     g_bvx_nbox++;
     logf("bvx: %s: boulevard junction box piece %lu, edges N E S W %.4s at state 0", path, v, e);
 }
+
+static int bvx_cells_on(void) { return g_bvx_nbox && g_bvx_ncell; }                      /* task avx32 */
 
 static int bvx_is_piece(WORD id) {
     int k;

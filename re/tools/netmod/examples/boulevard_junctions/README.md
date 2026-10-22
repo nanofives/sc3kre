@@ -16,7 +16,9 @@ of small crossings. Needs the `boulevard` package (its outer and median-nose pie
   `re/tools/netmod/bvx.py` with `boulevard.py runs()`): along a boulevard run, 2 or 3 consecutive columns with road
   beside the run, each side road over all of them or empty, every arm straight and clean for 2 cells. At the very end
   of a run with arms on both sides it is a T (the boulevard ends there). One side only at an end, or road 4+ wide
-  beside the run, is refused. Single roads stay the boulevard's own junction pieces.
+  beside the run, is refused. Single roads stay the boulevard's own junction pieces, except where the boulevard ends ON a single road
+  (task avx32, owner img12): its last column becomes a 1-column box, pieces 21928 / 21929 / 21930. A road or an
+  avenue crossing one column before the end keeps its usual pieces, then the cap.
 - **Saves:** box cells as 43, nose cells as 11204, so a game without the mod loads joined stock crossings.
 - **TrBlkAtt:** 23 slots per language (3 copied 43 records, 3 specs x 4 states, 2 copied 11204 x 4 states).
 

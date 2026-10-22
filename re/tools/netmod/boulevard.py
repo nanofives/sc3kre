@@ -38,6 +38,7 @@ CAP = (20704, 20705, 20706)   # end column where all three roads stop, rows 0 / 
 
 MIN_COLS = 3             # boulevard columns (not junction, taper or cap columns) a run needs
 TAPER_COLS = 3
+RAG_MAX = 12             # task avx32: the most columns a ragged end leaves to the stock tiler
 MIN_RUN = 4              # columns of three parallel roads a run needs at all (orchestrator ruling 2026-10-17: an
                          # exactly-3x3 full road block belongs to bigrbt, whatever its arms)
 
@@ -60,7 +61,9 @@ def runs(road, have_cap=True, have_taper=True, claimed=frozenset(), band_ok=None
               arm at (s, w0-1) and / or (s, w0+3) (the arm's next cell is road, the cells beside the arm cell are not)
     run       maximal consecutive columns; its ends: nothing beyond the last column -> cap (that column closes), one
               row going on straight -> taper to that row over the last TAPER_COLS columns, else refused
-    accepted  at least MIN_COLS columns besides junction / taper / cap columns, junctions not next to an end region,
+    accepted  at least MIN_COLS columns besides junction / taper / cap columns, junctions not next to an end region
+              (task avx32: a road / avenue crossing may stand next to a cap; a run ending ON a single road makes its
+              last column a 1-column box),
               no ROAD 8-touching the run except junction arms and the road a taper goes on into
     band_ok   task bvlanes: band_ok(real cell, away side) = sc3netmod's avl_band_ok (would the avenue band through
               that cell convert, counting this end as a join); None = assume it would. A narrowing or a BVX avenue arm
@@ -82,139 +85,206 @@ def runs(road, have_cap=True, have_taper=True, claimed=frozenset(), band_ok=None
                 out.append({"axis": axis, "w0": w0, "sa": sa, "sb": sb, "ok": False, "want": {}, "ends": {},
                             "why": "3-column run: a 3x3 block (bigrbt's)"})
                 continue
-            wide, why = BX.spans(R, sa, sb, w0)                 # task bvx: avenue / boulevard arms (bvx.py)
-            if band_ok and not why:                             # task bvlanes: avenue arms must convert
-                for sp in {id(v): v for v in wide.values()}.values():
-                    for key, w, d in (("n", w0 - 2, "-w"), ("s", w0 + 4, "+w")):      # task avx32: any 2-column arm
-                        cols = sp[key + "c"]
-                        if len(cols) == 2 and not band_ok(_to_real(axis, cols[0], w), _side(axis, d)):
-                            why = why or "an avenue arm that would stay two-way"
-            kind = {}
-            for s in range(sa, sb + 1):
-                if s in wide:                                   # task bvx
-                    kind[s] = wide[s]["kind"]
-                    continue
-                n, so = (s, w0 - 1) in R, (s, w0 + 3) in R
-                if not n and not so:
-                    kind[s] = "C"
-                    continue
-                arm = lambda w, d: (s, w + d) in R and (s - 1, w) not in R and (s + 1, w) not in R  # noqa: E731
-                if (n and not arm(w0 - 1, -1)) or (so and not arm(w0 + 3, 1)):
-                    why = why or "road beside the boulevard at column %d is not a straight single road" % s
-                kind[s] = "J" + ("N" if n else "") + ("S" if so else "")
-            ends, extra = {}, set()
-            for e, (se, step) in enumerate(((sb, 1), (sa, -1))):
-                beyond = [k for k in range(3) if (se + step, w0 + k) in R]
-                if not beyond and se in wide:                   # task bvx: the run ends on an avenue / boulevard
-                    sp = wide[se]
-                    if not (sp["n"] and sp["s"]):
-                        why = why or "end at column %d: a corner (road on one side only)" % se
-                        ends[e] = ("bad", None, [])
-                    else:
-                        ends[e] = ("tee", None, [se - step * i for i in range(sp["jb"] - sp["ja"] + 1)])
-                elif se in wide and len(beyond) == 2 and beyond[1] == beyond[0] + 1 and \
-                        all((se + 2 * step, w0 + k) in R for k in beyond):
-                    # task avx32: the run ends in a box (the crossing road at its last columns) and an avenue goes on
-                    # past it: the crossing road is a boulevard on one side, an avenue on the other (owner img7)
-                    sp = wide[se]
-                    if not (sp["n"] and sp["s"]):
-                        why = why or "end at column %d: a corner (road on one side only)" % se
-                        ends[e] = ("bad", None, [])
-                    else:
-                        ends[e] = ("boxav", tuple(beyond), [se - step * i for i in range(sp["jb"] - sp["ja"] + 1)])
-                        extra |= {(se + step, w0 + k) for k in beyond}
-                        if band_ok and not band_ok(_to_real(axis, se + 2 * step, w0 + beyond[0]),
-                                                   _side(axis, "+s" if step > 0 else "-s")):
-                            why = why or "the avenue past the box would stay two-way"
-                elif beyond and all((se + step, w0 + k) in C for k in beyond):
-                    ends[e] = ("dbv", None, [])          # task diagbv: bends into a diagonal boulevard
-                elif not beyond:
-                    ends[e] = ("cap", None, [se])
-                elif len(beyond) == 1 and (se + 2 * step, w0 + beyond[0]) in R:
-                    k = beyond[0]
-                    ends[e] = ("taper", k, [se - step * i for i in range(TAPER_COLS)])
-                    extra.add((se + step, w0 + k))
-                elif len(beyond) == 2 and beyond[1] == beyond[0] + 1 and                         all((se + 2 * step, w0 + k) in R for k in beyond):
-                    ends[e] = ("avenue", tuple(beyond), [se - step * i for i in range(TAPER_COLS)])
-                    extra |= {(se + step, w0 + k) for k in beyond}
-                    if band_ok and not band_ok(_to_real(axis, se + step, w0 + beyond[0]),
-                                               _side(axis, "+s" if step > 0 else "-s")):      # task bvlanes
-                        why = why or "the avenue it narrows into would stay two-way"
-                else:
-                    why = why or "end at column %d: roads %s go on (not one road, not an avenue)" % (se, beyond)
-                    ends[e] = ("bad", None, [])
-            endcols = {c for (_, _, cs) in ends.values() for c in cs}
-            normal = [s for s in range(sa, sb + 1) if s not in endcols]
-            if not why and len(set(ends[0][2]) & set(ends[1][2])):
-                why = "run too short for its two ends"
-            if not why and sum(1 for s in normal if kind[s] == "C") < MIN_COLS:
-                why = "fewer than %d boulevard columns" % MIN_COLS
-            tee = {c for (typ, _, cs) in ends.values() if typ in ("tee", "boxav") for c in cs}   # task bvx, avx32
-            if not why and any(kind[s] != "C" for s in endcols - tee):
-                why = "a junction inside an end region"
-            if not why and normal and (kind[normal[0]] != "C" or kind[normal[-1]] != "C"):
-                why = "a junction next to an end region"
-            if not why and ((ends[0][0] == "cap" and not have_cap) or (ends[0][0] == "taper" and not have_taper) or
-                            (ends[1][0] == "cap" and not have_cap) or (ends[1][0] == "taper" and not have_taper)):
-                why = "end pieces not declared"
-            cells = {(s, w0 + k) for s in range(sa, sb + 1) for k in range(3)}
-            arms = {(s, w0 - 1) for s in kind if "N" in kind[s][1:]} | {(s, w0 + 3) for s in kind if "S" in kind[s][1:]}
-            if not why:
-                for (s, w) in cells:
-                    for ds in (-1, 0, 1):
-                        for dw in (-1, 0, 1):
-                            q = (s + ds, w + dw)
-                            if q in R and q not in cells and q not in arms and q not in extra and q not in C:
-                                why = why or "touches road at %s" % (_to_real(axis, *q),)
-            want = {}
-            if not why:
-                def put(s, row, piece, st):
-                    want[_to_real(axis, s, w0 + row)] = (piece, (st + axis) & 3)
-                for e, (typ, k, cs) in ends.items():
-                    if typ in ("tee", "dbv", "boxav"):          # task bvx: its box comes with the spans below;
-                        continue                                # task diagbv: DBV writes that end
-                    if typ == "cap":
-                        for row in range(3):
-                            put(cs[0], row if e == 0 else 2 - row, CAP[row], 0 if e == 0 else 2)
-                    else:
-                        if typ == "avenue":
-                            base = AVNARROW[k if e == 0 else (2 - k[1], 2 - k[0])]
-                        else:
-                            base = TAPER[k if e == 0 else 2 - k]
-                        for col in range(TAPER_COLS):
-                            for row in range(3):
-                                s = cs[-1] + col if e == 0 else cs[-1] - col
-                                put(s, row if e == 0 else 2 - row, base + 3 * col + row, 0 if e == 0 else 2)
-                for s in normal:
-                    if kind[s] == "C":
-                        put(s, 0, OUTER, 2)
-                        put(s, 2, OUTER, 0)
-                        nosed = {c for (typ, _, cs) in ends.values() if typ != "avenue" for c in cs}   # the median
-                        hi = s + 1 in nosed or kind.get(s + 1, "C") != "C"           # goes on into an avenue end
-                        lo = s - 1 in nosed or kind.get(s - 1, "C") != "C"
-                        put(s, 1, NOSE2 if hi and lo else NOSE if hi or lo else MIDDLE, 2 if lo and not hi else 0)
-                    elif s in wide:                             # task bvx: the box, below
+            def _one(sa, sb, cut):
+                why = ""
+                bad = [None]                                # task avx32: the end the first refusal is about
+
+                def fail(msg, e=None):
+                    nonlocal why
+                    if not why:
+                        why, bad[0] = msg, e
+                wide, why = BX.spans(R, sa, sb, w0)                 # task bvx: avenue / boulevard arms (bvx.py)
+                if band_ok and not why:                             # task bvlanes: avenue arms must convert
+                    for sp in {id(v): v for v in wide.values()}.values():
+                        for key, w, d in (("n", w0 - 2, "-w"), ("s", w0 + 4, "+w")):      # task avx32: any 2-column arm
+                            cols = sp[key + "c"]
+                            if len(cols) == 2 and not band_ok(_to_real(axis, cols[0], w), _side(axis, d)):
+                                fail("an avenue arm that would stay two-way")
+                kind = {}
+                for s in range(sa, sb + 1):
+                    if s in wide:                                   # task bvx
+                        kind[s] = wide[s]["kind"]
                         continue
-                    else:
-                        j = kind[s][1:]
-                        if j == "N":                    # task bvlanes: the T's own entry / middle pieces
-                            put(s, 0, JUNC_N_T, 0); put(s, 1, JUNC_M_T, 0); put(s, 2, JUNC_F, 0)    # noqa: E702
-                        elif j == "S":
-                            put(s, 0, JUNC_F, 2); put(s, 1, JUNC_M_T, 2); put(s, 2, JUNC_N_T, 2)    # noqa: E702
+                    n, so = (s, w0 - 1) in R, (s, w0 + 3) in R
+                    if not n and not so:
+                        kind[s] = "C"
+                        continue
+                    arm = lambda w, d: (s, w + d) in R and (s - 1, w) not in R and (s + 1, w) not in R  # noqa: E731
+                    if (n and not arm(w0 - 1, -1)) or (so and not arm(w0 + 3, 1)):
+                        fail("road beside the boulevard at column %d is not a straight single road" % s)
+                    kind[s] = "J" + ("N" if n else "") + ("S" if so else "")
+                ends, extra = {}, set()
+                for e, (se, step) in enumerate(((sb, 1), (sa, -1))):
+                    beyond = [k for k in range(3) if (se + step, w0 + k) in R]
+                    if cut[e]:
+                        # task avx32: a RAGGED end: the cut[e] columns past it stay with the stock tiler; the run
+                        # ends on a plain column, its median in a nose
+                        if kind[se] != "C":
+                            fail("ragged end at column %d: not a plain column" % se, e)
+                            ends[e] = ("bad", None, [])
                         else:
-                            put(s, 0, JUNC_N, 0); put(s, 1, JUNC_M, 0); put(s, 2, JUNC_N, 2)        # noqa: E702
-                for sp in {id(v): v for v in wide.values()}.values():          # task bvx: one paved box per span
-                    bw = BX.box_want(axis, w0, sp, ends[1][0] == "tee" and sp["ja"] == sa,
-                                     ends[0][0] == "tee" and sp["jb"] == sb, _to_real,
-                                     [w0 + k for k in ends[1][1]] if ends[1][0] == "boxav" and sp["ja"] == sa else None,
-                                     [w0 + k for k in ends[0][1]] if ends[0][0] == "boxav" and sp["jb"] == sb else None)
-                    if bw is None:                              # task avx32: a box cell with no declared piece
-                        why = why or "a box cell with no declared piece"
-                        want = {}
+                            ends[e] = ("ragged", None, [])
+                            extra |= {(se + step, w0 + k) for k in range(-1, 4)}
+                        continue
+                    if not beyond and se in wide:                   # task bvx: the run ends on an avenue / boulevard
+                        sp = wide[se]
+                        if not (sp["n"] and sp["s"]):
+                            fail("end at column %d: a corner (road on one side only)" % se, e)
+                            ends[e] = ("bad", None, [])
+                        else:
+                            ends[e] = ("tee", None, [se - step * i for i in range(sp["jb"] - sp["ja"] + 1)])
+                    elif se in wide and len(beyond) == 2 and beyond[1] == beyond[0] + 1 and \
+                            all((se + 2 * step, w0 + k) in R for k in beyond):
+                        # task avx32: the run ends in a box (the crossing road at its last columns) and an avenue
+                        # goes on past it: the crossing road is a boulevard on one side, an avenue on the other (img7)
+                        sp = wide[se]
+                        if not (sp["n"] and sp["s"]):
+                            fail("end at column %d: a corner (road on one side only)" % se, e)
+                            ends[e] = ("bad", None, [])
+                        else:
+                            ends[e] = ("boxav", tuple(beyond), [se - step * i for i in range(sp["jb"] - sp["ja"] + 1)])
+                            extra |= {(se + step, w0 + k) for k in beyond}
+                            if band_ok and not band_ok(_to_real(axis, se + 2 * step, w0 + beyond[0]),
+                                                       _side(axis, "+s" if step > 0 else "-s")):
+                                fail("the avenue past the box would stay two-way")
+                    elif beyond and all((se + step, w0 + k) in C for k in beyond):
+                        ends[e] = ("dbv", None, [])          # task diagbv: bends into a diagonal boulevard
+                    elif not beyond and kind[se] == "JNS":
+                        # task avx32 (owner img12): the run ends ON a single road that crosses its last column (a T, the
+                        # boulevard the stem): that column is a 1-column box with its far side closed
+                        wide[se] = {"kind": "WNS", "ja": se, "jb": se, "n": True, "s": True, "nc": [se], "sc": [se]}
+                        ends[e] = ("tee", None, [se])
+                    elif not beyond:
+                        ends[e] = ("cap", None, [se])
+                    elif len(beyond) == 1 and (se + 2 * step, w0 + beyond[0]) in R:
+                        k = beyond[0]
+                        ends[e] = ("taper", k, [se - step * i for i in range(TAPER_COLS)])
+                        extra.add((se + step, w0 + k))
+                    elif len(beyond) == 2 and beyond[1] == beyond[0] + 1 and                         all((se + 2 * step, w0 + k) in R for k in beyond):
+                        ends[e] = ("avenue", tuple(beyond), [se - step * i for i in range(TAPER_COLS)])
+                        extra |= {(se + step, w0 + k) for k in beyond}
+                        if band_ok and not band_ok(_to_real(axis, se + step, w0 + beyond[0]),
+                                                   _side(axis, "+s" if step > 0 else "-s")):      # task bvlanes
+                            fail("the avenue it narrows into would stay two-way")
+                    else:
+                        fail("end at column %d: roads %s go on (not one road, not an avenue)" % (se, beyond), e)
+                        ends[e] = ("bad", None, [])
+                endcols = {c for (_, _, cs) in ends.values() for c in cs}
+                normal = [s for s in range(sa, sb + 1) if s not in endcols]
+                if len(set(ends[0][2]) & set(ends[1][2])):
+                    fail("run too short for its two ends")
+                if sum(1 for s in normal if kind[s] == "C") < MIN_COLS:
+                    fail("fewer than %d boulevard columns" % MIN_COLS)
+                tee = {c for (typ, _, cs) in ends.values() if typ in ("tee", "boxav") for c in cs}   # task bvx, avx32
+                for e in (0, 1):
+                    if any(kind[c] != "C" for c in set(ends[e][2]) - tee):
+                        fail("a junction inside an end region", e)
+                # task avx32: a road or an avenue crossing may stand next to a cap (the boulevard crosses it and
+                # stops one column on). Not a boulevard: its run would read the one-column stub as an arm shorter
+                # than 2
+                def cap_ok(s, e):
+                    return ends[e][0] == "cap" and (s not in wide or wide[s]["jb"] - wide[s]["ja"] < 2)
+                if normal and kind[normal[-1]] != "C" and not cap_ok(normal[-1], 0):
+                    fail("a junction next to an end region", 0)
+                if normal and kind[normal[0]] != "C" and not cap_ok(normal[0], 1):
+                    fail("a junction next to an end region", 1)
+                for e in (0, 1):
+                    if (ends[e][0] == "cap" and not have_cap) or (ends[e][0] == "taper" and not have_taper):
+                        fail("end pieces not declared", e)
+                cells = {(s, w0 + k) for s in range(sa, sb + 1) for k in range(3)}
+                arms = {(s, w0 - 1) for s in kind if "N" in kind[s][1:]} | \
+                    {(s, w0 + 3) for s in kind if "S" in kind[s][1:]}
+                if not why:
+                    for (s, w) in cells:
+                        for ds in (-1, 0, 1):
+                            for dw in (-1, 0, 1):
+                                q = (s + ds, w + dw)
+                                if q in R and q not in cells and q not in arms and q not in extra and q not in C:
+                                    fail("touches road at %s" % (_to_real(axis, *q),))
+                want = {}
+                if not why:
+                    def put(s, row, piece, st):
+                        want[_to_real(axis, s, w0 + row)] = (piece, (st + axis) & 3)
+                    for e, (typ, k, cs) in ends.items():
+                        if typ in ("tee", "dbv", "boxav", "ragged"):  # task bvx: its box comes with the spans below;
+                            continue                                # task diagbv: DBV writes that end
+                        if typ == "cap":
+                            for row in range(3):
+                                put(cs[0], row if e == 0 else 2 - row, CAP[row], 0 if e == 0 else 2)
+                        else:
+                            if typ == "avenue":
+                                base = AVNARROW[k if e == 0 else (2 - k[1], 2 - k[0])]
+                            else:
+                                base = TAPER[k if e == 0 else 2 - k]
+                            for col in range(TAPER_COLS):
+                                for row in range(3):
+                                    s = cs[-1] + col if e == 0 else cs[-1] - col
+                                    put(s, row if e == 0 else 2 - row, base + 3 * col + row, 0 if e == 0 else 2)
+                    for s in normal:
+                        if kind[s] == "C":
+                            put(s, 0, OUTER, 2)
+                            put(s, 2, OUTER, 0)
+                            nosed = {c for (typ, _, cs) in ends.values() if typ != "avenue" for c in cs}   # the median
+                            hi = s + 1 in nosed or kind.get(s + 1, "C") != "C" or \
+                                (s == sb and ends[0][0] == "ragged")                    # goes on into an avenue end
+                            lo = s - 1 in nosed or kind.get(s - 1, "C") != "C" or (s == sa and ends[1][0] == "ragged")
+                            put(s, 1, NOSE2 if hi and lo else NOSE if hi or lo else MIDDLE, 2 if lo and not hi else 0)
+                        elif s in wide:                             # task bvx: the box, below
+                            continue
+                        else:
+                            j = kind[s][1:]
+                            if j == "N":                    # task bvlanes: the T's own entry / middle pieces
+                                put(s, 0, JUNC_N_T, 0); put(s, 1, JUNC_M_T, 0); put(s, 2, JUNC_F, 0)    # noqa: E702
+                            elif j == "S":
+                                put(s, 0, JUNC_F, 2); put(s, 1, JUNC_M_T, 2); put(s, 2, JUNC_N_T, 2)    # noqa: E702
+                            else:
+                                put(s, 0, JUNC_N, 0); put(s, 1, JUNC_M, 0); put(s, 2, JUNC_N, 2)        # noqa: E702
+                    for sp in {id(v): v for v in wide.values()}.values():          # task bvx: one paved box per span
+                        bw = BX.box_want(axis, w0, sp, ends[1][0] == "tee" and sp["ja"] == sa,
+                                         ends[0][0] == "tee" and sp["jb"] == sb, _to_real,
+                                         [w0 + k for k in ends[1][1]]
+                                         if ends[1][0] == "boxav" and sp["ja"] == sa else None,
+                                         [w0 + k for k in ends[0][1]]
+                                         if ends[0][0] == "boxav" and sp["jb"] == sb else None)
+                        if bw is None:                              # task avx32: a box cell with no declared piece
+                            fail("a box cell with no declared piece")
+                            want = {}
+                            break
+                        want.update(bw)
+                return {"axis": axis, "w0": w0, "sa": sa, "sb": sb, "ok": not why, "why": why, "want": want,
+                        "ends": ends, "bad_end": bad[0] if why else None}
+            sa0, sb0 = sa, sb
+
+            def run_of(cut):
+                return _one(sa0 + cut[1], sb0 - cut[0], cut)
+            r = run_of((0, 0))
+            # task avx32 (orchestrator 2026-10-21): an end this rule cannot build does not take the whole run stock.
+            # Its columns stay with the stock tiler (cut 1, 2, ... from that end until the run converts), the rest
+            # converts, middle boxes included. Refusals not about one end (touching road, a bad arm, the AVL program
+            # rule) still refuse the run
+            first, cut = r, [0, 0]
+            for _round in range(2):
+                e = r["bad_end"]
+                if r["ok"] or e is None:
+                    break
+                nxt = None
+                for c in range(1, RAG_MAX + 1):
+                    cc = list(cut)
+                    cc[e] = c
+                    if sb0 - sa0 + 1 - cc[0] - cc[1] < MIN_RUN:
                         break
-                    want.update(bw)
-            out.append({"axis": axis, "w0": w0, "sa": sa, "sb": sb, "ok": not why, "why": why, "want": want,
-                        "ends": ends})
+                    r2 = run_of(tuple(cc))
+                    if r2["ok"] or (r2["bad_end"] is not None and r2["bad_end"] != e):
+                        nxt, cut = r2, cc
+                        break
+                if nxt is None:
+                    break
+                r = nxt
+            if not r["ok"]:
+                r, cut = first, [0, 0]
+            r.update({"sa": sa0, "sb": sb0, "cut": tuple(cut),
+                      "why": r["why"] if not r["ok"] else (first["why"] if r is not first else "")})
+            out.append(r)
     return out
 
 
