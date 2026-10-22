@@ -54,10 +54,7 @@ static const HwddRow *hwdd_tab(int par, int fly, int *n) {
     return fly ? g_hwdd_fly_h : g_hwdd_clover_h;
 }
 
-static DWORD hwdd_rd(HwyPass *hp, int x, int z) {
-    if (x >= hp->b.x0 && z >= hp->b.z0 && x < hp->b.x0 + hp->b.w && z < hp->b.z0 + hp->b.h) return hwy_at(hp, x, z);
-    return hwy_read(hp->mgr, hp->lay, x, z, hp->W, hp->H);
-}
+static DWORD hwdd_rd(HwyPass *hp, int x, int z) { return hwy_rd(hp, x, z); }       /* task hwtdel: the shared read */
 
 static int hwdd_inbox(HwyPass *hp, int x, int z) {                   /* hwy_end reverts one cell in from the border */
     return x > hp->x0 && z > hp->z0 && x < hp->x1 && z < hp->z1;
@@ -203,7 +200,7 @@ static void hwdd_unbuild(HwyPass *hp, int ox, int oz, int par) {
         v = hwdd_rd(hp, x, z);
         if (!v || hwy_id(v) != r->id || hwy_st(v) != r->st) continue;
         if (r->role == HWDD_LAND) hwy_drop(hp, x, z);
-        else hwy_put(hp, x, z, r->base, r->bst);
+        else if (hwy_inbuf(hp, x, z)) hwy_put(hp, x, z, r->base, r->bst);   /* task hwtdel: never written past the box */
         nd++;
     }
     if (nd) logf("hwdd: %s: cloverleaf at frame (%d,%d) %c broken: %d cells outside the pass box reverted", hp->who, ox,

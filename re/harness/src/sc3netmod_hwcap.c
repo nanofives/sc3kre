@@ -71,10 +71,7 @@ static void hwcap_cap_of(int sx, int sz, int lower, WORD *id, int *st) {
     }
 }
 
-static DWORD hwcap_rd(HwyPass *hp, int x, int z) {
-    if (x >= hp->b.x0 && z >= hp->b.z0 && x < hp->b.x0 + hp->b.w && z < hp->b.z0 + hp->b.h) return hwy_at(hp, x, z);
-    return hwy_read(hp->mgr, hp->lay, x, z, hp->W, hp->H);
-}
+static DWORD hwcap_rd(HwyPass *hp, int x, int z) { return hwy_rd(hp, x, z); }     /* task hwtdel: the shared read */
 
 static int hwcap_end(HwyPass *hp, int x, int z, int sx, int sz) {
     DWORD v = hwcap_rd(hp, x, z);

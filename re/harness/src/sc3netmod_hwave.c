@@ -54,6 +54,10 @@
  * Table line: hwavd <j-1 high> <j-1 low> <j0> <j+1 high> <j+1 low> <j+2>   (hwyp lines first)
  */
 
+/* task hwtdel: built transitions are looked up from one cell inside the box (hwy_end reverts from there; the scan
+ * started 3 in, so a grazing pass reverted the pieces on the box's edge rows and with them the avenue's lanes), and
+ * checked / kept with hwy_rd / hwy_keep_far, so a transition across the box edge is read whole. */
+
 /* task avmisc: avcore's sibling API (sc3netmod_avl.c, #included later; AVENUE_LANES.md 5) */
 static int avl_dir(int x, int z);
 static int avl_own(WORD id);
@@ -143,15 +147,15 @@ static const char *hwave_check(HwyPass *hp, int ax, int az, int k) {
     for (c = 0; c < 2; c++) {
         hwave_cell(ax, az, k, c, -1, &x, &z);
         hwave_plain(k, c, &id, &st);
-        if (!hwave_is(hwy_at(hp, x, z), id, st)) return "no plain highway behind the cap row";
+        if (!hwave_is(hwy_rd(hp, x, z), id, st)) return "no plain highway behind the cap row";
         hwave_cell(ax, az, k, c, 0, &x, &z);
         hwave_cap(k, c, &id, &st);
-        if (!hwave_is(hwy_at(hp, x, z), id, st) && !hwave_is(hwy_at(hp, x, z), g_hwave_p[1 - c], k))
+        if (!hwave_is(hwy_rd(hp, x, z), id, st) && !hwave_is(hwy_rd(hp, x, z), g_hwave_p[1 - c], k))
             return "cap row";
         hwave_cell(ax, az, k, c, 1, &x, &z);
         if (!hwave_isb(hwave_road_at(hp, x, z), 11203, hwave_uturn_st(k, c)) &&
-            !hwave_is(hwy_at(hp, x, z), g_hwave_p[3 - c], k) &&
-            !(g_hwave_s[0] && hwave_is(hwy_at(hp, x, z), g_hwave_s[1 - c], k)))      /* task avmisc */
+            !hwave_is(hwy_rd(hp, x, z), g_hwave_p[3 - c], k) &&
+            !(g_hwave_s[0] && hwave_is(hwy_rd(hp, x, z), g_hwave_s[1 - c], k)))      /* task avmisc */
             return "no avenue U-turn row past the cap";
         hwave_cell(ax, az, k, c, 2, &x, &z);
         if (!hwave_isb(hwave_road_at(hp, x, z), 11204, hwave_ave_st(k, c))) return "no straight avenue past the U-turn row";
@@ -204,13 +208,13 @@ static int hwave_row_ok(BYTE *mgr, int x, int z, DWORD v) {
    0x10008919]) and refresh the pass buffer; keep = claim + keep it for hwy_end */
 static int hwave_write(HwyPass *hp, int x, int z, WORD id, int st, int keep) {
     int pos[3], bx = x - hp->b.x0, bz = z - hp->b.z0;
-    DWORD cur = hwy_at(hp, x, z);
-    if (keep && hwave_is(cur, id, st) && !(cur & HWLT_LIT)) { hwy_keep(hp, x, z); return 0; }
+    DWORD cur = hwy_rd(hp, x, z);                 /* task hwtdel: any cell (a transition may straddle the box edge) */
+    if (keep && hwave_is(cur, id, st) && !(cur & HWLT_LIT)) { hwy_keep_far(hp, x, z, cur); return 0; }
     pos[0] = x << 8; pos[1] = z << 8; pos[2] = 0;
     ((PFN_Put)(g_rb_m + 0x8919))(hp->mgr, 0, hp->lay, pos, hwlt_want(((DWORD)id << 8) | (DWORD)(st & 3)), -1, 8, 0);   /* task hwlight */
     if (bx >= 0 && bz >= 0 && bx < hp->b.w && bz < hp->b.h)
         hp->b.c[bz * hp->b.w + bx] = hwy_read(hp->mgr, hp->lay, x, z, hp->W, hp->H);
-    if (keep) hwy_keep(hp, x, z);
+    if (keep) hwy_keep_far(hp, x, z, hwy_rd(hp, x, z));
     hp->nput++;
     return 1;
 }
@@ -233,10 +237,10 @@ static void hwave_revert(HwyPass *hp, int ax, int az, int k, const char *why) {
     for (c = 0; c < 2; c++)
         for (r = 0; r <= 1; r++) {
             hwave_cell(ax, az, k, c, r, &x, &z);
-            if (!hwave_is(hwy_at(hp, x, z), g_hwave_p[r * 2 + (1 - c)], k) &&
-                !(r && g_hwave_s[0] && hwave_is(hwy_at(hp, x, z), g_hwave_s[1 - c], k))) continue;     /* task avmisc */
+            if (!hwave_is(hwy_rd(hp, x, z), g_hwave_p[r * 2 + (1 - c)], k) &&
+                !(r && g_hwave_s[0] && hwave_is(hwy_rd(hp, x, z), g_hwave_s[1 - c], k))) continue;     /* task avmisc */
             hwave_cell(ax, az, k, c, r ? 2 : -1, &nx, &nz);
-            if (r == 0 && hwy_at(hp, nx, nz)) { hwave_cap(k, c, &id, &st); hwave_write(hp, x, z, id, st, 0); }
+            if (r == 0 && hwy_rd(hp, nx, nz)) { hwave_cap(k, c, &id, &st); hwave_write(hp, x, z, id, st, 0); }
             else if (r == 1 && hwave_road_at(hp, nx, nz)) hwave_write(hp, x, z, 11203, hwave_uturn_st(k, c), 0);
             else hwave_remove(hp, x, z);
             hwy_claim(hp, x, z);
@@ -281,9 +285,10 @@ static void hwave_run(HwyPass *hp) {
     struct { short x, z; BYTE k; } an[HWAVE_MAXA];
     hwavd_run(hp);                                /* phase 2: the diagonal ones */
     if (!g_hwave_p[0] || g_hwave_pre) return;     /* the straight ones need no claims: nothing to do before DAV */
-    /* 1. transitions already built: every piece names its anchor */
-    for (z = hp->z0 + 3; z <= hp->z1 - 3; z++)
-        for (x = hp->x0 + 3; x <= hp->x1 - 3; x++) {
+    /* 1. transitions already built: every piece names its anchor (task hwtdel: from one cell in, as hwy_end reverts;
+     * it was 3 in, so a piece on the box's edge rows was reverted though its transition was whole) */
+    for (z = hp->z0 + 1; z < hp->z1; z++)
+        for (x = hp->x0 + 1; x < hp->x1; x++) {
             DWORD v = hwy_at(hp, x, z);
             int role, ax, az, seen = 0;
             if (!v) continue;
@@ -442,31 +447,31 @@ static const char *hwavd_check(HwyPass *hp, int ax, int az, int k) {
                                             { 2, 1 }, { 1, 2 }, { 2, 2 } };
     if (!g_dav_on || !hwavd_dav_pieces()) return "no diagonal avenue block (DAV)";
     hwavd_cell(ax, az, k, -1, -1, &x, &z);
-    if (!hwave_is(hwy_at(hp, x, z), hwavd_mid(k), 0)) return "no plain highway band behind the cap";
+    if (!hwave_is(hwy_rd(hp, x, z), hwavd_mid(k), 0)) return "no plain highway band behind the cap";
     for (side = 0; side < 2; side++) {                           /* j-1: the plain band (or ours) */
         hwavd_cell(ax, az, k, HWAVD_OFF[side][0], HWAVD_OFF[side][1], &x, &z);
         hwavd_plain(k, side == 0, &id, &st);
-        v = hwy_at(hp, x, z);
+        v = hwy_rd(hp, x, z);
         if (!hwave_is(v, id, st) && !hwavd_ours(v, side, k)) return "no plain highway band beside the cap";
     }
     hwavd_cap(k, &id, &st);
-    v = hwy_at(hp, ax, az);
+    v = hwy_rd(hp, ax, az);
     if (!hwave_is(v, id, st) && !hwavd_ours(v, 2, k)) return "cap";
     hwavd_cell(ax, az, k, 1, 0, &x, &z);                          /* j+1 high: empty land or ours */
-    v = hwy_at(hp, x, z);
+    v = hwy_rd(hp, x, z);
     if (v ? !hwavd_ours(v, 3, k) : (hwave_road_at(hp, x, z) || !hwy_free(hp, x, z))) return "the cell past the cap is taken";
     hwavd_cell(ax, az, k, 0, 1, &x, &z);                          /* j+1 low: empty, a DAV end piece, or ours */
-    v = hwy_at(hp, x, z);
+    v = hwy_rd(hp, x, z);
     rv = hwave_road_at(hp, x, z);
     if (v ? !hwavd_ours(v, 4, k) : (rv ? !hwavd_dav_road(hwy_id(rv)) : !hwy_free(hp, x, z)))
         return "the avenue's end cell beside the cap is taken";
     hwavd_cell(ax, az, k, 1, 1, &x, &z);                          /* j+2: the avenue's end (road) or ours */
-    v = hwy_at(hp, x, z);
+    v = hwy_rd(hp, x, z);
     rv = hwave_road_at(hp, x, z);
     if (v ? !hwavd_ours(v, 5, k) : (!rv || !hwavd_dav_road(hwy_id(rv)))) return "no avenue end past the cap";
     for (j = 0; j < 2; j++) {                                     /* j+3: road (the build makes it DAV's plain outer) */
         hwavd_cell(ax, az, k, j ? 1 : 2, j ? 2 : 1, &x, &z);
-        if (hwy_at(hp, x, z) || !hwave_road_at(hp, x, z)) return "no avenue band two cells past the cap";
+        if (hwy_rd(hp, x, z) || !hwave_road_at(hp, x, z)) return "no avenue band two cells past the cap";
     }
     hwavd_cell(ax, az, k, 2, 2, &x, &z);                          /* j+4: the plain middle 20500 */
     if (hwy_id(hwave_road_at(hp, x, z)) != g_hwavd_middle) return "no plain avenue band (DAV middle piece) past the end";
@@ -514,10 +519,10 @@ static void hwavd_revert(HwyPass *hp, int ax, int az, int k, const char *why) {
     int j, x, z, bx, bz, n = 0, rect[6], x0 = 1 << 30, z0 = 1 << 30, x1 = -1, z1 = -1, behind, st;
     WORD id;
     hwavd_cell(ax, az, k, -1, -1, &bx, &bz);
-    behind = hwy_at(hp, bx, bz) != 0;
+    behind = hwy_rd(hp, bx, bz) != 0;
     for (j = 0; j < 6; j++) {
         hwavd_cell(ax, az, k, HWAVD_OFF[j][0], HWAVD_OFF[j][1], &x, &z);
-        if (!hwavd_ours(hwy_at(hp, x, z), j, k)) continue;
+        if (!hwavd_ours(hwy_rd(hp, x, z), j, k)) continue;
         if (j <= 1 && behind) { hwavd_plain(k, j == 0, &id, &st); hwave_write(hp, x, z, id, st, 0); }
         else if (j == 2 && behind) { hwavd_cap(k, &id, &st); hwave_write(hp, x, z, id, st, 0); }
         else if (j == 5) hwave_write(hp, x, z, 35, hwavd_outer_st(k, 0), 0);
@@ -544,8 +549,8 @@ static void hwavd_run(HwyPass *hp) {
     int x, z, k, j, na = 0;
     struct { short x, z; BYTE k; } an[HWAVE_MAXA];
     if (!g_hwavd_p[0]) return;
-    for (z = hp->z0 + 3; z <= hp->z1 - 3; z++)                    /* 1. built ones: each piece names its cap */
-        for (x = hp->x0 + 3; x <= hp->x1 - 3; x++) {
+    for (z = hp->z0 + 1; z < hp->z1; z++)                        /* 1. built ones: each piece names its cap (task hwtdel: */
+        for (x = hp->x0 + 1; x < hp->x1; x++) {                   /* from one cell in, as hwy_end reverts) */
             DWORD v = hwy_at(hp, x, z);
             int role, ax, az, dx, dz, seen = 0;
             if (!v) continue;

@@ -27,13 +27,27 @@
  *                            a cell that already holds piece.state is only kept. Works on a highway cell and on a
  *                            free cell. -> 1 written, 0 already there, -1 refused (cell neither highway nor free)
  *   hwy_keep(hp, x, z)       keep an hwyp piece that is right as it is
+ *   hwy_keep_far(hp, x, z, v)  task hwtdel: keep a cell that may lie outside the read box (v = its hwy_read value),
+ *                            so the re-place below covers an interchange's cells past the box too
+ *   hwy_rd(hp, x, z)         task hwtdel: hwy_at for any map cell (the buffer inside the box, a fresh read past it):
+ *                            blocks vote and check over their whole footprint with it
+ *   hwy_put past the box     task hwtdel: a cell outside the buffer is never written; when it already holds
+ *                            piece.state it is kept (hwy_keep_far) -> 0, else -1. So a block's normal "put every
+ *                            cell" loop keeps the interchange's cells past the box for the re-place
+ *   hwy_unput(hp, x, z, piece, state)  task hwtdel: take back a cell of an interchange part that no longer holds when
+ *                            it lies on the box's border row or past the box (land: hwy_drop; on highway: its stock
+ *                            piece, border row only); the interior is hwy_end's
+ *   hwy_gap_cap(...)         task hwtdel: the stock end cap facing a bulldozed neighbour, for a cut interchange's
+ *                            straight cells
  *   hwy_drop(hp, x, z)       remove whatever highway occupant the cell holds at hwy_end (a declared piece or a stock
  *                            highway cell, e.g. a T's stem stub when the T breaks): manager remover vt+0xb8, then the
  *                            3x3 rect retile; wins over keep. Any map cell: one outside the read box (or on its border
  *                            row) is queued (HWY_XDROP per pass) and read fresh at hwy_end, so a block can clear the
  *                            far side of a broken interchange the box did not reach
  * Kept cells are re-placed at hwy_end when a revert's rect retile changed them (the stock tiler re-places the cells
- * around a removed land piece, kept on-highway pieces included).
+ * around a removed land piece, kept on-highway pieces included; measured 2026-10-22, task hwtdel: an in-place retile
+ * of one highway cell re-tiled the run 6 cells away and wrote 15149 there). Task hwtdel's 15149 net (hwy_net_take /
+ * hwy_net_fix, below) then puts the pre-revert piece back in any cell of the box + HWY_RING that a revert left as 15149.
  * Revert (hwy_end): every cell of the read box (one cell in from its border) holding a declared piece (hwyp) that no
  * block kept in this pass goes back: a LAND piece (written into a free cell) is removed with the manager's own remover
  * vt+0xb8 = FUN_1000909f (vt+0x108 = FUN_100090f4 checks map-edge neighbour links, then layer vt+0x48), then the rect
@@ -81,7 +95,7 @@ struct HwyPass {
     void *lay;
     int W, H, x0, z0, x1, z1;                 /* map size; the read box (cells) */
     RbBuf b;                                  /* hwy_at values of the read box */
-    BYTE *flag;                               /* [cell]: 1 kept, 2 free tested, 4 free, 8 drop, 16 in kp[] */
+    BYTE *flag;                               /* [cell]: 1 kept, 2 free tested, 4 free, 8 drop, 16 in kp[], 32 reverted */
     const char *who;
     int nput, nrev;
     int nx;                                   /* hwy_drop cells outside the read box (or on its border row) */
@@ -234,6 +248,15 @@ static int hwy_st(DWORD v) { return (int)((v >> 16) & 3); }
 
 static DWORD hwy_at(HwyPass *hp, int x, int z) { return rb_at(&hp->b, x, z); }
 
+/* task hwtdel: any map cell, the pass buffer inside the read box, a fresh read past it. Interchange blocks vote and
+   check over their whole footprint with it: a pass box may hold only part of an interchange */
+static int hwy_inbuf(HwyPass *hp, int x, int z) {
+    return x >= hp->b.x0 && z >= hp->b.z0 && x < hp->b.x0 + hp->b.w && z < hp->b.z0 + hp->b.h;
+}
+static DWORD hwy_rd(HwyPass *hp, int x, int z) {
+    return hwy_inbuf(hp, x, z) ? hwy_at(hp, x, z) : hwy_read(hp->mgr, hp->lay, x, z, hp->W, hp->H);
+}
+
 static BYTE *hwy_flag(HwyPass *hp, int x, int z) {
     static BYTE dummy;
     x -= hp->b.x0; z -= hp->b.z0;
@@ -279,6 +302,20 @@ static void hwy_keep(HwyPass *hp, int x, int z) {
     *f |= 16;
 }
 
+/* task hwtdel: keep a cell that may lie outside the read box (or on its border row), holding v (its hwy_read value):
+   recorded for the re-place after the reverts, because a revert's rect retile re-tiles the whole highway run around
+   it, past the box (owner bug 2026-10-22: a T cut to 15149 cells by a pass that only grazed it). Inside the box =
+   hwy_keep. */
+static void hwy_keep_far(HwyPass *hp, int x, int z, DWORD v) {
+    int k;
+    if (x >= hp->b.x0 && z >= hp->b.z0 && x < hp->b.x0 + hp->b.w && z < hp->b.z0 + hp->b.h) { hwy_keep(hp, x, z); return; }
+    if (!v || hp->nk >= HWY_KEEP) return;
+    hwy_claim(hp, x, z);
+    for (k = 0; k < hp->nk; k++) if (hp->kp[k].x == x && hp->kp[k].z == z) return;
+    hp->kp[hp->nk].x = (short)x; hp->kp[hp->nk].z = (short)z; hp->kp[hp->nk].id = hwy_id(v); hp->kp[hp->nk].st = (BYTE)hwy_st(v);
+    hp->nk++;
+}
+
 static void hwy_drop(HwyPass *hp, int x, int z) {
     int k;
     if (x < 1 || z < 1 || x >= hp->W - 1 || z >= hp->H - 1) return;
@@ -295,6 +332,11 @@ static void hwy_drop(HwyPass *hp, int x, int z) {
 static int hwy_put(HwyPass *hp, int x, int z, WORD piece, int state) {
     DWORD cur = hwy_at(hp, x, z);
     int pos[3];
+    if (!hwy_inbuf(hp, x, z)) {   /* task hwtdel: past the box a cell is only kept (re-placed after reverts), never written */
+        cur = hwy_read(hp->mgr, hp->lay, x, z, hp->W, hp->H);
+        if (cur && hwy_id(cur) == piece && hwy_st(cur) == (state & 3) && !(cur & HWLT_LIT)) { hwy_keep_far(hp, x, z, cur); return 0; }
+        return -1;
+    }
     if (cur && hwy_id(cur) == piece && hwy_st(cur) == (state & 3) && !(cur & HWLT_LIT)) { hwy_keep(hp, x, z); return 0; }
     if (!cur && !hwy_free(hp, x, z)) return -1;
     pos[0] = x << 8; pos[1] = z << 8; pos[2] = 0;
@@ -306,6 +348,47 @@ static int hwy_put(HwyPass *hp, int x, int z, WORD piece, int state) {
     }
     hwy_keep(hp, x, z);
     hp->nput++;
+    return 1;
+}
+
+/* task hwtdel: the stock piece a declared piece saves as at state st (hwys table / save id / base), 0 = none */
+static WORD hwy_stock_of(WORD id, int st, int *sst) {
+    WORD sid = 0;
+    *sst = st;
+    if (!hwy_save_override(id, st, &sid, sst)) { sid = 0; *sst = st; }
+    if (!sid) sid = hwy_save_id(id);
+    if (!sid) sid = g_base[id];
+    return sid;
+}
+
+/* task hwtdel: take back one cell of an interchange part that no longer holds, wherever it lies. Inside the box
+   interior hwy_end reverts it (nothing to do). On the box's border row or past the box: a land piece is dropped
+   (hwy_drop queues it), an on-highway piece on the border row gets its stock piece (hwy_stock_of). Only when the cell
+   still holds piece.state. An on-highway cell past the box stays for a later pass (never written past the box). */
+static void hwy_unput(HwyPass *hp, int x, int z, WORD piece, int state) {
+    DWORD v = hwy_rd(hp, x, z);
+    int k = hwy_piece(piece), sst;
+    WORD sid;
+    if (!v || hwy_id(v) != piece || hwy_st(v) != (state & 3) || k < 0) return;
+    if (x > hp->x0 && x < hp->x1 && z > hp->z0 && z < hp->z1) return;
+    if (g_hwy_p[k].land) { hwy_drop(hp, x, z); return; }
+    if (!hwy_inbuf(hp, x, z) || hwy_claimed(x, z)) return;
+    sid = hwy_stock_of(piece, state & 3, &sst);
+    if (sid && sid != 15149) hwy_put(hp, x, z, sid, sst);
+}
+
+/* task hwtdel: the stock end cap for a straight highway cell (x, z) whose own highway runs along (ux, uz), when exactly
+   one of its two neighbours along it holds no highway (the player bulldozed the next cell): the cap facing that gap.
+   (px, pz) = the step toward the other lane of its carriageway pair (picks the lane's cap, hwcap_cap_of). -> 1 and
+   the cap, 0 = no gap or both sides open. A block that rewrites a cut interchange's cells with plain highway uses it so
+   the cut ends do not draw open (the re-place after reverts would otherwise keep a straight piece over the stock cap) */
+static void hwcap_cap_of(int sx, int sz, int lower, WORD *id, int *st);
+static int hwy_gap_cap(HwyPass *hp, int x, int z, int ux, int uz, int px, int pz, WORD *id, int *st) {
+    int s, gx = 0, gz = 0, n = 0;
+    for (s = -1; s <= 1; s += 2)
+        if (!hwy_rd(hp, x + s * ux, z + s * uz)) { gx = s * ux; gz = s * uz; n++; }
+    if (n != 1) return 0;
+    hwcap_cap_of(gx, gz, px + pz > 0, id, st);
     return 1;
 }
 
@@ -380,15 +463,85 @@ static HwyPass *hwy_begin(BYTE *mgr, int x0, int z0, int x1, int z1, const char 
     return &P;
 }
 
+/* task hwtdel: the 15149 net. A revert's rect retile re-tiles the whole highway run around the cell, past the read box,
+ * and where the stock tiler then sees an interchange's land pieces (Protected HWAY bases) beside the highway it writes
+ * 15149 "Highway Construction" (measured 2026-10-22: one in-place revert left 13 of them in a T 6 cells away; a
+ * cloverleaf's box-edge cells the same). The kept-cell re-place covers only cells some block kept. So hwy_end
+ * snapshots the box plus HWY_RING cells around it before it reverts, and afterwards puts the snapshot piece back in
+ * any cell that turned into 15149 from another piece. A cell reverted in this pass is skipped when it was a land piece
+ * (removed), but an on-highway piece re-tiled in place into 15149 gets the stock piece it saves as (hwys / save id /
+ * base: what the player's highway held before the interchange; measured: a dropped hwdx quadrant's join cell), unless
+ * that is 15149 itself (stub pieces). A 15149 the game made before the pass (a real stock side hit) is in the snapshot
+ * and stays. */
+#define HWY_RING 8
+#define HWY_15149 15149
+
+typedef struct { int x0, z0, w, h; DWORD *v; } HwyNet;
+
+static void hwy_net_take(HwyPass *hp, HwyNet *n) {
+    int x, z;
+    n->x0 = hp->x0 - HWY_RING; n->z0 = hp->z0 - HWY_RING;
+    if (n->x0 < 0) n->x0 = 0;
+    if (n->z0 < 0) n->z0 = 0;
+    n->w = (hp->x1 + HWY_RING < hp->W ? hp->x1 + HWY_RING : hp->W - 1) - n->x0 + 1;
+    n->h = (hp->z1 + HWY_RING < hp->H ? hp->z1 + HWY_RING : hp->H - 1) - n->z0 + 1;
+    n->v = (DWORD *)VirtualAlloc(NULL, (SIZE_T)n->w * n->h * sizeof(DWORD), MEM_COMMIT, PAGE_READWRITE);
+    if (!n->v) return;
+    for (z = 0; z < n->h; z++)
+        for (x = 0; x < n->w; x++) {
+            int cx = n->x0 + x, cz = n->z0 + z;
+            n->v[z * n->w + x] = (cx >= hp->b.x0 && cz >= hp->b.z0 && cx < hp->b.x0 + hp->b.w && cz < hp->b.z0 + hp->b.h)
+                                 ? hwy_at(hp, cx, cz) : hwy_read(hp->mgr, hp->lay, cx, cz, hp->W, hp->H);
+        }
+}
+
+static void hwy_net_fix(HwyPass *hp, HwyNet *n) {
+    int x, z, k;
+    if (!n->v) return;
+    for (z = 0; z < n->h; z++)
+        for (x = 0; x < n->w; x++) {
+            int cx = n->x0 + x, cz = n->z0 + z, pos[3], rev = 0, kp;
+            DWORD was = n->v[z * n->w + x], v;
+            if (!was || hwy_id(was) == HWY_15149) continue;
+            if (cx > hp->x0 && cx < hp->x1 && cz > hp->z0 && cz < hp->z1) rev = (*hwy_flag(hp, cx, cz) & 32) != 0;
+            for (k = 0; k < hp->nx && !rev; k++) rev = hp->xd[k][0] == cx && hp->xd[k][1] == cz;
+            kp = hwy_piece(hwy_id(was));
+            if (rev && (kp < 0 || g_hwy_p[kp].land || (*hwy_flag(hp, cx, cz) & 8))) continue;   /* removed: not ours */
+            v = hwy_read(hp->mgr, hp->lay, cx, cz, hp->W, hp->H);
+            if (!v || hwy_id(v) != HWY_15149) continue;
+            if (rev) {   /* our on-highway piece re-tiled in place into 15149: the stock piece it saves as (what was there) */
+                int sst;
+                WORD sid = hwy_stock_of(hwy_id(was), hwy_st(was), &sst);
+                if (!sid || sid == HWY_15149) continue;                   /* a stub piece: 15149 is its stock aftermath */
+                was = HWY_ON | ((DWORD)(sst & 3) << 16) | sid;
+            }
+            pos[0] = cx << 8; pos[1] = cz << 8; pos[2] = 0;
+            ((PFN_Put)(g_rb_m + 0x8919))(hp->mgr, 0, hp->lay, pos, hwlt_want(((DWORD)hwy_id(was) << 8) | (DWORD)hwy_st(was)), -1, 8, 0);
+            hp->nput++;
+            logf("hwy: %s: (%d,%d) 15149 left by a revert retile -> %u.%d put back", hp->who, cx, cz, hwy_id(was), hwy_st(was));
+        }
+    VirtualFree(n->v, 0, MEM_RELEASE);
+    n->v = NULL;
+}
+
 static void hwy_end(HwyPass *hp) {
     int x, z;
+    HwyNet net = {0};
     if (!hp || !hp->b.c) return;
     hwyt_run(hp);                                     /* the proof rule last: the shape blocks claim first */
+    for (z = hp->z0 + 1; z < hp->z1 && !net.v; z++)  /* task hwtdel: the 15149 net, only when something reverts */
+        for (x = hp->x0 + 1; x < hp->x1 && !net.v; x++) {
+            DWORD v = hwy_at(hp, x, z);
+            int k = v ? hwy_piece(hwy_id(v)) : -1;
+            if ((v && (*hwy_flag(hp, x, z) & 8)) || (k >= 0 && !(*hwy_flag(hp, x, z) & 1))) hwy_net_take(hp, &net);
+        }
+    if (!net.v && hp->nx) hwy_net_take(hp, &net);
     for (z = hp->z0 + 1; z < hp->z1; z++)
         for (x = hp->x0 + 1; x < hp->x1; x++) {
             DWORD v = hwy_at(hp, x, z);
             int k = v ? hwy_piece(hwy_id(v)) : -1, rect[6], drop = v && (*hwy_flag(hp, x, z) & 8);
             if (!drop && (k < 0 || (*hwy_flag(hp, x, z) & 1))) continue;
+            *hwy_flag(hp, x, z) |= 32;                /* task hwtdel: reverted in this pass (the 15149 net skips it) */
             if (drop || g_hwy_p[k].land) {
                 void *occ = NULL;
                 if (((PFN_HwyAt)VT(hp->lay, 0x7c))(hp->lay, 0, x, z, &occ) && occ) {
@@ -440,6 +593,7 @@ static void hwy_end(HwyPass *hp) {
         }
         hp->nput += nre;
     }
+    hwy_net_fix(hp, &net);                            /* task hwtdel */
     InterlockedExchangeAdd(&g_hwy_n_put, hp->nput);
     InterlockedExchangeAdd(&g_hwy_n_rev, hp->nrev);
     if (hp->nput || hp->nrev || !strcmp(hp->who, "load"))
