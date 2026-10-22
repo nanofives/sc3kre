@@ -29,6 +29,8 @@
  *    that quadrant (hwy_end reverts the rest); quadrants are only added on a fresh build.
  *  - A stock retile over part of the core may put 15149 / plain pieces back: the core still counts when at least half
  *    of its cells hold our pieces and the rest hold highway.
+ * Task hwtdel: cells past the read box are kept (hwy_put past the box keeps a right cell instead of refusing it with a
+ * ### line per cell), and a dropped quadrant's cells on the border row / past the box are taken back (hwy_unput).
  * Off: SC3NETMOD_HWDX=0.
  */
 #include "sc3netmod_hwdx_tab.h"
@@ -46,10 +48,7 @@ static void hwdx_cell(int i, int j, int r, int *x, int *z) {
     *x = i; *z = j;
 }
 
-static DWORD hwdx_rd(HwyPass *hp, int x, int z) {
-    if (x >= hp->b.x0 && z >= hp->b.z0 && x < hp->b.x0 + hp->b.w && z < hp->b.z0 + hp->b.h) return hwy_at(hp, x, z);
-    return hwy_read(hp->mgr, hp->lay, x, z, hp->W, hp->H);
-}
+static DWORD hwdx_rd(HwyPass *hp, int x, int z) { return hwy_rd(hp, x, z); }       /* task hwtdel: the shared read */
 
 static int hwdx_inbox(HwyPass *hp, int x, int z) {
     return x > hp->x0 && z > hp->z0 && x < hp->x1 && z < hp->z1;
@@ -279,7 +278,21 @@ static void hwdx_run(HwyPass *hp) {
             if (st[q] == 2 || (f->fresh && st[q] == 1)) {
                 hwdx_write(hp, f, q);
                 InterlockedIncrement(&g_hwdx_n_q);
-            } else if (!f->fresh) InterlockedIncrement(&g_hwdx_n_drop);
+            } else if (!f->fresh) {
+                InterlockedIncrement(&g_hwdx_n_drop);
+                for (j = 0; j < n; j++) {                /* task hwtdel: its cells on the border row / past the box too */
+                    int cx, cz, cst;
+                    WORD cid;
+                    if (t[j].quad != q) continue;
+                    cid = hwdx_want(&t[j], f->r, &cst, NULL);
+                    hwdx_cell(t[j].i, t[j].j, f->r, &cx, &cz);
+                    hwy_unput(hp, f->ox + cx, f->oz + cz, cid, cst);
+                    if (t[j].kind == 1) {                /* its capped join */
+                        DWORD v = hwdx_rd(hp, f->ox + cx, f->oz + cz);
+                        if (v && hwy_id(v) == hwdx_capid(&t[j], f)) hwy_unput(hp, f->ox + cx, f->oz + cz, hwy_id(v), hwy_st(v));
+                    }
+                }
+            }
         }
         InterlockedIncrement(f->fresh ? &g_hwdx_n_new : &g_hwdx_n_keep);
         logf("hwdx: %s: %s crossing O (%d,%d) case %c r %d, quadrants %s%s%s%s", hp->who, f->fresh ? "new" : "kept",
