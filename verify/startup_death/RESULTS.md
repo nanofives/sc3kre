@@ -1,6 +1,6 @@
 # Intermittent startup death at ~0.3 s (item 1 of the sc3undo leftovers, 2026-10-21)
 
-Status: cause read from a log, fix PARKED by owner call 2026-10-21 ("skip item 1's fix for now").
+Status: FIXED 2026-10-22 (owner approved): stream onramp dropped every remaining protection restore and pinned modules in sc3perf; 30 of 30 clean starts (verify/onramp/RESULTS.md). The text below is the 2026-10-21 diagnosis.
 
 ## Runs that died on 2026-10-20
 
