@@ -7728,6 +7728,21 @@ static void rz_fd_maybe(void *self, const RECT *dr, void *src, const RECT *sr) {
    the frame is client-sized, so it sits at 1/f of the way. Fix: that Blt is re-aimed at anchor x f and drawn at the
    size Windows draws the current cursor (its bitmap width / 32, 2x on this PC). SC3RESIZE_ANCHORMARK=0 turns it off. */
 static int  g_anchormark = 1;
+/* DRAGKICK (owner 2026-10-23: "when zooming in while moving the arrow disappears until I move the cursor again; on the
+   last two zoom levels it completely stops moving"). A stock zoom ends the right-drag (+0x1e6 = 0) and the game restarts
+   it on the next mouse move; at a CITYZOOM step DRAGANCHOR keeps it on but clears the velocity, which is also only
+   rebuilt on the next move (FUN_10043a38, city view vt +0x40). With the right button still held, one WM_MOUSEMOVE at the
+   pointer is posted after the zoom, so the drag, its velocity and its arrow come back at once. SC3RESIZE_DRAGKICK=0 off. */
+static int  g_dragkick = 1;
+static void rz_drag_kick(const char *why) {
+    POINT p;
+    RECT rc;
+    static int logged;
+    if (!g_dragkick || !g_hwnd || !(GetAsyncKeyState(VK_RBUTTON) & 0x8000)) return;
+    if (!GetCursorPos(&p) || !ScreenToClient(g_hwnd, &p) || !GetClientRect(g_hwnd, &rc) || !PtInRect(&rc, p)) return;
+    PostMessageA(g_hwnd, WM_MOUSEMOVE, MK_RBUTTON, MAKELPARAM((WORD)(short)p.x, (WORD)(short)p.y));
+    if (logged < 10) { logged++; logf("DRAGKICK> %s with the right button held: mouse move posted at (%ld,%ld)", why, p.x, p.y); }
+}
 static volatile int  g_am_on;
 static volatile LONG g_am_x, g_am_y;
 static void rz_am_fix(RECT *dr, const RECT *sr, RECT *out) {
@@ -10886,6 +10901,7 @@ static void rz_poll(void) {
                     *(LONG *)(b + 0x1f4) = 0; *(LONG *)(b + 0x1f8) = 0;
                     logf("DRAGANCHOR> right-drag active across x%ld -> x%ld: anchor (%d,%d) -> (%d,%d), velocity reset",
                          g_cz_f, cz_f, ax, ay, *(short *)(b + 0x1ec), *(short *)(b + 0x1ee));
+                    rz_drag_kick("zoom step");   /* rebuild the velocity at once (DRAGKICK) */
                 }
             }
         }
@@ -12657,6 +12673,7 @@ static int __stdcall cz_zoom(BYTE *view, int dir) {
     DWORD *cam;
     RECT rc;
     LONG mx, cur, was;
+    rz_drag_kick(dir ? "zoom out" : "zoom in");   /* posted: handled after this zoom (and a step's resize) */
     if (!g_cz_mode || IsBadReadPtr(view, 0x160)) return 0;
     cam = *(DWORD **)(view + 0x158);
     if (!cam || IsBadReadPtr(cam, 0x30) || cam[0x28 / 4] != 4 || !g_hwnd || !GetClientRect(g_hwnd, &rc)) return 0;
@@ -12791,6 +12808,30 @@ static void __fastcall cz_setdrag(void *self, void *edx, int x, int y, int on) {
     g_am_on = on != 0; g_am_x = (short)x; g_am_y = (short)y;   /* ANCHORMARK: the marker is drawn centred here */
     g_cz_setdrag_orig(self, NULL, x, y, on);
 }
+/* DRAGCAP (owner 2026-10-23: "speed of movement is much faster on the closest zoom levels"). The right-drag velocity is
+   (mouse - anchor) / divisor, clamped to the float at SIMSPR+0x676a8 (80 stock), in VIEW pixels per tick; at x2 / x3 a
+   view pixel is f screen pixels, so the top speed on screen was f times stock zoom 4. Below the cap the speed on screen
+   is already the same (the offset arrives as q / f). FUN_10043a38 (city view vt +0x40, the mouse move) is wrapped and
+   the velocity clamped to cap / f after it. SC3RESIZE_DRAGCAP=0 off. */
+static int g_dragcap = 1;
+typedef void (__fastcall *CZ_DRAGMOVE)(void *, void *, int, int);
+static CZ_DRAGMOVE g_cz_dragmove_orig;
+static float *g_dragcap_cap;
+static void __fastcall cz_dragmove(void *self, void *edx, int x, int y) {
+    (void)edx;
+    g_cz_dragmove_orig(self, NULL, x, y);
+    if (g_dragcap && g_cz_f > 1 && g_dragcap_cap && ((BYTE *)self)[0x1e6]) {
+        float lim = *g_dragcap_cap / (float)g_cz_f, *v = (float *)((BYTE *)self + 0x1f4);
+        int i;
+        static int logged;
+        for (i = 0; i < 2; i++) {
+            if (v[i] > lim) v[i] = lim;
+            else if (v[i] < -lim) v[i] = -lim;
+        }
+        if (logged < 3) { logged++; logf("DRAGCAP> x%ld: right-drag velocity clamped to +-%.1f view px (cap %.1f / %ld)", g_cz_f, lim, *g_dragcap_cap, g_cz_f); }
+    }
+}
+
 static void patch_setdrag(HMODULE ss) {
     DWORD *slot = (DWORD *)((BYTE *)ss + 0x678d0), old;
     if (!g_cz_mode || !g_cz_draganchor) return;
@@ -12800,6 +12841,14 @@ static void patch_setdrag(HMODULE ss) {
     *slot = (DWORD)cz_setdrag;
     (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     logf("--- DRAGANCHOR: city view SetDragMode (SIMSPR+0x42cfe, vt 0x10067894 +0x3c) wrapped: a right-drag keeps its anchor across zoom steps");
+    {   DWORD *mslot = (DWORD *)((BYTE *)ss + 0x678d4);   /* DRAGCAP: vt +0x40 = FUN_10043a38 */
+        if (g_dragcap && !IsBadReadPtr(mslot, 4) && *mslot == (DWORD)ss + 0x43a38 && VirtualProtect(mslot, 4, PAGE_EXECUTE_READWRITE, &old)) {
+            g_cz_dragmove_orig = (CZ_DRAGMOVE)*mslot;
+            g_dragcap_cap = (float *)((BYTE *)ss + 0x676a8);
+            *mslot = (DWORD)cz_dragmove;
+            logf("--- DRAGCAP: city view drag move (SIMSPR+0x43a38, vt +0x40) wrapped: top drag speed at x2 / x3 = stock zoom 4");
+        } else logf("--- DRAGCAP: city view vt+0x40 is not FUN_10043a38 - not installed");
+    }
 }
 
 static void patch_zoomcenter(HMODULE ss) {
@@ -13603,6 +13652,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_HSCENSUS", v, sizeof(v))) g_hs_census = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PANCURSOR", v, sizeof(v))) g_pancursor = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_ANCHORMARK", v, sizeof(v))) g_anchormark = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_DRAGKICK", v, sizeof(v))) g_dragkick = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_DRAGCAP", v, sizeof(v))) g_dragcap = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_FILTER", v, sizeof(v))) g_ms_filter = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_REPOST", v, sizeof(v))) g_ms_repost = atoi(v);
           GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_DUMP", g_ms_dump, sizeof(g_ms_dump));
