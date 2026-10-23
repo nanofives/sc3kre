@@ -7500,6 +7500,78 @@ static DWORD __fastcall qi_msg(void *self, void *edx, DWORD win, DWORD msg, DWOR
     return r;
 }
 
+/* PANCURSOR (owner 2026-10-23: "moving camera with right click makes the cursor smaller"). Measured with GetCursorInfo
+   during a right-drag: at the press the game sets a centred cursor (hotspot at the middle, the 21x21 centre / four-way
+   art), then while dragging it sets the stock PAN ... ARROW.cur cursors, whose art is 15x8 to 17x9 inside the 32x32
+   canvas, against the 17x29 pointer. Owner call: keep the four-way cursor for the whole drag. user32!SetCursor is
+   redirected in every loaded module's import table; while the right button is held, the first centred cursor set
+   after the press is kept and every later SetCursor of that hold gets it instead. SC3RESIZE_PANCURSOR=0 turns it off.
+   Import-table pages are left writable (never restore VirtualProtect: mods race on shared pages). */
+static int g_pancursor = 1;
+typedef HCURSOR (WINAPI *PFN_SETCURSOR)(HCURSOR);
+static PFN_SETCURSOR g_orig_setcursor;
+static HCURSOR g_pan_keep;
+static LONG g_pan_subs;
+static int rz_cursor_centred(HCURSOR h) {
+    ICONINFO ii;
+    BITMAP bm;
+    LONG w, hh;
+    int ok = 0;
+    if (!h || !GetIconInfo(h, &ii)) return 0;
+    if (GetObjectA(ii.hbmMask, sizeof(bm), &bm)) {
+        w = bm.bmWidth; hh = ii.hbmColor ? bm.bmHeight : bm.bmHeight / 2;
+        ok = w > 0 && hh > 0 && labs((LONG)ii.xHotspot * 2 - w) <= w / 8 && labs((LONG)ii.yHotspot * 2 - hh) <= hh / 8;
+    }
+    if (ii.hbmMask) DeleteObject(ii.hbmMask);
+    if (ii.hbmColor) DeleteObject(ii.hbmColor);
+    return ok;
+}
+static HCURSOR WINAPI rz_setcursor_hook(HCURSOR h) {
+    if (g_pancursor && (GetAsyncKeyState(VK_RBUTTON) & 0x8000)) {
+        if (!g_pan_keep) { if (rz_cursor_centred(h)) g_pan_keep = h; }
+        else if (h != g_pan_keep) { h = g_pan_keep; if (g_pan_subs++ < 3) logf("PANCURSOR> drag cursor replaced by the press cursor"); }
+    } else g_pan_keep = NULL;
+    return g_orig_setcursor(h);
+}
+static int rz_iat_patch(HMODULE m, const char *dll, const char *fn, void *repl, void **orig) {
+    BYTE *b = (BYTE *)m;
+    IMAGE_DOS_HEADER *dh = (IMAGE_DOS_HEADER *)b;
+    IMAGE_NT_HEADERS *nh;
+    IMAGE_IMPORT_DESCRIPTOR *id;
+    DWORD rva;
+    int n = 0;
+    if (!b || dh->e_magic != IMAGE_DOS_SIGNATURE) return 0;
+    nh = (IMAGE_NT_HEADERS *)(b + dh->e_lfanew);
+    rva = nh->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
+    if (!rva) return 0;
+    for (id = (IMAGE_IMPORT_DESCRIPTOR *)(b + rva); id->Name; id++) {
+        IMAGE_THUNK_DATA *ot, *ft;
+        if (lstrcmpiA((const char *)(b + id->Name), dll)) continue;
+        ot = (IMAGE_THUNK_DATA *)(b + (id->OriginalFirstThunk ? id->OriginalFirstThunk : id->FirstThunk));
+        ft = (IMAGE_THUNK_DATA *)(b + id->FirstThunk);
+        for (; ot->u1.AddressOfData; ot++, ft++) {
+            DWORD old;
+            if (IMAGE_SNAP_BY_ORDINAL(ot->u1.Ordinal)) continue;
+            if (lstrcmpA((const char *)((IMAGE_IMPORT_BY_NAME *)(b + ot->u1.AddressOfData))->Name, fn)) continue;
+            if ((void *)ft->u1.Function == repl) continue;
+            if (!*orig) *orig = (void *)ft->u1.Function;
+            if (VirtualProtect(&ft->u1.Function, sizeof(DWORD), PAGE_READWRITE, &old)) { ft->u1.Function = (DWORD)repl; n++; }
+        }
+    }
+    return n;
+}
+static void pk_install(void) {
+    static const char *mods[] = { NULL, "SIMSPR.DLL", "GZWIND.DLL", "GZGraphicD.dll", "SIMUI.DLL", "SIMCITY.DLL" };
+    int i, n = 0;
+    if (!g_pancursor) { logf("PANCURSOR> off (SC3RESIZE_PANCURSOR=0)"); return; }
+    for (i = 0; i < (int)(sizeof(mods) / sizeof(mods[0])); i++) {
+        HMODULE m = mods[i] ? GetModuleHandleA(mods[i]) : GetModuleHandleA(NULL);
+        if (m) n += rz_iat_patch(m, "USER32.dll", "SetCursor", (void *)rz_setcursor_hook, (void **)&g_orig_setcursor);
+    }
+    if (!g_orig_setcursor) g_orig_setcursor = (PFN_SETCURSOR)GetProcAddress(GetModuleHandleA("user32.dll"), "SetCursor");
+    logf("PANCURSOR> SetCursor redirected in %d import slot(s): a right-drag keeps the cursor set at the press", n);
+}
+
 static void qi_install(HMODULE sui) {
     static const BYTE e338f[6] = { 0x55, 0x8b, 0xec, 0x56, 0x8b, 0xf1 };   /* push ebp; mov ebp,esp; push esi; mov esi,ecx */
     if (!g_queryid) { logf("QUERYID> off (SC3RESIZE_QUERYID=0): no button in the query dialog"); return; }
@@ -13331,6 +13403,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           ho_install(sui);   /* HUDOPT: HUD scale controls in the Preferences dialog */
           rz_meet_hook(sui); /* DLGSTAY: the Reunirse pages share one stored position */
           qi_install(sui);   /* QUERYID: "Copiar ID" button in the query (?) dialog */
+          pk_install();      /* PANCURSOR: right-drag keeps the four-way cursor */
       }
       else logf("--- HUD: SIMUI.DLL never loaded after %d tries - capture NOT armed, HUD stays native", st); }
     if (g_hudlab) {
@@ -13426,6 +13499,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MENUBGFIT", v, sizeof(v))) g_menubg_fit = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE", v, sizeof(v))) g_menuscale = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HSCENSUS", v, sizeof(v))) g_hs_census = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_PANCURSOR", v, sizeof(v))) g_pancursor = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_FILTER", v, sizeof(v))) g_ms_filter = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_REPOST", v, sizeof(v))) g_ms_repost = atoi(v);
           GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_DUMP", g_ms_dump, sizeof(g_ms_dump));
