@@ -7520,14 +7520,21 @@ static int rz_cursor_centred(HCURSOR h) {
     if (!h || !GetIconInfo(h, &ii)) return 0;
     if (GetObjectA(ii.hbmMask, sizeof(bm), &bm)) {
         w = bm.bmWidth; hh = ii.hbmColor ? bm.bmHeight : bm.bmHeight / 2;
-        ok = w > 0 && hh > 0 && labs((LONG)ii.xHotspot * 2 - w) <= w / 8 && labs((LONG)ii.yHotspot * 2 - hh) <= hh / 8;
+        ok = w > 0 && hh > 0 && labs((LONG)ii.xHotspot * 2 - w) <= w / 32 && labs((LONG)ii.yHotspot * 2 - hh) <= hh / 32;   /* (16,16) of 32, +-1: the pan arrows sit at (14..17, 9..15) */
     }
     if (ii.hbmMask) DeleteObject(ii.hbmMask);
     if (ii.hbmColor) DeleteObject(ii.hbmColor);
     return ok;
 }
+static HCURSOR g_pan_last;   /* the last cursor this hook let through outside a right-button hold */
 static HCURSOR WINAPI rz_setcursor_hook(HCURSOR h) {
-    if (g_pancursor && (GetAsyncKeyState(VK_RBUTTON) & 0x8000)) {
+    static int dbg;
+    HCURSOR in = h;
+    int held = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+    if (g_pancursor && held && !g_pan_keep && !rz_cursor_centred(h) && g_pan_last && rz_cursor_centred(g_pan_last)) {
+        g_pan_keep = g_pan_last;   /* the hover cursor the press kept (no SetCursor at the press) */
+    }
+    if (g_pancursor && held) {
         if (!g_pan_keep) {
             /* the centred cursor is often already up from hovering the city (no new SetCursor at the press; owner
                recording 2026-10-23: 0xee056b before and through the press, then an arrow 30 ms later) */
@@ -7537,7 +7544,17 @@ static HCURSOR WINAPI rz_setcursor_hook(HCURSOR h) {
                 if (g_pan_subs++ < 3) logf("PANCURSOR> drag cursor replaced by the cursor up at the press"); }
         }
         else if (h != g_pan_keep) { h = g_pan_keep; if (g_pan_subs++ < 3) logf("PANCURSOR> drag cursor replaced by the press cursor"); }
-    } else g_pan_keep = NULL;
+    } else { g_pan_keep = NULL; g_pan_last = h; }
+    if (g_pancursor && dbg < 400 && (held || in != h || dbg < 40)) {
+        DWORD ra = (DWORD)_ReturnAddress();
+        HMODULE m = NULL;
+        char mn[32] = "?";
+        if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)ra, &m) && m) {
+            char full[MAX_PATH], *b; GetModuleFileNameA(m, full, MAX_PATH); b = strrchr(full, 92); lstrcpynA(mn, b ? b + 1 : full, sizeof(mn)); }
+        dbg++;
+        logf("PANCURSOR> #%d held=%d in=%p centred=%d -> %p keep=%p cur=%p from %s+0x%lX tid %lu", dbg, held, in,
+             rz_cursor_centred(in), h, g_pan_keep, GetCursor(), mn, ra - (DWORD)m, GetCurrentThreadId());
+    }
     return g_orig_setcursor(h);
 }
 static int rz_iat_patch(HMODULE m, const char *dll, const char *fn, void *repl, void **orig) {
