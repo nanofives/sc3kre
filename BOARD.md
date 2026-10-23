@@ -10,8 +10,8 @@ This file points at them and does not restate them.
 
 ## Current state, 2026-10-23 (read this first)
 
-**Latest published release is still `sc3mods-2026-10-12`** (target `7c1db20`). `main` is 475+ commits past it and
-nothing has been published since. Dev builds go to the LAN server (`re/scripts/lan_release`, last republish
+**Latest published release: `sc3mods-2026-10-23`** (target `60f22ea`, the `rc/1023` build plus the netmod road data,
+owner call 2026-10-23, `verify/mods_release_1023/RESULTS.md`). `main` pushed to GitHub the same day. Dev builds go to the LAN server (`re/scripts/lan_release`, last republish
 2026-10-21 at `67bd9ea`, 3,593 files). `child/cityzoom` is the only branch not merged into `main`.
 
 **Release candidate staged 2026-10-23: `Proyectos\Simcity_rc`** (branch `rc/1023` in worktree `Simcity_wt_rc` =
