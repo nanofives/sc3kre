@@ -7734,14 +7734,26 @@ static int  g_anchormark = 1;
    rebuilt on the next move (FUN_10043a38, city view vt +0x40). With the right button still held, one WM_MOUSEMOVE at the
    pointer is posted after the zoom, so the drag, its velocity and its arrow come back at once. SC3RESIZE_DRAGKICK=0 off. */
 static int  g_dragkick = 1;
-static void rz_drag_kick(const char *why) {
+static LPARAM g_cz_last_out;                 /* fwd (task cityzoom mouse map, defined with cz_mouse) */
+static int    g_cz_last_ok;
+static DWORD  g_cz_last_t;
+/* f = the zoom factor the move will be read at. The move is posted already in view pixels and marked as cz_mouse's last
+   output, so it is not divided again; measured 2026-10-23: a move posted while the game handled '+' at x3 came back
+   nested (left unmapped) and the client point (2034,992) read as view pixels sent the camera off at full speed. */
+static void rz_drag_kick(const char *why, LONG f) {
     POINT p;
     RECT rc;
+    LONG x, y;
+    LPARAM lp;
     static int logged;
     if (!g_dragkick || !g_hwnd || !(GetAsyncKeyState(VK_RBUTTON) & 0x8000)) return;
     if (!GetCursorPos(&p) || !ScreenToClient(g_hwnd, &p) || !GetClientRect(g_hwnd, &rc) || !PtInRect(&rc, p)) return;
-    PostMessageA(g_hwnd, WM_MOUSEMOVE, MK_RBUTTON, MAKELPARAM((WORD)(short)p.x, (WORD)(short)p.y));
-    if (logged < 10) { logged++; logf("DRAGKICK> %s with the right button held: mouse move posted at (%ld,%ld)", why, p.x, p.y); }
+    if (f < 1) f = 1;
+    x = p.x / f; y = p.y / f;
+    lp = MAKELPARAM((WORD)(short)x, (WORD)(short)y);
+    if (f > 1) { g_cz_last_out = lp; g_cz_last_ok = 1; g_cz_last_t = GetTickCount(); }
+    PostMessageA(g_hwnd, WM_MOUSEMOVE, MK_RBUTTON, lp);
+    if (logged < 10) { logged++; logf("DRAGKICK> %s with the right button held: mouse move posted at client (%ld,%ld) = view (%ld,%ld) at x%ld", why, p.x, p.y, x, y, f); }
 }
 static volatile int  g_am_on;
 static volatile LONG g_am_x, g_am_y;
@@ -10804,7 +10816,15 @@ static void rz_poll(void) {
         want = g_cz_req;
         cz_f = want;
         cz_cw = (LONG)w; cz_ch = (LONG)ht;
-        if (want > 1) { w = (w + want - 1) / want; ht = (ht + want - 1) / want; }
+        if (want > 1) {
+            w = (w + want - 1) / want; ht = (ht + want - 1) / want;
+            /* ALIGN8 (owner 2026-10-23, "buildings cut by horizontal lines, only at the closest zoom"): at x3 on
+               3840x1984 the view was 1280x662 and frame dumps while scrolling showed an undrawn black band exactly
+               6 view rows tall (662 = 82 x 8 + 6) carried through the view by the scroll copy, cutting the sprites it
+               crossed; x2 (992) and stock sizes are multiples of 8 and never showed it. Round the view up to 8: the
+               spare rows / columns lie past the stretch source (client / f) and are never shown. */
+            w = (w + 7) & ~7u; ht = (ht + 7) & ~7u;
+        }
     }
     /* SETTLED check. The render target is deliberately over-allocated by RZ_SURFACE_SLACK guard rows
        (zoom-blit overrun fix), so its height (+0x28) is ht..ht+SLACK, NOT exactly ht. Comparing
@@ -10901,7 +10921,7 @@ static void rz_poll(void) {
                     *(LONG *)(b + 0x1f4) = 0; *(LONG *)(b + 0x1f8) = 0;
                     logf("DRAGANCHOR> right-drag active across x%ld -> x%ld: anchor (%d,%d) -> (%d,%d), velocity reset",
                          g_cz_f, cz_f, ax, ay, *(short *)(b + 0x1ec), *(short *)(b + 0x1ee));
-                    rz_drag_kick("zoom step");   /* rebuild the velocity at once (DRAGKICK) */
+                    rz_drag_kick("zoom step", cz_f);   /* rebuild the velocity at once (DRAGKICK) */
                 }
             }
         }
@@ -11200,6 +11220,40 @@ static int cz_mouse(UINT m, LPARAM *lp) {
              cz_on_ui(nx, ny) ? " (lands on a UI window)" : "");
     }
     return 1;
+}
+
+/* CURSORMAP (owner 2026-10-23: '+' at the last zoom level while right-dragging sent the camera off). Probe at x3: after
+   the stock zoom-in the view's mouse point (+0x204/+0x208) was (2034,992), the CLIENT point, not view (678,330): the
+   game re-read the pointer through GZWIND FUN_10020260 (GetCursorPos + ScreenToClient, thiscall(&x, &y), vtable slot
+   GZWIND 0x1002dc04), which CITYZOOM did not map (CITY_ZOOM.md listed it as not mapped). It is wrapped: a point in the
+   city at x2 / x3 comes back in view pixels like every mapped mouse message; on a UI window it is left as is.
+   SC3RESIZE_CURSORMAP=0 off. */
+static int g_cursormap = 1;
+typedef void (__fastcall *GZ_CURPOS)(void *, void *, LONG *, LONG *);
+static GZ_CURPOS g_gz_curpos_orig;
+static void __fastcall gz_curpos(void *self, void *edx, LONG *px, LONG *py) {
+    LONG f = g_cz_f;
+    (void)edx;
+    g_gz_curpos_orig(self, NULL, px, py);
+    if (g_cursormap && f > 1 && !g_mb_active && px && py && !IsBadWritePtr(px, 4) && !IsBadWritePtr(py, 4) &&
+        !cz_on_ui(*px, *py)) {
+        static int logged;
+        LONG x = *px, y = *py;
+        *px = cz_div(x, f); *py = cz_div(y, f);
+        if (logged < 5) { logged++; logf("CURSORMAP> GZWIND cursor read (%ld,%ld) -> view (%ld,%ld) at x%ld", x, y, *px, *py, f); }
+    }
+}
+static void cursormap_install(void) {
+    HMODULE gw = GetModuleHandleA("GZWIND.DLL");
+    DWORD *slot, cur, old;
+    if (!g_cursormap || !gw) return;
+    slot = (DWORD *)((BYTE *)gw + 0x2dc04);
+    if (IsBadReadPtr(slot, 4) || (cur = *slot) != (DWORD)gw + 0x20260) {
+        logf("--- CURSORMAP: GZWIND vtable slot +0x2dc04 is not FUN_10020260 - not installed"); return; }
+    if (!VirtualProtect(slot, 4, PAGE_EXECUTE_READWRITE, &old)) return;
+    g_gz_curpos_orig = (GZ_CURPOS)cur;
+    if ((DWORD)InterlockedCompareExchange((LONG volatile *)slot, (LONG)(DWORD)gz_curpos, (LONG)cur) == cur)
+        logf("--- CURSORMAP: GZWIND GetCursorPos helper (FUN_10020260) wrapped: city points map to view pixels at x2 / x3");
 }
 
 static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
@@ -12673,7 +12727,7 @@ static int __stdcall cz_zoom(BYTE *view, int dir) {
     DWORD *cam;
     RECT rc;
     LONG mx, cur, was;
-    rz_drag_kick(dir ? "zoom out" : "zoom in");   /* posted: handled after this zoom (and a step's resize) */
+    rz_drag_kick(dir ? "zoom out" : "zoom in", g_cz_f);   /* posted: handled after this zoom (and a step's resize) */
     if (!g_cz_mode || IsBadReadPtr(view, 0x160)) return 0;
     cam = *(DWORD **)(view + 0x158);
     if (!cam || IsBadReadPtr(cam, 0x30) || cam[0x28 / 4] != 4 || !g_hwnd || !GetClientRect(g_hwnd, &rc)) return 0;
@@ -13559,6 +13613,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           rz_meet_hook(sui); /* DLGSTAY: the Reunirse pages share one stored position */
           qi_install(sui);   /* QUERYID: "Copiar ID" button in the query (?) dialog */
           pk_install();      /* PANCURSOR: right-drag arrows enlarged and centred */
+          cursormap_install();   /* CURSORMAP: GZWIND's GetCursorPos helper maps through the zoom factor */
       }
       else logf("--- HUD: SIMUI.DLL never loaded after %d tries - capture NOT armed, HUD stays native", st); }
     if (g_hudlab) {
@@ -13658,6 +13713,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_ANCHORMARK", v, sizeof(v))) g_anchormark = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_DRAGKICK", v, sizeof(v))) g_dragkick = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_DRAGCAP", v, sizeof(v))) g_dragcap = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_CURSORMAP", v, sizeof(v))) g_cursormap = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_FILTER", v, sizeof(v))) g_ms_filter = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_REPOST", v, sizeof(v))) g_ms_repost = atoi(v);
           GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_DUMP", g_ms_dump, sizeof(g_ms_dump));
