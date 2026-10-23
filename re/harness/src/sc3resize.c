@@ -3847,6 +3847,8 @@ static volatile LONG g_ms_rx, g_ms_ry, g_ms_rw, g_ms_rh;   /* the 4:3 rect, clie
 static DWORD *g_ms_lut;                   /* RGB565 -> XRGB */
 static DWORD *g_ms_f32;                   /* the frame as last read, 800x600 XRGB */
 static BYTE  *g_ms_bg;                    /* 1 = that frame pixel is background */
+static int    g_ms_ismenu = -1;           /* the frame shows the menu background (>= 1/10 of it); else (the intro logo,
+                                              owner 2026-10-23) the margins are black, not the menu picture */
 static WORD  *g_ms_raw;                   /* the frame as last read, RGB565: an unchanged row is skipped */
 static HDC    g_ms_dc;
 static HBITMAP g_ms_bmp, g_ms_oldbmp;
@@ -4101,6 +4103,17 @@ static int rz_ms_full(void *src, const RECT *sr, LONG cw, LONG ch) {
     if (!rz_ms_read(src, sr, 0, 0, NAT_W, NAT_H, bb)) return 0;
     if (!g_ms_valid) { bb[0] = 0; bb[1] = 0; bb[2] = NAT_W; bb[3] = NAT_H; }
     QueryPerformanceCounter(&t[1]);
+    if (bb[2] > bb[0]) {   /* pixels changed: is it still (or now) the menu? */
+        LONG i, nbg = 0;
+        int m;
+        for (i = 0; i < NAT_W * NAT_H; i++) nbg += g_ms_bg[i];
+        m = nbg >= NAT_W * NAT_H / 10;
+        if (m != g_ms_ismenu) {
+            logf("MENUSCALE> frame %s (%ld background px): margins %s", m ? "is the menu" : "is not the menu", nbg,
+                 m ? "show the menu picture" : "black");
+            g_ms_ismenu = m; g_ms_full_req = 1;
+        }
+    }
     if (bb[2] > bb[0]) {
         rz_ms_dest_box(bb, d);
         if (!g_ms_valid) { d[0] = 0; d[1] = 0; d[2] = g_ms_rw; d[3] = g_ms_rh; }
@@ -4119,11 +4132,12 @@ static int rz_ms_full(void *src, const RECT *sr, LONG cw, LONG ch) {
         dc = GetDC(g_hwnd);
         if (dc) {
             LONG rx = g_ms_rx, ry = g_ms_ry, rw = g_ms_rw, rh = g_ms_rh;
+            DWORD rop = g_ms_ismenu ? SRCCOPY : BLACKNESS;
             BitBlt(dc, rx, ry, rw, rh, g_ms_dc, 0, 0, SRCCOPY);
-            if (ry > 0) BitBlt(dc, 0, 0, cw, ry, g_mb_dc, 0, 0, SRCCOPY);
-            if (ch - ry - rh > 0) BitBlt(dc, 0, ry + rh, cw, ch - ry - rh, g_mb_dc, 0, ry + rh, SRCCOPY);
-            if (rx > 0) BitBlt(dc, 0, ry, rx, rh, g_mb_dc, 0, ry, SRCCOPY);
-            if (cw - rx - rw > 0) BitBlt(dc, rx + rw, ry, cw - rx - rw, rh, g_mb_dc, rx + rw, ry, SRCCOPY);
+            if (ry > 0) BitBlt(dc, 0, 0, cw, ry, g_mb_dc, 0, 0, rop);
+            if (ch - ry - rh > 0) BitBlt(dc, 0, ry + rh, cw, ch - ry - rh, g_mb_dc, 0, ry + rh, rop);
+            if (rx > 0) BitBlt(dc, 0, ry, rx, rh, g_mb_dc, 0, ry, rop);
+            if (cw - rx - rw > 0) BitBlt(dc, rx + rw, ry, cw - rx - rw, rh, g_mb_dc, rx + rw, ry, rop);
             ReleaseDC(g_hwnd, dc);
             g_ms_full_req = 0; g_ms_full_t = GetTickCount(); g_ms_nfull++;
         }
@@ -5034,6 +5048,28 @@ static int rz_hs_float_hud(void *win, const LONG *r, DWORD vt) {
     return g_hs_fl[k].hud;
 }
 
+/* HSCENSUS (owner 2026-10-23: "are there other elements that need rescaling?"): one log line per distinct
+   (class, size, decision) of a visible root / HUD-container window while HUD scale is enlarging, so a normal play
+   session lists every UI window and what HUDSCALE did with it. SC3RESIZE_HSCENSUS=0 turns it off. */
+static int g_hs_census = 1;
+static void rz_hs_census(DWORD vt, const LONG *r, const char *what) {
+    static DWORD seen[512];
+    static int nseen;
+    DWORD sui = (DWORD)GetModuleHandleA("SIMUI.DLL"), exe = (DWORD)GetModuleHandleA(NULL), spr = (DWORD)GetModuleHandleA("SIMSPR.DLL");
+    DWORD key = (vt * 2654435761u) ^ (DWORD)((r[2] - r[0]) * 7919 + (r[3] - r[1]) * 104729) ^ (DWORD)what[0] * 31 ^ (DWORD)what[1];
+    int i;
+    const char *mod = "?";
+    DWORD rel = vt;
+    if (!g_hs_census) return;
+    for (i = 0; i < nseen; i++) if (seen[i] == key) return;
+    if (nseen >= 512) return;
+    seen[nseen++] = key;
+    if (sui && vt > sui && vt < sui + 0x200000) { mod = "SIMUI"; rel = vt - sui; }
+    else if (exe && vt > exe && vt < exe + 0x200000) { mod = "SC3U"; rel = vt - exe; }
+    else if (spr && vt > spr && vt < spr + 0x200000) { mod = "SIMSPR"; rel = vt - spr; }
+    logf("HSCENSUS> %s+0x%05lX %ldx%ld at [%ld %ld %ld %ld]: %s", mod, rel, r[2] - r[0], r[3] - r[1], r[0], r[1], r[2], r[3], what);
+}
+
 /* Collect visible HUD windows (root children, and children of the full-client HUD container). Returns count. */
 static int rz_hs_collect(LONG cw, LONG ch, double s, int can_erase) {
     DWORD exe = (DWORD)GetModuleHandleA(NULL), spr = (DWORD)GetModuleHandleA("SIMSPR.DLL");
@@ -5065,7 +5101,8 @@ static int rz_hs_collect(LONG cw, LONG ch, double s, int can_erase) {
             r[0] = (LONG)c[0x14 / 4]; r[1] = (LONG)c[0x18 / 4]; r[2] = (LONG)c[0x1c / 4]; r[3] = (LONG)c[0x20 / 4];
             w = r[2] - r[0]; h = r[3] - r[1];
             if (sui && vt == sui + 0xa4d64 && w >= 120 && h >= 80) {                  /* dialog */
-                if (!rz_hd_add(c, r, cw, ch, s) && g_hs_ndlg < 16) { memcpy(g_hs_dlg[g_hs_ndlg], r, sizeof(r)); g_hs_ndlg++; }
+                if (!rz_hd_add(c, r, cw, ch, s)) { rz_hs_census(vt, r, "dialog KEPT NATIVE"); if (g_hs_ndlg < 16) { memcpy(g_hs_dlg[g_hs_ndlg], r, sizeof(r)); g_hs_ndlg++; } }
+                else rz_hs_census(vt, r, "dialog enlarged");
                 sig = (sig ^ (DWORD)(r[0] * 7 + r[1] * 131 + r[2] * 8191 + r[3] * 524287) ^ 0xd1a1) * 16777619u;
                 continue;
             }
@@ -5074,7 +5111,7 @@ static int rz_hs_collect(LONG cw, LONG ch, double s, int can_erase) {
             if (r[2] > cw) r[2] = cw;
             if (r[3] > ch) r[3] = ch;
             if (r[2] <= r[0] || r[3] <= r[1]) continue;
-            if ((r[2] - r[0]) * (r[3] - r[1]) > cw * ch / 2) continue;                 /* full-client layer */
+            if ((r[2] - r[0]) * (r[3] - r[1]) > cw * ch / 2) { rz_hs_census(vt, r, "full-client layer, NOT SCALED"); continue; }
             if (r[2] < cw - 2 && r[3] < ch - 2) {   /* floating (tooltips): enlarged only if it fits and can be erased */
                 LONG fx0 = rz_hs_dst_lo(r[0], cw, s), fy0 = rz_hs_dst_lo(r[1], ch, s);
                 int hud = g_hs_floatall || rz_hs_float_hud(c, r, vt);
@@ -5083,12 +5120,14 @@ static int rz_hs_collect(LONG cw, LONG ch, double s, int can_erase) {
                     g_hs_dst[n][0] = fx0; g_hs_dst[n][1] = fy0;
                     g_hs_dst[n][2] = rz_hs_dst_lo(r[2], cw, s); g_hs_dst[n][3] = rz_hs_dst_lo(r[3], ch, s);
                     g_hs_float[n] = 1; g_hs_vt[n] = vt;
+                    rz_hs_census(vt, r, "floating, enlarged");
                     sig = (sig ^ (DWORD)vt ^ 0x5a5a) * 16777619u;
                     sig = (sig ^ (DWORD)(r[0] * 7 + r[1] * 131 + r[2] * 8191 + r[3] * 524287)) * 16777619u;
                     n++;
                     continue;
                 }
-                if (!hud && exe && vt == exe + 0xd3bcc && can_erase && rz_hl_add(c, r, cw, ch, s)) continue;   /* task uiscale */
+                if (!hud && exe && vt == exe + 0xd3bcc && can_erase && rz_hl_add(c, r, cw, ch, s)) { rz_hs_census(vt, r, "cost label, enlarged"); continue; }   /* task uiscale */
+                if (can_erase) rz_hs_census(vt, r, hud ? "floating HUD, NOT SCALED (no room)" : "floating, NOT SCALED");
                 if (sk < 6) {
                     char t[64];
                     wsprintfA(t, " %08lX[%ld %ld %ld %ld]", vt - (sui && vt > sui && vt < sui + 0x200000 ? sui : 0),
@@ -5106,6 +5145,7 @@ static int rz_hs_collect(LONG cw, LONG ch, double s, int can_erase) {
             if (g_hs_dst[n][2] > cw) g_hs_dst[n][2] = cw;
             if (g_hs_dst[n][3] > ch) g_hs_dst[n][3] = ch;
             g_hs_float[n] = 0; g_hs_vt[n] = vt;
+            rz_hs_census(vt, r, "edge-anchored, enlarged");
             sig = (sig ^ (DWORD)vt) * 16777619u;
             sig = (sig ^ (DWORD)(r[0] * 7 + r[1] * 131 + r[2] * 8191 + r[3] * 524287)) * 16777619u;
             n++;
@@ -13385,6 +13425,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MENUBGSTOCK", v, sizeof(v))) g_menubg_stock = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUBGFIT", v, sizeof(v))) g_menubg_fit = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE", v, sizeof(v))) g_menuscale = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_HSCENSUS", v, sizeof(v))) g_hs_census = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_FILTER", v, sizeof(v))) g_ms_filter = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_REPOST", v, sizeof(v))) g_ms_repost = atoi(v);
           GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_DUMP", g_ms_dump, sizeof(g_ms_dump));
