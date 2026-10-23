@@ -7528,7 +7528,14 @@ static int rz_cursor_centred(HCURSOR h) {
 }
 static HCURSOR WINAPI rz_setcursor_hook(HCURSOR h) {
     if (g_pancursor && (GetAsyncKeyState(VK_RBUTTON) & 0x8000)) {
-        if (!g_pan_keep) { if (rz_cursor_centred(h)) g_pan_keep = h; }
+        if (!g_pan_keep) {
+            /* the centred cursor is often already up from hovering the city (no new SetCursor at the press; owner
+               recording 2026-10-23: 0xee056b before and through the press, then an arrow 30 ms later) */
+            HCURSOR cur = GetCursor();
+            if (rz_cursor_centred(h)) g_pan_keep = h;
+            else if (cur && cur != h && rz_cursor_centred(cur)) { g_pan_keep = cur; h = cur;
+                if (g_pan_subs++ < 3) logf("PANCURSOR> drag cursor replaced by the cursor up at the press"); }
+        }
         else if (h != g_pan_keep) { h = g_pan_keep; if (g_pan_subs++ < 3) logf("PANCURSOR> drag cursor replaced by the press cursor"); }
     } else g_pan_keep = NULL;
     return g_orig_setcursor(h);
