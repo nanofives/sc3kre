@@ -10642,6 +10642,81 @@ static void rz_close_flyouts(void) {
     }
 }
 
+/* UITOGGLE (owner 2026-10-23: "hiding / unhiding UI has a major delay / freeze on the game"). The game's hide-UI button
+ * (the "_" at the minimap's bottom-right corner) hides the bar, the side panel and the minimap; pressing it again shows
+ * them. The "city HUD became visible" trigger below (side panel +0xa0 bit 0 going 0 -> 1, written for "accept terrain")
+ * took every unhide for a new city: 3000 ms readiness gate with presents HELD (measured: 180 held presents, 3.09 s frozen
+ * picture at 3840x1984), then the full viewport routine, whose layout found every window already docked. So the trigger
+ * now asks what the last layout pass saw:
+ *   - it ran on this bridge at this client size with the HUD visible: the windows kept their laid-out rects while hidden,
+ *     nothing to do;
+ *   - it ran for a real resize (not a fresh city) with the HUD hidden: the layout is owed, but the city is long up, so it
+ *     runs on the next poll without the readiness wait;
+ *   - otherwise (accept terrain: the fresh city's pass ran with the HUD hidden, or no pass recorded): unchanged.
+ * SC3RESIZE_UITOGGLE=0 restores the old trigger. */
+static int    g_uitoggle = 1;
+static int    g_ut_vis = -1, g_ut_fresh;   /* side panel visibility / fresh-city flag of the last completed pass */
+static void  *g_ut_bridge;
+static DWORD  g_ut_w, g_ut_h;              /* size the pass got (the view: client / city zoom factor) */
+static LONG   g_ut_cw, g_ut_ch;            /* client size then */
+
+static int rz_ut_side_vis(void) {
+    return (g_side_top && !IsBadReadPtr(g_side_top, 0xa4)) ? (int)(*(DWORD *)((DWORD)g_side_top + 0xa0) & 1) : -1;
+}
+
+/* Called after each completed layout pass. */
+static void rz_ut_pass_done(int fresh, DWORD w, DWORD ht) {
+    RECT cr;
+    g_ut_vis = rz_ut_side_vis(); g_ut_fresh = fresh; g_ut_bridge = g_bridge; g_ut_w = w; g_ut_h = ht;
+    if (g_hwnd && GetClientRect(g_hwnd, &cr)) { g_ut_cw = cr.right - cr.left; g_ut_ch = cr.bottom - cr.top; }
+    else g_ut_vis = -1;
+}
+
+/* The one thing the game undoes on unhide: it resets the iso view's present list (iso+0x4d0) to its own map-area
+ * rect, measured {0,0,3744,1928} at 3840x1984 (client minus the side panel and the bar). The city layer then reaches
+ * the composite through a Blt smaller than the client, which never starts a new HUDFIX record list, so every frame
+ * after it took the equality fallback (measured 0 recorded Blts used, fps 60 -> 30). For a second after the HUD is
+ * shown, put back what the layout pass's step 9 pushed: one rect {0,0,w,h} of the pass. Render thread, as the pass. */
+static DWORD  g_ut_fix_until;
+static void rz_ut_present(void *iso) {
+    HMODULE ss;
+    DWORD list, ea[2], pa[1];
+    LONG rect[4], *r0;
+    if (!g_ut_fix_until) return;
+    if ((LONG)(GetTickCount() - g_ut_fix_until) > 0) { g_ut_fix_until = 0; return; }
+    ss = GetModuleHandleA("SIMSPR.DLL");
+    list = (DWORD)iso + 0x4d0;
+    if (!ss || IsBadReadPtr((void *)list, 8)) return;
+    ea[0] = *(DWORD *)list; ea[1] = *(DWORD *)(list + 4);
+    r0 = (LONG *)ea[0];
+    if (ea[0] && ea[1] - ea[0] == 16 && !IsBadReadPtr(r0, 16) &&
+        r0[0] == 0 && r0[1] == 0 && r0[2] == (LONG)g_ut_w && r0[3] == (LONG)g_ut_h) return;
+    logf("UITOGGLE> present list iso+0x4d0 has %ld rect(s), first [%ld %ld %ld %ld] - erase then push {0,0,%lu,%lu}",
+         ea[0] ? (LONG)((ea[1] - ea[0]) / 16) : 0L, r0 && !IsBadReadPtr(r0, 16) ? r0[0] : 0L,
+         r0 && !IsBadReadPtr(r0, 16) ? r0[1] : 0L, r0 && !IsBadReadPtr(r0, 16) ? r0[2] : 0L,
+         r0 && !IsBadReadPtr(r0, 16) ? r0[3] : 0L, g_ut_w, g_ut_h);
+    rz_thiscall((void *)list, (void *)((DWORD)ss + RVA_LIST_ERASE), ea, 2);
+    rect[0] = 0; rect[1] = 0; rect[2] = (LONG)g_ut_w; rect[3] = (LONG)g_ut_h;
+    pa[0] = (DWORD)&rect[0];
+    rz_thiscall((void *)list, (void *)((DWORD)ss + RVA_LIST_PUSH), pa, 1);
+}
+
+/* The HUD just became visible: 1 = handled here (skip, or run now), 0 = take the old path. */
+static int rz_ut_shown(DWORD w, DWORD ht) {
+    if (!g_uitoggle || g_ut_vis < 0 || g_ut_bridge != g_bridge) return 0;
+    if (g_ut_vis == 1 && g_ut_cw == (LONG)w && g_ut_ch == (LONG)ht) {
+        logf("UITOGGLE> HUD shown again at %lux%lu, last layout pass ran with it visible at this size - no re-layout", w, ht);
+        g_ut_fix_until = GetTickCount() + 1000;
+        return 1;
+    }
+    if (g_ut_vis == 0 && !g_ut_fresh) {
+        g_bridge_fresh = 1; g_bridge_ms = GetTickCount() - g_ready_ms; g_defer_logged = 0;
+        logf("UITOGGLE> HUD shown at %lux%lu after a resize laid it out hidden - layout runs now, no readiness wait", w, ht);
+        return 1;
+    }
+    return 0;
+}
+
 static void rz_poll(void) {
     void *iso;
     DWORD *v, R, w, ht;
@@ -10680,12 +10755,13 @@ static void rz_poll(void) {
        objects (no rebuild logged) but shows them after the terrain editor, where the first pass ran
        with them hidden - the result was the same broken HUD. Side panel +0xa0 bit 0 going 0 -> 1. */
     {   static int s_vis = -1;
-        int vis = (g_side_top && !IsBadReadPtr(g_side_top, 0xa4)) ? (int)(*(DWORD *)((DWORD)g_side_top + 0xa0) & 1) : -1;
-        if (vis == 1 && s_vis == 0) {
+        int vis = rz_ut_side_vis();
+        if (vis == 1 && s_vis == 0 && !rz_ut_shown(w, ht)) {   /* UITOGGLE: the hide-UI button's unhide */
             g_bridge_fresh = 1; g_bridge_ms = GetTickCount(); g_defer_logged = 0;
             logf("RZ   city HUD became visible - layout will run again once ready");
         }
         s_vis = vis;
+        rz_ut_present(iso);   /* UITOGGLE: undo the game's present-rect reset after a skipped re-layout */
     }
 
     /* No edge scrolling in windowed mode (owner, 2026-10-05) - see rz_edge_off. 250 ms cadence. */
@@ -10948,6 +11024,7 @@ static void rz_poll(void) {
     InterlockedExchange(&g_czp_on, 0); g_czq_n = 0;   /* DEFER: the frame is recreated below */
     __try {
         rz_do_resize(iso, w, ht);
+        rz_ut_pass_done(g_bridge_fresh != 0, w, ht);   /* UITOGGLE */
         g_bridge_fresh = 0;
         if (cz_move && g_cz_draganchor) {   /* DRAGANCHOR (owner 2026-10-23: right-drag + '+' flew the camera away) */
             BYTE *cv = (BYTE *)rz_city_view();
@@ -13765,6 +13842,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_FULLBLIT", v, sizeof(v))) g_ms_fullblit = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_REFRESH", v, sizeof(v))) g_ms_refresh = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HOLD", v, sizeof(v))) g_hold = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_UITOGGLE", v, sizeof(v))) g_uitoggle = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_DEFERRESIZE", v, sizeof(v))) g_deferresize = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_SIMLOCK", v, sizeof(v))) g_simlock = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_SKIPREFRESH", v, sizeof(v))) g_skiprefresh = atoi(v);

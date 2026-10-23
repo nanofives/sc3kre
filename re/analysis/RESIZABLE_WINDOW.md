@@ -901,6 +901,14 @@ de-maximize/maximize. Three causes, each measured:
    after the first pass ran with them hidden: minimap mid-screen, side buttons twice, bar contents left. The
    routine now also runs once when the side panel's `+0xa0` bit 0 goes 0 -> 1. Verified with a grab: HUD correct
    without a de-maximize.
+   **The hide-UI button trips the same trigger (UITOGGLE, 2026-10-23, `verify/uitoggle/RESULTS.md`).** The "_" at
+   the minimap's bottom-right corner hides bar, side panel and minimap. Unhiding set bit 0 again, so every unhide
+   waited the 3000 ms readiness gate with presents held (178..180 held presents, 3.1 s frozen, HUD scale on or off).
+   The trigger now skips the re-layout when the last pass ran with the HUD visible at this client size, and runs it at
+   once (no gate) when the last pass was a resize done while hidden. Accept terrain keeps the old path. The game's
+   unhide also resets the iso present list `iso+0x4d0` to its map-area rect (`{0,0,3744,1928}` at 3840x1984). The
+   skip path puts it back to the pass's `{0,0,w,h}`. Without that, HUDFIX's record list never restarts and fps drops
+   60 -> 30. `SC3RESIZE_UITOGGLE=0` = old trigger.
 
 ## Start size experiment and the "presents do not reach the screen" problem (2026-10-07)
 
