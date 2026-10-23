@@ -6393,14 +6393,18 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
             q[2] = min(g_hs_dlg[k][2], g_hs_dst[i][2]); q[3] = min(g_hs_dlg[k][3], g_hs_dst[i][3]);
             if (q[2] > q[0] && q[3] > q[1]) rz_hs_copy(bits, pitch, ox, oy, cw, q, 0);
         }
-    {   int nd = 0;   /* DLGSCALE: enlarged dialogs on top of everything, in the game's order */
+    {   int nd = 0, pass;   /* DLGSCALE: enlarged dialogs on top of everything. The root's child list is FRONT-first (owner
+                               2026-10-23: Reunirse, opened first, was drawn over Preferencias, opened later; the log listed
+                               Preferencias first), so dialogs are drawn from the back of the list; the floating cost label
+                               (lbl) stays last, in list order. The mouse picks the last drawn match, so it follows. */
+        for (pass = 0; pass < 2; pass++)
         for (k = 0; k < g_hd_nc; k++) {
-            HD_SLOT *d = &g_hd[g_hd_list[k]];
-            if (!d->dw) continue;
+            HD_SLOT *d = &g_hd[g_hd_list[pass ? k : g_hd_nc - 1 - k]];
+            if (!d->dw || (int)(d->lbl != 0) != pass) continue;
             rz_hd_draw(d, bits, pitch, ox, oy, g6);
             memcpy(g_hd_pdst[nd], d->dst, sizeof(d->dst)); memcpy(g_hd_pnat[nd], d->nat, sizeof(d->nat));
             g_hd_plbl[nd] = d->lbl;   /* task uiscale */
-            g_hd_pslot[nd] = g_hd_list[k]; nd++;
+            g_hd_pslot[nd] = (int)(d - g_hd); nd++;
         }
         g_hd_n = nd;
         if (nd) g_hd_frames++;
