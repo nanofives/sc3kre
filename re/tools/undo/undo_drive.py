@@ -13,7 +13,7 @@ State in %TEMP%/sc3undo_drive_state.json.
 """
 import json, os, subprocess, sys, time, pathlib, ctypes
 
-ROOT = pathlib.Path(r"C:\Users\maria\Desktop\Proyectos\Simcity")
+ROOT = pathlib.Path(__file__).resolve().parents[3]
 BIN = pathlib.Path(os.environ.get("SC3UNDO_INST", str(ROOT / "re" / "harness" / "inst_undoleft")))
 STATE = pathlib.Path(os.environ.get("TEMP", ".")) / "sc3undo_drive_state.json"
 OWNER = os.environ.get("SC3_SESSION", "undo-left")

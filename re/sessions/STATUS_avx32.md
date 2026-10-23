@@ -64,7 +64,7 @@ Grepped every worktree on 2026-10-21: none used by another stream.
   avx32_plan.png, before_* / after_* / final_* / nomod_* frames)
 
 ## instance
-C:\Users\maria\Desktop\Proyectos\Simcity_stock_avx32\re\harness\inst_avx32\ , last PIDs 43080 / 62104 / 16720 / 42988 (mine, all stopped).
+<workspace>\Simcity_stock_avx32\re\harness\inst_avx32\ , last PIDs 43080 / 62104 / 16720 / 42988 (mine, all stopped).
 Extra instance folders (mine): inst_avx32_nomod (mods_launch + sc3resize only), inst_avx32_old (release-code netmod).
 Tree prep: copied Simcity_stock_avint's mods\netmod\ledger.json + packs\ in (the release ships without them), then
 netpack uninstall / install boulevard_junctions from the worktree.

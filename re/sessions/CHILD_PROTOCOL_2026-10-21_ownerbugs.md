@@ -1,10 +1,9 @@
 # Child protocol, 2026-10-21: owner hand-test bugs on the LAN build (highways + avenues)
 
 You are one child of the orchestrator session titled **"SC3: owner hand-test bugs 10-21 (highways + avenues)"** (find it
-with `mcp__happy__list_peers`). The owner hand-tested the LAN build of main `664a685` (= `C:\Users\maria\Desktop\
-Proyectos\Simcity_release`, published 2026-10-21) and reported 7 problems with screenshots in
+with `mcp__happy__list_peers`). The owner hand-tested the LAN build of main `664a685` (= `<workspace>\Simcity_release`, published 2026-10-21) and reported 7 problems with screenshots in
 `MAIN\verify\ownerbugs_1021\owner_shots\img1..img9.png`. Each child owns ONE problem group (table below). MAIN =
-`C:\Users\maria\Desktop\Proyectos\Simcity`. LOOK at your screenshots first.
+`<workspace>\Simcity`. LOOK at your screenshots first.
 
 Rules otherwise as `re/sessions/CHILD_PROTOCOL_2026-10-18_highways.md` sections 1-4 (read it, and section 4's "how the
 existing pieces work") and `CHILD_PROTOCOL_2026-10-19_avlanes.md` (avenue lanes, one direction per half). In short:
@@ -15,8 +14,8 @@ STATUS file `MAIN\re\sessions\STATUS_<name>.md`, message the orchestrator at eve
 ## Your paths (already created)
 | what | path |
 |---|---|
-| worktree (edit ONLY here) | `C:\Users\maria\Desktop\Proyectos\Simcity_wt_<name>`, branch `child/<name>` from main `664a685` |
-| test tree (hard-linked copy of `Simcity_release`, INCLUDING its `mods\netmod` overlay and tables = what the owner ran) | `C:\Users\maria\Desktop\Proyectos\Simcity_stock_<name>` |
+| worktree (edit ONLY here) | `<workspace>\Simcity_wt_<name>`, branch `child/<name>` from main `664a685` |
+| test tree (hard-linked copy of `Simcity_release`, INCLUDING its `mods\netmod` overlay and tables = what the owner ran) | `<workspace>\Simcity_stock_<name>` |
 | instance folder | `Simcity_stock_<name>\re\harness\inst_<name>\` (`lab.sc3` = Roadless Paradise lab of the highway program, `perf.ini`, `menu_bg.bmp`) |
 
 The instance folder has NO mod binaries yet. Build ALL of them from your worktree into it (the owner's game runs all):

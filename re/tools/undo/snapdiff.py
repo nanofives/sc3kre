@@ -1,6 +1,6 @@
 """snapdiff.py A.sc3 B.sc3 - compare two city saves at IXF-record and section level."""
 import sys, os, hashlib
-sys.path.insert(0, r"C:\Users\maria\Desktop\Proyectos\Simcity\re\tools")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import ixf_parse, city_parse as CP
 
 def load(p):
