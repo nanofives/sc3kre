@@ -12842,12 +12842,16 @@ static void patch_setdrag(HMODULE ss) {
     (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     logf("--- DRAGANCHOR: city view SetDragMode (SIMSPR+0x42cfe, vt 0x10067894 +0x3c) wrapped: a right-drag keeps its anchor across zoom steps");
     {   DWORD *mslot = (DWORD *)((BYTE *)ss + 0x678d4);   /* DRAGCAP: vt +0x40 = FUN_10043a38 */
-        if (g_dragcap && !IsBadReadPtr(mslot, 4) && *mslot == (DWORD)ss + 0x43a38 && VirtualProtect(mslot, 4, PAGE_EXECUTE_READWRITE, &old)) {
-            g_cz_dragmove_orig = (CZ_DRAGMOVE)*mslot;
+        /* sc3overscroll ARROWS wraps the same slot: chain onto whatever is there (stock or a mod), swapped atomically */
+        DWORD cur = IsBadReadPtr(mslot, 4) ? 0 : *mslot;
+        if (g_dragcap && cur && VirtualProtect(mslot, 4, PAGE_EXECUTE_READWRITE, &old)) {
+            g_cz_dragmove_orig = (CZ_DRAGMOVE)cur;
             g_dragcap_cap = (float *)((BYTE *)ss + 0x676a8);
-            *mslot = (DWORD)cz_dragmove;
-            logf("--- DRAGCAP: city view drag move (SIMSPR+0x43a38, vt +0x40) wrapped: top drag speed at x2 / x3 = stock zoom 4");
-        } else logf("--- DRAGCAP: city view vt+0x40 is not FUN_10043a38 - not installed");
+            if ((DWORD)InterlockedCompareExchange((LONG volatile *)mslot, (LONG)(DWORD)cz_dragmove, (LONG)cur) == cur)
+                logf("--- DRAGCAP: city view drag move (vt +0x40) wrapped over %s: top drag speed at x2 / x3 = stock zoom 4",
+                     cur == (DWORD)ss + 0x43a38 ? "stock FUN_10043a38" : "another mod's wrapper");
+            else { g_cz_dragmove_orig = NULL; logf("--- DRAGCAP: vt+0x40 changed while installing - not installed"); }
+        } else if (g_dragcap) logf("--- DRAGCAP: city view vt+0x40 unreadable - not installed");
     }
 }
 

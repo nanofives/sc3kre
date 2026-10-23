@@ -768,14 +768,19 @@ static void __fastcall edge_wrap(void *self, void *edx, int x, int y) {
 }
 
 static int patch_arrows(HMODULE spr) {
-    DWORD *slot = (DWORD *)((BYTE *)spr + 0x678d4), old;      /* outer vtable 0x10067894, slot +0x40 */
-    if (IsBadReadPtr(slot, 4) || *slot != (DWORD)spr + 0x43a38) {
-        logf("### ARROWS: vtable slot SIMSPR+0x678d4 differs from shipped - NOT installed");
+    DWORD *slot = (DWORD *)((BYTE *)spr + 0x678d4), old, cur;      /* outer vtable 0x10067894, slot +0x40 */
+    /* sc3resize DRAGCAP wraps the same slot (2026-10-23): chain onto whatever is there, swapped atomically */
+    if (IsBadReadPtr(slot, 4) || !(cur = *slot)) {
+        logf("### ARROWS: vtable slot SIMSPR+0x678d4 unreadable - NOT installed");
         return 0;
     }
     if (!VirtualProtect(slot, 4, PAGE_EXECUTE_READWRITE, &old)) return 0;
-    g_edge_orig = (PFN_Edge)*slot;
-    *slot = (DWORD)edge_wrap;
+    g_edge_orig = (PFN_Edge)cur;
+    if ((DWORD)InterlockedCompareExchange((LONG volatile *)slot, (LONG)(DWORD)edge_wrap, (LONG)cur) != cur) {
+        logf("### ARROWS: vtable slot SIMSPR+0x678d4 changed while installing - NOT installed");
+        return 0;
+    }
+    if (cur != (DWORD)spr + 0x43a38) logf("### ARROWS: slot +0x40 already wrapped by another mod - chained");
     (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
     return 1;
 }
