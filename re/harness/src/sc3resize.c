@@ -3885,6 +3885,7 @@ static int rz_menu_visible(void) {
  * SC3RESIZE_MENUSCALE_DUMP=<abs prefix>: when <prefix>req exists, the next scaled present writes <prefix>NNN_client.bmp
  * (what was sent to the window) and <prefix>NNN_frame.bmp (the source frame as read), then deletes the request. */
 static int    g_menuscale = 1;
+static int    g_perfscale = 1;   /* task perfscale: SC3RESIZE_PERFSCALE=0 = old behaviour */
 static int    g_ms_filter = 1;            /* 1 bilinear, 0 nearest */
 static int    g_ms_repost = 1;            /* SC3RESIZE_MENUSCALE_REPOST=0: map a queued move at our last output too */
 static volatile LONG g_ms_on;             /* the last full menu present was scaled: the wndproc maps through g_ms_r* */
@@ -4263,6 +4264,7 @@ static int rz_mb_present(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, vo
         /* native window: no margins, but the same picture (owner: the 800x600 menu still showed the old one) */
         if (rz_mb_load() && rz_mb_prepare(NAT_W, NAT_H)) rz_mb_patch_src(src, sr, 0, 0, NAT_W, NAT_H);
         g_mb_active = 0;
+        if (g_perfscale) g_ms_on = 0;   /* task perfscale: restored to 800x600 from a scaled menu, sc3resize_menu_rect must not keep the old rect */
         return 0;   /* the caller presents it normally */
     }
     if (!GetClientRect(g_hwnd, &cr) || dw < cr.right - cr.left || dh < cr.bottom - cr.top) return 0;
@@ -13750,6 +13752,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MENUBGFIT", v, sizeof(v))) g_menubg_fit = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_LOGOBLACK", v, sizeof(v))) g_logoblack = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE", v, sizeof(v))) g_menuscale = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_PERFSCALE", v, sizeof(v))) g_perfscale = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HSCENSUS", v, sizeof(v))) g_hs_census = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PANCURSOR", v, sizeof(v))) g_pancursor = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_ANCHORMARK", v, sizeof(v))) g_anchormark = atoi(v);
