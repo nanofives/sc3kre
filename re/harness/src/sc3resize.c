@@ -4416,6 +4416,7 @@ static int    g_hs_diag;                /* SC3RESIZE_HUDSCALE_DIAG=1: per-second
  *   SC3RESIZE_HUDSCALE_MINISMOOTH=0 turns that step off. */
 static int    g_hudfix = 1;
 static int    g_hs_minismooth = 1;
+static void  *g_mn_mini;               /* MININAT: the minimap window (SIMUI vt 0x100aa180), seen by rz_hs_collect */
 static DWORD  g_hs_vt[HS_MAX];
 typedef struct { LONG d[4], s[4]; void *src; DWORD fl, klo, khi; int kind; } HS_REC;   /* kind 0 opaque, 1 keyed, 2 key unknown */
 #define HS_REC_MAX 256
@@ -5141,6 +5142,7 @@ static int rz_hs_collect(LONG cw, LONG ch, double s, int can_erase) {
             if (exe && vt == exe + 0xd32d0) { if (nl < 2) lvl[nl++] = c; continue; }   /* HUD container */
             if (!(c[0xa0 / 4] & 1)) continue;                                         /* hidden */
             if (spr && vt == spr + 0x676ac) continue;                                 /* city view */
+            if (sui && vt == sui + 0xaa180) g_mn_mini = c;                            /* MININAT */
             r[0] = (LONG)c[0x14 / 4]; r[1] = (LONG)c[0x18 / 4]; r[2] = (LONG)c[0x1c / 4]; r[3] = (LONG)c[0x20 / 4];
             w = r[2] - r[0]; h = r[3] - r[1];
             if (sui && vt == sui + 0xa4d64 && w >= 120 && h >= 80) {                  /* dialog */
@@ -6294,6 +6296,261 @@ static void cz_build_skip(int n, LONG cw, LONG ch) {
     g_cz_skw = cw; g_cz_skh = ch; g_cz_skf = g_cz_f; g_cz_skok = 1;
 }
 
+/* MININAT (task minimap, owner 2026-10-23: "on scaled UI I want the renderer of the minimap to be natively rendering at
+ * the size of the new UI so it doesn't look pixelated"). The minimap's map is a SIMUI map-view child (factory id 0x5a9,
+ * ctor FUN_10042866, vt 0x100a7e68) at (14,15) 129x129 in the minimap's own raster. Its Draw (vt+0x144 FUN_10043937)
+ * blits a square texture rotated into the diamond; the texture side is width * 0.7071 quantised to 32/64/128/256
+ * (FUN_100436b4), so natively 128, and the HUD pass then enlarged that small picture. Now, while the HUD factor s > 1, a
+ * twin of that map view (the game's own Clone, iface vt+0x10 FUN_10042aec: layers, rotation, view box) sized
+ * 2*round(64 s)+1 with its own raster (vt+0x170) is drawn by the game each time the native one draws, and the HUD pass
+ * copies its pixels 1:1 over the enlarged map. A dest pixel takes the twin only where the twin drew (not the fill) and
+ * the frame's native pixel under it is still the map's own pixel, so the buttons drawn over the map keep the enlarged
+ * native copy. Re-cloned when the native view's state (rotation, layers) changes. Freed before the minimap removes or
+ * rebuilds its map view (messages 0x311fdae5 / 0x511fdae5 / 0x45462fd2 to the minimap's vt+0xc FUN_100507ad, sent on
+ * a city load: measured, the minimap itself survives the load) and when the minimap shuts down, so the twin's cloned
+ * layers never outlive the city they read.
+ * SC3RESIZE_MINIMAP_NATIVE=0: the enlarged native copy, as before. */
+typedef DWORD (__fastcall *MN_TC0)(void *self, void *edx);
+typedef DWORD (__fastcall *MN_TC1)(void *self, void *edx, DWORD a);
+typedef DWORD (__fastcall *MN_TC2)(void *self, void *edx, DWORD a, void *b);
+typedef DWORD (__fastcall *MN_MSG)(void *self, void *edx, DWORD *msg);
+typedef DWORD (__fastcall *MN_TC4)(void *self, void *edx, DWORD a, DWORD b, DWORD c, DWORD d);
+#define MN_VT(o, off) ((*(DWORD **)(o))[(off) / 4])
+#define MN_KEY 0xF81F
+static int    g_mn_on = 1;
+static void  *g_mn_nat, *g_mn_twin;   /* the minimap's map view and its enlarged twin */
+static LONG   g_mn_T;                 /* twin side */
+static DWORD  g_mn_sig;               /* native view state at clone time */
+static WORD  *g_mn_buf, *g_mn_m;      /* twin pixels T*T; native map pixels as drawn, mw*mh */
+static LONG   g_mn_bufcap, g_mn_mcap, g_mn_bT, g_mn_mw, g_mn_mh, g_mn_mx, g_mn_my, g_mn_px, g_mn_py;
+static double g_mn_bs;                /* factor the buffer was drawn for */
+static int    g_mn_valid, g_mn_fails, g_mn_logs, g_mn_inst, g_mn_first;
+static DWORD  g_mn_draws, g_mn_clones, g_mn_comps, g_mn_stale, g_mn_px_n;
+static __int64 g_mn_drawt, g_mn_compt;
+static MN_TC0 g_mn_draw_orig, g_mn_mshut_orig;
+static MN_MSG g_mn_mmsg_orig;
+
+static BYTE *mn_lock(void *ras, LONG *pitch, LONG *w, LONG *h) {
+    DWORD gz = (DWORD)GetModuleHandleA("GZGraphicD.dll"), vt;
+    BYTE *bits;
+    if (!ras || IsBadReadPtr(ras, 0x50) || !gz) return NULL;
+    vt = *(DWORD *)ras;
+    if (vt != gz + 0x1E894 && vt != gz + 0x1F328) {
+        if (g_mn_logs < 20) { g_mn_logs++; logf("MININAT> raster 0x%08lX has vtable GZGraphicD+0x%lX, not a raster class - not read", (DWORD)ras, vt - gz); }
+        return NULL;
+    }
+    *w = ((LONG *)ras)[0x24 / 4]; *h = ((LONG *)ras)[0x28 / 4];
+    if (!(((MN_TC1)MN_VT(ras, 0x1c))(ras, 0, 0x40) & 0xff)) return NULL;
+    bits = (BYTE *)((MN_TC0)MN_VT(ras, 0x1a8))(ras, 0);
+    *pitch = (LONG)((MN_TC0)MN_VT(ras, 0x1ac))(ras, 0);
+    if (!bits || *w <= 0 || *h <= 0 || *pitch < *w * 2) { ((MN_TC1)MN_VT(ras, 0x20))(ras, 0, 0x40); return NULL; }
+    return bits;
+}
+static void mn_unlock(void *ras) { ((MN_TC1)MN_VT(ras, 0x20))(ras, 0, 0x40); }
+
+static DWORD mn_state(const BYTE *nat) {   /* rotation, border, colours, layer + palette lists */
+    static const int f[] = { 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x32, 0x33, 0x35, 0x36 };
+    const DWORD *d = (const DWORD *)nat;
+    DWORD h = 2166136261u, *head, *n;
+    int k, g;
+    for (k = 0; k < (int)(sizeof(f) / sizeof(f[0])); k++) h = (h ^ d[f[k]]) * 16777619u;
+    for (k = 0; k < 2; k++) {
+        head = (DWORD *)d[0x3c + k];
+        if (!head || IsBadReadPtr(head, 4)) continue;
+        for (n = (DWORD *)*head, g = 0; n && n != head && g < 64 && !IsBadReadPtr(n, 0x10); n = (DWORD *)*n, g++) {
+            h = (h ^ n[2]) * 16777619u;
+            if (!k) h = (h ^ n[3]) * 16777619u;
+        }
+    }
+    return h;
+}
+
+static void mn_free_twin(const char *why) {
+    void *t = g_mn_twin;
+    g_mn_valid = 0;
+    if (!t) return;
+    g_mn_twin = NULL; g_mn_T = 0;
+    ((MN_TC0)MN_VT(t, 0x28))(t, 0);   /* Shutdown: texture, own raster */
+    ((MN_TC0)MN_VT(t, 0x08))(t, 0);   /* Release */
+    logf("MININAT> twin 0x%08lX freed (%s)", (DWORD)t, why);
+}
+
+static int mn_make(BYTE *nat, LONG T) {
+    BYTE *iface = nat + 0xa4, *twin;
+    void *out = NULL;
+    DWORD sui = (DWORD)GetModuleHandleA("SIMUI.DLL");
+    if (!sui || MN_VT(iface, 0x10) != sui + 0x42aec) { logf("MININAT> map view iface vt+0x10 is not FUN_10042aec - off"); g_mn_on = 0; return 0; }
+    if (!(((MN_TC2)MN_VT(iface, 0x10))(iface, 0, 0x4d4e4154, &out) & 0xff) || !out) {
+        if (++g_mn_fails >= 3) g_mn_on = 0;
+        logf("MININAT> Clone failed (%d)%s", g_mn_fails, g_mn_on ? "" : " - off");
+        return 0;
+    }
+    twin = (BYTE *)out - 0xa4;
+    if (MN_VT(twin, 0x144) != MN_VT(nat, 0x144)) { logf("MININAT> clone 0x%08lX is not a map view - off", (DWORD)twin); g_mn_on = 0; return 0; }
+    ((MN_TC4)MN_VT(twin, 0xc8))(twin, 0, 0, 0, (DWORD)T, (DWORD)T);   /* SetRect: own raster below is made this size */
+    ((MN_TC0)MN_VT(twin, 0x24))(twin, 0);                              /* Init */
+    ((MN_TC1)MN_VT(twin, 0x170))(twin, 0, 1);                          /* own raster; resolves its graphics to it */
+    if (!*(void **)(twin + 0x58) || *(void **)(twin + 0x5c) != *(void **)(twin + 0x58)) {
+        logf("MININAT> twin 0x%08lX has no own raster (0x%08lX, graphics 0x%08lX)", (DWORD)twin, *(DWORD *)(twin + 0x58), *(DWORD *)(twin + 0x5c));
+        g_mn_twin = twin; mn_free_twin("no raster");
+        if (++g_mn_fails >= 3) g_mn_on = 0;
+        return 0;
+    }
+    g_mn_twin = twin; g_mn_T = T; g_mn_sig = mn_state(nat); g_mn_clones++;
+    logf("MININAT> twin 0x%08lX of map view 0x%08lX: %ldx%ld, own raster 0x%08lX, rotation %ld", (DWORD)twin, (DWORD)nat,
+         T, T, *(DWORD *)(twin + 0x58), ((LONG *)nat)[0x2b]);
+    return 1;
+}
+
+/* After the native map view drew (game thread, inside the minimap's paint). */
+static void mn_after(BYTE *nat, BYTE dirty) {
+    double s = g_hs_s;
+    LONG T, pitch, w, h, y, mx, my, mw, mh;
+    BYTE *bits, *twin;
+    void *ras;
+    LARGE_INTEGER t0, t1;
+    if (!g_hs_n || s < 1.01) return;
+    QueryPerformanceCounter(&t0);
+    T = 2 * (LONG)(64.0 * s + 0.5) + 1;
+    if (g_mn_nat != nat) { mn_free_twin("new map view"); g_mn_nat = nat; }
+    if (g_mn_twin && mn_state(nat) != g_mn_sig) mn_free_twin("rotation or layers changed");
+    if (!g_mn_twin) { if (!mn_make(nat, T)) return; dirty = 1; }
+    twin = (BYTE *)g_mn_twin;
+    if (g_mn_T != T) {
+        ((MN_TC4)MN_VT(twin, 0xc8))(twin, 0, 0, 0, (DWORD)T, (DWORD)T);
+        g_mn_T = T;
+        logf("MININAT> twin resized to %ldx%ld (factor %.3f)", T, T, s);
+    }
+    ras = *(void **)(twin + 0x58);
+    if (!(bits = mn_lock(ras, &pitch, &w, &h))) { g_mn_valid = 0; return; }
+    if (w != T || h != T) {
+        mn_unlock(ras); g_mn_valid = 0;
+        if (g_mn_logs < 20) { g_mn_logs++; logf("MININAT> twin raster is %ldx%ld, wanted %ldx%ld", w, h, T, T); }
+        return;
+    }
+    for (y = 0; y < T; y++) { WORD *r = (WORD *)(bits + y * pitch); LONG x; for (x = 0; x < T; x++) r[x] = MN_KEY; }
+    mn_unlock(ras);
+    if (dirty) *(twin + 0xdc) = 1;   /* the native texture was re-rendered this draw: so is the twin's */
+    ((MN_TC0)MN_VT(twin, 0x144))(twin, 0);
+    if (g_mn_bufcap < T * T) {
+        free(g_mn_buf); g_mn_buf = (WORD *)malloc((size_t)T * T * 2); g_mn_bufcap = g_mn_buf ? T * T : 0;
+        if (!g_mn_buf) { g_mn_valid = 0; return; }
+    }
+    if (!(bits = mn_lock(ras, &pitch, &w, &h))) { g_mn_valid = 0; return; }
+    for (y = 0; y < T; y++) memcpy(g_mn_buf + y * T, bits + y * pitch, T * 2);
+    mn_unlock(ras);
+    /* the native map's own pixels, from the minimap raster it drew into, at its rect there */
+    mx = ((LONG *)nat)[9]; my = ((LONG *)nat)[10]; mw = ((LONG *)nat)[11] - mx; mh = ((LONG *)nat)[12] - my;
+    ras = *(void **)(nat + 0x5c);
+    if (mw <= 0 || mh <= 0 || !(bits = mn_lock(ras, &pitch, &w, &h))) { g_mn_valid = 0; return; }
+    if (mx < 0 || my < 0 || mx + mw > w || my + mh > h) { mn_unlock(ras); g_mn_valid = 0; return; }
+    if (g_mn_mcap < mw * mh) {
+        free(g_mn_m); g_mn_m = (WORD *)malloc((size_t)mw * mh * 2); g_mn_mcap = g_mn_m ? mw * mh : 0;
+        if (!g_mn_m) { mn_unlock(ras); g_mn_valid = 0; return; }
+    }
+    for (y = 0; y < mh; y++) memcpy(g_mn_m + y * mw, bits + (my + y) * pitch + mx * 2, mw * 2);
+    mn_unlock(ras);
+    {   BYTE *mini = *(BYTE **)(nat + 0x3c);   /* client position: the minimap's rect (as rz_hs_collect reads it) + local */
+        g_mn_px = ((LONG *)mini)[0x14 / 4]; g_mn_py = ((LONG *)mini)[0x18 / 4];
+        g_mn_mx = g_mn_px + mx; g_mn_my = g_mn_py + my;
+    }
+    g_mn_mw = mw; g_mn_mh = mh; g_mn_bT = T; g_mn_bs = s; g_mn_valid = 1; g_mn_draws++;
+    QueryPerformanceCounter(&t1); g_mn_drawt += t1.QuadPart - t0.QuadPart;
+    if (!g_mn_first) {
+        g_mn_first = 1;
+        logf("MININAT> first twin draw: native map [%ld %ld %ld %ld] in the minimap raster, client (%ld,%ld), twin texture %ld, native texture %ld",
+             mx, my, mx + mw, my + mh, g_mn_mx, g_mn_my, ((LONG *)twin)[0x39], ((LONG *)nat)[0x39]);
+    }
+}
+
+static DWORD __fastcall mn_draw(void *self, void *edx) {
+    BYTE dirty = 0;
+    int mine = 0;
+    DWORD r;
+    (void)edx;
+    if (g_mn_on && g_mn_mini && self != g_mn_twin && *(void **)((BYTE *)self + 0x3c) == g_mn_mini) {
+        mine = 1; dirty = *((BYTE *)self + 0xdc);
+    }
+    r = g_mn_draw_orig(self, 0);
+    if (mine) mn_after((BYTE *)self, dirty);
+    return r;
+}
+static DWORD __fastcall mn_mini_shut(void *self, void *edx) {
+    (void)edx;
+    if (g_mn_nat && *(void **)((BYTE *)g_mn_nat + 0x3c) == self) { mn_free_twin("minimap shutdown"); g_mn_nat = NULL; }
+    if (self == g_mn_mini) g_mn_mini = NULL;
+    return g_mn_mshut_orig(self, 0);
+}
+static DWORD __fastcall mn_mini_msg(void *self, void *edx, DWORD *msg) {
+    (void)edx;
+    if (msg && !IsBadReadPtr(msg, 4) && (*msg == 0x311fdae5 || *msg == 0x511fdae5 || *msg == 0x45462fd2) &&
+        g_mn_nat && *(void **)((BYTE *)g_mn_nat + 0x3c) == self) {
+        mn_free_twin(*msg == 0x311fdae5 ? "the minimap drops its map view" : "the minimap rebuilds its map view");
+        g_mn_nat = NULL;
+    }
+    return g_mn_mmsg_orig(self, 0, msg);
+}
+
+/* Installed from the first enlarged pass (well after SIMUI's relocations, game thread). */
+static void mn_install(void) {
+    DWORD sui = (DWORD)GetModuleHandleA("SIMUI.DLL"), old, cur;
+    DWORD *ds, *ms, *mm;
+    if (g_mn_inst || !g_mn_on || !sui) return;
+    g_mn_inst = 1;
+    ds = (DWORD *)(sui + 0xa7e68 + 0x144); ms = (DWORD *)(sui + 0xaa180 + 0x28); mm = (DWORD *)(sui + 0xaa180 + 0x0c);
+    if (IsBadReadPtr(ds, 4) || IsBadReadPtr(ms, 4) || *ds != sui + 0x43937 || *ms != sui + 0x5062e || *mm != sui + 0x507ad) {
+        logf("MININAT> map view vt+0x144 / minimap vt+0x28, +0x0c are not FUN_10043937 / FUN_1005062e, FUN_100507ad - off"); g_mn_on = 0; return; }
+    if (!VirtualProtect(ds, 4, PAGE_EXECUTE_READWRITE, &old) || !VirtualProtect(ms, 4, PAGE_EXECUTE_READWRITE, &old) ||
+        !VirtualProtect(mm, 4, PAGE_EXECUTE_READWRITE, &old)) { g_mn_on = 0; return; }
+    /* the free hooks first: a twin must never exist without them */
+    g_mn_mmsg_orig = (MN_MSG)(cur = *mm);
+    if ((DWORD)InterlockedCompareExchange((LONG volatile *)mm, (LONG)(DWORD)mn_mini_msg, (LONG)cur) != cur) { g_mn_on = 0; return; }
+    g_mn_mshut_orig = (MN_TC0)(cur = *ms);
+    if ((DWORD)InterlockedCompareExchange((LONG volatile *)ms, (LONG)(DWORD)mn_mini_shut, (LONG)cur) != cur) { g_mn_on = 0; return; }
+    g_mn_draw_orig = (MN_TC0)(cur = *ds);
+    if ((DWORD)InterlockedCompareExchange((LONG volatile *)ds, (LONG)(DWORD)mn_draw, (LONG)cur) != cur) { g_mn_on = 0; return; }
+    (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
+    logf("MININAT> on: the minimap map is drawn by the game at the HUD factor (map view vt+0x144, minimap vt+0x0c, +0x28 wrapped)");
+    if (g_mn_mini) *((BYTE *)g_mn_mini + 0x60) = 1;   /* repaint the minimap now */
+}
+
+/* In the HUD pass, after the enlarged copy: the twin's pixels 1:1 over the map. */
+static void mn_compose(BYTE *bits, LONG pitch, LONG ox, LONG oy, LONG cw, LONG ch, double s) {
+    LONG T = g_mn_bT, X0, Y0, x, y, xa, xb, ya, yb;
+    double t;
+    LARGE_INTEGER t0, t1;
+    if (!g_mn_on) return;
+    mn_install();
+    if (!g_mn_valid || !T || !g_mn_mini || !g_mn_m) return;
+    QueryPerformanceCounter(&t0);
+    if (s != g_mn_bs || ((LONG *)g_mn_mini)[0x14 / 4] != g_mn_px || ((LONG *)g_mn_mini)[0x18 / 4] != g_mn_py) {
+        *((BYTE *)g_mn_mini + 0x60) = 1;   /* drawn for another factor or place: repaint, the enlarged copy shows meanwhile */
+        g_mn_stale++;
+        return;
+    }
+    t = (double)cw + s * (double)(g_mn_mx - cw) + 0.5; X0 = (LONG)t; if ((double)X0 > t) X0--;
+    t = (double)ch + s * (double)(g_mn_my - ch) + 0.5; Y0 = (LONG)t; if ((double)Y0 > t) Y0--;
+    xa = X0 < 0 ? 0 : X0; xb = X0 + T > cw ? cw : X0 + T;
+    ya = Y0 < 0 ? 0 : Y0; yb = Y0 + T > ch ? ch : Y0 + T;
+    for (y = ya; y < yb; y++) {
+        LONG sy = g_hs_ys[y];
+        const WORD *tw = g_mn_buf + (y - Y0) * T - X0, *sn = g_hs_snap + sy * cw, *mm;
+        WORD *f = (WORD *)(bits + (oy + y) * pitch) + ox;
+        if (sy < g_mn_my || sy >= g_mn_my + g_mn_mh) continue;
+        mm = g_mn_m + (sy - g_mn_my) * g_mn_mw - g_mn_mx;
+        for (x = xa; x < xb; x++) {
+            WORD w = tw[x];
+            LONG sx;
+            if (w == MN_KEY) continue;
+            sx = g_hs_xs[x];
+            if (sx < g_mn_mx || sx >= g_mn_mx + g_mn_mw || sn[sx] != mm[sx]) continue;   /* a button over the map */
+            f[x] = w; g_mn_px_n++;
+        }
+    }
+    g_mn_comps++;
+    QueryPerformanceCounter(&t1); g_mn_compt += t1.QuadPart - t0.QuadPart;
+}
+
 /* Before the final present: enlarge the HUD into the frame. Returns 1 when the frame must be restored after. */
 static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_screen) {
     double s, smax;
@@ -6469,6 +6726,7 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
             }
         }
     }
+    mn_compose(bits, pitch, ox, oy, cw, ch, s);   /* MININAT: the game-drawn map 1:1 over the enlarged one */
     for (k = 0; k < g_hs_ndlg; k++)   /* dialogs stay native and on top */
         for (i = 0; i < n; i++) {
             LONG q[4];
@@ -6507,6 +6765,14 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
                  1000.0 * g_hst[0] / g_freq.QuadPart / g_hs_frames, 1000.0 * g_hst[1] / g_freq.QuadPart / g_hs_frames,
                  1000.0 * g_hst[2] / g_freq.QuadPart / g_hs_frames, 1000.0 * g_hst[3] / g_freq.QuadPart / g_hs_frames);
         memset(g_hst, 0, sizeof(g_hst));
+        if (g_mn_on && (g_mn_draws || g_mn_comps || g_mn_stale)) {   /* MININAT */
+            logf("MININAT> %lu twin draws (%.2f ms each), %lu frames composed (%lu px/frame, %.3f ms/frame), %lu stale, %lu clone(s)",
+                 g_mn_draws, g_mn_draws && g_freq.QuadPart ? 1000.0 * (double)g_mn_drawt / (double)g_freq.QuadPart / g_mn_draws : 0.0,
+                 g_mn_comps, g_mn_comps ? g_mn_px_n / g_mn_comps : 0,
+                 g_mn_comps && g_freq.QuadPart ? 1000.0 * (double)g_mn_compt / (double)g_freq.QuadPart / g_mn_comps : 0.0,
+                 g_mn_stale, g_mn_clones);
+            g_mn_draws = g_mn_comps = g_mn_stale = g_mn_px_n = g_mn_clones = 0; g_mn_drawt = g_mn_compt = 0;
+        }
         logf("HUDSCALE> %lu enlarged frames in %lu ms, %.2f ms per frame in the pre-present pass%s; HUDFIX: %lu recorded HUD Blts used, %lu frame(s) on the equality fallback",
              g_hs_frames, GetTickCount() - g_hs_beat,
              g_freq.QuadPart ? 1000.0 * (double)g_hs_time / (double)g_freq.QuadPart / g_hs_frames : 0.0, city ? " (masked)" : "",
@@ -13820,6 +14086,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           }
           if (GetEnvironmentVariableA("SC3RESIZE_HUDFIX", v, sizeof(v))) g_hudfix = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_MINISMOOTH", v, sizeof(v))) g_hs_minismooth = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_MINIMAP_NATIVE", v, sizeof(v))) g_mn_on = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDPERF", v, sizeof(v))) g_hudperf = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDPERF_CHECK", v, sizeof(v))) g_hp_check = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDPERF_LAZY", v, sizeof(v))) g_hp_lazy = atoi(v);

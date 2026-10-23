@@ -388,3 +388,21 @@ install starts at Off".
 - Measured (`verify/uiscale/RESULTS.md`): 1.5x at 1600x900 and 3.307x at 3840x1984, at the centre, the bar, the side panel,
   the minimap corner and top-left: every decision logged `below the pointer` or `above the hotspot`.
 - `[UNCERTAIN]` drawn pointer size at (base 32, dpi 240): `SM_CYCURSOR` reads 64, and the clearance uses 80.
+
+## Minimap drawn by the game at the HUD factor (task minimap, 2026-10-23)
+
+Owner report: the enlarged minimap looks pixelated and blurry. Code: the MININAT block in `sc3resize.c`,
+`SC3RESIZE_MINIMAP_NATIVE=0` turns it off. Evidence and pictures: `verify/minimap/RESULTS.md`.
+
+- The map is a SIMUI map-view child of the minimap (factory id `0x5a9`, ctor `FUN_10042866`, vt `0x100a7e68`), 129x129 at
+  `(14,15)` `[CONFIRMED @ SIMUI 0x10050de2]`. Draw (vt+0x144 `FUN_10043937`) blits a square texture rotated into the
+  diamond. Texture side = `width * 0.70710677` quantised to 32/64/128/256 `[CONFIRMED @ SIMUI 0x100436b4]`, so 128 natively.
+- The map view renders at any size by itself: a new rect sets `+0xdd`, the next Draw rebuilds texture and corners. The game
+  can clone it (iface vt+0x10 `FUN_10042aec`: layer list `+0xf0`, overlays `+0xf4` incl. the view box, rotation `+0xac`),
+  and any GZ window can own a raster of its rect size (vt+0x170 `FUN_1006d56c`).
+- So with s > 1 a clone sized `2*round(64 s)+1` with its own raster is drawn each time the native one draws, and the pass
+  copies it 1:1 over the enlarged map where the frame's native pixel is still the map's own (buttons over the map keep
+  the enlarged copy). Cost at 2.187x: 0.14 ms per frame compose, 0.35 to 0.47 ms per twin draw.
+- The minimap survives a city load: it drops its map view on message `0x311fdae5` and rebuilds it on `0x511fdae5` /
+  `0x45462fd2` (vt+0xc `FUN_100507ad`). The twin is freed there, before the old city's layers go.
+- The stock minimap does not follow the city data view (Capas, Vista de capas: Crimen), with or without this change.
