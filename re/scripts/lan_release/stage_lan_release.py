@@ -35,7 +35,8 @@ APPS_SKIP = {"sc3u_stkdmp.txt", "sc3portable.ini", "gzgraphicd.dll.shipped", "si
              "sc3resize.ini"}   # task uiscale: the player's Preferencias choice (per PC); shipped, an update would reset it
 APPS_STOCK_FROM_ORIGINAL = ["SIMSPR.DLL", "GZGraphicD.dll"]
 # per-PC state the game or a mod writes: shipped once, never overwritten by the updater
-SEED = {"apps/sc3.cfg", "apps/sc3net.cfg", "apps/sc3u.ini"}
+SEED = {"apps/sc3.cfg", "apps/sc3net.cfg", "apps/sc3u.ini",
+        "cities/europolis 1024.sc3"}   # owner 2026-10-23: the 1024 test city, in the stage source's Cities. Seed so a save over it survives updates
 MOD_BINS = ["mods_launch.exe", "sc3resize.dll", "sc3bigcity.dll", "sc3overscroll.dll", "sc3simrun.dll", "sc3perf.dll",
             "sc3netmod.dll", "sc3undo.dll",
             "version.dll"]   # version.dll = the mod loader (sc3modldr.c, no injection since 2026-10-21): must sit beside SC3U.exe
