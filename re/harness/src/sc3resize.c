@@ -3507,12 +3507,32 @@ static volatile LONG g_mb_dx0, g_mb_dy0;  /* dest origin of the last full presen
 static volatile LONG g_mb_active;         /* 1 from a centred present until a full-window present of any other frame */
 static int    g_ms_valid;                 /* MENUSCALE: g_ms_f32 / g_ms_bg hold a whole frame and g_ms_out is composed from it */
 /* LOGOBLACK (owner 2026-10-23): the intro logo / "Cargando" screen is an 800x600 frame shown before any city view, so
-   it took the menu treatment and its margins showed the menu picture beside the logo's own black borders. A full
-   frame with fewer than 1/50 of its pixels classified as menu background is not the menu: its margins are filled
-   black and no pixel inside it is swapped for the picture. SC3RESIZE_LOGOBLACK=0 disables. */
+   it took the menu treatment and its margins showed the menu picture beside the logo's own black borders. The logo
+   is drawn over the stock menu photo (measured: 203,934 of 480,000 pixels still matched it), so a whole-frame count
+   cannot tell them apart. The edges can: the logo screen is black in a band around the frame (about 76 px left and
+   right, 60 px top and bottom, owner screenshot), where the menu shows its photo (the button container is
+   [80 60 720 540]). A full frame with under 1/4 of the edge strips (x < 40, x >= 760, y < 30, y >= 570) classified as
+   menu background is not the menu: its margins are filled black and no pixel inside it is swapped for the picture.
+   SC3RESIZE_LOGOBLACK=0 disables. */
 static int    g_logoblack = 1;
-static int    g_mb_black;                 /* the last full menu present had (almost) no menu background */
-#define RZ_MB_BLACK_MAX (NAT_W * NAT_H / 50)
+static int    g_mb_black;                 /* the last full menu present had (almost) no menu background at its edges */
+#define RZ_MB_EDGE_X 40
+#define RZ_MB_EDGE_Y 30
+#define RZ_MB_EDGE_AREA (2 * RZ_MB_EDGE_Y * NAT_W + 2 * RZ_MB_EDGE_X * (NAT_H - 2 * RZ_MB_EDGE_Y))
+#define RZ_MB_BLACK_MAX (RZ_MB_EDGE_AREA / 4)
+
+/* Visit every edge-strip pixel of the 800x600 frame once: for (y...) for (x in RZ_MB_EDGE_NEXT) */
+static __inline LONG rz_mb_edge_next(LONG x, LONG y) {
+    if (y < RZ_MB_EDGE_Y || y >= NAT_H - RZ_MB_EDGE_Y) return x + 1;
+    return x == RZ_MB_EDGE_X - 1 ? NAT_W - RZ_MB_EDGE_X : x + 1;
+}
+
+static void rz_mb_set_black(LONG nbg) {
+    if ((nbg < RZ_MB_BLACK_MAX) == g_mb_black) return;
+    g_mb_black = nbg < RZ_MB_BLACK_MAX;
+    logf("LOGOBLACK> %ld of %d edge-strip pixels are menu background: %s", nbg, RZ_MB_EDGE_AREA,
+         g_mb_black ? "not the menu, black margins" : "the menu, picture margins");
+}
 
 static void rz_mb_path(char *out, int cap, const char *leaf) {
     char *sl;
@@ -3760,19 +3780,16 @@ static void rz_mb_patch_src(void *src, const RECT *sr, LONG fx0, LONG fy0, LONG 
     bits = *(BYTE **)(desc + 0x24);
     /* sr = the region of the source surface; (fx0, fy0) = where it sits in the 800x600 frame */
     if (bits && pitch >= (sr->left + fw) * 2) {
-        if (g_logoblack && fw == NAT_W && fh == NAT_H) {   /* LOGOBLACK: classify the whole frame before swapping */
+        if (g_logoblack && fw == NAT_W && fh == NAT_H) {   /* LOGOBLACK: classify the edge strips before swapping */
             LONG nbg = 0;
             for (y = 0; y < fh; y++) {
                 const WORD *row = (const WORD *)(bits + (sr->top + y) * pitch) + sr->left;
                 const WORD *o = g_mb_orig + y * NAT_W, *l = g_mb_last + y * NAT_W;
                 const WORD *nv = g_mb_native ? g_mb_native + y * NAT_W : NULL;
-                for (x = 0; x < fw; x++) if (row[x] == o[x] || row[x] == l[x] || (nv && row[x] == nv[x])) nbg++;
+                for (x = 0; x < fw; x = rz_mb_edge_next(x, y))
+                    if (row[x] == o[x] || row[x] == l[x] || (nv && row[x] == nv[x])) nbg++;
             }
-            if ((nbg < RZ_MB_BLACK_MAX) != g_mb_black) {
-                g_mb_black = nbg < RZ_MB_BLACK_MAX;
-                logf("LOGOBLACK> %ld of %d frame pixels are menu background: %s", nbg, NAT_W * NAT_H,
-                     g_mb_black ? "not the menu, black margins" : "the menu, picture margins");
-            }
+            rz_mb_set_black(nbg);
         }
         if (g_mb_black) fh = 0;   /* not the menu: leave the frame as drawn */
         for (y = 0; y < fh; y++) {
@@ -4128,14 +4145,11 @@ static int rz_ms_full(void *src, const RECT *sr, LONG cw, LONG ch) {
     if (!rz_ms_prepare(cw, ch)) return 0;
     if (!rz_ms_read(src, sr, 0, 0, NAT_W, NAT_H, bb)) return 0;
     if (g_logoblack && (bb[2] > bb[0] || !g_ms_valid)) {   /* LOGOBLACK: is this frame the menu at all? */
-        LONG i, nbg = 0;
-        for (i = 0; i < NAT_W * NAT_H; i++) nbg += g_ms_bg[i];
-        if ((nbg < RZ_MB_BLACK_MAX) != g_mb_black) {
-            g_mb_black = nbg < RZ_MB_BLACK_MAX;
-            g_ms_valid = 0; g_ms_full_req = 1;   /* recompose the rect and resend the margins */
-            logf("LOGOBLACK> %ld of %d frame pixels are menu background: %s", nbg, NAT_W * NAT_H,
-                 g_mb_black ? "not the menu, black margins" : "the menu, picture margins");
-        }
+        LONG x, y, nbg = 0, was = g_mb_black;
+        for (y = 0; y < NAT_H; y++)
+            for (x = 0; x < NAT_W; x = rz_mb_edge_next(x, y)) nbg += g_ms_bg[y * NAT_W + x];
+        rz_mb_set_black(nbg);
+        if (g_mb_black != was) { g_ms_valid = 0; g_ms_full_req = 1; }   /* recompose the rect and resend the margins */
         /* not the menu: no pixel is the picture (stray matches would show specks of it). The class is re-read for
            any row that changes, and an unchanged row is the same logo row. */
         if (g_mb_black) memset(g_ms_bg, 0, NAT_W * NAT_H);
