@@ -40,3 +40,18 @@ Builds that did not count:
 
 Not run: save / load while magnified (a new city starts at x1 by design), terrain editor, a second monitor, the
 GZWIND GetCursorPos reader (`FUN_10020260`, not mapped; nothing followed the wrong point in these checks).
+
+## FPS while moving (owner hand test, round 2)
+
+Owner: "it looks perfect, but there's some minor FPS drop when moving around". Cause: two view -> frame Blts per moving
+frame, each a 4K stretch. Fix: DEFER (drop the overwritten one) + bit-identical x2 smooth path + HUD-city copy from the
+frame. Sim running, arrow-key scrolling, presents/s: x2 moving 36.3 -> 49.2, still 52.0 -> 59.0; x3 moving 36.8 -> 51.7,
+still 50.2 -> 57.5; stock zoom 4 unchanged (22 moving, 30 still). Mid-scroll frames clean (`owner_shots/15`). Detail:
+`re/analysis/CITY_ZOOM.md` "FPS while moving".
+
+## Round 3 (owner: "performance is still not optimal")
+
+Interleaved A/B, same binary (A = this round off by env, B = defaults), A B A B under the same background load, moving
+presents/s: x2 28.5 / 33.8 -> 33.2 / 37.7, x3 29.8 / 34.2 -> 37.5 / 41.2, stock x1 unchanged (20 to 21). Output checks: HUDPERF
+CHECK 0 px over ~1,400 frames, EPXCHECK 0 readable px over 512 incremental rebuilds. Quit no longer saves an 800x600 window.
+Detail and the one test-run crash (surface create failed, now retried): `re/analysis/CITY_ZOOM.md` "Round 3".

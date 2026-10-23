@@ -167,3 +167,107 @@ Not covered / open:
   prevented. Not seen at 3840x1984 (q / f stays in the top-left half, away from the native HUD box).
 - Save / load while magnified: a new city starts at x1 (by design), not run. Terrain editor / New City, not run.
 - The second monitor / a window drag between monitors while magnified, not run.
+
+## FPS while moving (owner hand test 2026-10-22: "it looks perfect, but there's some minor FPS drop when moving around")
+
+Measured with `SC3RESIZE_CITYZOOM_DIAG=1` (one `CZDIAG>` line per second: presents, camera moved or still, longest
+interval, ms per frame in the stretch / HUD pass / present, and the DEFER counters), arrow-key scrolling through
+`key_state_spoof.py`, sim running, 3840x1984, HUD Auto, smooth. Runs `inst_cityzoom\pan4` (before) and `pan5` (after).
+
+Cause `[CONFIRMED @ HSSEQ Blt sequence, run seq1]`: while the camera moves the game Blts the view into the frame twice per
+frame. The order is: present, scroll (view onto itself), RCI corner, full view, RCI corner, full view, the HUD, present.
+The first full copy is overwritten by the second, but each one was a 4K stretch, so every moving frame paid two
+(copied 2.9M HUD px per present instead of 1.7M). Stock zoom 4 does the same with two 1:1 4K copies (x1 moving 22
+presents/s, still 30).
+
+Changes (all in the CITYZOOM block):
+- DEFER: a city Blt only marks the frame as owed; the next city Blt drops an owed one; any other access pays it first
+  (a Blt from the frame, a Lock / GetDC / BltFast of it, a Blt onto it bigger than 20,000 px). Up to two small Blts
+  onto it (the RCI corner) pass through and are replayed after a late stretch. Only while HUDPERF's Lock / GetDC /
+  BltFast hooks are installed. `SC3RESIZE_CITYZOOM_DEFER=0` turns it off. Measured: dropped 37 to 42 stretches per
+  second while moving, every owed stretch paid by the first HUD Blt (0 at the present, so sc3perf's overlay is safe).
+- x2 smooth fast path: two pixels per DWORD with the bit-trick average, the same floor((a + b) / 2) the lane blend gives
+  at weight 16 of 32 (bit-identical).
+- HUD-city buffer: copied from the frame right after the stretch (last pass's rects) instead of stretched again; a
+  native rect inside its enlarged rect is not filled twice.
+- Worker threads stay at 4 (6 lost to the sim's 8 traffic workers); bands from 100,000 px.
+
+| presents/s (median of 1-s lines) | before (pan4) | after (pan5) |
+|---|---|---|
+| x1 still / moving (stock zoom 4) | 30.1 / 22.2 | 30.0 / 22.0 |
+| x2 still / moving | 52.0 / 36.3 | 59.0 / 49.2 |
+| x3 still / moving | 50.2 / 36.8 | 57.5 / 51.7 |
+
+Left while moving: the HUD pass grows from ~3.9 to ~7 ms per frame (HUDPERF rebuilds what the moving city under
+see-through HUD parts and the minimap view box change), at x1 as well, so it is not cityzoom. The same DEFER rule would
+also drop stock zoom 4's redundant 1:1 4K copy (about 10 ms per moving frame); not applied, the stock path is unchanged.
+
+## Round 3 (owner: "performance is still not optimal"; go: skip HUD-covered pixels, nearest while moving, the HUD pass while moving, stock zoom's duplicate copy)
+
+The owner's second session ran with other sessions' test jobs on the PC (3 `port.test.boot` workers, then `mashed_re`):
+stretch 6.7 to 8.5 ms and HUD pass 8 to 10 ms per frame, about twice the quiet-PC numbers. So the comparison below is an
+interleaved A/B with one binary: A = this round's features off by env, B = defaults, launched A, B, A, B under the same
+load (23 to 57 %), x1 / x2 / x3, 8 s still + 12 s arrow-key scrolling each, sim running.
+
+Changes (env switch to turn each off):
+- SKIP (`SC3RESIZE_CITYZOOM_SKIP=0`): dest pixels the last HUD pass composed from HUD taps only (HUDPERF cached runs)
+  are left out of the stretch and the HUD-city copy; native HUD rects never are. About 913,000 px per frame at 3840x1984.
+- MOVENEAREST (`SC3RESIZE_CITYZOOM_MOVENEAREST=0`): nearest while the view origin moved in the last 120 ms.
+- DEFER1 (`SC3RESIZE_CITYZOOM_DEFER1=0`): the same drop-the-overwritten-copy rule at x1. Measured there: the game copies
+  the view into the map area only (`[0 0 3744 1928]`) and passes a DDBLTFX; 15 to 16 copies per second dropped while
+  moving. No measurable fps change at x1 (its moving cost is elsewhere).
+- HUDPERF MT (`SC3RESIZE_HUDPERF_MT=0`): a window's rebuilt dest pixels in row bands over the CITYZOOM workers.
+- Minimap 2x incremental (`SC3RESIZE_HUDSCALE_EPXINC=0`): the changed native rows +-2 instead of the whole buffer.
+- HUDPERF MASK (`SC3RESIZE_HUDPERF_MASK=0`): snapshot changes at pixels no cached value reads do not trigger a rebuild.
+  Fired on only 2 to 9 rows per frame: the moving cost is the minimap's view box (HUD pixels), not the city behind.
+- Output checks: `SC3RESIZE_HUDPERF_CHECK=1` 0 px differ over about 1,400 frames (MASK + MT); new
+  `SC3RESIZE_HUDSCALE_EPXCHECK=1` 512 incremental minimap rebuilds, 0 readable px differ (pixels of see-through
+  sources differ and are never read).
+
+| moving, presents/s | A1 | B1 | A2 | B2 |
+|---|---|---|---|---|
+| x1 (stock zoom 4) | 20.6 | 20.1 | 21.3 | 21.1 |
+| x2 | 28.5 | 33.2 | 33.8 | 37.7 |
+| x3 | 29.8 | 37.5 | 34.2 | 41.2 |
+
+Moving frame split (A2 vs B2): stretch 7.6 to 9.3 -> 3.4 ms; HUD pass 9.3 to 10.6 -> 8.0 to 8.2 ms (compose 6.4 to 7.7
+-> 4.9 to 5.3, minimap 2x 1.2 to 1.3 -> 0.6 to 0.7). Still frames: within the run-to-run spread.
+
+Left: the HUD pass floor (about 3 ms per frame copying the 1.5M px enlarged HUD even when nothing changed), the present
+(2.6 ms quiet, 4 to 5 ms under load), the game's own scroll work (x1 moving 20 to 21 presents/s with or without this round).
+
+Also fixed: at quit the game restores the window to 800x600 by itself (WM_SIZE SIZE_RESTORED 800x600 about 0.6 s after
+the quit dialog), and WINMEM saved that, so every start after a quit came up small. A restore to exactly 800x600 now
+saves only after a player window command (WM_SYSCOMMAND / title double-click) in the last 2 s. Checked: quit through
+the dialogs, ini kept `maximized=1`.
+
+Crash seen once in a test run (`inst_cityzoom\pan7`): at a x1 -> x2 step both surface creates returned 0
+(`FUN_10009efb` -> vt+0x1dc failed), the render target was left with a NULL surface object (+0x44) and the next draw
+read through it (GZGraphicD `FUN_10014649` Lock). The same NULL +0x44 the monitor-change crash leaves; no display event
+was logged, and the cause is `[UNCERTAIN]` (a Frida key-state spoof had just detached in that run). Now: up to 6 create
+retries with a growing sleep (logged `CREATEFAIL`), and no ScrollTo on a render target without a surface.
+
+## Right-drag + zoom (owner 2026-10-23: "when I scroll holding right click and then I press '+' to zoom, the camera flies the other way I'm facing")
+
+Build: this branch (the owner's game was `inst_cityzoom`, round 3), not the LAN 2564a08. Log `handtest_1023`: a right press at
+x3 (mapped to view (723,407)), no release, then steps x3 -> x2 -> x1 with the button held; in the 1.1 s at x2 the kept
+centre moved from (-8377,5209) to (-3336,9127), i.e. right and down.
+
+Mechanism `[CONFIRMED @ SIMSPR 0x10043daf, 0x10042cfe]`: the right-drag scroll is a velocity. SetDragMode (city view vt
+0x10067894 +0x3c, `FUN_10042cfe(x, y, on)`) stores the anchor at view+0x1ec/+0x1ee and the mode at +0x1e6; each tick
+`FUN_10043daf` scrolls by the velocity at +0x1f4/+0x1f8 (floats, from mouse - anchor), all in view pixels. Measured with a
+probe: press at client (1760,900) -> anchor (1760,900) at x1, (880,450) at x2, (586,300) at x3; a zoom (stock or a step)
+turns the mode off (+0x1e6 = 0). The anchor is the press point as the game got it, so in the factor at the press; after a
+step the moves arrive as q / f_new. The flight direction in the owner's log (positive velocity after x3 -> x2) is the old
+anchor (q0 / 3) against new moves (q / 2). Stock zooms keep the mouse map 1:1, so the LAN build cannot do this.
+
+Fix (DRAGANCHOR, `SC3RESIZE_CITYZOOM_DRAGANCHOR=0` turns it off): (1) a drag still active at a step has its anchor scaled
+by f_old / f_new and its velocity cleared; (2) SetDragMode is wrapped: turned on with exactly the last right press point
+the game was given, after the factor changed since that press, the point is put in the current factor. Any other anchor
+passes as is. Left-drags (tools) map at the current factor, so a road drag across a step follows the cursor.
+
+Not reproduced end to end: with posted input (and VK_RBUTTON reported held through the GZWIND key leaf, GetAsyncKeyState
+and GetKeyState) the zoom ends the drag and it never restarts, so the owner's restart path (real mouse, likely another
+input path) could not be driven here; both of its possible forms are covered by (1) and (2). Checked with the fix: the
+hook installs, drags at x1 / x2 / x3 keep working, plain zoom steps and rotation keep the centre (tile (35,128) over three
+rotations at x2). Overscroll edge with a held drag: not run (the synthetic drag ends at the step).
