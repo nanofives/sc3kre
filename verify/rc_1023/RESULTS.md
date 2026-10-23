@@ -4,8 +4,12 @@ Branch `rc/1023` (worktree `Simcity_wt_rc`) = `main` 1b3cbee + `child/cityzoom` 
 fixes below (head 28f7537). Played from `Proyectos\Simcity_rc` (staged 2026-10-23 with `stage_lan_release.py`, 3,602 files).
 NOT deployed to the LAN server.
 
-⚠️ `Simcity_rc\manifest.json` is stale: `Apps\sc3resize.dll` (3F00868F78CB863B) and `Apps\sc3overscroll.dll` (67376B406F5BA9B6)
-were replaced by hand during the hand test. Rebuild all 9 binaries from the rc/1023 head and re-stage before any deploy.
+**Merged into main 2026-10-23 (734ad5f) and re-staged** from main: 9 binaries rebuilt, `Simcity_rc` 3,602 files, every
+binary matches the manifest, 9 files differ from the published LAN release. Launch check: DRAGANCHOR, DRAGCAP (chained
+over ARROWS), PANCURSOR, CURSORMAP and LOGOBLACK installed, only the benign `0xC0000096 @ SC3U+0x84122`.
+Merge note: a parallel session fixed the intro-logo margins on main (LOGOBLACK, 08a4033 / bdb688d, decided on the edge
+strips: the logo is drawn over the stock menu photo, so a whole-frame test like row 2 below counts it as the menu). The
+merge keeps LOGOBLACK and drops this branch's whole-frame test.
 
 ## Session smoke test (owner away, before the hand test)
 
@@ -18,7 +22,7 @@ Europolis, maximized 3840x1984, posted input, frames by FRAMEDUMP. Zoom x1 -> x2
 | # | owner report | cause (measured) | fix | evidence |
 |---:|---|---|---|---|
 | 1 | Reunirse drawn over Preferencias | DLGSCALE drew dialogs in child-list order, which is front-first | draw back to front, cost label last | log order: Preferencias (opened later) listed first |
-| 2 | intro logo: menu picture outside 4:3 | MENUSCALE treated every pre-city 800x600 frame as the menu | margins black unless >= 1/10 of the frame is menu background | log: 0 bg px at 1.1 s (black), 203,934 at 71 s (picture) |
+| 2 | intro logo: menu picture outside 4:3 | MENUSCALE treated every pre-city 800x600 frame as the menu | superseded on merge by main's LOGOBLACK (edge strips) | launch check: 549 of 91,200 edge px are menu background, black margins |
 | 3 | which UI elements still need rescaling? | | HSCENSUS: one log line per distinct UI window and what HUD scale did (`NOT SCALED` / `KEPT NATIVE`) | 40 entries so far, none native; the census list is still to be read after a full UI tour |
 | 4 | right-drag makes the cursor smaller | stock pan arrows: 15x8 art in a 32x32 cursor, hotspot at the tip | PANCURSOR v2: while the right button is held, each arrow is rebuilt once, art 3/4 of the canvas, centred | real-mouse drags (mouse_event + GetCursorInfo), road tool and no tool, windowed and maximized: every hold showed the rebuilt arrow, hotspot (32,32); offline render of all 8 arrows |
 | 5 | still marker at the press point offset up-left at zoom 6/7, small everywhere | 32x32 `anchor point cursor.BMP` Blt (GZGraphicD+0x18c89) into the frame at the anchor in VIEW px | ANCHORMARK: re-aimed at anchor x f and drawn at the cursor's bitmap size (64), in the outer Blt hook so DEFER replays it | mid-drag frame dumps at x1 and x3: marker centred on the press point, 0 marker px at the old x3 spot |

@@ -22,7 +22,7 @@ nothing has been published since. Dev builds go to the LAN server (`re/scripts/l
 Owner hand test 2026-10-23 found 9 issues, all fixed on rc/1023 (head 28f7537): dialog order, intro margins, a UI
 census (HSCENSUS), right-drag arrows enlarged and centred, the press-point marker at x2/x3 and pointer size, zoom while
 dragging (DRAGKICK, DRAGCAP, CURSORMAP) and the x3 building band (ALIGN8). Record and open items:
-`verify/rc_1023/RESULTS.md` on rc/1023. `Simcity_rc` now holds hand-copied sc3resize/sc3overscroll: re-stage before a deploy.
+`verify/rc_1023/RESULTS.md` on rc/1023. Merged into main 734ad5f and re-staged from main 2026-10-23 (manifest consistent, 9 binaries differ from the LAN release).
 
 **Merged on `main` since 10-12** (from the STATUS files; detail in each `re/sessions/STATUS_<name>.md`):
 
