@@ -8,7 +8,75 @@ this file is the live board. Opened 2026-08-24.
 `DEFERRED.md`, open questions in `UNCERTAINTIES.md`, per-session state in `re/sessions/STATUS_*.md`.
 This file points at them and does not restate them.
 
-## Current state, 2026-10-12 (read this first)
+## Current state, 2026-10-23 (read this first)
+
+**Latest published release is still `sc3mods-2026-10-12`** (target `7c1db20`). `main` is 475+ commits past it and
+nothing has been published since. Dev builds go to the LAN server (`re/scripts/lan_release`, last republish
+2026-10-21 at `67bd9ea`, 3,593 files). `child/cityzoom` is the only branch not merged into `main`.
+
+**Release candidate staged 2026-10-23: `Proyectos\Simcity_rc`** (branch `rc/1023` in worktree `Simcity_wt_rc` =
+`main` `1b3cbee` + `child/cityzoom` `38cf00e`, merge `fb99f9e`). Built with `build_mod.ps1` (9 binaries) and staged with
+`stage_lan_release.py`, 3,602 files. Against the current `Simcity_release` manifest only the 9 binaries differ
+(`mods_launch.exe`, `version.dll`, `sc3resize/bigcity/overscroll/simrun/perf/netmod/undo.dll`); packages, Cities,
+`perf.ini` and `menu_bg.bmp` are identical. NOT deployed to the server. Session smoke test PASSED 2026-10-23 (`verify/rc_1023/SMOKE.md`: zoom x2/x3, maximize cycles, 120 s soak at speed 4, no new fault); owner hand test still open.
+Owner hand test 2026-10-23 found 9 issues, all fixed on rc/1023 (head 28f7537): dialog order, intro margins, a UI
+census (HSCENSUS), right-drag arrows enlarged and centred, the press-point marker at x2/x3 and pointer size, zoom while
+dragging (DRAGKICK, DRAGCAP, CURSORMAP) and the x3 building band (ALIGN8). Record and open items:
+`verify/rc_1023/RESULTS.md` on rc/1023. `Simcity_rc` now holds hand-copied sc3resize/sc3overscroll: re-stage before a deploy.
+
+**Merged on `main` since 10-12** (from the STATUS files; detail in each `re/sessions/STATUS_<name>.md`):
+
+| area | what | merged |
+|---|---|---|
+| netmod package system | netcat, newpiece, netvariant, netpack, netrules, packlint, netbridge, netramp, artkit, lanekit, multitile, roundabouts 2/3/4 | 10-12/14 (came in under `round/avenues`, `2bbbeb4`) |
+| UI | laptop round (hudperf, toolicon, reunirse2, queryid), menuscale, hudclick, fullscreen (`252255a`), dlgscale (`895dfac`), uiscale Auto HUD (`a7b3195`), costlabel, noinject loader (`d7d114b`) | 10-14..22 |
+| traffic | lanedensity, pausetrips, cartrips FREEZE, carscroll, cartrips2 | 10-13..16 |
+| avenues | avenue program, boulevards, diagonals, lane rework (`9ffe42f`), avx32, avrbtfix, avramp, markings | 10-17..22 |
+| highways | interchanges, seam, capped joins, RAMPFIRST (`f21b9fc`), hwcap/hwask/hwave/hwcars, hwlone, hwtee, hwlight, hwtdel, onramp RAMPCAP | 10-18..22 |
+| undo | `sc3undo` (`17bf760`..`664a685`) | 10-20/21 |
+
+**Only on `rc/1023`, not on `main`:** `child/cityzoom` (zoom x2/x3 past the closest zoom, moving-FPS work, quit no longer
+saves an 800x600 window, DRAGANCHOR right-drag fix). Owner said "looks perfect" on round 1, then asked for the FPS
+fix (round 2/3) and reported the right-drag bug 2026-10-23. Neither fix is owner-confirmed. `STATUS_cityzoom.md`
+said "NOT committed" earlier; it is committed (`38cf00e`). `verify/cityzoom/` is untracked on `main`.
+
+**Owner hand tests still open** (wording and paths from the STATUS/RESULTS files):
+
+| # | item | where |
+|---:|---|---|
+| 1 | cityzoom: right-drag across a zoom step, scrolling at x2/x3, "Zoom extra" on/off. Not run: save/load while magnified, terrain editor, second monitor | `verify/cityzoom/RESULTS.md` |
+| 2 | uiscale Auto HUD scale and scaled cost label; pointer size at dpi 240 not measured | `STATUS_uiscale.md` |
+| 3 | sc3undo: real Ctrl+Z / Ctrl release; marina, on-ramp, multi-cell class not reached | `verify/undo_mod/RESULTS.md` |
+| 4 | fullscreen (Alt+Enter, remembered size, multi-monitor) | `verify/fullscreen/RESULTS.md` |
+| 5 | dlgscale: dialogs at the main menu; menuscale: maximized menu with a real mouse | `verify/dlgscale/RESULTS.md`, `STATUS_menuscale.md` |
+| 6 | onramp RAMPCAP on the LAN build | `STATUS_onramp.md` |
+| 7 | carscroll and cartrips2 M3 (DLLs in `re\harness\handtest_*`); cartrips2 still vanishes cars on arrival | `STATUS_carscroll.md`, `STATUS_cartrips2.md` |
+| 8 | netvariant draw/cross/save/open with and without the mod; netramp green ramp; multitile T/R; newpiece look | their STATUS files |
+| 9 | `sc3simrun` at the fastest speed (never soaked); the package as downloaded from GitHub | `formats/SIM_WHILE_SCROLLING.md`, `verify/mods_release_1012/RESULTS.md` |
+| 10 | Image sheets waiting for a look: hwlone, hwtee, hwtdel, hwlight, costlabel, avx32 img6..16, hwcap2, hwask, avcore, avjunc, roundabout2/3/4 | their `owner_shots` |
+
+**Owner design calls open** (long tail, each in its STATUS file): avenue look calls never answered (avx tree and crease,
+bvx palette, boulevard bulb vs cap and median width, bigrbt ring, diagx tree layer, diagbv taper), avjunc box look,
+avx32 "crossing road changes width" (img7/img8), avrbtfix painted caps (ids 21920..21934 granted), avramp old-city
+re-drag or a load-time join, hwtee mirrored trumpet, hwcars lane hand-offs and loops, hwx cloverleaf radius, hwseam
+answer, noinject `version.dll` for dev `MAIN\Apps`, roundabout island and zoom-3 give-way dashes, netpack/netbridge/
+netvariant/netramp/multitile/artkit defaults.
+
+**Traps to know before shipping:**
+- Package art is gitignored. Packages reach the release only through the stage source `Simcity_stock_avint` (install
+  from the worktree that built the art, e.g. `Simcity_wt_avint`), then stage + deploy. Rebuilding binaries alone does
+  not pick up package changes since the last republish.
+- `highway_core` must stay installed (old ramp cities); its ramp rule is opt-in `SC3NETMOD_HWYT=1`.
+- Random `0xC0000005` starts were mods racing on shared pages: never restore VirtualProtect. U-085 parked by owner.
+- Stage replaces the Apps DLLs: close the owner's game in `Simcity_release` first.
+- Frida attach while paused deadlocks the game. Desktop grabs are white or black while the PC is in use: use FRAMEDUMP.
+- CRLF/LF flips cause whole-file conflicts on merge. Check each block's start log after a merge (`rbt_install`).
+
+Known limits, not bugs to chase: changing monitors while running can crash (DirectDraw), the DWM8And16BitMitigation
+compat layer needs `mods_launch.exe -exe <renamed copy>`, traffic on dense 1024 maps is the throughput ceiling.
+
+## (historical) State 2026-10-12, release sc3mods-2026-10-12
+
 
 **Latest release: `sc3mods-2026-10-12`** on sc3kre (target `7c1db20`, record `verify/mods_release_1012/RESULTS.md`).
 One launcher (`mods_launch.exe`) and six DLLs: `sc3resize`, `sc3bigcity`, `sc3overscroll`, `sc3simrun`, `sc3perf`
