@@ -1,19 +1,15 @@
-# STATUS cityzoom (2026-10-22)
+# STATUS cityzoom (2026-10-23)
 
-State: BUILT, light-tested in game, waiting for the orchestrator to commit and the owner's hand test.
+State: zoom steps committed on child/cityzoom (5f3221b); round 2+3 perf work and the right-drag fix built and
+light-tested, NOT committed yet (owner testing).
 
-- Feature: zoom in past the closest zoom adds x2 and x3 (as the window allows: x2 + x3 at 3840x1984, x2 at
-  2560x1351 / 1600x1200, none at 1920x1080). The city view is drawn at client / f and stretched into the frame;
-  smooth follows the HUD "Suavizado". Preferencias checkbox "Zoom extra" (default on). `sc3resize.ini [view]
-  zoomextra` 0 / 1 / 2 (2 = at most x2), env `SC3RESIZE_CITYZOOM`.
-- Results: `MAIN\verify\cityzoom\RESULTS.md` (12 checks, timings), frames `verify/cityzoom/owner_shots/01..14`.
-  x2 smooth 45 to 54 presents/s at 4K vs 16 to 25 for stock zoom 4.
-- Worktree is on main `a7b3195` content (uiscale's sc3resize.c / HUD_SCALE.md / stage_lan_release.py copied in from
-  main, identical to it), my changes on top. No ids taken, no tables or packages changed.
-- Instance `Simcity_stock_hwlight\re\harness\inst_cityzoom`: all 8 mods from the worktree, game closed.
+- Feature: zoom in past the closest zoom adds x2 and x3 (as the window allows), view drawn at client / f and stretched
+  into the frame; Preferencias "Zoom extra" (default on), sc3resize.ini [view] zoomextra.
+- Round 2/3 (owner: FPS while moving): DEFER, x2 fast path, SKIP, MOVENEAREST, DEFER1, HUDPERF MT, incremental minimap
+  2x, HUDPERF MASK; quit no longer saves an 800x600 window; surface create retried (CREATEFAIL). A/B in
+  verify/cityzoom/RESULTS.md.
+- Right-drag + zoom (owner 2026-10-23): cause = the drag anchor is in the press-time factor's view pixels; fix
+  DRAGANCHOR (re/analysis/CITY_ZOOM.md last section). Built into inst_cityzoom2 (the owner's game holds inst_cityzoom's DLL).
 
-Files to commit:
-- worktree `Simcity_wt_cityzoom` (branch child/cityzoom): `re/harness/src/sc3resize.c`, `re/harness/src/sc3overscroll.c`,
-  `re/analysis/CITY_ZOOM.md` (the other three modified files equal main a7b3195)
-- MAIN: `re/sessions/STATUS_cityzoom.md`, `verify/cityzoom/RESULTS.md`, `verify/cityzoom/owner_shots/*.png` (14),
-  `verify/cityzoom/*.png` mockups, `verify/cityzoom/stretch.c`, `verify/cityzoom/mock.py`
+Files to commit (worktree Simcity_wt_cityzoom): re/harness/src/sc3resize.c, re/analysis/CITY_ZOOM.md,
+verify/cityzoom/RESULTS.md, re/sessions/STATUS_cityzoom.md (copy). MAIN: verify/cityzoom/owner_shots/* (local only).
