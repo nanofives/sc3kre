@@ -7501,17 +7501,20 @@ static DWORD __fastcall qi_msg(void *self, void *edx, DWORD win, DWORD msg, DWOR
 }
 
 /* PANCURSOR (owner 2026-10-23: "moving camera with right click makes the cursor smaller"). Measured with GetCursorInfo
-   during a right-drag: at the press the game sets a centred cursor (hotspot at the middle, the 21x21 centre / four-way
-   art), then while dragging it sets the stock PAN ... ARROW.cur cursors, whose art is 15x8 to 17x9 inside the 32x32
-   canvas, against the 17x29 pointer. Owner call: keep the four-way cursor for the whole drag. user32!SetCursor is
-   redirected in every loaded module's import table; while the right button is held, the first centred cursor set
-   after the press is kept and every later SetCursor of that hold gets it instead. SC3RESIZE_PANCURSOR=0 turns it off.
-   Import-table pages are left writable (never restore VirtualProtect: mods race on shared pages). */
+   during right-drags: the game sets the stock PAN ... ARROW.cur cursors, monochrome 32x32 with 15x8 to 17x9 px of art in
+   a corner and the hotspot at the arrow tip, so the arrow is a third of the pointer's height and jumps up-left of the
+   pointer. Owner call (second pass): arrows in both cases (with and without a tool), enlarged and centred on the pointer.
+   user32!SetCursor is redirected in every loaded module's import table. While the right button is held, any monochrome
+   cursor other than the one up at the press (and other than an exactly centred one, the four-way at the press) is
+   rebuilt once: same canvas, art scaled so its longer side is 3/4 of the canvas, centred, hotspot at the centre.
+   SC3RESIZE_PANCURSOR=0 turns it off. Import-table pages are left writable (never restore VirtualProtect). */
 static int g_pancursor = 1;
 typedef HCURSOR (WINAPI *PFN_SETCURSOR)(HCURSOR);
 static PFN_SETCURSOR g_orig_setcursor;
-static HCURSOR g_pan_keep;
-static LONG g_pan_subs;
+static HCURSOR g_pan_press;               /* the cursor up when this right-button hold started */
+static int     g_pan_held;
+static struct { HCURSOR src, big; } g_pan_map[32];
+static int g_pan_nmap;
 static int rz_cursor_centred(HCURSOR h) {
     ICONINFO ii;
     BITMAP bm;
@@ -7520,40 +7523,79 @@ static int rz_cursor_centred(HCURSOR h) {
     if (!h || !GetIconInfo(h, &ii)) return 0;
     if (GetObjectA(ii.hbmMask, sizeof(bm), &bm)) {
         w = bm.bmWidth; hh = ii.hbmColor ? bm.bmHeight : bm.bmHeight / 2;
-        ok = w > 0 && hh > 0 && labs((LONG)ii.xHotspot * 2 - w) <= w / 32 && labs((LONG)ii.yHotspot * 2 - hh) <= hh / 32;   /* (16,16) of 32, +-1: the pan arrows sit at (14..17, 9..15) */
+        ok = w > 0 && hh > 0 && labs((LONG)ii.xHotspot * 2 - w) <= w / 32 && labs((LONG)ii.yHotspot * 2 - hh) <= hh / 32;
     }
     if (ii.hbmMask) DeleteObject(ii.hbmMask);
     if (ii.hbmColor) DeleteObject(ii.hbmColor);
     return ok;
 }
-static HCURSOR g_pan_last;   /* the last cursor this hook let through outside a right-button hold */
-static HCURSOR WINAPI rz_setcursor_hook(HCURSOR h) {
-    static int dbg;
-    HCURSOR in = h;
-    int held = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
-    if (g_pancursor && held && !g_pan_keep && !rz_cursor_centred(h) && g_pan_last && rz_cursor_centred(g_pan_last)) {
-        g_pan_keep = g_pan_last;   /* the hover cursor the press kept (no SetCursor at the press) */
+/* Monochrome cursor -> enlarged, centred copy. NULL if not monochrome or unreadable (the caller keeps the original). */
+static HCURSOR rz_pan_enlarge(HCURSOR h) {
+    ICONINFO ii, ni;
+    BITMAP bm;
+    struct { BITMAPINFOHEADER h; RGBQUAD c[2]; } bi;
+    BYTE *src = NULL, *dst = NULL;
+    LONG w, hh, sstride, dstride, x, y, x0 = 0x7fff, y0 = 0x7fff, x1 = -1, y1 = -1, aw, ah, side, nw, nh, ox, oy;
+    HDC dc;
+    HCURSOR out = NULL;
+    if (!GetIconInfo(h, &ii)) return NULL;
+    if (ii.hbmColor || !GetObjectA(ii.hbmMask, sizeof(bm), &bm)) goto done;
+    w = bm.bmWidth; hh = bm.bmHeight / 2;
+    if (w <= 0 || hh <= 0 || w > 256) goto done;
+    sstride = ((w + 31) / 32) * 4;
+    src = (BYTE *)calloc(sstride, hh * 2);
+    memset(&bi, 0, sizeof(bi));
+    bi.h.biSize = sizeof(bi.h); bi.h.biWidth = w; bi.h.biHeight = -(hh * 2); bi.h.biPlanes = 1; bi.h.biBitCount = 1;
+    dc = GetDC(NULL);
+    if (!src || GetDIBits(dc, ii.hbmMask, 0, hh * 2, src, (BITMAPINFO *)&bi, DIB_RGB_COLORS) != hh * 2) { ReleaseDC(NULL, dc); goto done; }
+    ReleaseDC(NULL, dc);
+#define PB(buf, st, X, Y) (((buf)[(Y) * (st) + (X) / 8] >> (7 - (X) % 8)) & 1)
+    for (y = 0; y < hh; y++) for (x = 0; x < w; x++)
+        if (!PB(src, sstride, x, y) || PB(src, sstride, x, y + hh)) {   /* drawn: AND 0, or XOR 1 (inverted) */
+            if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    if (x1 < 0) goto done;
+    aw = x1 - x0 + 1; ah = y1 - y0 + 1;
+    side = aw > ah ? aw : ah;
+    nw = aw * (w * 3 / 4) / side; nh = ah * (hh * 3 / 4) / side;
+    if (nw < aw || nh < ah) { nw = aw; nh = ah; }   /* never shrink */
+    ox = (w - nw) / 2; oy = (hh - nh) / 2;
+    dstride = ((w + 15) / 16) * 2;                    /* CreateBitmap rows are WORD aligned */
+    dst = (BYTE *)malloc(dstride * hh * 2);
+    if (!dst) goto done;
+    memset(dst, 0xff, dstride * hh);                  /* AND plane: transparent */
+    memset(dst + dstride * hh, 0x00, dstride * hh);   /* XOR plane: nothing */
+    for (y = 0; y < nh; y++) for (x = 0; x < nw; x++) {
+        LONG sx = x0 + x * aw / nw, sy = y0 + y * ah / nh, dx = ox + x, dy = oy + y;
+        BYTE *da = dst + dy * dstride + dx / 8, *dx_ = dst + (dy + hh) * dstride + dx / 8, bit = (BYTE)(0x80 >> (dx % 8));
+        if (!PB(src, sstride, sx, sy)) *da &= (BYTE)~bit;
+        if (PB(src, sstride, sx, sy + hh)) *dx_ |= bit;
     }
-    if (g_pancursor && held) {
-        if (!g_pan_keep) {
-            /* the centred cursor is often already up from hovering the city (no new SetCursor at the press; owner
-               recording 2026-10-23: 0xee056b before and through the press, then an arrow 30 ms later) */
-            HCURSOR cur = GetCursor();
-            if (rz_cursor_centred(h)) g_pan_keep = h;
-            else if (cur && cur != h && rz_cursor_centred(cur)) { g_pan_keep = cur; h = cur;
-                if (g_pan_subs++ < 3) logf("PANCURSOR> drag cursor replaced by the cursor up at the press"); }
+#undef PB
+    memset(&ni, 0, sizeof(ni));
+    ni.fIcon = FALSE; ni.xHotspot = w / 2; ni.yHotspot = hh / 2;
+    ni.hbmMask = CreateBitmap(w, hh * 2, 1, 1, dst);
+    if (ni.hbmMask) { out = (HCURSOR)CreateIconIndirect(&ni); DeleteObject(ni.hbmMask); }
+    logf("PANCURSOR> cursor %p (art %ldx%ld at (%ld,%ld) of %ldx%ld, hotspot (%lu,%lu)) -> %p (art %ldx%ld centred, hotspot (%ld,%ld))",
+         h, aw, ah, x0, y0, w, hh, ii.xHotspot, ii.yHotspot, out, nw, nh, w / 2, hh / 2);
+done:
+    free(src); free(dst);
+    if (ii.hbmMask) DeleteObject(ii.hbmMask);
+    if (ii.hbmColor) DeleteObject(ii.hbmColor);
+    return out;
+}
+static HCURSOR WINAPI rz_setcursor_hook(HCURSOR h) {
+    int held = g_pancursor && (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+    if (!held) { g_pan_held = 0; return g_orig_setcursor(h); }
+    if (!g_pan_held) { g_pan_held = 1; g_pan_press = GetCursor(); }
+    if (h && h != g_pan_press && !rz_cursor_centred(h)) {
+        int i;
+        HCURSOR big = NULL;
+        for (i = 0; i < g_pan_nmap; i++) if (g_pan_map[i].src == h) { big = g_pan_map[i].big; break; }
+        if (i == g_pan_nmap && g_pan_nmap < 32) {
+            big = rz_pan_enlarge(h);
+            g_pan_map[g_pan_nmap].src = h; g_pan_map[g_pan_nmap].big = big; g_pan_nmap++;
         }
-        else if (h != g_pan_keep) { h = g_pan_keep; if (g_pan_subs++ < 3) logf("PANCURSOR> drag cursor replaced by the press cursor"); }
-    } else { g_pan_keep = NULL; g_pan_last = h; }
-    if (g_pancursor && dbg < 400 && (held || in != h || dbg < 40)) {
-        DWORD ra = (DWORD)_ReturnAddress();
-        HMODULE m = NULL;
-        char mn[32] = "?";
-        if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)ra, &m) && m) {
-            char full[MAX_PATH], *b; GetModuleFileNameA(m, full, MAX_PATH); b = strrchr(full, 92); lstrcpynA(mn, b ? b + 1 : full, sizeof(mn)); }
-        dbg++;
-        logf("PANCURSOR> #%d held=%d in=%p centred=%d -> %p keep=%p cur=%p from %s+0x%lX tid %lu", dbg, held, in,
-             rz_cursor_centred(in), h, g_pan_keep, GetCursor(), mn, ra - (DWORD)m, GetCurrentThreadId());
+        if (big) h = big;
     }
     return g_orig_setcursor(h);
 }
@@ -7593,7 +7635,7 @@ static void pk_install(void) {
         if (m) n += rz_iat_patch(m, "USER32.dll", "SetCursor", (void *)rz_setcursor_hook, (void **)&g_orig_setcursor);
     }
     if (!g_orig_setcursor) g_orig_setcursor = (PFN_SETCURSOR)GetProcAddress(GetModuleHandleA("user32.dll"), "SetCursor");
-    logf("PANCURSOR> SetCursor redirected in %d import slot(s): a right-drag keeps the cursor set at the press", n);
+    logf("PANCURSOR> SetCursor redirected in %d import slot(s): right-drag arrows enlarged and centred on the pointer", n);
 }
 
 static void qi_install(HMODULE sui) {
@@ -13427,7 +13469,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           ho_install(sui);   /* HUDOPT: HUD scale controls in the Preferences dialog */
           rz_meet_hook(sui); /* DLGSTAY: the Reunirse pages share one stored position */
           qi_install(sui);   /* QUERYID: "Copiar ID" button in the query (?) dialog */
-          pk_install();      /* PANCURSOR: right-drag keeps the four-way cursor */
+          pk_install();      /* PANCURSOR: right-drag arrows enlarged and centred */
       }
       else logf("--- HUD: SIMUI.DLL never loaded after %d tries - capture NOT armed, HUD stays native", st); }
     if (g_hudlab) {
