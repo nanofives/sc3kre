@@ -7720,6 +7720,37 @@ static void rz_fd_maybe(void *self, const RECT *dr, void *src, const RECT *sr) {
     ((RZ_UNLOCK)(*(DWORD **)src)[0x80 / 4])(src, NULL);
 }
 
+/* ANCHORMARK (owner 2026-10-23: "the indicator for the camera moving, which stands still at the right-click position,
+   is offset top left at zoom 6 and 7, and small at every level"). Measured with a Blt trace during real right-drags,
+   maximized 3840x1984: the marker is the 32x32 'anchor point cursor.BMP' sprite, Blt by GZGraphicD+0x18c89 into the frame
+   centred on the drag anchor (city view +0x1ec/+0x1ee, set by SetDragMode FUN_10042cfe). At x1 it lands at the press
+   point ([1904 976 1936 1008] for a press at 1920,992); at x3 at [624 314 656 346], the anchor in VIEW pixels, while
+   the frame is client-sized, so it sits at 1/f of the way. Fix: that Blt is re-aimed at anchor x f and drawn at the
+   size Windows draws the current cursor (its bitmap width / 32, 2x on this PC). SC3RESIZE_ANCHORMARK=0 turns it off. */
+static int  g_anchormark = 1;
+static volatile int  g_am_on;
+static volatile LONG g_am_x, g_am_y;
+static void rz_am_fix(RECT *dr, const RECT *sr, RECT *out) {
+    LONG cx, cy, half = 16, f = g_cz_f > 1 ? g_cz_f : 1;
+    ICONINFO ii;
+    BITMAP bm;
+    *out = *dr;
+    if (!g_anchormark || !g_am_on || !dr || !sr || IsBadReadPtr(dr, sizeof(RECT)) || IsBadReadPtr(sr, sizeof(RECT))) return;
+    if (sr->left || sr->top || sr->right != 32 || sr->bottom != 32) return;
+    if (dr->right - dr->left != 32 || dr->bottom - dr->top != 32) return;
+    if (labs(dr->left + 16 - g_am_x) > 1 || labs(dr->top + 16 - g_am_y) > 1) return;   /* not centred on the anchor */
+    if (GetIconInfo(GetCursor(), &ii)) {
+        if (GetObjectA(ii.hbmMask, sizeof(bm), &bm) && bm.bmWidth > 32 && bm.bmWidth <= 256) half = bm.bmWidth / 2;
+        if (ii.hbmMask) DeleteObject(ii.hbmMask);
+        if (ii.hbmColor) DeleteObject(ii.hbmColor);
+    }
+    cx = g_am_x * f; cy = g_am_y * f;
+    out->left = cx - half; out->top = cy - half; out->right = cx + half; out->bottom = cy + half;
+    {   static int logged; static LONG lastf;
+        if (logged < 12 && f != lastf) { logged++; lastf = f; logf("ANCHORMARK> marker [%ld %ld %ld %ld] -> [%ld %ld %ld %ld] (anchor (%ld,%ld) view px, x%ld)",
+                                         dr->left, dr->top, dr->right, dr->bottom, out->left, out->top, out->right, out->bottom, g_am_x, g_am_y, f); } }
+}
+
 static HRESULT WINAPI rz_blt_hook_inner(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, void *fx) {
     LARGE_INTEGER a, b;
     HRESULT hr;
@@ -8130,9 +8161,13 @@ static HRESULT WINAPI rz_blt_hook_debt(void *self, RECT *dr, void *src, RECT *sr
    records, the lazy restore, the RCI fix, HUDPERF stats) sees the client-sized city Blt it sees without a factor. */
 static HRESULT WINAPI rz_blt_hook(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, void *fx) {
     HRESULT hr;
-    RECT cd, cs;
+    RECT cd, cs, amr;
     static LONG diag_f;
     static int diag_n;
+    if (g_am_on && g_anchormark) {   /* ANCHORMARK: re-aim the drag marker first, so DEFER queues / replays the new rect */
+        rz_am_fix(dr, sr, &amr);
+        if (dr && memcmp(&amr, dr, sizeof(RECT))) dr = &amr;
+    }
     if (g_cz_f != diag_f) { diag_f = g_cz_f; diag_n = 0; }
     if (g_cz_f > 1 && src && src != self && g_hwnd && (src == g_cz_surf || src == g_cz_devsurf) && diag_n < 8) {
         diag_n++;
@@ -12753,6 +12788,7 @@ static void __fastcall cz_setdrag(void *self, void *edx, int x, int y, int on) {
              g_cz_rpf, g_cz_f, nx, ny);
         x = nx; y = ny;
     }
+    g_am_on = on != 0; g_am_x = (short)x; g_am_y = (short)y;   /* ANCHORMARK: the marker is drawn centred here */
     g_cz_setdrag_orig(self, NULL, x, y, on);
 }
 static void patch_setdrag(HMODULE ss) {
@@ -13566,6 +13602,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE", v, sizeof(v))) g_menuscale = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HSCENSUS", v, sizeof(v))) g_hs_census = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PANCURSOR", v, sizeof(v))) g_pancursor = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_ANCHORMARK", v, sizeof(v))) g_anchormark = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_FILTER", v, sizeof(v))) g_ms_filter = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_REPOST", v, sizeof(v))) g_ms_repost = atoi(v);
           GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_DUMP", g_ms_dump, sizeof(g_ms_dump));
