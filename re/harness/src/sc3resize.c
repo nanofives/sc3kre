@@ -3506,6 +3506,13 @@ static volatile DWORD g_mb_tick;          /* GetTickCount of the last centred pr
 static volatile LONG g_mb_dx0, g_mb_dy0;  /* dest origin of the last full present (client origin in dest space) */
 static volatile LONG g_mb_active;         /* 1 from a centred present until a full-window present of any other frame */
 static int    g_ms_valid;                 /* MENUSCALE: g_ms_f32 / g_ms_bg hold a whole frame and g_ms_out is composed from it */
+/* LOGOBLACK (owner 2026-10-23): the intro logo / "Cargando" screen is an 800x600 frame shown before any city view, so
+   it took the menu treatment and its margins showed the menu picture beside the logo's own black borders. A full
+   frame with fewer than 1/50 of its pixels classified as menu background is not the menu: its margins are filled
+   black and no pixel inside it is swapped for the picture. SC3RESIZE_LOGOBLACK=0 disables. */
+static int    g_logoblack = 1;
+static int    g_mb_black;                 /* the last full menu present had (almost) no menu background */
+#define RZ_MB_BLACK_MAX (NAT_W * NAT_H / 50)
 
 static void rz_mb_path(char *out, int cap, const char *leaf) {
     char *sl;
@@ -3753,6 +3760,21 @@ static void rz_mb_patch_src(void *src, const RECT *sr, LONG fx0, LONG fy0, LONG 
     bits = *(BYTE **)(desc + 0x24);
     /* sr = the region of the source surface; (fx0, fy0) = where it sits in the 800x600 frame */
     if (bits && pitch >= (sr->left + fw) * 2) {
+        if (g_logoblack && fw == NAT_W && fh == NAT_H) {   /* LOGOBLACK: classify the whole frame before swapping */
+            LONG nbg = 0;
+            for (y = 0; y < fh; y++) {
+                const WORD *row = (const WORD *)(bits + (sr->top + y) * pitch) + sr->left;
+                const WORD *o = g_mb_orig + y * NAT_W, *l = g_mb_last + y * NAT_W;
+                const WORD *nv = g_mb_native ? g_mb_native + y * NAT_W : NULL;
+                for (x = 0; x < fw; x++) if (row[x] == o[x] || row[x] == l[x] || (nv && row[x] == nv[x])) nbg++;
+            }
+            if ((nbg < RZ_MB_BLACK_MAX) != g_mb_black) {
+                g_mb_black = nbg < RZ_MB_BLACK_MAX;
+                logf("LOGOBLACK> %ld of %d frame pixels are menu background: %s", nbg, NAT_W * NAT_H,
+                     g_mb_black ? "not the menu, black margins" : "the menu, picture margins");
+            }
+        }
+        if (g_mb_black) fh = 0;   /* not the menu: leave the frame as drawn */
         for (y = 0; y < fh; y++) {
             WORD *row = (WORD *)(bits + (sr->top + y) * pitch) + sr->left;
             const WORD *o = g_mb_orig + (fy0 + y) * NAT_W + fx0, *n = g_mb_center + (fy0 + y) * NAT_W + fx0;
@@ -3778,13 +3800,19 @@ static void rz_mb_patch_src(void *src, const RECT *sr, LONG fx0, LONG fy0, LONG 
     ((RZ_UNLOCK)vt[0x80 / 4])(src, NULL);
 }
 
+/* One margin rect: the picture, or black on a frame that is not the menu (LOGOBLACK). */
+static void rz_mb_margin(HDC dc, LONG x, LONG y, LONG w, LONG h) {
+    if (g_mb_black) PatBlt(dc, x, y, w, h, BLACKNESS);
+    else BitBlt(dc, x, y, w, h, g_mb_dc, x, y, SRCCOPY);
+}
+
 static void rz_mb_margins(LONG cw, LONG ch, LONG ox, LONG oy) {
     HDC dc = GetDC(g_hwnd);
     if (!dc) return;
-    if (oy > 0) BitBlt(dc, 0, 0, cw, oy, g_mb_dc, 0, 0, SRCCOPY);
-    if (ch - oy - NAT_H > 0) BitBlt(dc, 0, oy + NAT_H, cw, ch - oy - NAT_H, g_mb_dc, 0, oy + NAT_H, SRCCOPY);
-    if (ox > 0) BitBlt(dc, 0, oy, ox, NAT_H, g_mb_dc, 0, oy, SRCCOPY);
-    if (cw - ox - NAT_W > 0) BitBlt(dc, ox + NAT_W, oy, cw - ox - NAT_W, NAT_H, g_mb_dc, ox + NAT_W, oy, SRCCOPY);
+    if (oy > 0) rz_mb_margin(dc, 0, 0, cw, oy);
+    if (ch - oy - NAT_H > 0) rz_mb_margin(dc, 0, oy + NAT_H, cw, ch - oy - NAT_H);
+    if (ox > 0) rz_mb_margin(dc, 0, oy, ox, NAT_H);
+    if (cw - ox - NAT_W > 0) rz_mb_margin(dc, ox + NAT_W, oy, cw - ox - NAT_W, NAT_H);
     ReleaseDC(g_hwnd, dc);
 }
 
@@ -4099,6 +4127,19 @@ static int rz_ms_full(void *src, const RECT *sr, LONG cw, LONG ch) {
     QueryPerformanceCounter(&t[0]);
     if (!rz_ms_prepare(cw, ch)) return 0;
     if (!rz_ms_read(src, sr, 0, 0, NAT_W, NAT_H, bb)) return 0;
+    if (g_logoblack && (bb[2] > bb[0] || !g_ms_valid)) {   /* LOGOBLACK: is this frame the menu at all? */
+        LONG i, nbg = 0;
+        for (i = 0; i < NAT_W * NAT_H; i++) nbg += g_ms_bg[i];
+        if ((nbg < RZ_MB_BLACK_MAX) != g_mb_black) {
+            g_mb_black = nbg < RZ_MB_BLACK_MAX;
+            g_ms_valid = 0; g_ms_full_req = 1;   /* recompose the rect and resend the margins */
+            logf("LOGOBLACK> %ld of %d frame pixels are menu background: %s", nbg, NAT_W * NAT_H,
+                 g_mb_black ? "not the menu, black margins" : "the menu, picture margins");
+        }
+        /* not the menu: no pixel is the picture (stray matches would show specks of it). The class is re-read for
+           any row that changes, and an unchanged row is the same logo row. */
+        if (g_mb_black) memset(g_ms_bg, 0, NAT_W * NAT_H);
+    }
     if (!g_ms_valid) { bb[0] = 0; bb[1] = 0; bb[2] = NAT_W; bb[3] = NAT_H; }
     QueryPerformanceCounter(&t[1]);
     if (bb[2] > bb[0]) {
@@ -4120,10 +4161,10 @@ static int rz_ms_full(void *src, const RECT *sr, LONG cw, LONG ch) {
         if (dc) {
             LONG rx = g_ms_rx, ry = g_ms_ry, rw = g_ms_rw, rh = g_ms_rh;
             BitBlt(dc, rx, ry, rw, rh, g_ms_dc, 0, 0, SRCCOPY);
-            if (ry > 0) BitBlt(dc, 0, 0, cw, ry, g_mb_dc, 0, 0, SRCCOPY);
-            if (ch - ry - rh > 0) BitBlt(dc, 0, ry + rh, cw, ch - ry - rh, g_mb_dc, 0, ry + rh, SRCCOPY);
-            if (rx > 0) BitBlt(dc, 0, ry, rx, rh, g_mb_dc, 0, ry, SRCCOPY);
-            if (cw - rx - rw > 0) BitBlt(dc, rx + rw, ry, cw - rx - rw, rh, g_mb_dc, rx + rw, ry, SRCCOPY);
+            if (ry > 0) rz_mb_margin(dc, 0, 0, cw, ry);
+            if (ch - ry - rh > 0) rz_mb_margin(dc, 0, ry + rh, cw, ch - ry - rh);
+            if (rx > 0) rz_mb_margin(dc, 0, ry, rx, rh);
+            if (cw - rx - rw > 0) rz_mb_margin(dc, rx + rw, ry, cw - rx - rw, rh);
             ReleaseDC(g_hwnd, dc);
             g_ms_full_req = 0; g_ms_full_t = GetTickCount(); g_ms_nfull++;
         }
@@ -12273,6 +12314,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_FLOATALL", v, sizeof(v))) g_hs_floatall = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUBGSTOCK", v, sizeof(v))) g_menubg_stock = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUBGFIT", v, sizeof(v))) g_menubg_fit = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_LOGOBLACK", v, sizeof(v))) g_logoblack = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE", v, sizeof(v))) g_menuscale = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_FILTER", v, sizeof(v))) g_ms_filter = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_REPOST", v, sizeof(v))) g_ms_repost = atoi(v);
