@@ -219,10 +219,11 @@ static void ld_close(BYTE *layer, DWORD x, DWORD z, BYTE t, BYTE **added, BYTE *
 }
 
 #include "sc3netmod_rampfirst.c"   /* task hwtrips: road / bus steps take an offered on-ramp first (SC3NETMOD_RAMPFIRST) */
+#include "sc3netmod_avflow.c"      /* task avflow: AVFIRST + AVDEPOSIT (SC3NETMOD_AVFIRST, SC3NETMOD_AVDEPOSIT) */
 
 static BYTE __fastcall ld_select(BYTE *layer, void *edx, BYTE *node, BYTE *out, DWORD budget, DWORD p4, DWORD p5, DWORD p6) {
     DWORD id, ev, x, z, s;
-    BYTE *added[10 + LD_TRIPMAX], addb[10 + LD_TRIPMAX], t = node[0x14], r;   /* task hwtrips: +6 for rf_close */
+    BYTE *added[16 + LD_TRIPMAX], addb[16 + LD_TRIPMAX], t = node[0x14], r;   /* task hwtrips: +6 for rf_close, task avflow: +5 avf_close */
     int nadd = 0, k, honoured, selfcopy = 0;
     LdCell *c = NULL;
     LdTrip *tr;
@@ -251,6 +252,7 @@ static BYTE __fastcall ld_select(BYTE *layer, void *edx, BYTE *node, BYTE *out, 
             }
     }
     if (!ev) rf_close(layer, node, added, addb, &nadd);            /* task hwtrips */
+    if (!ev) avf_close(layer, node, added, addb, &nadd);           /* task avflow: after the ramp */
     if (!ev && !nadd) return ((LD_SEL)g_ld_tramp)(layer, NULL, node, out, budget, p4, p5, p6);
     honoured = g_ld_mode != 3;
     if (ev && id < 65536 && g_base[id]) c = ld_cell(x, z, id);
@@ -285,6 +287,7 @@ static BYTE __fastcall ld_select(BYTE *layer, void *edx, BYTE *node, BYTE *out, 
         ld_close(layer, x, z, t, added, addb, &nadd);
         if (nadd > before) InterlockedExchangeAdd(&g_ld_n_premark, nadd - before);
         rf_close(layer, node, added, addb, &nadd);                 /* task hwtrips: after the lane closes */
+        avf_close(layer, node, added, addb, &nadd);                /* task avflow: after the ramp */
     }
     r = ((LD_SEL)g_ld_tramp)(layer, NULL, node, out, budget, p4, p5, p6);
     for (k = 0; k < nadd; k++) *added[k] &= (BYTE)~addb[k];
@@ -328,6 +331,8 @@ static __declspec(naked) void ld_stub(void) {
         jmp  dword ptr [g_ld_tramp]
     road:
         cmp  g_rf_on, 0          /* task hwtrips: ramp-first looks at every road / bus step */
+        jne  slow
+        cmp  g_avf_on, 0         /* task avflow: avenue-first too */
         jne  slow
         mov  eax, [eax]
         test eax, eax
@@ -402,11 +407,13 @@ static void lanedensity_install(void) {
     else if (got && !lstrcmpiA(v, "all")) g_ld_mode = 2;
     else if (got && !lstrcmpiA(v, "count")) g_ld_mode = 3;
     rf_init();                                                     /* task hwtrips */
-    if (g_rf_on && (!g_ld_mode || (g_ld_mode == 1 && !g_nvariants))) g_ld_mode = 4;   /* task hwtrips: ramp-first only */
+    avf_init();                                                    /* task avflow */
+    if ((g_rf_on || g_avf_on) && (!g_ld_mode || (g_ld_mode == 1 && !g_nvariants))) g_ld_mode = 4;   /* task hwtrips: ramp-first only */
     if (!g_ld_mode) { logf("lanedensity: off (SC3NETMOD_LANEDENSITY=0)"); return; }
     if (g_ld_mode == 1 && !g_nvariants) { logf("lanedensity: no variants, nothing to honour - not patched"); g_ld_mode = 0; return; }
     while (!(st = (BYTE *)GetModuleHandleA("SimTransit.dll")) && ms++ < 300000) Sleep(1);
     if (!st) { logf("lanedensity: SimTransit.dll never loaded"); g_ld_mode = 0; return; }
+    avd_install(st);                                               /* task avflow: its own call site, any ld mode */
     e = st + 0x755e;
     if (!bytes_are(e, g_ld_entry, 6) || st[0x71eb] != 0xE8 || (DWORD)(st + 0x71f0) + *(DWORD *)(st + 0x71ec) != (DWORD)st + 0x8a94) {
         logf("lanedensity: SimTransit+0x755e / +0x71eb differ from shipped - not patched");
@@ -519,6 +526,7 @@ static void lanedensity_stats(void) {
     int i, j, n = 0;
     if (!g_ld_mode) return;
     rampfirst_stats();                                             /* task hwtrips */
+    avflow_stats();                                                /* task avflow */
     if (g_ld_n_toggle) logf("lanedensity: ALT state %s, %ld switch(es), %ld retr(ies)", g_ld_on ? "ON" : "OFF", g_ld_n_toggle, g_ld_n_toggle_retry);
     logf("lanedensity: evals=%ld honoured steps=%ld neighbours closed=%ld wrong-way fails=%ld arrivals refused=%ld slow QI=%ld vtables=%ld refused-transition closes=%ld trip list full=%ld",
          g_ld_n_eval, g_ld_n_hon, g_ld_n_premark, g_ld_n_wrong, g_ld_n_arrblock, g_ld_n_slowqi, g_ld_nvt, g_ld_n_tripmark, g_ld_n_tripfull);

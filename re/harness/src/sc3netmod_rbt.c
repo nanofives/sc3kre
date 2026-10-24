@@ -124,6 +124,7 @@ static int g_avl_on;                                                         /* 
 static WORD g_avl_straight;                                                  /* task avcore */
 static void avl_line(const char *path, const char *line);                    /* task avcore */
 static void avl_pass(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who);  /* task avcore */
+static void avf_pass(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who);  /* task avflow */
 static void avl_stats(void);                                                 /* task avcore */
 static void hwave_stats(void);                                               /* task hwave */
 
@@ -384,6 +385,7 @@ static void __fastcall rb_pass(BYTE *mgr, void *edx, DWORD list, int net, int *b
         if (g_r9_centre) r9_run(mgr, x0, z0, x1, z1, "edit");                /* task bigrbt */
         if (g_hwy_np) hwave_road(mgr, x0, z0, x1, z1, "road", 0);            /* task hwave: after DAV, builds */
         if (g_avl_on) avl_pass(mgr, x0, z0, x1, z1, "edit");                 /* task avcore: last (+ its post hooks) */
+        avf_pass(mgr, x0 - 3, z0 - 3, x1 + 3, z1 + 3, "edit");                /* task avflow: class grid, after all writers */
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         InterlockedIncrement(&g_rb_n_fault);
         logf("### rbt: exception 0x%08lX in the edit pass", GetExceptionCode());
@@ -407,6 +409,7 @@ static void rb_load_pass(void) {
         if (g_r9_centre) r9_run(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");      /* task bigrbt */
         if (g_hwy_np) rb_hwy(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");         /* task hwcore */
         if (g_avl_on) avl_pass(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");       /* task avcore: last (+ its post hooks) */
+        avf_pass(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");                     /* task avflow: class grid, after all writers */
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         InterlockedIncrement(&g_rb_n_fault);
         logf("### rbt: exception 0x%08lX in the load pass", GetExceptionCode());
