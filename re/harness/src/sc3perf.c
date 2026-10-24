@@ -126,7 +126,7 @@ static int     g_spr_follow = 1;
 static DWORD   g_spr_base, g_sleep_orig;
 static LONG    g_seed_x = -100000, g_seed_y = -100000;
 static volatile LONG g_reseeds;
-static int     g_fastceil = 1, g_sprref = 1, g_layerref = 1;
+static int     g_fastceil = 1, g_sprref = 1, g_layerref = 1, g_strtref = 1, g_reloadshadow = 1;
 static int     g_trclear = 1, g_fastftol = 1, g_busy = 1, g_listcount = 1, g_listfind = 1;
 static volatile int g_busy_show = 1;   /* PERFPREFS: draw the busy lines (busy= keeps the detector itself) */
 static LARGE_INTEGER g_qf, g_t0;
@@ -975,15 +975,58 @@ static BYTE *mt_make_shadow(BYTE *layer) {
     *(BYTE ***)(g + 0xc) = rows;
     tr_register(g, buf, nrows * w);
     *(BYTE **)(s + 0x78) = g;
+    *(BYTE **)(s + 0x1f0) = layer;               /* RELOAD: the layer this shadow was shaped for */
     return s;
 }
-static void mt_refresh_shadow(BYTE *s, BYTE *layer) {
-    BYTE keep[0x38], *g = *(BYTE **)(s + 0x78);
+/* RELOAD (task reload1024, owner 2026-10-23: "loaded Europolis 1024 a second time, the game crashed"). The shadows
+   are made once, from the first city's traffic layer, and the refresh kept their marker grid (+0x78) and iterator
+   (+0x1c..+0x54) for good. Measured after Berlin (256) -> Europolis 1024 in one game: the workers routed 1024 trips
+   on a 256-row grid, 39,336 of 87,038 background trips faulted (msvcrt memset in the grid clear, sc3netmod rf_close
+   -> ld_mark reading row pointers past the 256 rows) and the game then stopped presenting (0 fps). When the live
+   layer or its grid size changes, the shadow now takes the new city's iterator (own vector emptied, as at creation)
+   and a marker grid of the new size; the old grid's buffers are released and its write-watch entry follows. */
+static int mt_reshape_shadow(BYTE *s, BYTE *layer) {
+    BYTE *rg = *(BYTE **)(layer + 0x78), *g = *(BYTE **)(s + 0x78), *buf, **rows, *obuf = NULL, **orows;
+    DWORD nrows, w, y;
+    LONG k;
+    memcpy(s + 0x1c, layer + 0x1c, 0x38);
+    memset(s + 0x1c + 0x20, 0, 12);
+    *(BYTE **)(s + 0x1f0) = layer;
+    if (!rg || !g) return 0;
+    nrows = *(DWORD *)(rg + 4); w = *(DWORD *)(rg + 8);
+    if (nrows == *(DWORD *)(g + 4) && w == *(DWORD *)(g + 8)) return 1;
+    rows = (BYTE **)VirtualAlloc(NULL, nrows * 4, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    buf = (BYTE *)VirtualAlloc(NULL, nrows * w, MEM_RESERVE | MEM_COMMIT | MEM_WRITE_WATCH, PAGE_READWRITE);
+    if (!rows || !buf) {
+        if (rows) VirtualFree(rows, 0, MEM_RELEASE);
+        if (buf) VirtualFree(buf, 0, MEM_RELEASE);
+        logf("TRAFFIC_MT> RELOAD: no memory for a %lux%lu worker grid - this worker skips trips", w, nrows);
+        return 0;
+    }
+    for (y = 0; y < nrows; y++) rows[y] = buf + y * w;
+    orows = *(BYTE ***)(g + 0xc);
+    for (k = 0; k < g_ntrx; k++)
+        if (g_trx[k].grid == g) { obuf = g_trx[k].buf; g_trx[k].buf = buf; g_trx[k].size = nrows * w; g_trx[k].val = -1; }
+    logf("TRAFFIC_MT> RELOAD: worker grid 0x%08lX %lux%lu -> %lux%lu (layer 0x%08lX)", (DWORD)g,
+         *(DWORD *)(g + 8), *(DWORD *)(g + 4), w, nrows, (DWORD)layer);
+    memcpy(g, rg, 0x10);
+    *(BYTE ***)(g + 0xc) = rows;
+    if (orows) VirtualFree(orows, 0, MEM_RELEASE);
+    if (obuf) VirtualFree(obuf, 0, MEM_RELEASE);
+    return 1;
+}
+/* returns 0 when the shadow cannot be used for this layer */
+static int mt_refresh_shadow(BYTE *s, BYTE *layer) {
+    BYTE keep[0x38], *g = *(BYTE **)(s + 0x78), *rg = *(BYTE **)(layer + 0x78);
+    if (g_reloadshadow && (*(BYTE **)(s + 0x1f0) != layer || !g || !rg ||
+        *(DWORD *)(rg + 4) != *(DWORD *)(g + 4) || *(DWORD *)(rg + 8) != *(DWORD *)(g + 8)))
+        if (!mt_reshape_shadow(s, layer)) return 0;
     memcpy(keep, s + 0x1c, 0x38);
     memcpy(s, layer, 0x110);
     memcpy(s + 0x1c, keep, 0x38);
     *(BYTE **)(s + 0x78) = g;
     *(DWORD *)(s + 0xb0) = 0; *(DWORD *)(s + 0xb4) = 0; *(float *)(s + 0x100) = 0.0f;
+    return 1;
 }
 static int mt_run_job(BYTE *s, TJOB *j) {
     __try {
@@ -1053,8 +1096,7 @@ static void smooth_work(int me) {
         if (n > 0) { g_sq_head += n; InterlockedExchangeAdd(&g_sq_inflight, n); }
         LeaveCriticalSection(&g_sqcs);
         if (n <= 0) return;
-        if (layer && layer == mt_layer()) {
-            mt_refresh_shadow(s, layer);
+        if (layer && layer == mt_layer() && mt_refresh_shadow(s, layer)) {
             for (i = 0; i < n; i++) mt_run_job(s, &g_sq[(start + i) & (SQ_CAP - 1)]);
             smooth_publish(s);
         }
@@ -1287,10 +1329,16 @@ static void mt_flush_locked(int sync) {
         return;
     }
     mt_finish_locked();                          /* one batch in flight at a time */
+    for (k = 0; k < g_mt_threads; k++)            /* RELOAD: a shadow that cannot take this layer: route here */
+        if (!mt_refresh_shadow(g_mt_shadow[k], layer)) {
+            for (i = 0; i < g_mtq_n; i++) mt_run_job(layer, &g_mtq[i]);
+            for (i = 0; i < g_mtq_n; i++) { DWORD o = g_mtq[i].occ; ((THIS0F)(*(DWORD **)o)[2])(o, NULL); }
+            g_mtq_n = 0;
+            return;
+        }
     t = g_mtq_fly; g_mtq_fly = g_mtq; g_mtq = t;
     g_fly_n = g_mtq_n;
     g_mtq_n = 0;
-    for (k = 0; k < g_mt_threads; k++) mt_refresh_shadow(g_mt_shadow[k], layer);
     g_mtq_next = 0;
     g_mt_left = g_mt_threads;
     g_fly_active = 1;
@@ -2004,6 +2052,146 @@ static DWORD WINAPI ss_watcher(LPVOID p) {
     jmp_to((BYTE *)ss + 0xcab6, (void *)ss_release);
     jmp_to((BYTE *)ss + 0xc3df, (void *)ss_addref);
     logf("SPR_REFCOUNT> SIMSERV class 0x1001f2c8 AddRef/Release atomic (0x1000c3df, 0x1000cab6)");
+    return 0;
+}
+/* ---------------------------------------------------------------- STRTSIM_REFCOUNT (task reload1024, 2026-10-23)
+   Owner: "I retried to load Europolis 1024 for a second time after I loaded it once and the game crashed" (STRTSIM
+   0x10011908, a std::set insert in the strike-crowd producer). Two STRTSIM message listeners, the strike-crowd
+   producer (vtable 0x1002c594, Linux cSSStrikeCrowdProducer) and the class at vtable 0x1002b0fc, share AddRef
+   0x10010569 `inc [ecx+0xc]` and use if-nonzero Releases 0x100110fc / 0x100076a8 (`if (n) n--; if (!n) destroy`).
+   GZServiceD's dispatch AddRefs and Releases every listener around each message (0x1000399b / 0x100039dc), and
+   OccupantInserted / OccupantRemoved reach the producer from the sim thread and the game thread, so the plain
+   inc/dec lose updates. Measured (Frida, STRTSIM pool + set destructor hooks, 1024 -> 1024 Load City, 5 runs):
+   count one too low = the message server's unregister in the layer's Shutdown call (STRTSIM 0x144df -> producer
+   Shutdown -> GZServiceD 0x3c4c) released it to 0 and destroyed it, then the layer's own Release (0x144ea) destroyed
+   it again: its set header went back to STRTSIM's small-block pool twice (FUN_1001125c, 0x10011283), two later
+   allocations shared one block and the next OccupantInserted crashed in the pool or the set rebalance. Count one
+   too high = the producer leaked (never destroyed). Both bodies are made atomic with the same results; an
+   over-release at 0 still destroys, as the game does. strtsim_refcount=0 turns this off. */
+/* STRTSIM_REFCOUNT_ALL (2026-10-24, strtsim_refcount_all=0 off): the same two bodies in 12 more STRTSIM classes
+   (vtables 0x1002A558 0x1002A92C 0x1002B550 0x1002C328 0x1002C600 0x1002C7C8 0x1002C840 0x1002C8CC 0x1002CB28
+   0x1002CF40 0x1002CFA8 0x1002D1D0): AddRefs 0x10003310 (+8), 0x10015599 (+4), 0x10021980 (+0x10) and every
+   if-nonzero Release of the template, its counter offset and destructor read from its own bytes. */
+typedef struct { DWORD dtor, del, off; } STRP;
+typedef void (__fastcall *STR_DTOR)(BYTE *self);
+typedef void (__cdecl *STR_DEL)(void *p);
+static int g_strtref_all = 1;
+static LONG __fastcall st_addref4(BYTE *self) { return InterlockedIncrement((volatile LONG *)(self + 4)); }
+static LONG __fastcall st_addref8(BYTE *self) { return InterlockedIncrement((volatile LONG *)(self + 8)); }
+static LONG __fastcall st_addref(BYTE *self) { return InterlockedIncrement((volatile LONG *)(self + 0xc)); }
+static LONG __fastcall st_addref10(BYTE *self) { return InterlockedIncrement((volatile LONG *)(self + 0x10)); }
+static LONG __fastcall st_release(BYTE *self, STRP *p) {
+    volatile LONG *rc = (volatile LONG *)(self + p->off);
+    LONG o, n;
+    for (;;) {
+        o = *rc;
+        if (!o) { n = 0; break; }                    /* the original skips the decrement and destroys */
+        if (InterlockedCompareExchange(rc, o - 1, o) == o) { n = o - 1; break; }
+    }
+    if (n) return n;
+    ((STR_DTOR)p->dtor)(self);
+    ((STR_DEL)p->del)(self);
+    return 0;
+}
+/* the Release template at r (counter offset r[5]): 1 if it matches byte for byte */
+static int st_is_release(const BYTE *r) {
+    BYTE n = r[5];
+    return r[0] == 0x56 && r[1] == 0x8b && r[2] == 0xf1 && r[3] == 0x8b && r[4] == 0x46 &&
+           (n == 4 || n == 8 || n == 0xc || n == 0x10) &&
+           r[6] == 0x85 && r[7] == 0xc0 && r[8] == 0x76 && r[9] == 0x04 && r[10] == 0x48 && r[11] == 0x89 &&
+           r[12] == 0x46 && r[13] == n && r[14] == 0x8b && r[15] == 0x46 && r[16] == n && r[17] == 0x85 &&
+           r[18] == 0xc0 && r[19] == 0x75 && r[20] == 0x14 && r[21] == 0x85 && r[22] == 0xf6 && r[23] == 0x74 &&
+           r[24] == 0x0e && r[25] == 0x8b && r[26] == 0xce && r[27] == 0xe8 && r[0x20] == 0x56 && r[0x21] == 0xe8 &&
+           !memcmp(r + 0x26, "\x59\x33\xc0\x5e\xc3", 5);
+}
+static DWORD WINAPI st_watcher(LPVOID unused) {
+    static const struct { DWORD rva; BYTE off; void *fn; int all; } adds[4] = {
+        {0x10569, 0x0c, (void *)st_addref, 0}, {0x3310, 0x08, (void *)st_addref8, 1},
+        {0x15599, 0x04, (void *)st_addref4, 1}, {0x21980, 0x10, (void *)st_addref10, 1}};
+    BYTE *st = NULL, *stubs;
+    STRP *pp;
+    DWORD e, k, sec, i, vs, va;
+    WORD ns, opt;
+    int ms = 0, n = 0, na = 0;
+    (void)unused;
+    while (!(st = (BYTE *)GetModuleHandleA("STRTSIM.DLL")) && ms++ < 300000) Sleep(1);
+    if (!st) return 0;
+    for (k = 0; k < 4; k++) {
+        BYTE *a = st + adds[k].rva, o = adds[k].off;
+        if (a[0] != 0xff || a[1] != 0x41 || a[2] != o || a[3] != 0x8b || a[4] != 0x41 || a[5] != o || a[6] != 0xc3) {
+            logf("STRTSIM_REFCOUNT> AddRef STRTSIM+0x%lx differs from shipped - not patched", adds[k].rva); return 0;
+        }
+    }
+    if (!st_is_release(st + 0x110fc) || !st_is_release(st + 0x76a8)) {
+        logf("STRTSIM_REFCOUNT> STRTSIM+0x110fc / +0x76a8 differ from shipped - not patched"); return 0;
+    }
+    stubs = (BYTE *)VirtualAlloc(NULL, 8192, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!stubs) return 0;
+    pp = (STRP *)(stubs + 4096);
+    e = *(DWORD *)(st + 0x3c); ns = *(WORD *)(st + e + 6); opt = *(WORD *)(st + e + 0x14); sec = (DWORD)st + e + 0x18 + opt;
+    for (k = 0; k < ns; k++) {
+        DWORD sh = sec + k * 40;
+        if (!(*(DWORD *)(sh + 0x24) & 0x20000000)) continue;
+        va = (DWORD)st + *(DWORD *)(sh + 0x0c); vs = *(DWORD *)(sh + 0x08);
+        for (i = 0; i + 0x30 < vs && n < 64; i++) {
+            BYTE *r = (BYTE *)va + i, *stub;
+            DWORD rva = (DWORD)(r - st);
+            if (r[0] != 0x56 || !st_is_release(r)) continue;
+            if (!g_strtref_all && rva != 0x110fc && rva != 0x76a8) continue;
+            stub = stubs + n * 16;
+            pp[n].dtor = (DWORD)(r + 0x20) + *(DWORD *)(r + 0x1c);          /* call rel32 at +0x1b */
+            pp[n].del = (DWORD)(r + 0x26) + *(DWORD *)(r + 0x22);           /* call rel32 at +0x21 */
+            pp[n].off = r[5];
+            stub[0] = 0xBA; *(DWORD *)(stub + 1) = (DWORD)&pp[n];           /* mov edx, params */
+            stub[5] = 0xE9; *(DWORD *)(stub + 6) = (DWORD)st_release - (DWORD)(stub + 10);
+            jmp_to(r, stub);
+            n++;
+        }
+    }
+    for (k = 0; k < 4; k++)
+        if (!adds[k].all || g_strtref_all) { jmp_to(st + adds[k].rva, adds[k].fn); na++; }
+    logf("STRTSIM_REFCOUNT> %d AddRef + %d if-nonzero Release bodies atomic (%s)", na, n,
+         g_strtref_all ? "all 14 plain-refcount classes" : "strike-crowd producer + vtable 0x1002b0fc only, strtsim_refcount_all=0");
+    return 0;
+}
+/* ---------------------------------------------------------------- SIMGROUP_REFCOUNT (task reload1024, 2026-10-24)
+   SIMCITY's sim group (vtable 0x10013d.., Simulate FUN_1000e93f iterates its 6 simulator vectors at +0x94) counts
+   references with a plain base AddRef 0x10010d0d `inc [ecx+4]` and if-nonzero Release 0x10010d14 (count 0: vt+0x98(1)),
+   reached through the adjustor thunks 0x1000e787 / 0x1000e78f. Same race class as STRTSIM_REFCOUNT, a template the
+   LAYER_REFCOUNT scan does not match (no stats call, ecx not esi). Suspect for the crash while playing a city
+   reloaded over a 1024 city: the sim registry walk calls a group whose simulator vectors are freed. Both bodies are
+   made atomic with the same results. simgroup_refcount=0 turns this off. */
+static int g_sgref = 1;
+typedef void (__fastcall *SG_DEL)(BYTE *self, void *edx, DWORD flags);
+static LONG __fastcall sg_addref(BYTE *self) { return InterlockedIncrement((volatile LONG *)(self + 4)); }
+static LONG __fastcall sg_release(BYTE *self) {
+    volatile LONG *rc = (volatile LONG *)(self + 4);
+    LONG o, n;
+    for (;;) {
+        o = *rc;
+        if (!o) { n = 0; break; }
+        if (InterlockedCompareExchange(rc, o - 1, o) == o) { n = o - 1; break; }
+    }
+    if (n) return n;
+    if (self) ((SG_DEL)(*(DWORD **)self)[0x98 / 4])(self, NULL, 1);
+    return 0;
+}
+static DWORD WINAPI sg_watcher(LPVOID unused) {
+    static const BYTE wadd[] = {0xff, 0x41, 0x04, 0x8b, 0x41, 0x04, 0xc3};
+    static const BYTE wrel[] = {0x8b, 0x41, 0x04, 0x85, 0xc0, 0x76, 0x04, 0x48, 0x89, 0x41, 0x04, 0x8b, 0x41, 0x04,
+                                0x85, 0xc0, 0x75, 0x10, 0x85, 0xc9, 0x74, 0x0a, 0x8b, 0x01, 0x6a, 0x01, 0xff, 0x90,
+                                0x98, 0x00, 0x00, 0x00, 0x33, 0xc0, 0xc3};
+    BYTE *sc = NULL;
+    int ms = 0;
+    (void)unused;
+    while (!(sc = (BYTE *)GetModuleHandleA("SIMCITY.DLL")) && ms++ < 300000) Sleep(1);
+    if (!sc) return 0;
+    if (memcmp(sc + 0x10d0d, wadd, sizeof(wadd)) || memcmp(sc + 0x10d14, wrel, sizeof(wrel))) {
+        logf("SIMGROUP_REFCOUNT> SIMCITY+0x10d0d/0x10d14 differ from shipped - not patched"); return 0;
+    }
+    jmp_to(sc + 0x10d14, (void *)sg_release);
+    jmp_to(sc + 0x10d0d, (void *)sg_addref);
+    logf("SIMGROUP_REFCOUNT> SIMCITY sim group AddRef 0x10010d0d / Release 0x10010d14 atomic");
     return 0;
 }
 static DWORD WINAPI spr_watcher(LPVOID p) {
@@ -3080,6 +3268,10 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID r) {
         g_fastceil = cfg("fast_ceil", 1);
         g_sprref = cfg("spr_refcount", 1);
         g_layerref = cfg("layer_refcount", 1);
+        g_strtref = cfg("strtsim_refcount", 1);
+        g_strtref_all = cfg("strtsim_refcount_all", 1);
+        g_sgref = cfg("simgroup_refcount", 1);
+        g_reloadshadow = cfg("reload_shadow", 1);
         g_busy = cfg("busy", 1);
         g_busy_show = cfg("busy_show", 1);
         g_locklog = cfg("locklog", 0);   /* LOCKLOG diag, SC3PERF_LOCKLOG=1 */
@@ -3109,6 +3301,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID r) {
         if (g_spr_budget > 0 || g_spr_follow || g_sprref) CreateThread(NULL, 0, spr_watcher, NULL, 0, NULL);
         if (g_sprref) CreateThread(NULL, 0, ss_watcher, NULL, 0, NULL);
         if (g_layerref) CreateThread(NULL, 0, rc_watcher, NULL, 0, NULL);
+        if (g_strtref) CreateThread(NULL, 0, st_watcher, NULL, 0, NULL);
+        if (g_sgref) CreateThread(NULL, 0, sg_watcher, NULL, 0, NULL);
         if (g_trclear || g_mt > 0 || g_fastceil || g_sprref) CreateThread(NULL, 0, tr_watcher, NULL, 0, NULL);
         if (g_fastftol) patch_ftol();      /* msvcrt is loaded before any mod; patch before the game converts a float */
     }

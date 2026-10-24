@@ -1,0 +1,31 @@
+SCENARIO.DLL: 5 plain AddRef, 1 plain Release (1 if-nonzero, 0 always), 1 vtables pairing them
+   vtable 0x1001A64C  AddRef 0x10005B6F (+0xc)  Release 0x100099A1 nz
+SIMADV.DLL: 6 plain AddRef, 3 plain Release (3 if-nonzero, 0 always), 3 vtables pairing them
+   vtable 0x100303F0  AddRef 0x100064FD (+0x2c)  Release 0x10006504 nz
+   vtable 0x10030AA8  AddRef 0x10011702 (+0x5c)  Release 0x10011709 nz
+   vtable 0x10031178  AddRef 0x1001C97A (+0x58)  Release 0x1001C981 nz
+SIMDSTR.DLL: 11 plain AddRef, 5 plain Release (5 if-nonzero, 0 always), 5 vtables pairing them
+   vtable 0x10032498  AddRef 0x1000652F (+0x2c)  Release 0x100066F0 nz
+   vtable 0x10032C98  AddRef 0x1000E087 (+0xc)  Release 0x1000E4EB nz
+   vtable 0x1003314C  AddRef 0x10013A81 (+0x78)  Release 0x10014090 nz
+   vtable 0x100332C8  AddRef 0x10016A93 (+0x50)  Release 0x1001715C nz
+   vtable 0x100337B4  AddRef 0x1000E087 (+0xc)  Release 0x100214F6 nz
+SIMGEOM.DLL: 5 plain AddRef, 1 plain Release (1 if-nonzero, 0 always), 1 vtables pairing them
+   vtable 0x1002942C  AddRef 0x1001474E (+0x4)  Release 0x10004DAB nz
+SIMSPR.DLL: 11 plain AddRef, 1 plain Release (1 if-nonzero, 0 always), 1 vtables pairing them
+   vtable 0x100673A8  AddRef 0x1005982A (+0x4)  Release 0x10041564 nz
+STRTSIM.DLL: 6 plain AddRef, 14 plain Release (14 if-nonzero, 0 always), 14 vtables pairing them
+   vtable 0x1002A558  AddRef 0x10003310 (+0x8)  Release 0x10003B58 nz
+   vtable 0x1002A92C  AddRef 0x10003310 (+0x8)  Release 0x10005F32 nz
+   vtable 0x1002B0FC  AddRef 0x10010569 (+0xc)  Release 0x100076A8 nz
+   vtable 0x1002B550  AddRef 0x10015599 (+0x4)  Release 0x1000934F nz
+   vtable 0x1002C328  AddRef 0x10003310 (+0x8)  Release 0x10010111 nz
+   vtable 0x1002C594  AddRef 0x10010569 (+0xc)  Release 0x100110FC nz
+   vtable 0x1002C600  AddRef 0x10021980 (+0x10)  Release 0x1001413A nz
+   vtable 0x1002C7C8  AddRef 0x10015599 (+0x4)  Release 0x10015613 nz
+   vtable 0x1002C840  AddRef 0x10021980 (+0x10)  Release 0x100166DF nz
+   vtable 0x1002C8CC  AddRef 0x10003310 (+0x8)  Release 0x10017158 nz
+   vtable 0x1002CB28  AddRef 0x10003310 (+0x8)  Release 0x10017A01 nz
+   vtable 0x1002CF40  AddRef 0x10015599 (+0x4)  Release 0x1001DD1A nz
+   vtable 0x1002CFA8  AddRef 0x10015599 (+0x4)  Release 0x1001DFC2 nz
+   vtable 0x1002D1D0  AddRef 0x10015599 (+0x4)  Release 0x1001F229 nz
