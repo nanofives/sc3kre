@@ -125,6 +125,7 @@ static WORD g_avl_straight;                                                  /* 
 static void avl_line(const char *path, const char *line);                    /* task avcore */
 static void avl_pass(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who);  /* task avcore */
 static void avf_pass(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who);  /* task avflow */
+static void avf_sweep_step(void);                                                  /* task avflow */
 static void avl_stats(void);                                                 /* task avcore */
 static void hwave_stats(void);                                               /* task hwave */
 
@@ -433,6 +434,7 @@ static char __fastcall rb_load(BYTE *mgr, void *edx, void *p1, void *p2) {
 }
 
 static LRESULT CALLBACK rb_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
+    if (m == RB_WM + 1) { avf_sweep_step(); return 0; }                     /* task avflow: class grid sweep */
     if (m == RB_WM) {
         logf("rbt: load pass message [tid %04lx]", GetCurrentThreadId());
         rb_load_pass();

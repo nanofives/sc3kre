@@ -151,11 +151,75 @@ ranks avenue and boulevard cells alike, and the trips that now stay on the 3,025
 they reach row 206. A per-trip trace through the boulevard's neighbours would settle it. One lever not built: rank
 boulevard cells ahead of avenue cells inside AVFIRST.
 
+### 2.7 BVFIRST: boulevard cells ranked above avenue cells (owner follow-up, 2026-10-24)
+
+Built as a third switch inside AVFIRST (`sc3netmod_avflow.c`, `SC3NETMOD_AVF_BVFIRST=1`, live `sc3netmod_avf_bv_set`,
+**off by default**). When an open boulevard candidate below the level is offered, the open avenue candidates are closed
+too. With only avenue cells open, AVFIRST runs as before. Stats: `bvfirst offers` (steps with an open boulevard
+candidate while it is on) and `avenue cells closed` (the steps it changed).
+
+**Per-trip trace first** (`re/tools/netmod/bvtrace_probe.py`, both blocks on). It covers every router step at a road
+cell beside the boulevard: what was offered (before ld_select closes anything) and what was taken. It also takes the
+final paths that pass within 3 cells.
+
+| save | boulevard cells | entry cells (road cells beside it) | steps there | of them with an open boulevard cell | ... and an open avenue cell too | arrived trips on the boulevard |
+|---|---|---|---|---|---|---|
+| seoulbv1 (bvlanes, x 145..157), 90 s | 39 | 2 (its two ends on row 206) | 1,377 | 1,193 | **0** | 186 of 26,375 (0.71%) |
+| seoulbv2 (extended, x 126..188), 90 s, BVFIRST off | 189 | 7 (both ends, crossing arms at x 142 / 163 / 178) | 5,627 | 5,247 | **0** | 105 of 24,179 (0.43%) |
+| same, BVFIRST on | 189 | 7 | 5,470 | 5,154 | **0** | 144 of 23,159 (0.62%) |
+
+BVFIRST can only change a step whose node has a boulevard cell and an avenue cell as open candidates at the same time.
+No such step happened. The boulevard is reached only through its two ends and its crossing roads, which are plain
+roads. BV keeps an end one plain cell away from an avenue it meets side-on: the west end tapers into row 206, and
+x 124 is plain road between the taper and the avenue at x 123. A first try ran the outer rows up to the avenues, and
+BV refused the whole 71-column run ("an avenue arm that would stay two-way"), so it stayed with the stock tiler.
+
+seoulbv2 (`inst_avflow\seoulbv2.sc3`, not in git) was made from seoulbv1 in game PID 21840. Rows 205 and 207 were
+demolished from x 124 to 142 and from 158 to 190 (whole buildings went, some wider than the rows). Rows 205, 206 and
+207 were dragged from x 124 to 190, then x 124..125 and 189..190 were demolished on rows 205 / 207 so the ends taper
+into row 206. BV: "boulevard axis 0, columns 126..188 at row 205, 189 cell(s)". Saved 6/5/2000.
+
+**ABBA, seoulbv2, one game (PID 25388), both on vs both on + BVFIRST**: blocks (FD FDB FDB FD) x 4, 4 months per
+window, first month dropped, 24 months per arm (`data/seoulbv2_abba_bvfirst.json`).
+
+| arm | failed | avenue share of path road cells | cells / trip | side streets | trips using the boulevard | boulevard share of path road cells | boulevard density |
+|---|---|---|---|---|---|---|---|
+| FD | 2.23% | 39.4% | 45.6 | 41.1 | 0.43% | 0.17% | 1.6 |
+| FD + BVFIRST | 2.20% | 39.9% | 46.1 | 40.7 | 0.38% | 0.16% | 1.3 |
+
+Every window range overlaps (boulevard use 0.24..0.52% in both arms, failed 2.08..2.44 vs 2.04..2.46). Over the
+whole game the counter read `bvfirst offers=282,047, avenue cells closed=0`, so the router made the same decisions in
+both arms. This run is an A/A test: the differences above are the noise floor of the method at 24 months per arm.
+
+**Recommendation: BVFIRST off by default.** It cannot act where boulevards meet avenues side-on or end on plain roads,
+which is every layout BV builds here. It would act only where a boulevard narrows straight into a one-way avenue
+(narrowing pieces next to avenue cells), and no save has that.
+
+What limits this boulevard is not ranking. With the blocks on, 0.4% of trips use it, and its monthly density is
+1.3..1.6 against 48 on avenues. Trips enter it only at 7 cells. At those cells, 52% of the steps that offered an open
+boulevard cell ended with no step at all, and 26% took a plain road. The trace reads the candidates before
+sc3netmod's per-trip refused-transition list and lane closes apply, so these are likely entries against the one-way
+outer rows being refused. That is not confirmed `[UNCERTAIN]`.
+
+**Class grid fix found on the way.** Blocks write outside the edit box: BV re-runs over the whole map when a run
+reaches the read border, and AVL writes a band to its far end. The class pass only re-read the edit box + 3, so after
+building seoulbv2 it saw 27 of 189 boulevard cells. Now every edit pass also starts a background SWEEP of the whole
+grid on the game thread, 16 rows per window message (`RB_WM + 1`, `avf_sweep_step`), restarted by each new edit.
+Checked in game: demolishing one cell at (170,205) made BV revert most of the run. The edit-box pass left 132
+boulevard cells and the sweep corrected that to 24 ("sweep rows 192..207: avenue cells 3126, boulevard cells 24").
+After a load the class grid is exact (189 cells).
+
+**Incident.** Game PID 14180 crashed during `rb_lab.py cam` (Frida camera call: rotate / zoom queued onto the game
+thread): `VEH FAULT 0xC0000005 at 0x00002B7C`, main thread, stack SIMSPR+0xDF01 < SIMSPR+0x1CBE3, sc3overscroll on
+the stack. Logs in `inst_avflow\crash_14180\`. The camera was then steered without Frida (zoom buttons, sc3io
+scroll), and its state was read with nramp_cam's `hascam` after a zoom-in / zoom-out pair, with no queued call.
+Not investigated further.
+
 ## 3. Not covered / open
 
 - Commute time: not read, no such statistic found (see the verdict).
-- Boulevards: measured on one 39-cell boulevard (2.6), no gain in use. A city with many boulevards was not measured,
-  because no shipped city has one.
+- Boulevards: measured on a 39-cell and a 189-cell boulevard (2.6, 2.7). No gain in use, and BVFIRST has nothing to
+  act on there. A boulevard that narrows into a one-way avenue was not measured (no save has one).
 - One city (Seoul) and one size (256). A 1024 city (Europolis, no boulevards) was not run.
 - The class of a cell changed by a highway-only pass (`rb_pass` net 4, e.g. an HWAVE transition onto an avenue) is
   refreshed only by the next road pass or load.
@@ -169,3 +233,5 @@ boulevard cells ahead of avenue cells inside AVFIRST.
 - `re/tools/netmod/avflow_report.py`: pools a run per arm, with window ranges.
 - `re/tools/netmod/avflow_sheet.py`: the owner sheet.
 - `re/tools/netmod/budget_closer.py`: closes the January budget dialog during long runs.
+- `re/tools/netmod/bvtrace_probe.py`: router steps at the boulevard's entry cells (offered / taken) and final paths
+  near it.

@@ -65,7 +65,7 @@ def main():
     by = defaultdict(list)
     for w in wins:
         by[w[0]["arm"]].append(w)
-    arms = [x for x in ("off", "F", "FD", "D") if x in by]
+    arms = [x for x in ("off", "F", "FD", "D", "FB", "FDB") if x in by]
     sep = " | " if a.md else "  "
     print(sep.join(["arm"] + [c for c, _ in COLS]))
     if a.md:
