@@ -2194,6 +2194,126 @@ static DWORD WINAPI sg_watcher(LPVOID unused) {
     logf("SIMGROUP_REFCOUNT> SIMCITY sim group AddRef 0x10010d0d / Release 0x10010d14 atomic");
     return 0;
 }
+/* ---------------------------------------------------------------- RES_REFCOUNT (task refaudit, 2026-10-24)
+   The plain-refcount classes the refaudit census (verify/refaudit/RESULTS.md, Frida per-object thread census over two
+   1024 games with reloads) saw handed back and forth between live threads, made atomic with the same results:
+   - SIMSPR and GZResourceD resource object (the same framework class, a 3-dword resource key at +0xc; vtables
+     0x10068950 / 0x1001d410 at +4): AddRef `inc [ecx+4]` (SIMSPR 0x1005982a, GZResourceD 0x10015b03) and Release
+     `if (n <= 1) vt+0x14(1), return 0; else n -= 1` (0x10059831 / 0x1000b7c0). Game, sim and sprite-loader threads,
+     up to 11 thread switches on one object. Switches res_refcount_simspr, res_refcount_gzres.
+   - STRTSIM occupant family (base vtable 0x1002b95c, live 0x1002af90 0x1002c9bc 0x1002b7ac): Release 0x1001607d
+     `if (n) n--; if (!n) vt+0x120(1)` on +8, whose AddRef 0x10003310 STRTSIM_REFCOUNT_ALL already made atomic (that
+     pass only matches the esi form). Game + sim. Switch strtsim_refcount_ecx.
+   - SCENARIO layer (vtable 0x1001a64c, GZ message target at +4): AddRef 0x10005b6f `inc [ecx+0xc]`, Release
+     0x100099a1 (the STRTSIM esi template: dtor 0x100067f0 + delete). Game + sim, rare. Switch scenario_refcount.
+   - Second census pass over the 86 `<= 1` vtables (verify/refaudit/le1_refcount_vtables.txt): SIMUI wrapper object
+     (vtable 0x100a8164, 0x14 bytes, ctor 0x10043d52, made in 0x10043424 and handed to its owner's vt+0x9c): AddRef
+     0x100139b6 `inc [ecx+4]` (shared by other SIMUI classes), Release 0x10043ba9 `<= 1` through vt+0x44. Every object
+     went game -> sim -> game, rare. Switch le1_refcount_simui.
+   All switches default on; each module is byte-checked against the shipped DLL and left alone if it differs. */
+static int g_resref_spr = 1, g_resref_gz = 1, g_strtref_ecx = 1, g_scnref = 1, g_le1ref_ui = 1;
+static LONG rr_release_le1(BYTE *self, int slot) {
+    volatile LONG *rc = (volatile LONG *)(self + 4);
+    for (;;) {
+        LONG o = *rc;
+        if (o <= 1) {                         /* the original destroys at <= 1 without writing the count */
+            if (InterlockedCompareExchange(rc, 0, o) != o) continue;
+            if (self) ((VDEL_FN)(*(DWORD **)self)[slot / 4])(self, NULL, 1);
+            return 0;
+        }
+        if (InterlockedCompareExchange(rc, o - 1, o) == o) return o - 1;
+    }
+}
+static LONG __fastcall rr_rel_le1_4_14(BYTE *self) { return rr_release_le1(self, 0x14); }
+static LONG __fastcall rr_rel_le1_4_44(BYTE *self) { return rr_release_le1(self, 0x44); }
+static LONG __fastcall rr_rel_nz_8_120(BYTE *self) {
+    volatile LONG *rc = (volatile LONG *)(self + 8);
+    LONG o, n;
+    for (;;) {
+        o = *rc;
+        if (!o) { n = 0; break; }
+        if (InterlockedCompareExchange(rc, o - 1, o) == o) { n = o - 1; break; }
+    }
+    if (n) return n;
+    if (self) ((VDEL_FN)(*(DWORD **)self)[0x120 / 4])(self, NULL, 1);
+    return 0;
+}
+static STRP g_scn_p;
+static LONG __fastcall rr_scn_release(BYTE *self) { return st_release(self, &g_scn_p); }
+static const BYTE RR_ADD4[] = {0xff, 0x41, 0x04, 0x8b, 0x41, 0x04, 0xc3};
+static const BYTE RR_LE1_4_14[] = {0x8b, 0x41, 0x04, 0x83, 0xf8, 0x01, 0x77, 0x0e, 0x85, 0xc9, 0x74, 0x07, 0x8b, 0x01,
+                                   0x6a, 0x01, 0xff, 0x50, 0x14, 0x33, 0xc0, 0xc3, 0x48, 0x89, 0x41, 0x04, 0xc3};
+/* AddRef `inc [ecx+4]` at rva_a and Release `<= 1` at rva_r: both or neither. 0 = module not loaded yet */
+static int rr_patch_res(const char *name, DWORD rva_a, DWORD rva_r) {
+    BYTE *m = (BYTE *)GetModuleHandleA(name);
+    if (!m) return 0;
+    if (memcmp(m + rva_a, RR_ADD4, sizeof(RR_ADD4)) || memcmp(m + rva_r, RR_LE1_4_14, sizeof(RR_LE1_4_14))) {
+        logf("RES_REFCOUNT> %s+0x%lx / +0x%lx differ from shipped - not patched", name, rva_a, rva_r); return 1;
+    }
+    jmp_to(m + rva_r, (void *)rr_rel_le1_4_14);
+    jmp_to(m + rva_a, (void *)st_addref4);
+    logf("RES_REFCOUNT> %s resource object AddRef 0x%08lx / Release 0x%08lx atomic", name, 0x10000000 + rva_a, 0x10000000 + rva_r);
+    return 1;
+}
+static int rr_patch_strtsim(void) {
+    static const BYTE wrel[] = {0x8b, 0x41, 0x08, 0x85, 0xc0, 0x76, 0x04, 0x48, 0x89, 0x41, 0x08, 0x8b, 0x41, 0x08,
+                                0x85, 0xc0, 0x75, 0x10, 0x85, 0xc9, 0x74, 0x0a, 0x8b, 0x01, 0x6a, 0x01, 0xff, 0x90,
+                                0x20, 0x01, 0x00, 0x00, 0x33, 0xc0, 0xc3};
+    BYTE *m = (BYTE *)GetModuleHandleA("STRTSIM.DLL");
+    if (!m) return 0;
+    if (memcmp(m + 0x1607d, wrel, sizeof(wrel))) { logf("RES_REFCOUNT> STRTSIM+0x1607d differs from shipped - not patched"); return 1; }
+    jmp_to(m + 0x1607d, (void *)rr_rel_nz_8_120);
+    logf("RES_REFCOUNT> STRTSIM occupant Release 0x1001607d atomic%s",
+         g_strtref && g_strtref_all ? "" : " (strtsim_refcount_all is off: its AddRef 0x10003310 stays plain)");
+    return 1;
+}
+static int rr_patch_scenario(void) {
+    static const BYTE wadd[] = {0xff, 0x41, 0x0c, 0x8b, 0x41, 0x0c, 0xc3};
+    BYTE *m = (BYTE *)GetModuleHandleA("SCENARIO.DLL"), *r;
+    if (!m) return 0;
+    r = m + 0x99a1;
+    if (memcmp(m + 0x5b6f, wadd, sizeof(wadd)) || !st_is_release(r) || r[5] != 0x0c ||
+        (DWORD)(r + 0x20) + *(DWORD *)(r + 0x1c) != (DWORD)m + 0x67f0) {
+        logf("RES_REFCOUNT> SCENARIO+0x5b6f / +0x99a1 differ from shipped - not patched"); return 1;
+    }
+    g_scn_p.dtor = (DWORD)(r + 0x20) + *(DWORD *)(r + 0x1c);          /* call rel32 at +0x1b */
+    g_scn_p.del = (DWORD)(r + 0x26) + *(DWORD *)(r + 0x22);           /* call rel32 at +0x21 */
+    g_scn_p.off = 0x0c;
+    jmp_to(r, (void *)rr_scn_release);
+    jmp_to(m + 0x5b6f, (void *)st_addref);
+    logf("RES_REFCOUNT> SCENARIO layer AddRef 0x10005b6f / Release 0x100099a1 atomic");
+    return 1;
+}
+/* SIMUI wrapper object: the same `<= 1` template, destroy slot 0x44 */
+static int rr_patch_simui(void) {
+    BYTE *m = (BYTE *)GetModuleHandleA("SIMUI.DLL");
+    BYTE rel[sizeof(RR_LE1_4_14)];
+    if (!m) return 0;
+    memcpy(rel, RR_LE1_4_14, sizeof(rel)); rel[18] = 0x44;
+    if (memcmp(m + 0x139b6, RR_ADD4, sizeof(RR_ADD4)) || memcmp(m + 0x43ba9, rel, sizeof(rel))) {
+        logf("RES_REFCOUNT> SIMUI+0x139b6 / +0x43ba9 differ from shipped - not patched"); return 1;
+    }
+    jmp_to(m + 0x43ba9, (void *)rr_rel_le1_4_44);
+    jmp_to(m + 0x139b6, (void *)st_addref4);
+    logf("RES_REFCOUNT> SIMUI wrapper object AddRef 0x100139b6 / Release 0x10043ba9 atomic");
+    return 1;
+}
+static DWORD WINAPI rr_watcher(LPVOID unused) {
+    int ms, k, all, done[5];
+    (void)unused;
+    done[0] = !g_resref_spr; done[1] = !g_resref_gz; done[2] = !g_strtref_ecx; done[3] = !g_scnref; done[4] = !g_le1ref_ui;
+    for (ms = 0; ms < 300000; ms++) {
+        if (!done[0]) done[0] = rr_patch_res("SIMSPR.DLL", 0x5982a, 0x59831);
+        if (!done[1]) done[1] = rr_patch_res("GZResourceD.dll", 0x15b03, 0xb7c0);
+        if (!done[2]) done[2] = rr_patch_strtsim();
+        if (!done[3]) done[3] = rr_patch_scenario();
+        if (!done[4]) done[4] = rr_patch_simui();
+        for (k = 0, all = 1; k < 5; k++) all &= done[k];
+        if (all) break;
+        Sleep(1);
+    }
+    return 0;
+}
 static DWORD WINAPI spr_watcher(LPVOID p) {
     DWORD spr = 0;
     int ms = 0;
@@ -3271,6 +3391,11 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID r) {
         g_strtref = cfg("strtsim_refcount", 1);
         g_strtref_all = cfg("strtsim_refcount_all", 1);
         g_sgref = cfg("simgroup_refcount", 1);
+        g_resref_spr = cfg("res_refcount_simspr", 1);
+        g_resref_gz = cfg("res_refcount_gzres", 1);
+        g_strtref_ecx = cfg("strtsim_refcount_ecx", 1);
+        g_scnref = cfg("scenario_refcount", 1);
+        g_le1ref_ui = cfg("le1_refcount_simui", 1);
         g_reloadshadow = cfg("reload_shadow", 1);
         g_busy = cfg("busy", 1);
         g_busy_show = cfg("busy_show", 1);
@@ -3303,6 +3428,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID r) {
         if (g_layerref) CreateThread(NULL, 0, rc_watcher, NULL, 0, NULL);
         if (g_strtref) CreateThread(NULL, 0, st_watcher, NULL, 0, NULL);
         if (g_sgref) CreateThread(NULL, 0, sg_watcher, NULL, 0, NULL);
+        if (g_resref_spr || g_resref_gz || g_strtref_ecx || g_scnref || g_le1ref_ui) CreateThread(NULL, 0, rr_watcher, NULL, 0, NULL);
         if (g_trclear || g_mt > 0 || g_fastceil || g_sprref) CreateThread(NULL, 0, tr_watcher, NULL, 0, NULL);
         if (g_fastftol) patch_ftol();      /* msvcrt is loaded before any mod; patch before the game converts a float */
     }

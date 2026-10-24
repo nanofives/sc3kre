@@ -1,0 +1,206 @@
+module         vtable          calls     viaGZ  objs  xobj switches  maxsw  threads
+SIMTRANSIT.DLL* 0x1001A278  100202162         0     1     1 85683719 85683719  MAIN game/UI thread#7472, TRAFFIC_MT worker#18012, TRAFFIC_MT worker#18796, TRAFFIC_MT worker#19172, TRAFFIC_MT worker#2032, TRAFFIC_MT worker#22956, TRAFFIC_MT worker#23772, TRAFFIC_MT worker#5400, TRAFFIC_MT worker#8476, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+SIMGEOM.DLL*   0x1002A530  269957417         0     1     1  4699692 4699692  MAIN game/UI thread#7472, TRAFFIC_MT worker#18012, TRAFFIC_MT worker#18796, TRAFFIC_MT worker#19172, TRAFFIC_MT worker#2032, TRAFFIC_MT worker#22956, TRAFFIC_MT worker#23772, TRAFFIC_MT worker#5400, TRAFFIC_MT worker#8476, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+SIMCITY.DLL*   0x10013CF0    3464711         0    62    21   126347  22476  MAIN game/UI thread#7472, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+SIMRCI.DLL*    0x1004D618    4009911         0     1     1    32014  32014  MAIN game/UI thread#7472, TRAFFIC_MT worker#18012, TRAFFIC_MT worker#18796, TRAFFIC_MT worker#19172, TRAFFIC_MT worker#2032, TRAFFIC_MT worker#22956, TRAFFIC_MT worker#23772, TRAFFIC_MT worker#5400, TRAFFIC_MT worker#8476, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+SIMSERV.DLL*   0x1001F790    2759348         0     1     1    20939  20939  MAIN game/UI thread#7472, TRAFFIC_MT worker#18012, TRAFFIC_MT worker#18796, TRAFFIC_MT worker#19172, TRAFFIC_MT worker#2032, TRAFFIC_MT worker#22956, TRAFFIC_MT worker#23772, TRAFFIC_MT worker#5400, TRAFFIC_MT worker#8476, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+SIMUTIL.DLL*   0x10022854    3845247         0     1     1     5674   5674  MAIN game/UI thread#7472, TRAFFIC_MT worker#18012, TRAFFIC_MT worker#18796, TRAFFIC_MT worker#19172, TRAFFIC_MT worker#2032, TRAFFIC_MT worker#22956, TRAFFIC_MT worker#23772, TRAFFIC_MT worker#5400, TRAFFIC_MT worker#8476, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+SIMSPR.DLL*    0x10067CFC    4629721         0     1     1     3094   3094  MAIN game/UI thread#7472, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+SIMECO.DLL*    0x1001C14C     495235         0     1     1     2317   2317  MAIN game/UI thread#7472, TRAFFIC_MT worker#18012, TRAFFIC_MT worker#18796, TRAFFIC_MT worker#19172, TRAFFIC_MT worker#2032, TRAFFIC_MT worker#22956, TRAFFIC_MT worker#23772, TRAFFIC_MT worker#5400, TRAFFIC_MT worker#8476, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+SIMMISC.DLL*   0x10041580   10136718         0     1     1     1712   1712  MAIN game/UI thread#7472, TRAFFIC_MT worker#18012, TRAFFIC_MT worker#18796, TRAFFIC_MT worker#19172, TRAFFIC_MT worker#2032, TRAFFIC_MT worker#22956, TRAFFIC_MT worker#23772, TRAFFIC_MT worker#5400, TRAFFIC_MT worker#8476, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+SIMSERV.DLL    0x1001F2C8    3127924   3127910     2     2      970    873  MAIN game/UI thread#7472, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+SIMNTWRK.DLL*  0x100291D4    1564023         0     1     1      750    750  MAIN game/UI thread#7472, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+SIMSPR.DLL*    0x10067264    1563990   1563988     2     2      717    621  MAIN game/UI thread#7472, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+STRTSIM.DLL    0x1002C594    4161044   4161042     2     2      712    643  MAIN game/UI thread#7472, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+SIMADV.DLL*    0x10030154    1564349         0     1     1      662    662  MAIN game/UI thread#7472, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+SIMSPR.DLL*    0x10064390    1563959   1563956     4     2      661    597  MAIN game/UI thread#7472, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+SIMGEOM.DLL    0x10029224     710747         0   233    87       87      1  MAIN game/UI thread#7472, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+GZRESOURCED.DLL 0x1001D410       2720         0    41     3       10      5  MAIN game/UI thread#7472, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+STRTSIM.DLL*   0x1002AF90       1770         0     9     9       10      2  MAIN game/UI thread#7472, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+SIMADV.DLL     0x100301A8        298         0    56     7        7      1  MAIN game/UI thread#7472, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+SIMSPR.DLL     0x10068950        312         0    12     3        3      1  MAIN game/UI thread#7472, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860
+SIMRCI.DLL     0x1004D388     106562         0     2     2        3      2  MAIN game/UI thread#7472, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+SIMUI.DLL      0x100A8164         14         0     2     2        2      1  MAIN game/UI thread#7472, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+SIMRCI.DLL     0x1004D39C   41587764         0     2     2        2      1  MAIN game/UI thread#7472, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+GZRESOURCED.DLL* 0x1001C1E4        265         0     1     1        2      2  MAIN game/UI thread#7472, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+SIMDSTR.DLL*   0x10033838        520         0     1     1        2      2  MAIN game/UI thread#7472, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+GZRESOURCED.DLL 0x1001DCE4       2948         0     1     1        1      1  MAIN game/UI thread#7472, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+SCENARIO.DLL   0x1001A64C         20        10     2     1        1      1  MAIN game/UI thread#7472, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860
+SIMDSTR.DLL    0x10032464       1857         0     1     1        1      1  MAIN game/UI thread#7472, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348
+SIMSPR.DLL*    0x10068D1C        992         0   992     0        0      0  MAIN game/UI thread#7472
+STRTSIM.DLL    0x1002C8CC      28671         0 23245     0        0      0  MAIN game/UI thread#7472
+SIMINIT.DLL*   0x10031288          8         0     4     0        0      0  MAIN game/UI thread#7472
+SIMADV.DLL     0x10030614        245         0   148     0        0      0  MAIN game/UI thread#7472
+SIMSPR.DLL*    0x100631C4          1         0     1     0        0      0  MAIN game/UI thread#7472
+SIMDIRT.DLL    0x100207D0          6         0     2     0        0      0  MAIN game/UI thread#7472
+SIMADV.DLL     0x10030AA8          8         0     6     0        0      0  MAIN game/UI thread#7472
+SIMADV.DLL     0x10031178         31         0    24     0        0      0  MAIN game/UI thread#7472
+SIMGEOM.DLL    0x10029F70          6         0     6     0        0      0  MAIN game/UI thread#7472
+STRTSIM.DLL*   0x1002A978         10         0     1     0        0      0  MAIN game/UI thread#7472
+SIMSPR.DLL*    0x100659B4         17        15     2     0        0      0  MAIN game/UI thread#7472
+SIMUI.DLL      0x100A811C         24         0    12     0        0      0  MAIN game/UI thread#7472
+SIMUTIL.DLL    0x10020794          4         0     2     0        0      0  MAIN game/UI thread#7472
+SIMUI.DLL      0x100AA110          4         0     2     0        0      0  MAIN game/UI thread#7472
+SIMADV.DLL     0x100303F0          8         0     8     0        0      0  MAIN game/UI thread#7472
+SIMDSTR.DLL    0x100325A0         48        18     2     0        0      0  MAIN game/UI thread#7472
+GZRESOURCED.DLL 0x1001CCE8          1         0     1     0        0      0  MAIN game/UI thread#7472
+SIMINIT.DLL*   0x1002FE40         37         0     1     0        0      0  MAIN game/UI thread#7472
+GZRESOURCED.DLL 0x1001D6B8        486         0    10     0        0      0  MAIN game/UI thread#7472
+GZWIND.DLL*    0x1002DF84          5         0     2     0        0      0  MAIN game/UI thread#7472
+SIMDSTR.DLL    0x100326D8          4         0     2     0        0      0  MAIN game/UI thread#7472
+SIMSPR.DLL*    0x100631E4          1         0     1     0        0      0  MAIN game/UI thread#7472
+SIMSPR.DLL*    0x10063234          1         0     1     0        0      0  MAIN game/UI thread#7472
+SIMSPR.DLL*    0x10063224          2         0     2     0        0      0  MAIN game/UI thread#7472
+SCENARIO.DLL*  0x1001A568          2         0     1     0        0      0  MAIN game/UI thread#7472
+SIMRCI.DLL     0x1004D46C          6         0     2     0        0      0  MAIN game/UI thread#7472
+SIMDSTR.DLL    0x10032728          4         0     2     0        0      0  MAIN game/UI thread#7472
+SCENARIO.DLL*  0x1001A3B8          1         0     1     0        0      0  MAIN game/UI thread#7472
+SIMCITY.DLL    0x1001378C          2         0     1     0        0      0  MAIN game/UI thread#7472
+SIMSPR.DLL*    0x100631F4          1         0     1     0        0      0  MAIN game/UI thread#7472
+SIMSPR.DLL*    0x10063204          1         0     1     0        0      0  MAIN game/UI thread#7472
+SCENARIO.DLL   0x1001A6E8          8         0     4     0        0      0  MAIN game/UI thread#7472
+SIMMISC.DLL    0x10040F3C         64         0     2     0        0      0  MAIN game/UI thread#7472
+STRTSIM.DLL    0x1002B0FC         12         0     2     0        0      0  MAIN game/UI thread#7472
+SIMSPR.DLL     0x100673A8          3         0     2     0        0      0  MAIN game/UI thread#7472
+STRTSIM.DLL    0x1002D1D0          3         0     2     0        0      0  MAIN game/UI thread#7472
+SIMSPR.DLL*    0x10063214          1         0     1     0        0      0  MAIN game/UI thread#7472
+STRTSIM.DLL    0x1002C600     213646    213614     1     0        0      0  MAIN game/UI thread#7472
+SIMUI.DLL*     0x100AE9B4          4         0     2     0        0      0  MAIN game/UI thread#7472
+SIMDSTR.DLL    0x10032700          4         0     2     0        0      0  MAIN game/UI thread#7472
+GZSERVICED.DLL* 0x10014234         89        89     1     0        0      0  MAIN game/UI thread#7472
+SIMUI.DLL      0x100A2410          2         0     1     0        0      0  MAIN game/UI thread#7472
+STRTSIM.DLL    0x1002A92C          2         0     2     0        0      0  MAIN game/UI thread#7472
+AUDIO.DLL      0x10020D98         16        14     2     0        0      0  MAIN game/UI thread#7472
+SIMUI.DLL*     0x100AB64C         84         0     1     0        0      0  MAIN game/UI thread#7472
+SIMINIT.DLL    0x1002FB44         18         0     1     0        0      0  MAIN game/UI thread#7472
+SIMINIT.DLL    0x1002F528          1         0     1     0        0      0  MAIN game/UI thread#7472
+SIMDSTR.DLL    0x100326B0          4         0     2     0        0      0  MAIN game/UI thread#7472
+STRTSIM.DLL    0x1002C7C8          6         0     2     0        0      0  MAIN game/UI thread#7472
+SIMSPR.DLL*    0x100631D4          1         0     1     0        0      0  MAIN game/UI thread#7472
+SIMINIT.DLL    0x1002FC04          2         0     1     0        0      0  MAIN game/UI thread#7472
+SIMUI.DLL*     0x100A84C0         14         0     1     0        0      0  MAIN game/UI thread#7472
+SIMSPR.DLL*    0x10064194          4         3     1     0        0      0  MAIN game/UI thread#7472
+SIMUI.DLL*     0x100A2FC8          8         8     1     0        0      0  MAIN game/UI thread#7472
+AUDIO.DLL*     0x10020210         13         0     1     0        0      0  MAIN game/UI thread#7472
+SIMUI.DLL*     0x100A2674          1         1     1     0        0      0  MAIN game/UI thread#7472
+SIMDIRT.DLL*   0x10020830          5         0     1     0        0      0  MAIN game/UI thread#7472
+
+objects whose vtable is not in the lists (shared AddRef/Release bodies):
+  SIMGEOM.DLL 0x1002A530         269957417
+  SIMTRANSIT.DLL 0x1001A278      100202162
+  SIMMISC.DLL 0x10041580         10136718
+  SIMSPR.DLL 0x10067CFC          4629721
+  SIMRCI.DLL 0x1004D618          4009911
+  SIMUTIL.DLL 0x10022854         3845247
+  SIMCITY.DLL 0x10013CF0         3464711
+  SIMSERV.DLL 0x1001F790         2759348
+  SIMADV.DLL 0x10030154          1564349
+  SIMNTWRK.DLL 0x100291D4        1564023
+  SIMSPR.DLL 0x10067264          1563990
+  SIMSPR.DLL 0x10064390          1563959
+  SIMECO.DLL 0x1001C14C          495235
+  STRTSIM.DLL 0x1002AF90         1770
+  SIMSPR.DLL 0x10068D1C          992
+  SIMDSTR.DLL 0x10033838         520
+  GZRESOURCED.DLL 0x1001C1E4     265
+  GZSERVICED.DLL 0x10014234      89
+  SIMUI.DLL 0x100AB64C           84
+  SIMINIT.DLL 0x1002FE40         37
+  SIMSPR.DLL 0x100659B4          17
+  SIMUI.DLL 0x100A84C0           14
+  AUDIO.DLL 0x10020210           13
+  STRTSIM.DLL 0x1002A978         10
+  SIMINIT.DLL 0x10031288         8
+  SIMUI.DLL 0x100A2FC8           8
+  GZWIND.DLL 0x1002DF84          5
+  SIMDIRT.DLL 0x10020830         5
+  SIMUI.DLL 0x100AE9B4           4
+  SIMSPR.DLL 0x10064194          4
+
+per function, calls by thread start address:
+  SIMGEOM.DLL    0x1001A2AF AddRef  thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=126686300, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=120966744, MAIN game/UI thread#7472=19679739, TRAFFIC_MT worker#19172=335527, TRAFFIC_MT worker#18012=331152, TRAFFIC_MT worker#22956=330863, TRAFFIC_MT worker#18796=330221, TRAFFIC_MT worker#5400=329780, TRAFFIC_MT worker#2032=328876, TRAFFIC_MT worker#8476=328813, TRAFFIC_MT worker#23772=312969
+  SIMTRANSIT.DLL 0x10011A38 AddRef  TRAFFIC_MT worker#19172=11389264, TRAFFIC_MT worker#22956=11241389, TRAFFIC_MT worker#18796=11205180, TRAFFIC_MT worker#5400=11161520, TRAFFIC_MT worker#18012=11148405, TRAFFIC_MT worker#8476=11102279, TRAFFIC_MT worker#2032=11094180, TRAFFIC_MT worker#23772=10519283, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=5405664, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=5099184, MAIN game/UI thread#7472=944699
+  SIMRCI.DLL     0x100318C1 AddRef  thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=11196082, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=9650270, MAIN game/UI thread#7472=2
+  SIMRCI.DLL     0x100318C8 Release thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=11196082, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=9650270, MAIN game/UI thread#7472=2
+  SIMMISC.DLL    0x10030A1E AddRef  thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=5610563, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=3926059, MAIN game/UI thread#7472=599202, TRAFFIC_MT worker#5400=127, TRAFFIC_MT worker#22956=122, TRAFFIC_MT worker#19172=114, TRAFFIC_MT worker#2032=109, TRAFFIC_MT worker#8476=108, TRAFFIC_MT worker#18012=106, TRAFFIC_MT worker#18796=105, TRAFFIC_MT worker#23772=103
+  SIMSPR.DLL     0x100561C4 AddRef  MAIN game/UI thread#7472=3067162, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=1020389, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=542172
+  SIMRCI.DLL     0x1003B9EB AddRef  thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=1599647, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=1576106, MAIN game/UI thread#7472=809886, TRAFFIC_MT worker#19172=3272, TRAFFIC_MT worker#22956=3162, TRAFFIC_MT worker#18796=3143, TRAFFIC_MT worker#18012=3040, TRAFFIC_MT worker#2032=3016, TRAFFIC_MT worker#5400=2962, TRAFFIC_MT worker#8476=2933, TRAFFIC_MT worker#23772=2747
+  SIMUTIL.DLL    0x10017C14 AddRef  thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=1796541, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=1522741, MAIN game/UI thread#7472=520520, TRAFFIC_MT worker#23772=756, TRAFFIC_MT worker#19172=746, TRAFFIC_MT worker#2032=735, TRAFFIC_MT worker#18012=678, TRAFFIC_MT worker#8476=674, TRAFFIC_MT worker#22956=622, TRAFFIC_MT worker#5400=621, TRAFFIC_MT worker#18796=613
+  STRTSIM.DLL    0x10010569 AddRef  thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=2040778, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=1084344, MAIN game/UI thread#7472=519414
+  SIMSERV.DLL    0x10014159 AddRef  thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=1147018, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=1082114, MAIN game/UI thread#7472=513135, TRAFFIC_MT worker#22956=2241, TRAFFIC_MT worker#18012=2196, TRAFFIC_MT worker#19172=2175, TRAFFIC_MT worker#2032=2161, TRAFFIC_MT worker#18796=2152, TRAFFIC_MT worker#8476=2126, TRAFFIC_MT worker#5400=2079, TRAFFIC_MT worker#23772=1951
+  STRTSIM.DLL    0x100110FC Release thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=1020389, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=542172, MAIN game/UI thread#7472=517962
+  STRTSIM.DLL    0x10003310 AddRef  thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=1020730, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=542701, MAIN game/UI thread#7472=15754
+  SIMADV.DLL     0x100287B1 AddRef  thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=1020389, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=542172, MAIN game/UI thread#7472=1788
+  SIMNTWRK.DLL   0x1002048F AddRef  thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=1020389, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=542172, MAIN game/UI thread#7472=1462
+  SIMSERV.DLL    0x1000C3DF AddRef  thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=1020389, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=542172, MAIN game/UI thread#7472=1401
+  SIMSERV.DLL    0x1000CAB6 Release thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=1020389, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=542174, MAIN game/UI thread#7472=1399
+  SIMCITY.DLL    0x10010D14 Release MAIN game/UI thread#7472=1075116, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=50675, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=29654
+  STRTSIM.DLL    0x10015599 AddRef  thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=520525, MAIN game/UI thread#7472=362743, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=271368
+  SIMCITY.DLL    0x10010D0D AddRef  thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=520525, MAIN game/UI thread#7472=362743, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=271368
+  SIMECO.DLL     0x10012E9D AddRef  thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=200322, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=161716, MAIN game/UI thread#7472=129022, TRAFFIC_MT worker#19172=565, TRAFFIC_MT worker#18796=535, TRAFFIC_MT worker#8476=529, TRAFFIC_MT worker#22956=527, TRAFFIC_MT worker#2032=513, TRAFFIC_MT worker#5400=511, TRAFFIC_MT worker#23772=511, TRAFFIC_MT worker#18012=484
+  SIMGEOM.DLL    0x10003567 AddRef  thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=246544, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=112022, MAIN game/UI thread#7472=19
+  SIMGEOM.DLL    0x1000356E Release thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=246544, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=112022, MAIN game/UI thread#7472=19
+  STRTSIM.DLL    0x10021980 AddRef  MAIN game/UI thread#7472=106823
+  STRTSIM.DLL    0x1001413A Release MAIN game/UI thread#7472=106823
+  STRTSIM.DLL    0x10017158 Release MAIN game/UI thread#7472=14336
+  SIMSPR.DLL     0x1005982A AddRef  MAIN game/UI thread#7472=1713, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=42, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=4
+  GZRESOURCED.DLL 0x10015B03 AddRef  MAIN game/UI thread#7472=921, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=80, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=6
+  GZRESOURCED.DLL 0x1000B7C0 Release MAIN game/UI thread#7472=915, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=80, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=6
+  STRTSIM.DLL    0x1001607D Release thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=529, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=341, MAIN game/UI thread#7472=15
+  SIMSPR.DLL     0x10059831 Release MAIN game/UI thread#7472=710, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=42, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=4
+  SIMDSTR.DLL    0x100236CC AddRef  thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=260, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=199, MAIN game/UI thread#7472=61
+  GZRESOURCED.DLL 0x1001814D AddRef  MAIN game/UI thread#7472=222, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=40, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=3
+  SIMADV.DLL     0x1002507E AddRef  thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=77, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=56, MAIN game/UI thread#7472=23
+  SIMADV.DLL     0x10025085 Release thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=77, thread(SIMGEOM.DLL,SIMRCI.DLL,sc3bigcity.dll,SIMCITY.DLL)#16348=56, MAIN game/UI thread#7472=23
+  SIMADV.DLL     0x1000B606 AddRef  MAIN game/UI thread#7472=127
+  SIMADV.DLL     0x1000B60D Release MAIN game/UI thread#7472=127
+  GZSERVICED.DLL 0x10011DA9 AddRef  MAIN game/UI thread#7472=89
+  SIMUI.DLL      0x100849EB AddRef  MAIN game/UI thread#7472=89
+  SIMINIT.DLL    0x1001FF93 AddRef  MAIN game/UI thread#7472=43
+  SIMUI.DLL      0x100139B6 AddRef  MAIN game/UI thread#7472=33
+  SIMMISC.DLL    0x10019B3E AddRef  MAIN game/UI thread#7472=32
+  SIMMISC.DLL    0x10019B45 Release MAIN game/UI thread#7472=32
+  SIMDSTR.DLL    0x10007661 AddRef  MAIN game/UI thread#7472=24
+  SIMDSTR.DLL    0x10008DC8 Release MAIN game/UI thread#7472=24
+  SIMUI.DLL      0x10043BA9 Release MAIN game/UI thread#7472=16
+  AUDIO.DLL      0x1001BD04 AddRef  MAIN game/UI thread#7472=13
+  SIMADV.DLL     0x1001C97A AddRef  MAIN game/UI thread#7472=12
+  SIMADV.DLL     0x1001C981 Release MAIN game/UI thread#7472=12
+  SCENARIO.DLL   0x10005B6F AddRef  MAIN game/UI thread#7472=9, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=1
+  SCENARIO.DLL   0x100099A1 Release MAIN game/UI thread#7472=9, thread(GZServiceD.dll,SIMCITY.DLL,frida-agent.dll,SIMGEOM.DLL)#5860=1
+  STRTSIM.DLL    0x100244CB AddRef  MAIN game/UI thread#7472=10
+  SIMINIT.DLL    0x1000C605 AddRef  MAIN game/UI thread#7472=9
+  SIMINIT.DLL    0x1000D3B3 Release MAIN game/UI thread#7472=9
+  AUDIO.DLL      0x10011277 AddRef  MAIN game/UI thread#7472=8
+  AUDIO.DLL      0x1001127E Release MAIN game/UI thread#7472=8
+  SIMDIRT.DLL    0x1001B9BF AddRef  MAIN game/UI thread#7472=8
+  SIMDSTR.DLL    0x10009884 AddRef  MAIN game/UI thread#7472=8
+  SIMDSTR.DLL    0x100098C1 Release MAIN game/UI thread#7472=8
+  STRTSIM.DLL    0x100076A8 Release MAIN game/UI thread#7472=6
+  SCENARIO.DLL   0x100012AE AddRef  MAIN game/UI thread#7472=6
+  GZWIND.DLL     0x10027149 AddRef  MAIN game/UI thread#7472=6
+  SIMADV.DLL     0x100064FD AddRef  MAIN game/UI thread#7472=4
+  SIMADV.DLL     0x10006504 Release MAIN game/UI thread#7472=4
+  SCENARIO.DLL   0x1000C9A7 Release MAIN game/UI thread#7472=4
+  SIMADV.DLL     0x10011702 AddRef  MAIN game/UI thread#7472=3
+  SIMADV.DLL     0x10011709 Release MAIN game/UI thread#7472=3
+  SIMDIRT.DLL    0x1001DAA9 Release MAIN game/UI thread#7472=3
+  SIMRCI.DLL     0x1004288D AddRef  MAIN game/UI thread#7472=3
+  SIMRCI.DLL     0x10042894 Release MAIN game/UI thread#7472=3
+  STRTSIM.DLL    0x10015613 Release MAIN game/UI thread#7472=2
+  SIMUI.DLL      0x10090D1C Release MAIN game/UI thread#7472=2
+  SIMUTIL.DLL    0x1001CC1C AddRef  MAIN game/UI thread#7472=2
+  SIMUTIL.DLL    0x100053AE Release MAIN game/UI thread#7472=2
+  SIMCITY.DLL    0x100098AE AddRef  MAIN game/UI thread#7472=2
+  SIMCITY.DLL    0x100098B5 Release MAIN game/UI thread#7472=2
+  SIMSPR.DLL     0x10041564 Release MAIN game/UI thread#7472=1
+  STRTSIM.DLL    0x10005F32 Release MAIN game/UI thread#7472=1
+  STRTSIM.DLL    0x1001F229 Release MAIN game/UI thread#7472=1
+  SIMDSTR.DLL    0x10005674 AddRef  MAIN game/UI thread#7472=1
+  SIMDSTR.DLL    0x1000567B Release MAIN game/UI thread#7472=1
+  SIMINIT.DLL    0x10004E3B AddRef  MAIN game/UI thread#7472=1
+  SIMINIT.DLL    0x1000D68D AddRef  MAIN game/UI thread#7472=1
+  SIMINIT.DLL    0x1000D694 Release MAIN game/UI thread#7472=1
+  GZRESOURCED.DLL 0x10015B0A Release MAIN game/UI thread#7472=1
+  SIMUI.DLL      0x100842B0 AddRef  MAIN game/UI thread#7472=1
+  SIMUI.DLL      0x100842B7 Release MAIN game/UI thread#7472=1
