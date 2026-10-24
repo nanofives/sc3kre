@@ -3,7 +3,8 @@ r"""avflow_probe.py - in-game measurement of the sc3netmod AVFLOW blocks (task a
 
 Arms, switched live through sc3netmod's exports at the game's own month boundary, so every month runs under one arm:
   off  = AVFIRST off, AVDEPOSIT off      F = AVFIRST only      FD = both
-Schedule: blocks of (off F FD FD F off) (each arm before and after the others), --mpw months per window; the first
+  FDB = both + BVFIRST (task avflow follow-up, sc3netmod_avf_bv_set)
+Schedule: blocks of (off F FD FD F off), or (a b b a) with two --arms, (each arm before and after the others), --mpw months per window; the first
 --settle month(s) of each window are recorded but marked settle (density carried over from the previous arm).
 
 Hooks (SimTransit.dll, Ghidra VAs, base 0x10000000):
@@ -45,6 +46,8 @@ var N = Process.getModuleByName('sc3netmod.dll');
 var gridf = new NativeFunction(N.getExportByName('sc3netmod_avf_grid'), 'pointer', ['pointer', 'pointer']);
 var setF = new NativeFunction(N.getExportByName('sc3netmod_avf_set'), 'int', ['int']);
 var setD = new NativeFunction(N.getExportByName('sc3netmod_avd_set'), 'int', ['int']);
+var eB = N.findExportByName('sc3netmod_avf_bv_set');
+var setB = eB === null ? function (v) { return -1; } : new NativeFunction(eB, 'int', ['int']);
 var WH = Memory.alloc(8), G = null, GW = 0, GH = 0;
 function grid() { var p = gridf(WH, WH.add(4)); G = p.isNull() ? null : p; GW = WH.readS32(); GH = WH.add(4).readS32(); }
 function cls(x, z) { if (G === null || x < 0 || z < 0 || x >= GW || z >= GH) return 0; return G.add(z * GW + x).readU8(); }
@@ -110,8 +113,8 @@ function gstats(l, annoy) {
   return out;
 }
 var MONTHS = [], SCHED = [], mi = 0, ARM = 'pre';
-var ARMS = {off: [0, 0], F: [1, 0], FD: [1, 1], D: [0, 1]};
-function apply(a) { var v = ARMS[a]; setF(v[0]); setD(v[1]); ARM = a; }
+var ARMS = {off: [0, 0, 0], F: [1, 0, 0], FD: [1, 1, 0], D: [0, 1, 0], FDB: [1, 1, 1], FB: [1, 0, 1]};
+function apply(a) { var v = ARMS[a]; setF(v[0]); setD(v[1]); setB(v[2]); ARM = a; }
 Interceptor.attach(A(0x100093e9), {
   onEnter: function () { this.l = this.context.ecx; this.b0 = this.l.add(0xb0).readU32(); this.b4 = this.l.add(0xb4).readU32(); },
   onLeave: function () {
@@ -142,7 +145,8 @@ def main():
     ap.add_argument("--mpw", type=int, default=2, help="game months per window")
     ap.add_argument("--settle", type=int, default=1, help="months at the start of each window marked settle")
     ap.add_argument("--radius", type=int, default=4)
-    ap.add_argument("--arms", default="off,F,FD", help="three arms, the block is a b c c b a")
+    ap.add_argument("--arms", default="off,F,FD", help="three arms (block a b c c b a) or two (block a b b a); "
+                    "arms: off F FD D FDB (both + BVFIRST) FB")
     ap.add_argument("--baseline", type=int, default=0, help="only record N months under the current state, no switching")
     ap.add_argument("--start", type=int, default=0)
     ap.add_argument("--set", default="", help="only switch to this arm (off, F, FD, D) and exit")
@@ -176,10 +180,10 @@ def main():
         return
     sched = []
     if not a.baseline:
-        x, y, z = a.arms.split(",")
+        arms = a.arms.split(",")
         win = []
         for _ in range(a.blocks):
-            win += [x, y, z, z, y, x]
+            win += arms + arms[::-1]
         for w in win:
             sched += [w] * a.mpw
         api.sched(sched)
