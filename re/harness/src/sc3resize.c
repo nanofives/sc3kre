@@ -4403,6 +4403,7 @@ static int     g_hd_capture = -1;               /* slot pressed on, until the re
 static int     g_hd_cap_drag;                   /* that dialog moved since the press: map the cursor 1:1 from it */
 static LONG    g_hd_cap_q[2], g_hd_cap_p[2], g_hd_cap_nat[2];
 static DWORD   g_hd_stamp, g_hd_px, g_hd_full, g_hd_frames;
+static LONG    g_hd_rb[4];                      /* VERDATOS: dest box (slot-local) the last rz_hd_draw recomputed */
 static int     rz_hd_add(void *win, const LONG *r, LONG cw, LONG ch, double s);   /* fwd */
 /* task uiscale (owner 2026-10-22, img17: "price tag is hiding under the cursor and it's not scaling with the rest of the
  * screen"). The city cost label (the game's tooltip window, vt exe+0xd3bcc, placed by SIMSPR 0x1004a3d7 from the view's
@@ -5538,6 +5539,7 @@ static int rz_hd_ready(HD_SLOT *d) {
 static void rz_hd_draw(HD_SLOT *d, BYTE *bits, LONG pitch, LONG ox, LONG oy, int g6) {
     LONG x0 = d->w, x1 = -1, y0 = d->h, y1 = -1, x, y, dx0, dx1, dy0, dy1;
     WORD *t;
+    g_hd_rb[0] = g_hd_rb[1] = g_hd_rb[2] = g_hd_rb[3] = 0;
     if (!d->valid) { x0 = 0; y0 = 0; x1 = d->w - 1; y1 = d->h - 1; g_hd_full++; }
     else
         for (y = 0; y < d->h; y++) {
@@ -5572,6 +5574,7 @@ static void rz_hd_draw(HD_SLOT *d, BYTE *bits, LONG pitch, LONG ox, LONG oy, int
                 }
         }
         g_hd_px += (DWORD)((dx1 - dx0) * (dy1 - dy0));
+        g_hd_rb[0] = dx0; g_hd_rb[1] = dy0; g_hd_rb[2] = dx1; g_hd_rb[3] = dy1;
     }
     d->valid = 1;
     t = d->prev; d->prev = d->cur; d->cur = t;   /* this frame's pixels are the next frame's "last" */
@@ -6599,6 +6602,8 @@ static void mn_after(BYTE *nat, BYTE dirty) {
     }
 }
 
+static int  g_vd_on = 1;                     /* VERDATOS (below) rides on this draw hook */
+static void vd_after(BYTE *nat, BYTE dirty);  /* fwd */
 static DWORD __fastcall mn_draw(void *self, void *edx) {
     BYTE dirty = 0;
     int mine = 0;
@@ -6607,8 +6612,10 @@ static DWORD __fastcall mn_draw(void *self, void *edx) {
     if (g_mn_on && g_mn_mini && self != g_mn_twin && *(void **)((BYTE *)self + 0x3c) == g_mn_mini) {
         mine = 1; dirty = *((BYTE *)self + 0xdc);
     }
+    if (!mine && g_vd_on) { mine = 2; dirty = *((BYTE *)self + 0xdc); }   /* VERDATOS: a map view in a dialog */
     r = g_mn_draw_orig(self, 0);
-    if (mine) mn_after((BYTE *)self, dirty);
+    if (mine == 1) mn_after((BYTE *)self, dirty);
+    else if (mine == 2) vd_after((BYTE *)self, dirty);
     return r;
 }
 static DWORD __fastcall mn_mini_shut(void *self, void *edx) {
@@ -6631,22 +6638,23 @@ static DWORD __fastcall mn_mini_msg(void *self, void *edx, DWORD *msg) {
 static void mn_install(void) {
     DWORD sui = (DWORD)GetModuleHandleA("SIMUI.DLL"), old, cur;
     DWORD *ds, *ms, *mm;
-    if (g_mn_inst || !g_mn_on || !sui) return;
+    if (g_mn_inst || !(g_mn_on || g_vd_on) || !sui) return;   /* VERDATOS needs the draw hook too */
     g_mn_inst = 1;
     ds = (DWORD *)(sui + 0xa7e68 + 0x144); ms = (DWORD *)(sui + 0xaa180 + 0x28); mm = (DWORD *)(sui + 0xaa180 + 0x0c);
     if (IsBadReadPtr(ds, 4) || IsBadReadPtr(ms, 4) || *ds != sui + 0x43937 || *ms != sui + 0x5062e || *mm != sui + 0x507ad) {
-        logf("MININAT> map view vt+0x144 / minimap vt+0x28, +0x0c are not FUN_10043937 / FUN_1005062e, FUN_100507ad - off"); g_mn_on = 0; return; }
+        logf("MININAT> map view vt+0x144 / minimap vt+0x28, +0x0c are not FUN_10043937 / FUN_1005062e, FUN_100507ad - off"); g_mn_on = g_vd_on = 0; return; }
     if (!VirtualProtect(ds, 4, PAGE_EXECUTE_READWRITE, &old) || !VirtualProtect(ms, 4, PAGE_EXECUTE_READWRITE, &old) ||
-        !VirtualProtect(mm, 4, PAGE_EXECUTE_READWRITE, &old)) { g_mn_on = 0; return; }
+        !VirtualProtect(mm, 4, PAGE_EXECUTE_READWRITE, &old)) { g_mn_on = g_vd_on = 0; return; }
     /* the free hooks first: a twin must never exist without them */
     g_mn_mmsg_orig = (MN_MSG)(cur = *mm);
-    if ((DWORD)InterlockedCompareExchange((LONG volatile *)mm, (LONG)(DWORD)mn_mini_msg, (LONG)cur) != cur) { g_mn_on = 0; return; }
+    if ((DWORD)InterlockedCompareExchange((LONG volatile *)mm, (LONG)(DWORD)mn_mini_msg, (LONG)cur) != cur) { g_mn_on = g_vd_on = 0; return; }
     g_mn_mshut_orig = (MN_TC0)(cur = *ms);
-    if ((DWORD)InterlockedCompareExchange((LONG volatile *)ms, (LONG)(DWORD)mn_mini_shut, (LONG)cur) != cur) { g_mn_on = 0; return; }
+    if ((DWORD)InterlockedCompareExchange((LONG volatile *)ms, (LONG)(DWORD)mn_mini_shut, (LONG)cur) != cur) { g_mn_on = g_vd_on = 0; return; }
     g_mn_draw_orig = (MN_TC0)(cur = *ds);
-    if ((DWORD)InterlockedCompareExchange((LONG volatile *)ds, (LONG)(DWORD)mn_draw, (LONG)cur) != cur) { g_mn_on = 0; return; }
+    if ((DWORD)InterlockedCompareExchange((LONG volatile *)ds, (LONG)(DWORD)mn_draw, (LONG)cur) != cur) { g_mn_on = g_vd_on = 0; return; }
     (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
-    logf("MININAT> on: the minimap map is drawn by the game at the HUD factor (map view vt+0x144, minimap vt+0x0c, +0x28 wrapped)");
+    logf("MININAT> on: the minimap map is drawn by the game at the HUD factor (map view vt+0x144, minimap vt+0x0c, +0x28 wrapped)%s",
+         g_mn_on ? "" : " - MININAT itself off (SC3RESIZE_MINIMAP_NATIVE=0), the hooks serve VERDATOS");
     if (g_mn_mini) *((BYTE *)g_mn_mini + 0x60) = 1;   /* repaint the minimap now */
 }
 
@@ -6688,6 +6696,302 @@ static void mn_compose(BYTE *bits, LONG pitch, LONG ox, LONG oy, LONG cw, LONG c
     QueryPerformanceCounter(&t1); g_mn_compt += t1.QuadPart - t0.QuadPart;
 }
 
+/* VERDATOS (task verdatos, owner 2026-10-25: the "Ver datos" data maps drawn natively at the HUD scale, not upscaled,
+ * as the minimap is). The Ver datos dialog (SIMUI+0xa4d64, 424x440) holds one panel per data view, each with its own
+ * map view (vt 0x100a7e68, 379x379 at panel-local (2,6)); only the shown panel's view draws, straight into the UI
+ * composite at client coordinates (measured live: view rect [1060 473 1439 852] in dialog [1020 427 1444 867]).
+ * DLGSCALE resamples the whole dialog, so the map came out a 379 px picture enlarged 2.25x to 3.3x. Now a twin of the
+ * view that last drew inside an enlarged dialog (the game's Clone, as MININAT) is sized to the dialog's factor with its
+ * own raster and drawn by the game after the native view drew, but only when the native view's picture, state or the
+ * factor changed (the stock view redraws about 16 times a second with the same pixels). DLGSCALE then pastes it 1:1
+ * over the enlarged map right after it draws that dialog (later dialogs and labels stay on top), where the twin drew and
+ * the frame's native pixel under it is still the view's own pixel as it drew (the legend, compass and option boxes over
+ * the map's square keep their resampled copy). The twin's texture side follows the twin's size past the game's
+ * 256 cap (512 / 1024, the 1024-cell city's own detail); SC3RESIZE_VERDATOS_TEX=<side> caps it (256 = the game's cap). It is freed when its view
+ * shuts down (vt+0x28 wrapped), when another view draws, and after 1 s unused (dialog closed, factor 1, other screen).
+ * SC3RESIZE_VERDATOS_NATIVE=0: the dialog's map resampled with the dialog, as before. */
+typedef DWORD (__fastcall *VD_FN)(void *self);
+static int    g_vd_tex = 1024;   /* largest twin texture side; 256 (or 0) = the game's cap */
+static void  *g_vd_nat, *g_vd_twin, *g_vd_dlg;   /* the native view, its twin, the dialog window it sits in */
+static LONG   g_vd_T, g_vd_bT, g_vd_lx, g_vd_ly, g_vd_mw, g_vd_mh, g_vd_bdw, g_vd_bw, g_vd_tex_n;
+static DWORD  g_vd_sig, g_vd_used, g_vd_gen;   /* gen: counts twin draws (the compose runs follow it) */
+static WORD  *g_vd_buf, *g_vd_m, *g_vd_mp;       /* twin T*T; native view pixels as drawn now / at the twin's last draw */
+static LONG   g_vd_bufcap, g_vd_mcap;
+static int    g_vd_valid, g_vd_fails, g_vd_logs, g_vd_inst, g_vd_first;
+static DWORD  g_vd_draws, g_vd_skips, g_vd_comps, g_vd_px_n, g_vd_clones;
+static __int64 g_vd_drawt, g_vd_compt;
+static MN_TC0 g_vd_shut_orig;
+
+static void vd_free(const char *why) {
+    void *t = g_vd_twin;
+    g_vd_valid = 0;
+    if (!t) return;
+    g_vd_twin = NULL; g_vd_T = 0;
+    ((MN_TC0)MN_VT(t, 0x28))(t, 0);   /* Shutdown: texture, own raster */
+    ((MN_TC0)MN_VT(t, 0x08))(t, 0);   /* Release */
+    logf("VERDATOS> twin 0x%08lX freed (%s)", (DWORD)t, why);
+}
+
+static DWORD __fastcall vd_view_shut(void *self, void *edx) {   /* map view vt+0x28 */
+    (void)edx;
+    if (self && self == g_vd_nat) { vd_free("its map view shuts down"); g_vd_nat = NULL; }
+    return g_vd_shut_orig(self, 0);
+}
+
+static void vd_install(void) {
+    DWORD sui = (DWORD)GetModuleHandleA("SIMUI.DLL"), old, cur, *vs;
+    if (g_vd_inst || !g_vd_on || !sui) return;
+    g_vd_inst = 1;
+    vs = (DWORD *)(sui + 0xa7e68 + 0x28);
+    if (IsBadReadPtr(vs, 4) || *vs != sui + 0x4390c || !VirtualProtect(vs, 4, PAGE_EXECUTE_READWRITE, &old)) {
+        logf("VERDATOS> map view vt+0x28 is not FUN_1004390c - off"); g_vd_on = 0; return; }
+    g_vd_shut_orig = (MN_TC0)(cur = *vs);
+    if ((DWORD)InterlockedCompareExchange((LONG volatile *)vs, (LONG)(DWORD)vd_view_shut, (LONG)cur) != cur) { g_vd_on = 0; return; }
+    logf("VERDATOS> on: a map view in an enlarged dialog is drawn by the game at the dialog's factor (map view vt+0x28 wrapped, texture %s)",
+         g_vd_tex >= 1024 ? "up to 1024" : g_vd_tex >= 512 ? "up to 512" : "game cap 256");
+}
+
+/* The twin's texture: the game's quantiser (FUN_100436b4) stops at 256; this one goes on to 512 / 1024 by the same
+ * 0.7071 rule, then rebuilds the texture and corners as the game does (FUN_1004367e, FUN_100435ed, FUN_10043780). */
+static void vd_tex(BYTE *twin) {
+    DWORD sui = (DWORD)GetModuleHandleA("SIMUI.DLL");
+    LONG *t = (LONG *)twin, side, tex;
+    float f;
+    if (g_vd_tex < 512 || !*(twin + 0xdd) || !sui) return;
+    side = t[0xb] - t[9];
+    if (*(BYTE *)(t + 0x2d)) side -= 2;
+    f = (float)side * 0.70710677f;
+    if (f <= 256.0f) return;   /* the game's own steps */
+    tex = f > 512.0f && g_vd_tex >= 1024 ? 1024 : 512;
+    {   /* no more texels than 2 per cell side: the layers fill the texture per texel from their cell grid (inner layer
+           +0x10 / +0x14, through the wrapper vt 0x100a811c +8), so past that a texel only repeats a cell */
+        DWORD *h = *(DWORD **)(twin + 0xf4), *n;
+        LONG cells = 0;
+        int g;
+        for (n = h && !IsBadReadPtr(h, 4) ? (DWORD *)*h : NULL, g = 0; n && n != h && g < 16 && !IsBadReadPtr(n, 12); n = (DWORD *)*n, g++) {
+            BYTE *wr = (BYTE *)n[2], *in;
+            if (!wr || IsBadReadPtr(wr, 12) || *(DWORD *)wr != sui + 0xa811c) continue;
+            in = *(BYTE **)(wr + 8);
+            if (in && !IsBadReadPtr(in, 0x18) && ((LONG *)in)[4] > cells && ((LONG *)in)[4] <= 4096) cells = ((LONG *)in)[4];
+        }
+        if (cells > 0 && cells * 2 < tex) tex = cells * 2 > 512 ? cells * 2 : 512;
+        if (cells > 0 && tex != t[0x39] && g_vd_logs < 40) { g_vd_logs++; logf("VERDATOS> twin texture %ld for a %ld-cell city (diamond side %.0f px)", tex, cells, f); }
+    }
+    if (t[0x39] != tex) {
+        ((VD_FN)(sui + 0x4367e))(twin);   /* drop the texture */
+        t[0x39] = tex;
+        ((VD_FN)(sui + 0x435ed))(twin);   /* make it at the new side */
+        *(twin + 0xdc) = 1;               /* render it */
+        g_vd_tex_n = tex;
+    }
+    *(float *)(t + 0x38) = f / (float)tex;
+    ((VD_FN)(sui + 0x43780))(twin);       /* corners */
+    *(twin + 0xdd) = 0;
+}
+
+static int vd_make(BYTE *nat, LONG T) {
+    BYTE *iface = nat + 0xa4, *twin;
+    void *out = NULL;
+    DWORD sui = (DWORD)GetModuleHandleA("SIMUI.DLL");
+    if (!sui || MN_VT(iface, 0x10) != sui + 0x42aec) { logf("VERDATOS> map view iface vt+0x10 is not FUN_10042aec - off"); g_vd_on = 0; return 0; }
+    if (!(((MN_TC2)MN_VT(iface, 0x10))(iface, 0, 0x4d4e4154, &out) & 0xff) || !out) {
+        if (++g_vd_fails >= 3) g_vd_on = 0;
+        logf("VERDATOS> Clone failed (%d)%s", g_vd_fails, g_vd_on ? "" : " - off");
+        return 0;
+    }
+    twin = (BYTE *)out - 0xa4;
+    if (MN_VT(twin, 0x144) != MN_VT(nat, 0x144)) { logf("VERDATOS> clone 0x%08lX is not a map view - off", (DWORD)twin); g_vd_on = 0; return 0; }
+    ((MN_TC4)MN_VT(twin, 0xc8))(twin, 0, 0, 0, (DWORD)T, (DWORD)T);
+    ((MN_TC0)MN_VT(twin, 0x24))(twin, 0);
+    ((MN_TC1)MN_VT(twin, 0x170))(twin, 0, 1);
+    if (!*(void **)(twin + 0x58) || *(void **)(twin + 0x5c) != *(void **)(twin + 0x58)) {
+        logf("VERDATOS> twin 0x%08lX has no own raster (0x%08lX, graphics 0x%08lX)", (DWORD)twin, *(DWORD *)(twin + 0x58), *(DWORD *)(twin + 0x5c));
+        g_vd_twin = twin; vd_free("no raster");
+        if (++g_vd_fails >= 3) g_vd_on = 0;
+        return 0;
+    }
+    g_vd_twin = twin; g_vd_T = T; g_vd_sig = mn_state(nat); g_vd_clones++;
+    logf("VERDATOS> twin 0x%08lX of map view 0x%08lX: %ldx%ld, own raster 0x%08lX, rotation %ld", (DWORD)twin, (DWORD)nat,
+         T, T, *(DWORD *)(twin + 0x58), ((LONG *)nat)[0x2b]);
+    return 1;
+}
+
+/* After a map view that is not the minimap's drew (game thread). Only one inside a dialog DLGSCALE enlarged on the last
+ * pass is taken; its rect is in client coordinates (it draws into the UI composite), inside that dialog's rect. */
+static void vd_after(BYTE *nat, BYTE dirty) {
+    LONG *n = (LONG *)nat, r[4], mw, mh, T, pitch, w, h, y, k;
+    const HD_SLOT *d = NULL;
+    BYTE *bits, *twin, *p;
+    void *ras;
+    int g, same;
+    LARGE_INTEGER t0, t1;
+    if (!g_vd_on || !g_hd_n || nat == g_vd_twin || nat == g_mn_twin) return;
+    for (p = *(BYTE **)(nat + 0x3c), g = 0; p && g < 6 && !d; p = *(BYTE **)(p + 0x3c), g++) {   /* the dialog it sits in */
+        if (IsBadReadPtr(p, 0x40)) return;
+        for (k = 0; k < g_hd_n; k++)
+            if (!g_hd_plbl[k] && g_hd[g_hd_pslot[k]].win == p) { d = &g_hd[g_hd_pslot[k]]; break; }
+    }
+    if (!d || d->w <= 0 || d->dw <= d->w) return;
+    r[0] = n[9]; r[1] = n[10]; r[2] = n[11]; r[3] = n[12];
+    mw = r[2] - r[0]; mh = r[3] - r[1];
+    if (mw < 64 || mh < 64 || r[0] < d->nat[0] || r[1] < d->nat[1] || r[2] > d->nat[2] || r[3] > d->nat[3]) {
+        if (g_vd_logs < 20) { g_vd_logs++; logf("VERDATOS> map view 0x%08lX [%ld %ld %ld %ld] is not inside its dialog [%ld %ld %ld %ld] - not taken",
+                                                (DWORD)nat, r[0], r[1], r[2], r[3], d->nat[0], d->nat[1], d->nat[2], d->nat[3]); }
+        return;
+    }
+    QueryPerformanceCounter(&t0);
+    vd_install();
+    if (!g_vd_on) return;
+    g_vd_used = GetTickCount();
+    T = 2 * (LONG)((double)(mw - 1) / 2.0 * (double)d->dw / (double)d->w + 0.5) + 1;
+    if (g_vd_nat != nat) { vd_free("another map view"); g_vd_nat = nat; }
+    if (g_vd_twin && mn_state(nat) != g_vd_sig) vd_free("rotation or layers changed");
+    if (!g_vd_twin) { if (!vd_make(nat, T)) return; dirty = 1; }
+    twin = (BYTE *)g_vd_twin;
+    /* the native view's pixels as it drew them, from the composite it drew into */
+    ras = *(void **)(nat + 0x5c);
+    if (!(bits = mn_lock(ras, &pitch, &w, &h))) { g_vd_valid = 0; return; }
+    if (r[0] < 0 || r[1] < 0 || r[2] > w || r[3] > h) { mn_unlock(ras); g_vd_valid = 0; return; }
+    if (g_vd_mcap < mw * mh) {
+        free(g_vd_m); free(g_vd_mp);
+        g_vd_m = (WORD *)malloc((size_t)mw * mh * 2); g_vd_mp = (WORD *)malloc((size_t)mw * mh * 2);
+        g_vd_mcap = g_vd_m && g_vd_mp ? mw * mh : 0;
+        if (!g_vd_mcap) { mn_unlock(ras); g_vd_valid = 0; return; }
+    }
+    for (y = 0; y < mh; y++) memcpy(g_vd_m + y * mw, bits + (r[1] + y) * pitch + r[0] * 2, mw * 2);
+    mn_unlock(ras);
+    same = g_vd_valid && !dirty && g_vd_bT == T && g_vd_T == T && g_vd_mw == mw && g_vd_mh == mh &&
+           !memcmp(g_vd_m, g_vd_mp, (size_t)mw * mh * 2);
+    g_vd_dlg = d->win; g_vd_lx = r[0] - d->nat[0]; g_vd_ly = r[1] - d->nat[1];
+    if (same) { g_vd_skips++; return; }   /* the twin already shows this picture */
+    if (g_vd_T != T) {
+        ((MN_TC4)MN_VT(twin, 0xc8))(twin, 0, 0, 0, (DWORD)T, (DWORD)T);
+        g_vd_T = T;
+        logf("VERDATOS> twin resized to %ldx%ld (dialog factor %.3f)", T, T, (double)d->dw / d->w);
+    }
+    ras = *(void **)(twin + 0x58);
+    if (!(bits = mn_lock(ras, &pitch, &w, &h))) { g_vd_valid = 0; return; }
+    if (w != T || h != T) {
+        mn_unlock(ras); g_vd_valid = 0;
+        if (g_vd_logs < 20) { g_vd_logs++; logf("VERDATOS> twin raster is %ldx%ld, wanted %ldx%ld", w, h, T, T); }
+        return;
+    }
+    for (y = 0; y < T; y++) { WORD *rw = (WORD *)(bits + y * pitch); LONG x; for (x = 0; x < T; x++) rw[x] = MN_KEY; }
+    mn_unlock(ras);
+    if (dirty) *(twin + 0xdc) = 1;
+    vd_tex(twin);
+    ((MN_TC0)MN_VT(twin, 0x144))(twin, 0);
+    if (g_vd_bufcap < T * T) {
+        free(g_vd_buf); g_vd_buf = (WORD *)malloc((size_t)T * T * 2); g_vd_bufcap = g_vd_buf ? T * T : 0;
+        if (!g_vd_buf) { g_vd_valid = 0; return; }
+    }
+    if (!(bits = mn_lock(ras, &pitch, &w, &h))) { g_vd_valid = 0; return; }
+    for (y = 0; y < T; y++) memcpy(g_vd_buf + y * T, bits + y * pitch, T * 2);
+    mn_unlock(ras);
+    { WORD *t = g_vd_mp; g_vd_mp = g_vd_m; g_vd_m = t; }   /* the picture this twin draw matches */
+    g_vd_mw = mw; g_vd_mh = mh; g_vd_bT = T; g_vd_bdw = d->dw; g_vd_bw = d->w; g_vd_valid = 1; g_vd_draws++; g_vd_gen++;
+    QueryPerformanceCounter(&t1); g_vd_drawt += t1.QuadPart - t0.QuadPart;
+    if (!g_vd_first) {
+        g_vd_first = 1;
+        logf("VERDATOS> first twin draw: map view [%ld %ld %ld %ld] in dialog [%ld %ld %ld %ld] -> [%ld %ld %ld %ld], twin %ldx%ld texture %ld (native %ld)",
+             r[0], r[1], r[2], r[3], d->nat[0], d->nat[1], d->nat[2], d->nat[3], d->dst[0], d->dst[1], d->dst[2], d->dst[3],
+             T, T, ((LONG *)twin)[0x39], n[0x39]);
+    }
+}
+
+/* DLGSCALE, right after it drew dialog d enlarged: the twin 1:1 over that dialog's enlarged map. d->prev holds this
+ * frame's native dialog pixels (rz_hd_draw swapped them in). Which dest pixels take the twin is kept as row runs in
+ * slot-local coordinates (a drag moves them with the dialog), rebuilt only when the twin, the factor or the native
+ * pixels over the map's rect changed. The runs also go into the slot's enlarged cache (d->out), which rz_hd_draw copies
+ * to the frame every frame and only partly recomputes (g_hd_rb), so a still or dragged dialog costs one compare of the
+ * map rect here. When the runs change, the cache can hold twin pixels the new runs do not cover: the slot is then
+ * rebuilt from its native pixels on the next frame. */
+static LONG  *g_vd_run, g_vd_runcap, g_vd_nrun, g_vd_rkey[4];
+static WORD  *g_vd_nc;   /* the native map rect of d->prev the runs were built from */
+static LONG   g_vd_nccap;
+static DWORD  g_vd_rgen, g_vd_rebuilds, g_vd_runid, g_vd_pid;
+static const HD_SLOT *g_vd_pd;   /* the slot whose cache holds the runs g_vd_pid */
+static void vd_compose(HD_SLOT *d, BYTE *bits, LONG pitch, LONG ox, LONG oy, LONG cw, LONG ch) {
+    LONG T = g_vd_bT, X0, Y0, x, y, xa, xb, ya, yb, k, key[4], bx0 = 0, by0 = 0, bx1 = d->dw, by1 = d->dh;
+    int same, mode;   /* mode 0: frame only, 1: frame + cache, 2: frame + cache inside the box rz_hd_draw recomputed */
+    LARGE_INTEGER t0, t1;
+    if (!g_vd_on) return;
+    mn_install();   /* the draw hook, also with MININAT off */
+    if (!g_vd_valid || d->win != g_vd_dlg || d->lbl || !T || !g_vd_mp) return;
+    if (d->dw != g_vd_bdw || d->w != g_vd_bw) return;   /* drawn for another factor: the resampled map until it redraws */
+    QueryPerformanceCounter(&t0);
+    g_vd_used = GetTickCount();
+    X0 = (LONG)(g_vd_lx * (double)d->dw / d->w + 0.5); Y0 = (LONG)(g_vd_ly * (double)d->dh / d->h + 0.5);   /* slot-local */
+    xa = X0 > 0 ? X0 : 0; xb = X0 + T < d->dw ? X0 + T : d->dw;
+    ya = Y0 > 0 ? Y0 : 0; yb = Y0 + T < d->dh ? Y0 + T : d->dh;
+    if (g_vd_nccap < g_vd_mw * g_vd_mh) {
+        free(g_vd_nc); g_vd_nc = (WORD *)malloc((size_t)g_vd_mw * g_vd_mh * 2);
+        g_vd_nccap = g_vd_nc ? g_vd_mw * g_vd_mh : 0; g_vd_rgen = 0;
+        if (!g_vd_nc) return;
+    }
+    key[0] = X0; key[1] = Y0; key[2] = d->dw; key[3] = d->dh;
+    same = g_vd_rgen == g_vd_gen && !memcmp(key, g_vd_rkey, sizeof(key));
+    for (y = 0; y < g_vd_mh; y++) {   /* the native pixels over the map's rect, against the ones the runs were built from */
+        const WORD *nr = d->prev + (y + g_vd_ly) * d->w + g_vd_lx;
+        WORD *c = g_vd_nc + y * g_vd_mw;
+        if (same && memcmp(c, nr, g_vd_mw * 2)) same = 0;
+        if (!same) memcpy(c, nr, g_vd_mw * 2);
+    }
+    if (!same) {   /* rebuild: a dest pixel takes the twin where the twin drew and the native pixel is the view's own */
+        g_vd_nrun = 0; g_vd_rebuilds++; g_vd_runid++;
+        for (y = ya; y < yb; y++) {
+            LONG v = d->ys[y], sl = (v >> 9) + ((v & 511) >= 128) - g_vd_ly;   /* nearest native row, view-local */
+            const WORD *tw = g_vd_buf + (y - Y0) * T - X0, *nr, *mr;
+            LONG st = -1;
+            if (sl < 0 || sl >= g_vd_mh) continue;
+            nr = g_vd_nc + sl * g_vd_mw; mr = g_vd_mp + sl * g_vd_mw;
+            for (x = xa; x <= xb; x++) {
+                int take = 0;
+                if (x < xb && tw[x] != MN_KEY) {
+                    LONG u = d->xs[x], cl = (u >> 9) + ((u & 511) >= 128) - g_vd_lx;
+                    take = cl >= 0 && cl < g_vd_mw && nr[cl] == mr[cl];   /* else a window over the map */
+                }
+                if (take && st < 0) st = x;
+                else if (!take && st >= 0) {
+                    if (g_vd_nrun * 3 + 3 > g_vd_runcap) {
+                        LONG nc = g_vd_runcap ? g_vd_runcap * 2 : 3 * 4096, *nn = (LONG *)realloc(g_vd_run, (size_t)nc * sizeof(LONG));
+                        if (!nn) { g_vd_nrun = 0; g_vd_rgen = 0; return; }
+                        g_vd_run = nn; g_vd_runcap = nc;
+                    }
+                    g_vd_run[g_vd_nrun * 3] = y; g_vd_run[g_vd_nrun * 3 + 1] = st; g_vd_run[g_vd_nrun * 3 + 2] = x; g_vd_nrun++;
+                    st = -1;
+                }
+            }
+        }
+        memcpy(g_vd_rkey, key, sizeof(key)); g_vd_rgen = g_vd_gen;
+    }
+    if (!same && g_vd_pd == d) { d->valid = 0; g_vd_pd = NULL; mode = 0; }
+    else if (g_vd_pd != d || g_vd_pid != g_vd_runid) { mode = 1; g_vd_pd = d; g_vd_pid = g_vd_runid; }
+    else { mode = 2; bx0 = g_hd_rb[0]; by0 = g_hd_rb[1]; bx1 = g_hd_rb[2]; by1 = g_hd_rb[3]; }
+    for (k = 0; k < g_vd_nrun; k++) {
+        LONG ry = g_vd_run[k * 3], r0 = g_vd_run[k * 3 + 1], r1 = g_vd_run[k * 3 + 2], fy = d->dst[1] + ry;
+        const WORD *src;
+        if (mode == 2) {
+            if (ry < by0 || ry >= by1) continue;
+            if (r0 < bx0) r0 = bx0;
+            if (r1 > bx1) r1 = bx1;
+            if (r1 <= r0) continue;
+        }
+        src = g_vd_buf + (ry - Y0) * T + (r0 - X0);
+        if (mode) memcpy(d->out + ry * d->dw + r0, src, (r1 - r0) * 2);
+        if (fy >= 0 && fy < ch && d->dst[0] + r0 >= 0 && d->dst[0] + r1 <= cw)
+            memcpy((WORD *)(bits + (oy + fy) * pitch) + ox + d->dst[0] + r0, src, (r1 - r0) * 2);
+        g_vd_px_n += (DWORD)(r1 - r0);
+    }
+    g_vd_comps++;
+    QueryPerformanceCounter(&t1); g_vd_compt += t1.QuadPart - t0.QuadPart;
+}
+
+/* Each present (game thread): drop a twin nobody drew or composed for 1 s. */
+static void vd_idle(void) {
+    if (g_vd_twin && GetTickCount() - g_vd_used > 1000) { vd_free("unused for 1 s (dialog closed or not enlarged)"); g_vd_nat = NULL; }
+}
+
 /* Before the final present: enlarge the HUD into the frame. Returns 1 when the frame must be restored after. */
 static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_screen) {
     double s, smax;
@@ -6700,6 +7004,7 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
     ULONG64 cy0;
     DWORD sui_base = (DWORD)GetModuleHandleA("SIMUI.DLL");
     static int logged_fmt;
+    vd_idle();   /* VERDATOS */
     g_hs_n = 0; g_hd_n = 0; g_hs_why = 1;
     g_cz_skok = 0;   /* task cityzoom SKIP: rebuilt below only when this pass composes */
     if (!g_hudscale || g_mb_active || cw <= 0 || ch <= 0) return 0;
@@ -6880,6 +7185,7 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
             HD_SLOT *d = &g_hd[g_hd_list[pass ? k : g_hd_nc - 1 - k]];
             if (!d->dw || (int)(d->lbl != 0) != pass) continue;
             rz_hd_draw(d, bits, pitch, ox, oy, g6);
+            if (!d->lbl) vd_compose(d, bits, pitch, ox, oy, cw, ch);   /* VERDATOS: the game-drawn map 1:1 over it */
             memcpy(g_hd_pdst[nd], d->dst, sizeof(d->dst)); memcpy(g_hd_pnat[nd], d->nat, sizeof(d->nat));
             g_hd_plbl[nd] = d->lbl;   /* task uiscale */
             g_hd_pslot[nd] = (int)(d - g_hd); nd++;
@@ -6909,6 +7215,14 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
                  g_mn_comps && g_freq.QuadPart ? 1000.0 * (double)g_mn_compt / (double)g_freq.QuadPart / g_mn_comps : 0.0,
                  g_mn_stale, g_mn_clones);
             g_mn_draws = g_mn_comps = g_mn_stale = g_mn_px_n = g_mn_clones = 0; g_mn_drawt = g_mn_compt = 0;
+        }
+        if (g_vd_on && (g_vd_draws || g_vd_skips || g_vd_comps)) {   /* VERDATOS */
+            logf("VERDATOS> %lu twin draws (%.2f ms each), %lu skipped (native picture unchanged), %lu frames composed (%lu px/frame copied, %.3f ms/frame, %lu run rebuilds), %lu clone(s), texture %ld",
+                 g_vd_draws, g_vd_draws && g_freq.QuadPart ? 1000.0 * (double)g_vd_drawt / (double)g_freq.QuadPart / g_vd_draws : 0.0, g_vd_skips,
+                 g_vd_comps, g_vd_comps ? g_vd_px_n / g_vd_comps : 0,
+                 g_vd_comps && g_freq.QuadPart ? 1000.0 * (double)g_vd_compt / (double)g_freq.QuadPart / g_vd_comps : 0.0,
+                 g_vd_rebuilds, g_vd_clones, g_vd_twin ? ((LONG *)g_vd_twin)[0x39] : 0L);
+            g_vd_draws = g_vd_skips = g_vd_comps = g_vd_px_n = g_vd_clones = g_vd_rebuilds = 0; g_vd_drawt = g_vd_compt = 0;
         }
         logf("HUDSCALE> %lu enlarged frames in %lu ms, %.2f ms per frame in the pre-present pass%s; HUDFIX: %lu recorded HUD Blts used, %lu frame(s) on the equality fallback",
              g_hs_frames, GetTickCount() - g_hs_beat,
@@ -14283,6 +14597,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MINIVIS", v, sizeof(v))) g_minivis = atoi(v);        /* task uiaudit */
           if (GetEnvironmentVariableA("SC3RESIZE_DLGONLY", v, sizeof(v))) g_dlgonly = atoi(v);        /* task uiaudit */
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_OPEN", v, sizeof(v))) g_ms_open = atoi(v); /* task uiaudit */
+          if (GetEnvironmentVariableA("SC3RESIZE_VERDATOS_NATIVE", v, sizeof(v))) g_vd_on = atoi(v);  /* task verdatos */
+          if (GetEnvironmentVariableA("SC3RESIZE_VERDATOS_TEX", v, sizeof(v))) g_vd_tex = atoi(v);    /* task verdatos */
           if (GetEnvironmentVariableA("SC3RESIZE_WINMEM", v, sizeof(v))) g_winmem = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_RESROW", v, sizeof(v))) g_resrow = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_STARTRES", v, sizeof(v))) g_startres = atoi(v);
@@ -14327,6 +14643,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
         logf("### FLAGS> menuscale=%d filter=%s repost=%d fullblit=%d refresh=%d dump=%s", g_menuscale,
              g_ms_filter ? "bilinear" : "nearest", g_ms_repost, g_ms_fullblit, g_ms_refresh, g_ms_dump[0] ? g_ms_dump : "-");
         logf("### FLAGS> uiaudit: tipdlg=%d minivis=%d dlgonly=%d menuscale_open=%d", g_tipdlg, g_minivis, g_dlgonly, g_ms_open);
+        logf("### FLAGS> verdatos: native=%d tex=%d", g_vd_on, g_vd_tex);
         if (AddVectoredExceptionHandler(1, rz_veh))
             logf("### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the "
                  "zoom-after-resize crash the game swallows)");
