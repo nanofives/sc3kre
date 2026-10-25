@@ -431,3 +431,37 @@ Owner picked four fixes, each a block in `sc3resize.c` with an off switch:
   to the stock background at the same spot was classed background. MENUSCALE's compose now reads the 3x3 morphological
   opening of the mask (a pixel stays background only inside some all-background 3x3 square; outside the frame counts as
   background). Measured A/B at 2560: 81 client pixels differ between the arms, all in the dialog, 0 on the menu picture.
+
+## Ver datos data maps drawn by the game at the dialog factor (task verdatos, 2026-10-25)
+
+Owner request: the Ver datos maps (aura, crime, pollution...) drawn natively at the HUD scale, not upscaled, as the
+minimap is. Code: the VERDATOS block in `sc3resize.c`, `SC3RESIZE_VERDATOS_NATIVE=0` turns it off. Evidence and pictures:
+`verify/verdatos/RESULTS.md`.
+
+- The dialog is the generic SIMUI+0xa4d64 class (container ctor `FUN_10044021`, 424x440). It holds one panel per data
+  view (ids 0x5fa..0x603, made in `FUN_10044430`), each with its own map view (vt `0x100a7e68`, 379x379 at panel-local
+  (2,6), made once in `FUN_10045df2`) `[CONFIRMED @ SIMUI 0x10044aa6]`: a view switch hides one panel and shows another, so
+  the map view object that draws changes, and the deactivated one drops its texture (`FUN_10042ca4` -> `FUN_1004367e`).
+  The layers come from the sim DLLs over the SIMDIRT base layer 0x2711. The map takes no clicks (view+0xd0 stays 0; a
+  posted click moved nothing). It follows the city rotation (minimap rotate buttons); the compass only shows it.
+- Unlike the minimap's, this view has no raster of its own: it draws into the client-sized UI composite (GZGraphicD
+  raster vt +0x1f328) at client coordinates `[MEASURED live: rect [1060 473 1439 852] in dialog [1020 427 1444 867]]`, and
+  the legend, compass and option boxes are sibling windows drawn after it. The legend box overlaps the diamond.
+- Twin: the same Clone as MININAT, sized `2*round(189 x dialog factor)+1` with its own raster, drawn after the native
+  view drew, but only when the native view's pixels (read back from the composite), its state or the factor changed. A
+  still view redraws about 16 times a second with identical pixels, so the twin draws once per open, view switch,
+  rotation or data refresh (about every 20 s with the sim running).
+- The twin's texture goes past the game's 256 cap: the layers fill any texture per texel from their cell grid
+  (`cx = W*tx/rectW`, inner layer +0x10/+0x14, reached through the wrapper vt 0x100a811c +8), so the side is the game's
+  rule (smallest power of 2 at or above the diamond side) capped at twice the city's cells: 512 for a 256-cell city,
+  1024 for a 1024-cell city. `SC3RESIZE_VERDATOS_TEX=<side>` caps it (256 = the game's cap). `this+0xe0` (texture scale)
+  is a float `[CONFIRMED @ SIMUI 0x10043765 fstp]`.
+- Paste: in DLGSCALE's draw loop right after `rz_hd_draw` for that dialog (dialogs in front and labels still cover it),
+  where the twin drew and the frame's native pixel is still the view's own, as row runs in slot-local coordinates. The
+  runs go into the slot's enlarged cache too, so a still or dragged dialog only pays one compare of the map rect
+  (0.23 to 0.42 ms per frame measured); when the runs change, the slot is rebuilt from its native pixels the next frame.
+- Lifetime: the dialog destroys its map views on close (measured: the view's vt+0x28 Shutdown runs), which frees the
+  twin first; also freed on a view switch, a rotation, and after 1 s unused.
+- It takes any map view inside an enlarged dialog, not only Ver datos. Only Ver datos was checked.
+- Cost per texture side, Europolis 1024: twin draw 44 to 101 ms (256), 81 to 120 ms (512), 172 to 366 ms (1024); per frame
+  0.27 to 0.72 ms whatever the side. 256 drops whole road rings on a 1024-cell city, 512 breaks them, 1024 keeps them.
