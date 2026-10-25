@@ -1,0 +1,4 @@
+module	rva	subsystem
+GZServiceD.dll	0x100072e2	font-render
+GZServiceD.dll	0x1000736f	font-render
+GZServiceD.dll	0x10007477	font-render

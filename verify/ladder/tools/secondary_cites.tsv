@@ -1,0 +1,338 @@
+module	addr	role	evidence	kind	doc
+SIMSPR.DLL	0x100159e2	occupant vt+0x14, first of chain that yields the cell vertical range anchor T	READ	fn	verify/artkit/RESULTS.md:41
+SIMSPR.DLL	0x1005ad34	chain vt+0x14 -> 0x1005ad34 -> 0x100014e7 giving anchor T	READ	fn	verify/artkit/RESULTS.md:41
+SIMSPR.DLL	0x100014e7	end of anchor-T chain (vt+0x14 -> 0x1005ad34 -> 0x100014e7)	READ	fn	verify/artkit/RESULTS.md:41
+SIMSPR.DLL	0x10007b4d	stores anchor T as s16 at cell+4	READ	fn	verify/artkit/RESULTS.md:41
+SIMSPR.DLL	0x1000b352	stores anchor T as s16 at cell+4	READ	fn	verify/artkit/RESULTS.md:41
+SIMSPR.DLL	0x10001c90	reader of frame table LayerFlags (u32 at header +0x12)	READ	fn	verify/artkit/RESULTS.md:43
+SIMSPR.DLL	0x100192aa	LayerFlags bit 0x80 becomes cell flag bit 0	READ	fn	verify/artkit/RESULTS.md:43
+SIMSPR.DLL	0x1000dc17	draws every LayerFlags-0x80 record in a pass BEFORE all other records	READ	fn	verify/artkit/RESULTS.md:43
+STRTSIM.DLL	0x1001e673	curve record trailing u32 = path sort id (-> +0x34)	READ	fn	verify/avcore/RESULTS.md:97
+STRTSIM.DLL	0x1001b030	sort id sent to the anim occupant manager on a change	READ	fn	verify/avcore/RESULTS.md:97
+STRTSIM.DLL	0x10018768	main thread stack frame STRTSIM+0x18768 in paused-attach deadlock	RUNTIME	site	verify/avcore/RESULTS.md:110
+SC3U.exe	0x00424c75	main thread stack frame SC3U+0x24c75 in paused-attach deadlock	RUNTIME	site	verify/avcore/RESULTS.md:110
+SIMSPR.DLL	0x10019ea9	main thread stack frame SIMSPR+0x19ea9 in paused-attach deadlock	RUNTIME	site	verify/avcore/RESULTS.md:110
+SIMCITY.DLL	0x1000d31d	main thread SIMCITY+0xd31d (EnterCriticalSection) in deadlock	RUNTIME	site	verify/avcore/RESULTS.md:110
+SC3U.exe	0x00402e74	stores the app singleton at 0x004fa86c	CONFIRMED	fn	verify/avcore/RESULTS.md:228
+SIMCITY.DLL	0x100056bb	increments city+0x140 (pause depth) and posts 0xc2a35d7f at 1	CONFIRMED	fn	verify/avcore/RESULTS.md:231
+SIMCITY.DLL	0x10005773	decrements city+0x140 and posts 0xc2a35d81 at 0	CONFIRMED	fn	verify/avcore/RESULTS.md:231
+STRTSIM.DLL	0x10016520	cSSStrtSimTrBlock::EnterVehicle: car enters lane edge only if no edge in its intersect list holds a car	CONFIRMED	fn	verify/avdiag/RESULTS.md:223
+STRTSIM.DLL	0x1001de36	path vtable +0x48 slot through which EnterVehicle is called	READ	fn	verify/avdiag/RESULTS.md:224
+STRTSIM.DLL	0x1001d553	WaitForPathClearance gives up after 40,000,000 units here	CONFIRMED	site	verify/avdiag/RESULTS.md:224
+STRTSIM.DLL	0x1001ff93	builds the intersect list from the edges' straight chords (-> FUN_10020063)	CONFIRMED	fn	verify/avdiag/RESULTS.md:225
+STRTSIM.DLL	0x10020063	intersect list build chain (FUN_1001ff93 -> FUN_10020063)	READ	fn	verify/avdiag/RESULTS.md:225
+STRTSIM.DLL	0x10020904	intersect list build chain callee (chord intersection)	READ	fn	verify/avdiag/RESULTS.md:225
+STRTSIM.DLL	0x100167fe	chord intersection: intersect unless shared START point or equal slopes, end points inclusive	CONFIRMED	fn	verify/avdiag/RESULTS.md:225
+STRTSIM.DLL	0x1001b680	street sim car move, main thread in Frida-paused deadlock stacks	RUNTIME	fn	verify/avjunc/RESULTS.md:56
+STRTSIM.DLL	0x10018750	street sim car move (-> sprite vt+100), in deadlock stacks	RUNTIME	fn	verify/avjunc/RESULTS.md:56
+SIMCITY.DLL	0x1000d310	EnterCriticalSection wrapper where the deadlocked main thread waits	RUNTIME	fn	verify/avjunc/RESULTS.md:56
+SIMNTWRK.DLL	0x1001a7f7	FUN_1001a7f7(1, id): membership of ROAD_GRND_Protected.txt (Protected piece test); module per re/analysis/NETVARIANT.md	READ	fn	verify/avx32/RESULTS.md:303
+SIMSPR.DLL	0x1001d503	Camera Translate; refused every step on 1024 cities (camtrace)	RUNTIME	fn	verify/bigcity_option/RESULTS.md:16
+SIMUI.DLL	0x10058c80	Preferences frame recipe; GZCOM create returned a message handler at vt+0xc, crash run 6; module per BIGGER_CITIES.md	RUNTIME	fn	verify/bigcity_option/RESULTS.md:19
+SIMUI.DLL	0x1002d3c4	the dialog's own frame function, drew the frame around the slider (run 10); module per BIGGER_CITIES/OPTIONS_DIALOG	RUNTIME	fn	verify/bigcity_option/RESULTS.md:21
+SIMDIRT.DLL	0x10017f2f	subdivision depth 8 push, only reaches every vertex up to 512; patched to push 9 when N > 512 (runs 1, 2)	RUNTIME	site	verify/bigcity_option/RESULTS.md:30
+SIMINIT.DLL	0x1000c09c	writes N into the 8-bit Z range (desc +0x40); clamp desk only	READ	fn	verify/bigcity_option/RESULTS.md:33
+UNKNOWN	0x1000aa4b	minimap indicator edge clamp, never traced	MENTION	fn	verify/bigcity_option/RESULTS.md:36
+UNKNOWN	0x1000a707	minimap indicator edge clamp, never traced	MENTION	fn	verify/bigcity_option/RESULTS.md:36
+SIMSPR.DLL	0x100071a3	packs a cell rectangle into 4 bytes on a zoom change when memory class < 0x14; untested	READ	fn	verify/bigcity_option/RESULTS.md:37
+SIMSPR.DLL	0x10008835	packs a cell rectangle into 4 bytes on a zoom change when memory class < 0x14; untested	READ	fn	verify/bigcity_option/RESULTS.md:37
+SIMDIRT.DLL	0x10017c2d	terrain generator, W*H*255*12 overflows at 2048; module per SIMDIRT_CLUSTER1.md	READ	fn	verify/bigcity_option/RESULTS.md:40
+SIMCITY.DLL	0x1000d31d	main thread in STRTSIM car step waiting in SIMCITY.DLL+0xd31d (Frida-paused hang)	RUNTIME	site	verify/bvlanes/RESULTS.md:89
+SIMSPR.DLL	0x10054f3d	render thread waiting at SIMSPR+0x54f3d (Frida-paused hang)	RUNTIME	site	verify/bvlanes/RESULTS.md:90
+SIMSPR.DLL	0x10043de7	camera scroll step writes animation rate 0 to the render view (copy 1 of 3); mod writes 60	RUNTIME	site	verify/carscroll/RESULTS.md:33
+SIMSPR.DLL	0x10043f60	camera scroll step writes animation rate 0 (copy 2 of 3); mod writes 60	RUNTIME	site	verify/carscroll/RESULTS.md:34
+SIMSPR.DLL	0x10044003	camera scroll step writes animation rate 0 (copy 3 of 3); mod writes 60	RUNTIME	site	verify/carscroll/RESULTS.md:34
+STRTSIM.DLL	0x1001f610	car removal: every removal reaches it with a listed cause (3,273 probed); module per CAR_TRIPS.md (STRTSIM unless named)	RUNTIME	fn	verify/cartrips/RESULTS.md:49
+STRTSIM.DLL	0x1001f040	view update re-placing cars over the moved rect (PutVehiclesInRect), 2/1 spawns in camera hold	RUNTIME	fn	verify/cartrips/RESULTS.md:53
+STRTSIM.DLL	0x1001f0ed	caller of FUN_1001f040 in the view update spawns	RUNTIME	site	verify/cartrips/RESULTS.md:53
+SimTransit.dll	0x100072f8	route_trip final-path pop call; a Frida native listener on it faults even when empty; module per CAR_TRIPS.md	RUNTIME	site	verify/cartrips/RESULTS.md:62
+STRTSIM.DLL	0x1001a950	sprite accessor, runs for every agent every tick (~88k calls/s), hooked by the probe; module per STRTSIM.md	RUNTIME	fn	verify/cartrips/RESULTS.md:67
+SC3U.exe	0x00425a99	agent loop's tick call; sc3simrun FREEZE skips frozen agents here while user-paused	RUNTIME	site	verify/cartrips/RESULTS.md:101
+SimTransit.dll	0x1000755e	ring scan keeps the most congested road neighbour below the cap (150), measured by CHOICE; module per HIGHWAY_TRIPS.md	RUNTIME	fn	verify/cartrips2/RESULTS.md:56
+SimTransit.dll	0x10006fe3	caller of route_trip (building and SIMMISC trips), measured by CALLER	RUNTIME	fn	verify/cartrips2/RESULTS.md:65
+SimTransit.dll	0x100097b9	building trip issuer: r = random(100) draw decides deposit flag; also measured by CALLER	RUNTIME	fn	verify/cartrips2/RESULTS.md:65
+SimTransit.dll	0x100099e0	return address in building issuer FUN_100097b9 (caller of FUN_10006fe3)	RUNTIME	site	verify/cartrips2/RESULTS.md:65
+SimTransit.dll	0x100098cb	return address in building issuer FUN_100097b9 (caller of FUN_10006fe3)	RUNTIME	site	verify/cartrips2/RESULTS.md:65
+SimTransit.dll	0x1000706a	trip from a cell (caller of route_trip from zone development); 15,968 trips, 0 flagged	RUNTIME	fn	verify/cartrips2/RESULTS.md:66
+SIMRCI.DLL	0x1001aa6c	SIMRCI +0x1AA6C, zone development caller of FUN_1000706a (return address)	RUNTIME	site	verify/cartrips2/RESULTS.md:66
+SIMMISC.DLL	0x1000a5bc	SIMMISC +0xA5BC, caller of FUN_10006fe3 (return address), 90 trips	RUNTIME	site	verify/cartrips2/RESULTS.md:67
+SIMMISC.DLL	0x1000ae43	SIMMISC +0xAE43, caller of FUN_10006fe3 (return address)	RUNTIME	site	verify/cartrips2/RESULTS.md:67
+SimTransit.dll	0x10007064	first return address read without the Frida trampoline (route_trip callers)	RUNTIME	site	verify/cartrips2/RESULTS.md:70
+SimTransit.dll	0x100070b3	first return address read without the Frida trampoline (route_trip callers)	RUNTIME	site	verify/cartrips2/RESULTS.md:70
+SC3U.exe	0x00425a10	agent loop, ms per second measured	RUNTIME	fn	verify/cartrips3/RESULTS.md:64
+GZWinD.dll	0x10020260	GZWIND GetCursorPos reader, not mapped	MENTION	fn	verify/cityzoom/RESULTS.md:42
+SC3U.exe	0x00484122	startup fault SC3U+0x84122 seen in every run	RUNTIME	site	verify/closex/RESULTS.md:26
+SC3U.exe	0x0043b51d	main menu's own Salir button (0x712BF5C4) handler	READ	fn	verify/closex/RESULTS.md:40
+SC3U.exe	0x0046135a	main pump, never sleeps (static read by worker)	READ	fn	verify/dlgscale/RESULTS.md:33
+SIMUI.DLL	0x100034d4	Reunirse opens non-modal through it (no Sleep(0) modal loop)	READ	fn	verify/dlgscale/RESULTS.md:34
+GZGraphicD.dll	0x100148f8	return address of 97.6% of surface Locks with Reunirse open (conversion copy)	RUNTIME	site	verify/dlgscale/RESULTS.md:67
+GZServiceD.dll	0x10006ea2	caller of the GZGraphicD Lock path, counted per second by frida_fmtmismatch (18 closed, 1,321 open)	RUNTIME	site	verify/dlgscale/RESULTS.md:68
+GZGraphicD.dll	0x100148f2	ff 90 d4 01 00 00 = call [eax+0x1d4], the format-mismatch branch of FUN_10014894	READ	site	verify/dlgscale/RESULTS.md:68
+GZGraphicD.dll	0x10014894	blit: conversion copy branch taken when destination format id (this+0x10) differs from source's; locks per call	CONFIRMED	fn	verify/dlgscale/RESULTS.md:69
+GZGraphicD.dll	0x100148de	format compare, read-only Frida probe counted per second	RUNTIME	site	verify/dlgscale/RESULTS.md:72
+GZServiceD.dll	0x10006e54	bitmap-font glyph draw from sheet this+0x34 via dest vt+0x118; CONFIRMED; sc3perf FONTCACHE replacement measured	RUNTIME	fn	verify/dlgscale/RESULTS.md:80
+GZServiceD.dll	0x100072e2	text loop, caller of glyph draw FUN_10006e54	READ	fn	verify/dlgscale/RESULTS.md:82
+GZServiceD.dll	0x1000736f	text loop, caller of glyph draw FUN_10006e54	READ	fn	verify/dlgscale/RESULTS.md:82
+GZServiceD.dll	0x10007477	text loop, caller of glyph draw FUN_10006e54	READ	fn	verify/dlgscale/RESULTS.md:82
+GZGraphicD.dll	0x10010ed1	SetResolution; STARTRES forces it to 800x600	RUNTIME	fn	verify/fullscreen/RESULTS.md:14
+GZGraphicD.dll	0x10011f73	game's exclusive fullscreen via DD1 SetDisplayMode(w,h,bpp), no refresh-rate argument	READ	fn	verify/fullscreen/RESULTS.md:17
+GZWinD.dll	0x10020971	window manager's modal loop (vtable 0x1002db80 slot +0xa0), closed by vt+0x44(0xd, win, id) from 49 sites	READ	fn	verify/hudclick/RESULTS.md:40
+SC3U.exe	0x00484122	VEH FAULT SC3U.exe+0x84122 at ~350 ms logged by every arm	RUNTIME	site	verify/hudfix/RESULTS.md:27
+SimTransit.dll	0x10007a63	router: type 3 node = cell flag 0x40 = occupant flag 0x200000	CONFIRMED	site	verify/hwave/RESULTS.md:26
+SimTransit.dll	0x100086e7	router: type 3 node = cell flag 0x40 = occupant flag 0x200000	CONFIRMED	fn	verify/hwave/RESULTS.md:26
+SimTransit.dll	0x10005983	occupant tests that make the router's cell flags (0x200000 -> flag 0x40); probed by hwave_probe	CONFIRMED	fn	verify/hwave/RESULTS.md:27
+SIMNTWRK.DLL	0x1001a5f2	only on-ramp class ids 0x3b1a..0x3b25 (15130..15141) give occupant flag 0x200000; kind 14/15	READ	fn	verify/hwave/RESULTS.md:27
+SimTransit.dll	0x10007881	router neighbour order x-, z+, x+ (trip entering 21602 sent back onto the avenue)	CONFIRMED	site	verify/hwave/RESULTS.md:75
+SIMNTWRK.DLL	0x10016ccd	flat test used by hwcap_need (log: flat 1); module per SIMNTWRK_CLUSTER2.md	RUNTIME	fn	verify/hwcap/RESULTS.md:58
+SIMNTWRK.DLL	0x10016d69	water test used by hwcap_need (log: water 1); module per SIMNTWRK_CLUSTER2.md	RUNTIME	fn	verify/hwcap/RESULTS.md:58
+SIMNTWRK.DLL	0x10008919	piece writer, hwcap writes the arm with it; module per SIMNTWRK_CLUSTER1.md	RUNTIME	fn	verify/hwcap/RESULTS.md:67
+STRTSIM.DLL	0x1001d2c0	car Tick (x +0x0c, z +0x14), hooked by the hwcars probe	RUNTIME	fn	verify/hwcars/RESULTS.md:48
+STRTSIM.DLL	0x1001c9e0	car Shutdown, hooked by the hwcars probe	RUNTIME	fn	verify/hwcars/RESULTS.md:48
+STRTSIM.DLL	0x1001c750	car step into next cell (no arrival node), one of two candidates for ramp-foot vanish, not traced; per CAR_TRIPS.md	MENTION	fn	verify/hwcars/RESULTS.md:78
+STRTSIM.DLL	0x1001c440	car step into next cell (no outgoing edge), one of two candidates for ramp-foot vanish, not traced; per CAR_TRIPS.md	MENTION	fn	verify/hwcars/RESULTS.md:78
+SimTransit.dll	0x10007881	router picks neighbours in fixed order with no destination or density ranking	CONFIRMED	site	verify/hwcars/RESULTS.md:88
+STRTSIM.DLL	0x1001d3b5	main thread stack: car Tick frame in deadlock (Frida stacks)	RUNTIME	site	verify/hwcars/RESULTS.md:100
+STRTSIM.DLL	0x10019adf	main thread stack frame after car Tick in deadlock	RUNTIME	site	verify/hwcars/RESULTS.md:100
+STRTSIM.DLL	0x1001b95b	MoveNStages stack frame in deadlock	RUNTIME	site	verify/hwcars/RESULTS.md:100
+STRTSIM.DLL	0x1001b8cc	MoveNStages stack frame in deadlock	RUNTIME	site	verify/hwcars/RESULTS.md:100
+STRTSIM.DLL	0x10018768	path build stack frame -> SC3U.exe+0xc3e64 in deadlock	RUNTIME	site	verify/hwcars/RESULTS.md:101
+SC3U.exe	0x004c3e64	SC3U.exe+0xc3e64 stack frame between STRTSIM path build and SIMSPR in deadlock	RUNTIME	site	verify/hwcars/RESULTS.md:101
+SIMCITY.DLL	0x1000d310	EnterCriticalSection on CS 0x1029d7b8 where the main thread waits	RUNTIME	fn	verify/hwcars/RESULTS.md:101
+SIMCITY.DLL	0x100114dc	thread 23676 stack root SIMCITY+0x114dc, owns CS 0x1029d7b8	RUNTIME	site	verify/hwcars/RESULTS.md:103
+SIMDIRT.DLL	0x10016ba2	thread 23676 stack top SIMDIRT+0x16ba2, waits on CS 0x103fcee8	RUNTIME	site	verify/hwcars/RESULTS.md:103
+SIMNTWRK.DLL	0x10009c65	method of the On-ramp selection object (its +0x54 = terrain object); calling it from the manager raised 0xC0000005	RUNTIME	fn	verify/hwcore/RESULTS.md:41
+SIMNTWRK.DLL	0x10012609	manager's terrain object (+0x30, the city vt+0x13c object); module per TILER_SIM.md	READ	fn	verify/hwcore/RESULTS.md:43
+SIMSPR.DLL	0x10002088	sprite class factory selecting class by frame table class id (traced statically in SIMSPR)	READ	fn	verify/hwcore/RESULTS.md:82
+SIMSPR.DLL	0x1004c611	sprite class factory selecting class by frame table class id	READ	fn	verify/hwcore/RESULTS.md:82
+SIMSPR.DLL	0x10015e72	class 0x672 vt+0x5c stores the attached terrain at +0xc	READ	fn	verify/hwcore/RESULTS.md:83
+SIMSPR.DLL	0x10015dd0	class 0x672 draws attached terrain before the piece with same draw point and clip	READ	fn	verify/hwcore/RESULTS.md:83
+SIMSPR.DLL	0x10054c75	class 0x7300 no-op vt+0x5c	READ	fn	verify/hwcore/RESULTS.md:84
+SIMSPR.DLL	0x100192aa	0x40 path attaches terrain through vt+0x5c	READ	fn	verify/hwcore/RESULTS.md:84
+SIMNTWRK.DLL	0x10008919	piece writer; hwy_end re-writes kept cells with it after a revert retile	READ	fn	verify/hwcore/RESULTS.md:108
+SIMNTWRK.DLL	0x10012fc3	network saver counts each tile before FUN_1000d688 writes it; module per hwdd/CITY_SAVE.md	READ	fn	verify/hwcore/RESULTS.md:116
+SIMNTWRK.DLL	0x1000d688	writes each tile record on save; module per CITY_SAVE.md	READ	fn	verify/hwcore/RESULTS.md:117
+SIMNTWRK.DLL	0x10012fc3	tile counter in the save that a land-piece-skip would need to patch	READ	fn	verify/hwdd/RESULTS.md:63
+SIMCITY.DLL	0x1000d31d	STRTSIM -> SIMSPR -> wait SIMCITY.DLL+0xd31d (Frida stacks, paused-attach hang)	RUNTIME	site	verify/hwlight/RESULTS.md:86
+SIMSPR.DLL	0x10054f3d	render thread wait SIMSPR+0x54f3d (Frida stacks)	RUNTIME	site	verify/hwlight/RESULTS.md:86
+SimTransit.dll	0x100070d0	route one trip: counts calls in layer +0xb0, failures in +0xb4, return low byte 1 on arrival; CONFIRMED; Frida probe	RUNTIME	fn	verify/hwtraffic/RESULTS.md:57
+SimTransit.dll	0x10006edd	density deposit (x, z, amount, mask) along an arrived trip's final path, mask 2 = highway node; probed	RUNTIME	fn	verify/hwtraffic/RESULTS.md:59
+SimTransit.dll	0x100093e9	monthly publish: month counters +0xb0/+0xb4, failed ratio +0xb8, average +0xc0, highway snapshot +0x64; probed	RUNTIME	fn	verify/hwtraffic/RESULTS.md:63
+SimTransit.dll	0x10009e8e	route_trip pop loop pop, final path read by hwtrips_probe	RUNTIME	fn	verify/hwtrips/RESULTS.md:11
+SimTransit.dll	0x100072d8	start of route_trip pop-loop call range 0x100072d8..0x100072f3 read by the probe	RUNTIME	site	verify/hwtrips/RESULTS.md:11
+SimTransit.dll	0x100072f3	end of route_trip pop-loop call range 0x100072d8..0x100072f3 read by the probe	RUNTIME	site	verify/hwtrips/RESULTS.md:11
+SimTransit.dll	0x1000755e	ring scan; LANEDENSITY entry detour hosts sc3netmod RAMPFIRST (measured)	RUNTIME	fn	verify/hwtrips/RESULTS.md:77
+UV.DLL	0x10005ffa	intro codec's own Unlock call, Frida witness reads the locked primary there	RUNTIME	site	verify/intro/RESULTS.md:21
+UV.DLL	0x10005ef9	codec writer call (+0x5ef9) re-targeted by INTRO	RUNTIME	site	verify/intro/RESULTS.md:40
+UV.DLL	0x10005e2a	codec writer call (+0x5e2a) re-targeted by INTRO	RUNTIME	site	verify/intro/RESULTS.md:40
+UV.DLL	0x10006900	codec frame function, logged per frame by INTRO (codec x,y 260,272)	RUNTIME	fn	verify/intro/RESULTS.md:42
+SimTransit.dll	0x1000755e	ring scan takes a road cell only while congestion byte < DAT_1001f0c0 = 150	CONFIRMED	fn	verify/lanedensity/RESULTS.md:89
+SimTransit.dll	0x10006edd	deposits mask & 0x35 into +0x6c, & 2 into +0x70, & 8 into +0x74; CONFIRMED; deposit probe 60 s	RUNTIME	fn	verify/lanekit/RESULTS.md:31
+SimTransit.dll	0x100070d0	route driver passes mask 2 for highway, 0x15 road/rail-station/bus, 8 subway	CONFIRMED	fn	verify/lanekit/RESULTS.md:32
+STRTSIM.DLL	0x1001c750	every street-sim cell transition, probed with --all; an "ok" return is not always a lane entry	RUNTIME	fn	verify/lanekit/RESULTS.md:46
+STRTSIM.DLL	0x10020108	arrival lookup takes the nearest node of the class in the 72-unit bucket	READ	fn	verify/lanekit/RESULTS.md:62
+SIMSPR.DLL	0x1000a513	tile -> world conversion used to compute where the centred tile "landed"	READ	fn	verify/leftclick/RESULTS.md:12
+SIMSPR.DLL	0x1001d09c	LCENTER install site (SIMSPR+0x1d09c), logged on install	RUNTIME	site	verify/leftclick/RESULTS.md:17
+SIMUI.DLL	0x1005090c	minimap click caller SIMUI+0x5090c (return address) in arm 5	RUNTIME	site	verify/leftclick/RESULTS.md:21
+SIMSPR.DLL	0x1001d1d9	zoom and rotate: pass stored centre tile +0xb0/+0xb4 to camera vt+0x38/vt+0x48 (static read only)	READ	fn	verify/leftclick/RESULTS.md:44
+SIMSPR.DLL	0x10006752	camera vt+0x38: puts the centre tile at the centre of the camera rect +0x64..+0x70	READ	fn	verify/leftclick/RESULTS.md:45
+SIMSPR.DLL	0x10006a55	camera vt+0x48: puts the centre tile at the centre of the camera rect +0x64..+0x70	READ	fn	verify/leftclick/RESULTS.md:45
+SC3U.exe	0x00403565	reads the intro option and compares it with "off" (-intro:off skips the movie)	CONFIRMED	fn	verify/menucrop/RESULTS.md:32
+SC3U.exe	0x00484122	0xC0000096 at SC3U.exe+0x84122 in resize's VEH log at startup	RUNTIME	site	verify/mods_combo/RESULTS.md:15
+SC3U.exe	0x00484122	startup privileged-instruction probe SC3U+0x84122 in VEH log, benign	RUNTIME	site	verify/mods_release/RESULTS.md:50
+SC3U.exe	0x00484122	VEH only the benign SC3U+0x84122	RUNTIME	site	verify/mods_release_1012/RESULTS.md:32
+SC3U.exe	0x00484122	benign 0xC0000096 @ SC3U+0x84122	RUNTIME	site	verify/mods_release_1024/RESULTS.md:15
+SC3U.exe	0x00484122	benign 0xC0000096 @ SC3U+0x84122	RUNTIME	site	verify/mods_release_1025/RESULTS.md:18
+SC3U.exe	0x00484122	benign 0xC0000096 @ SC3U+0x84122	RUNTIME	site	verify/mods_release_1025b/RESULTS.md:9
+SC3U.exe	0x00484122	benign 0xC0000096 @ SC3U+0x84122	RUNTIME	site	verify/mods_release_1025c/RESULTS.md:8
+SIMSPR.DLL	0x10047b70	stock SIMSPR+0x47B70 null read (failed right-drag marker load) fixed by SHAREREAD	RUNTIME	site	verify/mods_release_1025d/RESULTS.md:4
+SC3U.exe	0x00484122	benign 0xC0000096 @ SC3U+0x84122	RUNTIME	site	verify/mods_release_1025d/RESULTS.md:9
+SIMNTWRK.DLL	0x10008919	read for the multitile task (SIMNTWRK unless noted)	CONFIRMED	fn	verify/multitile/RESULTS.md:32
+SIMNTWRK.DLL	0x10009613	read for the multitile task	CONFIRMED	fn	verify/multitile/RESULTS.md:32
+SIMNTWRK.DLL	0x1000abde	read for the multitile task (funds test, spend)	CONFIRMED	fn	verify/multitile/RESULTS.md:32
+SIMNTWRK.DLL	0x1000ad3e	funds test range 0x1000ad3e..ad4d in FUN_1000abde	CONFIRMED	site	verify/multitile/RESULTS.md:32
+SIMNTWRK.DLL	0x1000ad4d	end of funds test range 0x1000ad3e..ad4d in FUN_1000abde	CONFIRMED	site	verify/multitile/RESULTS.md:32
+SIMNTWRK.DLL	0x1000bcd2	spend site of FUN_1000abde	CONFIRMED	site	verify/multitile/RESULTS.md:32
+SIMNTWRK.DLL	0x10009d20	read for the multitile task (start, end)	CONFIRMED	fn	verify/multitile/RESULTS.md:32
+SIMNTWRK.DLL	0x10004754	read for the multitile task (disassembled, ret 8)	CONFIRMED	fn	verify/multitile/RESULTS.md:33
+SIMNTWRK.DLL	0x100145aa	read for the multitile task	CONFIRMED	fn	verify/multitile/RESULTS.md:33
+SIMNTWRK.DLL	0x100151f1	read for the multitile task (entry)	CONFIRMED	fn	verify/multitile/RESULTS.md:33
+SIMNTWRK.DLL	0x10013afe	read for the multitile task	CONFIRMED	fn	verify/multitile/RESULTS.md:33
+SIMNTWRK.DLL	0x1002207c	read for the multitile task	CONFIRMED	fn	verify/multitile/RESULTS.md:33
+SIMNTWRK.DLL	0x10016ccd	read for the multitile task	CONFIRMED	fn	verify/multitile/RESULTS.md:33
+SIMNTWRK.DLL	0x10016d69	read for the multitile task	CONFIRMED	fn	verify/multitile/RESULTS.md:34
+SIMNTWRK.DLL	0x1001a7f7	read for the multitile task	CONFIRMED	fn	verify/multitile/RESULTS.md:34
+SIMNTWRK.DLL	0x10005f83	read for the multitile task	CONFIRMED	fn	verify/multitile/RESULTS.md:34
+SIMNTWRK.DLL	0x10005fad	read for the multitile task	CONFIRMED	fn	verify/multitile/RESULTS.md:34
+SIMNTWRK.DLL	0x100041e4	read for the multitile task	CONFIRMED	fn	verify/multitile/RESULTS.md:34
+SIMNTWRK.DLL	0x100106b8	read for the multitile task	CONFIRMED	fn	verify/multitile/RESULTS.md:34
+SIMNTWRK.DLL	0x1000f72c	read for the multitile task	CONFIRMED	fn	verify/multitile/RESULTS.md:34
+SIMNTWRK.DLL	0x1000f79c	read for the multitile task	CONFIRMED	fn	verify/multitile/RESULTS.md:34
+SIMNTWRK.DLL	0x1000f9b7	read for the multitile task	CONFIRMED	fn	verify/multitile/RESULTS.md:35
+SIMNTWRK.DLL	0x1001c102	read for the multitile task (charge site)	CONFIRMED	fn	verify/multitile/RESULTS.md:35
+SIMNTWRK.DLL	0x10014a23	network manager vt+0xf0 build, called by nb_drive.py on the game thread; module per HWY_ASK.md	RUNTIME	fn	verify/netbridge/RESULTS.md:10
+SIMSPR.DLL	0x1004adcd	SIMSPR drag-highlight grid: answers tool code 0x23 only for cells whose low nibble is 1 (measured)	RUNTIME	fn	verify/netbridge/RESULTS.md:12
+SIMNTWRK.DLL	0x10006018	manager vt+0x140, the "bridge costs $N" dialog, answered Yes by the tool; module per HWY_ASK.md	RUNTIME	fn	verify/netbridge/RESULTS.md:13
+SIMNTWRK.DLL	0x1001d6ef	manager vt+0xb4 removal, called by the tool with the bulldozer's argument shapes	RUNTIME	fn	verify/netbridge/RESULTS.md:15
+SIMGEOM.DLL	0x100142cf	game's own bulldozer call site SIMGEOM+0x142cf, watched during a UI demolish	RUNTIME	site	verify/netbridge/RESULTS.md:16
+SIMNTWRK.DLL	0x10009d20	highway diagonals/onramps: INHERIT thunks in place (29 of 29 sites) but never exercised, static only	READ	fn	verify/netbridge/RESULTS.md:55
+SIMNTWRK.DLL	0x1000abde	highway diagonals/onramps: INHERIT thunks in place but never exercised, static only	READ	fn	verify/netbridge/RESULTS.md:55
+SIMNTWRK.DLL	0x1000abde	On-ramp build, returned 1 with 3 points in S0 baseline	RUNTIME	fn	verify/netramp/RESULTS.md:18
+SIMNTWRK.DLL	0x10004754	holds the global point cap DAT_100322a4 < 0x200 (tool selects nothing after a few hundred hovers); module per onramp doc	RUNTIME	fn	verify/netramp/RESULTS.md:46
+SIMNTWRK.DLL	0x1000488d	only resetter of the On-ramp point cap DAT_100322a4	READ	fn	verify/netramp/RESULTS.md:46
+SIMNTWRK.DLL	0x100167d4	rail across the blue road laid on one side only, no crossing ("met (static 0x100167d4)"); module per NETBRIDGE.md	READ	fn	verify/newpiece/RESULTS.md:35
+SIMNTWRK.DLL	0x1000d225	piece vtable +0x54 target fed by TrBlkAtt records, not traced; module per NETWORK_RULE_ENGINE.md	MENTION	fn	verify/newpiece/RESULTS.md:58
+SIMNTWRK.DLL	0x10004754	adds a cell to tool selection only while DAT_100322a4 < 0x200, increments it each add; CONFIRMED; counter read via Frida	RUNTIME	fn	verify/onramp/RESULTS.md:6
+SIMNTWRK.DLL	0x1000488d	drag path builder, the only resetter of the add-point counter	READ	fn	verify/onramp/RESULTS.md:8
+SIMNTWRK.DLL	0x10009d20	On-ramp selection hover, adds points on every mouse move; wrapped by tmpl_install (rampcap log); returns ret 0x10	RUNTIME	fn	verify/onramp/RESULTS.md:8
+SIMNTWRK.DLL	0x1000abde	On-ramp build finds no points after the cap is hit (cost $0)	RUNTIME	fn	verify/onramp/RESULTS.md:9
+SIMNTWRK.DLL	0x1000f79c	On-ramp tool's own selection object that owns hover slot 0x1002c1bc	READ	fn	verify/onramp/RESULTS.md:39
+SC3U.exe	0x00484122	handled 0xC0000096 at SC3U.exe+0x84122 ~25 ms, the game's own startup probe	RUNTIME	site	verify/onramp/RESULTS.md:60
+SimTransit.dll	0x10007159	SIMTRANSIT+0x7159 written by sc3perf patch_trclear, page-protection race fault	RUNTIME	site	verify/onramp/RESULTS.md:66
+SimTransit.dll	0x1000755e	SimTransit +0x755e patched by sc3netmod LANEDENSITY from its own thread (same 4 KB page race)	RUNTIME	fn	verify/onramp/RESULTS.md:66
+SIMSPR.DLL	0x10043a5e	SIMSPR+0x43A5E written by sc3overscroll patch_camfeel, page-protection race fault	RUNTIME	site	verify/onramp/RESULTS.md:67
+SIMSPR.DLL	0x10043de7	written by sc3simrun patch_scroll_anim from its own thread (race on page 0x10043000)	RUNTIME	site	verify/onramp/RESULTS.md:67
+SIMSPR.DLL	0x10043f60	written by sc3simrun patch_scroll_anim; WRITE fault SIMSPR+0x43F60 at sc3simrun+0x18AC	RUNTIME	site	verify/onramp/RESULTS.md:67
+SIMSPR.DLL	0x10044003	written by sc3simrun patch_scroll_anim from its own thread	RUNTIME	site	verify/onramp/RESULTS.md:67
+SIMSPR.DLL	0x10042a95	overscroll tick moved there (runs 12, 13); first try passed the sub-object as the view	RUNTIME	fn	verify/overscroll/RESULTS.md:18
+SIMNTWRK.DLL	0x1000d594	saver writes a layer-side record (save word1 high half differs from runtime)	READ	fn	verify/queryid/RESULTS.md:18
+SimTransit.dll	0x100097b9	monthly/weekly building trip issuer (per-building calls), counted per second; issues once a week (day/7 == this+0x10)	RUNTIME	fn	verify/pausetrips/RESULTS.md:37
+SimTransit.dll	0x10006fe3	building trips, counted per second; sc3perf patched entry	RUNTIME	fn	verify/pausetrips/RESULTS.md:38
+SimTransit.dll	0x1000706a	zone-development trips (trip from a cell), counted per second; sc3perf patched entry	RUNTIME	fn	verify/pausetrips/RESULTS.md:39
+SimTransit.dll	0x100070d0	route searches (all callers), counted per second	RUNTIME	fn	verify/pausetrips/RESULTS.md:40
+SimTransit.dll	0x1000755e	router steps, counted per second	RUNTIME	fn	verify/pausetrips/RESULTS.md:43
+SimTransit.dll	0x10006edd	congestion deposits, counted per second; sc3perf patched entry	RUNTIME	fn	verify/pausetrips/RESULTS.md:44
+STRTSIM.DLL	0x1001c750	visible car moves (next cell), counted per second, 75.1/s even paused	RUNTIME	fn	verify/pausetrips/RESULTS.md:45
+SIMECO.DLL	0x1000423c	trip caller SIMECO+0x423c, no calls seen in Berlin runs	RUNTIME	site	verify/pausetrips/RESULTS.md:49
+SC3U.exe	0x004bfe89	trip caller, no calls seen in Berlin runs	RUNTIME	fn	verify/pausetrips/RESULTS.md:49
+STRTSIM.DLL	0x1001d2c0	per-vehicle update: adds heartbeat time to +0x30, steps frame vs +0x34, runs vt+0x14c; CONFIRMED; hooked arm X	RUNTIME	fn	verify/pausetrips/RESULTS.md:65
+SIMSPR.DLL	0x1004402e	camera hold take caller (vt+0x1c(1)/(0) per hold)	RUNTIME	site	verify/pausetrips/RESULTS.md:66
+SIMCITY.DLL	0x1000d036	starts the sim thread (_beginthreadex)	READ	fn	verify/pausetrips/RESULTS.md:76
+SIMCITY.DLL	0x10001675	sim thread command switch; every trip backtrace sits under it; CONFIRMED	RUNTIME	fn	verify/pausetrips/RESULTS.md:77
+SIMCITY.DLL	0x10001914	FUN_10001914(this, n) runs phase lists n..0	CONFIRMED	fn	verify/pausetrips/RESULTS.md:79
+SIMCITY.DLL	0x10001bec	registers clock kinds 1/2 when the first simulator joins list 0/1	CONFIRMED	fn	verify/pausetrips/RESULTS.md:81
+SIMCITY.DLL	0x100017e2	clock kind 3 = every day (command 5)	CONFIRMED	fn	verify/pausetrips/RESULTS.md:82
+SIMRCI.DLL	0x1001aa6c	zone development caller of FUN_1000706a (backtrace)	RUNTIME	site	verify/pausetrips/RESULTS.md:82
+SIMCITY.DLL	0x100016a9	return address in command switch for zone development trips (backtrace)	RUNTIME	site	verify/pausetrips/RESULTS.md:82
+SIMCITY.DLL	0x100016bb	return address in command switch for building trips (backtrace)	RUNTIME	site	verify/pausetrips/RESULTS.md:83
+SIMADV.DLL	0x100062d2	SIMADV monthly trip caller -> SIMMISC -> FUN_10006fe3 (backtrace)	RUNTIME	site	verify/pausetrips/RESULTS.md:84
+SIMCITY.DLL	0x100016d8	return address in command switch for SIMADV monthly trips (backtrace)	RUNTIME	site	verify/pausetrips/RESULTS.md:84
+SIMCITY.DLL	0x10001696	command switch call site (0x10001696/a4/b6/d3/f6)	CONFIRMED	site	verify/pausetrips/RESULTS.md:87
+SIMCITY.DLL	0x100016a4	command switch call site	CONFIRMED	site	verify/pausetrips/RESULTS.md:87
+SIMCITY.DLL	0x100016b6	command switch call site	CONFIRMED	site	verify/pausetrips/RESULTS.md:87
+SIMCITY.DLL	0x100016d3	command switch call site	CONFIRMED	site	verify/pausetrips/RESULTS.md:87
+SIMCITY.DLL	0x100016f6	command switch call site	CONFIRMED	site	verify/pausetrips/RESULTS.md:87
+SIMCITY.DLL	0x1000a641	clock register vt+0x3c, puts kind 1..6 on lists +4..+0x18	CONFIRMED	fn	verify/pausetrips/RESULTS.md:88
+SIMCITY.DLL	0x1000aa4d	clock day fire: runs +0xc daily, +0x10/+0x14/+0x18 on day of week/month/year = 1	CONFIRMED	fn	verify/pausetrips/RESULTS.md:89
+SIMCITY.DLL	0x100096f0	day of week	READ	fn	verify/pausetrips/RESULTS.md:89
+SIMCITY.DLL	0x100095ce	day of month	READ	fn	verify/pausetrips/RESULTS.md:89
+SIMCITY.DLL	0x100095af	day of year	READ	fn	verify/pausetrips/RESULTS.md:90
+SIMCITY.DLL	0x10005a70	city vt+0x200, returns city +0x130 (the clock)	CONFIRMED	fn	verify/pausetrips/RESULTS.md:91
+SIMCITY.DLL	0x100059cf	city vt+0x22c, clock Pause, +0x148 += 1 (month-pass bracket)	CONFIRMED	fn	verify/pausetrips/RESULTS.md:96
+SIMCITY.DLL	0x100016c9	month bracket wrap of command 7	CONFIRMED	site	verify/pausetrips/RESULTS.md:97
+SIMCITY.DLL	0x100016ea	month bracket wrap of command 7	CONFIRMED	site	verify/pausetrips/RESULTS.md:97
+SIMCITY.DLL	0x1000a854	LAB_1000a854, clock 1000 ms callback, tests +0x54 and skips minute/hour/day fires when non-zero	READ	fn	verify/pausetrips/RESULTS.md:100
+SIMCITY.DLL	0x1000a885	cmp [esi+0x54],0; jne: skip fires while paused	CONFIRMED	site	verify/pausetrips/RESULTS.md:101
+SIMCITY.DLL	0x1000a0ec	clock Pause: banks time since last poll into +0x5c when count goes 0 -> 1	CONFIRMED	fn	verify/pausetrips/RESULTS.md:102
+SIMCITY.DLL	0x1000a145	clock Resume: sets +0x58 = timeGetTime() when count goes back to 0	CONFIRMED	fn	verify/pausetrips/RESULTS.md:102
+SIMCITY.DLL	0x1000c0a5	the clock thread timer list's only entry, the 1000 ms callback, read live in every arm	RUNTIME	fn	verify/pausetrips/RESULTS.md:105
+SIMSPR.DLL	0x10042a95	view tick; reaches heartbeat via [view+0xb4]->vt+0x20 only when camera-busy bytes are 0 (backtraces, CONFIRMED range)	RUNTIME	fn	verify/pausetrips/RESULTS.md:108
+SIMSPR.DLL	0x10042b07	return address frame of the view tick's heartbeat call (backtrace)	RUNTIME	site	verify/pausetrips/RESULTS.md:108
+SIMSPR.DLL	0x1001cb09	backtrace frame SIMSPR 0x1001cb09 between view tick and SC3U heartbeat	RUNTIME	site	verify/pausetrips/RESULTS.md:108
+SC3U.exe	0x00426140	heartbeat: stores FUN_004758e3(this+0xbc) in +0x9c, calls +0x88 listeners only if +0xb0 is 0; CONFIRMED; backtrace	RUNTIME	fn	verify/pausetrips/RESULTS.md:108
+SC3U.exe	0x00425a10	agent loop calling each agent's vt+0x100 (backtrace)	RUNTIME	fn	verify/pausetrips/RESULTS.md:109
+STRTSIM.DLL	0x10019ab0	vehicle behaviour vt+0x14c (backtrace chain)	RUNTIME	fn	verify/pausetrips/RESULTS.md:110
+STRTSIM.DLL	0x1001b340	vehicle behaviour chain (backtrace)	RUNTIME	fn	verify/pausetrips/RESULTS.md:110
+STRTSIM.DLL	0x1001c440	vehicle behaviour chain -> next cell (backtrace)	RUNTIME	fn	verify/pausetrips/RESULTS.md:110
+SC3U.exe	0x004758e3	heartbeat time source; what it reads is not decoded	MENTION	fn	verify/pausetrips/RESULTS.md:111
+SIMCITY.DLL	0x100056bb	user pause: clock Pause, +0x140 += 1, posts 0xc2a35d7f; does not touch the heartbeat	READ	fn	verify/pausetrips/RESULTS.md:120
+SIMCITY.DLL	0x100058ac	camera hold: clock Pause, +0x144 += 1, calls FUN_1000ee96()->vt+0x1c(1); CONFIRMED; take per hold measured	RUNTIME	fn	verify/pausetrips/RESULTS.md:121
+SIMCITY.DLL	0x1000ee96	returns the heartbeat object whose vt+0x1c the camera hold calls (resolved live)	RUNTIME	fn	verify/pausetrips/RESULTS.md:121
+SC3U.exe	0x004263d0	heartbeat vtable slot 0x1c: +0xb0 += 1 (arg 1) / -= 1 (arg 0); CONFIRMED; resolved live	RUNTIME	fn	verify/pausetrips/RESULTS.md:122
+SIMCITY.DLL	0x1000590e	camera hold release (paired with 0x100058ac)	CONFIRMED	fn	verify/pausetrips/RESULTS.md:123
+SIMSPR.DLL	0x10042b04	view tick's call [view+0xb4]->vt+0x20 into the heartbeat	CONFIRMED	site	verify/pausetrips/RESULTS.md:126
+SIMSPR.DLL	0x10043daf	scroll step, called instead of the heartbeat while the camera is busy	CONFIRMED	fn	verify/pausetrips/RESULTS.md:127
+SIMSPR.DLL	0x10042ad7	call site of the scroll step FUN_10043daf in the view tick	CONFIRMED	site	verify/pausetrips/RESULTS.md:128
+SIMSPR.DLL	0x10042ad5	start of CONFIRMED range 0x10042ad5..0x10042b04 (camera-busy gate)	CONFIRMED	site	verify/pausetrips/RESULTS.md:128
+SimTransit.dll	0x10009242	sc3perf patched entry, not hooked by the --safe probe	RUNTIME	fn	verify/pausetrips/RESULTS.md:139
+SIMUI.DLL	0x1006c61b	root vt+0x14c: rebuilds every derived +0x14 rect from the local +0x80 rect	CONFIRMED	fn	verify/resize_edgescroll/RESULTS.md:43
+SIMSPR.DLL	0x10042cd3	outer vt+0x38, only setter of +0x177 (scroll in progress); spoofed arrow tap: setter calls 1,1,1,1,0	RUNTIME	fn	verify/resize_edgescroll/RESULTS.md:53
+SIMSPR.DLL	0x1004979a	keyboard-driven caller of vt+0x38(1)	READ	fn	verify/resize_edgescroll/RESULTS.md:55
+SIMSPR.DLL	0x1004985a	keyboard-driven caller of vt+0x38(1)	READ	fn	verify/resize_edgescroll/RESULTS.md:55
+SIMSPR.DLL	0x10043daf	polls the arrow keys while a scroll runs; caller of vt+0x38(1)	READ	fn	verify/resize_edgescroll/RESULTS.md:55
+SIMSPR.DLL	0x10043a38	band test, returns early while +0x177 == 0	READ	fn	verify/resize_edgescroll/RESULTS.md:56
+SC3U.exe	0x00484122	one VEH FAULT 0xC0000096 at SC3U.exe+0x84122 per log, 21-528 ms after start	RUNTIME	site	verify/reunirse/RESULTS.md:59
+SIMUI.DLL	0x10004405	Reunirse page builder (mov eax, imm32 prologue), detoured to note the current page	RUNTIME	fn	verify/reunirse/RESULTS.md:17
+SIMUI.DLL	0x10005602	Reunirse page builder (mov eax, imm32 prologue), detoured to note the current page	RUNTIME	fn	verify/reunirse/RESULTS.md:17
+SIMUI.DLL	0x1000823d	petitioner answer popup (337x254), not the topic page as PRE assumed; module per REUNIRSE_POSITION.md	RUNTIME	fn	verify/reunirse2/RESULTS.md:14
+SIMUI.DLL	0x10008d40	real builder of the advisor topic text page (384x354 at slot +0x18/+0x1c, seen in C1)	RUNTIME	fn	verify/reunirse2/RESULTS.md:16
+SIMUI.DLL	0x1000a1a2	real closer of the advisor topic text page	RUNTIME	fn	verify/reunirse2/RESULTS.md:16
+SIMUI.DLL	0x10008ceb	handler of the advisor topic text page	READ	fn	verify/reunirse2/RESULTS.md:16
+SC3U.exe	0x00484122	VEH FAULT 0xC0000096 @ SC3U.exe+0x84122 at startup, known, unrelated	RUNTIME	site	verify/reunirse2/RESULTS.md:44
+STRTSIM.DLL	0x1001c750	decomp read to confirm this is the vehicle; hook measured vehicle fields +0x0c/+0x14 (30/30 calls)	RUNTIME	fn	verify/roundabout2/RESULTS.md:65
+STRTSIM.DLL	0x10020108	arrival-node lookup, read for this task	READ	fn	verify/roundabout2/RESULTS.md:65
+SIMNTWRK.DLL	0x1001547b	retile pass, hooked at entry by rbt (log line); signature ret 0xc, box write read	RUNTIME	fn	verify/roundabout3/RESULTS.md:34
+SIMNTWRK.DLL	0x10008919	piece writer; roundabout conversion writes 4 pieces with it, no budget call	RUNTIME	fn	verify/roundabout3/RESULTS.md:71
+SIMNTWRK.DLL	0x100151f1	rect retile, used for saved roundabouts that no longer qualify; read for this task	READ	fn	verify/roundabout3/RESULTS.md:74
+SIMNTWRK.DLL	0x100130e9	read for this task (entry, this = manager)	READ	fn	verify/roundabout3/RESULTS.md:80
+SIMNTWRK.DLL	0x100165d8	read for this task	READ	fn	verify/roundabout3/RESULTS.md:81
+SIMNTWRK.DLL	0x10007791	read for this task	READ	fn	verify/roundabout3/RESULTS.md:81
+SIMNTWRK.DLL	0x1001a93d	read for this task	READ	fn	verify/roundabout3/RESULTS.md:81
+SIMNTWRK.DLL	0x1001a056	read for this task	READ	fn	verify/roundabout3/RESULTS.md:81
+SIMNTWRK.DLL	0x10023c14	read for this task	READ	fn	verify/roundabout3/RESULTS.md:82
+SIMSPR.DLL	0x100192aa	frame table bit 0x40 makes SIMSPR fetch and draw the cell's terrain under the occupant	CONFIRMED	fn	verify/roundabout4/RESULTS.md:74
+SIMSPR.DLL	0x1001a303	frame table bit 0x40 terrain-under fetch and draw	CONFIRMED	fn	verify/roundabout4/RESULTS.md:74
+SIMSPR.DLL	0x10019610	read for this task	READ	fn	verify/roundabout4/RESULTS.md:81
+SIMSPR.DLL	0x1001924c	read for this task	READ	fn	verify/roundabout4/RESULTS.md:81
+SIMSPR.DLL	0x1000dc17	read for this task	READ	fn	verify/roundabout4/RESULTS.md:81
+SIMSPR.DLL	0x1004402e	camera hold return address: one HOLD per camera phase unpatched, zero with simrun patched=1	RUNTIME	site	verify/simrun/RESULTS.md:19
+SIMSPR.DLL	0x1004359c	3 ms hold from right-button release bracket (logged)	RUNTIME	site	verify/simrun/RESULTS.md:30
+SIMSPR.DLL	0x10043540	zoom/rotate-style bracket containing hold at 0x1004359c	RUNTIME	fn	verify/simrun/RESULTS.md:30
+SIMSPR.DLL	0x100435ea	that bracket's own release	RUNTIME	site	verify/simrun/RESULTS.md:31
+SIMCITY.DLL	0x100059e7	coordinator +0x148 path pausing the clock (vt+0x22c), seen in idle samples	RUNTIME	site	verify/simrun/RESULTS.md:34
+SIMCITY.DLL	0x10005a33	coordinator +0x148 path (vt+0x230), seen in idle samples	RUNTIME	site	verify/simrun/RESULTS.md:34
+SIMSPR.DLL	0x10043daf	scroll step used by arrows and edge scrolling (not tested in fullscreen)	MENTION	fn	verify/simrun/RESULTS.md:38
+GZGraphicD.dll	0x10014904	null read at GZGraphicD+0x14904 in blit dispatcher, mod-off launch crash during load	RUNTIME	site	verify/simrun/RESULTS.md:62
+GZGraphicD.dll	0x10014894	blit dispatcher, crashed from a window message	RUNTIME	fn	verify/simrun/RESULTS.md:63
+SIMSPR.DLL	0x1000c155	write target SIMSPR+0xC155 of sc3bigcity's faulting write (page-protection race)	RUNTIME	site	verify/startup_death/RESULTS.md:22
+SIMSPR.DLL	0x1000c412	sc3resize GRIDB_CLAMP hook site on the same 4 KB page	RUNTIME	site	verify/startup_death/RESULTS.md:23
+SIMSPR.DLL	0x1000cfab	sc3resize GRIDB_CLAMP hook site on the same 4 KB page	RUNTIME	site	verify/startup_death/RESULTS.md:23
+SC3U.exe	0x00484122	benign 0xC0000096 at SC3U.exe+0x84122 in every run	RUNTIME	site	verify/startup_death/RESULTS.md:30
+SC3U.exe	0x00484122	0xC0000096 at SC3U.exe+0x84122 (also in owner logs)	RUNTIME	site	verify/uiscale/RESULTS.md:56
+GZGraphicD.dll	0x10010ef2	setter that could clobber the windowed flag; never observed (flag reads 1); module per STOCK_INSTALL/LAUNCH_CONTROL.md	RUNTIME	fn	verify/windowed/RESULTS.md:31
+SC3U.exe	0x0040b00f	loads every *.dll found and frees those without GZDllGetGZCOMDirector	CONFIRMED	fn	verify/windowed/RESULTS.md:39
+SC3U.exe	0x0048a575	LoadLibraryA + GetProcAddress	CONFIRMED	fn	verify/windowed/RESULTS.md:39
+SC3U.exe	0x0048a675	FreeLibrary	CONFIRMED	fn	verify/windowed/RESULTS.md:40
+SIMDIRT.DLL	0x1000c5d0	DirtBag +0x120 terrain writes, all vtable calls to +0x84 and +0x88 (both logged); runtime not reached in 3 runs	CONFIRMED	fn	verify/undo_mod/RESULTS.md:107
+SimTransit.dll	0x10004c8d	TrafficSimulator save, names the per-cell grids: bytes +0x60..+0x74, bits +0x7c/+0x80	READ	fn	verify/undo_mod/RESULTS.md:118
+SIMNTWRK.DLL	0x100151f1	recorded retile (SIMNTWRK +0xb0); re-running it left 2 cells with other descriptors (bd3)	RUNTIME	fn	verify/undo_mod/RESULTS.md:127
+SIMSERV.DLL	0x10007d35	crime/pollution lookup cache: on a miss scans every cached entry, copies nearest (vt+0x20) entry's modifier bytes	CONFIRMED	fn	verify/undo_mod/RESULTS.md:173
+SIMSERV.DLL	0x100087b2	game's own cache erase by key, called by the mod on undo	RUNTIME	fn	verify/undo_mod/RESULTS.md:178
+SIMECO.DLL	0x1000a88a	game's own erase on the node and its successor, called by the mod on undo	RUNTIME	fn	verify/undo_mod/RESULTS.md:179
+SIMSERV.DLL	0x10007f7e	operator[], used by the mod on redo to put back keys	RUNTIME	fn	verify/undo_mod/RESULTS.md:180
+SIMECO.DLL	0x1000a80b	operator[], used by the mod on redo to put back keys	RUNTIME	fn	verify/undo_mod/RESULTS.md:180
+SIMUI.DLL	0x10050cb3	re-centres the compass "N" label at (79,142)	READ	fn	verify/undo_mod/RESULTS.md:193
+SC3U.exe	0x004108f3	game Save command recipe (CLSID 0x410438DD, one string variant) copied by the probe's savepath step	RUNTIME	fn	verify/undo_spike/RESULTS.md:12
+SC3U.exe	0x0043e718	game Load command recipe (CLSID 0x610438A4) copied by the probe's loadpath step	RUNTIME	fn	verify/undo_spike/RESULTS.md:13
+SC3U.exe	0x004b4890	operator_new thunk, probe allocates command variants on the game heap with it	RUNTIME	fn	verify/undo_spike/RESULTS.md:16
+SIMSPR.DLL	0x10048a08	city view primary vt+0x58 SetTool(NULL), called by cleartool (run 6: mode 4 -> 0, tool -> 0)	RUNTIME	fn	verify/undo_spike/RESULTS.md:71
+SIMSPR.DLL	0x10048a2d	vt+0xa0(0,0) reached from SetTool, slot checked in the PE	RUNTIME	fn	verify/undo_spike/RESULTS.md:71
+SIMINIT.DLL	0x10008bf8	Load command: calls cISC3App vt+0x28 (end session) before CreateCity; fnlog hits confirm	RUNTIME	fn	verify/undo_spike/RESULTS.md:94
+SC3U.exe	0x00402e74	app ctor, installs vtable 0x004CF59C at app+0x30	READ	fn	verify/undo_spike/RESULTS.md:96
+SC3U.exe	0x00407f25	app_end_session (vtable slot +0x28), Sends 0x311FDAE5; CONFIRMED; fnlog runtime hits	RUNTIME	fn	verify/undo_spike/RESULTS.md:96
+SIMSERV.DLL	0x100073b0	save writes its tail from the global map DAT_10024968 (section tagged [CONFIRMED @ addresses below])	CONFIRMED	fn	verify/undo_spike/RESULTS.md:109
+SIMSERV.DLL	0x100071d5	load reads the tail into the object map at this+0x90, never the global (section [CONFIRMED @ addresses below])	CONFIRMED	fn	verify/undo_spike/RESULTS.md:110
+SIMSERV.DLL	0x10005f64	static initializer building the global building-modifier map once (section tagged [CONFIRMED @ addresses below])	CONFIRMED	fn	verify/undo_spike/RESULTS.md:111
+SIMSERV.DLL	0x1000689e	sc3_serv_load_building_modifier, fills the global map from the INI (section tagged [CONFIRMED @ addresses below])	CONFIRMED	fn	verify/undo_spike/RESULTS.md:112
+SIMSERV.DLL	0x10007d35	stamp_building_modifier: on a miss scans all entries for nearest (vt+0x20), inserts id (section [CONFIRMED @ below])	CONFIRMED	fn	verify/undo_spike/RESULTS.md:112
+SIMECO.DLL	0x10006abb	pollution save writes the global map DAT_10020818 (section tagged [CONFIRMED @ addresses below])	CONFIRMED	fn	verify/undo_spike/RESULTS.md:116
+SIMECO.DLL	0x100046bb	sc3_pollution_load_tuning, also uses the global map; insert path not read (section tagged [CONFIRMED @ addresses below])	CONFIRMED	fn	verify/undo_spike/RESULTS.md:118
+SIMSERV.DLL	0x100087b2	existing erase-by-key on the object map	READ	fn	verify/undo_spike/RESULTS.md:130
+SIMSERV.DLL	0x10007635	uses FUN_100087b2 erase-by-key on the object map	READ	fn	verify/undo_spike/RESULTS.md:130
+SIMSPR.DLL	0x1001a2f8	call [eax+0x244] on object at this+0x14 with a non-vtable pointer: AV caught by av_catch.py	RUNTIME	site	verify/undo_spike/RESULTS.md:189
+SIMDIRT.DLL	0x10012d3e	VEH fault SIMDIRT+0x12D3E loading a 1024 city without sc3bigcity	RUNTIME	site	verify/undo_spike/RESULTS.md:190
+SIMINIT.DLL	0x10008cbd	return address of app_end_session inside the Load 0x10008bf8 (fnlog)	RUNTIME	site	verify/undo_spike/RESULTS.md:226
+SC3U.exe	0x00407fbf	app_destroy_city, hit with arg 0x311FDAE5 (fnlog)	RUNTIME	fn	verify/undo_spike/RESULTS.md:227
+SC3U.exe	0x00407fbb	return address of app_destroy_city (fnlog)	RUNTIME	site	verify/undo_spike/RESULTS.md:227
+SC3U.exe	0x00407b5e	app_create_city, hit #1 (fnlog)	RUNTIME	fn	verify/undo_spike/RESULTS.md:228
+SIMINIT.DLL	0x10008fad	return address of app_create_city in SIMINIT (fnlog)	RUNTIME	site	verify/undo_spike/RESULTS.md:228
+SC3U.exe	0x004430f3	tooltip anchor function, hooked by sc3resize (anchor in logical px measured, arm M3)	RUNTIME	fn	verify/toolicon/RESULTS.md:20
