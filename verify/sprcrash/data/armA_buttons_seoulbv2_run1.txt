@@ -1,0 +1,75 @@
+[1/150] rotate PASS
+[2/150] zoom out PASS
+[3/150] key + PASS
+[4/150] zoom in PASS
+[5/150] minimap PASS
+[6/150] rotate PASS
+[7/150] zoom out PASS
+[8/150] zoom in PASS
+[9/150] zoom out PASS
+[10/150] rotate + road drag PASS
+[11/150] zoom in PASS
+[12/150] minimap PASS
+[13/150] zoom out PASS
+[14/150] zoom in PASS
+[15/150] zoom out PASS
+[16/150] zoom in PASS
+[17/150] zoom out PASS
+[18/150] rotate PASS
+[19/150] zoom out PASS
+[20/150] key + + road drag PASS
+[21/150] zoom in PASS
+[22/150] zoom out PASS
+[23/150] zoom out PASS
+[24/150] zoom in PASS
+[25/150] rotate PASS
+[26/150] rotate PASS
+[27/150] rotate PASS
+[28/150] zoom in PASS
+[29/150] zoom out PASS
+[30/150] zoom in + road drag PASS
+[31/150] zoom out PASS
+[32/150] zoom in PASS
+[33/150] zoom in PASS
+[34/150] zoom in PASS
+[35/150] minimap PASS
+[36/150] zoom out PASS
+[37/150] zoom in PASS
+[38/150] key - PASS
+[39/150] zoom in PASS
+[40/150] zoom in + road drag PASS
+[41/150] key + PASS
+[42/150] zoom in PASS
+[43/150] minimap PASS
+[44/150] zoom in PASS
+[45/150] zoom out PASS
+[46/150] zoom in PASS
+[47/150] rotate PASS
+[48/150] rotate PASS
+[49/150] zoom out PASS
+[50/150] zoom out + road drag PASS
+[51/150] zoom in PASS
+[52/150] rotate PASS
+[53/150] zoom in PASS
+[54/150] zoom out PASS
+[55/150] key + PASS
+[56/150] key + PASS
+[57/150] zoom out PASS
+[58/150] zoom in PASS
+[59/150] zoom out PASS
+Traceback (most recent call last):
+  File "<workspace>\Simcity_wt_sprcrash\re\tools\sprcrash\cam_soak.py", line 157, in <module>
+    sys.exit(main(sys.argv))
+             ^^^^^^^^^^^^^^
+  File "<workspace>\Simcity_wt_sprcrash\re\tools\sprcrash\cam_soak.py", line 146, in main
+    verdict, done = buttons(pid, h, n, edits)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<workspace>\Simcity_wt_sprcrash\re\tools\sprcrash\cam_soak.py", line 86, in buttons
+    road_drag(h)
+  File "<workspace>\Simcity_wt_sprcrash\re\tools\sprcrash\cam_soak.py", line 64, in road_drag
+    sc3io.drag(h, x0, y0, max(10, min(690, x1)), max(10, min(530, y1)), button="left", steps=8)
+  File "<workspace>\Simcity_wt_sprcrash\re\tools\sprcrash\..\sc3io.py", line 608, in drag
+    _post(hwnd, WM_MOUSEMOVE, 0, _lp(x0, y0))
+  File "<workspace>\Simcity_wt_sprcrash\re\tools\sprcrash\..\sc3io.py", line 570, in _post
+    raise RuntimeError(
+RuntimeError: PostMessageW(0x0200) to 0x01AA08BC failed: 1400

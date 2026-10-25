@@ -1,0 +1,65 @@
+[1/60] view z1r3 -> z0r3 at (232,155) PASS
+[2/60] view z0r3 -> z2r2 at (91,150) PASS
+[3/60] view z2r2 -> z2r2 at (168,175) PASS
+[4/60] view z2r2 -> z4r2 at (74,69) PASS
+[5/60] view z4r2 -> z2r0 at (172,87) PASS
+[6/60] view z2r0 -> z4r2 at (27,168) PASS
+[7/60] view z4r2 -> z4r3 at (129,227) PASS
+[8/60] view z4r3 -> z1r0 at (166,140) PASS
+[9/60] view z1r0 -> z1r0 at (99,206) PASS
+[10/60] view z1r0 -> z4r0 at (53,153) PASS
+[11/60] view z4r0 -> z1r0 at (122,57) PASS
+[12/60] view z1r0 -> z2r0 at (33,65) PASS
+[13/60] view z2r0 -> z0r0 at (127,195) PASS
+[14/60] view z0r0 -> z2r2 at (214,86) PASS
+[15/60] budget dialog closed
+[15/60] view z2r2 -> z4r3 at (129,112) PASS
+[16/60] view z4r3 -> z4r2 at (211,175) PASS
+[17/60] view z4r2 -> z0r0 at (212,32) PASS
+[18/60] view z0r0 -> z3r3 at (41,120) PASS
+[19/60] view z3r3 -> z3r2 at (159,233) PASS
+[20/60] view z3r2 -> z1r3 at (166,50) PASS
+[21/60] view z1r3 -> z0r3 at (190,192) PASS
+[22/60] view z0r3 -> z3r1 at (202,73) PASS
+[23/60] view z3r1 -> z2r0 at (186,136) PASS
+[24/60] view z2r0 -> z3r1 at (117,45) PASS
+[25/60] view z3r1 -> z2r1 at (201,226) PASS
+[26/60] view z2r1 -> z1r1 at (99,207) PASS
+[27/60] view z1r1 -> z2r0 at (118,108) PASS
+[28/60] view z2r0 -> z0r1 at (231,143) PASS
+[29/60] view z0r1 -> z1r0 at (104,125) PASS
+[30/60] budget dialog closed
+[30/60] view z1r0 -> z2r3 at (37,62) PASS
+[31/60] view z2r3 -> z1r1 at (80,78) PASS
+[32/60] view z1r1 -> z0r1 at (147,134) PASS
+[33/60] view z0r1 -> z3r3 at (24,188) PASS
+[34/60] view z3r3 -> z3r0 at (30,69) PASS
+[35/60] view z3r0 -> z3r1 at (120,45) PASS
+[36/60] view z3r1 -> z2r0 at (223,60) PASS
+[37/60] view z2r0 -> z2r3 at (109,226) PASS
+[38/60] view z2r3 -> z4r2 at (87,198) PASS
+[39/60] view z4r2 -> z2r3 at (68,180) PASS
+[40/60] view z2r3 -> z2r3 at (43,231) PASS
+[41/60] view z2r3 -> z3r1 at (218,131) PASS
+[42/60] view z3r1 -> z2r2 at (200,83) PASS
+[43/60] view z2r2 -> z3r3 at (61,55) PASS
+[44/60] view z3r3 -> z0r0 at (230,30) PASS
+[45/60] view z0r0 -> z3r0 at (224,151) PASS
+[46/60] view z3r0 -> z0r2 at (189,148) PASS
+[47/60] view z0r2 -> z2r1 at (37,41) PASS
+[48/60] view z2r1 -> z2r1 at (112,62) PASS
+[49/60] view z2r1 -> z0r2 at (132,206) PASS
+[50/60] budget dialog closed
+[50/60] view z0r2 -> z4r0 at (115,21) PASS
+[51/60] view z4r0 -> z3r3 at (109,58) PASS
+[52/60] view z3r3 -> z1r2 at (48,122) PASS
+[53/60] view z1r2 -> z4r1 at (152,22) PASS
+[54/60] view z4r1 -> z4r3 at (24,82) PASS
+[55/60] view z4r3 -> z0r3 at (52,44) PASS
+[56/60] view z0r3 -> z2r2 at (114,52) PASS
+[57/60] view z2r2 -> z4r2 at (186,131) PASS
+[58/60] view z4r2 -> z0r0 at (48,25) PASS
+[59/60] view z0r0 -> z4r2 at (215,125) PASS
+[60/60] view z4r2 -> z3r2 at (180,26) PASS
+aborted camera calls (JOBERR): 0
+VERDICT cam: PASS after 60 of 60 steps, 447 s, pid 23568

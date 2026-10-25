@@ -30,8 +30,11 @@ WM_JOB = 0x8000 + 0x5C5
 JS = r"""
 var exe = Process.getModuleByName('%EXE%').base;
 var jobs = [], results = [];
-function vfn(obj, off, ret, args) {
-  return new NativeFunction(obj.readPointer().add(off).readPointer(), ret, ['pointer'].concat(args), 'thiscall');
+function vfn(obj, off, ret, args, prop) {
+  // prop: let native exceptions take their normal path (a mod's OutputDebugStringA inside the call raises 0x40010006;
+  // Frida's default 'steal' unwinds out of the game code halfway, task sprcrash). Probing calls keep 'steal'
+  return new NativeFunction(obj.readPointer().add(off).readPointer(), ret, ['pointer'].concat(args),
+                            prop ? {abi: 'thiscall', exceptions: 'propagate'} : 'thiscall');
 }
 function city() {
   var app = exe.add(0x4fa86c - 0x400000).readPointer();
@@ -40,10 +43,10 @@ function city() {
 function post(id, arg) {
   var fw = exe.add(0xFAB74).readPointer();
   var out = Memory.alloc(4); out.writePointer(ptr(0));
-  vfn(fw, 0x10, 'int', ['uint32', 'uint32', 'pointer'])(fw, 0x64063387, 0xC1085722, out);
+  vfn(fw, 0x10, 'int', ['uint32', 'uint32', 'pointer'], 1)(fw, 0x64063387, 0xC1085722, out);
   var srv = out.readPointer();
   var msg = Memory.alloc(16); msg.writeU32(id); msg.add(4).writeU32(arg); msg.add(8).writeU32(0); msg.add(12).writeU32(0);
-  return vfn(srv, 0x10, 'int', ['pointer', 'uint8'])(srv, msg, 0);
+  return vfn(srv, 0x10, 'int', ['pointer', 'uint8'], 1)(srv, msg, 0);
 }
 function modname(p) { var m = Process.findModuleByAddress(p); return m ? m.name + '+0x' + p.sub(m.base).toString(16) : '' + p; }
 function cells(j) {
