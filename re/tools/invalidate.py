@@ -52,7 +52,7 @@ rpc.exports={go:function(mod,rva,doInval){
  if(doInval){
   var vt=rp(target,0), fn=rp(vt,0x154);
   if(!fn.isNull()){
-   var f=new NativeFunction(fn,"int",["pointer"],"thiscall");
+   var f=new NativeFunction(fn,"int",["pointer"],{abi:"thiscall",exceptions:"propagate"});
    f(target);
    out.dirty_after=ri(target,0x60)&0xff;
   }

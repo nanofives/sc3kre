@@ -23,7 +23,7 @@ import time
 
 import frida
 
-TOOLS = pathlib.Path(r"C:\Users\maria\Desktop\Proyectos\Simcity\re\tools")
+TOOLS = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS))
 import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 

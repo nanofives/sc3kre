@@ -33,7 +33,7 @@ var P = Process.getModuleByName('sc3perf.dll');
 var N = Process.getModuleByName('sc3netmod.dll');
 var setp = N.findExportByName('%EXPORT%');   // task hwtrips: --export
 if (setp === null) throw new Error('%EXPORT% not exported (build without ALT)');
-var ldset = new NativeFunction(setp, 'int', ['int']);
+var ldset = new NativeFunction(setp, 'int', ['int'], {exceptions: 'propagate'});
 // find the log call: push imm32 (the format string) followed by call
 var fmt = null, site = null;
 P.enumerateRanges('r--').forEach(function (r) {

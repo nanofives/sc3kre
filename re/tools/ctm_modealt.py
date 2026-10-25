@@ -24,7 +24,8 @@ import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the gam
 
 JS = r"""
 var M = Process.getModuleByName('sc3cartrips.dll');
-var fmode = new NativeFunction(M.getExportByName('sc3cartrips_mode'), 'int', ['int']);
+var fmode = new NativeFunction(M.getExportByName('sc3cartrips_mode'), 'int', ['int'], {exceptions: 'propagate'});
+// READ: car list snapshot, default exceptions kept
 var fcars = new NativeFunction(M.getExportByName('sc3cartrips_cars'), 'int', ['pointer', 'int']);
 var buf = Memory.alloc(64);
 rpc.exports = {

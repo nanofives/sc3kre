@@ -27,6 +27,7 @@ import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the gam
 
 JS = r"""
 var exe = Process.getModuleByName('SC3U.exe').base;
+// READ: every vfn call here is a flag query on a piece; default exceptions kept
 function vfn(obj, off, ret, args) {
   return new NativeFunction(obj.readPointer().add(off).readPointer(), ret, ['pointer'].concat(args), 'thiscall');
 }

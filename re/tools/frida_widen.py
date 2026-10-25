@@ -154,7 +154,7 @@ rpc.exports = {
                             var vt = rp(cw, 0), fn = rp(vt, 0xc8);
                             if (!fn.isNull()) {
                                 var f = new NativeFunction(fn, 'int',
-                                    ['pointer','int','int','int','int'], 'thiscall');
+                                    ['pointer','int','int','int','int'], {abi: 'thiscall', exceptions: 'propagate'});
                                 f(cw, cr[0]+dx, cr[1]+dy, cr[2]+dx, cr[3]+dy);
                                 /* SetRect does not maintain +0x80..0x8c when it holds ABSOLUTE
                                    coords (the container does; its child holds parent-local and

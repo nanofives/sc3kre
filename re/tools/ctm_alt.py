@@ -29,7 +29,8 @@ import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the gam
 
 JS = r"""
 var M = Process.getModuleByName('sc3cartrips.dll');
-var fset = new NativeFunction(M.getExportByName('sc3cartrips_set'), 'int', ['int']);
+var fset = new NativeFunction(M.getExportByName('sc3cartrips_set'), 'int', ['int'], {exceptions: 'propagate'});
+// READ: stats snapshot, default exceptions kept
 var fstats = new NativeFunction(M.getExportByName('sc3cartrips_stats'), 'int', ['pointer', 'int']);
 var buf = Memory.alloc(64);
 var PERF = null;
