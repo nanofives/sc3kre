@@ -32,6 +32,22 @@
  *               behind the same entry, TRAFFIC_MT). Only the type-1 road deposit site is touched: stations, highways,
  *               subways and the monthly decrement keep stock amounts.
  *
+ *   BVCOST      (task bventry) after a road / bus step onto a 1x1 boulevard cell (or avenue cell, its own scale), the
+ *               step's cost (out+0x18 - node+0x18, SimTransit 0x10008468: 4 + density/25 for a road) is scaled by n/d,
+ *               rounded up, at least 1. The trip budget (route_trip: DAT_1001f0b0 x param_3, checked first thing in
+ *               FUN_1000755e) then lasts longer through boulevards. Two switches: SC3NETMOD_BVCOST=1 (boulevard cells,
+ *               scale SC3NETMOD_AVCOST_BV=n/d, default 1/2), SC3NETMOD_AVCOST=1 (avenue cells, scale
+ *               SC3NETMOD_AVCOST_AV=n/d, default 1/2); live sc3netmod_avc_set(0|1), sc3netmod_avc_av_set(0|1).
+ *               Evidence: verify/bventry/RESULTS.md.
+ *   AVSTART     (task bventry) AVFIRST for a trip's START node (type 0x80, the lot). FUN_1000755e's start branch scans
+ *               every road cell within r of the lot rect (corners excluded), r = layer+0xc5 / +0xc6 / +0xc7 by the lot's
+ *               kind from FUN_100057f6 (thiscall on the layer: (occupant, &kind)), else +0xc8, with the ring scan's keep rule (busiest road
+ *               below TrafficAnnoyanceLevel) [CONFIRMED @ SimTransit 0x1000755e]. So a lot beside an empty boulevard
+ *               starts its trips on a busier road nearby (measured: 2 of 3 starts with an open boulevard cell in range).
+ *               With AVSTART, when an open avenue / boulevard cell below the level is in range, every other open road
+ *               cell in the box is closed for that one call (stations stay). SC3NETMOD_AVSTART=1 (avenue and boulevard
+ *               cells), =2 (boulevard cells only), =0 off; live sc3netmod_avs_set(0|1|2). Default off (recommended on, RESULTS 3.1).
+ *
  * Both on by default (measured, verify/avflow/RESULTS.md). Off switches: SC3NETMOD_AVFIRST=0, SC3NETMOD_AVDEPOSIT=0. Scales:
  * SC3NETMOD_AVDEP_AV=n/d, SC3NETMOD_AVDEP_BV=n/d. Live (measurement): sc3netmod_avf_set(0|1), sc3netmod_avd_set(0|1),
  * sc3netmod_avflow_set(0|1) (both), sc3netmod_avf_bv_set(0|1), sc3netmod_avf_grid(&w, &h) -> the class grid (index z * w + x).
@@ -40,6 +56,10 @@
 #define AVF_DEFAULT_FIRST   1        /* on: measured in verify/avflow/RESULTS.md (Seoul, one game, off / F / FD) */
 #define AVF_DEFAULT_DEPOSIT 1
 #define AVF_DEFAULT_BVFIRST 0        /* task avflow BVFIRST: set from verify/avflow/RESULTS.md section 2.7 */
+#define AVF_DEFAULT_BVCOST  0        /* task bventry: set from verify/bventry/RESULTS.md */
+#define AVF_DEFAULT_AVCOST  0        /* task bventry: the avenue half of BVCOST, its own switch */
+#define AVF_DEFAULT_AVSTART 0        /* task bventry: AVFIRST at the trip start; measured better (verify/bventry/RESULTS.md 3.1), off until the orchestrator / owner turn it on */
+#define AVS_MAX 1024                 /* cells AVSTART may close in one call (a 6x6 lot at r 8: 22 x 22 = 484) */
 
 static volatile LONG g_avf_on, g_avd_on, g_avf_bv;
 static volatile LONG g_avf_n_bvoffer, g_avf_n_bvclosed;   /* BVFIRST: offers with an open boulevard cell, avenue cells closed */
@@ -53,6 +73,21 @@ static DWORD g_avf_st;
 static volatile LONG g_avf_ncls[3];
 static volatile LONG g_avf_sweep_row = -1;       /* next row of the background sweep, -1 idle */
 static BYTE *g_avf_sweep_mgr;
+static volatile LONG g_avc_on, g_avc_av_on, g_avc_n[3], g_avc_saved[3];   /* task bventry: BVCOST boulevard / avenue switch,
+                                                                            steps scaled, cost taken off */
+static LONG g_avc_num[3] = {1, 1, 1}, g_avc_den[3] = {1, 2, 2};
+static volatile LONG g_avs_on, g_avs_n_start, g_avs_n_offer, g_avs_n_closed, g_avs_n_big;   /* task bventry: AVSTART */
+typedef DWORD (__fastcall *AVS_KIND)(BYTE *layer, void *edx, void *occ, BYTE *kind);   /* __thiscall on the layer:
+                                                                   0x100057f6 is mov edi, ecx ... ret 8 */
+typedef struct { BYTE *a[AVS_MAX]; BYTE b[AVS_MAX]; } AvsBuf;      /* per thread, heap: not on ld_select's stack */
+static DWORD g_avs_tls = TLS_OUT_OF_INDEXES;
+static AvsBuf *avs_buf(void) {
+    AvsBuf *p;
+    if (g_avs_tls == TLS_OUT_OF_INDEXES) return NULL;
+    p = (AvsBuf *)TlsGetValue(g_avs_tls);
+    if (!p) { p = (AvsBuf *)HeapAlloc(GetProcessHeap(), 0, sizeof(AvsBuf)); TlsSetValue(g_avs_tls, p); }
+    return p;
+}
 
 typedef void (__fastcall *AVD_DEP)(BYTE *layer, void *edx, int x, int z, DWORD amount, DWORD mask);
 
@@ -71,12 +106,33 @@ static void avf_frac(const char *name, int k) {
     else logf("### avflow: %s='%s' not n/d with 0 <= n <= d <= 1000 - default kept", name, v);
 }
 
+static void avc_frac(const char *name, int k) {                    /* task bventry: BVCOST scale, 0 < n <= d */
+    char v[32];
+    long n, d;
+    if (!GetEnvironmentVariableA(name, v, sizeof(v))) return;
+    if (sscanf(v, "%ld/%ld", &n, &d) == 2 && n > 0 && d > 0 && n <= d && d <= 1000) { g_avc_num[k] = n; g_avc_den[k] = d; }
+    else logf("### avflow: %s='%s' not n/d with 0 < n <= d <= 1000 - default kept", name, v);
+}
+
 static void avf_init(void) {
     g_avf_on = avf_env("SC3NETMOD_AVFIRST", AVF_DEFAULT_FIRST);
     g_avd_on = avf_env("SC3NETMOD_AVDEPOSIT", AVF_DEFAULT_DEPOSIT);
     g_avf_bv = avf_env("SC3NETMOD_AVF_BVFIRST", AVF_DEFAULT_BVFIRST);
     avf_frac("SC3NETMOD_AVDEP_AV", 1);
     avf_frac("SC3NETMOD_AVDEP_BV", 2);
+    g_avc_on = avf_env("SC3NETMOD_BVCOST", AVF_DEFAULT_BVCOST);       /* task bventry */
+    g_avc_av_on = avf_env("SC3NETMOD_AVCOST", AVF_DEFAULT_AVCOST);
+    {
+        char v[8];
+        g_avs_on = AVF_DEFAULT_AVSTART;
+        if (GetEnvironmentVariableA("SC3NETMOD_AVSTART", v, sizeof(v))) g_avs_on = v[0] == '2' ? 2 : v[0] != '0';
+    }
+    g_avs_tls = TlsAlloc();
+    logf("avflow: avstart %s", g_avs_on == 2 ? "on (boulevard cells only)" : g_avs_on ? "on (avenue and boulevard cells)" : "off");
+    avc_frac("SC3NETMOD_AVCOST_AV", 1);
+    avc_frac("SC3NETMOD_AVCOST_BV", 2);
+    logf("avflow: bvcost %s (step cost on boulevard cells x %ld/%ld), avcost %s (avenue cells x %ld/%ld)", g_avc_on ? "on" : "off",
+         g_avc_num[2], g_avc_den[2], g_avc_av_on ? "on" : "off", g_avc_num[1], g_avc_den[1]);
     logf("avflow: avfirst %s (bvfirst %s), avdeposit %s (avenue %ld/%ld, boulevard %ld/%ld of the adder)", g_avf_on ? "on" : "off",
          g_avf_bv ? "on" : "off", g_avd_on ? "on" : "off", g_avd_num[1], g_avd_den[1], g_avd_num[2], g_avd_den[2]);
 }
@@ -228,6 +284,76 @@ static void avf_close(BYTE *layer, BYTE *node, BYTE **added, BYTE *addb, int *na
         }
 }
 
+/* ---------------------------------------------------------------- BVCOST (task bventry: ld_select, after the step) */
+static void avc_adjust(BYTE *node, BYTE *out, BYTE r) {
+    DWORD x, z, base, oc, step, ns;
+    BYTE t;
+    int c;
+    if ((!g_avc_on && !g_avc_av_on) || !r || !g_avf_cls) return;
+    t = out[0x14];
+    if (t != 1 && t != 0x41) return;
+    x = *(DWORD *)(out + 4); z = *(DWORD *)(out + 8);
+    if (x != *(DWORD *)(out + 0xc) || z != *(DWORD *)(out + 0x10)) return;
+    c = avf_class(x, z);
+    if (!c || (c == 2 ? !g_avc_on : !g_avc_av_on) || g_avc_num[c] == g_avc_den[c]) return;
+    base = *(DWORD *)(node + 0x18); oc = *(DWORD *)(out + 0x18);
+    if (oc <= base) return;
+    step = oc - base;
+    ns = (step * (DWORD)g_avc_num[c] + (DWORD)g_avc_den[c] - 1) / (DWORD)g_avc_den[c];
+    if (!ns) ns = 1;
+    if (ns >= step) return;
+    *(DWORD *)(out + 0x18) = base + ns;
+    InterlockedIncrement(&g_avc_n[c]);
+    InterlockedExchangeAdd(&g_avc_saved[c], (LONG)(step - ns));
+}
+
+/* ---------------------------------------------------------------- AVSTART (task bventry: ld_select, start nodes) */
+static void avs_close(BYTE *layer, BYTE *node, BYTE **added, BYTE *addb, int *nadd) {
+    BYTE t = node[0x14], lvl, k = 0xee;
+    void *occ = *(void **)node;
+    int mode = (int)g_avs_on, r, bx0, bz0, bx1, bz1, x0, z0, x1, z1, x, z, found = 0, n0 = *nadd;
+    if (!mode || !g_avf_cls || !g_avf_st || t != 0x80) return;
+    if (!occ) r = layer[0xc8];
+    else {
+        if (!(((AVS_KIND)(g_avf_st + 0x57f6))(layer, NULL, occ, &k) & 0xff)) return;   /* the game's own kind call; failed: stock */
+        r = k == 0 ? layer[0xc5] : k == 1 ? layer[0xc6] : k == 2 ? layer[0xc7] : layer[0xc8];
+    }
+    InterlockedIncrement(&g_avs_n_start);
+    lvl = *(BYTE *)(g_avf_st + 0x1f0c0);
+    bx0 = *(int *)(node + 4) - r; bz0 = *(int *)(node + 8) - r; bx1 = *(int *)(node + 0xc) + r; bz1 = *(int *)(node + 0x10) + r;
+    x0 = bx0 < 0 ? 0 : bx0; z0 = bz0 < 0 ? 0 : bz0;
+    x1 = bx1 > *(int *)(layer + 0x14) - 1 ? *(int *)(layer + 0x14) - 1 : bx1;
+    z1 = bz1 > *(int *)(layer + 0x18) - 1 ? *(int *)(layer + 0x18) - 1 : bz1;
+    for (x = x0; x <= x1 && !found; x++)
+        for (z = z0; z <= z1; z++) {
+            int c;
+            if ((x == bx0 || x == bx1) && (z == bz0 || z == bz1)) continue;          /* the scan skips the corners */
+            c = avf_class((DWORD)x, (DWORD)z);
+            if (!c || (mode == 2 && c != 2)) continue;
+            if ((ld_flags(layer, x, z) & 0x11) != 0x01) continue;
+            if ((*ld_mark(layer, x, z) & t) == t) continue;
+            if (*(*(BYTE **)(*(BYTE **)(*(BYTE **)(layer + 0x6c) + 0xc) + x * 4) + z) >= lvl) continue;
+            found = 1;
+            break;
+        }
+    if (!found) return;
+    InterlockedIncrement(&g_avs_n_offer);
+    for (x = x0; x <= x1; x++)
+        for (z = z0; z <= z1; z++) {
+            int c = avf_class((DWORD)x, (DWORD)z);
+            if (c && (mode != 2 || c == 2)) continue;
+            if (*nadd >= AVS_MAX) {                                  /* too many: undo, stock */
+                int k2;
+                for (k2 = n0; k2 < *nadd; k2++) *added[k2] &= (BYTE)~addb[k2];
+                *nadd = n0;
+                InterlockedIncrement(&g_avs_n_big);
+                return;
+            }
+            ld_close(layer, (DWORD)x, (DWORD)z, t, added, addb, nadd);
+        }
+    InterlockedExchangeAdd(&g_avs_n_closed, *nadd - n0);
+}
+
 /* ---------------------------------------------------------------- AVDEPOSIT (call site SimTransit 0x10007463) */
 static void __fastcall avd_dep(BYTE *layer, void *edx, int x, int z, DWORD amount, DWORD mask) {
     int a = (signed char)(amount & 0xff), c;
@@ -276,6 +402,30 @@ __declspec(dllexport) int __cdecl sc3netmod_avf_bv_set(int on) {
     return (int)prev;
 }
 
+__declspec(dllexport) int __cdecl sc3netmod_avc_set(int on) {      /* task bventry */
+    LONG prev;
+    if (!g_ld_st || !g_ld_mode) return -1;
+    prev = InterlockedExchange(&g_avc_on, on ? 1 : 0);
+    logf("avflow: bvcost live switch %s (was %s)", on ? "ON" : "OFF", prev ? "on" : "off");
+    return (int)prev;
+}
+
+__declspec(dllexport) int __cdecl sc3netmod_avc_av_set(int on) {   /* task bventry: avenue half */
+    LONG prev;
+    if (!g_ld_st || !g_ld_mode) return -1;
+    prev = InterlockedExchange(&g_avc_av_on, on ? 1 : 0);
+    logf("avflow: avcost live switch %s (was %s)", on ? "ON" : "OFF", prev ? "on" : "off");
+    return (int)prev;
+}
+
+__declspec(dllexport) int __cdecl sc3netmod_avs_set(int on) {      /* task bventry: AVSTART, 0 off, 1 on, 2 boulevard only */
+    LONG prev;
+    if (!g_ld_st || !g_ld_mode) return -1;
+    prev = InterlockedExchange(&g_avs_on, on == 2 ? 2 : on ? 1 : 0);
+    logf("avflow: avstart live switch %d (was %ld)", on, prev);
+    return (int)prev;
+}
+
 __declspec(dllexport) int __cdecl sc3netmod_avd_set(int on) {
     LONG prev;
     if (!g_avd_orig) return -1;
@@ -300,4 +450,8 @@ static void avflow_stats(void) {
     logf("avflow: avfirst %s, avenue offers=%ld, other road candidates closed=%ld, bvfirst %s offers=%ld avenue cells closed=%ld | avdeposit %s, avenue deposits=%ld in=%ld out=%ld, boulevard deposits=%ld in=%ld out=%ld | cells avenue=%ld boulevard=%ld",
          g_avf_on ? "on" : "off", g_avf_n_offer, g_avf_n_closed, g_avf_bv ? "on" : "off", g_avf_n_bvoffer, g_avf_n_bvclosed, g_avd_on ? "on" : "off", g_avd_n_dep[1], g_avd_n_in[1],
          g_avd_n_out[1], g_avd_n_dep[2], g_avd_n_in[2], g_avd_n_out[2], g_avf_ncls[1], g_avf_ncls[2]);
+    logf("avflow: bvcost %s, boulevard steps scaled=%ld cost off=%ld | avcost %s, avenue steps scaled=%ld cost off=%ld",
+         g_avc_on ? "on" : "off", g_avc_n[2], g_avc_saved[2], g_avc_av_on ? "on" : "off", g_avc_n[1], g_avc_saved[1]);
+    logf("avflow: avstart %ld, starts=%ld with an open avenue/boulevard cell=%ld, cells closed=%ld, too big=%ld", g_avs_on,
+         g_avs_n_start, g_avs_n_offer, g_avs_n_closed, g_avs_n_big);   /* task bventry */
 }

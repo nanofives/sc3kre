@@ -1,0 +1,7 @@
+trips 14979 arrived 14681 | branches into the boulevard 756: arrived on it 108, failed back to A 647, trip ended inside 0
+inside branches: calls 163959 ok 85697 budget 7510 none 70752 | all road calls 1715524 budget 71246 none 631660
+headroom deciles at branch start [300, 96, 43, 37, 23, 40, 33, 24, 11, 60, 89] | failed branches [300, 96, 43, 37, 23, 29, 12, 13, 3, 14, 77] | all road steps [358710, 126934, 72975, 55377, 48445, 49231, 52995, 61563, 78885, 107503, 0]
+max cost/budget in failed branches (deciles) [90, 3, 12, 4, 13, 9, 19, 25, 28, 77, 367] mean calls per failed branch 188.1
+trip kinds [4560, 6148, 3252, 1019, 0] in branches [0, 72, 684, 0, 0] | entries {'154,204': 178, '125,206': 76, '154,208': 47, '178,204': 93, '163,204': 86, '189,206': 48, '142,204': 76, '178,208': 49, '163,208': 15, '181,209': 50, '156,204': 1, '157,204': 2, '158,204': 1, '137,204': 1, '136,204': 1, '151,204': 1, '149,204': 1, '184,208': 27, '155,204': 1, '148,202': 1, '150,204': 1}
+arrived by kind [4537, 6141, 3122, 881, 0] | arrived trips with a final-path road cell in the set, by kind [0, 41, 24, 0, 0] | final-path road cells in the set 449 of 376487 (0.119%)
+bitmaps radius [4, 3, 5] bv {'n': 189, 'k0': 189, 'k1': 0, 'k2': 0, 'f400': 0, 'any': 189} road {'n': 10091, 'k0': 6919, 'k1': 4237, 'k2': 1363, 'f400': 36, 'any': 9824}

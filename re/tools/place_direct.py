@@ -46,7 +46,7 @@ var exe = Process.getModuleByName('SC3U.exe').base;
 var simcity = Process.getModuleByName('SIMCITY.DLL').base;
 var jobs = [], results = [];
 function vfn(obj, off, ret, args) {
-  return new NativeFunction(obj.readPointer().add(off).readPointer(), ret, ['pointer'].concat(args), 'thiscall');
+  return new NativeFunction(obj.readPointer().add(off).readPointer(), ret, ['pointer'].concat(args), 'thiscall', {exceptions: 'propagate'});   // task bventry: game calls never 'steal' (memory project-rblab-cam-zoom-deadlock)
 }
 function city() {
   var app = exe.add(0x4fa86c - 0x400000).readPointer();
@@ -115,7 +115,7 @@ function run(job) {
     }
   } finally { if (!job.held) unpause(c); }
 }
-Interceptor.attach(Module.getExportByName('USER32.dll', 'DispatchMessageA'), {
+Interceptor.attach(Process.getModuleByName('USER32.dll').getExportByName('DispatchMessageA'), {
   onEnter: function (args) {
     var msg = args[0];
     if (msg.add(4).readU32() !== %WM% || jobs.length === 0) return;

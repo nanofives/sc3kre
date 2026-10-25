@@ -233,6 +233,14 @@ static BYTE __fastcall ld_select(BYTE *layer, void *edx, BYTE *node, BYTE *out, 
             if (tr->n) InterlockedDecrement(&g_ld_ntact);
             tr->n = 0; tr->selfkey = 0;
         }
+        if (g_avs_on) {                                            /* task bventry: AVSTART */
+            AvsBuf *ab = avs_buf();
+            int ns = 0;
+            if (ab) avs_close(layer, node, ab->a, ab->b, &ns);
+            r = ((LD_SEL)g_ld_tramp)(layer, NULL, node, out, budget, p4, p5, p6);
+            for (k = 0; k < ns; k++) *ab->a[k] &= (BYTE)~ab->b[k];
+            return r;
+        }
         return ((LD_SEL)g_ld_tramp)(layer, NULL, node, out, budget, p4, p5, p6);
     }
     x = *(DWORD *)(node + 4); z = *(DWORD *)(node + 8);
@@ -253,7 +261,11 @@ static BYTE __fastcall ld_select(BYTE *layer, void *edx, BYTE *node, BYTE *out, 
     }
     if (!ev) rf_close(layer, node, added, addb, &nadd);            /* task hwtrips */
     if (!ev) avf_close(layer, node, added, addb, &nadd);           /* task avflow: after the ramp */
-    if (!ev && !nadd) return ((LD_SEL)g_ld_tramp)(layer, NULL, node, out, budget, p4, p5, p6);
+    if (!ev && !nadd) {
+        r = ((LD_SEL)g_ld_tramp)(layer, NULL, node, out, budget, p4, p5, p6);
+        avc_adjust(node, out, r);                                  /* task bventry */
+        return r;
+    }
     honoured = g_ld_mode != 3;
     if (ev && id < 65536 && g_base[id]) c = ld_cell(x, z, id);
     if (ev & 0x200) {                                              /* entered against the lanes */
@@ -291,6 +303,7 @@ static BYTE __fastcall ld_select(BYTE *layer, void *edx, BYTE *node, BYTE *out, 
     }
     r = ((LD_SEL)g_ld_tramp)(layer, NULL, node, out, budget, p4, p5, p6);
     for (k = 0; k < nadd; k++) *added[k] &= (BYTE)~addb[k];
+    avc_adjust(node, out, r);                                      /* task bventry */
     if (g_ld_mode == 3 && r && *(DWORD *)(out + 4) == x && *(DWORD *)(out + 8) == z && (tr = ld_trip(1)) != NULL)
         tr->selfkey = LD_KEY(x, z) + 1;
     if (ev && r && (out[0x14] == 1 || out[0x14] == 3 || out[0x14] == 0x41) &&
@@ -328,11 +341,19 @@ static __declspec(naked) void ld_stub(void) {
         je   road
         cmp  dl, 0x41
         je   road
+        cmp  dl, 0x80            /* task bventry: AVSTART looks at trip starts */
+        jne  pass
+        cmp  g_avs_on, 0
+        jne  slow
         jmp  dword ptr [g_ld_tramp]
     road:
         cmp  g_rf_on, 0          /* task hwtrips: ramp-first looks at every road / bus step */
         jne  slow
         cmp  g_avf_on, 0         /* task avflow: avenue-first too */
+        jne  slow
+        cmp  g_avc_on, 0         /* task bventry: BVCOST adjusts the step after the call */
+        jne  slow
+        cmp  g_avc_av_on, 0
         jne  slow
         mov  eax, [eax]
         test eax, eax
@@ -408,7 +429,7 @@ static void lanedensity_install(void) {
     else if (got && !lstrcmpiA(v, "count")) g_ld_mode = 3;
     rf_init();                                                     /* task hwtrips */
     avf_init();                                                    /* task avflow */
-    if ((g_rf_on || g_avf_on) && (!g_ld_mode || (g_ld_mode == 1 && !g_nvariants))) g_ld_mode = 4;   /* task hwtrips: ramp-first only */
+    if ((g_rf_on || g_avf_on || g_avc_on || g_avc_av_on || g_avs_on) && (!g_ld_mode || (g_ld_mode == 1 && !g_nvariants))) g_ld_mode = 4;   /* task hwtrips: ramp-first only */
     if (!g_ld_mode) { logf("lanedensity: off (SC3NETMOD_LANEDENSITY=0)"); return; }
     if (g_ld_mode == 1 && !g_nvariants) { logf("lanedensity: no variants, nothing to honour - not patched"); g_ld_mode = 0; return; }
     while (!(st = (BYTE *)GetModuleHandleA("SimTransit.dll")) && ms++ < 300000) Sleep(1);

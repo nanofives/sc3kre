@@ -1,0 +1,32 @@
+{
+ "starts": 19103,
+ "near": 714,
+ "bv_open": 559,
+ "av_open": 248,
+ "took": {
+  "bv": 373,
+  "av": 189,
+  "plain": 127,
+  "station": 11,
+  "none": 14
+ },
+ "took_when_bv_open": {
+  "bv": 373,
+  "av": 175,
+  "plain": 0,
+  "station": 11,
+  "none": 0
+ },
+ "dens_taken": 18507,
+ "dens_bv": 9067,
+ "n_dens": 548,
+ "kinds": {
+  "0": 713,
+  "1": 1
+ },
+ "radius": {
+  "3": 1,
+  "4": 713
+ },
+ "secs": 40.0
+}
