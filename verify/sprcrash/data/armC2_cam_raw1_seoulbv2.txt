@@ -1,0 +1,3 @@
+[1/60] raw1 z0r0 -> z1r0 at (208,79) HANG
+aborted camera calls (JOBERR): 0
+VERDICT cam raw1: HANG after 1 of 60 steps, 74 s, pid 29676

@@ -1,0 +1,101 @@
+[1/100] zoom out PASS
+[2/100] zoom in PASS
+[3/100] zoom out PASS
+[4/100] zoom in PASS
+[5/100] zoom out (budget dialog closed) PASS
+[6/100] zoom out PASS
+[7/100] zoom in PASS
+[8/100] zoom in PASS
+[9/100] zoom in PASS
+[10/100] key - + road drag PASS
+[11/100] key - PASS
+[12/100] zoom in PASS
+[13/100] key + PASS
+[14/100] key + PASS
+[15/100] zoom in (budget dialog closed) PASS
+[16/100] rotate PASS
+[17/100] rotate PASS
+[18/100] rotate PASS
+[19/100] zoom in PASS
+[20/100] key - + road drag PASS
+[21/100] zoom out PASS
+[22/100] zoom in PASS
+[23/100] key - PASS
+[24/100] zoom out PASS
+[25/100] zoom out (budget dialog closed) PASS
+[26/100] zoom in PASS
+[27/100] zoom out PASS
+[28/100] zoom in PASS
+[29/100] key + PASS
+[30/100] rotate + road drag PASS
+[31/100] rotate PASS
+[32/100] rotate PASS
+[33/100] key - PASS
+[34/100] zoom in PASS
+[35/100] key + PASS
+[36/100] zoom out PASS
+[37/100] rotate PASS
+[38/100] rotate PASS
+[39/100] rotate PASS
+[40/100] rotate + road drag PASS
+[41/100] rotate PASS
+[42/100] zoom out PASS
+[43/100] minimap PASS
+[44/100] key - PASS
+[45/100] zoom in (budget dialog closed) PASS
+[46/100] zoom out PASS
+[47/100] zoom in PASS
+[48/100] zoom out PASS
+[49/100] key - PASS
+[50/100] zoom in + road drag PASS
+[51/100] rotate PASS
+[52/100] zoom out PASS
+[53/100] minimap PASS
+[54/100] minimap PASS
+[55/100] zoom in PASS
+[56/100] zoom in PASS
+[57/100] zoom in PASS
+[58/100] key - PASS
+[59/100] rotate PASS
+[60/100] key + + road drag PASS
+[61/100] zoom in PASS
+[62/100] zoom out PASS
+[63/100] zoom in PASS
+[64/100] zoom in PASS
+[65/100] rotate PASS
+[66/100] rotate PASS
+[67/100] zoom in PASS
+[68/100] zoom out PASS
+[69/100] zoom in PASS
+[70/100] zoom in (budget dialog closed) + road drag PASS
+[71/100] zoom out PASS
+[72/100] key + PASS
+[73/100] key - PASS
+[74/100] rotate PASS
+[75/100] key - PASS
+[76/100] zoom in PASS
+[77/100] zoom in PASS
+[78/100] zoom in PASS
+[79/100] rotate PASS
+[80/100] zoom out + road drag PASS
+[81/100] key - PASS
+[82/100] zoom in PASS
+[83/100] zoom in PASS
+[84/100] zoom out PASS
+[85/100] zoom in PASS
+[86/100] minimap PASS
+[87/100] zoom out PASS
+[88/100] key + PASS
+[89/100] zoom in PASS
+[90/100] minimap + road drag PASS
+[91/100] zoom in PASS
+[92/100] zoom in PASS
+[93/100] zoom in PASS
+[94/100] rotate PASS
+[95/100] zoom in (budget dialog closed) PASS
+[96/100] key - PASS
+[97/100] key - PASS
+[98/100] minimap PASS
+[99/100] zoom out PASS
+[100/100] rotate + road drag PASS
+VERDICT buttons: PASS after 100 of 100 steps, 632 s, pid 23568
