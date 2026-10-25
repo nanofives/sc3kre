@@ -739,6 +739,13 @@ static PFN_LoadLibraryA o_LoadLibraryA;
 static PFN_LoadLibraryExA o_LoadLibraryExA;
 
 static int g_ov_on, g_filelog;
+/* OVPIN (task spr47b70, 2026-10-25): ov_hook_all walks a K32EnumProcessModules list and reads each module's import
+   table. A listed module can be gone or not yet readable (7 handled IsBadReadPtr faults at 0x78000000 = Apps\MSVCRT.DLL
+   in verify/verdatos B_tex256_e1024_2560_3840), and one freed between the check and the walk would fault for real.
+   A reference is held across the walk (GetModuleHandleEx FROM_ADDRESS, as sc3perf LAYER_REFCOUNT does); a module
+   whose handle cannot be taken is skipped. SC3NETMOD_OVPIN=0 = the old unpinned walk. */
+static int g_ovpin = 1;
+static volatile LONG g_ovpin_skips;
 static char g_ovdir[MAX_PATH];       /* <root>\mods\netmod\overlay\ */
 static int g_ovdirlen;
 static char **g_ovfiles;             /* overlay files, path relative to the overlay = relative to root */
@@ -1023,15 +1030,29 @@ static int iat_patch(BYTE *m, const char *fn, void *to) {
 static void ov_hook_all(void) {
     typedef BOOL (WINAPI *PFN_EPM)(HANDLE, HMODULE *, DWORD, LPDWORD);
     static PFN_EPM epm;
-    HMODULE mods[512];
-    DWORD needed = 0, i;
+    HMODULE mods[512], pins[512];
+    DWORD needed = 0, i, n;
     int hits = 0;
     if (!epm) epm = (PFN_EPM)GetProcAddress(GetModuleHandleA("KERNEL32.dll"), "K32EnumProcessModules");
     if (!epm || !epm(GetCurrentProcess(), mods, sizeof(mods), &needed)) return;
+    n = needed / sizeof(HMODULE) < 512 ? needed / sizeof(HMODULE) : 512;
+    /* OVPIN: take the references before g_ovlock and drop them after it, so no loader call runs under g_ovlock
+       (the file hooks take g_ovlock on threads that may hold the loader lock) */
+    for (i = 0; i < n; i++) {
+        pins[i] = NULL;
+        if (!g_ovpin || mods[i] == g_self) continue;
+        if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCSTR)mods[i], &pins[i]) || pins[i] != mods[i]) {
+            if (pins[i]) FreeLibrary(pins[i]);
+            pins[i] = NULL;
+            if (InterlockedIncrement(&g_ovpin_skips) <= 8)
+                logf("overlay: module 0x%08lX listed but not loaded (freed or still mapping) - skipped (OVPIN)", (DWORD)mods[i]);
+        }
+    }
     EnterCriticalSection(&g_ovlock);
-    for (i = 0; i < needed / sizeof(HMODULE) && i < 512; i++) {
+    for (i = 0; i < n; i++) {
         BYTE *m = (BYTE *)mods[i];
         if (mods[i] == g_self) continue;                 /* our own reads stay on kernel32 */
+        if (g_ovpin && !pins[i]) continue;               /* OVPIN: not loaded when listed */
         hits += iat_patch(m, "CreateFileA", (void *)h_CreateFileA);
         hits += iat_patch(m, "GetFileAttributesA", (void *)h_GetFileAttributesA);
         hits += iat_patch(m, "FindFirstFileA", (void *)h_FindFirstFileA);
@@ -1041,6 +1062,7 @@ static void ov_hook_all(void) {
         hits += iat_patch(m, "LoadLibraryExA", (void *)h_LoadLibraryExA);
     }
     LeaveCriticalSection(&g_ovlock);
+    for (i = 0; i < n; i++) if (g_ovpin && pins[i]) FreeLibrary(pins[i]);
     if (hits) logf("overlay: %d import slot(s) hooked over %lu module(s)", hits, needed / sizeof(HMODULE));
 }
 
@@ -1050,6 +1072,7 @@ static void overlay_init(void) {
     char v[8];
     HMODULE k = GetModuleHandleA("KERNEL32.dll");
     InitializeCriticalSection(&g_ovlock);
+    if (env_off("SC3NETMOD_OVPIN")) { g_ovpin = 0; logf("overlay: OVPIN off (SC3NETMOD_OVPIN=0) - module walk unpinned"); }
     g_filelog = GetEnvironmentVariableA("SC3NETMOD_FILELOG", v, sizeof(v)) && v[0] == '1';
     if (env_off("SC3NETMOD_OVERLAY")) { logf("overlay: off (SC3NETMOD_OVERLAY=0)"); if (!g_filelog) return; }
     else if (g_rootlen) {

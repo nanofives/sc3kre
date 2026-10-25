@@ -13529,6 +13529,118 @@ static void patch_tipcursor(HMODULE ss) {
     logf("--- TIPCURSOR: tipcursor=1, the cost label's anchor box follows the drawn pointer size (SIMSPR+0x4a475, +0x4a4d5)");
 }
 
+/* SHAREREAD (task spr47b70, 2026-10-25: VEH FAULT READ 0 at SIMSPR+0x47B70, stock bug). The city view init
+ * FUN_10044471 loads 'UI\Shared\cursors\anchor point cursor.BMP' into this+0x1fc through GZResourceD FUN_10007603
+ * (SIMSPR+0x47B5F) and never checks it; +0x47B70 reads the vtable of the null result. The load fails whenever anyone
+ * else has the file open: GZResourceD's file open FUN_1001816f (vt 0x1001e128 +0xc) passes dwShareMode 0 to
+ * CreateFileA when the caller asks for no sharing, as the image loader does, and every test tree hard-links the same
+ * file. Reproduced in a stock game by holding the file open (verify/spr47b70). Three parts:
+ * (1) the file open's vtable slot is wrapped: a read-only open (no write bit) also passes FILE_SHARE_READ, so two
+ *     readers coexist. Writes keep the caller's mode.
+ * (2) SIMSPR+0x47B62: a null sprite is retried (5 ms apart, 20 tries, the game's own call with the same arguments),
+ *     then the two vt calls on it are skipped, so the view comes up without the anchor marker instead of dying.
+ * (3) SIMSPR+0x1004407C, the right-drag anchor marker draw (the only other reader of this+0x1fc): skipped when null.
+ * SC3RESIZE_SHAREREAD=0 stock. */
+static int g_shareread = 1;
+typedef char (__fastcall *PFN_GzFileOpen)(void *self, void *edx, DWORD acc, DWORD disp, DWORD share);
+static PFN_GzFileOpen g_gzopen_orig;
+static volatile LONG g_gzopen_n;
+static DWORD g_sr_ok_ret, g_sr_skip_ret, g_sr_draw_ret, g_sr_nodraw_ret, g_sr_mgr_fn;
+
+static char __fastcall rz_gzopen(void *self, void *edx, DWORD acc, DWORD disp, DWORD share) {
+    if (g_shareread && !(acc & 2) && !(share & 1)) { share |= 1; InterlockedIncrement(&g_gzopen_n); }
+    return g_gzopen_orig(self, edx, acc, disp, share);
+}
+
+/* ebp = FUN_10044471's frame: ebp-0x3c the path string object, ebp-0x28 the pixel format; out = this+0x1fc */
+static DWORD __stdcall rz_anchor_retry(BYTE *ebp, DWORD *out) {
+    typedef void *(__cdecl *PFN_Mgr)(void);
+    typedef char (__fastcall *PFN_Load)(void *mgr, void *edx, void *path, DWORD *out, DWORD a2, void *fmt, DWORD a4);
+    int n;
+    if (*out) return *out;
+    for (n = 1; n <= 20 && !*out; n++) {
+        void *mgr;
+        Sleep(5);
+        mgr = ((PFN_Mgr)g_sr_mgr_fn)();
+        if (mgr) (*(PFN_Load *)(*(BYTE **)mgr + 0xc))(mgr, NULL, ebp - 0x3c, out, 0, ebp - 0x28, 0);
+    }
+    if (*out) logf("SHAREREAD> the anchor marker sprite failed to load, loaded on retry %d", n - 1);
+    else logf("SHAREREAD> ### the anchor marker sprite failed to load 21 times - the view comes up without the marker");
+    return *out;
+}
+
+__declspec(naked) static void sr_load_stub(void) {   /* replaces SIMSPR+0x47B62 'mov ecx,[edi]; push 0xff' */
+    __asm {
+        pushad
+        push edi
+        push ebp
+        call rz_anchor_retry
+        mov  [esp+28], eax
+        popad
+        test eax, eax
+        jz   skip
+        mov  ecx, [edi]
+        push 0xff
+        jmp  dword ptr [g_sr_ok_ret]
+    skip:
+        jmp  dword ptr [g_sr_skip_ret]
+    }
+}
+
+__declspec(naked) static void sr_draw_stub(void) {   /* replaces SIMSPR+0x1004407C 'mov eax,[esi+0x60]; mov ecx,[esi+0x1fc]' */
+    __asm {
+        mov  ecx, [esi+1FCh]
+        test ecx, ecx
+        jz   nodraw
+        mov  eax, [esi+60h]
+        jmp  dword ptr [g_sr_draw_ret]
+    nodraw:
+        jmp  dword ptr [g_sr_nodraw_ret]
+    }
+}
+
+static void patch_shareread(HMODULE ss) {
+    static const BYTE o_load[7] = { 0x8b, 0x0f, 0x68, 0xff, 0x00, 0x00, 0x00 };
+    static const BYTE o_draw[9] = { 0x8b, 0x46, 0x60, 0x8b, 0x8e, 0xfc, 0x01, 0x00, 0x00 };
+    static const BYTE o_call[3] = { 0xff, 0x52, 0x0c };   /* SIMSPR+0x47B5F call [edx+0xc], the unchecked load */
+    BYTE *gr = (BYTE *)GetModuleHandleA("GZResourceD.dll");
+    BYTE *fl = (BYTE *)ss + 0x47b62, *fd = (BYTE *)ss + 0x4407c;
+    DWORD old;
+    int i;
+    if (!g_shareread) { logf("--- SHAREREAD: disabled (SC3RESIZE_SHAREREAD=0) - exclusive resource reads, unchecked anchor sprite"); return; }
+    if (gr) {   /* (1) GZResourceD file open, vtable 0x1001e128 slot +0xc */
+        DWORD *slot = (DWORD *)(gr + 0x1e134), want = (DWORD)gr + 0x1816f;
+        if (IsBadReadPtr(slot, 4) || *slot != want) logf("--- SHAREREAD: GZResourceD vt 0x1001e128 +0xc is not FUN_1001816f - share mode stock");
+        else if (VirtualProtect(slot, 4, PAGE_READWRITE, &old)) {   /* .rdata: a data page, no code shares it */
+            g_gzopen_orig = (PFN_GzFileOpen)want;
+            if ((DWORD)InterlockedCompareExchange((LONG volatile *)slot, (LONG)(DWORD)rz_gzopen, (LONG)want) != want) {
+                g_gzopen_orig = NULL; logf("--- SHAREREAD: GZResourceD file open slot changed while installing - share mode stock");
+            }
+        }
+    } else logf("--- SHAREREAD: GZResourceD.dll not loaded - share mode stock");
+    if (memcmp(fl, o_load, sizeof(o_load)) || memcmp(fd, o_draw, sizeof(o_draw)) || memcmp(fl - 3, o_call, sizeof(o_call))) {
+        logf("--- SHAREREAD: SIMSPR+0x47b62/+0x4407c differ from shipped - anchor sprite guard not installed");
+    } else {
+        g_sr_mgr_fn = (DWORD)ss + 0x5aa47;
+        g_sr_ok_ret = (DWORD)fl + sizeof(o_load);
+        g_sr_skip_ret = (DWORD)ss + 0x47b84;
+        g_sr_draw_ret = (DWORD)fd + sizeof(o_draw);
+        g_sr_nodraw_ret = (DWORD)ss + 0x440a2;
+        if (VirtualProtect(fl, sizeof(o_load), PAGE_EXECUTE_READWRITE, &old)
+            && VirtualProtect(fd, sizeof(o_draw), PAGE_EXECUTE_READWRITE, &old)) {
+            fl[0] = 0xE9; *(DWORD *)(fl + 1) = (DWORD)sr_load_stub - (DWORD)(fl + 5);
+            for (i = 5; i < (int)sizeof(o_load); i++) fl[i] = 0x90;
+            fd[0] = 0xE9; *(DWORD *)(fd + 1) = (DWORD)sr_draw_stub - (DWORD)(fd + 5);
+            for (i = 5; i < (int)sizeof(o_draw); i++) fd[i] = 0x90;
+            (void)0; /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
+            FlushInstructionCache(GetCurrentProcess(), fl, sizeof(o_load));
+            FlushInstructionCache(GetCurrentProcess(), fd, sizeof(o_draw));
+        } else { logf("--- SHAREREAD: VirtualProtect failed - anchor sprite guard not installed"); return; }
+    }
+    logf("--- SHAREREAD: on - GZResourceD read-only opens share reads (%s), anchor sprite load retried and null-guarded (SIMSPR+0x47b62, +0x4407c)",
+         g_gzopen_orig ? "slot wrapped" : "NOT wrapped");
+}
+
 /* ZOOMCENTER (task leftclick, owner design call 2026-10-12: zoom centres on the map area like the left click).
  * The zoom keys and the rotate keys call the iso view's zoom in / zoom out / rotate methods (vtable 0x10063390 slots
  * +0x60 FUN_1001d2d6, +0x64 FUN_1001d365, +0x70 FUN_1001d3f3, +0x74 FUN_1001d47b); the generic set (+0x6c FUN_1001d1d9)
@@ -14405,6 +14517,9 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
         if (GetEnvironmentVariableA("SC3RESIZE_TIPCURSOR", v, sizeof(v))) g_tipcursor = atoi(v);
         if (GetEnvironmentVariableA("SC3RESIZE_TIPCURSOR_PX", v, sizeof(v))) g_tipcursor_px = atoi(v); }
     patch_tipcursor(ss);     /* cost label clear of a large pointer (TIPCURSOR block) */
+    {   char v[8];
+        if (GetEnvironmentVariableA("SC3RESIZE_SHAREREAD", v, sizeof(v))) g_shareread = atoi(v); }
+    patch_shareread(ss);     /* SIMSPR+0x47B70 crash: shared resource reads + anchor sprite guard (SHAREREAD block) */
     {   char v[8];
         if (GetEnvironmentVariableA("SC3RESIZE_DIRTGUARD", v, sizeof(v))) g_dirtguard = atoi(v); }
     CreateThread(NULL, 0, dirtguard_watcher, NULL, 0, NULL);
