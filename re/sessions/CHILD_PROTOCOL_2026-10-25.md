@@ -33,3 +33,7 @@ each new file). Never add Defender exclusions, never restore quarantined files: 
 Frida: any NativeFunction that makes the game DO something uses `{exceptions: 'propagate'}` (memory
 project-rblab-cam-zoom-deadlock). Pictures: `SC3RESIZE_FRAMEDUMP` (desktop grabs are stale while the PC is in use).
 Load City lists `MAIN\Cities`; reach your tree with "Buscar en", or pass the city on the command line.
+
+HARD RULE (owner 2026-10-25): never take over the real mouse, keyboard or foreground. No SetCursorPos, mouse_event,
+SendInput, keybd_event, SetForegroundWindow or topmost raising. Drive the game with posted messages (sc3io posted input,
+PostMessage) or Frida game calls only. Anything that needs a real cursor goes on a "needs owner check" list.
