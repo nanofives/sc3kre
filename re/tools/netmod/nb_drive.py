@@ -34,21 +34,24 @@ JS = r"""
 var exe = Process.getModuleByName('SC3U.exe').base;
 var ntw = Process.getModuleByName('SIMNTWRK.DLL').base;
 var jobs = [], results = [], seen = [];
-function vfn(obj, off, ret, args) {
-  return new NativeFunction(obj.readPointer().add(off).readPointer(), ret, ['pointer'].concat(args), 'thiscall');
+function vfn(obj, off, ret, args, prop) {
+  // prop: action calls let native exceptions take their normal path (a mod's OutputDebugStringA inside the call raises
+  // 0x40010006; Frida's default 'steal' unwinds out of the game code halfway, task sprcrash/fridaprop). Reads keep 'steal'
+  return new NativeFunction(obj.readPointer().add(off).readPointer(), ret, ['pointer'].concat(args),
+                            prop ? {abi: 'thiscall', exceptions: 'propagate'} : 'thiscall');
 }
 function city() { return exe.add(0x4fa86c - 0x400000).readPointer().add(0x48).readPointer(); }
 function msgsrv() {
   var fw = exe.add(0xFAB74).readPointer();
   var out = Memory.alloc(4); out.writePointer(ptr(0));
-  vfn(fw, 0x10, 'int', ['uint32', 'uint32', 'pointer'])(fw, 0x64063387, 0xC1085722, out);
+  vfn(fw, 0x10, 'int', ['uint32', 'uint32', 'pointer'], 1)(fw, 0x64063387, 0xC1085722, out);
   return out.readPointer();
 }
 function post4(w) {
   var srv = msgsrv();
   var msg = Memory.alloc(16);
   for (var i = 0; i < 4; i++) msg.add(4 * i).writeU32(w[i] >>> 0);
-  return vfn(srv, 0x10, 'int', ['pointer', 'uint8'])(srv, msg, 0);
+  return vfn(srv, 0x10, 'int', ['pointer', 'uint8'], 1)(srv, msg, 0);
 }
 function modname(p) { var m = Process.findModuleByAddress(p); return m ? m.name + '+0x' + p.sub(m.base).toString(16) : '' + p; }
 function hex(p, n) { try { var b = new Uint8Array(p.readByteArray(n)); return Array.prototype.map.call(b, function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); } catch (e) { return '?'; } }

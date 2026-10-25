@@ -45,8 +45,11 @@ JS = r"""
 var exe = Process.getModuleByName('SC3U.exe').base;
 var simcity = Process.getModuleByName('SIMCITY.DLL').base;
 var jobs = [], results = [];
-function vfn(obj, off, ret, args) {
-  return new NativeFunction(obj.readPointer().add(off).readPointer(), ret, ['pointer'].concat(args), 'thiscall');
+function vfn(obj, off, ret, args, prop) {
+  // prop: action calls let native exceptions take their normal path (a mod's OutputDebugStringA inside the call raises
+  // 0x40010006; Frida's default 'steal' unwinds out of the game code halfway, task sprcrash/fridaprop). Reads keep 'steal'
+  return new NativeFunction(obj.readPointer().add(off).readPointer(), ret, ['pointer'].concat(args),
+                            prop ? {abi: 'thiscall', exceptions: 'propagate'} : 'thiscall');
 }
 function city() {
   var app = exe.add(0x4fa86c - 0x400000).readPointer();
@@ -58,10 +61,10 @@ function post(id, arg) {
   /* sc3simrun gz_post: framework *(SC3U+0xFAB74) vt+0x10 -> message service, then service vt+0x10(msg[4], 0) */
   var fw = exe.add(0xFAB74).readPointer();
   var out = Memory.alloc(4); out.writePointer(ptr(0));
-  vfn(fw, 0x10, 'int', ['uint32', 'uint32', 'pointer'])(fw, 0x64063387, 0xC1085722, out);
+  vfn(fw, 0x10, 'int', ['uint32', 'uint32', 'pointer'], 1)(fw, 0x64063387, 0xC1085722, out);
   var srv = out.readPointer();
   var msg = Memory.alloc(16); msg.writeU32(id); msg.add(4).writeU32(arg); msg.add(8).writeU32(0); msg.add(12).writeU32(0);
-  return vfn(srv, 0x10, 'int', ['pointer', 'uint8'])(srv, msg, 0);
+  return vfn(srv, 0x10, 'int', ['pointer', 'uint8'], 1)(srv, msg, 0);
 }
 function dump() {
   /* One GetOccupantAtCell (om vt+0x7c) per cell, distinct pointers only. The manager iterator (vt+0x70) returns
@@ -95,7 +98,7 @@ function run(job) {
   if (job.kind === 'post') return {job: job, ok: post(job.id, job.arg)};
   if (job.kind === 'dump') return {job: job, total: dump()};
   var c = city();
-  var pause = vfn(c, 0x21c, 'void', []), unpause = vfn(c, 0x220, 'void', []);
+  var pause = vfn(c, 0x21c, 'void', [], 1), unpause = vfn(c, 0x220, 'void', [], 1);
   if (!job.held) pause(c);
   try {
     if (job.kind === 'building') {
@@ -103,14 +106,14 @@ function run(job) {
       var coord = Memory.alloc(12); coord.writeS32(job.x << 8); coord.add(4).writeS32(job.z << 8); coord.add(8).writeS32(0x7fffffff);
       var key = Memory.alloc(12); key.writeU32(job.key[0]); key.add(4).writeU32(job.key[1]); key.add(8).writeU32(job.key[2]);
       var bounds = Memory.alloc(24), cost = Memory.alloc(4); cost.writeU32(0);
-      var ok = vfn(bl, 0x38, 'uint8', ['pointer', 'pointer', 'pointer', 'pointer', 'uint8'])(bl, coord, key, bounds, cost, job.free ? 1 : 0);
+      var ok = vfn(bl, 0x38, 'uint8', ['pointer', 'pointer', 'pointer', 'pointer', 'uint8'], 1)(bl, coord, key, bounds, cost, job.free ? 1 : 0);
       return {job: job, ok: ok, cost: cost.readU32(), bounds: [0,1,2,3,4,5].map(function (i) { return bounds.add(4 * i).readS32() >> 8; })};
     } else {
       var zl = vfn(c, 0x14c, 'pointer', [])(c);
       var b = Memory.alloc(24);
       [job.x0 << 8, job.z0 << 8, 0x7fffffff, job.x1 << 8, job.z1 << 8, 0x7fffffff].forEach(function (v, i) { b.add(4 * i).writeS32(v); });
       var cost = Memory.alloc(4); cost.writeS32(0);
-      var ok = vfn(zl, 0x88, 'uint8', ['int', 'pointer', 'pointer', 'uint8'])(zl, job.type, b, cost, 0);
+      var ok = vfn(zl, 0x88, 'uint8', ['int', 'pointer', 'pointer', 'uint8'], 1)(zl, job.type, b, cost, 0);
       return {job: job, ok: ok, cost: cost.readS32()};
     }
   } finally { if (!job.held) unpause(c); }
@@ -122,7 +125,7 @@ Interceptor.attach(Module.getExportByName('USER32.dll', 'DispatchMessageA'), {
     /* Building batches pause the city ONCE around the whole batch (vt+0x21c/0x220), not per building:
        per-building pause/unpause made a 22k batch take >10 min once the map filled up (2026-10-09). */
     var c = null, held = jobs.length > 1 && jobs[0].kind === 'building', budget = 300;
-    if (held) { c = city(); vfn(c, 0x21c, 'void', [])(c); }
+    if (held) { c = city(); vfn(c, 0x21c, 'void', [], 1)(c); }
     try {
       /* at most 300 jobs per dispatch: a whole 22k batch in one dispatch kept the window frozen for ~6 min
          (owner: "no puedo abrir la ventana"); the Python side keeps posting until the queue is empty */
@@ -132,7 +135,7 @@ Interceptor.attach(Module.getExportByName('USER32.dll', 'DispatchMessageA'), {
         try { var r = run(j); if (held) delete j.held; results.push(r); }
         catch (e) { results.push({job: j, error: '' + e}); }
       }
-    } finally { if (held) vfn(c, 0x220, 'void', [])(c); }
+    } finally { if (held) vfn(c, 0x220, 'void', [], 1)(c); }
   }
 });
 rpc.exports = {

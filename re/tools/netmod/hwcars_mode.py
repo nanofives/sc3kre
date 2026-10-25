@@ -13,7 +13,7 @@ import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the gam
 sc3pause.require_running(int(os.environ["SC3_PID"]), "hwcars_mode")
 s = frida.attach(int(os.environ["SC3_PID"]))
 sc = s.create_script("""
-var f = new NativeFunction(Process.getModuleByName('sc3cartrips.dll').getExportByName('sc3cartrips_mode'), 'int', ['int'], 'mscdecl');
+var f = new NativeFunction(Process.getModuleByName('sc3cartrips.dll').getExportByName('sc3cartrips_mode'), 'int', ['int'], {abi: 'mscdecl', exceptions: 'propagate'});
 rpc.exports = { set: function (m) { return f(m); } };
 """)
 sc.load()

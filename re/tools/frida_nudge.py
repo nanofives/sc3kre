@@ -81,7 +81,7 @@ rpc.exports = {
         var p = ptr(a), before = rect(p), e = ext(p);
         var vt = rp(p, 0), fn = rp(vt, 0xc8);
         if (fn.isNull()) return { ok: false, why: 'no vt+0xc8', before: before };
-        var f = new NativeFunction(fn, 'int', ['pointer','int','int','int','int'], 'thiscall');
+        var f = new NativeFunction(fn, 'int', ['pointer','int','int','int','int'], {abi: 'thiscall', exceptions: 'propagate'});
         f(p, before[0]+dx, before[1]+dy, before[2]+dx, before[3]+dy);
         /* keep an ABSOLUTE hit rect in step; leave a parent-local one alone */
         if (e[0] === before[0] && e[1] === before[1]) {

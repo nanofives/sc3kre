@@ -36,7 +36,7 @@ rpc.exports={dirty:function(){
  var vt=rp(panel,0), fn=rp(vt,0x154);
  var before=ri(panel,0x60)&0xff;
  if(fn.isNull())return {ok:false,why:"no vt+0x154"};
- var f=new NativeFunction(fn,"int",["pointer"],"thiscall");
+ var f=new NativeFunction(fn,"int",["pointer"],{abi:"thiscall",exceptions:"propagate"});
  f(panel);
  return {ok:true,panel:panel.toString(),dirty_before:before,dirty_after:ri(panel,0x60)&0xff};
 }};

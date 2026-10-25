@@ -167,7 +167,7 @@ rpc.exports = {
     if (kind === 'annoy') A(0x1001f0c0).writeU8(v < 0 ? annoyOrig : v);
     else if (kind === 'hwcost') A(0x1001f0b2).writeU8(v < 0 ? hwcOrig : v);
     else if (kind === 'rf') return new NativeFunction(Process.getModuleByName('sc3netmod.dll').getExportByName('sc3netmod_rf_set'),
-      'int', ['int'])(v < 0 ? 0 : 1);
+      'int', ['int'], {exceptions: 'propagate'})(v < 0 ? 0 : 1);
     else if (kind === 'rampd') {
       if (!ramps) findRamps();
       if (v < 0) { rampVal = -1; for (var i = 0; i < ramps.length; i++) wb(0x6c, ramps[i][0], ramps[i][1], rampOrig[i]); }

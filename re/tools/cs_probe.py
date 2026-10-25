@@ -82,6 +82,7 @@ Process.setExceptionHandler(function (d) {
 var MEM = { g: Memory.alloc(128), hkey: Memory.alloc(65536 * 4), hval: Memory.alloc(65536 * 8), stats: Memory.alloc(32) };
 var cm = new CModule(CSRC, { QueryPerformanceCounter: k32.getExportByName('QueryPerformanceCounter'),
                              g: MEM.g, hkey: MEM.hkey, hval: MEM.hval });
+// READ: probe's own CModule bookkeeping (no game state, no logging), default exceptions kept
 var drawFirst = new NativeFunction(cm.draw_first, 'uint32', ['uint32']);
 var drawLast = new NativeFunction(cm.draw_last, 'uint32', ['uint32']);
 var drawForget = new NativeFunction(cm.draw_forget, 'void', ['uint32']);
@@ -92,13 +93,13 @@ function gS64(o) { return MEM.g.add(o).readS64().toNumber(); }
 var SR = null, simAnimate = null, simStats = null;
 try {
   SR = Process.getModuleByName('sc3simrun.dll');
-  simAnimate = new NativeFunction(SR.getExportByName('sc3simrun_animate'), 'int', ['int'], 'mscdecl');
+  simAnimate = new NativeFunction(SR.getExportByName('sc3simrun_animate'), 'int', ['int'], {abi: 'mscdecl', exceptions: 'propagate'});
   simStats = new NativeFunction(SR.getExportByName('sc3simrun_stats'), 'void', ['pointer'], 'mscdecl');
 } catch (e) { SR = null; }
 var simMargin = null;
-try { simMargin = SR ? new NativeFunction(SR.getExportByName('sc3simrun_carmargin'), 'int', ['int'], 'mscdecl') : null; } catch (e) { simMargin = null; }
+try { simMargin = SR ? new NativeFunction(SR.getExportByName('sc3simrun_carmargin'), 'int', ['int'], {abi: 'mscdecl', exceptions: 'propagate'}) : null; } catch (e) { simMargin = null; }
 var ctFill = null;
-try { ctFill = new NativeFunction(Process.getModuleByName('sc3cartrips.dll').getExportByName('sc3cartrips_fill'), 'int', ['int'], 'mscdecl'); } catch (e) { ctFill = null; }
+try { ctFill = new NativeFunction(Process.getModuleByName('sc3cartrips.dll').getExportByName('sc3cartrips_fill'), 'int', ['int'], {abi: 'mscdecl', exceptions: 'propagate'}); } catch (e) { ctFill = null; }
 
 Interceptor.attach(A(SPR, 0x10042a95), { onEnter: cm.vt_enter });
 Interceptor.attach(A(SPR, 0x10043daf), { onEnter: cm.scroll_enter });

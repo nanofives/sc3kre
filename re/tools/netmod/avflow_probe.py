@@ -44,10 +44,10 @@ var TR = Process.getModuleByName('SimTransit.dll').base;
 function A(va) { return TR.add(va - 0x10000000); }
 var N = Process.getModuleByName('sc3netmod.dll');
 var gridf = new NativeFunction(N.getExportByName('sc3netmod_avf_grid'), 'pointer', ['pointer', 'pointer']);
-var setF = new NativeFunction(N.getExportByName('sc3netmod_avf_set'), 'int', ['int']);
-var setD = new NativeFunction(N.getExportByName('sc3netmod_avd_set'), 'int', ['int']);
+var setF = new NativeFunction(N.getExportByName('sc3netmod_avf_set'), 'int', ['int'], {exceptions: 'propagate'});
+var setD = new NativeFunction(N.getExportByName('sc3netmod_avd_set'), 'int', ['int'], {exceptions: 'propagate'});
 var eB = N.findExportByName('sc3netmod_avf_bv_set');
-var setB = eB === null ? function (v) { return -1; } : new NativeFunction(eB, 'int', ['int']);
+var setB = eB === null ? function (v) { return -1; } : new NativeFunction(eB, 'int', ['int'], {exceptions: 'propagate'});
 var WH = Memory.alloc(8), G = null, GW = 0, GH = 0;
 function grid() { var p = gridf(WH, WH.add(4)); G = p.isNull() ? null : p; GW = WH.readS32(); GH = WH.add(4).readS32(); }
 function cls(x, z) { if (G === null || x < 0 || z < 0 || x >= GW || z >= GH) return 0; return G.add(z * GW + x).readU8(); }
