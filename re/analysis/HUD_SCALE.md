@@ -406,3 +406,28 @@ Owner report: the enlarged minimap looks pixelated and blurry. Code: the MININAT
 - The minimap survives a city load: it drops its map view on message `0x311fdae5` and rebuilds it on `0x511fdae5` /
   `0x45462fd2` (vt+0xc `FUN_100507ad`). The twin is freed there, before the old city's layers go.
 - The stock minimap does not follow the city data view (Capas, Vista de capas: Crimen), with or without this change.
+
+## UI audit fixes (task uiaudit, 2026-10-25)
+
+Audit of every UI element with HUD scale Auto at 3840x1984 (3.307x) and 2560x1351 (2.252x): `verify/uiaudit/RESULTS.md`.
+Owner picked four fixes, each a block in `sc3resize.c` with an off switch:
+
+- **TIPDLG** (`SC3RESIZE_TIPDLG=0`): a tooltip of a dialog control (Reunirse advisor names) was drawn twice. A cursor on an
+  enlarged dialog is mapped by DLGSCALE, not `rz_hs_mouse`, so COSTLABEL took the tooltip (vt `exe+0xd3bcc`, the cost
+  label's class) for a city cost label and drew it at the stale TIPCURSOR point, while the dialog's own enlarged copy
+  showed the native tooltip clipped at the dialog edge. Now the wndproc records that the last mouse message landed on an
+  enlarged dialog (`g_hs_mouse_dlg`); such a tooltip is decided after the collect loop and enlarged with the dialog it
+  overlaps most (dest = dialog dest + (r - dialog native) x dialog scale), in a `lbl` slot (drawn last, no mouse). Log
+  `TIPDLG>`. A tooltip that overlaps no dialog keeps the COSTLABEL path.
+- **MINIVIS** (`SC3RESIZE_MINIVIS=0`): with the UI hidden the MININAT twin stayed on the city. `rz_hs_collect` skips the
+  hidden minimap before it records `g_mn_mini`, so `mn_compose` kept composing the twin against a snapshot rect no pass
+  refreshed. The twin is now composed only when the minimap was collected visible in this pass (`g_mn_seen`).
+- **DLGONLY** (`SC3RESIZE_DLGONLY=0`): in the terrain editor the only window is its 172x480 panel (a dialog), so the pass
+  stopped at `n <= 0`: the panel stayed native although HSCENSUS logged "dialog enlarged", and `sc3resize_ui_scale()`
+  returned 100, so sc3perf's FPS/profiler text was native. The pass now runs when a dialog is enlarged with no HUD window,
+  and the export reports the factor while a dialog is enlarged. The panel is enlarged like any dialog (2560: `[2388 435
+  2560 915] -> [2173 135 2560 1215]`); its clicks map (Aceptar este Terreno hit).
+- **MSOPEN** (`SC3RESIZE_MENUSCALE_OPEN=0`): specks of `menu_bg.bmp` inside the scaled Load City list. A list pixel equal
+  to the stock background at the same spot was classed background. MENUSCALE's compose now reads the 3x3 morphological
+  opening of the mask (a pixel stays background only inside some all-background 3x3 square; outside the frame counts as
+  background). Measured A/B at 2560: 81 client pixels differ between the arms, all in the dialog, 0 on the menu picture.

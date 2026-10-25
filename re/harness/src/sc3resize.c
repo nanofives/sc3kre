@@ -3893,6 +3893,14 @@ static volatile LONG g_ms_rx, g_ms_ry, g_ms_rw, g_ms_rh;   /* the 4:3 rect, clie
 static DWORD *g_ms_lut;                   /* RGB565 -> XRGB */
 static DWORD *g_ms_f32;                   /* the frame as last read, 800x600 XRGB */
 static BYTE  *g_ms_bg;                    /* 1 = that frame pixel is background */
+/* MSOPEN (task uiaudit 2026-10-25, owner pick #6): in the scaled Load City dialog a few 1-3 px specks of menu_bg.bmp
+ * showed inside the white file list. A list pixel whose RGB565 value equals the stock background at the same spot was
+ * classed background (measured: mask 1 at frame (542,232), inside the list). Real background is large areas, so the
+ * compose now reads the morphological OPENING of the mask (3x3): a pixel stays background only if some 3x3 square of
+ * background pixels contains it. Specks and lines under 3 px wide are dropped; area edges are kept. Outside the frame
+ * counts as background. SC3RESIZE_MENUSCALE_OPEN=0 = the raw mask. */
+static int    g_ms_open = 1;
+static BYTE  *g_ms_bgo, *g_ms_bge;        /* opened mask (what compose reads), erosion scratch */
 static WORD  *g_ms_raw;                   /* the frame as last read, RGB565: an unchanged row is skipped */
 static HDC    g_ms_dc;
 static HBITMAP g_ms_bmp, g_ms_oldbmp;
@@ -3952,6 +3960,8 @@ static int rz_ms_prepare(LONG cw, LONG ch) {
     }
     if (!g_ms_f32) g_ms_f32 = (DWORD *)malloc(NAT_W * NAT_H * 4);
     if (!g_ms_bg) g_ms_bg = (BYTE *)malloc(NAT_W * NAT_H);
+    if (g_ms_open && !g_ms_bgo) { g_ms_bgo = (BYTE *)malloc(NAT_W * NAT_H); g_ms_bge = (BYTE *)malloc(NAT_W * NAT_H); }   /* MSOPEN */
+    if (g_ms_open && (!g_ms_bgo || !g_ms_bge)) g_ms_open = 0;
     if (!g_ms_raw) g_ms_raw = (WORD *)malloc(NAT_W * NAT_H * 2);
     if (!g_ms_f32 || !g_ms_bg || !g_ms_raw) return 0;
     if (g_ms_dc) { SelectObject(g_ms_dc, g_ms_oldbmp); DeleteObject(g_ms_bmp); DeleteDC(g_ms_dc); g_ms_dc = NULL; }
@@ -4041,13 +4051,47 @@ static __inline DWORD rz_ms_lerp(DWORD a, DWORD b, LONG f) {   /* f 0..256 towar
            ((((a & 0x00FF00) * w + (b & 0x00FF00) * (DWORD)f) >> 8) & 0x00FF00);
 }
 
+/* MSOPEN: recompute the opened mask over frame box bb (x0 y0 x1 y1) and widen bb by what it can change (2 px). */
+static __inline int rz_ms_bgat(LONG x, LONG y) {
+    return x < 0 || y < 0 || x >= NAT_W || y >= NAT_H ? 1 : g_ms_bg[y * NAT_W + x];
+}
+static void rz_ms_openbb(LONG *bb) {
+    LONG x, y, x0 = bb[0] - 2, y0 = bb[1] - 2, x1 = bb[2] + 2, y1 = bb[3] + 2, ex0, ey0, ex1, ey1;
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > NAT_W) x1 = NAT_W;
+    if (y1 > NAT_H) y1 = NAT_H;
+    ex0 = x0 > 0 ? x0 - 1 : 0; ey0 = y0 > 0 ? y0 - 1 : 0;
+    ex1 = x1 < NAT_W ? x1 + 1 : NAT_W; ey1 = y1 < NAT_H ? y1 + 1 : NAT_H;
+    for (y = ey0; y < ey1; y++)   /* erosion: the 3x3 around (x,y) is all background */
+        for (x = ex0; x < ex1; x++)
+            g_ms_bge[y * NAT_W + x] = (BYTE)(rz_ms_bgat(x - 1, y - 1) & rz_ms_bgat(x, y - 1) & rz_ms_bgat(x + 1, y - 1) &
+                                             rz_ms_bgat(x - 1, y) & rz_ms_bgat(x, y) & rz_ms_bgat(x + 1, y) &
+                                             rz_ms_bgat(x - 1, y + 1) & rz_ms_bgat(x, y + 1) & rz_ms_bgat(x + 1, y + 1));
+    for (y = y0; y < y1; y++)     /* dilation of the erosion, inside the raw mask */
+        for (x = x0; x < x1; x++) {
+            LONG i, j;
+            BYTE o = 0;
+            if (g_ms_bg[y * NAT_W + x])
+                for (j = -1; j <= 1 && !o; j++)
+                    for (i = -1; i <= 1 && !o; i++) {
+                        LONG xx = x + i, yy = y + j;
+                        if (xx < 0 || yy < 0 || xx >= NAT_W || yy >= NAT_H) continue;
+                        o = g_ms_bge[yy * NAT_W + xx];
+                    }
+            g_ms_bgo[y * NAT_W + x] = o;
+        }
+    bb[0] = x0; bb[1] = y0; bb[2] = x1; bb[3] = y1;
+}
+
 /* Compose rect pixels [dx0,dx1) x [dy0,dy1) (rect coords) from the frame cache and the cover picture. */
 static void rz_ms_compose(LONG dx0, LONG dy0, LONG dx1, LONG dy1) {
     LONG x, y, rw = g_ms_rw, cw = g_ms_cw, rx = g_ms_rx, ry = g_ms_ry;
+    const BYTE *bgm = g_ms_open ? g_ms_bgo : g_ms_bg;   /* MSOPEN */
     for (y = dy0; y < dy1; y++) {
         LONG sy0 = g_ms_ys[y], fy = g_ms_yf[y], sy1 = sy0 < NAT_H - 1 ? sy0 + 1 : sy0;
         const DWORD *f0 = g_ms_f32 + sy0 * NAT_W, *f1 = g_ms_f32 + sy1 * NAT_W;
-        const BYTE *b0 = g_ms_bg + sy0 * NAT_W, *b1 = g_ms_bg + sy1 * NAT_W;
+        const BYTE *b0 = bgm + sy0 * NAT_W, *b1 = bgm + sy1 * NAT_W;
         const DWORD *p = g_mb_bits + (ry + y) * cw + rx;
         DWORD *o = g_ms_out + y * rw;
         if (!g_ms_filter) {
@@ -4156,6 +4200,7 @@ static int rz_ms_full(void *src, const RECT *sr, LONG cw, LONG ch) {
         if (g_mb_black) memset(g_ms_bg, 0, NAT_W * NAT_H);
     }
     if (!g_ms_valid) { bb[0] = 0; bb[1] = 0; bb[2] = NAT_W; bb[3] = NAT_H; }
+    if (g_ms_open && bb[2] > bb[0]) rz_ms_openbb(bb);   /* MSOPEN */
     QueryPerformanceCounter(&t[1]);
     if (bb[2] > bb[0]) {
         rz_ms_dest_box(bb, d);
@@ -4201,6 +4246,7 @@ static int rz_ms_partial(void *src, const RECT *sr) {
     if (!g_ms_valid || !g_ms_out) return 0;
     QueryPerformanceCounter(&t[0]);
     if (!rz_ms_read(src, sr, sr->left, sr->top, sr->right - sr->left, sr->bottom - sr->top, bb)) return 0;
+    if (g_ms_open && bb[2] > bb[0]) rz_ms_openbb(bb);   /* MSOPEN */
     QueryPerformanceCounter(&t[1]);
     if (bb[2] > bb[0]) {
         rz_ms_dest_box(bb, d);
@@ -5114,6 +5160,56 @@ static void rz_hs_census(DWORD vt, const LONG *r, const char *what) {
     logf("HSCENSUS> %s+0x%05lX %ldx%ld at [%ld %ld %ld %ld]: %s", mod, rel, r[2] - r[0], r[3] - r[1], r[0], r[1], r[2], r[3], what);
 }
 
+/* TIPDLG (task uiaudit 2026-10-25, owner pick #1): a tooltip of a DIALOG control was drawn twice. The tooltip window is
+ * the game's one tooltip (vt exe+0xd3bcc, the cost label's class). A cursor on an enlarged dialog is mapped by DLGSCALE,
+ * not rz_hs_mouse, so COSTLABEL took the tooltip for a city cost label and drew it enlarged at the stale TIPCURSOR point
+ * (measured: "city label [1032 588 1132 604] -> [1128 687 1353 723], cursor (1200,600)", the last CITY point), while the
+ * dialog's own enlarged copy showed the native tooltip again, clipped at the dialog edge. Now, when the last mouse message
+ * was on an enlarged dialog, a floating tooltip that overlaps a dialog of this pass is enlarged with THAT dialog's map
+ * (dest = dialog dest + (r - dialog native) * dialog scale), drawn after the dialogs (lbl slot: on top, takes no mouse).
+ * SC3RESIZE_TIPDLG=0 = the old rule. */
+static int g_tipdlg = 1;
+static volatile LONG g_hs_mouse_dlg;   /* the last mouse message landed on an enlarged dialog (set in the wndproc) */
+/* MINIVIS (task uiaudit, owner pick #2): with the UI hidden the MININAT twin stayed on the city. rz_hs_collect skips a
+ * hidden minimap before it records it, so g_mn_mini kept the hidden window and mn_compose went on composing the twin
+ * against a snapshot rect nobody refreshed (logged "0 twin draws, 50 frames composed" while hidden). The twin is now
+ * composed only when the minimap was collected visible in this pass. SC3RESIZE_MINIVIS=0 = the old rule. */
+static int g_minivis = 1, g_mn_seen;
+/* DLGONLY (task uiaudit, owner pick #4): with no HUD window up (terrain editor: only its 172x480 panel, a dialog) the
+ * pass stopped at "n <= 0", so the panel stayed native and sc3resize_ui_scale() returned 100 (FPS/profiler text native).
+ * The pass now runs when this frame has an enlarged dialog even without HUD windows, and the export reports the factor
+ * while a dialog is enlarged. SC3RESIZE_DLGONLY=0 = the old rule. */
+static int g_dlgonly = 1;
+static int rz_hl_slot(void *win);   /* fwd */
+static int rz_td_add(void *win, const LONG *r, const HD_SLOT *dd, LONG cw, LONG ch) {
+    double sx = (double)dd->dw / dd->w, sy = (double)dd->dh / dd->h;
+    LONG w = r[2] - r[0], h = r[3] - r[1], dw = (LONG)(w * sx + 0.5), dh = (LONG)(h * sy + 0.5);
+    LONG x0 = dd->dst[0] + (LONG)((r[0] - dd->nat[0]) * sx + 0.5), y0 = dd->dst[1] + (LONG)((r[1] - dd->nat[1]) * sy + 0.5);
+    int k;
+    HD_SLOT *d;
+    if (w <= 0 || h <= 0 || dw > cw || dh > ch) return 0;
+    if (x0 + dw > cw) x0 = cw - dw;
+    if (y0 + dh > ch) y0 = ch - dh;
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    k = rz_hl_slot(win);
+    if (k < 0) return 0;
+    d = &g_hd[k];
+    memcpy(d->nat, r, sizeof(d->nat));
+    d->dst[0] = x0; d->dst[1] = y0; d->dst[2] = x0 + dw; d->dst[3] = y0 + dh;
+    d->w = w; d->h = h; d->dw = dw; d->dh = dh;
+    g_hd_list[g_hd_nc++] = k;
+    {   static LONG lr[4];
+        static int logs;
+        if (logs < 100 && memcmp(lr, r, sizeof(lr))) {
+            logs++; memcpy(lr, r, sizeof(lr));
+            logf("TIPDLG> dialog tooltip [%ld %ld %ld %ld] -> [%ld %ld %ld %ld] with its dialog [%ld %ld %ld %ld] (%.3fx)",
+                 r[0], r[1], r[2], r[3], x0, y0, x0 + dw, y0 + dh, dd->nat[0], dd->nat[1], dd->nat[2], dd->nat[3], sx);
+        }
+    }
+    return 1;
+}
+
 /* Collect visible HUD windows (root children, and children of the full-client HUD container). Returns count. */
 static int rz_hs_collect(LONG cw, LONG ch, double s, int can_erase) {
     DWORD exe = (DWORD)GetModuleHandleA(NULL), spr = (DWORD)GetModuleHandleA("SIMSPR.DLL");
@@ -5122,9 +5218,12 @@ static int rz_hs_collect(LONG cw, LONG ch, double s, int can_erase) {
     int nl = 1, li, n = 0;
     DWORD sig = 2166136261u;
     char skipped[400];
-    int sk = 0;
+    int sk = 0, ntd = 0;
+    void *tdw[4];
+    LONG tdr[4][4];
     g_hs_ndlg = 0;
     g_hd_nc = 0; g_hd_stamp++;
+    g_mn_seen = 0;   /* MINIVIS */
     skipped[0] = 0;
     if (!root) return 0;
     lvl[0] = root;
@@ -5142,7 +5241,7 @@ static int rz_hs_collect(LONG cw, LONG ch, double s, int can_erase) {
             if (exe && vt == exe + 0xd32d0) { if (nl < 2) lvl[nl++] = c; continue; }   /* HUD container */
             if (!(c[0xa0 / 4] & 1)) continue;                                         /* hidden */
             if (spr && vt == spr + 0x676ac) continue;                                 /* city view */
-            if (sui && vt == sui + 0xaa180) g_mn_mini = c;                            /* MININAT */
+            if (sui && vt == sui + 0xaa180) { g_mn_mini = c; g_mn_seen = 1; }         /* MININAT (MINIVIS: seen visible) */
             r[0] = (LONG)c[0x14 / 4]; r[1] = (LONG)c[0x18 / 4]; r[2] = (LONG)c[0x1c / 4]; r[3] = (LONG)c[0x20 / 4];
             w = r[2] - r[0]; h = r[3] - r[1];
             if (sui && vt == sui + 0xa4d64 && w >= 120 && h >= 80) {                  /* dialog */
@@ -5157,6 +5256,11 @@ static int rz_hs_collect(LONG cw, LONG ch, double s, int can_erase) {
             if (r[3] > ch) r[3] = ch;
             if (r[2] <= r[0] || r[3] <= r[1]) continue;
             if ((r[2] - r[0]) * (r[3] - r[1]) > cw * ch / 2) { rz_hs_census(vt, r, "full-client layer, NOT SCALED"); continue; }
+            if (g_tipdlg && g_dlgscale && can_erase && g_hs_mouse_dlg && exe && vt == exe + 0xd3bcc && r[2] < cw - 2 && r[3] < ch - 2 &&
+                ntd < 4) {   /* TIPDLG: decided after the loop, once this pass's dialogs are known */
+                tdw[ntd] = c; memcpy(tdr[ntd], r, sizeof(r)); ntd++;
+                continue;
+            }
             if (r[2] < cw - 2 && r[3] < ch - 2) {   /* floating (tooltips): enlarged only if it fits and can be erased */
                 LONG fx0 = rz_hs_dst_lo(r[0], cw, s), fy0 = rz_hs_dst_lo(r[1], ch, s);
                 int hud = g_hs_floatall || rz_hs_float_hud(c, r, vt);
@@ -5195,6 +5299,22 @@ static int rz_hs_collect(LONG cw, LONG ch, double s, int can_erase) {
             sig = (sig ^ (DWORD)(r[0] * 7 + r[1] * 131 + r[2] * 8191 + r[3] * 524287)) * 16777619u;
             n++;
         }
+    }
+    for (li = 0; li < ntd; li++) {   /* TIPDLG: a tooltip on an enlarged dialog goes with that dialog */
+        int k, best = -1;
+        LONG ba = 0;
+        for (k = 0; k < g_hd_nc; k++) {
+            const HD_SLOT *dd = &g_hd[g_hd_list[k]];
+            LONG ox = (tdr[li][2] < dd->nat[2] ? tdr[li][2] : dd->nat[2]) - (tdr[li][0] > dd->nat[0] ? tdr[li][0] : dd->nat[0]);
+            LONG oy = (tdr[li][3] < dd->nat[3] ? tdr[li][3] : dd->nat[3]) - (tdr[li][1] > dd->nat[1] ? tdr[li][1] : dd->nat[1]);
+            if (dd->lbl || ox <= 0 || oy <= 0 || dd->w <= 0 || dd->h <= 0) continue;
+            if (ox * oy > ba) { ba = ox * oy; best = g_hd_list[k]; }
+        }
+        if (best >= 0 && rz_td_add(tdw[li], tdr[li], &g_hd[best], cw, ch)) {
+            rz_hs_census(exe + 0xd3bcc, tdr[li], "dialog tooltip, enlarged with its dialog");
+            sig = (sig ^ (DWORD)(tdr[li][0] * 7 + tdr[li][1] * 131 + tdr[li][2] * 8191 + tdr[li][3] * 524287) ^ 0x7d1a) * 16777619u;
+        } else if (rz_hl_add(tdw[li], tdr[li], cw, ch, s)) rz_hs_census(exe + 0xd3bcc, tdr[li], "cost label, enlarged");   /* not on a dialog: as before */
+        else rz_hs_census(exe + 0xd3bcc, tdr[li], "floating, NOT SCALED");
     }
     sig ^= (DWORD)g_hs_ndlg * 0x9e3779b9u;
     {   /* COSTLABEL: keep this pass's edge-anchored rects for the next pass's floating test */
@@ -5291,6 +5411,22 @@ static int rz_hd_add(void *win, const LONG *r, LONG cw, LONG ch, double s) {
 }
 
 /* task uiscale: the city cost label, enlarged by the HUD factor at the cursor. 0 = keep it native. */
+/* TIPDLG: a DLGSCALE slot for a floating label (lbl: drawn after the dialogs, takes no mouse), as rz_hl_add picks it. */
+static int rz_hl_slot(void *win) {
+    int i, k = -1;
+    if (g_hd_nc >= HD_MAX) return -1;
+    for (i = 0; i < HD_MAX; i++) if (g_hd[i].win == win) { k = i; break; }
+    if (k < 0)
+        for (i = 0; i < HD_MAX; i++) {
+            if (g_hd[i].used == g_hd_stamp) continue;
+            if (k < 0 || g_hd[i].used < g_hd[k].used) k = i;
+        }
+    if (k < 0 || g_hd[k].used == g_hd_stamp) return -1;
+    if (g_hd[k].win != win) { g_hd[k].win = win; g_hd[k].valid = 0; }
+    g_hd[k].used = g_hd_stamp; g_hd[k].lbl = 1;
+    return k;
+}
+
 static int rz_hl_add(void *win, const LONG *r, LONG cw, LONG ch, double s) {
     LONG w = r[2] - r[0], h = r[3] - r[1], dw, dh, x0, y0, mx, my, P, gap;
     int i, k = -1, derived = 0;
@@ -6522,6 +6658,7 @@ static void mn_compose(BYTE *bits, LONG pitch, LONG ox, LONG oy, LONG cw, LONG c
     if (!g_mn_on) return;
     mn_install();
     if (!g_mn_valid || !T || !g_mn_mini || !g_mn_m) return;
+    if (g_minivis && !g_mn_seen) return;   /* MINIVIS: hidden this pass (UI hidden), its snapshot rect is stale */
     QueryPerformanceCounter(&t0);
     if (s != g_mn_bs || ((LONG *)g_mn_mini)[0x14 / 4] != g_mn_px || ((LONG *)g_mn_mini)[0x18 / 4] != g_mn_py) {
         *((BYTE *)g_mn_mini + 0x60) = 1;   /* drawn for another factor or place: repaint, the enlarged copy shows meanwhile */
@@ -6589,7 +6726,7 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
     if (g_hs_key) city = rz_hs_city(cw, ch, &cpitch, &csub);
     n = rz_hs_collect(cw, ch, s, city != NULL);
     g_hs_why = 6;
-    if (n <= 0) { rz_hs_city_unlock(csub); return 0; }
+    if (n <= 0 && !(g_dlgonly && g_hd_nc > 0)) { rz_hs_city_unlock(csub); return 0; }   /* DLGONLY: a dialog alone runs it */
     g_hs_why = 7;
     if (g_hs_snapcap < cw * ch) {
         free(g_hs_snap);
@@ -6939,7 +7076,7 @@ static int rz_hs_mouse(UINT m, LPARAM *lp) {
    factor of the last enlarged present in percent, 100 when HUD scale is off or nothing was enlarged. sc3perf reads it
    (GetProcAddress) to draw its FPS line and busy lines at the same size. */
 __declspec(dllexport) int sc3resize_ui_scale(void) {
-    return g_hs_n > 0 && g_hs_s > 1.0 ? (int)(g_hs_s * 100.0 + 0.5) : 100;
+    return (g_hs_n > 0 || (g_dlgonly && g_hd_n > 0)) && g_hs_s > 1.0 ? (int)(g_hs_s * 100.0 + 0.5) : 100;   /* DLGONLY */
 }
 
 /* CITYZOOM export (task cityzoom): the factor the city view is drawn at (1 = stock). sc3overscroll reads it
@@ -11734,7 +11871,8 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         }
         if (g_hd_n > 0 && rz_hd_mouse(m, &lp)) {
             /* DLGSCALE: on an enlarged dialog (mapped, or already native): the HUD map below is not for it */
-        } else if (g_hs_depth == 0 && g_hs_n > 0) {
+            g_hs_mouse_dlg = 1;   /* TIPDLG */
+        } else if (g_hs_depth == 0 && (g_hs_mouse_dlg = 0, g_hs_n > 0)) {
             /* REPOST (task hudopt 2026-10-11): a WM_MOUSEMOVE carrying exactly the native point we produced for the
                previous message comes back through the queue ~15 ms later (measured: in (1100,332) -> native
                (1120,446), then a queued move at (1120,446); the physical cursor never moved). Mapping it again
@@ -14135,6 +14273,10 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_FSKEY", v, sizeof(v))) g_fskey = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_DLGSCALE", v, sizeof(v))) g_dlgscale = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_COSTLABEL_SCALE", v, sizeof(v))) g_costscale = atoi(v);   /* task uiscale */
+          if (GetEnvironmentVariableA("SC3RESIZE_TIPDLG", v, sizeof(v))) g_tipdlg = atoi(v);          /* task uiaudit */
+          if (GetEnvironmentVariableA("SC3RESIZE_MINIVIS", v, sizeof(v))) g_minivis = atoi(v);        /* task uiaudit */
+          if (GetEnvironmentVariableA("SC3RESIZE_DLGONLY", v, sizeof(v))) g_dlgonly = atoi(v);        /* task uiaudit */
+          if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_OPEN", v, sizeof(v))) g_ms_open = atoi(v); /* task uiaudit */
           if (GetEnvironmentVariableA("SC3RESIZE_WINMEM", v, sizeof(v))) g_winmem = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_RESROW", v, sizeof(v))) g_resrow = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_STARTRES", v, sizeof(v))) g_startres = atoi(v);
@@ -14178,6 +14320,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
              g_dlgstay, g_meetall);
         logf("### FLAGS> menuscale=%d filter=%s repost=%d fullblit=%d refresh=%d dump=%s", g_menuscale,
              g_ms_filter ? "bilinear" : "nearest", g_ms_repost, g_ms_fullblit, g_ms_refresh, g_ms_dump[0] ? g_ms_dump : "-");
+        logf("### FLAGS> uiaudit: tipdlg=%d minivis=%d dlgonly=%d menuscale_open=%d", g_tipdlg, g_minivis, g_dlgonly, g_ms_open);
         if (AddVectoredExceptionHandler(1, rz_veh))
             logf("### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the "
                  "zoom-after-resize crash the game swallows)");
