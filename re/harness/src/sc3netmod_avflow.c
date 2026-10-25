@@ -58,7 +58,7 @@
 #define AVF_DEFAULT_BVFIRST 0        /* task avflow BVFIRST: set from verify/avflow/RESULTS.md section 2.7 */
 #define AVF_DEFAULT_BVCOST  0        /* task bventry: set from verify/bventry/RESULTS.md */
 #define AVF_DEFAULT_AVCOST  0        /* task bventry: the avenue half of BVCOST, its own switch */
-#define AVF_DEFAULT_AVSTART 0        /* task bventry: AVFIRST at the trip start; measured better (verify/bventry/RESULTS.md 3.1), off until the orchestrator / owner turn it on */
+#define AVF_DEFAULT_AVSTART 1        /* task bventry: AVFIRST at the trip start (avenue and boulevard cells); measured better (verify/bventry/RESULTS.md 3.1), turned ON by owner call 2026-10-25 (loader2). SC3NETMOD_AVSTART=0 still turns it off */
 #define AVS_MAX 1024                 /* cells AVSTART may close in one call (a 6x6 lot at r 8: 22 x 22 = 484) */
 
 static volatile LONG g_avf_on, g_avd_on, g_avf_bv;

@@ -37,9 +37,12 @@ APPS_STOCK_FROM_ORIGINAL = ["SIMSPR.DLL", "GZGraphicD.dll"]
 # per-PC state the game or a mod writes: shipped once, never overwritten by the updater
 SEED = {"apps/sc3.cfg", "apps/sc3net.cfg", "apps/sc3u.ini",
         "cities/europolis 1024.sc3"}   # owner 2026-10-23: the 1024 test city, in the stage source's Cities. Seed so a save over it survives updates
-MOD_BINS = ["mods_launch.exe", "sc3resize.dll", "sc3bigcity.dll", "sc3overscroll.dll", "sc3simrun.dll", "sc3perf.dll",
+MOD_BINS = ["sc3resize.dll", "sc3bigcity.dll", "sc3overscroll.dll", "sc3simrun.dll", "sc3perf.dll",
             "sc3netmod.dll", "sc3undo.dll",
-            "version.dll"]   # version.dll = the mod loader (sc3modldr.c, no injection since 2026-10-21): must sit beside SC3U.exe
+            "version.dll"]   # version.dll = the mod loader (sc3modldr.c). Since 2026-10-25 it loads a built-in list
+            # from its own folder (Apps) on normal SC3U.exe start, so mods_launch.exe is no longer shipped (it was
+            # also ASR-flagged, and version.dll with the entry-point patch was Defender-flagged as Contebrew.A!ml).
+            # "Stock" = rename/remove version.dll, or set SC3MODS_OFF=1. See verify/loader2/RESULTS.md.
 NETMOD_PARTS = ["overlay", "tables"]          # not ledger.json (dev-PC paths) nor packs (sources, reinstall only)
 
 
@@ -108,7 +111,8 @@ def main():
     for f in ("sc3_update.ps1", "update.bat"):
         shutil.copy2(os.path.join(HERE, f), os.path.join(out, f))
     with open(os.path.join(out, "Jugar SimCity (mods).bat"), "w", newline="\r\n") as fh:
-        fh.write('@echo off\nstart "" /D "%~dp0Apps" "%~dp0Apps\\mods_launch.exe"\n')
+        # version.dll loads the mods itself on a normal start (built-in list), so the launcher just starts the game.
+        fh.write('@echo off\nstart "" /D "%~dp0Apps" "%~dp0Apps\\SC3U.exe"\n')
 
     files = []
     for r, _ds, fs in os.walk(out):
