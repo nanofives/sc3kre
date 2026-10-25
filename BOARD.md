@@ -10,7 +10,8 @@ This file points at them and does not restate them.
 
 ## Current state, 2026-10-23 (read this first)
 
-**Latest published release: `sc3mods-2026-10-25c`** (target `8587f2c`: sharp Ver datos maps; `verify/mods_release_1025c/RESULTS.md`).
+**Latest published release: `sc3mods-2026-10-25d`** (target `9825dc4`: SHAREREAD crash fix; `verify/mods_release_1025d/RESULTS.md`).
+Before it: `sc3mods-2026-10-25c` (target `8587f2c`: sharp Ver datos maps).
 Before it: `sc3mods-2026-10-25b` (target `def734b`: zoom-step crash with the minimap buttons fixed,
 UI audit fixes; `verify/mods_release_1025b/RESULTS.md`). Before it: `sc3mods-2026-10-25` (target `4a291be`: new loader without launcher, the 10-24 version.dll is
 Defender-flagged; avenue traffic changes, AVSTART on; `verify/mods_release_1025/RESULTS.md`). Same build on the LAN server.
