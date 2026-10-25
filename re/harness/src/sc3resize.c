@@ -13176,9 +13176,15 @@ static __declspec(naked) void zc_rot_stub(void) {
         jmp  dword ptr [g_6b0f_ret]
     }
 }
-/* Wrappers for iso view vt+0x60/+0x64/+0x70/+0x74 (thiscall, no stack args; the originals read ebx, kept by pushad). */
+/* Wrappers for iso view vt+0x60/+0x64/+0x70/+0x74 (thiscall, one stack arg that the originals pop with ret 4 and do
+   not read; they read ebx, kept by pushad). */
 #define ZC_WRAP(k) static __declspec(naked) void zc_wrap##k(void) { __asm { pushad } __asm { push ecx }     __asm { call zc_refresh_tile } __asm { popad } __asm { jmp dword ptr [g_zc_orig + 4 * k] } }
-/* zoom in / out: task cityzoom first (cz_zoom), then the ZOOMCENTER wrapper */
+/* zoom in / out: task cityzoom first (cz_zoom), then the ZOOMCENTER wrapper. When cz_zoom takes the step the original
+   is skipped, so the wrapper must return as the original does: FUN_1001d2d6 / FUN_1001d365 end in `ret 4` (c2 04 00) and
+   ZoomIn FUN_10042d8a pushes one argument (SIMSPR 0x10042e13 push [ebp+8]; call [eax+0x60]). A bare `ret` there (task
+   zoomcrash 2026-10-25) left 4 bytes on the stack, FUN_10042d8a's pop esi / pop ebx then returned the wrong ESI / EBX,
+   and on the minimap-button path sc3undo's thiscall helper restores ESP from EBX (sc3undo +0x662b mov esp, ebx): the
+   game died on the first x2 step with 0xC0000005 and no handler saw it, since no exception frame fits on a bad ESP. */
 static __declspec(naked) void zc_wrap0(void) {
     __asm {
         pushad
@@ -13195,7 +13201,7 @@ static __declspec(naked) void zc_wrap0(void) {
         jmp  dword ptr [g_zc_orig + 0]
     zin_done:
         popad
-        ret
+        ret  4
     }
 }
 static __declspec(naked) void zc_wrap1(void) {
@@ -13214,7 +13220,7 @@ static __declspec(naked) void zc_wrap1(void) {
         jmp  dword ptr [g_zc_orig + 4]
     zout_done:
         popad
-        ret
+        ret  4
     }
 }
 ZC_WRAP(2)
