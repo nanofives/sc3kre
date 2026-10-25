@@ -1,0 +1,4889 @@
+{
+"SCENARIO.DLL|0x10005b6f": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1001a64c"
+],
+"hit": [
+[
+"0x1001a64c",
+{
+"calls": 60,
+"objs": 4,
+"xobj": 2,
+"maxsw": 3,
+"threads": "main+sim"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0xc"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"SCENARIO.DLL|0x100099a1": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1001a64c"
+],
+"hit": [
+[
+"0x1001a64c",
+{
+"calls": 60,
+"objs": 4,
+"xobj": 2,
+"maxsw": 3,
+"threads": "main+sim"
+}
+]
+],
+"tmpl": [
+"esi"
+],
+"off": [
+"0xc"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"SIMADV.DLL|0x100064fd": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x100303f0"
+],
+"hit": [
+[
+"0x100303f0",
+{
+"calls": 24,
+"objs": 20,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x2c"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"SIMADV.DLL|0x10006504": {
+"role": [
+"Release"
+],
+"vts": [
+"0x100303f0"
+],
+"hit": [
+[
+"0x100303f0",
+{
+"calls": 24,
+"objs": 20,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"esi"
+],
+"off": [
+"0x2c"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"SIMADV.DLL|0x10011702": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10030aa8"
+],
+"hit": [
+[
+"0x10030aa8",
+{
+"calls": 20,
+"objs": 9,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x5c"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"SIMADV.DLL|0x10011709": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10030aa8"
+],
+"hit": [
+[
+"0x10030aa8",
+{
+"calls": 20,
+"objs": 9,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"esi"
+],
+"off": [
+"0x5c"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"SIMADV.DLL|0x1001c97a": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10031178"
+],
+"hit": [
+[
+"0x10031178",
+{
+"calls": 79,
+"objs": 36,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x58"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"SIMADV.DLL|0x1001c981": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10031178"
+],
+"hit": [
+[
+"0x10031178",
+{
+"calls": 79,
+"objs": 36,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"esi"
+],
+"off": [
+"0x58"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"SIMDSTR.DLL|0x1000652f": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10032498"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x2c"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"SIMDSTR.DLL|0x100066f0": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10032498"
+],
+"hit": [],
+"tmpl": [
+"esi"
+],
+"off": [
+"0x2c"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"SIMDSTR.DLL|0x1000e087": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10032c98",
+"0x100337b4"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0xc"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"SIMDSTR.DLL|0x1000e4eb": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10032c98"
+],
+"hit": [],
+"tmpl": [
+"esi"
+],
+"off": [
+"0xc"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"SIMDSTR.DLL|0x10013a81": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1003314c"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x78"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"SIMDSTR.DLL|0x10014090": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1003314c"
+],
+"hit": [],
+"tmpl": [
+"esi"
+],
+"off": [
+"0x78"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"SIMDSTR.DLL|0x10016a93": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x100332c8"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x50"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"SIMDSTR.DLL|0x1001715c": {
+"role": [
+"Release"
+],
+"vts": [
+"0x100332c8"
+],
+"hit": [],
+"tmpl": [
+"esi"
+],
+"off": [
+"0x50"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"SIMDSTR.DLL|0x100214f6": {
+"role": [
+"Release"
+],
+"vts": [
+"0x100337b4"
+],
+"hit": [],
+"tmpl": [
+"esi"
+],
+"off": [
+"0xc"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"SIMGEOM.DLL|0x1001474e": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1002942c"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"SIMGEOM.DLL|0x10004dab": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002942c"
+],
+"hit": [],
+"tmpl": [
+"esi"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"SIMSPR.DLL|0x1005982a": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x100673a8",
+"0x10068934",
+"0x10068950",
+"0x1006896c",
+"0x10068ae8",
+"0x10068b04",
+"0x10068bc4"
+],
+"hit": [
+[
+"0x100673a8",
+{
+"calls": 12,
+"objs": 4,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x10068950",
+{
+"calls": 47310,
+"objs": 1601,
+"xobj": 80,
+"maxsw": 11,
+"threads": "main+sim+sprload"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt",
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"SIMSPR.DLL|0x10041564": {
+"role": [
+"Release"
+],
+"vts": [
+"0x100673a8"
+],
+"hit": [
+[
+"0x100673a8",
+{
+"calls": 12,
+"objs": 4,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"esi"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"STRTSIM.DLL|0x10003310": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1002a558",
+"0x1002a92c",
+"0x1002c328",
+"0x1002c8cc",
+"0x1002cb28",
+"0x1002b95c"
+],
+"hit": [
+[
+"0x1002a558",
+{
+"calls": 20,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x1002a92c",
+{
+"calls": 11,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x1002c328",
+{
+"calls": 14,
+"objs": 9,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x1002c8cc",
+{
+"calls": 72402,
+"objs": 51013,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x1002cb28",
+{
+"calls": 189,
+"objs": 7,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x8"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt",
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"STRTSIM.DLL|0x10003b58": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002a558"
+],
+"hit": [
+[
+"0x1002a558",
+{
+"calls": 20,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"esi"
+],
+"off": [
+"0x8"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"STRTSIM.DLL|0x10005f32": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002a92c"
+],
+"hit": [
+[
+"0x1002a92c",
+{
+"calls": 11,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"esi"
+],
+"off": [
+"0x8"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"STRTSIM.DLL|0x10010569": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1002b0fc",
+"0x1002c594"
+],
+"hit": [
+[
+"0x1002b0fc",
+{
+"calls": 40,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x1002c594",
+{
+"calls": 13294303,
+"objs": 5,
+"xobj": 5,
+"maxsw": 645,
+"threads": "main+sim"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0xc"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"STRTSIM.DLL|0x100076a8": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002b0fc"
+],
+"hit": [
+[
+"0x1002b0fc",
+{
+"calls": 40,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"esi"
+],
+"off": [
+"0xc"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"STRTSIM.DLL|0x10015599": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1002b550",
+"0x1002c7c8",
+"0x1002cf40",
+"0x1002cfa8",
+"0x1002d1d0",
+"0x1002d080"
+],
+"hit": [
+[
+"0x1002b550",
+{
+"calls": 3842,
+"objs": 1515,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x1002c7c8",
+{
+"calls": 18,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x1002cf40",
+{
+"calls": 4219,
+"objs": 431,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x1002d1d0",
+{
+"calls": 9,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt",
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"STRTSIM.DLL|0x1000934f": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002b550"
+],
+"hit": [
+[
+"0x1002b550",
+{
+"calls": 3842,
+"objs": 1515,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"esi"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"STRTSIM.DLL|0x10010111": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002c328"
+],
+"hit": [
+[
+"0x1002c328",
+{
+"calls": 14,
+"objs": 9,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"esi"
+],
+"off": [
+"0x8"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"STRTSIM.DLL|0x100110fc": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002c594"
+],
+"hit": [
+[
+"0x1002c594",
+{
+"calls": 13294303,
+"objs": 5,
+"xobj": 5,
+"maxsw": 645,
+"threads": "main+sim"
+}
+]
+],
+"tmpl": [
+"esi"
+],
+"off": [
+"0xc"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"STRTSIM.DLL|0x10021980": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1002c600",
+"0x1002c840",
+"0x1002a5d0"
+],
+"hit": [
+[
+"0x1002c600",
+{
+"calls": 429928,
+"objs": 4,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x1002c840",
+{
+"calls": 2784,
+"objs": 449,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt",
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"STRTSIM.DLL|0x1001413a": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002c600"
+],
+"hit": [
+[
+"0x1002c600",
+{
+"calls": 429928,
+"objs": 4,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"esi"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"STRTSIM.DLL|0x10015613": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002c7c8"
+],
+"hit": [
+[
+"0x1002c7c8",
+{
+"calls": 18,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"esi"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"STRTSIM.DLL|0x100166df": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002c840"
+],
+"hit": [
+[
+"0x1002c840",
+{
+"calls": 2784,
+"objs": 449,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"esi"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"STRTSIM.DLL|0x10017158": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002c8cc"
+],
+"hit": [
+[
+"0x1002c8cc",
+{
+"calls": 72402,
+"objs": 51013,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"esi"
+],
+"off": [
+"0x8"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"STRTSIM.DLL|0x10017a01": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002cb28"
+],
+"hit": [
+[
+"0x1002cb28",
+{
+"calls": 189,
+"objs": 7,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"esi"
+],
+"off": [
+"0x8"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"STRTSIM.DLL|0x1001dd1a": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002cf40"
+],
+"hit": [
+[
+"0x1002cf40",
+{
+"calls": 4219,
+"objs": 431,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"esi"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"STRTSIM.DLL|0x1001dfc2": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002cfa8"
+],
+"hit": [],
+"tmpl": [
+"esi"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"STRTSIM.DLL|0x1001f229": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002d1d0"
+],
+"hit": [
+[
+"0x1002d1d0",
+{
+"calls": 9,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"esi"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables.txt"
+]
+},
+"AUDIO.DLL|0x10011277": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10020d98"
+],
+"hit": [
+[
+"0x10020d98",
+{
+"calls": 56,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x4c"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"AUDIO.DLL|0x1001127e": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10020d98"
+],
+"hit": [
+[
+"0x10020d98",
+{
+"calls": 56,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x4c"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"GZRESOURCED.DLL|0x10015b03": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1001c62c",
+"0x1001cb18",
+"0x1001cb34",
+"0x1001cce8",
+"0x1001cd04",
+"0x1001cd48",
+"0x1001ced4",
+"0x1001cef0",
+"0x1001d104",
+"0x1001d130",
+"0x1001d1f0",
+"0x1001d3f4",
+"0x1001d410",
+"0x1001d42c",
+"0x1001d68c",
+"0x1001d6b8",
+"0x1001d6d4",
+"0x1001d7c4",
+"0x1001d7f0",
+"0x1001d80c",
+"0x1001dce4"
+],
+"hit": [
+[
+"0x1001c62c",
+{
+"calls": 344,
+"objs": 11,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x1001cce8",
+{
+"calls": 5,
+"objs": 2,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x1001d410",
+{
+"calls": 17700,
+"objs": 210,
+"xobj": 12,
+"maxsw": 8,
+"threads": "main+sim+sprload"
+}
+],
+[
+"0x1001d6b8",
+{
+"calls": 1062,
+"objs": 14,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x1001dce4",
+{
+"calls": 2953,
+"objs": 2,
+"xobj": 1,
+"maxsw": 1,
+"threads": "main+sim"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt",
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"GZRESOURCED.DLL|0x100039f1": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1001c62c"
+],
+"hit": [
+[
+"0x1001c62c",
+{
+"calls": 344,
+"objs": 11,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SCENARIO.DLL|0x100012ae": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1001a308",
+"0x1001a31c",
+"0x1001a6e8"
+],
+"hit": [
+[
+"0x1001a6e8",
+{
+"calls": 24,
+"objs": 10,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SCENARIO.DLL|0x100012b5": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1001a308",
+"0x1001a31c"
+],
+"hit": [],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SCENARIO.DLL|0x1000c9a7": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1001a6e8"
+],
+"hit": [
+[
+"0x1001a6e8",
+{
+"calls": 24,
+"objs": 10,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMADV.DLL|0x1000b606": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10030614"
+],
+"hit": [
+[
+"0x10030614",
+{
+"calls": 959,
+"objs": 378,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x50"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMADV.DLL|0x1000b60d": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10030614"
+],
+"hit": [
+[
+"0x10030614",
+{
+"calls": 959,
+"objs": 378,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x50"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMCITY.DLL|0x10010d0d": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10013d8c",
+"0x10013e44"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMCITY.DLL|0x10010d14": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10013d8c",
+"0x10013e44"
+],
+"hit": [],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMDIRT.DLL|0x1001b9bf": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x100207d0",
+"0x10021104"
+],
+"hit": [
+[
+"0x100207d0",
+{
+"calls": 22,
+"objs": 6,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMDIRT.DLL|0x1001daa9": {
+"role": [
+"Release"
+],
+"vts": [
+"0x100207d0",
+"0x10021104"
+],
+"hit": [
+[
+"0x100207d0",
+{
+"calls": 22,
+"objs": 6,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMDSTR.DLL|0x10005674": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10032464",
+"0x10032478"
+],
+"hit": [
+[
+"0x10032464",
+{
+"calls": 1861,
+"objs": 4,
+"xobj": 1,
+"maxsw": 1,
+"threads": "main+sim"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMDSTR.DLL|0x1000567b": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10032464",
+"0x10032478"
+],
+"hit": [
+[
+"0x10032464",
+{
+"calls": 1861,
+"objs": 4,
+"xobj": 1,
+"maxsw": 1,
+"threads": "main+sim"
+}
+]
+],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMDSTR.DLL|0x10007661": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x100325a0",
+"0x1003232c"
+],
+"hit": [
+[
+"0x100325a0",
+{
+"calls": 142,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt",
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMDSTR.DLL|0x10008dc8": {
+"role": [
+"Release"
+],
+"vts": [
+"0x100325a0"
+],
+"hit": [
+[
+"0x100325a0",
+{
+"calls": 142,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMDSTR.DLL|0x10009884": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x100326b0",
+"0x100326d8",
+"0x10032700",
+"0x10032728"
+],
+"hit": [
+[
+"0x100326b0",
+{
+"calls": 12,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x100326d8",
+{
+"calls": 12,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x10032700",
+{
+"calls": 12,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x10032728",
+{
+"calls": 12,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMDSTR.DLL|0x100098c1": {
+"role": [
+"Release"
+],
+"vts": [
+"0x100326b0",
+"0x100326d8",
+"0x10032700",
+"0x10032728"
+],
+"hit": [
+[
+"0x100326b0",
+{
+"calls": 12,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x100326d8",
+{
+"calls": 12,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x10032700",
+{
+"calls": 12,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x10032728",
+{
+"calls": 12,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMECO.DLL|0x100185c7": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1001bf40",
+"0x1001bfa0",
+"0x1001c000",
+"0x1001c060",
+"0x1001c0c0",
+"0x1001cca4"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMECO.DLL|0x100185ce": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1001bf40",
+"0x1001bfa0",
+"0x1001c000",
+"0x1001c060",
+"0x1001c0c0",
+"0x1001cca4"
+],
+"hit": [],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMGEOM.DLL|0x10003567": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10029210",
+"0x10029224",
+"0x10029a94",
+"0x10029f70"
+],
+"hit": [
+[
+"0x10029224",
+{
+"calls": 1916729,
+"objs": 430,
+"xobj": 190,
+"maxsw": 1,
+"threads": "main+sim"
+}
+],
+[
+"0x10029f70",
+{
+"calls": 22,
+"objs": 15,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMGEOM.DLL|0x1000356e": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10029210",
+"0x10029224",
+"0x10029a94",
+"0x10029f70"
+],
+"hit": [
+[
+"0x10029224",
+{
+"calls": 1916729,
+"objs": 430,
+"xobj": 190,
+"maxsw": 1,
+"threads": "main+sim"
+}
+],
+[
+"0x10029f70",
+{
+"calls": 22,
+"objs": 15,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMGEOM.DLL|0x10014a99": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1002bb20",
+"0x100291a0"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt",
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMGEOM.DLL|0x10023e54": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002bb20"
+],
+"hit": [],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMINIT.DLL|0x10004e3b": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1002f528",
+"0x1002f940"
+],
+"hit": [
+[
+"0x1002f528",
+{
+"calls": 3,
+"objs": 2,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMINIT.DLL|0x100062ad": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002f528"
+],
+"hit": [
+[
+"0x1002f528",
+{
+"calls": 3,
+"objs": 2,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMINIT.DLL|0x1000c175": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002f940"
+],
+"hit": [],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMINIT.DLL|0x1000c605": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1002fb44"
+],
+"hit": [
+[
+"0x1002fb44",
+{
+"calls": 54,
+"objs": 2,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x8"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMINIT.DLL|0x1000d3b3": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002fb44"
+],
+"hit": [
+[
+"0x1002fb44",
+{
+"calls": 54,
+"objs": 2,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x8"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMINIT.DLL|0x1000cd67": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1002fbdc",
+"0x1002fbf0"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMINIT.DLL|0x1000cd6e": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002fbdc",
+"0x1002fbf0"
+],
+"hit": [],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMINIT.DLL|0x1000d68d": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1002fc04",
+"0x1002f230"
+],
+"hit": [
+[
+"0x1002fc04",
+{
+"calls": 8,
+"objs": 4,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt",
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMINIT.DLL|0x1000d694": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002fc04"
+],
+"hit": [
+[
+"0x1002fc04",
+{
+"calls": 8,
+"objs": 4,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMMISC.DLL|0x1002e3f0": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1003c4a0",
+"0x10041ca8"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMMISC.DLL|0x10034523": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1003c4a0",
+"0x10041ca8"
+],
+"hit": [],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMMISC.DLL|0x10019b3e": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10040f3c"
+],
+"hit": [
+[
+"0x10040f3c",
+{
+"calls": 192,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x74"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMMISC.DLL|0x10019b45": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10040f3c"
+],
+"hit": [
+[
+"0x10040f3c",
+{
+"calls": 192,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x74"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMRCI.DLL|0x1004288d": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1004c808",
+"0x1004c870",
+"0x1004cffc",
+"0x1004d46c",
+"0x1004dfa8"
+],
+"hit": [
+[
+"0x1004d46c",
+{
+"calls": 22,
+"objs": 6,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMRCI.DLL|0x10042894": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1004c808",
+"0x1004c870",
+"0x1004cffc",
+"0x1004d46c",
+"0x1004dfa8"
+],
+"hit": [
+[
+"0x1004d46c",
+{
+"calls": 22,
+"objs": 6,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMRCI.DLL|0x100318c1": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1004d388",
+"0x1004d39c",
+"0x1004d3b0"
+],
+"hit": [
+[
+"0x1004d388",
+{
+"calls": 326360,
+"objs": 5,
+"xobj": 4,
+"maxsw": 2,
+"threads": "main+sim"
+}
+],
+[
+"0x1004d39c",
+{
+"calls": 137125059,
+"objs": 5,
+"xobj": 4,
+"maxsw": 2,
+"threads": "main+sim"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMRCI.DLL|0x100318c8": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1004d388",
+"0x1004d39c",
+"0x1004d3b0"
+],
+"hit": [
+[
+"0x1004d388",
+{
+"calls": 326360,
+"objs": 5,
+"xobj": 4,
+"maxsw": 2,
+"threads": "main+sim"
+}
+],
+[
+"0x1004d39c",
+{
+"calls": 137125059,
+"objs": 5,
+"xobj": 4,
+"maxsw": 2,
+"threads": "main+sim"
+}
+]
+],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMSERV.DLL|0x1001a9e6": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1001ed08",
+"0x1001f1ac",
+"0x1001f370",
+"0x1001f5e4",
+"0x1001fffc"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMSERV.DLL|0x100192ad": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1001ed08",
+"0x1001f1ac",
+"0x1001f370",
+"0x1001f5e4",
+"0x1001fffc"
+],
+"hit": [],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMSERV.DLL|0x1000c3df": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1001f2c8"
+],
+"hit": [
+[
+"0x1001f2c8",
+{
+"calls": 8685546,
+"objs": 5,
+"xobj": 4,
+"maxsw": 958,
+"threads": "main+sim"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x38"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMSERV.DLL|0x1000cab6": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1001f2c8"
+],
+"hit": [
+[
+"0x1001f2c8",
+{
+"calls": 8685546,
+"objs": 5,
+"xobj": 4,
+"maxsw": 958,
+"threads": "main+sim"
+}
+]
+],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x38"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMUI.DLL|0x100139b6": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x100aa110",
+"0x100aef50",
+"0x100a811c",
+"0x100a8164"
+],
+"hit": [
+[
+"0x100aa110",
+{
+"calls": 14,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x100a811c",
+{
+"calls": 54,
+"objs": 27,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x100a8164",
+{
+"calls": 84,
+"objs": 9,
+"xobj": 9,
+"maxsw": 2,
+"threads": "main+sim"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt",
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMUI.DLL|0x10090d1c": {
+"role": [
+"Release"
+],
+"vts": [
+"0x100aa110",
+"0x100aef50"
+],
+"hit": [
+[
+"0x100aa110",
+{
+"calls": 14,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMUTIL.DLL|0x1001cc1c": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10020794",
+"0x10020848",
+"0x10022ae0",
+"0x10024130"
+],
+"hit": [
+[
+"0x10020794",
+{
+"calls": 12,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMUTIL.DLL|0x100053ae": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10020794"
+],
+"hit": [
+[
+"0x10020794",
+{
+"calls": 12,
+"objs": 5,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMUTIL.DLL|0x1001cc23": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10020848",
+"0x10022ae0",
+"0x10024130"
+],
+"hit": [],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"STRTSIM.DLL|0x1001607d": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002b95c"
+],
+"hit": [],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x8"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"STRTSIM.DLL|0x1001e004": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1002d018"
+],
+"hit": [
+[
+"0x1002d018",
+{
+"calls": 10,
+"objs": 10,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x2c"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"STRTSIM.DLL|0x1001e1de": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002d018"
+],
+"hit": [
+[
+"0x1002d018",
+{
+"calls": 10,
+"objs": 10,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x2c"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"STRTSIM.DLL|0x1001e2c3": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002d080"
+],
+"hit": [],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMTRANSIT.DLL|0x1001499a": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1001a678",
+"0x1001b5a0"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"SIMTRANSIT.DLL|0x100149a1": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1001a678",
+"0x1001b5a0"
+],
+"hit": [],
+"tmpl": [
+"ecx"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/reload1024/plain_refcount_vtables_ecx.txt"
+]
+},
+"AUDIO.DLL|0x100164c7": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10020258"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"AUDIO.DLL|0x100164ce": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10020258"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"AUDIO.DLL|0x1001bd04": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10021570"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"AUDIO.DLL|0x1001bd0b": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10021570"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GIMEX.DLL|0x10016f85": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10018278"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GIMEX.DLL|0x10016f8c": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10018278"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZGRAPHICD.DLL|0x1001c3fe": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1001f024"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZGRAPHICD.DLL|0x1001c405": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1001f024"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZRESOURCED.DLL|0x1000a5fb": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1001c308"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZRESOURCED.DLL|0x100023c0": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1001c308"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZRESOURCED.DLL|0x1000b7c0": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1001cb18",
+"0x1001cb34",
+"0x1001cce8",
+"0x1001cd04",
+"0x1001cd48",
+"0x1001ced4",
+"0x1001cef0",
+"0x1001d104",
+"0x1001d130",
+"0x1001d1f0",
+"0x1001d3f4",
+"0x1001d410",
+"0x1001d42c",
+"0x1001d68c",
+"0x1001d6b8",
+"0x1001d6d4",
+"0x1001d7c4",
+"0x1001d7f0",
+"0x1001d80c"
+],
+"hit": [
+[
+"0x1001cce8",
+{
+"calls": 5,
+"objs": 2,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x1001d410",
+{
+"calls": 17700,
+"objs": 210,
+"xobj": 12,
+"maxsw": 8,
+"threads": "main+sim+sprload"
+}
+],
+[
+"0x1001d6b8",
+{
+"calls": 1062,
+"objs": 14,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZRESOURCED.DLL|0x10015b0a": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1001dce4"
+],
+"hit": [
+[
+"0x1001dce4",
+{
+"calls": 2953,
+"objs": 2,
+"xobj": 1,
+"maxsw": 1,
+"threads": "main+sim"
+}
+]
+],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZRESOURCED.DLL|0x1001814d": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1001e128"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZRESOURCED.DLL|0x10018154": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1001e128"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZSOUNDD.DLL|0x10002431": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1000c318"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZSOUNDD.DLL|0x10002438": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1000c318"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZSERVICED.DLL|0x100063f7": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10014358"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZSERVICED.DLL|0x100063fe": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10014358"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZSERVICED.DLL|0x10011da9": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10014dc4"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZSERVICED.DLL|0x10011db0": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10014dc4"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZTOOLSD.DLL|0x10005f1c": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1000918c"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZTOOLSD.DLL|0x10005f23": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1000918c"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZWIND.DLL|0x10023411": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1002ab40"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZWIND.DLL|0x10023418": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002ab40"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZWIND.DLL|0x10027149": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1002e290"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZWIND.DLL|0x10027150": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002e290"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZWWWD.DLL|0x1000a9a7": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x100213d8"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZWWWD.DLL|0x1000a9ae": {
+"role": [
+"Release"
+],
+"vts": [
+"0x100213d8"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZWWWD.DLL|0x1000a0fe": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10021908"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"GZWWWD.DLL|0x1000da87": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10021908"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"MAXISADDON.DLL|0x10002136": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1000324c"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"MAXISADDON.DLL|0x1000213d": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1000324c"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SCENARIO.DLL|0x100101c1": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1001a3d8"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SCENARIO.DLL|0x100101c8": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1001a3d8"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SCENARIO.DLL|0x1000fac6": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1001aa80"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SCENARIO.DLL|0x10013d1b": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1001aa80"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMADV.DLL|0x1002507e": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x100301a8"
+],
+"hit": [
+[
+"0x100301a8",
+{
+"calls": 742,
+"objs": 135,
+"xobj": 15,
+"maxsw": 1,
+"threads": "main+sim"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMADV.DLL|0x10025085": {
+"role": [
+"Release"
+],
+"vts": [
+"0x100301a8"
+],
+"hit": [
+[
+"0x100301a8",
+{
+"calls": 742,
+"objs": 135,
+"xobj": 15,
+"maxsw": 1,
+"threads": "main+sim"
+}
+]
+],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMADV.DLL|0x100287b1": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x100317d8"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMADV.DLL|0x100287b8": {
+"role": [
+"Release"
+],
+"vts": [
+"0x100317d8"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMBABLD.DLL|0x12055fed": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x120692e0"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMBABLD.DLL|0x12055ff4": {
+"role": [
+"Release"
+],
+"vts": [
+"0x120692e0"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMBABLD.DLL|0x12059e64": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1206bf70",
+"0x1206bf8c",
+"0x1206bfa8",
+"0x1206c128",
+"0x1206c144",
+"0x1206c204",
+"0x1206cc34"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMBABLD.DLL|0x12050943": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1206bf70",
+"0x1206bf8c",
+"0x1206bfa8",
+"0x1206c128",
+"0x1206c144",
+"0x1206c204"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMBABLD.DLL|0x12059e6b": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1206cc34"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMBABLD.DLL|0x12058e3c": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1206cdc8"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMBABLD.DLL|0x1205c3c5": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1206cdc8"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMCITY.DLL|0x100098ae": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1001378c"
+],
+"hit": [
+[
+"0x1001378c",
+{
+"calls": 2,
+"objs": 1,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMCITY.DLL|0x100098b5": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1001378c"
+],
+"hit": [
+[
+"0x1001378c",
+{
+"calls": 2,
+"objs": 1,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMDIRT.DLL|0x1001ae08": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10020770"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMDIRT.DLL|0x1001ae0f": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10020770"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMDSTR.DLL|0x10025643": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1003232c"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMDSTR.DLL|0x100236cc": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10033e4c"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMDSTR.DLL|0x10029cd2": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10033e4c"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMECO.DLL|0x1000e760": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1001b130"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMECO.DLL|0x1000e767": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1001b130"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMECO.DLL|0x10012e9d": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1001c5dc"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMECO.DLL|0x10012ea4": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1001c5dc"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMGEOM.DLL|0x10014aa0": {
+"role": [
+"Release"
+],
+"vts": [
+"0x100291a0"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMGEOM.DLL|0x1001a2af": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1002ae74"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMGEOM.DLL|0x1001afd9": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002ae74"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMINIT.DLL|0x1001f795": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002f230"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMINIT.DLL|0x1001ff93": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10031430"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMINIT.DLL|0x10025247": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10031430"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMMISC.DLL|0x1002ad53": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1003c434"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMMISC.DLL|0x1002ad5a": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1003c434"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMMISC.DLL|0x10030a1e": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x100419f0"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMMISC.DLL|0x10030a25": {
+"role": [
+"Release"
+],
+"vts": [
+"0x100419f0"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMNTWRK.DLL|0x1001eeb2": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10029234"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMNTWRK.DLL|0x1001eeb9": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10029234"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMNTWRK.DLL|0x1002048f": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1002cbf0"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMNTWRK.DLL|0x10020496": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002cbf0"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMRCI.DLL|0x10036f79": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1004b140"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMRCI.DLL|0x10036f80": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1004b140"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMRCI.DLL|0x1003b9eb": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1004d868"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMRCI.DLL|0x1003b9f2": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1004d868"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMSERV.DLL|0x100106f9": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1001e140"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMSERV.DLL|0x10010700": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1001e140"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMSERV.DLL|0x10014159": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1001f938"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMSERV.DLL|0x10014160": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1001f938"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMSPR.DLL|0x1004f11b": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10062304"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMSPR.DLL|0x1004f122": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10062304"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMSPR.DLL|0x100561c4": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x100686a8"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMSPR.DLL|0x100561cb": {
+"role": [
+"Release"
+],
+"vts": [
+"0x100686a8"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMSPR.DLL|0x10059831": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10068934",
+"0x10068950",
+"0x1006896c",
+"0x10068ae8",
+"0x10068b04",
+"0x10068bc4"
+],
+"hit": [
+[
+"0x10068950",
+{
+"calls": 47310,
+"objs": 1601,
+"xobj": 80,
+"maxsw": 11,
+"threads": "main+sim+sprload"
+}
+]
+],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMUI.DLL|0x100842b0": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x100a2410"
+],
+"hit": [
+[
+"0x100a2410",
+{
+"calls": 4,
+"objs": 2,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMUI.DLL|0x100842b7": {
+"role": [
+"Release"
+],
+"vts": [
+"0x100a2410"
+],
+"hit": [
+[
+"0x100a2410",
+{
+"calls": 4,
+"objs": 2,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+]
+],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMUI.DLL|0x10043ba9": {
+"role": [
+"Release"
+],
+"vts": [
+"0x100a811c",
+"0x100a8164"
+],
+"hit": [
+[
+"0x100a811c",
+{
+"calls": 54,
+"objs": 27,
+"xobj": 0,
+"maxsw": 0,
+"threads": "main"
+}
+],
+[
+"0x100a8164",
+{
+"calls": 84,
+"objs": 9,
+"xobj": 9,
+"maxsw": 2,
+"threads": "main+sim"
+}
+]
+],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x4"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMUI.DLL|0x100849eb": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x100aed1c"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMUI.DLL|0x1008bea1": {
+"role": [
+"Release"
+],
+"vts": [
+"0x100aed1c"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMUTIL.DLL|0x10013402": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x100201c8"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMUTIL.DLL|0x10013409": {
+"role": [
+"Release"
+],
+"vts": [
+"0x100201c8"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMUTIL.DLL|0x10017c14": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x10023ab0"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMUTIL.DLL|0x10017c1b": {
+"role": [
+"Release"
+],
+"vts": [
+"0x10023ab0"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"STRTSIM.DLL|0x10021987": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002a5d0"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"STRTSIM.DLL|0x100244cb": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1002d4d8"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"STRTSIM.DLL|0x10025664": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1002d4d8"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMTRANSIT.DLL|0x1000e91f": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1001a518"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMTRANSIT.DLL|0x1000e926": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1001a518"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMTRANSIT.DLL|0x10011a38": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1001b304"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMTRANSIT.DLL|0x10011a3f": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1001b304"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMVARIABLES.DLL|0x10003419": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1000b2c8"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMVARIABLES.DLL|0x10003420": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1000b2c8"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x10"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMVARIABLES.DLL|0x10003f96": {
+"role": [
+"AddRef"
+],
+"vts": [
+"0x1000ba08"
+],
+"hit": [],
+"tmpl": [
+"inc"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+},
+"SIMVARIABLES.DLL|0x10007ca3": {
+"role": [
+"Release"
+],
+"vts": [
+"0x1000ba08"
+],
+"hit": [],
+"tmpl": [
+"le1"
+],
+"off": [
+"0x20"
+],
+"srcs": [
+"verify/refaudit/le1_refcount_vtables.txt"
+]
+}
+}
