@@ -118,7 +118,7 @@ function run(job) {
     }
   } finally { if (!job.held) unpause(c); }
 }
-Interceptor.attach(Module.getExportByName('USER32.dll', 'DispatchMessageA'), {
+Interceptor.attach(Process.getModuleByName('USER32.dll').getExportByName('DispatchMessageA'), {
   onEnter: function (args) {
     var msg = args[0];
     if (msg.add(4).readU32() !== %WM% || jobs.length === 0) return;

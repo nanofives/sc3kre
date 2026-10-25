@@ -4,6 +4,10 @@ r"""avflow_probe.py - in-game measurement of the sc3netmod AVFLOW blocks (task a
 Arms, switched live through sc3netmod's exports at the game's own month boundary, so every month runs under one arm:
   off  = AVFIRST off, AVDEPOSIT off      F = AVFIRST only      FD = both
   FDB = both + BVFIRST (task avflow follow-up, sc3netmod_avf_bv_set)
+  FDS = both + AVSTART (sc3netmod_avs_set 1), FDS2 = both + AVSTART boulevard cells only.
+  FDC = both + BVCOST (task bventry, sc3netmod_avc_set), C = BVCOST only, FDA = both + AVCOST (avenue cells,
+  sc3netmod_avc_av_set), FDCA = both + BVCOST + AVCOST. Per month also: select_next calls that failed on the trip
+  budget (param_3 < node cost +0x18), trips that hit the budget at least once, failed trips among them.
 Schedule: blocks of (off F FD FD F off), or (a b b a) with two --arms, (each arm before and after the others), --mpw months per window; the first
 --settle month(s) of each window are recorded but marked settle (density carried over from the previous arm).
 
@@ -48,6 +52,12 @@ var setF = new NativeFunction(N.getExportByName('sc3netmod_avf_set'), 'int', ['i
 var setD = new NativeFunction(N.getExportByName('sc3netmod_avd_set'), 'int', ['int'], {exceptions: 'propagate'});
 var eB = N.findExportByName('sc3netmod_avf_bv_set');
 var setB = eB === null ? function (v) { return -1; } : new NativeFunction(eB, 'int', ['int'], {exceptions: 'propagate'});
+var eC = N.findExportByName('sc3netmod_avc_set');      // task bventry: BVCOST
+var setC = eC === null ? function (v) { return -1; } : new NativeFunction(eC, 'int', ['int'], {exceptions: 'propagate'});
+var eV = N.findExportByName('sc3netmod_avc_av_set');   // task bventry: AVCOST (avenue cells)
+var setV = eV === null ? function (v) { return -1; } : new NativeFunction(eV, 'int', ['int'], {exceptions: 'propagate'});
+var eS = N.findExportByName('sc3netmod_avs_set');      // task bventry: AVSTART
+var setS = eS === null ? function (v) { return -1; } : new NativeFunction(eS, 'int', ['int'], {exceptions: 'propagate'});
 var WH = Memory.alloc(8), G = null, GW = 0, GH = 0;
 function grid() { var p = gridf(WH, WH.add(4)); G = p.isNull() ? null : p; GW = WH.readS32(); GH = WH.add(4).readS32(); }
 function cls(x, z) { if (G === null || x < 0 || z < 0 || x >= GW || z >= GH) return 0; return G.add(z * GW + x).readU8(); }
@@ -55,19 +65,27 @@ var L = null, RADIUS = %RADIUS%;
 function rows(l, off) { return l.add(off).readPointer().add(0xc).readPointer(); }
 var S = null;
 function fresh() { return {trips: 0, arrived: 0, failed: 0, arr_av: 0, arr_bv: 0, arr_any: 0, nodes: 0, nodes_av: 0,
-  nodes_bv: 0, nodes_road: 0}; }
+  nodes_bv: 0, nodes_road: 0, sel: 0, sel_bud: 0, trips_bud: 0, failed_bud: 0}; }
 S = fresh();
 var cur = {};
 Interceptor.attach(A(0x100070d0), {
-  onEnter: function () { L = this.context.ecx; cur[this.threadId] = {n: 0, r: 0, av: 0, bv: 0}; },
+  onEnter: function () { L = this.context.ecx; cur[this.threadId] = {n: 0, r: 0, av: 0, bv: 0, bud: 0}; },
   onLeave: function (r) {
     var c = cur[this.threadId]; delete cur[this.threadId];
     S.trips++;
-    if ((r.toInt32() & 0xff) === 0 || !c) { S.failed++; return; }
+    if (c && c.bud) S.trips_bud++;
+    if ((r.toInt32() & 0xff) === 0 || !c) { S.failed++; if (c && c.bud) S.failed_bud++; return; }
     S.arrived++; S.nodes += c.n; S.nodes_road += c.r; S.nodes_av += c.av; S.nodes_bv += c.bv;
     if (c.av) S.arr_av++;
     if (c.bv) S.arr_bv++;
     if (c.av || c.bv) S.arr_any++;
+  }
+});
+// task bventry: budget failures. FUN_1000755e's first test: param_3 (budget) < node cost +0x18 -> no step.
+Interceptor.attach(A(0x1000755e), {
+  onEnter: function (a) {
+    S.sel++;
+    if (a[2].toUInt32() < a[0].add(0x18).readU32()) { S.sel_bud++; var c = cur[this.threadId]; if (c) c.bud++; }
   }
 });
 var BACK_LO = A(0x100072d8), BACK_HI = A(0x100072f3);
@@ -113,8 +131,10 @@ function gstats(l, annoy) {
   return out;
 }
 var MONTHS = [], SCHED = [], mi = 0, ARM = 'pre';
-var ARMS = {off: [0, 0, 0], F: [1, 0, 0], FD: [1, 1, 0], D: [0, 1, 0], FDB: [1, 1, 1], FB: [1, 0, 1]};
-function apply(a) { var v = ARMS[a]; setF(v[0]); setD(v[1]); setB(v[2]); ARM = a; }
+var ARMS = {off: [0, 0, 0, 0, 0], F: [1, 0, 0, 0, 0], FD: [1, 1, 0, 0, 0], D: [0, 1, 0, 0, 0], FDB: [1, 1, 1, 0, 0],
+            FB: [1, 0, 1, 0, 0], FDC: [1, 1, 0, 1, 0], C: [0, 0, 0, 1, 0], FDA: [1, 1, 0, 0, 1], FDCA: [1, 1, 0, 1, 1],
+            FDS: [1, 1, 0, 0, 0, 1], FDS2: [1, 1, 0, 0, 0, 2]};
+function apply(a) { var v = ARMS[a]; setF(v[0]); setD(v[1]); setB(v[2]); setC(v[3]); setV(v[4]); setS(v[5] || 0); ARM = a; }
 Interceptor.attach(A(0x100093e9), {
   onEnter: function () { this.l = this.context.ecx; this.b0 = this.l.add(0xb0).readU32(); this.b4 = this.l.add(0xb4).readU32(); },
   onLeave: function () {
@@ -146,7 +166,7 @@ def main():
     ap.add_argument("--settle", type=int, default=1, help="months at the start of each window marked settle")
     ap.add_argument("--radius", type=int, default=4)
     ap.add_argument("--arms", default="off,F,FD", help="three arms (block a b c c b a) or two (block a b b a); "
-                    "arms: off F FD D FDB (both + BVFIRST) FB")
+                    "arms: off F FD D FDB (both + BVFIRST) FB FDC (both + BVCOST) C FDA (both + AVCOST) FDCA")
     ap.add_argument("--baseline", type=int, default=0, help="only record N months under the current state, no switching")
     ap.add_argument("--start", type=int, default=0)
     ap.add_argument("--set", default="", help="only switch to this arm (off, F, FD, D) and exit")

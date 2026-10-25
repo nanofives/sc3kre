@@ -37,6 +37,9 @@ def metrics(ms):
         "avg": t(lambda m: m["avg"]) / len(ms),
         "use_bv_pct": 100.0 * t(lambda m: m["probe"]["arr_bv"]) / max(1, arr),
         "bvnode_pct": 100.0 * t(lambda m: m["probe"]["nodes_bv"]) / max(1, road),
+        "bud_trip_pct": 100.0 * t(lambda m: m["probe"].get("trips_bud", 0)) / max(1, t(lambda m: m["probe"]["trips"])),
+        "bud_failed_pct": 100.0 * t(lambda m: m["probe"].get("failed_bud", 0)) / max(1, t(lambda m: m["probe"]["failed"])),
+        "bud_sel_pct": 100.0 * t(lambda m: m["probe"].get("sel_bud", 0)) / max(1, t(lambda m: m["probe"].get("sel", 0))),
     }
     for g in ("av", "bv", "side", "adj", "rest"):
         n = t(lambda m: m["dens"][g]["n"])
@@ -48,6 +51,7 @@ def metrics(ms):
 COLS = [("months", "%d"), ("routed_pm", "%.0f"), ("failed_pct", "%.2f"), ("use_pct", "%.1f"), ("avnode_pct", "%.1f"),
         ("nodes_trip", "%.1f"), ("avg", "%.1f"), ("d_av", "%.1f"), ("d_side", "%.1f"), ("d_adj", "%.1f"), ("d_rest", "%.1f"),
         ("hi_av", "%.1f"), ("hi_side", "%.1f")]
+COLS_BUD = [("bud_trip_pct", "%.1f"), ("bud_failed_pct", "%.1f"), ("bud_sel_pct", "%.2f")]
 COLS_BV = [("use_bv_pct", "%.2f"), ("bvnode_pct", "%.2f"), ("d_bv", "%.1f"), ("hi_bv", "%.2f")]
 
 
@@ -65,7 +69,7 @@ def main():
     by = defaultdict(list)
     for w in wins:
         by[w[0]["arm"]].append(w)
-    arms = [x for x in ("off", "F", "FD", "D", "FB", "FDB") if x in by]
+    arms = [x for x in ("off", "F", "FD", "D", "FB", "FDB", "C", "FDC", "FDA", "FDCA", "FDS", "FDS2") if x in by]
     sep = " | " if a.md else "  "
     print(sep.join(["arm"] + [c for c, _ in COLS]))
     if a.md:
@@ -80,6 +84,13 @@ def main():
         for arm in arms:
             r = metrics([m for w in by[arm] for m in w])
             print(sep.join([arm] + [fmt(f, r[c]) for c, f in COLS_BV]))
+    if any(m["probe"].get("sel") for w in wins for m in w):
+        COLS.extend(COLS_BUD)
+        print()
+        print(sep.join(["arm"] + [c for c, _ in COLS_BUD]) + "   (trips that hit the budget %, failed trips that hit it %, select calls failing on it %)")
+        for arm in arms:
+            r = metrics([m for w in by[arm] for m in w])
+            print(sep.join([arm] + [fmt(f, r[c]) for c, f in COLS_BUD]))
     print()
     print("per-window range (min..max of window means):")
     for arm in arms:
