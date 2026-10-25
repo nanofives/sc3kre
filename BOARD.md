@@ -10,7 +10,8 @@ This file points at them and does not restate them.
 
 ## Current state, 2026-10-23 (read this first)
 
-**Latest published release: `sc3mods-2026-10-25b`** (target `def734b`: zoom-step crash with the minimap buttons fixed,
+**Latest published release: `sc3mods-2026-10-25c`** (target `8587f2c`: sharp Ver datos maps; `verify/mods_release_1025c/RESULTS.md`).
+Before it: `sc3mods-2026-10-25b` (target `def734b`: zoom-step crash with the minimap buttons fixed,
 UI audit fixes; `verify/mods_release_1025b/RESULTS.md`). Before it: `sc3mods-2026-10-25` (target `4a291be`: new loader without launcher, the 10-24 version.dll is
 Defender-flagged; avenue traffic changes, AVSTART on; `verify/mods_release_1025/RESULTS.md`). Same build on the LAN server.
 Test launches: start `SC3U.exe` (version.dll loads the mods); `mods_launch.exe` is no longer built or shipped. Dev builds go to the LAN server (`re/scripts/lan_release`, last republish
