@@ -3785,9 +3785,231 @@ static int rz_mb_prepare(LONG cw, LONG ch) {
     return 1;
 }
 
+/* MENUMASK (child menumask 2026-10-26, owner: "fix the transparency mask behind the elements in the main menu, since the
+ * background image is different there's some mask issues"; shot verify/menumask/owner_shots/img1_salir_shadow_patch.png).
+ * The menu buttons are 9 sheets in MAIN.IXF (instances 0x22729930..38, 4x2 frames, RGB565, hard magenta key, no alpha),
+ * drawn as-is (measured on a stock frame: 379,996 stock px, 90,629 exact sprite px, the rest labels). Their outer 1-px
+ * ring was anti-aliased by Maxis against the stock picture: ring pixels fit p = a * art + (1 - a) * stock (alpha mean
+ * 0.49), so on another picture they draw a dark stair-step outline in the stock picture's colours. The grey slab under
+ * Salir is the sprite's own opaque art (no correlation with the stock picture), not a shadow.
+ * Fix: the sheets are decoded from the game's data at first use and, for every ring pixel of every frame at its measured
+ * frame position, alpha is estimated from the stock pixel and the art inside it (5x5 mean of pixels 2+ deep), kept as
+ * beta = 1 - a (0..256). A frame pixel takes the entry only when its 565 value equals the entry's at that spot, so
+ * dialogs and labels are untouched, and the output is p + beta * (picture - stock): the stock share swapped for the
+ * picture's, exactly p where the picture is the stock pixel (MENUSCALE: the picture at the dest pixel; 1:1 / native:
+ * written into the frame, with our own write tracked so it is not re-read as background or as art). Ring pixels without interior art that are within 48/255 of stock take the
+ * picture; with interior art too close to stock to tell, they stay as drawn (an anchor, beta 0).
+ * MSOPEN dropped background pixels in the jagged sprite edges (2,878 on a stock frame), which showed the stock colour:
+ * a raw-background pixel next to a matched ring pixel stays background.
+ * Positions: frame-0 placement of each sheet, found by exact pixel match on a stock frame dump (2026-10-26); a wrong one
+ * matches nothing and changes nothing. SC3RESIZE_MENUMASK=0 disables. */
+static int    g_menumask = 1;
+static int    g_mk_state;                 /* 0 untried, 1 built, -1 failed */
+static int   *g_mk_first, *g_mk_next;     /* per frame pixel: first entry (-1 none); entry chain */
+static WORD  *g_mk_val;                   /* entry: the sprite's 565 value at that spot */
+static WORD  *g_mk_beta;                  /* entry: share of the picture, 0..256 */
+static int    g_mk_n, g_mk_cap;
+static int   *g_mk_e;                     /* MENUSCALE: entry + 1 matched at each pixel of the frame as last read, 0 none */
+static WORD  *g_mk_w, *g_mk_src;          /* 1:1 path: the value we wrote into a ring pixel, and the sprite value */
+static BYTE  *g_mk_wv;                    /* g_mk_w holds a write */
+static BYTE  *g_mk_ob;                    /* 1 = a sheet frame shows the background here, next to its ring */
+static const DWORD g_mk_sheets[9][3] = {
+    { 0x22729930, 600, 427 }, { 0x22729931, 600, 427 },   /* Salir, Salir door closing */
+    { 0x22729932, 413, 216 }, { 0x22729933,  90, 462 },   /* Cargar Ciudad, MAXIS */
+    { 0x22729934, 260, 373 }, { 0x22729935, 399, 391 },   /* Preferencias, Terreno de ciudad real */
+    { 0x22729936, 111, 197 }, { 0x22729937, 274, 133 },   /* Nueva Ciudad, Ciudad Inicial */
+    { 0x22729938, 433,  70 } };                           /* Jugar escenario */
+
+static __inline int rz_mk_find(LONG i, WORD p) {
+    int e;
+    for (e = g_mk_first[i]; e >= 0; e = g_mk_next[e]) if (g_mk_val[e] == p) return e;
+    return -1;
+}
+
+/* p + beta * (picture - stock), per channel, saturated: exact p where the picture is the stock pixel. p, s, pic XRGB. */
+static __inline DWORD rz_mk_over(int e, DWORD p, DWORD s, DWORD pic) {
+    LONG b = g_mk_beta[e], k, out = 0;
+    for (k = 0; k < 24; k += 8) {
+        LONG c = (LONG)((p >> k) & 255) + ((((LONG)((pic >> k) & 255) - (LONG)((s >> k) & 255)) * b) >> 8);
+        out |= (c < 0 ? 0 : c > 255 ? 255 : c) << k;
+    }
+    return (DWORD)out;
+}
+
+static __inline void rz_mk_rgb(WORD q, LONG *c) {
+    LONG r = q >> 11, g = (q >> 5) & 63, b = q & 31;
+    c[0] = (r << 3) | (r >> 2); c[1] = (g << 2) | (g >> 4); c[2] = (b << 3) | (b >> 2);
+}
+
+static __inline DWORD rz_mk_x(WORD q) { LONG c[3]; rz_mk_rgb(q, c); return ((DWORD)c[0] << 16) | (c[1] << 8) | c[2]; }
+
+static int rz_mk_add(LONG i, WORD v, WORD beta) {   /* 1 = added */
+    if (rz_mk_find(i, v) >= 0) return 0;
+    if (g_mk_n == g_mk_cap) {
+        int cap = g_mk_cap ? g_mk_cap * 2 : 32768;
+        int *nx = (int *)realloc(g_mk_next, cap * sizeof(int));
+        WORD *va = nx ? (WORD *)realloc(g_mk_val, cap * sizeof(WORD)) : NULL;
+        WORD *be = va ? (WORD *)realloc(g_mk_beta, cap * sizeof(WORD)) : NULL;
+        if (nx) g_mk_next = nx;
+        if (va) g_mk_val = va;
+        if (!be) return 0;
+        g_mk_beta = be; g_mk_cap = cap;
+    }
+    g_mk_val[g_mk_n] = v; g_mk_beta[g_mk_n] = beta;
+    g_mk_next[g_mk_n] = g_mk_first[i]; g_mk_first[i] = g_mk_n++;
+    return 1;
+}
+
+/* One frame (fw x fh at sheet offset bx,by) of a sheet placed at frame (ox,oy): add its ring entries. cls = scratch. */
+static void rz_mk_frame(const WORD *px, LONG w, LONG bx, LONG by, LONG fw, LONG fh, LONG ox, LONG oy, BYTE *cls,
+                        LONG *nfix, LONG *nanc) {
+    LONG x, y, i, j;
+    for (y = 0; y < fh; y++)          /* 0 = shows the background (magenta, or the exact stock pixel), 1 = art */
+        for (x = 0; x < fw; x++) {
+            LONG fx = ox + x, fy = oy + y;
+            WORD sv = px[(by + y) * w + bx + x];
+            cls[y * fw + x] = (BYTE)(fx >= 0 && fy >= 0 && fx < NAT_W && fy < NAT_H && sv != 0xF81F &&
+                                     sv != g_mb_orig[fy * NAT_W + fx]);
+        }
+    for (y = 0; y < fh; y++)          /* 2 = ring: art with a background 8-neighbour (outside the frame counts) */
+        for (x = 0; x < fw; x++) {
+            int out = 0;
+            if (cls[y * fw + x] != 1) continue;
+            for (j = -1; j <= 1 && !out; j++)
+                for (i = -1; i <= 1 && !out; i++) {
+                    LONG xx = x + i, yy = y + j;
+                    out = xx < 0 || yy < 0 || xx >= fw || yy >= fh || cls[yy * fw + xx] == 0;
+                }
+            if (out) cls[y * fw + x] = 2;
+        }
+    for (y = 0; y < fh; y++)          /* the sprite's own background next to its ring: MSOPEN keeps it */
+        for (x = 0; x < fw; x++) {
+            int r = 0;
+            if (cls[y * fw + x] != 0 || ox + x < 0 || oy + y < 0 || ox + x >= NAT_W || oy + y >= NAT_H) continue;
+            for (j = -1; j <= 1 && !r; j++)
+                for (i = -1; i <= 1 && !r; i++) {
+                    LONG xx = x + i, yy = y + j;
+                    r = xx >= 0 && yy >= 0 && xx < fw && yy < fh && cls[yy * fw + xx] == 2;
+                }
+            if (r) g_mk_ob[(oy + y) * NAT_W + ox + x] = 1;
+        }
+    for (y = 0; y < fh; y++)
+        for (x = 0; x < fw; x++) {
+            LONG fi = (oy + y) * NAT_W + ox + x, p[3], s[3], c[3] = { 0, 0, 0 }, nd = 0, k, maxu = 0;
+            WORD sv;
+            double v[3], vv = 0, uv = 0, a;
+            WORD beta;
+            if (cls[y * fw + x] != 2) continue;
+            sv = px[(by + y) * w + bx + x];
+            rz_mk_rgb(sv, p); rz_mk_rgb(g_mb_orig[fi], s);
+            for (j = -2; j <= 2; j++)
+                for (i = -2; i <= 2; i++) {
+                    LONG xx = x + i, yy = y + j, q[3];
+                    if (xx < 0 || yy < 0 || xx >= fw || yy >= fh || cls[yy * fw + xx] != 1) continue;
+                    rz_mk_rgb(px[(by + yy) * w + bx + xx], q);
+                    c[0] += q[0]; c[1] += q[1]; c[2] += q[2]; nd++;
+                }
+            for (k = 0; k < 3; k++) { LONG u = p[k] - s[k]; if (labs(u) > maxu) maxu = labs(u); }
+            if (nd) for (k = 0; k < 3; k++) { v[k] = (double)c[k] / nd - s[k]; vv += v[k] * v[k]; uv += (p[k] - s[k]) * v[k]; }
+            if (!nd || vv < 300.0) {
+                if (maxu <= 48) *nfix += rz_mk_add(fi, sv, 256);   /* a speck near stock: the picture */
+                else *nanc += rz_mk_add(fi, sv, 0);
+                continue;
+            }
+            a = uv / vv; if (a < 0) a = 0; if (a > 1) a = 1;
+            beta = (WORD)((1.0 - a) * 256.0 + 0.5);
+            if (beta) *nfix += rz_mk_add(fi, sv, beta); else *nanc += rz_mk_add(fi, sv, 0);
+        }
+}
+
+static void rz_mk_build(void) {
+    char path[MAX_PATH], *sl;
+    HANDLE h;
+    DWORD rec[5], got, magic = 0, n = 0, off[9], size[9], t0 = GetTickCount();
+    LONG k, nfix = 0, nanc = 0, nsh = 0;
+    if (g_mk_state) return;
+    g_mk_state = -1;
+    if (!g_mb_orig) return;
+    memset(off, 0, sizeof(off)); memset(size, 0, sizeof(size));
+    if (!GetModuleFileNameA(NULL, path, sizeof(path))) return;
+    sl = strrchr(path, '\\'); if (sl) sl[1] = 0; else path[0] = 0;
+    lstrcatA(path, "Res\\UI\\Shared\\MAIN.IXF");
+    h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (h == INVALID_HANDLE_VALUE) { logf("MENUMASK> cannot open %s - off", path); return; }
+    if (!ReadFile(h, &magic, 4, &got, NULL) || got != 4 || magic != 0x80c381d7) { CloseHandle(h); return; }
+    while (n++ < 100000 && ReadFile(h, rec, 20, &got, NULL) && got == 20) {
+        if (!rec[0] && !rec[1] && !rec[2]) break;
+        if (rec[3] == 0xFFFFFFFF || rec[4] == 0xFFFFFFFF || rec[0] != 0x82b9b75c || rec[2] != 0x62b9da24) continue;
+        for (k = 0; k < 9; k++) if (rec[1] == g_mk_sheets[k][0]) { off[k] = rec[3]; size[k] = rec[4]; }
+    }
+    g_mk_first = (int *)malloc(NAT_W * NAT_H * sizeof(int));
+    g_mk_e = (int *)calloc(NAT_W * NAT_H, sizeof(int));
+    g_mk_w = (WORD *)malloc(NAT_W * NAT_H * 2); g_mk_src = (WORD *)malloc(NAT_W * NAT_H * 2);
+    g_mk_wv = (BYTE *)calloc(NAT_W * NAT_H, 1); g_mk_ob = (BYTE *)calloc(NAT_W * NAT_H, 1);
+    if (!g_mk_first || !g_mk_e || !g_mk_w || !g_mk_src || !g_mk_wv || !g_mk_ob) { CloseHandle(h); return; }
+    memset(g_mk_first, 0xFF, NAT_W * NAT_H * sizeof(int));
+    for (k = 0; k < 9; k++) {
+        BYTE *pay;
+        WORD *px;
+        BYTE *cls;
+        LONG w, hh, fw, fh, dec, fr;
+        if (!size[k] || size[k] < 0x20 || size[k] > 0x200000) { logf("MENUMASK> sheet 0x%08lX not found", g_mk_sheets[k][0]); continue; }
+        pay = (BYTE *)malloc(size[k]);
+        if (!pay) continue;
+        if (SetFilePointer(h, (LONG)off[k], NULL, FILE_BEGIN) != off[k] || !ReadFile(h, pay, size[k], &got, NULL) || got != size[k] ||
+            ((DWORD *)pay)[4] != 7 || ((DWORD *)pay)[2] < 4 || ((DWORD *)pay)[3] < 2 || ((DWORD *)pay)[2] > 2048 || ((DWORD *)pay)[3] > 2048) {
+            logf("MENUMASK> sheet 0x%08lX unreadable", g_mk_sheets[k][0]); free(pay); continue;
+        }
+        w = (LONG)((DWORD *)pay)[2]; hh = (LONG)((DWORD *)pay)[3]; fw = w / 4; fh = hh / 2;
+        px = (WORD *)malloc((size_t)w * hh * 2);
+        cls = (BYTE *)malloc((size_t)fw * fh);
+        dec = px ? rz_qfs_decode(pay + 0x18, size[k] - 0x18, (BYTE *)px, (DWORD)w * hh * 2) : -1;
+        free(pay);
+        if (dec != w * hh * 2 || !cls) { logf("MENUMASK> sheet 0x%08lX: decode gave %ld", g_mk_sheets[k][0], dec); free(px); free(cls); continue; }
+        for (fr = 0; fr < 8; fr++)
+            rz_mk_frame(px, w, (fr % 4) * fw, (fr / 4) * fh, fw, fh, (LONG)g_mk_sheets[k][1], (LONG)g_mk_sheets[k][2], cls, &nfix, &nanc);
+        free(px); free(cls); nsh++;
+    }
+    CloseHandle(h);
+    g_mk_state = g_mk_n ? 1 : -1;
+    logf("MENUMASK> %ld of 9 sheets, %d ring entries (%ld blend with the picture, %ld kept as drawn) in %lu ms",
+         nsh, g_mk_n, nfix, nanc, GetTickCount() - t0);
+}
+
+/* 1:1 / native path: frame pixel i holds sprite value p (or our write of it). Returns the 565 to write, or -1. */
+static LONG rz_mk_native(LONG i, WORD *px, WORD pic) {
+    WORD p = *px;
+    LONG e;
+    DWORD q;
+    if (g_mk_wv[i] && p == g_mk_w[i]) p = g_mk_src[i];   /* our own write, the game did not redraw it */
+    e = rz_mk_find(i, p);
+    if (e < 0 || !g_mk_beta[e]) { g_mk_wv[i] = 0; return -1; }
+    q = rz_mk_over((int)e, rz_mk_x(p), rz_mk_x(g_mb_orig[i]), rz_mk_x(pic));
+    g_mk_src[i] = p;
+    g_mk_w[i] = (WORD)(((q >> 8) & 0xF800) | ((q >> 5) & 0x07E0) | ((q >> 3) & 0x001F));
+    g_mk_wv[i] = 1;
+    return g_mk_w[i];
+}
+
 /* Replace stock-background pixels in the 800x600 source frame. IDirectDrawSurface Lock = vt+0x64,
    Unlock = vt+0x80; lPitch at desc+0x10 and lpSurface at desc+0x24 in both DDSURFACEDESC sizes. */
 typedef HRESULT (WINAPI *RZ_LOCK)(void *, RECT *, void *, DWORD, HANDLE);
+/* MENUMASK, 1:1 path: does frame pixel (fx,fy) have an 8-neighbour that is background (stock, our last picture write, or
+   the native picture)? A real ring pixel does; a dialog pixel that happens to share a sprite value usually does not.
+   (sx,sy) = the surface position of the frame origin. */
+static int rz_mk_nbbg(const BYTE *bits, LONG pitch, LONG sx, LONG sy, LONG fx, LONG fy) {
+    LONG i, j;
+    for (j = -1; j <= 1; j++)
+        for (i = -1; i <= 1; i++) {
+            LONG x = fx + i, y = fy + j, k;
+            WORD v;
+            if ((!i && !j) || x < 0 || y < 0 || x >= NAT_W || y >= NAT_H || sx + x < 0 || sy + y < 0) continue;
+            v = ((const WORD *)(bits + (sy + y) * pitch))[sx + x];
+            k = y * NAT_W + x;
+            if (v == g_mb_orig[k] || v == g_mb_last[k] || (g_mb_native && v == g_mb_native[k])) return 1;
+        }
+    return 0;
+}
 typedef HRESULT (WINAPI *RZ_UNLOCK)(void *, void *);
 static void rz_mb_patch_src(void *src, const RECT *sr, LONG fx0, LONG fy0, LONG fw, LONG fh) {
     DWORD *vt = *(DWORD **)src;
@@ -3816,6 +4038,7 @@ static void rz_mb_patch_src(void *src, const RECT *sr, LONG fx0, LONG fy0, LONG 
             rz_mb_set_black(nbg);
         }
         if (g_mb_black) fh = 0;   /* not the menu: leave the frame as drawn */
+        if (g_menumask && !g_mk_state) rz_mk_build();   /* MENUMASK */
         for (y = 0; y < fh; y++) {
             WORD *row = (WORD *)(bits + (sr->top + y) * pitch) + sr->left;
             const WORD *o = g_mb_orig + (fy0 + y) * NAT_W + fx0, *n = g_mb_center + (fy0 + y) * NAT_W + fx0;
@@ -3824,6 +4047,14 @@ static void rz_mb_patch_src(void *src, const RECT *sr, LONG fx0, LONG fy0, LONG 
                static menu background every frame, so after a size change the frame holds our previous picture
                (owner: the native-size picture stayed inside the maximized frame - two images). */
             for (x = 0; x < fw; x++) {
+                if (g_menumask && g_mk_state > 0) {   /* MENUMASK: a sprite edge pixel, re-blended onto the picture */
+                    LONG i = (fy0 + y) * NAT_W + fx0 + x, q;
+                    if (((g_mk_wv[i] && row[x] == g_mk_w[i]) || (g_mk_first[i] >= 0 && row[x] != o[x])) &&
+                        rz_mk_nbbg(bits, pitch, sr->left - fx0, sr->top - fy0, fx0 + x, fy0 + y)) {
+                        q = rz_mk_native(i, &row[x], n[x]);
+                        if (q >= 0) { row[x] = (WORD)q; g_mb_m_none++; continue; }
+                    }
+                }
                 if (row[x] == o[x]) { g_mb_m_orig++; row[x] = n[x]; l[x] = n[x]; }
                 else if (row[x] == l[x]) { g_mb_m_last++; row[x] = n[x]; l[x] = n[x]; }
                 else if (g_mb_native && row[x] == g_mb_native[(fy0 + y) * NAT_W + fx0 + x]) { g_mb_m_last++; row[x] = n[x]; l[x] = n[x]; }
@@ -4046,10 +4277,21 @@ static int rz_ms_read(void *src, const RECT *sr, LONG fx0, LONG fy0, LONG fw, LO
         for (x = 0; x < fw; x++) {
             WORD p = row[x];
             BYTE isbg;
-            DWORD q = g_ms_lut[p];
+            DWORD q;
+            int me = 0;
+            if (g_mk_e && g_mk_state > 0) {   /* MENUMASK: the 1:1 path's write of a ring pixel stands for the sprite value */
+                LONG i = i0 + x;
+                if (g_mk_wv[i] && p == g_mk_w[i]) p = g_mk_src[i];
+            }
+            q = g_ms_lut[p];
             if (p == o[x]) { isbg = 1; g_mb_m_orig++; }
             else if (p == l[x] || (nv && p == nv[x])) { isbg = 1; g_mb_m_last++; }
             else { isbg = 0; g_mb_m_none++; }
+            if (g_mk_e) {   /* MENUMASK */
+                LONG i = i0 + x;
+                if (!isbg && g_mk_state > 0 && g_mk_first[i] >= 0) me = rz_mk_find(i, p) + 1;
+                if (me != g_mk_e[i]) { g_mk_e[i] = me; if (cx0 < 0) cx0 = x; if (x > cx1) cx1 = x; }
+            }
             if (q != f[x] || isbg != b[x]) { f[x] = q; b[x] = isbg; if (cx0 < 0) cx0 = x; cx1 = x; }
         }
         if (cx0 >= 0) {
@@ -4079,6 +4321,17 @@ static __inline DWORD rz_ms_lerp(DWORD a, DWORD b, LONG f) {   /* f 0..256 towar
 static __inline int rz_ms_bgat(LONG x, LONG y) {
     return x < 0 || y < 0 || x >= NAT_W || y >= NAT_H ? 1 : g_ms_bg[y * NAT_W + x];
 }
+/* MENUMASK: the matched entry + 1 at frame pixel i, counted only next to a raw-background pixel (see rz_mk_nbbg). */
+static int rz_mk_at(LONG i) {
+    LONG x = i % NAT_W, y = i / NAT_W, a, b;
+    if (!g_mk_e[i]) return 0;
+    for (b = -1; b <= 1; b++)
+        for (a = -1; a <= 1; a++)
+            if ((a || b) && x + a >= 0 && y + b >= 0 && x + a < NAT_W && y + b < NAT_H && g_ms_bg[(y + b) * NAT_W + x + a])
+                return g_mk_e[i];
+    return 0;
+}
+
 static void rz_ms_openbb(LONG *bb) {
     LONG x, y, x0 = bb[0] - 2, y0 = bb[1] - 2, x1 = bb[2] + 2, y1 = bb[3] + 2, ex0, ey0, ex1, ey1;
     if (x0 < 0) x0 = 0;
@@ -4103,6 +4356,13 @@ static void rz_ms_openbb(LONG *bb) {
                         if (xx < 0 || yy < 0 || xx >= NAT_W || yy >= NAT_H) continue;
                         o = g_ms_bge[yy * NAT_W + xx];
                     }
+            if (!o && g_ms_bg[y * NAT_W + x] && g_mk_e && g_mk_state > 0 && g_mk_ob[y * NAT_W + x])   /* MENUMASK: a sprite edge's own background */
+                for (j = -1; j <= 1 && !o; j++)
+                    for (i = -1; i <= 1 && !o; i++) {
+                        LONG xx = x + i, yy = y + j;
+                        if (xx < 0 || yy < 0 || xx >= NAT_W || yy >= NAT_H) continue;
+                        o = rz_mk_at(yy * NAT_W + xx) != 0;
+                    }
             g_ms_bgo[y * NAT_W + x] = o;
         }
     bb[0] = x0; bb[1] = y0; bb[2] = x1; bb[3] = y1;
@@ -4112,14 +4372,21 @@ static void rz_ms_openbb(LONG *bb) {
 static void rz_ms_compose(LONG dx0, LONG dy0, LONG dx1, LONG dy1) {
     LONG x, y, rw = g_ms_rw, cw = g_ms_cw, rx = g_ms_rx, ry = g_ms_ry;
     const BYTE *bgm = g_ms_open ? g_ms_bgo : g_ms_bg;   /* MSOPEN */
+    int mm = g_menumask && g_mk_state > 0 && g_mk_e != NULL && !g_mb_black;   /* MENUMASK */
     for (y = dy0; y < dy1; y++) {
         LONG sy0 = g_ms_ys[y], fy = g_ms_yf[y], sy1 = sy0 < NAT_H - 1 ? sy0 + 1 : sy0;
         const DWORD *f0 = g_ms_f32 + sy0 * NAT_W, *f1 = g_ms_f32 + sy1 * NAT_W;
         const BYTE *b0 = bgm + sy0 * NAT_W, *b1 = bgm + sy1 * NAT_W;
         const DWORD *p = g_mb_bits + (ry + y) * cw + rx;
         DWORD *o = g_ms_out + y * rw;
+        const int *e0 = mm ? g_mk_e + sy0 * NAT_W : NULL, *e1 = mm ? g_mk_e + sy1 * NAT_W : NULL;   /* MENUMASK */
+        const WORD *s0 = g_mb_orig + sy0 * NAT_W, *s1 = g_mb_orig + sy1 * NAT_W;
+        int ea;
         if (!g_ms_filter) {
-            for (x = dx0; x < dx1; x++) { LONG sx = g_ms_xs[x]; o[x] = b0[sx] ? p[x] : f0[sx]; }
+            for (x = dx0; x < dx1; x++) {
+                LONG sx = g_ms_xs[x];
+                o[x] = b0[sx] ? p[x] : (e0 && e0[sx] && (ea = rz_mk_at(sy0 * NAT_W + sx)) != 0) ? rz_mk_over(ea - 1, f0[sx], g_ms_lut[s0[sx]], p[x]) : f0[sx];
+            }
             continue;
         }
         for (x = dx0; x < dx1; x++) {
@@ -4129,6 +4396,12 @@ static void rz_ms_compose(LONG dx0, LONG dy0, LONG dx1, LONG dy1) {
             if (ba & bb & bc & bd) { o[x] = p[x]; continue; }
             pa = ba ? p[x] : f0[sx0]; pb = bb ? p[x] : f0[sx1];
             pc = bc ? p[x] : f1[sx0]; pd = bd ? p[x] : f1[sx1];
+            if (e0) {   /* MENUMASK: a ring tap is its art share plus its picture share at this dest pixel */
+                if (!ba && e0[sx0] && (ea = rz_mk_at(sy0 * NAT_W + sx0)) != 0) pa = rz_mk_over(ea - 1, pa, g_ms_lut[s0[sx0]], p[x]);
+                if (!bb && e0[sx1] && (ea = rz_mk_at(sy0 * NAT_W + sx1)) != 0) pb = rz_mk_over(ea - 1, pb, g_ms_lut[s0[sx1]], p[x]);
+                if (!bc && e1[sx0] && (ea = rz_mk_at(sy1 * NAT_W + sx0)) != 0) pc = rz_mk_over(ea - 1, pc, g_ms_lut[s1[sx0]], p[x]);
+                if (!bd && e1[sx1] && (ea = rz_mk_at(sy1 * NAT_W + sx1)) != 0) pd = rz_mk_over(ea - 1, pd, g_ms_lut[s1[sx1]], p[x]);
+            }
             o[x] = rz_ms_lerp(rz_ms_lerp(pa, pb, fx), rz_ms_lerp(pc, pd, fx), fy);
         }
     }
@@ -4182,6 +4455,10 @@ static void rz_ms_dump_if_asked(void) {
     wsprintfA(p, "%s%03d_picture.bmp", g_ms_dump, g_ms_dumpn); rz_ms_write_bmp(p, g_mb_bits, cw, ch);
     for (y = 0; y < NAT_W * NAT_H; y++) cl[y] = g_ms_bg[y] ? 0xFFFFFF : 0;   /* background mask, white = background */
     wsprintfA(p, "%s%03d_mask.bmp", g_ms_dump, g_ms_dumpn); rz_ms_write_bmp(p, cl, NAT_W, NAT_H);
+    if (g_mk_e && g_mk_state > 0) {   /* MENUMASK: white = ring pixel re-blended, grey = ring pixel kept as drawn */
+        for (y = 0; y < NAT_W * NAT_H; y++) { int e = rz_mk_at(y); cl[y] = !e ? 0 : g_mk_beta[e - 1] ? 0xFFFFFF : 0x606060; }
+        wsprintfA(p, "%s%03d_ring.bmp", g_ms_dump, g_ms_dumpn); rz_ms_write_bmp(p, cl, NAT_W, NAT_H);
+    }
     free(cl);
     logf("MENUSCALE> dump %03d: client %ldx%ld, rect [%ld %ld %ld %ld]", g_ms_dumpn, cw, ch, g_ms_rx, g_ms_ry,
          g_ms_rx + g_ms_rw, g_ms_ry + g_ms_rh);
@@ -4212,6 +4489,7 @@ static int rz_ms_full(void *src, const RECT *sr, LONG cw, LONG ch) {
     HDC dc;
     QueryPerformanceCounter(&t[0]);
     if (!rz_ms_prepare(cw, ch)) return 0;
+    if (g_menumask && !g_mk_state) { rz_mk_build(); g_ms_valid = 0; }   /* MENUMASK: g_mk_e is filled by a whole read */
     if (!rz_ms_read(src, sr, 0, 0, NAT_W, NAT_H, bb)) return 0;
     if (g_logoblack && (bb[2] > bb[0] || !g_ms_valid)) {   /* LOGOBLACK: is this frame the menu at all? */
         LONG x, y, nbg = 0, was = g_mb_black;
@@ -4222,6 +4500,7 @@ static int rz_ms_full(void *src, const RECT *sr, LONG cw, LONG ch) {
         /* not the menu: no pixel is the picture (stray matches would show specks of it). The class is re-read for
            any row that changes, and an unchanged row is the same logo row. */
         if (g_mb_black) memset(g_ms_bg, 0, NAT_W * NAT_H);
+        if (g_mb_black && g_mk_e) memset(g_mk_e, 0, NAT_W * NAT_H * sizeof(int));   /* MENUMASK */
     }
     if (!g_ms_valid) { bb[0] = 0; bb[1] = 0; bb[2] = NAT_W; bb[3] = NAT_H; }
     if (g_ms_open && bb[2] > bb[0]) rz_ms_openbb(bb);   /* MSOPEN */
@@ -14882,6 +15161,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MINIVIS", v, sizeof(v))) g_minivis = atoi(v);        /* task uiaudit */
           if (GetEnvironmentVariableA("SC3RESIZE_DLGONLY", v, sizeof(v))) g_dlgonly = atoi(v);        /* task uiaudit */
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_OPEN", v, sizeof(v))) g_ms_open = atoi(v); /* task uiaudit */
+          if (GetEnvironmentVariableA("SC3RESIZE_MENUMASK", v, sizeof(v))) g_menumask = atoi(v);    /* child menumask */
           if (GetEnvironmentVariableA("SC3RESIZE_VERDATOS_NATIVE", v, sizeof(v))) g_vd_on = atoi(v);  /* task verdatos */
           if (GetEnvironmentVariableA("SC3RESIZE_VERDATOS_TEX", v, sizeof(v))) g_vd_tex = atoi(v);    /* task verdatos */
           if (GetEnvironmentVariableA("SC3RESIZE_WINMEM", v, sizeof(v))) g_winmem = atoi(v);

@@ -886,6 +886,37 @@ from `rz_mb_present` after `rz_mb_prepare` has built the cover picture:
 - cost, 3840x1984: about 0.15 ms per static present, one present of about 32 ms when a dialog opens (whole rect).
   Evidence and arms: `verify/menuscale/RESULTS.md`.
 
+### MENUMASK: button edges re-blended onto the picture (2026-10-26, child menumask)
+
+Owner: "fix the transparency mask behind the elements in the main menu". Measured on a stock frame (no `menu_bg.bmp`,
+1200x900 dump): 379,996 pixels equal the stock background, 90,629 are exact button-sprite pixels, 9,375 are other
+(labels). The buttons are 9 sheets in `MAIN.IXF` (`0x22729930..38`, 4x2 frames, RGB565, hard magenta key, no alpha),
+loaded by SC3U `FUN_0043a31e` [CONFIRMED @ 0x0043a31e] and drawn as-is. There is no shadow sprite and no shadow pass:
+only 1,698 non-stock pixels lie outside the sprite rects, all label text. The grey slab under Salir is the sprite's own
+opaque art: its texture does not correlate with the stock picture (local high-pass correlation 0.019, also tested
+blurred and shifted by up to 12 px).
+
+What showed the old picture is the 1-px edge ring. Ring 1 has 7,585 px, mean difference 69/255 from stock, and fits
+`p = a * art + (1 - a) * stock` with mean alpha 0.49 (75% within 16/255). Rings 2 and up are pure art (mean difference
+about 140, no blend fit). MSOPEN made it worse: its 3x3 opening drops 2,878 background pixels in the jagged sprite
+edges, and those showed the exact stock colour.
+
+Fix (`rz_mk_*` in `sc3resize.c`, `SC3RESIZE_MENUMASK=0` disables): at the first menu present the 9 sheets are decoded
+from the game's own `MAIN.IXF`. For every ring pixel of every frame, at the sheet's frame position (found by exact match
+on a stock dump), alpha is estimated from the stock pixel and the 5x5 mean of art 2+ px deep. That gives 38,010 entries
+over 15,671 positions. A frame pixel takes an entry only when its 565 value equals the entry's at that spot AND it has a
+raw-background 8-neighbour. Output = `p + (1 - a) * (picture - stock)`, which is exactly `p` where the picture is the
+stock pixel. MENUSCALE applies it per bilinear tap with the picture at the dest pixel. The 1:1 / native path writes it
+into the frame, and our own writes are tracked so they are not re-read as background or as art. MSOPEN keeps a raw
+background pixel that is a sheet's own border background next to a matched ring pixel. Labels are left as drawn: their
+dark edge is the label's own outline (re-blending it thinned the text). The Escenario smoke is translucent over stock
+beyond 1 px and is not covered.
+
+Checks (`verify/menumask/RESULTS.md`): no `menu_bg.bmp` at 800x600 gives a frame pixel-identical to the off arm. With a
+dialog open, nothing inside the dialog changes (3 to 11 matched pixels, all background specks). At 3840x1984, 0 of
+3,985,358 client pixels fed by unchanged non-ring source differ. Cost: a 78 ms one-time build (328 to 391 ms on cold
+files), about 5.8 MB, and 0.02 ms per static present.
+
 ## New City / Load City while already maximized (fixed 2026-10-07)
 
 Owner: with the window maximized before New City, the terrain panel moved constantly and the city needed a
