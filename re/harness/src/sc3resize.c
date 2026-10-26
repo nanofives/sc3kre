@@ -11901,6 +11901,11 @@ static void rz_set_stored_rect(DWORD w, DWORD h) {
  * The stock game has no Alt+Enter: its WndProc FUN_10017e2f turns WM_SYSKEYDOWN into its own key path and never calls
  * DefWindowProc for it [CONFIRMED @ GZGraphicD 0x10017e2f]. SC3RESIZE_FSKEY=0 / SC3RESIZE_WINMEM=0 turn each off. */
 static int g_fskey = 1, g_winmem = 1;
+/* WINPRIMARY (owner 2026-10-26, "always open on the main screen"): the saved window came back maximized on a second
+ * monitor left of the primary (MARIANO-PC, saved left=-1566), so the game looked like it never started. The saved size
+ * and maximized / fullscreen state are kept, but a saved rect that is not on the primary monitor is moved onto it,
+ * centred in its work area and shrunk to fit. SC3RESIZE_WINPRIMARY=0 restores to the saved monitor as before. */
+static int g_winprimary = 1;
 static DWORD g_wm_usert;   /* last player window command (WM_SYSCOMMAND / title double-click), task cityzoom */
 static int g_wm_restoring, g_wm_applied;   /* g_fs_on is declared beside rz_make_resizable's forward decl */
 static LONG g_fs_style, g_fs_exstyle;
@@ -11988,6 +11993,25 @@ static void wm_restore(HWND h) {
     }
     wp.length = sizeof(wp);
     if (!GetWindowPlacement(h, &wp)) return;
+    if (g_winprimary) {   /* WINPRIMARY: rcNormalPosition is in workspace coords = screen minus the primary work area origin */
+        POINT o = {0, 0};
+        HMONITOR pm = MonitorFromPoint(o, MONITOR_DEFAULTTOPRIMARY);
+        MONITORINFO mi;
+        mi.cbSize = sizeof(mi);
+        if (pm && GetMonitorInfoA(pm, &mi)) {
+            LONG ww = mi.rcWork.right - mi.rcWork.left, wh = mi.rcWork.bottom - mi.rcWork.top;
+            RECT rs = r;
+            OffsetRect(&rs, mi.rcWork.left, mi.rcWork.top);
+            if (MonitorFromRect(&rs, MONITOR_DEFAULTTONULL) != pm) {
+                LONG w = r.right - r.left, hh = r.bottom - r.top;
+                if (w > ww) w = ww;
+                if (hh > wh) hh = wh;
+                logf("WINMEM> saved [%ld %ld %ld %ld] is not on the primary monitor: moved onto it (WINPRIMARY)",
+                     r.left, r.top, r.right, r.bottom);
+                r.left = (ww - w) / 2; r.top = (wh - hh) / 2; r.right = r.left + w; r.bottom = r.top + hh;
+            }
+        }
+    }
     g_wm_restoring = 1;
     wp.rcNormalPosition = r;   /* SetWindowPlacement moves it onto a monitor if the saved one is gone */
     wp.showCmd = mx ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
@@ -14715,6 +14739,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_VERDATOS_NATIVE", v, sizeof(v))) g_vd_on = atoi(v);  /* task verdatos */
           if (GetEnvironmentVariableA("SC3RESIZE_VERDATOS_TEX", v, sizeof(v))) g_vd_tex = atoi(v);    /* task verdatos */
           if (GetEnvironmentVariableA("SC3RESIZE_WINMEM", v, sizeof(v))) g_winmem = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_WINPRIMARY", v, sizeof(v))) g_winprimary = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_RESROW", v, sizeof(v))) g_resrow = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_STARTRES", v, sizeof(v))) g_startres = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_EARLY", v, sizeof(v))) g_early = atoi(v);
