@@ -495,3 +495,31 @@ minimap is. Code: the VERDATOS block in `sc3resize.c`, `SC3RESIZE_VERDATOS_NATIV
 - Preferencias is modal: a click on Ver datos' X while it is open does nothing, so that pair closes front first only.
 - The cheat box (`SC3U+0xd12d0` 312x28 at [0 0]) stays native under the sc3perf FPS line. It does not open while Ver datos
   is up, and Ver datos does not open while it is up, so it never sits in front of an enlarged dialog.
+
+## Scrolling with Ver datos open (child vdscroll, 2026-10-26)
+
+Owner: "when trying to scroll the camera while the map details menu is open fps drop substantially". Detail and
+numbers: `verify/vdscroll/RESULTS.md`.
+
+- While the camera moves the game sets the data map view's dirty byte (view+0xdc) in bursts about 100 ms apart. With
+  the camera still it sets it 0 to 2 times per 10 s. Many of those draws change 0 native pixels. VERDATOS redrew its
+  twin on each one: 30 ms on a 256-cell city (texture 512), 230 to 420 ms on Europolis 1024 (texture 1024). Each new
+  twin rebuilt the paste runs, and a rebuild dropped DLGSCALE's cache, so the whole 954x990 dialog was resampled the
+  next frame.
+- VDSCROLL (`SC3RESIZE_VDSCROLL=0` off) changes this:
+  - The twin is redrawn only when the native view's pixels differ from the ones it was drawn over. The dirty byte alone
+    does nothing, except once the twin is older than 20 s (`SC3RESIZE_VDSCROLL_MAXAGE`), for data changes finer than a
+    native pixel on a 1024-cell city.
+  - With the camera still, that redraw is immediate (the monthly data refresh).
+  - While the iso view origin (`bridge+0x18` -> `+0x54/+0x58`) moved within the last 1 s (`SC3RESIZE_VDSCROLL_SETTLE`),
+    the redraw waits for the camera to stop. Meanwhile the compose's equality mask shows the resampled native pixel
+    wherever the data changed.
+  - Open, view switch, rotation and factor changes redraw at once, as before.
+  - A run rebuild from native pixels alone is pasted inside the box `rz_hd_draw` just resampled.
+  - A new twin whose runs cover the old ones (`vd_runs_cover`) keeps the cache.
+- Fixed cost per frame with one enlarged 424x440 dialog (new `DLGSCALE>` 10 s line): prep (dest snapshot for the
+  restore, native copy) plus draw (diff, full cache copy to the frame). That is two to three 1.9 MB copies, 3.5 to
+  6 ms per frame measured on a PC where a plain 1.9 MB memcpy took 1.3 ms (3 to 9 other games running). Not changed.
+- `SC3RESIZE_DIAG_ARROWS=1` (test only): GZWIND's `GetAsyncKeyState` import reports the arrow named by a posted
+  `WM_APP+0x5D0` as held, so benches scroll with posted keys and no Frida. `WM_APP+0x5D1` (wParam 0/1) sets VDSCROLL in
+  game for A/B. Bench: `re/tools/vdscroll_bench.py`.
