@@ -18,7 +18,7 @@ import argparse, json, os, pathlib, re, statistics, subprocess, sys, threading, 
 
 TOOLS = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS))
-TREE = pathlib.Path(os.environ.get("VDSCROLL_TREE", r"C:\Users\maria\Desktop\Proyectos\Simcity_stock_vdscroll"))
+TREE = pathlib.Path(os.environ.get("VDSCROLL_TREE", str(pathlib.Path(__file__).resolve().parents[3].parent / "Simcity_stock_vdscroll")))
 INST = TREE / "re" / "harness" / "inst_vdscroll"
 OUT = pathlib.Path(os.environ.get("VDSCROLL_OUT", str(pathlib.Path(os.environ.get("TEMP", ".")) / "vdscroll_runs")))
 
