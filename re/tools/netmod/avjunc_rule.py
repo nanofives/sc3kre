@@ -44,6 +44,7 @@ STOCK_MASK = {29: 0x01040104, 39: 0x309a309a, 43: 0x7bde7bde, 11203: 0x10081008,
 PLAIN = {29, 39, 43, 11204}                        # pieces a box or a nose may take
 AVCORE_BAND = {69, 67, 11258, 15098, 31, 32, 11201, 11202}   # avcore's one-way crossing / slope bases (band cells)
 AVL_STRAIGHT = 21700
+TEE_ROADS = {29, 39, 43, 11203}                    # task avxroad: roads whose dangling arm into a half reads as a T
 
 
 def opp(s):
@@ -178,6 +179,33 @@ def cap_links(L, P):
     return out
 
 
+def dropped_tees(L, P, roads, virt):
+    """task avxroad (owner hand test 2026-10-26, img1; C avx_drops): two roads meeting an avenue from opposite sides one
+    position apart. The stock tiler drops BOTH T's (measured with no netmod loaded), leaving each road with an arm
+    pointing into a straight half that has none back. Such a half (stock 11204 / avcore's straight) is re-read with
+    that arm, so the two positions form one box with a road arm on each side. Only plain single-road neighbours
+    (TEE_ROADS): another avenue's half, a rail crossing or a slope abutting the side is another shape (shipped cities:
+    64 of 227 dangling arms). -> {cell: arm sides}, merged over virt"""
+    out = dict(virt)
+    P.tees = set()
+    for c, pc in L.items():
+        if pc[0] not in (11204, AVL_STRAIGHT):
+            continue
+        st = pc[1] & 3
+        side = (st + 2) % 4
+        n = (c[0] + DIRV[side][0], c[1] + DIRV[side][1])
+        q = L.get(n)
+        if q is None or n not in roads or q[0] not in TEE_ROADS:
+            continue
+        A = out.get(c) or P.arms(pc[0], st)
+        B = P.arms(q[0], q[1] & 3)
+        if not A or side in A or not B or st not in B:
+            continue
+        out[c] = set(A) | {side}
+        P.tees.add(c)
+    return out
+
+
 class Band:
     """geometry of a band axis: positions along it, halves a (x- / z- side) and b"""
 
@@ -217,10 +245,12 @@ def bv_cells(roads):
     return out
 
 
-def find(L, P, roads, drop=frozenset(), bv=True, caps=True):
+def find(L, P, roads, drop=frozenset(), bv=True, caps=True, tees=True):
     """L: layer {(x, z): (id, state)}; roads: the set of ROAD cells; drop: box cell sets to leave stock (the
     validation pass). -> dict with boxes, noses, refusals."""
     P.virt = cap_links(L, P) if caps else {}         # task avx32
+    if tees:
+        P.virt = dropped_tees(L, P, roads, P.virt)    # task avxroad
     bvc = bv_cells(roads) if bv else set()            # task avx32
     segs = {}
     for (x, z), p in L.items():
@@ -571,7 +601,13 @@ def avl_bands(L, P, roads, res):
     boxcell = {c for b in res["boxes"] for c in b["cells"]}
     out = {}
     seen = set()
+    # task avxroad: avcore never sees AVX's re-read halves (dropped_tees); a box written over them ends the band
+    tees = getattr(P, "tees", set())
+    full_virt = P.virt
+    P.virt = {c: v for c, v in full_virt.items() if c not in tees}
     def bandpos(a, b, axis):
+        if a in boxcell or b in boxcell:
+            return False
         if straight_pair(L, P, a, b, axis) and a not in noses and b not in noses:
             return True
         pa, pb = L.get(a), L.get(b)
@@ -614,6 +650,7 @@ def avl_bands(L, P, roads, res):
         for c in cells:
             out[c] = ok
             seen.add(c)
+    P.virt = full_virt
     return out
 
 
