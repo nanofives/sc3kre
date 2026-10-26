@@ -303,6 +303,45 @@ static void avx_caps(AvxPass *p, int ox0, int oz0, int ox1, int oz1) {
             }
 }
 
+/* task avxroad (owner hand test 2026-10-26, img1; twin avjunc_rule.dropped_tees): two roads meeting an avenue from
+   opposite sides one position apart. The stock tiler drops BOTH T's (measured with no netmod loaded: the second road
+   turns the first T 39 back to 11204 and never makes its own), so the roads stop at the curbs with an arm pointing into
+   a straight half that has none back, no box forms and AVL converts the stretch as plain band. Re-read for this pass:
+   a straight half (11204 / avcore's straight) whose outside neighbour is a plain road piece (29 / 39 / 43 / 11203) with
+   an arm toward it gets that arm. The two positions then form one box with a road arm on each side (existing box pieces). Off:
+   SC3NETMOD_AVXDROP=0. */
+static int g_avx_drop = -1;
+static volatile LONG g_avx_n_tee;
+
+static void avx_drops(AvxPass *p, int ox0, int oz0, int ox1, int oz1, const char *who) {
+    int x, z, n = 0;
+    if (g_avx_drop < 0) {
+        g_avx_drop = !env_off("SC3NETMOD_AVXDROP");
+        logf("avx: dropped-T re-read %s", g_avx_drop ? "on" : "off (SC3NETMOD_AVXDROP=0)");
+    }
+    if (!g_avx_drop) return;
+    for (z = oz0; z <= oz1; z++)
+        for (x = ox0; x <= ox1; x++) {
+            DWORD v = avx_at(p, x, z), q;
+            WORD id = (WORD)(v & 0xffff), qid;
+            int st = (int)((v >> 16) & 3), out = (st + 2) & 3, ix = avx_ix(p, x, z), A, B;
+            if (!v || ix < 0 || !(id == 11204 || (g_avl_straight && id == g_avl_straight))) continue;
+            q = avx_at(p, x + AVX_DIR[out][0], z + AVX_DIR[out][1]);
+            qid = (WORD)(q & 0xffff);
+            /* plain single-road pieces only: another avenue's half, a rail crossing or a slope abutting the side is
+               another shape (shipped cities: 64 of 227 dangling arms, left alone) */
+            if (!q || !(qid == 29 || qid == 39 || qid == 43 || qid == 11203)) continue;
+            A = p->virt[ix] ? (p->virt[ix] & 0xf) : avx_arms(v);
+            B = avx_arms(q);
+            if (A <= 0 || (A & (1 << out)) || B <= 0 || !(B & (1 << st))) continue;
+            p->virt[ix] = (BYTE)(0x10 | A | (1 << out));
+            if (n < 8) logf("avx: %s: (%d,%d) road %u.%d has an arm into the straight half (stock dropped the T) -> read as a T",
+                            who, x, z, qid, (int)((q >> 16) & 3));
+            n++;
+        }
+    if (n) InterlockedExchangeAdd(&g_avx_n_tee, n);
+}
+
 static int avx_road(AvxPass *p, int x, int z) { return avx_at(p, x, z) != 0; }
 
 static void avx_make(AvxPass *p, int axis, int pos[][2][2], int np, int i0, int i1, AvxBox *bx) {
@@ -888,6 +927,7 @@ static void avx_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) 
     g_avx_have = 1;
     avx_read(p);
     avx_caps(p, ox0, oz0, ox1, oz1);                      /* task avx32 */
+    avx_drops(p, p->b.x0, p->b.z0, p->b.x0 + p->b.w - 1, p->b.z0 + p->b.h - 1, who);   /* task avxroad */
     avx_find(p, ox0, oz0, ox1, oz1);
     avx_validate(p);
     avx_corners(p, ox0, oz0, ox1, oz1);
@@ -915,9 +955,10 @@ static int avx_post_hook(BYTE *mgr, int x0, int z0, int x1, int z1, const char *
 
 static void avx_stats(void) {
     static LONG last;
-    LONG n = g_avx_n_j + g_avx_n_cells + g_avx_n_rev + g_avx_n_dem + g_avx_n_drop;
+    LONG n = g_avx_n_j + g_avx_n_cells + g_avx_n_rev + g_avx_n_dem + g_avx_n_drop + g_avx_n_tee;
     if (!g_avx_on || n == last) return;
     last = n;
-    logf("stats: avx boxes seen=%ld, cells written=%ld, reverted=%ld, boxes with a two-way arm=%ld, dropped=%ld",
-         g_avx_n_j, g_avx_n_cells, g_avx_n_rev, g_avx_n_dem, g_avx_n_drop);
+    logf("stats: avx boxes seen=%ld, cells written=%ld, reverted=%ld, boxes with a two-way arm=%ld, dropped=%ld, "
+         "stock-dropped T's re-read=%ld", g_avx_n_j, g_avx_n_cells, g_avx_n_rev, g_avx_n_dem, g_avx_n_drop,
+         g_avx_n_tee);                                                                          /* task avxroad */
 }
