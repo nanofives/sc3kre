@@ -8,7 +8,7 @@ The folder is a complete, playable SimCity 3000 Unlimited install plus the mods,
                              menu_bg.bmp (ship layout: loader beside SC3U.exe)
   Cities\ Buildings\ Scripts\ the game's own folders
   mods\netmod\overlay|tables  the installed netpack packages (sc3netmod serves them; nothing under Apps\ is replaced)
-  Jugar SimCity (mods).bat   starts Apps\mods_launch.exe
+  (no launcher file)         the updater creates "SimCity 3000 (mods).lnk" -> Apps\SC3U.exe on each PC
   sc3_update.ps1, update.bat the updater (copies of the files beside this script)
   manifest.json              {path, size, sha256, seed}: seed files are downloaded only when missing (per-PC prefs)
 
@@ -29,7 +29,9 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 GAME_DIRS = ["Apps", "Cities", "Buildings", "Scripts"]
-GAME_ROOT_FILES = ["SC3U.exe", "GameuxInstallHelper.dll", "Support.ico", "icon.ico", "EULA.txt", "README.TXT"]
+# SC3U.exe is NOT shipped at the root since 2026-10-26 (owner): it is a copy of Apps\SC3U.exe that cannot run there
+# (no game DLLs beside it: "missing UV.dll"). The updater makes a "SimCity 3000 (mods)" shortcut to Apps\SC3U.exe instead.
+GAME_ROOT_FILES = ["GameuxInstallHelper.dll", "Support.ico", "icon.ico", "EULA.txt", "README.TXT"]
 # dev-PC leftovers inside Apps (RE dumps, harness configs, the untouched originals kept beside patched DLLs)
 APPS_SKIP = {"sc3u_stkdmp.txt", "sc3portable.ini", "gzgraphicd.dll.shipped", "simspr.dll.shipped",
              "sc3resize.ini"}   # task uiscale: the player's Preferencias choice (per PC); shipped, an update would reset it
@@ -110,9 +112,8 @@ def main():
                 place(os.path.join(r, f), os.path.join(out, rel))
     for f in ("sc3_update.ps1", "update.bat"):
         shutil.copy2(os.path.join(HERE, f), os.path.join(out, f))
-    with open(os.path.join(out, "Jugar SimCity (mods).bat"), "w", newline="\r\n") as fh:
-        # version.dll loads the mods itself on a normal start (built-in list), so the launcher just starts the game.
-        fh.write('@echo off\nstart "" /D "%~dp0Apps" "%~dp0Apps\\SC3U.exe"\n')
+    # No launcher file since 2026-10-26: version.dll loads the mods on a normal start, and sc3_update.ps1 creates a
+    # "SimCity 3000 (mods)" shortcut to this PC's Apps\SC3U.exe (a .lnk holds absolute paths, so it cannot ship).
 
     files = []
     for r, _ds, fs in os.walk(out):

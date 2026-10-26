@@ -144,8 +144,49 @@ if ($Prune) {
     }
 }
 
+# --- 5. the launcher: a shortcut to THIS PC's Apps\SC3U.exe (owner 2026-10-26) ------------------------------------
+# A .lnk stores absolute paths, so it is made here rather than shipped. Old launch files are removed only when they are
+# ours: the root SC3U.exe only if it is byte-identical to Apps\SC3U.exe (it cannot run from the root: no game DLLs
+# there), the old .bat only if it is the one-line starter we shipped, and the retired Apps\mods_launch.exe.
+$appsExe = Join-Path $InstallRoot 'Apps\SC3U.exe'
+$lnkPath = Join-Path $InstallRoot 'SimCity 3000 (mods).lnk'
+if (Test-Path -LiteralPath $appsExe) {
+    try {
+        $shell = New-Object -ComObject WScript.Shell
+        $lnk = $shell.CreateShortcut($lnkPath)
+        $lnk.TargetPath = $appsExe
+        $lnk.WorkingDirectory = Join-Path $InstallRoot 'Apps'
+        $ico = Join-Path $InstallRoot 'icon.ico'
+        $lnk.IconLocation = $(if (Test-Path -LiteralPath $ico) { "$ico,0" } else { "$appsExe,0" })
+        $lnk.Description = 'SimCity 3000 Unlimited with the sc3mods'
+        $lnk.Save()
+        Write-Host "  + shortcut 'SimCity 3000 (mods)' -> Apps\SC3U.exe" -ForegroundColor Green
+    } catch {
+        Write-Host "      ! could not create the shortcut: $($_.Exception.Message)" -ForegroundColor Red
+    }
+    $rootExe = Join-Path $InstallRoot 'SC3U.exe'
+    if ((Test-Path -LiteralPath $rootExe) -and
+        (Get-FileHash -LiteralPath $rootExe -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $appsExe -Algorithm SHA256).Hash) {
+        try { Remove-Item -LiteralPath $rootExe -Force; Write-Host "  - removed the root SC3U.exe (start the game with the shortcut)" -ForegroundColor DarkYellow }
+        catch { Write-Host "      ! could not remove the root SC3U.exe: $($_.Exception.Message)" -ForegroundColor Red }
+    }
+    $oldBat = Join-Path $InstallRoot 'Jugar SimCity (mods).bat'
+    if (Test-Path -LiteralPath $oldBat) {
+        $txt = (Get-Content -LiteralPath $oldBat -Raw)
+        if ($txt -match '^@echo off\s+start "" /D "%~dp0Apps" "%~dp0Apps\\(SC3U|mods_launch)\.exe"\s*$') {
+            Remove-Item -LiteralPath $oldBat -Force
+            Write-Host "  - removed the old 'Jugar SimCity (mods).bat'" -ForegroundColor DarkYellow
+        }
+    }
+    $oldLaunch = Join-Path $InstallRoot 'Apps\mods_launch.exe'
+    if (Test-Path -LiteralPath $oldLaunch) {
+        try { Remove-Item -LiteralPath $oldLaunch -Force; Write-Host "  - removed the retired Apps\mods_launch.exe" -ForegroundColor DarkYellow }
+        catch { Write-Host "      ! could not remove Apps\mods_launch.exe: $($_.Exception.Message)" -ForegroundColor Red }
+    }
+}
+
 Write-Host ""
 Write-Host ("Done. updated {0}, up to date {1}, failed {2}, pruned {3}." -f $done, $upToDate, $failed, $pruned) -ForegroundColor Cyan
-Write-Host "Start the game with 'Jugar SimCity (mods).bat'."
+Write-Host "Start the game with the 'SimCity 3000 (mods)' shortcut in this folder (or Apps\SC3U.exe)."
 if ($failed -gt 0) { exit 1 }
 exit 0
