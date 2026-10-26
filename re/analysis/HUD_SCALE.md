@@ -523,3 +523,67 @@ numbers: `verify/vdscroll/RESULTS.md`.
 - `SC3RESIZE_DIAG_ARROWS=1` (test only): GZWIND's `GetAsyncKeyState` import reports the arrow named by a posted
   `WM_APP+0x5D0` as held, so benches scroll with posted keys and no Frida. `WM_APP+0x5D1` (wParam 0/1) sets VDSCROLL in
   game for A/B. Bench: `re/tools/vdscroll_bench.py`.
+## Text drawn at the factor (child nativetext, 2026-10-26)
+
+Owner request: "keep working on adding native rendering to the scaled UI instead of zooming in, like font, RCI indicators,
+clock, teleprompter". Code: `re/harness/src/sc3resize_ntext.c` (NATIVETEXT), #included by sc3resize.c, 6 hook-up lines.
+`SC3RESIZE_NATIVETEXT=0` off, `1` look A, `2` look B (prototype default). Evidence: `verify/nativetext/RESULTS.md`.
+
+How the game draws text (static read + live census, `SC3RESIZE_NATIVETEXT_LOG=1`):
+- Every glyph goes through GZServiceD `FUN_10006e54` (font this, dest raster, x, y, char): cell `char` of the table
+  font+0x14 (left top right bottom advance, 0x14 bytes) from the 8-bit sheet font+0x34, through the dest raster's vt+0x118
+  (GZGraphicD `FUN_10014894`, the converting branch vt+0x1d4 since the sheet is format 8) `[CONFIRMED @ GZServiceD
+  0x10006e54, GZGraphicD 0x10014894, 0x10014c05]`. The text loops `0x100072e2` (+0x90), `0x1000736f` (+0x8c, clipped, skips
+  glyphs not fully inside), `0x10007477` (+0x94, `&` mnemonic) and the boxes `0x10007a6c` / `0x100078ff` / `0x10007746` call it.
+- Colour: palette font+0x20 (+8 count, +0xc bits = 16, +0x10 WORD table). SetColor (vt+0x34 `FUN_100070aa`) writes entries
+  1..15 as a ramp from the colour to entry 16, entry 1 = the colour `[CONFIRMED]`. The key index is the sheet pixel (0,0)
+  when font+0x29 is set (`FUN_10007ce5`); measured 16 in all three sheets.
+- Fonts in Europolis (Spanish): font 0 640x54 line 18 and font 1 640x92 line 23 use 15 coverage levels (Comic-style UI
+  face, dialogs, "Cargando..."); font 2 640x42 line 14 is 1-bit (ink index 1), a bold sans (bar fields, ticker, RCI letters,
+  compass "N"). Index 17 is only the sheets' unused padding. Files `Res\Text\<lang>\*.fbf` (sc3_ui_init_theme SC3U
+  `FUN_0040efd8`).
+- Bar fields (city, Pob, funds, date): SIMUI `FUN_10026a09` copies the bar art into field rasters +0xb0..+0xbc and draws
+  with font +0x88, only on their messages; Draw blits the rasters every frame. Ticker (SC3U vt 0x4d0d64, step
+  `FUN_0044428d`): one glyph per step via font +0x84 at the strip's right end. RCI bars: 3 solid fills (SIMUI
+  `FUN_10065214`); letters are glyphs. Tooltips (SC3U vt 0x4d3bcc): own raster, fill + font +0x88 + frame lines. There is no
+  clock widget: the date is bar field 4.
+
+Mechanism:
+- A detour on `0x10006e54` (prologue `55 8b ec 83 ec 10`, installed at startup so the bar fields drawn at city load are
+  seen) records each glyph against the dest raster's DirectDraw surface (raster+0x44 -> +4), with its palette entries 0..16.
+  A glyph of another draw batch under a new glyph is dropped.
+- The records follow the pixels in `rz_blt_hook_inner`: a 1:1 Blt copies the source surface's records into the dest,
+  clipped to the source rect (earlier copies from the same source there are dropped), an opaque Blt or colour fill drops
+  the dest records it covers (keyed Blts drop nothing). A Blt of a surface onto itself moves the records under its source
+  rect: the ticker scrolls its strip that way, `step` px left per step (measured 121 to 306 moves per 10 s); treated as a
+  plain cover, it left only the newest ticker glyph. The frame's city Blt clears the composite, so at the present the
+  composite holds every glyph drawn this frame, in client coordinates.
+- In the HUD pass (after MININAT) and after each enlarged dialog or label: a record whose cell centre is in an enlarged
+  area is checked against the native frame (85% of the ink it still owns, later glyphs owning overlaps). A cut glyph (its
+  clip smaller than its cell) also needs 60% of its ink visible: the glyph the ticker scrolls in at its end showed 1 to 3
+  columns and a stale record matched them. A partly covered glyph is clipped to its matching ink. Of two valid records of
+  the same glyph and colour within 2 px, only the one matching more pixels is drawn (a shadow is another colour). Ink pixels are
+  inpainted from the nearest non-ink pixels in the row and column, that box is resampled again with the pass's own filter,
+  and the glyph is drawn at the factor in its palette entry 1 colour.
+- Look A: Comic Sans MS (anti-aliased fonts) or Arial Bold (the 1-bit font), sized so 'H' matches the game font's cap height
+  x factor, each glyph's ink starting where the game glyph's ink starts, on the game font's baseline. Look B (owner pick,
+  2026-10-26, the default): the game glyph's coverage (levels 1..15, 1-bit = 1.0), bicubic at the dest resolution,
+  contrast gain 0.9 x factor (1..4) about 0.5. Masks are cached per font, glyph, factor and sub-pixel phase.
+- Letter spacing (owner: "sometimes it looks off"): the glyph positions come from the game's own layout (its x per glyph,
+  advances included), and dest = a + b x is exact, but the first build put each mask at the ROUNDED dest pixel, so a
+  gap could be up to 1 px wider or narrower than native x factor. Look B now samples each glyph at its own phase (the
+  fraction of a + b x, in 1/8 px), placed at floor: measured at 2.252x with the ticker scrolling, the centroid-to-centroid
+  spacing error between neighbouring letters went from 0.34 px mean / 1.0 px max (22% of pairs over 0.5 px) to 0.035 px
+  mean / 0.17 px max (0 pairs over 0.5 px). `SC3RESIZE_NATIVETEXT_PHASE=0` restores the rounded placement.
+- RCI bars: the RCI Draw (SIMUI vt 0x100ab274 slot +0x144 = `FUN_10065214`) blits its background, then 3 solid fills
+  (raster vt+0x7c `FUN_1001552e` -> sub vt+0x18 `FUN_100197d9` = IDirectDrawSurface::Blt flags 0x1000400, colour at
+  DDBLTFX+0x50) `[CONFIRMED]`. The vtable slot is wrapped; colour fills made while it runs become fill records, followed
+  like glyphs, erased the same way and drawn at the mapped rect with partial coverage on the edge pixels.
+  `SC3RESIZE_NATIVETEXT_RCI=0` off.
+- Cost: per area, glyphs are grouped into lines or words (boxes within 6 native px); a group whose records and native
+  pixels (5 px around) match the last frame is pasted from a cache. The ticker's word groups move every step and are
+  recomputed. Measured maximized 3840x1984 (3.307x), 101 HUD glyphs per frame: look B 6.3 to 6.5 M thread cycles (1.8 ms)
+  per frame, look A 6.9 to 7.0 M (1.9 to 2.0 ms), against 37 to 46 M (10.8 to 13.5 ms) for the whole HUD pass.
+
+Not covered: the main menu (MENUSCALE resamples the 800x600 frame), text drawn through anything but `0x10006e54` (none
+seen), non-text art (buttons, frames, icons: bitmap only).
