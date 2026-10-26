@@ -465,3 +465,33 @@ minimap is. Code: the VERDATOS block in `sc3resize.c`, `SC3RESIZE_VERDATOS_NATIV
 - It takes any map view inside an enlarged dialog, not only Ver datos. Only Ver datos was checked.
 - Cost per texture side, Europolis 1024: twin draw 44 to 101 ms (256), 81 to 120 ms (512), 172 to 366 ms (1024); per frame
   0.27 to 0.72 ms whatever the side. 256 drops whole road rings on a 1024-cell city, 512 breaks them, 1024 keeps them.
+
+## Dialog subclasses and dialogs in front of dialogs (child newcitydlg, 2026-10-26)
+
+- "Is it a dialog" was `vt == SIMUI+0xa4d64`. That is the vt the dialog base ctor `FUN_1002c688` writes, and 16 SIMUI
+  classes overwrite it after calling that ctor. Direct subclasses (ctor -> vt): `0x100305fe` -> `0x100a5120`,
+  `0x10030b8c` -> `0x100a53ac`, `0x10031dde` -> `0x100a5604`, `0x100385c5` -> `0x100a6544`, `0x10039504` -> `0x100a67d0`,
+  `0x1003a0c0` -> `0x100a6a68`, `0x1003c494` -> `0x100a6ce8`, `0x1003ccc0` -> `0x100a6f84`, `0x1003de05` -> `0x100a71f0`,
+  `0x1003e042` -> `0x100a7468`, `0x1003eefa` -> `0x100a76fc`, `0x1003f6d0` -> `0x100a7988`, `0x1005b6f4` -> `0x100aa8e8`
+  (the in-city New City options, 639x389). Under `0x10031dde`: `0x100359fe` -> `0x100a58b8`, `0x10036753` -> `0x100a5c5c`,
+  `0x100379e0` -> `0x100a61d4` `[CONFIRMED @ each ctor]`. New City was therefore taken for a floating window and left
+  native ("floating, NOT SCALED"), and the placement poll never centred it (it opened at [32 76]).
+- The other 15 are the Internet Chat client (GZCOM factories registered in SIMUI `FUN_1006a964`; "Chat Settings",
+  "Create a Room", "Send a Private Message", "Friends", "All Users", "Room Properties", "Receive Snapshot?", the
+  transfer progress window, the room views, a text prompt). Nothing can open them: the entry is the "Internet chat"
+  cheat, which calls the chat manager's vt (`SC3U 0x4d0a70`, ctor `FUN_004187ab`) slot +0x54 = `FUN_0041c988`, 3 bytes,
+  `return 0` `[CONFIRMED @ 0x00418c71, 0x0041c988]`. Measured: the cheat box (`SC3U+0xd12d0`, Ctrl+Alt+Shift+C) takes the
+  text and closes, no window. DLGCLASS (`rz_is_dlg_vt`, `SC3RESIZE_DLGCLASS=0` off) therefore adds New City only, in
+  DLGSCALE, `rz_dialogs_poll` and the two HUD-translation exclusions. Per-class table: `verify/newcitydlg/RESULTS.md`.
+- Each enlarged dialog is resampled from its native rect in the frame, and that rect also holds what the game drew in
+  front of it. A dialog in front whose native rect overlaps it therefore showed up a second time, magnified inside the
+  back dialog's box at the back dialog's factor and offset. That is the owner's "New City cropped to the map dialog" when
+  New City stayed native, and it is a thin ghost strip when both are enlarged but their clamped dests do not line up.
+  DLGOCC (`SC3RESIZE_DLGOCC=0` off): where an earlier dialog in the pass list (the root list is front-first) overlaps a
+  dialog's native rect, that dialog's snapshot keeps its own pixels from the last frame. A dialog's first frame takes the
+  frame as it is. A dialog kept native in front of enlarged ones (dragged partly off the client) is treated the same way:
+  the enlarged dialogs behind freeze where it overlaps, its native pixels are saved before the enlarged pass and put
+  back right after the last enlarged dialog behind it, and the mouse on it stays native (`g_hd_nfr` / `g_hd_nfz`).
+- Preferencias is modal: a click on Ver datos' X while it is open does nothing, so that pair closes front first only.
+- The cheat box (`SC3U+0xd12d0` 312x28 at [0 0]) stays native under the sc3perf FPS line. It does not open while Ver datos
+  is up, and Ver datos does not open while it is up, so it never sits in front of an enlarged dialog.

@@ -1658,6 +1658,30 @@ static int rz_win_alive(void *want) {
     return rz_tree_has(root, want, 0, &budget);
 }
 
+/* DLGCLASS (child newcitydlg 2026-10-26, owner: "new city screen is not scaled up"). The in-city New City options
+ * dialog is not a SIMUI+0xa4d64 window: its ctor SIMUI FUN_1005b6f4 runs the dialog base ctor FUN_1002c688 (which sets
+ * vt 0x100a4d64) and then writes its own vt 0x100aa8e8, so every "is it a dialog" test here missed it (HSCENSUS:
+ * "SIMUI+0xAA8E8 639x389 at [32 76 671 465]: floating, NOT SCALED"). The base ctor has 13 direct subclasses in SIMUI,
+ * and FUN_10031dde's class has 3 more, each ctor writing the vt below after the base ctor
+ * [CONFIRMED @ 0x100305fe 0x10030b8c 0x10031dde 0x100385c5 0x10039504 0x1003a0c0 0x1003c494 0x1003ccc0 0x1003de05
+ * 0x1003e042 0x1003eefa 0x1003f6d0 0x1005b6f4; 0x100359fe 0x10036753 0x100379e0]. 15 of them are the Internet Chat
+ * client's windows (GZCOM factories registered in SIMUI FUN_1006a964; "Chat Settings", "Create a Room", "Friends",
+ * "Receive Snapshot?" ...). They cannot appear: the chat is opened by the "Internet chat" cheat, which calls the chat
+ * manager's vt (SC3U 0x4d0a70) slot +0x54 = FUN_0041c988, a 3-byte "return 0" [CONFIRMED @ 0x00418c71, 0x0041c988;
+ * measured: the cheat box takes the text and closes, no window]. So only New City (vt 0x100aa8e8) is added; it counts
+ * as a dialog for DLGSCALE, the dialog placement poll and the two HUD-translation exclusions. The chat list is in
+ * re/analysis/HUD_SCALE.md. SC3RESIZE_DLGCLASS=0: only 0xa4d64, as before. */
+static int g_dlgclass = 1;
+static const DWORD g_dlg_sub[] = { 0xaa8e8 };
+static int rz_is_dlg_vt(DWORD vt, DWORD sui) {
+    int i;
+    if (!sui || !vt) return 0;
+    if (vt == sui + 0xa4d64) return 1;
+    if (!g_dlgclass) return 0;
+    for (i = 0; i < (int)(sizeof(g_dlg_sub) / sizeof(g_dlg_sub[0])); i++) if (vt == sui + g_dlg_sub[i]) return 1;
+    return 0;
+}
+
 /* ⭐ DIALOGS FOLLOW THE WINDOW (owner hand test 2026-10-05, verify/resize_dialogs).
  *
  * Measured: dialogs are SIMUI+0xa4d64 windows, either direct children of the root (Reunirse
@@ -1776,7 +1800,7 @@ static void rz_dialogs_poll(LONG cw, LONG ch) {
             if (IsBadReadPtr(n, 0x0c)) break;
             c = *(void **)((DWORD)n + 8);
             n = *(void **)n;
-            if (!c || IsBadReadPtr(c, 0xa4) || *(DWORD *)c != sui + 0xa4d64) continue;
+            if (!c || IsBadReadPtr(c, 0xa4) || !rz_is_dlg_vt(*(DWORD *)c, sui)) continue;   /* DLGCLASS */
             r = (LONG *)((DWORD)c + 0x14);
             if (r[2] - r[0] < 120 || r[3] - r[1] < 80) continue;          /* not the corner widget */
             for (k = 0; k < g_dlg_n; k++) if (g_dlg[k].w == c) { e = k; break; }
@@ -2470,7 +2494,7 @@ static void rz_side_children_bottom(void) {
                        the dialog dock pulled it back, every poll (owner 2026-10-07: "moves constantly"). */
                     DWORD suif = (DWORD)GetModuleHandleA("SIMUI.DLL");
                     if (cvt && !IsBadReadPtr(cvt, 0xcc) && cvt[0xc8 / 4] &&
-                        !(suif && (DWORD)cvt == suif + 0xa4d64) &&
+                        !rz_is_dlg_vt((DWORD)cvt, suif) &&   /* DLGCLASS */
                         e[2] - e[0] > 0 && h > 0 && h < panelH / 2 &&
                         e[2] > bandL && e[1] < dy) {
                         DWORD a[4];
@@ -4394,6 +4418,26 @@ typedef struct {
     int lbl;                            /* task uiscale: the city cost label, placed at the cursor, takes no mouse */
 } HD_SLOT;
 static int     g_dlgscale = 1;
+/* DLGOCC (child newcitydlg 2026-10-26, owner: "when opening it while having the map open it crops"). Each enlarged
+ * dialog is resampled from its native rect in the frame, and that rect also holds whatever the game drew in front of
+ * it. With New City opened over Ver datos, Ver datos' copy carried the New City pixels inside its rect, enlarged at
+ * Ver datos' factor and place and drawn over the real New City (owner shot: New City cut to the map dialog's box).
+ * Now, where a dialog that comes earlier in this pass's list (the front) overlaps a dialog's native rect, that dialog
+ * keeps its own pixels from the last frame there. A dialog seen for the first time (no last frame) takes the frame as
+ * it is. The same goes for a dialog kept NATIVE in front of an enlarged one (one dragged partly off the client: measured,
+ * Ordenanzas at [-89 470 295 824] in front of Ver datos showed only as a magnified piece inside Ver datos' box, the real
+ * one hidden under it): the enlarged dialogs behind it keep their own pixels where it overlaps, its native pixels are
+ * saved before the enlarged pass and put back right after the last enlarged dialog behind it is drawn, and the mouse on
+ * it keeps native coordinates. SC3RESIZE_DLGOCC=0: the old copy. */
+static int     g_dlgocc = 1, g_dlgocc_logs;
+static int     g_hs_dlgz[16];                   /* kept-native dialog k: enlarged non-label dialogs in front of it */
+static LONG    g_nf_clip[16][4], g_nf_off[16];  /* its client-clipped rect and pixel offset in g_nf_buf, this pass */
+static WORD   *g_nf_buf;
+static LONG    g_nf_cap;
+static volatile LONG g_hd_nf;                   /* published: native dialogs drawn in front of enlarged ones */
+static LONG    g_hd_nfr[16][4];
+static int     g_hd_nfz[16];                    /* published entries [0, nfz) are drawn before (behind) it */
+static int     g_hd_cap_native;                 /* the press landed on such a native dialog */
 static HD_SLOT g_hd[HD_MAX];
 static int     g_hd_list[HD_MAX], g_hd_nc;      /* this pass: slots collected */
 static volatile LONG g_hd_n;                    /* published with g_hs_n: dialogs drawn enlarged, read by the wndproc */
@@ -5245,8 +5289,16 @@ static int rz_hs_collect(LONG cw, LONG ch, double s, int can_erase) {
             if (sui && vt == sui + 0xaa180) { g_mn_mini = c; g_mn_seen = 1; }         /* MININAT (MINIVIS: seen visible) */
             r[0] = (LONG)c[0x14 / 4]; r[1] = (LONG)c[0x18 / 4]; r[2] = (LONG)c[0x1c / 4]; r[3] = (LONG)c[0x20 / 4];
             w = r[2] - r[0]; h = r[3] - r[1];
-            if (sui && vt == sui + 0xa4d64 && w >= 120 && h >= 80) {                  /* dialog */
-                if (!rz_hd_add(c, r, cw, ch, s)) { rz_hs_census(vt, r, "dialog KEPT NATIVE"); if (g_hs_ndlg < 16) { memcpy(g_hs_dlg[g_hs_ndlg], r, sizeof(r)); g_hs_ndlg++; } }
+            if (rz_is_dlg_vt(vt, sui) && w >= 120 && h >= 80) {                       /* dialog (DLGCLASS) */
+                if (!rz_hd_add(c, r, cw, ch, s)) {
+                    rz_hs_census(vt, r, "dialog KEPT NATIVE");
+                    if (g_hs_ndlg < 16) {
+                        int q, z = 0;
+                        for (q = 0; q < g_hd_nc; q++) if (!g_hd[g_hd_list[q]].lbl) z++;   /* DLGOCC: its z rank */
+                        g_hs_dlgz[g_hs_ndlg] = z;
+                        memcpy(g_hs_dlg[g_hs_ndlg], r, sizeof(r)); g_hs_ndlg++;
+                    }
+                }
                 else rz_hs_census(vt, r, "dialog enlarged");
                 sig = (sig ^ (DWORD)(r[0] * 7 + r[1] * 131 + r[2] * 8191 + r[3] * 524287) ^ 0xd1a1) * 16777619u;
                 continue;
@@ -7005,7 +7057,7 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
     DWORD sui_base = (DWORD)GetModuleHandleA("SIMUI.DLL");
     static int logged_fmt;
     vd_idle();   /* VERDATOS */
-    g_hs_n = 0; g_hd_n = 0; g_hs_why = 1;
+    g_hs_n = 0; g_hd_n = 0; g_hd_nf = 0; g_hs_why = 1;
     g_cz_skok = 0;   /* task cityzoom SKIP: rebuilt below only when this pass composes */
     if (!g_hudscale || g_mb_active || cw <= 0 || ch <= 0) return 0;
     g_hs_why = 2;
@@ -7070,10 +7122,66 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
     for (k = 0; k < g_hd_nc; k++) {   /* DLGSCALE: the dest is restored after the present; keep the native pixels */
         HD_SLOT *d = &g_hd[g_hd_list[k]];
         LONG y;
+        int j;
         if (!rz_hd_ready(d)) { d->dw = 0; continue; }
         rz_hs_copy(bits, pitch, ox, oy, cw, d->dst, 1);
         for (y = 0; y < d->h; y++)
             memcpy(d->cur + y * d->w, (WORD *)(bits + (oy + d->nat[1] + y) * pitch) + ox + d->nat[0], d->w * 2);
+        for (j = 0; g_dlgocc && d->valid && !d->lbl && j < k; j++) {   /* DLGOCC: a dialog in front covers part of it */
+            const HD_SLOT *f = &g_hd[g_hd_list[j]];
+            LONG q0, q1, q2, q3;
+            if (f->lbl) continue;
+            q0 = max(f->nat[0], d->nat[0]) - d->nat[0]; q1 = max(f->nat[1], d->nat[1]) - d->nat[1];
+            q2 = min(f->nat[2], d->nat[2]) - d->nat[0]; q3 = min(f->nat[3], d->nat[3]) - d->nat[1];
+            if (q2 <= q0 || q3 <= q1) continue;
+            for (y = q1; y < q3; y++) memcpy(d->cur + y * d->w + q0, d->prev + y * d->w + q0, (q2 - q0) * 2);
+            if (g_dlgocc_logs < 20) {
+                static void *lw, *lf; static LONG lq[4];
+                if (lw != d->win || lf != f->win || lq[0] != q0 || lq[1] != q1 || lq[2] != q2 || lq[3] != q3) {
+                    lw = d->win; lf = f->win; lq[0] = q0; lq[1] = q1; lq[2] = q2; lq[3] = q3; g_dlgocc_logs++;
+                    logf("DLGOCC> dialog [%ld %ld %ld %ld] behind [%ld %ld %ld %ld]: its own pixels kept in local [%ld %ld %ld %ld]",
+                         d->nat[0], d->nat[1], d->nat[2], d->nat[3], f->nat[0], f->nat[1], f->nat[2], f->nat[3], q0, q1, q2, q3);
+                }
+            }
+        }
+        if (g_dlgocc && d->valid && !d->lbl) {   /* DLGOCC: a dialog kept native in front of it */
+            int a, rk = 0;
+            for (j = 0; j < k; j++) if (!g_hd[g_hd_list[j]].lbl) rk++;
+            for (a = 0; a < g_hs_ndlg; a++) {
+                LONG q0, q1, q2, q3;
+                if (g_hs_dlgz[a] > rk) continue;   /* behind this one */
+                q0 = max(g_hs_dlg[a][0], d->nat[0]) - d->nat[0]; q1 = max(g_hs_dlg[a][1], d->nat[1]) - d->nat[1];
+                q2 = min(g_hs_dlg[a][2], d->nat[2]) - d->nat[0]; q3 = min(g_hs_dlg[a][3], d->nat[3]) - d->nat[1];
+                if (q2 <= q0 || q3 <= q1) continue;
+                for (y = q1; y < q3; y++) memcpy(d->cur + y * d->w + q0, d->prev + y * d->w + q0, (q2 - q0) * 2);
+            }
+        }
+    }
+    {   /* DLGOCC: save the pixels of each kept-native dialog that has an enlarged dialog behind it */
+        int a, q, nr = 0;
+        LONG need = 0;
+        for (q = 0; q < g_hd_nc; q++) if (!g_hd[g_hd_list[q]].lbl) nr++;
+        for (a = 0; a < g_hs_ndlg; a++) {
+            LONG *c = g_nf_clip[a];
+            c[0] = max(g_hs_dlg[a][0], 0); c[1] = max(g_hs_dlg[a][1], 0);
+            c[2] = min(g_hs_dlg[a][2], cw); c[3] = min(g_hs_dlg[a][3], ch);
+            g_nf_off[a] = -1;
+            if (!g_dlgocc || g_hs_dlgz[a] >= nr || c[2] <= c[0] || c[3] <= c[1]) continue;
+            g_nf_off[a] = need; need += (c[2] - c[0]) * (c[3] - c[1]);
+        }
+        if (need > g_nf_cap) {
+            free(g_nf_buf);
+            g_nf_buf = (WORD *)malloc((size_t)need * 2);
+            g_nf_cap = g_nf_buf ? need : 0;
+        }
+        for (a = 0; a < g_hs_ndlg; a++) {
+            const LONG *c = g_nf_clip[a];
+            LONG y, w = c[2] - c[0];
+            if (g_nf_off[a] < 0) continue;
+            if (!g_nf_buf) { g_nf_off[a] = -1; continue; }
+            for (y = c[1]; y < c[3]; y++)
+                memcpy(g_nf_buf + g_nf_off[a] + (y - c[1]) * w, (WORD *)(bits + (oy + y) * pitch) + ox + c[0], w * 2);
+        }
     }
     { LARGE_INTEGER tq = t0; rz_hs_tick(0, &tq); }
     if (city && g_hudfix) {   /* HUDFIX: what the game drew into the composite this frame */
@@ -7180,16 +7288,41 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
                                2026-10-23: Reunirse, opened first, was drawn over Preferencias, opened later; the log listed
                                Preferencias first), so dialogs are drawn from the back of the list; the floating cost label
                                (lbl) stays last, in list order. The mouse picks the last drawn match, so it follows. */
+        int nf = 0;
         for (pass = 0; pass < 2; pass++)
         for (k = 0; k < g_hd_nc; k++) {
-            HD_SLOT *d = &g_hd[g_hd_list[pass ? k : g_hd_nc - 1 - k]];
-            if (!d->dw || (int)(d->lbl != 0) != pass) continue;
-            rz_hd_draw(d, bits, pitch, ox, oy, g6);
-            if (!d->lbl) vd_compose(d, bits, pitch, ox, oy, cw, ch);   /* VERDATOS: the game-drawn map 1:1 over it */
-            memcpy(g_hd_pdst[nd], d->dst, sizeof(d->dst)); memcpy(g_hd_pnat[nd], d->nat, sizeof(d->nat));
-            g_hd_plbl[nd] = d->lbl;   /* task uiscale */
-            g_hd_pslot[nd] = (int)(d - g_hd); nd++;
+            int li = pass ? k : g_hd_nc - 1 - k;
+            HD_SLOT *d = &g_hd[g_hd_list[li]];
+            if ((int)(d->lbl != 0) != pass) continue;
+            if (d->dw) {
+                rz_hd_draw(d, bits, pitch, ox, oy, g6);
+                if (!d->lbl) vd_compose(d, bits, pitch, ox, oy, cw, ch);   /* VERDATOS: the game-drawn map 1:1 over it */
+                memcpy(g_hd_pdst[nd], d->dst, sizeof(d->dst)); memcpy(g_hd_pnat[nd], d->nat, sizeof(d->nat));
+                g_hd_plbl[nd] = d->lbl;   /* task uiscale */
+                g_hd_pslot[nd] = (int)(d - g_hd); nd++;
+            }
+            if (!pass && g_dlgocc) {   /* DLGOCC: kept-native dialogs just in front of this one go back on top of it */
+                int a, j, rk = 0;
+                for (j = 0; j < li; j++) if (!g_hd[g_hd_list[j]].lbl) rk++;
+                for (a = 0; a < g_hs_ndlg; a++) {
+                    const LONG *c = g_nf_clip[a];
+                    LONG y, w = c[2] - c[0];
+                    if (g_nf_off[a] < 0 || g_hs_dlgz[a] != rk || nf >= 16) continue;
+                    for (y = c[1]; y < c[3]; y++)
+                        memcpy((WORD *)(bits + (oy + y) * pitch) + ox + c[0], g_nf_buf + g_nf_off[a] + (y - c[1]) * w, w * 2);
+                    memcpy(g_hd_nfr[nf], c, sizeof(g_hd_nfr[0])); g_hd_nfz[nf] = nd; nf++;
+                    if (g_dlgocc_logs < 40) {
+                        static LONG lr[4];
+                        if (memcmp(lr, c, sizeof(lr))) {
+                            memcpy(lr, c, sizeof(lr)); g_dlgocc_logs++;
+                            logf("DLGOCC> native dialog [%ld %ld %ld %ld] put back in front of %d enlarged dialog(s)",
+                                 g_hs_dlg[a][0], g_hs_dlg[a][1], g_hs_dlg[a][2], g_hs_dlg[a][3], nd);
+                        }
+                    }
+                }
+            }
         }
+        g_hd_nf = nf;
         g_hd_n = nd;
         if (nd) g_hd_frames++;
     }
@@ -7421,10 +7554,21 @@ static int rz_hd_mouse(UINT m, LPARAM *lp) {
         return 2;
     if (g_hd_capture >= 0)   /* a press on a dialog keeps the release (and the drag between) on that dialog */
         for (i = 0; i < n; i++) if (g_hd_pslot[i] == g_hd_capture) { k = i; break; }
+    if (k < 0 && g_hd_cap_native) {   /* DLGOCC: a press on a native dialog in front keeps its drag and release native */
+        if (up || down) g_hd_cap_native = 0;
+        if (up) return 0;
+    }
+    if (k < 0 && g_hd_cap_native) return 0;
     if (k < 0) {
+        LONG a, nf = g_hd_nf;
         g_hd_capture = -1;
         for (i = n - 1; i >= 0 && k < 0; i--)
             if (!g_hd_plbl[i] && qx >= g_hd_pdst[i][0] && qx < g_hd_pdst[i][2] && qy >= g_hd_pdst[i][1] && qy < g_hd_pdst[i][3]) k = i;
+        for (a = 0; a < nf; a++)   /* DLGOCC: a native dialog drawn after that one, under the cursor, takes the point as it is */
+            if (g_hd_nfz[a] > k && qx >= g_hd_nfr[a][0] && qx < g_hd_nfr[a][2] && qy >= g_hd_nfr[a][1] && qy < g_hd_nfr[a][3]) {
+                if (down) g_hd_cap_native = 1;
+                return 0;
+            }
     }
     if (k < 0) return 0;
     if (g_hd_capture >= 0 && !down && !g_hd_cap_drag &&
@@ -12655,7 +12799,7 @@ static void __stdcall fnlog_enter(int idx, DWORD *f) {
                        Capturing them here translated them like HUD pieces and kept their pointers after
                        they were freed (owner hand test 2026-10-05). */
                     DWORD suic = (DWORD)GetModuleHandleA("SIMUI.DLL");
-                    int is_dlg = suic && *(DWORD *)ecx == suic + 0xa4d64 && w >= 120 && h >= 80;
+                    int is_dlg = rz_is_dlg_vt(*(DWORD *)ecx, suic) && w >= 120 && h >= 80;   /* DLGCLASS */
                     if (!seen && !is_dlg && r[0] >= -64 && r[1] >= -64 && r[2] <= NAT_W + 64 && r[3] <= NAT_H + 64 &&
                     (w * h) <= (NAT_W * NAT_H * 7) / 10) {
                     LONG *wr = (LONG *)(ecx + 0x14);   /* the window's own (absolute) rect */
@@ -14707,6 +14851,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_THICKFRAME", v, sizeof(v))) g_thickframe = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_FSKEY", v, sizeof(v))) g_fskey = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_DLGSCALE", v, sizeof(v))) g_dlgscale = atoi(v);
+        if (GetEnvironmentVariableA("SC3RESIZE_DLGCLASS", v, sizeof(v))) g_dlgclass = atoi(v);      /* child newcitydlg */
+        if (GetEnvironmentVariableA("SC3RESIZE_DLGOCC", v, sizeof(v))) g_dlgocc = atoi(v);          /* child newcitydlg */
           if (GetEnvironmentVariableA("SC3RESIZE_COSTLABEL_SCALE", v, sizeof(v))) g_costscale = atoi(v);   /* task uiscale */
           if (GetEnvironmentVariableA("SC3RESIZE_TIPDLG", v, sizeof(v))) g_tipdlg = atoi(v);          /* task uiaudit */
           if (GetEnvironmentVariableA("SC3RESIZE_MINIVIS", v, sizeof(v))) g_minivis = atoi(v);        /* task uiaudit */
@@ -14759,6 +14905,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
              g_ms_filter ? "bilinear" : "nearest", g_ms_repost, g_ms_fullblit, g_ms_refresh, g_ms_dump[0] ? g_ms_dump : "-");
         logf("### FLAGS> uiaudit: tipdlg=%d minivis=%d dlgonly=%d menuscale_open=%d", g_tipdlg, g_minivis, g_dlgonly, g_ms_open);
         logf("### FLAGS> verdatos: native=%d tex=%d", g_vd_on, g_vd_tex);
+        logf("### FLAGS> newcitydlg: dlgclass=%d dlgocc=%d", g_dlgclass, g_dlgocc);
         if (AddVectoredExceptionHandler(1, rz_veh))
             logf("### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the "
                  "zoom-after-resize crash the game swallows)");
