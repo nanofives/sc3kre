@@ -7045,6 +7045,8 @@ static void vd_idle(void) {
 }
 
 /* Before the final present: enlarge the HUD into the frame. Returns 1 when the frame must be restored after. */
+#include "sc3resize_ntext.c"   /* child nativetext: NATIVETEXT, sharp text in the enlarged HUD and dialogs (SC3RESIZE_NATIVETEXT=0) */
+
 static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_screen) {
     double s, smax;
     int n, i, k, g6, dump, city_fix = 1;
@@ -7277,6 +7279,7 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
         }
     }
     mn_compose(bits, pitch, ox, oy, cw, ch, s);   /* MININAT: the game-drawn map 1:1 over the enlarged one */
+    nt_hud(src, n, bits, pitch, ox, oy, cw, ch, g6, s);   /* NATIVETEXT */
     for (k = 0; k < g_hs_ndlg; k++)   /* dialogs stay native and on top */
         for (i = 0; i < n; i++) {
             LONG q[4];
@@ -7297,6 +7300,7 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
             if (d->dw) {
                 rz_hd_draw(d, bits, pitch, ox, oy, g6);
                 if (!d->lbl) vd_compose(d, bits, pitch, ox, oy, cw, ch);   /* VERDATOS: the game-drawn map 1:1 over it */
+                nt_dlg(src, d, bits, pitch, ox, oy, g6);   /* NATIVETEXT */
                 memcpy(g_hd_pdst[nd], d->dst, sizeof(d->dst)); memcpy(g_hd_pnat[nd], d->nat, sizeof(d->nat));
                 g_hd_plbl[nd] = d->lbl;   /* task uiscale */
                 g_hd_pslot[nd] = (int)(d - g_hd); nd++;
@@ -8688,6 +8692,7 @@ static HRESULT WINAPI rz_blt_hook_inner(void *self, RECT *dr, void *src, RECT *s
     int hs_did;
     __int64 d;
     RECT sfix;
+    nt_blt(self, dr, src, sr, fl, fx);   /* NATIVETEXT: the glyph records follow the pixels */
     if (rz_mb_present(self, dr, src, sr, fl, fx, &hr)) return hr;
     /* EVENT-STYLE LAYOUT (owner 2026-10-07: "reposition of the elements looks buggy while it loads").
        On the FINAL present (dest covers the client):
@@ -14688,6 +14693,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
     {   char v[8];
         if (GetEnvironmentVariableA("SC3RESIZE_SHAREREAD", v, sizeof(v))) g_shareread = atoi(v); }
     patch_shareread(ss);     /* SIMSPR+0x47B70 crash: shared resource reads + anchor sprite guard (SHAREREAD block) */
+    nt_install();            /* NATIVETEXT: the glyph hook before any text is drawn (again from the HUD pass if not loaded yet) */
     {   char v[8];
         if (GetEnvironmentVariableA("SC3RESIZE_DIRTGUARD", v, sizeof(v))) g_dirtguard = atoi(v); }
     CreateThread(NULL, 0, dirtguard_watcher, NULL, 0, NULL);
@@ -14884,6 +14890,13 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_OPEN", v, sizeof(v))) g_ms_open = atoi(v); /* task uiaudit */
           if (GetEnvironmentVariableA("SC3RESIZE_VERDATOS_NATIVE", v, sizeof(v))) g_vd_on = atoi(v);  /* task verdatos */
           if (GetEnvironmentVariableA("SC3RESIZE_VERDATOS_TEX", v, sizeof(v))) g_vd_tex = atoi(v);    /* task verdatos */
+          if (GetEnvironmentVariableA("SC3RESIZE_NATIVETEXT", v, sizeof(v))) g_nt_on = atoi(v);       /* child nativetext */
+          if (GetEnvironmentVariableA("SC3RESIZE_NATIVETEXT_LOG", v, sizeof(v))) g_nt_log = atoi(v);
+          GetEnvironmentVariableA("SC3RESIZE_NATIVETEXT_FACE", g_nt_face, sizeof(g_nt_face));
+          GetEnvironmentVariableA("SC3RESIZE_NATIVETEXT_DUMP", g_nt_dump, sizeof(g_nt_dump));
+          GetEnvironmentVariableA("SC3RESIZE_NATIVETEXT_CTL", g_nt_ctl, sizeof(g_nt_ctl));
+          if (GetEnvironmentVariableA("SC3RESIZE_NATIVETEXT_PHASE", v, sizeof(v))) g_nt_phase = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_NATIVETEXT_RCI", v, sizeof(v))) g_nt_rci = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_WINMEM", v, sizeof(v))) g_winmem = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_WINPRIMARY", v, sizeof(v))) g_winprimary = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_RESROW", v, sizeof(v))) g_resrow = atoi(v);
@@ -14931,6 +14944,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
         logf("### FLAGS> uiaudit: tipdlg=%d minivis=%d dlgonly=%d menuscale_open=%d", g_tipdlg, g_minivis, g_dlgonly, g_ms_open);
         logf("### FLAGS> verdatos: native=%d tex=%d", g_vd_on, g_vd_tex);
         logf("### FLAGS> newcitydlg: dlgclass=%d dlgocc=%d", g_dlgclass, g_dlgocc);
+        logf("### FLAGS> nativetext: look=%d phase=%d rci=%d log=%d face=%s dump=%s", g_nt_on, g_nt_phase, g_nt_rci, g_nt_log, g_nt_face[0] ? g_nt_face : "auto", g_nt_dump[0] ? g_nt_dump : "-");
         if (AddVectoredExceptionHandler(1, rz_veh))
             logf("### VEH crash logger installed (logs any hardware fault MODULE+RVA - for the "
                  "zoom-after-resize crash the game swallows)");
