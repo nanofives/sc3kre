@@ -4726,6 +4726,7 @@ static int     g_hd_capture = -1;               /* slot pressed on, until the re
 static int     g_hd_cap_drag;                   /* that dialog moved since the press: map the cursor 1:1 from it */
 static LONG    g_hd_cap_q[2], g_hd_cap_p[2], g_hd_cap_nat[2];
 static DWORD   g_hd_stamp, g_hd_px, g_hd_full, g_hd_frames;
+static __int64 g_hdt[2];                         /* child vdscroll: DLGSCALE prep and draw time (QPC), DLGSCALE> line */
 static LONG    g_hd_rb[4];                      /* VERDATOS: dest box (slot-local) the last rz_hd_draw recomputed */
 static int     rz_hd_add(void *win, const LONG *r, LONG cw, LONG ch, double s);   /* fwd */
 /* task uiscale (owner 2026-10-22, img17: "price tag is hiding under the cursor and it's not scaling with the rest of the
@@ -7053,6 +7054,25 @@ static int    g_vd_valid, g_vd_fails, g_vd_logs, g_vd_inst, g_vd_first;
 static DWORD  g_vd_draws, g_vd_skips, g_vd_comps, g_vd_px_n, g_vd_clones;
 static __int64 g_vd_drawt, g_vd_compt;
 static MN_TC0 g_vd_shut_orig;
+/* VDSCROLL (child vdscroll 2026-10-26, owner: "when trying to scroll the camera while the map details menu is open fps
+ * drop substantially"). While the camera moves the game sets the data map's dirty byte (view+0xdc) about every 100 ms
+ * (measured: 20 per 10 s while scrolling, 0 to 2 while still), so the twin above was redrawn each time (30 ms per draw on
+ * a 256-cell city, 170 to 370 ms on a 1024-cell one), most of them with 0 native pixels changed, and each redraw made
+ * DLGSCALE resample the whole dialog on the next frame. Now, once the twin shows the view at the current geometry, it
+ * is redrawn only when the native view's pixels differ from the ones it was drawn over (the dirty byte alone does
+ * nothing), or on a dirty byte once the twin is older than g_vd_maxage ms (a data change finer than a native pixel, on a
+ * 1024-cell city). With the camera still that redraw is immediate (monthly data refresh). While the iso view origin
+ * moved within g_vd_settle ms it waits until the camera stops; meanwhile the compose keeps taking the twin only where the
+ * native pixel is still the one the twin was drawn over, so a cell whose data changed shows the dialog's resampled
+ * native pixel until then.
+ * Open, view switch, rotation and factor changes still redraw at once. A run rebuild caused by native pixels alone
+ * (twin unchanged) no longer drops DLGSCALE's cache: only the dest box rz_hd_draw recomputed can change runs, so the
+ * paste is limited to that box, and a new twin keeps the cache when its runs cover the old ones (vd_runs_cover).
+ * SC3RESIZE_VDSCROLL=0: as before. SC3RESIZE_VDSCROLL_SETTLE=<ms> (default 1000), SC3RESIZE_VDSCROLL_MAXAGE=<ms> (20000). */
+static int    g_vdscroll = 1;
+static DWORD  g_vd_settle = 1000, g_vd_defers, g_vd_late;
+static int    g_vd_pend, g_vd_waited, g_vd_slogs;
+static DWORD  g_vd_cam_t, g_vd_twin_t, g_vd_nochg, g_vd_now, g_vd_maxage = 20000;
 
 static void vd_free(const char *why) {
     void *t = g_vd_twin;
@@ -7195,7 +7215,29 @@ static void vd_after(BYTE *nat, BYTE dirty) {
     same = g_vd_valid && !dirty && g_vd_bT == T && g_vd_T == T && g_vd_mw == mw && g_vd_mh == mh &&
            !memcmp(g_vd_m, g_vd_mp, (size_t)mw * mh * 2);
     g_vd_dlg = d->win; g_vd_lx = r[0] - d->nat[0]; g_vd_ly = r[1] - d->nat[1];
-    if (same) { g_vd_skips++; return; }   /* the twin already shows this picture */
+    if (g_vdscroll && g_vd_valid && g_vd_bT == T && g_vd_T == T && g_vd_mw == mw && g_vd_mh == mh) {   /* VDSCROLL */
+        DWORD now = GetTickCount();
+        int changed = memcmp(g_vd_m, g_vd_mp, (size_t)mw * mh * 2) != 0;   /* vs the picture the twin was drawn over */
+        int aged = now - g_vd_twin_t >= g_vd_maxage;
+        {   /* the camera: the iso view's origin (as MOVENEAREST reads it) */
+            static LONG cox = 0x7fffffff, coy;
+            DWORD iso = g_bridge && !IsBadReadPtr(g_bridge, 0x1c) ? ((DWORD *)g_bridge)[0x18 / 4] : 0;
+            if (iso && !IsBadReadPtr((void *)iso, 0x60)) {
+                LONG ox = ((LONG *)iso)[0x54 / 4], oy = ((LONG *)iso)[0x58 / 4];
+                if (ox != cox || oy != coy) { if (cox != 0x7fffffff) g_vd_cam_t = now; cox = ox; coy = oy; }
+            }
+        }
+        if (changed || (dirty && aged)) g_vd_pend = 1;
+        if (!g_vd_pend) { if (dirty) g_vd_nochg++; else g_vd_skips++; return; }   /* the dirty byte alone: same pixels */
+        if (now - g_vd_cam_t < g_vd_settle) { g_vd_defers++; g_vd_waited = 1; return; }   /* camera moving: the native shows through */
+        if (!changed && !aged) { g_vd_pend = 0; g_vd_waited = 0; g_vd_nochg++; return; }   /* changed back meanwhile */
+        if (g_vd_waited) g_vd_late++; else g_vd_now++;
+        if (g_vd_slogs < 20) { g_vd_slogs++; logf("VDSCROLL> twin redraw (%s): %s, camera moved %lu ms ago, twin %lu ms old",
+                                                 g_vd_waited ? "after the camera stopped" : "at once", changed ? "native pixels changed" : "twin past its age",
+                                                 now - g_vd_cam_t, now - g_vd_twin_t); }
+        dirty = 1; g_vd_pend = 0; g_vd_waited = 0;   /* one redraw from the current data */
+    }
+    else if (same) { g_vd_skips++; return; }   /* the twin already shows this picture */
     if (g_vd_T != T) {
         ((MN_TC4)MN_VT(twin, 0xc8))(twin, 0, 0, 0, (DWORD)T, (DWORD)T);
         g_vd_T = T;
@@ -7222,6 +7264,7 @@ static void vd_after(BYTE *nat, BYTE dirty) {
     mn_unlock(ras);
     { WORD *t = g_vd_mp; g_vd_mp = g_vd_m; g_vd_m = t; }   /* the picture this twin draw matches */
     g_vd_mw = mw; g_vd_mh = mh; g_vd_bT = T; g_vd_bdw = d->dw; g_vd_bw = d->w; g_vd_valid = 1; g_vd_draws++; g_vd_gen++;
+    g_vd_twin_t = GetTickCount(); g_vd_pend = 0; g_vd_waited = 0;   /* VDSCROLL */
     QueryPerformanceCounter(&t1); g_vd_drawt += t1.QuadPart - t0.QuadPart;
     if (!g_vd_first) {
         g_vd_first = 1;
@@ -7238,14 +7281,28 @@ static void vd_after(BYTE *nat, BYTE dirty) {
  * to the frame every frame and only partly recomputes (g_hd_rb), so a still or dragged dialog costs one compare of the
  * map rect here. When the runs change, the cache can hold twin pixels the new runs do not cover: the slot is then
  * rebuilt from its native pixels on the next frame. */
-static LONG  *g_vd_run, g_vd_runcap, g_vd_nrun, g_vd_rkey[4];
+static LONG  *g_vd_run, g_vd_runcap, g_vd_nrun, g_vd_rkey[4], g_vd_okey[4];
 static WORD  *g_vd_nc;   /* the native map rect of d->prev the runs were built from */
 static LONG   g_vd_nccap;
 static DWORD  g_vd_rgen, g_vd_rebuilds, g_vd_runid, g_vd_pid;
 static const HD_SLOT *g_vd_pd;   /* the slot whose cache holds the runs g_vd_pid */
+static DWORD  g_vd_ncstamp;      /* VDSCROLL: the pass (g_hd_stamp) whose native pixels g_vd_nc holds */
+static LONG  *g_vd_orun, g_vd_oruncap, g_vd_onrun;   /* VDSCROLL: the runs before a rebuild */
+static DWORD  g_vd_keeps;
+/* VDSCROLL: does every old run lie inside the new runs of its row? Both lists are (y, x0, x1) sorted by y then x. Then a
+   paste of the new runs (cache + frame) overwrites every cache pixel the old runs wrote, and the cache can stay. */
+static int vd_runs_cover(const LONG *o, LONG no, const LONG *n, LONG nn) {
+    LONG i, j = 0;
+    for (i = 0; i < no; i++) {
+        LONG y = o[i * 3], a = o[i * 3 + 1], b = o[i * 3 + 2];
+        while (j < nn && (n[j * 3] < y || (n[j * 3] == y && n[j * 3 + 2] <= a))) j++;
+        if (j >= nn || n[j * 3] != y || n[j * 3 + 1] > a || n[j * 3 + 2] < b) return 0;   /* runs never touch: one must hold it */
+    }
+    return 1;
+}
 static void vd_compose(HD_SLOT *d, BYTE *bits, LONG pitch, LONG ox, LONG oy, LONG cw, LONG ch) {
     LONG T = g_vd_bT, X0, Y0, x, y, xa, xb, ya, yb, k, key[4], bx0 = 0, by0 = 0, bx1 = d->dw, by1 = d->dh;
-    int same, mode;   /* mode 0: frame only, 1: frame + cache, 2: frame + cache inside the box rz_hd_draw recomputed */
+    int same, mode, twin_same;   /* mode 0: frame only, 1: frame + cache, 2: frame + cache inside the box rz_hd_draw recomputed */
     LARGE_INTEGER t0, t1;
     if (!g_vd_on) return;
     mn_install();   /* the draw hook, also with MININAT off */
@@ -7263,6 +7320,9 @@ static void vd_compose(HD_SLOT *d, BYTE *bits, LONG pitch, LONG ox, LONG oy, LON
     }
     key[0] = X0; key[1] = Y0; key[2] = d->dw; key[3] = d->dh;
     same = g_vd_rgen == g_vd_gen && !memcmp(key, g_vd_rkey, sizeof(key));
+    twin_same = same && g_vd_ncstamp == g_hd_stamp - 1;   /* VDSCROLL: a rebuild from native pixels alone, last pass's */
+    memcpy(g_vd_okey, g_vd_rkey, sizeof(g_vd_okey));
+    g_vd_ncstamp = g_hd_stamp;
     for (y = 0; y < g_vd_mh; y++) {   /* the native pixels over the map's rect, against the ones the runs were built from */
         const WORD *nr = d->prev + (y + g_vd_ly) * d->w + g_vd_lx;
         WORD *c = g_vd_nc + y * g_vd_mw;
@@ -7270,6 +7330,14 @@ static void vd_compose(HD_SLOT *d, BYTE *bits, LONG pitch, LONG ox, LONG oy, LON
         if (!same) memcpy(c, nr, g_vd_mw * 2);
     }
     if (!same) {   /* rebuild: a dest pixel takes the twin where the twin drew and the native pixel is the view's own */
+        if (g_vdscroll && g_vd_pd == d && g_vd_pid == g_vd_runid) {   /* VDSCROLL: keep the old runs for vd_runs_cover */
+            if (g_vd_oruncap < g_vd_nrun * 3) {
+                LONG *nn = (LONG *)realloc(g_vd_orun, (size_t)(g_vd_nrun * 3 + 3) * sizeof(LONG));
+                if (nn) { g_vd_orun = nn; g_vd_oruncap = g_vd_nrun * 3 + 3; }
+            }
+            g_vd_onrun = g_vd_oruncap >= g_vd_nrun * 3 ? g_vd_nrun : -1;
+            if (g_vd_onrun > 0) memcpy(g_vd_orun, g_vd_run, (size_t)g_vd_nrun * 3 * sizeof(LONG));
+        } else g_vd_onrun = -1;
         g_vd_nrun = 0; g_vd_rebuilds++; g_vd_runid++;
         for (y = ya; y < yb; y++) {
             LONG v = d->ys[y], sl = (v >> 9) + ((v & 511) >= 128) - g_vd_ly;   /* nearest native row, view-local */
@@ -7297,7 +7365,15 @@ static void vd_compose(HD_SLOT *d, BYTE *bits, LONG pitch, LONG ox, LONG oy, LON
         }
         memcpy(g_vd_rkey, key, sizeof(key)); g_vd_rgen = g_vd_gen;
     }
-    if (!same && g_vd_pd == d) { d->valid = 0; g_vd_pd = NULL; mode = 0; }
+    if (!same && twin_same && g_vdscroll && g_vd_pd == d && g_vd_pid == g_vd_runid - 1) {   /* VDSCROLL: runs moved only
+           where native pixels changed this frame, all inside the box rz_hd_draw just resampled */
+        g_vd_pid = g_vd_runid; mode = 2; bx0 = g_hd_rb[0]; by0 = g_hd_rb[1]; bx1 = g_hd_rb[2]; by1 = g_hd_rb[3];
+    }
+    else if (!same && g_vdscroll && g_vd_pd == d && g_vd_onrun >= 0 && !memcmp(key, g_vd_okey, sizeof(key)) &&
+             g_vd_pid == g_vd_runid - 1 && vd_runs_cover(g_vd_orun, g_vd_onrun, g_vd_run, g_vd_nrun)) {
+        g_vd_pid = g_vd_runid; mode = 1; g_vd_keeps++;   /* VDSCROLL: a new twin over the same runs or more, cache kept */
+    }
+    else if (!same && g_vd_pd == d) { d->valid = 0; g_vd_pd = NULL; mode = 0; }
     else if (g_vd_pd != d || g_vd_pid != g_vd_runid) { mode = 1; g_vd_pd = d; g_vd_pid = g_vd_runid; }
     else { mode = 2; bx0 = g_hd_rb[0]; by0 = g_hd_rb[1]; bx1 = g_hd_rb[2]; by1 = g_hd_rb[3]; }
     for (k = 0; k < g_vd_nrun; k++) {
@@ -7399,6 +7475,7 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
         if (!(g_hudperf && rz_hp_inside(m, g_hs_dst[i], cw))) rz_hs_copy(bits, pitch, ox, oy, cw, m, 1);   /* HUDPERF: not twice */
         rz_hs_copy(bits, pitch, ox, oy, cw, g_hs_dst[i], 1);
     }
+    { LARGE_INTEGER tq; QueryPerformanceCounter(&tq); g_hdt[0] -= tq.QuadPart; }   /* child vdscroll: DLGSCALE> timing */
     for (k = 0; k < g_hd_nc; k++) {   /* DLGSCALE: the dest is restored after the present; keep the native pixels */
         HD_SLOT *d = &g_hd[g_hd_list[k]];
         LONG y;
@@ -7463,6 +7540,7 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
                 memcpy(g_nf_buf + g_nf_off[a] + (y - c[1]) * w, (WORD *)(bits + (oy + y) * pitch) + ox + c[0], w * 2);
         }
     }
+    { LARGE_INTEGER tq; QueryPerformanceCounter(&tq); g_hdt[0] += tq.QuadPart; }   /* child vdscroll: DLGSCALE> timing */
     { LARGE_INTEGER tq = t0; rz_hs_tick(0, &tq); }
     if (city && g_hudfix) {   /* HUDFIX: what the game drew into the composite this frame */
         LARGE_INTEGER tq; QueryPerformanceCounter(&tq);
@@ -7575,7 +7653,10 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
             HD_SLOT *d = &g_hd[g_hd_list[li]];
             if ((int)(d->lbl != 0) != pass) continue;
             if (d->dw) {
+                LARGE_INTEGER ta, tb;   /* child vdscroll: DLGSCALE> timing */
+                QueryPerformanceCounter(&ta);
                 rz_hd_draw(d, bits, pitch, ox, oy, g6);
+                QueryPerformanceCounter(&tb); g_hdt[1] += tb.QuadPart - ta.QuadPart;
                 if (!d->lbl) vd_compose(d, bits, pitch, ox, oy, cw, ch);   /* VERDATOS: the game-drawn map 1:1 over it */
                 memcpy(g_hd_pdst[nd], d->dst, sizeof(d->dst)); memcpy(g_hd_pnat[nd], d->nat, sizeof(d->nat));
                 g_hd_plbl[nd] = d->lbl;   /* task uiscale */
@@ -7629,12 +7710,22 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
                  g_mn_stale, g_mn_clones);
             g_mn_draws = g_mn_comps = g_mn_stale = g_mn_px_n = g_mn_clones = 0; g_mn_drawt = g_mn_compt = 0;
         }
+        if (g_hd_frames && g_freq.QuadPart) {   /* child vdscroll: where the enlarged dialogs' share of the pass goes */
+            logf("DLGSCALE> %lu frames with a dialog: prep (dest snapshot, native copy, DLGOCC) %.2f, draw (diff, resample, copy) %.2f ms/frame; resampled %lu px/frame, %lu full",
+                 g_hd_frames, 1000.0 * (double)g_hdt[0] / (double)g_freq.QuadPart / g_hd_frames,
+                 1000.0 * (double)g_hdt[1] / (double)g_freq.QuadPart / g_hd_frames, g_hd_px / g_hd_frames, g_hd_full);
+        }
+        g_hdt[0] = g_hdt[1] = 0; g_hd_px = g_hd_full = g_hd_frames = 0;
         if (g_vd_on && (g_vd_draws || g_vd_skips || g_vd_comps)) {   /* VERDATOS */
             logf("VERDATOS> %lu twin draws (%.2f ms each), %lu skipped (native picture unchanged), %lu frames composed (%lu px/frame copied, %.3f ms/frame, %lu run rebuilds), %lu clone(s), texture %ld",
                  g_vd_draws, g_vd_draws && g_freq.QuadPart ? 1000.0 * (double)g_vd_drawt / (double)g_freq.QuadPart / g_vd_draws : 0.0, g_vd_skips,
                  g_vd_comps, g_vd_comps ? g_vd_px_n / g_vd_comps : 0,
                  g_vd_comps && g_freq.QuadPart ? 1000.0 * (double)g_vd_compt / (double)g_freq.QuadPart / g_vd_comps : 0.0,
                  g_vd_rebuilds, g_vd_clones, g_vd_twin ? ((LONG *)g_vd_twin)[0x39] : 0L);
+            if (g_vdscroll && (g_vd_defers || g_vd_late || g_vd_nochg || g_vd_now))
+                logf("VDSCROLL> %lu dirty draws with the same native pixels (no redraw), %lu twin redraws at once, %lu after the camera stopped (%lu ms; %lu native draws waited), %lu dialog caches kept over a new twin",
+                     g_vd_nochg, g_vd_now, g_vd_late, g_vd_settle, g_vd_defers, g_vd_keeps);
+            g_vd_defers = g_vd_late = g_vd_keeps = g_vd_nochg = g_vd_now = 0;
             g_vd_draws = g_vd_skips = g_vd_comps = g_vd_px_n = g_vd_clones = g_vd_rebuilds = 0; g_vd_drawt = g_vd_compt = 0;
         }
         logf("HUDSCALE> %lu enlarged frames in %lu ms, %.2f ms per frame in the pre-present pass%s; HUDFIX: %lu recorded HUD Blts used, %lu frame(s) on the equality fallback",
@@ -8809,6 +8900,26 @@ static int rz_iat_patch(HMODULE m, const char *dll, const char *fn, void *repl, 
         }
     }
     return n;
+}
+/* DIAGARROWS (test only, child vdscroll 2026-10-26). SC3RESIZE_DIAG_ARROWS=1: GZWIND's GetAsyncKeyState import reports
+ * the arrow key a posted WM_RZ_DIAGARROW (wParam = VK_LEFT..VK_DOWN, 0 = none) names as held, so a bench can scroll
+ * the camera with posted arrow keys only (the handler reads the key state, GZWIND FUN_10025790), with no cursor, no
+ * focus and no Frida. Off by default; nothing changes without the env var. */
+#define WM_RZ_DIAGARROW (WM_APP + 0x5D0)
+static int g_diag_arrows;
+static volatile LONG g_diag_arrow;
+typedef SHORT (WINAPI *PFN_GAKS)(int);
+static PFN_GAKS g_orig_gaks;
+static SHORT WINAPI rz_diag_gaks(int vk) {
+    if (g_diag_arrow && vk == g_diag_arrow) return (SHORT)0x8000;
+    return g_orig_gaks(vk);
+}
+static void rz_diag_arrows_install(void) {
+    int n;
+    if (!g_diag_arrows) return;
+    n = rz_iat_patch(GetModuleHandleA("GZWIND.DLL"), "USER32.dll", "GetAsyncKeyState", (void *)rz_diag_gaks, (void **)&g_orig_gaks);
+    if (!g_orig_gaks) g_orig_gaks = (PFN_GAKS)GetProcAddress(GetModuleHandleA("user32.dll"), "GetAsyncKeyState");
+    logf("DIAGARROWS> test switch on: GZWIND GetAsyncKeyState redirected in %d import slot(s), arrows held by posted 0x%X", n, WM_RZ_DIAGARROW);
 }
 static void pk_install(void) {
     static const char *mods[] = { NULL, "SIMSPR.DLL", "GZWIND.DLL", "GZGraphicD.dll", "SIMUI.DLL", "SIMCITY.DLL" };
@@ -12584,6 +12695,9 @@ static void cursormap_install(void) {
 }
 
 static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
+    if (m == WM_RZ_DIAGARROW && g_diag_arrows) { g_diag_arrow = (LONG)wp; return 0; }   /* DIAGARROWS (test only) */
+    if (m == WM_RZ_DIAGARROW + 1 && g_diag_arrows) {   /* DIAGARROWS (test only): in-game A/B of the VDSCROLL block */
+        g_vdscroll = (int)wp; logf("DIAGARROWS> VDSCROLL set to %d", g_vdscroll); return 0; }
     if (m == WM_RBUTTONDOWN) { g_cz_rpx = (short)LOWORD(lp); g_cz_rpy = (short)HIWORD(lp); g_cz_rpf = 1; }   /* raw; a mapping block below overwrites it */
     if (m == WM_PAINT || m == WM_ERASEBKGND || m == WM_SIZE || m == WM_ACTIVATE || m == WM_ACTIVATEAPP ||
         m == WM_WINDOWPOSCHANGED || m == WM_DISPLAYCHANGE || m == WM_NCPAINT) g_ms_full_req = 1;   /* MENUSCALE */
@@ -15124,6 +15238,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           rz_meet_hook(sui); /* DLGSTAY: the Reunirse pages share one stored position */
           qi_install(sui);   /* QUERYID: "Copiar ID" button in the query (?) dialog */
           pk_install();      /* PANCURSOR: right-drag arrows enlarged and centred */
+          rz_diag_arrows_install();   /* DIAGARROWS (test only, SC3RESIZE_DIAG_ARROWS=1) */
           cursormap_install();   /* CURSORMAP: GZWIND's GetCursorPos helper maps through the zoom factor */
       }
       else logf("--- HUD: SIMUI.DLL never loaded after %d tries - capture NOT armed, HUD stays native", st); }
@@ -15263,6 +15378,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_DLGSCALE", v, sizeof(v))) g_dlgscale = atoi(v);
         if (GetEnvironmentVariableA("SC3RESIZE_DLGCLASS", v, sizeof(v))) g_dlgclass = atoi(v);      /* child newcitydlg */
         if (GetEnvironmentVariableA("SC3RESIZE_DLGOCC", v, sizeof(v))) g_dlgocc = atoi(v);          /* child newcitydlg */
+        if (GetEnvironmentVariableA("SC3RESIZE_DIAG_ARROWS", v, sizeof(v))) g_diag_arrows = atoi(v);   /* child vdscroll, test only */
           if (GetEnvironmentVariableA("SC3RESIZE_COSTLABEL_SCALE", v, sizeof(v))) g_costscale = atoi(v);   /* task uiscale */
           if (GetEnvironmentVariableA("SC3RESIZE_TIPDLG", v, sizeof(v))) g_tipdlg = atoi(v);          /* task uiaudit */
           if (GetEnvironmentVariableA("SC3RESIZE_MINIVIS", v, sizeof(v))) g_minivis = atoi(v);        /* task uiaudit */
@@ -15271,6 +15387,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MENUMASK", v, sizeof(v))) g_menumask = atoi(v);    /* child menumask */
           if (GetEnvironmentVariableA("SC3RESIZE_VERDATOS_NATIVE", v, sizeof(v))) g_vd_on = atoi(v);  /* task verdatos */
           if (GetEnvironmentVariableA("SC3RESIZE_VERDATOS_TEX", v, sizeof(v))) g_vd_tex = atoi(v);    /* task verdatos */
+          if (GetEnvironmentVariableA("SC3RESIZE_VDSCROLL", v, sizeof(v))) g_vdscroll = atoi(v);      /* child vdscroll */
+          if (GetEnvironmentVariableA("SC3RESIZE_VDSCROLL_SETTLE", v, sizeof(v))) g_vd_settle = (DWORD)atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_VDSCROLL_MAXAGE", v, sizeof(v))) g_vd_maxage = (DWORD)atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_WINMEM", v, sizeof(v))) g_winmem = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_WINPRIMARY", v, sizeof(v))) g_winprimary = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_RESROW", v, sizeof(v))) g_resrow = atoi(v);
