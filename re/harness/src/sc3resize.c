@@ -4540,6 +4540,7 @@ static volatile LONG g_cz_req = 1;     /* factor the zoom keys asked for (game t
 static volatile LONG g_cz_f = 1;       /* factor the view is drawn at now (read by the Blt hook and the wndproc) */
 static LONG g_cz_vw, g_cz_vh;          /* view size at that factor */
 static int  g_cz_draganchor = 1;       /* SC3RESIZE_CITYZOOM_DRAGANCHOR=0: leave a right-drag's anchor alone at a step */
+static int  g_cz_align8 = 1;           /* SC3RESIZE_CITYZOOM_ALIGN8=0: view not rounded up to 8 (test switch, task zoomband) */
 static LONG g_cz_rpx = -100000, g_cz_rpy, g_cz_rpf = 1;   /* the last right press as the game got it, and the factor then */
 static void *g_cz_surf;                /* the render target iso+0x74 as an IDirectDrawSurface: src of the city Blt */
 static void *g_cz_devsurf;             /* the device surface iso+0x4ec: the frame (city + HUD), kept client-sized */
@@ -8557,6 +8558,47 @@ static void qi_install(HMODULE sui) {
  * foreground: the game then presents white/black (verify/menucrop). */
 static char  g_fd_prefix[MAX_PATH];
 static DWORD g_fd_t, g_fd_n;
+/* SC3RESIZE_FRAMEDUMP_VIEW=1 (diag, task zoomband 2026-10-26): each dump also writes the whole city render target
+ * iso+0x74 to <prefix><tag>_view.bmp, slack rows included, so the rows under the HUD bar can be seen. */
+static int   g_fd_view;
+static void rz_fd_surf(void *surf, const char *path, const char *tag) {
+    LONG pitch, sw, sh, x, y, rowb;
+    DWORD bpp, gmask, wr;
+    BYTE *bits, *row;
+    HANDLE f;
+    BITMAPFILEHEADER bf;
+    BITMAPINFOHEADER bi;
+    if (!surf) { logf("FRAMEDUMP> %s: no view surface", tag); return; }
+    bits = rz_hs_lock(surf, &pitch, &bpp, &gmask, &sw, &sh);
+    if (!bits) { logf("FRAMEDUMP> %s: view lock failed", tag); return; }
+    if (bpp != 16 || sw <= 0 || sh <= 0) { ((RZ_UNLOCK)(*(DWORD **)surf)[0x80 / 4])(surf, NULL); return; }
+    rowb = (sw * 3 + 3) & ~3;
+    row = (BYTE *)malloc(rowb);
+    f = row ? CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL) : INVALID_HANDLE_VALUE;
+    if (f != INVALID_HANDLE_VALUE) {
+        memset(&bf, 0, sizeof(bf)); memset(&bi, 0, sizeof(bi));
+        bf.bfType = 0x4d42; bf.bfOffBits = sizeof(bf) + sizeof(bi); bf.bfSize = bf.bfOffBits + rowb * sh;
+        bi.biSize = sizeof(bi); bi.biWidth = sw; bi.biHeight = sh; bi.biPlanes = 1; bi.biBitCount = 24;
+        WriteFile(f, &bf, sizeof(bf), &wr, NULL); WriteFile(f, &bi, sizeof(bi), &wr, NULL);
+        memset(row, 0, rowb);
+        for (y = sh - 1; y >= 0; y--) {
+            const WORD *p = (const WORD *)(bits + y * pitch);
+            for (x = 0; x < sw; x++) {
+                WORD v = p[x];
+                BYTE r, g, b;
+                if (gmask == 0x07E0) { r = (BYTE)((v >> 11) << 3); g = (BYTE)(((v >> 5) & 63) << 2); }
+                else { r = (BYTE)(((v >> 10) & 31) << 3); g = (BYTE)(((v >> 5) & 31) << 3); }
+                b = (BYTE)((v & 31) << 3);
+                row[x * 3] = b; row[x * 3 + 1] = g; row[x * 3 + 2] = r;
+            }
+            WriteFile(f, row, rowb, &wr, NULL);
+        }
+        CloseHandle(f);
+        logf("FRAMEDUMP> %s: view surface %ldx%ld written to %s", tag, sw, sh, path);
+    }
+    free(row);
+    ((RZ_UNLOCK)(*(DWORD **)surf)[0x80 / 4])(surf, NULL);
+}
 static void rz_fd_maybe(void *self, const RECT *dr, void *src, const RECT *sr) {
     char req[MAX_PATH + 8], tag[64], path[MAX_PATH + 80];
     HANDLE f;
@@ -8622,6 +8664,7 @@ static void rz_fd_maybe(void *self, const RECT *dr, void *src, const RECT *sr) {
     } else logf("FRAMEDUMP> %s: cannot write %s", tag, path);
     free(row);
     ((RZ_UNLOCK)(*(DWORD **)src)[0x80 / 4])(src, NULL);
+    if (g_fd_view) { wsprintfA(path, "%s%s_view.bmp", g_fd_prefix, tag); rz_fd_surf(cz_find_surf_at(0x74), path, tag); }
 }
 
 /* ANCHORMARK (owner 2026-10-23: "the indicator for the camera moving, which stands still at the right-click position,
@@ -11803,7 +11846,7 @@ static void rz_poll(void) {
                6 view rows tall (662 = 82 x 8 + 6) carried through the view by the scroll copy, cutting the sprites it
                crossed; x2 (992) and stock sizes are multiples of 8 and never showed it. Round the view up to 8: the
                spare rows / columns lie past the stretch source (client / f) and are never shown. */
-            w = (w + 7) & ~7u; ht = (ht + 7) & ~7u;
+            if (g_cz_align8) { w = (w + 7) & ~7u; ht = (ht + 7) & ~7u; }
         }
     }
     /* SETTLED check. The render target is deliberately over-allocated by RZ_SURFACE_SLACK guard rows
@@ -13469,6 +13512,65 @@ static void patch_dirtclip(HMODULE ss) {
     logf("--- DIRTCLIP: dirty-cell rects clamped to the view at SIMSPR+0xd0c5 (terrain never drawn past the surface)");
 }
 
+/* ================= REPAINT8 (task zoomband, owner 2026-10-26: "when scrolling down a bit after changing zoom a line of
+ * wrong rendering appears, it goes away after moving around a little bit", maximized 2560x1351)
+ * The game's full repaint, iso vt+0x14c = FUN_1000b4b3, invalidates the view as 8 x 8 tiles of (W / 8) x (H / 8)
+ * pixels, integer division, then draws them (vt+0x130 per tile, vt+0x148(1,1)) [CONFIRMED @ SIMSPR 0x1000b4b3].
+ * So it covers 8 * (W / 8) x 8 * (H / 8): at 1351 rows the last 7 (1344..1350) are never redrawn, and keep what an
+ * earlier frame left there. It runs on a zoom change and on the layout pass. The rows lie under the HUD bar, but
+ * every scroll down copies the view up (FUN_10006226, render target vt+0x120) and redraws only the strip it
+ * exposes, so the stale 7-row stripe travels up with the picture and shows above the bar after about 130 px.
+ * Measured with SC3RESIZE_FRAMEDUMP_VIEW (verify/zoomband/RESULTS.md): view rows 1344..1350 flat after the layout
+ * and after each zoom step, the stripe at 1336..1342 after an 8 px scroll; the owner's picture shows a 7-row stripe.
+ * Same cause as ALIGN8's 6-row band at x3 (662 = 82 x 8 + 6), and a width off a multiple of 8 loses columns the same
+ * way. The shipped game only ran table sizes (multiples of 8). Fix: run the same tiling with the last tile of each
+ * row and column ending at the view edge; nothing changes when both sizes are multiples of 8.
+ * SC3RESIZE_REPAINT8=0 leaves the game's function in place. */
+static int g_repaint8 = 1;
+static volatile LONG g_repaint8_n;
+typedef void (__fastcall *RP8_PLAIN)(void *);                              /* FUN_1000e248: ecx only, ret */
+typedef void (__fastcall *RP8_INVAL)(void *, void *, LONG *, int, int);   /* vt+0x130: thiscall, ret 0xc */
+typedef void (__fastcall *RP8_DRAW)(void *, void *, int, int);            /* vt+0x148: thiscall, ret 8 */
+static RP8_PLAIN g_rp8_clear;
+static void __fastcall rp8_full_repaint(void *iso) {
+    LONG *v = (LONG *)iso, x0, y0, w, h, qx, qy, r[4], n;
+    DWORD *vt;
+    int i, j;
+    g_rp8_clear(iso);                       /* as the original: clear the pending lists and the dirty grid */
+    *((BYTE *)iso + 0x32c) = 0;
+    vt = *(DWORD **)iso;
+    x0 = v[0x54 / 4]; y0 = v[0x58 / 4];
+    w = v[0x5c / 4] - x0; h = v[0x60 / 4] - y0;
+    qx = w / 8; qy = h / 8;
+    for (j = 0; j < 8; j++) {
+        for (i = 0; i < 8; i++) {
+            r[0] = x0 + i * qx; r[2] = i == 7 ? x0 + w : r[0] + qx;
+            r[1] = y0 + j * qy; r[3] = j == 7 ? y0 + h : r[1] + qy;
+            ((RP8_INVAL)vt[0x130 / 4])(iso, NULL, r, 0, 0);
+        }
+    }
+    n = InterlockedIncrement(&g_repaint8_n);
+    if ((w & 7 || h & 7) && (n <= 6 || (n & 0xff) == 0))
+        logf("REPAINT8> #%ld full repaint of %ldx%ld: last tiles carry %ld more column(s) / %ld more row(s)", n, w, h,
+             w - 8 * qx, h - 8 * qy);
+    ((RP8_DRAW)vt[0x148 / 4])(iso, NULL, 1, 1);
+}
+
+static void rz_jmp_patch(BYTE *f, int len, void *to);
+static void patch_repaint8(HMODULE ss) {
+    static const BYTE pro[] = { 0x55, 0x8b, 0xec, 0x83, 0xec, 0x20, 0x53, 0x56, 0x57, 0x8b, 0xf1, 0xe8 };
+    BYTE *f = (BYTE *)ss + 0xb4b3;
+    if (!g_repaint8) { logf("--- REPAINT8: disabled (SC3RESIZE_REPAINT8=0)"); return; }
+    /* push ebp / mov ebp,esp / sub esp,0x20 / push ebx,esi,edi / mov esi,ecx / call FUN_1000e248 */
+    if (memcmp(f, pro, sizeof(pro)) || (DWORD)(f + 16) + *(DWORD *)(f + 12) != (DWORD)ss + 0xe248) {
+        logf("--- REPAINT8: SIMSPR+0xb4b3 differs from shipped - not installed");
+        return;
+    }
+    g_rp8_clear = (RP8_PLAIN)((BYTE *)ss + 0xe248);
+    rz_jmp_patch(f, 6, (void *)rp8_full_repaint);
+    logf("--- REPAINT8: full repaint (SIMSPR+0xb4b3) tiles reach the view edge at any size");
+}
+
 /* LCENTER (task leftclick, owner 2026-10-12: "el click izquierdo en el mapa para desplazarse no se adapta a la ventana").
  * A left click on the map (default tool, SIMSPR FUN_10043540), a left-drag (one call on the press) and a minimap click
  * (SIMUI+0x5090c) all call cISC3CityViewIso vt+0x54 = SIMSPR FUN_1001d039 CenterOnTile(tx, ty, flag). It puts the tile at
@@ -14675,6 +14777,9 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
         if (GetEnvironmentVariableA("SC3RESIZE_DIRTCLIP", v, sizeof(v))) g_dirtclip = atoi(v); }
     patch_dirtclip(ss);      /* the SIMDIRT 0x10013A8F crash: dirty cells past the view (DIRTCLIP block) */
     {   char v[8];
+        if (GetEnvironmentVariableA("SC3RESIZE_REPAINT8", v, sizeof(v))) g_repaint8 = atoi(v); }
+    patch_repaint8(ss);      /* task zoomband: the full repaint missed the rows / columns past a multiple of 8 */
+    {   char v[8];
         if (GetEnvironmentVariableA("SC3RESIZE_LCENTER", v, sizeof(v))) g_lcenter = atoi(v); }
     patch_lcenter(ss);       /* left click / minimap centre on the visible map area (LCENTER block) */
     {   char v[8];
@@ -14807,6 +14912,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_DIAG", v, sizeof(v))) g_hs_diag = atoi(v);
           GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_DUMP", g_hs_dump, sizeof(g_hs_dump));
           GetEnvironmentVariableA("SC3RESIZE_FRAMEDUMP", g_fd_prefix, sizeof(g_fd_prefix));
+          { char fv[8]; if (GetEnvironmentVariableA("SC3RESIZE_FRAMEDUMP_VIEW", fv, sizeof(fv))) g_fd_view = atoi(fv); }
           {   char ip[MAX_PATH];   /* task cityzoom: sc3resize.ini [view] zoomextra, env wins */
               ho_ini_path(ip, sizeof(ip));
               g_cz_mode = GetPrivateProfileIntA("view", "zoomextra", 1, ip);
@@ -14816,6 +14922,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
               if (GetEnvironmentVariableA("SC3RESIZE_CITYZOOM_SKIP", v, sizeof(v))) g_cz_skipon = atoi(v);
               if (GetEnvironmentVariableA("SC3RESIZE_CITYZOOM_DEFER1", v, sizeof(v))) g_cz_defer1 = atoi(v);
               if (GetEnvironmentVariableA("SC3RESIZE_CITYZOOM_DRAGANCHOR", v, sizeof(v))) g_cz_draganchor = atoi(v);
+              if (GetEnvironmentVariableA("SC3RESIZE_CITYZOOM_ALIGN8", v, sizeof(v))) g_cz_align8 = atoi(v);
               if (GetEnvironmentVariableA("SC3RESIZE_HUDPERF_MASK", v, sizeof(v))) g_hp_mask = atoi(v);
               if (GetEnvironmentVariableA("SC3RESIZE_HUDPERF_MT", v, sizeof(v))) g_hp_mt = atoi(v);
               if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_EPXINC", v, sizeof(v))) g_hs_epxinc = atoi(v);
