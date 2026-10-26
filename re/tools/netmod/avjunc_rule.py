@@ -206,6 +206,50 @@ def dropped_tees(L, P, roads, virt):
     return out
 
 
+def end_caps(L, P, virt):
+    """task avxroad (owner hand test 2026-10-26, img3; C avx_endcaps): an avenue that ends where one half turns into the
+    other and a road leaves the side of that other half. The stock tiler ends the turning half with its curve 11203 and
+    makes the other cell a T 39 (X 43 if a road also goes on straight), so the segment holds an 11203 and no box forms:
+    the end keeps the stock curve with its yellow centre line, and the band past it stays two-way. Pattern: a straight
+    pair, then the row {11203, 39 / 43}: the cap's arms are back and toward the T, the T's arms back, toward the cap and
+    out of the band's side, and nothing lies past the cap. The cap is re-read as a plain cell of the row (its own arms),
+    so the row forms a one-position box with the road as its side arm (existing box pieces). -> {cell: arm sides},
+    merged over virt"""
+    out = dict(virt)
+    P.caps = set()
+    for (x, z), pc in L.items():
+        if not P.is_half(pc[0]) or (pc[1] & 3) not in (1, 2):
+            continue
+        axis = "z" if (pc[1] & 3) == 1 else "x"
+        B = Band(axis)
+        a0, b0 = B.cells(x, z)
+        if not straight_pair(L, P, a0, b0, axis):
+            continue
+        for sg in (1, -1):
+            d = (sg * B.step[0], sg * B.step[1])
+            fwd = DIRV.index(d)
+            back = opp(fwd)
+            a1, b1 = (a0[0] + d[0], a0[1] + d[1]), (b0[0] + d[0], b0[1] + d[1])
+            p1, q1 = L.get(a1), L.get(b1)
+            if not (p1 and q1) or p1[0] not in (11203, 39, 43) or q1[0] not in (11203, 39, 43) or \
+                    [p1[0], q1[0]].count(11203) != 1:
+                continue
+            (cap, tee), h = ((a1, b1), 0) if p1[0] == 11203 else ((b1, a1), 1)
+            if cap in out or tee in out:
+                continue
+            across = DIRV.index((tee[0] - cap[0], tee[1] - cap[1]))
+            side = B.out[1 - h]                         # the T's outside (away from the cap)
+            ca = P.arms(L[cap][0], L[cap][1] & 3) or set()
+            ta = P.arms(L[tee][0], L[tee][1] & 3) or set()
+            if ca != {back, across} or not {back, opp(across), side} <= ta:
+                continue
+            if (cap[0] + d[0], cap[1] + d[1]) in L:
+                continue
+            out[cap] = set(ca)
+            P.caps.add(cap)
+    return out
+
+
 class Band:
     """geometry of a band axis: positions along it, halves a (x- / z- side) and b"""
 
@@ -245,12 +289,14 @@ def bv_cells(roads):
     return out
 
 
-def find(L, P, roads, drop=frozenset(), bv=True, caps=True, tees=True):
+def find(L, P, roads, drop=frozenset(), bv=True, caps=True, tees=True, ends=True):
     """L: layer {(x, z): (id, state)}; roads: the set of ROAD cells; drop: box cell sets to leave stock (the
     validation pass). -> dict with boxes, noses, refusals."""
     P.virt = cap_links(L, P) if caps else {}         # task avx32
     if tees:
         P.virt = dropped_tees(L, P, roads, P.virt)    # task avxroad
+    if ends:
+        P.virt = end_caps(L, P, P.virt)              # task avxroad (img3)
     bvc = bv_cells(roads) if bv else set()            # task avx32
     segs = {}
     for (x, z), p in L.items():
