@@ -342,6 +342,60 @@ static void avx_drops(AvxPass *p, int ox0, int oz0, int ox1, int oz1, const char
     if (n) InterlockedExchangeAdd(&g_avx_n_tee, n);
 }
 
+/* task avxroad (owner hand test 2026-10-26, img3; twin avjunc_rule.end_caps): an avenue that ends where one half turns
+   into the other and a road leaves the side of that other half. The stock tiler ends the turning half with its curve
+   11203 and makes the other cell a T 39 (X 43 if a road also goes on straight), so the segment holds an 11203 and no
+   box forms: the end keeps the stock curve with its yellow centre line and the band stays two-way. Pattern: a straight
+   pair, then the row {11203, 39 / 43}: the cap's arms are back and toward the T, the T's arms back, toward the cap and
+   out of the band's side, and nothing lies past the cap. The cap is re-read as a plain cell of the row (its own arms),
+   so the row forms a one-position box with the road as its side arm (existing box pieces; the cap cell saves as
+   11203). Off: SC3NETMOD_AVXEND=0. */
+static int g_avx_end = -1;
+static volatile LONG g_avx_n_cap;
+
+static void avx_endcaps(AvxPass *p, int ox0, int oz0, int ox1, int oz1, const char *who) {
+    int x, z, axis, sg, n = 0;
+    if (g_avx_end < 0) {
+        g_avx_end = !env_off("SC3NETMOD_AVXEND");
+        logf("avx: avenue end cap + T re-read %s", g_avx_end ? "on" : "off (SC3NETMOD_AVXEND=0)");
+    }
+    if (!g_avx_end) return;
+    for (z = oz0; z <= oz1; z++)
+        for (x = ox0; x <= ox1; x++)
+            for (axis = 0; axis < 2; axis++) {
+                if (!avx_pair(p, x, z, axis)) continue;
+                for (sg = -1; sg <= 1; sg += 2) {
+                    int dx = sg * AVX_STEP[axis][0], dz = sg * AVX_STEP[axis][1], fwd, back, across, side, ca, ta, ic;
+                    int ax = x + dx, az = z + dz, bx = ax + AVX_ACROSS[axis][0], bz = az + AVX_ACROSS[axis][1];
+                    int cx, cz, tx, tz;
+                    DWORD va = avx_at(p, ax, az), vb = avx_at(p, bx, bz), vc, vt;
+                    WORD ia = (WORD)(va & 0xffff), ib = (WORD)(vb & 0xffff);
+                    if (!va || !vb) continue;
+                    if (ia == 11203 && (ib == 39 || ib == 43)) {
+                        cx = ax; cz = az; tx = bx; tz = bz; vc = va; vt = vb; side = AVX_OUT[axis][1];
+                    } else if (ib == 11203 && (ia == 39 || ia == 43)) {
+                        cx = bx; cz = bz; tx = ax; tz = az; vc = vb; vt = va; side = AVX_OUT[axis][0];
+                    } else continue;
+                    if (avx_virt(p, cx, cz) || avx_virt(p, tx, tz)) continue;
+                    for (fwd = 0; fwd < 4 && !(AVX_DIR[fwd][0] == dx && AVX_DIR[fwd][1] == dz); fwd++) ;
+                    for (across = 0; across < 4 && !(AVX_DIR[across][0] == tx - cx && AVX_DIR[across][1] == tz - cz);
+                         across++) ;
+                    if (fwd == 4 || across == 4) continue;
+                    back = (fwd + 2) & 3;
+                    ca = avx_arms(vc); ta = avx_arms(vt);
+                    if (ca != ((1 << back) | (1 << across)) || ta <= 0) continue;
+                    if (!(ta & (1 << back)) || !(ta & (1 << ((across + 2) & 3))) || !(ta & (1 << side))) continue;
+                    if (avx_at(p, cx + dx, cz + dz)) continue;          /* nothing past the cap */
+                    if ((ic = avx_ix(p, cx, cz)) < 0) continue;
+                    p->virt[ic] = (BYTE)(0x10 | ca);
+                    if (n < 8) logf("avx: %s: (%d,%d) avenue end cap 11203.%d beside the T at (%d,%d) -> read as a box row",
+                                    who, cx, cz, (int)((vc >> 16) & 3), tx, tz);
+                    n++;
+                }
+            }
+    if (n) InterlockedExchangeAdd(&g_avx_n_cap, n);
+}
+
 static int avx_road(AvxPass *p, int x, int z) { return avx_at(p, x, z) != 0; }
 
 static void avx_make(AvxPass *p, int axis, int pos[][2][2], int np, int i0, int i1, AvxBox *bx) {
@@ -928,6 +982,7 @@ static void avx_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) 
     avx_read(p);
     avx_caps(p, ox0, oz0, ox1, oz1);                      /* task avx32 */
     avx_drops(p, p->b.x0, p->b.z0, p->b.x0 + p->b.w - 1, p->b.z0 + p->b.h - 1, who);   /* task avxroad */
+    avx_endcaps(p, ox0, oz0, ox1, oz1, who);              /* task avxroad (img3) */
     avx_find(p, ox0, oz0, ox1, oz1);
     avx_validate(p);
     avx_corners(p, ox0, oz0, ox1, oz1);
@@ -955,10 +1010,10 @@ static int avx_post_hook(BYTE *mgr, int x0, int z0, int x1, int z1, const char *
 
 static void avx_stats(void) {
     static LONG last;
-    LONG n = g_avx_n_j + g_avx_n_cells + g_avx_n_rev + g_avx_n_dem + g_avx_n_drop + g_avx_n_tee;
+    LONG n = g_avx_n_j + g_avx_n_cells + g_avx_n_rev + g_avx_n_dem + g_avx_n_drop + g_avx_n_tee + g_avx_n_cap;
     if (!g_avx_on || n == last) return;
     last = n;
     logf("stats: avx boxes seen=%ld, cells written=%ld, reverted=%ld, boxes with a two-way arm=%ld, dropped=%ld, "
-         "stock-dropped T's re-read=%ld", g_avx_n_j, g_avx_n_cells, g_avx_n_rev, g_avx_n_dem, g_avx_n_drop,
-         g_avx_n_tee);                                                                          /* task avxroad */
+         "stock-dropped T's re-read=%ld, end caps re-read=%ld", g_avx_n_j, g_avx_n_cells, g_avx_n_rev, g_avx_n_dem,
+         g_avx_n_drop, g_avx_n_tee, g_avx_n_cap);                                              /* task avxroad */
 }

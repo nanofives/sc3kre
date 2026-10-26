@@ -364,6 +364,23 @@ def cmd_build(a):
 
 # ------------------------------------------------------------------------------------------------ check
 
+def check_art(pack, T):
+    """task avxroad (owner img3, 2026-10-26): every box id's art must be the paint of ITS outline. 28 of 61 ids carried
+    the art of another outline (anchors.json named it: 21750 ACAI held AIII's), from an earlier id assignment, so the
+    owner saw bare slabs with no crosswalk or curb. paint_box writes the outline into anchors.json; compare it. No art
+    dir (not built here) is skipped. -> problems"""
+    bad = 0
+    for r in T["box"]:
+        p = os.path.join(pack, "art", str(r["id"]), "anchors.json")
+        if not os.path.isfile(p):
+            continue
+        note = json.load(open(p)).get("_", "")
+        if "outline %s " % r["outline"] not in note:
+            print("art %d: table outline %s, art painted for %r (rebuild: avjunc_build build)" % (r["id"], r["outline"], note))
+            bad += 1
+    return bad
+
+
 def cmd_check(a):
     from netmod import lanekit as LK
     from netmod import avlanes as AL
@@ -414,6 +431,7 @@ def cmd_check(a):
                     for p in pr:
                         print(lang, p)
                         bad += 1
+    bad += check_art(a.pack, T)
     print("check:", "PASSED" if not bad else "%d problem(s)" % bad)
     return 0 if not bad else 1
 
