@@ -22,17 +22,22 @@
  * When: a watcher thread checks every second and posts WM_AUTOSAVE to the game window, so the save runs on the game
  * thread. The save is put off (retried next second) while a mouse button is held or captured (a drag is in
  * progress), while a text field has focus, while the city object is new (< 20 s since it appeared) or the city's own
- * lock counter is nonzero (the game is already saving), or while another autosave is running.
+ * lock counter is nonzero (the game is already saving), or while another autosave is running. A due save also waits
+ * for idle_seconds without mouse or keyboard input ("idle wait" below).
  *
- * Cost: the game freezes for one save, ~1.3 s on a 256 city (sc3undo measurement on London).
+ * Cost: the game freezes for one save. With the game's "Guardando..." box replaced by the corner indicator ("corner
+ * indicator" below) that is ~0.3 s on Frankfurt (690 KB), against 1.6 - 2.7 s with the box.
  *
  * autosave.ini beside the DLL:
- *   [autosave] enabled=1 minutes=5 keep=2 dir=   (dir empty = next to the city file)
- * Test overrides: SC3AUTOSAVE_SECONDS=<n> (interval in seconds), SC3AUTOSAVE_LOG=<path>.
+ *   [autosave] enabled=1 minutes=5 keep=2 dir= idle_seconds=3 indicator=1   (dir empty = next to the city file)
+ * Test overrides: SC3AUTOSAVE_SECONDS=<n> (interval in seconds), SC3AUTOSAVE_LOG=<path>, SC3AUTOSAVE_HOLD=<ms> (hold the
+ * game thread after the save with the indicator up), SC3AUTOSAVE_INDFORCE=1 (show the indicator even when the game is
+ * not in front).
  * Log: sc3autosave.log beside the DLL.
  */
 #include <windows.h>
 #include "sc3mods_guard.h"
+#pragma comment(lib, "gdi32.lib")     /* the corner indicator */
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -75,6 +80,8 @@ static void self_path(char *out, int cap, const char *leaf) {
 static int   g_enabled = 1, g_keep = 2;
 static DWORD g_interval_ms = 5 * 60 * 1000;
 static char  g_cfg_dir[MAX_PATH];
+static DWORD g_idle_ms = 3000;      /* idle wait, see "idle wait" below */
+static int   g_indicator = 1;       /* corner indicator instead of the progress box */
 
 static void ini_read(void) {
     char path[MAX_PATH], v[32];
@@ -85,6 +92,8 @@ static void ini_read(void) {
         minutes   = GetPrivateProfileIntA("autosave", "minutes", 5, path);
         g_keep    = GetPrivateProfileIntA("autosave", "keep", 2, path);
         GetPrivateProfileStringA("autosave", "dir", "", g_cfg_dir, sizeof(g_cfg_dir), path);
+        g_idle_ms   = (DWORD)GetPrivateProfileIntA("autosave", "idle_seconds", 3, path) * 1000;
+        g_indicator = GetPrivateProfileIntA("autosave", "indicator", 1, path) ? 1 : 0;
         if (minutes < 1) minutes = 1;
         if (minutes > 240) minutes = 240;
         g_interval_ms = (DWORD)minutes * 60 * 1000;
@@ -286,6 +295,172 @@ static BYTE   *g_seen_city;
 static DWORD   g_seen_at, g_last_save;
 static int     g_saves, g_skips_logged;
 
+/* ------------------------------------------------------------------ idle wait
+ * The interval only makes a save DUE. A due save waits until the player has not touched mouse or keyboard over the
+ * game window for idle_seconds (default 3), so the freeze does not land in the middle of building something. After
+ * one more full interval without such a pause it saves anyway (at the next moment no button is held). */
+static DWORD g_last_input;
+
+/* ------------------------------------------------------------------ corner indicator instead of the progress box
+ * The city save opens the game's progress box itself: SIMCITY 0x1000429d (city Save, the handler of message
+ * 0x111fdae5 that the Save command posts) builds FUN_10002678(steps, string 0x2dd "Guardando...") at city+0x1a4, which
+ * calls the progress service FUN_1000edff(): vt+0x88(total, title) open, vt+0x8c(step) advance (redraws the box),
+ * vt+0x90() close (FUN_100026a8) [CONFIRMED @ SIMCITY 0x10002678, 0x100026e4, 0x100026a8]. Those three slots are
+ * wrapped: during an autosave they feed a small "Autoguardando..." indicator instead of opening the box; at any other
+ * time they call the game's own methods, so the player's Save and Load look exactly as before.
+ * The indicator is its own small window over the game's top-left corner, run by its own thread: GDI drawn on the game
+ * window itself never reached the screen (2026-10-27, desktop grab during a held save showed the frozen frame and no
+ * box: the DirectDraw presentation covers it). The window never activates (WS_EX_NOACTIVATE), lets clicks through
+ * (WS_EX_TRANSPARENT | WS_EX_LAYERED), shows "Autoguardando..." with a bar while the save runs, then "Autoguardado
+ * HH:MM" for 2 s. */
+typedef void (__fastcall *PFN_PgOpen)(void *, void *, DWORD, void *);
+typedef void (__fastcall *PFN_PgStep)(void *, void *, DWORD);
+typedef void (__fastcall *PFN_PgClose)(void *, void *);
+static PFN_PgOpen  g_pg_open;
+static PFN_PgStep  g_pg_step;
+static PFN_PgClose g_pg_close;
+static int   g_autosaving, g_pg_hooked;
+static DWORD g_pg_total, g_pg_cur;
+
+#define IND_W 176
+#define IND_H 36
+#define WM_IND_SHOW (WM_APP + 1)
+#define WM_IND_DONE (WM_APP + 2)
+static HWND  g_ind;                    /* the indicator window (owned by the indicator thread) */
+static volatile LONG g_ind_state;      /* 0 hidden, 1 saving, 2 done */
+static char  g_ind_done_text[32];
+
+static void ind_paint(HWND w) {
+    PAINTSTRUCT ps;
+    HDC dc = BeginPaint(w, &ps);
+    HFONT f, of;
+    HBRUSH bg = CreateSolidBrush(RGB(0x7a, 0x8c, 0xf0)), trough = CreateSolidBrush(RGB(0xe0, 0xe4, 0xf8)),
+           bar = CreateSolidBrush(RGB(0xe8, 0x60, 0x48));          /* the game's dialog blue / progress orange */
+    RECT rc = { 0, 0, IND_W, IND_H }, r, b;
+    DWORD tot = g_pg_total, cur = g_pg_cur;
+    int fill;
+    FillRect(dc, &rc, bg);
+    FrameRect(dc, &rc, trough);
+    f = CreateFontA(-13, 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, ANTIALIASED_QUALITY, 0, "Tahoma");
+    of = (HFONT)SelectObject(dc, f);
+    SetBkMode(dc, TRANSPARENT);
+    SetTextColor(dc, RGB(0xff, 0xff, 0xff));
+    SetRect(&r, 8, 3, IND_W - 8, 20);
+    DrawTextA(dc, g_ind_state == 2 ? g_ind_done_text : "Autoguardando...", -1, &r, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+    SetRect(&b, 8, 23, IND_W - 8, 29);
+    FillRect(dc, &b, trough);
+    if (g_ind_state == 2) cur = tot = 1;
+    fill = tot ? (int)((b.right - b.left) * (cur > tot ? tot : cur) / tot) : 0;
+    b.right = b.left + fill;
+    if (fill > 0) FillRect(dc, &b, bar);
+    SelectObject(dc, of);
+    DeleteObject(f); DeleteObject(bg); DeleteObject(bar); DeleteObject(trough);
+    EndPaint(w, &ps);
+}
+
+static LRESULT CALLBACK ind_proc(HWND w, UINT m, WPARAM wp, LPARAM lp) {
+    switch (m) {
+    case WM_PAINT: ind_paint(w); return 0;
+    case WM_IND_SHOW: {                                  /* place over the game's client top-left, show, no activation */
+        POINT pt = { 8, 26 };
+        KillTimer(w, 1);
+        if (!g_hwnd || IsIconic(g_hwnd)) return 0;
+        ClientToScreen(g_hwnd, &pt);
+        /* above the game and nothing else: the game window can be WS_EX_TOPMOST (ex-style 0x108 measured
+           2026-10-27, a plain HWND_TOP indicator stayed behind it); when it is not, show only while the game is
+           the foreground window, so the indicator never floats over another program */
+        if (GetWindowLongA(g_hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST)
+            SetWindowPos(w, HWND_TOPMOST, pt.x, pt.y, IND_W, IND_H, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        else if (GetForegroundWindow() == g_hwnd || GetEnvironmentVariableA("SC3AUTOSAVE_INDFORCE", NULL, 0)) {
+            /* SC3AUTOSAVE_INDFORCE (test only): show even when the game is not in front, for a PrintWindow check */
+            SetWindowPos(w, HWND_NOTOPMOST, pt.x, pt.y, IND_W, IND_H, SWP_NOACTIVATE);
+            SetWindowPos(w, HWND_TOP, pt.x, pt.y, IND_W, IND_H, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        } else return 0;
+        InvalidateRect(w, NULL, FALSE);
+        UpdateWindow(w);
+        {   RECT wr; GetWindowRect(w, &wr);
+            logf("IND> shown at (%ld,%ld)-(%ld,%ld) visible=%d", wr.left, wr.top, wr.right, wr.bottom, IsWindowVisible(w)); }
+        return 0;
+    }
+    case WM_IND_DONE: InvalidateRect(w, NULL, FALSE); SetTimer(w, 1, 2000, NULL); return 0;
+    case WM_TIMER: KillTimer(w, 1); g_ind_state = 0; ShowWindow(w, SW_HIDE); return 0;
+    case WM_MOUSEACTIVATE: return MA_NOACTIVATE;
+    case WM_NCHITTEST: return HTTRANSPARENT;
+    }
+    return DefWindowProcA(w, m, wp, lp);
+}
+
+static DWORD WINAPI ind_thread(LPVOID unused) {
+    WNDCLASSA wc;
+    MSG msg;
+    (void)unused;
+    memset(&wc, 0, sizeof(wc));
+    wc.lpfnWndProc = ind_proc;
+    wc.hInstance = (HINSTANCE)g_self;
+    wc.lpszClassName = "sc3autosave_ind";
+    wc.hCursor = LoadCursorA(NULL, (LPCSTR)IDC_ARROW);
+    RegisterClassA(&wc);
+    g_ind = CreateWindowExA(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TRANSPARENT, wc.lpszClassName, "",
+                            WS_POPUP, 0, 0, IND_W, IND_H, NULL, NULL, wc.hInstance, NULL);
+    if (!g_ind) { logf("IND> window not created (%lu)", GetLastError()); return 0; }
+    SetLayeredWindowAttributes(g_ind, 0, 235, LWA_ALPHA);
+    logf("IND> window 0x%08lX ready", (DWORD)g_ind);
+    while (GetMessageA(&msg, NULL, 0, 0) > 0) { TranslateMessage(&msg); DispatchMessageA(&msg); }
+    return 0;
+}
+
+/* called from the game thread by the progress wrappers and the autosave */
+static void ind_show(void)   { if (g_indicator && g_ind) { g_ind_state = 1; PostMessageA(g_ind, WM_IND_SHOW, 0, 0); } }
+static void ind_update(void) { if (g_indicator && g_ind && g_ind_state == 1) InvalidateRect(g_ind, NULL, FALSE); }
+static void ind_done(int ok) {
+    SYSTEMTIME t;
+    if (!g_indicator || !g_ind || !g_ind_state) return;
+    GetLocalTime(&t);
+    if (ok) _snprintf(g_ind_done_text, sizeof(g_ind_done_text), "Autoguardado %02d:%02d", t.wHour, t.wMinute);
+    else lstrcpyA(g_ind_done_text, "Autoguardado fallido");
+    g_ind_done_text[sizeof(g_ind_done_text) - 1] = 0;
+    g_ind_state = 2;
+    PostMessageA(g_ind, WM_IND_DONE, 0, 0);
+}
+
+static void __fastcall pg_open(void *self, void *edx, DWORD total, void *title) {
+    if (g_autosaving) { g_pg_total = total; g_pg_cur = 0; ind_show(); return; }
+    g_pg_open(self, edx, total, title);
+}
+static void __fastcall pg_step(void *self, void *edx, DWORD step) {
+    if (g_autosaving) { g_pg_cur = step; ind_update(); return; }
+    g_pg_step(self, edx, step);
+}
+static void __fastcall pg_close(void *self, void *edx) {
+    if (g_autosaving) return;
+    g_pg_close(self, edx);
+}
+
+/* wrap the three slots once, on the game thread (FUN_1000edff builds the service on first use) */
+static void pg_hook(void) {
+    typedef void *(__cdecl *PFN_Get)(void);
+    BYTE *sc = (BYTE *)GetModuleHandleA("SIMCITY.DLL"), *svc;
+    DWORD *vt, old;
+    if (g_pg_hooked || !sc) return;
+    g_pg_hooked = 1;
+    __try {
+        svc = (BYTE *)((PFN_Get)(sc + 0xedff))();
+        if (!svc || IsBadReadPtr(svc, 4)) { logf("PROGRESS> no progress service, box stays"); return; }
+        vt = *(DWORD **)svc;
+        if (IsBadReadPtr(vt, 0x94) || !VirtualProtect(&vt[0x88 / 4], 12, PAGE_READWRITE, &old)) {
+            logf("PROGRESS> vtable 0x%08lX not writable, box stays", (DWORD)vt); return;
+        }
+        g_pg_open  = (PFN_PgOpen)vt[0x88 / 4];
+        g_pg_step  = (PFN_PgStep)vt[0x8c / 4];
+        g_pg_close = (PFN_PgClose)vt[0x90 / 4];
+        vt[0x88 / 4] = (DWORD)pg_open;
+        vt[0x8c / 4] = (DWORD)pg_step;
+        vt[0x90 / 4] = (DWORD)pg_close;
+        logf("PROGRESS> service 0x%08lX vtable 0x%08lX: open/step/close wrapped (were 0x%08lX 0x%08lX 0x%08lX)",
+             (DWORD)svc, (DWORD)vt, (DWORD)g_pg_open, (DWORD)g_pg_step, (DWORD)g_pg_close);
+    } __except (EXCEPTION_EXECUTE_HANDLER) { logf("PROGRESS> hook threw 0x%08lX, box stays", GetExceptionCode()); }
+}
+
 /* returns NULL if the save can run now, else the reason it is put off */
 static const char *why_not(BYTE *city) {
     if (!city) return "no city";
@@ -317,7 +492,17 @@ static void autosave_now(void) {
     /* the Save command appends ".sc3" to a path that does not end in it, so the temp name ends in .sc3 too */
     _snprintf(tmp, sizeof(tmp), "%s%d.tmp.sc3", stem, slot); tmp[sizeof(tmp) - 1] = 0;
     DeleteFileA(tmp);
+    pg_hook();
+    g_pg_total = g_pg_cur = 0;
+    ind_show();
+    g_autosaving = 1;
     ok = game_save(city, tmp);
+    g_autosaving = 0;
+    {   /* test only: SC3AUTOSAVE_HOLD=<ms> holds the game thread with the indicator up, so a screen grab can catch it */
+        char v[16];
+        if (GetEnvironmentVariableA("SC3AUTOSAVE_HOLD", v, sizeof(v)) && atoi(v) > 0) Sleep((DWORD)atoi(v));
+    }
+    ind_done(ok);
     name_restore(city);
     {   /* check the restore: the city must still point at the player's own file */
         char want[MAX_PATH];
@@ -360,6 +545,7 @@ static LRESULT CALLBACK as_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         InterlockedExchange(&g_busy, 0);
         return 0;
     }
+    if ((m >= WM_MOUSEFIRST && m <= WM_MOUSELAST) || (m >= WM_KEYFIRST && m <= WM_KEYLAST)) g_last_input = GetTickCount();
     return CallWindowProcA(g_oldproc, h, m, wp, lp);
 }
 
@@ -383,6 +569,7 @@ static DWORD WINAPI watcher(LPVOID unused) {
     g_oldproc = (WNDPROC)GetWindowLongA(h, GWL_WNDPROC);
     {   WNDPROC prev = (WNDPROC)SetWindowLongA(h, GWL_WNDPROC, (LONG)as_wndproc);
         if (prev && prev != g_oldproc) g_oldproc = prev; }
+    if (g_indicator) CloseHandle(CreateThread(NULL, 0, ind_thread, NULL, 0, NULL));
     logf("### window 0x%08lX subclassed, every %lu s, keep %d%s%s", (DWORD)h, g_interval_ms / 1000, g_keep,
          g_cfg_dir[0] ? ", dir " : "", g_cfg_dir);
     for (;;) {
@@ -398,7 +585,15 @@ static DWORD WINAPI watcher(LPVOID unused) {
             continue;
         }
         if (!city || g_busy) continue;
-        if (GetTickCount() - g_last_save >= g_interval_ms) PostMessageA(h, WM_AUTOSAVE, 0, 0);
+        {   DWORD now = GetTickCount(), since = now - g_last_save;
+            if (since < g_interval_ms) continue;
+            /* due: wait for idle_seconds without input, or save anyway one more interval later */
+            if (now - g_last_input < g_idle_ms && since < 2 * g_interval_ms) {
+                if (!g_skips_logged++) logf("SAVE> due, waiting for %lu s without input", g_idle_ms / 1000);
+                continue;
+            }
+            PostMessageA(h, WM_AUTOSAVE, 0, 0);
+        }
     }
 }
 
