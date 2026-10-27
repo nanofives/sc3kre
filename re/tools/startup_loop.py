@@ -1,17 +1,17 @@
 """startup_loop.py - launch the game N times from an instance folder and record how each start ended (2026-10-21).
 
 For the intermittent startup death (game gone ~0.3 s in, no dump, sc3resize log ending after its SIMUI detours,
-verify/undo_mod n1 / handtest2 / t7). Each launch: mods_launch.exe -multi from <inst>, a copy of <city>, logs
+verify/undo_mod n1 / handtest2 / t7). Each launch: SC3U.exe via sc3wait.launch_game with the mods of <inst>, a copy of <city>, logs
 into <out>/<i>/. A launch is "alive" if SC3U still runs <alive> s after start (then killed by OUR pid); else it
-records the exit code mods_launch printed, the lifetime and every mod log's last line.
+records the process exit code, the lifetime and every mod log's last line.
 
-The caller must hold the game lease and pass its owner (the launchers refuse otherwise, lease_gate.h):
+The caller must hold the game lease and pass its owner (a direct launch does not check it; --owner becomes SC3_SESSION):
 
     pwsh re/harness/game_lock.ps1 -Acquire -Owner <you> -Minutes 60 -Note "startup loop"   # check its exit code
     py re/tools/startup_loop.py --owner <you> --inst re/harness/inst_undoleft --city <city.sc3> --out <dir> -n 30
 
 Options: --gap <s> pause between launches (default 15, memory: launches < 15 s apart died), --alive <s> (10),
---delay <ms> passed to mods_launch -delay, --env K=V (repeatable) extra environment for the game.
+--delay <ms> sleeps that long before each launch (the loader has no -delay), --env K=V (repeatable) extra environment for the game.
 Prints one line per launch: [i/N] name STATUS.
 """
 from __future__ import annotations
@@ -25,12 +25,8 @@ import subprocess
 import sys
 import time
 
-
-def sc3u_child(launcher_pid: int) -> int | None:
-    out = subprocess.run(["powershell", "-NoProfile", "-Command",
-                          f"(Get-CimInstance Win32_Process -Filter \"ParentProcessId={launcher_pid} and Name='SC3U.exe'\").ProcessId"],
-                         capture_output=True, text=True).stdout.strip()
-    return int(out) if out.isdigit() else None
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import sc3wait  # noqa: E402
 
 
 def other_games(mine: set[int]) -> list[int]:
@@ -65,7 +61,6 @@ def main() -> int:
     inst = os.path.abspath(a.inst)
     out = os.path.abspath(a.out)
     os.makedirs(out, exist_ok=True)
-    launcher = os.path.join(inst, "mods_launch.exe")
     mods = [f for f in os.listdir(inst) if f.lower().endswith(".dll")]
     results = []
     prev_exit = None
@@ -79,35 +74,34 @@ def main() -> int:
         for kv in a.env:
             k, v = kv.split("=", 1)
             env[k] = v
-        args = [launcher, "-multi"] + (["-delay", str(a.delay)] if a.delay else []) + ["--", city]
+        if a.delay:
+            time.sleep(a.delay / 1000.0)
         others = other_games(set())
         since_prev = None if prev_exit is None else round(time.time() - prev_exit, 1)
-        t0 = time.time()
         lo = open(os.path.join(d, "launch.out"), "w")
-        lp = subprocess.Popen(args, cwd=inst, stdout=lo, stderr=subprocess.STDOUT, env=env, creationflags=0x08000000)
-        pid = None
+        lp, t0 = sc3wait.launch_game(inst, city, env=env, out=lo)
+        pid = lp.pid
         while time.time() - t0 < a.alive:
-            if pid is None:
-                pid = sc3u_child(lp.pid)
             if lp.poll() is not None:
                 break
             time.sleep(0.25)
         alive = lp.poll() is None
+        life_ms = None
+        code = None
         if alive:
-            if pid:
-                subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
             try:
                 lp.wait(10)
             except subprocess.TimeoutExpired:
-                subprocess.run(["taskkill", "/PID", str(lp.pid), "/F"], capture_output=True)
+                pass
+        else:
+            life_ms = int((time.time() - t0) * 1000)   # upper bound: poll granularity 0.25 s
+            code = "0x%08X" % (lp.returncode & 0xFFFFFFFF)
         lo.close()
         prev_exit = time.time()
-        text = open(os.path.join(d, "launch.out"), errors="replace").read()
-        m = re.search(r"game exited, code = (0x[0-9A-F]+) after (\d+) ms", text)
-        lm = re.search(r"\[!\] lease: REFUSED", text)
         r = {"i": i, "dir": d, "alive": alive, "pid": pid, "others_running": others, "s_since_prev_exit": since_prev,
-             "exit_code": m.group(1) if m else None, "lifetime_ms": int(m.group(2)) if m else None,
-             "refused_by_lease": bool(lm),
+             "exit_code": code, "lifetime_ms": life_ms,
+             "refused_by_lease": False,
              "last": {mod: last_line(os.path.join(d, mod.replace(".dll", "").replace("sc3", "") + ".log"))
                       for mod in ("sc3resize.dll", "sc3undo.dll")}}
         for mod in mods:
@@ -115,10 +109,8 @@ def main() -> int:
             if os.path.exists(lg) and mod.lower() not in ("sc3resize.dll", "sc3undo.dll"):
                 r["last"][mod] = last_line(lg)
         results.append(r)
-        status = "REFUSED" if lm else ("ALIVE" if alive else f"DIED {r['exit_code']} at {r['lifetime_ms']} ms")
+        status = "ALIVE" if alive else f"DIED {r['exit_code']} at {r['lifetime_ms']} ms"
         print(f"[{i}/{a.n}] {a.tag}{i:02d} {status}" + (f" others={others}" if others else ""), flush=True)
-        if lm:
-            break
         if i < a.n:
             time.sleep(a.gap)
     json.dump(results, open(os.path.join(out, f"results{a.tag}.json"), "w"), indent=1)

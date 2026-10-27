@@ -191,7 +191,7 @@ def main():
             f.write("%d %s\n" % (pid, time.strftime("%Y-%m-%d %H:%M:%S")))
         # --settle is now the fallback fixed wait; the city-up log signal ends it early (cap 110 s or settle)
         sc3wait.wait_city_up(os.environ.get("SC3RESIZE_LOG", os.path.join(a.inst, "sc3resize.log")), t_launch,
-                             timeout=max(110.0, a.settle), fallback_sleep=a.settle)
+                             timeout=max(110.0, a.settle), fallback_sleep=a.settle, pid=pid)
         subprocess.run([sys.executable, os.path.join(TOOLS, "dismiss_tips.py")], env=os.environ)
         time.sleep(2)
     else:

@@ -61,7 +61,7 @@ import pathlib as _pl
 sys.path.insert(0, str(_pl.Path(__file__).resolve().parent))
 import sc3io  # noqa: E402
 try:
-    pid = sc3io.game_pid()   # honours SC3_PID when several games run (mods_launch -multi)
+    pid = sc3io.game_pid()   # honours SC3_PID when several games run (SC3MODS_MULTI=1)
 except Exception as e:  # noqa: BLE001
     say(f"SC3U not running ({e})")
     raise SystemExit(0)

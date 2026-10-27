@@ -2,7 +2,7 @@
 
 Usage: py -3.12 re/tools/leftclick_run_arm.py --inst <abs instance folder> --city <abs .sc3> --out <abs dir>
        [--env NAME=VALUE ...] [--keep]
-Kills only the PID it started. Rows: 800x600 clicks (352,272) (200,200); maximized clicks (792,461) (1400,800)
+Kills only the PID it started. The caller must hold the game lease (the direct launch does not take it). Rows: 800x600 clicks (352,272) (200,200); maximized clicks (792,461) (1400,800)
 and the minimap centre; restored click (352,272). Map-area centre and minimap are read from the live tree first.
 """
 from __future__ import annotations
@@ -20,18 +20,6 @@ WT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(TOOLS))
 
 
-def game_child(launcher_pid: int, timeout: float = 30) -> int:
-    t0 = time.time()
-    while time.time() - t0 < timeout:
-        out = subprocess.run(["powershell", "-NoProfile", "-Command",
-                              f"(Get-CimInstance Win32_Process -Filter \"ParentProcessId={launcher_pid} and Name='SC3U.exe'\").ProcessId"],
-                             capture_output=True, text=True).stdout.strip()
-        if out.isdigit():
-            return int(out)
-        time.sleep(0.5)
-    raise SystemExit("no SC3U child")
-
-
 def main(argv):
     ap = argparse.ArgumentParser()
     ap.add_argument("--inst", required=True); ap.add_argument("--city", required=True)
@@ -44,9 +32,9 @@ def main(argv):
     for kv in a.env:
         k, v = kv.split("=", 1); env[k] = v
     lo = open(out / "launch.out", "w")
-    lp = subprocess.Popen([str(pathlib.Path(a.inst) / "mods_launch.exe"), "-multi", "--", a.city],
-                          stdout=lo, stderr=subprocess.STDOUT, env=env, creationflags=0x08000000)
-    pid = game_child(lp.pid)
+    import sc3wait  # noqa: E402
+    lp, _ = sc3wait.launch_game(a.inst, a.city, env=env, out=lo)
+    pid = lp.pid
     os.environ["SC3_PID"] = str(pid)
     print("game pid", pid, flush=True)
     import sc3io  # noqa: E402  (reads SC3_PID)
@@ -59,6 +47,7 @@ def main(argv):
     else:
         print("city never came up"); return 2
     time.sleep(6)
+    sc3wait.run_after_load(pid)
     subprocess.run([sys.executable, str(TOOLS / "dismiss_tips.py")], env=os.environ)
     tr = subprocess.Popen([sys.executable, str(WT / "re/tools/leftclick_trace.py"), "--seconds", "90",
                            "--out", str(out / "trace.jsonl")], stdout=open(out / "trace.out", "w"),
@@ -92,6 +81,14 @@ def main(argv):
     cli("maximize"); time.sleep(6); cli("check")
     side, bar, mini = tree()
     print("side", side, "bar", bar, "mini", mini, flush=True)
+    missing = [n for n, v in (("side panel SIMUI+0xa9834", side), ("bottom bar SIMUI+0xa40ec", bar),
+                              ("minimap SIMUI+0xaa180", mini)) if v is None]
+    if missing:
+        tr.terminate()
+        if not a.keep:
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
+        print("UI tree has no %s (see %s); stopping" % (", ".join(missing), out / "tree_last.txt"), flush=True)
+        return 2
     cx, cy = side[0] // 2, bar[1] // 2
     mark(f"max map area [0 0 {side[0]} {bar[1]}] centre {cx},{cy}")
     for x, y in ((cx, cy), (1400, 800)):

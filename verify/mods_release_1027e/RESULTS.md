@@ -1,6 +1,6 @@
 # RESULTS - sc3mods release 2026-10-27e + LAN republish
 
-Replaces `sc3mods-2026-10-27d`. Owner call 2026-10-27: "Publish a mods release with sc3autosave". Target `main` `6c14438`.
+Replaces `sc3mods-2026-10-27d`. Owner call 2026-10-27: "Publish a mods release with sc3autosave". Target `main` `9133775` (was `6c14438` before the history rewrite below).
 Only change: the new mod `sc3autosave.dll` (`verify/autosave/RESULTS.md`) and `sc3mods.dll` rebuilt with it in its load
 list. The other 7 mod DLLs, `perf.ini`, `menu_bg.bmp`, `sc3mods_patch.ps1` and `mods/netmod/**` are the 10-27d files,
 byte-identical (copied from the 10-27d zip, hashes below match the 10-27d table), so players download 2 new files.
@@ -26,13 +26,24 @@ Launch check (`stage/release` patched like a player PC with `sc3mods_patch.ps1`,
   manifest files re-hashed: 0 changed.
 
 LAN: `deploy_lan_release.sh` sent 2 of 3,606 files (0.2 MB). Served manifest label `2026-10-27e`, served
-`Apps/sc3autosave.dll` SHA-256 matches. GitHub: `sc3mods-2026-10-27e`, target `6c14438`,
+`Apps/sc3autosave.dll` SHA-256 matches. GitHub: `sc3mods-2026-10-27e`, target `9133775` (originally `6c14438`),
 https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-10-27e, asset downloaded back, SHA-256 matches. The 10-27d
 notes now start with a "superseded" line.
 
 Publish policy: before pushing main, the 4 game screenshots under `verify/autosave/owner_shots/` were untracked
 (`6c14438`). `autosave2_loaded.png` had already reached the public repo with `5b97e48` (pushed by the 10-27d session).
-It is still in history: removing it needs a history rewrite, owner's call.
+The three others reached it with the same push (they were added in `7bea4ad`, removed in `6c14438`).
+
+**History rewrite (owner call 2026-10-27).** In a fresh clone, `git filter-branch --index-filter` over
+`9c29c95^..main` (17 commits) removed the four `verify/autosave/owner_shots/*.png` from every commit. Final tree unchanged
+(`7c974ad`), `f151258` (the 10-27d tag) unchanged because it never held them. Force-pushed with a lease on the old tip
+`e15b74e`: main `e15b74e` -> `a69ff99`. Tag `sc3mods-2026-10-27e` moved `6c14438` -> `9133775` (same tree), the release's
+target updated too, release still published with the same zip. Local: main soft-reset (another session's uncommitted
+`re/tools` edits untouched), tag moved, `child/artrecover` (fully merged) mixed-reset to its rewritten twin `c0f1ee1`,
+`child/autosave` reset to main, `child/autosave-clone` rebased onto `aa5d347` (rewritten `9c29c95`) = `8f52515`. No local
+ref reaches the old commits. Old map: `9c29c95 -> aa5d347`, `7bea4ad`, `617514d -> c0f1ee1`, `6c14438 -> 9133775`,
+`e15b74e -> a69ff99`. GitHub still serves the old commits by exact SHA until its own garbage collection: a full purge needs
+a GitHub Support request (not filed).
 
 | file | bytes | SHA-256 |
 |---|---|---|

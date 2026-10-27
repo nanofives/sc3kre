@@ -11,6 +11,7 @@ own re\ folder. Never edit a linked file in place: delete it and copy (newpiece.
 import os
 import sys
 
+# mods_launch.exe is retired (2026-10-25) but still skipped so an old source install does not leak it into a tree.
 SKIP_APPS = {"mods_launch.exe", "sc3resize.dll", "sc3bigcity.dll", "sc3overscroll.dll", "sc3simrun.dll",
              "sc3perf.dll", "sc3netmod.dll", "sc3undo.dll", "sc3cartrips.dll", "sc3mods.dll", "perf.ini", "menu_bg.bmp", "sc3mods_readme.txt", "sc3resize.ini"}
 
