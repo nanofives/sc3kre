@@ -1,0 +1,126 @@
+{
+ "piece": 27107,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 0,
+ "alt": [
+  0,
+  0,
+  -1,
+  -1
+ ],
+ "_comment": "task avslope: the sloped boulevard outer on 11202, lanes toward side 3 at state 0 = avenue_lanes 21725's (20700 has avenue 21700's lane positions)",
+ "vehicle": {
+  "class": "car",
+  "speed": 64000,
+  "lanes": [
+   {
+    "from": [
+     255,
+     -256,
+     80
+    ],
+    "to": [
+     0,
+     0,
+     80
+    ],
+    "uk_keep": true
+   },
+   {
+    "from": [
+     255,
+     -256,
+     175
+    ],
+    "to": [
+     0,
+     0,
+     175
+    ],
+    "uk_keep": true
+   }
+  ]
+ },
+ "pedestrian": {
+  "walks": [
+   {
+    "from": [
+     15,
+     15
+    ],
+    "to": [
+     240,
+     -256,
+     15
+    ],
+    "path": 1792
+   },
+   {
+    "from": [
+     240,
+     -256,
+     240
+    ],
+    "to": [
+     15,
+     240
+    ],
+    "path": 2048
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     15,
+     15
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     15,
+     240
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     240,
+     -256,
+     15
+    ],
+    "code": 16
+   },
+   {
+    "at": [
+     240,
+     -256,
+     240
+    ],
+    "code": 16
+   }
+  ]
+ },
+ "connects": {
+  "road": {
+   "low": [
+    [
+     "x+",
+     "x-"
+    ]
+   ],
+   "high": [
+    [
+     "x-",
+     "x+"
+    ]
+   ]
+  }
+ },
+ "curves": []
+}

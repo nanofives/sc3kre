@@ -133,6 +133,8 @@ static void sle_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who);
 static void sle_install(void);                                               /* task slopeend */
 static void sle_stats(void);                                                 /* task slopeend */
 static int g_sle_n, g_sle_on;                                                /* task slopeend */
+static void bvs_install(void);                                               /* task avslope: BVS, boulevards on slopes */
+static void bvs_stats(void);                                                 /* task avslope */
 
 /* ---------------------------------------------------------------- table line */
 static void rb_file(const char *path) {
@@ -501,6 +503,7 @@ static int rbt_install(BYTE *m) {
     if (!g_rb_piece) logf("rbt: no automatic roundabout in the tables");
     if (!g_dav_inner[0]) logf("dav: no automatic diagonal avenue in the tables");
     if (g_bv_p[0] && env_off("SC3NETMOD_BV")) { g_bv_p[0] = 0; logf("bv: off (SC3NETMOD_BV=0)"); }  /* task boulevard */
+    if (g_bv_p[0]) bvs_install();                                                                   /* task avslope */
     if (g_r9_centre && (env_off("SC3NETMOD_RBT9") || !r9_complete())) {    /* task bigrbt */
         logf("rbt9: off (%s)", r9_complete() ? "SC3NETMOD_RBT9=0" : "a piece role is missing in the tables");
         g_r9_centre = 0;
@@ -573,6 +576,7 @@ static void rbt_stats(void) {
     hwask_stats();                                                           /* task hwask */
     avl_stats();                                                             /* task avcore */
     sle_stats();                                                             /* task slopeend */
+    bvs_stats();                                                             /* task avslope */
     LONG n = g_rb_n_pass + g_rb_n_conv + g_rb_n_rev + g_rb_n_load + g_rb_n_fault;
     if (!g_rb_on || n == last) return;
     last = n;
