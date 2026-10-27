@@ -18,12 +18,14 @@
  *    again) and drawn at the factor with the record's text colour: look A a TrueType face, look B the game's own glyph
  *    rebuilt from its coverage levels at the dest resolution.
  * SC3RESIZE_NATIVETEXT=0 off (the resampled text, as before), 1 look A, 2 look B (default). _FACE=<TrueType face> (A),
- * _LOG=1 census of the glyph callers every 10 s, _DUMP=<abs prefix> writes each font sheet once. */
+ * _LOG=1 census of the glyph callers every 10 s, _DUMP=<abs prefix> writes each font sheet once, _FLICK=1|2 frame-to-frame
+ * stability of every glyph (diag). */
 #pragma comment(lib, "gdi32.lib")
 double __cdecl floor(double);   /* not <math.h>: it declares logf, which clashes with the logger */
 double __cdecl fabs(double);
 static int   g_nt_on = 2;
 static int   g_nt_log;
+static int   g_nt_flick;     /* SC3RESIZE_NATIVETEXT_FLICK (diag): see the FLICKER check */
 static char  g_nt_dump[MAX_PATH];
 static char  g_nt_face[64];   /* empty: Comic Sans MS for the anti-aliased fonts, Arial Bold for the 1-bit one */
 static int   g_nt_inst, g_nt_hooked;   /* hooked: records are kept (also while _CTL switches the look off) */
@@ -394,6 +396,9 @@ static void nt_add(BYTE *font, BYTE *dst, LONG x, LONG y, BYTE ch, DWORD *fp) {
         s = nt_surf(surf, 1);
         nt_drop(s, cr, 1, g_nt_batch);
         if ((r = nt_push(s)) != NULL) {
+            /* the slot is reused: clear it, or `kind` keeps an old RCI fill's 1 and the glyph is taken for a fill (rejected,
+               left resampled), a different set of glyphs each time the text is redrawn: the owner's flicker (round 3) */
+            memset(r, 0, sizeof(*r));
             r->x0 = r->c0 = cr[0]; r->y0 = r->c1 = cr[1]; r->x1 = r->c2 = cr[2]; r->y1 = r->c3 = cr[3];
             memcpy(r->pal, *(WORD **)(pal + 0x10), sizeof(r->pal));
             r->fi = (BYTE)fi; r->ch = ch; r->org = 0; r->batch = g_nt_batch;
@@ -693,7 +698,18 @@ static BYTE    *g_nt_ink; static LONG g_nt_inkcap;
 static LONG    *g_nt_tab; static LONG g_nt_tabcap;
 static LONG   (*g_nt_vb)[4];                       /* per record: the dest box this pass wrote */
 static LONG    *g_nt_hit;                          /* per record: its ink pixels that match the frame */
+static LONG    *g_nt_ownn;                         /* per record: its ink pixels it still owns */
+static BYTE    *g_nt_why;                          /* per record: 0 drawn, 1 owns no ink, 2 under 85% match, 3 cut, 4 twin */
 static DWORD    g_nt_twin, g_nt_fills;
+/* FLICKER check (diag, SC3RESIZE_NATIVETEXT_FLICK=1, child nativetext round 3): per glyph record, a hash of its native
+   cell and of its dest box after the compose, against the last frame's. Native the same and output not = a flicker,
+   split by state (sharp = redrawn or pasted, else left resampled). =2 also logs each such glyph, one line per area on
+   frames with one, and the enlarged dialogs' dest pixels that changed while the frame under the pass did not. */
+typedef struct { LONG ax, ay, x0, y0; DWORD id, nat, out, fno; LONG hit, own; BYTE st, why, kind, pad; } NT_FLK;
+#define NT_FLKN 16384
+static NT_FLK  *g_nt_flk;
+static DWORD    g_nt_fk_dfr, g_nt_fk_dch; static double g_nt_fk_dpx;   /* dialog frames compared, frames with a change, px changed */
+static DWORD    g_nt_fno, g_nt_fk_cmp, g_nt_fk_same, g_nt_fk_chg, g_nt_fk_st, g_nt_fk_shp, g_nt_fk_res, g_nt_fk_lines;
 static DWORD    g_nt_sp_n, g_nt_sp_bad, g_nt_gp_bad;   /* spacing check (per 10 s): letter pairs, pairs off by > 0.5 px, gaps off by >= 1.5 px */
 static double   g_nt_sp_sum, g_nt_sp_max, g_nt_gp_sum, g_nt_gp_max;
 /* per area: last frame's result. Same valid records and same native pixels under them -> the stored dest boxes are
@@ -724,6 +740,63 @@ static BYTE nt_rp(const NT_REC *v, LONG x, LONG y) {
     return f->pix[(c[1] + y - v->y0) * f->w + c[0] + x - v->x0];
 }
 static BYTE nt_rkey(const NT_REC *v) { return v->kind ? 0xFF : g_nt_f[v->fi].key; }
+static void nt_flick_check(const NT_TGT *t, const BYTE *bits, LONG pitch, LONG ox, LONG oy, int nv) {
+    static const char *sn[4] = { "resampled", "?", "redrawn", "pasted" };
+    int k, nd = 0, np = 0, nr = 0, nk = 0, nfl = 0, j;
+    LONG x, y;
+    if (!g_nt_flk && !(g_nt_flk = (NT_FLK *)calloc(NT_FLKN, sizeof(NT_FLK)))) return;
+    for (k = 0; k < nv; k++) {
+        const NT_REC *v = &g_nt_v[k];
+        LONG s0 = max(v->x0, t->n[0]), s1 = max(v->y0, t->n[1]), s2 = min(v->x1, t->n[2]), s3 = min(v->y1, t->n[3]), q0, q1, q2, q3;
+        DWORD nat = 2166136261u, out = 2166136261u, id = (DWORD)v->fi | (DWORD)v->ch << 8 | (DWORD)v->pal[1] << 16, h;
+        BYTE st = (BYTE)v->batch, why = g_nt_why[k];   /* 0 resampled, 2 redrawn, 3 pasted */
+        NT_FLK *e = NULL;
+        if (v->batch == 2) nd++; else if (v->batch == 3) np++; else nr++;
+        if (v->kind) nk++;
+        for (y = s1; y < s3; y++) for (x = s0; x < s2; x++) nat = (nat ^ nt_px(t, x, y)) * 16777619u;
+        q0 = max((LONG)floor(t->ax + t->bx * v->x0), t->d[0]); q2 = min((LONG)floor(t->ax + t->bx * v->x1) + 1, t->d[2]);
+        q1 = max((LONG)floor(t->ay + t->by * v->y0), t->d[1]); q3 = min((LONG)floor(t->ay + t->by * v->y1) + 1, t->d[3]);
+        for (y = q1; y < q3; y++) {
+            const WORD *o = (const WORD *)(bits + (oy + y) * pitch) + ox;
+            for (x = q0; x < q2; x++) out = (out ^ o[x]) * 16777619u;
+        }
+        h = ((DWORD)t->n[0] * 73856093u ^ (DWORD)t->n[1] * 19349663u ^ (DWORD)v->x0 * 83492791u ^ (DWORD)v->y0 * 2654435761u ^ id) & (NT_FLKN - 1);
+        for (j = 0; j < 8; j++) {
+            NT_FLK *c = &g_nt_flk[(h + j) & (NT_FLKN - 1)];
+            if (c->fno && c->ax == t->n[0] && c->ay == t->n[1] && c->x0 == v->x0 && c->y0 == v->y0 && c->id == id) { e = c; break; }
+        }
+        if (!e) for (j = 0; j < 8; j++) {   /* a free or stale slot */
+            NT_FLK *c = &g_nt_flk[(h + j) & (NT_FLKN - 1)];
+            if (!c->fno || c->fno + 1 < g_nt_fno) { e = c; e->fno = 0; break; }
+        }
+        if (!e || e->fno == g_nt_fno) continue;   /* (the same glyph twice in one place this frame: the first counts) */
+        if (e->fno && e->fno + 1 == g_nt_fno) {
+            g_nt_fk_cmp++;
+            if (e->nat == nat) {
+                g_nt_fk_same++;
+                if (e->out != out) {
+                    g_nt_fk_chg++; nfl++;
+                    if ((e->st >= 2) != (st >= 2)) g_nt_fk_st++; else if (st >= 2) g_nt_fk_shp++; else g_nt_fk_res++;
+                    if (g_nt_flick >= 2 && g_nt_fk_lines < 600) {
+                        g_nt_fk_lines++;
+                        logf("NATIVETEXT> flick: frame %lu area [%ld %ld %ld %ld] '%c' at (%ld,%ld) font %d colour %04X kind %d -> %d: %s -> %s (why %d -> %d, matched/owned %ld/%ld -> %ld/%ld)",
+                             g_nt_fno, t->n[0], t->n[1], t->n[2], t->n[3], v->ch >= 32 ? v->ch : '?', v->x0, v->y0, v->fi, v->pal[1], e->kind, v->kind,
+                             sn[e->st & 3], sn[st & 3], e->why, why, e->hit, e->own, g_nt_hit[k], g_nt_ownn[k]);
+                    }
+                }
+            }
+        }
+        e->ax = t->n[0]; e->ay = t->n[1]; e->x0 = v->x0; e->y0 = v->y0; e->id = id; e->nat = nat; e->out = out; e->fno = g_nt_fno;
+        e->st = st; e->why = why; e->kind = v->kind; e->hit = g_nt_hit[k]; e->own = g_nt_ownn[k];
+    }
+    if (g_nt_flick >= 2 && nfl && g_nt_fk_lines < 600) {
+        int w[5] = {0, 0, 0, 0, 0};
+        for (k = 0; k < nv; k++) if (g_nt_v[k].batch < 2) w[g_nt_why[k] < 5 ? g_nt_why[k] : 0]++;
+        g_nt_fk_lines++;
+        logf("NATIVETEXT> flick: frame %lu area [%ld %ld %ld %ld]: %d records (%d of kind fill), %d redrawn, %d pasted, %d resampled (owns no ink %d, under 85%% %d, cut %d, twin %d), %d changed on screen",
+             g_nt_fno, t->n[0], t->n[1], t->n[2], t->n[3], nv, nk, nd, np, nr, w[1], w[2], w[3], w[4], nfl);
+    }
+}
 static void nt_target(const NT_TGT *t, const NT_SURF *cs, BYTE *bits, LONG pitch, LONG ox, LONG oy, int g6) {
     LONG nw = t->n[2] - t->n[0], nh = t->n[3] - t->n[1], x, y;
     int i, nv = 0, k;
@@ -731,10 +804,10 @@ static void nt_target(const NT_TGT *t, const NT_SURF *cs, BYTE *bits, LONG pitch
     int dbx = 0;
     if (nw <= 0 || nh <= 0 || !cs || !cs->n) return;
     if (g_nt_vcap < cs->n) {
-        free(g_nt_v); free(g_nt_vb); free(g_nt_hit);
+        free(g_nt_v); free(g_nt_vb); free(g_nt_hit); free(g_nt_ownn); free(g_nt_why);
         g_nt_v = (NT_REC *)malloc(cs->n * sizeof(NT_REC)); g_nt_vb = (LONG (*)[4])malloc(cs->n * sizeof(g_nt_vb[0]));
-        g_nt_hit = (LONG *)malloc(cs->n * sizeof(LONG));
-        g_nt_vcap = g_nt_v && g_nt_vb && g_nt_hit ? cs->n : 0;
+        g_nt_hit = (LONG *)malloc(cs->n * sizeof(LONG)); g_nt_ownn = (LONG *)malloc(cs->n * sizeof(LONG)); g_nt_why = (BYTE *)malloc(cs->n);
+        g_nt_vcap = g_nt_v && g_nt_vb && g_nt_hit && g_nt_ownn && g_nt_why ? cs->n : 0;
         if (!g_nt_vcap) return;
     }
     if (g_nt_owncap < nw * nh) {
@@ -784,10 +857,10 @@ static void nt_target(const NT_TGT *t, const NT_SURF *cs, BYTE *bits, LONG pitch
                 }
             }
         v->batch = own > 0 && hit * 100 >= own * 85;   /* reused as the valid flag */
-        g_nt_hit[k] = hit;
+        g_nt_hit[k] = hit; g_nt_ownn[k] = own; g_nt_why[k] = own <= 0 ? 1 : v->batch ? 0 : 2;
         (void)vis;
         if (v->batch && !v->kind && (v->c0 > v->x0 || v->c2 < v->x1 || v->c1 > v->y0 || v->c3 < v->y1) && hit * 100 < f->inkn[v->ch] * 60)
-            v->batch = 0;   /* cut (the glyph the ticker is scrolling in at its end): too little of it shows to be sure */
+            v->batch = 0, g_nt_why[k] = 3;   /* cut (the glyph the ticker is scrolling in at its end): too little of it shows to be sure */
         if (g_nt_dbgfr && dbx < 12 && v->y0 > t->n[1] && (!v->batch || v->c0 != v->x0 || v->c2 != v->x1 || hit < own)) {   /* rejected, cut or covered */
             dbx++;
             logf("NATIVETEXT> diag: area [%ld %ld %ld %ld] glyph '%c' (org %u) %s cell [%ld %ld %ld %ld] clip [%ld %ld %ld %ld] visible ink %ld owned %ld matched %ld of %ld, matched box [%ld %ld %ld %ld]",
@@ -808,7 +881,7 @@ static void nt_target(const NT_TGT *t, const NT_SURF *cs, BYTE *bits, LONG pitch
             NT_REC *b = &g_nt_v[j];
             if (!b->batch || b->kind || b->ch != a->ch || b->fi != a->fi || labs(b->x0 - a->x0) > 2 || labs(b->y0 - a->y0) > 2 ||
                 b->pal[1] != a->pal[1]) continue;   /* (a shadow, like the compass "N" one 1 px off, is another colour) */
-            if (g_nt_hit[j] >= g_nt_hit[k]) a->batch = 0; else b->batch = 0;
+            if (g_nt_hit[j] >= g_nt_hit[k]) a->batch = 0, g_nt_why[k] = 4; else b->batch = 0, g_nt_why[j] = 4;
             g_nt_twin++;
         }
     }
@@ -1092,6 +1165,7 @@ static void nt_target(const NT_TGT *t, const NT_SURF *cs, BYTE *bits, LONG pitch
         }
     }
 clear_ink:
+    if (g_nt_flick) nt_flick_check(t, bits, pitch, ox, oy, nv);
     for (k = 0; k < nv; k++) {   /* clear the ink marks */
         const NT_REC *v = &g_nt_v[k];
         for (y = v->c1; y < v->c3; y++) memset(g_nt_ink + (y - t->n[1]) * nw + v->c0 - t->n[0], 0, v->c2 - v->c0);
@@ -1127,6 +1201,7 @@ static void nt_hud(void *comp, int n, BYTE *bits, LONG pitch, LONG ox, LONG oy, 
     }
     if (!g_nt_on || !g_nt_csok) return;
     g_nt_dbgfr = g_nt_dbgnow; g_nt_dbgnow = 0;
+    g_nt_fno++;
     QueryPerformanceCounter(&t0);
     rz_hp_cyc(&c0);
     EnterCriticalSection(&g_nt_cs);
@@ -1153,6 +1228,15 @@ static void nt_hud(void *comp, int n, BYTE *bits, LONG pitch, LONG ox, LONG oy, 
                  g_nt_sp_n, g_nt_sp_n ? g_nt_sp_sum / g_nt_sp_n : 0.0, g_nt_sp_max, g_nt_sp_bad,
                  g_nt_sp_n ? g_nt_gp_sum / g_nt_sp_n : 0.0, g_nt_gp_max, g_nt_gp_bad, g_nt_fills);
         g_nt_sp_n = g_nt_sp_bad = g_nt_gp_bad = g_nt_fills = 0; g_nt_sp_sum = g_nt_sp_max = g_nt_gp_sum = g_nt_gp_max = 0;
+        if (g_nt_flick) {
+            logf("NATIVETEXT> flicker: %lu glyphs seen in consecutive frames, %lu with the native cell unchanged, %lu of those changed on screen (%.3f%%): %lu sharp <-> resampled, %lu sharp both frames, %lu resampled both frames",
+                 g_nt_fk_cmp, g_nt_fk_same, g_nt_fk_chg, g_nt_fk_same ? 100.0 * g_nt_fk_chg / g_nt_fk_same : 0.0, g_nt_fk_st, g_nt_fk_shp, g_nt_fk_res);
+            if (g_nt_fk_dfr)
+                logf("NATIVETEXT> flicker: enlarged dialogs, %lu frames compared: %lu with dest px changed while the frame under the pass did not, %.1f px per frame",
+                     g_nt_fk_dfr, g_nt_fk_dch, g_nt_fk_dpx / g_nt_fk_dfr);
+            g_nt_fk_cmp = g_nt_fk_same = g_nt_fk_chg = g_nt_fk_st = g_nt_fk_shp = g_nt_fk_res = 0; g_nt_fk_lines = 0;
+            g_nt_fk_dfr = g_nt_fk_dch = 0; g_nt_fk_dpx = 0;
+        }
         if (g_nt_log >= 2) g_nt_dbgnow = 1;   /* the next frame logs one diag line per area */
         g_nt_beat = GetTickCount(); g_nt_frames = 0; g_nt_time = 0; g_nt_cyc = 0; g_nt_drawn = g_nt_rej = g_nt_maskb = 0; g_nt_chit = g_nt_cmiss = 0;
     }
@@ -1172,6 +1256,37 @@ static void nt_dlg(void *comp, const HD_SLOT *d, BYTE *bits, LONG pitch, LONG ox
         t.bx = (double)d->dw / d->w; t.by = (double)d->dh / d->h;
         t.ax = d->dst[0] - d->nat[0] * t.bx; t.ay = d->dst[1] - d->nat[1] * t.by;
         t.src = d->prev; t.stride = d->w; t.sx = d->nat[0]; t.sy = d->nat[1]; t.filt = g_hs_filter;   /* prev = this frame's (swapped) */
+        if (g_nt_flick >= 2 && !d->lbl) {   /* diag: this dialog's output against the last frame's, where the frame under the pass and the native pixels are the same */
+            static WORD *sv, *pa, *pu, *pn; static LONG cap, pw, ph, pncap;
+            LONG w = t.d[2] - t.d[0], h = t.d[3] - t.d[1], nw = t.n[2] - t.n[0], nh = t.n[3] - t.n[1], x, y, cnt = 0, nch = 0;
+            if (w > 0 && h > 0 && cap < w * h) {
+                free(sv); free(pa); free(pu);
+                sv = (WORD *)malloc(w * h * 2); pa = (WORD *)malloc(w * h * 2); pu = (WORD *)malloc(w * h * 2);
+                cap = sv && pa && pu ? w * h : 0; pw = 0;
+            }
+            if (nw > 0 && nh > 0 && pncap < nw * nh) { free(pn); pn = (WORD *)malloc(nw * nh * 2); pncap = pn ? nw * nh : 0; pw = 0; }
+            if (w > 0 && h > 0 && cap >= w * h && pncap >= nw * nh) {
+                for (y = 0; y < h; y++) memcpy(sv + y * w, (WORD *)(bits + (oy + t.d[1] + y) * pitch) + ox + t.d[0], w * 2);
+                nt_target(&t, cs, bits, pitch, ox, oy, g6);
+                if (pw == w && ph == h) {
+                    for (y = 0; y < nh; y++) for (x = 0; x < nw; x++) if (pn[y * nw + x] != nt_px(&t, t.n[0] + x, t.n[1] + y)) nch++;
+                    for (y = 0; y < h; y++) {
+                        const WORD *o = (const WORD *)(bits + (oy + t.d[1] + y) * pitch) + ox + t.d[0];
+                        for (x = 0; x < w; x++) if (o[x] != pa[y * w + x] && sv[y * w + x] == pu[y * w + x]) cnt++;
+                    }
+                    g_nt_fk_dfr++; g_nt_fk_dpx += cnt; if (cnt) g_nt_fk_dch++;
+                    if (cnt && g_nt_fk_lines < 600) {
+                        g_nt_fk_lines++;
+                        logf("NATIVETEXT> outdiff: frame %lu dialog [%ld %ld %ld %ld]: %ld dest px changed since the last frame where the frame under the pass did not (%ld native px of the dialog changed)",
+                             g_nt_fno, t.n[0], t.n[1], t.n[2], t.n[3], cnt, nch);
+                    }
+                }
+                for (y = 0; y < h; y++) memcpy(pa + y * w, (WORD *)(bits + (oy + t.d[1] + y) * pitch) + ox + t.d[0], w * 2);
+                memcpy(pu, sv, w * h * 2);
+                for (y = 0; y < nh; y++) for (x = 0; x < nw; x++) pn[y * nw + x] = nt_px(&t, t.n[0] + x, t.n[1] + y);
+                pw = w; ph = h;
+            } else nt_target(&t, cs, bits, pitch, ox, oy, g6);
+        } else
         nt_target(&t, cs, bits, pitch, ox, oy, g6);
     }
     LeaveCriticalSection(&g_nt_cs);

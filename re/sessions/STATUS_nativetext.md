@@ -1,52 +1,50 @@
 # STATUS nativetext (child of "SC3: owner bugs 10-23"), 2026-10-26
 
-State: round 2 done ("fixed"). Owner picked look B. B is the default, letter spacing is fixed (sub-pixel placement), and
-the RCI bars are redrawn at the factor.
+State: round 3 done ("fixed"). Owner report "letters flicker, their sharpness changes constantly" (look B, 10-26b):
+cause found and fixed, measured before/after in the same tree.
 
-- Worktree `Simcity_wt_nativetext`, branch `child/nativetext` from main `742fe1f`. Nothing committed (claude2 policy).
-- Test tree `Simcity_stock_nativetext`, instance `re\harness\inst_nativetext` (all 7 mods + `Apps\version.dll` built
-  from the worktree). No game left running.
-- Results and pictures: `MAIN\verify\nativetext\RESULTS.md` (round 2 section), `MAIN\verify\nativetext\owner_shots\`
-  (00..10 round 1, looks A/B; 11..21 round 2, spacing and RCI).
+- Worktree `Simcity_wt_nativetext`, branch `child/nativetext`, fast-forwarded to main `0284ba7` by the orchestrator, then the
+  round 3 edits on top. Nothing committed (claude2 policy).
+- Test tree `Simcity_stock_nativetext`: instance `re\harness\inst_nativetext` (all 7 mods from the worktree, sc3resize with
+  the fix) and `re\harness\inst_before` (same mods, sc3resize without the fix, for the A/B). No game left running, harness
+  claim released.
+- Results and pictures: `MAIN\verify\nativetext\RESULTS.md` (section "Round 3"), `owner_shots\22_flicker_frames_before_after.png`,
+  `owner_shots\23_flicker_line_x3.png`.
+
+## Round 3 in short
+
+The glyph detour (`nt_add`) never set the record's `kind`, and record slots are reused. After RCI bar fills had gone
+through a surface's records, new glyph records inherited `kind` 1, were checked as fills, failed and stayed resampled, a
+different set of letters each time the game redrew the text (every frame with the sim running: the advisor portrait
+animates). Fix: `memset` the record before filling it.
+
+Advisor text at 2560x1351, sim running 3 min, 18 10-s windows each:
+- before: 17.7% of glyph-frames changed on screen with their native cell unchanged (231,869 sharp <-> resampled flips),
+  3,962 of 4,140 dialog frames changed, 11,000 px per frame;
+- after: 2 of 2,987,939 glyph-frames, 0 flips, 0 of 6,333 dialog frames.
+- NATIVETEXT cost fell from 12.3 to 13.7 ms to 4.1 to 4.6 ms per frame (rejected glyphs had made their groups miss the cache).
 
 ## Files to commit (worktree paths)
 
 | file | change |
 |---|---|
-| `re/harness/src/sc3resize_ntext.c` | NEW: the NATIVETEXT block (glyph detour, records, Blt propagation incl. self-Blt scroll, compose, looks A/B, sub-pixel look B masks, RCI fill records, cache, census, spacing check) |
-| `re/harness/src/sc3resize.c` | hook-up only: `#include` before `rz_hs_pre`, `nt_install()` after `patch_shareread`, `nt_blt(..., fx)` first line of `rz_blt_hook_inner`, `nt_hud()` after `mn_compose`, `nt_dlg()` after `vd_compose`, 7 env lines, 1 FLAGS line |
-| `re/analysis/HUD_SCALE.md` | section "Text drawn at the factor" (mechanism, spacing, RCI) |
-| `functions.csv` | 6 GZServiceD font rows to C2 (0x100072e2, 0x1000736f, 0x10007477, 0x100070aa, 0x10007ce5, 0x10007d9f) |
+| `re/harness/src/sc3resize_ntext.c` | the fix (record cleared in `nt_add`); diag `SC3RESIZE_NATIVETEXT_FLICK=1|2` (per-glyph frame-to-frame stability, report line every 10 s, per-glyph and per-dialog log lines at 2); per-record `own` / `why` arrays used by it |
+| `re/harness/src/sc3resize.c` | `SC3RESIZE_NATIVETEXT_FLICK` env line; FRAMEDUMP burst: the req file takes `<tag> <N> [x0 y0 x1 y1]` for N consecutive presents, optionally cropped (single-frame requests unchanged) |
+| `re/analysis/HUD_SCALE.md` | "Text drawn at the factor": the flicker cause and fix |
 
-`sc3resize_ntext.c` is new under the ignored `/re/*` rule (.gitignore:62), like the other tracked sources there. It
-needs `git add -f re/harness/src/sc3resize_ntext.c`, and the build fails without it (sc3resize.c #includes it).
-`functions.csv.bak_tracker` (tracker.py backup in the worktree root) is ignored; leave it out.
-
-Merge note: other children (vdscroll, zoomband) edit sc3resize.c. This change touches it only at the hook-up points
-and the env block.
+Round 1/2 files are already on main (10-26b).
 
 ## Switches
 
-`SC3RESIZE_NATIVETEXT` 0 off, 1 look A (TrueType), 2 look B (default). `_PHASE=0` old rounded placement (control).
-`_RCI=0` RCI bars resampled as before. `_FACE=<face>` (look A). `_LOG=1` glyph census every 10 s, `=2` also cut-glyph
-diag. `_DUMP=<abs prefix>` font sheets. `_CTL=<file>` live switch: first digit look, second digit phase (diag).
-
-## Measured (round 2)
-
-Spacing error between neighbouring letters vs native x factor (centroids), ticker scrolling:
-- 2.252x, rounded: 0.31 to 0.34 px mean, 1.0 px max, 20 to 23% of pairs > 0.5 px.
-- 2.252x, sub-pixel: 0.034 px mean, 0.17 px max, 0 pairs > 0.5 px.
-- 3.307x with Reunirse: 0.055 px mean, 0.35 px max, 0 pairs > 0.5 px.
-RESULTS.md has the ink-gap measure and the costs.
+`SC3RESIZE_NATIVETEXT` 0 off, 1 look A, 2 look B (default). `_PHASE=0` rounded placement. `_RCI=0` RCI bars resampled.
+`_FACE`, `_LOG=1|2`, `_DUMP`, `_CTL` as before. NEW `_FLICK=1|2` (diag).
 
 ## Needs owner
 
-1. Look at sheets 11..21 (spacing, RCI, scrolling ticker).
-2. Optional call: at 3.3x the thin strokes of the Comic-style title font are a little uneven in look B (edge
-   sharpening, not spacing). A lower sharpening gain for the anti-aliased fonts would soften it.
-3. Hand test with a real cursor (hover tooltips, budget, query dialog): not run here (posted input only).
+1. Look at 22 and 23, then the game itself with the sim running over an advisor text: letters should hold still.
+2. Still open from round 2: hand test with a real cursor (hover tooltips, budget, query dialog); optional lower sharpening
+   gain for the thin Comic-style title strokes at 3.3x.
 
 ## Open items
 
 - Main menu text (MENUSCALE) is not covered.
-- Wall-clock costs are noisy (other children's games on this PC). Thread cycles are the stable number.

@@ -126,6 +126,56 @@ Cost: 2560x1351 HUD with the ticker, 3.5 to 4.4 M thread cycles per frame with t
 per frame: 18.6 to 25 M cycles. The PC was shared with other games; the ticker word groups and the dialog text are
 recomputed every frame (about 12 groups).
 
+## Round 3: letters flicker (2026-10-26)
+
+Owner report on look B (`sc3mods-2026-10-26b`): "letters flicker a little bit, their sharpness changes constantly and it's
+harder to read them", Reunirse advisor text at 2560x1351 (2.252x).
+
+**Cause.** The glyph detour (`nt_add`) filled each new record field by field and never set `kind` (0 glyph, 1 solid fill),
+and the record arrays reuse their slots. Once RCI bar fills had passed through a surface's array, a new glyph record could
+inherit `kind` 1 from the slot's old content. It was then checked as a solid fill of its text colour, failed the 85% match
+and was left resampled. With the sim running the advisor portrait animates and the game redraws the dialog text every
+frame, so a different set of letters inherited the stale value each frame: those letters switched between sharp and
+resampled, and the erase around them changed their neighbours by 1 LSB. The paused game never showed it (no RCI fills, text
+not redrawn), which is why round 2's still pictures looked right.
+
+Ruled out on the way, measured in the same game: the compose is deterministic within a frame (the shipped compose, a forced
+full recompute and a cache paste agreed to the pixel on every frame), the record list order, the native pixels near the
+text (only the portrait changes), the frame under the pass, the FPU state (x87 cw 027F, mxcsr 1FA0 every frame) and the
+mask sets.
+
+**Fix.** The record is cleared before it is filled (one `memset` in `nt_add`). No other behaviour changes.
+
+**Measured.** Same tree, same city, same posted steps (Reunirse, finance advisor, "Impuestos comerciales" text), sim running
+3 min, 10-s windows from 90 s on (18 windows each). Metric: per glyph record, a hash of its native cell and of its dest
+pixels, compared with the last frame (`SC3RESIZE_NATIVETEXT_FLICK=1`). A flicker is a glyph whose output changed while its
+native cell did not.
+
+| | before (shipped 10-26b) | after |
+|---|---:|---:|
+| glyph-frames with the native cell unchanged | 1,919,505 | 2,987,939 |
+| of those changed on screen | 340,595 (17.7%; 14.1 to 24.4% per window) | 2 (under 0.001%, both sharp in both frames) |
+| sharp <-> resampled flips | 231,869 | 0 |
+| dialog frames with dest pixels changed while the frame under the pass did not | 3,962 of 4,140 | 0 of 6,333 |
+| dest pixels changed per dialog frame | 11,000 | 0 |
+| NATIVETEXT per frame (with the diag on) | 12.3 to 13.7 ms, 37 to 39 M cycles | 4.1 to 4.6 ms, 14 to 16 M cycles |
+| glyphs drawn / rejected per frame | 267 / 227 | 490 / 2 |
+
+In the before run the flicker started 90 s after unpausing, once RCI fills had gone through the records. Before that the
+two builds measure the same. The cost drop comes from the rejected glyphs: each rejection made its text group miss the cache
+every frame.
+
+Pictures (`owner_shots/`):
+
+| file | what |
+|---|---|
+| `22_flicker_frames_before_after.png` | 6 consecutive presented frames (FRAMEDUMP burst) of the advisor text, before (left) and after (right); next to each frame, in red, the pixels that changed since the frame above. Before: 1,845 to 10,335 px per frame pair, whole letters. After: 0 px in every pair. The before column is the 6-frame window with the most change out of 16, the after column the same rule |
+| `23_flicker_line_x3.png` | one line, 3x: two consecutive frames before (letters switch between sharp and soft) and after (identical) |
+
+Diag kept for later rounds: `SC3RESIZE_NATIVETEXT_FLICK=1` adds a flicker line to the 10-s report, `=2` also logs each
+changed glyph (state, kind, match counts) and each enlarged dialog's changed pixels. The FRAMEDUMP request file now takes
+`<tag> <N> [x0 y0 x1 y1]` for N consecutive presents, optionally cropped.
+
 ## Not covered
 
 - Main menu and its dialogs (MENUSCALE resamples the 800x600 frame; the glyph records exist, the compose is not hooked

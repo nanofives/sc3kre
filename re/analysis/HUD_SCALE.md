@@ -580,6 +580,14 @@ Mechanism:
   DDBLTFX+0x50) `[CONFIRMED]`. The vtable slot is wrapped; colour fills made while it runs become fill records, followed
   like glyphs, erased the same way and drawn at the mapped rect with partial coverage on the edge pixels.
   `SC3RESIZE_NATIVETEXT_RCI=0` off.
+- Flicker (owner, round 3: "letters flicker a little bit, their sharpness changes constantly"): the glyph detour filled a
+  record field by field and never set `kind`, and the record arrays reuse their slots. After RCI fills (kind 1) had passed
+  through a surface's array, new glyph records could inherit kind 1, were checked as solid fills, failed and stayed
+  resampled. With the sim running the advisor portrait animates and the game redraws the dialog text every frame, so
+  a different set of glyphs inherited it each frame: letters flipped between sharp and resampled, and their neighbours'
+  erase changed by 1 LSB. Each frame's compose was deterministic (a forced recompute and a cache paste agreed with the
+  shipped compose to the pixel). Fix: the record is cleared before it is filled. `SC3RESIZE_NATIVETEXT_FLICK=1|2`
+  (diag) counts glyphs whose output changes while their native cell does not.
 - Cost: per area, glyphs are grouped into lines or words (boxes within 6 native px); a group whose records and native
   pixels (5 px around) match the last frame is pasted from a cache. The ticker's word groups move every step and are
   recomputed. Measured maximized 3840x1984 (3.307x), 101 HUD glyphs per frame: look B 6.3 to 6.5 M thread cycles (1.8 ms)
