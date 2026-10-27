@@ -24,6 +24,9 @@
  *
  * True centre (2026-10-07): steps are judged at the real visible centre, not the view's stale native centre.
  *
+ * Audio divide guard (2026-10-27, AUDIODIV): stock AUDIO.DLL divides by the number of map cells around the camera
+ * in two underground ambient-sound helpers and has no zero check. Past the edge that number can be 0, see patch_audiodiv.
+ *
  * Config: overscroll.ini beside the DLL:  [camera] overscroll=75  (50 = stock, max 95), slide=1, arrows_keep=1,
  *                                                  true_center=1
  *                                         [display] windowed=1
@@ -103,6 +106,7 @@ static int g_truec = 1;              /* [camera] true_center: judge steps at the
 static int g_wall = 1;               /* [camera] front_wall: front edges judged at the bottom of the cliff wall */
 static int g_camfeel = 1;            /* CAMFEEL block: SC3OVERSCROLL_CAMFEEL=0 keeps the shipped camera constants */
 static int g_cam_step = 8, g_cam_div = 4, g_cam_dead = 2;   /* [camera] scroll_step / drag_divisor / drag_deadzone */
+static int g_audiodiv = 1;           /* AUDIODIV block: SC3OVERSCROLL_AUDIODIV=0 leaves AUDIO.DLL stock */
 
 static void ini_read(void) {
     char path[MAX_PATH];
@@ -825,13 +829,88 @@ static void patch_camfeel(HMODULE spr) {
          g_cam_step, g_cam_div, g_cam_dead);
 }
 
+/* ============================================================ AUDIODIV: AUDIO.DLL cell-count divide guard */
+
+/* AUDIO.DLL FUN_1000ae06 and FUN_1000ae7a (__fastcall, ecx = the ambient-sound object) take the cell box around the
+ * camera from FUN_1000a3d0 (+0x9a0..+0x9ac widened by (6 - zoom +0x9bc) * 6, clamped to 0 .. map size - 1), count the
+ * cells FUN_100097b2 accepts in [ebp-8] and the ones the cell query vt+0x3c / vt+0x40 also accepts in [ebp-4], and
+ * return [ebp-4] * 100 / [ebp-8] with no zero check: `idiv dword ptr [ebp-8]` at 0x1000ae74 / 0x1000aee8.
+ * FUN_10009890 calls them when +0x18 == 5 and +0x9cc (the view layer, read through vt+0x18 in FUN_1000a459) is 1 / 2.
+ * With the camera past the map edge the box can hold no map cell, so the count is 0 and the audio thread dies with
+ * C0000094 (owner, MARIANO-PC 2026-10-27, AUDIO.DLL+0xAEE8 in a 1024 city 370 ms after "past the edge").
+ * The three other cell-count divisions on the same path already test for 0: FUN_10009890 (local_c, layer 0 branch),
+ * FUN_100096be (local_10), FUN_1000a995 (+0xa28) [CONFIRMED @ re/ghidra_export_audio].
+ *
+ * The 14-byte tail at 0x1000ae6c / 0x1000aee0 (mov eax,[ebp-4] / pop esi / imul eax,eax,100 / cdq /
+ * idiv [ebp-8] / pop ebx / leave / ret) is entered only at its first byte (jg from the loop head), holds no
+ * base relocation, and both copies are byte-identical. Each tail becomes a jmp into a stub that does the same
+ * thing, except that a count of 0 returns 0 (the hit count is 0 then too: it only grows after the count does).
+ * FUN_10009890 already treats 0 as "no sound": it stops that sound (vt+0x28) instead of playing it. */
+static volatile LONG g_ad_calls[2], g_ad_zero[2], g_ad_play[2];   /* [0] FUN_1000ae06 (layer 1), [1] FUN_1000ae7a (layer 2) */
+
+#define AUDIODIV_STUB(name, i) \
+__declspec(naked) static void name(void) { \
+    __asm { lock inc dword ptr [g_ad_calls + 4 * i] } \
+    __asm { mov eax, [ebp - 4] } \
+    __asm { pop esi } \
+    __asm { mov ecx, [ebp - 8] } \
+    __asm { test ecx, ecx } \
+    __asm { jz name##_zero } \
+    __asm { imul eax, eax, 100 } \
+    __asm { cdq } \
+    __asm { idiv ecx } \
+    __asm { test eax, eax } \
+    __asm { jz name##_out } \
+    __asm { lock inc dword ptr [g_ad_play + 4 * i] } \
+    __asm { name##_out: pop ebx } \
+    __asm { leave } \
+    __asm { ret } \
+    __asm { name##_zero: lock inc dword ptr [g_ad_zero + 4 * i] } \
+    __asm { xor eax, eax } \
+    __asm { pop ebx } \
+    __asm { leave } \
+    __asm { ret } \
+}
+AUDIODIV_STUB(audiodiv_ae06, 0)
+AUDIODIV_STUB(audiodiv_ae7a, 1)
+
+static int patch_audiodiv(HMODULE au) {
+    static const BYTE tail[14] = { 0x8b, 0x45, 0xfc, 0x5e, 0x6b, 0xc0, 0x64, 0x99, 0xf7, 0x7d, 0xf8, 0x5b, 0xc9, 0xc3 };
+    BYTE *a = (BYTE *)au + 0xae6c, *b = (BYTE *)au + 0xaee0;
+    if (memcmp(a, tail, sizeof(tail)) || memcmp(b, tail, sizeof(tail))) {
+        logf("### AUDIODIV: AUDIO.DLL+0xae6c / +0xaee0 differ from shipped - NOT patched");
+        return 0;
+    }
+    if (!write_jmp(a, (void *)audiodiv_ae06, 7) || !write_jmp(b, (void *)audiodiv_ae7a, 7)) {
+        logf("### AUDIODIV: VirtualProtect failed (%lu) - NOT patched", GetLastError());
+        return 0;
+    }
+    logf("### AUDIODIV: AUDIO.DLL at 0x%08lX, FUN_1000ae06 / FUN_1000ae7a return 0 on an empty cell box"
+         " (idiv at +0xae74 / +0xaee8 guarded)", (DWORD)au);
+    return 1;
+}
+
+/* One line when the guard first fires, then at most one a minute while the counters move. */
+static void audiodiv_report(void) {
+    static LONG last_zero = 0, last_calls = 0;
+    static DWORD last_ms = 0;
+    LONG z = g_ad_zero[0] + g_ad_zero[1], c = g_ad_calls[0] + g_ad_calls[1];
+    DWORD now = GetTickCount();
+    if (z == last_zero && c == last_calls) return;
+    if (!(last_zero == 0 && z > 0) && now - last_ms < 60000) return;
+    logf("### AUDIODIV: layer 1 %ld calls / %ld empty box / %ld playing, layer 2 %ld / %ld / %ld",
+         g_ad_calls[0], g_ad_zero[0], g_ad_play[0], g_ad_calls[1], g_ad_zero[1], g_ad_play[1]);
+    last_zero = z; last_calls = c; last_ms = now;
+}
+
 /* ================================================================ boot */
 
 static DWORD WINAPI watcher(LPVOID param) {
-    HMODULE gz = NULL, spr = NULL;
-    int ok = 0, ms = 0;
+    HMODULE gz = NULL, spr = NULL, au = NULL;
+    int ok = 0, ms = 0, ad = 0;
     (void)param;
     while (ms < 300000 && !(gz && spr)) {
+        if (g_audiodiv && !au && (au = GetModuleHandleA("AUDIO.DLL")) != NULL) ad = patch_audiodiv(au);
         if (!gz && (gz = GetModuleHandleA("GZGraphicD.dll")) != NULL && g_windowed) {
             patch_windowed(gz);
             patch_surfacefmt(gz);
@@ -859,7 +938,15 @@ static DWORD WINAPI watcher(LPVOID param) {
         logf("### READY: windowed=%d overscroll=%d%% slide=%d hook=%d edge=%d (gain %d, max %d px/s, tick %d) arrows_keep=%d",
              g_windowed, g_overscroll, g_slide, ok, g_edge, g_edge_gain, g_edge_max, hb, g_arrows);
     }
-    return 0;
+    if (!g_audiodiv) { logf("### AUDIODIV: off (SC3OVERSCROLL_AUDIODIV=0), AUDIO.DLL left stock"); return 0; }
+    /* AUDIO.DLL is a GZCOM component the game maps in its Apps scan: keep looking if it was not there yet */
+    for (ms = 0; !au && ms < 300000; ms += 5) {
+        if ((au = GetModuleHandleA("AUDIO.DLL")) != NULL) ad = patch_audiodiv(au);
+        else Sleep(5);
+    }
+    if (!au) { logf("### AUDIODIV: AUDIO.DLL not mapped after 300 s - nothing to guard"); return 0; }
+    if (!ad) return 0;
+    for (;;) { Sleep(1000); audiodiv_report(); }
 }
 
 BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
@@ -873,7 +960,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
         QueryPerformanceCounter(&g_t0);
         ini_read();
         {   char v[8];
-            if (GetEnvironmentVariableA("SC3OVERSCROLL_CAMFEEL", v, sizeof(v))) g_camfeel = atoi(v); }
+            if (GetEnvironmentVariableA("SC3OVERSCROLL_CAMFEEL", v, sizeof(v))) g_camfeel = atoi(v);
+            if (GetEnvironmentVariableA("SC3OVERSCROLL_AUDIODIV", v, sizeof(v))) g_audiodiv = atoi(v); }
         log_open();
         logf("### sc3overscroll loaded - overscroll %d%%", g_overscroll);
         CreateThread(NULL, 0, watcher, NULL, 0, NULL);
