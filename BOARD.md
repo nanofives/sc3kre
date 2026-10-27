@@ -10,7 +10,9 @@ This file points at them and does not restate them.
 
 ## Current state, 2026-10-23 (read this first)
 
-**Latest published release: `sc3mods-2026-10-27c`** (target `f9bfc29`: mods inert unless sc3mods.dll loads them, so an
+**Latest published release: `sc3mods-2026-10-27d`** (target `f151258`: AUDIO.DLL divide-by-zero guard past the edge with an
+underground view, no sc3autosave; `verify/mods_release_1027d/RESULTS.md`, stage source now `stage\src`). Before it:
+`sc3mods-2026-10-27c` (target `f9bfc29`, superseded: mods inert unless sc3mods.dll loads them, so an
 unpatched exe starts stock instead of closing; `verify/mods_release_1027c/RESULTS.md`). Before it: `sc3mods-2026-10-27b`
 (target `c2149d8`, superseded: new mod loader `sc3mods.dll` imported by a per-PC
 `sc3mods_patch.ps1` exe patch, because Defender quarantined the 10-27 `version.dll` as Contebrew.A!ml;
