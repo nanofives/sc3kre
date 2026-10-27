@@ -80,9 +80,10 @@ netvariant/netramp/multitile/artkit defaults.
   from the worktree that built the art), then stage + deploy. Rebuilding binaries alone does not pick up package
   changes since the last republish. **2026-10-27: the old source `Simcity_stock_avint` and the art worktrees
   (`Simcity_wt_avint` etc.) were deleted in the folder consolidation.** `stage\src` holds only the installed
-  overlay/tables (rebuilt from the LAN 10-27c download): no ledger, no `packs\`, no package art. The shipped content is
-  intact. Any package change needs the art regenerated with the tracked painters (`re/tools/netmod/*_paint.py`,
-  `netart.py`) and the packages reinstalled into `stage\src`.
+  overlay/tables (rebuilt from the LAN 10-27c download). **Recovered:** `re/tools/netmod/netpack_recover.py` rebuilt all 18
+  packages' png_dir + anchors from that overlay, and a real install reproduced 113/113 files byte-identical
+  (`verify/artrecover/RESULTS.md`). The sources + ledger are in `dev\artrecover\tree\mods\netmod` until adopted into
+  `stage\src`.
 - `highway_core` must stay installed (old ramp cities); its ramp rule is opt-in `SC3NETMOD_HWYT=1`.
 - Random `0xC0000005` starts were mods racing on shared pages: never restore VirtualProtect. U-085 parked by owner.
 - Stage replaces the Apps DLLs: close the owner's game in `stage\release` first.
