@@ -10,7 +10,9 @@ This file points at them and does not restate them.
 
 ## Current state, 2026-10-23 (read this first)
 
-**Latest published release: `sc3mods-2026-10-27b`** (target `c2149d8`: new mod loader `sc3mods.dll` imported by a per-PC
+**Latest published release: `sc3mods-2026-10-27c`** (target `f9bfc29`: mods inert unless sc3mods.dll loads them, so an
+unpatched exe starts stock instead of closing; `verify/mods_release_1027c/RESULTS.md`). Before it: `sc3mods-2026-10-27b`
+(target `c2149d8`, superseded: new mod loader `sc3mods.dll` imported by a per-PC
 `sc3mods_patch.ps1` exe patch, because Defender quarantined the 10-27 `version.dll` as Contebrew.A!ml;
 `verify/mods_release_1027b/RESULTS.md`). Before it: `sc3mods-2026-10-27` (target `fe40300`, superseded: no letter flicker,
 avenue / boulevard lanes on slopes; `verify/mods_release_1027/RESULTS.md`). Before it: `sc3mods-2026-10-26b` (target `f0f5b15`: sharp UI text, sloped road ends, REPAINT8, VDSCROLL,
