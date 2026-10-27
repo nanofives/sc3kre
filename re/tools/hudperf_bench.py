@@ -27,6 +27,7 @@ import time
 
 TOOLS = pathlib.Path(r"C:\Users\maria\Desktop\Proyectos\Simcity\re\tools")
 sys.path.insert(0, str(TOOLS))
+import sc3wait  # noqa: E402
 
 
 def game_child(launcher_pid: int, timeout: float = 40) -> int:
@@ -123,8 +124,9 @@ def main(argv):
         x, y = (int(v) for v in a.at.split(","))
         ctypes.windll.user32.SetWindowPos(hwnd, 0, x, y, 0, 0, 0x0001 | 0x0004 | 0x0010)  # NOSIZE NOZORDER NOACTIVATE
         time.sleep(3)
+    n_rz = len(log.read_text(errors="replace"))
     sc3io.maximize_without_focus(hwnd)
-    time.sleep(8)
+    sc3wait.wait_layout(log, n_rz)      # was a blind 8 s
     if a.speed:
         sc3io.key(hwnd, ord(a.speed[0]))
         time.sleep(0.5)

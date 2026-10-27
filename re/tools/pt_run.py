@@ -36,7 +36,8 @@ TOOLS = HERE
 sys.path.insert(0, TOOLS)
 import sc3io  # noqa: E402
 from pt_probe import JS  # noqa: E402
-import sc3pause  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
+import sc3pause  # noqa: E402
+import sc3wait  # noqa: E402  (task avcore: refuse a Frida attach while the game is paused)
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 
@@ -179,6 +180,7 @@ def main():
         dst = os.path.join(a.inst, "%s.sc3" % a.arm)
         shutil.copyfile(a.city, dst)
         log = open(os.path.join(a.inst, "launch_%s.out" % a.arm), "w")
+        t_launch = time.time()
         subprocess.Popen([os.path.join(a.inst, "mods_launch.exe"), "-multi", "--", dst], stdout=log, stderr=log, cwd=a.inst)
         for _ in range(90):
             time.sleep(1)
@@ -191,7 +193,9 @@ def main():
         print("arm %s pid %d" % (a.arm, pid), flush=True)
         with open(os.path.join(a.inst, "pid_%s.txt" % a.arm), "w") as f:
             f.write("%d %s\n" % (pid, time.strftime("%Y-%m-%d %H:%M:%S")))
-        time.sleep(a.settle)
+        # --settle is now the fallback fixed wait; the city-up log signal ends it early (cap 110 s or settle)
+        sc3wait.wait_city_up(os.environ.get("SC3RESIZE_LOG", os.path.join(a.inst, "sc3resize.log")), t_launch,
+                             timeout=max(110.0, a.settle), fallback_sleep=a.settle)
         subprocess.run([sys.executable, os.path.join(TOOLS, "dismiss_tips.py")], env=os.environ)
         time.sleep(2)
     else:

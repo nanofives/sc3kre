@@ -29,6 +29,7 @@ def main(argv):
         shutil.copyfile(city, dst)
     out = os.path.join(inst, "launch_%s.out" % arm)
     log = open(out, "w")
+    t_launch = time.time()
     subprocess.Popen([os.path.join(inst, "mods_launch.exe"), "-multi", "--", dst], stdout=log, stderr=log, cwd=inst,
                      env=env)
     pid = None
@@ -41,7 +42,9 @@ def main(argv):
     if not pid:
         raise SystemExit("launcher printed no pid (%s)" % out)
     print("arm %s pid %d city %s" % (arm, pid, dst), flush=True)
-    time.sleep(60)
+    sys.path.insert(0, TOOLS)
+    import sc3wait
+    sc3wait.wait_city_up(env.get("SC3RESIZE_LOG", os.path.join(inst, "sc3resize.log")), t_launch)
     env["SC3_PID"] = str(pid)
     subprocess.run([sys.executable, os.path.join(TOOLS, "dismiss_tips.py")], env=env)
     print("PID=%d" % pid)

@@ -57,6 +57,7 @@ def main(argv):
     if p0:
         raise SystemExit("a game from this tree is already running (pid %d); stop it first" % p0)
     log = open(os.path.join(inst, "launch_%s.out" % arm), "w")
+    t_launch = time.time()
     subprocess.Popen([os.path.join(inst, "mods_launch.exe"), "-multi", "--", dst], stdout=log, stderr=log, cwd=inst)
     pid = None
     for _ in range(60):
@@ -71,7 +72,8 @@ def main(argv):
     sys.path.insert(0, os.path.join(REPO, "re", "tools"))
     import sc3io
     import ctypes
-    time.sleep(60)
+    import sc3wait
+    sc3wait.wait_city_up(os.environ.get("SC3RESIZE_LOG", os.path.join(inst, "sc3resize.log")), t_launch)
     h = sc3io.game_hwnd()
     ctypes.windll.user32.SetWindowPos(h, 0, 2700, 60, 0, 0, 0x0001 | 0x0004 | 0x0010)
     time.sleep(2)
@@ -88,8 +90,9 @@ def main(argv):
         drive("drag", "300,240", "180,300")
         time.sleep(1.5)
         drive("shot", os.path.join(vdir, "%s_04_roads.png" % arm))
+        t_save = time.time()
         drive("cmd", "0x10009002")
-        time.sleep(12)
+        sc3wait.wait_file_saved(dst, t_save)
         shutil.copyfile(dst, os.path.join(inst, "%s_after.sc3" % arm))
         print("saved copy -> %s" % os.path.join(inst, "%s_after.sc3" % arm))
     print("pid %d left running" % pid)
