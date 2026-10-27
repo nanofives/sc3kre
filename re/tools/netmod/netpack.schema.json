@@ -277,6 +277,11 @@
       "items": {"type": "string", "pattern": "^avx[mnk] [0-9]+ [A-Z01]{4} [A-Z01]{1,4}( [01])?$"},
       "description": "Task avjunc: raw sc3netmod table lines of the AVX block (sc3netmod_avx.c, verify/avjunc/PLAN.md): `avxm <piece> <outline> <modes>` a junction box cell at state 0, per side N E S W outline I (another box cell) / A (an arm) / C (closed) and modes I (2 lanes in) / O (2 out) / T (two-way) / C; `avxn <piece> <ends> <oneway>` a half beside a box (a variant of 11204), ends = 4 digits N E S W with 1 where the median nose is, oneway 1 = one-way lanes; `avxk <piece> <outline> <modes>` the outer cell of an avenue corner that is a T / X (task avjunc corners). Pieces must be ROAD variants of this package."
     },
+    "boulevard_slope_lines": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^bvs (o [0-9]+ [0-9]+ [0-3]|m [0-9]+ [0-9]+)$"},
+      "description": "Task avslope: raw sc3netmod table lines of the BVS part of the BV block (sc3netmod_bvs.c): `bvs o <piece> <slope piece> <side>` the sloped outer carriageway of a boulevard (lanes toward world side <side> at state 0), `bvs m <piece> <slope piece>` the sloped middle; the slope piece one of 11202 / 11201 / 32 / 31, the pieces ROAD variants of it from this package. BV writes them on boulevard cells that stand on a legal slope."
+    },
     "road_end_lines": {
       "type": "array",
       "items": {"type": "string", "pattern": "^sle [0-9]+( [0-9]+){6}$"},

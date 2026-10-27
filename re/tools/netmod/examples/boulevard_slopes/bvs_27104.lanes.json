@@ -1,0 +1,159 @@
+{
+ "piece": 27104,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 0,
+ "alt": [
+  0,
+  -1,
+  -1,
+  0
+ ],
+ "_comment": "task avslope: the sloped boulevard outer on 11201, lanes toward side 2 at state 0 = avenue_lanes 21722's (20700 has avenue 21700's lane positions)",
+ "vehicle": {
+  "class": "car",
+  "speed": 64000,
+  "lanes": [
+   {
+    "from": [
+     80,
+     0,
+     0
+    ],
+    "to": [
+     80,
+     -256,
+     255
+    ],
+    "uk_keep": true
+   },
+   {
+    "from": [
+     175,
+     0,
+     0
+    ],
+    "to": [
+     175,
+     -256,
+     255
+    ],
+    "uk_keep": true
+   }
+  ]
+ },
+ "pedestrian": {
+  "walks": [
+   {
+    "from": [
+     15,
+     -256,
+     240
+    ],
+    "to": [
+     15,
+     15
+    ],
+    "path": 2049
+   },
+   {
+    "from": [
+     240,
+     15
+    ],
+    "to": [
+     240,
+     -256,
+     240
+    ],
+    "path": 1793
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     15,
+     -256,
+     240
+    ],
+    "code": 24
+   },
+   {
+    "at": [
+     15,
+     15
+    ],
+    "code": 8
+   },
+   {
+    "at": [
+     240,
+     -256,
+     240
+    ],
+    "code": 24
+   },
+   {
+    "at": [
+     240,
+     15
+    ],
+    "code": 8
+   }
+  ]
+ },
+ "connects": {
+  "road": {
+   "low": [
+    [
+     "z-",
+     "z+"
+    ]
+   ],
+   "high": [
+    [
+     "z+",
+     "z-"
+    ]
+   ]
+  }
+ },
+ "curves": [
+  {
+   "shape": 23606,
+   "pts": [
+    [
+     80,
+     0,
+     0
+    ],
+    [
+     80,
+     -256,
+     255
+    ]
+   ],
+   "sort_id": 0
+  },
+  {
+   "shape": 23607,
+   "pts": [
+    [
+     175,
+     -256,
+     255
+    ],
+    [
+     175,
+     0,
+     0
+    ]
+   ],
+   "sort_id": 0
+  }
+ ]
+}

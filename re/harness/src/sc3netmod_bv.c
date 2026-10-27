@@ -57,6 +57,7 @@ static int bv_variant(unsigned long v) { return v && v <= 0xffff && g_base[v]; }
 static void bv_line(const char *path, const char *line) {
     unsigned long v[10];
     int k;
+    if (!strncmp(line, "bvs ", 4)) { bvs_line(path, line); return; }                  /* task avslope */
     if (!strncmp(line, "bvp ", 4)) {
         if (sscanf(line + 4, "%lu %lu %lu %lu %lu %lu %lu", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6]) != 7) {
             logf("### bv: %s: bad line '%s'", path, line);
@@ -152,6 +153,7 @@ static int bv_is_piece(WORD id) {
     for (k = 0; k < 3; k++) for (j = 0; j < 9; j++) if (g_bv_tap[k][j] == id) return 1;
     for (k = 0; k < 2; k++) for (j = 0; j < 9; j++) if (g_bv_av[k][j] == id) return 1;
     if (bvx_is_piece(id)) return 1;                       /* task bvx */
+    if (bvs_is_piece(id)) return 1;                       /* task avslope: the sloped outer / middle */
     return 0;
 }
 
@@ -544,9 +546,10 @@ static void bv_decide_part(void *ctx, BvPass *P, int sa, int sb, int w, const in
     for (k = 0; k < P->n; k++) {
         int cx = P->cell[k].x, cz = P->cell[k].z, pos[3];
         DWORD cur = rb_at(&P->b, cx, cz);
-        if ((((cur & 0xffff) << 8) | ((cur >> 16) & 3)) == P->cell[k].want) continue;
+        DWORD want = bvs_map(d->mgr, cx, cz, P->cell[k].want, g_bv_p);                  /* task avslope: on a slope */
+        if ((((cur & 0xffff) << 8) | ((cur >> 16) & 3)) == want) continue;
         pos[0] = cx << 8; pos[1] = cz << 8; pos[2] = 0;
-        ((PFN_Put)(g_rb_m + 0x8919))(d->mgr, 0, d->lay, pos, P->cell[k].want, -1, 8, 0);
+        ((PFN_Put)(g_rb_m + 0x8919))(d->mgr, 0, d->lay, pos, want, -1, 8, 0);
         nw++;
         bv_dirty(cx, cz);                                                               /* task bvlanes */
     }

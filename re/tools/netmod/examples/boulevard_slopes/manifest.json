@@ -1,0 +1,237 @@
+{
+ "netpack": 1,
+ "name": "boulevard_slopes",
+ "version": "1.0.0",
+ "author": "netmod (task avslope)",
+ "description": "Boulevards on slopes (owner 2026-10-26: 'check for 3 road avenues for the same'). On a legal slope the stock game puts the plain slope piece (11202 / 11201, steep 32 / 31) in every road cell; sc3netmod's BV block writes these instead on a boulevard's sloped cells (sc3netmod_bvs.c): 27100..27107 the sloped outer carriageway, one per slope piece and direction (one-way lanes as avenue_lanes' slope pieces), 27108..27111 the sloped middle (two-way, the tree median), one per slope piece. Art: the boulevard package's own 20700 / 20701 laid on the slope piece's plane (avslope_paint.py bvbuild). All save as the slope piece, so a game without the mod loads the stock slope.",
+ "variants": [
+  {
+   "id": 27100,
+   "base": 31,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard (one way), slope",
+    "ENGLISH": "Bulevar (un sentido), pendiente"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 31,
+    "png_dir": "art/27100",
+    "first_pass": false
+   }
+  },
+  {
+   "id": 27101,
+   "base": 31,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard (one way), slope",
+    "ENGLISH": "Bulevar (un sentido), pendiente"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 31,
+    "png_dir": "art/27101",
+    "first_pass": false
+   }
+  },
+  {
+   "id": 27102,
+   "base": 32,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard (one way), slope",
+    "ENGLISH": "Bulevar (un sentido), pendiente"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 32,
+    "png_dir": "art/27102",
+    "first_pass": false
+   }
+  },
+  {
+   "id": 27103,
+   "base": 32,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard (one way), slope",
+    "ENGLISH": "Bulevar (un sentido), pendiente"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 32,
+    "png_dir": "art/27103",
+    "first_pass": false
+   }
+  },
+  {
+   "id": 27104,
+   "base": 11201,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard (one way), slope",
+    "ENGLISH": "Bulevar (un sentido), pendiente"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11201,
+    "png_dir": "art/27104",
+    "first_pass": false
+   }
+  },
+  {
+   "id": 27105,
+   "base": 11201,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard (one way), slope",
+    "ENGLISH": "Bulevar (un sentido), pendiente"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11201,
+    "png_dir": "art/27105",
+    "first_pass": false
+   }
+  },
+  {
+   "id": 27106,
+   "base": 11202,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard (one way), slope",
+    "ENGLISH": "Bulevar (un sentido), pendiente"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11202,
+    "png_dir": "art/27106",
+    "first_pass": false
+   }
+  },
+  {
+   "id": 27107,
+   "base": 11202,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard (one way), slope",
+    "ENGLISH": "Bulevar (un sentido), pendiente"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11202,
+    "png_dir": "art/27107",
+    "first_pass": false
+   }
+  },
+  {
+   "id": 27108,
+   "base": 31,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, slope",
+    "ENGLISH": "Bulevar, pendiente"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 31,
+    "png_dir": "art/27108",
+    "first_pass": false
+   }
+  },
+  {
+   "id": 27109,
+   "base": 32,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, slope",
+    "ENGLISH": "Bulevar, pendiente"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 32,
+    "png_dir": "art/27109",
+    "first_pass": false
+   }
+  },
+  {
+   "id": 27110,
+   "base": 11201,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, slope",
+    "ENGLISH": "Bulevar, pendiente"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11201,
+    "png_dir": "art/27110",
+    "first_pass": false
+   }
+  },
+  {
+   "id": 27111,
+   "base": 11202,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, slope",
+    "ENGLISH": "Bulevar, pendiente"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11202,
+    "png_dir": "art/27111",
+    "first_pass": false
+   }
+  }
+ ],
+ "lanes": [
+  {
+   "piece": 27100,
+   "spec": "bvs_27100.lanes.json"
+  },
+  {
+   "piece": 27101,
+   "spec": "bvs_27101.lanes.json"
+  },
+  {
+   "piece": 27102,
+   "spec": "bvs_27102.lanes.json"
+  },
+  {
+   "piece": 27103,
+   "spec": "bvs_27103.lanes.json"
+  },
+  {
+   "piece": 27104,
+   "spec": "bvs_27104.lanes.json"
+  },
+  {
+   "piece": 27105,
+   "spec": "bvs_27105.lanes.json"
+  },
+  {
+   "piece": 27106,
+   "spec": "bvs_27106.lanes.json"
+  },
+  {
+   "piece": 27107,
+   "spec": "bvs_27107.lanes.json"
+  }
+ ],
+ "boulevard_slope_lines": [
+  "bvs o 27100 31 2",
+  "bvs o 27101 31 0",
+  "bvs o 27102 32 1",
+  "bvs o 27103 32 3",
+  "bvs o 27104 11201 2",
+  "bvs o 27105 11201 0",
+  "bvs o 27106 11202 1",
+  "bvs o 27107 11202 3",
+  "bvs m 27108 31",
+  "bvs m 27109 32",
+  "bvs m 27110 11201",
+  "bvs m 27111 11202"
+ ]
+}

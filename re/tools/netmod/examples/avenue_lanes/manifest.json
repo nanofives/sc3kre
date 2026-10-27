@@ -1,9 +1,9 @@
 {
  "netpack": 1,
  "name": "avenue_lanes",
- "version": "0.1.0",
+ "version": "0.2.0",
  "author": "netmod (task avcore)",
- "description": "One-way avenue halves (owner 2026-10-19: 2 lanes each way, right-hand traffic everywhere). sc3netmod's AVL block writes these on an avenue band it can convert whole (re/analysis/AVENUE_LANES.md): 21700 the straight half (base 11204, both lanes in the half's direction), 21701 the avenue end U-turn quarter (base 11203), also an avenue corner's outer bend; 21726 an avenue corner's inner bend (base 11203). 21710..21725 a stock rail / power line / highway crossing or a road slope on a half, one way (two ids per base, one per direction). All save as their base at the same state, so a game without the mod loads the stock avenue.",
+ "description": "One-way avenue halves (owner 2026-10-19: 2 lanes each way, right-hand traffic everywhere). sc3netmod's AVL block writes these on an avenue band it can convert whole (re/analysis/AVENUE_LANES.md): 21700 the straight half (base 11204, both lanes in the half's direction), 21701 the avenue end U-turn quarter (base 11203), also an avenue corner's outer bend; 21726 an avenue corner's inner bend (base 11203). 21710..21725 a stock rail / power line / highway crossing or a road slope on a half, one way (two ids per base, one per direction). All save as their base at the same state, so a game without the mod loads the stock avenue. Task avslope (2026-10-26): the slope ids 21718..21725 draw the avenue half (white dashes, median, trees) laid on the slope piece's plane, built by `py -3.12 ../../avslope_paint.py --game <tree> build .` (art/ not shipped); without it they drew the plain sloped road.",
  "variants": [
   {
    "id": 21700,
@@ -112,7 +112,12 @@
    "name": {
     "*": "Avenue (one way), slope"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 31,
+    "png_dir": "art/21718",
+    "first_pass": false
+   }
   },
   {
    "id": 21719,
@@ -121,7 +126,12 @@
    "name": {
     "*": "Avenue (one way), slope"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 31,
+    "png_dir": "art/21719",
+    "first_pass": false
+   }
   },
   {
    "id": 21720,
@@ -130,7 +140,12 @@
    "name": {
     "*": "Avenue (one way), slope"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 32,
+    "png_dir": "art/21720",
+    "first_pass": false
+   }
   },
   {
    "id": 21721,
@@ -139,7 +154,12 @@
    "name": {
     "*": "Avenue (one way), slope"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 32,
+    "png_dir": "art/21721",
+    "first_pass": false
+   }
   },
   {
    "id": 21722,
@@ -148,7 +168,12 @@
    "name": {
     "*": "Avenue (one way), slope"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11201,
+    "png_dir": "art/21722",
+    "first_pass": false
+   }
   },
   {
    "id": 21723,
@@ -157,7 +182,12 @@
    "name": {
     "*": "Avenue (one way), slope"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11201,
+    "png_dir": "art/21723",
+    "first_pass": false
+   }
   },
   {
    "id": 21724,
@@ -166,7 +196,12 @@
    "name": {
     "*": "Avenue (one way), slope"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11202,
+    "png_dir": "art/21724",
+    "first_pass": false
+   }
   },
   {
    "id": 21725,
@@ -175,7 +210,12 @@
    "name": {
     "*": "Avenue (one way), slope"
    },
-   "trblkatt": "copy_base"
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11202,
+    "png_dir": "art/21725",
+    "first_pass": false
+   }
   },
   {
    "id": 21726,

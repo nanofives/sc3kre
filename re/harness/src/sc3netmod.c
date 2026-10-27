@@ -138,7 +138,7 @@ static int table_read(const char *path) {
         if (!strncmp(p, "avxb ", 5) || !strncmp(p, "avxa ", 5)) continue;   /* task avx: AVX lines, read by rbt_install */
         if (!strncmp(p, "avxm ", 5) || !strncmp(p, "avxn ", 5) || !strncmp(p, "avxk ", 5)) continue;   /* task avjunc */
         if (!strncmp(p, "bvp ", 4) || !strncmp(p, "bvc ", 4) || !strncmp(p, "bvt ", 4) ||
-            !strncmp(p, "bva ", 4)) continue;   /* task boulevard */
+            !strncmp(p, "bva ", 4) || !strncmp(p, "bvs ", 4)) continue;   /* task boulevard, avslope */
         if (!strncmp(p, "sle ", 4)) continue;            /* task slopeend: SLE lines, read by rbt_install */
         if (!strncmp(p, "rbt9 ", 5)) continue;           /* RBT9 lines, read by rbt_install (task bigrbt) */
         if (!strncmp(p, "bvxb ", 5) || !strncmp(p, "bvxa ", 5)) continue;   /* task bvx: read by rbt_install */
@@ -1379,6 +1379,7 @@ static int netramp_install(BYTE *m) {
 #include "sc3netmod_rbt.c"          /* task roundabout3: RBT, automatic 2x2 roundabouts (SC3NETMOD_RBT=0) */
 #include "sc3netmod_dav.c"          /* task diagave: DAV, automatic diagonal avenues on RBT's hooks (SC3NETMOD_DAV=0) */
 #include "sc3netmod_avx.c"          /* task avx: AVX, straight avenue intersections on RBT's hooks (SC3NETMOD_AVX=0) */
+#include "sc3netmod_bvs.c"          /* task avslope: BVS, boulevards on slopes, called by BV (SC3NETMOD_BVS=0) */
 #include "sc3netmod_bv.c"           /* task boulevard: BV, automatic boulevards on RBT's hooks (SC3NETMOD_BV=0) */
 #include "sc3netmod_rbt9.c"         /* task bigrbt: RBT9, automatic 3x3 roundabouts on RBT's hooks (SC3NETMOD_RBT9=0) */
 #include "sc3netmod_bvx.c"          /* task bvx: boulevard x avenue / boulevard junctions in BV's runs (SC3NETMOD_BVX=0) */
