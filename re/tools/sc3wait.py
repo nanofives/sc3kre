@@ -94,3 +94,41 @@ def wait_layout(log, start, timeout=60.0, settle=1.0):
     else:
         print("WARN: no 'RZ TIMING pass' in %s within %.0f s" % (log, timeout), file=sys.stderr, flush=True)
     return ok
+
+
+# Mod DLLs in the order the retired mods_launch.exe loaded them; only the ones present in the instance load.
+MODS = ["sc3resize.dll", "sc3bigcity.dll", "sc3overscroll.dll", "sc3simrun.dll", "sc3startsize.dll", "sc3perf.dll",
+        "sc3netmod.dll", "sc3cartrips.dll", "sc3undo.dll", "sc3autosave.dll"]
+
+
+def launch_game(inst, city, env=None, out=None, multi=True, extra_args=(), tree=None):
+    r"""Start <tree>\Apps\SC3U.exe directly with the mods of instance folder `inst` (replaces
+    `<inst>\mods_launch.exe -multi -- <city>`, retired 2026-10-25). The version.dll / sc3mods.dll loader beside
+    the exe reads SC3MODS_DIR (mods + their logs live in `inst`), SC3MODS_LIST (the DLLs present, in the old
+    launcher's order) and SC3MODS_MULTI (per-pid single-instance mutex). `tree` defaults to inst\..\..\..
+    The launcher no longer enforces the game lease: take it (game_lock.ps1) and export SC3_SESSION yourself.
+    Returns (Popen, t_launch); Popen.pid is the game's own pid."""
+    import subprocess
+    inst = os.path.abspath(inst)
+    tree = os.path.abspath(tree or os.path.join(inst, "..", "..", ".."))
+    apps = os.path.join(tree, "Apps")
+    exe = os.path.join(apps, "SC3U.exe")
+    if not os.path.exists(exe):
+        raise SystemExit("no SC3U.exe at %s" % exe)
+    present = [m for m in MODS if os.path.exists(os.path.join(inst, m))]
+    if not present:
+        raise SystemExit("no mod DLL in %s" % inst)
+    e = dict(os.environ if env is None else env)
+    e["SC3MODS_DIR"] = inst
+    e["SC3MODS_LIST"] = ";".join(present)
+    if multi:
+        e["SC3MODS_MULTI"] = "1"
+    else:
+        e.pop("SC3MODS_MULTI", None)
+    if os.path.exists(city):
+        city = os.path.abspath(city)      # the game runs with cwd = Apps
+    args = [exe, city] + list(extra_args)
+    sink = out if out is not None else subprocess.DEVNULL
+    t_launch = time.time()
+    p = subprocess.Popen(args, cwd=apps, env=e, stdout=sink, stderr=subprocess.STDOUT if out is not None else None)
+    return p, t_launch

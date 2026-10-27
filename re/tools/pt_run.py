@@ -4,8 +4,8 @@ r"""pt_run.py - one pausetrips arm (verify/pausetrips/PRE.md): launch, drive the
   py -3.12 pt_run.py --inst <instance folder> --city <src.sc3> --arm NAME --schedule "s3:60,P:90,s1:120,..." [--safe]
   py -3.12 pt_run.py --attach --arm NAME --schedule ...     # SC3_PID already set, no launch / no kill
 
-<inst> holds mods_launch.exe and the mod DLLs of the arm; the city is copied into it as <arm>.sc3 and launched with
--multi. Only the pid this script started is ever killed. Input is posted to the game window (sc3io): no focus, no
+<inst> holds the mod DLLs of the arm; the city is copied into it as <arm>.sc3 and launched with sc3wait.launch_game
+(Apps\SC3U.exe, SC3MODS_DIR=<inst>, SC3MODS_MULTI=1). Only the pid this script started is ever killed. Input is posted to the game window (sc3io): no focus, no
 cursor. Keys: P = sc3resize PAUSEKEY (posts 0xc2a35d7e / 0xc2a35d80, city+0x140), 1-4 = SPEEDKEYS (0xc2684065).
 
 Schedule tokens (seconds after the colon):
@@ -180,15 +180,11 @@ def main():
         dst = os.path.join(a.inst, "%s.sc3" % a.arm)
         shutil.copyfile(a.city, dst)
         log = open(os.path.join(a.inst, "launch_%s.out" % a.arm), "w")
-        t_launch = time.time()
-        subprocess.Popen([os.path.join(a.inst, "mods_launch.exe"), "-multi", "--", dst], stdout=log, stderr=log, cwd=a.inst)
-        for _ in range(90):
-            time.sleep(1)
-            pid = find_pid(exe, set())
-            if pid:
-                break
-        if not pid:
-            raise SystemExit("game did not start")
+        proc, t_launch = sc3wait.launch_game(a.inst, dst, out=log)
+        pid = proc.pid
+        time.sleep(1)
+        if proc.poll() is not None:
+            raise SystemExit("game did not start (exit %s, see %s)" % (proc.returncode, log.name))
         os.environ["SC3_PID"] = str(pid)
         print("arm %s pid %d" % (a.arm, pid), flush=True)
         with open(os.path.join(a.inst, "pid_%s.txt" % a.arm), "w") as f:

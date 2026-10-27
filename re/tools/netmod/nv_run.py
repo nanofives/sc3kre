@@ -3,12 +3,10 @@ r"""nv_run.py - launch one netvariant test arm on a -multi instance and wait unt
 
   py -3.12 nv_run.py <instance dir> <city.sc3> <arm> [ENV=VAL ...]
 
-Copies the city to <instance>\nv_<arm>.sc3, starts <instance>\mods_launch.exe -multi -- <copy> with the given
-extra environment, reads the pid from the launcher's own "[+] created, pid = N" line, waits 60 s for the
-load, dismisses the tips dialog and prints `PID=<n>`. It only ever touches the pid it started.
+Copies the city to <instance>\nv_<arm>.sc3, starts the tree's Apps\SC3U.exe on that copy (sc3wait.launch_game: SC3MODS_DIR=<instance>, MULTI) with the
+given extra environment, takes the pid from the process it started, waits for the city-up log line, dismisses the tips dialog and prints `PID=<n>`. It only ever touches the pid it started.
 """
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -29,21 +27,14 @@ def main(argv):
         shutil.copyfile(city, dst)
     out = os.path.join(inst, "launch_%s.out" % arm)
     log = open(out, "w")
-    t_launch = time.time()
-    subprocess.Popen([os.path.join(inst, "mods_launch.exe"), "-multi", "--", dst], stdout=log, stderr=log, cwd=inst,
-                     env=env)
-    pid = None
-    for _ in range(60):
-        time.sleep(0.5)
-        m = re.search(r"pid = (\d+)", open(out).read())
-        if m:
-            pid = int(m.group(1))
-            break
-    if not pid:
-        raise SystemExit("launcher printed no pid (%s)" % out)
-    print("arm %s pid %d city %s" % (arm, pid, dst), flush=True)
     sys.path.insert(0, TOOLS)
     import sc3wait
+    proc, t_launch = sc3wait.launch_game(inst, dst, env=env, out=log)
+    pid = proc.pid
+    time.sleep(1)
+    if proc.poll() is not None:
+        raise SystemExit("game did not start (exit %s, see %s)" % (proc.returncode, out))
+    print("arm %s pid %d city %s" % (arm, pid, dst), flush=True)
     sc3wait.wait_city_up(env.get("SC3RESIZE_LOG", os.path.join(inst, "sc3resize.log")), t_launch)
     env["SC3_PID"] = str(pid)
     subprocess.run([sys.executable, os.path.join(TOOLS, "dismiss_tips.py")], env=env)
