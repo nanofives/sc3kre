@@ -1,0 +1,4 @@
+LIBRARY sc3mods
+EXPORTS
+    sc3mods_version @1
+    sc3mods_id DATA

@@ -4,12 +4,14 @@ everything to the server", modelled on TD5RE's td5re-files / td5re_update.ps1).
 
 The folder is a complete, playable SimCity 3000 Unlimited install plus the mods, laid out as a player PC keeps it:
   Apps\                      stock game files (SIMSPR.DLL / GZGraphicD.dll from original\modules: the dev PC's copies
-                             are patched on disk, see STOCK_INSTALL.md) + mods_launch.exe + the mod DLLs + perf.ini +
-                             menu_bg.bmp (ship layout: loader beside SC3U.exe)
+                             are patched on disk, see STOCK_INSTALL.md) + the mod DLLs + sc3mods.dll (the loader) +
+                             perf.ini + menu_bg.bmp. SC3U.exe is the STOCK anchor here; the updater patches the local
+                             copy on each PC to import sc3mods.dll (2026-10-27, replaces the version.dll proxy).
   Cities\ Buildings\ Scripts\ the game's own folders
   mods\netmod\overlay|tables  the installed netpack packages (sc3netmod serves them; nothing under Apps\ is replaced)
   (no launcher file)         the updater creates "SimCity 3000 (mods).lnk" -> Apps\SC3U.exe on each PC
   sc3_update.ps1, update.bat the updater (copies of the files beside this script)
+  sc3mods_patch.ps1          adds the sc3mods.dll import to this PC's SC3U.exe; the updater runs it, -Restore undoes it
   manifest.json              {path, size, sha256, seed}: seed files are downloaded only when missing (per-PC prefs)
 
 Files are hard-linked from the sources when they share a volume (no extra disk), copied otherwise.
@@ -38,13 +40,16 @@ APPS_SKIP = {"sc3u_stkdmp.txt", "sc3portable.ini", "gzgraphicd.dll.shipped", "si
 APPS_STOCK_FROM_ORIGINAL = ["SIMSPR.DLL", "GZGraphicD.dll"]
 # per-PC state the game or a mod writes: shipped once, never overwritten by the updater
 SEED = {"apps/sc3.cfg", "apps/sc3net.cfg", "apps/sc3u.ini",
+        "apps/sc3u.exe",               # 2026-10-27: SC3U.exe is seeded so the updater never overwrites a locally
+                                       # patched exe (sc3_update runs sc3mods_patch.ps1 to add the sc3mods import on
+                                       # each PC). The server copy stays the stock anchor; no modified exe is hosted.
         "cities/europolis 1024.sc3"}   # owner 2026-10-23: the 1024 test city, in the stage source's Cities. Seed so a save over it survives updates
 MOD_BINS = ["sc3resize.dll", "sc3bigcity.dll", "sc3overscroll.dll", "sc3simrun.dll", "sc3perf.dll",
             "sc3netmod.dll", "sc3undo.dll",
-            "version.dll"]   # version.dll = the mod loader (sc3modldr.c). Since 2026-10-25 it loads a built-in list
-            # from its own folder (Apps) on normal SC3U.exe start, so mods_launch.exe is no longer shipped (it was
-            # also ASR-flagged, and version.dll with the entry-point patch was Defender-flagged as Contebrew.A!ml).
-            # "Stock" = rename/remove version.dll, or set SC3MODS_OFF=1. See verify/loader2/RESULTS.md.
+            "sc3mods.dll"]   # sc3mods.dll = the mod loader (sc3mods.c). 2026-10-27: it replaces the version.dll proxy
+            # (flagged Program:Win32/Contebrew.A!ml as a system-DLL-named sideloader). It has its own name and no
+            # forwarders; SC3U.exe loads it because sc3mods_patch.ps1 adds an import for it to the exe (run per PC by
+            # sc3_update). "Stock" = run sc3mods_patch.ps1 -Restore, or set SC3MODS_OFF=1. See verify/importldr/RESULTS.md.
 NETMOD_PARTS = ["overlay", "tables"]          # not ledger.json (dev-PC paths) nor packs (sources, reinstall only)
 
 
@@ -112,8 +117,11 @@ def main():
                 place(os.path.join(r, f), os.path.join(out, rel))
     for f in ("sc3_update.ps1", "update.bat"):
         shutil.copy2(os.path.join(HERE, f), os.path.join(out, f))
-    # No launcher file since 2026-10-26: version.dll loads the mods on a normal start, and sc3_update.ps1 creates a
-    # "SimCity 3000 (mods)" shortcut to this PC's Apps\SC3U.exe (a .lnk holds absolute paths, so it cannot ship).
+    # sc3mods_patch.ps1 (one level up, re/scripts) adds the sc3mods.dll import to this PC's SC3U.exe. sc3_update runs
+    # it after downloading; it also ships so a player can -Restore to stock by hand.
+    shutil.copy2(os.path.join(HERE, "..", "sc3mods_patch.ps1"), os.path.join(out, "sc3mods_patch.ps1"))
+    # No launcher file since 2026-10-26: the mods load on a normal start once SC3U.exe is patched, and sc3_update.ps1
+    # creates a "SimCity 3000 (mods)" shortcut to this PC's Apps\SC3U.exe (a .lnk holds absolute paths, so it cannot ship).
 
     files = []
     for r, _ds, fs in os.walk(out):

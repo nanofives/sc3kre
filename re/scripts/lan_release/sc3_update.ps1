@@ -183,6 +183,29 @@ if (Test-Path -LiteralPath $appsExe) {
         try { Remove-Item -LiteralPath $oldLaunch -Force; Write-Host "  - removed the retired Apps\mods_launch.exe" -ForegroundColor DarkYellow }
         catch { Write-Host "      ! could not remove Apps\mods_launch.exe: $($_.Exception.Message)" -ForegroundColor Red }
     }
+    # remove the old version.dll loader (superseded 2026-10-27 by the sc3mods.dll import), only if it is ours: if it is
+    # still present the patched exe would load it too (SC3U.exe keeps importing the system VERSION.dll), double-loading.
+    $oldVer = Join-Path $InstallRoot 'Apps\version.dll'
+    if (Test-Path -LiteralPath $oldVer) {
+        $vtxt = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($oldVer))
+        if ($vtxt.Contains('sc3modldr ') -or $vtxt.Contains('sc3mods ')) {
+            try { Remove-Item -LiteralPath $oldVer -Force; Write-Host "  - removed the old Apps\version.dll loader (superseded by sc3mods.dll)" -ForegroundColor DarkYellow }
+            catch { Write-Host "      ! could not remove Apps\version.dll: $($_.Exception.Message)" -ForegroundColor Red }
+        }
+    }
+    # patch this PC's SC3U.exe to import sc3mods.dll (idempotent: a no-op if already patched). The server hosts the
+    # stock exe; the mods load only once this local patch is applied.
+    $patcher = Join-Path $InstallRoot 'sc3mods_patch.ps1'
+    if (Test-Path -LiteralPath $patcher) {
+        try {
+            & $patcher -Apps (Join-Path $InstallRoot 'Apps')
+        } catch {
+            Write-Host "      ! sc3mods_patch.ps1 failed: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "        the game will start without mods until SC3U.exe is patched (run sc3mods_patch.ps1)." -ForegroundColor Red
+        }
+    } else {
+        Write-Host "      ! sc3mods_patch.ps1 is missing; cannot enable the mods on this PC." -ForegroundColor Red
+    }
 }
 
 Write-Host ""
