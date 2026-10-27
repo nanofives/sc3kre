@@ -1,0 +1,378 @@
+{
+  "netpack": 1,
+  "name": "road_slope_ends",
+  "version": "1.1.0",
+  "author": "netmod (task slopeend, 2026-10-26)",
+  "description": "Rounded road ends on sloped cells. Stock puts the straight slope piece (11202 / 11201, steep 32 / 31) on every road cell of a legal slope whatever its neighbours hold, so a road that ends on a slope ends with a square cut. This package adds, per slope piece, three ROAD variants per state (0 and 2): the uphill end rounded, the downhill end rounded, both ends rounded (27000..27023; a variant is only ever written at its own state), drawn like the flat dead end 11225. sc3netmod block SLE (road_end_lines) writes them after every road retile and after a city load: road on the downhill side only -> uphill end, uphill side only -> downhill end, neither -> both ends; road on both sides or beside the cell -> the stock piece. Art: built by re/tools/netmod/slopeend_paint.py build <this folder> into art/ (the slope piece's own profile bent round a half circle, frame table from 11225 so the sprite class 0x0672 draws the terrain under the piece (the slope pieces' class 0x059D draws none), anchors moved for that class's altitude rule per state). Saves keep the stock slope piece id.",
+  "game": {
+    "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+  },
+  "variants": [
+    {
+      "id": 27000,
+      "base": 11202,
+      "network": "ROAD",
+      "name": {
+        "*": "Road End (uphill)",
+        "ENGLISH": "Fin de Carretera (cuesta arriba)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27000",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27001,
+      "base": 11202,
+      "network": "ROAD",
+      "name": {
+        "*": "Road End (downhill)",
+        "ENGLISH": "Fin de Carretera (cuesta abajo)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27001",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27002,
+      "base": 11202,
+      "network": "ROAD",
+      "name": {
+        "*": "Road Ends (slope)",
+        "ENGLISH": "Fin de Carretera (pendiente)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27002",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27003,
+      "base": 11202,
+      "network": "ROAD",
+      "name": {
+        "*": "Road End (uphill)",
+        "ENGLISH": "Fin de Carretera (cuesta arriba)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27003",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27004,
+      "base": 11202,
+      "network": "ROAD",
+      "name": {
+        "*": "Road End (downhill)",
+        "ENGLISH": "Fin de Carretera (cuesta abajo)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27004",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27005,
+      "base": 11202,
+      "network": "ROAD",
+      "name": {
+        "*": "Road Ends (slope)",
+        "ENGLISH": "Fin de Carretera (pendiente)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27005",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27006,
+      "base": 11201,
+      "network": "ROAD",
+      "name": {
+        "*": "Road End (uphill)",
+        "ENGLISH": "Fin de Carretera (cuesta arriba)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27006",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27007,
+      "base": 11201,
+      "network": "ROAD",
+      "name": {
+        "*": "Road End (downhill)",
+        "ENGLISH": "Fin de Carretera (cuesta abajo)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27007",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27008,
+      "base": 11201,
+      "network": "ROAD",
+      "name": {
+        "*": "Road Ends (slope)",
+        "ENGLISH": "Fin de Carretera (pendiente)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27008",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27009,
+      "base": 11201,
+      "network": "ROAD",
+      "name": {
+        "*": "Road End (uphill)",
+        "ENGLISH": "Fin de Carretera (cuesta arriba)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27009",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27010,
+      "base": 11201,
+      "network": "ROAD",
+      "name": {
+        "*": "Road End (downhill)",
+        "ENGLISH": "Fin de Carretera (cuesta abajo)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27010",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27011,
+      "base": 11201,
+      "network": "ROAD",
+      "name": {
+        "*": "Road Ends (slope)",
+        "ENGLISH": "Fin de Carretera (pendiente)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27011",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27012,
+      "base": 32,
+      "network": "ROAD",
+      "name": {
+        "*": "Road End (uphill)",
+        "ENGLISH": "Fin de Carretera (cuesta arriba)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27012",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27013,
+      "base": 32,
+      "network": "ROAD",
+      "name": {
+        "*": "Road End (downhill)",
+        "ENGLISH": "Fin de Carretera (cuesta abajo)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27013",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27014,
+      "base": 32,
+      "network": "ROAD",
+      "name": {
+        "*": "Road Ends (slope)",
+        "ENGLISH": "Fin de Carretera (pendiente)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27014",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27015,
+      "base": 32,
+      "network": "ROAD",
+      "name": {
+        "*": "Road End (uphill)",
+        "ENGLISH": "Fin de Carretera (cuesta arriba)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27015",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27016,
+      "base": 32,
+      "network": "ROAD",
+      "name": {
+        "*": "Road End (downhill)",
+        "ENGLISH": "Fin de Carretera (cuesta abajo)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27016",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27017,
+      "base": 32,
+      "network": "ROAD",
+      "name": {
+        "*": "Road Ends (slope)",
+        "ENGLISH": "Fin de Carretera (pendiente)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27017",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27018,
+      "base": 31,
+      "network": "ROAD",
+      "name": {
+        "*": "Road End (uphill)",
+        "ENGLISH": "Fin de Carretera (cuesta arriba)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27018",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27019,
+      "base": 31,
+      "network": "ROAD",
+      "name": {
+        "*": "Road End (downhill)",
+        "ENGLISH": "Fin de Carretera (cuesta abajo)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27019",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27020,
+      "base": 31,
+      "network": "ROAD",
+      "name": {
+        "*": "Road Ends (slope)",
+        "ENGLISH": "Fin de Carretera (pendiente)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27020",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27021,
+      "base": 31,
+      "network": "ROAD",
+      "name": {
+        "*": "Road End (uphill)",
+        "ENGLISH": "Fin de Carretera (cuesta arriba)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27021",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27022,
+      "base": 31,
+      "network": "ROAD",
+      "name": {
+        "*": "Road End (downhill)",
+        "ENGLISH": "Fin de Carretera (cuesta abajo)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27022",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    },
+    {
+      "id": 27023,
+      "base": 31,
+      "network": "ROAD",
+      "name": {
+        "*": "Road Ends (slope)",
+        "ENGLISH": "Fin de Carretera (pendiente)"
+      },
+      "art": {
+        "from": 11225,
+        "png_dir": "art/27023",
+        "ground_under": true
+      },
+      "trblkatt": "copy_base"
+    }
+  ],
+  "road_end_lines": [
+    "sle 11202 27000 27001 27002 27003 27004 27005",
+    "sle 11201 27006 27007 27008 27009 27010 27011",
+    "sle 32 27012 27013 27014 27015 27016 27017",
+    "sle 31 27018 27019 27020 27021 27022 27023"
+  ]
+}

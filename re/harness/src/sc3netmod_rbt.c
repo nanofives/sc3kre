@@ -128,6 +128,11 @@ static void avf_pass(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who)
 static void avf_sweep_step(void);                                                  /* task avflow */
 static void avl_stats(void);                                                 /* task avcore */
 static void hwave_stats(void);                                               /* task hwave */
+static void sle_line(const char *path, const char *line);                    /* task slopeend: SLE block */
+static void sle_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who);  /* task slopeend */
+static void sle_install(void);                                               /* task slopeend */
+static void sle_stats(void);                                                 /* task slopeend */
+static int g_sle_n, g_sle_on;                                                /* task slopeend */
 
 /* ---------------------------------------------------------------- table line */
 static void rb_file(const char *path) {
@@ -157,6 +162,7 @@ static void rb_file(const char *path) {
         if (!strncmp(line, "hwave ", 6)) { hwave_line(path, line); continue; } /* task hwave */
         if (!strncmp(line, "hwavd ", 6)) { hwavd_line(path, line); continue; } /* task hwave */
         if (!strncmp(line, "hwavs ", 6)) { hwavs_line(path, line); continue; } /* task avmisc */
+        if (!strncmp(line, "sle ", 4)) { sle_line(path, line); continue; }      /* task slopeend */
         if (!strncmp(line, "hwrc ", 5)) continue;                            /* task hwave: read by NETRAMP */
         if (!strncmp(line, "hwy", 3)) { hwy_line(path, line); continue; }  /* task hwcore */
         if (strncmp(line, "rbt ", 4) || g_rb_off) continue;
@@ -385,6 +391,7 @@ static void __fastcall rb_pass(BYTE *mgr, void *edx, DWORD list, int net, int *b
         if (g_bv_p[0]) bv_run(mgr, x0, z0, x1, z1, "edit");                  /* task boulevard */
         if (g_r9_centre) r9_run(mgr, x0, z0, x1, z1, "edit");                /* task bigrbt */
         if (g_hwy_np) hwave_road(mgr, x0, z0, x1, z1, "road", 0);            /* task hwave: after DAV, builds */
+        if (g_sle_on) sle_run(mgr, x0 - 1, z0 - 1, x1 + 1, z1 + 1, "edit");     /* task slopeend */
         if (g_avl_on) avl_pass(mgr, x0, z0, x1, z1, "edit");                 /* task avcore: last (+ its post hooks) */
         avf_pass(mgr, x0 - 3, z0 - 3, x1 + 3, z1 + 3, "edit");                /* task avflow: class grid, after all writers */
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -409,6 +416,7 @@ static void rb_load_pass(void) {
         if (g_bv_p[0]) bv_run(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");        /* task boulevard */
         if (g_r9_centre) r9_run(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");      /* task bigrbt */
         if (g_hwy_np) rb_hwy(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");         /* task hwcore */
+        if (g_sle_on) sle_run(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");            /* task slopeend */
         if (g_avl_on) avl_pass(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");       /* task avcore: last (+ its post hooks) */
         avf_pass(mgr, 0, 0, 0x7fffff, 0x7fffff, "load");                     /* task avflow: class grid, after all writers */
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -500,9 +508,10 @@ static int rbt_install(BYTE *m) {
     if (g_bvx_nbox && env_off("SC3NETMOD_BVX")) { g_bvx_nbox = 0; logf("bvx: off (SC3NETMOD_BVX=0)"); }   /* task bvx */
     if (g_dbv_out && env_off("SC3NETMOD_DBV")) { g_dbv_out = 0; logf("dbv: off (SC3NETMOD_DBV=0)"); }  /* task diagbv */
     hwy_install();                                                                                  /* task hwcore */
+    sle_install();                                                                                  /* task slopeend */
     if (g_avl_straight && env_off("SC3NETMOD_AVL")) { g_avl_straight = 0; logf("avl: off (SC3NETMOD_AVL=0)"); }   /* task avcore */
     if (!g_rb_piece && !g_dav_inner[0] && !g_avx_nbox && !g_bv_p[0] && !g_r9_centre && !g_dbv_out && !g_hwy_np &&
-        !g_avl_straight)                                                                            /* task avcore */
+        !g_avl_straight && !g_sle_n)                                                                /* task avcore, slopeend */
         return 0;                                    /* avx, boulevard, bigrbt, diagbv, hwcore (bvx runs in BV) */
     g_rb_m = m;
     g_rb_msize = nt->OptionalHeader.SizeOfImage;
@@ -512,6 +521,7 @@ static int rbt_install(BYTE *m) {
         g_rb_piece = 0; g_dav_inner[0] = 0; g_avx_nbox = 0; g_bv_p[0] = 0; g_r9_centre = 0;   /* avx, boulevard, bigrbt */
         g_hwy_np = 0;                                                                         /* task hwcore */
         g_avl_straight = 0;                                                                   /* task avcore */
+        g_sle_n = 0;                                                                          /* task slopeend */
         return 0;
     }
     g_rb_stock = (BYTE *)VirtualAlloc(NULL, 1024 * 1024, MEM_COMMIT, PAGE_READWRITE);
@@ -524,6 +534,7 @@ static int rbt_install(BYTE *m) {
         g_rb_piece = 0; g_dav_inner[0] = 0; g_avx_nbox = 0; g_bv_p[0] = 0; g_r9_centre = 0;   /* avx, boulevard, bigrbt */
         g_hwy_np = 0;                                                                         /* task hwcore */
         g_avl_straight = 0;                                                                   /* task avcore */
+        g_sle_n = 0;                                                                          /* task slopeend */
         return 0;
     }
     g_rb_on = 1;
@@ -531,6 +542,7 @@ static int rbt_install(BYTE *m) {
     if (g_avx_nbox) { g_avx_on = 1; logf("avx: avenue junctions on, %d box piece(s)", g_avx_nbox); }   /* task avx */
     if (g_r9_centre) logf("rbt9: automatic 3x3 roundabouts on (centre piece %u)", g_r9_centre);   /* task bigrbt */
     if (g_dbv_out) { g_dbv_on = 1; logf("dbv: diagonal boulevards on"); }                           /* task diagbv */
+    if (g_sle_n) { g_sle_on = 1; logf("sle: road slope ends on, %d slope piece(s)", g_sle_n); }   /* task slopeend */
     if (g_avl_straight) { g_avl_on = 1; logf("avl: one-way avenue halves on (straight %u)", g_avl_straight); }   /* task avcore */
     logf("rbt: hooked the retile pass FUN_1001547b (entry) and the city load (manager vt+0x1c); piece %u, min %d arm(s), "
          "arm-less quarter %u; diagonal avenues %s (inner %u %u %u)", g_rb_piece, g_rb_min, g_rb_closed,
@@ -560,6 +572,7 @@ static void rbt_stats(void) {
     hwave_stats();                                                           /* task hwave */
     hwask_stats();                                                           /* task hwask */
     avl_stats();                                                             /* task avcore */
+    sle_stats();                                                             /* task slopeend */
     LONG n = g_rb_n_pass + g_rb_n_conv + g_rb_n_rev + g_rb_n_load + g_rb_n_fault;
     if (!g_rb_on || n == last) return;
     last = n;
