@@ -6937,6 +6937,7 @@ static void mn_after(BYTE *nat, BYTE dirty) {
 }
 
 static int  g_vd_on = 1;                     /* VERDATOS (below) rides on this draw hook */
+static int  g_vd_panelonly = 1;              /* VDPANELONLY: only map views inside a Ver datos panel (see vd_after) */
 static void vd_after(BYTE *nat, BYTE dirty);  /* fwd */
 static DWORD __fastcall mn_draw(void *self, void *edx) {
     BYTE dirty = 0;
@@ -7185,6 +7186,18 @@ static void vd_after(BYTE *nat, BYTE dirty) {
             if (!g_hd_plbl[k] && g_hd[g_hd_pslot[k]].win == p) { d = &g_hd[g_hd_pslot[k]]; break; }
     }
     if (!d || d->w <= 0 || d->dw <= d->w) return;
+    /* VDPANELONLY (owner report 2026-10-27, "Mapa de vecinos" all grey with VERDATOS): only a map view inside a PANEL
+     * of its dialog is taken. Measured window chains (SIMUI vtable offsets, Craterville, 2560x1351, HUD 2.25x):
+     *   Ver datos:       map view A7E68 < panel A4D64 < dialog A4D64      (dialog found 2 levels up)
+     *   Mapa de vecinos: map view A7E68 < dialog A4D64                    (dialog found 1 level up)
+     * The neighbours map view draws the whole region's terrain; VERDATOS's twin (a Clone of the view) drew it flat grey,
+     * and only the label boxes kept the game's pixels. Not taken, that map is the game's own picture enlarged again, as
+     * with VERDATOS off. SC3RESIZE_VDPANELONLY=0 takes every map view as before. */
+    if (g < 2 && g_vd_panelonly) {
+        static BYTE *told;
+        if (told != nat) { told = nat; logf("VERDATOS> map view 0x%08lX sits directly in its dialog (not a Ver datos panel) - not taken", (DWORD)nat); }
+        return;
+    }
     r[0] = n[9]; r[1] = n[10]; r[2] = n[11]; r[3] = n[12];
     mw = r[2] - r[0]; mh = r[3] - r[1];
     if (mw < 64 || mh < 64 || r[0] < d->nat[0] || r[1] < d->nat[1] || r[2] > d->nat[2] || r[3] > d->nat[3]) {
@@ -15427,6 +15440,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_OPEN", v, sizeof(v))) g_ms_open = atoi(v); /* task uiaudit */
           if (GetEnvironmentVariableA("SC3RESIZE_MENUMASK", v, sizeof(v))) g_menumask = atoi(v);    /* child menumask */
           if (GetEnvironmentVariableA("SC3RESIZE_VERDATOS_NATIVE", v, sizeof(v))) g_vd_on = atoi(v);  /* task verdatos */
+          if (GetEnvironmentVariableA("SC3RESIZE_VDPANELONLY", v, sizeof(v))) g_vd_panelonly = atoi(v);  /* owner report 2026-10-27 */
           if (GetEnvironmentVariableA("SC3RESIZE_VERDATOS_TEX", v, sizeof(v))) g_vd_tex = atoi(v);    /* task verdatos */
           if (GetEnvironmentVariableA("SC3RESIZE_VDSCROLL", v, sizeof(v))) g_vdscroll = atoi(v);      /* child vdscroll */
           if (GetEnvironmentVariableA("SC3RESIZE_VDSCROLL_SETTLE", v, sizeof(v))) g_vd_settle = (DWORD)atoi(v);
