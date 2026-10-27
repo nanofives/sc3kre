@@ -28,7 +28,7 @@
 
 /* The shipped mods, load order (sc3resize first: it registers the GZGraphicD loader notification the others rely on). */
 static const char k_default_list[] =
-    "sc3resize.dll;sc3bigcity.dll;sc3overscroll.dll;sc3simrun.dll;sc3perf.dll;sc3netmod.dll;sc3undo.dll";
+    "sc3resize.dll;sc3bigcity.dll;sc3overscroll.dll;sc3simrun.dll;sc3perf.dll;sc3netmod.dll;sc3undo.dll;sc3autosave.dll";
 
 /* Marker so the patcher and file searches can tell the DLL is ours. */
 const char sc3mods_id[] = "sc3mods 1 (2026-10-27, exe import)";

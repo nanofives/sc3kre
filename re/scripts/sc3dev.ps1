@@ -45,7 +45,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 # The built-in list in sc3mods.c (load order). sc3mods itself goes to tree\Apps.
-$AllMods = 'sc3resize', 'sc3bigcity', 'sc3overscroll', 'sc3simrun', 'sc3perf', 'sc3netmod', 'sc3undo'
+$AllMods = 'sc3resize', 'sc3bigcity', 'sc3overscroll', 'sc3simrun', 'sc3perf', 'sc3netmod', 'sc3undo', 'sc3autosave'
 
 # Works from main or from any worktree: the common .git dir sits in main.
 $Main = Split-Path (git -C $PSScriptRoot rev-parse --path-format=absolute --git-common-dir)

@@ -45,7 +45,7 @@ SEED = {"apps/sc3.cfg", "apps/sc3net.cfg", "apps/sc3u.ini",
                                        # each PC). The server copy stays the stock anchor; no modified exe is hosted.
         "cities/europolis 1024.sc3"}   # owner 2026-10-23: the 1024 test city, in the stage source's Cities. Seed so a save over it survives updates
 MOD_BINS = ["sc3resize.dll", "sc3bigcity.dll", "sc3overscroll.dll", "sc3simrun.dll", "sc3perf.dll",
-            "sc3netmod.dll", "sc3undo.dll",
+            "sc3netmod.dll", "sc3undo.dll", "sc3autosave.dll",
             "sc3mods.dll"]   # sc3mods.dll = the mod loader (sc3mods.c). 2026-10-27: it replaces the version.dll proxy
             # (flagged Program:Win32/Contebrew.A!ml as a system-DLL-named sideloader). It has its own name and no
             # forwarders; SC3U.exe loads it because sc3mods_patch.ps1 adds an import for it to the exe (run per PC by
