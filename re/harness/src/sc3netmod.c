@@ -50,6 +50,7 @@ etmod\cross\*.txt. SC3NETMOD_INHERIT=0 / SC3NETMOD_XCROSS=0 turn them off.
  */
 
 #include <windows.h>
+#include "sc3mods_guard.h"
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
@@ -1443,6 +1444,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     (void)reserved;
     if (reason == DLL_PROCESS_ATTACH) {
         char path[MAX_PATH];
+        if (!sc3mods_guard(inst, "sc3netmod")) return TRUE;   /* not our loader: stay inert (sc3mods_guard.h) */
         g_self = (HMODULE)inst;
         DisableThreadLibraryCalls(inst);
         InitializeCriticalSection(&g_lock);

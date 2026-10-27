@@ -109,6 +109,7 @@
  * startup (SC3PERF_OVERLAY, SC3PERF_BUSY_SHOW, SC3PERF_PROFILE, ...); SC3PERF_LOG=<path> (default sc3perf.log beside the DLL).
  */
 #include <windows.h>
+#include "sc3mods_guard.h"
 #include <tlhelp32.h>
 #include <stdio.h>
 #include <string.h>
@@ -3363,6 +3364,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID r) {
     (void)r;
     if (reason == DLL_PROCESS_ATTACH) {
         char path[MAX_PATH], *sl;
+        if (!sc3mods_guard(inst, "sc3perf")) return TRUE;   /* not our loader: stay inert (sc3mods_guard.h) */
         g_self = inst;
         DisableThreadLibraryCalls(inst);
         QueryPerformanceFrequency(&g_qf);

@@ -25,6 +25,7 @@
  * Build:  re/harness/build_undo.ps1. Ships via mods_launch.exe.
  */
 #include <windows.h>
+#include "sc3mods_guard.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -1522,6 +1523,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     (void)reserved;
     if (reason == DLL_PROCESS_ATTACH) {
         char path[MAX_PATH];
+        if (!sc3mods_guard(inst, "sc3undo")) return TRUE;   /* not our loader: stay inert (sc3mods_guard.h) */
         g_self = (HMODULE)inst;
         DisableThreadLibraryCalls(inst);
         InitializeCriticalSection(&g_lock);

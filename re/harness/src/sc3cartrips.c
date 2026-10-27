@@ -35,6 +35,7 @@
  */
 
 #include <windows.h>
+#include "sc3mods_guard.h"
 #include <tlhelp32.h>
 #include <intrin.h>
 #include <stdio.h>
@@ -1036,6 +1037,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     (void)reserved;
     if (reason == DLL_PROCESS_ATTACH) {
         char path[MAX_PATH];
+        if (!sc3mods_guard(inst, "sc3cartrips")) return TRUE;   /* not our loader: stay inert (sc3mods_guard.h) */
         g_self = (HMODULE)inst;
         DisableThreadLibraryCalls(inst);
         InitializeCriticalSection(&g_lock);

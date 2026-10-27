@@ -177,6 +177,10 @@ static void unique_mutex(void) {
     logf("[+] -multi: mutex renamed to \"%s\"", g_mutex_name);
 }
 
+/* Nonzero only on the thread inside load_mods' loop: the mods' DllMain asks this (sc3mods_guard.h, 2026-10-27). */
+static volatile DWORD g_loading_tid;
+int __stdcall sc3mods_loading(void) { return g_loading_tid && g_loading_tid == GetCurrentThreadId(); }
+
 /* Loaded straight from DllMain (loader lock held). No exe patch, no VirtualProtect on .text. */
 static void load_mods(void) {
     char list[1024], path[MAX_PATH];
@@ -185,6 +189,7 @@ static void load_mods(void) {
     lstrcpynA(list, g_list, sizeof(list));
     logf("mod-load start from %s (GZGraphicD loaded now? %s)", g_dir,
          GetModuleHandleA("GZGraphicD.dll") ? "YES - too late for sc3resize EARLY" : "no");
+    g_loading_tid = GetCurrentThreadId();
     for (p = list; p && *p; p = next) {
         HMODULE m;
         next = strchr(p, ';');
@@ -196,6 +201,7 @@ static void load_mods(void) {
         logf("[+] loaded %s (HMODULE 0x%08lX)", p, (DWORD)m);
         n++;
     }
+    g_loading_tid = 0;
     logf("[+] %d mod(s) loaded (no exe patch, no VirtualProtect on .text)", n);
 }
 

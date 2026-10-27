@@ -36,6 +36,11 @@ const char sc3mods_id[] = "sc3mods 1 (2026-10-27, exe import)";
 /* The one function the patched exe imports. The game never calls it; the import is what makes the loader map this DLL. */
 int __stdcall sc3mods_version(void) { return 1; }
 
+/* Nonzero only on the thread inside load_mods' LoadLibrary loop. Each mod's DllMain asks this (sc3mods_guard.h) and
+ * stays inert otherwise, so the game's own *.dll component scan cannot start a mod. */
+static volatile DWORD g_loading_tid;
+int __stdcall sc3mods_loading(void) { return g_loading_tid && g_loading_tid == GetCurrentThreadId(); }
+
 static char g_dir[MAX_PATH];
 static char g_list[1024];
 static char g_log[MAX_PATH];
@@ -104,6 +109,7 @@ static void load_mods(LPVOID res) {
              "stock. Run sc3mods_patch.ps1 in the game folder.");
         return;
     }
+    g_loading_tid = GetCurrentThreadId();
     for (p = list; p && *p; p = next) {
         HMODULE m;
         next = strchr(p, ';');
@@ -115,6 +121,7 @@ static void load_mods(LPVOID res) {
         logf("[+] loaded %s (HMODULE 0x%08lX)", p, (DWORD)m);
         n++;
     }
+    g_loading_tid = 0;
     logf("[+] %d mod(s) loaded", n);
 }
 
