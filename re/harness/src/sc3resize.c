@@ -8952,6 +8952,11 @@ static void qi_install(HMODULE sui) {
  * foreground: the game then presents white/black (verify/menucrop). */
 static char  g_fd_prefix[MAX_PATH];
 static DWORD g_fd_t, g_fd_n;
+/* burst (diag, child nativetext 2026-10-26): req "<tag> <N> [x0 y0 x1 y1]" dumps the next N presents in a row as
+   <tag>_00.. (no 50 ms gap), cropped to the client rect given (default the whole frame). */
+static int   g_fd_burst, g_fd_bi;
+static char  g_fd_btag[48];
+static RECT  g_fd_bcrop;
 /* SC3RESIZE_FRAMEDUMP_VIEW=1 (diag, task zoomband 2026-10-26): each dump also writes the whole city render target
  * iso+0x74 to <prefix><tag>_view.bmp, slack rows included, so the rows under the HUD bar can be seen. */
 static int   g_fd_view;
@@ -9003,26 +9008,54 @@ static void rz_fd_maybe(void *self, const RECT *dr, void *src, const RECT *sr) {
     BYTE *bits, *row;
     BITMAPFILEHEADER bf;
     BITMAPINFOHEADER bi;
-    if (rz_hs_is_screen(self) != 1 || GetTickCount() - g_fd_t < 50) return;   /* only Blts onto the primary count */
+    RECT crop;
+    if (rz_hs_is_screen(self) != 1 || (!g_fd_burst && GetTickCount() - g_fd_t < 50)) return;   /* only Blts onto the primary count */
     g_fd_t = GetTickCount();
-    wsprintfA(req, "%sreq", g_fd_prefix);
-    if (GetFileAttributesA(req) == INVALID_FILE_ATTRIBUTES || !GetClientRect(g_hwnd, &cr)) return;
+    if (!GetClientRect(g_hwnd, &cr)) return;
     part = dr->right - dr->left < cr.right || dr->bottom - dr->top < cr.bottom;
-    tag[0] = 0;
-    f = CreateFileA(req, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
-    if (f != INVALID_HANDLE_VALUE) {
-        if (ReadFile(f, tag, sizeof(tag) - 1, &rd, NULL)) tag[rd] = 0;
-        CloseHandle(f);
+    if (g_fd_burst) {
+        if (part) return;
+        wsprintfA(tag, "%s_%02d", g_fd_btag, g_fd_bi++);
+        g_fd_burst--;
+    } else {
+        wsprintfA(req, "%sreq", g_fd_prefix);
+        if (GetFileAttributesA(req) == INVALID_FILE_ATTRIBUTES) return;
+        tag[0] = 0;
+        f = CreateFileA(req, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+        if (f != INVALID_HANDLE_VALUE) {
+            if (ReadFile(f, tag, sizeof(tag) - 1, &rd, NULL)) tag[rd] = 0;
+            CloseHandle(f);
+        }
+        for (x = 0; tag[x]; x++) if (tag[x] == '\r' || tag[x] == '\n') { tag[x] = 0; break; }
+        for (x = 0; tag[x] && tag[x] != ' '; x++) ;
+        if (tag[x] == ' ' && !part) {   /* a burst: "<tag> <N> [x0 y0 x1 y1]" */
+            const char *q = tag + x + 1;
+            LONG nv[5] = {0, 0, 0, 0, 0};
+            int ni;
+            tag[x] = 0;
+            for (ni = 0; ni < 5 && *q; ni++) {
+                while (*q == ' ') q++;
+                while (*q >= '0' && *q <= '9') nv[ni] = nv[ni] * 10 + (*q++ - '0');
+            }
+            lstrcpynA(g_fd_btag, tag, sizeof(g_fd_btag));
+            SetRect(&g_fd_bcrop, nv[1], nv[2], nv[3], nv[4]);
+            g_fd_bi = 0; g_fd_burst = nv[0] > 1 ? nv[0] - 1 : 0;
+            wsprintfA(tag, "%s_%02d", g_fd_btag, g_fd_bi++);
+        } else SetRect(&g_fd_bcrop, 0, 0, 0, 0);
+        if (!tag[0]) wsprintfA(tag, "%03lu", g_fd_n);
+        DeleteFileA(req);
     }
-    for (x = 0; tag[x]; x++) if (tag[x] == '\r' || tag[x] == '\n') { tag[x] = 0; break; }
-    if (!tag[0]) wsprintfA(tag, "%03lu", g_fd_n);
     g_fd_n++;
-    DeleteFileA(req);
     bits = rz_hs_lock(src, &pitch, &bpp, &gmask, &sw, &sh);
     if (bits && part) {   /* a partial present: the source surface's client-sized area from (0,0), HUD as drawn natively */
         if (sw < cr.right || sh < cr.bottom) { logf("FRAMEDUMP> %s: partial present from a %ldx%ld surface, not dumped", tag, sw, sh);
             ((RZ_UNLOCK)(*(DWORD **)src)[0x80 / 4])(src, NULL); return; }
         all.left = 0; all.top = 0; all.right = cr.right; all.bottom = cr.bottom; sr = &all;
+    }
+    if (!part && g_fd_bcrop.right > g_fd_bcrop.left && g_fd_bcrop.bottom > g_fd_bcrop.top) {   /* burst crop (client coords) */
+        crop.left = sr->left + g_fd_bcrop.left; crop.top = sr->top + g_fd_bcrop.top;
+        crop.right = min(sr->left + g_fd_bcrop.right, sr->right); crop.bottom = min(sr->top + g_fd_bcrop.bottom, sr->bottom);
+        sr = &crop;
     }
     w = sr->right - sr->left; h = sr->bottom - sr->top;
     if (!bits) { logf("FRAMEDUMP> %s: lock failed", tag); return; }
@@ -15403,6 +15436,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           GetEnvironmentVariableA("SC3RESIZE_NATIVETEXT_CTL", g_nt_ctl, sizeof(g_nt_ctl));
           if (GetEnvironmentVariableA("SC3RESIZE_NATIVETEXT_PHASE", v, sizeof(v))) g_nt_phase = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_NATIVETEXT_RCI", v, sizeof(v))) g_nt_rci = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_NATIVETEXT_FLICK", v, sizeof(v))) g_nt_flick = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_WINMEM", v, sizeof(v))) g_winmem = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_WINPRIMARY", v, sizeof(v))) g_winprimary = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_RESROW", v, sizeof(v))) g_resrow = atoi(v);
