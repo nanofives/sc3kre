@@ -69,6 +69,7 @@ def main(argv):
     (out / "pid.txt").write_text(str(pid))
     print(f"[0/9] launch pid {pid} env {a.env} OK", flush=True)
     import sc3io, vdscroll_io as vdio  # noqa: E402
+    import sc3wait  # noqa: E402
     vdio.FD = fd
     log, perf = out / "resize.log", out / "perf.log"
     t0 = time.time()
@@ -83,12 +84,16 @@ def main(argv):
     time.sleep(5)
     h = sc3io.game_hwnd()
     vdio.moveto(h, 60, 60); time.sleep(1)
+    n_rz = len(log.read_text(errors="replace")) if log.exists() else 0
     if a.max:
         print("maximized client", sc3io.maximize_without_focus(h), flush=True)
     else:
         w, hh = (int(v) for v in a.size.split("x"))
         print("client", vdio.resize(h, w, hh), flush=True)
-    time.sleep(6)
+    if a.stock:
+        time.sleep(6)                                   # mods off: no resize log to wait on
+    else:
+        sc3wait.wait_layout(log, n_rz, timeout=60)      # was a blind 6 s
     _, _, cw, ch = sc3io.client_rect_on_screen(h)
     # unpause (cities start paused); PAUSEKEY logs the depth change
     for _ in range(0 if a.paused else 3):

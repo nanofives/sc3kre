@@ -88,6 +88,12 @@ Prune at the end of every round. By 2026-10-27 the old layout had left 130 merge
 The LAN release stages into `MAIN\stage\release` (`re/scripts/lan_release/deploy_lan_release.sh` default), which is
 also the base for new trees. A re-stage makes new files: existing trees keep the build they were linked from.
 
+The stage SOURCE (`stage_lan_release.py --game`: the tree with the installed packages, `mods\netmod\ledger.json` and
+`packs\`) lives in `MAIN\stage\src`, never in `dev\`. Package art (`png_dir`, `anchors.json`) is gitignored, so
+`git status` calls a worktree clean while it holds the only copy. `sc3dev remove` refuses a worktree with ignored files
+under `re/tools/netmod/examples`, a tree with a netpack ledger, or a child folder with a `KEEP` file. Copy art you
+want kept into the stage source's `packs\` (via `netpack.py install`) before the merge.
+
 ## 7. Round brief template
 
 ```

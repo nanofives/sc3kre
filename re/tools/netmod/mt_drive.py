@@ -111,10 +111,16 @@ def main(argv):
         sc3io.move(v.h, *px)
         time.sleep(0.8)
         sc3io.click(v.h, *px)
-        time.sleep(2.5)
-        for l in log_tail(log, n0):
-            if "PLACED" in l or "REFUSED" in l or "before any" in l:
-                print(l, flush=True)
+        # was a blind 2.5 s: return the moment the mod logs its verdict, keep a cap (now 6 s) and stay
+        # silent on a miss exactly as before
+        t_end = time.time() + 6.0
+        while True:
+            hits = [l for l in log_tail(log, n0) if "PLACED" in l or "REFUSED" in l or "before any" in l]
+            if hits or time.time() >= t_end:
+                break
+            time.sleep(0.1)
+        for l in hits:
+            print(l, flush=True)
     elif what == "road":
         a = tuple(map(int, argv[4].split(",")))
         b = tuple(map(int, argv[5].split(",")))

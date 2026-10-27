@@ -40,7 +40,7 @@ $outdir = Join-Path $repo "re\harness\test_logs"
 # and cannot be graded unattended. 'windowed-movie' is kept as an opt-in INTERACTIVE
 # scenario for exactly that reason.
 $scenarios = [ordered]@{
-  "windowed-nointro"    = "-nocom -windowed -origin -fix16 -fitclient -nointro"  # the render test
+  "windowed-nointro"    = "-nocom -windowed -origin -fix16 -fitclient -nointro -gzseq `"dump@9`""  # the render test; the dump step ends the run early (GZSEQ: COMPLETE)
   "fullscreen-nointro"  = "-nocom -nointro"                                       # opt-in, takes the display
   "windowed-movie"      = "-nocom -windowed -origin -fix16 -fitclient"            # opt-in, INTERACTIVE (skip the movie by hand)
 }
@@ -94,8 +94,28 @@ foreach ($s in $selected) {
     $args = "$switches -gzlog `"$gz`" -kill $Kill -log `"$log`""
     Write-Host ("  run {0}/{1} ..." -f $i, $Runs) -NoNewline
     $so = Join-Path $outdir ("{0}_{1}_run{2}.stdout" -f $s, $stamp, $i)
-    Start-Process -FilePath $launch -ArgumentList $args -Wait -NoNewWindow `
-        -RedirectStandardOutput $so | Out-Null
+    # -kill $Kill stays the cap. 2026-10-27: do not always sit out the whole cap: poll our own log for
+    # the probe's '### GZSEQ: COMPLETE' (what capture.ps1 waits on) and stop our launcher and its game
+    # as soon as it shows. Scenarios without -gzseq never log it and so run to the cap as before.
+    $lp = Start-Process -FilePath $launch -ArgumentList $args -PassThru -NoNewWindow `
+        -RedirectStandardOutput $so
+    $t0 = Get-Date
+    while (-not $lp.HasExited) {
+        Start-Sleep -Milliseconds 400
+        if ((Test-Path $log) -and (Select-String -Path $log -Pattern '### GZSEQ: COMPLETE' -Quiet -EA SilentlyContinue)) {
+            Start-Sleep -Milliseconds 1500      # let the probe flush its post-sequence report block
+            Get-CimInstance Win32_Process -Filter "ParentProcessId=$($lp.Id)" -EA SilentlyContinue |
+                ForEach-Object { Stop-Process -Id $_.ProcessId -Force -EA SilentlyContinue }
+            Stop-Process -Id $lp.Id -Force -EA SilentlyContinue
+            Write-Host (" (GZSEQ complete after {0:N1}s)" -f ((Get-Date) - $t0).TotalSeconds) -NoNewline
+            break
+        }
+        if (((Get-Date) - $t0).TotalSeconds -gt ($Kill + 30)) {   # launcher should have killed at $Kill
+            Stop-Process -Id $lp.Id -Force -EA SilentlyContinue
+            Write-Host " (launcher overran the cap)" -NoNewline -ForegroundColor Red
+            break
+        }
+    }
     $out = (& python $check $log 2>&1 | Out-String)
     $verdict = "?"
     if ($out -match ": (PASS|FAIL|HARNESS-FAIL) ===") { $verdict = $Matches[1] }

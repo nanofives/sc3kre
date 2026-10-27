@@ -3,8 +3,8 @@ r"""np_arm.py - one newpiece test arm: launch, draw the two pre-registered roads
 
   py -3.12 np_arm.py <tree> <arm> [--city <src.sc3>] [--no-draw] [--keep]
 
-<tree>\re\harness\inst_newpiece holds mods_launch.exe + sc3resize.dll. The city is copied to <inst>\roadless_<arm>.sc3
-and launched with -multi; this script only ever touches the pid it started. The window is moved to the 100 % monitor
+<tree>\re\harness\inst_newpiece holds the mod DLLs (sc3resize.dll...). The city is copied to <inst>\roadless_<arm>.sc3
+and launched through sc3wait.launch_game (SC3U.exe + SC3MODS_DIR/MULTI); this script only ever touches the pid it started. The window is moved to the 100 % monitor
 DISPLAY2 so game, input and dump coordinates coincide (grabs of this machine's 125 % monitors came back white on
 2026-10-12; frames come from sc3resize's in-process DUMP instead, np_drive.py shot).
 
@@ -57,21 +57,18 @@ def main(argv):
     if p0:
         raise SystemExit("a game from this tree is already running (pid %d); stop it first" % p0)
     log = open(os.path.join(inst, "launch_%s.out" % arm), "w")
-    subprocess.Popen([os.path.join(inst, "mods_launch.exe"), "-multi", "--", dst], stdout=log, stderr=log, cwd=inst)
-    pid = None
-    for _ in range(60):
-        time.sleep(1)
-        pid = find_pid(exe, before)
-        if pid:
-            break
-    if not pid:
-        raise SystemExit("game did not start")
+    sys.path.insert(0, os.path.join(REPO, "re", "tools"))
+    import sc3wait
+    proc, t_launch = sc3wait.launch_game(inst, dst, out=log, tree=tree)
+    pid = proc.pid
+    time.sleep(1)
+    if proc.poll() is not None:
+        raise SystemExit("game did not start (exit %s, see %s)" % (proc.returncode, log.name))
     print("arm %s pid %d" % (arm, pid))
     os.environ["SC3_PID"] = str(pid)
-    sys.path.insert(0, os.path.join(REPO, "re", "tools"))
     import sc3io
     import ctypes
-    time.sleep(60)
+    sc3wait.wait_city_up(os.environ.get("SC3RESIZE_LOG", os.path.join(inst, "sc3resize.log")), t_launch)
     h = sc3io.game_hwnd()
     ctypes.windll.user32.SetWindowPos(h, 0, 2700, 60, 0, 0, 0x0001 | 0x0004 | 0x0010)
     time.sleep(2)
@@ -88,8 +85,9 @@ def main(argv):
         drive("drag", "300,240", "180,300")
         time.sleep(1.5)
         drive("shot", os.path.join(vdir, "%s_04_roads.png" % arm))
+        t_save = time.time()
         drive("cmd", "0x10009002")
-        time.sleep(12)
+        sc3wait.wait_file_saved(dst, t_save)
         shutil.copyfile(dst, os.path.join(inst, "%s_after.sc3" % arm))
         print("saved copy -> %s" % os.path.join(inst, "%s_after.sc3" % arm))
     print("pid %d left running" % pid)

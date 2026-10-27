@@ -10,7 +10,9 @@ This file points at them and does not restate them.
 
 ## Current state, 2026-10-23 (read this first)
 
-**Latest published release: `sc3mods-2026-10-27c`** (target `f9bfc29`: mods inert unless sc3mods.dll loads them, so an
+**Latest published release: `sc3mods-2026-10-27d`** (target `f151258`: AUDIO.DLL divide-by-zero guard past the edge with an
+underground view, no sc3autosave; `verify/mods_release_1027d/RESULTS.md`, stage source now `stage\src`). Before it:
+`sc3mods-2026-10-27c` (target `f9bfc29`, superseded: mods inert unless sc3mods.dll loads them, so an
 unpatched exe starts stock instead of closing; `verify/mods_release_1027c/RESULTS.md`). Before it: `sc3mods-2026-10-27b`
 (target `c2149d8`, superseded: new mod loader `sc3mods.dll` imported by a per-PC
 `sc3mods_patch.ps1` exe patch, because Defender quarantined the 10-27 `version.dll` as Contebrew.A!ml;
@@ -74,12 +76,16 @@ answer, noinject `version.dll` for dev `MAIN\Apps`, roundabout island and zoom-3
 netvariant/netramp/multitile/artkit defaults.
 
 **Traps to know before shipping:**
-- Package art is gitignored. Packages reach the release only through the stage source `Simcity_stock_avint` (install
-  from the worktree that built the art, e.g. `Simcity_wt_avint`), then stage + deploy. Rebuilding binaries alone does
-  not pick up package changes since the last republish.
+- Package art is gitignored. Packages reach the release only through the stage source `stage\src` (install
+  from the worktree that built the art), then stage + deploy. Rebuilding binaries alone does not pick up package
+  changes since the last republish. **2026-10-27: the old source `Simcity_stock_avint` and the art worktrees
+  (`Simcity_wt_avint` etc.) were deleted in the folder consolidation.** `stage\src` holds only the installed
+  overlay/tables (rebuilt from the LAN 10-27c download). **Recovered:** `re/tools/netmod/netpack_recover.py` rebuilt all 18
+  packages' png_dir + anchors from that overlay, and a real install reproduced 113/113 files byte-identical
+  (`verify/artrecover/RESULTS.md`). The ledger + `packs\` were adopted into `stage\src` on 2026-10-27, so it is a full stage source again.
 - `highway_core` must stay installed (old ramp cities); its ramp rule is opt-in `SC3NETMOD_HWYT=1`.
 - Random `0xC0000005` starts were mods racing on shared pages: never restore VirtualProtect. U-085 parked by owner.
-- Stage replaces the Apps DLLs: close the owner's game in `Simcity_release` first.
+- Stage replaces the Apps DLLs: close the owner's game in `stage\release` first.
 - Frida attach while paused deadlocks the game. Desktop grabs are white or black while the PC is in use: use FRAMEDUMP.
 - CRLF/LF flips cause whole-file conflicts on merge. Check each block's start log after a merge (`rbt_install`).
 

@@ -101,7 +101,14 @@ function Remove([object]$p, [bool]$force) {
         $i = Info $p.Root
         if (-not $force -and $i.merged -ne 'yes') { throw "$($p.Branch) has $($i.ahead) commit(s) not on main; merge it or pass -Force" }
         if (-not $force -and $i.dirty -gt 0) { throw "$($p.Wt) has $($i.dirty) uncommitted change(s); commit them or pass -Force" }
+        # git status hides ignored files, and package art (png_dir, anchors) is ignored by design: on 2026-10-27 a
+        # clean-by-git-status cleanup deleted the only copy of the avenue/highway art in Simcity_wt_avint.
+        $art = @(git -C $p.Wt status --porcelain --ignored -- re/tools/netmod/examples | Where-Object { $_ -like '!! *' })
+        if (-not $force -and $art.Count) { throw "$($p.Wt) holds $($art.Count) ignored path(s) under re/tools/netmod/examples (package art, in no commit): $($art[0].Substring(3)). Copy them out or pass -Force" }
     }
+    # A tree with installed packages (ledger + packs) can be a stage source (2026-10-27: Simcity_stock_avint was).
+    if (-not $force -and (Test-Path "$($p.Tree)\mods\netmod\ledger.json")) { throw "$($p.Tree) has a netpack ledger (installed packages, maybe a stage source); pass -Force" }
+    if (Test-Path "$($p.Root)\KEEP") { throw "$($p.Root)\KEEP exists: protected. Delete the KEEP file first" }
     # rmdir /s does not follow junctions, and deleting a hard link never touches the base's copy
     cmd /c "rmdir /s /q `"$($p.Root)`""
     if (Test-Path $p.Root) { throw "$($p.Root) still present (a file is in use)" }
