@@ -610,6 +610,7 @@ def compile_pack(stock, pack_dir, man):
            "highway_lines": [],                                                             # task hwcore
            "avenue_lines": [],                                                              # task avcore
            "avenue_junction_lines": [],                                                     # task avjunc
+           "road_end_lines": [],                                                            # task slopeend
            "texts": [_text(t, langs_text, "%s texts %d" % (pname, n + 1))                   # task hwask
                      for n, t in enumerate(man.get("texts", []))]}
     for n, v in enumerate(man.get("variants", [])):
@@ -842,6 +843,14 @@ def compile_pack(stock, pack_dir, man):
             raise NetpackError("%s avenue_lines %d: %s names a piece that is not a %s variant of this package" %
                                (pname, n + 1, tok[0], " / ".join(nets)))
         out["avenue_lines"].append(ln)
+    for n, ln in enumerate(man.get("road_end_lines", [])):           # task slopeend: sc3netmod SLE block (raw lines)
+        tok = ln.split()                                             # sle <slope piece> <up> <down> <both> at state 0, then 2
+        if len(tok) != 8 or tok[0] != "sle" or not all(t.isdigit() for t in tok[1:]) or \
+                int(tok[1]) not in (11202, 11201, 32, 31) or \
+                any(int(t) not in vids or vids[int(t)]["net"] != "ROAD" or vids[int(t)]["base"] != int(tok[1]) for t in tok[2:]):
+            raise NetpackError("%s road_end_lines %d: '%s' is not `sle <11202|11201|32|31> <up> <down> <both> (state 0) <up> <down> <both> (state 2)` with ROAD "
+                               "variants of that slope piece from this package" % (pname, n + 1, ln))
+        out["road_end_lines"].append(ln)
     for n, ln in enumerate(man.get("avenue_junction_lines", [])):    # task avjunc: sc3netmod AVX block (raw lines)
         tok = ln.split()                                             # avxm <piece> <outline> <modes>, avxn <piece> <ends> <0|1>
         if not tok or tok[0] not in ("avxm", "avxn", "avxk") or len(tok) not in (4, 5) or not tok[1].isdigit():
@@ -1179,7 +1188,7 @@ def merge(stock, packs):
                 c.get("auto_avenue_junctions") or c.get("auto_boulevards") or c.get("auto_big_roundabouts") or \
                 c.get("auto_boulevard_junctions") or c.get("auto_diagonal_boulevards") or \
                 c.get("highway_lines") or c.get("avenue_lines") or \
-                c.get("avenue_junction_lines"):  # avx, bv, bigrbt, bvx, diagbv, hwcore, avcore, avjunc
+                c.get("avenue_junction_lines") or c.get("road_end_lines"):   # task slopeend  # avx, bv, bigrbt, bvx, diagbv, hwcore, avcore, avjunc
             tables[c["name"]] = ("# netpack %s: <variant id> <base id>, read by sc3netmod.dll\r\n" % c["name"]).encode() + \
                 b"".join(b"%d %d\r\n" % (v["id"], v["base"]) for v in sorted(c["variants"], key=lambda v: v["id"])) + \
                 RAMP.table_lines(c["ramps"]) + TPL.table_lines(mine) + \
@@ -1217,7 +1226,8 @@ def merge(stock, packs):
                          for a in c.get("auto_diagonal_boulevards", [])) + \
                 b"".join(b"%s\r\n" % ln.encode() for ln in c.get("highway_lines", [])) + \
                 b"".join(b"%s\r\n" % ln.encode() for ln in c.get("avenue_lines", [])) + \
-                b"".join(b"%s\r\n" % ln.encode() for ln in c.get("avenue_junction_lines", []))      # task hwcore, avcore, avjunc
+                b"".join(b"%s\r\n" % ln.encode() for ln in c.get("avenue_junction_lines", [])) + \
+                b"".join(b"%s\r\n" % ln.encode() for ln in c.get("road_end_lines", []))      # task hwcore, avcore, avjunc, slopeend
                 # task diagave, avx, boulevard, bigrbt, diagx, bvx, diagbv
 
     # ---- report + checks that need the merged result
@@ -1234,6 +1244,7 @@ def merge(stock, packs):
     placed |= {c[0] for t in templates for c in t["cells"].values()}   # a template places it (task multitile)
     placed |= {a["piece"] for a in autos}                    # sc3netmod RBT places it (task roundabout3)
     placed |= {a["closed"] for a in autos if a.get("closed")}   # and the arm-less quarter (task roundabout4)
+    placed |= {int(t) for c in comp for ln in c.get("road_end_lines", []) for t in ln.split()[2:]}   # task slopeend: SLE
     placed |= {m["piece"] for a in davs for m in a["middle"]}   # sc3netmod DAV places them (task diagave)
     placed |= {j["piece"] for a in davs for j in a.get("junction", [])}
     placed |= {cell[2] for a in davs for m in a.get("merge", []) for cell in m["cells"]}
