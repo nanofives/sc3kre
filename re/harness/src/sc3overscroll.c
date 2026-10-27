@@ -31,6 +31,7 @@
  */
 
 #include <windows.h>
+#include "sc3mods_guard.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -864,6 +865,7 @@ static DWORD WINAPI watcher(LPVOID param) {
 BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     (void)reserved;
     if (reason == DLL_PROCESS_ATTACH) {
+        if (!sc3mods_guard(inst, "sc3overscroll")) return TRUE;   /* not our loader: stay inert (sc3mods_guard.h) */
         g_self = (HMODULE)inst;
         DisableThreadLibraryCalls(inst);
         InitializeCriticalSection(&g_lock);

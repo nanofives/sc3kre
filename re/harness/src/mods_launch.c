@@ -191,6 +191,9 @@ int main(int argc, char **argv) {
     SetEnvironmentVariableA("SC3MODS_LIST", list);
     SetEnvironmentVariableA("SC3MODS_EVENT", evname);
     SetEnvironmentVariableA("SC3MODS_MULTI", multi ? "1" : NULL);
+    /* The mods start only when their loader says so (sc3mods_guard.h, 2026-10-27). A version.dll built before that has
+       no sc3mods_loading export, so this launcher opts the whole game process in. */
+    SetEnvironmentVariableA("SC3MODS_ANYLOAD", "1");
     _snprintf(num, sizeof(num), "%d", delayms);
     SetEnvironmentVariableA("SC3MODS_DELAY", delayms > 0 ? num : NULL);
 

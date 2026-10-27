@@ -75,6 +75,7 @@
  * Build: 32-bit x86 (must match SC3U.exe, PE32). re/harness/build_resize.ps1.
  */
 #include <windows.h>
+#include "sc3mods_guard.h"
 #include <intrin.h>   /* _ReturnAddress - exact Blt caller, replaces the failed stack scans */
 #include <stdio.h>
 #include <stdlib.h>
@@ -15293,6 +15294,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
 BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     (void)reserved;
     if (reason == DLL_PROCESS_ATTACH) {
+        if (!sc3mods_guard(inst, "sc3resize")) return TRUE;   /* not our loader: stay inert (sc3mods_guard.h) */
         g_self = (HMODULE)inst;
         DisableThreadLibraryCalls(inst);
         InitializeCriticalSection(&g_lock);

@@ -18,3 +18,4 @@ EXPORTS
     VerQueryValueA=x_VerQueryValueA @16
     VerQueryValueW=x_VerQueryValueW @17
     sc3modldr_id DATA
+    sc3mods_loading @18
