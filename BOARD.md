@@ -10,7 +10,8 @@ This file points at them and does not restate them.
 
 ## Current state, 2026-10-23 (read this first)
 
-**Latest published release: `sc3mods-2026-10-26`** (target `c2276dd`: main screen, New City dialog, offset-road avenue junctions;
+**Latest published release: `sc3mods-2026-10-26b`** (target `f0f5b15`: sharp UI text, sloped road ends, REPAINT8, VDSCROLL,
+MENUMASK, AVXEND; `verify/mods_release_1026b/RESULTS.md`). Before it: `sc3mods-2026-10-26` (target `c2276dd`: main screen, New City dialog, offset-road avenue junctions;
 `verify/mods_release_1026/RESULTS.md`). Before it: `sc3mods-2026-10-25d` (target `9825dc4`: SHAREREAD crash fix).
 Before it: `sc3mods-2026-10-25c` (target `8587f2c`: sharp Ver datos maps).
 Before it: `sc3mods-2026-10-25b` (target `def734b`: zoom-step crash with the minimap buttons fixed,
