@@ -12,7 +12,7 @@ import os
 import sys
 
 SKIP_APPS = {"mods_launch.exe", "sc3resize.dll", "sc3bigcity.dll", "sc3overscroll.dll", "sc3simrun.dll",
-             "sc3perf.dll", "sc3netmod.dll", "sc3undo.dll", "sc3cartrips.dll", "perf.ini", "menu_bg.bmp", "sc3mods_readme.txt", "sc3resize.ini"}
+             "sc3perf.dll", "sc3netmod.dll", "sc3undo.dll", "sc3cartrips.dll", "sc3mods.dll", "perf.ini", "menu_bg.bmp", "sc3mods_readme.txt", "sc3resize.ini"}
 
 
 def skip(rel):

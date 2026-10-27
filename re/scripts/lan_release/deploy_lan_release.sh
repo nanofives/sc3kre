@@ -15,7 +15,11 @@ PI_HOST="${PI_HOST:-mariano@mariano-server.local}"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519_rpi}"
 REMOTE_DIR="${REMOTE_DIR:-/home/mariano/td5re-release/simcity}"
 FILES_PORT="${FILES_PORT:-8088}"
-STAGE="${1:-$HOME/Desktop/Proyectos/Simcity_release}"
+# Staging folder: MAIN/stage/release since 2026-10-27 (re/sessions/CHILD_PROTOCOL.md section 6), the old sibling
+# Proyectos/Simcity_release until it is moved.
+DEFAULT_STAGE="$HOME/Desktop/Proyectos/Simcity/stage/release"
+[ -d "$DEFAULT_STAGE" ] || DEFAULT_STAGE="$HOME/Desktop/Proyectos/Simcity_release"
+STAGE="${1:-$DEFAULT_STAGE}"
 SSH_OPTS="-o ConnectTimeout=15 -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
 SSH_CMD="ssh -i $SSH_KEY $SSH_OPTS"
 
