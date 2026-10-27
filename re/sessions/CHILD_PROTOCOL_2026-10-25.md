@@ -40,6 +40,6 @@ PostMessage) or Frida game calls only. Anything that needs a real cursor goes on
 
 TEST SLOTS (workspace rule 2026-10-26): LIVING-PC runs at most 2 test runs at a time across all sessions. Wrap every
 game-harness batch / soak / A-B loop: bash `test-slot bash -c '<command>'`, PowerShell
-`py -3.12 C:\Users\maria\Desktop\Proyectos\.claude\scripts	estslot\proyectos_test_slot.py pwsh -NoProfile -Command '<command>'`.
+`py -3.12 C:\Users\maria\Desktop\Proyectos\.claude\scripts\testslot\proyectos_test_slot.py pwsh -NoProfile -Command '<command>'`.
 On claude2 the hook that enforces this does not run: follow it yourself. "[test-slot] all N test slots busy, waiting" is the
 queue, not a hang. One quick single launch may skip it with PROYECTOS_TEST_SLOT=off.
