@@ -96,6 +96,14 @@ static void load_mods(LPVOID res) {
     logf("mod-load start from %s (%s, tid %lu, GZGraphicD loaded now? %s)", g_dir,
          res ? "static import, process init" : "dynamic load", GetCurrentThreadId(),
          GetModuleHandleA("GZGraphicD.dll") ? "YES - too late for sc3resize EARLY" : "no");
+    /* An unpatched SC3U.exe still maps this DLL later (the game loads the DLLs in Apps after GZGraphicD). Loading the
+     * mods from there hung the game with no window on MARIANO-PC 2026-10-27 (log stopped at "mod-load start"), so a
+     * dynamic load loads nothing: the game runs stock until sc3mods_patch.ps1 is run. */
+    if (!res) {
+        logf("[!] SC3U.exe is not patched (sc3mods.dll was loaded late, not as an import): no mods loaded, the game runs "
+             "stock. Run sc3mods_patch.ps1 in the game folder.");
+        return;
+    }
     for (p = list; p && *p; p = next) {
         HMODULE m;
         next = strchr(p, ';');
