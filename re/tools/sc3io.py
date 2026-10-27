@@ -139,7 +139,7 @@ def _dpi_scale(hwnd: int) -> float:
 # ---------------------------------------------------------------------------------------------
 
 def game_pid() -> int:
-    """The game's pid. With several games running (mods_launch.exe -multi), set SC3_PID to the one this
+    """The game's pid. With several games running (SC3MODS_MULTI=1), set SC3_PID to the one this
     session owns: every tool that calls game_pid() then drives that instance and no other."""
     env = os.environ.get("SC3_PID", "").strip()
     if env:
@@ -170,7 +170,7 @@ def game_pid() -> int:
     if len(pids) > 1:
         raise CaptureError(
             f"{len(pids)} {GAME_EXE} processes are running (pids {pids}). Set SC3_PID to the one "
-            "this session owns (several run at once only with mods_launch.exe -multi). Refusing to guess."
+            "this session owns (several run at once only with SC3MODS_MULTI=1). Refusing to guess."
         )
     return pids[0]
 

@@ -1,6 +1,7 @@
 """closex_drive.py - launch one -multi instance and drive the CLOSEX test (verify/closex/PRE.md).
 
-Only ever touches the PID it started. Subcommands:
+Only ever touches the PID it started. `launch` starts SC3U.exe directly (sc3wait.launch_game) and does not take the
+game lease: the caller must hold it. Subcommands:
 
     py -3.12 re/tools/closex_drive.py launch <inst_dir> <city.sc3> [--env K=V ...]   -> prints pid, writes <inst>/pid.txt
     py -3.12 re/tools/closex_drive.py close  <pid>          # PostMessage WM_CLOSE to that PID's game window
@@ -26,18 +27,6 @@ sys.path.insert(0, str(pathlib.Path(r"C:\Users\maria\Desktop\Proyectos\Simcity\r
 k32 = ctypes.WinDLL("kernel32", use_last_error=True)
 u32 = ctypes.WinDLL("user32", use_last_error=True)
 WM_CLOSE, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_SYSCOMMAND, SC_CLOSE, VK_F4 = 0x10, 0x104, 0x105, 0x112, 0xF060, 0x73
-
-
-def child_game_pid(parent: int, timeout: float = 30.0) -> int:
-    end = time.time() + timeout
-    while time.time() < end:
-        out = subprocess.run(["powershell", "-NoProfile", "-Command",
-                              f"(Get-CimInstance Win32_Process -Filter \"ParentProcessId={parent} and Name='SC3U.exe'\").ProcessId"],
-                             capture_output=True, text=True).stdout.strip()
-        if out.isdigit():
-            return int(out)
-        time.sleep(0.5)
-    raise SystemExit(f"no SC3U child of launcher {parent}")
 
 
 def hwnd_of(pid: int) -> int:
@@ -74,7 +63,7 @@ def main(a: list[str]) -> int:
     cmd = a[0]
     if cmd == "launch":
         inst = pathlib.Path(a[1]).resolve()
-        city = [] if a[2] == "-" else ["--", str(pathlib.Path(a[2]).resolve())]
+        city = None if a[2] == "-" else str(pathlib.Path(a[2]).resolve())
         env = dict(os.environ)
         env["SC3RESIZE_LOG"] = str(inst / "sc3resize.log")
         for kv in a[3:]:
@@ -83,9 +72,9 @@ def main(a: list[str]) -> int:
             k, v = kv.split("=", 1)
             env[k] = v
         out = open(inst / "launch.out", "w")
-        lp = subprocess.Popen([str(inst / "mods_launch.exe"), "-multi"] + city, cwd=str(inst), env=env,
-                              stdout=out, stderr=subprocess.STDOUT, creationflags=0x08000000)
-        pid = child_game_pid(lp.pid)
+        import sc3wait
+        lp, _ = sc3wait.launch_game(inst, city, env=env, out=out)
+        pid = lp.pid
         (inst / "pid.txt").write_text(str(pid))
         print(pid)
         return 0

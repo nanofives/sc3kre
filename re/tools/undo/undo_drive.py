@@ -2,7 +2,7 @@
 
 Instance folder: %SC3UNDO_INST% (default re/harness/inst_undoleft); owner: %SC3_SESSION% (default undo-left).
 
-  launch <city.sc3> <outdir>     acquire the lease, start bin/mods_launch.exe -multi, wait for the city
+  launch <city.sc3> <outdir>     acquire the lease, start SC3U.exe via sc3wait.launch_game, wait for the city
   shot <name>                    grab the window to <outdir>/<name>.png
   click x y | drag x0 y0 x1 y1   posted left-button input (sc3io)
   key VK [ctrl]                  posted key
@@ -45,17 +45,10 @@ def main(a):
             print("LEASE NOT HELD - not launching"); return 2
         env = dict(os.environ, SC3_SESSION=OWNER, SC3UNDO_LOG=str(out / "undo.log"), SC3RESIZE_LOG=str(out / "resize.log"),
                    SC3RESIZE_WINMEM="0", SC3UNDO_TEST="1", SC3RESIZE_FRAMEDUMP=str(out / "fd_"))
+        import sc3wait
         lo = open(out / "launch.out", "w")
-        lp = subprocess.Popen([str(BIN / "mods_launch.exe"), "-multi", "--", city], cwd=str(BIN),
-                              stdout=lo, stderr=subprocess.STDOUT, env=env, creationflags=0x08000000)
-        pid = None
-        for _ in range(60):
-            o = subprocess.run(["powershell", "-NoProfile", "-Command",
-                                f"(Get-CimInstance Win32_Process -Filter \"ParentProcessId={lp.pid} and Name='SC3U.exe'\").ProcessId"],
-                               capture_output=True, text=True).stdout.strip()
-            if o.isdigit(): pid = int(o); break
-            time.sleep(0.5)
-        if not pid: print("no SC3U child"); return 2
+        lp, _ = sc3wait.launch_game(BIN, city, env=env, out=lo)
+        pid = lp.pid
         STATE.write_text(json.dumps({"pid": pid, "launcher": lp.pid, "out": str(out)}))
         print("game pid", pid)
         t0 = time.time()

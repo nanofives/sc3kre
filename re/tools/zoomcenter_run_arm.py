@@ -9,7 +9,7 @@ origin +0x54/+0x58). The map-area centre is read from the live side panel / bar 
 Usage: py -3.12 re/tools/zoomcenter_run_arm.py --inst <abs instance folder> --city <abs .sc3> --out <abs dir>
        [--env NAME=VALUE ...]
 Also clicks the four minimap buttons twice each (pair order A B C D A B C D).
-Kills only the PID it started.
+Kills only the PID it started. The caller must hold the game lease (the direct launch does not take it).
 """
 from __future__ import annotations
 
@@ -60,18 +60,6 @@ hook(0x6a55, "rotate");
 """
 
 
-def game_child(launcher_pid: int, timeout: float = 30) -> int:
-    t0 = time.time()
-    while time.time() - t0 < timeout:
-        out = subprocess.run(["powershell", "-NoProfile", "-Command",
-                              f"(Get-CimInstance Win32_Process -Filter \"ParentProcessId={launcher_pid} and Name='SC3U.exe'\").ProcessId"],
-                             capture_output=True, text=True).stdout.strip()
-        if out.isdigit():
-            return int(out)
-        time.sleep(0.5)
-    raise SystemExit("no SC3U child")
-
-
 def main(argv):
     ap = argparse.ArgumentParser()
     ap.add_argument("--inst", required=True); ap.add_argument("--city", required=True)
@@ -82,10 +70,9 @@ def main(argv):
     env["SC3RESIZE_LOG"] = str(out / "resize.log")
     for kv in a.env:
         k, v = kv.split("=", 1); env[k] = v
-    lp = subprocess.Popen([str(pathlib.Path(a.inst) / "mods_launch.exe"), "-multi", "--", a.city],
-                          stdout=open(out / "launch.out", "w"), stderr=subprocess.STDOUT, env=env,
-                          creationflags=0x08000000)
-    pid = game_child(lp.pid)
+    import sc3wait  # noqa: E402
+    lp, _ = sc3wait.launch_game(a.inst, a.city, env=env, out=open(out / "launch.out", "w"))
+    pid = lp.pid
     os.environ["SC3_PID"] = str(pid)
     print("game pid", pid, flush=True)
     import sc3io  # noqa: E402
@@ -98,6 +85,7 @@ def main(argv):
     else:
         print("city never came up"); subprocess.run(["taskkill", "/PID", str(pid), "/F"]); return 2
     time.sleep(6)
+    sc3wait.run_after_load(pid)
     subprocess.run([sys.executable, str(TOOLS / "dismiss_tips.py")], env=os.environ)
     hwnd = sc3io.game_hwnd()
     rec = open(out / "zoom.jsonl", "w", encoding="utf-8")

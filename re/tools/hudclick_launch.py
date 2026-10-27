@@ -1,10 +1,10 @@
 """Launch one hudclick arm on a stock tree: start, wait for the city, dismiss tips, maximize, report.
 
-Usage: py -3.12 re/tools/hudclick_launch.py --tree <abs tree> --city <abs .sc3> --out <abs dir> [--env K=V ...]
+Usage: py -3.12 re/tools/hudclick_launch.py --tree <abs tree> --city <abs .sc3> --out <abs dir> [--inst <mod dir>] [--env K=V ...]
 
 Writes <out>/pid.txt, <out>/resize.log (SC3RESIZE_LOG), <prefix>max.bmp when SC3RESIZE_FRAMEDUMP is set
 (desktop grabs show white/black while the game is not in the foreground), prints the pid, client size and the logged
-HUD factor. The game is left running; kill it by the pid in pid.txt (only that pid).
+HUD factor. The caller must hold the game lease (the direct launch does not take it). The game is left running; kill it by the pid in pid.txt (only that pid).
 """
 import argparse
 import os
@@ -18,21 +18,10 @@ TOOLS = pathlib.Path(r"C:\Users\maria\Desktop\Proyectos\Simcity\re\tools")
 sys.path.insert(0, str(TOOLS))
 
 
-def game_child(launcher_pid: int, timeout: float = 40) -> int:
-    t0 = time.time()
-    while time.time() - t0 < timeout:
-        out = subprocess.run(["powershell", "-NoProfile", "-Command",
-                              f"(Get-CimInstance Win32_Process -Filter \"ParentProcessId={launcher_pid} and Name='SC3U.exe'\").ProcessId"],
-                             capture_output=True, text=True).stdout.strip()
-        if out.isdigit():
-            return int(out)
-        time.sleep(0.5)
-    raise SystemExit("no SC3U child")
-
-
 def main(argv):
     ap = argparse.ArgumentParser()
     ap.add_argument("--tree", required=True); ap.add_argument("--city", required=True)
+    ap.add_argument("--inst", default=None, help="folder with the mod DLLs + logs (SC3MODS_DIR); default <tree>/Apps")
     ap.add_argument("--out", required=True); ap.add_argument("--env", action="append", default=[])
     a = ap.parse_args(argv)
     out = pathlib.Path(a.out); out.mkdir(parents=True, exist_ok=True)
@@ -42,10 +31,10 @@ def main(argv):
     for kv in a.env:
         k, v = kv.split("=", 1); env[k] = v
     (out / "env.txt").write_text("\n".join(a.env) + "\n")
-    lp = subprocess.Popen([str(apps / "mods_launch.exe"), "-multi", "--", "-intro:off", a.city],
-                          stdout=open(out / "launch.out", "w"), stderr=subprocess.STDOUT, env=env,
-                          cwd=str(apps), creationflags=0x08000000)
-    pid = game_child(lp.pid)
+    import sc3wait  # noqa: E402
+    lp, _ = sc3wait.launch_game(a.inst or apps, a.city, env=env, out=open(out / "launch.out", "w"), tree=a.tree,
+                                pre_args=["-intro:off"])
+    pid = lp.pid
     os.environ["SC3_PID"] = str(pid)
     (out / "pid.txt").write_text(str(pid))
     print("game pid", pid, flush=True)
@@ -59,6 +48,7 @@ def main(argv):
     else:
         print("city never came up (pid left running)"); return 2
     time.sleep(6)
+    sc3wait.run_after_load(pid)
     subprocess.run([sys.executable, str(TOOLS / "dismiss_tips.py")], env=os.environ)
     hwnd = sc3io.game_hwnd()
     sc3io.maximize_without_focus(hwnd)

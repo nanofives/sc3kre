@@ -8,6 +8,8 @@ Task hudperf 2026-10-12. Phases (each --phase seconds, default 32, so each holds
 Per phase the script records the byte range of resize.log and sc3perf.log it covered, and prints:
   HUDSCALE "ms per frame in the pre-present pass" lines, HUDPERF lines, and the sc3perf CSV fps (median, min).
 Kills only the PID it started.
+Lease: the direct launch does not take the game lease (the retired launcher did); the caller must hold it
+(re/harness/game_lock.ps1 -Acquire -Owner <you>) and export SC3_SESSION.
 
 Usage: py -3.12 re/tools/hudperf_bench.py --inst <abs instance> --city <abs .sc3> --out <abs dir>
        [--env NAME=VALUE ...] [--phases static,scroll,hover,flyout] [--phase 25] [--keep]
@@ -28,18 +30,7 @@ import time
 TOOLS = pathlib.Path(r"C:\Users\maria\Desktop\Proyectos\Simcity\re\tools")
 sys.path.insert(0, str(TOOLS))
 import sc3wait  # noqa: E402
-
-
-def game_child(launcher_pid: int, timeout: float = 40) -> int:
-    t0 = time.time()
-    while time.time() - t0 < timeout:
-        out = subprocess.run(["powershell", "-NoProfile", "-Command",
-                              f"(Get-CimInstance Win32_Process -Filter \"ParentProcessId={launcher_pid} and Name='SC3U.exe'\").ProcessId"],
-                             capture_output=True, text=True).stdout.strip()
-        if out.isdigit():
-            return int(out)
-        time.sleep(0.5)
-    raise SystemExit("no SC3U child")
+import sc3pause  # noqa: E402
 
 
 def size(p: pathlib.Path) -> int:
@@ -90,6 +81,7 @@ def main(argv):
     ap.add_argument("--phases", default="static,scroll,hover,flyout")
     ap.add_argument("--phase", type=float, default=32.0)
     ap.add_argument("--keep", action="store_true", help="leave the game running at the end")
+    ap.add_argument("--tree", default=None, help="game tree holding Apps/SC3U.exe (default: three levels above inst)")
     ap.add_argument("--speed", default="3")
     ap.add_argument("--at", default="-2400,100", help="move the window here (screen px) before maximizing, '' = leave")
     a = ap.parse_args(argv)
@@ -100,10 +92,8 @@ def main(argv):
     for kv in a.env:
         k, v = kv.split("=", 1); env[k] = v
     perf = inst / "sc3perf.log"
-    lp = subprocess.Popen([str(inst / "mods_launch.exe"), "-multi", "--", a.city],
-                          stdout=open(out / "launch.out", "w"), stderr=subprocess.STDOUT, env=env,
-                          creationflags=0x08000000)
-    pid = game_child(lp.pid)
+    lp, _ = sc3wait.launch_game(inst, a.city, env=env, out=open(out / "launch.out", "w"), tree=a.tree)
+    pid = lp.pid
     os.environ["SC3_PID"] = str(pid)
     (out / "pid.txt").write_text(str(pid))
     print("game pid", pid, flush=True)
@@ -117,6 +107,7 @@ def main(argv):
     else:
         print("city never came up"); subprocess.run(["taskkill", "/PID", str(pid), "/F"]); return 2
     time.sleep(6)
+    sc3wait.run_after_load(pid, keep_paused=not a.speed)   # --speed '' kept the load pause before, too
     subprocess.run([sys.executable, str(TOOLS / "dismiss_tips.py")], env=os.environ)
     hwnd = sc3io.game_hwnd()
     if a.at:
@@ -127,16 +118,10 @@ def main(argv):
     n_rz = len(log.read_text(errors="replace"))
     sc3io.maximize_without_focus(hwnd)
     sc3wait.wait_layout(log, n_rz)      # was a blind 8 s
-    if a.speed:
+    if a.speed:   # the speed keys do not unpause; run_after_load already did (a second P would re-pause)
         sc3io.key(hwnd, ord(a.speed[0]))
         time.sleep(0.5)
-        for _ in range(3):   # P toggles the pause (sc3resize PAUSEKEY); the speed keys do not unpause
-            sc3io.key(hwnd, ord("P"))
-            time.sleep(1.0)
-            pk = re.findall(r"PAUSEKEY> depth \d+ -> (\w+)", log.read_text(errors="replace"))
-            if pk and pk[-1] == "resume":
-                break
-        print("pause key:", pk[-1] if pk else "no PAUSEKEY line", flush=True)
+        print("pause state:", sc3pause.pause_state(pid)[1], flush=True)
     time.sleep(2)
     try:
         g = sc3io.grab(hwnd, settle=0.3)
