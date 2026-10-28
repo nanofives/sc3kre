@@ -325,6 +325,7 @@ static void rotate(const char *stem) {
 /* ------------------------------------------------------------------ the autosave */
 #define WM_AUTOSAVE (WM_APP + 0x5E0)
 #define WM_AS_HOOK  (WM_APP + 0x5E1)     /* wrap the progress service once a city exists (game thread) */
+#define WM_AS_UNAUTO (WM_APP + 0x5E2)    /* a loaded autosave: point the city's file name back at its own file */
 static HWND    g_hwnd;
 static WNDPROC g_oldproc;
 static volatile LONG g_busy;
@@ -621,6 +622,34 @@ static void autosave_now(void) {
          g_name_len > 0 ? g_name : "");
 }
 
+/* UNAUTO (owner 2026-10-28: "if i open an auto save file when i save it at the end of my session it should NOT save
+ * with the auto save name"). The game's Save writes to the city's file name, which is the path it was loaded from. When
+ * that is an autosave ("<city> (auto 5 min).sc3", or "<city>.autosaveN.sc3" from the builds before 10-28b), the name
+ * is set to "<city>.sc3" in the same folder once the load is over (city vt+0x258, as name_restore), so Save goes to
+ * the player's own file. Autosaves keep going to the "<city> (auto ...)" files (target_stem strips the suffix anyway).
+ * SC3AUTOSAVE_UNAUTO=0 keeps the loaded name. */
+static int g_unauto = 1;
+static void unauto_name(void) {
+    BYTE *city = city_get();
+    char *slash, *cut, want[MAX_PATH];
+    if (!city || city_lock(city) != 0) return;
+    name_save(city);
+    if (g_name_len <= 0) return;
+    slash = strrchr(g_name, '\\');
+    if (!slash) slash = strrchr(g_name, '/');
+    slash = slash ? slash + 1 : g_name;
+    if ((cut = strstr(slash, " (auto ")) == NULL && (cut = strstr(slash, ".autosave")) == NULL) return;
+    lstrcpynA(want, g_name, sizeof(want));
+    _snprintf(want + (cut - g_name), sizeof(want) - (cut - g_name), ".sc3");
+    want[sizeof(want) - 1] = 0;
+    logf("UNAUTO> loaded autosave '%s': Save now goes to '%s'", g_name, want);
+    lstrcpynA(g_name, want, sizeof(g_name));
+    g_name_len = (int)strlen(g_name);
+    name_restore(city);
+    name_save(city);
+    if (strcmp(g_name, want)) logf("UNAUTO> name NOT changed: '%s'", g_name);
+}
+
 static LRESULT CALLBACK as_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     if (m == WM_AUTOSAVE) {
         DWORD waited = GetTickCount() - g_post_at;
@@ -644,6 +673,7 @@ static LRESULT CALLBACK as_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         return 0;
     }
     if (m == WM_AS_HOOK) { pg_hook(); return 0; }
+    if (m == WM_AS_UNAUTO) { if (!g_busy) unauto_name(); return 0; }
     if ((m >= WM_MOUSEFIRST && m <= WM_MOUSELAST) || (m >= WM_KEYFIRST && m <= WM_KEYLAST)) g_last_input = GetTickCount();
     return CallWindowProcA(g_oldproc, h, m, wp, lp);
 }
@@ -709,7 +739,11 @@ static DWORD WINAPI watcher(LPVOID unused) {
         if (g_wait_unlock && city) {
             long lk = city_lock(city);
             g_seen_at = g_last_save = GetTickCount();
-            if (lk == 0) { g_wait_unlock = 0; logf("CITY> lock 0, interval starts"); }
+            if (lk == 0) {
+                g_wait_unlock = 0;
+                logf("CITY> lock 0, interval starts");
+                if (g_unauto) PostMessageA(h, WM_AS_UNAUTO, 0, 0);   /* UNAUTO, on the game thread */
+            }
             continue;
         }
         if (!city || g_busy || !g_enabled) continue;
@@ -744,6 +778,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
         g_log = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         ini_read();
         g_diag = GetEnvironmentVariableA("SC3AUTOSAVE_DIAG", NULL, 0) != 0;
+        {   char v[8];
+            if (GetEnvironmentVariableA("SC3AUTOSAVE_UNAUTO", v, sizeof(v))) g_unauto = atoi(v) != 0; }
         logf("### sc3autosave loaded, enabled=%d", g_enabled);
         /* enabled=0 still starts the watcher: Preferencias can turn autosave on without a restart */
         CreateThread(NULL, 0, watcher, NULL, 0, NULL);
