@@ -29,3 +29,6 @@ LAN: 1 of 3,606 files sent (0.5 MB). Served label `2026-10-28d`, served sc3resiz
 
 Owner checks pending: Big One.autosave2 maximized (10-28c fix), one real-mouse click on Volver, a Mover by hand.
 Not tested by relocate: levelling on a slope, right-click cancel, menus after a move, sc3undo of a move.
+
+GitHub: `sc3mods-2026-10-28d`, target `6604a3a`, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-10-28d, asset
+downloaded back, SHA-256 matches. The 10-28c notes now start with a "superseded" line.
