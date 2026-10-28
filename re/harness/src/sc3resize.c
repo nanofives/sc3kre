@@ -8436,12 +8436,296 @@ static void ho_hide_resrow(void *win) {
     logf("RESROW> resolution row: %d of 2 hidden", hid);
 }
 
+/* MODSPAGE (owner 2026-10-27: "la opción de auto-guardado tiene que ser desactivable en el menú de opciones, hacé un
+ * submenú dentro de preferencias con todas las opciones de los mods"). Preferencias gets a "Mods..." button; a click
+ * turns the same window into a mods page (the game's own controls hidden, ours shown) with a "Volver" button back.
+ * OK and cancel work from either page, with the rules each option already had: OK applies, anything else keeps.
+ *   - The HUDOPT / PERFPREFS / CITYZOOM controls move to the mods page (same ids, same read-back on close).
+ *   - Autosave (sc3autosave): on/off, interval, indicator. Written to autosave.ini, which sc3autosave re-reads when
+ *     the file changes, so it applies at once.
+ *   - Restart options, written to each mod's own ini (read once at start): simrun.ini [sim] run_while_scrolling,
+ *     overscroll.ini [camera] overscroll (50 = no overscroll, the mod's floor) and [edge] enabled, undo.ini [undo]
+ *     enabled / buttons. A section only appears when its mod is loaded.
+ * Clicks: the dialog's message handler FUN_10055e07 passes a button click as message 3, p3 1, p4 = control id, to
+ * the command handler FUN_10058f14 [CONFIRMED @ SIMUI 0x10055e07]; our two buttons are taken there, before the
+ * original. Page switch = window vt+0xf4(1, 0/1) (RESROW's hide). Text buttons as QUERYID (factory +0x2c).
+ * SC3RESIZE_MODSPAGE=0: no button, the controls stay where they were. */
+static int g_modspage = 1;
+#define MP_BTN_MODS 0x02F95B51
+#define MP_BTN_BACK 0x02F95B52
+#define MP_TITLE    0x02F95B53
+#define MP_H_UI     0x02F95B54
+#define MP_H_PERF   0x02F95B55
+#define MP_H_AS     0x02F95B56
+#define MP_H_OTHER  0x02F95B57
+#define MP_AS_ON    0x02F95B58
+#define MP_AS_IND   0x02F95B59
+#define MP_AS_GRP   0x02F95B5A
+#define MP_AS_M5    0x02F95B5B
+#define MP_AS_M10   0x02F95B5C
+#define MP_AS_M15   0x02F95B5D
+#define MP_AS_M30   0x02F95B5E
+#define MP_AS_LBL   0x02F95B5F
+#define MP_SIMRUN   0x02F95B60
+#define MP_UNDO     0x02F95B61
+#define MP_UNDOBTN  0x02F95B62
+#define MP_OVERSC   0x02F95B63
+#define MP_EDGE     0x02F95B64
+#define MP_MAXKIDS  96
+static void *g_mp_win;                       /* the Preferences window the lists below belong to */
+static void *g_mp_game[MP_MAXKIDS];          /* the game's children (page A), and whether each was visible */
+static int   g_mp_game_vis[MP_MAXKIDS], g_mp_ngame;
+static int   g_mp_page;                      /* 0 = the game's page, 1 = mods */
+/* the values shown when the dialog was built, to write only what the player changed */
+static int   g_mp_as_on, g_mp_as_min, g_mp_as_ind, g_mp_simrun, g_mp_undo, g_mp_undobtn, g_mp_oversc, g_mp_ovs_pct, g_mp_edge;
+
+static const DWORD k_mp_page_ids[] = { MP_BTN_BACK, MP_TITLE, MP_H_UI, MP_H_PERF, MP_H_AS, MP_H_OTHER, MP_AS_ON, MP_AS_IND,
+    MP_AS_GRP, MP_AS_LBL, MP_SIMRUN, MP_UNDO, MP_UNDOBTN, MP_OVERSC, MP_EDGE,
+    HO_LABEL, HO_GROUP, HO_SMOOTH, PP_FPS, PP_BUSY, CZ_BOX };
+#define MP_NPAGE (sizeof(k_mp_page_ids) / sizeof(k_mp_page_ids[0]))
+
+static void mp_ini(char *out, int cap, const char *leaf) { rz_mb_path(out, cap, leaf); }   /* every mod's ini sits beside its DLL */
+static int  mp_loaded(const char *dll) { return GetModuleHandleA(dll) != NULL; }
+
+static void mp_vis(void *c, int on) { if (c && !IsBadReadPtr(c, 0xa4)) ho_v(c, 0xf4, 2, 1, on ? 1 : 0, 0, 0, 0); }
+static void *mp_child(void *win, DWORD id) { return (void *)ho_v(win, 0x78, 1, id, 0, 0, 0, 0); }
+
+/* checkbox at (x, y), the PERFPREFS recipe with a free y */
+static int mp_checkbox(void *fac, void *win, DWORD id, const char *text, int on, int x, int y, int w, DWORD col) {
+    BYTE s[0x20];
+    void *cb, *cw;
+    int ok = 0;
+    ho_str(s, text);
+    cb = (void *)ho_v(fac, 0x3c, 5, id, (DWORD)s, 0, 0, 0);
+    ho_str_free(s);
+    if (!cb) return 0;
+    ho_v(cb, 0x34, 1, on ? 1 : 0, 0, 0, 0, 0);
+    ho_v(cb, 0x74, 4, 3, 1, 2, 2, 0);
+    ho_v(cb, 0x60, 1, ho_v(fac, 0x14, 1, 0xf, 0, 0, 0, 0), 0, 0, 0, 0);
+    ho_v(cb, 0x64, 2, 0, col, 0, 0, 0);
+    ho_v(cb, 0x64, 2, 2, col, 0, 0, 0);
+    ho_v(cb, 0x64, 2, 4, col, 0, 0, 0);
+    cw = (void *)ho_v(cb, 0x1c, 0, 0, 0, 0, 0, 0);
+    ho_v(cw, 0xb8, 1, (DWORD)w, 0, 0, 0, 0);
+    cw = (void *)ho_v(cb, 0x1c, 0, 0, 0, 0, 0, 0);
+    ho_v(cw, 0xcc, 2, (DWORD)x, (DWORD)y, 0, 0, 0);
+    cw = (void *)ho_v(cb, 0x1c, 0, 0, 0, 0, 0, 0);
+    ok = (int)(ho_v(win, 0x34, 1, (DWORD)cw, 0, 0, 0, 0) & 0xff);
+    if (!ok) ho_v(cw, 0x28, 0, 0, 0, 0, 0, 0);
+    ho_v(cb, 0x08, 0, 0, 0, 0, 0, 0);
+    return ok;
+}
+
+/* one-row option group, the HUDOPT recipe */
+static int mp_group(void *fac, void *win, DWORD gid, const DWORD *ids, const char **txt, int n, DWORD sel, int x, int y, int w, DWORD col) {
+    BYTE s[0x20];
+    void *grp, *gw;
+    LONG r[4];
+    int ok = 0, i;
+    ho_str(s, NULL);
+    grp = (void *)ho_v(fac, 0x48, 3, gid, (DWORD)s, 0, 0, 0);
+    ho_str_free(s);
+    if (!grp) return 0;
+    ho_v(grp, 0x24, 1, ho_v(fac, 0x14, 1, 0xf, 0, 0, 0, 0), 0, 0, 0, 0);
+    ho_v(grp, 0x28, 2, 2, col, 0, 0, 0);
+    ho_v(grp, 0x28, 2, 3, col, 0, 0, 0);
+    ho_v(grp, 0x28, 2, 4, col, 0, 0, 0);
+    ho_v(grp, 0x14, 2, 1, 0, 0, 0, 0);
+    ho_v(grp, 0x14, 2, 8, 0, 0, 0, 0);
+    ho_v(grp, 0x18, 2, 0, 0, 0, 0, 0);
+    r[0] = x; r[1] = y; r[2] = x + w; r[3] = y + 18;
+    gw = (void *)ho_v(grp, 0x0c, 0, 0, 0, 0, 0, 0);
+    ho_v(gw, 0xc4, 1, (DWORD)r, 0, 0, 0, 0);
+    for (i = 0; i < n; i++) { ho_str(s, txt[i]); ho_v(grp, 0x38, 5, ids[i], (DWORD)s, 0, 0, 0); ho_str_free(s); }
+    if (sel) ho_v(grp, 0x34, 1, sel, 0, 0, 0, 0);
+    gw = (void *)ho_v(grp, 0x0c, 0, 0, 0, 0, 0, 0);
+    ho_v(gw, 0xcc, 2, (DWORD)x, (DWORD)y, 0, 0, 0);
+    gw = (void *)ho_v(grp, 0x0c, 0, 0, 0, 0, 0, 0);
+    ok = (int)(ho_v(win, 0x34, 1, (DWORD)gw, 0, 0, 0, 0) & 0xff);
+    if (!ok) ho_v(gw, 0x28, 0, 0, 0, 0, 0, 0);
+    else ho_v(gw, 0xc8, 4, (DWORD)x, (DWORD)y, (DWORD)(x + w), *(LONG *)((BYTE *)gw + 0x8c), 0);   /* full width back (HUDOPT) */
+    ho_v(grp, 0x08, 0, 0, 0, 0, 0, 0);
+    return ok;
+}
+
+/* text button, the QUERYID recipe */
+static int mp_button(void *fac, void *win, DWORD id, const char *text, int x, int y, int w, int h) {
+    BYTE s[0x20];
+    void *btn, *bw;
+    int ok = 0;
+    ho_str(s, text);
+    btn = (void *)ho_v(fac, 0x2c, 5, id, (DWORD)s, 0, 0, 0);
+    if (btn) {
+        ho_v(btn, 0x24, 2, 4, 1, 0, 0, 0);
+        ho_v(btn, 0x24, 2, 0x20, 0, 0, 0, 0);
+        bw = (void *)ho_v(btn, 0x1c, 0, 0, 0, 0, 0, 0);
+        ho_v(bw, 0x10c, 1, (DWORD)s, 0, 0, 0, 0);
+        ho_v(bw, 0xc8, 4, (DWORD)x, (DWORD)y, (DWORD)(x + w), (DWORD)(y + h), 0);
+        ho_v(bw, 0xf4, 2, 2, 1, 0, 0, 0);
+        ok = (int)(ho_v(win, 0x34, 1, (DWORD)bw, 0, 0, 0, 0) & 0xff);
+        if (!ok) ho_v(bw, 0x28, 0, 0, 0, 0, 0, 0);
+        ho_v(btn, 0x08, 0, 0, 0, 0, 0, 0);
+    }
+    ho_str_free(s);
+    return ok;
+}
+
+/* move one of our existing controls to (x, y) on the mods page; a group keeps its width */
+static void mp_move(void *win, DWORD id, int x, int y) {
+    BYTE *c = (BYTE *)mp_child(win, id);
+    LONG *l;
+    if (!c || IsBadReadPtr(c, 0xa4)) return;
+    l = (LONG *)(c + 0x80);
+    ho_v(c, 0xc8, 4, (DWORD)x, (DWORD)y, (DWORD)(x + (l[2] - l[0])), (DWORD)(y + (l[3] - l[1])), 0);
+}
+
+/* the mods page, layout (Preferences is 480x472, local coords) */
+#define MP_X0 18
+#define MP_X1 30
+static void mp_build(void *win) {
+    HMODULE sui = GetModuleHandleA("SIMUI.DLL");
+    void *fac, *okb;
+    DWORD col, sel;
+    char p[MAX_PATH];
+    int es = ho_spanish(), n = 0, i, guard = 0;
+    BYTE *w = (BYTE *)win;
+    void *head, *nd;
+    if (!g_modspage || !g_hudopt || !sui || !win || IsBadReadPtr(win, 0xa4)) return;
+    fac = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85065))();
+    if (!fac || IsBadReadPtr(fac, 4)) return;
+    col = ho_v(fac, 0x80, 1, 0x62e56a2e, 0, 0, 0, 0);
+    if (!mp_child(win, MP_BTN_MODS)) {
+        /* current values */
+        mp_ini(p, sizeof(p), "autosave.ini");
+        g_mp_as_on  = GetPrivateProfileIntA("autosave", "enabled", 1, p) ? 1 : 0;
+        g_mp_as_min = GetPrivateProfileIntA("autosave", "minutes", 5, p);
+        g_mp_as_ind = GetPrivateProfileIntA("autosave", "indicator", 1, p) ? 1 : 0;
+        mp_ini(p, sizeof(p), "simrun.ini");     g_mp_simrun = GetPrivateProfileIntA("sim", "run_while_scrolling", 1, p) ? 1 : 0;
+        mp_ini(p, sizeof(p), "undo.ini");       g_mp_undo = GetPrivateProfileIntA("undo", "enabled", 1, p) ? 1 : 0;
+                                                g_mp_undobtn = GetPrivateProfileIntA("undo", "buttons", 1, p) ? 1 : 0;
+        mp_ini(p, sizeof(p), "overscroll.ini"); g_mp_ovs_pct = GetPrivateProfileIntA("camera", "overscroll", 75, p);
+                                                g_mp_oversc = g_mp_ovs_pct > 50;
+                                                g_mp_edge = GetPrivateProfileIntA("edge", "enabled", 1, p) ? 1 : 0;
+        /* page A: the button, in the right half of "Opciones generales" that HUDOPT's controls leave */
+        n += mp_button(fac, win, MP_BTN_MODS, es ? "Opciones de mods..." : "Mod options...", 250, 372, 150, 26);
+        /* page B */
+        n += ho_add_label(fac, win, MP_TITLE, es ? "Opciones de los mods" : "Mod options", MP_X0, 40, 300);
+        n += ho_add_label(fac, win, MP_H_UI, es ? "Interfaz" : "Interface", MP_X0, 66, 200);
+        mp_move(win, HO_LABEL, MP_X1, 84);
+        mp_move(win, HO_GROUP, MP_X1, 100);
+        mp_move(win, HO_SMOOTH, 280, 100);
+        mp_move(win, CZ_BOX, 280, 118);
+        n += ho_add_label(fac, win, MP_H_PERF, es ? "Rendimiento" : "Performance", MP_X0, 146, 200);
+        mp_move(win, PP_FPS, MP_X1, 164);
+        mp_move(win, PP_BUSY, 150, 164);
+        if (mp_loaded("sc3autosave.dll")) {
+            static const DWORD aid[4] = { MP_AS_M5, MP_AS_M10, MP_AS_M15, MP_AS_M30 };
+            const char *atx[4] = { "5 min   ", "10 min   ", "15 min   ", "30 min" };
+            n += ho_add_label(fac, win, MP_H_AS, es ? "Autoguardado" : "Autosave", MP_X0, 192, 200);
+            n += mp_checkbox(fac, win, MP_AS_ON, es ? "Autoguardar" : "Autosave", g_mp_as_on, MP_X1, 210, 120, col);
+            n += mp_checkbox(fac, win, MP_AS_IND, es ? "Mostrar aviso" : "Show notice", g_mp_as_ind, 160, 210, 150, col);
+            n += ho_add_label(fac, win, MP_AS_LBL, es ? "Cada:" : "Every:", MP_X1, 232, 50);
+            sel = g_mp_as_min <= 5 ? MP_AS_M5 : g_mp_as_min <= 10 ? MP_AS_M10 : g_mp_as_min <= 15 ? MP_AS_M15 : MP_AS_M30;
+            n += mp_group(fac, win, MP_AS_GRP, aid, atx, 4, sel, 80, 230, 300, col);
+        }
+        if (mp_loaded("sc3simrun.dll") || mp_loaded("sc3overscroll.dll") || mp_loaded("sc3undo.dll"))
+            n += ho_add_label(fac, win, MP_H_OTHER, es ? "Al reiniciar el juego" : "After restarting the game", MP_X0, 260, 300);
+        if (mp_loaded("sc3simrun.dll"))
+            n += mp_checkbox(fac, win, MP_SIMRUN, es ? "La ciudad sigue al mover la c\xe1mara" : "City keeps running while scrolling",
+                             g_mp_simrun, MP_X1, 278, 330, col);
+        if (mp_loaded("sc3overscroll.dll")) {
+            n += mp_checkbox(fac, win, MP_OVERSC, es ? "C\xe1mara m\xe1s all\xe1 del borde" : "Camera past the map edge", g_mp_oversc, MP_X1, 298, 200, col);
+            n += mp_checkbox(fac, win, MP_EDGE, es ? "Mover en el borde" : "Edge scroll", g_mp_edge, 250, 298, 180, col);
+        }
+        if (mp_loaded("sc3undo.dll")) {
+            n += mp_checkbox(fac, win, MP_UNDO, es ? "Deshacer (Ctrl+Z)" : "Undo (Ctrl+Z)", g_mp_undo, MP_X1, 318, 200, col);
+            n += mp_checkbox(fac, win, MP_UNDOBTN, es ? "Botones de deshacer" : "Undo buttons", g_mp_undobtn, 250, 318, 180, col);
+        }
+        n += mp_button(fac, win, MP_BTN_BACK, es ? "Volver" : "Back", MP_X0, 372, 110, 26);
+        logf("MODSPAGE> Preferences 0x%08lX: %d controls added", (DWORD)win, n);
+    }
+    /* sort the children: ours (page B), the OK button (both pages), everything else is the game's page */
+    g_mp_win = win; g_mp_ngame = 0; g_mp_page = 0;
+    okb = mp_child(win, 0x02F95AD8);
+    head = *(void **)(w + 0x34);
+    nd = (head && !IsBadReadPtr(head, 4)) ? *(void **)head : NULL;
+    while (nd && nd != head && guard++ < 200 && !IsBadReadPtr(nd, 0x0c)) {
+        BYTE *ch = *(BYTE **)((BYTE *)nd + 8);
+        int ours = 0;
+        for (i = 0; i < (int)MP_NPAGE && !ours; i++) ours = ch == (BYTE *)mp_child(win, k_mp_page_ids[i]);
+        /* the title bar's children (title, close box: local top above 30, measured) stay on both pages */
+        if (ch && !ours && ch != (BYTE *)okb && ch != (BYTE *)mp_child(win, MP_BTN_MODS) && g_mp_ngame < MP_MAXKIDS &&
+            !IsBadReadPtr(ch, 0xa4) && *(LONG *)(ch + 0x84) >= 30)
+            g_mp_game[g_mp_ngame++] = ch;
+        nd = *(void **)nd;
+    }
+    for (i = 0; i < (int)MP_NPAGE; i++) mp_vis(mp_child(win, k_mp_page_ids[i]), 0);
+    mp_vis(mp_child(win, MP_BTN_MODS), 1);
+    logf("MODSPAGE> %d game controls on the first page", g_mp_ngame);
+}
+
+static void mp_show(void *win, int mods) {
+    int i;
+    if (win != g_mp_win) return;
+    if (mods && !g_mp_page)
+        for (i = 0; i < g_mp_ngame; i++) {
+            BYTE *c = (BYTE *)g_mp_game[i];
+            g_mp_game_vis[i] = !IsBadReadPtr(c, 0xa4) && (*(DWORD *)(c + 0xa0) & 1);
+            if (g_mp_game_vis[i]) mp_vis(c, 0);
+        }
+    if (!mods && g_mp_page)
+        for (i = 0; i < g_mp_ngame; i++) if (g_mp_game_vis[i]) mp_vis(g_mp_game[i], 1);
+    for (i = 0; i < (int)MP_NPAGE; i++) mp_vis(mp_child(win, k_mp_page_ids[i]), mods);
+    mp_vis(mp_child(win, MP_BTN_MODS), !mods);
+    g_mp_page = mods;
+    ho_v(win, 0x154, 0, 0, 0, 0, 0, 0);   /* invalidate */
+    logf("MODSPAGE> %s page", mods ? "mods" : "game");
+}
+
+static void mp_write_int(const char *leaf, const char *sec, const char *key, int v) {
+    char p[MAX_PATH], s[16];
+    mp_ini(p, sizeof(p), leaf);
+    wsprintfA(s, "%d", v);
+    WritePrivateProfileStringA(sec, key, s, p);
+}
+
+/* on close: OK writes what changed, anything else keeps (the HUDOPT rule) */
+static void mp_close(void *win, DWORD id) {
+    int v, ch = 0;
+    void *o = NULL;
+    if (win != g_mp_win) return;
+    g_mp_win = NULL;
+    if (id != 0x02F95AD8) { logf("MODSPAGE> closed with 0x%08lX (cancel): nothing written", id); return; }
+    if ((v = pp_read_box(win, MP_AS_ON)) >= 0 && v != g_mp_as_on) { mp_write_int("autosave.ini", "autosave", "enabled", v); ch++; }
+    if ((v = pp_read_box(win, MP_AS_IND)) >= 0 && v != g_mp_as_ind) { mp_write_int("autosave.ini", "autosave", "indicator", v); ch++; }
+    if ((ho_v(win, 0x80, 3, MP_AS_GRP, 0xa1336cc0, (DWORD)&o, 0, 0) & 0xff) && o) {
+        DWORD s = ho_v(o, 0x30, 0, 0, 0, 0, 0, 0);
+        int m = s == MP_AS_M5 ? 5 : s == MP_AS_M10 ? 10 : s == MP_AS_M15 ? 15 : s == MP_AS_M30 ? 30 : g_mp_as_min;
+        ho_v(o, 0x08, 0, 0, 0, 0, 0, 0);
+        if (m != g_mp_as_min) { mp_write_int("autosave.ini", "autosave", "minutes", m); ch++; }
+    }
+    if ((v = pp_read_box(win, MP_SIMRUN)) >= 0 && v != g_mp_simrun) { mp_write_int("simrun.ini", "sim", "run_while_scrolling", v); ch++; }
+    if ((v = pp_read_box(win, MP_OVERSC)) >= 0 && v != g_mp_oversc) {
+        mp_write_int("overscroll.ini", "camera", "overscroll", v ? (g_mp_ovs_pct > 50 ? g_mp_ovs_pct : 75) : 50); ch++; }
+    if ((v = pp_read_box(win, MP_EDGE)) >= 0 && v != g_mp_edge) { mp_write_int("overscroll.ini", "edge", "enabled", v); ch++; }
+    if ((v = pp_read_box(win, MP_UNDO)) >= 0 && v != g_mp_undo) { mp_write_int("undo.ini", "undo", "enabled", v); ch++; }
+    if ((v = pp_read_box(win, MP_UNDOBTN)) >= 0 && v != g_mp_undobtn) { mp_write_int("undo.ini", "undo", "buttons", v); ch++; }
+    logf("MODSPAGE> OK: %d mod setting(s) written", ch);
+}
+
 static DWORD __fastcall ho_prefs_msg(void *self, void *edx, DWORD win, DWORD msg, DWORD p3, DWORD p4, DWORD p5) {
     DWORD a[5], r;
     (void)edx;
+    if (g_modspage && msg == 3 && p3 == 1 && win && (p4 == MP_BTN_MODS || p4 == MP_BTN_BACK)) {   /* MODSPAGE buttons */
+        mp_show((void *)win, p4 == MP_BTN_MODS);
+        return 1;
+    }
     a[0] = win; a[1] = msg; a[2] = p3; a[3] = p4; a[4] = p5;
     r = rz_thiscall_ret(self, g_orig_5e07, a, 5);
-    if (msg == 0xa2bf8ace && (r & 0xff) && win) { ho_add_controls((void *)win); pp_add_controls((void *)win); cz_add_box((void *)win); ho_hide_resrow((void *)win); }
+    if (msg == 0xa2bf8ace && (r & 0xff) && win) {
+        ho_add_controls((void *)win); pp_add_controls((void *)win); cz_add_box((void *)win); ho_hide_resrow((void *)win);
+        mp_build((void *)win);   /* MODSPAGE, last: it moves the controls above onto the mods page */
+    }
     return r;
 }
 
@@ -8466,6 +8750,7 @@ static DWORD __fastcall ho_prefs_close(void *self, void *edx, DWORD win, DWORD i
         }
         pp_close((void *)win, id);   /* PERFPREFS */
         cz_close_box((void *)win, id);   /* task cityzoom */
+        mp_close((void *)win, id);   /* MODSPAGE */
     }
     a[0] = win; a[1] = id;
     return rz_thiscall_ret(self, g_orig_62b1, a, 2);
@@ -15351,6 +15636,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MENUBG", v, sizeof(v))) g_menubg = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDOPT", v, sizeof(v))) g_hudopt = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PERFPREFS", v, sizeof(v))) g_perfprefs = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_MODSPAGE", v, sizeof(v))) g_modspage = atoi(v);   /* owner 2026-10-27 */
           if (GetEnvironmentVariableA("SC3RESIZE_QUERYID", v, sizeof(v))) g_queryid = atoi(v);
           if (g_hudopt) ho_load_ini();   /* HUDOPT: the Preferences choice, env vars below still override */
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE", v, sizeof(v))) { g_hudscale = atoi(v); g_ho_env |= 1; }
