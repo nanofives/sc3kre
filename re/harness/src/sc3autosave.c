@@ -85,6 +85,7 @@ static DWORD g_interval_ms = 5 * 60 * 1000;
 static char  g_cfg_dir[MAX_PATH];
 static DWORD g_idle_ms = 3000;      /* idle wait, see "idle wait" below */
 static int   g_indicator = 1;       /* corner indicator instead of the progress box */
+static int   g_unauto = 1;          /* UNAUTO below; autosave.ini [autosave] unauto=, SC3AUTOSAVE_UNAUTO overrides */
 
 static void ini_read(void) {
     char path[MAX_PATH], v[32];
@@ -96,10 +97,12 @@ static void ini_read(void) {
         GetPrivateProfileStringA("autosave", "dir", "", g_cfg_dir, sizeof(g_cfg_dir), path);
         g_idle_ms   = (DWORD)GetPrivateProfileIntA("autosave", "idle_seconds", 3, path) * 1000;
         g_indicator = GetPrivateProfileIntA("autosave", "indicator", 1, path) ? 1 : 0;
+        g_unauto    = GetPrivateProfileIntA("autosave", "unauto", 1, path) ? 1 : 0;
         if (minutes < 1) minutes = 1;
         if (minutes > 240) minutes = 240;
         g_interval_ms = (DWORD)minutes * 60 * 1000;
     }
+    if (GetEnvironmentVariableA("SC3AUTOSAVE_UNAUTO", v, sizeof(v))) g_unauto = atoi(v) != 0;
     if (GetEnvironmentVariableA("SC3AUTOSAVE_SECONDS", v, sizeof(v)) && atoi(v) > 0) g_interval_ms = (DWORD)atoi(v) * 1000;
     /* test only: SC3AUTOSAVE_TIERS=<b>,<c> = the 10 min / 1 h ages in seconds */
     if (GetEnvironmentVariableA("SC3AUTOSAVE_TIERS", v, sizeof(v)) && atoi(v) > 0 && strchr(v, ',')) {
@@ -627,8 +630,7 @@ static void autosave_now(void) {
  * that is an autosave ("<city> (auto 5 min).sc3", or "<city>.autosaveN.sc3" from the builds before 10-28b), the name
  * is set to "<city>.sc3" in the same folder once the load is over (city vt+0x258, as name_restore), so Save goes to
  * the player's own file. Autosaves keep going to the "<city> (auto ...)" files (target_stem strips the suffix anyway).
- * SC3AUTOSAVE_UNAUTO=0 keeps the loaded name. */
-static int g_unauto = 1;
+ * SC3AUTOSAVE_UNAUTO=0 keeps the loaded name; so does autosave.ini [autosave] unauto=0 (the mods page checkbox). */
 static void unauto_name(void) {
     BYTE *city = city_get();
     char *slash, *cut, want[MAX_PATH];
@@ -717,8 +719,8 @@ static DWORD WINAPI watcher(LPVOID unused) {
                 if (!was_first) {   /* the first look only records the time: DllMain already read the file */
                     ini_read();
                     g_skips_logged = 0;
-                    logf("INI> autosave.ini changed: enabled=%d every %lu s, indicator %d", g_enabled,
-                         g_interval_ms / 1000, g_indicator);
+                    logf("INI> autosave.ini changed: enabled=%d every %lu s, indicator %d, unauto %d", g_enabled,
+                         g_interval_ms / 1000, g_indicator, g_unauto);
                 }
             }
             first = 0;   /* no file at the first look: one created later is a change */
@@ -778,8 +780,6 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
         g_log = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         ini_read();
         g_diag = GetEnvironmentVariableA("SC3AUTOSAVE_DIAG", NULL, 0) != 0;
-        {   char v[8];
-            if (GetEnvironmentVariableA("SC3AUTOSAVE_UNAUTO", v, sizeof(v))) g_unauto = atoi(v) != 0; }
         logf("### sc3autosave loaded, enabled=%d", g_enabled);
         /* enabled=0 still starts the watcher: Preferencias can turn autosave on without a restart */
         CreateThread(NULL, 0, watcher, NULL, 0, NULL);

@@ -1030,6 +1030,26 @@ __declspec(dllexport) int sc3overscroll_camera_set(int step, int div) {
     return sc3overscroll_camera_get();
 }
 
+/* Mods page (sc3resize MODSPAGE): which 0 = [camera] overscroll (50 floor .. 95), 1 = [edge] push. Both apply live:
+   allowed() reads g_overscroll on every camera move, push_start() reads g_push at every drag. Saved to overscroll.ini. */
+__declspec(dllexport) int sc3overscroll_opt_get(int which) { return which == 0 ? g_overscroll : which == 1 ? g_push : -1; }
+__declspec(dllexport) int sc3overscroll_opt_set(int which, int v) {
+    char path[MAX_PATH], s[16];
+    self_path(path, sizeof(path), "overscroll.ini");
+    if (which == 0) {
+        if (v < 50) v = 50;
+        if (v > 95) v = 95;
+        g_overscroll = v;
+        wsprintfA(s, "%d", v);
+        if (path[0]) WritePrivateProfileStringA("camera", "overscroll", s, path);
+    } else if (which == 1) {
+        g_push = v ? 1 : 0;
+        if (path[0]) WritePrivateProfileStringA("edge", "push", g_push ? "1" : "0", path);
+    } else return -1;
+    logf("### OPT: %s %d from the mods page, saved to overscroll.ini", which ? "edge push" : "overscroll", v);
+    return sc3overscroll_opt_get(which);
+}
+
 /* ============================================================ AUDIODIV: AUDIO.DLL cell-count divide guard */
 
 /* AUDIO.DLL FUN_1000ae06 and FUN_1000ae7a (__fastcall, ecx = the ambient-sound object) take the cell box around the
@@ -1137,7 +1157,7 @@ static DWORD WINAPI watcher(LPVOID param) {
             else logf("### EDGE: SIMSPR+0x42a95 differs from shipped - edge scroll NOT installed");
         }
         QueryPerformanceCounter(&g_edge_last);
-        if (hb && g_push) CreateThread(NULL, 0, push_thread, NULL, 0, NULL);
+        if (hb) CreateThread(NULL, 0, push_thread, NULL, 0, NULL);   /* always: push can be turned on from the mods page */
         logf("### READY: windowed=%d overscroll=%d%% slide=%d hook=%d edge=%d (gain %d, max %d px/s, tick %d) arrows_keep=%d",
              g_windowed, g_overscroll, g_slide, ok, g_edge, g_edge_gain, g_edge_max, hb, g_arrows);
     }
