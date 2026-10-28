@@ -439,9 +439,19 @@ static void cap_wait(void) {
     g_wait_ms += now_ms() - w0;
 }
 
+/* OVNEST (task edgeload 2026-10-28): a final present can nest. sc3resize's Blt hook, which this one chains to, issues
+   its own full-client Blts inside it (the RCI corner repaint, src NULL), and those come back through perf_blt. The
+   nested call saw the outer call's g_ov_saved and ran ov_copy(NULL, 1): 0xC0000005 READ 0 at sc3perf+0x6D9F
+   (0585798 build), stack sc3perf+0x79D5 (after the chained Blt) twice and +0x79F0 (after ov_copy), VEH
+   in_rci_repaint=1 (verify/edgeload, run 1, 50 s after a load at 2560x1351). Fix: only the outermost Blt draws the
+   overlay, and each call restores only what it saved, on its own src. SC3PERF_OVNEST=0 (perf.ini [perf] ovnest=0)
+   keeps the old pairing. */
+static int g_ovnest = 1;
+static LONG g_ov_depth;                  /* Blts in progress through perf_blt (the presents run on the game thread) */
 static HRESULT WINAPI perf_blt(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, void *fx) {
     double a, b;
     HRESULT hr;
+    int ov_top = 0, ov_mine = 0;
     int final = dr && g_cw > 0 && !IsBadReadPtr(dr, sizeof(RECT)) &&
                 dr->right - dr->left >= g_cw && dr->bottom - dr->top >= g_ch;
     if (!final && g_iconic && g_cap) {
@@ -452,12 +462,29 @@ static HRESULT WINAPI perf_blt(void *self, RECT *dr, void *src, RECT *sr, DWORD 
     }
     if (final) {
         cap_wait();
-        draw_overlay(src, sr && !IsBadReadPtr(sr, sizeof(RECT)) ? sr : NULL);
+        if (!g_ovnest || g_ov_depth == 0) {
+            draw_overlay(src, sr && !IsBadReadPtr(sr, sizeof(RECT)) ? sr : NULL);
+            ov_top = 1;
+            if (g_ovnest) { ov_mine = g_ov_saved; g_ov_saved = 0; }
+        } else {
+            static LONG nest_n;
+            LONG n = InterlockedIncrement(&nest_n);
+            if (n <= 3 || (n & 0xfff) == 0)
+                logf("OVNEST> #%ld full-client Blt inside a present (src 0x%08lX): overlay left to the outer call", n,
+                     (DWORD)src);
+        }
     }
     a = now_ms();
+    g_ov_depth++;
     hr = g_next_blt(self, dr, src, sr, fl, fx);
-    if (final && g_ov_saved) { ov_copy(src, 1); g_ov_saved = 0; }   /* give the game its pixels back */
-    if (final && g_ov_menu) { draw_overlay_menu(); g_ov_menu = 0; }   /* UISCALE: the menu's text, on the window */
+    g_ov_depth--;
+    if (g_ovnest) {
+        if (ov_mine) ov_copy(src, 1);   /* give the game its pixels back, on the surface they came from */
+        if (ov_top && g_ov_menu) { draw_overlay_menu(); g_ov_menu = 0; }
+    } else {
+        if (final && g_ov_saved) { ov_copy(src, 1); g_ov_saved = 0; }   /* give the game its pixels back */
+        if (final && g_ov_menu) { draw_overlay_menu(); g_ov_menu = 0; }   /* UISCALE: the menu's text, on the window */
+    }
     b = now_ms();
     if (final) {   /* a frame ends here */
         double ft = g_last_present > 0 ? b - g_last_present : 0;
@@ -3402,6 +3429,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID r) {
         g_busy = cfg("busy", 1);
         g_busy_show = cfg("busy_show", 1);
         g_locklog = cfg("locklog", 0);   /* LOCKLOG diag, SC3PERF_LOCKLOG=1 */
+        g_ovnest = cfg("ovnest", 1);     /* OVNEST, SC3PERF_OVNEST=0 */
         g_listcount = cfg("list_count", 1);
         g_listfind = cfg("list_find", 1);
         {   /* default 8 workers (owner call 2026-10-09), never more than the logical processors minus one */
