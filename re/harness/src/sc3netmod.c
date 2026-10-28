@@ -1395,6 +1395,7 @@ static int netramp_install(BYTE *m) {
 #include "sc3netmod_hwave.c"        /* task hwave: HWAVE, highway <-> avenue transition (SC3NETMOD_HWAVE=0) */
 #include "sc3netmod_sle.c"          /* task slopeend: SLE, rounded road ends on slopes (SC3NETMOD_SLE=0) */
 #include "sc3netmod_avl.c"          /* task avcore: AVL, one-way avenue halves on RBT's hooks (SC3NETMOD_AVL=0) */
+#include "sc3netmod_avp.c"          /* task avpaint: AVP, the avenue look on bands AVL leaves two-way (SC3NETMOD_AVP=0) */
 #include "sc3netmod_lanes.c"        /* task lanedensity: road density honours turn matrices (SC3NETMOD_LANEDENSITY) */
 
 /* ============================================================ arming */

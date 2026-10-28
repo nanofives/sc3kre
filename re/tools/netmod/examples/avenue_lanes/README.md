@@ -24,3 +24,14 @@ py -3.12 re/tools/netmod/netpack.py install re/tools/netmod/examples/avenue_lane
 ```
 
 The game needs an sc3netmod.dll built with `sc3netmod_avl.c`. Off switch: `SC3NETMOD_AVL=0`.
+
+Task avpaint (2026-10-28), built by `py -3.12 -m netmod.avpaint_build build netmod/examples/avenue_lanes --junctions
+netmod/examples/avenue_junctions` from re/tools (copies art from this folder's art/ and avenue_junctions' art/):
+
+- **21727..21735 look-only twins** (`avlp`): the art of 21701 / 21726 (21727) and 21718..21725 (21728..21735) on the
+  stock base with the stock two-way lanes (no lane spec). sc3netmod's AVP block writes them on the bends, U-turn ends
+  and slope rows of an avenue band AVL leaves two-way, so it still looks like the avenue. Saved as the base.
+- **21736..21741 corner + T** (`avlt`): an avenue corner with a plain road meeting the other band right beside it
+  converts one-way as one paved box. 21736 / 21737 the linked inner bend and half (base 39, lanes from
+  avjunc_build.box_spec), 21738..21741 = avenue_junctions box cells 20817 / 20815 / 20814 / 20816 under own ids (AVX
+  reverts its own ids where it found no box). Needs avenue_junctions installed (its curves are repeated here).

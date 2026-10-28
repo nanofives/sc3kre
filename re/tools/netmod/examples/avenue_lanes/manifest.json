@@ -1,9 +1,9 @@
 {
  "netpack": 1,
  "name": "avenue_lanes",
- "version": "0.2.0",
+ "version": "0.3.0",
  "author": "netmod (task avcore)",
- "description": "One-way avenue halves (owner 2026-10-19: 2 lanes each way, right-hand traffic everywhere). sc3netmod's AVL block writes these on an avenue band it can convert whole (re/analysis/AVENUE_LANES.md): 21700 the straight half (base 11204, both lanes in the half's direction), 21701 the avenue end U-turn quarter (base 11203), also an avenue corner's outer bend; 21726 an avenue corner's inner bend (base 11203). 21710..21725 a stock rail / power line / highway crossing or a road slope on a half, one way (two ids per base, one per direction). All save as their base at the same state, so a game without the mod loads the stock avenue. Task avslope (2026-10-26): the slope ids 21718..21725 draw the avenue half (white dashes, median, trees) laid on the slope piece's plane, built by `py -3.12 ../../avslope_paint.py --game <tree> build .` (art/ not shipped); without it they drew the plain sloped road.",
+ "description": "One-way avenue halves (owner 2026-10-19: 2 lanes each way, right-hand traffic everywhere). sc3netmod's AVL block writes these on an avenue band it can convert whole (re/analysis/AVENUE_LANES.md): 21700 the straight half (base 11204, both lanes in the half's direction), 21701 the avenue end U-turn quarter (base 11203), also an avenue corner's outer bend; 21726 an avenue corner's inner bend (base 11203). 21710..21725 a stock rail / power line / highway crossing or a road slope on a half, one way (two ids per base, one per direction). All save as their base at the same state, so a game without the mod loads the stock avenue. Task avslope (2026-10-26): the slope ids 21718..21725 draw the avenue half (white dashes, median, trees) laid on the slope piece's plane, built by `py -3.12 ../../avslope_paint.py --game <tree> build .` (art/ not shipped); without it they drew the plain sloped road. Task avpaint (2026-10-28): 21727..21735 are LOOK-ONLY twins (sc3netmod's AVP block) of 21701 / 21726 and 21718..21725 on the stock base with stock two-way lanes, written on the bends, U-turn ends and slopes of an avenue band AVL leaves two-way, so it still looks like the avenue. 21736..21741 are the corner + T pieces: an avenue corner with a plain road meeting the other band right beside it converts one-way as a paved box (21738..21741 are avenue_junctions box cells 20817 / 20815 / 20814 / 20816 under own ids). Needs avenue_junctions installed (its curves). Task avpaint (2026-10-28): 21727..21735 are LOOK-ONLY twins (sc3netmod's AVP block) of 21701 / 21726 and 21718..21725 on the stock base with stock two-way lanes, written on the bends, U-turn ends and slopes of an avenue band AVL leaves two-way, so it still looks like the avenue. 21736..21741 are the corner + T pieces: an avenue corner with a plain road meeting the other band right beside it converts one-way as a paved box (21738..21741 are avenue_junctions box cells 20817 / 20815 / 20814 / 20816 under own ids). Needs avenue_junctions installed (its curves).",
  "variants": [
   {
    "id": 21700,
@@ -229,6 +229,224 @@
     "from": 11203,
     "png_dir": "art/11203"
    }
+  },
+  {
+   "id": 21727,
+   "base": 11203,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (two way)",
+    "ENGLISH": "Avenida (doble sentido)"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11203,
+    "png_dir": "art/21727"
+   }
+  },
+  {
+   "id": 21728,
+   "base": 31,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (two way)",
+    "ENGLISH": "Avenida (doble sentido)"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 31,
+    "png_dir": "art/21728",
+    "first_pass": false
+   }
+  },
+  {
+   "id": 21729,
+   "base": 31,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (two way)",
+    "ENGLISH": "Avenida (doble sentido)"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 31,
+    "png_dir": "art/21729",
+    "first_pass": false
+   }
+  },
+  {
+   "id": 21730,
+   "base": 32,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (two way)",
+    "ENGLISH": "Avenida (doble sentido)"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 32,
+    "png_dir": "art/21730",
+    "first_pass": false
+   }
+  },
+  {
+   "id": 21731,
+   "base": 32,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (two way)",
+    "ENGLISH": "Avenida (doble sentido)"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 32,
+    "png_dir": "art/21731",
+    "first_pass": false
+   }
+  },
+  {
+   "id": 21732,
+   "base": 11201,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (two way)",
+    "ENGLISH": "Avenida (doble sentido)"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11201,
+    "png_dir": "art/21732",
+    "first_pass": false
+   }
+  },
+  {
+   "id": 21733,
+   "base": 11201,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (two way)",
+    "ENGLISH": "Avenida (doble sentido)"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11201,
+    "png_dir": "art/21733",
+    "first_pass": false
+   }
+  },
+  {
+   "id": 21734,
+   "base": 11202,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (two way)",
+    "ENGLISH": "Avenida (doble sentido)"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11202,
+    "png_dir": "art/21734",
+    "first_pass": false
+   }
+  },
+  {
+   "id": 21735,
+   "base": 11202,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (two way)",
+    "ENGLISH": "Avenida (doble sentido)"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11202,
+    "png_dir": "art/21735",
+    "first_pass": false
+   }
+  },
+  {
+   "id": 21736,
+   "base": 39,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue corner junction",
+    "ENGLISH": "Esquina de avenida"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21736"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21737,
+   "base": 39,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue corner junction",
+    "ENGLISH": "Esquina de avenida"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21737"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21738,
+   "base": 39,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue corner junction",
+    "ENGLISH": "Esquina de avenida"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21738"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21739,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue corner junction",
+    "ENGLISH": "Esquina de avenida"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21739"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21740,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue corner junction",
+    "ENGLISH": "Esquina de avenida"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21740"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21741,
+   "base": 39,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue corner junction",
+    "ENGLISH": "Esquina de avenida"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/21741"
+   },
+   "trblkatt": "copy_base"
   }
  ],
  "lanes": [
@@ -307,6 +525,30 @@
   {
    "piece": 21726,
    "spec": "avl_21726.lanes.json"
+  },
+  {
+   "piece": 21736,
+   "spec": "avl_21736.lanes.json"
+  },
+  {
+   "piece": 21737,
+   "spec": "avl_21737.lanes.json"
+  },
+  {
+   "piece": 21738,
+   "spec": "avl_21738.lanes.json"
+  },
+  {
+   "piece": 21739,
+   "spec": "avl_21739.lanes.json"
+  },
+  {
+   "piece": 21740,
+   "spec": "avl_21740.lanes.json"
+  },
+  {
+   "piece": 21741,
+   "spec": "avl_21741.lanes.json"
   }
  ],
  "avenue_lines": [
@@ -328,6 +570,22 @@
   "avlc 21722 11201 2",
   "avlc 21723 11201 0",
   "avlc 21724 11202 1",
-  "avlc 21725 11202 3"
+  "avlc 21725 11202 3",
+  "avlp 21727 21701",
+  "avlp 21727 21726",
+  "avlp 21728 21718",
+  "avlp 21729 21719",
+  "avlp 21730 21720",
+  "avlp 21731 21721",
+  "avlp 21732 21722",
+  "avlp 21733 21723",
+  "avlp 21734 21724",
+  "avlp 21735 21725",
+  "avlt 21736 ICAI CCIO",
+  "avlt 21737 ICAI ICOC",
+  "avlt 21738 ICAI ICOT",
+  "avlt 21739 AAII ITOT",
+  "avlt 21740 AAII TOTI",
+  "avlt 21741 ACII ICOT"
  ]
 }

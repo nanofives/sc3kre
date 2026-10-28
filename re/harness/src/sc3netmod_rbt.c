@@ -198,10 +198,17 @@ static WORD g_hwlt_t[65536];                  /* piece -> its twin, 0 none */
 static WORD g_hwlt_p[65536];                  /* twin -> its piece, 0 not a twin */
 #define HWLT_LIT 0x40000000UL
 
+/* task avpaint: AVP's look-only twins (sc3netmod_avp.c). A read sees the base, with the twin's index in AVP_IX */
+static BYTE g_avp_ix[65536];                  /* twin -> its index 1..AVP_MAX, 0 not a twin */
+static WORD g_avp_tw[65536];                  /* AVL piece -> its twin, 0 none */
+static WORD g_avp_id[256];                    /* index -> twin */
+#define AVP_IX 0x0ff00000UL
+
 static DWORD hwlt_read(DWORD r) {
     WORD id = (WORD)(r & 0xffff);
     int odd = (int)((r >> 16) & 1);
     if (!r) return r;
+    if (g_avp_ix[id]) return (r & ~0xffffUL) | g_base[id] | ((DWORD)g_avp_ix[id] << 20);   /* task avpaint */
     if (g_hwlt_p[id]) return (r & ~0xffffUL) | g_hwlt_p[id] | (odd ? 0 : HWLT_LIT);
     if (g_hwlt_t[id] && odd) return r | HWLT_LIT;
     return r;
