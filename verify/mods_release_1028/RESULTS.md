@@ -49,3 +49,6 @@ box, a T on the inner side (21740 / 21741).
 | mods/netmod/** | | as stage/release (avenue_lanes 0.3.0) |
 | every other file | | as `verify/mods_release_1027f/RESULTS.md` |
 | `sc3mods_2026-10-28.zip` | 43,611,810 | 22DC147132CE506121781F10B2ECEEC4898AEAD7DD100AA1E5FFC68EEA6A231A |
+
+GitHub: `sc3mods-2026-10-28`, target `9f842f7`, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-10-28, asset
+downloaded back, SHA-256 matches. The 10-27f notes now start with a "superseded" line.
