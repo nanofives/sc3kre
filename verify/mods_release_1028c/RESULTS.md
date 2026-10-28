@@ -30,3 +30,6 @@ LAN: 2 of 3,606 files sent (0.6 MB). Served label `2026-10-28c`, served sc3resiz
 | `sc3mods_2026-10-28c.zip` | 43,615,253 | 140F7D90DBF955CEDA37085E36FCE9CF2DEE5DACA641C92A132BD82BCEA636DF |
 
 Owner check pending: Big One.autosave2 from the main menu with the window maximized on MARIANO-PC.
+
+GitHub: `sc3mods-2026-10-28c`, target `451dc44`, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-10-28c, asset
+downloaded back, SHA-256 matches. The 10-28b notes now start with a "superseded" line.
