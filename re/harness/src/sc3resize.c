@@ -8106,6 +8106,7 @@ static int ho_spanish(void) {
 }
 
 /* Label, mirrored from SIMUI FUN_1005844a (the dialog's section labels), caption set from our own string. */
+static int g_ho_lblcol;
 static int ho_add_label(void *fac, void *win, DWORD id, const char *text, int x, int y, int w) {
     HMODULE sui = GetModuleHandleA("SIMUI.DLL");
     BYTE s[0x20];
@@ -8116,7 +8117,7 @@ static int ho_add_label(void *fac, void *win, DWORD id, const char *text, int x,
     if (lbl) {
         ho_v(lbl, 0x40, 1, ho_v(fac, 0x14, 1, 0xf, 0, 0, 0, 0), 0, 0, 0, 0);          /* font 0xf */
         cs = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85039))();                   /* colour service */
-        if (cs) ho_v(lbl, 0x24, 1, ho_v(cs, 0x84, 3, 0x79, 0x7d, 0xb5, 0, 0) & 0xffff, 0, 0, 0, 0);
+        if (cs) ho_v(lbl, 0x24, 1, ho_v(cs, 0x84, 3, g_ho_lblcol ? 0x10 : 0x79, g_ho_lblcol ? 0x10 : 0x7d, g_ho_lblcol ? 0x50 : 0xb5, 0, 0) & 0xffff, 0, 0, 0, 0);   /* g_ho_lblcol: MODSUI navy for labels on the blue camera panel */
         lw = (void *)ho_v(lbl, 0x0c, 0, 0, 0, 0, 0, 0);
         ho_v(lw, 0x10c, 1, (DWORD)s, 0, 0, 0, 0);                                     /* caption */
         ho_v(lw, 0xb8, 1, (DWORD)w, 0, 0, 0, 0);
@@ -8488,6 +8489,40 @@ static int cs_add_slider(void *fac, void *win, DWORD id, int x, int y, int w, in
     return ok;
 }
 
+/* MODSUI (owner 2026-10-28): the two camera sliders sit on one light-blue panel, built as the game builds its framed
+ * sections of Preferencias: window class 0x4303E5B6 / 0xE303E5AE from the singleton FUN_1008489d vt+0xc, vt+0x38 = its
+ * window, colour factory +0x80(0x62E56A2B, 1) through vt+0x14, style 0x22, rect {0,0,w,h}, +0xec(id), +0xf4(0x800, 0),
+ * +0xcc(x, y), parent vt+0x34 [CONFIRMED @ SIMUI 0x10058c80]. Added before the sliders so it draws under them.
+ * SC3RESIZE_MODSUI=0 drops the panel. */
+#define MP_PANEL 0x02F95B65
+static int g_modspage;   /* default set where it is defined below */
+static int g_modsui = 1;
+typedef void *(__cdecl *MP_GETSVC)(void);
+static int mp_panel(void *fac, void *win, DWORD id, int x, int y, int w, int h) {
+    HMODULE sui = GetModuleHandleA("SIMUI.DLL");
+    void **svc, *obj = NULL, *pw;
+    LONG r[4];
+    int ok = 0;
+    DWORD col;
+    if (!sui) return 0;
+    svc = (void **)((MP_GETSVC)((BYTE *)sui + 0x8489d))();
+    if (!svc || IsBadReadPtr(svc, 4)) return 0;
+    if (!(ho_v(svc, 0x0c, 3, 0x4303e5b6, 0xe303e5ae, (DWORD)&obj, 0, 0) & 0xff) || !obj) return 0;
+    col = ho_v(fac, 0x80, 2, 0x62e56a2c, 0, 0, 0, 0);   /* the saturated panel behind the sound sliders: FUN_100564d9 frame 0x02F95ADC */
+    ho_v(obj, 0x0c, 1, 0x22, 0, 0, 0, 0);
+    ho_v(obj, 0x14, 1, col, 0, 0, 0, 0);
+    r[0] = 0; r[1] = 0; r[2] = w; r[3] = h;
+    pw = (void *)ho_v(obj, 0x38, 0, 0, 0, 0, 0, 0);
+    ho_v(pw, 0xc4, 1, (DWORD)r, 0, 0, 0, 0);
+    ho_v(pw, 0xec, 1, id, 0, 0, 0, 0);
+    ho_v(pw, 0xf4, 2, 0x800, 0, 0, 0, 0);
+    ho_v(pw, 0xcc, 2, (DWORD)x, (DWORD)y, 0, 0, 0);
+    pw = (void *)ho_v(obj, 0x38, 0, 0, 0, 0, 0, 0);
+    ok = (int)(ho_v(win, 0x34, 1, (DWORD)pw, 0, 0, 0, 0) & 0xff);
+    ho_v(obj, 0x08, 0, 0, 0, 0, 0, 0);
+    return ok;
+}
+
 static void cs_add_controls(void *win) {
     HMODULE sui = GetModuleHandleA("SIMUI.DLL");
     CS_GET get;
@@ -8504,9 +8539,12 @@ static void cs_add_controls(void *win) {
     ia = cs_nearest(cs_steps, 10, cur & 0xffff);
     id = cs_nearest(cs_divs, 8, (cur >> 16) & 0x3fff);
     es = ho_spanish();
-    ok += ho_add_label(fac, win, CS_ARROW_LBL, es ? "Vel. flechas" : "Arrow speed", CS_X_LBL, CS_Y_ARROW + 2, 96);
+    if (g_modspage && g_modsui) logf("MODSUI> camera panel %s", mp_panel(fac, win, MP_PANEL, 278, 161, 190, 50) ? "added" : "FAILED");
+    g_ho_lblcol = g_modspage && g_modsui; ok += ho_add_label(fac, win, CS_ARROW_LBL, es ? "Vel. flechas" : "Arrow speed", CS_X_LBL, CS_Y_ARROW + 2, 96);
+    g_ho_lblcol = 0;
     ok += cs_add_slider(fac, win, CS_ARROW, CS_X_SLIDER, CS_Y_ARROW, CS_W_SLIDER, ia * 0x400 / 9);
-    ok += ho_add_label(fac, win, CS_DRAG_LBL, es ? "Vel. clic der." : "Drag speed", CS_X_LBL, CS_Y_DRAG + 2, 96);
+    g_ho_lblcol = g_modspage && g_modsui; ok += ho_add_label(fac, win, CS_DRAG_LBL, es ? "Vel. clic der." : "Drag speed", CS_X_LBL, CS_Y_DRAG + 2, 96);
+    g_ho_lblcol = 0;
     ok += cs_add_slider(fac, win, CS_DRAG, CS_X_SLIDER, CS_Y_DRAG, CS_W_SLIDER, id * 0x400 / 7);
     logf("CAMSET> Preferences 0x%08lX: %d of 4 controls added, arrows step %d (pos %d/9), drag divisor %d (pos %d/7)",
          (DWORD)win, ok, cur & 0xffff, ia, (cur >> 16) & 0x3fff, id);
@@ -8590,7 +8628,7 @@ static int   g_mp_as_on, g_mp_as_min, g_mp_as_ind, g_mp_simrun, g_mp_undo, g_mp_
 
 static const DWORD k_mp_page_ids[] = { MP_BTN_BACK, MP_TITLE, MP_H_UI, MP_H_PERF, MP_H_AS, MP_H_OTHER, MP_AS_ON, MP_AS_IND,
     MP_AS_GRP, MP_AS_LBL, MP_SIMRUN, MP_UNDO, MP_UNDOBTN, MP_OVERSC, MP_EDGE,
-    HO_LABEL, HO_GROUP, HO_SMOOTH, PP_FPS, PP_BUSY, CZ_BOX, CS_HDR, CS_ARROW_LBL, CS_ARROW, CS_DRAG_LBL, CS_DRAG };
+    MP_PANEL, HO_LABEL, HO_GROUP, HO_SMOOTH, PP_FPS, PP_BUSY, CZ_BOX, CS_HDR, CS_ARROW_LBL, CS_ARROW, CS_DRAG_LBL, CS_DRAG };
 #define MP_NPAGE (sizeof(k_mp_page_ids) / sizeof(k_mp_page_ids[0]))
 
 static void mp_ini(char *out, int cap, const char *leaf) { rz_mb_path(out, cap, leaf); }   /* every mod's ini sits beside its DLL */
@@ -8688,6 +8726,17 @@ static void mp_move(void *win, DWORD id, int x, int y) {
     ho_v(c, 0xc8, 4, (DWORD)x, (DWORD)y, (DWORD)(x + (l[2] - l[0])), (DWORD)(y + (l[3] - l[1])), 0);
 }
 
+/* top of a button h high, centred vertically on the OK tick (0x02F95AD8, local (432, 434)); its rect is measured */
+static int mp_btn_y(void *win, int h) {
+    BYTE *ok = (BYTE *)mp_child(win, 0x02F95AD8);
+    int y;
+    if (!ok || IsBadReadPtr(ok, 0xa4)) return 434;
+    y = *(LONG *)(ok + 0x84) + ((*(LONG *)(ok + 0x8c) - *(LONG *)(ok + 0x84)) - h) / 2;
+    logf("MODSUI> OK button rect [%ld %ld %ld %ld], buttons at y %d", *(LONG *)(ok + 0x80), *(LONG *)(ok + 0x84),
+         *(LONG *)(ok + 0x88), *(LONG *)(ok + 0x8c), y);
+    return y;
+}
+
 /* the mods page, layout (Preferences is 480x472, local coords) */
 #define MP_X0 18
 #define MP_X1 30
@@ -8716,7 +8765,7 @@ static void mp_build(void *win) {
                                                 g_mp_oversc = g_mp_ovs_pct > 50;
                                                 g_mp_edge = GetPrivateProfileIntA("edge", "enabled", 1, p) ? 1 : 0;
         /* page A: the button, in the right half of "Opciones generales" that HUDOPT's controls leave */
-        n += mp_button(fac, win, MP_BTN_MODS, es ? "Opciones de mods..." : "Mod options...", 250, 372, 150, 26);
+        n += mp_button(fac, win, MP_BTN_MODS, es ? "Opciones de mods..." : "Mod options...", MP_X0, mp_btn_y(win, 26), 150, 26);
         /* page B */
         n += ho_add_label(fac, win, MP_TITLE, es ? "Opciones de los mods" : "Mod options", MP_X0, 40, 300);
         n += ho_add_label(fac, win, MP_H_UI, es ? "Interfaz" : "Interface", MP_X0, 66, 200);
@@ -8757,7 +8806,7 @@ static void mp_build(void *win) {
             n += mp_checkbox(fac, win, MP_UNDO, es ? "Deshacer (Ctrl+Z)" : "Undo (Ctrl+Z)", g_mp_undo, MP_X1, 318, 200, col);
             n += mp_checkbox(fac, win, MP_UNDOBTN, es ? "Botones de deshacer" : "Undo buttons", g_mp_undobtn, 250, 318, 180, col);
         }
-        n += mp_button(fac, win, MP_BTN_BACK, es ? "Volver" : "Back", MP_X0, 372, 110, 26);
+        n += mp_button(fac, win, MP_BTN_BACK, es ? "Volver" : "Back", MP_X0, mp_btn_y(win, 26), 110, 26);
         logf("MODSPAGE> Preferences 0x%08lX: %d controls added", (DWORD)win, n);
     }
     /* sort the children: ours (page B), the OK button (both pages), everything else is the game's page */
@@ -15754,7 +15803,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MENUBG", v, sizeof(v))) g_menubg = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_HUDOPT", v, sizeof(v))) g_hudopt = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PERFPREFS", v, sizeof(v))) g_perfprefs = atoi(v);
-          if (GetEnvironmentVariableA("SC3RESIZE_MODSPAGE", v, sizeof(v))) g_modspage = atoi(v);   /* owner 2026-10-27 */
+          if (GetEnvironmentVariableA("SC3RESIZE_MODSPAGE", v, sizeof(v))) g_modspage = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_MODSUI", v, sizeof(v))) g_modsui = atoi(v);   /* owner 2026-10-27 */
           if (GetEnvironmentVariableA("SC3RESIZE_QUERYID", v, sizeof(v))) g_queryid = atoi(v);
           if (g_hudopt) ho_load_ini();   /* HUDOPT: the Preferences choice, env vars below still override */
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE", v, sizeof(v))) { g_hudscale = atoi(v); g_ho_env |= 1; }
