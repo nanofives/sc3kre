@@ -133,8 +133,29 @@ be one-way; otherwise it leaves the whole band stock two-way (owner decision).
      refused band processes the band beyond each corner in the same run, even outside the pass box;
   2. a cell on each half holding a piece DECLARED one-way by a sibling (`avlj` line, section 5), whose edge facing the
      band carries the band's direction (traffic of the half that flows into the piece = `I`, out of it = `O`);
+  1c. a CORNER + T (task avpaint, 2026-10-28, owner save "Big One" (567..569, 31..32)): a plain road meets the other
+     band's first row right beside the corner block. The stock tiler puts T 39 / X 43 on that row (the T row) and,
+     with the road on the outer side, links the inner bend and the other band's half beside it through their shared
+     edge (each becomes a T 39 = its own arms + that edge). avl_corner_at accepts the block when every linked cell and
+     both T row cells have an `avlt` piece for their outline / modes (AVX box-cell letters: one paved 2 x 2 box whose
+     arms are the inner band's half, the outer bend, the other band and the road, two-way). The other band then
+     begins one row further out; seen from it, the T row is the end (`T row of a corner + T`) and the corner band is
+     decided with it, as through a plain corner. Off: `SC3NETMOD_AVLCT=0`. Table line:
+     `avlt <piece> <outline NESW> <modes NESW>` at state 0, same letters as `avxm`; the piece is written at a state
+     with the cell's own connections (the cell's state first) and must have the cell's base;
+  2. a cell on each half holding a piece DECLARED one-way by a sibling (`avlj` line, section 5), whose edge facing the
+     band carries the band's direction (traffic of the half that flows into the piece = `I`, out of it = `O`);
   3. the map edge.
   Anything else (a stock T 39 / X 43 on a half, a plain road continuing a half, an undeclared variant) refuses the band.
+- **Why a band stays two-way** (task avpaint): every refused band logs one line, `avl: <who>: band along <axis> from
+  (x,z) rows k0..k1 stays two-way: <reason>`, the first check that failed (an end that is not a U-turn pair / corner /
+  join, with the corner check stage reached; join letters that do not fit; a crossing row without a variant; corner
+  chain depth). Through a corner the band beyond names itself. Capped at 200 lines on load, like the accepted lines.
+- **Look of a refused band (AVP, sc3netmod_avp.c, task avpaint):** a band AVL leaves two-way still gets the avenue
+  look on its bends, U-turn ends and slope rows: `avlp <twin> <piece>` declares a look-only twin of AVL's piece (same
+  art, the stock base, the base's two-way lanes, saved as the base). Only cells of a band that holds at least one
+  straight 11204 row and has no converted cell. rb_read / hwy_read return a twin as its base (index in bits 20..27,
+  AVP_IX), so every block decides on the stock grid. Off: `SC3NETMOD_AVP=0`.
 - **Write / revert:** the game's piece writer FUN_10008919 per cell, as AVX / DAV. An avcore piece in a band that no
   longer qualifies gets its base back at the same state (the stock piece it replaced) before the writes; a rect retile
   would keep a Protected base (measured: rail crossing 69 stayed the one-way variant). Runs on every
