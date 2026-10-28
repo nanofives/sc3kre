@@ -32,3 +32,6 @@ LAN: 4 of 3,606 files sent (0.9 MB). Served label `2026-10-28e`, the four served
 
 Not tested by modsopts: the overscroll slider's effect on the camera, the Monitor / 120 / Sin límite radios, English text, cancel.
 Owner checks pending: a Save after loading an autosave, plus the 10-28c / 10-28d items.
+
+GitHub: `sc3mods-2026-10-28e`, target `ec035d1`, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-10-28e, asset
+downloaded back, SHA-256 matches. The 10-28d notes now start with a "superseded" line. The repo README mods section went live with this push.
