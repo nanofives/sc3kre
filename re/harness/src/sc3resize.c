@@ -8618,17 +8618,35 @@ static int g_modspage = 1;
 #define MP_UNDOBTN  0x02F95B62
 #define MP_OVERSC   0x02F95B63
 #define MP_EDGE     0x02F95B64
+#define MP_H_BLD    0x02F95B66   /* "Edificios" heading */
+#define MP_BLD_MOVE 0x02F95B67   /* "Boton Mover" (RELOCATE) */
+#define MP_BLD_OVER 0x02F95B68   /* "Construir sobre zonas" (PLOPOVER) */
+#define MP_AS_UNAUTO 0x02F95B69  /* "Guardar en la ciudad original" (sc3autosave UNAUTO) */
+#define MP_OVS_SL   0x02F95B6A   /* overscroll slider, leftmost = off */
+#define MP_OVS_LBL  0x02F95B6B
+#define MP_FPS_GRP  0x02F95B6C   /* FPS cap group, radios 6D..71 */
+#define MP_FPS_R0   0x02F95B6D
+#define MP_FPS_LBL  0x02F95B72
+#define MP_PUSH     0x02F95B73   /* [edge] push, "push the camera when building at the edge" */
+#define MP_AS_M60   0x02F95B74
 #define MP_MAXKIDS  96
+/* RELOCATE / PLOPOVER switches (block below). The hooks are installed unless the env turns BOTH off, and only the
+ * behaviour gates on these two flags, so the mods page can flip them at any time. sc3resize.ini [buildings] mover= /
+ * plopover= (default 1) are read at start, the env vars override. */
+static int   g_relocate = 1, g_plopover = 1, g_rl_envoff;
+static int   g_mp_unauto, g_mp_mover, g_mp_plop, g_mp_cap, g_mp_ovs_idx, g_mp_push;
+static const int k_mp_caps[5] = { -1, 30, 60, 120, 0 };   /* sc3perf fps_cap: -1 monitor refresh, 0 none */
+static HMODULE g_rl_geom;   /* SIMGEOM when the RELOCATE hooks are in */
 static void *g_mp_win;                       /* the Preferences window the lists below belong to */
 static void *g_mp_game[MP_MAXKIDS];          /* the game's children (page A), and whether each was visible */
 static int   g_mp_game_vis[MP_MAXKIDS], g_mp_ngame;
 static int   g_mp_page;                      /* 0 = the game's page, 1 = mods */
 /* the values shown when the dialog was built, to write only what the player changed */
-static int   g_mp_as_on, g_mp_as_min, g_mp_as_ind, g_mp_simrun, g_mp_undo, g_mp_undobtn, g_mp_oversc, g_mp_ovs_pct, g_mp_edge;
+static int   g_mp_as_on, g_mp_as_min, g_mp_as_ind, g_mp_simrun, g_mp_undo, g_mp_undobtn, g_mp_ovs_pct, g_mp_edge;
 
 static const DWORD k_mp_page_ids[] = { MP_BTN_BACK, MP_TITLE, MP_H_UI, MP_H_PERF, MP_H_AS, MP_H_OTHER, MP_AS_ON, MP_AS_IND,
-    MP_AS_GRP, MP_AS_LBL, MP_SIMRUN, MP_UNDO, MP_UNDOBTN, MP_OVERSC, MP_EDGE,
-    MP_PANEL, HO_LABEL, HO_GROUP, HO_SMOOTH, PP_FPS, PP_BUSY, CZ_BOX, CS_HDR, CS_ARROW_LBL, CS_ARROW, CS_DRAG_LBL, CS_DRAG };
+    MP_AS_GRP, MP_AS_LBL, MP_H_BLD, MP_BLD_MOVE, MP_BLD_OVER, MP_AS_UNAUTO, MP_SIMRUN, MP_UNDO, MP_UNDOBTN, MP_EDGE, MP_OVS_SL, MP_OVS_LBL, MP_FPS_GRP, MP_FPS_LBL, MP_PUSH, MP_AS_M60, CS_HDR,
+    MP_PANEL, HO_LABEL, HO_GROUP, HO_SMOOTH, PP_FPS, PP_BUSY, CZ_BOX, CS_ARROW_LBL, CS_ARROW, CS_DRAG_LBL, CS_DRAG };
 #define MP_NPAGE (sizeof(k_mp_page_ids) / sizeof(k_mp_page_ids[0]))
 
 static void mp_ini(char *out, int cap, const char *leaf) { rz_mb_path(out, cap, leaf); }   /* every mod's ini sits beside its DLL */
@@ -8762,12 +8780,23 @@ static void mp_build(void *win) {
         g_mp_as_on  = GetPrivateProfileIntA("autosave", "enabled", 1, p) ? 1 : 0;
         g_mp_as_min = GetPrivateProfileIntA("autosave", "minutes", 5, p);
         g_mp_as_ind = GetPrivateProfileIntA("autosave", "indicator", 1, p) ? 1 : 0;
+        g_mp_unauto = GetPrivateProfileIntA("autosave", "unauto", 1, p) ? 1 : 0;
+        g_mp_mover = g_relocate ? 1 : 0; g_mp_plop = g_plopover ? 1 : 0;   /* live values: env + ini + earlier OK */
         mp_ini(p, sizeof(p), "simrun.ini");     g_mp_simrun = GetPrivateProfileIntA("sim", "run_while_scrolling", 1, p) ? 1 : 0;
         mp_ini(p, sizeof(p), "undo.ini");       g_mp_undo = GetPrivateProfileIntA("undo", "enabled", 1, p) ? 1 : 0;
                                                 g_mp_undobtn = GetPrivateProfileIntA("undo", "buttons", 1, p) ? 1 : 0;
         mp_ini(p, sizeof(p), "overscroll.ini"); g_mp_ovs_pct = GetPrivateProfileIntA("camera", "overscroll", 75, p);
-                                                g_mp_oversc = g_mp_ovs_pct > 50;
+                                                g_mp_push = GetPrivateProfileIntA("edge", "push", 1, p) ? 1 : 0;
                                                 g_mp_edge = GetPrivateProfileIntA("edge", "enabled", 1, p) ? 1 : 0;
+        {   HMODULE om = GetModuleHandleA("sc3overscroll.dll");   /* the live values win over the ini */
+            int (*og)(int) = om ? (int (*)(int))GetProcAddress(om, "sc3overscroll_opt_get") : NULL;
+            if (og) { g_mp_ovs_pct = og(0); g_mp_push = og(1) ? 1 : 0; }
+            if (g_mp_ovs_pct < 50) g_mp_ovs_pct = 50;
+            if (g_mp_ovs_pct > 95) g_mp_ovs_pct = 95;
+            g_mp_ovs_idx = (g_mp_ovs_pct - 50 + 2) / 5; }
+        {   HMODULE pm = GetModuleHandleA("sc3perf.dll");
+            int (*cg)(void) = pm ? (int (*)(void))GetProcAddress(pm, "sc3perf_cap_get") : NULL;
+            g_mp_cap = cg ? cg() : -2; }   /* -2: no sc3perf cap export, no row */
         /* page A: the button, in the right half of "Opciones generales" that HUDOPT's controls leave */
         n += mp_button(fac, win, MP_BTN_MODS, es ? "Opciones de mods..." : "Mod options...", MP_BX, mp_btn_y(win, MP_BH), 150, MP_BH);
         /* page B */
@@ -8780,35 +8809,56 @@ static void mp_build(void *win) {
         n += ho_add_label(fac, win, MP_H_PERF, es ? "Rendimiento" : "Performance", MP_X0, 146, 200);
         mp_move(win, PP_FPS, MP_X1, 164);
         mp_move(win, PP_BUSY, 150, 164);
-        if (mp_child(win, CS_ARROW)) {   /* CAMSET: right column, free from y 146 to the autosave row at 210 */
-            n += ho_add_label(fac, win, CS_HDR, es ? "C\xe1mara" : "Camera", 280, 146, 180);
-            mp_move(win, CS_ARROW_LBL, 292, 166);
-            mp_move(win, CS_ARROW, 374, 164);
-            mp_move(win, CS_DRAG_LBL, 292, 188);
-            mp_move(win, CS_DRAG, 374, 186);
+        if (g_rl_geom) {   /* RELOCATE / PLOPOVER live in sc3resize: applied at once on OK */
+            n += ho_add_label(fac, win, MP_H_BLD, es ? "Edificios" : "Buildings", 280, 146, 190);
+            n += mp_checkbox(fac, win, MP_BLD_MOVE, es ? "Bot\xf3n Mover" : "Move button", g_mp_mover, 292, 164, 170, col);
+            n += mp_checkbox(fac, win, MP_BLD_OVER, es ? "Construir sobre zonas" : "Build over zones", g_mp_plop, 292, 182, 176, col);
+        }
+        if (g_mp_cap != -2) {   /* sc3perf: applies within a second */
+            DWORD fid[5];
+            const char *ftx[5] = { "Monitor   ", "30   ", "60   ", "120   ", es ? "Sin l\xedmite" : "No limit" };
+            for (i = 0; i < 5; i++) fid[i] = MP_FPS_R0 + i;
+            sel = 0;
+            for (i = 0; i < 5; i++) if (k_mp_caps[i] == g_mp_cap) sel = fid[i];
+            n += ho_add_label(fac, win, MP_FPS_LBL, es ? "L\xedmite de FPS:" : "FPS limit:", MP_X1, 208, 90);
+            n += mp_group(fac, win, MP_FPS_GRP, fid, ftx, 5, sel, 122, 206, 340, col);
         }
         if (mp_loaded("sc3autosave.dll")) {
-            static const DWORD aid[4] = { MP_AS_M5, MP_AS_M10, MP_AS_M15, MP_AS_M30 };
-            const char *atx[4] = { "5 min   ", "10 min   ", "15 min   ", "30 min" };
-            n += ho_add_label(fac, win, MP_H_AS, es ? "Autoguardado" : "Autosave", MP_X0, 192, 200);
-            n += mp_checkbox(fac, win, MP_AS_ON, es ? "Autoguardar" : "Autosave", g_mp_as_on, MP_X1, 210, 120, col);
-            n += mp_checkbox(fac, win, MP_AS_IND, es ? "Mostrar aviso" : "Show notice", g_mp_as_ind, 160, 210, 150, col);
-            n += ho_add_label(fac, win, MP_AS_LBL, es ? "Cada:" : "Every:", MP_X1, 232, 50);
-            sel = g_mp_as_min <= 5 ? MP_AS_M5 : g_mp_as_min <= 10 ? MP_AS_M10 : g_mp_as_min <= 15 ? MP_AS_M15 : MP_AS_M30;
-            n += mp_group(fac, win, MP_AS_GRP, aid, atx, 4, sel, 80, 230, 300, col);
+            static const DWORD aid[5] = { MP_AS_M5, MP_AS_M10, MP_AS_M15, MP_AS_M30, MP_AS_M60 };
+            const char *atx[5] = { "5 min   ", "10 min   ", "15 min   ", "30 min   ", "60 min" };
+            n += ho_add_label(fac, win, MP_H_AS, es ? "Autoguardado" : "Autosave", MP_X0, 232, 200);
+            n += mp_checkbox(fac, win, MP_AS_ON, es ? "Autoguardar" : "Autosave", g_mp_as_on, MP_X1, 250, 120, col);
+            n += mp_checkbox(fac, win, MP_AS_IND, es ? "Mostrar aviso" : "Show notice", g_mp_as_ind, 150, 250, 112, col);
+            n += mp_checkbox(fac, win, MP_AS_UNAUTO, es ? "Guardar en la ciudad original" : "Save to the original city",
+                             g_mp_unauto, 266, 250, 204, col);
+            n += ho_add_label(fac, win, MP_AS_LBL, es ? "Cada:" : "Every:", MP_X1, 274, 50);
+            sel = g_mp_as_min <= 5 ? MP_AS_M5 : g_mp_as_min <= 10 ? MP_AS_M10 : g_mp_as_min <= 15 ? MP_AS_M15 : g_mp_as_min <= 30 ? MP_AS_M30 : MP_AS_M60;
+            n += mp_group(fac, win, MP_AS_GRP, aid, atx, 5, sel, 80, 272, 390, col);
+        }
+        if (mp_child(win, CS_ARROW) || mp_loaded("sc3overscroll.dll"))
+            n += ho_add_label(fac, win, CS_HDR, es ? "C\xe1mara" : "Camera", MP_X0, 298, 180);
+        if (mp_child(win, CS_ARROW)) {   /* CAMSET: the panel and its two sliders, left */
+            mp_move(win, MP_PANEL, 30, 316);
+            mp_move(win, CS_ARROW_LBL, 44, 321);
+            mp_move(win, CS_ARROW, 126, 319);
+            mp_move(win, CS_DRAG_LBL, 44, 343);
+            mp_move(win, CS_DRAG, 126, 341);
+        }
+        if (mp_loaded("sc3overscroll.dll")) {   /* overscroll slider (leftmost = off) and push: both live */
+            n += ho_add_label(fac, win, MP_OVS_LBL, es ? "M\xe1s all\xe1 del borde" : "Past the map edge", 236, 318, 124);
+            n += cs_add_slider(fac, win, MP_OVS_SL, 364, 316, 100, g_mp_ovs_idx * 0x400 / 9);
+            n += mp_checkbox(fac, win, MP_PUSH, es ? "Empujar c\xe1mara al construir" : "Push camera when building", g_mp_push, 236, 342, 234, col);
         }
         if (mp_loaded("sc3simrun.dll") || mp_loaded("sc3overscroll.dll") || mp_loaded("sc3undo.dll"))
-            n += ho_add_label(fac, win, MP_H_OTHER, es ? "Al reiniciar el juego" : "After restarting the game", MP_X0, 260, 300);
+            n += ho_add_label(fac, win, MP_H_OTHER, es ? "Al reiniciar el juego" : "After restarting the game", MP_X0, 374, 300);
         if (mp_loaded("sc3simrun.dll"))
             n += mp_checkbox(fac, win, MP_SIMRUN, es ? "La ciudad sigue al mover la c\xe1mara" : "City keeps running while scrolling",
-                             g_mp_simrun, MP_X1, 278, 330, col);
-        if (mp_loaded("sc3overscroll.dll")) {
-            n += mp_checkbox(fac, win, MP_OVERSC, es ? "C\xe1mara m\xe1s all\xe1 del borde" : "Camera past the map edge", g_mp_oversc, MP_X1, 298, 200, col);
-            n += mp_checkbox(fac, win, MP_EDGE, es ? "Mover en el borde" : "Edge scroll", g_mp_edge, 250, 298, 180, col);
-        }
+                             g_mp_simrun, MP_X1, 392, 330, col);
+        if (mp_loaded("sc3overscroll.dll"))
+            n += mp_checkbox(fac, win, MP_EDGE, es ? "Mover en el borde" : "Edge scroll", g_mp_edge, MP_X1, 412, 140, col);
         if (mp_loaded("sc3undo.dll")) {
-            n += mp_checkbox(fac, win, MP_UNDO, es ? "Deshacer (Ctrl+Z)" : "Undo (Ctrl+Z)", g_mp_undo, MP_X1, 318, 200, col);
-            n += mp_checkbox(fac, win, MP_UNDOBTN, es ? "Botones de deshacer" : "Undo buttons", g_mp_undobtn, 250, 318, 180, col);
+            n += mp_checkbox(fac, win, MP_UNDO, es ? "Deshacer (Ctrl+Z)" : "Undo (Ctrl+Z)", g_mp_undo, 180, 412, 140, col);
+            n += mp_checkbox(fac, win, MP_UNDOBTN, es ? "Botones de deshacer" : "Undo buttons", g_mp_undobtn, 330, 412, 140, col);
         }
         n += mp_button(fac, win, MP_BTN_BACK, es ? "Volver" : "Back", MP_BX, mp_btn_y(win, MP_BH), 110, MP_BH);
         logf("MODSPAGE> Preferences 0x%08lX: %d controls added", (DWORD)win, n);
@@ -8878,13 +8928,32 @@ static void mp_close(void *win, DWORD id) {
     if ((v = pp_read_box(win, MP_AS_IND)) >= 0 && v != g_mp_as_ind) { mp_write_int("autosave.ini", "autosave", "indicator", v); ch++; }
     if ((ho_v(win, 0x80, 3, MP_AS_GRP, 0xa1336cc0, (DWORD)&o, 0, 0) & 0xff) && o) {
         DWORD s = ho_v(o, 0x30, 0, 0, 0, 0, 0, 0);
-        int m = s == MP_AS_M5 ? 5 : s == MP_AS_M10 ? 10 : s == MP_AS_M15 ? 15 : s == MP_AS_M30 ? 30 : g_mp_as_min;
+        int m = s == MP_AS_M5 ? 5 : s == MP_AS_M10 ? 10 : s == MP_AS_M15 ? 15 : s == MP_AS_M30 ? 30 : s == MP_AS_M60 ? 60 : g_mp_as_min;
         ho_v(o, 0x08, 0, 0, 0, 0, 0, 0);
         if (m != g_mp_as_min) { mp_write_int("autosave.ini", "autosave", "minutes", m); ch++; }
     }
+    if ((v = pp_read_box(win, MP_AS_UNAUTO)) >= 0 && v != g_mp_unauto) { mp_write_int("autosave.ini", "autosave", "unauto", v); ch++; }
+    if ((v = pp_read_box(win, MP_BLD_MOVE)) >= 0 && v != g_mp_mover) {
+        g_relocate = v; mp_write_int("sc3resize.ini", "buildings", "mover", v); ch++; logf("RELOCATE> Mover button %s from the mods page", v ? "on" : "off"); }
+    if ((v = pp_read_box(win, MP_BLD_OVER)) >= 0 && v != g_mp_plop) {
+        g_plopover = v; mp_write_int("sc3resize.ini", "buildings", "plopover", v); ch++; logf("PLOPOVER> build over zones %s from the mods page", v ? "on" : "off"); }
     if ((v = pp_read_box(win, MP_SIMRUN)) >= 0 && v != g_mp_simrun) { mp_write_int("simrun.ini", "sim", "run_while_scrolling", v); ch++; }
-    if ((v = pp_read_box(win, MP_OVERSC)) >= 0 && v != g_mp_oversc) {
-        mp_write_int("overscroll.ini", "camera", "overscroll", v ? (g_mp_ovs_pct > 50 ? g_mp_ovs_pct : 75) : 50); ch++; }
+    {   HMODULE om = GetModuleHandleA("sc3overscroll.dll");   /* live through sc3overscroll's exports */
+        int (*os)(int, int) = om ? (int (*)(int, int))GetProcAddress(om, "sc3overscroll_opt_set") : NULL;
+        int sl = cs_read(win, MP_OVS_SL);
+        if (os && sl >= 0) {
+            int idx = ((sl > 0x400 ? 0x400 : sl) * 9 + 0x200) / 0x400;
+            if (idx != g_mp_ovs_idx) { os(0, 50 + 5 * idx); ch++; logf("OVERSCROLL> past the edge %d%% from the mods page", 50 + 5 * idx); }
+        }
+        if (os && (v = pp_read_box(win, MP_PUSH)) >= 0 && v != g_mp_push) { os(1, v); ch++; }
+    }
+    if (g_mp_cap != -2 && (ho_v(win, 0x80, 3, MP_FPS_GRP, 0xa1336cc0, (DWORD)&o, 0, 0) & 0xff) && o) {
+        DWORD sg = ho_v(o, 0x30, 0, 0, 0, 0, 0, 0);
+        HMODULE pm = GetModuleHandleA("sc3perf.dll");
+        int (*cs)(int) = pm ? (int (*)(int))GetProcAddress(pm, "sc3perf_cap_set") : NULL;
+        ho_v(o, 0x08, 0, 0, 0, 0, 0, 0);
+        if (cs && sg >= MP_FPS_R0 && sg < MP_FPS_R0 + 5 && k_mp_caps[sg - MP_FPS_R0] != g_mp_cap) { cs(k_mp_caps[sg - MP_FPS_R0]); ch++; }
+    }
     if ((v = pp_read_box(win, MP_EDGE)) >= 0 && v != g_mp_edge) { mp_write_int("overscroll.ini", "edge", "enabled", v); ch++; }
     if ((v = pp_read_box(win, MP_UNDO)) >= 0 && v != g_mp_undo) { mp_write_int("undo.ini", "undo", "enabled", v); ch++; }
     if ((v = pp_read_box(win, MP_UNDOBTN)) >= 0 && v != g_mp_undobtn) { mp_write_int("undo.ini", "undo", "buttons", v); ch++; }
@@ -8988,7 +9057,6 @@ static void ho_install(HMODULE sui) {
  * +0x14 dialog mode, +0xd8 occupant or NULL, +0xdc/+0xe0/+0xe4 coord with cell = +0xdc >> 8, +0xe0 >> 8
  * [CONFIRMED @ SIMUI 0x10062cee, 0x10062cba, 0x1006255a]. SC3RESIZE_QUERYID=0: no detour, no button. */
 static int   g_queryid = 1;
-static int   g_relocate = 1, g_plopover = 1;   /* RELOCATE block below */
 /* RELOCATE cost policy (owner call 2026-10-28): a move pays RL_PRICE_PCT % of the building's price plus the bulldozing
    and levelling the game would charge. SC3RESIZE_RELOCATE_PRICEPCT=<0..100>, SC3RESIZE_RELOCATE_CLEARCOST=0 (no
    bulldozing / levelling charge). Both 0 = a free move. */
@@ -9432,7 +9500,7 @@ static void pk_install(void) {
 static void qi_install(HMODULE sui) {
     static const BYTE e338f[6] = { 0x55, 0x8b, 0xec, 0x56, 0x8b, 0xf1 };   /* push ebp; mov ebp,esp; push esi; mov esi,ecx */
     if (!g_queryid) logf("QUERYID> off (SC3RESIZE_QUERYID=0): no button in the query dialog");
-    if (!g_queryid && !g_relocate) return;
+    if (!g_queryid && g_rl_envoff) return;
     if (ho_hook(sui, 0x6338f, e338f, 6, (void *)qi_msg, &g_orig_338f, "query dialog messages FUN_1006338f") && g_queryid)
         logf("QUERYID> on: \"Copiar ID\" button in the query (?) dialog");
 }
@@ -9464,7 +9532,6 @@ static void qi_install(HMODULE sui) {
  * removed / inserted events, so remove-then-insert keeps both. SC3RESIZE_RELOCATE=0: no button. SC3RESIZE_PLOPOVER=0:
  * zoned buildings refuse the spot again. Both 0: nothing installed. */
 #define RL_BW  80
-static HMODULE g_rl_geom;
 static DWORD   g_rl_orig[8];                   /* layer slots +0x24..+0x30, +0x38..+0x44 */
 static void   *g_rl_occ;                       /* the occupant being moved, AddRef'd by us */
 static BYTE   *g_rl_city;                      /* its city: never Release across a city change */
@@ -9830,7 +9897,7 @@ static void rl_install(void) {
     BYTE *s, *c;
     DWORD *vt, old;
     int i, st = 0;
-    if (!g_relocate && !g_plopover) { logf("RELOCATE> off (SC3RESIZE_RELOCATE=0 and SC3RESIZE_PLOPOVER=0)"); return; }
+    if (g_rl_envoff) { logf("RELOCATE> off (SC3RESIZE_RELOCATE=0 and SC3RESIZE_PLOPOVER=0)"); return; }
     while (st++ < 300 && !(g = GetModuleHandleA("SIMGEOM.DLL"))) Sleep(100);
     if (!g) { logf("RELOCATE> SIMGEOM.DLL not loaded: off"); return; }
     s = (BYTE *)g + 0x76b4; c = (BYTE *)g + 0x7760;
@@ -16344,8 +16411,13 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MPHOVER", v, sizeof(v))) g_mp_hover = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MODSUI", v, sizeof(v))) g_modsui = atoi(v);   /* owner 2026-10-27 */
           if (GetEnvironmentVariableA("SC3RESIZE_QUERYID", v, sizeof(v))) g_queryid = atoi(v);
+          {   char bp[MAX_PATH]; ho_ini_path(bp, sizeof(bp));   /* mods page: [buildings], then the env overrides */
+              g_relocate = GetPrivateProfileIntA("buildings", "mover", 1, bp) ? 1 : 0;
+              g_plopover = GetPrivateProfileIntA("buildings", "plopover", 1, bp) ? 1 : 0; }
           if (GetEnvironmentVariableA("SC3RESIZE_RELOCATE", v, sizeof(v))) g_relocate = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PLOPOVER", v, sizeof(v))) g_plopover = atoi(v);
+          g_rl_envoff = GetEnvironmentVariableA("SC3RESIZE_RELOCATE", v, sizeof(v)) && !atoi(v) &&
+                        GetEnvironmentVariableA("SC3RESIZE_PLOPOVER", v, sizeof(v)) && !atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_RELOCATE_PRICEPCT", v, sizeof(v))) g_rl_price_pct = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_RELOCATE_CLEARCOST", v, sizeof(v))) g_rl_clearcost = atoi(v);
           if (g_hudopt) ho_load_ini();   /* HUDOPT: the Preferences choice, env vars below still override */

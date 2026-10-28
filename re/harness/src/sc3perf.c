@@ -3356,6 +3356,18 @@ __declspec(dllexport) int sc3perf_show_set(int bits) {
     return sc3perf_show_get();
 }
 
+/* FPS cap from the mods page (sc3resize MODSPAGE): 0 off, -1 the window's monitor refresh rate, N fps. The stats thread
+   reads g_cap every 4th 250 ms tick, so a change applies within a second. Saved to perf.ini [perf] fps_cap. */
+__declspec(dllexport) int sc3perf_cap_get(void) { return g_cap; }
+__declspec(dllexport) int sc3perf_cap_set(int v) {
+    if (v < -1) v = -1;
+    if (v > 1000) v = 1000;
+    g_cap = v;
+    perf_ini_put("fps_cap", v);
+    logf("PERFPREFS> frame cap setting %d from Preferences, saved to perf.ini", v);
+    return g_cap;
+}
+
 /* ---------------------------------------------------------------- startup */
 static int cfg(const char *key, int def) {
     char ini[MAX_PATH], v[32];
