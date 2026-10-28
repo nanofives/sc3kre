@@ -1,15 +1,69 @@
 # sc3kre — SimCity 3000 Unlimited reverse-engineering
 
 Static reverse-engineering of **SimCity 3000 Unlimited** (Maxis / Electronic Arts, 2000),
-a 32-bit x86 Windows game. The goal for this phase is **understand and annotate first**:
-produce a full annotated map of the engine plus documented, round-tripping file-format and
-modding knowledge. The decision about whether to build a source port or a modding toolkit is
-deferred until the surface is mapped.
+a 32-bit x86 Windows game. The goal is a **modding and format toolkit**: documented,
+round-tripping file formats, and mods for the retail game built on that knowledge (below).
+A source port is not planned.
 
 This repository contains **only original work**: our own tools and our own analysis notes.
 It contains **no game assets, no binaries, and no decompiled EA/Maxis code**. See
 [What is NOT in this repo](#what-is-not-in-this-repo-and-why). You need your own legally
 obtained copy of the game to use any of it.
+
+## The mods (sc3mods)
+
+Ready-to-use mods for your own copy of SimCity 3000 Unlimited, published as zips on the
+[Releases](https://github.com/nanofives/sc3kre/releases) page (the newest one is at the top). Unzip into the
+game folder, run `sc3mods_patch.ps1` once, start `Apps\SC3U.exe`. `sc3mods_patch.ps1 -Restore` goes back to stock.
+Each release has a `README.txt` with install steps, every option and what changed. Most settings are on one page
+in the game: Preferencias, "Opciones de mods...".
+
+**Window and interface (sc3resize)**
+- Resizable window, maximize, and borderless fullscreen with Alt+Enter. Size and state are remembered and the game
+  always opens on the main screen.
+- Interface scale ("Auto" by default, or Normal, 125%, 150%, 200%): bottom bar, side panel, minimap and dialogs grow
+  with the window. Text is redrawn sharp at the larger size instead of stretched, and so are the minimap and the
+  Ver datos maps.
+- Extra zoom steps x2 and x3 past the closest stock zoom on large windows.
+- The main menu scales to the window, with an upscaled menu picture (`menu_bg.bmp`, replaceable).
+- P pauses, 1 to 4 set the speed.
+- Right-drag scrolling with bigger arrows, and two camera speed sliders (arrow keys, right-button drag).
+- "Mover" button in the "?" window of rewards, business deals and landmarks: pick the building up and place it
+  somewhere else (half its price plus bulldozing and levelling).
+- Buildings placed from a menu can go over zoned buildings, which are demolished first.
+- Many crash and drawing fixes for large windows (repaint gaps, odd window heights, dialogs cut off, files the game
+  locked against other readers).
+
+**Bigger cities (sc3bigcity)**: maps of 512 and 1024 tiles with the "Enorme" size.
+
+**Camera (sc3overscroll)**: the camera can go past the map edge, slides along it, and pushing the mouse past the
+window edge while building scrolls the camera, faster the harder you push.
+
+**City keeps running (sc3simrun)**: the date and the simulation keep going while you move the camera.
+
+**Speed and stability (sc3perf)**: faster drawing, frame cap, FPS counter and profiler, traffic simulation on
+several threads, and the fixes that make 1024 cities load, reload and run without freezing or crashing.
+
+**Roads, avenues and highways (sc3netmod + road data)**
+- Avenues with 2 lanes each way (right-hand traffic, lane markings), on slopes too.
+- Boulevards: three parallel roads become a boulevard with a median.
+- Diagonal avenues and boulevards, with junctions, crosswalks, merges and bends.
+- Avenue junctions with roads and with other avenues, corners and T junctions.
+- Roundabouts: a 2x2 road square becomes a roundabout by itself, plus a 3x3 one.
+- Highway interchanges (diagonal ones too) that finish building, on-ramps, capped joins, correctly lit walls.
+- Traffic that uses avenues, boulevards and highways more, and road density that follows the turns cars make.
+- Rounded road ends on slopes.
+
+**Undo (sc3undo)**: Ctrl+Z / Ctrl+Y (or buttons under the minimap) undo and redo zoning, networks, buildings, the
+bulldozer and terrain tools, money included.
+
+**Autosave (sc3autosave)**: saves the city every 5 minutes (10, 15 or 30 selectable) with the game's own Save,
+into three files beside it, `(auto 5 min)`, `(auto 10 min)` and `(auto 1 h)`, never into your own file. It waits
+for a pause in your input, shows a small corner notice instead of the large saving box, and a loaded autosave saves
+back to the city's own file.
+
+Every fix has an off switch (an environment variable or an ini key), listed in the release `README.txt`. The mods
+contain no game code or data. The road data in `mods\netmod` is built from your own game files.
 
 ## Headline findings
 
