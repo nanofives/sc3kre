@@ -14468,6 +14468,88 @@ static void patch_repaint8(HMODULE ss) {
     logf("--- REPAINT8: full repaint (SIMSPR+0xb4b3) tiles reach the view edge at any size");
 }
 
+/* ================= INITSLACK (task edgeload, owner 2026-10-28: "Big One" autosave loaded from the main menu crashed at
+ * once, twice, maximized 2560x1351 on MARIANO-PC: VEH FAULT WRITE at GZGraphicD+0x253E, one page past a surface)
+ * GZGraphicD FUN_1000239d, the 2x branch of the zoom-scaled 16bpp sprite blit, writes every source row to dest rows y
+ * and y+1 (0x1000253c / 0x1000253e). For an odd dest height its last pass still writes row y+1 = the dest bottom, one
+ * row past the rect [CONFIRMED @ GZGraphicD 0x1000239d]. At zoom 4 the iso Init forces an even view origin (param_5/6
+ * & ~1 when zoom > 3 [CONFIRMED @ SIMSPR 0x10005b42]), so a doubled sprite clipped at the surface bottom has an odd
+ * height exactly when the surface height is odd: at 1351 rows it writes row 1351, past the allocation. 600 and other
+ * even heights never do. Surfaces sc3resize recreates carry RZ_SURFACE_SLACK guard rows for this (2026-08-30), but a
+ * city made while the window is already at size gets its render target from the game's Init, call [eax+0xc](w, h) at
+ * SIMSPR 0x10005cf8 or 0x10005df1 (the one the load took), unpadded, and the layout pass that would pad it waits
+ * g_ready_ms (3 s): the load's first full repaint draws in that window. Reproduced (verify/edgeload): Big One.autosave2 at client 2560x1351, dest
+ * [336 1250 520 1351] into a 2560x1351 raster whose 0x699000-byte region ends at the faulting page. Fix: pad the Init
+ * create's height by the same guard rows, except at the native 800x600, so the render target has them from the first
+ * frame. The rows are never presented (the view rect stays w x h) and the settle check already accepts h..h+SLACK.
+ * SC3RESIZE_INITSLACK=0 leaves the call alone. */
+static int g_initslack = 1;
+static DWORD g_is_ret[2];                /* after the 6 stolen bytes at SIMSPR+0x5ced / +0x5de6 */
+static volatile LONG g_initslack_n;
+static void __stdcall initslack_log(DWORD w, DWORD h) {
+    LONG n = InterlockedIncrement(&g_initslack_n);
+    if (n <= 8 || (n & 0xff) == 0)
+        logf("INITSLACK> #%ld city view Init creates its render target %lux%lu: allocated %lux%lu (+%d guard rows)",
+             n, w, h, w, h + RZ_SURFACE_SLACK, RZ_SURFACE_SLACK);
+}
+/* in: eax = height, Init's frame in ebp ([ebp+0x10] = width). out: eax padded unless 800x600. */
+static __declspec(naked) void initslack_pad(void) {
+    __asm {
+        cmp  dword ptr [ebp + 0x10], NAT_W
+        jne  is_pad
+        cmp  eax, NAT_H
+        je   is_keep
+    is_pad:
+        pushad
+        push eax
+        push dword ptr [ebp + 0x10]
+        call initslack_log
+        popad
+        add  eax, RZ_SURFACE_SLACK
+    is_keep:
+        ret
+    }
+}
+/* the stolen bytes at each site: push [ebp+0x14] (now padded) / mov eax,[ebp+0x28] */
+static __declspec(naked) void initslack_stub_a(void) {
+    __asm {
+        mov  eax, [ebp + 0x14]
+        call initslack_pad
+        push eax
+        mov  eax, [ebp + 0x28]
+        jmp  dword ptr [g_is_ret]
+    }
+}
+static __declspec(naked) void initslack_stub_b(void) {
+    __asm {
+        mov  eax, [ebp + 0x14]
+        call initslack_pad
+        push eax
+        mov  eax, [ebp + 0x28]
+        jmp  dword ptr [g_is_ret + 4]
+    }
+}
+static void patch_initslack(HMODULE ss) {
+    /* push [ebp+0x14] / mov eax,[ebp+0x28] / mov ecx,[edi] / push [ebp+0x10] / call [eax+0xc]: the render target create
+       on the param_9 path (0x10005cf8) and on the fallback path (0x10005df1, the one a load took in verify/edgeload) */
+    static const BYTE pro[] = { 0xff, 0x75, 0x14, 0x8b, 0x45, 0x28, 0x8b, 0x0f, 0xff, 0x75, 0x10, 0xff, 0x50, 0x0c };
+    static const DWORD rva[2] = { 0x5ced, 0x5de6 };
+    void *stub[2];
+    int i;
+    stub[0] = (void *)initslack_stub_a; stub[1] = (void *)initslack_stub_b;
+    if (!g_initslack) { logf("--- INITSLACK: disabled (SC3RESIZE_INITSLACK=0)"); return; }
+    for (i = 0; i < 2; i++)
+        if (memcmp((BYTE *)ss + rva[i], pro, sizeof(pro))) {
+            logf("--- INITSLACK: SIMSPR+0x%lx differs from shipped - not installed", rva[i]);
+            return;
+        }
+    for (i = 0; i < 2; i++) {
+        g_is_ret[i] = (DWORD)ss + rva[i] + 6;
+        rz_jmp_patch((BYTE *)ss + rva[i], 6, stub[i]);
+    }
+    logf("--- INITSLACK: city view Init pads its render target by %d guard rows (SIMSPR+0x5ced, +0x5de6)", RZ_SURFACE_SLACK);
+}
+
 /* LCENTER (task leftclick, owner 2026-10-12: "el click izquierdo en el mapa para desplazarse no se adapta a la ventana").
  * A left click on the map (default tool, SIMSPR FUN_10043540), a left-drag (one call on the press) and a minimap click
  * (SIMUI+0x5090c) all call cISC3CityViewIso vt+0x54 = SIMSPR FUN_1001d039 CenterOnTile(tx, ty, flag). It puts the tile at
@@ -15676,6 +15758,9 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
     {   char v[8];
         if (GetEnvironmentVariableA("SC3RESIZE_REPAINT8", v, sizeof(v))) g_repaint8 = atoi(v); }
     patch_repaint8(ss);      /* task zoomband: the full repaint missed the rows / columns past a multiple of 8 */
+    {   char v[8];
+        if (GetEnvironmentVariableA("SC3RESIZE_INITSLACK", v, sizeof(v))) g_initslack = atoi(v); }
+    patch_initslack(ss);     /* task edgeload: the game's own Init render target gets the guard rows too */
     {   char v[8];
         if (GetEnvironmentVariableA("SC3RESIZE_LCENTER", v, sizeof(v))) g_lcenter = atoi(v); }
     patch_lcenter(ss);       /* left click / minimap centre on the visible map area (LCENTER block) */
