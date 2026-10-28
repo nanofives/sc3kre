@@ -8988,6 +8988,12 @@ static void ho_install(HMODULE sui) {
  * +0x14 dialog mode, +0xd8 occupant or NULL, +0xdc/+0xe0/+0xe4 coord with cell = +0xdc >> 8, +0xe0 >> 8
  * [CONFIRMED @ SIMUI 0x10062cee, 0x10062cba, 0x1006255a]. SC3RESIZE_QUERYID=0: no detour, no button. */
 static int   g_queryid = 1;
+static int   g_relocate = 1, g_plopover = 1;   /* RELOCATE block below */
+/* RELOCATE cost policy (owner call 2026-10-28): a move pays RL_PRICE_PCT % of the building's price plus the bulldozing
+   and levelling the game would charge. SC3RESIZE_RELOCATE_PRICEPCT=<0..100>, SC3RESIZE_RELOCATE_CLEARCOST=0 (no
+   bulldozing / levelling charge). Both 0 = a free move. */
+#define RL_PRICE_PCT 50
+static int   g_rl_price_pct = RL_PRICE_PCT, g_rl_clearcost = 1;
 static void *g_orig_338f;
 #define QI_BTN 0x02F95B50
 
@@ -9245,6 +9251,9 @@ static void qi_add_button(void *win, BYTE *qo) {
     }
 }
 
+static DWORD rl_click(void *self, DWORD win, BYTE *qo);   /* RELOCATE, below */
+static void rl_add_button(void *win, BYTE *qo);
+#define RL_BTN 0x02F95B51
 static DWORD __fastcall qi_msg(void *self, void *edx, DWORD win, DWORD msg, DWORD p3, DWORD p4, DWORD p5) {
     DWORD a[5], r;
     (void)edx;
@@ -9252,9 +9261,13 @@ static DWORD __fastcall qi_msg(void *self, void *edx, DWORD win, DWORD msg, DWOR
         logf("QUERYID> click (p3 %lu)", p3);
         if (p3 == 1) { qi_copy((BYTE *)self - 4); return 1; }
     }
+    if (msg == 3 && p4 == RL_BTN && p3 == 1 && rl_click(self, win, (BYTE *)self - 4)) return 1;   /* RELOCATE */
     a[0] = win; a[1] = msg; a[2] = p3; a[3] = p4; a[4] = p5;
     r = rz_thiscall_ret(self, g_orig_338f, a, 5);
-    if (msg == 0xa2bf8ace && (r & 0xff) && win) qi_add_button((void *)win, (BYTE *)self - 4);
+    if (msg == 0xa2bf8ace && (r & 0xff) && win) {
+        if (g_queryid) qi_add_button((void *)win, (BYTE *)self - 4);
+        rl_add_button((void *)win, (BYTE *)self - 4);                                                  /* RELOCATE */
+    }
     return r;
 }
 
@@ -9418,9 +9431,433 @@ static void pk_install(void) {
 
 static void qi_install(HMODULE sui) {
     static const BYTE e338f[6] = { 0x55, 0x8b, 0xec, 0x56, 0x8b, 0xf1 };   /* push ebp; mov ebp,esp; push esi; mov esi,ecx */
-    if (!g_queryid) { logf("QUERYID> off (SC3RESIZE_QUERYID=0): no button in the query dialog"); return; }
-    if (ho_hook(sui, 0x6338f, e338f, 6, (void *)qi_msg, &g_orig_338f, "query dialog messages FUN_1006338f"))
+    if (!g_queryid) logf("QUERYID> off (SC3RESIZE_QUERYID=0): no button in the query dialog");
+    if (!g_queryid && !g_relocate) return;
+    if (ho_hook(sui, 0x6338f, e338f, 6, (void *)qi_msg, &g_orig_338f, "query dialog messages FUN_1006338f") && g_queryid)
         logf("QUERYID> on: \"Copiar ID\" button in the query (?) dialog");
+}
+
+/* ================= RELOCATE + PLOPOVER (task relocate 2026-10-28, re/analysis/RELOCATE.md)
+ * Owner A: "podemos agregar un boton en el '?' de un edificio especial de premios o remarcables para recolocarlo? al
+ * hacerlo demuele el original y reemplaza la ubicacion del otro". Owner B: "colocar edificios de prop puede hacerse sobre
+ * edificios con zonas? que sea autodemoler y colocar?"
+ * Building layer = city vt+0x138, interface vtable SIMGEOM 0x100292c0: +0x24..+0x30 CanPlace for kinds 0..3, +0x38..+0x44
+ * Place for kinds 0..3, all thunks into 0x10006ba6(coord*, key*, bounds*, cost*, free, kind, doPlace) [CONFIRMED @ SIMGEOM
+ * 0x10006a65..0x10006b7e]. A building tool passes its key as tool+0x108 and its free flag as tool+0x114 [CONFIRMED @ SIMGEOM
+ * 0x1000970f, 0x100099eb, 0x10009d3f]. The site check 0x100072f6 accepts an occupant inside the footprint only when
+ * IsGeomFlag(0x400) (flora) or IsGeomFlag(0x400000) and IsGeomFlag(0x800) (power-line pieces), then CanUserRemove, adding
+ * the per-tile demolish price [ebp-0x30] once into [ebp-0x14] (0x100076b4..0x100076f5). Buildings of every kind carry 0x104
+ * (census, verify/relocate/census_berlin.json), so a zoned house refuses the spot. The commit 0x10007760 removes only
+ * those flora / power occupants, inserts the building, writes zone 22 over it and withdraws the price unless free.
+ * Hooks, all only for calls made BY A BUILDING TOOL (key pointer - 0x108 is one of the four tool vtables): the 8 layer
+ * slots set a context; a cave at 0x100076b4 keeps the stock rule and with the context also accepts (B) a zoned building
+ * (GeomFlag 0x100, zone byte 1..11 under it, CanUserRemove) charged as the bulldozer charges it (per-tile x footprint), and
+ * (A) the occupant being moved, free; a detour on 0x10007760 then removes those through the demolition layer (city
+ * vt+0x194, SIMGEOM vtable 0x1002a7b4) per-occupant entry vt+0x6c DemolishOccupant(occ, priv, cost*, box*, mask*), which
+ * charges nothing and leaves no rubble. The commit only runs after the check passed, so a refused spot demolishes nothing.
+ * A: "Mover" in the "?" dialog of a reward / business deal ([REWARD_BUILDINGS], [BUSINESS_DEAL_BUILDINGS] of
+ * Advisor-CityPlanner.ini) or landmark (type 18001..18999, CitySim.ini) makes the game's own placement tool for its key
+ * through the layer's factory vt+0x70(key, oneShot 1, free 1, 0x6856f7, out) and activates it (out vt+0x2c), as
+ * 0x10007d5b does for the picker. The tool keeps the game's free flag (the stock commit withdraws nothing); the cost is
+ * the owner's policy (RL_PRICE_PCT above), computed in rl_cost, reported to the tool and withdrawn here after a placement.
+ * Rewards keep no "built" state (SIMADV item +0x54 is only ever set), landmarks clear and set "placed" on the occupant
+ * removed / inserted events, so remove-then-insert keeps both. SC3RESIZE_RELOCATE=0: no button. SC3RESIZE_PLOPOVER=0:
+ * zoned buildings refuse the spot again. Both 0: nothing installed. */
+#define RL_BW  80
+static HMODULE g_rl_geom;
+static DWORD   g_rl_orig[8];                   /* layer slots +0x24..+0x30, +0x38..+0x44 */
+static void   *g_rl_occ;                       /* the occupant being moved, AddRef'd by us */
+static BYTE   *g_rl_city;                      /* its city: never Release across a city change */
+static void   *g_rl_tool;                      /* what the factory handed back for our tool */
+static DWORD   g_rl_key[3], g_rl_type;
+static LONG    g_rl_cell[4];
+static struct { int on, reloc, n; DWORD tid; void *kill[64]; LONG rect[64][4]; LONG clr, zon; } g_rl;   /* clr / zon: the
+   stock per-occupant clearing price and our zoned-building bulldozing, added up by the site check */
+static DWORD g_rl_ret_e4, g_rl_ret_fb, g_rl_ret_70b, g_rl_7760_imm, g_rl_7760_ret;
+
+static const DWORD rl_types[] = {   /* [REWARD_BUILDINGS] then [BUSINESS_DEAL_BUILDINGS], Advisor-CityPlanner.ini */
+    10110, 10120, 13005, 14003, 14150, 14550, 14370, 11002, 13872, 13874, 14170, 13871, 14600, 14325, 11001, 1002, 12350,
+    20001, 20002, 19003, 19004, 19001, 19002, 19999 };
+static int rl_movable(DWORD t) {
+    int i;
+    if (t > 18000 && t < 19000) return 1;      /* landmarks: 18001..18045 under 18000 in [AgentTypeHierarchy] */
+    for (i = 0; i < (int)(sizeof(rl_types) / sizeof(rl_types[0])); i++) if (rl_types[i] == t) return 1;
+    return 0;
+}
+
+static BYTE *rl_city(void) {
+    BYTE *exe = (BYTE *)GetModuleHandleA(NULL), *app, *city;
+    HMODULE sc = GetModuleHandleA("SIMCITY.DLL");
+    if (!sc) return NULL;
+    __try {
+        app = *(BYTE **)(exe + 0xfa86c);
+        if (!app) return NULL;
+        city = *(BYTE **)(app + 0x48);
+        if (!city || *(DWORD *)city != (DWORD)sc + 0x13260) return NULL;
+        return city;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return NULL; }
+}
+
+/* surface occupant manager (city vt+0x11c) GetOccupantAtCell vt+0x7c(x, z, &occ) AddRefs [CONFIRMED @ SIMGEOM 0x1000ec60] */
+static int rl_occ_at_is(DWORD x, DWORD z, void *want) {
+    BYTE *city = rl_city();
+    void *om, *o = NULL;
+    int same;
+    if (!city) return 0;
+    om = (void *)ho_v(city, 0x11c, 0, 0, 0, 0, 0, 0);
+    if (!om || !(ho_v(om, 0x7c, 3, x, z, (DWORD)&o, 0, 0) & 0xff) || !o) return 0;
+    same = o == want;
+    ho_v(o, 0x08, 0, 0, 0, 0, 0, 0);
+    return same;
+}
+
+static void rl_drop(const char *why) {
+    if (!g_rl_occ) return;
+    if (g_rl_city == rl_city()) ho_v(g_rl_occ, 0x08, 0, 0, 0, 0, 0, 0);
+    else logf("RELOCATE> city changed: our reference to 0x%08lX is dropped without Release", (DWORD)g_rl_occ);
+    logf("RELOCATE> pending move of type %lu ended (%s)", g_rl_type, why);
+    g_rl_occ = NULL; g_rl_tool = NULL; g_rl_city = NULL;
+}
+
+/* the zone byte under a cell: city vt+0x14c zone layer, vt+0x34 GetValue(x, z, BYTE *) (the call SIMUI 0x1006255a makes) */
+static int rl_zone(LONG x, LONG z) {
+    BYTE *city = rl_city(), b = 0xff;
+    void *zl;
+    if (!city) return -1;
+    zl = (void *)ho_v(city, 0x14c, 0, 0, 0, 0, 0, 0);
+    if (!zl) return -1;
+    ho_v(zl, 0x34, 3, (DWORD)x, (DWORD)z, (DWORD)&b, 0, 0);
+    return b;
+}
+
+/* the cave's decision for one occupant inside the footprint: 0 refuse, 1 stock accept (continue at CanUserRemove + the
+   stock per-occupant price), 2 accepted here with the price already added */
+static int __stdcall rl_site_occ(void *occ, LONG pertile, LONG *cost) {
+    LONG r[4];
+    int i, z;
+    __try {
+        if ((ho_v(occ, 0x3c, 1, 0x400, 0, 0, 0, 0) & 0xff) ||
+            ((ho_v(occ, 0x3c, 1, 0x400000, 0, 0, 0, 0) & 0xff) && (ho_v(occ, 0x3c, 1, 0x800, 0, 0, 0, 0) & 0xff)))
+        {
+            if (g_rl.on && g_rl.tid == GetCurrentThreadId()) g_rl.clr += pertile;   /* the stock adds it after CanUserRemove */
+            return 1;                                                           /* the stock rule, unchanged */
+        }
+        if (!g_rl.on || g_rl.tid != GetCurrentThreadId()) return 0;
+        if (g_rl.reloc && occ == g_rl_occ) return 2;                            /* the one being moved: removed anyway */
+        if (!g_plopover || !(ho_v(occ, 0x3c, 1, 0x100, 0, 0, 0, 0) & 0xff)) return 0;
+        if (!(ho_v(occ, 0x74, 0, 0, 0, 0, 0, 0) & 0xff)) return 0;              /* CanUserRemove */
+        memset(r, 0, sizeof(r));
+        ho_v(occ, 0xd0, 1, (DWORD)r, 0, 0, 0, 0);                               /* cell rect, inclusive */
+        z = rl_zone(r[0], r[1]);
+        if (z < 1 || z > 11) return 0;                                          /* not on R/C/I zoning: refuse as stock */
+        for (i = 0; i < g_rl.n; i++) if (g_rl.kill[i] == occ) return 2;
+        if (g_rl.n >= 64) return 0;
+        g_rl.kill[g_rl.n] = occ;
+        memcpy(g_rl.rect[g_rl.n], r, sizeof(r));
+        g_rl.n++;
+        *cost += pertile * (r[2] - r[0] + 1) * (r[3] - r[1] + 1);               /* what the bulldozer charges */
+        g_rl.zon += pertile * (r[2] - r[0] + 1) * (r[3] - r[1] + 1);
+        return 2;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
+}
+
+/* replaces SIMGEOM 0x100076b4..0x100076e3 (the flag test); edi = occupant */
+static __declspec(naked) void rl_site_stub(void) {
+    __asm {
+        pushad
+        lea  eax, [ebp - 0x14]
+        push eax
+        push dword ptr [ebp - 0x30]
+        push edi
+        call rl_site_occ
+        mov  [esp + 28], eax
+        popad
+        cmp  eax, 1
+        je   rl_s1
+        cmp  eax, 2
+        je   rl_s2
+        jmp  dword ptr [g_rl_ret_70b]
+    rl_s1:
+        jmp  dword ptr [g_rl_ret_e4]
+    rl_s2:
+        jmp  dword ptr [g_rl_ret_fb]
+    }
+}
+
+/* per-occupant removal through the demolition layer: vt+0x6c(occ, priv 1, cost*, box*, netmask*), no charge, no rubble */
+static int rl_remove(void *occ, const LONG *r, const char *what) {
+    BYTE *city = rl_city();
+    void *dl;
+    LONG box[6];
+    DWORD cost = 0, mask = 0;
+    int i, gone;
+    if (!city || !(dl = (void *)ho_v(city, 0x194, 0, 0, 0, 0, 0, 0))) return 0;
+    for (i = 0; i < 6; i++) box[i] = 0x7fffffff;
+    __try { ho_v(dl, 0x6c, 5, (DWORD)occ, 1, (DWORD)&cost, (DWORD)box, (DWORD)&mask); }
+    __except (EXCEPTION_EXECUTE_HANDLER) { logf("RELOCATE> fault removing %s", what); return 0; }
+    gone = !rl_occ_at_is((DWORD)r[0], (DWORD)r[1], occ);
+    logf("RELOCATE> %s cells [%ld %ld %ld %ld] %s (stock price %lu, not charged here)", what, r[0], r[1], r[2], r[3],
+         gone ? "removed" : "STILL THERE", cost);
+    return gone;
+}
+
+/* SIMGEOM 0x10007760 entry: the stock commit is about to insert the building */
+static void __stdcall rl_commit_pre(void) {
+    int i, n;
+    void *kill[64];
+    LONG rect[64][4];
+    if (!g_rl.on || g_rl.tid != GetCurrentThreadId()) return;
+    n = g_rl.n;
+    memcpy(kill, g_rl.kill, n * sizeof(void *));
+    memcpy(rect, g_rl.rect, n * sizeof(rect[0]));
+    g_rl.n = 0;
+    if (g_rl.reloc && g_rl_occ) rl_remove(g_rl_occ, g_rl_cell, "moved building (original)");
+    for (i = 0; i < n; i++) rl_remove(kill[i], rect[i], "zoned building under the footprint");
+}
+static __declspec(naked) void rl_commit_stub(void) {
+    __asm {
+        pushad
+        call rl_commit_pre
+        popad
+        mov  eax, dword ptr [g_rl_7760_imm]   /* the stolen 'mov eax, imm32' (EH frame) */
+        jmp  dword ptr [g_rl_7760_ret]
+    }
+}
+
+/* is the caller a building tool? key pointer - 0x108 has one of the four tool vtables [SIMGEOM 0x10029504, 0x10029734,
+   0x100295e4, 0x1002968c]. *mine = it is the tool "Mover" made. */
+static int rl_tool(DWORD keyp, int *mine) {
+    static const DWORD vts[4] = { 0x29504, 0x29734, 0x295e4, 0x2968c };
+    BYTE *t = (BYTE *)keyp - 0x108;
+    DWORD vt;
+    int i;
+    *mine = 0;
+    if (keyp < 0x10000 || IsBadReadPtr(t, 0x118)) return 0;
+    vt = *(DWORD *)t;
+    for (i = 0; i < 4; i++) if (vt == (DWORD)g_rl_geom + vts[i]) break;
+    if (i == 4) return 0;
+    if (g_rl_occ && g_rl_tool && t[0x114] && ((BYTE *)g_rl_tool == t || (BYTE *)g_rl_tool == t + 0x58 || (BYTE *)g_rl_tool == t + 0x5c)
+        && !memcmp(t + 0x108, g_rl_key, 12))
+        *mine = 1;
+    {   static void *seen;
+        if (g_rl_tool && t[0x114] && seen != g_rl_tool) {
+            seen = g_rl_tool;
+            logf("RELOCATE> free building tool 0x%08lX (vtable SIMGEOM+0x%lX, one-shot %u) vs factory 0x%08lX: %s",
+                 (DWORD)t, vt - (DWORD)g_rl_geom, t[0x115], (DWORD)g_rl_tool, *mine ? "ours" : "NOT MATCHED");
+        }
+    }
+    return 1;
+}
+
+/* the 8 layer slots: idx 0..3 CanPlace kinds 0..3 (4 args), 4..7 Place kinds 0..3 (5 args) */
+/* the move's price under the owner's policy, from the parts the check measured (the move tool checks and places with the
+   game's free flag, so c = clearing + zoned bulldozing + levelling, no price). Budget = the layer's own (+0x30): price
+   vt+0x54(type id), per-tile demolish price vt+0x58(7), as SIMGEOM 0x100072f6 reads them. */
+typedef struct { LONG price, half, orig, clr, zon, lev, total; } RLCost;
+static void rl_cost(void *self, LONG c, LONG clr, LONG zon, RLCost *k) {
+    void *bud = *(void **)((BYTE *)self + 0x30);
+    LONG pertile = (LONG)ho_v(bud, 0x58, 1, 7, 0, 0, 0, 0);
+    k->price = (LONG)ho_v(bud, 0x54, 1, g_rl_type, 0, 0, 0, 0);
+    k->half = k->price * g_rl_price_pct / 100;
+    k->orig = pertile * (g_rl_cell[2] - g_rl_cell[0] + 1) * (g_rl_cell[3] - g_rl_cell[1] + 1);   /* bulldozing the original */
+    k->clr = clr; k->zon = zon;
+    k->lev = c - clr - zon; if (k->lev < 0) k->lev = 0;
+    k->total = k->half + (g_rl_clearcost ? k->orig + clr + zon + k->lev : 0);
+}
+
+static DWORD rl_layer(int idx, void *self, DWORD *v) {
+    int place = idx >= 4, kind = idx & 3, mine = 0, tool, nz = 0;
+    DWORD r = 0, a[7];
+    LONG clr = 0, zon = 0, f0 = 0;
+    RLCost k;
+    static int logged;
+    tool = (g_relocate || g_plopover) && rl_tool(v[1], &mine);
+    if (!tool || (g_rl.on && g_rl.tid == GetCurrentThreadId()))
+        return rz_thiscall_ret(self, (void *)g_rl_orig[idx], v, place ? 5 : 4);
+    if (mine && !rl_occ_at_is((DWORD)g_rl_cell[0], (DWORD)g_rl_cell[1], g_rl_occ)) {
+        if (!(logged & 1)) { logged |= 1; logf("RELOCATE> the building being moved is no longer in the city: placement refused"); }
+        if (v[3]) *(DWORD *)v[3] = 0;
+        return 0;
+    }
+    g_rl.on = 1; g_rl.reloc = mine; g_rl.n = 0; g_rl.clr = g_rl.zon = 0; g_rl.tid = GetCurrentThreadId();
+    if (mine && place) f0 = (LONG)ho_v(*(void **)((BYTE *)self + 0x30), 0x10, 0, 0, 0, 0, 0, 0);   /* funds, low dword */
+    __try {
+        if (mine && !place) {   /* the stock CanPlace hard-codes free = 0: ask as the free tool will place */
+            a[0] = v[0]; a[1] = v[1]; a[2] = v[2]; a[3] = v[3]; a[4] = 1; a[5] = (DWORD)kind; a[6] = 0;
+            r = rz_thiscall_ret(self, (BYTE *)g_rl_geom + 0x6ba6, a, 7);
+        } else r = rz_thiscall_ret(self, (void *)g_rl_orig[idx], v, place ? 5 : 4);
+        nz = g_rl.n; clr = g_rl.clr; zon = g_rl.zon;
+    } __finally { g_rl.on = 0; g_rl.reloc = 0; g_rl.n = 0; }
+    if (mine && v[3]) {   /* report the policy's total: the tool shows it on the cursor label and tests funds against it */
+        rl_cost(self, (LONG)*(DWORD *)v[3], clr, zon, &k);
+        *(DWORD *)v[3] = (DWORD)k.total;
+        if (place && (r & 0xff)) {
+            void *bud = *(void **)((BYTE *)self + 0x30);
+            if (k.total > 0) ho_v(bud, 0x14, 1, (DWORD)k.total, 0, 0, 0, 0);   /* Withdraw, the slot the commit uses */
+            logf("RELOCATE> MOVE cost of type %lu: price %ld, %d%% charged %ld, bulldoze %ld (original %ld + clearing %ld + zoned %ld), "
+                 "levelling %ld%s, total %ld; funds %ld -> %ld", g_rl_type, k.price, g_rl_price_pct, k.half,
+                 k.orig + k.clr + k.zon, k.orig, k.clr, k.zon, k.lev, g_rl_clearcost ? "" : " (not charged)", k.total, f0,
+                 (LONG)ho_v(bud, 0x10, 0, 0, 0, 0, 0, 0));
+        }
+    }
+    if (!place && (mine || nz)) {   /* site checks of the move tool, or that would demolish zoned buildings: one line
+                                       per new cell or result */
+        static LONG lx = -1, lz = -1; static DWORD lr = 2;
+        LONG cx = (LONG)((DWORD *)v[0])[0] >> 8, cz = (LONG)((DWORD *)v[0])[1] >> 8;
+        if (cx != lx || cz != lz || (r & 0xff) != lr)
+            logf("RELOCATE> %s check at (%ld, %ld): %s, %d zoned building(s) to demolish, cost %lu", mine ? "move" : "building",
+                 cx, cz, (r & 0xff) ? "ok" : "refused", nz, v[3] ? *(DWORD *)v[3] : 0);
+        lx = cx; lz = cz; lr = r & 0xff;
+    }
+    if (place) {
+        logf("RELOCATE> %s placement (kind %d) at (%ld, %ld): %s, price %lu", mine ? "MOVE" : "building",
+             kind, (LONG)((DWORD *)v[0])[0] >> 8, (LONG)((DWORD *)v[0])[1] >> 8, (r & 0xff) ? "placed" : "refused",
+             v[3] ? *(DWORD *)v[3] : 0);
+        if (mine && (r & 0xff)) rl_drop("moved");
+    }
+    return r;
+}
+#define RL_CAN(k) static DWORD __fastcall rl_can##k(void *s, void *e, DWORD a, DWORD b, DWORD c, DWORD d) { \
+    DWORD v[4]; (void)e; v[0] = a; v[1] = b; v[2] = c; v[3] = d; return rl_layer(k, s, v); }
+#define RL_PUT(k) static DWORD __fastcall rl_put##k(void *s, void *e, DWORD a, DWORD b, DWORD c, DWORD d, DWORD f) { \
+    DWORD v[5]; (void)e; v[0] = a; v[1] = b; v[2] = c; v[3] = d; v[4] = f; return rl_layer(4 + k, s, v); }
+RL_CAN(0) RL_CAN(1) RL_CAN(2) RL_CAN(3) RL_PUT(0) RL_PUT(1) RL_PUT(2) RL_PUT(3)
+
+/* start the game's own tool for the remembered key. Run from a thread timer 250 ms after the click: started inside the
+   click, the button-up of that same click reached the new tool, which ran Apply without a button-down and faulted on its
+   unset +0x10 (SIMGEOM 0x10021a84, measured 2026-10-28). */
+static void CALLBACK rl_start_tool(HWND h, UINT m, UINT_PTR id, DWORD t) {
+    BYTE *city = rl_city();
+    void *bl, *out = NULL;
+    DWORD ok;
+    (void)h; (void)m; (void)t;
+    KillTimer(NULL, id);
+    if (!g_rl_occ || g_rl_tool || !city || city != g_rl_city) return;
+    bl = (void *)ho_v(city, 0x138, 0, 0, 0, 0, 0, 0);
+    ok = bl ? ho_v(bl, 0x70, 5, (DWORD)g_rl_key, 1, 1, 0x6856f7, (DWORD)&out) & 0xff : 0;   /* key, one-shot, free */
+    if (ok && out) {
+        g_rl_tool = out;
+        ho_v(out, 0x2c, 0, 0, 0, 0, 0, 0);   /* select it, as SIMGEOM 0x10007d5b does */
+        ho_v(out, 0x08, 0, 0, 0, 0, 0, 0);
+    }
+    logf("RELOCATE> MOVE tool for type %lu: 0x%08lX %s", g_rl_type, (DWORD)out, ok && out ? "active" : "NOT MADE");
+    if (!ok || !out) rl_drop("no tool");
+}
+
+/* "Mover" clicked: remember the occupant, close the dialog the way its close box does, start the tool a moment later */
+static DWORD rl_click(void *self, DWORD win, BYTE *qo) {
+    void *occ = *(void **)(qo + 0xd8), *attr;
+    BYTE *city = rl_city();
+    DWORD *k, a[5];
+    LONG r[4];
+    if (!occ || !city || !g_rl_geom) return 0;
+    rl_drop("a new move started");
+    attr = (void *)ho_v(occ, 0x80, 0, 0, 0, 0, 0, 0);
+    k = attr ? (DWORD *)ho_v(attr, 0x14, 0, 0, 0, 0, 0, 0) : NULL;
+    if (!k || IsBadReadPtr(k, 12)) { logf("RELOCATE> no key on the queried building"); return 0; }
+    memset(r, 0, sizeof(r));
+    ho_v(occ, 0xd0, 1, (DWORD)r, 0, 0, 0, 0);
+    memcpy(g_rl_key, k, 12); memcpy(g_rl_cell, r, sizeof(r));
+    g_rl_type = ho_v(occ, 0x88, 0, 0, 0, 0, 0, 0);
+    ho_v(occ, 0x04, 0, 0, 0, 0, 0, 0);
+    g_rl_occ = occ; g_rl_city = city; g_rl_tool = NULL;
+    logf("RELOCATE> MOVE start: type %lu key 0x%08lX 0x%08lX 0x%08lX cells [%ld %ld %ld %ld]",
+         g_rl_type, g_rl_key[0], g_rl_key[1], g_rl_key[2], r[0], r[1], r[2], r[3]);
+    /* close: message 3, p3 1, the close-box id, the path Escape takes (FUN_10063d0a(win, 1)) [SIMUI 0x1006338f] */
+    a[0] = win; a[1] = 3; a[2] = 1; a[3] = 0x42b7c353; a[4] = 0;
+    rz_thiscall_ret(self, g_orig_338f, a, 5);
+    if (!SetTimer(NULL, 0, 250, rl_start_tool)) rl_drop("SetTimer failed");
+    return 1;
+}
+
+/* 1 when no child of the dialog overlaps the parent-local rect (children list as qi_dump_children walks it) */
+static int rl_rect_free(void *win, LONG x0, LONG y0, LONG x1, LONG y1) {
+    BYTE *w = (BYTE *)win;
+    void *head = *(void **)(w + 0x34), *n;
+    int guard = 0;
+    n = (head && !IsBadReadPtr(head, 4)) ? *(void **)head : NULL;
+    while (n && n != head && guard++ < 40 && !IsBadReadPtr(n, 0x0c)) {
+        BYTE *ch = *(BYTE **)((BYTE *)n + 8);
+        if (ch && !IsBadReadPtr(ch, 0xa4)) {
+            LONG *cl = (LONG *)(ch + 0x80);
+            if (cl[0] < x1 && x0 < cl[2] && cl[1] < y1 && y0 < cl[3]) return 0;
+        }
+        n = *(void **)n;
+    }
+    return 1;
+}
+
+static void rl_add_button(void *win, BYTE *qo) {
+    HMODULE sui = GetModuleHandleA("SIMUI.DLL");
+    void *occ = *(void **)(qo + 0xd8), *fac;
+    LONG *l = (LONG *)((BYTE *)win + 0x80), w, h, bx, by;
+    DWORD t;
+    int ok;
+    if (!g_relocate || !g_rl_geom || !sui || !occ || IsBadReadPtr(win, 0xa4)) return;
+    if (ho_v(win, 0x78, 1, RL_BTN, 0, 0, 0, 0)) return;
+    __try { t = ho_v(occ, 0x88, 0, 0, 0, 0, 0, 0); } __except (EXCEPTION_EXECUTE_HANDLER) { return; }
+    if (!rl_movable(t)) return;
+    fac = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85065))();
+    if (!fac || IsBadReadPtr(fac, 4)) return;
+    w = l[2] - l[0]; h = l[3] - l[1];
+    bx = w - 0x32 - 8 - RL_BW - (g_queryid ? QI_BW + 8 : 0);
+    by = h - 0x25 + (32 - QI_BH) / 2;
+    /* some dialogs carry the game's own "Sustituir" at the bottom left (measured: the Mayor's House, 308 wide, where the
+       bottom row has no room): then one row up, right-aligned over the OK button */
+    if (!rl_rect_free(win, bx, by, bx + RL_BW, by + QI_BH)) { bx = w - 8 - RL_BW; by -= QI_BH + 6; }
+    ok = mp_button(fac, win, RL_BTN, ho_spanish() ? "Mover" : "Move", bx, by, RL_BW, QI_BH);
+    logf("RELOCATE> \"?\" of type %lu: Mover button %s at local (%ld, %ld)", t, ok ? "added" : "FAILED", bx, by);
+}
+
+static int rl_patch_slot(DWORD *slot, void *fn, DWORD *orig) {
+    DWORD old;
+    if (!VirtualProtect(slot, 4, PAGE_EXECUTE_READWRITE, &old)) return 0;
+    *orig = *slot;
+    *slot = (DWORD)fn;
+    return 1;
+}
+
+static void rl_install(void) {
+    static const BYTE site[0x30] = {
+        0x8b, 0x07, 0x68, 0x00, 0x04, 0x00, 0x00, 0x8b, 0xcf, 0xff, 0x50, 0x3c, 0x84, 0xc0, 0x75, 0x20,
+        0x8b, 0x07, 0x68, 0x00, 0x00, 0x40, 0x00, 0x8b, 0xcf, 0xff, 0x50, 0x3c, 0x84, 0xc0, 0x74, 0x37,
+        0x8b, 0x07, 0x68, 0x00, 0x08, 0x00, 0x00, 0x8b, 0xcf, 0xff, 0x50, 0x3c, 0x84, 0xc0, 0x74, 0x27 };
+    static void *fns[8] = { (void *)rl_can0, (void *)rl_can1, (void *)rl_can2, (void *)rl_can3,
+                            (void *)rl_put0, (void *)rl_put1, (void *)rl_put2, (void *)rl_put3 };
+    static const DWORD slots_rva[8] = { 0x10006a65, 0x10006a82, 0x10006aa0, 0x10006abe,
+                                        0x10006b02, 0x10006b21, 0x10006b40, 0x10006b5f };
+    HMODULE g = NULL;
+    BYTE *s, *c;
+    DWORD *vt, old;
+    int i, st = 0;
+    if (!g_relocate && !g_plopover) { logf("RELOCATE> off (SC3RESIZE_RELOCATE=0 and SC3RESIZE_PLOPOVER=0)"); return; }
+    while (st++ < 300 && !(g = GetModuleHandleA("SIMGEOM.DLL"))) Sleep(100);
+    if (!g) { logf("RELOCATE> SIMGEOM.DLL not loaded: off"); return; }
+    s = (BYTE *)g + 0x76b4; c = (BYTE *)g + 0x7760;
+    vt = (DWORD *)((BYTE *)g + 0x292c0 + 0x24);
+    for (i = 0; i < 8; i++) {
+        DWORD want = (DWORD)g + (slots_rva[i] - 0x10000000);
+        if (vt[i + (i >= 4 ? 1 : 0)] != want) break;   /* +0x24..+0x30, then +0x38..+0x44 (+0x34 is the multi-cell slot) */
+    }
+    if (i < 8 || memcmp(s, site, sizeof(site)) || c[0] != 0xb8 || c[5] != 0xe8) {
+        logf("RELOCATE> SIMGEOM differs from shipped (slot %d): not installed", i);
+        return;
+    }
+    g_rl_geom = g;
+    g_rl_ret_e4 = (DWORD)g + 0x76e4; g_rl_ret_fb = (DWORD)g + 0x76fb; g_rl_ret_70b = (DWORD)g + 0x770b;
+    g_rl_7760_imm = *(DWORD *)(c + 1); g_rl_7760_ret = (DWORD)c + 5;
+    for (i = 0; i < 8; i++) rl_patch_slot(&vt[i + (i >= 4 ? 1 : 0)], fns[i], &g_rl_orig[i]);
+    if (VirtualProtect(s, sizeof(site), PAGE_EXECUTE_READWRITE, &old)) {
+        s[0] = 0xE9; *(DWORD *)(s + 1) = (DWORD)rl_site_stub - (DWORD)(s + 5);
+        for (i = 5; i < (int)sizeof(site); i++) s[i] = 0xCC;    /* unreachable: nothing branches into the range */
+        FlushInstructionCache(GetCurrentProcess(), s, sizeof(site));
+    }
+    if (VirtualProtect(c, 5, PAGE_EXECUTE_READWRITE, &old)) {
+        c[0] = 0xE9; *(DWORD *)(c + 1) = (DWORD)rl_commit_stub - (DWORD)(c + 5);
+        FlushInstructionCache(GetCurrentProcess(), c, 5);
+    }
+    logf("RELOCATE> on: Mover button %s, auto-demolish of zoned buildings under a placed building %s "
+         "(layer slots + site check SIMGEOM+0x76b4 + commit SIMGEOM+0x7760)", g_relocate ? "on" : "off", g_plopover ? "on" : "off");
 }
 
 /* FRAMEDUMP (diag, task hudclick 2026-10-15). SC3RESIZE_FRAMEDUMP=<abs prefix>: when the file <prefix>req exists, the
@@ -15841,6 +16278,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           ho_install(sui);   /* HUDOPT: HUD scale controls in the Preferences dialog */
           rz_meet_hook(sui); /* DLGSTAY: the Reunirse pages share one stored position */
           qi_install(sui);   /* QUERYID: "Copiar ID" button in the query (?) dialog */
+          rl_install();      /* RELOCATE: "Mover" in the "?" of rewards/landmarks, auto-demolish of zoned buildings */
           pk_install();      /* PANCURSOR: right-drag arrows enlarged and centred */
           rz_diag_arrows_install();   /* DIAGARROWS (test only, SC3RESIZE_DIAG_ARROWS=1) */
           cursormap_install();   /* CURSORMAP: GZWIND's GetCursorPos helper maps through the zoom factor */
@@ -15906,6 +16344,10 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MPHOVER", v, sizeof(v))) g_mp_hover = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MODSUI", v, sizeof(v))) g_modsui = atoi(v);   /* owner 2026-10-27 */
           if (GetEnvironmentVariableA("SC3RESIZE_QUERYID", v, sizeof(v))) g_queryid = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_RELOCATE", v, sizeof(v))) g_relocate = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_PLOPOVER", v, sizeof(v))) g_plopover = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_RELOCATE_PRICEPCT", v, sizeof(v))) g_rl_price_pct = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_RELOCATE_CLEARCOST", v, sizeof(v))) g_rl_clearcost = atoi(v);
           if (g_hudopt) ho_load_ini();   /* HUDOPT: the Preferences choice, env vars below still override */
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE", v, sizeof(v))) { g_hudscale = atoi(v); g_ho_env |= 1; }
           if (GetEnvironmentVariableA("SC3RESIZE_HUDSCALE_FILTER", v, sizeof(v))) { g_hs_filter = atoi(v); g_ho_env |= 2; }
