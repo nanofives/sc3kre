@@ -53,7 +53,10 @@ $exe = Join-Path $Apps 'SC3U.exe'
 $bak = Join-Path $Apps 'SC3U.exe.orig'
 if (-not (Test-Path -LiteralPath $exe)) { throw "SC3U.exe not found in $Apps. Pass -Apps <folder>." }
 
-if (Get-Process -Name 'SC3U', 'SC3U_mods' -ErrorAction SilentlyContinue) {
+# only a game started from THIS folder holds this exe (dev trees run several installs side by side)
+$full = (Resolve-Path -LiteralPath $exe).Path
+if (Get-Process -Name 'SC3U', 'SC3U_mods' -ErrorAction SilentlyContinue |
+        Where-Object { -not $_.Path -or [IO.Path]::GetDirectoryName($_.Path) -ieq [IO.Path]::GetDirectoryName($full) }) {
     throw "SimCity 3000 is running. Close it first."
 }
 

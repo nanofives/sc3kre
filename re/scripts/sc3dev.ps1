@@ -11,8 +11,8 @@
     Simcity\dev\<name>\inst    built mods, perf.ini, logs           (SC3MODS_DIR for the game)
     Simcity\stage\release      the LAN staging folder = the default base (was Proyectos\Simcity_release)
 
-  The base's Apps\SC3U.exe is already patched to import sc3mods.dll (sc3mods_patch.ps1), so a tree only needs the
-  loader built into its own Apps\. Never edit a linked file in place: delete it and copy first.
+  The base ships the stock Apps\SC3U.exe, so `new` patches the tree's own copy to import sc3mods.dll
+  (sc3mods_patch.ps1) and builds the loader into the tree's Apps\. Never edit a linked file in place: delete it and copy first.
 
   Commands:
     new    <name> [-From main] [-Base <dir>] [-NoBuild]   worktree + tree + loader + all mods
@@ -126,6 +126,10 @@ switch ($Cmd) {
         if ($LASTEXITCODE) { throw "git worktree add failed" }
         py -3.12 (Join-Path $Main 're\tools\netmod\link_tree.py') $Base $p.Tree
         if ($LASTEXITCODE) { throw "link_tree failed" }
+        # the base ships the stock exe (release = stock exe + sc3mods_patch.ps1 per PC): patch the tree's own copy.
+        # The script writes a temp file and moves it over the exe, so the hard link to the base is replaced, not written
+        pwsh -NoProfile -File (Join-Path $Main 're\scripts\sc3mods_patch.ps1') -Apps "$($p.Tree)\Apps"
+        if ($LASTEXITCODE) { throw "sc3mods_patch failed" }
         New-Item -ItemType Directory -Force $p.Inst | Out-Null
         if (-not $NoBuild) { Build $p $AllMods }
         Write-Host "[+] $($p.Root)  (branch $($p.Branch) from $From, base $Base)"
