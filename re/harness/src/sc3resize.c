@@ -9927,6 +9927,225 @@ static void rl_install(void) {
          "(layer slots + site check SIMGEOM+0x76b4 + commit SIMGEOM+0x7760)", g_relocate ? "on" : "off", g_plopover ? "on" : "off");
 }
 
+/* ================= ROADOVER (task roadover 2026-10-28, re/analysis/ROADOVER.md)
+ * Owner: "i'm not able to place road over these residential buildings". PLOPOVER for the network drag tools: a road,
+ * highway, rail or power-line drag over ZONED buildings demolishes them and builds, charging the bulldozing.
+ * Stock: each drag tool owns a path object (tool+0x114, ctor SIMNTWRK 0x10010be8). Its drag compute (vt+0xc,
+ * 0x1000488d) tests every cell with 0x10010731, which hands the occupant there to the tool's drag predicate vt+0xc
+ * (stateless functor, `ret 4`, NETWORK_RULE_ENGINE.md 5). Road 0x1001ad60 accepts CanUserRemove AND (flora 0x400, road
+ * bits 0x8800, or vt+0x5c type 0xe/0xf); highway 0x1001ae36 / rail 0x1001ade7 the same with their bits, power line
+ * 0x1001adaf flora or 0x400800. A building (0x104) fails, the path paints 0x24 (red) and tool+0x38 = 1, so Apply
+ * (vt+0x48, road 0x1000e72a) posts refusal 0x1e. The four predicates are netmgr vt+0x54 indices 0x1c/0x1d/0x1e/0x21,
+ * fetched only by the four tools' init (0x1000e537 / e9e7 / ee4b / fc45). Pipes and subway pass under buildings in
+ * stock (their predicate 0x1001ad4f is CanUserRemove alone) and are left alone here.
+ * Hooks (installed unless SC3RESIZE_ROADOVER=0, behaviour gated on g_plopover, the "Construir sobre zonas" checkbox):
+ * 1. the 4 predicates' vt+0xc: stock, else 1 for a zoned building (GeomFlag 0x100, CanUserRemove, zone 1..11 under its
+ *    first cell, PLOPOVER's test). sc3netmod's CROSS block wraps the road / highway / rail ones too: ro_install runs on
+ *    its own thread, waits for sc3netmod to wrap them and chains its wrappers (ours -> sc3netmod's -> stock).
+ * 2. tool vt+0x4c / +0x50 (cost, base calls them after the compute +0x54): stock writes tool+0x34 then 0x100259b8 (funds
+ *    < +0x34 -> +0x39 = 1, Apply posts "no funds" 0x20). We add the bulldozing of every distinct zoned building under the
+ *    path cells (path+8..+0xc, 12-byte points x<<8, z<<8, y) and run 0x100259b8 again.
+ * 3. netmgr vt+0xf0 0x10014a23 (thiscall 8 args, ret 0x20: layer, sel, netType, cost, ?, points, count, ?), reached from
+ *    the build slots +0x94.. through +0xec 0x10014807: for netType 1 road / 2 rail / 3 power / 4 highway, demolish the zoned
+ *    buildings under the points (rl_remove), run the stock build, withdraw the bulldozing. This runs inside tool Apply,
+ *    where sc3undo records occupant removals. */
+#define RO_NPRED 4
+#define RO_NTOOL 4
+static DWORD g_ro_pred_orig[RO_NPRED], g_ro_cost_orig[RO_NTOOL], g_ro_f0_orig;
+static HMODULE g_ro_ntwrk;
+
+static void *ro_budget(void) {
+    BYTE *city = rl_city();
+    HMODULE misc = GetModuleHandleA("SIMMISC.DLL");
+    void *bu;
+    if (!city || !misc) return NULL;
+    bu = (void *)ho_v(city, 0x15c, 0, 0, 0, 0, 0, 0);
+    return bu && *(DWORD *)bu == (DWORD)misc + 0x3c550 ? bu : NULL;
+}
+
+/* a zoned building PLOPOVER would demolish: GeomFlag 0x100, CanUserRemove, zone byte 1..11 under its first cell */
+static int ro_zoned(void *occ, LONG *r) {
+    int z;
+    __try {
+        if (!(ho_v(occ, 0x3c, 1, 0x100, 0, 0, 0, 0) & 0xff)) return 0;
+        if (!(ho_v(occ, 0x74, 0, 0, 0, 0, 0, 0) & 0xff)) return 0;
+        memset(r, 0, 4 * sizeof(LONG));
+        ho_v(occ, 0xd0, 1, (DWORD)r, 0, 0, 0, 0);
+        z = rl_zone(r[0], r[1]);
+        return z >= 1 && z <= 11;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
+}
+
+static DWORD ro_pred(int i, void *self, void *occ) {
+    DWORD r = rz_thiscall_ret(self, (void *)g_ro_pred_orig[i], (DWORD *)&occ, 1);
+    LONG rc[4];
+    if ((r & 0xff) || !g_plopover || !occ) return r;
+    return ro_zoned(occ, rc) ? 1 : r;
+}
+#define RO_PRED(k) static DWORD __fastcall ro_pred##k(void *s, void *e, void *occ) { (void)e; return ro_pred(k, s, occ); }
+RO_PRED(0) RO_PRED(1) RO_PRED(2) RO_PRED(3)
+
+/* the zoned buildings under a list of cell points (12-byte x<<8, z<<8, y), each once; returns the bulldozing (per-tile
+   price budget vt+0x58(7) x footprint, what the bulldozer and PLOPOVER charge). Only points the selection layer marks
+   0x23 (valid) count: +0xf0 builds only those (SIMNTWRK 0x10014ab2..0x10014acb: FUN_10021b37() vt+0x8c, then vt+0x30(point,
+   &kind)), and the path paints into the same layer (path+0x50, set at 0x10010be8). So a building under a cell refused for
+   another reason (slope, water, another occupant, a whole-path refusal, funds) is neither charged nor demolished. */
+typedef struct { int n; void *occ[64]; LONG rect[64][4]; } ROSet;
+static LONG ro_collect(const LONG *pts, DWORD cnt, ROSet *s) {
+    BYTE *city = rl_city();
+    void *om, *bu = ro_budget(), *o, *sel = NULL, *g;
+    LONG r[4], pertile, sum = 0;
+    DWORD i, kind;
+    int j;
+    s->n = 0;
+    if (!city || !bu || !pts || !g_ro_ntwrk || IsBadReadPtr(pts, cnt * 12)) return 0;
+    om = (void *)ho_v(city, 0x11c, 0, 0, 0, 0, 0, 0);
+    g = ((void *(__cdecl *)(void))((BYTE *)g_ro_ntwrk + 0x21b37))();
+    if (g) sel = (void *)ho_v(g, 0x8c, 0, 0, 0, 0, 0, 0);
+    if (!om || !sel) return 0;
+    pertile = (LONG)ho_v(bu, 0x58, 1, 7, 0, 0, 0, 0);
+    for (i = 0; i < cnt && i < 0x500; i++) {
+        o = NULL;
+        if (pts[i * 3] == 0x7fffffff) continue;
+        kind = 0;
+        ho_v(sel, 0x30, 2, (DWORD)(pts + i * 3), (DWORD)&kind, 0, 0, 0);
+        if (kind != 0x23) continue;
+        if (!(ho_v(om, 0x7c, 3, (DWORD)(pts[i * 3] >> 8), (DWORD)(pts[i * 3 + 1] >> 8), (DWORD)&o, 0, 0) & 0xff) || !o) continue;
+        if (ro_zoned(o, r)) {
+            for (j = 0; j < s->n; j++) if (s->occ[j] == o) break;
+            if (j == s->n && s->n < 64) {
+                s->occ[s->n] = o;
+                memcpy(s->rect[s->n], r, sizeof(r));
+                s->n++;
+                sum += pertile * (r[2] - r[0] + 1) * (r[3] - r[1] + 1);
+            }
+        }
+        ho_v(o, 0x08, 0, 0, 0, 0, 0, 0);
+    }
+    return sum;
+}
+
+static DWORD ro_cost(int i, BYTE *tool, DWORD sel) {
+    DWORD r = rz_thiscall_ret(tool, (void *)g_ro_cost_orig[i], &sel, 1);
+    BYTE *path;
+    ROSet s;
+    LONG extra, base;
+    static LONG lbase = -1, lextra = -1; static int ln = -1;
+    if (!g_plopover) return r;
+    __try {
+        path = *(BYTE **)(tool + 0x114);
+        if (!path || IsBadReadPtr(path, 0x10)) return r;
+        {   LONG *b = *(LONG **)(path + 8), *e = *(LONG **)(path + 0xc);
+            if (!b || e <= b) return r;
+            extra = ro_collect(b, (DWORD)(e - b) / 3, &s); }
+        if (!s.n) return r;
+        base = *(LONG *)(tool + 0x34);
+        *(LONG *)(tool + 0x34) = base + extra;
+        ((void (__fastcall *)(BYTE *))((BYTE *)g_ro_ntwrk + 0x259b8))(tool);   /* funds test -> +0x39 */
+        if (base != lbase || extra != lextra || s.n != ln)
+            logf("ROADOVER> drag over %d zoned building(s): network %ld + bulldozing %ld = %ld%s", s.n, base, extra,
+                 base + extra, tool[0x39] ? " (not enough funds)" : "");
+        lbase = base; lextra = extra; ln = s.n;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { logf("ROADOVER> fault in the cost hook"); }
+    return r;
+}
+#define RO_COST(k) static DWORD __fastcall ro_cost##k(void *s, void *e, DWORD sel) { (void)e; return ro_cost(k, (BYTE *)s, sel); }
+RO_COST(0) RO_COST(1) RO_COST(2) RO_COST(3)
+
+static DWORD __fastcall ro_build(void *mgr, void *edx, DWORD layer, DWORD sel, DWORD net, DWORD cost, DWORD a4,
+                                 DWORD pts, DWORD cnt, DWORD a7) {
+    static const char *nm[5] = { "?", "road", "rail", "power line", "highway" };
+    DWORD a[8], r;
+    ROSet s;
+    LONG extra, funds, after;
+    void *bu;
+    int i, gone = 0;
+    (void)edx;
+    a[0] = layer; a[1] = sel; a[2] = net; a[3] = cost; a[4] = a4; a[5] = pts; a[6] = cnt; a[7] = a7;
+    if (!g_plopover || net < 1 || net > 4 || !cnt) return rz_thiscall_ret(mgr, (void *)g_ro_f0_orig, a, 8);
+    extra = ro_collect((const LONG *)pts, cnt, &s);
+    if (!s.n) return rz_thiscall_ret(mgr, (void *)g_ro_f0_orig, a, 8);
+    bu = ro_budget();
+    funds = bu ? (LONG)ho_v(bu, 0x10, 0, 0, 0, 0, 0, 0) : 0;
+    if (!bu || funds < (LONG)cost + extra) {
+        logf("ROADOVER> %s build over %d zoned building(s) refused: funds %ld < %lu + bulldozing %ld", nm[net], s.n, funds,
+             cost, extra);
+        return 0;
+    }
+    for (i = 0; i < s.n; i++) gone += rl_remove(s.occ[i], s.rect[i], "zoned building under the drag");
+    r = rz_thiscall_ret(mgr, (void *)g_ro_f0_orig, a, 8);
+    if (extra > 0) ho_v(bu, 0x14, 1, (DWORD)extra, 0, 0, 0, 0);   /* Withdraw, the slot PLOPOVER uses */
+    after = (LONG)ho_v(bu, 0x10, 0, 0, 0, 0, 0, 0);
+    logf("ROADOVER> %s build over %d zoned building(s) (%d removed), %lu cell point(s): %s, network %lu + bulldozing %ld; "
+         "funds %ld -> %ld", nm[net], s.n, gone, cnt, (r & 0xff) ? "built" : "BUILD FAILED", cost, extra, funds, after);
+    return r;
+}
+
+static void ro_install(void) {
+    /* predicate vtables (slot +0xc), tool vtables (slots +0x4c, +0x50), netmgr vtable 0x1002c7bc slot +0xf0 */
+    static const DWORD pvt[RO_NPRED] = { 0x2c590, 0x2c568, 0x2c57c, 0x2c554 };       /* road, highway, rail, power */
+    static const DWORD pfn[RO_NPRED] = { 0x1ad60, 0x1ae36, 0x1ade7, 0x1adaf };
+    static const DWORD tvt[RO_NTOOL] = { 0x2bef8, 0x2bfa0, 0x2c048, 0x2c280 };       /* road, highway, rail, power */
+    static const DWORD tfn[RO_NTOOL] = { 0xe6f9, 0xebb8, 0xf00d, 0xfe02 };
+    static void *pw[RO_NPRED] = { (void *)ro_pred0, (void *)ro_pred1, (void *)ro_pred2, (void *)ro_pred3 };
+    static void *cw[RO_NTOOL] = { (void *)ro_cost0, (void *)ro_cost1, (void *)ro_cost2, (void *)ro_cost3 };
+    char v[8];
+    HMODULE n = NULL;
+    BYTE *m;
+    DWORD d, *f0;
+    int i, st = 0;
+    if (GetEnvironmentVariableA("SC3RESIZE_ROADOVER", v, sizeof(v)) && !atoi(v)) {
+        logf("ROADOVER> off (SC3RESIZE_ROADOVER=0)"); return;
+    }
+    while (st++ < 300 && !(n = GetModuleHandleA("SIMNTWRK.DLL"))) Sleep(100);
+    if (!n) { logf("ROADOVER> SIMNTWRK.DLL not loaded: off"); return; }
+    m = (BYTE *)n; d = (DWORD)n;   /* the offsets above are from the module base (DLL preferred base 0x10000000) */
+    f0 = (DWORD *)(m + 0x2c7bc + 0xf0);
+    /* sc3netmod's CROSS block wraps slot +0xc of the road / highway / rail predicates too, and skips a slot that no
+       longer holds the stock function (measured 2026-10-28: whichever mod came second lost its hook). The loader maps
+       every mod at process init, so when sc3netmod is there, wait until it has wrapped them, then chain what the slot
+       holds: ours -> sc3netmod's -> stock. A slot may hold the stock function or code inside sc3netmod.dll. */
+    {   HMODULE nm = GetModuleHandleA("sc3netmod.dll"), owner;
+        int w = 0, k;
+        for (; nm && w < 100; w++) {
+            for (k = 0; k < 3; k++) {
+                owner = NULL;
+                GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                   (LPCSTR)((DWORD *)(m + pvt[k]))[3], &owner);
+                if (owner != nm) break;
+            }
+            if (k == 3) break;
+            Sleep(100);
+        }
+        if (nm) logf("ROADOVER> sc3netmod is loaded: %s after %d ms, chaining its predicate wrappers", w < 100 ?
+                     "it wrapped the road / highway / rail predicates" : "it did NOT wrap them (CROSS off?)", w * 100);
+        for (i = 0; i < RO_NPRED; i++) {
+            DWORD cur = ((DWORD *)(m + pvt[i]))[3];
+            owner = NULL;
+            GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               (LPCSTR)cur, &owner);
+            if (cur != d + pfn[i] && !(nm && owner == nm)) {
+                logf("ROADOVER> SIMNTWRK predicate vtable +0x%lX slot +0xc = 0x%08lX, neither stock nor sc3netmod: "
+                     "not installed", pvt[i], cur); return; }
+        }
+    }
+    for (i = 0; i < RO_NTOOL; i++)
+        if (((DWORD *)(m + tvt[i]))[0x4c / 4] != d + tfn[i] || ((DWORD *)(m + tvt[i]))[0x50 / 4] != d + tfn[i]) {
+            logf("ROADOVER> SIMNTWRK tool vtable +0x%lX differs from shipped: not installed", tvt[i]); return; }
+    if (*f0 != d + 0x14a23) { logf("ROADOVER> SIMNTWRK netmgr +0xf0 differs from shipped: not installed"); return; }
+    g_ro_ntwrk = n;
+    for (i = 0; i < RO_NPRED; i++) rl_patch_slot(&((DWORD *)(m + pvt[i]))[3], pw[i], &g_ro_pred_orig[i]);
+    for (i = 0; i < RO_NTOOL; i++) {
+        DWORD dummy;
+        rl_patch_slot(&((DWORD *)(m + tvt[i]))[0x4c / 4], cw[i], &g_ro_cost_orig[i]);
+        rl_patch_slot(&((DWORD *)(m + tvt[i]))[0x50 / 4], cw[i], &dummy);
+    }
+    rl_patch_slot(f0, (void *)ro_build, &g_ro_f0_orig);
+    logf("ROADOVER> on: road / highway / rail / power-line drags over zoned buildings %s (4 drag predicates, 4 tool cost "
+         "slots, netmgr +0xf0)", g_plopover ? "demolish them" : "refuse (PLOPOVER off)");
+}
+static DWORD WINAPI ro_thread(LPVOID p) { (void)p; ro_install(); return 0; }   /* it may wait for sc3netmod */
+
 /* FRAMEDUMP (diag, task hudclick 2026-10-15). SC3RESIZE_FRAMEDUMP=<abs prefix>: when the file <prefix>req exists, the
  * next client-sized Blt onto the primary writes its source rect (the frame exactly as presented, after any HUDSCALE
  * pass) to <prefix><tag>.bmp, tag = the first line of req (else a counter), and deletes req. A smaller Blt onto the
@@ -16346,6 +16565,9 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           rz_meet_hook(sui); /* DLGSTAY: the Reunirse pages share one stored position */
           qi_install(sui);   /* QUERYID: "Copiar ID" button in the query (?) dialog */
           rl_install();      /* RELOCATE: "Mover" in the "?" of rewards/landmarks, auto-demolish of zoned buildings */
+          {   HANDLE t = CreateThread(NULL, 0, ro_thread, NULL, 0, NULL);   /* ROADOVER: road / highway / rail /
+                                                                            power drags over zoned buildings demolish them */
+              if (t) CloseHandle(t); else ro_install(); }
           pk_install();      /* PANCURSOR: right-drag arrows enlarged and centred */
           rz_diag_arrows_install();   /* DIAGARROWS (test only, SC3RESIZE_DIAG_ARROWS=1) */
           cursormap_install();   /* CURSORMAP: GZWIND's GetCursorPos helper maps through the zoom factor */
