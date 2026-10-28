@@ -13,7 +13,10 @@ import sys
 
 # mods_launch.exe is retired (2026-10-25) but still skipped so an old source install does not leak it into a tree.
 SKIP_APPS = {"mods_launch.exe", "sc3resize.dll", "sc3bigcity.dll", "sc3overscroll.dll", "sc3simrun.dll",
-             "sc3perf.dll", "sc3netmod.dll", "sc3undo.dll", "sc3cartrips.dll", "sc3mods.dll", "perf.ini", "menu_bg.bmp", "sc3mods_readme.txt", "sc3resize.ini"}
+             "sc3perf.dll", "sc3netmod.dll", "sc3undo.dll", "sc3cartrips.dll", "sc3mods.dll", "sc3autosave.dll", "perf.ini", "menu_bg.bmp", "sc3mods_readme.txt", "sc3resize.ini",
+             "autosave.ini", "overscroll.ini", "simrun.ini", "undo.ini"}
+# Any other sc3*.dll in Apps is a mod too (no stock SC3U DLL starts with sc3): sc3autosave.dll leaked into trees
+# until 2026-10-28 because it was missing from the list above, so new mods are caught by the prefix.
 
 
 def skip(rel):
@@ -22,7 +25,7 @@ def skip(rel):
         return True
     if len(parts) == 2 and parts[0].lower() == "apps":
         n = parts[1].lower()
-        return n in SKIP_APPS or n.endswith(".log")
+        return n in SKIP_APPS or n.endswith(".log") or (n.startswith("sc3") and n.endswith(".dll"))
     return False
 
 

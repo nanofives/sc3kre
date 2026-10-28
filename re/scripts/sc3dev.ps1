@@ -124,8 +124,10 @@ switch ($Cmd) {
         if (-not (Test-Path "$Base\Apps\SC3U.exe")) { throw "base $Base has no Apps\SC3U.exe" }
         git -C $Main worktree add -b $p.Branch $p.Wt $From
         if ($LASTEXITCODE) { throw "git worktree add failed" }
-        py -3.12 (Join-Path $Main 're\tools\netmod\link_tree.py') $Base $p.Tree
-        if ($LASTEXITCODE) { throw "link_tree failed" }
+        # py.exe, not py: from Git Bash, PATH has ~/bin/py first (a sh shim for bash). pwsh cannot run it, returns
+        # with no output and no exit code, and the tree was never linked (dev\edgepush, dev\avpaint on 2026-10-27).
+        py.exe -3.12 (Join-Path $Main 're\tools\netmod\link_tree.py') $Base $p.Tree
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$($p.Tree)\Apps\SIMSPR.DLL")) { throw "link_tree failed: $($p.Tree) has no game files" }
         # the base ships the stock exe (release = stock exe + sc3mods_patch.ps1 per PC): patch the tree's own copy.
         # The script writes a temp file and moves it over the exe, so the hard link to the base is replaced, not written
         pwsh -NoProfile -File (Join-Path $Main 're\scripts\sc3mods_patch.ps1') -Apps "$($p.Tree)\Apps"
