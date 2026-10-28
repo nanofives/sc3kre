@@ -13,26 +13,29 @@
  *     game still treats the city as unsaved and asks "save changes?" on quit as before. [UNCERTAIN: what vt+0x40(0)
  *     clears is not read; the mod just leaves it alone.]
  *
- * Where: next to the city's own file, "<city>.autosave<N>.sc3", N = 1..keep (oldest overwritten). A city that was
- * never saved goes to <game>\Cities\Untitled.autosaveN.sc3. Each save goes to "<city>.autosave<N>.tmp.sc3" first (the
- * command appends ".sc3" to any path that does not end in it, measured 2026-10-27) and is renamed
- * over the target only when the game says it succeeded, so a failed or interrupted save never destroys the previous
- * autosave. A save byte-identical to the newest autosave (a paused city saves identically) is dropped.
+ * Where: next to the city's own file, three files "<city> (auto 5 min).sc3", "(auto 10 min)", "(auto 1 h)" (2026-10-28,
+ * "three files" below; builds before that wrote "<city>.autosave1/2.sc3", which are left alone). A city that was never
+ * saved goes to <game>\Cities\Untitled (auto ...).sc3. Each save goes to "<city> (auto).tmp.sc3" first (the command
+ * appends ".sc3" to any path that does not end in it, measured 2026-10-27) and is renamed over the target only when the
+ * game says it succeeded, so a failed or interrupted save never destroys the previous autosave. A save byte-identical
+ * to the newest autosave (a paused city saves identically) is dropped.
  *
  * When: a watcher thread checks every second and posts WM_AUTOSAVE to the game window, so the save runs on the game
  * thread. The save is put off (retried next second) while a mouse button is held or captured (a drag is in
- * progress), while a text field has focus, while the city object is new (< 20 s since it appeared) or the city's own
- * lock counter is nonzero (the game is already saving), or while another autosave is running. A due save also waits
- * for idle_seconds without mouse or keyboard input ("idle wait" below).
+ * progress), while a text field has focus, while the city object is new (< 20 s since it appeared, or since the game
+ * thread came back from a load, "one WM_AUTOSAVE in flight" below) or the city's own lock counter is nonzero (the game
+ * is saving, or a dialog such as Load City is open: lock 3 measured 2026-10-28), or while another autosave is running.
+ * A due save also waits for idle_seconds without mouse or keyboard input ("idle wait" below).
  *
  * Cost: the game freezes for one save. With the game's "Guardando..." box replaced by the corner indicator ("corner
  * indicator" below) that is ~0.3 s on Frankfurt (690 KB), against 1.6 - 2.7 s with the box.
  *
  * autosave.ini beside the DLL:
- *   [autosave] enabled=1 minutes=5 keep=2 dir= idle_seconds=3 indicator=1   (dir empty = next to the city file)
- * Test overrides: SC3AUTOSAVE_SECONDS=<n> (interval in seconds), SC3AUTOSAVE_LOG=<path>, SC3AUTOSAVE_HOLD=<ms> (hold the
- * game thread after the save with the indicator up), SC3AUTOSAVE_INDFORCE=1 (show the indicator even when the game is
- * not in front).
+ *   [autosave] enabled=1 minutes=5 dir= idle_seconds=3 indicator=1   (dir empty = next to the city file; keep= is gone)
+ * Test overrides: SC3AUTOSAVE_SECONDS=<n> (interval in seconds), SC3AUTOSAVE_TIERS=<b>,<c> (the 10 min / 1 h ages in
+ * seconds), SC3AUTOSAVE_LOG=<path>, SC3AUTOSAVE_HOLD=<ms> (hold the game thread after the save with the indicator up),
+ * SC3AUTOSAVE_INDFORCE=1 (show the indicator even when the game is not in front), SC3AUTOSAVE_DIAG=1 (log the stack of
+ * every WM_AUTOSAVE dispatch).
  * Log: sc3autosave.log beside the DLL.
  */
 #include <windows.h>
@@ -76,8 +79,8 @@ static void self_path(char *out, int cap, const char *leaf) {
 }
 
 /* ------------------------------------------------------------------ config */
-#define MAXKEEP 9
-static int   g_enabled = 1, g_keep = 2;
+static int   g_enabled = 1;
+static DWORD g_tier_b = 10 * 60, g_tier_c = 60 * 60;   /* seconds, see "three files" below */
 static DWORD g_interval_ms = 5 * 60 * 1000;
 static char  g_cfg_dir[MAX_PATH];
 static DWORD g_idle_ms = 3000;      /* idle wait, see "idle wait" below */
@@ -90,7 +93,6 @@ static void ini_read(void) {
     if (path[0]) {
         g_enabled = GetPrivateProfileIntA("autosave", "enabled", 1, path) ? 1 : 0;
         minutes   = GetPrivateProfileIntA("autosave", "minutes", 5, path);
-        g_keep    = GetPrivateProfileIntA("autosave", "keep", 2, path);
         GetPrivateProfileStringA("autosave", "dir", "", g_cfg_dir, sizeof(g_cfg_dir), path);
         g_idle_ms   = (DWORD)GetPrivateProfileIntA("autosave", "idle_seconds", 3, path) * 1000;
         g_indicator = GetPrivateProfileIntA("autosave", "indicator", 1, path) ? 1 : 0;
@@ -99,8 +101,11 @@ static void ini_read(void) {
         g_interval_ms = (DWORD)minutes * 60 * 1000;
     }
     if (GetEnvironmentVariableA("SC3AUTOSAVE_SECONDS", v, sizeof(v)) && atoi(v) > 0) g_interval_ms = (DWORD)atoi(v) * 1000;
-    if (g_keep < 1) g_keep = 1;
-    if (g_keep > MAXKEEP) g_keep = MAXKEEP;
+    /* test only: SC3AUTOSAVE_TIERS=<b>,<c> = the 10 min / 1 h ages in seconds */
+    if (GetEnvironmentVariableA("SC3AUTOSAVE_TIERS", v, sizeof(v)) && atoi(v) > 0 && strchr(v, ',')) {
+        g_tier_b = (DWORD)atoi(v);
+        g_tier_c = (DWORD)atoi(strchr(v, ',') + 1);
+    }
 }
 
 /* ------------------------------------------------------------------ engine access */
@@ -240,7 +245,7 @@ static int file_hash(const char *path, unsigned __int64 *h, DWORD *size) {
     return 1;
 }
 
-/* "<dir>\<base>.autosave" from the city file name (or <game>\Cities\Untitled when it has none) */
+/* "<dir>\<base>" from the city file name (or <game>\Cities\Untitled when it has none) */
 static void target_stem(char *out, int cap) {
     char dir[MAX_PATH], base[MAX_PATH], *s, *dot;
     if (g_name_len > 0) {
@@ -251,8 +256,9 @@ static void target_stem(char *out, int cap) {
         else { lstrcpynA(base, dir, sizeof(base)); dir[0] = 0; }
         dot = strrchr(base, '.');
         if (dot) *dot = 0;
-        /* an autosave the player loaded saves as itself, not as "x.autosave1.autosave1" */
-        if ((dot = strstr(base, ".autosave")) != NULL) *dot = 0;
+        /* an autosave the player loaded saves under its city, not as "x (auto 5 min) (auto 5 min)" */
+        if ((dot = strstr(base, " (auto")) != NULL) *dot = 0;
+        if ((dot = strstr(base, ".autosave")) != NULL) *dot = 0;     /* names of the builds before 10-28 */
     } else {
         lstrcpyA(base, "Untitled");
         dir[0] = 0;
@@ -265,34 +271,75 @@ static void target_stem(char *out, int cap) {
         lstrcatA(dir, "\\Cities");
     }
     if (!base[0]) lstrcpyA(base, "Untitled");
-    _snprintf(out, cap, "%s\\%s.autosave", dir, base);
+    _snprintf(out, cap, "%s\\%s", dir, base);
     out[cap - 1] = 0;
 }
 
-/* slot to write = the first missing one, else the oldest by write time; *newest = the newest existing one (0 = none) */
-static int pick_slot(const char *stem, int *newest) {
-    char p[MAX_PATH];
-    int i, missing = 0, oldest = 0;
-    FILETIME t_old, t_new;
+/* ------------------------------------------------------------------ three files
+ * Owner 2026-10-28: "guardar hasta 3 autosave, el de los ultimos 5 minutos, ultimos 10, ultima hora".
+ *   A "<city> (auto 5 min).sc3"   the newest autosave
+ *   B "<city> (auto 10 min).sc3"
+ *   C "<city> (auto 1 h).sc3"
+ * Each save is written to "<city> (auto).tmp.sc3". If it differs from A: when A exists and B is missing or its save is
+ * at least 10 min old, B first moves to C (when C is missing or its save is at least 60 min old), then A moves to B;
+ * last the tmp file becomes A. A file's age is its last-write time (a rename keeps it), i.e. when that save was made.
+ * With the 5 min default A is 0-5 min old, B the save before it, C 10-65 min old. */
+static const char *const k_slot[3] = { " (auto 5 min).sc3", " (auto 10 min).sc3", " (auto 1 h).sc3" };
+static void slot_path(char *out, int cap, const char *stem, int i) {
+    _snprintf(out, cap, "%s%s", stem, k_slot[i]);
+    out[cap - 1] = 0;
+}
+/* seconds since the file was last written, or -1 when it does not exist */
+static long file_age(const char *path) {
     WIN32_FILE_ATTRIBUTE_DATA a;
-    *newest = 0;
-    for (i = 1; i <= g_keep; i++) {
-        _snprintf(p, sizeof(p), "%s%d.sc3", stem, i); p[sizeof(p) - 1] = 0;
-        if (!GetFileAttributesExA(p, GetFileExInfoStandard, &a)) { if (!missing) missing = i; continue; }
-        if (!*newest || CompareFileTime(&a.ftLastWriteTime, &t_new) > 0) { *newest = i; t_new = a.ftLastWriteTime; }
-        if (!oldest || CompareFileTime(&a.ftLastWriteTime, &t_old) < 0) { oldest = i; t_old = a.ftLastWriteTime; }
+    FILETIME now;
+    unsigned __int64 n, w;
+    if (!GetFileAttributesExA(path, GetFileExInfoStandard, &a)) return -1;
+    GetSystemTimeAsFileTime(&now);
+    n = ((unsigned __int64)now.dwHighDateTime << 32) | now.dwLowDateTime;
+    w = ((unsigned __int64)a.ftLastWriteTime.dwHighDateTime << 32) | a.ftLastWriteTime.dwLowDateTime;
+    return n > w ? (long)((n - w) / 10000000) : 0;
+}
+static int move_over(const char *from, const char *to) {
+    if (MoveFileExA(from, to, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) return 1;
+    logf("ROT> rename %s -> %s failed (%lu)", from, to, GetLastError());
+    return 0;
+}
+/* make room in A for the new save: A -> B, B -> C by the ages above */
+static void rotate(const char *stem) {
+    char a[MAX_PATH], b[MAX_PATH], c[MAX_PATH];
+    long aa, ab, ac;
+    slot_path(a, sizeof(a), stem, 0); slot_path(b, sizeof(b), stem, 1); slot_path(c, sizeof(c), stem, 2);
+    aa = file_age(a); ab = file_age(b); ac = file_age(c);
+    if (aa < 0) return;                                        /* no A: nothing to keep */
+    if (ab >= 0 && ab < (long)g_tier_b) {                      /* B young enough: A is simply replaced */
+        logf("ROT> A (%ld s) replaced, B (%ld s) kept", aa, ab);
+        return;
     }
-    if (missing) return missing;                      /* fill empty slots before overwriting any */
-    return oldest ? oldest : 1;
+    if (ab >= 0 && (ac < 0 || ac >= (long)g_tier_c)) {
+        if (move_over(b, c)) logf("ROT> B (%ld s) -> C (was %ld s)", ab, ac);
+    }
+    if (move_over(a, b)) logf("ROT> A (%ld s) -> B (was %ld s)", aa, ab);
 }
 
 /* ------------------------------------------------------------------ the autosave */
 #define WM_AUTOSAVE (WM_APP + 0x5E0)
+#define WM_AS_HOOK  (WM_APP + 0x5E1)     /* wrap the progress service once a city exists (game thread) */
 static HWND    g_hwnd;
 static WNDPROC g_oldproc;
 static volatile LONG g_busy;
 static BYTE   *g_seen_city;
 static DWORD   g_seen_at, g_last_save;
+/* One WM_AUTOSAVE in flight (child autosave3 2026-10-28). The watcher used to post one every second while a save was
+ * due. During a long load (Europolis 1024: the city pointer changed at 267 s, the game thread came back at ~303 s) they
+ * queued up and all ran when the load ended: 6 full saves back to back, 1.5-2.5 s each, and the "just loaded" guard
+ * had already run out because it counted from the pointer change. Now the watcher posts only when none is queued,
+ * the handler drops a message for another city or one that is no longer due, and a message that waited in the queue
+ * for over 5 s (the game thread was stuck, a load) restarts the "just loaded" wait from that moment. */
+static volatile LONG g_posted;
+static int     g_wait_unlock;          /* new city, its lock counter not yet seen at 0 */
+static BYTE   *g_post_city;
+static DWORD   g_post_at, g_stall_at;
 static int     g_saves, g_skips_logged;
 
 /* ------------------------------------------------------------------ idle wait
@@ -423,8 +470,10 @@ static void ind_done(int ok) {
     PostMessageA(g_ind, WM_IND_DONE, 0, 0);
 }
 
+static volatile LONG g_pg_depth;      /* the game's own progress box is open (a load or a save is running) */
 static void __fastcall pg_open(void *self, void *edx, DWORD total, void *title) {
     if (g_autosaving) { g_pg_total = total; g_pg_cur = 0; ind_show(); return; }
+    InterlockedIncrement(&g_pg_depth);
     g_pg_open(self, edx, total, title);
 }
 static void __fastcall pg_step(void *self, void *edx, DWORD step) {
@@ -433,7 +482,42 @@ static void __fastcall pg_step(void *self, void *edx, DWORD step) {
 }
 static void __fastcall pg_close(void *self, void *edx) {
     if (g_autosaving) return;
+    if (g_pg_depth > 0) InterlockedDecrement(&g_pg_depth);
     g_pg_close(self, edx);
+}
+
+/* SC3AUTOSAVE_DIAG=1 (diag, child autosave3 2026-10-28): every WM_AUTOSAVE dispatch logs why it would be put off and the
+   game-module return addresses found on the stack, to see which message loop dispatched it */
+static int g_diag;
+static void diag_stack(const char *tag) {
+    char line[1400], mod[MAX_PATH], *leaf;
+    DWORD *sp, *top, v, esp_now;
+    HMODULE m;
+    int n = 0, len;
+    __asm { mov esp_now, esp }
+    sp = (DWORD *)esp_now;
+    top = sp + 0x1800 / 4;
+    len = _snprintf(line, sizeof(line), "DIAG> %s stack:", tag);
+    for (; sp < top && n < 24 && len < (int)sizeof(line) - 64; sp++) {
+        __try { v = *sp; } __except (EXCEPTION_EXECUTE_HANDLER) { break; }
+        if (v < 0x00401000) continue;
+        if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                (LPCSTR)v, &m) || !m) continue;
+        if (m == g_self || !GetModuleFileNameA(m, mod, sizeof(mod))) continue;
+        leaf = strrchr(mod, '\\'); leaf = leaf ? leaf + 1 : mod;
+        if (!lstrcmpiA(leaf, "SC3U.exe") || !_strnicmp(leaf, "SIM", 3) || !_strnicmp(leaf, "GZ", 2) || !_strnicmp(leaf, "STRT", 4)) {
+            BYTE *b = (BYTE *)v;
+            int call = 0;
+            __try {   /* a return address: the bytes before it are a call (E8 rel32, FF /2 with a 0/1/4-byte operand) */
+                call = b[-5] == 0xE8 || (b[-6] == 0xFF && (b[-5] & 0x38) == 0x10) || (b[-2] == 0xFF && (b[-1] & 0x38) == 0x10)
+                    || (b[-3] == 0xFF && (b[-2] & 0x38) == 0x10);
+            } __except (EXCEPTION_EXECUTE_HANDLER) { call = 0; }
+            if (!call) continue;
+            len += _snprintf(line + len, sizeof(line) - len, " %s+0x%lX", leaf, v - (DWORD)m);
+            n++;
+        }
+    }
+    logf("%s", line);
 }
 
 /* wrap the three slots once, on the game thread (FUN_1000edff builds the service on first use) */
@@ -465,6 +549,7 @@ static void pg_hook(void) {
 static const char *why_not(BYTE *city) {
     if (!city) return "no city";
     if (GetTickCount() - g_seen_at < 20000) return "city just loaded";
+    if (g_stall_at && GetTickCount() - g_stall_at < 20000) return "game thread was busy (a load)";
     if (city_lock(city) != 0) return "city locked (the game is saving)";
     if (GetCapture()) return "mouse captured";
     if (GetAsyncKeyState(VK_LBUTTON) < 0 || GetAsyncKeyState(VK_RBUTTON) < 0 || GetAsyncKeyState(VK_MBUTTON) < 0)
@@ -476,10 +561,12 @@ static const char *why_not(BYTE *city) {
 static void autosave_now(void) {
     BYTE *city = city_get();
     const char *why = why_not(city);
-    char stem[MAX_PATH], target[MAX_PATH], tmp[MAX_PATH], prev[MAX_PATH];
+    char stem[MAX_PATH], target[MAX_PATH], tmp[MAX_PATH];
     unsigned __int64 h, hp;
     DWORD sz, szp, t0 = GetTickCount();
-    int slot, newest, ok;
+    int ok;
+    if (city != g_post_city) { logf("SAVE> message was for another city, dropped"); return; }
+    if (GetTickCount() - g_last_save < g_interval_ms) return;           /* a save already ran since it was posted */
     if (why) {
         if (!g_skips_logged++) logf("SAVE> put off: %s", why);
         return;
@@ -487,10 +574,9 @@ static void autosave_now(void) {
     name_save(city);
     if (g_name_len < 0) { logf("SAVE> city name unreadable, skipped"); g_last_save = GetTickCount(); return; }
     target_stem(stem, sizeof(stem));
-    slot = pick_slot(stem, &newest);
-    _snprintf(target, sizeof(target), "%s%d.sc3", stem, slot); target[sizeof(target) - 1] = 0;
+    slot_path(target, sizeof(target), stem, 0);
     /* the Save command appends ".sc3" to a path that does not end in it, so the temp name ends in .sc3 too */
-    _snprintf(tmp, sizeof(tmp), "%s%d.tmp.sc3", stem, slot); tmp[sizeof(tmp) - 1] = 0;
+    _snprintf(tmp, sizeof(tmp), "%s (auto).tmp.sc3", stem); tmp[sizeof(tmp) - 1] = 0;
     DeleteFileA(tmp);
     pg_hook();
     g_pg_total = g_pg_cur = 0;
@@ -520,16 +606,13 @@ static void autosave_now(void) {
         DeleteFileA(tmp);
         return;
     }
-    if (newest) {
-        _snprintf(prev, sizeof(prev), "%s%d.sc3", stem, newest); prev[sizeof(prev) - 1] = 0;
-        if (file_hash(prev, &hp, &szp) && hp == h && szp == sz) {
-            DeleteFileA(tmp);
-            logf("SAVE> unchanged since %s, dropped (%lu B, %lu ms)", prev, sz, GetTickCount() - t0);
-            return;
-        }
+    if (file_hash(target, &hp, &szp) && hp == h && szp == sz) {
+        DeleteFileA(tmp);
+        logf("SAVE> unchanged since %s, dropped (%lu B, %lu ms)", target, sz, GetTickCount() - t0);
+        return;
     }
-    if (!MoveFileExA(tmp, target, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        logf("SAVE> rename %s -> %s failed (%lu)", tmp, target, GetLastError());
+    rotate(stem);
+    if (!move_over(tmp, target)) {
         DeleteFileA(tmp);
         return;
     }
@@ -540,11 +623,27 @@ static void autosave_now(void) {
 
 static LRESULT CALLBACK as_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     if (m == WM_AUTOSAVE) {
+        DWORD waited = GetTickCount() - g_post_at;
+        if (waited > 5000) {                               /* the game thread did not pump messages for > 5 s */
+            g_stall_at = GetTickCount();
+            logf("SAVE> message waited %lu ms in the queue (game thread busy), waiting 20 s more", waited);
+        }
+        InterlockedExchange(&g_posted, 0);
+        if (g_diag) {
+            BYTE *c = city_get();
+            const char *w = why_not(c);
+            char tag[160];
+            _snprintf(tag, sizeof(tag), "WM_AUTOSAVE city 0x%08lX lock %ld pgdepth %ld seen %lu ms ago -> %s", (DWORD)c,
+                      c ? city_lock(c) : -1, g_pg_depth, GetTickCount() - g_seen_at, w ? w : "SAVE");
+            tag[sizeof(tag) - 1] = 0;
+            diag_stack(tag);
+        }
         if (InterlockedExchange(&g_busy, 1)) return 0;     /* a nested message loop inside a save: never re-enter */
         autosave_now();
         InterlockedExchange(&g_busy, 0);
         return 0;
     }
+    if (m == WM_AS_HOOK) { pg_hook(); return 0; }
     if ((m >= WM_MOUSEFIRST && m <= WM_MOUSELAST) || (m >= WM_KEYFIRST && m <= WM_KEYLAST)) g_last_input = GetTickCount();
     return CallWindowProcA(g_oldproc, h, m, wp, lp);
 }
@@ -570,8 +669,8 @@ static DWORD WINAPI watcher(LPVOID unused) {
     {   WNDPROC prev = (WNDPROC)SetWindowLongA(h, GWL_WNDPROC, (LONG)as_wndproc);
         if (prev && prev != g_oldproc) g_oldproc = prev; }
     CloseHandle(CreateThread(NULL, 0, ind_thread, NULL, 0, NULL));   /* always: the indicator can be turned on later */
-    logf("### window 0x%08lX subclassed, every %lu s, keep %d%s%s", (DWORD)h, g_interval_ms / 1000, g_keep,
-         g_cfg_dir[0] ? ", dir " : "", g_cfg_dir);
+    logf("### window 0x%08lX subclassed, every %lu s, B/C ages %lu / %lu s%s%s", (DWORD)h, g_interval_ms / 1000,
+         g_tier_b, g_tier_c, g_cfg_dir[0] ? ", dir " : "", g_cfg_dir);
     for (;;) {
         BYTE *city;
         Sleep(1000);
@@ -588,8 +687,8 @@ static DWORD WINAPI watcher(LPVOID unused) {
                 if (!was_first) {   /* the first look only records the time: DllMain already read the file */
                     ini_read();
                     g_skips_logged = 0;
-                    logf("INI> autosave.ini changed: enabled=%d every %lu s, keep %d, indicator %d", g_enabled,
-                         g_interval_ms / 1000, g_keep, g_indicator);
+                    logf("INI> autosave.ini changed: enabled=%d every %lu s, indicator %d", g_enabled,
+                         g_interval_ms / 1000, g_indicator);
                 }
             }
             first = 0;   /* no file at the first look: one created later is a change */
@@ -600,7 +699,17 @@ static DWORD WINAPI watcher(LPVOID unused) {
             g_seen_city = city;
             g_seen_at = g_last_save = GetTickCount();
             g_skips_logged = 0;
+            g_post_city = NULL;                       /* a queued message for the old city is dropped by the handler */
+            g_wait_unlock = city != NULL;
             logf("CITY> %s 0x%08lX", city ? "city" : "no city", (DWORD)city);
+            if (city && !g_pg_hooked) PostMessageA(h, WM_AS_HOOK, 0, 0);
+            continue;
+        }
+        /* the interval of a new city starts when its lock counter is first 0 (the load holds it), not at the pointer */
+        if (g_wait_unlock && city) {
+            long lk = city_lock(city);
+            g_seen_at = g_last_save = GetTickCount();
+            if (lk == 0) { g_wait_unlock = 0; logf("CITY> lock 0, interval starts"); }
             continue;
         }
         if (!city || g_busy || !g_enabled) continue;
@@ -611,7 +720,11 @@ static DWORD WINAPI watcher(LPVOID unused) {
                 if (!g_skips_logged++) logf("SAVE> due, waiting for %lu s without input", g_idle_ms / 1000);
                 continue;
             }
-            PostMessageA(h, WM_AUTOSAVE, 0, 0);
+            if (InterlockedCompareExchange(&g_posted, 1, 0) == 0) {
+                g_post_city = city;
+                g_post_at = now;
+                if (!PostMessageA(h, WM_AUTOSAVE, 0, 0)) InterlockedExchange(&g_posted, 0);
+            }
         }
     }
 }
@@ -630,6 +743,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
         if (!GetEnvironmentVariableA("SC3AUTOSAVE_LOG", path, sizeof(path))) self_path(path, sizeof(path), "sc3autosave.log");
         g_log = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         ini_read();
+        g_diag = GetEnvironmentVariableA("SC3AUTOSAVE_DIAG", NULL, 0) != 0;
         logf("### sc3autosave loaded, enabled=%d", g_enabled);
         /* enabled=0 still starts the watcher: Preferencias can turn autosave on without a restart */
         CreateThread(NULL, 0, watcher, NULL, 0, NULL);
