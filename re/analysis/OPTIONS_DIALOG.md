@@ -194,3 +194,16 @@ the city hold `city+0x144` reads 2 (`sim_status`), and the detector treats a hel
 ### Evidence
 
 `verify/perfprefs/PRE.md` (pre-registration) and `RESULTS.md`.
+
+## Camera speed sliders (CAMSET, 2026-10-28)
+
+Owner request 2026-10-27: arrow and right-drag camera speed configurable in Preferences. Two labels + two of the
+game's own sliders (factory `+0x50`, read back with IID `0x21325207` `vt+0x10`, the recipe PREFS_UI.md section 4
+proved) in the gap the hidden resolution row leaves at the bottom of the left frame: "Vel. flechas" slider at local
+`(112, 296)` and "Vel. clic der." at `(112, 318)`, width 86, ids `0x02F95B4B..4E`. Range 0..1024 snapped to
+arrows step {2,4,6,8,12,16,24,32,48,64} (shipped 32, dev feel 8) and drag divisor {16,12,8,6,4,3,2,1}, left = slow
+(shipped 2, dev feel 4). sc3resize draws them and on OK calls sc3overscroll exports `sc3overscroll_camera_get/_set`.
+sc3overscroll writes SIMSPR (the CAMFEEL bytes) plus the live city view `+0x1c8..+0x1dc`, and saves
+`overscroll.ini [camera] scroll_step / drag_divisor`. Measured: from the main menu and inside Madrid, OK logged
+`live view ... step 8.0 -> 64` (`verify/edgepush/owner_shots/02_prefs.png`, `07_prefs.png`). Not added while
+`SC3RESIZE_RESROW=1` shows the resolution row.

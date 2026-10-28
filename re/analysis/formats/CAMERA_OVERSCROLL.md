@@ -74,6 +74,8 @@ Front edges (stepping off them moves down the screen, chosen per rotation) draw 
 so they are judged at altitude 0, the bottom of the wall. Measured void share at the four diagonal limits: old
 23/74/63/63%, true centre alone 87/86/42/37%, with the wall rule 87/86/91/85% (`verify/overscroll/TRUECENTER_PRE.md`).
 
+**5. Push past the edge (2026-10-27).** Owner report: in a window that touches the screen edge the cursor cannot leave it sideways, and above/below only the title bar or taskbar strip is left, so edge scroll while placing stayed slow or did nothing. Now the cursor is clipped to the client area for the drag (`clip`), and a low-level mouse hook (own thread) reads each move before the clip clamps it. The part past the bound adds to a virtual distance outside (per axis, capped at `push_cap`, cleared by a move back inward), and speed = gain x (real + virtual). If the hook never sees a position past the bound during a drag, a cursor held on the bound gains 250 virtual px/s instead. `### PUSH:` log lines say which path ran. Needs a real-mouse owner check: posted messages do not reach the hook.
+
 ## Config (`overscroll.ini` beside the DLL)
 
 ```ini
@@ -87,6 +89,9 @@ front_wall=1    ; front edges judged at the bottom of the cliff wall
 enabled=1
 gain=8          ; px/s per pixel the cursor is outside the window
 max=1600        ; px/s
+push=1          ; a push past the screen/window edge counts as distance outside
+clip=1          ; cursor held inside the window while a placing drag is held
+push_cap=300    ; most virtual px a push adds
 [display]
 windowed=1
 ```

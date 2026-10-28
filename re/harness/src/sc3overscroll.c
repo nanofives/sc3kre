@@ -29,6 +29,7 @@
  *
  * Config: overscroll.ini beside the DLL:  [camera] overscroll=75  (50 = stock, max 95), slide=1, arrows_keep=1,
  *                                                  true_center=1
+ *                                         [edge] enabled=1, gain=8, max=1600, push=1, clip=1, push_cap=300
  *                                         [display] windowed=1
  * Build: re/harness/build_overscroll.ps1. Launcher: overscroll_launch.exe.
  */
@@ -101,6 +102,9 @@ static int g_overscroll = 75;        /* percent of the screen allowed past the m
 static int g_windowed = 1;
 static int g_slide = 1;
 static int g_edge, g_edge_gain, g_edge_max;   /* defaults set in ini_read */
+static int g_push = 1;               /* [edge] push: count a push past the screen / window edge as distance outside */
+static int g_clip = 1;               /* [edge] clip: keep the cursor inside the window while a placing drag is held */
+static int g_push_cap = 300;         /* [edge] push_cap: most virtual pixels a push can add */
 static int g_arrows = 1;             /* [camera] arrows_keep: a held arrow survives a mouse move */
 static int g_truec = 1;              /* [camera] true_center: judge steps at the real visible centre */
 static int g_wall = 1;               /* [camera] front_wall: front edges judged at the bottom of the cliff wall */
@@ -123,6 +127,10 @@ static void ini_read(void) {
     g_edge = GetPrivateProfileIntA("edge", "enabled", 1, path) ? 1 : 0;
     g_edge_gain = GetPrivateProfileIntA("edge", "gain", 8, path);
     g_edge_max = GetPrivateProfileIntA("edge", "max", 1600, path);
+    g_push = GetPrivateProfileIntA("edge", "push", 1, path) ? 1 : 0;
+    g_clip = GetPrivateProfileIntA("edge", "clip", 1, path) ? 1 : 0;
+    g_push_cap = GetPrivateProfileIntA("edge", "push_cap", 300, path);
+    if (g_push_cap < 1) g_push_cap = 1;
     g_cam_step = GetPrivateProfileIntA("camera", "scroll_step", 8, path);
     g_cam_div = GetPrivateProfileIntA("camera", "drag_divisor", 4, path);
     g_cam_dead = GetPrivateProfileIntA("camera", "drag_deadzone", 2, path);
@@ -502,6 +510,19 @@ static int patch_translate(HMODULE m) {
  * so the overscroll limit and edge sliding apply. A WM_MOUSEMOVE at the cursor is posted at most
  * every 60 ms so the tool's drag preview follows the moved camera.
  *
+ * Push past the edge (owner, 2026-10-27): the cursor cannot leave a window that touches the screen edge
+ * (left/right of a maximized window), and above/below only the title bar / taskbar strip is left, so
+ * the speed stayed near zero there. Now:
+ *  - [edge] clip=1: while the drag is held the cursor is clipped to the client area (ClipCursor), so all
+ *    four sides behave alike. The previous clip is put back on release, focus loss or a FAULT.
+ *  - [edge] push=1: a low-level mouse hook (own thread) sees each move BEFORE the clip or the screen edge
+ *    clamps it. The part of a move that lands past the bound (clip rect, or the monitor when clip=0) is
+ *    added to a virtual distance outside, per axis, capped at push_cap. A move back inward on that axis
+ *    clears it. The speed is gain * (real + virtual) px outside, as before, so pushing harder past the
+ *    edge scrolls faster and holding still keeps the speed.
+ *  - If the hook never reports a position past the bound in a drag (the hook would then be clamping), a
+ *    cursor held on the bound gains virtual distance with time (PUSH_RAMP px/s) so it still speeds up.
+ *
  * v1 ran from the GZGraphicD blit heartbeat and posted a mouse move on every step: the UI flickered
  * while the camera moved (owner, 2026-10-06). The camera moved in the middle of drawing a frame.
  *
@@ -521,6 +542,98 @@ static volatile LONG g_edge_moves;
 
 typedef void  (__fastcall *PFN_Move)(void *, void *, float, float, int);
 static DWORD g_last_post;
+
+/* ---- push past the edge: virtual distance outside, written by the hook thread, read by the tick */
+#define PUSH_RAMP 250.0              /* px/s, fallback when the hook only ever sees clamped positions */
+static volatile LONG g_push_on;      /* a placing drag is held: the hook measures */
+static volatile LONG g_vox, g_voy;   /* virtual px past the bound, signed like ox/oy */
+static volatile LONG g_push_seen;    /* the hook saw a position past the bound in this drag */
+static RECT  g_bound;                /* screen rect the cursor is held in (clip rect, or the monitor) */
+static RECT  g_old_clip;
+static volatile LONG g_clipped;
+static double g_ramp_x, g_ramp_y;
+static volatile LONG g_push_logs;
+
+static void unclip(void) {
+    if (InterlockedExchange(&g_clipped, 0)) ClipCursor(&g_old_clip);
+}
+
+static LONG push_axis(volatile LONG *v, LONG pos, LONG cur, LONG lo, LONG hi) {
+    LONG over = pos < lo ? pos - lo : pos > hi ? pos - hi : 0, n = *v;
+    if (over) {
+        if (n && (over < 0) != (n < 0)) n = 0;   /* changed side: start over */
+        n += over;
+        if (n > g_push_cap) n = g_push_cap;
+        if (n < -g_push_cap) n = -g_push_cap;
+    } else if ((pos > cur && n < 0) || (pos < cur && n > 0)) n = 0;   /* moved back inward */
+    *v = n;
+    return over;
+}
+
+static LRESULT CALLBACK push_hook(int code, WPARAM wp, LPARAM lp) {
+    if (code == HC_ACTION && g_push_on) {
+        MSLLHOOKSTRUCT *m = (MSLLHOOKSTRUCT *)lp;
+        UINT up = GetSystemMetrics(SM_SWAPBUTTON) ? WM_RBUTTONUP : WM_LBUTTONUP;
+        if (wp == up) {
+            g_push_on = 0;
+            unclip();
+        } else if (wp == WM_MOUSEMOVE) {
+            POINT cur;
+            LONG a, b;
+            if (GetCursorPos(&cur)) {   /* the position before this move */
+                a = push_axis(&g_vox, m->pt.x, cur.x, g_bound.left, g_bound.right - 1);
+                b = push_axis(&g_voy, m->pt.y, cur.y, g_bound.top, g_bound.bottom - 1);
+                if ((a || b) && !g_push_seen) {
+                    g_push_seen = 1;
+                    if (InterlockedIncrement(&g_push_logs) <= 20)
+                        logf("### PUSH: hook sees the cursor %ld,%ld px past the bound (pt %ld,%ld, bound %ld,%ld-%ld,%ld)",
+                             a, b, m->pt.x, m->pt.y, g_bound.left, g_bound.top, g_bound.right, g_bound.bottom);
+                }
+            }
+        }
+    }
+    return CallNextHookEx(NULL, code, wp, lp);
+}
+
+static DWORD WINAPI push_thread(LPVOID param) {
+    MSG msg;
+    HHOOK h = SetWindowsHookExA(WH_MOUSE_LL, push_hook, g_self, 0);
+    (void)param;
+    logf("### PUSH: low-level mouse hook %s (clip %d, cap %d px)", h ? "installed" : "FAILED", g_clip, g_push_cap);
+    if (!h) { g_push = 0; return 0; }
+    while (GetMessageA(&msg, NULL, 0, 0) > 0) DispatchMessageA(&msg);
+    UnhookWindowsHookEx(h);
+    return 0;
+}
+
+/* Start measuring for a drag that just started on the city view: bound = client rect (clipped) or the
+   monitor the window is on. */
+static void push_start(void) {
+    RECT rc;
+    POINT a = { 0, 0 };
+    g_vox = g_voy = 0;
+    g_push_seen = 0;
+    g_ramp_x = g_ramp_y = 0;
+    if (!g_push && !g_clip) return;
+    if (g_clip && GetClientRect(g_hwnd, &rc) && ClientToScreen(g_hwnd, &a)) {
+        OffsetRect(&rc, a.x, a.y);
+        if (!g_clipped && GetClipCursor(&g_old_clip) && ClipCursor(&rc)) g_clipped = 1;
+    }
+    if (g_clipped) g_bound = rc;
+    else {
+        MONITORINFO mi;
+        mi.cbSize = sizeof(mi);
+        if (!GetMonitorInfoA(MonitorFromWindow(g_hwnd, MONITOR_DEFAULTTONEAREST), &mi)) return;
+        g_bound = mi.rcMonitor;
+    }
+    g_push_on = g_push;
+}
+
+static void push_stop(void) {
+    g_push_on = 0;
+    g_vox = g_voy = 0;
+    unclip();
+}
 
 static void edge_tick(BYTE *outer) {
     LARGE_INTEGER now;
@@ -545,21 +658,42 @@ static void edge_tick(BYTE *outer) {
         BYTE *win = GetForegroundWindow() == g_hwnd ? outer + 4 : NULL;   /* the cIGZWin sub-object */
         g_drag_ok = 0;
         g_drag_outer = NULL;
+        push_stop();
         if (win && x >= 0 && y >= 0 && x < rc.right && y < rc.bottom) {
             int *abs = (int *)(win + 0x14);
             if (x >= abs[0] && y >= abs[1] && x < abs[2] && y < abs[3]) {
                 g_drag_ok = 1;
                 g_drag_outer = win - 4;
                 g_acc_x = g_acc_y = 0;
+                push_start();
             }
         }
     }
     g_lb_was = lb;
-    if (!lb) { g_drag_ok = 0; return; }
+    if (!lb || (g_drag_ok && GetForegroundWindow() != g_hwnd)) { g_drag_ok = 0; push_stop(); return; }
     if (!g_drag_ok || g_drag_outer != outer) return;
 
     if (x < 0) ox = x; else if (x >= rc.right) ox = x - rc.right + 1;
     if (y < 0) oy = y; else if (y >= rc.bottom) oy = y - rc.bottom + 1;
+    if (g_push_on) {
+        POINT s;
+        ox += g_vox;
+        oy += g_voy;
+        if (!g_push_seen && GetCursorPos(&s)) {   /* fallback: the hook clamps, so time held on the bound counts */
+            if (s.x <= g_bound.left) g_ramp_x -= PUSH_RAMP * dt;
+            else if (s.x >= g_bound.right - 1) g_ramp_x += PUSH_RAMP * dt;
+            else g_ramp_x = 0;
+            if (s.y <= g_bound.top) g_ramp_y -= PUSH_RAMP * dt;
+            else if (s.y >= g_bound.bottom - 1) g_ramp_y += PUSH_RAMP * dt;
+            else g_ramp_y = 0;
+            if (g_ramp_x > g_push_cap) g_ramp_x = g_push_cap;
+            if (g_ramp_x < -g_push_cap) g_ramp_x = -g_push_cap;
+            if (g_ramp_y > g_push_cap) g_ramp_y = g_push_cap;
+            if (g_ramp_y < -g_push_cap) g_ramp_y = -g_push_cap;
+            ox += (int)g_ramp_x;
+            oy += (int)g_ramp_y;
+        }
+    }
     if (!ox && !oy) { g_acc_x = g_acc_y = 0; return; }
 
     {
@@ -580,6 +714,7 @@ static void edge_tick(BYTE *outer) {
         } __except (EXCEPTION_EXECUTE_HANDLER) {
             logf("### EDGE: FAULT 0x%08lX moving the camera - edge scroll stopped for this drag", GetExceptionCode());
             g_drag_ok = 0;
+            push_stop();
             return;
         }
         if (GetTickCount() - g_last_post >= 60) {
@@ -587,8 +722,8 @@ static void edge_tick(BYTE *outer) {
             PostMessageA(g_hwnd, WM_MOUSEMOVE, MK_LBUTTON, MAKELPARAM((short)x, (short)y));
         }
         if ((InterlockedIncrement(&g_edge_moves) & 0x3ff) == 1)
-            logf("### EDGE: dragging with the cursor %d,%d px outside, camera step (%d,%d), %ld so far",
-                 ox, oy, mx, my, g_edge_moves);
+            logf("### EDGE: dragging with the cursor %d,%d px outside (virtual %ld,%ld, hook past bound %ld), camera step (%d,%d), %ld so far",
+                 ox, oy, g_vox, g_voy, g_push_seen, mx, my, g_edge_moves);
     }
 }
 
@@ -635,6 +770,7 @@ static int insn_len(const BYTE *p, int *is_rel32) {
 }
 
 static DWORD g_outer_vt;             /* SIMSPR+0x67894, the outer city view class */
+static BYTE *volatile g_view;        /* the last city view the tick saw (primary object), for CAMSET */
 
 static void __stdcall heartbeat(int idx, DWORD *f) {
     /* FUN_10042a95 is called with ecx = the cIGZWin sub-object (vtable SIMSPR+0x676ac); the outer
@@ -642,8 +778,10 @@ static void __stdcall heartbeat(int idx, DWORD *f) {
     BYTE *win = (BYTE *)f[7];
     (void)idx;
     if (g_edge && win && !IsBadReadPtr(win - 4, 0xc0)
-        && *(DWORD *)win == g_outer_vt - 0x67894 + 0x676ac && *(DWORD *)(win - 4) == g_outer_vt)
+        && *(DWORD *)win == g_outer_vt - 0x67894 + 0x676ac && *(DWORD *)(win - 4) == g_outer_vt) {
+        g_view = win - 4;
         edge_tick(win - 4);
+    }
 }
 
 static int install_heartbeat(BYTE *t) {
@@ -829,6 +967,69 @@ static void patch_camfeel(HMODULE spr) {
          g_cam_step, g_cam_div, g_cam_dead);
 }
 
+/* CAMSET (owner 2026-10-27: "quiero que la velocidad del movimiento de la camara con flechas o con click derecho sea
+ * configurable"). sc3resize puts two sliders in the game's Preferences dialog and calls these on OK. This mod owns the
+ * values and overscroll.ini, as for CAMFEEL. The setter writes the same bytes CAMFEEL writes (dead zone untouched) and
+ * also the live city view's own copy of the step: primary object +0x1c8 (active) and +0x1cc..+0x1dc (per-zoom bank),
+ * which FUN_100440b1 copied from .rdata when the view was built [CONFIRMED @ SIMSPR 0x100440b1], so arrows change at
+ * once with no reload. The drag divisor is code, read on every drag message, so it is live as soon as it is written.
+ * The divisor bytes are written only while their surrounding code is still the shipped `push imm8` shape.
+ *   int  sc3overscroll_camera_get(void)              -> step | divisor << 16 | 0x40000000 (0 = SIMSPR not patched yet)
+ *   int  sc3overscroll_camera_set(int step, int div) -> the get() value after the write, 0 = refused */
+static volatile LONG g_camset_ok;     /* SIMSPR seen and its camera bytes have the expected shape */
+
+static int camset_shape(HMODULE spr) {
+    static const BYTE ctx_x[4] = { 0x99, 0x59, 0xf7, 0xf9 }, ctx_y[2] = { 0x8b, 0xf8 };
+    BYTE *dx = (BYTE *)spr + 0x43a5d, *dy = (BYTE *)spr + 0x43a67;
+    return dx[0] == 0x6a && dy[0] == 0x6a && !memcmp(dx + 2, ctx_x, 4) && !memcmp(dy + 2, ctx_y, 2);
+}
+
+__declspec(dllexport) int sc3overscroll_camera_get(void) {
+    HMODULE spr = GetModuleHandleA("SIMSPR.DLL");
+    int step, div;
+    if (!spr || !g_camset_ok) return 0;
+    step = (int)*(float *)((BYTE *)spr + 0x67690);              /* what SIMSPR holds now, not what the ini said */
+    div = -(int)*(signed char *)((BYTE *)spr + 0x43a5e);
+    if (step < 0) step = 0;
+    if (div < 0) div = 0;
+    return (step & 0xffff) | ((div & 0x3fff) << 16) | 0x40000000;
+}
+
+__declspec(dllexport) int sc3overscroll_camera_set(int step, int div) {
+    HMODULE spr = GetModuleHandleA("SIMSPR.DLL");
+    char path[MAX_PATH], v[16];
+    float st[5], *bank = spr ? (float *)((BYTE *)spr + 0x67690) : NULL;
+    BYTE nd = (BYTE)(-div), *view = g_view;
+    int i, live = 0;
+    if (!spr || !g_camset_ok || step < 1 || step > 256 || div < 1 || div > 128) {
+        logf("### CAMSET: refused step %d divisor %d (SIMSPR %s, shape %ld)", step, div, spr ? "ok" : "missing", g_camset_ok);
+        return 0;
+    }
+    if (!camset_shape(spr)) { logf("### CAMSET: SIMSPR drag code changed shape - refused"); return 0; }
+    for (i = 0; i < 5; i++) st[i] = (float)step;
+    if (!write_code((BYTE *)bank, st, sizeof(st)) || !write_code((BYTE *)spr + 0x43a5e, &nd, 1)
+        || !write_code((BYTE *)spr + 0x43a68, &nd, 1)) {
+        logf("### CAMSET: VirtualProtect failed (%lu)", GetLastError()); return 0; }
+    __try {
+        if (view && *(DWORD *)view == g_outer_vt) {
+            float *f = (float *)(view + 0x1c8), old = f[0];
+            for (i = 0; i < 6; i++) f[i] = (float)step;
+            live = 1;
+            logf("### CAMSET: live view 0x%08lX step %.1f -> %d", (DWORD)view, old, step);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { live = 0; }
+    g_cam_step = step;
+    g_cam_div = div;
+    self_path(path, sizeof(path), "overscroll.ini");
+    if (path[0]) {
+        wsprintfA(v, "%d", step); WritePrivateProfileStringA("camera", "scroll_step", v, path);
+        wsprintfA(v, "%d", div); WritePrivateProfileStringA("camera", "drag_divisor", v, path);
+    }
+    logf("### CAMSET: arrows step %d, right-drag divisor %d%s, saved to overscroll.ini", step, div,
+         live ? "" : " (no city view yet: the next view takes it from SIMSPR)");
+    return sc3overscroll_camera_get();
+}
+
 /* ============================================================ AUDIODIV: AUDIO.DLL cell-count divide guard */
 
 /* AUDIO.DLL FUN_1000ae06 and FUN_1000ae7a (__fastcall, ecx = the ambient-sound object) take the cell box around the
@@ -918,6 +1119,7 @@ static DWORD WINAPI watcher(LPVOID param) {
         if (!spr && (spr = GetModuleHandleA("SIMSPR.DLL")) != NULL) {
             ok = patch_translate(spr);
             if (g_camfeel) patch_camfeel(spr);
+            g_camset_ok = camset_shape(spr);
             if (g_arrows) g_arrows = patch_arrows(spr) ? 1 : 0;
         }
         Sleep(1);
@@ -935,6 +1137,7 @@ static DWORD WINAPI watcher(LPVOID param) {
             else logf("### EDGE: SIMSPR+0x42a95 differs from shipped - edge scroll NOT installed");
         }
         QueryPerformanceCounter(&g_edge_last);
+        if (hb && g_push) CreateThread(NULL, 0, push_thread, NULL, 0, NULL);
         logf("### READY: windowed=%d overscroll=%d%% slide=%d hook=%d edge=%d (gain %d, max %d px/s, tick %d) arrows_keep=%d",
              g_windowed, g_overscroll, g_slide, ok, g_edge, g_edge_gain, g_edge_max, hb, g_arrows);
     }

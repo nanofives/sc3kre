@@ -8436,12 +8436,119 @@ static void ho_hide_resrow(void *win) {
     logf("RESROW> resolution row: %d of 2 hidden", hid);
 }
 
+/* CAMSET (owner 2026-10-27: arrow and right-drag camera speed configurable in Preferences). Two sliders in the gap the
+ * hidden resolution row leaves at the bottom of the left frame (label 0x02F95AE3 at (12, 296), dropdown at
+ * [18 314 194 334], frame 0x02F95AD9 [6 42 206 342] [CONFIRMED @ SIMUI 0x100564d9, 0x10058631]). Sliders are the game's
+ * own (factory +0x50, as FUN_10058e75 builds the audio ones, read back through GetChildAs IID 0x21325207 vt+0x10, as
+ * FUN_100593ac does); the probe proved this recipe in this dialog (re/analysis/PREFS_UI.md section 4). Range 0..1024,
+ * snapped to a short table of speeds. sc3overscroll owns the values and overscroll.ini: we call its exports
+ * sc3overscroll_camera_get / _set (no sc3overscroll.dll, or one without them: no sliders). OK applies at once, every
+ * other close keeps the old values. Ids 0x02F95B4B..4E are above 0x02F95B11 like PERFPREFS'. Not added while the
+ * resolution row is shown (SC3RESIZE_RESROW=1), it would sit on top of it. */
+#define CS_ARROW_LBL 0x02F95B4B
+#define CS_ARROW     0x02F95B4C
+#define CS_DRAG_LBL  0x02F95B4D
+#define CS_DRAG      0x02F95B4E
+#define CS_X_LBL     12
+#define CS_X_SLIDER  112
+#define CS_W_SLIDER  86
+#define CS_Y_ARROW   296
+#define CS_Y_DRAG    318
+typedef int (*CS_GET)(void);
+typedef int (*CS_SET)(int, int);
+static const int cs_steps[10] = { 2, 4, 6, 8, 12, 16, 24, 32, 48, 64 };   /* arrow px per step, shipped 32, dev feel 8 */
+static const int cs_divs[8] = { 16, 12, 8, 6, 4, 3, 2, 1 };               /* drag divisor, left = slow; shipped 2, dev feel 4 */
+
+static int cs_api(CS_GET *get, CS_SET *set) {
+    HMODULE om = GetModuleHandleA("sc3overscroll.dll");
+    *get = om ? (CS_GET)GetProcAddress(om, "sc3overscroll_camera_get") : NULL;
+    *set = om ? (CS_SET)GetProcAddress(om, "sc3overscroll_camera_set") : NULL;
+    return *get && *set;
+}
+
+static int cs_nearest(const int *t, int n, int v) {
+    int i, best = 0;
+    for (i = 1; i < n; i++) if (abs(t[i] - v) < abs(t[best] - v)) best = i;
+    return best;
+}
+
+static int cs_add_slider(void *fac, void *win, DWORD id, int x, int y, int w, int value) {
+    void *sl, *sw;
+    int ok;
+    sl = (void *)ho_v(fac, 0x50, 5, id, 1, 0, 0x400, (DWORD)value);   /* CreateSlider(id, 1, min, max, value) */
+    if (!sl) return 0;
+    sw = (void *)ho_v(sl, 0x0c, 0, 0, 0, 0, 0, 0);
+    ho_v(sw, 0xb8, 1, (DWORD)w, 0, 0, 0, 0);
+    ho_v(sw, 0xcc, 2, (DWORD)x, (DWORD)y, 0, 0, 0);
+    ok = (int)(ho_v(win, 0x34, 1, (DWORD)sw, 0, 0, 0, 0) & 0xff);
+    if (!ok) ho_v(sw, 0x28, 0, 0, 0, 0, 0, 0);
+    ho_v(sl, 0x08, 0, 0, 0, 0, 0, 0);
+    return ok;
+}
+
+static void cs_add_controls(void *win) {
+    HMODULE sui = GetModuleHandleA("SIMUI.DLL");
+    CS_GET get;
+    CS_SET set;
+    void *fac;
+    int cur, ia, id, es, ok = 0;
+    if (g_resrow || !sui || !win || IsBadReadPtr(win, 0x90)) return;
+    if (!cs_api(&get, &set)) { logf("CAMSET> sc3overscroll.dll %s - no camera speed sliders",
+                                    GetModuleHandleA("sc3overscroll.dll") ? "has no camera exports" : "not loaded"); return; }
+    if (!(cur = get())) { logf("CAMSET> sc3overscroll has not seen SIMSPR yet - no camera speed sliders"); return; }
+    if (ho_v(win, 0x78, 1, CS_ARROW, 0, 0, 0, 0)) return;
+    fac = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85065))();
+    if (!fac || IsBadReadPtr(fac, 4)) return;
+    ia = cs_nearest(cs_steps, 10, cur & 0xffff);
+    id = cs_nearest(cs_divs, 8, (cur >> 16) & 0x3fff);
+    es = ho_spanish();
+    ok += ho_add_label(fac, win, CS_ARROW_LBL, es ? "Vel. flechas" : "Arrow speed", CS_X_LBL, CS_Y_ARROW + 2, 96);
+    ok += cs_add_slider(fac, win, CS_ARROW, CS_X_SLIDER, CS_Y_ARROW, CS_W_SLIDER, ia * 0x400 / 9);
+    ok += ho_add_label(fac, win, CS_DRAG_LBL, es ? "Vel. clic der." : "Drag speed", CS_X_LBL, CS_Y_DRAG + 2, 96);
+    ok += cs_add_slider(fac, win, CS_DRAG, CS_X_SLIDER, CS_Y_DRAG, CS_W_SLIDER, id * 0x400 / 7);
+    logf("CAMSET> Preferences 0x%08lX: %d of 4 controls added, arrows step %d (pos %d/9), drag divisor %d (pos %d/7)",
+         (DWORD)win, ok, cur & 0xffff, ia, (cur >> 16) & 0x3fff, id);
+    {   static int dumped;
+        if (dumped++ < 2) { ho_log_child(win, CS_ARROW, "arrow slider"); ho_log_child(win, CS_DRAG, "drag slider"); }
+    }
+}
+
+/* -1 = slider not found, else 0..1024 */
+static int cs_read(void *win, DWORD id) {
+    void *o = NULL;
+    int v;
+    if (!(ho_v(win, 0x80, 3, id, 0x21325207, (DWORD)&o, 0, 0) & 0xff) || !o) return -1;
+    v = (int)ho_v(o, 0x10, 0, 0, 0, 0, 0, 0);
+    ho_v(o, 0x08, 0, 0, 0, 0, 0, 0);
+    return v;
+}
+
+static void cs_close(void *win, DWORD id) {
+    CS_GET get;
+    CS_SET set;
+    int a = cs_read(win, CS_ARROW), d = cs_read(win, CS_DRAG), step, div, cur;
+    if (a < 0 || d < 0 || !cs_api(&get, &set)) return;   /* not our dialog build (sliders never added) */
+    if (a > 0x400) a = 0x400;
+    if (d > 0x400) d = 0x400;
+    step = cs_steps[(a * 9 + 0x200) / 0x400];
+    div = cs_divs[(d * 7 + 0x200) / 0x400];
+    cur = get();
+    if (id != 0x02F95AD8) {
+        logf("CAMSET> closed with 0x%08lX (cancel): dialog showed step %d divisor %d, kept %d %d", id, step, div,
+             cur & 0xffff, (cur >> 16) & 0x3fff);
+        return;
+    }
+    if (step == (cur & 0xffff) && div == ((cur >> 16) & 0x3fff)) { logf("CAMSET> OK: step %d, divisor %d (unchanged)", step, div); return; }
+    logf("CAMSET> OK: arrows step %d -> %d, drag divisor %d -> %d: %s", cur & 0xffff, step, (cur >> 16) & 0x3fff, div,
+         set(step, div) ? "applied" : "REFUSED by sc3overscroll");
+}
+
 static DWORD __fastcall ho_prefs_msg(void *self, void *edx, DWORD win, DWORD msg, DWORD p3, DWORD p4, DWORD p5) {
     DWORD a[5], r;
     (void)edx;
     a[0] = win; a[1] = msg; a[2] = p3; a[3] = p4; a[4] = p5;
     r = rz_thiscall_ret(self, g_orig_5e07, a, 5);
-    if (msg == 0xa2bf8ace && (r & 0xff) && win) { ho_add_controls((void *)win); pp_add_controls((void *)win); cz_add_box((void *)win); ho_hide_resrow((void *)win); }
+    if (msg == 0xa2bf8ace && (r & 0xff) && win) { ho_add_controls((void *)win); pp_add_controls((void *)win); cz_add_box((void *)win); ho_hide_resrow((void *)win); cs_add_controls((void *)win); }
     return r;
 }
 
@@ -8466,6 +8573,7 @@ static DWORD __fastcall ho_prefs_close(void *self, void *edx, DWORD win, DWORD i
         }
         pp_close((void *)win, id);   /* PERFPREFS */
         cz_close_box((void *)win, id);   /* task cityzoom */
+        cs_close((void *)win, id);       /* CAMSET */
     }
     a[0] = win; a[1] = id;
     return rz_thiscall_ret(self, g_orig_62b1, a, 2);
