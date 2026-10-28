@@ -206,4 +206,4 @@ arrows step {2,4,6,8,12,16,24,32,48,64} (shipped 32, dev feel 8) and drag diviso
 sc3overscroll writes SIMSPR (the CAMFEEL bytes) plus the live city view `+0x1c8..+0x1dc`, and saves
 `overscroll.ini [camera] scroll_step / drag_divisor`. Measured: from the main menu and inside Madrid, OK logged
 `live view ... step 8.0 -> 64` (`verify/edgepush/owner_shots/02_prefs.png`, `07_prefs.png`). Not added while
-`SC3RESIZE_RESROW=1` shows the resolution row.
+`SC3RESIZE_RESROW=1` shows the resolution row. With MODSPAGE (default, merged from main f5b756d) they move to the mods page under a "Cámara" heading, right of "Rendimiento" (`22_modspage.png`); OK from there logged `arrows step 8 -> 24: applied`.

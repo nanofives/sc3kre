@@ -569,12 +569,31 @@ static DWORD WINAPI watcher(LPVOID unused) {
     g_oldproc = (WNDPROC)GetWindowLongA(h, GWL_WNDPROC);
     {   WNDPROC prev = (WNDPROC)SetWindowLongA(h, GWL_WNDPROC, (LONG)as_wndproc);
         if (prev && prev != g_oldproc) g_oldproc = prev; }
-    if (g_indicator) CloseHandle(CreateThread(NULL, 0, ind_thread, NULL, 0, NULL));
+    CloseHandle(CreateThread(NULL, 0, ind_thread, NULL, 0, NULL));   /* always: the indicator can be turned on later */
     logf("### window 0x%08lX subclassed, every %lu s, keep %d%s%s", (DWORD)h, g_interval_ms / 1000, g_keep,
          g_cfg_dir[0] ? ", dir " : "", g_cfg_dir);
     for (;;) {
         BYTE *city;
         Sleep(1000);
+        {   /* MODSPAGE (sc3resize Preferencias -> Opciones de mods) writes autosave.ini: re-read it when it changes */
+            static FILETIME seen;            /* zero = no file */
+            static int first = 1;
+            char ip[MAX_PATH];
+            WIN32_FILE_ATTRIBUTE_DATA a;
+            self_path(ip, sizeof(ip), "autosave.ini");
+            if (GetFileAttributesExA(ip, GetFileExInfoStandard, &a) && CompareFileTime(&a.ftLastWriteTime, &seen)) {
+                int was_first = first;
+                seen = a.ftLastWriteTime;
+                first = 0;
+                if (!was_first) {   /* the first look only records the time: DllMain already read the file */
+                    ini_read();
+                    g_skips_logged = 0;
+                    logf("INI> autosave.ini changed: enabled=%d every %lu s, keep %d, indicator %d", g_enabled,
+                         g_interval_ms / 1000, g_keep, g_indicator);
+                }
+            }
+            first = 0;   /* no file at the first look: one created later is a change */
+        }
         if (!IsWindow(h)) return 0;
         city = city_get();
         if (city != g_seen_city) {                    /* new / loaded / closed city: the interval starts again */
@@ -584,7 +603,7 @@ static DWORD WINAPI watcher(LPVOID unused) {
             logf("CITY> %s 0x%08lX", city ? "city" : "no city", (DWORD)city);
             continue;
         }
-        if (!city || g_busy) continue;
+        if (!city || g_busy || !g_enabled) continue;
         {   DWORD now = GetTickCount(), since = now - g_last_save;
             if (since < g_interval_ms) continue;
             /* due: wait for idle_seconds without input, or save anyway one more interval later */
@@ -612,7 +631,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
         g_log = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         ini_read();
         logf("### sc3autosave loaded, enabled=%d", g_enabled);
-        if (!g_enabled) return TRUE;
+        /* enabled=0 still starts the watcher: Preferencias can turn autosave on without a restart */
         CreateThread(NULL, 0, watcher, NULL, 0, NULL);
     }
     return TRUE;
