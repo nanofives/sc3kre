@@ -34,3 +34,6 @@ sc3autosave SHA-256 match the stage.
 | README.txt | | 2026-10-28b section, autosave file names, keep= removed from the options |
 | every other file | | as `verify/mods_release_1028/RESULTS.md` |
 | `sc3mods_2026-10-28b.zip` | 43,614,187 | 74BC4F5DC9ECA41E7AF273C342A0B60024C5FCE9360BB879FE963966188EA0EF |
+
+GitHub: `sc3mods-2026-10-28b`, target `1a68628`, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-10-28b, asset
+downloaded back, SHA-256 matches. The 10-28 notes now start with a "superseded" line.
