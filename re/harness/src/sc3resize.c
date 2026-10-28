@@ -8634,6 +8634,8 @@ static const DWORD k_mp_page_ids[] = { MP_BTN_BACK, MP_TITLE, MP_H_UI, MP_H_PERF
 static void mp_ini(char *out, int cap, const char *leaf) { rz_mb_path(out, cap, leaf); }   /* every mod's ini sits beside its DLL */
 static int  mp_loaded(const char *dll) { return GetModuleHandleA(dll) != NULL; }
 
+static int g_mp_hover = 1;   /* SC3RESIZE_MPHOVER=0 off */
+static LPARAM g_mp_lastlp;   /* last WM_LBUTTONUP point, client coords as received */
 static void mp_vis(void *c, int on) { if (c && !IsBadReadPtr(c, 0xa4)) ho_v(c, 0xf4, 2, 1, on ? 1 : 0, 0, 0, 0); }
 static void *mp_child(void *win, DWORD id) { return (void *)ho_v(win, 0x78, 1, id, 0, 0, 0, 0); }
 
@@ -8731,7 +8733,7 @@ static int mp_btn_y(void *win, int h) {
     BYTE *ok = (BYTE *)mp_child(win, 0x02F95AD8);
     int y;
     if (!ok || IsBadReadPtr(ok, 0xa4)) return 434;
-    y = *(LONG *)(ok + 0x84) + ((*(LONG *)(ok + 0x8c) - *(LONG *)(ok + 0x84)) - h) / 2;
+    y = *(LONG *)(ok + 0x8c) - h;   /* bottom on the tick's bottom; h is the tick's height, so the top matches too */
     logf("MODSUI> OK button rect [%ld %ld %ld %ld], buttons at y %d", *(LONG *)(ok + 0x80), *(LONG *)(ok + 0x84),
          *(LONG *)(ok + 0x88), *(LONG *)(ok + 0x8c), y);
     return y;
@@ -8739,6 +8741,8 @@ static int mp_btn_y(void *win, int h) {
 
 /* the mods page, layout (Preferences is 480x472, local coords) */
 #define MP_X0 18
+#define MP_BX 6      /* the two buttons: left edge on the panel frames above (owner 2026-10-28) */
+#define MP_BH 32     /* the tick's height */
 #define MP_X1 30
 static void mp_build(void *win) {
     HMODULE sui = GetModuleHandleA("SIMUI.DLL");
@@ -8765,7 +8769,7 @@ static void mp_build(void *win) {
                                                 g_mp_oversc = g_mp_ovs_pct > 50;
                                                 g_mp_edge = GetPrivateProfileIntA("edge", "enabled", 1, p) ? 1 : 0;
         /* page A: the button, in the right half of "Opciones generales" that HUDOPT's controls leave */
-        n += mp_button(fac, win, MP_BTN_MODS, es ? "Opciones de mods..." : "Mod options...", MP_X0, mp_btn_y(win, 26), 150, 26);
+        n += mp_button(fac, win, MP_BTN_MODS, es ? "Opciones de mods..." : "Mod options...", MP_BX, mp_btn_y(win, MP_BH), 150, MP_BH);
         /* page B */
         n += ho_add_label(fac, win, MP_TITLE, es ? "Opciones de los mods" : "Mod options", MP_X0, 40, 300);
         n += ho_add_label(fac, win, MP_H_UI, es ? "Interfaz" : "Interface", MP_X0, 66, 200);
@@ -8806,7 +8810,7 @@ static void mp_build(void *win) {
             n += mp_checkbox(fac, win, MP_UNDO, es ? "Deshacer (Ctrl+Z)" : "Undo (Ctrl+Z)", g_mp_undo, MP_X1, 318, 200, col);
             n += mp_checkbox(fac, win, MP_UNDOBTN, es ? "Botones de deshacer" : "Undo buttons", g_mp_undobtn, 250, 318, 180, col);
         }
-        n += mp_button(fac, win, MP_BTN_BACK, es ? "Volver" : "Back", MP_X0, mp_btn_y(win, 26), 110, 26);
+        n += mp_button(fac, win, MP_BTN_BACK, es ? "Volver" : "Back", MP_BX, mp_btn_y(win, MP_BH), 110, MP_BH);
         logf("MODSPAGE> Preferences 0x%08lX: %d controls added", (DWORD)win, n);
     }
     /* sort the children: ours (page B), the OK button (both pages), everything else is the game's page */
@@ -8844,6 +8848,15 @@ static void mp_show(void *win, int mods) {
     mp_vis(mp_child(win, MP_BTN_MODS), !mods);
     g_mp_page = mods;
     ho_v(win, 0x154, 0, 0, 0, 0, 0, 0);   /* invalidate */
+    /* the button that appears under the cursor never got a mouse-enter: send the move the game would get */
+    if (g_mp_hover && g_hwnd && g_mp_lastlp) {
+        /* the dialog keeps the child under the mouse until a move leaves it (measured: a move inside the button, or to the
+           same point, changes nothing; out and back works), so go out of both buttons' rect and back */
+        LPARAM o = MAKELPARAM((WORD)LOWORD(g_mp_lastlp), (WORD)(HIWORD(g_mp_lastlp) - 80));
+        PostMessageA(g_hwnd, WM_MOUSEMOVE, 0, o);
+        PostMessageA(g_hwnd, WM_MOUSEMOVE, 0, g_mp_lastlp);
+        logf("MODSPAGE> hover refresh at (%d,%d)", (int)(short)LOWORD(g_mp_lastlp), (int)(short)HIWORD(g_mp_lastlp));
+    }
     logf("MODSPAGE> %s page", mods ? "mods" : "game");
 }
 
@@ -13231,6 +13244,7 @@ static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     }
     if (m == WM_EXITSIZEMOVE) wm_save();   /* WINMEM: end of a drag */
     if (m == WM_SYSCOMMAND || m == WM_NCLBUTTONDBLCLK) g_wm_usert = GetTickCount();
+    if (m == WM_LBUTTONUP) g_mp_lastlp = lp;   /* MODSPAGE: where the page-switch click happened */
     if (g_zoomkeys && (m == WM_KEYDOWN || m == WM_KEYUP)) {   /* ZOOMKEYS */
         if (wp == VK_OEM_PLUS) wp = VK_ADD;
         else if (wp == VK_OEM_MINUS) wp = VK_SUBTRACT;
@@ -15889,6 +15903,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_HUDOPT", v, sizeof(v))) g_hudopt = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PERFPREFS", v, sizeof(v))) g_perfprefs = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MODSPAGE", v, sizeof(v))) g_modspage = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_MPHOVER", v, sizeof(v))) g_mp_hover = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MODSUI", v, sizeof(v))) g_modsui = atoi(v);   /* owner 2026-10-27 */
           if (GetEnvironmentVariableA("SC3RESIZE_QUERYID", v, sizeof(v))) g_queryid = atoi(v);
           if (g_hudopt) ho_load_ini();   /* HUDOPT: the Preferences choice, env vars below still override */
