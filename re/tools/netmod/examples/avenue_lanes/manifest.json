@@ -1,9 +1,9 @@
 {
  "netpack": 1,
  "name": "avenue_lanes",
- "version": "0.3.0",
+ "version": "0.4.0",
  "author": "netmod (task avcore)",
- "description": "One-way avenue halves (owner 2026-10-19: 2 lanes each way, right-hand traffic everywhere). sc3netmod's AVL block writes these on an avenue band it can convert whole (re/analysis/AVENUE_LANES.md): 21700 the straight half (base 11204, both lanes in the half's direction), 21701 the avenue end U-turn quarter (base 11203), also an avenue corner's outer bend; 21726 an avenue corner's inner bend (base 11203). 21710..21725 a stock rail / power line / highway crossing or a road slope on a half, one way (two ids per base, one per direction). All save as their base at the same state, so a game without the mod loads the stock avenue. Task avslope (2026-10-26): the slope ids 21718..21725 draw the avenue half (white dashes, median, trees) laid on the slope piece's plane, built by `py -3.12 ../../avslope_paint.py --game <tree> build .` (art/ not shipped); without it they drew the plain sloped road. Task avpaint (2026-10-28): 21727..21735 are LOOK-ONLY twins (sc3netmod's AVP block) of 21701 / 21726 and 21718..21725 on the stock base with stock two-way lanes, written on the bends, U-turn ends and slopes of an avenue band AVL leaves two-way, so it still looks like the avenue. 21736..21741 are the corner + T pieces: an avenue corner with a plain road meeting the other band right beside it converts one-way as a paved box (21738..21741 are avenue_junctions box cells 20817 / 20815 / 20814 / 20816 under own ids). Needs avenue_junctions installed (its curves). Task avpaint (2026-10-28): 21727..21735 are LOOK-ONLY twins (sc3netmod's AVP block) of 21701 / 21726 and 21718..21725 on the stock base with stock two-way lanes, written on the bends, U-turn ends and slopes of an avenue band AVL leaves two-way, so it still looks like the avenue. 21736..21741 are the corner + T pieces: an avenue corner with a plain road meeting the other band right beside it converts one-way as a paved box (21738..21741 are avenue_junctions box cells 20817 / 20815 / 20814 / 20816 under own ids). Needs avenue_junctions installed (its curves).",
+ "description": "One-way avenue halves (owner 2026-10-19: 2 lanes each way, right-hand traffic everywhere). sc3netmod's AVL block writes these on an avenue band it can convert whole (re/analysis/AVENUE_LANES.md): 21700 the straight half (base 11204, both lanes in the half's direction), 21701 the avenue end U-turn quarter (base 11203), also an avenue corner's outer bend; 21726 an avenue corner's inner bend (base 11203). 21710..21725 a stock rail / power line / highway crossing or a road slope on a half, one way (two ids per base, one per direction). All save as their base at the same state, so a game without the mod loads the stock avenue. Task avslope (2026-10-26): the slope ids 21718..21725 draw the avenue half (white dashes, median, trees) laid on the slope piece's plane, built by `py -3.12 ../../avslope_paint.py --game <tree> build .` (art/ not shipped); without it they drew the plain sloped road. Task avpaint (2026-10-28): 21727..21735 are LOOK-ONLY twins (sc3netmod's AVP block) of 21701 / 21726 and 21718..21725 on the stock base with stock two-way lanes, written on the bends, U-turn ends and slopes of an avenue band AVL leaves two-way, so it still looks like the avenue. 21736..21741 are the corner + T pieces: an avenue corner with a plain road meeting the other band right beside it converts one-way as a paved box (21738..21741 are avenue_junctions box cells 20817 / 20815 / 20814 / 20816 under own ids). Needs avenue_junctions installed (its curves). Task avpaint (2026-10-28): 21727..21735 are LOOK-ONLY twins (sc3netmod's AVP block) of 21701 / 21726 and 21718..21725 on the stock base with stock two-way lanes, written on the bends, U-turn ends and slopes of an avenue band AVL leaves two-way, so it still looks like the avenue. 21736..21741 are the corner + T pieces: an avenue corner with a plain road meeting the other band right beside it converts one-way as a paved box (21738..21741 are avenue_junctions box cells 20817 / 20815 / 20814 / 20816 under own ids). Needs avenue_junctions installed (its curves). Task cartrees (2026-10-29): 21700 and 21742 carry 11204's layer 1 with BOTH halves' median trees in the slots where the half is the far one (avenue_markings.py build --trees), so cars behind the median are drawn under every median tree (stock 11204 paints the near half's trees in its first-pass layer 0, under all cars). 21742 is the LOOK-ONLY twin of 21700 (AVP) on the straight rows of a band AVL leaves two-way: stock 11204 base, stock lanes.",
  "variants": [
   {
    "id": 21700,
@@ -447,6 +447,20 @@
     "png_dir": "art/21741"
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 21742,
+   "base": 11204,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (two way)",
+    "ENGLISH": "Avenida (doble sentido)"
+   },
+   "trblkatt": "copy_base",
+   "art": {
+    "from": 11204,
+    "png_dir": "art/11204"
+   }
   }
  ],
  "lanes": [
@@ -581,6 +595,7 @@
   "avlp 21733 21723",
   "avlp 21734 21724",
   "avlp 21735 21725",
+  "avlp 21742 21700",
   "avlt 21736 ICAI CCIO",
   "avlt 21737 ICAI ICOC",
   "avlt 21738 ICAI ICOT",

@@ -46,6 +46,22 @@ static int avp_enabled(void) {
     return g_avp_on && g_avp_n;
 }
 
+/* Straight rows (task cartrees, 2026-10-29): with a twin of AVL's straight half declared (`avlp 21742 21700`), both
+ * cells of every straight row of a two-way band get it, so the band draws 21700's look: its layer 1 holds both halves'
+ * median trees in the far half's slots (avenue_markings.py --trees), which stock 11204 cannot do because 6.9% of its
+ * halves face a road T across the median, not the mirrored half. A band row is always the mirrored pair (avl_row).
+ * Off: SC3NETMOD_AVPSTRAIGHT=0 (straights stay stock 11204, as before). */
+static int g_avp_str_on = -1;
+
+static int avp_straight_on(void) {
+    if (g_avp_str_on < 0) {
+        g_avp_str_on = !env_off("SC3NETMOD_AVPSTRAIGHT");
+        logf("avp: straight rows %s (twin %u)", g_avp_str_on ? "painted" : "stock (SC3NETMOD_AVPSTRAIGHT=0)",
+             g_avl_straight ? g_avp_tw[g_avl_straight] : 0);
+    }
+    return g_avp_str_on && g_avl_straight && g_avp_tw[g_avl_straight];
+}
+
 typedef struct { int x, z; DWORD want; } AvpW;              /* want = paint << 8 | state */
 
 static void avp_add(AvlPass *p, BYTE *mark, AvpW *w, int *nw, int cap, int x, int z, WORD piece) {
@@ -95,6 +111,10 @@ static void avp_band(AvlPass *p, BYTE *mark, AvpW *w, int *nw, int cap, int axis
             int cx = ax + dx * k + (c && !axis ? 1 : 0), cz = az + dz * k + (c && axis ? 1 : 0);
             int dir = axis ? (c ? 3 : 1) : (c ? 2 : 0), ci;
             DWORD v = avl_at(p, cx, cz);
+            if (v && avl_is_straight(AVL_ID(v)) && avp_straight_on()) {   /* straight row: both halves are 11204 */
+                avp_add(p, mark, w, nw, cap, cx, cz, g_avl_straight);
+                continue;
+            }
             if (!v || avl_is_straight(AVL_ID(v)) || (ci = avl_cross_of(AVL_ID(v))) < 0) continue;
             avp_add(p, mark, w, nw, cap, cx, cz, avl_cross_want(g_avl_c[ci].base, AVL_ST(v), dir));
         }

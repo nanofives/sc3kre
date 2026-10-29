@@ -122,6 +122,27 @@ positions. Rotation 1 draws all of it.
   tables' child-layer bits (+0x12 low bits, 40 frames) are the way the stock pieces split a ground layer from a
   tall layer; using that for props instead of clearing the bit was not tried.
 
+### 8.2 Cars against tall layers (task cartrees, 2026-10-28)
+
+Measured live (read-only Frida on SIMSPR `0x1000c6f0`, Seoul (135, 212) zoom 4, stock and modded games identical):
+
+- Display records are 0x2c bytes at view+0x500, built by `0x1000be25`: cell records carry layer byte 1 (+0x18) and
+  footprint +0x1c..+0x28 = the cell square (shrunk by 100 when the sprite flag & 2); car records (dynamic sprites,
+  DSR flags 0) carry the DSR's layer byte +0x28 (1 on every car measured, all on flat sort-id-0 curves; that it is
+  the path sort id + 1 is [UNCERTAIN]) and footprint centre +-100 or more.
+  A layered piece's layer 1 is a separate DSR record attached to the cell (flags 0x02, footprint the cell square
+  shrunk by 0x30, layer byte 2, depth anchor at the cell's (x*256+254, z*256+0)).
+- Comparator `0x1000c7a6`: footprints overlap and layer bytes differ -> the lower layer draws first; else the depth
+  key +0x14, (0x1000000 - (x + z)) * 0x40 - alt / 4 (Linux `GetDistanceToSpriteMicroUnits`).
+- `0x1000dc17` draws every type-1 (first-pass) record before any sorted record.
+- Consequence for 11204 (both halves first pass, draw flags 0x10008181): the far half's median trees (layer 1, slots
+  1 / 2) cover its own cars; the near half's (layer 0 only, slots 0 / 3) are under every car, so a far-half car behind
+  them was drawn over them. Fix: the far half's layer 1 also carries the partner's trees (avenue_markings.py
+  `--trees`, on 21700 / 21742 only, because the art must assume the mirrored half across the median).
+- Rule for new art: a tall prop that must hide cars behind it belongs in layer 1 of the cell IN FRONT of those cars'
+  lanes, never in a first-pass layer 0. Boulevard middle rows (20701..20703, trees in layer 1 in every slot) were
+  checked in game the same day: far middle-lane cars behind, near middle-lane cars in front, no change needed.
+
 ## 9. The kit
 
 `netart.py` subcommands. Every route ends in a netpack `png_dir` (z{z}_r{r}.png, plus anchors.json when sizes
