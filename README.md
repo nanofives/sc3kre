@@ -30,7 +30,8 @@ in the game: Preferencias, "Opciones de mods...".
 - Right-drag scrolling with bigger arrows, and two camera speed sliders (arrow keys, right-button drag).
 - "Mover" button in the "?" window of rewards, business deals and landmarks: pick the building up and place it
   somewhere else (half its price plus bulldozing and levelling).
-- Buildings placed from a menu can go over zoned buildings, which are demolished first.
+- Buildings placed from a menu, and road, rail, highway and power line drags, can go over zoned buildings,
+  which are demolished first (bulldozing added to the cost, undo puts them back).
 - Many crash and drawing fixes for large windows (repaint gaps, odd window heights, dialogs cut off, files the game
   locked against other readers).
 
@@ -53,6 +54,7 @@ several threads, and the fixes that make 1024 cities load, reload and run withou
 - Highway interchanges (diagonal ones too) that finish building, on-ramps, capped joins, correctly lit walls.
 - Traffic that uses avenues, boulevards and highways more, and road density that follows the turns cars make.
 - Rounded road ends on slopes.
+- Cars on the far side of an avenue draw behind the median trees (stock avenues inside a band too).
 
 **Undo (sc3undo)**: Ctrl+Z / Ctrl+Y (or buttons under the minimap) undo and redo zoning, networks, buildings, the
 bulldozer and terrain tools, money included.
