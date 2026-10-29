@@ -31,3 +31,6 @@ LAN: 43 of 3,612 files sent (40.2 MB). Served label `2026-10-29b`.
 Open: startup crash GZGraphicD+0x14904 (null read in the blit dispatcher FUN_10014894) seen in 2 of 6 hwyscurve launches with
 another game running (re/sessions/STATUS_hwyscurve.md), not routed yet. zonedemo reported sc3undo records only while paused
 (not confirmed by the orchestrator).
+
+GitHub: `sc3mods-2026-10-29b`, target `0b14467`, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-10-29b, asset
+downloaded back, SHA-256 matches. The 10-29 notes now start with a "superseded" line.
