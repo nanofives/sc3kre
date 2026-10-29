@@ -3,6 +3,8 @@ r"""avenue_markings.py - reskin art for the stock straight avenue: white dashed 
 line (owner, 2026-10-17: "on avenues instead of yellow lines they should be white striped lines for every lane").
 
   py -3 avenue_markings.py build PACK_DIR      art/<piece>/z{z}_r{r}.png (layer 0) for 11204 (avenue) and 11203 (end)
+  py -3 avenue_markings.py build PACK_DIR --trees   also 11204's layer 1 with both halves' median trees (TREE_PARTNER,
+                                               task cartrees): avenue_lanes only (21700 and its two-way twin 21742)
 
 Per stock frame (zoom z, frame slot k) every pixel is unprojected to the frame's lane coordinates (x, zl in 0..256).
 The yellow pixels give the line: its direction (the lane axis they spread along) and its footprint (their spread across
@@ -159,6 +161,55 @@ def frame(pid, z, k):
     return out, (L, T), n
 
 
+# Median trees (task cartrees, owner 2026-10-28 "some cars are rendering over the trees"). 11204 draws each half's two
+# median trees itself. In the slots where they stand at the half's BACK edge (0, 3) they are only in layer 0, and both
+# halves are first-pass cells (draw flags 0x10008181): SIMSPR 0x1000dc17 paints them before every sorted record, so a
+# car on the other half, behind them, is drawn over them. In the slots where they stand at the FRONT edge (1, 2) they
+# are also in layer 1, a sorted record of layer byte 2 that the comparator 0x1000c7a6 draws after the cars of that
+# half. TREE_PARTNER: the far half's layer 1 in slot r also carries the partner half's trees, cut from the partner's
+# layer 0 in slot (r + 2) % 4 (the pixels outside its ground diamond) and placed one cell over: slot 1's median is its
+# u = 0 edge (partner one cell down-left), slot 2's its v = 1 edge (down-right). Measured stock layout (z4: l1 r0 / r3
+# 4x4 empty, r1 / r2 the two trees). Layer 0 stays stock, so the near half still draws its own trees under the cars in
+# front of them. Valid only where the cell across the median is the mirrored half (a band row): 21700 and AVP's
+# two-way twin, never the stock 11204 reskin (6.9% of shipped 11204 halves face a road T 39 across the median).
+TREE_PARTNER = {1: (3, -0.5, 0.25), 2: (0, 0.5, 0.25)}    # far slot -> (partner slot, dx, dy in tile widths)
+
+
+def tree_frame(z, r):
+    """-> (RGBA image, (L, T)) of 11204's layer 1 at slot r with the partner half's median trees added"""
+    from PIL import Image
+    l1 = NA.stock_frames(11204, 1)[(z, r)]
+    if r not in TREE_PARTNER:
+        return l1
+    ps, fx, fy = TREE_PARTNER[r]
+    pim, (PL, PT) = NA.stock_frames(11204, 0)[(z, ps)]
+    W = NA.TILE_W[z]
+    dx, dy = int(round(fx * W)), int(round(fy * W))
+    ground = NA.ground_mask(z)
+    pts = {}
+    src = pim.load()
+    for y in range(pim.height):
+        for x in range(pim.width):
+            c = src[x, y]
+            if c[3] >= 128 and (x - PL, y - PT) not in ground:
+                pts[(x - PL + dx, y - PT + dy)] = c
+    im1, (L1, T1) = l1
+    own = im1.load()
+    for y in range(im1.height):                            # the half's own trees on top, as stock draws them
+        for x in range(im1.width):
+            if own[x, y][3] >= 128:
+                pts[(x - L1, y - T1)] = own[x, y]
+    if not pts:
+        return l1
+    x0, y0 = min(p[0] for p in pts), min(p[1] for p in pts)
+    x1, y1 = max(p[0] for p in pts), max(p[1] for p in pts)
+    out = Image.new("RGBA", (x1 - x0 + 1, y1 - y0 + 1), (0, 0, 0, 0))
+    o = out.load()
+    for (x, y), c in pts.items():
+        o[x - x0, y - y0] = c
+    return out, (-x0, -y0)
+
+
 def cmd_build(a):
     report = {}
     for pid in PIECES:
@@ -172,6 +223,11 @@ def cmd_build(a):
                 im.save(os.path.join(d, name))
                 anchors[name] = list(anc)
                 n += ny
+                if a.trees and pid == 11204 and k in TREE_PARTNER:
+                    tim, tanc = tree_frame(z, k)
+                    tname = NA.frame_name(z, k, 1)
+                    tim.save(os.path.join(d, tname))
+                    anchors[tname] = list(tanc)
         anchors["_"] = "avenue_markings.py build: %d with white dashed lanes" % pid
         json.dump(anchors, open(os.path.join(d, "anchors.json"), "w"), indent=1)
         report[pid] = n
@@ -184,6 +240,8 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd", required=True)
     b = sub.add_parser("build")
     b.add_argument("pack")
+    b.add_argument("--trees", action="store_true",
+                   help="also 11204's layer 1 with the partner half's median trees (TREE_PARTNER; avenue_lanes only)")
     a = ap.parse_args(argv)
     {"build": cmd_build}[a.cmd](a)
 

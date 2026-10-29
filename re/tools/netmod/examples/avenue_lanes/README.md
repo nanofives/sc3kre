@@ -18,7 +18,7 @@ Build and install (the art is made from the game's own frames, so it is not ship
 
 ```
 cd re/tools/netmod/examples/avenue_lanes
-py -3.12 ../../avenue_markings.py build .            # art/11204, art/11203 (white dashes)
+py -3.12 ../../avenue_markings.py build . --trees    # art/11204 (white dashes + both halves' median trees in layer 1), art/11203
 cd ../../../../..
 py -3.12 re/tools/netmod/netpack.py install re/tools/netmod/examples/avenue_lanes --tree <game tree>
 ```
@@ -35,3 +35,18 @@ netmod/examples/avenue_junctions` from re/tools (copies art from this folder's a
   converts one-way as one paved box. 21736 / 21737 the linked inner bend and half (base 39, lanes from
   avjunc_build.box_spec), 21738..21741 = avenue_junctions box cells 20817 / 20815 / 20814 / 20816 under own ids (AVX
   reverts its own ids where it found no box). Needs avenue_junctions installed (its curves are repeated here).
+
+Task cartrees (2026-10-29, owner: "some cars are rendering over the trees"):
+
+- **Median trees over the far carriageway.** Stock 11204 puts the near half's median trees only in its layer 0, and both
+  halves are first-pass cells (SIMSPR `0x1000dc17` paints them before every car), so a car on the far half, behind those
+  trees, was drawn over them (stock behaviour too). `--trees` gives 21700's layer 1, in the two slots where the half is
+  the far one (1, 2), the partner half's trees as well: cut from 11204's layer 0 in slot (r + 2) % 4 (pixels outside the
+  ground diamond) and placed one cell over. Layer 1 is the sorted layer-2 record the comparator `0x1000c7a6` draws
+  after the far half's cars and the depth sort draws before the near half's. Layer 0 is unchanged; with no car the
+  two-cell picture is pixel-identical to stock at every zoom. Needs the cell across the median to be the mirrored half,
+  true for every band row, so the stock 11204 reskin (avenue_markings) does NOT get it: 6.9% of shipped 11204 halves
+  face a road T (39) across the median.
+- **21742** look-only twin of 21700 (`avlp 21742 21700`): base 11204, stock two-way lanes, saved as 11204. sc3netmod's
+  AVP block now also paints the straight rows of a band AVL leaves two-way with it, so stock avenues get the same trees
+  (off: `SC3NETMOD_AVPSTRAIGHT=0`). 11204 cells outside any band row stay stock.
