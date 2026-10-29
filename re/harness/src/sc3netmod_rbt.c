@@ -120,6 +120,9 @@ static void hwave_road(BYTE *mgr, int x0, int z0, int x1, int z1, const char *wh
 static void hwavd_line(const char *path, const char *line);                  /* task hwave */
 static void hwavs_line(const char *path, const char *line);                  /* task avmisc */
 static int hwave_claimed(int x, int z);                                      /* task hwave: DAV skips them */
+static void hwsc_line(const char *path, const char *line);                   /* task hwyscurve */
+static void hwsc_run(struct HwyPass *hp);                                    /* task hwyscurve */
+static void hwsc_stats(void);                                                /* task hwyscurve */
 static int g_avl_on;                                                         /* task avcore: AVL block (sc3netmod_avl.c) */
 static WORD g_avl_straight;                                                  /* task avcore */
 static void avl_line(const char *path, const char *line);                    /* task avcore */
@@ -164,6 +167,7 @@ static void rb_file(const char *path) {
         if (!strncmp(line, "hwave ", 6)) { hwave_line(path, line); continue; } /* task hwave */
         if (!strncmp(line, "hwavd ", 6)) { hwavd_line(path, line); continue; } /* task hwave */
         if (!strncmp(line, "hwavs ", 6)) { hwavs_line(path, line); continue; } /* task avmisc */
+        if (!strncmp(line, "hwsc ", 5)) { hwsc_line(path, line); continue; }  /* task hwyscurve */
         if (!strncmp(line, "sle ", 4)) { sle_line(path, line); continue; }      /* task slopeend */
         if (!strncmp(line, "hwrc ", 5)) continue;                            /* task hwave: read by NETRAMP */
         if (!strncmp(line, "hwy", 3)) { hwy_line(path, line); continue; }  /* task hwcore */
@@ -360,6 +364,7 @@ static void rb_hwy(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) {
     hwdd_run(hp);                                                            /* task hwdd */
     hwdx_run(hp);                                                            /* task hwdx */
     hwave_run(hp);                                                           /* task hwave */
+    hwsc_run(hp);                                                            /* task hwyscurve */
     hwy_end(hp);
 }
 
@@ -580,6 +585,7 @@ static void rbt_stats(void) {
     hwdd_stats();                                                            /* task hwdd */
     hwdx_stats();                                                            /* task hwdx */
     hwave_stats();                                                           /* task hwave */
+    hwsc_stats();                                                            /* task hwyscurve */
     hwask_stats();                                                           /* task hwask */
     avl_stats();                                                             /* task avcore */
     sle_stats();                                                             /* task slopeend */

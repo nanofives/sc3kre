@@ -1,0 +1,2334 @@
+{
+ "netpack": 1,
+ "name": "highway_scurve",
+ "version": "1.0.0",
+ "author": "sc3kre",
+ "description": "Task hwyscurve: two parallel highways drawn one cell apart that overlap by 2 to 4 cells become an S-curve: the highway shifts sideways over the overlap and keeps going, both directions drivable, instead of Highway Construction tiles. Flat ground only; saved as the stock Highway Construction tiles, so a game without the mod loads the city as stock shows it.",
+ "game": {
+  "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+ },
+ "variants": [
+  {
+   "id": 28200,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S2 0,0",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28200",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28300,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S2 0,0 (lit twin of 28200)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28300",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28201,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S2 0,1",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28201",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28301,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S2 0,1 (lit twin of 28201)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28301",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28202,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S2 0,2",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28202",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28302,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S2 0,2 (lit twin of 28202)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28302",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28203,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S2 1,0",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28203",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28303,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S2 1,0 (lit twin of 28203)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28303",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28204,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S2 1,1",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28204",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28304,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S2 1,1 (lit twin of 28204)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28304",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28205,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S2 1,2",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28205",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28305,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S2 1,2 (lit twin of 28205)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28305",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28206,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S3 0,0",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28206",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28306,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S3 0,0 (lit twin of 28206)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28306",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28207,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S3 0,1",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28207",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28307,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S3 0,1 (lit twin of 28207)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28307",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28208,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S3 0,2",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28208",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28308,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S3 0,2 (lit twin of 28208)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28308",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28209,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S3 1,0",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28209",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28309,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S3 1,0 (lit twin of 28209)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28309",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28210,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S3 1,1",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28210",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28310,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S3 1,1 (lit twin of 28210)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28310",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28211,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S3 1,2",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28211",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28311,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S3 1,2 (lit twin of 28211)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28311",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28212,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S3 2,0",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28212",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28312,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S3 2,0 (lit twin of 28212)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28312",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28213,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S3 2,1",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28213",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28313,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S3 2,1 (lit twin of 28213)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28313",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28214,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S3 2,2",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28214",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28314,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S3 2,2 (lit twin of 28214)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28314",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28215,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 0,0",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28215",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28315,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 0,0 (lit twin of 28215)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28315",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28216,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 0,1",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28216",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28316,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 0,1 (lit twin of 28216)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28316",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28217,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 0,2",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28217",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28317,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 0,2 (lit twin of 28217)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28317",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28218,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 1,0",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28218",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28318,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 1,0 (lit twin of 28218)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28318",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28219,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 1,1",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28219",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28319,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 1,1 (lit twin of 28219)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28319",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28220,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 1,2",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28220",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28320,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 1,2 (lit twin of 28220)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28320",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28221,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 2,0",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28221",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28321,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 2,0 (lit twin of 28221)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28321",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28222,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 2,1",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28222",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28322,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 2,1 (lit twin of 28222)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28322",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28223,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 2,2",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28223",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28323,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 2,2 (lit twin of 28223)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28323",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28224,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 3,0",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28224",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28324,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 3,0 (lit twin of 28224)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28324",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28225,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 3,1",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28225",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28325,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 3,1 (lit twin of 28225)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28325",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28226,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 3,2",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28226",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28326,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve S4 3,2 (lit twin of 28226)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28326",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28227,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z2 0,0",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28227",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28327,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z2 0,0 (lit twin of 28227)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28327",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28228,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z2 0,1",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28228",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28328,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z2 0,1 (lit twin of 28228)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28328",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28229,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z2 0,2",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28229",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28329,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z2 0,2 (lit twin of 28229)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28329",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28230,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z2 1,0",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28230",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28330,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z2 1,0 (lit twin of 28230)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28330",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28231,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z2 1,1",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28231",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28331,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z2 1,1 (lit twin of 28231)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28331",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28232,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z2 1,2",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28232",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28332,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z2 1,2 (lit twin of 28232)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28332",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28233,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z3 0,0",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28233",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28333,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z3 0,0 (lit twin of 28233)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28333",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28234,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z3 0,1",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28234",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28334,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z3 0,1 (lit twin of 28234)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28334",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28235,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z3 0,2",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28235",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28335,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z3 0,2 (lit twin of 28235)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28335",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28236,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z3 1,0",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28236",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28336,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z3 1,0 (lit twin of 28236)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28336",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28237,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z3 1,1",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28237",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28337,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z3 1,1 (lit twin of 28237)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28337",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28238,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z3 1,2",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28238",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28338,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z3 1,2 (lit twin of 28238)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28338",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28239,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z3 2,0",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28239",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28339,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z3 2,0 (lit twin of 28239)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28339",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28240,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z3 2,1",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28240",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28340,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z3 2,1 (lit twin of 28240)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28340",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28241,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z3 2,2",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28241",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28341,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z3 2,2 (lit twin of 28241)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28341",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28242,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 0,0",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28242",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28342,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 0,0 (lit twin of 28242)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28342",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28243,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 0,1",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28243",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28343,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 0,1 (lit twin of 28243)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28343",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28244,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 0,2",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28244",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28344,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 0,2 (lit twin of 28244)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28344",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28245,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 1,0",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28245",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28345,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 1,0 (lit twin of 28245)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28345",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28246,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 1,1",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28246",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28346,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 1,1 (lit twin of 28246)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28346",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28247,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 1,2",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28247",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28347,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 1,2 (lit twin of 28247)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28347",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28248,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 2,0",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28248",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28348,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 2,0 (lit twin of 28248)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28348",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28249,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 2,1",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28249",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28349,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 2,1 (lit twin of 28249)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28349",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28250,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 2,2",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28250",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28350,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 2,2 (lit twin of 28250)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28350",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28251,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 3,0",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28251",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28351,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 3,0 (lit twin of 28251)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28351",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28252,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 3,1",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28252",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28352,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 3,1 (lit twin of 28252)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28352",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28253,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 3,2",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28253",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 28353,
+   "base": 15051,
+   "network": "HWAY",
+   "name": {
+    "*": "Highway S-curve Z4 3,2 (lit twin of 28253)",
+    "ENGLISH": "Highway"
+   },
+   "art": {
+    "from": 15127,
+    "png_dir": "art/28353",
+    "ground_under": true
+   },
+   "trblkatt": "copy_base"
+  }
+ ],
+ "lanes": [
+  {
+   "piece": 28200,
+   "spec": "hwsc_28200.lanes.json"
+  },
+  {
+   "piece": 28300,
+   "spec": "hwsc_28200.lanes.json"
+  },
+  {
+   "piece": 28201,
+   "spec": "hwsc_28201.lanes.json"
+  },
+  {
+   "piece": 28301,
+   "spec": "hwsc_28201.lanes.json"
+  },
+  {
+   "piece": 28202,
+   "spec": "hwsc_28202.lanes.json"
+  },
+  {
+   "piece": 28302,
+   "spec": "hwsc_28202.lanes.json"
+  },
+  {
+   "piece": 28203,
+   "spec": "hwsc_28203.lanes.json"
+  },
+  {
+   "piece": 28303,
+   "spec": "hwsc_28203.lanes.json"
+  },
+  {
+   "piece": 28204,
+   "spec": "hwsc_28204.lanes.json"
+  },
+  {
+   "piece": 28304,
+   "spec": "hwsc_28204.lanes.json"
+  },
+  {
+   "piece": 28205,
+   "spec": "hwsc_28205.lanes.json"
+  },
+  {
+   "piece": 28305,
+   "spec": "hwsc_28205.lanes.json"
+  },
+  {
+   "piece": 28206,
+   "spec": "hwsc_28206.lanes.json"
+  },
+  {
+   "piece": 28306,
+   "spec": "hwsc_28206.lanes.json"
+  },
+  {
+   "piece": 28207,
+   "spec": "hwsc_28207.lanes.json"
+  },
+  {
+   "piece": 28307,
+   "spec": "hwsc_28207.lanes.json"
+  },
+  {
+   "piece": 28209,
+   "spec": "hwsc_28209.lanes.json"
+  },
+  {
+   "piece": 28309,
+   "spec": "hwsc_28209.lanes.json"
+  },
+  {
+   "piece": 28210,
+   "spec": "hwsc_28210.lanes.json"
+  },
+  {
+   "piece": 28310,
+   "spec": "hwsc_28210.lanes.json"
+  },
+  {
+   "piece": 28211,
+   "spec": "hwsc_28211.lanes.json"
+  },
+  {
+   "piece": 28311,
+   "spec": "hwsc_28211.lanes.json"
+  },
+  {
+   "piece": 28213,
+   "spec": "hwsc_28213.lanes.json"
+  },
+  {
+   "piece": 28313,
+   "spec": "hwsc_28213.lanes.json"
+  },
+  {
+   "piece": 28214,
+   "spec": "hwsc_28214.lanes.json"
+  },
+  {
+   "piece": 28314,
+   "spec": "hwsc_28214.lanes.json"
+  },
+  {
+   "piece": 28215,
+   "spec": "hwsc_28215.lanes.json"
+  },
+  {
+   "piece": 28315,
+   "spec": "hwsc_28215.lanes.json"
+  },
+  {
+   "piece": 28216,
+   "spec": "hwsc_28216.lanes.json"
+  },
+  {
+   "piece": 28316,
+   "spec": "hwsc_28216.lanes.json"
+  },
+  {
+   "piece": 28218,
+   "spec": "hwsc_28218.lanes.json"
+  },
+  {
+   "piece": 28318,
+   "spec": "hwsc_28218.lanes.json"
+  },
+  {
+   "piece": 28219,
+   "spec": "hwsc_28219.lanes.json"
+  },
+  {
+   "piece": 28319,
+   "spec": "hwsc_28219.lanes.json"
+  },
+  {
+   "piece": 28220,
+   "spec": "hwsc_28220.lanes.json"
+  },
+  {
+   "piece": 28320,
+   "spec": "hwsc_28220.lanes.json"
+  },
+  {
+   "piece": 28221,
+   "spec": "hwsc_28221.lanes.json"
+  },
+  {
+   "piece": 28321,
+   "spec": "hwsc_28221.lanes.json"
+  },
+  {
+   "piece": 28222,
+   "spec": "hwsc_28222.lanes.json"
+  },
+  {
+   "piece": 28322,
+   "spec": "hwsc_28222.lanes.json"
+  },
+  {
+   "piece": 28223,
+   "spec": "hwsc_28223.lanes.json"
+  },
+  {
+   "piece": 28323,
+   "spec": "hwsc_28223.lanes.json"
+  },
+  {
+   "piece": 28225,
+   "spec": "hwsc_28225.lanes.json"
+  },
+  {
+   "piece": 28325,
+   "spec": "hwsc_28225.lanes.json"
+  },
+  {
+   "piece": 28226,
+   "spec": "hwsc_28226.lanes.json"
+  },
+  {
+   "piece": 28326,
+   "spec": "hwsc_28226.lanes.json"
+  },
+  {
+   "piece": 28227,
+   "spec": "hwsc_28227.lanes.json"
+  },
+  {
+   "piece": 28327,
+   "spec": "hwsc_28227.lanes.json"
+  },
+  {
+   "piece": 28228,
+   "spec": "hwsc_28228.lanes.json"
+  },
+  {
+   "piece": 28328,
+   "spec": "hwsc_28228.lanes.json"
+  },
+  {
+   "piece": 28229,
+   "spec": "hwsc_28229.lanes.json"
+  },
+  {
+   "piece": 28329,
+   "spec": "hwsc_28229.lanes.json"
+  },
+  {
+   "piece": 28230,
+   "spec": "hwsc_28230.lanes.json"
+  },
+  {
+   "piece": 28330,
+   "spec": "hwsc_28230.lanes.json"
+  },
+  {
+   "piece": 28231,
+   "spec": "hwsc_28231.lanes.json"
+  },
+  {
+   "piece": 28331,
+   "spec": "hwsc_28231.lanes.json"
+  },
+  {
+   "piece": 28232,
+   "spec": "hwsc_28232.lanes.json"
+  },
+  {
+   "piece": 28332,
+   "spec": "hwsc_28232.lanes.json"
+  },
+  {
+   "piece": 28234,
+   "spec": "hwsc_28234.lanes.json"
+  },
+  {
+   "piece": 28334,
+   "spec": "hwsc_28234.lanes.json"
+  },
+  {
+   "piece": 28235,
+   "spec": "hwsc_28235.lanes.json"
+  },
+  {
+   "piece": 28335,
+   "spec": "hwsc_28235.lanes.json"
+  },
+  {
+   "piece": 28236,
+   "spec": "hwsc_28236.lanes.json"
+  },
+  {
+   "piece": 28336,
+   "spec": "hwsc_28236.lanes.json"
+  },
+  {
+   "piece": 28237,
+   "spec": "hwsc_28237.lanes.json"
+  },
+  {
+   "piece": 28337,
+   "spec": "hwsc_28237.lanes.json"
+  },
+  {
+   "piece": 28238,
+   "spec": "hwsc_28238.lanes.json"
+  },
+  {
+   "piece": 28338,
+   "spec": "hwsc_28238.lanes.json"
+  },
+  {
+   "piece": 28239,
+   "spec": "hwsc_28239.lanes.json"
+  },
+  {
+   "piece": 28339,
+   "spec": "hwsc_28239.lanes.json"
+  },
+  {
+   "piece": 28240,
+   "spec": "hwsc_28240.lanes.json"
+  },
+  {
+   "piece": 28340,
+   "spec": "hwsc_28240.lanes.json"
+  },
+  {
+   "piece": 28243,
+   "spec": "hwsc_28243.lanes.json"
+  },
+  {
+   "piece": 28343,
+   "spec": "hwsc_28243.lanes.json"
+  },
+  {
+   "piece": 28244,
+   "spec": "hwsc_28244.lanes.json"
+  },
+  {
+   "piece": 28344,
+   "spec": "hwsc_28244.lanes.json"
+  },
+  {
+   "piece": 28245,
+   "spec": "hwsc_28245.lanes.json"
+  },
+  {
+   "piece": 28345,
+   "spec": "hwsc_28245.lanes.json"
+  },
+  {
+   "piece": 28246,
+   "spec": "hwsc_28246.lanes.json"
+  },
+  {
+   "piece": 28346,
+   "spec": "hwsc_28246.lanes.json"
+  },
+  {
+   "piece": 28247,
+   "spec": "hwsc_28247.lanes.json"
+  },
+  {
+   "piece": 28347,
+   "spec": "hwsc_28247.lanes.json"
+  },
+  {
+   "piece": 28248,
+   "spec": "hwsc_28248.lanes.json"
+  },
+  {
+   "piece": 28348,
+   "spec": "hwsc_28248.lanes.json"
+  },
+  {
+   "piece": 28249,
+   "spec": "hwsc_28249.lanes.json"
+  },
+  {
+   "piece": 28349,
+   "spec": "hwsc_28249.lanes.json"
+  },
+  {
+   "piece": 28250,
+   "spec": "hwsc_28250.lanes.json"
+  },
+  {
+   "piece": 28350,
+   "spec": "hwsc_28250.lanes.json"
+  },
+  {
+   "piece": 28251,
+   "spec": "hwsc_28251.lanes.json"
+  },
+  {
+   "piece": 28351,
+   "spec": "hwsc_28251.lanes.json"
+  },
+  {
+   "piece": 28252,
+   "spec": "hwsc_28252.lanes.json"
+  },
+  {
+   "piece": 28352,
+   "spec": "hwsc_28252.lanes.json"
+  }
+ ],
+ "connects": [
+  {
+   "piece": 28208,
+   "road": {
+    "low": [],
+    "high": []
+   }
+  },
+  {
+   "piece": 28308,
+   "road": {
+    "low": [],
+    "high": []
+   }
+  },
+  {
+   "piece": 28212,
+   "road": {
+    "low": [],
+    "high": []
+   }
+  },
+  {
+   "piece": 28312,
+   "road": {
+    "low": [],
+    "high": []
+   }
+  },
+  {
+   "piece": 28217,
+   "road": {
+    "low": [],
+    "high": []
+   }
+  },
+  {
+   "piece": 28317,
+   "road": {
+    "low": [],
+    "high": []
+   }
+  },
+  {
+   "piece": 28224,
+   "road": {
+    "low": [],
+    "high": []
+   }
+  },
+  {
+   "piece": 28324,
+   "road": {
+    "low": [],
+    "high": []
+   }
+  },
+  {
+   "piece": 28233,
+   "road": {
+    "low": [],
+    "high": []
+   }
+  },
+  {
+   "piece": 28333,
+   "road": {
+    "low": [],
+    "high": []
+   }
+  },
+  {
+   "piece": 28241,
+   "road": {
+    "low": [],
+    "high": []
+   }
+  },
+  {
+   "piece": 28341,
+   "road": {
+    "low": [],
+    "high": []
+   }
+  },
+  {
+   "piece": 28242,
+   "road": {
+    "low": [],
+    "high": []
+   }
+  },
+  {
+   "piece": 28342,
+   "road": {
+    "low": [],
+    "high": []
+   }
+  },
+  {
+   "piece": 28253,
+   "road": {
+    "low": [],
+    "high": []
+   }
+  },
+  {
+   "piece": 28353,
+   "road": {
+    "low": [],
+    "high": []
+   }
+  }
+ ],
+ "highway_lines": [
+  "hwyp 28200 0",
+  "hwyp 28201 0",
+  "hwyp 28202 0",
+  "hwyp 28203 0",
+  "hwyp 28204 0",
+  "hwyp 28205 0",
+  "hwyp 28206 0",
+  "hwyp 28207 0",
+  "hwyp 28208 0",
+  "hwyp 28209 0",
+  "hwyp 28210 0",
+  "hwyp 28211 0",
+  "hwyp 28212 0",
+  "hwyp 28213 0",
+  "hwyp 28214 0",
+  "hwyp 28215 0",
+  "hwyp 28216 0",
+  "hwyp 28217 0",
+  "hwyp 28218 0",
+  "hwyp 28219 0",
+  "hwyp 28220 0",
+  "hwyp 28221 0",
+  "hwyp 28222 0",
+  "hwyp 28223 0",
+  "hwyp 28224 0",
+  "hwyp 28225 0",
+  "hwyp 28226 0",
+  "hwyp 28227 0",
+  "hwyp 28228 0",
+  "hwyp 28229 0",
+  "hwyp 28230 0",
+  "hwyp 28231 0",
+  "hwyp 28232 0",
+  "hwyp 28233 0",
+  "hwyp 28234 0",
+  "hwyp 28235 0",
+  "hwyp 28236 0",
+  "hwyp 28237 0",
+  "hwyp 28238 0",
+  "hwyp 28239 0",
+  "hwyp 28240 0",
+  "hwyp 28241 0",
+  "hwyp 28242 0",
+  "hwyp 28243 0",
+  "hwyp 28244 0",
+  "hwyp 28245 0",
+  "hwyp 28246 0",
+  "hwyp 28247 0",
+  "hwyp 28248 0",
+  "hwyp 28249 0",
+  "hwyp 28250 0",
+  "hwyp 28251 0",
+  "hwyp 28252 0",
+  "hwyp 28253 0",
+  "hwys 28200 15051 2 73 0 15051 0 73 2",
+  "hwys 28201 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28202 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28203 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28204 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28205 15051 0 73 2 15051 2 73 0",
+  "hwys 28206 15051 2 73 0 15051 0 73 2",
+  "hwys 28207 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28208 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28209 15051 2 73 0 15051 0 73 2",
+  "hwys 28210 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28211 15051 0 73 2 15051 2 73 0",
+  "hwys 28212 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28213 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28214 15051 0 73 2 15051 2 73 0",
+  "hwys 28215 15051 2 73 0 15051 0 73 2",
+  "hwys 28216 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28217 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28218 15051 2 73 0 15051 0 73 2",
+  "hwys 28219 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28220 15051 0 73 2 15051 2 73 0",
+  "hwys 28221 15051 2 73 0 15051 0 73 2",
+  "hwys 28222 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28223 15051 0 73 2 15051 2 73 0",
+  "hwys 28224 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28225 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28226 15051 0 73 2 15051 2 73 0",
+  "hwys 28227 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28228 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28229 15051 0 73 2 15051 2 73 0",
+  "hwys 28230 15051 2 73 0 15051 0 73 2",
+  "hwys 28231 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28232 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28233 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28234 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28235 15051 0 73 2 15051 2 73 0",
+  "hwys 28236 15051 2 73 0 15051 0 73 2",
+  "hwys 28237 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28238 15051 0 73 2 15051 2 73 0",
+  "hwys 28239 15051 2 73 0 15051 0 73 2",
+  "hwys 28240 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28241 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28242 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28243 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28244 15051 0 73 2 15051 2 73 0",
+  "hwys 28245 15051 2 73 0 15051 0 73 2",
+  "hwys 28246 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28247 15051 0 73 2 15051 2 73 0",
+  "hwys 28248 15051 2 73 0 15051 0 73 2",
+  "hwys 28249 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28250 15051 0 73 2 15051 2 73 0",
+  "hwys 28251 15051 2 73 0 15051 0 73 2",
+  "hwys 28252 15149 0 15149 0 15149 0 15149 0",
+  "hwys 28253 15149 0 15149 0 15149 0 15149 0",
+  "hwyl 28200 28300",
+  "hwyl 28201 28301",
+  "hwyl 28202 28302",
+  "hwyl 28203 28303",
+  "hwyl 28204 28304",
+  "hwyl 28205 28305",
+  "hwyl 28206 28306",
+  "hwyl 28207 28307",
+  "hwyl 28208 28308",
+  "hwyl 28209 28309",
+  "hwyl 28210 28310",
+  "hwyl 28211 28311",
+  "hwyl 28212 28312",
+  "hwyl 28213 28313",
+  "hwyl 28214 28314",
+  "hwyl 28215 28315",
+  "hwyl 28216 28316",
+  "hwyl 28217 28317",
+  "hwyl 28218 28318",
+  "hwyl 28219 28319",
+  "hwyl 28220 28320",
+  "hwyl 28221 28321",
+  "hwyl 28222 28322",
+  "hwyl 28223 28323",
+  "hwyl 28224 28324",
+  "hwyl 28225 28325",
+  "hwyl 28226 28326",
+  "hwyl 28227 28327",
+  "hwyl 28228 28328",
+  "hwyl 28229 28329",
+  "hwyl 28230 28330",
+  "hwyl 28231 28331",
+  "hwyl 28232 28332",
+  "hwyl 28233 28333",
+  "hwyl 28234 28334",
+  "hwyl 28235 28335",
+  "hwyl 28236 28336",
+  "hwyl 28237 28337",
+  "hwyl 28238 28338",
+  "hwyl 28239 28339",
+  "hwyl 28240 28340",
+  "hwyl 28241 28341",
+  "hwyl 28242 28342",
+  "hwyl 28243 28343",
+  "hwyl 28244 28344",
+  "hwyl 28245 28345",
+  "hwyl 28246 28346",
+  "hwyl 28247 28347",
+  "hwyl 28248 28348",
+  "hwyl 28249 28349",
+  "hwyl 28250 28350",
+  "hwyl 28251 28351",
+  "hwyl 28252 28352",
+  "hwyl 28253 28353",
+  "hwsc 0 2 0 0 28200",
+  "hwsc 0 2 0 1 28201",
+  "hwsc 0 2 0 2 28202",
+  "hwsc 0 2 1 0 28203",
+  "hwsc 0 2 1 1 28204",
+  "hwsc 0 2 1 2 28205",
+  "hwsc 0 3 0 0 28206",
+  "hwsc 0 3 0 1 28207",
+  "hwsc 0 3 0 2 28208",
+  "hwsc 0 3 1 0 28209",
+  "hwsc 0 3 1 1 28210",
+  "hwsc 0 3 1 2 28211",
+  "hwsc 0 3 2 0 28212",
+  "hwsc 0 3 2 1 28213",
+  "hwsc 0 3 2 2 28214",
+  "hwsc 0 4 0 0 28215",
+  "hwsc 0 4 0 1 28216",
+  "hwsc 0 4 0 2 28217",
+  "hwsc 0 4 1 0 28218",
+  "hwsc 0 4 1 1 28219",
+  "hwsc 0 4 1 2 28220",
+  "hwsc 0 4 2 0 28221",
+  "hwsc 0 4 2 1 28222",
+  "hwsc 0 4 2 2 28223",
+  "hwsc 0 4 3 0 28224",
+  "hwsc 0 4 3 1 28225",
+  "hwsc 0 4 3 2 28226",
+  "hwsc 1 2 0 0 28227",
+  "hwsc 1 2 0 1 28228",
+  "hwsc 1 2 0 2 28229",
+  "hwsc 1 2 1 0 28230",
+  "hwsc 1 2 1 1 28231",
+  "hwsc 1 2 1 2 28232",
+  "hwsc 1 3 0 0 28233",
+  "hwsc 1 3 0 1 28234",
+  "hwsc 1 3 0 2 28235",
+  "hwsc 1 3 1 0 28236",
+  "hwsc 1 3 1 1 28237",
+  "hwsc 1 3 1 2 28238",
+  "hwsc 1 3 2 0 28239",
+  "hwsc 1 3 2 1 28240",
+  "hwsc 1 3 2 2 28241",
+  "hwsc 1 4 0 0 28242",
+  "hwsc 1 4 0 1 28243",
+  "hwsc 1 4 0 2 28244",
+  "hwsc 1 4 1 0 28245",
+  "hwsc 1 4 1 1 28246",
+  "hwsc 1 4 1 2 28247",
+  "hwsc 1 4 2 0 28248",
+  "hwsc 1 4 2 1 28249",
+  "hwsc 1 4 2 2 28250",
+  "hwsc 1 4 3 0 28251",
+  "hwsc 1 4 3 1 28252",
+  "hwsc 1 4 3 2 28253"
+ ]
+}

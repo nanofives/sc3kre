@@ -1393,6 +1393,7 @@ static int netramp_install(BYTE *m) {
 #include "sc3netmod_hwdd.c"         /* task hwdd: HWDD, diagonal x diagonal highway cloverleaf (SC3NETMOD_HWDD=0) */
 #include "sc3netmod_hwdx.c"         /* task hwdx: HWDX, diagonal x straight highway cloverleaf (SC3NETMOD_HWDX=0) */
 #include "sc3netmod_hwave.c"        /* task hwave: HWAVE, highway <-> avenue transition (SC3NETMOD_HWAVE=0) */
+#include "sc3netmod_hwsc.c"         /* task hwyscurve: HWSC, highway S-curve over a one-cell offset (SC3NETMOD_HWSC=0) */
 #include "sc3netmod_sle.c"          /* task slopeend: SLE, rounded road ends on slopes (SC3NETMOD_SLE=0) */
 #include "sc3netmod_avl.c"          /* task avcore: AVL, one-way avenue halves on RBT's hooks (SC3NETMOD_AVL=0) */
 #include "sc3netmod_avp.c"          /* task avpaint: AVP, the avenue look on bands AVL leaves two-way (SC3NETMOD_AVP=0) */
