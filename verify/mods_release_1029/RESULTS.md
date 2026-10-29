@@ -30,3 +30,6 @@ LAN: 66 of 3,607 files sent (55.3 MB, the netmod overlay rebuilt by the pack cha
 | `sc3mods_2026-10-29.zip` | 43,684,012 | 63761CC1EA6052BD0F976AC948677CE02CA8A52A3908D6F8059BEC71C9DF286C |
 
 Not tested: a highway drag over houses, slope/water refusals during a road-over drag, avenue trees at zooms 0..3 in game (offline pixel check only).
+
+GitHub: `sc3mods-2026-10-29`, target `b4552b3`, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-10-29, asset
+downloaded back, SHA-256 matches. The 10-28e notes now start with a "superseded" line.
