@@ -32,6 +32,7 @@ in the game: Preferencias, "Opciones de mods...".
   somewhere else (half its price plus bulldozing and levelling).
 - Buildings placed from a menu, and road, rail, highway and power line drags, can go over zoned buildings,
   which are demolished first (bulldozing added to the cost, undo puts them back).
+- Zoning over buildings of another zone type, and de-zoning, demolish them (same type left alone).
 - Many crash and drawing fixes for large windows (repaint gaps, odd window heights, dialogs cut off, files the game
   locked against other readers).
 
@@ -52,6 +53,7 @@ several threads, and the fixes that make 1024 cities load, reload and run withou
 - Avenue junctions with roads and with other avenues, corners and T junctions.
 - Roundabouts: a 2x2 road square becomes a roundabout by itself, plus a 3x3 one.
 - Highway interchanges (diagonal ones too) that finish building, on-ramps, capped joins, correctly lit walls.
+- Highway S curves where two parallel highways one cell apart overlap.
 - Traffic that uses avenues, boulevards and highways more, and road density that follows the turns cars make.
 - Rounded road ends on slopes.
 - Cars on the far side of an avenue draw behind the median trees (stock avenues inside a band too).
