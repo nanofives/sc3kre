@@ -7071,6 +7071,77 @@ static MN_TC0 g_vd_shut_orig;
  * (twin unchanged) no longer drops DLGSCALE's cache: only the dest box rz_hd_draw recomputed can change runs, so the
  * paste is limited to that box, and a new twin keeps the cache when its runs cover the old ones (vd_runs_cover).
  * SC3RESIZE_VDSCROLL=0: as before. SC3RESIZE_VDSCROLL_SETTLE=<ms> (default 1000), SC3RESIZE_VDSCROLL_MAXAGE=<ms> (20000). */
+/* VDRADIO (child vdradio, owner report 2026-10-29: "cambiar el mapa de contaminacion no funciona cuando esta grande la
+ * UI"). A panel's option radios (pollution: air / water / garbage) show one layer of its map view and hide the others
+ * through the view's ShowLayer / HideLayer (SIMUI FUN_10043252 / FUN_100432ba, all: FUN_10043288 / FUN_100432f0):
+ * the layer wrapper's byte +0xc (vt 0x100a811c, set +0x1c FUN_10043c3e, get +0x20 FUN_10043c48), plus the view's dirty
+ * byte. The texture render (FUN_10043882) and the draw (FUN_10043937) skip a wrapper whose byte is 0. The twin's
+ * wrappers are copies the Clone made, and mn_state hashes only the list pointers. Measured 2026-10-29 (Berlin, pollution
+ * panel, SC3RESIZE_VDRADIO_DIAG=1 logs both lists): the native view holds terrain, air, water, garbage with shown bytes
+ * 1 1 0 0, its fresh twin had 1 1 1 1. So the twin drew every layer stacked from the first frame, and no radio changed
+ * it: the native map changed underneath, the sharp one pasted over it did not.
+ * Now the native's shown bytes are copied into the twin's wrappers at the clone and whenever they change (they are part
+ * of the twin's signature). Twin and native wrappers share the inner layer (+8, FUN_10043bc4), so they pair by it
+ * whatever the list order. A change redraws the twin at once with its texture re-rendered (no re-clone, which costs up
+ * to ~0.4 s on a 1024-cell city). If the wrappers do not pair, a change frees the twin and the next draw clones again.
+ * SC3RESIZE_VDRADIO=0: as before. */
+static int    g_vdradio = 1, g_vd_rforce;
+static DWORD  g_vd_shown, g_vd_rsyncs;
+static DWORD vd_shown(const BYTE *nat) {   /* the native view's layer wrappers (list +0xf4) and their shown bytes */
+    DWORD sui = (DWORD)GetModuleHandleA("SIMUI.DLL"), h = 2166136261u, *head = *(DWORD **)(nat + 0xf4), *n;
+    int g;
+    if (!head || IsBadReadPtr(head, 4)) return 0;
+    for (n = (DWORD *)*head, g = 0; n && n != head && g < 64 && !IsBadReadPtr(n, 12); n = (DWORD *)*n, g++) {
+        const BYTE *wr = (const BYTE *)n[2];
+        if (!wr || IsBadReadPtr(wr, 0x10) || *(const DWORD *)wr != sui + 0xa811c) continue;   /* only the known wrapper */
+        h = (h ^ (DWORD)wr) * 16777619u;
+        h = (h ^ wr[0xc]) * 16777619u;
+    }
+    return h;
+}
+static int vd_sync(const BYTE *nat, BYTE *twin) {   /* the native's shown bytes into the twin's wrappers: copied, or -1 */
+    DWORD sui = (DWORD)GetModuleHandleA("SIMUI.DLL"), *th = *(DWORD **)(twin + 0xf4), *nh = *(DWORD **)(nat + 0xf4), *t, *n;
+    int g, k, c = 0, nt = 0, nn = 0;
+    if (!th || !nh || IsBadReadPtr(th, 4) || IsBadReadPtr(nh, 4)) return -1;
+    for (n = (DWORD *)*nh, k = 0; n && n != nh && k < 64 && !IsBadReadPtr(n, 12); n = (DWORD *)*n, k++) {
+        const BYTE *nw = (const BYTE *)n[2];
+        if (nw && !IsBadReadPtr(nw, 0x10) && *(const DWORD *)nw == sui + 0xa811c) nn++;
+    }
+    for (t = (DWORD *)*th, g = 0; t && t != th && g < 64 && !IsBadReadPtr(t, 12); t = (DWORD *)*t, g++) {
+        BYTE *tw = (BYTE *)t[2];
+        const BYTE *p = NULL;
+        if (!tw || IsBadReadPtr(tw, 0x10) || *(DWORD *)tw != sui + 0xa811c) continue;
+        nt++;
+        for (n = (DWORD *)*nh, k = 0; n && n != nh && k < 64 && !IsBadReadPtr(n, 12); n = (DWORD *)*n, k++) {
+            const BYTE *nw = (const BYTE *)n[2];
+            if (nw && !IsBadReadPtr(nw, 0x10) && *(const DWORD *)nw == sui + 0xa811c &&
+                *(const DWORD *)(nw + 8) == *(DWORD *)(tw + 8)) { p = nw; break; }
+        }
+        if (!p) return -1;
+        if (tw[0xc] != p[0xc]) { tw[0xc] = p[0xc]; c++; }   /* what the wrapper's vt+0x1c (FUN_10043c3e) does */
+    }
+    return nt == nn ? c : -1;
+}
+static void vd_dump_layers(const char *tag, const BYTE *v) {   /* VDRADIO diag (SC3RESIZE_VDRADIO_DIAG=1) */
+    static int on = -1;
+    char b[900]; int o = 0, k, g;
+    DWORD sui = (DWORD)GetModuleHandleA("SIMUI.DLL");
+    if (on < 0) { char e[8]; on = GetEnvironmentVariableA("SC3RESIZE_VDRADIO_DIAG", e, sizeof(e)) ? atoi(e) : 0; }
+    if (!on || !v) return;
+    for (k = 0; k < 2; k++) {
+        DWORD *head = *(DWORD **)(v + 0xf0 + 4 * k), *n;
+        o += _snprintf(b + o, sizeof(b) - o, k ? " | f4:" : "f0:");
+        if (!head || IsBadReadPtr(head, 4)) continue;
+        for (n = (DWORD *)*head, g = 0; n && n != head && g < 12 && !IsBadReadPtr(n, 16) && o < 800; n = (DWORD *)*n, g++) {
+            const BYTE *w = (const BYTE *)n[2];
+            if (k == 0) { o += _snprintf(b + o, sizeof(b) - o, " (%08lX,%08lX)", n[2], n[3]); continue; }
+            if (!w || IsBadReadPtr(w, 0x10)) { o += _snprintf(b + o, sizeof(b) - o, " ?"); continue; }
+            o += _snprintf(b + o, sizeof(b) - o, " [w %08lX vt+%lX in %08lX invt+%lX c%d]", (DWORD)w, *(DWORD *)w - sui,
+                           *(DWORD *)(w + 8), *(DWORD *)(w + 8) && !IsBadReadPtr(*(void **)(w + 8), 4) ? **(DWORD **)(w + 8) - sui : 0, w[0xc]);
+        }
+    }
+    logf("VDRADIO> %s view %08lX dirty %d: %s", tag, (DWORD)v, v[0xdc], b);
+}
 static int    g_vdscroll = 1;
 static DWORD  g_vd_settle = 1000, g_vd_defers, g_vd_late;
 static int    g_vd_pend, g_vd_waited, g_vd_slogs;
@@ -7164,7 +7235,13 @@ static int vd_make(BYTE *nat, LONG T) {
         if (++g_vd_fails >= 3) g_vd_on = 0;
         return 0;
     }
-    g_vd_twin = twin; g_vd_T = T; g_vd_sig = mn_state(nat); g_vd_clones++;
+    g_vd_twin = twin; g_vd_T = T; g_vd_sig = mn_state(nat); g_vd_shown = vd_shown(nat); g_vd_clones++;   /* VDRADIO */
+    vd_dump_layers("clone: native", nat); vd_dump_layers("clone: twin", twin);
+    if (g_vdradio) {   /* VDRADIO: the clone comes out with every layer shown, the native shows one per radio */
+        int c = vd_sync(nat, twin);
+        if (c && g_vd_rsyncs < 20) { g_vd_rsyncs++; logf("VDRADIO> twin 0x%08lX: %d shown byte(s) taken from its map view at the clone%s", (DWORD)twin, c, c < 0 ? " - failed, layers do not pair" : ""); }
+        vd_dump_layers("clone: twin synced", twin);
+    }
     logf("VERDATOS> twin 0x%08lX of map view 0x%08lX: %ldx%ld, own raster 0x%08lX, rotation %ld", (DWORD)twin, (DWORD)nat,
          T, T, *(DWORD *)(twin + 0x58), ((LONG *)nat)[0x2b]);
     return 1;
@@ -7212,6 +7289,19 @@ static void vd_after(BYTE *nat, BYTE dirty) {
     T = 2 * (LONG)((double)(mw - 1) / 2.0 * (double)d->dw / (double)d->w + 0.5) + 1;
     if (g_vd_nat != nat) { vd_free("another map view"); g_vd_nat = nat; }
     if (g_vd_twin && mn_state(nat) != g_vd_sig) vd_free("rotation or layers changed");
+    if (g_vd_twin && g_vdradio) {   /* VDRADIO: a layer shown or hidden (option radio) */
+        DWORD sh = vd_shown(nat);
+        if (sh != g_vd_shown) {
+            int c;
+            vd_dump_layers("change: native", nat); vd_dump_layers("change: twin", (BYTE *)g_vd_twin);
+            c = vd_sync(nat, (BYTE *)g_vd_twin);
+            if (c < 0) vd_free("a layer shown or hidden, twin layers do not pair with the view's");
+            else {
+                g_vd_shown = sh; g_vd_rforce = 1; dirty = 1; g_vd_rsyncs++;
+                if (g_vd_rsyncs <= 20) logf("VDRADIO> map view 0x%08lX showed / hid a layer: %d shown byte(s) copied into the twin", (DWORD)nat, c);
+            }
+        }
+    }
     if (!g_vd_twin) { if (!vd_make(nat, T)) return; dirty = 1; }
     twin = (BYTE *)g_vd_twin;
     /* the native view's pixels as it drew them, from the composite it drew into */
@@ -7231,7 +7321,7 @@ static void vd_after(BYTE *nat, BYTE dirty) {
     g_vd_dlg = d->win; g_vd_lx = r[0] - d->nat[0]; g_vd_ly = r[1] - d->nat[1];
     if (g_vdscroll && g_vd_valid && g_vd_bT == T && g_vd_T == T && g_vd_mw == mw && g_vd_mh == mh) {   /* VDSCROLL */
         DWORD now = GetTickCount();
-        int changed = memcmp(g_vd_m, g_vd_mp, (size_t)mw * mh * 2) != 0;   /* vs the picture the twin was drawn over */
+        int changed = memcmp(g_vd_m, g_vd_mp, (size_t)mw * mh * 2) != 0 || g_vd_rforce;   /* vs the picture the twin was drawn over; VDRADIO */
         int aged = now - g_vd_twin_t >= g_vd_maxage;
         {   /* the camera: the iso view's origin (as MOVENEAREST reads it) */
             static LONG cox = 0x7fffffff, coy;
@@ -7280,6 +7370,12 @@ static void vd_after(BYTE *nat, BYTE dirty) {
     g_vd_mw = mw; g_vd_mh = mh; g_vd_bT = T; g_vd_bdw = d->dw; g_vd_bw = d->w; g_vd_valid = 1; g_vd_draws++; g_vd_gen++;
     g_vd_twin_t = GetTickCount(); g_vd_pend = 0; g_vd_waited = 0;   /* VDSCROLL */
     QueryPerformanceCounter(&t1); g_vd_drawt += t1.QuadPart - t0.QuadPart;
+    if (g_vd_rforce) {   /* VDRADIO */
+        g_vd_rforce = 0;
+        if (g_vd_rsyncs <= 20 && g_freq.QuadPart)
+            logf("VDRADIO> twin redrawn with the new layer in %.1f ms (twin %ldx%ld, texture %ld)",
+                 1000.0 * (double)(t1.QuadPart - t0.QuadPart) / (double)g_freq.QuadPart, T, T, ((LONG *)twin)[0x39]);
+    }
     if (!g_vd_first) {
         g_vd_first = 1;
         logf("VERDATOS> first twin draw: map view [%ld %ld %ld %ld] in dialog [%ld %ld %ld %ld] -> [%ld %ld %ld %ld], twin %ldx%ld texture %ld (native %ld)",
@@ -17094,6 +17190,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_VDPANELONLY", v, sizeof(v))) g_vd_panelonly = atoi(v);  /* owner report 2026-10-27 */
           if (GetEnvironmentVariableA("SC3RESIZE_VERDATOS_TEX", v, sizeof(v))) g_vd_tex = atoi(v);    /* task verdatos */
           if (GetEnvironmentVariableA("SC3RESIZE_VDSCROLL", v, sizeof(v))) g_vdscroll = atoi(v);      /* child vdscroll */
+          if (GetEnvironmentVariableA("SC3RESIZE_VDRADIO", v, sizeof(v))) g_vdradio = atoi(v);        /* child vdradio */
           if (GetEnvironmentVariableA("SC3RESIZE_VDSCROLL_SETTLE", v, sizeof(v))) g_vd_settle = (DWORD)atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_VDSCROLL_MAXAGE", v, sizeof(v))) g_vd_maxage = (DWORD)atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_NATIVETEXT", v, sizeof(v))) g_nt_on = atoi(v);       /* child nativetext */
