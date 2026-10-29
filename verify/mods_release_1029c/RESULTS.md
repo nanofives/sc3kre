@@ -23,3 +23,6 @@ LAN: 1 of 3,612 files sent (0.5 MB). Served label `2026-10-29c`, served sc3resiz
 | README.txt | | 2026-10-29c section |
 | every other file | | as `verify/mods_release_1029b/RESULTS.md` |
 | `sc3mods_2026-10-29c.zip` | 50,222,421 | 53AD169417379AE7A8C904C639499B2874D3A700BC6DCF738CEA39CE7534C313 |
+
+GitHub: `sc3mods-2026-10-29c`, target `baa17d0`, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-10-29c, asset
+downloaded back, SHA-256 matches. The 10-29b notes now start with a "superseded" line.
