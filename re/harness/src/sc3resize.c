@@ -10146,6 +10146,158 @@ static void ro_install(void) {
 }
 static DWORD WINAPI ro_thread(LPVOID p) { (void)p; ro_install(); return 0; }   /* it may wait for sc3netmod */
 
+/* ================= ZONEDEMO (task zonedemo 2026-10-29, re/analysis/ZONEDEMO.md)
+ * Owner: (1) zoning over zoned buildings of ANOTHER zone type demolishes them and zones the cells, buildings of the
+ * same type (residential over residential, any density) stay, as stock; (2) DeZone demolishes the zoned buildings on
+ * the cells it de-zones. Stock (measured -Stock, verify/zonedemo/RESULTS.md): every zone tool refuses a building cell.
+ * All 13 zone tools are one class, vtable SIMRCI 0x1004c06c: Apply +0x48 0x1000b7d0 calls the zone layer interface
+ * (object+0x10, vtable 0x1004d1e0) CanZone +0x84 = 0x1003559f thiscall(zoneType, rect6*, cost*) ret 0xc at 0x1000b7f3,
+ * then PlaceZone +0x88 = 0x1003591f thiscall(zoneType, rect6*, cost*, 0) ret 0x10 at 0x1000b8cc; the cost slots +0x4c
+ * 0x1000b931 / +0x50 0x1000b973 call CanZone and put its cost into tool+0x34 (the cursor label), refusal -> +0x38, funds
+ * short -> +0x39 (0x1003f621) [CONFIRMED @ SIMRCI 0x1000b7d0, 0x1000b931, 0x1000b973, PE vtables]. CanZone per cell:
+ * zone == tool zone skipped, an occupant other than flora 0x400 / power line 0x400000+0x800 rejects the cell, water-ish
+ * (city vt+0x13c vt+0x54) rejects; false when no cell counts or funds < cost [CONFIRMED @ 0x1003559f].
+ * Both slots are wrapped. Only calls whose return address is inside the zone tool (0x1000b7d0..0x1000b9d2) change:
+ * PlaceZone's own inner CanZone, scripts and other callers stay stock. A cell the stock skips (same zone) or rejects for
+ * water stays out. Otherwise a zoned building there (PLOPOVER test: GeomFlag 0x100, CanUserRemove, zone 1..11 under its
+ * first cell) is taken when the tool is DeZone or its R 1-3 / C 5-7 / I 9-11 class differs from the building's. Airport,
+ * seaport and landfill tools (14 / 15 / 17) take none, and their own buildings are not on 1..11: stock both ways.
+ * CanZone: the taken cells count at the tool's unit price, each building adds per-tile price x footprint once (what the
+ * bulldozer charges), ok = (stock ok or taken cells) and funds >= total. PlaceZone: demolish them (rl_remove), run the
+ * stock PlaceZone on the freed cells, Withdraw the bulldozing. This runs inside tool Apply, which sc3undo journals.
+ * Behaviour follows g_plopover (the "Construir sobre zonas" checkbox). SC3RESIZE_ZONEDEMO=0 installs nothing. */
+#define ZD_MAX 512
+static DWORD g_zd_can_orig, g_zd_put_orig;
+static HMODULE g_zd_rci;
+typedef struct { int n, cells; LONG bull; void *occ[ZD_MAX]; LONG rect[ZD_MAX][4]; } ZDSet;
+
+static int zd_class(int z) { return z >= 1 && z <= 3 ? 1 : z >= 5 && z <= 7 ? 2 : z >= 9 && z <= 11 ? 3 : 0; }
+static int zd_from_tool(DWORD ra) { DWORD o = ra - (DWORD)g_zd_rci; return o >= 0xb7d0 && o < 0xb9d2; }
+
+/* the tool's unit price: CanZone's category map {0:6, 1/5/9:0, 2/6/10:1, 3/7/11:2, 17:3, 14:4, 15:5}, budget vt+0x58 */
+static LONG zd_unit(void *bu, DWORD zt) {
+    static const signed char cat[18] = { 6, 0, 1, 2, -1, 0, 1, 2, -1, 0, 1, 2, -1, -1, 4, 5, -1, 3 };
+    if (zt > 17 || cat[zt] < 0) return 0;
+    return (LONG)ho_v(bu, 0x58, 1, (DWORD)cat[zt], 0, 0, 0, 0);
+}
+
+/* the zoned buildings this zone drag takes, on the cells of rect (8.8 coords, [0],[1] and [3],[4], inclusive) */
+static void zd_collect(void *iface, DWORD zt, const LONG *rc, void *bu, ZDSet *s) {
+    BYTE *zl = (BYTE *)iface - 0x10, b;
+    void *city = *(void **)((BYTE *)iface + 0x34), *om, *l2, *o;
+    LONG x, z, x0, x1, z0, z1, r[4], pertile;
+    int j, bz, tc = zd_class((int)zt);
+    s->n = 0; s->cells = 0; s->bull = 0;
+    if (zt != 0 && !tc) return;                                   /* airport / seaport / landfill: stock */
+    om = (void *)ho_v(city, 0x11c, 0, 0, 0, 0, 0, 0);
+    l2 = (void *)ho_v(city, 0x13c, 0, 0, 0, 0, 0, 0);
+    if (!om || !l2) return;
+    pertile = (LONG)ho_v(bu, 0x58, 1, 7, 0, 0, 0, 0);
+    x0 = min(rc[0], rc[3]) >> 8; x1 = max(rc[0], rc[3]) >> 8;
+    z0 = min(rc[1], rc[4]) >> 8; z1 = max(rc[1], rc[4]) >> 8;
+    for (x = x0; x <= x1; x++)
+        for (z = z0; z <= z1; z++) {
+            b = 0xff;
+            ho_v(zl, 0x34, 3, (DWORD)x, (DWORD)z, (DWORD)&b, 0, 0);
+            if (b == zt) continue;                                /* stock skips it */
+            o = NULL;
+            if (!(ho_v(om, 0x7c, 3, (DWORD)x, (DWORD)z, (DWORD)&o, 0, 0) & 0xff) || !o) continue;
+            if (ro_zoned(o, r) && (bz = rl_zone(r[0], r[1]), zt == 0 || zd_class(bz) != tc) &&
+                !(ho_v(l2, 0x54, 2, (DWORD)x, (DWORD)z, 0, 0, 0) & 0xff)) {
+                for (j = 0; j < s->n; j++) if (s->occ[j] == o) break;
+                if (j == s->n && s->n < ZD_MAX) {
+                    s->occ[s->n] = o;
+                    memcpy(s->rect[s->n], r, sizeof(r));
+                    s->n++;
+                    s->bull += pertile * (r[2] - r[0] + 1) * (r[3] - r[1] + 1);
+                }
+                if (j < s->n) s->cells++;
+            }
+            ho_v(o, 0x08, 0, 0, 0, 0, 0, 0);
+        }
+}
+
+static DWORD __fastcall zd_can(void *self, void *edx, DWORD zt, LONG *rect, DWORD *cost) {
+    DWORD a[3], r, ra = (DWORD)_ReturnAddress();
+    static ZDSet s;   /* game thread only; 10 KB off the stack */
+    static LONG lcost = -1, lextra = -1; static int ln = -1;
+    LONG extra, total;
+    __int64 funds;
+    void *bu;
+    int ok;
+    (void)edx;
+    a[0] = zt; a[1] = (DWORD)rect; a[2] = (DWORD)cost;
+    r = rz_thiscall_ret(self, (void *)g_zd_can_orig, a, 3);
+    if (!g_plopover || !zd_from_tool(ra) || !rect || !cost || !(bu = ro_budget())) return r;
+    __try {
+        zd_collect(self, zt, rect, bu, &s);
+        if (!s.n) return r;
+        extra = zd_unit(bu, zt) * s.cells + s.bull;
+        total = (LONG)*cost + extra;
+        funds = *(__int64 *)((BYTE *)bu + 0x38);
+        ok = ((r & 0xff) || s.cells) && (total == 0 || funds >= total);
+        if ((LONG)*cost != lcost || extra != lextra || s.n != ln)
+            logf("ZONEDEMO> zone %lu drag over %d zoned building(s), %d cell(s): stock %s $%lu + zoning them $%ld + "
+                 "bulldozing $%ld = $%ld%s", zt, s.n, s.cells, (r & 0xff) ? "ok" : "refused", *cost,
+                 extra - s.bull, s.bull, total, funds < total ? " (not enough funds)" : "");
+        lcost = (LONG)*cost; lextra = extra; ln = s.n;
+        *cost = (DWORD)total;
+        r = (r & 0xffffff00) | (ok ? 1 : 0);
+    } __except (EXCEPTION_EXECUTE_HANDLER) { logf("ZONEDEMO> fault in the CanZone hook"); }
+    return r;
+}
+
+static DWORD __fastcall zd_put(void *self, void *edx, DWORD zt, LONG *rect, DWORD *cost, DWORD a3) {
+    DWORD a[4], r, ra = (DWORD)_ReturnAddress();
+    static ZDSet s;
+    __int64 funds, after;
+    void *bu;
+    int i, gone = 0;
+    (void)edx;
+    a[0] = zt; a[1] = (DWORD)rect; a[2] = (DWORD)cost; a[3] = a3;
+    if (!g_plopover || !zd_from_tool(ra) || !rect || !(bu = ro_budget()))
+        return rz_thiscall_ret(self, (void *)g_zd_put_orig, a, 4);
+    __try { zd_collect(self, zt, rect, bu, &s); }
+    __except (EXCEPTION_EXECUTE_HANDLER) { s.n = 0; logf("ZONEDEMO> fault collecting the zone drag"); }
+    if (!s.n) return rz_thiscall_ret(self, (void *)g_zd_put_orig, a, 4);
+    funds = *(__int64 *)((BYTE *)bu + 0x38);
+    if (funds < s.bull) {   /* the tool's CanZone already refused this; kept for a caller that skipped it */
+        logf("ZONEDEMO> zone %lu over %d zoned building(s) refused: funds %I64d < bulldozing %ld", zt, s.n, funds, s.bull);
+        return rz_thiscall_ret(self, (void *)g_zd_put_orig, a, 4);
+    }
+    for (i = 0; i < s.n; i++) gone += rl_remove(s.occ[i], s.rect[i], zt ? "zoned building under the zone drag" :
+                                                "zoned building under the de-zone drag");
+    r = rz_thiscall_ret(self, (void *)g_zd_put_orig, a, 4);
+    if (s.bull > 0) ho_v(bu, 0x14, 1, (DWORD)s.bull, 0, 0, 0, 0);   /* Withdraw, the slot PLOPOVER / ROADOVER use */
+    after = *(__int64 *)((BYTE *)bu + 0x38);
+    logf("ZONEDEMO> zone %lu over %d zoned building(s) (%d removed), %d cell(s): %s, zoning $%lu + bulldozing $%ld; "
+         "funds %I64d -> %I64d", zt, s.n, gone, s.cells, (r & 0xff) ? "placed" : "PLACE FAILED", cost ? *cost : 0,
+         s.bull, funds, after);
+    return r;
+}
+
+static void zd_install(void) {
+    char v[8];
+    HMODULE m = NULL;
+    DWORD *vt;
+    int st = 0;
+    if (GetEnvironmentVariableA("SC3RESIZE_ZONEDEMO", v, sizeof(v)) && !atoi(v)) {
+        logf("ZONEDEMO> off (SC3RESIZE_ZONEDEMO=0)"); return;
+    }
+    while (st++ < 300 && !(m = GetModuleHandleA("SIMRCI.DLL"))) Sleep(100);
+    if (!m) { logf("ZONEDEMO> SIMRCI.DLL not loaded: off"); return; }
+    vt = (DWORD *)((BYTE *)m + 0x4d1e0);
+    if (vt[0x84 / 4] != (DWORD)m + 0x3559f || vt[0x88 / 4] != (DWORD)m + 0x3591f) {
+        logf("ZONEDEMO> SIMRCI zone layer +0x84 / +0x88 = 0x%08lX / 0x%08lX, not shipped: not installed",
+             vt[0x84 / 4], vt[0x88 / 4]); return; }
+    g_zd_rci = m;
+    rl_patch_slot(&vt[0x84 / 4], (void *)zd_can, &g_zd_can_orig);
+    rl_patch_slot(&vt[0x88 / 4], (void *)zd_put, &g_zd_put_orig);
+    logf("ZONEDEMO> on: zone tools over zoned buildings of another type, and DeZone over any, %s (zone layer CanZone "
+         "+0x84, PlaceZone +0x88)", g_plopover ? "demolish them" : "refuse (PLOPOVER off)");
+}
+static DWORD WINAPI zd_thread(LPVOID p) { (void)p; zd_install(); return 0; }
+
 /* FRAMEDUMP (diag, task hudclick 2026-10-15). SC3RESIZE_FRAMEDUMP=<abs prefix>: when the file <prefix>req exists, the
  * next client-sized Blt onto the primary writes its source rect (the frame exactly as presented, after any HUDSCALE
  * pass) to <prefix><tag>.bmp, tag = the first line of req (else a counter), and deletes req. A smaller Blt onto the
@@ -16568,6 +16720,9 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           {   HANDLE t = CreateThread(NULL, 0, ro_thread, NULL, 0, NULL);   /* ROADOVER: road / highway / rail /
                                                                             power drags over zoned buildings demolish them */
               if (t) CloseHandle(t); else ro_install(); }
+          {   HANDLE t = CreateThread(NULL, 0, zd_thread, NULL, 0, NULL);   /* ZONEDEMO: zoning over zoned buildings
+                                                                            of another type (or DeZone) demolishes them */
+              if (t) CloseHandle(t); else zd_install(); }
           pk_install();      /* PANCURSOR: right-drag arrows enlarged and centred */
           rz_diag_arrows_install();   /* DIAGARROWS (test only, SC3RESIZE_DIAG_ARROWS=1) */
           cursormap_install();   /* CURSORMAP: GZWIND's GetCursorPos helper maps through the zoom factor */
