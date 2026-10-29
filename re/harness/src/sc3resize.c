@@ -14926,6 +14926,209 @@ static void patch_frame_style(HMODULE gz) {
          "(WS_THICKFRAME|WS_MAXIMIZEBOX, same bytes as pe_patch resizable_frame)");
 }
 
+/* NULLBLIT (child startcrash, 2026-10-29). Startup crash 0xC0000005 READ 0 at GZGraphicD+0x14904, 2 of 6 launches
+ * in dev\hwyscurve, same site as the monitor-change crash (memory project-test-display-environment) and the mod-off
+ * crash in verify/simrun. The blit dispatcher FUN_10014894 (device vt+0x118) does `mov ecx,[this+0x44];
+ * mov eax,[ecx]` with no check, and the crash stack is the loading window's WM_PAINT: wndproc FUN_10017e2f ->
+ * FUN_10011e76 -> GZWIND window draw -> SC3U FUN_0043d489, which blits its image [win+0xac] into its target
+ * [win+0x5c] = the 800x600 screen device [CONFIRMED @ GZGraphicD 0x100148fa, SC3U 0x0043d4f1, traced live].
+ * device+0x44 (the render raster) is NULL only after the device's release-all (vt+0x20c FUN_1001673b -> vt+0x1e8
+ * FUN_10014410) or when its create failed (FUN_1001420d: both CreateSurface calls of FUN_10019273 failed, then
+ * +0x44 = 0) [CONFIRMED @ 0x1001420d, 0x10014410, 0x10019273]. GZ's paint path has no "device ready" check, so a
+ * WM_PAINT landing in that state dereferences NULL. In a normal start the screen device is created once and never
+ * released (traced, verify/startcrash), so the state needs a surface rebuild or create failure: a display change, or
+ * a transient CreateSurface error (sc3resize CREATEFAIL logged one on 2026-10-22). Not reproduced naturally here.
+ * Fix: the two dispatcher slots of both device vtables (.rdata, no code page shared with another mod) are wrapped:
+ *   +0x118 FUN_10014894: this = target, crashes on this+0x44    -> skipped (returns 0) when this+0x44 is NULL
+ *   +0x138 FUN_10014918: [esp+4] = target, crashes on its +0x44 -> skipped when that +0x44 is NULL
+ * in vtables 0x1001f328 (the device class) and 0x1001e894 (its base). The frame redraws on the next paint once the
+ * raster exists again. Each episode (a device seen without a raster) logs the device, its size, the caller, and the
+ * window / display state, and the recovery logs how many blits were skipped, so the next occurrence names its trigger.
+ * REBUILD (orchestrator 2026-10-29): GZ never rebuilds the screen device by itself after startup (its only callers of
+ * vt+0x204/+0x208 are the startup FUN_100114b8 and FUN_1001611b's own system-memory retry), so a skipped blit alone
+ * would leave that window black for good. The screen device is recorded when GZ builds it (device vt+0x208
+ * FUN_1001611b wrapped, `this` kept on success). When a blit finds THAT device without a raster, the block runs GZ's
+ * own startup sequence on it: vt+0x20c FUN_1001673b (release all, safe on a partial device) then vt+0x204
+ * FUN_10016106 (build primary + device + back buffers), at most 3 tries per episode, 2 s apart, logged with the result.
+ * The build does not refresh the present's cached primary: the device's +0x6c interface keeps it in its +0x44
+ * (device+0xb0), written only by FUN_10016ba4 (`this+0x44 = vt+0x78()`), so after a rebuild the next present
+ * (FUN_10016bf1) Blts onto the freed old primary (forced teardown test: READ at a dead vtable from
+ * GZGraphicD+0x16C3D, with and without the rebuild). FUN_10016ba4 is therefore called once after the build with a
+ * delta of 0 (its counter +0x18 unchanged) to re-read the new primary.
+ * Other devices are only skipped and logged (no rebuild path is known for them).
+ * SC3RESIZE_NULLBLIT=0 stock, 1 (default) skip + screen rebuild, 2 skip only. */
+static int g_nullblit = 1;
+static volatile LONG g_nullblit_done;
+static DWORD g_nb_orig118, g_nb_orig138;      /* FUN_10014894 / FUN_10014918, relocated */
+static void *volatile g_nb_dev;               /* device of the open episode (NULL = none) */
+static volatile LONG g_nb_skip, g_nb_ep;      /* blits skipped in the open episode / episodes so far */
+static DWORD g_nb_t0;
+static void *volatile g_nb_screen;            /* the device GZ built through vt+0x208 (the screen device) */
+static DWORD g_nb_orig208;                    /* FUN_1001611b, relocated */
+static int g_nb_tries, g_nb_inrebuild;
+static DWORD g_nb_last_try;
+
+typedef char (__fastcall *PFN_NbBuild)(void *self, void *edx);
+static char __fastcall nb_build208(void *self, void *edx) {   /* thiscall, no stack args, returns al */
+    char r = ((PFN_NbBuild)g_nb_orig208)(self, edx);
+    if (r) g_nb_screen = self;
+    return r;
+}
+
+/* Called on the game thread from inside the blit (begin/end flag 0x10 does not touch the raster, FUN_10014649). */
+static void rz_nb_rebuild(void *dev) {
+    DWORD *vt = *(DWORD **)dev, now = GetTickCount();
+    int ok;
+    if (g_nullblit != 1 || dev != g_nb_screen || g_nb_inrebuild || g_nb_tries >= 3) return;
+    if (g_nb_tries && now - g_nb_last_try < 2000) return;
+    if (IsBadReadPtr(vt, 0x210) || vt[0x204 / 4] != (DWORD)GetModuleHandleA("GZGraphicD.dll") + 0x16106) {
+        logf("NULLBLIT> screen device 0x%08lX: vt+0x204 is not FUN_10016106 - no rebuild", (DWORD)dev);
+        g_nb_tries = 3; return;
+    }
+    g_nb_inrebuild = 1; g_nb_tries++; g_nb_last_try = now;
+    rz_thiscall(dev, (void *)vt[0x20c / 4], NULL, 0);          /* release all (FUN_1001673b) */
+    ok = rz_thiscall(dev, (void *)vt[0x204 / 4], NULL, 0) & 0xff;   /* build (FUN_10016106 -> FUN_1001611b) */
+    {   /* present's cached primary (device+0xb0): re-read through FUN_10016ba4 on the +0x6c interface, delta 0 */
+        DWORD *sub = (DWORD *)((BYTE *)dev + 0x6c), *svt, want = (DWORD)GetModuleHandleA("GZGraphicD.dll") + 0x16ba4, zero = 0;
+        DWORD before = ((DWORD *)dev)[0xb0 / 4];
+        int k, found = -1;
+        svt = IsBadReadPtr(sub, 4) ? NULL : *(DWORD **)sub;
+        for (k = 0; ok && svt && k < 64 && !IsBadReadPtr(svt + k, 4); k++) if (svt[k] == want) { found = k; break; }
+        if (found >= 0) rz_thiscall(sub, (void *)svt[found], &zero, 1);
+        logf("NULLBLIT> present target (device+0xb0) 0x%08lX -> 0x%08lX (%s)", before, ((DWORD *)dev)[0xb0 / 4],
+             found >= 0 ? "re-read through FUN_10016ba4" : ok ? "FUN_10016ba4 not in the +0x6c vtable - NOT refreshed" : "build failed");
+    }
+    g_nb_inrebuild = 0;
+    logf("NULLBLIT> screen device 0x%08lX rebuild try %d (release all + build, GZ's startup sequence): %s, +0x44 = 0x%08lX, "
+         "%lux%lu, %lu ms", (DWORD)dev, g_nb_tries, ok ? "ok" : "FAILED", ((DWORD *)dev)[0x44 / 4],
+         ((DWORD *)dev)[0x24 / 4], ((DWORD *)dev)[0x28 / 4], GetTickCount() - now);
+}
+
+static void __stdcall rz_nb_null(void *dev, DWORD ret, int slot) {
+    LONG n;
+    if (g_nb_dev != dev) {   /* a new episode */
+        char who[96];
+        DEVMODEA dm;
+        RECT cr = { 0, 0, 0, 0 };
+        LONG ep = InterlockedIncrement(&g_nb_ep);
+        g_nb_dev = dev; g_nb_skip = 0; g_nb_t0 = GetTickCount(); g_nb_tries = 0;
+        rz_modstr(ret, who, sizeof(who));
+        ZeroMemory(&dm, sizeof(dm)); dm.dmSize = sizeof(dm);
+        if (!EnumDisplaySettingsA(NULL, ENUM_CURRENT_SETTINGS, &dm)) dm.dmPelsWidth = dm.dmPelsHeight = dm.dmBitsPerPel = 0;
+        if (g_hwnd) GetClientRect(g_hwnd, &cr);
+        logf("NULLBLIT> ### episode %ld: device 0x%08lX (%ldx%ld, init %d) has no raster (+0x44 = 0); blit vt+0x%X "
+             "from %s skipped. window %s iconic=%d visible=%d client %ldx%ld, display %lux%lu %lu bpp, %d monitor(s)",
+             ep, (DWORD)dev, ((LONG *)dev)[0x24 / 4], ((LONG *)dev)[0x28 / 4], *((BYTE *)dev + 8), slot, who,
+             g_hwnd ? "known" : "not yet captured", g_hwnd ? IsIconic(g_hwnd) : -1, g_hwnd ? IsWindowVisible(g_hwnd) : -1,
+             cr.right - cr.left, cr.bottom - cr.top, dm.dmPelsWidth, dm.dmPelsHeight, dm.dmBitsPerPel,
+             GetSystemMetrics(SM_CMONITORS));
+        logf("NULLBLIT> device 0x%08lX is %s", (DWORD)dev, dev == g_nb_screen ? "the screen device (GZ built it through vt+0x208)"
+             : "not the screen device: skip only");
+    }
+    rz_nb_rebuild(dev);
+    n = InterlockedIncrement(&g_nb_skip);
+    if (n == 100 || n == 10000) logf("NULLBLIT> device 0x%08lX still without a raster: %ld blits skipped in %lu ms",
+                                     (DWORD)dev, n, GetTickCount() - g_nb_t0);
+}
+
+static void __stdcall rz_nb_back(void *dev) {
+    if (g_nb_dev != dev) return;
+    logf("NULLBLIT> device 0x%08lX has a raster again (+0x44 = 0x%08lX) after %ld skipped blit(s), %lu ms",
+         (DWORD)dev, ((DWORD *)dev)[0x44 / 4], g_nb_skip, GetTickCount() - g_nb_t0);
+    g_nb_dev = NULL;
+}
+
+__declspec(naked) static void nb_blit118(void) {   /* thiscall, ecx = target device, 4 args, ret 0x10 */
+    __asm {
+        mov  eax, [ecx+44h]
+        test eax, eax
+        jz   nullr
+        cmp  ecx, [g_nb_dev]
+        je   back
+        jmp  dword ptr [g_nb_orig118]
+    back:
+        pushad
+        push ecx
+        call rz_nb_back
+        popad
+        jmp  dword ptr [g_nb_orig118]
+    nullr:
+        pushad
+        push 118h
+        push dword ptr [esp+36]      /* the caller's return address (pushad = 32 bytes, + the push above) */
+        push ecx
+        call rz_nb_null
+        popad
+        xor  eax, eax
+        ret  10h
+    }
+}
+
+__declspec(naked) static void nb_blit138(void) {   /* thiscall, ecx = source, [esp+4] = target device, ret 0x10 */
+    __asm {
+        mov  eax, [esp+4]
+        test eax, eax
+        jz   orig                    /* no target object at all: leave it to the game, as stock */
+        mov  edx, [eax+44h]
+        test edx, edx
+        jz   nullr
+        cmp  eax, [g_nb_dev]
+        je   back
+    orig:
+        jmp  dword ptr [g_nb_orig138]
+    back:
+        pushad
+        push eax
+        call rz_nb_back
+        popad
+        jmp  dword ptr [g_nb_orig138]
+    nullr:
+        pushad
+        push 138h
+        push dword ptr [esp+36]
+        push eax
+        call rz_nb_null
+        popad
+        xor  eax, eax
+        ret  10h
+    }
+}
+
+/* Loader-lock safe: data writes to .rdata and logf only. Runs from the loader notification, again (no-op) later. */
+static void patch_nullblit(HMODULE gz) {
+    static const DWORD vts[2] = { 0x1f328, 0x1e894 };   /* device class, its base: both hold the two dispatchers */
+    DWORD b = (DWORD)gz, old;
+    int i, n = 0;
+    if (!gz || InterlockedExchange(&g_nullblit_done, 1)) return;
+    if (!g_nullblit) { logf("--- NULLBLIT: disabled (SC3RESIZE_NULLBLIT=0) - a blit into a device without a raster dereferences NULL, as stock"); return; }
+    g_nb_orig118 = b + 0x14894; g_nb_orig138 = b + 0x14918;
+    for (i = 0; i < 2; i++) {
+        DWORD *s118 = (DWORD *)(b + vts[i] + 0x118), *s138 = (DWORD *)(b + vts[i] + 0x138);
+        if (IsBadReadPtr(s118, 4) || IsBadReadPtr(s138, 4) || *s118 != g_nb_orig118 || *s138 != g_nb_orig138) {
+            logf("--- NULLBLIT: vtable 0x%lX slots +0x118/+0x138 hold 0x%08lX/0x%08lX, not the stock dispatchers - left alone",
+                 0x10000000 + vts[i], IsBadReadPtr(s118, 4) ? 0 : *s118, IsBadReadPtr(s138, 4) ? 0 : *s138);
+            continue;
+        }
+        if (!VirtualProtect(s118, 0x24, PAGE_READWRITE, &old)) {   /* .rdata: a data page, no code shares it */
+            logf("--- NULLBLIT: VirtualProtect failed on vtable 0x%lX (%lu)", 0x10000000 + vts[i], GetLastError());
+            continue;
+        }
+        InterlockedExchange((LONG volatile *)s118, (LONG)(DWORD)nb_blit118);
+        InterlockedExchange((LONG volatile *)s138, (LONG)(DWORD)nb_blit138);
+        if (i == 0) {   /* the device class only (the base's +0x208 is a stub): record the screen device as GZ builds it */
+            DWORD *s208 = (DWORD *)(b + vts[0] + 0x208);
+            g_nb_orig208 = b + 0x1611b;
+            if (!IsBadReadPtr(s208, 4) && *s208 == g_nb_orig208 && VirtualProtect(s208, 4, PAGE_READWRITE, &old))
+                InterlockedExchange((LONG volatile *)s208, (LONG)(DWORD)nb_build208);
+            else logf("--- NULLBLIT: vt 0x1001f328 +0x208 is not FUN_1001611b - screen device not recorded, no rebuild");
+        }
+        n++;
+    }
+    logf("--- NULLBLIT: on - %d of 2 device vtables wrapped (vt+0x118 FUN_10014894, vt+0x138 FUN_10014918): a blit into a "
+         "device without a raster (+0x44 = 0) is skipped and logged instead of reading NULL (GZGraphicD+0x14904); screen rebuild %s",
+         n, g_nullblit == 1 ? "on" : "off (SC3RESIZE_NULLBLIT=2)");
+}
+
 typedef struct { USHORT Length, MaximumLength; PWSTR Buffer; } RZ_USTR;
 typedef struct { ULONG Flags; const RZ_USTR *FullDllName; const RZ_USTR *BaseDllName; PVOID DllBase; ULONG SizeOfImage; } RZ_LDR_DATA;
 typedef VOID (CALLBACK *RZ_LDR_FN)(ULONG, const RZ_LDR_DATA *, PVOID);
@@ -14951,6 +15154,7 @@ static VOID CALLBACK rz_ldr_notify(ULONG reason, const RZ_LDR_DATA *d, PVOID ctx
     patch_startres((HMODULE)d->DllBase);
     patch_surfacefmt((HMODULE)d->DllBase);
     if (g_thickframe) patch_frame_style((HMODULE)d->DllBase);
+    patch_nullblit((HMODULE)d->DllBase);   /* NULLBLIT block: GZGraphicD+0x14904 startup crash */
 }
 
 /* ⭐ DPIAWARE (child windowed, 2026-10-12). Owner design call: on a >100% screen the game is drawn sharp at its
@@ -16639,6 +16843,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
     patch_startres(gz);   /* no-op when the loader notification ran */
     patch_surfacefmt(gz);
     if (g_thickframe) patch_frame_style(gz);   /* WINDOWED-EARLY block: no-op when the loader notification ran */
+    patch_nullblit(gz);      /* NULLBLIT block: no-op when the loader notification ran */
     patch_gridb_clamp(ss);   /* FIX A: clamp the grid-B bucket index (OOB AV root cause) */
     {   char v[8];
         if (GetEnvironmentVariableA("SC3RESIZE_CELLFIX", v, sizeof(v))) g_cellfix = atoi(v);
@@ -16873,6 +17078,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_DIALOGS", v, sizeof(v))) g_dialogs = atoi(v);
           g_bltbeat = GetEnvironmentVariableA("SC3RESIZE_BLTBEAT", v, sizeof(v)) && atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_THICKFRAME", v, sizeof(v))) g_thickframe = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_NULLBLIT", v, sizeof(v))) g_nullblit = atoi(v);   /* child startcrash */
           if (GetEnvironmentVariableA("SC3RESIZE_FSKEY", v, sizeof(v))) g_fskey = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_DLGSCALE", v, sizeof(v))) g_dlgscale = atoi(v);
         if (GetEnvironmentVariableA("SC3RESIZE_DLGCLASS", v, sizeof(v))) g_dlgclass = atoi(v);      /* child newcitydlg */
