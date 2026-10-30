@@ -88,6 +88,8 @@ static HANDLE g_log = INVALID_HANDLE_VALUE;
 static LARGE_INTEGER g_freq, g_t0;
 static HMODULE g_self;                          /* [SLIDER] this DLL, for locating slider.ini */
 static DWORD g_logcap, g_logbytes;              /* default-log cap, see log_open */
+static int g_logtail = 1, g_logseg;             /* LOGTAIL, see log_open */
+static char g_logpath[MAX_PATH];
 
 static void logf(const char *fmt, ...) {
     char buf[2048];
@@ -113,7 +115,30 @@ static void logf(const char *fmt, ...) {
 
     EnterCriticalSection(&g_lock);
     if (g_log != INVALID_HANDLE_VALUE) {
-        if (g_logcap && g_logbytes + (DWORD)n > g_logcap) {
+        if (g_logcap && g_logbytes + (DWORD)n > g_logcap && g_logtail && g_logpath[0]) {
+            /* LOGTAIL: the full log moves aside and a new one starts, so the newest lines (a crash's VEH FAULT
+               lines) are never the ones dropped. First segment -> sc3resize.start.log (startup lines, kept),
+               every later one -> sc3resize.prev.log (replaced). At most 3 x the cap on disk. */
+            static const char cont[] = "### log segment full - continued in a new sc3resize.log (LOGTAIL)\r\n";
+            char to[MAX_PATH + 16], hd[112], *dot;
+            int k;
+            WriteFile(g_log, cont, sizeof(cont) - 1, &wrote, NULL);
+            CloseHandle(g_log);
+            lstrcpynA(to, g_logpath, MAX_PATH);
+            dot = strrchr(to, '.');
+            if (!dot || strchr(dot, '\\')) dot = to + lstrlenA(to);
+            lstrcpyA(dot, g_logseg++ ? ".prev.log" : ".start.log");
+            MoveFileExA(g_logpath, to, MOVEFILE_REPLACE_EXISTING);
+            g_log = CreateFileA(g_logpath, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+            g_logbytes = 0;
+            if (g_log != INVALID_HANDLE_VALUE) {
+                k = _snprintf(hd, sizeof(hd) - 1, "### log segment %d (earlier lines in sc3resize.start.log%s)\r\n",
+                              g_logseg + 1, g_logseg > 1 ? " and sc3resize.prev.log" : "");
+                if (k > 0) { WriteFile(g_log, hd, (DWORD)k, &wrote, NULL); g_logbytes += (DWORD)k; }
+                WriteFile(g_log, line, (DWORD)n, &wrote, NULL);
+                g_logbytes += (DWORD)n;
+            }
+        } else if (g_logcap && g_logbytes + (DWORD)n > g_logcap) {
             static const char stop[] = "### log cap reached (8 MB) - further lines dropped. "
                                        "Set SC3RESIZE_LOG=<path> for an uncapped log.\r\n";
             WriteFile(g_log, stop, sizeof(stop) - 1, &wrote, NULL);
@@ -130,9 +155,16 @@ static void logf(const char *fmt, ...) {
 
 /* The default log (no SC3RESIZE_LOG) is capped so a long play session cannot grow it without bound:
  * an owner session with many resizes wrote ~1.6 MB (verify/handtest_1006). An explicit SC3RESIZE_LOG
- * path (dev and verify runs) stays uncapped. */
+ * path (dev and verify runs) stays uncapped.
+ * LOGTAIL (child memleak 2026-10-29): the cap used to stop the log for good. The owner's 10-29 crash came after
+ * 72 min, when the log had hit 8 MB, so the crash's VEH lines were dropped. Now a full log rotates (see logf):
+ * sc3resize.log = newest lines, sc3resize.start.log = the first 8 MB, sc3resize.prev.log = the 8 MB before the
+ * current file. SC3RESIZE_LOGTAIL=0 = the old stop. A previous session's .start/.prev are deleted at startup. */
 static void log_open(void) {
     char path[MAX_PATH];
+    {   char v[8];
+        if (GetEnvironmentVariableA("SC3RESIZE_LOGTAIL", v, sizeof(v)) && v[0] == '0') g_logtail = 0;
+    }
     if (!GetEnvironmentVariableA("SC3RESIZE_LOG", path, sizeof(path))) {  /* [RESIZE] own default */
         /* Beside the DLL, not the process CWD: the game runs with CWD = Apps\, a game folder, so a
          * bare relative name wrote the log into the install (2026-10-09). */
@@ -142,6 +174,16 @@ static void log_open(void) {
         else
             lstrcpynA(path, "sc3resize.log", sizeof(path));
         g_logcap = 8u * 1024u * 1024u;
+        if (g_logtail) {   /* LOGTAIL: a previous session's segments would read as this one's */
+            char old[MAX_PATH + 16], *dot;
+            lstrcpynA(g_logpath, path, MAX_PATH);
+            lstrcpynA(old, path, MAX_PATH);
+            dot = strrchr(old, '.');
+            if (dot && !strchr(dot, '\\')) {
+                lstrcpyA(dot, ".start.log"); DeleteFileA(old);
+                lstrcpyA(dot, ".prev.log");  DeleteFileA(old);
+            }
+        }
     }
     g_log = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ, NULL,
                         CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -11668,6 +11710,9 @@ static DWORD rz_thiscall_ret(void *self, void *fn, const DWORD *a, int n) {
  * downstream overwrites them: vt+0x1dc (FUN_1001420d) writes only this+0x44, and vt+0x1e0
  * (FUN_100142a2) writes none of them [CONFIRMED @ 0x1001420d, 0x100142a2].
  * The +0x08 surfaces-created guard must be cleared first or FUN_10009efb refuses. */
+static int g_reshow = 2;                /* RESHOWONCE (step 8c): 2 once per city view, 1 every resize (old), 0 never */
+static int g_surffree = 1;              /* SURFFREE below; SC3RESIZE_SURFFREE=0 = off */
+static LONG g_surffree_n;
 static int rz_recreate_raster(DWORD obj, const char *name, DWORD w, DWORD ht, HMODULE gz) {
     DWORD *vt, ca[8];
     DWORD want_r = (DWORD)gz + GZ_RVA_VT_RASTER, want_b = (DWORD)gz + GZ_RVA_VT_BLITDEST;
@@ -11765,6 +11810,26 @@ static int rz_recreate_raster(DWORD obj, const char *name, DWORD w, DWORD ht, HM
             logf("RZ   %s obj+0x8c %lu -> 0 (force system memory)", name, o[0x8c / 4]);
             o[0x8c / 4] = 0;
         }
+    }
+    /* SURFFREE (child memleak 2026-10-29). The create below never releases what the raster already holds: FUN_10009efb ->
+       vt+0x1dc FUN_1001420d does `this+0x44 = operator_new(0x100)` over the old raster, and vt+0x1e0 builds +0x48
+       [CONFIRMED @ GZGraphicD 0x10009efb, 0x1001420d]. So every resize and every CITYZOOM step orphaned the old
+       system-memory surfaces of the render target and the frame: owner 10-29 crash, address space full after 72 min
+       (verify/memleak: +19 MB per window resize, +28 MB per x1/x2 round trip at 2540x1331; VirtualQuery census of the
+       live game: 59 blocks of exactly 2540 x 1339 x 2 bytes). The game's own release is vt+0x1e8 FUN_10014410 (+0x48 and
+       +0x44: vt+4, then the deleting destructor, then NULL), the step GZ runs before its own rebuild (vt+0x20c
+       FUN_1001673b). It runs here first, when the slot is FUN_10014410. HUDFIT / SIDEFIT keep their own copy of the art,
+       and a failed create already left +0x44 NULL before this change (FUN_1001420d clears it), so nothing reads the old
+       surface after this point. SC3RESIZE_SURFFREE=0 = the old behaviour (no release). */
+    if (g_surffree && *((BYTE *)obj + 8) && ((DWORD *)obj)[0x44 / 4]) {
+        if (vt[0x1e8 / 4] == (DWORD)gz + 0x14410) {
+            DWORD o44 = ((DWORD *)obj)[0x44 / 4], o48 = ((DWORD *)obj)[0x48 / 4];
+            if (g_cz_surf || g_cz_devsurf) { g_cz_surf = NULL; g_cz_devsurf = NULL; }   /* re-read after the resize */
+            rz_thiscall((void *)obj, (void *)vt[0x1e8 / 4], NULL, 0);
+            g_surffree_n++;
+            logf("RZ   %s SURFFREE: released +0x44 0x%08lX / +0x48 0x%08lX through FUN_10014410 (#%ld)", name, o44, o48,
+                 g_surffree_n);
+        } else logf("RZ   %s SURFFREE: vt+0x1e8 = 0x%08lX, not FUN_10014410 - old surfaces kept", name, vt[0x1e8 / 4]);
     }
     *((BYTE *)obj + 8) = 0;
     rc = rz_thiscall((void *)obj, (void *)vt[0x0c / 4], ca, 8);
@@ -11940,13 +12005,27 @@ static void rz_do_resize(void *iso, DWORD w, DWORD ht) {
         int cols = (int)((DWORD *)iso)[0x18 / 4];
         DWORD *grid = (DWORD *)((DWORD *)iso)[0x24 / 4];
         g_rz_step = 8;
-        if (rows < 1 || rows > 4096 || cols < 1 || cols > 4096 || !grid ||
+        /* RESHOWONCE (child memleak 2026-10-29). This pass is not net zero on a 1024 map: every resize and every
+           CITYZOOM step left ~3.5 MB of re-decoded sprite art behind (Big One, 1,046,814 cells; verify/memleak: zoom
+           x1/x2 round trips 238 -> 299 MB over 9 cycles with it, 225 -> 225 without; a two-phase heap trace put the
+           survivors on SIMSPR FUN_10012b98 -> FUN_10012d91, the art cache's decode, reached from drawable vt+0x34).
+           Calling vt+0x34 then vt+0x38 instead, so no cache count reaches 0, leaked the same. The game's own view
+           transition FUN_100071a3 skips this very loop when rotation and zoom group are unchanged
+           [CONFIRMED @ SIMSPR 0x100071a3: param_2 == param_4 && !group change -> skip], which is always the case here.
+           Frame dumps after x2 / x1 steps and a 2400x1250 -> 2540x1331 resize drew the same view without it
+           (verify/memleak/runs g3 vs g4). Kept for the first layout of each city view (the case it was measured for,
+           2026-08-29) and skipped after. SC3RESIZE_RESHOW=1 = every resize (old), 0 = never. */
+        static void *s_reshow_bridge;
+        if (!g_reshow || (g_reshow == 2 && s_reshow_bridge == g_bridge)) {
+            logf("RZ   [step 8c] skipped (%s)", g_reshow ? "RESHOWONCE: this city view already had its pass" : "SC3RESIZE_RESHOW=0");
+        } else if (rows < 1 || rows > 4096 || cols < 1 || cols > 4096 || !grid ||
             IsBadReadPtr(grid, (UINT)rows * 4)) {
             logf("RZ   [step 8c] REFUSE grid re-show: rows=%d cols=%d grid=0x%08lX zoom=%d rot=%d",
                  rows, cols, (DWORD)grid, zoom, rot);
         } else {
             DWORD ha[5], sa[5];
             int r, c, occ = 0, shown = 0, badcell = 0;
+            s_reshow_bridge = g_bridge;
             for (r = 0; r < rows; r++) {
                 DWORD rowp = grid[r];
                 if (!rowp || IsBadReadPtr((void *)rowp, (UINT)cols * 0x14)) { badcell++; continue; }
@@ -15094,6 +15173,58 @@ __declspec(naked) static void nb_blit138(void) {   /* thiscall, ecx = source, [e
     }
 }
 
+/* NULLLOCK (child memleak 2026-10-29, part of NULLBLIT). Owner crash 10-29 18:04 (MARIANO-PC, release 10-29c): READ 0
+ * at GZGraphicD+0x1465D, ecx = 0, eax = 0x7ec, from a city-view paint (SIMSPR 0x1001cbdd device vt+0x148 <- SC3U
+ * 0x00441456), right after the client went 2560x1351 -> 2540x1331 with the largest free address block at 6 MB: the
+ * new-size surfaces could not be created, so the screen device was left without a raster. Same class as NULLBLIT, other
+ * slots: device vt+0x1c FUN_10014649 (begin, flags) and vt+0x20 FUN_1001467e (end, flags) do `mov ecx,[this+0x44];
+ * mov eax,[ecx]` whenever flags & 0x7ec, and both already return al = 0 when the raster refuses (its vt+0xc / vt+0x10)
+ * [CONFIRMED by disassembly @ 0x1001465a, 0x1001468d; slot 0x1c / 0x20 in vtables 0x1001f328 and 0x1001e894]. Wrapped:
+ * with flags & 0x7ec and this+0x44 NULL they return 0 (the raster-refused path) and go through the NULLBLIT episode
+ * log and screen rebuild. SC3RESIZE_NULLLOCK=0 = not wrapped (NULLBLIT=0 turns both off). */
+static int g_nulllock = 1;
+static DWORD g_nb_orig1c, g_nb_orig20;        /* FUN_10014649 / FUN_1001467e, relocated */
+__declspec(naked) static void nb_lock1c(void) {   /* thiscall, ecx = device, [esp+4] = flags, ret 4 */
+    __asm {
+        test dword ptr [esp+4], 7ech
+        jz   orig
+        mov  eax, [ecx+44h]
+        test eax, eax
+        jz   nullr
+    orig:
+        jmp  dword ptr [g_nb_orig1c]
+    nullr:
+        pushad
+        push 1ch
+        push dword ptr [esp+36]
+        push ecx
+        call rz_nb_null
+        popad
+        xor  eax, eax
+        ret  4
+    }
+}
+__declspec(naked) static void nb_lock20(void) {   /* thiscall, ecx = device, [esp+4] = flags, ret 4 */
+    __asm {
+        test dword ptr [esp+4], 7ech
+        jz   orig
+        mov  eax, [ecx+44h]
+        test eax, eax
+        jz   nullr
+    orig:
+        jmp  dword ptr [g_nb_orig20]
+    nullr:
+        pushad
+        push 20h
+        push dword ptr [esp+36]
+        push ecx
+        call rz_nb_null
+        popad
+        xor  eax, eax
+        ret  4
+    }
+}
+
 /* Loader-lock safe: data writes to .rdata and logf only. Runs from the loader notification, again (no-op) later. */
 static void patch_nullblit(HMODULE gz) {
     static const DWORD vts[2] = { 0x1f328, 0x1e894 };   /* device class, its base: both hold the two dispatchers */
@@ -15115,6 +15246,17 @@ static void patch_nullblit(HMODULE gz) {
         }
         InterlockedExchange((LONG volatile *)s118, (LONG)(DWORD)nb_blit118);
         InterlockedExchange((LONG volatile *)s138, (LONG)(DWORD)nb_blit138);
+        if (g_nulllock) {   /* NULLLOCK: begin / end (vt+0x1c / +0x20) */
+            DWORD *s1c = (DWORD *)(b + vts[i] + 0x1c), *s20 = (DWORD *)(b + vts[i] + 0x20);
+            g_nb_orig1c = b + 0x14649; g_nb_orig20 = b + 0x1467e;
+            if (!IsBadReadPtr(s1c, 8) && *s1c == g_nb_orig1c && *s20 == g_nb_orig20 && VirtualProtect(s1c, 8, PAGE_READWRITE, &old)) {
+                InterlockedExchange((LONG volatile *)s1c, (LONG)(DWORD)nb_lock1c);
+                InterlockedExchange((LONG volatile *)s20, (LONG)(DWORD)nb_lock20);
+                if (i == 0) logf("--- NULLLOCK: device begin/end vt+0x1c/+0x20 (FUN_10014649/FUN_1001467e) wrapped: with no "
+                                 "raster they return 0 instead of reading NULL (GZGraphicD+0x1465D, owner crash 10-29)");
+            } else logf("--- NULLLOCK: vtable 0x%lX +0x1c/+0x20 hold 0x%08lX/0x%08lX, not FUN_10014649/FUN_1001467e - left alone",
+                        0x10000000 + vts[i], IsBadReadPtr(s1c, 8) ? 0 : *s1c, IsBadReadPtr(s1c, 8) ? 0 : *s20);
+        }
         if (i == 0) {   /* the device class only (the base's +0x208 is a stub): record the screen device as GZ builds it */
             DWORD *s208 = (DWORD *)(b + vts[0] + 0x208);
             g_nb_orig208 = b + 0x1611b;
@@ -17079,6 +17221,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           g_bltbeat = GetEnvironmentVariableA("SC3RESIZE_BLTBEAT", v, sizeof(v)) && atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_THICKFRAME", v, sizeof(v))) g_thickframe = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_NULLBLIT", v, sizeof(v))) g_nullblit = atoi(v);   /* child startcrash */
+          if (GetEnvironmentVariableA("SC3RESIZE_NULLLOCK", v, sizeof(v))) g_nulllock = atoi(v);   /* child memleak */
+          if (GetEnvironmentVariableA("SC3RESIZE_SURFFREE", v, sizeof(v))) g_surffree = atoi(v);   /* child memleak */
+          if (GetEnvironmentVariableA("SC3RESIZE_RESHOW", v, sizeof(v))) g_reshow = atoi(v);   /* child memleak, diagnostic */
           if (GetEnvironmentVariableA("SC3RESIZE_FSKEY", v, sizeof(v))) g_fskey = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_DLGSCALE", v, sizeof(v))) g_dlgscale = atoi(v);
         if (GetEnvironmentVariableA("SC3RESIZE_DLGCLASS", v, sizeof(v))) g_dlgclass = atoi(v);      /* child newcitydlg */
