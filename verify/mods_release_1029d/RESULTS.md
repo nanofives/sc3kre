@@ -30,3 +30,6 @@ LAN: 3 of 3,612 files sent (0.8 MB). Served label `2026-10-29d`.
 | `sc3mods_2026-10-29d.zip` | 50,225,632 | 4629FCE09DFD2167F22DD3E2533A7878CF73B05B44D1E634B3F832D0E31F651A |
 
 Owner checks: zoom steps with Ver datos open, Alt+Enter after resizes (not run by memleak), a long session on Big One.
+
+GitHub: `sc3mods-2026-10-29d`, target `900dbec`, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-10-29d, asset
+downloaded back, SHA-256 matches. The 10-29c notes now start with a "superseded" line.
