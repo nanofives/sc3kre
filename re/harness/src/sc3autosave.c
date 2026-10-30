@@ -86,6 +86,8 @@ static char  g_cfg_dir[MAX_PATH];
 static DWORD g_idle_ms = 3000;      /* idle wait, see "idle wait" below */
 static int   g_indicator = 1;       /* corner indicator instead of the progress box */
 static int   g_unauto = 1;          /* UNAUTO below; autosave.ini [autosave] unauto=, SC3AUTOSAVE_UNAUTO overrides */
+static int   g_faultfix = 1;       /* FAULTFIX below; SC3AUTOSAVE_FAULTFIX=0 = off */
+static DWORD g_min_free_mb = 64;   /* MINFREE below; autosave.ini [autosave] min_free_mb=, SC3AUTOSAVE_MINFREE, 0 = off */
 
 static void ini_read(void) {
     char path[MAX_PATH], v[32];
@@ -98,11 +100,14 @@ static void ini_read(void) {
         g_idle_ms   = (DWORD)GetPrivateProfileIntA("autosave", "idle_seconds", 3, path) * 1000;
         g_indicator = GetPrivateProfileIntA("autosave", "indicator", 1, path) ? 1 : 0;
         g_unauto    = GetPrivateProfileIntA("autosave", "unauto", 1, path) ? 1 : 0;
+        g_min_free_mb = (DWORD)GetPrivateProfileIntA("autosave", "min_free_mb", 64, path);
         if (minutes < 1) minutes = 1;
         if (minutes > 240) minutes = 240;
         g_interval_ms = (DWORD)minutes * 60 * 1000;
     }
     if (GetEnvironmentVariableA("SC3AUTOSAVE_UNAUTO", v, sizeof(v))) g_unauto = atoi(v) != 0;
+    if (GetEnvironmentVariableA("SC3AUTOSAVE_MINFREE", v, sizeof(v))) g_min_free_mb = (DWORD)atoi(v);
+    if (GetEnvironmentVariableA("SC3AUTOSAVE_FAULTFIX", v, sizeof(v))) g_faultfix = atoi(v) != 0;
     if (GetEnvironmentVariableA("SC3AUTOSAVE_SECONDS", v, sizeof(v)) && atoi(v) > 0) g_interval_ms = (DWORD)atoi(v) * 1000;
     /* test only: SC3AUTOSAVE_TIERS=<b>,<c> = the 10 min / 1 h ages in seconds */
     if (GetEnvironmentVariableA("SC3AUTOSAVE_TIERS", v, sizeof(v)) && atoi(v) > 0 && strchr(v, ',')) {
@@ -199,13 +204,72 @@ typedef DWORD (__fastcall *PFN_GV0)(void *, void *);
 typedef DWORD (__fastcall *PFN_GV1)(void *, void *, void *);
 typedef void  (__fastcall *PFN_GVarCtor)(void *);
 typedef void  (__fastcall *PFN_GVarS)(void *, void *, const char *, DWORD);
+/* FAULTFIX (child memleak 2026-10-29). Owner crash 10-29 (MARIANO-PC, Big One 1024, 72 min): the address space ran
+ * out, a save faulted half way ("SAVE threw 0xC0000005", caught below), and every later save was "put off: city
+ * locked" until the game died. The city save SIMCITY 0x1000429d (the handler the Save command reaches) does three
+ * things that only its normal exit undoes, and an exception unwinds past all three:
+ *   - city+0x1a8 lock object (FUN_1000d283: vtable, CRITICAL_SECTION at +4, depth +0x20; vt+4 = FUN_1000d310 enter +
+ *     depth++, vt+8 = FUN_1000d3e0 depth-- + leave) entered at the start, left at the end;
+ *   - city vt+0x21c (lock counter city+0x144 up, sim sub-object +0x130 vt+0x2c), vt+0x220 at the end;
+ *   - a progress object at city+0x1a4 (FUN_10002678), closed by FUN_100026a8 and freed at the end.
+ * [CONFIRMED @ SIMCITY 0x1000429d, 0x1000d283, 0x1000d310, 0x1000d3e0, 0x10002678, 0x100026a8]
+ * After a fault the mod puts each back to what it read before the save (leaves the critical section as often as this
+ * thread entered it, calls vt+0x220 until city+0x144 is back, closes the progress object through FUN_100026a8 while
+ * the progress wrappers still swallow it, and clears city+0x1a4; the 8-byte object is left unfreed), then stops
+ * autosaving for the session (g_fault_stop). SC3AUTOSAVE_FAULTFIX=0 = the old behaviour (log only, keep saving). */
+static volatile LONG g_fault_stop;
+
+/* MINFREE (child memleak 2026-10-29): the owner's failed save ran with the largest free address block at 62 MB (sc3perf
+ * CSV, 10-29); the saves before it, at 78 MB and more, worked. The game is not large-address-aware (2 GB user space), so
+ * a save that needs a block the process no longer has faults. Before each autosave the mod walks the address space
+ * (VirtualQuery, as sc3perf does) and skips the save when the largest free block is under min_free_mb (default 64,
+ * autosave.ini [autosave] min_free_mb=, SC3AUTOSAVE_MINFREE=<MB>, 0 = no check). A skipped save logs a line and is tried
+ * again one interval later. */
+static char  g_mem_note[64] = "not measured";
+static DWORD mem_largest_free_mb(void) {
+    MEMORY_BASIC_INFORMATION mbi;
+    BYTE *a = (BYTE *)0x10000;
+    SIZE_T big = 0;
+    while (a < (BYTE *)0x7FFF0000 && VirtualQuery(a, &mbi, sizeof(mbi))) {
+        if (mbi.State == MEM_FREE && mbi.RegionSize > big) big = mbi.RegionSize;
+        a = (BYTE *)mbi.BaseAddress + mbi.RegionSize;
+    }
+    return (DWORD)(big >> 20);
+}
+typedef void (__fastcall *PFN_PgEnd)(void *);
+static void save_recover(BYTE *city, long lock0, DWORD depth0, BYTE *prog0, PFN_GV0 lock_dn) {
+    BYTE *lk = city + 0x1a8;
+    int n = 0, m = 0;
+    __try {
+        RTL_CRITICAL_SECTION *cs = (RTL_CRITICAL_SECTION *)(lk + 4);
+        while ((DWORD)cs->OwningThread == GetCurrentThreadId() && *(DWORD *)(lk + 0x20) > depth0 && n < 16) {
+            ((PFN_GV0)vslot(lk, 0x08))(lk, NULL);                        /* FUN_1000d3e0 */
+            n++;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { logf("FAULTFIX> city lock object threw 0x%08lX", GetExceptionCode()); }
+    __try {
+        while (lock_dn && *(long *)(city + 0x144) > lock0 && m < 16) { lock_dn(city, NULL); m++; }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { logf("FAULTFIX> unlock threw 0x%08lX", GetExceptionCode()); }
+    __try {
+        BYTE *p = *(BYTE **)(city + 0x1a4);
+        if (p && p != prog0) {
+            ((PFN_PgEnd)((BYTE *)GetModuleHandleA("SIMCITY.DLL") + 0x26a8))(p);   /* FUN_100026a8, swallowed */
+            *(BYTE **)(city + 0x1a4) = prog0;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { logf("FAULTFIX> progress close threw 0x%08lX", GetExceptionCode()); }
+    logf("FAULTFIX> after the fault: left the city lock object %d time(s), city lock %d time(s), now lock %ld",
+         n, m, city_lock(city));
+}
+
 static int game_save(BYTE *city, const char *path) {
     PFN_GNew gnew = (PFN_GNew)(g_exe + 0xB4890);                       /* operator_new, the game heap */
     PFN_GDir gdir = (PFN_GDir)(g_exe + 0x84573);                       /* COM director, SC3U 0x00484573 */
     PFN_GV0 lock_up = (PFN_GV0)vslot(city, 0x21c), lock_dn = (PFN_GV0)vslot(city, 0x220);
     void *dir, *cmd = NULL, *v;
-    DWORD ok = 0;
-    int locked = 0;
+    DWORD ok = 0, depth0 = *(DWORD *)(city + 0x1a8 + 0x20);
+    long lock0 = city_lock(city);
+    BYTE *prog0 = *(BYTE **)(city + 0x1a4);
+    int locked = 0, faulted = 0;
     __try {
         dir = gdir();
         if (!dir) return 0;
@@ -223,6 +287,13 @@ static int game_save(BYTE *city, const char *path) {
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         logf("SAVE threw 0x%08lX", GetExceptionCode());
         ok = 0;
+        faulted = 1;
+    }
+    if (faulted && g_faultfix) {
+        save_recover(city, lock0 + locked, depth0, prog0, lock_dn);   /* our own vt+0x21c is undone just below */
+        InterlockedExchange(&g_fault_stop, 1);
+        logf("SAVE> autosave is OFF for the rest of this session: the game faulted inside its own save (memory %s). "
+             "Save by hand under a new name, then restart the game.", g_mem_note);
     }
     if (locked) {
         __try { lock_dn(city, NULL); }                                  /* SIMCITY 0x1000590e */
@@ -575,6 +646,17 @@ static void autosave_now(void) {
         if (!g_skips_logged++) logf("SAVE> put off: %s", why);
         return;
     }
+    if (g_fault_stop) return;
+    {   DWORD fr = mem_largest_free_mb();
+        _snprintf(g_mem_note, sizeof(g_mem_note), "largest free block %lu MB before the save", fr);
+        g_mem_note[sizeof(g_mem_note) - 1] = 0;
+        if (g_min_free_mb && fr < g_min_free_mb) {
+            logf("SAVE> skipped: largest free address block %lu MB < %lu MB (the game is close to running out of "
+                 "address space, a save now would fault). Save by hand and restart the game", fr, g_min_free_mb);
+            g_last_save = GetTickCount();
+            return;
+        }
+    }
     name_save(city);
     if (g_name_len < 0) { logf("SAVE> city name unreadable, skipped"); g_last_save = GetTickCount(); return; }
     target_stem(stem, sizeof(stem));
@@ -748,7 +830,7 @@ static DWORD WINAPI watcher(LPVOID unused) {
             }
             continue;
         }
-        if (!city || g_busy || !g_enabled) continue;
+        if (!city || g_busy || !g_enabled || g_fault_stop) continue;
         {   DWORD now = GetTickCount(), since = now - g_last_save;
             if (since < g_interval_ms) continue;
             /* due: wait for idle_seconds without input, or save anyway one more interval later */

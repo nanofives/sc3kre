@@ -1521,7 +1521,7 @@ static void patch_trafficmt(DWORD st) {
 typedef struct { void *fl[17]; } TPOOL;
 static DWORD g_tls_pool = TLS_OUT_OF_INDEXES;
 static DWORD g_ntw;                                  /* SIMNTWRK base */
-static volatile LONG g_pool_chunks;
+static volatile LONG g_pool_chunks, g_pool_bytes;   /* worker-pool chunks carved so far (MEMLOG) */
 typedef void *(__cdecl *MALLOC_FN)(size_t);
 typedef void (__cdecl *FREE_FN)(void *);
 typedef void *(__cdecl *REFILL_FN)(DWORD);
@@ -1538,6 +1538,7 @@ static void *pool_tls_alloc(TPOOL *pl, DWORD n) {
     chunk = (BYTE *)HeapAlloc(GetProcessHeap(), 0, sz * 64);
     if (!chunk) return NULL;
     InterlockedIncrement(&g_pool_chunks);
+    InterlockedExchangeAdd(&g_pool_bytes, (LONG)(sz * 64));
     for (k = 1; k < 63; k++) *(void **)(chunk + k * sz) = chunk + (k + 1) * sz;
     *(void **)(chunk + 63 * sz) = NULL;
     pl->fl[idx] = chunk + sz;
@@ -3291,6 +3292,8 @@ static DWORD WINAPI stats_thread(LPVOID p) {
         if (g_mt > 0 && tick && tick % 240 == 0 && g_mt_batches)
             logf("TRAFFIC_MT> %ld batches, %ld trips, %.0f ms routing (%.2f ms per trip), sim thread waited %.0f ms, %ld faults, %ld lock-free grid reads",
                  g_mt_batches, g_mt_jobs, g_mt_ms, g_mt_jobs ? g_mt_ms / g_mt_jobs : 0.0, g_mt_wait_ms, g_mt_faults, g_geom_fast);
+        if (g_tls_pool != TLS_OUT_OF_INDEXES && tick && tick % 240 == 0)
+            logf("MT_LOCKS> worker free lists: %ld chunks, %.1f MB carved", g_pool_chunks, g_pool_bytes / 1048576.0);
         if (g_listfind && tick && tick % 240 == 0)
             logf("LIST_FIND> hits %ld walks %ld builds %ld drops %ld (table %lu slots)", g_lf_hits, g_lf_walks,
                  g_lf_builds, g_lf_drops, g_lfcap);
