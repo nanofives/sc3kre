@@ -6,7 +6,7 @@ dialog-local pixels, dumping a frame (SC3RESIZE_FRAMEDUMP) after each. Posted in
 py -3.12 re/tools/graphaxis_lab.py --tag A [--city "Berlin, Germany"] [--size 2560x1351] [--view 9]
     [--click NAME:x,y ...] [--survey] [--env K=V ...] [--keep]
 A click NAME:x,y clicks Ver datos dialog-local (x, y). The Graficas page is a child at (38, 40) of that dialog: checkbox
-col c row r at (64 + 120 c, 257 + 24 r), range radios 1 / 10 / 100 years at (322, 387 / 405 / 423) and dumps <NAME>.png; NAME:- only dumps. The dialog crop of every dump
+col c row r at (64 + 120 c, 257 + 24 r), range radios 1 / 10 / 100 years at (322, 387 / 405 / 423) and dumps <NAME>.png; NAME:- only dumps, NAME:key=P4 posts keys, NAME:sleep=<s> waits, NAME:cmd=0x10009002 fires a menu command (Save). The dialog crop of every dump
 is pasted into strip.png in order."""
 import argparse, os, pathlib, re, subprocess, sys, time
 TOOLS = pathlib.Path(__file__).resolve().parent
@@ -95,7 +95,16 @@ def main(argv):
             sc3io.click(h, int(x0 + 21 * f), int(y0 + vy * f)); time.sleep(2.5)
         for k, c in enumerate(a.click):
             nm, xy = c.split(":", 1)
-            if xy != "-":
+            if xy.startswith("key="):      # posted keys, e.g. key=P4 (sc3resize: P pause toggle, 1-4 speed)
+                for ch in xy[4:]:
+                    sc3io.key(h, ord(ch.upper())); time.sleep(0.4)
+            elif xy.startswith("cmd="):      # a menu command through np_drive (Frida post), e.g. cmd=0x10009002 = Save
+                r = subprocess.run([sys.executable, str(TOOLS / "netmod" / "np_drive.py"), "cmd", xy[4:]],
+                                   capture_output=True, text=True, env=os.environ)
+                print("    cmd", xy[4:], (r.stdout + r.stderr).strip().splitlines()[-1:], flush=True)
+            elif xy.startswith("sleep="):
+                time.sleep(float(xy[6:]))
+            elif xy != "-":
                 x, y = (int(v) for v in xy.split(","))
                 sc3io.click(h, int(x0 + x * f), int(y0 + y * f))
             time.sleep(a.wait)

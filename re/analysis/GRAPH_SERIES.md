@@ -98,3 +98,29 @@ graph. SIMRCI `0x100214e0` is the Residents / Education / Health series. SIMSERV
 4. Polucion aire vs agua: two fields the game averages away. Very low cost.
 5. Basura: producida vs al vertedero, capacidad restante. Ties in with the landfill stream. Low to medium.
 6. Empleos vs poblacion activa: the inputs of Desempleo. Low cost.
+
+## 7. Built 2026-10-30 (owner pick 1-4): GRAPHNEW, `re/harness/src/sc3resize_graphs.c`
+
+Five graphs, one checkbox each, 11 lines, made of the game's own series class. Code comment block = the full evidence.
+
+| Checkbox | Lines | Source (read after SIMMISC `0x10007d88`, closed month `ci`) |
+|---|---|---|
+| Ingresos/Gastos | Ingresos, Gastos | budget int64 rings `+off+ci*8`. Income: taxes `+0x90/+0x118/+0x1a0`, fares `+0x3a0`, ordinances `+0x2d0`, neighbour deals `+0x470`, business deals `+0x4e8`, disaster relief `+0x338`. Expenses: ordinances `+0x268`, neighbour deals `+0x408`, bonds dword `+0x558+ci*4`, departments: map `+0x60` nodes `+0x30+ci*8` (yearly total node `+0x90`, SIMMISC `0x10008d54`) |
+| Energia of./dem. | oferta, demanda | city vt+0x150 = power layer + 0x14. Supply `+0x70`. Demand = sum of the demand bytes `+0x2dc` (w `+0x28`, h `+0x34`+1). Measured on Berlin: the byte sum equals the served `+0x74` of the next tick (served lags one month), so it is the same unit, and it also counts unpowered tiles |
+| Agua of./dem. | oferta, demanda | city vt+0x154 = plumbing layer. Supply int64 `+0xb0`, delivered int64 `+0xb8`. Unmet water demand is not stored, so "demanda" is what was delivered |
+| Demanda RCI | R, C, I | city vt+0x1b8(0x80f1e6d3), QI 0x40a42f1c, vt+0x14(3000/5000/8000), valve vt+0x30/+0x38/+0x3c. Shown as the HUD bar: -1000..1000. Berlin: all three valves max 2000 min -2000 |
+| Contam. aire/agua | aire, agua | city vt+0x16c = SIMECO + 0x1c, vt+0x78 / +0x7c, as % of vt+0x84 / +0x88 (11000) |
+
+Calendar: city vt+0x1e4(&month, &day, &year), month already the new one. Yearly push when the closed month is December,
+decade push when (year + 1) % 10 == 0 (same rule as the game's records).
+
+History file `<city>.sc3.graphs` (1,512 bytes): header {magic, ver 1, closed-month key, 11}, then per line {id, scale,
+12 + 10 + 10 dwords}. Written after SIMCITY `0x1000429d` (city save) returns success, once the city file on disk carries
+the save's time. Read the first time the graphs look at a city in a session and whenever the date jumps, used only when
+its key equals the city's. City vt+0x1c (`0x10003b8b`) is NOT the load path: a detour on it never fired on a load.
+
+Corrections to earlier notes (worker pass 2026-10-30):
+- POWER_GRID.md `+0x78` is the spare-capacity % (what Energia % plots), not unmet demand. `+0x2d8` is the Energia
+  series, not a message dispatcher.
+- Section 4 above: unmet water / power demand are not stored as totals. The budget has 9 income/expense groups, not 7.
+- `0x1002f8fd` (page vt+0x20) takes 2 arguments (`ret 8`), Ghidra shows one.

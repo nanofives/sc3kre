@@ -9678,7 +9678,9 @@ static void *g_orig_2ed75;
 #define GX_TW    5            /* tick length */
 
 #define GX_FUNDS 0x630536cb   /* Funds control id */
-typedef struct { DWORD scale, rgb; int n, funds; } GX_COL;
+typedef struct { DWORD scale, rgb; int n; double mul, add; } GX_COL;   /* real = recorded * mul + add */
+static int  gn_xform(const void *p, DWORD *key, double *mul, double *add);   /* GRAPHNEW (sc3resize_graphs.c) */
+static void gn_pre_render(BYTE *page, void *win);
 
 static double gx_floor(double v) { double t = (double)(__int64)v; return t > v ? t - 1.0 : t; }
 
@@ -9778,7 +9780,8 @@ static void gx_after(BYTE *dir, BYTE *win) {
     HMODULE sui = GetModuleHandleA("SIMUI.DLL");
     BYTE *ch, *v0, *v1, *e, *p;
     GX_COL col[GX_COLS];
-    int ncol = 0, non = 0, c, k, i, x, y, ox, oy, pl, pt, pb, y0, mode = 3;
+    DWORD keys[64];
+    int ncol = 0, non = 0, nkey = 0, c, k, i, x, y, ox, oy, pl, pt, pb, y0, mode = 3;
     float mn, mx, k100;
     void *fac, *g = NULL;
     char sig[256], t[24];
@@ -9794,17 +9797,22 @@ static void gx_after(BYTE *dir, BYTE *win) {
     v0 = *(BYTE **)(dir + 0x68); v1 = *(BYTE **)(dir + 0x6c);
     if (!v0 || v1 <= v0 || (v1 - v0) > 64 * 8 || IsBadReadPtr(v0, v1 - v0)) v0 = v1 = NULL;
     for (e = v0; e && e < v1; e += 8) {
-        DWORD sc, rgb, *idp;
-        int fu;
+        DWORD sc, rgb, *idp, key;
+        double mul = 1.0, add = 0.0;
         if (!e[0] || !(p = *(BYTE **)(e + 4)) || IsBadReadPtr(p, 4)) continue;
         sc = ho_v(p, 0x20, 0, 0, 0, 0, 0, 0);
         if ((int)sc <= 0) continue;                         /* the game draws nothing for it either */
-        non++;
         rgb = ho_v(p, 0x1c, 0, 0, 0, 0, 0, 0) & 0xffffff;
-        idp = (DWORD *)ho_v(p, 0x14, 0, 0, 0, 0, 0, 0);
-        fu = idp && !IsBadReadPtr(idp, 4) && *idp == GX_FUNDS;
-        for (c = 0; c < ncol && (col[c].scale != sc || col[c].funds != fu); c++) ;
-        if (c == ncol && ncol < GX_COLS) { col[ncol].scale = sc; col[ncol].rgb = rgb; col[ncol].n = 0; col[ncol].funds = fu; ncol++; }
+        if (!gn_xform(p, &key, &mul, &add)) {                 /* a stock series: one graph per checkbox id */
+            idp = (DWORD *)ho_v(p, 0x14, 0, 0, 0, 0, 0, 0);
+            key = idp && !IsBadReadPtr(idp, 4) ? *idp : (DWORD)p;
+            if (key == GX_FUNDS) { mul = 1000.0; add = -100000.0; }
+        }
+        for (k = 0; k < nkey && keys[k] != key; k++) ;       /* graphs on = checkboxes on, a GRAPHNEW graph has 2-3 lines */
+        if (k == nkey && nkey < 64) keys[nkey++] = key;
+        non = nkey;
+        for (c = 0; c < ncol && (col[c].scale != sc || col[c].mul != mul || col[c].add != add); c++) ;
+        if (c == ncol && ncol < GX_COLS) { col[ncol].scale = sc; col[ncol].rgb = rgb; col[ncol].n = 0; col[ncol].mul = mul; col[ncol].add = add; ncol++; }
         if (c < ncol) col[c].n++;
     }
     if ((ho_v(win, 0x80, 3, 2, 0xa1336cc0, (DWORD)&g, 0, 0) & 0xff) && g) {   /* range group, read as the original does */
@@ -9816,7 +9824,7 @@ static void gx_after(BYTE *dir, BYTE *win) {
     ox = *(LONG *)(ch + 0x14) - *(LONG *)(win + 0x14); oy = *(LONG *)(ch + 0x18) - *(LONG *)(win + 0x18);
     k100 = *(float *)((BYTE *)sui + 0xa40b4);
     wsprintfA(sig, "on %d cols %d mode %d plot %d %d %d y0 %d off %d %d", non, ncol, mode, pl, pt, pb, y0, ox, oy);
-    for (c = 0; c < ncol; c++) wsprintfA(sig + lstrlenA(sig), " | scale %lu rgb %06lX x%d%s", col[c].scale, col[c].rgb, col[c].n, col[c].funds ? " funds" : "");
+    for (c = 0; c < ncol; c++) wsprintfA(sig + lstrlenA(sig), " | scale %lu rgb %06lX x%d%s", col[c].scale, col[c].rgb, col[c].n, col[c].mul != 1.0 || col[c].add != 0.0 ? " xform" : "");
     if (lstrcmpA(sig, last)) {
         BYTE *d = win;
         lstrcpynA(last, sig, sizeof(last));
@@ -9851,7 +9859,7 @@ static void gx_after(BYTE *dir, BYTE *win) {
         int dec, n = 0;
         WORD c16;
         if (c >= ncol) { gx_hide_col(win, c, 0); continue; }
-        mul = col[c].funds ? 1000.0 : 1.0; add = col[c].funds ? -100000.0 : 0.0;           /* real = recorded * mul + add */
+        mul = col[c].mul; add = col[c].add;                                                  /* real = recorded * mul + add */
         rlo = (double)mn * col[c].scale / k100 * mul + add; rhi = (double)mx * col[c].scale / k100 * mul + add;
         st = gx_step(rhi - rlo);
         top = rhi > -rlo ? rhi : -rlo;
@@ -9877,6 +9885,7 @@ static void __fastcall gx_render(void *self, void *edx, DWORD win) {
     DWORD a[1];
     (void)edx;
     a[0] = win;
+    gn_pre_render((BYTE *)self, (void *)win);   /* GRAPHNEW: hidden lines follow their graph's checkbox */
     rz_thiscall_ret(self, g_orig_2ed75, a, 1);
     gx_after((BYTE *)self, (BYTE *)win);
 }
@@ -9888,6 +9897,7 @@ static void gx_install(HMODULE sui) {
     if (ho_hook(sui, 0x2ed75, e, 5, (void *)gx_render, &g_orig_2ed75, "graphs page render FUN_1002ed75"))
         logf("GRAPHAXIS> on: Y axis on the Graficas page while 1..%d series are on", g_gx_max);
 }
+#include "sc3resize_graphs.c"   /* GRAPHNEW: 5 new graphs on the Graficas page (SC3RESIZE_GRAPHNEW=0) */
 
 /* ================= RELOCATE + PLOPOVER (task relocate 2026-10-28, re/analysis/RELOCATE.md)
  * Owner A: "podemos agregar un boton en el '?' de un edificio especial de premios o remarcables para recolocarlo? al
@@ -18004,6 +18014,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           rz_meet_hook(sui); /* DLGSTAY: the Reunirse pages share one stored position */
           qi_install(sui);   /* QUERYID: "Copiar ID" button in the query (?) dialog */
           gx_install(sui);   /* GRAPHAXIS: Y axis on the Graficas page */
+          gn_install(sui);   /* GRAPHNEW: income/expenses, power, water, RCI, pollution graphs */
           rl_install();      /* RELOCATE: "Mover" in the "?" of rewards/landmarks, auto-demolish of zoned buildings */
           pkr_install(sui);  /* PICKER: eyedropper (minimap button, Ctrl+F) */
           {   HANDLE t = CreateThread(NULL, 0, ro_thread, NULL, 0, NULL);   /* ROADOVER: road / highway / rail /
@@ -18085,6 +18096,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_GRAPHAXIS_MAX", v, sizeof(v))) g_gx_max = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_GRAPHAXIS_FONT", v, sizeof(v))) g_gx_font = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_GRAPHAXIS_LOG", v, sizeof(v))) g_gx_log = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_GRAPHNEW", v, sizeof(v))) g_graphnew = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_GRAPHNEW_LOG", v, sizeof(v))) g_gn_log = atoi(v);
           {   char bp[MAX_PATH]; ho_ini_path(bp, sizeof(bp));   /* mods page: [buildings], then the env overrides */
               g_relocate = GetPrivateProfileIntA("buildings", "mover", 1, bp) ? 1 : 0;
               g_plopover = GetPrivateProfileIntA("buildings", "plopover", 1, bp) ? 1 : 0; }
