@@ -124,3 +124,7 @@ Corrections to earlier notes (worker pass 2026-10-30):
   series, not a message dispatcher.
 - Section 4 above: unmet water / power demand are not stored as totals. The budget has 9 income/expense groups, not 7.
 - `0x1002f8fd` (page vt+0x20) takes 2 arguments (`ret 8`), Ghidra shows one.
+
+Autosaves (2026-10-31): sc3resize export `sc3resize_graphs_write(path)` writes the snapshot of the last save; sc3autosave
+block GRAPHS calls it for its temp file and moves / deletes `.graphs` with each autosave file. The reader tries the
+city's file, then `<stem> (auto 5 min|10 min|1 h).sc3`, because UNAUTO renames a loaded autosave to `<city>.sc3`.
