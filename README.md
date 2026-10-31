@@ -33,6 +33,10 @@ in the game: Preferencias, "Opciones de mods...".
 - Buildings placed from a menu, and road, rail, highway and power line drags, can go over zoned buildings,
   which are demolished first (bulldozing added to the cost, undo puts them back).
 - Zoning over buildings of another zone type, and de-zoning, demolish them (same type left alone).
+- Picker: the eyedropper button under the minimap, or Ctrl+F, then click a building, zone or road to select its
+  build tool with the same item.
+- A scale on the left of the Gráficas page, and five more graphs (income and expenses, power and water supply
+  and demand, R/C/I demand, air and water pollution) with their 10 and 100 year history.
 - Many crash and drawing fixes for large windows (repaint gaps, odd window heights, dialogs cut off, files the game
   locked against other readers).
 
@@ -60,6 +64,12 @@ several threads, and the fixes that make 1024 cities load, reload and run withou
 
 **Undo (sc3undo)**: Ctrl+Z / Ctrl+Y (or buttons under the minimap) undo and redo zoning, networks, buildings, the
 bulldozer and terrain tools, money included.
+
+**Landfills (sc3landfill)**: each zone sends its garbage to the nearest landfill with room, every landfill keeps
+its own pile, and the "?" window shows how full one is with a "Vaciar" button that empties it for a fee.
+
+**More Ver datos (sc3dataview)**: V switches to extra maps (radiation, whether each lot's trips arrive, congestion
+on streets, highways and subway separately) and the Cuadros tabs show school and hospital places against demand.
 
 **Autosave (sc3autosave)**: saves the city every 5 minutes (10, 15 or 30 selectable) with the game's own Save,
 into three files beside it, `(auto 5 min)`, `(auto 10 min)` and `(auto 1 h)`, never into your own file. It waits
