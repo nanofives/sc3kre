@@ -1378,6 +1378,7 @@ static int netramp_install(BYTE *m) {
 /* ==== NETRAMP end ======================================================================================= */
 #include "sc3netmod_tmpl.c"         /* task multitile: TMPL, multi-cell templates (SC3NETMOD_TMPL=0) */
 #include "sc3netmod_rbt.c"          /* task roundabout3: RBT, automatic 2x2 roundabouts (SC3NETMOD_RBT=0) */
+#include "sc3netmod_cut.c"          /* task avdiagbreak: CUT, revert guard for DAV (SC3NETMOD_CUTGUARD=0) */
 #include "sc3netmod_dav.c"          /* task diagave: DAV, automatic diagonal avenues on RBT's hooks (SC3NETMOD_DAV=0) */
 #include "sc3netmod_avx.c"          /* task avx: AVX, straight avenue intersections on RBT's hooks (SC3NETMOD_AVX=0) */
 #include "sc3netmod_bvs.c"          /* task avslope: BVS, boulevards on slopes, called by BV (SC3NETMOD_BVS=0) */
@@ -1435,6 +1436,7 @@ static DWORD WINAPI watcher(LPVOID param) {
         avx_stats();                     /* task avx */
         bv_stats();                      /* task boulevard */
         dbv_stats();                     /* task diagbv */
+        cut_stats();                     /* task avdiagbreak */
         if (g_n_cross_map || g_n_pred_map || g_n_saved_base)
             logf("stats: crossing-switch lookups mapped=%ld, predicate id reads mapped=%ld, tiles saved as base (last save)=%ld",
                  g_n_cross_map, g_n_pred_map, g_n_saved_base);
