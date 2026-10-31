@@ -1036,6 +1036,7 @@ static int    g_presentfix_logged;
 static int    g_submove = -1;      /* SC3RESIZE_SUBMOVE: move flyout sub-tool buttons with the panel's dy.
                                      -1 (default) = follow SIDESPAN. 0 / 1 force it (A/B). */
 static int    g_rcifix = 1;        /* SC3RESIZE_RCIFIX=0 disables the present-time RCI re-composite */
+static int    g_rcifix_band = 1;   /* SC3RESIZE_RCIFIX_BAND=0: re-composite the whole RCI again, not only its overhang band */
 static int    g_rcifix_logged;
 static void  *g_rci_cached;        /* the RCI window, cached across frames (a root child) */
 static DWORD  rz_thiscall_ret(void *self, void *fn, const DWORD *a, int n); /* fwd: full EAX return */
@@ -3512,20 +3513,36 @@ static void rz_repaint_rci(void) {
     if (IsBadReadPtr((void *)(src58 + 0x44), 4) || !*(DWORD *)(src58 + 0x44)) return;
     g_in_rci_repaint = 1;
     {   DWORD one = 0x10;
+        /* RCIFIX_BAND (child pickerui 2026-10-31, owner picture verify/pickerui/owner_tooltip_under.png): only the band
+           above the bar's top is re-blitted, the part the city covers. Below it the game's own order is right, and a
+           full re-blit there drew the RCI over the game's tooltip (the picker button's "Cuentagotas (Ctrl+F)" lost its
+           left 32 px to the gauge). A source and dest of different sizes keep the full re-blit. */
+        LONG bs[4], bd[4], *s24 = (LONG *)((DWORD)rci + 0x24), *d90 = (LONG *)((DWORD)rci + 0x90);
+        int band = 0;
+        if (g_rcifix_band && g_hud_top && !IsBadReadPtr(g_hud_top, 0x90) && s24[2] - s24[0] == d90[2] - d90[0] &&
+            s24[3] - s24[1] == d90[3] - d90[1]) {
+            LONG barTop = ((LONG *)((DWORD)g_hud_top + 0x80))[1];
+            if (barTop > d90[1] && barTop < d90[3]) {
+                memcpy(bs, s24, sizeof(bs)); memcpy(bd, d90, sizeof(bd));
+                bd[3] = barTop; bs[3] = bs[1] + (barTop - bd[1]);
+                band = 1;
+            }
+        }
         if (rz_thiscall(tgt, (void *)tvt[0x1c / 4], &one, 1) & 0xff) {   /* begin/lock */
             DWORD a4[4];
             a4[0] = src58;                     /* the RCI's surface        */
-            a4[1] = (DWORD)((DWORD)rci + 0x24);/* source rect  +0x24       */
-            a4[2] = (DWORD)((DWORD)rci + 0x90);/* dest rect    +0x90       */
+            a4[1] = band ? (DWORD)bs : (DWORD)((DWORD)rci + 0x24);/* source rect  +0x24 */
+            a4[2] = band ? (DWORD)bd : (DWORD)((DWORD)rci + 0x90);/* dest rect    +0x90 */
             a4[3] = 0;
             rz_thiscall(tgt, (void *)tvt[0x118 / 4], a4, 4);            /* the blit */
             rz_thiscall(tgt, (void *)tvt[0x20 / 4], &one, 1);          /* end/unlock */
             if (!g_rcifix_logged) {
                 g_rcifix_logged = 1;
-                logf("RCIFIX> re-composited the RCI at present time (dest +0x90 = [%ld %ld %ld %ld]) "
+                logf("RCIFIX> re-composited the RCI at present time (dest +0x90 = [%ld %ld %ld %ld], %s) "
                      "so its overhang draws over the viewport",
                      ((LONG *)((DWORD)rci + 0x90))[0], ((LONG *)((DWORD)rci + 0x90))[1],
-                     ((LONG *)((DWORD)rci + 0x90))[2], ((LONG *)((DWORD)rci + 0x90))[3]);
+                     ((LONG *)((DWORD)rci + 0x90))[2], ((LONG *)((DWORD)rci + 0x90))[3],
+                     band ? "the band above the bar only" : "whole");
             }
         }
     }
@@ -14630,12 +14647,17 @@ static void cursormap_install(void) {
  * tool vt+0x2c for a plopped building (the building picker's own path, SIMGEOM 0x10007d99).
  * Button: an 18x20 image button drawn here, added to the minimap panel (SIMUI vtable 0x100aa180) by entry detours on
  * its Init FUN_1004faec and child notify FUN_1005093f, so it chains with sc3undo's vtable wrap of the same slots.
- * SC3RESIZE_PICKER=0: nothing installed. _BUTTON=0: no button (Ctrl+F only). _KEY=0: no Ctrl+F. Test message
- * WM_RZ_PICKER: wParam 1 start (the button's path), 2 the Ctrl+F handler, 3 pick the cell lParam = x | z << 16 directly,
- * 4 cancel. */
+ * Round pickerui (owner 2026-10-31): no message when it starts (messages only for a click that picks nothing); while it is
+ * the active tool the game's query cursor is swapped for an eyedropper cursor (pkr_setcursor); the button art is the
+ * minimap's own minus button with its bar replaced by an eyedropper glyph (pkr_strip), so bevel, shading and the four
+ * state frames are the stock ones; the button is set enabled (frame 1, like the zoom / rotate buttons).
+ * SC3RESIZE_PICKER=0: nothing installed. _BUTTON=0: no button (Ctrl+F only). _KEY=0: no Ctrl+F. _CURSOR=0: the game's
+ * query cursor stays. Test message WM_RZ_PICKER: wParam 1 start (the button's path), 2 the Ctrl+F handler, 3 pick the
+ * cell lParam = x | z << 16 directly, 4 cancel, 5 log the current tool, 6 post a menu command, 7 dump the minimap's
+ * button art (needs SC3RESIZE_FRAMEDUMP), 8 log what SetCursor would show now. */
 #define WM_RZ_PICKER (WM_APP + 0x5F0)
 #define PKR_BTN 0x5D0A0010
-static int   g_picker = 1, g_pkr_button = 1, g_pkr_key = 1;
+static int   g_picker = 1, g_pkr_button = 1, g_pkr_key = 1, g_pkr_cursor_on = 1;
 static HMODULE g_pkr_geom;
 static DWORD g_pkr_apply_orig;                  /* SIMGEOM 0x1000b6b4 */
 static void *g_pkr_iface;                       /* our reference (what the directory handed back) */
@@ -14686,7 +14708,7 @@ static void pkr_start(const char *how) {
     void *dir = NULL, *it = NULL;
     DWORD vt, a[3];
     if (!sui || !g_pkr_geom || !city) { logf("PICKER> %s: no city / modules", how); return; }
-    if (pkr_active()) { logf("PICKER> %s: already on", how); pkr_say("Cuentagotas: clic en un objeto (Esc cancela)", "Picker: click an object (Esc cancels)"); return; }
+    if (pkr_active()) { logf("PICKER> %s: already on", how); return; }
     pkr_drop("restarted");
     __try {
         ((void (__fastcall *)(void **))(sui + 0x14b0d))(&dir);
@@ -14707,7 +14729,7 @@ static void pkr_start(const char *how) {
     } __except (EXCEPTION_EXECUTE_HANDLER) { logf("PICKER> %s: fault 0x%08lX starting the tool", how, GetExceptionCode()); g_pkr_obj = NULL; }
     logf("PICKER> %s: query tool 0x%08lX (iface 0x%08lX) %s", how, (DWORD)g_pkr_obj, (DWORD)g_pkr_iface,
          g_pkr_obj && pkr_active() ? "active as picker" : "NOT ACTIVE");
-    if (g_pkr_obj) pkr_say("Cuentagotas: clic en un objeto (Esc cancela)", "Picker: click an object (Esc cancels)");
+    /* pickerui (owner 2026-10-31 "remove the top banner"): no message at the start, the eyedropper cursor says it */
 }
 
 /* the picked tool, from a thread timer (game thread) */
@@ -14869,19 +14891,115 @@ static double pkr_seg2(double px, double py, double ax, double ay, double bx, do
     dx = ax + t * dx - px; dy = ay + t * dy - py;
     return dx * dx + dy * dy;
 }
+/* the eyedropper glyph in the 26x29 frame of the minimap's round buttons: tapered glass tube from the bottom-left tip, a
+   collar across it, a neck and the bulb at the top right (inside the button face, rows 4..19) */
+static int pkr_glyph(double px, double py) {
+    double ax = 5.2, ay = 17.8, bx = 11.6, by = 11.4, dx = bx - ax, dy = by - ay, t, w;
+    t = ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy);
+    if (t < 0) t = 0; if (t > 1) t = 1;
+    w = 0.75 + 0.6 * t;
+    if (pkr_seg2(px, py, ax, ay, bx, by) <= w * w) return 1;
+    if (pkr_seg2(px, py, 10.2, 9.0, 14.0, 12.8) <= 1.35 * 1.35) return 1;
+    if (pkr_seg2(px, py, 12.4, 10.6, 14.6, 8.4) <= 1.05 * 1.05) return 1;
+    return (px - 15.7) * (px - 15.7) + (py - 7.1) * (py - 7.1) <= 2.9 * 2.9;
+}
+/* pickerui (owner 2026-10-31: "the icon must have shading like the other buttons of the panel"): the art is the minimap's
+   own zoom-out button {0x2f78c6d, 0x22f96e2e}, a 4-frame 104x29 strip (frame 0 greyed, 1 normal, 2 pressed, 3 hover;
+   measured: the zoom and rotate buttons show frame 1, sc3undo's greyed arrows frame 0) whose glyph is a plain bar, rows
+   10..12, columns 6..18 of each 26x29 frame. The bar is replaced by the face rows above and below it, the eyedropper
+   is laid over the face in the bar's own colour (4x4 subsamples), and the frames are shrunk to 18x20 with sc3undo's box
+   filter, the one its arrows went through. rgb: 104x29x3 bytes. 0 = the art is not that strip (caller draws its own). */
+static int pkr_from_minus(const WORD *sv, LONG sp, WORD keyc, DWORD code, BYTE *db, LONG dp) {
+    static BYTE rgb[29][104][3];
+    LONG x, y, f, k;
+    for (y = 0; y < 29; y++)
+        for (x = 0; x < 104; x++) {
+            WORD v = sv[y * sp + x];
+            BYTE *o = rgb[y][x];
+            if (v == keyc) { o[0] = 255; o[1] = 0; o[2] = 255; continue; }
+            if (code == 7) { o[0] = (BYTE)((v >> 11) << 3); o[1] = (BYTE)(((v >> 5) & 63) << 2); o[2] = (BYTE)((v & 31) << 3); }
+            else           { o[0] = (BYTE)(((v >> 10) & 31) << 3); o[1] = (BYTE)(((v >> 5) & 31) << 3); o[2] = (BYTE)((v & 31) << 3); }
+            if (o[0] == 255 && o[1] == 0 && o[2] == 255) o[2] = 254;
+        }
+    for (f = 0; f < 4; f++) {   /* the bar must be there: its middle at least 40 darker than the face above it */
+        BYTE *bar = rgb[11][f * 26 + 12], *face = rgb[9][f * 26 + 12];
+        if (face[0] + face[1] + face[2] - bar[0] - bar[1] - bar[2] < 120) { logf("PICKER> minus art frame %ld: no bar where expected", f); return 0; }
+    }
+    for (f = 0; f < 4; f++) {
+        BYTE ink[3];
+        LONG ox = f * 26;
+        memcpy(ink, rgb[11][ox + 12], 3);
+        for (x = 6; x <= 18; x++)
+            for (k = 0; k < 3; k++) {
+                BYTE *a = rgb[9][ox + x], *b = rgb[13][ox + x], *o = rgb[10 + k][ox + x];
+                int c;
+                for (c = 0; c < 3; c++) o[c] = (BYTE)(a[c] + ((int)b[c] - a[c]) * (k + 1) / 4);
+            }
+        for (y = 0; y < 29; y++)
+            for (x = 0; x < 26; x++) {
+                BYTE *o = rgb[y][ox + x];
+                int n = 0, sx, sy, c;
+                if (o[0] == 255 && o[1] == 0 && o[2] == 255) continue;
+                for (sy = 0; sy < 4; sy++) for (sx = 0; sx < 4; sx++) n += pkr_glyph(x + (sx + 0.5) / 4, y + (sy + 0.5) / 4);
+                if (n) for (c = 0; c < 3; c++) o[c] = (BYTE)(o[c] + ((int)ink[c] - o[c]) * n / 16);
+            }
+    }
+    for (f = 0; f < 4; f++)
+        for (y = 0; y < 20; y++)
+            for (x = 0; x < 18; x++) {
+                LONG x0 = f * 26 + x * 26 / 18, x1 = f * 26 + ((x + 1) * 26 + 17) / 18, y0 = y * 29 / 20, y1 = ((y + 1) * 29 + 19) / 20, xx, yy;
+                DWORD r = 0, g = 0, b = 0, n = 0, m = 0;
+                WORD out;
+                for (yy = y0; yy < y1 && yy < 29; yy++)
+                    for (xx = x0; xx < x1 && xx < (f + 1) * 26; xx++) {
+                        BYTE *v = rgb[yy][xx];
+                        if (v[0] == 255 && v[1] == 0 && v[2] == 255) { m++; continue; }
+                        r += v[0]; g += v[1]; b += v[2]; n++;
+                    }
+                out = (!n || m > n) ? keyc : pkr_rgb((int)(r / n), (int)(g / n), (int)(b / n), code);
+                if (out == keyc && n && m <= n) out ^= 1;      /* a real colour must not become the key */
+                *(WORD *)(db + y * dp + (f * 18 + x) * 2) = out;
+            }
+    return 1;
+}
+/* the old drawn art, kept for an install whose minus art differs: a flat disc, frames in the stock order */
+static void pkr_drawn(BYTE *db, LONG dp, WORD keyc, DWORD code) {
+    LONG x, y, f;
+    for (f = 0; f < 4; f++)
+        for (y = 0; y < 20; y++)
+            for (x = 0; x < 18; x++) {
+                double px = x + 0.5, py = y + 0.5, cx = 9.0, cy = 10.0, d2 = (px - cx) * (px - cx) + (py - cy) * (py - cy);
+                int lift = f == 3 ? 24 : f == 2 ? -28 : 0, sh = f == 2 ? 1 : 0, grey = f == 0;
+                WORD c = keyc;
+                if (d2 <= 8.6 * 8.6) {
+                    int g0 = 222 - (int)(py * 3.0) + lift;                 /* face, lit from the top */
+                    c = d2 > 7.4 * 7.4 ? pkr_rgb(70, 74, 96, code)          /* rim */
+                                       : pkr_rgb(g0 - 8, g0 - 2, g0 + 14, code);
+                    if (d2 <= 7.4 * 7.4) {
+                        double qx = px - sh, qy = py - sh;
+                        double tube = pkr_seg2(qx, qy, 4.6, 15.6, 10.2, 10.0), coll = pkr_seg2(qx, qy, 9.0, 8.6, 11.8, 11.4);
+                        double bulb = (qx - 12.6) * (qx - 12.6) + (qy - 7.6) * (qy - 7.6);
+                        int ink = grey ? 140 : 40;
+                        if (bulb <= 2.7 * 2.7 || coll <= 1.05 * 1.05) c = pkr_rgb(ink, ink + 10, 150, code);
+                        else if (tube <= 0.95 * 0.95) c = pkr_rgb(grey ? 150 : 60, grey ? 155 : 90, grey ? 160 : 200, code);
+                    }
+                }
+                *(WORD *)(db + y * dp + (f * 18 + x) * 2) = c;
+            }
+}
 static void *pkr_strip(void) {
     BYTE *sui = (BYTE *)GetModuleHandleA("SIMUI.DLL");
-    DWORD key[3] = { 0, 0x2f78c6d, 0x22f96e30 }, src = 0, fmt[2] = { 0, 0 }, a[8];
+    DWORD key[3] = { 0, 0x2f78c6d, 0x22f96e2e }, src = 0, fmt[2] = { 0, 0 }, a[8];
     void *com, *dst = NULL;
-    BYTE *db;
-    LONG dp, x, y, f;
+    BYTE *db, *sb = NULL;
+    LONG dp, sp = 0, sw = 0, sh = 0;
     WORD keyc;
-    int ok = 0;
-    if (!((char (__cdecl *)(DWORD *, DWORD *, char))(sui + 0x25489))(key, &src, 0) || !src) return NULL;   /* format donor */
+    int ok = 0, locked = 0, from = 0;
+    if (!((char (__cdecl *)(DWORD *, DWORD *, char))(sui + 0x25489))(key, &src, 0) || !src) return NULL;   /* zoom-out art */
     __try {
         ho_v((void *)src, 0x4c, 1, (DWORD)fmt, 0, 0, 0, 0);
-        ho_v((void *)src, 0x08, 0, 0, 0, 0, 0, 0);
         if (fmt[1] != 16 || (fmt[0] != 7 && fmt[0] != 5)) { logf("PICKER> art format {%lu,%lu}: no button", fmt[0], fmt[1]); __leave; }
+        sw = (LONG)ho_v((void *)src, 0x38, 0, 0, 0, 0, 0, 0); sh = (LONG)ho_v((void *)src, 0x3c, 0, 0, 0, 0, 0, 0);
         keyc = fmt[0] == 7 ? 0xF81F : 0x7C1F;
         com = ((void *(__cdecl *)(void))(sui + 0x8489d))();
         if (!com || !(ho_v(com, 0x0c, 3, 0xc470d325, 0x20732180, (DWORD)&dst, 0, 0) & 0xff) || !dst) __leave;
@@ -14889,33 +15007,22 @@ static void *pkr_strip(void) {
         if (!(rz_thiscall_ret(dst, (void *)(*(DWORD **)dst)[0x0c / 4], a, 8) & 0xff)) __leave;
         if (!(ho_v(dst, 0x1c, 1, 0x40, 0, 0, 0, 0) & 0xff)) __leave;
         db = (BYTE *)ho_v(dst, 0x1a8, 0, 0, 0, 0, 0, 0); dp = (LONG)ho_v(dst, 0x1ac, 0, 0, 0, 0, 0, 0);
-        if (db && dp >= 4 * 18 * 2)
-            for (f = 0; f < 4; f++)
-                for (y = 0; y < 20; y++)
-                    for (x = 0; x < 18; x++) {
-                        double px = x + 0.5, py = y + 0.5, cx = 9.0, cy = 10.0, d2 = (px - cx) * (px - cx) + (py - cy) * (py - cy);
-                        int lift = f == 1 ? 24 : f == 2 ? -28 : 0, sh = f == 2 ? 1 : 0, grey = f == 3;
-                        WORD c = keyc;
-                        if (d2 <= 8.6 * 8.6) {
-                            int g0 = 222 - (int)(py * 3.0) + lift;                 /* face, lit from the top */
-                            c = d2 > 7.4 * 7.4 ? pkr_rgb(70, 74, 96, fmt[0])        /* rim */
-                                               : pkr_rgb(g0 - 8, g0 - 2, g0 + 14, fmt[0]);
-                            if (d2 <= 7.4 * 7.4) {
-                                double qx = px - sh, qy = py - sh;
-                                double tube = pkr_seg2(qx, qy, 4.6, 15.6, 10.2, 10.0), coll = pkr_seg2(qx, qy, 9.0, 8.6, 11.8, 11.4);
-                                double bulb = (qx - 12.6) * (qx - 12.6) + (qy - 7.6) * (qy - 7.6);
-                                int ink = grey ? 140 : 40, inkb = grey ? 150 : 150;
-                                if (bulb <= 2.7 * 2.7 || coll <= 1.05 * 1.05) c = pkr_rgb(ink, ink + 10, inkb, fmt[0]);
-                                else if (tube <= 0.95 * 0.95) c = pkr_rgb(grey ? 150 : 60, grey ? 155 : 90, grey ? 160 : 200, fmt[0]);
-                            }
-                        }
-                        *(WORD *)(db + y * dp + (f * 18 + x) * 2) = c;
-                    }
+        if (db && dp >= 4 * 18 * 2) {
+            if (sw == 104 && sh == 29 && (ho_v((void *)src, 0x1c, 1, 0x40, 0, 0, 0, 0) & 0xff)) {
+                locked = 1;
+                sb = (BYTE *)ho_v((void *)src, 0x1a8, 0, 0, 0, 0, 0, 0); sp = (LONG)ho_v((void *)src, 0x1ac, 0, 0, 0, 0, 0, 0);
+                from = sb && sp >= 104 * 2 && pkr_from_minus((const WORD *)sb, sp / 2, keyc, fmt[0], db, dp);
+            }
+            if (!from) pkr_drawn(db, dp, keyc, fmt[0]);
+        }
         ho_v(dst, 0x20, 1, 0x40, 0, 0, 0, 0);
         ho_v(dst, 0xc8, 1, ho_v(dst, 0x18c, 3, 0xff, 0, 0xff, 0, 0), 0, 0, 0, 0);   /* magenta = transparent */
         ok = db != NULL;
     } __except (EXCEPTION_EXECUTE_HANDLER) { logf("PICKER> button art fault 0x%08lX", GetExceptionCode()); ok = 0; }
+    if (locked) ho_v((void *)src, 0x20, 1, 0x40, 0, 0, 0, 0);
+    ho_v((void *)src, 0x08, 0, 0, 0, 0, 0, 0);
     if (!ok && dst) { ho_v(dst, 0x08, 0, 0, 0, 0, 0, 0); dst = NULL; }
+    if (ok) logf("PICKER> button art: %s", from ? "the zoom-out button's strip with an eyedropper glyph" : "drawn (zoom-out art not as expected)");
     return dst;
 }
 static void pkr_add_button(void *panel) {
@@ -14941,6 +15048,7 @@ static void pkr_add_button(void *panel) {
         ok = win && (ho_v(panel, 0x34, 1, (DWORD)win, 0, 0, 0, 0) & 0xff);
         /* the panel's bottom-left corner, on sc3undo's row (y = h - 22), left of the anticlockwise rotate button (x 34) */
         if (ok) ho_v(win, 0xcc, 2, 10, (DWORD)(ph - 2 - 20), 0, 0, 0);
+        if (ok) ho_v(win, 0xf4, 2, 2, 1, 0, 0, 0);   /* enabled: frame 1 like the zoom / rotate buttons (pickerui; sc3undo greys with (2, 0)) */
         ho_v(btn, 0x08, 0, 0, 0, 0, 0, 0);
     }
     ho_str_free(cap);
@@ -14963,6 +15071,154 @@ static DWORD __fastcall pkr_mm_notify(void *self, void *edx, DWORD type, DWORD i
     }
     a[0] = type; a[1] = id;
     return rz_thiscall_ret(self, g_pkr_mm_notify, a, 2);
+}
+
+/* ---- the eyedropper cursor (pickerui, owner 2026-10-31: "a very similar icon in the same style as the cursor").
+   The game's tool cursors are 32x32 monochrome .cur files, the arrow at the top left with the hotspot at its tip (0,0)
+   and a black / white tool picture beside it, loaded with LoadCursorFromFileA and set with SetCursor [CONFIRMED @ SC3U
+   0x0047cf0f, 0x0047d159]. Ours is drawn the same way, written once to %TEMP% as a .cur and loaded with the same call,
+   so Windows sizes it exactly as it sizes the game's own (80x80 at the dev PC's pointer size 4, TOOLTIP_CURSOR.md).
+   SetCursor is redirected in the modules PANCURSOR covers: while the picker is the active tool, the game's query cursor
+   (recognised by its masks, compared with Res\UI\Shared\Cursors\QUERY CURSOR.cur) becomes the eyedropper. Every other
+   cursor, and the query cursor of the stock "?" tool, is left alone. '#' black, 'O' white, '.' transparent. */
+static const char *pkr_cur_art[32] = {
+    "###########.....................",
+    "#OOOOOOO##......................",
+    "#OOOOOO##.......................",
+    "#OOOOO##........................",
+    "#OOOO##.........................",
+    "#OOO##..........................",
+    "#OO##...........................",
+    "#O##............................",
+    "###.............................",
+    "##..............................",
+    "#......................#####....",
+    ".....................##OO####...",
+    ".....................#OO#####...",
+    "....................#OO######...",
+    "....................#O#######...",
+    "...................#########....",
+    "...................########.....",
+    "...................#######......",
+    "...............#..#######.......",
+    "..............#######...........",
+    "..............#O####............",
+    "...............#O##.............",
+    "..............###O##............",
+    ".............#OO####............",
+    "............#OO#..#.............",
+    "...........#OO#.................",
+    "..........#OO#..................",
+    ".........#OO#...................",
+    "........##O#....................",
+    "........###.....................",
+    ".......##.......................",
+    "................................" };
+static HCURSOR g_pkr_cursor;
+static PFN_SETCURSOR g_pkr_setcursor_orig;
+static BYTE *g_pkr_qmask;
+static int   g_pkr_qok, g_pkr_qlen;
+static struct { HCURSOR h; int q; } g_pkr_curmap[64];
+static int   g_pkr_ncur;
+
+/* a monochrome cursor's AND + XOR masks, top-down 1 bpp, as a malloc'd block with its width and height in front (the
+   size Windows made it: 32x32 from the file, more at a larger SM_CXCURSOR). NULL = not a monochrome cursor */
+static BYTE *pkr_cur_masks(HCURSOR h, int *len) {
+    ICONINFO ii;
+    BITMAP bm;
+    struct { BITMAPINFOHEADER h; RGBQUAD c[2]; } bi;
+    HDC dc;
+    BYTE *out = NULL;
+    LONG st;
+    *len = 0;
+    if (!h || !GetIconInfo(h, &ii)) return NULL;
+    if (!ii.hbmColor && GetObjectA(ii.hbmMask, sizeof(bm), &bm) && bm.bmWidth > 0 && bm.bmWidth <= 256 && bm.bmHeight > 0 && bm.bmHeight <= 512) {
+        st = ((bm.bmWidth + 31) / 32) * 4;
+        out = (BYTE *)malloc(8 + st * bm.bmHeight);
+        if (out) {
+            ((LONG *)out)[0] = bm.bmWidth; ((LONG *)out)[1] = bm.bmHeight;
+            memset(&bi, 0, sizeof(bi));
+            bi.h.biSize = sizeof(bi.h); bi.h.biWidth = bm.bmWidth; bi.h.biHeight = -bm.bmHeight; bi.h.biPlanes = 1; bi.h.biBitCount = 1;
+            dc = GetDC(NULL);
+            if (GetDIBits(dc, ii.hbmMask, 0, bm.bmHeight, out + 8, (BITMAPINFO *)&bi, DIB_RGB_COLORS) == bm.bmHeight) *len = 8 + st * bm.bmHeight;
+            else { free(out); out = NULL; }
+            ReleaseDC(NULL, dc);
+        }
+    }
+    if (ii.hbmMask) DeleteObject(ii.hbmMask);
+    if (ii.hbmColor) DeleteObject(ii.hbmColor);
+    return out;
+}
+static int pkr_is_query_cursor(HCURSOR h) {
+    BYTE *m;
+    int i, q, n;
+    for (i = 0; i < g_pkr_ncur; i++) if (g_pkr_curmap[i].h == h) return g_pkr_curmap[i].q;
+    m = g_pkr_qok ? pkr_cur_masks(h, &n) : NULL;
+    q = m && n == g_pkr_qlen && !memcmp(m, g_pkr_qmask, n);
+    free(m);
+    if (g_pkr_ncur < 64) { g_pkr_curmap[g_pkr_ncur].h = h; g_pkr_curmap[g_pkr_ncur].q = q; g_pkr_ncur++; }
+    if (q) logf("PICKER> cursor 0x%08lX is the game's query cursor", (DWORD)h);
+    return q;
+}
+static HCURSOR WINAPI pkr_setcursor(HCURSOR h) {
+    if (g_pkr_obj && g_pkr_cursor && h && h != g_pkr_cursor && pkr_is_query_cursor(h) && pkr_active()) h = g_pkr_cursor;
+    return g_pkr_setcursor_orig(h);
+}
+/* the .cur file from pkr_cur_art, loaded like the game's cursors; and the query cursor's masks to recognise it by */
+static void pkr_cursor_install(void) {
+    static const char *mods[] = { NULL, "SIMSPR.DLL", "GZWIND.DLL", "GZGraphicD.dll", "SIMUI.DLL", "SIMCITY.DLL" };
+    BYTE f[22 + 40 + 8 + 128 + 128];
+    char dir[MAX_PATH], path[MAX_PATH], tmp[MAX_PATH], *sl;
+    HANDLE fh;
+    DWORD wr = 0;
+    HCURSOR q;
+    int x, y, i, n = 0;
+    if (!g_pkr_cursor_on) { logf("PICKER> cursor off (SC3RESIZE_PICKER_CURSOR=0)"); return; }
+    memset(f, 0, sizeof(f));
+    f[2] = 2; f[4] = 1;                                        /* ICONDIR: type 2 = cursor, 1 image */
+    f[6] = 32; f[7] = 32; f[8] = 2;                            /* 32x32, 2 colours, hotspot (0,0) */
+    *(DWORD *)(f + 14) = 40 + 8 + 256; *(DWORD *)(f + 18) = 22;
+    *(DWORD *)(f + 22) = 40; *(LONG *)(f + 26) = 32; *(LONG *)(f + 30) = 64; *(WORD *)(f + 34) = 1; *(WORD *)(f + 36) = 1;
+    f[66] = f[67] = f[68] = 255;                               /* palette: 0 black, 1 white */
+    for (y = 0; y < 32; y++)                                   /* rows bottom-up: XOR then AND */
+        for (x = 0; x < 32; x++) {
+            char c = pkr_cur_art[y][x];
+            BYTE bit = (BYTE)(0x80 >> (x & 7));
+            if (c == 'O') f[70 + (31 - y) * 4 + x / 8] |= bit;
+            if (c == '.') f[70 + 128 + (31 - y) * 4 + x / 8] |= bit;
+        }
+    if (!GetTempPathA(sizeof(dir), dir)) lstrcpyA(dir, ".\\");
+    wsprintfA(path, "%ssc3resize_picker_eyedropper.cur", dir);
+    wsprintfA(tmp, "%ssc3resize_picker_%lu.tmp", dir, GetCurrentProcessId());
+    fh = CreateFileA(tmp, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+    if (fh != INVALID_HANDLE_VALUE) {
+        WriteFile(fh, f, sizeof(f), &wr, NULL); CloseHandle(fh);
+        if (wr != sizeof(f) || !MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING)) DeleteFileA(tmp);
+    }
+    g_pkr_cursor = LoadCursorFromFileA(path);
+    GetModuleFileNameA(NULL, dir, sizeof(dir));
+    if ((sl = strrchr(dir, '\\')) != NULL) sl[1] = 0;
+    wsprintfA(tmp, "%sRes\\UI\\Shared\\Cursors\\QUERY CURSOR.cur", dir);
+    q = LoadCursorFromFileA(tmp);
+    if (!q) logf("PICKER> %s: LoadCursorFromFileA error %lu", tmp, GetLastError());
+    g_pkr_qmask = q ? pkr_cur_masks(q, &g_pkr_qlen) : NULL;
+    g_pkr_qok = g_pkr_qmask != NULL;
+    if (g_pkr_qok) {   /* both made by the same call, so Windows gives them the same size */
+        int n2;
+        BYTE *em = g_pkr_cursor ? pkr_cur_masks(g_pkr_cursor, &n2) : NULL;
+        logf("PICKER> query cursor masks %ldx%ld, eyedropper %ldx%ld", ((LONG *)g_pkr_qmask)[0], ((LONG *)g_pkr_qmask)[1],
+             em ? ((LONG *)em)[0] : 0, em ? ((LONG *)em)[1] : 0);
+        free(em);
+    }
+    if (q) DestroyCursor(q);
+    if (g_pkr_cursor && g_pkr_qok)
+        for (i = 0; i < (int)(sizeof(mods) / sizeof(mods[0])); i++) {
+            HMODULE m = mods[i] ? GetModuleHandleA(mods[i]) : GetModuleHandleA(NULL);
+            if (m) n += rz_iat_patch(m, "USER32.dll", "SetCursor", (void *)pkr_setcursor, (void **)&g_pkr_setcursor_orig);
+        }
+    if (!g_pkr_setcursor_orig) g_pkr_setcursor_orig = (PFN_SETCURSOR)GetProcAddress(GetModuleHandleA("user32.dll"), "SetCursor");
+    logf("PICKER> eyedropper cursor %s (%s), query cursor masks %s, SetCursor redirected in %d import slot(s)",
+         g_pkr_cursor ? "loaded" : "NOT LOADED", path, g_pkr_qok ? "read" : "NOT READ", n);
 }
 
 /* entry detour on a function that starts `mov eax, imm32` (5 bytes, any base) */
@@ -15004,6 +15260,7 @@ static void pkr_install(HMODULE sui) {
         pkr_hook((BYTE *)sui + 0x4faec, (void *)pkr_mm_init, &g_pkr_mm_init, "SIMUI FUN_1004faec minimap Init");
         if (g_pkr_mm_init) pkr_hook((BYTE *)sui + 0x5093f, (void *)pkr_mm_notify, &g_pkr_mm_notify, "SIMUI FUN_1005093f minimap notify");
     }
+    pkr_cursor_install();
     logf("PICKER> on: query tool Apply SIMGEOM+0xb6b4 wrapped, button %s, Ctrl+F %s", g_pkr_mm_notify ? "on the minimap" : "off",
          g_pkr_key ? "on" : "off");
 }
@@ -15081,6 +15338,50 @@ static void pkr_toast_post(void *src) {
     ((RZ_UNLOCK)(*(DWORD **)src)[0x80 / 4])(src, NULL);
 }
 
+/* test (WM_RZ_PICKER 7): the minimap panel's own button strips {0x2f78c6d, 0x22f96e2d..0x22f96e35} as 24-bit BMPs next to
+   the FRAMEDUMP prefix, to compare our button's shading with the stock ones */
+static void pkr_art_dump(void) {
+    BYTE *sui = (BYTE *)GetModuleHandleA("SIMUI.DLL");
+    DWORD inst;
+    if (!sui || !g_fd_prefix[0]) { logf("PICKER> art dump: needs SC3RESIZE_FRAMEDUMP"); return; }
+    for (inst = 0x22f96e2d; inst <= 0x22f96e35; inst++) {
+        DWORD key[3] = { 0, 0x2f78c6d, 0 }, src = 0, fmt[2] = { 0, 0 };
+        LONG w = 0, hh = 0, p, x, y, rs;
+        BYTE *b = NULL, *out;
+        char path[MAX_PATH];
+        key[2] = inst;
+        if (!((char (__cdecl *)(DWORD *, DWORD *, char))(sui + 0x25489))(key, &src, 0) || !src) { logf("PICKER> art 0x%08lX: none", inst); continue; }
+        __try {
+            ho_v((void *)src, 0x4c, 1, (DWORD)fmt, 0, 0, 0, 0);
+            w = (LONG)ho_v((void *)src, 0x38, 0, 0, 0, 0, 0, 0); hh = (LONG)ho_v((void *)src, 0x3c, 0, 0, 0, 0, 0, 0);
+            if (fmt[1] == 16 && w > 0 && hh > 0 && w < 1024 && hh < 1024 && (ho_v((void *)src, 0x1c, 1, 0x40, 0, 0, 0, 0) & 0xff)) {
+                b = (BYTE *)ho_v((void *)src, 0x1a8, 0, 0, 0, 0, 0, 0); p = (LONG)ho_v((void *)src, 0x1ac, 0, 0, 0, 0, 0, 0);
+                rs = (w * 3 + 3) & ~3;
+                out = b ? (BYTE *)calloc(rs, hh) : NULL;
+                if (out) {
+                    BITMAPFILEHEADER fh; BITMAPINFOHEADER ih; HANDLE f; DWORD wr;
+                    for (y = 0; y < hh; y++) for (x = 0; x < w; x++) {
+                        WORD v = *(WORD *)(b + y * p + x * 2);
+                        BYTE *o = out + (hh - 1 - y) * rs + x * 3;
+                        if (fmt[0] == 7) { o[2] = (BYTE)((v >> 11) << 3); o[1] = (BYTE)(((v >> 5) & 63) << 2); o[0] = (BYTE)((v & 31) << 3); }
+                        else { o[2] = (BYTE)(((v >> 10) & 31) << 3); o[1] = (BYTE)(((v >> 5) & 31) << 3); o[0] = (BYTE)((v & 31) << 3); }
+                    }
+                    memset(&fh, 0, sizeof(fh)); memset(&ih, 0, sizeof(ih));
+                    fh.bfType = 0x4d42; fh.bfOffBits = sizeof(fh) + sizeof(ih); fh.bfSize = fh.bfOffBits + rs * hh;
+                    ih.biSize = sizeof(ih); ih.biWidth = w; ih.biHeight = hh; ih.biPlanes = 1; ih.biBitCount = 24;
+                    wsprintfA(path, "%sart_%08lx.bmp", g_fd_prefix, inst);
+                    f = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+                    if (f != INVALID_HANDLE_VALUE) { WriteFile(f, &fh, sizeof(fh), &wr, NULL); WriteFile(f, &ih, sizeof(ih), &wr, NULL); WriteFile(f, out, rs * hh, &wr, NULL); CloseHandle(f); }
+                    free(out);
+                    logf("PICKER> art 0x%08lX format {%lu,%lu} %ldx%ld -> %s", inst, fmt[0], fmt[1], w, hh, path);
+                }
+                ho_v((void *)src, 0x20, 1, 0x40, 0, 0, 0, 0);
+            } else logf("PICKER> art 0x%08lX format {%lu,%lu} %ldx%ld: not dumped", inst, fmt[0], fmt[1], w, hh);
+        } __except (EXCEPTION_EXECUTE_HANDLER) { logf("PICKER> art 0x%08lX: fault", inst); }
+        ho_v((void *)src, 0x08, 0, 0, 0, 0, 0, 0);
+    }
+}
+
 /* rz_wndproc: 1 = swallowed */
 static int pkr_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     if (!g_pkr_geom) return 0;
@@ -15090,6 +15391,12 @@ static int pkr_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         else if (wp == 3) pkr_pick((LONG)(short)LOWORD(lp), (LONG)(short)HIWORD(lp), "test cell");
         else if (wp == 4) { if (pkr_active()) PostMessageA(h, WM_KEYDOWN, VK_ESCAPE, 0x00010001); }
         else if (wp == 6) logf("PICKER> test: menu command 0x%08lX %s", (DWORD)lp, rz_city_post(0x025F0A91, (DWORD)lp) ? "posted" : "NOT POSTED");
+        else if (wp == 7) pkr_art_dump();
+        else if (wp == 8) {   /* test: the cursor up now, and what the picker makes of it */
+            HCURSOR c = GetCursor();
+            logf("PICKER> cursor now 0x%08lX%s, picker %s, eyedropper 0x%08lX", (DWORD)c, c == g_pkr_cursor && c ? " (the eyedropper)" :
+                 c && pkr_is_query_cursor(c) ? " (the query cursor)" : "", pkr_active() ? "on" : "off", (DWORD)g_pkr_cursor);
+        }
         else if (wp == 5) {   /* test: the city view's current tool (SIMGEOM FUN_1001be16 = app vt+0x74, tool at +0x228) */
             __try {
                 BYTE *t = pkr_cur_tool();
@@ -18083,6 +18390,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           g_presentlog = GetEnvironmentVariableA("SC3RESIZE_PRESENTLOG", v, sizeof(v)) && atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PRESENTFIX", v, sizeof(v))) g_presentfix = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_RCIFIX", v, sizeof(v))) g_rcifix = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_RCIFIX_BAND", v, sizeof(v))) g_rcifix_band = atoi(v);   /* pickerui */
           if (GetEnvironmentVariableA("SC3RESIZE_SUBMOVE", v, sizeof(v))) g_submove = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_CDCDLOG", v, sizeof(v))) g_cdcdlog = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_RTP3", v, sizeof(v))) g_rt_p3 = (LONG)atoi(v);
@@ -18106,6 +18414,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_PICKER", v, sizeof(v))) g_picker = atoi(v);   /* PICKER */
           if (GetEnvironmentVariableA("SC3RESIZE_PICKER_BUTTON", v, sizeof(v))) g_pkr_button = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PICKER_KEY", v, sizeof(v))) g_pkr_key = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_PICKER_CURSOR", v, sizeof(v))) g_pkr_cursor_on = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_GRAPHAXIS", v, sizeof(v))) g_graphaxis = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_GRAPHAXIS_MAX", v, sizeof(v))) g_gx_max = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_GRAPHAXIS_FONT", v, sizeof(v))) g_gx_font = atoi(v);

@@ -5,11 +5,13 @@ Owner request (2026-10-30): "Add a picker tool (also Ctrl+F) to pick a selected 
 What it does: the eyedropper button on the minimap panel (bottom-left corner) or Ctrl+F starts the picker. A click on
 the city makes the build tool of the object under the cursor the active tool, with that exact item: the same tool and
 item the menus would give. Objects with no build tool show a short message and the picker stays on. Esc or a
-right-click ends it.
+right-click ends it. While it is on, the mouse cursor is an eyedropper (round pickerui, section 6).
 
 Code: `re/harness/src/sc3resize.c`, block `PICKER` right before `rz_wndproc`. Switches: `SC3RESIZE_PICKER=0` installs
-nothing. `SC3RESIZE_PICKER_BUTTON=0`: no button (Ctrl+F only). `SC3RESIZE_PICKER_KEY=0`: no Ctrl+F. Evidence:
-`verify/picker/RESULTS.md`. Test tools: `re/tools/picker_lab.py`, `picker_batch.py`, `picker_screen.py`.
+nothing. `SC3RESIZE_PICKER_BUTTON=0`: no button (Ctrl+F only). `SC3RESIZE_PICKER_KEY=0`: no Ctrl+F.
+`SC3RESIZE_PICKER_CURSOR=0`: the game's query cursor stays. Evidence: `verify/picker/RESULTS.md`,
+`verify/pickerui/RESULTS.md`. Test tools: `re/tools/picker_lab.py` (`PICKER_RUNS=<dir>` moves its run folders),
+`picker_batch.py`, `picker_screen.py`, `pickerui_check.py`.
 
 ## 1. The game's query tool, which the picker reuses
 
@@ -44,7 +46,7 @@ view pointer, so "is the picker on" must read the view's +0x228.
    reach the new tool), then our reference is released.
 4. Esc is the game's own. A right-click (press and release within 5 px) while the picker is on is turned into the
    game's Esc (posted `WM_KEYDOWN` / `WM_KEYUP` VK_ESCAPE).
-5. Messages: a box drawn into the presented frame in the Blt hook, saved / drawn with GetDC / restored after the Blt
+5. Messages (since pickerui only after a click that picks nothing, none at the start): a box drawn into the presented frame in the Blt hook, saved / drawn with GetDC / restored after the Blt
    (sc3perf's counter recipe), 2.5 s, at the HUD factor. FRAMEDUMP sees it.
 6. Button: an 18x20 four-frame image (drawn by the mod, format from the rotate art `{0x2f78c6d, 0x22f96e30}`), added in
    the minimap panel's Init `FUN_1004faec` and answered in its child notify `FUN_1005093f` through entry detours (both
@@ -90,3 +92,38 @@ they pick Roads (measured: "Avenida (un sentido)", type 16000, flags `0xc804`).
 - A real cursor click on the button (posted clicks only). Hold-to-drag behaviour of the picked tools is the game's.
 - Ctrl+F while a text field has focus is left to the field (`rz_text_focus`), not tested.
 - Cities other than Berlin, 1024 cities, an English install (strings switch through `ho_spanish`).
+
+## 6. Round pickerui (2026-10-31, owner feedback on the released picker)
+
+| owner item | change | where |
+|---|---|---|
+| "remove the top banner with the eyedropper" | no message when the picker starts or is started again. The short messages after a click that picks nothing stay (2.5 s) | `pkr_start` |
+| "a very similar icon in the same style as the cursor" | eyedropper cursor while the picker is the active tool | `pkr_cursor_install`, `pkr_setcursor` |
+| "shading like the other buttons of the panel" | button art built from the minimap's own zoom-out button | `pkr_strip`, `pkr_from_minus` |
+| "closes after picking the first element" | already the behaviour: a successful pick releases the picker (`pkr_drop("picked")`), measured again | `pkr_timer` |
+| tooltip under the panel (picture) | RCIFIX re-blits only the RCI's overhang band | `rz_repaint_rci` |
+
+**Cursor.** The game's tool cursors are monochrome `.cur` files under `Apps\Res\UI\Shared\Cursors\` (32x32, the arrow
+top left with the hotspot at (0,0), a black / white picture beside it), loaded with `LoadCursorFromFileA` and set with
+`SetCursor` `[CONFIRMED @ SC3U 0x0047cf0f, 0x0047d159]`. The query tool's is `QUERY CURSOR.cur`. The eyedropper is drawn
+in that style (ASCII art `pkr_cur_art`), written once to `%TEMP%\sc3resize_picker_eyedropper.cur` and loaded with the
+same call, so Windows gives it the size it gives the game's cursors. Measured on this PC: both load as 64x64 (masks
+64x128), not 32x32. `SetCursor` is redirected in SC3U, SIMSPR, GZWIND, GZGraphicD, SIMUI and SIMCITY (3 import slots
+found; PANCURSOR chains on top of it). While `pkr_active()`, a cursor whose masks equal `QUERY CURSOR.cur`'s becomes the
+eyedropper. The stock "?" tool keeps its cursor.
+
+**Button art.** `{0x2f78c6d, 0x22f96e2e}` is the zoom-out button, a 104x29 strip of four 26x29 frames: 0 greyed, 1
+normal, 2 pressed, 3 hover (measured: the zoom and rotate buttons show frame 1, sc3undo's greyed arrows frame 0, the
+hovered picker button frame 3). Its glyph is a bar at rows 10..12, columns 6..18. The bar is replaced by the face rows 9
+and 13, the eyedropper glyph is laid over the face in the bar's colour (4x4 subsamples), and the strip is shrunk to
+18x20 with sc3undo's box filter. The button is set enabled (`win vt+0xf4(2, 1)`), so it shows frame 1 like its
+neighbours. Before this round it showed frame 0. The old drawn art stays as the fallback when the zoom-out art is not
+that strip.
+
+**Tooltip.** The game's tooltip (SC3U class `0x4d3bcc`, root child) is placed centred above the button, so for a button at
+panel x 10 it reaches 41 px left of the panel, over the RCI gauge (`[599 520 640 608]` at 800x600). RCIFIX (sc3resize,
+`rz_repaint_rci`) re-blitted the whole RCI at present time, after everything, which drew the gauge over the tooltip. Only
+the band above the bar's top needs it (the city covers that band, RCIFIX's reason), so the re-blit is now limited to
+that band (`SC3RESIZE_RCIFIX_BAND=0` brings back the whole re-blit). Below the bar's top the game's own order is right.
+Any other tooltip over the lower RCI had the same problem.
+
