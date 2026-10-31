@@ -9649,6 +9649,246 @@ static void qi_install(HMODULE sui) {
         logf("QUERYID> on: \"Copiar ID\" button in the query (?) dialog");
 }
 
+/* ================= GRAPHAXIS (child graphaxis 2026-10-30). Owner: "los graficos deberian tener una barra vertical de
+ * referencia a la izquierda, que desaparezca si se encienden muchos graficos".
+ * The Graficas page of Ver datos is drawn by SIMUI FUN_1002ed75 (this = page director, arg = page window). Each series is
+ * plotted as value * _DAT_100a40b4 (100.0f) / scale, scale = series vt+0x20, points from series vt+0x28 / +0x34 / +0x40
+ * (12 months / 10 years / 10 decades, picked by the range group, page child 2, IID 0xa1336cc0 vt+0x30 = 3 / 4 / 5),
+ * colour vt+0x1c, the series list {BYTE on; series *} at this+0x68..+0x6c [CONFIRMED @ SIMUI 0x1002ed75]. The chart is
+ * page child 6, line chart main vt 0x100ac85c. Its Y range is min +0x12c / max +0x134 (floats, axis 1 of the +0xa4 axis
+ * interface, setters 0x1006e905 / 0x1006e917), plot rect +0xac..+0xb8, y of plotted 0 at +0x16c:
+ * y = [+0x16c] - v * (bottom - top) / (max - min) [CONFIRMED @ SIMUI 0x100703f0, 0x1007033e].
+ * After the original draws, an axis of native widgets goes just inside the left edge of the plot: per round value a 5 px
+ * tick (the game's leader-line shape, class 0x4303E5B6 / 0xE303E5AE style 0x11, recipe SIMUI 0x1002e19e / 0x1002f848) and
+ * a label (factory +0x44; label vt+0x44(n): n % 3 vertical, n / 3 horizontal [CONFIRMED @ GZWIND 0x1000f049,
+ * 0x1000f09e]), both in the series colour. Series that share a scale share a column. More than g_gx_max series on
+ * (SC3RESIZE_GRAPHAXIS_MAX, default 2), or none: the axis hides. Being widgets of the page, they go through DLGSCALE,
+ * NATIVETEXT and every resize like the page text. Funds (control id 0x630536cb, SIMMISC 0x100067c7) is recorded as
+ * (max(treasury, -100000) + 100000) / 1000 [CONFIRMED @ SIMMISC 0x10007d88], so its column reads raw * 1000 - 100000.
+ * The other 15 series are shown as recorded (fixed scales 100 / 260 / 150 / 89 / 220 are the game's index units).
+ * SC3RESIZE_GRAPHAXIS=0: no detour, no axis. */
+static int   g_graphaxis = 1, g_gx_max = 2, g_gx_font = 0xf, g_gx_log;
+static void *g_orig_2ed75;
+#define GX_LBL   0x02F95C00   /* + column * 0x10 + tick */
+#define GX_TICK  0x02F95C80
+#define GX_COLS  4
+#define GX_TK    12
+#define GX_LW    40           /* label box */
+#define GX_LH    14
+#define GX_TW    5            /* tick length */
+
+#define GX_FUNDS 0x630536cb   /* Funds control id */
+typedef struct { DWORD scale, rgb; int n, funds; } GX_COL;
+
+static double gx_floor(double v) { double t = (double)(__int64)v; return t > v ? t - 1.0 : t; }
+
+/* 1, 2 or 5 x 10^k, about 4 steps over span, never under 1 (values are integers) */
+static double gx_step(double span) {
+    double raw = span / 4.0, mag = 1.0, n;
+    if (raw <= 1.0) return 1.0;
+    while (mag * 10.0 <= raw) mag *= 10.0;
+    n = raw / mag;
+    return (n <= 1.0 ? 1.0 : n <= 2.0 ? 2.0 : n <= 5.0 ? 5.0 : 10.0) * mag;
+}
+
+/* v in unit (1, 1e3 "K", 1e6 "M") with dec decimals, trailing zeros dropped */
+static void gx_fmt(char *o, double v, double unit, int dec) {
+    const char *suf = unit >= 1e6 ? "M" : unit >= 1e3 ? "K" : "";
+    __int64 p = 1, t;
+    int i, neg = v < 0, ip, fp;
+    for (i = 0; i < dec; i++) p *= 10;
+    t = (__int64)((neg ? -v : v) / unit * (double)p + 0.5);
+    ip = (int)(t / p); fp = (int)(t % p);
+    while (dec > 0 && fp && fp % 10 == 0) { fp /= 10; dec--; }
+    if (dec > 0 && fp) { char f[24]; wsprintfA(f, "%%s%%d.%%0%dd%%s", dec); wsprintfA(o, f, neg ? "-" : "", ip, fp, suf); }
+    else if (!t) lstrcpyA(o, "0");
+    else wsprintfA(o, "%s%d%s", neg ? "-" : "", ip, suf);
+}
+
+static void gx_show(void *w, int on) { if (w && !IsBadReadPtr(w, 0xa4)) ho_v(w, on ? 0xf8 : 0xfc, 0, 0, 0, 0, 0, 0); }
+
+static void gx_hide_col(void *win, int c, int from) {
+    int k;
+    for (k = from; k < GX_TK; k++) {
+        gx_show(mp_child(win, GX_LBL + c * 0x10 + k), 0);
+        gx_show(mp_child(win, GX_TICK + c * 0x10 + k), 0);
+    }
+}
+
+static WORD gx_col16(DWORD rgb) {
+    HMODULE sui = GetModuleHandleA("SIMUI.DLL");
+    void *cs = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85039))();
+    return cs ? (WORD)(ho_v(cs, 0x84, 3, (rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff, 0, 0) & 0xffff) : 0;
+}
+
+/* the label window `id` of `win`, made on first use; caption, colour and rect set every time */
+static void gx_label(void *fac, void *win, DWORD id, const char *text, WORD col, int x, int y) {
+    BYTE s[0x20];
+    BYTE *lw = (BYTE *)mp_child(win, id);
+    ho_str(s, text);
+    if (!lw) {
+        void *lbl = (void *)ho_v(fac, 0x44, 2, id, (DWORD)s, 0, 0, 0);                    /* CreateLabel */
+        if (lbl) {
+            if (g_gx_font >= 0) ho_v(lbl, 0x40, 1, ho_v(fac, 0x14, 1, (DWORD)g_gx_font, 0, 0, 0, 0), 0, 0, 0, 0);
+            ho_v(lbl, 0x44, 1, 1, 0, 0, 0, 0);                                                /* left, centred vertically */
+            lw = (BYTE *)ho_v(lbl, 0x0c, 0, 0, 0, 0, 0, 0);
+            ho_v(lw, 0xec, 1, id, 0, 0, 0, 0);
+            if (!(ho_v(win, 0x34, 1, (DWORD)lw, 0, 0, 0, 0) & 0xff)) { ho_v(lw, 0x28, 0, 0, 0, 0, 0, 0); lw = NULL; }
+            ho_v(lbl, 0x08, 0, 0, 0, 0, 0, 0);
+        }
+    }
+    if (lw && !IsBadReadPtr(lw, 0xa8)) {
+        ho_v(lw + 0xa4, 0x24, 1, col, 0, 0, 0, 0);                                           /* label iface: colour */
+        ho_v(lw, 0x10c, 1, (DWORD)s, 0, 0, 0, 0);
+        ho_v(lw, 0xc8, 4, (DWORD)x, (DWORD)y, (DWORD)(x + GX_LW), (DWORD)(y + GX_LH), 0);
+        gx_show(lw, 1);
+    }
+    ho_str_free(s);
+}
+
+/* the tick shape `id` of `win`, a GX_TW x 1 filled quad; col is the display colour (a raw 0xRRGGBB drew dark red) */
+static void gx_tick(void *win, DWORD id, DWORD col, int x, int y) {
+    HMODULE sui = GetModuleHandleA("SIMUI.DLL");
+    void *obj = NULL, *w;
+    LONG r[4], pts[8] = { 0, 0, 0, 1, GX_TW, 1, GX_TW, 0 };
+    if (!(w = mp_child(win, id))) {
+        void **svc = (void **)((MP_GETSVC)((BYTE *)sui + 0x8489d))();
+        if (!svc || IsBadReadPtr(svc, 4) || !(ho_v(svc, 0x0c, 3, 0x4303e5b6, 0xe303e5ae, (DWORD)&obj, 0, 0) & 0xff) || !obj) return;
+        ho_v(obj, 0x0c, 1, 0x11, 0, 0, 0, 0);
+        r[0] = 0; r[1] = 0; r[2] = GX_TW; r[3] = 1;
+        w = (void *)ho_v(obj, 0x38, 0, 0, 0, 0, 0, 0);
+        ho_v(w, 0xc4, 1, (DWORD)r, 0, 0, 0, 0);
+        ho_v(w, 0xec, 1, id, 0, 0, 0, 0);
+        ho_v(w, 0xf4, 2, 0x800, 0, 0, 0, 0);
+        ho_v(obj, 0x34, 2, 4, (DWORD)pts, 0, 0, 0);
+        if (!(ho_v(win, 0x34, 1, (DWORD)w, 0, 0, 0, 0) & 0xff)) { ho_v(w, 0x28, 0, 0, 0, 0, 0, 0); w = NULL; }
+    } else if (!(ho_v(win, 0x80, 3, id, 0xe303e5ae, (DWORD)&obj, 0, 0) & 0xff)) obj = NULL;
+    if (obj) {
+        ho_v(obj, 0x14, 1, col, 0, 0, 0, 0); ho_v(obj, 0x18, 1, col, 0, 0, 0, 0); ho_v(obj, 0x1c, 1, col, 0, 0, 0, 0);
+        ho_v(obj, 0x08, 0, 0, 0, 0, 0, 0);
+    }
+    if (w && !IsBadReadPtr(w, 0xa4)) {
+        ho_v(w, 0xc8, 4, (DWORD)x, (DWORD)y, (DWORD)(x + GX_TW), (DWORD)(y + 1), 0);
+        gx_show(w, 1);
+    }
+}
+
+static void gx_after(BYTE *dir, BYTE *win) {
+    static char last[256];
+    HMODULE sui = GetModuleHandleA("SIMUI.DLL");
+    BYTE *ch, *v0, *v1, *e, *p;
+    GX_COL col[GX_COLS];
+    int ncol = 0, non = 0, c, k, i, x, y, ox, oy, pl, pt, pb, y0, mode = 3;
+    float mn, mx, k100;
+    void *fac, *g = NULL;
+    char sig[256], t[24];
+    if (!sui || !dir || IsBadReadPtr(dir, 0x70) || !win || IsBadReadPtr(win, 0xa4)) return;
+    ch = (BYTE *)ho_v(win, 0x78, 1, 6, 0, 0, 0, 0);
+    if (!ch || IsBadReadPtr(ch, 0x170) || *(DWORD *)ch != (DWORD)sui + 0xac85c) {
+        if (lstrcmpA(last, "nochart")) {
+            lstrcpyA(last, "nochart");
+            logf("GRAPHAXIS> page 0x%08lX: child 6 is not the line chart (0x%08lX), no axis", (DWORD)win, (DWORD)ch);
+        }
+        return;
+    }
+    v0 = *(BYTE **)(dir + 0x68); v1 = *(BYTE **)(dir + 0x6c);
+    if (!v0 || v1 <= v0 || (v1 - v0) > 64 * 8 || IsBadReadPtr(v0, v1 - v0)) v0 = v1 = NULL;
+    for (e = v0; e && e < v1; e += 8) {
+        DWORD sc, rgb, *idp;
+        int fu;
+        if (!e[0] || !(p = *(BYTE **)(e + 4)) || IsBadReadPtr(p, 4)) continue;
+        sc = ho_v(p, 0x20, 0, 0, 0, 0, 0, 0);
+        if ((int)sc <= 0) continue;                         /* the game draws nothing for it either */
+        non++;
+        rgb = ho_v(p, 0x1c, 0, 0, 0, 0, 0, 0) & 0xffffff;
+        idp = (DWORD *)ho_v(p, 0x14, 0, 0, 0, 0, 0, 0);
+        fu = idp && !IsBadReadPtr(idp, 4) && *idp == GX_FUNDS;
+        for (c = 0; c < ncol && (col[c].scale != sc || col[c].funds != fu); c++) ;
+        if (c == ncol && ncol < GX_COLS) { col[ncol].scale = sc; col[ncol].rgb = rgb; col[ncol].n = 0; col[ncol].funds = fu; ncol++; }
+        if (c < ncol) col[c].n++;
+    }
+    if ((ho_v(win, 0x80, 3, 2, 0xa1336cc0, (DWORD)&g, 0, 0) & 0xff) && g) {   /* range group, read as the original does */
+        mode = (int)ho_v(g, 0x30, 0, 0, 0, 0, 0, 0);
+        ho_v(g, 0x08, 0, 0, 0, 0, 0, 0);
+    }
+    mn = *(float *)(ch + 0x12c); mx = *(float *)(ch + 0x134);
+    pl = *(LONG *)(ch + 0xac); pt = *(LONG *)(ch + 0xb0); pb = *(LONG *)(ch + 0xb8); y0 = *(LONG *)(ch + 0x16c);
+    ox = *(LONG *)(ch + 0x14) - *(LONG *)(win + 0x14); oy = *(LONG *)(ch + 0x18) - *(LONG *)(win + 0x18);
+    k100 = *(float *)((BYTE *)sui + 0xa40b4);
+    wsprintfA(sig, "on %d cols %d mode %d plot %d %d %d y0 %d off %d %d", non, ncol, mode, pl, pt, pb, y0, ox, oy);
+    for (c = 0; c < ncol; c++) wsprintfA(sig + lstrlenA(sig), " | scale %lu rgb %06lX x%d%s", col[c].scale, col[c].rgb, col[c].n, col[c].funds ? " funds" : "");
+    if (lstrcmpA(sig, last)) {
+        BYTE *d = win;
+        lstrcpynA(last, sig, sizeof(last));
+        logf("GRAPHAXIS> page 0x%08lX chart 0x%08lX: %s, Y %d..%d (x%d)", (DWORD)win, (DWORD)ch, sig, (int)mn, (int)mx, (int)k100);
+        logf("GRAPHAXIS>   chart local [%ld %ld %ld %ld] abs [%ld %ld %ld %ld], page abs [%ld %ld %ld %ld]",
+             *(LONG *)(ch + 0x80), *(LONG *)(ch + 0x84), *(LONG *)(ch + 0x88), *(LONG *)(ch + 0x8c),
+             *(LONG *)(ch + 0x14), *(LONG *)(ch + 0x18), *(LONG *)(ch + 0x1c), *(LONG *)(ch + 0x20),
+             *(LONG *)(win + 0x14), *(LONG *)(win + 0x18), *(LONG *)(win + 0x1c), *(LONG *)(win + 0x20));
+        for (i = 0; i < 8 && d && !IsBadReadPtr(d, 0x40); i++, d = *(BYTE **)(d + 0x3c))
+            if (rz_is_dlg_vt(*(DWORD *)d, (DWORD)sui)) {
+                logf("GRAPHAXIS> dialog abs [%ld %ld %ld %ld]", *(LONG *)(d + 0x14), *(LONG *)(d + 0x18), *(LONG *)(d + 0x1c), *(LONG *)(d + 0x20));
+                break;
+            }
+        for (e = v0; g_gx_log && e && e < v1; e += 8) {
+            DWORD a[12];
+            if (!e[0] || !(p = *(BYTE **)(e + 4)) || IsBadReadPtr(p, 4)) continue;
+            memset(a, 0, sizeof(a));
+            ho_v(p, mode == 4 ? 0x34 : mode == 5 ? 0x40 : 0x28, 1, (DWORD)a, 0, 0, 0, 0);
+            DWORD *idp = (DWORD *)ho_v(p, 0x14, 0, 0, 0, 0, 0, 0);
+            logf("GRAPHAXIS>   series 0x%08lX vt 0x%08lX id 0x%08lX scale %lu newest..oldest %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld",
+                 (DWORD)p, *(DWORD *)p, idp && !IsBadReadPtr(idp, 4) ? *idp : 0, ho_v(p, 0x20, 0, 0, 0, 0, 0, 0), a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11]);
+        }
+    }
+    if (!g_graphaxis || non == 0 || non > g_gx_max || mx <= mn || pb <= pt || k100 <= 0.0f) {
+        for (c = 0; c < GX_COLS; c++) gx_hide_col(win, c, 0);
+        return;
+    }
+    fac = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85065))();
+    if (!fac || IsBadReadPtr(fac, 4)) return;
+    for (c = 0; c < GX_COLS; c++) {
+        double rlo, rhi, st, unit, top, v, mul, add;
+        int dec, n = 0;
+        WORD c16;
+        if (c >= ncol) { gx_hide_col(win, c, 0); continue; }
+        mul = col[c].funds ? 1000.0 : 1.0; add = col[c].funds ? -100000.0 : 0.0;           /* real = recorded * mul + add */
+        rlo = (double)mn * col[c].scale / k100 * mul + add; rhi = (double)mx * col[c].scale / k100 * mul + add;
+        st = gx_step(rhi - rlo);
+        top = rhi > -rlo ? rhi : -rlo;
+        unit = top >= 1e6 ? 1e6 : top >= 1e4 ? 1e3 : 1.0;
+        dec = st / unit >= 1.0 ? 0 : st / unit >= 0.1 ? 1 : 2;
+        c16 = gx_col16(col[c].rgb);
+        x = ox + pl + 2 + c * (GX_TW + 1 + GX_LW);
+        for (v = gx_floor(rlo / st + 0.999999) * st; v <= rhi + st * 1e-6 && n < GX_TK; v += st, n++) {
+            double py = (double)y0 - ((v - add) / mul * k100 / col[c].scale) * (double)(pb - pt) / (double)(mx - mn);
+            y = oy + (int)(py + 0.5);
+            gx_tick(win, GX_TICK + c * 0x10 + n, c16, x, y);
+            gx_fmt(t, v, unit, dec);
+            k = y - GX_LH / 2;
+            if (k < oy + pt) k = oy + pt;                          /* inside the plot */
+            if (k > oy + pb - GX_LH) k = oy + pb - GX_LH;
+            gx_label(fac, win, GX_LBL + c * 0x10 + n, t, c16, x + GX_TW + 1, k);
+        }
+        gx_hide_col(win, c, n);
+    }
+}
+
+static void __fastcall gx_render(void *self, void *edx, DWORD win) {
+    DWORD a[1];
+    (void)edx;
+    a[0] = win;
+    rz_thiscall_ret(self, g_orig_2ed75, a, 1);
+    gx_after((BYTE *)self, (BYTE *)win);
+}
+
+static void gx_install(HMODULE sui) {
+    BYTE e[5];
+    if (!g_graphaxis) { logf("GRAPHAXIS> off (SC3RESIZE_GRAPHAXIS=0): no axis on the Graficas page"); return; }
+    e[0] = 0xb8; *(DWORD *)(e + 1) = (DWORD)sui + 0x9b42b;   /* mov eax, <EH handler> (relocated with SIMUI) */
+    if (ho_hook(sui, 0x2ed75, e, 5, (void *)gx_render, &g_orig_2ed75, "graphs page render FUN_1002ed75"))
+        logf("GRAPHAXIS> on: Y axis on the Graficas page while 1..%d series are on", g_gx_max);
+}
+
 /* ================= RELOCATE + PLOPOVER (task relocate 2026-10-28, re/analysis/RELOCATE.md)
  * Owner A: "podemos agregar un boton en el '?' de un edificio especial de premios o remarcables para recolocarlo? al
  * hacerlo demuele el original y reemplaza la ubicacion del otro". Owner B: "colocar edificios de prop puede hacerse sobre
@@ -17763,6 +18003,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           ho_install(sui);   /* HUDOPT: HUD scale controls in the Preferences dialog */
           rz_meet_hook(sui); /* DLGSTAY: the Reunirse pages share one stored position */
           qi_install(sui);   /* QUERYID: "Copiar ID" button in the query (?) dialog */
+          gx_install(sui);   /* GRAPHAXIS: Y axis on the Graficas page */
           rl_install();      /* RELOCATE: "Mover" in the "?" of rewards/landmarks, auto-demolish of zoned buildings */
           pkr_install(sui);  /* PICKER: eyedropper (minimap button, Ctrl+F) */
           {   HANDLE t = CreateThread(NULL, 0, ro_thread, NULL, 0, NULL);   /* ROADOVER: road / highway / rail /
@@ -17840,6 +18081,10 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_PICKER", v, sizeof(v))) g_picker = atoi(v);   /* PICKER */
           if (GetEnvironmentVariableA("SC3RESIZE_PICKER_BUTTON", v, sizeof(v))) g_pkr_button = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PICKER_KEY", v, sizeof(v))) g_pkr_key = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_GRAPHAXIS", v, sizeof(v))) g_graphaxis = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_GRAPHAXIS_MAX", v, sizeof(v))) g_gx_max = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_GRAPHAXIS_FONT", v, sizeof(v))) g_gx_font = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_GRAPHAXIS_LOG", v, sizeof(v))) g_gx_log = atoi(v);
           {   char bp[MAX_PATH]; ho_ini_path(bp, sizeof(bp));   /* mods page: [buildings], then the env overrides */
               g_relocate = GetPrivateProfileIntA("buildings", "mover", 1, bp) ? 1 : 0;
               g_plopover = GetPrivateProfileIntA("buildings", "plopover", 1, bp) ? 1 : 0; }
