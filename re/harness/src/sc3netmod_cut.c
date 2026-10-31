@@ -17,6 +17,7 @@
  */
 typedef struct {
     int on, x0, z0, x1, z1, W, H, w, h, full, nreput;
+    int sides;                          /* window sides a cut component reaches: 1 x0, 2 z0, 4 x1, 8 z1 (DAVGROW) */
     DWORD *want;                        /* [cell]: piece << 8 | state this pass wrote (or found right), 0 none */
     BYTE *seen;                         /* [cell]: 0 not walked, 1 component inside the window, 2 reaches its border */
     int *q;                             /* the walk's queue */
@@ -27,8 +28,8 @@ static volatile LONG g_cut_n_cut, g_cut_n_reput;
 
 static void cut_begin(CutGuard *g, int x0, int z0, int x1, int z1, int W, int H) {
     if (g_cut_on < 0) {
-        g_cut_on = !env_off("SC3NETMOD_CUTGUARD");
-        logf("cut: revert guard %s (SC3NETMOD_CUTGUARD)", g_cut_on ? "on" : "off");
+        g_cut_on = !env_off("SC3NETMOD_DAVCUT") && !env_off("SC3NETMOD_CUTGUARD");   /* either name, =0 off */
+        logf("cut: revert guard %s (SC3NETMOD_DAVCUT)", g_cut_on ? "on" : "off");
     }
     ZeroMemory(g, sizeof(*g));
     g->on = g_cut_on;
@@ -50,9 +51,10 @@ static void cut_wrote(CutGuard *g, int x, int z, DWORD want) {
     g->want[(z - g->z0) * g->w + (x - g->x0)] = want;
 }
 
-static int cut_at_border(CutGuard *g, int x, int z) {
-    return (x <= g->x0 + 1 && g->x0 > 0) || (z <= g->z0 + 1 && g->z0 > 0) || (x >= g->x1 - 1 && g->x1 < g->W - 1) ||
-           (z >= g->z1 - 1 && g->z1 < g->H - 1);
+/* the window sides (1 x0, 2 z0, 4 x1, 8 z1) a cell is on or one in from, inside the map; 0 none */
+static int cut_side(CutGuard *g, int x, int z) {
+    return (x <= g->x0 + 1 && g->x0 > 0 ? 1 : 0) | (z <= g->z0 + 1 && g->z0 > 0 ? 2 : 0) |
+           (x >= g->x1 - 1 && g->x1 < g->W - 1 ? 4 : 0) | (z >= g->z1 - 1 && g->z1 < g->H - 1 ? 8 : 0);
 }
 
 /* does the component of block pieces (is(), not keep[]) through the stale cell (x, z) reach the window's border? */
@@ -62,14 +64,14 @@ static int cut_reaches(CutGuard *g, RbBuf *b, int x, int z, int (*is)(WORD), con
     if (!g->seen) {
         g->seen = (BYTE *)VirtualAlloc(NULL, (SIZE_T)g->w * g->h, MEM_COMMIT, PAGE_READWRITE);
         g->q = (int *)VirtualAlloc(NULL, (SIZE_T)g->w * g->h * 4, MEM_COMMIT, PAGE_READWRITE);
-        if (!g->seen || !g->q) return 1;                     /* no memory: the whole-map pass decides */
+        if (!g->seen || !g->q) { g->sides = 15; return 1; }  /* no memory: the whole-map pass decides */
     }
     if (g->seen[i]) return g->seen[i] == 2;
     g->seen[i] = 1;
     g->q[n++] = i;
     while (head < n) {
-        int c = g->q[head++], cx = g->x0 + c % g->w, cz = g->z0 + c / g->w, dx, dz;
-        if (cut_at_border(g, cx, cz)) hit = 1;
+        int c = g->q[head++], cx = g->x0 + c % g->w, cz = g->z0 + c / g->w, dx, dz, sd = cut_side(g, cx, cz);
+        if (sd) { hit = 1; g->sides |= sd; }
         for (dz = -1; dz <= 1; dz++)
             for (dx = -1; dx <= 1; dx++) {
                 int nx = cx + dx, nz = cz + dz, j;
@@ -88,24 +90,24 @@ static int cut_reaches(CutGuard *g, RbBuf *b, int x, int z, int (*is)(WORD), con
 }
 
 /* before the revert loop: -> 1 when the windowed pass must revert nothing (the whole-map pass decides). border = the
-   pass's own flag (a kept band reached the border); stale cells are those is() pieces in the inner area not kept. */
+   pass's own flag (a kept band reached the border); stale cells are those is() pieces in the inner area not kept.
+   Every stale component is walked (g->sides = all the sides they reach, for DAVGROW); one log line per call. */
 static int cut_hold(CutGuard *g, RbBuf *b, int border, int (*is)(WORD), const BYTE *keep, int (*skip)(int, int),
                     const char *who, const char *blk) {
-    int x, z;
+    int x, z, hit = 0;
     if (!g->on || g->full) return 0;
-    if (border) return 1;
     for (z = g->z0 + 1; z < g->z1; z++)
         for (x = g->x0 + 1; x < g->x1; x++) {
             DWORD v = rb_at(b, x, z);
             if (!v || !is((WORD)(v & 0xffff)) || keep[(z - g->z0) * g->w + (x - g->x0)] || (skip && skip(x, z))) continue;
-            if (cut_reaches(g, b, x, z, is, keep)) {
+            if (cut_reaches(g, b, x, z, is, keep) && !hit) {
+                hit = 1;
                 InterlockedIncrement(&g_cut_n_cut);
                 logf("%s: %s: (%d,%d) piece %lu belongs to a run the read window (%d,%d)-(%d,%d) cuts: not reverted, "
-                     "whole-map pass", blk, who, x, z, v & 0xffff, g->x0, g->z0, g->x1, g->z1);
-                return 1;
+                     "wider pass", blk, who, x, z, v & 0xffff, g->x0, g->z0, g->x1, g->z1);
             }
         }
-    return 0;
+    return border || hit;
 }
 
 /* after the revert loop (nrev > 0): the cells this pass wrote that the reverts' run-wide stock retile changed */
@@ -135,6 +137,6 @@ static void cut_stats(void) {
     LONG n = g_cut_n_cut + g_cut_n_reput;
     if (n == last) return;
     last = n;
-    logf("stats: cut windows held for the whole-map pass=%ld, cells put back after a revert=%ld", g_cut_n_cut,
+    logf("stats: cut windows held for a wider pass=%ld, cells put back after a revert=%ld", g_cut_n_cut,
          g_cut_n_reput);
 }
