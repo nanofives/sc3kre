@@ -9724,7 +9724,7 @@ static WORD gx_col16(DWORD rgb) {
 }
 
 /* the label window `id` of `win`, made on first use; caption, colour and rect set every time */
-static void gx_label(void *fac, void *win, DWORD id, const char *text, WORD col, int x, int y) {
+static void gx_label(void *fac, void *win, DWORD id, const char *text, WORD col, int x, int y, int w) {
     BYTE s[0x20];
     BYTE *lw = (BYTE *)mp_child(win, id);
     ho_str(s, text);
@@ -9742,7 +9742,7 @@ static void gx_label(void *fac, void *win, DWORD id, const char *text, WORD col,
     if (lw && !IsBadReadPtr(lw, 0xa8)) {
         ho_v(lw + 0xa4, 0x24, 1, col, 0, 0, 0, 0);                                           /* label iface: colour */
         ho_v(lw, 0x10c, 1, (DWORD)s, 0, 0, 0, 0);
-        ho_v(lw, 0xc8, 4, (DWORD)x, (DWORD)y, (DWORD)(x + GX_LW), (DWORD)(y + GX_LH), 0);
+        ho_v(lw, 0xc8, 4, (DWORD)x, (DWORD)y, (DWORD)(x + w), (DWORD)(y + GX_LH), 0);
         gx_show(lw, 1);
     }
     ho_str_free(s);
@@ -9781,7 +9781,7 @@ static void gx_after(BYTE *dir, BYTE *win) {
     BYTE *ch, *v0, *v1, *e, *p;
     GX_COL col[GX_COLS];
     DWORD keys[64];
-    int ncol = 0, non = 0, nkey = 0, c, k, i, x, y, ox, oy, pl, pt, pb, y0, mode = 3;
+    int ncol = 0, non = 0, nkey = 0, c, k, i, x, y, ox, oy, pl, pt, pr, pb, y0, mode = 3, lw;
     float mn, mx, k100;
     void *fac, *g = NULL;
     char sig[256], t[24];
@@ -9820,10 +9820,16 @@ static void gx_after(BYTE *dir, BYTE *win) {
         ho_v(g, 0x08, 0, 0, 0, 0, 0, 0);
     }
     mn = *(float *)(ch + 0x12c); mx = *(float *)(ch + 0x134);
-    pl = *(LONG *)(ch + 0xac); pt = *(LONG *)(ch + 0xb0); pb = *(LONG *)(ch + 0xb8); y0 = *(LONG *)(ch + 0x16c);
-    ox = *(LONG *)(ch + 0x14) - *(LONG *)(win + 0x14); oy = *(LONG *)(ch + 0x18) - *(LONG *)(win + 0x18);
+    pl = *(LONG *)(ch + 0xac); pt = *(LONG *)(ch + 0xb0); pr = *(LONG *)(ch + 0xb4); pb = *(LONG *)(ch + 0xb8); y0 = *(LONG *)(ch + 0x16c);
+    /* graphfix 2026-10-31: the chart's offset in the page is its LOCAL rect (+0x80/+0x84) when the page is its parent.
+     * On the page's first render the absolute rects are not final yet (logged: chart abs [84 84], page abs [38 40] =
+     * off 46 44, every later render off 6 10 = the local rect), which put the whole axis 40 px right and 34 px down
+     * until a checkbox click rendered the page again. Absolute difference only for a chart that is not a direct child. */
+    if (*(BYTE **)(ch + 0x3c) == win) { ox = *(LONG *)(ch + 0x80); oy = *(LONG *)(ch + 0x84); }
+    else { ox = *(LONG *)(ch + 0x14) - *(LONG *)(win + 0x14); oy = *(LONG *)(ch + 0x18) - *(LONG *)(win + 0x18); }
     k100 = *(float *)((BYTE *)sui + 0xa40b4);
-    wsprintfA(sig, "on %d cols %d mode %d plot %d %d %d y0 %d off %d %d", non, ncol, mode, pl, pt, pb, y0, ox, oy);
+    wsprintfA(sig, "on %d cols %d mode %d plot %d %d %d %d y0 %d off %d %d%s", non, ncol, mode, pl, pt, pr, pb, y0, ox, oy,
+             *(BYTE **)(ch + 0x3c) == win ? " local" : " abs");
     for (c = 0; c < ncol; c++) wsprintfA(sig + lstrlenA(sig), " | scale %lu rgb %06lX x%d%s", col[c].scale, col[c].rgb, col[c].n, col[c].mul != 1.0 || col[c].add != 0.0 ? " xform" : "");
     if (lstrcmpA(sig, last)) {
         BYTE *d = win;
@@ -9848,7 +9854,7 @@ static void gx_after(BYTE *dir, BYTE *win) {
                  (DWORD)p, *(DWORD *)p, idp && !IsBadReadPtr(idp, 4) ? *idp : 0, ho_v(p, 0x20, 0, 0, 0, 0, 0, 0), a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11]);
         }
     }
-    if (!g_graphaxis || non == 0 || non > g_gx_max || mx <= mn || pb <= pt || k100 <= 0.0f) {
+    if (!g_graphaxis || non == 0 || non > g_gx_max || mx <= mn || pb <= pt + GX_LH || pr <= pl + GX_TW + 2 || k100 <= 0.0f) {
         for (c = 0; c < GX_COLS; c++) gx_hide_col(win, c, 0);
         return;
     }
@@ -9866,16 +9872,24 @@ static void gx_after(BYTE *dir, BYTE *win) {
         unit = top >= 1e6 ? 1e6 : top >= 1e4 ? 1e3 : 1.0;
         dec = st / unit >= 1.0 ? 0 : st / unit >= 0.1 ? 1 : 2;
         c16 = gx_col16(col[c].rgb);
-        x = ox + pl + 2 + c * (GX_TW + 1 + GX_LW);
+        /* graphfix: column 0's tick starts on the first pixel inside the plot's left frame line (pl), its number right
+         * after the tick. Ticks and label boxes are clamped into the plot rect: top/bottom labels shift inwards, a box
+         * that would cross the right edge is narrowed, a column with no room left is hidden. */
+        x = ox + pl + 1 + c * (GX_TW + 1 + GX_LW);
+        lw = ox + pr - (x + GX_TW + 1);
+        if (lw > GX_LW) lw = GX_LW;
+        if (lw < GX_LH) { gx_hide_col(win, c, 0); continue; }
         for (v = gx_floor(rlo / st + 0.999999) * st; v <= rhi + st * 1e-6 && n < GX_TK; v += st, n++) {
             double py = (double)y0 - ((v - add) / mul * k100 / col[c].scale) * (double)(pb - pt) / (double)(mx - mn);
             y = oy + (int)(py + 0.5);
+            if (y < oy + pt) y = oy + pt;                          /* the tick inside the plot too */
+            if (y > oy + pb - 1) y = oy + pb - 1;
             gx_tick(win, GX_TICK + c * 0x10 + n, c16, x, y);
             gx_fmt(t, v, unit, dec);
             k = y - GX_LH / 2;
             if (k < oy + pt) k = oy + pt;                          /* inside the plot */
             if (k > oy + pb - GX_LH) k = oy + pb - GX_LH;
-            gx_label(fac, win, GX_LBL + c * 0x10 + n, t, c16, x + GX_TW + 1, k);
+            gx_label(fac, win, GX_LBL + c * 0x10 + n, t, c16, x + GX_TW + 1, k, lw);
         }
         gx_hide_col(win, c, n);
     }

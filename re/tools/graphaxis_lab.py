@@ -5,7 +5,8 @@ dialog-local pixels, dumping a frame (SC3RESIZE_FRAMEDUMP) after each. Posted in
 
 py -3.12 re/tools/graphaxis_lab.py --tag A [--city "Berlin, Germany"] [--size 2560x1351] [--view 9]
     [--click NAME:x,y ...] [--survey] [--env K=V ...] [--keep]
-A click NAME:x,y clicks Ver datos dialog-local (x, y). The Graficas page is a child at (38, 40) of that dialog: checkbox
+A click NAME:x,y clicks Ver datos dialog-local (x, y). NAME:reopen closes Ver datos and opens it again (graphfix: the
+page's first render), NAME:size=WxH resizes the client live. The Graficas page is a child at (38, 40) of that dialog: checkbox
 col c row r at (64 + 120 c, 257 + 24 r), range radios 1 / 10 / 100 years at (322, 387 / 405 / 423) and dumps <NAME>.png; NAME:- only dumps, NAME:key=P4 posts keys, NAME:sleep=<s> waits, NAME:cmd=0x10009002 fires a menu command (Save). The dialog crop of every dump
 is pasted into strip.png in order."""
 import argparse, os, pathlib, re, subprocess, sys, time
@@ -30,6 +31,8 @@ def main(argv):
     ap.add_argument("--tree", default=str(root.parents[0] / "tree")); ap.add_argument("--inst", default=str(root.parents[0] / "inst"))
     ap.add_argument("--out", default=str(root.parents[2] / "verify" / "graphaxis" / "runs"))
     ap.add_argument("--keep", action="store_true", help="leave the game running")
+    ap.add_argument("--dlg", default="", help="x,y: the dialog's screen origin when it is not enlarged (SC3RESIZE_DLGSCALE=0); "
+                    "the GRAPHAXIS dialog line names the page, 38,40 inside the dialog")
     a = ap.parse_args(argv)
     out = pathlib.Path(a.out) / a.tag
     out.mkdir(parents=True, exist_ok=True)
@@ -48,6 +51,7 @@ def main(argv):
     steps = 3 + len(a.click)
     print(f"[1/{steps}] launch pid {p.pid} env {a.env} OK", flush=True)
     names = []
+    boxes = {}
     bw, bh = 424, 440
     try:
         ok, _ = sc3wait.wait_log(log, r"city HUD became visible", 400)
@@ -69,19 +73,33 @@ def main(argv):
 
         def q(nx, ny):
             return int(cx + s * (nx - cx)), int(cy + s * (ny - cy))
-        sc3io.click(h, *q(cw - 35, ch - 257)); time.sleep(1.2)   # views category
-        n1 = log.stat().st_size
-        sc3io.click(h, *q(cw - 82, ch - 240))                    # Ver datos
-        sc3wait.wait_log(log, DLG, 30, start=n1); time.sleep(1.5)   # GXD only when not enlarged (HUD 1)
-        sc3io.click(h, *q(cw - 35, ch - 257)); time.sleep(1.5)   # flyout closed
-        txt = log.read_text(errors="replace")
-        dl = [d for d in re.findall(DLG, txt) if int(d[2]) - int(d[0]) >= 300]   # not a tooltip
-        gx = re.findall(GXD, txt)
-        if dl:
-            x0, y0, x1, y1 = (int(v) for v in dl[-1][4:8])
-            f = (x1 - x0) / (int(dl[-1][2]) - int(dl[-1][0]))
-        elif gx:
-            x0, y0, x1, y1 = (int(v) for v in gx[-1]); f = 1.0
+        def open_vd():
+            """Views flyout > Ver datos, flyout closed again; returns the dialog's screen origin and factor"""
+            sc3io.click(h, *q(cw - 35, ch - 257)); time.sleep(1.2)   # views category
+            n1 = log.stat().st_size
+            sc3io.click(h, *q(cw - 82, ch - 240))                    # Ver datos
+            sc3wait.wait_log(log, DLG + "|" + GXD, 30, start=n1); time.sleep(1.5)   # GXD only when not enlarged (HUD 1)
+            sc3io.click(h, *q(cw - 35, ch - 257)); time.sleep(1.5)   # flyout closed
+            txt = log.read_text(errors="replace")
+            dl = [d for d in re.findall(DLG, txt) if int(d[2]) - int(d[0]) >= 300]   # not a tooltip
+            gx = re.findall(GXD, txt)
+            if dl:
+                x0, y0, x1, y1 = (int(v) for v in dl[-1][4:8])
+                return x0, y0, (x1 - x0) / (int(dl[-1][2]) - int(dl[-1][0]))
+            if a.dlg:
+                return tuple(int(v) for v in a.dlg.split(",")) + (1.0,)
+            if gx:
+                return int(gx[-1][0]), int(gx[-1][1]), 1.0
+            return None
+
+        def open_view():
+            if a.view:
+                vy = 50 + 27.2 * (a.view - 1) if a.view <= 10 else (387 if a.view == 11 else 413)
+                sc3io.click(h, int(x0 + 21 * f), int(y0 + vy * f)); time.sleep(2.5)
+
+        r = open_vd()
+        if r:
+            x0, y0, f = r
         else:
             x0 = y0 = 0; f = 1.0
             print(f"[3/{steps}] open Ver datos FAIL (no dialog line)"); vdio.dump("open")
@@ -90,12 +108,33 @@ def main(argv):
             for nv in range(1, 11):
                 sc3io.click(h, int(x0 + 21 * f), int(y0 + (50 + 27.2 * (nv - 1)) * f)); time.sleep(2.5)
                 vdio.dump(f"survey{nv}")
-        if a.view:
-            vy = 50 + 27.2 * (a.view - 1) if a.view <= 10 else (387 if a.view == 11 else 413)
-            sc3io.click(h, int(x0 + 21 * f), int(y0 + vy * f)); time.sleep(2.5)
+        open_view()
         for k, c in enumerate(a.click):
             nm, xy = c.split(":", 1)
-            if xy.startswith("key="):      # posted keys, e.g. key=P4 (sc3resize: P pause toggle, 1-4 speed)
+            if xy == "reopen":             # close Ver datos with its X, open it again on the same view (a new first render)
+                sc3io.click(h, int(x0 + 402 * f), int(y0 + 16 * f)); time.sleep(2.0)
+                r = open_vd()
+                if r:
+                    x0, y0, f = r
+                open_view()
+                print(f"    reopened, dialog at ({x0},{y0}) factor {f:.3f}", flush=True)
+            elif xy.startswith("size="):   # live client resize with the dialog open (DLGSCALE factor follows the HUD)
+                n2 = log.stat().st_size
+                w, hh = (int(v) for v in xy[5:].split("x"))
+                print("    client", vdio.resize(h, w, hh), flush=True)
+                sc3wait.wait_layout(log, n2, timeout=60)
+                time.sleep(2.0)
+                _, _, cw, ch = sc3io.client_rect_on_screen(h)   # the HUD click points follow the new layout
+                txt = log.read_text(errors="replace")
+                m = re.findall(r"HUDSCALE> \d+ window\(s\) enlarged ([0-9.]+)x about \((\d+),(\d+)\)", txt)
+                s = float(m[-1][0]) if m else 1.0
+                cx, cy = (int(m[-1][1]), int(m[-1][2])) if m else (cw, ch)
+                txt = txt[n2:]
+                dl = [d for d in re.findall(DLG, txt) if int(d[2]) - int(d[0]) >= 300]
+                if dl:
+                    x0, y0, x1, y1 = (int(v) for v in dl[-1][4:8]); f = (x1 - x0) / (int(dl[-1][2]) - int(dl[-1][0]))
+                print(f"    dialog at ({x0},{y0}) factor {f:.3f}", flush=True)
+            elif xy.startswith("key="):      # posted keys, e.g. key=P4 (sc3resize: P pause toggle, 1-4 speed)
                 for ch in xy[4:]:
                     sc3io.key(h, ord(ch.upper())); time.sleep(0.4)
             elif xy.startswith("cmd="):      # a menu command through np_drive (Frida post), e.g. cmd=0x10009002 = Save
@@ -112,11 +151,14 @@ def main(argv):
             time.sleep(1.0)
             pth = vdio.dump(nm)
             names.append(nm)
+            boxes[nm] = (x0, y0, f)
             print(f"[{4 + k}/{steps}] {nm} {'OK' if pth else 'NODUMP'}", flush=True)
         try:   # the dialog of each frame side by side, in click order
             from PIL import Image
-            box = (x0, y0, x0 + int(bw * f), y0 + int(bh * f))
-            ims = [Image.open(fd / f"{nm}.png").crop(box).resize((bw, bh)) for nm in names if (fd / f"{nm}.png").exists()]
+            def crop(nm):   # each frame at the dialog box it was taken with
+                bx, by, bf = boxes[nm]
+                return Image.open(fd / f"{nm}.png").crop((bx, by, bx + int(bw * bf), by + int(bh * bf))).resize((bw, bh))
+            ims = [crop(nm) for nm in names if (fd / f"{nm}.png").exists()]
             if ims:
                 st = Image.new("RGB", (bw * len(ims), bh))
                 for i, im in enumerate(ims):
