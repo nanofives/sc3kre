@@ -45,3 +45,6 @@ staged manifest SHA-256 (132 checked, 0 mismatches), sc3mods_patch.ps1 equal to 
 
 Owner checks: real Ctrl+F and a real click on the picker, landfill "?" lines at a big UI scale and the fee, a city saved
 after Vaciar loaded without the mod, the 10 / 100 year graph views over a long session.
+
+GitHub: `sc3mods-2026-10-31`, target `02b339b`, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-10-31, asset
+downloaded back, SHA-256 matches. The 10-29d notes now start with a "superseded" line.
