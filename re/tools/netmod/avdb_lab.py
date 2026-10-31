@@ -7,9 +7,11 @@ SC3_PID = your game, running (not paused).
   py avdb_lab.py stair X,Z N [--axis 1]          one diagonal road drag: N rows of a staircase from (X,Z)
                                                  (axis 0 runs +x +z, axis 1 runs -x +z), 2 cells per row
   py avdb_lab.py avenue X,Z N [--axis 1]         a 3-cell diagonal avenue: two joined drags, the second one cell over
+  py avdb_lab.py dboulevard X,Z N [--axis 1]     a diagonal boulevard: three joined drags, one cell over each
   py avdb_lab.py road X0,Z0 X1,Z1                straight road drag
   py avdb_lab.py remove X,Z                      bulldoze one cell
   py avdb_lab.py snap X0,Z0,X1,Z1 OUT.json       piece.state of every network cell in the box
+  py avdb_lab.py occ X0,Z0,X1,Z1 [STEP]          map of occupied cells ('#' anything, 'r' network, '.' empty), every STEP
   py avdb_lab.py diff A.json B.json              cells that differ
   py avdb_lab.py grid A.json                     ASCII view (piece ids) of a snapshot
 """
@@ -71,6 +73,11 @@ def main(argv):
         n = int(a[1])
         print(json.dumps(build(stair(x, z, n, axis))))
         print(json.dumps(build(stair(x + (-1 if axis else 1), z, n, axis))))
+    elif cmd == "dboulevard":
+        x, z = xy(a[0])
+        n = int(a[1])
+        for d in range(3):
+            print(json.dumps(build(stair(x + d * (-1 if axis else 1), z, n, axis))))
     elif cmd == "road":
         print(json.dumps(build(nb_drive.line(xy(a[0]), xy(a[1])))))
     elif cmd == "remove":
@@ -78,6 +85,15 @@ def main(argv):
         s = nb_drive.Session()
         s.job({"kind": "post4", "w": [0x637C0DAB, 0, 0, 0]})
         print(json.dumps(s.job({"kind": "remove", "x": x, "z": z}, timeout=300)))
+        s.close()
+    elif cmd == "occ":
+        x0, z0, x1, z1 = xy(a[0])
+        st = int(a[1]) if len(a) > 1 else 1
+        s = nb_drive.Session()
+        for z in range(z0, z1 + 1, st):
+            r = s.job({"kind": "cells", "x0": x0, "y0": z, "x1": x1, "y1": z})
+            got = {c["x"]: ("r" if "piece" in c else "#") for c in r.get("cells", [])}
+            print("%4d " % z + "".join(got.get(x, ".") for x in range(x0, x1 + 1, st)), flush=True)
         s.close()
     elif cmd == "snap":
         snap(xy(a[0]), a[1])

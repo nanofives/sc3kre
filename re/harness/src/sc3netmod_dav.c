@@ -462,14 +462,20 @@ static int dav_valid(DavPass *p, int n) {
 static const BYTE DAV_AX_ST[2][4] = { { 2, 0, 2, 0 }, { 1, 3, 1, 3 } };     /* A0, A1, B1, B2 */
 
 /* one pass over the cells in [x0..x1] x [z0..z1]; -> 1 when a band reached the read border (the caller re-runs it
-   over the whole map). keep[cell] = 1 for every cell of a converted band (the revert skips them). */
-static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, const char *who, BYTE *keep) {
+   over the whole map). keep[cell] = 1 for every cell of a converted band (the revert skips them).
+   task avdiagbreak (DAVGROW): psides != NULL -> a band reaching the border is not written here, and *psides = the
+   window sides (1 x0, 2 z0, 4 x1, 8 z1) cut bands and cut stale runs reach (the caller grows the window there) */
+static int g_dav_grow = -1;
+static volatile LONG g_dav_n_grow, g_dav_n_full;
+static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, const char *who, BYTE *keep,
+                    int *psides) {
     void *lay = *(void **)(mgr + 0x3c);
     DavPass P;
     CutGuard cg;                        /* task avdiagbreak: the revert guard (sc3netmod_cut.c) */
     BYTE *mem;
     SIZE_T nbuf;
     int axis, x, z, n, k, j, border = 0, nb = 0, nwall = 0, nrev = 0, nxall = 0, round, done, dry, nst[2] = { 0, 0 };
+    int allsd = 0;                      /* task avdiagbreak: DAVGROW, cut sides of the write round */
     P.b.x0 = x0; P.b.z0 = z0; P.b.w = x1 - x0 + 1; P.b.h = z1 - z0 + 1;
     nbuf = (SIZE_T)P.b.w * P.b.h;
     mem = (BYTE *)VirtualAlloc(NULL, nbuf * 6 + DAV_MAX_CELLS * (sizeof(DavCell) + 4 + sizeof(DavJ)) +
@@ -512,6 +518,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                 DWORD mcw[16];
                 BYTE side[1024];
                 int nop = 0, opn[DAV_MAX_OPN][6];       /* task avdiag: median openings: near, median, far cell (real) */
+                int bsd = 0;                            /* task avdiagbreak: window sides this band reaches */
                 const char *why = "";
                 if (!dav_full(&P.b, axis, x, z) || dav_full(&P.b, axis, x - 1, z - 1)) continue;
                 while (dav_full(&P.b, axis, x + rows, z + rows)) rows++;
@@ -750,8 +757,11 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
 #undef XC
                 for (k = 0; k < n && ok; k++) {
                     int cx = P.cell[k].x, cz = P.cell[k].z;
-                    if ((cx <= x0 && x0 > 0) || (cz <= z0 && z0 > 0) || (cx >= x1 && x1 < W - 1) || (cz >= z1 && z1 < H - 1))
-                        border = 1;
+                    {                                              /* task avdiagbreak: per side, for DAVGROW */
+                        int sd = (cx <= x0 && x0 > 0 ? 1 : 0) | (cz <= z0 && z0 > 0 ? 2 : 0) |
+                                 (cx >= x1 && x1 < W - 1 ? 4 : 0) | (cz >= z1 && z1 < H - 1 ? 8 : 0);
+                        if (sd) { border = 1; bsd |= sd; }
+                    }
                     for (j = 0; j < 8 && ok; j++) {                /* isolated: no other road touches the band */
                         int qx = cx + DAV_DIR[j][0], qz = cz + DAV_DIR[j][1];
                         if (rb_at(&P.b, qx, qz) && !(dav_mark(&P, qx, qz) & 44) && !(dav_xm(&P, qx, qz) & 1) &&
@@ -938,7 +948,8 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                 if (g_dav_probe && !dry)                           /* task avdiag: dav_band_ok's question */
                     for (k = 0; k < n; k++)
                         if (P.cell[k].x == g_dav_pq[0] && P.cell[k].z == g_dav_pq[1]) g_dav_pr = ok;
-                if (ok && !dry && !g_dav_probe) {
+                if (!dry && psides) allsd |= bsd;                /* task avdiagbreak: DAVGROW */
+                if (ok && !dry && !g_dav_probe && !(psides && bsd)) {   /* DAVGROW: a cut band is decided wider */
                     nb++;
                     for (k = 0; k < n + na + nxw; k++) {
                         int cx, cz;
@@ -967,7 +978,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                              axis ? -x : x, z, n, nj, na, nmg, bend[0], bend[1], nxm, nw);
                     nwall += nw;
                     nxall += nxm;
-                } else if (!dry && !g_dav_probe && (nj || na || nxm)) {
+                } else if (!ok && !dry && !g_dav_probe && (nj || na || nxm)) {
                     logf("dav: %s: band axis %d from (%d,%d) with %d junction cell(s), %d crossing(s) left to the stock "
                          "tiler: %s", who, axis, axis ? -x : x, z, nj, nxm, why);
                 }
@@ -1013,6 +1024,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                 logf("dav: %s: (%d,%d) avenue piece %lu no longer in a band -> stock retile", who, x, z, v & 0xffff);
             }
     if (keep && nrev) cut_reput(&cg, mgr, lay, who, "dav");    /* task avdiagbreak: the run-wide retile's damage */
+    if (psides) *psides = allsd | (keep ? cg.sides : 0);       /* task avdiagbreak: DAVGROW */
     if (keep) cut_end(&cg);
     VirtualFree(mem, 0, MEM_RELEASE);
     InterlockedExchangeAdd(&g_dav_n_bands, nb);
@@ -1022,25 +1034,49 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
     return border;
 }
 
-/* cells [x0..x1] x [z0..z1] were edited (the retile pass's work box) or the whole map (load) */
+/* cells [x0..x1] x [z0..z1] were edited (the retile pass's work box) or the whole map (load).
+   task avdiagbreak (DAVGROW, like avslow's DBVGROW / BVGROW): a window that cuts a band, or a stale run DAVCUT holds,
+   used to go straight to a whole-map pass (every edit near a long diagonal avenue on 1024 read the whole map). Now the
+   window grows on the cut sides, by 64 cells and then doubling, until nothing is cut (the whole map at worst). Cut bands
+   are not written in a cut window. Off: SC3NETMOD_DAVGROW=0 (straight to the whole map, as before). */
 static void dav_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) {
-    int W = (*(int *)(mgr + 0x5c) >> 8) + 1, H = (*(int *)(mgr + 0x60) >> 8) + 1, M = 24, full;
+    int W = (*(int *)(mgr + 0x5c) >> 8) + 1, H = (*(int *)(mgr + 0x60) >> 8) + 1, M = 24, full, sides = 0, step = 64;
+    int round;
     BYTE *keep;
     if (!g_dav_on || W < 4 || H < 4 || W > 4096 || H > 4096) return;
+    if (g_dav_grow < 0) {
+        g_dav_grow = !env_off("SC3NETMOD_DAVGROW");
+        logf("dav: DAVGROW %s (SC3NETMOD_DAVGROW)", g_dav_grow ? "on" : "off");
+    }
     x0 -= M; z0 -= M; x1 += M; z1 += M;
     if (x0 < 0) x0 = 0;
     if (z0 < 0) z0 = 0;
     if (x1 > W - 1) x1 = W - 1;
     if (z1 > H - 1) z1 = H - 1;
-    full = x0 == 0 && z0 == 0 && x1 == W - 1 && z1 == H - 1;
-    keep = (BYTE *)VirtualAlloc(NULL, (SIZE_T)(x1 - x0 + 1) * (z1 - z0 + 1), MEM_COMMIT, PAGE_READWRITE);
-    if (!keep) return;
-    if (dav_pass(mgr, x0, z0, x1, z1, W, H, who, keep) && !full) {
-        VirtualFree(keep, 0, MEM_RELEASE);
-        logf("dav: %s: a band reached the read border - whole-map pass", who);
-        keep = (BYTE *)VirtualAlloc(NULL, (SIZE_T)W * H, MEM_COMMIT, PAGE_READWRITE);
+    for (round = 0; ; round++) {
+        full = x0 == 0 && z0 == 0 && x1 == W - 1 && z1 == H - 1;
+        keep = (BYTE *)VirtualAlloc(NULL, (SIZE_T)(x1 - x0 + 1) * (z1 - z0 + 1), MEM_COMMIT, PAGE_READWRITE);
         if (!keep) return;
-        dav_pass(mgr, 0, 0, W - 1, H - 1, W, H, who, keep);
+        sides = 0;
+        if (!dav_pass(mgr, x0, z0, x1, z1, W, H, who, keep, (full || !g_dav_grow) ? NULL : &sides) || full) break;
+        VirtualFree(keep, 0, MEM_RELEASE);
+        if (!g_dav_grow) {                                                   /* the old way */
+            logf("dav: %s: a band reached the read border - whole-map pass", who);
+            x0 = 0; z0 = 0; x1 = W - 1; z1 = H - 1;
+            continue;
+        }
+        if (!sides) sides = 15;                                              /* never: a cut names its side */
+        if (sides & 1) x0 = max(0, x0 - step);
+        if (sides & 2) z0 = max(0, z0 - step);
+        if (sides & 4) x1 = min(W - 1, x1 + step);
+        if (sides & 8) z1 = min(H - 1, z1 + step);
+        step *= 2;
+        InterlockedIncrement(&g_dav_n_grow);
+        if (x0 == 0 && z0 == 0 && x1 == W - 1 && z1 == H - 1) InterlockedIncrement(&g_dav_n_full);
+        if (round < 12)
+            logf("dav: %s: the window cuts a diagonal avenue (side%s%s%s%s) - window grown to (%d,%d)-(%d,%d)", who,
+                 sides & 1 ? " x-" : "", sides & 2 ? " z-" : "", sides & 4 ? " x+" : "", sides & 8 ? " z+" : "", x0, z0,
+                 x1, z1);
     }
     VirtualFree(keep, 0, MEM_RELEASE);
 }
@@ -1076,10 +1112,10 @@ static int dav_band_ok(int x, int z) {
     x0 = x - 40 < 0 ? 0 : x - 40; z0 = z - 40 < 0 ? 0 : z - 40;
     x1 = x + 40 > W - 1 ? W - 1 : x + 40; z1 = z + 40 > H - 1 ? H - 1 : z + 40;
     g_dav_probe = 1; g_dav_pq[0] = x; g_dav_pq[1] = z; g_dav_pr = 0;
-    border = dav_pass(mgr, x0, z0, x1, z1, W, H, "probe", NULL);
+    border = dav_pass(mgr, x0, z0, x1, z1, W, H, "probe", NULL, NULL);
     if (border && !(x0 == 0 && z0 == 0 && x1 == W - 1 && z1 == H - 1)) {
         g_dav_pr = 0;
-        dav_pass(mgr, 0, 0, W - 1, H - 1, W, H, "probe", NULL);
+        dav_pass(mgr, 0, 0, W - 1, H - 1, W, H, "probe", NULL, NULL);
     }
     g_dav_probe = 0;
     return g_dav_pr;
@@ -1087,10 +1123,11 @@ static int dav_band_ok(int x, int z) {
 
 static void dav_stats(void) {
     static LONG last;
-    LONG n = g_dav_n_bands + g_dav_n_cells + g_dav_n_rev + g_dav_n_x + g_dav_n_avl;
+    LONG n = g_dav_n_bands + g_dav_n_cells + g_dav_n_rev + g_dav_n_x + g_dav_n_avl + g_dav_n_grow;
     if (!g_dav_on || n == last) return;
     last = n;
     logf("stats: dav bands seen=%ld, cells written=%ld, middle cells reverted=%ld, crossings=%ld, left two-way for a "
-         "straight avenue=%ld", g_dav_n_bands, g_dav_n_cells, g_dav_n_rev, g_dav_n_x, g_dav_n_avl);   /* task avdiag */
+         "straight avenue=%ld, windows grown=%ld (to the whole map %ld)", g_dav_n_bands, g_dav_n_cells, g_dav_n_rev,
+         g_dav_n_x, g_dav_n_avl, g_dav_n_grow, g_dav_n_full);   /* task avdiag, task avdiagbreak */
 
 }
