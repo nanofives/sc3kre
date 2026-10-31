@@ -466,6 +466,7 @@ static const BYTE DAV_AX_ST[2][4] = { { 2, 0, 2, 0 }, { 1, 3, 1, 3 } };     /* A
 static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, const char *who, BYTE *keep) {
     void *lay = *(void **)(mgr + 0x3c);
     DavPass P;
+    CutGuard cg;                        /* task avdiagbreak: the revert guard (sc3netmod_cut.c) */
     BYTE *mem;
     SIZE_T nbuf;
     int axis, x, z, n, k, j, border = 0, nb = 0, nwall = 0, nrev = 0, nxall = 0, round, done, dry, nst[2] = { 0, 0 };
@@ -489,6 +490,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
     P.xmark = P.mark + nbuf;
     for (z = 0; z < P.b.h; z++)
         for (x = 0; x < P.b.w; x++) P.b.c[z * P.b.w + x] = rb_read(mgr, lay, x0 + x, z0 + z, W, H);
+    if (keep) cut_begin(&cg, x0, z0, x1, z1, W, H); else ZeroMemory(&cg, sizeof(cg));   /* task avdiagbreak */
     /* task diagx: with crossings of two diagonal avenues, dry rounds (no writes) until no band changes, each band's
        crossing needing the other band converted in the round before (round 0: assumed); then the write round */
     done = !g_davx_partner;
@@ -953,6 +955,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                         if (keep && (k < n || k >= n + na) && cx >= x0 && cz >= z0 && cx <= x1 && cz <= z1)
                             keep[(cz - z0) * P.b.w + (cx - x0)] = 1;
                         if (dbv_claimed(cx, cz)) continue;          /* task diagbv: DBV writes its own cells */
+                        cut_wrote(&cg, cx, cz, want);               /* task avdiagbreak */
                         if ((((cur & 0xffff) << 8) | ((cur >> 16) & 3)) == want) continue;
                         pos[0] = cx << 8; pos[1] = cz << 8; pos[2] = 0;
                         ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, lay, pos, want, -1, 8, 0);
@@ -994,8 +997,10 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
     if (round >= 6) done = 1;
     { DavSt *tmp = P.st[0]; P.st[0] = P.st[1]; P.st[1] = tmp; nst[0] = nst[1]; }
     }
-    /* middle and junction pieces in the area (one cell in from the read border) that no band kept: back to stock */
-    if (keep)
+    /* middle and junction pieces in the area (one cell in from the read border) that no band kept: back to stock.
+       task avdiagbreak: not when the read window cuts their run, or the whole-map pass comes anyway (cut_hold) */
+    if (keep && cut_hold(&cg, &P.b, border, dav_is_mid, keep, dbv_claimed, who, "dav")) border = 1;   /* the whole-map pass decides */
+    else if (keep)
         for (z = z0 + 1; z < z1; z++)
             for (x = x0 + 1; x < x1; x++) {
                 DWORD v = rb_at(&P.b, x, z);
@@ -1007,6 +1012,8 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                 nrev++;
                 logf("dav: %s: (%d,%d) avenue piece %lu no longer in a band -> stock retile", who, x, z, v & 0xffff);
             }
+    if (keep && nrev) cut_reput(&cg, mgr, lay, who, "dav");    /* task avdiagbreak: the run-wide retile's damage */
+    if (keep) cut_end(&cg);
     VirtualFree(mem, 0, MEM_RELEASE);
     InterlockedExchangeAdd(&g_dav_n_bands, nb);
     InterlockedExchangeAdd(&g_dav_n_cells, nwall);
