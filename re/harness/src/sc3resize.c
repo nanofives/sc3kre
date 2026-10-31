@@ -9460,6 +9460,10 @@ static void qi_add_button(void *win, BYTE *qo) {
 static DWORD rl_click(void *self, DWORD win, BYTE *qo);   /* RELOCATE, below */
 static void rl_add_button(void *win, BYTE *qo);
 #define RL_BTN 0x02F95B51
+static int  g_landfill = 1;                                /* LANDFILL, below */
+#define LF_BTN 0x02F95B52
+static void lf_add(void *win, BYTE *qo);
+static void lf_click(void *win, BYTE *qo);
 static DWORD __fastcall qi_msg(void *self, void *edx, DWORD win, DWORD msg, DWORD p3, DWORD p4, DWORD p5) {
     DWORD a[5], r;
     (void)edx;
@@ -9468,11 +9472,13 @@ static DWORD __fastcall qi_msg(void *self, void *edx, DWORD win, DWORD msg, DWOR
         if (p3 == 1) { qi_copy((BYTE *)self - 4); return 1; }
     }
     if (msg == 3 && p4 == RL_BTN && p3 == 1 && rl_click(self, win, (BYTE *)self - 4)) return 1;   /* RELOCATE */
+    if (msg == 3 && p4 == LF_BTN && p3 == 1 && g_landfill) { lf_click((void *)win, (BYTE *)self - 4); return 1; }   /* LANDFILL */
     a[0] = win; a[1] = msg; a[2] = p3; a[3] = p4; a[4] = p5;
     r = rz_thiscall_ret(self, g_orig_338f, a, 5);
     if (msg == 0xa2bf8ace && (r & 0xff) && win) {
         if (g_queryid) qi_add_button((void *)win, (BYTE *)self - 4);
         rl_add_button((void *)win, (BYTE *)self - 4);                                                  /* RELOCATE */
+        if (g_landfill) lf_add((void *)win, (BYTE *)self - 4);                                       /* LANDFILL */
     }
     return r;
 }
@@ -9638,7 +9644,7 @@ static void pk_install(void) {
 static void qi_install(HMODULE sui) {
     static const BYTE e338f[6] = { 0x55, 0x8b, 0xec, 0x56, 0x8b, 0xf1 };   /* push ebp; mov ebp,esp; push esi; mov esi,ecx */
     if (!g_queryid) logf("QUERYID> off (SC3RESIZE_QUERYID=0): no button in the query dialog");
-    if (!g_queryid && g_rl_envoff) return;
+    if (!g_queryid && g_rl_envoff && !g_landfill) return;
     if (ho_hook(sui, 0x6338f, e338f, 6, (void *)qi_msg, &g_orig_338f, "query dialog messages FUN_1006338f") && g_queryid)
         logf("QUERYID> on: \"Copiar ID\" button in the query (?) dialog");
 }
@@ -10012,6 +10018,77 @@ static void rl_add_button(void *win, BYTE *qo) {
     if (!rl_rect_free(win, bx, by, bx + RL_BW, by + QI_BH)) { bx = w - 8 - RL_BW; by -= QI_BH + 6; }
     ok = mp_button(fac, win, RL_BTN, ho_spanish() ? "Mover" : "Move", bx, by, RL_BW, QI_BH);
     logf("RELOCATE> \"?\" of type %lu: Mover button %s at local (%ld, %ld)", t, ok ? "added" : "FAILED", bx, by);
+}
+
+/* LANDFILL (task landfill 2026-10-30, re/analysis/LANDFILL.md). Owner: "Each landfill should be independent, and it
+ * should be possible to empty one." On a landfill cell (zone byte 17, city vt+0x14c GetValue as qi_build reads it) the
+ * query dialog gets three lines about that one landfill (fill %, tons, free room, the fee) and a "Vaciar" button. Both come
+ * from sc3landfill.dll (sc3landfill_text / sc3landfill_empty), which owns the mechanism; without it nothing is added.
+ * The click empties the landfill and rewrites the lines, the last one with the result. SC3RESIZE_LANDFILL=0: nothing added. */
+#define LF_L1  0x02F95B53
+#define LF_L2  0x02F95B54
+#define LF_L3  0x02F95B55
+#define LF_BW  80
+typedef int (__cdecl *PFN_lf_text)(int, int, int, char *, char *, char *, int);
+typedef int (__cdecl *PFN_lf_empty)(int, int, int, char *, int);
+
+static void lf_cell(BYTE *qo, int *x, int *z) {
+    DWORD *c = (DWORD *)(qo + 0xdc);
+    *x = (int)((LONG)c[0] >> 8); *z = (int)((LONG)c[1] >> 8);
+}
+
+static void lf_caption(void *win, DWORD id, const char *t) {
+    void *c = (void *)ho_v(win, 0x78, 1, id, 0, 0, 0, 0);
+    BYTE s[0x20];
+    if (!c || IsBadReadPtr(c, 4)) return;
+    ho_str(s, t);
+    ho_v(c, 0x10c, 1, (DWORD)s, 0, 0, 0, 0);
+    ho_str_free(s);
+}
+
+static void lf_add(void *win, BYTE *qo) {
+    HMODULE sui = GetModuleHandleA("SIMUI.DLL"), lfm = GetModuleHandleA("sc3landfill.dll");
+    PFN_lf_text ft;
+    void *fac;
+    LONG *l = (LONG *)((BYTE *)win + 0x80), w, h, by, ly;
+    char l1[160], l2[160], l3[160];
+    int x, z, es = ho_spanish(), ok1, ok2, ok3 = 0, okb = 0;
+    if (!sui || !lfm || !win || IsBadReadPtr(win, 0xa4)) return;
+    if (ho_v(win, 0x78, 1, LF_BTN, 0, 0, 0, 0) || ho_v(win, 0x78, 1, LF_L1, 0, 0, 0, 0)) return;
+    ft = (PFN_lf_text)GetProcAddress(lfm, "sc3landfill_text");
+    if (!ft) return;
+    lf_cell(qo, &x, &z);
+    if (!ft(x, z, es, l1, l2, l3, sizeof(l1))) return;
+    fac = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85065))();
+    if (!fac || IsBadReadPtr(fac, 4)) return;
+    w = l[2] - l[0]; h = l[3] - l[1];
+    by = h - 0x25 + (32 - QI_BH) / 2;
+    ly = by - 58;
+    {   int keep = g_ho_lblcol;
+        g_ho_lblcol = 1;                       /* navy, as the dialog's own text (the default light blue read faint) */
+        ok1 = ho_add_label(fac, win, LF_L1, l1, 10, ly, w - 20);
+        ok2 = ho_add_label(fac, win, LF_L2, l2, 10, ly + 18, w - 20);
+        if (l3[0]) ok3 = ho_add_label(fac, win, LF_L3, l3, 10, ly + 36, w - 20);
+        g_ho_lblcol = keep;
+    }
+    if (GetProcAddress(lfm, "sc3landfill_empty") && l3[0])   /* the fee line exists only when emptying is on */
+        okb = mp_button(fac, win, LF_BTN, es ? "Vaciar" : "Empty", 8, by, LF_BW, QI_BH);
+    logf("LANDFILL> \"?\" on landfill cell (%d, %d), dialog %ldx%ld: lines %d %d %d, button %d | %s | %s | %s", x, z, w,
+         h, ok1, ok2, ok3, okb, l1, l2, l3);
+}
+
+static void lf_click(void *win, BYTE *qo) {
+    HMODULE lfm = GetModuleHandleA("sc3landfill.dll");
+    PFN_lf_empty fe = lfm ? (PFN_lf_empty)GetProcAddress(lfm, "sc3landfill_empty") : NULL;
+    PFN_lf_text ft = lfm ? (PFN_lf_text)GetProcAddress(lfm, "sc3landfill_text") : NULL;
+    char msg[200], l1[160], l2[160], l3[160];
+    int x, z, es = ho_spanish(), r;
+    if (!fe || !ft) return;
+    lf_cell(qo, &x, &z);
+    r = fe(x, z, es, msg, sizeof(msg));
+    logf("LANDFILL> Vaciar on (%d, %d): %d \"%s\"", x, z, r, msg);
+    if (ft(x, z, es, l1, l2, l3, sizeof(l1))) { lf_caption(win, LF_L1, l1); lf_caption(win, LF_L2, l2); }
+    lf_caption(win, LF_L3, msg[0] ? msg : l3);
 }
 
 static int rl_patch_slot(DWORD *slot, void *fn, DWORD *orig) {
@@ -17231,6 +17308,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MPHOVER", v, sizeof(v))) g_mp_hover = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MODSUI", v, sizeof(v))) g_modsui = atoi(v);   /* owner 2026-10-27 */
           if (GetEnvironmentVariableA("SC3RESIZE_QUERYID", v, sizeof(v))) g_queryid = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_LANDFILL", v, sizeof(v))) g_landfill = atoi(v);   /* task landfill */
           {   char bp[MAX_PATH]; ho_ini_path(bp, sizeof(bp));   /* mods page: [buildings], then the env overrides */
               g_relocate = GetPrivateProfileIntA("buildings", "mover", 1, bp) ? 1 : 0;
               g_plopover = GetPrivateProfileIntA("buildings", "plopover", 1, bp) ? 1 : 0; }
