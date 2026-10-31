@@ -13,7 +13,7 @@
   (mods_launch.exe is retired 2026-10-25: launch with sc3wait.launch_game, direct Apps\SC3U.exe + SC3MODS_* env.)
 #>
 param(
-    [Parameter(Mandatory)] [ValidateSet('sc3resize', 'sc3bigcity', 'sc3overscroll', 'sc3simrun', 'sc3perf', 'sc3netmod', 'sc3cartrips', 'sc3undo', 'sc3autosave', 'sc3mods')]
+    [Parameter(Mandatory)] [ValidateSet('sc3resize', 'sc3bigcity', 'sc3overscroll', 'sc3simrun', 'sc3perf', 'sc3netmod', 'sc3cartrips', 'sc3undo', 'sc3autosave', 'sc3landfill', 'sc3mods')]
     [string] $Mod,
     [Parameter(Mandatory)] [string] $Src,
     [Parameter(Mandatory)] [string] $Out
