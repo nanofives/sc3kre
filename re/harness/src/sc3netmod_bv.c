@@ -503,7 +503,15 @@ static int bv_takes(BYTE *mgr, int x, int z) {
 
 typedef struct {
     BYTE *mgr; void *lay; int x0, z0, x1, z1, W, H; const char *who; BYTE *keep; int write, border, nruns, nw;
+    int sides;                  /* task avslow: the read-window sides a cut run reached (bv_bside bits) */
 } BvDecide;
+
+/* task avslow: the read-window sides (1 x0, 2 z0, 4 x1, 8 z1) a cell is on or one in from, 0 none. A run with a cell
+   there is cut by the window (the old test, per side) */
+static int bv_bside(const BvDecide *d, int cx, int cz) {
+    return (cx <= d->x0 + 1 && d->x0 > 0 ? 1 : 0) | (cz <= d->z0 + 1 && d->z0 > 0 ? 2 : 0) |
+           (cx >= d->x1 - 1 && d->x1 < d->W - 1 ? 4 : 0) | (cz >= d->z1 - 1 && d->z1 < d->H - 1 ? 8 : 0);
+}
 
 /* one converting piece of a run (bv_parts): border check, then keep[] (write 0) or the pieces + log (write 1) */
 static void bv_decide_part(void *ctx, BvPass *P, int sa, int sb, int w, const int *cut, const char *why, int split) {
@@ -514,13 +522,9 @@ static void bv_decide_part(void *ctx, BvPass *P, int sa, int sb, int w, const in
            end: the whole-map pass decides it */
         int ec[2], j, hit = 0;
         ec[0] = sa; ec[1] = sb;
-        for (j = 0; j < 2 && !hit; j++)
-            for (k = 0; k < 3 && !hit; k++) {
-                int cx = bv_rx(axis, ec[j], w + k), cz = bv_rz(axis, ec[j], w + k);
-                hit = (cx <= d->x0 + 1 && d->x0 > 0) || (cz <= d->z0 + 1 && d->z0 > 0) ||
-                      (cx >= d->x1 - 1 && d->x1 < d->W - 1) || (cz >= d->z1 - 1 && d->z1 < d->H - 1);
-            }
-        if (hit) { d->border = 1; return; }
+        for (j = 0; j < 2; j++)
+            for (k = 0; k < 3; k++) hit |= bv_bside(d, bv_rx(axis, ec[j], w + k), bv_rz(axis, ec[j], w + k));
+        if (hit) { d->border = 1; d->sides |= hit; return; }                 /* task avslow: + the sides */
         if (d->write && split)
             logf("bv: %s: run axis %d from (%d,%d): split at a bad arm, columns %d..%d convert, the rest of %d..%d left to "
                  "the stock tiler: %s", d->who, axis, bv_rx(axis, sa, w), bv_rz(axis, sa, w), sa + cut[1], sb - cut[0],
@@ -529,13 +533,11 @@ static void bv_decide_part(void *ctx, BvPass *P, int sa, int sb, int w, const in
             logf("bv: %s: run axis %d from (%d,%d): ragged end(s), %d column(s) at +s and %d at -s left to the stock "
                  "tiler: %s", d->who, axis, bv_rx(axis, sa, w), bv_rz(axis, sa, w), cut[0], cut[1], why);
     }
-    for (k = 0; k < P->n; k++) {                     /* the run or its ring at the read border: seen cut, not written */
-        int cx = P->cell[k].x, cz = P->cell[k].z;
-        if ((cx <= d->x0 + 1 && d->x0 > 0) || (cz <= d->z0 + 1 && d->z0 > 0) || (cx >= d->x1 - 1 && d->x1 < d->W - 1) ||
-            (cz >= d->z1 - 1 && d->z1 < d->H - 1))
-            break;
+    {                                                /* the run or its ring at the read border: seen cut, not written */
+        int sd = 0;
+        for (k = 0; k < P->n; k++) sd |= bv_bside(d, P->cell[k].x, P->cell[k].z);
+        if (sd) { d->border = 1; d->sides |= sd; return; }                   /* task avslow: + the sides */
     }
-    if (k < P->n) { d->border = 1; return; }
     if (!d->write) {
         if (d->keep)
             for (k = 0; k < P->n; k++) d->keep[(P->cell[k].z - d->z0) * P->b.w + (P->cell[k].x - d->x0)] = 1;
@@ -562,11 +564,11 @@ static void bv_decide_part(void *ctx, BvPass *P, int sa, int sb, int w, const in
 /* every run of the read window, decided; write = 0: only mark keep[] and find the border; write = 1: put the pieces
    (and log). -> 1 when an accepted run reached the read border (the caller re-runs over the whole map) */
 static int bv_decide(BvPass *P, BYTE *mgr, void *lay, int x0, int z0, int x1, int z1, int W, int H, const char *who,
-                     BYTE *keep, BYTE *kind, int write, int *pnruns, int *pnw) {
+                     BYTE *keep, BYTE *kind, int write, int *pnruns, int *pnw, int *psides) {
     int axis;
     BvDecide d;
     d.mgr = mgr; d.lay = lay; d.x0 = x0; d.z0 = z0; d.x1 = x1; d.z1 = z1; d.W = W; d.H = H; d.who = who; d.keep = keep;
-    d.write = write; d.border = 0; d.nruns = 0; d.nw = 0;
+    d.write = write; d.border = 0; d.nruns = 0; d.nw = 0; d.sides = 0;
     for (axis = 0; axis < 2; axis++) {
         int s0 = axis ? z0 : x0, s1 = axis ? z1 : x1, wl = axis ? -x1 : z0, wh = axis ? -x0 : z1, s, w;
         P->axis = axis;
@@ -576,6 +578,16 @@ static int bv_decide(BvPass *P, BYTE *mgr, void *lay, int x0, int z0, int x1, in
                 int sb;
                 if (!bv_full(P, s, w) || bv_full(P, s - 1, w)) continue;
                 if (!bv_parts(P, s, w, &sb, &why, kind, bv_decide_part, &d)) {   /* task avx32: + ragged ends, splits */
+                    if (!write && sb > s) {              /* task avslow: a refused run holding our pieces, cut */
+                        int c, r, sd = 0, ours = 0;
+                        for (c = s; c <= sb; c++)
+                            for (r = 0; r < 3; r++) {
+                                int cx = bv_rx(axis, c, w + r), cz = bv_rz(axis, c, w + r);
+                                sd |= bv_bside(&d, cx, cz);
+                                ours |= bv_is_piece((WORD)(rb_at(&P->b, cx, cz) & 0xffff));
+                            }
+                        if (ours) d.sides |= sd;
+                    }
                     if (write && *why && sb - s + 1 >= 2 * BV_MIN_COLS)
                         logf("bv: %s: run axis %d from (%d,%d), %d column(s) left to the stock tiler: %s", who, axis,
                              bv_rx(axis, s, w), bv_rz(axis, s, w), sb - s + 1, why);
@@ -584,6 +596,7 @@ static int bv_decide(BvPass *P, BYTE *mgr, void *lay, int x0, int z0, int x1, in
     }
     *pnruns += d.nruns;
     *pnw += d.nw;
+    if (psides) *psides = d.sides;                                               /* task avslow */
     return d.border;
 }
 
@@ -591,7 +604,9 @@ static int bv_decide(BvPass *P, BYTE *mgr, void *lay, int x0, int z0, int x1, in
    task avx32 (img16): decide (keep), revert, re-read, THEN write. Writing first let a revert's stock retile overwrite
    pieces just written (in game: a run cut by a rail crossing, its far side reverted, 4 written columns came back
    stock until the next edit) */
-static int bv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, const char *who, BYTE *keep) {
+static int g_bv_grow = -1;                       /* task avslow: BVGROW on (SC3NETMOD_BVGROW=0 off), see bv_run */
+static volatile LONG g_bv_n_grow, g_bv_n_full;
+static int bv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, const char *who, BYTE *keep, int *psides) {
     void *lay = *(void **)(mgr + 0x3c);
     BvPass P;
     BYTE *mem, kind[BV_MAX_RUN];
@@ -605,7 +620,25 @@ static int bv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, cons
     P.cell = (BvCell *)(mem + nbuf * 4);
     for (z = 0; z < P.b.h; z++)
         for (x = 0; x < P.b.w; x++) P.b.c[z * P.b.w + x] = rb_read(mgr, lay, x0 + x, z0 + z, W, H);
-    border = bv_decide(&P, mgr, lay, x0, z0, x1, z1, W, H, who, keep, kind, 0, &nruns, &nwall);
+    border = bv_decide(&P, mgr, lay, x0, z0, x1, z1, W, H, who, keep, kind, 0, &nruns, &nwall, psides);
+    if (psides && g_bv_grow) {                       /* task avslow: a cut run: no revert, no write, the caller grows */
+        int sd;
+        for (z = z0; z <= z1; z++)                   /* + any boulevard piece on the border ring */
+            for (x = x0; x <= x1; x++) {
+                BvDecide rd;
+                rd.x0 = x0; rd.z0 = z0; rd.x1 = x1; rd.z1 = z1; rd.W = W; rd.H = H;
+                sd = bv_bside(&rd, x, z);
+                if (sd & ~*psides) {
+                    DWORD v = rb_at(&P.b, x, z);
+                    if (v && bv_is_piece((WORD)(v & 0xffff))) *psides |= sd;
+                }
+                if (!sd && x1 - 2 > x) x = x1 - 2;   /* the inside of the row holds no ring cell */
+            }
+        if (*psides) {
+            VirtualFree(mem, 0, MEM_RELEASE);
+            return 1;
+        }
+    }
     /* boulevard pieces (one cell in from the read border) that no run kept: back to stock */
     if (keep)
         for (z = z0 + 1; z < z1; z++)
@@ -622,7 +655,7 @@ static int bv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, cons
     if (nrev)                                        /* task avx32: the retiles may have changed cells: read again */
         for (z = 0; z < P.b.h; z++)
             for (x = 0; x < P.b.w; x++) P.b.c[z * P.b.w + x] = rb_read(mgr, lay, x0 + x, z0 + z, W, H);
-    bv_decide(&P, mgr, lay, x0, z0, x1, z1, W, H, who, NULL, kind, 1, &nruns, &nwall);
+    bv_decide(&P, mgr, lay, x0, z0, x1, z1, W, H, who, NULL, kind, 1, &nruns, &nwall, NULL);
     VirtualFree(mem, 0, MEM_RELEASE);
     InterlockedExchangeAdd(&g_bv_n_runs, nruns);
     InterlockedExchangeAdd(&g_bv_n_cells, nwall);
@@ -630,24 +663,52 @@ static int bv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, cons
     return border;
 }
 
+/* task avslow (BVGROW, owner 2026-10-30 "placing road after a 3-lane avenue takes much longer"): the edit box + M is
+   read; a boulevard run cut by that window used to cost, on every edit near a long boulevard, a stock retile of each
+   cut cell in the window (~8.5 ms each) and then a whole-map bv_pass (~0.4-0.5 s on a 1024 map) that wrote the same
+   pieces back. Now a pass that finds a cut run writes nothing (bv_pass with psides), and the window grows only on the
+   sides a cut run reached (an accepted run at the border, a refused run holding boulevard pieces at the border, or a
+   boulevard piece on the border ring), by 64 cells and then doubling, until no run is cut (the whole map last). The
+   pass that writes sees every run touching the window whole, as the whole-map pass did. A refused cut run used to get
+   its pieces reverted with no whole-map pass at all (avdiagbreak's DAV case, same code shape here).
+   Off: SC3NETMOD_BVGROW=0 (old way). */
 static void bv_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) {
-    int W = (*(int *)(mgr + 0x5c) >> 8) + 1, H = (*(int *)(mgr + 0x60) >> 8) + 1, M = 24, full;
+    int W = (*(int *)(mgr + 0x5c) >> 8) + 1, H = (*(int *)(mgr + 0x60) >> 8) + 1, M = 24, full, sides = 0, step = 64;
+    int round;
     BYTE *keep;
     if (!g_bv_p[0] || W < 4 || H < 4 || W > 4096 || H > 4096) return;
+    if (g_bv_grow < 0) {
+        g_bv_grow = !env_off("SC3NETMOD_BVGROW");
+        logf("bv: BVGROW %s (SC3NETMOD_BVGROW)", g_bv_grow ? "on" : "off");
+    }
     x0 -= M; z0 -= M; x1 += M; z1 += M;
     if (x0 < 0) x0 = 0;
     if (z0 < 0) z0 = 0;
     if (x1 > W - 1) x1 = W - 1;
     if (z1 > H - 1) z1 = H - 1;
-    full = x0 == 0 && z0 == 0 && x1 == W - 1 && z1 == H - 1;
-    keep = (BYTE *)VirtualAlloc(NULL, (SIZE_T)(x1 - x0 + 1) * (z1 - z0 + 1), MEM_COMMIT, PAGE_READWRITE);
-    if (!keep) return;
-    if (bv_pass(mgr, x0, z0, x1, z1, W, H, who, keep) && !full) {
-        VirtualFree(keep, 0, MEM_RELEASE);
-        logf("bv: %s: a boulevard reached the read border - whole-map pass", who);
-        keep = (BYTE *)VirtualAlloc(NULL, (SIZE_T)W * H, MEM_COMMIT, PAGE_READWRITE);
+    for (round = 0; ; round++) {
+        full = x0 == 0 && z0 == 0 && x1 == W - 1 && z1 == H - 1;
+        keep = (BYTE *)VirtualAlloc(NULL, (SIZE_T)(x1 - x0 + 1) * (z1 - z0 + 1), MEM_COMMIT, PAGE_READWRITE);
         if (!keep) return;
-        bv_pass(mgr, 0, 0, W - 1, H - 1, W, H, who, keep);
+        if (!bv_pass(mgr, x0, z0, x1, z1, W, H, who, keep, full ? NULL : &sides) || full) break;
+        VirtualFree(keep, 0, MEM_RELEASE);
+        if (!g_bv_grow) {                                                    /* the old way */
+            logf("bv: %s: a boulevard reached the read border - whole-map pass", who);
+            x0 = 0; z0 = 0; x1 = W - 1; z1 = H - 1;
+            continue;
+        }
+        if (!sides) sides = 15;                                              /* never: a cut run names its side */
+        if (sides & 1) x0 = max(0, x0 - step);
+        if (sides & 2) z0 = max(0, z0 - step);
+        if (sides & 4) x1 = min(W - 1, x1 + step);
+        if (sides & 8) z1 = min(H - 1, z1 + step);
+        step *= 2;
+        InterlockedIncrement(&g_bv_n_grow);
+        if (x0 == 0 && z0 == 0 && x1 == W - 1 && z1 == H - 1) InterlockedIncrement(&g_bv_n_full);
+        if (round < 12)
+            logf("bv: %s: a boulevard reached the read border (side%s%s%s%s) - window grown to (%d,%d)-(%d,%d)", who,
+                 sides & 1 ? " x-" : "", sides & 2 ? " z-" : "", sides & 4 ? " x+" : "", sides & 8 ? " z+" : "", x0, z0,
+                 x1, z1);
     }
     VirtualFree(keep, 0, MEM_RELEASE);
 }
@@ -681,8 +742,9 @@ static int bv_post_avl(BYTE *mgr, int x0, int z0, int x1, int z1, const char *wh
 
 static void bv_stats(void) {
     static LONG last;
-    LONG n = g_bv_n_runs + g_bv_n_cells + g_bv_n_rev;
+    LONG n = g_bv_n_runs + g_bv_n_cells + g_bv_n_rev + g_bv_n_grow;
     if (!g_bv_p[0] || n == last) return;
     last = n;
-    logf("stats: bv runs seen=%ld, cells written=%ld, cells reverted=%ld", g_bv_n_runs, g_bv_n_cells, g_bv_n_rev);
+    logf("stats: bv runs seen=%ld, cells written=%ld, cells reverted=%ld, windows grown=%ld (to the whole map %ld)",
+         g_bv_n_runs, g_bv_n_cells, g_bv_n_rev, g_bv_n_grow, g_bv_n_full);                 /* task avslow */
 }

@@ -395,8 +395,69 @@ static void dbv_clear(DbvPass *p) {
     ZeroMemory(p->owner, (SIZE_T)p->b.w * p->b.h);
 }
 
-/* -> 1 when an accepted band reached the read border (the caller re-runs it over the whole map) */
-static int dbv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, const char *who, BYTE *keep) {
+/* task avslow: DBVGROW (see dbv_run). The read-window sides (1 x0, 2 z0, 4 x1, 8 z1) a real cell is on or one in
+   from, 0 none (the old border test, per side) */
+static int g_dbv_grow = -1;
+static volatile LONG g_dbv_n_grow, g_dbv_n_full;
+static int dbv_bside(const DbvPass *p, int W, int H, int x, int z) {
+    int x0 = p->b.x0, z0 = p->b.z0, x1 = p->b.x0 + p->b.w - 1, z1 = p->b.z0 + p->b.h - 1;
+    return (x <= x0 + 1 && x0 > 0 ? 1 : 0) | (z <= z0 + 1 && z0 > 0 ? 2 : 0) | (x >= x1 - 1 && x1 < W - 1 ? 4 : 0) |
+           (z >= z1 - 1 && z1 < H - 1 ? 8 : 0);
+}
+
+/* task avslow: does the window cut a diagonal boulevard? Dry run of dbv_pass's band scan, nothing written: the sides
+   reached by (1) an accepted band (the old border test), (2) a chain of 2+ rows holding DBV pieces (the cut part
+   of a band can fail them: too few clean rows, an end outside; the old pass then reverted its pieces, the owner's
+   "diagonal boulevard torn down by a road placed elsewhere"), (3) any DBV piece on the border ring. */
+static int dbv_cut_sides(DbvPass *P, int W, int H) {
+    int axis, k, j, sides = 0, x, z;
+    int x0 = P->b.x0, z0 = P->b.z0, x1 = P->b.x0 + P->b.w - 1, z1 = P->b.z0 + P->b.h - 1;
+    for (axis = 0; axis < 2; axis++) {
+        int cx0 = axis ? z0 : x0, cx1 = axis ? z1 : x1, cz0 = axis ? -x1 - 1 : z0, cz1 = axis ? -x0 - 1 : z1, cx, cz;
+        P->axis = axis;
+        for (cz = cz0; cz <= cz1; cz++)
+            for (cx = cx0; cx <= cx1; cx++) {
+                const char *why = "";
+                int n = 0, clean = 0, sd = 0;
+                if (!dbv_full(P, cx, cz) || dbv_full(P, cx - 1, cz - 1)) continue;
+                while (dbv_full(P, cx + n, cz + n) && n < DBV_MAX_ROWS) n++;
+                for (k = 0; k < n; k++)
+                    clean += !dbv_rd(P, cx + k - 1, cz + k) && !dbv_rd(P, cx + k + 4, cz + k);
+                if (n >= 2) {                                  /* (2) counts only a chain holding our pieces */
+                    int ours = 0, cd = 0;
+                    for (k = 0; k < n; k++)
+                        for (j = 0; j < 4; j++) {
+                            int rx = DBV_RX(P, cx + k + j, cz + k), rz = DBV_RZ(P, cx + k + j, cz + k);
+                            cd |= dbv_bside(P, W, H, rx, rz);
+                            ours |= dbv_is_piece((WORD)(rb_at(&P->b, rx, rz) & 0xffff));
+                        }
+                    if (ours) sd |= cd;
+                }
+                if (clean >= DBV_MIN_CLEAN) {
+                    if (dbv_band(P, cx, cz, n, &why))
+                        for (k = 0; k < P->n; k++)
+                            sd |= dbv_bside(P, W, H, DBV_RX(P, P->cell[k].x, P->cell[k].z),
+                                            DBV_RZ(P, P->cell[k].x, P->cell[k].z));
+                    dbv_clear(P);
+                }
+                sides |= sd;
+            }
+    }
+    for (z = z0; z <= z1; z++)                                     /* (3): the ring only */
+        for (x = x0; x <= x1; x++) {
+            int sd = dbv_bside(P, W, H, x, z);
+            if (sd & ~sides) {
+                DWORD v = rb_at(&P->b, x, z);
+                if (v && dbv_is_piece((WORD)(v & 0xffff))) sides |= sd;
+            }
+            if (!sd && x1 - 2 > x) x = x1 - 2;                      /* skip the inside of the row */
+        }
+    return sides;
+}
+
+/* -> 1 when an accepted band reached the read border (the caller re-runs it over the whole map); task avslow: with
+   psides and DBVGROW on, -> 1 when dbv_cut_sides finds a cut, before any write or revert (*psides = the sides) */
+static int dbv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, const char *who, BYTE *keep, int *psides) {
     void *lay = *(void **)(mgr + 0x3c);
     DbvPass P;
     BYTE *mem;
@@ -412,6 +473,10 @@ static int dbv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
     P.cell = (DbvCell *)(P.owner + nbuf);
     for (z = 0; z < P.b.h; z++)
         for (x = 0; x < P.b.w; x++) P.b.c[z * P.b.w + x] = rb_read(mgr, lay, x0 + x, z0 + z, W, H);
+    if (psides && g_dbv_grow && (*psides = dbv_cut_sides(&P, W, H)) != 0) {     /* task avslow: cut, decide wider */
+        VirtualFree(mem, 0, MEM_RELEASE);
+        return 1;
+    }
     for (axis = 0; axis < 2; axis++) {
         /* canonical box of the read box: axis 1 real (x, z) = canonical (z, -x - 1) */
         int cx0 = axis ? z0 : x0, cx1 = axis ? z1 : x1, cz0 = axis ? -x1 - 1 : z0, cz1 = axis ? -x0 - 1 : z1, cx, cz;
@@ -477,34 +542,60 @@ static int dbv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
     return border;
 }
 
+/* task avslow (DBVGROW, owner 2026-10-30): the edit box + M is read. A diagonal boulevard the window cut used to be
+   decided on its visible part: accepted, every edit near it reverted its cut cells (stock retile each) and then a
+   whole-map pass wrote them back; refused (too few clean rows inside, an end outside), its pieces were reverted and no
+   whole-map pass followed, so a road placed ~22-26 cells from a band's end tore the band down. Now a window that cuts
+   one (dbv_cut_sides) writes nothing and grows on the cut sides, by 64 cells and then doubling, until nothing is cut
+   (the whole map at worst). Off: SC3NETMOD_DBVGROW=0 (old way). */
 static void dbv_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) {
-    int W = (*(int *)(mgr + 0x5c) >> 8) + 1, H = (*(int *)(mgr + 0x60) >> 8) + 1, M = 24, full;
+    int W = (*(int *)(mgr + 0x5c) >> 8) + 1, H = (*(int *)(mgr + 0x60) >> 8) + 1, M = 24, full, sides = 0, step = 64;
+    int round;
     BYTE *keep;
     if (!g_dbv_claim) g_dbv_claim = (DWORD *)VirtualAlloc(NULL, DBV_CLAIM * sizeof(DWORD), MEM_COMMIT, PAGE_READWRITE);
     if (g_dbv_claim) { ZeroMemory(g_dbv_claim, DBV_CLAIM * sizeof(DWORD)); g_dbv_nclaim = 0; }
     if (!g_dbv_on || W < 4 || H < 4 || W > 4096 || H > 4096) return;
+    if (g_dbv_grow < 0) {
+        g_dbv_grow = !env_off("SC3NETMOD_DBVGROW");
+        logf("dbv: DBVGROW %s (SC3NETMOD_DBVGROW)", g_dbv_grow ? "on" : "off");
+    }
     x0 -= M; z0 -= M; x1 += M; z1 += M;
     if (x0 < 0) x0 = 0;
     if (z0 < 0) z0 = 0;
     if (x1 > W - 1) x1 = W - 1;
     if (z1 > H - 1) z1 = H - 1;
-    full = x0 == 0 && z0 == 0 && x1 == W - 1 && z1 == H - 1;
-    keep = (BYTE *)VirtualAlloc(NULL, (SIZE_T)(x1 - x0 + 1) * (z1 - z0 + 1), MEM_COMMIT, PAGE_READWRITE);
-    if (!keep) return;
-    if (dbv_pass(mgr, x0, z0, x1, z1, W, H, who, keep) && !full) {
-        VirtualFree(keep, 0, MEM_RELEASE);
-        logf("dbv: %s: a diagonal boulevard reached the read border - whole-map pass", who);
-        keep = (BYTE *)VirtualAlloc(NULL, (SIZE_T)W * H, MEM_COMMIT, PAGE_READWRITE);
+    for (round = 0; ; round++) {
+        full = x0 == 0 && z0 == 0 && x1 == W - 1 && z1 == H - 1;
+        keep = (BYTE *)VirtualAlloc(NULL, (SIZE_T)(x1 - x0 + 1) * (z1 - z0 + 1), MEM_COMMIT, PAGE_READWRITE);
         if (!keep) return;
-        dbv_pass(mgr, 0, 0, W - 1, H - 1, W, H, who, keep);
+        if (!dbv_pass(mgr, x0, z0, x1, z1, W, H, who, keep, full ? NULL : &sides) || full) break;
+        VirtualFree(keep, 0, MEM_RELEASE);
+        if (!g_dbv_grow) {                                                   /* the old way */
+            logf("dbv: %s: a diagonal boulevard reached the read border - whole-map pass", who);
+            x0 = 0; z0 = 0; x1 = W - 1; z1 = H - 1;
+            continue;
+        }
+        if (!sides) sides = 15;                                              /* never: a cut names its side */
+        if (sides & 1) x0 = max(0, x0 - step);
+        if (sides & 2) z0 = max(0, z0 - step);
+        if (sides & 4) x1 = min(W - 1, x1 + step);
+        if (sides & 8) z1 = min(H - 1, z1 + step);
+        step *= 2;
+        InterlockedIncrement(&g_dbv_n_grow);
+        if (x0 == 0 && z0 == 0 && x1 == W - 1 && z1 == H - 1) InterlockedIncrement(&g_dbv_n_full);
+        if (round < 12)
+            logf("dbv: %s: the window cuts a diagonal boulevard (side%s%s%s%s) - window grown to (%d,%d)-(%d,%d)", who,
+                 sides & 1 ? " x-" : "", sides & 2 ? " z-" : "", sides & 4 ? " x+" : "", sides & 8 ? " z+" : "", x0, z0,
+                 x1, z1);
     }
     VirtualFree(keep, 0, MEM_RELEASE);
 }
 
 static void dbv_stats(void) {
     static LONG last;
-    LONG n = g_dbv_n_bands + g_dbv_n_cells + g_dbv_n_rev;
+    LONG n = g_dbv_n_bands + g_dbv_n_cells + g_dbv_n_rev + g_dbv_n_grow;
     if (!g_dbv_on || n == last) return;
     last = n;
-    logf("stats: dbv bands seen=%ld, cells written=%ld, cells reverted=%ld", g_dbv_n_bands, g_dbv_n_cells, g_dbv_n_rev);
+    logf("stats: dbv bands seen=%ld, cells written=%ld, cells reverted=%ld, windows grown=%ld (to the whole map %ld)",
+         g_dbv_n_bands, g_dbv_n_cells, g_dbv_n_rev, g_dbv_n_grow, g_dbv_n_full);              /* task avslow */
 }

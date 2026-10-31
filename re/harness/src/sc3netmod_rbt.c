@@ -368,9 +368,49 @@ static void rb_hwy(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) {
     hwy_end(hp);
 }
 
+/* task avslow: PTIME, the time each block takes in one top-level ROAD edit pass, one log line per pass that took at
+   least SC3NETMOD_PTIME_MIN ms (default 100; 0 = every pass). Off: SC3NETMOD_PTIME=0. PT_DO only adds up; nested passes
+   (a block's own retile) count inside the block that made them. */
+enum { PT_STOCK, PT_RBT, PT_HWV1, PT_DBV, PT_DAV, PT_AVX, PT_BV, PT_R9, PT_HWV0, PT_SLE, PT_AVL, PT_AVF,
+       PT_AVL_RUN, PT_AVL_PDAV, PT_AVL_PBV, PT_AVL_RERUN, PT_AVL_PAVX, PT_AVP, PT_N };
+static const char *PT_NAME[PT_N] = { "stock", "rbt", "hwave1", "dbv", "dav", "avx", "bv", "rbt9", "hwave0", "sle",
+                                     "avl", "avf", "avl.run", "avl.post_dav", "avl.post_bv", "avl.rerun",
+                                     "avl.post_avx", "avp" };
+static double g_pt[PT_N];
+static int g_pt_on = -1, g_pt_reruns, g_pt_min = 100;
+static __int64 pt_now(void) { LARGE_INTEGER t; QueryPerformanceCounter(&t); return t.QuadPart; }
+#define PT_DO(slot, call) do { __int64 pt_t_ = pt_now(); call; \
+                               g_pt[slot] += (double)(pt_now() - pt_t_) * 1000.0 / (double)g_freq.QuadPart; } while (0)
+static void pt_log(int x0, int z0, int x1, int z1) {
+    char buf[900];
+    int k, n;
+    double tot = g_pt[PT_STOCK];
+    for (k = PT_RBT; k <= PT_AVF; k++) tot += g_pt[k];
+    if (tot < g_pt_min) return;
+    n = _snprintf(buf, sizeof(buf), "ptime: edit (%d,%d)-(%d,%d) %.2f ms:", x0, z0, x1, z1, tot);
+    for (k = 0; k < PT_N && n > 0 && n < (int)sizeof(buf) - 40; k++)
+        if (g_pt[k] >= 0.01) n += _snprintf(buf + n, sizeof(buf) - n, " %s %.2f", PT_NAME[k], g_pt[k]);
+    if (n > 0 && n < (int)sizeof(buf) - 24) _snprintf(buf + n, sizeof(buf) - n, " reruns %d", g_pt_reruns);
+    buf[sizeof(buf) - 1] = 0;
+    logf("%s", buf);
+}
+
 static void __fastcall rb_pass(BYTE *mgr, void *edx, DWORD list, int net, int *box) {
     int x0, z0, x1, z1;
+    __int64 pt_t0 = pt_now();
+    LONG pt_top = !g_rb_busy;
     ((PFN_Pass)(void *)rb_tramp)(mgr, edx, list, net, box);
+    if (g_pt_on < 0) {
+        char v[16];
+        g_pt_on = !env_off("SC3NETMOD_PTIME");
+        if (GetEnvironmentVariableA("SC3NETMOD_PTIME_MIN", v, sizeof(v))) g_pt_min = atoi(v);
+        logf("ptime: %s, min %d ms (SC3NETMOD_PTIME, SC3NETMOD_PTIME_MIN)", g_pt_on ? "on" : "off", g_pt_min);
+    }
+    if (pt_top) {
+        ZeroMemory(g_pt, sizeof(g_pt));
+        g_pt_reruns = 0;
+        g_pt[PT_STOCK] = (double)(pt_now() - pt_t0) * 1000.0 / (double)g_freq.QuadPart;
+    }
     if (net == 4 && box && !g_rb_busy && g_hwy_np && box[0] != 0x7fffffff && box[1] != 0x7fffffff) {  /* task hwcore */
         g_rb_mgr = mgr;
         InterlockedIncrement(&g_rb_busy);
@@ -397,22 +437,23 @@ static void __fastcall rb_pass(BYTE *mgr, void *edx, DWORD list, int net, int *b
     InterlockedIncrement(&g_rb_n_pass);
     InterlockedIncrement(&g_rb_busy);
     __try {
-        if (g_rb_piece) rb_run(mgr, x0 - 3, z0 - 3, x1 + 2, z1 + 2, "edit");   /* blocks whose cells/ring/beyond touch the box */
-        if (g_hwy_np) hwave_road(mgr, x0, z0, x1, z1, "road", 1);            /* task hwave: before DAV, claims */
-        dbv_run(mgr, x0, z0, x1, z1, "edit");                  /* task diagbv: first, its claims stop DAV / BV */
-        if (g_dav_on) dav_run(mgr, x0, z0, x1, z1, "edit");                  /* task diagave */
-        if (g_avx_on) avx_run(mgr, x0, z0, x1, z1, "edit");                  /* task avx */
-        if (g_bv_p[0]) bv_run(mgr, x0, z0, x1, z1, "edit");                  /* task boulevard */
-        if (g_r9_centre) r9_run(mgr, x0, z0, x1, z1, "edit");                /* task bigrbt */
-        if (g_hwy_np) hwave_road(mgr, x0, z0, x1, z1, "road", 0);            /* task hwave: after DAV, builds */
-        if (g_sle_on) sle_run(mgr, x0 - 1, z0 - 1, x1 + 1, z1 + 1, "edit");     /* task slopeend */
-        if (g_avl_on) avl_pass(mgr, x0, z0, x1, z1, "edit");                 /* task avcore: last (+ its post hooks) */
-        avf_pass(mgr, x0 - 3, z0 - 3, x1 + 3, z1 + 3, "edit");                /* task avflow: class grid, after all writers */
+        if (g_rb_piece) PT_DO(PT_RBT, rb_run(mgr, x0 - 3, z0 - 3, x1 + 2, z1 + 2, "edit"));   /* blocks whose cells/ring/beyond touch the box */
+        if (g_hwy_np) PT_DO(PT_HWV1, hwave_road(mgr, x0, z0, x1, z1, "road", 1));            /* task hwave: before DAV, claims */
+        PT_DO(PT_DBV, dbv_run(mgr, x0, z0, x1, z1, "edit"));                  /* task diagbv: first, its claims stop DAV / BV */
+        if (g_dav_on) PT_DO(PT_DAV, dav_run(mgr, x0, z0, x1, z1, "edit"));                  /* task diagave */
+        if (g_avx_on) PT_DO(PT_AVX, avx_run(mgr, x0, z0, x1, z1, "edit"));                  /* task avx */
+        if (g_bv_p[0]) PT_DO(PT_BV, bv_run(mgr, x0, z0, x1, z1, "edit"));                  /* task boulevard */
+        if (g_r9_centre) PT_DO(PT_R9, r9_run(mgr, x0, z0, x1, z1, "edit"));                /* task bigrbt */
+        if (g_hwy_np) PT_DO(PT_HWV0, hwave_road(mgr, x0, z0, x1, z1, "road", 0));            /* task hwave: after DAV, builds */
+        if (g_sle_on) PT_DO(PT_SLE, sle_run(mgr, x0 - 1, z0 - 1, x1 + 1, z1 + 1, "edit"));     /* task slopeend */
+        if (g_avl_on) PT_DO(PT_AVL, avl_pass(mgr, x0, z0, x1, z1, "edit"));                 /* task avcore: last (+ its post hooks) */
+        PT_DO(PT_AVF, avf_pass(mgr, x0 - 3, z0 - 3, x1 + 3, z1 + 3, "edit"));                /* task avflow: class grid, after all writers */
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         InterlockedIncrement(&g_rb_n_fault);
         logf("### rbt: exception 0x%08lX in the edit pass", GetExceptionCode());
     }
     InterlockedDecrement(&g_rb_busy);
+    if (g_pt_on) pt_log(x0, z0, x1, z1);                                     /* task avslow */
 }
 
 /* ---------------------------------------------------------------- after a load */

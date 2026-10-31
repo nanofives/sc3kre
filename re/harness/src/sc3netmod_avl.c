@@ -796,13 +796,15 @@ static void avp_stats(void);
 /* what rb_pass / rb_load_pass call: avl_run, then the post hooks, re-runs as they ask */
 static void avl_pass(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) {
     int round, k, want, rb[4], u[4] = { 0, 0, 0, 0 };
-    avl_run(mgr, x0, z0, x1, z1, who);
+    PT_DO(PT_AVL_RUN, avl_run(mgr, x0, z0, x1, z1, who));                 /* task avslow: PT_DO timings */
     for (round = 0; round <= AVL_ROUNDS; round++) {
         want = 0;
         for (k = 0; k < AVL_POST_AVX; k++) {                       /* the re-run hooks */
             if (!g_avl_post[k]) continue;
             rb[0] = rb[1] = 0x7fffffff; rb[2] = rb[3] = -1;
-            if (g_avl_post[k](mgr, x0, z0, x1, z1, who, rb) && rb[2] >= rb[0] && rb[3] >= rb[1]) {
+            int got;
+            PT_DO(k == AVL_POST_DAV ? PT_AVL_PDAV : PT_AVL_PBV, got = g_avl_post[k](mgr, x0, z0, x1, z1, who, rb));
+            if (got && rb[2] >= rb[0] && rb[3] >= rb[1]) {
                 if (!want) { u[0] = rb[0]; u[1] = rb[1]; u[2] = rb[2]; u[3] = rb[3]; }
                 else { u[0] = min(u[0], rb[0]); u[1] = min(u[1], rb[1]); u[2] = max(u[2], rb[2]); u[3] = max(u[3], rb[3]); }
                 want = 1;
@@ -810,13 +812,15 @@ static void avl_pass(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who)
         }
         if (!want) break;
         if (round == AVL_ROUNDS) { logf("### avl: %s: post hooks still asking after %d re-runs - stopped", who, AVL_ROUNDS); break; }
-        avl_run(mgr, u[0], u[1], u[2], u[3], who);
+        g_pt_reruns++;
+        if (g_pt_on && g_pt_reruns <= 8) logf("ptime: avl re-run %d over (%d,%d)-(%d,%d)", g_pt_reruns, u[0], u[1], u[2], u[3]);
+        PT_DO(PT_AVL_RERUN, avl_run(mgr, u[0], u[1], u[2], u[3], who));
     }
     if (g_avl_post[AVL_POST_AVX]) {                                /* last, on the final band map */
         rb[0] = rb[1] = 0x7fffffff; rb[2] = rb[3] = -1;
-        g_avl_post[AVL_POST_AVX](mgr, x0, z0, x1, z1, who, rb);
+        PT_DO(PT_AVL_PAVX, g_avl_post[AVL_POST_AVX](mgr, x0, z0, x1, z1, who, rb));
     }
-    avp_run(mgr, x0, z0, x1, z1, who);                             /* task avpaint: last, on AVL's final band map */
+    PT_DO(PT_AVP, avp_run(mgr, x0, z0, x1, z1, who));                            /* task avpaint: last, on AVL's final band map */
 }
 
 static void avl_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) {
