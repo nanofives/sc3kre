@@ -10644,6 +10644,8 @@ static void rz_am_fix(RECT *dr, const RECT *sr, RECT *out) {
                                          dr->left, dr->top, dr->right, dr->bottom, out->left, out->top, out->right, out->bottom, g_am_x, g_am_y, f); } }
 }
 
+static void pkr_toast_pre(void *src, RECT *dr, RECT *sr);   /* PICKER, below */
+static void pkr_toast_post(void *src);
 static HRESULT WINAPI rz_blt_hook_inner(void *self, RECT *dr, void *src, RECT *sr, DWORD fl, void *fx) {
     LARGE_INTEGER a, b;
     HRESULT hr;
@@ -10797,6 +10799,8 @@ static HRESULT WINAPI rz_blt_hook_inner(void *self, RECT *dr, void *src, RECT *s
                      (DWORD)self, dr->left, dr->top, dr->right, dr->bottom, (DWORD)src, (DWORD)g_hs_lastsrc);
         }
     }
+    if (dr && sr && src && !IsBadReadPtr(dr, sizeof(RECT)) && !IsBadReadPtr(sr, sizeof(RECT)))
+        pkr_toast_pre(src, dr, sr);   /* PICKER: its message box, in the frame (and in FRAMEDUMP) */
     if (g_fd_prefix[0] && dr && sr && src && g_hwnd && !IsBadReadPtr(dr, sizeof(RECT)) && !IsBadReadPtr(sr, sizeof(RECT)))
         rz_fd_maybe(self, dr, src, sr);   /* FRAMEDUMP diag: the frame as it goes to the screen */
     QueryPerformanceCounter(&a);
@@ -10804,6 +10808,7 @@ static HRESULT WINAPI rz_blt_hook_inner(void *self, RECT *dr, void *src, RECT *s
     if (g_cz_inblt && src == g_cz_surf) { g_cz_inblt = 0; hr = cz_stretch_blt(self); }   /* task cityzoom: stretched */
     else if (cz_defer1(self, dr, src, sr, fl, fx)) hr = 0;                                 /* task cityzoom: x1 owed */
     if (hr) hr = g_orig_blt(self, dr, src, sr, fl, fx);
+    pkr_toast_post(src);   /* PICKER: the frame under the box back */
     QueryPerformanceCounter(&b);
     if (g_cz_diag && dr && g_hwnd && !IsBadReadPtr(dr, sizeof(RECT)) && rz_hs_is_screen(self) == 1) {
         RECT cq;
@@ -14261,7 +14266,529 @@ static void cursormap_install(void) {
         logf("--- CURSORMAP: GZWIND GetCursorPos helper (FUN_10020260) wrapped: city points map to view pixels at x2 / x3");
 }
 
+/* ================= PICKER (child picker 2026-10-30, re/analysis/PICKER.md). Owner: "Add a picker tool (also Ctrl+F) to
+ * pick a selected building/road/entity that's selectable."
+ * An eyedropper: a button on the minimap panel or Ctrl+F starts it, a click on the city makes the build tool of what is
+ * under the cursor the active tool, with that exact item: a plopped building's own tool, the zone tool + density of a
+ * grown building or a zoned lot, the road / highway / rail / power line / pipe / subway tool of a network piece, Place
+ * Trees, Place Water. Anything else shows a short message and the picker stays on. Esc or a right-click ends it.
+ * The picker IS the game's query ("?") tool, started the way the bottom bar's "?" button starts it: its child-notify
+ * SIMUI 0x10026973(1, 0x52fb5feb) creates CLSID 0x339da69 through the COM directory (FUN_10014b0d, vt+0xc, IID
+ * 0x6856f7), calls FUN_10065c35(0xc) and selects it (iface vt+0x2c) [CONFIRMED @ SIMUI 0x10026973, disassembly]. That
+ * object is SIMGEOM's query tool: ctor 0x1000b1ec, vtables 0x1002984c (+0), 0x100298a8 (+0x58), 0x10029838 (+0x5c); its
+ * Apply, slot +0x48 = 0x1000b6b4 __thiscall(tool, LONG *coord 8.8), ret 4, makes query command 0x816c8928 whose
+ * SIMUI 0x10010c39 opens the dialog [CONFIRMED @ SIMGEOM 0x1000b6b4, measured: Frida backtrace 2026-10-30]. We keep
+ * our own reference to the instance and wrap that one vtable slot: a call on OUR instance identifies the object with
+ * the same lookup 0x10010c39 makes (SIMUI FUN_1008e800() vt+0x88 occupant manager, vt+0x6c in-bounds, vt+0x7c
+ * GetOccupantAtCell, AddRef'd) and opens no dialog. Every other query tool is stock. The tool's +8 is the city view while
+ * it is the active tool and 0 once deselected (Esc or a menu click, measured), so that is the "picker on" test; the
+ * view (SIMSPR vtable +0x67894) holds the current tool at +0x228 (measured).
+ * The picked tool is started 250 ms later from a thread timer (RELOCATE trap: the button-up of the same click must not
+ * reach the new tool): menu commands {0x025F0A91, cmd} through the message service (MenuItem.INI, formats/MENUITEM_INI.md)
+ * for zones, networks, trees and water; building layer (city vt+0x138) +0x70(key, oneShot 0, free 0, 0x6856f7, &tool),
+ * tool vt+0x2c for a plopped building (the building picker's own path, SIMGEOM 0x10007d99).
+ * Button: an 18x20 image button drawn here, added to the minimap panel (SIMUI vtable 0x100aa180) by entry detours on
+ * its Init FUN_1004faec and child notify FUN_1005093f, so it chains with sc3undo's vtable wrap of the same slots.
+ * SC3RESIZE_PICKER=0: nothing installed. _BUTTON=0: no button (Ctrl+F only). _KEY=0: no Ctrl+F. Test message
+ * WM_RZ_PICKER: wParam 1 start (the button's path), 2 the Ctrl+F handler, 3 pick the cell lParam = x | z << 16 directly,
+ * 4 cancel. */
+#define WM_RZ_PICKER (WM_APP + 0x5F0)
+#define PKR_BTN 0x5D0A0010
+static int   g_picker = 1, g_pkr_button = 1, g_pkr_key = 1;
+static HMODULE g_pkr_geom;
+static DWORD g_pkr_apply_orig;                  /* SIMGEOM 0x1000b6b4 */
+static void *g_pkr_iface;                       /* our reference (what the directory handed back) */
+static BYTE *g_pkr_obj, *g_pkr_city;            /* the tool object (vtable 0x1002984c) and its city */
+static void *g_pkr_mm_init, *g_pkr_mm_notify;   /* trampolines */
+static LONG  g_pkr_rx, g_pkr_ry, g_pkr_rdown;   /* right-click start */
+typedef struct { int kind; DWORD cmd, key[3]; BYTE *city; char what[96]; } PKR_PICK;   /* kind 1 command, 2 building key */
+static PKR_PICK g_pkr_pend;
+static char  g_pkr_toast[160];
+static DWORD g_pkr_toast_until;
+
+static void pkr_say(const char *es, const char *en) {
+    lstrcpynA(g_pkr_toast, ho_spanish() ? es : en, sizeof(g_pkr_toast));
+    g_pkr_toast_until = GetTickCount() + 2500;
+    logf("PICKER> message: %s", g_pkr_toast);
+}
+
+/* our reference is dropped: Release unless the city changed under it (then its city is gone, RELOCATE rule) */
+static void pkr_drop(const char *why) {
+    if (!g_pkr_iface) return;
+    if (rl_city() == g_pkr_city) ho_v(g_pkr_iface, 0x08, 0, 0, 0, 0, 0, 0);
+    else logf("PICKER> city changed: our reference to 0x%08lX is dropped without Release", (DWORD)g_pkr_iface);
+    logf("PICKER> picker ended (%s)", why);
+    g_pkr_iface = NULL; g_pkr_obj = NULL; g_pkr_city = NULL;
+}
+
+/* the city view's current tool: SIMGEOM FUN_1001be16 (app vt+0x74) -> view, SIMSPR vtable +0x67894, tool at +0x228
+   (measured 2026-10-30: our query tool there while selected, gone after Esc or a menu click) */
+static BYTE *pkr_cur_tool(void) {
+    HMODULE spr = GetModuleHandleA("SIMSPR.DLL");
+    BYTE *vw;
+    if (!g_pkr_geom || !spr) return NULL;
+    __try {
+        vw = ((BYTE *(__cdecl *)(void))((BYTE *)g_pkr_geom + 0x1be16))();
+        if (!vw || IsBadReadPtr(vw, 0x22c) || *(DWORD *)vw != (DWORD)spr + 0x67894) return NULL;
+        return *(BYTE **)(vw + 0x228);
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return NULL; }
+}
+static int pkr_active(void) {
+    if (!g_pkr_obj) return 0;
+    if (rl_city() != g_pkr_city) { pkr_drop("city changed"); return 0; }
+    return pkr_cur_tool() == g_pkr_obj;
+}
+
+/* start the picker: the "?" button's own sequence, keeping the reference */
+static void pkr_start(const char *how) {
+    BYTE *sui = (BYTE *)GetModuleHandleA("SIMUI.DLL"), *city = rl_city();
+    void *dir = NULL, *it = NULL;
+    DWORD vt, a[3];
+    if (!sui || !g_pkr_geom || !city) { logf("PICKER> %s: no city / modules", how); return; }
+    if (pkr_active()) { logf("PICKER> %s: already on", how); pkr_say("Cuentagotas: clic en un objeto (Esc cancela)", "Picker: click an object (Esc cancels)"); return; }
+    pkr_drop("restarted");
+    __try {
+        ((void (__fastcall *)(void **))(sui + 0x14b0d))(&dir);
+        if (!dir) { logf("PICKER> %s: no COM directory", how); __leave; }
+        a[0] = 0x339da69; a[1] = 0x6856f7; a[2] = (DWORD)&it;
+        rz_thiscall_ret(dir, (void *)(*(DWORD **)dir)[0x0c / 4], a, 3);
+        if (it) {
+            ((void (__cdecl *)(DWORD))(sui + 0x65c35))(0xc);
+            ho_v(it, 0x2c, 0, 0, 0, 0, 0, 0);
+            vt = *(DWORD *)it - (DWORD)g_pkr_geom;
+            g_pkr_obj = vt == 0x298a8 ? (BYTE *)it - 0x58 : vt == 0x29838 ? (BYTE *)it - 0x5c : vt == 0x2984c ? (BYTE *)it : NULL;
+            if (!g_pkr_obj || *(DWORD *)g_pkr_obj != (DWORD)g_pkr_geom + 0x2984c) {
+                logf("PICKER> %s: tool interface vtable SIMGEOM+0x%lX is not the query tool's: not used", how, vt);
+                ho_v(it, 0x08, 0, 0, 0, 0, 0, 0); g_pkr_obj = NULL;
+            } else { g_pkr_iface = it; g_pkr_city = city; }
+        }
+        ((void (__fastcall *)(void **))(sui + 0x14b2e))(&dir);
+    } __except (EXCEPTION_EXECUTE_HANDLER) { logf("PICKER> %s: fault 0x%08lX starting the tool", how, GetExceptionCode()); g_pkr_obj = NULL; }
+    logf("PICKER> %s: query tool 0x%08lX (iface 0x%08lX) %s", how, (DWORD)g_pkr_obj, (DWORD)g_pkr_iface,
+         g_pkr_obj && pkr_active() ? "active as picker" : "NOT ACTIVE");
+    if (g_pkr_obj) pkr_say("Cuentagotas: clic en un objeto (Esc cancela)", "Picker: click an object (Esc cancels)");
+}
+
+/* the picked tool, from a thread timer (game thread) */
+static void CALLBACK pkr_timer(HWND h, UINT m, UINT_PTR id, DWORD t) {
+    BYTE *city = rl_city();
+    PKR_PICK p = g_pkr_pend;
+    (void)h; (void)m; (void)t;
+    KillTimer(NULL, id);
+    g_pkr_pend.kind = 0;
+    if (!p.kind || !city || city != p.city) { logf("PICKER> pending pick dropped (city changed)"); return; }
+    if (p.kind == 1) {
+        int ok = rz_city_post(0x025F0A91, p.cmd) != NULL;
+        logf("PICKER> %s -> menu command 0x%08lX %s", p.what, p.cmd, ok ? "posted" : "NOT POSTED");
+    } else {
+        void *bl = (void *)ho_v(city, 0x138, 0, 0, 0, 0, 0, 0), *out = NULL;
+        DWORD ok = 0;
+        __try {
+            ok = bl ? ho_v(bl, 0x70, 5, (DWORD)p.key, 0, 0, 0x6856f7, (DWORD)&out) & 0xff : 0;   /* key, not one-shot, not free */
+            if (ok && out) { ho_v(out, 0x2c, 0, 0, 0, 0, 0, 0); ho_v(out, 0x08, 0, 0, 0, 0, 0, 0); }
+        } __except (EXCEPTION_EXECUTE_HANDLER) { ok = 0; logf("PICKER> fault 0x%08lX making the building tool", GetExceptionCode()); }
+        logf("PICKER> %s -> building tool for key 0x%08lX 0x%08lX 0x%08lX: %s", p.what, p.key[0], p.key[1], p.key[2],
+             ok && out ? "active" : "NOT MADE");
+        if (!ok || !out) { pkr_say("Cuentagotas: el juego no da herramienta para esto", "Picker: the game has no tool for this"); return; }
+    }
+    pkr_drop("picked");
+}
+
+static const DWORD pkr_zone_cmd[18] = {   /* zone byte -> zone tool command (LAUNCH_CONTROL.md 31.9.6, all 13 observed) */
+    0, 0x10003101, 0x10003102, 0x10003103, 0, 0x10003201, 0x10003202, 0x10003203, 0, 0x10003301, 0x10003302, 0x10003303,
+    0, 0, 0x10003006, 0x10003005, 0, 0x10003004 };
+
+static int pkr_name(void *occ, char *out, int cap) {
+    BYTE nm[0x20];
+    const char *t;
+    out[0] = 0;
+    __try {
+        ho_str(nm, NULL);
+        ho_v(occ, 0x7c, 1, (DWORD)nm, 0, 0, 0, 0);
+        t = (const char *)ho_v(nm, 0x14, 0, 0, 0, 0, 0, 0);
+        if (t && !IsBadStringPtrA(t, 96)) lstrcpynA(out, t, cap);
+        ho_str_free(nm);
+    } __except (EXCEPTION_EXECUTE_HANDLER) { out[0] = 0; }
+    return out[0] != 0;
+}
+
+static int pkr_is_piece(void *occ) {   /* one of the 22 SIMNTWRK piece classes (occupant vtable, qi_piece_vt2) */
+    HMODULE nt = GetModuleHandleA("SIMNTWRK.DLL");
+    DWORD vt = *(DWORD *)occ;
+    int i;
+    if (!nt) return 0;
+    for (i = 0; i < 22; i++) if (vt == (DWORD)nt + qi_piece_vt2[i]) return 1;
+    return 0;
+}
+
+/* what is at cell (x, z) and which tool makes it; queues the tool. 1 = a tool was found */
+static int pkr_pick(LONG x, LONG z, const char *how) {
+    BYTE *sui = (BYTE *)GetModuleHandleA("SIMUI.DLL"), *city = rl_city();
+    void *vw, *om = NULL, *occ = NULL;
+    PKR_PICK p;
+    DWORD type = 0, flags = 0;
+    int zone = -1, water = 0;
+    char nm[80];
+    memset(&p, 0, sizeof(p));
+    if (!sui || !city) return 0;
+    __try {
+        vw = ((void *(__cdecl *)(void))(sui + 0x8e800))();
+        om = vw ? (void *)ho_v(vw, 0x88, 0, 0, 0, 0, 0, 0) : NULL;
+        if (!om || !(ho_v(om, 0x6c, 2, (DWORD)x, (DWORD)z, 0, 0, 0) & 0xff)) { logf("PICKER> %s at (%ld, %ld): outside the city", how, x, z); return 0; }
+        if (!(ho_v(om, 0x7c, 3, (DWORD)x, (DWORD)z, (DWORD)&occ, 0, 0) & 0xff)) occ = NULL;
+        zone = rl_zone(x, z);
+        {   void *dirt = (void *)ho_v(city, 0x13c, 0, 0, 0, 0, 0, 0);
+            water = dirt ? (int)(ho_v(dirt, 0x54, 2, (DWORD)x, (DWORD)z, 0, 0, 0) & 0xff) : 0; }
+        nm[0] = 0;
+        if (occ) {
+            LONG r[4];
+            type = ho_v(occ, 0x88, 0, 0, 0, 0, 0, 0);
+            flags = ho_v(occ, 0x48, 0, 0, 0, 0, 0, 0);
+            pkr_name(occ, nm, sizeof(nm));
+            memset(r, 0, sizeof(r));
+            ho_v(occ, 0xd0, 1, (DWORD)r, 0, 0, 0, 0);
+            if (flags & 0x100) zone = rl_zone(r[0], r[1]);   /* a building: the zone under its first cell */
+            if (pkr_is_piece(occ)) {
+                /* a network piece: one type id per network does not hold (Berlin census: road pieces carry 16000 / 16003 /
+                   16004 / 16011, rail 17000..17004, highway 16001 / 17202..17204, power 12103 / 12104 / 17100 / 17105 /
+                   17106, crossings 16014), so the GeomFlag network bits decide (census: road 0x8000, highway 0x10000, rail
+                   0x20000, on-ramp 0x200000, power 0x400000; a crossing has two), then the TilingRules sets */
+                DWORD cmd = flags & 0x200000 ? 0x10004302 : flags & 0x10000 ? 0x10004301 : flags & 0x8000 ? 0x10004001
+                          : flags & 0x20000 ? 0x10004101 : flags & 0x400000 ? 0x10005001 : 0;
+                if (!cmd) {
+                    HMODULE nt = GetModuleHandleA("SIMNTWRK.DLL");
+                    DWORD id = *(DWORD *)((BYTE *)occ - 4 + 0x18) & 0xffff;
+                    static const DWORD lists[6] = { 0x32348, 0x3234c, 0x32350, 0x32354, 0x32358, 0x3235c };
+                    static const DWORD cmds[6] = { 0x10004001, 0x10004301, 0x10004101, 0x10004201, 0x10005003, 0x10005001 };
+                    int j;
+                    for (j = 0; j < 6 && !cmd; j++) if (nt && qi_in_list(nt, lists[j], id) == 1) cmd = cmds[j];
+                    if (!cmd) cmd = type == 17300 ? 0x10005003 : type == 17400 ? 0x10004201 : 0;
+                }
+                if (cmd) { p.kind = 1; p.cmd = cmd; }
+            }
+            else switch (type) {
+            default:
+                if (flags == 0x404) { p.kind = 1; p.cmd = 0x10002001; break; }   /* flora (census: every tree 0x404) */
+                if (!(flags & 0x100)) break;
+                if (zone > 0 && zone < 18 && pkr_zone_cmd[zone]) { p.kind = 1; p.cmd = pkr_zone_cmd[zone]; break; }   /* grown */
+                if (rl_movable(type)) {
+                    logf("PICKER> %s at (%ld, %ld): %s type %lu is one per city: refused", how, x, z, nm, type);
+                    pkr_say("Cuentagotas: solo uno por ciudad", "Picker: only one per city");
+                    ho_v(occ, 0x08, 0, 0, 0, 0, 0, 0);
+                    return 0;
+                }
+                if (type == 15100) break;   /* an abandoned lot (Berlin has them on zone 22): no tool makes one */
+                {   /* the occupant's own key (3 dwords 0x10 before what its first field points at, QUERY_ID.md), checked
+                       against the attrib key in use; they differ only on an abandoned building, whose own key is the
+                       original. Else the attrib key. */
+                    void *attr = (void *)ho_v(occ, 0x80, 0, 0, 0, 0, 0, 0);
+                    DWORD *k = attr ? (DWORD *)ho_v(attr, 0x14, 0, 0, 0, 0, 0, 0) : NULL, o1 = ((DWORD *)occ)[1];
+                    if (k && IsBadReadPtr(k, 12)) k = NULL;
+                    if (k && o1 > 0x10000 && !IsBadReadPtr((void *)(o1 - 0x10), 12) &&
+                        ((DWORD *)(o1 - 0x10))[0] == k[0] && ((DWORD *)(o1 - 0x10))[1] == k[1]) k = (DWORD *)(o1 - 0x10);
+                    if (k) { p.kind = 2; memcpy(p.key, k, 12); } }
+            }
+            ho_v(occ, 0x08, 0, 0, 0, 0, 0, 0);
+        } else if (zone > 0 && zone < 18 && pkr_zone_cmd[zone]) { p.kind = 1; p.cmd = pkr_zone_cmd[zone]; lstrcpyA(nm, "zoned lot"); }
+        else if (water) { p.kind = 1; p.cmd = 0x10002002; lstrcpyA(nm, "water"); }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { logf("PICKER> %s at (%ld, %ld): fault 0x%08lX", how, x, z, GetExceptionCode()); return 0; }
+    wsprintfA(p.what, "%.60s (type %lu, flags 0x%lX, zone %d)", nm[0] ? nm : (occ ? "object" : "empty"), type, flags, zone);
+    logf("PICKER> %s at (%ld, %ld): %s %s", how, x, z, p.what, p.kind == 1 ? "-> command" : p.kind == 2 ? "-> building key" : "-> no tool");
+    if (!p.kind) {
+        if (occ) pkr_say("Cuentagotas: esto no tiene herramienta de construccion", "Picker: this has no build tool");
+        else pkr_say("Cuentagotas: no hay nada para copiar aqui", "Picker: nothing to pick here");
+        return 0;
+    }
+    p.city = city;
+    g_pkr_pend = p;
+    if (!SetTimer(NULL, 0, 250, pkr_timer)) { g_pkr_pend.kind = 0; logf("PICKER> SetTimer failed"); return 0; }
+    return 1;
+}
+
+/* the query tool's Apply slot: our instance picks, every other one is stock */
+static DWORD __fastcall pkr_apply(void *self, void *edx, LONG *coord) {
+    DWORD a[1];
+    (void)edx;
+    if (g_pkr_obj && (BYTE *)self == g_pkr_obj && coord && !IsBadReadPtr(coord, 8)) {
+        pkr_pick(coord[0] >> 8, coord[1] >> 8, "click");
+        return 1;
+    }
+    a[0] = (DWORD)coord;
+    return rz_thiscall_ret(self, (void *)g_pkr_apply_orig, a, 1);
+}
+
+/* ---- the minimap button: an 18x20 eyedropper strip (4 frames like the rotate art), drawn here */
+static WORD pkr_rgb(int r, int g, int b, DWORD code) {
+    if (r < 0) r = 0; if (g < 0) g = 0; if (b < 0) b = 0; if (r > 255) r = 255; if (g > 255) g = 255; if (b > 255) b = 255;
+    return code == 7 ? (WORD)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)) : (WORD)(((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3));
+}
+static double pkr_seg2(double px, double py, double ax, double ay, double bx, double by) {   /* squared distance */
+    double dx = bx - ax, dy = by - ay, t = ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy);
+    if (t < 0) t = 0; if (t > 1) t = 1;
+    dx = ax + t * dx - px; dy = ay + t * dy - py;
+    return dx * dx + dy * dy;
+}
+static void *pkr_strip(void) {
+    BYTE *sui = (BYTE *)GetModuleHandleA("SIMUI.DLL");
+    DWORD key[3] = { 0, 0x2f78c6d, 0x22f96e30 }, src = 0, fmt[2] = { 0, 0 }, a[8];
+    void *com, *dst = NULL;
+    BYTE *db;
+    LONG dp, x, y, f;
+    WORD keyc;
+    int ok = 0;
+    if (!((char (__cdecl *)(DWORD *, DWORD *, char))(sui + 0x25489))(key, &src, 0) || !src) return NULL;   /* format donor */
+    __try {
+        ho_v((void *)src, 0x4c, 1, (DWORD)fmt, 0, 0, 0, 0);
+        ho_v((void *)src, 0x08, 0, 0, 0, 0, 0, 0);
+        if (fmt[1] != 16 || (fmt[0] != 7 && fmt[0] != 5)) { logf("PICKER> art format {%lu,%lu}: no button", fmt[0], fmt[1]); __leave; }
+        keyc = fmt[0] == 7 ? 0xF81F : 0x7C1F;
+        com = ((void *(__cdecl *)(void))(sui + 0x8489d))();
+        if (!com || !(ho_v(com, 0x0c, 3, 0xc470d325, 0x20732180, (DWORD)&dst, 0, 0) & 0xff) || !dst) __leave;
+        a[0] = 4 * 18; a[1] = 20; a[2] = fmt[0]; a[3] = fmt[1]; a[4] = a[5] = a[6] = a[7] = 0;
+        if (!(rz_thiscall_ret(dst, (void *)(*(DWORD **)dst)[0x0c / 4], a, 8) & 0xff)) __leave;
+        if (!(ho_v(dst, 0x1c, 1, 0x40, 0, 0, 0, 0) & 0xff)) __leave;
+        db = (BYTE *)ho_v(dst, 0x1a8, 0, 0, 0, 0, 0, 0); dp = (LONG)ho_v(dst, 0x1ac, 0, 0, 0, 0, 0, 0);
+        if (db && dp >= 4 * 18 * 2)
+            for (f = 0; f < 4; f++)
+                for (y = 0; y < 20; y++)
+                    for (x = 0; x < 18; x++) {
+                        double px = x + 0.5, py = y + 0.5, cx = 9.0, cy = 10.0, d2 = (px - cx) * (px - cx) + (py - cy) * (py - cy);
+                        int lift = f == 1 ? 24 : f == 2 ? -28 : 0, sh = f == 2 ? 1 : 0, grey = f == 3;
+                        WORD c = keyc;
+                        if (d2 <= 8.6 * 8.6) {
+                            int g0 = 222 - (int)(py * 3.0) + lift;                 /* face, lit from the top */
+                            c = d2 > 7.4 * 7.4 ? pkr_rgb(70, 74, 96, fmt[0])        /* rim */
+                                               : pkr_rgb(g0 - 8, g0 - 2, g0 + 14, fmt[0]);
+                            if (d2 <= 7.4 * 7.4) {
+                                double qx = px - sh, qy = py - sh;
+                                double tube = pkr_seg2(qx, qy, 4.6, 15.6, 10.2, 10.0), coll = pkr_seg2(qx, qy, 9.0, 8.6, 11.8, 11.4);
+                                double bulb = (qx - 12.6) * (qx - 12.6) + (qy - 7.6) * (qy - 7.6);
+                                int ink = grey ? 140 : 40, inkb = grey ? 150 : 150;
+                                if (bulb <= 2.7 * 2.7 || coll <= 1.05 * 1.05) c = pkr_rgb(ink, ink + 10, inkb, fmt[0]);
+                                else if (tube <= 0.95 * 0.95) c = pkr_rgb(grey ? 150 : 60, grey ? 155 : 90, grey ? 160 : 200, fmt[0]);
+                            }
+                        }
+                        *(WORD *)(db + y * dp + (f * 18 + x) * 2) = c;
+                    }
+        ho_v(dst, 0x20, 1, 0x40, 0, 0, 0, 0);
+        ho_v(dst, 0xc8, 1, ho_v(dst, 0x18c, 3, 0xff, 0, 0xff, 0, 0), 0, 0, 0, 0);   /* magenta = transparent */
+        ok = db != NULL;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { logf("PICKER> button art fault 0x%08lX", GetExceptionCode()); ok = 0; }
+    if (!ok && dst) { ho_v(dst, 0x08, 0, 0, 0, 0, 0, 0); dst = NULL; }
+    return dst;
+}
+static void pkr_add_button(void *panel) {
+    BYTE *sui = (BYTE *)GetModuleHandleA("SIMUI.DLL");
+    LONG rect[4] = { 0, 0, 0, 0 }, *pr = (LONG *)((BYTE *)panel + 0x80), ph = pr[3] - pr[1];
+    BYTE cap[0x20], tt[0x20];
+    void *img, *fac, *btn, *win = NULL;
+    int ok = 0;
+    if (ho_v(panel, 0x78, 1, PKR_BTN, 0, 0, 0, 0)) return;   /* already there */
+    if (!(img = pkr_strip())) { logf("PICKER> no button art: Ctrl+F only"); return; }
+    ho_v(img, 0x40, 1, (DWORD)rect, 0, 0, 0, 0);
+    fac = ((void *(__cdecl *)(void))(sui + 0x85065))();
+    ho_str(cap, "");
+    btn = fac ? (void *)ho_v(fac, 0x30, 5, PKR_BTN, (DWORD)cap, (DWORD)img, (DWORD)rect, 0) : NULL;
+    if (btn) {
+        ho_str(tt, ho_spanish() ? "Cuentagotas (Ctrl+F)" : "Picker (Ctrl+F)");
+        ho_v(btn, 0x8c, 1, (DWORD)tt, 0, 0, 0, 0);
+        ho_str_free(tt);
+        ho_v(btn, 0x24, 2, 4, 0, 0, 0, 0);
+        ho_v(btn, 0x24, 2, 0x100, 1, 0, 0, 0);
+        ho_v(btn, 0x98, 1, 0x1000000, 0, 0, 0, 0);
+        win = (void *)ho_v(btn, 0x1c, 0, 0, 0, 0, 0, 0);
+        ok = win && (ho_v(panel, 0x34, 1, (DWORD)win, 0, 0, 0, 0) & 0xff);
+        /* the panel's bottom-left corner, on sc3undo's row (y = h - 22), left of the anticlockwise rotate button (x 34) */
+        if (ok) ho_v(win, 0xcc, 2, 10, (DWORD)(ph - 2 - 20), 0, 0, 0);
+        ho_v(btn, 0x08, 0, 0, 0, 0, 0, 0);
+    }
+    ho_str_free(cap);
+    ho_v(img, 0x08, 0, 0, 0, 0, 0, 0);
+    logf("PICKER> minimap button %ldx%ld at (10, %ld): %s", rect[2] - rect[0], rect[3] - rect[1], ph - 22, ok ? "added" : "FAILED");
+}
+static DWORD __fastcall pkr_mm_init(void *self, void *edx) {
+    DWORD r = rz_thiscall_ret(self, g_pkr_mm_init, NULL, 0);
+    (void)edx;
+    if ((r & 0xff) && g_pkr_button) __try { pkr_add_button(self); } __except (EXCEPTION_EXECUTE_HANDLER) { logf("PICKER> button fault"); }
+    return r;
+}
+static DWORD __fastcall pkr_mm_notify(void *self, void *edx, DWORD type, DWORD id) {
+    DWORD a[2];
+    (void)edx;
+    if (type == 1 && id == PKR_BTN) {
+        logf("PICKER> minimap button clicked");
+        if (g_hwnd) PostMessageA(g_hwnd, WM_RZ_PICKER, 1, 0);   /* run outside the panel's handler */
+        return 1;
+    }
+    a[0] = type; a[1] = id;
+    return rz_thiscall_ret(self, g_pkr_mm_notify, a, 2);
+}
+
+/* entry detour on a function that starts `mov eax, imm32` (5 bytes, any base) */
+static int pkr_hook(BYTE *fn, void *detour, void **orig, const char *name) {
+    BYTE *tr;
+    DWORD old;
+    if (*orig) return 1;
+    if (IsBadReadPtr(fn, 10) || fn[0] != 0xB8 || fn[5] != 0xE8) { logf("PICKER> %s: prologue differs, not hooked", name); return 0; }
+    tr = (BYTE *)VirtualAlloc(NULL, 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!tr) return 0;
+    memcpy(tr, fn, 5);
+    tr[5] = 0xE9; *(DWORD *)(tr + 6) = (DWORD)(fn + 5) - (DWORD)(tr + 10);
+    FlushInstructionCache(GetCurrentProcess(), tr, 16);
+    if (!VirtualProtect(fn, 5, PAGE_EXECUTE_READWRITE, &old)) return 0;
+    *orig = tr;
+    fn[0] = 0xE9; *(DWORD *)(fn + 1) = (DWORD)detour - (DWORD)(fn + 5);
+    FlushInstructionCache(GetCurrentProcess(), fn, 5);
+    logf("PICKER> detour on %s", name);
+    return 1;
+}
+
+static void pkr_install(HMODULE sui) {
+    HMODULE g = NULL;
+    DWORD *slot;
+    int st = 0;
+    if (!g_picker) { logf("PICKER> off (SC3RESIZE_PICKER=0)"); return; }
+    while (st++ < 300 && !(g = GetModuleHandleA("SIMGEOM.DLL"))) Sleep(100);
+    if (!g) { logf("PICKER> SIMGEOM.DLL not loaded: off"); return; }
+    slot = (DWORD *)((BYTE *)g + 0x2984c + 0x48);
+    {   /* the "?" handler's three calls we repeat: FUN_10014b0d, FUN_10065c35, FUN_10014b2e (rel32 at +0x29, +0x50, +0x71) */
+        BYTE *h = (BYTE *)sui + 0x26973;
+        if (h[0x29] != 0xE8 || h[0x50] != 0xE8 || h[0x71] != 0xE8 || h + 0x2e + *(LONG *)(h + 0x2a) != (BYTE *)sui + 0x14b0d ||
+            h + 0x55 + *(LONG *)(h + 0x51) != (BYTE *)sui + 0x65c35 || h + 0x76 + *(LONG *)(h + 0x72) != (BYTE *)sui + 0x14b2e ||
+            *(DWORD *)(h + 0x41) != 0x339da69) { logf("PICKER> SIMUI \"?\" handler FUN_10026973 differs: off"); return; } }
+    if (*slot != (DWORD)g + 0xb6b4) { logf("PICKER> query tool Apply slot is 0x%08lX, not SIMGEOM+0xb6b4: off", *slot); return; }
+    g_pkr_geom = g;
+    if (!rl_patch_slot(slot, (void *)pkr_apply, &g_pkr_apply_orig)) { g_pkr_geom = NULL; logf("PICKER> slot patch failed: off"); return; }
+    if (g_pkr_button) {
+        pkr_hook((BYTE *)sui + 0x4faec, (void *)pkr_mm_init, &g_pkr_mm_init, "SIMUI FUN_1004faec minimap Init");
+        if (g_pkr_mm_init) pkr_hook((BYTE *)sui + 0x5093f, (void *)pkr_mm_notify, &g_pkr_mm_notify, "SIMUI FUN_1005093f minimap notify");
+    }
+    logf("PICKER> on: query tool Apply SIMGEOM+0xb6b4 wrapped, button %s, Ctrl+F %s", g_pkr_mm_notify ? "on the minimap" : "off",
+         g_pkr_key ? "on" : "off");
+}
+
+/* ---- the message: a box drawn into the presented frame (as sc3perf's counter: save, draw, present, restore) */
+static BYTE *g_pkr_sv;
+static LONG  g_pkr_svx, g_pkr_svy, g_pkr_svw, g_pkr_svh, g_pkr_svb;
+static void *g_pkr_svsrc;
+static void pkr_toast_pre(void *src, RECT *dr, RECT *sr) {
+    typedef HRESULT (WINAPI *GETDC)(void *, HDC *);
+    typedef HRESULT (WINAPI *RELDC)(void *, HDC);
+    RECT cr;
+    LONG pitch, sw, sh, y, s;
+    DWORD bpp, gm;
+    BYTE *bits;
+    HDC dc = NULL;
+    SIZE ts;
+    static HFONT font;
+    static int font_s;
+    g_pkr_svsrc = NULL;
+    if (!g_pkr_toast[0] || !g_hwnd || (LONG)(g_pkr_toast_until - GetTickCount()) <= 0) return;
+    if (!src || !sr || !dr || !GetClientRect(g_hwnd, &cr) || dr->right - dr->left < cr.right || dr->bottom - dr->top < cr.bottom) return;
+    s = sc3resize_ui_scale();
+    if (s < 100) s = 100;
+    if (!font || font_s != s) {
+        if (font) DeleteObject(font);
+        font = CreateFontA(-(15 * s / 100), 0, 0, 0, FW_BOLD, 0, 0, 0, ANSI_CHARSET, 0, 0, ANTIALIASED_QUALITY, 0, "Arial");
+        font_s = s;
+    }
+    {   HDC sdc = GetDC(NULL);
+        HGDIOBJ o = SelectObject(sdc, font);
+        GetTextExtentPoint32A(sdc, g_pkr_toast, lstrlenA(g_pkr_toast), &ts);
+        SelectObject(sdc, o); ReleaseDC(NULL, sdc); }
+    g_pkr_svw = ts.cx + 24 * s / 100; g_pkr_svh = ts.cy + 12 * s / 100;
+    g_pkr_svx = sr->left + (cr.right - g_pkr_svw) / 2; g_pkr_svy = sr->top + 40 * s / 100;
+    if (g_pkr_svx < sr->left) g_pkr_svx = sr->left;
+    bits = rz_hs_lock(src, &pitch, &bpp, &gm, &sw, &sh);
+    if (!bits) return;
+    g_pkr_svb = (LONG)bpp / 8;
+    if (g_pkr_svb < 1 || g_pkr_svb > 4 || g_pkr_svx + g_pkr_svw > sw || g_pkr_svy + g_pkr_svh > sh) {
+        ((RZ_UNLOCK)(*(DWORD **)src)[0x80 / 4])(src, NULL); return; }
+    g_pkr_sv = (BYTE *)realloc(g_pkr_sv, g_pkr_svw * g_pkr_svh * g_pkr_svb);
+    if (g_pkr_sv) for (y = 0; y < g_pkr_svh; y++)
+        memcpy(g_pkr_sv + y * g_pkr_svw * g_pkr_svb, bits + (g_pkr_svy + y) * pitch + g_pkr_svx * g_pkr_svb, g_pkr_svw * g_pkr_svb);
+    ((RZ_UNLOCK)(*(DWORD **)src)[0x80 / 4])(src, NULL);
+    if (!g_pkr_sv) return;
+    if (((GETDC)(*(DWORD **)src)[0x44 / 4])(src, &dc) != 0 || !dc) return;
+    {   RECT b;
+        HBRUSH fill = CreateSolidBrush(RGB(40, 52, 120)), edge = CreateSolidBrush(RGB(200, 210, 255));
+        HGDIOBJ o;
+        SetRect(&b, g_pkr_svx, g_pkr_svy, g_pkr_svx + g_pkr_svw, g_pkr_svy + g_pkr_svh);
+        FillRect(dc, &b, edge);
+        InflateRect(&b, -2, -2);
+        FillRect(dc, &b, fill);
+        o = SelectObject(dc, font);
+        SetBkMode(dc, TRANSPARENT);
+        SetTextColor(dc, RGB(255, 255, 255));
+        TextOutA(dc, g_pkr_svx + 12 * s / 100, g_pkr_svy + 6 * s / 100, g_pkr_toast, lstrlenA(g_pkr_toast));
+        SelectObject(dc, o);
+        DeleteObject(fill); DeleteObject(edge); }
+    ((RELDC)(*(DWORD **)src)[0x68 / 4])(src, dc);
+    g_pkr_svsrc = src;
+}
+static void pkr_toast_post(void *src) {
+    LONG pitch, sw, sh, y;
+    DWORD bpp, gm;
+    BYTE *bits;
+    if (!g_pkr_svsrc || src != g_pkr_svsrc) return;
+    g_pkr_svsrc = NULL;
+    bits = rz_hs_lock(src, &pitch, &bpp, &gm, &sw, &sh);
+    if (!bits) return;
+    if ((LONG)bpp / 8 == g_pkr_svb && g_pkr_svx + g_pkr_svw <= sw && g_pkr_svy + g_pkr_svh <= sh)
+        for (y = 0; y < g_pkr_svh; y++)
+            memcpy(bits + (g_pkr_svy + y) * pitch + g_pkr_svx * g_pkr_svb, g_pkr_sv + y * g_pkr_svw * g_pkr_svb, g_pkr_svw * g_pkr_svb);
+    ((RZ_UNLOCK)(*(DWORD **)src)[0x80 / 4])(src, NULL);
+}
+
+/* rz_wndproc: 1 = swallowed */
+static int pkr_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
+    if (!g_pkr_geom) return 0;
+    if (m == WM_RZ_PICKER) {
+        if (wp == 1) pkr_start("button");
+        else if (wp == 2) pkr_start("Ctrl+F");
+        else if (wp == 3) pkr_pick((LONG)(short)LOWORD(lp), (LONG)(short)HIWORD(lp), "test cell");
+        else if (wp == 4) { if (pkr_active()) PostMessageA(h, WM_KEYDOWN, VK_ESCAPE, 0x00010001); }
+        else if (wp == 6) logf("PICKER> test: menu command 0x%08lX %s", (DWORD)lp, rz_city_post(0x025F0A91, (DWORD)lp) ? "posted" : "NOT POSTED");
+        else if (wp == 5) {   /* test: the city view's current tool (SIMGEOM FUN_1001be16 = app vt+0x74, tool at +0x228) */
+            __try {
+                BYTE *t = pkr_cur_tool();
+                DWORD rva = 0;
+                const char *mn = t ? qi_mod_of(*(DWORD *)t, &rva) : "none";
+                logf("PICKER> current tool 0x%08lX vtable %s+0x%lX%s", (DWORD)t, mn ? mn : "?", rva, t == g_pkr_obj && t ? " (the picker)" : "");
+                if (t && mn && !lstrcmpiA(mn, "SIMGEOM.DLL") && !IsBadReadPtr(t + 0x108, 12))
+                    logf("PICKER>   building tool key 0x%08lX 0x%08lX 0x%08lX", *(DWORD *)(t + 0x108), *(DWORD *)(t + 0x10c), *(DWORD *)(t + 0x110));
+                if (t && mn && !lstrcmpiA(mn, "SIMRCI.DLL") && !IsBadReadPtr(t + 0x124, 4))   /* zone tool ctor 0x1000ba68 */
+                    logf("PICKER>   zone tool +0x124 = 0x%08lX", *(DWORD *)(t + 0x124));
+            } __except (EXCEPTION_EXECUTE_HANDLER) { logf("PICKER> current tool: fault"); }
+        }
+        return 1;
+    }
+    if (g_pkr_key && wp == 'F' && (m == WM_KEYDOWN || m == WM_KEYUP) && GetKeyState(VK_CONTROL) < 0 &&
+        GetKeyState(VK_MENU) >= 0 && GetKeyState(VK_SHIFT) >= 0 && !rz_text_focus()) {
+        if (m == WM_KEYDOWN && !(lp & 0x40000000)) pkr_start("Ctrl+F");
+        return 1;
+    }
+    if (g_pkr_key && m == WM_CHAR && wp == 6 && GetKeyState(VK_CONTROL) < 0 && !rz_text_focus()) return 1;   /* the Ctrl+F char */
+    if (m == WM_KEYDOWN && wp == VK_ESCAPE && g_pkr_obj) {   /* the game's Esc deselects the tool; ours is let go after it */
+        if (pkr_active()) { g_pkr_toast_until = 0; logf("PICKER> Esc"); }
+        return 0;
+    }
+    if (m == WM_RBUTTONDOWN) { g_pkr_rx = (short)LOWORD(lp); g_pkr_ry = (short)HIWORD(lp); g_pkr_rdown = 1; }
+    if (m == WM_RBUTTONUP && g_pkr_rdown) {
+        LONG dx = (short)LOWORD(lp) - g_pkr_rx, dy = (short)HIWORD(lp) - g_pkr_ry;
+        g_pkr_rdown = 0;
+        if (dx * dx + dy * dy <= 25 && pkr_active()) {   /* a right-click, not a pan: the game's own Esc */
+            logf("PICKER> right-click: cancelled");
+            g_pkr_toast_until = 0;
+            PostMessageA(h, WM_KEYDOWN, VK_ESCAPE, 0x00010001);
+            PostMessageA(h, WM_KEYUP, VK_ESCAPE, 0xC0010001);
+        }
+    }
+    return 0;
+}
+
 static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
+    if (pkr_wndproc(h, m, wp, lp)) return 0;   /* PICKER */
     if (m == WM_RZ_DIAGARROW && g_diag_arrows) { g_diag_arrow = (LONG)wp; return 0; }   /* DIAGARROWS (test only) */
     if (m == WM_RZ_DIAGARROW + 1 && g_diag_arrows) {   /* DIAGARROWS (test only): in-game A/B of the VDSCROLL block */
         g_vdscroll = (int)wp; logf("DIAGARROWS> VDSCROLL set to %d", g_vdscroll); return 0; }
@@ -17160,6 +17687,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           rz_meet_hook(sui); /* DLGSTAY: the Reunirse pages share one stored position */
           qi_install(sui);   /* QUERYID: "Copiar ID" button in the query (?) dialog */
           rl_install();      /* RELOCATE: "Mover" in the "?" of rewards/landmarks, auto-demolish of zoned buildings */
+          pkr_install(sui);  /* PICKER: eyedropper (minimap button, Ctrl+F) */
           {   HANDLE t = CreateThread(NULL, 0, ro_thread, NULL, 0, NULL);   /* ROADOVER: road / highway / rail /
                                                                             power drags over zoned buildings demolish them */
               if (t) CloseHandle(t); else ro_install(); }
@@ -17231,6 +17759,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MPHOVER", v, sizeof(v))) g_mp_hover = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MODSUI", v, sizeof(v))) g_modsui = atoi(v);   /* owner 2026-10-27 */
           if (GetEnvironmentVariableA("SC3RESIZE_QUERYID", v, sizeof(v))) g_queryid = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_PICKER", v, sizeof(v))) g_picker = atoi(v);   /* PICKER */
+          if (GetEnvironmentVariableA("SC3RESIZE_PICKER_BUTTON", v, sizeof(v))) g_pkr_button = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_PICKER_KEY", v, sizeof(v))) g_pkr_key = atoi(v);
           {   char bp[MAX_PATH]; ho_ini_path(bp, sizeof(bp));   /* mods page: [buildings], then the env overrides */
               g_relocate = GetPrivateProfileIntA("buildings", "mover", 1, bp) ? 1 : 0;
               g_plopover = GetPrivateProfileIntA("buildings", "plopover", 1, bp) ? 1 : 0; }
