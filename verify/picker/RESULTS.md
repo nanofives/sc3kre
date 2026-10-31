@@ -64,6 +64,20 @@ plus its item: zone tools their zone byte (+0x124), building tools their key (+0
 
 Seen in passing: a netmod one-way avenue piece ("Avenida (un sentido)", type 16000) picked Roads.
 
+## Integration with sc3landfill (main 32e4630, all 9 mods, Craterville, 2026-10-30)
+
+The LANDFILL block adds its lines and "Vaciar" in the query DIALOG (qi_msg, SIMUI `0x1006338f`). The picker wraps the
+query TOOL's Apply and never opens a dialog, so the two do not meet. Run `runs/lf`, camera on the 56-cell landfill.
+
+| check | result |
+|---|---|
+| stock "?" on landfill cell (77, 228) | **PASS.** `LANDFILL> "?" on landfill cell (77, 228) ... lines 1 1 1, button 1`, "Este vertedero: 55% completo", Vaciar shown |
+| picker on the same cell | **PASS.** "Relleno (type 12850, zone 17)" -> Landfill `0x10003004`, active tool SIMRCI+0x4C06C zone byte 0x11, no dialog, no LANDFILL line |
+| picker on a road / a building there | **PASS.** Carretera -> Roads (SIMNTWRK+0x2BEF8); Centro de reciclaje 12851 -> its building tool (key 0x2714) |
+
+Picture: `owner_shots/11_landfill_stock_query_vs_picker.png`. Found on the way: `re/tools/sc3wait.py` launched games
+without sc3landfill (its fixed `MODS` list sets `SC3MODS_LIST`); `sc3landfill.dll` added to that list.
+
 ## Needs owner check
 
 - Real Ctrl+F on the keyboard.
