@@ -88,6 +88,7 @@ static int   g_indicator = 1;       /* corner indicator instead of the progress 
 static int   g_unauto = 1;          /* UNAUTO below; autosave.ini [autosave] unauto=, SC3AUTOSAVE_UNAUTO overrides */
 static int   g_faultfix = 1;       /* FAULTFIX below; SC3AUTOSAVE_FAULTFIX=0 = off */
 static DWORD g_min_free_mb = 64;   /* MINFREE below; autosave.ini [autosave] min_free_mb=, SC3AUTOSAVE_MINFREE, 0 = off */
+static int   g_graphs = 1;         /* GRAPHS below; SC3AUTOSAVE_GRAPHS=0 = off */
 
 static void ini_read(void) {
     char path[MAX_PATH], v[32];
@@ -106,6 +107,7 @@ static void ini_read(void) {
         g_interval_ms = (DWORD)minutes * 60 * 1000;
     }
     if (GetEnvironmentVariableA("SC3AUTOSAVE_UNAUTO", v, sizeof(v))) g_unauto = atoi(v) != 0;
+    if (GetEnvironmentVariableA("SC3AUTOSAVE_GRAPHS", v, sizeof(v))) g_graphs = atoi(v) != 0;
     if (GetEnvironmentVariableA("SC3AUTOSAVE_MINFREE", v, sizeof(v))) g_min_free_mb = (DWORD)atoi(v);
     if (GetEnvironmentVariableA("SC3AUTOSAVE_FAULTFIX", v, sizeof(v))) g_faultfix = atoi(v) != 0;
     if (GetEnvironmentVariableA("SC3AUTOSAVE_SECONDS", v, sizeof(v)) && atoi(v) > 0) g_interval_ms = (DWORD)atoi(v) * 1000;
@@ -374,8 +376,41 @@ static long file_age(const char *path) {
     w = ((unsigned __int64)a.ftLastWriteTime.dwHighDateTime << 32) | a.ftLastWriteTime.dwLowDateTime;
     return n > w ? (long)((n - w) / 10000000) : 0;
 }
+/* GRAPHS (child graphaxis 2026-10-31, owner: autosaves should keep the graph history too). sc3resize GRAPHNEW keeps the
+ * new graphs' history in "<city file>.graphs" next to the city, written after a save to the city's own file. An
+ * autosave goes to a temp name and the city gets its old name back, so it got none. Now each autosave asks sc3resize
+ * for the history taken at that save (export sc3resize_graphs_write, "<tmp>.graphs"), and every rename or delete of an
+ * autosave file below does the same to its ".graphs" file, so each slot keeps the history of its own save. A slot whose
+ * save has no history file loses any older one. sc3resize reads a loaded autosave's history from these files.
+ * SC3AUTOSAVE_GRAPHS=0: no history files (as before). */
+typedef int (__cdecl *PFN_GraphsWrite)(const char *);
+static void gr_side(char *out, int cap, const char *sc3) { _snprintf(out, cap, "%s.graphs", sc3); out[cap - 1] = 0; }
+static void gr_delete(const char *sc3) {
+    char s[MAX_PATH + 8];
+    if (!g_graphs) return;
+    gr_side(s, sizeof(s), sc3);
+    DeleteFileA(s);
+}
+static void gr_write(const char *sc3) {
+    PFN_GraphsWrite w;
+    HMODULE rz;
+    if (!g_graphs) return;
+    rz = GetModuleHandleA("sc3resize.dll");
+    w = rz ? (PFN_GraphsWrite)GetProcAddress(rz, "sc3resize_graphs_write") : NULL;
+    if (!w) { logf("GRAPHS> sc3resize without the graphs export: no history file for this autosave"); return; }
+    if (!w(sc3)) logf("GRAPHS> sc3resize wrote no history for %s", sc3);
+}
+static void gr_move(const char *from, const char *to) {   /* after the .sc3 moved: its history follows, or none stays */
+    char a[MAX_PATH + 8], b[MAX_PATH + 8];
+    if (!g_graphs) return;
+    gr_side(a, sizeof(a), from); gr_side(b, sizeof(b), to);
+    if (GetFileAttributesA(a) == INVALID_FILE_ATTRIBUTES) { DeleteFileA(b); return; }
+    if (!MoveFileExA(a, b, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+        logf("GRAPHS> rename %s -> %s failed (%lu)", a, b, GetLastError());
+}
+
 static int move_over(const char *from, const char *to) {
-    if (MoveFileExA(from, to, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) return 1;
+    if (MoveFileExA(from, to, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) { gr_move(from, to); return 1; }
     logf("ROT> rename %s -> %s failed (%lu)", from, to, GetLastError());
     return 0;
 }
@@ -664,6 +699,7 @@ static void autosave_now(void) {
     /* the Save command appends ".sc3" to a path that does not end in it, so the temp name ends in .sc3 too */
     _snprintf(tmp, sizeof(tmp), "%s (auto).tmp.sc3", stem); tmp[sizeof(tmp) - 1] = 0;
     DeleteFileA(tmp);
+    gr_delete(tmp);
     pg_hook();
     g_pg_total = g_pg_cur = 0;
     ind_show();
@@ -692,14 +728,17 @@ static void autosave_now(void) {
         DeleteFileA(tmp);
         return;
     }
+    gr_write(tmp);                                 /* GRAPHS: the history taken at this save, "<tmp>.graphs" */
     if (file_hash(target, &hp, &szp) && hp == h && szp == sz) {
         DeleteFileA(tmp);
+        gr_delete(tmp);
         logf("SAVE> unchanged since %s, dropped (%lu B, %lu ms)", target, sz, GetTickCount() - t0);
         return;
     }
     rotate(stem);
     if (!move_over(tmp, target)) {
         DeleteFileA(tmp);
+        gr_delete(tmp);
         return;
     }
     g_saves++;

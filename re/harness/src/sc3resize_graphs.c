@@ -24,9 +24,11 @@
  *    0x10033baa]. Lines of one graph share one scale (1.1 x the group's largest kept value, rounded up), so they compare
  *    and share one axis column. Values are unsigned in the class, so R/C/I demand is stored + an offset (gn_off).
  *  - history: the class rings live only in memory, so 10 years / 100 years are kept in "<city>.sc3.graphs" next to the
- *    city file, written after a successful city save (SIMCITY 0x1000429d = city vt+0x20). It is read the first time the
+ *    city file, written after a successful city save (SIMCITY 0x1000429d = city vt+0x20); sc3autosave gets its own copy
+ *    per autosave through the export sc3resize_graphs_write. It is read the first time the
  *    graphs look at a city in a session and whenever the date jumps (another city or an older save was loaded: the
- *    closed month is neither the last one pushed nor the next), and used only when its date is the city's date. A city
+ *    closed month is neither the last one pushed nor the next), from the city's file or one of its 3 autosaves, and
+ *    used only when its date is the city's date. A city
  *    vt+0x1c (0x10003b8b) detour never fired on a load (measured 2026-10-30), so no load hook. The .sc3 itself is not
  *    touched: the stock game ignores the file.
  * SC3RESIZE_GRAPHNEW=0: none of this is installed (the 16 stock graphs, as before). SC3RESIZE_GRAPHNEW_LOG=1 logs every
@@ -291,34 +293,48 @@ static void gn_snapshot(void) {
     g_gn_snapkey = g_gn_last;
 }
 
+static DWORD g_gn_snaptick;   /* GetTickCount of the last snapshot (0 = none) */
+
+/* "<sc3>.graphs" from a snapshot */
+static int gn_write_file(const char *sc3, const GN_REC *snap, int key) {
+    char side[MAX_PATH + 8];
+    HANDLE h;
+    GN_HDR hd;
+    DWORD w1 = 0, w2 = 0;
+    wsprintfA(side, "%s.graphs", sc3);
+    hd.magic = GN_MAGIC; hd.ver = 1; hd.key = (DWORD)key; hd.n = GN_LINES;
+    h = CreateFileA(side, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE) { logf("GRAPHNEW> cannot write %s (%lu)", side, GetLastError()); return 0; }
+    WriteFile(h, &hd, sizeof(hd), &w1, NULL);
+    WriteFile(h, snap, sizeof(GN_REC) * GN_LINES, &w2, NULL);
+    CloseHandle(h);
+    logf("GRAPHNEW> history written: %s (closed month key %d)", side, key);
+    return w1 == sizeof(hd) && w2 == sizeof(GN_REC) * GN_LINES;
+}
+
 /* after a save: wait until the city's file carries the save's time (the save command may set the name after the city
-   save routine returns), then write "<city file>.graphs". A file that did not change (autosave writes a temp copy and
-   gives the city its old name back) gets nothing. */
+   save routine returns), then write "<city file>.graphs". A file that did not change gets nothing: sc3autosave saves
+   to a temp name and gives the city its old name back, and asks for its own copy through sc3resize_graphs_write. */
 static DWORD WINAPI gn_writer(LPVOID arg) {
-    char name[MAX_PATH], side[MAX_PATH + 8];
+    char name[MAX_PATH];
     WIN32_FILE_ATTRIBUTE_DATA fa;
     ULARGE_INTEGER t0, t1;
-    int tries;
+    FILETIME seen = { 0, 0 };
+    GN_REC snap[GN_LINES];
+    int tries, key;
     (void)arg;
-    t0.LowPart = g_gn_savet.dwLowDateTime; t0.HighPart = g_gn_savet.dwHighDateTime;
     for (tries = 0; tries < 40; tries++) {
         Sleep(250);
+        if (g_gn_savet.dwLowDateTime != seen.dwLowDateTime || g_gn_savet.dwHighDateTime != seen.dwHighDateTime) {
+            seen = g_gn_savet; tries = 0;   /* a newer save while we wait: its time, a fresh 10 s */
+        }
+        t0.LowPart = seen.dwLowDateTime; t0.HighPart = seen.dwHighDateTime;
         if (!gn_city_name(gn_city(), name, sizeof(name))) continue;
         if (!GetFileAttributesExA(name, GetFileExInfoStandard, &fa)) continue;
         t1.LowPart = fa.ftLastWriteTime.dwLowDateTime; t1.HighPart = fa.ftLastWriteTime.dwHighDateTime;
         if (t1.QuadPart + 20000000ui64 < t0.QuadPart) continue;          /* older than the save (2 s slack) */
-        {   HANDLE h;
-            GN_HDR hd;
-            DWORD w;
-            wsprintfA(side, "%s.graphs", name);
-            hd.magic = GN_MAGIC; hd.ver = 1; hd.key = (DWORD)g_gn_snapkey; hd.n = GN_LINES;
-            h = CreateFileA(side, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-            if (h == INVALID_HANDLE_VALUE) { logf("GRAPHNEW> cannot write %s (%lu)", side, GetLastError()); break; }
-            WriteFile(h, &hd, sizeof(hd), &w, NULL);
-            WriteFile(h, g_gn_snap, sizeof(g_gn_snap), &w, NULL);
-            CloseHandle(h);
-            logf("GRAPHNEW> history written: %s (closed month key %d)", side, g_gn_snapkey);
-        }
+        memcpy(snap, g_gn_snap, sizeof(snap)); key = g_gn_snapkey;
+        gn_write_file(name, snap, key);
         break;
     }
     InterlockedExchange(&g_gn_writer, 0);
@@ -331,50 +347,85 @@ static DWORD __fastcall gn_save(BYTE *city, void *edx, void *db) {
     DWORD r;
     GetSystemTimeAsFileTime(&t);
     r = ((GN_CITYFN)g_orig_save)(city, edx, db);
-    if ((r & 0xff) && g_gn_if[0] && g_gn_last >= 0 && !InterlockedExchange(&g_gn_writer, 1)) {
-        HANDLE th;
-        gn_snapshot();
+    if ((r & 0xff) && g_gn_if[0] && g_gn_last >= 0) {
+        gn_snapshot();                     /* every save, also while a writer still waits on an earlier one */
+        g_gn_snaptick = GetTickCount();
         g_gn_savet = t;
-        th = CreateThread(NULL, 0, gn_writer, NULL, 0, NULL);
-        if (th) CloseHandle(th); else InterlockedExchange(&g_gn_writer, 0);
+        if (!InterlockedExchange(&g_gn_writer, 1)) {
+            HANDLE th = CreateThread(NULL, 0, gn_writer, NULL, 0, NULL);
+            if (th) CloseHandle(th); else InterlockedExchange(&g_gn_writer, 0);
+        }
     }
     return r;
 }
 
+/* For sc3autosave (its GRAPHS block): write the history taken at the save that just ended next to `sc3`, the file that
+   save went to. 1 = written. Refuses a snapshot older than 2 min (no save of ours ran just before). */
+__declspec(dllexport) int sc3resize_graphs_write(const char *sc3) {
+    GN_REC snap[GN_LINES];
+    if (!g_gn_if[0] || !g_gn_snaptick || !sc3 || IsBadStringPtrA(sc3, MAX_PATH)) return 0;
+    if (GetTickCount() - g_gn_snaptick > 120000) { logf("GRAPHNEW> history for %s refused: no save in the last 2 min", sc3); return 0; }
+    memcpy(snap, g_gn_snap, sizeof(snap));
+    return gn_write_file(sc3, snap, g_gn_snapkey);
+}
+
+/* "<sc3>.graphs" into out when it exists, is ours and was saved at closed month `key` */
+static int gn_read_file(const char *sc3, int key, GN_REC *out, int *found_key) {
+    char side[MAX_PATH + 8];
+    HANDLE h;
+    GN_HDR hd;
+    DWORD rd;
+    int ok = 0;
+    *found_key = -1;
+    wsprintfA(side, "%s.graphs", sc3);
+    h = CreateFileA(side, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    if (ReadFile(h, &hd, sizeof(hd), &rd, NULL) && rd == sizeof(hd) && hd.magic == GN_MAGIC && hd.ver == 1 &&
+        hd.n == GN_LINES && ReadFile(h, out, sizeof(GN_REC) * GN_LINES, &rd, NULL) && rd == sizeof(GN_REC) * GN_LINES) {
+        *found_key = (int)hd.key;
+        ok = (int)hd.key == key;
+    }
+    CloseHandle(h);
+    return ok;
+}
+
 /* first look this session, or the dates jumped: start over, from the history file when it matches */
 static void gn_sync(void *cal) {
-    char name[MAX_PATH], side[MAX_PATH + 8];
-    int key = gn_key(cal, NULL, NULL), i, ok = 0, was = g_gn_last;
+    static const char *const slot[3] = { " (auto 5 min).sc3", " (auto 10 min).sc3", " (auto 1 h).sc3" };   /* sc3autosave k_slot */
+    char name[MAX_PATH], cand[MAX_PATH + 24], t[32];
+    int key = gn_key(cal, NULL, NULL), i, c, n, ok = 0, was = g_gn_last, fk;
     if (!g_gn_if[0] || key < 0) return;
     if (g_gn_synced && (key == g_gn_last || key == g_gn_last + 1)) return;
     g_gn_synced = 1;
     for (i = 0; i < GN_LINES; i++) { gn_reset_line(i); gn_label(i, "-"); }
-    if (gn_city_name(gn_city(), name, sizeof(name))) {
-        HANDLE h;
-        GN_HDR hd;
-        DWORD rd;
-        wsprintfA(side, "%s.graphs", name);
-        h = CreateFileA(side, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
-        if (h != INVALID_HANDLE_VALUE) {
-            if (ReadFile(h, &hd, sizeof(hd), &rd, NULL) && rd == sizeof(hd) && hd.magic == GN_MAGIC && hd.ver == 1 &&
-                hd.n == GN_LINES && ReadFile(h, g_gn_snap, sizeof(g_gn_snap), &rd, NULL) && rd == sizeof(g_gn_snap)) {
-                if ((int)hd.key == key) {
-                    for (i = 0; i < GN_LINES; i++) {
-                        ho_v(g_gn_if[i], 0x60, 1, g_gn_snap[i].scale, 0, 0, 0, 0);
-                        ho_v(g_gn_if[i], 0x70, 1, (DWORD)g_gn_snap[i].m, 0, 0, 0, 0);
-                        ho_v(g_gn_if[i], 0x78, 1, (DWORD)g_gn_snap[i].y, 0, 0, 0, 0);
-                        ho_v(g_gn_if[i], 0x80, 1, (DWORD)g_gn_snap[i].d, 0, 0, 0, 0);
-                        gn_fmt_real(name, (double)g_gn_snap[i].m[0] - (double)g_gn_off[k_gn[i].grp]);   /* newest month */
-                        gn_label(i, name);
-                    }
-                    ok = 1;
-                } else logf("GRAPHNEW> %s is for closed month key %lu, the city is at %d: not used", side, hd.key, key);
+    cand[0] = 0;
+    if (gn_city_name(gn_city(), name, sizeof(name)))
+        /* the city's own file first, then its autosaves: a loaded autosave is renamed "<city>.sc3" right after the load
+           (sc3autosave UNAUTO), so its history sits under the autosave's name. Only a file saved at this exact closed
+           month is taken. */
+        for (c = 0; c < 4 && !ok; c++) {
+            if (c == 0) lstrcpynA(cand, name, MAX_PATH);
+            else {
+                n = lstrlenA(name);
+                if (n < 4 || lstrcmpiA(name + n - 4, ".sc3")) break;
+                lstrcpynA(cand, name, n - 3);
+                lstrcatA(cand, slot[c - 1]);
             }
-            CloseHandle(h);
+            if (gn_read_file(cand, key, g_gn_snap, &fk)) ok = 1;
+            else if (fk >= 0) logf("GRAPHNEW> %s.graphs is for closed month key %d, the city is at %d: not used", cand, fk, key);
         }
-    }
+    if (ok)
+        for (i = 0; i < GN_LINES; i++) {
+            ho_v(g_gn_if[i], 0x60, 1, g_gn_snap[i].scale, 0, 0, 0, 0);
+            ho_v(g_gn_if[i], 0x70, 1, (DWORD)g_gn_snap[i].m, 0, 0, 0, 0);
+            ho_v(g_gn_if[i], 0x78, 1, (DWORD)g_gn_snap[i].y, 0, 0, 0, 0);
+            ho_v(g_gn_if[i], 0x80, 1, (DWORD)g_gn_snap[i].d, 0, 0, 0, 0);
+            gn_fmt_real(t, (double)g_gn_snap[i].m[0] - (double)g_gn_off[k_gn[i].grp]);   /* newest month */
+            gn_label(i, t);
+        }
     g_gn_last = key;
-    logf("GRAPHNEW> city at closed month key %d (last push %d): history %s", key, was, ok ? "read from the .graphs file" : "starts empty");
+    logf("GRAPHNEW> city at closed month key %d (last push %d): history %s%s", key, was,
+         ok ? "read from " : "starts empty", ok ? cand : "");
 }
 
 /* ---------------------------------------------------------------------------------------------- monthly push */
