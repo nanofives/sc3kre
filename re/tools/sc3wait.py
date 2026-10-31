@@ -133,7 +133,7 @@ def wait_layout(log, start, timeout=60.0, settle=1.0):
 
 # Mod DLLs in the order the retired mods_launch.exe loaded them; only the ones present in the instance load.
 MODS = ["sc3resize.dll", "sc3bigcity.dll", "sc3overscroll.dll", "sc3simrun.dll", "sc3startsize.dll", "sc3perf.dll",
-        "sc3netmod.dll", "sc3cartrips.dll", "sc3undo.dll", "sc3autosave.dll"]
+        "sc3netmod.dll", "sc3cartrips.dll", "sc3undo.dll", "sc3autosave.dll", "sc3landfill.dll", "sc3dataview.dll"]
 
 
 def launch_game(inst, city, env=None, out=None, multi=True, extra_args=(), tree=None, pre_args=(), off=False):
