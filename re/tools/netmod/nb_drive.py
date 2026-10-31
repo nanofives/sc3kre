@@ -113,7 +113,14 @@ function build(j) {
   /* FUN_10014a23 keeps only the cells for which SIMNTWRK FUN_10021b37()->vt+0x8c() (a SIMSPR object, vtable
      SIMSPR+0x67a5c) vt+0x30 = SIMSPR FUN_1004adcd answers 0x23: that reads the drag-highlight byte grid
      (object+0x6c, FUN_1004bd7b: rows at [[grid+0xc]+0xc]) and answers object+0x2c when the low nibble is 1.
-     So mark the path cells as a UI drag would, call, then put the bytes and the code back. */
+     So mark the path cells as a UI drag would, call, then put the bytes and the code back.
+     Task cyantri (2026-10-31): a grid byte holds the live highlight (low nibble) and the state last pushed to the view
+     (high nibble); vt+0x58 = SIMSPR FUN_1004b779(int box[6]) pushes every cell of the box where the two differ
+     (message 0xC3331D0D) and syncs them. The pieces are placed while the cells read highlighted, so the terrain drawn
+     under a ground-under piece's transparent part (35, 20505, 20950: flag 0x40) shows the highlight colour (0,120,152).
+     Writing the bytes back alone leaves them in sync, nothing is pushed and the colour stays until a reload: the owner's
+     "cyan triangles" in every avdb_lab picture. So the restore marks them pushed-highlighted (high nibble 1) and calls
+     vt+0x58 over the cells' box, as the UI's own clear does. j.hlpush === false (NB_DRIVE_HLPUSH=0) keeps the old way. */
   var g0 = new NativeFunction(ntw.add(0x21b37), 'pointer', [])();
   var g = vfn(g0, 0x8c, 'pointer', [])(g0);
   var rows = g.add(0x6c).readPointer().add(0xc).readPointer().add(0xc).readPointer();
@@ -136,8 +143,19 @@ function build(j) {
   var r;
   try { r = f(MGR, MGR.add(0x3c).readPointer(), ptr(0), j.net, j.cost, box, buf, n, ptr(0)); }
   finally {
-    for (var k2 = saved.length - 1; k2 >= 0; k2--) saved[k2][0].writeU8(saved[k2][1]);
+    var push = j.hlpush !== false, hb = [0x7fffffff, 0x7fffffff, 0x7fffffff, -0x80000000, -0x80000000, 0x7fffffff];
+    for (var k2 = saved.length - 1; k2 >= 0; k2--)
+      saved[k2][0].writeU8(push ? ((saved[k2][1] & 0x0f) | 0x10) : saved[k2][1]);
     g.add(0x2c).writeU32(code);
+    if (push && n) {
+      for (var k3 = 0; k3 < n; k3++) {
+        hb[0] = Math.min(hb[0], j.cells[k3][0] << 8); hb[1] = Math.min(hb[1], j.cells[k3][1] << 8);
+        hb[3] = Math.max(hb[3], j.cells[k3][0] << 8); hb[4] = Math.max(hb[4], j.cells[k3][1] << 8);
+      }
+      var hbox = Memory.alloc(24);
+      for (var b2 = 0; b2 < 6; b2++) hbox.add(4 * b2).writeS32(hb[b2]);
+      vfn(g, 0x58, 'void', ['pointer'], true)(g, hbox);
+    }
     slot.writePointer(orig140);
     Memory.protect(slot, 4, 'r--');
     hooks.forEach(function (h) { h.detach(); });
@@ -281,6 +299,8 @@ class Session:
         self.hwnd = sc3io.game_hwnd()
 
     def job(self, j, timeout=60):
+        if j.get("kind") == "build" and os.environ.get("NB_DRIVE_HLPUSH") == "0":
+            j = dict(j, hlpush=False)          # task cyantri: old restore, for before pictures
         self.sc.exports_sync.queue(j)
         t0 = time.time()
         while time.time() - t0 < timeout:
