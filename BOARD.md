@@ -24,7 +24,7 @@ Before it: `sc3mods-2026-10-25c` (target `8587f2c`: sharp Ver datos maps).
 Before it: `sc3mods-2026-10-25b` (target `def734b`: zoom-step crash with the minimap buttons fixed,
 UI audit fixes; `verify/mods_release_1025b/RESULTS.md`). Before it: `sc3mods-2026-10-25` (target `4a291be`: new loader without launcher, the 10-24 version.dll is
 Defender-flagged; avenue traffic changes, AVSTART on; `verify/mods_release_1025/RESULTS.md`). Same build on the LAN server.
-Test launches: start `SC3U.exe` (version.dll loads the mods); `mods_launch.exe` is no longer built or shipped. Dev builds go to the LAN server (`re/scripts/lan_release`, last republish
+Test launches: start `SC3U.exe` (version.dll loads the mods); `mods_launch.exe` is retired (source, `build_mod.ps1` target and `check_launch_lease.py` deleted 2026-10-27; `sc3wait.launch_game` replaces it). Dev builds go to the LAN server (`re/scripts/lan_release`, last republish
 2026-10-21 at `67bd9ea`, 3,593 files). `child/cityzoom` is the only branch not merged into `main`.
 
 **Release candidate staged 2026-10-23: `Proyectos\Simcity_rc`** (branch `rc/1023` in worktree `Simcity_wt_rc` =
