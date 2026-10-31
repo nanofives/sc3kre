@@ -47,3 +47,58 @@ each at `2560x1351` and `1600x900`.
 - Lab trap: the game handles a posted click right after the next present. The lab dumps a throwaway frame first.
 - `tree\Apps\SC3.cfg` was un-hard-linked in this tree before toggling checkboxes (the game keeps the page's checkbox state
   in prefs).
+
+---
+
+# Part 2 built: five new graphs (owner pick 2026-10-30, block GRAPHNEW, `SC3RESIZE_GRAPHNEW=0` off)
+
+Owner pick: 1 income vs expenses, 2 power and water supply vs demand, 3 R/C/I demand, 4 air vs water pollution.
+
+## Layout (agreed before building)
+
+The 16 stock checkboxes fill rows 0..5. The free cells are row 5 col 1 and rows 6..7 in cols 0..1; col 2 of those rows
+is the 1 / 10 / 100 years radios. The game's own placement would put the 17th checkbox on the "1 ano" radio, so the
+mod moves the 5 new ones after the game lays out the page. No stock control moves except Agua %, which the game itself
+puts at row 5 col 0 once the list is longer. Mockup: `mockup_layout_5_new.png`.
+
+| checkbox | lines | values |
+|---|---|---|
+| Ingresos/Gastos | Ingresos, Gastos | money per month (all budget income / expense lines, departments included) |
+| Energia of./dem. | oferta, demanda | game power units; demand counts unpowered tiles too |
+| Agua of./dem. | oferta, demanda | supply = pump capacity, "demanda" = water delivered (the game keeps no unmet water total) |
+| Demanda RCI | R, C, I | the HUD bar's scale, -1000..1000, 0 in the middle |
+| Contam. aire/agua | aire, agua | % of the game's UI maximum (same base as Polucion) |
+
+Lines of one graph share one scale and one axis column. The axis counts checkboxes, not lines: 1 or 2 graphs on = axis,
+3 or more = hidden. Sources and RVAs: `re/analysis/GRAPH_SERIES.md` section 7.
+
+## History
+
+The game's series keep 12 months / 10 years / 10 decades only in memory. The mod writes them to `<city>.sc3.graphs` next
+to the city after each successful save, and reads them back when the city is opened again at the same date. The `.sc3`
+is written by the game's own save, unchanged. Without the mod the extra file is ignored.
+
+## Check (dev/graphaxis/tree, all mods, client 2560x1351, posted input only)
+
+| step | result |
+|---|---|
+| Berlin copy `GraphTest.sc3`, ~10 months at speed 4, Save (menu command 0x10009002) | `GraphTest.sc3.graphs` written (1,512 bytes), log `history written ... closed month key 24814` |
+| reopen `GraphTest.sc3` | log `history read from the .graphs file`; the graphs show the months recorded before the save (`0_cargada_con_historia.png`) |
+| each graph after ~8 more months | `1_ingresos_energia.png`, `2_energia_agua.png`, `3_agua_rci.png` (2 graphs, 2 columns each), `4_contaminacion_sola.png` (1 graph) |
+| 4 graphs on | axis hidden (`5_muchos_sin_eje.png`) |
+| `SC3RESIZE_GRAPHNEW=0` with the saved city | the stock 16-checkbox page (`6_interruptor_apagado_GRAPHNEW0.png`) |
+| stock game, no mods (`SC3MODS_OFF=1`), saved city | ran 120 s, no error dialog from that process. No picture (desktop grab blocked by another session's window) |
+
+Values on Berlin per month: income ~12,500, expenses ~12,400, power supply 195,168 vs demand ~157,000, water 182,000 vs
+132,000, R/C/I 570 / 440 / -700..600, air 18-19 %, water 5 %.
+
+Pictures: `owner_shots_nuevos\` (dialog crops at 2.25x).
+
+## Not checked / open
+
+- 10-year and 100-year views were not run long enough to fill (a year takes ~1 min at speed 4, a decade ~10 min). They
+  use the same rings and roll-up rule as the stock series. The saved file round-trips all three rings.
+- Months before the mod was installed show as 0 (no data). The game does not keep these values anywhere older.
+- With many lines on, the game's own line-end labels stack on each other, as with the stock graphs.
+- Autosaves get no `.graphs` file: sc3autosave saves to a temp name and puts the city name back, so the city's own file
+  never changes. Loading an autosave starts the new graphs empty.
