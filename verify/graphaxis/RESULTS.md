@@ -100,5 +100,22 @@ Pictures: `owner_shots_nuevos\` (dialog crops at 2.25x).
   use the same rings and roll-up rule as the stock series. The saved file round-trips all three rings.
 - Months before the mod was installed show as 0 (no data). The game does not keep these values anywhere older.
 - With many lines on, the game's own line-end labels stack on each other, as with the stock graphs.
-- Autosaves get no `.graphs` file: sc3autosave saves to a temp name and puts the city name back, so the city's own file
-  never changes. Loading an autosave starts the new graphs empty.
+- Autosaves: fixed 2026-10-31, see below.
+
+
+# Autosaves keep the graph history (owner "si", 2026-10-31; sc3autosave block GRAPHS, `SC3AUTOSAVE_GRAPHS=0` off)
+
+- sc3resize exports `sc3resize_graphs_write(path)`: it writes the history taken at the save that just ended (every city
+  save takes a snapshot) to `<path>.graphs`. It refuses a snapshot older than 2 min.
+- sc3autosave calls it for its temp file after a successful save. Every rename (rotation A -> B -> C, temp -> A) and every
+  delete of an autosave file does the same to its `.graphs`. A slot whose save has no history loses any older file.
+- Reading: a loaded autosave is renamed `<city>.sc3` by UNAUTO, so the reader tries the city's own file first and then
+  its 3 autosave slots, and takes the one saved at the city's exact closed month.
+
+Check (GraphTest, autosave every 40 s with tiers 30 / 60 s, speed 4, ~3 min):
+
+| step | result |
+|---|---|
+| 4 autosaves | each slot has its `.graphs` with the same time as its `.sc3`: `(auto 5 min)`, `(auto 10 min)`, `(auto 1 h)`. Keys 24814 / 24821 / 24828 / 24834 written, rotation logged `ROT> A -> B`, `B -> C` |
+| player's own `GraphTest.sc3.graphs` | untouched (still the 23:06 file) |
+| load `GraphTest (auto 5 min).sc3` | UNAUTO renames the city to `GraphTest.sc3`. Log: `GraphTest.sc3.graphs is for closed month key 24814, the city is at 24834: not used`, then `history read from ... GraphTest (auto 5 min).sc3`. Picture `owner_shots_nuevos/7_autoguardado_cargado_con_historia.png`: 12 months of Ingresos/Gastos and Energia |
