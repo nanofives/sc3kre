@@ -17,7 +17,7 @@ import vdscroll_io as vdio
 
 ROOT = TOOLS.parents[1]            # the worktree
 MAIN = ROOT.parents[2]             # Simcity
-RUNS = MAIN / "verify" / "picker" / "runs"
+RUNS = pathlib.Path(os.environ.get("PICKER_RUNS") or (MAIN / "verify" / "picker" / "runs"))   # pickerui: PICKER_RUNS=verify/pickerui/runs
 WM_RZ_PICKER = 0x8000 + 0x5F0
 
 TRACE_JS = r"""
