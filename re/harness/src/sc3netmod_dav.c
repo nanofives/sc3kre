@@ -354,11 +354,15 @@ static int dav_is_x(WORD id) {                       /* a crossing piece (varian
 }
 
 typedef struct { int x, z; BYTE pref; } DavCell;    /* x in real space; pref: ambiguous end cell, 1 = A, 2 = B */
-typedef struct { int x, z; BYTE o; } DavArm;         /* a straight road cell beside the avenue -> 29 in state o */
+typedef struct { int x, z; BYTE o, end; } DavArm;    /* a straight road cell beside the avenue -> 29 in state o;
+                                                        task davtouch: end 1 = a one-cell stub -> 11225 in state o */
 typedef struct { int x, z; BYTE n, s1, s2, o, e; } DavJ;   /* a junction cell and its descriptor */
 
 #define DAV_MAX_ARMS 256
 #define DAV_MAX_COLS 64
+#define DAV_MAX_BAD 64                                 /* task davtouch */
+#define DAV_MAX_FOR 128
+#define DAV_TOUCH_TRIES 8
 
 typedef struct { int x, z; BYTE axis, ok; } DavSt;  /* a band's start row (axis space) and whether it converted */
 
@@ -373,7 +377,48 @@ typedef struct {                                      /* one pass: the read buff
     int *xwx, *xwz;                     /* the band's crossing writes: cell, want */
     DWORD *xww;
     DavSt *st[2];                       /* band status, previous round / this round */
+    int nbad, badx[DAV_MAX_BAD], badz[DAV_MAX_BAD];       /* task davtouch: this try's touching cells (real) */
+    int nfor, forx[DAV_MAX_FOR], forz[DAV_MAX_FOR];       /* task davtouch: cells masked out of the read buffer */
+    DWORD forv[DAV_MAX_FOR];
 } DavPass;
+
+/* task davtouch (owner 2026-10-31: "A road touching a diagonal avenue should keep the avenue"). A road touching a band
+   in a shape the rules have no junction for (a stub, a road at the end row's side, a column near an end, a road going
+   on from the end cell, a corner or an angled diagonal touch) made ok = 0, and the revert loop then stock-retiled the
+   whole band. Now such a band is judged again with the touching road's cells masked out of the read buffer (read as
+   no road), up to DAV_TOUCH_TRIES times: every band cell stays avenue, the touching road keeps its stock pieces. A
+   one-cell stub beside a band row is a junction arm instead (dead-end 11225 facing the avenue). The mask lives only
+   while its band is judged and written (dav_unmask). Off: SC3NETMOD_DAVTOUCH=0. */
+static int g_dav_touch = -1;
+static volatile LONG g_dav_n_touch, g_dav_n_stub;
+
+static void dav_bad(DavPass *p, int x, int z) {
+    if (p->nbad < DAV_MAX_BAD) { p->badx[p->nbad] = x; p->badz[p->nbad] = z; p->nbad++; }
+}
+
+static int dav_mask(DavPass *p) {                    /* -> cells newly masked */
+    int k, n = 0;
+    for (k = 0; k < p->nbad && p->nfor < DAV_MAX_FOR; k++) {
+        int x = p->badx[k] - p->b.x0, z = p->badz[k] - p->b.z0;
+        DWORD *c;
+        if (x < 0 || z < 0 || x >= p->b.w || z >= p->b.h) continue;
+        c = &p->b.c[z * p->b.w + x];
+        if (!*c) continue;
+        p->forx[p->nfor] = p->badx[k]; p->forz[p->nfor] = p->badz[k]; p->forv[p->nfor] = *c; p->nfor++;
+        *c = 0;
+        n++;
+    }
+    p->nbad = 0;
+    return n;
+}
+
+static void dav_unmask(DavPass *p) {
+    while (p->nfor > 0) {
+        p->nfor--;
+        p->b.c[(p->forz[p->nfor] - p->b.z0) * p->b.w + (p->forx[p->nfor] - p->b.x0)] = p->forv[p->nfor];
+    }
+    p->nbad = 0;
+}
 
 static int dav_mark(DavPass *p, int x, int z) {
     x -= p->b.x0; z -= p->b.z0;
@@ -402,9 +447,19 @@ static void dav_add_arm(DavPass *p, int *na, int axis, int ax, int z, int o) {
     int x = axis ? -ax : ax;
     BYTE *m = dav_markp(p, x, z);
     if (*na >= DAV_MAX_ARMS || (*m & 8)) return;
-    p->arm[*na].x = x; p->arm[*na].z = z; p->arm[*na].o = (BYTE)o;
+    p->arm[*na].x = x; p->arm[*na].z = z; p->arm[*na].o = (BYTE)o; p->arm[*na].end = 0;
     *m |= 8;
     (*na)++;
+}
+
+/* task davtouch: a one-cell stub beside a band row = a junction arm drawn as the stock dead end 11225 whose open side
+   faces the avenue (state 3 open to +x, 1 to -x, in real space) */
+static void dav_add_stub(DavPass *p, int *na, int axis, int ax, int z, int open_ax) {
+    int n0 = *na;
+    dav_add_arm(p, na, axis, ax, z, 0);
+    if (*na == n0) return;
+    p->arm[n0].end = 1;
+    p->arm[n0].o = (BYTE)((open_ax > 0) != (axis != 0) ? 3 : 1);
 }
 
 static int dav_own_mask(DavPass *p, int x, int z, int bit) {
@@ -497,9 +552,27 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
     for (z = 0; z < P.b.h; z++)
         for (x = 0; x < P.b.w; x++) P.b.c[z * P.b.w + x] = rb_read(mgr, lay, x0 + x, z0 + z, W, H);
     if (keep) cut_begin(&cg, x0, z0, x1, z1, W, H); else ZeroMemory(&cg, sizeof(cg));   /* task avdiagbreak */
+    P.nbad = P.nfor = 0;                                                                   /* task davtouch */
+    if (g_dav_touch < 0) {
+        g_dav_touch = !env_off("SC3NETMOD_DAVTOUCH");
+        logf("dav: DAVTOUCH %s (SC3NETMOD_DAVTOUCH)", g_dav_touch ? "on" : "off");
+    }
     /* task diagx: with crossings of two diagonal avenues, dry rounds (no writes) until no band changes, each band's
        crossing needing the other band converted in the round before (round 0: assumed); then the write round */
     done = !g_davx_partner;
+/* clear this band's scratch: its marks and its crossings' windows (task davtouch: also before a retry) */
+#define DAV_SCRATCH_CLEAR() do { \
+        for (k = 0; k < n; k++) *dav_markp(&P, P.cell[k].x, P.cell[k].z) = 0; \
+        for (k = 0; k < na; k++) *dav_markp(&P, P.arm[k].x, P.arm[k].z) = 0; \
+        for (k = 0; k < npath; k++) *dav_markp(&P, path[k][0], path[k][1]) = 0; \
+        for (k = 0; k < nxm; k++) { \
+            const DavX *q_ = &g_davx[xmt[k]]; \
+            int i2, j2; \
+            for (j2 = 0; j2 < q_->h; j2++) \
+                for (i2 = 0; i2 < q_->w; i2++) \
+                    dav_xm_set(&P, axis ? -(xma[k] + q_->x0 + i2) : xma[k] + q_->x0 + i2, xmz[k] + q_->z0 + j2, 0); \
+        } \
+        for (k = 0; k < nxw; k++) dav_xm_set(&P, P.xwx[k], P.xwz[k], 0); } while (0)
     for (round = 0;; round++) {
     dry = !done;
     nst[1] = 0;
@@ -509,8 +582,12 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
 #define MK(a, zq) dav_mark(&P, axis ? -(a) : (a), (zq))
 #define DCL(a, zq) dbv_claimed(axis ? -(a) : (a), (zq))      /* task diagbv: a diagonal boulevard's cell */
 #define DOUT(a, zq) (RD(a, zq) && !(MK(a, zq) & 4) && !DCL(a, zq))
+#define DBAD(a, zq) dav_bad(&P, axis ? -(a) : (a), (zq))       /* task davtouch: a touching cell */
         for (z = z0; z <= z1; z++)
             for (x = ax0; x <= ax1; x++) {
+              int ntry = 0;                             /* task davtouch: the band judged again with touches masked */
+              dav_unmask(&P);
+              dav_retry: {
                 int rows = 0, ok = 1, step, nw = 0, namb = 0, amb[DAV_MAX_AMB], combo, ncombo, best = -1, run, brun;
                 int bestcost = 0x7fffffff, na = 0, nj = 0, ncn = 0, ncs = 0, colN[DAV_MAX_COLS][2], colS[DAV_MAX_COLS][2];
                 int nmg = 0, mg[2][4], npath = 0, path[16][2], nmc = 0, mcx[16], mcz[16], bend[2], e;
@@ -519,7 +596,9 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                 BYTE side[1024];
                 int nop = 0, opn[DAV_MAX_OPN][6];       /* task avdiag: median openings: near, median, far cell (real) */
                 int bsd = 0;                            /* task avdiagbreak: window sides this band reaches */
+                int tch = 0;                            /* task davtouch: the isolation test found touching road */
                 const char *why = "";
+                P.nbad = 0;
                 if (!dav_full(&P.b, axis, x, z) || dav_full(&P.b, axis, x - 1, z - 1)) continue;
                 while (dav_full(&P.b, axis, x + rows, z + rows)) rows++;
                 for (k = 0, run = brun = 0; k < rows; k++)        /* anchored by MIN_ROWS clean rows (no road beside) */
@@ -619,7 +698,11 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                                    ncs < DAV_MAX_COLS) {
                             colS[ncs][0] = aa - 1; colS[ncs][1] = zz; ncs++;
                             dav_add_arm(&P, &na, axis, aa - 1, zz, 1); dav_add_arm(&P, &na, axis, aa - 1, zz + 1, 1);
-                        } else { ok = 0; why = "road beside the avenue is not a straight arm"; }
+                        } else if (g_dav_touch && !RD(aa - 2, zz) && !RD(aa - 1, zz + 1) && !DOUT(aa - 2, zz + 1) &&
+                                   !DOUT(aa - 2, zz - 1) && !DOUT(aa, zz + 1)) {          /* task davtouch: a stub */
+                            side[k] |= 1;
+                            dav_add_stub(&P, &na, axis, aa - 1, zz, 1);
+                        } else { ok = 0; why = "road beside the avenue is not a straight arm"; DBAD(aa - 1, zz); }
                     }
                     if (bend[1] == 1 && k >= rows - 2 && RD(aa + 3, zz)) side[k] |= 4;
                     else if (ok && RD(aa + 3, zz) && !(XC(aa + 3, zz) & 1) && !DCL(aa + 3, zz)) {
@@ -630,7 +713,11 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                                    ncn < DAV_MAX_COLS) {
                             colN[ncn][0] = aa + 3; colN[ncn][1] = zz; ncn++;
                             dav_add_arm(&P, &na, axis, aa + 3, zz, 1); dav_add_arm(&P, &na, axis, aa + 3, zz - 1, 1);
-                        } else { ok = 0; why = "road beside the avenue is not a straight arm"; }
+                        } else if (g_dav_touch && !RD(aa + 4, zz) && !RD(aa + 3, zz - 1) && !DOUT(aa + 4, zz + 1) &&
+                                   !DOUT(aa + 4, zz - 1) && !DOUT(aa + 2, zz - 1)) {      /* task davtouch: a stub */
+                            side[k] |= 2;
+                            dav_add_stub(&P, &na, axis, aa + 3, zz, -1);
+                        } else { ok = 0; why = "road beside the avenue is not a straight arm"; DBAD(aa + 3, zz); }
                     }
                 }
                 /* junction cells (axis-space d, then real descriptor) */
@@ -647,7 +734,11 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                     if (!side[k]) continue;
                     if (g_dav_no && (s3 == 1 || s3 == 2)) {        /* task avdiag: a median opening (twin diagave) */
                         int fc = s3 == 1 ? 2 : 0, end = s3 == 1 ? 1 : 3, d;
-                        if (k == 0 || k == rows - 1) { ok = 0; why = "a road meets one carriageway in the avenue's end row"; break; }
+                        if (k == 0 || k == rows - 1) {
+                            ok = 0; why = "a road meets one carriageway in the avenue's end row";
+                            if (s3 == 1) DBAD(aa - 1, zz); else DBAD(aa + 3, zz);                  /* task davtouch */
+                            break;
+                        }
                         if (nop >= DAV_MAX_OPN) { ok = 0; why = "too many median openings"; break; }
                         for (d = 0; d < 3; d++) JADD(aa + d, zz, d, 0, d == fc ? (axis ? 4 - end : end) : 255);
                         OADD(aa + 2 - fc, zz, 0); OADD(aa + 1, zz, 1); OADD(aa + fc, zz, 2); nop++;
@@ -662,7 +753,9 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                     int x0c = colN[k][0], zz = colN[k][1], cross = 0, t;
                     for (j = 0; j < ncs; j++) if (colS[j][0] == x0c && colS[j][1] == zz + 4) cross = 1;
                     if (!cross && g_dav_no) {                    /* task avdiag: a median opening, far curb S */
-                        if (zz + 3 - z >= rows - 1) { ok = 0; why = "a column road meets one carriageway near the avenue's end"; break; }
+                        if (zz + 3 - z >= rows - 1) {
+                            ok = 0; why = "a column road meets one carriageway near the avenue's end"; DBAD(x0c, zz); break;
+                        }
                         if (nop >= DAV_MAX_OPN) { ok = 0; why = "too many median openings"; break; }
                         for (t = 1; t <= 3; t++) JADD(x0c, zz + t, x0c - (x + zz + t - z), 1, t == 3 ? 2 : 255);
                         OADD(x0c, zz + 1, 0); OADD(x0c, zz + 2, 1); OADD(x0c, zz + 3, 2); nop++;
@@ -670,7 +763,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                     }
                     for (t = 1; t <= (cross ? 3 : 1); t++) {
                         int zr = zz + t, kr = zr - z;
-                        if (kr < 0 || kr >= rows) { ok = 0; why = "column road leaves the avenue's rows"; break; }
+                        if (kr < 0 || kr >= rows) { ok = 0; why = "column road leaves the avenue's rows"; DBAD(x0c, zz); break; }
                         JADD(x0c, zr, x0c - (x + kr), 1, 255);
                     }
                 }
@@ -680,13 +773,15 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                     if (crossed) continue;
                     if (g_dav_no) {                              /* task avdiag: a median opening, far curb N */
                         int t;
-                        if (kr - 2 < 1 || kr >= rows) { ok = 0; why = "a column road meets one carriageway near the avenue's end"; break; }
+                        if (kr - 2 < 1 || kr >= rows) {
+                            ok = 0; why = "a column road meets one carriageway near the avenue's end"; DBAD(x0c, zz); break;
+                        }
                         if (nop >= DAV_MAX_OPN) { ok = 0; why = "too many median openings"; break; }
                         for (t = 1; t <= 3; t++) JADD(x0c, zz - t, t - 1, 1, t == 3 ? 0 : 255);
                         OADD(x0c, zz - 1, 0); OADD(x0c, zz - 2, 1); OADD(x0c, zz - 3, 2); nop++;
                         continue;
                     }
-                    if (kr < 0 || kr >= rows) { ok = 0; why = "column road leaves the avenue's rows"; break; }
+                    if (kr < 0 || kr >= rows) { ok = 0; why = "column road leaves the avenue's rows"; DBAD(x0c, zz); break; }
                     JADD(x0c, zz - 1, 0, 1, 255);
                 }
 #undef OADD
@@ -737,10 +832,24 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                         continue;
                     }
                     for (k = 1;; k++) {
-                        int got = 0;
+                        int got = 0, in3[3];
                         for (j = 0; j < 3; j++) {
                             int axj = ar + step * k + j, zj = zr + step * k;
-                            if (RD(axj, zj) && !(MK(axj, zj) & 8)) {
+                            in3[j] = RD(axj, zj) && !(MK(axj, zj) & 8);
+                        }
+                        if (g_dav_touch) {
+                            /* task davtouch: only cells the drags' staircases reach: below (above) a band cell of the
+                               row before, or after such a cell in this row along the drag. A road touching the end at
+                               a corner is a touch (masked), not a drag end */
+                            int c3[3], zj = zr + step * k;
+                            for (j = 0; j < 3; j++) c3[j] = in3[j] && (MK(ar + step * k + j, zj - step) & 4);
+                            if (step > 0) { for (j = 1; j < 3; j++) if (in3[j] && c3[j - 1]) c3[j] = 1; }
+                            else for (j = 1; j >= 0; j--) if (in3[j] && c3[j + 1]) c3[j] = 1;
+                            for (j = 0; j < 3; j++) in3[j] = c3[j];
+                        }
+                        for (j = 0; j < 3; j++) {
+                            int axj = ar + step * k + j, zj = zr + step * k;
+                            if (in3[j]) {
                                 dav_add(&P, &n, axis, axj, zj, j == 0 ? 1 : j == 2 ? 2 : 0, step < 0 ? 1 : 2);
                                 got = 1;
                             }
@@ -751,22 +860,24 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
 #undef RD
 #undef MK
 #undef DOUT
+#undef DBAD
 #undef DCL
 #undef BX
 #undef BZ
 #undef XC
-                for (k = 0; k < n && ok; k++) {
+                for (k = 0; k < n && (ok || tch); k++) {          /* task davtouch: tch = collect every touch */
                     int cx = P.cell[k].x, cz = P.cell[k].z;
                     {                                              /* task avdiagbreak: per side, for DAVGROW */
                         int sd = (cx <= x0 && x0 > 0 ? 1 : 0) | (cz <= z0 && z0 > 0 ? 2 : 0) |
                                  (cx >= x1 && x1 < W - 1 ? 4 : 0) | (cz >= z1 && z1 < H - 1 ? 8 : 0);
                         if (sd) { border = 1; bsd |= sd; }
                     }
-                    for (j = 0; j < 8 && ok; j++) {                /* isolated: no other road touches the band */
+                    for (j = 0; j < 8 && (ok || tch); j++) {       /* isolated: no other road touches the band */
                         int qx = cx + DAV_DIR[j][0], qz = cz + DAV_DIR[j][1];
                         if (rb_at(&P.b, qx, qz) && !(dav_mark(&P, qx, qz) & 44) && !(dav_xm(&P, qx, qz) & 1) &&
                             !dbv_claimed(qx, qz)) {                  /* task diagx, task diagbv */
                             ok = 0; why = "touches road";
+                            if (g_dav_touch) { tch = 1; dav_bad(&P, qx, qz); }     /* task davtouch */
                         }
                     }
                     if (P.cell[k].pref) {
@@ -821,7 +932,13 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                                 P.want[k] = dav_junc_of(P.junc[j].n, P.junc[j].s1, P.junc[j].s2, P.junc[j].o, P.junc[j].e);
                                 break;
                             }
-                        if (j == nj || !P.want[k]) { ok = 0; why = "no junction piece declared"; }
+                        if (j == nj || !P.want[k]) {
+                            int a2;
+                            ok = 0; why = "no junction piece declared";
+                            for (a2 = 0; a2 < na && g_dav_touch; a2++)       /* task davtouch: its arms touch */
+                                if (P.arm[a2].x - cx <= 1 && cx - P.arm[a2].x <= 1 && P.arm[a2].z - cz <= 1 && cz - P.arm[a2].z <= 1)
+                                    dav_bad(&P, P.arm[a2].x, P.arm[a2].z);
+                        }
                         continue;
                     }
                     va = (m & 1) ? g_dav_lone[dav_own_mask(&P, cx, cz, 1)] : 0;
@@ -945,6 +1062,11 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                             break;
                         }
                 }
+                /* task davtouch: refused for a touching road -> judge the band again with those cells masked */
+                if (!ok && g_dav_touch && P.nbad && ntry < DAV_TOUCH_TRIES) {
+                    DAV_SCRATCH_CLEAR();
+                    if (dav_mask(&P)) { ntry++; goto dav_retry; }
+                }
                 if (nst[1] < DAV_MAX_ST) {                         /* task diagx: this round's status */
                     P.st[1][nst[1]].axis = (BYTE)axis; P.st[1][nst[1]].x = x; P.st[1][nst[1]].z = z;
                     P.st[1][nst[1]].ok = (BYTE)ok; nst[1]++;
@@ -961,7 +1083,8 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                         int pos[3];
                         if (k < n) { cx = P.cell[k].x; cz = P.cell[k].z; want = P.want[k]; }
                         else if (k < n + na) {
-                            cx = P.arm[k - n].x; cz = P.arm[k - n].z; want = ((DWORD)29 << 8) | P.arm[k - n].o;
+                            cx = P.arm[k - n].x; cz = P.arm[k - n].z;
+                            want = ((DWORD)(P.arm[k - n].end ? 11225 : 29) << 8) | P.arm[k - n].o;   /* davtouch: stub */
                         } else {                                   /* the crossings' cells outside the band */
                             cx = P.xwx[k - n - na]; cz = P.xwz[k - n - na]; want = P.xww[k - n - na];
                             if (dav_mark(&P, cx, cz) & 4) continue;
@@ -975,6 +1098,13 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                         pos[0] = cx << 8; pos[1] = cz << 8; pos[2] = 0;
                         ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, lay, pos, want, -1, 8, 0);
                         nw++;
+                        if (k >= n && k < n + na && P.arm[k - n].end) InterlockedIncrement(&g_dav_n_stub);   /* davtouch */
+                    }
+                    if (ntry) {                                    /* task davtouch */
+                        InterlockedIncrement(&g_dav_n_touch);
+                        if (nw || !strcmp(who, "load"))
+                            logf("dav: %s: band axis %d from (%d,%d) kept: %d touching road cell(s) left to the stock tiler "
+                                 "(DAVTOUCH, %d tries)", who, axis, axis ? -x : x, z, P.nfor, ntry);
                     }
                     if (nw || !strcmp(who, "load"))
                         logf("dav: %s: band axis %d, %d row(s) from (%d,%d), %d cell(s), %d junction cell(s), %d arm "
@@ -982,25 +1112,16 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                              axis ? -x : x, z, n, nj, na, nmg, bend[0], bend[1], nxm, nw);
                     nwall += nw;
                     nxall += nxm;
-                } else if (!ok && !dry && !g_dav_probe && (nj || na || nxm)) {
+                } else if (!ok && !dry && !g_dav_probe && (nj || na || nxm || ntry)) {   /* davtouch: ntry */
                     logf("dav: %s: band axis %d from (%d,%d) with %d junction cell(s), %d crossing(s) left to the stock "
                          "tiler: %s", who, axis, axis ? -x : x, z, nj, nxm, why);
                 }
-                for (k = 0; k < n; k++) *dav_markp(&P, P.cell[k].x, P.cell[k].z) = 0;   /* clear this band's scratch */
-                for (k = 0; k < na; k++) *dav_markp(&P, P.arm[k].x, P.arm[k].z) = 0;
-                for (k = 0; k < npath; k++) *dav_markp(&P, path[k][0], path[k][1]) = 0;
-                for (k = 0; k < nxm; k++) {                       /* and its crossings' windows */
-                    const DavX *q = &g_davx[xmt[k]];
-                    int i2, j2;
-                    for (j2 = 0; j2 < q->h; j2++)
-                        for (i2 = 0; i2 < q->w; i2++) {
-                            int ax = xma[k] + q->x0 + i2;
-                            dav_xm_set(&P, axis ? -ax : ax, xmz[k] + q->z0 + j2, 0);
-                        }
-                }
-                for (k = 0; k < nxw; k++) dav_xm_set(&P, P.xwx[k], P.xwz[k], 0);
+                DAV_SCRATCH_CLEAR();
+              }
             }
     }
+    dav_unmask(&P);                                                    /* task davtouch */
+#undef DAV_SCRATCH_CLEAR
     if (done) break;
     /* stable when this round's statuses equal the last round's (same bands in the same order) */
     if (round > 0 && nst[0] == nst[1]) {
@@ -1127,11 +1248,12 @@ static int dav_band_ok(int x, int z) {
 
 static void dav_stats(void) {
     static LONG last;
-    LONG n = g_dav_n_bands + g_dav_n_cells + g_dav_n_rev + g_dav_n_x + g_dav_n_avl + g_dav_n_grow;
+    LONG n = g_dav_n_bands + g_dav_n_cells + g_dav_n_rev + g_dav_n_x + g_dav_n_avl + g_dav_n_grow + g_dav_n_touch;
     if (!g_dav_on || n == last) return;
     last = n;
     logf("stats: dav bands seen=%ld, cells written=%ld, middle cells reverted=%ld, crossings=%ld, left two-way for a "
-         "straight avenue=%ld, windows grown=%ld (to the whole map %ld)", g_dav_n_bands, g_dav_n_cells, g_dav_n_rev,
-         g_dav_n_x, g_dav_n_avl, g_dav_n_grow, g_dav_n_full);   /* task avdiag, task avdiagbreak */
+         "straight avenue=%ld, windows grown=%ld (to the whole map %ld), kept with touching road=%ld, stub arms=%ld",
+         g_dav_n_bands, g_dav_n_cells, g_dav_n_rev, g_dav_n_x, g_dav_n_avl, g_dav_n_grow, g_dav_n_full, g_dav_n_touch,
+         g_dav_n_stub);   /* task avdiag, task avdiagbreak, task davtouch */
 
 }
