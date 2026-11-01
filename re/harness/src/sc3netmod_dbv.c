@@ -39,6 +39,9 @@
 #define DBV_MAX_USES 64
 #define DBV_MAX_ROWS 1024
 #define DBV_CLAIM 32768                      /* claims hash slots (power of two) */
+#define DBV_MAX_BAD 64                       /* task dbvtouch */
+#define DBV_MAX_FOR 128
+#define DBV_TOUCH_TRIES 8
 
 enum { DK_NONE = 0, DK_JROW_BOTH = 1, DK_JROW_A, DK_JROW_STEM, DK_JCOL_BOTH, DK_JCOL_A, DK_NARROW_C, DK_NARROW_A,
        DK_TAPER0, DK_TAPER1, DK_TAPER2, DK_CAP_SQ, DK_CAP_PART, DK_TAPER0S, DK_TAPER1S, DK_TAPER2S, DK_CAP_X4Z3,
@@ -121,12 +124,56 @@ typedef struct {
     DbvCell *cell;
     int n;
     int ragged;                 /* task avrbtfix: ends of the last accepted band left to the stock tiler */
+    int nbad, badx[DBV_MAX_BAD], badz[DBV_MAX_BAD];       /* task dbvtouch: this try's touching cells (real) */
+    int nfor, forx[DBV_MAX_FOR], forz[DBV_MAX_FOR];       /* task dbvtouch: cells masked out of the read buffer */
+    DWORD forv[DBV_MAX_FOR];
+    int nstub;                  /* task dbvtouch: one-cell stub arms of the last accepted band */
 } DbvPass;
 
 #define DBV_RX(p, cx, cz) ((p)->axis ? -(cz) - 1 : (cx))
 #define DBV_RZ(p, cx, cz) ((p)->axis ? (cx) : (cz))
 
 static int dbv_rd(DbvPass *p, int cx, int cz) { return rb_at(&p->b, DBV_RX(p, cx, cz), DBV_RZ(p, cx, cz)) != 0; }
+
+/* task dbvtouch (owner 2026-10-31: "A road touching a diagonal avenue should keep the avenue"; the owner's "3-lane
+   avenue" is this boulevard). A road touching a band in a shape the rules have no junction or end for (a stub, a road
+   beside an end row, a column road that is not a straight single road) refused the band and the revert loop
+   stock-retiled all of it. Now the band is judged again with the touching road's cells masked out of the read buffer
+   (read as no road), up to DBV_TOUCH_TRIES times: the band converts, the touching road keeps its stock pieces. A
+   one-cell stub beside a band row is a row junction instead (its arm = the stock dead end 11225 facing the band). The
+   mask lives only while its band is judged and written (dbv_unmask). Off: SC3NETMOD_DBVTOUCH=0. */
+static int g_dbv_touch = -1;
+static volatile LONG g_dbv_n_touch, g_dbv_n_stub;
+
+static void dbv_bad(DbvPass *p, int cx, int cz) {                        /* canonical cell */
+    if (g_dbv_touch > 0 && p->nbad < DBV_MAX_BAD && dbv_rd(p, cx, cz)) {
+        p->badx[p->nbad] = DBV_RX(p, cx, cz); p->badz[p->nbad] = DBV_RZ(p, cx, cz); p->nbad++;
+    }
+}
+
+static int dbv_mask(DbvPass *p) {                                         /* -> cells newly masked */
+    int k, n = 0;
+    for (k = 0; k < p->nbad && p->nfor < DBV_MAX_FOR; k++) {
+        int x = p->badx[k] - p->b.x0, z = p->badz[k] - p->b.z0;
+        DWORD *c;
+        if (x < 0 || z < 0 || x >= p->b.w || z >= p->b.h) continue;
+        c = &p->b.c[z * p->b.w + x];
+        if (!*c) continue;
+        p->forx[p->nfor] = p->badx[k]; p->forz[p->nfor] = p->badz[k]; p->forv[p->nfor] = *c; p->nfor++;
+        *c = 0;
+        n++;
+    }
+    p->nbad = 0;
+    return n;
+}
+
+static void dbv_unmask(DbvPass *p) {
+    while (p->nfor > 0) {
+        p->nfor--;
+        p->b.c[(p->forz[p->nfor] - p->b.z0) * p->b.w + (p->forx[p->nfor] - p->b.x0)] = p->forv[p->nfor];
+    }
+    p->nbad = 0;
+}
 
 static BYTE *dbv_mk(DbvPass *p, BYTE *buf, int cx, int cz) {
     static BYTE dummy;
@@ -219,9 +266,11 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
     DbvUse use[DBV_MAX_USES];
     BYTE endrow[DBV_MAX_ROWS];
     int nu = 0, e, k, j, i, cx, cz, nclean = 0, armx[256], armz[256], armo[256], na = 0;
+    int sw, se, na0, tbad = 0;                                           /* task dbvtouch */
     *why = "";
     p->n = 0;
     p->ragged = 0;                                                       /* task avrbtfix */
+    p->nstub = 0;                                                        /* task dbvtouch */
     memset(endrow, 0, n);
 #define IN_CHAIN(z) ((z) >= z0 && (z) < z0 + n)
 #define LEFT(z) (x0 + (z) - z0)
@@ -238,8 +287,13 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
     /* ---- ends */
     for (e = 1; e >= 0; e--) {
         int z_e = e ? z0 + n - 1 : z0, a_e = LEFT(z_e), kind = dbv_end_kind(p, z_e, a_e, e, n), sgn = e ? 1 : -1, dx, dz;
-        if (kind == DK_NONE) { *why = e ? "bottom end: the roads past the band are not an end this package knows"
-                                        : "top end: the roads past the band are not an end this package knows"; return 0; }
+        if (kind == DK_NONE) {
+            *why = e ? "bottom end: the roads past the band are not an end this package knows"
+                     : "top end: the roads past the band are not an end this package knows";
+            dbv_bad(p, DBV_CELLX(-1, 0), DBV_CELLZ(-1, 0));                 /* task dbvtouch: a road beside the end row */
+            dbv_bad(p, DBV_CELLX(4, 0), DBV_CELLZ(4, 0));
+            return 0;
+        }
         if (kind == DK_BEND_X) {
             for (dz = -2; dz <= 0; dz++) {
                 int zr = z_e + sgn * dz;
@@ -288,20 +342,38 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
         w = dbv_rd(p, a - 1, z); ea = dbv_rd(p, a + 4, z);
         rw = w && dbv_rd(p, a - 2, z) && !OUTSIDE(a - 1, z + 1) && !OUTSIDE(a - 2, z + 1) && !OUTSIDE(a - 2, z - 1);
         re = ea && dbv_rd(p, a + 5, z) && !OUTSIDE(a + 4, z - 1) && !OUTSIDE(a + 5, z - 1) && !OUTSIDE(a + 5, z + 1);
+        sw = se = 0;                                                     /* task dbvtouch: one-cell stubs */
+        if (g_dbv_touch > 0 && w && !rw && !dbv_rd(p, a - 2, z) && !OUTSIDE(a - 1, z + 1) && !OUTSIDE(a - 2, z + 1) &&
+            !OUTSIDE(a - 2, z - 1) && !OUTSIDE(a, z + 1))
+            rw = sw = 1;
+        if (g_dbv_touch > 0 && ea && !re && !dbv_rd(p, a + 5, z) && !OUTSIDE(a + 4, z - 1) && !OUTSIDE(a + 5, z - 1) &&
+            !OUTSIDE(a + 5, z + 1) && !OUTSIDE(a + 3, z - 1))
+            re = se = 1;
         if ((w && !rw) || (ea && !re) || !(w || ea)) continue;
+        na0 = na;
         if (w && ea) { ADDUSE(DK_JROW_BOTH, a, z, 0); ADDARMS(DK_JROW_BOTH, a, z, 0); }
         else { ADDUSE(DK_JROW_A, a, z, ea); ADDARMS(DK_JROW_A, a, z, ea); }
+        for (i = na0; i < na && (sw || se); i++) {                       /* task dbvtouch: the stub's arms */
+            if (!dbv_rd(p, armx[i], armz[i])) {                          /* the far cell: no road, no arm */
+                MARK(armx[i], armz[i]) &= ~4;
+                memmove(&armx[i], &armx[i + 1], (na - i - 1) * sizeof(int));
+                memmove(&armz[i], &armz[i + 1], (na - i - 1) * sizeof(int));
+                memmove(&armo[i], &armo[i + 1], (na - i - 1) * sizeof(int));
+                na--; i--;
+            } else if ((sw && armx[i] == a - 1 && armz[i] == z) || (se && armx[i] == a + 4 && armz[i] == z))
+                armo[i] = 0x100 | (armx[i] == a - 1 ? 3 : 1);            /* 11225 open toward the band (canonical) */
+        }
     }
     /* ---- column roads: N arm above a row's d3, S arm below the row three down (its d0) */
     for (k = 0; k < n; k++) {
         int z = z0 + k, xc = LEFT(z) + 3, zl = z + 3, south, t, bad = 0;
         if (endrow[k] || !dbv_rd(p, xc, z - 1) || (MARK(xc, z - 1) & 6)) continue;
         if (!(dbv_rd(p, xc, z - 2) && !OUTSIDE(xc + 1, z - 1) && !OUTSIDE(xc + 1, z - 2) && !OUTSIDE(xc - 1, z - 2)))
-            { *why = "road above the band is not a straight single road"; return 0; }
+            { *why = "road above the band is not a straight single road"; dbv_bad(p, xc, z - 1); return 0; }
         south = IN_CHAIN(zl) && LEFT(zl) == xc && dbv_rd(p, xc, zl + 1) && dbv_rd(p, xc, zl + 2) &&
                 !OUTSIDE(xc - 1, zl + 1) && !OUTSIDE(xc - 1, zl + 2) && !OUTSIDE(xc + 1, zl + 2);
         for (t = z; t < z + 4; t++) if (!IN_CHAIN(t) || endrow[t - z0]) bad = 1;
-        if (bad) { *why = "a column road inside an end"; return 0; }
+        if (bad) { *why = "a column road inside an end"; dbv_bad(p, xc, z - 1); return 0; }      /* dbvtouch */
         if (south) { ADDUSE(DK_JCOL_BOTH, xc, zl, 0); ADDARMS(DK_JCOL_BOTH, xc, zl, 0); }
         else { ADDUSE(DK_JCOL_A, xc, zl, 1); ADDARMS(DK_JCOL_A, xc, zl, 1); }
     }
@@ -311,9 +383,9 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
         for (i = 0; i < nu; i++) if (use[i].rx == xc && use[i].rz == z) dup = 1;
         if (dup) continue;
         if (!(dbv_rd(p, xc, z + 2) && !OUTSIDE(xc - 1, z + 1) && !OUTSIDE(xc - 1, z + 2) && !OUTSIDE(xc + 1, z + 2)))
-            { *why = "road below the band is not a straight single road"; return 0; }
+            { *why = "road below the band is not a straight single road"; dbv_bad(p, xc, z + 1); return 0; }
         for (t = z - 3; t <= z; t++) if (!IN_CHAIN(t) || endrow[t - z0]) bad = 1;
-        if (bad) { *why = "a column road inside an end"; return 0; }
+        if (bad) { *why = "a column road inside an end"; dbv_bad(p, xc, z + 1); return 0; }      /* dbvtouch */
         ADDUSE(DK_JCOL_A, xc, z, 0); ADDARMS(DK_JCOL_A, xc, z, 0);
     }
     /* ---- clean rows besides junction and end rows */
@@ -365,20 +437,27 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
     for (i = 0; i < na; i++) {
         if (MARK(armx[i], armz[i]) & 33 || *dbv_mk(p, p->owner, armx[i], armz[i])) { *why = "an arm cell inside the band"; return 0; }
         if (p->n < DAV_MAX_CELLS) {
-            p->cell[p->n].x = armx[i]; p->cell[p->n].z = armz[i]; p->cell[p->n].want = ((DWORD)29 << 8) | armo[i];
+            p->cell[p->n].x = armx[i]; p->cell[p->n].z = armz[i];
+            p->cell[p->n].want = armo[i] & 0x100 ? ((DWORD)11225 << 8) | (armo[i] & 3) : ((DWORD)29 << 8) | armo[i];
+            if (armo[i] & 0x100) p->nstub++;                             /* task dbvtouch */
             p->n++;
         }
     }
     /* ---- isolated */
     for (k = 0; k < p->n; k++) {
         int dx, dz, c0x = p->cell[k].x, c0z = p->cell[k].z;
-        if ((p->cell[k].want >> 8) == 29 && (MARK(c0x, c0z) & 4)) continue;
+        if (((p->cell[k].want >> 8) == 29 || (p->cell[k].want >> 8) == 11225) && (MARK(c0x, c0z) & 4)) continue;
         for (dx = -1; dx <= 1; dx++)
             for (dz = -1; dz <= 1; dz++) {
                 int qx = c0x + dx, qz = c0z + dz;
-                if (dbv_rd(p, qx, qz) && !(MARK(qx, qz) & (32 | 2 | 4))) { *why = "touches road"; return 0; }
+                if (dbv_rd(p, qx, qz) && !(MARK(qx, qz) & (32 | 2 | 4))) {
+                    *why = "touches road";
+                    if (g_dbv_touch <= 0) return 0;
+                    dbv_bad(p, qx, qz); tbad = 1;                        /* task dbvtouch: collect every touch */
+                }
             }
     }
+    if (tbad) return 0;
 #undef IN_CHAIN
 #undef LEFT
 #undef MARK
@@ -393,6 +472,23 @@ static void dbv_clear(DbvPass *p) {
     /* every mark of the last chain (its ends reach rows away, a bend's straight runs any distance) */
     ZeroMemory(p->mark, (SIZE_T)p->b.w * p->b.h);
     ZeroMemory(p->owner, (SIZE_T)p->b.w * p->b.h);
+}
+
+/* task dbvtouch: dbv_band, judged again with the touching cells it names masked (they stay masked until dbv_unmask,
+   so the caller writes the band against the same buffer); *ntry = the masked tries */
+static int dbv_band_t(DbvPass *p, int x0, int z0, int n, const char **why, int *ntry) {
+    int t = 0, ok;
+    p->nbad = 0;
+    for (;;) {
+        ok = dbv_band(p, x0, z0, n, why);
+        if (ok || g_dbv_touch <= 0 || !p->nbad || t >= DBV_TOUCH_TRIES) break;
+        dbv_clear(p);
+        if (!dbv_mask(p)) break;
+        t++;
+    }
+    p->nbad = 0;
+    if (ntry) *ntry = t;
+    return ok;
 }
 
 /* task avslow: DBVGROW (see dbv_run). The read-window sides (1 x0, 2 z0, 4 x1, 8 z1) a real cell is on or one in
@@ -419,6 +515,7 @@ static int dbv_cut_sides(DbvPass *P, int W, int H) {
             for (cx = cx0; cx <= cx1; cx++) {
                 const char *why = "";
                 int n = 0, clean = 0, sd = 0;
+                dbv_unmask(P);                                 /* task dbvtouch: the last band's mask */
                 if (!dbv_full(P, cx, cz) || dbv_full(P, cx - 1, cz - 1)) continue;
                 while (dbv_full(P, cx + n, cz + n) && n < DBV_MAX_ROWS) n++;
                 for (k = 0; k < n; k++)
@@ -434,7 +531,7 @@ static int dbv_cut_sides(DbvPass *P, int W, int H) {
                     if (ours) sd |= cd;
                 }
                 if (clean >= DBV_MIN_CLEAN) {
-                    if (dbv_band(P, cx, cz, n, &why))
+                    if (dbv_band_t(P, cx, cz, n, &why, NULL))   /* task dbvtouch */
                         for (k = 0; k < P->n; k++)
                             sd |= dbv_bside(P, W, H, DBV_RX(P, P->cell[k].x, P->cell[k].z),
                                             DBV_RZ(P, P->cell[k].x, P->cell[k].z));
@@ -443,6 +540,7 @@ static int dbv_cut_sides(DbvPass *P, int W, int H) {
                 sides |= sd;
             }
     }
+    dbv_unmask(P);                                                 /* task dbvtouch */
     for (z = z0; z <= z1; z++)                                     /* (3): the ring only */
         for (x = x0; x <= x1; x++) {
             int sd = dbv_bside(P, W, H, x, z);
@@ -471,6 +569,11 @@ static int dbv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
     P.mark = mem + nbuf * 4;
     P.owner = P.mark + nbuf;
     P.cell = (DbvCell *)(P.owner + nbuf);
+    P.nbad = P.nfor = 0;                                                     /* task dbvtouch */
+    if (g_dbv_touch < 0) {
+        g_dbv_touch = !env_off("SC3NETMOD_DBVTOUCH");
+        logf("dbv: DBVTOUCH %s (SC3NETMOD_DBVTOUCH)", g_dbv_touch ? "on" : "off");
+    }
     for (z = 0; z < P.b.h; z++)
         for (x = 0; x < P.b.w; x++) P.b.c[z * P.b.w + x] = rb_read(mgr, lay, x0 + x, z0 + z, W, H);
     if (psides && g_dbv_grow && (*psides = dbv_cut_sides(&P, W, H)) != 0) {     /* task avslow: cut, decide wider */
@@ -484,15 +587,16 @@ static int dbv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
         for (cz = cz0; cz <= cz1; cz++)
             for (cx = cx0; cx <= cx1; cx++) {
                 const char *why = "";
-                int n = 0, clean = 0, nw = 0;
+                int n = 0, clean = 0, nw = 0, ntry = 0;
+                dbv_unmask(&P);                                /* task dbvtouch: the last band's mask */
                 if (!dbv_full(&P, cx, cz) || dbv_full(&P, cx - 1, cz - 1)) continue;
                 while (dbv_full(&P, cx + n, cz + n) && n < DBV_MAX_ROWS) n++;
                 for (k = 0; k < n; k++)
                     clean += !dbv_rd(&P, cx + k - 1, cz + k) && !dbv_rd(&P, cx + k + 4, cz + k);
                 if (clean < DBV_MIN_CLEAN) continue;
-                if (!dbv_band(&P, cx, cz, n, &why)) {
-                    logf("dbv: %s: band axis %d from canonical (%d,%d), %d row(s) left to the stock tiler: %s", who, axis,
-                         cx, cz, n, why);
+                if (!dbv_band_t(&P, cx, cz, n, &why, &ntry)) {             /* task dbvtouch */
+                    logf("dbv: %s: band axis %d from canonical (%d,%d), %d row(s) left to the stock tiler: %s%s", who, axis,
+                         cx, cz, n, why, ntry ? " (DBVTOUCH: still refused with the touching road masked)" : "");
                     dbv_clear(&P);
                     continue;
                 }
@@ -514,6 +618,11 @@ static int dbv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                     ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, lay, pos, want, -1, 8, 0);
                     nw++;
                 }
+                if (ntry) InterlockedIncrement(&g_dbv_n_touch);              /* task dbvtouch */
+                if (P.nstub) InterlockedExchangeAdd(&g_dbv_n_stub, P.nstub);
+                if (ntry && (nw || !strcmp(who, "load")))
+                    logf("dbv: %s: band axis %d from canonical (%d,%d) kept: %d touching road cell(s) left to the stock tiler "
+                         "(DBVTOUCH, %d tries)", who, axis, cx, cz, P.nfor, ntry);
                 if (nw || !strcmp(who, "load"))
                     logf("dbv: %s: diagonal boulevard axis %d, %d row(s) from canonical (%d,%d), %d cell(s), %d written%s",
                          who, axis, n, cx, cz, P.n, nw, P.ragged == 2 ? ", both ends left to the stock tiler (shape not known)"
@@ -522,6 +631,7 @@ static int dbv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                 dbv_clear(&P);
             }
     }
+    dbv_unmask(&P);                                                          /* task dbvtouch */
     /* DBV pieces (one cell in from the read border) that no band kept: back to stock */
     if (keep)
         for (z = z0 + 1; z < z1; z++)
@@ -593,9 +703,10 @@ static void dbv_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) 
 
 static void dbv_stats(void) {
     static LONG last;
-    LONG n = g_dbv_n_bands + g_dbv_n_cells + g_dbv_n_rev + g_dbv_n_grow;
+    LONG n = g_dbv_n_bands + g_dbv_n_cells + g_dbv_n_rev + g_dbv_n_grow + g_dbv_n_touch;
     if (!g_dbv_on || n == last) return;
     last = n;
-    logf("stats: dbv bands seen=%ld, cells written=%ld, cells reverted=%ld, windows grown=%ld (to the whole map %ld)",
-         g_dbv_n_bands, g_dbv_n_cells, g_dbv_n_rev, g_dbv_n_grow, g_dbv_n_full);              /* task avslow */
+    logf("stats: dbv bands seen=%ld, cells written=%ld, cells reverted=%ld, windows grown=%ld (to the whole map %ld), "
+         "kept with touching road=%ld, stub arms=%ld", g_dbv_n_bands, g_dbv_n_cells, g_dbv_n_rev, g_dbv_n_grow,
+         g_dbv_n_full, g_dbv_n_touch, g_dbv_n_stub);                        /* task avslow, task dbvtouch */
 }
