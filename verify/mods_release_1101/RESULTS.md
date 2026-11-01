@@ -42,3 +42,6 @@ Zip: the 2026-10-31 zip with the 11 binaries replaced, `mods/` replaced from the
 
 Owner checks: picker cursor with the real mouse and pointer size, the Big One diagonal after loading (lower avenue x 584/585
 is now two-way), touching roads on diagonals in normal play.
+
+GitHub: `sc3mods-2026-11-01`, target `e56b6f2`, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-11-01, asset
+downloaded back, SHA-256 matches. The 10-31 notes now start with a "superseded" line.
