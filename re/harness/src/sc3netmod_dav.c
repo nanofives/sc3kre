@@ -857,6 +857,10 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                     if (!STRAIGHT_OK(axis ? -bx : bx, bz, away)) {
                         ok = 0; why = "the straight avenue it bends into stays two-way";
                         InterlockedIncrement(&g_dav_n_avl);
+                        if (!dry && !g_dav_probe)                     /* task avrbtchain: this refusal was silent */
+                            logf("dav: %s: band axis %d from (%d,%d), %d row(s), left to the stock tiler (the 43/11203 "
+                                 "ladder): the straight avenue it bends into at (%d,%d) stays two-way%s", who, axis,
+                                 axis ? -x : x, z, rows, axis ? -bx : bx, bz, g_dav_post ? " (post-AVL)" : "");
                     }
                 }
                 if (ok && (g_dav_u[0] || g_dav_nn || g_dav_nt) && nxw) {   /* the crossings' straight avenue cells */
