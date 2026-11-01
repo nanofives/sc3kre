@@ -148,8 +148,11 @@ static int dav_is_mid(WORD id) {                 /* any avenue piece: middle, ou
 
 /* save as 43: a cell holding both roads (stock 35 draws one); the OUTER piece (b == 0) saves as its base 35; merge
    pieces as their `davs` lines say */
+static WORD dav_twin_piece(WORD id);
+
 static int dav_save_43(WORD id) {
     int k;
+    if (dav_twin_piece(id)) id = dav_twin_piece(id);                                 /* task avrbtchain: DAVTWO */
     for (k = 0; k < g_dav_nmid; k++) if (g_dav_mid[k].piece == id) return g_dav_mid[k].b != 0;
     if (id && (id == g_dav_u[0] || id == g_dav_u[1])) return 1;                     /* task avdiag: 20500's U-turns */
     return dav_is_s43(id);
@@ -161,6 +164,60 @@ static WORD dav_mid_of(WORD a, WORD b, int delta) {
         if (g_dav_mid[k].a == a && g_dav_mid[k].b == b && g_dav_mid[k].delta == delta) return g_dav_mid[k].piece;
     return 0;
 }
+
+/* task avrbtchain (owner 2026-10-31 "This is not turning into an avenue", call A 2026-11-01): DAVTWO, the diagonal
+ * avenue LOOK on a band whose only refusal is "the straight avenue it bends into stays two-way". Without it that band
+ * stays the stock 43/11203 ladder, which draws as a chain of circles. A package declares a two-way twin per middle
+ * piece, `davw <twin> <piece>` (netpack key avenue_lines): same base and art as <piece>, the pre-avdiag two-way lanes
+ * (the union of the two stock roads' lanes; the outer piece's twin has none, so stock 35's). Such a band (no junction,
+ * arm, stub, merge, crossing or touching road: those stay as today) is written with the lone stock pieces and the
+ * twins, without the one-way roles (U-turn ends, no-lane cells). Readers see the twin's own id, so AVL does not count
+ * it as an avlj join and a straight band ending on it stays two-way too: the whole group is two-way. Twins save like
+ * their piece (43 for a cell of both roads). Off: SC3NETMOD_DAVTWO=0 (the ladder, as before). */
+static WORD g_davw_t[DAV_MAX_MID];              /* g_dav_mid[k]'s twin, 0 none */
+static WORD g_davw_p[DAV_MAX_MID];              /* the piece of `davw` line k, kept until both tables are read */
+static WORD g_davw_w[DAV_MAX_MID];
+static int g_davw_n, g_dav_two = -1;
+static volatile LONG g_dav_n_two, g_dav_n_two_cells;
+static int g_dav_sask, g_dav_sbox[4];            /* post-AVL: one-way straights a DAVTWO band bends into */
+
+static void dav_wline(const char *path, const char *line) {
+    unsigned long v, a;
+    if (sscanf(line + 5, "%lu %lu", &v, &a) != 2 || !v || v > 0xffff || !a || a > 0xffff || v == a || !g_base[v] ||
+        g_base[v] != g_base[a] || g_davw_n >= DAV_MAX_MID) {
+        logf("### dav: %s: bad two-way twin line (not a variant of the piece's base, or too many): '%s'", path, line);
+        return;
+    }
+    g_davw_w[g_davw_n] = (WORD)v; g_davw_p[g_davw_n] = (WORD)a; g_davw_n++;
+    logf("dav: %s: two-way twin %lu = the look of %lu on base %u", path, v, a, g_base[v]);
+}
+
+static WORD dav_twin_of(WORD piece) {           /* the middle piece's two-way twin, 0 none */
+    int k, j;
+    for (k = 0; k < g_dav_nmid; k++)
+        if (g_dav_mid[k].piece == piece) {
+            if (!g_davw_t[k])
+                for (j = 0; j < g_davw_n; j++) if (g_davw_p[j] == piece) g_davw_t[k] = g_davw_w[j];
+            return g_davw_t[k];
+        }
+    return 0;
+}
+
+static WORD dav_twin_piece(WORD id) {           /* a twin -> its middle piece, else 0 */
+    int j;
+    for (j = 0; id && j < g_davw_n; j++) if (g_davw_w[j] == id) return g_davw_p[j];
+    return 0;
+}
+
+static int dav_two_on(void) {
+    if (g_dav_two < 0) {
+        g_dav_two = !env_off("SC3NETMOD_DAVTWO");
+        logf("dav: DAVTWO %s (%d two-way twin(s), SC3NETMOD_DAVTWO)", g_dav_two ? "on" : "off", g_davw_n);
+    }
+    return g_dav_two && g_davw_n;
+}
+
+static int dav_is_mid_or_twin(WORD id) { return dav_is_mid(id) || dav_twin_piece(id) != 0; }   /* the revert pass */
 
 /* road test in axis space: axis 1 mirrors x */
 static int dav_road(RbBuf *b, int axis, int x, int z) { return rb_at(b, axis ? -x : x, z) != 0; }
@@ -592,6 +649,8 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                 int bestcost = 0x7fffffff, na = 0, nj = 0, ncn = 0, ncs = 0, colN[DAV_MAX_COLS][2], colS[DAV_MAX_COLS][2];
                 int nmg = 0, mg[2][4], npath = 0, path[16][2], nmc = 0, mcx[16], mcz[16], bend[2], e;
                 int nxm = 0, xmt[DAVX_MAX_M], xma[DAVX_MAX_M], xmz[DAVX_MAX_M], nxw = 0, xend[2], t, xout = 0;
+                int two = 0, twx = 0, twz = 0;                    /* task avrbtchain: DAVTWO band, its straight cell */
+                int sok[2] = { 0, 0 }, sox[2], soz[2];          /* task avrbtchain: bends whose straight is one-way */
                 DWORD mcw[16];
                 BYTE side[1024];
                 int nop = 0, opn[DAV_MAX_OPN][6];       /* task avdiag: median openings: near, median, far cell (real) */
@@ -971,10 +1030,39 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                     } else if (bend[e] == 1) {                        /* along x, rows v -1 / 0 go on past d2 */
                         bx = BX(3); bz = BZ(0); away = (e ? 1 : 3) ^ (axis ? 2 : 0);
                     } else continue;
-                    if (!STRAIGHT_OK(axis ? -bx : bx, bz, away)) {
+                    if (STRAIGHT_OK(axis ? -bx : bx, bz, away)) { sok[e] = 1; sox[e] = axis ? -bx : bx; soz[e] = bz; }
+                    else {
+                        /* task avrbtchain: DAVTWO, a plain band (no junction, arm, merge, crossing, touch) is written
+                           with the two-way twins instead of being left to the ladder */
+                        if (!nj && !na && !nmg && !nxm && !nxw && !ntry && !g_dav_probe && dav_two_on()) {
+                            if (!two) { two = 1; twx = axis ? -bx : bx; twz = bz; }
+                            continue;
+                        }
                         ok = 0; why = "the straight avenue it bends into stays two-way";
                         InterlockedIncrement(&g_dav_n_avl);
+                        if (!dry && !g_dav_probe)                     /* task avrbtchain: this refusal was silent */
+                            logf("dav: %s: band axis %d from (%d,%d), %d row(s), left to the stock tiler (the 43/11203 "
+                                 "ladder): the straight avenue it bends into at (%d,%d) stays two-way%s", who, axis,
+                                 axis ? -x : x, z, rows, axis ? -bx : bx, bz, g_dav_post ? " (post-AVL)" : "");
                     }
+                }
+                if (ok && two && g_dav_post && !dry)                 /* task avrbtchain: a one-way straight on a DAVTWO */
+                    for (e = 0; e < 2; e++)                          /* band: AVL re-decides it (its end is no avlj join) */
+                        if (sok[e]) {
+                            if (!g_dav_sask) { g_dav_sbox[0] = g_dav_sbox[2] = sox[e]; g_dav_sbox[1] = g_dav_sbox[3] = soz[e]; }
+                            g_dav_sbox[0] = min(g_dav_sbox[0], sox[e]); g_dav_sbox[1] = min(g_dav_sbox[1], soz[e]);
+                            g_dav_sbox[2] = max(g_dav_sbox[2], sox[e]); g_dav_sbox[3] = max(g_dav_sbox[3], soz[e]);
+                            g_dav_sask = 1;
+                        }
+                if (ok && two) {                                     /* task avrbtchain: DAVTWO, middle pieces -> twins */
+                    for (k = 0; k < n && ok; k++) {
+                        WORD p = (WORD)(P.want[k] >> 8), tw;
+                        if (!dav_is_mid(p)) continue;               /* lone stock 35 / 18004 / 1999: stock two-way lanes */
+                        tw = dav_twin_of(p);
+                        if (!tw) { ok = 0; why = "the straight avenue it bends into stays two-way (no two-way twin)"; }
+                        else P.want[k] = ((DWORD)tw << 8) | (P.want[k] & 0xff);
+                    }
+                    if (!ok) InterlockedIncrement(&g_dav_n_avl);
                 }
                 if (ok && (g_dav_u[0] || g_dav_nn || g_dav_nt) && nxw) {   /* the crossings' straight avenue cells */
                     int sx_ = 0, sz_ = 0, ns = 0;
@@ -1002,7 +1090,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
 #undef BZ
                 /* task avdiag: the one-way roles. A free end (no bend, crossing, junction or merge there): its last middle
                    cell (both carriageways, extreme along the band) holds the U-turn; the band cells past it carry none */
-                for (e = 0; e < 2 && ok && g_dav_u[0]; e++) {
+                for (e = 0; e < 2 && ok && !two && g_dav_u[0]; e++) {            /* task avrbtchain: no roles if DAVTWO */
                     int merge_here = 0, best_k = -1, bs = 0, s;
                     if (bend[e] || xend[e] || (side[e ? rows - 1 : 0] & 3)) continue;
                     for (j = 0; j < nmg; j++) if (mg[j][0] == (e ? 0 : 1)) merge_here = 1;
@@ -1106,6 +1194,14 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                         logf("dav: %s: band axis %d, %d row(s) from (%d,%d), %d cell(s), %d junction cell(s), %d arm "
                              "cell(s), %d merge(s), bends %d/%d, %d crossing(s), %d written", who, axis, rows,
                              axis ? -x : x, z, n, nj, na, nmg, bend[0], bend[1], nxm, nw);
+                    if (two) {                                     /* task avrbtchain: DAVTWO */
+                        InterlockedIncrement(&g_dav_n_two);
+                        InterlockedExchangeAdd(&g_dav_n_two_cells, nw);
+                        if (nw || !strcmp(who, "load"))
+                            logf("dav: %s: band axis %d from (%d,%d) written with the two-way look (DAVTWO): the straight "
+                                 "avenue it bends into at (%d,%d) stays two-way%s", who, axis, axis ? -x : x, z, twx, twz,
+                                 g_dav_post ? " (post-AVL)" : "");
+                    }
                     nwall += nw;
                     nxall += nxm;
                 } else if (!ok && !dry && !g_dav_probe && (nj || na || nxm || ntry)) {   /* davtouch: ntry */
@@ -1131,13 +1227,13 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
     }
     /* middle and junction pieces in the area (one cell in from the read border) that no band kept: back to stock.
        task avdiagbreak: not when the read window cuts their run, or the whole-map pass comes anyway (cut_hold) */
-    if (keep && cut_hold(&cg, &P.b, border, dav_is_mid, keep, dbv_claimed, who, "dav")) border = 1;   /* the whole-map pass decides */
+    if (keep && cut_hold(&cg, &P.b, border, dav_is_mid_or_twin, keep, dbv_claimed, who, "dav")) border = 1;   /* the whole-map pass decides (avrbtchain: twins too) */
     else if (keep)
         for (z = z0 + 1; z < z1; z++)
             for (x = x0 + 1; x < x1; x++) {
                 DWORD v = rb_at(&P.b, x, z);
                 int rect[6];
-                if (!v || !dav_is_mid((WORD)(v & 0xffff)) || keep[(z - z0) * P.b.w + (x - x0)] || dbv_claimed(x, z))
+                if (!v || !dav_is_mid_or_twin((WORD)(v & 0xffff)) || keep[(z - z0) * P.b.w + (x - x0)] || dbv_claimed(x, z))
                     continue;                                    /* task diagbv: claimed cells are DBV's */
                 rect[0] = x << 8; rect[1] = z << 8; rect[2] = 0; rect[3] = x << 8; rect[4] = z << 8; rect[5] = 0;
                 ((PFN_Retile)VT(mgr, 0xb0))(mgr, 0, rect, 3);
@@ -1205,11 +1301,29 @@ static void dav_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) 
 /* task avdiag: AVL's post phase (AVL_POST_DAV): after avl_run, a band that bends into or crosses a straight avenue AVL
    left two-way goes back to the stock tiler; then AVL re-decides the box (a straight band ending on it may change) */
 static int dav_post(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who, int *rbox) {
-    LONG before = g_dav_n_rev;
+    LONG before = g_dav_n_rev, tbefore = g_dav_n_two_cells;
     if (!g_dav_on || (!g_dav_u[0] && !g_dav_nn && !g_dav_nt)) return 0;
     g_dav_post = 1;
+    g_dav_sask = 0;
     dav_run(mgr, x0, z0, x1, z1, who);
     g_dav_post = 0;
+    if (g_dav_sask && g_dav_n_rev == before) {                        /* task avrbtchain: DAVTWO band beside a one-way */
+        rbox[0] = min(x0, g_dav_sbox[0]) - 24; rbox[1] = min(z0, g_dav_sbox[1]) - 24;   /* straight: AVL re-decides */
+        rbox[2] = max(x1, g_dav_sbox[2]) + 24; rbox[3] = max(z1, g_dav_sbox[3]) + 24;   /* that straight too */
+        if (rbox[0] < 0) rbox[0] = 0;
+        if (rbox[1] < 0) rbox[1] = 0;
+        logf("dav: %s: a two-way look band (DAVTWO) bends into a one-way straight avenue near (%d,%d) - AVL re-decides",
+             who, g_dav_sbox[0], g_dav_sbox[1]);
+        return 1;
+    }
+    if (g_dav_n_two_cells != tbefore && g_dav_n_rev == before) {      /* task avrbtchain: DAVTWO wrote twins over a band */
+        rbox[0] = x0 - 24; rbox[1] = z0 - 24; rbox[2] = x1 + 24; rbox[3] = z1 + 24;   /* AVL re-decides: a straight band */
+        if (rbox[0] < 0) rbox[0] = 0;                                 /* ending on it no longer has an avlj join */
+        if (rbox[1] < 0) rbox[1] = 0;
+        logf("dav: %s: %ld band cell(s) given the two-way look (DAVTWO) - AVL re-decides", who,
+             (long)(g_dav_n_two_cells - tbefore));
+        return 1;
+    }
     if (g_dav_n_rev == before) return 0;
     rbox[0] = x0 - 24; rbox[1] = z0 - 24; rbox[2] = x1 + 24; rbox[3] = z1 + 24;
     if (rbox[0] < 0) rbox[0] = 0;
@@ -1244,12 +1358,14 @@ static int dav_band_ok(int x, int z) {
 
 static void dav_stats(void) {
     static LONG last;
-    LONG n = g_dav_n_bands + g_dav_n_cells + g_dav_n_rev + g_dav_n_x + g_dav_n_avl + g_dav_n_grow + g_dav_n_touch;
+    LONG n = g_dav_n_bands + g_dav_n_cells + g_dav_n_rev + g_dav_n_x + g_dav_n_avl + g_dav_n_grow + g_dav_n_touch + g_dav_n_two;
     if (!g_dav_on || n == last) return;
     last = n;
     logf("stats: dav bands seen=%ld, cells written=%ld, middle cells reverted=%ld, crossings=%ld, left two-way for a "
          "straight avenue=%ld, windows grown=%ld (to the whole map %ld), kept with touching road=%ld, stub arms=%ld",
          g_dav_n_bands, g_dav_n_cells, g_dav_n_rev, g_dav_n_x, g_dav_n_avl, g_dav_n_grow, g_dav_n_full, g_dav_n_touch,
          g_dav_n_stub);   /* task avdiag, task avdiagbreak, task davtouch */
+    if (g_dav_n_two)                                                   /* task avrbtchain: DAVTWO */
+        logf("stats: dav two-way look bands=%ld, cells written=%ld", g_dav_n_two, g_dav_n_two_cells);
 
 }

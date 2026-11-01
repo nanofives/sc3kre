@@ -289,8 +289,8 @@
     },
     "avenue_lines": {
       "type": "array",
-      "items": {"type": "string", "pattern": "^avl[a-z] [0-9]+( [-0-9A-Za-z.]+)*$"},
-      "description": "Task avcore: raw sc3netmod table lines of the one-way avenue base (sc3netmod_avl.c, re/analysis/AVENUE_LANES.md): `avls <piece>` the one-way straight half, `avlu <piece>` the end U-turn quarter (also a corner's outer bend), `avlk <piece>` an avenue corner's inner bend, `avlc <piece> <base> <side>` a one-way crossing / slope variant whose lanes run toward world side <side> (0 N 1 E 2 S 3 W) at state 0, `avlj <piece> <NESW>` a sibling piece a one-way band may end on (I = traffic enters the piece across that side, O = leaves, . = none, at state 0). Pieces must be ROAD variants of this package."
+      "items": {"type": "string", "pattern": "^(avl[a-z]|davw) [0-9]+( [-0-9A-Za-z.]+)*$"},
+      "description": "Task avcore: raw sc3netmod table lines of the one-way avenue base (sc3netmod_avl.c, re/analysis/AVENUE_LANES.md): `avls <piece>` the one-way straight half, `avlu <piece>` the end U-turn quarter (also a corner's outer bend), `avlk <piece>` an avenue corner's inner bend, `avlc <piece> <base> <side>` a one-way crossing / slope variant whose lanes run toward world side <side> (0 N 1 E 2 S 3 W) at state 0, `avlj <piece> <NESW>` a sibling piece a one-way band may end on (I = traffic enters the piece across that side, O = leaves, . = none, at state 0). Task avrbtchain: `davw <twin> <piece>` a two-way twin of a diagonal avenue middle piece (same base and art, two-way lanes), written by DAV (DAVTWO) on a band whose straight avenue stays two-way. Pieces must be ROAD variants of this package."
     },
     "auto_diagonal_boulevards": {
       "type": "array",

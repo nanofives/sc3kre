@@ -1,7 +1,7 @@
 {
  "netpack": 1,
  "name": "diagonal_avenue",
- "version": "0.6.0",
+ "version": "0.7.0",
  "author": "netmod (task diagave)",
  "description": "Diagonal avenues: draw two diagonal roads joined side by side (the second one cell over) and sc3netmod's DAV block makes them one avenue, four lanes wide. Stock diagonal 35 draws only the road half of its cell, so the middle cell of each row holds both roads: it becomes one of these middle pieces (two stock halves on one tile, both halves' lanes); the main one, 20500, has the median of avenue 11204 (grass and its trees, art table from 11204: road layer + tree layer) and the outer cells beside it become 20505 (stock 35 with the median-side tip as grass). Built by `diagave.py build .` in this folder before install (art/ is made from the game's frames and is not shipped). Junctions: a straight road crossing the avenue, meeting it from one side, or the avenue ending on it (pieces 20510..20519: road 29 with the avenue's halves as asphalt). Merges: where one carriageway ends and the other goes on as a single road, its outer curb tapers into the other one over three rows (pieces 20520..20524 when B ends, 20530..20534 when A ends); junctions carry crosswalks. Crossings (task diagx): another diagonal avenue or the straight avenue 11204 crossing it, or the avenue ending on one (pieces 20540..20594, templates from recipe_crossings.json).",
  "game": {
@@ -1404,6 +1404,90 @@
     "png_dir": "art/20513"
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 21830,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue (two way)",
+    "ENGLISH": "Avenida diagonal (doble sentido)"
+   },
+   "art": {
+    "from": 11204,
+    "png_dir": "art/20500"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21831,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue (two way)",
+    "ENGLISH": "Avenida diagonal (doble sentido)"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20501"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21832,
+   "base": 18004,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue (two way)",
+    "ENGLISH": "Avenida diagonal (doble sentido)"
+   },
+   "art": {
+    "from": 18004,
+    "png_dir": "art/20502"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21833,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue (two way)",
+    "ENGLISH": "Avenida diagonal (doble sentido)"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20503"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21834,
+   "base": 1999,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue (two way)",
+    "ENGLISH": "Avenida diagonal (doble sentido)"
+   },
+   "art": {
+    "from": 1999,
+    "png_dir": "art/20504"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 21835,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue (two way)",
+    "ENGLISH": "Avenida diagonal (doble sentido)"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/20505"
+   },
+   "trblkatt": "copy_base"
   }
  ],
  "lanes": [
@@ -1806,6 +1890,26 @@
   {
    "piece": 21820,
    "spec": "avd_21820.lanes.json"
+  },
+  {
+   "piece": 21830,
+   "spec": "two_21830.lanes.json"
+  },
+  {
+   "piece": 21831,
+   "spec": "two_21831.lanes.json"
+  },
+  {
+   "piece": 21832,
+   "spec": "two_21832.lanes.json"
+  },
+  {
+   "piece": 21833,
+   "spec": "two_21833.lanes.json"
+  },
+  {
+   "piece": 21834,
+   "spec": "two_21834.lanes.json"
   }
  ],
  "auto_diagonal_avenues": [
@@ -4930,6 +5034,12 @@
   "avlj 20577 OO.I",
   "avlj 20582 .I.O",
   "avlj 20583 O.II",
-  "avlj 20588 I.O."
+  "avlj 20588 I.O.",
+  "davw 21830 20500",
+  "davw 21831 20501",
+  "davw 21832 20502",
+  "davw 21833 20503",
+  "davw 21834 20504",
+  "davw 21835 20505"
  ]
 }
