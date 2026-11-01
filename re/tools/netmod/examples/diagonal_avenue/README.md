@@ -58,3 +58,13 @@ sc3netmod -Src re/harness/src -Out <instance folder>`). Off switch: `SC3NETMOD_D
 
 Offline: `diagave.py combos` (the pieces every drag footprint needs), `scan` (bands per save and why each converts or
 not), `plan SAVE`, `preview`.
+
+Two-way look (task avrbtchain, 0.7.0). A diagonal that bends into a straight avenue converts to the one-way pieces
+only when the AVL block converts that straight avenue too. Before 0.7.0 a refused band stayed the stock 43/11203
+ladder, which draws as a chain of circles (owner report 2026-10-31). Now the variants 21830..21835 are two-way twins
+of the middle pieces 20500..20505: the same base and art, with the two-way lanes these pieces had before avdiag
+(two_218xx.lanes.json, the union of the two stock roads' lanes; 21835, the outer piece's twin, keeps stock 35's).
+The `davw <twin> <piece>` lines in avenue_lines declare them. DAV writes them on a band with no junction, arm, merge,
+crossing or touching road when the only refusal is a straight avenue that stays two-way. A straight avenue ending on
+the twins also stays two-way, so the whole group is two-way. Twins save like their pieces (43 / 35). Off switch:
+`SC3NETMOD_DAVTWO=0`.

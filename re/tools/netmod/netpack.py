@@ -837,9 +837,9 @@ def compile_pack(stock, pack_dir, man):
         out["highway_lines"].append(ln)
     for n, ln in enumerate(man.get("avenue_lines", [])):             # task avcore: sc3netmod AVL block (raw lines)
         tok = ln.split()                                             # avls / avlu / avlc <piece> ..., avlj <piece> <NESW>
-        if not tok or tok[0] not in ("avls", "avlu", "avlk", "avlc", "avlj", "avlt", "avlp") or len(tok) < 2 or \
-                not tok[1].isdigit():                                # avlt / avlp: task avpaint
-            raise NetpackError("%s avenue_lines %d: '%s' is not an avls / avlu / avlk / avlc / avlj / avlt / avlp line" %
+        if not tok or tok[0] not in ("avls", "avlu", "avlk", "avlc", "avlj", "avlt", "avlp", "davw") or len(tok) < 2 or \
+                not tok[1].isdigit():                                # avlt / avlp: task avpaint, davw: avrbtchain
+            raise NetpackError("%s avenue_lines %d: '%s' is not an avls / avlu / avlk / avlc / avlj / avlt / avlp / davw line" %
                                (pname, n + 1, ln))
         nets = ("ROAD", "HWAY") if tok[0] == "avlj" else ("ROAD",)     # avlj: hwave's ground row is HWAY (avmisc)
         if int(tok[1]) not in vids or vids[int(tok[1])]["net"] not in nets:
