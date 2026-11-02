@@ -1,18 +1,22 @@
 /* ======================================================================================================== GRAPHNEW
  * (child graphaxis 2026-10-30, owner pick: income vs expenses, power and water supply vs demand, R/C/I demand, air vs
- * water pollution). #included by sc3resize.c right after the GRAPHAXIS block. Plan and evidence: re/analysis/GRAPH_SERIES.md.
+ * water pollution; child graphtabs 2026-11-02, owner: "Demand graphs are not working, they show nothing, shows flat /
+ * energy demand/offer either / put tabs to show different types of graphs, add more graphs according to available
+ * data"). #included by sc3resize.c right after the GRAPHAXIS block. Plan and evidence: re/analysis/GRAPH_SERIES.md.
  *
- * Five new graphs on the Graficas page, one checkbox each, 2 or 3 lines each (11 lines). Every line is a series object of
- * the game's own class (SIMMISC ctor 0x10033556, 0xf0 bytes, interface at +8, vtable 0x10041b78 [CONFIRMED]), so the page
- * draws, labels and scales it like its own 16:
+ * 14 new graphs on the Graficas page, one checkbox each, 31 lines. Every line is a series object of the game's own class
+ * (SIMMISC ctor 0x10033556, 0xf0 bytes, interface at +8, vtable 0x10041b78 [CONFIRMED]), so the page draws, labels and
+ * scales it like its own 16:
  *  - enumeration: the page broadcasts {0x02DC6D7F, 0x605} and each layer answers sink->+0xc(series) = FUN_1002f8c7, which
  *    appends {BYTE on; series *} to page+0x68 [CONFIRMED @ SIMUI 0x1002f8fd, 0x1002f8c7]. A detour on 0x1002f8fd appends
- *    our 11 after the original.
- *  - layout: FUN_1002e012 makes one checkbox per entry, 3 per row from page (20, 210), pitch 120 x 24 [CONFIRMED @ SIMUI
- *    0x1002e012, 0x1002e380]. Its automatic place for entry 17 lands on the 1 / 10 / 100 years radios, so after it runs the
- *    five group checkboxes are moved to free cells of columns 0 and 1 (rows 5..7) and the other 6 lines' checkboxes are
- *    hidden. A hidden line follows its group's checkbox: its own id is swapped for one no window has, so the renderer's
- *    by-id lookup (0x1002ed75) misses and leaves the on byte we set before it runs.
+ *    our 31 after the original.
+ *  - tabs (graphtabs): a row of 5 radio buttons under the chart (the range group's recipe, SIMUI 0x1002e6cb). Every
+ *    checkbox of the page belongs to one tab (k_tab, by checkbox id); only the current tab's checkboxes are shown, from
+ *    page (20, 230), 3 per row, pitch 120 x 24, and only the current tab's checked graphs are drawn. A click on a radio
+ *    reaches the page handler SIMUI 0x1002df5b as message 3, p3 3, which re-renders [CONFIRMED @ SIMUI 0x1002df5b]; the
+ *    tab is read back before every render. A series that must not be drawn gets an id no window has (series vt+0x54):
+ *    the renderer's by-id checkbox lookup (0x1002ed75) misses and leaves the on byte we set before it runs. Stock series
+ *    get their real id back before the page closes (and on the next enumeration), so the game prefs keep their state.
  *  - close: FUN_1002eb59 writes every entry's on byte to the game prefs keyed by checkbox id, then releases the series
  *    [CONFIRMED @ SIMUI 0x1002eb59]. A detour takes our entries out of the list first (their on state goes to
  *    sc3resize.ini [graphs] instead), so the game prefs never hold our ids.
@@ -31,31 +35,84 @@
  *    used only when its date is the city's date. A city
  *    vt+0x1c (0x10003b8b) detour never fired on a load (measured 2026-10-30), so no load hook. The .sc3 itself is not
  *    touched: the stock game ignores the file.
+ *  - seeding (graphtabs): a line with no history file used to start as 12 months of its fill value (0, or "no demand"),
+ *    which is what the owner saw as "flat, shows nothing" (owner log 2026-11-01: "history starts empty", graphs opened
+ *    before a month closed). Now the 12 months come from rings the game itself saves, where one exists:
+ *      income / expenses: the budget rings (slots > the closed month hold last year's months, the year-end fold only
+ *        zeroes the yearly accumulators) [CONFIRMED @ SIMMISC 0x10007d88, saved by 0x10007519];
+ *      power used: the 12 x 10 ring of power used per plant type, power base+0xcc, newest row base+0x2ac
+ *        [CONFIRMED @ SIMUTIL 0x10004c1f, saved by 0x100045ec]; power supply from it and the stock Energia % series
+ *        (spare % = (S - D) * 100 / S, [CONFIRMED @ SIMUTIL 0x100051b8]): S = D * 100 / (100 - spare) when spare > 0;
+ *      garbage: the 7 SIMECO month rings, index = closed month [CONFIRMED @ SIMECO 0x10007b5d, saved by 0x10006abb].
+ *    Every other line (no ring in the game) and the 10 / 100 year views are filled with the value of now (the mean of
+ *    the seeded 12 months for a seeded line), so a line starts at its real level and moves from the next month.
  * SC3RESIZE_GRAPHNEW=0: none of this is installed (the 16 stock graphs, as before). SC3RESIZE_GRAPHNEW_LOG=1 logs every
- * monthly push. */
-static int   g_graphnew = 1, g_gn_log;
-#define GN_LINES 11
-#define GN_GROUPS 5
+ * monthly push. SC3RESIZE_GRAPHTABS=0: no tabs, every checkbox in one grid (the 10-30 page, rows run past the radios). */
+static int   g_graphnew = 1, g_gn_log, g_graphtabs = 1;
+#define GN_LINES 31
+#define GN_GROUPS 14
 #define GN_ID0   0x7A3C0100u           /* line i: checkbox id GN_ID0 + i, label id GN_ID0 + 0x40 + i, dummy GN_ID0 + 0x80 + i */
+#define GN_STKDUMMY 0x7A3C0200u        /* + k: a stock series kept off the chart (other tab) */
+#define GN_TABGRP   0x7A3C0300u        /* the tab radio group; its buttons + 1 + t */
+#define GN_TABS  5
 typedef struct { const char *es, *en; int grp; DWORD rgb; } GN_LINE;
+/* line index = id - GN_ID0 = record id in the history file: lines 0..10 keep their 10-30 meaning (old files stay valid) */
 static const GN_LINE k_gn[GN_LINES] = {
     { "Ingresos", "Income", 0, 0x209020 },          { "Gastos", "Expenses", 0, 0xD02020 },
     { "Energ\xed""a oferta", "Power supply", 1, 0xE09000 }, { "Energ\xed""a demanda", "Power demand", 1, 0x7040C0 },
-    { "Agua oferta", "Water supply", 2, 0x1878E0 },  { "Agua demanda", "Water demand", 2, 0x7040C0 },
+    { "Agua oferta", "Water supply", 2, 0x1878E0 },  { "Agua entregada", "Water delivered", 2, 0x7040C0 },
     { "Demanda R", "R demand", 3, 0x00A000 },       { "Demanda C", "C demand", 3, 0x2040E0 },
     { "Demanda I", "I demand", 3, 0xD0A000 },
-    { "Contam. aire", "Air pollution", 4, 0x707070 }, { "Contam. agua", "Water pollution", 4, 0x2060C0 } };
-static const char *k_gn_grp_es[GN_GROUPS] = { "Ingresos/Gastos", "Energ\xed""a of./dem.", "Agua of./dem.", "Demanda RCI", "Contam. aire/agua" };
-static const char *k_gn_grp_en[GN_GROUPS] = { "Income/Expenses", "Power sup./dem.", "Water sup./dem.", "RCI demand", "Air/water pollut." };
-static const int   k_gn_lead[GN_GROUPS] = { 0, 2, 4, 6, 9 };
-static const int   k_gn_cell[GN_GROUPS][2] = { { 1, 5 }, { 0, 6 }, { 1, 6 }, { 0, 7 }, { 1, 7 } };   /* col, row (Agua % takes 0, 5) */
+    { "Contam. aire", "Air pollution", 4, 0x707070 }, { "Contam. agua", "Water pollution", 4, 0x2060C0 },
+    /* graphtabs 2026-11-02 */
+    { "Energ\xed""a consumo", "Power used", 1, 0x20A0A0 },
+    { "Impuesto R", "R tax", 5, 0x00A000 },        { "Impuesto C", "C tax", 5, 0x2040E0 },
+    { "Impuesto I", "I tax", 5, 0xD0A000 },
+    { "Deuda", "Debt", 6, 0xC03030 },
+    { "Empleos", "Jobs", 7, 0x2060C0 },             { "Trabajadores", "Workers", 7, 0xC07020 },
+    { "Escuela alumnos", "School pupils", 8, 0x2060C0 },   { "Escuela capacidad", "School capacity", 8, 0x909090 },
+    { "Univ. alumnos", "College students", 9, 0x7040C0 },  { "Univ. capacidad", "College capacity", 9, 0x909090 },
+    { "Pacientes", "Patients", 10, 0xD02020 },      { "Hosp. capacidad", "Hospital capacity", 10, 0x909090 },
+    { "Basura producida", "Garbage made", 11, 0x806020 }, { "Al vertedero", "To landfill", 11, 0xC07020 },
+    { "Reciclada", "Recycled", 11, 0x20A040 },      { "Incinerada", "Incinerated", 11, 0xD02020 },
+    { "Exportada", "Exported", 11, 0x2060C0 },
+    { "Sin energ\xed""a", "Unpowered", 12, 0xE09000 },
+    { "Abandonados", "Abandoned", 13, 0x806040 } };
+static const char *k_gn_grp_es[GN_GROUPS] = { "Ingresos/Gastos", "Energ\xed""a of./dem.", "Agua of./entreg.", "Demanda RCI",
+    "Contam. aire/agua", "Impuestos", "Deuda (bonos)", "Empleos/Trab.", "Escuelas", "Universidades", "Hospitales", "Basura",
+    "Sin energ\xed""a", "Abandonados" };
+static const char *k_gn_grp_en[GN_GROUPS] = { "Income/Expenses", "Power sup./dem.", "Water sup./deliv.", "RCI demand",
+    "Air/water pollut.", "Tax rates", "Debt (bonds)", "Jobs/Workers", "Schools", "Colleges", "Hospitals", "Garbage",
+    "Unpowered", "Abandoned" };
+static const int   k_gn_lead[GN_GROUPS] = { 0, 2, 4, 6, 9, 12, 15, 16, 18, 20, 22, 24, 29, 30 };
+
+/* the tabs, by checkbox id: stock ids measured 2026-11-02 (GRAPHNEW entry log, Berlin), ours = the group's lead line.
+   A stock id that is in no tab (none known) goes to the last tab. */
+static const char *k_tab_es[GN_TABS] = { "Ciudad", "Econom\xed""a", "Servicios", "Redes", "Ambiente" };
+static const char *k_tab_en[GN_TABS] = { "City", "Economy", "Services", "Utilities", "Environment" };
+static const DWORD k_tab[GN_TABS][12] = {
+    { 0x4308EADB /* Tamano */, 0x0349A4CB /* Poblacion */, 0x0303E40D /* Residentes */, 0x8308EC75 /* Comercio */,
+      0xA308EC84 /* Industria */, 0xA308EC96 /* Desempleo */, GN_ID0 + 16 /* Empleos */, GN_ID0 + 6 /* Demanda RCI */,
+      GN_ID0 + 30 /* Abandonados */, 0 },
+    { 0x630536CB /* Fondos */, GN_ID0 + 0 /* Ingresos/Gastos */, GN_ID0 + 12 /* Impuestos */, GN_ID0 + 15 /* Deuda */,
+      0xC3080BED /* Valor del Terreno */, 0 },
+    { 0x4303E4E7 /* Educacion */, 0x6303E4F7 /* Salud */, GN_ID0 + 18 /* Escuelas */, GN_ID0 + 20 /* Universidades */,
+      GN_ID0 + 22 /* Hospitales */, 0x43092C78 /* Crimen */, 0x0259C03F /* Aprobacion */, 0 },
+    { 0xE0AFDF68 /* Energia % */, GN_ID0 + 2 /* Energia of./dem. */, GN_ID0 + 29 /* Sin energia */, 0x02BF0033 /* Agua % */,
+      GN_ID0 + 4 /* Agua of./entreg. */, 0x029CA804 /* Trafico */, 0 },
+    { 0xE3079EF9 /* Polucion */, GN_ID0 + 9 /* Contam. aire/agua */, GN_ID0 + 24 /* Basura */, 0 } };
+
 static DWORD g_gn_off[GN_GROUPS];      /* stored = real + off (R/C/I demand can be negative), set in gn_make */
 static BYTE *g_gn_if[GN_LINES];        /* interface (object + 8), one reference held for the session */
 static int   g_gn_on[GN_GROUPS];       /* group checkbox state, sc3resize.ini [graphs] */
+static int   g_gn_tab;                 /* current tab, sc3resize.ini [graphs] tab */
 static int   g_gn_last = -1;           /* year * 12 + closed month index of the last push */
 static int   g_gn_synced;
 static int   g_gn_es = 1;
-static void *g_orig_f8fd, *g_orig_e012, *g_orig_eb59, *g_orig_7d88, *g_orig_save;
+static void *g_orig_f8fd, *g_orig_e012, *g_orig_eb59, *g_orig_7d88, *g_orig_save, *g_orig_df5b;
+typedef struct { void *p; DWORD id; } GN_STK;
+static GN_STK g_gn_stk[48];            /* stock series -> its real checkbox id */
+static int    g_gn_nstk;
 
 static void gn_sync(void *cal);   /* below */
 static void gn_fmt_real(char *o, double v);
@@ -90,6 +147,8 @@ static void gn_ini(int save) {
         if (save) { wsprintfA(v, "%d", g_gn_on[g] ? 1 : 0); WritePrivateProfileStringA("graphs", k, v, p); }
         else g_gn_on[g] = GetPrivateProfileIntA("graphs", k, 0, p) ? 1 : 0;
     }
+    if (save) { wsprintfA(v, "%d", g_gn_tab); WritePrivateProfileStringA("graphs", "tab", v, p); }
+    else { g_gn_tab = (int)GetPrivateProfileIntA("graphs", "tab", 0, p); if (g_gn_tab < 0 || g_gn_tab >= GN_TABS) g_gn_tab = 0; }
 }
 
 /* every ring of line i to the fill value (offset), scale back to the start value */
@@ -141,34 +200,62 @@ static int gn_make(void) {
     }
     gn_ini(0);
     done = 1;
-    logf("GRAPHNEW> %d series made (SIMMISC class), groups on %d%d%d%d%d", GN_LINES, g_gn_on[0], g_gn_on[1], g_gn_on[2], g_gn_on[3], g_gn_on[4]);
+    logf("GRAPHNEW> %d series made (SIMMISC class), %d graphs, tab %d", GN_LINES, GN_GROUPS, g_gn_tab);
     return 1;
 }
 
 /* ---------------------------------------------------------------------------------------------- the page */
 typedef DWORD (__fastcall *GN_PAGEFN)(void *self, void *edx, DWORD a);
-
 typedef DWORD (__fastcall *GN_PAGEFN2)(void *self, void *edx, DWORD a, DWORD b);
+
+static DWORD gn_series_id(void *p) {
+    DWORD *idp = (DWORD *)ho_v(p, 0x14, 0, 0, 0, 0, 0, 0);
+    return idp && !IsBadReadPtr(idp, 4) ? *idp : 0;
+}
+static void gn_set_id(void *p, DWORD id) { ho_v(p, 0x54, 1, (DWORD)&id, 0, 0, 0, 0); }
+static int gn_stk_of(const void *p) { int k; for (k = 0; k < g_gn_nstk; k++) if (g_gn_stk[k].p == p) return k; return -1; }
+
+/* tab of a checkbox id; a stock id in no tab goes to the last tab */
+static int gn_tab_of(DWORD cbid) {
+    int t, j;
+    for (t = 0; t < GN_TABS; t++) for (j = 0; j < 12 && k_tab[t][j]; j++) if (k_tab[t][j] == cbid) return t;
+    return GN_TABS - 1;
+}
+static int gn_tab_of_entry(void *p) {
+    int i = gn_line_of(p), k;
+    if (i >= 0) return gn_tab_of(GN_ID0 + k_gn_lead[k_gn[i].grp]);
+    k = gn_stk_of(p);
+    return gn_tab_of(k >= 0 ? g_gn_stk[k].id : gn_series_id(p));
+}
+
 static DWORD __fastcall gn_enum(BYTE *page, void *edx, DWORD city, DWORD a2) {   /* page vt+0x20, ret 8: 2 args */
     HMODULE sui = GetModuleHandleA("SIMUI.DLL");
     DWORD r = ((GN_PAGEFN2)g_orig_f8fd)(page, edx, city, a2), a[1];
     BYTE *e, *v0, *v1;
-    int i, n = 0;
+    int i, n = 0, k;
     if (!gn_make()) return r;
     __try { gn_sync(((void *(__cdecl *)(void))((BYTE *)sui + 0x8e7da))()); }   /* a load since the last look: read its history now */
     __except (EXCEPTION_EXECUTE_HANDLER) { logf("GRAPHNEW> history check threw 0x%08lX", GetExceptionCode()); }
+    /* stock series: remember the real id (or give it back, if a page went away without our close) */
+    v0 = *(BYTE **)(page + 0x68); v1 = *(BYTE **)(page + 0x6c);
+    for (e = v0; e && e < v1; e += 8) {
+        void *p = *(void **)(e + 4);
+        if (gn_line_of(p) >= 0) continue;
+        if ((k = gn_stk_of(p)) >= 0) { if (gn_series_id(p) != g_gn_stk[k].id) gn_set_id(p, g_gn_stk[k].id); }
+        else if (g_gn_nstk < 48) { g_gn_stk[g_gn_nstk].p = p; g_gn_stk[g_gn_nstk].id = gn_series_id(p); g_gn_nstk++; }
+    }
     for (i = 0; i < GN_LINES; i++) {
         int have = 0;
         v0 = *(BYTE **)(page + 0x68); v1 = *(BYTE **)(page + 0x6c);
         for (e = v0; e && e < v1; e += 8) if (*(BYTE **)(e + 4) == g_gn_if[i]) have = 1;
         if (have) continue;
-        { DWORD id = GN_ID0 + i; ho_v(g_gn_if[i], 0x54, 1, (DWORD)&id, 0, 0, 0, 0); }   /* real id back for the layout */
+        gn_set_id(g_gn_if[i], GN_ID0 + i);   /* real id back for the layout */
         a[0] = (DWORD)g_gn_if[i];
         rz_thiscall_ret(page + 0x64, (BYTE *)sui + 0x2f8c7, a, 1);
         n++;
     }
-    logf("GRAPHNEW> page 0x%08lX: %d series added to the list (%d entries)", (DWORD)page, n,
-         (int)((*(BYTE **)(page + 0x6c) - *(BYTE **)(page + 0x68)) / 8));
+    logf("GRAPHNEW> page 0x%08lX: %d series added to the list (%d entries, %d stock)", (DWORD)page, n,
+         (int)((*(BYTE **)(page + 0x6c) - *(BYTE **)(page + 0x68)) / 8), g_gn_nstk);
     return r;
 }
 
@@ -177,29 +264,111 @@ static void *gn_cbox(void *win, DWORD id) {   /* the checkbox interface (IID 0x8
     if (!(ho_v(win, 0x80, 3, id, 0x8810, (DWORD)&cb, 0, 0) & 0xff)) return NULL;
     return cb;
 }
+static int gn_cb_state(void *win, DWORD id) {   /* -1 = no such checkbox */
+    void *cb = gn_cbox(win, id);
+    int on;
+    if (!cb) return -1;
+    on = (ho_v(cb, 0x38, 0, 0, 0, 0, 0, 0) & 0xff) ? 1 : 0;
+    ho_v(cb, 0x08, 0, 0, 0, 0, 0, 0);
+    return on;
+}
 
-/* before the renderer: each hidden line takes its group checkbox state */
+/* a checkbox off the current tab: hidden AND moved far below the page. Hidden alone still took clicks: measured
+   2026-11-02, a click on the Redes tab's first-row cell toggled Salud, hidden there from the Servicios tab. */
+static void gn_park(BYTE *w) {
+    gx_show(w, 0);
+    ho_v(w, 0xcc, 2, 20, 4000, 0, 0, 0);
+}
+
+/* show the checkboxes of tab t at their cells, hide every other one (ours and stock) */
+static void gn_place_tab(BYTE *page, void *win, int t) {
+    BYTE *e, *v0, *v1, *w;
+    int j, n = 0, extra = 0;
+    DWORD cb;
+    v0 = *(BYTE **)(page + 0x68); v1 = *(BYTE **)(page + 0x6c);
+    for (e = v0; e && e < v1 && !IsBadReadPtr(e, 8); e += 8) {   /* hide all */
+        void *p = *(void **)(e + 4);
+        int i = gn_line_of(p), k = gn_stk_of(p);
+        cb = i >= 0 ? GN_ID0 + i : k >= 0 ? g_gn_stk[k].id : gn_series_id(p);
+        if ((w = (BYTE *)mp_child(win, cb))) gn_park(w);
+    }
+    for (j = 0; j < 12 && k_tab[t][j]; j++) {
+        if (!(w = (BYTE *)mp_child(win, k_tab[t][j]))) continue;
+        ho_v(w, 0xcc, 2, (DWORD)(20 + 120 * (n % 3)), (DWORD)(230 + 24 * (n / 3)), 0, 0, 0);
+        gx_show(w, 1);
+        n++;
+    }
+    if (t == GN_TABS - 1)                                         /* stock ids in no tab */
+        for (j = 0; j < g_gn_nstk && n < 12; j++) {
+            int tt, jj, known = 0;
+            for (tt = 0; tt < GN_TABS && !known; tt++) for (jj = 0; jj < 12 && k_tab[tt][jj]; jj++) if (k_tab[tt][jj] == g_gn_stk[j].id) known = 1;
+            if (known || !(w = (BYTE *)mp_child(win, g_gn_stk[j].id))) continue;
+            ho_v(w, 0xcc, 2, (DWORD)(20 + 120 * (n % 3)), (DWORD)(230 + 24 * (n / 3)), 0, 0, 0);
+            gx_show(w, 1);
+            n++; extra++;
+        }
+    /* vt+0xcc writes only the LOCAL rect; hit-testing uses the derived rect +0x14, rebuilt by vt+0x168 / vt+0x14c (this
+       window and every child) [CONFIRMED @ SIMUI 0x1006c61b, 0x1006d4eb]. Without this the first click after a tab
+       switch went to the old place of the checkbox (measured 2026-11-02: lost), then vt+0x154 marks the page dirty. */
+    ho_v(win, 0x168, 0, 0, 0, 0, 0, 0);
+    ho_v(win, 0x14c, 0, 0, 0, 0, 0, 0);
+    ho_v(win, 0x154, 0, 0, 0, 0, 0, 0);
+    logf("GRAPHNEW> page 0x%08lX tab %d: %d checkboxes shown%s", (DWORD)page, t, n, extra ? " (some not in any tab)" : "");
+}
+
+static int g_gn_placed = -1;   /* tab whose checkboxes are placed on the current page window */
+static void *g_gn_placed_win;
+
+/* before the renderer: the tab from its radio group, then every entry's id / on byte */
 static void gn_pre_render(BYTE *page, void *win) {
     BYTE *e, *v0, *v1;
-    int g, i, ch = 0;
+    int g, i, ch = 0, k;
     if (!g_gn_if[0] || !page || IsBadReadPtr(page, 0x70)) return;
     for (g = 0; g < GN_GROUPS; g++) {
-        void *cb = gn_cbox(win, GN_ID0 + k_gn_lead[g]);
-        int on;
-        if (!cb) continue;
-        on = (ho_v(cb, 0x38, 0, 0, 0, 0, 0, 0) & 0xff) ? 1 : 0;
-        ho_v(cb, 0x08, 0, 0, 0, 0, 0, 0);
-        if (on != g_gn_on[g]) { g_gn_on[g] = on; ch = 1; }
+        int on = gn_cb_state(win, GN_ID0 + k_gn_lead[g]);
+        if (on >= 0 && on != g_gn_on[g]) { g_gn_on[g] = on; ch = 1; }
+    }
+    if (g_graphtabs) {
+        void *o = NULL;
+        if ((ho_v(win, 0x80, 3, GN_TABGRP, 0xa1336cc0, (DWORD)&o, 0, 0) & 0xff) && o) {
+            DWORD s = ho_v(o, 0x30, 0, 0, 0, 0, 0, 0);
+            ho_v(o, 0x08, 0, 0, 0, 0, 0, 0);
+            if (s > GN_TABGRP && s <= GN_TABGRP + GN_TABS && (int)(s - GN_TABGRP - 1) != g_gn_tab) { g_gn_tab = (int)(s - GN_TABGRP - 1); ch = 1; }
+        }
+        if (g_gn_placed_win == win && g_gn_placed != g_gn_tab) { gn_place_tab(page, win, g_gn_tab); g_gn_placed = g_gn_tab; }
     }
     if (ch) gn_ini(1);   /* kept at once, not only on close */
+    if (g_gn_log) {   /* every checkbox's state, logged when it changes */
+        static char last[160];
+        char st[160];
+        int n = 0;
+        for (k = 0; k < g_gn_nstk && n < 60; k++) { int s = gn_cb_state(win, g_gn_stk[k].id); st[n++] = s < 0 ? '-' : (char)('0' + s); }
+        st[n++] = '|';
+        for (g = 0; g < GN_GROUPS; g++) { int s = gn_cb_state(win, GN_ID0 + k_gn_lead[g]); st[n++] = s < 0 ? '-' : (char)('0' + s); }
+        wsprintfA(st + n, " tab %d", g_gn_tab);
+        if (lstrcmpA(st, last)) { lstrcpyA(last, st); logf("GRAPHNEW> boxes %s", st); }
+    }
     v0 = *(BYTE **)(page + 0x68); v1 = *(BYTE **)(page + 0x6c);
-    for (e = v0; e && e < v1 && !IsBadReadPtr(e, 8); e += 8)
-        if ((i = gn_line_of(*(void **)(e + 4))) >= 0 && k_gn_lead[k_gn[i].grp] != i) e[0] = (BYTE)g_gn_on[k_gn[i].grp];
+    for (e = v0, k = 0; e && e < v1 && !IsBadReadPtr(e, 8); e += 8, k++) {
+        void *p = *(void **)(e + 4);
+        int here = !g_graphtabs || g_gn_placed_win != win || gn_tab_of_entry(p) == g_gn_tab;
+        if ((i = gn_line_of(p)) >= 0) {
+            g = k_gn[i].grp;
+            if (k_gn_lead[g] != i) e[0] = (BYTE)(g_gn_on[g] && here);           /* id is the dummy since the layout */
+            else if (here) gn_set_id(p, GN_ID0 + i);                            /* the renderer reads the checkbox */
+            else { gn_set_id(p, GN_ID0 + 0x80 + i); e[0] = 0; }
+        } else if (g_graphtabs && (i = gn_stk_of(p)) >= 0) {
+            if (here) gn_set_id(p, g_gn_stk[i].id);
+            else { gn_set_id(p, GN_STKDUMMY + (DWORD)i); e[0] = 0; }
+        }
+    }
 }
 
 static DWORD __fastcall gn_layout(BYTE *page, void *edx, DWORD win) {
-    DWORD r = ((GN_PAGEFN)g_orig_e012)(page, edx, win), id;
-    int i, g;
+    HMODULE sui = GetModuleHandleA("SIMUI.DLL");
+    DWORD r = ((GN_PAGEFN)g_orig_e012)(page, edx, win), ids[GN_TABS];
+    const char *tx[GN_TABS];
+    int i, g, t, ok = 0;
     if (!g_gn_if[0] || !win) return r;
     for (i = 0; i < GN_LINES; i++) {
         BYTE *w = (BYTE *)mp_child((void *)win, GN_ID0 + i);
@@ -207,31 +376,70 @@ static DWORD __fastcall gn_layout(BYTE *page, void *edx, DWORD win) {
         if (!w || IsBadReadPtr(w, 0xa4)) { logf("GRAPHNEW> no checkbox for line %d", i); continue; }
         if (k_gn_lead[g] == i) {
             void *cb;
-            ho_v(w, 0xcc, 2, (DWORD)(20 + 120 * k_gn_cell[g][0]), (DWORD)(210 + 24 * k_gn_cell[g][1]), 0, 0, 0);
             if ((cb = gn_cbox((void *)win, GN_ID0 + i))) { ho_v(cb, 0x34, 1, (DWORD)g_gn_on[g], 0, 0, 0, 0); ho_v(cb, 0x08, 0, 0, 0, 0, 0, 0); }
         } else {
-            gx_show(w, 0);
-            id = GN_ID0 + 0x80 + i;  ho_v(g_gn_if[i], 0x54, 1, (DWORD)&id, 0, 0, 0, 0);   /* the renderer's lookup misses */
+            gn_park(w);
+            gn_set_id(g_gn_if[i], GN_ID0 + 0x80 + i);   /* the renderer's lookup misses */
         }
     }
-    gx_render(page, NULL, win);   /* redraw with the group states (the original drew before our checkboxes were set) */
-    logf("GRAPHNEW> page 0x%08lX laid out: 5 group checkboxes in rows 5..7, 6 line checkboxes hidden", (DWORD)page);
+    if (g_graphtabs) {
+        void *fac = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85065))();
+        if (fac && !IsBadReadPtr(fac, 4) && !mp_child((void *)win, GN_TABGRP)) {
+            DWORD col = ho_v((void *)win, 0x184, 3, 0x31, 0x34, 0x7b, 0, 0);   /* the range group's colour (SIMUI 0x1002e6cb) */
+            for (t = 0; t < GN_TABS; t++) { ids[t] = GN_TABGRP + 1 + t; tx[t] = g_gn_es ? k_tab_es[t] : k_tab_en[t]; }
+            ok = mp_group(fac, (void *)win, GN_TABGRP, ids, tx, GN_TABS, GN_TABGRP + 1 + g_gn_tab, 14, 205, 360, col);
+        }
+        g_gn_placed_win = (void *)win;
+        gn_place_tab(page, (void *)win, g_gn_tab);
+        g_gn_placed = g_gn_tab;
+        logf("GRAPHNEW> page 0x%08lX laid out: tabs %s, tab %d", (DWORD)page, ok ? "added" : "NOT added", g_gn_tab);
+    } else {
+        /* the 10-30 grid: group checkboxes in free cells of rows 5..9 (columns 0 / 1) */
+        for (g = 0; g < GN_GROUPS; g++) {
+            BYTE *w = (BYTE *)mp_child((void *)win, GN_ID0 + k_gn_lead[g]);
+            int c = (g + 1) % 2, rw = 5 + (g + 1) / 2;
+            if (w) ho_v(w, 0xcc, 2, (DWORD)(20 + 120 * c), (DWORD)(210 + 24 * rw), 0, 0, 0);
+        }
+    }
+    gx_render(page, NULL, win);   /* redraw with the group states and the tab (the original drew before) */
+    return r;
+}
+
+/* the page's control handler (vtable 0x100a4fe8 +0xc, this = page + 4). A radio pick arrives as message 3, p3 3, p4 =
+   the group id, and the original re-renders only when that group's selection is 3..5 (the range radios) [CONFIRMED @
+   SIMUI 0x1002df5b], so a tab pick changed the radio and nothing else until the next click, which then hit the old
+   tab's checkbox (measured 2026-11-02). After the original: our group -> render (pre_render places the tab). */
+typedef DWORD (__fastcall *GN_CTLFN)(void *self, void *edx, DWORD win, DWORD msg, DWORD p3, DWORD id, DWORD p5);
+static DWORD __fastcall gn_ctl(BYTE *self, void *edx, DWORD win, DWORD msg, DWORD p3, DWORD id, DWORD p5) {
+    DWORD r = ((GN_CTLFN)g_orig_df5b)(self, edx, win, msg, p3, id, p5);
+    if (msg == 3 && (p3 == 1 || p3 == 3) && g_graphtabs && g_gn_if[0] && win &&
+        (id == GN_TABGRP || (id > GN_TABGRP && id <= GN_TABGRP + GN_TABS))) {
+        __try { gx_render(self - 4, NULL, win); }
+        __except (EXCEPTION_EXECUTE_HANDLER) { logf("GRAPHNEW> tab render threw 0x%08lX", GetExceptionCode()); }
+        r = (r & ~0xffu) | 1;
+    }
     return r;
 }
 
 static void __fastcall gn_close(BYTE *page, void *edx, DWORD win) {
     BYTE *v0, *v1, *e, *o;
-    int n = 0;
+    int n = 0, k, on;
     if (g_gn_if[0] && page && !IsBadReadPtr(page, 0x70)) {
         gn_pre_render(page, (void *)win);
         gn_ini(1);
         v0 = *(BYTE **)(page + 0x68); v1 = *(BYTE **)(page + 0x6c);
         for (e = o = v0; e && e < v1; e += 8) {
-            if (gn_line_of(*(void **)(e + 4)) >= 0) { ho_v(*(void **)(e + 4), 0x08, 0, 0, 0, 0, 0, 0); n++; continue; }   /* the list's reference */
+            void *p = *(void **)(e + 4);
+            if (gn_line_of(p) >= 0) { ho_v(p, 0x08, 0, 0, 0, 0, 0, 0); n++; continue; }   /* the list's reference */
+            if ((k = gn_stk_of(p)) >= 0) {                   /* real id + checkbox state back, for the game prefs */
+                gn_set_id(p, g_gn_stk[k].id);
+                if ((on = gn_cb_state((void *)win, g_gn_stk[k].id)) >= 0) e[0] = (BYTE)on;
+            }
             if (o != e) memcpy(o, e, 8);
             o += 8;
         }
         if (v0) *(BYTE **)(page + 0x6c) = o;
+        if (g_gn_placed_win == (void *)win) { g_gn_placed_win = NULL; g_gn_placed = -1; }
         logf("GRAPHNEW> page 0x%08lX closing: %d series taken out before the game saves its prefs", (DWORD)page, n);
     }
     ((GN_PAGEFN)g_orig_eb59)(page, edx, win);
@@ -295,14 +503,14 @@ static void gn_snapshot(void) {
 
 static DWORD g_gn_snaptick;   /* GetTickCount of the last snapshot (0 = none) */
 
-/* "<sc3>.graphs" from a snapshot */
+/* "<sc3>.graphs" from a snapshot (ver 2: GN_LINES records, each with its id; ver 1 had 11) */
 static int gn_write_file(const char *sc3, const GN_REC *snap, int key) {
     char side[MAX_PATH + 8];
     HANDLE h;
     GN_HDR hd;
     DWORD w1 = 0, w2 = 0;
     wsprintfA(side, "%s.graphs", sc3);
-    hd.magic = GN_MAGIC; hd.ver = 1; hd.key = (DWORD)key; hd.n = GN_LINES;
+    hd.magic = GN_MAGIC; hd.ver = 2; hd.key = (DWORD)key; hd.n = GN_LINES;
     h = CreateFileA(side, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (h == INVALID_HANDLE_VALUE) { logf("GRAPHNEW> cannot write %s (%lu)", side, GetLastError()); return 0; }
     WriteFile(h, &hd, sizeof(hd), &w1, NULL);
@@ -320,7 +528,7 @@ static DWORD WINAPI gn_writer(LPVOID arg) {
     WIN32_FILE_ATTRIBUTE_DATA fa;
     ULARGE_INTEGER t0, t1;
     FILETIME seen = { 0, 0 };
-    GN_REC snap[GN_LINES];
+    static GN_REC snap[GN_LINES];
     int tries, key;
     (void)arg;
     for (tries = 0; tries < 40; tries++) {
@@ -362,75 +570,202 @@ static DWORD __fastcall gn_save(BYTE *city, void *edx, void *db) {
 /* For sc3autosave (its GRAPHS block): write the history taken at the save that just ended next to `sc3`, the file that
    save went to. 1 = written. Refuses a snapshot older than 2 min (no save of ours ran just before). */
 __declspec(dllexport) int sc3resize_graphs_write(const char *sc3) {
-    GN_REC snap[GN_LINES];
+    static GN_REC snap[GN_LINES];
     if (!g_gn_if[0] || !g_gn_snaptick || !sc3 || IsBadStringPtrA(sc3, MAX_PATH)) return 0;
     if (GetTickCount() - g_gn_snaptick > 120000) { logf("GRAPHNEW> history for %s refused: no save in the last 2 min", sc3); return 0; }
     memcpy(snap, g_gn_snap, sizeof(snap));
     return gn_write_file(sc3, snap, g_gn_snapkey);
 }
 
-/* "<sc3>.graphs" into out when it exists, is ours and was saved at closed month `key` */
-static int gn_read_file(const char *sc3, int key, GN_REC *out, int *found_key) {
+/* "<sc3>.graphs" into out[] by record id when it exists, is ours and was saved at closed month `key`; have[i] = 1 for
+   each line found. Returns the number of lines read. */
+static int gn_read_file(const char *sc3, int key, GN_REC *out, int *have, int *found_key) {
     char side[MAX_PATH + 8];
     HANDLE h;
     GN_HDR hd;
-    DWORD rd;
-    int ok = 0;
+    GN_REC r;
+    DWORD rd, k;
+    int n = 0, i;
     *found_key = -1;
     wsprintfA(side, "%s.graphs", sc3);
     h = CreateFileA(side, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
     if (h == INVALID_HANDLE_VALUE) return 0;
-    if (ReadFile(h, &hd, sizeof(hd), &rd, NULL) && rd == sizeof(hd) && hd.magic == GN_MAGIC && hd.ver == 1 &&
-        hd.n == GN_LINES && ReadFile(h, out, sizeof(GN_REC) * GN_LINES, &rd, NULL) && rd == sizeof(GN_REC) * GN_LINES) {
+    if (ReadFile(h, &hd, sizeof(hd), &rd, NULL) && rd == sizeof(hd) && hd.magic == GN_MAGIC && (hd.ver == 1 || hd.ver == 2) &&
+        hd.n >= 1 && hd.n <= 64) {
         *found_key = (int)hd.key;
-        ok = (int)hd.key == key;
+        if ((int)hd.key == key)
+            for (k = 0; k < hd.n; k++) {
+                if (!ReadFile(h, &r, sizeof(r), &rd, NULL) || rd != sizeof(r)) break;
+                i = (int)(r.id - GN_ID0);
+                if (i < 0 || i >= GN_LINES) continue;
+                out[i] = r; have[i] = 1; n++;
+            }
     }
     CloseHandle(h);
-    return ok;
+    return n;
 }
 
-/* first look this session, or the dates jumped: start over, from the history file when it matches */
-static void gn_sync(void *cal) {
-    static const char *const slot[3] = { " (auto 5 min).sc3", " (auto 10 min).sc3", " (auto 1 h).sc3" };   /* sc3autosave k_slot */
-    char name[MAX_PATH], cand[MAX_PATH + 24], t[32];
-    int key = gn_key(cal, NULL, NULL), i, c, n, ok = 0, was = g_gn_last, fk;
-    if (!g_gn_if[0] || key < 0) return;
-    if (g_gn_synced && (key == g_gn_last || key == g_gn_last + 1)) return;
-    g_gn_synced = 1;
-    for (i = 0; i < GN_LINES; i++) { gn_reset_line(i); gn_label(i, "-"); }
-    cand[0] = 0;
-    if (gn_city_name(gn_city(), name, sizeof(name)))
-        /* the city's own file first, then its autosaves: a loaded autosave is renamed "<city>.sc3" right after the load
-           (sc3autosave UNAUTO), so its history sits under the autosave's name. Only a file saved at this exact closed
-           month is taken. */
-        for (c = 0; c < 4 && !ok; c++) {
-            if (c == 0) lstrcpynA(cand, name, MAX_PATH);
-            else {
-                n = lstrlenA(name);
-                if (n < 4 || lstrcmpiA(name + n - 4, ".sc3")) break;
-                lstrcpynA(cand, name, n - 3);
-                lstrcatA(cand, slot[c - 1]);
-            }
-            if (gn_read_file(cand, key, g_gn_snap, &fk)) ok = 1;
-            else if (fk >= 0) logf("GRAPHNEW> %s.graphs is for closed month key %d, the city is at %d: not used", cand, fk, key);
-        }
-    if (ok)
-        for (i = 0; i < GN_LINES; i++) {
-            ho_v(g_gn_if[i], 0x60, 1, g_gn_snap[i].scale, 0, 0, 0, 0);
-            ho_v(g_gn_if[i], 0x70, 1, (DWORD)g_gn_snap[i].m, 0, 0, 0, 0);
-            ho_v(g_gn_if[i], 0x78, 1, (DWORD)g_gn_snap[i].y, 0, 0, 0, 0);
-            ho_v(g_gn_if[i], 0x80, 1, (DWORD)g_gn_snap[i].d, 0, 0, 0, 0);
-            gn_fmt_real(t, (double)g_gn_snap[i].m[0] - (double)g_gn_off[k_gn[i].grp]);   /* newest month */
-            gn_label(i, t);
-        }
-    g_gn_last = key;
-    logf("GRAPHNEW> city at closed month key %d (last push %d): history %s%s", key, was,
-         ok ? "read from " : "starts empty", ok ? cand : "");
+/* ---------------------------------------------------------------------------------------------- reading the city */
+typedef struct {
+    BYTE *city, *budget, *pw, *wa, *po, *res, *zone;   /* pw = power iface (base + 0x14), po = SIMECO iface (base + 0x1c) */
+    void *vl;                                          /* valve layer, released by gn_ctx_free */
+} GN_CTX;
+
+static void gn_ctx(GN_CTX *c, BYTE *budget) {
+    HMODULE sui = GetModuleHandleA("SIMUI.DLL"), ut = GetModuleHandleA("SIMUTIL.DLL"), eco = GetModuleHandleA("SIMECO.DLL"),
+            mi = GetModuleHandleA("SIMMISC.DLL"), rci = GetModuleHandleA("SIMRCI.DLL");
+    BYTE *p;
+    void *L;
+    memset(c, 0, sizeof(*c));
+    if (!sui) return;
+    c->city = (BYTE *)((void *(__cdecl *)(void))((BYTE *)sui + 0x8e7da))();
+    if (!c->city) return;
+    /* budget: the monthly function's own pointer, else city vt+0x15c (vtable SIMMISC 0x1003c550) */
+    p = budget ? budget : (BYTE *)ho_v(c->city, 0x15c, 0, 0, 0, 0, 0, 0);
+    if (p && mi && !IsBadReadPtr(p, 0x5a0) && *(DWORD *)p == (DWORD)mi + 0x3c550) c->budget = p;
+    p = (BYTE *)ho_v(c->city, 0x150, 0, 0, 0, 0, 0, 0);
+    if (p && ut && !IsBadReadPtr(p - 0x14, 0x300) && *(DWORD *)p == (DWORD)ut + 0x20550) c->pw = p;
+    p = (BYTE *)ho_v(c->city, 0x154, 0, 0, 0, 0, 0, 0);
+    if (p && ut && !IsBadReadPtr(p, 0xc0) && *(DWORD *)p == (DWORD)ut + 0x22944) c->wa = p;
+    p = (BYTE *)ho_v(c->city, 0x16c, 0, 0, 0, 0, 0, 0);
+    if (p && eco && !IsBadReadPtr(p - 0x1c, 0x4a0) && *(DWORD *)p == (DWORD)eco + 0x1b984) c->po = p;
+    p = (BYTE *)ho_v(c->city, 0x17c, 0, 0, 0, 0, 0, 0);
+    if (p && rci && !IsBadReadPtr(p, 4) && *(DWORD *)p == (DWORD)rci + 0x4c99c) c->res = p;
+    p = (BYTE *)ho_v(c->city, 0x14c, 0, 0, 0, 0, 0, 0);
+    if (p && rci && !IsBadReadPtr(p, 4) && *(DWORD *)p == (DWORD)rci + 0x4d1e0) c->zone = p;
+    L = (void *)ho_v(c->city, 0x1b8, 1, 0x80f1e6d3, 0, 0, 0, 0);
+    if (L) {
+        if (!(ho_v(L, 0x00, 2, 0x40a42f1c, (DWORD)&c->vl, 0, 0, 0) & 0xff)) c->vl = NULL;
+        ho_v(L, 0x08, 0, 0, 0, 0, 0, 0);
+    }
+}
+static void gn_ctx_free(GN_CTX *c) { if (c->vl) ho_v(c->vl, 0x08, 0, 0, 0, 0, 0, 0); c->vl = NULL; }
+
+static void *gn_valve(GN_CTX *c, DWORD id) {   /* released by the caller */
+    void *va = NULL;
+    if (!c->vl || !(ho_v(c->vl, 0x14, 3, id, 0xf1ec30, (DWORD)&va, 0, 0) & 0xff)) return NULL;
+    return va;
 }
 
-/* ---------------------------------------------------------------------------------------------- monthly push */
-static int gn_values(BYTE *budget, double *v);   /* below: the 11 real values of the month that closed */
+typedef float (__fastcall *GN_FLOATFN)(void *self, void *edx);
 
+/* budget income / expenses of closed month ci (ring slot ci) */
+static BYTE *gn_next(BYTE *n);
+static void gn_budget_month(BYTE *b, int ci, double *in, double *ex) {
+    static const DWORD inc[8] = { 0x90, 0x118, 0x1a0, 0x3a0, 0x2d0, 0x470, 0x4e8, 0x338 }, exq[2] = { 0x268, 0x408 };
+    BYTE *head, *n;
+    int k, g = 0;
+    *in = *ex = 0;
+    for (k = 0; k < 8; k++) *in += (double)*(__int64 *)(b + inc[k] + ci * 8);
+    for (k = 0; k < 2; k++) *ex += (double)*(__int64 *)(b + exq[k] + ci * 8);
+    *ex += (double)*(LONG *)(b + 0x558 + ci * 4);
+    head = *(BYTE **)(b + 0x60);
+    if (head) for (n = *(BYTE **)(head + 8); n && n != head && g < 256; g++, n = gn_next(n)) *ex += (double)*(__int64 *)(n + 0x30 + ci * 8);
+}
+
+/* ---------------------------------------------------------------------------------------------- the 31 values
+ * Read for the month that closed (index ci, as the record computes it). Sources (re/analysis/GRAPH_SERIES.md sections 7, 8):
+ *  - income / expenses: budget int64 rings base + off + ci * 8. Income: taxes R/C/I +0x90 / +0x118 / +0x1a0, fares +0x3a0,
+ *    ordinances +0x2d0, neighbour deals +0x470, business deals +0x4e8, disaster relief +0x338. Expenses: ordinances +0x268,
+ *    neighbour deals +0x408, bonds (dword ring) +0x558 + ci * 4, departments: every node of the map at +0x60 (MSVC6 tree,
+ *    successor FUN_10003354), ring node+0x30 + ci * 8 [CONFIRMED @ SIMMISC 0x10007d88, 0x10008a3e, 0x10008ced, 0x10008d54].
+ *  - power: city vt+0x150 = SIMUTIL power iface (base + 0x14, vtable 0x10020550). Supply = base+0x70, served = base+0x74
+ *    [CONFIRMED @ SIMUTIL 0x10004e57]. Demand = iface vt+0x5c = base+0x2ec, the running sum of the per-tile demand bytes
+ *    [CONFIRMED @ SIMUTIL 0x100041ce, 0x10004340] (10-30 summed the bytes base+0x2dc itself: same number). Used = the
+ *    newest row of the 12 x 10 ring base+0xcc (row base+0x2ac) [CONFIRMED @ SIMUTIL 0x10004c1f]. Unpowered tiles = iface
+ *    vt+0x60 = max(0, demanding tiles - powered tiles).
+ *  - water: city vt+0x154 = SIMUTIL plumbing layer. Supply = int64 base+0xb0 (pump capacity), delivered = int64 base+0xb8
+ *    [CONFIRMED @ SIMUTIL 0x1000e8c4]. Unmet water demand is not kept anywhere.
+ *  - R / C / I demand: city vt+0x1b8(0x80f1e6d3), QI 0x40a42f1c, vt+0x14(3000 / 5000 / 8000, 0xf1ec30, &valve), valve
+ *    vt+0x30 value, +0x38 max, +0x3c min [CONFIRMED @ SIMUI 0x10026e40, 0x10065303], shown as the HUD bar sees it:
+ *    v >= 0 ? v * 1000 / max : v * -1000 / min, -1000..1000 [CONFIRMED @ SIMRCI 0x10042e89].
+ *  - pollution: city vt+0x16c = SIMECO iface, vt+0x78 air, vt+0x7c water, as % of vt+0x84 / +0x88 [CONFIRMED @ SIMECO
+ *    0x10007b5d, 0x10008249].
+ *  - taxes: budget vt+0x4c(i) = byte +0x8c + i * 0x88, i = 0..2, the block whose +4 is the tax income ring i
+ *    [CONFIRMED @ SIMMISC 0x1000520b]; i = 0/1/2 = R/C/I [UNCERTAIN: order not tied to the budget window yet].
+ *  - debt: int64 budget+0x590 (vt+0x60, bonds outstanding) [CONFIRMED @ SIMMISC 0x1000521f].
+ *  - jobs / workers: the inputs of Desempleo [CONFIRMED @ SIMMISC 0x100285bb]: jobs = valve 7000 vt+0x2c, workers =
+ *    trunc(valve 3000 vt+0x28 * res vt+0x7c (float)).
+ *  - schools / colleges / hospitals: city vt+0x17c = SIMRCI residential iface (vtable 0x1004c99c): pupils vt+0x50 vs
+ *    capacity vt+0x64, students vt+0x58 vs vt+0x68, patients vt+0x48 vs vt+0x60 (worker read 2026-11-02).
+ *  - garbage: SIMECO base (iface - 0x1c) int64 rings, slot ci: made +0x1a8, exported +0x268, incinerated +0x328,
+ *    recycled +0x388, to landfill +0x3e8 [CONFIRMED @ SIMECO 0x10007b5d]; names as LANDFILL.md.
+ *  - abandoned tiles: city vt+0x14c = SIMRCI zone layer (vtable 0x1004d1e0) vt+0x54 [worker read, UNCERTAIN until the
+ *    vtable check passes in a run]. */
+static BYTE *gn_next(BYTE *n) {   /* FUN_10003354: left +8, parent +4, right +0xc, NULL leaves */
+    BYTE *r = *(BYTE **)(n + 0xc), *p;
+    if (r) { while (*(BYTE **)(r + 8)) r = *(BYTE **)(r + 8); return r; }
+    p = *(BYTE **)(n + 4);
+    while (p && n == *(BYTE **)(p + 0xc)) { n = p; p = *(BYTE **)(p + 4); }
+    if (*(BYTE **)(n + 0xc) != p) n = p;
+    return n;
+}
+
+static const DWORD k_gn_garb[5] = { 0x1a8, 0x3e8, 0x388, 0x328, 0x268 };   /* lines 24..28 */
+
+static void gn_values(GN_CTX *c, int ci, double *v) {
+    static const DWORD vid[3] = { 3000, 5000, 8000 };
+    int k;
+    char dbg[400];
+    int n = 0;
+    for (k = 0; k < GN_LINES; k++) v[k] = 0;
+    dbg[0] = 0;
+    if (c->budget) {
+        gn_budget_month(c->budget, ci, &v[0], &v[1]);
+        for (k = 0; k < 3; k++) v[12 + k] = (double)*(BYTE *)(c->budget + 0x8c + k * 0x88);
+        v[15] = (double)*(__int64 *)(c->budget + 0x590);
+    }
+    if (c->pw) {
+        BYTE *base = c->pw - 0x14;
+        LONG row = *(LONG *)(base + 0x2ac);
+        v[2] = *(LONG *)(base + 0x70);
+        v[3] = (double)ho_v(c->pw, 0x5c, 0, 0, 0, 0, 0, 0);
+        if (row >= 0 && row < 12) for (k = 0; k < 10; k++) v[11] += *(LONG *)(base + 0xcc + (row * 10 + k) * 4);
+        v[29] = (double)ho_v(c->pw, 0x60, 0, 0, 0, 0, 0, 0);
+        n += wsprintfA(dbg + n, "power supply %ld served %ld demand %ld used %ld unpowered %ld; ", *(LONG *)(base + 0x70),
+                       *(LONG *)(base + 0x74), (LONG)v[3], (LONG)v[11], (LONG)v[29]);
+    } else n += wsprintfA(dbg + n, "no power layer; ");
+    if (c->wa) { v[4] = (double)*(__int64 *)(c->wa + 0xb0); v[5] = (double)*(__int64 *)(c->wa + 0xb8); }
+    for (k = 0; k < 3; k++) {
+        void *va = gn_valve(c, vid[k]);
+        LONG val, mx, mn;
+        if (!va) continue;
+        val = (LONG)ho_v(va, 0x30, 0, 0, 0, 0, 0, 0);
+        mx = (LONG)ho_v(va, 0x38, 0, 0, 0, 0, 0, 0);
+        mn = (LONG)ho_v(va, 0x3c, 0, 0, 0, 0, 0, 0);
+        v[6 + k] = val >= 0 ? (mx > 0 ? val * 1000.0 / mx : 0) : (mn < 0 ? val * -1000.0 / mn : 0);
+        ho_v(va, 0x08, 0, 0, 0, 0, 0, 0);
+    }
+    {   void *vj = gn_valve(c, 7000), *vr = gn_valve(c, 3000);
+        double rp = 0, f = 0;
+        if (vj) { v[16] = (double)ho_v(vj, 0x2c, 0, 0, 0, 0, 0, 0); ho_v(vj, 0x08, 0, 0, 0, 0, 0, 0); }
+        if (vr) { rp = (double)ho_v(vr, 0x28, 0, 0, 0, 0, 0, 0); ho_v(vr, 0x08, 0, 0, 0, 0, 0, 0); }
+        if (c->res) f = (double)((GN_FLOATFN)(*(void ***)c->res)[0x7c / 4])(c->res, NULL);
+        v[17] = rp * f >= 0 ? (double)(__int64)(rp * f) : 0;
+        n += wsprintfA(dbg + n, "jobs %ld R pop %ld x workforce %ld/1000; ", (LONG)v[16], (LONG)rp, (LONG)(f * 1000.0));
+    }
+    if (c->po) {
+        BYTE *base = c->po - 0x1c;
+        LONG ma = (LONG)ho_v(c->po, 0x84, 0, 0, 0, 0, 0, 0), mw = (LONG)ho_v(c->po, 0x88, 0, 0, 0, 0, 0, 0);
+        v[9] = (LONG)ho_v(c->po, 0x78, 0, 0, 0, 0, 0, 0) * 100.0 / (ma > 0 ? ma : 11000);
+        v[10] = (LONG)ho_v(c->po, 0x7c, 0, 0, 0, 0, 0, 0) * 100.0 / (mw > 0 ? mw : 11000);
+        for (k = 0; k < 5; k++) v[24 + k] = (double)*(__int64 *)(base + k_gn_garb[k] + ci * 8);
+    }
+    if (c->res) {
+        v[18] = (double)ho_v(c->res, 0x50, 0, 0, 0, 0, 0, 0); v[19] = (double)ho_v(c->res, 0x64, 0, 0, 0, 0, 0, 0);
+        v[20] = (double)ho_v(c->res, 0x58, 0, 0, 0, 0, 0, 0); v[21] = (double)ho_v(c->res, 0x68, 0, 0, 0, 0, 0, 0);
+        v[22] = (double)ho_v(c->res, 0x48, 0, 0, 0, 0, 0, 0); v[23] = (double)ho_v(c->res, 0x60, 0, 0, 0, 0, 0, 0);
+    } else n += wsprintfA(dbg + n, "no residential iface; ");
+    if (c->zone) v[30] = (double)ho_v(c->zone, 0x54, 0, 0, 0, 0, 0, 0);
+    else {
+        BYTE *z = c->city ? (BYTE *)ho_v(c->city, 0x14c, 0, 0, 0, 0, 0, 0) : NULL;
+        n += wsprintfA(dbg + n, "no zone layer (0x%08lX vt 0x%08lX); ", (DWORD)z, z && !IsBadReadPtr(z, 4) ? *(DWORD *)z : 0);
+    }
+    for (k = 0; k < GN_LINES; k++) if (v[k] < 0 && k_gn[k].grp != 3) v[k] = 0;   /* the class keeps unsigned values */
+    if (g_gn_log) logf("GRAPHNEW>   %smonth index %d", dbg, ci);
+}
+
+/* ---------------------------------------------------------------------------------------------- scale + push */
 static DWORD gn_nice(double v) {   /* 1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8 x 10^k at or above v, at least 10 */
     static const double st[10] = { 1.0, 1.2, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0 };
     double m = 1.0;
@@ -452,24 +787,22 @@ static void gn_fmt_real(char *o, double v) {   /* 12,345 / -1,234 */
     *o = 0;
 }
 
-static void gn_record(void *cal, BYTE *budget) {
-    double v[GN_LINES];
-    DWORD s[GN_LINES], a[12];
-    int ci, yr, i, g, k;
-    gn_sync(cal);
-    if (gn_key(cal, &ci, &yr) < 0 || !gn_values(budget, v)) return;
-    for (i = 0; i < GN_LINES; i++) {
-        double x = v[i] + (double)g_gn_off[k_gn[i].grp];
-        s[i] = x <= 0.0 ? 0 : x >= 4294967295.0 ? 0xffffffffu : (DWORD)(x + 0.5);
-    }
-    for (g = 0; g < GN_GROUPS; g++) {          /* one scale per graph, before the pushes (a push clamps to it) */
+static DWORD gn_store(int i, double v) {
+    double x = v + (double)g_gn_off[k_gn[i].grp];
+    return x <= 0.0 ? 0 : x >= 4294967295.0 ? 0xffffffffu : (DWORD)(x + 0.5);
+}
+
+/* one scale per graph from everything it keeps plus `now` (stored units, NULL = none), set before a push (a push clamps) */
+static void gn_rescale(const DWORD *now) {
+    DWORD a[12], sc;
+    int g, i, k;
+    for (g = 0; g < GN_GROUPS; g++) {
         double mx = 0.0;
-        DWORD sc;
         if (g_gn_off[g]) sc = 2 * g_gn_off[g];
         else {
             for (i = 0; i < GN_LINES; i++) {
                 if (k_gn[i].grp != g) continue;
-                if (s[i] > mx) mx = s[i];
+                if (now && now[i] > mx) mx = now[i];
                 ho_v(g_gn_if[i], 0x28, 1, (DWORD)a, 0, 0, 0, 0); for (k = 0; k < 12; k++) if (a[k] > mx) mx = a[k];
                 ho_v(g_gn_if[i], 0x34, 1, (DWORD)a, 0, 0, 0, 0); for (k = 0; k < 10; k++) if (a[k] > mx) mx = a[k];
                 ho_v(g_gn_if[i], 0x40, 1, (DWORD)a, 0, 0, 0, 0); for (k = 0; k < 10; k++) if (a[k] > mx) mx = a[k];
@@ -478,6 +811,127 @@ static void gn_record(void *cal, BYTE *budget) {
         }
         for (i = 0; i < GN_LINES; i++) if (k_gn[i].grp == g) ho_v(g_gn_if[i], 0x60, 1, sc, 0, 0, 0, 0);
     }
+}
+
+/* lines not read from a history file: 12 months from the game's own rings where it keeps one, the rest at today's value */
+static void gn_seed(const int *have) {
+    GN_CTX c;
+    double v[GN_LINES], m[GN_LINES][12];
+    int seeded[GN_LINES], i, k, ci = 11, yr = 0, n = 0;
+    DWORD a[12], y[10];
+    char t[32];
+    HMODULE sui = GetModuleHandleA("SIMUI.DLL");
+    memset(seeded, 0, sizeof(seeded));
+    gn_ctx(&c, NULL);
+    if (!c.city) return;
+    if (gn_key(c.city, &ci, &yr) < 0) { gn_ctx_free(&c); return; }
+    gn_values(&c, ci, v);
+    for (i = 0; i < GN_LINES; i++) for (k = 0; k < 12; k++) m[i][k] = v[i];
+    if (c.budget) {
+        for (k = 0; k < 12; k++) gn_budget_month(c.budget, (ci - k + 12) % 12, &m[0][k], &m[1][k]);
+        seeded[0] = seeded[1] = 1;
+    }
+    if (c.pw) {
+        BYTE *base = c.pw - 0x14, *es;
+        LONG row = *(LONG *)(base + 0x2ac), r, t2;
+        DWORD p[12];
+        int okp = 0;
+        if (row >= 0 && row < 12) {
+            for (k = 0; k < 12; k++) {
+                r = (row - k + 12) % 12; m[11][k] = 0;
+                for (t2 = 0; t2 < 10; t2++) m[11][k] += *(LONG *)(base + 0xcc + (r * 10 + t2) * 4);
+            }
+            seeded[11] = 1;
+            es = *(BYTE **)(base + 0x2d8);                /* the stock Energia % series (record 0x100051b8 reads base+0x2d8) */
+            if (es && !IsBadReadPtr(es, 4) && sui) { memset(p, 0, sizeof(p)); ho_v(es, 0x28, 1, (DWORD)p, 0, 0, 0, 0); okp = 1; }
+            if (okp) {
+                for (k = 0; k < 12; k++)
+                    m[2][k] = p[k] > 0 && p[k] < 100 ? m[11][k] * 100.0 / (100.0 - p[k]) : m[11][k];
+                m[2][0] = v[2];                            /* the newest month is known exactly */
+                seeded[2] = 1;
+                logf("GRAPHNEW>   seed power: spare %% newest..oldest %lu %lu %lu %lu, used %ld %ld %ld %ld", p[0], p[1], p[2], p[3],
+                     (LONG)m[11][0], (LONG)m[11][1], (LONG)m[11][2], (LONG)m[11][3]);
+            }
+        }
+    }
+    if (c.po) {
+        BYTE *base = c.po - 0x1c;
+        for (i = 0; i < 5; i++) for (k = 0; k < 12; k++) m[24 + i][k] = (double)*(__int64 *)(base + k_gn_garb[i] + ((ci - k + 12) % 12) * 8);
+        for (i = 0; i < 5; i++) seeded[24 + i] = 1;
+    }
+    for (i = 0; i < GN_LINES; i++) {
+        double mean = 0;
+        if (have[i]) continue;
+        for (k = 0; k < 12; k++) { a[k] = gn_store(i, m[i][k]); mean += m[i][k] / 12.0; }
+        for (k = 0; k < 10; k++) y[k] = gn_store(i, seeded[i] ? mean : v[i]);
+        ho_v(g_gn_if[i], 0x60, 1, 0xffffffffu, 0, 0, 0, 0);   /* no clamp while the arrays go in */
+        ho_v(g_gn_if[i], 0x70, 1, (DWORD)a, 0, 0, 0, 0);
+        ho_v(g_gn_if[i], 0x78, 1, (DWORD)y, 0, 0, 0, 0);
+        ho_v(g_gn_if[i], 0x80, 1, (DWORD)y, 0, 0, 0, 0);
+        gn_fmt_real(t, m[i][0]);
+        gn_label(i, t);
+        n++;
+    }
+    gn_rescale(NULL);
+    gn_ctx_free(&c);
+    logf("GRAPHNEW> seeded %d line(s) (12 months from the game's rings: %s%s%s%s), the rest at today's value", n,
+         seeded[0] ? "budget " : "", seeded[11] ? "power-used " : "", seeded[2] ? "power-supply " : "", seeded[24] ? "garbage" : "");
+}
+
+/* first look this session, or the dates jumped: start over, from the history file when it matches, the rest seeded */
+static void gn_sync(void *cal) {
+    static const char *const slot[3] = { " (auto 5 min).sc3", " (auto 10 min).sc3", " (auto 1 h).sc3" };   /* sc3autosave k_slot */
+    char name[MAX_PATH], cand[MAX_PATH + 24], t[32];
+    int have[GN_LINES], key = gn_key(cal, NULL, NULL), i, c, n, got = 0, was = g_gn_last, fk;
+    if (!g_gn_if[0] || key < 0) return;
+    if (g_gn_synced && (key == g_gn_last || key == g_gn_last + 1)) return;
+    g_gn_synced = 1;
+    memset(have, 0, sizeof(have));
+    for (i = 0; i < GN_LINES; i++) { gn_reset_line(i); gn_label(i, "-"); }
+    cand[0] = 0;
+    if (gn_city_name(gn_city(), name, sizeof(name)))
+        /* the city's own file first, then its autosaves: a loaded autosave is renamed "<city>.sc3" right after the load
+           (sc3autosave UNAUTO), so its history sits under the autosave's name. Only a file saved at this exact closed
+           month is taken. */
+        for (c = 0; c < 4 && !got; c++) {
+            if (c == 0) lstrcpynA(cand, name, MAX_PATH);
+            else {
+                n = lstrlenA(name);
+                if (n < 4 || lstrcmpiA(name + n - 4, ".sc3")) break;
+                lstrcpynA(cand, name, n - 3);
+                lstrcatA(cand, slot[c - 1]);
+            }
+            if ((got = gn_read_file(cand, key, g_gn_snap, have, &fk)) > 0) break;
+            if (fk >= 0) logf("GRAPHNEW> %s.graphs is for closed month key %d, the city is at %d: not used", cand, fk, key);
+        }
+    for (i = 0; i < GN_LINES; i++) {
+        if (!have[i]) continue;
+        ho_v(g_gn_if[i], 0x60, 1, g_gn_snap[i].scale, 0, 0, 0, 0);
+        ho_v(g_gn_if[i], 0x70, 1, (DWORD)g_gn_snap[i].m, 0, 0, 0, 0);
+        ho_v(g_gn_if[i], 0x78, 1, (DWORD)g_gn_snap[i].y, 0, 0, 0, 0);
+        ho_v(g_gn_if[i], 0x80, 1, (DWORD)g_gn_snap[i].d, 0, 0, 0, 0);
+        gn_fmt_real(t, (double)g_gn_snap[i].m[0] - (double)g_gn_off[k_gn[i].grp]);   /* newest month */
+        gn_label(i, t);
+    }
+    g_gn_last = key;
+    logf("GRAPHNEW> city at closed month key %d (last push %d): history %s%s (%d line(s))", key, was,
+         got ? "read from " : "file none", got ? cand : "", got);
+    __try { gn_seed(have); }
+    __except (EXCEPTION_EXECUTE_HANDLER) { logf("GRAPHNEW> seeding threw 0x%08lX", GetExceptionCode()); }
+}
+
+static void gn_record(void *cal, BYTE *budget) {
+    GN_CTX c;
+    double v[GN_LINES];
+    DWORD s[GN_LINES];
+    int ci, yr, i;
+    gn_sync(cal);
+    if (gn_key(cal, &ci, &yr) < 0) return;
+    gn_ctx(&c, budget);
+    gn_values(&c, ci, v);
+    gn_ctx_free(&c);
+    for (i = 0; i < GN_LINES; i++) s[i] = gn_store(i, v[i]);
+    gn_rescale(s);
     for (i = 0; i < GN_LINES; i++) {
         char t[32];
         ho_v(g_gn_if[i], 0x6c, 1, s[i], 0, 0, 0, 0);
@@ -490,7 +944,7 @@ static void gn_record(void *cal, BYTE *budget) {
     }
     g_gn_last = yr * 12 + ci;
     if (g_gn_log) {
-        char t[400];
+        char t[700];
         int n = wsprintfA(t, "GRAPHNEW> %d-%02d pushed:", yr, ci + 1);
         for (i = 0; i < GN_LINES; i++) n += wsprintfA(t + n, " %ld", (long)(v[i] < 0 ? v[i] - 0.5 : v[i] + 0.5));
         logf("%s", t);
@@ -512,11 +966,16 @@ static void gn_install(HMODULE sui) {
     HMODULE mi = GetModuleHandleA("SIMMISC.DLL"), sc = GetModuleHandleA("SIMCITY.DLL");
     static const BYTE p6a[6] = { 0x55, 0x8b, 0xec, 0x83, 0xec, 0x10 };    /* push ebp; mov ebp,esp; sub esp,0x10 */
     static const BYTE p6b[6] = { 0x55, 0x8b, 0xec, 0x83, 0xec, 0x3c };    /* ... sub esp,0x3c */
+    static const BYTE p6c[6] = { 0x55, 0x8b, 0xec, 0x51, 0x53, 0x56 };    /* push ebp; mov ebp,esp; push ecx; push ebx; push esi */
     BYTE e1[5], e3[5];
+    char v[8];
     if (!g_graphnew) { logf("GRAPHNEW> off (SC3RESIZE_GRAPHNEW=0): the 16 stock graphs only"); return; }
+    if (GetEnvironmentVariableA("SC3RESIZE_GRAPHTABS", v, sizeof(v))) g_graphtabs = atoi(v);
     if (!mi || !sc) { logf("GRAPHNEW> SIMMISC / SIMCITY not loaded: no new graphs"); return; }
     e1[0] = 0xb8; *(DWORD *)(e1 + 1) = (DWORD)sui + 0x9b348;   /* FUN_1002e012: mov eax, <EH handler> */
     e3[0] = 0xb8; *(DWORD *)(e3 + 1) = (DWORD)sc + 0x1186e;    /* FUN_1000429d */
+    if (g_graphtabs && !ho_hook(sui, 0x2df5b, p6c, 6, (void *)gn_ctl, &g_orig_df5b, "graphs page control handler FUN_1002df5b"))
+        g_graphtabs = 0;   /* no tab clicks without it: the one-grid page */
     if (!ho_hook(sui, 0x2f8fd, p6a, 6, (void *)gn_enum, &g_orig_f8fd, "graphs enumeration FUN_1002f8fd") ||
         !ho_hook(sui, 0x2e012, e1, 5, (void *)gn_layout, &g_orig_e012, "graphs layout FUN_1002e012") ||
         !ho_hook(sui, 0x2eb59, p6a, 6, (void *)gn_close, &g_orig_eb59, "graphs close FUN_1002eb59") ||
@@ -525,100 +984,5 @@ static void gn_install(HMODULE sui) {
         logf("GRAPHNEW> a hook failed (see above): the hooks already in place stay, the new graphs may be partial");
         return;
     }
-    logf("GRAPHNEW> on: 5 new graphs (11 lines) on the Graficas page");
-}
-
-/* ---------------------------------------------------------------------------------------------- the 11 values
- * Read after FUN_10007d88 returns, for the month that closed (index ci, as the record computes it). Sources (worker pass
- * 2026-10-30 over the exports + PE, re/analysis/GRAPH_SERIES.md section 7):
- *  - income / expenses: budget int64 rings base + off + ci * 8. Income: taxes R/C/I +0x90 / +0x118 / +0x1a0, fares +0x3a0,
- *    ordinances +0x2d0, neighbour deals +0x470, business deals +0x4e8, disaster relief +0x338. Expenses: ordinances +0x268,
- *    neighbour deals +0x408, bonds (dword ring) +0x558 + ci * 4, departments: every node of the map at +0x60 (MSVC6 tree,
- *    successor FUN_10003354), ring node+0x30 + ci * 8. The year-end fold adds the income rings to the treasury and
- *    subtracts the expense rings, and the YTD getters split them the same way [CONFIRMED @ SIMMISC 0x10007d88, 0x10008a3e,
- *    0x10008ced, 0x10008d54].
- *  - power: city vt+0x150 = SIMUTIL power layer + 0x14. Supply = base+0x70 (sum of plant output reached by each grid),
- *    served = base+0x74 [CONFIRMED @ SIMUTIL 0x10004e57]. Demand = sum of the per-tile demand bytes base+0x2dc
- *    (width +0x28, height +0x34 + 1), the bytes the drain subtracts from the supply [CONFIRMED @ 0x10005015..0x100050fa],
- *    so it counts tiles that got no power too.
- *  - water: city vt+0x154 = SIMUTIL plumbing layer. Supply = int64 base+0xb0 (pump capacity), delivered = int64 base+0xb8
- *    [CONFIRMED @ SIMUTIL 0x1000e8c4]. Unmet water demand is not kept anywhere, so the second line is what was delivered.
- *  - R / C / I: city vt+0x1b8(0x80f1e6d3), QI 0x40a42f1c, vt+0x14(3000 / 5000 / 8000, 0xf1ec30, &valve), valve vt+0x30
- *    value, +0x38 max, +0x3c min [CONFIRMED @ SIMUI 0x10026e40, 0x10065303]. Shown as the HUD bar sees it:
- *    v >= 0 ? v * 1000 / max : v * -1000 / min, -1000..1000 [CONFIRMED @ SIMRCI 0x10042e89].
- *  - pollution: city vt+0x16c = SIMECO + 0x1c, vt+0x78 air, vt+0x7c water, vt+0x84 / +0x88 MaxAir / MaxWater for the UI
- *    (SC3Pollution.ini, 11000) [CONFIRMED @ SIMECO 0x10007b5d, 0x10008249]. Shown as a percent of that max, the unit the
- *    stock Polucion graph averages. */
-static BYTE *gn_next(BYTE *n) {   /* FUN_10003354: left +8, parent +4, right +0xc, NULL leaves */
-    BYTE *r = *(BYTE **)(n + 0xc), *p;
-    if (r) { while (*(BYTE **)(r + 8)) r = *(BYTE **)(r + 8); return r; }
-    p = *(BYTE **)(n + 4);
-    while (p && n == *(BYTE **)(p + 0xc)) { n = p; p = *(BYTE **)(p + 4); }
-    if (*(BYTE **)(n + 0xc) != p) n = p;
-    return n;
-}
-
-static int gn_values(BYTE *b, double *v) {
-    static const DWORD inc[8] = { 0x90, 0x118, 0x1a0, 0x3a0, 0x2d0, 0x470, 0x4e8, 0x338 }, exq[2] = { 0x268, 0x408 };
-    static const DWORD vid[3] = { 3000, 5000, 8000 };
-    HMODULE sui = GetModuleHandleA("SIMUI.DLL"), ut = GetModuleHandleA("SIMUTIL.DLL"), eco = GetModuleHandleA("SIMECO.DLL");
-    BYTE *city, *pw, *wa, *head, *n, *rs;
-    void *po, *L, *vl = NULL;
-    DWORD m = 0, x[4], y = 0;
-    int ci, k, g = 0;
-    double in = 0, ex = 0, dem = 0;
-    char dbg[200];
-    if (!sui || !ut || !eco) return 0;
-    ho_v(*(void **)(b + 0x14), 0x1e4, 3, (DWORD)&m, (DWORD)x, (DWORD)&y, 0, 0);
-    ci = m == 1 ? 11 : (int)m - 2;
-    if (ci < 0 || ci > 11) ci = 11;
-    for (k = 0; k < 8; k++) in += (double)*(__int64 *)(b + inc[k] + ci * 8);
-    for (k = 0; k < 2; k++) ex += (double)*(__int64 *)(b + exq[k] + ci * 8);
-    ex += (double)*(LONG *)(b + 0x558 + ci * 4);
-    head = *(BYTE **)(b + 0x60);
-    if (head) for (n = *(BYTE **)(head + 8); n && n != head && g < 256; g++, n = gn_next(n)) ex += (double)*(__int64 *)(n + 0x30 + ci * 8);
-    v[0] = in; v[1] = ex;
-    city = (BYTE *)((void *(__cdecl *)(void))((BYTE *)sui + 0x8e7da))();
-    for (k = 2; k < GN_LINES; k++) v[k] = 0;
-    if (!city) return 1;
-    pw = (BYTE *)ho_v(city, 0x150, 0, 0, 0, 0, 0, 0);
-    if (pw && !IsBadReadPtr(pw - 0x14, 0x2f0) && *(DWORD *)pw == (DWORD)ut + 0x20550) {
-        BYTE *base = pw - 0x14;
-        LONG w = *(LONG *)(base + 0x28), h = *(LONG *)(base + 0x34) + 1, i;
-        v[2] = *(LONG *)(base + 0x70);
-        rs = *(BYTE **)(base + 0x2dc);
-        if (rs && w > 0 && h > 0 && w <= 4096 && h <= 4096 && !IsBadReadPtr(rs, (UINT_PTR)w * h))
-            for (i = 0; i < w * h; i++) dem += rs[i];
-        v[3] = dem;
-        wsprintfA(dbg, "power supply %ld served %ld demand bytes %ld (%ldx%ld)", *(LONG *)(base + 0x70), *(LONG *)(base + 0x74), (LONG)dem, w, h);
-    } else lstrcpyA(dbg, "power layer not found");
-    wa = (BYTE *)ho_v(city, 0x154, 0, 0, 0, 0, 0, 0);
-    if (wa && !IsBadReadPtr(wa, 0xc0) && *(DWORD *)wa == (DWORD)ut + 0x22944) {
-        v[4] = (double)*(__int64 *)(wa + 0xb0);
-        v[5] = (double)*(__int64 *)(wa + 0xb8);
-    }
-    L = (void *)ho_v(city, 0x1b8, 1, 0x80f1e6d3, 0, 0, 0, 0);
-    if (L) {
-        if ((ho_v(L, 0x00, 2, 0x40a42f1c, (DWORD)&vl, 0, 0, 0) & 0xff) && vl)
-            for (k = 0; k < 3; k++) {
-                void *va = NULL;
-                LONG val, mx, mn;
-                if (!(ho_v(vl, 0x14, 3, vid[k], 0xf1ec30, (DWORD)&va, 0, 0) & 0xff) || !va) continue;
-                val = (LONG)ho_v(va, 0x30, 0, 0, 0, 0, 0, 0);
-                mx = (LONG)ho_v(va, 0x38, 0, 0, 0, 0, 0, 0);
-                mn = (LONG)ho_v(va, 0x3c, 0, 0, 0, 0, 0, 0);
-                v[6 + k] = val >= 0 ? (mx > 0 ? val * 1000.0 / mx : 0) : (mn < 0 ? val * -1000.0 / mn : 0);
-                if (g_gn_log) logf("GRAPHNEW>   valve %lu value %ld max %ld min %ld -> %ld", vid[k], val, mx, mn, (LONG)v[6 + k]);
-                ho_v(va, 0x08, 0, 0, 0, 0, 0, 0);
-            }
-        ho_v(L, 0x08, 0, 0, 0, 0, 0, 0);
-    }
-    po = (void *)ho_v(city, 0x16c, 0, 0, 0, 0, 0, 0);
-    if (po && !IsBadReadPtr(po, 4) && *(DWORD *)po == (DWORD)eco + 0x1b984) {
-        LONG ma = (LONG)ho_v(po, 0x84, 0, 0, 0, 0, 0, 0), mw = (LONG)ho_v(po, 0x88, 0, 0, 0, 0, 0, 0);
-        v[9] = (LONG)ho_v(po, 0x78, 0, 0, 0, 0, 0, 0) * 100.0 / (ma > 0 ? ma : 11000);
-        v[10] = (LONG)ho_v(po, 0x7c, 0, 0, 0, 0, 0, 0) * 100.0 / (mw > 0 ? mw : 11000);
-    }
-    if (g_gn_log) logf("GRAPHNEW>   %s, %d department(s), month index %d", dbg, g, ci);
-    return 1;
+    logf("GRAPHNEW> on: %d new graphs (%d lines) on the Graficas page, tabs %s", GN_GROUPS, GN_LINES, g_graphtabs ? "on" : "off");
 }

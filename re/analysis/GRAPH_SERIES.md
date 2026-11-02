@@ -128,3 +128,57 @@ Corrections to earlier notes (worker pass 2026-10-30):
 Autosaves (2026-10-31): sc3resize export `sc3resize_graphs_write(path)` writes the snapshot of the last save; sc3autosave
 block GRAPHS calls it for its temp file and moves / deletes `.graphs` with each autosave file. The reader tries the
 city's file, then `<stem> (auto 5 min|10 min|1 h).sc3`, because UNAUTO renames a loaded autosave to `<city>.sc3`.
+
+## 8. graphtabs (2026-11-02): tabs, 9 more graphs, history seeded at load
+
+Owner: "Demand graphs are not working, they show nothing, shows flat / energy demand/offer either / put tabs to show
+different types of graphs, add more graphs according to available data".
+
+**Why the new graphs looked flat.** The owner's MARIANO-PC log (2026-11-01, Big One): `history starts empty`, Graficas
+opened before a month closed. With no `.graphs` file every new line was 12 months of its fill value (0, or "no demand"
+for R/C/I). The values pushed were right (LIVING-PC Berlin: power supply 195,168 vs demand ~158,000, R/C/I moving).
+
+**Seeding at load** (a line not found in the history file):
+
+| Lines | 12 months from | Evidence |
+|---|---|---|
+| Ingresos, Gastos | budget rings, slot `(ci - k) % 12`. Slots after `ci` hold last year's months: the year-end fold zeroes only the yearly accumulators | [CONFIRMED @ SIMMISC 0x10007d88], saved by `0x10007519` |
+| Energia consumo | power ring base+0xcc, 12 rows x 10 plant types, newest row base+0x2ac (rolling, not the calendar month) | [CONFIRMED @ SIMUTIL 0x10004c1f], saved by `0x100045ec` |
+| Energia oferta | consumo and the stock Energia % series (base+**0x2d8**, spare % = (S - D) * 100 / S): S = D * 100 / (100 - spare) when spare > 0, else D. Newest month exact | [CONFIRMED @ SIMUTIL 0x100051b8] |
+| Basura (5 lines) | SIMECO int64 month rings, slot = closed month | [CONFIRMED @ SIMECO 0x10007b5d], saved by `0x10006abb` |
+
+Every other line, and the 10 / 100 year views, start at today's value (the 12-month mean for a seeded line). No ring
+exists in the game for R/C/I demand, water, pollution split, taxes, debt, jobs, schools, hospitals or abandoned tiles.
+
+Correction: the worker read put the Energia series at power +0x2c8. Its builder `0x10003904` runs with this = base+0x10;
+the record `0x100051b8` reads base+0x2d8 (measured: a read at +0x2c8 found nothing).
+
+**New graphs** (lines 11..30; lines 0..10 keep their ids, so 10-30 `.graphs` files still load):
+
+| Graph | Lines | Source |
+|---|---|---|
+| Energia of./dem. | + consumo | newest row of the power ring. Demand is now iface vt+0x5c (base+0x2ec, running sum of the demand bytes) |
+| Agua of./entreg. | "demanda" renamed "entregada" | it always was delivered (+0xb8); unmet water is not stored |
+| Impuestos | R, C, I (%) | budget byte +0x8c + i * 0x88 (vt+0x4c(i)). i = R/C/I [UNCERTAIN order]. Berlin reads 2 / 3 / 3 |
+| Deuda (bonos) | 1 | int64 budget+0x590 (vt+0x60) |
+| Empleos/Trab. | jobs, workers | Desempleo's inputs [CONFIRMED @ SIMMISC 0x100285bb]: valve 7000 vt+0x2c; trunc(valve 3000 vt+0x28 * res vt+0x7c float). Berlin: 425,561 jobs, 794,278 x 0.647 = 513,898 workers |
+| Escuelas / Universidades / Hospitales | users vs capacity | res iface (city vt+0x17c, vtable SIMRCI 0x1004c99c): vt+0x50 / +0x64, vt+0x58 / +0x68, vt+0x48 / +0x60. Berlin: 155,982 / 120,000 pupils, 50,140 / 39,000 patients |
+| Basura | made, landfill, recycled, incinerated, exported | SIMECO rings +0x1a8, +0x3e8, +0x388, +0x328, +0x268 |
+| Sin energia | unpowered tiles | power iface vt+0x60 |
+| Abandonados | abandoned tiles | city vt+0x14c (vtable SIMRCI 0x1004d1e0, checked at run time) vt+0x54. Berlin: 0..54 per month |
+
+The budget is reached as city vt+0x15c (vtable SIMMISC 0x1003c550) when no month has closed yet.
+
+**Tabs.** A radio row under the chart (the range group's recipe, SIMUI `0x1002e6cb`, here `mp_group`): Ciudad, Economia,
+Servicios, Redes, Ambiente. Each checkbox id belongs to one tab (`k_tab`); only the current tab's checkboxes show, from
+page (20, 230), 3 per row, and only its checked graphs draw (off-tab series get an id no window has, stock ones get
+their id back before the page closes). Traps found in the lab:
+- The page's control handler `0x1002df5b` re-renders after a radio pick only when that group's selection is 3..5 (the
+  range radios) [CONFIRMED @ SIMUI 0x1002df5b]. A tab pick changed the radio and nothing else; the next click then hit
+  the old tab's checkbox. Detour on `0x1002df5b`: our group id -> render.
+- A hidden checkbox (vt+0xfc) still took clicks at its cell (a click on Redes' first cell toggled Salud, hidden there
+  from Servicios). Off-tab checkboxes are also moved to y 4000.
+- Moves write the LOCAL rect only; the page rebuilds derived rects (vt+0x168, vt+0x14c) after placing a tab.
+- `SC3RESIZE_GRAPHTABS=0`: the one-grid page; groups 6..14 then sit below the page's bottom edge.
+- Lab: `graphaxis_lab.py` waited on the first GRAPHAXIS dialog line, which now comes before DLGSCALE's: wait on DLGSCALE
+  first. A Save from the lab needs an un-linked city copy (`GraphTest.sc3`); the linked Berlin never saved.
