@@ -182,3 +182,71 @@ their id back before the page closes). Traps found in the lab:
 - `SC3RESIZE_GRAPHTABS=0`: the one-grid page; groups 6..14 then sit below the page's bottom edge.
 - Lab: `graphaxis_lab.py` waited on the first GRAPHAXIS dialog line, which now comes before DLGSCALE's: wait on DLGSCALE
   first. A Save from the lab needs an un-linked city copy (`GraphTest.sc3`); the linked Berlin never saved.
+
+## 9. graphs2 (2026-11-02): drawn tabs on both pages, Cuadros tabs, bar charts (education, health, water, transport)
+
+Owner: line-graph tabs drawn as real tabs in one aligned row; the Cuadros radios become tabs too; Education tab with
+capacity vs students (schools, universities, what exists for libraries and museums); Health tab with patients vs
+capacity; water sources and processing in one tab; transportation methods used. Code: `sc3resize_vdtabs.c` (tab
+widgets), `sc3resize_vdbars.c` (Cuadros hooks, bars, trip counter), GRAPHNEW hooks in `sc3resize_graphs.c`.
+
+**Tabs.** GZWIND has no tab class (19 classes in `FUN_1000121d`; `FUN_1001a420`, once tagged "layout_tabs", draws a
+scrolling item list) [CONFIRMED @ GZWIND 0x1000121d, 0x1001a420]. A tab = shape-class polygons (0x4303E5B6, **style
+0x31** = filled + outlined, fill vt+0x14, line vt+0x18, as SIMUI 0x10046590 / 0x10051c53; **0x11 only strokes**) +
+a caption-only text button over them (factory +0x2c, iface vt+0x58(NULL) drops the art, style bit 0x10 skips the
+bevel, click = message 3 / p3 1 / id to the page's control handler) [CONFIRMED @ GZWIND 0x10008935, 0x10008adf,
+0x10008fdb]. Tabs hang under a rule on the chart's bottom edge; the selected one is the Cuadros panel colour
+(factory colour 0x62E56A2B), taller, rule broken under it. The button's auto-size (style 0x6a4 bit 0x20) does not
+measure the caption (54..67 px for every caption): widths come from a per-character table of font 0xf.
+
+**Cuadros page.** Director vtable SIMUI 0x100a4080: build `0x1001f3df` (+0xc), close `0x10020ffd` (+0x10); control
+handler `0x1001f30d` (vtable 0x100a4008 +0xc, ret 0x14); refresh `0x1001f3b3` (vtable 0x100a3fe8 +0xc, message
+0xC2A3FD82) [CONFIRMED by PE read + decompilation]. Children: bar chart 2 (14,10) 356x189, pie 3, panel 4, labels
+0xb/0xc, legend 0xd..0x1c, radio group 5 (6 Educacion, 7 Electricidad, 8 Basura, 9 Salud, 10 Poblacion), fill
+`0x100245c7`. The mod patches the 4 vtable slots (sc3dataview's prologue detour on the fill keeps working), parks the
+radio group, and adds 7 tabs (5 stock + Agua + Transporte).
+
+**Values shown** (all live, measured on Berlin 2026-11-02, `verify/graphs2/RESULTS.md`):
+
+| Tab | Value | Read | Evidence |
+|---|---|---|---|
+| Educacion | school pupils / places | res layer (city+0xe4, vt SIMRCI 0x1004c99c) +0x66c / +0x670 | SIMRCI 0x10024347 (0x10024b46, 0x10024614) |
+| | college students / places | +0x674 / +0x678 | 0x10024b74, 0x10024637 |
+| | library places, museum places | +0x67c, +0x680 | 0x1002464c, 0x10024661 |
+| | libraries / museums built | places / PopServed (globals SIMRCI 0x1005741c, 0x1005745c) | getters 0x10007f28, 0x1000907f |
+| | residents of the age band served | res vt+0x78 x res vt+0x80(lo, hi), band bytes 0x10057420/21, 0x10057460/61 | 0x100251b5 |
+| | teachers, professors, strikes | +0x684, +0x688, +0x650 / +0x651 | 0x10024606, 0x10024629 |
+| Salud | patients / beds, doctors, strike | +0x664 / +0x668, +0x68c, +0x652 | 0x10024833, 0x1002485d, 0x10024572 |
+| Agua | supply, delivered (int64) | plumbing P (city vt+0x154) +0xb0, +0xb8 | SIMUTIL 0x1000e8c4 |
+| | per source: count, output, capacity | list *(*(P+0x74)), node +0x18 cap u16, +0x1a output u16, +0x20 type (2 tower, 3 pump, 5 desal), lock *(P+0x14) | 0x1000e0b5, 0x1000f771 |
+| | buildings left dry, of consumers | P+0xc4, P+0xc0 (= 100 when none is dry) | 0x1000e8c4 |
+| | water pollution (stock average) | SIMECO po (city vt+0x16c) vt+0x7c of vt+0x88 | 0x10008249 |
+| | pollution produced / treated, last month | po+0xe8 / po+0xec | rollover 0x10007a9e |
+| | treatment plants, capacity | list po+0x98 (sentinel), item vt+0x34 x 30; aging po+0xb8; lock = the object AT po+0x74 | SIMECO 0x1000a032, 0x10008249; SIMUTIL 0x10002563 |
+| Transporte | trips using each network, per month | counted by the mod (below) | SimTransit 0x100072b6..0x10007554 |
+| | failure ratio, last month | float T+0xb8, T = SimTransit 0x1001fdb8 | 0x100093e9 |
+
+Checks that passed at run time: the per-source outputs add up to P+0xb0 exactly (Berlin 2067-03: 165,354 + 12,842 +
+6,140 = 184,336); highway share of trips that used a network 4.9%, inside the 4.2-7.1% hwtrips range.
+
+**Not stored by the game** (said in the tab or here, no proxy drawn): library / museum users (their seats go into the
+per-age EQ arrays mixed with schools); students / patients are demand (every resident of the band; population x
+pollution rate), not enrolment; unmet water demand; water held by towers; sewage volume; trip counts per mode.
+
+**Traps.** (1) The [Library] INI section is read by the first library built (`FUN_1000793d`, guard `DAT_100585b4`):
+with none built, the globals hold the file's defaults (PopServed 60000, ages 6..18), not the INI's (41000, 25..100).
+(2) SIMECO's lock is an embedded object at po+0x74 (its first dword is the vtable); SIMUTIL's plumbing lock is a
+pointer at P+0x14. Taking *(po+0x74) as the object faulted. (3) Bars reuse window ids in draw order, so a full-frame
+shape must have its own id made before everything else, or it covers labels made earlier with lower ids. (4) The lab
+game starts paused: `key=P4` before waiting for a month.
+
+**TRIPMODES.** route_trip's pop `call 0x10009eed` at SimTransit 0x100072f8 -> a stub (sc3cartrips' recipe, signature at
+0x100072f3, locked 8-byte write) that ORs each node's network into a per-thread mask (TLS) and, on the origin pop
+(type 0x80) of a trip with the deposit flag [ebp+0x14], counts the trip once per network it used. Node types: road 1,
+3; highway 2; bus 0x41, 0x42, 0x43, 0x50; rail 4, 0x14; subway 8, 0x18. Month = GRAPHNEW's budget record. Berlin:
+1,276..1,612 trips per month, roads 62%, highways 3.5%, rail 5%, subway 7%, bus 0%, no network 30% (only the origin lot was
+popped: route_trip tests arrival on the start node before expanding; what those trips are is [UNCERTAIN]). sc3cartrips patches the same call; the second to arrive refuses.
+
+Off switches: `SC3RESIZE_VDTABS=0` (stock radios on both pages, no bars), `SC3RESIZE_VDBARS=0` (tabs, no bars),
+`SC3RESIZE_TRIPMODES=0`, `SC3RESIZE_VDBARS_LOCK=0` (read the lists without the layers' locks). Log:
+`SC3RESIZE_VDTABS_LOG=1`.
