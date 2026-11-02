@@ -46,10 +46,22 @@ Steps inside `0x1001d840`:
    `BecomeDefunctDueToAge` / `GetCorrespondingBuildingRubble` set 8 `[iOS-HINT]`. Same QI/`+0x4c` gate as the
    valve code (`PORTS_AIRPORTS.md`, `0x1002f5af`).
 2. **Lookup.** Exact type id (`vt+0x88`) in `DAT_10058688`. If absent, walk the map and take the first row for which
-   a two-id predicate (`vt+0x24(rowId, typeId)`) is true, then cache that result (zeros included) under the type id.
-   iOS keys the map by `Class*` and the predicate is the class-ancestor bitmask test `[iOS-HINT]`. SC3U builds the
-   class tree from `CitySim.ini [AgentTypeHierarchy]` (`SC3U.exe 0x0040cc08`). No agent type has two ancestor rows,
-   so the walk order never matters.
+   `IsAncestor(rowId, typeId)` is true, then cache that result (zeros included) under the type id. No agent type
+   has two ancestor rows, so the walk order never matters. Identity of the call (2026-11-02, section 8):
+   - the object is `layer+0x4c`, filled at init by `FUN_1003d02d` = `FUN_1003ceec()` (the app singleton) `vt+0x40`
+     `[CONFIRMED @ 0x1001c854]`; `this` of the stamp is the layer base (`0x1001dae7` does `ecx -= 0x24`);
+   - SDK `cISC3App` slot 16 (`+0x40`) = `GetAppAgentTypeTree`, slot 20 (`+0x50`) = `GetAppDataDirectory`, which
+     is what every SIMRCI ini loader uses `+0x50` for;
+   - `cISC3AgentTypeTree`: slots 11/12 are the `IsAncestor` overload pair; with the project's overload-reversal
+     rule (`GZCOM_INTERFACE_CATALOGUE.md` 12a) `+0x24` = `IsAncestor(uint, uint)`, `+0x20` = `IsAncestor(uint,
+     uint, uint&)`. The call pushes 2 arguments, matching `+0x24`;
+   - argument order: other modules call the same slot as `(3000, type)`, `(5000, type)`, `(18000, type)`,
+     `(12005, type)` (SIMRCI `0x1002f5af`, SIMGEOM `0x10008599`, SIMECO `0x100095e7`), so it is
+     `IsAncestor(ancestor, descendant)`. The land value call passes `(rowId, typeId)`;
+   - Linux `libSimInit.so` names the class `cSC3AgentTypeTree`, with `IsAncestor(uint,uint)`,
+     `AddISARelationBetweenAgentTypes` and `cSC3App::AgentTypeTree()`;
+   - the tree is built from `CitySim.ini [AgentTypeHierarchy]` (`SC3U.exe 0x0040cc08`).
+   So a Small Park (14311, parent 14310) gets the 14310 Park row `[CONFIRMED by call topology + SDK slot map]`.
 3. **Stamp.** For every cell of the occupant's bounding rect (`vt+0xd0`), read-add-write the 4 values into
    `+0x50` = A, `+0x6c` = R, `+0x88` = C, `+0xa4` = I.
 
@@ -102,8 +114,33 @@ PostOffice 13008, HistoricBuilding 14160, Church 14910, Arcology 1001, Dam 12510
 
 ## 7. Open
 
-- `vt+0x24` predicate body not read on the SC3U side; descent semantics rest on the iOS class test plus the
-  hierarchy loader. A save-side check (a 14311 Small Park gets the 14310 row) would make it `[CONFIRMED]`.
+- The `IsAncestor` body itself was not read (SC3U `SIMINIT` side); the reading rests on the slot map, the constant
+  call sites and the Linux names (section 3).
 - Who calls `0x1001d25c` (the layer vtable slot) not traced.
-- The pollution, aura and crime `[AgentIDModifiers]` lookups were not checked for the same hierarchy fallback.
-  Pollution has its own rows for 14311..14316, which suggests per-type rows there.
+- The pollution special routine `SIMECO 0x1000a032` (recycling, incinerator, waste-to-energy, water treatment) not read.
+
+## 8. The other three per-building tables
+
+All three use the same gate (QI `0xe0faadc7`, `vt+0x4c == 1`), the same add/subtract mode, and fall back to an
+ancestor row when the type has none. No type has two ancestor rows in any of the four tables.
+
+| Table | Row format | Parse | Stamp | Fallback |
+|---|---|---|---|---|
+| `SC3Aura.ini` | `radius,amount` | SIMMISC `0x100020a3`: first token -> byte `+2` (radius), rest -> signed char in short `+0` (amount); **row dropped if amount == 0** (only `12101=0,0`) | SIMMISC `0x1000314a`: amount added flat to every cell of the occupant rect grown by radius, map `this+0x5c` | first row with `IsAncestor(row, type)` (`this+0x38` = `App vt+0x40` via `FUN_1003216b`) |
+| `SC3Crime.ini` | `radius,amount` | SIMSERV `0x1000689e`: first token -> byte `+1` (radius), rest -> `atol` clamped -127..127, byte `+0` (amount) | SIMSERV `0x10007d35`: amount added flat over rect grown by radius | row with smallest ancestor distance via `vt+0x20` = `IsAncestor(a, b, &dist)` |
+| `SC3Pollution.ini` | `air:r,water:r,garbage` | SIMECO `0x1000564a` | SIMECO `0x100095e7`: footprint + linear falloff (`PORTS_AIRPORTS.md` 3.1) | walk parents (`GetNode` `vt+0x1c`, parent `vt+0x28`) until a row or type 50 |
+
+Field order: both loaders split with the same 470-byte routine (SIMMISC `0x1002ad9b` = SIMSERV `0x10010741`, identical
+after normalising names) that returns the text before the first `,` and removes it plus the comma from the source.
+So the **first number is the radius, the second the signed amount** `[CONFIRMED @ 0x100020a3, 0x1000689e]`. This fits
+the data: every first field is >= 0 and every second field is signed.
+
+Pollution: recycling 12851, incinerator 12852, waste-to-energy 12853 and water treatment 12820 (and descendants)
+first go through `0x1000a032`, then still get the normal table stamp `[CONFIRMED @ SIMECO 0x1000969b]`.
+
+Readings from the resolved tables (workbook "All effects by building"):
+- Police Station 13130 has **no crime row**. Police act on crime through coverage (`SC3Police.ini`), not this table.
+  City Hall (-20, radius 20), Courthouse (-30, radius 30) and Quigley Castle (-80, radius 40) are the crime reducers.
+- Parks: every park type gets the 14310 rows for land value (+50 R), aura (radius 8, +2) and crime (radius 3, +6),
+  but has its own pollution row (Small Park -5 air, Big Park -20 air...).
+- Schools, police, fire stations and hospitals add a little pollution (air 50-60, radius 10) and garbage.
