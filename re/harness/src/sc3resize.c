@@ -946,6 +946,7 @@ static struct { void *w; LONG nat[4]; } g_corner[CORNER_MAX];
 static int    g_corner_n;
 static LONG   g_rci_nat[4];   /* RCI indicator native rect, cached once for absolute y placement */
 static int    g_rci_nat_ok;
+static int    g_rcibars;      /* RCIBARS (sc3resize_rcibars.c): tentative, = 1 there; the RCI is 18 px wider */
 static void *rz_find_by_vt(void *w, DWORD wantvt, int depth, int *budget);
 static void rz_side_fit_surface(DWORD liveH);
 static void rz_hud_setrect_w(DWORD wantW);   /* dock the bar, spanning to wantW (0 = full client) */
@@ -2731,6 +2732,14 @@ static void rz_bar_children_right(void) {
             if (rci && !IsBadWritePtr(rci, 0xa0)) {
                 LONG *e = (LONG *)((DWORD)rci + 0x80);
                 LONG w = e[2] - e[0], want = art[2] - 1;   /* right of the console with the native 1-px overlap (599 vs art 600) */
+                /* RCIBARS: the RCI is 59 px, not 41. Where the console cannot slide left (client 800 wide: console 600 + RCI 59
+                   + minimap 160 > 800) its native spot ran 18 px under the minimap and hid the P column. End it at the minimap's
+                   left edge instead; it then covers the plain right end of the console art (the "?" art ends near x 580 in an 800x600 frame dump,
+                   verify/rcibars). */
+                if (g_rcibars && g_mini && !IsBadReadPtr(g_mini, 0x90)) {
+                    LONG ml = ((LONG *)((DWORD)g_mini + 0x80))[0];
+                    if (ml > w && want + w > ml) want = ml - w;
+                }
                 DWORD *rvt = *(DWORD **)rci;
                 /* Cache the RCI's NATIVE rect once (still at native the first time we see it), then
                  * place it at native_y + the bar's vertical shift, so it docks DOWN with the bar
@@ -7576,6 +7585,7 @@ static void vd_idle(void) {
 }
 
 /* Before the final present: enlarge the HUD into the frame. Returns 1 when the frame must be restored after. */
+static void *g_rcb_drawfn;   /* RCIBARS: its RCI Draw wrapper once installed (sc3resize_rcibars.c), accepted by NATIVETEXT */
 #include "sc3resize_ntext.c"   /* child nativetext: NATIVETEXT, sharp text in the enlarged HUD and dialogs (SC3RESIZE_NATIVETEXT=0) */
 
 static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_screen) {
@@ -10114,6 +10124,7 @@ static void gx_install(HMODULE sui) {
         logf("GRAPHAXIS> on: Y axis on the Graficas page while 1..%d series are on", g_gx_max);
 }
 #include "sc3resize_graphs.c"   /* GRAPHNEW: 14 new graphs + tabs on the Graficas page (SC3RESIZE_GRAPHNEW=0, SC3RESIZE_GRAPHTABS=0) */
+#include "sc3resize_rcibars.c"  /* RCIBARS: Aeropuerto / Puerto capacity-in-use bars on the RCI (SC3RESIZE_RCIBARS=0) */
 
 /* ================= RELOCATE + PLOPOVER (task relocate 2026-10-28, re/analysis/RELOCATE.md)
  * Owner A: "podemos agregar un boton en el '?' de un edificio especial de premios o remarcables para recolocarlo? al
@@ -18534,6 +18545,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           rm_install(sui);   /* RESTORE: "Vida util" list on the Reunirse list page */
           gx_install(sui);   /* GRAPHAXIS: Y axis on the Graficas page */
           gn_install(sui);   /* GRAPHNEW: income/expenses, power, water, RCI, pollution graphs */
+          rcb_install(sui);  /* RCIBARS: A / P capacity-in-use bars on the RCI meter */
           rl_install();      /* RELOCATE: "Mover" in the "?" of rewards/landmarks, auto-demolish of zoned buildings */
           pkr_install(sui);  /* PICKER: eyedropper (minimap button, Ctrl+F) */
           {   HANDLE t = CreateThread(NULL, 0, ro_thread, NULL, 0, NULL);   /* ROADOVER: road / highway / rail /
@@ -18622,6 +18634,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_GRAPHAXIS_LOG", v, sizeof(v))) g_gx_log = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_GRAPHNEW", v, sizeof(v))) g_graphnew = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_GRAPHNEW_LOG", v, sizeof(v))) g_gn_log = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_RCIBARS", v, sizeof(v))) g_rcibars = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_RCIBARS_LOG", v, sizeof(v))) g_rcb_log = atoi(v);
           {   char bp[MAX_PATH]; ho_ini_path(bp, sizeof(bp));   /* mods page: [buildings], then the env overrides */
               g_relocate = GetPrivateProfileIntA("buildings", "mover", 1, bp) ? 1 : 0;
               g_plopover = GetPrivateProfileIntA("buildings", "plopover", 1, bp) ? 1 : 0; }

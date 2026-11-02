@@ -461,7 +461,7 @@ static void nt_rci_install(void) {
     if (g_nt_rcinst || !g_nt_rci || !sui) return;
     g_nt_rcinst = 1;
     slot = (DWORD *)(sui + 0xab274 + 0x144);
-    if (IsBadReadPtr(slot, 4) || *slot != sui + 0x65214) { logf("NATIVETEXT> RCI vt+0x144 is not FUN_10065214 - RCI bars stay resampled"); return; }
+    if (IsBadReadPtr(slot, 4) || (*slot != sui + 0x65214 && (!g_rcb_drawfn || *slot != (DWORD)g_rcb_drawfn))) { logf("NATIVETEXT> RCI vt+0x144 is not FUN_10065214 - RCI bars stay resampled"); return; }
     if (!VirtualProtect(slot, 4, PAGE_EXECUTE_READWRITE, &old)) return;
     g_nt_rci_orig = (void *)(cur = *slot);
     if ((DWORD)InterlockedCompareExchange((LONG volatile *)slot, (LONG)(DWORD)nt_rci_draw, (LONG)cur) != cur) { g_nt_rci_orig = NULL; return; }
