@@ -69,7 +69,10 @@
  *                                     [sim] animate_while_scrolling=1 (0 = agents freeze during camera moves, stock)
  *                                     [churn] anarchy_res|com|ind=0, upgrade_X and density_X=-1 (game value),
  *                                     enabled=1 (0 = stock rolls; env SC3SIMRUN_CHURN=0 too)
+ *                                     [sirens] enabled=1 per_vehicle=1 chance_pct=20 cooldown_s=30 (SIRENS block;
+ *                                     env SC3SIMRUN_SIRENS=0 = stock, SC3SIMRUN_SIREN_PERVEH / _PCT / _COOL per part)
  * Exports (measurement): sc3simrun_animate(on) switches the scroll-frame rate at run time (returns the old state),
+ *         sc3simrun_sirens(DWORD out[4]) = siren states recorded, cooldown blocks, siren-actor updates, removals.
  *         sc3simrun_stats(DWORD out[6]) = scroll frames seen by the stub, agent ticks, frozen agent ticks, strip refills, producer ticks run on the revealed strip, producer ticks skipped.
  * Env:    SC3SIMRUN_LOG=<abs path>  SC3SIMRUN_TRACE=1 (20 Hz sampler + hold/pause caller log)
  *         SC3SIMRUN_RESUME=1 (test only: post 0xc2a35d80 once per unit of +0x140 after load)
@@ -80,6 +83,7 @@
 #include "sc3mods_guard.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 /* ============================================================ logging */
 
@@ -258,6 +262,7 @@ static int g_anim = 1;                           /* animate street agents while 
 static int g_car_margin = 5;                     /* sim rect = view box + this many cells (stock 2) */
 
 static void churn_ini(const char *path);
+static void sirens_ini(const char *path);
 
 static void ini_read(void) {
     char path[MAX_PATH];
@@ -273,6 +278,7 @@ static void ini_read(void) {
         g_freeze = !lstrcmpiA(v, "cars") ? 1 : (!lstrcmpiA(v, "0") || !lstrcmpiA(v, "off")) ? 0 : 2;
     }
     churn_ini(path);
+    sirens_ini(path);
 }
 
 /* ============================================================ FREEZE */
@@ -658,6 +664,195 @@ static int churn_arm(HMODULE rci) {
     return n;
 }
 
+/* ============================================================ SIRENS
+ * Owner 2026-11-02: "avoid looping sirens sounds during gameplay, lower their chances significantly" (task sirens,
+ * re/analysis/SIRENS.md, verify/sirens/RESULTS.md).
+ * Stock: STRTSIM DecideSirenState 0x100198c0 rolls rand(100) < 0x50 -> 0 (no siren), else 1 / 2, at vehicle placement;
+ * FUN_1001b340 re-rolls the same way while the vehicle drives (inline copy, imm8 at 0x1001b44e). The state goes to
+ * AUDIO as BoxX event 5. AUDIO keeps one Actor object per [Actor] id (113 fire, 114 police, 130 ambulance; vtable
+ * 0x100210ec, ctor 0x10012d97) with ONE state field +0x90: event 5 (slot 14, 0x100138a8) writes it only for the vehicle
+ * the actor already tracks (+0x88), the position update (slot 12, 0x100134fb) starts the looped driveby stream on ANY
+ * vehicle of that id while +0x90 != 0, nothing clears it on untrack, and the ctor never initializes it (live value
+ * 0x444e452c, ",END" heap text). So every on-screen emergency vehicle sounds a siren, one after the other.
+ * Fix, three parts with their own switches (A/B), all off with SC3SIMRUN_SIRENS=0 or [sirens] enabled=0:
+ *   (b) CHANCE  [sirens] chance_pct (env SC3SIMRUN_SIREN_PCT), 100 = part off. The imm8 0x50 at both roll sites becomes 100 - 20 * chance_pct / 100 (chance_pct = % of the stock chance,
+ *           default 20 -> 4 vehicles in 100; 0 = never; 100 = stock; 500 = every vehicle).
+ *   (a) PERVEH  [sirens] per_vehicle=1 (env SC3SIMRUN_SIREN_PERVEH), 0 = part off. The four Actor slots that see a vehicle (12 update, 13 / 21 removed, 14 state) are wrapped for actors whose
+ *           +0x38 (the [Actor] type field) is 0, the siren type: the state of each vehicle is kept in a table, and
+ *           before every position update +0x90 is set to THAT vehicle's state, so only vehicles that rolled a siren
+ *           sound one. The stock slots still do all the work.
+ *   (c) COOLDOWN [sirens] cooldown_s (env SC3SIMRUN_SIREN_COOL), 0 = part off. After an actor was last audible, a new vehicle may not start it for cooldown_s seconds (default 30).
+ * Every byte and vtable slot is checked before it is written; a mismatch leaves that part stock and is logged. */
+
+#define SIR_N 256
+typedef struct { BYTE *act; DWORD veh; LONG st; } SIR_ENT;
+static SIR_ENT g_sir[SIR_N];
+static int g_sir_next;
+static CRITICAL_SECTION g_sir_lock;
+static BYTE *g_sir_acts[16];                     /* siren actors seen (driveby stream +0x3c), cooldown clock */
+static DWORD g_sir_last[16];
+static int g_sir_on = 1, g_sir_perveh = 1, g_sir_pct = 20, g_sir_cool = 30;
+static volatile LONG g_sir_stat[4];              /* states on recorded, cooldown blocks, updates, removals */
+typedef DWORD (__fastcall *PFN_SirUpd)(BYTE *, void *, DWORD, DWORD, DWORD, DWORD);
+typedef DWORD (__fastcall *PFN_SirV1)(BYTE *, void *, DWORD);
+typedef DWORD (__fastcall *PFN_SirV2)(BYTE *, void *, DWORD, DWORD);
+static PFN_SirUpd g_sir_upd;
+static PFN_SirV1 g_sir_rm13, g_sir_rm21;
+static PFN_SirV2 g_sir_state;
+
+static void sirens_ini(const char *path) {
+    char env[16];
+    if (path[0]) {
+        g_sir_on = GetPrivateProfileIntA("sirens", "enabled", 1, path) ? 1 : 0;
+        g_sir_perveh = GetPrivateProfileIntA("sirens", "per_vehicle", 1, path) ? 1 : 0;
+        g_sir_pct = (int)GetPrivateProfileIntA("sirens", "chance_pct", 20, path);
+        g_sir_cool = (int)GetPrivateProfileIntA("sirens", "cooldown_s", 30, path);
+    }
+    if (GetEnvironmentVariableA("SC3SIMRUN_SIRENS", env, sizeof(env)) && env[0] == '0') g_sir_on = 0;
+    if (GetEnvironmentVariableA("SC3SIMRUN_SIREN_PERVEH", env, sizeof(env))) g_sir_perveh = env[0] != '0';
+    if (GetEnvironmentVariableA("SC3SIMRUN_SIREN_PCT", env, sizeof(env))) g_sir_pct = atoi(env);
+    if (GetEnvironmentVariableA("SC3SIMRUN_SIREN_COOL", env, sizeof(env))) g_sir_cool = atoi(env);
+    if (g_sir_pct < 0) g_sir_pct = 0;
+    if (g_sir_pct > 500) g_sir_pct = 500;
+    if (g_sir_cool < 0) g_sir_cool = 0;
+}
+
+static int sir_find(BYTE *act, DWORD veh) {
+    int i;
+    for (i = 0; i < SIR_N; i++) if (g_sir[i].veh == veh && g_sir[i].act == act) return i;
+    return -1;
+}
+
+static void sir_forget(BYTE *act, DWORD veh) {
+    int i;
+    EnterCriticalSection(&g_sir_lock);
+    if ((i = sir_find(act, veh)) >= 0) { g_sir[i].act = NULL; g_sir[i].veh = 0; g_sir[i].st = 0; }
+    LeaveCriticalSection(&g_sir_lock);
+}
+
+static DWORD *sir_clock(BYTE *act) {
+    int i;
+    if (!*(DWORD *)(act + 0x3c)) return NULL;     /* no driveby stream: a car honk actor, never a siren */
+    for (i = 0; i < 16; i++) {
+        if (g_sir_acts[i] == act) return &g_sir_last[i];
+        if (!g_sir_acts[i]) { g_sir_acts[i] = act; g_sir_last[i] = 0; return &g_sir_last[i]; }
+    }
+    return NULL;
+}
+
+/* slot 14 0x100138a8 thiscall(veh, state), ret 8 */
+static DWORD __fastcall sir_state(BYTE *a, void *edx, DWORD veh, DWORD st) {
+    if (g_sir_perveh && *(LONG *)(a + 0x38) == 0 && veh) {
+        int i;
+        EnterCriticalSection(&g_sir_lock);
+        i = sir_find(a, veh);
+        if (st) {
+            if (i < 0) {
+                for (i = 0; i < SIR_N && g_sir[i].veh; i++) {}
+                if (i == SIR_N) { i = g_sir_next; g_sir_next = (g_sir_next + 1) % SIR_N; }   /* full: drop the oldest slot */
+                g_sir[i].act = a; g_sir[i].veh = veh;
+            }
+            g_sir[i].st = (LONG)st;
+            g_sir_stat[0]++;
+        } else if (i >= 0) { g_sir[i].act = NULL; g_sir[i].veh = 0; g_sir[i].st = 0; }
+        LeaveCriticalSection(&g_sir_lock);
+    }
+    return g_sir_state(a, edx, veh, st);
+}
+
+/* slot 12 0x100134fb thiscall(veh, x, 0, z), ret 0x10 */
+static DWORD __fastcall sir_upd(BYTE *a, void *edx, DWORD veh, DWORD x, DWORD y, DWORD z) {
+    LONG saved = 0, blocked = 0;
+    DWORD r;
+    if (*(LONG *)(a + 0x38) == 0) {
+        LONG st;
+        DWORD now = GetTickCount(), *last;
+        int i;
+        saved = *(LONG *)(a + 0x90);
+        st = g_sir_perveh ? 0 : saved;           /* per_vehicle=0: the stock shared latch decides */
+        EnterCriticalSection(&g_sir_lock);
+        if (g_sir_perveh && (i = sir_find(a, veh)) >= 0) st = g_sir[i].st;
+        last = g_sir_cool ? sir_clock(a) : NULL;
+        LeaveCriticalSection(&g_sir_lock);
+        if (last) {
+            if (*(DWORD *)(a + 0x88) || *(LONG *)(a + 0xb4) > 0) *last = now;      /* tracking or still audible */
+            else if (st && *last && now - *last < (DWORD)g_sir_cool * 1000) { st = 0; blocked = 1; g_sir_stat[1]++; }
+        }
+        *(LONG *)(a + 0x90) = st;
+        g_sir_stat[2]++;
+    }
+    r = g_sir_upd(a, edx, veh, x, y, z);
+    if (blocked && !g_sir_perveh) *(LONG *)(a + 0x90) = saved;   /* keep the stock latch as it was */
+    return r;
+}
+
+/* slot 13 0x10013873 (event 2) and slot 21 0x10013b5a (event 4): thiscall(veh), ret 4 */
+static DWORD __fastcall sir_rm13(BYTE *a, void *edx, DWORD veh) {
+    if (g_sir_perveh && *(LONG *)(a + 0x38) == 0 && veh) { sir_forget(a, veh); g_sir_stat[3]++; }
+    return g_sir_rm13(a, edx, veh);
+}
+static DWORD __fastcall sir_rm21(BYTE *a, void *edx, DWORD veh) {
+    if (g_sir_perveh && *(LONG *)(a + 0x38) == 0 && veh) { sir_forget(a, veh); g_sir_stat[3]++; }
+    return g_sir_rm21(a, edx, veh);
+}
+
+static int sir_patch_roll(BYTE *p, const BYTE *tail, int ntail, BYTE thr, const char *what) {
+    DWORD old;
+    if (IsBadReadPtr(p, 12 + ntail) || p[0] != 0x6a || p[1] != 0x64 || p[2] != 0xb9 || p[7] != 0xe8
+        || memcmp(p + 12, tail, ntail)) {
+        logf("SIRENS> CHANCE %s differs from shipped - NOT patched", what);
+        return 0;
+    }
+    if (!VirtualProtect(p + 14, 1, PAGE_EXECUTE_READWRITE, &old)) return 0;
+    p[14] = thr;
+    /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
+    FlushInstructionCache(GetCurrentProcess(), p + 14, 1);
+    return 1;
+}
+
+static int sirens_arm(HMODULE strt, HMODULE audio) {
+    static const BYTE t1[] = { 0x83, 0xf8, 0x50, 0x73, 0x03, 0x33, 0xc0, 0xc3 };   /* 0x100198cc cmp eax,0x50 / jae / xor / ret */
+    static const BYTE t2[] = { 0x83, 0xf8, 0x50, 0x73, 0x04, 0x33, 0xc0, 0xeb };   /* 0x1001b44c cmp eax,0x50 / jae / xor / jmp */
+    static const DWORD slot_va[4] = { 0x134fb, 0x13873, 0x138a8, 0x13b5a };
+    static const int slot_ix[4] = { 12, 13, 14, 21 };
+    BYTE *S = (BYTE *)strt, *U = (BYTE *)audio;
+    DWORD *vt = (DWORD *)(U + 0x210ec), old;
+    int i, thr = 100 - (20 * g_sir_pct + 50) / 100, n = 0, ok = 1;
+    if (thr < 0) thr = 0;
+    InitializeCriticalSection(&g_sir_lock);
+    if (g_sir_pct != 100) {                      /* (b) CHANCE */
+        n += sir_patch_roll(S + 0x198c0, t1, sizeof(t1), (BYTE)thr, "STRTSIM+0x198c0");
+        n += sir_patch_roll(S + 0x1b440, t2, sizeof(t2), (BYTE)thr, "STRTSIM+0x1b440");
+        logf("SIRENS> (b) CHANCE chance_pct=%d -> rand(100) < %d is no siren (stock 80), %d of 2 sites", g_sir_pct, thr, n);
+    } else logf("SIRENS> (b) CHANCE off: chance_pct=100 (stock roll)");
+    if (!g_sir_perveh && !g_sir_cool) {
+        logf("SIRENS> (a) PERVEH off, (c) COOLDOWN off: AUDIO untouched");
+        return n;
+    }
+    for (i = 0; i < 4; i++)
+        if (IsBadReadPtr(vt + slot_ix[i], 4) || vt[slot_ix[i]] != (DWORD)U + slot_va[i]) {
+            logf("SIRENS> AUDIO vtable 0x100210ec slot %d holds 0x%08lX, expected 0x%08lX - (a)/(c) NOT armed",
+                 slot_ix[i], vt[slot_ix[i]], (DWORD)U + slot_va[i]);
+            ok = 0;
+        }
+    if (!ok) return n;
+    if (!VirtualProtect(vt + 12, (21 - 12 + 1) * 4, PAGE_READWRITE, &old)) return n;
+    g_sir_upd = (PFN_SirUpd)vt[12]; g_sir_rm13 = (PFN_SirV1)vt[13]; g_sir_state = (PFN_SirV2)vt[14];
+    g_sir_rm21 = (PFN_SirV1)vt[21];
+    vt[12] = (DWORD)sir_upd; vt[13] = (DWORD)sir_rm13; vt[14] = (DWORD)sir_state; vt[21] = (DWORD)sir_rm21;
+    /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
+    logf("SIRENS> (a) PERVEH %s, (c) COOLDOWN cooldown_s=%d%s (AUDIO slots 12/13/14/21 wrapped)",
+         g_sir_perveh ? "on (per-vehicle siren state)" : "off (stock shared latch)", g_sir_cool, g_sir_cool ? "" : " (off)");
+    return n + 4;
+}
+
+__declspec(dllexport) void __cdecl sc3simrun_sirens(DWORD *out) {
+    out[0] = (DWORD)g_sir_stat[0];
+    out[1] = (DWORD)g_sir_stat[1];
+    out[2] = (DWORD)g_sir_stat[2];
+    out[3] = (DWORD)g_sir_stat[3];
+}
+
 /* ============================================================ sampler */
 
 static DWORD WINAPI sampler(LPVOID param) {
@@ -683,6 +878,12 @@ static DWORD WINAPI sampler(LPVOID param) {
         while (!(rci = GetModuleHandleA("SIMRCI.DLL"))) Sleep(5);
         logf("### CHURN: %d site(s) armed", churn_arm(rci));
     } else logf("### CHURN: off (stock redevelopment rolls)");
+    if (g_sir_on) {
+        HMODULE strt, au;
+        while (!(strt = GetModuleHandleA("STRTSIM.DLL"))) Sleep(5);
+        while (!(au = GetModuleHandleA("AUDIO.DLL"))) Sleep(5);
+        logf("### SIRENS: %d patch sites armed (2 roll bytes + 4 AUDIO slots when all parts are on)", sirens_arm(strt, au));
+    } else logf("### SIRENS: off (stock siren chance and the shared per-id siren state)");
     while (!(simcity = GetModuleHandleA("SIMCITY.DLL"))) Sleep(5);
     if (g_anim_armed) {
         HMODULE strt;

@@ -48,6 +48,9 @@ window edge while building scrolls the camera, faster the harder you push.
 **City keeps running (sc3simrun)**: the date and the simulation keep going while you move the camera.
 Working buildings are no longer torn down at random and rebuilt as the same kind of building (the game's
 "anarchy" roll); upgrades to pricier or denser buildings still happen. `simrun.ini [churn]` sets each roll.
+Sirens no longer play on every emergency vehicle in view one after the other: only vehicles that rolled a siren
+sound one, the roll is 20% of the game's chance, and the same siren waits 30 s before it plays again
+(`simrun.ini [sirens]`: `per_vehicle`, `chance_pct`, `cooldown_s`).
 
 **Speed and stability (sc3perf)**: faster drawing, frame cap, FPS counter and profiler, traffic simulation on
 several threads, and the fixes that make 1024 cities load, reload and run without freezing or crashing.
