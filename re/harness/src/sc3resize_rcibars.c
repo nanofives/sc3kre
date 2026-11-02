@@ -168,7 +168,7 @@ static void rcb_widen(BYTE *rci) {
     fh = font ? (LONG)ho_v(font, 0x60, 1, 0, 0, 0, 0, 0) : 14;
     ly = ((0x3e - 0x33) / 2 + 0x33) - fh / 2;
     ly2 = g_rcb_full ? 0x4e - fh : ly;     /* A / P letters: the bottom row of the panel (owner 2026-11-02) */
-    g_rcb_base = g_rcb_full ? ly2 - 1 : *(LONG *)(rci + 0xec);
+    g_rcb_base = g_rcb_full ? ly2 : *(LONG *)(rci + 0xec);
 #define RCB_CP(sx0, sy0, sx1, sy1, dx0, dy0) do { s[0] = (sx0); s[1] = (sy0); s[2] = (sx1); s[3] = (sy1); \
         d[0] = (dx0); d[1] = (dy0); d[2] = (dx0) + (sx1) - (sx0); d[3] = (dy0) + (sy1) - (sy0); \
         ho_v(R, 0x118, 4, (DWORD)old, (DWORD)s, (DWORD)d, 0, 0); } while (0)
@@ -191,8 +191,11 @@ static void rcb_widen(BYTE *rci) {
         LONG y;
         /* letter rows: plain panel row 32 (above the columns), one row at a time. The right margin is NOT plain: x 32..40
            is the panel's right-edge shading (measured, verify/rcibars), and the first build showed it as a grey box. */
-        for (y = ly; y < ly + fh; y++) RCB_CP(12, RCB_TOP + 2, 21, RCB_TOP + 3, dx, y);
-        RCB_CP(12, ly + fh, 21, h0, dx, ly + fh);
+        for (y = ly; y < ly + fh; y++) { if (g_rcb_full) RCB_CP(12, ly + fh, 21, ly + fh + 1, dx, y); else RCB_CP(12, RCB_TOP + 2, 21, RCB_TOP + 3, dx, y); }   /* full: the white track continues through the R C I letter row */
+        RCB_CP(12, ly + fh, 21, g_rcb_full ? ly2 : h0, dx, ly + fh);   /* full: only down to the A / P letters */
+        if (g_rcb_full) for (y = ly + fh; y < ly2; y++) RCB_CP(12, ly + fh, 21, ly + fh + 1, dx, y);
+        /* from the A / P letter band down nothing but panel background (the glyphs sit inside the band), so the columns end at the letters (owner 2026-11-02) */
+        if (g_rcb_full) for (y = ly2; y < h0; y++) RCB_CP(12, RCB_TOP + 2, 21, RCB_TOP + 3, dx, y);
     }
     RCB_CP(30, RCB_TOP, w0, h0, 30 + RCB_EXTRA, RCB_TOP);       /* right margin [30, 41) to the new edge */
     for (k = w0; k < W; k++) RCB_CP(0, 0, 1, RCB_TOP, k, 0);    /* above the panel: stock column 0 (outside the tab, keyed) */
