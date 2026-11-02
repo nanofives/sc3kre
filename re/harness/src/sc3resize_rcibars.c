@@ -192,6 +192,14 @@ static void rcb_widen(BYTE *rci) {
     }
     RCB_CP(30, RCB_TOP, w0, h0, 30 + RCB_EXTRA, RCB_TOP);       /* right margin [30, 41) to the new edge */
     for (k = w0; k < W; k++) RCB_CP(0, 0, 1, RCB_TOP, k, 0);    /* above the panel: stock column 0 (outside the tab, keyed) */
+    if (g_hudpos_bolsa) {
+        /* HUDPOS (owner 2026-11-02, "move the Visitar Bolsa de SimCity icon near the minimap"): the globe tab and its plate
+           (stock x 0..41, rows 0..29) go to the right end of the wider raster, flush with the minimap's edge; the columns they
+           leave get stock column 0 (keyed above the panel). Copied from the STOCK raster, not within R (overlapping Blt). */
+        LONG kx;
+        RCB_CP(0, 0, w0, RCB_TOP, RCB_EXTRA, 0);
+        for (kx = 0; kx < RCB_EXTRA; kx++) RCB_CP(0, 0, 1, RCB_TOP, kx, 0);
+    }
     *(DWORD *)(os + 0xdc) = ofl;
     memcpy(rs + 0x78, os + 0x78, 0x64);                         /* DDBLTFX, the key at +0x5c */
     *(DWORD *)(rs + 0xdc) = ofl;
@@ -214,6 +222,14 @@ static void rcb_widen(BYTE *rci) {
              w0, h0, W, h0, ly, ly + fh, e[0], e[1], e[2], e[3], x);
         ho_v(rci, 0xc8, 4, (DWORD)x, (DWORD)e[1], (DWORD)(x + W), (DWORD)(e[1] + h0), 0);
         logf("RCIBARS> RCI local now [%ld %ld %ld %ld], surface +0x58 %08lX", e[0], e[1], e[2], e[3], *(DWORD *)(rci + 0x58));
+    }
+    if (g_hudpos_bolsa) {   /* the stock 0x7d1 link button follows its art by RCB_EXTRA px */
+        void *bw = (void *)ho_v(rci, 0x78, 1, 0x7d1, 0, 0, 0, 0);
+        if (bw && !IsBadWritePtr(bw, 0xa0)) {
+            LONG *be = (LONG *)((BYTE *)bw + 0x80), b0 = be[0], b1 = be[1], b2 = be[2], b3 = be[3];
+            ho_v(bw, 0xc8, 4, (DWORD)(b0 + RCB_EXTRA), (DWORD)b1, (DWORD)(b2 + RCB_EXTRA), (DWORD)b3, 0);
+            logf("HUDPOS> Bolsa button local [%ld %ld %ld %ld] -> [%ld %ld %ld %ld]", b0, b1, b2, b3, be[0], be[1], be[2], be[3]);
+        } else logf("HUDPOS> Bolsa button 0x7d1 not found: art moved, button not");
     }
     rcb_button(rci, R, 30, 0x33, 30 + RCB_EXTRA, 0x3e);   /* rows 51..62: between the up (+0xec) and down (+0xf0) bars */
     g_rcb_shown[0] = g_rcb_shown[1] = -1;

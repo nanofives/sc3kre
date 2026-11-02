@@ -946,6 +946,7 @@ static struct { void *w; LONG nat[4]; } g_corner[CORNER_MAX];
 static int    g_corner_n;
 static LONG   g_rci_nat[4];   /* RCI indicator native rect, cached once for absolute y placement */
 static int    g_rci_nat_ok;
+static int    g_hudpos_pkr = 1, g_hudpos_q = 1, g_hudpos_bolsa = 1;   /* HUDPOS blocks (SC3RESIZE_HUDPOS_PKR / _Q / _BOLSA = 0 off) */
 static int    g_rcibars;      /* RCIBARS (sc3resize_rcibars.c): tentative, = 1 there; the RCI is 18 px wider */
 static void *rz_find_by_vt(void *w, DWORD wantvt, int depth, int *budget);
 static void rz_side_fit_surface(DWORD liveH);
@@ -2648,12 +2649,18 @@ static void rz_bar_children_right(void) {
                     g_barkid_nat[g_barkid_n][0] = e[0]; g_barkid_nat[g_barkid_n][1] = e[1];
                     g_barkid_nat[g_barkid_n][2] = e[2]; g_barkid_nat[g_barkid_n][3] = e[3];
                     nat = g_barkid_nat[g_barkid_n];
+                    logf("HUDPOS> bar kid %d native [%ld %ld %ld %ld]", g_barkid_n, e[0], e[1], e[2], e[3]);
                     g_barkid_n++;
                 }
-                if (nat && (e[0] != nat[0] + dx || e[1] != nat[1])) {
+                /* HUDPOS (owner 2026-11-02, "move the ? a little bit to the left"): the "?" (query) button is the 28..40 px
+                   square whose native x is 520..590 (it sat 0 px from the RCI after RCIBARS widened it). 8 px left. */
+                LONG qd = (g_hudpos_q && nat && nat[2] - nat[0] >= 28 && nat[2] - nat[0] <= 40 && nat[3] - nat[1] >= 28 &&
+                           nat[3] - nat[1] <= 40 && nat[0] >= 520 && nat[0] <= 590) ? -8 : 0;
+                if (nat && (e[0] != nat[0] + dx + qd || e[1] != nat[1])) {
                     DWORD a[4];
-                    a[0] = (DWORD)(nat[0] + dx); a[1] = (DWORD)nat[1];
-                    a[2] = (DWORD)(nat[2] + dx); a[3] = (DWORD)nat[3];
+                    if (qd) logf("HUDPOS> '?' button native [%ld %ld %ld %ld] -> x %ld", nat[0], nat[1], nat[2], nat[3], nat[0] + dx + qd);
+                    a[0] = (DWORD)(nat[0] + dx + qd); a[1] = (DWORD)nat[1];
+                    a[2] = (DWORD)(nat[2] + dx + qd); a[3] = (DWORD)nat[3];
                     rz_thiscall(c, (void *)cvt[0xc8 / 4], a, 4);
                     moved++;
                 }
@@ -15143,6 +15150,35 @@ static int pkr_from_minus(const WORD *sv, LONG sp, WORD keyc, DWORD code, BYTE *
         BYTE *bar = rgb[11][f * 26 + 12], *face = rgb[9][f * 26 + 12];
         if (face[0] + face[1] + face[2] - bar[0] - bar[1] - bar[2] < 120) { logf("PICKER> minus art frame %ld: no bar where expected", f); return 0; }
     }
+    /* HUDPOS (owner 2026-11-02, "the picker button background looks weird"): the minus art's outer ring is the soft shadow
+       baked against the LIGHT top of the panel (blue pixels such as 90a0f8, b - r >= 64). Shrunk into the darker bottom-left
+       corner it shows as a light octagon around the button, which the undo / rotate buttons do not have. The ring is found
+       by flood fill from each frame's border through those blue pixels and made transparent; the dark shadow and the rim
+       stay. SC3RESIZE_HUDPOS_PKR=0: off. */
+    if (g_hudpos_pkr)
+        for (f = 0; f < 4; f++) {
+            static short stk[26 * 29 + 8][2];
+            LONG ox = f * 26, sp2 = 0;
+            for (y = 0; y < 29; y++)
+                for (x = 0; x < 26; x++)
+                    if ((x == 0 || y == 0 || x == 25 || y == 28) && sp2 < 26 * 29) { stk[sp2][0] = (short)x; stk[sp2][1] = (short)y; sp2++; }
+            while (sp2 > 0) {
+                LONG cx = stk[--sp2][0], cy = stk[sp2][1], d;
+                BYTE *p = rgb[cy][ox + cx];
+                static const int dxy[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+                int halo = (int)p[2] - (int)p[0] >= 64 && p[2] >= 0xb0;
+                if (!(p[0] == 255 && p[1] == 0 && p[2] == 255) && !halo) continue;
+                if (!(p[0] == 255 && p[1] == 0 && p[2] == 255)) { p[0] = 255; p[1] = 0; p[2] = 255; }
+                for (d = 0; d < 4; d++) {
+                    LONG nx = cx + dxy[d][0], ny = cy + dxy[d][1];
+                    BYTE *q;
+                    if (nx < 0 || ny < 0 || nx > 25 || ny > 28) continue;
+                    q = rgb[ny][ox + nx];
+                    if (q[0] == 255 && q[1] == 0 && q[2] == 255) continue;      /* already transparent: done */
+                    if ((int)q[2] - (int)q[0] >= 64 && q[2] >= 0xb0 && sp2 < 26 * 29) { stk[sp2][0] = (short)nx; stk[sp2][1] = (short)ny; sp2++; }
+                }
+            }
+        }
     for (f = 0; f < 4; f++) {
         BYTE ink[3];
         LONG ox = f * 26;
@@ -18653,6 +18689,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_GRAPHNEW_LOG", v, sizeof(v))) g_gn_log = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_RCIBARS", v, sizeof(v))) g_rcibars = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_RCIBARS_LOG", v, sizeof(v))) g_rcb_log = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_HUDPOS_PKR", v, sizeof(v))) g_hudpos_pkr = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_HUDPOS_Q", v, sizeof(v))) g_hudpos_q = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_HUDPOS_BOLSA", v, sizeof(v))) g_hudpos_bolsa = atoi(v);
           {   char bp[MAX_PATH]; ho_ini_path(bp, sizeof(bp));   /* mods page: [buildings], then the env overrides */
               g_relocate = GetPrivateProfileIntA("buildings", "mover", 1, bp) ? 1 : 0;
               g_plopover = GetPrivateProfileIntA("buildings", "plopover", 1, bp) ? 1 : 0; }
