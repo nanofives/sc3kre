@@ -2060,6 +2060,20 @@ fires on a city load, which is cheaper and more conclusive than any amount of st
 
 ---
 
+### 22d. Resolved 2026-11-02 for `cISC3City` (not DirtBag): slot 5 is the load entry
+
+The callers settle the city's `Init` triple, and the §19c table above has the wrong load entry:
+
+| slot | RVA | form | caller evidence |
+|---:|---|---|---|
+| 5 | `0x1000351e` | `Init(cIGZDBSegment*)` | SIMINIT `0x10008bf8` (city file load) builds the object with `GZIID_cIGZDBSegment` `0xc019963e` and calls city `+0x14` for `.sc3/.sct/.st3/.snr` |
+| 6 | `0x10003178` | `Init(cISC2Importer*)` | same loader, `.sc2` branch (IFF `FORM`/`SCDH`), importer object to city `+0x18`; agrees with 22b |
+| 7 | `0x10003b8b` | `Init(cISC3NewCityInfo&)` | SIMINIT `0x1000bd2b` = `cSC3CmdNewCity::DoGameNew` (Linux symbol, identical body) calls city `+0x1c`; the body reads 12 getters `+0x44..+0x74` |
+
+A full reversal of the header order, same as the other overload groups. `GRAPH_SERIES.md` already measured that a
+detour on `0x10003b8b` never fires on a load. Instrument `0x1000351e` for the T1 load trace. Details:
+`LAND_VALUE.md` section 7.
+
 ## 23. CityView / CityViewIso share a vtable — checked, and that is correct
 
 §18b listed `cISC3CityView` and `cISC3CityViewIso` both resolving to `SIMSPR.DLL` `0x10063390`, which reads

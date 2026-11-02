@@ -120,10 +120,18 @@ PostOffice 13008, HistoricBuilding 14160, Church 14910, Arcology 1001, Dam 12510
 
 ## 7. Open
 
-- `PostCityInit` modes: 1 = after a save file loads (SIMINIT `sc3_city_import_savefile` `0x10008bf8`, second
-  argument = file type 1..6, third = path); 2 = after a SimCity 2000 import (SIMINIT `0x1000bd2b`: city
-  `Init(cISC2Importer*)` then `PostCityInit(2, 7, 0)`), which sets edit mode 2 and does not start the simulation.
-  No literal-mode call was found for a brand-new city (`Init(cISC3NewCityInfo&)`); that path is still open.
+- `PostCityInit(mode, kind, path)` modes (corrected 2026-11-02, an earlier version of this line called mode 2 an
+  SC2000 import):
+  - **1 = the city came from a file.** SIMINIT `sc3_city_import_savefile` `0x10008bf8`; kind = the city
+    definition's `GetFileType` (`0x10003d77`): 1 `.sc2` (IFF `FORM`/`SCDH`), 2 SCX (stub, never), 3 any name ending
+    in `3` (`.sc3`), 4 `.SCT` (Cities/Terrains), 5 `.ST3` (starter towns), 6 `.snr` (scenarios). Types 3-6 go
+    through city slot 5 `Init(cIGZDBSegment*)`, `.sc2` through slot 6 `Init(cISC2Importer*)`. All of them start
+    the simulation.
+  - **2 = brand-new city.** SIMINIT `0x1000bd2b` = `cSC3CmdNewCity::DoGameNew` (body matches the Linux symbol:
+    `0xe` guard, `PostCityInit(2, 7, 0)`), after city slot 7 `Init(cISC3NewCityInfo&)`. Edit mode 2, no
+    `StartCitySimulation` at that point. What starts the simulation later for a new city was not traced.
+  - Side result: the tracker had the city `Init` overloads at slot 6 = DBSegment and slot 7 = importer (C3). The
+    call sites above show 5 = DBSegment, 6 = importer, 7 = NewCityInfo (full reversal of the header); corrected.
 - Closed 2026-11-02: `IsAncestor` body read (section 3); pollution routine `0x1000a032` read (section 8); caller
   chain of `0x1001d25c` traced (below).
 
@@ -185,8 +193,14 @@ recycling, SIMUTIL `0x100017ae` for water treatment). It returns true when the o
   water value is clamped to `MaxLifespan/2` if it exceeds `MaxLifespan`).
 
 So the counts are **facilities at or past their decline age** (about 64-68 years old), not working facilities.
-Waste-to-Energy shares the incinerator QI and count; its own `[WasteToEnergyPowerPlant] DeclineAge=672` sits in
-`SC3PowerLayer.ini`. Which class implements it, and so which DeclineAge it uses, was not checked.
+Waste-to-Energy shares the incinerator QI and count, but it is a different class: a SIMUTIL power plant
+(`sc3_powerplant_wastetoenergy_ctor` `0x10009f0e`). Its `0x345777a` query returns `object+0x54` (vtable
+`0x100221b8`), whose slots 6/7/8 thunk to the power-plant base: `sc3_powerplant_get_decline_age` (`+0x20`),
+`sc3_powerplant_get_age_months`, `sc3_powerplant_check_ready` (same standing-and-past-decline test). The decline
+age is per plant: `sc3_powerplant_set_lifespan` multiplies `[WasteToEnergyPowerPlant]` `MaxLifeSpan=840` and
+`DeclineAge=672` by one random factor in `[1-p, 1+p]`, `p = PercentageVariationInLongevity/100 = 0.15`
+(SIMUTIL RNG `0x1001705c`: seed `0x12345678`, `state *= 0x278dde6d`). So a Waste-to-Energy plant starts counting
+somewhere between 571 and 773 months, against a fixed 768 for incinerators `[CONFIRMED @ SIMUTIL 0x10006ba6]`.
 
 Readings from the resolved tables (workbook "All effects by building"):
 - Police Station 13130 has **no crime row**. Police act on crime through coverage (`SC3Police.ini`), not this table.
