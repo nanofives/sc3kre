@@ -31,8 +31,10 @@
  * A caption label over the map names the extra layer on show (SC3DATAVIEW_CAPTION=0: none).
  * H: the Cuadros page fill SIMUI 0x100245c7 is detoured; on tabs Educacion / Salud a column of labels shows students vs
  * places, patients vs capacity, staff and strikes from the residential layer (block below; SC3DATAVIEW_HNUM=0: none).
+ * TRANSIT (child transitmap 2026-11-02): an 11th Ver datos panel under Mapa de zonas, "Mapa de transporte publico",
+ * per origin cell the share of trips with no bus / rail / subway (block below; SC3DATAVIEW_TRANSIT=0 / transit=0: none).
  * Off: SC3DATAVIEW=0 (nothing patched). dataview.ini beside the DLL: [dataview] key=86 (VK), pollution=1, traffic=1,
- * measure=1. Log sc3dataview.log beside the DLL (SC3DATAVIEW_LOG overrides). Saves are never touched.
+ * measure=1, transit=1. Log sc3dataview.log beside the DLL (SC3DATAVIEW_LOG overrides). Saves are never touched.
  */
 
 #include <windows.h>
@@ -74,7 +76,7 @@ static void self_path(char *out, int cap, const char *leaf) {
 
 /* ============================================================ config */
 
-static int g_key = 'V', g_pollution = 1, g_traffic = 1, g_measure = 1, g_caption = 1, g_hnum = 1;
+static int g_key = 'V', g_pollution = 1, g_traffic = 1, g_measure = 1, g_caption = 1, g_hnum = 1, g_transit = 1;
 
 static int env_int(const char *name, int *out) {
     char v[16];
@@ -91,12 +93,14 @@ static void ini_read(void) {
         WritePrivateProfileStringA("dataview", "pollution", "1", p);
         WritePrivateProfileStringA("dataview", "traffic", "1", p);
         WritePrivateProfileStringA("dataview", "measure", "1", p);
+        WritePrivateProfileStringA("dataview", "transit", "1", p);
     }
     if (p[0]) {
         g_key = GetPrivateProfileIntA("dataview", "key", 'V', p);
         g_pollution = GetPrivateProfileIntA("dataview", "pollution", 1, p) ? 1 : 0;
         g_traffic = GetPrivateProfileIntA("dataview", "traffic", 1, p) ? 1 : 0;
         g_measure = GetPrivateProfileIntA("dataview", "measure", 1, p) ? 1 : 0;
+        g_transit = GetPrivateProfileIntA("dataview", "transit", 1, p) ? 1 : 0;
     }
     env_int("SC3DATAVIEW_KEY", &g_key);
     env_int("SC3DATAVIEW_POLLUTION", &g_pollution);
@@ -104,6 +108,7 @@ static void ini_read(void) {
     env_int("SC3DATAVIEW_MEASURE", &g_measure);
     env_int("SC3DATAVIEW_CAPTION", &g_caption);
     env_int("SC3DATAVIEW_HNUM", &g_hnum);
+    env_int("SC3DATAVIEW_TRANSIT", &g_transit);
 }
 
 /* ============================================================ game calls */
@@ -193,6 +198,7 @@ static int text_focus(void) {
 #define ID_ROAD    0x2741
 #define ID_HWY     0x2742
 #define ID_SUB     0x2743
+#define ID_TRANSIT 0x2750   /* Mapa de transporte publico (block TRANSIT below); no stock layer uses 0x2744..0x27ff in SIMUI */
 
 #define ECO_BASE_VT   0x1cca4    /* SIMECO layer base vtable */
 #define ECO_BASE_CTOR 0x1853b    /* __fastcall(obj) */
@@ -211,6 +217,8 @@ static int   g_vt_ready;
 static void *g_orig_add;
 static DWORD g_col_ok, g_col_fail;
 static int   g_col_ready;
+typedef DWORD (__cdecl *TCELLFN)(int, int);
+static TCELLFN g_tcell;      /* sc3resize TRIPCELLS: packed trips (low 16) / transit trips (high 16) per origin cell */
 
 typedef WORD (__stdcall *RGBFN)(DWORD, DWORD, DWORD);
 
@@ -243,6 +251,18 @@ static char __fastcall dv_cell(BYTE *self, void *edx, int x, int z, DWORD *out) 
     (void)edx;
     if (!tl || x < 0 || z < 0 || x >= *(int *)(self + 0x10) || z >= *(int *)(self + 0x14)) return 0;
     __try {
+        if (id == ID_TRANSIT) {   /* share of the cell's trips that used no bus / rail / subway, stock traffic palette */
+            DWORD v = g_tcell ? g_tcell(x, z) : 0, n = v & 0xffff, t = v >> 16;
+            void *pal;
+            int np;
+            if (!n) return 0;
+            if (t > n) t = n;
+            pal = (void *)vc(self, 0x1c, 0, 0, 0, 0, 0);
+            if (!pal) return 0;
+            np = (int)vc(pal, 0x14, 0, 0, 0, 0, 0);
+            if (np < 1) return 0;
+            return (char)vc(pal, 0x1c, 2, (DWORD)(((np - 1) * (n - t) * 2 + n) / (2 * n)), (DWORD)out, 0, 0);
+        }
         if (id == ID_TRIPS) {
             int r = trip_at(tl, x, z);
             if (r == 2) return 0;
@@ -341,11 +361,12 @@ static void ui_label(void *win, DWORD id, const char *text, WORD col, int x, int
 
 #define P_POLL 0
 #define P_TRAF 1
+#define P_TRANS 2   /* our own panel: one layer, always shown, no V cycle */
 typedef struct { BYTE *iface; BYTE *obj; DWORD id; int panel, ours; } Ent;
 #define MAXE 96
 static Ent g_ent[MAXE];
 static int g_ne;
-static int g_mode[2];                 /* index into the panel's list, 0 = stock */
+static int g_mode[3];                 /* index into the panel's list, 0 = stock */
 static const DWORD k_poll[] = { 0, ID_B };
 static const DWORD k_traf[] = { 0, ID_TRIPS, ID_ROAD, ID_HWY, ID_SUB };
 static const char *k_name_poll[] = { "stock", "0x2735 (built by SIMECO, never shown)" };
@@ -395,7 +416,9 @@ static int view_visible(BYTE *iface) {
 static void set_shown(BYTE *iface, DWORD id, int on) { vc(iface, on ? 0x84 : 0x8c, 1, id, 0, 0, 0); }
 
 static void apply_entry(Ent *e) {
-    DWORD want = e->panel == P_POLL ? k_poll[g_mode[P_POLL]] : k_traf[g_mode[P_TRAF]];
+    DWORD want;
+    if (e->panel == P_TRANS) { set_shown(e->iface, e->id, 1); return; }
+    want = e->panel == P_POLL ? k_poll[g_mode[P_POLL]] : k_traf[g_mode[P_TRAF]];
     set_shown(e->iface, e->id, want == e->id);
 }
 
@@ -522,6 +545,266 @@ static BYTE __fastcall dv_add(BYTE *iface, void *edx, BYTE *inner) {
     return r;
 }
 
+/* ============================================================ TRANSIT: "Mapa de transporte publico" (child transitmap 2026-11-02)
+ * Owner: "add world map section below mapa de zonas to show places where people are not using public transit".
+ * PLACE [CONFIRMED @ SIMUI]. The Ver datos dialog init FUN_10044257 calls FUN_10044430 (call at 0x1004436b), which
+ * builds the ten map panels with their factories and adds each with FUN_1004458c(dialog, panel, slot): panel vt+0xc
+ * Init(dialog, dialog+0x30, &{4, slot*0x1c+4}) and the panel joins the list dialog+0x78. Slots 0..9 are the maps
+ * (9 = Mapa de zonas), Cuadros is 12 and Graficas 13, so slot 10, right under Mapa de zonas, is empty. The panel's icon
+ * button takes the panel id (+0x60, vt+0x2c SetId, button made by vt+0x48 from vt+0x44(group, image)), a click switches
+ * panels by that id (dialog vt+0x38, FUN_10044aa6: old vt+0x18, new vt+0x1c, dialog title = new vt+0x38 = +0x20 string).
+ * Ids in use: 0x5fa..0x603 maps, 0x604 Cuadros (FUN_1001f286), 0x605 Graficas (FUN_1002f8fd). Ours is 0x606.
+ * WHAT WE ADD. The call at 0x1004436b goes to tp_panels: FUN_10044430, then one more panel at slot 10, an instance of
+ * the traffic panel class (factory FUN_1004ac53, ctor FUN_1004ac88, vtable 0x100a8bd8, 0x26 slots) given a copy of its
+ * vtable with three slots ours:
+ *   +0x0c Init = the traffic Init FUN_1004acf9 step for step, with our id, title, icon and legend, and our layer in
+ *         place of 0x2715: SetId; SetTitle vt+0x3c (gzstring); icon vt+0x44(0x5e5, 0x14) = the unused train strip of
+ *         Apps\Res\UI\Shared\000005E5_Maps.ixf (104x26, 4 states, as the other icons); base init FUN_10045d40;
+ *         palettes FUN_10046c07(0x830fa4d9 terrain, 0xa30e2116 traffic); legend box FUN_10046a6e + gradient
+ *         FUN_10046e6c(0xa30e2116); legend labels FUN_10047524(slot 0 of 4 / slot 3 of 4); layers via the view's AddLayer:
+ *         0x2711 terrain with palette 0x830fa4d9, then 0x2750 (ours) with the traffic palette.
+ *   +0x1c Activate: stock, then the caption over the map (what red means, last month's citywide transit share).
+ *   +0x8c FUN_1004773c maps the panel id to a city view mode with a switch over 0x5fa..0x603 and leaves the mode
+ *         uninitialised for any other id: ours runs it as the traffic panel (0x602).
+ * Layer 0x2750: per cell, the share of the trips starting there that used no bus, rail or subway, as the traffic
+ * palette index (light = all used transit, dark red = none did); no trips = not drawn. Data: sc3resize TRIPCELLS
+ * (sc3resize_vdbars.c), this month + last month. Without it the map is empty and the caption says so. */
+#define TP_ID       0x606
+#define TP_SLOT     10
+#define TP_ICON     0x14
+#define TP_NSLOTS   0x26
+#define SUI_PANELS      0x44430    /* FUN_10044430 */
+#define SUI_PANELS_CALL 0x4436b    /* call FUN_10044430 in FUN_10044257 */
+#define SUI_TRAF_NEW    0x4ac53
+#define SUI_TRAF_VT     0xa8bd8
+#define SUI_TRAF_INIT   0x4acf9
+#define SUI_PANEL_ADD   0x4458c
+#define SUI_BASEINIT    0x45d40
+#define SUI_PALETTE     0x46c07
+#define SUI_LEGBOX      0x46a6e
+#define SUI_LEGGRAD     0x46e6c
+#define SUI_LEGLABEL    0x47524
+#define SUI_ACTIVATE    0x4603f
+#define SUI_USEMAP      0x4773c
+#define TP_CAP_ID   0x0DA7A010
+
+typedef int (__cdecl *TINFOFN)(LONG *);
+typedef void (__cdecl *TBUILDFN)(void);
+static TINFOFN g_tinfo;
+static TBUILDFN g_tbuild;
+static DWORD g_tpvt[TP_NSLOTS];
+static int g_tp_es = 1, g_tp_n;
+
+static DWORD sui_this(DWORD rva, void *self, int n, DWORD a0, DWORD a1, DWORD a2, DWORD a3, DWORD a4) {
+    DWORD a[5];
+    a[0] = a0; a[1] = a1; a[2] = a2; a[3] = a3; a[4] = a4;
+    return thiscall_n(self, g_sui + rva, a, n);
+}
+
+static void tp_resolve(void) {
+    HMODULE rz = GetModuleHandleA("sc3resize.dll");
+    LONG in[8];
+    if (rz && !g_tinfo) {
+        g_tinfo = (TINFOFN)GetProcAddress(rz, "sc3resize_tripcells_info");
+        g_tcell = (TCELLFN)GetProcAddress(rz, "sc3resize_tripcell");
+        g_tbuild = (TBUILDFN)GetProcAddress(rz, "sc3resize_tripcells_build");
+    }
+    memset(in, 0, sizeof(in));
+    if (g_tinfo) { g_tinfo(in); g_tp_es = in[0] ? 1 : 0; }
+}
+
+static void tp_num(char *o, LONG v) {   /* 45.210 / 45,210 */
+    char t[16];
+    int n, i, k = 0;
+    if (v < 0) v = 0;
+    n = wsprintfA(t, "%ld", v);
+    for (i = 0; i < n; i++) {
+        if (i && (n - i) % 3 == 0) o[k++] = g_tp_es ? '.' : ',';
+        o[k++] = t[i];
+    }
+    o[k] = 0;
+}
+
+/* caption lines over the map (children of the panel window, local to it, right of the compass) */
+static void tp_caption(BYTE *panel) {
+    BYTE *iface = (BYTE *)vc(panel, 0x84, 0, 0, 0, 0, 0), *view, *par;
+    LONG in[8], l, t, n, tr;
+    char l1[96], l2[128], a[16];
+    int on;
+    WORD col;
+    if (!iface) return;
+    view = iface - 0xa4;
+    if (*(DWORD *)view != (DWORD)g_sui + SUI_VIEW_VT || !(par = *(BYTE **)(view + 0x3c))) return;
+    l = *(LONG *)(view + 0x80); t = *(LONG *)(view + 0x84);
+    memset(in, 0, sizeof(in));
+    on = g_tinfo ? g_tinfo(in) : 0;
+    g_tp_es = in[0] || !g_tinfo ? 1 : 0;
+    lstrcpyA(l1, g_tp_es ? "Rojo: viajes sin bus, tren ni metro" : "Red: trips with no bus, rail or subway");
+    if (!on) lstrcpyA(l2, g_tp_es ? "Sin datos de viajes (sc3resize TRIPCELLS apagado)" : "No trip data (sc3resize TRIPCELLS off)");
+    else {
+        int last = in[1] > 0;
+        n = last ? in[1] - in[3] : in[5];   /* trips that used a network */
+        tr = last ? in[2] : in[6];
+        if (n <= 0) lstrcpyA(l2, g_tp_es ? "Todav\xed" "a no hay viajes contados" : "No trips counted yet");
+        else {
+            long p10 = (long)(tr * 1000.0 / n + 0.5);
+            tp_num(a, n);
+            if (g_tp_es) wsprintfA(l2, "%s: %ld,%ld%% de %s viajes en transporte", last ? "Mes pasado" : "Este mes",
+                                   p10 / 10, p10 % 10, a);
+            else wsprintfA(l2, "%s: %ld.%ld%% of %s trips on transit", last ? "Last month" : "This month so far",
+                           p10 / 10, p10 % 10, a);
+        }
+    }
+    col = ui_col(0x20, 0x28, 0x70);   /* lines under 50 characters fit the 316 px */
+    ui_label(par, TP_CAP_ID, l1, col, l + 62, t + 4, 316, 14);
+    ui_label(par, TP_CAP_ID + 1, l2, col, l + 62, t + 19, 316, 14);
+    logf("TP> caption: %s | %s (counting %d, last month %ld trips, %ld transit, %ld no network, months %ld, this month %ld / %ld)",
+         l1, l2, on, in[1], in[2], in[3], in[4], in[5], in[6]);
+}
+
+/* the drawn grid (5 x 5 neighbourhood sums, x16 fixed point) against the traffic layer's trip bits */
+static void tp_measure(BYTE *obj) {
+    BYTE *tl = *(BYTE **)(obj + 0x40);
+    int W = *(int *)(obj + 0x10), H = *(int *)(obj + 0x14), x, z;
+    long cells = 0, none = 0, all = 0, tried = 0, sn = 0, st = 0;
+    if (!g_tcell || !tl || W <= 0 || H <= 0) return;
+    if ((long)W * H > 300000 && g_measure < 2) { logf("TP> measure skipped on %dx%d (SC3DATAVIEW_MEASURE=2 forces)", W, H); return; }
+    __try {
+        for (x = 0; x < W; x++) for (z = 0; z < H; z++) {
+            DWORD v = g_tcell(x, z), n = v & 0xffff, t = v >> 16;
+            if (!n) continue;
+            cells++; sn += n; st += t;
+            if (!t) none++;
+            if (t >= n) all++;
+            if (trip_at(tl, x, z) != 2) tried++;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { logf("TP> FAULT measuring"); return; }
+    logf("TP> %dx%d: %ld cells drawn (weight %ld, transit %ld): %ld no transit, %ld all transit; "
+         "%ld of them have the game's trip bit", W, H, cells, sn, st, none, all, tried);
+}
+
+static void add_transit(BYTE *iface, BYTE *traffic, void *pal) {
+    BYTE *tl = traffic ? *(BYTE **)(traffic + 0x40) : NULL, *o;
+    if (!tl || tl != *(BYTE **)(g_st + ST_LAYER)) { logf("TP> stock 0x2715 layer missing or not SimTransit's: no transit layer"); return; }
+    if (!vt_init() || !(o = pool_take())) { logf("TP> no layer object"); return; }
+    vc(o, 0x14, 1, ID_TRANSIT, 0, 0, 0);
+    vc(o, 0x28, 2, *(DWORD *)(traffic + 0x10), *(DWORD *)(traffic + 0x14), 0, 0);
+    if (pal) vc(o, 0x18, 1, (DWORD)pal, 0, 0, 0);
+    *(DWORD *)(o + 0x3c) = ID_TRANSIT;
+    *(BYTE **)(o + 0x40) = tl;
+    add_entry(iface, o, ID_TRANSIT, P_TRANS, 1);
+}
+
+/* panel vt+0xc Init(dialog, parent, &pos), thiscall ret 0xc: FUN_1004acf9 with our id, title, icon, legend, layer */
+static char __fastcall tp_init(BYTE *self, void *edx, BYTE *p1, BYTE *p2, void *p3) {
+    DWORD id = TP_ID;
+    BYTE s[0x20], *iface, *base, *tr;
+    char ok = 0;
+    (void)edx;
+    if ((BYTE)vc(self, 0x6c, 0, 0, 0, 0, 0)) return 0;
+    __try {
+        tp_resolve();
+        ok = (BYTE)vc(self, 0x2c, 1, (DWORD)&id, 0, 0, 0) != 0;
+        if (ok) {
+            ui_str(s, g_tp_es ? "Mapa de transporte p\xfa" "blico" : "Public transit map");
+            ok = (BYTE)vc(self, 0x3c, 1, (DWORD)s, 0, 0, 0) != 0;
+            ui_str_free(s);
+        }
+        if (ok) ok = (BYTE)vc(self, 0x44, 2, 0x5e5, TP_ICON, 0, 0) != 0;
+        if (ok) ok = (BYTE)sui_this(SUI_BASEINIT, self, 3, (DWORD)p1, (DWORD)p2, (DWORD)p3, 0, 0) != 0;
+        sui_this(SUI_PALETTE, self, 2, (DWORD)p1, 0x830fa4d9, 0, 0, 0);
+        sui_this(SUI_PALETTE, self, 2, (DWORD)p1, 0xa30e2116, 0, 0, 0);
+        if (ok) ok = (BYTE)sui_this(SUI_LEGBOX, self, 2, (DWORD)p2, 0, 0, 0, 0) != 0;
+        if (ok) ok = (BYTE)sui_this(SUI_LEGGRAD, self, 4, (DWORD)p1, (DWORD)p2, 0xa30e2116, 0, 0) != 0;
+        if (ok) {
+            ui_str(s, g_tp_es ? "Con transporte" : "Use transit");
+            sui_this(SUI_LEGLABEL, self, 5, (DWORD)p2, (DWORD)s, 0, 0, 4);
+            ui_str_free(s);
+            ui_str(s, g_tp_es ? "Sin transporte" : "No transit");
+            sui_this(SUI_LEGLABEL, self, 5, (DWORD)p2, (DWORD)s, 0, 3, 4);
+            ui_str_free(s);
+        }
+        iface = ok ? (BYTE *)vc(self, 0x84, 0, 0, 0, 0, 0) : NULL;
+        if (!iface) ok = 0;
+        if (ok && (base = (BYTE *)vc(p1, 0x58, 1, 0x2711, 0, 0, 0)) != NULL) {
+            ok = (BYTE)vc(base, 0x18, 1, vc(p1, 0x48, 1, 0x830fa4d9, 0, 0, 0), 0, 0, 0) != 0;
+            if (ok) ok = (BYTE)vc(iface, 0x98, 1, (DWORD)base, 0, 0, 0) != 0;
+        }
+        if (ok) {
+            tr = (BYTE *)vc(p1, 0x58, 1, ID_TRAFFIC, 0, 0, 0);
+            add_transit(iface, tr, (void *)vc(p1, 0x48, 1, 0xa30e2116, 0, 0, 0));
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { logf("TP> FAULT 0x%08lX in the panel init", GetExceptionCode()); ok = 0; }
+    logf("TP> panel 0x%08lX init %s (id 0x%x, slot %d, icon 0x%x, %s)", (DWORD)self, ok ? "ok" : "FAILED", TP_ID, TP_SLOT,
+         TP_ICON, g_tcell ? "TRIPCELLS found" : "no sc3resize TRIPCELLS");
+    return ok;
+}
+
+/* vt+0x1c, called when the panel is switched in */
+static void __fastcall tp_activate(BYTE *self) {
+    thiscall_n(self, g_sui + SUI_ACTIVATE, NULL, 0);
+    __try {
+        int i;
+        BYTE *iface = (BYTE *)vc(self, 0x84, 0, 0, 0, 0, 0);
+        tp_resolve();
+        if (g_tbuild) g_tbuild();   /* sc3resize rebuilds the drawn grid from this month + the history */
+        tp_caption(self);
+        for (i = 0; i < g_ne; i++)
+            if (g_ent[i].panel == P_TRANS && g_ent[i].iface == iface && ent_alive(&g_ent[i])) {
+                if (g_measure) tp_measure(g_ent[i].obj);
+                vc(iface, 0x84, 1, ID_TRANSIT, 0, 0, 0);   /* ShowLayer: also marks the view dirty, new data drawn */
+                break;
+            }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { logf("TP> FAULT 0x%08lX on activate", GetExceptionCode()); }
+}
+
+/* vt+0x8c FUN_1004773c (city view mode for the panel id): run as the traffic panel */
+static DWORD __fastcall tp_usemap(BYTE *self) {
+    DWORD keep = *(DWORD *)(self + 0x60), r;
+    *(DWORD *)(self + 0x60) = 0x602;
+    r = thiscall_n(self, g_sui + SUI_USEMAP, NULL, 0);
+    *(DWORD *)(self + 0x60) = keep;
+    return r;
+}
+
+/* replaces `call FUN_10044430` at SIMUI 0x1004436b (ecx = the dialog) */
+static char __fastcall tp_panels(BYTE *dlg) {
+    char r = (char)thiscall_n(dlg, g_sui + SUI_PANELS, NULL, 0);
+    BYTE *o;
+    DWORD a[2];
+    if (!r || !g_transit) return r;
+    __try {
+        o = ((BYTE *(__cdecl *)(void))(g_sui + SUI_TRAF_NEW))();
+        if (!o) { logf("TP> traffic panel factory returned NULL"); return r; }
+        *(DWORD **)o = g_tpvt;
+        a[0] = (DWORD)o; a[1] = TP_SLOT;
+        g_tp_n++;
+        logf("TP> dialog 0x%08lX: panel 0x%08lX added at slot %d: %d (dialog #%d)", (DWORD)dlg, (DWORD)o, TP_SLOT,
+             (BYTE)thiscall_n(dlg, g_sui + SUI_PANEL_ADD, a, 2), g_tp_n);
+    } __except (EXCEPTION_EXECUTE_HANDLER) { logf("TP> FAULT 0x%08lX adding the panel", GetExceptionCode()); }
+    return r;
+}
+
+static int tp_install(void) {
+    DWORD *src = (DWORD *)(g_sui + SUI_TRAF_VT), old;
+    BYTE *at = g_sui + SUI_PANELS_CALL;
+    static const BYTE k_call[5] = { 0xe8, 0xc0, 0x00, 0x00, 0x00 };
+    int i;
+    if (memcmp(at, k_call, 5) || src[0xc / 4] != (DWORD)g_sui + SUI_TRAF_INIT || src[0x1c / 4] != (DWORD)g_sui + SUI_ACTIVATE ||
+        src[0x8c / 4] != (DWORD)g_sui + SUI_USEMAP) {
+        logf("TP> REFUSED: SIMUI is not the anchored build (call at +0x%lx or traffic panel vtable differ)", SUI_PANELS_CALL);
+        return 0;
+    }
+    for (i = 0; i < TP_NSLOTS; i++) g_tpvt[i] = src[i];
+    g_tpvt[0xc / 4] = (DWORD)tp_init;
+    g_tpvt[0x1c / 4] = (DWORD)tp_activate;
+    g_tpvt[0x8c / 4] = (DWORD)tp_usemap;
+    if (!VirtualProtect(at, 5, PAGE_EXECUTE_READWRITE, &old)) return 0;   /* left writable: mod startup races */
+    *(DWORD *)(at + 1) = (DWORD)tp_panels - (DWORD)(at + 5);
+    FlushInstructionCache(GetCurrentProcess(), at, 5);
+    return 1;
+}
+
 /* ============================================================ measuring */
 
 static int zone_at(void *zl, int x, int z) { BYTE b = 0xff; vc(zl, 0x34, 3, (DWORD)x, (DWORD)z, (DWORD)&b, 0); return b; }
@@ -633,7 +916,7 @@ static int on_key(void) {
     int p, i;
     ent_sweep();
     p = visible_panel();
-    if (p < 0) return 0;
+    if (p < 0 || p == P_TRANS) return 0;
     if (p == P_POLL) g_mode[p] = (g_mode[p] + 1) % 2;
     else g_mode[p] = (g_mode[p] + 1) % 5;
     logf("KEY> panel %s -> %s", p == P_POLL ? "Contaminacion" : "Trafico",
@@ -812,6 +1095,7 @@ static DWORD WINAPI watcher(LPVOID unused) {
     logf("### AddLayer hooked (SIMUI+0x%lx +0x98), pollution=%d traffic=%d key=%d measure=%d", SUI_IFACE_VT, g_pollution,
          g_traffic, g_key, g_measure);
     if (g_hnum) logf("### Cuadros page numbers %s", hook_tabs() ? "hooked (SIMUI+0x245c7)" : "NOT hooked");
+    if (g_transit) logf("### Mapa de transporte publico %s", tp_install() ? "on (Ver datos slot 10, SIMUI+0x4436b)" : "NOT installed");
     Sleep(500);
     g_oldproc = (WNDPROC)GetWindowLongA(h, GWL_WNDPROC);
     {   WNDPROC prev = (WNDPROC)SetWindowLongA(h, GWL_WNDPROC, (LONG)dv_wndproc);
