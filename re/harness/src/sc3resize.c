@@ -2465,7 +2465,12 @@ static void rz_side_children_bottom(void) {
         }
         n = *(void **)n;
     }
-    if (moved && (dy > 0 || changed)) {   /* at dy 0, only when a restore actually changed something */
+    /* Only when something actually moved (2026-11-02). `moved` also counts items already in place,
+     * so the old `moved && (dy > 0 || changed)` fired on EVERY pass whenever the panel was pushed
+     * (dy > 0): the cluster poll runs this every 120 ms, so any window taller than ~600 invalidated
+     * the whole side panel and re-ran the cascade ~8x/s for nothing. Items the game re-creates come
+     * back at their native y, so they still count as `changed` and still get the cascade. */
+    if (moved && changed) {
         /* ⭐ INVALIDATE AFTER MOVING, or the cached composite keeps the old pixels.
          *
          * The window geometry was already provably right - a live dump with a submenu open showed
@@ -13151,6 +13156,15 @@ static void rz_hud_srcrect(DWORD liveW) {
         logf("SRCRECT> REFUSED: +0xd0 is not a positive rect [%ld %ld %ld %ld]",
              sr[0], sr[1], sr[2], sr[3]);
         return;
+    }
+    /* The clamp at the end caps the step at the sampled surface's width ([0x2a], the 600-px console,
+     * never widened), so widen-then-clamp was a silent no-op that logged a widening every 120 ms
+     * from the cluster poll (2026-11-02). Cap the target first; nothing to do -> return quietly. */
+    {   DWORD obj = ((DWORD *)g_hud_top)[0x2a];
+        if (obj && !IsBadReadPtr((void *)obj, 0x2c)) {
+            LONG sw = (LONG)((DWORD *)obj)[0x24 / 4];
+            if (sw > 0 && sr[2] - sr[0] >= sw && sw < (LONG)liveW) return;
+        }
     }
     if (sr[2] - sr[0] >= (LONG)liveW) {
         logf("SRCRECT> already wide: [%ld %ld %ld %ld] step=%ld >= %lu",
