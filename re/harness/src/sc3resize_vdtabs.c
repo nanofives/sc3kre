@@ -23,10 +23,13 @@
  * sit over a button [CONFIRMED @ GZWIND 0x1000a074]; here every shape is under its button anyway.
  * SC3RESIZE_VDTABS=0: none of this; the Graficas page keeps its radio row (graphtabs) and Cuadros its stock radios. */
 static int g_vdtabs = 1, g_vt_font = 0xf, g_vt_log;
+static int g_vt_cur = 0xf;       /* font of the strip being built: g_vt_font, or the Cuadros one (tabfont) */
+static void *g_vt_fac;           /* factory of the strip being built, for measuring */
 #define TB_MAX 8
 #define VT_R 9
 #define VT_GAP 2
 static int g_vt_round = 1;   /* SC3RESIZE_VDTABSROUND=0: the old trapezoid tabs */
+static int g_vt_small = 1, g_vt_small_id = 0x11;   /* SC3RESIZE_VDTABSSMALL=0: Cuadros tabs in font 0xf again; _VDTABSFONT=<id> */
 
 /* id layout of one strip: +1+i button, +0x10+i fill, +0x20+i left edge, +0x30+i right edge, +0x40+i bottom edge,
    +0x50 / +0x51 the two pieces of the rule */
@@ -131,7 +134,7 @@ static int vt_tab_btn(void *fac, void *win, DWORD id, const char *text) {
         ho_v(btn, 0x24, 2, 0x10, 1, 0, 0, 0);                      /* ... draws no bevel */
         ho_v(btn, 0x24, 2, 4, 1, 0, 0, 0);                         /* caption on */
         ho_v(btn, 0x24, 2, 0x80, 0, 0, 0, 0);                      /* caption does not move when pressed */
-        ho_v(btn, 0x60, 1, ho_v(fac, 0x14, 1, (DWORD)g_vt_font, 0, 0, 0, 0), 0, 0, 0, 0);
+        ho_v(btn, 0x60, 1, ho_v(fac, 0x14, 1, (DWORD)g_vt_cur, 0, 0, 0, 0), 0, 0, 0, 0);
         ho_v(btn, 0x64, 2, 0, g_vt_c_text, 0, 0, 0);
         ho_v(btn, 0x64, 2, 2, g_vt_c_hover, 0, 0, 0);
         ho_v(btn, 0x64, 2, 4, g_vt_c_text, 0, 0, 0);
@@ -150,9 +153,36 @@ static int vt_tab_btn(void *fac, void *win, DWORD id, const char *text) {
     return mw;
 }
 
+/* width of `t` in font `fid` from the font's own glyph table (cell `char` of the table at font+0x14, 0x14 bytes: left top right
+   bottom advance [CONFIRMED @ GZServiceD 0x10006e54], see HUD_SCALE.md); -1 when the table is not readable */
+static int vt_font_w(int fid, const char *t) {
+    BYTE *f, *tb;
+    int w = 0;
+    const unsigned char *c;
+    if (!g_vt_fac || !(f = (BYTE *)ho_v(g_vt_fac, 0x14, 1, (DWORD)fid, 0, 0, 0, 0)) || IsBadReadPtr(f, 0x18)) return -1;
+    tb = *(BYTE **)(f + 0x14);
+    if (!tb || IsBadReadPtr(tb, 0x14 * 256)) return -1;
+    for (c = (const unsigned char *)t; *c; c++) w += *(LONG *)(tb + 0x14 * *c + 0x10);
+    return w;
+}
+static void vt_font_probe(void) {
+    int id;
+    static const char *s[3] = { "Electricidad", "Ciudad", "H" };
+    for (id = 0; id < 0x30; id++) {
+        BYTE *f = g_vt_fac ? (BYTE *)ho_v(g_vt_fac, 0x14, 1, (DWORD)id, 0, 0, 0, 0) : NULL;
+        BYTE *tb;
+        if (!f || IsBadReadPtr(f, 0x18)) continue;
+        tb = *(BYTE **)(f + 0x14);
+        logf("VDTABS> font probe id 0x%02x obj 0x%08lX table %s: Electricidad %d, Ciudad %d, H adv %d cell h %d", id, (DWORD)f,
+             (tb && !IsBadReadPtr(tb, 0x14 * 256)) ? "ok" : "unreadable", vt_font_w(id, s[0]), vt_font_w(id, s[1]), vt_font_w(id, s[2]),
+             (tb && !IsBadReadPtr(tb, 0x14 * 256)) ? (int)(*(LONG *)(tb + 0x14 * 'H' + 12) - *(LONG *)(tb + 0x14 * 'H' + 4)) : -1);
+    }
+}
+
 /* caption width estimate (font 0xf): table in tenths of a pixel */
 static int vt_text_w(const char *t) {
     int w = 0;
+    if (g_vt_cur != 0xf) { int m = vt_font_w(g_vt_cur, t); if (m > 0) return m; }
     const unsigned char *c;
     for (c = (const unsigned char *)t; *c; c++) {
         unsigned char ch = *c;
@@ -266,6 +296,8 @@ static int tb_make(void *fac, void *win, TB *t, DWORD id0, const char **txt, int
     int k = 0;
     if (!fac || !win || n <= 0 || n > TB_MAX) return 0;
     vt_colours(fac);
+    g_vt_fac = fac;
+    if (g_vt_log) { static int pr; if (!pr) { pr = 1; vt_font_probe(); } }
     memset(t, 0, sizeof(*t));
     t->id0 = id0; t->win = win; t->n = n; t->sel = sel; t->x0 = x0; t->x1 = x1; t->y = y; t->h = h;
     for (i = 0; i < n; i++) { t->tx[i] = x0 + 4 + i * 40; t->tw[i] = 40; }
