@@ -1,0 +1,14 @@
+# Round 2026-11-02b: owner feedback on sc3mods-2026-11-02c
+Orchestrator: "SC3 graphs tabs + Vida util/restore/query UI round". Rules: re/sessions/CHILD_PROTOCOL.md. Workspaces from main be42ba9.
+Owner screenshots: MAIN\.happy-uploads\image-1793660447354.png .. -362.png (1 dead recycling center after restore, 2 Educacion
+library/museum bars, 3 RCI A/P, 4 picker button, 5 Vida util icon, 6 Vida util list, 7 airport query).
+Running in parallel: child modlang (moves every mod UI string into per-language tables). New strings: write them in the current
+inline `es ? "..." : "..."` style; modlang absorbs them at merge.
+
+| stream | owner report (2026-11-02) | expected |
+|---|---|---|
+| restorefix | "restored a power building (check mariano-pc latest run) and the building got destroyed" (shot 1: Centro de reciclaje (Muerta), Edad 355,419,668 anos); "i also want a feature to rebuild the same building that got destroyed in that place"; Vida util list: title must read "Vida Útil" in the game's title font (Comic Sans look); "<" ">" arrow buttons smaller, they overlap; the hourglass icon "looks weird" | cause with RVA + fix (birthdate write), rebuild-in-place for dead/destroyed buildings with lifespan (button in the "?" of the rubble + in the list), title, arrows, clearer hourglass |
+| vdcolors | Educacion library/museum bars: "color coding is not clear enough if i'm looking it's positive or not ... make sure things are red when they are in need"; RCI A/P "seems like airport and ports can't go negative ... A and P should be at the bottom and the bar should go all the way to the top of the current RCI bar" | every Cuadros bar red when demand > supply (and a legend), A/P letters at the bottom row with the R C I letters, bars use the full RCI height upward from the baseline |
+| transitmap | "add world map section below mapa de zonas to show places where people are not using public transit" | a Ver datos map layer under Mapa de zonas: per-cell share of trips that use no bus/rail/subway, from the trip data (cite RVAs) |
+| hudpos | "move the 'Visitar Bolsa de SimCity' icon near the minimap, move the '?' a little bit to the left"; picker button background "looks weird" (shot 4) | HUD buttons re-placed, picker button with a clean background like its neighbours |
+| placehints | airport query says "Trafico aereo: Escaso" with airport demand, same with ports: why (cite RVAs); "for parks and other plopabble buildings show the impact it has in nearby zones"; "when placing airports and ports display the extents of how much will it plop, avoid placing things that won't have buildings, same with the limits of RCI" | explanation first (message the orchestrator), then placement overlays: port/airport zone preview of what can develop (power/water/transport within 6, pier water run, runway rect rules), plop preview of land value / effect radius, RCI ceiling hint |

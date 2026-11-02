@@ -2569,6 +2569,37 @@ static void rz_side_children_bottom(void) {
 }
 
 
+/* HUDPOS (owner 2026-11-02): with the "?" 8 px left, the bar's console art [0x2a] (600x56) shows a 2 px dark separator at
+   x 579..580 that the "?" shadow used to hide. Those two columns get the plain panel colour c8d0f8 (RGB565 0xCE9F; art column 581 is dark too, the RCI hides it), under a
+   balanced lock of the surface, once per surface (the sub-object and its DD surface pointer are remembered).
+   SC3RESIZE_HUDPOS_Q=0 leaves the art alone. */
+static void hudpos_art_patch(void) {
+    DWORD obj, sub, *svt, want, lk, nbits, npitch, r, dd;
+    static DWORD done_sub, done_dd;
+    HMODULE gz = GetModuleHandleA("GZGraphicD.dll");
+    if (!g_hudpos_q || !g_hud_top || IsBadReadPtr(g_hud_top, 0xc0) || !gz) return;
+    obj = ((DWORD *)g_hud_top)[0x2a];
+    if (!obj || IsBadReadPtr((void *)obj, 0x48)) return;
+    if (((DWORD *)obj)[0x24 / 4] != 600 || ((DWORD *)obj)[0x28 / 4] < 56) return;
+    sub = ((DWORD *)obj)[0x44 / 4];
+    if (!sub || IsBadReadPtr((void *)sub, 0xf8)) return;
+    svt = *(DWORD **)sub; want = (DWORD)gz + GZ_RVA_VT_SURFACE;
+    if ((DWORD)svt != want) return;
+    dd = ((DWORD *)sub)[0x04 / 4];
+    if (sub == done_sub && dd == done_dd) return;
+    lk = rz_thiscall((void *)sub, (void *)svt[0x0c / 4], NULL, 0);
+    nbits = ((DWORD *)sub)[0xf0 / 4]; npitch = ((DWORD *)sub)[0xf4 / 4];
+    if ((lk & 0xff) && nbits && npitch && !IsBadWritePtr((void *)nbits, npitch * 56)) {
+        for (r = 8; r < 56; r++) {
+            WORD *row = (WORD *)((BYTE *)nbits + r * npitch);
+            row[579] = row[580] = 0xCE9F;   /* RGB565 of c8d0f8, the plain panel colour of this bar */
+        }
+        done_sub = sub; done_dd = dd;
+        logf("HUDPOS> console art columns 579..580 repainted with the panel colour (surface 0x%08lX)", dd);
+    }
+    if (lk & 0xff) rz_thiscall((void *)sub, (void *)svt[0x10 / 4], NULL, 0);
+}
+
 /* ⭐ BAR CONTENTS — slide the controls to the right end, beside the minimap.
  *
  * The bar docks and spans the full client width, but its children keep their NATIVE offsets, so the
@@ -2784,6 +2815,7 @@ static void rz_bar_children_right(void) {
         }
     }
 
+    hudpos_art_patch();
     if (moved) {
         DWORD *bvt = *(DWORD **)bar;
         if (bvt && !IsBadReadPtr(bvt, 0x158) && bvt[0x154 / 4])
