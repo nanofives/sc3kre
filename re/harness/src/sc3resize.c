@@ -8792,6 +8792,7 @@ static int g_modspage = 1;
 #define MP_FPS_LBL  0x02F95B72
 #define MP_PUSH     0x02F95B73   /* [edge] push, "push the camera when building at the edge" */
 #define MP_AS_M60   0x02F95B74
+#define MP_LANG_BTN 0x02F95B75   /* LANGSEL: "Idioma: <name>", each click picks the next installed language */
 #define MP_MAXKIDS  96
 /* RELOCATE / PLOPOVER switches (block below). The hooks are installed unless the env turns BOTH off, and only the
  * behaviour gates on these two flags, so the mods page can flip them at any time. sc3resize.ini [buildings] mover= /
@@ -8808,7 +8809,7 @@ static int   g_mp_page;                      /* 0 = the game's page, 1 = mods */
 static int   g_mp_as_on, g_mp_as_min, g_mp_as_ind, g_mp_simrun, g_mp_undo, g_mp_undobtn, g_mp_ovs_pct, g_mp_edge;
 
 static const DWORD k_mp_page_ids[] = { MP_BTN_BACK, MP_TITLE, MP_H_UI, MP_H_PERF, MP_H_AS, MP_H_OTHER, MP_AS_ON, MP_AS_IND,
-    MP_AS_GRP, MP_AS_LBL, MP_H_BLD, MP_BLD_MOVE, MP_BLD_OVER, MP_AS_UNAUTO, MP_SIMRUN, MP_UNDO, MP_UNDOBTN, MP_EDGE, MP_OVS_SL, MP_OVS_LBL, MP_FPS_GRP, MP_FPS_LBL, MP_PUSH, MP_AS_M60, CS_HDR,
+    MP_AS_GRP, MP_AS_LBL, MP_H_BLD, MP_BLD_MOVE, MP_BLD_OVER, MP_AS_UNAUTO, MP_SIMRUN, MP_UNDO, MP_UNDOBTN, MP_EDGE, MP_OVS_SL, MP_OVS_LBL, MP_FPS_GRP, MP_FPS_LBL, MP_PUSH, MP_AS_M60, MP_LANG_BTN, CS_HDR,
     MP_PANEL, HO_LABEL, HO_GROUP, HO_SMOOTH, PP_FPS, PP_BUSY, CZ_BOX, CS_ARROW_LBL, CS_ARROW, CS_DRAG_LBL, CS_DRAG };
 #define MP_NPAGE (sizeof(k_mp_page_ids) / sizeof(k_mp_page_ids[0]))
 
@@ -8920,6 +8921,162 @@ static int mp_btn_y(void *win, int h) {
     return y;
 }
 
+/* ===== LANGSEL (2026-11-02): pick the game's text language on the mods page, applied at the next start. =====
+ *
+ * How the game picks it [CONFIRMED @ 0x0040586a]: app init reads "HKEY_LOCAL_MACHINE\Software\Electronic Arts\Maxis\
+ * SimCity 3000 Unlimited\Language" (string 0x004f4dac) through FUN_00406c06 (cdecl (string object, int *out) -> char,
+ * a DWORD or all-digit string as int). A value below 0x2c is the game's own language number and goes straight to the
+ * locale object's vt+0x78; a larger one is a Windows LCID mapped through vt+0x1c. Missing: the "Default Locale" path.
+ * GZServiceD turns the number into the Res\Text folder name [CONFIRMED @ GZServiceD 0x1000b450]: 1 English,
+ * 2 English-UK, 3 French, 4 German, 5 Italian, 6 Spanish, 7 Dutch, 8 Danish, 9 Swedish ... GOG's language_setup.exe only
+ * writes that HKLM value, which needs admin, and the game is not registry-virtualized (a VirtualStore value is not seen,
+ * measured 2026-11-02 under Frida: RegOpenKeyExA ret 2).
+ *
+ * So no registry: FUN_00406c06 is hooked (5-byte jmp over its `mov eax, imm32`, trampoline runs it and jumps back to
+ * +5, the DIRTGUARD recipe) and answers the Language read with the folder picked here, sc3resize.ini [language]
+ * folder=<Res\Text folder>; empty or missing = the game decides as stock. Folders are labelled by what they contain
+ * (the "Load City" menu string in SC3StringsMenu.IXF), not by their name: the dev install's ENGLISH folder holds
+ * Spanish text. SC3RESIZE_LANGSEL=0 turns the hook and the button off. */
+static const struct { const char *folder; int id; } k_lang_ids[] = {
+    { "English", 1 }, { "English-UK", 2 }, { "French", 3 }, { "German", 4 }, { "Italian", 5 }, { "Spanish", 6 },
+    { "Dutch", 7 }, { "Danish", 8 }, { "Swedish", 9 }, { "Norwegian", 10 }, { "Finnish", 11 }, { "Hebrew", 12 },
+    { "Russian", 13 }, { "Portuguese", 14 }, { "Japanese", 15 }, { "Polish", 16 } };
+/* "Load City" in each language's SC3StringsMenu.IXF (read from the shipped folders 2026-11-02); NULL name = English,
+ * labelled by folder (US / UK). German before Dutch: "Stad laden" is not inside "Stadt laden", but keep the order safe. */
+static const struct { const char *marker; const char *name; } k_lang_marks[] = {
+    { "Cargar Ciudad", "Espa\xf1ol" }, { "Charger une ville", "Fran\xe7" "ais" }, { "Stadt laden", "Deutsch" },
+    { "Carica Citt", "Italiano" }, { "Stad laden", "Nederlands" }, { "Ladda stad", "Svenska" }, { "Load City", NULL } };
+#define LANG_MAX 16
+static int  g_langsel = 1;
+static int  g_lang_n;                           /* installed language folders found */
+static char g_lang_folder[LANG_MAX][32];        /* real folder name on disk */
+static char g_lang_label[LANG_MAX][32];         /* what the button shows */
+static int  g_lang_gid[LANG_MAX];               /* the game's language number */
+static int  g_lang_ini = -1;                    /* index in effect from the ini at this start, -1 = the game decides */
+static int  g_lang_pick = -1;                   /* index on the page, -1 = the game decides ("Auto") */
+static int  g_lang_page0 = -1;                  /* g_lang_pick when the page was built */
+static int  g_lang_over;                        /* number the hook returns, 0 = pass through */
+static BYTE *g_lang_tramp;
+
+static const char *lang_find(const BYTE *b, DWORD n, const char *m) {
+    DWORD k = (DWORD)lstrlenA(m), i;
+    for (i = 0; k && i + k <= n; i++) if (!memcmp(b + i, m, k)) return (const char *)b + i;
+    return NULL;
+}
+
+/* fill g_lang_* from <exe dir>\Res\Text\*: only folders the game can name (k_lang_ids) */
+static void lang_scan(void) {
+    char base[MAX_PATH], pat[MAX_PATH], *sl;
+    WIN32_FIND_DATAA fd;
+    HANDLE h;
+    if (!GetModuleFileNameA(NULL, base, sizeof(base))) return;
+    sl = strrchr(base, '\\'); if (!sl) return; sl[1] = 0;
+    lstrcatA(base, "Res\\Text\\");
+    _snprintf(pat, sizeof(pat), "%s*", base);
+    h = FindFirstFileA(pat, &fd);
+    if (h == INVALID_HANDLE_VALUE) { logf("LANGSEL> no %s", pat); return; }
+    do {
+        int i, id = 0;
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || fd.cFileName[0] == '.') continue;
+        for (i = 0; i < (int)(sizeof(k_lang_ids) / sizeof(k_lang_ids[0])); i++)
+            if (!lstrcmpiA(fd.cFileName, k_lang_ids[i].folder)) id = k_lang_ids[i].id;
+        if (!id || g_lang_n >= LANG_MAX) continue;
+        {   char mp[MAX_PATH];
+            DWORD len = 0;
+            BYTE *b;
+            const char *name = NULL;
+            int hit = 0;
+            _snprintf(mp, sizeof(mp), "%s%s\\SC3StringsMenu.IXF", base, fd.cFileName);   /* the file system ignores case */
+            b = rz_mb_readfile(mp, &len);
+            for (i = 0; b && !hit && i < (int)(sizeof(k_lang_marks) / sizeof(k_lang_marks[0])); i++)
+                if (lang_find(b, len, k_lang_marks[i].marker)) { hit = 1; name = k_lang_marks[i].name; }
+            free(b);   /* rz_mb_readfile mallocs */
+            if (!hit) continue;   /* no menu text: the game could not run in it either */
+            if (!name) name = id == 2 ? "English (UK)" : id == 1 ? "English (US)" : fd.cFileName;
+            lstrcpynA(g_lang_folder[g_lang_n], fd.cFileName, 32);
+            lstrcpynA(g_lang_label[g_lang_n], name, 32);
+            g_lang_gid[g_lang_n] = id;
+            logf("LANGSEL> Res\\Text\\%s = language %d, contains %s", fd.cFileName, id, name);
+            g_lang_n++;
+        }
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+}
+
+typedef char (__cdecl *LANG_REGINT)(DWORD, int *);
+static char __cdecl lang_regint(DWORD s, int *out) {
+    const char *b = NULL, *e = NULL;
+    char r;
+    int lang = 0;
+    if (s && !IsBadReadPtr((void *)s, 12)) {   /* string object: vtable, begin, end */
+        b = *(const char **)(s + 4); e = *(const char **)(s + 8);
+        lang = b && e > b + 9 && e - b < 512 && !IsBadReadPtr(b, (UINT_PTR)(e - b)) && !_strnicmp(e - 9, "\\Language", 9);
+    }
+    if (lang && g_lang_over > 0 && out && !IsBadWritePtr(out, 4)) {
+        *out = g_lang_over;
+        logf("LANGSEL> game asked for its language: answered %d (Res\\Text\\%s, %s) from sc3resize.ini", g_lang_over,
+             g_lang_folder[g_lang_ini], g_lang_label[g_lang_ini]);
+        return 1;
+    }
+    r = ((LANG_REGINT)(void *)g_lang_tramp)(s, out);
+    if (lang) {
+        if (r && out) logf("LANGSEL> game asked for its language: registry value %d (no choice saved, stock)", *out);
+        else logf("LANGSEL> game asked for its language: no registry value (no choice saved, stock)");
+    }
+    return r;
+}
+
+/* DllMain: read the choice, hook the read. The exe's code is identical in GOG 2.0.0.3 and 2.0.949 here. */
+static void lang_install(void) {
+    BYTE *f = (BYTE *)GetModuleHandleA(NULL) + 0x6c06;
+    char p[MAX_PATH], v[32];
+    DWORD old;
+    int i;
+    if (!g_langsel) { logf("LANGSEL> off (SC3RESIZE_LANGSEL=0)"); return; }
+    lang_scan();
+    ho_ini_path(p, sizeof(p));
+    GetPrivateProfileStringA("language", "folder", "", v, sizeof(v), p);
+    for (i = 0; v[0] && i < g_lang_n; i++) if (!lstrcmpiA(v, g_lang_folder[i])) g_lang_ini = i;
+    if (v[0] && g_lang_ini < 0) logf("LANGSEL> sc3resize.ini folder=%s is not installed: the game decides", v);
+    g_lang_pick = g_lang_ini;
+    if (g_lang_ini < 0) { logf("LANGSEL> no language saved: the game decides (stock)"); }
+    else g_lang_over = g_lang_gid[g_lang_ini];
+    /* b8 1c 10 4c 00   mov eax, 0x004c101c  (EH frame)   e8 <rel32 -> __EH_prolog> */
+    if (f[0] != 0xb8 || *(DWORD *)(f + 1) != 0x004c101c || f[5] != 0xe8) {
+        logf("LANGSEL> SC3U.exe+0x6c06 differs from GOG 2.0.0.3 / 2.0.949 - not installed"); g_lang_over = 0; return;
+    }
+    g_lang_tramp = (BYTE *)VirtualAlloc(NULL, 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!g_lang_tramp) return;
+    memcpy(g_lang_tramp, f, 5);
+    g_lang_tramp[5] = 0xE9; *(DWORD *)(g_lang_tramp + 6) = (DWORD)(f + 5) - (DWORD)(g_lang_tramp + 10);
+    if (!VirtualProtect(f, 5, PAGE_EXECUTE_READWRITE, &old)) return;
+    f[0] = 0xE9; *(DWORD *)(f + 1) = (DWORD)lang_regint - (DWORD)(f + 5);
+    FlushInstructionCache(GetCurrentProcess(), f, 5);   /* no restore (task onramp) */
+    logf("LANGSEL> hooked the game's Language read (SC3U.exe+0x6c06); %d language(s) installed, in effect: %s",
+         g_lang_n, g_lang_ini >= 0 ? g_lang_label[g_lang_ini] : "the game's own choice");
+}
+
+/* "Idioma: Espanol", plus "(al reiniciar)" once it differs from what this start runs */
+static void lang_caption(char *out, int cap, int es) {
+    const char *nm = g_lang_pick < 0 ? (es ? "Autom\xe1tico" : "Automatic") : g_lang_label[g_lang_pick];
+    _snprintf(out, cap, "%s: %s%s", es ? "Idioma" : "Language", nm,
+              g_lang_pick != g_lang_ini ? (es ? " (al reiniciar)" : " (on restart)") : "");
+    out[cap - 1] = 0;
+}
+
+static void lang_click(void *win) {
+    BYTE s[0x20];
+    char t[96];
+    void *c = mp_child(win, MP_LANG_BTN);
+    g_lang_pick = g_lang_pick + 1 >= g_lang_n ? -1 : g_lang_pick + 1;   /* Auto, then each installed language */
+    lang_caption(t, sizeof(t), ho_spanish());
+    if (c && !IsBadReadPtr(c, 0xa4)) {
+        ho_str(s, t); ho_v(c, 0x10c, 1, (DWORD)s, 0, 0, 0, 0); ho_str_free(s);
+        ho_v(c, 0x154, 0, 0, 0, 0, 0, 0);   /* invalidate */
+    }
+    logf("LANGSEL> page pick: %s", t);
+}
+
 /* the mods page, layout (Preferences is 480x472, local coords) */
 #define MP_X0 18
 #define MP_BX 6      /* the two buttons: left edge on the panel frames above (owner 2026-10-28) */
@@ -9024,6 +9181,12 @@ static void mp_build(void *win) {
             n += mp_checkbox(fac, win, MP_UNDOBTN, es ? "Botones de deshacer" : "Undo buttons", g_mp_undobtn, 330, 412, 140, col);
         }
         n += mp_button(fac, win, MP_BTN_BACK, es ? "Volver" : "Back", MP_BX, mp_btn_y(win, MP_BH), 110, MP_BH);
+        if (g_langsel && g_lang_n > 1) {   /* LANGSEL: between Volver and the OK tick (x 432) */
+            char lt[96];
+            g_lang_page0 = g_lang_pick;
+            lang_caption(lt, sizeof(lt), es);
+            n += mp_button(fac, win, MP_LANG_BTN, lt, 124, mp_btn_y(win, MP_BH), 300, MP_BH);
+        }
         logf("MODSPAGE> Preferences 0x%08lX: %d controls added", (DWORD)win, n);
     }
     /* sort the children: ours (page B), the OK button (both pages), everything else is the game's page */
@@ -9120,6 +9283,13 @@ static void mp_close(void *win, DWORD id) {
     if ((v = pp_read_box(win, MP_EDGE)) >= 0 && v != g_mp_edge) { mp_write_int("overscroll.ini", "edge", "enabled", v); ch++; }
     if ((v = pp_read_box(win, MP_UNDO)) >= 0 && v != g_mp_undo) { mp_write_int("undo.ini", "undo", "enabled", v); ch++; }
     if ((v = pp_read_box(win, MP_UNDOBTN)) >= 0 && v != g_mp_undobtn) { mp_write_int("undo.ini", "undo", "buttons", v); ch++; }
+    if (g_langsel && g_lang_n > 1 && g_lang_pick != g_lang_page0) {   /* LANGSEL: takes effect at the next start */
+        char p[MAX_PATH];
+        ho_ini_path(p, sizeof(p));
+        WritePrivateProfileStringA("language", "folder", g_lang_pick < 0 ? "" : g_lang_folder[g_lang_pick], p);
+        logf("LANGSEL> OK: saved %s for the next start", g_lang_pick < 0 ? "Automatic (the game decides)" : g_lang_label[g_lang_pick]);
+        ch++;
+    }
     logf("MODSPAGE> OK: %d mod setting(s) written", ch);
 }
 
@@ -9130,6 +9300,7 @@ static DWORD __fastcall ho_prefs_msg(void *self, void *edx, DWORD win, DWORD msg
         mp_show((void *)win, p4 == MP_BTN_MODS);
         return 1;
     }
+    if (g_modspage && g_langsel && msg == 3 && p3 == 1 && win && p4 == MP_LANG_BTN) { lang_click((void *)win); return 1; }
     a[0] = win; a[1] = msg; a[2] = p3; a[3] = p4; a[4] = p5;
     r = rz_thiscall_ret(self, g_orig_5e07, a, 5);
     if (msg == 0xa2bf8ace && (r & 0xff) && win) {
@@ -18434,6 +18605,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_HUDOPT", v, sizeof(v))) g_hudopt = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PERFPREFS", v, sizeof(v))) g_perfprefs = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MODSPAGE", v, sizeof(v))) g_modspage = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_LANGSEL", v, sizeof(v))) g_langsel = atoi(v);
+          lang_install();   /* LANGSEL: before WinMain, the game reads its language during app init */
           if (GetEnvironmentVariableA("SC3RESIZE_MPHOVER", v, sizeof(v))) g_mp_hover = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MODSUI", v, sizeof(v))) g_modsui = atoi(v);   /* owner 2026-10-27 */
           if (GetEnvironmentVariableA("SC3RESIZE_QUERYID", v, sizeof(v))) g_queryid = atoi(v);
