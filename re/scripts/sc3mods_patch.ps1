@@ -34,8 +34,15 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# SC3U.exe anchor (SimCity 3000 Unlimited, GOG). RVAs are only valid for this exact binary.
-$ANCHOR = '49DD55E183C68DFFE6AC57E85A91EF3B3E79C45A9D137EDFCBB3840026349DC7'
+# Stock SC3U.exe builds this script accepts. Every game DLL is byte-identical across them, so the mods' RVAs hold.
+#   2.0.0.3 : the RE anchor (older GOG installer).
+#   2.0.949 : current GOG / Steam. Same exe with 8 bytes changed: 'ret 8' over the first bytes of the resolution
+#             snap (0x00407684) and validate (0x00407756) functions, so any resolution is accepted. No mod uses them.
+$ANCHORS = @{
+    '49DD55E183C68DFFE6AC57E85A91EF3B3E79C45A9D137EDFCBB3840026349DC7' = '2.0.0.3'
+    '42E30CE0E3188C4B92058D97A3E2EC571AADA0B23DE4A8797330B82BAB862F4E' = '2.0.949'
+}
+function Is-Stock([string]$hash) { return $ANCHORS.ContainsKey($hash) }
 $SECNAME = '.sc3mod'          # the section this script adds; also how it recognises an already-patched exe
 $EXPORT  = 'sc3mods_version'  # the one function the new import references
 
@@ -123,8 +130,8 @@ function Write-Atomic([string]$dest, [byte[]]$bytes) {
 if ($Restore) {
     if (-not (Test-Path -LiteralPath $bak)) { throw "No backup SC3U.exe.orig in $Apps. Nothing to restore." }
     $bh = Sha256Hex $bak
-    if ($bh -ne $ANCHOR) { throw "Backup SC3U.exe.orig hash $bh is not the stock anchor. Refusing to restore it." }
-    if ((Sha256Hex $exe) -eq $ANCHOR) {
+    if (-not (Is-Stock $bh)) { throw "Backup SC3U.exe.orig hash $bh is not a known stock build. Refusing to restore it." }
+    if (Is-Stock (Sha256Hex $exe)) {
         Write-Host "SC3U.exe is already stock. Nothing to restore." -ForegroundColor Green
     } else {
         Write-Atomic $exe ([System.IO.File]::ReadAllBytes($bak))
@@ -155,16 +162,24 @@ if (Has-Section $pe0 $SECNAME) {
     exit 0
 }
 
-if ($h -ne $ANCHOR) {
-    throw "SC3U.exe hash $h is neither the stock anchor nor an exe this script patched. Refusing. Reinstall the stock game exe, then run this again."
+if (-not (Is-Stock $h)) {
+    throw "SC3U.exe hash $h is neither a known stock build (GOG 2.0.0.3 or GOG/Steam 2.0.949) nor an exe this script patched. Refusing. Reinstall the stock game exe, then run this again."
 }
+Write-Host "Stock SC3U.exe build $($ANCHORS[$h]) recognised." -ForegroundColor Green
 
 # back up the pristine exe
 if (-not (Test-Path -LiteralPath $bak)) {
     [System.IO.File]::Copy($exe, $bak)   # Copy, not link: the backup must survive a rewrite of the exe
     Write-Host "Backed up stock SC3U.exe -> SC3U.exe.orig" -ForegroundColor Green
-} elseif ((Sha256Hex $bak) -ne $ANCHOR) {
-    throw "SC3U.exe.orig exists but is not the stock anchor. Move it aside and run again."
+} else {
+    $bh = Sha256Hex $bak
+    if (-not (Is-Stock $bh)) {
+        throw "SC3U.exe.orig exists but is not a known stock build. Move it aside and run again."
+    }
+    if ($bh -ne $h) {   # backup from another stock build (the game was updated since): keep the exe that is here now
+        [System.IO.File]::Copy($exe, $bak, $true)
+        Write-Host "Replaced SC3U.exe.orig (build $($ANCHORS[$bh])) with this stock SC3U.exe (build $($ANCHORS[$h]))." -ForegroundColor Green
+    }
 }
 
 $b = $pe0.Bytes
