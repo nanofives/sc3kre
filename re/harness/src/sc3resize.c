@@ -5566,6 +5566,7 @@ static int g_minivis = 1, g_mn_seen;
  * The pass now runs when this frame has an enlarged dialog even without HUD windows, and the export reports the factor
  * while a dialog is enlarged. SC3RESIZE_DLGONLY=0 = the old rule. */
 static int g_dlgonly = 1;
+static int g_perfdlg = 1;   /* PERFDLG: sc3resize_ui_scale ignores a dialog-only pass (SC3RESIZE_PERFDLG=0 = old) */
 static int rz_hl_slot(void *win);   /* fwd */
 static int rz_td_add(void *win, const LONG *r, const HD_SLOT *dd, LONG cw, LONG ch) {
     double sx = (double)dd->dw / dd->w, sy = (double)dd->dh / dd->h;
@@ -8067,7 +8068,9 @@ static int rz_hs_mouse(UINT m, LPARAM *lp) {
    factor of the last enlarged present in percent, 100 when HUD scale is off or nothing was enlarged. sc3perf reads it
    (GetProcAddress) to draw its FPS line and busy lines at the same size. */
 __declspec(dllexport) int sc3resize_ui_scale(void) {
-    return (g_hs_n > 0 || (g_dlgonly && g_hd_n > 0)) && g_hs_s > 1.0 ? (int)(g_hs_s * 100.0 + 0.5) : 100;   /* DLGONLY */
+    /* PERFDLG (owner 2026-11-02: "el menu de sustituir hace que el profiler aparezca mas grande"): a dialog alone must not
+       scale the FPS text (DLGONLY did, so the bar jumped to the dialog factor while it was open). SC3RESIZE_PERFDLG=0 = old. */
+    return (g_hs_n > 0 || (!g_perfdlg && g_dlgonly && g_hd_n > 0)) && g_hs_s > 1.0 ? (int)(g_hs_s * 100.0 + 0.5) : 100;   /* DLGONLY */
 }
 
 /* CITYZOOM export (task cityzoom): the factor the city view is drawn at (1 = stock). sc3overscroll reads it
@@ -18519,6 +18522,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_TIPDLG", v, sizeof(v))) g_tipdlg = atoi(v);          /* task uiaudit */
           if (GetEnvironmentVariableA("SC3RESIZE_MINIVIS", v, sizeof(v))) g_minivis = atoi(v);        /* task uiaudit */
           if (GetEnvironmentVariableA("SC3RESIZE_DLGONLY", v, sizeof(v))) g_dlgonly = atoi(v);        /* task uiaudit */
+          if (GetEnvironmentVariableA("SC3RESIZE_PERFDLG", v, sizeof(v))) g_perfdlg = atoi(v);        /* task perfdlg */
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_OPEN", v, sizeof(v))) g_ms_open = atoi(v); /* task uiaudit */
           if (GetEnvironmentVariableA("SC3RESIZE_MENUMASK", v, sizeof(v))) g_menumask = atoi(v);    /* child menumask */
           if (GetEnvironmentVariableA("SC3RESIZE_VERDATOS_NATIVE", v, sizeof(v))) g_vd_on = atoi(v);  /* task verdatos */
