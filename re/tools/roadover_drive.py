@@ -28,7 +28,9 @@ import hwcars_drag  # noqa: E402
 
 CMDS = {"road": 0x10004001, "hway": 0x10004301, "rail": 0x10004101,   # hwcars_drag.py
         "police": 0x10006201,                                             # LAUNCH_CONTROL.md
-        "bulldoze": 0x1000400A}                                           # rb_lab.py
+        "bulldoze": 0x1000400A,                                           # rb_lab.py
+        "airport": 0x10003006, "seaport": 0x10003005,                     # LAUNCH_CONTROL.md (zone 14 / 15)
+        "smallpark": 0x10006601, "bigpark": 0x10006602}                   # LAUNCH_CONTROL.md (placehints)
 WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP, MK_LBUTTON = 0x200, 0x201, 0x202, 1
 
 
