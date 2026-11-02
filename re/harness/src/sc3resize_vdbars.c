@@ -590,7 +590,9 @@ static void cq_setup(BYTE *dir, void *win) {
         for (k = 0; k < CQ_TABS; k++) tx[k] = vb_es() ? k_cq_es[k] : k_cq_en[k];
         vt_colours(fac);
         cq_frame(win, 0);
+        g_vt_cur = g_vt_small ? g_vt_small_id : g_vt_font;
         tb_make(fac, win, &g_cq_tb, CQ_ID0, tx, CQ_TABS, g_cq.tab, x0 - 8, x1 + 10, y, 18);
+        g_vt_cur = g_vt_font;
     }
     logf("VDTABS> Cuadros page 0x%08lX built: stock radio %d, tab %d, panel bottom %d", (DWORD)win, sel, g_cq.tab, y);
     cq_after(win);
@@ -644,6 +646,8 @@ static void vb_install(HMODULE sui) {
     if (GetEnvironmentVariableA("SC3RESIZE_VDTABS", v, sizeof(v))) g_vdtabs = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_VDBARS", v, sizeof(v))) g_vdbars = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_VDTABSROUND", v, sizeof(v))) g_vt_round = atoi(v);
+    if (GetEnvironmentVariableA("SC3RESIZE_VDTABSSMALL", v, sizeof(v))) g_vt_small = atoi(v);
+    if (GetEnvironmentVariableA("SC3RESIZE_VDTABSFONT", v, sizeof(v))) g_vt_small_id = (int)strtol(v, NULL, 0);
     if (GetEnvironmentVariableA("SC3RESIZE_TRIPMODES", v, sizeof(v))) g_tripmodes = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_VDTABS_FONT", v, sizeof(v))) g_vt_font = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_VDTABS_LOG", v, sizeof(v))) g_vt_log = atoi(v);
