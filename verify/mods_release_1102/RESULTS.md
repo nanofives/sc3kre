@@ -31,3 +31,8 @@ replaced and README.txt updated (header, sc3simrun line, NEW IN 2026-11-02, `[ch
 
 Owner checks: a built-up city over a few game years, working buildings no longer rebuilt as the same thing, upgrades
 still happening.
+
+GitHub: `sc3mods-2026-11-02`, target `13f1978`, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-11-02, asset
+downloaded back, SHA-256 matches. The 11-01 notes now start with a "superseded" line.
+After publishing, `stage/release` was renamed to `stage/release_1101_old` and `stage/release_1102` to `stage/release`
+(label `2026-11-02`). `release_1101_old` is left for removal once no dev tree game holds its files.
