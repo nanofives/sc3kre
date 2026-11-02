@@ -11042,6 +11042,8 @@ static void zd_install(void) {
 }
 static DWORD WINAPI zd_thread(LPVOID p) { (void)p; zd_install(); return 0; }
 
+#include "sc3resize_placehints.c"  /* PLACEHINTS: airport/seaport zone + plop land value previews (SC3RESIZE_PLACEHINTS=0) */
+
 /* FRAMEDUMP (diag, task hudclick 2026-10-15). SC3RESIZE_FRAMEDUMP=<abs prefix>: when the file <prefix>req exists, the
  * next client-sized Blt onto the primary writes its source rect (the frame exactly as presented, after any HUDSCALE
  * pass) to <prefix><tag>.bmp, tag = the first line of req (else a counter), and deletes req. A smaller Blt onto the
@@ -18634,6 +18636,9 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           {   HANDLE t = CreateThread(NULL, 0, zd_thread, NULL, 0, NULL);   /* ZONEDEMO: zoning over zoned buildings
                                                                             of another type (or DeZone) demolishes them */
               if (t) CloseHandle(t); else zd_install(); }
+          {   HANDLE t = CreateThread(NULL, 0, ph_thread, NULL, 0, NULL);   /* PLACEHINTS: what an airport / seaport
+                                                                            drag can grow, a plop's land value halo */
+              if (t) CloseHandle(t); else ph_install(); }
           pk_install();      /* PANCURSOR: right-drag arrows enlarged and centred */
           rz_diag_arrows_install();   /* DIAGARROWS (test only, SC3RESIZE_DIAG_ARROWS=1) */
           cursormap_install();   /* CURSORMAP: GZWIND's GetCursorPos helper maps through the zoom factor */
