@@ -60,8 +60,14 @@ Steps inside `0x1001d840`:
      `IsAncestor(ancestor, descendant)`. The land value call passes `(rowId, typeId)`;
    - Linux `libSimInit.so` names the class `cSC3AgentTypeTree`, with `IsAncestor(uint,uint)`,
      `AddISARelationBetweenAgentTypes` and `cSC3App::AgentTypeTree()`;
-   - the tree is built from `CitySim.ini [AgentTypeHierarchy]` (`SC3U.exe 0x0040cc08`).
-   So a Small Park (14311, parent 14310) gets the 14310 Park row `[CONFIRMED by call topology + SDK slot map]`.
+   - the tree is built from `CitySim.ini [AgentTypeHierarchy]` (`SC3U.exe 0x0040cc08`);
+   - the body, `SIMINIT.DLL`, vtable `0x1002f35c` (slot 3 = Init `0x10002eb1`, which registers the
+     `sc3agenttype` / `sc3typehierarchy` commands): slot 9 `+0x24` `0x10002f3b` forwards to slot 8 `+0x20`
+     `0x10002f56` = `IsAncestor(a, b, &dist)`. That one looks up a (b, a) cache at `this+0x1c`; otherwise it gets
+     node A = `GetNode(a)` and node B = `GetNode(b)` (slot 7 `0x10002e88`) and walks B up through its parents
+     (node `vt+0x28`), counting steps. Reaching A gives true, with dist = steps. a == b is true with dist 0
+     `[CONFIRMED @ SIMINIT 0x10002f56]`.
+   So a Small Park (14311, parent 14310) gets the 14310 Park row `[CONFIRMED]`.
 3. **Stamp.** For every cell of the occupant's bounding rect (`vt+0xd0`), read-add-write the 4 values into
    `+0x50` = A, `+0x6c` = R, `+0x88` = C, `+0xa4` = I.
 
@@ -114,10 +120,8 @@ PostOffice 13008, HistoricBuilding 14160, Church 14910, Arcology 1001, Dam 12510
 
 ## 7. Open
 
-- The `IsAncestor` body itself was not read (SC3U `SIMINIT` side); the reading rests on the slot map, the constant
-  call sites and the Linux names (section 3).
 - Who calls `0x1001d25c` (the layer vtable slot) not traced.
-- The pollution special routine `SIMECO 0x1000a032` (recycling, incinerator, waste-to-energy, water treatment) not read.
+- Closed 2026-11-02: `IsAncestor` body read (section 3); pollution routine `0x1000a032` read (section 8).
 
 ## 8. The other three per-building tables
 
@@ -137,6 +141,18 @@ the data: every first field is >= 0 and every second field is signed.
 
 Pollution: recycling 12851, incinerator 12852, waste-to-energy 12853 and water treatment 12820 (and descendants)
 first go through `0x1000a032`, then still get the normal table stamp `[CONFIRMED @ SIMECO 0x1000969b]`.
+`0x1000a032` does not touch the pollution grids. It only adds the building to (mode 0) or removes it from (mode 1) a
+facility list, under the lock at `+0x90`, and keeps a count of members whose `vt+0x20` is true:
+
+| Type | QI | List | Count |
+|---|---|---|---|
+| 12851 Recycling | `0x634acd1d` | `+0xc0` | `+0xdc` |
+| 12852 Incinerator | `0x345777a` | `+0xb8` | `+0xd8` (shared) |
+| 12853 Waste-to-Energy | `0x345777a` | `+0xbc` | `+0xd8` (shared) |
+| 12820 Water Treatment | `0x4337354e` | `+0xb4` | `+0xd4` |
+
+`[CONFIRMED @ SIMECO 0x1000a032]`. The recycling list feeds `0x10007fd4` `sc3_eco_compute_service_ratio`. What
+`vt+0x20` tests was not read.
 
 Readings from the resolved tables (workbook "All effects by building"):
 - Police Station 13130 has **no crime row**. Police act on crime through coverage (`SC3Police.ini`), not this table.
