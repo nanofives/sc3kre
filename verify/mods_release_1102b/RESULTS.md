@@ -50,3 +50,9 @@ Zip: the 2026-11-02 zip (downloaded from its GitHub release) with `Apps/sc3mods.
 
 Owner checks: the compat-flag picture after a resize on a GOG 2.0.949 install, the README KNOWN LIMITS line that still
 suggests a renamed `SC3U_mods.exe` (the loader only loads into `SC3U.exe`).
+
+GitHub: `sc3mods-2026-11-02b`, target `6d9e6f6`, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-11-02b, asset
+downloaded back, SHA-256 matches. The 11-02 notes now start with a "superseded" line. Issue #2 answered:
+https://github.com/nanofives/sc3kre/issues/2#issuecomment-6579054294
+After publishing, `stage/release` was renamed to `stage/release_1102_old` and `stage/release_1102b` to `stage/release`
+(label `2026-11-02b`). `release_1102_old` is left for removal once no dev tree game holds its files.
