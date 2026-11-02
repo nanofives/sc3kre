@@ -643,6 +643,7 @@ static void vb_install(HMODULE sui) {
     int ok;
     if (GetEnvironmentVariableA("SC3RESIZE_VDTABS", v, sizeof(v))) g_vdtabs = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_VDBARS", v, sizeof(v))) g_vdbars = atoi(v);
+    if (GetEnvironmentVariableA("SC3RESIZE_VDTABSROUND", v, sizeof(v))) g_vt_round = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_TRIPMODES", v, sizeof(v))) g_tripmodes = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_VDTABS_FONT", v, sizeof(v))) g_vt_font = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_VDTABS_LOG", v, sizeof(v))) g_vt_log = atoi(v);

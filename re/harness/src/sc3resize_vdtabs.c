@@ -24,6 +24,9 @@
  * SC3RESIZE_VDTABS=0: none of this; the Graficas page keeps its radio row (graphtabs) and Cuadros its stock radios. */
 static int g_vdtabs = 1, g_vt_font = 0xf, g_vt_log;
 #define TB_MAX 8
+#define VT_R 9
+#define VT_GAP 2
+static int g_vt_round = 1;   /* SC3RESIZE_VDTABSROUND=0: the old trapezoid tabs */
 
 /* id layout of one strip: +1+i button, +0x10+i fill, +0x20+i left edge, +0x30+i right edge, +0x40+i bottom edge,
    +0x50 / +0x51 the two pieces of the rule */
@@ -167,23 +170,43 @@ static int vt_text_w(const char *t) {
 
 /* place the tabs from x0 by their caption widths, padding shrunk to fit x0..x1 */
 static void tb_layout(TB *t) {
+    int g_vt_gap = g_vt_round ? VT_GAP : -1;
     int i, sum = 0, pad, x, avail = t->x1 - t->x0 - 4;
     for (i = 0; i < t->n; i++) sum += t->mw[i];
-    pad = t->n ? (avail - sum) / t->n : 0;
+    pad = t->n ? (avail - sum - g_vt_gap * (t->n - 1)) / t->n : 0;
     if (pad > 22) pad = 22;
     if (pad < 4) pad = 4;
     x = t->x0 + 4;
     for (i = 0; i < t->n; i++) {
         t->tx[i] = x;
         t->tw[i] = t->mw[i] + pad;
-        x += t->tw[i] - 1;                           /* neighbours share an edge pixel */
+        x += t->tw[i] + g_vt_gap;                    /* ROUND: a gap between tabs; old look: neighbours share an edge pixel */
     }
     if (x > t->x1 && sum > 0) {                     /* still too wide: scale (captions may clip, logged) */
         double k = (double)(t->x1 - t->x0 - 4) / (double)(x - t->x0 - 4);
         x = t->x0 + 4;
-        for (i = 0; i < t->n; i++) { t->tx[i] = x; t->tw[i] = (int)(t->tw[i] * k); x += t->tw[i] - 1; }
+        for (i = 0; i < t->n; i++) { t->tx[i] = x; t->tw[i] = (int)(t->tw[i] * k); x += t->tw[i] + g_vt_gap; }
         logf("VDTABS> strip 0x%08lX: %d tabs need %d px, %d available: scaled", t->id0, t->n, sum + t->n * 4, avail);
     }
+}
+
+/* one rounded-top tab body in colour `col` at (x, y), w x H, corner radius R, as up to 4 stacked rects (a polygon of more than 4
+   points drew skewed: only the 4-point recipe is known good). Rows are grouped by their corner inset (a circle's), so the corner is a
+   pixel-art stair. ids id[0..3] */
+static void vt_round_tab(void *win, const DWORD *id, WORD col, int x, int y, int w, int H, int R) {
+    int k, g = 0, y0 = 0, cur = -1, in_[VT_R + 1];
+    for (k = 0; k < R; k++) {
+        int d2 = 2 * R - 2 * k - 1, v4 = 4 * R * R - d2 * d2, sr = 0;
+        while ((2 * sr + 1) * (2 * sr + 1) <= v4) sr++;          /* sr = round(sqrt(v4 / 4)) */
+        in_[k] = R - sr;
+    }
+    for (k = 0; k < R && in_[k] > 0; k++) {
+        if (cur >= 0 && in_[k] != cur && g < 5) { vt_rect(win, id[g++], col, x + cur, y + y0, w - 2 * cur, k - y0); y0 = k; }
+        cur = in_[k];
+    }
+    if (cur >= 0 && k > y0 && g < 5) { vt_rect(win, id[g++], col, x + cur, y + y0, w - 2 * cur, k - y0); y0 = k; }
+    vt_rect(win, id[g++], col, x, y + y0, w, H - y0);       /* the rows with no inset, down to the bottom */
+    while (g < 6) gx_show(mp_child(win, id[g++]), 0);
 }
 
 /* shapes + button rects for the current selection */
@@ -195,6 +218,22 @@ static void tb_draw(TB *t) {
         int s = i == t->sel, x = t->tx[i], w = t->tw[i], top = s ? t->y - 1 : t->y + 1, bot = t->y + t->h - (s ? 0 : 2), H = bot - top;
         LONG f[8], l[8], r[8];
         BYTE *bw;
+        if (g_vt_round && w > 2 * VT_R + 4 && H > VT_R + 4 && TB_MAX <= 8) {
+            /* ROUND: vertical sides, rounded top corners (radius VT_R at 1x; DLGSCALE scales the page surface).
+               The shape class takes few points (a 20-point outline drew as a chamfer), so every polygon here has 7:
+               an outline layer in the border colour (corner L, corner R, body) and the same three inset by 1 px in the fill colour. */
+            WORD fc = s ? g_vt_c_sel : g_vt_c_off;
+            DWORD io[6], ii[6];
+            int q;
+            for (q = 0; q < 6; q++) { io[q] = t->id0 + 0x10 + 8 * q + i; ii[q] = t->id0 + 0x90 + 8 * q + i; }
+            vt_round_tab(win, io, g_vt_c_border, x, top, w, H, VT_R);
+            vt_round_tab(win, ii, fc, x + 1, top + 1, w - 2, H - 2, VT_R - 1);
+            if ((bw = (BYTE *)mp_child(win, t->id0 + 1 + i)) && !IsBadReadPtr(bw, 0xa4)) {
+                ho_v(bw, 0xc8, 4, (DWORD)x + 2, (DWORD)top, (DWORD)(x + w - 2), (DWORD)bot, 0);
+                gx_show(bw, 1);
+            }
+            continue;
+        }
         f[0] = 0; f[1] = 0; f[2] = w; f[3] = 0; f[4] = w - 3; f[5] = H; f[6] = 3; f[7] = H;
         l[0] = 0; l[1] = 0; l[2] = 1; l[3] = 0; l[4] = 4; l[5] = H; l[6] = 3; l[7] = H;
         r[0] = 3; r[1] = 0; r[2] = 4; r[3] = 0; r[4] = 1; r[5] = H; r[6] = 0; r[7] = H;
@@ -209,8 +248,8 @@ static void tb_draw(TB *t) {
     }
     /* the rule, broken under the selected tab */
     if (t->sel >= 0 && t->sel < t->n) {
-        vt_rect(win, t->id0 + 0x50, g_vt_c_border, t->x0, t->y, t->tx[t->sel] - t->x0 + 1, 1);
-        vt_rect(win, t->id0 + 0x51, g_vt_c_border, t->tx[t->sel] + t->tw[t->sel] - 1, t->y, t->x1 - (t->tx[t->sel] + t->tw[t->sel] - 1), 1);
+        vt_rect(win, t->id0 + 0x50, g_vt_c_border, t->x0, t->y, t->tx[t->sel] - t->x0 + (g_vt_round ? (VT_R * 4) / 9 : 1), 1);
+        { int rx = t->tx[t->sel] + t->tw[t->sel] - (g_vt_round ? (VT_R * 4) / 9 : 1); vt_rect(win, t->id0 + 0x51, g_vt_c_border, rx, t->y, t->x1 - rx, 1); }
     } else {
         vt_rect(win, t->id0 + 0x50, g_vt_c_border, t->x0, t->y, t->x1 - t->x0, 1);
         gx_show(mp_child(win, t->id0 + 0x51), 0);
