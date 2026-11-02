@@ -10113,7 +10113,9 @@ static void gx_install(HMODULE sui) {
     if (ho_hook(sui, 0x2ed75, e, 5, (void *)gx_render, &g_orig_2ed75, "graphs page render FUN_1002ed75"))
         logf("GRAPHAXIS> on: Y axis on the Graficas page while 1..%d series are on", g_gx_max);
 }
+#include "sc3resize_vdtabs.c"   /* VDTABS: drawn tabs for the Graficas and Cuadros pages (SC3RESIZE_VDTABS=0) */
 #include "sc3resize_graphs.c"   /* GRAPHNEW: 14 new graphs + tabs on the Graficas page (SC3RESIZE_GRAPHNEW=0, SC3RESIZE_GRAPHTABS=0) */
+#include "sc3resize_vdbars.c"   /* VDBARS: Cuadros tabs + bar charts (education, health, water, transport) (SC3RESIZE_VDBARS=0, SC3RESIZE_TRIPMODES=0) */
 
 /* ================= RELOCATE + PLOPOVER (task relocate 2026-10-28, re/analysis/RELOCATE.md)
  * Owner A: "podemos agregar un boton en el '?' de un edificio especial de premios o remarcables para recolocarlo? al
@@ -18534,6 +18536,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           rm_install(sui);   /* RESTORE: "Vida util" list on the Reunirse list page */
           gx_install(sui);   /* GRAPHAXIS: Y axis on the Graficas page */
           gn_install(sui);   /* GRAPHNEW: income/expenses, power, water, RCI, pollution graphs */
+          vb_install(sui);   /* VDTABS / VDBARS: Cuadros tabs, bars, trip modes */
           rl_install();      /* RELOCATE: "Mover" in the "?" of rewards/landmarks, auto-demolish of zoned buildings */
           pkr_install(sui);  /* PICKER: eyedropper (minimap button, Ctrl+F) */
           {   HANDLE t = CreateThread(NULL, 0, ro_thread, NULL, 0, NULL);   /* ROADOVER: road / highway / rail /

@@ -55,6 +55,8 @@ static int   g_graphnew = 1, g_gn_log, g_graphtabs = 1;
 #define GN_STKDUMMY 0x7A3C0200u        /* + k: a stock series kept off the chart (other tab) */
 #define GN_TABGRP   0x7A3C0300u        /* the tab radio group; its buttons + 1 + t */
 #define GN_TABS  5
+#define GT_ID0   0x7A3C0320u           /* VDTABS strip of the Graficas page (ids +1 .. +0x51, sc3resize_vdtabs.c) */
+static TB g_gt_tb;
 typedef struct { const char *es, *en; int grp; DWORD rgb; } GN_LINE;
 /* line index = id - GN_ID0 = record id in the history file: lines 0..10 keep their 10-30 meaning (old files stay valid) */
 static const GN_LINE k_gn[GN_LINES] = {
@@ -115,6 +117,7 @@ static GN_STK g_gn_stk[48];            /* stock series -> its real checkbox id *
 static int    g_gn_nstk;
 
 static void gn_sync(void *cal);   /* below */
+static void tm_install(void); static void tm_month(int key);   /* VDBARS (sc3resize_vdbars.c) */
 static void gn_fmt_real(char *o, double v);
 static int gn_line_of(const void *p) { int i; for (i = 0; i < GN_LINES; i++) if (g_gn_if[i] && (void *)g_gn_if[i] == p) return i; return -1; }
 
@@ -382,7 +385,21 @@ static DWORD __fastcall gn_layout(BYTE *page, void *edx, DWORD win) {
             gn_set_id(g_gn_if[i], GN_ID0 + 0x80 + i);   /* the renderer's lookup misses */
         }
     }
-    if (g_graphtabs) {
+    if (g_graphtabs && g_vdtabs) {   /* VDTABS: drawn tabs hanging under the chart (child 6), not a radio row */
+        void *fac = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85065))();
+        BYTE *ch = (BYTE *)mp_child((void *)win, 6);
+        int x0 = 6, x1 = 380, y = 198;
+        if (ch && !IsBadReadPtr(ch, 0x90) && *(BYTE **)(ch + 0x3c) == (BYTE *)win) {
+            x0 = *(LONG *)(ch + 0x80); x1 = *(LONG *)(ch + 0x88); y = *(LONG *)(ch + 0x8c) - 1;
+        }
+        for (t = 0; t < GN_TABS; t++) tx[t] = g_gn_es ? k_tab_es[t] : k_tab_en[t];
+        if (fac && !IsBadReadPtr(fac, 4) && !mp_child((void *)win, GT_ID0 + 1))
+            ok = tb_make(fac, (void *)win, &g_gt_tb, GT_ID0, tx, GN_TABS, g_gn_tab, x0, x1, y, 18);
+        g_gn_placed_win = (void *)win;
+        gn_place_tab(page, (void *)win, g_gn_tab);
+        g_gn_placed = g_gn_tab;
+        logf("GRAPHNEW> page 0x%08lX laid out: drawn tabs %s (chart bottom %d, x %d..%d), tab %d", (DWORD)page, ok ? "added" : "NOT added", y, x0, x1, g_gn_tab);
+    } else if (g_graphtabs) {
         void *fac = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85065))();
         if (fac && !IsBadReadPtr(fac, 4) && !mp_child((void *)win, GN_TABGRP)) {
             DWORD col = ho_v((void *)win, 0x184, 3, 0x31, 0x34, 0x7b, 0, 0);   /* the range group's colour (SIMUI 0x1002e6cb) */
@@ -411,7 +428,18 @@ static DWORD __fastcall gn_layout(BYTE *page, void *edx, DWORD win) {
    tab's checkbox (measured 2026-11-02). After the original: our group -> render (pre_render places the tab). */
 typedef DWORD (__fastcall *GN_CTLFN)(void *self, void *edx, DWORD win, DWORD msg, DWORD p3, DWORD id, DWORD p5);
 static DWORD __fastcall gn_ctl(BYTE *self, void *edx, DWORD win, DWORD msg, DWORD p3, DWORD id, DWORD p5) {
-    DWORD r = ((GN_CTLFN)g_orig_df5b)(self, edx, win, msg, p3, id, p5);
+    DWORD r;
+    int tt;
+    if (msg == 3 && p3 == 1 && g_graphtabs && g_vdtabs && g_gn_if[0] && win && (tt = tb_hit(&g_gt_tb, (void *)win, id)) >= 0) {
+        __try {   /* VDTABS: a tab click (button message) -> select, redraw the strip, render (pre_render places the tab) */
+            if (tt != g_gn_tab) { g_gn_tab = tt; gn_ini(1); }
+            g_gt_tb.sel = tt;
+            tb_draw(&g_gt_tb);
+            gx_render(self - 4, NULL, win);
+        } __except (EXCEPTION_EXECUTE_HANDLER) { logf("GRAPHNEW> tab click threw 0x%08lX", GetExceptionCode()); }
+        return 1;
+    }
+    r = ((GN_CTLFN)g_orig_df5b)(self, edx, win, msg, p3, id, p5);
     if (msg == 3 && (p3 == 1 || p3 == 3) && g_graphtabs && g_gn_if[0] && win &&
         (id == GN_TABGRP || (id > GN_TABGRP && id <= GN_TABGRP + GN_TABS))) {
         __try { gx_render(self - 4, NULL, win); }
@@ -440,6 +468,7 @@ static void __fastcall gn_close(BYTE *page, void *edx, DWORD win) {
         }
         if (v0) *(BYTE **)(page + 0x6c) = o;
         if (g_gn_placed_win == (void *)win) { g_gn_placed_win = NULL; g_gn_placed = -1; }
+        if (g_gt_tb.win == (void *)win) g_gt_tb.win = NULL, g_gt_tb.n = 0;
         logf("GRAPHNEW> page 0x%08lX closing: %d series taken out before the game saves its prefs", (DWORD)page, n);
     }
     ((GN_PAGEFN)g_orig_eb59)(page, edx, win);
@@ -957,6 +986,8 @@ static DWORD __fastcall gn_month(BYTE *budget) {
     if (g_gn_if[0] && budget && !IsBadReadPtr(budget, 0x50)) {
         __try { gn_record(*(void **)(budget + 0x14), budget); }
         __except (EXCEPTION_EXECUTE_HANDLER) { logf("GRAPHNEW> monthly record threw 0x%08lX", GetExceptionCode()); }
+        __try { tm_install(); tm_month(g_gn_last); }   /* VDBARS TRIPMODES: a month closed */
+        __except (EXCEPTION_EXECUTE_HANDLER) { }
     }
     return r;
 }
