@@ -9484,6 +9484,10 @@ static int  g_landfill = 1;                                /* LANDFILL, below */
 #define LF_BTN 0x02F95B52
 static void lf_add(void *win, BYTE *qo);
 static void lf_click(void *win, BYTE *qo);
+static int  g_restore = 1;                                /* RESTORE (sc3resize_restore.c, SC3RESIZE_RESTORE=0) */
+#define RS_BTN 0x5E570001
+static void rs_add(void *win, BYTE *qo);
+static void rs_click(void *win, BYTE *qo);
 static DWORD __fastcall qi_msg(void *self, void *edx, DWORD win, DWORD msg, DWORD p3, DWORD p4, DWORD p5) {
     DWORD a[5], r;
     (void)edx;
@@ -9493,12 +9497,14 @@ static DWORD __fastcall qi_msg(void *self, void *edx, DWORD win, DWORD msg, DWOR
     }
     if (msg == 3 && p4 == RL_BTN && p3 == 1 && rl_click(self, win, (BYTE *)self - 4)) return 1;   /* RELOCATE */
     if (msg == 3 && p4 == LF_BTN && p3 == 1 && g_landfill) { lf_click((void *)win, (BYTE *)self - 4); return 1; }   /* LANDFILL */
+    if (msg == 3 && p4 == RS_BTN && p3 == 1 && g_restore) { rs_click((void *)win, (BYTE *)self - 4); return 1; }    /* RESTORE */
     a[0] = win; a[1] = msg; a[2] = p3; a[3] = p4; a[4] = p5;
     r = rz_thiscall_ret(self, g_orig_338f, a, 5);
     if (msg == 0xa2bf8ace && (r & 0xff) && win) {
         if (g_queryid) qi_add_button((void *)win, (BYTE *)self - 4);
         rl_add_button((void *)win, (BYTE *)self - 4);                                                  /* RELOCATE */
         if (g_landfill) lf_add((void *)win, (BYTE *)self - 4);                                       /* LANDFILL */
+        if (g_restore) rs_add((void *)win, (BYTE *)self - 4);                                        /* RESTORE */
     }
     return r;
 }
@@ -9664,7 +9670,7 @@ static void pk_install(void) {
 static void qi_install(HMODULE sui) {
     static const BYTE e338f[6] = { 0x55, 0x8b, 0xec, 0x56, 0x8b, 0xf1 };   /* push ebp; mov ebp,esp; push esi; mov esi,ecx */
     if (!g_queryid) logf("QUERYID> off (SC3RESIZE_QUERYID=0): no button in the query dialog");
-    if (!g_queryid && g_rl_envoff && !g_landfill) return;
+    if (!g_queryid && g_rl_envoff && !g_landfill && !g_restore) return;
     if (ho_hook(sui, 0x6338f, e338f, 6, (void *)qi_msg, &g_orig_338f, "query dialog messages FUN_1006338f") && g_queryid)
         logf("QUERYID> on: \"Copiar ID\" button in the query (?) dialog");
 }
@@ -10374,6 +10380,8 @@ static void lf_click(void *win, BYTE *qo) {
     if (ft(x, z, es, l1, l2, l3, sizeof(l1))) { lf_caption(win, LF_L1, l1); lf_caption(win, LF_L2, l2); }
     lf_caption(win, LF_L3, msg[0] ? msg : l3);
 }
+
+#include "sc3resize_restore.c"   /* RESTORE: "Restaurar" in the query dialog + Reunirse list (SC3RESIZE_RESTORE=0) */
 
 static int rl_patch_slot(DWORD *slot, void *fn, DWORD *orig) {
     DWORD old;
@@ -15440,6 +15448,7 @@ static int pkr_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
 
 static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     if (pkr_wndproc(h, m, wp, lp)) return 0;   /* PICKER */
+    if (m == WM_RZ_RESTORE) { rs_test(wp, lp); return 0; }   /* RESTORE (test only) */
     if (m == WM_RZ_DIAGARROW && g_diag_arrows) { g_diag_arrow = (LONG)wp; return 0; }   /* DIAGARROWS (test only) */
     if (m == WM_RZ_DIAGARROW + 1 && g_diag_arrows) {   /* DIAGARROWS (test only): in-game A/B of the VDSCROLL block */
         g_vdscroll = (int)wp; logf("DIAGARROWS> VDSCROLL set to %d", g_vdscroll); return 0; }
@@ -18337,6 +18346,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           ho_install(sui);   /* HUDOPT: HUD scale controls in the Preferences dialog */
           rz_meet_hook(sui); /* DLGSTAY: the Reunirse pages share one stored position */
           qi_install(sui);   /* QUERYID: "Copiar ID" button in the query (?) dialog */
+          rm_install(sui);   /* RESTORE: "Vida util" list on the Reunirse list page */
           gx_install(sui);   /* GRAPHAXIS: Y axis on the Graficas page */
           gn_install(sui);   /* GRAPHNEW: income/expenses, power, water, RCI, pollution graphs */
           rl_install();      /* RELOCATE: "Mover" in the "?" of rewards/landmarks, auto-demolish of zoned buildings */
@@ -18414,6 +18424,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MODSUI", v, sizeof(v))) g_modsui = atoi(v);   /* owner 2026-10-27 */
           if (GetEnvironmentVariableA("SC3RESIZE_QUERYID", v, sizeof(v))) g_queryid = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_LANDFILL", v, sizeof(v))) g_landfill = atoi(v);   /* task landfill */
+          if (GetEnvironmentVariableA("SC3RESIZE_RESTORE", v, sizeof(v))) g_restore = atoi(v);     /* task restore */
           if (GetEnvironmentVariableA("SC3RESIZE_PICKER", v, sizeof(v))) g_picker = atoi(v);   /* PICKER */
           if (GetEnvironmentVariableA("SC3RESIZE_PICKER_BUTTON", v, sizeof(v))) g_pkr_button = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PICKER_KEY", v, sizeof(v))) g_pkr_key = atoi(v);
