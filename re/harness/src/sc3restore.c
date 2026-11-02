@@ -18,7 +18,7 @@
  * 0x1000234d); a plant's output falls linearly from DeclineAge to MaxAge and is recomputed every update
  * (SIMUTIL 0x100069fb), so a new birthdate also gives the output back.
  *
- * RESTORE. cost = price x clamp(age / MaxAge, 0, 1), rounded, price = budget vt+0x54(type id) (the build price the building tool
+ * RESTORE. cost = price x clamp(age / MaxAge, 0, 1) x cost_percent / 100 (restore.ini, default 50), rounded, price = budget vt+0x54(type id) (the build price the building tool
  * charges, SIMGEOM 0x100072f6; budget = city vt+0x15c, SIMMISC vtable 0x1003c550). Funds = budget vt+0x10; refused
  * when short. Paid with budget vt+0x14 (Withdraw, the slot the building tool's commit uses). The new birthdate is the
  * first day of the current city month (age 0): today's year/month come from the game's own GetAge and the old
@@ -41,6 +41,10 @@ static HANDLE g_log = INVALID_HANDLE_VALUE;
 static LARGE_INTEGER g_freq, g_t0;
 static HMODULE g_self;
 static int g_on;
+/* COSTPCT (round restoreui 2026-11-02, owner: "restoring must be cheaper, keeping a building alive saves a rebuild"):
+   the restore cost is this percent of price x fraction of life used. restore.ini beside the DLL, [restore]
+   cost_percent=50 (default 50); SC3RESTORE_COSTPCT overrides; 100 = the 11-02 formula. Clamped to 0..1000. */
+static LONG g_cost_pct = 50;
 
 static void logf(const char *fmt, ...) {
     char buf[1536], line[1664];
@@ -276,9 +280,10 @@ static int info_of(void *occ, SC3R_INFO *o) {
         bud = budget_get();
         o->price = bud ? (LONG)vc(bud, 0x54, 1, o->type, 0, 0, 0) : 0;
         if (o->price < 0) o->price = 0;
-        {   /* price x clamp(age / MaxAge, 0, 1), rounded half up */
+        {   /* price x clamp(age / MaxAge, 0, 1) x cost_percent / 100, rounded half up (COSTPCT) */
             LONG used = o->age < 0 ? 0 : (o->age > o->max_age ? o->max_age : o->age);
-            o->cost = (LONG)(((__int64)o->price * used * 2 + o->max_age) / ((__int64)o->max_age * 2));
+            __int64 den = (__int64)o->max_age * 100;
+            o->cost = (LONG)(((__int64)o->price * used * g_cost_pct * 2 + den) / (den * 2));
         }
         ok = 1;
     } __except (EXCEPTION_EXECUTE_HANDLER) { logf("INFO> fault reading occupant 0x%08lX", (DWORD)occ); ok = 0; }
@@ -558,7 +563,15 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
             return TRUE;
         }
         g_on = 1;
-        logf("### sc3restore loaded: nothing patched, exports for sc3resize's RESTORE block");
+        {   char ini[MAX_PATH];
+            self_path(ini, sizeof(ini), "restore.ini");
+            g_cost_pct = (LONG)GetPrivateProfileIntA("restore", "cost_percent", 50, ini);
+            if (GetEnvironmentVariableA("SC3RESTORE_COSTPCT", v, sizeof(v))) g_cost_pct = atol(v);
+            if (g_cost_pct < 0) g_cost_pct = 0;
+            if (g_cost_pct > 1000) g_cost_pct = 1000;
+        }
+        logf("### sc3restore loaded: nothing patched, exports for sc3resize's RESTORE block; cost = %ld%% of price x life used "
+             "(restore.ini [restore] cost_percent, SC3RESTORE_COSTPCT)", g_cost_pct);
     }
     return TRUE;
 }

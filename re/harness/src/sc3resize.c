@@ -9664,6 +9664,13 @@ static int  g_restore = 1;                                /* RESTORE (sc3resize_
 #define RS_BTN 0x5E570001
 static void rs_add(void *win, BYTE *qo);
 static void rs_click(void *win, BYTE *qo);
+/* round restoreui 2026-11-02 (sc3resize_restore.c), each with its own off switch SC3RESIZE_<NAME>=0:
+   RSICON "Vida util" as an icon cut from the close box's art, RSLAYOUT narrower list buttons on one unbroken light-blue
+   strip, RSGREY "Como nuevo" disabled, SUSTFONT the game's "Sustituir" redone as a standard text button, QROWS more rows
+   about the building in the query dialog */
+static int  g_rs_icon = 1, g_rs_layout = 1, g_rs_grey = 1, g_rs_sust = 1, g_rs_qrows = 1;
+static void rs_sust(void *win);
+static void rs_qrows(void *win, BYTE *qo);
 static DWORD __fastcall qi_msg(void *self, void *edx, DWORD win, DWORD msg, DWORD p3, DWORD p4, DWORD p5) {
     DWORD a[5], r;
     (void)edx;
@@ -9680,6 +9687,8 @@ static DWORD __fastcall qi_msg(void *self, void *edx, DWORD win, DWORD msg, DWOR
         if (g_queryid) qi_add_button((void *)win, (BYTE *)self - 4);
         rl_add_button((void *)win, (BYTE *)self - 4);                                                  /* RELOCATE */
         if (g_landfill) lf_add((void *)win, (BYTE *)self - 4);                                       /* LANDFILL */
+        if (g_rs_sust) rs_sust((void *)win);                                                          /* SUSTFONT */
+        if (g_rs_qrows) rs_qrows((void *)win, (BYTE *)self - 4);                                     /* QROWS */
         if (g_restore) rs_add((void *)win, (BYTE *)self - 4);                                        /* RESTORE */
     }
     return r;
@@ -9846,7 +9855,7 @@ static void pk_install(void) {
 static void qi_install(HMODULE sui) {
     static const BYTE e338f[6] = { 0x55, 0x8b, 0xec, 0x56, 0x8b, 0xf1 };   /* push ebp; mov ebp,esp; push esi; mov esi,ecx */
     if (!g_queryid) logf("QUERYID> off (SC3RESIZE_QUERYID=0): no button in the query dialog");
-    if (!g_queryid && g_rl_envoff && !g_landfill && !g_restore) return;
+    if (!g_queryid && g_rl_envoff && !g_landfill && !g_restore && !g_rs_sust && !g_rs_qrows) return;
     if (ho_hook(sui, 0x6338f, e338f, 6, (void *)qi_msg, &g_orig_338f, "query dialog messages FUN_1006338f") && g_queryid)
         logf("QUERYID> on: \"Copiar ID\" button in the query (?) dialog");
 }
@@ -18612,6 +18621,11 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_QUERYID", v, sizeof(v))) g_queryid = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_LANDFILL", v, sizeof(v))) g_landfill = atoi(v);   /* task landfill */
           if (GetEnvironmentVariableA("SC3RESIZE_RESTORE", v, sizeof(v))) g_restore = atoi(v);     /* task restore */
+          if (GetEnvironmentVariableA("SC3RESIZE_RSICON", v, sizeof(v))) g_rs_icon = atoi(v);      /* round restoreui */
+          if (GetEnvironmentVariableA("SC3RESIZE_RSLAYOUT", v, sizeof(v))) g_rs_layout = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_RSGREY", v, sizeof(v))) g_rs_grey = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_SUSTFONT", v, sizeof(v))) g_rs_sust = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_QROWS", v, sizeof(v))) g_rs_qrows = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PICKER", v, sizeof(v))) g_picker = atoi(v);   /* PICKER */
           if (GetEnvironmentVariableA("SC3RESIZE_PICKER_BUTTON", v, sizeof(v))) g_pkr_button = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PICKER_KEY", v, sizeof(v))) g_pkr_key = atoi(v);

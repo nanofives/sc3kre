@@ -47,9 +47,12 @@ GetAge 341 / MaxAge 939.
 
 ## 2. Restore
 
-- **Cost** = price x clamp(age / MaxAge, 0, 1), rounded half up. Price = budget vt+0x54(type id), the build price the building tool
-  charges (SIMGEOM 0x100072f6; budget = city vt+0x15c, SIMMISC vtable 0x1003c550). Coal plant: price 5000, 341 of 939
-  months used, cost 1815.
+- **Cost** = price x clamp(age / MaxAge, 0, 1) x cost_percent / 100, rounded half up. Price = budget vt+0x54(type id),
+  the build price the building tool charges (SIMGEOM 0x100072f6; budget = city vt+0x15c, SIMMISC vtable 0x1003c550).
+  **cost_percent** (round restoreui 2026-11-02, owner: restoring must be cheaper, keeping a building alive saves a
+  rebuild): `restore.ini` beside `sc3restore.dll`, `[restore] cost_percent=50`, default 50 when the file or key is
+  missing; `SC3RESTORE_COSTPCT` overrides; clamped to 0..1000; 100 = the first formula. The value in use is logged on
+  load. Coal plant at 50%: price 5000, 235 of 939 months used, cost 626 (at 100%: 1,251).
 - **Funds** = budget vt+0x10. Refused when short. Paid with budget vt+0x14 (Withdraw, the slot the building tool's
   commit uses).
 - **New birthdate** = the first day of the city's current month, so GetAge reads 0. The current year/month is derived
@@ -80,6 +83,36 @@ GetAge 341 / MaxAge 939.
      rows a page, least life left first, "Restaurar $N" each, "Restaurar todos ($total)", "<" ">", "Volver".
      The list refreshes on every 0x22c05b3f, and a click whose price rose since it was drawn is refused with
      "El costo subió a $N: pulsá de nuevo" (the sim keeps running while Reunirse is open).
+
+## 3b. UI round restoreui (2026-11-02), each block with its own off switch
+
+Evidence and pictures: `verify/restoreui/RESULTS.md`.
+
+- **RSICON** (`SC3RESIZE_RSICON=0`): "Vida útil" is an image button left of the close box, top on the close box's top.
+  The close box sits inside the page's title bar child (SIMUI+0xA4B1C, local [4 4 379 35]); it is an image button,
+  window vtable GZWIND+0x2b190, art at window +0x118, first-frame rect at +0xfc..+0x108 (stored by GZWIND 0x1000901e,
+  called from SetImage 0x10008559: modes 2..5 = 4 frames side by side) `[CONFIRMED @ GZWIND 0x1000901e, 0x10008559]`.
+  Its art is a 96x100 sheet of 24x25 frames, rows close / back / minimise / maximise (measured). The icon is the
+  minimise row with its bar replaced by an hourglass inside the glyph's outline box, so bevel, outline and the four
+  state frames are the stock ones. Tooltip "Vida útil". Without the art: the 11-02 text button.
+- **RSLAYOUT** (`SC3RESIZE_RSLAYOUT=0`): a factory text button fills its whole rect with factory colour 0xb (the
+  factory sets it through window vt+0x178, GZWIND 0x1000b6b2 / 0x1001fb67) and draws its pill inside; its box is 33
+  tall whatever height it is given (measured). The light blue between buttons was window background: boxes are now
+  butted (rows 33 apart, footer edge to edge from x 8 to w - 8; one page = the arrows grey instead of hidden). Row
+  buttons 92 wide read "Restaurar"; the price is on the row's second line, "decae" on the first. A label wraps past
+  about 41 characters and the wrapped part is not drawn (measured), hence the split.
+- **RSGREY** (`SC3RESIZE_RSGREY=0`): "Como nuevo" / "Restaurado" in the query dialog and "Nuevo" rows in the list are
+  disabled through window vt+0xf4(2, 0) (flag 2 = enabled): drawn grey, no click.
+- **SUSTFONT** (`SC3RESIZE_SUSTFONT=0`): "Sustituir" is made from the window template {0x75807649, 0x22ba0121}, id 4,
+  only when qo+0xd6 `[CONFIRMED @ SIMUI 0x1006260e]`. Its window has the factory text button's class (measured), the
+  template sets a different font. It is hidden and a factory text button takes its place: id 4 (the dialog acts on
+  message 3 p4 4 as before), same rect, same enabled flag, and the same caption object (window +0x44, GZWIND
+  0x1001fa6c from SetCaption vt+0x10c).
+- **QROWS** (`SC3RESIZE_QROWS=0`): rows about the building in the "?" dialog, added through the dialog's own row list
+  (qo+0x100, QI 0x583, vt+0x4c FUN_100645bf(label, value, flags 0x20000, red 0) `[CONFIRMED @ SIMUI 0x100645bf]`) after
+  the game's rows. The dialog does not grow for rows added after its build, so QROWS grows it: the row list window
+  (SIMUI+0xAAF64) stretches 14 px a row, the children below it move down, plus one button row when RESTORE or
+  RELOCATE put a button above the bottom row. Sources: `re/sessions/restoreui_query_rows_research.md`.
 
 ## 4. Traps found on the way
 
