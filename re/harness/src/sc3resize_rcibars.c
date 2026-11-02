@@ -35,6 +35,8 @@ static int   g_rcibars = 1, g_rcb_log;
 static void *g_rcb_init_orig, *g_rcb_draw_orig;
 static void *g_rcb_btn;              /* our tooltip button (own reference), released at the next Init */
 static LONG  g_rcb_shown[2] = { -1, -1 };
+static LONG  g_rcb_base = 74;        /* baseline row of the A / P bars = just above their letters (set in rcb_widen) */
+static int   g_rcb_full = 1;         /* SC3RESIZE_RCIBARS_FULL=0: the first build (letters mid, bars 16 px from row 51) */
 static char  g_rcb_tip[200];
 
 typedef DWORD (__fastcall *RCB_FN0)(void *);
@@ -149,7 +151,7 @@ static void *rcb_newraster(BYTE *win, LONG w, LONG h) {
 static void rcb_widen(BYTE *rci) {
     BYTE *sui = (BYTE *)GetModuleHandleA("SIMUI.DLL");
     void *old = *(void **)(rci + 0xa8), *R, *wm, *font;
-    LONG w0, h0, W, s[4], d[4], ly, fh, k;
+    LONG w0, h0, W, s[4], d[4], ly, ly2, fh, k;
     BYTE *os, *rs;
     DWORD ofl;
     LONG *e = (LONG *)(rci + 0x80);
@@ -165,6 +167,8 @@ static void rcb_widen(BYTE *rci) {
     if (!font && wm) font = (void *)ho_v(wm, 0x14, 1, 0, 0, 0, 0, 0);
     fh = font ? (LONG)ho_v(font, 0x60, 1, 0, 0, 0, 0, 0) : 14;
     ly = ((0x3e - 0x33) / 2 + 0x33) - fh / 2;
+    ly2 = g_rcb_full ? 0x4e - fh : ly;     /* A / P letters: the bottom row of the panel (owner 2026-11-02) */
+    g_rcb_base = g_rcb_full ? ly2 - 1 : *(LONG *)(rci + 0xec);
 #define RCB_CP(sx0, sy0, sx1, sy1, dx0, dy0) do { s[0] = (sx0); s[1] = (sy0); s[2] = (sx1); s[3] = (sy1); \
         d[0] = (dx0); d[1] = (dy0); d[2] = (dx0) + (sx1) - (sx0); d[3] = (dy0) + (sy1) - (sy0); \
         ho_v(R, 0x118, 4, (DWORD)old, (DWORD)s, (DWORD)d, 0, 0); } while (0)
@@ -202,7 +206,7 @@ static void rcb_widen(BYTE *rci) {
         if (ho_v(font, 0x34, 1, col, 0, 0, 0, 0) & 0xff) {
             for (k = 0; k < 2; k++) {
                 LONG bl = 32 + 9 * k, tw = (LONG)ho_v(font, 0x78, 2, (DWORD)lt[k], 1, 0, 0, 0);
-                ho_v(font, 0x90, 5, (DWORD)R, (DWORD)((5 - tw) / 2 + bl), (DWORD)ly, (DWORD)lt[k], 1);
+                ho_v(font, 0x90, 5, (DWORD)R, (DWORD)((5 - tw) / 2 + bl), (DWORD)ly2, (DWORD)lt[k], 1);
             }
             ho_v(font, 0x34, 1, oc, 0, 0, 0, 0);
         }
@@ -215,7 +219,8 @@ static void rcb_widen(BYTE *rci) {
         ho_v(rci, 0xc8, 4, (DWORD)x, (DWORD)e[1], (DWORD)(x + W), (DWORD)(e[1] + h0), 0);
         logf("RCIBARS> RCI local now [%ld %ld %ld %ld], surface +0x58 %08lX", e[0], e[1], e[2], e[3], *(DWORD *)(rci + 0x58));
     }
-    rcb_button(rci, R, 30, 0x33, 30 + RCB_EXTRA, 0x3e);   /* rows 51..62: between the up (+0xec) and down (+0xf0) bars */
+    if (g_rcb_full) rcb_button(rci, R, 30, ly2, 30 + RCB_EXTRA, ly2 + fh);   /* over the letters: the bars rise above them */
+    else rcb_button(rci, R, 30, 0x33, 30 + RCB_EXTRA, 0x3e);   /* rows 51..62: between the up (+0xec) and down (+0xf0) bars */
     g_rcb_shown[0] = g_rcb_shown[1] = -1;
 }
 
@@ -258,10 +263,13 @@ static DWORD __fastcall rcb_draw(void *self) {
         __try {
         if (ho_v(dst, 0x1c, 1, 0x10, 0, 0, 0, 0) & 0xff) {
             static const BYTE rgb[2][3] = { { 0x90, 0x30, 0xc0 }, { 0xd0, 0x70, 0x00 } };   /* A purple, P orange */
-            LONG base = *(LONG *)(rci + 0xec), tick = base - (LONG)(sc * 75.0f / 100.0f + 0.5f);
+            /* 100% = the top of the RCI meter (stock up bars end at +0xec - sc); the baseline is the A / P letter row */
+            LONG base = g_rcb_full ? g_rcb_base : *(LONG *)(rci + 0xec), top = *(LONG *)(rci + 0xec) - (LONG)(sc + 0.5f),
+                 full = g_rcb_full && base - top > 4 ? base - top : (LONG)(sc + 0.5f),
+                 tick = base - (LONG)(full * 75.0f / 100.0f + 0.5f);
             DWORD tcol = ho_v(rci, 0x184, 3, 0x80, 0x00, 0x00, 0, 0);
             for (k = 0; k < 2; k++) {
-                LONG bl = 32 + 9 * k, h = (LONG)(sc * (cap[k] < 0 ? 0 : cap[k] > 100 ? 100 : cap[k]) / 100.0f + 0.5f);
+                LONG bl = 32 + 9 * k, h = (LONG)(full * (cap[k] < 0 ? 0 : cap[k] > 100 ? 100 : cap[k]) / 100.0f + 0.5f);
                 if (h > 0) rcb_fill(rci, dst, ho_v(rci, 0x184, 3, rgb[k][0], rgb[k][1], rgb[k][2], 0, 0), bl, base - h, bl + 5, base);
                 rcb_fill(rci, dst, tcol, bl - 1, tick, bl + 6, tick + 1);   /* the advisor's 75% */
             }
@@ -274,7 +282,9 @@ static DWORD __fastcall rcb_draw(void *self) {
 
 static void rcb_install(HMODULE suim) {
     DWORD sui = (DWORD)suim, old, *si, *sd;
+    char ev[8];
     if (!g_rcibars || !sui) return;
+    if (GetEnvironmentVariableA("SC3RESIZE_RCIBARS_FULL", ev, sizeof(ev))) g_rcb_full = atoi(ev);
     si = (DWORD *)(sui + 0xab274 + 0x24);
     sd = (DWORD *)(sui + 0xab274 + 0x144);
     if (IsBadReadPtr(si, 4) || IsBadReadPtr(sd, 4) || *si != sui + 0x64b08 || *sd != sui + 0x65214) {

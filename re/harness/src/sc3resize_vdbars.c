@@ -67,14 +67,15 @@ static int g_vdbars = 1, g_tripmodes = 1;
 #define VB_SHP0 0x7A3C0600u     /* + 0 .. 0xff */
 typedef struct { void *fac, *win; int nl, ns; } VB;
 static int g_vb_nl, g_vb_ns;    /* used by the last draw on g_cq.win */
-static WORD g_vb_ink, g_vb_sub, g_vb_track, g_vb_a, g_vb_b, g_vb_warn;
+static WORD g_vb_ink, g_vb_sub, g_vb_track, g_vb_a, g_vb_b, g_vb_warn, g_vb_ok;
+static int g_vb_redbars = 1;   /* SC3RESIZE_VDREDBARS=0: the old blue demand bars (red only on the % text) */
 
 static void vb_colours(void) {
     static int done;
     if (done) return;
     done = 1;
     g_vb_ink = gx_col16(0x202870); g_vb_sub = gx_col16(0x505890); g_vb_track = gx_col16(0xC8D0F0);
-    g_vb_a = gx_col16(0x2060D0); g_vb_b = gx_col16(0x8890A8); g_vb_warn = gx_col16(0xC02020);
+    g_vb_a = gx_col16(0x2060D0); g_vb_b = gx_col16(0x8890A8); g_vb_warn = gx_col16(0xC02020); g_vb_ok = gx_col16(0x20A040);
 }
 static void vb_text(VB *b, const char *t, WORD col, int x, int y, int w, int h, int align) {
     if (b->nl < 0x100) vt_label(b->fac, b->win, VB_LBL0 + b->nl++, t, col, x, y, w, h, align);
@@ -117,19 +118,29 @@ static void vb_num(char *o, double v) {
     else { long d = (long)((v + 50000.0) / 100000.0); if (d % 10) wsprintfA(o, "%ld%c%ldM", d / 10, dc, d % 10); else wsprintfA(o, "%ldM", d / 10); }
 }
 
-/* a 26 px row: name (+ pct) / sub line on the left, bar a over bar b (shared scale), the two values on the right */
-static void vb_pair(VB *b, int x0, int x1, int y, const char *name, const char *sub, double a, double c, int pct) {
+/* a 26 px row: name (+ pct) / sub line on the left, bar a over bar b (shared scale), the two values on the right.
+   dem = which value is the DEMAND measured against the other as capacity: 0 none (plain blue), 1 = a, 2 = b. The demand bar
+   and its number are red when demand exceeds capacity (need), green when covered (VDREDBARS). */
+static void vb_pair(VB *b, int x0, int x1, int y, const char *name, const char *sub, double a, double c, int pct, int dem) {
     char t[64], va[24], vc[24];
     double mx = a > c ? a : c;
     int bx = x0 + 140, bw = x1 - 58 - bx;
+    int rd = g_vb_redbars && dem;
+    int short_ = rd && (dem == 1 ? a > c : c > a);
+    WORD ca = g_vb_a, cb = g_vb_b;
+    if (rd) { WORD d = short_ ? g_vb_warn : g_vb_ok; if (dem == 1) ca = d; else cb = d; }
     if (pct && c > 0) wsprintfA(t, "%s  %ld%%", name, (long)(a * 100.0 / c + 0.5)); else lstrcpynA(t, name, sizeof(t));
-    vb_text(b, t, pct && c > 0 && a > c ? g_vb_warn : g_vb_ink, x0, y, 138, 13, 1);
+    vb_text(b, t, (pct && c > 0 && a > c) || (short_ && !pct) ? g_vb_warn : g_vb_ink, x0, y, 138, 13, 1);
     vb_text(b, sub, g_vb_sub, x0, y + 12, 138, 13, 1);
-    vb_bar(b, bx, y + 2, bw, 8, mx > 0 ? a / mx : 0, g_vb_a);
-    vb_bar(b, bx, y + 14, bw, 8, mx > 0 ? c / mx : 0, g_vb_b);
+    vb_bar(b, bx, y + 2, bw, 8, mx > 0 ? a / mx : 0, ca);
+    vb_bar(b, bx, y + 14, bw, 8, mx > 0 ? c / mx : 0, cb);
     vb_num(va, a); vb_num(vc, c);
-    vb_text(b, va, g_vb_a, x1 - 56, y, 56, 13, 7);
-    vb_text(b, vc, g_vb_b, x1 - 56, y + 12, 56, 13, 7);
+    vb_text(b, va, ca, x1 - 56, y, 56, 13, 7);
+    vb_text(b, vc, cb, x1 - 56, y + 12, 56, 13, 7);
+}
+static void vb_legend(VB *b, int x0, int x1, int y) {
+    if (!g_vb_redbars) return;
+    vb_text(b, vb_es() ? "rojo = falta capacidad, verde = cubierto" : "red = capacity short, green = covered", g_vb_sub, x0, y, x1 - x0, 14, 1);
 }
 /* a 16 px row: name, one bar of frac, a value text */
 static void vb_one(VB *b, int x0, int x1, int y, const char *name, double frac, const char *val) {
@@ -270,24 +281,25 @@ static void vb_education(VB *b, int x0, int x1, int y) {
     rlib = vb_band(rl, g[0x57420], g[0x57421], &slib);
     rmus = vb_band(rl, g[0x57460], g[0x57461], &smus);
     vb_pair(b, x0, x1, y, es ? "Escuelas" : "Schools", es ? "alumnos / plazas" : "pupils / places",
-            *(LONG *)(rl + 0x66c), *(LONG *)(rl + 0x670), 1);
+            *(LONG *)(rl + 0x66c), *(LONG *)(rl + 0x670), 1, 1);
     vb_pair(b, x0, x1, y + 26, es ? "Universidades" : "Colleges", es ? "alumnos / plazas" : "students / places",
-            *(LONG *)(rl + 0x674), *(LONG *)(rl + 0x678), 1);
+            *(LONG *)(rl + 0x674), *(LONG *)(rl + 0x678), 1, 1);
     wsprintfA(t, "%s (%ld)", es ? "Bibliotecas" : "Libraries", libu > 0 ? libc / libu : 0);
     /* the [Library] INI section is read by the first library built (ctor FUN_1000793d, guard DAT_100585b4): with none
        built the globals hold the file's defaults (PopServed 60000, ages 6..18, measured on Berlin), so no band then */
     if (libc > 0) wsprintfA(sub, es ? "%d-%d a\xf1os / plazas" : "aged %d-%d / places", g[0x57420], g[0x57421] > 89 ? 89 : g[0x57421]);
     else { lstrcpyA(sub, es ? "ninguna en la ciudad" : "none in the city"); rlib = 0; }
-    vb_pair(b, x0, x1, y + 52, t, sub, rlib, libc, 0);
+    vb_pair(b, x0, x1, y + 52, t, sub, rlib, libc, 0, 1);
     wsprintfA(t, "%s (%ld)", es ? "Museos" : "Museums", musu > 0 ? musc / musu : 0);
     if (musc > 0) wsprintfA(sub, es ? "%d-%d a\xf1os / plazas" : "aged %d-%d / places", g[0x57460], g[0x57461] > 89 ? 89 : g[0x57461]);
     else { lstrcpyA(sub, es ? "ninguno en la ciudad" : "none in the city"); rmus = 0; }
-    vb_pair(b, x0, x1, y + 78, t, sub, rmus, musc, 0);
+    vb_pair(b, x0, x1, y + 78, t, sub, rmus, musc, 0, 1);
     vb_num(n1, *(LONG *)(rl + 0x684)); vb_num(n2, *(LONG *)(rl + 0x688));
     wsprintfA(t, es ? "Docentes %s   Profesores %s   Huelga: %s" : "Teachers %s   Professors %s   Strike: %s", n1, n2,
               rl[0x650] && rl[0x651] ? (es ? "escuela y universidad" : "schools and colleges") :
               rl[0x650] ? (es ? "escuela" : "schools") : rl[0x651] ? (es ? "universidad" : "colleges") : "no");
     vb_text(b, t, g_vb_ink, x0, y + 106, x1 - x0, 14, 1);
+    vb_legend(b, x0, x1, y + 122);
     if (g_vt_log) {
         static char last[200];
         char lg[200];
@@ -304,10 +316,11 @@ static void vb_health(VB *b, int x0, int x1, int y) {
     int es = vb_es();
     if (!rl) { vb_text(b, es ? "Sin datos de salud" : "No health data", g_vb_ink, x0, y, 300, 14, 1); return; }
     vb_pair(b, x0, x1, y, es ? "Hospitales" : "Hospitals", es ? "pacientes / camas" : "patients / beds",
-            *(LONG *)(rl + 0x664), *(LONG *)(rl + 0x668), 1);
+            *(LONG *)(rl + 0x664), *(LONG *)(rl + 0x668), 1, 1);
     vb_num(n1, *(LONG *)(rl + 0x68c));
     wsprintfA(t, es ? "M\xe9" "dicos %s   Huelga: %s" : "Doctors %s   Strike: %s", n1, rl[0x652] ? (es ? "s\xed" : "yes") : "no");
     vb_text(b, t, g_vb_ink, x0, y + 28, x1 - x0, 14, 1);
+    vb_legend(b, x0, x1, y + 44);
     if (g_vt_log) {
         static LONG last[3] = { -1, -1, -1 };
         if (last[0] != *(LONG *)(rl + 0x664) || last[1] != *(LONG *)(rl + 0x668) || last[2] != *(LONG *)(rl + 0x68c)) {
@@ -367,9 +380,9 @@ static void vb_water(VB *b, int px0, int px1, int py, int lx0, int lx1, int ly) 
     vb_text(b, es ? "Fuentes de agua (este mes)" : "Water sources (this month)", g_vb_ink, px0, py, px1 - px0, 14, 1);
     for (k = 0; k < 3; k++) {
         wsprintfA(t, "%s (%ld)", es ? nm_es[k] : nm_en[k], cnt[k]);
-        vb_pair(b, px0, px1, py + 16 + 26 * k, t, es ? "produce / capacidad" : "output / capacity", out[k], cap[k], 0);
+        vb_pair(b, px0, px1, py + 16 + 26 * k, t, es ? "produce / capacidad" : "output / capacity", out[k], cap[k], 0, 0);
     }
-    vb_pair(b, px0, px1, py + 16 + 78, es ? "Total" : "Total", es ? "entregada / oferta" : "delivered / supply", (double)del, (double)sup, 1);
+    vb_pair(b, px0, px1, py + 16 + 78, es ? "Total" : "Total", es ? "entregada / oferta" : "delivered / supply", (double)del, (double)sup, 1, 1);
     if (!P) lstrcpyA(t, es ? "Sin red de agua" : "No water layer");
     else if (dry > 0) wsprintfA(t, es ? "Edificios sin agua: %ld de %ld" : "Buildings without water: %ld of %ld", dry, cons);
     else lstrcpyA(t, es ? "Todos los edificios que piden agua la reciben" : "Every building that needs water gets it");
@@ -382,14 +395,15 @@ static void vb_water(VB *b, int px0, int px1, int py, int lx0, int lx1, int ly) 
     }
     /* below the tabs: treatment */
     vb_text(b, es ? "Tratamiento de aguas (mes pasado)" : "Water treatment (last month)", g_vb_ink, lx0, ly, lx1 - lx0, 14, 1);
-    vb_pair(b, lx0, lx1, ly + 16, es ? "Contaminaci\xf3n" : "Pollution", es ? "tratada / producida" : "treated / produced", treat, prod, 1);
+    vb_pair(b, lx0, lx1, ly + 16, es ? "Contaminaci\xf3n" : "Pollution", es ? "tratada / producida" : "treated / produced", treat, prod, 1, 2);
     wsprintfA(t, es ? "Plantas (%ld)" : "Plants (%ld)", np);
     wsprintfA(sub, es ? "capacidad / producida" : "capacity / produced");   /* capacity = sum of item vt+0x34 x 30 */
-    vb_pair(b, lx0, lx1, ly + 42, t, sub, pcap, prod, 0);
+    vb_pair(b, lx0, lx1, ly + 42, t, sub, pcap, prod, 0, 2);
     if (aging > 0) {
         wsprintfA(t, es ? "Plantas envejecidas: %ld (su capacidad baja)" : "Aging plants: %ld (capacity falls)", aging);
         vb_text(b, t, g_vb_warn, lx0, ly + 70, lx1 - lx0, 14, 1);
     }
+    vb_legend(b, lx0, lx1, ly + 86);
     if (g_vt_log) {
         static char last[300];
         char lg[300];
@@ -651,6 +665,7 @@ static void vb_install(HMODULE sui) {
     if (GetEnvironmentVariableA("SC3RESIZE_TRIPMODES", v, sizeof(v))) g_tripmodes = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_VDTABS_FONT", v, sizeof(v))) g_vt_font = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_VDTABS_LOG", v, sizeof(v))) g_vt_log = atoi(v);
+    if (GetEnvironmentVariableA("SC3RESIZE_VDREDBARS", v, sizeof(v))) g_vb_redbars = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_VDBARS_LOCK", v, sizeof(v))) g_vb_lock = atoi(v);
     if (!g_vdtabs) g_vdbars = 0;   /* the bars sit where the stock radio group is: no tabs, no bars (sc3dataview's text stays) */
     if (!g_vdtabs && !g_vdbars) { logf("VDTABS> off (SC3RESIZE_VDTABS=0, SC3RESIZE_VDBARS=0): stock Cuadros page"); return; }
