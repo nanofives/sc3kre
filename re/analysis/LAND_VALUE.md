@@ -120,7 +120,10 @@ PostOffice 13008, HistoricBuilding 14160, Church 14910, Arcology 1001, Dam 12510
 
 ## 7. Open
 
-- The meaning of `PostCityInit`'s mode argument (2 = no simulation start) was not read.
+- `PostCityInit` modes: 1 = after a save file loads (SIMINIT `sc3_city_import_savefile` `0x10008bf8`, second
+  argument = file type 1..6, third = path); 2 = after a SimCity 2000 import (SIMINIT `0x1000bd2b`: city
+  `Init(cISC2Importer*)` then `PostCityInit(2, 7, 0)`), which sets edit mode 2 and does not start the simulation.
+  No literal-mode call was found for a brand-new city (`Init(cISC3NewCityInfo&)`); that path is still open.
 - Closed 2026-11-02: `IsAncestor` body read (section 3); pollution routine `0x1000a032` read (section 8); caller
   chain of `0x1001d25c` traced (below).
 
@@ -170,8 +173,20 @@ facility list, under the lock at `+0x90`, and keeps a count of members whose `vt
 | 12853 Waste-to-Energy | `0x345777a` | `+0xbc` | `+0xd8` (shared) |
 | 12820 Water Treatment | `0x4337354e` | `+0xb4` | `+0xd4` |
 
-`[CONFIRMED @ SIMECO 0x1000a032]`. The recycling list feeds `0x10007fd4` `sc3_eco_compute_service_ratio`. What
-`vt+0x20` tests was not read.
+`[CONFIRMED @ SIMECO 0x1000a032]`. The recycling list feeds `0x10007fd4` `sc3_eco_compute_service_ratio`.
+
+What the count counts: `vt+0x20` is the same body in all three classes (SIMECO `0x100015d9` for incinerator and
+recycling, SIMUTIL `0x100017ae` for water treatment). It returns true when the owning occupant is standing
+(`vt+0x4c == 1`) **and** `DeclineAge <= age`:
+
+- age (slot 7): `(year*12 + month)` now (sim `vt+0x1e4`) minus the build date the same way = **months since built**
+  (`0x10001582`, `0x100035a0`, SIMUTIL `0x10001757`);
+- DeclineAge (slot 6) from `SC3Tune.ini`: Incinerator 768, RecyclingCenter 810, WaterTreatment 768 months (the
+  water value is clamped to `MaxLifespan/2` if it exceeds `MaxLifespan`).
+
+So the counts are **facilities at or past their decline age** (about 64-68 years old), not working facilities.
+Waste-to-Energy shares the incinerator QI and count; its own `[WasteToEnergyPowerPlant] DeclineAge=672` sits in
+`SC3PowerLayer.ini`. Which class implements it, and so which DeclineAge it uses, was not checked.
 
 Readings from the resolved tables (workbook "All effects by building"):
 - Police Station 13130 has **no crime row**. Police act on crime through coverage (`SC3Police.ini`), not this table.
