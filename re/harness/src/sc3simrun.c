@@ -67,6 +67,8 @@
  * Config: simrun.ini beside the DLL:  [sim] run_while_scrolling=1   (0 = stock, the A/B control)
  *                                     [sim] freeze_on_pause=street  (cars = cars only, 0 = stock)
  *                                     [sim] animate_while_scrolling=1 (0 = agents freeze during camera moves, stock)
+ *                                     [churn] anarchy_res|com|ind=0, upgrade_X and density_X=-1 (game value),
+ *                                     enabled=1 (0 = stock rolls; env SC3SIMRUN_CHURN=0 too)
  * Exports (measurement): sc3simrun_animate(on) switches the scroll-frame rate at run time (returns the old state),
  *         sc3simrun_stats(DWORD out[6]) = scroll frames seen by the stub, agent ticks, frozen agent ticks, strip refills, producer ticks run on the revealed strip, producer ticks skipped.
  * Env:    SC3SIMRUN_LOG=<abs path>  SC3SIMRUN_TRACE=1 (20 Hz sampler + hold/pause caller log)
@@ -255,6 +257,8 @@ static int g_freeze = 2;                         /* 0 stock, 1 cars, 2 street */
 static int g_anim = 1;                           /* animate street agents while the camera moves */
 static int g_car_margin = 5;                     /* sim rect = view box + this many cells (stock 2) */
 
+static void churn_ini(const char *path);
+
 static void ini_read(void) {
     char path[MAX_PATH];
     self_path(path, sizeof(path), "simrun.ini");
@@ -268,6 +272,7 @@ static void ini_read(void) {
         GetPrivateProfileStringA("sim", "freeze_on_pause", "street", v, sizeof(v), path);
         g_freeze = !lstrcmpiA(v, "cars") ? 1 : (!lstrcmpiA(v, "0") || !lstrcmpiA(v, "off")) ? 0 : 2;
     }
+    churn_ini(path);
 }
 
 /* ============================================================ FREEZE */
@@ -593,6 +598,66 @@ __declspec(dllexport) void __cdecl sc3simrun_stats(DWORD *out) {
     out[5] = (DWORD)g_tick_skips;
 }
 
+/* ============================================================ CHURN
+ * Zone redevelopment rolls (owner 2026-11-01, task churn; re/analysis/ZONE_REDEVELOPMENT.md). The R/C/I per-lot
+ * evaluators SIMRCI 0x10028f12 / 0x1000fd53 / 0x10017fc0 run once per lot per ~30 game days and, with demand > 0,
+ * redevelop a working building on three rolls, each a `cmp eax, [abs32]` against a SC3Tune.INI global:
+ *   upgrade (HigherLandValueRedevelopmentPct, rand(100)), density (HigherDensityRedevelopmentPct, rand(100)),
+ *   anarchy (AnarchyFactor, rand(10000): rebuild as the SAME lot class, the churn the owner sees).
+ * Each site's 4-byte operand is repointed at a DWORD here, so the roll reads our value. A key at -1 leaves its
+ * site untouched (the game's value, SC3Tune or a modded SYS.PAK). Bytes are checked before any write; a site that
+ * differs is skipped and logged. LowerLandValueRedevelopmentPct is not offered: its pickers (0x100297fb,
+ * 0x10018e45) always return 0, so that roll never decides anything. */
+
+typedef struct { const char *key; DWORD va; DWORD global; } CHURN_SITE;
+static const CHURN_SITE g_churn_sites[9] = {
+    { "anarchy_res", 0x10029503, 0x1005802c }, { "anarchy_com", 0x1001033b, 0x10057554 },
+    { "anarchy_ind", 0x100187cb, 0x100576e4 },
+    { "upgrade_res", 0x1002946e, 0x10058020 }, { "upgrade_com", 0x100102a6, 0x10057548 },
+    { "upgrade_ind", 0x10018749, 0x100576d8 },
+    { "density_res", 0x100294cf, 0x10058028 }, { "density_com", 0x10010307, 0x10057550 },
+    { "density_ind", 0x100187a2, 0x100576e0 },
+};
+static int g_churn_on = 1;
+static int g_churn_cfg[9] = { 0, 0, 0, -1, -1, -1, -1, -1, -1 };   /* anarchy off, upgrades as the game has them */
+static volatile DWORD g_churn_val[9];
+
+static void churn_ini(const char *path) {
+    int i;
+    char env[8];
+    if (path[0]) {
+        g_churn_on = GetPrivateProfileIntA("churn", "enabled", 1, path) ? 1 : 0;
+        for (i = 0; i < 9; i++)
+            g_churn_cfg[i] = (int)GetPrivateProfileIntA("churn", g_churn_sites[i].key, g_churn_cfg[i], path);
+    }
+    if (GetEnvironmentVariableA("SC3SIMRUN_CHURN", env, sizeof(env)) && env[0] == '0') g_churn_on = 0;
+}
+
+static int churn_arm(HMODULE rci) {
+    int i, n = 0;
+    DWORD delta = (DWORD)rci - 0x10000000;
+    for (i = 0; i < 9; i++) {
+        const CHURN_SITE *s = &g_churn_sites[i];
+        BYTE *p = (BYTE *)(s->va + delta);
+        DWORD old, want = s->global + delta, cur;
+        int v = g_churn_cfg[i];
+        if (v < 0) continue;
+        if (IsBadReadPtr(p, 6) || p[0] != 0x3B || p[1] != 0x05 || memcmp(p + 2, &want, 4)) {
+            logf("CHURN> %s: SIMRCI+0x%05lX differs from shipped - NOT patched", s->key, s->va - 0x10000000);
+            continue;
+        }
+        cur = *(DWORD *)want;                    /* the image default (10) until the ctor reads SC3Tune.INI */
+        g_churn_val[i] = (DWORD)v;
+        if (!VirtualProtect(p + 2, 4, PAGE_EXECUTE_READWRITE, &old)) continue;
+        *(DWORD *)(p + 2) = (DWORD)&g_churn_val[i];
+        /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
+        FlushInstructionCache(GetCurrentProcess(), p + 2, 4);
+        logf("CHURN> %s = %d (game global now %lu)", s->key, v, cur);
+        n++;
+    }
+    return n;
+}
+
 /* ============================================================ sampler */
 
 static DWORD WINAPI sampler(LPVOID param) {
@@ -613,6 +678,11 @@ static DWORD WINAPI sampler(LPVOID param) {
         logf("### ANIMATE: animate_while_scrolling=%d armed=%d%s", g_anim, anim,
              g_anim && !g_run ? " (needs run_while_scrolling=1: the stock camera hold suspends the heartbeat)" : "");
     }
+    if (g_churn_on) {
+        HMODULE rci;
+        while (!(rci = GetModuleHandleA("SIMRCI.DLL"))) Sleep(5);
+        logf("### CHURN: %d site(s) armed", churn_arm(rci));
+    } else logf("### CHURN: off (stock redevelopment rolls)");
     while (!(simcity = GetModuleHandleA("SIMCITY.DLL"))) Sleep(5);
     if (g_anim_armed) {
         HMODULE strt;
