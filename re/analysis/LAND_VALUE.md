@@ -129,7 +129,14 @@ PostOffice 13008, HistoricBuilding 14160, Church 14910, Arcology 1001, Dam 12510
     the simulation.
   - **2 = brand-new city.** SIMINIT `0x1000bd2b` = `cSC3CmdNewCity::DoGameNew` (body matches the Linux symbol:
     `0xe` guard, `PostCityInit(2, 7, 0)`), after city slot 7 `Init(cISC3NewCityInfo&)`. Edit mode 2, no
-    `StartCitySimulation` at that point. What starts the simulation later for a new city was not traced.
+    `StartCitySimulation` at that point. The simulation starts when the player accepts the terrain:
+    SIMUI `0x100144f2` reacts to `0x624a8220` by creating the terrain-edit object (window id `0x72e85997`,
+    created by `0x1005f44c` = Linux `cSC3WinProcTerrEdit::CreateTerrEditWin`); its button handler
+    `0x100607ab` (= Linux `cSC3WinProcTerrEdit::on_btn_clicked`) posts **`0x624a8221`** for button
+    `0x72e867a1` "Accept this Terrain" (also the Enter key, `0x1006078d`). The city's `DoMessage` turns that
+    into `SetEditMode(1)` + `StartCitySimulation`, so the layers' `SimulationBegin` (land value `0x1001d25c`)
+    run at that moment, and the same SIMUI handler closes the terrain window. "Re-Generate Terrain" is
+    `0x72e867a2`. Only these two senders of `0x624a8221` exist: `PostCityInit` (file loads) and this button.
   - Side result: the tracker had the city `Init` overloads at slot 6 = DBSegment and slot 7 = importer (C3). The
     call sites above show 5 = DBSegment, 6 = importer, 7 = NewCityInfo (full reversal of the header); corrected.
 - Closed 2026-11-02: `IsAncestor` body read (section 3); pollution routine `0x1000a032` read (section 8); caller
