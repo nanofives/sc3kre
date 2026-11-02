@@ -47,6 +47,8 @@ En la calle animada (STRTSIM), los veh├¡culos de clase 1 (tren) y 2 (metro) e
 - Consecuencia: que el metro cueste 1 por celda y la calle 4 no atrae viajes al metro. Solo ampl├¡a hasta d├│nde llega el presupuesto. Esto est├í demostrado para autopistas (`HIGHWAY_TRIPS.md`). Para estaciones lo infiero del mismo c├│digo, no se midi├│.
 - Las estaciones entran en el ring scan como candidatas cuando la celda tiene el bit 0x10 y el modo correspondiente est├í habilitado (`LANE_DENSITY.md`). La regla de preferencia entre estaci├│n y calle no est├í medida: `HIGHWAY_TRIPS` excluy├│ a prop├│sito los pasos con estaci├│n vecina.
 
+**La estación tiene que tocar la vía (medido 2026-11-02, `verify/railgap/RESULTS.md`).** Misma estación en Berlín, solo cambia la celda entre ella y la vía. Con un hueco de una celda: 0 pasos estación > vía y 0 viajes llegados en 800 días, aunque los viajes sí entran desde la calle. Tocando: 31 pasos estación > vía, 164 vía > estación y 19 viajes llegados en 578 días. Además, en 190.939 viajes ningún paso fue de una estación a una calle. La estación es una puerta de un solo sentido, de la calle o el lote a la vía, y el viaje termina sobre la vía.
+
 **Capacidad y ridership.** No encontr├® ning├║n campo de capacidad de estaci├│n ni conteo de pasajeros por l├¡nea. Lo ├║nico que el router acumula de los tramos en bus es un float en `layer[0x40]` [CONFIRMED @ SimTransit 0x100070d0]. Su lector no est├í identificado.
 
 **Cu├ínto se usa.** En Berl├¡n el 92-93% de los viajes que llegan usan solo calles. En Europolis 1024 es el 38-39%, y bajo la vista central la mayor├¡a de los nodos son de metro (`CAR_TRIPS.md` 3.2, medido en juego).
