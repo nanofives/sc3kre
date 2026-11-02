@@ -946,6 +946,7 @@ static struct { void *w; LONG nat[4]; } g_corner[CORNER_MAX];
 static int    g_corner_n;
 static LONG   g_rci_nat[4];   /* RCI indicator native rect, cached once for absolute y placement */
 static int    g_rci_nat_ok;
+static int    g_hudpos_pkr = 1, g_hudpos_q = 1, g_hudpos_bolsa = 1;   /* HUDPOS blocks (SC3RESIZE_HUDPOS_PKR / _Q / _BOLSA = 0 off) */
 static int    g_rcibars;      /* RCIBARS (sc3resize_rcibars.c): tentative, = 1 there; the RCI is 18 px wider */
 static void *rz_find_by_vt(void *w, DWORD wantvt, int depth, int *budget);
 static void rz_side_fit_surface(DWORD liveH);
@@ -2568,6 +2569,37 @@ static void rz_side_children_bottom(void) {
 }
 
 
+/* HUDPOS (owner 2026-11-02): with the "?" 8 px left, the bar's console art [0x2a] (600x56) shows a 2 px dark separator at
+   x 579..580 that the "?" shadow used to hide. Those two columns get the plain panel colour c8d0f8 (RGB565 0xCE9F; art column 581 is dark too, the RCI hides it), under a
+   balanced lock of the surface, once per surface (the sub-object and its DD surface pointer are remembered).
+   SC3RESIZE_HUDPOS_Q=0 leaves the art alone. */
+static void hudpos_art_patch(void) {
+    DWORD obj, sub, *svt, want, lk, nbits, npitch, r, dd;
+    static DWORD done_sub, done_dd;
+    HMODULE gz = GetModuleHandleA("GZGraphicD.dll");
+    if (!g_hudpos_q || !g_hud_top || IsBadReadPtr(g_hud_top, 0xc0) || !gz) return;
+    obj = ((DWORD *)g_hud_top)[0x2a];
+    if (!obj || IsBadReadPtr((void *)obj, 0x48)) return;
+    if (((DWORD *)obj)[0x24 / 4] != 600 || ((DWORD *)obj)[0x28 / 4] < 56) return;
+    sub = ((DWORD *)obj)[0x44 / 4];
+    if (!sub || IsBadReadPtr((void *)sub, 0xf8)) return;
+    svt = *(DWORD **)sub; want = (DWORD)gz + GZ_RVA_VT_SURFACE;
+    if ((DWORD)svt != want) return;
+    dd = ((DWORD *)sub)[0x04 / 4];
+    if (sub == done_sub && dd == done_dd) return;
+    lk = rz_thiscall((void *)sub, (void *)svt[0x0c / 4], NULL, 0);
+    nbits = ((DWORD *)sub)[0xf0 / 4]; npitch = ((DWORD *)sub)[0xf4 / 4];
+    if ((lk & 0xff) && nbits && npitch && !IsBadWritePtr((void *)nbits, npitch * 56)) {
+        for (r = 8; r < 56; r++) {
+            WORD *row = (WORD *)((BYTE *)nbits + r * npitch);
+            row[579] = row[580] = 0xCE9F;   /* RGB565 of c8d0f8, the plain panel colour of this bar */
+        }
+        done_sub = sub; done_dd = dd;
+        logf("HUDPOS> console art columns 579..580 repainted with the panel colour (surface 0x%08lX)", dd);
+    }
+    if (lk & 0xff) rz_thiscall((void *)sub, (void *)svt[0x10 / 4], NULL, 0);
+}
+
 /* ⭐ BAR CONTENTS — slide the controls to the right end, beside the minimap.
  *
  * The bar docks and spans the full client width, but its children keep their NATIVE offsets, so the
@@ -2648,12 +2680,18 @@ static void rz_bar_children_right(void) {
                     g_barkid_nat[g_barkid_n][0] = e[0]; g_barkid_nat[g_barkid_n][1] = e[1];
                     g_barkid_nat[g_barkid_n][2] = e[2]; g_barkid_nat[g_barkid_n][3] = e[3];
                     nat = g_barkid_nat[g_barkid_n];
+                    logf("HUDPOS> bar kid %d native [%ld %ld %ld %ld]", g_barkid_n, e[0], e[1], e[2], e[3]);
                     g_barkid_n++;
                 }
-                if (nat && (e[0] != nat[0] + dx || e[1] != nat[1])) {
+                /* HUDPOS (owner 2026-11-02, "move the ? a little bit to the left"): the "?" (query) button is the 28..40 px
+                   square whose native x is 520..590 (it sat 0 px from the RCI after RCIBARS widened it). 8 px left. */
+                LONG qd = (g_hudpos_q && nat && nat[2] - nat[0] >= 28 && nat[2] - nat[0] <= 40 && nat[3] - nat[1] >= 28 &&
+                           nat[3] - nat[1] <= 40 && nat[0] >= 520 && nat[0] <= 590) ? -8 : 0;
+                if (nat && (e[0] != nat[0] + dx + qd || e[1] != nat[1])) {
                     DWORD a[4];
-                    a[0] = (DWORD)(nat[0] + dx); a[1] = (DWORD)nat[1];
-                    a[2] = (DWORD)(nat[2] + dx); a[3] = (DWORD)nat[3];
+                    if (qd) logf("HUDPOS> '?' button native [%ld %ld %ld %ld] -> x %ld", nat[0], nat[1], nat[2], nat[3], nat[0] + dx + qd);
+                    a[0] = (DWORD)(nat[0] + dx + qd); a[1] = (DWORD)nat[1];
+                    a[2] = (DWORD)(nat[2] + dx + qd); a[3] = (DWORD)nat[3];
                     rz_thiscall(c, (void *)cvt[0xc8 / 4], a, 4);
                     moved++;
                 }
@@ -2777,6 +2815,7 @@ static void rz_bar_children_right(void) {
         }
     }
 
+    hudpos_art_patch();
     if (moved) {
         DWORD *bvt = *(DWORD **)bar;
         if (bvt && !IsBadReadPtr(bvt, 0x158) && bvt[0x154 / 4])
@@ -15143,6 +15182,35 @@ static int pkr_from_minus(const WORD *sv, LONG sp, WORD keyc, DWORD code, BYTE *
         BYTE *bar = rgb[11][f * 26 + 12], *face = rgb[9][f * 26 + 12];
         if (face[0] + face[1] + face[2] - bar[0] - bar[1] - bar[2] < 120) { logf("PICKER> minus art frame %ld: no bar where expected", f); return 0; }
     }
+    /* HUDPOS (owner 2026-11-02, "the picker button background looks weird"): the minus art's outer ring is the soft shadow
+       baked against the LIGHT top of the panel (blue pixels such as 90a0f8, b - r >= 64). Shrunk into the darker bottom-left
+       corner it shows as a light octagon around the button, which the undo / rotate buttons do not have. The ring is found
+       by flood fill from each frame's border through those blue pixels and made transparent; the dark shadow and the rim
+       stay. SC3RESIZE_HUDPOS_PKR=0: off. */
+    if (g_hudpos_pkr)
+        for (f = 0; f < 4; f++) {
+            static short stk[26 * 29 + 8][2];
+            LONG ox = f * 26, sp2 = 0;
+            for (y = 0; y < 29; y++)
+                for (x = 0; x < 26; x++)
+                    if ((x == 0 || y == 0 || x == 25 || y == 28) && sp2 < 26 * 29) { stk[sp2][0] = (short)x; stk[sp2][1] = (short)y; sp2++; }
+            while (sp2 > 0) {
+                LONG cx = stk[--sp2][0], cy = stk[sp2][1], d;
+                BYTE *p = rgb[cy][ox + cx];
+                static const int dxy[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+                int halo = (int)p[2] - (int)p[0] >= 64 && p[2] >= 0xb0;
+                if (!(p[0] == 255 && p[1] == 0 && p[2] == 255) && !halo) continue;
+                if (!(p[0] == 255 && p[1] == 0 && p[2] == 255)) { p[0] = 255; p[1] = 0; p[2] = 255; }
+                for (d = 0; d < 4; d++) {
+                    LONG nx = cx + dxy[d][0], ny = cy + dxy[d][1];
+                    BYTE *q;
+                    if (nx < 0 || ny < 0 || nx > 25 || ny > 28) continue;
+                    q = rgb[ny][ox + nx];
+                    if (q[0] == 255 && q[1] == 0 && q[2] == 255) continue;      /* already transparent: done */
+                    if ((int)q[2] - (int)q[0] >= 64 && q[2] >= 0xb0 && sp2 < 26 * 29) { stk[sp2][0] = (short)nx; stk[sp2][1] = (short)ny; sp2++; }
+                }
+            }
+        }
     for (f = 0; f < 4; f++) {
         BYTE ink[3];
         LONG ox = f * 26;
@@ -18653,6 +18721,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_GRAPHNEW_LOG", v, sizeof(v))) g_gn_log = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_RCIBARS", v, sizeof(v))) g_rcibars = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_RCIBARS_LOG", v, sizeof(v))) g_rcb_log = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_HUDPOS_PKR", v, sizeof(v))) g_hudpos_pkr = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_HUDPOS_Q", v, sizeof(v))) g_hudpos_q = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_HUDPOS_BOLSA", v, sizeof(v))) g_hudpos_bolsa = atoi(v);
           {   char bp[MAX_PATH]; ho_ini_path(bp, sizeof(bp));   /* mods page: [buildings], then the env overrides */
               g_relocate = GetPrivateProfileIntA("buildings", "mover", 1, bp) ? 1 : 0;
               g_plopover = GetPrivateProfileIntA("buildings", "plopover", 1, bp) ? 1 : 0; }
