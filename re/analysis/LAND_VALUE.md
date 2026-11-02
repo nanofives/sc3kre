@@ -120,8 +120,27 @@ PostOffice 13008, HistoricBuilding 14160, Church 14910, Arcology 1001, Dam 12510
 
 ## 7. Open
 
-- Who calls `0x1001d25c` (the layer vtable slot) not traced.
-- Closed 2026-11-02: `IsAncestor` body read (section 3); pollution routine `0x1000a032` read (section 8).
+- The meaning of `PostCityInit`'s mode argument (2 = no simulation start) was not read.
+- Closed 2026-11-02: `IsAncestor` body read (section 3); pollution routine `0x1000a032` read (section 8); caller
+  chain of `0x1001d25c` traced (below).
+
+### Who starts the land value layer
+
+`0x1001d25c` is slot 11 (`+0x2c`) of the layer's `cISC3CityLayer` vtable `0x1004c5dc`, i.e. `SimulationBegin`
+(slot 5 of the same vtable is `sc3_landvalue_load_tuning` = StaticInit). The chain, each link read:
+
+1. SC3U `0x00407bec` `cISC3App::PostCityInit(mode, int, name)` (vtable `0x004cf59c` slot 8; slot 6 `GetCity` =
+   `mov eax,[ecx+0x18]`) sends the city message `0x624a8220` when mode == 2, otherwise `0x624a8221`.
+2. SIMCITY `0x10002fa6` `cSC3City::DoMessage`: `0x624a8221` -> `SetEditMode(1)` then `vt+0x1dc`; `0x624a8220` ->
+   `SetEditMode(2)` only.
+3. SIMCITY `0x10006bfa` = `cSC3City::StartCitySimulation` (vtable `0x10013260` slot 119; alignment checked on slot
+   98 `LandValueLayer` = `mov eax,[ecx+0xf0]` and slot 112 `NumberOfLayers`). Among other work it calls `vt+0x2c()`
+   on every layer in the vector `city+0x94`.
+4. SIMRCI `0x1001d25c`: occupant manager, full modifier rebuild, register as change receiver.
+
+`StartCitySimulation` has no other caller (the other `vt+0x1dc` hits are a framework message switch on a
+different object), and only the app sends `0x624a8221`. Init of the layer (slot 9, `0x1001c854`) comes earlier
+from SIMCITY `0x100069d8` `sc3_sim_wire_subsystems`, which calls slot 9 on every layer.
 
 ## 8. The other three per-building tables
 
