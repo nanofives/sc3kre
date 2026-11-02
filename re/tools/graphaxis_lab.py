@@ -78,7 +78,11 @@ def main(argv):
             sc3io.click(h, *q(cw - 35, ch - 257)); time.sleep(1.2)   # views category
             n1 = log.stat().st_size
             sc3io.click(h, *q(cw - 82, ch - 240))                    # Ver datos
-            sc3wait.wait_log(log, DLG + "|" + GXD, 30, start=n1); time.sleep(1.5)   # GXD only when not enlarged (HUD 1)
+            # GXD only when not enlarged (HUD 1); since graphtabs the page also renders at open, before DLGSCALE logs
+            ok, _ = sc3wait.wait_log(log, DLG, 15 if s > 1.01 else 3, start=n1)
+            if not ok:
+                sc3wait.wait_log(log, GXD, 20, start=n1)
+            time.sleep(1.5)
             sc3io.click(h, *q(cw - 35, ch - 257)); time.sleep(1.5)   # flyout closed
             txt = log.read_text(errors="replace")
             dl = [d for d in re.findall(DLG, txt) if int(d[2]) - int(d[0]) >= 300]   # not a tooltip

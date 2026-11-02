@@ -9937,7 +9937,7 @@ static void gx_install(HMODULE sui) {
     if (ho_hook(sui, 0x2ed75, e, 5, (void *)gx_render, &g_orig_2ed75, "graphs page render FUN_1002ed75"))
         logf("GRAPHAXIS> on: Y axis on the Graficas page while 1..%d series are on", g_gx_max);
 }
-#include "sc3resize_graphs.c"   /* GRAPHNEW: 5 new graphs on the Graficas page (SC3RESIZE_GRAPHNEW=0) */
+#include "sc3resize_graphs.c"   /* GRAPHNEW: 14 new graphs + tabs on the Graficas page (SC3RESIZE_GRAPHNEW=0, SC3RESIZE_GRAPHTABS=0) */
 
 /* ================= RELOCATE + PLOPOVER (task relocate 2026-10-28, re/analysis/RELOCATE.md)
  * Owner A: "podemos agregar un boton en el '?' de un edificio especial de premios o remarcables para recolocarlo? al
