@@ -62,3 +62,6 @@ one tree run in dev\rcibars (frame dumps)
 
 ## asks of other sessions
 none
+
+## owner call 2026-11-02
+No agricultural bar on the RCI (no farm demand exists, a farm count was offered and declined).
