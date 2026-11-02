@@ -28,3 +28,10 @@ sc3simrun line, NEW IN 2026-11-02c). 135 entries, 134 checked against the staged
 
 History clean-up: the round's merges had force-added verify/*/owner_shots/*.png and verify/*/runs/ (game screenshots, logs). Before
 the push they were removed from the 19 unpushed commits (filter-branch, origin/main..HEAD); the files stay on disk, untracked.
+
+GitHub: `sc3mods-2026-11-02c`, target `839e612`, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-11-02c, asset
+downloaded back, SHA-256 matches. The 11-02b notes now start with a "superseded" line.
+
+LAN: `deploy_lan_release.sh stage/release_1102c` sent 3 of 3,615 files (0.9 MB). Served label `2026-11-02c`, served
+sc3resize / sc3restore / sc3simrun SHA-256 match the stage. Then `stage/release` -> `stage/release_1102b_old`,
+`stage/release_1102c` -> `stage/release`.
