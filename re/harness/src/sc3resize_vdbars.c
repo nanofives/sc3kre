@@ -59,7 +59,8 @@
  *    per month: the budget's monthly record (GRAPHNEW gn_month) closes a month. sc3cartrips (a dev tool, not shipped)
  *    patches the same call: whichever comes second refuses and logs it.
  * SC3RESIZE_VDBARS=0: no bars (Agua / Transporte tabs show nothing, sc3dataview's text stays). SC3RESIZE_TRIPMODES=0:
- * no SimTransit patch. SC3RESIZE_VDTABS=0: Cuadros keeps its stock radios and gets no bars (they would sit on the radios). */
+ * no SimTransit patch (and no TRIPCELLS). SC3RESIZE_TRIPCELLS=0: no per-cell counts (sc3dataview's transit map stays empty).
+ * SC3RESIZE_VDTABS=0: Cuadros keeps its stock radios and gets no bars (they would sit on the radios). */
 static int g_vdbars = 1, g_tripmodes = 1;
 
 /* ---------------------------------------------------------------------------------------------- bar primitives */
@@ -144,12 +145,109 @@ static void vb_pct(char *o, double num, double den) {
 }
 
 /* ---------------------------------------------------------------------------------------------- TRIPMODES */
-#define TM_N 8   /* [0] trips counted, [1] road, [2] highway, [3] bus, [4] rail, [5] subway, [6] (unused), [7] no network */
+#define TM_N 8   /* [0] trips counted, [1] road, [2] highway, [3] bus, [4] rail, [5] subway, [6] any of bus/rail/subway, [7] no network */
 static volatile LONG g_tm[TM_N];
 static LONG  g_tm_last[TM_N], g_tm_lastkey = -1;
 static DWORD g_tm_tls = TLS_OUT_OF_INDEXES;
 static DWORD g_tm_target;
 static int   g_tm_on;
+
+/* TRIPCELLS (child transitmap 2026-11-02, SC3RESIZE_TRIPCELLS=0 off): the same counted trips per ORIGIN cell, for
+ * sc3dataview's "Mapa de transporte publico". The game keeps no trip mode anywhere; the origin is the last node
+ * route_trip pops (type 0x80, cell rect +4 x0, +8 z0, +0xc x1, +0x10 z1, measured 1 x 1 on Berlin) [CONFIRMED @
+ * SimTransit 0x100072b6..0x10007554, sc3cartrips]. Three grids, u32 per cell, stride TC_S, low 16 bits = trips that
+ * used a network, high 16 = those that used bus, rail or subway:
+ *   cur   this month, raw counts, one locked add per origin cell (routing threads);
+ *   hist  the months before, x16 fixed point, each closed month added and the older ones faded by 1/8 (about the last
+ *         8 months: Berlin counts about 1,250 trips a month, so one month alone is a sparse dot field);
+ *   disp  what the map draws: hist + cur x16 summed over the 5 x 5 cells around each cell (a neighbourhood's share,
+ *         not single dots), rebuilt at month close and when the map is switched in (sc3resize_tripcells_build).
+ * Trips that used no network (lot next to lot) and failed trips (never popped) are not in it. 3 x 4 MB reserved, the
+ * OS commits a page per x row as it is written. */
+#define TC_S 1024
+#define TC_R 2
+static int g_tripcells = 1;
+static DWORD *g_tc_cur, *g_tc_hist, *g_tc_disp;
+static volatile LONG g_tc_maxx = -1, g_tc_maxz = -1, g_tc_seen, g_tc_busy;
+static LONG  g_tc_months, g_tc_dx = -1, g_tc_dz = -1;
+static void tc_cell_add(const BYTE *node, DWORD add) {
+    DWORD *g = g_tc_cur;
+    int x0 = *(const int *)(node + 4), z0 = *(const int *)(node + 8), x1 = *(const int *)(node + 0xc), z1 = *(const int *)(node + 0x10), x, z, t;
+    if (!g) return;
+    if (x1 < x0) { t = x0; x0 = x1; x1 = t; }
+    if (z1 < z0) { t = z0; z0 = z1; z1 = t; }
+    if (x0 < 0 || z0 < 0 || x1 >= TC_S || z1 >= TC_S || x1 - x0 > 7 || z1 - z0 > 7) return;
+    if (InterlockedIncrement(&g_tc_seen) <= 6)
+        logf("TRIPCELLS> origin rect [%d %d %d %d] %s", x0, z0, x1, z1, (add >> 16) ? "transit" : "no transit");
+    for (x = x0; x <= x1; x++) for (z = z0; z <= z1; z++) InterlockedExchangeAdd((volatile LONG *)&g[x * TC_S + z], (LONG)add);
+    if (x1 > g_tc_maxx) InterlockedExchange(&g_tc_maxx, x1);
+    if (z1 > g_tc_maxz) InterlockedExchange(&g_tc_maxz, z1);
+}
+static void tc_alloc(void) {
+    char v[8];
+    if (GetEnvironmentVariableA("SC3RESIZE_TRIPCELLS", v, sizeof(v))) g_tripcells = atoi(v);
+    if (!g_tripcells || g_tc_cur) return;
+    g_tc_hist = (DWORD *)VirtualAlloc(NULL, TC_S * TC_S * 4, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    g_tc_disp = g_tc_hist ? (DWORD *)VirtualAlloc(NULL, TC_S * TC_S * 4, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE) : NULL;
+    g_tc_cur = g_tc_disp ? (DWORD *)VirtualAlloc(NULL, TC_S * TC_S * 4, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE) : NULL;
+    logf("TRIPCELLS> %s", g_tc_cur ? "on: trips counted per origin cell" : "no memory: off");
+}
+static DWORD tc_sat(DWORD n, DWORD t) {   /* pack, scaled down so n fits 16 bits */
+    if (t > n) t = n;
+    if (n > 0xffff) { t = (DWORD)((unsigned __int64)t * 0xffff / n); n = 0xffff; }
+    return n | (t << 16);
+}
+/* disp = 5 x 5 sums of (hist + cur x16). One builder at a time (month close on the sim thread, the map on the UI). */
+static void tc_build(void) {
+    LONG X, Z, x, z, i, j;
+    if (!g_tc_cur || InterlockedExchange(&g_tc_busy, 1)) return;
+    X = g_tc_maxx + 1 + TC_R; Z = g_tc_maxz + 1 + TC_R;
+    if (X > TC_S) X = TC_S;
+    if (Z > TC_S) Z = TC_S;
+    if (g_tc_maxx >= 0) for (x = 0; x < X; x++) for (z = 0; z < Z; z++) {
+        DWORD n = 0, t = 0;
+        for (i = x - TC_R; i <= x + TC_R; i++) {
+            if (i < 0 || i > g_tc_maxx) continue;
+            for (j = z - TC_R; j <= z + TC_R; j++) {
+                DWORD h, c;
+                if (j < 0 || j >= TC_S) continue;
+                h = g_tc_hist[i * TC_S + j]; c = g_tc_cur[i * TC_S + j];
+                n += (h & 0xffff) + (c & 0xffff) * 16;
+                t += (h >> 16) + (c >> 16) * 16;
+            }
+        }
+        g_tc_disp[x * TC_S + z] = n ? tc_sat(n, t) : 0;
+    }
+    g_tc_dx = g_tc_maxx >= 0 ? X - 1 : -1; g_tc_dz = Z - 1;
+    InterlockedExchange(&g_tc_busy, 0);
+}
+/* a month closed: fade hist by 1/8 and add the month (x16); fresh = another city: drop everything */
+static void tc_month(int fresh) {
+    LONG rows = g_tc_maxx + 1, x, z, Z = g_tc_maxz + 1;
+    if (!g_tc_cur) return;
+    if (fresh) {
+        if (rows > 0) {
+            memset(g_tc_hist, 0, (size_t)rows * TC_S * 4); memset(g_tc_cur, 0, (size_t)rows * TC_S * 4);
+            memset(g_tc_disp, 0, (size_t)(rows + TC_R < TC_S ? rows + TC_R : TC_S) * TC_S * 4);
+        }
+        g_tc_months = 0;
+        logf("TRIPCELLS> month key jumped (city loaded): per-cell history cleared");
+        return;
+    }
+    for (x = 0; x < rows; x++) for (z = 0; z < Z; z++) {
+        DWORD *cp = &g_tc_cur[x * TC_S + z], c = *cp, h = g_tc_hist[x * TC_S + z], n, t;
+        if (c) c = (DWORD)InterlockedExchange((volatile LONG *)cp, 0);
+        if (!c && !h) continue;
+        n = (h & 0xffff); t = (h >> 16);
+        n -= n >> 3; t -= t >> 3;
+        n += (c & 0xffff) * 16; t += (c >> 16) * 16;
+        if (n > 0xffff) n = 0xffff;
+        if (t > n) t = n;
+        g_tc_hist[x * TC_S + z] = n | (t << 16);
+    }
+    g_tc_months++;
+    tc_build();
+}
 
 static void __cdecl tm_on_pop(BYTE *node, BYTE *fp) {
     DWORD e = GetLastError(), st = (DWORD)TlsGetValue(g_tm_tls);
@@ -166,7 +264,9 @@ static void __cdecl tm_on_pop(BYTE *node, BYTE *fp) {
         if (st & 0x40000000u) {
             InterlockedIncrement(&g_tm[0]);
             for (k = 0; k < 5; k++) if (st & (1u << k)) InterlockedIncrement(&g_tm[1 + k]);
+            if (st & 0x1c) InterlockedIncrement(&g_tm[6]);
             if (!(st & 0x1f)) InterlockedIncrement(&g_tm[7]);
+            else if (g_tc_cur) tc_cell_add(node, 1u | ((st & 0x1c) ? 0x10000u : 0));   /* TRIPCELLS */
         }
         st = 0;
     }
@@ -215,6 +315,7 @@ static void tm_install(void) {
         return;
     }
     if ((g_tm_tls = TlsAlloc()) == TLS_OUT_OF_INDEXES) { logf("TRIPMODES> no TLS index: no trip counting"); return; }
+    tc_alloc();   /* TRIPCELLS, before the patch goes live */
     g_tm_target = (DWORD)st + 0x9eed;
     b[0] = 0xE8; *(DWORD *)(b + 1) = (DWORD)tm_stub - (DWORD)(p + 5 + 5);
     if (!tm_write_q(p + 5, b, 5)) { logf("TRIPMODES> patch at SimTransit+0x72f8 failed"); return; }
@@ -226,9 +327,29 @@ static void tm_month(int key) {
     int k;
     if (!g_tm_on) return;
     for (k = 0; k < TM_N; k++) g_tm_last[k] = InterlockedExchange(&g_tm[k], 0);
+    tc_month(g_tm_lastkey >= 0 && key != g_tm_lastkey + 1);   /* TRIPCELLS: a jump (city load) drops the old city's cells */
     g_tm_lastkey = key;
-    logf("TRIPMODES> month %d: %ld trips, road %ld highway %ld bus %ld rail %ld subway %ld none %ld", key, g_tm_last[0],
-         g_tm_last[1], g_tm_last[2], g_tm_last[3], g_tm_last[4], g_tm_last[5], g_tm_last[7]);
+    logf("TRIPMODES> month %d: %ld trips, road %ld highway %ld bus %ld rail %ld subway %ld transit %ld none %ld", key, g_tm_last[0],
+         g_tm_last[1], g_tm_last[2], g_tm_last[3], g_tm_last[4], g_tm_last[5], g_tm_last[6], g_tm_last[7]);
+}
+
+/* TRIPCELLS readers (sc3dataview): the drawn grid, packed like the others (5 x 5 neighbourhood, fixed point) */
+__declspec(dllexport) DWORD __cdecl sc3resize_tripcell(int x, int z) {
+    DWORD *d = g_tc_disp;
+    if (!d || x < 0 || z < 0 || x > g_tc_dx || z > g_tc_dz) return 0;
+    return d[x * TC_S + z];
+}
+/* rebuild the drawn grid now (the map was switched in) */
+__declspec(dllexport) void __cdecl sc3resize_tripcells_build(void) {
+    __try { tc_build(); } __except (EXCEPTION_EXECUTE_HANDLER) { InterlockedExchange(&g_tc_busy, 0); }
+}
+__declspec(dllexport) int __cdecl sc3resize_tripcells_info(LONG *out) {
+    __try { tm_install(); } __except (EXCEPTION_EXECUTE_HANDLER) { }
+    if (out) {
+        out[0] = vb_es(); out[1] = g_tm_last[0]; out[2] = g_tm_last[6]; out[3] = g_tm_last[7];
+        out[4] = g_tc_months; out[5] = g_tm[0]; out[6] = g_tm[6];
+    }
+    return g_tm_on && g_tc_cur != NULL;
 }
 
 /* ---------------------------------------------------------------------------------------------- the data */

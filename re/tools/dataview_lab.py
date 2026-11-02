@@ -2,7 +2,7 @@
 (SC3RESIZE_FRAMEDUMP) after each. Posted input only, no focus, no z-order change. Based on graphaxis_lab.py.
 
 py -3.12 re/tools/dataview_lab.py --tag A [--city Craterville] [--size 1600x900] [--view 3]
-    [--step NAME:x,y | NAME:key | NAME:view<n> | NAME:- ...] [--survey] [--env K=V ...] [--keep]
+    [--step NAME:x,y | NAME:key | NAME:vk<hex> | NAME:view<n> | NAME:- ...] [--survey] [--env K=V ...] [--keep]
 NAME:x,y clicks Ver datos dialog-local (x, y); NAME:key posts the sc3dataview key (V); NAME:view<n> clicks left icon n
 (1..10 maps, 11 Cuadros, 12 Graficas); NAME:- only dumps. Each step dumps <NAME>.png; the dialog crops go into strip.png in order. The mod log
 (sc3dataview.log) is copied into the run folder."""
@@ -103,6 +103,8 @@ def main(argv):
             nm, act = c.split(":", 1)
             if act == "key":
                 sc3io.key(h, 0x56)
+            elif act.startswith("vk"):          # NAME:vk<hex>: post that virtual key (sc3resize 1..4 = sim speed)
+                sc3io.key(h, int(act[2:], 16))
             elif act.startswith("view"):
                 view(int(act[4:]))
             elif act != "-":
