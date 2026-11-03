@@ -20,3 +20,9 @@ Replaces `sc3mods-2026-11-03c`. Owner call 2026-11-03: publish modtoggle (verify
 Zip: the 11-03c zip with Apps/sc3resize.dll, Apps/sc3mods.dll and Apps/sc3lang/*.txt replaced, README.txt updated (header,
 NEW IN 2026-11-03d, sc3mods.ini under OPTIONS). 142 entries, 141 checked against the staged manifest, 0 mismatches.
 `sc3mods_2026-11-03d.zip` 50,720,316 bytes, SHA-256 422B30897478386D25BAEE5B11A930587E9D5A83F68210A86813E87BFDD27960.
+
+GitHub: `sc3mods-2026-11-03d`, target `ff46aef`, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-11-03d, asset
+downloaded back, SHA-256 matches. The 11-03c notes start with a "superseded" line.
+LAN: `deploy_lan_release.sh stage/release_1103d` sent 9 of 3,622 files (1.0 MB). Served label `2026-11-03d`; served
+sc3resize.dll, sc3mods.dll and sc3lang/de.txt match the stage. Then `stage/release` -> `stage/release_1103c_old`,
+`stage/release_1103d` -> `stage/release`.

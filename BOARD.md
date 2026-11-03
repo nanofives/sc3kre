@@ -227,6 +227,7 @@ RE done, tool exists outside a test harness, validated in the running game.
 | **Placement hints on Shift, green impact halo, Shift + release places** | sc3resize PLACEHINTS (SHIFT, GREEN, SHIFTPLACE) | `verify/mods_release_1103/RESULTS.md` | **Released in `sc3mods-2026-11-03` + LAN** 2026-11-03. Owner check: the physical Shift key |
 | **Station warning; station placement hints (reach, trips, dead-end track); Shift-only halo; 2-3 line hints; music pause on focus loss; Vida Util footer band + arrows; trip months from load** | sc3resize STATIONWARN, PLACEHINTS, MUSICFOCUS, RSSTRIP, RSARROW_DY | `verify/mods_release_1103b/RESULTS.md`, round `re/sessions/ROUND_2026-11-03_owner_feedback.md` | **Released in `sc3mods-2026-11-03b` + LAN** 2026-11-03. Owner checks: physical Shift, music by ear, subway / rail-subway placement |
 | **Ghost highlight tiles fixed (GHOSTFIX)** | sc3resize STATIONWARN + PLACEHINTS hl_push | `verify/mods_release_1103c/RESULTS.md`, `verify/ghosttiles/RESULTS.md` | **Released in `sc3mods-2026-11-03c` + LAN** 2026-11-03 |
+| **Mods and features on/off page (MODTOGGLE)** | sc3resize "Activar mods" page + sc3mods.dll `sc3mods.ini [mods]/[env]` | `verify/mods_release_1103d/RESULTS.md`, `verify/modtoggle/RESULTS.md` | **Released in `sc3mods-2026-11-03d` + LAN** 2026-11-03, all 7 languages checked in-game |
 
 > **Correction on record:** `HANDOFF.md` still claims sprite modding has "no RGB565 quantizer and no
 > PNG import". That is **stale** — `sprite_patch.py` has `quantize565()`, `export_png()` and
