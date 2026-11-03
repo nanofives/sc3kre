@@ -15727,6 +15727,7 @@ static int pkr_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
 
 static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     if (pkr_wndproc(h, m, wp, lp)) return 0;   /* PICKER */
+    if (m == WM_KEYDOWN || m == WM_KEYUP || m == WM_KILLFOCUS) ph_shiftmsg(m, wp);   /* PLACEHINTS: Shift shows the text */
     if (m == WM_RZ_RESTORE) { rs_test(wp, lp); return 0; }   /* RESTORE (test only) */
     if (m == WM_RZ_DIAGARROW && g_diag_arrows) { g_diag_arrow = (LONG)wp; return 0; }   /* DIAGARROWS (test only) */
     if (m == WM_RZ_DIAGARROW + 1 && g_diag_arrows) {   /* DIAGARROWS (test only): in-game A/B of the VDSCROLL block */
