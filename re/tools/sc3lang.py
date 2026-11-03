@@ -205,6 +205,25 @@ LAYOUT = [
     ('lifespan.as_new', 0xf, 92, 'button'), ('lifespan.new', 0xf, 92, 'button'), ('lifespan.restore_2', 0xf, 92, 'button'),
     ('lifespan.restore', 0xf, 150, 'button', '$1,246'), ('lifespan.restore_all', 0xf, 196, 'button', '$12,345'),
     ('resize.no_limit', 0xf, 60, 'label'),   # FPS radio at the dialog edge: "Sin limite" (56) fits, "Sans limite" (66) clipped
+    # round 2026-11-02b keys. A tuple = printf arguments (sample values, '@key' = that key's text in the same language).
+    # room None = no width in the code: compared with Spanish (shown in game), flagged when 8+ px wider than Spanish.
+    ('lifespan.rebuild_2', 0xf, 92, 'button'), ('lifespan.repair', 0xf, 92, 'button'),          # Vida util rows (QI_BW)
+    ('lifespan.rebuild_free', 0xf, 150, 'button'), ('lifespan.rebuild', 0xf, 150, 'button', '$1,246'),   # query (RS_BW)
+    ('lifespan.repair_free', 0xf, 150, 'button'),
+    ('lifespan.that_age_dead', 0xf, 355, 'label', (41, 3, '1,234,567')),
+    ('lifespan.dead_rebuild', 0xf, 263, 'label', ('12,345',)), ('lifespan.dead_date_damaged_free', 0xf, 263, 'label'),
+    ('dataview.red_trips_with_no', 0xf, 316, 'label'),                                             # transit map caption
+    ('dataview.transit_share', 0xf, 316, 'label', ('@dataview.this_month_so_far', 12, 3, '1.473')),
+    ('dataview.no_trip_data_sc3resize', 0xf, 316, 'label'), ('dataview.no_trips_counted_yet', 0xf, 316, 'label'),
+    ('dataview.use_transit', 0xf, None, 'label'), ('dataview.no_transit', 0xf, None, 'label'),   # legend (stock label)
+    ('dataview.public_transit_map', 0xf, 380, 'label'),
+    ('cuadros.red_capacity_short_green', 0xf, 370, 'label'),                                      # Cuadros legend line
+    # placement tooltip: no line break, cut at 768 px while a hint shows (PLACEHINTS.md), "$12,345  " cost text first
+    ('placehints.port_hint', 0x11, None, 'label', ('$12,345  @placehints.airport', 40, 3, 'C', 20000, 45, 78, 'C', 1100, 440,
+                                                 '@placehints.runway')),
+    ('placehints.port_hint', 0x11, None, 'label', ('$12,345  @placehints.seaport', 40, 3, 'I', 10000, 45, 78, 'I', 1100, 440,
+                                                 '@placehints.piers')),
+    ('placehints.land_value', 0x11, 768, 'label', ('$12,345  R +12%', 'C +8%', 'I -5%', '@placehints.marked', 'R', '+', 10, 6)),
 ] + [(k, 0xf, 133, 'label') for k in (   # query dialog rows, label column: "Cout de construction :" (133) met the values
     'lifespan.build_cost', 'lifespan.declines_from', 'lifespan.life_left', 'lifespan.output', 'lifespan.months_overworked',
     'lifespan.beds_this_one', 'lifespan.doctors_this_one', 'lifespan.teachers_this_one', 'lifespan.professors_this_one')
@@ -248,16 +267,31 @@ def width_report(tables, fonts, strip_room):
         arg = it[4] if len(it) > 4 else None
         if fid not in fonts:
             continue
-        cells = []
+        cells, ws = [], {}
         for c in codes:
-            t = tables[c].get(k, tables['en'].get(k, ''))
-            if arg:
+            tab = tables[c]
+            t = tab.get(k, tables['en'].get(k, ''))
+            if isinstance(arg, tuple):   # printf with sample arguments; '@key' inside a string = that key's text
+                def sub(v):
+                    if not isinstance(v, str):
+                        return v
+                    return re.sub(r'@([\w.]+)', lambda m: tab.get(m.group(1), tables['en'].get(m.group(1), '')), v)
+                if isinstance(arg[0], str) and arg[0].startswith('$') and '%s' in t:   # cost text before the hint
+                    lead, rest = sub(arg[0]).split('  ', 1)
+                    vals = tuple(sub(v) for v in (rest,) + arg[1:])
+                    t = lead + '  ' + re.sub(r'%l([dc])', r'%\1', t) % vals
+                else:
+                    t = re.sub(r'%l([dc])', r'%\1', t) % tuple(sub(v) for v in arg)
+            elif arg:
                 t = t.replace('%s', arg)
-            w = text_w(fonts[fid], t) + PAD[kind]
-            bad = w > room
+            ws[c] = text_w(fonts[fid], t) + PAD[kind]
+        r = room if room is not None else ws.get('es', 0) + 8
+        for c in codes:
+            bad = ws[c] > r
             over += bad
-            cells.append(('**%d OVER**' if bad else '%d') % w)
-        out.append('| %s (%s) | 0x%x | %d | %s |' % (k, kind, fid, room, ' | '.join(cells)))
+            cells.append(('**%d OVER**' if bad else '%d') % ws[c])
+        out.append('| %s (%s) | 0x%x | %s | %s |' % (k, kind, fid, room if room is not None else 'es+8',
+                                                     ' | '.join(cells)))
     return out, over
 
 
@@ -420,7 +454,15 @@ def cmd_convert(a):
         fname = os.path.basename(f)
         if fname in ('sc3mods_lang.c',):
             continue
-        for i, code in code_lines(open(f, encoding='latin-1').read()):
+        text = open(f, encoding='latin-1').read()
+        covered = set()                       # lines inside an SC3TR( / SC3KEY( call that spans several lines
+        for rx in (RX_TR, RX_KEY):
+            for m in rx.finditer(text):
+                a0 = text.count('\n', 0, m.start()) + 1
+                covered.update(range(a0, a0 + m.group(0).count('\n') + 1))
+        for i, code in code_lines(text):
+            if i in covered:
+                continue
             if RX_SKIPLINE.search(code) or RX_PAIR.search(code):
                 continue
             hits = [t for t in re.findall(STR, code) if len(t) > 4 and RX_SPANISH.search(t)]

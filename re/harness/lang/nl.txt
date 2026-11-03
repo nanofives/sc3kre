@@ -496,3 +496,89 @@ restore.this_building_does_not=Dit gebouw veroudert niet
 undo.redo=Opnieuw (Ctrl+Y)
 # en: Undo (Ctrl+Z)
 undo.undo=Ongedaan (Ctrl+Z)
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: red = capacity short, green = covered
+cuadros.red_capacity_short_green=rood = capaciteit tekort, groen = gedekt
+# en: Last month
+dataview.last_month=Vorige maand
+# en: No transit
+dataview.no_transit=Zonder ov
+# en: No trip data (sc3resize TRIPCELLS off)
+dataview.no_trip_data_sc3resize=Geen ritgegevens (sc3resize TRIPCELLS uit)
+# en: No trips counted yet
+dataview.no_trips_counted_yet=Nog geen ritten geteld
+# en: Public transit map
+dataview.public_transit_map=Kaart van het openbaar vervoer
+# en: Red: trips with no bus, rail or subway
+dataview.red_trips_with_no=Rood: ritten zonder bus, trein of metro
+# en: This month so far
+dataview.this_month_so_far=Deze maand
+# en: %s: %ld.%ld%% of %s trips on transit
+dataview.transit_share=%s: %ld,%ld%% van %s ritten met ov
+# en: Use transit
+dataview.use_transit=Met ov
+# en: Cannot be rebuilt
+lifespan.cannot_be_rebuilt=Kan niet herbouwd worden
+# en: Cannot build there
+lifespan.cannot_build_there=Kan hier niet bouwen
+# en: Date damaged: free repair
+lifespan.date_damaged_free_repair=Datum beschadigd: gratis reparatie
+# en: Dead (date damaged). Free
+lifespan.dead_date_damaged_free=In verval (datum beschadigd). Gratis
+# en: Dead. Rebuild: $%s
+lifespan.dead_rebuild=In verval. Herbouwen: $%s
+# en: End of its life: it can be rebuilt
+lifespan.end_its_life_can=Einde levensduur: kan herbouwd worden
+# en: It is gone
+lifespan.gone=Bestaat niet meer
+# en: Lifespan
+lifespan.lifespan_2=Levensduur
+# en: A move is in progress
+lifespan.move_in_progress=Er loopt een verhuizing
+# en: Next
+lifespan.next=Volgende
+# en: No longer rubble
+lifespan.no_longer_rubble=Niet meer in verval
+# en: Not available (Mover is off)
+lifespan.not_available_mover_off=Niet beschikbaar (Verplaats uit)
+# en: Not enough funds: costs $%s, you have $%s
+lifespan.not_enough_funds_costs=Niet genoeg geld: kost $%s, je hebt $%s
+# en: Previous
+lifespan.previous=Vorige
+# en: Rebuild $%s
+lifespan.rebuild=Herbouwen $%s
+# en: Rebuild
+lifespan.rebuild_2=Herbouwen
+# en: Rebuild (free)
+lifespan.rebuild_free=Herbouwen (gratis)
+# en: Rebuilt ($%s)
+lifespan.rebuilt=Herbouwd ($%s)
+# en: Rebuilt for $%s
+lifespan.rebuilt_for=Herbouwd voor $%s
+# en: Rebuilt for free
+lifespan.rebuilt_for_free=Gratis herbouwd
+# en: Repair
+lifespan.repair=Repareren
+# en: Repair (free)
+lifespan.repair_free=Repareren (gratis)
+# en: %d that age, %d dead. $%s
+lifespan.that_age_dead=%d die verouderen, %d in verval. $%s
+# en: Airport
+placehints.airport=Luchthaven
+# en: red
+placehints.in_red=rood
+# en: Land value %s  %s  %s  |  %s %c %s%ld%% or more up to %ld cells
+placehints.land_value=Grondwaarde %s  %s  %s  |  %s %c %s%ld%% of meer tot %ld vakken
+# en: marked
+placehints.marked=gemarkeerd
+# en: "piers: 5 edge cells on water, "
+placehints.piers="kades: 5 waterranden, "
+# en: %s %ld cells, %ld without transport (red)  |  cap. %s +%ld, use %ld%% to %ld%%  |  %s ceiling %ld to %ld  |  %sneeds power and water
+placehints.port_hint=%s %ld vakken, %ld zonder weg (rood)  |  cap. %s +%ld, gebruik %ld%% - %ld%%  |  plafond %s %ld - %ld  |  %snodig: stroom, water
+# en: "runway: 3x5 or more, "
+placehints.runway="baan: min. 3x5, "
+# en: Seaport
+placehints.seaport=Haven
+# en: Date repaired, free
+restore.date_repaired_free=Datum gerepareerd, gratis

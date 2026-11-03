@@ -84,6 +84,7 @@ dataview.cap_trips_key=V: viajes y congestión por red
 dataview.college=Universidad
 dataview.doctors=Médicos %s
 dataview.hospitals=Hospitales
+dataview.last_month=Mes pasado
 dataview.no=no
 dataview.no_places=%s: sin plazas
 dataview.no_transit=Sin transporte
@@ -100,6 +101,8 @@ dataview.strike_both=escuela y universidad
 dataview.strike_college=universidad
 dataview.strike_school=escuela
 dataview.teachers=Docentes %s
+dataview.this_month_so_far=Este mes
+dataview.transit_share=%s: %ld,%ld%% de %s viajes en transporte
 dataview.use_transit=Con transporte
 dataview.used_of_cap="   %s de %s"
 dataview.yes=sí
@@ -227,6 +230,16 @@ lifespan.that_age_dead=%d con vida útil, %d en ruinas. $%s
 lifespan.that_age_funds=%d con vida útil. Fondos $%s
 lifespan.y=%lda
 lifespan.y_m=%lda %ldm
+
+# ---- placehints
+placehints.airport=Aeropuerto
+placehints.in_red=en rojo
+placehints.land_value=Valor del suelo %s  %s  %s  |  %s %c %s%ld%% o mas hasta %ld celdas
+placehints.marked=marcado
+placehints.piers="muelles: 5 de borde con agua, "
+placehints.port_hint=%s %ld celdas, %ld sin transporte (rojo)  |  cap. %s +%ld, uso %ld%% a %ld%%  |  techo %s %ld a %ld  |  %snecesita energia y agua
+placehints.runway="pista: 3x5 o mas, "
+placehints.seaport=Puerto
 
 # ---- rcibars
 rcibars.tooltip=Capacidad en uso: Aeropuerto %ld%%, Puerto %ld%%

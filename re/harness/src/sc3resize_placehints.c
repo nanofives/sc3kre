@@ -219,18 +219,17 @@ static DWORD __fastcall ph_zprev(BYTE *tool, void *edx, LONG *rect, DWORD out) {
         capn = ph_cappct(sup + add, dem);
         {
             int tiny = air && (x1 - x0 + 1 < 3 || z1 - z0 + 1 < 3 || (x1 - x0 + 1 < 5 && z1 - z0 + 1 < 5));
-            if (es)
-                wsprintfA(t, "%s %ld celdas, %ld sin transporte (rojo)  |  cap. %s +%ld, uso %ld%% a %ld%%  |  "
-                             "techo %s %ld a %ld  |  %snecesita energia y agua",
-                          air ? "Aeropuerto" : "Puerto", n, bad, air ? "C" : "I", add, cap, capn,
-                          air ? "C" : "I", vmax - vmax * cap / 100, vmax - vmax * capn / 100,
-                          air ? (tiny ? "pista: 3x5 o mas, " : "") : "muelles: 5 de borde con agua, ");
-            else
-                wsprintfA(t, "%s %ld cells, %ld without transport (red)  |  cap. %s +%ld, use %ld%% to %ld%%  |  "
-                             "%s ceiling %ld to %ld  |  %sneeds power and water",
-                          air ? "Airport" : "Seaport", n, bad, air ? "C" : "I", add, cap, capn,
-                          air ? "C" : "I", vmax - vmax * cap / 100, vmax - vmax * capn / 100,
-                          air ? (tiny ? "runway: 3x5 or more, " : "") : "piers: 5 edge cells on water, ");
+            /* modlang: one format per language from the tables, the inline pair is the fallback */
+            wsprintfA(t, SC3TR(es, "placehints.port_hint",
+                               "%s %ld celdas, %ld sin transporte (rojo)  |  cap. %s +%ld, uso %ld%% a %ld%%  |  "
+                               "techo %s %ld a %ld  |  %snecesita energia y agua",
+                               "%s %ld cells, %ld without transport (red)  |  cap. %s +%ld, use %ld%% to %ld%%  |  "
+                               "%s ceiling %ld to %ld  |  %sneeds power and water"),
+                      air ? SC3TR(es, "placehints.airport", "Aeropuerto", "Airport") : SC3TR(es, "placehints.seaport", "Puerto", "Seaport"),
+                      n, bad, air ? "C" : "I", add, cap, capn,
+                      air ? "C" : "I", vmax - vmax * cap / 100, vmax - vmax * capn / 100,
+                      air ? (tiny ? SC3TR(es, "placehints.runway", "pista: 3x5 o mas, ", "runway: 3x5 or more, ") : "")
+                          : SC3TR(es, "placehints.piers", "muelles: 5 de borde con agua, ", "piers: 5 edge cells on water, "));
         }
         ph_sethint(tool, t);
     } __except (EXCEPTION_EXECUTE_HANDLER) { }
@@ -344,12 +343,10 @@ static DWORD __fastcall ph_bprev(BYTE *tool, void *edx, LONG *pos, LONG *out, in
         {
             char part[3][24];
             for (k = 0; k < 3; k++) wsprintfA(part[k], "%c %s%ld%%", cls[k], peak[k] > 0 ? "+" : "", peak[k]);
-            if (ho_spanish())
-                wsprintfA(t, "Valor del suelo %s  %s  %s  |  %s %c %s%ld%% o mas hasta %ld celdas", part[0], part[1], part[2],
-                          peak[best] > 0 ? "marcado" : "en rojo", cls[best], peak[best] > 0 ? "+" : "-", thr, reach);
-            else
-                wsprintfA(t, "Land value %s  %s  %s  |  %s %c %s%ld%% or more up to %ld cells", part[0], part[1], part[2],
-                          peak[best] > 0 ? "marked" : "red", cls[best], peak[best] > 0 ? "+" : "-", thr, reach);
+            wsprintfA(t, SC3TR(ho_spanish(), "placehints.land_value", "Valor del suelo %s  %s  %s  |  %s %c %s%ld%% o mas hasta %ld celdas",
+                               "Land value %s  %s  %s  |  %s %c %s%ld%% or more up to %ld cells"), part[0], part[1], part[2],
+                      peak[best] > 0 ? SC3TR(ho_spanish(), "placehints.marked", "marcado", "marked") : SC3TR(ho_spanish(), "placehints.in_red", "en rojo", "red"),
+                      cls[best], peak[best] > 0 ? "+" : "-", thr, reach);
         }
         if (g_ph_log && lstrcmpA(g_ph_hint, t))
             logf("PLACEHINTS> plop type %lu row %lu (R %d C %d I %d) footprint %ldx%ld", type, row.key, row.v[0],
