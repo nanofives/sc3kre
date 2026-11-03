@@ -158,6 +158,7 @@ static struct { BYTE *self; void *win; LPARAM cell; } g_rs_close;   /* the dialo
  *   RSTITLE   the list page's title reads "Vida Util" while the list is up (the game's own title window and font)
  *   RSARROWS  "<" ">" as 24x25 image buttons cut from the close box's art (were 40 px text buttons whose pills overlap)
  *   RSHG2     the hourglass redrawn as pixel art (off = the 11-02c drawing) */
+static int g_rs_strip = 1;   /* SC3RESIZE_RSSTRIP=0: no continuous footer band */
 static int g_rs_rebuild = 1, g_rs_title = 1, g_rs_arrows = 1, g_rs_hg2 = 1, g_rs_fix_init;
 static void rs_fix_init(void) {
     char v[8];
@@ -166,6 +167,7 @@ static void rs_fix_init(void) {
     if (GetEnvironmentVariableA("SC3RESIZE_REBUILD", v, sizeof(v))) g_rs_rebuild = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_RSTITLE", v, sizeof(v))) g_rs_title = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_RSARROWS", v, sizeof(v))) g_rs_arrows = atoi(v);
+    if (GetEnvironmentVariableA("SC3RESIZE_RSSTRIP", v, sizeof(v))) g_rs_strip = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_RSHG2", v, sizeof(v))) g_rs_hg2 = atoi(v);
     logf("RESTOREFIX> REBUILD %d, RSTITLE %d, RSARROWS %d, RSHG2 %d", g_rs_rebuild, g_rs_title, g_rs_arrows, g_rs_hg2);
 }
@@ -672,6 +674,7 @@ static void rs_test(WPARAM wp, LPARAM lp) {
 #define RM_PREV   0x5E570102
 #define RM_NEXT   0x5E570103
 #define RM_BACK   0x5E570105
+#define RM_STRIP  0x5E570110              /* RSSTRIP: flat light-blue shape behind the whole footer row */
 #define RM_L1     0x5E570200              /* + row */
 #define RM_L2     0x5E570220
 #define RM_RB     0x5E570240
@@ -706,6 +709,22 @@ static void rm_reload(void) {
 }
 
 /* write every caption of the page from g_rm (the widgets exist, rm_open made them) */
+/* RSSTRIP: a flat filled rect from the game's shape window (class 0x4303E5B6 / 0xE303E5AE, style 0x31 via vt_rect),
+   colour = the colour service's converted 16-bit value (a raw 0xRRGGBB drew dark red) of the footer boxes' light blue (120, 144, 248, measured on the boxes).
+   Disabled so a click falls through to the parent. 1 = added. Page-local (x, y). */
+static int rs_flat(void *win, DWORD id, int x, int y, int w, int h) {
+    HMODULE sui = GetModuleHandleA("SIMUI.DLL");
+    void *cs, *sw;
+    if (!sui) return 0;
+    cs = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85039))();
+    if (!cs) return 0;
+    vt_rect(win, id, (WORD)(ho_v(cs, 0x84, 3, 120, 144, 248, 0, 0) & 0xffff), x, y, w, h);   /* VDTABS recipe: style 0x31 = filled (0x11 only strokes) */
+    sw = mp_child(win, id);
+    if (!sw) return 0;
+    ho_v(sw, 0xf4, 2, 2, 0, 0, 0, 0);   /* disabled: a click falls through to the parent */
+    return 1;
+}
+
 static void rm_fill(void *win) {
     int es = ho_spanish(), k, pages = g_rm.n ? (g_rm.n + RM_ROWS - 1) / RM_ROWS : 1;
     char t[200], a[24], b[24], c[32];
@@ -814,7 +833,7 @@ static void rm_hide_game(void *win) { g_rm.nhidden = 0; rm_hide_tree(win, 0); }
 static void rm_collect_ours(void *win) {
     DWORD ids[32];
     int n = 0, k;
-    ids[n++] = RM_BTN; ids[n++] = RM_HEAD; ids[n++] = RM_ALL; ids[n++] = RM_PREV; ids[n++] = RM_NEXT; ids[n++] = RM_BACK;
+    ids[n++] = RM_BTN; ids[n++] = RM_HEAD; ids[n++] = RM_ALL; ids[n++] = RM_PREV; ids[n++] = RM_NEXT; ids[n++] = RM_BACK; ids[n++] = RM_STRIP;
     for (k = 0; k < RM_ROWS; k++) { ids[n++] = RM_L1 + k; ids[n++] = RM_L2 + k; ids[n++] = RM_RB + k; }
     g_rm.nours = 0;
     for (k = 0; k < n && g_rm.nours < 32; k++) {
@@ -865,6 +884,7 @@ static void rm_open(void *win) {
             int oa;
             wa = w - 16 - 84 - (3 * gap + 2 * aw);
             xa = 8;
+            if (g_rs_strip) ok += rs_flat(win, RM_STRIP, 8, yb, w - 16, QI_BH);   /* RSSTRIP: created first = under every footer button */
             ok += mp_button(fac, win, RM_ALL, " ", xa, yb, wa, QI_BH);                xa += wa;
             xp = xa + gap;
             oa = rs_img_btn(fac, win, RM_PREV, 1, xp, ya, SC3TR(es, "lifespan.previous", "Anterior", "Previous"), &aw);
@@ -904,7 +924,7 @@ static void rm_open(void *win) {
         ok += mp_button(fac, win, RM_BACK, SC3TR(es, "lifespan.back", "Volver", "Back"), w - 8 - 76, y, 76, QI_BH);
         logf("RESTORE> Reunirse page %ldx%ld: %d widgets made", w, h, ok);
     } else {
-        rm_show(win, RM_HEAD, 1); rm_show(win, RM_ALL, 1); rm_show(win, RM_BACK, 1);
+        rm_show(win, RM_HEAD, 1); rm_show(win, RM_ALL, 1); rm_show(win, RM_BACK, 1); rm_show(win, RM_STRIP, 1);
     }
     g_rm.win = win;
     rm_collect_ours(win);
@@ -915,7 +935,7 @@ static void rm_open(void *win) {
 
 static void rm_close(void *win) {
     int k;
-    static const DWORD ids[] = { RM_HEAD, RM_ALL, RM_PREV, RM_NEXT, RM_BACK };
+    static const DWORD ids[] = { RM_HEAD, RM_ALL, RM_PREV, RM_NEXT, RM_BACK, RM_STRIP };
     for (k = 0; k < (int)(sizeof(ids) / sizeof(ids[0])); k++) rm_show(win, ids[k], 0);
     for (k = 0; k < RM_ROWS; k++) { rm_show(win, RM_L1 + k, 0); rm_show(win, RM_L2 + k, 0); rm_show(win, RM_RB + k, 0); }
     for (k = g_rm.nhidden - 1; k >= 0; k--) if (rz_win_alive(g_rm.hidden[k])) ho_v(g_rm.hidden[k], 0xf4, 2, 1, 1, 0, 0, 0);
