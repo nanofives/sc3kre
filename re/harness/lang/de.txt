@@ -586,3 +586,29 @@ restore.date_repaired_free=Datum repariert, kostenlos
 # ---- added by sc3lang.py merge (machine translation, needs native review)
 # en: green
 placehints.in_green=grün
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: no street next to it
+stationwarn.bus_no_street=keine Straße daneben
+# en: connected
+stationwarn.connected=in Ordnung
+# en: Connection:
+stationwarn.connection=Anbindung:
+# en: Stations not connected: %ld of %ld
+stationwarn.cuadros_bad=Stationen ohne Anbindung: %ld von %ld
+# en: Stations: %ld, all connected
+stationwarn.cuadros_ok=Stationen: %ld, alle angebunden
+# en: no street or buildings
+stationwarn.no_access=ohne Straße und Häuser
+# en: No passengers:
+stationwarn.no_passengers=Keine Fahrgäste:
+# en: no other station on it
+stationwarn.rail_no_dest=Gleis ohne Ziel
+# en: not on the track
+stationwarn.rail_no_track=nicht am Gleis
+# en: not on track or subway
+stationwarn.rs_no_track=weder Gleis noch U-Bahn
+# en: no other station on it
+stationwarn.subway_no_dest=U-Bahn ohne Ziel
+# en: not on the subway line
+stationwarn.subway_no_track=nicht an der U-Bahn

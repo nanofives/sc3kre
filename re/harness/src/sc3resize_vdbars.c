@@ -572,6 +572,9 @@ static void vb_transport(VB *b, int x0, int x1, int y) {
         wsprintfA(t, SC3TR(es, "cuadros.trips_with_no_destination", "Viajes sin destino (mes pasado): %s", "Trips with no destination (last month): %s"), val);
         vb_text(b, t, g_vb_ink, x0, y + 18 + 118, x1 - x0, 14, 1);
     }
+    {   int sw = sw_cuadros_text(t, sizeof(t));   /* STATIONWARN: poorly connected stations */
+        if (sw) vb_text(b, t, sw == 2 ? g_vb_warn : g_vb_ink, x0, y + 18 + 134, x1 - x0, 14, 1);
+    }
     if (g_vt_log) {
         static LONG last = -2;
         if (last != key) {
