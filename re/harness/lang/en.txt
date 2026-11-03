@@ -476,6 +476,12 @@ placehints.st_dead_subway=touches no subway: 0 trips (red)
 # sc3resize_placehints.c
 placehints.st_links=connects through %d cells
 # sc3resize_placehints.c
+placehints.st_nodest_rail=the rail leads to no other station and no map edge: 0 trips (red)
+# sc3resize_placehints.c
+placehints.st_nodest_railsub=neither rail nor subway leads to another station or a map edge: 0 trips (red)
+# sc3resize_placehints.c
+placehints.st_nodest_subway=the subway leads to no other station and no map edge: 0 trips (red)
+# sc3resize_placehints.c
 placehints.st_notrips=no trip data (TRIPCELLS off)
 # sc3resize_placehints.c
 placehints.st_rail=Train station

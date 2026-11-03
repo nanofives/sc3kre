@@ -166,3 +166,49 @@ counts, with the in-box transit split (orchestrator go).
 - stationwarn: share `ph_station_links` (signature sent 2026-11-03).
 - GRAPHNEW / TRIPCELLS owner: TRIPCELLS months close only after the Graficas page was opened once (`gn_month` gated on
   `g_gn_if[0]`), so the transit map and this hint have no monthly history before that. Not changed here.
+
+# STATUS tripmonth (2026-11-03, orchestrator round after placehints4)
+
+## goal
+1. TRIPCELLS month close from the city load, graphs unchanged. 2. Station preview: (a) "somewhere to go" flood, (b)
+exact per-class reach. 3. Owner: Shift label in 2 or 3 lines.
+
+## verdict + deciding RVAs
+1. `gn_month` (SIMMISC `0x10007d88` detour) closed trip months only with the graph series made (Graficas opened once).
+   New else branch: key = `gn_key(budget+0x14)`, `tm_month(key)`. Built, measured.
+2. (a) `ph_station_dest`: flood over rail 4 / tunnel 8, edge 0x1000 / 0x2000 (SimTransit `0x10008a94`), other station
+   entry with reach, or a ring bus stop (stationwarn's rule). (b) per lot: class `0x100057f6`, rect occ vt+0xcc, lot rect
+   + r_k corners cut holds a footprint cell (start scan `0x1000755e`). Built, measured.
+3. TIPLINES: SC3U `0x00442f06` raster height 3 lines, `0x00443331` render wrapped (font vtable copy, vt+0x58 / vt+0x88
+   line by line), split at "|" groups. Built, measured es + de.
+
+## built
+`dev\tripmonth\inst\sc3resize.dll`, clean build.
+
+## proven game-side vs static only
+- game-side (`verify/tripmonth/RESULTS.md`): months 24805..24823 closed with Graficas never opened; connected line links 2
+  dest 1, stub links 2 dest 0 red; per-lot area; labels 3 lines (station, airport, es), 2 lines (park es, station de).
+- static only: graphs after opening the page (path untouched), subway kinds in game, `_LINES=0`, scaled HUD.
+
+## blocked on
+-
+
+## files owned
+- re/harness/src/sc3resize_graphs.c  (gn_month else branch)
+- re/harness/src/sc3resize_placehints.c  (force-add: station dest + per-lot reach + TIPLINES + octal fix)
+- re/harness/lang/{es,en,fr,de,it,nl,sv}.txt  (3 keys placehints.st_nodest_*, es "vía" fix)
+- re/analysis/PLACEHINTS.md  (section F)
+- verify/tripmonth/RESULTS.md, verify/tripmonth/lang_resolved_on_main_41150db/  (MAIN)
+- re/sessions/STATUS_placehints.md  (this section, MAIN)
+- pictures in MAIN\verify\tripmonth\owner_shots\ (not for git)
+
+## conflicts against main 41150db
+- lang fr/de/it/nl/sv.txt: both sides appended a block at the end (3 placehints keys / 12 stationwarn keys). Keep both;
+  resolved copies in verify/tripmonth/lang_resolved_on_main_41150db (check: 306 keys). Everything else merges clean.
+
+## game-harness need
+-
+
+## asks of other sessions
+- stationwarn: `ph_station_dest` is the placement copy of sw_flood (no shared code); keep the two rules in step.
+- main has "v355a" in es.txt (3 placehints keys) until this merges.
