@@ -212,3 +212,40 @@ exact per-class reach. 3. Owner: Shift label in 2 or 3 lines.
 ## asks of other sessions
 - stationwarn: `ph_station_dest` is the placement copy of sw_flood (no shared code); keep the two rules in step.
 - main has "v355a" in es.txt (3 placehints keys) until this merges.
+
+# STATUS ghosttiles (2026-11-03, owner bug on sc3mods-2026-11-03b: ghost coloured tiles while placing)
+
+## goal
+Find and fix highlight cells left on the map while placing a ploppable.
+
+## verdict + deciding RVA
+Highlighter push vt+0x58 SIMSPR `0x1004b779` sets the dirty rect +0x50 to the rect it is given (LAB_1004b931). The
+tools' clear `0x1004b653` (in the fill `0x1004af93` and the cancel `0x1004ae23`) wipes only +0x50. STATIONWARN's blink
+pushed the station rect every 700 ms, so the tool's old cells were stranded (every tool, any city with a flagged
+station). PLACEHINTS' halo push could leave the footprint out. Fix: block GHOSTFIX `hl_push` (stationwarn restores +0x50
+after its push, placehints pushes the union with +0x50). `SC3RESIZE_GHOSTFIX=0` = before.
+
+## built
+`dev\ghosttiles\inst\sc3resize.dll`, clean build.
+
+## proven game-side vs static only
+- game-side (`verify/ghosttiles/RESULTS.md`): 5 ghosts before, 0 after, 5 again with `_GHOSTFIX=0`. Shift held moves,
+  Shift up, Esc, tool change clean. Stationwarn marker still blinks.
+- not run: real mouse / physical Shift, station plop and airport drag shots, dialog open while placing.
+
+## blocked on
+-
+
+## files owned
+- re/harness/src/sc3resize_stationwarn.c  (hl_push + sw_paint call, force-add rule `/re/*`)
+- re/harness/src/sc3resize_placehints.c   (ph_push calls hl_push, force-add)
+- verify/ghosttiles/RESULTS.md  (MAIN)
+- re/sessions/STATUS_placehints.md  (this section, MAIN)
+- pictures in MAIN\verify\ghosttiles\owner_shots\ (not for git)
+
+## game-harness need
+-
+
+## asks of other sessions
+- any mod that pushes the cell highlighter (vt+0x58) should use `hl_push` (keep = 1 for a marker outside the tools'
+  rect, 0 for a preview), or it strands the tools' cells.
