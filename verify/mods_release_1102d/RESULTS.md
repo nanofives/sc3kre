@@ -26,3 +26,10 @@ plus modlang. Binaries built from main `3339ade` (dev/rel1102d).
 Zip: the 11-02c zip with the 12 DLLs replaced, Apps/sc3lang/*.txt added, README.txt updated (header, sc3lang line,
 NEW IN 2026-11-02d with the recycling-center warning). 142 entries, 141 checked against the staged manifest, 0 mismatches.
 `sc3mods_2026-11-02d.zip` 50,692,107 bytes, SHA-256 953BFE73205A16853CC3B3FC245EBC812D2EE45B6239B39950F1092322F91987.
+
+GitHub: `sc3mods-2026-11-02d`, target `fa5aec8`, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-11-02d, asset
+downloaded back, SHA-256 matches. The 11-02c notes start with a "superseded" line that points recycling-center users to Reconstruir.
+
+LAN: `deploy_lan_release.sh stage/release_1102d` sent 19 of 3,622 files (2.7 MB). Served label `2026-11-02d`; served
+sc3resize.dll, sc3mods.dll and sc3lang/fr.txt SHA-256 match the stage. Then `stage/release` -> `stage/release_1102c_old`,
+`stage/release_1102d` -> `stage/release`.
