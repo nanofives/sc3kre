@@ -26,7 +26,12 @@ typedef struct {                      /* = SC3R_INFO in sc3restore.c */
     DWORD size, type;
     LONG  age, max_age, decline, aging, defunct, price, cost, x0, z0, x1, z1, birth_y, birth_m;
     char  name[64];
+    DWORD flags;                      /* RS_DEAD / RS_BADDATE (restorefix 2026-11-02) */
+    DWORD key[3];                     /* attrib key, what the building tool places */
+    DWORD jdn;
 } RS_INFO;
+#define RS_DEAD    1u                 /* = SC3R_DEAD: rubble of an expired building (keeps class, type, name, key) */
+#define RS_BADDATE 2u                 /* = SC3R_BADDATE: alive, birthdate broken (the 11-02c recycling-center bug) */
 typedef int  (__cdecl *PFN_rs_info)(void *, RS_INFO *);
 typedef int  (__cdecl *PFN_rs_apply)(void *, int, char *, int);
 typedef LONG (__cdecl *PFN_rs_funds)(void);
@@ -59,6 +64,14 @@ static void rs_age(char *out, int cap, LONG months, int es) {
 
 static void rs_line(const RS_INFO *i, int es, char *out, int cap) {
     char a[24], m[24], l[24];
+    if (i->flags & RS_DEAD) {
+        _snprintf(out, cap, es ? "Fin de su vida \xfatil: se puede reconstruir" : "End of its life: it can be rebuilt");
+        out[cap - 1] = 0; return;
+    }
+    if (i->flags & RS_BADDATE) {
+        _snprintf(out, cap, es ? "Fecha da\xf1" "ada: reparaci\xf3n gratis" : "Date damaged: free repair");
+        out[cap - 1] = 0; return;
+    }
     rs_age(a, sizeof(a), i->age, es);
     rs_age(m, sizeof(m), i->max_age, es);
     rs_age(l, sizeof(l), i->max_age - i->age, es);
@@ -76,6 +89,9 @@ static void rs_caption(const RS_INFO *i, int es, char *out, int cap) {
     rs_money(c, sizeof(c), i->cost);
     if (g_rs_last.tick && GetTickCount() - g_rs_last.tick < 10000 && g_rs_last.type == i->type && g_rs_last.x0 == i->x0 &&
         g_rs_last.z0 == i->z0) lstrcpynA(out, g_rs_last.cap, cap);
+    else if ((i->flags & (RS_DEAD | RS_BADDATE)) == (RS_DEAD | RS_BADDATE)) _snprintf(out, cap, es ? "Reconstruir (gratis)" : "Rebuild (free)");
+    else if (i->flags & RS_DEAD) { rs_money(c, sizeof(c), i->price); _snprintf(out, cap, es ? "Reconstruir $%s" : "Rebuild $%s", c); }
+    else if (i->flags & RS_BADDATE) _snprintf(out, cap, es ? "Reparar (gratis)" : "Repair (free)");
     else if (i->age <= 0) _snprintf(out, cap, es ? "Como nuevo" : "As new");
     else _snprintf(out, cap, es ? "Restaurar $%s" : "Restore $%s", c);
     out[cap - 1] = 0;
@@ -137,6 +153,151 @@ static void rs_query_cell(LONG x, LONG z);   /* below */
 static struct { BYTE *self; void *win; LPARAM cell; } g_rs_close;   /* the dialog to close and reopen (rs_click) */
 #define WM_RZ_RESTORE (WM_APP + 0x5F8)
 
+/* ================= restorefix (round 2026-11-02b), each block with its own off switch SC3RESIZE_<NAME>=0:
+ *   REBUILD   "Reconstruir $N" in the "?" of a dead building and on its row of the Vida util list
+ *   RSTITLE   the list page's title reads "Vida Util" while the list is up (the game's own title window and font)
+ *   RSARROWS  "<" ">" as 24x25 image buttons cut from the close box's art (were 40 px text buttons whose pills overlap)
+ *   RSHG2     the hourglass redrawn as pixel art (off = the 11-02c drawing) */
+static int g_rs_rebuild = 1, g_rs_title = 1, g_rs_arrows = 1, g_rs_hg2 = 1, g_rs_fix_init;
+static void rs_fix_init(void) {
+    char v[8];
+    if (g_rs_fix_init) return;
+    g_rs_fix_init = 1;
+    if (GetEnvironmentVariableA("SC3RESIZE_REBUILD", v, sizeof(v))) g_rs_rebuild = atoi(v);
+    if (GetEnvironmentVariableA("SC3RESIZE_RSTITLE", v, sizeof(v))) g_rs_title = atoi(v);
+    if (GetEnvironmentVariableA("SC3RESIZE_RSARROWS", v, sizeof(v))) g_rs_arrows = atoi(v);
+    if (GetEnvironmentVariableA("SC3RESIZE_RSHG2", v, sizeof(v))) g_rs_hg2 = atoi(v);
+    logf("RESTOREFIX> REBUILD %d, RSTITLE %d, RSARROWS %d, RSHG2 %d", g_rs_rebuild, g_rs_title, g_rs_arrows, g_rs_hg2);
+}
+
+/* the rubble's info (sc3restore_dead): 1 = occ is a dead building with a lifespan */
+static int rs_dead(void *occ, RS_INFO *i) {
+    PFN_rs_info fd = (PFN_rs_info)rs_fn("sc3restore_dead");
+    memset(i, 0, sizeof(*i));
+    i->size = sizeof(*i);
+    return g_rs_rebuild && fd && occ && fd(occ, i);
+}
+
+/* ================= REBUILD (restorefix 2026-11-02b, owner: "i also want a feature to rebuild the same building that got
+ * destroyed in that place"). A building with a lifespan that dies leaves rubble of its own class, type, name and attrib key
+ * (SIMECO 0x100035f7 makes it through the building layer from the same attrib, state 8, Kill; SIMUTIL 0x1000690c the same
+ * for plants), so the rubble says what stood there. The rebuild is the game's own check + place, SIMGEOM 0x10006ba6 through
+ * the building layer's (city vt+0x138) CanPlace / Place slots for the tool kind of the key (the factory 0x10007e64 picks the
+ * tool by key {0x207edc0e, 0x57e, inst}: inst 1 = kind 1, 0xdc/0xeb/0xf4/0xfa = kind 2, 0x3e8a/0xe9 = kind 3, else kind 0;
+ * the four tools call +0x24..+0x30 / +0x38..+0x44 [CONFIRMED @ SIMGEOM 0x1000970f, 0x10009f7f, 0x100099eb, 0x10009d3f]),
+ * at the rubble's first cell, coord {x << 8, z << 8, 0} (the min corner: 0x10006ba6 adds (size - 1) * 0x100 for the far one).
+ * Not free: the stock check prices it (build price + clearing + levelling) and the stock Place refuses when funds are short
+ * and withdraws the cost itself. The rubble itself is a building (GeomFlag 0x104) that the stock site check refuses, so the
+ * call runs inside RELOCATE's context with the rubble as "the occupant being moved": the cave at 0x100076b4 accepts it at no
+ * price and the commit detour at 0x10007760 removes it (DemolishOccupant, no rubble) just before the stock insert. A refused
+ * spot removes nothing. Needs the RELOCATE hooks (in unless SC3RESIZE_RELOCATE=0 and SC3RESIZE_PLOPOVER=0). */
+static int rb_kind(const DWORD *k) {
+    if (k[0] == 0x207edc0e && k[1] == 0x57e) {
+        if (k[2] == 1) return 1;
+        if (k[2] == 0x3e8a || k[2] == 0xe9) return 3;
+        if (k[2] == 0xdc || k[2] == 0xeb || k[2] == 0xf4 || k[2] == 0xfa) return 2;
+        if (k[2] == 0x1f98 || k[2] == 0x1f8b || k[2] == 0x1f5d) return -1;   /* multi-cell / random variants: not here */
+    }
+    return 0;
+}
+/* 1 placed, 0 refused (msg says why), *paid = what the game withdrew */
+static int rb_rebuild(void *occ, const RS_INFO *i, int es, char *msg, int cap, LONG *paid) {
+    BYTE *city = rl_city();
+    void *bl, *bud, *o2 = NULL, *om;
+    LONG coord[3], bounds[6], funds, f1;
+    DWORD cost = 0, a[5], r = 0, t2 = 0;
+    int kind, k, placed = 0;
+    /* FREE for a building the 11-02c restore bug killed (dead with a birthdate GetAge cannot make sense of, RS_BADDATE;
+       the owner already paid for that restore; orchestrator call 2026-11-02): Place with the game's free flag, so the
+       stock commit withdraws nothing and does not test funds (SIMGEOM 0x10006ba6). Any other dead building: PAID. */
+    int freeb = (i->flags & (RS_DEAD | RS_BADDATE)) == (RS_DEAD | RS_BADDATE);
+    char c1[32], c2[32];
+    msg[0] = 0; *paid = 0;
+    if (!g_rs_rebuild) return 0;
+    if (!city || !g_rl_geom || !g_rl_orig[0] || !g_rl_7760_ret) {
+        _snprintf(msg, cap, es ? "No disponible (Mover desactivado)" : "Not available (Mover is off)");
+        logf("REBUILD> refused: the RELOCATE hooks are not in (SC3RESIZE_RELOCATE=0 and SC3RESIZE_PLOPOVER=0?)");
+        return 0;
+    }
+    if (g_rl.on || g_rl_occ) {
+        _snprintf(msg, cap, es ? "Hay una mudanza en curso" : "A move is in progress");
+        logf("REBUILD> refused: a Mover is pending (occupant 0x%08lX)", (DWORD)g_rl_occ);
+        return 0;
+    }
+    kind = rb_kind(i->key);
+    if (!i->key[0] || kind < 0) {
+        _snprintf(msg, cap, es ? "No se puede reconstruir" : "Cannot be rebuilt");
+        logf("REBUILD> refused: key 0x%08lX 0x%08lX 0x%08lX (kind %d)", i->key[0], i->key[1], i->key[2], kind);
+        return 0;
+    }
+    bl = (void *)ho_v(city, 0x138, 0, 0, 0, 0, 0, 0);
+    bud = (void *)ho_v(city, 0x15c, 0, 0, 0, 0, 0, 0);
+    if (!bl || !bud) return 0;
+    funds = (LONG)ho_v(bud, 0x10, 0, 0, 0, 0, 0, 0);
+    coord[0] = i->x0 << 8; coord[1] = i->z0 << 8; coord[2] = 0;
+    g_rl_occ = occ; g_rl_city = city; g_rl_tool = NULL; g_rl_type = i->type;
+    g_rl_cell[0] = i->x0; g_rl_cell[1] = i->z0; g_rl_cell[2] = i->x1; g_rl_cell[3] = i->z1;
+    g_rl.on = 1; g_rl.reloc = 1; g_rl.n = 0; g_rl.clr = g_rl.zon = 0; g_rl.tid = GetCurrentThreadId();
+    __try {
+        for (k = 0; k < 6; k++) bounds[k] = 0x7fffffff;
+        a[0] = (DWORD)coord; a[1] = (DWORD)i->key; a[2] = (DWORD)bounds; a[3] = (DWORD)&cost;
+        r = rz_thiscall_ret(bl, (void *)g_rl_orig[kind], a, 4) & 0xff;            /* CanPlace, as the tool's Apply */
+        if (r && !freeb && (LONG)cost > funds) {
+            rs_money(c1, sizeof(c1), (LONG)cost); rs_money(c2, sizeof(c2), funds);
+            _snprintf(msg, cap, es ? "Fondos insuficientes: cuesta $%s, hay $%s" : "Not enough funds: costs $%s, you have $%s", c1, c2);
+            r = 2;
+        } else if (r) {
+            DWORD pcost = 0;
+            g_rl.n = 0; g_rl.clr = g_rl.zon = 0;
+            for (k = 0; k < 6; k++) bounds[k] = 0x7fffffff;
+            a[0] = (DWORD)coord; a[1] = (DWORD)i->key; a[2] = (DWORD)bounds; a[3] = (DWORD)&pcost; a[4] = (DWORD)freeb;   /* free only for the bug's victims */
+            placed = (int)(rz_thiscall_ret(bl, (void *)g_rl_orig[4 + kind], a, 5) & 0xff);   /* Place: the stock commit */
+            cost = pcost;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { logf("REBUILD> fault 0x%08lX in the check / place", GetExceptionCode()); placed = 0; }
+    g_rl.on = 0; g_rl.reloc = 0; g_rl.n = 0;
+    g_rl_occ = NULL; g_rl_city = NULL; g_rl_type = 0;
+    f1 = (LONG)ho_v(bud, 0x10, 0, 0, 0, 0, 0, 0);
+    om = (void *)ho_v(city, 0x11c, 0, 0, 0, 0, 0, 0);
+    if (om && (ho_v(om, 0x7c, 3, (DWORD)i->x0, (DWORD)i->z0, (DWORD)&o2, 0, 0) & 0xff) && o2) {
+        t2 = ho_v(o2, 0x88, 0, 0, 0, 0, 0, 0);
+        if (o2 == occ) t2 = 0;
+        ho_v(o2, 0x08, 0, 0, 0, 0, 0, 0);
+    }
+    logf("REBUILD> %s (type %lu, key 0x%08lX 0x%08lX 0x%08lX, kind %d) at cells [%ld %ld %ld %ld]: %s; check %s, place %s, "
+         "cost %lu, funds %ld -> %ld; now at (%ld, %ld): %s type %lu", i->name, i->type, i->key[0], i->key[1], i->key[2], kind,
+         i->x0, i->z0, i->x1, i->z1,
+         freeb ? "FREE (died from the 11-02c restore bug: broken birthdate, the owner paid for that restore)"
+               : "PAID (died of old age: the build price)",
+         r == 1 ? "ok" : r == 2 ? "ok but funds short" : "REFUSED", placed ? "done" : "not done",
+         cost, funds, f1, i->x0, i->z0, t2 == i->type ? "the new building" : "NOT the new building", t2);
+    if (placed && t2 == i->type) {
+        *paid = funds - f1;
+        rs_money(c1, sizeof(c1), *paid);
+        if (freeb && *paid == 0) _snprintf(msg, cap, es ? "Reconstruido sin costo" : "Rebuilt for free");
+        else _snprintf(msg, cap, es ? "Reconstruido por $%s" : "Rebuilt for $%s", c1);
+        return 1;
+    }
+    if (!msg[0]) _snprintf(msg, cap, es ? "No se puede construir ah\xed" : "Cannot build there");
+    return 0;
+}
+/* the rubble at (x0, z0) of that type: rebuild it (the list's row button) */
+static int rb_rebuild_at(LONG x0, LONG z0, DWORD type, int es, char *msg, int cap) {
+    BYTE *city = rl_city();
+    void *om = city ? (void *)ho_v(city, 0x11c, 0, 0, 0, 0, 0, 0) : NULL, *o = NULL;
+    RS_INFO i;
+    LONG paid;
+    int r = 0;
+    msg[0] = 0;
+    if (!om || !(ho_v(om, 0x7c, 3, (DWORD)x0, (DWORD)z0, (DWORD)&o, 0, 0) & 0xff) || !o) {
+        _snprintf(msg, cap, es ? "Ya no est\xe1" : "It is gone"); return 0;
+    }
+    if (ho_v(o, 0x88, 0, 0, 0, 0, 0, 0) == type && rs_dead(o, &i) && i.x0 == x0 && i.z0 == z0) r = rb_rebuild(o, &i, es, msg, cap, &paid);
+    else _snprintf(msg, cap, es ? "Ya no est\xe1 en ruinas" : "No longer rubble");
+    ho_v(o, 0x08, 0, 0, 0, 0, 0, 0);
+    return r;
+}
+
 static void rs_add(void *win, BYTE *qo) {
     HMODULE sui = GetModuleHandleA("SIMUI.DLL");
     PFN_rs_info fi = (PFN_rs_info)rs_fn("sc3restore_info");
@@ -149,7 +310,7 @@ static void rs_add(void *win, BYTE *qo) {
     if (ho_v(win, 0x78, 1, RS_BTN, 0, 0, 0, 0)) return;
     memset(&i, 0, sizeof(i));
     i.size = sizeof(i);
-    if (!fi(occ, &i)) return;
+    if (!fi(occ, &i) && !rs_dead(occ, &i)) return;   /* REBUILD: a dead one gets "Reconstruir $price" */
     fac = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85065))();
     if (!fac || IsBadReadPtr(fac, 4)) return;
     w = l[2] - l[0]; h = l[3] - l[1];
@@ -159,7 +320,8 @@ static void rs_add(void *win, BYTE *qo) {
     rs_caption(&i, es, cap, sizeof(cap));
     okb = mp_button(fac, win, RS_BTN, cap, bx, by, RS_BW, QI_BH);
     if (okb) g_rs_win = win;
-    if (okb && g_rs_grey && i.age <= 0) rs_enable(win, RS_BTN, 0);   /* RSGREY: "Como nuevo" / "Restaurado" grey, not clickable */
+    if (okb && g_rs_grey && i.age <= 0 && !(i.flags & (RS_DEAD | RS_BADDATE)))
+        rs_enable(win, RS_BTN, 0);   /* RSGREY: "Como nuevo" / "Restaurado" grey, not clickable */
     ly = by - 22;
     rs_line(&i, es, line, sizeof(line));
     if (rl_rect_free(win, 10, ly, w - 10, ly + 18)) {
@@ -184,11 +346,36 @@ static void rs_click(void *win, BYTE *qo) {
     if (!fi || !fa || !occ) return;
     memset(&i, 0, sizeof(i));
     i.size = sizeof(i);
-    if (!fi(occ, &i)) return;
-    if (i.age <= 0) return;                            /* "Como nuevo": nothing to do */
+    if (!fi(occ, &i)) {
+        LONG paid = 0;
+        if (!rs_dead(occ, &i)) return;
+        /* REBUILD: the rubble's "Reconstruir"; on success the dialog is closed and opened again on the new building */
+        r = rb_rebuild(occ, &i, es, msg, sizeof(msg), &paid);
+        logf("REBUILD> click on %s at (%ld, %ld): %d \"%s\"", i.name, i.x0, i.z0, r, msg);
+        rs_money(c, sizeof(c), r ? paid : i.price);
+        if (!r) {
+            LONG f = 0;
+            PFN_rs_funds ff = (PFN_rs_funds)rs_fn("sc3restore_funds");
+            if (ff) f = ff();
+            if (!(i.flags & RS_BADDATE) && f < i.price) _snprintf(cap, sizeof(cap), es ? "Sin fondos ($%s)" : "No funds ($%s)", c);
+            else lstrcpynA(cap, es ? "No se pudo" : "Not done", sizeof(cap));
+            cap[sizeof(cap) - 1] = 0;
+            lf_caption(win, RS_BTN, cap);
+            return;
+        }
+        g_rs_last.type = i.type; g_rs_last.x0 = i.x0; g_rs_last.z0 = i.z0; g_rs_last.tick = GetTickCount();
+        _snprintf(g_rs_last.cap, sizeof(g_rs_last.cap), es ? "Reconstruido ($%s)" : "Rebuilt ($%s)", c);
+        g_rs_last.cap[sizeof(g_rs_last.cap) - 1] = 0;
+        g_rs_close.self = qo + 4; g_rs_close.win = win;
+        g_rs_close.cell = (LPARAM)((i.x0 & 0xffff) | ((i.z0 & 0xffff) << 16));
+        if (!g_hwnd || !PostMessageA(g_hwnd, WM_RZ_RESTORE, 4, 0)) logf("RESTORE> PostMessage failed: the dialog is not reopened");
+        return;
+    }
+    if (i.age <= 0 && !(i.flags & RS_BADDATE)) return; /* "Como nuevo": nothing to do */
     r = fa(occ, es, msg, sizeof(msg));
     logf("RESTORE> click on %s at (%ld, %ld): %d \"%s\"", i.name, i.x0, i.z0, r, msg);
     rs_money(c, sizeof(c), i.cost);
+    if (r && (i.flags & RS_BADDATE)) lstrcpynA(c, "0", sizeof(c));
     if (!r) {                                          /* refused: say so on the button, the dialog stays */
         LONG f = 0;
         PFN_rs_funds ff = (PFN_rs_funds)rs_fn("sc3restore_funds");
@@ -282,7 +469,7 @@ static void qr_grow(void *win, BYTE *occ, int nrows) {
         LONG by = h - 0x25 + (32 - QI_BH) / 2;
         if (mv && !IsBadReadPtr(mv, 0xa4) && ((LONG *)(mv + 0x80))[1] < by - 2) extra = QI_BH + 6;
         memset(&i, 0, sizeof(i)); i.size = sizeof(i);
-        if (!extra && g_restore && fi && fi(occ, &i) && !i.defunct) {
+        if (!extra && g_restore && fi && ((fi(occ, &i) && !i.defunct) || rs_dead(occ, &i))) {
             LONG bx = (l[2] - l[0]) - 0x32 - 8 - RS_BW - (g_queryid ? QI_BW + 8 : 0);
             if (bx < 8 || !rl_rect_free(win, bx, by, bx + RS_BW, by + QI_BH)) extra = QI_BH + 6;
         }
@@ -450,6 +637,23 @@ static void rs_test(WPARAM wp, LPARAM lp) {
         LONG x = (LONG)(short)LOWORD(lp), z = (LONG)(short)HIWORD(lp);
         if (wp == 5) { PFN_tl f = (PFN_tl)rs_fn("sc3restore_test_left"); logf("RESTORE> test: age (%ld, %ld) -> %d", x, z, f ? f(x, z, 60) : -1); }
         else { PFN_to f = (PFN_to)rs_fn("sc3restore_test_output"); if (f) f(x, z); }
+    } else if (wp == 8) {   /* TEST ONLY (restorefix): age the building at cell lp to one month past its MaxAge, so the game kills it */
+        typedef int (__cdecl *PFN_tl)(LONG, LONG, LONG);
+        PFN_tl f = (PFN_tl)rs_fn("sc3restore_test_left");
+        LONG x = (LONG)(short)LOWORD(lp), z = (LONG)(short)HIWORD(lp);
+        logf("RESTORE> test: age (%ld, %ld) past its life -> %d", x, z, f ? f(x, z, -1) : -1);
+    } else if (wp == 10) {  /* TEST ONLY (restorefix): break the birthdate at cell lp as the 11-02c bug did */
+        typedef int (__cdecl *PFN_tb)(LONG, LONG);
+        PFN_tb f = (PFN_tb)rs_fn("sc3restore_test_break");
+        LONG x = (LONG)(short)LOWORD(lp), z = (LONG)(short)HIWORD(lp);
+        logf("RESTORE> test: break the date at (%ld, %ld) -> %d", x, z, f ? f(x, z) : -1);
+    } else if (wp == 9) {   /* TEST ONLY (restorefix): one Vida util list scan, for its log (and the type -> key table it learns) */
+        typedef int (__cdecl *PFN_ls)(RS_INFO *, int, LONG *);
+        static RS_INFO rows[512];
+        LONG tot = 0;
+        PFN_ls fl = (PFN_ls)rs_fn("sc3restore_list");
+        rows[0].size = sizeof(RS_INFO);
+        logf("RESTORE> test: list scan -> %d row(s)", fl ? fl(rows, 512, &tot) : -1);
     } else if (wp == 7) {
         rs_scan_classes();
     } else if (wp == 2) {
@@ -485,6 +689,8 @@ static struct {
     char msg[160]; DWORD msg_tick;     /* the last action's result, shown in the header for 8 s */
 } g_rm;
 
+static int rs_img_btn(void *fac, void *win, DWORD id, int glyph, LONG x, LONG y, const char *tip, LONG *fw_out);   /* RSARROWS, below */
+static void rs_title(void *win, int on);                                                                       /* RSTITLE, below */
 static void rm_show(void *win, DWORD id, int on) {
     void *c = (void *)ho_v(win, 0x78, 1, id, 0, 0, 0, 0);
     if (c && !IsBadReadPtr(c, 4)) ho_v(c, 0xf4, 2, 1, on ? 1 : 0, 0, 0, 0);
@@ -507,9 +713,11 @@ static void rm_fill(void *win) {
     LONG funds = ff ? ff() : 0;
     if (g_rm.msg[0]) lstrcpynA(t, g_rm.msg, sizeof(t));
     else {
-        int k2 = 0;
+        int k2 = 0, nd = 0, j;
+        for (j = 0; j < g_rm.n; j++) if (g_rm.rows[j].flags & RS_DEAD) nd++;
         rs_money(c, sizeof(c), funds);
-        k2 = _snprintf(t, sizeof(t), es ? "%d con vida \xfatil. Fondos $%s" : "%d that age. Funds $%s", g_rm.n, c);
+        if (nd) k2 = _snprintf(t, sizeof(t), es ? "%d con vida \xfatil, %d en ruinas. $%s" : "%d that age, %d dead. $%s", g_rm.n - nd, nd, c);
+        else k2 = _snprintf(t, sizeof(t), es ? "%d con vida \xfatil. Fondos $%s" : "%d that age. Funds $%s", g_rm.n, c);
         if (pages > 1 && k2 > 0) _snprintf(t + k2, sizeof(t) - k2, es ? ". P\xe1g. %d/%d" : ". Page %d/%d", g_rm.page + 1, pages);
     }
     t[sizeof(t) - 1] = 0;
@@ -518,6 +726,24 @@ static void rm_fill(void *win) {
         int i = g_rm.page * RM_ROWS + k, on = i < g_rm.n;
         rm_show(win, RM_L1 + k, on); rm_show(win, RM_L2 + k, on); rm_show(win, RM_RB + k, on);
         if (!on) continue;
+        if (g_rm.rows[i].flags & (RS_DEAD | RS_BADDATE)) {   /* restorefix: rubble -> Reconstruir, broken date -> Reparar */
+            int dead = (g_rm.rows[i].flags & RS_DEAD) != 0;
+            /* line 1 as the live rows (a label wraps past about 41 characters and the wrapped part is not drawn, measured:
+               "Central Termica de Carbon (59, 164), en ruinas" lost "ruinas"), the state on line 2 */
+            _snprintf(t, sizeof(t), "%.40s (%ld, %ld)", g_rm.rows[i].name, g_rm.rows[i].x0, g_rm.rows[i].z0);
+            t[sizeof(t) - 1] = 0;
+            lf_caption(win, RM_L1 + k, t);
+            rs_money(c, sizeof(c), g_rm.rows[i].price);
+            if (dead && (g_rm.rows[i].flags & RS_BADDATE))   /* killed by the 11-02c bug: free */
+                lstrcpynA(t, es ? "En ruinas (fecha da\xf1" "ada). Gratis" : "Dead (date damaged). Free", sizeof(t));
+            else if (dead) _snprintf(t, sizeof(t), es ? "En ruinas. Reconstruir: $%s" : "Dead. Rebuild: $%s", c);
+            else lstrcpynA(t, es ? "Fecha da\xf1" "ada: reparaci\xf3n gratis" : "Date damaged: free repair", sizeof(t));
+            t[sizeof(t) - 1] = 0;
+            lf_caption(win, RM_L2 + k, t);
+            lf_caption(win, RM_RB + k, dead ? (es ? "Reconstruir" : "Rebuild") : (es ? "Reparar" : "Repair"));
+            rs_enable(win, RM_RB + k, dead ? g_rs_rebuild : 1);
+            continue;
+        }
         /* RSLAYOUT: the price moves from the (narrower) button to the second line, "decae" to the first (a label wraps
            past about 41 characters and the wrapped part is not shown, measured: "... (decae). $7,080" lost its price) */
         if (g_rs_layout && g_rm.rows[i].aging)
@@ -631,12 +857,33 @@ static void rm_open(void *win) {
         }
         g_ho_lblcol = keep;
         yb = h - 42;
+        if (g_rs_arrows) {
+            /* RSARROWS (restorefix, owner: "'<' '>' smaller, they overlap", shot 1793660447360): a text button's pill is
+               wider than 40 px and the next box paints over its right end, so the arrows are 24x25 image buttons cut from
+               the close box's art (bevel and state frames as the X), 6 px apart, centred on the footer row */
+            LONG aw = 24, gap = 6, ya = yb + (QI_BH - 25) / 2, xp;
+            int oa;
+            wa = w - 16 - 84 - (3 * gap + 2 * aw);
+            xa = 8;
+            ok += mp_button(fac, win, RM_ALL, " ", xa, yb, wa, QI_BH);                xa += wa;
+            xp = xa + gap;
+            oa = rs_img_btn(fac, win, RM_PREV, 1, xp, ya, es ? "Anterior" : "Previous", &aw);
+            oa += rs_img_btn(fac, win, RM_NEXT, 2, xp + aw + gap, ya, es ? "Siguiente" : "Next", NULL);
+            if (oa < 2) {   /* no art: the text buttons in the same strip */
+                logf("RSARROWS> image buttons not made (%d of 2): text buttons", oa);
+                if (!ho_v(win, 0x78, 1, RM_PREV, 0, 0, 0, 0)) ok += mp_button(fac, win, RM_PREV, "<", xa, yb, gap + aw + gap / 2, QI_BH);
+                if (!ho_v(win, 0x78, 1, RM_NEXT, 0, 0, 0, 0)) ok += mp_button(fac, win, RM_NEXT, ">", xa + gap + aw + gap / 2, yb, aw + gap + gap / 2, QI_BH);
+            } else ok += oa;
+            xa += 3 * gap + 2 * aw;
+            ok += mp_button(fac, win, RM_BACK, es ? "Volver" : "Back", xa, yb, w - 8 - xa, QI_BH);
+        } else {
         wa = w - 16 - 40 - 40 - 84;
         xa = 8;
         ok += mp_button(fac, win, RM_ALL, " ", xa, yb, wa, QI_BH);                xa += wa;
         ok += mp_button(fac, win, RM_PREV, "<", xa, yb, 40, QI_BH);               xa += 40;
         ok += mp_button(fac, win, RM_NEXT, ">", xa, yb, 40, QI_BH);               xa += 40;
         ok += mp_button(fac, win, RM_BACK, es ? "Volver" : "Back", xa, yb, w - 8 - xa, QI_BH);
+        }
         logf("RESTORE> Reunirse page %ldx%ld: %d widgets made (RSLAYOUT: rows %d wide, footer edge to edge 8..%ld)", w, h, ok,
              (int)bw, w - 8);
     } else if (!ho_v(win, 0x78, 1, RM_HEAD, 0, 0, 0, 0)) {   /* SC3RESIZE_RSLAYOUT=0: the 11-02 layout */
@@ -661,6 +908,7 @@ static void rm_open(void *win) {
     }
     g_rm.win = win;
     rm_collect_ours(win);
+    rs_title(win, 1);                                    /* RSTITLE */
     rm_fill(win);
     logf("RESTORE> Reunirse list on: %d building(s), total %ld, %d game children hidden", g_rm.n, g_rm.total, g_rm.nhidden);
 }
@@ -673,6 +921,7 @@ static void rm_close(void *win) {
     for (k = g_rm.nhidden - 1; k >= 0; k--) if (rz_win_alive(g_rm.hidden[k])) ho_v(g_rm.hidden[k], 0xf4, 2, 1, 1, 0, 0, 0);
     g_rm.nhidden = 0;
     rm_show(win, RM_BTN, 1);
+    rs_title(win, 0);                                    /* RSTITLE: the game's title back */
     g_rm.win = NULL;
     ho_v(win, 0x154, 0, 0, 0, 0, 0, 0);
     logf("RESTORE> Reunirse list off (Volver)");
@@ -707,8 +956,11 @@ static int rm_click(void *win, DWORD id) {
         int i = g_rm.page * RM_ROWS + (int)(id - RM_RB), r;
         char nm[64];
         if (i >= g_rm.n || !fa) return 1;
-        if (g_rm.rows[i].age <= 0) return 1;
+        if (g_rm.rows[i].age <= 0 && !(g_rm.rows[i].flags & (RS_DEAD | RS_BADDATE))) return 1;
         lstrcpynA(nm, g_rm.rows[i].name, sizeof(nm));
+        if (g_rm.rows[i].flags & RS_DEAD)    /* REBUILD */
+            r = rb_rebuild_at(g_rm.rows[i].x0, g_rm.rows[i].z0, g_rm.rows[i].type, es, msg, sizeof(msg));
+        else
         r = fa(g_rm.rows[i].x0, g_rm.rows[i].z0, g_rm.rows[i].type, g_rm.rows[i].cost, es, msg, sizeof(msg));
         logf("RESTORE> Reunirse: row %d %s at (%ld, %ld) -> %d \"%s\"", i, nm, g_rm.rows[i].x0, g_rm.rows[i].z0, r, msg);
         rm_reload();
@@ -806,8 +1058,87 @@ static BYTE *rs_close_box(void *win, LONG *ox, LONG *oy) {
     }
     return best;
 }
+/* RSHG2 / RSARROWS (restorefix 2026-11-02b, owner: the hourglass "looks weird", shot 1793660447359: at 24x25 the 11-02c
+   anti-aliased glass read as a dark bow tie with a bar under it). Pixel art instead, one ink pixel per '#', 's' = sand (ink
+   at 55% over the face). */
+/* The measured sheet (96x100, 24x25 frames; frame order disabled, normal, pressed, hover): each frame's glyph sits in an
+   inner square with its outline at x 4..17, y 4..15, one row lower in the pressed frame (f 2), measured from the art
+   (verify/restorefix/RESULTS.md). The 11-02c code found that square from dark pixels and took the button's own bevel rows
+   (y 2..3, 16) as its edges, so the glass was drawn over the square's top and bottom lines (the bar the owner saw).
+     glyph 0 (RSHG2): the minimise row (2) with the whole square painted in the face colour, row by row, and an 11x12
+              hourglass drawn there in the square's outline colour (grey in the disabled frame)
+     glyph 1 (RSARROWS "<"): the back row (1) as it is, the game's own arrow
+     glyph 2 (RSARROWS ">"): the back row with the glyph's dark pixels mirrored inside the square */
+static const char *const g_rs_glyph_hg12[12] = {
+    "###########",
+    " #       # ",
+    " #sssssss# ",
+    "  #sssss#  ",
+    "   #sss#   ",
+    "    #s#    ",
+    "    #s#    ",
+    "   # s #   ",
+    "  #  s  #  ",
+    " #  sss  # ",
+    " #sssssss# ",
+    "###########" };
+/* the most common colour of row[x0..x1] among the pixels lighter than minlum (the glyph's own pixels left out: on the
+   minimise row the bar's 6 dark pixels outnumber the face's 5 and won the vote, measured) */
+static WORD rs_row_face(WORD *row, int x0, int x1, WORD dflt, DWORD code, int minlum) {
+    int best = 0, i, j;
+    WORD fc = dflt;
+    for (i = x0; i <= x1; i++) {
+        int c = 0;
+        if (rs_lum(row[i], code) < minlum) continue;
+        for (j = x0; j <= x1; j++) c += row[j] == row[i];
+        if (c > best) { best = c; fc = row[i]; }
+    }
+    return fc;
+}
+static void rs_frames_v2(BYTE *db, LONG dp, const BYTE *sb, LONG sp, DWORD code, WORD keyc, int glyph) {
+    int f, x, y, srow = glyph ? 1 : 2;
+    for (f = 0; f < 4; f++) {
+        LONG ox = f * 24, t = 4 + (f == 2), b = 15 + (f == 2), l = 4, r = 17;
+        WORD ink = ((const WORD *)(sb + (srow * 25 + t) * sp))[f * 24 + 10];   /* the square's top line, mid-way */
+        int il = rs_lum(ink, code), ir, ig, ib, pr, pg, pb;
+        for (y = 0; y < 25; y++) memcpy(db + y * dp + ox * 2, sb + (srow * 25 + y) * sp + f * 24 * 2, 24 * 2);
+        if (glyph == 0) {
+            WORD fcs[25];
+            for (y = t + 1; y < b; y++) fcs[y] = rs_row_face((WORD *)(db + y * dp) + ox, l + 1, r - 1, ink, code, il + 40);
+            fcs[t] = fcs[t + 1]; fcs[b] = fcs[b - 1];
+            for (y = t; y <= b; y++) { WORD *row = (WORD *)(db + y * dp) + ox; for (x = l; x <= r; x++) row[x] = fcs[y]; }
+            rs_unpack(ink, code, &ir, &ig, &ib);
+            for (y = 0; y < 12; y++) {
+                WORD *row = (WORD *)(db + (t + y) * dp) + ox;
+                for (x = 0; x < 11; x++) {
+                    char c = g_rs_glyph_hg12[y][x];
+                    int px = l + 1 + x;                      /* columns 5..15 of the 4..17 square */
+                    if (c == ' ') continue;
+                    if (c == '#') row[px] = ink;
+                    else { rs_unpack(row[px], code, &pr, &pg, &pb);
+                           row[px] = rs_pack(pr + (ir - pr) * 55 / 100, pg + (ig - pg) * 55 / 100, pb + (ib - pb) * 55 / 100, code); }
+                    if (row[px] == keyc) row[px] ^= 1;
+                }
+            }
+        } else if (glyph == 2) {
+            for (y = t + 1; y < b; y++) {
+                WORD *row = (WORD *)(db + y * dp) + ox, src[24], fc;
+                memcpy(src, row, sizeof(src));
+                fc = rs_row_face(src, l + 1, r - 1, src[l + 1], code, il + 40);
+                for (x = l + 1; x < r; x++) if (rs_lum(src[x], code) < il + 40) row[x] = fc;             /* glyph out */
+                for (x = l + 1; x < r; x++) if (rs_lum(src[x], code) < il + 40) row[(l + r) - x] = src[x]; /* mirrored in */
+            }
+        }
+        logf("RSICON> frame %d: %s, square [%ld %ld %ld %ld], ink luminance %d", f,
+             glyph == 0 ? "hourglass 11x12 on the bare face (RSHG2)" : glyph == 1 ? "the game's back arrow" : "the back arrow mirrored",
+             l, t, r, b, il);
+    }
+}
+
 /* a 4-frame strip of the close box's frame size with the hourglass; NULL = not made (the caller keeps the text button) */
-static void *rs_icon_art(BYTE *xb, LONG *fw_out, LONG *fh_out) {
+static void *rs_icon_art_g(BYTE *xb, LONG *fw_out, LONG *fh_out, int glyph);
+static void *rs_icon_art(BYTE *xb, LONG *fw_out, LONG *fh_out) { return rs_icon_art_g(xb, fw_out, fh_out, 0); }
+static void *rs_icon_art_g(BYTE *xb, LONG *fw_out, LONG *fh_out, int glyph) {
     BYTE *sui = (BYTE *)GetModuleHandleA("SIMUI.DLL"), *sb = NULL, *db = NULL;
     void *src = *(void **)(xb + 0x118), *com, *dst = NULL;
     LONG *fr = (LONG *)(xb + 0xfc), fw = fr[2] - fr[0], fh = fr[3] - fr[1], sw = 0, sh = 0, sp = 0, dp = 0, nf = 0, f, x, y;
@@ -837,7 +1168,13 @@ static void *rs_icon_art(BYTE *xb, LONG *fw_out, LONG *fh_out) {
         if (!(rz_thiscall_ret(dst, (void *)(*(DWORD **)dst)[0x0c / 4], a, 8) & 0xff)) __leave;
         if (!(ho_v(dst, 0x1c, 1, 0x40, 0, 0, 0, 0) & 0xff)) __leave;
         db = (BYTE *)ho_v(dst, 0x1a8, 0, 0, 0, 0, 0, 0); dp = (LONG)ho_v(dst, 0x1ac, 0, 0, 0, 0, 0, 0);
-        if (db && dp >= 4 * fw * 2) {
+        if (db && dp >= 4 * fw * 2 && (glyph || g_rs_hg2) && fw == 24 && fh == 25 && nf >= 4 && sh >= 3 * fh) {
+            rs_frames_v2(db, dp, sb, sp, fmt[0], keyc, glyph);   /* RSHG2 / RSARROWS */
+            rs_dump_strip(glyph == 1 ? "rsicon_left" : glyph == 2 ? "rsicon_right" : "rsicon_hourglass", db, dp, 4 * fw, fh, fmt[0]);
+            ok = 1;
+        } else if (db && dp >= 4 * fw * 2 && glyph) {
+            logf("RSARROWS> the close box's art is not the measured 4x4 sheet of 24x25 frames: no arrow art");
+        } else if (db && dp >= 4 * fw * 2) {
             for (f = 0; f < 4; f++) {                     /* frame f of the minimise row (row 2 of the sheet) */
                 LONG sf = f < nf ? f : nf - 1, ox = f * fw, sy0 = 2 * fh, bx0 = fw, by0 = fh, bx1 = -1, by1 = -1;
                 LONG ink_l = 999, sl;
@@ -887,7 +1224,7 @@ static void *rs_icon_art(BYTE *xb, LONG *fw_out, LONG *fh_out) {
                 logf("RSICON> frame %ld: glyph outline [%ld %ld %ld %ld], ink luminance %ld", f, bx0, by0, bx1, by1, ink_l);
             }
             if (ok < 0) { ok = 0; ho_v(dst, 0x20, 1, 0x40, 0, 0, 0, 0); __leave; }
-            rs_dump_strip("rsicon_hourglass", db, dp, 4 * fw, fh, fmt[0]);
+            rs_dump_strip(glyph == 1 ? "rsicon_left" : glyph == 2 ? "rsicon_right" : "rsicon_hourglass", db, dp, 4 * fw, fh, fmt[0]);
             ok = 1;
         }
         ho_v(dst, 0x20, 1, 0x40, 0, 0, 0, 0);
@@ -932,6 +1269,109 @@ static int rm_add_icon(void *fac, void *win) {
 }
 
 
+/* RSARROWS: an image button with a glyph cut from the close box's art (as rm_add_icon), page-local (x, y); 1 = added */
+static int rs_img_btn(void *fac, void *win, DWORD id, int glyph, LONG x, LONG y, const char *tip, LONG *fw_out) {
+    LONG rect[4] = { 0, 0, 0, 0 }, fw = 0, fh = 0, ox = 0, oy = 0;
+    BYTE *xb = rs_close_box(win, &ox, &oy);
+    BYTE cap[0x20], tt[0x20];
+    void *img, *btn, *bw;
+    int ok = 0;
+    if (!xb || !(img = rs_icon_art_g(xb, &fw, &fh, glyph))) return 0;
+    if (fw_out) *fw_out = fw;
+    ho_v(img, 0x40, 1, (DWORD)rect, 0, 0, 0, 0);
+    ho_str(cap, "");
+    btn = (void *)ho_v(fac, 0x30, 5, id, (DWORD)cap, (DWORD)img, (DWORD)rect, 0);
+    if (btn) {
+        ho_str(tt, tip);
+        ho_v(btn, 0x8c, 1, (DWORD)tt, 0, 0, 0, 0);
+        ho_str_free(tt);
+        ho_v(btn, 0x24, 2, 4, 0, 0, 0, 0);
+        ho_v(btn, 0x24, 2, 0x100, 1, 0, 0, 0);
+        ho_v(btn, 0x98, 1, 0x1000000, 0, 0, 0, 0);
+        bw = (void *)ho_v(btn, 0x1c, 0, 0, 0, 0, 0, 0);
+        ok = bw && (ho_v(win, 0x34, 1, (DWORD)bw, 0, 0, 0, 0) & 0xff);
+        if (ok) { ho_v(bw, 0xcc, 2, (DWORD)x, (DWORD)y, 0, 0, 0); ho_v(bw, 0xf4, 2, 2, 1, 0, 0, 0); }
+        else if (bw) ho_v(bw, 0x28, 0, 0, 0, 0, 0, 0);
+        ho_v(btn, 0x08, 0, 0, 0, 0, 0, 0);
+    }
+    ho_str_free(cap);
+    ho_v(img, 0x08, 0, 0, 0, 0, 0, 0);
+    logf("RSARROWS> %s image button %ldx%ld at page (%ld, %ld): %s", glyph == 1 ? "\"<\"" : "\">\"", fw, fh, x, y, ok ? "added" : "FAILED");
+    return ok;
+}
+
+/* ================= RSTITLE (restorefix 2026-11-02b, owner: the list must be titled "Vida Util" in the game's title font,
+ * the Comic-Sans-like face of the "Reunirse" title). The page's title is the game's own text in its title bar (the child at
+ * local top < 12, bottom < 48, as rs_close_box finds it). The window holding the text is found by its caption (window +0x44,
+ * the SetCaption slot vt+0x10c stores it there, GZWIND 0x1001fa6c) and given "Vida Util" through vt+0x10c while the list is
+ * up, so the game draws it with its own font; Volver and a page close put the old caption back. */
+static struct { void *w; char old[64]; } g_rs_title_w;
+static const char *rs_win_text(BYTE *w) {
+    BYTE *s = w + 0x44;
+    const char *t = NULL;
+    __try {
+        if (IsBadReadPtr(s, 8) || !*(DWORD *)s || IsBadReadPtr(*(void **)s, 0x18)) return NULL;
+        t = (const char *)ho_v(s, 0x14, 0, 0, 0, 0, 0, 0);
+        if (!t || IsBadStringPtrA(t, 64) || !t[0]) return NULL;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return NULL; }
+    return t;
+}
+static void *rs_title_find(void *win, char *out, int cap) {
+    BYTE *w = (BYTE *)win;
+    void *head = *(void **)(w + 0x34), *n, *found = NULL;
+    int guard = 0;
+    n = (head && !IsBadReadPtr(head, 4)) ? *(void **)head : NULL;
+    while (n && n != head && guard++ < 80 && !IsBadReadPtr(n, 0x0c) && !found) {
+        BYTE *tb = *(BYTE **)((BYTE *)n + 8);
+        if (tb && !IsBadReadPtr(tb, 0xa4) && ((LONG *)(tb + 0x80))[1] < 12 && ((LONG *)(tb + 0x80))[3] < 48) {
+            const char *t = rs_win_text(tb);
+            void *h2 = *(void **)(tb + 0x34), *n2;
+            int g2 = 0;
+            DWORD rva = 0;
+            if (t) { logf("RSTITLE> title bar %s+0x%lX holds \"%s\"", qi_mod_of(*(DWORD *)tb, &rva), rva, t); found = tb; lstrcpynA(out, t, cap); }
+            n2 = (h2 && !IsBadReadPtr(h2, 4)) ? *(void **)h2 : NULL;
+            while (!found && n2 && n2 != h2 && g2++ < 40 && !IsBadReadPtr(n2, 0x0c)) {
+                BYTE *ch = *(BYTE **)((BYTE *)n2 + 8);
+                LONG *cl;
+                if (ch && !IsBadReadPtr(ch, 0xa4)) {
+                    cl = (LONG *)(ch + 0x80);
+                    t = rs_win_text(ch);
+                    logf("RSTITLE>   title bar child %s+0x%lX local [%ld %ld %ld %ld] text %s%s%s", qi_mod_of(*(DWORD *)ch, &rva), rva,
+                         cl[0], cl[1], cl[2], cl[3], t ? "\"" : "", t ? t : "(none)", t ? "\"" : "");
+                    if (t) { found = ch; lstrcpynA(out, t, cap); }
+                }
+                n2 = *(void **)n2;
+            }
+        }
+        n = *(void **)n;
+    }
+    return found;
+}
+static void rs_title(void *win, int on) {
+    BYTE s[0x20];
+    if (!g_rs_title) return;
+    if (on) {
+        char old[64];
+        void *t = rs_title_find(win, old, sizeof(old));
+        if (!t) { logf("RSTITLE> no title text found on the page: title unchanged"); return; }
+        if (g_rs_title_w.w != t) { g_rs_title_w.w = t; lstrcpynA(g_rs_title_w.old, old, sizeof(g_rs_title_w.old)); }
+        ho_str(s, ho_spanish() ? "Vida \xdatil" : "Lifespan");
+        ho_v(t, 0x10c, 1, (DWORD)s, 0, 0, 0, 0);
+        ho_str_free(s);
+        ho_v(t, 0x154, 0, 0, 0, 0, 0, 0);
+        logf("RSTITLE> title \"%s\" -> \"%s\"", g_rs_title_w.old, ho_spanish() ? "Vida \xdatil" : "Lifespan");
+    } else if (g_rs_title_w.w) {
+        if (rz_win_alive(g_rs_title_w.w)) {
+            ho_str(s, g_rs_title_w.old);
+            ho_v(g_rs_title_w.w, 0x10c, 1, (DWORD)s, 0, 0, 0, 0);
+            ho_str_free(s);
+            ho_v(g_rs_title_w.w, 0x154, 0, 0, 0, 0, 0, 0);
+            logf("RSTITLE> title back to \"%s\"", g_rs_title_w.old);
+        }
+        g_rs_title_w.w = NULL;
+    }
+}
+
 /* the "Vida util" button, left of the close box, on the title bar row */
 static void rm_add_button(void *win) {
     HMODULE sui = GetModuleHandleA("SIMUI.DLL");
@@ -955,7 +1395,7 @@ static DWORD __fastcall rm_42f7(void *self, void *edx, DWORD win, DWORD msg, DWO
     DWORD a[5], r;
     (void)edx;
     if (g_restore && msg == 3 && p3 == 1 && win && rm_click((void *)win, p4)) return 1;
-    if (msg == 0xa2bf8acf && (void *)win == g_rm.win) { g_rm.win = NULL; g_rm.nhidden = 0; }   /* page closing */
+    if (msg == 0xa2bf8acf && (void *)win == g_rm.win) { g_rm.win = NULL; g_rm.nhidden = 0; g_rs_title_w.w = NULL; }   /* page closing */
     a[0] = win; a[1] = msg; a[2] = p3; a[3] = p4; a[4] = p5;
     r = rz_thiscall_ret(self, g_orig_42f7, a, 5);
     if (g_restore && msg == 0xa2bf8ace && win) rm_add_button((void *)win);
@@ -977,6 +1417,7 @@ static DWORD __fastcall rm_42f7(void *self, void *edx, DWORD win, DWORD msg, DWO
 static void rm_install(HMODULE sui) {
     static const BYTE e42f7[6] = { 0x55, 0x8b, 0xec, 0x83, 0xec, 0x20 };   /* push ebp; mov ebp,esp; sub esp,0x20 */
     if (!g_restore) { logf("RESTORE> off (SC3RESIZE_RESTORE=0)"); return; }
+    rs_fix_init();
     if (ho_hook(sui, 0x42f7, e42f7, 6, (void *)rm_42f7, &g_orig_42f7, "Reunirse list page messages FUN_100042f7"))
         logf("RESTORE> on: \"Restaurar\" in the query dialog, \"Vida util\" on the Reunirse list page");
 }

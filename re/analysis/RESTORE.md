@@ -32,6 +32,13 @@ Read and written through the **building interface** (QI 0xe0faadc7): vt+0x3c Has
 0x1000b4a7 -> 0x10006b86, SIMECO 0x100013c9 / 0x100013dc]`. The game itself uses vt+0x44 to give a dead plant's date to
 its rubble (SIMUTIL 0x1000690c, BecomeDefunctDueToAge).
 
+**The recycling center is different** (found by restorefix 2026-11-02b after it killed the owner's 5 centers): its
+building vtable SIMECO 0x1001b784 has GetBirthdate +0x40 = 0x1000342e (object +0x3c) and SetBirthdate +0x44 =
+0x10003441, which reads date **vt+0x34 (year)** and **vt+0x38 (day of the year)** and rebuilds the number as
+jdn(12/31, year - 1) + day of the year (0x100113a4) `[CONFIRMED @ SIMECO 0x10003441, date class 0x10011cc0 -> 0x100118c4,
+0x10011cc8 -> 0x100116f7]`. Its mortal (vtable 0x1001b5d0, occupant +0x24 = object +0x2c) keeps the date at mortal +0x0c
+(GetAge 0x100035a0). A stand-in date must answer all four slots.
+
 **MaxAge / DeclineAge** come from the ini files once per building: SC3PowerLayer.ini `MaxLifeSpan` / `DeclineAge` with
 `PercentageVariationInLongevity=15` drawn per plant in the ctor (SIMUTIL 0x10006ba6; Berlin's coal plant: 939 months
 from an ini 840), SC3Tune.ini for water treatment / incinerator / recycling, SC3WaterLayer.ini `WaterPumpLife=110` etc.
@@ -114,9 +121,34 @@ Evidence and pictures: `verify/restoreui/RESULTS.md`.
   (SIMUI+0xAAF64) stretches 14 px a row, the children below it move down, plus one button row when RESTORE or
   RELOCATE put a button above the bottom row. Sources: `re/sessions/restoreui_query_rows_research.md`.
 
+## 3c. restorefix (round 2026-11-02b): the date fix, Reconstruir, list polish
+
+Evidence and pictures: `verify/restorefix/RESULTS.md`.
+
+- **Date fix** (`sc3restore.c`, no switch): the stand-in date answers vt+0x34 / +0x38 (above). Every write is read back
+  through GetBirthdate, and the building must then read age 0 and alive. Otherwise the old date is written back, the
+  restore is refused and nothing is charged (11-02c charged the failed ones). A live building with a broken date (age
+  below -1200 or above 1,000,000 months) is listed with "Reparar (gratis)". The game kills those within seconds, measured.
+- **REBUILD** (`SC3RESIZE_REBUILD=0`): the rubble of an expired building keeps its class, type id and name, not its key.
+  Its attrib is the rubble art {0x207edc0e, 0x57e, 0x2345}, made from occupant +0x24 (SIMECO 0x100035f7). Placing that
+  key put an "Escombros de Edificio" (type 15410) for $0, measured. The building's key comes from a type -> key table
+  (seeded with 15 stock types, learned from every live one, saved to `restore_keys.ini`). The place is the stock
+  CanPlace / Place (SIMGEOM 0x10006ba6) at the rubble's first cell, coord {x << 8, z << 8, 0}, in the tool kind the
+  factory 0x10007e64 gives the key. It runs inside RELOCATE's context with the rubble as the occupant being moved, so the
+  site-check cave accepts it and the commit detour removes it. The game prices and withdraws the cost.
+- **RSTITLE / RSARROWS / RSHG2**: see `verify/restorefix/RESULTS.md` section 3. The close box's 96x100 sheet: frames
+  disabled, normal, pressed, hover. Each glyph sits in an inner square, outline x 4..17, y 4..15, one row lower when
+  pressed.
+
 ## 4. Traps found on the way
 
 - FUN_100042f7's arity: see above. Check the `ret` of any handler before detouring it, the decompiler drops unused args.
 - A thread timer (SetTimer with no window) set inside the query dialog's modal loop fired about 10 s late. Posted
   messages to the game window are dispatched at once (15 to 31 ms measured).
 - `fd_set` is a winsock typedef pulled in by windows.h: do not name a function that in a mod source.
+- A stand-in game object must answer every slot the callees read, per class: the SIMUTIL plants and the SIMECO
+  incinerator read date vt+0x68 only, the SIMECO recycling center reads vt+0x34 and vt+0x38. Read the value back after
+  every write and roll back on a mismatch.
+- A dead building's attrib key is its rubble's. Never place from it.
+- The game launches started from a Bash tool call die when that call returns. Launch from PowerShell `Start-Process` for
+  a game that must outlive the command.
