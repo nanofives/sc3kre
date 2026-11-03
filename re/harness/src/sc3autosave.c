@@ -40,6 +40,7 @@
  */
 #include <windows.h>
 #include "sc3mods_guard.h"
+#include "sc3lang.h"   /* modlang: SC3TR, mod text from the per-language tables */
 #pragma comment(lib, "gdi32.lib")     /* the corner indicator */
 #include <stdio.h>
 #include <string.h>
@@ -503,7 +504,7 @@ static void ind_paint(HWND w) {
     SetBkMode(dc, TRANSPARENT);
     SetTextColor(dc, RGB(0xff, 0xff, 0xff));
     SetRect(&r, 8, 3, IND_W - 8, 20);
-    DrawTextA(dc, g_ind_state == 2 ? g_ind_done_text : "Autoguardando...", -1, &r, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+    DrawTextA(dc, g_ind_state == 2 ? g_ind_done_text : SC3TR(1, "autosave.saving", "Autoguardando...", "Autosaving..."), -1, &r, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
     SetRect(&b, 8, 23, IND_W - 8, 29);
     FillRect(dc, &b, trough);
     if (g_ind_state == 2) cur = tot = 1;
@@ -573,8 +574,8 @@ static void ind_done(int ok) {
     SYSTEMTIME t;
     if (!g_indicator || !g_ind || !g_ind_state) return;
     GetLocalTime(&t);
-    if (ok) _snprintf(g_ind_done_text, sizeof(g_ind_done_text), "Autoguardado %02d:%02d", t.wHour, t.wMinute);
-    else lstrcpyA(g_ind_done_text, "Autoguardado fallido");
+    if (ok) _snprintf(g_ind_done_text, sizeof(g_ind_done_text), SC3TR(1, "autosave.saved_at", "Autoguardado %02d:%02d", "Autosaved %02d:%02d"), t.wHour, t.wMinute);
+    else lstrcpynA(g_ind_done_text, SC3TR(1, "autosave.failed", "Autoguardado fallido", "Autosave failed"), sizeof(g_ind_done_text));
     g_ind_done_text[sizeof(g_ind_done_text) - 1] = 0;
     g_ind_state = 2;
     PostMessageA(g_ind, WM_IND_DONE, 0, 0);

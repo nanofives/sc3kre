@@ -54,3 +54,16 @@ if errorlevel 1 exit /b 1
 if ($LASTEXITCODE -ne 0) { throw "build failed (exit $LASTEXITCODE)" }
 $f = if ($Mod -eq 'sc3mods') { "$Out\sc3mods.dll" } else { "$Out\$Mod.dll" }
 Write-Host ("[+] built {0} ({1} bytes)" -f $f, (Get-Item $f).Length)
+
+# modlang 2026-11-02: the mods' string tables go beside the DLLs (sc3mods.dll reads <mods dir>\sc3lang\<code>.txt).
+# Delete then copy: in a test tree the old file may be a hard link into the base, never write through it.
+$lang = Join-Path (Split-Path $Src) 'lang'
+if (Test-Path $lang) {
+    $dst = Join-Path $Out 'sc3lang'
+    New-Item -ItemType Directory -Force -Path $dst | Out-Null
+    foreach ($t in Get-ChildItem -Path $lang -Filter '*.txt') {
+        $d = Join-Path $dst $t.Name
+        if (Test-Path $d) { Remove-Item -LiteralPath $d -Force }
+        Copy-Item -LiteralPath $t.FullName -Destination $d
+    }
+}

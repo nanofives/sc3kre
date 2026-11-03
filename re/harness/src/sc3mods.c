@@ -16,11 +16,15 @@
  *   SC3MODS_DIR set (test harness): dir = it, list = SC3MODS_LIST or the built-in default.
  *   SC3MODS_DIR unset (normal start): the built-in default list from this DLL's own folder (Apps), host SC3U.exe only.
  *   SC3MODS_MULTI=1               -> rename the single-instance mutex per pid (parallel test instances).
+ * TEXT: sc3mods_lang() / sc3mods_tr() give every mod the game's text language and the <dir>\sc3lang\<code>.txt tables
+ *   (sc3mods_lang.c; SC3MODS_LANGTABLES=0 = each mod's old inline es/en text).
  * Log: <dir>\sc3mods.log, appended, "[pid N t=tick]" prefix. A mod that fails to load is logged and skipped.
  */
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include <ctype.h>
 
 /* this SC3U.exe build (anchor 49DD55E1...), image-relative - only used by the -multi mutex rename */
 #define SLOT_RVA    0x000f4b10             /* pointer to the mutex name, FUN_0040496d reads it */
@@ -65,6 +69,8 @@ static void logf(const char *fmt, ...) {
     WriteFile(h, line, n, &w, NULL);
     CloseHandle(h);
 }
+
+#include "sc3mods_lang.c"   /* modlang 2026-11-02: sc3mods_lang / sc3mods_tr, the mods' language and string tables */
 
 /* host exe base name == "sc3u.exe" ? */
 static int host_is_sc3u(void) {
@@ -151,6 +157,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID res) {
     char v[8];
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(inst);
+        lang_init();
         if (decide(inst)) {
             _snprintf(g_log, sizeof(g_log), "%s\\sc3mods.log", g_dir);
             if (GetEnvironmentVariableA("SC3MODS_MULTI", v, sizeof(v)) && v[0] == '1') unique_mutex();

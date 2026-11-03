@@ -1,0 +1,498 @@
+# sc3lang sv - Svenska (SWEDISH)
+# MACHINE TRANSLATION, NEEDS NATIVE REVIEW (modlang 2026-11-02). Each line is preceded by the English it
+# translates. Keep every %d / %s / %ld / %.40s / %% exactly as in the English, in the same order: a line
+# whose conversions differ is ignored at run time and the English shows instead (logged in sc3mods.log).
+# A missing key shows the English. Format: UTF-8, key=value, "quoted" for leading/trailing spaces.
+
+
+# ---- autosave
+# en: Autosave failed
+autosave.failed=Autosparning misslyckades
+# en: Autosaved %02d:%02d
+autosave.saved_at=Autosparat %02d:%02d
+# en: Autosaving...
+autosave.saving=Autosparar...
+
+# ---- bigcity
+# en: Huge
+bigcity.huge=Enorm
+
+# ---- cuadros
+# en: aged %d-%d / places
+cuadros.aged_places=%d-%d år / platser
+# en: Aging plants: %ld (capacity falls)
+cuadros.aging_plants_capacity_falls=Åldrande verk: %ld (kapaciteten sjunker)
+# en: Buildings without water: %ld of %ld
+cuadros.buildings_without_water=Byggnader utan vatten: %ld av %ld
+# en: capacity / produced
+cuadros.capacity_produced=kapacitet / producerat
+# en: Colleges
+cuadros.colleges=Högskolor
+# en: colleges
+cuadros.colleges_2=högskolor
+# en: .
+cuadros.decimal_sep=,
+# en: delivered / supply
+cuadros.delivered_supply=levererat / utbud
+# en: Desalination
+cuadros.desalination=Avsaltning
+# en: Doctors %s   Strike: %s
+cuadros.doctors_strike=Läkare %s   Strejk: %s
+# en: Every building that needs water gets it
+cuadros.every_building_that_needs=Varje byggnad som behöver vatten får det
+# en: Hospitals
+cuadros.hospitals=Sjukhus
+# en: last month
+cuadros.last_month=förra månaden
+# en: Libraries
+cuadros.libraries=Bibliotek
+# en: Bus
+cuadros.mode_bus=Buss
+# en: Highways
+cuadros.mode_highways=Motorvägar
+# en: No network
+cuadros.mode_none=Inget nät
+# en: Rail
+cuadros.mode_rail=Tåg
+# en: Streets
+cuadros.mode_streets=Gator
+# en: Subway
+cuadros.mode_subway=Tunnelbana
+# en: Museums
+cuadros.museums=Museer
+# en: no
+cuadros.no=nej
+# en: No education data
+cuadros.no_education_data=Inga utbildningsdata
+# en: No health data
+cuadros.no_health_data=Inga hälsodata
+# en: No water layer
+cuadros.no_water_layer=Inget vattennät
+# en: none in the city
+cuadros.none_in_city=inga i staden
+# en: none in the city
+cuadros.none_in_city_2=inga i staden
+# en: One trip can use several networks.
+cuadros.one_trip_can_use=En resa kan använda flera nät.
+# en: output / capacity
+cuadros.output_capacity=produktion / kapacitet
+# en: patients / beds
+cuadros.patients_beds=patienter / sängar
+# en: Plants (%ld)
+cuadros.plants=Verk (%ld)
+# en: Pollution
+cuadros.pollution=Förorening
+# en: Pumps
+cuadros.pumps=Pumpar
+# en: pupils / places
+cuadros.pupils_places=elever / platser
+# en: Schools
+cuadros.schools=Skolor
+# en: schools
+cuadros.schools_2=skolor
+# en: schools and colleges
+cuadros.schools_and_colleges=skolor och högskolor
+# en: students / places
+cuadros.students_places=studenter / platser
+# en: Education
+cuadros.tab_education=Utbildning
+# en: Garbage
+cuadros.tab_garbage=Sopor
+# en: Health
+cuadros.tab_health=Hälsa
+# en: Population
+cuadros.tab_population=Befolkning
+# en: Power
+cuadros.tab_power=Energi
+# en: Transport
+cuadros.tab_transport=Transport
+# en: Water
+cuadros.tab_water=Vatten
+# en: Teachers %s   Professors %s   Strike: %s
+cuadros.teachers_professors_strike=Lärare %s   Professorer %s   Strejk: %s
+# en: this month
+cuadros.this_month=denna månad
+# en: ,
+cuadros.thousands_sep=" "
+# en: Total
+cuadros.total=Totalt
+# en: treated / produced
+cuadros.treated_produced=renat / producerat
+# en: Trip counting is off (SC3RESIZE_TRIPMODES=0 or sc3cartrips loaded)
+cuadros.trip_counting_off_sc3resize=Resräkning av (SC3RESIZE_TRIPMODES=0 eller sc3cartrips laddad)
+# en: Trips using each network (%s, %s trips)
+cuadros.trips_using_each_network=Resor per nät (%s, %s resor)
+# en: Trips with no destination (last month): %s
+cuadros.trips_with_no_destination=Resor utan mål (förra månaden): %s
+# en: Water pollution: %s
+cuadros.water_pollution=Vattenförorening: %s
+# en: Water sources (this month)
+cuadros.water_sources_this_month=Vattenkällor (denna månad)
+# en: Water towers
+cuadros.water_towers=Vattentorn
+# en: Water treatment (last month)
+cuadros.water_treatment_last_month=Vattenrening (förra månaden)
+# en: yes
+cuadros.yes=ja
+
+# ---- dataview
+# en: Highway congestion (V)
+dataview.cap_congestion_highways=Köer på motorvägar (V)
+# en: Road congestion (V)
+dataview.cap_congestion_roads=Köer på gator (V)
+# en: Subway congestion (V: back)
+dataview.cap_congestion_subway=Trängsel i tunnelbanan (V: tillbaka)
+# en: Radiation (V: back)
+dataview.cap_radiation_back=Strålning (V: tillbaka)
+# en: V: radiation
+dataview.cap_radiation_key=V: strålning
+# en: Trips: green arrives, red does not (V)
+dataview.cap_trips=Resor: grönt kommer fram, rött inte (V)
+# en: V: trips and congestion by network
+dataview.cap_trips_key=V: resor och köer per nät
+# en: College
+dataview.college=Högskola
+# en: Doctors %s
+dataview.doctors=Läkare %s
+# en: Hospitals
+dataview.hospitals=Sjukhus
+# en: no
+dataview.no=nej
+# en: %s: no places
+dataview.no_places=%s: inga platser
+# en: Patients / capacity
+dataview.patients_capacity=Patienter / kapacitet
+# en: Professors %s
+dataview.professors=Professorer %s
+# en: Pupils / places
+dataview.pupils_places=Elever / platser
+# en: School
+dataview.school=Skola
+# en: Strike: %s
+dataview.strike=Strejk: %s
+# en: school and college
+dataview.strike_both=skola och högskola
+# en: college
+dataview.strike_college=högskola
+# en: school
+dataview.strike_school=skola
+# en: Teachers %s
+dataview.teachers=Lärare %s
+# en: "   %s of %s"
+dataview.used_of_cap="   %s av %s"
+# en: yes
+dataview.yes=ja
+
+# ---- graphs
+# en: Abandoned
+graphs.abandoned=Övergivna
+# en: Air pollution
+graphs.air_pollution=Luftförorening
+# en: C demand
+graphs.c_demand=Efterfrågan C
+# en: C tax
+graphs.c_tax=Skatt C
+# en: College capacity
+graphs.college_capacity=Högskoleplatser
+# en: College students
+graphs.college_students=Studenter
+# en: Debt
+graphs.debt=Skuld
+# en: Expenses
+graphs.expenses=Utgifter
+# en: Exported
+graphs.exported=Exporterat
+# en: Garbage made
+graphs.garbage_made=Sopor producerade
+# en: Abandoned
+graphs.grp_abandoned=Övergivna
+# en: Air/water pollut.
+graphs.grp_air_water_pollut=Förorening luft/vatten
+# en: Colleges
+graphs.grp_colleges=Högskolor
+# en: Debt (bonds)
+graphs.grp_debt_bonds=Skuld (obligationer)
+# en: Garbage
+graphs.grp_garbage=Sopor
+# en: Hospitals
+graphs.grp_hospitals=Sjukhus
+# en: Income/Expenses
+graphs.grp_income_expenses=Intäkter/Utgifter
+# en: Jobs/Workers
+graphs.grp_jobs_workers=Jobb/Arbetare
+# en: Power sup./dem.
+graphs.grp_power_sup_dem=Energi utbud/efterfr.
+# en: RCI demand
+graphs.grp_rci_demand=Efterfrågan RCI
+# en: Schools
+graphs.grp_schools=Skolor
+# en: Tax rates
+graphs.grp_tax_rates=Skattesatser
+# en: Unpowered
+graphs.grp_unpowered=Utan ström
+# en: Water sup./deliv.
+graphs.grp_water_sup_deliv=Vatten utbud/lev.
+# en: Hospital capacity
+graphs.hospital_capacity=Sjukhusplatser
+# en: I demand
+graphs.i_demand=Efterfrågan I
+# en: I tax
+graphs.i_tax=Skatt I
+# en: Incinerated
+graphs.incinerated=Förbränt
+# en: Income
+graphs.income=Intäkter
+# en: Jobs
+graphs.jobs=Jobb
+# en: Patients
+graphs.patients=Patienter
+# en: Power demand
+graphs.power_demand=Efterfrågan energi
+# en: Power supply
+graphs.power_supply=Utbud energi
+# en: Power used
+graphs.power_used=Energiförbrukning
+# en: R demand
+graphs.r_demand=Efterfrågan R
+# en: R tax
+graphs.r_tax=Skatt R
+# en: Recycled
+graphs.recycled=Återvunnet
+# en: School capacity
+graphs.school_capacity=Skolplatser
+# en: School pupils
+graphs.school_pupils=Elever
+# en: City
+graphs.tab_city=Stad
+# en: Economy
+graphs.tab_economy=Ekonomi
+# en: Environment
+graphs.tab_environment=Miljö
+# en: Services
+graphs.tab_services=Tjänster
+# en: Utilities
+graphs.tab_utilities=Försörjning
+# en: To landfill
+graphs.to_landfill=Till deponi
+# en: Unpowered
+graphs.unpowered=Utan ström
+# en: Water delivered
+graphs.water_delivered=Vatten levererat
+# en: Water pollution
+graphs.water_pollution=Vattenförorening
+# en: Water supply
+graphs.water_supply=Utbud vatten
+# en: Workers
+graphs.workers=Arbetare
+
+# ---- landfill
+# en: Already empty
+landfill.already_empty=Redan tom
+# en: Already emptying one
+landfill.already_emptying_one=En tömning pågår redan
+# en: Emptied
+landfill.emptied=Tömd
+# en: Emptied: %s tons for $%s
+landfill.emptied_tons_for=Tömd: %s ton för $%s
+# en: Emptying it costs $%s
+landfill.emptying_costs=Tömning kostar $%s
+# en: Emptying in a few seconds
+landfill.emptying_in_few_seconds=Töms om några sekunder
+# en: Emptying is off (landfill.ini)
+landfill.emptying_off_landfill_ini=Tömning är av (landfill.ini)
+# en: " (%d not connected)"
+landfill.not_connected=" (%d utan anslutning)"
+# en: Not enough funds: it costs $%s
+landfill.not_enough_funds_costs=Inte tillräckligt med pengar: kostar $%s
+# en: Not a landfill
+landfill.not_landfill=Inte en deponi
+# en: Not ready yet: let the game run for a moment
+landfill.not_ready_yet_let=Inte klart än: låt spelet gå en stund
+# en: This landfill: %d%% full
+landfill.this_landfill_full=Denna deponi: %d%% full
+# en: %s of %s tons (%s free)
+landfill.tons_free=%s av %s ton (%s ledigt)
+
+# ---- lifespan
+# en: age %s%s
+lifespan.age=ålder %s%s
+# en: Age %s of %s, %s left%s
+lifespan.age_left=Ålder %s av %s, %s kvar%s
+# en: Age %s, %s left. $%s
+lifespan.age_left_2=Ålder %s, %s kvar. $%s
+# en: Age %s, %s left
+lifespan.age_left_3=Ålder %s, %s kvar
+# en: Age %s, %s left%s
+lifespan.age_left_4=Ålder %s, %s kvar%s
+# en: As new
+lifespan.as_new=Som ny
+# en: Back
+lifespan.back=Tillbaka
+# en: Beds (this one):
+lifespan.beds_this_one=Sängar (denna):
+# en: Build cost:
+lifespan.build_cost=Byggkostnad:
+# en: Declines from:
+lifespan.declines_from=Förfaller från:
+# en: " (declining)"
+lifespan.declining=" (förfaller)"
+# en: %.40s (%ld, %ld), declining
+lifespan.declining_2=%.40s (%ld, %ld), förfaller
+# en: " (declining)"
+lifespan.declining_3=" (förfaller)"
+# en: " (declining now)"
+lifespan.declining_now=" (förfaller redan)"
+# en: Doctors (this one):
+lifespan.doctors_this_one=Läkare (denna):
+# en: Life left:
+lifespan.life_left=Livslängd kvar:
+# en: Lifespan
+lifespan.lifespan=Livslängd
+# en: Months overworked:
+lifespan.months_overworked=Mån. överbelastad:
+# en: New
+lifespan.new=Ny
+# en: No funds ($%s)
+lifespan.no_funds=Inga pengar ($%s)
+# en: Not done
+lifespan.not_done=Gick inte
+# en: Output:
+lifespan.output=Prestanda:
+# en: . Page %d/%d
+lifespan.page=. Sida %d/%d
+# en: Professors (this one):
+lifespan.professors_this_one=Professorer (denna):
+# en: Restore $%s
+lifespan.restore=Renovera $%s
+# en: Restore
+lifespan.restore_2=Renovera
+# en: Restore all ($%s)
+lifespan.restore_all=Renovera alla ($%s)
+# en: Restored ($%s)
+lifespan.restored=Renoverad ($%s)
+# en: Teachers (this one):
+lifespan.teachers_this_one=Lärare (denna):
+# en: %d that age. Funds $%s
+lifespan.that_age_funds=%d som åldras. Pengar $%s
+# en: %ldy
+lifespan.y=%ld år
+# en: %ldy %ldm
+lifespan.y_m=%ld år %ld mån
+
+# ---- rcibars
+# en: Capacity in use: Airport %ld%%, Seaport %ld%%
+rcibars.tooltip=Kapacitet i bruk: flygplats %ld%%, hamn %ld%%
+
+# ---- resize
+# en: After restarting the game
+resize.after_restarting_game=Efter omstart av spelet
+# en: Arrow speed
+resize.arrow_speed=Pilfart
+# en: Automatic
+resize.automatic=Automatiskt
+# en: Autosave
+resize.autosave=Autosparning
+# en: Autosave
+resize.autosave_2=Autospara
+# en: Back
+resize.back=Tillbaka
+# en: Build over zones
+resize.build_over_zones=Bygg på zoner
+# en: Buildings
+resize.buildings=Byggnader
+# en: Camera
+resize.camera=Kamera
+# en: City keeps running while scrolling
+resize.city_keeps_running_while=Staden fortsätter vid rullning
+# en: Copy ID
+resize.copy_id=Kopiera ID
+# en: Drag speed
+resize.drag_speed=Dragfart
+# en: Edge scroll
+resize.edge_scroll=Kantrullning
+# en: Empty
+resize.empty=Töm
+# en: Every:
+resize.every=Var:
+# en: Extra zoom
+resize.extra_zoom=Extra zoom
+# en: FPS limit:
+resize.fps_limit=FPS-gräns:
+# en: Interface
+resize.interface=Gränssnitt
+# en: Interface scale:
+resize.interface_scale=Gränssnittets skala:
+# en: Language
+resize.language=Språk
+# en: Mod options...
+resize.mod_options=Modalternativ...
+# en: Mod options
+resize.mod_options_2=Modalternativ
+# en: Move
+resize.move=Flytta
+# en: Move button
+resize.move_button=Knappen Flytta
+# en: No limit
+resize.no_limit=Obegr.
+# en: " (on restart)"
+resize.on_restart=" (vid omstart)"
+# en: Past the map edge
+resize.past_map_edge=Förbi kanten
+# en: Performance
+resize.performance=Prestanda
+# en: Picker (Ctrl+F)
+resize.picker=Pipett (Ctrl+F)
+# en: Picker: this has no build tool
+resize.picker_no_build_tool=Pipett: detta har inget byggverktyg
+# en: Picker: the game has no tool for this
+resize.picker_no_game_tool=Pipett: spelet har inget verktyg för detta
+# en: Picker: nothing to pick here
+resize.picker_nothing_here=Pipett: inget att kopiera här
+# en: Picker: only one per city
+resize.picker_one_per_city=Pipett: bara en per stad
+# en: Push camera when building
+resize.push_camera_when_building=Skjut kameran vid byggande
+# en: Save to the original city
+resize.save_original_city=Spara i den ursprungliga staden
+# en: "Auto   "
+resize.scale_auto="Auto   "
+# en: "Normal   "
+resize.scale_normal="Normal   "
+# en: Show FPS
+resize.show_fps=Visa FPS
+# en: Show notice
+resize.show_notice=Visa notis
+# en: Show profiler
+resize.show_profiler=Visa profilerare
+# en: Smooth
+resize.smooth=Utjämning
+# en: Undo (Ctrl+Z)
+resize.undo=Ångra (Ctrl+Z)
+# en: Undo buttons
+resize.undo_buttons=Ångra-knappar
+
+# ---- restore
+# en: Already as good as new
+restore.already_as_good_as=Redan som ny
+# en: The building is gone
+restore.building_gone=Byggnaden finns inte längre
+# en: The cost is now $%s: click again
+restore.cost_now_click_again=Kostnaden är nu $%s: klicka igen
+# en: Could not restore
+restore.could_not_restore=Kunde inte renovera
+# en: No budget
+restore.no_budget=Ingen budget
+# en: Not enough funds: costs $%s, you have $%s
+restore.not_enough_funds_costs=Inte tillräckligt med pengar: kostar $%s, du har $%s
+# en: Restored for $%s
+restore.restored_for=Renoverad för $%s
+# en: %d restored for $%s
+restore.restored_for_2=%d renoverade för $%s
+# en: This building does not age
+restore.this_building_does_not=Denna byggnad åldras inte
+
+# ---- undo
+# en: Redo (Ctrl+Y)
+undo.redo=Gör om (Ctrl+Y)
+# en: Undo (Ctrl+Z)
+undo.undo=Ångra (Ctrl+Z)

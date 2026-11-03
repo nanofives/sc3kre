@@ -52,8 +52,8 @@ static void rs_money(char *out, int cap, LONG v) {    /* 1234567 -> "1,234,567" 
 /* "12a 4m" / "12y 4m" from months */
 static void rs_age(char *out, int cap, LONG months, int es) {
     if (months < 0) months = 0;
-    if (months % 12) _snprintf(out, cap, es ? "%lda %ldm" : "%ldy %ldm", months / 12, months % 12);
-    else _snprintf(out, cap, es ? "%lda" : "%ldy", months / 12);
+    if (months % 12) _snprintf(out, cap, SC3TR(es, "lifespan.y_m", "%lda %ldm", "%ldy %ldm"), months / 12, months % 12);
+    else _snprintf(out, cap, SC3TR(es, "lifespan.y", "%lda", "%ldy"), months / 12);
     out[cap - 1] = 0;
 }
 
@@ -62,8 +62,8 @@ static void rs_line(const RS_INFO *i, int es, char *out, int cap) {
     rs_age(a, sizeof(a), i->age, es);
     rs_age(m, sizeof(m), i->max_age, es);
     rs_age(l, sizeof(l), i->max_age - i->age, es);
-    _snprintf(out, cap, es ? "Edad %s de %s, le quedan %s%s" : "Age %s of %s, %s left%s", a, m, l,
-              i->aging ? (es ? " (decayendo)" : " (declining)") : "");
+    _snprintf(out, cap, SC3TR(es, "lifespan.age_left", "Edad %s de %s, le quedan %s%s", "Age %s of %s, %s left%s"), a, m, l,
+              i->aging ? (SC3TR(es, "lifespan.declining", " (decayendo)", " (declining)")) : "");
     out[cap - 1] = 0;
 }
 
@@ -76,8 +76,8 @@ static void rs_caption(const RS_INFO *i, int es, char *out, int cap) {
     rs_money(c, sizeof(c), i->cost);
     if (g_rs_last.tick && GetTickCount() - g_rs_last.tick < 10000 && g_rs_last.type == i->type && g_rs_last.x0 == i->x0 &&
         g_rs_last.z0 == i->z0) lstrcpynA(out, g_rs_last.cap, cap);
-    else if (i->age <= 0) _snprintf(out, cap, es ? "Como nuevo" : "As new");
-    else _snprintf(out, cap, es ? "Restaurar $%s" : "Restore $%s", c);
+    else if (i->age <= 0) _snprintf(out, cap, SC3TR(es, "lifespan.as_new", "Como nuevo", "As new"));
+    else _snprintf(out, cap, SC3TR(es, "lifespan.restore", "Restaurar $%s", "Restore $%s"), c);
     out[cap - 1] = 0;
 }
 
@@ -193,14 +193,14 @@ static void rs_click(void *win, BYTE *qo) {
         LONG f = 0;
         PFN_rs_funds ff = (PFN_rs_funds)rs_fn("sc3restore_funds");
         if (ff) f = ff();
-        if (f < i.cost) _snprintf(cap, sizeof(cap), es ? "Sin fondos ($%s)" : "No funds ($%s)", c);
-        else lstrcpynA(cap, es ? "No se pudo" : "Not done", sizeof(cap));
+        if (f < i.cost) _snprintf(cap, sizeof(cap), SC3TR(es, "lifespan.no_funds", "Sin fondos ($%s)", "No funds ($%s)"), c);
+        else lstrcpynA(cap, SC3TR(es, "lifespan.not_done", "No se pudo", "Not done"), sizeof(cap));
         cap[sizeof(cap) - 1] = 0;
         lf_caption(win, RS_BTN, cap);
         return;
     }
     g_rs_last.type = i.type; g_rs_last.x0 = i.x0; g_rs_last.z0 = i.z0; g_rs_last.tick = GetTickCount();
-    _snprintf(g_rs_last.cap, sizeof(g_rs_last.cap), es ? "Restaurado ($%s)" : "Restored ($%s)", c);
+    _snprintf(g_rs_last.cap, sizeof(g_rs_last.cap), SC3TR(es, "lifespan.restored", "Restaurado ($%s)", "Restored ($%s)"), c);
     g_rs_last.cap[sizeof(g_rs_last.cap) - 1] = 0;
     /* Close and reopen from posted messages, so this click is fully handled before its dialog goes. A posted message,
        not a thread timer: the dialog's modal loop dispatched a 150 ms timer 10 s late (measured). */
@@ -331,7 +331,7 @@ static void rs_qrows(void *win, BYTE *qo) {
             if (price > 0) {
                 rs_money(m1, sizeof(m1), price);
                 _snprintf(v, sizeof(v), "$%s", m1); v[sizeof(v) - 1] = 0;
-                tried++; n += qr_row(li, es ? "Coste de obra:" : "Build cost:", v);
+                tried++; n += qr_row(li, SC3TR(es, "lifespan.build_cost", "Coste de obra:", "Build cost:"), v);
             }
         }
         /* lifespan */
@@ -341,11 +341,11 @@ static void rs_qrows(void *win, BYTE *qo) {
             DWORD *mvt = *(DWORD **)mo;
             if (!dead && mx > 0 && mx < 100000 && dc >= 0 && dc <= mx) {
                 rs_age(m1, sizeof(m1), dc, es);
-                _snprintf(v, sizeof(v), es ? "%s de edad%s" : "age %s%s", m1, age >= dc ? (es ? " (ya decae)" : " (declining now)") : "");
+                _snprintf(v, sizeof(v), SC3TR(es, "lifespan.age", "%s de edad%s", "age %s%s"), m1, age >= dc ? (SC3TR(es, "lifespan.declining_now", " (ya decae)", " (declining now)")) : "");
                 v[sizeof(v) - 1] = 0;
-                tried++; n += qr_row(li, es ? "Decae desde:" : "Declines from:", v);
+                tried++; n += qr_row(li, SC3TR(es, "lifespan.declines_from", "Decae desde:", "Declines from:"), v);
                 rs_age(m2, sizeof(m2), mx - age, es);
-                tried++; n += qr_row(li, es ? "Vida restante:" : "Life left:", m2);
+                tried++; n += qr_row(li, SC3TR(es, "lifespan.life_left", "Vida restante:", "Life left:"), m2);
             }
             /* a SIMUTIL plant (the output pair as sc3restore's plant_output checks it) */
             if (!dead && util && mvt[0x3c / 4] == (DWORD)util + 0x2563 && mvt[0x38 / 4] == (DWORD)util + 0x6b67) {
@@ -353,10 +353,10 @@ static void rs_qrows(void *win, BYTE *qo) {
                 WORD ow = *(WORD *)((BYTE *)mo + 0x10);
                 if (base > 0) {
                     _snprintf(v, sizeof(v), "%ld%%", (LONG)(((__int64)now * 100 + base / 2) / base)); v[sizeof(v) - 1] = 0;
-                    tried++; n += qr_row(li, es ? "Rendimiento:" : "Output:", v);
+                    tried++; n += qr_row(li, SC3TR(es, "lifespan.output", "Rendimiento:", "Output:"), v);
                 }
                 _snprintf(v, sizeof(v), "%u", (unsigned)ow); v[sizeof(v) - 1] = 0;
-                tried++; n += qr_row(li, es ? "Meses en sobrecarga:" : "Months overworked:", v);
+                tried++; n += qr_row(li, SC3TR(es, "lifespan.months_overworked", "Meses en sobrecarga:", "Months overworked:"), v);
             }
             ho_v(mo, 0x08, 0, 0, 0, 0, 0, 0);
             mo = NULL;
@@ -364,15 +364,15 @@ static void rs_qrows(void *win, BYTE *qo) {
         /* per-building health / education staff */
         if (rci && ovt == (DWORD)rci + 0x4b548) {
             _snprintf(v, sizeof(v), "%lu", *(DWORD *)(occ + 0x24)); v[sizeof(v) - 1] = 0;
-            tried++; n += qr_row(li, es ? "Camas (este):" : "Beds (this one):", v);
+            tried++; n += qr_row(li, SC3TR(es, "lifespan.beds_this_one", "Camas (este):", "Beds (this one):"), v);
             _snprintf(v, sizeof(v), "%lu", *(DWORD *)(occ + 0x28)); v[sizeof(v) - 1] = 0;
-            tried++; n += qr_row(li, es ? "M\xe9" "dicos (este):" : "Doctors (this one):", v);
+            tried++; n += qr_row(li, SC3TR(es, "lifespan.doctors_this_one", "M\xe9" "dicos (este):", "Doctors (this one):"), v);
         } else if (rci && ovt == (DWORD)rci + 0x4be08) {
             _snprintf(v, sizeof(v), "%lu", *(DWORD *)(occ + 0x24)); v[sizeof(v) - 1] = 0;
-            tried++; n += qr_row(li, es ? "Profesores (esta):" : "Teachers (this one):", v);
+            tried++; n += qr_row(li, SC3TR(es, "lifespan.teachers_this_one", "Profesores (esta):", "Teachers (this one):"), v);
         } else if (rci && ovt == (DWORD)rci + 0x4b2a8) {
             _snprintf(v, sizeof(v), "%lu", *(DWORD *)(occ + 0x24)); v[sizeof(v) - 1] = 0;
-            tried++; n += qr_row(li, es ? "Profesores (esta):" : "Professors (this one):", v);
+            tried++; n += qr_row(li, SC3TR(es, "lifespan.professors_this_one", "Profesores (esta):", "Professors (this one):"), v);
         }
         logf("QROWS> %d of %d row(s) added", n, tried);
         if (n > 0) qr_grow(win, occ, n);
@@ -509,8 +509,8 @@ static void rm_fill(void *win) {
     else {
         int k2 = 0;
         rs_money(c, sizeof(c), funds);
-        k2 = _snprintf(t, sizeof(t), es ? "%d con vida \xfatil. Fondos $%s" : "%d that age. Funds $%s", g_rm.n, c);
-        if (pages > 1 && k2 > 0) _snprintf(t + k2, sizeof(t) - k2, es ? ". P\xe1g. %d/%d" : ". Page %d/%d", g_rm.page + 1, pages);
+        k2 = _snprintf(t, sizeof(t), SC3TR(es, "lifespan.that_age_funds", "%d con vida \xfatil. Fondos $%s", "%d that age. Funds $%s"), g_rm.n, c);
+        if (pages > 1 && k2 > 0) _snprintf(t + k2, sizeof(t) - k2, SC3TR(es, "lifespan.page", ". P\xe1g. %d/%d", ". Page %d/%d"), g_rm.page + 1, pages);
     }
     t[sizeof(t) - 1] = 0;
     lf_caption(win, RM_HEAD, t);
@@ -521,7 +521,7 @@ static void rm_fill(void *win) {
         /* RSLAYOUT: the price moves from the (narrower) button to the second line, "decae" to the first (a label wraps
            past about 41 characters and the wrapped part is not shown, measured: "... (decae). $7,080" lost its price) */
         if (g_rs_layout && g_rm.rows[i].aging)
-            _snprintf(t, sizeof(t), es ? "%.40s (%ld, %ld), decae" : "%.40s (%ld, %ld), declining", g_rm.rows[i].name,
+            _snprintf(t, sizeof(t), SC3TR(es, "lifespan.declining_2", "%.40s (%ld, %ld), decae", "%.40s (%ld, %ld), declining"), g_rm.rows[i].name,
                       g_rm.rows[i].x0, g_rm.rows[i].z0);
         else _snprintf(t, sizeof(t), "%.40s (%ld, %ld)", g_rm.rows[i].name, g_rm.rows[i].x0, g_rm.rows[i].z0);
         t[sizeof(t) - 1] = 0;
@@ -530,24 +530,24 @@ static void rm_fill(void *win) {
         rs_age(b, sizeof(b), g_rm.rows[i].max_age - g_rm.rows[i].age, es);
         rs_money(c, sizeof(c), g_rm.rows[i].cost);
         if (g_rs_layout && g_rm.rows[i].age > 0)
-            _snprintf(t, sizeof(t), es ? "Edad %s, quedan %s. $%s" : "Age %s, %s left. $%s", a, b, c);
+            _snprintf(t, sizeof(t), SC3TR(es, "lifespan.age_left_2", "Edad %s, quedan %s. $%s", "Age %s, %s left. $%s"), a, b, c);
         else if (g_rs_layout)
-            _snprintf(t, sizeof(t), es ? "Edad %s, quedan %s" : "Age %s, %s left", a, b);
+            _snprintf(t, sizeof(t), SC3TR(es, "lifespan.age_left_3", "Edad %s, quedan %s", "Age %s, %s left"), a, b);
         else
-            _snprintf(t, sizeof(t), es ? "Edad %s, quedan %s%s" : "Age %s, %s left%s", a, b,
-                      g_rm.rows[i].aging ? (es ? " (decae)" : " (declining)") : "");
+            _snprintf(t, sizeof(t), SC3TR(es, "lifespan.age_left_4", "Edad %s, quedan %s%s", "Age %s, %s left%s"), a, b,
+                      g_rm.rows[i].aging ? (SC3TR(es, "lifespan.declining_3", " (decae)", " (declining)")) : "");
         t[sizeof(t) - 1] = 0;
         lf_caption(win, RM_L2 + k, t);
-        if (g_rm.rows[i].age <= 0 && g_rs_layout) lstrcpynA(t, es ? "Nuevo" : "New", sizeof(t));   /* "Como nuevo" is wider than the 92 px pill */
-        else if (g_rm.rows[i].age <= 0) lstrcpynA(t, es ? "Como nuevo" : "As new", sizeof(t));
-        else if (g_rs_layout) lstrcpynA(t, es ? "Restaurar" : "Restore", sizeof(t));
-        else _snprintf(t, sizeof(t), es ? "Restaurar $%s" : "Restore $%s", c);
+        if (g_rm.rows[i].age <= 0 && g_rs_layout) lstrcpynA(t, SC3TR(es, "lifespan.new", "Nuevo", "New"), sizeof(t));   /* "Como nuevo" is wider than the 92 px pill */
+        else if (g_rm.rows[i].age <= 0) lstrcpynA(t, SC3TR(es, "lifespan.as_new", "Como nuevo", "As new"), sizeof(t));
+        else if (g_rs_layout) lstrcpynA(t, SC3TR(es, "lifespan.restore_2", "Restaurar", "Restore"), sizeof(t));
+        else _snprintf(t, sizeof(t), SC3TR(es, "lifespan.restore", "Restaurar $%s", "Restore $%s"), c);
         t[sizeof(t) - 1] = 0;
         lf_caption(win, RM_RB + k, t);
         if (g_rs_grey) rs_enable(win, RM_RB + k, g_rm.rows[i].age > 0);   /* RSGREY */
     }
     rs_money(c, sizeof(c), g_rm.total);
-    _snprintf(t, sizeof(t), es ? "Restaurar todos ($%s)" : "Restore all ($%s)", c);
+    _snprintf(t, sizeof(t), SC3TR(es, "lifespan.restore_all", "Restaurar todos ($%s)", "Restore all ($%s)"), c);
     t[sizeof(t) - 1] = 0;
     lf_caption(win, RM_ALL, t);
     if (g_rs_layout) {   /* RSLAYOUT: one page = the arrows grey, not hidden, so the footer strip stays unbroken */
@@ -636,7 +636,7 @@ static void rm_open(void *win) {
         ok += mp_button(fac, win, RM_ALL, " ", xa, yb, wa, QI_BH);                xa += wa;
         ok += mp_button(fac, win, RM_PREV, "<", xa, yb, 40, QI_BH);               xa += 40;
         ok += mp_button(fac, win, RM_NEXT, ">", xa, yb, 40, QI_BH);               xa += 40;
-        ok += mp_button(fac, win, RM_BACK, es ? "Volver" : "Back", xa, yb, w - 8 - xa, QI_BH);
+        ok += mp_button(fac, win, RM_BACK, SC3TR(es, "lifespan.back", "Volver", "Back"), xa, yb, w - 8 - xa, QI_BH);
         logf("RESTORE> Reunirse page %ldx%ld: %d widgets made (RSLAYOUT: rows %d wide, footer edge to edge 8..%ld)", w, h, ok,
              (int)bw, w - 8);
     } else if (!ho_v(win, 0x78, 1, RM_HEAD, 0, 0, 0, 0)) {   /* SC3RESIZE_RSLAYOUT=0: the 11-02 layout */
@@ -654,7 +654,7 @@ static void rm_open(void *win) {
         ok += mp_button(fac, win, RM_ALL, " ", 8, y, 196, QI_BH);
         ok += mp_button(fac, win, RM_PREV, "<", 210, y, 36, QI_BH);
         ok += mp_button(fac, win, RM_NEXT, ">", 250, y, 36, QI_BH);
-        ok += mp_button(fac, win, RM_BACK, es ? "Volver" : "Back", w - 8 - 76, y, 76, QI_BH);
+        ok += mp_button(fac, win, RM_BACK, SC3TR(es, "lifespan.back", "Volver", "Back"), w - 8 - 76, y, 76, QI_BH);
         logf("RESTORE> Reunirse page %ldx%ld: %d widgets made", w, h, ok);
     } else {
         rm_show(win, RM_HEAD, 1); rm_show(win, RM_ALL, 1); rm_show(win, RM_BACK, 1);
@@ -911,7 +911,7 @@ static int rm_add_icon(void *fac, void *win) {
     ho_str(cap, "");
     btn = (void *)ho_v(fac, 0x30, 5, RM_BTN, (DWORD)cap, (DWORD)img, (DWORD)rect, 0);
     if (btn) {
-        ho_str(tt, ho_spanish() ? "Vida \xfatil" : "Lifespan");
+        ho_str(tt, SC3TR(ho_spanish(), "lifespan.lifespan", "Vida \xfatil", "Lifespan"));
         ho_v(btn, 0x8c, 1, (DWORD)tt, 0, 0, 0, 0);
         ho_str_free(tt);
         ho_v(btn, 0x24, 2, 4, 0, 0, 0, 0);
@@ -945,7 +945,7 @@ static void rm_add_button(void *win) {
     w = l[2] - l[0];
     if (g_rm.win == win) { g_rm.win = NULL; g_rm.nhidden = 0; }   /* a new page at a reused address */
     ok = g_rs_icon && rm_add_icon(fac, win);            /* RSICON; SC3RESIZE_RSICON=0 or no art: the text button */
-    if (!ok) ok = mp_button(fac, win, RM_BTN, ho_spanish() ? "Vida \xfatil" : "Lifespan", w - 34 - 84, 8, 84, 24);
+    if (!ok) ok = mp_button(fac, win, RM_BTN, SC3TR(ho_spanish(), "lifespan.lifespan", "Vida \xfatil", "Lifespan"), w - 34 - 84, 8, 84, 24);
     logf("RESTORE> Reunirse list page 0x%08lX %ldx%ld: \"Vida util\" button %s", (DWORD)win, w, l[3] - l[1], ok ? "added" : "FAILED");
 }
 

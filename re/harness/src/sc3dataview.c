@@ -37,6 +37,7 @@
 
 #include <windows.h>
 #include "sc3mods_guard.h"
+#include "sc3lang.h"   /* modlang: SC3TR, mod text from the per-language tables */
 #include <stdio.h>
 #include <string.h>
 
@@ -416,10 +417,16 @@ static void apply_panel(int panel) {
 /* the caption over a panel's map: which extra layer is on, and the key. Child of the panel (the view's parent), at the
    top of the view's local rect right of the compass. */
 #define CAP_ID 0x0DA7A001
-static const char *k_cap_poll[] = { "V: radiaci\xf3n", "Radiaci\xf3n (V: volver)" };
-static const char *k_cap_traf[] = { "V: viajes y congesti\xf3n por red", "Viajes: verde llega, rojo no (V)",
-                                    "Congesti\xf3n en calles (V)", "Congesti\xf3n en autopistas (V)",
-                                    "Congesti\xf3n en metro (V: volver)" };
+/* modlang 2026-11-02: these were Spanish only; the English is new. SC3MODS_LANGTABLES=0 shows the Spanish as before. */
+static const SC3TXT k_cap_poll[] = {
+    { SC3KEY("dataview.cap_radiation_key"), "V: radiaci\xf3n", "V: radiation" },
+    { SC3KEY("dataview.cap_radiation_back"), "Radiaci\xf3n (V: volver)", "Radiation (V: back)" } };
+static const SC3TXT k_cap_traf[] = {
+    { SC3KEY("dataview.cap_trips_key"), "V: viajes y congesti\xf3n por red", "V: trips and congestion by network" },
+    { SC3KEY("dataview.cap_trips"), "Viajes: verde llega, rojo no (V)", "Trips: green arrives, red does not (V)" },
+    { SC3KEY("dataview.cap_congestion_roads"), "Congesti\xf3n en calles (V)", "Road congestion (V)" },
+    { SC3KEY("dataview.cap_congestion_highways"), "Congesti\xf3n en autopistas (V)", "Highway congestion (V)" },
+    { SC3KEY("dataview.cap_congestion_subway"), "Congesti\xf3n en metro (V: volver)", "Subway congestion (V: back)" } };
 static void caption_view(BYTE *iface, int panel) {
     BYTE *view = iface - 0xa4, *par;
     LONG l, t;
@@ -434,7 +441,7 @@ static void caption_view(BYTE *iface, int panel) {
                  *(LONG *)(view + 0x88), *(LONG *)(view + 0x8c), (DWORD)par, *(LONG *)(par + 0x80), *(LONG *)(par + 0x84),
                  *(LONG *)(par + 0x88), *(LONG *)(par + 0x8c));
         }
-        ui_label(par, CAP_ID, panel == P_POLL ? k_cap_poll[g_mode[P_POLL]] : k_cap_traf[g_mode[P_TRAF]],
+        ui_label(par, CAP_ID, sc3lang_txt(1, panel == P_POLL ? &k_cap_poll[g_mode[P_POLL]] : &k_cap_traf[g_mode[P_TRAF]]),
                  ui_col(0x20, 0x28, 0x70), l + 62, t + 4, 250, 14);
     } __except (EXCEPTION_EXECUTE_HANDLER) { logf("CAP> FAULT 0x%08lX", GetExceptionCode()); }
 }
@@ -672,8 +679,8 @@ static void h_pair(char *o1, char *o2, const char *what, long used, long cap) {
     char a[16], b[16];
     h_num(a, used); h_num(b, cap);
     if (cap > 0) wsprintfA(o1, "%s %ld%%", what, (long)((used * 100.0) / cap + 0.5));
-    else wsprintfA(o1, "%s: sin plazas", what);
-    wsprintfA(o2, "   %s de %s", a, b);
+    else wsprintfA(o1, SC3TR(1, "dataview.no_places", "%s: sin plazas", "%s: no places"), what);
+    wsprintfA(o2, SC3TR(1, "dataview.used_of_cap", "   %s de %s", "   %s of %s"), a, b);
 }
 
 static void h_update(BYTE *page, int tab) {
@@ -689,18 +696,23 @@ static void h_update(BYTE *page, int tab) {
         rl = *(BYTE **)(c + 0xe4);
         if (!rl || IsBadReadPtr(rl, 0x690) || *(DWORD *)rl != (DWORD)rci + 0x4c99c) { logf("H> city +0xe4 is not the residential layer"); rl = NULL; }
         if (rl && tab == 6) {
-            lstrcpyA(ln[n++], "Alumnos / plazas");
-            h_pair(ln[n], ln[n + 1], "Escuela", *(LONG *)(rl + 0x66c), *(LONG *)(rl + 0x670)); n += 2;
-            h_pair(ln[n], ln[n + 1], "Universidad", *(LONG *)(rl + 0x674), *(LONG *)(rl + 0x678)); n += 2;
-            lstrcpyA(ln[n], "Docentes "); h_num(ln[n] + 9, *(LONG *)(rl + 0x684)); n++;
-            lstrcpyA(ln[n], "Profesores "); h_num(ln[n] + 11, *(LONG *)(rl + 0x688)); n++;
-            wsprintfA(ln[n++], "Huelga: %s", rl[0x650] && rl[0x651] ? "escuela y universidad" : rl[0x650] ? "escuela" :
-                      rl[0x651] ? "universidad" : "no");
+            char nb[16];
+            lstrcpynA(ln[n++], SC3TR(1, "dataview.pupils_places", "Alumnos / plazas", "Pupils / places"), 64);
+            h_pair(ln[n], ln[n + 1], SC3TR(1, "dataview.school", "Escuela", "School"), *(LONG *)(rl + 0x66c), *(LONG *)(rl + 0x670)); n += 2;
+            h_pair(ln[n], ln[n + 1], SC3TR(1, "dataview.college", "Universidad", "College"), *(LONG *)(rl + 0x674), *(LONG *)(rl + 0x678)); n += 2;
+            h_num(nb, *(LONG *)(rl + 0x684)); wsprintfA(ln[n++], SC3TR(1, "dataview.teachers", "Docentes %s", "Teachers %s"), nb);
+            h_num(nb, *(LONG *)(rl + 0x688)); wsprintfA(ln[n++], SC3TR(1, "dataview.professors", "Profesores %s", "Professors %s"), nb);
+            wsprintfA(ln[n++], SC3TR(1, "dataview.strike", "Huelga: %s", "Strike: %s"),
+                      rl[0x650] && rl[0x651] ? SC3TR(1, "dataview.strike_both", "escuela y universidad", "school and college") :
+                      rl[0x650] ? SC3TR(1, "dataview.strike_school", "escuela", "school") :
+                      rl[0x651] ? SC3TR(1, "dataview.strike_college", "universidad", "college") : SC3TR(1, "dataview.no", "no", "no"));
         } else if (rl) {
-            lstrcpyA(ln[n++], "Pacientes / capacidad");
-            h_pair(ln[n], ln[n + 1], "Hospitales", *(LONG *)(rl + 0x664), *(LONG *)(rl + 0x668)); n += 2;
-            lstrcpyA(ln[n], "M\xe9" "dicos "); h_num(ln[n] + 8, *(LONG *)(rl + 0x68c)); n++;
-            wsprintfA(ln[n++], "Huelga: %s", rl[0x652] ? "s\xed" : "no");
+            char nb[16];
+            lstrcpynA(ln[n++], SC3TR(1, "dataview.patients_capacity", "Pacientes / capacidad", "Patients / capacity"), 64);
+            h_pair(ln[n], ln[n + 1], SC3TR(1, "dataview.hospitals", "Hospitales", "Hospitals"), *(LONG *)(rl + 0x664), *(LONG *)(rl + 0x668)); n += 2;
+            h_num(nb, *(LONG *)(rl + 0x68c)); wsprintfA(ln[n++], SC3TR(1, "dataview.doctors", "M\xe9" "dicos %s", "Doctors %s"), nb);
+            wsprintfA(ln[n++], SC3TR(1, "dataview.strike", "Huelga: %s", "Strike: %s"),
+                      rl[0x652] ? SC3TR(1, "dataview.yes", "s\xed", "yes") : SC3TR(1, "dataview.no", "no", "no"));
         }
         if (rl && (tab != last_tab || memcmp(last, ln, sizeof(last)))) {
             logf("H> tab %d: raw school %ld/%ld college %ld/%ld health %ld/%ld teachers %ld profs %ld doctors %ld strikes %d %d %d "

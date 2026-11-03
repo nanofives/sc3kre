@@ -3,3 +3,5 @@ EXPORTS
     sc3mods_version @1
     sc3mods_loading @2
     sc3mods_id DATA
+    sc3mods_lang @3
+    sc3mods_tr @4

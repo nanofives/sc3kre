@@ -38,6 +38,7 @@
 
 #include <windows.h>
 #include "sc3mods_guard.h"
+#include "sc3lang.h"   /* modlang: SC3TR, mod text from the per-language tables */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -104,9 +105,12 @@ static void log_open(void) {
 
 static volatile LONG g_big_n = BIG_MIN;      /* current slider size */
 static int  g_last_big;                     /* the last New City used our option */
-static char g_caption[64] = "Enorme";
+static char g_caption[64];                  /* bigcity.ini [city] caption=; empty = "Enorme" from the language tables (modlang) */
 static int  g_fix_vertical = 1;
 static int  g_windowed = 1;
+
+/* the size option's caption: the ini's own text, else the table text (asked late: the language is known at UI time) */
+static const char *big_cap(void) { return g_caption[0] ? g_caption : SC3TR(1, "bigcity.huge", "Enorme", "Huge"); }
 
 static int snap_size(int v) {
     int n = BIG_MIN + ((v - BIG_MIN + BIG_STEP / 2) / BIG_STEP) * BIG_STEP;
@@ -121,7 +125,7 @@ static void ini_read(void) {
     if (!path[0]) return;
     g_big_n = snap_size(GetPrivateProfileIntA("city", "size", BIG_MIN, path));
     g_last_big = GetPrivateProfileIntA("city", "selected", 0, path) ? 1 : 0;
-    GetPrivateProfileStringA("city", "caption", "Enorme", g_caption, sizeof(g_caption), path);
+    GetPrivateProfileStringA("city", "caption", "", g_caption, sizeof(g_caption), path);
     g_fix_vertical = GetPrivateProfileIntA("fixes", "clamp_vertical", 1, path) ? 1 : 0;
     g_windowed = GetPrivateProfileIntA("display", "windowed", 1, path) ? 1 : 0;
 }
@@ -355,7 +359,7 @@ static int __stdcall big_resolve(void *dlg) {
     g_big_n = n;
     g_last_created = n;
     ini_write(n, 1);
-    logf("### SIZE: New City OK with \"%s\" -> %d x %d", g_caption, n, n);
+    logf("### SIZE: New City OK with \"%s\" -> %d x %d", big_cap(), n, n);
     return n;
 }
 
@@ -695,7 +699,7 @@ static void radio_caption(void *gwin, int n) {
     void *r = find_id(gwin, BIG_RADIO_ID);
     char txt[48];
     if (!r) return;
-    _snprintf(txt, sizeof(txt) - 1, "%s %d", g_caption, n); txt[sizeof(txt) - 1] = 0;
+    _snprintf(txt, sizeof(txt) - 1, "%s %d", big_cap(), n); txt[sizeof(txt) - 1] = 0;
     label_text(r, txt);
 }
 
@@ -763,13 +767,13 @@ static int augment(void *gwin) {
     log_children("dialog", dlg);
     log_children("group", gwin);
 
-    if (gzstr_init(&cap, g_caption)) {
+    if (gzstr_init(&cap, big_cap())) {
         PFN_AddOption addopt = (PFN_AddOption)gz_vslot(g, 0x38);
         if (addopt) ok = addopt(g, NULL, BIG_RADIO_ID, &cap, 0, 0, 0);
         gzstr_free(&cap);
     }
     { PFN_Rel rl = (PFN_Rel)gz_vslot(g, 0x08); if (rl) rl(g, NULL); }
-    logf("### UI: add radio 0x%08X \"%s\" -> %s", BIG_RADIO_ID, g_caption, ok ? "OK" : "FAILED");
+    logf("### UI: add radio 0x%08X \"%s\" -> %s", BIG_RADIO_ID, big_cap(), ok ? "OK" : "FAILED");
     if (!ok) return 0;
 
     if (!find_id(dlg, BIG_SLIDER_ID)) {
@@ -1523,7 +1527,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
         ini_read();
         log_open();
         logf("### sc3bigcity loaded - size %d, caption \"%s\", vertical clamp %d",
-             g_big_n, g_caption, g_fix_vertical);
+             g_big_n, g_caption[0] ? g_caption : "(language table)", g_fix_vertical);
         CreateThread(NULL, 0, watcher, NULL, 0, NULL);
     }
     return TRUE;
