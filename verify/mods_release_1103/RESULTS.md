@@ -21,3 +21,9 @@ Replaces `sc3mods-2026-11-02d`. Owner call 2026-11-03: merge placehints3 and pub
 Zip: the 11-02d zip with Apps/sc3resize.dll and Apps/sc3lang/*.txt replaced, README.txt updated (header, NEW IN 2026-11-03).
 142 entries, 141 checked against the staged manifest, 0 mismatches. `sc3mods_2026-11-03.zip` 50,695,195 bytes, SHA-256
 780828BC4B3DD93237A27FEEF6AC44F661EF0D2843277CD7B26E28F262DB0AC3.
+
+GitHub: `sc3mods-2026-11-03`, target `f3653ff`, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-11-03, asset
+downloaded back, SHA-256 matches. The 11-02d notes start with a "superseded" line.
+
+LAN: deployed from `stage/release_1103`, served label `2026-11-03`, served sc3resize.dll and sc3lang/es.txt match the stage.
+Then `stage/release` -> `stage/release_1102d_old`, `stage/release_1103` -> `stage/release`.
