@@ -586,3 +586,31 @@ restore.date_repaired_free=Datum reparerat, gratis
 # ---- added by sc3lang.py merge (machine translation, needs native review)
 # en: green
 placehints.in_green=grönt
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Bus stop
+placehints.st_bus=Busshållplats
+# en: touches no road: 0 trips (red)
+placehints.st_dead_bus=rör ingen gata: 0 resor (röd)
+# en: touches no rail: 0 trips (red)
+placehints.st_dead_rail=rör inget spår: 0 resor (röd)
+# en: touches no rail or subway: 0 trips (red)
+placehints.st_dead_railsub=rör varken spår eller tunnel: 0 resor (röd)
+# en: touches no subway: 0 trips (red)
+placehints.st_dead_subway=rör ingen tunnel: 0 resor (röd)
+# en: connects through %d cells
+placehints.st_links=ansluten via %d rutor
+# en: no trip data (TRIPCELLS off)
+placehints.st_notrips=inga resdata (TRIPCELLS av)
+# en: Train station
+placehints.st_rail=Tågstation
+# en: Rail to subway
+placehints.st_railsub=Tåg till tunnelbana
+# en: Subway station
+placehints.st_subway=Tunnelbanestation
+# en: %ld trips a month start here, %ld by transit (green)
+placehints.st_trips=%ld resor i månaden börjar här, %ld med kollektivtrafik (grön)
+# en: %ld trips since the city loaded start here, %ld by transit (green)
+placehints.st_trips_load=%ld resor sedan laddningen börjar här, %ld med kollektivtrafik (grön)
+# en: %s: walk R %d C %d I %d cells  |  %s  |  %s
+placehints.station=%s: till fots R %d C %d I %d rutor  |  %s  |  %s

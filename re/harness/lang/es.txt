@@ -241,6 +241,19 @@ placehints.piers="muelles: 5 de borde con agua, "
 placehints.port_hint=%s %ld celdas, %ld sin transporte (rojo)  |  cap. %s +%ld, uso %ld%% a %ld%%  |  techo %s %ld a %ld  |  %snecesita energia y agua
 placehints.runway="pista: 3x5 o mas, "
 placehints.seaport=Puerto
+placehints.st_bus=Parada de bus
+placehints.st_dead_bus=no toca ninguna calle: 0 viajes (rojo)
+placehints.st_dead_rail=no toca la v355a: 0 viajes (rojo)
+placehints.st_dead_railsub=no toca v355a ni túnel: 0 viajes (rojo)
+placehints.st_dead_subway=no toca el túnel: 0 viajes (rojo)
+placehints.st_links=conecta por %d celdas
+placehints.st_notrips=sin datos de viajes (TRIPCELLS apagado)
+placehints.st_rail=Estación de tren
+placehints.st_railsub=Tren a metro
+placehints.st_subway=Estación de metro
+placehints.st_trips=%ld viajes al mes salen de aquí, %ld en transporte (verde)
+placehints.st_trips_load=%ld viajes desde la carga salen de aquí, %ld en transporte (verde)
+placehints.station=%s: a pie R %d C %d I %d celdas  |  %s  |  %s
 
 # ---- rcibars
 rcibars.tooltip=Capacidad en uso: Aeropuerto %ld%%, Puerto %ld%%

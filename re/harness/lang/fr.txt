@@ -586,3 +586,31 @@ restore.date_repaired_free=Date réparée, gratuit
 # ---- added by sc3lang.py merge (machine translation, needs native review)
 # en: green
 placehints.in_green=en vert
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Bus stop
+placehints.st_bus=Arrêt de bus
+# en: touches no road: 0 trips (red)
+placehints.st_dead_bus=ne touche aucune rue : 0 trajet (rouge)
+# en: touches no rail: 0 trips (red)
+placehints.st_dead_rail=ne touche pas la voie : 0 trajet (rouge)
+# en: touches no rail or subway: 0 trips (red)
+placehints.st_dead_railsub=ne touche ni voie ni tunnel : 0 trajet (rouge)
+# en: touches no subway: 0 trips (red)
+placehints.st_dead_subway=ne touche pas le tunnel : 0 trajet (rouge)
+# en: connects through %d cells
+placehints.st_links=relié par %d cases
+# en: no trip data (TRIPCELLS off)
+placehints.st_notrips=pas de données de trajets (TRIPCELLS désactivé)
+# en: Train station
+placehints.st_rail=Gare
+# en: Rail to subway
+placehints.st_railsub=Train vers métro
+# en: Subway station
+placehints.st_subway=Station de métro
+# en: %ld trips a month start here, %ld by transit (green)
+placehints.st_trips=%ld trajets par mois partent d'ici, %ld en transport (vert)
+# en: %ld trips since the city loaded start here, %ld by transit (green)
+placehints.st_trips_load=%ld trajets depuis le chargement partent d'ici, %ld en transport (vert)
+# en: %s: walk R %d C %d I %d cells  |  %s  |  %s
+placehints.station=%s : à pied R %d C %d I %d cases  |  %s  |  %s

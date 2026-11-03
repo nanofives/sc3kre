@@ -586,3 +586,31 @@ restore.date_repaired_free=Datum gerepareerd, gratis
 # ---- added by sc3lang.py merge (machine translation, needs native review)
 # en: green
 placehints.in_green=groen
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Bus stop
+placehints.st_bus=Bushalte
+# en: touches no road: 0 trips (red)
+placehints.st_dead_bus=raakt geen straat: 0 ritten (rood)
+# en: touches no rail: 0 trips (red)
+placehints.st_dead_rail=raakt geen spoor: 0 ritten (rood)
+# en: touches no rail or subway: 0 trips (red)
+placehints.st_dead_railsub=raakt geen spoor of tunnel: 0 ritten (rood)
+# en: touches no subway: 0 trips (red)
+placehints.st_dead_subway=raakt geen tunnel: 0 ritten (rood)
+# en: connects through %d cells
+placehints.st_links=verbonden via %d vakken
+# en: no trip data (TRIPCELLS off)
+placehints.st_notrips=geen ritgegevens (TRIPCELLS uit)
+# en: Train station
+placehints.st_rail=Treinstation
+# en: Rail to subway
+placehints.st_railsub=Trein naar metro
+# en: Subway station
+placehints.st_subway=Metrostation
+# en: %ld trips a month start here, %ld by transit (green)
+placehints.st_trips=%ld ritten per maand beginnen hier, %ld met ov (groen)
+# en: %ld trips since the city loaded start here, %ld by transit (green)
+placehints.st_trips_load=%ld ritten sinds het laden beginnen hier, %ld met ov (groen)
+# en: %s: walk R %d C %d I %d cells  |  %s  |  %s
+placehints.station=%s: lopen R %d C %d I %d vakken  |  %s  |  %s

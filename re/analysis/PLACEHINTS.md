@@ -181,3 +181,43 @@ slot returns that code for nibble 2. The `0x10019903` call returns RGB 0x2c 0xb4
 a sprite is green. A rising halo cell is set through the stock setter with the tool code (dirty rect, push
 bookkeeping) and its low nibble is then changed to 2. The stock clear (`0x1004b653`, low nibble -> 0) and push
 (`0x1004b779`, nibble compare) handle any value. Falls stay 0x24 red. `SC3RESIZE_PLACEHINTS_GREEN=0` = the old colour.
+
+## E. Round 4 (placehints4, 2026-11-03): halo on Shift, transit research
+
+**Halo only while Shift is held (built).** Owner: "without shift it should hide the area affecting a ploppable
+building". `ph_bprev` still computes the halo (the label needs the reach) but marks cells only when Shift is down.
+A Shift edge re-runs the building tool's preview: tool vt+0x54(tool+0x40, out rect6), the same call the move handler
+SIMGEOM `0x10021764` makes. The stock fill under it, highlighter vt+0x4c = SIMSPR `0x1004af93`, clears every live
+cell (`0x1004b653`), fills the footprint and pushes rect plus dirty rect (vt+0x58), so the old halo is pushed away
+`[CONFIRMED @ SIMSPR 0x1004af93]`. The call is made only when the hint tool is a building tool (one of the 4 SIMGEOM
+vtables) and the city view's current tool (view+0x228, measured by the picker), so a switched-away or freed tool is
+never called. The sprite tint follows the cells, so it goes too. The airport / seaport red no-transport cells stay
+always on: they say where the dragged zone cannot grow, like the stock red refusal.
+
+**Transit catchment (built, station preview).** The trip start node (type 0x80) in SimTransit `0x1000755e` scans the lot
+rect grown by r cells, corners skipped, r = layer+0xc5 (Res, 4), +0xc6 (Com, 3), +0xc7 (Ind, 5), +0xc8 (other, 5) by
+the lot kind from `0x100057f6` (STTraffic `TripMaxDistanceToRoad`, +1 with the shuttle ordinance, `0x100087fd`). A
+cell whose layer+0x5c flags hold 0x10 is a station candidate: with the bus mode and flag 1 a bus stop (node 0x50),
+flag 0x20 rail-subway (0x30), flag 4 with the rail mode rail (0x14), else subway (0x18). A station candidate below
+`DAT_1001f0c0` sets the keep value to 0xff, so any station in range beats every road cell `[CONFIRMED @ SimTransit
+0x1000755e]`. Whether the trip has the mode at all is the building's flags and the 60% roll (`0x100097b9`,
+PUBLIC_TRANSIT.md 2). Per-cell trip counts and their transit share: TRIPCELLS (`sc3resize_vdbars.c`).
+
+**Station preview (built, `ph_station`).** Station plop types measured from the plop tool type log after the menu
+commands (MenuItem.INI names): Bus Stop `0x10004004` -> 12210, Train Station `0x10004102` -> 12230 (both building tool
+vtable SIMGEOM `0x10029504`), Subway Station `0x10004202` -> 12360, Rail To Subway `0x10004009` -> 12361 (vtable
+`0x1002968c`). With Shift: the cells within the Res reach (layer+0xc5) of the footprint, corners skipped, drawn in the
+tool colour, green where TRIPCELLS has trips from that cell that used bus, rail or subway, and the label sums the trips
+starting in the area. Always: footprint red when `ph_station_links` = 0. The onward step from a station node (same
+function, generic ring branch: rect + 1, corners skipped) goes to a cell that lacks 0x10 and has: bus stop 0x50 ->
+road 1 (node 0x41), rail station 0x14 -> rail 4, subway station 0x18 -> tunnel 8, rail-subway 0x30 -> 4 or 8
+`[CONFIRMED @ SimTransit 0x1000755e]`. Measured in Berlin: a 2x2 train station touching a new rail line gives links 2,
+one cell off gives 0 (railgap measured 0 trips for the same gap).
+
+Live reach bytes in Berlin: layer+0xc5..+0xc8 = 5 / 4 / 6 / 7, while STTraffic lists 4 / 3 / 5 / 5. The shuttle
+ordinance (+1 each, `0x100087fd`) would account for 5 / 4 / 6 / 6. `[UNCERTAIN]` whether Berlin has that ordinance on,
+and where the 7 for "other" comes from; the hint reads the live bytes either way.
+
+TRIPCELLS limit: it closes a month only from GRAPHNEW's budget hook (`sc3resize_graphs.c` `gn_month`), which does
+nothing until the Graficas page has been opened once (`g_gn_if[0]` is made by `gn_make` from the page enumeration).
+Before that the hint has only the count since the load, and the label says so.
