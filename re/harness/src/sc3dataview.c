@@ -656,10 +656,11 @@ static void tp_caption(BYTE *panel) {
         else {
             long p10 = (long)(tr * 1000.0 / n + 0.5);
             tp_num(a, n);
-            if (g_tp_es) wsprintfA(l2, "%s: %ld,%ld%% de %s viajes en transporte", last ? "Mes pasado" : "Este mes",
-                                   p10 / 10, p10 % 10, a);
-            else wsprintfA(l2, "%s: %ld.%ld%% of %s trips on transit", last ? "Last month" : "This month so far",
-                           p10 / 10, p10 % 10, a);
+            wsprintfA(l2, SC3TR(g_tp_es, "dataview.transit_share", "%s: %ld,%ld%% de %s viajes en transporte",
+                                "%s: %ld.%ld%% of %s trips on transit"),
+                      last ? SC3TR(g_tp_es, "dataview.last_month", "Mes pasado", "Last month")
+                           : SC3TR(g_tp_es, "dataview.this_month_so_far", "Este mes", "This month so far"),
+                      p10 / 10, p10 % 10, a);
         }
     }
     col = ui_col(0x20, 0x28, 0x70);   /* lines under 50 characters fit the 316 px */

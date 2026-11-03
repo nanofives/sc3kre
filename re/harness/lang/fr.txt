@@ -496,3 +496,89 @@ restore.this_building_does_not=Ce bâtiment ne vieillit pas
 undo.redo=Rétablir (Ctrl+Y)
 # en: Undo (Ctrl+Z)
 undo.undo=Annuler (Ctrl+Z)
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: red = capacity short, green = covered
+cuadros.red_capacity_short_green=rouge = capacité insuffisante, vert = couvert
+# en: Last month
+dataview.last_month=Mois dernier
+# en: No transit
+dataview.no_transit=Sans transport
+# en: No trip data (sc3resize TRIPCELLS off)
+dataview.no_trip_data_sc3resize=Pas de données (sc3resize TRIPCELLS désactivé)
+# en: No trips counted yet
+dataview.no_trips_counted_yet=Aucun trajet compté pour le moment
+# en: Public transit map
+dataview.public_transit_map=Carte des transports en commun
+# en: Red: trips with no bus, rail or subway
+dataview.red_trips_with_no=Rouge : trajets sans bus, train ni métro
+# en: This month so far
+dataview.this_month_so_far=Ce mois-ci
+# en: %s: %ld.%ld%% of %s trips on transit
+dataview.transit_share=%s : %ld,%ld%% des %s trajets en transports
+# en: Use transit
+dataview.use_transit=Avec transport
+# en: Cannot be rebuilt
+lifespan.cannot_be_rebuilt=Reconstruction impossible
+# en: Cannot build there
+lifespan.cannot_build_there=Construction impossible ici
+# en: Date damaged: free repair
+lifespan.date_damaged_free_repair=Date endommagée : réparation gratuite
+# en: Dead (date damaged). Free
+lifespan.dead_date_damaged_free=En ruine (date endommagée). Gratuit
+# en: Dead. Rebuild: $%s
+lifespan.dead_rebuild=En ruine. Reconstruire : $%s
+# en: End of its life: it can be rebuilt
+lifespan.end_its_life_can=Fin de vie : reconstruction possible
+# en: It is gone
+lifespan.gone=N'existe plus
+# en: Lifespan
+lifespan.lifespan_2=Durée de vie
+# en: A move is in progress
+lifespan.move_in_progress=Un déplacement est en cours
+# en: Next
+lifespan.next=Suivant
+# en: No longer rubble
+lifespan.no_longer_rubble=N'est plus en ruine
+# en: Not available (Mover is off)
+lifespan.not_available_mover_off=Indisponible (Déplacer désactivé)
+# en: Not enough funds: costs $%s, you have $%s
+lifespan.not_enough_funds_costs=Fonds insuffisants : coût $%s, vous avez $%s
+# en: Previous
+lifespan.previous=Précédent
+# en: Rebuild $%s
+lifespan.rebuild=Reconstruire $%s
+# en: Rebuild
+lifespan.rebuild_2=Reconstruire
+# en: Rebuild (free)
+lifespan.rebuild_free=Reconstruire (gratuit)
+# en: Rebuilt ($%s)
+lifespan.rebuilt=Reconstruit ($%s)
+# en: Rebuilt for $%s
+lifespan.rebuilt_for=Reconstruit pour $%s
+# en: Rebuilt for free
+lifespan.rebuilt_for_free=Reconstruit gratuitement
+# en: Repair
+lifespan.repair=Réparer
+# en: Repair (free)
+lifespan.repair_free=Réparer (gratuit)
+# en: %d that age, %d dead. $%s
+lifespan.that_age_dead=%d qui vieillissent, %d en ruine. $%s
+# en: Airport
+placehints.airport=Aéroport
+# en: red
+placehints.in_red=en rouge
+# en: Land value %s  %s  %s  |  %s %c %s%ld%% or more up to %ld cells
+placehints.land_value=Valeur du terrain %s  %s  %s  |  %s %c %s%ld%% ou plus jusqu'à %ld cases
+# en: marked
+placehints.marked=marqué
+# en: "piers: 5 edge cells on water, "
+placehints.piers="quais : 5 bords d'eau, "
+# en: %s %ld cells, %ld without transport (red)  |  cap. %s +%ld, use %ld%% to %ld%%  |  %s ceiling %ld to %ld  |  %sneeds power and water
+placehints.port_hint=%s %ld cases, %ld sans accès (rouge)  |  cap. %s +%ld, usage %ld%% à %ld%%  |  plafond %s %ld à %ld  |  %sbesoin élec. et eau
+# en: "runway: 3x5 or more, "
+placehints.runway="piste : 3x5 ou plus, "
+# en: Seaport
+placehints.seaport=Port
+# en: Date repaired, free
+restore.date_repaired_free=Date réparée, gratuit

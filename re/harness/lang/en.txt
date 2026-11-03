@@ -158,6 +158,8 @@ dataview.doctors=Doctors %s
 # sc3dataview.c
 dataview.hospitals=Hospitals
 # sc3dataview.c
+dataview.last_month=Last month
+# sc3dataview.c
 dataview.no=no
 # sc3dataview.c
 dataview.no_places=%s: no places
@@ -189,6 +191,10 @@ dataview.strike_college=college
 dataview.strike_school=school
 # sc3dataview.c
 dataview.teachers=Teachers %s
+# sc3dataview.c
+dataview.this_month_so_far=This month so far
+# sc3dataview.c
+dataview.transit_share=%s: %ld.%ld%% of %s trips on transit
 # sc3dataview.c
 dataview.use_transit=Use transit
 # sc3dataview.c
@@ -437,6 +443,24 @@ lifespan.that_age_funds=%d that age. Funds $%s
 lifespan.y=%ldy
 # sc3resize_restore.c
 lifespan.y_m=%ldy %ldm
+
+# ---- placehints
+# sc3resize_placehints.c
+placehints.airport=Airport
+# sc3resize_placehints.c
+placehints.in_red=red
+# sc3resize_placehints.c
+placehints.land_value=Land value %s  %s  %s  |  %s %c %s%ld%% or more up to %ld cells
+# sc3resize_placehints.c
+placehints.marked=marked
+# sc3resize_placehints.c
+placehints.piers="piers: 5 edge cells on water, "
+# sc3resize_placehints.c
+placehints.port_hint=%s %ld cells, %ld without transport (red)  |  cap. %s +%ld, use %ld%% to %ld%%  |  %s ceiling %ld to %ld  |  %sneeds power and water
+# sc3resize_placehints.c
+placehints.runway="runway: 3x5 or more, "
+# sc3resize_placehints.c
+placehints.seaport=Seaport
 
 # ---- rcibars
 # sc3resize_rcibars.c

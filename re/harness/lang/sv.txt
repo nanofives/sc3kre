@@ -496,3 +496,89 @@ restore.this_building_does_not=Denna byggnad åldras inte
 undo.redo=Gör om (Ctrl+Y)
 # en: Undo (Ctrl+Z)
 undo.undo=Ångra (Ctrl+Z)
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: red = capacity short, green = covered
+cuadros.red_capacity_short_green=rött = kapacitet saknas, grönt = täckt
+# en: Last month
+dataview.last_month=Förra månaden
+# en: No transit
+dataview.no_transit=Utan kollektiv
+# en: No trip data (sc3resize TRIPCELLS off)
+dataview.no_trip_data_sc3resize=Inga resdata (sc3resize TRIPCELLS av)
+# en: No trips counted yet
+dataview.no_trips_counted_yet=Inga resor räknade än
+# en: Public transit map
+dataview.public_transit_map=Karta över kollektivtrafiken
+# en: Red: trips with no bus, rail or subway
+dataview.red_trips_with_no=Rött: resor utan buss, tåg eller tunnelbana
+# en: This month so far
+dataview.this_month_so_far=Denna månad
+# en: %s: %ld.%ld%% of %s trips on transit
+dataview.transit_share=%s: %ld,%ld%% av %s resor kollektivt
+# en: Use transit
+dataview.use_transit=Med kollektiv
+# en: Cannot be rebuilt
+lifespan.cannot_be_rebuilt=Kan inte byggas om
+# en: Cannot build there
+lifespan.cannot_build_there=Kan inte bygga där
+# en: Date damaged: free repair
+lifespan.date_damaged_free_repair=Datum skadat: gratis reparation
+# en: Dead (date damaged). Free
+lifespan.dead_date_damaged_free=Förfallen (datum skadat). Gratis
+# en: Dead. Rebuild: $%s
+lifespan.dead_rebuild=Förfallen. Bygg om: $%s
+# en: End of its life: it can be rebuilt
+lifespan.end_its_life_can=Livets slut: kan byggas om
+# en: It is gone
+lifespan.gone=Finns inte längre
+# en: Lifespan
+lifespan.lifespan_2=Livslängd
+# en: A move is in progress
+lifespan.move_in_progress=En flytt pågår
+# en: Next
+lifespan.next=Nästa
+# en: No longer rubble
+lifespan.no_longer_rubble=Inte längre förfallen
+# en: Not available (Mover is off)
+lifespan.not_available_mover_off=Inte tillgänglig (Flytta av)
+# en: Not enough funds: costs $%s, you have $%s
+lifespan.not_enough_funds_costs=Inte tillräckligt med pengar: kostar $%s, du har $%s
+# en: Previous
+lifespan.previous=Föregående
+# en: Rebuild $%s
+lifespan.rebuild=Bygg om $%s
+# en: Rebuild
+lifespan.rebuild_2=Bygg om
+# en: Rebuild (free)
+lifespan.rebuild_free=Bygg om (gratis)
+# en: Rebuilt ($%s)
+lifespan.rebuilt=Ombyggd ($%s)
+# en: Rebuilt for $%s
+lifespan.rebuilt_for=Ombyggd för $%s
+# en: Rebuilt for free
+lifespan.rebuilt_for_free=Ombyggd gratis
+# en: Repair
+lifespan.repair=Reparera
+# en: Repair (free)
+lifespan.repair_free=Reparera (gratis)
+# en: %d that age, %d dead. $%s
+lifespan.that_age_dead=%d som åldras, %d förfallna. $%s
+# en: Airport
+placehints.airport=Flygplats
+# en: red
+placehints.in_red=rött
+# en: Land value %s  %s  %s  |  %s %c %s%ld%% or more up to %ld cells
+placehints.land_value=Markvärde %s  %s  %s  |  %s %c %s%ld%% eller mer upp till %ld rutor
+# en: marked
+placehints.marked=markerat
+# en: "piers: 5 edge cells on water, "
+placehints.piers="kajer: 5 vattenkanter, "
+# en: %s %ld cells, %ld without transport (red)  |  cap. %s +%ld, use %ld%% to %ld%%  |  %s ceiling %ld to %ld  |  %sneeds power and water
+placehints.port_hint=%s %ld rutor, %ld utan transport (rött)  |  kap. %s +%ld, användn. %ld%% till %ld%%  |  tak %s %ld till %ld  |  %sbehöver ström, vatten
+# en: "runway: 3x5 or more, "
+placehints.runway="bana: 3x5 eller mer, "
+# en: Seaport
+placehints.seaport=Hamn
+# en: Date repaired, free
+restore.date_repaired_free=Datum reparerat, gratis
