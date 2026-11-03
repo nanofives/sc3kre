@@ -11,3 +11,8 @@ highlighter pushes keep the tools' wipe rect +0x50; stationwarn's blink had shru
   manifest re-hashed: 0 changed, 0 missing, 0 extra.
 - Zip: the 11-03b zip with Apps/sc3resize.dll replaced, README.txt updated (header, NEW IN 2026-11-03c). 142 entries, 141 checked,
   0 mismatches. `sc3mods_2026-11-03c.zip` 50,713,048 bytes, SHA-256 6FC437D892949D0BA4CA3286F01BF361A21C4A7EDCE392552D696525A95CDC8B.
+
+GitHub: `sc3mods-2026-11-03c`, target `0b8f2d2`, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-11-03c, asset
+downloaded back, SHA-256 matches. The 11-03b notes start with a "superseded" line.
+LAN: deployed from `stage/release_1103c`, served label `2026-11-03c`, served sc3resize.dll matches the stage. Then
+`stage/release` -> `stage/release_1103b_old`, `stage/release_1103c` -> `stage/release`.
