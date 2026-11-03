@@ -49,3 +49,46 @@ class rises/falls by >= 1/4 of its peak, label = R C I peaks + reach.
 ## asks of other sessions
 - modlang: new inline es/en strings in `sc3resize_placehints.c` (`ph_zprev`, `ph_bprev`).
 - the label shares SC3U's cost tooltip; any mod that changes that tooltip should know about the two width patches.
+
+# STATUS placehints2 (2026-11-02, follow-up round)
+
+## goal
+Owner after trying placehints: hint text only while Shift is held, impact halo in green (light blue = the zone colour).
+
+## verdict + deciding RVAs
+- Shift text: `ph_label` adds the hint only while Shift is down. The state is read from the game window's WM_KEYDOWN /
+  WM_KEYUP VK_SHIFT in `rz_wndproc`, and a change re-posts the label (view vt+0x50) with its last arguments.
+- Stock Shift meaning: at left-button-up only. MK_SHIFT -> GZ flag 1 (GZGraphicD `0x10017b90`). The zone tool
+  `0x1003f7ca` (SIMRCI) and the building tool `0x1002165e` (SIMGEOM) commit only when flag 1 is clear, so Shift held at
+  release cancels. Measured: airport drag, no zone, no cost. Kept as stock. Owner call open (RESULTS 1).
+- Green: terrain colour = SIMDIRT palette row per code (`0x1001576a`, palettes `0x10016cce`), sprite tint = SIMSPR
+  `0x10018081` +0xdc / +0xde. New highlighter nibble 2 -> code 0x35, a green row appended to palette style 0. Getter
+  slot SIMSPR vtable `0x10067a5c` +0x30 is hooked, and so is the call at `0x10019903`. Detail `re/analysis/PLACEHINTS.md` D.
+
+## built
+`dev\placehints2\inst\sc3resize.dll`, clean build.
+
+## proven game-side vs static only
+- game-side (Berlin, posted input, `verify/placehints2/RESULTS.md`): no text without Shift. Text with a posted Shift
+  down and gone on Shift up, both without a mouse move, park and airport. Green halo on terrain and buildings, blue
+  footprint, red falls unchanged, Esc clears. Shift plus release cancels (stock).
+- not run: the physical Shift key (owner check), `_SHIFT=force|never`, `_GREEN=0`, the full mod set.
+
+## blocked on
+-
+
+## files owned
+- re/harness/src/sc3resize_placehints.c  (force-add, `/re/*` ignore rule)
+- re/harness/src/sc3resize.c  (1 line in rz_wndproc: ph_shiftmsg)
+- re/harness/lang/{es,en,fr,de,it,nl,sv}.txt  (placehints.in_green)
+- re/analysis/PLACEHINTS.md  (section D)
+- verify/placehints2/RESULTS.md  (MAIN)
+- re/sessions/STATUS_placehints.md  (this section, MAIN)
+- pictures in MAIN\verify\placehints2\owner_shots\ (not for git)
+
+## game-harness need
+-
+
+## asks of other sessions
+- any mod that reads highlighter codes through vt+0x30 can now see 0x35 (only under a plop halo). sc3undo's tint
+  clear is unaffected.
