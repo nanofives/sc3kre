@@ -77,3 +77,13 @@ Full table for every measured caption: `py re/tools/sc3lang.py check --fonts <in
   in their stock text). German uses W/G/I, as its stock text does.
 - Only fr and de were seen in game. it/nl/sv are checked by the measure only.
 - The Vida util list rows and the picker toasts were not opened in another language.
+
+## Round 2 (merged build, main d087f9e + modlang2)
+- 277 keys in all 7 tables after the merge of vdcolors, hudpos, placehints, transitmap and restorefix: 68 inline pairs
+  converted by the orchestrator with `sc3lang.py convert`, the placehints and transit if/else blocks by hand, 42 new
+  keys machine translated into fr/de/it/nl/sv.
+- Spanish unchanged: Cuadros Educacion, Vida util list, transit map, 0 differing pixels between tables on and
+  `SC3MODS_LANGTABLES=0`.
+- French: the same three in French (picture 6).
+- Widths: the transit caption lines, legend labels and the placement tooltip were shortened in the languages that
+  measured longer than their room (tooltip: font 0x11, compared with the Spanish line that fits 768 px in game).

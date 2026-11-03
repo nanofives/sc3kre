@@ -81,3 +81,36 @@ None left running. `dev\modlang\inst\sc3resize.ini` removed after the LANGSEL ru
 
 ## asks of other sessions
 None.
+
+---
+## round 2 (dev\modlang2 from main d087f9e, after the merge of modlang + vdcolors, hudpos, placehints, transitmap, restorefix)
+
+### done
+1. The 42 keys missing from fr/de/it/nl/sv (31 from the orchestrator's convert run, 11 from item 2) translated (machine
+   translation) and added with `sc3lang.py merge` (each block headed "machine translation, needs native review").
+   All 7 tables: 277 keys, 0 missing, 0 format mismatches, 0 characters outside cp1252.
+2. By hand: sc3resize_placehints.c, port/airport hint (if (es) ... else ...) and land value hint (if (ho_spanish())
+   ...), now `SC3TR` formats plus `SC3TR` words (placehints.*). sc3dataview.c, transit share line (if (g_tp_es) ...),
+   now dataview.transit_share / last_month / this_month_so_far. The by-hand list now holds only the 4 known non-UI lines.
+   `convert` now skips the continuation lines of an SC3TR call that spans several lines.
+3. Widths, calibrated on the pictures. Shortened after measuring: fr/it/sv transit share line and fr/it "no trip data"
+   (316 px caption), it/sv legend labels, fr/de/nl/sv seaport/airport tooltip and their piers/runway words (the
+   tooltip is font 0x11, Spanish airport line 763 of 768 px, which matches the placehints note that the Spanish line
+   was shortened to fit 768). Vida util rows (263 px), list head (355 px), Reconstruir / Reparar buttons (92 and 150 px),
+   Cuadros legend (370 px), transit title, all fit. Remaining flags unchanged from round 1 (Undo buttons 1-4 px,
+   the "Vida util" text button only shown with SC3RESIZE_RSICON=0).
+4. In game, merged build (Berlin, posted input only, test slot):
+   - Spanish, tables on vs SC3MODS_LANGTABLES=0: Cuadros Educacion (red/green bars) 0 differing pixels, Vida util list
+     (Reconstruir rows) 0, transit map 0 (one other pair of transit dumps differed only by a stock hover tooltip
+     "Mapa de zonas" left by the posted click).
+   - French (LANGSEL FRENCH): "Préférences" -> fr, 277 keys loaded. Cuadros, transit map (title, two caption lines,
+     legend) and Vida util list ("Reconstruire", "En ruine. Reconstruire : §5,000", "Tout restaurer") in French.
+   - Picture: `verify/modlang/owner_shots/6_fusion_es_arriba_fr_abajo_cuadros_transporte_vidautil.png`.
+   - Not seen in game: the placement tooltip in another language (needs a posted zone drag), the transit share line
+     (no trips counted in a fresh start, the caption showed "no trips counted yet").
+
+### files to commit (dev\modlang2\wt)
+- re/harness/lang/es.txt en.txt fr.txt de.txt it.txt nl.txt sv.txt (tracked now, plain git add)
+- re/harness/src/sc3resize_placehints.c, re/harness/src/sc3dataview.c
+- re/tools/sc3lang.py
+- MAIN: re/sessions/STATUS_modlang.md, verify/modlang/RESULTS.md (pictures and verify/modlang/runs2 not staged)
