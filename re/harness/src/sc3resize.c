@@ -8812,6 +8812,7 @@ static void cs_close(void *win, DWORD id) {
  * original. Page switch = window vt+0xf4(1, 0/1) (RESROW's hide). Text buttons as QUERYID (factory +0x2c).
  * SC3RESIZE_MODSPAGE=0: no button, the controls stay where they were. */
 static int g_modspage = 1;
+static int g_modtoggle = 1;   /* MODTOGGLE page C, SC3RESIZE_MODTOGGLE=0 off */
 #define MP_BTN_MODS 0x02F95B51
 #define MP_BTN_BACK 0x02F95B52
 #define MP_TITLE    0x02F95B53
@@ -8844,6 +8845,13 @@ static int g_modspage = 1;
 #define MP_PUSH     0x02F95B73   /* [edge] push, "push the camera when building at the edge" */
 #define MP_AS_M60   0x02F95B74
 #define MP_LANG_BTN 0x02F95B75   /* LANGSEL: "Idioma: <name>", each click picks the next installed language */
+#define MP_FEAT_BTN 0x02F95B76   /* MODTOGGLE: "Activar mods..." on the mods page, opens the third page */
+#define MT_TITLE    0x02F95B77
+#define MT_H_MODS   0x02F95B78
+#define MT_H_FEAT   0x02F95B79
+#define MT_NOTE     0x02F95B7A
+#define MT_NOTE2    0x02F95B7B
+#define MT_ROW0     0x02F95B80   /* one checkbox per k_mt_rows entry, 0x02F95B80.. */
 #define MP_MAXKIDS  96
 /* RELOCATE / PLOPOVER switches (block below). The hooks are installed unless the env turns BOTH off, and only the
  * behaviour gates on these two flags, so the mods page can flip them at any time. sc3resize.ini [buildings] mover= /
@@ -8860,7 +8868,7 @@ static int   g_mp_page;                      /* 0 = the game's page, 1 = mods */
 static int   g_mp_as_on, g_mp_as_min, g_mp_as_ind, g_mp_simrun, g_mp_undo, g_mp_undobtn, g_mp_ovs_pct, g_mp_edge;
 
 static const DWORD k_mp_page_ids[] = { MP_BTN_BACK, MP_TITLE, MP_H_UI, MP_H_PERF, MP_H_AS, MP_H_OTHER, MP_AS_ON, MP_AS_IND,
-    MP_AS_GRP, MP_AS_LBL, MP_H_BLD, MP_BLD_MOVE, MP_BLD_OVER, MP_AS_UNAUTO, MP_SIMRUN, MP_UNDO, MP_UNDOBTN, MP_EDGE, MP_OVS_SL, MP_OVS_LBL, MP_FPS_GRP, MP_FPS_LBL, MP_PUSH, MP_AS_M60, MP_LANG_BTN, CS_HDR,
+    MP_AS_GRP, MP_AS_LBL, MP_H_BLD, MP_BLD_MOVE, MP_BLD_OVER, MP_AS_UNAUTO, MP_SIMRUN, MP_UNDO, MP_UNDOBTN, MP_EDGE, MP_OVS_SL, MP_OVS_LBL, MP_FPS_GRP, MP_FPS_LBL, MP_PUSH, MP_AS_M60, MP_LANG_BTN, MP_FEAT_BTN, CS_HDR,
     MP_PANEL, HO_LABEL, HO_GROUP, HO_SMOOTH, PP_FPS, PP_BUSY, CZ_BOX, CS_ARROW_LBL, CS_ARROW, CS_DRAG_LBL, CS_DRAG };
 #define MP_NPAGE (sizeof(k_mp_page_ids) / sizeof(k_mp_page_ids[0]))
 
@@ -9128,6 +9136,116 @@ static void lang_click(void *win) {
     logf("LANGSEL> page pick: %s", t);
 }
 
+/* ===== MODTOGGLE (owner 2026-11-03: "on the mods options add a feature to disable mod features"). =====
+ * A third page, "Activar mods", reached from the mods page: one checkbox per mod DLL and per feature, applied at the
+ * next start. Everything goes to <mods dir>\sc3mods.ini, which sc3mods.dll reads before any mod loads:
+ *   [mods] <dll>=0     the DLL is not loaded
+ *   [env]  NAME=0      the feature's existing off-switch is set in the environment (an env var already set wins)
+ * Turning a row back on deletes its keys, so the file only ever lists what is off. sc3resize.dll itself has no row:
+ * it hosts this page. Each feature row names the env switches its code already reads (atoi / v[0]=='0'). */
+typedef struct { SC3TXT t; const char *dll; const char *env; } MT_ROW;   /* dll set = a [mods] row, else env = ';' list */
+static const MT_ROW k_mt_rows[] = {
+    { { SC3KEY("resize.mt_bigcity"),   "Ciudades grandes",        "Big cities" },             "sc3bigcity.dll",    NULL },
+    { { SC3KEY("resize.mt_netmod"),    "Avenidas y autopistas",   "Avenues and highways" },   "sc3netmod.dll",     NULL },
+    { { SC3KEY("resize.mt_overscroll"),"C\xe1mara fuera del borde", "Camera past the edge" }, "sc3overscroll.dll", NULL },
+    { { SC3KEY("resize.mt_simrun"),    "Ajustes de simulaci\xf3n", "Simulation tweaks" },     "sc3simrun.dll",     NULL },
+    { { SC3KEY("resize.mt_perf"),      "FPS y perfilador",        "FPS and profiler" },       "sc3perf.dll",       NULL },
+    { { SC3KEY("resize.mt_undo"),      "Deshacer",                "Undo" },                   "sc3undo.dll",       NULL },
+    { { SC3KEY("resize.mt_autosave"),  "Autoguardado",            "Autosave" },               "sc3autosave.dll",   NULL },
+    { { SC3KEY("resize.mt_landfill"),  "Vertederos",              "Landfills" },              "sc3landfill.dll",   NULL },
+    { { SC3KEY("resize.mt_dataview"),  "Capas extra de datos",    "Extra data layers" },      "sc3dataview.dll",   NULL },
+    { { SC3KEY("resize.mt_restore"),   "Restaurar edificios",     "Restore buildings" },      "sc3restore.dll",    NULL },
+    { { SC3KEY("resize.mt_placehints"),"Ayudas al colocar",       "Placement hints" },        NULL, "SC3RESIZE_PLACEHINTS" },
+    { { SC3KEY("resize.mt_stationwarn"),"Aviso de estaciones",    "Station warnings" },       NULL, "SC3RESIZE_STATIONWARN" },
+    { { SC3KEY("resize.mt_graphs"),    "Gr\xe1" "ficas mejoradas", "Improved graphs" },       NULL, "SC3RESIZE_GRAPHAXIS;SC3RESIZE_GRAPHNEW;SC3RESIZE_GRAPHTABS" },
+    { { SC3KEY("resize.mt_verdatos"),  "Mapas de datos n\xedtidos", "Sharp data maps" },      NULL, "SC3RESIZE_VERDATOS_NATIVE" },
+    { { SC3KEY("resize.mt_rcibars"),   "Barras RCI detalladas",   "Detailed RCI bars" },      NULL, "SC3RESIZE_RCIBARS" },
+    { { SC3KEY("resize.mt_picker"),    "Cuentagotas",             "Picker tool" },            NULL, "SC3RESIZE_PICKER" },
+    { { SC3KEY("resize.mt_queryid"),   "Bot\xf3n Copiar ID",      "Copy ID button" },         NULL, "SC3RESIZE_QUERYID" },
+    { { SC3KEY("resize.mt_uitoggle"),  "Bot\xf3n ocultar interfaz", "Hide-UI button" },       NULL, "SC3RESIZE_UITOGGLE" },
+    { { SC3KEY("resize.mt_keys"),      "Teclas P y 1-4",          "P and 1-4 keys" },         NULL, "SC3RESIZE_PAUSEKEY;SC3RESIZE_SPEEDKEYS" },
+    { { SC3KEY("resize.mt_churn"),     "Renovaci\xf3n de edificios", "Building renewal" },    NULL, "SC3SIMRUN_CHURN" },
+    { { SC3KEY("resize.mt_sirens"),    "Arreglo de sirenas",      "Siren fix" },              NULL, "SC3SIMRUN_SIRENS" } };
+#define MT_N ((int)(sizeof(k_mt_rows) / sizeof(k_mt_rows[0])))
+static int g_mt_on0[MT_N];   /* state shown when the page was built */
+
+/* on in sc3mods.ini: a [mods] row unless <dll>=0, an env row unless one of its names is 0 */
+static int mt_state(const MT_ROW *r) {
+    char p[MAX_PATH], v[16], nm[64];
+    const char *s, *e;
+    mp_ini(p, sizeof(p), "sc3mods.ini");
+    if (r->dll) return GetPrivateProfileIntA("mods", r->dll, 1, p) != 0;
+    for (s = r->env; s && *s; s = *e ? e + 1 : e) {
+        int k;
+        e = strchr(s, ';'); if (!e) e = s + lstrlenA(s);
+        k = (int)(e - s); if (k >= (int)sizeof(nm)) k = sizeof(nm) - 1;
+        memcpy(nm, s, k); nm[k] = 0;
+        GetPrivateProfileStringA("env", nm, "", v, sizeof(v), p);
+        if (v[0] == '0' && !v[1]) return 0;
+    }
+    return 1;
+}
+
+static void mt_write(const MT_ROW *r, int on) {
+    char p[MAX_PATH], nm[64];
+    const char *s, *e;
+    mp_ini(p, sizeof(p), "sc3mods.ini");
+    if (r->dll) { WritePrivateProfileStringA("mods", r->dll, on ? NULL : "0", p); return; }
+    for (s = r->env; s && *s; s = *e ? e + 1 : e) {
+        int k;
+        e = strchr(s, ';'); if (!e) e = s + lstrlenA(s);
+        k = (int)(e - s); if (k >= (int)sizeof(nm)) k = sizeof(nm) - 1;
+        memcpy(nm, s, k); nm[k] = 0;
+        WritePrivateProfileStringA("env", nm, on ? NULL : "0", p);
+    }
+}
+
+static int mt_is_ours(void *win, void *ch) {
+    int i;
+    static const DWORD fixed[] = { MT_TITLE, MT_H_MODS, MT_H_FEAT, MT_NOTE, MT_NOTE2 };
+    for (i = 0; i < (int)(sizeof(fixed) / sizeof(fixed[0])); i++) if (ch == mp_child(win, fixed[i])) return 1;
+    for (i = 0; i < MT_N; i++) if (ch == mp_child(win, MT_ROW0 + i)) return 1;
+    return 0;
+}
+
+static void mt_vis_all(void *win, int on) {
+    int i;
+    static const DWORD fixed[] = { MT_TITLE, MT_H_MODS, MT_H_FEAT, MT_NOTE, MT_NOTE2 };
+    for (i = 0; i < (int)(sizeof(fixed) / sizeof(fixed[0])); i++) mp_vis(mp_child(win, fixed[i]), on);
+    for (i = 0; i < MT_N; i++) mp_vis(mp_child(win, MT_ROW0 + i), on);
+}
+
+/* page C controls: mods left, features right, 19 px rows */
+static int mt_build(void *fac, void *win, int es, DWORD col) {
+    int n = 0, i, ym = 84, yf = 84;
+    n += ho_add_label(fac, win, MT_TITLE, SC3TR(es, "resize.mt_title", "Activar mods y funciones", "Turn mods and features on or off"), 18, 40, 440);
+    n += ho_add_label(fac, win, MT_H_MODS, SC3TR(es, "resize.mt_mods", "Mods", "Mods"), 18, 64, 200);
+    n += ho_add_label(fac, win, MT_H_FEAT, SC3TR(es, "resize.mt_features", "Funciones", "Features"), 250, 64, 200);
+    for (i = 0; i < MT_N; i++) {
+        const MT_ROW *r = &k_mt_rows[i];
+        g_mt_on0[i] = mt_state(r);
+        if (r->dll) { n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 30, ym, 214, col); ym += 19; }
+        else        { n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 262, yf, 208, col); yf += 19; }
+    }
+    i = (ym > yf ? ym : yf) + 12;
+    n += ho_add_label(fac, win, MT_NOTE, SC3TR(es, "resize.mt_note", "Los cambios se aplican al reiniciar el juego.",
+                                               "Changes apply the next time the game starts."), 18, i, 450);
+    n += ho_add_label(fac, win, MT_NOTE2, SC3TR(es, "resize.mt_note2", "Una ciudad grande o con avenidas necesita su mod para cargar.",
+                                                "A big city or one with avenues needs its mod to load."), 18, i + 20, 450);
+    return n;
+}
+
+/* OK: write the rows the player changed */
+static int mt_close(void *win) {
+    int i, v, ch = 0;
+    for (i = 0; i < MT_N; i++)
+        if ((v = pp_read_box(win, MT_ROW0 + i)) >= 0 && v != g_mt_on0[i]) {
+            mt_write(&k_mt_rows[i], v); ch++;
+            logf("MODTOGGLE> %s %s at the next start", k_mt_rows[i].dll ? k_mt_rows[i].dll : k_mt_rows[i].env, v ? "on" : "off");
+        }
+    return ch;
+}
+
 /* the mods page, layout (Preferences is 480x472, local coords) */
 #define MP_X0 18
 #define MP_BX 6      /* the two buttons: left edge on the panel frames above (owner 2026-10-28) */
@@ -9171,7 +9289,11 @@ static void mp_build(void *win) {
         /* page A: the button, in the right half of "Opciones generales" that HUDOPT's controls leave */
         n += mp_button(fac, win, MP_BTN_MODS, SC3TR(es, "resize.mod_options", "Opciones de mods...", "Mod options..."), MP_BX, mp_btn_y(win, MP_BH), 150, MP_BH);
         /* page B */
-        n += ho_add_label(fac, win, MP_TITLE, SC3TR(es, "resize.mod_options_2", "Opciones de los mods", "Mod options"), MP_X0, 40, 300);
+        n += ho_add_label(fac, win, MP_TITLE, SC3TR(es, "resize.mod_options_2", "Opciones de los mods", "Mod options"), MP_X0, 40, 270);
+        if (g_modtoggle) {   /* MODTOGGLE: top right of the mods page, opens page C */
+            n += mp_button(fac, win, MP_FEAT_BTN, SC3TR(es, "resize.mt_button", "Activar mods...", "Turn mods on/off..."), 292, 34, 176, 26);
+            n += mt_build(fac, win, es, col);
+        }
         n += ho_add_label(fac, win, MP_H_UI, SC3TR(es, "resize.interface", "Interfaz", "Interface"), MP_X0, 66, 200);
         mp_move(win, HO_LABEL, MP_X1, 84);
         mp_move(win, HO_GROUP, MP_X1, 100);
@@ -9249,6 +9371,7 @@ static void mp_build(void *win) {
         BYTE *ch = *(BYTE **)((BYTE *)nd + 8);
         int ours = 0;
         for (i = 0; i < (int)MP_NPAGE && !ours; i++) ours = ch == (BYTE *)mp_child(win, k_mp_page_ids[i]);
+        if (!ours && ch) ours = mt_is_ours(win, ch);   /* MODTOGGLE page C */
         /* the title bar's children (title, close box: local top above 30, measured) stay on both pages */
         if (ch && !ours && ch != (BYTE *)okb && ch != (BYTE *)mp_child(win, MP_BTN_MODS) && g_mp_ngame < MP_MAXKIDS &&
             !IsBadReadPtr(ch, 0xa4) && *(LONG *)(ch + 0x84) >= 30)
@@ -9256,10 +9379,12 @@ static void mp_build(void *win) {
         nd = *(void **)nd;
     }
     for (i = 0; i < (int)MP_NPAGE; i++) mp_vis(mp_child(win, k_mp_page_ids[i]), 0);
+    mt_vis_all(win, 0);
     mp_vis(mp_child(win, MP_BTN_MODS), 1);
     logf("MODSPAGE> %d game controls on the first page", g_mp_ngame);
 }
 
+/* mods: 0 = the game's page, 1 = mods page, 2 = MODTOGGLE page (Volver on it goes back to 1) */
 static void mp_show(void *win, int mods) {
     int i;
     if (win != g_mp_win) return;
@@ -9271,7 +9396,9 @@ static void mp_show(void *win, int mods) {
         }
     if (!mods && g_mp_page)
         for (i = 0; i < g_mp_ngame; i++) if (g_mp_game_vis[i]) mp_vis(g_mp_game[i], 1);
-    for (i = 0; i < (int)MP_NPAGE; i++) mp_vis(mp_child(win, k_mp_page_ids[i]), mods);
+    for (i = 0; i < (int)MP_NPAGE; i++) mp_vis(mp_child(win, k_mp_page_ids[i]), mods == 1);
+    mt_vis_all(win, mods == 2);
+    if (mods == 2) mp_vis(mp_child(win, MP_BTN_BACK), 1);
     mp_vis(mp_child(win, MP_BTN_MODS), !mods);
     g_mp_page = mods;
     ho_v(win, 0x154, 0, 0, 0, 0, 0, 0);   /* invalidate */
@@ -9284,7 +9411,7 @@ static void mp_show(void *win, int mods) {
         PostMessageA(g_hwnd, WM_MOUSEMOVE, 0, g_mp_lastlp);
         logf("MODSPAGE> hover refresh at (%d,%d)", (int)(short)LOWORD(g_mp_lastlp), (int)(short)HIWORD(g_mp_lastlp));
     }
-    logf("MODSPAGE> %s page", mods ? "mods" : "game");
+    logf("MODSPAGE> %s page", mods == 2 ? "turn mods on/off" : mods ? "mods" : "game");
 }
 
 static void mp_write_int(const char *leaf, const char *sec, const char *key, int v) {
@@ -9341,14 +9468,15 @@ static void mp_close(void *win, DWORD id) {
         logf("LANGSEL> OK: saved %s for the next start", g_lang_pick < 0 ? "Automatic (the game decides)" : g_lang_label[g_lang_pick]);
         ch++;
     }
+    if (g_modtoggle) ch += mt_close(win);   /* MODTOGGLE: sc3mods.ini, next start */
     logf("MODSPAGE> OK: %d mod setting(s) written", ch);
 }
 
 static DWORD __fastcall ho_prefs_msg(void *self, void *edx, DWORD win, DWORD msg, DWORD p3, DWORD p4, DWORD p5) {
     DWORD a[5], r;
     (void)edx;
-    if (g_modspage && msg == 3 && p3 == 1 && win && (p4 == MP_BTN_MODS || p4 == MP_BTN_BACK)) {   /* MODSPAGE buttons */
-        mp_show((void *)win, p4 == MP_BTN_MODS);
+    if (g_modspage && msg == 3 && p3 == 1 && win && (p4 == MP_BTN_MODS || p4 == MP_BTN_BACK || p4 == MP_FEAT_BTN)) {   /* MODSPAGE buttons */
+        mp_show((void *)win, p4 == MP_BTN_MODS ? 1 : p4 == MP_FEAT_BTN ? 2 : g_mp_page == 2 ? 1 : 0);
         return 1;
     }
     if (g_modspage && g_langsel && msg == 3 && p3 == 1 && win && p4 == MP_LANG_BTN) { lang_click((void *)win); return 1; }
@@ -18739,6 +18867,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_HUDOPT", v, sizeof(v))) g_hudopt = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_PERFPREFS", v, sizeof(v))) g_perfprefs = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MODSPAGE", v, sizeof(v))) g_modspage = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_MODTOGGLE", v, sizeof(v))) g_modtoggle = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_LANGSEL", v, sizeof(v))) g_langsel = atoi(v);
           lang_install();   /* LANGSEL: before WinMain, the game reads its language during app init */
           if (GetEnvironmentVariableA("SC3RESIZE_MPHOVER", v, sizeof(v))) g_mp_hover = atoi(v);

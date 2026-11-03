@@ -646,3 +646,59 @@ placehints.st_nodest_rail=i binari non portano ad altre stazioni né al bordo: 0
 placehints.st_nodest_railsub=né binari né tunnel portano a un'altra stazione o al bordo: 0 viaggi (rosso)
 # en: the subway leads to no other station and no map edge: 0 trips (red)
 placehints.st_nodest_subway=il tunnel non porta ad altre stazioni né al bordo: 0 viaggi (rosso)
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Autosave
+resize.mt_autosave=Salvataggio auto
+# en: Big cities
+resize.mt_bigcity=Città grandi
+# en: Turn mods on/off...
+resize.mt_button=Attiva mod...
+# en: Building renewal
+resize.mt_churn=Rinnovo edifici
+# en: Extra data layers
+resize.mt_dataview=Livelli di dati
+# en: Features
+resize.mt_features=Funzioni
+# en: Improved graphs
+resize.mt_graphs=Grafici migliorati
+# en: P and 1-4 keys
+resize.mt_keys=Tasti P e 1-4
+# en: Landfills
+resize.mt_landfill=Discariche
+# en: Mods
+resize.mt_mods=Mod
+# en: Avenues and highways
+resize.mt_netmod=Viali e autostrade
+# en: Changes apply the next time the game starts.
+resize.mt_note=Le modifiche valgono al prossimo avvio.
+# en: A big city or one with avenues needs its mod to load.
+resize.mt_note2=Una città grande o con viali richiede la sua mod.
+# en: Camera past the edge
+resize.mt_overscroll=Camera oltre il bordo
+# en: FPS and profiler
+resize.mt_perf=FPS e profiler
+# en: Picker tool
+resize.mt_picker=Contagocce
+# en: Placement hints
+resize.mt_placehints=Aiuti al piazzamento
+# en: Copy ID button
+resize.mt_queryid=Pulsante Copia ID
+# en: Detailed RCI bars
+resize.mt_rcibars=Barre RCI dettagliate
+# en: Restore buildings
+resize.mt_restore=Restaura edifici
+# en: Simulation tweaks
+resize.mt_simrun=Simulazione
+# en: Siren fix
+resize.mt_sirens=Correzione sirene
+# en: Station warnings
+resize.mt_stationwarn=Avviso stazioni
+# en: Turn mods and features on or off
+resize.mt_title=Attiva mod e funzioni
+# en: Hide-UI button
+resize.mt_uitoggle=Pulsante nascondi UI
+# en: Undo
+resize.mt_undo=Annulla
+# en: Sharp data maps
+resize.mt_verdatos=Mappe dati nitide

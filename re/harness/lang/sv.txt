@@ -646,3 +646,59 @@ placehints.st_nodest_rail=spåret leder inte till någon annan station eller kan
 placehints.st_nodest_railsub=varken spår eller tunnel leder till en annan station eller kanten: 0 resor (röd)
 # en: the subway leads to no other station and no map edge: 0 trips (red)
 placehints.st_nodest_subway=tunneln leder inte till någon annan station eller kanten: 0 resor (röd)
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Autosave
+resize.mt_autosave=Autospara
+# en: Big cities
+resize.mt_bigcity=Stora städer
+# en: Turn mods on/off...
+resize.mt_button=Moddar på/av...
+# en: Building renewal
+resize.mt_churn=Förnyelse
+# en: Extra data layers
+resize.mt_dataview=Extra datalager
+# en: Features
+resize.mt_features=Funktioner
+# en: Improved graphs
+resize.mt_graphs=Bättre grafer
+# en: P and 1-4 keys
+resize.mt_keys=Tangent P och 1-4
+# en: Landfills
+resize.mt_landfill=Soptippar
+# en: Mods
+resize.mt_mods=Moddar
+# en: Avenues and highways
+resize.mt_netmod=Alléer och motorvägar
+# en: Changes apply the next time the game starts.
+resize.mt_note=Ändringar gäller vid nästa start.
+# en: A big city or one with avenues needs its mod to load.
+resize.mt_note2=En stor stad eller med alléer behöver sin modd.
+# en: Camera past the edge
+resize.mt_overscroll=Kamera förbi kanten
+# en: FPS and profiler
+resize.mt_perf=FPS och profilerare
+# en: Picker tool
+resize.mt_picker=Pipett
+# en: Placement hints
+resize.mt_placehints=Placeringshjälp
+# en: Copy ID button
+resize.mt_queryid=Knapp Kopiera ID
+# en: Detailed RCI bars
+resize.mt_rcibars=Detaljerade RCI
+# en: Restore buildings
+resize.mt_restore=Renovera byggnader
+# en: Simulation tweaks
+resize.mt_simrun=Simulering
+# en: Siren fix
+resize.mt_sirens=Sirenfix
+# en: Station warnings
+resize.mt_stationwarn=Stationsvarning
+# en: Turn mods and features on or off
+resize.mt_title=Slå på/av moddar
+# en: Hide-UI button
+resize.mt_uitoggle=Knapp dölj UI
+# en: Undo
+resize.mt_undo=Ångra
+# en: Sharp data maps
+resize.mt_verdatos=Skarpa datakartor
