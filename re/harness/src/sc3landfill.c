@@ -40,6 +40,7 @@
 
 #include <windows.h>
 #include "sc3mods_guard.h"
+#include "sc3lang.h"   /* modlang: SC3TR, mod text from the per-language tables */
 #include <stdio.h>
 #include <string.h>
 #include <intrin.h>
@@ -602,11 +603,11 @@ __declspec(dllexport) int __cdecl sc3landfill_text(int x, int z, int es, char *l
     thousands(b, sizeof(b), t.cap / 10, es);
     thousands(c, sizeof(c), t.room / 10, es);
     thousands(d, sizeof(d), fee_of(t.fill), es);
-    k = _snprintf(l1, cap, es ? "Este vertedero: %d%% completo" : "This landfill: %d%% full", pct);
+    k = _snprintf(l1, cap, SC3TR(es, "landfill.this_landfill_full", "Este vertedero: %d%% completo", "This landfill: %d%% full"), pct);
     if (k > 0 && t.nact < t.cells)    /* cells without road access hold nothing */
-        _snprintf(l1 + k, cap - k, es ? " (%d sin acceso)" : " (%d not connected)", t.cells - t.nact);
-    _snprintf(l2, cap, es ? "%s de %s ton. (libre %s)" : "%s of %s tons (%s free)", a, b, c);
-    if (g_empty) _snprintf(l3, cap, es ? "Vaciarlo cuesta $%s" : "Emptying it costs $%s", d);
+        _snprintf(l1 + k, cap - k, SC3TR(es, "landfill.not_connected", " (%d sin acceso)", " (%d not connected)"), t.cells - t.nact);
+    _snprintf(l2, cap, SC3TR(es, "landfill.tons_free", "%s de %s ton. (libre %s)", "%s of %s tons (%s free)"), a, b, c);
+    if (g_empty) _snprintf(l3, cap, SC3TR(es, "landfill.emptying_costs", "Vaciarlo cuesta $%s", "Emptying it costs $%s"), d);
     l1[cap - 1] = l2[cap - 1] = l3[cap - 1] = 0;
     return 1;
 }
@@ -630,20 +631,20 @@ static int do_empty(int x, int z, int es, char *msg, int cap) {
     LONG total = 0, cost, funds, f1;
     char a[32], b[32];
     __try {
-        if (!layers_get(&L) || !dev) { _snprintf(msg, cap, es ? "No disponible todav\xed" "a: reanud\xe1 la simulaci\xf3n un momento" : "Not ready yet: let the game run for a moment"); return 0; }
+        if (!layers_get(&L) || !dev) { _snprintf(msg, cap, SC3TR(es, "landfill.not_ready_yet_let", "No disponible todav\xed" "a: reanud\xe1 la simulaci\xf3n un momento", "Not ready yet: let the game run for a moment")); return 0; }
         valve = *(BYTE **)(dev + 0x3c);
         if (!valve_ok(valve) || *(void **)(dev + 0x4c) != L.pl) { _snprintf(msg, cap, "landfill: unexpected layers"); logf("### EMPTY: layers do not match (dev pl 0x%08lX, city pl 0x%08lX)", *(DWORD *)(dev + 0x4c), (DWORD)L.pl); return 0; }
         n = flood(&L, x, z, &list);
-        if (!n) { _snprintf(msg, cap, es ? "No es un vertedero" : "Not a landfill"); return 0; }
+        if (!n) { _snprintf(msg, cap, SC3TR(es, "landfill.not_landfill", "No es un vertedero", "Not a landfill")); return 0; }
         for (i = 0; i < n; i++) total += (LONG)fill_at(L.pl, (int)(list[i] & 0xffff), (int)(list[i] >> 16));
-        if (!total) { VirtualFree(list, 0, MEM_RELEASE); _snprintf(msg, cap, es ? "Ya est\xe1 vac\xedo" : "Already empty"); return 0; }
+        if (!total) { VirtualFree(list, 0, MEM_RELEASE); _snprintf(msg, cap, SC3TR(es, "landfill.already_empty", "Ya est\xe1 vac\xedo", "Already empty")); return 0; }
         cost = fee_of(total);
         bu = budget_get();
         funds = bu ? (LONG)vc(bu, 0x10, 0, 0, 0, 0, 0) : 0;
         if (!bu || funds < cost) {
             VirtualFree(list, 0, MEM_RELEASE);
             thousands(a, sizeof(a), cost, es);
-            _snprintf(msg, cap, es ? "Fondos insuficientes: cuesta $%s" : "Not enough funds: it costs $%s", a);
+            _snprintf(msg, cap, SC3TR(es, "landfill.not_enough_funds_costs", "Fondos insuficientes: cuesta $%s", "Not enough funds: it costs $%s"), a);
             logf("EMPTY> landfill at (%d, %d): %d cells, %ld units, refused: funds %ld < %ld", x, z, n, total, funds, cost);
             return 0;
         }
@@ -674,7 +675,7 @@ static int do_empty(int x, int z, int es, char *msg, int cap) {
     if (g_independent && g_labelled) { int g = lab_at(x, z); if (g) grp_room(&g_grp[g], L.pl); }
     thousands(a, sizeof(a), total / 10, es);
     thousands(b, sizeof(b), cost, es);
-    _snprintf(msg, cap, es ? "Vaciado: %s ton. por $%s" : "Emptied: %s tons for $%s", a, b);
+    _snprintf(msg, cap, SC3TR(es, "landfill.emptied_tons_for", "Vaciado: %s ton. por $%s", "Emptied: %s tons for $%s"), a, b);
     logf("EMPTY> landfill at (%d, %d): %d cells, %d emptied, %ld units (%ld t), fee $%ld, funds %ld -> %ld", x, z, n,
          emptied, total, total / 10, cost, funds, f1);
     return 1;
@@ -686,20 +687,20 @@ __declspec(dllexport) int __cdecl sc3landfill_empty(int x, int z, int es, char *
     int i;
     msg[0] = 0;
     if (!g_on) return 0;
-    if (!g_empty) { _snprintf(msg, cap, es ? "Vaciar est\xe1 apagado (landfill.ini)" : "Emptying is off (landfill.ini)"); return 0; }
+    if (!g_empty) { _snprintf(msg, cap, SC3TR(es, "landfill.emptying_off_landfill_ini", "Vaciar est\xe1 apagado (landfill.ini)", "Emptying is off (landfill.ini)")); return 0; }
     if (!c) return 0;
     if (city_paused(c)) return do_empty(x, z, es, msg, cap);
-    if (!g_dev) { _snprintf(msg, cap, es ? "No disponible todav\xed" "a: reanud\xe1 la simulaci\xf3n un momento" : "Not ready yet: let the game run for a moment"); return 0; }
-    if (g_req == 1) { _snprintf(msg, cap, es ? "Ya hay un vaciado en curso" : "Already emptying one"); return 0; }
+    if (!g_dev) { _snprintf(msg, cap, SC3TR(es, "landfill.not_ready_yet_let", "No disponible todav\xed" "a: reanud\xe1 la simulaci\xf3n un momento", "Not ready yet: let the game run for a moment")); return 0; }
+    if (g_req == 1) { _snprintf(msg, cap, SC3TR(es, "landfill.already_emptying_one", "Ya hay un vaciado en curso", "Already emptying one")); return 0; }
     g_req_x = x; g_req_z = z; g_req_es = es; g_req_msg[0] = 0;
     InterlockedExchange(&g_req, 1);
     for (i = 0; i < 300 && g_req == 1; i++) Sleep(10);
     if (g_req == 2) {
         lstrcpynA(msg, g_req_msg, cap);
         InterlockedExchange(&g_req, 0);
-        return strncmp(g_req_msg, es ? "Vaciado" : "Emptied", 7) == 0 ? 1 : 0;
+        return strncmp(g_req_msg, SC3TR(es, "landfill.emptied", "Vaciado", "Emptied"), 7) == 0 ? 1 : 0;
     }
-    _snprintf(msg, cap, es ? "Se vac\xed" "a en unos segundos" : "Emptying in a few seconds");
+    _snprintf(msg, cap, SC3TR(es, "landfill.emptying_in_few_seconds", "Se vac\xed" "a en unos segundos", "Emptying in a few seconds"));
     return 2;
 }
 

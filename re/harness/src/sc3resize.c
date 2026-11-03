@@ -76,6 +76,7 @@
  */
 #include <windows.h>
 #include "sc3mods_guard.h"
+#include "sc3lang.h"   /* modlang: SC3TR, mod text from the per-language tables */
 #include <intrin.h>   /* _ReturnAddress - exact Blt caller, replaces the failed stack scans */
 #include <stdio.h>
 #include <stdlib.h>
@@ -8373,14 +8374,15 @@ static void ho_add_controls(void *win) {
     static const DWORD ids[5] = { HO_FIT, HO_OFF, HO_P125, HO_P150, HO_P200 };   /* task uiscale: Auto first */
     /* trailing spaces widen the auto-sized options: the group spaces its columns by the widest option so far
        (GZWIND FUN_1000337d), and without them the next column's radio touches the text before it */
-    const char *txt_es[5] = { "Auto   ", "Normal   ", "125%   ", "150%   ", "200%" };
-    const char *txt_en[5] = { "Auto   ", "Normal   ", "125%   ", "150%   ", "200%" };
+    const char *txt[5] = { "Auto   ", "Normal   ", "125%   ", "150%   ", "200%" };
     if (!sui || !win || IsBadReadPtr(win, 0x90)) return;
+    txt[0] = SC3TR(es, "resize.scale_auto", "Auto   ", "Auto   ");         /* modlang: keep the trailing spaces */
+    txt[1] = SC3TR(es, "resize.scale_normal", "Normal   ", "Normal   ");
     if (ho_v(win, 0x78, 1, HO_GROUP, 0, 0, 0, 0)) { logf("HUDOPT> controls already in this window"); return; }
     fac = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85065))();
     if (!fac || IsBadReadPtr(fac, 4)) { logf("HUDOPT> no widget factory"); return; }
     col = ho_v(fac, 0x80, 1, 0x62e56a2e, 0, 0, 0, 0);
-    okl = ho_add_label(fac, win, HO_LABEL, es ? "Escala de la interfaz:" : "Interface scale:", HO_X, HO_Y_LABEL, 0xb4);
+    okl = ho_add_label(fac, win, HO_LABEL, SC3TR(es, "resize.interface_scale", "Escala de la interfaz:", "Interface scale:"), HO_X, HO_Y_LABEL, 0xb4);
 
     /* option group, FUN_10059ccf + the builder's AddOption/Select/SetXY/AddChild sequence */
     ho_str(s, NULL);
@@ -8399,7 +8401,7 @@ static void ho_add_controls(void *win) {
         gw = (void *)ho_v(grp, 0x0c, 0, 0, 0, 0, 0, 0);
         ho_v(gw, 0xc4, 1, (DWORD)r, 0, 0, 0, 0);
         for (i = 0; i < 5; i++) {
-            ho_str(s, es ? txt_es[i] : txt_en[i]);
+            ho_str(s, txt[i]);
             ho_v(grp, 0x38, 5, ids[i], (DWORD)s, 0, 0, 0);
             ho_str_free(s);
         }
@@ -8421,7 +8423,7 @@ static void ho_add_controls(void *win) {
     }
 
     /* checkbox, FUN_10058d67 */
-    ho_str(s, es ? "Suavizado" : "Smooth");
+    ho_str(s, SC3TR(es, "resize.smooth", "Suavizado", "Smooth"));
     cb = (void *)ho_v(fac, 0x3c, 5, HO_SMOOTH, (DWORD)s, 0, 0, 0);
     ho_str_free(s);
     if (cb) {
@@ -8563,8 +8565,8 @@ static void pp_add_controls(void *win) {
     col = ho_v(fac, 0x80, 1, 0x62e56a2e, 0, 0, 0, 0);
     bits = get();
     es = ho_spanish();
-    okf = pp_add_checkbox(fac, win, PP_FPS, es ? "Ver FPS" : "Show FPS", bits & 1, PP_X_FPS, 96, col);
-    okb = pp_add_checkbox(fac, win, PP_BUSY, es ? "Ver perfilador" : "Show profiler", bits & 2, PP_X_BUSY, 120, col);
+    okf = pp_add_checkbox(fac, win, PP_FPS, SC3TR(es, "resize.show_fps", "Ver FPS", "Show FPS"), bits & 1, PP_X_FPS, 96, col);
+    okb = pp_add_checkbox(fac, win, PP_BUSY, SC3TR(es, "resize.show_profiler", "Ver perfilador", "Show profiler"), bits & 2, PP_X_BUSY, 120, col);
     logf("PERFPREFS> Preferences 0x%08lX: FPS box %s (%d), profiler box %s (%d), sc3perf bits 0x%x",
          (DWORD)win, okf ? "added" : "FAILED", bits & 1, okb ? "added" : "FAILED", (bits >> 1) & 1, bits);
     {   static int dumped;
@@ -8616,7 +8618,7 @@ static void cz_add_box(void *win) {
     fac = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85065))();
     if (!fac || IsBadReadPtr(fac, 4)) return;
     col = ho_v(fac, 0x80, 1, 0x62e56a2e, 0, 0, 0, 0);
-    ok = pp_add_checkbox(fac, win, CZ_BOX, ho_spanish() ? "Zoom extra" : "Extra zoom", g_cz_mode != 0, CZ_BOX_X, 120, col);
+    ok = pp_add_checkbox(fac, win, CZ_BOX, SC3TR(ho_spanish(), "resize.extra_zoom", "Zoom extra", "Extra zoom"), g_cz_mode != 0, CZ_BOX_X, 120, col);
     logf("CITYZOOM> Preferences 0x%08lX: zoom extra box %s (%d)", (DWORD)win, ok ? "added" : "FAILED", g_cz_mode != 0);
 }
 static void cz_close_box(void *win, DWORD id) {
@@ -8752,10 +8754,10 @@ static void cs_add_controls(void *win) {
     id = cs_nearest(cs_divs, 8, (cur >> 16) & 0x3fff);
     es = ho_spanish();
     if (g_modspage && g_modsui) logf("MODSUI> camera panel %s", mp_panel(fac, win, MP_PANEL, 278, 161, 190, 50) ? "added" : "FAILED");
-    g_ho_lblcol = g_modspage && g_modsui; ok += ho_add_label(fac, win, CS_ARROW_LBL, es ? "Vel. flechas" : "Arrow speed", CS_X_LBL, CS_Y_ARROW + 2, 96);
+    g_ho_lblcol = g_modspage && g_modsui; ok += ho_add_label(fac, win, CS_ARROW_LBL, SC3TR(es, "resize.arrow_speed", "Vel. flechas", "Arrow speed"), CS_X_LBL, CS_Y_ARROW + 2, 96);
     g_ho_lblcol = 0;
     ok += cs_add_slider(fac, win, CS_ARROW, CS_X_SLIDER, CS_Y_ARROW, CS_W_SLIDER, ia * 0x400 / 9);
-    g_ho_lblcol = g_modspage && g_modsui; ok += ho_add_label(fac, win, CS_DRAG_LBL, es ? "Vel. clic der." : "Drag speed", CS_X_LBL, CS_Y_DRAG + 2, 96);
+    g_ho_lblcol = g_modspage && g_modsui; ok += ho_add_label(fac, win, CS_DRAG_LBL, SC3TR(es, "resize.drag_speed", "Vel. clic der.", "Drag speed"), CS_X_LBL, CS_Y_DRAG + 2, 96);
     g_ho_lblcol = 0;
     ok += cs_add_slider(fac, win, CS_DRAG, CS_X_SLIDER, CS_Y_DRAG, CS_W_SLIDER, id * 0x400 / 7);
     logf("CAMSET> Preferences 0x%08lX: %d of 4 controls added, arrows step %d (pos %d/9), drag divisor %d (pos %d/7)",
@@ -9107,9 +9109,9 @@ static void lang_install(void) {
 
 /* "Idioma: Espanol", plus "(al reiniciar)" once it differs from what this start runs */
 static void lang_caption(char *out, int cap, int es) {
-    const char *nm = g_lang_pick < 0 ? (es ? "Autom\xe1tico" : "Automatic") : g_lang_label[g_lang_pick];
-    _snprintf(out, cap, "%s: %s%s", es ? "Idioma" : "Language", nm,
-              g_lang_pick != g_lang_ini ? (es ? " (al reiniciar)" : " (on restart)") : "");
+    const char *nm = g_lang_pick < 0 ? (SC3TR(es, "resize.automatic", "Autom\xe1tico", "Automatic")) : g_lang_label[g_lang_pick];
+    _snprintf(out, cap, "%s: %s%s", SC3TR(es, "resize.language", "Idioma", "Language"), nm,
+              g_lang_pick != g_lang_ini ? (SC3TR(es, "resize.on_restart", " (al reiniciar)", " (on restart)")) : "");
     out[cap - 1] = 0;
 }
 
@@ -9167,45 +9169,45 @@ static void mp_build(void *win) {
             int (*cg)(void) = pm ? (int (*)(void))GetProcAddress(pm, "sc3perf_cap_get") : NULL;
             g_mp_cap = cg ? cg() : -2; }   /* -2: no sc3perf cap export, no row */
         /* page A: the button, in the right half of "Opciones generales" that HUDOPT's controls leave */
-        n += mp_button(fac, win, MP_BTN_MODS, es ? "Opciones de mods..." : "Mod options...", MP_BX, mp_btn_y(win, MP_BH), 150, MP_BH);
+        n += mp_button(fac, win, MP_BTN_MODS, SC3TR(es, "resize.mod_options", "Opciones de mods...", "Mod options..."), MP_BX, mp_btn_y(win, MP_BH), 150, MP_BH);
         /* page B */
-        n += ho_add_label(fac, win, MP_TITLE, es ? "Opciones de los mods" : "Mod options", MP_X0, 40, 300);
-        n += ho_add_label(fac, win, MP_H_UI, es ? "Interfaz" : "Interface", MP_X0, 66, 200);
+        n += ho_add_label(fac, win, MP_TITLE, SC3TR(es, "resize.mod_options_2", "Opciones de los mods", "Mod options"), MP_X0, 40, 300);
+        n += ho_add_label(fac, win, MP_H_UI, SC3TR(es, "resize.interface", "Interfaz", "Interface"), MP_X0, 66, 200);
         mp_move(win, HO_LABEL, MP_X1, 84);
         mp_move(win, HO_GROUP, MP_X1, 100);
         mp_move(win, HO_SMOOTH, 280, 100);
         mp_move(win, CZ_BOX, 280, 118);
-        n += ho_add_label(fac, win, MP_H_PERF, es ? "Rendimiento" : "Performance", MP_X0, 146, 200);
+        n += ho_add_label(fac, win, MP_H_PERF, SC3TR(es, "resize.performance", "Rendimiento", "Performance"), MP_X0, 146, 200);
         mp_move(win, PP_FPS, MP_X1, 164);
         mp_move(win, PP_BUSY, 150, 164);
         if (g_rl_geom) {   /* RELOCATE / PLOPOVER live in sc3resize: applied at once on OK */
-            n += ho_add_label(fac, win, MP_H_BLD, es ? "Edificios" : "Buildings", 280, 146, 190);
-            n += mp_checkbox(fac, win, MP_BLD_MOVE, es ? "Bot\xf3n Mover" : "Move button", g_mp_mover, 292, 164, 170, col);
-            n += mp_checkbox(fac, win, MP_BLD_OVER, es ? "Construir sobre zonas" : "Build over zones", g_mp_plop, 292, 182, 176, col);
+            n += ho_add_label(fac, win, MP_H_BLD, SC3TR(es, "resize.buildings", "Edificios", "Buildings"), 280, 146, 190);
+            n += mp_checkbox(fac, win, MP_BLD_MOVE, SC3TR(es, "resize.move_button", "Bot\xf3n Mover", "Move button"), g_mp_mover, 292, 164, 170, col);
+            n += mp_checkbox(fac, win, MP_BLD_OVER, SC3TR(es, "resize.build_over_zones", "Construir sobre zonas", "Build over zones"), g_mp_plop, 292, 182, 176, col);
         }
         if (g_mp_cap != -2) {   /* sc3perf: applies within a second */
             DWORD fid[5];
-            const char *ftx[5] = { "Monitor   ", "30   ", "60   ", "120   ", es ? "Sin l\xedmite" : "No limit" };
+            const char *ftx[5] = { "Monitor   ", "30   ", "60   ", "120   ", SC3TR(es, "resize.no_limit", "Sin l\xedmite", "No limit") };
             for (i = 0; i < 5; i++) fid[i] = MP_FPS_R0 + i;
             sel = 0;
             for (i = 0; i < 5; i++) if (k_mp_caps[i] == g_mp_cap) sel = fid[i];
-            n += ho_add_label(fac, win, MP_FPS_LBL, es ? "L\xedmite de FPS:" : "FPS limit:", MP_X1, 208, 90);
+            n += ho_add_label(fac, win, MP_FPS_LBL, SC3TR(es, "resize.fps_limit", "L\xedmite de FPS:", "FPS limit:"), MP_X1, 208, 90);
             n += mp_group(fac, win, MP_FPS_GRP, fid, ftx, 5, sel, 122, 206, 340, col);
         }
         if (mp_loaded("sc3autosave.dll")) {
             static const DWORD aid[5] = { MP_AS_M5, MP_AS_M10, MP_AS_M15, MP_AS_M30, MP_AS_M60 };
             const char *atx[5] = { "5 min   ", "10 min   ", "15 min   ", "30 min   ", "60 min" };
-            n += ho_add_label(fac, win, MP_H_AS, es ? "Autoguardado" : "Autosave", MP_X0, 232, 200);
-            n += mp_checkbox(fac, win, MP_AS_ON, es ? "Autoguardar" : "Autosave", g_mp_as_on, MP_X1, 250, 120, col);
-            n += mp_checkbox(fac, win, MP_AS_IND, es ? "Mostrar aviso" : "Show notice", g_mp_as_ind, 150, 250, 112, col);
-            n += mp_checkbox(fac, win, MP_AS_UNAUTO, es ? "Guardar en la ciudad original" : "Save to the original city",
+            n += ho_add_label(fac, win, MP_H_AS, SC3TR(es, "resize.autosave", "Autoguardado", "Autosave"), MP_X0, 232, 200);
+            n += mp_checkbox(fac, win, MP_AS_ON, SC3TR(es, "resize.autosave_2", "Autoguardar", "Autosave"), g_mp_as_on, MP_X1, 250, 120, col);
+            n += mp_checkbox(fac, win, MP_AS_IND, SC3TR(es, "resize.show_notice", "Mostrar aviso", "Show notice"), g_mp_as_ind, 150, 250, 112, col);
+            n += mp_checkbox(fac, win, MP_AS_UNAUTO, SC3TR(es, "resize.save_original_city", "Guardar en la ciudad original", "Save to the original city"),
                              g_mp_unauto, 266, 250, 204, col);
-            n += ho_add_label(fac, win, MP_AS_LBL, es ? "Cada:" : "Every:", MP_X1, 274, 50);
+            n += ho_add_label(fac, win, MP_AS_LBL, SC3TR(es, "resize.every", "Cada:", "Every:"), MP_X1, 274, 50);
             sel = g_mp_as_min <= 5 ? MP_AS_M5 : g_mp_as_min <= 10 ? MP_AS_M10 : g_mp_as_min <= 15 ? MP_AS_M15 : g_mp_as_min <= 30 ? MP_AS_M30 : MP_AS_M60;
             n += mp_group(fac, win, MP_AS_GRP, aid, atx, 5, sel, 80, 272, 390, col);
         }
         if (mp_child(win, CS_ARROW) || mp_loaded("sc3overscroll.dll"))
-            n += ho_add_label(fac, win, CS_HDR, es ? "C\xe1mara" : "Camera", MP_X0, 298, 180);
+            n += ho_add_label(fac, win, CS_HDR, SC3TR(es, "resize.camera", "C\xe1mara", "Camera"), MP_X0, 298, 180);
         if (mp_child(win, CS_ARROW)) {   /* CAMSET: the panel and its two sliders, left */
             mp_move(win, MP_PANEL, 30, 316);
             mp_move(win, CS_ARROW_LBL, 44, 321);
@@ -9214,22 +9216,22 @@ static void mp_build(void *win) {
             mp_move(win, CS_DRAG, 126, 341);
         }
         if (mp_loaded("sc3overscroll.dll")) {   /* overscroll slider (leftmost = off) and push: both live */
-            n += ho_add_label(fac, win, MP_OVS_LBL, es ? "M\xe1s all\xe1 del borde" : "Past the map edge", 236, 318, 124);
+            n += ho_add_label(fac, win, MP_OVS_LBL, SC3TR(es, "resize.past_map_edge", "M\xe1s all\xe1 del borde", "Past the map edge"), 236, 318, 124);
             n += cs_add_slider(fac, win, MP_OVS_SL, 364, 316, 100, g_mp_ovs_idx * 0x400 / 9);
-            n += mp_checkbox(fac, win, MP_PUSH, es ? "Empujar c\xe1mara al construir" : "Push camera when building", g_mp_push, 236, 342, 234, col);
+            n += mp_checkbox(fac, win, MP_PUSH, SC3TR(es, "resize.push_camera_when_building", "Empujar c\xe1mara al construir", "Push camera when building"), g_mp_push, 236, 342, 234, col);
         }
         if (mp_loaded("sc3simrun.dll") || mp_loaded("sc3overscroll.dll") || mp_loaded("sc3undo.dll"))
-            n += ho_add_label(fac, win, MP_H_OTHER, es ? "Al reiniciar el juego" : "After restarting the game", MP_X0, 374, 300);
+            n += ho_add_label(fac, win, MP_H_OTHER, SC3TR(es, "resize.after_restarting_game", "Al reiniciar el juego", "After restarting the game"), MP_X0, 374, 300);
         if (mp_loaded("sc3simrun.dll"))
-            n += mp_checkbox(fac, win, MP_SIMRUN, es ? "La ciudad sigue al mover la c\xe1mara" : "City keeps running while scrolling",
+            n += mp_checkbox(fac, win, MP_SIMRUN, SC3TR(es, "resize.city_keeps_running_while", "La ciudad sigue al mover la c\xe1mara", "City keeps running while scrolling"),
                              g_mp_simrun, MP_X1, 392, 330, col);
         if (mp_loaded("sc3overscroll.dll"))
-            n += mp_checkbox(fac, win, MP_EDGE, es ? "Mover en el borde" : "Edge scroll", g_mp_edge, MP_X1, 412, 140, col);
+            n += mp_checkbox(fac, win, MP_EDGE, SC3TR(es, "resize.edge_scroll", "Mover en el borde", "Edge scroll"), g_mp_edge, MP_X1, 412, 140, col);
         if (mp_loaded("sc3undo.dll")) {
-            n += mp_checkbox(fac, win, MP_UNDO, es ? "Deshacer (Ctrl+Z)" : "Undo (Ctrl+Z)", g_mp_undo, 180, 412, 140, col);
-            n += mp_checkbox(fac, win, MP_UNDOBTN, es ? "Botones de deshacer" : "Undo buttons", g_mp_undobtn, 330, 412, 140, col);
+            n += mp_checkbox(fac, win, MP_UNDO, SC3TR(es, "resize.undo", "Deshacer (Ctrl+Z)", "Undo (Ctrl+Z)"), g_mp_undo, 180, 412, 140, col);
+            n += mp_checkbox(fac, win, MP_UNDOBTN, SC3TR(es, "resize.undo_buttons", "Botones de deshacer", "Undo buttons"), g_mp_undobtn, 330, 412, 140, col);
         }
-        n += mp_button(fac, win, MP_BTN_BACK, es ? "Volver" : "Back", MP_BX, mp_btn_y(win, MP_BH), 110, MP_BH);
+        n += mp_button(fac, win, MP_BTN_BACK, SC3TR(es, "resize.back", "Volver", "Back"), MP_BX, mp_btn_y(win, MP_BH), 110, MP_BH);
         if (g_langsel && g_lang_n > 1) {   /* LANGSEL: between Volver and the OK tick (x 432) */
             char lt[96];
             g_lang_page0 = g_lang_pick;
@@ -9681,7 +9683,7 @@ static void qi_add_button(void *win, BYTE *qo) {
     }
     bx = w - 0x32 - 8 - QI_BW;
     by = h - 0x25 + (32 - QI_BH) / 2;
-    ho_str(s, ho_spanish() ? "Copiar ID" : "Copy ID");
+    ho_str(s, SC3TR(ho_spanish(), "resize.copy_id", "Copiar ID", "Copy ID"));
     btn = (void *)ho_v(fac, 0x2c, 5, QI_BTN, (DWORD)s, 0, 0, 0);
     if (btn) {
         ho_v(btn, 0x24, 2, 4, 1, 0, 0, 0);
@@ -10543,7 +10545,7 @@ static void rl_add_button(void *win, BYTE *qo) {
     /* some dialogs carry the game's own "Sustituir" at the bottom left (measured: the Mayor's House, 308 wide, where the
        bottom row has no room): then one row up, right-aligned over the OK button */
     if (!rl_rect_free(win, bx, by, bx + RL_BW, by + QI_BH)) { bx = w - 8 - RL_BW; by -= QI_BH + 6; }
-    ok = mp_button(fac, win, RL_BTN, ho_spanish() ? "Mover" : "Move", bx, by, RL_BW, QI_BH);
+    ok = mp_button(fac, win, RL_BTN, SC3TR(ho_spanish(), "resize.move", "Mover", "Move"), bx, by, RL_BW, QI_BH);
     logf("RELOCATE> \"?\" of type %lu: Mover button %s at local (%ld, %ld)", t, ok ? "added" : "FAILED", bx, by);
 }
 
@@ -10599,7 +10601,7 @@ static void lf_add(void *win, BYTE *qo) {
         g_ho_lblcol = keep;
     }
     if (GetProcAddress(lfm, "sc3landfill_empty") && l3[0])   /* the fee line exists only when emptying is on */
-        okb = mp_button(fac, win, LF_BTN, es ? "Vaciar" : "Empty", 8, by, LF_BW, QI_BH);
+        okb = mp_button(fac, win, LF_BTN, SC3TR(es, "resize.empty", "Vaciar", "Empty"), 8, by, LF_BW, QI_BH);
     logf("LANDFILL> \"?\" on landfill cell (%d, %d), dialog %ldx%ld: lines %d %d %d, button %d | %s | %s | %s", x, z, w,
          h, ok1, ok2, ok3, okb, l1, l2, l3);
 }
@@ -14928,8 +14930,8 @@ static PKR_PICK g_pkr_pend;
 static char  g_pkr_toast[160];
 static DWORD g_pkr_toast_until;
 
-static void pkr_say(const char *es, const char *en) {
-    lstrcpynA(g_pkr_toast, ho_spanish() ? es : en, sizeof(g_pkr_toast));
+static void pkr_say(const char *text) {   /* modlang: callers pass SC3TR(ho_spanish(), key, es, en) */
+    lstrcpynA(g_pkr_toast, text, sizeof(g_pkr_toast));
     g_pkr_toast_until = GetTickCount() + 2500;
     logf("PICKER> message: %s", g_pkr_toast);
 }
@@ -15011,7 +15013,7 @@ static void CALLBACK pkr_timer(HWND h, UINT m, UINT_PTR id, DWORD t) {
         } __except (EXCEPTION_EXECUTE_HANDLER) { ok = 0; logf("PICKER> fault 0x%08lX making the building tool", GetExceptionCode()); }
         logf("PICKER> %s -> building tool for key 0x%08lX 0x%08lX 0x%08lX: %s", p.what, p.key[0], p.key[1], p.key[2],
              ok && out ? "active" : "NOT MADE");
-        if (!ok || !out) { pkr_say("Cuentagotas: el juego no da herramienta para esto", "Picker: the game has no tool for this"); return; }
+        if (!ok || !out) { pkr_say(SC3TR(ho_spanish(), "resize.picker_no_game_tool", "Cuentagotas: el juego no da herramienta para esto", "Picker: the game has no tool for this")); return; }
     }
     pkr_drop("picked");
 }
@@ -15095,7 +15097,7 @@ static int pkr_pick(LONG x, LONG z, const char *how) {
                 if (zone > 0 && zone < 18 && pkr_zone_cmd[zone]) { p.kind = 1; p.cmd = pkr_zone_cmd[zone]; break; }   /* grown */
                 if (rl_movable(type)) {
                     logf("PICKER> %s at (%ld, %ld): %s type %lu is one per city: refused", how, x, z, nm, type);
-                    pkr_say("Cuentagotas: solo uno por ciudad", "Picker: only one per city");
+                    pkr_say(SC3TR(ho_spanish(), "resize.picker_one_per_city", "Cuentagotas: solo uno por ciudad", "Picker: only one per city"));
                     ho_v(occ, 0x08, 0, 0, 0, 0, 0, 0);
                     return 0;
                 }
@@ -15117,8 +15119,8 @@ static int pkr_pick(LONG x, LONG z, const char *how) {
     wsprintfA(p.what, "%.60s (type %lu, flags 0x%lX, zone %d)", nm[0] ? nm : (occ ? "object" : "empty"), type, flags, zone);
     logf("PICKER> %s at (%ld, %ld): %s %s", how, x, z, p.what, p.kind == 1 ? "-> command" : p.kind == 2 ? "-> building key" : "-> no tool");
     if (!p.kind) {
-        if (occ) pkr_say("Cuentagotas: esto no tiene herramienta de construccion", "Picker: this has no build tool");
-        else pkr_say("Cuentagotas: no hay nada para copiar aqui", "Picker: nothing to pick here");
+        if (occ) pkr_say(SC3TR(ho_spanish(), "resize.picker_no_build_tool", "Cuentagotas: esto no tiene herramienta de construccion", "Picker: this has no build tool"));
+        else pkr_say(SC3TR(ho_spanish(), "resize.picker_nothing_here", "Cuentagotas: no hay nada para copiar aqui", "Picker: nothing to pick here"));
         return 0;
     }
     p.city = city;
@@ -15326,7 +15328,7 @@ static void pkr_add_button(void *panel) {
     ho_str(cap, "");
     btn = fac ? (void *)ho_v(fac, 0x30, 5, PKR_BTN, (DWORD)cap, (DWORD)img, (DWORD)rect, 0) : NULL;
     if (btn) {
-        ho_str(tt, ho_spanish() ? "Cuentagotas (Ctrl+F)" : "Picker (Ctrl+F)");
+        ho_str(tt, SC3TR(ho_spanish(), "resize.picker", "Cuentagotas (Ctrl+F)", "Picker (Ctrl+F)"));
         ho_v(btn, 0x8c, 1, (DWORD)tt, 0, 0, 0, 0);
         ho_str_free(tt);
         ho_v(btn, 0x24, 2, 4, 0, 0, 0, 0);

@@ -1,0 +1,498 @@
+# sc3lang it - Italiano (ITALIAN)
+# MACHINE TRANSLATION, NEEDS NATIVE REVIEW (modlang 2026-11-02). Each line is preceded by the English it
+# translates. Keep every %d / %s / %ld / %.40s / %% exactly as in the English, in the same order: a line
+# whose conversions differ is ignored at run time and the English shows instead (logged in sc3mods.log).
+# A missing key shows the English. Format: UTF-8, key=value, "quoted" for leading/trailing spaces.
+
+
+# ---- autosave
+# en: Autosave failed
+autosave.failed=Salvataggio auto fallito
+# en: Autosaved %02d:%02d
+autosave.saved_at=Salvataggio auto %02d:%02d
+# en: Autosaving...
+autosave.saving=Salvataggio auto...
+
+# ---- bigcity
+# en: Huge
+bigcity.huge=Enorme
+
+# ---- cuadros
+# en: aged %d-%d / places
+cuadros.aged_places=%d-%d anni / posti
+# en: Aging plants: %ld (capacity falls)
+cuadros.aging_plants_capacity_falls=Impianti vecchi: %ld (capacità in calo)
+# en: Buildings without water: %ld of %ld
+cuadros.buildings_without_water=Edifici senza acqua: %ld su %ld
+# en: capacity / produced
+cuadros.capacity_produced=capacità / prodotta
+# en: Colleges
+cuadros.colleges=Università
+# en: colleges
+cuadros.colleges_2=università
+# en: .
+cuadros.decimal_sep=,
+# en: delivered / supply
+cuadros.delivered_supply=erogata / offerta
+# en: Desalination
+cuadros.desalination=Dissalatori
+# en: Doctors %s   Strike: %s
+cuadros.doctors_strike=Medici %s   Sciopero: %s
+# en: Every building that needs water gets it
+cuadros.every_building_that_needs=Ogni edificio che chiede acqua la riceve
+# en: Hospitals
+cuadros.hospitals=Ospedali
+# en: last month
+cuadros.last_month=mese scorso
+# en: Libraries
+cuadros.libraries=Biblioteche
+# en: Bus
+cuadros.mode_bus=Autobus
+# en: Highways
+cuadros.mode_highways=Autostrade
+# en: No network
+cuadros.mode_none=Nessuna rete
+# en: Rail
+cuadros.mode_rail=Treno
+# en: Streets
+cuadros.mode_streets=Strade
+# en: Subway
+cuadros.mode_subway=Metro
+# en: Museums
+cuadros.museums=Musei
+# en: no
+cuadros.no=no
+# en: No education data
+cuadros.no_education_data=Nessun dato sull'istruzione
+# en: No health data
+cuadros.no_health_data=Nessun dato sulla sanità
+# en: No water layer
+cuadros.no_water_layer=Nessuna rete idrica
+# en: none in the city
+cuadros.none_in_city=nessuna in città
+# en: none in the city
+cuadros.none_in_city_2=nessuno in città
+# en: One trip can use several networks.
+cuadros.one_trip_can_use=Un viaggio può usare più reti.
+# en: output / capacity
+cuadros.output_capacity=produzione / capacità
+# en: patients / beds
+cuadros.patients_beds=pazienti / letti
+# en: Plants (%ld)
+cuadros.plants=Impianti (%ld)
+# en: Pollution
+cuadros.pollution=Inquinamento
+# en: Pumps
+cuadros.pumps=Pompe
+# en: pupils / places
+cuadros.pupils_places=alunni / posti
+# en: Schools
+cuadros.schools=Scuole
+# en: schools
+cuadros.schools_2=scuole
+# en: schools and colleges
+cuadros.schools_and_colleges=scuole e università
+# en: students / places
+cuadros.students_places=studenti / posti
+# en: Education
+cuadros.tab_education=Istruzione
+# en: Garbage
+cuadros.tab_garbage=Rifiuti
+# en: Health
+cuadros.tab_health=Sanità
+# en: Population
+cuadros.tab_population=Popolazione
+# en: Power
+cuadros.tab_power=Energia
+# en: Transport
+cuadros.tab_transport=Trasporti
+# en: Water
+cuadros.tab_water=Acqua
+# en: Teachers %s   Professors %s   Strike: %s
+cuadros.teachers_professors_strike=Insegnanti %s   Professori %s   Sciopero: %s
+# en: this month
+cuadros.this_month=questo mese
+# en: ,
+cuadros.thousands_sep=.
+# en: Total
+cuadros.total=Totale
+# en: treated / produced
+cuadros.treated_produced=trattata / prodotta
+# en: Trip counting is off (SC3RESIZE_TRIPMODES=0 or sc3cartrips loaded)
+cuadros.trip_counting_off_sc3resize=Conteggio viaggi disattivato (SC3RESIZE_TRIPMODES=0 o sc3cartrips caricato)
+# en: Trips using each network (%s, %s trips)
+cuadros.trips_using_each_network=Viaggi per rete (%s, %s viaggi)
+# en: Trips with no destination (last month): %s
+cuadros.trips_with_no_destination=Viaggi senza destinazione (mese scorso): %s
+# en: Water pollution: %s
+cuadros.water_pollution=Inquinamento dell'acqua: %s
+# en: Water sources (this month)
+cuadros.water_sources_this_month=Fonti d'acqua (questo mese)
+# en: Water towers
+cuadros.water_towers=Torri idriche
+# en: Water treatment (last month)
+cuadros.water_treatment_last_month=Trattamento acque (mese scorso)
+# en: yes
+cuadros.yes=sì
+
+# ---- dataview
+# en: Highway congestion (V)
+dataview.cap_congestion_highways=Traffico in autostrada (V)
+# en: Road congestion (V)
+dataview.cap_congestion_roads=Traffico in strada (V)
+# en: Subway congestion (V: back)
+dataview.cap_congestion_subway=Affollamento metro (V: indietro)
+# en: Radiation (V: back)
+dataview.cap_radiation_back=Radiazioni (V: indietro)
+# en: V: radiation
+dataview.cap_radiation_key=V: radiazioni
+# en: Trips: green arrives, red does not (V)
+dataview.cap_trips=Viaggi: verde arriva, rosso no (V)
+# en: V: trips and congestion by network
+dataview.cap_trips_key=V: viaggi e traffico per rete
+# en: College
+dataview.college=Università
+# en: Doctors %s
+dataview.doctors=Medici %s
+# en: Hospitals
+dataview.hospitals=Ospedali
+# en: no
+dataview.no=no
+# en: %s: no places
+dataview.no_places=%s: nessun posto
+# en: Patients / capacity
+dataview.patients_capacity=Pazienti / capacità
+# en: Professors %s
+dataview.professors=Professori %s
+# en: Pupils / places
+dataview.pupils_places=Alunni / posti
+# en: School
+dataview.school=Scuola
+# en: Strike: %s
+dataview.strike=Sciopero: %s
+# en: school and college
+dataview.strike_both=scuola e università
+# en: college
+dataview.strike_college=università
+# en: school
+dataview.strike_school=scuola
+# en: Teachers %s
+dataview.teachers=Insegnanti %s
+# en: "   %s of %s"
+dataview.used_of_cap="   %s su %s"
+# en: yes
+dataview.yes=sì
+
+# ---- graphs
+# en: Abandoned
+graphs.abandoned=Abbandonati
+# en: Air pollution
+graphs.air_pollution=Inquinam. aria
+# en: C demand
+graphs.c_demand=Domanda C
+# en: C tax
+graphs.c_tax=Tassa C
+# en: College capacity
+graphs.college_capacity=Capacità univ.
+# en: College students
+graphs.college_students=Studenti univ.
+# en: Debt
+graphs.debt=Debito
+# en: Expenses
+graphs.expenses=Spese
+# en: Exported
+graphs.exported=Esportati
+# en: Garbage made
+graphs.garbage_made=Rifiuti prodotti
+# en: Abandoned
+graphs.grp_abandoned=Abbandonati
+# en: Air/water pollut.
+graphs.grp_air_water_pollut=Inquinam. aria/acqua
+# en: Colleges
+graphs.grp_colleges=Università
+# en: Debt (bonds)
+graphs.grp_debt_bonds=Debito (obbligazioni)
+# en: Garbage
+graphs.grp_garbage=Rifiuti
+# en: Hospitals
+graphs.grp_hospitals=Ospedali
+# en: Income/Expenses
+graphs.grp_income_expenses=Entrate/Spese
+# en: Jobs/Workers
+graphs.grp_jobs_workers=Posti/Lavoratori
+# en: Power sup./dem.
+graphs.grp_power_sup_dem=Energia off./dom.
+# en: RCI demand
+graphs.grp_rci_demand=Domanda RCI
+# en: Schools
+graphs.grp_schools=Scuole
+# en: Tax rates
+graphs.grp_tax_rates=Aliquote
+# en: Unpowered
+graphs.grp_unpowered=Senza corrente
+# en: Water sup./deliv.
+graphs.grp_water_sup_deliv=Acqua off./erog.
+# en: Hospital capacity
+graphs.hospital_capacity=Capacità ospedali
+# en: I demand
+graphs.i_demand=Domanda I
+# en: I tax
+graphs.i_tax=Tassa I
+# en: Incinerated
+graphs.incinerated=Inceneriti
+# en: Income
+graphs.income=Entrate
+# en: Jobs
+graphs.jobs=Posti di lavoro
+# en: Patients
+graphs.patients=Pazienti
+# en: Power demand
+graphs.power_demand=Domanda energia
+# en: Power supply
+graphs.power_supply=Offerta energia
+# en: Power used
+graphs.power_used=Energia consumata
+# en: R demand
+graphs.r_demand=Domanda R
+# en: R tax
+graphs.r_tax=Tassa R
+# en: Recycled
+graphs.recycled=Riciclati
+# en: School capacity
+graphs.school_capacity=Capacità scuole
+# en: School pupils
+graphs.school_pupils=Alunni
+# en: City
+graphs.tab_city=Città
+# en: Economy
+graphs.tab_economy=Economia
+# en: Environment
+graphs.tab_environment=Ambiente
+# en: Services
+graphs.tab_services=Servizi
+# en: Utilities
+graphs.tab_utilities=Reti
+# en: To landfill
+graphs.to_landfill=In discarica
+# en: Unpowered
+graphs.unpowered=Senza corrente
+# en: Water delivered
+graphs.water_delivered=Acqua erogata
+# en: Water pollution
+graphs.water_pollution=Inquinam. acqua
+# en: Water supply
+graphs.water_supply=Offerta acqua
+# en: Workers
+graphs.workers=Lavoratori
+
+# ---- landfill
+# en: Already empty
+landfill.already_empty=Già vuota
+# en: Already emptying one
+landfill.already_emptying_one=Uno svuotamento è già in corso
+# en: Emptied
+landfill.emptied=Svuotata
+# en: Emptied: %s tons for $%s
+landfill.emptied_tons_for=Svuotata: %s t per $%s
+# en: Emptying it costs $%s
+landfill.emptying_costs=Svuotarla costa $%s
+# en: Emptying in a few seconds
+landfill.emptying_in_few_seconds=Svuotamento tra pochi secondi
+# en: Emptying is off (landfill.ini)
+landfill.emptying_off_landfill_ini=Lo svuotamento è disattivato (landfill.ini)
+# en: " (%d not connected)"
+landfill.not_connected=" (%d senza accesso)"
+# en: Not enough funds: it costs $%s
+landfill.not_enough_funds_costs=Fondi insufficienti: costa $%s
+# en: Not a landfill
+landfill.not_landfill=Non è una discarica
+# en: Not ready yet: let the game run for a moment
+landfill.not_ready_yet_let=Non ancora pronto: lascia andare il gioco per un momento
+# en: This landfill: %d%% full
+landfill.this_landfill_full=Questa discarica: %d%% piena
+# en: %s of %s tons (%s free)
+landfill.tons_free=%s su %s t (%s libere)
+
+# ---- lifespan
+# en: age %s%s
+lifespan.age=età %s%s
+# en: Age %s of %s, %s left%s
+lifespan.age_left=Età %s su %s, restano %s%s
+# en: Age %s, %s left. $%s
+lifespan.age_left_2=Età %s, restano %s. $%s
+# en: Age %s, %s left
+lifespan.age_left_3=Età %s, restano %s
+# en: Age %s, %s left%s
+lifespan.age_left_4=Età %s, restano %s%s
+# en: As new
+lifespan.as_new=Come nuovo
+# en: Back
+lifespan.back=Indietro
+# en: Beds (this one):
+lifespan.beds_this_one=Letti (questo):
+# en: Build cost:
+lifespan.build_cost=Costo costruz.:
+# en: Declines from:
+lifespan.declines_from=Decade da:
+# en: " (declining)"
+lifespan.declining=" (in declino)"
+# en: %.40s (%ld, %ld), declining
+lifespan.declining_2=%.40s (%ld, %ld), in declino
+# en: " (declining)"
+lifespan.declining_3=" (declino)"
+# en: " (declining now)"
+lifespan.declining_now=" (già in declino)"
+# en: Doctors (this one):
+lifespan.doctors_this_one=Medici (questo):
+# en: Life left:
+lifespan.life_left=Vita residua:
+# en: Lifespan
+lifespan.lifespan=Vita utile
+# en: Months overworked:
+lifespan.months_overworked=Mesi in sovraccarico:
+# en: New
+lifespan.new=Nuovo
+# en: No funds ($%s)
+lifespan.no_funds=Niente fondi ($%s)
+# en: Not done
+lifespan.not_done=Non riuscito
+# en: Output:
+lifespan.output=Rendimento:
+# en: . Page %d/%d
+lifespan.page=. Pag. %d/%d
+# en: Professors (this one):
+lifespan.professors_this_one=Professori (questa):
+# en: Restore $%s
+lifespan.restore=Restaura $%s
+# en: Restore
+lifespan.restore_2=Restaura
+# en: Restore all ($%s)
+lifespan.restore_all=Restaura tutti ($%s)
+# en: Restored ($%s)
+lifespan.restored=Restaurato ($%s)
+# en: Teachers (this one):
+lifespan.teachers_this_one=Insegnanti (questa):
+# en: %d that age. Funds $%s
+lifespan.that_age_funds=%d che invecchiano. Fondi $%s
+# en: %ldy
+lifespan.y=%ld a
+# en: %ldy %ldm
+lifespan.y_m=%ld a %ld m
+
+# ---- rcibars
+# en: Capacity in use: Airport %ld%%, Seaport %ld%%
+rcibars.tooltip=Capacità in uso: aeroporto %ld%%, porto %ld%%
+
+# ---- resize
+# en: After restarting the game
+resize.after_restarting_game=Dopo il riavvio del gioco
+# en: Arrow speed
+resize.arrow_speed=Vel. frecce
+# en: Automatic
+resize.automatic=Automatico
+# en: Autosave
+resize.autosave=Salvataggio auto
+# en: Autosave
+resize.autosave_2=Salva auto
+# en: Back
+resize.back=Indietro
+# en: Build over zones
+resize.build_over_zones=Costruire sulle zone
+# en: Buildings
+resize.buildings=Edifici
+# en: Camera
+resize.camera=Visuale
+# en: City keeps running while scrolling
+resize.city_keeps_running_while=La città continua durante lo scorrimento
+# en: Copy ID
+resize.copy_id=Copia ID
+# en: Drag speed
+resize.drag_speed=Vel. trascina
+# en: Edge scroll
+resize.edge_scroll=Scorri ai bordi
+# en: Empty
+resize.empty=Svuota
+# en: Every:
+resize.every=Ogni:
+# en: Extra zoom
+resize.extra_zoom=Zoom extra
+# en: FPS limit:
+resize.fps_limit=Limite FPS:
+# en: Interface
+resize.interface=Interfaccia
+# en: Interface scale:
+resize.interface_scale=Scala dell'interfaccia:
+# en: Language
+resize.language=Lingua
+# en: Mod options...
+resize.mod_options=Opzioni mod...
+# en: Mod options
+resize.mod_options_2=Opzioni delle mod
+# en: Move
+resize.move=Sposta
+# en: Move button
+resize.move_button=Pulsante Sposta
+# en: No limit
+resize.no_limit=Illimitato
+# en: " (on restart)"
+resize.on_restart=" (al riavvio)"
+# en: Past the map edge
+resize.past_map_edge=Oltre il bordo
+# en: Performance
+resize.performance=Prestazioni
+# en: Picker (Ctrl+F)
+resize.picker=Contagocce (Ctrl+F)
+# en: Picker: this has no build tool
+resize.picker_no_build_tool=Contagocce: questo non ha uno strumento di costruzione
+# en: Picker: the game has no tool for this
+resize.picker_no_game_tool=Contagocce: il gioco non ha uno strumento per questo
+# en: Picker: nothing to pick here
+resize.picker_nothing_here=Contagocce: niente da copiare qui
+# en: Picker: only one per city
+resize.picker_one_per_city=Contagocce: solo uno per città
+# en: Push camera when building
+resize.push_camera_when_building=Sposta la visuale costruendo
+# en: Save to the original city
+resize.save_original_city=Salva nella città originale
+# en: "Auto   "
+resize.scale_auto="Auto   "
+# en: "Normal   "
+resize.scale_normal="Normale   "
+# en: Show FPS
+resize.show_fps=Mostra FPS
+# en: Show notice
+resize.show_notice=Mostra avviso
+# en: Show profiler
+resize.show_profiler=Mostra profiler
+# en: Smooth
+resize.smooth=Smussato
+# en: Undo (Ctrl+Z)
+resize.undo=Annulla (Ctrl+Z)
+# en: Undo buttons
+resize.undo_buttons=Pulsanti annulla
+
+# ---- restore
+# en: Already as good as new
+restore.already_as_good_as=Già come nuovo
+# en: The building is gone
+restore.building_gone=L'edificio non c'è più
+# en: The cost is now $%s: click again
+restore.cost_now_click_again=Ora il costo è $%s: clicca di nuovo
+# en: Could not restore
+restore.could_not_restore=Impossibile restaurare
+# en: No budget
+restore.no_budget=Nessun budget
+# en: Not enough funds: costs $%s, you have $%s
+restore.not_enough_funds_costs=Fondi insufficienti: costa $%s, hai $%s
+# en: Restored for $%s
+restore.restored_for=Restaurato per $%s
+# en: %d restored for $%s
+restore.restored_for_2=%d restaurati per $%s
+# en: This building does not age
+restore.this_building_does_not=Questo edificio non invecchia
+
+# ---- undo
+# en: Redo (Ctrl+Y)
+undo.redo=Ripeti (Ctrl+Y)
+# en: Undo (Ctrl+Z)
+undo.undo=Annulla (Ctrl+Z)

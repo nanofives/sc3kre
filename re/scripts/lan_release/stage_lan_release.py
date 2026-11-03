@@ -107,6 +107,11 @@ def main():
         place(os.path.join(a.stock_modules, f), os.path.join(out, "Apps", f), copy=True)
     for f in MOD_BINS:
         place(os.path.join(a.bins, f), os.path.join(out, "Apps", f))
+    # modlang 2026-11-02: the mods' string tables, Apps\sc3lang\<code>.txt (read by sc3mods.dll), from the repo
+    lang = os.path.normpath(os.path.join(HERE, "..", "..", "harness", "lang"))
+    for f in sorted(os.listdir(lang)) if os.path.isdir(lang) else []:
+        if f.lower().endswith(".txt"):
+            place(os.path.join(lang, f), os.path.join(out, "Apps", "sc3lang", f), copy=True)
     place(a.menu_bg, os.path.join(out, "Apps", "menu_bg.bmp"))
     place(a.perf_ini, os.path.join(out, "Apps", "perf.ini"))
     for part in NETMOD_PARTS:

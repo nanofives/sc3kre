@@ -87,12 +87,8 @@ static void rcb_settip(void) {
 }
 
 static void rcb_maketip(LONG ca, LONG ci) {
-    if (ho_spanish())
-        wsprintfA(g_rcb_tip, "Capacidad en uso: Aeropuerto %ld%%, Puerto %ld%%",
-                  ca < 0 ? 0 : ca, ci < 0 ? 0 : ci);
-    else
-        wsprintfA(g_rcb_tip, "Capacity in use: Airport %ld%%, Seaport %ld%%",
-                  ca < 0 ? 0 : ca, ci < 0 ? 0 : ci);
+    wsprintfA(g_rcb_tip, SC3TR(ho_spanish(), "rcibars.tooltip", "Capacidad en uso: Aeropuerto %ld%%, Puerto %ld%%",
+                               "Capacity in use: Airport %ld%%, Seaport %ld%%"), ca < 0 ? 0 : ca, ci < 0 ? 0 : ci);
 }
 
 /* The tooltip button (recipe of the RCI's own 0x7d1 button, SIMUI 0x10064b08: factory FUN_10085065 vt+0x30(id, caption,

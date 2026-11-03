@@ -32,6 +32,7 @@
 
 #include <windows.h>
 #include "sc3mods_guard.h"
+#include "sc3lang.h"   /* modlang: SC3TR, mod text from the per-language tables */
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -515,23 +516,23 @@ __declspec(dllexport) int __cdecl sc3restore_apply(void *occ, int es, char *msg,
     char a[32], b[32];
     msg[0] = 0;
     if (!g_on || !occ) return 0;
-    if (!info_of(occ, &i) || i.defunct) { _snprintf(msg, cap, es ? "Este edificio no envejece" : "This building does not age"); return 0; }
-    if (i.age <= 0 && !(i.flags & SC3R_BADDATE)) { _snprintf(msg, cap, es ? "Ya est\xe1 como nuevo" : "Already as good as new"); return 0; }
-    if (!bud) { _snprintf(msg, cap, es ? "Sin presupuesto" : "No budget"); return 0; }
+    if (!info_of(occ, &i) || i.defunct) { _snprintf(msg, cap, SC3TR(es, "restore.this_building_does_not", "Este edificio no envejece", "This building does not age")); return 0; }
+    if (i.age <= 0 && !(i.flags & SC3R_BADDATE)) { _snprintf(msg, cap, SC3TR(es, "restore.already_as_good_as", "Ya est\xe1 como nuevo", "Already as good as new")); return 0; }
+    if (!bud) { _snprintf(msg, cap, SC3TR(es, "restore.no_budget", "Sin presupuesto", "No budget")); return 0; }
     f0 = funds_get(bud);
     fmt_money(a, sizeof(a), i.cost); fmt_money(b, sizeof(b), f0);
     if (f0 < i.cost) {
-        _snprintf(msg, cap, es ? "Fondos insuficientes: cuesta $%s, hay $%s" : "Not enough funds: costs $%s, you have $%s", a, b);
+        _snprintf(msg, cap, SC3TR(es, "restore.not_enough_funds_costs", "Fondos insuficientes: cuesta $%s, hay $%s", "Not enough funds: costs $%s, you have $%s"), a, b);
         logf("APPLY> refused, funds %ld < cost %ld (%s)", f0, i.cost, i.name);
         return 0;
     }
     log_output(occ, "before the restore");
-    if (!restore_one(occ, &i)) { _snprintf(msg, cap, es ? "No se pudo restaurar" : "Could not restore"); return 0; }
+    if (!restore_one(occ, &i)) { _snprintf(msg, cap, SC3TR(es, "restore.could_not_restore", "No se pudo restaurar", "Could not restore")); return 0; }
     if (i.cost > 0) vc(bud, 0x14, 1, (DWORD)i.cost, 0, 0, 0);           /* Withdraw */
     logf("APPLY> %s restored: price %ld, used %ld of %ld months, cost %ld; funds %ld -> %ld", i.name, i.price, i.age,
          i.max_age, i.cost, f0, funds_get(bud));
-    if (i.flags & SC3R_BADDATE) _snprintf(msg, cap, es ? "Fecha reparada, sin costo" : "Date repaired, free");
-    else _snprintf(msg, cap, es ? "Restaurado por $%s" : "Restored for $%s", a);
+    if (i.flags & SC3R_BADDATE) _snprintf(msg, cap, SC3TR(es, "restore.date_repaired_free", "Fecha reparada, sin costo", "Date repaired, free"));
+    else _snprintf(msg, cap, SC3TR(es, "restore.restored_for", "Restaurado por $%s", "Restored for $%s"), a);
     return 1;
 }
 
@@ -620,11 +621,11 @@ __declspec(dllexport) int __cdecl sc3restore_apply_at(LONG x0, LONG z0, DWORD ty
     msg[0] = 0;
     if (!g_on) return 0;
     o = occ_at((DWORD)x0, (DWORD)z0, type);
-    if (!o) { _snprintf(msg, cap, es ? "El edificio ya no est\xe1" : "The building is gone"); return 0; }
+    if (!o) { _snprintf(msg, cap, SC3TR(es, "restore.building_gone", "El edificio ya no est\xe1", "The building is gone")); return 0; }
     if (max_cost >= 0 && info_of(o, &i) && i.cost > max_cost) {
         char a[32];
         fmt_money(a, sizeof(a), i.cost);
-        _snprintf(msg, cap, es ? "El costo subi\xf3 a $%s: puls\xe1 de nuevo" : "The cost is now $%s: click again", a);
+        _snprintf(msg, cap, SC3TR(es, "restore.cost_now_click_again", "El costo subi\xf3 a $%s: puls\xe1 de nuevo", "The cost is now $%s: click again"), a);
         logf("APPLY> refused, cost %ld above the %ld shown (%s)", i.cost, max_cost, i.name);
         rel(o);
         return 3;
@@ -649,12 +650,12 @@ __declspec(dllexport) int __cdecl sc3restore_apply_all(LONG max_total, int es, c
     f0 = funds_get(bud);
     fmt_money(a, sizeof(a), total); fmt_money(b, sizeof(b), f0);
     if (max_total >= 0 && total > max_total) {
-        _snprintf(msg, cap, es ? "El costo subi\xf3 a $%s: puls\xe1 de nuevo" : "The cost is now $%s: click again", a);
+        _snprintf(msg, cap, SC3TR(es, "restore.cost_now_click_again", "El costo subi\xf3 a $%s: puls\xe1 de nuevo", "The cost is now $%s: click again"), a);
         logf("ALL> refused, total %ld above the %ld shown", total, max_total);
         return -1;
     }
     if (f0 < total) {
-        _snprintf(msg, cap, es ? "Fondos insuficientes: cuesta $%s, hay $%s" : "Not enough funds: costs $%s, you have $%s", a, b);
+        _snprintf(msg, cap, SC3TR(es, "restore.not_enough_funds_costs", "Fondos insuficientes: cuesta $%s, hay $%s", "Not enough funds: costs $%s, you have $%s"), a, b);
         logf("ALL> refused, funds %ld < total %ld", f0, total);
         return 0;
     }
@@ -670,7 +671,7 @@ __declspec(dllexport) int __cdecl sc3restore_apply_all(LONG max_total, int es, c
     if (paid > 0) vc(bud, 0x14, 1, (DWORD)paid, 0, 0, 0);
     fmt_money(a, sizeof(a), paid);
     logf("ALL> %d of %d restored, paid %ld; funds %ld -> %ld", done, n, paid, f0, funds_get(bud));
-    _snprintf(msg, cap, es ? "%d restaurado(s) por $%s" : "%d restored for $%s", done, a);
+    _snprintf(msg, cap, SC3TR(es, "restore.restored_for_2", "%d restaurado(s) por $%s", "%d restored for $%s"), done, a);
     return done;
 }
 

@@ -1,0 +1,498 @@
+# sc3lang nl - Nederlands (DUTCH)
+# MACHINE TRANSLATION, NEEDS NATIVE REVIEW (modlang 2026-11-02). Each line is preceded by the English it
+# translates. Keep every %d / %s / %ld / %.40s / %% exactly as in the English, in the same order: a line
+# whose conversions differ is ignored at run time and the English shows instead (logged in sc3mods.log).
+# A missing key shows the English. Format: UTF-8, key=value, "quoted" for leading/trailing spaces.
+
+
+# ---- autosave
+# en: Autosave failed
+autosave.failed=Autosave mislukt
+# en: Autosaved %02d:%02d
+autosave.saved_at=Autosave %02d:%02d
+# en: Autosaving...
+autosave.saving=Autosave...
+
+# ---- bigcity
+# en: Huge
+bigcity.huge=Enorm
+
+# ---- cuadros
+# en: aged %d-%d / places
+cuadros.aged_places=%d-%d jaar / plaatsen
+# en: Aging plants: %ld (capacity falls)
+cuadros.aging_plants_capacity_falls=Verouderde installaties: %ld (capaciteit daalt)
+# en: Buildings without water: %ld of %ld
+cuadros.buildings_without_water=Gebouwen zonder water: %ld van %ld
+# en: capacity / produced
+cuadros.capacity_produced=capaciteit / geproduceerd
+# en: Colleges
+cuadros.colleges=Hogescholen
+# en: colleges
+cuadros.colleges_2=hogescholen
+# en: .
+cuadros.decimal_sep=,
+# en: delivered / supply
+cuadros.delivered_supply=geleverd / aanbod
+# en: Desalination
+cuadros.desalination=Ontzilting
+# en: Doctors %s   Strike: %s
+cuadros.doctors_strike=Artsen %s   Staking: %s
+# en: Every building that needs water gets it
+cuadros.every_building_that_needs=Elk gebouw dat water nodig heeft, krijgt het
+# en: Hospitals
+cuadros.hospitals=Ziekenhuizen
+# en: last month
+cuadros.last_month=vorige maand
+# en: Libraries
+cuadros.libraries=Bibliotheken
+# en: Bus
+cuadros.mode_bus=Bus
+# en: Highways
+cuadros.mode_highways=Snelwegen
+# en: No network
+cuadros.mode_none=Geen netwerk
+# en: Rail
+cuadros.mode_rail=Trein
+# en: Streets
+cuadros.mode_streets=Straten
+# en: Subway
+cuadros.mode_subway=Metro
+# en: Museums
+cuadros.museums=Musea
+# en: no
+cuadros.no=nee
+# en: No education data
+cuadros.no_education_data=Geen onderwijsgegevens
+# en: No health data
+cuadros.no_health_data=Geen gezondheidsgegevens
+# en: No water layer
+cuadros.no_water_layer=Geen waternet
+# en: none in the city
+cuadros.none_in_city=geen in de stad
+# en: none in the city
+cuadros.none_in_city_2=geen in de stad
+# en: One trip can use several networks.
+cuadros.one_trip_can_use=Eén rit kan meerdere netwerken gebruiken.
+# en: output / capacity
+cuadros.output_capacity=productie / capaciteit
+# en: patients / beds
+cuadros.patients_beds=patiënten / bedden
+# en: Plants (%ld)
+cuadros.plants=Installaties (%ld)
+# en: Pollution
+cuadros.pollution=Vervuiling
+# en: Pumps
+cuadros.pumps=Pompen
+# en: pupils / places
+cuadros.pupils_places=leerlingen / plaatsen
+# en: Schools
+cuadros.schools=Scholen
+# en: schools
+cuadros.schools_2=scholen
+# en: schools and colleges
+cuadros.schools_and_colleges=scholen en hogescholen
+# en: students / places
+cuadros.students_places=studenten / plaatsen
+# en: Education
+cuadros.tab_education=Onderwijs
+# en: Garbage
+cuadros.tab_garbage=Afval
+# en: Health
+cuadros.tab_health=Zorg
+# en: Population
+cuadros.tab_population=Bevolking
+# en: Power
+cuadros.tab_power=Energie
+# en: Transport
+cuadros.tab_transport=Vervoer
+# en: Water
+cuadros.tab_water=Water
+# en: Teachers %s   Professors %s   Strike: %s
+cuadros.teachers_professors_strike=Leraren %s   Docenten %s   Staking: %s
+# en: this month
+cuadros.this_month=deze maand
+# en: ,
+cuadros.thousands_sep=.
+# en: Total
+cuadros.total=Totaal
+# en: treated / produced
+cuadros.treated_produced=gezuiverd / geproduceerd
+# en: Trip counting is off (SC3RESIZE_TRIPMODES=0 or sc3cartrips loaded)
+cuadros.trip_counting_off_sc3resize=Ritten tellen staat uit (SC3RESIZE_TRIPMODES=0 of sc3cartrips geladen)
+# en: Trips using each network (%s, %s trips)
+cuadros.trips_using_each_network=Ritten per netwerk (%s, %s ritten)
+# en: Trips with no destination (last month): %s
+cuadros.trips_with_no_destination=Ritten zonder bestemming (vorige maand): %s
+# en: Water pollution: %s
+cuadros.water_pollution=Watervervuiling: %s
+# en: Water sources (this month)
+cuadros.water_sources_this_month=Waterbronnen (deze maand)
+# en: Water towers
+cuadros.water_towers=Watertorens
+# en: Water treatment (last month)
+cuadros.water_treatment_last_month=Waterzuivering (vorige maand)
+# en: yes
+cuadros.yes=ja
+
+# ---- dataview
+# en: Highway congestion (V)
+dataview.cap_congestion_highways=Files op snelwegen (V)
+# en: Road congestion (V)
+dataview.cap_congestion_roads=Files op straten (V)
+# en: Subway congestion (V: back)
+dataview.cap_congestion_subway=Drukte in de metro (V: terug)
+# en: Radiation (V: back)
+dataview.cap_radiation_back=Straling (V: terug)
+# en: V: radiation
+dataview.cap_radiation_key=V: straling
+# en: Trips: green arrives, red does not (V)
+dataview.cap_trips=Ritten: groen komt aan, rood niet (V)
+# en: V: trips and congestion by network
+dataview.cap_trips_key=V: ritten en files per netwerk
+# en: College
+dataview.college=Hogeschool
+# en: Doctors %s
+dataview.doctors=Artsen %s
+# en: Hospitals
+dataview.hospitals=Ziekenhuizen
+# en: no
+dataview.no=nee
+# en: %s: no places
+dataview.no_places=%s: geen plaatsen
+# en: Patients / capacity
+dataview.patients_capacity=Patiënten / capaciteit
+# en: Professors %s
+dataview.professors=Docenten %s
+# en: Pupils / places
+dataview.pupils_places=Leerlingen / plaatsen
+# en: School
+dataview.school=School
+# en: Strike: %s
+dataview.strike=Staking: %s
+# en: school and college
+dataview.strike_both=school en hogeschool
+# en: college
+dataview.strike_college=hogeschool
+# en: school
+dataview.strike_school=school
+# en: Teachers %s
+dataview.teachers=Leraren %s
+# en: "   %s of %s"
+dataview.used_of_cap="   %s van %s"
+# en: yes
+dataview.yes=ja
+
+# ---- graphs
+# en: Abandoned
+graphs.abandoned=Verlaten
+# en: Air pollution
+graphs.air_pollution=Luchtvervuiling
+# en: C demand
+graphs.c_demand=Vraag C
+# en: C tax
+graphs.c_tax=Belasting C
+# en: College capacity
+graphs.college_capacity=Capaciteit hogesch.
+# en: College students
+graphs.college_students=Studenten
+# en: Debt
+graphs.debt=Schuld
+# en: Expenses
+graphs.expenses=Uitgaven
+# en: Exported
+graphs.exported=Geëxporteerd
+# en: Garbage made
+graphs.garbage_made=Afval geproduceerd
+# en: Abandoned
+graphs.grp_abandoned=Verlaten
+# en: Air/water pollut.
+graphs.grp_air_water_pollut=Vervuiling lucht/water
+# en: Colleges
+graphs.grp_colleges=Hogescholen
+# en: Debt (bonds)
+graphs.grp_debt_bonds=Schuld (obligaties)
+# en: Garbage
+graphs.grp_garbage=Afval
+# en: Hospitals
+graphs.grp_hospitals=Ziekenhuizen
+# en: Income/Expenses
+graphs.grp_income_expenses=Inkomsten/Uitgaven
+# en: Jobs/Workers
+graphs.grp_jobs_workers=Banen/Werkenden
+# en: Power sup./dem.
+graphs.grp_power_sup_dem=Energie aanb./vraag
+# en: RCI demand
+graphs.grp_rci_demand=Vraag RCI
+# en: Schools
+graphs.grp_schools=Scholen
+# en: Tax rates
+graphs.grp_tax_rates=Belastingtarieven
+# en: Unpowered
+graphs.grp_unpowered=Zonder stroom
+# en: Water sup./deliv.
+graphs.grp_water_sup_deliv=Water aanb./gelev.
+# en: Hospital capacity
+graphs.hospital_capacity=Capaciteit ziekenh.
+# en: I demand
+graphs.i_demand=Vraag I
+# en: I tax
+graphs.i_tax=Belasting I
+# en: Incinerated
+graphs.incinerated=Verbrand
+# en: Income
+graphs.income=Inkomsten
+# en: Jobs
+graphs.jobs=Banen
+# en: Patients
+graphs.patients=Patiënten
+# en: Power demand
+graphs.power_demand=Vraag energie
+# en: Power supply
+graphs.power_supply=Aanbod energie
+# en: Power used
+graphs.power_used=Energieverbruik
+# en: R demand
+graphs.r_demand=Vraag R
+# en: R tax
+graphs.r_tax=Belasting R
+# en: Recycled
+graphs.recycled=Gerecycled
+# en: School capacity
+graphs.school_capacity=Capaciteit scholen
+# en: School pupils
+graphs.school_pupils=Leerlingen
+# en: City
+graphs.tab_city=Stad
+# en: Economy
+graphs.tab_economy=Economie
+# en: Environment
+graphs.tab_environment=Milieu
+# en: Services
+graphs.tab_services=Diensten
+# en: Utilities
+graphs.tab_utilities=Netten
+# en: To landfill
+graphs.to_landfill=Naar stortplaats
+# en: Unpowered
+graphs.unpowered=Zonder stroom
+# en: Water delivered
+graphs.water_delivered=Water geleverd
+# en: Water pollution
+graphs.water_pollution=Watervervuiling
+# en: Water supply
+graphs.water_supply=Aanbod water
+# en: Workers
+graphs.workers=Werkenden
+
+# ---- landfill
+# en: Already empty
+landfill.already_empty=Al leeg
+# en: Already emptying one
+landfill.already_emptying_one=Er wordt er al een geleegd
+# en: Emptied
+landfill.emptied=Geleegd
+# en: Emptied: %s tons for $%s
+landfill.emptied_tons_for=Geleegd: %s ton voor $%s
+# en: Emptying it costs $%s
+landfill.emptying_costs=Legen kost $%s
+# en: Emptying in a few seconds
+landfill.emptying_in_few_seconds=Wordt over enkele seconden geleegd
+# en: Emptying is off (landfill.ini)
+landfill.emptying_off_landfill_ini=Legen staat uit (landfill.ini)
+# en: " (%d not connected)"
+landfill.not_connected=" (%d zonder toegang)"
+# en: Not enough funds: it costs $%s
+landfill.not_enough_funds_costs=Niet genoeg geld: kost $%s
+# en: Not a landfill
+landfill.not_landfill=Geen stortplaats
+# en: Not ready yet: let the game run for a moment
+landfill.not_ready_yet_let=Nog niet klaar: laat het spel even lopen
+# en: This landfill: %d%% full
+landfill.this_landfill_full=Deze stortplaats: %d%% vol
+# en: %s of %s tons (%s free)
+landfill.tons_free=%s van %s ton (%s vrij)
+
+# ---- lifespan
+# en: age %s%s
+lifespan.age=leeftijd %s%s
+# en: Age %s of %s, %s left%s
+lifespan.age_left=Leeftijd %s van %s, nog %s%s
+# en: Age %s, %s left. $%s
+lifespan.age_left_2=Leeftijd %s, nog %s. $%s
+# en: Age %s, %s left
+lifespan.age_left_3=Leeftijd %s, nog %s
+# en: Age %s, %s left%s
+lifespan.age_left_4=Leeftijd %s, nog %s%s
+# en: As new
+lifespan.as_new=Als nieuw
+# en: Back
+lifespan.back=Terug
+# en: Beds (this one):
+lifespan.beds_this_one=Bedden (dit):
+# en: Build cost:
+lifespan.build_cost=Bouwkosten:
+# en: Declines from:
+lifespan.declines_from=Vervalt vanaf:
+# en: " (declining)"
+lifespan.declining=" (in verval)"
+# en: %.40s (%ld, %ld), declining
+lifespan.declining_2=%.40s (%ld, %ld), in verval
+# en: " (declining)"
+lifespan.declining_3=" (verval)"
+# en: " (declining now)"
+lifespan.declining_now=" (al in verval)"
+# en: Doctors (this one):
+lifespan.doctors_this_one=Artsen (dit):
+# en: Life left:
+lifespan.life_left=Restlevensduur:
+# en: Lifespan
+lifespan.lifespan=Levensduur
+# en: Months overworked:
+lifespan.months_overworked=Maanden overbelast:
+# en: New
+lifespan.new=Nieuw
+# en: No funds ($%s)
+lifespan.no_funds=Geen geld ($%s)
+# en: Not done
+lifespan.not_done=Niet gelukt
+# en: Output:
+lifespan.output=Rendement:
+# en: . Page %d/%d
+lifespan.page=. Pag. %d/%d
+# en: Professors (this one):
+lifespan.professors_this_one=Docenten (deze):
+# en: Restore $%s
+lifespan.restore=Herstellen $%s
+# en: Restore
+lifespan.restore_2=Herstellen
+# en: Restore all ($%s)
+lifespan.restore_all=Alles herstellen ($%s)
+# en: Restored ($%s)
+lifespan.restored=Hersteld ($%s)
+# en: Teachers (this one):
+lifespan.teachers_this_one=Leraren (deze):
+# en: %d that age. Funds $%s
+lifespan.that_age_funds=%d die verouderen. Geld $%s
+# en: %ldy
+lifespan.y=%ld j
+# en: %ldy %ldm
+lifespan.y_m=%ld j %ld m
+
+# ---- rcibars
+# en: Capacity in use: Airport %ld%%, Seaport %ld%%
+rcibars.tooltip=Capaciteit in gebruik: luchthaven %ld%%, haven %ld%%
+
+# ---- resize
+# en: After restarting the game
+resize.after_restarting_game=Na het herstarten van het spel
+# en: Arrow speed
+resize.arrow_speed=Pijlsnelheid
+# en: Automatic
+resize.automatic=Automatisch
+# en: Autosave
+resize.autosave=Autosave
+# en: Autosave
+resize.autosave_2=Autosave
+# en: Back
+resize.back=Terug
+# en: Build over zones
+resize.build_over_zones=Bouwen op zones
+# en: Buildings
+resize.buildings=Gebouwen
+# en: Camera
+resize.camera=Camera
+# en: City keeps running while scrolling
+resize.city_keeps_running_while=Stad loopt door tijdens scrollen
+# en: Copy ID
+resize.copy_id=ID kopiëren
+# en: Drag speed
+resize.drag_speed=Sleepsnelheid
+# en: Edge scroll
+resize.edge_scroll=Randscrollen
+# en: Empty
+resize.empty=Legen
+# en: Every:
+resize.every=Elke:
+# en: Extra zoom
+resize.extra_zoom=Extra zoom
+# en: FPS limit:
+resize.fps_limit=FPS-limiet:
+# en: Interface
+resize.interface=Interface
+# en: Interface scale:
+resize.interface_scale=Schaal van de interface:
+# en: Language
+resize.language=Taal
+# en: Mod options...
+resize.mod_options=Mod-opties...
+# en: Mod options
+resize.mod_options_2=Mod-opties
+# en: Move
+resize.move=Verplaats
+# en: Move button
+resize.move_button=Knop Verplaats
+# en: No limit
+resize.no_limit=Geen max
+# en: " (on restart)"
+resize.on_restart=" (na herstart)"
+# en: Past the map edge
+resize.past_map_edge=Voorbij de rand
+# en: Performance
+resize.performance=Prestaties
+# en: Picker (Ctrl+F)
+resize.picker=Pipet (Ctrl+F)
+# en: Picker: this has no build tool
+resize.picker_no_build_tool=Pipet: dit heeft geen bouwgereedschap
+# en: Picker: the game has no tool for this
+resize.picker_no_game_tool=Pipet: het spel heeft hier geen gereedschap voor
+# en: Picker: nothing to pick here
+resize.picker_nothing_here=Pipet: hier valt niets te kopiëren
+# en: Picker: only one per city
+resize.picker_one_per_city=Pipet: maar één per stad
+# en: Push camera when building
+resize.push_camera_when_building=Camera duwen bij bouwen
+# en: Save to the original city
+resize.save_original_city=Opslaan in de originele stad
+# en: "Auto   "
+resize.scale_auto="Auto   "
+# en: "Normal   "
+resize.scale_normal="Normaal   "
+# en: Show FPS
+resize.show_fps=FPS tonen
+# en: Show notice
+resize.show_notice=Melding tonen
+# en: Show profiler
+resize.show_profiler=Profiler tonen
+# en: Smooth
+resize.smooth=Vloeiend
+# en: Undo (Ctrl+Z)
+resize.undo=Ongedaan (Ctrl+Z)
+# en: Undo buttons
+resize.undo_buttons=Knoppen ongedaan
+
+# ---- restore
+# en: Already as good as new
+restore.already_as_good_as=Al als nieuw
+# en: The building is gone
+restore.building_gone=Het gebouw is weg
+# en: The cost is now $%s: click again
+restore.cost_now_click_again=De kosten zijn nu $%s: klik nogmaals
+# en: Could not restore
+restore.could_not_restore=Herstellen niet gelukt
+# en: No budget
+restore.no_budget=Geen budget
+# en: Not enough funds: costs $%s, you have $%s
+restore.not_enough_funds_costs=Niet genoeg geld: kost $%s, je hebt $%s
+# en: Restored for $%s
+restore.restored_for=Hersteld voor $%s
+# en: %d restored for $%s
+restore.restored_for_2=%d hersteld voor $%s
+# en: This building does not age
+restore.this_building_does_not=Dit gebouw veroudert niet
+
+# ---- undo
+# en: Redo (Ctrl+Y)
+undo.redo=Opnieuw (Ctrl+Y)
+# en: Undo (Ctrl+Z)
+undo.undo=Ongedaan (Ctrl+Z)

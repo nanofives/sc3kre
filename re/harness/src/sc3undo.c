@@ -26,6 +26,7 @@
  */
 #include <windows.h>
 #include "sc3mods_guard.h"
+#include "sc3lang.h"   /* modlang: SC3TR, mod text from the per-language tables */
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -417,8 +418,8 @@ static DWORD __fastcall bar_init(void *self, void *edx) {
             } else x = (br[2] - br[0]) - 2 * 26 - 4;
         }
         if (y < 0) y = 0;
-        add_button(self, BTN_UNDO, 0x22f96e30, g_lang_es ? "Deshacer (Ctrl+Z)" : "Undo (Ctrl+Z)", x, y);
-        add_button(self, BTN_REDO, 0x22f96e2f, g_lang_es ? "Rehacer (Ctrl+Y)" : "Redo (Ctrl+Y)", x + 26 + 2, y);
+        add_button(self, BTN_UNDO, 0x22f96e30, SC3TR(g_lang_es, "undo.undo", "Deshacer (Ctrl+Z)", "Undo (Ctrl+Z)"), x, y);
+        add_button(self, BTN_REDO, 0x22f96e2f, SC3TR(g_lang_es, "undo.redo", "Rehacer (Ctrl+Y)", "Redo (Ctrl+Y)"), x + 26 + 2, y);
     } __except (EXCEPTION_EXECUTE_HANDLER) { logf("BTN> threw 0x%08lX", GetExceptionCode()); }
     return r;
 }
@@ -611,8 +612,8 @@ static DWORD __fastcall mm_init(void *self, void *edx) {
             if (!img) { DWORD key[3] = { 0, 0x2f78c6d, art[i] }, im = 0;   /* fall back to the full-size strip */
                 if (((char (__cdecl *)(DWORD *, DWORD *, char))((BYTE *)GetModuleHandleA("SIMUI.DLL") + 0x25489))(key, &im, 1)) img = (void *)im; }
             if (!img) continue;
-            add_button_img(self, ids[i], img, i == 0 ? (g_lang_es ? "Deshacer (Ctrl+Z)" : "Undo (Ctrl+Z)")
-                                                     : (g_lang_es ? "Rehacer (Ctrl+Y)" : "Redo (Ctrl+Y)"), x, y);
+            add_button_img(self, ids[i], img, i == 0 ? (SC3TR(g_lang_es, "undo.undo", "Deshacer (Ctrl+Z)", "Undo (Ctrl+Z)"))
+                                                     : (SC3TR(g_lang_es, "undo.redo", "Rehacer (Ctrl+Y)", "Redo (Ctrl+Y)")), x, y);
             vc(img, 0x08, 0, 0, 0, 0, 0, 0);
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) { logf("BTN> minimap threw 0x%08lX", GetExceptionCode()); }

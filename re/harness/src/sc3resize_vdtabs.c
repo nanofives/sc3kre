@@ -298,6 +298,31 @@ static int tb_make(void *fac, void *win, TB *t, DWORD id0, const char **txt, int
     vt_colours(fac);
     g_vt_fac = fac;
     if (g_vt_log) { static int pr; if (!pr) { pr = 1; vt_font_probe(); } }
+    {   /* modlang: SC3RESIZE_FONTDUMP=1 writes the glyph advances of fonts 0xf and 0x11 (all 256 codes, the table vt_font_w
+           reads) to <mods dir>\fontwidths.txt once, so re/tools/sc3lang.py widths can measure every language's captions offline
+           (the FBF fonts are byte-identical in all 7 Res\Text folders, measured 2026-11-02). */
+        static int dumped;
+        char v[4], p[MAX_PATH], line[2400];
+        if (!dumped && GetEnvironmentVariableA("SC3RESIZE_FONTDUMP", v, sizeof(v)) && v[0] == '1') {
+            HANDLE h;
+            int fi, c, k;
+            DWORD w;
+            static const int fids[2] = { 0xf, 0x11 };
+            dumped = 1;
+            rz_mb_path(p, sizeof(p), "fontwidths.txt");
+            h = CreateFileA(p, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+            for (fi = 0; fi < 2 && h != INVALID_HANDLE_VALUE; fi++) {
+                BYTE *f = (BYTE *)ho_v(fac, 0x14, 1, (DWORD)fids[fi], 0, 0, 0, 0), *tbl;
+                if (!f || IsBadReadPtr(f, 0x18) || !(tbl = *(BYTE **)(f + 0x14)) || IsBadReadPtr(tbl, 0x14 * 256)) continue;
+                k = wsprintfA(line, "font 0x%02x", fids[fi]);
+                for (c = 0; c < 256; c++) k += wsprintfA(line + k, " %ld", *(LONG *)(tbl + 0x14 * c + 0x10));
+                line[k++] = '\r'; line[k++] = '\n';
+                WriteFile(h, line, k, &w, NULL);
+            }
+            if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
+            logf("VDTABS> FONTDUMP: glyph advances of fonts 0xf, 0x11 -> %s", p);
+        }
+    }
     memset(t, 0, sizeof(*t));
     t->id0 = id0; t->win = win; t->n = n; t->sel = sel; t->x0 = x0; t->x1 = x1; t->y = y; t->h = h;
     for (i = 0; i < n; i++) { t->tx[i] = x0 + 4 + i * 40; t->tw[i] = 40; }

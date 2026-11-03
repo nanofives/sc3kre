@@ -57,41 +57,65 @@ static int   g_graphnew = 1, g_gn_log, g_graphtabs = 1;
 #define GN_TABS  5
 #define GT_ID0   0x7A3C0320u           /* VDTABS strip of the Graficas page (ids +1 .. +0x51, sc3resize_vdtabs.c) */
 static TB g_gt_tb;
-typedef struct { const char *es, *en; int grp; DWORD rgb; } GN_LINE;
+typedef struct { const char *key, *es, *en; int grp; DWORD rgb; } GN_LINE;   /* key: modlang table id */
 /* line index = id - GN_ID0 = record id in the history file: lines 0..10 keep their 10-30 meaning (old files stay valid) */
 static const GN_LINE k_gn[GN_LINES] = {
-    { "Ingresos", "Income", 0, 0x209020 },          { "Gastos", "Expenses", 0, 0xD02020 },
-    { "Energ\xed""a oferta", "Power supply", 1, 0xE09000 }, { "Energ\xed""a demanda", "Power demand", 1, 0x7040C0 },
-    { "Agua oferta", "Water supply", 2, 0x1878E0 },  { "Agua entregada", "Water delivered", 2, 0x7040C0 },
-    { "Demanda R", "R demand", 3, 0x00A000 },       { "Demanda C", "C demand", 3, 0x2040E0 },
-    { "Demanda I", "I demand", 3, 0xD0A000 },
-    { "Contam. aire", "Air pollution", 4, 0x707070 }, { "Contam. agua", "Water pollution", 4, 0x2060C0 },
+    { SC3KEY("graphs.income"), "Ingresos", "Income", 0, 0x209020 },
+    { SC3KEY("graphs.expenses"), "Gastos", "Expenses", 0, 0xD02020 },
+    { SC3KEY("graphs.power_supply"), "Energ\xed""a oferta", "Power supply", 1, 0xE09000 },
+    { SC3KEY("graphs.power_demand"), "Energ\xed""a demanda", "Power demand", 1, 0x7040C0 },
+    { SC3KEY("graphs.water_supply"), "Agua oferta", "Water supply", 2, 0x1878E0 },
+    { SC3KEY("graphs.water_delivered"), "Agua entregada", "Water delivered", 2, 0x7040C0 },
+    { SC3KEY("graphs.r_demand"), "Demanda R", "R demand", 3, 0x00A000 },
+    { SC3KEY("graphs.c_demand"), "Demanda C", "C demand", 3, 0x2040E0 },
+    { SC3KEY("graphs.i_demand"), "Demanda I", "I demand", 3, 0xD0A000 },
+    { SC3KEY("graphs.air_pollution"), "Contam. aire", "Air pollution", 4, 0x707070 },
+    { SC3KEY("graphs.water_pollution"), "Contam. agua", "Water pollution", 4, 0x2060C0 },
     /* graphtabs 2026-11-02 */
-    { "Energ\xed""a consumo", "Power used", 1, 0x20A0A0 },
-    { "Impuesto R", "R tax", 5, 0x00A000 },        { "Impuesto C", "C tax", 5, 0x2040E0 },
-    { "Impuesto I", "I tax", 5, 0xD0A000 },
-    { "Deuda", "Debt", 6, 0xC03030 },
-    { "Empleos", "Jobs", 7, 0x2060C0 },             { "Trabajadores", "Workers", 7, 0xC07020 },
-    { "Escuela alumnos", "School pupils", 8, 0x2060C0 },   { "Escuela capacidad", "School capacity", 8, 0x909090 },
-    { "Univ. alumnos", "College students", 9, 0x7040C0 },  { "Univ. capacidad", "College capacity", 9, 0x909090 },
-    { "Pacientes", "Patients", 10, 0xD02020 },      { "Hosp. capacidad", "Hospital capacity", 10, 0x909090 },
-    { "Basura producida", "Garbage made", 11, 0x806020 }, { "Al vertedero", "To landfill", 11, 0xC07020 },
-    { "Reciclada", "Recycled", 11, 0x20A040 },      { "Incinerada", "Incinerated", 11, 0xD02020 },
-    { "Exportada", "Exported", 11, 0x2060C0 },
-    { "Sin energ\xed""a", "Unpowered", 12, 0xE09000 },
-    { "Abandonados", "Abandoned", 13, 0x806040 } };
-static const char *k_gn_grp_es[GN_GROUPS] = { "Ingresos/Gastos", "Energ\xed""a of./dem.", "Agua of./entreg.", "Demanda RCI",
-    "Contam. aire/agua", "Impuestos", "Deuda (bonos)", "Empleos/Trab.", "Escuelas", "Universidades", "Hospitales", "Basura",
-    "Sin energ\xed""a", "Abandonados" };
-static const char *k_gn_grp_en[GN_GROUPS] = { "Income/Expenses", "Power sup./dem.", "Water sup./deliv.", "RCI demand",
-    "Air/water pollut.", "Tax rates", "Debt (bonds)", "Jobs/Workers", "Schools", "Colleges", "Hospitals", "Garbage",
-    "Unpowered", "Abandoned" };
+    { SC3KEY("graphs.power_used"), "Energ\xed""a consumo", "Power used", 1, 0x20A0A0 },
+    { SC3KEY("graphs.r_tax"), "Impuesto R", "R tax", 5, 0x00A000 },
+    { SC3KEY("graphs.c_tax"), "Impuesto C", "C tax", 5, 0x2040E0 },
+    { SC3KEY("graphs.i_tax"), "Impuesto I", "I tax", 5, 0xD0A000 },
+    { SC3KEY("graphs.debt"), "Deuda", "Debt", 6, 0xC03030 },
+    { SC3KEY("graphs.jobs"), "Empleos", "Jobs", 7, 0x2060C0 },
+    { SC3KEY("graphs.workers"), "Trabajadores", "Workers", 7, 0xC07020 },
+    { SC3KEY("graphs.school_pupils"), "Escuela alumnos", "School pupils", 8, 0x2060C0 },
+    { SC3KEY("graphs.school_capacity"), "Escuela capacidad", "School capacity", 8, 0x909090 },
+    { SC3KEY("graphs.college_students"), "Univ. alumnos", "College students", 9, 0x7040C0 },
+    { SC3KEY("graphs.college_capacity"), "Univ. capacidad", "College capacity", 9, 0x909090 },
+    { SC3KEY("graphs.patients"), "Pacientes", "Patients", 10, 0xD02020 },
+    { SC3KEY("graphs.hospital_capacity"), "Hosp. capacidad", "Hospital capacity", 10, 0x909090 },
+    { SC3KEY("graphs.garbage_made"), "Basura producida", "Garbage made", 11, 0x806020 },
+    { SC3KEY("graphs.to_landfill"), "Al vertedero", "To landfill", 11, 0xC07020 },
+    { SC3KEY("graphs.recycled"), "Reciclada", "Recycled", 11, 0x20A040 },
+    { SC3KEY("graphs.incinerated"), "Incinerada", "Incinerated", 11, 0xD02020 },
+    { SC3KEY("graphs.exported"), "Exportada", "Exported", 11, 0x2060C0 },
+    { SC3KEY("graphs.unpowered"), "Sin energ\xed""a", "Unpowered", 12, 0xE09000 },
+    { SC3KEY("graphs.abandoned"), "Abandonados", "Abandoned", 13, 0x806040 } };
+static const SC3TXT k_gn_grp[GN_GROUPS] = {
+    { SC3KEY("graphs.grp_income_expenses"), "Ingresos/Gastos", "Income/Expenses" },
+    { SC3KEY("graphs.grp_power_sup_dem"), "Energ\xed""a of./dem.", "Power sup./dem." },
+    { SC3KEY("graphs.grp_water_sup_deliv"), "Agua of./entreg.", "Water sup./deliv." },
+    { SC3KEY("graphs.grp_rci_demand"), "Demanda RCI", "RCI demand" },
+    { SC3KEY("graphs.grp_air_water_pollut"), "Contam. aire/agua", "Air/water pollut." },
+    { SC3KEY("graphs.grp_tax_rates"), "Impuestos", "Tax rates" },
+    { SC3KEY("graphs.grp_debt_bonds"), "Deuda (bonos)", "Debt (bonds)" },
+    { SC3KEY("graphs.grp_jobs_workers"), "Empleos/Trab.", "Jobs/Workers" },
+    { SC3KEY("graphs.grp_schools"), "Escuelas", "Schools" },
+    { SC3KEY("graphs.grp_colleges"), "Universidades", "Colleges" },
+    { SC3KEY("graphs.grp_hospitals"), "Hospitales", "Hospitals" },
+    { SC3KEY("graphs.grp_garbage"), "Basura", "Garbage" },
+    { SC3KEY("graphs.grp_unpowered"), "Sin energ\xed""a", "Unpowered" },
+    { SC3KEY("graphs.grp_abandoned"), "Abandonados", "Abandoned" } };
 static const int   k_gn_lead[GN_GROUPS] = { 0, 2, 4, 6, 9, 12, 15, 16, 18, 20, 22, 24, 29, 30 };
 
 /* the tabs, by checkbox id: stock ids measured 2026-11-02 (GRAPHNEW entry log, Berlin), ours = the group's lead line.
    A stock id that is in no tab (none known) goes to the last tab. */
-static const char *k_tab_es[GN_TABS] = { "Ciudad", "Econom\xed""a", "Servicios", "Redes", "Ambiente" };
-static const char *k_tab_en[GN_TABS] = { "City", "Economy", "Services", "Utilities", "Environment" };
+static const SC3TXT k_tabtx[GN_TABS] = {
+    { SC3KEY("graphs.tab_city"), "Ciudad", "City" }, { SC3KEY("graphs.tab_economy"), "Econom\xed""a", "Economy" },
+    { SC3KEY("graphs.tab_services"), "Servicios", "Services" },
+    { SC3KEY("graphs.tab_utilities"), "Redes", "Utilities" },
+    { SC3KEY("graphs.tab_environment"), "Ambiente", "Environment" } };
 static const DWORD k_tab[GN_TABS][12] = {
     { 0x4308EADB /* Tamano */, 0x0349A4CB /* Poblacion */, 0x0303E40D /* Residentes */, 0x8308EC75 /* Comercio */,
       0xA308EC84 /* Industria */, 0xA308EC96 /* Desempleo */, GN_ID0 + 16 /* Empleos */, GN_ID0 + 6 /* Demanda RCI */,
@@ -169,7 +193,7 @@ static void gn_label(int i, const char *val) {
     GN_STR s;
     char t[96];
     int m;
-    wsprintfA(t, "%s\n%s", g_gn_es ? k_gn[i].es : k_gn[i].en, val);
+    wsprintfA(t, "%s\n%s", sc3lang_tr(g_gn_es, k_gn[i].key, k_gn[i].es, k_gn[i].en), val);
     for (m = 0; m < 3; m++) ho_v(g_gn_if[i], 0x50, 2, (DWORD)m, (DWORD)gn_str(&s, t), 0, 0, 0);
 }
 
@@ -192,8 +216,8 @@ static int gn_make(void) {
         rz_thiscall_ret(mem, (BYTE *)mi + 0x33556, a, 1);
         g_gn_if[i] = mem + 8;
         ho_v(g_gn_if[i], 0x04, 0, 0, 0, 0, 0, 0);                                        /* AddRef, kept */
-        ho_v(g_gn_if[i], 0x4c, 1, (DWORD)gn_str(&s, k_gn_lead[g] == i ? (g_gn_es ? k_gn_grp_es[g] : k_gn_grp_en[g])
-                                                     : (g_gn_es ? k_gn[i].es : k_gn[i].en)), 0, 0, 0, 0);
+        ho_v(g_gn_if[i], 0x4c, 1, (DWORD)gn_str(&s, k_gn_lead[g] == i ? sc3lang_txt(g_gn_es, &k_gn_grp[g])
+                                                     : (sc3lang_tr(g_gn_es, k_gn[i].key, k_gn[i].es, k_gn[i].en))), 0, 0, 0, 0);
         id = GN_ID0 + i;          ho_v(g_gn_if[i], 0x54, 1, (DWORD)&id, 0, 0, 0, 0);
         id = GN_ID0 + 0x40 + i;   ho_v(g_gn_if[i], 0x58, 1, (DWORD)&id, 0, 0, 0, 0);
         ho_v(g_gn_if[i], 0x5c, 1, k_gn[i].rgb, 0, 0, 0, 0);
@@ -392,7 +416,7 @@ static DWORD __fastcall gn_layout(BYTE *page, void *edx, DWORD win) {
         if (ch && !IsBadReadPtr(ch, 0x90) && *(BYTE **)(ch + 0x3c) == (BYTE *)win) {
             x0 = *(LONG *)(ch + 0x80); x1 = *(LONG *)(ch + 0x88); y = *(LONG *)(ch + 0x8c) - 1;
         }
-        for (t = 0; t < GN_TABS; t++) tx[t] = g_gn_es ? k_tab_es[t] : k_tab_en[t];
+        for (t = 0; t < GN_TABS; t++) tx[t] = sc3lang_txt(g_gn_es, &k_tabtx[t]);
         if (fac && !IsBadReadPtr(fac, 4) && !mp_child((void *)win, GT_ID0 + 1))
             ok = tb_make(fac, (void *)win, &g_gt_tb, GT_ID0, tx, GN_TABS, g_gn_tab, x0, x1, y, 18);
         g_gn_placed_win = (void *)win;
@@ -403,7 +427,7 @@ static DWORD __fastcall gn_layout(BYTE *page, void *edx, DWORD win) {
         void *fac = ((void *(__cdecl *)(void))((BYTE *)sui + 0x85065))();
         if (fac && !IsBadReadPtr(fac, 4) && !mp_child((void *)win, GN_TABGRP)) {
             DWORD col = ho_v((void *)win, 0x184, 3, 0x31, 0x34, 0x7b, 0, 0);   /* the range group's colour (SIMUI 0x1002e6cb) */
-            for (t = 0; t < GN_TABS; t++) { ids[t] = GN_TABGRP + 1 + t; tx[t] = g_gn_es ? k_tab_es[t] : k_tab_en[t]; }
+            for (t = 0; t < GN_TABS; t++) { ids[t] = GN_TABGRP + 1 + t; tx[t] = sc3lang_txt(g_gn_es, &k_tabtx[t]); }
             ok = mp_group(fac, (void *)win, GN_TABGRP, ids, tx, GN_TABS, GN_TABGRP + 1 + g_gn_tab, 14, 205, 360, col);
         }
         g_gn_placed_win = (void *)win;

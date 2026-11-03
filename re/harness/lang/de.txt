@@ -1,0 +1,498 @@
+# sc3lang de - Deutsch (GERMAN)
+# MACHINE TRANSLATION, NEEDS NATIVE REVIEW (modlang 2026-11-02). Each line is preceded by the English it
+# translates. Keep every %d / %s / %ld / %.40s / %% exactly as in the English, in the same order: a line
+# whose conversions differ is ignored at run time and the English shows instead (logged in sc3mods.log).
+# A missing key shows the English. Format: UTF-8, key=value, "quoted" for leading/trailing spaces.
+
+
+# ---- autosave
+# en: Autosave failed
+autosave.failed=Autospeichern fehlgeschlagen
+# en: Autosaved %02d:%02d
+autosave.saved_at=Autogespeichert %02d:%02d
+# en: Autosaving...
+autosave.saving=Autospeichern...
+
+# ---- bigcity
+# en: Huge
+bigcity.huge=Riesig
+
+# ---- cuadros
+# en: aged %d-%d / places
+cuadros.aged_places=%d-%d Jahre / Plätze
+# en: Aging plants: %ld (capacity falls)
+cuadros.aging_plants_capacity_falls=Alternde Anlagen: %ld (Kapazität sinkt)
+# en: Buildings without water: %ld of %ld
+cuadros.buildings_without_water=Gebäude ohne Wasser: %ld von %ld
+# en: capacity / produced
+cuadros.capacity_produced=Kapazität / erzeugt
+# en: Colleges
+cuadros.colleges=Hochschulen
+# en: colleges
+cuadros.colleges_2=Hochschulen
+# en: .
+cuadros.decimal_sep=,
+# en: delivered / supply
+cuadros.delivered_supply=geliefert / Angebot
+# en: Desalination
+cuadros.desalination=Entsalzung
+# en: Doctors %s   Strike: %s
+cuadros.doctors_strike=Ärzte %s   Streik: %s
+# en: Every building that needs water gets it
+cuadros.every_building_that_needs=Jedes Gebäude, das Wasser braucht, bekommt es
+# en: Hospitals
+cuadros.hospitals=Krankenhäuser
+# en: last month
+cuadros.last_month=letzter Monat
+# en: Libraries
+cuadros.libraries=Bibliotheken
+# en: Bus
+cuadros.mode_bus=Bus
+# en: Highways
+cuadros.mode_highways=Autobahnen
+# en: No network
+cuadros.mode_none=Kein Netz
+# en: Rail
+cuadros.mode_rail=Bahn
+# en: Streets
+cuadros.mode_streets=Straßen
+# en: Subway
+cuadros.mode_subway=U-Bahn
+# en: Museums
+cuadros.museums=Museen
+# en: no
+cuadros.no=nein
+# en: No education data
+cuadros.no_education_data=Keine Bildungsdaten
+# en: No health data
+cuadros.no_health_data=Keine Gesundheitsdaten
+# en: No water layer
+cuadros.no_water_layer=Kein Wassernetz
+# en: none in the city
+cuadros.none_in_city=keine in der Stadt
+# en: none in the city
+cuadros.none_in_city_2=keine in der Stadt
+# en: One trip can use several networks.
+cuadros.one_trip_can_use=Eine Fahrt kann mehrere Netze nutzen.
+# en: output / capacity
+cuadros.output_capacity=Leistung / Kapazität
+# en: patients / beds
+cuadros.patients_beds=Patienten / Betten
+# en: Plants (%ld)
+cuadros.plants=Anlagen (%ld)
+# en: Pollution
+cuadros.pollution=Verschmutzung
+# en: Pumps
+cuadros.pumps=Pumpen
+# en: pupils / places
+cuadros.pupils_places=Schüler / Plätze
+# en: Schools
+cuadros.schools=Schulen
+# en: schools
+cuadros.schools_2=Schulen
+# en: schools and colleges
+cuadros.schools_and_colleges=Schulen und Hochschulen
+# en: students / places
+cuadros.students_places=Studenten / Plätze
+# en: Education
+cuadros.tab_education=Bildung
+# en: Garbage
+cuadros.tab_garbage=Müll
+# en: Health
+cuadros.tab_health=Gesundheit
+# en: Population
+cuadros.tab_population=Bevölkerung
+# en: Power
+cuadros.tab_power=Energie
+# en: Transport
+cuadros.tab_transport=Verkehr
+# en: Water
+cuadros.tab_water=Wasser
+# en: Teachers %s   Professors %s   Strike: %s
+cuadros.teachers_professors_strike=Lehrer %s   Professoren %s   Streik: %s
+# en: this month
+cuadros.this_month=dieser Monat
+# en: ,
+cuadros.thousands_sep=.
+# en: Total
+cuadros.total=Gesamt
+# en: treated / produced
+cuadros.treated_produced=aufbereitet / erzeugt
+# en: Trip counting is off (SC3RESIZE_TRIPMODES=0 or sc3cartrips loaded)
+cuadros.trip_counting_off_sc3resize=Fahrtenzählung aus (SC3RESIZE_TRIPMODES=0 oder sc3cartrips geladen)
+# en: Trips using each network (%s, %s trips)
+cuadros.trips_using_each_network=Fahrten je Netz (%s, %s Fahrten)
+# en: Trips with no destination (last month): %s
+cuadros.trips_with_no_destination=Fahrten ohne Ziel (letzter Monat): %s
+# en: Water pollution: %s
+cuadros.water_pollution=Wasserverschmutzung: %s
+# en: Water sources (this month)
+cuadros.water_sources_this_month=Wasserquellen (dieser Monat)
+# en: Water towers
+cuadros.water_towers=Wassertürme
+# en: Water treatment (last month)
+cuadros.water_treatment_last_month=Wasseraufbereitung (letzter Monat)
+# en: yes
+cuadros.yes=ja
+
+# ---- dataview
+# en: Highway congestion (V)
+dataview.cap_congestion_highways=Stau auf Autobahnen (V)
+# en: Road congestion (V)
+dataview.cap_congestion_roads=Stau auf Straßen (V)
+# en: Subway congestion (V: back)
+dataview.cap_congestion_subway=U-Bahn-Auslastung (V: zurück)
+# en: Radiation (V: back)
+dataview.cap_radiation_back=Strahlung (V: zurück)
+# en: V: radiation
+dataview.cap_radiation_key=V: Strahlung
+# en: Trips: green arrives, red does not (V)
+dataview.cap_trips=Fahrten: grün kommt an, rot nicht (V)
+# en: V: trips and congestion by network
+dataview.cap_trips_key=V: Fahrten und Stau je Netz
+# en: College
+dataview.college=Hochschule
+# en: Doctors %s
+dataview.doctors=Ärzte %s
+# en: Hospitals
+dataview.hospitals=Krankenhäuser
+# en: no
+dataview.no=nein
+# en: %s: no places
+dataview.no_places=%s: keine Plätze
+# en: Patients / capacity
+dataview.patients_capacity=Patienten / Kapazität
+# en: Professors %s
+dataview.professors=Professoren %s
+# en: Pupils / places
+dataview.pupils_places=Schüler / Plätze
+# en: School
+dataview.school=Schule
+# en: Strike: %s
+dataview.strike=Streik: %s
+# en: school and college
+dataview.strike_both=Schule und Hochschule
+# en: college
+dataview.strike_college=Hochschule
+# en: school
+dataview.strike_school=Schule
+# en: Teachers %s
+dataview.teachers=Lehrer %s
+# en: "   %s of %s"
+dataview.used_of_cap="   %s von %s"
+# en: yes
+dataview.yes=ja
+
+# ---- graphs
+# en: Abandoned
+graphs.abandoned=Verlassen
+# en: Air pollution
+graphs.air_pollution=Luftverschmutzung
+# en: C demand
+graphs.c_demand=Nachfrage G
+# en: C tax
+graphs.c_tax=Steuer G
+# en: College capacity
+graphs.college_capacity=Hochschulplätze
+# en: College students
+graphs.college_students=Studenten
+# en: Debt
+graphs.debt=Schulden
+# en: Expenses
+graphs.expenses=Ausgaben
+# en: Exported
+graphs.exported=Exportiert
+# en: Garbage made
+graphs.garbage_made=Müll erzeugt
+# en: Abandoned
+graphs.grp_abandoned=Verlassen
+# en: Air/water pollut.
+graphs.grp_air_water_pollut=Luft/Wasser-Versch.
+# en: Colleges
+graphs.grp_colleges=Hochschulen
+# en: Debt (bonds)
+graphs.grp_debt_bonds=Schulden (Anleihen)
+# en: Garbage
+graphs.grp_garbage=Müll
+# en: Hospitals
+graphs.grp_hospitals=Krankenhäuser
+# en: Income/Expenses
+graphs.grp_income_expenses=Einnahmen/Ausgaben
+# en: Jobs/Workers
+graphs.grp_jobs_workers=Jobs/Arbeiter
+# en: Power sup./dem.
+graphs.grp_power_sup_dem=Energie Ang./Nachfr.
+# en: RCI demand
+graphs.grp_rci_demand=Nachfrage WGI
+# en: Schools
+graphs.grp_schools=Schulen
+# en: Tax rates
+graphs.grp_tax_rates=Steuersätze
+# en: Unpowered
+graphs.grp_unpowered=Ohne Strom
+# en: Water sup./deliv.
+graphs.grp_water_sup_deliv=Wasser Ang./gelief.
+# en: Hospital capacity
+graphs.hospital_capacity=Krankenhausplätze
+# en: I demand
+graphs.i_demand=Nachfrage I
+# en: I tax
+graphs.i_tax=Steuer I
+# en: Incinerated
+graphs.incinerated=Verbrannt
+# en: Income
+graphs.income=Einnahmen
+# en: Jobs
+graphs.jobs=Jobs
+# en: Patients
+graphs.patients=Patienten
+# en: Power demand
+graphs.power_demand=Energienachfrage
+# en: Power supply
+graphs.power_supply=Energieangebot
+# en: Power used
+graphs.power_used=Energieverbrauch
+# en: R demand
+graphs.r_demand=Nachfrage W
+# en: R tax
+graphs.r_tax=Steuer W
+# en: Recycled
+graphs.recycled=Recycelt
+# en: School capacity
+graphs.school_capacity=Schulplätze
+# en: School pupils
+graphs.school_pupils=Schüler
+# en: City
+graphs.tab_city=Stadt
+# en: Economy
+graphs.tab_economy=Wirtschaft
+# en: Environment
+graphs.tab_environment=Umwelt
+# en: Services
+graphs.tab_services=Dienste
+# en: Utilities
+graphs.tab_utilities=Versorgung
+# en: To landfill
+graphs.to_landfill=Zur Deponie
+# en: Unpowered
+graphs.unpowered=Ohne Strom
+# en: Water delivered
+graphs.water_delivered=Wasser geliefert
+# en: Water pollution
+graphs.water_pollution=Wasserverschmutzung
+# en: Water supply
+graphs.water_supply=Wasserangebot
+# en: Workers
+graphs.workers=Arbeiter
+
+# ---- landfill
+# en: Already empty
+landfill.already_empty=Schon leer
+# en: Already emptying one
+landfill.already_emptying_one=Es wird schon eine geleert
+# en: Emptied
+landfill.emptied=Geleert
+# en: Emptied: %s tons for $%s
+landfill.emptied_tons_for=Geleert: %s t für $%s
+# en: Emptying it costs $%s
+landfill.emptying_costs=Leeren kostet $%s
+# en: Emptying in a few seconds
+landfill.emptying_in_few_seconds=Wird in wenigen Sekunden geleert
+# en: Emptying is off (landfill.ini)
+landfill.emptying_off_landfill_ini=Leeren ist aus (landfill.ini)
+# en: " (%d not connected)"
+landfill.not_connected=" (%d ohne Anschluss)"
+# en: Not enough funds: it costs $%s
+landfill.not_enough_funds_costs=Nicht genug Geld: kostet $%s
+# en: Not a landfill
+landfill.not_landfill=Keine Deponie
+# en: Not ready yet: let the game run for a moment
+landfill.not_ready_yet_let=Noch nicht bereit: lass das Spiel kurz laufen
+# en: This landfill: %d%% full
+landfill.this_landfill_full=Diese Deponie: %d%% voll
+# en: %s of %s tons (%s free)
+landfill.tons_free=%s von %s t (%s frei)
+
+# ---- lifespan
+# en: age %s%s
+lifespan.age=Alter %s%s
+# en: Age %s of %s, %s left%s
+lifespan.age_left=Alter %s von %s, noch %s%s
+# en: Age %s, %s left. $%s
+lifespan.age_left_2=Alter %s, noch %s. $%s
+# en: Age %s, %s left
+lifespan.age_left_3=Alter %s, noch %s
+# en: Age %s, %s left%s
+lifespan.age_left_4=Alter %s, noch %s%s
+# en: As new
+lifespan.as_new=Wie neu
+# en: Back
+lifespan.back=Zurück
+# en: Beds (this one):
+lifespan.beds_this_one=Betten (dieses):
+# en: Build cost:
+lifespan.build_cost=Baukosten:
+# en: Declines from:
+lifespan.declines_from=Verfällt ab:
+# en: " (declining)"
+lifespan.declining=" (verfällt)"
+# en: %.40s (%ld, %ld), declining
+lifespan.declining_2=%.40s (%ld, %ld), verfällt
+# en: " (declining)"
+lifespan.declining_3=" (verfällt)"
+# en: " (declining now)"
+lifespan.declining_now=" (verfällt schon)"
+# en: Doctors (this one):
+lifespan.doctors_this_one=Ärzte (dieses):
+# en: Life left:
+lifespan.life_left=Restlebensdauer:
+# en: Lifespan
+lifespan.lifespan=Lebensdauer
+# en: Months overworked:
+lifespan.months_overworked=Monate überlastet:
+# en: New
+lifespan.new=Neu
+# en: No funds ($%s)
+lifespan.no_funds=Kein Geld ($%s)
+# en: Not done
+lifespan.not_done=Nicht möglich
+# en: Output:
+lifespan.output=Leistung:
+# en: . Page %d/%d
+lifespan.page=. Seite %d/%d
+# en: Professors (this one):
+lifespan.professors_this_one=Professoren (diese):
+# en: Restore $%s
+lifespan.restore=Erneuern $%s
+# en: Restore
+lifespan.restore_2=Erneuern
+# en: Restore all ($%s)
+lifespan.restore_all=Alle erneuern ($%s)
+# en: Restored ($%s)
+lifespan.restored=Erneuert ($%s)
+# en: Teachers (this one):
+lifespan.teachers_this_one=Lehrer (diese):
+# en: %d that age. Funds $%s
+lifespan.that_age_funds=%d, die altern. Geld $%s
+# en: %ldy
+lifespan.y=%ld J.
+# en: %ldy %ldm
+lifespan.y_m=%ld J. %ld M.
+
+# ---- rcibars
+# en: Capacity in use: Airport %ld%%, Seaport %ld%%
+rcibars.tooltip=Kapazität in Gebrauch: Flughafen %ld%%, Hafen %ld%%
+
+# ---- resize
+# en: After restarting the game
+resize.after_restarting_game=Nach dem Neustart des Spiels
+# en: Arrow speed
+resize.arrow_speed=Pfeiltempo
+# en: Automatic
+resize.automatic=Automatisch
+# en: Autosave
+resize.autosave=Autospeichern
+# en: Autosave
+resize.autosave_2=Autospeichern
+# en: Back
+resize.back=Zurück
+# en: Build over zones
+resize.build_over_zones=Über Zonen bauen
+# en: Buildings
+resize.buildings=Gebäude
+# en: Camera
+resize.camera=Kamera
+# en: City keeps running while scrolling
+resize.city_keeps_running_while=Stadt läuft beim Scrollen weiter
+# en: Copy ID
+resize.copy_id=ID kopieren
+# en: Drag speed
+resize.drag_speed=Ziehtempo
+# en: Edge scroll
+resize.edge_scroll=Rand-Scrollen
+# en: Empty
+resize.empty=Leeren
+# en: Every:
+resize.every=Alle:
+# en: Extra zoom
+resize.extra_zoom=Extra-Zoom
+# en: FPS limit:
+resize.fps_limit=FPS-Limit:
+# en: Interface
+resize.interface=Oberfläche
+# en: Interface scale:
+resize.interface_scale=Skalierung der Oberfläche:
+# en: Language
+resize.language=Sprache
+# en: Mod options...
+resize.mod_options=Mod-Optionen...
+# en: Mod options
+resize.mod_options_2=Mod-Optionen
+# en: Move
+resize.move=Versetzen
+# en: Move button
+resize.move_button=Knopf Versetzen
+# en: No limit
+resize.no_limit=Kein Limit
+# en: " (on restart)"
+resize.on_restart=" (beim Neustart)"
+# en: Past the map edge
+resize.past_map_edge=Über den Rand
+# en: Performance
+resize.performance=Leistung
+# en: Picker (Ctrl+F)
+resize.picker=Pipette (Strg+F)
+# en: Picker: this has no build tool
+resize.picker_no_build_tool=Pipette: dafür gibt es kein Bauwerkzeug
+# en: Picker: the game has no tool for this
+resize.picker_no_game_tool=Pipette: das Spiel hat dafür kein Werkzeug
+# en: Picker: nothing to pick here
+resize.picker_nothing_here=Pipette: hier gibt es nichts zu kopieren
+# en: Picker: only one per city
+resize.picker_one_per_city=Pipette: nur einer pro Stadt
+# en: Push camera when building
+resize.push_camera_when_building=Kamera beim Bauen schieben
+# en: Save to the original city
+resize.save_original_city=In der Originalstadt speichern
+# en: "Auto   "
+resize.scale_auto="Auto   "
+# en: "Normal   "
+resize.scale_normal="Normal   "
+# en: Show FPS
+resize.show_fps=FPS zeigen
+# en: Show notice
+resize.show_notice=Hinweis zeigen
+# en: Show profiler
+resize.show_profiler=Profiler zeigen
+# en: Smooth
+resize.smooth=Glätten
+# en: Undo (Ctrl+Z)
+resize.undo=Rückgängig (Strg+Z)
+# en: Undo buttons
+resize.undo_buttons=Rückgängig-Knöpfe
+
+# ---- restore
+# en: Already as good as new
+restore.already_as_good_as=Schon wie neu
+# en: The building is gone
+restore.building_gone=Das Gebäude ist weg
+# en: The cost is now $%s: click again
+restore.cost_now_click_again=Die Kosten sind jetzt $%s: noch einmal klicken
+# en: Could not restore
+restore.could_not_restore=Erneuern nicht möglich
+# en: No budget
+restore.no_budget=Kein Budget
+# en: Not enough funds: costs $%s, you have $%s
+restore.not_enough_funds_costs=Nicht genug Geld: kostet $%s, du hast $%s
+# en: Restored for $%s
+restore.restored_for=Erneuert für $%s
+# en: %d restored for $%s
+restore.restored_for_2=%d erneuert für $%s
+# en: This building does not age
+restore.this_building_does_not=Dieses Gebäude altert nicht
+
+# ---- undo
+# en: Redo (Ctrl+Y)
+undo.redo=Wiederholen (Strg+Y)
+# en: Undo (Ctrl+Z)
+undo.undo=Rückgängig (Strg+Z)

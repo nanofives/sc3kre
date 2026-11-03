@@ -1,0 +1,559 @@
+# sc3lang en - English (Res\Text\English-UK)
+# GENERATED from the inline English text in re/harness/src by re/tools/sc3lang.py extract. Do not edit:
+# change the SC3TR(...) / SC3KEY(...) text in the source and run extract again.
+# Format: UTF-8, key=value, "quoted" when the value has leading or trailing spaces, \n escapes.
+
+
+# ---- autosave
+# sc3autosave.c
+autosave.failed=Autosave failed
+# sc3autosave.c
+autosave.saved_at=Autosaved %02d:%02d
+# sc3autosave.c
+autosave.saving=Autosaving...
+
+# ---- bigcity
+# sc3bigcity.c
+bigcity.huge=Huge
+
+# ---- cuadros
+# sc3resize_vdbars.c
+cuadros.aged_places=aged %d-%d / places
+# sc3resize_vdbars.c
+cuadros.aging_plants_capacity_falls=Aging plants: %ld (capacity falls)
+# sc3resize_vdbars.c
+cuadros.buildings_without_water=Buildings without water: %ld of %ld
+# sc3resize_vdbars.c
+cuadros.capacity_produced=capacity / produced
+# sc3resize_vdbars.c
+cuadros.colleges=Colleges
+# sc3resize_vdbars.c
+cuadros.colleges_2=colleges
+# sc3resize_vdbars.c
+cuadros.decimal_sep=.
+# sc3resize_vdbars.c
+cuadros.delivered_supply=delivered / supply
+# sc3resize_vdbars.c
+cuadros.desalination=Desalination
+# sc3resize_vdbars.c
+cuadros.doctors_strike=Doctors %s   Strike: %s
+# sc3resize_vdbars.c
+cuadros.every_building_that_needs=Every building that needs water gets it
+# sc3resize_vdbars.c
+cuadros.hospitals=Hospitals
+# sc3resize_vdbars.c
+cuadros.last_month=last month
+# sc3resize_vdbars.c
+cuadros.libraries=Libraries
+# sc3resize_vdbars.c
+cuadros.mode_bus=Bus
+# sc3resize_vdbars.c
+cuadros.mode_highways=Highways
+# sc3resize_vdbars.c
+cuadros.mode_none=No network
+# sc3resize_vdbars.c
+cuadros.mode_rail=Rail
+# sc3resize_vdbars.c
+cuadros.mode_streets=Streets
+# sc3resize_vdbars.c
+cuadros.mode_subway=Subway
+# sc3resize_vdbars.c
+cuadros.museums=Museums
+# sc3resize_vdbars.c
+cuadros.no=no
+# sc3resize_vdbars.c
+cuadros.no_education_data=No education data
+# sc3resize_vdbars.c
+cuadros.no_health_data=No health data
+# sc3resize_vdbars.c
+cuadros.no_water_layer=No water layer
+# sc3resize_vdbars.c
+cuadros.none_in_city=none in the city
+# sc3resize_vdbars.c
+cuadros.none_in_city_2=none in the city
+# sc3resize_vdbars.c
+cuadros.one_trip_can_use=One trip can use several networks.
+# sc3resize_vdbars.c
+cuadros.output_capacity=output / capacity
+# sc3resize_vdbars.c
+cuadros.patients_beds=patients / beds
+# sc3resize_vdbars.c
+cuadros.plants=Plants (%ld)
+# sc3resize_vdbars.c
+cuadros.pollution=Pollution
+# sc3resize_vdbars.c
+cuadros.pumps=Pumps
+# sc3resize_vdbars.c
+cuadros.pupils_places=pupils / places
+# sc3resize_vdbars.c
+cuadros.red_capacity_short_green=red = capacity short, green = covered
+# sc3resize_vdbars.c
+cuadros.schools=Schools
+# sc3resize_vdbars.c
+cuadros.schools_2=schools
+# sc3resize_vdbars.c
+cuadros.schools_and_colleges=schools and colleges
+# sc3resize_vdbars.c
+cuadros.students_places=students / places
+# sc3resize_vdbars.c
+cuadros.tab_education=Education
+# sc3resize_vdbars.c
+cuadros.tab_garbage=Garbage
+# sc3resize_vdbars.c
+cuadros.tab_health=Health
+# sc3resize_vdbars.c
+cuadros.tab_population=Population
+# sc3resize_vdbars.c
+cuadros.tab_power=Power
+# sc3resize_vdbars.c
+cuadros.tab_transport=Transport
+# sc3resize_vdbars.c
+cuadros.tab_water=Water
+# sc3resize_vdbars.c
+cuadros.teachers_professors_strike=Teachers %s   Professors %s   Strike: %s
+# sc3resize_vdbars.c
+cuadros.this_month=this month
+# sc3resize_vdbars.c
+cuadros.thousands_sep=,
+# sc3resize_vdbars.c
+cuadros.total=Total
+# sc3resize_vdbars.c
+cuadros.treated_produced=treated / produced
+# sc3resize_vdbars.c
+cuadros.trip_counting_off_sc3resize=Trip counting is off (SC3RESIZE_TRIPMODES=0 or sc3cartrips loaded)
+# sc3resize_vdbars.c
+cuadros.trips_using_each_network=Trips using each network (%s, %s trips)
+# sc3resize_vdbars.c
+cuadros.trips_with_no_destination=Trips with no destination (last month): %s
+# sc3resize_vdbars.c
+cuadros.water_pollution=Water pollution: %s
+# sc3resize_vdbars.c
+cuadros.water_sources_this_month=Water sources (this month)
+# sc3resize_vdbars.c
+cuadros.water_towers=Water towers
+# sc3resize_vdbars.c
+cuadros.water_treatment_last_month=Water treatment (last month)
+# sc3resize_vdbars.c
+cuadros.yes=yes
+
+# ---- dataview
+# sc3dataview.c
+dataview.cap_congestion_highways=Highway congestion (V)
+# sc3dataview.c
+dataview.cap_congestion_roads=Road congestion (V)
+# sc3dataview.c
+dataview.cap_congestion_subway=Subway congestion (V: back)
+# sc3dataview.c
+dataview.cap_radiation_back=Radiation (V: back)
+# sc3dataview.c
+dataview.cap_radiation_key=V: radiation
+# sc3dataview.c
+dataview.cap_trips=Trips: green arrives, red does not (V)
+# sc3dataview.c
+dataview.cap_trips_key=V: trips and congestion by network
+# sc3dataview.c
+dataview.college=College
+# sc3dataview.c
+dataview.doctors=Doctors %s
+# sc3dataview.c
+dataview.hospitals=Hospitals
+# sc3dataview.c
+dataview.no=no
+# sc3dataview.c
+dataview.no_places=%s: no places
+# sc3dataview.c
+dataview.no_transit=No transit
+# sc3dataview.c
+dataview.no_trip_data_sc3resize=No trip data (sc3resize TRIPCELLS off)
+# sc3dataview.c
+dataview.no_trips_counted_yet=No trips counted yet
+# sc3dataview.c
+dataview.patients_capacity=Patients / capacity
+# sc3dataview.c
+dataview.professors=Professors %s
+# sc3dataview.c
+dataview.public_transit_map=Public transit map
+# sc3dataview.c
+dataview.pupils_places=Pupils / places
+# sc3dataview.c
+dataview.red_trips_with_no=Red: trips with no bus, rail or subway
+# sc3dataview.c
+dataview.school=School
+# sc3dataview.c
+dataview.strike=Strike: %s
+# sc3dataview.c
+dataview.strike_both=school and college
+# sc3dataview.c
+dataview.strike_college=college
+# sc3dataview.c
+dataview.strike_school=school
+# sc3dataview.c
+dataview.teachers=Teachers %s
+# sc3dataview.c
+dataview.use_transit=Use transit
+# sc3dataview.c
+dataview.used_of_cap="   %s of %s"
+# sc3dataview.c
+dataview.yes=yes
+
+# ---- graphs
+# sc3resize_graphs.c
+graphs.abandoned=Abandoned
+# sc3resize_graphs.c
+graphs.air_pollution=Air pollution
+# sc3resize_graphs.c
+graphs.c_demand=C demand
+# sc3resize_graphs.c
+graphs.c_tax=C tax
+# sc3resize_graphs.c
+graphs.college_capacity=College capacity
+# sc3resize_graphs.c
+graphs.college_students=College students
+# sc3resize_graphs.c
+graphs.debt=Debt
+# sc3resize_graphs.c
+graphs.expenses=Expenses
+# sc3resize_graphs.c
+graphs.exported=Exported
+# sc3resize_graphs.c
+graphs.garbage_made=Garbage made
+# sc3resize_graphs.c
+graphs.grp_abandoned=Abandoned
+# sc3resize_graphs.c
+graphs.grp_air_water_pollut=Air/water pollut.
+# sc3resize_graphs.c
+graphs.grp_colleges=Colleges
+# sc3resize_graphs.c
+graphs.grp_debt_bonds=Debt (bonds)
+# sc3resize_graphs.c
+graphs.grp_garbage=Garbage
+# sc3resize_graphs.c
+graphs.grp_hospitals=Hospitals
+# sc3resize_graphs.c
+graphs.grp_income_expenses=Income/Expenses
+# sc3resize_graphs.c
+graphs.grp_jobs_workers=Jobs/Workers
+# sc3resize_graphs.c
+graphs.grp_power_sup_dem=Power sup./dem.
+# sc3resize_graphs.c
+graphs.grp_rci_demand=RCI demand
+# sc3resize_graphs.c
+graphs.grp_schools=Schools
+# sc3resize_graphs.c
+graphs.grp_tax_rates=Tax rates
+# sc3resize_graphs.c
+graphs.grp_unpowered=Unpowered
+# sc3resize_graphs.c
+graphs.grp_water_sup_deliv=Water sup./deliv.
+# sc3resize_graphs.c
+graphs.hospital_capacity=Hospital capacity
+# sc3resize_graphs.c
+graphs.i_demand=I demand
+# sc3resize_graphs.c
+graphs.i_tax=I tax
+# sc3resize_graphs.c
+graphs.incinerated=Incinerated
+# sc3resize_graphs.c
+graphs.income=Income
+# sc3resize_graphs.c
+graphs.jobs=Jobs
+# sc3resize_graphs.c
+graphs.patients=Patients
+# sc3resize_graphs.c
+graphs.power_demand=Power demand
+# sc3resize_graphs.c
+graphs.power_supply=Power supply
+# sc3resize_graphs.c
+graphs.power_used=Power used
+# sc3resize_graphs.c
+graphs.r_demand=R demand
+# sc3resize_graphs.c
+graphs.r_tax=R tax
+# sc3resize_graphs.c
+graphs.recycled=Recycled
+# sc3resize_graphs.c
+graphs.school_capacity=School capacity
+# sc3resize_graphs.c
+graphs.school_pupils=School pupils
+# sc3resize_graphs.c
+graphs.tab_city=City
+# sc3resize_graphs.c
+graphs.tab_economy=Economy
+# sc3resize_graphs.c
+graphs.tab_environment=Environment
+# sc3resize_graphs.c
+graphs.tab_services=Services
+# sc3resize_graphs.c
+graphs.tab_utilities=Utilities
+# sc3resize_graphs.c
+graphs.to_landfill=To landfill
+# sc3resize_graphs.c
+graphs.unpowered=Unpowered
+# sc3resize_graphs.c
+graphs.water_delivered=Water delivered
+# sc3resize_graphs.c
+graphs.water_pollution=Water pollution
+# sc3resize_graphs.c
+graphs.water_supply=Water supply
+# sc3resize_graphs.c
+graphs.workers=Workers
+
+# ---- landfill
+# sc3landfill.c
+landfill.already_empty=Already empty
+# sc3landfill.c
+landfill.already_emptying_one=Already emptying one
+# sc3landfill.c
+landfill.emptied=Emptied
+# sc3landfill.c
+landfill.emptied_tons_for=Emptied: %s tons for $%s
+# sc3landfill.c
+landfill.emptying_costs=Emptying it costs $%s
+# sc3landfill.c
+landfill.emptying_in_few_seconds=Emptying in a few seconds
+# sc3landfill.c
+landfill.emptying_off_landfill_ini=Emptying is off (landfill.ini)
+# sc3landfill.c
+landfill.not_connected=" (%d not connected)"
+# sc3landfill.c
+landfill.not_enough_funds_costs=Not enough funds: it costs $%s
+# sc3landfill.c
+landfill.not_landfill=Not a landfill
+# sc3landfill.c
+landfill.not_ready_yet_let=Not ready yet: let the game run for a moment
+# sc3landfill.c
+landfill.this_landfill_full=This landfill: %d%% full
+# sc3landfill.c
+landfill.tons_free=%s of %s tons (%s free)
+
+# ---- lifespan
+# sc3resize_restore.c
+lifespan.age=age %s%s
+# sc3resize_restore.c
+lifespan.age_left=Age %s of %s, %s left%s
+# sc3resize_restore.c
+lifespan.age_left_2=Age %s, %s left. $%s
+# sc3resize_restore.c
+lifespan.age_left_3=Age %s, %s left
+# sc3resize_restore.c
+lifespan.age_left_4=Age %s, %s left%s
+# sc3resize_restore.c
+lifespan.as_new=As new
+# sc3resize_restore.c
+lifespan.back=Back
+# sc3resize_restore.c
+lifespan.beds_this_one=Beds (this one):
+# sc3resize_restore.c
+lifespan.build_cost=Build cost:
+# sc3resize_restore.c
+lifespan.cannot_be_rebuilt=Cannot be rebuilt
+# sc3resize_restore.c
+lifespan.cannot_build_there=Cannot build there
+# sc3resize_restore.c
+lifespan.date_damaged_free_repair=Date damaged: free repair
+# sc3resize_restore.c
+lifespan.dead_date_damaged_free=Dead (date damaged). Free
+# sc3resize_restore.c
+lifespan.dead_rebuild=Dead. Rebuild: $%s
+# sc3resize_restore.c
+lifespan.declines_from=Declines from:
+# sc3resize_restore.c
+lifespan.declining=" (declining)"
+# sc3resize_restore.c
+lifespan.declining_2=%.40s (%ld, %ld), declining
+# sc3resize_restore.c
+lifespan.declining_3=" (declining)"
+# sc3resize_restore.c
+lifespan.declining_now=" (declining now)"
+# sc3resize_restore.c
+lifespan.doctors_this_one=Doctors (this one):
+# sc3resize_restore.c
+lifespan.end_its_life_can=End of its life: it can be rebuilt
+# sc3resize_restore.c
+lifespan.gone=It is gone
+# sc3resize_restore.c
+lifespan.life_left=Life left:
+# sc3resize_restore.c
+lifespan.lifespan=Lifespan
+# sc3resize_restore.c
+lifespan.lifespan_2=Lifespan
+# sc3resize_restore.c
+lifespan.months_overworked=Months overworked:
+# sc3resize_restore.c
+lifespan.move_in_progress=A move is in progress
+# sc3resize_restore.c
+lifespan.new=New
+# sc3resize_restore.c
+lifespan.next=Next
+# sc3resize_restore.c
+lifespan.no_funds=No funds ($%s)
+# sc3resize_restore.c
+lifespan.no_longer_rubble=No longer rubble
+# sc3resize_restore.c
+lifespan.not_available_mover_off=Not available (Mover is off)
+# sc3resize_restore.c
+lifespan.not_done=Not done
+# sc3resize_restore.c
+lifespan.not_enough_funds_costs=Not enough funds: costs $%s, you have $%s
+# sc3resize_restore.c
+lifespan.output=Output:
+# sc3resize_restore.c
+lifespan.page=. Page %d/%d
+# sc3resize_restore.c
+lifespan.previous=Previous
+# sc3resize_restore.c
+lifespan.professors_this_one=Professors (this one):
+# sc3resize_restore.c
+lifespan.rebuild=Rebuild $%s
+# sc3resize_restore.c
+lifespan.rebuild_2=Rebuild
+# sc3resize_restore.c
+lifespan.rebuild_free=Rebuild (free)
+# sc3resize_restore.c
+lifespan.rebuilt=Rebuilt ($%s)
+# sc3resize_restore.c
+lifespan.rebuilt_for=Rebuilt for $%s
+# sc3resize_restore.c
+lifespan.rebuilt_for_free=Rebuilt for free
+# sc3resize_restore.c
+lifespan.repair=Repair
+# sc3resize_restore.c
+lifespan.repair_free=Repair (free)
+# sc3resize_restore.c
+lifespan.restore=Restore $%s
+# sc3resize_restore.c
+lifespan.restore_2=Restore
+# sc3resize_restore.c
+lifespan.restore_all=Restore all ($%s)
+# sc3resize_restore.c
+lifespan.restored=Restored ($%s)
+# sc3resize_restore.c
+lifespan.teachers_this_one=Teachers (this one):
+# sc3resize_restore.c
+lifespan.that_age_dead=%d that age, %d dead. $%s
+# sc3resize_restore.c
+lifespan.that_age_funds=%d that age. Funds $%s
+# sc3resize_restore.c
+lifespan.y=%ldy
+# sc3resize_restore.c
+lifespan.y_m=%ldy %ldm
+
+# ---- rcibars
+# sc3resize_rcibars.c
+rcibars.tooltip=Capacity in use: Airport %ld%%, Seaport %ld%%
+
+# ---- resize
+# sc3resize.c
+resize.after_restarting_game=After restarting the game
+# sc3resize.c
+resize.arrow_speed=Arrow speed
+# sc3resize.c
+resize.automatic=Automatic
+# sc3resize.c
+resize.autosave=Autosave
+# sc3resize.c
+resize.autosave_2=Autosave
+# sc3resize.c
+resize.back=Back
+# sc3resize.c
+resize.build_over_zones=Build over zones
+# sc3resize.c
+resize.buildings=Buildings
+# sc3resize.c
+resize.camera=Camera
+# sc3resize.c
+resize.city_keeps_running_while=City keeps running while scrolling
+# sc3resize.c
+resize.copy_id=Copy ID
+# sc3resize.c
+resize.drag_speed=Drag speed
+# sc3resize.c
+resize.edge_scroll=Edge scroll
+# sc3resize.c
+resize.empty=Empty
+# sc3resize.c
+resize.every=Every:
+# sc3resize.c
+resize.extra_zoom=Extra zoom
+# sc3resize.c
+resize.fps_limit=FPS limit:
+# sc3resize.c
+resize.interface=Interface
+# sc3resize.c
+resize.interface_scale=Interface scale:
+# sc3resize.c
+resize.language=Language
+# sc3resize.c
+resize.mod_options=Mod options...
+# sc3resize.c
+resize.mod_options_2=Mod options
+# sc3resize.c
+resize.move=Move
+# sc3resize.c
+resize.move_button=Move button
+# sc3resize.c
+resize.no_limit=No limit
+# sc3resize.c
+resize.on_restart=" (on restart)"
+# sc3resize.c
+resize.past_map_edge=Past the map edge
+# sc3resize.c
+resize.performance=Performance
+# sc3resize.c
+resize.picker=Picker (Ctrl+F)
+# sc3resize.c
+resize.picker_no_build_tool=Picker: this has no build tool
+# sc3resize.c
+resize.picker_no_game_tool=Picker: the game has no tool for this
+# sc3resize.c
+resize.picker_nothing_here=Picker: nothing to pick here
+# sc3resize.c
+resize.picker_one_per_city=Picker: only one per city
+# sc3resize.c
+resize.push_camera_when_building=Push camera when building
+# sc3resize.c
+resize.save_original_city=Save to the original city
+# sc3resize.c
+resize.scale_auto="Auto   "
+# sc3resize.c
+resize.scale_normal="Normal   "
+# sc3resize.c
+resize.show_fps=Show FPS
+# sc3resize.c
+resize.show_notice=Show notice
+# sc3resize.c
+resize.show_profiler=Show profiler
+# sc3resize.c
+resize.smooth=Smooth
+# sc3resize.c
+resize.undo=Undo (Ctrl+Z)
+# sc3resize.c
+resize.undo_buttons=Undo buttons
+
+# ---- restore
+# sc3restore.c
+restore.already_as_good_as=Already as good as new
+# sc3restore.c
+restore.building_gone=The building is gone
+# sc3restore.c
+restore.cost_now_click_again=The cost is now $%s: click again
+# sc3restore.c
+restore.could_not_restore=Could not restore
+# sc3restore.c
+restore.date_repaired_free=Date repaired, free
+# sc3restore.c
+restore.no_budget=No budget
+# sc3restore.c
+restore.not_enough_funds_costs=Not enough funds: costs $%s, you have $%s
+# sc3restore.c
+restore.restored_for=Restored for $%s
+# sc3restore.c
+restore.restored_for_2=%d restored for $%s
+# sc3restore.c
+restore.this_building_does_not=This building does not age
+
+# ---- undo
+# sc3undo.c
+undo.redo=Redo (Ctrl+Y)
+# sc3undo.c
+undo.undo=Undo (Ctrl+Z)
