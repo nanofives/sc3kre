@@ -614,3 +614,11 @@ placehints.st_trips=%ld ritten per maand beginnen hier, %ld met ov (groen)
 placehints.st_trips_load=%ld ritten sinds het laden beginnen hier, %ld met ov (groen)
 # en: %s: walk R %d C %d I %d cells  |  %s  |  %s
 placehints.station=%s: lopen R %d C %d I %d vakken  |  %s  |  %s
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: the rail leads to no other station and no map edge: 0 trips (red)
+placehints.st_nodest_rail=het spoor leidt naar geen ander station en geen rand: 0 ritten (rood)
+# en: neither rail nor subway leads to another station or a map edge: 0 trips (red)
+placehints.st_nodest_railsub=spoor noch tunnel leidt naar een ander station of de rand: 0 ritten (rood)
+# en: the subway leads to no other station and no map edge: 0 trips (red)
+placehints.st_nodest_subway=de tunnel leidt naar geen ander station en geen rand: 0 ritten (rood)

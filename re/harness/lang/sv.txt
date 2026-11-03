@@ -614,3 +614,11 @@ placehints.st_trips=%ld resor i månaden börjar här, %ld med kollektivtrafik (
 placehints.st_trips_load=%ld resor sedan laddningen börjar här, %ld med kollektivtrafik (grön)
 # en: %s: walk R %d C %d I %d cells  |  %s  |  %s
 placehints.station=%s: till fots R %d C %d I %d rutor  |  %s  |  %s
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: the rail leads to no other station and no map edge: 0 trips (red)
+placehints.st_nodest_rail=spåret leder inte till någon annan station eller kanten: 0 resor (röd)
+# en: neither rail nor subway leads to another station or a map edge: 0 trips (red)
+placehints.st_nodest_railsub=varken spår eller tunnel leder till en annan station eller kanten: 0 resor (röd)
+# en: the subway leads to no other station and no map edge: 0 trips (red)
+placehints.st_nodest_subway=tunneln leder inte till någon annan station eller kanten: 0 resor (röd)

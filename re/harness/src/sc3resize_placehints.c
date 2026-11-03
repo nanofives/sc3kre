@@ -90,6 +90,119 @@ static DWORD *g_ph_tipw;            /* SC3U 0x0044314a: the 0x100 px width limit
 #define PH_TIPW 0x300               /* while a hint is shown: one line up to 768 px instead of "..." at 256 */
 static void ph_tipw(DWORD w) { if (g_ph_tipw && *g_ph_tipw != w) InterlockedExchange((LONG volatile *)g_ph_tipw, (LONG)w); }
 
+/* ------------------------------------------------------------------------------------- TIPLINES (tripmonth 2026-11-03) */
+/* Owner: "when pressing shift if the text is too long put it in two or 3 lines". The cost label is the game's tooltip
+ * window (SC3U class 0x4d3bcc), drawn by FUN_00443331 [CONFIRMED @ SC3U 0x00443331, disassembly]:
+ *   font = w+0xa8, raster = w+0xb0, text = [w+0x48, w+0x4c), pads w+0xac (x) / w+0xad (y), colour w+0xd4;
+ *   font vt+0x58(str, len, &rect w+0xb4) measures (rect x0 y0 x1 y1), the pads are added, the size is clamped to the
+ *   raster (vt+0x38 width, vt+0x3c height), font vt+0x88(raster, padx, pady, str, len, colour) draws it in ONE line, and
+ *   the window takes that size, placed by the anchor box (TIPCURSOR) and kept on screen.
+ *   The raster is made one font line tall: raster vt+0xc(w, font vt+0x60(0) + 2 pady) in FUN_00442e88.
+ * The raster height is made 3 lines + 2 pady at creation (detour of the height expression at 0x00442f06; a live
+ * raster does not resize through vt+0xc, measured: the window stayed one line tall), like the 0x300 width at
+ * 0x00442f16: every tooltip window still sizes itself to its own text, so a stock one looks the same.
+ * When the text holds '\n' (only the hints put one there, at most 2), the wrap runs the stock body with the font object pointed at a copy of its vtable whose measure and draw
+ * slots take the text line by line (one stock call per line, lines stacked by the first line's height). Every other
+ * tooltip goes straight to the stock body. The window then sizes, places and scales (COSTLABEL) as before.
+ * SC3RESIZE_PLACEHINTS_LINES=0: one line, as before. */
+static int    g_ph_lines = 1;
+static void  *g_ph_tip_orig;
+static DWORD  g_ph_fvt[128], g_ph_fvt_src, g_ph_fmeas, g_ph_fdraw;
+static LONG   g_ph_flh;               /* line height from the last multi-line measure */
+
+static DWORD __fastcall ph_fmeasure(BYTE *font, void *edx, const char *s, DWORD n, LONG *r) {
+    DWORD a[3], i, i0 = 0, rv = 0;
+    LONG w = 0, lh = 0, nl = 0, x0 = 0, y0 = 0;
+    (void)edx;
+    for (i = 0; i <= n; i++) {
+        LONG q[4];
+        if (i < n && s[i] != '\n') continue;
+        q[0] = q[1] = q[2] = q[3] = 0;
+        a[0] = (DWORD)(s + i0); a[1] = i - i0; a[2] = (DWORD)q;
+        rv = rz_thiscall_ret(font, (void *)g_ph_fmeas, a, 3);
+        if (!nl) { x0 = q[0]; y0 = q[1]; lh = q[3] - q[1]; }
+        if (q[2] - q[0] > w) w = q[2] - q[0];
+        nl++;
+        i0 = i + 1;
+    }
+    if (lh <= 0) lh = 12;
+    g_ph_flh = lh;
+    if (r) { r[0] = x0; r[1] = y0; r[2] = x0 + w; r[3] = y0 + lh * nl; }
+    return rv;
+}
+static DWORD __fastcall ph_fdraw(BYTE *font, void *edx, void *ras, LONG px, LONG py, const char *s, DWORD n, DWORD col) {
+    DWORD a[6], i, i0 = 0, rv = 0;
+    LONG k = 0;
+    (void)edx;
+    for (i = 0; i <= n; i++) {
+        if (i < n && s[i] != '\n') continue;
+        a[0] = (DWORD)ras; a[1] = (DWORD)px; a[2] = (DWORD)(py + k * g_ph_flh); a[3] = (DWORD)(s + i0); a[4] = i - i0; a[5] = col;
+        if (i > i0) rv = rz_thiscall_ret(font, (void *)g_ph_fdraw, a, 6);
+        k++;
+        i0 = i + 1;
+    }
+    return rv;
+}
+static DWORD __fastcall ph_tipdraw(BYTE *w) {
+    BYTE *font = NULL, *ras = NULL;
+    DWORD *vt = NULL, rv;
+    int nl = 0;
+    __try {
+        const char *s = *(const char **)(w + 0x48);
+        DWORD n = *(DWORD *)(w + 0x4c) - (DWORD)s, i;
+        font = *(BYTE **)(w + 0xa8); ras = *(BYTE **)(w + 0xb0);
+        if (g_ph && g_ph_lines && s && font && ras && n < 2048 && !IsBadReadPtr(s, n))
+            for (i = 0; i < n; i++) if (s[i] == '\n') nl++;
+        if (nl) {
+            vt = *(DWORD **)font;
+            if (nl > 2 || IsBadReadPtr(vt, sizeof(g_ph_fvt))) nl = 0;
+            else {
+                if (g_ph_fvt_src != (DWORD)vt) {
+                    memcpy(g_ph_fvt, vt, sizeof(g_ph_fvt));
+                    g_ph_fmeas = vt[0x58 / 4]; g_ph_fdraw = vt[0x88 / 4];
+                    g_ph_fvt[0x58 / 4] = (DWORD)ph_fmeasure; g_ph_fvt[0x88 / 4] = (DWORD)ph_fdraw;
+                    g_ph_fvt_src = (DWORD)vt;
+                }
+                *(DWORD **)font = g_ph_fvt;
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { nl = 0; }
+    rv = rz_thiscall_ret(w, g_ph_tip_orig, NULL, 0);
+    if (nl && vt) *(DWORD **)font = vt;
+    return rv;
+}
+
+/* the hint as 1 to 3 lines at the "  |  " groups: under 70 characters one line, under 140 two, else three, with the
+   breaks that make the longest line shortest (groups are few, so every split is tried). */
+static int ph_span(const int *gl, int a, int b) { int n = 0, k; for (k = a; k < b; k++) n += gl[k]; return n + 5 * (b - a - 1); }
+static void ph_wrap(char *buf) {
+    static const char sep[] = "  |  ";
+    char out[700], *g[24];
+    int ng = 0, i, j, L = lstrlenA(buf), lines, gl[24], best = 0x7fffffff, bi = -1, bj = -1;
+    char *p = buf, *q;
+    if (L >= (int)sizeof(out) - 8) return;
+    lines = L <= 70 ? 1 : L <= 140 ? 2 : 3;
+    if (lines == 1) return;
+    while (ng < 24) { g[ng++] = p; q = strstr(p, sep); if (!q) break; *q = 0; p = q + 5; }
+    if (ng < lines) lines = ng;
+    for (i = 0; i < ng; i++) gl[i] = lstrlenA(g[i]);
+    if (lines >= 2) for (i = 1; i < ng; i++) {        /* first break before group i */
+        if (lines == 2) {
+            int m = max(ph_span(gl, 0, i), ph_span(gl, i, ng));
+            if (m < best) { best = m; bi = i; bj = -1; }
+        } else for (j = i + 1; j < ng; j++) {        /* second break before group j */
+            int m = max(max(ph_span(gl, 0, i), ph_span(gl, i, j)), ph_span(gl, j, ng));
+            if (m < best) { best = m; bi = i; bj = j; }
+        }
+    }
+    out[0] = 0;
+    for (i = 0; i < ng; i++) {
+        if (i) lstrcatA(out, (i == bi || i == bj) ? "\n" : sep);
+        lstrcatA(out, g[i]);
+    }
+    lstrcpyA(buf, out);
+}
+
 /* ---------------------------------------------------------------------------------------------------- label */
 typedef void *(__cdecl *PH_FN0)(void);
 static DWORD __fastcall ph_label(BYTE *view, void *edx, DWORD show, LONG cost, DWORD nofunds) {
@@ -117,10 +230,11 @@ static DWORD __fastcall ph_label(BYTE *view, void *edx, DWORD show, LONG cost, D
                 buf[n] = 0;
                 lstrcatA(buf, n ? "  |  " : "");
                 lstrcpynA(buf + lstrlenA(buf), g_ph_hint, (int)(sizeof(buf) - lstrlenA(buf)));
+                if (g_ph_lines && g_ph_tip_orig) ph_wrap(buf);   /* TIPLINES: 2 or 3 lines at the "|" groups */
                 ho_v(s, 0x10, 1, (DWORD)buf, 0, 0, 0, 0);
                 *(LONG *)(view + 0x130) = cost;
                 g_ph_lbl_dirty = 1;
-                ph_tipw(PH_TIPW);
+                ph_tipw(strchr(buf, '\n') ? 0x2000 : PH_TIPW);   /* the fit test measures the text as one line */
             }
         } else if (g_ph_lbl_dirty) {
             *(LONG *)(view + 0x130) = cost + 1;   /* differs: the stock body formats the plain cost again */
@@ -475,10 +589,12 @@ static DWORD __fastcall ph_zprev(BYTE *tool, void *edx, LONG *rect, DWORD out) {
  *    The rule [CONFIRMED @ SimTransit 0x1000755e, start node type 0x80]: a trip's start scans its lot rect grown by r,
  *    corners skipped, r = layer+0xc5 Res / +0xc6 Com / +0xc7 Ind / +0xc8 other (STTraffic TripMaxDistanceToRoad 4 / 3 /
  *    5 / 5, +1 with the shuttle ordinance 0x100087fd). A cell with flag 0x10 in the layer+0x5c grid is a station
- *    candidate, and one below DAT_1001f0c0 sets the keep value to 0xff, so it beats every road. The drawn area uses the
- *    Res reach (exact for 1-cell lots; a bigger lot reaches when any of its cells is inside); the label names all three.
+ *    candidate, and one below DAT_1001f0c0 sets the keep value to 0xff, so it beats every road. The drawn area is exact
+ *    per lot and class since tripmonth (ph_station); the label names the three reaches.
  *    Trips: TRIPCELLS (sc3resize_vdbars.c), per origin cell, all / bus-rail-subway, months faded by 1/8.
- *  - always (like the stock red refusal): footprint red when no neighbour can take the trip on, ph_station_links.
+ *  - always (like the stock red refusal): footprint red when no neighbour can take the trip on (ph_station_links), or
+ *    since tripmonth when the track it touches leads to no map edge and no other station with lots in reach
+ *    (ph_station_dest, the same rule as stationwarn's sw_flood).
  * Station agent type ids: measured in the lab (plop tool type log), SC3RESIZE_PLACEHINTS_STATIONS=bus,rail,subway,railsub
  * overrides. SC3RESIZE_PLACEHINTS_STATION=0: stations get no hint (stock preview). */
 #define PH_ST_LAYER 0x1fdb8           /* SimTransit traffic layer singleton (sc3dataview ST_LAYER) */
@@ -530,29 +646,142 @@ static int ph_station_kind(DWORD type) {
     return -1;
 }
 
-/* the station preview, called from ph_bprev after the stock footprint fill. Footprint cells fx0..fx1, fz0..fz1. */
+/* ---- tripmonth 2026-11-03 (orchestrator: "somewhere to go" + the exact per-class reach) -------------------------- */
+/* the four reach grids are bit rows: object +0x10 = row array by x, one DWORD per 32 z (as stationwarn sw_ingrid,
+   layout of the tried/ok grids +0x7c/+0x80). T+0x84 / +0x88 / +0x8c = every R / C / I lot rect grown by +0xc5 / +0xc6 /
+   +0xc7, no corner cut (FUN_1000559e) [CONFIRMED @ SimTransit 0x1000559e]: the arrival test for those trip kinds. */
+static int ph_ingrid(BYTE *tl, int off, LONG x, LONG z) {
+    BYTE *g = *(BYTE **)(tl + off);
+    DWORD **rows;
+    if (!g || IsBadReadPtr(g, 0x14) || !(rows = *(DWORD ***)(g + 0x10))) return 0;
+    return (rows[x][z >> 5] >> (z & 31)) & 1;
+}
+static int ph_inreach(BYTE *tl, LONG x, LONG z) { return ph_ingrid(tl, 0x84, x, z) || ph_ingrid(tl, 0x88, x, z) || ph_ingrid(tl, 0x8c, x, z); }
+
+/* the occupant at a cell (SimTransit's occupant manager T+0x94 vt+0x7c, AddRef'd: release with vt+0x08) and its rect
+   (occ vt+0xcc, 6 longs << 8, x1 / z1 inclusive), as FUN_1000559e and stationwarn read them */
+static void *ph_tocc(BYTE *tl, LONG x, LONG z, LONG *r4) {
+    BYTE *mgr = *(BYTE **)(tl + 0x94);
+    void *o = NULL;
+    LONG r[6];
+    if (!mgr || !(ho_v(mgr, 0x7c, 3, (DWORD)x, (DWORD)z, (DWORD)&o, 0, 0) & 0xff) || !o) return NULL;
+    r[0] = r[1] = r[3] = r[4] = 0x7fffffff; r[2] = r[5] = 0;
+    ho_v(o, 0xcc, 1, (DWORD)r, 0, 0, 0, 0);
+    if (r[0] == 0x7fffffff) { ho_v(o, 0x08, 0, 0, 0, 0, 0, 0); return NULL; }
+    r4[0] = r[0] >> 8; r4[1] = r[1] >> 8; r4[2] = r[3] >> 8; r4[3] = r[4] >> 8;
+    return o;
+}
+typedef DWORD (__fastcall *PH_KINDFN)(BYTE *layer, void *edx, void *occ, BYTE *kind);   /* thiscall on the layer */
+
+/* "somewhere to go" (SHARED RULE with stationwarn sc3resize_stationwarn.c sw_flood): a rail (net 0, bit 4) or subway
+ * (net 1, bit 8) trip arrives only on a map-edge connection cell 0x1000 / 0x2000 (FUN_10008a94), or by stepping into
+ * another station cell (rail: 0x10 with 4; subway: 0x10 with 0x20, or with 8 and without 1 / 4) whose rect lies in a
+ * reach grid [CONFIRMED @ SimTransit 0x10008a94, 0x1000755e types 4 / 8]. Track nodes spread over the 4-neighbour cells
+ * of their own bit. Returns 1 when a component touching the footprint's ring reaches one of those, or the ring holds a
+ * bus stop (0x10 | 1: a station hands the trip to it, 0x10007fe9). Flood buffers: one byte + one DWORD per cell, kept. */
+static BYTE  *g_ph_fv;
+static DWORD *g_ph_fq;
+static LONG   g_ph_fn;
+static int ph_track(WORD f, int net) { return !(f & 0x10) && (f & (net ? 8 : 4)); }
+static int ph_entry(WORD f, int net) {
+    if (!(f & 0x10)) return 0;
+    if (!net) return (f & 4) != 0;
+    return (f & 0x20) || ((f & 8) && !(f & 5));
+}
+static int ph_station_dest(BYTE *tl, int kind, LONG x0, LONG z0, LONG x1, LONG z1) {
+    LONG W = *(int *)(tl + 0x14), H = *(int *)(tl + 0x18), x, z, qt = 0, i;
+    int net, ok = 0;
+    if (kind == 0) return 1;                      /* a bus stop arrives like a road (0x41, FUN_10008a94) */
+    if (W * H > g_ph_fn) {
+        if (g_ph_fv) { VirtualFree(g_ph_fv, 0, MEM_RELEASE); VirtualFree(g_ph_fq, 0, MEM_RELEASE); }
+        g_ph_fv = (BYTE *)VirtualAlloc(NULL, (SIZE_T)W * H, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        g_ph_fq = (DWORD *)VirtualAlloc(NULL, (SIZE_T)W * H * 4, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        g_ph_fn = g_ph_fv && g_ph_fq ? W * H : 0;
+        if (!g_ph_fn) return 1;                   /* no memory: say nothing rather than a false red */
+    }
+    for (net = 0; net < 2 && !ok; net++) {
+        WORD edge = net ? 0x2000 : 0x1000;
+        LONG qh = 0;
+        if ((kind == 1 && net) || (kind == 2 && !net)) continue;
+        qt = 0;
+        for (x = x0 - 1; x <= x1 + 1; x++) for (z = z0 - 1; z <= z1 + 1; z++) {   /* the ring: seeds and bus stops */
+            WORD f;
+            if ((x == x0 - 1 || x == x1 + 1) && (z == z0 - 1 || z == z1 + 1)) continue;
+            if (x >= x0 && x <= x1 && z >= z0 && z <= z1) continue;
+            if (x < 0 || z < 0 || x >= W || z >= H) continue;
+            f = ph_tflags(tl, x, z);
+            if ((f & 0x11) == 0x11) ok = 1;
+            if (ph_track(f, net) && !g_ph_fv[x * H + z]) { g_ph_fv[x * H + z] = 1; g_ph_fq[qt++] = (DWORD)(x * H + z); }
+        }
+        while (qh < qt && !ok) {
+            DWORD p = g_ph_fq[qh++];
+            LONG cx = (LONG)(p / H), cz = (LONG)(p % H), k;
+            if (ph_tflags(tl, cx, cz) & edge) { ok = 1; break; }
+            for (k = 0; k < 4 && !ok; k++) {
+                LONG nx = cx + (k == 0 ? -1 : k == 1 ? 1 : 0), nz = cz + (k == 2 ? -1 : k == 3 ? 1 : 0), r4[4], a, b;
+                WORD f;
+                void *o;
+                if (nx < 0 || nz < 0 || nx >= W || nz >= H) continue;
+                f = ph_tflags(tl, nx, nz);
+                if (ph_track(f, net)) {
+                    if (!g_ph_fv[nx * H + nz]) { g_ph_fv[nx * H + nz] = 1; g_ph_fq[qt++] = (DWORD)(nx * H + nz); }
+                } else if (ph_entry(f, net) && (nx < x0 || nx > x1 || nz < z0 || nz > z1) && (o = ph_tocc(tl, nx, nz, r4))) {
+                    ho_v(o, 0x08, 0, 0, 0, 0, 0, 0);
+                    if (r4[0] < 0 || r4[1] < 0 || r4[2] >= W || r4[3] >= H || r4[2] - r4[0] > 15 || r4[3] - r4[1] > 15) continue;
+                    for (a = r4[0]; a <= r4[2] && !ok; a++) for (b = r4[1]; b <= r4[3] && !ok; b++) if (ph_inreach(tl, a, b)) ok = 1;
+                }
+            }
+        }
+        for (i = 0; i < qt; i++) g_ph_fv[g_ph_fq[i]] = 0;   /* clear only what was marked */
+    }
+    return ok;
+}
+
+/* the station preview, called from ph_bprev after the stock footprint fill. Footprint cells fx0..fx1, fz0..fz1.
+ * Since tripmonth the area is exact per lot: an R / C / I lot (class from FUN_100057f6, the call the trip start and
+ * FUN_1000559e make) is drawn when its rect grown by its own reach (+0xc5 / +0xc6 / +0xc7), corners skipped, holds a
+ * footprint cell, which is the start scan's test for that lot [CONFIRMED @ SimTransit 0x1000755e 0x80 branch]. Cells
+ * without an R / C / I lot (roads, civic buildings, empty land) start no counted trips and are not drawn. */
 static void ph_station(BYTE *tool, void *hl, int kind, LONG fx0, LONG fz0, LONG fx1, LONG fz1) {
     BYTE *tl = ph_tlayer();
-    char t[400], tr[160], lk[96];
-    int es = ho_spanish(), draw = ph_shift(), links, r, rc, ri;
-    LONG W, H, x, z, hx0, hz0, hx1, hz1, cells = 0, tcells = 0;
+    char t[400], tr[160], lk[120];
+    int es = ho_spanish(), draw = ph_shift(), links, dest, rr[3], rmax, k;
+    LONG W, H, x, z, hx0, hz0, hx1, hz1, cells = 0, tcells = 0, lots = 0;
     double sn = 0, st = 0, cn = 0, ct = 0;
+    void *last = NULL;
+    int lastin = 0;
     if (!tl) { ph_sethint(tool, ""); return; }
     W = *(int *)(tl + 0x14); H = *(int *)(tl + 0x18);
-    r = tl[0xc5]; rc = tl[0xc6]; ri = tl[0xc7];
-    if (r < 1 || r > 16) r = 4;
+    for (k = 0; k < 3; k++) { rr[k] = tl[0xc5 + k]; if (rr[k] > 16) rr[k] = 16; }
+    rmax = rr[0] > rr[1] ? rr[0] : rr[1]; if (rr[2] > rmax) rmax = rr[2];
     links = ph_station_links(tl, kind, fx0, fz0, fx1, fz1);
-    if (!links && !tool[0x38] && !tool[0x39] && !tool[0x3a]) {   /* dead here: footprint red, Shift or not */
+    dest = links ? ph_station_dest(tl, kind, fx0, fz0, fx1, fz1) : 0;
+    if ((!links || !dest) && !tool[0x38] && !tool[0x39] && !tool[0x3a]) {   /* dead here: footprint red, Shift or not */
         for (x = fx0; x <= fx1; x++) for (z = fz0; z <= fz1; z++) ph_mark(hl, x, z, 0x24);
         ph_push(hl, fx0, fz0, fx1, fz1);
     }
-    hx0 = fx0 - r < 0 ? 0 : fx0 - r; hz0 = fz0 - r < 0 ? 0 : fz0 - r;
-    hx1 = fx1 + r > W - 1 ? W - 1 : fx1 + r; hz1 = fz1 + r > H - 1 ? H - 1 : fz1 + r;
+    hx0 = fx0 - rmax < 0 ? 0 : fx0 - rmax; hz0 = fz0 - rmax < 0 ? 0 : fz0 - rmax;
+    hx1 = fx1 + rmax > W - 1 ? W - 1 : fx1 + rmax; hz1 = fz1 + rmax > H - 1 ? H - 1 : fz1 + rmax;
     for (x = hx0; x <= hx1; x++) for (z = hz0; z <= hz1; z++) {
-        LONG dx = x < fx0 ? fx0 - x : x > fx1 ? x - fx1 : 0, dz = z < fz0 ? fz0 - z : z > fz1 ? z - fz1 : 0;
-        int tused = 0;
-        if (!dx && !dz) continue;                                  /* footprint: the stock preview */
-        if (dx > r || dz > r || (dx == r && dz == r)) continue;    /* outside the reach, or a skipped corner */
+        LONG r4[4];
+        void *o;
+        int in = 0, tused = 0;
+        if (x >= fx0 && x <= fx1 && z >= fz0 && z <= fz1) continue;   /* footprint: the stock preview */
+        if (!(o = ph_tocc(tl, x, z, r4))) continue;
+        if (o == last) in = lastin;                                    /* the same lot as the cell before */
+        else {
+            BYTE c = 0xee;
+            if ((((PH_KINDFN)(g_ph_st + 0x57f6))(tl, NULL, o, &c) & 0xff) && c <= 2) {
+                LONG r = rr[c];
+                LONG dx = fx1 < r4[0] ? r4[0] - fx1 : fx0 > r4[2] ? fx0 - r4[2] : 0;
+                LONG dz = fz1 < r4[1] ? r4[1] - fz1 : fz0 > r4[3] ? fz0 - r4[3] : 0;
+                in = dx <= r && dz <= r && !(dx == r && dz == r);
+                if (in) lots++;
+            }
+            last = o; lastin = in;
+        }
+        ho_v(o, 0x08, 0, 0, 0, 0, 0, 0);   /* compared by address only from here (the lot stays on the map) */
+        if (!in) continue;
         cells++;
         if (g_tc_hist && g_tc_cur && x < TC_S && z < TC_S) {
             DWORD h = g_tc_hist[x * TC_S + z], c = g_tc_cur[x * TC_S + z];
@@ -564,40 +793,49 @@ static void ph_station(BYTE *tool, void *hl, int kind, LONG fx0, LONG fz0, LONG 
     }
     if (draw && cells) ph_push(hl, hx0, hz0, hx1, hz1);
     /* trips a month: hist holds each closed month x16, older ones faded by 1/8, so after k months the weights sum to
-       128 (1 - (7/8)^k). TRIPCELLS closes a month only from GRAPHNEW's budget hook, which runs once the Graficas page
-       has been opened (sc3resize_graphs.c gn_month, g_gn_if[0]); until then it holds only the count since the load. */
+       128 (1 - (7/8)^k). Months close from the budget month hook (sc3resize_graphs.c gn_month, from the city load since
+       tripmonth); before the first close there is only the count since the load. */
     if (!g_tc_cur)
         lstrcpyA(tr, SC3TR(es, "placehints.st_notrips", "sin datos de viajes (TRIPCELLS apagado)", "no trip data (TRIPCELLS off)"));
     else if (g_tc_months > 0) {
         double w, f = 1;
-        LONG k;
-        for (k = 0; k < g_tc_months && k < 64; k++) f *= 0.875;
+        LONG m;
+        for (m = 0; m < g_tc_months && m < 64; m++) f *= 0.875;
         w = 128.0 * (1.0 - f);
         wsprintfA(tr, SC3TR(es, "placehints.st_trips", "%ld viajes al mes salen de aqu\xed, %ld en transporte (verde)",
                             "%ld trips a month start here, %ld by transit (green)"), (LONG)(sn / w + 0.5), (LONG)(st / w + 0.5));
     } else
         wsprintfA(tr, SC3TR(es, "placehints.st_trips_load", "%ld viajes desde la carga salen de aqu\xed, %ld en transporte (verde)",
                             "%ld trips since the city loaded start here, %ld by transit (green)"), (LONG)cn, (LONG)ct);
-    if (links)
+    if (links && dest)
         wsprintfA(lk, SC3TR(es, "placehints.st_links", "conecta por %d celdas", "connects through %d cells"), links);
+    else if (links && kind == 2)
+        lstrcpyA(lk, SC3TR(es, "placehints.st_nodest_subway", "el t\xfanel no lleva a otra estaci\xf3n ni al borde: 0 viajes (rojo)",
+                           "the subway leads to no other station and no map edge: 0 trips (red)"));
+    else if (links && kind == 3)
+        lstrcpyA(lk, SC3TR(es, "placehints.st_nodest_railsub", "ni la v\xed" "a ni el t\xfanel llevan a otra estaci\xf3n ni al borde: 0 viajes (rojo)",
+                           "neither rail nor subway leads to another station or a map edge: 0 trips (red)"));
+    else if (links)
+        lstrcpyA(lk, SC3TR(es, "placehints.st_nodest_rail", "la v\xed" "a no lleva a otra estaci\xf3n ni al borde: 0 viajes (rojo)",
+                           "the rail leads to no other station and no map edge: 0 trips (red)"));
     else if (kind == 0)
         lstrcpyA(lk, SC3TR(es, "placehints.st_dead_bus", "no toca ninguna calle: 0 viajes (rojo)", "touches no road: 0 trips (red)"));
     else if (kind == 2)
         lstrcpyA(lk, SC3TR(es, "placehints.st_dead_subway", "no toca el t\xfanel: 0 viajes (rojo)", "touches no subway: 0 trips (red)"));
     else if (kind == 3)
-        lstrcpyA(lk, SC3TR(es, "placehints.st_dead_railsub", "no toca v\355a ni t\xfanel: 0 viajes (rojo)", "touches no rail or subway: 0 trips (red)"));
+        lstrcpyA(lk, SC3TR(es, "placehints.st_dead_railsub", "no toca v\xed" "a ni t\xfanel: 0 viajes (rojo)", "touches no rail or subway: 0 trips (red)"));
     else
-        lstrcpyA(lk, SC3TR(es, "placehints.st_dead_rail", "no toca la v\355a: 0 viajes (rojo)", "touches no rail: 0 trips (red)"));
+        lstrcpyA(lk, SC3TR(es, "placehints.st_dead_rail", "no toca la v\xed" "a: 0 viajes (rojo)", "touches no rail: 0 trips (red)"));
     wsprintfA(t, SC3TR(es, "placehints.station", "%s: a pie R %d C %d I %d celdas  |  %s  |  %s",
                        "%s: walk R %d C %d I %d cells  |  %s  |  %s"),
               kind == 0 ? SC3TR(es, "placehints.st_bus", "Parada de bus", "Bus stop")
               : kind == 1 ? SC3TR(es, "placehints.st_rail", "Estaci\xf3n de tren", "Train station")
               : kind == 2 ? SC3TR(es, "placehints.st_subway", "Estaci\xf3n de metro", "Subway station")
                           : SC3TR(es, "placehints.st_railsub", "Tren a metro", "Rail to subway"),
-              r, rc, ri, tr, lk);
+              rr[0], rr[1], rr[2], tr, lk);
     if (g_ph_log && lstrcmpA(g_ph_hint, t))
-        logf("PLACEHINTS> station kind %d footprint [%ld %ld %ld %ld] links %d, reach %d: %ld cells, %ld with transit trips",
-             kind, fx0, fz0, fx1, fz1, links, r, cells, tcells);
+        logf("PLACEHINTS> station kind %d footprint [%ld %ld %ld %ld] links %d dest %d, reach R %d C %d I %d: %ld lots, %ld cells, "
+             "%ld with transit trips", kind, fx0, fz0, fx1, fz1, links, dest, rr[0], rr[1], rr[2], lots, cells, tcells);
     ph_sethint(tool, t);
 }
 
@@ -751,6 +989,7 @@ static void ph_install(void) {
     if (GetEnvironmentVariableA("SC3RESIZE_PLACEHINTS_GREEN", v, sizeof(v))) g_ph_green = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_PLACEHINTS_SHIFTPLACE", v, sizeof(v))) g_ph_shiftplace = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_PLACEHINTS_STATION", v, sizeof(v))) g_ph_station = atoi(v);
+    if (GetEnvironmentVariableA("SC3RESIZE_PLACEHINTS_LINES", v, sizeof(v))) g_ph_lines = atoi(v);
     {   char sv[64];
         if (GetEnvironmentVariableA("SC3RESIZE_PLACEHINTS_STATIONS", sv, sizeof(sv))) {
             char *q = sv; int i;
@@ -777,6 +1016,30 @@ static void ph_install(void) {
         if (push[0] == 0x68 && *(DWORD *)(push + 1) == 0x100 && VirtualProtect(push + 1, 4, PAGE_EXECUTE_READWRITE, &old))
             *(DWORD *)(push + 1) = PH_TIPW;
         else logf("PLACEHINTS> tooltip raster push at SC3U 0x00442f16 not shipped: hints stay cut at 256 px"); }
+    if (g_ph_lines) {   /* TIPLINES: raster 3 lines tall at creation. 0x00442f06: movsx ecx, byte [esi+0xad] (7 bytes);
+                           lea eax, [eax+ecx*2] (3) -> jmp to the same with lea eax, [eax+eax*2] between, back to 0x00442f10 */
+        BYTE *exe = (BYTE *)GetModuleHandleA(NULL), *at = exe + 0x42f06, *st = NULL;
+        static const BYTE want[10] = { 0x0f, 0xbe, 0x8e, 0xad, 0x00, 0x00, 0x00, 0x8d, 0x04, 0x48 };
+        DWORD old;
+        if (!memcmp(at, want, 10) && (st = (BYTE *)VirtualAlloc(NULL, 32, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE)) &&
+            VirtualProtect(at, 10, PAGE_EXECUTE_READWRITE, &old)) {
+            memcpy(st, want, 7);                                   /* movsx ecx, byte [esi+0xad] */
+            st[7] = 0x8d; st[8] = 0x04; st[9] = 0x40;              /* lea eax, [eax+eax*2] */
+            st[10] = 0x8d; st[11] = 0x04; st[12] = 0x48;           /* lea eax, [eax+ecx*2] */
+            st[13] = 0xe9; *(DWORD *)(st + 14) = (DWORD)(at + 10) - (DWORD)(st + 18);
+            FlushInstructionCache(GetCurrentProcess(), st, 32);
+            for (i = 5; i < 10; i++) at[i] = 0x90;
+            *(DWORD *)(at + 1) = (DWORD)st - (DWORD)(at + 5);
+            at[0] = 0xe9;
+            FlushInstructionCache(GetCurrentProcess(), at, 10);
+            logf("PLACEHINTS> tooltip raster made 3 lines tall (SC3U 0x00442f06)");
+        } else { logf("PLACEHINTS> tooltip raster height at SC3U 0x00442f06 not shipped: hints stay on one line"); g_ph_lines = 0; }
+    }
+    if (g_ph_lines) {   /* TIPLINES: the tooltip render, prologue push ecx; push ebx; push esi; mov esi, ecx */
+        static const BYTE p5[5] = { 0x51, 0x53, 0x56, 0x8b, 0xf1 };
+        if (!ho_hook(GetModuleHandleA(NULL), 0x43331, p5, 5, (void *)ph_tipdraw, &g_ph_tip_orig, "SC3U tooltip render FUN_00443331"))
+            { logf("PLACEHINTS> SC3U 0x00443331 not shipped: hints stay on one line"); g_ph_lines = 0; }
+    }
     if (g_ph_zone) {
         slot = (DWORD *)(g_ph_rci + 0x4c06c + 0x54);
         if (*slot == (DWORD)g_ph_rci + 0xb9d2) rl_patch_slot(slot, (void *)ph_zprev, &g_ph_zprev_orig);

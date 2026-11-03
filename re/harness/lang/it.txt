@@ -614,3 +614,11 @@ placehints.st_trips=%ld viaggi al mese partono da qui, %ld coi mezzi (verde)
 placehints.st_trips_load=%ld viaggi dal caricamento partono da qui, %ld coi mezzi (verde)
 # en: %s: walk R %d C %d I %d cells  |  %s  |  %s
 placehints.station=%s: a piedi R %d C %d I %d celle  |  %s  |  %s
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: the rail leads to no other station and no map edge: 0 trips (red)
+placehints.st_nodest_rail=i binari non portano ad altre stazioni né al bordo: 0 viaggi (rosso)
+# en: neither rail nor subway leads to another station or a map edge: 0 trips (red)
+placehints.st_nodest_railsub=né binari né tunnel portano a un'altra stazione o al bordo: 0 viaggi (rosso)
+# en: the subway leads to no other station and no map edge: 0 trips (red)
+placehints.st_nodest_subway=il tunnel non porta ad altre stazioni né al bordo: 0 viaggi (rosso)

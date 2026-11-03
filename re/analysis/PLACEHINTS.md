@@ -221,3 +221,35 @@ and where the 7 for "other" comes from; the hint reads the live bytes either way
 TRIPCELLS limit: it closes a month only from GRAPHNEW's budget hook (`sc3resize_graphs.c` `gn_month`), which does
 nothing until the Graficas page has been opened once (`g_gn_if[0]` is made by `gn_make` from the page enumeration).
 Before that the hint has only the count since the load, and the label says so.
+
+## F. Round 5 (tripmonth, 2026-11-03): month close from load, station flood, per-lot reach, label lines
+
+**TRIPCELLS months from the load.** `gn_month` (`sc3resize_graphs.c`, detour on SIMMISC `0x10007d88`, the budget
+month) closed the trip month only inside `if (g_gn_if[0])`, and the series are made only when the Graficas page is
+first enumerated (`gn_make` from `gn_enum`). An `else` branch now takes the month key from the same calendar call
+(`gn_key(budget+0x14)`, the value `gn_record` stores) and runs `tm_install(); tm_month(key)` without touching any
+series. Measured: Berlin, Graficas never opened, `TRIPMODES> month 24805 .. 24823` one per game month from the load.
+
+**Somewhere to go (`ph_station_dest`).** Same rule as stationwarn's `sw_flood` (`STATION_RULE.md`): flood the track
+touching the footprint ring over 4-neighbour cells of its bit (rail 4 / tunnel 8, no 0x10); it counts as connected
+when a track cell carries the map-edge connection 0x1000 / 0x2000 (`FUN_10008a94`), or a neighbouring station entry
+cell (rail: 0x10 with 4; subway: 0x10 with 0x20, or 8 without 1 / 4) belongs to a station whose rect has a cell in a
+reach grid, or the ring holds a bus stop (0x10 | 1) `[CONFIRMED @ SimTransit 0x10008a94, 0x1000755e]`. Measured:
+station on the long z=91 line, links 2 dest 1; on a 4-cell stub laid in the test game, links 2 dest 0 (red).
+
+**Exact per-class reach.** The grids T+0x84 / +0x88 / +0x8c are every R / C / I lot rect grown by its class reach,
+no corner cut (`FUN_1000559e`): the arrival test. The catchment of a new station is the other direction, the trip
+start scan: a lot of class k (`FUN_100057f6` on its occupant, from manager T+0x94 vt+0x7c, rect vt+0xcc) reaches it
+when its rect grown by r_k, corners skipped, holds a footprint cell. The preview now draws exactly those lots.
+
+**Label lines.** The game tooltip (`FUN_00443331`) measures and draws its text in one call each, into a raster one
+line tall (`FUN_00442e88`). TIPLINES: the raster height expression at `0x00442f06` is detoured to 3 lines + 2 pady
+(the window still sizes itself to its text, as with the width at `0x00442f16`), and while a hint holds '\n' the
+render runs with the font object pointed at a vtable copy whose measure (vt+0x58) and draw (vt+0x88) go line by line.
+A live raster does not resize through raster vt+0xc (tried first: the window stayed one line). The hint is split at
+the "  |  " groups into 2 lines from 71 characters and 3 from 141, with the breaks that make the longest line
+shortest. The fit test `FUN_004431e1` measures the text as one line, so its width limit is lifted to 0x2000 while a
+wrapped hint is shown.
+
+Table bug found: `sc3lang.py extract` does not read octal escapes, so `"v\355a"` (placehints4) went into es.txt as
+"v355a". The source now uses the project's split literal `"v\xed" "a"`.

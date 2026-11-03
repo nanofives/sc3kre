@@ -1012,6 +1012,12 @@ static DWORD __fastcall gn_month(BYTE *budget) {
         __except (EXCEPTION_EXECUTE_HANDLER) { logf("GRAPHNEW> monthly record threw 0x%08lX", GetExceptionCode()); }
         __try { tm_install(); tm_month(g_gn_last); }   /* VDBARS TRIPMODES: a month closed */
         __except (EXCEPTION_EXECUTE_HANDLER) { }
+    } else if (budget && !IsBadReadPtr(budget, 0x50)) {
+        /* tripmonth 2026-11-03: the series are made only once the Graficas page has been opened (gn_make from gn_enum),
+           so before that the month close above never ran and TRIPCELLS / TRIPMODES had no months. The key is the one
+           gn_record would store (gn_key on the same calendar), computed here without touching any graph series. */
+        __try { int key = gn_key(*(void **)(budget + 0x14), NULL, NULL); if (key >= 0) { tm_install(); tm_month(key); } }
+        __except (EXCEPTION_EXECUTE_HANDLER) { }
     }
     return r;
 }
