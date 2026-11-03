@@ -3,7 +3,9 @@
   py -3.12 re/tools/restore_lab.py up   --tag T [--city "Berlin, Germany"] [--env K=V ...]   launch, unpause, keep running
   py -3.12 re/tools/restore_lab.py query --tag T X Z        open the "?" dialog on cell (X, Z) (WM_RZ_RESTORE 1)
   py -3.12 re/tools/restore_lab.py btn  --tag T             log the restore button's absolute rect (WM_RZ_RESTORE 2)
-  py -3.12 re/tools/restore_lab.py msg  --tag T WP [LP]     any WM_RZ_RESTORE
+  py -3.12 re/tools/restore_lab.py msg  --tag T WP [LP]     any WM_RZ_RESTORE (restorefix: 8 age cell LP = x | z << 16 past its
+                                                            life, 9 one list scan, 10 break its date as 11-02c did)
+  RESTORE_RUNS=<dir> moves the run folders (restorefix used MAIN/verify/restorefix/runs)
   py -3.12 re/tools/restore_lab.py dump --tag T NAME        one frame -> verify/restore/runs/T/fd/NAME.png
   py -3.12 re/tools/restore_lab.py click --tag T X Y        posted left click at client X,Y
   py -3.12 re/tools/restore_lab.py key  --tag T VK          posted key

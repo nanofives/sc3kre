@@ -137,18 +137,33 @@ static void *budget_get(void) {
     return b && !IsBadReadPtr(b, 4) && *(DWORD *)b == (DWORD)misc + 0x3c550 ? b : NULL;
 }
 
-/* A date object the game's Get/SetBirthdate can talk to: they only call vt+0x10 Set(day number) and vt+0x68 Get()
-   [CONFIRMED @ SIMUTIL 0x10006b73, 0x10015fdd; SIMECO 0x100013c9, 0x10011313]. __fastcall with a dummy edx is the
-   thiscall shape (this in ecx, callee pops the stack args). Every other slot is the 0-arg getter. */
+/* A date object the game's Get/SetBirthdate can talk to. The slots they call [CONFIRMED]:
+     vt+0x10 Set(day number)   SIMUTIL 0x10006b73 (GetBirthdate), SIMECO 0x100013c9, 0x1000342e
+     vt+0x68 day number        SIMUTIL 0x10006b86 / 0x10015fdd (SetBirthdate), SIMECO incinerator 0x100013dc / 0x10011313
+     vt+0x34 year              SIMECO recycling center SetBirthdate 0x10003441 (date class: 0x10011cc0 -> 0x100118c4)
+     vt+0x38 day of the year   same caller (0x10011cc8 -> 0x100116f7 = jdn - jdn(12/31, year-1)); 0x10003441 rebuilds the
+                               number as 0x100113a4: jdn(12/31, year-1) + day of the year
+   RESTOREFIX 2026-11-02: until then every slot but 0x10 answered the day number, so the recycling center's
+   SetBirthdate built a year of about 2,489,000 and the building died (owner, MARIANO-PC, release 2026-11-02c).
+   __fastcall with a dummy edx is the thiscall shape (this in ecx, callee pops the stack args). Every other slot is the
+   0-arg day number getter. */
 typedef struct { const DWORD *vt; DWORD jdn; } FakeDate;
+static DWORD jdn_make(DWORD m, DWORD d, DWORD y);
+static void jdn_split(DWORD j, DWORD *m, DWORD *d, DWORD *y);
 static DWORD __fastcall fdate_get(FakeDate *d, void *edx) { (void)edx; return d->jdn; }
 static void __fastcall fdate_set(FakeDate *d, void *edx, DWORD j) { (void)edx; d->jdn = j; }
+static DWORD __fastcall fdate_year(FakeDate *d, void *edx) { DWORD m, dd, y; (void)edx; jdn_split(d->jdn, &m, &dd, &y); return y; }
+static DWORD __fastcall fdate_doy(FakeDate *d, void *edx) {
+    DWORD m, dd, y; (void)edx; jdn_split(d->jdn, &m, &dd, &y); return d->jdn - jdn_make(12, 31, y - 1);
+}
 static DWORD g_fd_vt[48];
 static void fd_init(FakeDate *d, DWORD jdn) {
     int i;
     if (!g_fd_vt[0]) {
         for (i = 0; i < 48; i++) g_fd_vt[i] = (DWORD)fdate_get;
         g_fd_vt[0x10 / 4] = (DWORD)fdate_set;
+        g_fd_vt[0x34 / 4] = (DWORD)fdate_year;
+        g_fd_vt[0x38 / 4] = (DWORD)fdate_doy;
     }
     d->vt = g_fd_vt; d->jdn = jdn;
 }
@@ -183,7 +198,15 @@ typedef struct {
     LONG  x0, z0, x1, z1;       /* footprint, cells (occupant vt+0xd0) */
     LONG  birth_y, birth_m;
     char  name[SC3R_NAME];      /* occupant vt+0x7c, the query dialog's title */
+    /* RESTOREFIX 2026-11-02 (sc3resize's RS_INFO must match) */
+    DWORD flags;                /* SC3R_DEAD: IsDefunct (rubble of an expired building, keeps class, type, name, key);
+                                   SC3R_BADDATE: alive with a birthdate GetAge cannot make sense of (the 11-02c
+                                   recycling-center bug): restore = a free repair */
+    DWORD key[3];               /* attrib key (occupant vt+0x80 -> vt+0x14), what the building tool places */
+    DWORD jdn;                  /* birthdate, day number */
 } SC3R_INFO;
+#define SC3R_DEAD    1u
+#define SC3R_BADDATE 2u
 
 static void *qi(void *o, DWORD iid) {
     void *r = NULL;
@@ -241,6 +264,68 @@ static void log_class_once(void *mortal, void *occ) {
          s ? s + 1 : p, vt - (DWORD)m, ga - (DWORD)m, *(DWORD *)occ - (DWORD)m, (LONG)((BYTE *)mortal - (BYTE *)occ));
 }
 
+/* REBUILD: type id -> the building tool's key {type, group, instance}. The rubble an expired building leaves keeps its
+   type id and name but not its key, so the key is taken from a live building of the same type: every live one info_of
+   reads is learned (logged once, saved to restore_keys.ini beside the DLL so it outlives the session and the city), and
+   the stock types are seeded below (measured in game, KEYS> lines of sc3restore.log). */
+typedef struct { DWORD type, key[3]; } KeyRow;
+static KeyRow g_keys[256];
+static int g_nkeys;
+#define K3(i) { 0x207edc0e, 0x57e, i }
+static const KeyRow g_key_seed[] = {   /* measured 2026-11-02 over 12 shipped cities (verify/restorefix/RESULTS.md) */
+    { 12111, K3(0xcf) }, { 12112, K3(0xca) }, { 12113, K3(0xc9) }, { 12114, K3(0xcd) }, { 12115, K3(0xcb) },
+    { 12116, K3(0xce) }, { 12117, K3(0xcc) }, { 12118, K3(0xc8) },                  /* power plants */
+    { 12810, K3(0xdc) }, { 12820, K3(0xf4) }, { 12830, K3(0xfa) }, { 12840, K3(0xeb) }, /* water (plumbing tool kind) */
+    { 12851, K3(0x2714) }, { 12852, K3(0x2713) }, { 12853, K3(0x272d) },              /* recycling, incinerators */
+};
+#undef K3
+static void key_put(DWORD type, const DWORD *k, int save, const char *why) {
+    int i;
+    if (!type || !k[0]) return;
+    for (i = 0; i < g_nkeys; i++) if (g_keys[i].type == type) {
+        if (!memcmp(g_keys[i].key, k, 12)) return;
+        logf("KEYS> type %lu: key 0x%08lX 0x%08lX 0x%08lX replaces 0x%08lX 0x%08lX 0x%08lX (%s)", type, k[0], k[1], k[2],
+             g_keys[i].key[0], g_keys[i].key[1], g_keys[i].key[2], why);
+        memcpy(g_keys[i].key, k, 12);
+        break;
+    }
+    if (i == g_nkeys) {
+        if (g_nkeys >= 256) return;
+        g_keys[g_nkeys].type = type; memcpy(g_keys[g_nkeys].key, k, 12); g_nkeys++;
+        if (save) logf("KEYS> type %lu: key 0x%08lX 0x%08lX 0x%08lX (%s)", type, k[0], k[1], k[2], why);
+    }
+    if (save) {
+        char ini[MAX_PATH], n[16], v[48];
+        self_path(ini, sizeof(ini), "restore_keys.ini");
+        _snprintf(n, sizeof(n), "%lu", type);
+        _snprintf(v, sizeof(v), "%08lX %08lX %08lX", k[0], k[1], k[2]);
+        WritePrivateProfileStringA("keys", n, v, ini);
+    }
+}
+static void key_learn(DWORD type, const DWORD *k) {
+    int i;
+    for (i = 0; i < g_nkeys; i++) if (g_keys[i].type == type && !memcmp(g_keys[i].key, k, 12)) return;
+    key_put(type, k, 1, "learned from a live one");
+}
+static int key_find(DWORD type, DWORD *k) {
+    int i;
+    for (i = 0; i < g_nkeys; i++) if (g_keys[i].type == type) { memcpy(k, g_keys[i].key, 12); return 1; }
+    return 0;
+}
+static void key_load(void) {
+    char ini[MAX_PATH], buf[8192], *p, v[48];
+    int i, n = 0;
+    for (i = 0; i < (int)(sizeof(g_key_seed) / sizeof(g_key_seed[0])); i++) key_put(g_key_seed[i].type, g_key_seed[i].key, 0, "seed");
+    self_path(ini, sizeof(ini), "restore_keys.ini");
+    if (!GetPrivateProfileStringA("keys", NULL, "", buf, sizeof(buf), ini)) return;
+    for (p = buf; *p; p += strlen(p) + 1) {
+        DWORD t = (DWORD)strtoul(p, NULL, 10), k[3] = { 0, 0, 0 };
+        GetPrivateProfileStringA("keys", p, "", v, sizeof(v), ini);
+        if (t && sscanf(v, "%lx %lx %lx", &k[0], &k[1], &k[2]) == 3) { key_put(t, k, 0, "restore_keys.ini"); n++; }
+    }
+    logf("KEYS> %d type -> key row(s) loaded from restore_keys.ini, %d known", n, g_nkeys);
+}
+
 /* 1 = occ has a lifespan; fills *o (defunct ones too, flagged) */
 static int info_of(void *occ, SC3R_INFO *o) {
     void *mo = NULL, *bu = NULL, *bud;
@@ -259,20 +344,40 @@ static int info_of(void *occ, SC3R_INFO *o) {
         o->age     = (LONG)vc(mo, 0x1c, 0, 0, 0, 0, 0);
         o->aging   = (LONG)(vc(mo, 0x20, 0, 0, 0, 0, 0) & 0xff);
         o->defunct = (LONG)(vc(mo, 0x28, 0, 0, 0, 0, 0) & 0xff);
-        if (o->max_age <= 0 || o->max_age > 100000 || o->age < -1200 || o->age > 1000000) {
-            logf("INFO> occupant 0x%08lX answers 0x43680ca9 but MaxAge %ld age %ld are out of range: ignored",
-                 (DWORD)occ, o->max_age, o->age);
+        if (o->max_age <= 0 || o->max_age > 100000) {
+            logf("INFO> occupant 0x%08lX answers 0x43680ca9 but MaxAge %ld is out of range: ignored", (DWORD)occ, o->max_age);
             rel(mo);
             return 0;
+        }
+        if (o->defunct) o->flags |= SC3R_DEAD;
+        if (o->age < -1200 || o->age > 1000000) {   /* RESTOREFIX: was ignored, so the broken ones got no button. Alive:
+                                                       a free repair. Dead (killed by the 11-02c bug, the owner paid for
+                                                       that restore): a free Reconstruir (orchestrator call 2026-11-02) */
+            static int nlog;
+            o->flags |= SC3R_BADDATE;
+            if (nlog++ < 16) logf("INFO> occupant 0x%08lX: MaxAge %ld but age %ld, a broken birthdate%s: offered free (%s)",
+                                  (DWORD)occ, o->max_age, o->age, o->defunct ? ", dead" : "",
+                                  o->defunct ? "Reconstruir" : "repair");
         }
         bu = qi(occ, 0xe0faadc7);
         if (bu) {
             fd_init(&fd, 0);
             vc(bu, 0x40, 1, (DWORD)&fd, 0, 0, 0);            /* GetBirthdate */
+            o->jdn = fd.jdn;
             if (fd.jdn) { jdn_split(fd.jdn, &m, &d, &y); o->birth_y = (LONG)y; o->birth_m = (LONG)m; }
             rel(bu);
         }
         o->type = vc(occ, 0x88, 0, 0, 0, 0, 0);
+        {   void *at = (void *)vc(occ, 0x80, 0, 0, 0, 0, 0);      /* attrib and its key (RELOCATE's rl_click reads the same) */
+            DWORD *k = at ? (DWORD *)vc(at, 0x14, 0, 0, 0, 0, 0) : NULL;
+            DWORD kk[3] = { 0, 0, 0 };
+            if (k && !IsBadReadPtr(k, 12)) memcpy(kk, k, 12);
+            /* REBUILD: the rubble's attrib is the rubble art's (SIMECO 0x100035f7 makes it from occupant +0x24, measured:
+               key {0x207edc0e, 0x57e, 0x2345} = "Escombros de Edificio" type 15410), so a dead building's key comes from
+               the type -> key table, learned from live ones of the same type */
+            if (!o->defunct) { memcpy(o->key, kk, 12); key_learn(o->type, kk); }
+            else key_find(o->type, o->key);
+        }
         memset(r, 0, sizeof(r));
         vc(occ, 0xd0, 1, (DWORD)r, 0, 0, 0);
         o->x0 = r[0]; o->z0 = r[1]; o->x1 = r[2]; o->z1 = r[3];
@@ -281,7 +386,7 @@ static int info_of(void *occ, SC3R_INFO *o) {
         o->price = bud ? (LONG)vc(bud, 0x54, 1, o->type, 0, 0, 0) : 0;
         if (o->price < 0) o->price = 0;
         {   /* price x clamp(age / MaxAge, 0, 1) x cost_percent / 100, rounded half up (COSTPCT) */
-            LONG used = o->age < 0 ? 0 : (o->age > o->max_age ? o->max_age : o->age);
+            LONG used = (o->flags & (SC3R_BADDATE | SC3R_DEAD)) || o->age < 0 ? 0 : (o->age > o->max_age ? o->max_age : o->age);
             __int64 den = (__int64)o->max_age * 100;
             o->cost = (LONG)(((__int64)o->price * used * g_cost_pct * 2 + den) / (den * 2));
         }
@@ -291,34 +396,76 @@ static int info_of(void *occ, SC3R_INFO *o) {
     return ok;
 }
 
-/* the new birthdate: first day of the city's current month, from GetAge and the old birthdate */
-static int restore_one(void *occ, SC3R_INFO *before) {
-    void *bu;
+/* the new birthdate: first day of the city's current month. Today's year/month come from GetAge and the old birthdate;
+   for a broken birthdate (SC3R_BADDATE) from the city date itself (city vt+0x1e4 GetDate(&month, &day, &year), the call
+   GetAge makes [SIMUTIL 0x100120a1, SIMECO 0x100035a0]). RESTOREFIX: the date is read back through GetBirthdate and must
+   be the one written, the building must then read age 0 and alive; otherwise the old date is written back and the restore
+   is refused (and not charged). */
+static int bday_get(void *occ, DWORD *jdn) {
+    void *bu = qi(occ, 0xe0faadc7);
     FakeDate fd;
-    LONG ym, age_after;
-    DWORD y, m;
-    SC3R_INFO after;
-    int ok = 0;
-    if (!before->birth_y) return 0;
-    ym = before->birth_y * 12 + (before->birth_m - 1) + before->age;    /* the city's year*12 + month-1 now */
-    y = (DWORD)(ym / 12); m = (DWORD)(ym % 12) + 1;
-    bu = qi(occ, 0xe0faadc7);
     if (!bu) return 0;
-    __try {
-        fd_init(&fd, jdn_make(m, 1, y));
-        vc(bu, 0x44, 1, (DWORD)&fd, 0, 0, 0);                    /* SetBirthdate */
-        ok = 1;
-    } __except (EXCEPTION_EXECUTE_HANDLER) { ok = 0; }
+    fd_init(&fd, 0);
+    __try { vc(bu, 0x40, 1, (DWORD)&fd, 0, 0, 0); } __except (EXCEPTION_EXECUTE_HANDLER) { fd.jdn = 0; }
     rel(bu);
-    if (ok && info_of(occ, &after)) {
-        age_after = after.age;
-        logf("RESTORE> %s (type %lu) at (%ld, %ld): age %ld -> %ld months, birthdate %ld-%02ld -> %ld-%02ld, MaxAge %ld, decline %ld, IsDefunct %ld",
-             before->name, before->type, before->x0, before->z0, before->age, age_after, before->birth_y, before->birth_m,
-             after.birth_y, after.birth_m, after.max_age, after.decline, after.defunct);
-        log_output(occ, "right after the restore (the game recomputes it on its next update)");
-        ok = age_after == 0 && !after.defunct;
-    }
+    *jdn = fd.jdn;
+    return fd.jdn != 0;
+}
+static int bday_set(void *occ, DWORD jdn) {
+    void *bu = qi(occ, 0xe0faadc7);
+    FakeDate fd;
+    int ok = 1;
+    if (!bu) return 0;
+    fd_init(&fd, jdn);
+    __try { vc(bu, 0x44, 1, (DWORD)&fd, 0, 0, 0); } __except (EXCEPTION_EXECUTE_HANDLER) { ok = 0; }
+    rel(bu);
     return ok;
+}
+static int restore_one(void *occ, SC3R_INFO *before) {
+    LONG ym;
+    DWORD y, m, want, got = 0, old = before->jdn;
+    SC3R_INFO after;
+    int ok;
+    if (before->flags & SC3R_DEAD) return 0;
+    if (before->flags & SC3R_BADDATE) {
+        BYTE *c = city_get();
+        DWORD cm = 0, cd = 0, cy = 0;
+        if (!c) return 0;
+        vc(c, 0x1e4, 3, (DWORD)&cm, (DWORD)&cd, (DWORD)&cy, 0);
+        if (cy < 1800 || cy > 9999 || cm < 1 || cm > 12) { logf("RESTORE> city date %lu-%02lu looks wrong: not repaired", cy, cm); return 0; }
+        y = cy; m = cm;
+    } else {
+        if (!before->birth_y) return 0;
+        ym = before->birth_y * 12 + (before->birth_m - 1) + before->age;    /* the city's year*12 + month-1 now */
+        y = (DWORD)(ym / 12); m = (DWORD)(ym % 12) + 1;
+    }
+    want = jdn_make(m, 1, y);
+    if (!bday_set(occ, want)) return 0;
+    ok = bday_get(occ, &got) && got == want;
+    if (!ok) {
+        logf("RESTORE> %s (type %lu) at (%ld, %ld): birthdate written %lu but read back %lu: the old one (%lu) written back, "
+             "refused", before->name, before->type, before->x0, before->z0, want, got, old);
+        if (old) bday_set(occ, old);
+        return 0;
+    }
+    if (!info_of(occ, &after)) {
+        logf("RESTORE> %s at (%ld, %ld): not readable after the new birthdate: the old one written back, refused",
+             before->name, before->x0, before->z0);
+        if (old) bday_set(occ, old);
+        return 0;
+    }
+    logf("RESTORE> %s (type %lu) at (%ld, %ld): age %ld -> %ld months, birthdate %ld-%02ld -> %ld-%02ld (day %lu -> %lu)%s, "
+         "MaxAge %ld, decline %ld, IsDefunct %ld", before->name, before->type, before->x0, before->z0, before->age, after.age,
+         before->birth_y, before->birth_m, after.birth_y, after.birth_m, old, got,
+         (before->flags & SC3R_BADDATE) ? " [broken date repaired]" : "", after.max_age, after.decline, after.defunct);
+    log_output(occ, "right after the restore (the game recomputes it on its next update)");
+    if (after.age != 0 || after.defunct) {
+        logf("RESTORE> %s: age %ld / IsDefunct %ld after the write, not as new: the old birthdate written back, refused",
+             before->name, after.age, after.defunct);
+        if (old) bday_set(occ, old);
+        return 0;
+    }
+    return 1;
 }
 
 static LONG funds_get(void *bud) { return bud ? (LONG)vc(bud, 0x10, 0, 0, 0, 0, 0) : 0; }
@@ -348,6 +495,16 @@ __declspec(dllexport) int __cdecl sc3restore_info(void *occ, SC3R_INFO *out) {
     return 1;
 }
 
+/* RESTOREFIX: 1 = the occupant is the rubble of a building with a lifespan (IsDefunct; the rubble keeps class, type, name
+   and key: SIMECO 0x100035f7 / SIMUTIL 0x1000690c make it from the same attrib). price = the build price. */
+__declspec(dllexport) int __cdecl sc3restore_dead(void *occ, SC3R_INFO *out) {
+    SC3R_INFO i;
+    if (!g_on || !occ || !out || out->size != sizeof(SC3R_INFO)) return 0;
+    if (!info_of(occ, &i) || !i.defunct) return 0;
+    *out = i;
+    return 1;
+}
+
 __declspec(dllexport) LONG __cdecl sc3restore_funds(void) { return g_on ? funds_get(budget_get()) : 0; }
 
 /* 1 restored, 0 refused (msg says why). */
@@ -359,7 +516,7 @@ __declspec(dllexport) int __cdecl sc3restore_apply(void *occ, int es, char *msg,
     msg[0] = 0;
     if (!g_on || !occ) return 0;
     if (!info_of(occ, &i) || i.defunct) { _snprintf(msg, cap, es ? "Este edificio no envejece" : "This building does not age"); return 0; }
-    if (i.age <= 0) { _snprintf(msg, cap, es ? "Ya est\xe1 como nuevo" : "Already as good as new"); return 0; }
+    if (i.age <= 0 && !(i.flags & SC3R_BADDATE)) { _snprintf(msg, cap, es ? "Ya est\xe1 como nuevo" : "Already as good as new"); return 0; }
     if (!bud) { _snprintf(msg, cap, es ? "Sin presupuesto" : "No budget"); return 0; }
     f0 = funds_get(bud);
     fmt_money(a, sizeof(a), i.cost); fmt_money(b, sizeof(b), f0);
@@ -373,7 +530,8 @@ __declspec(dllexport) int __cdecl sc3restore_apply(void *occ, int es, char *msg,
     if (i.cost > 0) vc(bud, 0x14, 1, (DWORD)i.cost, 0, 0, 0);           /* Withdraw */
     logf("APPLY> %s restored: price %ld, used %ld of %ld months, cost %ld; funds %ld -> %ld", i.name, i.price, i.age,
          i.max_age, i.cost, f0, funds_get(bud));
-    _snprintf(msg, cap, es ? "Restaurado por $%s" : "Restored for $%s", a);
+    if (i.flags & SC3R_BADDATE) _snprintf(msg, cap, es ? "Fecha reparada, sin costo" : "Date repaired, free");
+    else _snprintf(msg, cap, es ? "Restaurado por $%s" : "Restored for $%s", a);
     return 1;
 }
 
@@ -383,9 +541,12 @@ __declspec(dllexport) int __cdecl sc3restore_apply(void *occ, int es, char *msg,
 typedef char (__fastcall *PFN_AT)(void *om, void *edx, DWORD x, DWORD z, void **occ);
 typedef char (__fastcall *PFN_QI)(void *o, void *edx, DWORD iid, void **out);
 typedef DWORD (__fastcall *PFN_REL)(void *o, void *edx);
-static int cmp_left(const void *a, const void *b) {
+static int cmp_left(const void *a, const void *b) {   /* dead first, then broken dates, then least life left */
     const SC3R_INFO *p = (const SC3R_INFO *)a, *q = (const SC3R_INFO *)b;
     LONG lp = p->max_age - p->age, lq = q->max_age - q->age;
+    int rp = (p->flags & SC3R_DEAD) ? 0 : (p->flags & SC3R_BADDATE) ? 1 : 2;
+    int rq = (q->flags & SC3R_DEAD) ? 0 : (q->flags & SC3R_BADDATE) ? 1 : 2;
+    if (rp != rq) return rp - rq;
     return lp < lq ? -1 : lp > lq ? 1 : 0;
 }
 __declspec(dllexport) int __cdecl sc3restore_list(SC3R_INFO *rows, int cap, LONG *total) {
@@ -420,9 +581,7 @@ __declspec(dllexport) int __cdecl sc3restore_list(SC3R_INFO *rows, int cap, LONG
                     SC3R_INFO i;
                     ns++;
                     if (info_of(o, &i)) {
-                        if (!i.defunct) { if (n < cap) rows[n++] = i; }
-                        else if (ndef++ < 8) logf("LIST>   defunct (no button): %s type %lu at (%ld, %ld) age %ld / %ld",
-                                                  i.name, i.type, i.x0, i.z0, i.age, i.max_age);
+                        if (n < cap) { rows[n++] = i; if (i.defunct) ndef++; }   /* RESTOREFIX: dead ones too, for Reconstruir */
                     }
                 }
             }
@@ -431,13 +590,14 @@ __declspec(dllexport) int __cdecl sc3restore_list(SC3R_INFO *rows, int cap, LONG
     } __except (EXCEPTION_EXECUTE_HANDLER) { logf("LIST> fault in the cell scan at (%d, %d)", x, z); }
     QueryPerformanceCounter(&t1);
     qsort(rows, n, sizeof(SC3R_INFO), cmp_left);
-    if (total) for (k = 0; k < n; k++) *total += rows[k].cost;
-    logf("LIST> %d building(s) with a lifespan alive (%d with one, defunct included), %d cells (%dx%d) in %.1f ms, total cost %ld", n, ns, cells,
-         nx, nz, (double)(t1.QuadPart - t0.QuadPart) * 1000.0 / (double)g_freq.QuadPart, total ? *total : 0);
+    if (total) for (k = 0; k < n; k++) if (!(rows[k].flags & SC3R_DEAD)) *total += rows[k].cost;
+    logf("LIST> %d row(s): %d alive, %d dead (%d buildings with a lifespan), %d cells (%dx%d) in %.1f ms, total cost %ld", n,
+         n - ndef, ndef, ns, cells, nx, nz, (double)(t1.QuadPart - t0.QuadPart) * 1000.0 / (double)g_freq.QuadPart, total ? *total : 0);
     for (k = 0; k < n && k < 40; k++)
-        logf("LIST>   %s type %lu at (%ld, %ld) age %ld / %ld (decline %ld) born %ld-%02ld price %ld cost %ld",
+        logf("LIST>   %s type %lu at (%ld, %ld) age %ld / %ld (decline %ld) born %ld-%02ld price %ld cost %ld%s%s",
              rows[k].name, rows[k].type, rows[k].x0, rows[k].z0, rows[k].age, rows[k].max_age, rows[k].decline,
-             rows[k].birth_y, rows[k].birth_m, rows[k].price, rows[k].cost);
+             rows[k].birth_y, rows[k].birth_m, rows[k].price, rows[k].cost,
+             (rows[k].flags & SC3R_DEAD) ? " DEAD" : "", (rows[k].flags & SC3R_BADDATE) ? " BROKEN DATE" : "");
     return n;
 }
 
@@ -500,7 +660,8 @@ __declspec(dllexport) int __cdecl sc3restore_apply_all(LONG max_total, int es, c
     }
     for (k = 0; k < n; k++) {
         void *o;
-        if (rows[k].age <= 0) continue;
+        if (rows[k].flags & SC3R_DEAD) continue;
+        if (rows[k].age <= 0 && !(rows[k].flags & SC3R_BADDATE)) continue;
         o = occ_at((DWORD)rows[k].x0, (DWORD)rows[k].z0, rows[k].type);
         if (!o) continue;
         if (restore_one(o, &rows[k])) { done++; paid += rows[k].cost; }
@@ -526,11 +687,25 @@ __declspec(dllexport) int __cdecl sc3restore_test_left(LONG x, LONG z, LONG left
     log_output(o, "test: before ageing");
     want = i.max_age - left;
     ym = i.birth_y * 12 + (i.birth_m - 1) + i.age - want;   /* birth year*12 + month-1 that gives age `want` */
-    bu = qi(o, 0xe0faadc7);
-    if (bu) { fd_init(&fd, jdn_make((DWORD)(ym % 12) + 1, 1, (DWORD)(ym / 12))); vc(bu, 0x44, 1, (DWORD)&fd, 0, 0, 0); rel(bu); }
+    (void)bu; (void)fd;
+    bday_set(o, jdn_make((DWORD)(ym % 12) + 1, 1, (DWORD)(ym / 12)));
     info_of(o, &i);
     logf("TEST> %s at (%ld, %ld) aged to %ld of %ld months (decline %ld)", i.name, i.x0, i.z0, i.age, i.max_age, i.decline);
     log_output(o, "test: right after ageing");
+    rel(o);
+    return 1;
+}
+/* TEST ONLY (restorefix, WM_RZ_RESTORE 10): break the birthdate of the building at (x, z) the way the 11-02c FakeDate did
+   on a recycling center (year = the day number), to exercise the free repair. Free, logged. */
+__declspec(dllexport) int __cdecl sc3restore_test_break(LONG x, LONG z) {
+    BYTE *c = city_get();
+    void *om = c ? (void *)vc(c, 0x11c, 0, 0, 0, 0, 0) : NULL, *o = NULL;
+    SC3R_INFO i;
+    if (!g_on || !om || !(vc(om, 0x7c, 3, (DWORD)x, (DWORD)z, (DWORD)&o, 0) & 0xff) || !o) return 0;
+    if (!info_of(o, &i) || !i.jdn) { rel(o); return 0; }
+    bday_set(o, jdn_make(12, 31, i.jdn - 1) + 100);
+    info_of(o, &i);
+    logf("TEST> %s at (%ld, %ld): birthdate broken on purpose, age now %ld, flags 0x%lX", i.name, i.x0, i.z0, i.age, i.flags);
     rel(o);
     return 1;
 }
@@ -570,6 +745,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
             if (g_cost_pct < 0) g_cost_pct = 0;
             if (g_cost_pct > 1000) g_cost_pct = 1000;
         }
+        key_load();
         logf("### sc3restore loaded: nothing patched, exports for sc3resize's RESTORE block; cost = %ld%% of price x life used "
              "(restore.ini [restore] cost_percent, SC3RESTORE_COSTPCT)", g_cost_pct);
     }
