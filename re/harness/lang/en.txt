@@ -448,6 +448,8 @@ lifespan.y_m=%ldy %ldm
 # sc3resize_placehints.c
 placehints.airport=Airport
 # sc3resize_placehints.c
+placehints.in_green=green
+# sc3resize_placehints.c
 placehints.in_red=red
 # sc3resize_placehints.c
 placehints.land_value=Land value %s  %s  %s  |  %s %c %s%ld%% or more up to %ld cells

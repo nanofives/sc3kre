@@ -126,3 +126,58 @@ the steady state, reached when the 16-step block cursor next wraps.
 Not in the label yet: aura (`SC3Aura.ini`, flat over the rect grown by the radius, SIMMISC `0x1000314a`), crime
 (SIMSERV `0x10007d35`) and pollution (SIMECO `0x100095e7`, linear falloff). Their tables are loaded into maps of the
 same kind; reading them is the next step (same lookup shape, `LAND_VALUE.md` 8).
+
+## D. Round 2 (placehints2, 2026-11-02): text on Shift, green halo
+
+Owner after trying it: "the extra information when placing a zone should be visible when pressing shift, the zone
+impact should be in a shade of green, light blue is the same as the zone it's being placed".
+
+### Stock meaning of Shift during placement
+
+| step | what the code does | evidence |
+|---|---|---|
+| Win32 to GZ mouse flags | MK_SHIFT (4) -> 0x1, MK_CONTROL (8) -> 0x2, MK_LBUTTON -> 0x10, MK_RBUTTON -> 0x20 | GZGraphicD `0x10017b90` `[CONFIRMED]` |
+| view to tool | SIMSPR city view input slots (LDown `0x10049336`, Move `0x1004947d`, LUp `0x10049540`, ...) store the flags at view+0x20c and pass them unchanged to the active handler (the tool) | `[CONFIRMED]` |
+| zone tool left up | `if ((flags & 1) == 0)` pick cell, preview +0x54, commit +0x48; then always resets the drag | SIMRCI `0x1003f7ca` `[CONFIRMED]` |
+| building tool left up | same gate before its commit | SIMGEOM `0x1002165e` `[CONFIRMED]` |
+| down / move | no read of the flags | SIMRCI `0x1003f737`, `0x1003f91e`, SIMGEOM `0x100215a9`, `0x10021764` |
+| keys | city view KeyDown `0x10049265` reacts to Ctrl (0x11) and Alt (0x12) only, not to VK_SHIFT. Tool key slots only forward | SIMSPR, SIMRCI `0x1003f308` / `0x1003f31b` |
+
+Shift held when the left button is released cancels the zone drag or the plop. Measured: a posted `WM_LBUTTONUP` with
+wParam MK_SHIFT after a 30-cell airport drag in Berlin placed no zone and the money stayed at $123,479
+(`verify/placehints2/owner_shots/B3_release_with_shift_cancels.png`). PLACEHINTS keeps that stock rule.
+
+### Text on Shift
+
+`ph_label` adds the hint only while `ph_shift()`. The state comes from the game window's own `WM_KEYDOWN` /
+`WM_KEYUP` VK_SHIFT (`rz_wndproc` -> `ph_shiftmsg`, `WM_KILLFOCUS` = up), not from `GetKeyState`, so a posted key
+message drives it in the lab. On a change the label is posted again (view vt+0x50) with the show / cost / no-funds
+arguments of its last post, when that post showed it and a hint waits. `SC3RESIZE_PLACEHINTS_SHIFT=force|never`
+overrides. Red and green cells are not text and stay on.
+
+### Where the highlight colour comes from
+
+The highlighter cell byte holds a state per nibble (1 = tool code hl+0x2c, 0xf = 0x24, 0 = none, getter
+`0x1004adcd` = vt+0x30). Two readers turn the code into a colour:
+
+- Terrain: sprite manager `0x1001a4c8` (Linux `cSC3CitySpriteManager::createTerrainSpriteCellCursor`) passes
+  (hl+0x28 style, code) to DirtBag (city vt+0x13c) vt+0x70 = SIMDIRT `0x10005d20` -> cell cursor `0x10016b11` (+8 style,
+  +9 = code | 0x80). Its colour, `0x1001576a`: `palette[style & 0x3f].rows[code & 0x7f][shade >> 1]`, palette table at
+  `DAT_10025bac + 0xc`, 9 entries of 8 bytes {loaded byte, rows - 1 short at +2, row array at +4}, loaded from
+  palBasic.bmp, data1Pal.bmp, data2Pal.bmp, data3Pal.bmp, (4 dynamic), palUnder.bmp, palWater.bmp, palEdgeL.bmp,
+  palEdgeD.bmp (`0x10016cce`, rows made by `0x10012342`, freed by `0x100121a9` with msvcrt free). Pixel decode:
+  cdecl `DAT_10025bb4(pixel, &c0, &c1, &c2)` (`add esp, 0x10` after the call at `0x100157b5`).
+  Measured: style 0 has 53 rows of 32 shades. Row 0x23 mid shade decodes to 0 101 131.
+- Sprites (buildings standing on highlighted cells): `0x10018081` (Linux `isRegionHighlighted`, sole caller the E8 at
+  `0x10019903` in `0x10019899`) returns +0xdc (RGB 0 0x8a 0xb4) if any cell is highlighted, +0xde (RGB 0xdf 0x2c 0x2c)
+  if one is 0x24. Both are made once at `0x10016eba` by FUN_1004feba() vt+0x88(&out, r, g, b). The tint goes to the
+  sprite instance vt+0x28.
+
+### Green
+
+Nibble 2 = a new code, the index of a row appended to the style's palette (0x35 in style 0): the light blue row 0x23
+recoloured with the same shading (brightness l = max channel -> RGB l/4, l, 3l/10, mid shade 32 129 32). The getter
+slot returns that code for nibble 2. The `0x10019903` call returns RGB 0x2c 0xb4 0x36 when every highlighted cell under
+a sprite is green. A rising halo cell is set through the stock setter with the tool code (dirty rect, push
+bookkeeping) and its low nibble is then changed to 2. The stock clear (`0x1004b653`, low nibble -> 0) and push
+(`0x1004b779`, nibble compare) handle any value. Falls stay 0x24 red. `SC3RESIZE_PLACEHINTS_GREEN=0` = the old colour.

@@ -43,8 +43,37 @@
  * Row lookup as 0x1001d840: exact type in the map SIMRCI DAT_10058688 (node +0x10 key, +0x14 R C I A), else the first
  * row whose type IsAncestor of it (app SIMRCI 0x1003ceec() vt+0x40 = agent type tree, vt+0x24(ancestor, type)).
  *
+ * Round 2 (placehints2, owner after trying it: "the extra information when placing a zone should be visible when pressing
+ * shift, the zone impact should be in a shade of green, light blue is the same as the zone it's being placed"):
+ *  - SHIFT: the hint TEXT is added to the cost label only while Shift is held; the red / green cells stay always on.
+ *    Stock Shift role (re/analysis/PLACEHINTS.md D): only at button release. GZGraphicD 0x10017b90 maps MK_SHIFT to GZ
+ *    mouse flag 1, and the left-up slots commit only when (flags & 1) == 0 (zone SIMRCI 0x1003f7ca, building SIMGEOM
+ *    0x1002165e): releasing with Shift held cancels the drag / plop (measured: airport drag, no zone, no cost). Down and
+ *    move ignore the flags. This block leaves that as it is. The state comes from the WM_KEYDOWN / WM_KEYUP VK_SHIFT the game
+ *    window receives (rz_wndproc -> ph_shiftmsg), and a change re-posts the label with its last arguments, so it updates
+ *    without a mouse move. SC3RESIZE_PLACEHINTS_SHIFT=force / never: test override (a modifier cannot be posted).
+ *  - GREEN: where a plop raises land value the halo is green, not the tool's light blue. The highlighter holds 3 states
+ *    per cell (low nibble 1 = tool code, 0xf = 0x24, 0 = none), the getter vt+0x30 0x1004adcd maps them, and two
+ *    readers turn the code into a colour:
+ *      terrain:  SIMSPR 0x1001a4c8 -> DirtBag vt+0x70 SIMDIRT 0x10005d20 -> cell cursor 0x10016b11 (+9 = code | 0x80),
+ *                drawn by 0x1001576a as palette[style].row[code][shade] (palette table DAT_10025bac +0xc, 9 entries of
+ *                {loaded, rows - 1 (short +2), row array +4}, built from palBasic.bmp .. palEdgeD.bmp, 0x10016cce /
+ *                0x10012342), decoded by the cdecl DAT_10025bb4(pixel, &c0, &c1, &c2);
+ *      sprites:  SIMSPR 0x10018081 (called only at 0x10019903) returns +0xdc (light blue, RGB 0 0x8a 0xb4) for any
+ *                highlighted cell under the sprite or +0xde (red, RGB 0xdf 0x2c 0x2c) when one is 0x24, both made
+ *                once by the converter FUN_1004feba() vt+0x88(&out, r, g, b) at 0x10016eba.
+ *    The block adds nibble 2 -> code PH_GCODE: a green row appended to the palette of the highlighter's style
+ *    (the tool's light-blue row 0x23 recoloured, same shading), the getter slot returns PH_GCODE for nibble 2, and the
+ *    0x10019903 call returns a green tint when the sprite stands only on green cells. SC3RESIZE_PLACEHINTS_GREEN=0: the
+ *    halo goes back to the tool colour.
+ *
  * SC3RESIZE_PLACEHINTS=0: nothing. _ZONE=0 / _PLOP=0: one of the two. _LOG=1: one line per hint change. */
-static int  g_ph = 1, g_ph_zone = 1, g_ph_plop = 1, g_ph_log;
+static int  g_ph = 1, g_ph_zone = 1, g_ph_plop = 1, g_ph_log, g_ph_green = 1;
+static int  g_ph_shiftmode;         /* 0 = the Shift key, 1 = force (always shown), 2 = never */
+static volatile LONG g_ph_shiftdown;/* Shift held, from the game window's key messages */
+static void *g_ph_lview;            /* last cost label call: view, show, cost, nofunds (for the re-post on Shift) */
+static DWORD g_ph_lshow, g_ph_lcost, g_ph_lnf;
+static int ph_shift(void) { return g_ph_shiftmode == 1 ? 1 : g_ph_shiftmode == 2 ? 0 : g_ph_shiftdown != 0; }
 static BYTE *g_ph_rci, *g_ph_geom, *g_ph_spr;
 static DWORD g_ph_zprev_orig, g_ph_bprev_orig[4], g_ph_lbl_orig;
 static char  g_ph_hint[400];        /* text appended to the cost label, "" = none (game thread only) */
@@ -64,9 +93,10 @@ static DWORD __fastcall ph_label(BYTE *view, void *edx, DWORD show, LONG cost, D
        0x1002146b (building tools), 77 bytes each, or ph_repost. Any other tool (road, query...) drops it. */
     if (!g_ph_inrepost && !(ra - (DWORD)g_ph_rci - 0x3f5d4 < 0x4d) && !(ra - (DWORD)g_ph_geom - 0x2146b < 0x4d))
         g_ph_hint[0] = 0;
+    g_ph_lview = view; g_ph_lshow = show & 0xff; g_ph_lcost = (DWORD)cost; g_ph_lnf = nofunds;   /* for a Shift edge */
     __try {
         BYTE *s = view + 0x134;
-        if (g_ph && g_ph_hint[0] && (show & 0xff)) {
+        if (g_ph && g_ph_hint[0] && (show & 0xff) && ph_shift()) {
             void *f = ((PH_FN0)(g_ph_spr + 0x4ff6a))();
             char buf[600];
             const char *d;
@@ -119,6 +149,25 @@ static void ph_sethint(BYTE *tool, const char *t) {
     ph_repost(tool);
 }
 
+/* rz_wndproc, game window thread (the same thread the tools post the label from): WM_KEYDOWN / WM_KEYUP VK_SHIFT and
+   WM_KILLFOCUS (a key-up then goes to another window). On a change, the label is posted again with the arguments of
+   its last post, when that post showed it and a hint is waiting, so Shift alone adds or drops the text. */
+static void ph_shiftmsg(UINT m, WPARAM wp) {
+    LONG down;
+    if (!g_ph) return;
+    if (m == WM_KILLFOCUS) down = 0;
+    else if ((m == WM_KEYDOWN || m == WM_KEYUP) && wp == VK_SHIFT) down = m == WM_KEYDOWN;
+    else return;
+    if (InterlockedExchange(&g_ph_shiftdown, down) == down || g_ph_shiftmode) return;
+    if (g_ph_log) logf("PLACEHINTS> Shift %s%s", down ? "down" : "up", g_ph_hint[0] && g_ph_lshow ? ": label re-posted" : "");
+    if (!g_ph_hint[0] || !g_ph_lshow || !g_ph_lview) return;
+    __try {
+        g_ph_inrepost = 1;
+        ho_v(g_ph_lview, 0x50, 3, 1, g_ph_lcost, g_ph_lnf, 0, 0);
+    } __except (EXCEPTION_EXECUTE_HANDLER) { }
+    g_ph_inrepost = 0;
+}
+
 /* --------------------------------------------------------------------------------------------- highlighter */
 static void ph_mark(void *hl, LONG x, LONG z, DWORD code) {
     LONG p[3];
@@ -129,6 +178,140 @@ static void ph_push(void *hl, LONG x0, LONG z0, LONG x1, LONG z1) {
     LONG b[6];
     b[0] = x0 << 8; b[1] = z0 << 8; b[2] = 0; b[3] = x1 << 8; b[4] = z1 << 8; b[5] = 0;
     ho_v(hl, 0x58, 1, (DWORD)b, 0, 0, 0, 0);
+}
+
+/* ------------------------------------------------------------------------------------------------- green */
+static BYTE  *g_ph_dirt;
+static DWORD  g_ph_gcode;            /* the green code, the index of the row this block appends (0 = none yet) */
+static void  *g_ph_garr[9];          /* per palette style: the row array this block installed */
+static DWORD  g_ph_get_orig, g_ph_tint_orig;
+static WORD   g_ph_g16, g_ph_g16_for;/* sprite tint, made for this value of the stock tint (+0xdc) */
+typedef void   (__cdecl *PH_DEC)(DWORD px, BYTE *c0, BYTE *c1, BYTE *c2);
+typedef void  *(__cdecl *PH_MALLOC)(size_t);
+typedef size_t (__cdecl *PH_MSIZE)(void *);
+#define PH_GR(l) ((l) / 4)           /* the green from the light blue's brightness l: (l/4, l, l*3/10) */
+#define PH_GB(l) ((l) * 3 / 10)
+
+/* the display colour of r g b (SIMSPR converter FUN_1004feba() vt+0x88(&out, r, g, b), as 0x10016eba makes +0xdc) */
+static WORD ph_enc(DWORD r, DWORD g, DWORD b) {
+    DWORD o = 0;
+    void *cv = ((PH_FN0)(g_ph_spr + 0x4feba))();
+    if (cv) ho_v(cv, 0x88, 4, (DWORD)&o, r, g, b, 0);
+    return (WORD)o;
+}
+
+/* make sure the palette of `style` has the green row at g_ph_gcode. The row array is the game's (msvcrt heap, freed
+   entry by entry by SIMDIRT 0x100121a9 with msvcrt free), so the new array and row come from msvcrt malloc; the rows
+   between the old end and the green one (only when styles differ in height) stay NULL, which that free loop skips. */
+static int ph_green_ready(void *hl) {
+    static PH_MALLOC mal; static PH_MSIZE msz;
+    BYTE *bag, *pal, *e;
+    WORD **arr, **na, *src, *row;
+    DWORD style, rows, need, i, w, s;
+    PH_DEC dec;
+    if (!g_ph_dirt) g_ph_dirt = (BYTE *)GetModuleHandleA("SIMDIRT.DLL");
+    if (!g_ph_green || !g_ph_dirt || !hl) return 0;
+    style = *(DWORD *)((BYTE *)hl + 0x28) & 0x3f;
+    if (style > 8) return 0;
+    bag = *(BYTE **)(g_ph_dirt + 0x25bac);
+    dec = *(PH_DEC *)(g_ph_dirt + 0x25bb4);
+    if (!bag || !dec || IsBadReadPtr(bag, 0x20)) return 0;
+    pal = *(BYTE **)(bag + 0xc);
+    if (!pal || IsBadReadPtr(pal, 9 * 8)) return 0;
+    e = pal + style * 8;
+    if (!e[0]) return 0;
+    arr = *(WORD ***)(e + 4);
+    rows = (DWORD)*(WORD *)(e + 2) + 1;
+    if (arr && arr == g_ph_garr[style] && g_ph_gcode && rows == g_ph_gcode + 1) return 1;
+    if (!arr || rows <= 0x23 || IsBadReadPtr(arr, rows * 4) || !(src = arr[0x23])) return 0;
+    if (!mal) {
+        HMODULE crt = GetModuleHandleA("msvcrt.dll");
+        if (crt) { mal = (PH_MALLOC)GetProcAddress(crt, "malloc"); msz = (PH_MSIZE)GetProcAddress(crt, "_msize"); }
+        if (!mal || !msz) { logf("PLACEHINTS> msvcrt malloc/_msize not found: green halo off"); g_ph_green = 0; return 0; }
+    }
+    if (!g_ph_gcode) g_ph_gcode = rows;            /* one code for every style: the first height seen */
+    if (rows > g_ph_gcode || g_ph_gcode > 0x7f) {  /* a taller style: its row at our code is a stock colour */
+        logf("PLACEHINTS> palette style %lu has %lu rows, green code 0x%lX: green halo off", style, rows, g_ph_gcode);
+        g_ph_green = 0; return 0;
+    }
+    s = (DWORD)msz(src);
+    w = s / 2;
+    if (!s || s == (DWORD)-1 || w < 2 || w > 4096) return 0;
+    need = g_ph_gcode + 1;
+    na = (WORD **)mal(need * 4);
+    row = (WORD *)mal(w * 2);
+    if (!na || !row) return 0;
+    for (i = 0; i < need; i++) na[i] = i < rows ? arr[i] : NULL;
+    for (i = 0; i < w; i++) {                       /* same shading as the light blue: brightness = max channel */
+        BYTE c[3] = { 0, 0, 0 }, l;
+        dec((DWORD)src[i], &c[0], &c[1], &c[2]);
+        l = c[0] > c[1] ? c[0] : c[1]; if (c[2] > l) l = c[2];
+        row[i] = ph_enc(PH_GR(l), l, PH_GB(l));
+    }
+    na[g_ph_gcode] = row;
+    *(WORD ***)(e + 4) = na;                        /* the old array is left allocated: a reader may hold it */
+    *(WORD *)(e + 2) = (WORD)(need - 1);
+    g_ph_garr[style] = na;
+    {   BYTE c[3] = { 0, 0, 0 }, g[3] = { 0, 0, 0 };
+        dec((DWORD)src[w / 2], &c[0], &c[1], &c[2]); dec((DWORD)row[w / 2], &g[0], &g[1], &g[2]);
+        logf("PLACEHINTS> green row 0x%lX added to palette style %lu (%lu rows, %lu shades): mid shade light blue "
+             "%u %u %u -> green %u %u %u", g_ph_gcode, style, rows, w, c[0], c[1], c[2], g[0], g[1], g[2]); }
+    return 1;
+}
+
+/* highlighter getter vt+0x30 (0x1004adcd, void(pos*, code*), ret 8): nibble 2 = the green code */
+static void __fastcall ph_hlget(BYTE *hl, void *edx, LONG *pos, DWORD *out) {
+    DWORD a[2];
+    (void)edx;
+    a[0] = (DWORD)pos; a[1] = (DWORD)out;
+    rz_thiscall_ret(hl, (void *)g_ph_get_orig, a, 2);
+    if (g_ph_gcode && g_ph_green && pos && out && !*out) {
+        __try {
+            void *g = *(void **)(hl + 0x6c);
+            BYTE b = 0;
+            if (g) { ho_v(g, 0x34, 3, (DWORD)(pos[0] >> 8), (DWORD)(pos[1] >> 8), (DWORD)&b, 0, 0); if ((b & 0xf) == 2) *out = g_ph_gcode; }
+        } __except (EXCEPTION_EXECUTE_HANDLER) { }
+    }
+}
+
+/* SIMSPR 0x10018081 (sprite manager, this+0x1c highlighter; (x0, z0, x1, z1, colour*), ret 0x14), called at 0x10019903:
+   a sprite standing only on green cells (no tool-coloured or red cell) gets the green tint */
+static DWORD __fastcall ph_tint(BYTE *mgr, void *edx, DWORD x0, DWORD z0, DWORD x1, DWORD z1, DWORD *out) {
+    DWORD a[5], r;
+    (void)edx;
+    a[0] = x0; a[1] = z0; a[2] = x1; a[3] = z1; a[4] = (DWORD)out;
+    r = rz_thiscall_ret(mgr, (void *)g_ph_tint_orig, a, 5);
+    if (!(r & 0xff) || !g_ph_gcode || !g_ph_green || !out) return r;
+    __try {
+        WORD blue = *(WORD *)(mgr + 0xdc);
+        void *hl = *(void **)(mgr + 0x1c);
+        DWORD x, z, code;
+        int green = 0, other = 0;
+        if (*out != blue || !hl || x1 < x0 || z1 < z0 || x1 - x0 > 63 || z1 - z0 > 63) return r;
+        for (x = x0; x <= x1 && !other; x++) for (z = z0; z <= z1 && !other; z++) {
+            LONG p[3];
+            p[0] = (LONG)(x << 8); p[1] = (LONG)(z << 8); p[2] = 0; code = 0;
+            ho_v(hl, 0x30, 2, (DWORD)p, (DWORD)&code, 0, 0, 0);
+            if (code == g_ph_gcode) green = 1; else if (code) other = 1;
+        }
+        if (green && !other) {
+            if (g_ph_g16_for != blue || !g_ph_g16) { g_ph_g16 = ph_enc(0x2c, 0xb4, 0x36); g_ph_g16_for = blue; }
+            *out = g_ph_g16;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { }
+    return r;
+}
+
+/* a halo cell going up: the tool's own code through the stock setter (dirty rect, push bookkeeping), then nibble 2 */
+static void ph_mark_up(void *hl, LONG x, LONG z) {
+    void *g;
+    BYTE b = 0;
+    ph_mark(hl, x, z, *(DWORD *)((BYTE *)hl + 0x2c));
+    if (!ph_green_ready(hl) || !(g = *(void **)((BYTE *)hl + 0x6c))) return;
+    ho_v(g, 0x34, 3, (DWORD)x, (DWORD)z, (DWORD)&b, 0, 0);
+    if ((b & 0xf) != 1) return;
+    b = (BYTE)((b & 0xf0) | 2);
+    ho_v(g, 0x3c, 3, (DWORD)x, (DWORD)z, (DWORD)&b, 0, 0);
 }
 
 /* city size in cells: SIMRCI app vt+0x18 = city, vt+0xcc / vt+0xd0 (the base tool ctor 0x1003f48e reads the same) */
@@ -329,7 +512,7 @@ static DWORD __fastcall ph_bprev(BYTE *tool, void *edx, LONG *pos, LONG *out, in
                 for (cx = gx * 4; cx < gx * 4 + 4; cx++) for (cz = gz * 4; cz < gz * 4 + 4; cz++) {
                     LONG d;
                     if (cx >= fx0 && cx <= fx1 && cz >= fz0 && cz <= fz1) continue;   /* footprint: the stock preview */
-                    ph_mark(hl, cx, cz, v > 0 ? 0x23 : 0x24);
+                    if (v > 0) ph_mark_up(hl, cx, cz); else ph_mark(hl, cx, cz, 0x24);   /* up green, down red */
                     d = cx < fx0 ? fx0 - cx : cx > fx1 ? cx - fx1 : 0;
                     if (cz < fz0 && fz0 - cz > d) d = fz0 - cz;
                     if (cz > fz1 && cz - fz1 > d) d = cz - fz1;
@@ -345,7 +528,8 @@ static DWORD __fastcall ph_bprev(BYTE *tool, void *edx, LONG *pos, LONG *out, in
             for (k = 0; k < 3; k++) wsprintfA(part[k], "%c %s%ld%%", cls[k], peak[k] > 0 ? "+" : "", peak[k]);
             wsprintfA(t, SC3TR(ho_spanish(), "placehints.land_value", "Valor del suelo %s  %s  %s  |  %s %c %s%ld%% o mas hasta %ld celdas",
                                "Land value %s  %s  %s  |  %s %c %s%ld%% or more up to %ld cells"), part[0], part[1], part[2],
-                      peak[best] > 0 ? SC3TR(ho_spanish(), "placehints.marked", "marcado", "marked") : SC3TR(ho_spanish(), "placehints.in_red", "en rojo", "red"),
+                      peak[best] > 0 ? (g_ph_green && g_ph_gcode ? SC3TR(ho_spanish(), "placehints.in_green", "en verde", "green")
+                                                                 : SC3TR(ho_spanish(), "placehints.marked", "marcado", "marked")) : SC3TR(ho_spanish(), "placehints.in_red", "en rojo", "red"),
                       cls[best], peak[best] > 0 ? "+" : "-", thr, reach);
         }
         if (g_ph_log && lstrcmpA(g_ph_hint, t))
@@ -372,6 +556,9 @@ static void ph_install(void) {
     if (GetEnvironmentVariableA("SC3RESIZE_PLACEHINTS_ZONE", v, sizeof(v))) g_ph_zone = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_PLACEHINTS_PLOP", v, sizeof(v))) g_ph_plop = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_PLACEHINTS_LOG", v, sizeof(v))) g_ph_log = atoi(v);
+    if (GetEnvironmentVariableA("SC3RESIZE_PLACEHINTS_GREEN", v, sizeof(v))) g_ph_green = atoi(v);
+    if (GetEnvironmentVariableA("SC3RESIZE_PLACEHINTS_SHIFT", v, sizeof(v)))
+        g_ph_shiftmode = !lstrcmpiA(v, "force") ? 1 : !lstrcmpiA(v, "never") ? 2 : 0;
     if (!g_ph) { logf("PLACEHINTS> off (SC3RESIZE_PLACEHINTS=0)"); return; }
     while (st++ < 300 && !((rci = GetModuleHandleA("SIMRCI.DLL")) && (geom = GetModuleHandleA("SIMGEOM.DLL")) &&
                            (spr = GetModuleHandleA("SIMSPR.DLL")))) Sleep(100);
@@ -403,7 +590,23 @@ static void ph_install(void) {
         }
         if (!nb) { logf("PLACEHINTS> no building tool preview slot is shipped: plop hint off"); g_ph_plop = 0; }
     }
-    logf("PLACEHINTS> on: cost label (SIMSPR view +0x50)%s%s", g_ph_zone ? ", airport/seaport zone drag (SIMRCI +0x54)" : "",
-         g_ph_plop ? ", land value halo for plopped buildings (SIMGEOM +0x54)" : "");
+    if (g_ph_plop && g_ph_green) {   /* GREEN: palette row (SIMDIRT), getter slot, sprite tint call (SIMSPR) */
+        BYTE *call = g_ph_spr + 0x19903;
+        DWORD old;
+        slot = (DWORD *)(g_ph_spr + 0x67a5c + 0x30);
+        if (*slot != (DWORD)g_ph_spr + 0x4adcd || call[0] != 0xe8 ||
+                 (DWORD)(call + 5 + *(LONG *)(call + 1)) != (DWORD)g_ph_spr + 0x18081) {
+            logf("PLACEHINTS> highlighter getter 0x%08lX / tint call %02X not shipped: green halo off", *slot, call[0]);
+            g_ph_green = 0;
+        } else if (VirtualProtect(call + 1, 4, PAGE_EXECUTE_READWRITE, &old)) {
+            rl_patch_slot(slot, (void *)ph_hlget, &g_ph_get_orig);
+            g_ph_tint_orig = (DWORD)g_ph_spr + 0x18081;
+            InterlockedExchange((LONG volatile *)(call + 1), (LONG)((DWORD)ph_tint - (DWORD)(call + 5)));
+            FlushInstructionCache(GetCurrentProcess(), call, 5);
+        } else { logf("PLACEHINTS> tint call not writable: green halo off"); g_ph_green = 0; }
+    }
+    logf("PLACEHINTS> on: cost label (SIMSPR view +0x50)%s%s%s, hint text %s", g_ph_zone ? ", airport/seaport zone drag (SIMRCI +0x54)" : "",
+         g_ph_plop ? ", land value halo for plopped buildings (SIMGEOM +0x54)" : "", g_ph_plop && g_ph_green ? " in green" : "",
+         g_ph_shiftmode == 1 ? "always (SHIFT=force)" : g_ph_shiftmode == 2 ? "never (SHIFT=never)" : "while Shift is held");
 }
 static DWORD WINAPI ph_thread(LPVOID p) { (void)p; ph_install(); return 0; }

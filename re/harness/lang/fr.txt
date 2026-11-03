@@ -582,3 +582,7 @@ placehints.runway="piste : 3x5 ou plus, "
 placehints.seaport=Port
 # en: Date repaired, free
 restore.date_repaired_free=Date réparée, gratuit
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: green
+placehints.in_green=en vert

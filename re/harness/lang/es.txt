@@ -233,6 +233,7 @@ lifespan.y_m=%lda %ldm
 
 # ---- placehints
 placehints.airport=Aeropuerto
+placehints.in_green=en verde
 placehints.in_red=en rojo
 placehints.land_value=Valor del suelo %s  %s  %s  |  %s %c %s%ld%% o mas hasta %ld celdas
 placehints.marked=marcado
