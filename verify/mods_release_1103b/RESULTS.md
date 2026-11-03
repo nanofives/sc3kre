@@ -24,3 +24,9 @@ Source: main `6e99ead`.
 Zip: the 11-03 zip with Apps/sc3resize.dll and Apps/sc3lang/*.txt replaced, README.txt updated (header, NEW IN 2026-11-03b).
 142 entries, 141 checked against the staged manifest, 0 mismatches. `sc3mods_2026-11-03b.zip` 50,712,727 bytes, SHA-256
 B526D5D1D9F79023DE8FD37C265784523DA46257129EA632CED50067ABE44871.
+
+GitHub: `sc3mods-2026-11-03b`, target `5c57c20`, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-11-03b, asset
+downloaded back, SHA-256 matches. The 11-03 notes start with a "superseded" line.
+
+LAN: deployed from `stage/release_1103b`, served label `2026-11-03b`, served sc3resize.dll and sc3lang/es.txt match the stage.
+Then `stage/release` -> `stage/release_1103_old`, `stage/release_1103b` -> `stage/release`.
