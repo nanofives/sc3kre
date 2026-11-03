@@ -563,6 +563,8 @@ static void rs_qrows(void *win, BYTE *qo) {
             _snprintf(v, sizeof(v), "%lu", *(DWORD *)(occ + 0x24)); v[sizeof(v) - 1] = 0;
             tried++; n += qr_row(li, SC3TR(es, "lifespan.professors_this_one", "Profesores (esta):", "Professors (this one):"), v);
         }
+        {   int sn = sw_qrows(li, occ);   /* STATIONWARN: why a station gets no passengers */
+            n += sn; tried += sn; }
         logf("QROWS> %d of %d row(s) added", n, tried);
         if (n > 0) qr_grow(win, occ, n);
     } __except (EXCEPTION_EXECUTE_HANDLER) { logf("QROWS> fault 0x%08lX", GetExceptionCode()); }

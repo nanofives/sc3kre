@@ -315,6 +315,20 @@ restore.restored_for=Restaurado por $%s
 restore.restored_for_2=%d restaurado(s) por $%s
 restore.this_building_does_not=Este edificio no envejece
 
+# ---- stationwarn
+stationwarn.bus_no_street=sin calle al lado
+stationwarn.connected=correcta
+stationwarn.connection=Conexión:
+stationwarn.cuadros_bad=Estaciones sin conexión: %ld de %ld
+stationwarn.cuadros_ok=Estaciones: %ld, todas conectadas
+stationwarn.no_access=sin calle ni edificios
+stationwarn.no_passengers=Sin pasajeros:
+stationwarn.rail_no_dest=vía sin otra estación
+stationwarn.rail_no_track=no toca la vía
+stationwarn.rs_no_track=no toca vía ni metro
+stationwarn.subway_no_dest=metro sin otra estación
+stationwarn.subway_no_track=no toca el metro
+
 # ---- undo
 undo.redo=Rehacer (Ctrl+Y)
 undo.undo=Deshacer (Ctrl+Z)

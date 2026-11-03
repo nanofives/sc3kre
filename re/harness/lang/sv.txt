@@ -614,3 +614,27 @@ placehints.st_trips=%ld resor i månaden börjar här, %ld med kollektivtrafik (
 placehints.st_trips_load=%ld resor sedan laddningen börjar här, %ld med kollektivtrafik (grön)
 # en: %s: walk R %d C %d I %d cells  |  %s  |  %s
 placehints.station=%s: till fots R %d C %d I %d rutor  |  %s  |  %s
+# en: no street next to it
+stationwarn.bus_no_street=ingen gata intill
+# en: connected
+stationwarn.connected=korrekt
+# en: Connection:
+stationwarn.connection=Anslutning:
+# en: Stations not connected: %ld of %ld
+stationwarn.cuadros_bad=Stationer utan anslutning: %ld av %ld
+# en: Stations: %ld, all connected
+stationwarn.cuadros_ok=Stationer: %ld, alla anslutna
+# en: no street or buildings
+stationwarn.no_access=ingen gata/byggnad
+# en: No passengers:
+stationwarn.no_passengers=Inga resenärer:
+# en: no other station on it
+stationwarn.rail_no_dest=ingen annan station
+# en: not on the track
+stationwarn.rail_no_track=rör inte spåret
+# en: not on track or subway
+stationwarn.rs_no_track=ej spår eller t-bana
+# en: no other station on it
+stationwarn.subway_no_dest=ingen annan station
+# en: not on the subway line
+stationwarn.subway_no_track=rör inte tunnelbanan

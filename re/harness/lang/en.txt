@@ -604,6 +604,32 @@ restore.restored_for_2=%d restored for $%s
 # sc3restore.c
 restore.this_building_does_not=This building does not age
 
+# ---- stationwarn
+# sc3resize_stationwarn.c
+stationwarn.bus_no_street=no street next to it
+# sc3resize_stationwarn.c
+stationwarn.connected=connected
+# sc3resize_stationwarn.c
+stationwarn.connection=Connection:
+# sc3resize_stationwarn.c
+stationwarn.cuadros_bad=Stations not connected: %ld of %ld
+# sc3resize_stationwarn.c
+stationwarn.cuadros_ok=Stations: %ld, all connected
+# sc3resize_stationwarn.c
+stationwarn.no_access=no street or buildings
+# sc3resize_stationwarn.c
+stationwarn.no_passengers=No passengers:
+# sc3resize_stationwarn.c
+stationwarn.rail_no_dest=no other station on it
+# sc3resize_stationwarn.c
+stationwarn.rail_no_track=not on the track
+# sc3resize_stationwarn.c
+stationwarn.rs_no_track=not on track or subway
+# sc3resize_stationwarn.c
+stationwarn.subway_no_dest=no other station on it
+# sc3resize_stationwarn.c
+stationwarn.subway_no_track=not on the subway line
+
 # ---- undo
 # sc3undo.c
 undo.redo=Redo (Ctrl+Y)

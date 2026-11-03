@@ -614,3 +614,27 @@ placehints.st_trips=%ld ritten per maand beginnen hier, %ld met ov (groen)
 placehints.st_trips_load=%ld ritten sinds het laden beginnen hier, %ld met ov (groen)
 # en: %s: walk R %d C %d I %d cells  |  %s  |  %s
 placehints.station=%s: lopen R %d C %d I %d vakken  |  %s  |  %s
+# en: no street next to it
+stationwarn.bus_no_street=geen straat ernaast
+# en: connected
+stationwarn.connected=in orde
+# en: Connection:
+stationwarn.connection=Verbinding:
+# en: Stations not connected: %ld of %ld
+stationwarn.cuadros_bad=Stations zonder verbinding: %ld van %ld
+# en: Stations: %ld, all connected
+stationwarn.cuadros_ok=Stations: %ld, alle verbonden
+# en: no street or buildings
+stationwarn.no_access=geen straat of huizen
+# en: No passengers:
+stationwarn.no_passengers=Geen reizigers:
+# en: no other station on it
+stationwarn.rail_no_dest=geen ander station
+# en: not on the track
+stationwarn.rail_no_track=raakt het spoor niet
+# en: not on track or subway
+stationwarn.rs_no_track=geen spoor of metro
+# en: no other station on it
+stationwarn.subway_no_dest=geen ander station
+# en: not on the subway line
+stationwarn.subway_no_track=raakt de metro niet

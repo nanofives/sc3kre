@@ -10175,6 +10175,7 @@ static void gx_install(HMODULE sui) {
 }
 #include "sc3resize_vdtabs.c"   /* VDTABS: drawn tabs for the Graficas and Cuadros pages (SC3RESIZE_VDTABS=0) */
 #include "sc3resize_graphs.c"   /* GRAPHNEW: 14 new graphs + tabs on the Graficas page (SC3RESIZE_GRAPHNEW=0, SC3RESIZE_GRAPHTABS=0) */
+#include "sc3resize_stationwarn.c"   /* STATIONWARN: poorly connected stations flagged ("?" rows, Cuadros line, red marker) (SC3RESIZE_STATIONWARN=0) */
 #include "sc3resize_vdbars.c"   /* VDBARS: Cuadros tabs + bar charts (education, health, water, transport) (SC3RESIZE_VDBARS=0, SC3RESIZE_TRIPMODES=0) */
 #include "sc3resize_rcibars.c"  /* RCIBARS: Aeropuerto / Puerto capacity-in-use bars on the RCI (SC3RESIZE_RCIBARS=0) */
 
@@ -16290,6 +16291,7 @@ static void __stdcall fnlog_enter(int idx, DWORD *f) {
         if (g_menubg && !g_blt_slot && f[7] && !IsBadReadPtr((void *)(f[7] + 4), 4))
             rz_patch_ddblt_surf(*(DWORD *)(f[7] + 4));
         rz_poll();
+        sw_tick();   /* STATIONWARN: the red marker on poorly connected stations */
         if (g_census_ms && GetTickCount() >= g_census_ms) { g_census_ms = 0; rz_census(); }
         if (g_hudlab) rz_hudlab_tick();
         return;
@@ -18660,6 +18662,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           rm_install(sui);   /* RESTORE: "Vida util" list on the Reunirse list page */
           gx_install(sui);   /* GRAPHAXIS: Y axis on the Graficas page */
           gn_install(sui);   /* GRAPHNEW: income/expenses, power, water, RCI, pollution graphs */
+          sw_install();      /* STATIONWARN: poorly connected stations */
           vb_install(sui);   /* VDTABS / VDBARS: Cuadros tabs, bars, trip modes */
           rcb_install(sui);  /* RCIBARS: A / P capacity-in-use bars on the RCI meter */
           rl_install();      /* RELOCATE: "Mover" in the "?" of rewards/landmarks, auto-demolish of zoned buildings */
