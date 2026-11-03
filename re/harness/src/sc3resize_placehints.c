@@ -76,6 +76,9 @@ static DWORD g_ph_lshow, g_ph_lcost, g_ph_lnf;
 static int ph_shift(void) { return g_ph_shiftmode == 1 ? 1 : g_ph_shiftmode == 2 ? 0 : g_ph_shiftdown != 0; }
 static BYTE *g_ph_rci, *g_ph_geom, *g_ph_spr;
 static DWORD g_ph_zprev_orig, g_ph_bprev_orig[4], g_ph_lbl_orig;
+static int   g_ph_shiftplace = 1;   /* SHIFTPLACE: Shift + button release places like a plain release, hint tools only */
+static DWORD g_ph_zup_orig, g_ph_bup_orig[4];
+static BYTE *g_ph_hinttool;         /* the tool whose preview made the current hint (game thread) */
 static char  g_ph_hint[400];        /* text appended to the cost label, "" = none (game thread only) */
 static int   g_ph_inrepost;         /* ph_repost is calling the label (game thread) */
 static int   g_ph_lbl_dirty;      /* the label string holds a hint: force a stock re-format once it is gone */
@@ -136,6 +139,7 @@ static void ph_repost(BYTE *tool) {
 }
 
 static void ph_sethint(BYTE *tool, const char *t) {
+    if (t[0]) g_ph_hinttool = tool; else if (g_ph_hinttool == tool) g_ph_hinttool = NULL;
     if (!lstrcmpA(g_ph_hint, t)) return;
     lstrcpynA(g_ph_hint, t, sizeof(g_ph_hint));
     if (g_ph_log && lstrcmpA(g_ph_lastlog, t)) {
@@ -167,6 +171,26 @@ static void ph_shiftmsg(UINT m, WPARAM wp) {
     } __except (EXCEPTION_EXECUTE_HANDLER) { }
     g_ph_inrepost = 0;
 }
+
+/* ------------------------------------------------------------------------------------------ SHIFTPLACE */
+/* Stock: the left-up slots commit only when (flags & 1) == 0, flag 1 = MK_SHIFT (zone SIMRCI 0x1003f7ca, building SIMGEOM
+   0x1002165e, both (x, z, byte flags), ret 0xc). While the tool is the one whose preview made the current hint (airport /
+   seaport zone drag, plop with a land value row) the flag is dropped, so Shift + release places like a plain release.
+   Other tools, other zone types, plops without a hint and every other use of Shift are not touched. */
+static DWORD ph_up(BYTE *tool, DWORD orig, DWORD x, DWORD z, DWORD flags) {
+    DWORD a[3];
+    if (g_ph && g_ph_shiftplace && (flags & 1) && tool == g_ph_hinttool && g_ph_hint[0]) {
+        if (g_ph_log) logf("PLACEHINTS> Shift + release on the hint tool: placed as a plain release");
+        flags &= ~1u;
+    }
+    a[0] = x; a[1] = z; a[2] = flags;
+    return rz_thiscall_ret(tool, (void *)orig, a, 3);
+}
+static DWORD __fastcall ph_zup(BYTE *t, void *e, DWORD x, DWORD z, DWORD f) { (void)e; return ph_up(t, g_ph_zup_orig, x, z, f); }
+static DWORD __fastcall ph_bup0(BYTE *t, void *e, DWORD x, DWORD z, DWORD f) { (void)e; return ph_up(t, g_ph_bup_orig[0], x, z, f); }
+static DWORD __fastcall ph_bup1(BYTE *t, void *e, DWORD x, DWORD z, DWORD f) { (void)e; return ph_up(t, g_ph_bup_orig[1], x, z, f); }
+static DWORD __fastcall ph_bup2(BYTE *t, void *e, DWORD x, DWORD z, DWORD f) { (void)e; return ph_up(t, g_ph_bup_orig[2], x, z, f); }
+static DWORD __fastcall ph_bup3(BYTE *t, void *e, DWORD x, DWORD z, DWORD f) { (void)e; return ph_up(t, g_ph_bup_orig[3], x, z, f); }
 
 /* --------------------------------------------------------------------------------------------- highlighter */
 static void ph_mark(void *hl, LONG x, LONG z, DWORD code) {
@@ -557,6 +581,7 @@ static void ph_install(void) {
     if (GetEnvironmentVariableA("SC3RESIZE_PLACEHINTS_PLOP", v, sizeof(v))) g_ph_plop = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_PLACEHINTS_LOG", v, sizeof(v))) g_ph_log = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_PLACEHINTS_GREEN", v, sizeof(v))) g_ph_green = atoi(v);
+    if (GetEnvironmentVariableA("SC3RESIZE_PLACEHINTS_SHIFTPLACE", v, sizeof(v))) g_ph_shiftplace = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_PLACEHINTS_SHIFT", v, sizeof(v)))
         g_ph_shiftmode = !lstrcmpiA(v, "force") ? 1 : !lstrcmpiA(v, "never") ? 2 : 0;
     if (!g_ph) { logf("PLACEHINTS> off (SC3RESIZE_PLACEHINTS=0)"); return; }
@@ -583,10 +608,20 @@ static void ph_install(void) {
         if (*slot == (DWORD)g_ph_rci + 0xb9d2) rl_patch_slot(slot, (void *)ph_zprev, &g_ph_zprev_orig);
         else { logf("PLACEHINTS> zone tool preview slot is 0x%08lX, not shipped: zone hint off", *slot); g_ph_zone = 0; }
     }
+    if (g_ph_zone && g_ph_shiftplace) {
+        slot = (DWORD *)(g_ph_rci + 0x4c06c + 0x28);
+        if (*slot == (DWORD)g_ph_rci + 0x3f7ca) rl_patch_slot(slot, (void *)ph_zup, &g_ph_zup_orig);
+        else logf("PLACEHINTS> zone tool up slot is 0x%08lX, not shipped: SHIFTPLACE off for zones", *slot);
+    }
     if (g_ph_plop) {
         for (i = 0; i < 4; i++) {
             slot = (DWORD *)(g_ph_geom + bvt[i] + 0x54);
             if (*slot == (DWORD)g_ph_geom + 0x968b) { rl_patch_slot(slot, bfn[i], &g_ph_bprev_orig[i]); nb++; }
+            slot = (DWORD *)(g_ph_geom + bvt[i] + 0x28);
+            if (g_ph_shiftplace && *slot == (DWORD)g_ph_geom + 0x2165e) {
+                static void *const bup[4] = { (void *)ph_bup0, (void *)ph_bup1, (void *)ph_bup2, (void *)ph_bup3 };
+                rl_patch_slot(slot, bup[i], &g_ph_bup_orig[i]);
+            }
         }
         if (!nb) { logf("PLACEHINTS> no building tool preview slot is shipped: plop hint off"); g_ph_plop = 0; }
     }
