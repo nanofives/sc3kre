@@ -339,7 +339,7 @@ static void ph_mark(void *hl, LONG x, LONG z, DWORD code) {
 static void ph_push(void *hl, LONG x0, LONG z0, LONG x1, LONG z1) {
     LONG b[6];
     b[0] = x0 << 8; b[1] = z0 << 8; b[2] = 0; b[3] = x1 << 8; b[4] = z1 << 8; b[5] = 0;
-    ho_v(hl, 0x58, 1, (DWORD)b, 0, 0, 0, 0);
+    hl_push(hl, b, 0);   /* GHOSTFIX (sc3resize_stationwarn.c): push the union with the dirty rect, never shrink it */
 }
 
 /* ------------------------------------------------------------------------------------------------- green */

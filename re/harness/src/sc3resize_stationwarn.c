@@ -363,6 +363,42 @@ static void *sw_hl(void) {
     }
     return NULL;
 }
+/* GHOSTFIX (child ghosttiles 2026-11-03, owner: "when placing a ploppable sometimes i see traces of the indicator on the
+ * map, like ghost colored tiles"). The highlighter's push vt+0x58 SIMSPR 0x1004b779(rect6) repaints the cells of the
+ * rect (plus the dirty rect +0x50 while +0x25 == 0) and then sets the dirty rect +0x50 to the rect it was GIVEN
+ * [CONFIRMED @ SIMSPR 0x1004b779, the copy at LAB_1004b931]. The tools' clear FUN_1004b653 wipes only the cells inside
+ * +0x50 (called by the fill 0x1004af93 on every preview and by the cancel 0x1004ae23). So any push with a rect that does
+ * not hold every live cell strands the rest: they stay drawn until a game restart. Two such pushes existed:
+ *  - the marker below pushed a station's rect every 700 ms (blink): +0x50 became that station and the tool's last
+ *    footprint / halo was never cleared, for every tool, in any city with a flagged station;
+ *  - placehints pushed only its halo bbox, which can leave the stock footprint outside +0x50.
+ * hl_push(hl, rect, keep): keep = 1 (the marker) restores +0x50 after the push, so the marker stays out of the tools'
+ * clear as before and the tools keep their own rect; keep = 0 (a preview) pushes the union of the rect and +0x50, so
+ * +0x50 never shrinks. SC3RESIZE_GHOSTFIX=0: the plain push of before. */
+static int g_gf = -1;
+static void hl_push(void *hl, LONG *r, int keep) {
+    BYTE *h = (BYTE *)hl;
+    LONG save[6], u[6];
+    int i;
+    if (g_gf < 0) { char v[8]; g_gf = GetEnvironmentVariableA("SC3RESIZE_GHOSTFIX", v, sizeof(v)) ? atoi(v) : 1;
+                    logf("GHOSTFIX> %s", g_gf ? "on: highlighter pushes keep the dirty rect +0x50" : "off (SC3RESIZE_GHOSTFIX=0)"); }
+    if (!g_gf || IsBadReadPtr(h + 0x50, 0x18)) { ho_v(hl, 0x58, 1, (DWORD)r, 0, 0, 0, 0); return; }
+    memcpy(save, h + 0x50, sizeof(save));
+    if (keep) {
+        ho_v(hl, 0x58, 1, (DWORD)r, 0, 0, 0, 0);
+        memcpy(h + 0x50, save, sizeof(save));
+        return;
+    }
+    for (i = 0; i < 6; i++) u[i] = r[i];
+    if (!h[0x25]) {   /* +0x50 holds live cells (0x1004b534 clears +0x25 on every set, 0x1004ae23 sets it once cleared) */
+        if (save[0] < u[0]) u[0] = save[0];
+        if (save[1] < u[1]) u[1] = save[1];
+        if (save[3] > u[3]) u[3] = save[3];
+        if (save[4] > u[4]) u[4] = save[4];
+    }
+    ho_v(hl, 0x58, 1, (DWORD)u, 0, 0, 0, 0);
+}
+
 /* one rect's cells to red (on) or back to none (only cells still red); 1 = something changed */
 static int sw_paint(void *hl, int x0, int z0, int x1, int z1, int on) {
     void *g = *(void **)((BYTE *)hl + 0x6c);
@@ -379,7 +415,7 @@ static int sw_paint(void *hl, int x0, int z0, int x1, int z1, int on) {
     if (ch) {
         LONG r[6];
         r[0] = x0 << 8; r[1] = z0 << 8; r[2] = 0; r[3] = x1 << 8; r[4] = z1 << 8; r[5] = 0;
-        ho_v(hl, 0x58, 1, (DWORD)r, 0, 0, 0, 0);
+        hl_push(hl, r, 1);   /* GHOSTFIX: the tools' dirty rect +0x50 is put back after the repaint */
     }
     return ch;
 }
