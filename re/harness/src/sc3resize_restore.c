@@ -159,6 +159,7 @@ static struct { BYTE *self; void *win; LPARAM cell; } g_rs_close;   /* the dialo
  *   RSARROWS  "<" ">" as 24x25 image buttons cut from the close box's art (were 40 px text buttons whose pills overlap)
  *   RSHG2     the hourglass redrawn as pixel art (off = the 11-02c drawing) */
 static int g_rs_strip = 1;   /* SC3RESIZE_RSSTRIP=0: no continuous footer band */
+static int g_rs_arrow_dy = 2;   /* ARROWSV: the arrows 2 px lower (owner 2026-11-03, measured 2 px high on 01_list_p1); SC3RESIZE_RSARROW_DY=<n> */
 static int g_rs_rebuild = 1, g_rs_title = 1, g_rs_arrows = 1, g_rs_hg2 = 1, g_rs_fix_init;
 static void rs_fix_init(void) {
     char v[8];
@@ -167,6 +168,7 @@ static void rs_fix_init(void) {
     if (GetEnvironmentVariableA("SC3RESIZE_REBUILD", v, sizeof(v))) g_rs_rebuild = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_RSTITLE", v, sizeof(v))) g_rs_title = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_RSARROWS", v, sizeof(v))) g_rs_arrows = atoi(v);
+    if (GetEnvironmentVariableA("SC3RESIZE_RSARROW_DY", v, sizeof(v))) g_rs_arrow_dy = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_RSSTRIP", v, sizeof(v))) g_rs_strip = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_RSHG2", v, sizeof(v))) g_rs_hg2 = atoi(v);
     logf("RESTOREFIX> REBUILD %d, RSTITLE %d, RSARROWS %d, RSHG2 %d", g_rs_rebuild, g_rs_title, g_rs_arrows, g_rs_hg2);
@@ -882,7 +884,7 @@ static void rm_open(void *win) {
             /* RSARROWS (restorefix, owner: "'<' '>' smaller, they overlap", shot 1793660447360): a text button's pill is
                wider than 40 px and the next box paints over its right end, so the arrows are 24x25 image buttons cut from
                the close box's art (bevel and state frames as the X), 6 px apart, centred on the footer row */
-            LONG aw = 24, gap = 6, ya = yb + (QI_BH - 25) / 2, xp;
+            LONG aw = 24, gap = 6, ya = yb + (QI_BH - 25) / 2 + g_rs_arrow_dy, xp;
             int oa;
             wa = w - 16 - 84 - (3 * gap + 2 * aw);
             xa = 8;
