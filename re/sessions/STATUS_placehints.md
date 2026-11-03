@@ -92,3 +92,35 @@ Owner after trying placehints: hint text only while Shift is held, impact halo i
 ## asks of other sessions
 - any mod that reads highlighter codes through vt+0x30 can now see 0x35 (only under a plop halo). sc3undo's tint
   clear is unaffected.
+
+# STATUS placehints3 (2026-11-02, Shift + release places)
+
+## goal
+Owner: Shift + release places the zone. Only hint tools, only the button-up, off switch `SC3RESIZE_PLACEHINTS_SHIFTPLACE=0`.
+
+## verdict + deciding RVAs
+Wrapped the left-up slots: SIMRCI `0x1004c06c`+0x28 (`0x1003f7ca`) and SIMGEOM 4 vtables +0x28 (`0x1002165e`). The wrapper
+clears flag bit 0 (MK_SHIFT) when the tool is the current hint tool. Flag meaning: GZGraphicD `0x10017b90`.
+
+## built
+`dev\placehints3\inst\sc3resize.dll`, clean build.
+
+## proven game-side vs static only
+- game-side (`verify/placehints3/RESULTS.md`): airport 30 cells placed, charged $15,000. Big Park placed, charged
+  $1,045. Road drag with Shift + release still cancels (stock).
+- not run: `_SHIFTPLACE=0`, the physical key, the full mod set.
+
+## blocked on
+-
+
+## files owned
+- re/harness/src/sc3resize_placehints.c  (force-add)
+- verify/placehints3/RESULTS.md  (MAIN)
+- re/sessions/STATUS_placehints.md  (this section, MAIN)
+- pictures in MAIN\verify\placehints3\owner_shots\ (not for git)
+
+## game-harness need
+-
+
+## asks of other sessions
+-
