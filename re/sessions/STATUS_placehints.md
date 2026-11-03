@@ -124,3 +124,45 @@ clears flag bit 0 (MK_SHIFT) when the tool is the current hint tool. Flag meanin
 
 ## asks of other sessions
 -
+
+# STATUS placehints4 (2026-11-03, owner feedback on sc3mods-2026-11-03)
+
+## goal
+1. Plop land value halo only while Shift is held. 2. Public transport in the Shift view: (a) station catchment + trip
+counts, with the in-box transit split (orchestrator go).
+
+## verdict + deciding RVAs
+1. Built. Halo marked only with Shift down. A Shift edge re-runs the building tool preview (tool vt+0x54 with tool+0x40,
+   as SIMGEOM `0x10021764`); the stock fill SIMSPR `0x1004af93` clears (`0x1004b653`) and re-pushes the grid. Guard: hint
+   tool is a SIMGEOM building tool and the view's current tool (view+0x228). Airport/seaport red cells stay always on.
+2. Built (`ph_station`). Catchment = trip start scan SimTransit `0x1000755e` (lot rect + r, corners skipped, r =
+   layer+0xc5..0xc8 live, Berlin 5/4/6/7). Onward step from a station = rect + 1, corners skipped, a cell lacking 0x10
+   with road 1 / rail 4 / tunnel 8 (`ph_station_links`, shared with stationwarn). Station types 12210 / 12230 / 12360 /
+   12361 (measured). Trips from TRIPCELLS.
+
+## built
+`dev\placehints4\inst\sc3resize.dll`, clean build.
+
+## proven game-side vs static only
+- game-side (`verify/placehints4/RESULTS.md`): halo only on Shift (A1-A4). Train station touching a laid rail line links 2,
+  one cell off 0 and red (B1-B3), city spot with green transit cells and trip counts (B4), bus stop beside a road (C1).
+- not run: physical Shift, `_SHIFT=force|never`, `_STATION=0`, subway / rail-to-subway shots, airport drag re-shot.
+
+## blocked on
+-
+
+## files owned
+- re/harness/src/sc3resize_placehints.c  (force-add, `/re/*` ignore rule)
+- re/harness/lang/{es,en,fr,de,it,nl,sv}.txt  (13 placehints.st_* / placehints.station keys)
+- re/analysis/PLACEHINTS.md  (section E)
+- verify/placehints4/RESULTS.md  (MAIN)
+- re/sessions/STATUS_placehints.md  (this section, MAIN)
+- pictures in MAIN\verify\placehints4\owner_shots\ (not for git)
+
+## game-harness need
+-
+
+## asks of other sessions
+- stationwarn: share `ph_station_links` (signature sent 2026-11-03).
+- GRAPHNEW / TRIPCELLS owner: TRIPCELLS months close only after the Graficas page was opened once (`gn_month` gated on
+  `g_gn_if[0]`), so the transit map and this hint have no monthly history before that. Not changed here.
