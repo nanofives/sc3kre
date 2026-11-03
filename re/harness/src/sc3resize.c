@@ -15725,7 +15725,38 @@ static int pkr_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     return 0;
 }
 
+/* MUSICFOCUS: pause the music while the game window is not the active one (owner 2026-11-03).
+   AUDIO.DLL AudioManager = *(AUDIO+0x26f00) (DAT_10026f00); +0x28 = the player's music volume, +0x24 = sound on/off
+   [CONFIRMED @ 0x10008d77:176-195]. Message 0x3eb stores the volume and calls vtable slot +0x6c of the service
+   FUN_10019c03() (0x10019c03) with it. Here the same slot is called with 0 on deactivation and with +0x28 on
+   activation, +0x28 itself untouched, so a music volume of 0 (music off) stays silent and nothing new is started.
+   Sound effects are left alone. SC3RESIZE_MUSICFOCUS=0 turns the block off. */
+static int g_musicfocus = 1;
+static int g_mf_paused = 0;
+static void rz_musicfocus(int active) {
+    DWORD au = (DWORD)GetModuleHandleA("AUDIO.DLL");
+    typedef int (__cdecl *svc_t)(void);
+    typedef void (__fastcall *setvol_t)(void *self, void *edx, int vol);
+    if (!g_musicfocus || !au || (active ? !g_mf_paused : g_mf_paused)) return;
+    __try {
+        void *mgr = *(void **)(au + 0x26f00);
+        void *svc;
+        int vol;
+        if (!mgr) return;
+        svc = (void *)((svc_t)(au + 0x19c03))();
+        if (!svc) return;
+        vol = active ? *(int *)((BYTE *)mgr + 0x28) : 0;
+        ((setvol_t)(*(DWORD **)svc)[0x6c / 4])(svc, 0, vol);
+        g_mf_paused = !active;
+        logf("MUSICFOCUS> %s: music volume -> %d (player's setting %d, sound on/off %d)", active ? "active" : "inactive",
+             vol, *(int *)((BYTE *)mgr + 0x28), *(int *)((BYTE *)mgr + 0x24));
+    } __except (EXCEPTION_EXECUTE_HANDLER) { logf("MUSICFOCUS> exception, block idle"); g_musicfocus = 0; }
+}
+
 static LRESULT CALLBACK rz_wndproc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
+    if (m == WM_ACTIVATEAPP) rz_musicfocus(wp != 0);   /* MUSICFOCUS */
+    if (m == WM_SIZE && wp == SIZE_MINIMIZED) rz_musicfocus(0);
+    else if (m == WM_SIZE && wp == SIZE_RESTORED && GetForegroundWindow() == h) rz_musicfocus(1);
     if (pkr_wndproc(h, m, wp, lp)) return 0;   /* PICKER */
     if (m == WM_KEYDOWN || m == WM_KEYUP || m == WM_KILLFOCUS) ph_shiftmsg(m, wp);   /* PLACEHINTS: Shift shows the text */
     if (m == WM_RZ_RESTORE) { rs_test(wp, lp); return 0; }   /* RESTORE (test only) */
@@ -18802,6 +18833,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_PAUSEKEY", v, sizeof(v))) g_pausekey = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_SPEEDKEYS", v, sizeof(v))) g_speedkeys = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_CLOSEX", v, sizeof(v))) g_closex = atoi(v);
+          if (GetEnvironmentVariableA("SC3RESIZE_MUSICFOCUS", v, sizeof(v))) g_musicfocus = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_KEYFOCUS", v, sizeof(v))) g_keyfocus = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_MINICLASS", v, sizeof(v))) g_miniclass = atoi(v);
           if (GetEnvironmentVariableA("SC3RESIZE_DLGKEEP", v, sizeof(v))) g_dlgkeep = atoi(v);
