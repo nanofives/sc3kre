@@ -463,6 +463,32 @@ placehints.port_hint=%s %ld cells, %ld without transport (red)  |  cap. %s +%ld,
 placehints.runway="runway: 3x5 or more, "
 # sc3resize_placehints.c
 placehints.seaport=Seaport
+# sc3resize_placehints.c
+placehints.st_bus=Bus stop
+# sc3resize_placehints.c
+placehints.st_dead_bus=touches no road: 0 trips (red)
+# sc3resize_placehints.c
+placehints.st_dead_rail=touches no rail: 0 trips (red)
+# sc3resize_placehints.c
+placehints.st_dead_railsub=touches no rail or subway: 0 trips (red)
+# sc3resize_placehints.c
+placehints.st_dead_subway=touches no subway: 0 trips (red)
+# sc3resize_placehints.c
+placehints.st_links=connects through %d cells
+# sc3resize_placehints.c
+placehints.st_notrips=no trip data (TRIPCELLS off)
+# sc3resize_placehints.c
+placehints.st_rail=Train station
+# sc3resize_placehints.c
+placehints.st_railsub=Rail to subway
+# sc3resize_placehints.c
+placehints.st_subway=Subway station
+# sc3resize_placehints.c
+placehints.st_trips=%ld trips a month start here, %ld by transit (green)
+# sc3resize_placehints.c
+placehints.st_trips_load=%ld trips since the city loaded start here, %ld by transit (green)
+# sc3resize_placehints.c
+placehints.station=%s: walk R %d C %d I %d cells  |  %s  |  %s
 
 # ---- rcibars
 # sc3resize_rcibars.c

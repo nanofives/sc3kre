@@ -45,7 +45,10 @@
  *
  * Round 2 (placehints2, owner after trying it: "the extra information when placing a zone should be visible when pressing
  * shift, the zone impact should be in a shade of green, light blue is the same as the zone it's being placed"):
- *  - SHIFT: the hint TEXT is added to the cost label only while Shift is held; the red / green cells stay always on.
+ *  - SHIFT: the hint TEXT is added to the cost label only while Shift is held. Since placehints4 the plop halo (green /
+ *    red land value cells and the green sprite tint, which follows the cells) also shows only while Shift is held
+ *    (ph_halo_redo). The airport / seaport red no-transport cells stay always on: they say where the zone being dragged
+ *    cannot grow, like the stock red refusal, not an area the building affects.
  *    Stock Shift role (re/analysis/PLACEHINTS.md D): only at button release. GZGraphicD 0x10017b90 maps MK_SHIFT to GZ
  *    mouse flag 1, and the left-up slots commit only when (flags & 1) == 0 (zone SIMRCI 0x1003f7ca, building SIMGEOM
  *    0x1002165e): releasing with Shift held cancels the drag / plop (measured: airport drag, no zone, no cost). Down and
@@ -153,6 +156,26 @@ static void ph_sethint(BYTE *tool, const char *t) {
     ph_repost(tool);
 }
 
+/* placehints4 (owner 2026-11-03: "without shift it should hide the area affecting a ploppable building"): the land value
+   halo is drawn only while Shift is held, so a Shift edge runs the building tool's preview again. The stock fill under it
+   (highlighter vt+0x4c = SIMSPR 0x1004af93) clears every live cell (0x1004b653), fills the footprint and pushes the
+   rect plus the dirty rect (vt+0x58), so the old halo goes and ph_bprev draws it again only when Shift is down. Called
+   with the same arguments as the move handler SIMGEOM 0x10021764 (tool+0x40 = the cell it last previewed, out rect6),
+   only when the hint tool is a building tool AND the city view's current tool (view +0x228, the picker's measurement),
+   so a tool that was switched away or freed is never called. */
+static void ph_halo_redo(void) {
+    static const DWORD bvt[4] = { 0x29504, 0x295e4, 0x2968c, 0x29734 };
+    BYTE *t = g_ph_hinttool, *vw = (BYTE *)g_ph_lview;
+    LONG out[6];
+    int i, ok = 0;
+    if (!t || !vw || !g_ph_plop || IsBadReadPtr(vw, 0x22c) || *(DWORD *)vw != (DWORD)g_ph_spr + 0x67894) return;
+    if (*(BYTE **)(vw + 0x228) != t || IsBadReadPtr(t, 0x120)) return;
+    for (i = 0; i < 4; i++) if (*(DWORD *)t == (DWORD)g_ph_geom + bvt[i]) ok = 1;
+    if (!ok || t[0x30]) return;
+    ho_v(t, 0x54, 2, (DWORD)(t + 0x40), (DWORD)out, 0, 0, 0);
+    if (g_ph_log) logf("PLACEHINTS> halo %s", ph_shift() ? "drawn (Shift down)" : "cleared (Shift up)");
+}
+
 /* rz_wndproc, game window thread (the same thread the tools post the label from): WM_KEYDOWN / WM_KEYUP VK_SHIFT and
    WM_KILLFOCUS (a key-up then goes to another window). On a change, the label is posted again with the arguments of
    its last post, when that post showed it and a hint is waiting, so Shift alone adds or drops the text. */
@@ -166,6 +189,7 @@ static void ph_shiftmsg(UINT m, WPARAM wp) {
     if (g_ph_log) logf("PLACEHINTS> Shift %s%s", down ? "down" : "up", g_ph_hint[0] && g_ph_lshow ? ": label re-posted" : "");
     if (!g_ph_hint[0] || !g_ph_lshow || !g_ph_lview) return;
     __try {
+        ph_halo_redo();
         g_ph_inrepost = 1;
         ho_v(g_ph_lview, 0x50, 3, 1, g_ph_lcost, g_ph_lnf, 0, 0);
     } __except (EXCEPTION_EXECUTE_HANDLER) { }
@@ -443,6 +467,140 @@ static DWORD __fastcall ph_zprev(BYTE *tool, void *edx, LONG *rect, DWORD out) {
     return r;
 }
 
+
+/* ------------------------------------------------------------------------------------------ STATION (placehints4) */
+/* Owner 2026-11-03: "is it possible to add public transport to the shift visualization?". While a bus stop, train
+ * station, subway station or rail-to-subway station is being placed:
+ *  - Shift: the cells whose lots would walk to it, and of those the ones whose trips already use transit in green.
+ *    The rule [CONFIRMED @ SimTransit 0x1000755e, start node type 0x80]: a trip's start scans its lot rect grown by r,
+ *    corners skipped, r = layer+0xc5 Res / +0xc6 Com / +0xc7 Ind / +0xc8 other (STTraffic TripMaxDistanceToRoad 4 / 3 /
+ *    5 / 5, +1 with the shuttle ordinance 0x100087fd). A cell with flag 0x10 in the layer+0x5c grid is a station
+ *    candidate, and one below DAT_1001f0c0 sets the keep value to 0xff, so it beats every road. The drawn area uses the
+ *    Res reach (exact for 1-cell lots; a bigger lot reaches when any of its cells is inside); the label names all three.
+ *    Trips: TRIPCELLS (sc3resize_vdbars.c), per origin cell, all / bus-rail-subway, months faded by 1/8.
+ *  - always (like the stock red refusal): footprint red when no neighbour can take the trip on, ph_station_links.
+ * Station agent type ids: measured in the lab (plop tool type log), SC3RESIZE_PLACEHINTS_STATIONS=bus,rail,subway,railsub
+ * overrides. SC3RESIZE_PLACEHINTS_STATION=0: stations get no hint (stock preview). */
+#define PH_ST_LAYER 0x1fdb8           /* SimTransit traffic layer singleton (sc3dataview ST_LAYER) */
+static int    g_ph_station = 1;
+static BYTE  *g_ph_st;
+static DWORD  g_ph_stype[4] = { 12210, 12230, 12360, 12361 };   /* bus stop, train station, subway station, rail to
+   subway: agent type ids measured 2026-11-03, plop tool type log after menu commands 0x10004004 / 0x10004102 / 0x10004202 /
+   0x10004009 (MenuItem.INI names), building tool vtables SIMGEOM 0x10029504 (bus, train) and 0x1002968c (both subway) */
+
+static BYTE *ph_tlayer(void) {
+    BYTE *tl;
+    if (!g_ph_st) g_ph_st = (BYTE *)GetModuleHandleA("SimTransit.dll");
+    if (!g_ph_st) return NULL;
+    tl = *(BYTE **)(g_ph_st + PH_ST_LAYER);
+    if (!tl || IsBadReadPtr(tl, 0xd0) || *(int *)(tl + 0x14) <= 0 || *(int *)(tl + 0x18) <= 0 ||
+        *(int *)(tl + 0x14) > 4096 || *(int *)(tl + 0x18) > 4096 || !*(BYTE **)(tl + 0x5c)) return NULL;
+    return tl;
+}
+static WORD ph_tflags(BYTE *tl, LONG x, LONG z) {
+    return *(WORD *)(*(BYTE **)(*(BYTE **)(*(BYTE **)(tl + 0x5c) + 0xc) + x * 4) + z * 2);
+}
+
+/* THE SHARED STATION RULE (child stationwarn uses the same one for built stations). Number of cells through which a
+ * station of `kind` on the cell rect x0..x1, z0..z1 can pass a trip on; 0 = a dead station. The route step from a
+ * station node looks at the rect grown by 1, corners skipped (the station's own cells carry 0x10 and never qualify),
+ * and steps to a cell that LACKS 0x10 and has: bus stop 0x50 -> 1 road (node 0x41), train station 0x14 -> 4 rail,
+ * subway station 0x18 -> 8 tunnel, rail-subway 0x30 -> 4 or 8 [CONFIRMED @ SimTransit 0x1000755e]. Measured for rail:
+ * a 1-cell gap gave 0 arrivals in 800 days (verify/railgap/RESULTS.md). kind: 0 bus, 1 rail, 2 subway, 3 rail-subway. */
+static int ph_station_links(BYTE *tl, int kind, LONG x0, LONG z0, LONG x1, LONG z1) {
+    static const WORD need[4] = { 1, 4, 8, 4 | 8 };
+    LONG W = *(int *)(tl + 0x14), H = *(int *)(tl + 0x18), x, z;
+    int n = 0;
+    if (kind < 0 || kind > 3) return 0;
+    for (x = x0 - 1; x <= x1 + 1; x++) for (z = z0 - 1; z <= z1 + 1; z++) {
+        WORD f;
+        if ((x == x0 - 1 || x == x1 + 1) && (z == z0 - 1 || z == z1 + 1)) continue;   /* corners */
+        if (x >= x0 && x <= x1 && z >= z0 && z <= z1) continue;                        /* the station itself */
+        if (x < 0 || z < 0 || x >= W || z >= H) continue;
+        f = ph_tflags(tl, x, z);
+        if (!(f & 0x10) && (f & need[kind])) n++;
+    }
+    return n;
+}
+
+static int ph_station_kind(DWORD type) {
+    int i;
+    if (!g_ph_station || !type) return -1;
+    for (i = 0; i < 4; i++) if (g_ph_stype[i] == type) return i;
+    return -1;
+}
+
+/* the station preview, called from ph_bprev after the stock footprint fill. Footprint cells fx0..fx1, fz0..fz1. */
+static void ph_station(BYTE *tool, void *hl, int kind, LONG fx0, LONG fz0, LONG fx1, LONG fz1) {
+    BYTE *tl = ph_tlayer();
+    char t[400], tr[160], lk[96];
+    int es = ho_spanish(), draw = ph_shift(), links, r, rc, ri;
+    LONG W, H, x, z, hx0, hz0, hx1, hz1, cells = 0, tcells = 0;
+    double sn = 0, st = 0, cn = 0, ct = 0;
+    if (!tl) { ph_sethint(tool, ""); return; }
+    W = *(int *)(tl + 0x14); H = *(int *)(tl + 0x18);
+    r = tl[0xc5]; rc = tl[0xc6]; ri = tl[0xc7];
+    if (r < 1 || r > 16) r = 4;
+    links = ph_station_links(tl, kind, fx0, fz0, fx1, fz1);
+    if (!links && !tool[0x38] && !tool[0x39] && !tool[0x3a]) {   /* dead here: footprint red, Shift or not */
+        for (x = fx0; x <= fx1; x++) for (z = fz0; z <= fz1; z++) ph_mark(hl, x, z, 0x24);
+        ph_push(hl, fx0, fz0, fx1, fz1);
+    }
+    hx0 = fx0 - r < 0 ? 0 : fx0 - r; hz0 = fz0 - r < 0 ? 0 : fz0 - r;
+    hx1 = fx1 + r > W - 1 ? W - 1 : fx1 + r; hz1 = fz1 + r > H - 1 ? H - 1 : fz1 + r;
+    for (x = hx0; x <= hx1; x++) for (z = hz0; z <= hz1; z++) {
+        LONG dx = x < fx0 ? fx0 - x : x > fx1 ? x - fx1 : 0, dz = z < fz0 ? fz0 - z : z > fz1 ? z - fz1 : 0;
+        int tused = 0;
+        if (!dx && !dz) continue;                                  /* footprint: the stock preview */
+        if (dx > r || dz > r || (dx == r && dz == r)) continue;    /* outside the reach, or a skipped corner */
+        cells++;
+        if (g_tc_hist && g_tc_cur && x < TC_S && z < TC_S) {
+            DWORD h = g_tc_hist[x * TC_S + z], c = g_tc_cur[x * TC_S + z];
+            sn += h & 0xffff; st += h >> 16; cn += c & 0xffff; ct += c >> 16;
+            tused = (h >> 16) || (c >> 16);
+        }
+        if (tused) tcells++;
+        if (draw) { if (tused) ph_mark_up(hl, x, z); else ph_mark(hl, x, z, *(DWORD *)((BYTE *)hl + 0x2c)); }
+    }
+    if (draw && cells) ph_push(hl, hx0, hz0, hx1, hz1);
+    /* trips a month: hist holds each closed month x16, older ones faded by 1/8, so after k months the weights sum to
+       128 (1 - (7/8)^k). TRIPCELLS closes a month only from GRAPHNEW's budget hook, which runs once the Graficas page
+       has been opened (sc3resize_graphs.c gn_month, g_gn_if[0]); until then it holds only the count since the load. */
+    if (!g_tc_cur)
+        lstrcpyA(tr, SC3TR(es, "placehints.st_notrips", "sin datos de viajes (TRIPCELLS apagado)", "no trip data (TRIPCELLS off)"));
+    else if (g_tc_months > 0) {
+        double w, f = 1;
+        LONG k;
+        for (k = 0; k < g_tc_months && k < 64; k++) f *= 0.875;
+        w = 128.0 * (1.0 - f);
+        wsprintfA(tr, SC3TR(es, "placehints.st_trips", "%ld viajes al mes salen de aqu\xed, %ld en transporte (verde)",
+                            "%ld trips a month start here, %ld by transit (green)"), (LONG)(sn / w + 0.5), (LONG)(st / w + 0.5));
+    } else
+        wsprintfA(tr, SC3TR(es, "placehints.st_trips_load", "%ld viajes desde la carga salen de aqu\xed, %ld en transporte (verde)",
+                            "%ld trips since the city loaded start here, %ld by transit (green)"), (LONG)cn, (LONG)ct);
+    if (links)
+        wsprintfA(lk, SC3TR(es, "placehints.st_links", "conecta por %d celdas", "connects through %d cells"), links);
+    else if (kind == 0)
+        lstrcpyA(lk, SC3TR(es, "placehints.st_dead_bus", "no toca ninguna calle: 0 viajes (rojo)", "touches no road: 0 trips (red)"));
+    else if (kind == 2)
+        lstrcpyA(lk, SC3TR(es, "placehints.st_dead_subway", "no toca el t\xfanel: 0 viajes (rojo)", "touches no subway: 0 trips (red)"));
+    else if (kind == 3)
+        lstrcpyA(lk, SC3TR(es, "placehints.st_dead_railsub", "no toca v\355a ni t\xfanel: 0 viajes (rojo)", "touches no rail or subway: 0 trips (red)"));
+    else
+        lstrcpyA(lk, SC3TR(es, "placehints.st_dead_rail", "no toca la v\355a: 0 viajes (rojo)", "touches no rail: 0 trips (red)"));
+    wsprintfA(t, SC3TR(es, "placehints.station", "%s: a pie R %d C %d I %d celdas  |  %s  |  %s",
+                       "%s: walk R %d C %d I %d cells  |  %s  |  %s"),
+              kind == 0 ? SC3TR(es, "placehints.st_bus", "Parada de bus", "Bus stop")
+              : kind == 1 ? SC3TR(es, "placehints.st_rail", "Estaci\xf3n de tren", "Train station")
+              : kind == 2 ? SC3TR(es, "placehints.st_subway", "Estaci\xf3n de metro", "Subway station")
+                          : SC3TR(es, "placehints.st_railsub", "Tren a metro", "Rail to subway"),
+              r, rc, ri, tr, lk);
+    if (g_ph_log && lstrcmpA(g_ph_hint, t))
+        logf("PLACEHINTS> station kind %d footprint [%ld %ld %ld %ld] links %d, reach %d: %ld cells, %ld with transit trips",
+             kind, fx0, fz0, fx1, fz1, links, r, cells, tcells);
+    ph_sethint(tool, t);
+}
+
 /* ---------------------------------------------------------------------------------------------------- plop */
 typedef struct { DWORD key; signed char v[4]; int found; } PH_ROW;
 static void ph_walk(BYTE *node, BYTE *head, void *tree, DWORD type, PH_ROW *best, int depth) {
@@ -489,12 +647,22 @@ static DWORD __fastcall ph_bprev(BYTE *tool, void *edx, LONG *pos, LONG *out, in
         char t[400];
         LONG w, h, fx0, fz0, fx1, fz1, bx0, bz0, nbx, nbz, bw, bh, i, j, k, x, z, pass, peak[3], best = -1, bestabs = 0;
         LONG reach = 0, thr = 1;   /* marked blocks: at least a quarter of the peak of the strongest class */
+        int draw = ph_shift();     /* placehints4: the halo is drawn only while Shift is held (the text too, ph_label) */
         static const char cls[3] = { 'R', 'C', 'I' };
         if (!pos || !hl || !db || tool[0x30]) { ph_sethint(tool, ""); return r; }
         if (!(ho_v(db, 0x24, 3, (DWORD)(tool + 0x108), 0xe075ef51, (DWORD)&attr, 0, 0) & 0xff) || !attr) {
             ph_sethint(tool, ""); return r; }
         type = ho_v(attr, 0x50, 0, 0, 0, 0, 0, 0);
         ho_v(attr, 0x08, 0, 0, 0, 0, 0, 0);
+        {   static DWORD lastt = 0xffffffff;
+            if (g_ph_log && type != lastt) {
+                logf("PLACEHINTS> plop tool type %lu (tool vtable SIMGEOM+0x%lX)", type, *(DWORD *)tool - (DWORD)g_ph_geom);
+                lastt = type; } }
+        if ((k = ph_station_kind(type)) >= 0) {   /* placehints4: bus stop / train / subway / rail-to-subway station */
+            fx0 = pos[0] >> 8; fz0 = pos[1] >> 8;
+            ph_station(tool, hl, (int)k, fx0, fz0, fx0 + tool[0x116], fz0 + tool[0x117]);
+            return r;
+        }
         if (!ph_lvrow(type, &row) || (!row.v[0] && !row.v[1] && !row.v[2]) || !ph_citysize(&w, &h)) {
             ph_sethint(tool, ""); return r; }
         fx0 = pos[0] >> 8; fz0 = pos[1] >> 8;
@@ -536,7 +704,7 @@ static DWORD __fastcall ph_bprev(BYTE *tool, void *edx, LONG *pos, LONG *out, in
                 for (cx = gx * 4; cx < gx * 4 + 4; cx++) for (cz = gz * 4; cz < gz * 4 + 4; cz++) {
                     LONG d;
                     if (cx >= fx0 && cx <= fx1 && cz >= fz0 && cz <= fz1) continue;   /* footprint: the stock preview */
-                    if (v > 0) ph_mark_up(hl, cx, cz); else ph_mark(hl, cx, cz, 0x24);   /* up green, down red */
+                    if (draw) { if (v > 0) ph_mark_up(hl, cx, cz); else ph_mark(hl, cx, cz, 0x24); }   /* up green, down red */
                     d = cx < fx0 ? fx0 - cx : cx > fx1 ? cx - fx1 : 0;
                     if (cz < fz0 && fz0 - cz > d) d = fz0 - cz;
                     if (cz > fz1 && cz - fz1 > d) d = cz - fz1;
@@ -544,7 +712,7 @@ static DWORD __fastcall ph_bprev(BYTE *tool, void *edx, LONG *pos, LONG *out, in
                     if (cx < hx0) hx0 = cx; if (cz < hz0) hz0 = cz; if (cx > hx1) hx1 = cx; if (cz > hz1) hz1 = cz;
                 }
             }
-            if (hx1 >= 0) ph_push(hl, hx0, hz0, hx1, hz1);
+            if (draw && hx1 >= 0) ph_push(hl, hx0, hz0, hx1, hz1);
         }
         if (best < 0) { ph_sethint(tool, ""); return r; }
         {
@@ -582,6 +750,12 @@ static void ph_install(void) {
     if (GetEnvironmentVariableA("SC3RESIZE_PLACEHINTS_LOG", v, sizeof(v))) g_ph_log = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_PLACEHINTS_GREEN", v, sizeof(v))) g_ph_green = atoi(v);
     if (GetEnvironmentVariableA("SC3RESIZE_PLACEHINTS_SHIFTPLACE", v, sizeof(v))) g_ph_shiftplace = atoi(v);
+    if (GetEnvironmentVariableA("SC3RESIZE_PLACEHINTS_STATION", v, sizeof(v))) g_ph_station = atoi(v);
+    {   char sv[64];
+        if (GetEnvironmentVariableA("SC3RESIZE_PLACEHINTS_STATIONS", sv, sizeof(sv))) {
+            char *q = sv; int i;
+            for (i = 0; i < 4 && *q; i++) { g_ph_stype[i] = strtoul(q, &q, 0); while (*q == ',' || *q == ' ') q++; }
+        } }
     if (GetEnvironmentVariableA("SC3RESIZE_PLACEHINTS_SHIFT", v, sizeof(v)))
         g_ph_shiftmode = !lstrcmpiA(v, "force") ? 1 : !lstrcmpiA(v, "never") ? 2 : 0;
     if (!g_ph) { logf("PLACEHINTS> off (SC3RESIZE_PLACEHINTS=0)"); return; }
