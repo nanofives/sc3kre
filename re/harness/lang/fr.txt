@@ -646,3 +646,59 @@ placehints.st_nodest_rail=la voie ne mène à aucune autre gare ni au bord : 0 t
 placehints.st_nodest_railsub=ni la voie ni le tunnel ne mènent à une autre gare ou au bord : 0 trajet (rouge)
 # en: the subway leads to no other station and no map edge: 0 trips (red)
 placehints.st_nodest_subway=le tunnel ne mène à aucune autre station ni au bord : 0 trajet (rouge)
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Autosave
+resize.mt_autosave=Sauvegarde auto
+# en: Big cities
+resize.mt_bigcity=Grandes villes
+# en: Turn mods on/off...
+resize.mt_button=Activer mods...
+# en: Building renewal
+resize.mt_churn=Renouvellement
+# en: Extra data layers
+resize.mt_dataview=Couches de données
+# en: Features
+resize.mt_features=Fonctions
+# en: Improved graphs
+resize.mt_graphs=Graphiques améliorés
+# en: P and 1-4 keys
+resize.mt_keys=Touches P et 1-4
+# en: Landfills
+resize.mt_landfill=Décharges
+# en: Mods
+resize.mt_mods=Mods
+# en: Avenues and highways
+resize.mt_netmod=Avenues et autoroutes
+# en: Changes apply the next time the game starts.
+resize.mt_note=Les changements s'appliquent au prochain lancement.
+# en: A big city or one with avenues needs its mod to load.
+resize.mt_note2=Une grande ville ou avec avenues a besoin de son mod.
+# en: Camera past the edge
+resize.mt_overscroll=Caméra hors du bord
+# en: FPS and profiler
+resize.mt_perf=FPS et profileur
+# en: Picker tool
+resize.mt_picker=Pipette
+# en: Placement hints
+resize.mt_placehints=Aide au placement
+# en: Copy ID button
+resize.mt_queryid=Bouton Copier ID
+# en: Detailed RCI bars
+resize.mt_rcibars=Barres RCI détaillées
+# en: Restore buildings
+resize.mt_restore=Restaurer bâtiments
+# en: Simulation tweaks
+resize.mt_simrun=Réglages simulation
+# en: Siren fix
+resize.mt_sirens=Correctif sirènes
+# en: Station warnings
+resize.mt_stationwarn=Alerte gares
+# en: Turn mods and features on or off
+resize.mt_title=Activer mods et fonctions
+# en: Hide-UI button
+resize.mt_uitoggle=Bouton masquer l'UI
+# en: Undo
+resize.mt_undo=Annuler
+# en: Sharp data maps
+resize.mt_verdatos=Cartes nettes

@@ -550,6 +550,60 @@ resize.move=Move
 # sc3resize.c
 resize.move_button=Move button
 # sc3resize.c
+resize.mt_autosave=Autosave
+# sc3resize.c
+resize.mt_bigcity=Big cities
+# sc3resize.c
+resize.mt_button=Turn mods on/off...
+# sc3resize.c
+resize.mt_churn=Building renewal
+# sc3resize.c
+resize.mt_dataview=Extra data layers
+# sc3resize.c
+resize.mt_features=Features
+# sc3resize.c
+resize.mt_graphs=Improved graphs
+# sc3resize.c
+resize.mt_keys=P and 1-4 keys
+# sc3resize.c
+resize.mt_landfill=Landfills
+# sc3resize.c
+resize.mt_mods=Mods
+# sc3resize.c
+resize.mt_netmod=Avenues and highways
+# sc3resize.c
+resize.mt_note=Changes apply the next time the game starts.
+# sc3resize.c
+resize.mt_note2=A big city or one with avenues needs its mod to load.
+# sc3resize.c
+resize.mt_overscroll=Camera past the edge
+# sc3resize.c
+resize.mt_perf=FPS and profiler
+# sc3resize.c
+resize.mt_picker=Picker tool
+# sc3resize.c
+resize.mt_placehints=Placement hints
+# sc3resize.c
+resize.mt_queryid=Copy ID button
+# sc3resize.c
+resize.mt_rcibars=Detailed RCI bars
+# sc3resize.c
+resize.mt_restore=Restore buildings
+# sc3resize.c
+resize.mt_simrun=Simulation tweaks
+# sc3resize.c
+resize.mt_sirens=Siren fix
+# sc3resize.c
+resize.mt_stationwarn=Station warnings
+# sc3resize.c
+resize.mt_title=Turn mods and features on or off
+# sc3resize.c
+resize.mt_uitoggle=Hide-UI button
+# sc3resize.c
+resize.mt_undo=Undo
+# sc3resize.c
+resize.mt_verdatos=Sharp data maps
+# sc3resize.c
 resize.no_limit=No limit
 # sc3resize.c
 resize.on_restart=" (on restart)"

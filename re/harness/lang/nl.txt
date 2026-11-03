@@ -646,3 +646,59 @@ placehints.st_nodest_rail=het spoor leidt naar geen ander station en geen rand: 
 placehints.st_nodest_railsub=spoor noch tunnel leidt naar een ander station of de rand: 0 ritten (rood)
 # en: the subway leads to no other station and no map edge: 0 trips (red)
 placehints.st_nodest_subway=de tunnel leidt naar geen ander station en geen rand: 0 ritten (rood)
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Autosave
+resize.mt_autosave=Automatisch opslaan
+# en: Big cities
+resize.mt_bigcity=Grote steden
+# en: Turn mods on/off...
+resize.mt_button=Mods aan/uit...
+# en: Building renewal
+resize.mt_churn=Vernieuwing
+# en: Extra data layers
+resize.mt_dataview=Extra datalagen
+# en: Features
+resize.mt_features=Functies
+# en: Improved graphs
+resize.mt_graphs=Betere grafieken
+# en: P and 1-4 keys
+resize.mt_keys=Toetsen P en 1-4
+# en: Landfills
+resize.mt_landfill=Stortplaatsen
+# en: Mods
+resize.mt_mods=Mods
+# en: Avenues and highways
+resize.mt_netmod=Lanen en snelwegen
+# en: Changes apply the next time the game starts.
+resize.mt_note=Wijzigingen gelden bij de volgende start.
+# en: A big city or one with avenues needs its mod to load.
+resize.mt_note2=Een grote stad of met lanen heeft zijn mod nodig.
+# en: Camera past the edge
+resize.mt_overscroll=Camera voorbij de rand
+# en: FPS and profiler
+resize.mt_perf=FPS en profiler
+# en: Picker tool
+resize.mt_picker=Pipet
+# en: Placement hints
+resize.mt_placehints=Plaatsingshulp
+# en: Copy ID button
+resize.mt_queryid=Knop ID kopiëren
+# en: Detailed RCI bars
+resize.mt_rcibars=Gedetailleerde RCI
+# en: Restore buildings
+resize.mt_restore=Gebouwen herstellen
+# en: Simulation tweaks
+resize.mt_simrun=Simulatie
+# en: Siren fix
+resize.mt_sirens=Sirene-fix
+# en: Station warnings
+resize.mt_stationwarn=Stationswaarschuwing
+# en: Turn mods and features on or off
+resize.mt_title=Mods en functies aan/uit
+# en: Hide-UI button
+resize.mt_uitoggle=Knop UI verbergen
+# en: Undo
+resize.mt_undo=Ongedaan maken
+# en: Sharp data maps
+resize.mt_verdatos=Scherpe datakaarten

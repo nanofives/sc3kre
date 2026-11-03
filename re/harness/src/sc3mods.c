@@ -98,11 +98,47 @@ static void unique_mutex(void) {
     logf("[+] -multi: mutex renamed to \"%s\"", g_mutex_name);
 }
 
+/* MODTOGGLE (owner 2026-11-03: "on the mods options add a feature to disable mod features"). The page that writes this
+ * is sc3resize's "Activar mods" page (MODSPAGE). <dir>\sc3mods.ini, read once here before any mod loads:
+ *   [mods]  <dll>=0    the DLL is not loaded (sc3resize.dll cannot be turned off: it hosts the page)
+ *   [env]   NAME=val   set in the process environment before the mods load, unless NAME is already set (a test
+ *                      harness or the user's own env wins). Every mod already reads its own NAME=0 off-switch.
+ * SC3MODS_INI=0 ignores the file. */
+static char g_ini[MAX_PATH];
+
+static int ini_on(void) {
+    char v[8];
+    if (GetEnvironmentVariableA("SC3MODS_INI", v, sizeof(v)) && v[0] == '0') return 0;
+    _snprintf(g_ini, sizeof(g_ini), "%s\\sc3mods.ini", g_dir);
+    g_ini[sizeof(g_ini) - 1] = 0;
+    return GetFileAttributesA(g_ini) != INVALID_FILE_ATTRIBUTES;
+}
+
+static void ini_env(void) {
+    char sec[4096], cur[8], *k;
+    DWORD n = GetPrivateProfileSectionA("env", sec, sizeof(sec), g_ini);
+    int set = 0;
+    for (k = sec; n && k < sec + n && *k; k += lstrlenA(k) + 1) {
+        char *eq = strchr(k, '=');
+        if (!eq || eq == k) continue;
+        *eq = 0;
+        if (GetEnvironmentVariableA(k, cur, sizeof(cur)) || GetLastError() != ERROR_ENVVAR_NOT_FOUND)
+            logf("    [env] %s left as the environment has it", k);
+        else if (SetEnvironmentVariableA(k, eq + 1)) { logf("    [env] %s=%s (sc3mods.ini)", k, eq + 1); set++; }
+        *eq = '=';
+    }
+    if (set) logf("[+] sc3mods.ini: %d feature switch(es) set", set);
+}
+
+static int ini_mod_off(const char *dll) {
+    return g_ini[0] && lstrcmpiA(dll, "sc3resize.dll") && GetPrivateProfileIntA("mods", dll, 1, g_ini) == 0;
+}
+
 /* Loaded straight from DllMain (loader lock held), on the thread that runs process init (the game's main thread). */
 static void load_mods(LPVOID res) {
     char list[1024], path[MAX_PATH];
     char *p, *next;
-    int n = 0;
+    int n = 0, off = 0;
     lstrcpynA(list, g_list, sizeof(list));
     logf("mod-load start from %s (%s, tid %lu, GZGraphicD loaded now? %s)", g_dir,
          res ? "static import, process init" : "dynamic load", GetCurrentThreadId(),
@@ -115,12 +151,14 @@ static void load_mods(LPVOID res) {
              "stock. Run sc3mods_patch.ps1 in the game folder.");
         return;
     }
+    if (ini_on()) ini_env(); else g_ini[0] = 0;
     g_loading_tid = GetCurrentThreadId();
     for (p = list; p && *p; p = next) {
         HMODULE m;
         next = strchr(p, ';');
         if (next) *next++ = 0;
         if (!*p) continue;
+        if (ini_mod_off(p)) { logf("[-] %s turned off in sc3mods.ini [mods]: not loaded", p); off++; continue; }
         _snprintf(path, sizeof(path), "%s\\%s", g_dir, p);
         m = LoadLibraryA(path);
         if (!m) { logf("[!] LoadLibrary %s failed, GetLastError=%lu", path, GetLastError()); continue; }
@@ -128,7 +166,7 @@ static void load_mods(LPVOID res) {
         n++;
     }
     g_loading_tid = 0;
-    logf("[+] %d mod(s) loaded", n);
+    logf("[+] %d mod(s) loaded%s", n, off ? ", some turned off in sc3mods.ini" : "");
 }
 
 /* Fill g_dir / g_list from env or the built-in default. Returns 0 if nothing should load. */

@@ -646,3 +646,59 @@ placehints.st_nodest_rail=das Gleis führt zu keinem anderen Bahnhof und keinem 
 placehints.st_nodest_railsub=weder Gleis noch Tunnel führen zu einer anderen Station oder zum Rand: 0 Fahrten (rot)
 # en: the subway leads to no other station and no map edge: 0 trips (red)
 placehints.st_nodest_subway=der Tunnel führt zu keiner anderen Station und keinem Rand: 0 Fahrten (rot)
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Autosave
+resize.mt_autosave=Autospeichern
+# en: Big cities
+resize.mt_bigcity=Große Städte
+# en: Turn mods on/off...
+resize.mt_button=Mods an/aus...
+# en: Building renewal
+resize.mt_churn=Erneuerung
+# en: Extra data layers
+resize.mt_dataview=Datenebenen
+# en: Features
+resize.mt_features=Funktionen
+# en: Improved graphs
+resize.mt_graphs=Bessere Grafiken
+# en: P and 1-4 keys
+resize.mt_keys=Tasten P und 1-4
+# en: Landfills
+resize.mt_landfill=Deponien
+# en: Mods
+resize.mt_mods=Mods
+# en: Avenues and highways
+resize.mt_netmod=Alleen und Autobahnen
+# en: Changes apply the next time the game starts.
+resize.mt_note=Änderungen gelten beim nächsten Start.
+# en: A big city or one with avenues needs its mod to load.
+resize.mt_note2=Große Städte oder Alleen brauchen ihren Mod.
+# en: Camera past the edge
+resize.mt_overscroll=Kamera über den Rand
+# en: FPS and profiler
+resize.mt_perf=FPS und Profiler
+# en: Picker tool
+resize.mt_picker=Pipette
+# en: Placement hints
+resize.mt_placehints=Platzierungshilfen
+# en: Copy ID button
+resize.mt_queryid=ID-kopieren-Knopf
+# en: Detailed RCI bars
+resize.mt_rcibars=RCI-Balken
+# en: Restore buildings
+resize.mt_restore=Gebäude renovieren
+# en: Simulation tweaks
+resize.mt_simrun=Simulation
+# en: Siren fix
+resize.mt_sirens=Sirenen-Fix
+# en: Station warnings
+resize.mt_stationwarn=Bahnhofswarnung
+# en: Turn mods and features on or off
+resize.mt_title=Mods und Funktionen
+# en: Hide-UI button
+resize.mt_uitoggle=UI-ausblenden-Knopf
+# en: Undo
+resize.mt_undo=Rückgängig
+# en: Sharp data maps
+resize.mt_verdatos=Scharfe Datenkarten

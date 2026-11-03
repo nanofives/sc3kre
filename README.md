@@ -16,7 +16,8 @@ Ready-to-use mods for your own copy of SimCity 3000 Unlimited, published as zips
 [Releases](https://github.com/nanofives/sc3kre/releases) page (the newest one is at the top). Unzip into the
 game folder, run `sc3mods_patch.ps1` once, start `Apps\SC3U.exe`. `sc3mods_patch.ps1 -Restore` goes back to stock.
 Each release has a `README.txt` with install steps, every option and what changed. Most settings are on one page
-in the game: Preferencias, "Opciones de mods...".
+in the game: Preferencias, "Opciones de mods...". "Activar mods..." on that page turns each mod, and the main
+features inside them, on or off from the next start (saved in `Apps\sc3mods.ini`).
 
 **Window and interface (sc3resize)**
 - Resizable window, maximize, and borderless fullscreen with Alt+Enter. Size and state are remembered and the game
