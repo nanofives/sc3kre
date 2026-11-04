@@ -702,3 +702,11 @@ resize.mt_uitoggle=Knop UI verbergen
 resize.mt_undo=Ongedaan maken
 # en: Sharp data maps
 resize.mt_verdatos=Scherpe datakaarten
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Now, in this city (on OK, no restart)
+resize.mt_city=Nu, in deze stad (bij OK, zonder herstart)
+# en: Recalculate salt water
+resize.mt_saltcalc=Zout water herberekenen
+# en: Salt water only at sea
+resize.mt_saltfix=Zout water alleen in zee

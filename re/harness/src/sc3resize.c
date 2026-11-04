@@ -8851,6 +8851,8 @@ static int g_modtoggle = 1;   /* MODTOGGLE page C, SC3RESIZE_MODTOGGLE=0 off */
 #define MT_H_FEAT   0x02F95B79
 #define MT_NOTE     0x02F95B7A
 #define MT_NOTE2    0x02F95B7B
+#define MT_H_CITY   0x02F95B7C   /* SALTFIX: "Esta ciudad" heading on page C */
+#define MT_SALT     0x02F95B7D   /* SALTFIX: "Recalcular agua salada" checkbox, applied on OK */
 #define MT_ROW0     0x02F95B80   /* one checkbox per k_mt_rows entry, 0x02F95B80.. */
 #define MP_MAXKIDS  96
 /* RELOCATE / PLOPOVER switches (block below). The hooks are installed unless the env turns BOTH off, and only the
@@ -9136,6 +9138,8 @@ static void lang_click(void *win) {
     logf("LANGSEL> page pick: %s", t);
 }
 
+#include "sc3resize_saltfix.c"   /* SALTFIX: sea water salt by flood from the map edge, rivers + lakes fresh (SC3RESIZE_SALTFIX=0) */
+
 /* ===== MODTOGGLE (owner 2026-11-03: "on the mods options add a feature to disable mod features"). =====
  * A third page, "Activar mods", reached from the mods page: one checkbox per mod DLL and per feature, applied at the
  * next start. Everything goes to <mods dir>\sc3mods.ini, which sc3mods.dll reads before any mod loads:
@@ -9165,7 +9169,8 @@ static const MT_ROW k_mt_rows[] = {
     { { SC3KEY("resize.mt_uitoggle"),  "Bot\xf3n ocultar interfaz", "Hide-UI button" },       NULL, "SC3RESIZE_UITOGGLE" },
     { { SC3KEY("resize.mt_keys"),      "Teclas P y 1-4",          "P and 1-4 keys" },         NULL, "SC3RESIZE_PAUSEKEY;SC3RESIZE_SPEEDKEYS" },
     { { SC3KEY("resize.mt_churn"),     "Renovaci\xf3n de edificios", "Building renewal" },    NULL, "SC3SIMRUN_CHURN" },
-    { { SC3KEY("resize.mt_sirens"),    "Arreglo de sirenas",      "Siren fix" },              NULL, "SC3SIMRUN_SIRENS" } };
+    { { SC3KEY("resize.mt_sirens"),    "Arreglo de sirenas",      "Siren fix" },              NULL, "SC3SIMRUN_SIRENS" },
+    { { SC3KEY("resize.mt_saltfix"),   "Agua salada solo en el mar", "Salt water only at sea" }, NULL, "SC3RESIZE_SALTFIX" } };
 #define MT_N ((int)(sizeof(k_mt_rows) / sizeof(k_mt_rows[0])))
 static int g_mt_on0[MT_N];   /* state shown when the page was built */
 
@@ -9202,7 +9207,7 @@ static void mt_write(const MT_ROW *r, int on) {
 
 static int mt_is_ours(void *win, void *ch) {
     int i;
-    static const DWORD fixed[] = { MT_TITLE, MT_H_MODS, MT_H_FEAT, MT_NOTE, MT_NOTE2 };
+    static const DWORD fixed[] = { MT_TITLE, MT_H_MODS, MT_H_FEAT, MT_NOTE, MT_NOTE2, MT_H_CITY, MT_SALT };
     for (i = 0; i < (int)(sizeof(fixed) / sizeof(fixed[0])); i++) if (ch == mp_child(win, fixed[i])) return 1;
     for (i = 0; i < MT_N; i++) if (ch == mp_child(win, MT_ROW0 + i)) return 1;
     return 0;
@@ -9210,7 +9215,7 @@ static int mt_is_ours(void *win, void *ch) {
 
 static void mt_vis_all(void *win, int on) {
     int i;
-    static const DWORD fixed[] = { MT_TITLE, MT_H_MODS, MT_H_FEAT, MT_NOTE, MT_NOTE2 };
+    static const DWORD fixed[] = { MT_TITLE, MT_H_MODS, MT_H_FEAT, MT_NOTE, MT_NOTE2, MT_H_CITY, MT_SALT };
     for (i = 0; i < (int)(sizeof(fixed) / sizeof(fixed[0])); i++) mp_vis(mp_child(win, fixed[i]), on);
     for (i = 0; i < MT_N; i++) mp_vis(mp_child(win, MT_ROW0 + i), on);
 }
@@ -9232,6 +9237,11 @@ static int mt_build(void *fac, void *win, int es, DWORD col) {
                                                "Changes apply the next time the game starts."), 18, i, 450);
     n += ho_add_label(fac, win, MT_NOTE2, SC3TR(es, "resize.mt_note2", "Una ciudad grande o con avenidas necesita su mod para cargar.",
                                                 "A big city or one with avenues needs its mod to load."), 18, i + 20, 450);
+    {   SF_GRID g; void *eco;   /* SALTFIX: only with a city open and the hook in */
+        if (g_saltfix && g_sf_dirt && sf_city_grid(sf_city(), &g, &eco)) {
+            n += ho_add_label(fac, win, MT_H_CITY, SC3TR(es, "resize.mt_city", "Ahora, en esta ciudad (al aceptar, sin reiniciar)", "Now, in this city (on OK, no restart)"), 18, i + 48, 440);
+            n += mp_checkbox(fac, win, MT_SALT, SC3TR(es, "resize.mt_saltcalc", "Recalcular agua salada", "Recalculate salt water"), 0, 30, i + 66, 300, col);
+        } }
     return n;
 }
 
@@ -9243,6 +9253,7 @@ static int mt_close(void *win) {
             mt_write(&k_mt_rows[i], v); ch++;
             logf("MODTOGGLE> %s %s at the next start", k_mt_rows[i].dll ? k_mt_rows[i].dll : k_mt_rows[i].env, v ? "on" : "off");
         }
+    if (pp_read_box(win, MT_SALT) == 1 && salt_recalc() >= 0) ch++;   /* SALTFIX: now, on OK */
     return ch;
 }
 
@@ -18739,6 +18750,10 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
     {   char v[8];
         if (GetEnvironmentVariableA("SC3RESIZE_DIRTGUARD", v, sizeof(v))) g_dirtguard = atoi(v); }
     CreateThread(NULL, 0, dirtguard_watcher, NULL, 0, NULL);
+    {   char v[8];   /* SALTFIX */
+        if (GetEnvironmentVariableA("SC3RESIZE_SALTFIX", v, sizeof(v))) g_saltfix = atoi(v);
+        if (GetEnvironmentVariableA("SC3RESIZE_SALTFIX_DUMP", v, sizeof(v))) g_sf_dump = atoi(v); }
+    CreateThread(NULL, 0, sf_watcher, NULL, 0, NULL);
 
 
     /* v3: the create-recorder hook (idx 2) is DROPPED - it crashed the game at startup in v2

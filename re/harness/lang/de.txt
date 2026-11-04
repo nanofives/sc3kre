@@ -702,3 +702,11 @@ resize.mt_uitoggle=UI-ausblenden-Knopf
 resize.mt_undo=Rückgängig
 # en: Sharp data maps
 resize.mt_verdatos=Scharfe Datenkarten
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Now, in this city (on OK, no restart)
+resize.mt_city=Jetzt, in dieser Stadt (bei OK, ohne Neustart)
+# en: Recalculate salt water
+resize.mt_saltcalc=Salzwasser neu berechnen
+# en: Salt water only at sea
+resize.mt_saltfix=Salzwasser nur im Meer

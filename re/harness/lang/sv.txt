@@ -702,3 +702,11 @@ resize.mt_uitoggle=Knapp dölj UI
 resize.mt_undo=Ångra
 # en: Sharp data maps
 resize.mt_verdatos=Skarpa datakartor
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Now, in this city (on OK, no restart)
+resize.mt_city=Nu, i den här staden (vid OK, utan omstart)
+# en: Recalculate salt water
+resize.mt_saltcalc=Räkna om saltvatten
+# en: Salt water only at sea
+resize.mt_saltfix=Saltvatten bara i havet

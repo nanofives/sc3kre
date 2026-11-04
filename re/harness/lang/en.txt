@@ -558,6 +558,8 @@ resize.mt_button=Turn mods on/off...
 # sc3resize.c
 resize.mt_churn=Building renewal
 # sc3resize.c
+resize.mt_city=Now, in this city (on OK, no restart)
+# sc3resize.c
 resize.mt_dataview=Extra data layers
 # sc3resize.c
 resize.mt_features=Features
@@ -589,6 +591,10 @@ resize.mt_queryid=Copy ID button
 resize.mt_rcibars=Detailed RCI bars
 # sc3resize.c
 resize.mt_restore=Restore buildings
+# sc3resize.c
+resize.mt_saltcalc=Recalculate salt water
+# sc3resize.c
+resize.mt_saltfix=Salt water only at sea
 # sc3resize.c
 resize.mt_simrun=Simulation tweaks
 # sc3resize.c
