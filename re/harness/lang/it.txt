@@ -702,3 +702,11 @@ resize.mt_uitoggle=Pulsante nascondi UI
 resize.mt_undo=Annulla
 # en: Sharp data maps
 resize.mt_verdatos=Mappe dati nitide
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Now, in this city (on OK, no restart)
+resize.mt_city=Ora, in questa città (con OK, senza riavvio)
+# en: Recalculate salt water
+resize.mt_saltcalc=Ricalcola l'acqua salata
+# en: Salt water only at sea
+resize.mt_saltfix=Acqua salata solo in mare
