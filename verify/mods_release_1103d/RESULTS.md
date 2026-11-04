@@ -9,6 +9,9 @@ Replaces `sc3mods-2026-11-03c`. Owner call 2026-11-03: publish modtoggle (verify
   "Activar mods..." button were opened in-game with `SC3MODS_LANG` = en, fr, de, it, nl, sv (es in verify/modtoggle): every
   table loaded with 333 keys, every caption fits its column, accents drawn. Pictures (not for git):
   verify/modtoggle/owner_shots/activar_mods_all_languages.png and activar_mods_<lang>.png.
+  Repeated with the GAME's language switched too (sc3resize.ini [language] folder = English-UK, FRENCH, GERMAN, ITALIAN,
+  DUTCH, SWEDISH, no SC3MODS_LANG): the dialog title is the game's own text (Preferences, Préférences, Einstellungen,
+  Preferenze, Instellingen, Egenskaper) and sc3mods.dll detected each language from it by itself. The sheet now shows these.
 - `stage_lan_release.py --game stage/src --bins stage/bins_1103d --stock-modules original/modules --menu-bg stage/release/Apps/menu_bg.bmp
   --perf-ini stage/release/Apps/perf.ini --out stage/release_1103d --label 2026-11-03d`: 3,622 files, 707.1 MB. Against 11-03c:
   changed Apps/sc3resize.dll, Apps/sc3mods.dll and Apps/sc3lang/*.txt (7), 0 added, 0 removed.
