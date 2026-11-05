@@ -25,6 +25,12 @@ speeds, language). "Turn mods on/off..." on that page switches each mod, and the
 off from the next start (saved in `Apps\sc3mods.ini`). The mods' own text comes in 7 languages (English, Spanish,
 French, German, Italian, Dutch, Swedish) and follows the game's language.
 
+![A 1024 tile city running at 1600x900, 28.8 million people](docs/screenshots/city_1024.jpg)
+*A 1024 tile city in a 1600x900 window.*
+
+![The in-game page that turns each mod and feature on or off](docs/screenshots/mods_on_off.png)
+*Preferences > Mod options > Turn mods on/off.*
+
 ### Window and interface (sc3resize)
 - Resizable window, maximize, and borderless fullscreen with Alt+Enter. Size and state are remembered and the game
   always opens on the main screen.

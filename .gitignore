@@ -24,6 +24,8 @@
 # same class as ROADMAP/HANDOFF (our own prose, no game bytes). CLAUDE.md stays UNPUBLISHED
 # by design, so its pointer at this file is local-only.
 !/BOARD.md
+# README screenshots (owner call 2026-11-05): two in-game pictures of the mods, nothing else under docs/.
+!/docs/
 !/UNCERTAINTIES.md
 !/STUBS.md
 !/DEFERRED.md
