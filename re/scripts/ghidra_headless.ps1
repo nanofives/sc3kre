@@ -8,7 +8,8 @@
     -Import     Create/refresh the SC3 Ghidra project and import original\SC3U.exe (full auto-analysis)
     -Export     Re-run ExportAllDecomp.java -> re\ghidra_export\ (the greppable offline model)
     -Count      Print the function-count breakdown
-    -Script <Name.java> [-Args "..."]   Run any post-script against the analyzed program
+    -Script <Name.java> [-Args "..."] [-Write]   Run any post-script against the analyzed program
+                (read-only unless -Write; -Write saves the script's changes into the project)
 
   Examples:
     pwsh re\scripts\ghidra_headless.ps1 -Import
@@ -21,6 +22,8 @@ param(
   [switch]$Count,
   [string]$Script,
   [string]$ScriptArgs = "",
+  # -Script runs read-only unless -Write is given (for scripts that mutate the program, e.g. ApplyCvSymbols.java)
+  [switch]$Write,
   [switch]$IOS,
   [string]$Module = "",
   # Loki Linux demo library (x86 ELF, GCC 2.95, .dynsym-named), e.g. -Linux libSimRCI.so
@@ -111,8 +114,9 @@ elseif ($Count) {
                     "-scriptPath", $ScriptDir, "-postScript", "CountFunctions.java")
 }
 elseif ($Script) {
-  $post = @($ProjDir, $ProjName, "-process", $ProcName, "-noanalysis", "-readOnly",
-            "-scriptPath", $ScriptDir, "-postScript", $Script)
+  $post = @($ProjDir, $ProjName, "-process", $ProcName, "-noanalysis")
+  if (-not $Write) { $post += "-readOnly" }
+  $post += @("-scriptPath", $ScriptDir, "-postScript", $Script)
   if ($ScriptArgs) { $post += $ScriptArgs.Split(" ") }
   Invoke-Headless $post
 }

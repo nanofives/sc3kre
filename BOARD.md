@@ -8,6 +8,12 @@ this file is the live board. Opened 2026-08-24.
 `DEFERRED.md`, open questions in `UNCERTAINTIES.md`, per-session state in `re/sessions/STATUS_*.md`.
 This file points at them and does not restate them.
 
+**RE naming, 2026-11-05: SC3U.exe has its original names.** The retail CD's `SC3U.ICD` (same 2.0.949 build) kept
+full CodeView symbols. Applied to Ghidra + the export (qualified file names now, e.g. `004064ee_cSC3App__DoCDCheck.c`)
+and to the tracker: 5,895 exe C0 -> C1, 300 rows added, 7,858 DLL C0 -> C1 by identical body. Vtable slot names for 108
+`cISC3*` interfaces are in the local `original/retail_2.0.949/CV_CLASSES.md`. Detail and trust limits:
+`re/analysis/CV_SYMBOLS.md`. Check there before naming an exe function or a `vt+0x..` slot by hand.
+
 ## Current state, 2026-10-23 (read this first)
 
 **Latest published release: `sc3mods-2026-10-27d`** (target `f151258`: AUDIO.DLL divide-by-zero guard past the edge with an

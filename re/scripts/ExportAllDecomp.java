@@ -51,9 +51,11 @@ public class ExportAllDecomp extends GhidraScript {
                 DecompileResults r = dec.decompileFunction(f, 60, monitor);
                 String c = (r != null && r.decompileCompleted()) ? r.getDecompiledFunction().getC()
                                                                  : "// DECOMPILE FAILED @ " + addr + "\n";
-                File cf = new File(fnDir, f.getEntryPoint() + "_" + sanitize(f.getName()) + ".c");
+                // Qualified name (class::method) since 2026-11-05: the CV symbols put SC3U.exe functions in class
+                // namespaces, and the bare name alone ("Init", "GetCity") would hide the class in the file name.
+                File cf = new File(fnDir, f.getEntryPoint() + "_" + sanitize(f.getName(true)) + ".c");
                 PrintWriter w = new PrintWriter(cf);
-                w.println("// " + addr + "  " + f.getName() + "  (" + f.getBody().getNumAddresses() + " bytes)");
+                w.println("// " + addr + "  " + f.getName(true) + "  (" + f.getBody().getNumAddresses() + " bytes)");
                 w.print(c);
                 w.close();
                 ok++;

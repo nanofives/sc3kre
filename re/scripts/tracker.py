@@ -25,6 +25,7 @@ Usage:
   py re/scripts/tracker.py set  --module SIMRCI.DLL 0x10002573 --conf C2 --sub rci \\
         --name sc3_rci_compute_demand --notes "..." [--append-notes] [--demote] [--apply]
   py re/scripts/tracker.py batch edits.tsv [--legacy-names] [--apply]   (one splice for many rows)
+  py re/scripts/tracker.py add rows.tsv [--apply]   (insert NEW rows, full column set; refuses existing keys)
   py re/scripts/tracker.py selftest
 Dry run unless --apply.
 """
@@ -282,6 +283,78 @@ def cmd_batch(a):
     return write_spliced(t, edits, a.apply)
 
 
+def cmd_add(a):
+    """TSV with the full column set (module, rva, ghidra_name, size, kind, confidence, subsystem, new_name, notes).
+    Inserts rows that do NOT exist yet (refuses existing keys), each after the last row of its module with a lower
+    rva, so a module's block stays in address order. Same gates as `set`. Verifies that every pre-existing record
+    is byte-identical and in the same order afterwards. Added 2026-11-05 for the CodeView functions Ghidra lacked."""
+    t = Tracker()
+    with io.open(a.file, encoding="utf-8", newline="") as fh:
+        reqs = list(csv.DictReader(fh, delimiter="\t"))
+    missing = [h for h in t.header if h not in (reqs[0] if reqs else {})]
+    if reqs and missing:
+        sys.exit(f"BLOCKING: add file lacks columns {missing}")
+    blank = {h: "" for h in t.header}
+    new_rows, failed, keys = [], 0, set()
+    for q in reqs:
+        mod = check_module(t, q["module"])
+        rva = norm_rva(q["rva"])
+        if t.lookup(mod, rva) is not None or (mod.lower(), rva) in keys:
+            print(f"!! {mod} {rva}: row exists (use set/batch to edit)"); failed += 1; continue
+        keys.add((mod.lower(), rva))
+        new = {h: q[h] for h in t.header}
+        new["module"], new["rva"] = mod, rva
+        errs = gate(blank, new, False)
+        if errs:
+            print(f"!! {mod} {rva}: " + "; ".join(errs)); failed += 1; continue
+        new_rows.append(new)
+    print(f"add: {len(reqs)} requested, {len(new_rows)} would be inserted, {failed} rejected")
+    if failed and not a.skip_rejected:
+        sys.exit("BLOCKING: rejected rows; fix them or pass --skip-rejected. Nothing written.")
+    if not new_rows:
+        print("nothing to write"); return 0
+    # insertion point: after the last row of the same module whose rva sorts below the new one
+    cm, cr = t.col["module"], t.col["rva"]
+    after = {}
+    for nr in new_rows:
+        best = None
+        for i, r in enumerate(t.rows):
+            if r[cm] == nr["module"] and int(r[cr], 16) < int(nr["rva"], 16):
+                best = i if best is None or int(r[cr], 16) >= int(t.rows[best][cr], 16) else best
+        if best is None:
+            best = max(i for i, r in enumerate(t.rows) if r[cm] == nr["module"])
+        after.setdefault(best, []).append(nr)
+    raws = [t.raws[0]]
+    for i, raw in enumerate(t.raws[1:]):
+        raws.append(raw)
+        for nr in sorted(after.get(i, []), key=lambda x: int(x["rva"], 16)):
+            if not raws[-1].endswith("\n"):
+                raws[-1] += "\r\n"
+            raws.append(serialise([nr[h] for h in t.header], "\r\n"))
+    if not a.apply:
+        print(f"DRY RUN -- {len(new_rows)} record(s) would be inserted. Re-run with --apply.")
+        return 0
+    bak = t.path + ".bak_tracker"
+    shutil.copy2(t.path, bak)
+    tmp = t.path + ".tmp_tracker"
+    with io.open(tmp, "w", encoding="utf-8", newline="") as fh:
+        fh.write("".join(raws))
+    os.replace(tmp, t.path)
+    after_t = Tracker(t.path)
+    added = {(m.lower(), r) for (m, r) in keys}
+    kept = [raw for raw, row in zip(after_t.raws[1:], after_t.rows)
+            if (row[cm].lower(), row[cr].lower()) not in added]
+    old = list(t.raws[1:])
+    if old and not old[-1].endswith("\n"):
+        old[-1] += "\r\n"   # the last record may gain a terminator when a row is inserted after it
+    if len(after_t.rows) != len(t.rows) + len(new_rows) or kept != old:
+        shutil.copy2(bak, t.path)
+        sys.exit(f"BLOCKING: verification failed (rows {len(t.rows)} -> {len(after_t.rows)}, expected "
+                 f"+{len(new_rows)}, or an old record changed). Restored from {bak}.")
+    print(f"APPLIED: inserted {len(new_rows)} row(s); all {len(t.rows)} old records unchanged; backup {bak}")
+    return 0
+
+
 def cmd_selftest(_):
     import tempfile
     src = ('"module","rva","ghidra_name","size","kind","confidence","subsystem","new_name","notes"\r\n'
@@ -324,9 +397,12 @@ def main(argv):
     b.add_argument("--demote", action="store_true"); b.add_argument("--legacy-names", action="store_true")
     b.add_argument("--skip-rejected", action="store_true")
     b.add_argument("--legacy-from", help="also accept C2+ names found in this backup functions.csv")
+    ad = sp.add_parser("add"); ad.add_argument("file"); ad.add_argument("--apply", action="store_true")
+    ad.add_argument("--skip-rejected", action="store_true")
     sp.add_parser("selftest")
     a = ap.parse_args(argv)
-    return {"get": cmd_get, "find": cmd_find, "set": cmd_set, "batch": cmd_batch, "selftest": cmd_selftest}[a.cmd](a)
+    return {"get": cmd_get, "find": cmd_find, "set": cmd_set, "batch": cmd_batch, "add": cmd_add,
+            "selftest": cmd_selftest}[a.cmd](a)
 
 
 if __name__ == "__main__":
