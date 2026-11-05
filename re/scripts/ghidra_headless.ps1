@@ -24,6 +24,9 @@ param(
   [string]$ScriptArgs = "",
   # -Script runs read-only unless -Write is given (for scripts that mutate the program, e.g. ApplyCvSymbols.java)
   [switch]$Write,
+  # -Export into this folder instead of the module's re\ghidra_export_* (export fresh, then swap: an in-place
+  # export after renames leaves the old FUN_* files beside the renamed ones)
+  [string]$ExportTo = "",
   [switch]$IOS,
   [string]$Module = "",
   # Loki Linux demo library (x86 ELF, GCC 2.95, .dynsym-named), e.g. -Linux libSimRCI.so
@@ -80,6 +83,7 @@ elseif ($IOS) {
   $ExportDir = Join-Path $Root "re\ghidra_export"
 }
 
+if ($ExportTo) { $ExportDir = $ExportTo }
 if (-not (Test-Path $Headless)) { throw "Ghidra not found at $Headless — run install first." }
 
 # Fail fast on a held project lock. Measured 2026-10-05: with a ghidra-headless-mcp session holding

@@ -198,15 +198,75 @@ hand from the SDK headers in the catalogue): 48 C2+ slots compared, e.g. +0x138 
 `PollutionLayer` all equal the C3 names, and the overload pair +0x12c `CreateOccupant(cISC3OccupantAttrib*)` /
 +0x130 `CreateOccupant(cGZResourceKey&)` equals the C3 `_attrib` / `_reskey` split.
 
-**Applied:** 5,036 tracker rows tagged `[CV-IFACE 2026-11-05] <Interface>::<Method> slot +0x.. (<signature>)`, C0 -> C1
-for 2,734 (subsystem `iface:<Interface>` where empty). C0 24,334 -> 21,600. 9 rows skipped (they already fail a
-gate). **810 slot targets have no tracker row** (Ghidra never made a function there): listed in
-`iface/missing_functions.tsv` for a `MakeFunctions.java` pass.
+**Applied:** tracker rows tagged `[CV-IFACE 2026-11-05] <Interface>::<Method> slot +0x.. (<signature>)`, C0 -> C1
+(subsystem `iface:<Interface>` where empty): 5,036 in the first run, **721 more** after a correction, **141 more** after
+the SDK-id follow-up below (5,898 in all). 9 rows skipped (they already fail a gate). The correction: the first run
+looked rows up by the DLL FILE's spelling (`GZWIND.DLL`), the tracker spells `GZWinD.dll` / `GZWWWD.dll` /
+`SIMVARIABLES.DLL`, so 721 existing rows were reported as "no tracker row" and left untagged. Matched
+case-insensitively, **89** slot targets really have no row (`iface/missing_functions.tsv`); `ApplyDllNames.java`
+creates them in Ghidra.
 
 **Limits.** The layers that matter most for mods (`cISC3ZoneLayer`, `cISC3PowerLayer`, `cISC3PollutionLayer`,
 traffic, transit, network) are only forward references in the exe's types, so CodeView gives no method list for
 them. Their slots stay with the SDK-header walks in `GZCOM_INTERFACE_CATALOGUE.md`. A slot function shared by
 several vtables (one trivial body for many getters) lists every slot it fills.
+
+### Follow-up the same day: SDK-declared interfaces, more ids
+
+`iface_linux.py` now also accepts interfaces only the SDK headers declare (`iface/sdk_classes.txt`, extracted from a
+clone outside the tree). That needed one more guard: a class answers an interface's id only if it derives from it,
+so an id that an UNRELATED class also answers is a shared base, not `cISC3X`. Without the guard the first run named
+`0x81c0cb7b` `cISC3CrimeLayer` although the pollution layer answers it too, and `0x81c0cb7c` `cISC3PollutionLayer`
+(it is `cISC3QueryInfo`). With it: held-out **10 of 10** correct, 0 wrong, **43 ids** from Linux names, every one served
+by its twin DLL. 112 ids in total. The slot pass then named 130 more functions (141 rows).
+
+**Placement check against the catalogue.** Two independent methods: the catalogue's arity fingerprint scan (s18) and
+this pass's emulated QueryInterface. Where both give an answer they agree on **11 of 11** classes, at the same
+vtable (budget, residential, city, sprite cell map, occupant manager, base advisor, ordinance, disaster, cell
+cursor, weather, dirt bag).
+
+## Newly located SDK interfaces walked with `walk_vtable_class.py` (2026-11-05)
+
+s18c could not place `cISC3AuraLayer`, `cISC3LandValueLayer` and others: their inherited cell-map slots are adjustor
+thunks with no `ret`, so there is no arity to fingerprint. The interface id locates them instead. 17 interfaces were
+walked in report mode (vtable from the id, names from the header by slot position, the walker's strict arity check
+and blocking collision audit): **0 arity mismatches; every measurable slot agrees** (aura and land value 1/1 measurable,
+fire 11/11, ordinance 12/12, petitioner manager 9/9, dirt generator 8/8, the advisors 1..7 each).
+
+The walker's own `--apply` was NOT used: it rewrites the whole tracker with `csv.DictWriter` (the churn CLAUDE.md
+warns about), replaces existing notes (it would have wiped the `[CV-COPY]`/`[CV-IFACE]` notes) and sets C1 on rows
+that may be higher. Its `--batch-out` rows went through `tracker.py batch` instead: note appended, new_name only where
+empty, C0 -> C1 only. **92 rows** `[SDK-WALK 2026-11-05]`. 7 rows dropped: 3 functions (SIMADV `0x10006c6d`,
+`0x10010f8c`, `0x1001d21a`) are one body filling slots of several advisor interfaces, so no single method name fits.
+
+## Name audit against the original names (2026-11-05)
+
+520 rows where a session's `sc3_*` name did not obviously match the CodeView name were sent to the worker account in 4
+chunks (read-only: each body read and classified). 322 CONSISTENT, 135 VAGUE, 53 WRONG, 10 UNSURE.
+
+- **WRONG -> renamed: 42** (`[NAME-AUDIT 2026-11-05] renamed from <old>: <reason> (original: <name>)`, confidence
+  unchanged). Examples: SC3U.exe `0x00406eb8` and `0x0048440b` (resource manager, not a string manager), SIMCITY
+  `0x100095ce` (`cRZDate::DayOfMonth`, returned the day, not the month), SIMCITY `0x1000addd` (`cRZRandom::Seed`, not
+  a timer), six `cSC3CompressibleINIFile::EnumEntries`/`InitFileType` copies named as factory registration. 6 skipped
+  (name changed since the clash table), 1 skipped (proposed name failed NAME_OK).
+- **VAGUE: not renamed.** The names are not wrong, the original name already sits in the notes and as a Ghidra label,
+  and renaming working names breaks references in docs and memory. Proposals kept in the local
+  `original/retail_2.0.949/audit/vague_proposals.tsv`.
+
+## For mod work: `re/tools/vtname.py`
+
+```
+py -3.12 re/tools/vtname.py cIGZWin 0xc8 0xe4            # slot -> method + signature
+py -3.12 re/tools/vtname.py --pe SIMCITY.DLL 0x10013260 0x14c   # real vtable: target, tracker name, interface method
+py -3.12 re/tools/vtname.py --scan re/harness/src/sc3resize.c --as cIGZWin   # every vt+0x.. in a file, candidates
+```
+
+The CodeView `cIGZWin` layout confirms what the UI mods worked out by hand in `sc3resize.c`: `vt+0xc8` "SetRect" =
+`SetArea(long,long,long,long)`, `vt+0x98`/`+0x9c` = `GetL`/`GetT` (`mov eax,[ecx+0x80/0x84]`), `vt+0xd8` = 
+`ScreenToWindowCoordinates`, `vt+0xdc` = `WindowToScreenCoordinates`, `vt+0xe4` = `IsPointInWindowScreenCoordinates`,
+`vt+0x144` = `GZPaint`, and the paint walk's per-child `vt+0x148` = `Plot`. The mod sources were NOT edited: a
+`vt+0xNN` is only meaningful with the object it is called on (`sc3resize.c`'s `vt+0x68` is not a window, although
+`cIGZWin` +0x68 exists), and child worktrees edit the same files.
 
 ## Rules of evidence
 
@@ -217,6 +277,9 @@ several vtables (one trivial body for many getters) lists every slot it fills.
   A masked hash ignores constants, so two template instances that differ only in an ID can share it.
 - `[CV-IFACE]` = the function sits in slot k of a vtable whose QueryInterface answers interface I's id, and slot k
   of I is that method (CodeView layout). A name witness for the slot, not for the body. C1.
+- `[SDK-WALK]` = vtable located by its interface id, slot named from the SDK header by position, arity checked where
+  measurable (the note says which). C1.
+- `[NAME-AUDIT]` = a session name replaced because the body and the original name contradict it. Old name in the note.
 - CV names beat `[LINUX-HINT]` and `[iOS-HINT]` names for the exe.
 - `functions.csv` is published with the repo. The CV notes put about 16,000 original symbol names into it. Pushing
   that is the owner's call.

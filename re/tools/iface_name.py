@@ -149,14 +149,16 @@ def main():
 
     # check against tracker names already at C2+
     with io.open(os.path.join(ROOT, "functions.csv"), encoding="utf-8", newline="") as fh:
-        tr = {(r["module"], int(r["rva"], 16)): r for r in csv.DictReader(fh)}
+        # case-insensitive: the tracker spells GZWinD.dll / GZWWWD.dll / SIMVARIABLES.DLL, the files GZWIND.DLL ...
+        # (keyed on the file spelling, 721 existing rows were reported as missing and left untagged)
+        tr = {(r["module"].lower(), int(r["rva"], 16)): r for r in csv.DictReader(fh)}
     by_fn = collections.defaultdict(set)
     for o in final:
         by_fn[(o[0], o[7])].add(o[4])
     ck = collections.Counter()
     ex = []
     for k, meths in by_fn.items():
-        r = tr.get(k)
+        r = tr.get((k[0].lower(), k[1]))
         if r is None:
             ck["no tracker row"] += 1
             continue
@@ -179,7 +181,7 @@ def main():
     edits, missing = [], []
     stb = collections.Counter()
     for (mod, t), lst in sorted(per.items()):
-        r = tr.get((mod, t))
+        r = tr.get((mod.lower(), t))
         if r is None:
             missing.append((mod, t, lst[0]))
             continue

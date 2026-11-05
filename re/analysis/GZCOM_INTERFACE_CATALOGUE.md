@@ -1694,6 +1694,15 @@ treatment, not as 20 finished results.
 That is also the value of having done six walks by hand first: without ground truth, this scan would have
 looked like an unqualified success.
 
+> **2026-11-05: placed by interface id instead of arity** (`re/analysis/CV_SYMBOLS.md`, interface pass). An emulated
+> QueryInterface answers the interface's id at the vtable's own subobject, so the thunked cell-map slots no longer
+> matter: `cISC3AuraLayer` SIMMISC `0x1003c208` (`0x4259c018`), `cISC3LandValueLayer` SIMRCI `0x1004c624`
+> (`0x6098556b`), `cISC3BuildingLayer` SIMGEOM `0x100292c0` (`0x20631788`), `cISC3CitySpriteManager` SIMSPR
+> (`0x416cc7f3`), plus `cISC3FireLayer` SIMSERV `0x1001ee04`, `cISC3WorldLayer` SIMMISC `0x10041324`, the commercial
+> and industrial layers, the dirt generator, the plugin building manager, the petitioner manager and the seven
+> `cISC3AdvisorFor*`. The two methods agree on all 11 classes both place. Crime is still unplaced: its candidate id
+> `0x81c0cb7b` is also answered by the pollution layer, so it is a shared base, not the crime interface.
+
 ### 18d. `0x81c0cb7c` still not named
 
 The bulk scan was expected to name U-044's remaining IID by matching the ≥82-slot arity vector of the class

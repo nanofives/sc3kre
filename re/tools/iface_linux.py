@@ -60,10 +60,27 @@ def plausible(k, lib, serves):
     return 0x01000000 <= k < 0xFFFF0000 and k in serves.get(LIB2DLL.get(lib, "?"), set())
 
 
+PARENTS = {}   # interface -> direct bases (SDK header lines + CodeView), filled in main()
+
+
+def derives(a, b, seen=None):
+    if a == b:
+        return True
+    seen = seen or set()
+    if a in seen:
+        return False
+    seen.add(a)
+    return any(derives(p, b, seen) for p in PARENTS.get(a, ()))
+
+
 def solve(qis, known, cvif, serves):
     named = dict(known)
     taken = set(named.values())
     how = {}
+    holders = collections.defaultdict(set)   # id -> Linux classes whose QueryInterface accepts it
+    for lib, cls, ks in qis:
+        for k in ks:
+            holders[k].add(cls)
     changed = True
     while changed:
         changed = False
@@ -72,6 +89,11 @@ def solve(qis, known, cvif, serves):
             if c is None or c not in cvif or c in taken:
                 continue
             left = [k for k in ks if k not in named and plausible(k, lib, serves)]
+            # A class answers an interface's id only if it derives from that interface. If an unrelated class
+            # also answers this id, it is a shared base, not cISC3X (first SDK run: 0x81c0cb7b, answered by the
+            # crime AND pollution layers, came out as cISC3CrimeLayer).
+            left = [k for k in left if all(conv(o) is not None and derives(conv(o), c) or o.startswith(cls)
+                                           for o in holders[k])]
             if len(left) == 1:
                 named[left[0]] = c
                 taken.add(c)
@@ -86,8 +108,37 @@ def main():
     for r in csv.DictReader(open(os.path.join(IF, "iid_table.tsv"), encoding="utf-8"), delimiter="\t"):
         if r["interface"] and r["how"] in ("exe+sdk", "exe-solved", "sdk"):
             base[int(r["iid"], 16)] = r["interface"]
+    fin = os.path.join(IF, "iid_final.tsv")   # includes ids named by elimination (0x81c0cb7c cISC3QueryInfo)
+    if os.path.exists(fin):
+        for r in csv.DictReader(open(fin, encoding="utf-8"), delimiter="\t"):
+            if not r["source"].startswith("linux:"):
+                base[int(r["iid"], 16)] = r["interface"]
+    import re as _re
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    for r in csv.DictReader(open(os.path.join(CV, "cv_classes.tsv"), encoding="utf-8"), delimiter="\t"):
+        if r["bases"]:
+            PARENTS[r["class"]] = [b.split("@")[0] for b in r["bases"].split(";")]
     for k, (n, _) in EXTRA_KNOWN.items():
         base[k] = n
+    # Interfaces only the SDK headers declare (CodeView has them as forward references at most) are accepted by
+    # the rule too, when iface/sdk_classes.txt exists ("cISC3ZoneLayer : public cISC3CityCellMap<uint8_t>" lines,
+    # extracted from a clone OUTSIDE the tree). SDK template args are mapped to MSVC spellings.
+    sdkp = os.path.join(IF, "sdk_classes.txt")
+    sdk_only = set()
+    if os.path.exists(sdkp):
+        stdint = {"int8_t": "signed char", "uint8_t": "unsigned char", "int16_t": "short", "uint16_t": "unsigned short",
+                  "int32_t": "long", "uint32_t": "unsigned long"}
+        for line in open(sdkp, encoding="utf-8"):
+            for a, b in stdint.items():
+                line = line.replace(f"<{a}>", f"<{b}>")
+            n, _, rest = line.partition(":")
+            n = n.strip()
+            bases = [x.replace("public", "").strip() for x in rest.split(",") if x.strip()]
+            PARENTS.setdefault(n, bases)
+            if n and n not in cvif:
+                sdk_only.add(n)
+        cvif = cvif | sdk_only
+        print("SDK-only interfaces accepted by the rule:", len(sdk_only))
     qis = []
     for p in sorted(glob.glob(os.path.join(ROOT, "re", "match_linux", "lin_*.tsv"))):
         lib = os.path.basename(p)[4:-4]
