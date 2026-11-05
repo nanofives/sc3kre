@@ -81,7 +81,12 @@ chain* (see §2), where the surrounding shape disambiguates them.
 | `GIID_cIGZWinMgr` | `0x5a4` | low-entropy |
 | `GZIID_cIGZResourceKeyList` | `0x199656` | low-entropy |
 | **GZIID_cISC3CityLayer** | **`0x206c6e7c`** | **NOT in the SDK headers — named by us in §12c** |
-| ? unnamed | `0x81c0cb7c` | not in the headers; 16 implementors, 8 not city layers (U-044) |
+| ~~? unnamed~~ **GZIID_cISC3QueryInfo** | `0x81c0cb7c` | not in the headers; 16 implementors, 8 not city layers. **Named 2026-11-05 from the retail CodeView types (U-044 closed)** |
+
+> **2026-11-05: 85 interface ids are now named** (53 from the exe's own QueryInterface code + CodeView class layouts,
+> 17 from the Linux demo's named QueryInterface functions, 13 SDK-only, 1 from an exe call site, 1 by elimination), and 871 DLL vtables
+> are matched to the interface they implement. Method, tables and checks: `re/analysis/CV_SYMBOLS.md`, "Interface
+> pass". Local tables: `original/retail_2.0.949/iface/iid_final.tsv`, `slots.tsv`.
 
 ---
 

@@ -10,7 +10,7 @@ This file points at them and does not restate them.
 
 **RE naming, 2026-11-05: SC3U.exe has its original names.** The retail CD's `SC3U.ICD` (same 2.0.949 build) kept
 full CodeView symbols. Applied to Ghidra + the export (qualified file names now, e.g. `004064ee_cSC3App__DoCDCheck.c`)
-and to the tracker: 5,895 exe C0 -> C1, 300 rows added, 7,858 DLL C0 -> C1 by identical body. Vtable slot names for 108
+and to the tracker: 5,895 exe C0 -> C1, 300 rows added, 7,858 DLL C0 -> C1 by identical body, then 2,734 more DLL C0 -> C1 from the interface each DLL vtable implements (871 vtables, `[CV-IFACE]`). Vtable slot names for 108
 `cISC3*` interfaces are in the local `original/retail_2.0.949/CV_CLASSES.md`. Detail and trust limits:
 `re/analysis/CV_SYMBOLS.md`. Check there before naming an exe function or a `vt+0x..` slot by hand.
 

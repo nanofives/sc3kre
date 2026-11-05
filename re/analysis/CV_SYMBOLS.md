@@ -143,6 +143,71 @@ an ICF fold of differently named functions. Rejected by the gates: 29,026 (hash 
 952 (exe copy has no CV name), 176 (repeats inside the DLL), 56 (generic shape), 53 (ICF fold), 11 (no row).
 The DLL Ghidra projects were NOT renamed. The names live in the tracker notes only.
 
+## Interface pass: DLL vtable slots named from the interface each vtable implements (2026-11-05)
+
+The DLLs have no symbols, but their classes implement interfaces whose vtable layout CodeView gives exactly. A
+vtable layout is the binary contract, so a DLL vtable that implements `cISC3City` has `cISC3City`'s methods in
+its slots. What was missing is which DLL vtable implements which interface. Four steps, all tools in `re/tools/`,
+all outputs in the local `original/retail_2.0.949/iface/`:
+
+1. **`qi_scan.py`: every vtable, by emulating QueryInterface.** Every GZCOM vtable starts with QueryInterface.
+   Each candidate (a data dword whose next two dwords are also code pointers) is run under unicorn as
+   `QueryInterface(id, &out)` against a fake object, for every candidate id (immediates in the body and its
+   base-class chain, plus every id seen anywhere). Result per vtable: the ids its subobject answers, and where
+   `*ppv` points for the others. Traps fixed on the way: MSVC puts the "ask the base class" branch AFTER the
+   first `ret 8`, so the immediate scan must not stop at `ret`; candidates run with bogus arguments write into the
+   image and the fake vtable, and a unicorn write hook reports a store without blocking it, so the image is
+   restored after any such run (without that, 3,181 of 3,420 exe targets came back unusable).
+   Exe check against CodeView's `vftable` labels: **205 of 211 QueryInterface vtables found, 0 false positives**
+   (missed: 4 `cSC3OccupantManagerAnim` QIs that do not emulate cleanly, 2 that return false for id 1).
+   All modules: 2,221 vtables (2,016 in DLLs) in 31 s.
+2. **`iface_ids.py`: interface ids from the exe.** For each exe class, CodeView gives every base subobject's
+   absolute offset (`cSC3App`: `cIGZSystemService` +0, `cIGZApp` +0x18, `cISC3App` +0x30). An id answered at
+   offset x can only be an interface at x. Intersect over classes, eliminate, repeat. MSVC's `{for `X'}` vtable
+   labels are NOT usable for this: under multiple inheritance they do not name the owning base (reading them named
+   `0x66` cIGZSystemService, the SDK's `0x6c` contradicts it; by offset `0x66` = `cIGZApp`).
+   **53 ids, 7 of 7 that overlap the SDK headers agree, 0 conflicts.**
+3. **`iface_linux.py`: more ids from the Loki Linux demo's named QueryInterface functions** (`re/match_linux/lin_*.tsv`).
+   Rule: `cSC3X::QueryInterface` introduces `cISC3X`; when exactly one plausible constant is left in its body, that
+   constant is the id. A plausible constant is >= 0x01000000 (the first run re-derived 7 of 8 known ids WRONG
+   from addresses inside the Linux image such as `0x5092e0`) and is served by a vtable in the twin Windows DLL.
+   Held-out on the known ids: **8 of 8 re-derived correctly** (50 not reachable by the rule). **17 new ids**, every
+   one served by its twin DLL (`cISC3ResidentialLayer` `0x4106c508` in SIMRCI, `cISC3OccupantManager`
+   `0xa1478afe` in SIMGEOM, `cISC3WinCityView` `0xa1634f05` and `cISC3CitySpriteManager` `0x416cc7f3` in SIMSPR, ...).
+   Plus `0xfa1` = `cISC3City` from the exe consumer `cSC3App::CreateCity` `0x00407b5e`
+   (`GetClassObject(0xa1a166cc, 0xfa1, &out)` stored to `cSC3App+0x48 mpCity`, a `cISC3City *`), and by ancestor
+   elimination **`0x81c0cb7c` = `cISC3QueryInfo`** (U-044 closed). 85 ids in total (`iid_final.tsv`).
+4. **`iface_name.py`: name the slots.** A vtable's interface = the most-derived named interface its subobject
+   answers (all its named ids must lie on that interface's CodeView chain). Named only if the vtable has at least
+   as many code slots as the interface. If the subobject also answers unnamed ids, the named interface is a correct
+   prefix (single inheritance), and that is recorded.
+
+| | count |
+|---|---:|
+| DLL vtables named (126 of them as a prefix of a more derived, unnamed interface) | 871 |
+| not named: no named id answered | 1,104 |
+| not named: interface only forward-declared in CodeView (no method list) | 20 |
+| not named: named ids not on one chain | 21 |
+| slots named / distinct DLL functions / interfaces | 20,338 / 5,855 / 49 |
+
+**Check against names sessions gave the same functions (C2+):** 306 contain the method name exactly, 23 share most
+words, 128 are worded differently. Sampled, the different ones mostly say the same thing from the body's side
+(`sc3_rci_get_serviceid_80f1e6d3` = `cISC3CityLayer::GetLayerType`, `sc3_ntwrk_hud_message_proc` =
+`cIGZWinProc::DoWinMsg`, `sc3_gzstream_write_u32` = `SetFieldUint32`). `cSC3City` (SIMCITY `0x10013260`, walked by
+hand from the SDK headers in the catalogue): 48 C2+ slots compared, e.g. +0x138 `BuildingLayer` ... +0x16c
+`PollutionLayer` all equal the C3 names, and the overload pair +0x12c `CreateOccupant(cISC3OccupantAttrib*)` /
++0x130 `CreateOccupant(cGZResourceKey&)` equals the C3 `_attrib` / `_reskey` split.
+
+**Applied:** 5,036 tracker rows tagged `[CV-IFACE 2026-11-05] <Interface>::<Method> slot +0x.. (<signature>)`, C0 -> C1
+for 2,734 (subsystem `iface:<Interface>` where empty). C0 24,334 -> 21,600. 9 rows skipped (they already fail a
+gate). **810 slot targets have no tracker row** (Ghidra never made a function there): listed in
+`iface/missing_functions.tsv` for a `MakeFunctions.java` pass.
+
+**Limits.** The layers that matter most for mods (`cISC3ZoneLayer`, `cISC3PowerLayer`, `cISC3PollutionLayer`,
+traffic, transit, network) are only forward references in the exe's types, so CodeView gives no method list for
+them. Their slots stay with the SDK-header walks in `GZCOM_INTERFACE_CATALOGUE.md`. A slot function shared by
+several vtables (one trivial body for many getters) lists every slot it fills.
+
 ## Rules of evidence
 
 - `[CV-SYMBOL]` = the original name and signature from the retail build's own debug info, at the exact address.
@@ -150,6 +215,8 @@ The DLL Ghidra projects were NOT renamed. The names live in the tracker notes on
   decompilation read, C3 a runtime or second witness, as before.
 - `[CV-COPY]` = same body shape as a CV-named exe function. Hint quality, like the 2026-10-05 framework copies.
   A masked hash ignores constants, so two template instances that differ only in an ID can share it.
+- `[CV-IFACE]` = the function sits in slot k of a vtable whose QueryInterface answers interface I's id, and slot k
+  of I is that method (CodeView layout). A name witness for the slot, not for the body. C1.
 - CV names beat `[LINUX-HINT]` and `[iOS-HINT]` names for the exe.
 - `functions.csv` is published with the repo. The CV notes put about 16,000 original symbol names into it. Pushing
   that is the owner's call.
