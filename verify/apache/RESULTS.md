@@ -63,3 +63,35 @@ right = (-7.95, +7.9) cells, one pixel down = (+7.94, +7.94).
 
 Known: the author's cruise speed (about 1.1 cells/s) makes a 100-cell leg take 1.5 min, so a full round of 9 posts takes
 several minutes. Not changed. Post position = first scanned cell of the building, not its centre.
+
+## Step 4: the flyover as a Reunirse petition 0xDB (this commit)
+
+Static read (worker, 2026-11-06), from the Civic Deals DLL (MinGW, symbols kept) and SIMADV:
+- Queue: SIMADV `FUN_100208ac(mgr, id, 0, 1, 0, 120)` thiscall, not a vtable slot, mgr = city vt+0x1b4. Returns 0 if
+  the id was ever queued in this process (so one offer per game session).
+- Answer: SIMADV `0x1002096a` PetitionerButtonPressed(mgr, id, button) 1 = button 1, 2 = button 2. Texts:
+  `0x10021b7c` GetPetitionerStructureFromID(mgr, id, rec), cIGZString* at rec+0x10..0x28 (name, title, message,
+  button 1, button 2, reaction 1, reaction 2). Civic Deals swaps the manager's vptr to reach these; we detour both
+  functions at their prologue instead (7 and 5 bytes, checked), so the two plugins chain whichever loads first.
+- 0xDB: free id; SIMADV's stock switch sends it to a no-op case. PetitionerExtraInfo `19,2` = portrait 19, advisor
+  slot 2 (as D7 / D9). `NumberOfPetitionerMessages` is read by nothing (no string match in the exe or any DLL).
+- Conditions: military base = BuildingLayer vt+0x60(0x2AFA) > 0 (the base lot is placed only after the mayor accepts
+  petition 0xCD, so a base means the deal was accepted); crime = CrimeLayer()->GetAverageValue() > 40 with population
+  > 10000 (Public Safety advisor's HIGH_CRIME_LEVEL=40, SIMADV 0x100145ef). Checked every 15 s while a city is open
+  and no flight is running. Accept = the "apache on" cheat path (3-minute flyover); reject = nothing.
+- Text: Spanish when `sc3mods.dll` `sc3mods_lang()` says "es", else English. The DLL sets name, title, message,
+  buttons, reactions; `re/tools/apache_patch.py` adds the SYS.PAK line and the six IXF records (list heading, impact
+  analysis, buttons, reactions) to the player's files and copies the DLL + the author's sprites.
+- MSVC: the SDK's overloaded virtuals (cIGZString::FromChar) are called by slot, since MSVC orders overloads
+  differently from the GCC the SDK was written for.
+
+| check (Craterville, `APACHE_PETITION_FORCE=1` because its crime is 15) | result |
+|---|---|
+| hooks | `PETITION_HOOKS_IN`; `PETITION_CHECK base 4 crime 15 pop 208780` |
+| queue | `PETITION_QUEUED`; Reunirse lists "Patrulla aérea de la base militar" |
+| open | "Operación Cielo Seguro", "Coronel Vidal, base militar", message and both buttons in Spanish |
+| Autorizar la patrulla | reaction in Spanish, `PETITION_ACCEPTED`, `START_TIMED`, formation flies |
+
+Not checked: the unforced path in a city with crime > 40, the reject button, English / other folders, together with
+Civic Deals in one tree. [UNCERTAIN] the frame rate fell to 3-7 fps during this run (120 in earlier runs) from the
+queue onward; not traced (the machine was shared, and nothing of ours runs per frame there).

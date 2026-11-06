@@ -15,6 +15,9 @@
 #include "cISC3ZoneLayer.h"
 #include "cISC3OccupantManager.h"
 #include "cISC3Occupant.h"
+#include "cISC3CrimeLayer.h"
+#include "cISC3ResidentialLayer.h"
+#include "cISC3BuildingLayer.h"
 #include <vector>
 #include "FlightMotion.h"
 #include "GZServPtrs.h"
@@ -564,6 +567,115 @@ bool Paint(cISC3App* app){
     }
     return true;
 }
+// ===== sc3kre 2026-11-06: the flyover as a Reunirse petition (owner: offered when the city has a military base, the
+// base deal was accepted and crime is high; accept = "apache on", reject = nothing). Static read in verify/apache/RESULTS.md:
+//  - queue: SIMADV FUN_100208ac(mgr, id, 0, 1, 0, 120), thiscall, not exported (the call Civic Deals makes)
+//  - answer: SIMADV 0x1002096a PetitionerButtonPressed(mgr, id, button 1 accept / 2 reject); texts: 0x10021b7c
+//    GetPetitionerStructureFromID(mgr, id, rec), record +0x10 name, +0x14 title, +0x18 message, +0x1c / +0x20 buttons,
+//    +0x24 / +0x28 reactions (cIGZString*). Both are detoured at their prologue, so a second plugin that swaps the
+//    manager's vtable (Civic Deals) still reaches them.
+//  - base: BuildingLayer vt+0x60(0x2AFA) > 0. The base lot is placed only after the mayor accepts petition 0xCD, so
+//    a base in the city means the deal was accepted.
+//  - crime: CrimeLayer()->GetAverageValue() > 40 with population > 10000, the Public Safety advisor's "high crime"
+//    (Advisor-PublicSafety.ini HIGH_CRIME_LEVEL=40, SIMADV 0x100145ef).
+// Petition id 0xDB (free; SIMADV's stock switch routes it to a no-op case). Data: SYS.PAK PetitionerExtraInfo
+// 0x000000DB=19,2 and the six Sc3StringsPetitioner*.IXF records, added by re/tools/apache_patch.py.
+// MSVC note: this file is built with MSVC (build_msvc.cmd); MSVC lays overloaded virtuals out in a different order
+// than GCC, which the SDK headers were written for, so overloaded methods (cIGZString::FromChar) are called by slot.
+constexpr uint32_t petitionID=0xDB;
+bool petitionOffered=false;
+void* petitionDirector=nullptr;
+using BtnFn=bool(__thiscall*)(void*,uint32_t,uint32_t);
+using InfoFn=bool(__thiscall*)(void*,uint32_t,void*);
+BtnFn origButton=nullptr;InfoFn origInfo=nullptr;
+bool Spanish(){
+    using LangFn=const char*(__stdcall*)();
+    HMODULE m=GetModuleHandleA("sc3mods.dll");
+    auto f=m?reinterpret_cast<LangFn>(GetProcAddress(m,"sc3mods_lang")):nullptr;
+    const char* c=f?f():nullptr;
+    return c && c[0]=='e' && c[1]=='s';
+}
+const char* PetitionText(int i){
+    static const char* es[7]={"Coronel Vidal, base militar","Operaci\xf3n Cielo Seguro",
+        "Alcalde, la delincuencia no deja de subir. La base puede prestarle tres helic\xf3pteros Apache para patrullar la "
+        "ciudad durante unos minutos. No cuesta nada a las arcas, aunque el ruido no le va a gustar a todo el mundo.",
+        "Autorizar la patrulla","Rechazar la oferta",
+        "Los helic\xf3pteros despegan ahora, Alcalde. Vigilaremos la ciudad desde el aire.",
+        "Entendido, Alcalde. La base sigue a su disposici\xf3n si cambia de idea."};
+    static const char* en[7]={"Colonel Vidal, military base","Operation Safe Skies",
+        "Mayor, crime keeps rising. The base can lend you three Apache helicopters to patrol the city for a few minutes. "
+        "It costs the treasury nothing, though not everyone will like the noise.",
+        "Authorize the patrol","Decline the offer",
+        "The helicopters are taking off now, Mayor. We will watch the city from the air.",
+        "Understood, Mayor. The base remains at your service if you change your mind."};
+    return (Spanish()?es:en)[i];
+}
+bool __fastcall HookInfo(void* mgr,void*,uint32_t id,void* rec){
+    const bool r=origInfo(mgr,id,rec);
+    if(id==petitionID && rec && !IsBadReadPtr(rec,0x2c)){
+        for(int i=0;i<7;++i){
+            void* str=*reinterpret_cast<void**>(static_cast<uint8_t*>(rec)+0x10+4*i);
+            if(!str || IsBadReadPtr(str,4))continue;
+            using FromChar=uint32_t(__thiscall*)(void*,const char*);
+            (*reinterpret_cast<FromChar**>(str))[0x10/4](str,PetitionText(i));
+        }
+    }
+    return r;
+}
+void StartFromPetition();
+bool __fastcall HookButton(void* mgr,void*,uint32_t id,uint32_t button){
+    const bool r=origButton(mgr,id,button);
+    if(id==petitionID){Log(button==1?"PETITION_ACCEPTED":"PETITION_REJECTED");if(button==1)StartFromPetition();}
+    return r;
+}
+bool Detour(uint8_t* fn,const uint8_t* expect,int len,void* hook,void** tramp){
+    if(std::memcmp(fn,expect,len))return false;
+    auto* t=static_cast<uint8_t*>(VirtualAlloc(nullptr,32,MEM_COMMIT|MEM_RESERVE,PAGE_EXECUTE_READWRITE));
+    if(!t)return false;
+    std::memcpy(t,fn,len);t[len]=0xE9;*reinterpret_cast<int32_t*>(t+len+1)=int32_t((fn+len)-(t+len+5));
+    DWORD old;if(!VirtualProtect(fn,len,PAGE_EXECUTE_READWRITE,&old))return false;
+    *tramp=t;fn[0]=0xE9;*reinterpret_cast<int32_t*>(fn+1)=int32_t(static_cast<uint8_t*>(hook)-(fn+5));
+    for(int i=5;i<len;++i)fn[i]=0x90;
+    FlushInstructionCache(GetCurrentProcess(),fn,len);
+    return true;
+}
+bool InstallPetition(){
+    static int state=0;   // 0 not tried, 1 in, -1 refused
+    if(state)return state>0;
+    auto* b=reinterpret_cast<uint8_t*>(GetModuleHandleA("SIMADV.DLL"));
+    if(!b)return false;
+    static const uint8_t eBtn[7]={0x55,0x8b,0xec,0x53,0x8b,0x5d,0x08},eInfo[5]={0x8b,0x49,0x28,0x85,0xc9};
+    state=-1;
+    if(*reinterpret_cast<uint32_t*>(b+0x208b6)!=0x7d8b5756 || b[0x208ba]!=0x08){Log("PETITION_OFF: SIMADV queue differs");return false;}
+    if(!Detour(b+0x2096a,eBtn,7,reinterpret_cast<void*>(&HookButton),reinterpret_cast<void**>(&origButton)) ||
+       !Detour(b+0x21b7c,eInfo,5,reinterpret_cast<void*>(&HookInfo),reinterpret_cast<void**>(&origInfo))){
+        Log("PETITION_OFF: SIMADV petitioner functions differ");return false;}
+    state=1;Log("PETITION_HOOKS_IN");return true;
+}
+void CALLBACK OfferTick(HWND,UINT,UINT_PTR,DWORD){
+    if(petitionOffered || !cityReady || playing)return;
+    cRZAutoRefCount<cISC3App> app;
+    if(!App(framework,app))return;
+    cISC3City* city=app->GetCity();
+    if(!city || !InstallPetition())return;
+    auto* bl=city->BuildingLayer();auto* cr=city->CrimeLayer();auto* res=city->ResidentialLayer();
+    if(!bl || !cr || !res)return;
+    using Track=uint32_t(__thiscall*)(void*,uint32_t);   // SDK says bool; the body returns the count (SIMGEOM 0x10003d85)
+    const uint32_t bases=(*reinterpret_cast<Track**>(bl))[0x60/4](bl,0x2AFA);
+    const unsigned crime=cr->GetAverageValue();const int pop=res->GetPopulation();
+    static ULONGLONG nextLog=0;const ULONGLONG now=GetTickCount64();
+    if(now>=nextLog){char b[96];wsprintfA(b,"PETITION_CHECK base %d crime %u pop %d",int(bases),crime,pop);Log(b);nextLog=now+60000;}
+    const bool force=GetEnvironmentVariableA("APACHE_PETITION_FORCE",nullptr,0)>0;   // lab: offer without the conditions
+    if(!force && (bases==0 || bases==0xFFFFFFFFu || crime<=40 || pop<=10000))return;
+    void* mgr=city->GetPetitionerManager();
+    auto* b=reinterpret_cast<uint8_t*>(GetModuleHandleA("SIMADV.DLL"));
+    if(!mgr || !b)return;
+    using AddFn=bool(__thiscall*)(void*,uint32_t,int,uint8_t,uint8_t,uint8_t);
+    petitionOffered=true;   // once per game session either way: SIMADV keeps offered ids until exit
+    const bool ok=reinterpret_cast<AddFn>(b+0x208ac)(mgr,petitionID,0,1,0,120);
+    Log(ok?"PETITION_QUEUED":"PETITION_QUEUE_REFUSED");
+}
+
 void CALLBACK Tick(HWND,UINT,UINT_PTR id,DWORD){
     if(id!=timer || !playing || blocked)return;
     const ULONGLONG now=GetTickCount64();
@@ -592,7 +704,7 @@ class ApacheDirector final:public cRZMessageCOMDirector {
     std::string assetPath;
 public:
     uint32_t GetDirectorID()const override{return directorID;}
-    bool OnStart(cIGZCOM* value)override{com=value;auto* f=com?com->FrameWork():nullptr;if(!f)return false;f->AddHook(this);return true;}
+    bool OnStart(cIGZCOM* value)override{com=value;petitionDirector=this;auto* f=com?com->FrameWork():nullptr;if(!f)return false;f->AddHook(this);return true;}
     bool PostAppInit()override{
         cRZAutoRefCount<cISC3App> app;
         if(!App(mpFrameWork,app))return false;
@@ -606,6 +718,7 @@ public:
         for(const auto& c:controls){manager->RegisterCheatCode(c.first,cRZBaseString(c.second));manager->AddNotification(this,c.first);}
         cIGZMessageServerPtr messages;
         if(messages){messages->AddNotification(this,preCity);messages->AddNotification(this,postCity);}
+        SetTimer(nullptr,0,15000,OfferTick);   // sc3kre: Reunirse petition check
         cRZBaseString module;ModulePath(module);
         assetPath=module.ToChar();
         size_t slash=assetPath.find_last_of("\\/");
@@ -684,4 +797,9 @@ public:
         return true;
     }
 };
+namespace{void StartFromPetition(){   // sc3kre: accept = the same path as the cheat "apache on"
+    if(!petitionDirector)return;
+    cGZMessage m(cheatMessage);m.dwData1=onID;
+    static_cast<ApacheDirector*>(petitionDirector)->DoMessage(m);
+}}
 cRZCOMDllDirector* RZGetCOMDllDirector(){static ApacheDirector director;return &director;}
