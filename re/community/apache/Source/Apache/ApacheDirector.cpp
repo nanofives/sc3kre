@@ -332,7 +332,8 @@ bool Paint(cISC3App* app){
     if(!city || !map || !ValidMap(map) || !attributes[0])return false;
     if(cityIdentity!=city || (spriteMap && spriteMap!=map))return false;
     const unsigned width=city->CellCountX(),height=city->CellCountZ();
-    if(width<16 || height<16 || width>256 || height>256)return false;
+    // sc3kre 2026-11-06: up to 1024 for sc3bigcity (was 256; nothing else here depends on it)
+    if(width<16 || height<16 || width>1024 || height>1024){Log("PAINT_SIZE_REJECTED");return false;}
     const auto* bytes=static_cast<const uint8_t*>(map);
     int altitudeShift=0,tileShift=0,horizontalShift=0;
     unsigned rotation=0;
@@ -341,7 +342,10 @@ bool Paint(cISC3App* app){
     std::memcpy(&horizontalShift,bytes+0x48,4);
     std::memcpy(&rotation,bytes+0x2c,4);
     if(altitudeShift<0 || altitudeShift>4 || tileShift<0 || tileShift>8 ||
-       horizontalShift<0 || horizontalShift>8 || rotation>3 || !PinZoom(unsigned(altitudeShift)))return false;
+       horizontalShift<0 || horizontalShift>8 || rotation>3 || !PinZoom(unsigned(altitudeShift))){
+        char b[96];wsprintfA(b,"PAINT_VIEW_REJECTED alt %d tile %d hor %d rot %u",altitudeShift,tileShift,horizontalShift,rotation);
+        Log(b);return false;   // sc3kre: say why
+    }
     const ULONGLONG now=GetTickCount64();
     const double dt=std::clamp(double(now-lastTick)/1000.,0.,.10);
     lastTick=now;
@@ -414,6 +418,8 @@ bool Paint(cISC3App* app){
             std::atan2(aircraft[0].velocity.z,aircraft[0].velocity.x),dt);
     }
 
+    {   static ULONGLONG nextPos=0;   // sc3kre: lead aircraft position in the log, for camera checks
+        if(now>=nextPos){char b[64];wsprintfA(b,"POS %d %d of %u",int(cx),int(cz),width);Log(b);nextPos=now+5000;} }
     if(now>=nextDensityCheck){
         narrowFormation=patrolReady && Roads(city,int(cx),int(cz),5)>28;
         nextDensityCheck=now+1500;

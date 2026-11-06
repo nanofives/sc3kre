@@ -26,3 +26,20 @@ Findings that the next steps fix:
 - **Big maps**: `Paint` returns false (and the mod stops with `DRAW_FAILED`) when the city is over 256 cells, so no Apache
   on sc3bigcity 512 / 1024 maps.
 - **Zoom**: `altitudeShift > 4` stops it too; cityzoom x2 / x3 not yet checked against that field.
+
+## Step 2: big maps and zoom (this commit)
+
+Changes in `Source/Apache/ApacheDirector.cpp` (marked `sc3kre`):
+- City size limit 256 -> 1024 (`Paint`). Nothing else in the file depends on 256: positions are cells * 256 in
+  int32, the ground read checks the map's own +0x14 / +0x18 size against CellCountX / Z.
+- `PAINT_SIZE_REJECTED` / `PAINT_VIEW_REJECTED alt .. tile .. hor .. rot ..` in the log instead of a silent stop.
+- `POS x z of w` every 5 s (lead aircraft cell), used to aim the camera in tests.
+
+| check (Europolis 1024, sc3bigcity, 800x600) | result |
+|---|---|
+| `apache patrol`, `apache on` | no `DRAW_FAILED`, no rejection; formation drawn (`owner_shots/1_apache_1024.png`, zoom 3 and zoom 4) |
+| zoom 1 -> 4 while flying | no rejection logged at any level |
+| cityzoom x2 / x3 | not reached at 800x600 (the + button past zoom 4 left the view unchanged); [UNCERTAIN] at a bigger window |
+
+Minimap -> cell mapping measured on the 1024 map, rotation 0, 800x600: centre (718,513) = cell (492,492), one pixel
+right = (-7.95, +7.9) cells, one pixel down = (+7.94, +7.94).
