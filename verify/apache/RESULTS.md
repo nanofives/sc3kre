@@ -43,3 +43,23 @@ Changes in `Source/Apache/ApacheDirector.cpp` (marked `sc3kre`):
 
 Minimap -> cell mapping measured on the 1024 map, rotation 0, 800x600: centre (718,513) = cell (492,492), one pixel
 right = (-7.95, +7.9) cells, one pixel down = (+7.94, +7.94).
+
+## Step 3: patrol on roads, between the military base and the police stations (this commit)
+
+- **Why the route never used roads**: `cISC3ZoneLayer::GetRoadCount` (SIMRCI 0x100331a1, slot +0x70, correct) counts
+  road occupants in the one-cell strip BESIDE a straight row / column segment and returns 0 when begin and end differ
+  on both x and z [static read]. The mod passed a square, so 0 always. `Roads()` now counts road cells one by one:
+  `SurfaceOccupantManager()->GetOccupantAtCell(x,z)` + `IsGeomFlag(0x8000)` (the Roads network bit).
+- **Posts** (owner: patrol tied to police / military): at each `apache patrol` a cell scan collects Military Base 11002
+  (one per 12 cells, the lot is large) and PoliceStation 13130 / SmallPoliceStation 13120 (one per 4 cells), ids from
+  CitySim.ini. The base goes first. At each road junction the choice gets +2 per cell of progress toward the current
+  post. Reached = within 16 cells; skipped = no new best distance for 25 s. No posts: the old road patrol.
+
+| check (Craterville 256, `apache patrol`) | result |
+|---|---|
+| route start | `ROAD_PATROL_FOUND` (was `ROAD_COUNT_EMPTY` every 7 s) |
+| posts | `PATROL_POSTS military 1 police 8`, positions logged (first build said military 9: dedupe was 4 cells) |
+| 6 min | 13 road turns; base `SKIPPED` at 32 cells (no road nearer to the lot's first scanned cell), police station 1 `REACHED` at 10 cells |
+
+Known: the author's cruise speed (about 1.1 cells/s) makes a 100-cell leg take 1.5 min, so a full round of 9 posts takes
+several minutes. Not changed. Post position = first scanned cell of the building, not its centre.

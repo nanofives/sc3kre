@@ -13,6 +13,9 @@
 #include "cISC3App.h"
 #include "cISC3City.h"
 #include "cISC3ZoneLayer.h"
+#include "cISC3OccupantManager.h"
+#include "cISC3Occupant.h"
+#include <vector>
 #include "FlightMotion.h"
 #include "GZServPtrs.h"
 #include <windows.h>
@@ -162,20 +165,62 @@ void FallbackWaypoint(unsigned width,unsigned height){
     headingZ=(targetZ>cz+1)?1:(targetZ<cz-1)?-1:0;
     waypointX=targetX;waypointZ=targetZ;
 }
+// sc3kre 2026-11-06: cISC3ZoneLayer::GetRoadCount (SIMRCI 0x100331a1) counts the road occupants of the one-cell strip
+// BESIDE a straight row or column segment and returns 0 when begin and end differ on both x and z, so the old square
+// query was always 0 (ROAD_COUNT_EMPTY on every city). Count road cells (geometry flag 0x8000) one by one instead.
+bool IsRoad(cISC3OccupantManager* om,int x,int z){
+    cISC3Occupant* o=nullptr;
+    const bool road=om->GetOccupantAtCell(uint32_t(x),uint32_t(z),&o) && o && o->IsGeomFlag(0x8000);
+    if(o)o->Release();
+    return road;
+}
 uint32_t Roads(cISC3City* city,int x,int z,int radius){
-    if(!city || !city->ZoneLayer())return 0;
+    if(!city)return 0;
+    cISC3OccupantManager* om=city->SurfaceOccupantManager();
+    if(!om)return 0;
     const int w=int(city->CellCountX()),h=int(city->CellCountZ());
     if(x<radius || z<radius || x+radius>=w || z+radius>=h)return 0;
-    const sIGZPointXZUint32 begin{uint32_t(x-radius),uint32_t(z-radius)};
-    const sIGZPointXZUint32 end{uint32_t(x+radius),uint32_t(z+radius)};
-    return city->ZoneLayer()->GetRoadCount(begin,end);
+    uint32_t n=0;
+    for(int i=x-radius;i<=x+radius;++i)for(int j=z-radius;j<=z+radius;++j)n+=IsRoad(om,i,j);
+    return n;
+}
+// sc3kre 2026-11-06 (owner: patrol tied to police / military): the patrol visits the military base and every police
+// station in turn along the roads. Type ids from CitySim.ini: 11002 Military Base, 13130 PoliceStation,
+// 13120 SmallPoliceStation. Found by a cell scan once per patrol start (a station answers on each of its cells,
+// so hits closer than 4 cells to a kept one are the same building).
+struct Post{int x,z;uint32_t type;};
+std::vector<Post> posts;
+size_t postIndex=0;
+bool postsScanned=false;
+void ScanPosts(cISC3City* city){
+    posts.clear();postIndex=0;postsScanned=true;
+    cISC3OccupantManager* om=city?city->SurfaceOccupantManager():nullptr;
+    if(!om)return;
+    const int w=int(city->CellCountX()),h=int(city->CellCountZ());
+    int bases=0,police=0;
+    for(int x=0;x<w;++x)for(int z=0;z<h;++z){
+        cISC3Occupant* o=nullptr;
+        if(!om->GetOccupantAtCell(uint32_t(x),uint32_t(z),&o) || !o)continue;
+        const uint32_t t=o->TypeId();
+        o->Release();
+        if(t!=11002 && t!=13130 && t!=13120)continue;
+        bool seen=false;
+        const int sameLot=t==11002?12:4;   // the base is a large plopped lot (measured: 9 hits at 4)
+        for(const Post& p:posts)if(p.type==t && std::abs(p.x-x)<sameLot && std::abs(p.z-z)<sameLot){seen=true;break;}
+        if(seen)continue;
+        if(t==11002){posts.insert(posts.begin(),Post{x,z,t});++bases;}else{posts.push_back(Post{x,z,t});++police;}
+    }
+    char b[96];wsprintfA(b,"PATROL_POSTS military %d police %d",bases,police);Log(b);
+    for(const Post& p:posts){wsprintfA(b,"PATROL_POST (%d,%d) type %u",p.x,p.z,p.type);Log(b);}
 }
 void SelectWaypoint(cISC3City* city,unsigned width,unsigned height){
     if(!patrolReady){
         double best=-1;int bestX=0,bestZ=0;
         for(int x=int(width*.12);x<int(width*.85);x+=std::max(4,int(width/14)))
             for(int z=int(height*.24);z<int(height*.80);z+=std::max(4,int(height/14))){
-                const double score=double(Roads(city,x,z,2))-.04*std::hypot(x-width*.17,z-height*.60);
+                const double rx=(patrolMode && !posts.empty())?posts[postIndex].x:width*.17;
+                const double rz=(patrolMode && !posts.empty())?posts[postIndex].z:height*.60;
+                const double score=double(Roads(city,x,z,2))-.04*std::hypot(x-rx,z-rz);
                 if(score>best){best=score;bestX=x;bestZ=z;}
             }
         patrolReady=best>0;
@@ -193,7 +238,12 @@ void SelectWaypoint(cISC3City* city,unsigned width,unsigned height){
         const int tx=x+dirX[i]*step,tz=z+dirZ[i]*step;
         const double road=double(Roads(city,tx,tz,2));
         if(!road)continue;
-        const double score=road+(i==0?5.:i==3?-10.:((turns+i)%3==0?1.5:0.));
+        double score=road+(i==0?5.:i==3?-10.:((turns+i)%3==0?1.5:0.));
+        if(patrolMode && !posts.empty()){   // sc3kre: head for the current post
+            const Post& p=posts[postIndex];
+            const double gain=std::hypot(x-p.x,z-p.z)-std::hypot(tx-p.x,tz-p.z);
+            score+=gain*2.;
+        }
         if(score>best){best=score;choice=i;}
     }
     if(best<-1e8){
@@ -202,6 +252,21 @@ void SelectWaypoint(cISC3City* city,unsigned width,unsigned height){
         waypointX=std::clamp(double(x+headingX*step),3.,double(city->CellCountX())-4.);
         waypointZ=std::clamp(double(z+headingZ*step),3.,double(city->CellCountZ())-4.);
         Log("ROAD_PATROL_BACKTRACK");return;
+    }
+    if(patrolMode && !posts.empty()){
+        // reached = within 16 cells (a post can sit far from its nearest road: the Craterville base is ~30 cells off
+        // the road net). Stuck = no new best distance for 25 s: go on to the next post.
+        static double bestDist=1e9;static ULONGLONG bestAt=0;static size_t bestFor=size_t(-1);
+        const ULONGLONG t=GetTickCount64();
+        const double d=std::hypot(x-posts[postIndex].x,z-posts[postIndex].z);
+        if(bestFor!=postIndex){bestFor=postIndex;bestDist=d;bestAt=t;}
+        if(d<bestDist-1.){bestDist=d;bestAt=t;}
+        const bool reached=d<16.,stuck=t-bestAt>25000;
+        if(reached || stuck){
+            char b[96];wsprintfA(b,"PATROL_POST_%s %u (%d,%d) type %u dist %d",reached?"REACHED":"SKIPPED",unsigned(postIndex),
+                posts[postIndex].x,posts[postIndex].z,posts[postIndex].type,int(d));
+            Log(b);postIndex=(postIndex+1)%posts.size();bestFor=size_t(-1);
+        }
     }
     headingX=dirX[choice];headingZ=dirZ[choice];
     waypointX=x+headingX*step;waypointZ=z+headingZ*step;
@@ -353,6 +418,7 @@ bool Paint(cISC3App* app){
     travel=std::clamp(double(now-startTime)/180000.,0.,1.);
     const double pathX=width*(.15+.70*travel+.012*std::sin(6.2831853*travel));
     const double pathZ=height*(.61-.22*travel+.009*std::sin(6.2831853*travel));
+    if(patrolMode && !postsScanned)ScanPosts(city);
     if(!pilotMode && !returning && now>=nextWaypoint &&
        (!patrolReady || std::hypot(waypointX-cx,waypointZ-cz)<.4)){
         if(cx==0 && cz==0){cx=pathX;cz=pathZ;}
@@ -598,7 +664,7 @@ public:
         }
         if(blocked || !cityReady || !app->GetCity() || !Map(app) || !ValidMap(Map(app))){Log("START_BLOCKED: city or SIMSPR unavailable");return true;}
         if(command==patrolID && playing){
-            patrolMode=true;pilotMode=false;returning=false;
+            patrolMode=true;pilotMode=false;returning=false;postsScanned=false;
             nextWaypoint=GetTickCount64();nextTicker=0;
             Log("PATROL_CONTINUOUS");return true;
         }
@@ -609,7 +675,7 @@ public:
         pilotMode=returning=turnLeftHeld=turnRightHeld=false;manualX=manualZ=0;
         motionReady=nudgeActive=headingLocked=false;aircraft={};aircraftAltitude={};
         formationAngle=0;formationSpread=3.;facingCandidate=-1;facingSince=0;
-        patrolMode=command==patrolID;
+        patrolMode=command==patrolID;postsScanned=false;
         patrolReady=narrowFormation=false;turns=fallbackLeg=0;
         travel=0;cx=cz=0;playing=true;
         timer=SetTimer(nullptr,0,20,Tick);
