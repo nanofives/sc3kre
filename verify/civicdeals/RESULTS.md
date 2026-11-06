@@ -54,5 +54,5 @@ per the upstream README (github.com/0xC0000054/sc3k-extra-cheats): `dotcom` +1,0
 | `moolah 500000` | funds 500,000 |
 | `SimDate 1 1 1990`, `simdate 1 1 1990`, `SimDate 5 20 1900`, `SimDate 1 1 1840` (README example), sim running or paused | **date unchanged** (1933 kept), with and without SC3KCivicDeals.dll |
 
-[UNCERTAIN] why SimDate does nothing here: the stock-tree control (`-Stock`) could not be read (the 16-bit DWM garbling,
+Cause found and fixed 2026-11-06 (verify/simdate/RESULTS.md): the stock "sim" cheat caught the text first. Old note:: the stock-tree control (`-Stock`) could not be read (the 16-bit DWM garbling,
 `project-dwm16-mitigation-root-cause`), so whether our mods or the GOG 2.0.949 build stop it is not known yet.

@@ -75,7 +75,7 @@ player's own files**, which also lets the Spanish texts keep their language. Thi
 |---|---|---|
 | Terraformer panel: taller, Bosque denso, Natural World switch, aligned tools | sc3resize TERRPANEL / NATWORLD | `verify/terrpanel/RESULTS.md` |
 | Weather switch "Clima: Lluvia y nubes" | sc3resize WEATHER | `verify/terrpanel/RESULTS.md` |
-| D9 / DA in Spanish, ExtraCheats unchanged | `re/tools/civicdeals_patch.py` | `verify/civicdeals/RESULTS.md` (SimDate does nothing here, cause open) |
+| D9 / DA in Spanish, ExtraCheats unchanged | `re/tools/civicdeals_patch.py` | `verify/civicdeals/RESULTS.md` (SimDate fixed by sc3resize CHEATFIX, `verify/simdate/RESULTS.md`) |
 | Bosque button in the Paisaje flyout | sc3resize FORESTTOOL | `verify/foresttool/RESULTS.md` |
 | Apache: 1024 maps, road patrol via police + base, Reunirse petition 0xDB, rotor sound | `re/community/apache` (MSVC build), `re/tools/apache_patch.py` | `verify/apache/RESULTS.md` |
 
