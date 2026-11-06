@@ -710,3 +710,17 @@ resize.mt_city=Jetzt, in dieser Stadt (bei OK, ohne Neustart)
 resize.mt_saltcalc=Salzwasser neu berechnen
 # en: Salt water only at sea
 resize.mt_saltfix=Salzwasser nur im Meer
+# en: Larger terrain panel
+resize.mt_terrpanel=Größeres Geländefenster
+# en: Dense forest
+resize.tp_forest=Dichter Wald
+# en: More options:
+resize.tp_more=Weitere Optionen:
+# en: Natural World
+resize.tp_natworld=Natural World
+# en: Weather switch
+resize.mt_weather=Wetter-Schalter
+# en: Weather:
+resize.wx_label=Wetter:
+# en: Rain and clouds
+resize.wx_rain=Regen und Wolken

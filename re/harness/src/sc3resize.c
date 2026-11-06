@@ -8846,6 +8846,8 @@ static int g_modtoggle = 1;   /* MODTOGGLE page C, SC3RESIZE_MODTOGGLE=0 off */
 #define MP_AS_M60   0x02F95B74
 #define MP_LANG_BTN 0x02F95B75   /* LANGSEL: "Idioma: <name>", each click picks the next installed language */
 #define MP_FEAT_BTN 0x02F95B76   /* MODTOGGLE: "Activar mods..." on the mods page, opens the third page */
+#define MP_WX_LBL   0x02F95D10   /* WEATHER: "Clima:" */
+#define MP_WX_BOX   0x02F95D11   /* WEATHER: "Lluvia y nubes" */
 #define MT_TITLE    0x02F95B77
 #define MT_H_MODS   0x02F95B78
 #define MT_H_FEAT   0x02F95B79
@@ -8870,7 +8872,7 @@ static int   g_mp_page;                      /* 0 = the game's page, 1 = mods */
 static int   g_mp_as_on, g_mp_as_min, g_mp_as_ind, g_mp_simrun, g_mp_undo, g_mp_undobtn, g_mp_ovs_pct, g_mp_edge;
 
 static const DWORD k_mp_page_ids[] = { MP_BTN_BACK, MP_TITLE, MP_H_UI, MP_H_PERF, MP_H_AS, MP_H_OTHER, MP_AS_ON, MP_AS_IND,
-    MP_AS_GRP, MP_AS_LBL, MP_H_BLD, MP_BLD_MOVE, MP_BLD_OVER, MP_AS_UNAUTO, MP_SIMRUN, MP_UNDO, MP_UNDOBTN, MP_EDGE, MP_OVS_SL, MP_OVS_LBL, MP_FPS_GRP, MP_FPS_LBL, MP_PUSH, MP_AS_M60, MP_LANG_BTN, MP_FEAT_BTN, CS_HDR,
+    MP_AS_GRP, MP_AS_LBL, MP_H_BLD, MP_BLD_MOVE, MP_BLD_OVER, MP_AS_UNAUTO, MP_SIMRUN, MP_UNDO, MP_UNDOBTN, MP_EDGE, MP_OVS_SL, MP_OVS_LBL, MP_FPS_GRP, MP_FPS_LBL, MP_PUSH, MP_AS_M60, MP_LANG_BTN, MP_FEAT_BTN, MP_WX_LBL, MP_WX_BOX, CS_HDR,
     MP_PANEL, HO_LABEL, HO_GROUP, HO_SMOOTH, PP_FPS, PP_BUSY, CZ_BOX, CS_ARROW_LBL, CS_ARROW, CS_DRAG_LBL, CS_DRAG };
 #define MP_NPAGE (sizeof(k_mp_page_ids) / sizeof(k_mp_page_ids[0]))
 
@@ -9139,6 +9141,7 @@ static void lang_click(void *win) {
 }
 
 #include "sc3resize_saltfix.c"   /* SALTFIX: sea water salt by flood from the map edge, rivers + lakes fresh (SC3RESIZE_SALTFIX=0) */
+#include "sc3resize_weather.c"   /* WEATHER: rain and clouds switch on the mods page (SC3RESIZE_WEATHER=0) */
 
 /* ===== MODTOGGLE (owner 2026-11-03: "on the mods options add a feature to disable mod features"). =====
  * A third page, "Activar mods", reached from the mods page: one checkbox per mod DLL and per feature, applied at the
@@ -9170,7 +9173,9 @@ static const MT_ROW k_mt_rows[] = {
     { { SC3KEY("resize.mt_keys"),      "Teclas P y 1-4",          "P and 1-4 keys" },         NULL, "SC3RESIZE_PAUSEKEY;SC3RESIZE_SPEEDKEYS" },
     { { SC3KEY("resize.mt_churn"),     "Renovaci\xf3n de edificios", "Building renewal" },    NULL, "SC3SIMRUN_CHURN" },
     { { SC3KEY("resize.mt_sirens"),    "Arreglo de sirenas",      "Siren fix" },              NULL, "SC3SIMRUN_SIRENS" },
-    { { SC3KEY("resize.mt_saltfix"),   "Agua salada solo en el mar", "Salt water only at sea" }, NULL, "SC3RESIZE_SALTFIX" } };
+    { { SC3KEY("resize.mt_saltfix"),   "Agua salada solo en el mar", "Salt water only at sea" }, NULL, "SC3RESIZE_SALTFIX" },
+    { { SC3KEY("resize.mt_terrpanel"), "Panel de terreno ampliado", "Larger terrain panel" }, NULL, "SC3RESIZE_TERRPANEL" },
+    { { SC3KEY("resize.mt_weather"),   "Interruptor de clima",    "Weather switch" },         NULL, "SC3RESIZE_WEATHER" } };
 #define MT_N ((int)(sizeof(k_mt_rows) / sizeof(k_mt_rows[0])))
 static int g_mt_on0[MT_N];   /* state shown when the page was built */
 
@@ -9232,15 +9237,15 @@ static int mt_build(void *fac, void *win, int es, DWORD col) {
         if (r->dll) { n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 30, ym, 214, col); ym += 19; }
         else        { n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 262, yf, 208, col); yf += 19; }
     }
-    i = (ym > yf ? ym : yf) + 12;
+    i = (ym > yf ? ym : yf) + 8;   /* 14 feature rows: keep the city section clear of Volver (local y 436) */
     n += ho_add_label(fac, win, MT_NOTE, SC3TR(es, "resize.mt_note", "Los cambios se aplican al reiniciar el juego.",
                                                "Changes apply the next time the game starts."), 18, i, 450);
     n += ho_add_label(fac, win, MT_NOTE2, SC3TR(es, "resize.mt_note2", "Una ciudad grande o con avenidas necesita su mod para cargar.",
-                                                "A big city or one with avenues needs its mod to load."), 18, i + 20, 450);
+                                                "A big city or one with avenues needs its mod to load."), 18, i + 18, 450);
     {   SF_GRID g; void *eco;   /* SALTFIX: only with a city open and the hook in */
         if (g_saltfix && g_sf_dirt && sf_city_grid(sf_city(), &g, &eco)) {
-            n += ho_add_label(fac, win, MT_H_CITY, SC3TR(es, "resize.mt_city", "Ahora, en esta ciudad (al aceptar, sin reiniciar)", "Now, in this city (on OK, no restart)"), 18, i + 48, 440);
-            n += mp_checkbox(fac, win, MT_SALT, SC3TR(es, "resize.mt_saltcalc", "Recalcular agua salada", "Recalculate salt water"), 0, 30, i + 66, 300, col);
+            n += ho_add_label(fac, win, MT_H_CITY, SC3TR(es, "resize.mt_city", "Ahora, en esta ciudad (al aceptar, sin reiniciar)", "Now, in this city (on OK, no restart)"), 18, i + 40, 440);
+            n += mp_checkbox(fac, win, MT_SALT, SC3TR(es, "resize.mt_saltcalc", "Recalcular agua salada", "Recalculate salt water"), 0, 30, i + 58, 300, col);
         } }
     return n;
 }
@@ -9313,6 +9318,10 @@ static void mp_build(void *win) {
         n += ho_add_label(fac, win, MP_H_PERF, SC3TR(es, "resize.performance", "Rendimiento", "Performance"), MP_X0, 146, 200);
         mp_move(win, PP_FPS, MP_X1, 164);
         mp_move(win, PP_BUSY, 150, 164);
+        if (g_weather) {   /* WEATHER: under Ver FPS, applied at once on OK */
+            n += ho_add_label(fac, win, MP_WX_LBL, SC3TR(es, "resize.wx_label", "Clima:", "Weather:"), MP_X1, 184, 60);
+            n += mp_checkbox(fac, win, MP_WX_BOX, SC3TR(es, "resize.wx_rain", "Lluvia y nubes", "Rain and clouds"), g_wx_on, 96, 182, 170, col);
+        }
         if (g_rl_geom) {   /* RELOCATE / PLOPOVER live in sc3resize: applied at once on OK */
             n += ho_add_label(fac, win, MP_H_BLD, SC3TR(es, "resize.buildings", "Edificios", "Buildings"), 280, 146, 190);
             n += mp_checkbox(fac, win, MP_BLD_MOVE, SC3TR(es, "resize.move_button", "Bot\xf3n Mover", "Move button"), g_mp_mover, 292, 164, 170, col);
@@ -9452,6 +9461,7 @@ static void mp_close(void *win, DWORD id) {
         g_relocate = v; mp_write_int("sc3resize.ini", "buildings", "mover", v); ch++; logf("RELOCATE> Mover button %s from the mods page", v ? "on" : "off"); }
     if ((v = pp_read_box(win, MP_BLD_OVER)) >= 0 && v != g_mp_plop) {
         g_plopover = v; mp_write_int("sc3resize.ini", "buildings", "plopover", v); ch++; logf("PLOPOVER> build over zones %s from the mods page", v ? "on" : "off"); }
+    if (g_weather && (v = pp_read_box(win, MP_WX_BOX)) >= 0 && v != g_wx_on) { wx_set(v, 1); wx_save(v); ch++; }
     if ((v = pp_read_box(win, MP_SIMRUN)) >= 0 && v != g_mp_simrun) { mp_write_int("simrun.ini", "sim", "run_while_scrolling", v); ch++; }
     {   HMODULE om = GetModuleHandleA("sc3overscroll.dll");   /* live through sc3overscroll's exports */
         int (*os)(int, int) = om ? (int (*)(int, int))GetProcAddress(om, "sc3overscroll_opt_set") : NULL;
@@ -9569,6 +9579,9 @@ static void ho_install(HMODULE sui) {
     if (g_orig_62b1)
         ho_hook(sui, 0x55e07, e5e07, 6, (void *)ho_prefs_msg, &g_orig_5e07, "Preferences messages FUN_10055e07");
 }
+
+#include "sc3resize_natworld.c"   /* NATWORLD: Classic Natural World colours, switchable (SC3RESIZE_NATWORLD=0) */
+#include "sc3resize_terrpanel.c"   /* TERRPANEL: taller terrain editor panel + "Bosque denso" (SC3RESIZE_TERRPANEL=0) */
 
 /* QUERYID (task queryid 2026-10-12, re/analysis/QUERY_ID.md). Owner: "me gustaria senalar con ID el elemento que quiero
  * trabajar, podemos implementar un boton en el menu de '?' para que copie el ID de lo seleccionado?"
@@ -16431,6 +16444,7 @@ static void __stdcall fnlog_enter(int idx, DWORD *f) {
             rz_patch_ddblt_surf(*(DWORD *)(f[7] + 4));
         rz_poll();
         sw_tick();   /* STATIONWARN: the red marker on poorly connected stations */
+        wx_tick();   /* WEATHER: re-request rain on a new city view */
         if (g_census_ms && GetTickCount() >= g_census_ms) { g_census_ms = 0; rz_census(); }
         if (g_hudlab) rz_hudlab_tick();
         return;
@@ -18752,6 +18766,10 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
     CreateThread(NULL, 0, dirtguard_watcher, NULL, 0, NULL);
     {   char v[8];   /* SALTFIX */
         if (GetEnvironmentVariableA("SC3RESIZE_SALTFIX", v, sizeof(v))) g_saltfix = atoi(v);
+        if (GetEnvironmentVariableA("SC3RESIZE_TERRPANEL", v, sizeof(v))) g_terrpanel = atoi(v);   /* TERRPANEL */
+        if (GetEnvironmentVariableA("SC3RESIZE_WEATHER", v, sizeof(v))) g_weather = atoi(v);   /* WEATHER */
+        if (GetEnvironmentVariableA("SC3RESIZE_TERRPANEL_LOG", v, sizeof(v))) g_tp_log = atoi(v);
+        if (GetEnvironmentVariableA("SC3RESIZE_NATWORLD", v, sizeof(v))) g_natworld = atoi(v);   /* NATWORLD */
         if (GetEnvironmentVariableA("SC3RESIZE_SALTFIX_DUMP", v, sizeof(v))) g_sf_dump = atoi(v); }
     CreateThread(NULL, 0, sf_watcher, NULL, 0, NULL);
 
@@ -18802,6 +18820,8 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           ho_install(sui);   /* HUDOPT: HUD scale controls in the Preferences dialog */
           rz_meet_hook(sui); /* DLGSTAY: the Reunirse pages share one stored position */
           qi_install(sui);   /* QUERYID: "Copiar ID" button in the query (?) dialog */
+          tp_install(sui);   /* TERRPANEL: taller terrain editor panel */
+          wx_startup();      /* WEATHER: saved rain and clouds switch */
           rm_install(sui);   /* RESTORE: "Vida util" list on the Reunirse list page */
           gx_install(sui);   /* GRAPHAXIS: Y axis on the Graficas page */
           gn_install(sui);   /* GRAPHNEW: income/expenses, power, water, RCI, pollution graphs */

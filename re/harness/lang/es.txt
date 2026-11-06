@@ -312,10 +312,12 @@ resize.mt_saltfix=Agua salada solo en el mar
 resize.mt_simrun=Ajustes de simulación
 resize.mt_sirens=Arreglo de sirenas
 resize.mt_stationwarn=Aviso de estaciones
+resize.mt_terrpanel=Panel de terreno ampliado
 resize.mt_title=Activar mods y funciones
 resize.mt_uitoggle=Botón ocultar interfaz
 resize.mt_undo=Deshacer
 resize.mt_verdatos=Mapas de datos nítidos
+resize.mt_weather=Interruptor de clima
 resize.no_limit=Sin límite
 resize.on_restart=" (al reiniciar)"
 resize.past_map_edge=Más allá del borde
@@ -333,8 +335,13 @@ resize.show_fps=Ver FPS
 resize.show_notice=Mostrar aviso
 resize.show_profiler=Ver perfilador
 resize.smooth=Suavizado
+resize.tp_forest=Bosque denso
+resize.tp_more=Más opciones:
+resize.tp_natworld=Natural World
 resize.undo=Deshacer (Ctrl+Z)
 resize.undo_buttons=Botones de deshacer
+resize.wx_label=Clima:
+resize.wx_rain=Lluvia y nubes
 
 # ---- restore
 restore.already_as_good_as=Ya está como nuevo

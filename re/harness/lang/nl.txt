@@ -710,3 +710,17 @@ resize.mt_city=Nu, in deze stad (bij OK, zonder herstart)
 resize.mt_saltcalc=Zout water herberekenen
 # en: Salt water only at sea
 resize.mt_saltfix=Zout water alleen in zee
+# en: Larger terrain panel
+resize.mt_terrpanel=Groter terreinpaneel
+# en: Dense forest
+resize.tp_forest=Dicht bos
+# en: More options:
+resize.tp_more=Meer opties:
+# en: Natural World
+resize.tp_natworld=Natural World
+# en: Weather switch
+resize.mt_weather=Weerschakelaar
+# en: Weather:
+resize.wx_label=Weer:
+# en: Rain and clouds
+resize.wx_rain=Regen en wolken

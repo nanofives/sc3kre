@@ -602,6 +602,8 @@ resize.mt_sirens=Siren fix
 # sc3resize.c
 resize.mt_stationwarn=Station warnings
 # sc3resize.c
+resize.mt_terrpanel=Larger terrain panel
+# sc3resize.c
 resize.mt_title=Turn mods and features on or off
 # sc3resize.c
 resize.mt_uitoggle=Hide-UI button
@@ -609,6 +611,8 @@ resize.mt_uitoggle=Hide-UI button
 resize.mt_undo=Undo
 # sc3resize.c
 resize.mt_verdatos=Sharp data maps
+# sc3resize.c
+resize.mt_weather=Weather switch
 # sc3resize.c
 resize.no_limit=No limit
 # sc3resize.c
@@ -643,10 +647,20 @@ resize.show_notice=Show notice
 resize.show_profiler=Show profiler
 # sc3resize.c
 resize.smooth=Smooth
+# sc3resize_terrpanel.c
+resize.tp_forest=Dense forest
+# sc3resize_terrpanel.c
+resize.tp_more=More options:
+# sc3resize_terrpanel.c
+resize.tp_natworld=Natural World
 # sc3resize.c
 resize.undo=Undo (Ctrl+Z)
 # sc3resize.c
 resize.undo_buttons=Undo buttons
+# sc3resize.c
+resize.wx_label=Weather:
+# sc3resize.c
+resize.wx_rain=Rain and clouds
 
 # ---- restore
 # sc3restore.c

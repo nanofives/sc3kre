@@ -710,3 +710,17 @@ resize.mt_city=Nu, i den här staden (vid OK, utan omstart)
 resize.mt_saltcalc=Räkna om saltvatten
 # en: Salt water only at sea
 resize.mt_saltfix=Saltvatten bara i havet
+# en: Larger terrain panel
+resize.mt_terrpanel=Större terrängpanel
+# en: Dense forest
+resize.tp_forest=Tät skog
+# en: More options:
+resize.tp_more=Fler alternativ:
+# en: Natural World
+resize.tp_natworld=Natural World
+# en: Weather switch
+resize.mt_weather=Väderbrytare
+# en: Weather:
+resize.wx_label=Väder:
+# en: Rain and clouds
+resize.wx_rain=Regn och moln
