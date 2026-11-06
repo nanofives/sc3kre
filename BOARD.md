@@ -18,7 +18,7 @@ are `<addr>_<name>.c`, old exports in `*_pre_cv`), and 42 wrong session names we
 ## Current state, 2026-10-23 (read this first)
 
 **New 2026-11-06: community mods (Apache Flyover, Civic Deals + Extra Cheats, Classic Natural World).** Author
-permission obtained, owner decided per feature what to keep or tweak: `re/analysis/COMMUNITY_MODS.md`. Done on main (e03ab40): taller terrain panel + Bosque denso, Natural World switch, weather switch (`verify/terrpanel/RESULTS.md`). Open: D9/DA in Spanish, ExtraCheats, forest tool button, Apache.
+permission obtained, owner decided per feature what to keep or tweak: `re/analysis/COMMUNITY_MODS.md`. Done on main (e03ab40): taller terrain panel + Bosque denso, Natural World switch, weather switch (`verify/terrpanel/RESULTS.md`). All built 2026-11-06 (D9/DA es, ExtraCheats, Bosque button, Apache 1024 + patrol + Reunirse + rotor); status table at the end of the plan. Not released yet.
 
 **Latest published release: `sc3mods-2026-10-27d`** (target `f151258`: AUDIO.DLL divide-by-zero guard past the edge with an
 underground view, no sc3autosave; `verify/mods_release_1027d/RESULTS.md`, stage source now `stage\src`). Before it:

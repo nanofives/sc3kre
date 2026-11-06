@@ -68,3 +68,16 @@ player's own files**, which also lets the Spanish texts keep their language. Thi
 1. File the authors' permission wording in this document.
 2. Coexistence run in a dev workspace (`sc3dev.ps1 new community`): startup with our mods, zoom past 4, a 1024 city,
    city switch, `[sc3resize.log]` VEH FAULT lines. Civic Deals only on an English text copy until the patcher exists.
+
+## Status 2026-11-06 (all owner decisions built, on main)
+
+| Feature | Where | Verify |
+|---|---|---|
+| Terraformer panel: taller, Bosque denso, Natural World switch, aligned tools | sc3resize TERRPANEL / NATWORLD | `verify/terrpanel/RESULTS.md` |
+| Weather switch "Clima: Lluvia y nubes" | sc3resize WEATHER | `verify/terrpanel/RESULTS.md` |
+| D9 / DA in Spanish, ExtraCheats unchanged | `re/tools/civicdeals_patch.py` | `verify/civicdeals/RESULTS.md` (SimDate does nothing here, cause open) |
+| Bosque button in the Paisaje flyout | sc3resize FORESTTOOL | `verify/foresttool/RESULTS.md` |
+| Apache: 1024 maps, road patrol via police + base, Reunirse petition 0xDB, rotor sound | `re/community/apache` (MSVC build), `re/tools/apache_patch.py` | `verify/apache/RESULTS.md` |
+
+Not done: shipping (the mods release and the GitHub README need the new parts and the three install tools), owner hand
+tests by ear and eye, cityzoom x2/x3 with the Apache at a bigger window.
