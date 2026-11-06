@@ -1,0 +1,10 @@
+This file lists the original copyright and license information for
+the third-party libraries or other resources included with this software.
+
+The attached notices are provided for information only.
+
+License notice for gzcom-dll
+--------------------------------------------------------------
+
+GNU Lesser General Public License, version 2.1 or later.
+https://www.gnu.org/licenses/old-licenses/lgpl-2.1.en.html

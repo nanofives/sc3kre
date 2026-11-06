@@ -1,0 +1,26 @@
+Bundled community SDK: LGPL-2.1-or-later
+=======================================
+The SDK source used by the Apache DLL is included under
+Source/vendor/sc3k-gzcom-dll, along with its LGPL-2.1 license and original
+Third Party Notices.txt. ApacheDirector.cpp and all other Apache source are
+included under Source/Apache; the Apache portions are licensed MIT (LICENSE.txt).
+
+The DLL incorporates two SDK implementation files:
+  src/gzcom-dll/src/cRZBaseString.cpp
+  src/gzcom-dll/src/cRZCOMDllDirector.cpp
+and includes SDK headers from:
+  src/gzcom-dll/include/
+
+To relink with a modified community SDK, modify or replace the SDK source
+in Source/vendor/sc3k-gzcom-dll while retaining its license and notices,
+then run BUILD-WINDOWS.cmd with Zig on Windows, or bash build.sh using
+MinGW i686 on Linux. The build scripts compile ApacheDirector.cpp and those
+two SDK .cpp files together to produce a new 32-bit Windows DLL.
+No proprietary SC3K game executable or data is needed for compilation.
+The runtime still requires a legally obtained compatible copy of the game.
+
+The LGPL permits relinking after SDK changes. Preserve the SDK copyright
+and licensing notices when redistributing a modified SDK. Apache source is
+provided as a machine-readable work suitable for building and relinking;
+this package does not impose a prohibition on reverse engineering for SDK
+debugging. See the full LGPL text for distribution terms.

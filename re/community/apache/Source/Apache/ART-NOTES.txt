@@ -1,0 +1,12 @@
+Airframe edit made with the built-in image-generation tool. Prompt: remove only main and tail rotor blades; preserve fixed wings, airframe, mast, hubs, camera, scale and source canvas. File: apache-airframe.png.
+Rotor streaks are deterministic vector geometry in build_assets.py, rendered as three native sprite phases at build time. The airframe does not change between phases.
+Reference technique: https://www.cryengine.com/docs/static/engines/cryengine-5/categories/23756816/pages/26870699 (separate animated/blurred rotor representations). No assets from this reference were copied.
+
+
+v0.9: apache-directions.png generated with built-in image generation using
+apache-airframe.png as the identity/style reference. Prompt: transparent 4x2
+eight-view Apache airframe sheet, fixed elevated camera, eight yaw headings,
+olive SC3KU-era prerendered style; keep hubs, remove rotating blades; no shadows,
+text, lights or glow. Generated rear diagonal cell order was corrected by the
+explicit DIRECTIONS table in build_assets.py. Main and tail rotor geometry is
+built separately at the measured mast locations. Original artwork retained.
