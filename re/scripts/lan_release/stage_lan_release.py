@@ -26,6 +26,7 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -44,6 +45,7 @@ SEED = {"apps/sc3.cfg", "apps/sc3net.cfg", "apps/sc3u.ini",
                                        # patched exe (sc3_update runs sc3mods_patch.ps1 to add the sc3mods import on
                                        # each PC). The server copy stays the stock anchor; no modified exe is hosted.
         "cities/europolis 1024.sc3"}   # owner 2026-10-23: the 1024 test city, in the stage source's Cities. Seed so a save over it survives updates
+OPTIONAL_BINS = ["sc3natworld.bin"]   # NATWORLD colours (natworld_pack.py), copied when present in --bins
 MOD_BINS = ["sc3resize.dll", "sc3bigcity.dll", "sc3overscroll.dll", "sc3simrun.dll", "sc3perf.dll",
             "sc3netmod.dll", "sc3undo.dll", "sc3autosave.dll", "sc3landfill.dll", "sc3dataview.dll", "sc3restore.dll",
             "sc3mods.dll"]   # sc3mods.dll = the mod loader (sc3mods.c). 2026-10-27: it replaces the version.dll proxy
@@ -84,6 +86,8 @@ def main():
     ap.add_argument("--perf-ini", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--label", default="")
+    ap.add_argument("--community", default="", help="a community_bundle.py folder: installed into the staged tree "
+                    "with re/scripts/community_patch.ps1 (2026-11-06)")
     a = ap.parse_args()
     out = os.path.abspath(a.out)
     if os.path.exists(os.path.join(out, ".git")) or os.path.exists(os.path.join(out, "Apps", "SC3U.exe")) and \
@@ -107,6 +111,9 @@ def main():
         place(os.path.join(a.stock_modules, f), os.path.join(out, "Apps", f), copy=True)
     for f in MOD_BINS:
         place(os.path.join(a.bins, f), os.path.join(out, "Apps", f))
+    for f in OPTIONAL_BINS:   # 2026-11-06: data files the mods read beside their DLL
+        if os.path.exists(os.path.join(a.bins, f)):
+            place(os.path.join(a.bins, f), os.path.join(out, "Apps", f), copy=True)
     # modlang 2026-11-02: the mods' string tables, Apps\sc3lang\<code>.txt (read by sc3mods.dll), from the repo
     lang = os.path.normpath(os.path.join(HERE, "..", "..", "harness", "lang"))
     for f in sorted(os.listdir(lang)) if os.path.isdir(lang) else []:
@@ -125,6 +132,21 @@ def main():
     # sc3mods_patch.ps1 (one level up, re/scripts) adds the sc3mods.dll import to this PC's SC3U.exe. sc3_update runs
     # it after downloading; it also ships so a player can -Restore to stock by hand.
     shutil.copy2(os.path.join(HERE, "..", "sc3mods_patch.ps1"), os.path.join(out, "sc3mods_patch.ps1"))
+    if a.community:
+        # 2026-11-06: the community mods (Apache Flyover, Civic Deals, Extra Cheats) installed into the served tree the
+        # way a player installs them, then their backups dropped (a LAN client gets a fresh tree from the manifest).
+        cdir = os.path.join(out, "community")
+        shutil.copytree(a.community, cdir)
+        shutil.copy2(os.path.join(HERE, "..", "community_patch.ps1"), os.path.join(cdir, "community_patch.ps1"))
+        r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                            os.path.join(cdir, "community_patch.ps1"), "-Game", out], capture_output=True, text=True)
+        print(r.stdout.strip())
+        if r.returncode:
+            sys.exit("community_patch.ps1 failed: " + r.stderr.strip())
+        for rr, _ds, fs in os.walk(out):
+            for f in fs:
+                if f.endswith(".community-orig"):
+                    os.remove(os.path.join(rr, f))
     # No launcher file since 2026-10-26: the mods load on a normal start once SC3U.exe is patched, and sc3_update.ps1
     # creates a "SimCity 3000 (mods)" shortcut to this PC's Apps\SC3U.exe (a .lnk holds absolute paths, so it cannot ship).
 

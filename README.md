@@ -15,8 +15,9 @@ obtained copy of the game to use any of it.
 Ready-to-use mods for your own copy of SimCity 3000 Unlimited, published as zips on the
 [Releases](https://github.com/nanofives/sc3kre/releases) page (the newest one is at the top).
 
-**Install.** Unzip into the game folder (the one with `Apps`, `Cities` and `SC3U.exe`), run
-`powershell -ExecutionPolicy Bypass -File .\sc3mods_patch.ps1` once in that folder, start `Apps\SC3U.exe`.
+**Install.** Unzip into the game folder (the one with `Apps` and `Cities`, `SC3U.exe` is inside `Apps`), run
+`powershell -ExecutionPolicy Bypass -File .\sc3mods_patch.ps1` once in that folder, start `Apps\SC3U.exe`. GOG and
+Steam copies both work.
 `sc3mods_patch.ps1 -Restore` goes back to stock. Each release has a `README.txt` with install steps, every option
 and what changed.
 
@@ -125,6 +126,20 @@ French, German, Italian, Dutch, Swedish) and follows the game's language.
   it, `(auto 5 min)`, `(auto 10 min)` and `(auto 1 h)`, never into your own file. It waits for a pause in your input,
   shows a small corner notice instead of the large saving box, and a loaded autosave saves back to the city's own
   file.
+
+### Terrain editor and weather (sc3resize)
+- The New City terrain panel is taller, with "Bosque denso" (dense forest on all land, also after Re-Generate) and a
+  "Natural World" switch for the Classic Natural World terrain and water colours by thronevintagetech.
+- "Weather: Rain and clouds" on the mod options page keeps the game's own clouds and rain on.
+
+### Community mods (optional, `community\` in the release)
+Apache Flyover and Civic Deals + Extra Cheats by thronevintagetech and Null 45, shipped with the authors'
+permission. `community\community_patch.ps1` installs them on your own game files and `-Restore` removes them.
+- Civic Deals: two new Reunirse offers (in Spanish on a Spanish game), forest and weather cheats. A "forest" button
+  joins the Landscape tool menu. Extra Cheats: dotcom, moolah, SimDate (SimDate fixed by sc3resize).
+- Apache Flyover, built from the author's source in [`re/community/apache`](re/community/apache): works on 1024 maps,
+  the patrol follows roads between the military base and the police stations, a Reunirse offer when crime is high
+  and the city has a military base, and the game's own helicopter sound.
 
 Every fix has an off switch (an environment variable or an ini key), listed in the release `README.txt`. The mods
 contain no game code or data. The road data in `mods\netmod` is built from your own game files.
