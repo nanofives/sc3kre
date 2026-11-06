@@ -9582,6 +9582,7 @@ static void ho_install(HMODULE sui) {
 
 #include "sc3resize_natworld.c"   /* NATWORLD: Classic Natural World colours, switchable (SC3RESIZE_NATWORLD=0) */
 #include "sc3resize_terrpanel.c"   /* TERRPANEL: taller terrain editor panel + "Bosque denso" (SC3RESIZE_TERRPANEL=0) */
+#include "sc3resize_foresttool.c"   /* FORESTTOOL: "forestfill" button in the Paisaje flyout (SC3RESIZE_FORESTTOOL=0) */
 
 /* QUERYID (task queryid 2026-10-12, re/analysis/QUERY_ID.md). Owner: "me gustaria senalar con ID el elemento que quiero
  * trabajar, podemos implementar un boton en el menu de '?' para que copie el ID de lo seleccionado?"
@@ -16445,6 +16446,7 @@ static void __stdcall fnlog_enter(int idx, DWORD *f) {
         rz_poll();
         sw_tick();   /* STATIONWARN: the red marker on poorly connected stations */
         wx_tick();   /* WEATHER: re-request rain on a new city view */
+        ft_tick();   /* FORESTTOOL: paint the 7th Paisaje button when its flyout opens */
         if (g_census_ms && GetTickCount() >= g_census_ms) { g_census_ms = 0; rz_census(); }
         if (g_hudlab) rz_hudlab_tick();
         return;
@@ -18768,6 +18770,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
         if (GetEnvironmentVariableA("SC3RESIZE_SALTFIX", v, sizeof(v))) g_saltfix = atoi(v);
         if (GetEnvironmentVariableA("SC3RESIZE_TERRPANEL", v, sizeof(v))) g_terrpanel = atoi(v);   /* TERRPANEL */
         if (GetEnvironmentVariableA("SC3RESIZE_WEATHER", v, sizeof(v))) g_weather = atoi(v);   /* WEATHER */
+        if (GetEnvironmentVariableA("SC3RESIZE_FORESTTOOL", v, sizeof(v))) g_foresttool = atoi(v);   /* FORESTTOOL */
         if (GetEnvironmentVariableA("SC3RESIZE_TERRPANEL_LOG", v, sizeof(v))) g_tp_log = atoi(v);
         if (GetEnvironmentVariableA("SC3RESIZE_NATWORLD", v, sizeof(v))) g_natworld = atoi(v);   /* NATWORLD */
         if (GetEnvironmentVariableA("SC3RESIZE_SALTFIX_DUMP", v, sizeof(v))) g_sf_dump = atoi(v); }
@@ -18822,6 +18825,7 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
           qi_install(sui);   /* QUERYID: "Copiar ID" button in the query (?) dialog */
           tp_install(sui);   /* TERRPANEL: taller terrain editor panel */
           wx_startup();      /* WEATHER: saved rain and clouds switch */
+          if (!g_cdcdlog) ft_install(sui); else logf("FORESTTOOL> off: SC3RESIZE_CDCDLOG holds FUN_1004cdcd");   /* FORESTTOOL */
           rm_install(sui);   /* RESTORE: "Vida util" list on the Reunirse list page */
           gx_install(sui);   /* GRAPHAXIS: Y axis on the Graficas page */
           gn_install(sui);   /* GRAPHNEW: income/expenses, power, water, RCI, pollution graphs */
