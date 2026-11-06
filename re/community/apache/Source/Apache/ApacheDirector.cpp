@@ -336,8 +336,10 @@ bool RemoveSprites(void* current){
     if(clean)spriteMap=nullptr;
     return clean;
 }
+void HeliSound(cISC3App* app,bool on,int32_t mx,int32_t mz,int32_t alt);
 bool Stop(void* current){
     playing=false;StopTimer();
+    {cRZAutoRefCount<cISC3App> a;if(App(framework,a))HeliSound(a,false,0,0,0);}   // sc3kre: rotor off
     if(!RemoveSprites(current)){blocked=true;Log("CLEANUP_FAILED: restart game");return false;}
     Log("STOP_OK");
     return true;
@@ -393,6 +395,27 @@ bool PinZoom(unsigned zoom){
         pinned[zoom][i]=true;
     }
     return true;
+}
+// sc3kre 2026-11-06 (owner: rotor sound): the game's own helicopter loop, AUDIO.INI [Actor] 131 "VehicleHelicopter"
+// sfx\vehicles\helilp.xa, driven the way STRTSIM drives vehicle sounds: cISC3App vt+0x34 GetBoxX -> cIBoxX vt+0x14
+// Event(n, actor, handle, a, b) (AUDIO 0x10008d77). 6 kSfxSpecial2 sets the altitude, 3 kSfxUpdate the position
+// (cells * 256), 4 kSfxKill stops it. One loop per actor id; it follows the lead aircraft. AUDIO itself plays it only at
+// the two closest zooms, on screen, in the surface view, at the ambience volume (static read, verify/apache/RESULTS.md).
+// Called by slot: MSVC vs GCC overload order (see the petition block).
+void* const heliHandle=reinterpret_cast<void*>(0x739A61B0);
+bool heliSounding=false;
+void HeliSound(cISC3App* app,bool on,int32_t mx,int32_t mz,int32_t alt){
+    if(!app)return;
+    using GetBox=void*(__thiscall*)(void*);
+    using Event=bool(__thiscall*)(void*,uint32_t,uint32_t,intptr_t,intptr_t,intptr_t);
+    void* bx=(*reinterpret_cast<GetBox**>(app))[0x34/4](app);
+    if(!bx)return;
+    auto ev=(*reinterpret_cast<Event**>(bx))[0x14/4];
+    const intptr_t h=reinterpret_cast<intptr_t>(heliHandle);
+    if(!on){if(heliSounding)ev(bx,4,131,h,0,0);heliSounding=false;return;}
+    ev(bx,6,131,h,alt,0);
+    ev(bx,3,131,h,mx,mz);
+    if(!heliSounding){heliSounding=true;Log("ROTOR_SOUND_ON");}
 }
 bool Paint(cISC3App* app){
     auto* city=app?app->GetCity():nullptr;
@@ -564,6 +587,11 @@ bool Paint(cISC3App* app){
             }
             s={sprite,mx,mz,altitude,targetAlpha};
         }
+    }
+    {   static ULONGLONG nextSound=0;   // sc3kre: rotor sound at the lead aircraft, every 100 ms (AUDIO's own tick)
+        if(now>=nextSound){nextSound=now+100;
+            HeliSound(app,true,int32_t(std::lround(aircraft[0].position.x*256.)),int32_t(std::lround(aircraft[0].position.z*256.)),
+                int32_t(std::lround(aircraftAltitude[0])));}
     }
     return true;
 }

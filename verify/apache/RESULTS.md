@@ -95,3 +95,35 @@ Static read (worker, 2026-11-06), from the Civic Deals DLL (MinGW, symbols kept)
 Not checked: the unforced path in a city with crime > 40, the reject button, English / other folders, together with
 Civic Deals in one tree. [UNCERTAIN] the frame rate fell to 3-7 fps during this run (120 in earlier runs) from the
 queue onward; not traced (the machine was shared, and nothing of ours runs per frame there).
+
+## Frame rate check (A/B, Craterville, sim running, 100 s each, sc3perf CSV t = 70..150 s)
+
+| run | median fps | min fps |
+|---|---|---|
+| A: no Apache DLL | 102.3 | 21.0 |
+| B: Apache DLL, petition hooks in and petition queued | 118.7 | 108.7 |
+
+The 3-7 fps seen in step 4 was with the Reunirse window open: the stock per-glyph slowdown of that dialog
+(`project-dialog-overlay-scale` in memory), not the petition code.
+
+## Step 5: rotor sound (this commit)
+
+- The game's own loop: AUDIO.INI [Actor] `131="VehicleHelicopter"`, `sfx\vehicles\helilp.xa`. Static read (worker):
+  vehicles push their sound to AUDIO, AUDIO never scans for them. cISC3App vt+0x34 GetBoxX -> cIBoxX vt+0x14
+  `Event(n, actorId, handle, a, b)` = AUDIO 0x10008d77: 6 kSfxSpecial2 (altitude), 3 kSfxUpdate (x, z in cells * 256,
+  every 10th move tick in STRTSIM 0x10018750), 4 kSfxKill. One loop per actor id; the handle is only compared.
+- Plugin: every 100 ms of `Paint`, Special2 + Update with the lead aircraft (handle 0x739A61B0); Kill in `Stop`.
+- AUDIO's own gating stays: only the two closest zooms (mgr+0x9bc > 3), surface view, on screen, more than 99/256 of a
+  step above ground; volume = ambience volume (mgr+0x2c) - (5 - zoom) * VehicleAttenuation 300. A game helicopter that
+  holds actor 131 first keeps it until it lets go (one loop per id).
+- `re/tools/apache_heliaudio.py`: Frida read of actor 131 (tracked handle, current volume, position, height).
+
+| check (Craterville, `apache on` then `apache pilot` to hover, closest zoom, camera on the aircraft) | result |
+|---|---|
+| updates reach AUDIO | actor 131 position follows the lead aircraft (x, z = POS * 256), height above ground 3072 |
+| off screen | volume 0, not tracked (AUDIO's on-screen test) |
+| on screen, hovering | `tracked 0x739a61b0` (ours), volume 1024 (full ambience volume) |
+| flight ends (3 min, `STOP_OK`) | Kill: volume 0, not tracked |
+
+Not checked by ear (no listener at the PC). Not checked: two flights in one session, a game helicopter competing for
+actor 131, zoom 3 volume (1024 - 300 = 724 by the formula).
