@@ -43,6 +43,56 @@ $ANCHORS = @{
     '42E30CE0E3188C4B92058D97A3E2EC571AADA0B23DE4A8797330B82BAB862F4E' = '2.0.949'
 }
 function Is-Stock([string]$hash) { return $ANCHORS.ContainsKey($hash) }
+
+# A copy of a stock build can differ from it outside the program itself: the Steam copy of 2.0.949 (reported
+# 2026-11-06, Steam app 2741560 build 12966690) carries an Authenticode signature (Properties shows a "Digital
+# Signatures" tab, the file is larger). The signature is appended at the end of the file and listed in the security
+# directory, and it changes the file hash but not one byte of code. So a build is also recognised by its NORMALISED
+# bytes: signature cut off, security directory and PE checksum zeroed. Both stock builds above are unsigned with a
+# zero checksum, so their normalised hash is the hash listed.
+function Strip-Signature([byte[]]$b) {
+    $lf = [BitConverter]::ToInt32($b, 0x3c); $opt = $lf + 24
+    $so = [BitConverter]::ToUInt32($b, $opt + 0x80); $ss = [BitConverter]::ToUInt32($b, $opt + 0x84)
+    $len = $b.Length
+    if ($so -gt 0 -and $ss -gt 0 -and $so + $ss -ge $b.Length - 8 -and $so -le $b.Length) { $len = [int]$so }   # signature at the end: cut it
+    $o = New-Object byte[] $len
+    [Array]::Copy($b, 0, $o, 0, $len)
+    [Array]::Copy([BitConverter]::GetBytes([uint64]0), 0, $o, $opt + 0x80, 8)   # security directory
+    [Array]::Copy([BitConverter]::GetBytes([uint32]0), 0, $o, $opt + 0x40, 4)   # checksum
+    return ,$o
+}
+function Bytes-Sha256([byte[]]$b) {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($sha.ComputeHash($b))).Replace('-', '') } finally { $sha.Dispose() }
+}
+# -> the build name ('2.0.949', '2.0.949 (signed copy)', ...) or $null
+function Get-Build([string]$path) {
+    $raw = [System.IO.File]::ReadAllBytes($path)
+    $h = Bytes-Sha256 $raw
+    if ($ANCHORS.ContainsKey($h)) { return $ANCHORS[$h] }
+    $n = Bytes-Sha256 (Strip-Signature $raw)
+    if ($ANCHORS.ContainsKey($n)) { return "$($ANCHORS[$n]) (signed copy)" }
+    return $null
+}
+# what to print when an exe is not recognised, so a report can be compared with the stock builds
+function Show-ExeReport([string]$path) {
+    $b = [System.IO.File]::ReadAllBytes($path)
+    $lf = [BitConverter]::ToInt32($b, 0x3c); $opt = $lf + 24
+    $nsec = [BitConverter]::ToUInt16($b, $lf + 6); $soh = [BitConverter]::ToUInt16($b, $lf + 20); $t = $lf + 24 + $soh
+    Write-Host ("  size {0}, timestamp 0x{1:X8}, checksum 0x{2:X8}, security dir at 0x{3:X} size {4}" -f $b.Length,
+        [BitConverter]::ToUInt32($b, $lf + 8), [BitConverter]::ToUInt32($b, $opt + 0x40),
+        [BitConverter]::ToUInt32($b, $opt + 0x80), [BitConverter]::ToUInt32($b, $opt + 0x84))
+    Write-Host ("  normalised SHA-256 {0}" -f (Bytes-Sha256 (Strip-Signature $b)))
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    for ($i = 0; $i -lt $nsec; $i++) {
+        $o = $t + $i * 40
+        $nm = [System.Text.Encoding]::ASCII.GetString($b, $o, 8).TrimEnd([char]0)
+        $va = [BitConverter]::ToUInt32($b, $o + 12); $rs = [BitConverter]::ToUInt32($b, $o + 16); $rp = [BitConverter]::ToUInt32($b, $o + 20)
+        $hh = if ($rp + $rs -le $b.Length) { ([BitConverter]::ToString($sha.ComputeHash($b, [int]$rp, [int]$rs))).Replace('-', '').Substring(0, 16) } else { 'past end' }
+        Write-Host ("  section {0,-8} VA 0x{1:X6} raw 0x{2:X6} size 0x{3:X6} sha {4}" -f $nm, $va, $rp, $rs, $hh)
+    }
+    $sha.Dispose()
+}
 $SECNAME = '.sc3mod'          # the section this script adds; also how it recognises an already-patched exe
 $EXPORT  = 'sc3mods_version'  # the one function the new import references
 
@@ -68,8 +118,8 @@ if (Get-Process -Name 'SC3U', 'SC3U_mods' -ErrorAction SilentlyContinue |
 }
 
 # --- read a PE into a byte array and give field helpers ---------------------------------------------------------
-function Read-Pe([string]$path) {
-    $b = [System.IO.File]::ReadAllBytes($path)
+function Read-Pe([string]$path) { return Read-PeBytes ([System.IO.File]::ReadAllBytes($path)) $path }
+function Read-PeBytes([byte[]]$b, [string]$path) {
     $lfanew = [BitConverter]::ToInt32($b, 0x3c)
     if ([BitConverter]::ToUInt16($b, $lfanew) -ne 0x4550) { throw "$path is not a PE (no PE signature)." }
     $opt = $lfanew + 24
@@ -129,9 +179,8 @@ function Write-Atomic([string]$dest, [byte[]]$bytes) {
 # ================================================================================================================
 if ($Restore) {
     if (-not (Test-Path -LiteralPath $bak)) { throw "No backup SC3U.exe.orig in $Apps. Nothing to restore." }
-    $bh = Sha256Hex $bak
-    if (-not (Is-Stock $bh)) { throw "Backup SC3U.exe.orig hash $bh is not a known stock build. Refusing to restore it." }
-    if (Is-Stock (Sha256Hex $exe)) {
+    if (-not (Get-Build $bak)) { throw "Backup SC3U.exe.orig ($(Sha256Hex $bak)) is not a known stock build. Refusing to restore it." }
+    if (Get-Build $exe) {
         Write-Host "SC3U.exe is already stock. Nothing to restore." -ForegroundColor Green
     } else {
         Write-Atomic $exe ([System.IO.File]::ReadAllBytes($bak))
@@ -162,26 +211,35 @@ if (Has-Section $pe0 $SECNAME) {
     exit 0
 }
 
-if (-not (Is-Stock $h)) {
-    throw "SC3U.exe hash $h is neither a known stock build (GOG 2.0.0.3 or GOG/Steam 2.0.949) nor an exe this script patched. Refusing. Reinstall the stock game exe, then run this again."
+$build = Get-Build $exe
+if (-not $build) {
+    Write-Host "SC3U.exe is not a build this script knows. Details for a bug report:" -ForegroundColor Red
+    Show-ExeReport $exe
+    throw "SC3U.exe hash $h is neither a known stock build (GOG 2.0.0.3, GOG/Steam 2.0.949, or a signed copy of one) nor an exe this script patched. Refusing. Please post the lines above in a bug report."
 }
-Write-Host "Stock SC3U.exe build $($ANCHORS[$h]) recognised." -ForegroundColor Green
+Write-Host "Stock SC3U.exe build $build recognised." -ForegroundColor Green
 
 # back up the pristine exe
 if (-not (Test-Path -LiteralPath $bak)) {
     [System.IO.File]::Copy($exe, $bak)   # Copy, not link: the backup must survive a rewrite of the exe
     Write-Host "Backed up stock SC3U.exe -> SC3U.exe.orig" -ForegroundColor Green
 } else {
-    $bh = Sha256Hex $bak
-    if (-not (Is-Stock $bh)) {
+    $bb = Get-Build $bak
+    if (-not $bb) {
         throw "SC3U.exe.orig exists but is not a known stock build. Move it aside and run again."
     }
-    if ($bh -ne $h) {   # backup from another stock build (the game was updated since): keep the exe that is here now
+    if ((Sha256Hex $bak) -ne $h) {   # backup from another stock build (the game was updated since): keep the exe that is here now
         [System.IO.File]::Copy($exe, $bak, $true)
-        Write-Host "Replaced SC3U.exe.orig (build $($ANCHORS[$bh])) with this stock SC3U.exe (build $($ANCHORS[$h]))." -ForegroundColor Green
+        Write-Host "Replaced SC3U.exe.orig (build $bb) with this stock SC3U.exe (build $build)." -ForegroundColor Green
     }
 }
 
+# a signed copy: patch the unsigned program (the signature would sit between the last section and ours, at an offset the
+# loader may not accept, and it no longer matches once the import table changes). The backup keeps the signed file.
+if ($build -like '*signed copy*') {
+    $pe0 = Read-PeBytes (Strip-Signature $pe0.Bytes) $exe
+    Write-Host "  removed the file signature from the copy being patched (SC3U.exe.orig keeps it)." -ForegroundColor DarkYellow
+}
 $b = $pe0.Bytes
 $opt = $pe0.Opt
 $secAlign = $pe0.SecAlign
@@ -258,7 +316,7 @@ $d = $orig.Count * 20
 [Array]::Copy($dllBytes, 0, $blob, $dllOff, $dllBytes.Length)
 
 $rawLen = [int](Align ([uint32]$blobLen) $fileAlign)
-$newRaw = $b.Length                               # append at the current end of file (file is file-aligned)
+$newRaw = [int](Align ([uint32]$b.Length) $fileAlign)   # append at the end of file, file-aligned (a cut signature can end mid-block)
 
 # ---- assemble the new file ----
 $out = New-Object byte[] ($newRaw + $rawLen)
