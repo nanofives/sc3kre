@@ -41,3 +41,18 @@ No VEH fault (only the start-up privileged-instruction one every tree logs). Pic
 Not checked: the reject buttons, the English-UK / other-language folders in game, the petitioner portrait (blank on both
 offers; the author's `19,2` portrait entry, not compared with the untranslated package), save/load with an offer pending.
 The DLL's notices are Win32 message boxes, which take the foreground window (the cheat itself shows them).
+
+## Extra Cheats (Null 45, MIT): shipped unchanged
+
+`civicdeals_patch.py` also copies `SC3KExtraCheats.dll` unchanged into Apps (`--restore` removes it). Its three cheats,
+per the upstream README (github.com/0xC0000054/sc3k-extra-cheats): `dotcom` +1,000,000, `moolah <n>` sets the funds,
+`SimDate <m> <d> <y>` sets the date. No visible text of its own, so nothing to translate.
+
+| cheat (dev tree, both DLLs loaded, then ExtraCheats alone) | result |
+|---|---|
+| `dotcom` | funds 10,933 -> 1,010,933 (both setups) |
+| `moolah 500000` | funds 500,000 |
+| `SimDate 1 1 1990`, `simdate 1 1 1990`, `SimDate 5 20 1900`, `SimDate 1 1 1840` (README example), sim running or paused | **date unchanged** (1933 kept), with and without SC3KCivicDeals.dll |
+
+[UNCERTAIN] why SimDate does nothing here: the stock-tree control (`-Stock`) could not be read (the 16-bit DWM garbling,
+`project-dwm16-mitigation-root-cause`), so whether our mods or the GOG 2.0.949 build stop it is not known yet.

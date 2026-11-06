@@ -10,6 +10,7 @@ the player's copies, which also keeps the player's language. What it does to <ga
   Res\\Text\\<lang>\\Sc3StringsPetitioner{Advice,Button1,Button2,Heading,Reaction1,Reaction2}.IXF
                                   two new records each (instance 0xD9, 0xDA), payload appended at the end, every
                                   original record untouched (the index has spare zero slots)
+  SC3KExtraCheats.dll             Null 45's plugin (dotcom, moolah, SimDate), copied unchanged
   SC3KCivicDeals.dll              the author's DLL; for Spanish its visible strings (petitioner name, window titles,
                                   message bodies, buttons, reactions, cheat notices) are rewritten in place, each
                                   inside its original NUL-padded slot
@@ -225,10 +226,11 @@ def restore(game):
             if f.endswith(SUFFIX):
                 os.replace(os.path.join(root, f), os.path.join(root, f[:-len(SUFFIX)]))
                 n += 1
-    dll = os.path.join(game, "Apps", "SC3KCivicDeals.dll")
-    if os.path.exists(dll) and not os.path.exists(dll + SUFFIX):
-        os.remove(dll)
-        n += 1
+    for leaf in ("SC3KCivicDeals.dll", "SC3KExtraCheats.dll"):
+        dll = os.path.join(game, "Apps", leaf)
+        if os.path.exists(dll) and not os.path.exists(dll + SUFFIX):
+            os.remove(dll)
+            n += 1
     print(f"restored {n} file(s)")
 
 
@@ -271,6 +273,10 @@ def main(argv):
             items = en_items[f] if fl == "en" else [(i, ES_IXF[(f, i)].encode("cp1252")) for i in (0xD9, 0xDA)]
             print(f"{folder}\\{f} [{fl}]:", ixf_append(p, _g[f], items, dry))
     dl = lang or folder_lang(textdir, "ENGLISH")
+    xc = os.path.join(pk, "SC3KExtraCheats.dll")   # Null 45's plugin, MIT: shipped unchanged (owner decision)
+    if os.path.exists(xc):
+        write_new(os.path.join(apps, "SC3KExtraCheats.dll"), open(xc, "rb").read(), dry)
+        print("SC3KExtraCheats.dll: copied unchanged")
     print("SC3KCivicDeals.dll:", patch_dll(os.path.join(pk, "SC3KCivicDeals.dll"), os.path.join(apps, "SC3KCivicDeals.dll"), dl, dry))
     return 0
 
