@@ -4790,6 +4790,8 @@ static int    g_hs_float[HS_MAX];          /* 1 = not edge-anchored (a tooltip):
 static volatile LONG g_hs_n;            /* dest rects in use (0 = inactive): read by the wndproc */
 static volatile LONG g_hs_cw, g_hs_ch;
 static double g_hs_s = 1.0;
+static double g_hs_ui = 1.0;   /* UNIFIEDFPS: the HUD factor of the last present outside the main menu */
+static int    g_unifps = 1;    /* UNIFIEDFPS: sc3resize_ui_scale reports g_hs_ui (SC3RESIZE_UNIFIEDFPS=0 = old) */
 static LONG   g_hs_dlg[16][4];          /* dialogs kept native this frame (DLGSCALE off, or no room to enlarge) */
 static int    g_hs_ndlg;
 /* DLGSCALE (owner 2026-10-20: "the Reunirse popup is not scaled, neither any other menu"; design call the same day:
@@ -7642,6 +7644,7 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
     vd_idle();   /* VERDATOS */
     g_hs_n = 0; g_hd_n = 0; g_hd_nf = 0; g_hs_why = 1;
     g_cz_skok = 0;   /* task cityzoom SKIP: rebuilt below only when this pass composes */
+    if (!g_hudscale) g_hs_ui = 1.0;   /* UNIFIEDFPS */
     if (!g_hudscale || g_mb_active || cw <= 0 || ch <= 0) return 0;
     g_hs_why = 2;
     if (sr->right - sr->left != cw || sr->bottom - sr->top != ch) return 0;   /* only a 1:1 present */
@@ -7656,9 +7659,12 @@ static int rz_hs_pre(void *src, const RECT *sr, LONG cw, LONG ch, int self_is_sc
                  s < 1.01 ? " (native size)" : "");
         }
     }
-    if (s < 1.01) return 0;
-    g_hs_why = 4;
-    if (rz_menu_visible()) return 0;
+    {   int menu = rz_menu_visible();
+        if (!menu) g_hs_ui = s;   /* UNIFIEDFPS: the HUD factor at this size, whether or not anything is enlarged */
+        if (s < 1.01) return 0;
+        g_hs_why = 4;
+        if (menu) return 0;
+    }
     g_hs_why = 5;
     if (!rz_hs_tables(cw, ch, s)) return 0;
     QueryPerformanceCounter(&t0);
@@ -8123,6 +8129,12 @@ static int rz_hs_mouse(UINT m, LPARAM *lp) {
    factor of the last enlarged present in percent, 100 when HUD scale is off or nothing was enlarged. sc3perf reads it
    (GetProcAddress) to draw its FPS line and busy lines at the same size. */
 __declspec(dllexport) int sc3resize_ui_scale(void) {
+    /* UNIFIEDFPS (owner 2026-11-08: "i want a unified FPS display, but the old one with the other font without HUD
+       scaling was still appearing on the terrain creation screen"). The terrain screen hides the city HUD, so no pass
+       enlarged anything (g_hs_n 0) and this returned 100: sc3perf drew the stock-size text there. Now the factor
+       comes from every present outside the main menu (g_hs_ui, set in rz_hs_pre before anything is collected), so the
+       text has one size on the terrain screen, in the city and with a dialog open. SC3RESIZE_UNIFIEDFPS=0 = the rule below. */
+    if (g_unifps) return g_hs_ui > 1.0 ? (int)(g_hs_ui * 100.0 + 0.5) : 100;
     /* PERFDLG (owner 2026-11-02: "el menu de sustituir hace que el profiler aparezca mas grande"): a dialog alone must not
        scale the FPS text (DLGONLY did, so the bar jumped to the dialog factor while it was open). SC3RESIZE_PERFDLG=0 = old. */
     return (g_hs_n > 0 || (!g_perfdlg && g_dlgonly && g_hd_n > 0)) && g_hs_s > 1.0 ? (int)(g_hs_s * 100.0 + 0.5) : 100;   /* DLGONLY */
@@ -19039,6 +19051,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
           if (GetEnvironmentVariableA("SC3RESIZE_MINIVIS", v, sizeof(v))) g_minivis = atoi(v);        /* task uiaudit */
           if (GetEnvironmentVariableA("SC3RESIZE_DLGONLY", v, sizeof(v))) g_dlgonly = atoi(v);        /* task uiaudit */
           if (GetEnvironmentVariableA("SC3RESIZE_PERFDLG", v, sizeof(v))) g_perfdlg = atoi(v);        /* task perfdlg */
+          if (GetEnvironmentVariableA("SC3RESIZE_UNIFIEDFPS", v, sizeof(v))) g_unifps = atoi(v);      /* UNIFIEDFPS */
           if (GetEnvironmentVariableA("SC3RESIZE_MENUSCALE_OPEN", v, sizeof(v))) g_ms_open = atoi(v); /* task uiaudit */
           if (GetEnvironmentVariableA("SC3RESIZE_MENUMASK", v, sizeof(v))) g_menumask = atoi(v);    /* child menumask */
           if (GetEnvironmentVariableA("SC3RESIZE_VERDATOS_NATIVE", v, sizeof(v))) g_vd_on = atoi(v);  /* task verdatos */

@@ -287,7 +287,9 @@ static HFONT ov_font(int s) {
     if (s == big_s) return big;
     if (big) DeleteObject(big);
     big = NULL; big_s = s;
-    if (s > 100) {
+    /* UNIFIEDFPS (owner 2026-11-08: "the old one with the other font"): Consolas at every size, 100 included, so the
+       text never switches to the stock raster font. SC3PERF_STOCKFONT=1 = the stock font at 100, as before. */
+    if (s > 100 || (s == 100 && !getenv("SC3PERF_STOCKFONT"))) {
         LOGFONTA lf;
         TEXTMETRICA tm;
         HDC sdc = GetDC(NULL);
