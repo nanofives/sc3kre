@@ -18774,6 +18774,8 @@ static DWORD WINAPI rz_watcher(LPVOID param) {
         if (GetEnvironmentVariableA("SC3RESIZE_FORESTTOOL", v, sizeof(v))) g_foresttool = atoi(v);
         if (GetEnvironmentVariableA("SC3RESIZE_CHEATFIX", v, sizeof(v))) g_cheatfix = atoi(v);   /* CHEATFIX */   /* FORESTTOOL */
         if (GetEnvironmentVariableA("SC3RESIZE_TERRPANEL_LOG", v, sizeof(v))) g_tp_log = atoi(v);
+        if (GetEnvironmentVariableA("SC3RESIZE_TP_TREEBAR", v, sizeof(v))) g_tp_treebar = atoi(v);   /* TERRPANEL TREEBAR */
+        if (GetEnvironmentVariableA("SC3RESIZE_TP_SLICE", v, sizeof(v))) g_tp_slice = atoi(v);       /* TERRPANEL FILLSLICE */
         if (GetEnvironmentVariableA("SC3RESIZE_NATWORLD", v, sizeof(v))) g_natworld = atoi(v);   /* NATWORLD */
         if (GetEnvironmentVariableA("SC3RESIZE_SALTFIX_DUMP", v, sizeof(v))) g_sf_dump = atoi(v); }
     CreateThread(NULL, 0, sf_watcher, NULL, 0, NULL);

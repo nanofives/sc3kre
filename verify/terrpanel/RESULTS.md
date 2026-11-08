@@ -116,3 +116,26 @@ sc3resize.ini `[weather] rain`, off by default; nothing is patched at start unle
 | restart with `rain=1` saved | `new city: rain and clouds requested` 6 s after start, clouds over the city with the sim paused |
 
 Picture: `owner_shots/17_weather_switch.png`. Not checked: 512/1024 maps, lightning frequency (still the game's own 1 in 3).
+
+## TREEBAR + FILLSLICE (owner hand test 2026-11-08, MARIANO-PC, 1024 map)
+
+Owner: "bosque denso enabled should also depend on the tree bar" and "it froze the game for a few seconds". His log:
+`forest fill: 1048576 of 1048576 cells planted, 2157 ms`, one call on the UI thread.
+
+- TREEBAR: the tree slider is the right one (0x72e867af, tree icon in image 2 of 22DEC90F_TerrEdit.ixf), stored in
+  the window proc's byte +0x14 [CONFIRMED @ SIMUI 0x1005f352], packed as bits 16..22 of the Re-Generate message
+  [CONFIRMED @ SIMUI 0x10060ab2]. Bar 0..0xff -> InitFloraLevel level 0x20..0xff (density 1..7). A bar move while
+  ticked refills when the density step changes. `SC3RESIZE_TP_TREEBAR=0` = always 0xff.
+- FILLSLICE: one-shot thread timer, 50 ms slices, re-armed 10 ms after each. Accept plants what is left first.
+  `SC3RESIZE_TP_SLICE=0` = the old single call.
+
+| check (LIVING-PC, 1024 map, 800x600, dev tree) | result |
+|---|---|
+| periodic 10 ms timer, 20 ms slices (first try) | 0 fps for the whole 3.7 s: timer always due, dropped |
+| one slice per frame from the fnlog idx 0 hook | hook ran ~3 times a second here, 58 s total, dropped |
+| tick, bar at 128 | density 4, 55 slices, 3402 ms planting, 7984 ms total, game drew between slices |
+| bar dragged 128 -> 20 while ticked | refills at density 3, 2, 1 |
+| Accept mid-fill | `planting the last 824 rows now`, then the city HUD built, no new fault |
+
+Not checked: screenshots (a Happy window covered the game for the whole run, sc3io refused every grab). One start
+died in the intro at `GZGraphicD+0x18C7A`, before the panel existed, the same intro crash as above.

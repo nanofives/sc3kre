@@ -53,25 +53,118 @@ static void *tp_terrain(void) {
 
 typedef BYTE (__fastcall *TP_INITFLORA)(void *self, void *edx, DWORD x, DWORD y, DWORD level);
 
-/* plant the densest trees on every cell; returns the cells the game accepted, -1 if the terrain was not found */
-static int tp_fill(void *t) {
-    int rows, cols, x, y, n = 0;
-    DWORD t0 = GetTickCount();
+/* TREEBAR (owner 2026-11-08: "bosque denso enabled should also depend on the tree bar"). The panel's three sliders are
+   0x72e867ad / ae / af, left to right under the hills / water / tree icons of image 2 of 22DEC90F_TerrEdit.ixf (decoded
+   2026-11-08). DoWinMsg stores their values (0..0xff, range set at build) in the window proc's bytes +0x12 / +0x13 /
+   +0x14 on message 3 p3 0xc [CONFIRMED @ SIMUI 0x1005f352]; getters vt+0x1c / +0x20 / +0x24 return those bytes
+   (0x1005f615, 0x1005f619, 0x100052ec). Re-Generate packs them into msg[1] as (af >> 1) << 16 | (ae >> 1) << 8 | ad >> 1
+   [CONFIRMED @ SIMUI 0x10060ab2], so the tree value of a regenerate is ((msg[1] >> 16) & 0x7f) << 1.
+   InitFloraLevel plants only levels above 0x1f, at density level >> 5 (1..7): the bar maps 0..0xff onto 0x20..0xff,
+   so the tick always plants something and the bar picks how dense. SC3RESIZE_TP_TREEBAR=0: always 0xff, as before. */
+static int   g_tp_treebar = 1;
+static BYTE *g_tp_proc;            /* the terrain panel's window proc (DoWinMsg this), for the slider bytes */
+#define TP_TREES_SLIDER 0x72e867af
+
+static DWORD tp_level(int trees) {   /* trees 0..0xff, -1 = unknown */
+    if (!g_tp_treebar || trees < 0) return 0xff;
+    return 0x20 + (DWORD)trees * (0xff - 0x20) / 0xff;
+}
+static int tp_trees_now(void) {
+    HMODULE sui = GetModuleHandleA("SIMUI.DLL");
+    if (!g_tp_proc || !sui || IsBadReadPtr(g_tp_proc, 0x18) || *(DWORD *)g_tp_proc != (DWORD)sui + 0xaaae0) return -1;
+    return g_tp_proc[0x14];
+}
+
+/* FILLSLICE (owner 2026-11-08, 1024 map: "it froze the game for a few seconds"; his log: 1,048,576 cells, 2157 ms in
+   one call on the UI thread). The fill now runs in slices of about TP_SLICE_MS from a ONE-SHOT thread timer
+   (SetTimer(NULL), dispatched on the game thread, the RELOCATE / PICKER pattern), re-armed TP_GAP_MS after each slice
+   ends, so the game draws between slices. Measured on LIVING-PC, 1024 map, 1,048,576 cells (~3.6 s of planting here):
+   - a periodic 10 ms timer: due again after every slice, the game drew 0 fps for the whole 3.7 s;
+   - one slice per frame posted from the frame hook (fnlog_enter idx 0): that hook ran only ~3 times a second on this
+     screen, 58 s in total;
+   - one-shot 40 ms slices, 20 ms gap: 15.4 s in total for 5.7 s of planting (the gap is timer resolution + a frame).
+   A new start (tick, Re-Generate, tree bar moved) restarts it from row 0. Accept finishes what is left at once before
+   the stock handler, so the city never starts half filled. The terrain or the city changing stops it.
+   SC3RESIZE_TP_SLICE=0: the old single-call fill. */
+static int   g_tp_slice = 1;
+#define TP_SLICE_MS 50
+#define TP_GAP_MS   10
+static struct { void *t, *city; int rows, cols, x, n, slices; DWORD level, t0, busy_ms; UINT_PTR timer; } g_tpf;
+
+/* rows from g_tpf.x until done or the deadline (0 = no deadline); 1 = finished or stopped */
+static int tp_fill_rows(DWORD deadline) {
     TP_INITFLORA fn;
+    int y, done = 0;
+    DWORD s0 = GetTickCount();
+    if (!g_tpf.t) return 1;
+    if (tp_terrain() != g_tpf.t || sf_city() != g_tpf.city) {
+        logf("TERRPANEL> forest fill stopped at row %d of %d: the terrain changed", g_tpf.x, g_tpf.rows - 1);
+        g_tpf.t = NULL;
+        return 1;
+    }
+    __try {
+        fn = (TP_INITFLORA)(*(DWORD **)g_tpf.t)[0x90 / 4];
+        while (g_tpf.x < g_tpf.rows - 1) {
+            for (y = 0; y < g_tpf.cols - 1; y++)
+                if (fn(g_tpf.t, NULL, (DWORD)g_tpf.x, (DWORD)y, g_tpf.level) & 0xff) g_tpf.n++;
+            g_tpf.x++;
+            if (deadline && (LONG)(GetTickCount() - deadline) >= 0) break;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        logf("TERRPANEL> forest fill: fault at row %d after %d cells, stopped", g_tpf.x, g_tpf.n);
+        g_tpf.t = NULL;
+        return 1;
+    }
+    g_tpf.slices++;
+    g_tpf.busy_ms += GetTickCount() - s0;
+    if (g_tpf.x >= g_tpf.rows - 1) {
+        logf("TERRPANEL> forest fill: %d of %d cells planted at level 0x%02lx (density %lu), %d slice(s), %lu ms busy, %lu ms total",
+             g_tpf.n, (g_tpf.rows - 1) * (g_tpf.cols - 1), g_tpf.level, g_tpf.level >> 5, g_tpf.slices, g_tpf.busy_ms,
+             GetTickCount() - g_tpf.t0);
+        g_tpf.t = NULL;
+        done = 1;
+    }
+    return done;
+}
+
+/* one slice, then the timer again TP_GAP_MS after it ended (a periodic timer is already due when a slice ends) */
+static void CALLBACK tp_fill_timer(HWND h, UINT m, UINT_PTR id, DWORD tm) {
+    (void)h; (void)m; (void)tm;
+    KillTimer(NULL, id);
+    if (g_tpf.timer == id) g_tpf.timer = 0;
+    if (g_tpf.t && !tp_fill_rows(GetTickCount() + TP_SLICE_MS) && !g_tpf.timer) {
+        g_tpf.timer = SetTimer(NULL, 0, TP_GAP_MS, tp_fill_timer);
+        if (!g_tpf.timer) { logf("TERRPANEL> SetTimer failed: filling the rest now"); tp_fill_rows(0); }
+    }
+}
+
+/* start (or restart) a fill of terrain t (NULL = the current one) at a tree value 0..0xff (-1 = unknown) */
+static void tp_fill(void *t, int trees) {
+    int rows, cols;
     if (!t) t = tp_terrain();
-    if (!t) { logf("TERRPANEL> forest fill: no terrain"); return -1; }
+    if (!t) { logf("TERRPANEL> forest fill: no terrain"); return; }
     __try {
         rows = (int)ho_v(t, 0xb0, 0, 0, 0, 0, 0, 0);
         cols = (int)ho_v(t, 0xb4, 0, 0, 0, 0, 0, 0);
-        if (rows < 2 || cols < 2 || rows > 4097 || cols > 4097) { logf("TERRPANEL> forest fill: odd size %d x %d", rows, cols); return -1; }
-        fn = (TP_INITFLORA)(*(DWORD **)t)[0x90 / 4];
-        for (x = 0; x < rows - 1; x++)
-            for (y = 0; y < cols - 1; y++)
-                if (fn(t, NULL, (DWORD)x, (DWORD)y, 0xff) & 0xff) n++;
-        logf("TERRPANEL> forest fill: %d of %d cells planted, %lu ms (grid +0x44 %s)", n, (rows - 1) * (cols - 1),
-             GetTickCount() - t0, *(DWORD *)((BYTE *)t + 0x44) ? "set" : "none");
-    } __except (EXCEPTION_EXECUTE_HANDLER) { logf("TERRPANEL> forest fill: fault after %d cells, stopped", n); return -1; }
-    return n;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { logf("TERRPANEL> forest fill: fault reading the size"); return; }
+    if (rows < 2 || cols < 2 || rows > 4097 || cols > 4097) { logf("TERRPANEL> forest fill: odd size %d x %d", rows, cols); return; }
+    g_tpf.t = t; g_tpf.city = sf_city(); g_tpf.rows = rows; g_tpf.cols = cols;
+    g_tpf.x = 0; g_tpf.n = 0; g_tpf.slices = 0; g_tpf.busy_ms = 0; g_tpf.t0 = GetTickCount();
+    g_tpf.level = tp_level(trees);
+    logf("TERRPANEL> forest fill started: %d x %d cells, tree bar %d -> level 0x%02lx (density %lu)%s", rows - 1, cols - 1,
+         trees, g_tpf.level, g_tpf.level >> 5, g_tp_slice ? ", in slices" : "");
+    if (!g_tp_slice) { tp_fill_rows(0); return; }
+    if (!tp_fill_rows(GetTickCount() + TP_SLICE_MS) && !g_tpf.timer) {
+        g_tpf.timer = SetTimer(NULL, 0, TP_GAP_MS, tp_fill_timer);
+        if (!g_tpf.timer) { logf("TERRPANEL> SetTimer failed: filling the rest now"); tp_fill_rows(0); }
+    }
+}
+
+/* Accept: plant what is left before the city starts */
+static void tp_fill_finish(void) {
+    if (!g_tpf.t) return;
+    logf("TERRPANEL> Accept during the fill: planting the last %d rows now", g_tpf.rows - 1 - g_tpf.x);
+    tp_fill_rows(0);
 }
 
 /* after the stock handler: a regenerated terrain gets the forest when the box is ticked */
@@ -80,7 +173,7 @@ static DWORD __fastcall tp_dirt_msg(void *self, void *edx, DWORD *msg) {
     (void)edx;
     a[0] = (DWORD)msg;
     r = rz_thiscall_ret(self, (void *)g_tp_orig_dirtmsg, a, 1);
-    if (g_tp_forest && msg && !IsBadReadPtr(msg, 4) && msg[0] == 0x2f2ee63) tp_fill(self);
+    if (g_tp_forest && msg && !IsBadReadPtr(msg, 8) && msg[0] == 0x2f2ee63) tp_fill(self, (int)(((msg[1] >> 16) & 0x7f) << 1));
     return r;
 }
 
@@ -170,15 +263,23 @@ static DWORD __fastcall tp_msg(void *self, void *edx, DWORD win, DWORD msg, DWOR
     DWORD a[5], r;
     (void)edx;
     if (g_tp_log && msg == 3) logf("TERRPANEL> msg 3 p3 0x%lx p4 0x%08lx p5 0x%lx", p3, p4, p5);
+    g_tp_proc = (BYTE *)self;
+    if (msg == 3 && p3 == 1 && p4 == 0x72e867a1) tp_fill_finish();   /* Accept: no half-filled city */
     a[0] = win; a[1] = msg; a[2] = p3; a[3] = p4; a[4] = p5;
     r = rz_thiscall_ret(self, g_orig_f352, a, 5);
     if (msg == 0xa2bf8ace && (r & 0xff) && win) tp_build((void *)win);
+    else if (msg == 3 && p3 == 0xc && p4 == TP_TREES_SLIDER && g_tp_forest && g_tp_treebar) {
+        /* tree bar moved with the box ticked: refill at the new density (the stock byte is stored by now) */
+        int tr = tp_trees_now();
+        if (tr >= 0 && tp_level(tr) >> 5 != g_tpf.level >> 5) tp_fill(NULL, tr);   /* only when the density step changes */
+    }
     else if (msg == 3 && p4 == TP_FOREST && win) {   /* our box: read its state after the stock handling */
         int v = pp_read_box((void *)win, TP_FOREST);
         if (v >= 0 && v != g_tp_forest) {
             g_tp_forest = v;
             logf("TERRPANEL> forest %s", v ? "ticked: filling now and after every Re-Generate" : "unticked: from the next Re-Generate");
-            if (v) tp_fill(NULL);
+            if (v) tp_fill(NULL, tp_trees_now());
+            else if (g_tpf.t) { logf("TERRPANEL> forest fill stopped at row %d (unticked)", g_tpf.x); g_tpf.t = NULL; }
         }
         r = 1;
     } else if (msg == 3 && p4 == TP_NATWORLD && win) {
