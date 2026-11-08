@@ -93,7 +93,7 @@ French, German, Italian, Dutch, Swedish) and follows the game's language.
   "Recalculate salt water". It decides where pumps and desalination plants work.
 
 ### Speed and stability (sc3perf)
-- Faster drawing, frame cap, FPS counter and profiler, traffic simulation on several threads, and the fixes that make
+- Faster drawing, frame cap, FPS counter and profiler (one font and size on every screen), traffic simulation on several threads, and the fixes that make
   1024 cities load, reload and run without freezing or crashing.
 
 ### Roads, avenues and highways (sc3netmod + road data)
@@ -128,7 +128,8 @@ French, German, Italian, Dutch, Swedish) and follows the game's language.
   file.
 
 ### Terrain editor and weather (sc3resize)
-- The New City terrain panel is taller, with "Bosque denso" (dense forest on all land, also after Re-Generate) and a
+- The New City terrain panel is taller, with "Bosque denso" (forest on all land at the tree bar's density, also after
+  Re-Generate, planted a strip at a time so big maps do not freeze) and a
   "Natural World" switch for the Classic Natural World terrain and water colours by thronevintagetech.
 - "Weather: Rain and clouds" on the mod options page keeps the game's own clouds and rain on.
 
