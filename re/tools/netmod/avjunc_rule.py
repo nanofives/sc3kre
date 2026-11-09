@@ -46,6 +46,22 @@ AVCORE_BAND = {69, 67, 11258, 15098, 31, 32, 11201, 11202}   # avcore's one-way 
 AVL_STRAIGHT = 21700
 TEE_ROADS = {29, 39, 43, 11203}                    # task avxroad: roads whose dangling arm into a half reads as a T
 
+# task avdiamond (2026-11-09, C block AVDIAMOND in sc3netmod_avx.c): the ground ends of the stock on-ramp strips. Each
+# connects ONE side, its ground side (lanes at y 0): 15138 / 15140 off-ramps (2 lanes out onto the ground at 64 / 174 or
+# 81 / 191), 15139 / 15141 on-ramps (1 lane in from the stock road exit node). Ground side at state 0 (lanekit show):
+# 15138 / 15139 x- (W), 15140 / 15141 z- (N); one state turns N -> E. A box edge facing an off-ramp takes mode I (both
+# lanes in: the hand-off finds the arrival node by bucket (n + 16) / 72, so 64 / 81 meet 80 and 174 / 191 meet 175),
+# one facing an on-ramp keeps T (its out lane is the ramp's only entry).
+RAMP_END = {15138: (3, "off"), 15139: (3, "on"), 15140: (0, "off"), 15141: (0, "on")}
+CROSS_ROW = {15098, 11258, 69, 67}                 # avcore crossing bases that split a segment touching a ramp
+MAXWALK = 16                                       # task avdiamond: how far a segment walk may go before the split
+DIAMOND = os.environ.get("SC3NETMOD_AVDIAMOND", "1") != "0"
+
+
+def ramp_kind(pid):
+    """'off' / 'on' for a ramp ground end (task avdiamond), else None"""
+    return RAMP_END[pid][1] if DIAMOND and pid in RAMP_END else None
+
 
 def opp(s):
     return (s + 2) % 4
@@ -82,6 +98,8 @@ class Pieces:
     def arms(self, pid, state):
         if pid in self.own:
             loc = {e for e, c in enumerate(self.own[pid]["outline"]) if c in "AI"}
+        elif ramp_kind(pid):                        # task avdiamond: a ramp ground end, its ground side only
+            loc = {RAMP_END[pid][0]}
         else:
             b = self.stock_of(pid)
             if b is None:
@@ -289,6 +307,48 @@ def bv_cells(roads):
     return out
 
 
+def ramp_arm(L, P, c, side):
+    """task avdiamond: does cell c connect across `side` to a ramp ground end? -> 'off' / 'on' / None"""
+    n = (c[0] + DIRV[side][0], c[1] + DIRV[side][1])
+    q = L.get(n)
+    if q is None or not ramp_kind(q[0]) or not conn(L, P, c, side):
+        return None
+    return ramp_kind(q[0])
+
+
+def split_ramp_segment(L, P, B, pos, why):
+    """task avdiamond: the walked positions (seed outward) -> [(positions, why)]. A walk with no ramp arm is the old
+    segment (refused at MAXSEG positions, as before). A walk whose positions touch a ramp on their outside is cut at
+    every crossing row (both cells an avcore crossing base in CROSS_ROW: under a highway there is no straight pair
+    between the two ramp junctions, so the crossing between them becomes its own band ending on two boxes). The part
+    past the last crossing keeps the walk's own reason (it is not bounded when the walk stopped on the limit)."""
+    long_why = "segment longer than %d" % MAXSEG
+    has_ramp = DIAMOND and any(ramp_arm(L, P, pr[h], B.out[h]) for pr in pos for h in (0, 1))
+    if not has_ramp:
+        if len(pos) >= MAXSEG:                      # the old walk stopped (refused) on its 6th position
+            return [(pos[:MAXSEG], long_why)]
+        return [(pos, why)]
+    def crossing(pr):
+        return all(L.get(c) and P.stock_of(L[c][0]) in CROSS_ROW for c in pr)
+    runs, cur = [], []
+    for pr in pos:
+        if crossing(pr):
+            if cur:
+                runs.append((cur, True))
+            cur = []
+        else:
+            cur.append(pr)
+    if cur:
+        runs.append((cur, False))
+    out = []
+    for sub, closed in runs:
+        w = None if closed else why
+        if w is None and len(sub) >= MAXSEG:
+            w = long_why
+        out.append((sub, w))
+    return out
+
+
 def find(L, P, roads, drop=frozenset(), bv=True, caps=True, tees=True, ends=True):
     """L: layer {(x, z): (id, state)}; roads: the set of ROAD cells; drop: box cell sets to leave stock (the
     validation pass). -> dict with boxes, noses, refusals."""
@@ -298,6 +358,7 @@ def find(L, P, roads, drop=frozenset(), bv=True, caps=True, tees=True, ends=True
     if ends:
         P.virt = end_caps(L, P, P.virt)              # task avxroad (img3)
     bvc = bv_cells(roads) if bv else set()            # task avx32
+    P.ramp_cells = set()                              # task avdiamond: cells of every segment walk touching a ramp
     segs = {}
     for (x, z), p in L.items():
         if not P.is_half(p[0]) or (p[1] & 3) not in (1, 2):
@@ -309,6 +370,7 @@ def find(L, P, roads, drop=frozenset(), bv=True, caps=True, tees=True, ends=True
             continue
         for sg in (1, -1):
             pos, k, why, term = [], 1, None, "band"
+            lim = MAXWALK if DIAMOND else MAXSEG
             while True:
                 a = (a0[0] + sg * B.step[0] * k, a0[1] + sg * B.step[1] * k)
                 b = (b0[0] + sg * B.step[0] * k, b0[1] + sg * B.step[1] * k)
@@ -322,16 +384,22 @@ def find(L, P, roads, drop=frozenset(), bv=True, caps=True, tees=True, ends=True
                     break
                 pos.append((a, b))
                 k += 1
-                if k > MAXSEG:
+                if k > lim:
                     why = "segment longer than %d" % MAXSEG
                     break
             if not pos:
                 continue
-            if sg < 0:
-                pos = pos[::-1]
-            key = frozenset(c for pr in pos for c in pr)
-            if key not in segs:
-                segs[key] = dict(axis=axis, pos=pos, why=why, term=term, pairs=(sg, (a0, b0)))
+            subs = split_ramp_segment(L, P, B, pos, why)
+            if DIAMOND and any(ramp_arm(L, P, pr[h], B.out[h]) for pr in pos for h in (0, 1)):
+                end = (a0[0] + sg * B.step[0] * k, a0[1] + sg * B.step[1] * k)          # task avdiamond: for checks
+                endb = (b0[0] + sg * B.step[0] * k, b0[1] + sg * B.step[1] * k)
+                P.ramp_cells |= {c for pr in pos for c in pr} | {a0, b0, end, endb}
+            for sub, swhy in subs:
+                if sg < 0:
+                    sub = sub[::-1]
+                key = frozenset(c for pr in sub for c in pr)
+                if key not in segs:
+                    segs[key] = dict(axis=axis, pos=sub, why=swhy, term=term, pairs=(sg, (a0, b0)))
     boxes, noses, links, refused = {}, {}, {}, collections.Counter()
     for sg in segs.values():
         if sg["why"]:
@@ -493,6 +561,8 @@ def make_box(L, P, B, pos, r):
                 elif e == e_out:
                     if (i, h) in spans:
                         info["edges"][e] = ("A", "span", (i, h))
+                    elif ramp_arm(L, P, c, e) == "off":    # task avdiamond: an off-ramp delivers 2 lanes in
+                        info["edges"][e] = ("A", "ramp", None)
                     elif conn(L, P, c, e):
                         info["edges"][e] = ("A", "road", None)
                     else:
@@ -558,6 +628,8 @@ def box_modes(bx, demoted=frozenset()):
                 modes.append("C")
             elif kind == "road":
                 modes.append("T")
+            elif kind == "ramp":                    # task avdiamond: off-ramp, both lanes into the box
+                modes.append("I")
             elif kind == "band":
                 if ("band", ref, e) in demoted:
                     modes.append("T")
@@ -840,7 +912,8 @@ def other_modes(L, P, bands, c):
     A = P.arms(p[0], p[1] & 3)
     if A is None:
         return "XXXX"                                   # unknown connections (a diagonal road piece, ...): refuse
-    return "".join("T" if e in A else "C" for e in range(4))
+    r = "O" if ramp_kind(p[0]) == "off" else "T"        # task avdiamond: an off-ramp's lanes leave it
+    return "".join(r if e in A else "C" for e in range(4))
 
 
 def edge_check(L, P, roads):

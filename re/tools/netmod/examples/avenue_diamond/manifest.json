@@ -1,0 +1,155 @@
+{
+ "netpack": 1,
+ "name": "avenue_diamond",
+ "version": "0.1.0",
+ "author": "netmod (task avdiamond)",
+ "description": "Avenue junctions beside a highway's diamond ramps (task avdiamond, 2026-11-09). sc3netmod's AVX block reads the stock on-ramp ground ends (15138..15141) as road arms and, on an avenue under an elevated highway, cuts the junction segment at the highway crossing, so each ramp junction becomes one paved box and the crossing between them a one-way band. These pieces are the box cells whose outside edge faces an off-ramp: both ramp lanes enter the box. Needs avenue_junctions (the other box cells). Saved as 43 / 39, so a game without the mod loads stock junctions. Build: `py -3.12 -m netmod.avdiamond_build build .` in re/tools (art from the game's frames, not shipped).",
+ "game": {
+  "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+ },
+ "variants": [
+  {
+   "id": 20850,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue ramp junction",
+    "ENGLISH": "Cruce de avenida con rampa"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20850"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20851,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue ramp junction",
+    "ENGLISH": "Cruce de avenida con rampa"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20851"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20852,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue ramp junction",
+    "ENGLISH": "Cruce de avenida con rampa"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20852"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20853,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue ramp junction",
+    "ENGLISH": "Cruce de avenida con rampa"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20853"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20854,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue ramp junction",
+    "ENGLISH": "Cruce de avenida con rampa"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20854"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20855,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue ramp junction",
+    "ENGLISH": "Cruce de avenida con rampa"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20855"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20856,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue ramp junction",
+    "ENGLISH": "Cruce de avenida con rampa"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20856"
+   },
+   "trblkatt": "copy_base"
+  }
+ ],
+ "lanes": [
+  {
+   "piece": 20850,
+   "spec": "box_20850.lanes.json"
+  },
+  {
+   "piece": 20851,
+   "spec": "box_20851.lanes.json"
+  },
+  {
+   "piece": 20852,
+   "spec": "box_20852.lanes.json"
+  },
+  {
+   "piece": 20853,
+   "spec": "box_20853.lanes.json"
+  },
+  {
+   "piece": 20854,
+   "spec": "box_20854.lanes.json"
+  },
+  {
+   "piece": 20855,
+   "spec": "box_20855.lanes.json"
+  },
+  {
+   "piece": 20856,
+   "spec": "box_20856.lanes.json"
+  }
+ ],
+ "avenue_junction_lines": [
+  "avxm 20850 AAAI IIOT",
+  "avxm 20851 AAII IIOT",
+  "avxm 20852 AAAI IITT",
+  "avxm 20853 AAAI TIOT",
+  "avxm 20854 AAAI TITT",
+  "avxm 20855 AAII TITT",
+  "avxm 20856 AAII TIOT"
+ ],
+ "avenue_lines": [
+  "avlj 20850 I.O.",
+  "avlj 20851 I...",
+  "avlj 20852 I...",
+  "avlj 20853 ..O."
+ ]
+}

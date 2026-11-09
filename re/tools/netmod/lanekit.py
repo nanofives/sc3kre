@@ -155,15 +155,19 @@ def rot_code(code, k=1):
 def rotate(rec, k=1):
     """Rotate a record k quarter turns. Positions (x, z) -> (255 - z, x), curve keys' low 2 bits + 1 (the curve
     libraries hold each shape at 4 rotations, key = shape * 256 + rotation), exit codes + 8 (mod 32), nodes
-    re-sorted by (x, y, z) and edge targets renumbered. Corner altitude offsets rotate with the corners."""
+    re-sorted by (x, y, z) and edge targets renumbered. The corner altitude offsets (alt) stay as they are.
+
+    alt, task avdiamond 2026-11-09: every stock slope record holds the SAME alt in every state (31 states 0 / 2
+    [0,-2,-2,0]; 32 states 0 / 2 [0,0,-2,-2]; 11201 states 0..3 [0,-1,-1,0]; 11202 states 0..3 [0,0,-1,-1]; lanekit
+    show). This function used to turn alt with the corners, so avcore's one-way slope variants (21718..21725) and
+    boulevard_slopes (27100..) got a rotated alt in states 1..3. On the owner's Big One, 21718.2 at (584,122): road cars
+    ran 512 units below stock 31.2's height (23552 -> 23043 instead of 24064 -> 23552), and 229 of 375 were removed at
+    the edge into the next cell (stock: 19 crossed, 0 removed there). verify/avdiamond/RESULTS.md."""
     k %= 4
     if k == 0:
         return json.loads(json.dumps(rec))
     out = {"flag": rec["flag"], "ped": [], "veh": []}
-    r = rec["alt_raw"]                                # corner c at raw index (0, 3, 2, 1)[c]; corner c -> c+k
-    corners = [r[0], r[3], r[2], r[1]]
-    nc = [corners[(c - k) % 4] for c in range(4)]
-    out["alt_raw"] = [nc[0], nc[3], nc[2], nc[1]]
+    out["alt_raw"] = list(rec["alt_raw"])             # stock: alt is the same in every state
     for kind in ("ped", "veh"):
         nodes = []
         for i, n in enumerate(rec[kind]):
