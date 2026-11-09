@@ -86,7 +86,7 @@ class Pieces:
     def __init__(self, own=None, avl_base=None):
         self.own = own or {}                        # id -> {"outline": "NESW", "kind": "box" | "nose" | "half"}
         self.virt = {}                              # task avx32: cell -> arm sides (cap_links), set by find()
-        self.avl_base = avl_base or {AVL_STRAIGHT: 11204, 21701: 11203}
+        self.avl_base = avl_base or {AVL_STRAIGHT: 11204, 21701: 11203, 21726: 11203}
         for k in range(21710, 21726):
             self.avl_base.setdefault(k, [69, 67, 11258, 15098, 31, 32, 11201, 11202][(k - 21710) // 2])
 
@@ -361,11 +361,16 @@ def corner_trim(L, P, sub):
         return sub
     for i, pr in enumerate(sub):
         if any(L.get(c) and P.stock_of(L[c][0]) == 11203 for c in pr):
+            other = [c for c in pr if not (L.get(c) and P.stock_of(L[c][0]) == 11203)]
+            if not other or not all(P.is_half(L[c][0]) or P.stock_of(L[c][0]) == 39 for c in other if L.get(c)):
+                return sub                                  # an X / two bends: a junction, not a corner block
             cut = i - 1
-            if cut >= 1 and not any(L.get(c) and P.is_half(L[c][0]) for c in sub[i - 1]):
+            if i + 1 < len(sub) and any(L.get(c) and P.stock_of(L[c][0]) == 11203 for c in sub[i + 1]):
+                cut = i                                     # the outer bend is next: this 11203 is the inner one
+            elif cut >= 1 and not any(L.get(c) and P.is_half(L[c][0]) for c in sub[i - 1]):
                 cut -= 1
             cut = max(cut, 0)
-            P.corner_cells |= {c for pr in sub[cut:i + 1] for c in pr}   # no nose on them (avcore's block)
+            P.corner_cells |= {c for pr in sub[cut:(i + 2 if cut == i else i + 1)] for c in pr}   # avcore's block
             return sub[:cut]
     return sub
 
@@ -599,7 +604,7 @@ def make_box(L, P, B, pos, r):
                         q = L.get(n)
                         if q is None or not conn(L, P, c, e):
                             info["edges"][e] = ("C", None, None)
-                        elif 0 <= j < len(pos) or P.is_half(q[0]) or P.stock_of(q[0]) in AVCORE_BAND:
+                        elif 0 <= j < len(pos) or P.is_half(q[0]) or P.stock_of(q[0]) in AVCORE_BAND or                                 n in getattr(P, "corner_cells", ()):          # task avdiamond D2b
                             info["edges"][e] = ("A", "band", h)
                         else:
                             info["edges"][e] = ("A", "road", None)
@@ -954,6 +959,8 @@ def other_modes(L, P, bands, c):
         return half_modes(p[1] & 3, True)
     if P.is_half(p[0]) and c in getattr(P, "corner_cells", ()):   # task avdiamond D2: C's avx_nb_mode reads any
         return half_modes(p[1] & 3, True)                         # half one-way (a corner half avl_bands lacks)
+    if c in getattr(P, "corner_cells", ()):                       # task avdiamond D2b: avcore's block, skipped
+        return None
     if P.stock_of(p[0]) in AVCORE_BAND:                 # avcore's crossing / slope pieces: skipped
         return None
     A = P.arms(p[0], p[1] & 3)

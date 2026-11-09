@@ -188,3 +188,59 @@ What changed (`re/harness/src/sc3netmod_hwt.c`, dispatcher line in `sc3netmod_rb
 | owner save, re-drag (608,133)..(608,135) by `nb_drive build 1` | live (608,134) 15098.0; after save + reload **20858.0**, the west half continuous 133..138, T intact |
 
 Not done: in-game run of the 15 shipped cities (offline argument above instead); English-UK; the twin's own art.
+
+## The three corners: the chain (604,119) -> (608,134) converts (D3a, D3, D2b)
+
+The chain z 604/605 (119..130) - tight corner (605,131) - x 131/132 (606..607) - corner (608..609,131..132) - z 608/609
+(133..138) converts all or nothing. Each link needed a shape the stock tiler leaves irregular:
+
+| shape | cells | what the tiler left | change (AVL `sc3netmod_avl.c`, AVX `sc3netmod_avx.c`, all under SC3NETMOD_AVDIAMOND) | pieces |
+|---|---|---|---|---|
+| D3a corner with a plain-road half | (608..609,131..132) | (609,132) a 29.1 where the corner's half belongs; outer cell (609,131) a T 39.3 with a road east | a 29 along a band axis, an 11203 beside it across the axis, a T / X / corner piece next to it along the axis and a straight half beside that one is read as the half (11204, median toward the bend): in avl_at and in AVX's corner junctions | avjunc's corner junction 21768 at (609,131), avcore 21726 / 21700 |
+| D3 tight corner | (604..605,131..132) | the two U-ends share the X 43 (605,131) | new end kind "tight corner" (avl_tight_at): the U-turn bend P and the X Q in the end row, the other band's U-turn bend Q' past Q; both bands decided together | U-turn quarters 21701 at (604,131) / (605,132); new X **20861** (avlt AAAA IOIO, base 43, avjunc box lanes N->E and S->W plus the U-turns, art = avjunc box painter AAAA) |
+| D2b corner beside a junction | (604..605,117..119) | (604,119) a T 39.0 whose W arm points at the side of the on-ramp 15141 (no arm back); the inner bend (604,118) a T 39.0 with a stub N arm; the other side of the block is D2a's box at 603 | a 39 whose arm points at a ramp that has no arm back is read without it (a straight half); a corner whose other side is an avlj junction row (box / link noses) converts with its band alone (the D2a join, now also for a plain bend); AVX: cells of a corner block a ramp walk stopped at count as band arms of the box beside it and are skipped in validation | avcore 21726 written at (604,118) at the 11203 state the corner wants (saves as 11203.0: the stub arm goes) |
+
+Guards found on the way:
+- The corner trim stops before a corner block only when the bend row's other cell is a straight half or a linked T. An X
+  there (Moscow (82,165)) is a junction. The first version cut it and the offline diff showed 2 changed noses outside
+  the ramp cases. Now 0.
+- After conversion the inner bend is avcore's 21726 (base 11203), so the walk meets an 11203 one row earlier. The trim
+  reads "an 11203 with another 11203 in the next row" as the inner bend. The first reload test lost the chain: box 603
+  was not rebuilt and the stock retile put the 39s back. Now the chain survives the reload.
+- The three shapes (29 half, tight corner, corner beside a junction) apply only with a highway piece (ramp, crossing,
+  deck, interchange) within 2 cells (`avd_near_hwy`). The same shapes occur away from highways in the shipped cities
+  (crude pattern count: about 970 X-with-two-bends, 24 29-halves) and belong to later groups.
+
+| check | result |
+|---|---|
+| owner save (west half re-dragged), load | 37 one-way bands (34 before the corners): `(604,119) rows 0..11 -> one-way (corner + T / tight corner)`, `(606,131) rows 0..1 (tight corner / corner)`, `(608,133) rows 0..5 (corner / join or edge)`; (601,117) stays one-way |
+| live cells | (604,118) 21726.0, (604,119) 21700.1, (605,117) 21701.0, (604,131) / (605,132) 21701.2, (605,131) 20861.0, (608,132) 21726.0, (609,131) 21768.3, (609,132) 21700.3, (608,134) 20860.0 (the crossing twin's one-way variant), (609,134) 21716.0 |
+| seams, ENGLISH, every join that touches one of our pieces in 596..612 x 110..142 | 0 problems (English-UK: 28, all where a right-hand piece meets a stock two-way piece, the accepted limitation) |
+| routed ground trips, 150 s, mask 21 (the only mask on the road halves; mask 8 runs both ways only under 584 and 604/605, where subway lines run) | every half in its rule direction, 0 steps against: 598 N 302, 599 S 105, row 117 E 920, row 118 W 407 (the D2a knot), 604 N 2,036, 605 S 2,316, row 131 E 1,471, row 132 W 1,014, 608 N 2,389, 609 S 2,508, 584 N 38,843, 585 S 2,976 |
+| cars on screen, 120 s, ground height | 584 N 1,989 / 0 against, 585 S 385 / 0; no ground car entered the 598 knot or the chain in that window (the trips above are the evidence there) |
+| save + reload | 1,014 variant tiles saved and restored; the same 36 one-way band lines; live grid 578..612 x 104..150 identical (0 cells) |
+| without sc3netmod | 578 cells read, 0 variant ids, grid = saved bases |
+
+Saved bases that now differ from the owner's original save in 578..612 x 104..150 (18 cells): the AVX base rule ones
+listed in D1 / D2a; (604,118) 39.0 -> 11203.0 and (604,119) 39.0 -> 11204.1 (the stub arms go); (609,132) 29.1 ->
+11204.3; (608,134) 15051.0 -> 15098.0 (the re-dragged road, kept by the D4 fix).
+
+Trip recorder: `re/tools/netmod/avdiamond_trips.py` (read-only, SimTransit route + deposit hooks; the deposit order is the
+popped path, so it runs against travel: calibrated on the one-way 585 half, 0 steps the other way).
+
+Pictures: `d3_chain_604_131_z4.png`, `d3_chain_608_131_z4_rot2.png`, `d2b_603_118_z4_rot2.png`.
+Open look item: the crossing twin 20858..20860 draws as the stock highway-over-road crossing.
+
+### Shipped cities with AVDIAMOND on / off (in game, 2026-11-09)
+
+9 shipped cities with avenues and highways (Berlin, Frankfurt, Moscow, Seoul, Madrid, Sacramento, London, Madison,
+Liverpool), each loaded with `SC3NETMOD_AVDIAMOND=0` and with it on (test-slot batch, own PIDs, 18 loads, all PASS).
+- One-way band lines in the load log: Frankfurt 139 -> 166, Moscow 124 -> 146, Seoul 132 -> 155, Sacramento 52 -> 62,
+  Madison 6 -> 8; London 194 / 194 and Liverpool 198 / 198 unchanged; Berlin 199 / 199 and Madrid 198 / 199. The
+  accepted-band log is capped at 200 lines on load, so the Berlin and Madrid lists are truncated and their line
+  differences are not usable (`data/shipped_onoff_bands.txt`).
+- Exact for those two, from the saved variant lists (each mode loaded, saved, `netvariant scan`): Berlin one-way avcore
+  cells 1,038 -> 1,142 (**0 lost**, 104 gained), Madrid 1,599 -> 1,681 (**0 lost**, 82 gained). Gained cells farther than 8
+  cells from any highway piece: Berlin 2 ((124..125,96), the end of a band whose other end is a ramp box at
+  (124..125,89..92)), Madrid 32 (the band x 26..45 z 231 / 232, ending at the ramp box at x 47..54). Both are bands that
+  now end on a ramp junction box, i.e. ramp cases.

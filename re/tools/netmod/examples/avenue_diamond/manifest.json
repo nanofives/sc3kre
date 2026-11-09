@@ -147,6 +147,20 @@
     "*": "Avenue (one way), under a highway T",
     "ENGLISH": "Avenida (un sentido) bajo autopista"
    }
+  },
+  {
+   "id": 20861,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue corner junction",
+    "ENGLISH": "Esquina de avenida"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20861"
+   },
+   "trblkatt": "copy_base"
   }
  ],
  "lanes": [
@@ -183,6 +197,10 @@
    "spec": "ct_20857.lanes.json"
   },
   {
+   "piece": 20861,
+   "spec": "ct_20861.lanes.json"
+  },
+  {
    "piece": 20859,
    "spec": "hwtx_20859.lanes.json"
   },
@@ -202,6 +220,7 @@
  ],
  "avenue_lines": [
   "avlt 20857 IAAI TIIO",
+  "avlt 20861 AAAA IOIO",
   "avlj 20850 I.O.",
   "avlj 20851 I...",
   "avlj 20852 I...",

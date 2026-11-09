@@ -184,6 +184,18 @@ static int avd_on(void) {
     return g_avd;
 }
 
+/* task avdiamond D2b / D3: the corner shapes this block adds (a 29 half, a tight corner, a corner beside a junction)
+   apply only beside a highway: a highway piece (ramps, crossings, decks, interchanges) within 2 cells of (x, z). The
+   same shapes elsewhere are later groups' (shipped cities hold them away from highways too) */
+static DWORD hwy_read(BYTE *mgr, void *lay, int x, int z, int W, int H);   /* sc3netmod_hwy.c */
+static int avd_near_hwy(BYTE *mgr, void *lay, int x, int z, int W, int H) {
+    int dx, dz;
+    for (dz = -2; dz <= 2; dz++)
+        for (dx = -2; dx <= 2; dx++)
+            if (hwy_read(mgr, lay, x + dx, z + dz, W, H)) return 1;
+    return 0;
+}
+
 /* 1 off-ramp, 2 on-ramp ground end, 0 neither (or the block off) */
 static int avd_ramp(WORD id) {
     if (id < 15138 || id > 15141 || !avd_on()) return 0;
@@ -477,7 +489,8 @@ static void avx_make(AvxPass *p, int axis, int pos[][2][2], int np, int i0, int 
                     if (j >= 0 && j < bx->L) *ek = 'R';
                     else if (!q || !avx_conn(p, x, z, e)) *ek = 'C';
                     else if ((i0 + j >= 0 && i0 + j < np) || avx_is_half((WORD)(q & 0xffff)) ||
-                             avx_avcore_band((WORD)(q & 0xffff))) *ek = 'B';
+                             avx_avcore_band((WORD)(q & 0xffff)) ||
+                             (avx_ix(p, nx, nz) >= 0 && p->cblk[avx_ix(p, nx, nz)])) *ek = 'B';   /* avdiamond D2b */
                     else *ek = 'D';
                 } else if (e == eo) {
                     if (bx->span[i][h] >= 0) *ek = 'S';
@@ -582,6 +595,7 @@ static char avx_nb_mode(AvxPass *p, int x, int z, int e) {
         return md[e];
     }
     if (avx_avcore_band((WORD)(v & 0xffff))) return '?';
+    if (ix >= 0 && p->cblk[ix]) return '?';               /* task avdiamond D2b: a corner block avcore decides */
     a = avx_arms(v);
     if (a < 0) return 'X';                                /* unknown connections (a diagonal road piece, ...): refuse */
     if (avd_ramp((WORD)(v & 0xffff)) == 1) return (a & (1 << e)) ? 'O' : 'C';   /* task avdiamond: off-ramp lanes leave */
@@ -763,11 +777,18 @@ static int avd_corner_trim(AvxPass *p, int pos[][2][2], int n) {
         for (h = 0; h < 2; h++)
             if (avx_stock_of((WORD)(avx_at(p, pos[j][h][0], pos[j][h][1]) & 0xffff)) == 11203) break;
         if (h == 2) continue;
+        {   /* the bend row's other cell: a straight half or a linked T 39; an X / another bend = a junction */
+            WORD oid = (WORD)(avx_at(p, pos[j][h ^ 1][0], pos[j][h ^ 1][1]) & 0xffff);
+            if (!(avx_is_half(oid) || avx_stock_of(oid) == 39)) return n;
+        }
         cut = j - 1;
-        if (cut >= 1 && !avx_is_half((WORD)(avx_at(p, pos[j - 1][0][0], pos[j - 1][0][1]) & 0xffff)) &&
+        if (j + 1 < n && (avx_stock_of((WORD)(avx_at(p, pos[j + 1][0][0], pos[j + 1][0][1]) & 0xffff)) == 11203 ||
+                          avx_stock_of((WORD)(avx_at(p, pos[j + 1][1][0], pos[j + 1][1][1]) & 0xffff)) == 11203))
+            cut = j;                        /* the next row holds the outer bend: this 11203 is the inner one (end row) */
+        else if (cut >= 1 && !avx_is_half((WORD)(avx_at(p, pos[j - 1][0][0], pos[j - 1][0][1]) & 0xffff)) &&
             !avx_is_half((WORD)(avx_at(p, pos[j - 1][1][0], pos[j - 1][1][1]) & 0xffff))) cut--;
         if (cut < 0) cut = 0;
-        for (i = cut; i <= j; i++)
+        for (i = cut; i <= (cut == j && j + 1 < n ? j + 1 : j); i++)            /* the whole block */
             for (h = 0; h < 2; h++) {
                 int ix = avx_ix(p, pos[i][h][0], pos[i][h][1]);
                 if (ix >= 0) p->cblk[ix] = 1;
@@ -912,8 +933,15 @@ static void avx_corners(AvxPass *p, int ox0, int oz0, int ox1, int oz1) {
                 char ol[4], md[4];
                 if (!qi || !qo || !qn) continue;
                 if (!(inn == 11203 || (avl_own(inn) && g_base[inn] == 11203))) continue;
-                if (!(ii == 11204 || ii == g_avl_straight) || !(io == 11204 || io == g_avl_straight)) continue;
                 si = (int)((qi >> 16) & 3); so = (int)((qo >> 16) & 3);
+                /* task avdiamond D3a (owner's Big One (609,132)): the stock tiler left a plain road 29 where a corner's
+                   half should be (the outer cell is a T with a road out). A 29 along that half's band axis is read as
+                   the half whose median faces the inner bend (state = that side), as avcore reads it (avl_at) */
+                if ((ii == 29 || io == 29) && avd_on() && avd_near_hwy(p->mgr, p->lay, x, z, p->W, p->H)) {
+                    if (ii == 29 && (int)((qi >> 16) & 1) == ((ein & 1) ? 0 : 1)) { ii = 11204; si = eout; }
+                    if (io == 29 && (int)((qo >> 16) & 1) == ((eout & 1) ? 0 : 1)) { io = 11204; so = ein; }
+                }
+                if (!(ii == 11204 || ii == g_avl_straight) || !(io == 11204 || io == g_avl_straight)) continue;
                 if (((si + 3) & 3) != ((ein + 2) & 3) || ((so + 3) & 3) != eout) continue;
                 if (hx + AVX_DIR[si][0] != nx || hz + AVX_DIR[si][1] != nz) continue;
                 if (ox + AVX_DIR[so][0] != nx || oz + AVX_DIR[so][1] != nz) continue;
