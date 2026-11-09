@@ -127,3 +127,34 @@ Pictures: `d2_598_knot_z4.png`, `d2_598_knot_z4_rot2.png`.
 Still two-way, by the chain rule: z 604/605 (120..130) -> tight corner (605,131) -> x 131/132 -> corner + T (608,132) ->
 row 133 -> (608,134) with no road. D2b (the 603..605 corner with a linked inner bend) and D3 (the tight corner) are
 both in that chain, so on the owner's save neither can convert before D4 is solved.
+
+## D4: why the save has no road at (608,134) (read-only: hwt source + build-order lab, no hwt change)
+
+Owner's T: hwt trumpet anchor (601,133) turn 0. (608,134) is its cell (7,1) = piece 21227 (a rewritten through-highway
+cell, `hwt 21227 7 1 0 1`, saved as plain deck 15051). (608,133) = frame (7,0), not a T cell, holds a stock crossing
+15098.2; (609,133..134) are outside the footprint, 15098.
+
+Source (`re/harness/src/sc3netmod_hwt.c`):
+- A NEW T (`hwt_check`) needs every through-highway cell from dx tx0-1 to tx1+1 (here -3..8) to be a plain straight
+  15051 / 73 (`hwt_straight` -> `hwt_head`, lines 98..123). A road crossing 15098 there refuses the T.
+- An EXISTING T (`hwt_existing`, every highway retile that reaches it and every load pass): a rewritten highway cell that
+  holds any highway piece passes (`if (!c->land && v) continue; /* a rewritten highway cell, re-tiled */`, line 381),
+  then every T cell is re-put with its own piece (line 393). A stock crossing 15098 there is overwritten by 21227, a
+  deck with no road under it, so the road loses that cell. There is no crossing test in the file.
+
+Lab (flattened copy of Roadless Paradise, `dev/avdiamond/tree/Cities/lab_hwt.sc3`, own PIDs 18800, 19328, 18568, 4344,
+`SC3NETMOD_HWASK=0` so the T builds without the question; highways and roads by `nb_drive.py build`, no cursor):
+
+| order | what happened |
+|---|---|
+| A: T first (anchor (110,60) turn 0, `hwt: load: full T ... 50 cells written`), then a road along z at x 117 (the T's dx 7) under the through highway | live, right after the drag: (117,60) 15098.2, (117,61) 15098.0, road continuous (the stock tiler replaced 21227). Saved as that. After reload, the load pass (`stats: hwt kept=1`, `hwy: load pass ... 1 written`): (117,60) 15098.2, **(117,61) 21227.0**, road cut at z 61. The same cells as the owner's (608,133) / (608,134) |
+| B: road first (x 157), then the through highway over it, then the stem | live: `hwt: edit: T at anchor (150,60) turn 0 refused: the through highway must run on 6 cells right of the stem (seen from the stem), nothing past its end`; both crossings kept, no T |
+
+**Cause: the T came first; the avenue was dragged under it afterwards; the next hwt pass over the existing T (a load,
+or a highway retile reaching it) wrote 21227 back over the stock crossing and deleted the avenue's west half there.**
+The road is never cut at the drag itself: it disappears at the next load / highway retile, which is why the owner
+did not see it happen.
+
+Where a road can pass under a T at all: the road column needs both sides of the through highway free of ramp cells.
+Frame row dz -1 holds ramp land at dx -2..3 (and the stem at 0..1), row dz 2 at dx 0..6, so only dx <= -3 or dx >= 7
+are open. The only T cell in those columns is (7,1), 21227. Proposed fix: see STATUS (reported before building).
