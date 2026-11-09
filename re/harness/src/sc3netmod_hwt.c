@@ -80,6 +80,88 @@ static void hwt_line(const char *path, const char *line) {
     g_hwt_n++;
 }
 
+/* task avdiamond D4 (round 2026-11-09, verify/avdiamond/RESULTS.md D4): a road dragged under a built T. The stock tiler
+   puts its crossing 15098 into the T's highway cell; on the next load / highway retile hwt_existing used to re-put its
+   own piece there, a deck with no road under it, and the road lost that cell (owner's Big One (608,134), lab
+   reproduced). Now (switch SC3NETMOD_HWTCROSS, off = the old behaviour):
+   - a T highway cell that holds a road / rail crossing (15098, 11258, 16006, 16007 or a variant of one) is never
+     overwritten: where the package has a crossing twin for that cell (`hwtx` lines, the first one per cell = the
+     two-way twin hwt writes, the others = AVL's one-way variants of it, kept) and the crossing is the 15098 of the
+     T's own heading (turns 0 / 2: 15098 has no records at 1 / 3), the twin is written; else the cell is left as it is
+     and logged;
+   - a new T accepts a stock crossing on its through highway outside its own cells, and on a twin cell;
+   - a broken T puts the stock crossing back on a twin cell and leaves other crossings alone.
+   Only T cell (7,1) (21227) can have a road under it: elsewhere the ramps hold both sides of the through highway. */
+#define HWT_MAXX 8
+static int avl_own(WORD id);                                /* sc3netmod_avl.c */
+static struct { WORD piece; short dx, dz; } g_hwtx[HWT_MAXX];
+static int g_hwtx_n, g_hwtx_on = -1;
+static volatile LONG g_hwtx_n_twin, g_hwtx_n_left;
+
+static void hwtx_line(const char *path, const char *line) {
+    long p, dx, dz;
+    if (sscanf(line + 5, "%ld %ld %ld", &p, &dx, &dz) != 3 || p <= 0 || p > 0xffff || g_base[p] != 15098 ||
+        g_hwtx_n >= HWT_MAXX) {
+        logf("### hwt: %s: bad crossing twin line (piece must be a variant of 15098) '%s'", path, line);
+        return;
+    }
+    g_hwtx[g_hwtx_n].piece = (WORD)p; g_hwtx[g_hwtx_n].dx = (short)dx; g_hwtx[g_hwtx_n].dz = (short)dz;
+    g_hwtx_n++;
+    logf("hwt: %s: crossing twin %ld for T cell (%ld,%ld)", path, p, dx, dz);
+}
+
+static int hwtx_on(void) {
+    if (g_hwtx_on < 0) {
+        g_hwtx_on = !env_off("SC3NETMOD_HWTCROSS");
+        logf("hwt: road / rail crossings under a T %s (%d twin line(s))", g_hwtx_on ? "kept" : "overwritten as before "
+             "(SC3NETMOD_HWTCROSS=0)", g_hwtx_n);
+    }
+    return g_hwtx_on;
+}
+
+/* a road / rail crossing under the highway (stock or a variant of one) */
+static int hwtx_xing(DWORD v) {
+    WORD id = hwy_id(v), b;
+    if (!v) return 0;
+    b = id < 20000 ? id : g_base[id];
+    return b == 15098 || b == 11258 || b == 16006 || b == 16007;
+}
+
+/* the two-way twin for T cell (dx, dz), 0 none; hwtx_fam: v is one of that cell's twin family */
+static WORD hwtx_twin(int dx, int dz) {
+    int j;
+    for (j = 0; j < g_hwtx_n; j++) if (g_hwtx[j].dx == dx && g_hwtx[j].dz == dz) return g_hwtx[j].piece;
+    return 0;
+}
+static int hwtx_fam(int dx, int dz, DWORD v) {
+    int j;
+    for (j = 0; v && j < g_hwtx_n; j++) if (g_hwtx[j].dx == dx && g_hwtx[j].dz == dz && g_hwtx[j].piece == hwy_id(v)) return 1;
+    return 0;
+}
+
+/* T highway cell k at turn r holding v: 0 not a crossing (or the block off); 1 = a crossing that takes the twin
+   (*id / *st = what to write: the cell's own family piece if it holds one, else the two-way twin); 2 = leave it */
+static int hwtx_cell(int k, int r, DWORD v, WORD *id, int *st) {
+    WORD tw;
+    if (!hwtx_on() || !hwtx_xing(v)) return 0;
+    tw = hwtx_twin(g_hwt_c[k].dx, g_hwt_c[k].dz);
+    if (tw && !(r & 1) && hwy_st(v) == r && (hwy_id(v) == 15098 || hwtx_fam(g_hwt_c[k].dx, g_hwt_c[k].dz, v) ||
+                                              (hwy_id(v) >= 20000 && g_base[hwy_id(v)] == 15098 && avl_own(hwy_id(v))))) {
+        *id = hwtx_fam(g_hwt_c[k].dx, g_hwt_c[k].dz, v) ? hwy_id(v) : tw;
+        *st = r;
+        return 1;
+    }
+    return 2;
+}
+
+static void hwtx_left(HwyPass *hp, int x, int z, DWORD v, const char *what) {
+    static volatile LONG nlog;
+    InterlockedIncrement(&g_hwtx_n_left);
+    if (InterlockedIncrement(&nlog) <= 40)
+        logf("hwt: %s: T cell (%d,%d) holds a road / rail crossing %u.%d: left as it is (%s)", hp->who, x, z, hwy_id(v),
+             hwy_st(v), what);
+}
+
 static int hwt_cell_of(WORD id) {
     int k;
     for (k = 0; k < g_hwt_n; k++) if (g_hwt_c[k].piece == id) return k;
@@ -101,6 +183,11 @@ static int hwt_head(DWORD v, int *hx, int *hz) {
     if (!v) return 0;
     if (id == 15051 && (s == 0 || s == 2)) { *hx = s == 2 ? 1 : -1; *hz = 0; return 1; }
     if (id == 73 && (s == 0 || s == 2)) { *hx = 0; *hz = s == 0 ? 1 : -1; return 1; }
+    if (g_hwtx_on > 0 && (s == 0 || s == 2)) {                         /* task avdiamond D4: a road under the highway */
+        WORD b = id < 20000 ? id : g_base[id];
+        if (b == 15098) { *hx = s == 2 ? 1 : -1; *hz = 0; return 1; }
+        if (b == 11258) { *hx = 0; *hz = s == 0 ? 1 : -1; return 1; }
+    }
     return 0;
 }
 
@@ -246,7 +333,11 @@ static int hwt_check(HwyPass *hp, int ax, int az, int r, int gesture, int set, c
         if (!(c->sets & set)) continue;
         hwt_world(ax, az, r, c->dx, c->dz, &x, &z);
         if (hwy_claimed(x, z)) { *why = "cell claimed by another block"; return 0; }
-        if (!c->land) continue;
+        if (!c->land) {                                                  /* task avdiamond D4 */
+            WORD tid; int tst;
+            if (hwtx_cell(k, r, hwy_at(hp, x, z), &tid, &tst) == 2) { *why = "a road / rail crossing under a T cell"; return 0; }
+            continue;
+        }
         if (gesture == 2 && c->dz == 2 && (c->dx == 0 || c->dx == 1)) continue;   /* the stub arm: an X arm cell */
         if (!hwy_free(hp, x, z)) { *why = c->dz >= 2 ? "far side not free" : "stem side not free"; return 0; }
         for (j = 0; j < 4; j++) {                                        /* no other highway touching it */
@@ -267,6 +358,11 @@ static void hwt_build(HwyPass *hp, int ax, int az, int r, int gesture, int set) 
         WORD id;
         if (!(c->sets & set)) continue;
         hwt_world(ax, az, r, c->dx, c->dz, &x, &z);
+        if (!c->land) {                                                  /* task avdiamond D4: a road under it */
+            WORD tid; int tst, xc = hwtx_cell(k, r, hwy_at(hp, x, z), &tid, &tst);
+            if (xc == 1) { if (hwy_put(hp, x, z, tid, tst) < 0) bad++; else { n++; InterlockedIncrement(&g_hwtx_n_twin); } continue; }
+            if (xc == 2) { hwtx_left(hp, x, z, hwy_at(hp, x, z), "new T"); hwy_keep(hp, x, z); continue; }
+        }
         id = c->land ? 0 : hwt_capped(k, r, hwy_at(hp, x, z));          /* task hwcap2: its highway ends here */
         if (id) ncap++;
         if (hwy_put(hp, x, z, id ? id : c->piece, r) < 0) bad++; else n++;
@@ -292,7 +388,8 @@ static void hwt_build(HwyPass *hp, int ax, int az, int r, int gesture, int set) 
 
 /* task hwtdel: cell k of a T at turn r holds its own piece (or its capped twin) */
 static int hwt_is_own(int k, int r, DWORD v) {
-    return v && hwy_st(v) == r && (hwy_id(v) == g_hwt_c[k].piece || (!g_hwt_c[k].land && hwy_id(v) == hwt_twin(k)));
+    return v && hwy_st(v) == r && (hwy_id(v) == g_hwt_c[k].piece || (!g_hwt_c[k].land && hwy_id(v) == hwt_twin(k)) ||
+                                   (g_hwtx_on > 0 && !g_hwt_c[k].land && hwtx_fam(g_hwt_c[k].dx, g_hwt_c[k].dz, v)));
 }
 
 /* task hwtdel: votes for anchor (ax, az, r) over the T's WHOLE footprint, cells outside the read box read from the map.
@@ -389,6 +486,16 @@ static int hwt_existing(HwyPass *hp, int ax, int az, int r, int set) {
         WORD id;
         if (!(c->sets & set)) continue;
         hwt_world(ax, az, r, c->dx, c->dz, &x, &z);
+        if (!c->land) {                                                  /* task avdiamond D4: never delete a road */
+            DWORD cv = hwy_rd(hp, x, z);
+            WORD tid; int tst, xc = hwtx_cell(k, r, cv, &tid, &tst);
+            if (xc == 1) { if (hwy_put(hp, x, z, tid, tst) > 0) InterlockedIncrement(&g_hwtx_n_twin); continue; }
+            if (xc == 2) {
+                hwtx_left(hp, x, z, cv, "built T");
+                if (hwy_inbuf(hp, x, z)) hwy_keep(hp, x, z); else hwy_keep_far(hp, x, z, cv);
+                continue;
+            }
+        }
         id = c->land ? 0 : hwt_capped(k, r, hwy_rd(hp, x, z));          /* task hwcap2: its highway ends here */
         hwy_put(hp, x, z, id ? id : c->piece, r);       /* task hwtdel: past the box hwy_put only keeps a right cell */
     }
@@ -438,6 +545,13 @@ static void hwt_break(HwyPass *hp, int ax, int az, int r, int set) {
         if (!(c->sets & set) || c->land) continue;
         hwt_world(ax, az, r, c->dx, c->dz, &x, &z);
         if (x <= hp->x0 || x >= hp->x1 || z <= hp->z0 || z >= hp->z1 || !hwy_at(hp, x, z) || hwy_claimed(x, z)) continue;
+        if (hwtx_on() && hwtx_xing(hwy_at(hp, x, z))) {             /* task avdiamond D4: the road stays */
+            DWORD cv = hwy_at(hp, x, z);
+            if (hwtx_fam(c->dx, c->dz, cv) || (hwy_id(cv) >= 20000 && g_base[hwy_id(cv)] == 15098 && avl_own(hwy_id(cv)))) {
+                if (hwy_put(hp, x, z, 15098, hwy_st(cv)) > 0) n++;  /* the twin (or AVL's one-way one) -> stock crossing */
+            } else hwy_keep(hp, x, z);
+            continue;
+        }
         if (stem && gap && c->dz > gap) {                           /* the stub: removed by hwy_end */
             hwy_drop(hp, x, z);
             n++;
@@ -472,7 +586,13 @@ static int hwt_any_claimed(HwyPass *hp, int ax, int az, int r, int set) {
     return 0;
 }
 
+static void hwt_run2(HwyPass *hp);
 static void hwt_run(HwyPass *hp) {
+    hwtx_on();                                                          /* task avdiamond D4: set before hwt_head reads it */
+    hwt_run2(hp);
+}
+
+static void hwt_run2(HwyPass *hp) {
     static int cand[64][5];                    /* ax, az, r, votes, sets seen */
     int ncand = 0, x, z, r, k, j;
     const char *why;
@@ -554,4 +674,6 @@ static void hwt_stats(void) {
     last = n;
     logf("stats: hwt full Ts built=%ld, right-in/right-out built=%ld, kept=%ld, broken=%ld", g_hwt_n_full,
          g_hwt_n_rio, g_hwt_n_kept, g_hwt_n_broken);
+    if (g_hwtx_n_twin || g_hwtx_n_left)
+        logf("stats: hwt crossings under a T: twin written=%ld, left as they are=%ld", g_hwtx_n_twin, g_hwtx_n_left);
 }

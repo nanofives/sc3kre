@@ -1,0 +1,127 @@
+{
+ "piece": 20860,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 0,
+ "alt": [
+  0,
+  0,
+  0,
+  0
+ ],
+ "_comment": "avdiamond_build.py: avenue_lanes 21717's lanes (one-way avenue half under a highway) on the T crossing twin",
+ "vehicle": {
+  "class": "car",
+  "speed": 64000,
+  "lanes": [
+   {
+    "from": [
+     255,
+     1024,
+     61
+    ],
+    "to": [
+     0,
+     1024,
+     61
+    ],
+    "path": 71425,
+    "exit": false,
+    "speed": 95999
+   },
+   {
+    "from": [
+     255,
+     1024,
+     145
+    ],
+    "to": [
+     0,
+     1024,
+     145
+    ],
+    "path": 71169,
+    "exit": false,
+    "speed": 95999
+   },
+   {
+    "from": [
+     80,
+     0,
+     255
+    ],
+    "to": [
+     80,
+     0,
+     0
+    ],
+    "uk_keep": true
+   },
+   {
+    "from": [
+     175,
+     0,
+     255
+    ],
+    "to": [
+     175,
+     0,
+     0
+    ],
+    "uk_keep": true
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     0,
+     1024,
+     61
+    ],
+    "code": 0,
+    "speed": 95999
+   },
+   {
+    "at": [
+     0,
+     1024,
+     145
+    ],
+    "code": 0,
+    "speed": 95999
+   }
+  ]
+ },
+ "pedestrian": {
+  "walks": [],
+  "exits": []
+ },
+ "connects": {
+  "road": {
+   "low": [
+    [
+     "x+",
+     "x-"
+    ],
+    [
+     "z+",
+     "z-"
+    ]
+   ],
+   "high": [
+    [
+     "x-",
+     "x+"
+    ],
+    [
+     "z-",
+     "z+"
+    ]
+   ]
+  }
+ }
+}

@@ -73,5 +73,23 @@
    "base": 43,
    "note": "corner + T, T row cell beside the linked half with an off-ramp on its outside (owner Big One (600,118)), avl_corner_at letters"
   }
- ]
+ ],
+ "hwtx": {
+  "_": "task avdiamond D4: crossing twins of hwt's 21227 (T cell (7,1)) with a road under it; base 15098, stock 15098 art",
+  "cell": [
+   7,
+   1
+  ],
+  "twin": 20858,
+  "oneway": [
+   [
+    20859,
+    21716
+   ],
+   [
+    20860,
+    21717
+   ]
+  ]
+ }
 }

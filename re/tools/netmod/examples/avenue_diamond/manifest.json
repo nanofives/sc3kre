@@ -119,6 +119,34 @@
     "png_dir": "art/20857"
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 20858,
+   "base": 15098,
+   "network": "ROAD",
+   "trblkatt": "copy_base",
+   "name": {
+    "*": "Highway T over a road",
+    "ENGLISH": "Cruce de autopista sobre calle"
+   }
+  },
+  {
+   "id": 20859,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way), under a highway T",
+    "ENGLISH": "Avenida (un sentido) bajo autopista"
+   }
+  },
+  {
+   "id": 20860,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue (one way), under a highway T",
+    "ENGLISH": "Avenida (un sentido) bajo autopista"
+   }
   }
  ],
  "lanes": [
@@ -153,6 +181,14 @@
   {
    "piece": 20857,
    "spec": "ct_20857.lanes.json"
+  },
+  {
+   "piece": 20859,
+   "spec": "hwtx_20859.lanes.json"
+  },
+  {
+   "piece": 20860,
+   "spec": "hwtx_20860.lanes.json"
   }
  ],
  "avenue_junction_lines": [
@@ -169,6 +205,13 @@
   "avlj 20850 I.O.",
   "avlj 20851 I...",
   "avlj 20852 I...",
-  "avlj 20853 ..O."
+  "avlj 20853 ..O.",
+  "avlc 20859 15098 2 20858",
+  "avlc 20860 15098 0 20858"
+ ],
+ "highway_lines": [
+  "hwtx 20858 7 1",
+  "hwtx 20859 7 1",
+  "hwtx 20860 7 1"
  ]
 }

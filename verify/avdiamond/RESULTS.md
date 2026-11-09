@@ -158,3 +158,33 @@ did not see it happen.
 Where a road can pass under a T at all: the road column needs both sides of the through highway free of ramp cells.
 Frame row dz -1 holds ramp land at dx -2..3 (and the stem at 0..1), row dz 2 at dx 0..6, so only dx <= -3 or dx >= 7
 are open. The only T cell in those columns is (7,1), 21227. Proposed fix: see STATUS (reported before building).
+
+## D4 fix: a road under a T is never deleted (hwt block, switch SC3NETMOD_HWTCROSS)
+
+What changed (`re/harness/src/sc3netmod_hwt.c`, dispatcher line in `sc3netmod_rbt.c`, AVL family in `sc3netmod_avl.c`):
+- Guard: a T highway cell holding a road / rail crossing (15098, 11258, 16006, 16007 or a variant of one) is never
+  overwritten, in hwt_existing (built T), hwt_build (new T) and hwt_break (broken T). On T cell (7,1) at turns 0 / 2
+  with the T's own 15098 there, the crossing twin is written; any other crossing in a T cell is left as it is and
+  logged (`hwt: <who>: T cell (x,z) holds a road / rail crossing id.st: left as it is`).
+- New T: a stock crossing on the through highway counts as straight highway (15098 like 15051, 11258 like 73); a
+  crossing in a T cell other than a twin cell refuses the T (as before).
+- Pieces (package avenue_diamond, `hwtx` highway lines + `avlc ... <family>` avenue lines): 20858 = the two-way twin of
+  21227 (base 15098, stock 15098 lanes and art, saved as 15098); 20859 / 20860 = its one-way variants for AVL (avenue_lanes
+  21716 / 21717's lanes, art of 15098). AVL treats a family cell like its base, writes the family's one-way variants and
+  gives back the family piece (not the base) when a band reverts.
+- Look: the twin draws as the stock highway-over-road crossing, not as 21227 (hwt's frames are painted by hwt_paint at
+  other sizes, so no pixel composite). Lanes are the same as 21227's (plain through lanes) plus the road.
+- Off (`SC3NETMOD_HWTCROSS=0`): measured, the old overwrite comes back (below).
+
+| check | result |
+|---|---|
+| lab, order A (T, then road at the T's dx 7), save + reload with the fix | (117,60) 15098.2, (117,61) **20858.0**, road continuous (before the fix: 21227, road cut) |
+| lab, order B (road, then through highway, then stem) | live `hwt: edit: full T at anchor (150,60) turn 0 ... 50 cells written`; (157,60) 15098.2, (157,61) 20858.0, road continuous; survives save + reload |
+| lab, guard: road under T cells (2,0) / (2,1) at x 152 | reload: `T cell (152,60) / (152,61) holds a road / rail crossing 15098.0: left as it is (built T)`, both kept, T kept |
+| lab, same save with `SC3NETMOD_HWTCROSS=0` | `hwy: load pass ... 4 written`: (117,61) / (157,61) 21227, (152,60) 21219, (152,61) 21224, all three roads cut (the old behaviour) |
+| saves | the twins save as 15098 (network_layer on the saved lab city: all six cells 15098) |
+| owner save, existing Ts without a road (5 Ts) | load with the fix on and off: `hwy: load pass ... 0 written` both, T footprint 596..612 x 126..140 identical |
+| shipped cities | offline: 0 hwt pieces in all 16 saves (`data/d4_shipped_hwt_scan.txt`), so the built-T paths never run there; 7 cities hold T triggers (caps / stub X), where only the new-T check runs, and a load pass never builds a new T while hwask is on ("not asked on a load pass: the default") |
+| owner save, re-drag (608,133)..(608,135) by `nb_drive build 1` | live (608,134) 15098.0; after save + reload **20858.0**, the west half continuous 133..138, T intact |
+
+Not done: in-game run of the 15 shipped cities (offline argument above instead); English-UK; the twin's own art.

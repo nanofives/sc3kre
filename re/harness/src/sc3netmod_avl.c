@@ -40,7 +40,7 @@
 #define AVL_MAXJ 4096                                       /* every package's avlj lines together */
 #define AVL_MAXLEN 4096                                     /* longest band walked, rows */
 
-typedef struct { WORD piece, base; BYTE side; } AvlC;
+typedef struct { WORD piece, base; BYTE side; WORD fam; } AvlC;   /* fam: task avdiamond D4, 0 = the stock base's own */
 typedef struct { WORD piece; char e[4]; } AvlJ;
 static WORD g_avl_uturn, g_avl_corner;                      /* g_avl_straight, g_avl_on: sc3netmod_rbt.c */
 static AvlC g_avl_c[AVL_MAXC];
@@ -70,14 +70,18 @@ static void avl_line(const char *path, const char *line) {
         return;
     }
     if (!strncmp(line, "avlc ", 5)) {
-        if (sscanf(line + 5, "%lu %lu %lu", &v, &b, &s) != 3 || !v || v > 0xffff || !b || b > 0xffff || s > 3 ||
-            g_base[v] != (WORD)b || g_avl_nc >= AVL_MAXC) {
+        unsigned long fam = 0;                     /* task avdiamond D4: avlc <piece> <base> <side> [<family>] */
+        int nf = sscanf(line + 5, "%lu %lu %lu %lu", &v, &b, &s, &fam);
+        if (nf < 3 || !v || v > 0xffff || !b || b > 0xffff || s > 3 || g_base[v] != (WORD)b || g_avl_nc >= AVL_MAXC ||
+            (nf == 4 && (fam > 0xffff || g_base[fam] != (WORD)b))) {
             logf("### avl: %s: bad crossing line (or not a variant of its base, or too many): '%s'", path, line);
             return;
         }
         g_avl_c[g_avl_nc].piece = (WORD)v; g_avl_c[g_avl_nc].base = (WORD)b; g_avl_c[g_avl_nc].side = (BYTE)s;
+        g_avl_c[g_avl_nc].fam = nf == 4 ? (WORD)fam : 0;
         g_avl_nc++;
-        logf("avl: %s: one-way %lu on base %lu, lanes toward side %lu at state 0", path, v, b, s);
+        logf("avl: %s: one-way %lu on base %lu, lanes toward side %lu at state 0%s", path, v, b, s,
+             nf == 4 ? " (family of a two-way crossing piece)" : "");
         return;
     }
     if (!strncmp(line, "avlj ", 5)) {
@@ -136,25 +140,40 @@ static DWORD avl_at(AvlPass *p, int x, int z) {
 
 static int avl_is_straight(WORD id) { return id == 11204 || (g_avl_straight && id == g_avl_straight); }
 
+/* task avdiamond D4: a crossing FAMILY = another block's two-way crossing piece (hwt's 21227 crossing twin, base 15098)
+   with its own one-way variants (avlc ... <family>). A cell holding the family piece is a crossing row like its base;
+   AVL writes the family's one-way variants there, and gives the family piece back (not the base) when it reverts.
+   -> the family of a cell id (the two-way piece), 0 none */
+static WORD avl_fam_of(WORD id) {
+    int k;
+    if (!id) return 0;
+    for (k = 0; k < g_avl_nc; k++)
+        if (g_avl_c[k].fam && (g_avl_c[k].fam == id || g_avl_c[k].piece == id)) return g_avl_c[k].fam;
+    return 0;
+}
+
 /* the crossing table entry for a cell id (stock base or one of our variants), -1 none */
 static int avl_cross_of(WORD id) {
     int k;
-    for (k = 0; k < g_avl_nc; k++) if (g_avl_c[k].piece == id || g_avl_c[k].base == id) return k;
+    WORD f = avl_fam_of(id);
+    for (k = 0; k < g_avl_nc; k++)
+        if (g_avl_c[k].fam == f && (g_avl_c[k].piece == id || g_avl_c[k].base == id || (f && f == id))) return k;
     return -1;
 }
 
-/* the variant of base `b` whose lanes run toward world side `dir` at state `st`, 0 none */
-static WORD avl_cross_want(WORD b, int st, int dir) {
+/* the variant of base `b` (of family `f`, 0 = the stock one) whose lanes run toward world side `dir` at state `st` */
+static WORD avl_cross_want_f(WORD b, int st, int dir, WORD f) {
     int k;
     for (k = 0; k < g_avl_nc; k++)
-        if (g_avl_c[k].base == b && ((g_avl_c[k].side + st) & 3) == dir) return g_avl_c[k].piece;
+        if (g_avl_c[k].base == b && g_avl_c[k].fam == f && ((g_avl_c[k].side + st) & 3) == dir) return g_avl_c[k].piece;
     return 0;
 }
+#define avl_cross_want(b, st, dir) avl_cross_want_f((b), (st), (dir), 0)
 
 static int avl_free(AvlPass *p, int x, int z, DWORD v) {
     WORD id = AVL_ID(v);
     if (!v) return 0;
-    if (id >= 20000 && !avl_own(id)) return 0;
+    if (id >= 20000 && !avl_own(id) && !avl_fam_of(id)) return 0;    /* task avdiamond D4: a family piece is free */
     if (dbv_claimed(x, z) || hwave_claimed(x, z)) return 0;
     (void)p;
     return 1;
@@ -617,7 +636,8 @@ static int avl_decide_r(AvlPass *p, int axis, int ax, int az, int *pk0, int *pk1
             int cx = ax + dx * k + (c && !axis ? 1 : 0), cz = az + dz * k + (c && axis ? 1 : 0);
             DWORD v = avl_at(p, cx, cz);
             int ci = avl_cross_of(AVL_ID(v)), dir = axis ? (c ? 3 : 1) : (c ? 2 : 0);
-            if (!avl_is_straight(AVL_ID(v)) && (ci < 0 || !avl_cross_want(g_avl_c[ci].base, AVL_ST(v), dir))) {
+            if (!avl_is_straight(AVL_ID(v)) &&
+                (ci < 0 || !avl_cross_want_f(g_avl_c[ci].base, AVL_ST(v), dir, avl_fam_of(AVL_ID(v))))) {
                 ok = 0;
                 avl_why(stk, "band along %s at (%d,%d): row %d (%d,%d) holds %u.%d, no one-way variant toward %c",
                         axis ? "x" : "z", ax, az, k, cx, cz, AVL_ID(v), AVL_ST(v), AVL_SIDE[dir]);
@@ -723,7 +743,8 @@ static void avl_band(AvlPass *p, int axis, int ax, int az, AvlW *w, int *nw, int
             DWORD v = avl_at(p, cx, cz);
             WORD id = AVL_ID(v), piece;
             if (!v) continue;
-            piece = avl_is_straight(id) ? g_avl_straight : ok ? avl_cross_want(g_avl_c[avl_cross_of(id)].base, AVL_ST(v), dir) : 0;
+            piece = avl_is_straight(id) ? g_avl_straight :
+                    ok ? avl_cross_want_f(g_avl_c[avl_cross_of(id)].base, AVL_ST(v), dir, avl_fam_of(id)) : 0;
             avl_cell(p, ok, cx, cz, piece, 1 + dir, w, nw, cap, rv, nrv, rcap);
         }
     }
@@ -939,7 +960,10 @@ static void avl_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) 
         int pos[3];
         if (!v || !avl_own(AVL_ID(v))) continue;
         pos[0] = rv[2 * k] << 8; pos[1] = rv[2 * k + 1] << 8; pos[2] = 0;
-        ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, P.lay, pos, ((DWORD)g_base[AVL_ID(v)] << 8) | AVL_ST(v), -1, 8, 0);
+        {   /* task avdiamond D4: a family variant goes back to the family piece (hwt's twin), not to the base */
+            WORD f = avl_fam_of(AVL_ID(v)), back = f && f != AVL_ID(v) ? f : g_base[AVL_ID(v)];
+            ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, P.lay, pos, ((DWORD)back << 8) | AVL_ST(v), -1, 8, 0);
+        }
     }
     if (nrv) ZeroMemory(P.rd, (SIZE_T)P.W * P.H);                 /* a retile may have changed neighbours: read again */
     for (k = 0; k < nw; k++) {

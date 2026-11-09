@@ -28,6 +28,7 @@ from netmod import avjunc_rule as R     # noqa: E402
 IDS = list(range(20850, 20900))
 SHAPE0, SHAPE_MAX = 25500, 25999
 JUNC = os.path.join(HERE, "examples", "avenue_junctions")
+AVLC_SIDE = {21716: "2", 21717: "0"}                  # avenue_lanes: avlc 21716 15098 2, avlc 21717 15098 0
 
 
 def have_combos():
@@ -86,7 +87,7 @@ def cmd_pieces(a):
         rows.append({"id": free.pop(0), "outline": k[0], "modes": k[1], "base": R.save_base(k[0]), **need[k]})
     out = {"_": "avdiamond_build.py pieces: box cells with an off-ramp edge (mode I on the outside edge) that "
                 "avenue_junctions lacks; outline / modes N E S W at state 0 as avjunc_build",
-           "box": rows, "ct": prev.get("ct", [])}                 # corner + T cells: kept by hand (D2)
+           "box": rows, "ct": prev.get("ct", []), "hwtx": prev.get("hwtx")}   # kept by hand (D2, D4)
     os.makedirs(a.pack, exist_ok=True)
     json.dump(out, open(p, "w", newline="\n"), indent=1)
     print("wrote %s: %d pieces" % (p, len(rows)))
@@ -152,6 +153,24 @@ def cmd_build(a):
                          "name": {"*": "Avenue corner junction", "ENGLISH": "Esquina de avenida"},
                          "art": {"from": 43, "png_dir": "art/%d" % r["id"]}, "trblkatt": "copy_base"})
         outlines.setdefault(r["outline"], []).append(r["id"])
+    hx = T.get("hwtx")                              # task avdiamond D4: crossing twins under a T cell
+    hlines = []
+    if hx:
+        dx, dz = hx["cell"]
+        variants.append({"id": hx["twin"], "base": 15098, "network": "ROAD", "trblkatt": "copy_base",
+                         "name": {"*": "Highway T over a road", "ENGLISH": "Cruce de autopista sobre calle"}})
+        hlines.append("hwtx %d %d %d" % (hx["twin"], dx, dz))
+        for pid, src in hx["oneway"]:
+            sp = json.load(open(os.path.join(HERE, "examples", "avenue_lanes", "avl_%d.lanes.json" % src)))
+            sp["piece"] = pid
+            sp["_comment"] = "avdiamond_build.py: avenue_lanes %d's lanes (one-way avenue half under a highway) on the T crossing twin" % src
+            sp.pop("curves", None)
+            fn = "hwtx_%d.lanes.json" % pid
+            json.dump(sp, open(os.path.join(a.pack, fn), "w", newline="\n"), indent=1)
+            lanes_entries.append({"piece": pid, "spec": fn})
+            variants.append({"id": pid, "base": 15098, "network": "ROAD",
+                             "name": {"*": "Avenue (one way), under a highway T", "ENGLISH": "Avenida (un sentido) bajo autopista"}})
+            hlines.append("hwtx %d %d %d" % (pid, dx, dz))
     if plan.shapes:
         first = os.path.join(a.pack, lanes_entries[0]["spec"])
         sp = json.load(open(first))
@@ -173,7 +192,9 @@ def cmd_build(a):
         "variants": sorted(variants, key=lambda v: v["id"]),
         "lanes": lanes_entries,
         "avenue_junction_lines": [ln for ln in lines if ln.startswith("avx")],
-        "avenue_lines": [ln for ln in lines if ln.startswith(("avlj", "avlt"))],
+        "avenue_lines": [ln for ln in lines if ln.startswith(("avlj", "avlt"))] + (
+            ["avlc %d 15098 %s %d" % (pid, AVLC_SIDE[src], hx["twin"]) for pid, src in hx["oneway"]] if hx else []),
+        "highway_lines": hlines,
     }
     json.dump(man, open(os.path.join(a.pack, "manifest.json"), "w", newline="\n"), indent=1)
     print("specs: %d box pieces (%d lanes); new curve shapes %s" % (len(T["box"]), nlanes, sorted(plan.shapes)))

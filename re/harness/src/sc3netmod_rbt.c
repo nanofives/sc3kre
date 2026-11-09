@@ -104,6 +104,7 @@ static WORD hwy_save_id(WORD id);                                            /* 
 static int hwy_install(void);                                                /* task hwcore */
 static void hwy_stats(void);                                                 /* task hwcore */
 static void hwt_line(const char *path, const char *line);                    /* task hwt */
+static void hwtx_line(const char *path, const char *line);                   /* task avdiamond D4 */
 static void hwt_run(struct HwyPass *hp);                                     /* task hwt */
 static void hwt_stats(void);                                                 /* task hwt */
 static void hwx_line(const char *path, const char *line);                    /* task hwx */
@@ -164,6 +165,7 @@ static void rb_file(const char *path) {
         if (!strncmp(line, "rbt9 ", 5)) { r9_line(path, line); continue; }       /* task bigrbt */
         if (!strncmp(line, "dbvb ", 5) || !strncmp(line, "dbvs ", 5)) { dbv_line(path, line); continue; } /* task diagbv */
         if (!strncmp(line, "hwt ", 4) || !strncmp(line, "hwtc ", 5)) { hwt_line(path, line); continue; } /* task hwt (hwtc: task hwcap2) */
+        if (!strncmp(line, "hwtx ", 5)) { hwtx_line(path, line); continue; }  /* task avdiamond D4: crossing twins under a T */
         if (!strncmp(line, "hwx ", 4)) { hwx_line(path, line); continue; } /* task hwx */
         if (!strncmp(line, "hwask ", 6)) { hwask_line(path, line); continue; } /* task hwask */
         if (!strncmp(line, "hwave ", 6)) { hwave_line(path, line); continue; } /* task hwave */
