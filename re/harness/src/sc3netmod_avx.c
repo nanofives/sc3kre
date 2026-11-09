@@ -255,6 +255,7 @@ typedef struct {
     int rx0, rz0, rx1, rz1;                              /* cells a revert may touch: the edit box + 2 (whole map on load) */
     BYTE *kmap;                                          /* 1: a corner junction cell this pass keeps */
     BYTE *virt;                                          /* task avx32: 0x10 | arm sides re-read by avx_caps, 0 none */
+    BYTE *cblk;                                          /* task avdiamond D2: 1 = a corner block a ramp walk stopped at */
     AvxCorner *kc; int nk, kcap;
 } AvxPass;
 
@@ -613,7 +614,8 @@ static void avx_noses(AvxPass *p) {
                         x += AVX_DIR[e][0]; z += AVX_DIR[e][1];
                     }
                     ix = avx_ix(p, x, z);
-                    if (ix >= 0 && !p->own[ix] && !p->nose[ix] && avx_is_row((WORD)(avx_at(p, x, z) & 0xffff))) {
+                    if (ix >= 0 && !p->own[ix] && !p->nose[ix] && !p->cblk[ix] &&                 /* avdiamond D2 */
+                        avx_is_row((WORD)(avx_at(p, x, z) & 0xffff))) {
                         p->nose[ix] = (BYTE)(1 + bx->axis);
                         p->nst[ix] = (signed char)((avx_at(p, x, z) >> 16) & 3);
                     }
@@ -738,13 +740,54 @@ static void avx_seg(AvxPass *p, int axis, int sg, int pos[][2][2], int np) {
     }
 }
 
+/* task avdiamond D2 (twin avjunc_rule.cross_pair): both cells an avcore crossing base with its road along the band;
+   road axis at state 0: 15098 along z, 11258 / 69 / 67 along x, odd states turn it. Such a row seeds a ramp walk (the
+   x avenue z 117 / 118 on the owner's Big One has no straight pair at all: T row, 11258 crossing, ramp T, corner) */
+static int avd_cross_pair(AvxPass *p, int x, int z, int axis) {
+    DWORD a = avx_at(p, x, z), b = avx_at(p, x + AVX_ACROSS[axis][0], z + AVX_ACROSS[axis][1]);
+    WORD ba = avx_stock_of((WORD)(a & 0xffff)), bb = avx_stock_of((WORD)(b & 0xffff));
+    int r0, along = axis ? 1 : 0;                            /* along x: 0, along z: 1 */
+    if (!a || !b || ba != bb || !(ba == 15098 || ba == 11258 || ba == 69 || ba == 67)) return 0;
+    r0 = ba == 15098 ? 1 : 0;
+    return ((r0 ^ (int)((a >> 16) & 1)) == along) && ((r0 ^ (int)((b >> 16) & 1)) == along);
+}
+
+/* task avdiamond D2 (twin avjunc_rule.corner_trim): a ramp walk part that runs into an avenue corner block (a position
+   holding an 11203) stops before it: the block's end row and bend row belong to avcore's corner rule; when the row
+   before the bend holds no straight half (the walk enters through a corner + T's T row), the T row goes too. The
+   cells left out are marked, so no nose is written on them. -> the part's new length */
+static int avd_corner_trim(AvxPass *p, int pos[][2][2], int n) {
+    int j, h, cut, i;
+    if (!avd_on()) return n;
+    for (j = 0; j < n; j++) {
+        for (h = 0; h < 2; h++)
+            if (avx_stock_of((WORD)(avx_at(p, pos[j][h][0], pos[j][h][1]) & 0xffff)) == 11203) break;
+        if (h == 2) continue;
+        cut = j - 1;
+        if (cut >= 1 && !avx_is_half((WORD)(avx_at(p, pos[j - 1][0][0], pos[j - 1][0][1]) & 0xffff)) &&
+            !avx_is_half((WORD)(avx_at(p, pos[j - 1][1][0], pos[j - 1][1][1]) & 0xffff))) cut--;
+        if (cut < 0) cut = 0;
+        for (i = cut; i <= j; i++)
+            for (h = 0; h < 2; h++) {
+                int ix = avx_ix(p, pos[i][h][0], pos[i][h][1]);
+                if (ix >= 0) p->cblk[ix] = 1;
+            }
+        return cut;
+    }
+    return n;
+}
+
 /* segments and boxes from the straight pairs in (ox0, oz0)-(ox1, oz1) (twin avjunc_rule.find) */
 static void avx_find(AvxPass *p, int ox0, int oz0, int ox1, int oz1) {
     int x, z, axis, sg, lim = avd_on() ? AVX_MAXWALK : AVX_MAXSEG;
     for (z = oz0; z <= oz1; z++)
         for (x = ox0; x <= ox1; x++)
             for (axis = 0; axis < 2; axis++) {
-                if (!avx_pair(p, x, z, axis)) continue;
+                int xseed = 0;
+                if (!avx_pair(p, x, z, axis)) {
+                    if (!avd_on() || !avd_cross_pair(p, x, z, axis)) continue;
+                    xseed = 1;                                    /* task avdiamond D2: walks toward a ramp only */
+                }
                 for (sg = -1; sg <= 1; sg += 2) {
                     int pos[AVX_MAXWALK][2][2], np = 0, k = 1, bad = 0, i, h, ramp = 0, s0;
                     for (;;) {
@@ -765,6 +808,7 @@ static void avx_find(AvxPass *p, int ox0, int oz0, int ox1, int oz1) {
                                 if (avd_ramp((WORD)(avx_at(p, cx + AVX_DIR[e][0], cz + AVX_DIR[e][1]) & 0xffff)) &&
                                     avx_conn(p, cx, cz, e)) ramp = 1;
                             }
+                    if (!ramp && xseed) continue;
                     if (!ramp) {                                  /* the old segment */
                         if (bad || np > AVX_MAXSEG) continue;
                         avx_seg(p, axis, sg, pos, np);
@@ -783,12 +827,15 @@ static void avx_find(AvxPass *p, int ox0, int oz0, int ox1, int oz1) {
                                     (sb == 15098 || sb == 11258 || sb == 69 || sb == 67);
                         }
                         if (i < np && !cross) continue;
-                        if (i > s0 && (i < np || !bad) && i - s0 <= AVX_MAXSEG) {
-                            int sub[AVX_MAXSEG][2][2], n = i - s0, j;
-                            for (j = 0; j < n; j++)
-                                for (h = 0; h < 2; h++) { sub[j][h][0] = pos[s0 + j][h][0]; sub[j][h][1] = pos[s0 + j][h][1]; }
-                            if (cross || s0) InterlockedIncrement(&g_avd_n_split);
-                            avx_seg(p, axis, sg, sub, n);
+                        if (i > s0 && (i < np || !bad)) {
+                            int n = avd_corner_trim(p, &pos[s0], i - s0);    /* task avdiamond D2 */
+                            if (n > 0 && n <= AVX_MAXSEG) {
+                                int sub[AVX_MAXSEG][2][2], j;
+                                for (j = 0; j < n; j++)
+                                    for (h = 0; h < 2; h++) { sub[j][h][0] = pos[s0 + j][h][0]; sub[j][h][1] = pos[s0 + j][h][1]; }
+                                if (cross || s0) InterlockedIncrement(&g_avd_n_split);
+                                avx_seg(p, axis, sg, sub, n);
+                            }
                         }
                         s0 = i + 1;
                     }
@@ -1048,14 +1095,15 @@ static void avx_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) 
     n = p->b.w * p->b.h;
     p->cap = strcmp(who, "load") ? 512 : 16384;
     p->kcap = strcmp(who, "load") ? 64 : 4096;
-    p->b.c = (DWORD *)VirtualAlloc(NULL, (SIZE_T)n * 14 + 32 + (SIZE_T)p->cap * sizeof(AvxBox) +    /* avx32: +virt */
+    p->b.c = (DWORD *)VirtualAlloc(NULL, (SIZE_T)n * 15 + 32 + (SIZE_T)p->cap * sizeof(AvxBox) +    /* avx32: +virt, avdiamond: +cblk */
                                    (SIZE_T)p->kcap * sizeof(AvxCorner), MEM_COMMIT, PAGE_READWRITE);
     if (!p->b.c) return;
     p->own = (int *)(p->b.c + n);
     p->link = (BYTE *)(p->own + n); p->nose = p->link + n; p->segm = p->nose + n; p->nst = (signed char *)(p->segm + n);
     p->kmap = (BYTE *)(p->nst + n);
     p->virt = p->kmap + n;                                                                /* task avx32 */
-    p->bx = (AvxBox *)(((ULONG_PTR)(p->virt + n) + 15) & ~(ULONG_PTR)15);
+    p->cblk = p->virt + n;                                                                /* task avdiamond D2 */
+    p->bx = (AvxBox *)(((ULONG_PTR)(p->cblk + n) + 15) & ~(ULONG_PTR)15);
     p->kc = (AvxCorner *)(p->bx + p->cap);
     g_avx_have = 1;
     avx_read(p);

@@ -89,3 +89,41 @@ Pictures (`MAIN\verify\avdiamond\owner_shots\`, not in git): `d1_584_diamond_z4.
 sc3netmod: stock yellow centre line).
 
 Not done in D1: English-UK in game (offline only, known limitation); the 598 crossing (needs D2).
+
+## D2a: the corner knot with an off-ramp, (598..600,116..118)
+
+Shape: the z avenue 598/599 turns into the x avenue z 117/118 through a corner whose inner bend (599,117) and the half
+beside it (599,118) are linked T's (avpaint's corner + T). The T row is (600,117)/(600,118), its road the off-ramp 15140
+at (600,119). On the corner's z side there is no band, only a link row (116), the ramp T (115) and the crossing
+(113/114). The x avenue has no straight pair at all (T row, 11258 crossing 601/602, on-ramp T 603, corner 604/605).
+
+What changed:
+- AVX, ramp walks only (twin `avjunc_rule.corner_trim`, `cross_pair`; C `avd_corner_trim`, `avd_cross_pair`): a crossing
+  row seeds a walk too (kept only when it touches a ramp); a walk part that runs into a corner block (a position with an
+  11203) stops before the block's end row, and also before a corner + T's T row when the row before the bend holds no
+  straight half; the block cells get no nose. New boxes: (598,115) (on-ramp T, median opening at (599,115)) and
+  (603,117)/(603,118) (on-ramp T on the x avenue). Existing box pieces cover them.
+- AVL (`sc3netmod_avl.c`, switch SC3NETMOD_AVDIAMOND): a corner + T's corner side may be a junction row: two avlj pieces
+  (AVX's link noses at (598,116)/(599,116)) whose letters carry the corner band's directions (`avd_ct_joinrow`). The band
+  beyond the T row then decides the block alone and writes it (`avl_corner_block`, the old corner writer moved into a
+  function); the linked inner bend answers avl_dir with the join cell's travel, so AVX reads its arm one-way. A road arm
+  of the T row that is an off-ramp gets mode I. Missing corner + T pieces are logged (`avl: corner + T: no avlt piece`).
+- Package avenue_diamond: `avlt 20857 IAAI TIIO` (base 43, art = avjunc box painter IAAI), the T row cell with the
+  off-ramp below it. The other three corner + T cells reuse avpaint's 21736 / 21737 / 21738.
+
+| check | result |
+|---|---|
+| offline diff, 15 shipped cities + owner save | 133 changed boxes on ramp walks, **0 outside the ramp cases**; twin 38 boxes on the owner save = game |
+| package check / selfblock / avlanes | PASSED, 0 of 8, unchanged ids 20850..20856 |
+| seams in 597..604 x 111..119, live pieces, `avlanes.check` | ENGLISH 0 problems in 80 checks; English-UK 24, every one where a right-hand piece meets a stock two-way piece (the accepted UK limitation) |
+| owner save, load | 38 boxes, 34 one-way bands: new `(598,113) rows 0..1 -> one-way (join / join)`, `(601,117) rows 0..1 -> one-way (T row of a corner + T / join)` |
+| live cells | 598 / 599: 112 box, 113 / 114 21716 / 21717, 115 box 20805 / 20806, 116 one-way link noses 21773 / 21772, 117 21700.1 + 21736.2, 118 21701.2 + 21737.1; T row 21738.3 / 20857.0; 601 / 602 21715 / 21714; 603 box 20829 / 20831 (E arms two-way: the corner 604 / 605 is in the D4 chain) |
+| save + reload | save 964 variant tiles; reload `all 964 restored`, same one-way band list, live grid 578..612 x 104..150 identical |
+| without sc3netmod | 0 variant ids, grid = saved bases; corner + T cells keep their stock bases; 14 cells differ from the original save, all AVX's box / link-row base rule (D1's 8 plus (598,115), (598,116), (599,115), (599,116), (603,117), (603,118)) |
+| cars, 120 s, box 594..607 x 106..124 | **no ground road car entered the knot**: every class-0 sample there is at highway height (y 35..36 k), the rest subway trains. Direction on these cells is shown offline only (seams above) |
+
+Pictures: `d2_598_knot_z4.png`, `d2_598_knot_z4_rot2.png`.
+
+Still two-way, by the chain rule: z 604/605 (120..130) -> tight corner (605,131) -> x 131/132 -> corner + T (608,132) ->
+row 133 -> (608,134) with no road. D2b (the 603..605 corner with a linked inner bend) and D3 (the tight corner) are
+both in that chain, so on the owner's save neither can convert before D4 is solved.

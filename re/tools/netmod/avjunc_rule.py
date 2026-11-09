@@ -342,11 +342,47 @@ def split_ramp_segment(L, P, B, pos, why):
         runs.append((cur, False))
     out = []
     for sub, closed in runs:
+        sub = corner_trim(L, P, sub)
+        if not sub:
+            continue
         w = None if closed else why
         if w is None and len(sub) >= MAXSEG:
             w = long_why
         out.append((sub, w))
     return out
+
+
+def corner_trim(L, P, sub):
+    """task avdiamond D2: a ramp walk part that runs into an avenue corner block (a position holding an 11203) stops
+    before the block: the block's end row and bend row belong to avcore's corner rule (corner / corner + T). When the
+    row before the bend holds no straight half (both cells a linked T: the walk enters through the T row of a corner + T),
+    the T row is avcore's too and goes as well."""
+    if not DIAMOND:
+        return sub
+    for i, pr in enumerate(sub):
+        if any(L.get(c) and P.stock_of(L[c][0]) == 11203 for c in pr):
+            cut = i - 1
+            if cut >= 1 and not any(L.get(c) and P.is_half(L[c][0]) for c in sub[i - 1]):
+                cut -= 1
+            cut = max(cut, 0)
+            P.corner_cells |= {c for pr in sub[cut:i + 1] for c in pr}   # no nose on them (avcore's block)
+            return sub[:cut]
+    return sub
+
+
+def cross_pair(L, P, a, b, axis):
+    """task avdiamond D2: both cells an avcore crossing base with its road along the band (a band row of crossings,
+    no straight pair needed). Road axis at state 0: 15098 along z, 11258 / 69 / 67 along x; odd states turn it."""
+    pa, pb = L.get(a), L.get(b)
+    if not (pa and pb):
+        return False
+    ba, bb = P.stock_of(pa[0]), P.stock_of(pb[0])
+    if ba not in CROSS_ROW or ba != bb:
+        return False
+    r0 = "z" if ba == 15098 else "x"
+    def road(st):
+        return r0 if st % 2 == 0 else ("x" if r0 == "z" else "z")
+    return road(pa[1] & 3) == axis and road(pb[1] & 3) == axis
 
 
 def find(L, P, roads, drop=frozenset(), bv=True, caps=True, tees=True, ends=True):
@@ -359,15 +395,22 @@ def find(L, P, roads, drop=frozenset(), bv=True, caps=True, tees=True, ends=True
         P.virt = end_caps(L, P, P.virt)              # task avxroad (img3)
     bvc = bv_cells(roads) if bv else set()            # task avx32
     P.ramp_cells = set()                              # task avdiamond: cells of every segment walk touching a ramp
+    P.corner_cells = set()                            # task avdiamond D2: corner blocks a ramp walk stopped at
     segs = {}
+    seeds = []
     for (x, z), p in L.items():
-        if not P.is_half(p[0]) or (p[1] & 3) not in (1, 2):
-            continue
-        axis = "z" if (p[1] & 3) == 1 else "x"
+        if P.is_half(p[0]) and (p[1] & 3) in (1, 2):
+            axis = "z" if (p[1] & 3) == 1 else "x"
+            a0, b0 = Band(axis).cells(x, z)
+            if straight_pair(L, P, a0, b0, axis):
+                seeds.append((axis, a0, b0, False))
+        if DIAMOND and P.stock_of(p[0]) in CROSS_ROW:          # task avdiamond D2: crossing rows seed ramp walks
+            for axis in ("x", "z"):
+                a0, b0 = Band(axis).cells(x, z)
+                if cross_pair(L, P, a0, b0, axis):
+                    seeds.append((axis, a0, b0, True))
+    for axis, a0, b0, xseed in seeds:
         B = Band(axis)
-        a0, b0 = B.cells(x, z)
-        if not straight_pair(L, P, a0, b0, axis):
-            continue
         for sg in (1, -1):
             pos, k, why, term = [], 1, None, "band"
             lim = MAXWALK if DIAMOND else MAXSEG
@@ -389,6 +432,8 @@ def find(L, P, roads, drop=frozenset(), bv=True, caps=True, tees=True, ends=True
                     break
             if not pos:
                 continue
+            if xseed and not any(ramp_arm(L, P, pr[h], B.out[h]) for pr in pos for h in (0, 1)):
+                continue                                    # a crossing seed only walks toward a ramp
             subs = split_ramp_segment(L, P, B, pos, why)
             if DIAMOND and any(ramp_arm(L, P, pr[h], B.out[h]) for pr in pos for h in (0, 1)):
                 end = (a0[0] + sg * B.step[0] * k, a0[1] + sg * B.step[1] * k)          # task avdiamond: for checks
@@ -476,7 +521,7 @@ def find(L, P, roads, drop=frozenset(), bv=True, caps=True, tees=True, ends=True
                 noses[n] = dict(links[n] if n in links else {"axis": bx["axis_of"][c], "h": None}, link=True)
                 n = (n[0] + DIRV[side][0], n[1] + DIRV[side][1])
             p = L.get(n)
-            if p and P.is_row(p[0]) and n not in boxcell:
+            if p and P.is_row(p[0]) and n not in boxcell and n not in P.corner_cells:      # task avdiamond D2
                 noses.setdefault(n, {"axis": bx["axis_of"][c], "h": None})
         B = bx["band"]                                   # the crossing avenue's side: its links and first halves
         other = "z" if B.axis == "x" else "x"
@@ -907,6 +952,8 @@ def other_modes(L, P, bands, c):
         return "CCCC"
     if bands.get(c) and P.is_half(p[0]):
         return half_modes(p[1] & 3, True)
+    if P.is_half(p[0]) and c in getattr(P, "corner_cells", ()):   # task avdiamond D2: C's avx_nb_mode reads any
+        return half_modes(p[1] & 3, True)                         # half one-way (a corner half avl_bands lacks)
     if P.stock_of(p[0]) in AVCORE_BAND:                 # avcore's crossing / slope pieces: skipped
         return None
     A = P.arms(p[0], p[1] & 3)

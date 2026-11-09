@@ -24,8 +24,8 @@
    "outline": "AAAI",
    "modes": "IITT",
    "base": 43,
-   "cells": 156,
-   "oneway": 0,
+   "cells": 158,
+   "oneway": 1,
    "example": "Berlin, Germany.sc3 (202, 191)"
   },
   {
@@ -42,7 +42,7 @@
    "outline": "AAAI",
    "modes": "TITT",
    "base": 43,
-   "cells": 156,
+   "cells": 158,
    "oneway": 0,
    "example": "Berlin, Germany.sc3 (202, 191)"
   },
@@ -63,6 +63,15 @@
    "cells": 140,
    "oneway": 0,
    "example": "Berlin, Germany.sc3 (110, 30)"
+  }
+ ],
+ "ct": [
+  {
+   "id": 20857,
+   "outline": "IAAI",
+   "modes": "TIIO",
+   "base": 43,
+   "note": "corner + T, T row cell beside the linked half with an off-ramp on its outside (owner Big One (600,118)), avl_corner_at letters"
   }
  ]
 }

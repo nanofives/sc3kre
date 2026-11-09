@@ -105,6 +105,20 @@
     "png_dir": "art/20856"
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 20857,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue corner junction",
+    "ENGLISH": "Esquina de avenida"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/20857"
+   },
+   "trblkatt": "copy_base"
   }
  ],
  "lanes": [
@@ -135,6 +149,10 @@
   {
    "piece": 20856,
    "spec": "box_20856.lanes.json"
+  },
+  {
+   "piece": 20857,
+   "spec": "ct_20857.lanes.json"
   }
  ],
  "avenue_junction_lines": [
@@ -147,6 +165,7 @@
   "avxm 20856 AAII TIOT"
  ],
  "avenue_lines": [
+  "avlt 20857 IAAI TIIO",
   "avlj 20850 I.O.",
   "avlj 20851 I...",
   "avlj 20852 I...",

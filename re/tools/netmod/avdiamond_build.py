@@ -68,13 +68,25 @@ def cmd_pieces(a):
                         need[k]["cells"] += 1
                         need[k]["oneway"] += 0 if n else 1
     keys = sorted(need, key=lambda k: (-need[k]["oneway"], -need[k]["cells"], k))
-    rows = []
-    for pid, (o, m) in zip(IDS, keys):
-        rows.append({"id": pid, "outline": o, "modes": m, "base": R.save_base(o), **need[(o, m)]})
+    p = os.path.join(a.pack, "avdiamond_pieces.json")
+    prev = json.load(open(p)) if os.path.exists(p) else {}
+    old = prev.get("box", [])                                        # ids are stable: saved cities hold them
+    rows, taken = [], set()
+    for r in old:
+        k = (r["outline"], r["modes"])
+        rows.append({"id": r["id"], "outline": r["outline"], "modes": r["modes"], "base": r["base"],
+                     **need.get(k, {"cells": 0, "oneway": 0, "example": "(no longer needed by the scan)"})})
+        taken.add(k)
+    free = [i for i in IDS if i not in {r["id"] for r in rows}]
+    for k in keys:
+        if k in taken:
+            continue
+        if not free:
+            raise SystemExit("out of ids (20850..20899)")
+        rows.append({"id": free.pop(0), "outline": k[0], "modes": k[1], "base": R.save_base(k[0]), **need[k]})
     out = {"_": "avdiamond_build.py pieces: box cells with an off-ramp edge (mode I on the outside edge) that "
                 "avenue_junctions lacks; outline / modes N E S W at state 0 as avjunc_build",
-           "box": rows}
-    p = os.path.join(a.pack, "avdiamond_pieces.json")
+           "box": rows, "ct": prev.get("ct", [])}                 # corner + T cells: kept by hand (D2)
     os.makedirs(a.pack, exist_ok=True)
     json.dump(out, open(p, "w", newline="\n"), indent=1)
     print("wrote %s: %d pieces" % (p, len(rows)))
@@ -93,6 +105,8 @@ def table_lines(T):
     out = []
     for r in T["box"]:
         out.append("avxm %d %s %s" % (r["id"], r["outline"], r["modes"]))
+    for r in T.get("ct", []):
+        out.append("avlt %d %s %s" % (r["id"], r["outline"], r["modes"]))
     for r in T["box"]:
         e_ramp = ramp_edge(r["outline"], r["modes"])
         lj = "".join(m if (o == "A" and m in "IO" and e != e_ramp) else "."
@@ -126,6 +140,18 @@ def cmd_build(a):
                          "name": {"*": "Avenue ramp junction", "ENGLISH": "Cruce de avenida con rampa"},
                          "art": {"from": 43, "png_dir": "art/%d" % r["id"]}, "trblkatt": "copy_base"})
         outlines.setdefault(r["outline"], []).append(r["id"])
+    for r in T.get("ct", []):                       # task avdiamond D2: corner + T cells (sc3netmod_avl.c `avlt`)
+        spec, ln = AB.box_spec(r["id"], r["outline"], r["modes"], r["base"], game, plan, peds[r["base"]])
+        spec["_"] = ("avdiamond_build.py: avenue corner + T cell, outline %s modes %s (N E S W, state 0), saved as %d"
+                     % (r["outline"], r["modes"], r["base"]))
+        nlanes += len(ln)
+        fn = "ct_%d.lanes.json" % r["id"]
+        json.dump(spec, open(os.path.join(a.pack, fn), "w", newline="\n"), indent=1)
+        lanes_entries.append({"piece": r["id"], "spec": fn})
+        variants.append({"id": r["id"], "base": r["base"], "network": "ROAD",
+                         "name": {"*": "Avenue corner junction", "ENGLISH": "Esquina de avenida"},
+                         "art": {"from": 43, "png_dir": "art/%d" % r["id"]}, "trblkatt": "copy_base"})
+        outlines.setdefault(r["outline"], []).append(r["id"])
     if plan.shapes:
         first = os.path.join(a.pack, lanes_entries[0]["spec"])
         sp = json.load(open(first))
@@ -147,7 +173,7 @@ def cmd_build(a):
         "variants": sorted(variants, key=lambda v: v["id"]),
         "lanes": lanes_entries,
         "avenue_junction_lines": [ln for ln in lines if ln.startswith("avx")],
-        "avenue_lines": [ln for ln in lines if ln.startswith("avlj")],
+        "avenue_lines": [ln for ln in lines if ln.startswith(("avlj", "avlt"))],
     }
     json.dump(man, open(os.path.join(a.pack, "manifest.json"), "w", newline="\n"), indent=1)
     print("specs: %d box pieces (%d lanes); new curve shapes %s" % (len(T["box"]), nlanes, sorted(plan.shapes)))
