@@ -1,0 +1,102 @@
+{
+ "_": "avdiamond_build.py pieces: box cells with an off-ramp edge (mode I on the outside edge) that avenue_junctions lacks; outline / modes N E S W at state 0 as avjunc_build",
+ "box": [
+  {
+   "id": 20850,
+   "outline": "AAAI",
+   "modes": "IIOT",
+   "base": 43,
+   "cells": 156,
+   "oneway": 39,
+   "example": "Berlin, Germany.sc3 (202, 191)"
+  },
+  {
+   "id": 20851,
+   "outline": "AAII",
+   "modes": "IIOT",
+   "base": 43,
+   "cells": 282,
+   "oneway": 36,
+   "example": "Berlin, Germany.sc3 (110, 30)"
+  },
+  {
+   "id": 20852,
+   "outline": "AAAI",
+   "modes": "IITT",
+   "base": 43,
+   "cells": 156,
+   "oneway": 0,
+   "example": "Berlin, Germany.sc3 (202, 191)"
+  },
+  {
+   "id": 20853,
+   "outline": "AAAI",
+   "modes": "TIOT",
+   "base": 43,
+   "cells": 156,
+   "oneway": 0,
+   "example": "Berlin, Germany.sc3 (202, 191)"
+  },
+  {
+   "id": 20854,
+   "outline": "AAAI",
+   "modes": "TITT",
+   "base": 43,
+   "cells": 156,
+   "oneway": 0,
+   "example": "Berlin, Germany.sc3 (202, 191)"
+  },
+  {
+   "id": 20855,
+   "outline": "AAII",
+   "modes": "TITT",
+   "base": 43,
+   "cells": 142,
+   "oneway": 0,
+   "example": "Berlin, Germany.sc3 (110, 30)"
+  },
+  {
+   "id": 20856,
+   "outline": "AAII",
+   "modes": "TIOT",
+   "base": 43,
+   "cells": 140,
+   "oneway": 0,
+   "example": "Berlin, Germany.sc3 (110, 30)"
+  }
+ ],
+ "ct": [
+  {
+   "id": 20857,
+   "outline": "IAAI",
+   "modes": "TIIO",
+   "base": 43,
+   "note": "corner + T, T row cell beside the linked half with an off-ramp on its outside (owner Big One (600,118)), avl_corner_at letters"
+  },
+  {
+   "id": 20861,
+   "outline": "AAAA",
+   "modes": "IOIO",
+   "base": 43,
+   "note": "tight corner X (avl_tight_at): two U-ends sharing an X, owner Big One (605,131)"
+  }
+ ],
+ "hwtx": {
+  "_": "task avdiamond D4: crossing twins of hwt's 21227 (T cell (7,1)) with a road under it; base 15098, stock 15098 art",
+  "cell": [
+   7,
+   1
+  ],
+  "twin": 20858,
+  "oneway": [
+   [
+    20859,
+    21716
+   ],
+   [
+    20860,
+    21717
+   ]
+  ]
+ }
+}

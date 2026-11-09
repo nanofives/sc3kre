@@ -40,7 +40,7 @@
 #define AVL_MAXJ 4096                                       /* every package's avlj lines together */
 #define AVL_MAXLEN 4096                                     /* longest band walked, rows */
 
-typedef struct { WORD piece, base; BYTE side; } AvlC;
+typedef struct { WORD piece, base; BYTE side; WORD fam; } AvlC;   /* fam: task avdiamond D4, 0 = the stock base's own */
 typedef struct { WORD piece; char e[4]; } AvlJ;
 static WORD g_avl_uturn, g_avl_corner;                      /* g_avl_straight, g_avl_on: sc3netmod_rbt.c */
 static AvlC g_avl_c[AVL_MAXC];
@@ -70,14 +70,18 @@ static void avl_line(const char *path, const char *line) {
         return;
     }
     if (!strncmp(line, "avlc ", 5)) {
-        if (sscanf(line + 5, "%lu %lu %lu", &v, &b, &s) != 3 || !v || v > 0xffff || !b || b > 0xffff || s > 3 ||
-            g_base[v] != (WORD)b || g_avl_nc >= AVL_MAXC) {
+        unsigned long fam = 0;                     /* task avdiamond D4: avlc <piece> <base> <side> [<family>] */
+        int nf = sscanf(line + 5, "%lu %lu %lu %lu", &v, &b, &s, &fam);
+        if (nf < 3 || !v || v > 0xffff || !b || b > 0xffff || s > 3 || g_base[v] != (WORD)b || g_avl_nc >= AVL_MAXC ||
+            (nf == 4 && (fam > 0xffff || g_base[fam] != (WORD)b))) {
             logf("### avl: %s: bad crossing line (or not a variant of its base, or too many): '%s'", path, line);
             return;
         }
         g_avl_c[g_avl_nc].piece = (WORD)v; g_avl_c[g_avl_nc].base = (WORD)b; g_avl_c[g_avl_nc].side = (BYTE)s;
+        g_avl_c[g_avl_nc].fam = nf == 4 ? (WORD)fam : 0;
         g_avl_nc++;
-        logf("avl: %s: one-way %lu on base %lu, lanes toward side %lu at state 0", path, v, b, s);
+        logf("avl: %s: one-way %lu on base %lu, lanes toward side %lu at state 0%s", path, v, b, s,
+             nf == 4 ? " (family of a two-way crossing piece)" : "");
         return;
     }
     if (!strncmp(line, "avlj ", 5)) {
@@ -122,7 +126,7 @@ static int avl_claimed(int x, int z) {
 /* ---------------------------------------------------------------- lazy cell reads for one pass */
 typedef struct { BYTE *mgr; void *lay; int W, H; DWORD *c; BYTE *rd, *seen; } AvlPass;
 
-static DWORD avl_at(AvlPass *p, int x, int z) {
+static DWORD avl_raw(AvlPass *p, int x, int z) {
     int i;
     if (x < 0 || z < 0 || x >= p->W || z >= p->H) return 0;
     if (!p->rd) return rb_read(p->mgr, p->lay, x, z, p->W, p->H);   /* avl_band_ok: no cache */
@@ -131,30 +135,104 @@ static DWORD avl_at(AvlPass *p, int x, int z) {
     return p->c[i];
 }
 
+static int avd_on(void);                                     /* sc3netmod_avx.c */
+static int avd_near_hwy(BYTE *mgr, void *lay, int x, int z, int W, int H);
+static int avd_ramp(WORD id);
+static int avx_arms(DWORD v);
+static int avx_is_corner(WORD id);
+/* task avdiamond D3a (owner's Big One (609,132)): an avenue corner whose outer cell is a T with a road out, where the
+   stock tiler left a plain road 29 in place of the half beside the inner bend's row. Read as that half (11204 at the
+   state whose median faces the inner bend) when: the 29 lies along a band axis, an 11203 bend is beside it across that
+   axis, a T 39 / X 43 / AVX corner piece is next to it along the axis, and the cell beside that one on the bend's side
+   is a straight half. Same reading in AVX's corner junctions (avx_corners). Off with SC3NETMOD_AVDIAMOND=0. */
+static DWORD avl_at(AvlPass *p, int x, int z) {
+    static const signed char D[4][2] = { { 0, -1 }, { 1, 0 }, { 0, 1 }, { -1, 0 } };
+    DWORD v = avl_raw(p, x, z);
+    int t, s, a;
+    if ((v & 0xffff) == 39 && avd_on()) {
+        /* task avdiamond D2b (owner's Big One (604,119)): a T whose third arm points at the side of a ramp end that has
+           no arm back (the stock tiler's dangling arm beside an on-ramp) is read without it: a straight half when the
+           two arms left are opposite and the cell across is the partner half of a band */
+        int A = avx_arms(v), m = A, d;
+        if (A <= 0) return v;
+        for (d = 0; d < 4; d++) {
+            DWORD n;
+            int B;
+            if (!(A & (1 << d))) continue;
+            n = avl_raw(p, x + D[d][0], z + D[d][1]);
+            if (!n || !avd_ramp((WORD)(n & 0xffff))) continue;
+            B = avx_arms(n);
+            if (B > 0 && (B & (1 << ((d + 2) & 3)))) continue;
+            m &= ~(1 << d);
+        }
+        if (m == A || !(m == 0x5 || m == 0xa)) return v;            /* N+S (0x5) or E+W (0xa) */
+        for (s = 0; s < 4; s++) {                                    /* the partner half across: median toward it */
+            DWORD q;
+            if (m & (1 << s)) continue;
+            q = avl_raw(p, x + D[s][0], z + D[s][1]);
+            if ((q & 0xffff) == 11204 && (int)((q >> 16) & 3) == ((s + 2) & 3))
+                return (v & ~0x3ffffUL) | 11204UL | ((DWORD)s << 16);
+        }
+        return v;
+    }
+    if ((v & 0xffff) != 29 || !avd_on() || !avd_near_hwy(p->mgr, p->lay, x, z, p->W, p->H)) return v;
+    t = (int)((v >> 16) & 1);                                 /* 29: state 0 along x, 1 along z */
+    for (s = t ? 1 : 0; s < 4; s += 2) {                      /* across the axis: E / W along z, N / S along x */
+        DWORD n = avl_raw(p, x + D[s][0], z + D[s][1]);
+        WORD ni = (WORD)(n & 0xffff), nb = ni < 20000 ? ni : g_base[ni];
+        if (!n || nb != 11203) continue;
+        for (a = t ? 0 : 1; a < 4; a += 2) {                  /* along the axis: the outer cell */
+            DWORD o = avl_raw(p, x + D[a][0], z + D[a][1]), m2;
+            WORD oi = (WORD)(o & 0xffff), mi;
+            if (!o || !(oi == 39 || oi == 43 || avx_is_corner(oi))) continue;
+            m2 = avl_raw(p, x + D[a][0] + D[s][0], z + D[a][1] + D[s][1]);
+            mi = (WORD)(m2 & 0xffff);
+            if (!(mi == 11204 || (g_avl_straight && mi == g_avl_straight))) continue;
+            return (v & ~0x3ffffUL) | 11204UL | ((DWORD)s << 16);
+        }
+    }
+    return v;
+}
+
 #define AVL_ID(v) ((WORD)((v) & 0xffff))
 #define AVL_ST(v) ((int)(((v) >> 16) & 3))
 
 static int avl_is_straight(WORD id) { return id == 11204 || (g_avl_straight && id == g_avl_straight); }
 
+/* task avdiamond D4: a crossing FAMILY = another block's two-way crossing piece (hwt's 21227 crossing twin, base 15098)
+   with its own one-way variants (avlc ... <family>). A cell holding the family piece is a crossing row like its base;
+   AVL writes the family's one-way variants there, and gives the family piece back (not the base) when it reverts.
+   -> the family of a cell id (the two-way piece), 0 none */
+static WORD avl_fam_of(WORD id) {
+    int k;
+    if (!id) return 0;
+    for (k = 0; k < g_avl_nc; k++)
+        if (g_avl_c[k].fam && (g_avl_c[k].fam == id || g_avl_c[k].piece == id)) return g_avl_c[k].fam;
+    return 0;
+}
+
 /* the crossing table entry for a cell id (stock base or one of our variants), -1 none */
 static int avl_cross_of(WORD id) {
     int k;
-    for (k = 0; k < g_avl_nc; k++) if (g_avl_c[k].piece == id || g_avl_c[k].base == id) return k;
+    WORD f = avl_fam_of(id);
+    for (k = 0; k < g_avl_nc; k++)
+        if (g_avl_c[k].fam == f && (g_avl_c[k].piece == id || g_avl_c[k].base == id || (f && f == id))) return k;
     return -1;
 }
 
-/* the variant of base `b` whose lanes run toward world side `dir` at state `st`, 0 none */
-static WORD avl_cross_want(WORD b, int st, int dir) {
+/* the variant of base `b` (of family `f`, 0 = the stock one) whose lanes run toward world side `dir` at state `st` */
+static WORD avl_cross_want_f(WORD b, int st, int dir, WORD f) {
     int k;
     for (k = 0; k < g_avl_nc; k++)
-        if (g_avl_c[k].base == b && ((g_avl_c[k].side + st) & 3) == dir) return g_avl_c[k].piece;
+        if (g_avl_c[k].base == b && g_avl_c[k].fam == f && ((g_avl_c[k].side + st) & 3) == dir) return g_avl_c[k].piece;
     return 0;
 }
+#define avl_cross_want(b, st, dir) avl_cross_want_f((b), (st), (dir), 0)
 
 static int avl_free(AvlPass *p, int x, int z, DWORD v) {
     WORD id = AVL_ID(v);
     if (!v) return 0;
-    if (id >= 20000 && !avl_own(id)) return 0;
+    if (id >= 20000 && !avl_own(id) && !avl_fam_of(id)) return 0;    /* task avdiamond D4: a family piece is free */
     if (dbv_claimed(x, z) || hwave_claimed(x, z)) return 0;
     (void)p;
     return 1;
@@ -266,7 +344,7 @@ typedef struct { WORD piece; char ol[4], md[4]; } AvlT;
 #define AVL_MAXT 16
 static AvlT g_avl_t[AVL_MAXT];
 static int g_avl_nt, g_avl_ct = -1;
-typedef struct { int n, link_in, link_m2; int x[4], z[4]; DWORD want[4]; BYTE mapv[4]; } AvlCT;
+typedef struct { int n, link_in, link_m2, join; int x[4], z[4]; DWORD want[4]; BYTE mapv[4]; } AvlCT;   /* join: D2b */
 
 static int avl_ct_on(void) {
     if (g_avl_ct < 0) {
@@ -323,11 +401,18 @@ static DWORD avl_ct_find(DWORD v, const char *ol, const char *md) {
 
 static int avl_ct_cell(AvlCT *ct, int x, int z, DWORD v, const char *ol, const char *md, BYTE mapv) {
     DWORD w = avl_ct_find(v, ol, md);
+    if (!w) {                                                     /* task avdiamond D2: which piece is missing */
+        static volatile LONG nmiss;
+        if (InterlockedIncrement(&nmiss) <= 40)
+            logf("avl: corner + T: no avlt piece for (%d,%d) %u.%d (base %u) outline %.4s modes %.4s (world N E S W)",
+                 x, z, AVL_ID(v), AVL_ST(v), avx_stock_of(AVL_ID(v)), ol, md);
+    }
     if (!w || ct->n >= 4) return 0;
     ct->x[ct->n] = x; ct->z[ct->n] = z; ct->want[ct->n] = w; ct->mapv[ct->n] = mapv; ct->n++;
     return 1;
 }
 
+static int avd_ct_joinrow(AvlPass *p, int oaxis, int x, int z, int k1);   /* task avdiamond D2 */
 static int avl_corner_at(AvlPass *p, int axis, int ax, int az, int k, int end, int *oaxis, int *ox, int *oz, int *oass,
                          int *stage, AvlCT *ct) {
     int dx = axis ? 1 : 0, dz = axis ? 0 : 1, fwd = end > 0, ib;
@@ -340,7 +425,7 @@ static int avl_corner_at(AvlPass *p, int axis, int ax, int az, int k, int end, i
     if (!stage) stage = &dummy;
     if (!ct) ct = &ct0;
     *stage = 0;
-    ct->n = ct->link_in = ct->link_m2 = 0;
+    ct->n = ct->link_in = ct->link_m2 = ct->join = 0;
     if (!a || !b || !a2 || !b2) return 0;
     for (ib = 0; ib < 2; ib++) {
         const signed char *S = AVL_CST[axis][fwd][ib];
@@ -380,6 +465,20 @@ static int avl_corner_at(AvlPass *p, int axis, int ax, int az, int k, int end, i
         if (axis == 0) { *ox = ib ? bx + 1 : x - 1; *oz = min(z, z2); *oass = ib ? -1 : 1; }   /* along x: W / E */
         else { *ox = min(x, x2); *oz = ib ? bz + 1 : z - 1; *oass = ib ? -1 : 1; }            /* along z: N / S */
         if (!lin && !lm2 && avl_row(p, *oaxis, *ox, *oz, 0)) return ib + 1;
+        if (!lm2 && avd_on() && avd_ct_joinrow(p, *oaxis, *ox, *oz, ib ? -1 : 1) &&
+            avd_near_hwy(p->mgr, p->lay, ib ? bx : x, ib ? bz : z, p->W, p->H)) {   /* (lin: a linked 39, or a bend:
+                                                                    our corner piece after a reload, or a stock 11203) */
+            /* task avdiamond D2b (owner's Big One (604..605,117..118)): the inner bend is a 39 whose extra arm (toward
+               the next row) leads nowhere, and the other side of the block is a junction (AVX's box (603,117/118)), not
+               a band: the corner converts with this band alone. The bend is written as avcore's corner piece at the
+               11203 state the corner wants (it saves as that 11203: the stub arm goes) and answers avl_dir toward the
+               junction, so AVX reads that box arm one-way */
+            int sT = axis ? (ib ? 2 : 0) : (ib ? 1 : 3), ix = ib ? bx : x, iz = ib ? bz : z;
+            ct->x[0] = ix; ct->z[0] = iz; ct->want[0] = ((DWORD)g_avl_corner << 8) | (DWORD)S[iin];
+            ct->mapv[0] = (BYTE)(1 + sT); ct->n = 1;
+            ct->link_in = 1; ct->link_m2 = 0; ct->join = 1;
+            return ib + 1;
+        }
         if (!cton) return 0;
         {   /* corner + T: the T row at (ox, oz), the other band one row further out */
             int ix = ib ? bx : x, iz = ib ? bz : z;                /* the inner bend */
@@ -425,13 +524,19 @@ static int avl_corner_at(AvlPass *p, int axis, int ax, int az, int k, int end, i
             ol[oT] = lin ? 'I' : 'A'; md[oT] = fin ? 'I' : 'O';
             ol[sT] = 'A'; md[sT] = fin ? 'O' : 'I';
             ol[sL] = 'I'; md[sL] = 'T';
-            if (ra) { ol[oL] = 'A'; md[oL] = 'T'; }
+            if (ra) {                                              /* task avdiamond D2: an off-ramp's lanes come in */
+                ol[oL] = 'A';
+                md[oL] = avd_ramp(AVL_ID(avl_at(p, tax + AVL_D[oL][0], taz + AVL_D[oL][1]))) == 1 ? 'I' : 'T';
+            }
             if (!avl_ct_cell(ct, tax, taz, ta, ol, md, 0xff)) return 0;
             memset(ol, 'C', 4); memset(md, 'C', 4);                /* T row cell beside the other half */
             ol[oT] = lm2 ? 'I' : 'A'; md[oT] = fin ? 'O' : 'I';
             ol[sT] = 'A'; md[sT] = fin ? 'I' : 'O';
             ol[oL] = 'I'; md[oL] = 'T';
-            if (rb) { ol[sL] = 'A'; md[sL] = 'T'; }
+            if (rb) {
+                ol[sL] = 'A';
+                md[sL] = avd_ramp(AVL_ID(avl_at(p, tbx + AVL_D[sL][0], tbz + AVL_D[sL][1]))) == 1 ? 'I' : 'T';
+            }
             if (!avl_ct_cell(ct, tbx, tbz, tb, ol, md, 0xff)) return 0;
             return ib + 1;
         }
@@ -449,20 +554,107 @@ static int avl_on_stack(AvlStack *stk, int axis, int x, int z) {
     return 0;
 }
 
+/* task avdiamond D2 (owner's Big One (598..600,116..118)): the corner band's side of a corner + T may be a junction
+   instead of a band: the row beside the block holds two avlj pieces (AVX's link noses after the ramp box (598,115)) whose
+   letters on the side facing the block carry the corner band's directions. The block is then decided with the band
+   beyond the T row alone, and that band writes it. Off with SC3NETMOD_AVDIAMOND=0 (avd_on, sc3netmod_avx.c). */
+static int avd_ct_joinrow(AvlPass *p, int oaxis, int x, int z, int k1) {
+    int bx = x + (oaxis ? 0 : 1), bz = z + (oaxis ? 1 : 0);
+    int face = oaxis ? (k1 > 0 ? 1 : 3) : (k1 > 0 ? 2 : 0);          /* the join row's side facing the block */
+    int ta = oaxis ? 1 : 0, tb = oaxis ? 3 : 2;                       /* along z: A runs N, B S; along x: A E, B W */
+    DWORD a = avl_at(p, x, z), b = avl_at(p, bx, bz);
+    char la, lb;
+    if (!a || !b || !avd_on()) return 0;
+    la = avl_letter(AVL_ID(a), AVL_ST(a), face);
+    lb = avl_letter(AVL_ID(b), AVL_ST(b), face);
+    /* a half running away from the block (toward (face + 2)) enters the join across `face`: I; the other leaves: O */
+    return la && lb && la == (ta == ((face + 2) & 3) ? 'I' : 'O') && lb == (tb == ((face + 2) & 3) ? 'I' : 'O');
+}
+
 /* task avpaint: is the row at offset k (past the run, toward `end`) the T row of a corner + T whose corner band is the
-   other axis? -> 1 with that band's first-half cell (*sx, *sz) and its end facing the corner (*se) */
-static int avl_ct_side(AvlPass *p, int axis, int ax, int az, int k, int end, int *sx, int *sz, int *se) {
+   other axis? -> 1 with that band's first-half cell (*sx, *sz) and its end facing the corner (*se); *join = 1 when that
+   side is a junction row (avd_ct_joinrow), not a band */
+static int avl_ct_side(AvlPass *p, int axis, int ax, int az, int k, int end, int *sx, int *sz, int *se, int *join) {
     int dx = axis ? 1 : 0, dz = axis ? 0 : 1, c;
+    if (join) *join = 0;
     if (!avl_ct_on()) return 0;
     for (c = 0; c < 2; c++) {
-        int ax1, az1, k1 = c ? -1 : 1, e1 = c ? -1 : 1, oa, ox, oz, os;
+        int ax1, az1, k1 = c ? -1 : 1, e1 = c ? -1 : 1, oa, ox, oz, os, jn = 0;
         AvlCT ct;
         if (axis == 1) { ax1 = min(ax + dx * (k + end), ax + dx * (k + 2 * end)); az1 = c ? az + 2 : az - 1; }
         else { az1 = min(az + dz * (k + end), az + dz * (k + 2 * end)); ax1 = c ? ax + 2 : ax - 1; }
-        if (!avl_row(p, 1 - axis, ax1, az1, 0)) continue;
+        if (!avl_row(p, 1 - axis, ax1, az1, 0)) {
+            if (!avd_ct_joinrow(p, 1 - axis, ax1, az1, k1)) continue;
+            jn = 1;
+        }
         if (!avl_corner_at(p, 1 - axis, ax1, az1, k1, e1, &oa, &ox, &oz, &os, NULL, &ct) || !ct.n) continue;
         if (oa != axis || ox != ax + dx * (k - end) || oz != az + dz * (k - end)) continue;
         *sx = ax1; *sz = az1; *se = e1;
+        if (join) *join = jn;
+        return 1;
+    }
+    return 0;
+}
+
+/* task avdiamond D3 (owner's Big One (604..605,131..132)): a TIGHT corner. Two bands meet at a shared X 43: the end
+   row of this band holds its U-turn bend P (the 11203 of the end pattern) and the X Q; the cell Q' past Q (in this
+   band's direction) is the other band's U-turn bend, and the other band begins beside Q / Q'. One-way: P and Q' are U-turn
+   quarters (avlu), Q an avlt piece (outline AAAA) carrying this band's half in Q's column (it runs into the corner)
+   to the other band's half beside Q, and the other band's half from Q' to the bend P (seen from either band). The
+   mirrored corner needs another piece and is refused. The two bands convert together, as through a corner. */
+typedef struct { int px, pz, qx, qz, q2x, q2z; DWORD want; } AvlTQ;
+static const int AVL_USTATE[2][2][2] = { { { 3, 0 }, { 2, 1 } }, { { 3, 2 }, { 0, 1 } } };   /* [axis][fwd][A/B] */
+static int avl_tight_at(AvlPass *p, int axis, int ax, int az, int k, int end, int *oaxis, int *ox, int *oz, int *oass,
+                        AvlTQ *tq) {
+    int dx = axis ? 1 : 0, dz = axis ? 0 : 1, fwd = end > 0, pk;
+    int x = ax + dx * k, z = az + dz * k, bx = x + (axis ? 0 : 1), bz = z + (axis ? 1 : 0);
+    int dEnd = axis ? (fwd ? 1 : 3) : (fwd ? 2 : 0);
+    if (!avd_on() || !g_avl_uturn) return 0;
+    for (pk = 0; pk < 2; pk++) {                               /* P on A (pk 0) or on B */
+        int px = pk ? bx : x, pz = pk ? bz : z, qx = pk ? x : bx, qz = pk ? z : bz, dPQ, q2x, q2z, oa, s, slot, fw2, hx, hz;
+        DWORD P = avl_at(p, px, pz), Q = avl_at(p, qx, qz), Q2, H, w;
+        WORD qb;
+        char ol[5] = "AAAA", md[4];
+        if (!P || !Q || !avl_is_bend(AVL_ID(P), g_avl_uturn) || AVL_ST(P) != AVL_USTATE[axis][fwd][pk]) continue;
+        if (!avd_near_hwy(p->mgr, p->lay, qx, qz, p->W, p->H)) continue;         /* group D: beside a highway only */
+        qb = AVL_ID(Q) < 20000 ? AVL_ID(Q) : g_base[AVL_ID(Q)];
+        if (qb != 43 || (AVL_ID(Q) != 43 && !avl_is_t(AVL_ID(Q)))) continue;
+        for (dPQ = 0; dPQ < 4 && !(px + AVL_D[dPQ][0] == qx && pz + AVL_D[dPQ][1] == qz); dPQ++) ;
+        if (dPQ == 4) continue;
+        q2x = qx + AVL_D[dEnd][0]; q2z = qz + AVL_D[dEnd][1];
+        Q2 = avl_at(p, q2x, q2z);
+        if (!Q2 || !avl_is_bend(AVL_ID(Q2), g_avl_uturn)) continue;
+        hx = qx - AVL_D[dEnd][0]; hz = qz - AVL_D[dEnd][1];        /* this band's half in Q's column */
+        H = avl_at(p, hx, hz);
+        if (!H) continue;
+        {   int t = (AVL_ST(H) + 3) & 3;                            /* into the corner, or away from it (the other view) */
+            if (t != dEnd && t != ((dEnd + 2) & 3)) continue;
+            hz = t == dEnd;                                         /* reused below as the flag */
+        }
+        oa = 1 - axis;
+        {   /* the other band: first row beside Q / Q' (toward dPQ), its end toward the corner */
+            int c1x = qx + AVL_D[dPQ][0], c1z = qz + AVL_D[dPQ][1], c2x = q2x + AVL_D[dPQ][0], c2z = q2z + AVL_D[dPQ][1];
+            int first = oa ? (c1z < c2z) : (c1x < c2x);             /* along x: A = smaller z; along z: smaller x */
+            *ox = first ? c1x : c2x; *oz = first ? c1z : c2z;
+            slot = first ? 1 : 0;                                   /* Q' is the A cell when c2 is first */
+            s = (dPQ == 1 || dPQ == 2) ? -1 : 1;                     /* the corner lies on its back (-1) or forward end */
+        }
+        fw2 = s > 0;
+        if (AVL_ST(Q2) != AVL_USTATE[oa][fw2][slot]) continue;
+        if (!avl_row(p, oa, *ox, *oz, 0)) continue;
+        if (!avl_free(p, px, pz, P) || !avl_free(p, qx, qz, Q) || !avl_free(p, q2x, q2z, Q2)) continue;
+        if (hz) { md[(dEnd + 2) & 3] = 'I'; md[dPQ] = 'O'; md[dEnd] = 'I'; md[(dPQ + 2) & 3] = 'O'; }
+        else    { md[dPQ] = 'I'; md[(dEnd + 2) & 3] = 'O'; md[(dPQ + 2) & 3] = 'I'; md[dEnd] = 'O'; }
+        /* (the mirrored corner gives letters no declared piece has: refused below) */
+        w = avl_ct_find(Q, ol, md);
+        if (!w) {
+            static volatile LONG nmiss;
+            if (InterlockedIncrement(&nmiss) <= 20)
+                logf("avl: tight corner: no avlt piece for (%d,%d) outline AAAA modes %.4s (world N E S W)", qx, qz, md);
+            continue;
+        }
+        *oaxis = oa; *oass = s;
+        if (tq) { tq->px = px; tq->pz = pz; tq->qx = qx; tq->qz = qz; tq->q2x = q2x; tq->q2z = q2z; tq->want = w; }
         return 1;
     }
     return 0;
@@ -478,7 +670,7 @@ static int avl_end(AvlPass *p, int axis, int ax, int az, int k, int end, int *u,
     int fwd = end > 0, da = axis ? 1 : 0, db = axis ? 3 : 2;     /* travel: along z A runs N, B runs S; along x A E, B W */
     int face = axis ? (fwd ? 3 : 1) : (fwd ? 0 : 2);             /* the end piece's side facing the band */
     int toward = axis ? (fwd ? 1 : 3) : (fwd ? 2 : 0);           /* travel side that points into this end */
-    int c, oaxis, ox, oz, oass, hw, cst = 0;
+    int c, oaxis, ox, oz, oass, hw, cst = 0, cjn = 0;
     AvlCT ct;
     DWORD a, b;
     char la, lb;
@@ -504,6 +696,7 @@ static int avl_end(AvlPass *p, int axis, int ax, int az, int k, int end, int *u,
     if (g_avl_corner && g_avl_uturn && (c = avl_corner_at(p, axis, ax, az, k, end, &oaxis, &ox, &oz, &oass, &cst, &ct))) {
         int k0, k1, ub, uf;
         *u = ct.n ? 4 + c : 1 + c;                               /* 2 / 3 corner, 5 / 6 corner + T */
+        if (ct.join) return 1;                                   /* task avdiamond D2b: the other side is a junction */
         if (avl_on_stack(stk, oaxis, ox, oz)) return 1;          /* a loop of bands: that band is being decided above */
         if (stk->n >= AVL_DEPTH) {
             avl_why(stk, "band along %s at (%d,%d): %s end corner chain deeper than %d bands", axis ? "x" : "z", ax, az,
@@ -512,9 +705,10 @@ static int avl_end(AvlPass *p, int axis, int ax, int az, int k, int end, int *u,
         }
         return avl_decide_r(p, oaxis, ox, oz, &k0, &k1, &ub, &uf, oass, stk);   /* (its own reason if refused) */
     }
-    if (g_avl_corner && g_avl_uturn && avl_ct_side(p, axis, ax, az, k, end, &ox, &oz, &oass)) {
+    if (g_avl_corner && g_avl_uturn && avl_ct_side(p, axis, ax, az, k, end, &ox, &oz, &oass, &cjn)) {
         int k0, k1, ub, uf;                                       /* task avpaint: the T row of a corner + T */
         *u = 7;
+        if (cjn) return 1;                                        /* task avdiamond D2: a junction on the corner side */
         if (avl_on_stack(stk, 1 - axis, ox, oz)) return 1;
         if (stk->n >= AVL_DEPTH) {
             avl_why(stk, "band along %s at (%d,%d): %s end corner chain deeper than %d bands", axis ? "x" : "z", ax, az,
@@ -522,6 +716,17 @@ static int avl_end(AvlPass *p, int axis, int ax, int az, int k, int end, int *u,
             return 0;
         }
         return avl_decide_r(p, 1 - axis, ox, oz, &k0, &k1, &ub, &uf, oass, stk);
+    }
+    if (avl_tight_at(p, axis, ax, az, k, end, &oaxis, &ox, &oz, &oass, NULL)) {   /* task avdiamond D3 */
+        int k0, k1, ub, uf;
+        *u = 8;
+        if (avl_on_stack(stk, oaxis, ox, oz)) return 1;
+        if (stk->n >= AVL_DEPTH) {
+            avl_why(stk, "band along %s at (%d,%d): %s end corner chain deeper than %d bands", axis ? "x" : "z", ax, az,
+                    en, AVL_DEPTH);
+            return 0;
+        }
+        return avl_decide_r(p, oaxis, ox, oz, &k0, &k1, &ub, &uf, oass, stk);
     }
     /* task avx32 (owner img10): a highway transition's ground row (hwave: the one-way hwavs pair, or the two-way T2
        pair it holds while the avenue stays two-way) is read as the one-way pair (T2 exit -> hwavs exit, T2 entry ->
@@ -581,7 +786,8 @@ static int avl_decide_r(AvlPass *p, int axis, int ax, int az, int *pk0, int *pk1
             int cx = ax + dx * k + (c && !axis ? 1 : 0), cz = az + dz * k + (c && axis ? 1 : 0);
             DWORD v = avl_at(p, cx, cz);
             int ci = avl_cross_of(AVL_ID(v)), dir = axis ? (c ? 3 : 1) : (c ? 2 : 0);
-            if (!avl_is_straight(AVL_ID(v)) && (ci < 0 || !avl_cross_want(g_avl_c[ci].base, AVL_ST(v), dir))) {
+            if (!avl_is_straight(AVL_ID(v)) &&
+                (ci < 0 || !avl_cross_want_f(g_avl_c[ci].base, AVL_ST(v), dir, avl_fam_of(AVL_ID(v))))) {
                 ok = 0;
                 avl_why(stk, "band along %s at (%d,%d): row %d (%d,%d) holds %u.%d, no one-way variant toward %c",
                         axis ? "x" : "z", ax, az, k, cx, cz, AVL_ID(v), AVL_ST(v), AVL_SIDE[dir]);
@@ -632,6 +838,41 @@ static void avl_cell(AvlPass *p, int ok, int cx, int cz, WORD piece, int mapv, A
     avl_cellw(p, ok, cx, cz, ((DWORD)piece << 8) | AVL_ST(avl_at(p, cx, cz)), mapv, w, nw, cap, rv, nrv, rcap);
 }
 
+/* the cells of a corner block (kind 2 / 3 corner, 5 / 6 corner + T) past the row at offset kk of the band through
+   (ax, az): written (ok) or given back; the band beyond the corner is queued in next[] (task avdiamond D2: also called
+   for a corner + T whose corner side is a junction, from the band beyond the T row) */
+static void avl_corner_block(AvlPass *p, int ok, int axis, int ax, int az, int kk, int end, int kind, AvlW *w, int *nw,
+                             int cap, int *rv, int *nrv, int rcap, int next[2][3], int *pnnext, int join) {
+    int dx = axis ? 1 : 0, dz = axis ? 0 : 1, nnext = *pnnext;
+    int x = ax + dx * kk, z = az + dz * kk, bx = x + (axis ? 0 : 1), bz = z + (axis ? 1 : 0);
+    int ib = kind == 3 || kind == 6, x2 = x + dx * end, z2 = z + dz * end, bx2 = bx + dx * end, bz2 = bz + dz * end;
+    int oaxis, ox, oz, oass, i, cok;
+    AvlCT ct;
+    /* inner bend, its partner half, the other half, the outer bend */
+    int ix = ib ? bx : x, iz = ib ? bz : z, mx = ib ? x : bx, mz = ib ? z : bz;
+    int m2x = ib ? bx2 : x2, m2z = ib ? bz2 : z2, ox2 = ib ? x2 : bx2, oz2 = ib ? z2 : bz2;
+    cok = avl_corner_at(p, axis, ax, az, kk, end, &oaxis, &ox, &oz, &oass, NULL, &ct);
+    if (!cok) ct.n = ct.link_in = ct.link_m2 = 0;
+    if (!ct.link_in) avl_cell(p, ok, ix, iz, g_avl_corner, 0xff, w, nw, cap, rv, nrv, rcap);
+    avl_cell(p, ok, mx, mz, g_avl_straight, 1 + ((AVL_ST(avl_at(p, mx, mz)) + 3) & 3), w, nw, cap, rv, nrv, rcap);
+    if (!ct.link_m2)
+        avl_cell(p, ok, m2x, m2z, g_avl_straight, 1 + ((AVL_ST(avl_at(p, m2x, m2z)) + 3) & 3), w, nw, cap, rv, nrv, rcap);
+    if (avl_is_bend(AVL_ID(avl_at(p, ox2, oz2)), g_avl_uturn))  /* a declared avlj outer cell is not ours */
+        avl_cell(p, ok, ox2, oz2, g_avl_uturn, 0xff, w, nw, cap, rv, nrv, rcap);
+    for (i = 0; i < ct.n; i++)                             /* task avpaint: corner + T cells */
+        avl_cellw(p, ok, ct.x[i], ct.z[i], ct.want[i], ct.mapv[i], w, nw, cap, rv, nrv, rcap);
+    if (join && ok && ct.link_in && g_avl_map && ix < g_avl_mw && iz < g_avl_mh) {
+        /* task avdiamond D2: the linked inner bend next to the junction row answers avl_dir with the join cell's
+           travel, so AVX's arm toward it (over its noses) reads one-way, as its letters are */
+        DWORD jv = avl_at(p, ix - dx * end, iz - dz * end);
+        if (jv) g_avl_map[iz * g_avl_mw + ix] = (BYTE)(1 + ((AVL_ST(jv) + 3) & 3));
+    }
+    if (cok && !ct.join && !p->seen[oz * p->W + ox] && nnext < 2) {   /* (a junction on the other side: no band) */
+        next[nnext][0] = oaxis; next[nnext][1] = ox; next[nnext][2] = oz; nnext++;
+    }
+    *pnnext = nnext;
+}
+
 /* one band from the seed (ax, az): walk, decide, collect writes (accepted) or reverts (refused); through a corner the
    band beyond is processed in the same run (it may lie outside the pass box) */
 static void avl_band(AvlPass *p, int axis, int ax, int az, AvlW *w, int *nw, int cap, int *rv, int *nrv, int rcap,
@@ -652,7 +893,8 @@ static void avl_band(AvlPass *p, int axis, int ax, int az, AvlW *w, int *nw, int
             DWORD v = avl_at(p, cx, cz);
             WORD id = AVL_ID(v), piece;
             if (!v) continue;
-            piece = avl_is_straight(id) ? g_avl_straight : ok ? avl_cross_want(g_avl_c[avl_cross_of(id)].base, AVL_ST(v), dir) : 0;
+            piece = avl_is_straight(id) ? g_avl_straight :
+                    ok ? avl_cross_want_f(g_avl_c[avl_cross_of(id)].base, AVL_ST(v), dir, avl_fam_of(id)) : 0;
             avl_cell(p, ok, cx, cz, piece, 1 + dir, w, nw, cap, rv, nrv, rcap);
         }
     }
@@ -663,29 +905,25 @@ static void avl_band(AvlPass *p, int axis, int ax, int az, AvlW *w, int *nw, int
             avl_cell(p, ok, x, z, g_avl_uturn, 0xff, w, nw, cap, rv, nrv, rcap);
             avl_cell(p, ok, bx, bz, g_avl_uturn, 0xff, w, nw, cap, rv, nrv, rcap);
         } else if (kind == 2 || kind == 3 || kind == 5 || kind == 6) {
-            int ib = kind == 3 || kind == 6, x2 = x + dx * end, z2 = z + dz * end, bx2 = bx + dx * end, bz2 = bz + dz * end;
-            int oaxis, ox, oz, oass, i, cok;
-            AvlCT ct;
-            /* inner bend, its partner half, the other half, the outer bend */
-            int ix = ib ? bx : x, iz = ib ? bz : z, mx = ib ? x : bx, mz = ib ? z : bz;
-            int m2x = ib ? bx2 : x2, m2z = ib ? bz2 : z2, ox2 = ib ? x2 : bx2, oz2 = ib ? z2 : bz2;
-            cok = avl_corner_at(p, axis, ax, az, kk, end, &oaxis, &ox, &oz, &oass, NULL, &ct);
-            if (!cok) ct.n = ct.link_in = ct.link_m2 = 0;
-            if (!ct.link_in) avl_cell(p, ok, ix, iz, g_avl_corner, 0xff, w, nw, cap, rv, nrv, rcap);
-            avl_cell(p, ok, mx, mz, g_avl_straight, 1 + ((AVL_ST(avl_at(p, mx, mz)) + 3) & 3), w, nw, cap, rv, nrv, rcap);
-            if (!ct.link_m2)
-                avl_cell(p, ok, m2x, m2z, g_avl_straight, 1 + ((AVL_ST(avl_at(p, m2x, m2z)) + 3) & 3), w, nw, cap, rv, nrv, rcap);
-            if (avl_is_bend(AVL_ID(avl_at(p, ox2, oz2)), g_avl_uturn))  /* a declared avlj outer cell is not ours */
-                avl_cell(p, ok, ox2, oz2, g_avl_uturn, 0xff, w, nw, cap, rv, nrv, rcap);
-            for (i = 0; i < ct.n; i++)                             /* task avpaint: corner + T cells */
-                avl_cellw(p, ok, ct.x[i], ct.z[i], ct.want[i], ct.mapv[i], w, nw, cap, rv, nrv, rcap);
-            if (cok && !p->seen[oz * p->W + ox] && nnext < 2) {
-                next[nnext][0] = oaxis; next[nnext][1] = ox; next[nnext][2] = oz; nnext++;
-            }
+            avl_corner_block(p, ok, axis, ax, az, kk, end, kind, w, nw, cap, rv, nrv, rcap, next, &nnext, 0);
         } else if (kind == 7) {                                    /* task avpaint: a corner + T's T row: the corner band */
-            int sx, sz, se;                                        /* writes the block, in this run */
-            if (avl_ct_side(p, axis, ax, az, kk, end, &sx, &sz, &se) && !p->seen[sz * p->W + sx] && nnext < 2) {
-                next[nnext][0] = 1 - axis; next[nnext][1] = sx; next[nnext][2] = sz; nnext++;
+            int sx, sz, se, jn;                                    /* writes the block, in this run */
+            if (avl_ct_side(p, axis, ax, az, kk, end, &sx, &sz, &se, &jn)) {
+                if (jn) {                                          /* task avdiamond D2: this band writes the block */
+                    int oa, ox, oz, os, cb = avl_corner_at(p, 1 - axis, sx, sz, se, se, &oa, &ox, &oz, &os, NULL, NULL);
+                    if (cb) avl_corner_block(p, ok, 1 - axis, sx, sz, se, se, 4 + cb, w, nw, cap, rv, nrv, rcap, next, &nnext, 1);
+                } else if (!p->seen[sz * p->W + sx] && nnext < 2) {
+                    next[nnext][0] = 1 - axis; next[nnext][1] = sx; next[nnext][2] = sz; nnext++;
+                }
+            }
+        } else if (kind == 8) {                                    /* task avdiamond D3: a tight corner */
+            int oa, ox, oz, os;
+            AvlTQ tq;
+            if (avl_tight_at(p, axis, ax, az, kk, end, &oa, &ox, &oz, &os, &tq)) {
+                avl_cell(p, ok, tq.px, tq.pz, g_avl_uturn, 0xff, w, nw, cap, rv, nrv, rcap);
+                avl_cell(p, ok, tq.q2x, tq.q2z, g_avl_uturn, 0xff, w, nw, cap, rv, nrv, rcap);
+                avl_cellw(p, ok, tq.qx, tq.qz, tq.want, 0xff, w, nw, cap, rv, nrv, rcap);
+                if (!p->seen[oz * p->W + ox] && nnext < 2) { next[nnext][0] = oa; next[nnext][1] = ox; next[nnext][2] = oz; nnext++; }
             }
         } else if (kind == 4) {                                    /* task avx32: the ground row of a highway transition */
             int c;
@@ -701,11 +939,11 @@ static void avl_band(AvlPass *p, int axis, int ax, int az, AvlW *w, int *nw, int
     if (ok) InterlockedIncrement(&g_avl_n_bands); else InterlockedIncrement(&g_avl_n_refused);
     if (ok && k1 - k0 + 1 >= 1) {
         static volatile LONG nlog;
-        static const char *KIND[8] = { "join or edge", "U-turn", "corner", "corner", "highway ground row", "corner + T",
-                                       "corner + T", "T row of a corner + T" };
+        static const char *KIND[9] = { "join or edge", "U-turn", "corner", "corner", "highway ground row", "corner + T",
+                                       "corner + T", "T row of a corner + T", "tight corner" };
         if (InterlockedIncrement(&nlog) <= 200 || strcmp(who, "load"))
             logf("avl: %s: band along %s from (%d,%d) rows %d..%d -> one-way (ends: %s / %s)", who, axis ? "x" : "z",
-                 ax, az, k0, k1, KIND[ub & 7], KIND[uf & 7]);
+                 ax, az, k0, k1, KIND[ub > 8 ? 0 : ub], KIND[uf > 8 ? 0 : uf]);
     }
     if (!ok) {                                                    /* task avpaint: the refusal reason */
         static volatile LONG nlogr;
@@ -881,7 +1119,10 @@ static void avl_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) 
         int pos[3];
         if (!v || !avl_own(AVL_ID(v))) continue;
         pos[0] = rv[2 * k] << 8; pos[1] = rv[2 * k + 1] << 8; pos[2] = 0;
-        ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, P.lay, pos, ((DWORD)g_base[AVL_ID(v)] << 8) | AVL_ST(v), -1, 8, 0);
+        {   /* task avdiamond D4: a family variant goes back to the family piece (hwt's twin), not to the base */
+            WORD f = avl_fam_of(AVL_ID(v)), back = f && f != AVL_ID(v) ? f : g_base[AVL_ID(v)];
+            ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, P.lay, pos, ((DWORD)back << 8) | AVL_ST(v), -1, 8, 0);
+        }
     }
     if (nrv) ZeroMemory(P.rd, (SIZE_T)P.W * P.H);                 /* a retile may have changed neighbours: read again */
     for (k = 0; k < nw; k++) {
