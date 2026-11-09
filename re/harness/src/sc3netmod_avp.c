@@ -17,7 +17,7 @@
  * Every reader sees the base: rb_read / hwy_read (hwlt_read, sc3netmod_rbt.c) return the base id with the twin's index
  * in bits 20..27 (AVP_IX), so AVL, AVX and every sibling decide on the stock grid and AVL writes over a painted cell
  * as over the stock one. AVP's own writes compare that index. Painted cells that no longer qualify get their base back
- * (the box + 2, as AVL's reverts). Off: SC3NETMOD_AVP=0.
+ * (the box + 2, as AVL's reverts). OFF BY DEFAULT since 2026-11-09 (look over two-way lanes); on: SC3NETMOD_AVP=1.
  */
 
 #define AVP_MAX 64
@@ -40,8 +40,11 @@ static void avp_line(const char *path, const char *line) {
 
 static int avp_enabled(void) {
     if (g_avp_on < 0) {
-        g_avp_on = !env_off("SC3NETMOD_AVP");
-        logf("avp: avenue look on two-way bands %s (%d twin(s))", g_avp_on ? "on" : "off (SC3NETMOD_AVP=0)", g_avp_n);
+        /* Off by default since 2026-11-09 (owner: "cars drive opposite to the lane"): a twin keeps the stock two-way
+         * lanes under the one-way look, so in each half one lane ran against the painted direction. A band AVL leaves
+         * two-way now draws the stock two-way avenue. SC3NETMOD_AVP=1 brings the look back. */
+        g_avp_on = env_on("SC3NETMOD_AVP");
+        logf("avp: avenue look on two-way bands %s (%d twin(s))", g_avp_on ? "on (SC3NETMOD_AVP=1)" : "off (default)", g_avp_n);
     }
     return g_avp_on && g_avp_n;
 }
@@ -127,8 +130,10 @@ static void avp_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) 
     AvlPass P;
     AvpW *w;
     BYTE *mark;
-    int x, z, k, nw = 0, n = 0, nrv = 0, cap;
-    if (!avp_enabled()) return;
+    int x, z, k, nw = 0, n = 0, nrv = 0, cap, on = avp_enabled();
+    if (!g_avp_n) return;                                          /* no twins declared */
+    /* AVP off (the default since 2026-11-09): paint nothing, but still give back every twin in the box, so a city
+     * saved while AVP was on (its 0x4E56 variant list restores the twins on load) gets the stock two-way look. */
     P.mgr = mgr; P.lay = *(void **)(mgr + 0x3c);
     P.W = (*(int *)(mgr + 0x5c) >> 8) + 1; P.H = (*(int *)(mgr + 0x60) >> 8) + 1;
     if (P.W < 4 || P.H < 4 || P.W > 4096 || P.H > 4096) return;
@@ -144,7 +149,7 @@ static void avp_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) 
     P.seen = P.rd + P.W * P.H;
     mark = P.seen + P.W * P.H;
     w = (AvpW *)(mark + P.W * P.H);
-    for (z = z0 < 0 ? 0 : z0; z <= z1 && z < P.H; z++)             /* seeds: as avl_run */
+    for (z = z0 < 0 ? 0 : z0; on && z <= z1 && z < P.H; z++)       /* seeds: as avl_run */
         for (x = x0 < 0 ? 0 : x0; x <= x1 && x < P.W; x++) {
             DWORD v = avl_at(&P, x, z);
             WORD id = AVL_ID(v);

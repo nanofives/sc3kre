@@ -100,6 +100,11 @@ static int env_off(const char *name) {
     return GetEnvironmentVariableA(name, v, sizeof(v)) && v[0] == '0';
 }
 
+static int env_on(const char *name) {                      /* opt-in flags: on only when set to 1 */
+    char v[8];
+    return GetEnvironmentVariableA(name, v, sizeof(v)) && v[0] == '1';
+}
+
 /* ============================================================ the variant table */
 
 static WORD g_base[65536];          /* g_base[variant] = base id, 0 = not a variant */
