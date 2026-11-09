@@ -448,6 +448,25 @@ static void avx_endcaps(AvxPass *p, int ox0, int oz0, int ox1, int oz1, const ch
 
 static int avx_road(AvxPass *p, int x, int z) { return avx_at(p, x, z) != 0; }
 
+/* task avends B1 (2026-11-09, round brief ROUND_2026-11-09_avends.md, twin avjunc_rule.link_row): a box's crossing
+   avenue span is also found on a LINK row of the crossing avenue, both cells our link noses (avxn ... 1). A city saved
+   with AVX's link noses restores them on load (saved as 11204); avx_pair skips link noses (a link stays a link), so a T
+   of avenues beside such a row found no span, read the row as a road arm (T) against the nose's one-way edge and was
+   dropped in validation: owner's Big One (547..548,63..65), link row (546,64)/(546,65). Stock linked T 39 pairs are
+   NOT read this way (offline: 463 boxes / noses would change in the shipped cities). Off: SC3NETMOD_AVTEE=0. */
+static int g_avt = -1;
+static int avt_on(void) {
+    if (g_avt < 0) {
+        g_avt = !env_off("SC3NETMOD_AVTEE");
+        logf("avx: avtee (a link-nose row of the crossing avenue is a span) %s", g_avt ? "on" : "off (SC3NETMOD_AVTEE=0)");
+    }
+    return g_avt;
+}
+static int avt_link_row(AvxPass *p, int ax, int az, int bx, int bz) {
+    return avt_on() && avx_is_nose((WORD)(avx_at(p, ax, az) & 0xffff)) == 2 &&
+           avx_is_nose((WORD)(avx_at(p, bx, bz) & 0xffff)) == 2;
+}
+
 static void avx_make(AvxPass *p, int axis, int pos[][2][2], int np, int i0, int i1, AvxBox *bx) {
     int i, h, e, k;
     ZeroMemory(bx, sizeof(*bx));
@@ -467,6 +486,7 @@ static void avx_make(AvxPass *p, int axis, int pos[][2][2], int np, int i0, int 
                     DWORD qa, qb;
                     WORD ia, ib;
                     if (avx_pair(p, oax, oaz, axis ^ 1)) { found = 1; break; }
+                    if (avt_link_row(p, oax, oaz, obx, obz)) { found = 1; break; }                 /* task avends B1 */
                     qa = avx_at(p, oax, oaz); qb = avx_at(p, obx, obz);
                     ia = (WORD)(qa & 0xffff); ib = (WORD)(qb & 0xffff);
                     if (!qa || !qb || !((avx_plain(ia) || avx_own(ia) || avx_avcore_band(ia) || avx_virt(p, oax, oaz)) &&
@@ -885,7 +905,10 @@ static void avx_validate(AvxPass *p) {
             AvxBox *bx = &p->bx[t];
             int ok = 1;
             if (bx->dead) continue;
-            if (!avx_all_pieces(bx)) { avx_kill(p, t); ndrop++; bad++; continue; }
+            if (!avx_all_pieces(bx)) {
+                if (env_on("SC3NETMOD_AVXDBG")) logf("avx: dbg drop: box at (%d,%d) L %d: no piece", bx->x[0][0], bx->z[0][0], bx->L);
+                avx_kill(p, t); ndrop++; bad++; continue;
+            }
             for (i = 0; i < bx->L && ok; i++)
                 for (h = 0; h < 2 && ok; h++) {
                     char ol[4], md[4];
@@ -898,10 +921,21 @@ static void avx_validate(AvxPass *p) {
                             b = avx_nb_mode(p, nx, nz, (e + 2) & 3);
                             if (a == 'C' && b == 'T') continue;            /* a stub that does not connect (stock too) */
                         }
-                        if (b == 'X') { ok = 0; continue; }
+                        if (b == 'X') {
+                            ok = 0;
+                            if (env_on("SC3NETMOD_AVXDBG"))
+                                logf("avx: dbg drop: box at (%d,%d) cell (%d,%d) side %c vs (%d,%d) %u.%d unknown arms",
+                                     bx->x[0][0], bx->z[0][0], bx->x[i][h], bx->z[i][h], "NESW"[e], nx, nz,
+                                     (unsigned)(avx_at(p, nx, nz) & 0xffff), (int)((avx_at(p, nx, nz) >> 16) & 3));
+                            continue;
+                        }
                         if (b == '?') continue;
                         if (!((a == 'I' && b == 'O') || (a == 'O' && b == 'I') || (a == 'T' && b == 'T') ||
                               (a == 'C' && b == 'C') || (a == 'C' && !avx_road(p, nx, nz)))) ok = 0;
+                        if (!ok && env_on("SC3NETMOD_AVXDBG"))   /* task avends: why a box is dropped (debug only) */
+                            logf("avx: dbg drop: box at (%d,%d) cell (%d,%d) side %c mode %c vs (%d,%d) %u.%d mode %c",
+                                 bx->x[0][0], bx->z[0][0], bx->x[i][h], bx->z[i][h], "NESW"[e], a, nx, nz,
+                                 (unsigned)(avx_at(p, nx, nz) & 0xffff), (int)((avx_at(p, nx, nz) >> 16) & 3), b);
                     }
                 }
             if (!ok) { avx_kill(p, t); ndrop++; bad++; }

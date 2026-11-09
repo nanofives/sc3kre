@@ -1,0 +1,36 @@
+{
+ "netpack": 1,
+ "name": "avenue_ends",
+ "version": "0.1.0",
+ "author": "netmod (task avends)",
+ "description": "Avenue ends that used to stay two-way (task avends, 2026-11-09): pieces sc3netmod's AVL / AVX blocks write where the stock tiler left an irregular end (a corner + T whose linked half is a plain road, ...). Saved as their stock base, so a game without the mod loads the stock pieces. Needs avenue_lanes and avenue_junctions. Build: `py -3.12 -m netmod.avends_build build .` in re/tools (art from the game's frames, not shipped).",
+ "game": {
+  "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
+ },
+ "variants": [
+  {
+   "id": 22000,
+   "base": 29,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/22000"
+   },
+   "trblkatt": "copy_base"
+  }
+ ],
+ "lanes": [
+  {
+   "piece": 22000,
+   "spec": "ct_22000.lanes.json"
+  }
+ ],
+ "avenue_junction_lines": [],
+ "avenue_lines": [
+  "avlt 22000 IICA CICO"
+ ]
+}

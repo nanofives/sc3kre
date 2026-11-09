@@ -1,0 +1,8 @@
+{
+ "_": "avends_build.py pieces (task avends, 2026-11-09): outline / modes N E S W at state 0 (AVX box-cell letters)",
+ "ct": [
+  {"id": 22000, "outline": "IICA", "modes": "CICO", "base": 29,
+   "why": "B2: the linked half of a corner + T where the stock tiler left a plain road 29 (owner's Big One (568,32)); avenue_lanes 21737 turned one state, on base 29 so the save keeps the 29"}
+ ],
+ "box": []
+}

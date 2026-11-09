@@ -413,6 +413,16 @@ static int avl_ct_cell(AvlCT *ct, int x, int z, DWORD v, const char *ol, const c
 }
 
 static int avd_ct_joinrow(AvlPass *p, int oaxis, int x, int z, int k1);   /* task avdiamond D2 */
+/* task avends B2 (2026-11-09, round brief ROUND_2026-11-09_avends.md): a corner + T whose linked half is a plain road
+   29 (the stock tiler unlinked it; the inner bend 39 keeps its arm toward it). Off: SC3NETMOD_AVCT29=0 */
+static int g_avct29 = -1;
+static int avct29_on(void) {
+    if (g_avct29 < 0) {
+        g_avct29 = !env_off("SC3NETMOD_AVCT29");
+        logf("avl: corner + T with a plain-road half (avends B2) %s", g_avct29 ? "on" : "off (SC3NETMOD_AVCT29=0)");
+    }
+    return g_avct29;
+}
 static int avl_corner_at(AvlPass *p, int axis, int ax, int az, int k, int end, int *oaxis, int *ox, int *oz, int *oass,
                          int *stage, AvlCT *ct) {
     int dx = axis ? 1 : 0, dz = axis ? 0 : 1, fwd = end > 0, ib;
@@ -443,9 +453,17 @@ static int avl_corner_at(AvlPass *p, int axis, int ax, int az, int k, int end, i
         if (*stage < 1) *stage = 1;
         if (!avl_is_straight(AVL_ID(mid))) continue;
         if (!avl_is_straight(AVL_ID(mid2))) {                      /* corner + T: a linked half */
-            if (!cton || !(AVL_ID(mid2) == 39 || avl_is_t(AVL_ID(mid2))) ||
-                avl_arms(mid2) != (avx_rotm(avx_stock_arms(11204), S[im2]) | (1 << ((sL + 2) & 3)))) continue;
-            lm2 = 1;
+            if (cton && lin && avct29_on() && avx_stock_of(AVL_ID(mid2)) == 29 &&
+                avl_arms(mid2) == avx_rotm(avx_stock_arms(11204), S[im2])) {
+                /* task avends B2 (owner's Big One (568,32), newest save): the stock tiler left a plain road 29 where
+                   the linked half stands; the inner bend's link arm (sL) points at it and the 29 has no arm back.
+                   Read as the linked half: written as a base-29 avlt piece (20900), so the save keeps the 29 */
+                lm2 = 1;
+            } else {
+                if (!cton || !(AVL_ID(mid2) == 39 || avl_is_t(AVL_ID(mid2))) ||
+                    avl_arms(mid2) != (avx_rotm(avx_stock_arms(11204), S[im2]) | (1 << ((sL + 2) & 3)))) continue;
+                lm2 = 1;
+            }
         }
         if (*stage < 2) *stage = 2;
         bend = avl_is_bend(AVL_ID(out), g_avl_uturn);
