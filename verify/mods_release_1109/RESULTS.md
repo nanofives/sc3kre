@@ -44,3 +44,6 @@ then the screenshot avenue converts. Car directions through the 598 knot and the
 not by cars seen on screen.
 
 Not checked: English-UK game run, the twin 20858 art (draws as the stock highway-over-road crossing).
+
+GitHub: `sc3mods-2026-11-09`, target 1b13990, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-11-09, asset
+downloaded back, SHA-256 matches. The 11-08 notes start with a "superseded" line.
