@@ -32,6 +32,9 @@ def table_lines(T):
         out.append("avxm %d %s %s" % (r["id"], r["outline"], r["modes"]))
     for r in T.get("ct", []):
         out.append("avlt %d %s %s" % (r["id"], r["outline"], r["modes"]))
+    for r in T.get("nt", []):                     # task avends F3: sc3netmod_bv.c `bvn`, avlj on the avenue side
+        for pid, lj in sorted(r.get("avlj", {}).items()):
+            out.append("avlj %s %s" % (pid, lj))
     for r in T.get("box", []):
         lj = "".join(m if (o == "A" and m in "IO" and e not in r.get("road_edges", [])) else "."
                      for e, (o, m) in enumerate(zip(r["outline"], r["modes"])))
@@ -70,6 +73,15 @@ def cmd_build(a):
                              "name": {"*": "Avenue junction", "ENGLISH": "Cruce de avenida"},
                              "art": {"from": 43, "png_dir": "art/%d" % r["id"]}, "trblkatt": "copy_base"})
             outlines.setdefault(r["outline"], []).append(r["id"])
+    for r in T.get("nt", []):                     # task avends F3: specs and art by avends_fbuild.py
+        for pid in r["ids"]:
+            fn = "bvn_%d.lanes.json" % pid
+            if not os.path.exists(os.path.join(a.pack, fn)):
+                raise SystemExit("%s missing: run avends_fbuild build first" % fn)
+            lanes_entries.append({"piece": pid, "spec": fn})
+            variants.append({"id": pid, "base": 43, "network": "ROAD",
+                             "name": {"*": "Boulevard to avenue junction", "ENGLISH": "Cruce de bulevar a avenida"},
+                             "art": {"from": 43, "png_dir": "art/%d" % pid}, "trblkatt": "copy_base"})
     if plan.shapes:
         first = os.path.join(a.pack, lanes_entries[0]["spec"])
         sp = json.load(open(first))
@@ -90,6 +102,7 @@ def cmd_build(a):
         "lanes": lanes_entries,
         "avenue_junction_lines": [ln for ln in lines if ln.startswith("avx")],
         "avenue_lines": [ln for ln in lines if ln.startswith(("avlj", "avlt"))],
+        "boulevard_slope_lines": ["bvn %d %s" % (r["keep"], " ".join(str(i) for i in r["ids"])) for r in T.get("nt", [])],
     }
     json.dump(man, open(os.path.join(a.pack, "manifest.json"), "w", newline="\n"), indent=1)
     print("specs: %d pieces (%d lanes); new curve shapes %s" % (len(variants), nlanes, sorted(plan.shapes)))

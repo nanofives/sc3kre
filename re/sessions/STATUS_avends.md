@@ -57,13 +57,17 @@ where the game's piece writer refuses the put (an existing AVX limitation, 3 non
 English-UK. Still two-way on the owner save: the D4 chain (4 bands, owner re-drag pending) and the (584,108) knot (3).
 
 ## blocked on
-F (the (584,108) knot): which junction the owner means. North of it is a BOULEVARD (straight 20700..20702 at x
-575..577, then the diagonal boulevard 20950 / 20951 rows 99..106, its end left to the stock tiler by DBV), so "3 into
-two" reads as boulevard -> avenue narrowing, not only a one-column avenue jog. Both designs sent; waiting for the call.
+Nothing. F built (owner go 2026-11-09): F2a DBVBENDT, F2b BVSHORT, F3 BVNT (pieces 22002..22013), plus AVLKEEPMAP (AVL's
+band map was cleared by load-time re-runs; needed for F). Owner save: converted 50, refused 4 (only the D4 chain).
 
 ## files owned (worktree dev/avends/wt unless MAIN)
 - `re/harness/src/sc3netmod_avx.c` (B1 AVTEE; debug drop lines under `SC3NETMOD_AVXDBG=1`, logs only)
-- `re/harness/src/sc3netmod_avl.c` (B2 AVCT29)
+- `re/harness/src/sc3netmod_avl.c` (B2 AVCT29, A AVUEND, F AVLKEEPMAP)
+- `re/harness/src/sc3netmod_dbv.c` (F2a DBVBENDT), `re/harness/src/sc3netmod_bv.c` (F2b BVSHORT, F3 BVNT, debug
+  `SC3NETMOD_BVDBG=1`), `re/harness/src/sc3netmod_bvx.c` (F3 box skip), `re/harness/src/sc3netmod.c` (`bvn` line)
+- `re/tools/netmod/diagbv.py` (F2a twin), `re/tools/netmod/netpack.py` + `netpack.schema.json` (`bvn` lines)
+- `re/tools/netmod/avends_dbvdiff.py`, `re/tools/netmod/avends_fbuild.py` (new)
+- `re/tools/netmod/examples/avenue_ends/bvn_22002..22013.lanes.json` (new, 12 files)
 - `re/tools/netmod/avjunc_rule.py` (AVTEE twin, table_info, city_layer_saved)
 - `re/tools/netmod/avends_build.py`, `re/tools/netmod/avends_diff.py`, `re/tools/netmod/avends_seams.py` (new)
 - `re/tools/netmod/examples/avenue_ends/manifest.json`, `.../ct_22000.lanes.json`, `.../ct_22001.lanes.json` (new)
@@ -71,7 +75,7 @@ two" reads as boulevard -> avenue narrowing, not only a one-column avenue jog. B
   avdiamond_pieces.json)
 - `verify/avends/RESULTS.md` (new)
 - MAIN `re/sessions/STATUS_avends.md`
-- not in git: package art `examples/avenue_ends/art/22000`, `art/22001` (worktree only until release), pictures
+- not in git: package art `examples/avenue_ends/art/22000..22013` (worktree only until release), pictures
   `MAIN/verify/avends/owner_shots/*.png`, lab saves in `dev/avends/tree/Cities/` (BigOne_strip547, BigOne_b12_saved, BigOne_e_saved, BigOne_a_saved)
 - release step: `netpack.py install avenue_ends --tree stage/src` (art from the worktree)
 

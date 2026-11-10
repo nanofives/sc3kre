@@ -154,3 +154,57 @@ Pictures: `e_614_192_z4_rot0.png`, `e_614_192_z4_rot2.png`, `a1_561_11_z4_rot0.p
 `a2_485_18_z4_rot0.png`, `a2_485_18_z4_rot2.png` (rot 0: a grid-diagonal road draws as a vertical line).
 Lab trap: a frame dump requested after an autosave in the same game did not arm again (`DUMP> armed` stops) and
 `rb_lab.py shot` copied the previous dump; take pictures before the first autosave or in a fresh game.
+
+## F: the boulevard narrowing into an avenue with an avenue T, (583..586,107..109) (owner 2026-11-09: "a junction that turns 3 into two in either left or right"; design approved with both alignments)
+
+What the knot is: a straight boulevard (20700..20702) turns into the diagonal boulevard (20950 / 20951, rows 99..106);
+its end at row 106 lands on three straight columns 583..585 for three rows (107..109), the avenue goes on south on
+584 / 585 (rail crossing row 110), and the x avenue z 108 / 109 leaves east from 585. The stock tiler had left it all
+as T / X pieces; DBV called the end "ragged", BV refused the 3 x 3 block (bigrbt's) and a junction in an end region.
+
+| part | change | switch | pieces |
+|---|---|---|---|
+| F1 | none: BV's straight narrowing (`bva 0 / 1`, 20750..20768, bvlanes' one-way lanes) is used as it is | | |
+| F2a, DBV | new end kind bend-z-tee: a bend into three straight columns whose 2nd and 3rd rows past the end also carry an avenue arm on ONE side (the arm is BV's path). `sc3netmod_dbv.c` dbv_end_kind, twin `diagbv.classify_end` | `SC3NETMOD_DBVBENDT=0` | none |
+| F2b, BV | a run of exactly 3 columns is accepted when one end bends into a DBV band (end type 5) and the other narrows into an avenue (type 3); the whole run is the narrowing | `SC3NETMOD_BVSHORT=0` | bva |
+| F3, BV | a narrowing whose last two columns carry an avenue arm on the kept side's outer edge: those 6 cells take `bvn` pieces, the arm's first two cells BVX's noses; BVX's "box + avenue past it" end now leaves a one-sided arm to the narrowing | `SC3NETMOD_BVNT=0` | **22002..22007** (keep rows 0 / 1, arm on row 0's side, the knot's), **22008..22013** (the mirror), base 43 |
+| AVL map | a load-time re-run over a small box (BV's post-AVL hook, after BV wrote the knot) cleared AVL's whole band map, so AVX's final pass read every other band as two-way: on the first load 39 boxes were demoted (group D's diamond boxes among them), 3 after a reload. Now only the whole-map load run starts from an empty map. Needed for F; changes nothing where no load re-run happens | `SC3NETMOD_AVLKEEPMAP=0` | |
+
+Lanes (`re/tools/netmod/avends_fbuild.py`, bvlanes' own generators): column 0 of the narrowing keeps bva's lanes;
+columns 1..2 are one junction box (`bvlanes.box_lanes`, avjunc's movement rule) whose W arm is the narrowing's lanes
+at the end of column 0 (3 in / 3 out), E arm the avenue (2 / 2), side arm the 2-wide avenue (`bvlanes.arm_z`), plus
+the lane that opens the side coming out of the avenue to 3 lanes. The +x side's third lane merges in the straight
+on (3 -> 2). Curves: shapes 26520..26999 (the stock library lacks them). Art: bvx.Box per cell (the boulevard
+junctions' box look). Table: `bvn <0|1> <col1 row0..2> <col2 row0..2>` (manifest `boulevard_slope_lines`; netpack and
+its schema accept the line), `avlj` on the two avenue-side cells. The cell at the closed corner (22007 / 22011) has no
+lane (as bvlanes' taper corners).
+
+| check | result |
+|---|---|
+| DBV before / after (twin `diagbv.bands`, `avends_dbvdiff.py`, 15 shipped cities + owner save) | the shipped cities' 3 bands (Berlin 2, Moscow 1) unchanged; owner save: 1 band, its bottom end ragged -> bend-z-tee, same 32 cells; **0 other changes** |
+| package | `netpack validate` OK, 0 errors (19 installed packages); selfblock 0 of 14 |
+| owner save, first load | `dbv: ... 32 cell(s)` (no ragged end); `bv: load: boulevard axis 1, columns 107..109 at row -585, 11 cell(s), 11 written`; `stats: avl bands converted=50, refused=4` (the 4: the D4 chain, owner re-drag pending); boxes with a two-way arm 3 |
+| new one-way bands | `(584,110) rows 0..0` (rail row, ends join / join), `(587,108) rows 0..10` (the x avenue, join / corner), `(598,110) rows 0..0` (its corner band); D's box 112 N arm one-way (20850 / 20805) |
+| live cells | 107: bva 20752.1 / 20751.1 / 20750.1; 108: 22004.1 / 22003.1 / 22002.1, noses 20910.2 / 20911.0 at 586; 109: 22007.1 / 22006.1 / 22005.1; 110: 21711.1 / 21710.1; 111: 21772.1 / 21773.3 |
+| seams, ENGLISH, 580..590 x 104..113 | 59 seams: 0 at any F cell; 3 at row 112 (D's ramp box against the ramp ends, the bucket hand-off group D documented). English-UK: none at F cells |
+| routed trips, 150 s (mask 21) | avenue 584 N 3,240 / 0 against, 585 S 960 / 0, x avenue row 108 E 100 / 0; row 109 W: no road trip in the window. Through the box: boulevard -> row 108 E, avenue N -> boulevard, avenue N -> row 108 E seen; boulevard -> avenue S and row 109 -> box not seen in the window |
+| save + reload (final build) | `save: 1199 variant tile(s) written as base`; reload `all 1199 variant tiles restored`, the same band lines, boxes with a two-way arm 3, live grid 574..600 x 96..120 identical to the first load (242 cells, 0 differ); no fault |
+| saved bases | the knot's nine cells save as 43 (BV's rule: a stock game keeps the roads joined), the link row 111 as 11204 (AVX's) |
+| without sc3netmod | 242 cells, 0 variant ids, live grid = saved bases |
+| shipped cities in game, F switches off / on (16 saves x 2, test-slot batch, `bv: load`, `dbv: load` and `stats: avl` lines) | 15 identical; Madrid differs only in the first 10 s stats line's `cells written` (0 / 1712: logged before / after the load pass wrote), the same 208 converted / 49 refused and the same bv / dbv lines. The Europolis maps (no avenue) never print an AVL stats line, so the batch timed out on them (marked FAIL there) after recording their (empty) lines |
+| every F switch off (`DBVBENDT BVSHORT BVNT AVLKEEPMAP = 0`) | `converted=43, refused=7, cells written=298`, boxes with a two-way arm 5: the pre-F result |
+
+Pictures (zoom 4, before the first autosave): `f_knot_584_108_z4_rot0.png` .. `rot3.png` (rot 2 reads best).
+
+## Open items
+
+- Refused piece puts (existing AVX limitation, no whole-box revert guard for now, orchestrator 2026-11-09): on
+  Sacramento the game's piece writer leaves 4 cells stock, logged with `SC3NETMOD_AVXDBG=1`: (168,139) 20812.3 (the
+  avends E box, its other cell (167,139) 20813.3 is written), (153,157) 20813.2, (182,194) nose 20801.0 / 20810.0,
+  (120,196) nose 20802.3 / 20811.3. Why the factory call in 0x10008919 refuses these (piece, state) pairs is
+  [UNCERTAIN]. The owner's Big One has none.
+- English-UK in game (offline only, the accepted limitation).
+- Debug-only switches left in: `SC3NETMOD_AVXDBG=1` (AVX drops and refused puts), `SC3NETMOD_BVDBG=1` (BV runs under 6
+  columns refused, with the reason). Both log only.
+- F's twin: BV's twin (boulevard.py runs) does not know F2b / F3; the shipped-city check for them is the in-game on / off
+  batch above. DBV's twin (diagbv.py) has F2a.

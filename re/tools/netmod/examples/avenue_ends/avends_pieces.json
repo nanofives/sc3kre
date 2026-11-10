@@ -16,5 +16,39 @@
    "why": "A2: the bend cell of an avenue U-turn pair that also carries a road arm (owner's Big One (485,19), diagonal road 35 to the E): U-turn traffic in from the other U-turn cell (W at state 0), out to the band (S), the road two-way (N)"
   }
  ],
- "box": []
+ "box": [],
+ "nt": [
+  {
+   "keep": 0,
+   "ids": [
+    22002,
+    22003,
+    22004,
+    22005,
+    22006,
+    22007
+   ],
+   "avlj": {
+    "22005": ".O..",
+    "22006": ".I.."
+   },
+   "why": "F3: boulevard narrowing to the avenue on rows 0, 1 with an avenue T on its last two columns, kept side (owner's Big One (583..585,107..109))"
+  },
+  {
+   "keep": 1,
+   "ids": [
+    22008,
+    22009,
+    22010,
+    22011,
+    22012,
+    22013
+   ],
+   "avlj": {
+    "22012": ".O..",
+    "22013": ".I.."
+   },
+   "why": "F3 mirror: narrowing to the avenue on rows 1, 2 with the avenue T on the row-2 side"
+  }
+ ]
 }

@@ -35,6 +35,174 @@
     "png_dir": "art/22001"
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 22002,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard to avenue junction",
+    "ENGLISH": "Cruce de bulevar a avenida"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/22002"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22003,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard to avenue junction",
+    "ENGLISH": "Cruce de bulevar a avenida"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/22003"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22004,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard to avenue junction",
+    "ENGLISH": "Cruce de bulevar a avenida"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/22004"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22005,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard to avenue junction",
+    "ENGLISH": "Cruce de bulevar a avenida"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/22005"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22006,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard to avenue junction",
+    "ENGLISH": "Cruce de bulevar a avenida"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/22006"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22007,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard to avenue junction",
+    "ENGLISH": "Cruce de bulevar a avenida"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/22007"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22008,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard to avenue junction",
+    "ENGLISH": "Cruce de bulevar a avenida"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/22008"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22009,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard to avenue junction",
+    "ENGLISH": "Cruce de bulevar a avenida"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/22009"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22010,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard to avenue junction",
+    "ENGLISH": "Cruce de bulevar a avenida"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/22010"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22011,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard to avenue junction",
+    "ENGLISH": "Cruce de bulevar a avenida"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/22011"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22012,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard to avenue junction",
+    "ENGLISH": "Cruce de bulevar a avenida"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/22012"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22013,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard to avenue junction",
+    "ENGLISH": "Cruce de bulevar a avenida"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/22013"
+   },
+   "trblkatt": "copy_base"
   }
  ],
  "lanes": [
@@ -45,11 +213,67 @@
   {
    "piece": 22001,
    "spec": "ct_22001.lanes.json"
+  },
+  {
+   "piece": 22002,
+   "spec": "bvn_22002.lanes.json"
+  },
+  {
+   "piece": 22003,
+   "spec": "bvn_22003.lanes.json"
+  },
+  {
+   "piece": 22004,
+   "spec": "bvn_22004.lanes.json"
+  },
+  {
+   "piece": 22005,
+   "spec": "bvn_22005.lanes.json"
+  },
+  {
+   "piece": 22006,
+   "spec": "bvn_22006.lanes.json"
+  },
+  {
+   "piece": 22007,
+   "spec": "bvn_22007.lanes.json"
+  },
+  {
+   "piece": 22008,
+   "spec": "bvn_22008.lanes.json"
+  },
+  {
+   "piece": 22009,
+   "spec": "bvn_22009.lanes.json"
+  },
+  {
+   "piece": 22010,
+   "spec": "bvn_22010.lanes.json"
+  },
+  {
+   "piece": 22011,
+   "spec": "bvn_22011.lanes.json"
+  },
+  {
+   "piece": 22012,
+   "spec": "bvn_22012.lanes.json"
+  },
+  {
+   "piece": 22013,
+   "spec": "bvn_22013.lanes.json"
   }
  ],
  "avenue_junction_lines": [],
  "avenue_lines": [
   "avlt 22000 IICA CICO",
-  "avlt 22001 ACAI TCOI"
+  "avlt 22001 ACAI TCOI",
+  "avlj 22005 .O..",
+  "avlj 22006 .I..",
+  "avlj 22012 .O..",
+  "avlj 22013 .I.."
+ ],
+ "boulevard_slope_lines": [
+  "bvn 0 22002 22003 22004 22005 22006 22007",
+  "bvn 1 22008 22009 22010 22011 22012 22013"
  ]
 }

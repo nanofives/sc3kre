@@ -219,7 +219,9 @@ static int bvx_boxes(BvPass *p, int sa, int sb, int w0, const BYTE *kind, int lo
             side[dir] = bvx_letter(p->axis, BVX_REAL[p->axis][dir], n, (const int (*)[2])cs, arm);
             part |= side[dir] == 'L' || side[dir] == 'H';
         }
-        if (g_bvx_ncell) {                                                         /* task bvlanes */
+        if (ja == g_bvnt_skip[0] || ja == g_bvnt_skip[1]) {
+            /* task avends F3: the narrowing's bvat pieces stand on this span (bv_run1); only the arm's noses below */
+        } else if (g_bvx_ncell) {                                                  /* task bvlanes */
             char re[4];
             int bx0 = 0x7fffffff, bz0 = 0x7fffffff, bx1 = -0x7fffffff, bz1 = -0x7fffffff;
             for (dir = 0; dir < 4; dir++) re[BVX_REAL[p->axis][dir]] = side[dir];

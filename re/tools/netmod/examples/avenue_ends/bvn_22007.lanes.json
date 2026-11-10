@@ -1,0 +1,134 @@
+{
+ "piece": 22007,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 1,
+ "mirror_uk": false,
+ "vehicle": {
+  "class": "car",
+  "speed": 64000,
+  "lanes": []
+ },
+ "pedestrian": {
+  "walks": [
+   {
+    "from": [
+     15,
+     240
+    ],
+    "to": [
+     15,
+     15
+    ],
+    "path": 259,
+    "crosswalk": true
+   },
+   {
+    "from": [
+     15,
+     15
+    ],
+    "to": [
+     240,
+     15
+    ],
+    "path": 256,
+    "crosswalk": true
+   },
+   {
+    "from": [
+     240,
+     240
+    ],
+    "to": [
+     15,
+     240
+    ],
+    "path": 258,
+    "crosswalk": true
+   },
+   {
+    "from": [
+     240,
+     15
+    ],
+    "to": [
+     240,
+     240
+    ],
+    "path": 257,
+    "crosswalk": true
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     15,
+     15
+    ],
+    "code": 8
+   },
+   {
+    "at": [
+     15,
+     15
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     15,
+     240
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     15,
+     240
+    ],
+    "code": 24
+   },
+   {
+    "at": [
+     240,
+     15
+    ],
+    "code": 8
+   },
+   {
+    "at": [
+     240,
+     15
+    ],
+    "code": 16
+   },
+   {
+    "at": [
+     240,
+     240
+    ],
+    "code": 24
+   },
+   {
+    "at": [
+     240,
+     240
+    ],
+    "code": 16
+   }
+  ]
+ },
+ "connects": {
+  "road": {
+   "low": [],
+   "high": []
+  }
+ },
+ "curves": [],
+ "_": "avends_fbuild.py: boulevard narrowing to the avenue on rows (0, 1) with an avenue T, cell (col 2, row 2) of the narrowing (canonical, +x end), saved as 43"
+}

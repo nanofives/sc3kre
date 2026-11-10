@@ -856,6 +856,13 @@ def compile_pack(stock, pack_dir, man):
         out["road_end_lines"].append(ln)
     for n, ln in enumerate(man.get("boulevard_slope_lines", [])):    # task avslope: sc3netmod BVS (BV) lines, raw
         tok = ln.split()                                             # bvs o <piece> <slope piece> <side>, bvs m <piece> <slope piece>
+        if tok[:1] == ["bvn"]:                                       # task avends F3: bvn <first kept row 0|1> <6 pieces>
+            if len(tok) != 8 or tok[1] not in ("0", "1") or not all(t.isdigit() for t in tok[2:]) or \
+                    any(int(t) not in vids or vids[int(t)]["net"] != "ROAD" for t in tok[2:]):
+                raise NetpackError("%s boulevard_slope_lines %d: '%s' is not `bvn <0|1> <6 ROAD variants of this package>`"
+                                   % (pname, n + 1, ln))
+            out["boulevard_slope_lines"].append(ln)
+            continue
         if len(tok) != (5 if tok[1:2] == ["o"] else 4) or tok[0] != "bvs" or tok[1] not in ("o", "m") or \
                 not all(t.isdigit() for t in tok[2:]) or int(tok[3]) not in (11202, 11201, 32, 31) or \
                 (tok[1] == "o" and int(tok[4]) > 3) or int(tok[2]) not in vids or vids[int(tok[2])]["net"] != "ROAD" or \
@@ -1261,6 +1268,8 @@ def merge(stock, packs):
     placed |= {a["closed"] for a in autos if a.get("closed")}   # and the arm-less quarter (task roundabout4)
     placed |= {int(t) for c in comp for ln in c.get("road_end_lines", []) for t in ln.split()[2:]}   # task slopeend: SLE
     placed |= {int(ln.split()[2]) for c in comp for ln in c.get("boulevard_slope_lines", [])}   # task avslope: BVS
+    placed |= {int(t) for c in comp for ln in c.get("boulevard_slope_lines", []) if ln.startswith("bvn ")
+               for t in ln.split()[2:]}                                                           # task avends F3
     placed |= {m["piece"] for a in davs for m in a["middle"]}   # sc3netmod DAV places them (task diagave)
     placed |= {j["piece"] for a in davs for j in a.get("junction", [])}
     placed |= {cell[2] for a in davs for m in a.get("merge", []) for cell in m["cells"]}

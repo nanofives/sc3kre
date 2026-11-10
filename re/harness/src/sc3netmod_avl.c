@@ -1183,7 +1183,19 @@ static void avl_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) 
         g_avl_map = (BYTE *)VirtualAlloc(NULL, (SIZE_T)P.W * P.H, MEM_COMMIT, PAGE_READWRITE);
         g_avl_mw = P.W; g_avl_mh = P.H;
     }
-    if (load && g_avl_map) ZeroMemory(g_avl_map, (SIZE_T)P.W * P.H);
+    /* task avends F (2026-11-09): only the load pass over the whole map starts from an empty band map. A post-hook
+       re-run over a small box (avl_pass: BV / DAV asked for one) used to clear it too, so AVX's post pass then read
+       every band outside that box as two-way and demoted its boxes (owner's Big One, first load with the knot's BV
+       cells written: 39 boxes with a two-way arm, 3 after a reload). The re-run re-walks every band through its box
+       and writes / clears those bands' cells itself. Off: SC3NETMOD_AVLKEEPMAP=0 (clear on every load run, as before) */
+    if (load && g_avl_map) {
+        static int keep = -1;
+        if (keep < 0) {
+            keep = !env_off("SC3NETMOD_AVLKEEPMAP");
+            logf("avl: band map kept across load re-runs (avends F) %s", keep ? "on" : "off (SC3NETMOD_AVLKEEPMAP=0)");
+        }
+        if (!keep || (x0 <= 0 && z0 <= 0 && x1 >= P.W - 1 && z1 >= P.H - 1)) ZeroMemory(g_avl_map, (SIZE_T)P.W * P.H);
+    }
     if (x0 < 0) x0 = 0;
     if (z0 < 0) z0 = 0;
     if (x1 > P.W - 1) x1 = P.W - 1;

@@ -501,6 +501,14 @@ def _dav_ok(c):
     return DAV_BAND_OK is None or bool(DAV_BAND_OK(c))
 
 
+# task avends F2a (2026-11-09): a bend-z whose 2nd / 3rd rows past the end also carry an avenue arm on one side
+BENDT = os.environ.get("SC3NETMOD_DBVBENDT", "1") != "0"
+
+
+def rd_end(cell, R, dx, dz):
+    return cell(dx, dz) in R
+
+
 def classify_end(R, z_e, a_e, e, nrows):
     """end e (1 bottom = the chain's last row, 0 top = its first row, turned) -> (kind or None, cell function)"""
     def cell(dx, dz):                     # bottom-oriented coordinates of this end -> canonical cell
@@ -515,6 +523,11 @@ def classify_end(R, z_e, a_e, e, nrows):
     r1, r2, r3, r4 = rr[:4]
     if r1 == (0, 1, 2) and r2 == (-1, 0, 1):
         return "bend-z", cell
+    if r1 == (0, 1, 2) and BENDT:                                    # task avends F2a (C: DK_BEND_ZT)
+        east, west = rd(4, 2) and rd(4, 3), rd(0, 2) and rd(0, 3)
+        ar, na = (4, 0) if east else (0, 4)
+        if (east != west) and all(rd(dx, j) for dx in (1, 2, 3) for j in (2, 3)) and not rd(ar, 1) and                 not rd(ar, 4) and not rd(na, 2) and not rd(na, 3) and rd(5 if east else -1, 2) and rd(5 if east else -1, 3):
+            return "bend-z-tee", cell
     if all(r == (0, 1, 2) for r in rr[:5]):                         # DAV gets at least 3 rows past the claim
         return ("narrow-C" if _dav_ok(cell(3, 3)) else None), cell   # task bvlanes: the avenue must convert
     if all(r == (1, 2, 3) for r in rr[:3]):
@@ -569,7 +582,14 @@ def _one_band(R, chain, stamps):
                     if not (cell(dx, dz) in R):
                         break
                     path.add(cell(dx, dz))
-        elif kind == "bend-z":
+        elif kind in ("bend-z", "bend-z-tee"):
+            if kind == "bend-z-tee":                                  # task avends F2a: the arm is BV's
+                st2 = 1 if rd_end(cell, R, 4, 2) else -1
+                for j in (2, 3):
+                    dx = 4 if st2 > 0 else 0
+                    while abs(dx) < 512 and cell(dx, j) in R:
+                        path.add(cell(dx, j))
+                        dx += st2
             for j in range(1, 128):
                 cs = [cell(dx, j) for dx in (1, 2, 3) if cell(dx, j) in R]
                 if not cs:
