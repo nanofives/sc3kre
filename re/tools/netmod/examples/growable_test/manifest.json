@@ -1,0 +1,12 @@
+{
+  "netpack": 1,
+  "name": "growable_test",
+  "version": "1.0.0",
+  "author": "sc3kre",
+  "description": "Test fixture for task growable: a red copy of Pitched Roof Cottage (3065) as a NEW residential building 36001, added to BUILDFAM family 11 (LandUse 3100, low density, low land value) with weight 50, so it grows next to the 12 stock members. No stock building is replaced.",
+  "growables": [
+    {"id": 36001, "base": 3065, "family": 11, "weight": 50,
+     "name": {"*": "Casa roja de prueba", "ENGLISH": "Casa roja de prueba"},
+     "art": {"recolor": "red"}}
+  ]
+}

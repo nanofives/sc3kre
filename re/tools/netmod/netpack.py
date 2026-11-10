@@ -68,6 +68,7 @@ import netramp as RAMP  # noqa: E402  ramps / on-ramps / tunnels / slopes (NET_R
 from PIL import Image   # noqa: E402  png_dir art (any size with anchors.json, NET_ART.md)
 import netpack_lanes as NL  # noqa: E402  task lanekit: lanes (TrBlkAtt) and connects (turn matrices), NET_LANES.md
 import netpack_templates as TPL  # noqa: E402  task multitile: multi-cell templates (MULTITILE.md)
+import netpack_growables as GROW  # noqa: E402  task growable: custom zoned buildings added to BUILDFAM families
 
 SCHEMA_VERSION = 1
 SCHEMA_FILE = os.path.join(HERE, "netpack.schema.json")
@@ -338,8 +339,8 @@ def schema_check(m):
 
 # =================================================================== art
 
-def _frames_of(stock, art_piece):
-    ex = stock.exemplars().get(art_piece)
+def _frames_of(stock, art_piece, exemplars=None):
+    ex = (stock.exemplars() if exemplars is None else exemplars).get(art_piece)
     if ex is None:
         raise NetpackError("piece %d has no exemplar in Apps\\Res\\Occupant" % art_piece)
     key = tkb1_key(ex[1], 0x67)
@@ -442,12 +443,12 @@ def _finish_art(res, art, where):
     return res
 
 
-def compile_art(stock, pack_dir, art, default_piece, where):
+def compile_art(stock, pack_dir, art, default_piece, where, exemplars=None):
     """art spec -> {"from", "cs_key", "cs_rel", "cs", "frames", "keys", "pix", "anchor"}.
     keys = the distinct (group, instance) records of the source frames, in first-use order."""
     art = art or {}
     src = art.get("from", default_piece)
-    cs_key, (cs_rel, cs), frames = _frames_of(stock, src)
+    cs_key, (cs_rel, cs), frames = _frames_of(stock, src, exemplars)   # task growable: building exemplars
     keys = []
     for _, _, g, i, _ in frames:
         if (g, i) not in keys:
@@ -893,6 +894,12 @@ def compile_pack(stock, pack_dir, man):
             out["lanekit"] = NL.compile_entries(stock.root, pack_dir, man)
         except NL.LanesError as e:
             raise NetpackError(str(e))
+    try:                                                 # task growable (netpack_growables.py, BUILDING_PICK.md 6 C)
+        out["growables"] = GROW.compile_entries(sys.modules[__name__], stock, pack_dir, man, _names, langs_text)
+    except GROW.GrowError as e:
+        raise NetpackError(str(e))
+    for gr in out["growables"]:
+        out["warnings"] += gr["art"].get("warnings", [])
     return out
 
 
@@ -924,6 +931,11 @@ def merge(stock, packs):
             if v["id"] in seen:
                 raise NetpackError("variant id %d is declared by both %s and %s" % (v["id"], seen[v["id"]], c["name"]))
             seen[v["id"]] = c["name"]
+    for c in comp:                          # task growable: frame-table, name and pixel keys share the variant id space
+        for g in c["growables"]:
+            if g["id"] in seen:
+                raise NetpackError("id %d is declared by both %s and %s" % (g["id"], seen[g["id"]], c["name"]))
+            seen[g["id"]] = c["name"]
     rs = {}
     for c in comp:
         for r in c["reskins"]:
@@ -934,7 +946,7 @@ def merge(stock, packs):
 
     # ---- art: every record gets (group, (piece << 16) | ordinal), groups filled up to ART_MAX_RECORDS
     items = [("v", v["id"], v) for c in comp for v in c["variants"]] + \
-            [("r", r["piece"], r) for c in comp for r in c["reskins"]]
+            [("r", r["piece"], r) for c in comp for r in c["reskins"]] +             [("g", g["id"], g) for c in comp for g in c["growables"]]          # task growable
     dats, cur, group = [], [], ART_GROUP0
     for kind, piece, it in items:
         a = it["art"]
@@ -958,9 +970,16 @@ def merge(stock, packs):
         NL.merge(stock, [(c["name"], c["lanekit"]) for c in comp], {v["id"]: v for v in variants}, files, report)
     except NL.LanesError as e:
         raise NetpackError(str(e))
-    if variants:
-        files[OCC_KOREA] = ixf_insert.new_container([(EX_GROUP, v["id"], EX_TYPE, v["exemplar"]) for v in variants])
-        files[CS_KOREA] = ixf_insert.new_container([(KOREA_CS_GROUP, v["id"], CS_TYPE, v["table"]) for v in variants])
+    growables = sorted((g for c in comp for g in c["growables"]), key=lambda g: g["id"])   # task growable
+    if variants or growables:
+        files[OCC_KOREA] = ixf_insert.new_container([(EX_GROUP, v["id"], EX_TYPE, v["exemplar"]) for v in variants] +
+                                                    [(GROW.BLD_GROUP, g["id"], GROW.BLD_TYPE, g["exemplar"])
+                                                     for g in growables])
+        files[CS_KOREA] = ixf_insert.new_container([(KOREA_CS_GROUP, v["id"], CS_TYPE, v["table"]) for v in variants] +
+                                                   [(KOREA_CS_GROUP, g["id"], CS_TYPE, g["table"]) for g in growables])
+    if growables:                           # task growable: one Key line per growable in its BUILDFAM family
+        gl = [g for c in comp for g in sorted(c["growables"], key=lambda g: g["id"])]   # package name order, then id
+        files[GROW.BUILDFAM] = GROW.patch_buildfam(stock.read(GROW.BUILDFAM), gl, ixf_parse, NL.replace_records)
 
     # ---- reskins: same-size rewrite of the piece's frame-table payload inside a copy of its CSAttrib container
     by_cont = {}
@@ -1000,7 +1019,7 @@ def merge(stock, packs):
     langs = stock.lang_dirs("Text")
     for lang in langs:
         recs = []
-        for v in variants:
+        for v in variants + growables:      # task growable: building names share the container
             t = (v["names"] or {}).get(lang)
             if t is not None:
                 b = t.encode("cp1252")
@@ -1191,7 +1210,7 @@ def merge(stock, packs):
     # (arm O: GZResourceD opens Text\<lang>\*.IXF by the names listed there; a file merely present is not read).
     # The shipped list repeats key 0xa1096a4f for SC3StringsBuildings.IXF and SC3StringsBuildings_Holidays.IXF.
     ini = []
-    if any(v["names"] for v in variants):
+    if any(v["names"] for v in variants + growables):
         ini.append({"file": "Default.ini", "section": "DBSegments", "key": "0xa1096a4f", "op": "append",
                     "value": r"0x80c381d7;Res\Text\%%Language%%\%s" % NAME_FILE, "_pack": "(variant names)"})
     for g in text_groups:                                             # task hwask: one list line per texts group
@@ -1286,6 +1305,9 @@ def merge(stock, packs):
     for c in comp:
         for r in c["reskins"]:
             report["reskins"].append({"piece": r["piece"], "frames": len(r["art"]["frames"]), "sharers": r["sharers"]})
+    report["growables"] = [{"id": g["id"], "base": g["base"], "family": g["family"], "landuse": g["landuse"],   # task growable
+                            "weight": g["weight"], "art_from": g["art"]["from"], "records": 2 * len(g["art"]["keys"])}
+                           for g in growables]
     report["ramps"] = [{"table": r["table"], "slot": r["slot"], "from": r["from"], "to": r["to"]} for r in ramps]
     report["auto_roundabouts"] = [{"piece": a["piece"], "min_arms": a["min_arms"], "closed": a.get("closed", 0)}
                                   for a in autos]
