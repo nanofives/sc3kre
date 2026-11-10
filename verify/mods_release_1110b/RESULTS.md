@@ -55,3 +55,6 @@ lines under OPTIONS). 159 entries, 158 checked against the staged manifest, 0 mi
 79A68384F78C3BD80128BF0A741B828EE24DF58D1EBB6F0DE9EEB326AE86E8F2.
 
 Not checked: New City / Load City from a loaded city with this build (needs a free screen, owner check), English-UK.
+
+GitHub: `sc3mods-2026-11-10b`, target 1cc0bc4, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-11-10b, asset
+downloaded back, SHA-256 matches. The 11-10 notes start with a "superseded" line.
