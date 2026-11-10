@@ -686,11 +686,12 @@ static void gn_ctx(GN_CTX *c, BYTE *budget) {
     if (p && rci && !IsBadReadPtr(p, 4) && *(DWORD *)p == (DWORD)rci + 0x4c99c) c->res = p;
     p = (BYTE *)ho_v(c->city, 0x14c, 0, 0, 0, 0, 0, 0);
     if (p && rci && !IsBadReadPtr(p, 4) && *(DWORD *)p == (DWORD)rci + 0x4d1e0) c->zone = p;
+    /* VALVEREF (2026-11-10, verify/crashguard): city vt+0x1b8 is cISC3City::GetSpecificLayer, a borrowed pointer (no
+       AddRef: the RCTRACE run saw no AddRef from it). Only the QI reference is ours. The Release of L that stood here
+       took one count off the valve layer per call (once a game month): Europolis 1024 starts at 100, so after ~100
+       months the layer was destroyed under the sim thread (sc3_valvelayer_end_of_month, SIMRCI+0x312CC). */
     L = (void *)ho_v(c->city, 0x1b8, 1, 0x80f1e6d3, 0, 0, 0, 0);
-    if (L) {
-        if (!(ho_v(L, 0x00, 2, 0x40a42f1c, (DWORD)&c->vl, 0, 0, 0) & 0xff)) c->vl = NULL;
-        ho_v(L, 0x08, 0, 0, 0, 0, 0, 0);
-    }
+    if (L && !(ho_v(L, 0x00, 2, 0x40a42f1c, (DWORD)&c->vl, 0, 0, 0) & 0xff)) c->vl = NULL;
 }
 static void gn_ctx_free(GN_CTX *c) { if (c->vl) ho_v(c->vl, 0x08, 0, 0, 0, 0, 0, 0); c->vl = NULL; }
 

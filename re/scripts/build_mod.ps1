@@ -16,7 +16,8 @@ param(
     [Parameter(Mandatory)] [ValidateSet('sc3resize', 'sc3bigcity', 'sc3overscroll', 'sc3simrun', 'sc3perf', 'sc3netmod', 'sc3cartrips', 'sc3undo', 'sc3autosave', 'sc3landfill', 'sc3dataview', 'sc3restore', 'sc3mods')]
     [string] $Mod,
     [Parameter(Mandatory)] [string] $Src,
-    [Parameter(Mandatory)] [string] $Out
+    [Parameter(Mandatory)] [string] $Out,
+    [switch] $NoVersionInfo
 )
 $ErrorActionPreference = 'Stop'
 $Src = (Resolve-Path $Src).Path
@@ -33,13 +34,65 @@ $vcvars = Join-Path $vsroot 'VC\Auxiliary\Build\vcvars32.bat'
 if (-not (Test-Path $vcvars)) { throw "vcvars32.bat not found at $vcvars" }
 
 $cl = '/nologo /W3 /O2 /MT /GS- /D_CRT_SECURE_NO_WARNINGS /DWIN32 /D_WIN32_WINNT=0x0501'
+
+# AVVERSION (2026-11-10): every mod DLL carries a VERSIONINFO resource. Without one, every sc3netmod.dll build since
+# 2026-10-27 was flagged Gen:Variant.Draftor.8144 by the Bitdefender engine (BitDefender, eScan, G DATA; the other 10
+# engines on Jotti found nothing). The same code with this resource scanned 0 of 13 (verify/avflag/RESULTS.md).
+# -NoVersionInfo builds without it, for A/B scans.
+$resArg = ''
+$rcLine = ''
+if (-not $NoVersionInfo) {
+    $what = @{
+        sc3resize = 'resizable window, interface scaling and fixes'; sc3bigcity = '512 and 1024 city sizes'
+        sc3overscroll = 'camera past the map edge'; sc3simrun = 'simulation keeps running while the camera moves'
+        sc3perf = 'performance and stability fixes'; sc3netmod = 'roads, avenues and highways'
+        sc3cartrips = 'car trips'; sc3undo = 'undo'; sc3autosave = 'autosave'; sc3landfill = 'landfill tool'
+        sc3dataview = 'extra data views'; sc3restore = 'restore tool'; sc3mods = 'mod loader'
+    }[$Mod]
+    $d = Get-Date
+    $rc = Join-Path $obj "$Mod.rc"
+    Set-Content -Path $rc -Encoding ASCII -Value @"
+#include <winver.h>
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION $($d.Year),$($d.Month),$($d.Day),0
+ PRODUCTVERSION $($d.Year),$($d.Month),$($d.Day),0
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_DLL
+ FILESUBTYPE 0x0L
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904b0"
+    BEGIN
+      VALUE "CompanyName", "sc3kre (github.com/nanofives/sc3kre)"
+      VALUE "FileDescription", "SimCity 3000 Unlimited mod: $what"
+      VALUE "FileVersion", "$($d.ToString('yyyy.MM.dd'))"
+      VALUE "InternalName", "$Mod"
+      VALUE "LegalCopyright", "Copyright (c) 2026 nanofives, MIT License"
+      VALUE "OriginalFilename", "$Mod.dll"
+      VALUE "ProductName", "sc3mods for SimCity 3000 Unlimited"
+      VALUE "ProductVersion", "$($d.ToString('yyyy.MM.dd'))"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END
+"@
+    $rcLine = "rc /nologo /fo `"$obj\$Mod.res`" `"$rc`"`r`nif errorlevel 1 exit /b 1"
+    $resArg = " `"$obj\$Mod.res`""
+}
+
 if ($Mod -eq 'sc3mods') {
     # The mod loader (2026-10-27, replaces the version.dll proxy): Apps\sc3mods.dll, imported by an SC3U.exe that
     # re/scripts/sc3mods_patch.ps1 has patched.
-    $line = "cl $cl /LD `"$Src\sc3mods.c`" /Fe`"$Out\sc3mods.dll`" /link /SUBSYSTEM:WINDOWS /DEF:`"$Src\sc3mods.def`" kernel32.lib"
+    $line = "cl $cl /LD `"$Src\sc3mods.c`"$resArg /Fe`"$Out\sc3mods.dll`" /link /SUBSYSTEM:WINDOWS /DEF:`"$Src\sc3mods.def`" kernel32.lib"
 } else {
     $libs = 'kernel32.lib user32.lib' + $(if ($Mod -eq 'sc3perf') { ' gdi32.lib' } else { '' })
-    $line = "cl $cl /LD `"$Src\$Mod.c`" /Fe`"$Out\$Mod.dll`" /link /SUBSYSTEM:WINDOWS $libs"
+    $line = "cl $cl /LD `"$Src\$Mod.c`"$resArg /Fe`"$Out\$Mod.dll`" /link /SUBSYSTEM:WINDOWS $libs"
 }
 # A global CL=/MP12 breaks VC6-era builds of these sources; clear it for the child cmd.
 $bat = Join-Path $obj '_build.bat'
@@ -47,6 +100,7 @@ Set-Content -Path $bat -Encoding ASCII -Value @"
 set CL=
 call "$vcvars" >nul
 cd /d "$obj"
+$rcLine
 $line
 if errorlevel 1 exit /b 1
 "@
