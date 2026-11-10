@@ -69,6 +69,9 @@ Measured in arm N: a SYS.PAK whose `Default.ini` grew by one line (+67 bytes, re
 and the container it names is opened. That is the first game load of a length-changing SYS.PAK in this project, and it
 closes gap 1 of the capability map in practice: a package can add `[DBSegments]` lines, so the Korea pair is no longer
 the only place new containers can go. netpack still merges into the Korea pair (1,023 variants fit).
+Correction 2026-11-10 (verify/batslots): 1,023 is the stock 0x5000-byte index. `ixf_insert.new_container` grows the
+index, and records past it load in game: growable 36001 at slot 1,231 and the 16 bat_slots ids in a 1,248-record
+`OccupantAttribs_Korea.IXF` all grew. No upper limit was found.
 
 ## 3. Delivery: overlay (default) vs direct, decided by arm F
 

@@ -900,6 +900,7 @@ def compile_pack(stock, pack_dir, man):
         raise NetpackError(str(e))
     for gr in out["growables"]:
         out["warnings"] += gr["art"].get("warnings", [])
+        out["ini"] += gr["ini"]                          # task batslots: [ReplaceableBuildings] rows
     return out
 
 
@@ -1305,8 +1306,9 @@ def merge(stock, packs):
     for c in comp:
         for r in c["reskins"]:
             report["reskins"].append({"piece": r["piece"], "frames": len(r["art"]["frames"]), "sharers": r["sharers"]})
-    report["growables"] = [{"id": g["id"], "base": g["base"], "family": g["family"], "landuse": g["landuse"],   # task growable
-                            "weight": g["weight"], "art_from": g["art"]["from"], "records": 2 * len(g["art"]["keys"])}
+    report["growables"] = [{"id": g["id"], "base": g["base"], "family": g["families"], "landuse": g["landuse"],   # task growable
+                            "weight": g["weight"], "art_from": g["art"]["from"], "records": 2 * len(g["art"]["keys"]),
+                            "replaceable": bool(g["ini"])}                                                # task batslots
                            for g in growables]
     report["ramps"] = [{"table": r["table"], "slot": r["slot"], "from": r["from"], "to": r["to"]} for r in ramps]
     report["auto_roundabouts"] = [{"piece": a["piece"], "min_arms": a["min_arms"], "closed": a.get("closed", 0)}
