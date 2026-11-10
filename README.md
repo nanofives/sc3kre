@@ -151,6 +151,24 @@ in `mods\netmod`, which a new release replaces.
   the patrol follows roads between the military base and the police stations, a Reunirse offer when crime is high
   and the city has a military base, and the game's own helicopter sound.
 
+### Your Building Architect buildings in zones (`tools\bat_growables.ps1`)
+Every building in your game's Building Architect list becomes a zoned building of its own that grows next to the
+game's buildings. Nothing is replaced. It needs the road mod (`mods\netmod`), which every sc3mods release has.
+1. Close the game. Run `powershell -ExecutionPolicy Bypass -File .\tools\bat_growables.ps1` in the game folder.
+2. It writes `bat_growables.ini` in the game folder, one section per building. Each has `enabled`, `class` (the kind
+   of zone lot it grows on, the classes and the lot sizes they take are listed at the top of the file) and `weight`
+   (how often it's picked, a game building has 1 to 10). Houses, shops and factories start enabled, with a class guessed
+   from the building's `.bld` file in `Buildings`. Anything else (a school, a park) starts at `enabled = 0`.
+3. Change what you like and run the script again. Start the game as usual.
+- To add a building of your own: in a city, open the Replace window of a building of the same size, use "Edit list"
+  to add your .bld, close the game and run the script again. It picks up the new building and keeps the numbers of
+  the ones you already have.
+- Your building takes its population, jobs and other stats from a game building of the same class and size.
+- Run the script again after installing a new sc3mods release, since the release replaces the files in `mods\netmod`.
+- `-Restore` takes the buildings out again and puts every file back. Your `bat_growables.ini` stays.
+- A city saved with these buildings and loaded without them doesn't crash. Each one becomes a game building of the
+  same type.
+
 Every fix has an off switch (an environment variable or an ini key), listed in the release `README.txt`. The mods
 contain no game code or data. The road data in `mods\netmod` is built from your own game files.
 

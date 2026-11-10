@@ -8,7 +8,8 @@ only (no game run, no Ghidra session). Every claim carries `[CONFIRMED @ addr]` 
 (`verify/growable/RESULTS.md`, netpack `growables` key). (A) all three sets in one city with a random mix works with
 data only, proven in game on 2026-11-10 (`verify/stylemix/RESULTS.md`, netpack `style_sets` key): each set building
 gets its own occupant id, its frame tables go to `CSAttrib_Korea` and its pixels to a top-level `Res\Sprites` DAT, so
-no set has to be active. (B) a per-area style the player paints needs
+no set has to be active. (C') every BAT building a player has grows as its own building, proven in game on
+2026-11-10 (`verify/batconvert/RESULTS.md`, player tool `re/scripts/bat_growables.ps1`). (B) a per-area style the player paints needs
 code: one hook, a paint tool and save storage. A per-zone-type style (all residential European, say) is data only.
 
 ## 0. Corrections to the starting assumptions
@@ -210,6 +211,12 @@ Computer Shops". The art agrees (half-timbering and mansards against glass tower
 - **Footprint:** the BAT list is filtered by lot size == `SizeInCellsX` (SIMINIT `0x100053be`, SIMUI `0x1001bb56`);
   the engine never compares sizes. A **new** id listed in `[ReplaceableBuildings]` is offered like a stock one: proven
   in game with slot 36100 and The Joneses through the stock dialog (verify/batslots/RESULTS.md).
+- **BAT buildings as their own growables (batconvert 2026-11-10):** an exemplar whose prop 0x67 points straight at a
+  BAT.DAT frame table `{0x6300, 0xBA1DBF1E, inst}` grows and draws the BAT art (lab arm, The Joneses, 797 lots,
+  queried). BAT.DAT is registered by `0x10005ae2` through `FUN_10005fff`, the routine that registers set DATs. The
+  shipped converter copies the table and pixels to its own keys anyway: the segment has unload / update paths
+  (`0x10006a8f`, `0x10006c35`) and the BAT.DAT instance is not the `.bld`'s own for 2 of 15 buildings
+  (`verify/batconvert/RESULTS.md` design 1).
 
 ## 6. Verdicts
 
@@ -302,13 +309,18 @@ keys still resolve.
 ## 7. Open items and the evidence missing
 
 - ZoneLayer `+0x24c` identity: a CodeView match for its `+0x20` / `+0x58` slots.
-- Plumbing `vt+0x48` and attrib `+0xbc & 0x100` meanings.
+- Plumbing `vt+0x48` and attrib `+0xbc & 0x100` meanings. Data side (batconvert 2026-11-10): exemplar prop `0xCA`
+  holds `0x100` on the filler lot Playground 3079 and `0x0` / `0xA4` on Dingy Ave. 113 / Goodplace Arms 3020; that
+  prop 0xCA feeds `+0xbc` is [UNCERTAIN] (no loader read).
 - Industrial class rows (the D / C / A token): the industrial parser was not read.
 - Loader behaviour on an unresolved occupant key. stylemix measured it on a save taken while still paused: all 6,723
   style copies were replaced on load by another building of the SAME building type (t18), 942 by their own base id,
   occupant count unchanged, no other lot changed. growable (§6 C) reported its 36001 lots as empty after load, from a
   screenshot; its save 4 counts (0 of 36001, +896 family-11 stock houses after a run) fit either reading. Recheck
-  growable with a paused save. The branch in `SIMGEOM 0x1001e516` / `0x10002cc2` that substitutes is not read.
+  growable with a paused save. The branch in `SIMGEOM 0x1001e516` / `0x10002cc2` that substitutes is not read. batconvert measured it a second time the same way: all 852
+  converted BAT buildings (ids 37000+) of a Sacramento save became a building of the same type at the same cell, 0
+  left, occupant count unchanged, no other occupant changed (the 101 North Shore Cannery 2x2 lots became 159 Storage
+  Tanks).
 - `[OccAttribCache]`: an exemplar outside it crashes the residential developer (§6 C). Open: why, and whether a new
   container with its own cache entry works.
 - Whether a top-level `Res\Sprites` DAT is also a resource-manager segment (each is registered under
@@ -316,7 +328,9 @@ keys still resolve.
   frame tables in `CSAttrib_Korea`).
 - Building Replacement Manager: where new ids land in the slide order (attrib-cache iteration order), not seen in game.
 - `.bld` record `0x644D7179` (u32 `0x208` .. `0x217`): a category by the building names, [UNCERTAIN].
-- BAT.DAT frame tables index 16 frames, stock building tables 20: which frames a BAT building lacks.
+- ~~BAT.DAT frame tables index 16 frames~~ **Settled 2026-11-10 (batconvert):** every shipped BAT.DAT `0x6300` table
+  has 20 entries like a stock building table, entries 16-19 naming the pixels of entries 12-15 with flag 2. 16
+  distinct pixel records. Nothing is missing.
 - `cRZIniFile::EnumEntries` order: assumed to be file order for `[DBSegments]` priority.
 
 The one-off helper scripts used (PE vtable reader, TKB1 dumper, family coverage table) were not kept in the repo.
