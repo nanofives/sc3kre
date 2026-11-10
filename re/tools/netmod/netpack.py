@@ -14,6 +14,8 @@ NAME order (so install order does not change a byte):
   Apps\Res\Occupant\OccupantAttribs_Korea.IXF   variant exemplars        (SYS.PAK [DBSegments] 0x55908ADC, not shipped)
   Apps\Res\Sprites\CSAttrib_Korea.IXF           variant frame tables     (SYS.PAK [DBSegments] 0x55908ADB, not shipped)
   Apps\Res\Sprites\4E3D00nn_netpack.DAT         new pixel + anchor records (Res\Sprites\*.DAT is enumerated, SC3U 0x0040b761)
+  Apps\Res\Sprites\<group>_netpack_set.DAT     style_sets: a building set's pixels, verbatim (netpack_stylesets.py)
+  Apps\Res\BUILDFAM.IXF                        growables / style_sets: Key lines inserted into the families
   Apps\Res\Sprites\CSATTRIB*.IXF                copy with reskinned pieces' frames pointed at the new records
   Apps\Res\SSimData\<lang>\TrBlkAtt.IXF         copy + the variants' traffic records (base records re-keyed)
   Apps\Res\TilingRules\*.txt                    copies with the variant ids in the Set and the packages' rule edits
@@ -69,6 +71,7 @@ from PIL import Image   # noqa: E402  png_dir art (any size with anchors.json, N
 import netpack_lanes as NL  # noqa: E402  task lanekit: lanes (TrBlkAtt) and connects (turn matrices), NET_LANES.md
 import netpack_templates as TPL  # noqa: E402  task multitile: multi-cell templates (MULTITILE.md)
 import netpack_growables as GROW  # noqa: E402  task growable: custom zoned buildings added to BUILDFAM families
+import netpack_stylesets as STY  # noqa: E402  task stylemix: building-set styles grown side by side (new ids)
 
 SCHEMA_VERSION = 1
 SCHEMA_FILE = os.path.join(HERE, "netpack.schema.json")
@@ -900,6 +903,10 @@ def compile_pack(stock, pack_dir, man):
         raise NetpackError(str(e))
     for gr in out["growables"]:
         out["warnings"] += gr["art"].get("warnings", [])
+    try:                                                 # task stylemix (netpack_stylesets.py, BUILDING_PICK.md 6 A)
+        out["style_sets"] = STY.compile_entries(sys.modules[__name__], stock, man, GROW.BUILDFAM, GROW.buildings(stock))
+    except STY.StyleError as e:
+        raise NetpackError(str(e))
     return out
 
 
@@ -936,6 +943,16 @@ def merge(stock, packs):
             if g["id"] in seen:
                 raise NetpackError("id %d is declared by both %s and %s" % (g["id"], seen[g["id"]], c["name"]))
             seen[g["id"]] = c["name"]
+    sets = {}                               # task stylemix: one package per set; its ids share the occupant key space
+    for c in comp:
+        for st in c["style_sets"]:
+            if st["set"] in sets:
+                raise NetpackError("building set %08x is mixed in by both %s and %s" % (st["set"], sets[st["set"]], c["name"]))
+            sets[st["set"]] = c["name"]
+            for nid, _ in st["exemplars"]:
+                if nid in seen:
+                    raise NetpackError("id %d is declared by both %s and %s" % (nid, seen[nid], c["name"]))
+                seen[nid] = c["name"]
     rs = {}
     for c in comp:
         for r in c["reskins"]:
@@ -971,14 +988,21 @@ def merge(stock, packs):
     except NL.LanesError as e:
         raise NetpackError(str(e))
     growables = sorted((g for c in comp for g in c["growables"]), key=lambda g: g["id"])   # task growable
-    if variants or growables:
+    styles = [st for c in comp for st in c["style_sets"]]                                  # task stylemix
+    if variants or growables or styles:
         files[OCC_KOREA] = ixf_insert.new_container([(EX_GROUP, v["id"], EX_TYPE, v["exemplar"]) for v in variants] +
                                                     [(GROW.BLD_GROUP, g["id"], GROW.BLD_TYPE, g["exemplar"])
-                                                     for g in growables])
+                                                     for g in growables] +
+                                                    [(STY.BLD_GROUP, nid, STY.BLD_TYPE, ex)
+                                                     for st in styles for nid, ex in st["exemplars"]])
         files[CS_KOREA] = ixf_insert.new_container([(KOREA_CS_GROUP, v["id"], CS_TYPE, v["table"]) for v in variants] +
-                                                   [(KOREA_CS_GROUP, g["id"], CS_TYPE, g["table"]) for g in growables])
-    if growables:                           # task growable: one Key line per growable in its BUILDFAM family
+                                                   [(KOREA_CS_GROUP, g["id"], CS_TYPE, g["table"]) for g in growables] +
+                                                   [t for st in styles for t in st["tables"]])
+    for st in styles:                       # task stylemix: the set's pixels, verbatim, one DAT per set pixel group
+        files[STY.PIX_FILE % st["pix_group"]] = ixf_insert.new_container(st["pixels"])
+    if growables or styles:                 # task growable / stylemix: Key lines inserted into BUILDFAM families
         gl = [g for c in comp for g in sorted(c["growables"], key=lambda g: g["id"])]   # package name order, then id
+        gl += [ln for c in comp for st in c["style_sets"] for ln in st["lines"]]
         files[GROW.BUILDFAM] = GROW.patch_buildfam(stock.read(GROW.BUILDFAM), gl, ixf_parse, NL.replace_records)
 
     # ---- reskins: same-size rewrite of the piece's frame-table payload inside a copy of its CSAttrib container
@@ -1308,6 +1332,10 @@ def merge(stock, packs):
     report["growables"] = [{"id": g["id"], "base": g["base"], "family": g["family"], "landuse": g["landuse"],   # task growable
                             "weight": g["weight"], "art_from": g["art"]["from"], "records": 2 * len(g["art"]["keys"])}
                            for g in growables]
+    report["style_sets"] = [{"set": st["set"], "offset": st["offset"], "weight": st["weight"],            # task stylemix
+                             "buildings": len(st["exemplars"]), "tables": len(st["tables"]),
+                             "pixel_records": len(st["pixels"]), "lines": len(st["lines"]), "families": st["families"]}
+                            for st in styles]
     report["ramps"] = [{"table": r["table"], "slot": r["slot"], "from": r["from"], "to": r["to"]} for r in ramps]
     report["auto_roundabouts"] = [{"piece": a["piece"], "min_arms": a["min_arms"], "closed": a.get("closed", 0)}
                                   for a in autos]
@@ -1717,6 +1745,13 @@ def _print_report(report):
               % (t["pack"], t["name"], t["cells"], t["orientations"], t["cost"], t["protect_add"] or "-"))
         for pic in t["picture"]:
             print("    " + pic.replace("\n", "\n    "))
+    for g in report.get("growables", []):                                       # task growable
+        print("  growable %d  base %d  family %d (LandUse %d)  weight %d" % (g["id"], g["base"], g["family"],
+                                                                             g["landuse"], g["weight"]))
+    for st in report.get("style_sets", []):                                     # task stylemix
+        print("  style set %08x  ids +%d  %d buildings, %d frame tables, %d pixel records, %d family lines in %s"
+              % (st["set"], st["offset"], st["buildings"], st["tables"], st["pixel_records"], st["lines"],
+                 st["families"]))
     for w in report["warnings"]:
         print("  WARNING " + w)
     for w in report.get("info", []):

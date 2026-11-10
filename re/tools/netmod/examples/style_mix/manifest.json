@@ -1,0 +1,19 @@
+{
+  "netpack": 1,
+  "name": "style_mix",
+  "version": "1.0.0",
+  "author": "sc3kre",
+  "description": "All three building styles grow side by side at random: every European (set e523f3fb) and Asian (set 6523f3d5) building that re-skins a zoned building is added as a NEW building (id + 400000 / id + 1500000) next to the North American one, so nothing stock is replaced. Keep the in-game building style at the default.",
+  "style_sets": [
+    {
+      "set": "e523f3fb",
+      "offset": 400000,
+      "weight": 1
+    },
+    {
+      "set": "6523f3d5",
+      "offset": 1500000,
+      "weight": 1
+    }
+  ]
+}
