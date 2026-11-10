@@ -132,6 +132,11 @@ def main():
     # sc3mods_patch.ps1 (one level up, re/scripts) adds the sc3mods.dll import to this PC's SC3U.exe. sc3_update runs
     # it after downloading; it also ships so a player can -Restore to stock by hand.
     shutil.copy2(os.path.join(HERE, "..", "sc3mods_patch.ps1"), os.path.join(out, "sc3mods_patch.ps1"))
+    # 2026-11-10d: the Building Architect converter (re/scripts/bat_growables.ps1, verify/batconvert). It runs on the
+    # player's PC against their own Apps\BARender\BAT.DAT, so it ships unrun: the staged overlay holds no converted
+    # buildings.
+    os.makedirs(os.path.join(out, "tools"), exist_ok=True)
+    shutil.copy2(os.path.join(HERE, "..", "bat_growables.ps1"), os.path.join(out, "tools", "bat_growables.ps1"))
     if a.community:
         # 2026-11-06: the community mods (Apache Flyover, Civic Deals, Extra Cheats) installed into the served tree the
         # way a player installs them, then their backups dropped (a LAN client gets a fresh tree from the manifest).

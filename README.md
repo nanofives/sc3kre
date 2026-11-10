@@ -151,6 +151,16 @@ in `mods\netmod`, which a new release replaces.
   the patrol follows roads between the military base and the police stations, a Reunirse offer when crime is high
   and the city has a military base, and the game's own helicopter sound.
 
+### More buildings in zones (road data in `mods\netmod`)
+- All three building styles in one city: the European and Asian buildings grow next to the North American ones at
+  random, as buildings of their own. A city keeps the style it was saved with (most European cities are saved with
+  the European style), so for an even mix use a city saved with the default style, such as Sacramento or Madison.
+- Building Architect slots: 16 zoned buildings, each a copy of a game building, that you can put your own Building
+  Architect building on with the Replace button of the building's query window (same lot size). The game's buildings
+  keep growing too.
+- A city saved with any of these buildings still loads without the mods. Each one becomes a game building of the
+  same type.
+
 ### Your Building Architect buildings in zones (`tools\bat_growables.ps1`)
 Every building in your game's Building Architect list becomes a zoned building of its own that grows next to the
 game's buildings. Nothing is replaced. It needs the road mod (`mods\netmod`), which every sc3mods release has.
