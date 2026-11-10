@@ -357,9 +357,25 @@
       "type": "array",
       "items": {"$ref": "#/$defs/growable"},
       "description": "Task growable: custom zoned buildings ADDED to a BUILDFAM.IXF family, so they grow in zones next to the stock members (re/tools/netmod/netpack_growables.py, re/analysis/BUILDING_PICK.md 6 C, verify/growable/RESULTS.md)."
+    },
+    "style_sets": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/style_set"},
+      "description": "Task stylemix: a stock building set (Res/Sprites/BuildingSets/<set>) grows NEXT TO the base style instead of replacing it. Every set exemplar that is a BUILDFAM family member is copied verbatim at id + offset (frame table and name unchanged), its frame tables go to CSAttrib_Korea.IXF and its pixels to Res/Sprites/<group>_netpack_set.DAT, and each family gains one Key line per copied member at member weight x weight. Keep the in-game building set at the default (re/tools/netmod/netpack_stylesets.py, re/analysis/BUILDING_PICK.md 6 A, verify/stylemix/RESULTS.md)."
     }
   },
   "$defs": {
+    "style_set": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["set", "offset"],
+      "properties": {
+        "set": {"type": "string", "pattern": "^[0-9A-Fa-f]{8}$", "description": "The set's folder name under Apps/Res/Sprites/BuildingSets (= its SC3CityScheme.ini [BuildingSets] key): e523f3fb (European names) or 6523f3d5 (Asian names)."},
+        "offset": {"type": "integer", "minimum": 65536, "description": "New occupant id = base id + offset. 400000 (e523f3fb) and 1500000 (6523f3d5) follow the sets' own frame-table numbering and are free."},
+        "weight": {"type": "integer", "minimum": 1, "default": 1, "description": "Multiplier on each copied member's stock weight. 1 for every set = each style a third of the time for buildings both sets re-skin."},
+        "families": {"type": "array", "items": {"type": "integer", "minimum": 1}, "description": "Only these BUILDFAM families (default: every family)."}
+      }
+    },
     "growable": {
       "type": "object",
       "additionalProperties": false,

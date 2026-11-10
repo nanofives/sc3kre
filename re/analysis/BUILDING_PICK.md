@@ -5,9 +5,10 @@
 only (no game run, no Ghidra session). Every claim carries `[CONFIRMED @ addr]` or `[UNCERTAIN]` with what is missing.
 
 **Verdicts (section 6):** (C) additive custom growables work with data only, proven in game on 2026-11-10
-(`verify/growable/RESULTS.md`, netpack `growables` key). (A) all three
-sets in one city with a random mix is feasible with data only, but each set building needs its own occupant id and one
-step (making the set's art reachable without the set active) is unproven. (B) a per-area style the player paints needs
+(`verify/growable/RESULTS.md`, netpack `growables` key). (A) all three sets in one city with a random mix works with
+data only, proven in game on 2026-11-10 (`verify/stylemix/RESULTS.md`, netpack `style_sets` key): each set building
+gets its own occupant id, its frame tables go to `CSAttrib_Korea` and its pixels to a top-level `Res\Sprites` DAT, so
+no set has to be active. (B) a per-area style the player paints needs
 code: one hook, a paint tool and save storage. A per-zone-type style (all residential European, say) is data only.
 
 ## 0. Corrections to the starting assumptions
@@ -152,7 +153,10 @@ No remap table, no added ids. [CONFIRMED]
 | f2 to f5 (`0`, `0x3fbX0000`, `0`, `0x3fbX0001`) | the four outputs of `GetUiImageForBuildingSet` | `0x1000575f`; meaning of each pair [UNCERTAIN] |
 | f6 (`0` / `2` / `1`) | `GetSoundIdForCurrentBuildingSet` | `0x10005705` |
 
-Which archive is European and which Asian is [UNCERTAIN]: the set name strings were not resolved.
+`e523f3fb` (`BST_0004.dat`) is the European set and `6523f3d5` (`MBE_0015.dat`) the Asian one. [CONFIRMED, data] Each
+set exemplar's prop 0x6D names it in group `0x453BBDE0` (`SC3MBEStringsBuildings.IXF`, a stock `[DBSegments]` row),
+English-UK: 403065 "Old Charmer", 404008 "La de da Shops" against 1503065 "Kamagaland Cottage", 1504008 "Kwang-Hwa
+Computer Shops". The art agrees (half-timbering and mansards against glass towers, `verify/stylemix` legend sheets).
 
 ## 4. What the save stores
 
@@ -163,10 +167,20 @@ Which archive is European and which Asian is [UNCERTAIN]: the set name strings w
   watched at runtime]
 - A city saved under style X and loaded under Y renders with Y's overrides wherever Y has them; every saved key exists
   in the base files. [CONFIRMED by data]
-- Whether the style id is saved in the city file at all is [UNCERTAIN]. `SimSettings.buildingSetId` is an app
-  preference (CodeView `cSC3AppPreferences+0x84`, `+0xc`); the header part of the city writer read so far
-  (`SIMCITY 0x1000429d`) writes cell counts, names and date, not a scheme id. No `SetCityScheme` caller was found.
-  Missing: that caller, or a diff of one city saved under two styles.
+- **Each city stores its style.** Record `{type 0x0525A6B9, group 0x4525A6E2, instance 1}`, 12 bytes, uncompressed in
+  every shipped save: building set, flora set, landscape. SIMINIT `FUN_10009e1f` (called from
+  `sc3_city_import_savefile` `0x10008bf8`) starts from the defaults (scheme manager `vt+0x24`, `+0x4c`, `+0x68`),
+  reads the three u32 when the record exists and calls `SetCityScheme(landscape, flora, buildingSet, 0)`.
+  [CONFIRMED @ 0x10009e1f] Shipped values: Berlin, Moscow, London, Liverpool, Frankfurt, Madrid, Europolis, Big One,
+  Mount Herrang `e523f3fb`, Seoul and Craterville `6523f3d5`, Madison, Sacramento, Farmsville, Roadless Paradise,
+  Europolis 1024 and the tutorial 0. Runtime: Moscow loads with the live set `0xE523F3FB`; a copy with only that
+  dword set to 0 loads with set 0, and the game's next save of it holds 0 (`verify/stylemix` case 4).
+  [CONFIRMED at runtime] Live layout: scheme manager = `*(app + 0x108)` (`cSC3App::CitySchemeManager` `0x004063cf`
+  reads `[ecx+0xd8]` on the `cISC3App` subobject at app+0x30), `+0x50` current building set, `+0x54` default
+  (`GetDefaultBuildingSet` `0x1000550a`), `+0x58` set archives loaded.
+- The app preference `SimSettings.buildingSetId` (`cSC3AppPreferences+0x90`, `SC3.cfg` record `0xA352F1B5`) does
+  not decide a loaded city's style: set to 0 in a dev tree, Moscow still loaded European. Its use (the New City
+  default, probably) is [UNCERTAIN]: its readers were not traced.
 - BAT replacements are saved in the city: `LoadBATReplacementSet` `0x100059d7` reads record
   `{0x99f47014, 0x79f4702d, 0}` as a count then `(origKey, batKey)` pairs, each passed to `MakeBATReplacement`.
   [CONFIRMED read side; writer `0x10006328` not read]
@@ -218,7 +232,16 @@ exemplar alone in a new container reached only through a `[DBSegments]` row cras
 whose vtable word is not valid). Why is [UNCERTAIN]; a new container with its own `[OccAttribCache]` entry was not
 tested.
 
-### (A) All three sets at once, random mix: feasible, data only, larger, one unproven step
+### (A) All three sets at once, random mix: PROVEN in game 2026-11-10, data only
+
+Built as netpack's `style_sets` key (`re/tools/netmod/netpack_stylesets.py`, package `examples/style_mix`, results
+`verify/stylemix/RESULTS.md`). Step 2 below was not needed as proposed: the set's frame tables are copied verbatim
+(keys unchanged) into `CSAttrib_Korea.IXF` and its pixel records verbatim into `Res\Sprites\<group>_netpack_set.DAT`,
+the two containers netpack already proved for frames and pixels, and the re-keyed exemplars go into
+`OccupantAttribs_Korea.IXF` (`[OccAttribCache]` Entry5). In Moscow 2,887 European and 2,833 Asian copies grew by the
+first autosave, the three styles stand in one view, reload works, switching the style European -> 0 in one session
+keeps the copies' art, and a load without the package replaces each copy with a building of the same type. The
+original plan follows.
 
 Stock blocker: one key gives one record (front segment wins) and the sets reuse the base ids, so each style variant
 needs its own occupant id.
@@ -234,7 +257,9 @@ needs its own occupant id.
    (NETPACK arm F). **Unproven:** whether a top-level listed DAT also serves its `BIN\r` records to the resource
    manager [UNCERTAIN]; netpack used a separate `CSAttrib_Korea` for frames, which suggests it does not.
 3. Shadow copies of the RCI families (4, 7-17, 19, 20, 22-25, 28-31) adding the new ids; weights set the mix ratio.
-4. Keep the active building set at 0, or a set pick re-skins the base ids on top of the mix.
+4. Keep the active building set at 0, or a set pick re-skins the base ids on top of the mix. The set is per city
+   (§4), so this means a city saved with style 0. With a set active the mix still works, the base ids draw in that
+   set's style (measured, `verify/stylemix` case 4).
 
 Fallback if step 2 fails: hook `SetCityScheme` or `FUN_10005fff` to register the set DATs with
 `RegisterDBSegmentBack` (`vt+0x64`) at startup and with the sprite image manager. Base keys keep priority, set-unique
@@ -256,21 +281,24 @@ keys still resolve.
 
 - **C: DONE 2026-11-10** (`verify/growable/RESULTS.md`): red houses on screen, key instance 36001 in the save, reload
   with the mod passes, load without the mod drops the buildings. "Copiar ID" on a red house was not checked.
-- **A (gating):** one re-keyed BST record (FooFoo as 404008) plus the re-keyed BST copy in place, 404008 added to
-  family 9 at high weight, set 0. Pass = BST-art FooFoo and NA-art FooFoo (4008) grow side by side in one city.
+- **A: DONE 2026-11-10** (`verify/stylemix/RESULTS.md`): all 251 set buildings at once rather than one gating
+  record. Copies grow, three styles in one shot with set 0, reload passes, load without the package does not crash.
 
 ## 7. Open items and the evidence missing
 
 - ZoneLayer `+0x24c` identity: a CodeView match for its `+0x20` / `+0x58` slots.
 - Plumbing `vt+0x48` and attrib `+0xbc & 0x100` meanings.
 - Industrial class rows (the D / C / A token): the industrial parser was not read.
-- Whether a city file stores the scheme id: a `SetCityScheme` caller, or a two-save diff.
-- Loader behaviour on an unresolved occupant key: observed (dropped, lot left empty, no crash, §6 C); the branch in
-  `SIMGEOM 0x1001e516` / `0x10002cc2` that drops it is not read.
+- Loader behaviour on an unresolved occupant key. stylemix measured it on a save taken while still paused: all 6,723
+  style copies were replaced on load by another building of the SAME building type (t18), 942 by their own base id,
+  occupant count unchanged, no other lot changed. growable (§6 C) reported its 36001 lots as empty after load, from a
+  screenshot; its save 4 counts (0 of 36001, +896 family-11 stock houses after a run) fit either reading. Recheck
+  growable with a paused save. The branch in `SIMGEOM 0x1001e516` / `0x10002cc2` that substitutes is not read.
 - `[OccAttribCache]`: an exemplar outside it crashes the residential developer (§6 C). Open: why, and whether a new
   container with its own cache entry works.
-- Whether a top-level `Res\Sprites` DAT is also a resource-manager segment.
+- Whether a top-level `Res\Sprites` DAT is also a resource-manager segment (each is registered under
+  `kGZCATNAME_SC3DBSegmentSprite` by `cSC3App::LoadRegistry` `0x0040b761`; stylemix avoided the question by keeping
+  frame tables in `CSAttrib_Korea`).
 - `cRZIniFile::EnumEntries` order: assumed to be file order for `[DBSegments]` priority.
-- Which set id is European and which is Asian.
 
 The one-off helper scripts used (PE vtable reader, TKB1 dumper, family coverage table) were not kept in the repo.
