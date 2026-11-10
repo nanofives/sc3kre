@@ -57,8 +57,8 @@ static int rcb_read(LONG cap[2], LONG sd[2][2]) {
         if (!city) return 0;
         L = (void *)ho_v(city, 0x1b8, 1, 0x80f1e6d3, 0, 0, 0, 0);   /* the valve layer, as GRAPHNEW gn_ctx */
         if (!L) return 0;
+        /* VALVEREF (2026-11-10): GetSpecificLayer is borrowed, only the QI reference is released (see gn_ctx) */
         if (!(ho_v(L, 0x00, 2, 0x40a42f1c, (DWORD)&vl, 0, 0, 0) & 0xff)) vl = NULL;
-        ho_v(L, 0x08, 0, 0, 0, 0, 0, 0);
         if (!vl) return 0;
         for (k = 0; k < 2; k++) {
             void *va = NULL, *vs = NULL;

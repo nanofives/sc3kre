@@ -1803,15 +1803,139 @@ static volatile LONG g_rc_patched[4];
 static BYTE *g_rc_stubs;
 static int   g_rc_nstub;
 
+/* RCTRACE (2026-11-10, crash hunt, verify/crashguard): per-call-site AddRef / Release counts for the objects of ONE
+   class, picked by its vtable: perf.ini [perf] rc_trace=SIMRCI.DLL:0x4cee4 (or env SC3PERF_RC_TRACE). Each event is
+   keyed by the return address into the caller and the next return address found on the stack above it (the caller's
+   caller, approximate: the first stack dword inside a loaded module's image). Every 60 s, and at the first zero-count
+   Release, the table is logged with the traced object's count. Off by default (empty). */
+#define RCT_N 512
+typedef struct { volatile LONG used; DWORD c1, c2; volatile LONG add, rel, zero; } RCT_E;
+static RCT_E g_rct[RCT_N];
+static char g_rct_spec[96];
+static volatile DWORD g_rct_vt, g_rct_obj;
+static int g_rct_off;
+static struct { DWORD lo, hi; } g_rct_mods[192];
+static int g_rct_nmods;
+static volatile LONG g_rct_dumped_zero;
+
+static DWORD rct_parent(const DWORD *sp, DWORD c1) {
+    int i, k;
+    for (i = 1; i < 40; i++) {
+        DWORD v = sp[i];
+        if (v == c1) continue;
+        for (k = 0; k < g_rct_nmods; k++) if (v >= g_rct_mods[k].lo && v < g_rct_mods[k].hi) return v;
+    }
+    return 0;
+}
+static void rct_note(BYTE *self, int off, const DWORD *sp, int kind) {
+    DWORD c1 = sp[0], c2 = rct_parent(sp, c1), h = ((c1 * 2654435761u) ^ (c2 * 40503u)) % RCT_N;
+    int i;
+    g_rct_obj = (DWORD)self; g_rct_off = off;
+    for (i = 0; i < RCT_N; i++, h = (h + 1) % RCT_N) {
+        RCT_E *e = &g_rct[h];
+        if (!e->used && InterlockedCompareExchange(&e->used, 1, 0) == 0) {
+            e->c1 = c1; e->c2 = c2;
+            InterlockedExchange(&e->used, 2);
+        }
+        while (e->used == 1) YieldProcessor();
+        if (e->c1 == c1 && e->c2 == c2) {
+            InterlockedIncrement(kind == 0 ? &e->add : kind == 1 ? &e->rel : &e->zero);
+            return;
+        }
+    }
+}
+static void rct_name(DWORD a, char *out, int n) {
+    HMODULE h;
+    char path[MAX_PATH], *s;
+    if (a && GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                (LPCSTR)a, &h) && GetModuleFileNameA(h, path, sizeof(path))) {
+        s = strrchr(path, '\\');
+        _snprintf(out, n, "%s+0x%lX", s ? s + 1 : path, a - (DWORD)h);
+    } else _snprintf(out, n, "0x%08lX", a);
+    out[n - 1] = 0;
+}
+static void rct_dump(const char *why) {
+    int i;
+    DWORD o = g_rct_obj;
+    logf("RCTRACE> %s: object 0x%08lX count %ld", why, o,
+         (o && !IsBadReadPtr((void *)(o + g_rct_off), 4)) ? *(LONG *)(o + g_rct_off) : -1L);
+    for (i = 0; i < RCT_N; i++) {
+        char a[96], b[96];
+        if (g_rct[i].used != 2) continue;
+        rct_name(g_rct[i].c1, a, sizeof(a));
+        rct_name(g_rct[i].c2, b, sizeof(b));
+        logf("RCTRACE>   +%ld -%ld zero%ld  %s < %s", g_rct[i].add, g_rct[i].rel, g_rct[i].zero, a, b);
+    }
+}
+static DWORD WINAPI rct_thread(LPVOID p) {
+    char mod[64] = {0}, *colon;
+    DWORD rva;
+    HMODULE m = NULL;
+    HANDLE s;
+    MODULEENTRY32 me;
+    int t;
+    (void)p;
+    colon = strchr(g_rct_spec, ':');
+    if (!colon || colon - g_rct_spec >= (int)sizeof(mod)) { logf("RCTRACE> bad spec '%s' (MODULE.DLL:0xRVA)", g_rct_spec); return 0; }
+    memcpy(mod, g_rct_spec, colon - g_rct_spec);
+    rva = strtoul(colon + 1, NULL, 16);
+    for (t = 0; t < 12000 && !(m = GetModuleHandleA(mod)); t++) Sleep(50);
+    if (!m) { logf("RCTRACE> %s never loaded", mod); return 0; }
+    Sleep(3000);                                   /* the game maps every Apps DLL around then */
+    s = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetCurrentProcessId());
+    me.dwSize = sizeof(me);
+    if (s != INVALID_HANDLE_VALUE && Module32First(s, &me)) do {
+        if (g_rct_nmods < 192) {
+            g_rct_mods[g_rct_nmods].lo = (DWORD)me.modBaseAddr;
+            g_rct_mods[g_rct_nmods].hi = (DWORD)me.modBaseAddr + me.modBaseSize;
+            g_rct_nmods++;
+        }
+    } while (Module32Next(s, &me));
+    if (s != INVALID_HANDLE_VALUE) CloseHandle(s);
+    g_rct_vt = (DWORD)m + rva;
+    logf("RCTRACE> watching objects with vtable %s+0x%lX (0x%08lX), %d module ranges", mod, rva, g_rct_vt, g_rct_nmods);
+    for (;;) { Sleep(60000); rct_dump("periodic"); }
+}
+
 static LONG __fastcall rc_addref(BYTE *self, RCP *p) {
     LONG n = InterlockedIncrement((volatile LONG *)(self + p->off));
     BYTE *st = ((RC_STATS)p->stats)();
+    if (g_rct_vt && *(DWORD *)self == g_rct_vt) rct_note(self, p->off, (const DWORD *)_AddressOfReturnAddress(), 0);
     ((TVOID0)(*(DWORD **)st)[1])(st, NULL);
     return n;
+}
+/* RCZERO (2026-11-10, from thronevintagetech's SC3KU Enhancement Package v2026.11.09, MIT): the F2/F3 Release bodies
+   run the deleting destructor when the count is ALREADY 0 (F2 jbe skips the decrement and falls into TAIL, e.g.
+   SIMRCI sc3_valvelayer_release 0x1002efb8), and so did our atomic copy. A destructor that releases an interface on
+   its own object, or a second thread that reads the count after another thread's 1 -> 0, then destroys the object a
+   second time. With rc_zero=1 only the 1 -> 0 transition destroys; a Release that finds 0 returns 0 and is logged
+   (first 32, then every 1000th) with the caller and the object's vtable, so a player log shows where it happens.
+   rc_zero=0 = the stock behaviour. */
+static int g_rczero = 1;
+static volatile LONG g_rczero_n;
+static void rc_zero_note(BYTE *self, void *caller) {
+    LONG k = InterlockedIncrement(&g_rczero_n);
+    char cm[MAX_PATH] = "?", vm[MAX_PATH] = "?";
+    HMODULE h;
+    DWORD vt = 0, cb = 0, vb = 0;
+    if (k > 32 && k % 1000) return;
+    if (!IsBadReadPtr(self, 4)) vt = *(DWORD *)self;
+    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (LPCSTR)caller, &h)) { cb = (DWORD)h; GetModuleFileNameA(h, cm, sizeof(cm)); }
+    if (vt && GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                 (LPCSTR)vt, &h)) { vb = (DWORD)h; GetModuleFileNameA(h, vm, sizeof(vm)); }
+    logf("RCZERO> #%ld Release at count 0 skipped: object 0x%08lX vtable %s+0x%lX, caller %s+0x%lX, thread %lu",
+         k, (DWORD)self, strrchr(vm, '\\') ? strrchr(vm, '\\') + 1 : vm, vt - vb,
+         strrchr(cm, '\\') ? strrchr(cm, '\\') + 1 : cm, (DWORD)caller - cb, GetCurrentThreadId());
 }
 static LONG __fastcall rc_release(BYTE *self, RCP *p) {
     volatile LONG *rc = (volatile LONG *)(self + p->off);
     LONG n;
+    if (g_rct_vt && *(DWORD *)self == g_rct_vt) {
+        const DWORD *sp = (const DWORD *)_AddressOfReturnAddress();
+        rct_note(self, p->off, sp, *rc ? 1 : 2);
+        if (!*rc && InterlockedExchange(&g_rct_dumped_zero, 1) == 0) rct_dump("first zero-count Release");
+    }
     if (p->kind == 1) {
         BYTE *st;
         n = InterlockedDecrement(rc);
@@ -1820,7 +1944,10 @@ static LONG __fastcall rc_release(BYTE *self, RCP *p) {
     } else {
         for (;;) {
             LONG o = *rc;
-            if (!o) { n = 0; break; }
+            if (!o) {
+                if (g_rczero) { rc_zero_note(self, _ReturnAddress()); return 0; }
+                n = 0; break;
+            }
             if (InterlockedCompareExchange(rc, o - 1, o) == o) {
                 BYTE *st = ((RC_STATS)p->stats)();
                 ((TVOID0)(*(DWORD **)st)[0x28 / 4])(st, NULL);
@@ -1935,6 +2062,169 @@ static DWORD WINAPI rc_watcher(LPVOID p) {
         Sleep(50);
     }
     logf("LAYER_REFCOUNT> done: %ld AddRef, %ld + %ld Release patched in total", g_rc_patched[0], g_rc_patched[1], g_rc_patched[2]);
+    return 0;
+}
+
+/* ---------------------------------------------------------------- VALVESHUT (2026-11-10)
+   Ported from thronevintagetech's sc3rcicleanup (SC3KU Enhancement Package v2026.11.09, MIT) and checked against our
+   SIMRCI disassembly. SIMRCI sc3_valvelayer_shutdown 0x1002ecbc (cISC3CityLayer::Shutdown, slot 0x34 of the valve
+   layer's interface vtable 0x1004ce9c; `this` = that interface, object count at this+4 per sc3_valvelayer_addref
+   0x1004312b / _release 0x1002efb8) drains two maps. The first loop null-checks each node's payload +0x14 (0x1002ed27),
+   the second calls through it unchecked (0x1002ed59). Shutdown also NULLs +0x38 (0x1002eda2) while the forwarder
+   0x1002e9da (slot 0x6c of the same vtable) calls [this+0x38]->vt+0x34 with no check. Parts, perf.ini [perf] / SC3PERF_*:
+     valve_guard=1  second loop skips a NULL payload and goes on to the erase at 0x1002ed66, as the first loop does;
+                    both loops leave when the tree is empty although the count is not (a re-entrant drain);
+                    the forwarder returns 0 while +0x38 is NULL
+     valve_hold=1   a Shutdown re-entered for the same layer on the same thread returns 1 at once, and the layer holds
+                    one extra reference while Shutdown runs, so a child's Release cannot free it mid-way
+     valve_lock=1   Shutdown and the forwarder take one lock, so the sim thread cannot call through +0x38 while the game
+                    thread releases it (needs valve_hold=1, which owns the shutdown hook)
+   Gate: SIMRCI TimeDateStamp 0x38fd559f, SizeOfImage 0x60000, and the original bytes at every site. A site already
+   patched by someone else (for example the fork's own sc3rcicleanup.dll) fails the byte check and nothing is installed. */
+static int g_valveguard = 1, g_valvehold = 1, g_valvelock = 1;
+typedef DWORD (__fastcall *VS_SHUT)(BYTE *self, void *edx);
+typedef DWORD (__fastcall *VS_DISP)(BYTE *self, void *edx, DWORD a, DWORD b, DWORD c);
+typedef struct VS_FRAME { BYTE *self; struct VS_FRAME *prev; } VS_FRAME;
+static VS_SHUT g_vs_shut;
+static VS_DISP g_vs_disp;
+static DWORD g_vs_tls = TLS_OUT_OF_INDEXES;
+static CRITICAL_SECTION g_vs_cs;
+static volatile LONG g_vs_reentry, g_vs_refused, g_vs_calls;
+
+static int vs_in_shutdown(BYTE *self) {
+    VS_FRAME *f;
+    if (g_vs_tls == TLS_OUT_OF_INDEXES) return 0;
+    for (f = (VS_FRAME *)TlsGetValue(g_vs_tls); f; f = f->prev) if (f->self == self) return 1;
+    return 0;
+}
+static DWORD __fastcall vs_shutdown(BYTE *self, void *edx) {
+    VS_FRAME fr;
+    DWORD r = 1;
+    int held = 0, lock = g_valvelock;
+    (void)edx;
+    if (lock) EnterCriticalSection(&g_vs_cs);
+    if (vs_in_shutdown(self)) {
+        InterlockedIncrement(&g_vs_reentry);
+        logf("VALVESHUT> Shutdown re-entered for layer 0x%08lX on thread %lu: returned at once", (DWORD)self,
+             GetCurrentThreadId());
+        if (lock) LeaveCriticalSection(&g_vs_cs);
+        return 1;
+    }
+    fr.self = self;
+    fr.prev = (VS_FRAME *)TlsGetValue(g_vs_tls);
+    TlsSetValue(g_vs_tls, &fr);
+    InterlockedIncrement(&g_vs_calls);
+    __try {
+        if (*(volatile LONG *)(self + 4) > 0) { ((TVOID0)(*(DWORD **)self)[1])(self, NULL); held = 1; }
+        r = g_vs_shut(self, NULL);
+    } __finally {
+        TlsSetValue(g_vs_tls, fr.prev);
+        if (lock) LeaveCriticalSection(&g_vs_cs);
+        if (held) ((TVOID0)(*(DWORD **)self)[2])(self, NULL);   /* may be the final Release: no reads of self after */
+    }
+    return r;
+}
+static DWORD __fastcall vs_dispatch(BYTE *self, void *edx, DWORD a, DWORD b, DWORD c) {
+    DWORD r = 0;
+    int lock = g_valvelock;
+    (void)edx;
+    if (lock) EnterCriticalSection(&g_vs_cs);
+    __try {
+        if (!vs_in_shutdown(self) && *(void **)(self + 0x38)) r = g_vs_disp(self, NULL, a, b, c);
+        else if (InterlockedIncrement(&g_vs_refused) <= 8)
+            logf("VALVESHUT> layer 0x%08lX: call through +0x38 refused (%s), thread %lu", (DWORD)self,
+                 *(void **)(self + 0x38) ? "inside its Shutdown" : "cleared by Shutdown", GetCurrentThreadId());
+    } __finally {
+        if (lock) LeaveCriticalSection(&g_vs_cs);
+    }
+    return r;
+}
+static BYTE *vs_exec(size_t n) {
+    static BYTE *pool;
+    static size_t used;
+    BYTE *p;
+    if (!pool) pool = (BYTE *)VirtualAlloc(NULL, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!pool || used + n > 4096) return NULL;
+    p = pool + used;
+    used += (n + 15) & ~15u;
+    return p;
+}
+static void vs_rel32(BYTE *at, const BYTE *to) { *(LONG *)at = (LONG)(to - (at + 4)); }
+static void vs_patch(BYTE *at, int len, const BYTE *to) {
+    DWORD old;
+    int i;
+    VirtualProtect(at, len, PAGE_EXECUTE_READWRITE, &old);
+    at[0] = 0xE9; vs_rel32(at + 1, to);
+    for (i = 5; i < len; i++) at[i] = 0x90;
+    VirtualProtect(at, len, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), at, len);
+}
+static void patch_valveshut(BYTE *b) {
+    static const BYTE w_shut[] = {0x53, 0x55, 0x56, 0x8b, 0xf1};
+    static const BYTE w_null[] = {0x8b, 0x4f, 0x14, 0x8b, 0x01};
+    static const BYTE w_tree[] = {0x8b, 0x03, 0x8b, 0x78, 0x08};
+    static const BYTE w_erase[] = {0x51, 0x8b, 0xcb, 0x8b, 0xc4, 0x89, 0x38};
+    static const BYTE w_disp[] = {0xff, 0x74, 0x24, 0x0c, 0x8b, 0x49, 0x38, 0xff, 0x74, 0x24, 0x0c, 0x8b, 0x01,
+                                  0xff, 0x74, 0x24, 0x0c, 0xff, 0x50, 0x34, 0xc2, 0x0c, 0x00};
+    static const DWORD nulls[2] = {0x2ed56, 0x2ed5e}, trees[2] = {0x2ed1f, 0x2ed51}, exits[2] = {0x2ed49, 0x2ed77};
+    static const BYTE cnt[2] = {0x18, 0x28};
+    BYTE *pe = b + *(DWORD *)(b + 0x3c), *c;
+    int i, guard = g_valveguard, hold = g_valvehold;
+    if (*(DWORD *)pe != 0x4550 || *(DWORD *)(pe + 8) != 0x38fd559f || *(DWORD *)(pe + 80) != 0x60000) {
+        logf("VALVESHUT> SIMRCI.DLL is not the 2.0.949 build (timestamp/size differ): not installed");
+        return;
+    }
+    if (guard && (memcmp(b + nulls[0], w_null, 5) || memcmp(b + nulls[1], w_null, 5) || memcmp(b + trees[0], w_tree, 5) ||
+                  memcmp(b + trees[1], w_tree, 5) || memcmp(b + 0x2ed66, w_erase, 7) || memcmp(b + 0x2e9da, w_disp, 23))) {
+        logf("VALVESHUT> guard sites differ from the stock bytes (patched by another mod?): guard not installed");
+        guard = 0;
+    }
+    if (hold && memcmp(b + 0x2ecbc, w_shut, 5)) {
+        logf("VALVESHUT> Shutdown entry differs from the stock bytes (patched by another mod?): hold not installed");
+        hold = 0;
+    }
+    if (hold && (g_vs_tls = TlsAlloc()) == TLS_OUT_OF_INDEXES) hold = 0;
+    /* the lock lives in both hooks, so it is settled before either goes live (Enter/Leave must stay paired) */
+    g_valvelock = g_valvelock && guard && hold;
+    if (g_valvelock) InitializeCriticalSection(&g_vs_cs);
+    if (guard) {
+        for (i = 0; i < 2; i++) {          /* mov ecx,[edi+14h] / test ecx,ecx / jz erase / mov eax,[ecx] / jmp back */
+            if (!(c = vs_exec(18))) return;
+            memcpy(c, "\x8b\x4f\x14\x85\xc9\x0f\x84\0\0\0\0\x8b\x01\xe9\0\0\0\0", 18);
+            vs_rel32(c + 7, b + 0x2ed66);
+            vs_rel32(c + 14, b + nulls[i] + 5);
+            vs_patch(b + nulls[i], 5, c);
+        }
+        for (i = 0; i < 2; i++) {          /* mov eax,[ebx] / mov edi,[eax+8] / cmp edi,eax / jne back / count=0 / jmp exit */
+            if (!(c = vs_exec(25))) return;
+            memcpy(c, "\x8b\x03\x8b\x78\x08\x3b\xf8\x0f\x85\0\0\0\0\xc7\x46\0\0\0\0\0\xe9\0\0\0\0", 25);
+            vs_rel32(c + 9, b + trees[i] + 5);
+            c[15] = cnt[i];
+            vs_rel32(c + 21, b + exits[i]);
+            vs_patch(b + trees[i], 5, c);
+        }
+        if (!(c = vs_exec(12))) return;    /* the forwarder's first 7 bytes, then back to 0x1002e9e1 */
+        memcpy(c, w_disp, 7);
+        c[7] = 0xE9; vs_rel32(c + 8, b + 0x2e9e1);
+        g_vs_disp = (VS_DISP)c;
+        vs_patch(b + 0x2e9da, 7, (BYTE *)vs_dispatch);
+    }
+    if (hold) {
+        if (!(c = vs_exec(10))) return;    /* the Shutdown's first 5 bytes, then back to 0x1002ecc1 */
+        memcpy(c, w_shut, 5);
+        c[5] = 0xE9; vs_rel32(c + 6, b + 0x2ecc1);
+        g_vs_shut = (VS_SHUT)c;
+        vs_patch(b + 0x2ecbc, 5, (BYTE *)vs_shutdown);
+    }
+    logf("VALVESHUT> SIMRCI 0x%08lX: guard=%d hold=%d lock=%d", (DWORD)b, guard, hold, g_valvelock);
+}
+static DWORD WINAPI vs_watcher(LPVOID p) {
+    HMODULE m = NULL;
+    int t;
+    (void)p;
+    for (t = 0; t < 12000 && !(m = GetModuleHandleA("SIMRCI.DLL")); t++) Sleep(50);   /* up to 10 minutes */
+    if (!m) { logf("VALVESHUT> SIMRCI.DLL never loaded: not installed"); return 0; }
+    patch_valveshut((BYTE *)m);
     return 0;
 }
 
@@ -3434,6 +3724,10 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID r) {
         g_fastceil = cfg("fast_ceil", 1);
         g_sprref = cfg("spr_refcount", 1);
         g_layerref = cfg("layer_refcount", 1);
+        g_rczero = cfg("rc_zero", 1);           /* RCZERO, SC3PERF_RC_ZERO=0 */
+        g_valveguard = cfg("valve_guard", 1);   /* VALVESHUT parts, SC3PERF_VALVE_GUARD / _HOLD / _LOCK=0 */
+        g_valvehold = cfg("valve_hold", 1);
+        g_valvelock = cfg("valve_lock", 1);
         g_strtref = cfg("strtsim_refcount", 1);
         g_strtref_all = cfg("strtsim_refcount_all", 1);
         g_sgref = cfg("simgroup_refcount", 1);
@@ -3473,6 +3767,15 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID r) {
         if (g_spr_budget > 0 || g_spr_follow || g_sprref) CreateThread(NULL, 0, spr_watcher, NULL, 0, NULL);
         if (g_sprref) CreateThread(NULL, 0, ss_watcher, NULL, 0, NULL);
         if (g_layerref) CreateThread(NULL, 0, rc_watcher, NULL, 0, NULL);
+        logf("CRASHGUARD> rc_zero=%d (with layer_refcount=%d) valve_guard=%d valve_hold=%d valve_lock=%d",
+             g_rczero, g_layerref, g_valveguard, g_valvehold, g_valvelock);
+        if (g_valveguard || g_valvehold) CreateThread(NULL, 0, vs_watcher, NULL, 0, NULL);
+        {   char ini[MAX_PATH];
+            _snprintf(ini, sizeof(ini), "%sperf.ini", g_dir);
+            GetPrivateProfileStringA("perf", "rc_trace", "", g_rct_spec, sizeof(g_rct_spec), ini);
+            GetEnvironmentVariableA("SC3PERF_RC_TRACE", g_rct_spec, sizeof(g_rct_spec));
+            if (g_rct_spec[0] && g_layerref) CreateThread(NULL, 0, rct_thread, NULL, 0, NULL);
+        }
         if (g_strtref) CreateThread(NULL, 0, st_watcher, NULL, 0, NULL);
         if (g_sgref) CreateThread(NULL, 0, sg_watcher, NULL, 0, NULL);
         if (g_resref_spr || g_resref_gz || g_strtref_ecx || g_scnref || g_le1ref_ui) CreateThread(NULL, 0, rr_watcher, NULL, 0, NULL);
