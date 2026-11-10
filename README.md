@@ -143,6 +143,8 @@ French, German, Italian, Dutch, Swedish) and follows the game's language.
 ### Community mods (optional, `community\` in the release)
 Apache Flyover and Civic Deals + Extra Cheats by thronevintagetech and Null 45, shipped with the authors'
 permission. `community\community_patch.ps1` installs them on your own game files and `-Restore` removes them.
+Run it again after installing a new sc3mods release: it also writes the petitions into the road mod's own `SYS.PAK`
+in `mods\netmod`, which a new release replaces.
 - Civic Deals: two new Reunirse offers (in Spanish on a Spanish game), forest and weather cheats. A "forest" button
   joins the Landscape tool menu. Extra Cheats: dotcom, moolah, SimDate (SimDate fixed by sc3resize).
 - Apache Flyover, built from the author's source in [`re/community/apache`](re/community/apache): works on 1024 maps,
