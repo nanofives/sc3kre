@@ -352,9 +352,27 @@
         }
       },
       "description": "Task boulevard: sc3netmod turns three parallel straight roads (a run of at least 3 clean columns, along x or z) into one boulevard: carriageways on the outer rows, extra lanes and a tree median on the middle one; junctions with single straight roads, end caps and tapers. After each road retile and after a city load; back to stock when it stops qualifying. Rule and tool: re/tools/netmod/boulevard.py, verify/boulevard/."
+    },
+    "growables": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/growable"},
+      "description": "Task growable: custom zoned buildings ADDED to a BUILDFAM.IXF family, so they grow in zones next to the stock members (re/tools/netmod/netpack_growables.py, re/analysis/BUILDING_PICK.md 6 C, verify/growable/RESULTS.md)."
     }
   },
   "$defs": {
+    "growable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "base", "family"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1, "maximum": 65535, "description": "New building occupant id {0x207EDC0E, 0x57E, id}: no stock exemplar (stock ids top out at 35005), not used by a variant or another growable (frame-table, name and pixel keys share the id space)."},
+        "base": {"type": "integer", "minimum": 1, "description": "Stock building whose exemplar is copied (LandUse, footprint, population, cost). Its LandUse (prop 0x65) must equal the family's."},
+        "family": {"type": "integer", "minimum": 1, "description": "BUILDFAM.IXF family record instance (1..31 stock), e.g. 11 = residential low density, low land value, LandUse 3100."},
+        "weight": {"type": "integer", "minimum": 1, "default": 1, "description": "4th Key field: how many times the building enters the rule's draw list (stock weights 1..10)."},
+        "name": {"$ref": "#/$defs/names"},
+        "art": {"$ref": "#/$defs/art"}
+      }
+    },
     "piece_id": {
       "type": "integer",
       "minimum": 1,

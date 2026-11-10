@@ -4,7 +4,8 @@
 (b) custom buildings ADDED to the pool of buildings that grow in zones instead of replacing a stock one. Static reading
 only (no game run, no Ghidra session). Every claim carries `[CONFIRMED @ addr]` or `[UNCERTAIN]` with what is missing.
 
-**Verdicts (section 6):** (C) additive custom growables are feasible with data only and are the cheapest. (A) all three
+**Verdicts (section 6):** (C) additive custom growables work with data only, proven in game on 2026-11-10
+(`verify/growable/RESULTS.md`, netpack `growables` key). (A) all three
 sets in one city with a random mix is feasible with data only, but each set building needs its own occupant id and one
 step (making the set's art reachable without the set active) is unproven. (B) a per-area style the player paints needs
 code: one hook, a paint tool and save storage. A per-zone-type style (all residential European, say) is data only.
@@ -183,7 +184,12 @@ Which archive is European and which Asian is [UNCERTAIN]: the set name strings w
 
 ## 6. Verdicts
 
-### (C) Additive custom growables: feasible, data only, cheapest
+### (C) Additive custom growables: PROVEN in game 2026-11-10, data only
+
+Runtime result (`verify/growable/RESULTS.md`): a red copy of Pitched Roof Cottage at new id 36001, added to family 11
+at weight 50 next to the 12 stock members, grew on its own in Moscow (954 lots in the first autosave, counted with
+`occupant_layer.py`), reloaded with the mod (931 in the next save), and nothing stock was replaced. Reproducible as
+netpack's `growables` key (`re/tools/netmod/netpack_growables.py`, example `examples/growable_test`). The recipe:
 
 1. An exemplar TKB1 record at a new key `{0x207EDC0E, 0x57E, newId}`: prop 0x65 = an existing class (e.g. 3100, so
    population, jobs and the developer class line up), prop 0x66 footprint, prop 0x67 pointing at a new CSAttrib frame
@@ -197,9 +203,20 @@ Which archive is European and which Asian is [UNCERTAIN]: the set name strings w
    which competes in the up-to-4 random rule tries.
 4. No code.
 
-Caveats: saves then contain `newId`, so the mod must be installed to load them; what the loader does with an unresolved
-key is [UNCERTAIN] (`SIMGEOM 0x1001e516`, `0x10002cc2`). Whether a new attrib container must also be listed in
-`[OccAttribCache]` is [UNCERTAIN] (Korea `0x55908ADC` is already Entry5).
+Family line placement: `SIMGEOM 0x10001250` reads Key lines until `BuildingCount` of them resolved; a weight-0 or
+unresolved key lowers the count instead [CONFIRMED @ 0x1000136f], so the new line goes first and the count is raised
+by one.
+
+Saves: they contain `newId`. Loading one **without** the mod does not crash: the buildings are dropped on load, their
+lots show as empty zoned land and regrow with stock members (no 36001 in the next save, 896 more family-11 stock
+houses). [CONFIRMED at runtime, `verify/growable/RESULTS.md` (4)]. Which branch of `SIMGEOM 0x1001e516` /
+`0x10002cc2` drops the key was not traced.
+
+`[OccAttribCache]`: needed in practice. The exemplar inside `OccupantAttribs_Korea.IXF` (Entry5) works. The same
+exemplar alone in a new container reached only through a `[DBSegments]` row crashed the game twice out of two runs,
+~3 s after unpause, at `SIMRCI 0x10026D6D` (`call [edx+0x40]` in `sc3_resdev_place_lots_block_v3` on an attrib
+whose vtable word is not valid). Why is [UNCERTAIN]; a new container with its own `[OccAttribCache]` entry was not
+tested.
 
 ### (A) All three sets at once, random mix: feasible, data only, larger, one unproven step
 
@@ -237,9 +254,8 @@ keys still resolve.
 
 ### Runtime checks that would prove each
 
-- **C:** copy one 1x1 class-3100 exemplar with flat-red art (netpack pattern) to a new id, add it to family 11 with
-  weight 50, zone light residential on low land value with power, watch for red houses. Then "Copiar ID" shows the new
-  id, after save `occupant_layer.py` shows key instance = new id, and the city reloads with the mod present.
+- **C: DONE 2026-11-10** (`verify/growable/RESULTS.md`): red houses on screen, key instance 36001 in the save, reload
+  with the mod passes, load without the mod drops the buildings. "Copiar ID" on a red house was not checked.
 - **A (gating):** one re-keyed BST record (FooFoo as 404008) plus the re-keyed BST copy in place, 404008 added to
   family 9 at high weight, set 0. Pass = BST-art FooFoo and NA-art FooFoo (4008) grow side by side in one city.
 
@@ -249,8 +265,10 @@ keys still resolve.
 - Plumbing `vt+0x48` and attrib `+0xbc & 0x100` meanings.
 - Industrial class rows (the D / C / A token): the industrial parser was not read.
 - Whether a city file stores the scheme id: a `SetCityScheme` caller, or a two-save diff.
-- Loader behaviour on an unresolved occupant key: `SIMGEOM 0x1001e516` / `0x10002cc2`.
-- `[OccAttribCache]` requirement for new attrib segments.
+- Loader behaviour on an unresolved occupant key: observed (dropped, lot left empty, no crash, §6 C); the branch in
+  `SIMGEOM 0x1001e516` / `0x10002cc2` that drops it is not read.
+- `[OccAttribCache]`: an exemplar outside it crashes the residential developer (§6 C). Open: why, and whether a new
+  container with its own cache entry works.
 - Whether a top-level `Res\Sprites` DAT is also a resource-manager segment.
 - `cRZIniFile::EnumEntries` order: assumed to be file order for `[DBSegments]` priority.
 - Which set id is European and which is Asian.
