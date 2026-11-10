@@ -25,7 +25,7 @@ Two findings changed the picture on the way:
 | `re/tools/netmod/netpack_stylesets.py` | new: compiles the `style_sets` manifest key |
 | `re/tools/netmod/netpack.py` | wires `style_sets` into compile, merge (collisions, Korea pair, set DATs, BUILDFAM lines) and the report (also prints growables now) |
 | `re/tools/netmod/netpack.schema.json` | `style_sets` property + `$defs/style_set` |
-| `re/tools/netmod/examples/style_mix/build_style_mix.py` + `manifest.json` | the package, written by script (`--euro N --asian N` set the weights) |
+| `re/tools/netmod/stylemix_build.py` + `manifest.json` | the package, written by script (`--euro N --asian N` set the weights) |
 | `re/tools/netmod/examples/style_mix/README.md` | player-facing description |
 | `verify/stylemix/*.py` | the checks below: style counts, legend sheet, live scheme read, save scheme read/patch, no-mod diff |
 
@@ -75,8 +75,8 @@ For comparison the set DATs that `SetCityScheme` registers in GZResourceD hold 5
 Dev workspace `dev/stylemix`, city `Moscow, Russia.sc3` (24,512 occupants as shipped). Windowed, posted keys and
 clicks only (0x50 unpause, 0x34 speed 4, minimap clicks, the Load dialog). Churn sped up with `inst\simrun.ini`
 `[churn] anarchy_res=5000, anarchy_com=5000`. Autosave every 150 s. Counts from `occupant_layer.py`
-(`re/tools/netmod/examples/style_mix/verify/verify_stylemix_count.py`). "Mixable" = base buildings whose id has style copies. Live style read
-from memory with `verify_stylemix_scheme.py` (scheme manager = `*(app + 0x108)`, vtable checked =
+(`re/tools/netmod/stylemix_verify_count.py`). "Mixable" = base buildings whose id has style copies. Live style read
+from memory with `stylemix_verify_scheme.py` (scheme manager = `*(app + 0x108)`, vtable checked =
 SIMINIT+0x2f528, `+0x50` = current building set).
 
 | Save | City style | Occupants | Base (mixable ids) | European | Asian | 36001 |
@@ -115,7 +115,7 @@ SIMINIT+0x2f528, `+0x50` = current building set).
 5. **Load WITHOUT the mod** (package uninstalled, the other 21 kept): no crash, no VEH fault. The copies do not
    become empty lots. On load each copy is replaced by another building of the **same building type** (t18): of
    6,723 copies, 942 became their own base id and 5,781 another member, all 6,723 of the same type, the occupant
-   count is unchanged (25,193) and no other lot changed (`verify_stylemix_nomod_diff.py`, save taken while still
+   count is unchanged (25,193) and no other lot changed (`stylemix_verify_nomod_diff.py`, save taken while still
    paused, so no sim time passed). `s11_load_without_mod.png` shows the street with North American buildings where
    the copies were. Which branch of `SIMGEOM 0x1001e516` / `0x10002cc2` picks the substitute was not traced.
 
@@ -145,10 +145,10 @@ against glass towers). The `[BuildingSets]` sound field is 2 for `e523f3fb` and 
 ## Files
 
 - Commit (from `dev/stylemix/wt`): `re/tools/netmod/netpack_stylesets.py`, `re/tools/netmod/netpack.py`,
-  `re/tools/netmod/netpack.schema.json`, `re/tools/netmod/examples/style_mix/build_style_mix.py`,
+  `re/tools/netmod/netpack.schema.json`, `re/tools/netmod/stylemix_build.py`,
   `re/tools/netmod/examples/style_mix/manifest.json`, `re/tools/netmod/examples/style_mix/README.md`,
-  `re/analysis/BUILDING_PICK.md`, `verify/stylemix/RESULTS.md`, `re/tools/netmod/examples/style_mix/verify/verify_stylemix_count.py`,
-  `re/tools/netmod/examples/style_mix/verify/verify_stylemix_legend.py`, `re/tools/netmod/examples/style_mix/verify/verify_stylemix_scheme.py`,
-  `re/tools/netmod/examples/style_mix/verify/verify_stylemix_setscheme.py`, `re/tools/netmod/examples/style_mix/verify/verify_stylemix_nomod_diff.py`.
+  `re/analysis/BUILDING_PICK.md`, `verify/stylemix/RESULTS.md`, `re/tools/netmod/stylemix_verify_count.py`,
+  `re/tools/netmod/stylemix_verify_legend.py`, `re/tools/netmod/stylemix_verify_scheme.py`,
+  `re/tools/netmod/stylemix_verify_setscheme.py`, `re/tools/netmod/stylemix_verify_nomod_diff.py`.
   MAIN: `re/sessions/STATUS_stylemix.md`.
 - Not committed: `MAIN\verify\stylemix\owner_shots\*.png` (game art), the saves in `dev/stylemix/tree/Cities`.

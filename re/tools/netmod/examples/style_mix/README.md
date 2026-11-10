@@ -38,5 +38,5 @@ To change the mix, rebuild the manifest with different weights before installing
 European and Asian buildings as North American ones:
 
 ```
-py -3.12 re/tools/netmod/examples/style_mix/build_style_mix.py --euro 2 --asian 2
+py -3.12 re/tools/netmod/stylemix_build.py --euro 2 --asian 2
 ```
