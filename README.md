@@ -20,6 +20,8 @@ Ready-to-use mods for your own copy of SimCity 3000 Unlimited, published as zips
 Steam copies both work.
 `sc3mods_patch.ps1 -Restore` goes back to stock. Each release has a `README.txt` with install steps, every option
 and what changed.
+Bitdefender flagged `sc3netmod.dll` up to 2026-11-10 (Gen:Variant.Draftor.8144, a false positive). From 2026-11-10b
+every mod DLL carries version information and scans clean.
 
 **Settings.** Preferences > "Mod options..." holds the settings (interface scale, FPS limit, autosave, camera
 speeds, language). "Turn mods on/off..." on that page switches each mod, and the main features inside them, on or
@@ -95,6 +97,8 @@ French, German, Italian, Dutch, Swedish) and follows the game's language.
 ### Speed and stability (sc3perf)
 - Faster drawing, frame cap, FPS counter and profiler (one font and size on every screen), traffic simulation on several threads, and the fixes that make
   1024 cities load, reload and run without freezing or crashing.
+- Crash guards from thronevintagetech's SC3KU Enhancement Package: an object already at a zero count is never freed
+  twice, and the demand valve layer's shutdown is protected.
 
 ### Roads, avenues and highways (sc3netmod + road data)
 - Avenues with 2 lanes each way (right-hand traffic, lane markings), on slopes too, also where they pass under a
