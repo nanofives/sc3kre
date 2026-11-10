@@ -101,7 +101,8 @@ French, German, Italian, Dutch, Swedish) and follows the game's language.
   highway next to its ramps. Avenues that stay two-way keep the stock look and lanes.
 - Boulevards: three parallel roads become a boulevard with a median.
 - Diagonal avenues and boulevards, with junctions, crosswalks, merges and bends.
-- Avenue junctions with roads and with other avenues, corners and T junctions.
+- Avenue junctions with roads and with other avenues, corners, T junctions, dead ends and U-turn ends, and a
+  boulevard that narrows into an avenue with a side avenue joining.
 - Roundabouts: a 2x2 road square becomes a roundabout by itself, plus a 3x3 one.
 - Highway interchanges (diagonal ones too) that finish building, on-ramps, capped joins, correctly lit walls, roads kept
   under highway T junctions.
