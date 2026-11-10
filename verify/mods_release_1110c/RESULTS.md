@@ -46,3 +46,6 @@ differ from 10b. Its `mods\` is still the unpatched one: 121 files, all byte-ide
 community_patch.ps1 themselves; the LAN tree has the community mods pre-installed, so its overlay SYS.PAK differs from
 the zip's by design). 159 entries. `sc3mods_2026-11-10c.zip` 51,926,579 bytes, SHA-256
 EB8CB4707536B4BBE91D700A000F89B18FA426EAA3F3FD0DFA11F0F57091F3CB.
+
+GitHub: `sc3mods-2026-11-10c`, target d97ef20, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-11-10c, asset
+downloaded back, SHA-256 matches. The 10b notes start with a "superseded" line.
