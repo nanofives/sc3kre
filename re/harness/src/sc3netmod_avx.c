@@ -145,8 +145,22 @@ static const struct { WORD id; DWORD m; } AVX_STOCK[] = {
     { 69, 0x01040104 }, { 67, 0x01040104 }, { 11258, 0x21040184 }, { 15098, 0x20842180 }, { 31, 0x20802080 },
     { 32, 0x01040104 }, { 11201, 0x20802080 }, { 11202, 0x01040104 } };
 
+/* task avends E (2026-11-09, round brief ROUND_2026-11-09_avends.md, twin avjunc_rule AVSTUB): the stock road dead end
+   11225 (a one-cell stub, props 310 = 0x80008000, one arm: S at state 0) is a road arm. Without it a half T'd into a
+   stub read "unknown arms": no box formed and avcore ended the band on the stock T (owner's Big One (614,192), between
+   slope rows 191 / 193). Off: SC3NETMOD_AVSTUB=0 (then 11225 is unknown again, as before). */
+static int g_avs = -1;
+static int avs_on(void) {
+    if (g_avs < 0) {
+        g_avs = !env_off("SC3NETMOD_AVSTUB");
+        logf("avx: avstub (road dead end 11225 is a road arm) %s", g_avs ? "on" : "off (SC3NETMOD_AVSTUB=0)");
+    }
+    return g_avs;
+}
+
 static int avx_stock_arms(WORD b) {                       /* -> arm sides N E S W at state 0 (bits), -1 unknown */
     int k, d, out = 0;
+    if (b == 11225) return avs_on() ? 1 << 2 : -1;        /* task avends E: S at state 0 */
     for (k = 0; k < (int)(sizeof(AVX_STOCK) / sizeof(AVX_STOCK[0])); k++)
         if (AVX_STOCK[k].id == b) {
             for (d = 0; d < 4; d++)
@@ -818,6 +832,33 @@ static int avd_corner_trim(AvxPass *p, int pos[][2][2], int n) {
     return n;
 }
 
+/* task avends A1 (2026-11-09, round brief ROUND_2026-11-09_avends.md, twin avjunc_rule.uturn_stop): a segment walk that
+   reaches a stock avenue end (the U-turn pair 11203 / avcore's 21701 at the end pattern's states, AVENUE_LANES.md 3)
+   stops before it, and the pair counts as avcore's block (cblk: a band arm of the box beside it, '?' in validation,
+   no nose). Until now the walk took the U-turn in and refused the whole segment ("piece 11203 in the segment"), so a
+   road T on the last row before an end (owner's Big One (561,12)) made no box and the band stayed two-way. avcore
+   writes the U-turn with the band (avl_end kind 9). Off: SC3NETMOD_AVUEND=0 (also turns off A2 in sc3netmod_avl.c). */
+static int g_avu = -1;
+static int avu_on(void) {
+    if (g_avu < 0) {
+        g_avu = !env_off("SC3NETMOD_AVUEND");
+        logf("avx: avuend (U-turn ends with a road on the last row) %s", g_avu ? "on" : "off (SC3NETMOD_AVUEND=0)");
+    }
+    return g_avu;
+}
+/* axis 0 along x: cells z- / z+; axis 1 along z: x- / x+. sg > 0: the end lies E (axis 0) / S (axis 1) */
+static int avu_uturn(AvxPass *p, int ax, int az, int bx, int bz, int axis, int sg) {
+    static const int ST[2][2][2] = { { { 3, 2 }, { 0, 1 } }, { { 3, 0 }, { 2, 1 } } };   /* [axis][sg > 0][cell] */
+    DWORD a = avx_at(p, ax, az), b = avx_at(p, bx, bz);
+    int ia, ib;
+    if (!avu_on() || !a || !b) return 0;
+    if (avx_stock_of((WORD)(a & 0xffff)) != 11203 || avx_stock_of((WORD)(b & 0xffff)) != 11203) return 0;
+    if ((int)((a >> 16) & 3) != ST[axis][sg > 0][0] || (int)((b >> 16) & 3) != ST[axis][sg > 0][1]) return 0;
+    if ((ia = avx_ix(p, ax, az)) >= 0) p->cblk[ia] = 1;
+    if ((ib = avx_ix(p, bx, bz)) >= 0) p->cblk[ib] = 1;
+    return 1;
+}
+
 /* segments and boxes from the straight pairs in (ox0, oz0)-(ox1, oz1) (twin avjunc_rule.find) */
 static void avx_find(AvxPass *p, int ox0, int oz0, int ox1, int oz1) {
     int x, z, axis, sg, lim = avd_on() ? AVX_MAXWALK : AVX_MAXSEG;
@@ -836,6 +877,7 @@ static void avx_find(AvxPass *p, int ox0, int oz0, int ox1, int oz1) {
                         int bx = ax + AVX_ACROSS[axis][0], bz = az + AVX_ACROSS[axis][1];
                         DWORD a = avx_at(p, ax, az), b = avx_at(p, bx, bz);
                         if (!a || !b || avx_pair(p, ax, az, axis)) break;
+                        if (avu_uturn(p, ax, az, bx, bz, axis, sg)) break;              /* task avends A1 */
                         if (avx_foreign((WORD)(a & 0xffff)) || avx_foreign((WORD)(b & 0xffff))) { bad = 1; break; }
                         if (np == lim) { bad = 1; break; }
                         pos[np][0][0] = ax; pos[np][0][1] = az; pos[np][1][0] = bx; pos[np][1][1] = bz; np++;
@@ -1122,6 +1164,12 @@ static int avx_write(AvxPass *p, int final, const char *who) {
         pos[0] = wx[t] << 8; pos[1] = wz[t] << 8; pos[2] = 0;
         ((PFN_Put)(g_rb_m + 0x8919))(p->mgr, 0, p->lay, pos, ww[t], -1, 8, 0);
         n++;
+        if (env_on("SC3NETMOD_AVXDBG")) {                 /* task avends: a put that did not take (debug only) */
+            DWORD aft = rb_read(p->mgr, p->lay, wx[t], wz[t], p->W, p->H);
+            if ((((aft & 0xffff) << 8) | ((aft >> 16) & 3)) != ww[t])
+                logf("avx: dbg put: (%d,%d) wanted %lu.%lu, reads %lu.%lu after the put (was %lu.%lu)", wx[t], wz[t],
+                     ww[t] >> 8, ww[t] & 3, aft & 0xffff, (aft >> 16) & 3, cur & 0xffff, (cur >> 16) & 3);
+        }
     }
     if (n || nrev || !strcmp(who, "load"))
         logf("avx: %s %s: %d junction box(es), %d corner junction(s), %d cell(s) written, %d reverted", who,

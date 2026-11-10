@@ -79,3 +79,78 @@ mostly hidden by towers), `b2_568_31_z4_rot0.png`, `b2_568_31_z4_rot2.png`. Knot
 `knot_584_108_z4_rot0..3.png`.
 
 Not done: English-UK in game (offline only, the accepted limitation).
+
+## E: a one-cell dead-end stub T'd into an avenue half, (613..615,192) (AVX block AVSTUB, off: `SC3NETMOD_AVSTUB=0`)
+
+Cause: the stock road dead end 11225 was not in AVX's stock arm table (arms "unknown"), so the half T'd into it made
+no box and avcore ended both bands on the stock T (614,192) 39.2. Change (`sc3netmod_avx.c` avx_stock_arms, twin
+`avjunc_rule.STUB_MASK`): 11225 is a road arm on its one side (props 310 = 0x80008000 measured with lanekit: S at state
+0; the saved cells agree, 11225.1 connects to its W). No new piece: the box cells use avjunc's 20805 / 20806.
+
+Every stub-T box the rule makes in the 15 shipped cities + the owner save (offline diff, saved variants read; pieces
+checked against the installed avxm lines; in game, see the shipped-city batch below):
+| city | box cells | pieces | in game |
+|---|---|---|---|
+| owner's Big One | (613,192) / (614,192), between slope rows 191 / 193 | 20806.2 / 20805.0 | as designed |
+| London | (238,49) / (239,49), stub 11225.3 at (237,49) | 20805.2 / 20806.0 | as designed, noses one-way |
+| Sacramento | (167,139) / (168,139), a band END with road 29 W and stub 11225.1 E | 20813.3 / (20812.3) | **(168,139) stays stock 39.3: the game's piece writer refuses that put** (below) |
+
+| check (owner save) | result |
+|---|---|
+| load | `converted=41, refused=9` (39 / 11 with B only); `(613,176) rows 0..15 -> one-way (join / join)`, `(613,193) rows 0..36 -> one-way (join / U-turn)` |
+| seams, ENGLISH, 610..618 x 186..198 | 38 seams, 0 problems (English-UK 4: the box's road edge against the stock stub) |
+| routed trips, 150 s | 613 N 7,125 / 0 against, 614 S 7,105 / 0 against; no trip used the stub cell in that window |
+| save + reload | 1,143 variants saved and restored, band lines and live window (79 cells) identical |
+
+## A1: U-turn end with a road T on the last row, (560..562,11..13); A2: U-turn pair whose bend carries a road arm, (485,18..19) (AVX + AVL block AVUEND, off: `SC3NETMOD_AVUEND=0`)
+
+A1 cause: AVX's segment walk took the U-turn pair in and refused the segment ("piece 11203 in the segment"), so no box
+formed at the T (561,12) and AVL refused the end. Change: the walk stops before a U-turn pair (AVENUE_LANES.md 3's
+four end patterns, 11203 or 21701) and marks it as avcore's block (`cblk`, as D2b's corner blocks: a band arm of the
+box beside it, '?' in validation, no nose); twin `avjunc_rule.uturn_stop`. AVL: a band whose end is a join (the nose
+row 562) with only join rows (the box 561) and then the U-turn pair past it gets the new end kind 9 "join + U-turn"
+(`avu_uturn_past`, up to 6 join rows): it writes the U-turn 21701 with the band, and the U-turn cells answer avl_dir
+with their halves' travel so AVX's post pass keeps the box arm toward them one-way. No new piece (box = 20805 / 20806).
+
+A2 cause: (485,19) is a T 39.1 = the U-turn bend 11203.1 plus an E arm into the diagonal road 35, so AVL did not read
+a U-turn pair. Change: new end kind 10 "U-turn with a road" (`avu_road_uturn`): one cell 11203 at its end state, the
+other a 39 whose arms are the bend's plus exactly one road arm (not toward the band) with a road beyond. The 11203 ->
+21701, the 39 -> an `avlt` piece found by its letters: **22001** (avlt `ACAI TCOI`, base 39: U-turn traffic in from
+the other U-turn cell, out to the band, the road two-way; lanes and art by avjunc's box-cell model and painter).
+
+AVUEND's offline diff (saved variants read) also adds a box in 4 shipped cities, each the A1 shape (a road / ramp
+junction on the rows just before a stock U-turn pair), all with existing pieces and all as designed in game:
+| city | box | beside the U-turn at |
+|---|---|---|
+| Craterville | (189,103..104), road S | (190,103..104) |
+| London | (185,169..170), road N | (184,169..170) |
+| Madrid | (217,185..186), road N | (218,185..186) |
+| Seoul | (224..225,107), a ramp X under the highway, link row 106 | (224..225,105) |
+
+| check (owner save) | result |
+|---|---|
+| package | 22000 + 22001: `netpack validate` OK, 0 errors; selfblock 0 of 2 |
+| load | `converted=43, refused=7`; `(563,11) rows 0..1 -> one-way (join + U-turn / join)`, `(484,18) rows 0..0 -> one-way (join / U-turn with a road)` |
+| live cells | A1: U-turn 21701.3 / 21701.2 at 560, box 20806.3 / 20805.1 at 561, noses 20801 / 20802 at 562. A2: (485,18) 21701.0, (485,19) 22001.1, noses at 483 one-way |
+| seams, ENGLISH | A2 window 21 seams, 0 problems; A1 window 42 seams, 1 line at (568,11)S inside the existing 567..568 T box (avjunc's 20807 / 20808: the same unfed entry node as in B1), none at the new cells |
+| routed trips, 150 s | every half in its rule direction, 0 against: A1 row 11 E 2,273, row 12 W 3,221, U-turn 12 -> 11 373; A2 row 18 E 1,613, row 19 W 1,666, U-turn 18 -> 19 321. The side road (561,13) and the diagonal (486,19) carry trips both ways. Mask 8 both ways on row 19: 6 subway tiles under it |
+| save + reload | 1,159 variants saved and restored, band lines and both live windows (99 cells) identical; saved bases: A2 cells unchanged (11203.0 / 39.1), A1 / E box cells by AVX's outline rule |
+| without sc3netmod | 178 cells in the A / E windows, 0 variant ids, live grid = saved bases |
+| AVUEND and AVSTUB off | `converted=39, refused=11` (the B-only result) |
+
+## Shipped cities in game (all switches on, test-slot batch, own PIDs 11080, 19124, 3424, 20616, 19184)
+
+London, Sacramento, Craterville, Madrid and Seoul loaded; every new box above is live as designed except Sacramento's
+(168,139). With `SC3NETMOD_AVXDBG=1` the write loop logs puts that do not take:
+`avx: dbg put: (168,139) wanted 20812.3, reads 39.3 after the put (was 39.3)`. The same happens on that map to three
+cells that are NOT avends cases: (153,157) 20813.2, (182,194) nose 20801.0 / 20810.0, (120,196) nose 20802.3 / 20811.3.
+The writer (SIMNTWRK `sc3_ntwrk_write_piece` 0x10008919) writes nothing when its factory call `vt+0x48(&occ,
+0xc14f8955, id, state)` returns 0 [CONFIRMED @ 0x10008919]; why the factory refuses these (piece, state) pairs is
+[UNCERTAIN] (20813.3 is accepted one cell away). Existing AVX behaviour, not caused by avends; on the owner's Big One
+no put fails. Effect at Sacramento (167..168,139): one box cell one-way, the other stock 39.3 (its band still
+converts).
+
+Pictures: `e_614_192_z4_rot0.png`, `e_614_192_z4_rot2.png`, `a1_561_11_z4_rot0.png`, `a1_561_11_z4_rot2.png`,
+`a2_485_18_z4_rot0.png`, `a2_485_18_z4_rot2.png` (rot 0: a grid-diagonal road draws as a vertical line).
+Lab trap: a frame dump requested after an autosave in the same game did not arm again (`DUMP> armed` stops) and
+`rb_lab.py shot` copied the previous dump; take pictures before the first autosave or in a fresh game.

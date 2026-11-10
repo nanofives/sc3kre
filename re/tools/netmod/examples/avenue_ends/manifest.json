@@ -21,16 +21,35 @@
     "png_dir": "art/22000"
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 22001,
+   "base": 39,
+   "network": "ROAD",
+   "name": {
+    "*": "Avenue junction",
+    "ENGLISH": "Cruce de avenida"
+   },
+   "art": {
+    "from": 43,
+    "png_dir": "art/22001"
+   },
+   "trblkatt": "copy_base"
   }
  ],
  "lanes": [
   {
    "piece": 22000,
    "spec": "ct_22000.lanes.json"
+  },
+  {
+   "piece": 22001,
+   "spec": "ct_22001.lanes.json"
   }
  ],
  "avenue_junction_lines": [],
  "avenue_lines": [
-  "avlt 22000 IICA CICO"
+  "avlt 22000 IICA CICO",
+  "avlt 22001 ACAI TCOI"
  ]
 }

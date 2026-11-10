@@ -61,6 +61,23 @@ DIAMOND = os.environ.get("SC3NETMOD_AVDIAMOND", "1") != "0"
 # city saved with AVX's link noses restores them; avx_pair skips link noses, so a T of avenues next to such a row had no
 # span, read the row as a road arm (T) and was dropped in validation (owner's Big One (547..548,63..65)).
 AVTEE = os.environ.get("SC3NETMOD_AVTEE", "1") != "0"
+# task avends E (C block AVSTUB in sc3netmod_avx.c): the stock road dead end 11225 (props 310 = 0x80008000, one arm, S at
+# state 0) is a road arm; without it a half T'd into a stub read "unknown" and no box formed (owner's Big One (614,192)).
+AVSTUB = os.environ.get("SC3NETMOD_AVSTUB", "1") != "0"
+STUB_MASK = {11225: 0x80008000}
+# task avends A1 (C block AVUEND in sc3netmod_avx.c): a segment walk stops before a stock avenue end (the U-turn pair
+# 11203 / 21701 at the end pattern's states) and the pair is avcore's block (corner_cells: a band arm, '?' in validation).
+AVUEND = os.environ.get("SC3NETMOD_AVUEND", "1") != "0"
+UTURN_ST = {("x", 1): (0, 1), ("x", -1): (3, 2), ("z", 1): (2, 1), ("z", -1): (3, 0)}   # (axis, walk sign): a, b states
+
+
+def uturn_stop(L, P, a, b, axis, sg):
+    if not AVUEND:
+        return False
+    pa, pb = L.get(a), L.get(b)
+    if not (pa and pb and P.stock_of(pa[0]) == 11203 and P.stock_of(pb[0]) == 11203):
+        return False
+    return ((pa[1] & 3), (pb[1] & 3)) == UTURN_ST[(axis, sg)]
 
 
 def ramp_kind(pid):
@@ -96,7 +113,7 @@ class Pieces:
             self.avl_base.setdefault(k, [69, 67, 11258, 15098, 31, 32, 11201, 11202][(k - 21710) // 2])
 
     def stock_of(self, pid):
-        if pid in STOCK_MASK:
+        if pid in STOCK_MASK or (AVSTUB and pid in STUB_MASK):
             return pid
         return self.avl_base.get(pid)
 
@@ -109,7 +126,7 @@ class Pieces:
             b = self.stock_of(pid)
             if b is None:
                 return None                         # foreign
-            loc = mask_arms_nesw(STOCK_MASK[b])
+            loc = mask_arms_nesw(STOCK_MASK.get(b) or STUB_MASK[b])
         return {(e + state) % 4 for e in loc}
 
     def is_row(self, pid):
@@ -431,6 +448,9 @@ def find(L, P, roads, drop=frozenset(), bv=True, caps=True, tees=True, ends=True
                     term = "end"
                     break
                 if straight_pair(L, P, a, b, axis):
+                    break
+                if uturn_stop(L, P, a, b, axis, sg):                  # task avends A1
+                    P.corner_cells |= {a, b}
                     break
                 if P.foreign(L[a][0]) or P.foreign(L[b][0]):
                     why = "foreign piece"

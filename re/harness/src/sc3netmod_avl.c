@@ -681,6 +681,74 @@ static int avl_tight_at(AvlPass *p, int axis, int ax, int az, int k, int end, in
 /* the row past the run at offset k (end = -1 the back end, +1 the forward end): acceptable? *u = 1 U-turn, 2 / 3 a
    corner (inner bend on A / B). assume == end: the caller's end, accepted whatever stands on it (avl_band_ok, and the
    band beyond a corner, which is being decided by the caller) */
+/* task avends A2 (2026-11-09, round brief ROUND_2026-11-09_avends.md, owner's Big One (485,18..19)): a U-turn pair
+   whose one cell is a T 39 = the U-turn bend plus one road arm (the stock tiler's T where a road leaves the end; there
+   a diagonal road 35). One-way: the 11203 -> avcore's U-turn quarter, the 39 -> an `avlt` box-cell piece found by its
+   letters (the side toward the other U-turn cell 'I', the band side 'A', the road 'A' / two-way 'T'). -> 1 with the
+   39 cell (*cx, *cz) and its piece (id << 8 | state), the 11203 cell (*ux, *uz). Off with SC3NETMOD_AVUEND=0. */
+static int avu_road_uturn(AvlPass *p, int axis, int fwd, int x, int z, int bx, int bz, int *cx, int *cz, DWORD *want,
+                          int *ux, int *uz) {
+    static const int USTATE[2][2][2] = { { { 3, 0 }, { 2, 1 } }, { { 3, 2 }, { 0, 1 } } };   /* as avl_end */
+    int face = axis ? (fwd ? 3 : 1) : (fwd ? 0 : 2), toward = axis ? (fwd ? 1 : 3) : (fwd ? 2 : 0), c;
+    if (!avu_on() || !g_avl_uturn || !avl_ct_on()) return 0;
+    for (c = 0; c < 2; c++) {                                  /* c = the cell holding the T (0: A, 1: B) */
+        int tx = c ? bx : x, tz = c ? bz : z, ox = c ? x : bx, oz = c ? z : bz, r, extra, tr, oside, w;
+        DWORD t = avl_at(p, tx, tz), o = avl_at(p, ox, oz), rd;
+        char ol[4], md[4];
+        if (!t || !o || avx_stock_of(AVL_ID(o)) != 11203 || AVL_ST(o) != USTATE[axis][fwd][c ^ 1]) continue;
+        if (avx_stock_of(AVL_ID(t)) != 39 || !avl_free(p, tx, tz, t) || !avl_free(p, ox, oz, o)) continue;
+        extra = avl_arms(t) & ~avx_rotm(avx_stock_arms(11203), USTATE[axis][fwd][c]);
+        if (extra <= 0 || (extra & (extra - 1)) ||
+            (avl_arms(t) & avx_rotm(avx_stock_arms(11203), USTATE[axis][fwd][c])) !=
+                avx_rotm(avx_stock_arms(11203), USTATE[axis][fwd][c])) continue;
+        for (r = 0; r < 4; r++) if (extra == 1 << r) break;
+        if (r == face) continue;
+        rd = avl_at(p, tx + AVL_D[r][0], tz + AVL_D[r][1]);
+        if (!rd) continue;                                     /* the road beyond (a diagonal 35: arms not known) */
+        if (avl_arms(rd) > 0 && !(avl_arms(rd) & (1 << ((r + 2) & 3)))) continue;
+        for (oside = 0; oside < 4; oside++) if (tx + AVL_D[oside][0] == ox && tz + AVL_D[oside][1] == oz) break;
+        tr = c ? (axis ? 3 : 2) : (axis ? 1 : 0);              /* the T cell's half travel (A: N / E, B: S / W) */
+        for (w = 0; w < 4; w++) { ol[w] = 'C'; md[w] = 'C'; }
+        ol[oside] = 'I'; ol[face] = 'A'; ol[r] = 'A'; md[r] = 'T';
+        if (tr == toward) { md[face] = 'I'; md[oside] = 'O'; }  /* the half runs into the end: band -> other cell */
+        else { md[oside] = 'I'; md[face] = 'O'; }               /* it leaves the end: other cell -> band */
+        *want = avl_ct_find(t, ol, md);
+        if (!*want) {
+            static volatile LONG nmiss;
+            if (InterlockedIncrement(&nmiss) <= 20)
+                logf("avl: U-turn with a road: no avlt piece for (%d,%d) %u.%d outline %.4s modes %.4s (world N E S W)",
+                     tx, tz, AVL_ID(t), AVL_ST(t), ol, md);
+            continue;
+        }
+        *cx = tx; *cz = tz; *ux = ox; *uz = oz;
+        return 1;
+    }
+    return 0;
+}
+
+/* task avends A1: past the join row (x, z)/(bx, bz) at this end, over every further row of join pieces (AVX's noses and
+   box rows, at most 6), is the next row the stock U-turn pair of this end (11203 / avcore's U-turn at the end
+   pattern's states, both free)? -> 1 with its cells */
+static int avu_uturn_past(AvlPass *p, int axis, int fwd, int x, int z, int bx, int bz, int *x2, int *z2, int *bx2,
+                          int *bz2) {
+    static const int USTATE[2][2][2] = { { { 3, 0 }, { 2, 1 } }, { { 3, 2 }, { 0, 1 } } };   /* as avl_end */
+    int dx = axis ? 1 : 0, dz = axis ? 0 : 1, end = fwd ? 1 : -1, face = axis ? (fwd ? 3 : 1) : (fwd ? 0 : 2), n;
+    if (!avu_on() || !g_avl_uturn) return 0;
+    for (n = 1; n <= 7; n++) {
+        int cx = x + dx * end * n, cz = z + dz * end * n, ex = bx + dx * end * n, ez = bz + dz * end * n;
+        DWORD a = avl_at(p, cx, cz), b = avl_at(p, ex, ez);
+        if (!a || !b) return 0;
+        if (avx_stock_of(AVL_ID(a)) == 11203 && avx_stock_of(AVL_ID(b)) == 11203) {
+            if (AVL_ST(a) != USTATE[axis][fwd][0] || AVL_ST(b) != USTATE[axis][fwd][1] ||
+                !avl_free(p, cx, cz, a) || !avl_free(p, ex, ez, b)) return 0;
+            *x2 = cx; *z2 = cz; *bx2 = ex; *bz2 = ez;
+            return 1;
+        }
+        if (!avl_letter(AVL_ID(a), AVL_ST(a), face) || !avl_letter(AVL_ID(b), AVL_ST(b), face)) return 0;
+    }
+    return 0;
+}
+
 static int avl_end(AvlPass *p, int axis, int ax, int az, int k, int end, int *u, int assume, AvlStack *stk) {
     static const int USTATE[2][2][2] = { { { 3, 0 }, { 2, 1 } }, { { 3, 2 }, { 0, 1 } } };   /* [axis][fwd][A/B] */
     int dx = axis ? 1 : 0, dz = axis ? 0 : 1;
@@ -710,6 +778,11 @@ static int avl_end(AvlPass *p, int axis, int ax, int az, int k, int end, int *u,
         if (!g_avl_uturn) avl_why(stk, "band along %s at (%d,%d): %s end is a U-turn pair but no avlu piece is loaded",
                                   axis ? "x" : "z", ax, az, en);
         return g_avl_uturn != 0;
+    }
+    {   /* task avends A2: a U-turn pair whose one cell carries a road arm */
+        int tx, tz, ux, uz;
+        DWORD tw;
+        if (avu_road_uturn(p, axis, fwd, x, z, bx, bz, &tx, &tz, &tw, &ux, &uz)) { *u = 10; return 1; }
     }
     if (g_avl_corner && g_avl_uturn && (c = avl_corner_at(p, axis, ax, az, k, end, &oaxis, &ox, &oz, &oass, &cst, &ct))) {
         int k0, k1, ub, uf;
@@ -778,6 +851,10 @@ static int avl_end(AvlPass *p, int axis, int ax, int az, int k, int end, int *u,
         return 0;
     }
     if (hw) *u = 4;
+    else {                                /* task avends A1: join rows (AVX's noses / box) with the stock U-turn past them */
+        int x2, z2, bx2, bz2;
+        if (avu_uturn_past(p, axis, fwd, x, z, bx, bz, &x2, &z2, &bx2, &bz2)) *u = 9;
+    }
     return 1;
 }
 
@@ -943,6 +1020,19 @@ static void avl_band(AvlPass *p, int axis, int ax, int az, AvlW *w, int *nw, int
                 avl_cellw(p, ok, tq.qx, tq.qz, tq.want, 0xff, w, nw, cap, rv, nrv, rcap);
                 if (!p->seen[oz * p->W + ox] && nnext < 2) { next[nnext][0] = oa; next[nnext][1] = ox; next[nnext][2] = oz; nnext++; }
             }
+        } else if (kind == 9) {                                    /* task avends A1: the U-turn past the join rows; its */
+            int x2, z2, bx2, bz2;                                  /* cells answer avl_dir with their halves' travel */
+            if (avu_uturn_past(p, axis, end > 0, x, z, bx, bz, &x2, &z2, &bx2, &bz2)) {   /* (AVX's arm toward them) */
+                avl_cell(p, ok, x2, z2, g_avl_uturn, 1 + (axis ? 1 : 0), w, nw, cap, rv, nrv, rcap);
+                avl_cell(p, ok, bx2, bz2, g_avl_uturn, 1 + (axis ? 3 : 2), w, nw, cap, rv, nrv, rcap);
+            }
+        } else if (kind == 10) {                                   /* task avends A2: a U-turn pair with a road arm */
+            int tx, tz, ux, uz;
+            DWORD tw;
+            if (avu_road_uturn(p, axis, end > 0, x, z, bx, bz, &tx, &tz, &tw, &ux, &uz)) {
+                avl_cell(p, ok, ux, uz, g_avl_uturn, 0xff, w, nw, cap, rv, nrv, rcap);
+                avl_cellw(p, ok, tx, tz, tw, 0xff, w, nw, cap, rv, nrv, rcap);
+            }
         } else if (kind == 4) {                                    /* task avx32: the ground row of a highway transition */
             int c;
             for (c = 0; c < 2; c++) {
@@ -957,11 +1047,12 @@ static void avl_band(AvlPass *p, int axis, int ax, int az, AvlW *w, int *nw, int
     if (ok) InterlockedIncrement(&g_avl_n_bands); else InterlockedIncrement(&g_avl_n_refused);
     if (ok && k1 - k0 + 1 >= 1) {
         static volatile LONG nlog;
-        static const char *KIND[9] = { "join or edge", "U-turn", "corner", "corner", "highway ground row", "corner + T",
-                                       "corner + T", "T row of a corner + T", "tight corner" };
+        static const char *KIND[11] = { "join or edge", "U-turn", "corner", "corner", "highway ground row", "corner + T",
+                                       "corner + T", "T row of a corner + T", "tight corner", "join + U-turn",
+                                       "U-turn with a road" };
         if (InterlockedIncrement(&nlog) <= 200 || strcmp(who, "load"))
             logf("avl: %s: band along %s from (%d,%d) rows %d..%d -> one-way (ends: %s / %s)", who, axis ? "x" : "z",
-                 ax, az, k0, k1, KIND[ub > 8 ? 0 : ub], KIND[uf > 8 ? 0 : uf]);
+                 ax, az, k0, k1, KIND[ub > 10 ? 0 : ub], KIND[uf > 10 ? 0 : uf]);
     }
     if (!ok) {                                                    /* task avpaint: the refusal reason */
         static volatile LONG nlogr;
