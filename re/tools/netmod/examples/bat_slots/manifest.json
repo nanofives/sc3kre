@@ -1,0 +1,181 @@
+{
+  "netpack": 1,
+  "name": "bat_slots",
+  "version": "1.0.0",
+  "author": "sc3kre",
+  "description": "BAT slots: 16 new zoned buildings that grow next to the stock ones (each a copy of a stock building at a new id, weight 1 in its family) and are listed in [ReplaceableBuildings], so the Building Replacement window offers them. Put your own Building Architect building on a slot and it grows in zones without replacing any stock building. Built by re/tools/netmod/batslots_build.py.",
+  "growables": [
+    {
+      "id": 36100,
+      "base": 113,
+      "family": 11,
+      "weight": 1,
+      "name": {
+        "*": "BAT Slot Light Residential Low Wealth 1x1"
+      },
+      "replaceable": true
+    },
+    {
+      "id": 36101,
+      "base": 116,
+      "family": 4,
+      "weight": 1,
+      "name": {
+        "*": "BAT Slot Light Residential Mid Wealth 1x1"
+      },
+      "replaceable": true
+    },
+    {
+      "id": 36102,
+      "base": 120,
+      "family": [
+        10,
+        31
+      ],
+      "weight": 1,
+      "name": {
+        "*": "BAT Slot Light Residential High Wealth 1x1"
+      },
+      "replaceable": true
+    },
+    {
+      "id": 36103,
+      "base": 3000,
+      "family": [
+        10,
+        31
+      ],
+      "weight": 1,
+      "name": {
+        "*": "BAT Slot Light Residential High Wealth 2x2"
+      },
+      "replaceable": true
+    },
+    {
+      "id": 36104,
+      "base": 3018,
+      "family": 16,
+      "weight": 1,
+      "name": {
+        "*": "BAT Slot Medium Residential Low Wealth 2x2"
+      },
+      "replaceable": true
+    },
+    {
+      "id": 36105,
+      "base": 3020,
+      "family": [
+        28,
+        12
+      ],
+      "weight": 1,
+      "name": {
+        "*": "BAT Slot Medium Residential Mid Wealth 2x2"
+      },
+      "replaceable": true
+    },
+    {
+      "id": 36106,
+      "base": 3001,
+      "family": 17,
+      "weight": 1,
+      "name": {
+        "*": "BAT Slot Medium Residential High Wealth 2x2"
+      },
+      "replaceable": true
+    },
+    {
+      "id": 36107,
+      "base": 3015,
+      "family": [
+        30,
+        14
+      ],
+      "weight": 1,
+      "name": {
+        "*": "BAT Slot Dense Residential Mid Wealth 2x2"
+      },
+      "replaceable": true
+    },
+    {
+      "id": 36110,
+      "base": 126,
+      "family": 7,
+      "weight": 1,
+      "name": {
+        "*": "BAT Slot Light Commercial Low Wealth 1x1"
+      },
+      "replaceable": true
+    },
+    {
+      "id": 36111,
+      "base": 4003,
+      "family": 9,
+      "weight": 1,
+      "name": {
+        "*": "BAT Slot Light Commercial High Wealth 1x1"
+      },
+      "replaceable": true
+    },
+    {
+      "id": 36112,
+      "base": 151,
+      "family": 9,
+      "weight": 1,
+      "name": {
+        "*": "BAT Slot Light Commercial High Wealth 2x2"
+      },
+      "replaceable": true
+    },
+    {
+      "id": 36113,
+      "base": 156,
+      "family": 8,
+      "weight": 1,
+      "name": {
+        "*": "BAT Slot Medium Commercial Low Wealth 2x2"
+      },
+      "replaceable": true
+    },
+    {
+      "id": 36114,
+      "base": 157,
+      "family": 23,
+      "weight": 1,
+      "name": {
+        "*": "BAT Slot Medium Commercial High Wealth 2x2"
+      },
+      "replaceable": true
+    },
+    {
+      "id": 36115,
+      "base": 155,
+      "family": 24,
+      "weight": 1,
+      "name": {
+        "*": "BAT Slot Dense Commercial Low Wealth 2x2"
+      },
+      "replaceable": true
+    },
+    {
+      "id": 36120,
+      "base": 164,
+      "family": 20,
+      "weight": 1,
+      "name": {
+        "*": "BAT Slot Light Industrial Clean 2x2"
+      },
+      "replaceable": true
+    },
+    {
+      "id": 36121,
+      "base": 8014,
+      "family": 6,
+      "weight": 1,
+      "name": {
+        "*": "BAT Slot Medium Industrial Dirty 2x2"
+      },
+      "replaceable": true
+    }
+  ]
+}

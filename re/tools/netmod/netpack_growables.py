@@ -18,6 +18,11 @@ What one entry becomes (re/analysis/BUILDING_PICK.md section 6 C, verify/growabl
                count), so a line inserted first is read whatever the family's original count was. The weight is the
                number of times the attrib is pushed into the rule's draw list (BUILDING_PICK.md 2, 0x100274bb).
 
+Task batslots (2026-11-10): "family" may be a list (the same LandUse can sit in several families, one per rule:
+LandUse 3500 is family 10 for some rules and 31 for another), and "replaceable": true (or a row name) adds the id to
+SC3CityScheme.ini [ReplaceableBuildings] in SYS.PAK, so the stock Building Replacement window offers it as a slot a
+player can put a .bld building on (verify/batslots/RESULTS.md).
+
 Ids share one space with netpack variants (frame-table and name instances are keyed by id) and must fit 16 bits
 (pixel keys are id << 16 | ordinal).
 """
@@ -82,22 +87,29 @@ def compile_entries(np, stock, pack_dir, man, names_fn, langs_text):
     out = []
     for n, g in enumerate(man.get("growables", [])):
         where = "%s growable %d (id %s)" % (pname, n + 1, g.get("id"))
-        gid, base, fam, weight = g["id"], g["base"], g["family"], g.get("weight", 1)
+        gid, base, weight = g["id"], g["base"], g.get("weight", 1)
+        fam_list = g["family"] if isinstance(g["family"], list) else [g["family"]]   # task batslots: several families
+        if not fam_list or len(set(fam_list)) != len(fam_list):
+            raise GrowError("%s: family must be one family instance or a list of distinct ones" % where)
+        fam = fam_list[0]
         if not 0 < gid <= 0xFFFF:
             raise GrowError("%s: id must fit 16 bits (pixel record keys are id << 16 | ordinal)" % where)
         if gid in bld:
             raise GrowError("%s: id %d already has a stock building exemplar (%s)" % (where, gid, bld[gid][0]))
         if base not in bld:
             raise GrowError("%s: base %d has no stock building exemplar {0x207EDC0E, 0x57E, id}" % (where, base))
-        if fam not in fams:
-            raise GrowError("%s: BUILDFAM.IXF has no family record %d" % (where, fam))
+        for f in fam_list:
+            if f not in fams:
+                raise GrowError("%s: BUILDFAM.IXF has no family record %d" % (where, f))
         if not isinstance(weight, int) or weight < 1:
             raise GrowError("%s: weight must be a positive integer (0 drops the line, SIMGEOM 0x10001250)" % where)
         lu = family_landuse(fams[fam])
         base_lu = tkb1_u32(bld[base][1], 0x65, np.tkb1_props)
-        if not base_lu or base_lu[0] != lu:
-            raise GrowError("%s: base %d LandUse (prop 0x65) %s differs from family %d LandUse %s; every stock "
-                            "family member matches its family (BUILDING_PICK.md 2)" % (where, base, base_lu, fam, lu))
+        for f in fam_list:
+            flu = family_landuse(fams[f])
+            if not base_lu or base_lu[0] != flu:
+                raise GrowError("%s: base %d LandUse (prop 0x65) %s differs from family %d LandUse %s; every stock "
+                                "family member matches its family (BUILDING_PICK.md 2)" % (where, base, base_lu, f, flu))
         art_spec = g.get("art")
         if art_spec and art_spec.get("from") is not None and art_spec["from"] not in bld:
             raise GrowError("%s: art.from %d has no stock building exemplar" % (where, art_spec["from"]))
@@ -114,9 +126,18 @@ def compile_entries(np, stock, pack_dir, man, names_fn, langs_text):
             first = names.get("ENGLISH") or sorted(names.items())[0][1]
             ex = tkb1_set_text(ex, 0x64, first, np.tkb1_props)
         np.tkb1_props(ex)                                   # walk check: the record still parses end to end
-        out.append({"id": gid, "base": base, "family": fam, "landuse": lu, "weight": weight, "art": art,
-                    "exemplar": ex, "names": names, "where": where, "_pack": pname,
-                    "comment": (names or {}).get("ENGLISH") or "netpack %s" % pname})
+        comment = (names or {}).get("ENGLISH") or "netpack %s" % pname
+        ini = []
+        rp = g.get("replaceable")                           # task batslots: offered in the Building Replacement window
+        if rp:
+            row = rp if isinstance(rp, str) else comment
+            if any(c in row for c in "=;[]\r\n"):
+                raise GrowError("%s: replaceable row name %r has a character the ini row cannot hold" % (where, row))
+            ini.append({"file": "SC3CityScheme.ini", "section": "ReplaceableBuildings",
+                        "key": "%d,%d,%d" % (BLD_TYPE, BLD_GROUP, gid), "op": "add", "value": row, "_pack": pname})
+        out.append({"id": gid, "base": base, "family": fam, "families": fam_list, "landuse": lu, "weight": weight,
+                    "art": art, "exemplar": ex, "names": names, "where": where, "_pack": pname,
+                    "comment": comment, "ini": ini})
     return out
 
 
@@ -124,7 +145,8 @@ def patch_buildfam(stock_bytes, growables, ixf_parse, replace_records):
     """-> new BUILDFAM.IXF bytes with each growable's Key line in its family (package name order, then id)."""
     by_fam = {}
     for g in growables:
-        by_fam.setdefault(g["family"], []).append(g)
+        for f in g.get("families", [g["family"]]):                # task batslots: one line in every listed family
+            by_fam.setdefault(f, []).append(g)
     cur = {s[1]: stock_bytes[s[3]:s[3] + s[4]] for s in ixf_parse.read_index_slots(stock_bytes)
            if s[0] == FAM_GROUP and s[2] == FAM_TYPE}          # slot = (group, instance, type, offset, size)
     new = []

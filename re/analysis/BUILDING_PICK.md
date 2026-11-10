@@ -183,7 +183,10 @@ Computer Shops". The art agrees (half-timbering and mansards against glass tower
   default, probably) is [UNCERTAIN]: its readers were not traced.
 - BAT replacements are saved in the city: `LoadBATReplacementSet` `0x100059d7` reads record
   `{0x99f47014, 0x79f4702d, 0}` as a count then `(origKey, batKey)` pairs, each passed to `MakeBATReplacement`.
-  [CONFIRMED read side; writer `0x10006328` not read]
+  The record belongs to the `.sc3` container itself (not the city blob): a 12-byte zero key, u32 count, then per pair
+  the building key and the BAT key (3 x u32 each), written by `SaveBATReplacementSet` `0x10006328` from the map at
+  scheme `+0x8c`. Shipped cities carry the 16-byte empty form. [CONFIRMED, read and write side, on four game-written
+  saves, verify/batslots/RESULTS.md]
 
 ## 5. `.bld` replacement
 
@@ -195,6 +198,18 @@ Computer Shops". The art agrees (half-timbering and mansards against glass tower
 - So a `.bld` is a **skin on an existing occupant id**. It never enters a family and never adds a candidate. BAT
   segments load as type `0x39ef105f` into the key list `+0x80` (`0x10005ae2`); SIMUI `0x1002933f` lists `*.BLD` in a
   catalog tree. A new id can only be added through families (§6 C).
+- **Settled 2026-11-10 (verify/batslots):** the BAT buildings on offer are the override records (type `0x856CD19A`,
+  group `0xBA1DBF1E`) of `Apps\BARender\BAT.DAT`, which `0x10005ae2` opens as `<dir>BAT.dat` (string `0x10037360`;
+  the directory from a service vt+0x50 is [UNCERTAIN] by code, but the dialogs listed exactly that file's buildings).
+  Override payload: byte lot size, sprite attrib key `{0x6300, 0xBA1DBF1E, inst}`, length + name, length + architect.
+- **Which stock buildings the windows offer:** the Building Replacement Manager (opened only from the City Scheme
+  dialog of the New City flow, SIMUI `0x1005e3a1`) walks the whole occupant attrib cache and keeps every attrib whose
+  key is in `[ReplaceableBuildings]` (SIMUI `0x1001c3a8`), not the buildings of the city. In a city the path is the
+  query dialog's Replace button, created only when `IsReplaceableBuilding` (SIMUI `0x1006260e`), absent on buildings
+  under construction or abandoned (seen in game). Both commit through scheme vt+0xa4. [CONFIRMED]
+- **Footprint:** the BAT list is filtered by lot size == `SizeInCellsX` (SIMINIT `0x100053be`, SIMUI `0x1001bb56`);
+  the engine never compares sizes. A **new** id listed in `[ReplaceableBuildings]` is offered like a stock one: proven
+  in game with slot 36100 and The Joneses through the stock dialog (verify/batslots/RESULTS.md).
 
 ## 6. Verdicts
 
@@ -299,6 +314,9 @@ keys still resolve.
 - Whether a top-level `Res\Sprites` DAT is also a resource-manager segment (each is registered under
   `kGZCATNAME_SC3DBSegmentSprite` by `cSC3App::LoadRegistry` `0x0040b761`; stylemix avoided the question by keeping
   frame tables in `CSAttrib_Korea`).
+- Building Replacement Manager: where new ids land in the slide order (attrib-cache iteration order), not seen in game.
+- `.bld` record `0x644D7179` (u32 `0x208` .. `0x217`): a category by the building names, [UNCERTAIN].
+- BAT.DAT frame tables index 16 frames, stock building tables 20: which frames a BAT building lacks.
 - `cRZIniFile::EnumEntries` order: assumed to be file order for `[DBSegments]` priority.
 
 The one-off helper scripts used (PE vtable reader, TKB1 dumper, family coverage table) were not kept in the repo.
