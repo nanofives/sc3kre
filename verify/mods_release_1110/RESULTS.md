@@ -37,3 +37,6 @@ Zip: the 11-09 zip (downloaded back, SHA-256 C2D77D1B... as recorded) with Apps/
 
 Not checked: English-UK game run, bend-x variant of the F knot (stays stock), the 4 Sacramento puts the game refuses (open
 item in verify/avends/RESULTS.md, predates this round).
+
+GitHub: `sc3mods-2026-11-10`, target 05331c0, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-11-10, asset
+downloaded back, SHA-256 matches. The 11-09 notes start with a "superseded" line.
