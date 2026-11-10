@@ -13,6 +13,10 @@
     sprites into Apps, and on a Spanish game writes the Civic Deals texts in Spanish. Every file it changes is
     backed up once as <file>.community-orig. It is safe to run more than once. -Restore undoes everything.
 
+    The road mod (sc3netmod) serves the game its own SYS.PAK from mods\netmod\overlay\Apps\Sys\SYS.PAK, so the same
+    entries go into that copy too (2026-11-10c; before, the game never saw the Civic Deals petitions with the road
+    mod installed). A new sc3mods release replaces that copy: run this script again after updating sc3mods.
+
 .PARAMETER Game
     The game folder (the one with Apps). Defaults to this script's folder or the folder above it.
 
@@ -55,20 +59,11 @@ function Write-New([string]$path, [byte[]]$bytes) {
 }
 function U32([byte[]]$b, [int]$o) { return [BitConverter]::ToUInt32($b, $o) }
 
-# ================================================================================================================
-if ($Restore) {
-    $n = 0
-    Get-ChildItem -LiteralPath $apps -Recurse -File -Filter "*$SUFFIX" | ForEach-Object {
-        Move-Item -LiteralPath $_.FullName -Destination ($_.FullName.Substring(0, $_.FullName.Length - $SUFFIX.Length)) -Force
-        $n++
-    }
-    foreach ($rel in $data.files) {
-        $dst = Join-Path $Game ($rel -replace '/', '\')
-        if (Test-Path -LiteralPath $dst) { Remove-Item -LiteralPath $dst -Force; $n++ }
-    }
-    Write-Host "Restored $n file(s). The community mods are off." -ForegroundColor Green
-    exit 0
-}
+# sc3netmod answers the game's reads of Apps\Sys\SYS.PAK from mods\netmod\overlay\Apps\Sys\SYS.PAK when that file
+# exists (the road packages' own SYS.PAK). The petitions must be in that copy too, or the game never sees them
+# (2026-11-10). It is edited in place with no backup: a new sc3mods release replaces it, so -Restore takes the lines
+# out again instead of putting back an old copy.
+$overlayPak = Join-Path $Game 'mods\netmod\overlay\Apps\Sys\SYS.PAK'
 
 # ---- SYS.PAK: 51 x [u32 A][u32 nameLen][name], u32 A_last, then records [u32 lines][u32 len, chars]... ----------
 function Read-Pak([byte[]]$b) {
@@ -115,30 +110,60 @@ function Build-Pak($pak) {
     return ,$out.ToArray()
 }
 
-$pakPath = Join-Path $apps 'Sys\SYS.PAK'
-$pakBytes = [System.IO.File]::ReadAllBytes($pakPath)
-$pak = Read-Pak $pakBytes
-if (-not ([System.Linq.Enumerable]::SequenceEqual([byte[]](Build-Pak $pak), [byte[]]$pakBytes))) {
-    throw "SYS.PAK does not rebuild byte for byte. Not changed."
-}
-$changed = 0
-foreach ($op in $data.syspak) {
-    $idx = -1
-    for ($i = 0; $i -lt $pak.Names.Count; $i++) { if ($pak.Names[$i] -ieq $op.member) { $idx = $i } }
-    if ($idx -lt 0) { throw "SYS.PAK has no $($op.member). Not changed." }
-    $lines = $pak.Recs[$idx]
-    if ($op.insert) {
-        if ($lines.Contains($op.insert[0])) { continue }
-        $k = $lines.IndexOf($op.after)
-        if ($k -lt 0) { throw "SYS.PAK $($op.member): line '$($op.after)' not found. Not changed." }
-        $lines.InsertRange($k + 1, [string[]]$op.insert); $changed++
-    } else {
-        $k = $lines.IndexOf($op.replace)
-        if ($k -ge 0) { $lines[$k] = $op.with; $changed++ }
+# Adds the petition lines to one SYS.PAK (or takes them out with -Undo). Returns the number of changes.
+function Patch-Pak([string]$pakPath, [string]$label, [switch]$Undo, [switch]$Backup) {
+    $pakBytes = [System.IO.File]::ReadAllBytes($pakPath)
+    $pak = Read-Pak $pakBytes
+    if (-not ([System.Linq.Enumerable]::SequenceEqual([byte[]](Build-Pak $pak), [byte[]]$pakBytes))) {
+        throw "$label does not rebuild byte for byte. Not changed."
     }
+    $changed = 0
+    foreach ($op in $data.syspak) {
+        $idx = -1
+        for ($i = 0; $i -lt $pak.Names.Count; $i++) { if ($pak.Names[$i] -ieq $op.member) { $idx = $i } }
+        if ($idx -lt 0) { throw "$label has no $($op.member). Not changed." }
+        $lines = $pak.Recs[$idx]
+        if ($Undo) {
+            if ($op.insert) { foreach ($l in $op.insert) { while ($lines.Remove($l)) { $changed++ } } }
+            else { $k = $lines.IndexOf($op.with); if ($k -ge 0) { $lines[$k] = $op.replace; $changed++ } }
+        } elseif ($op.insert) {
+            if ($lines.Contains($op.insert[0])) { continue }
+            $k = $lines.IndexOf($op.after)
+            if ($k -lt 0) { throw "$label $($op.member): line '$($op.after)' not found. Not changed." }
+            $lines.InsertRange($k + 1, [string[]]$op.insert); $changed++
+        } else {
+            $k = $lines.IndexOf($op.replace)
+            if ($k -ge 0) { $lines[$k] = $op.with; $changed++ }
+        }
+    }
+    if ($changed) {
+        if ($Backup) { Save-Once $pakPath }
+        Write-New $pakPath (Build-Pak $pak)
+        Write-Host "${label}: $changed change(s)" -ForegroundColor Green
+    } else { Write-Host "${label}: already done" }
+    return $changed
 }
-if ($changed) { Save-Once $pakPath; Write-New $pakPath (Build-Pak $pak); Write-Host "SYS.PAK: $changed change(s)" -ForegroundColor Green }
-else { Write-Host "SYS.PAK: already done" }
+
+# ================================================================================================================
+if ($Restore) {
+    $n = 0
+    Get-ChildItem -LiteralPath $apps -Recurse -File -Filter "*$SUFFIX" | ForEach-Object {
+        Move-Item -LiteralPath $_.FullName -Destination ($_.FullName.Substring(0, $_.FullName.Length - $SUFFIX.Length)) -Force
+        $n++
+    }
+    foreach ($rel in $data.files) {
+        $dst = Join-Path $Game ($rel -replace '/', '\')
+        if (Test-Path -LiteralPath $dst) { Remove-Item -LiteralPath $dst -Force; $n++ }
+    }
+    if (Test-Path -LiteralPath $overlayPak) {
+        if ((Patch-Pak $overlayPak 'mods\netmod SYS.PAK' -Undo) -gt 0) { $n++ }
+    }
+    Write-Host "Restored $n file(s). The community mods are off." -ForegroundColor Green
+    exit 0
+}
+
+[void](Patch-Pak (Join-Path $apps 'Sys\SYS.PAK') 'SYS.PAK' -Backup)
+if (Test-Path -LiteralPath $overlayPak) { [void](Patch-Pak $overlayPak 'mods\netmod SYS.PAK') }
 
 # ---- petitioner IXF: u32 magic, 20-byte index slots {group, instance, type, offset, size} up to a zero slot ----------
 function Ixf-Records([byte[]]$b) {
