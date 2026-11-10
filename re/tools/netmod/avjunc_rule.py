@@ -56,6 +56,28 @@ RAMP_END = {15138: (3, "off"), 15139: (3, "on"), 15140: (0, "off"), 15141: (0, "
 CROSS_ROW = {15098, 11258, 69, 67}                 # avcore crossing bases that split a segment touching a ramp
 MAXWALK = 16                                       # task avdiamond: how far a segment walk may go before the split
 DIAMOND = os.environ.get("SC3NETMOD_AVDIAMOND", "1") != "0"
+# task avends B1 (2026-11-09, C block AVTEE in sc3netmod_avx.c): a box's crossing-avenue span is also found on a LINK
+# row of the crossing avenue (both cells our link noses). A
+# city saved with AVX's link noses restores them; avx_pair skips link noses, so a T of avenues next to such a row had no
+# span, read the row as a road arm (T) and was dropped in validation (owner's Big One (547..548,63..65)).
+AVTEE = os.environ.get("SC3NETMOD_AVTEE", "1") != "0"
+# task avends E (C block AVSTUB in sc3netmod_avx.c): the stock road dead end 11225 (props 310 = 0x80008000, one arm, S at
+# state 0) is a road arm; without it a half T'd into a stub read "unknown" and no box formed (owner's Big One (614,192)).
+AVSTUB = os.environ.get("SC3NETMOD_AVSTUB", "1") != "0"
+STUB_MASK = {11225: 0x80008000}
+# task avends A1 (C block AVUEND in sc3netmod_avx.c): a segment walk stops before a stock avenue end (the U-turn pair
+# 11203 / 21701 at the end pattern's states) and the pair is avcore's block (corner_cells: a band arm, '?' in validation).
+AVUEND = os.environ.get("SC3NETMOD_AVUEND", "1") != "0"
+UTURN_ST = {("x", 1): (0, 1), ("x", -1): (3, 2), ("z", 1): (2, 1), ("z", -1): (3, 0)}   # (axis, walk sign): a, b states
+
+
+def uturn_stop(L, P, a, b, axis, sg):
+    if not AVUEND:
+        return False
+    pa, pb = L.get(a), L.get(b)
+    if not (pa and pb and P.stock_of(pa[0]) == 11203 and P.stock_of(pb[0]) == 11203):
+        return False
+    return ((pa[1] & 3), (pb[1] & 3)) == UTURN_ST[(axis, sg)]
 
 
 def ramp_kind(pid):
@@ -91,7 +113,7 @@ class Pieces:
             self.avl_base.setdefault(k, [69, 67, 11258, 15098, 31, 32, 11201, 11202][(k - 21710) // 2])
 
     def stock_of(self, pid):
-        if pid in STOCK_MASK:
+        if pid in STOCK_MASK or (AVSTUB and pid in STUB_MASK):
             return pid
         return self.avl_base.get(pid)
 
@@ -104,7 +126,7 @@ class Pieces:
             b = self.stock_of(pid)
             if b is None:
                 return None                         # foreign
-            loc = mask_arms_nesw(STOCK_MASK[b])
+            loc = mask_arms_nesw(STOCK_MASK.get(b) or STUB_MASK[b])
         return {(e + state) % 4 for e in loc}
 
     def is_row(self, pid):
@@ -427,6 +449,9 @@ def find(L, P, roads, drop=frozenset(), bv=True, caps=True, tees=True, ends=True
                     break
                 if straight_pair(L, P, a, b, axis):
                     break
+                if uturn_stop(L, P, a, b, axis, sg):                  # task avends A1
+                    P.corner_cells |= {a, b}
+                    break
                 if P.foreign(L[a][0]) or P.foreign(L[b][0]):
                     why = "foreign piece"
                     break
@@ -557,6 +582,16 @@ def find(L, P, roads, drop=frozenset(), bv=True, caps=True, tees=True, ends=True
     return {"boxes": list(boxes.values()), "noses": noses, "refused": refused}
 
 
+def link_row(L, P, a, b, side):
+    """task avends B1: cells a, b (b on world side `side` of a) are one row of a crossing avenue held as a link: both
+    our link noses (restored from a save)"""
+    pa, pb = L.get(a), L.get(b)
+    if not (pa and pb):
+        return False
+    # only our link noses: reading two stock linked T 39 as a span changed 463 boxes / noses in the shipped cities
+    return all(q[0] in P.own and P.own[q[0]]["kind"] == "link" for q in (pa, pb))
+
+
 def make_box(L, P, B, pos, r):
     """box over run r of a segment: cells, outline and arm list; modes come from box_modes()"""
     cells = {}
@@ -573,6 +608,9 @@ def make_box(L, P, B, pos, r):
                     oa = (ca[0] + DIRV[side][0] * k, ca[1] + DIRV[side][1] * k)
                     ob = (cb[0] + DIRV[side][0] * k, cb[1] + DIRV[side][1] * k)
                     if straight_pair(L, P, oa, ob, "z" if B.axis == "x" else "x"):
+                        found = True
+                        break
+                    if AVTEE and link_row(L, P, oa, ob, B.along[1]):     # task avends B1
                         found = True
                         break
                     qa, qb = L.get(oa), L.get(ob)       # links, avcore's crossings / slopes, noses: keep going
@@ -849,6 +887,52 @@ def arm_status(L, P, res, bands):
 
 
 # ------------------------------------------------------------------------------------------------ offline scan
+
+def table_info(tdir):
+    """task avends: what a reloading game knows from the installed netmod tables (tree/mods/netmod/tables): variant ->
+    base, AVX's own pieces (box / nose / link / corner), avcore's family (by base) and AVP's look twins (given back)"""
+    import glob
+    base, own, avl, avlp = {}, {}, set(), set()
+    for f in glob.glob(os.path.join(tdir, "*.txt")):
+        for line in open(f, encoding="ascii", errors="replace"):
+            t = line.split()
+            if not t or t[0].startswith("#"):
+                continue
+            if t[0].isdigit() and len(t) >= 2 and t[1].isdigit():
+                base[int(t[0])] = int(t[1])
+            elif t[0] == "avxm":
+                own[int(t[1])] = {"outline": t[2], "kind": "box"}
+            elif t[0] == "avxn":
+                own[int(t[1])] = {"outline": "CACA", "kind": "link" if len(t) > 4 and t[4] == "1" else "nose"}
+            elif t[0] == "avxk":
+                own[int(t[1])] = {"outline": t[2], "kind": "corner"}
+            elif t[0] in ("avls", "avlu", "avlk", "avlt", "avlc"):
+                avl.add(int(t[1]))
+            elif t[0] == "avlp":
+                avlp.add(int(t[1]))
+    return base, own, avl, avlp
+
+
+def city_layer_saved(path, ids, tdir):
+    """task avends: city_layer + the save's variant list (section 0x4E56) as a reload restores it, -> L, roads, Pieces.
+    AVP twins read as their base (AVP is off by default and gives them back; rb_read returns a twin as its base)."""
+    from netmod import netvariant
+    import city_write
+    L, roads = city_layer(path, ids)
+    base, own, avl, avlp = table_info(tdir)
+    ab = {v: base[v] for v in avl if v in base}
+    avb = dict(Pieces().avl_base)
+    avb.update(ab)
+    P = Pieces(own=own, avl_base=avb)
+    for w0, w1, vid in netvariant.section_entries(city_write.City.load(path)) or []:
+        v = vid & 0xFFFF
+        if v in avlp or v not in base:
+            continue
+        c = (w0 & 0x7FF, (w0 >> 11) & 0x7FF)
+        L[c] = (v, (w0 >> 30) & 3)
+        roads.add(c)
+    return L, roads, P
+
 
 def city_layer(path, ids):
     from netmod import tiler

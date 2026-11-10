@@ -45,7 +45,22 @@
 
 enum { DK_NONE = 0, DK_JROW_BOTH = 1, DK_JROW_A, DK_JROW_STEM, DK_JCOL_BOTH, DK_JCOL_A, DK_NARROW_C, DK_NARROW_A,
        DK_TAPER0, DK_TAPER1, DK_TAPER2, DK_CAP_SQ, DK_CAP_PART, DK_TAPER0S, DK_TAPER1S, DK_TAPER2S, DK_CAP_X4Z3,
-       DK_CAP_X4Z4, DK_BEND_X = 100, DK_BEND_Z, DK_STEM, DK_RAGGED };                /* DK_RAGGED: task avrbtfix */
+       DK_CAP_X4Z4, DK_BEND_X = 100, DK_BEND_Z, DK_STEM, DK_RAGGED, DK_BEND_ZT };     /* DK_RAGGED: task avrbtfix */
+
+/* task avends F2a (2026-11-09, round brief ROUND_2026-11-09_avends.md, twin diagbv.classify_end "bend-z-tee"): a bend
+   into three straight columns whose second and third rows past the end also carry an avenue arm on ONE side (two rows,
+   the arm's first cells beside the columns; none on rows 1 and 4). The stock tiler leaves it; DBV called it ragged.
+   The three columns and the arm are BV's (a boulevard narrowing into an avenue with an avenue T on its last two
+   columns, sc3netmod_bv.c AVENDS F2b / F3); DBV writes the band as for a plain bend-z. Owner's Big One (583..585,
+   107..109). Off: SC3NETMOD_DBVBENDT=0 (the end is ragged again). */
+static int g_dbvt = -1;
+static int dbvt_on(void) {
+    if (g_dbvt < 0) {
+        g_dbvt = !env_off("SC3NETMOD_DBVBENDT");
+        logf("dbv: bend into a narrowing with an avenue T (avends F2a) %s", g_dbvt ? "on" : "off (SC3NETMOD_DBVBENDT=0)");
+    }
+    return g_dbvt;
+}
 
 typedef struct { signed char dx, dz; WORD piece; BYTE state; } DbvStamp;
 static DbvStamp g_dbv_st[DBV_KINDS][DBV_MAX_STAMP];
@@ -221,6 +236,13 @@ static int dbv_end_kind(DbvPass *p, int z_e, int a_e, int e, int nrows) {
 #define R012 (DM(0) | DM(1) | DM(2))
 #define R123 (DM(1) | DM(2) | DM(3))
     if (rr[0] == R012 && rr[1] == (DM(-1) | DM(0) | DM(1))) return DK_BEND_Z;
+    if (rr[0] == R012 && dbvt_on()) {                                    /* task avends F2a */
+        int east = DBV_RDE(4, 2) && DBV_RDE(4, 3), west = DBV_RDE(0, 2) && DBV_RDE(0, 3), ar = east ? 4 : 0, na = east ? 0 : 4;
+        if ((east ^ west) && DBV_RDE(1, 2) && DBV_RDE(2, 2) && DBV_RDE(3, 2) && DBV_RDE(1, 3) && DBV_RDE(2, 3) &&
+            DBV_RDE(3, 3) && !DBV_RDE(ar, 1) && !DBV_RDE(ar, 4) && !DBV_RDE(na, 2) && !DBV_RDE(na, 3) &&
+            DBV_RDE(east ? 5 : -1, 2) && DBV_RDE(east ? 5 : -1, 3))
+            return DK_BEND_ZT;
+    }
     for (j = 0, ok = 1; j < 5; j++) ok = ok && rr[j] == R012;
     if (ok) return dbv_narrow_ok(p, z_e, a_e, e, DK_NARROW_C) ? DK_NARROW_C : DK_NONE;              /* task bvlanes */
     if (rr[0] == R123 && rr[1] == R123 && rr[2] == R123)
@@ -301,7 +323,13 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
                 for (dx = 1; dx <= dz + 3; dx++) MARK(DBV_CELLX(dx, dz), DBV_CELLZ(dx, dz)) |= 16;
                 for (dx = 1; dx < 512 && DBV_RDE(dx, dz); dx++) MARK(DBV_CELLX(dx, dz), DBV_CELLZ(dx, dz)) |= 2;
             }
-        } else if (kind == DK_BEND_Z) {
+        } else if (kind == DK_BEND_Z || kind == DK_BEND_ZT) {
+            if (kind == DK_BEND_ZT) {                                    /* task avends F2a: the arm is BV's */
+                int st2 = DBV_RDE(4, 2) ? 1 : -1;
+                for (j = 2; j <= 3; j++)
+                    for (dx = st2 > 0 ? 4 : 0; dx > -512 && dx < 512 && DBV_RDE(dx, j); dx += st2)
+                        MARK(DBV_CELLX(dx, j), DBV_CELLZ(dx, j)) |= 2;
+            }
             for (j = 1; j < 512; j++) {
                 int got = 0;
                 for (dx = 1; dx <= 3; dx++)

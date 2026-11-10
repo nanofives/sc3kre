@@ -46,6 +46,33 @@ static WORD g_bv_cap[3];
 static WORD g_bv_tap[3][9];
 static WORD g_bv_av[2][9];                     /* narrowing to the avenue on rows k, k+1 (k 0 / 1), column-major */
 static WORD g_bv_jt[2];                        /* task bvlanes: a T's entry row / middle row (`bvj`), 0 = jn / jm */
+/* task avends F2b / F3 (2026-11-09, round brief ROUND_2026-11-09_avends.md; owner's Big One (583..585,107..109)):
+   F2b: a run of exactly BV_TAPER columns is a boulevard when one end bends into a diagonal boulevard (DBV's cells
+   beyond, end type 5) and the other narrows into an avenue (type 3): the whole run is the narrowing (a 3 x 3 block with
+   a DBV band on one side is not bigrbt's). Off: SC3NETMOD_BVSHORT=0.
+   F3: a narrowing whose last two columns (the ones next to the avenue) carry an avenue arm on the KEPT side's outer
+   edge (a BVX wide span of 2 columns, one side only): those 6 cells take `bvn` pieces (the narrowing with a junction
+   box over its last two columns: the arm's movements, every lane of the narrowing), the arm's two first cells BVX's
+   noses as for any avenue arm. Line `bvn <first kept row 0|1> <col1 row0..2> <col2 row0..2>` (canonical, +s end).
+   Off: SC3NETMOD_BVNT=0. */
+static WORD g_bv_at[2][6];
+static int g_bvs_short = -1, g_bvnt = -1;
+static int g_bvnt_skip[2] = { -0x7fffffff, -0x7fffffff };   /* the span column bvx_boxes leaves to the bvn pieces */
+static int bvshort_on(void) {
+    if (g_bvs_short < 0) {
+        g_bvs_short = !env_off("SC3NETMOD_BVSHORT");
+        logf("bv: 3-column run between a diagonal bend and a narrowing (avends F2b) %s",
+             g_bvs_short ? "on" : "off (SC3NETMOD_BVSHORT=0)");
+    }
+    return g_bvs_short;
+}
+static int bvnt_on(void) {
+    if (g_bvnt < 0) {
+        g_bvnt = !env_off("SC3NETMOD_BVNT");
+        logf("bv: avenue T on a narrowing's last two columns (avends F3) %s", g_bvnt ? "on" : "off (SC3NETMOD_BVNT=0)");
+    }
+    return g_bvnt;
+}
 static volatile LONG g_bv_n_runs, g_bv_n_cells, g_bv_n_rev;
 
 enum { BV_OUTER, BV_MIDDLE, BV_NOSE, BV_NOSE2, BV_JN, BV_JM, BV_JF };
@@ -106,6 +133,17 @@ static void bv_line(const char *path, const char *line) {
             if (!bv_variant(v[k])) { logf("### bv: %s: narrowing piece %lu is not a variant", path, v[k]); return; }
         for (k = 0; k < 9; k++) g_bv_av[v[0]][k] = (WORD)v[k + 1];
         logf("bv: %s: narrowing to the avenue on rows %lu, %lu = pieces %lu..%lu", path, v[0], v[0] + 1, v[1], v[9]);
+    } else if (!strncmp(line, "bvn ", 4)) {                                          /* task avends F3 */
+        if (sscanf(line + 4, "%lu %lu %lu %lu %lu %lu %lu", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6]) != 7 ||
+            v[0] > 1) {
+            logf("### bv: %s: bad narrowing + T line '%s'", path, line);
+            return;
+        }
+        for (k = 1; k < 7; k++)
+            if (!bv_variant(v[k])) { logf("### bv: %s: narrowing + T piece %lu is not a variant", path, v[k]); return; }
+        for (k = 0; k < 6; k++) g_bv_at[v[0]][k] = (WORD)v[k + 1];
+        logf("bv: %s: narrowing to the avenue on rows %lu, %lu with an avenue T = pieces %lu..%lu", path, v[0], v[0] + 1,
+             v[1], v[6]);
     }
 }
 
@@ -152,6 +190,7 @@ static int bv_is_piece(WORD id) {
     if (g_bv_jt[0] == id || g_bv_jt[1] == id) return 1;                    /* task bvlanes */
     for (k = 0; k < 3; k++) for (j = 0; j < 9; j++) if (g_bv_tap[k][j] == id) return 1;
     for (k = 0; k < 2; k++) for (j = 0; j < 9; j++) if (g_bv_av[k][j] == id) return 1;
+    for (k = 0; k < 2; k++) for (j = 0; j < 6; j++) if (g_bv_at[k][j] == id) return 1;   /* task avends F3 */
     if (bvx_is_piece(id)) return 1;                       /* task bvx */
     if (bvs_is_piece(id)) return 1;                       /* task avslope: the sloped outer / middle */
     return 0;
@@ -208,6 +247,7 @@ static void bv_put(BvPass *p, int s, int w, WORD piece, int st) {
 static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *kind, int cut_hi, int cut_lo,
                    int *bad_e) {
     int sb = sa, s, k, e, n, ncl = 0, endtyp[2], endkeep[2], endlo, endhi, normlo, normhi, teew[2] = { 0, 0 };
+    int shortrun = 0, f3[2] = { 0, 0 };                                  /* task avends F2b / F3 */
     *why = "";
     *bad_e = -1;
     p->bja = p->bjb = -1;                                                /* task avx32 (img16 split) */
@@ -218,7 +258,18 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
     sb -= cut_hi;
     n = sb - sa + 1;
     if (n < BV_MIN_COLS) return 0;
-    if (n < BV_MIN_RUN) { *why = "3-column run: a 3x3 block (bigrbt's)"; return 0; }
+    if (n < BV_MIN_RUN) {
+        /* task avends F2b: one end bends into a diagonal boulevard (decided with the end types below) */
+        int bend = 0;
+        for (e = 0; e < 2 && n == BV_TAPER && bvshort_on() && !cut_hi && !cut_lo; e++) {
+            int se = e ? sa - 1 : sb + 1, g = 0, c = 0;
+            for (k = 0; k < 3; k++) { g += bv_road(p, se, w0 + k); c += bv_road(p, se, w0 + k) && bv_cl(p, se, w0 + k); }
+            if (g && c == g) bend = 1;
+        }
+        if (!bend) { *why = "3-column run: a 3x3 block (bigrbt's)"; return 0; }
+        shortrun = 1;
+    }
+    g_bvnt_skip[0] = g_bvnt_skip[1] = -0x7fffffff;                        /* task avends F3 */
     /* task avx32 (img16): a ragged end on a column with road beside it is refused before the spans, so bv_run_fb
        keeps cutting that end (a span further in must not be read as the other end's refusal first) */
     for (e = 0; e < 2; e++) {
@@ -257,7 +308,8 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
             endtyp[e] = 4; endkeep[e] = -9; teew[e] = k;
         }
         else if (got == 2 && row == first + 1 && (kind[se - sa] & 4) && bv_road(p, se + 2 * st, w0 + first) &&
-                 bv_road(p, se + 2 * st, w0 + row)) {
+                 bv_road(p, se + 2 * st, w0 + row) &&
+                 !(bvnt_on() && (kind[se - sa] & 3) != 3)) {   /* task avends F3: an arm on one side = narrowing + T */
             /* task avx32: the run ends in a box and an avenue goes on past it (the crossing road is a boulevard on one
                side, an avenue on the other: owner img7); the box side is 'L' / 'H'. Its noses come from the run that
                has this avenue beside it (bvx_boxes, side arm) */
@@ -304,23 +356,38 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
             p->natt++;
         }
     }
+    if (shortrun && !((endtyp[0] == 3 && endtyp[1] == 5) || (endtyp[1] == 3 && endtyp[0] == 5)))   /* avends F2b */
+        { *why = "3-column run: a 3x3 block (bigrbt's)"; return 0; }
+    for (e = 0; e < 2; e++) {                                            /* task avends F3: a T on the narrowing */
+        int c1 = e ? sa : sb - 1, c2 = e ? sa + 1 : sb, ci = e ? sa + 2 : sb - 2, want;
+        if (endtyp[e] != 3 || !bvnt_on()) continue;
+        if (!(kind[c1 - sa] & 4) && !(kind[c2 - sa] & 4)) continue;
+        /* the kept outer row: first 0 -> row w0 (arm on the -w side, bit 1); first 1 -> row w0 + 2 (+w side, bit 2) */
+        want = 4 | (endkeep[e] == 0 ? 1 : 2);
+        if (kind[c1 - sa] != want || kind[c2 - sa] != want || (ci >= sa && ci <= sb && kind[ci - sa]))
+            { *why = "an avenue T on a narrowing that is not on its last two columns, kept side"; *bad_e = e; return 0; }
+        if (!g_bv_at[e ? 1 - endkeep[e] : endkeep[e]][0])
+            { *why = "no narrowing + T pieces declared"; *bad_e = e; return 0; }
+        f3[e] = 1;
+        g_bvnt_skip[e] = c1;
+    }
     /* bvx: 4 = T, diagbv: 5 = DBV, avx32: 6 = box + avenue, 7 = ragged */
     endhi = endtyp[0] == 1 ? 1 : endtyp[0] == 4 || endtyp[0] == 6 ? teew[0] : endtyp[0] >= 5 ? 0 : BV_TAPER;
     endlo = endtyp[1] == 1 ? 1 : endtyp[1] == 4 || endtyp[1] == 6 ? teew[1] : endtyp[1] >= 5 ? 0 : BV_TAPER;
     normlo = sa + endlo;
     normhi = sb - endhi;
-    if (normhi < normlo) { *why = "run too short for its ends"; return 0; }
+    if (normhi < normlo && !(shortrun && normhi == normlo - 1)) { *why = "run too short for its ends"; return 0; }
     for (s = normlo; s <= normhi; s++) ncl += kind[s - sa] == 0;
-    if (ncl < BV_MIN_COLS) { *why = "fewer than 3 boulevard columns"; return 0; }
+    if (ncl < BV_MIN_COLS && !shortrun) { *why = "fewer than 3 boulevard columns"; return 0; }
     for (s = sa; s < normlo; s++)
-        if (kind[s - sa] && endtyp[1] != 4 && endtyp[1] != 6)
+        if (kind[s - sa] && endtyp[1] != 4 && endtyp[1] != 6 && !f3[1])
             { *why = "a junction inside an end region"; *bad_e = 1; return 0; }
     for (s = normhi + 1; s <= sb; s++)
-        if (kind[s - sa] && endtyp[0] != 4 && endtyp[0] != 6)
+        if (kind[s - sa] && endtyp[0] != 4 && endtyp[0] != 6 && !f3[0])
             { *why = "a junction inside an end region"; *bad_e = 0; return 0; }
     /* task avx32: a road or an avenue crossing may stand next to a cap (the boulevard crosses it and stops one column
        on). Not a boulevard (3 wide): its own run reads the one-column stub as an arm shorter than 2 */
-    for (e = 0; e < 2; e++) {
+    for (e = 0; e < 2 && !shortrun; e++) {                   /* task avends F2b: a short run has no normal column */
         int s0 = e ? normlo : normhi, st = e ? 1 : -1, wd = 0;
         if (!kind[s0 - sa]) continue;
         if (kind[s0 - sa] & 4)
@@ -353,7 +420,8 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
             for (col = 0; col < BV_TAPER; col++)
                 for (row = 0; row < 3; row++)
                     bv_put(p, e ? sa + BV_TAPER - 1 - col : sb - BV_TAPER + 1 + col, w0 + (e ? 2 - row : row),
-                           set[3 * col + row], e ? 2 : 0);
+                           f3[e] && col >= 1 ? g_bv_at[e ? 1 - endkeep[e] : endkeep[e]][3 * (col - 1) + row] :
+                           set[3 * col + row], e ? 2 : 0);                 /* task avends F3 */
         }
     }
     for (s = normlo; s <= normhi; s++) {
@@ -588,6 +656,9 @@ static int bv_decide(BvPass *P, BYTE *mgr, void *lay, int x0, int z0, int x1, in
                             }
                         if (ours) d.sides |= sd;
                     }
+                    if (write && *why && sb - s + 1 < 2 * BV_MIN_COLS && env_on("SC3NETMOD_BVDBG"))   /* avends: debug */
+                        logf("bv: dbg: %s: run axis %d from (%d,%d), %d column(s) refused: %s", who, axis,
+                             bv_rx(axis, s, w), bv_rz(axis, s, w), sb - s + 1, why);
                     if (write && *why && sb - s + 1 >= 2 * BV_MIN_COLS)
                         logf("bv: %s: run axis %d from (%d,%d), %d column(s) left to the stock tiler: %s", who, axis,
                              bv_rx(axis, s, w), bv_rz(axis, s, w), sb - s + 1, why);
