@@ -44,3 +44,6 @@ E09F2ECEFF110C6CC5FCDFB774964907977A4E1390E7CB5C38C9FBBC0E850237.
 
 Not checked (owner): the Building Replacement Manager window (New City flow) with the slots, a 2x2 BAT on a 2x2 slot, a
 .bld the player adds with "Edit list" then converted, a European-style city with the mix.
+
+GitHub: `sc3mods-2026-11-10d`, target 61b9c16, https://github.com/nanofives/sc3kre/releases/tag/sc3mods-2026-11-10d, asset
+downloaded back, SHA-256 matches. The 10c notes start with a "superseded" line.
