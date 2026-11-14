@@ -12,6 +12,7 @@ The folder is a complete, playable SimCity 3000 Unlimited install plus the mods,
   (no launcher file)         the updater creates "SimCity 3000 (mods).lnk" -> Apps\SC3U.exe on each PC
   sc3_update.ps1, update.bat the updater (copies of the files beside this script)
   sc3mods_patch.ps1          adds the sc3mods.dll import to this PC's SC3U.exe; the updater runs it, -Restore undoes it
+  sc3mods_patch.sh           the same for Linux / macOS (Wine), run by hand: sh sc3mods_patch.sh [--restore]
   manifest.json              {path, size, sha256, seed}: seed files are downloaded only when missing (per-PC prefs)
 
 Files are hard-linked from the sources when they share a volume (no extra disk), copied otherwise.
@@ -132,6 +133,12 @@ def main():
     # sc3mods_patch.ps1 (one level up, re/scripts) adds the sc3mods.dll import to this PC's SC3U.exe. sc3_update runs
     # it after downloading; it also ships so a player can -Restore to stock by hand.
     shutil.copy2(os.path.join(HERE, "..", "sc3mods_patch.ps1"), os.path.join(out, "sc3mods_patch.ps1"))
+    # 2026-11-14 lxpatch: the same patch for Linux / macOS (Wine, Lutris, CrossOver), POSIX sh. LF line endings are
+    # required, so it is copied as bytes with CRLF turned back into LF if a checkout changed them.
+    with open(os.path.join(HERE, "..", "sc3mods_patch.sh"), "rb") as _f:
+        _sh = _f.read().replace(bytes([13, 10]), bytes([10]))
+    with open(os.path.join(out, "sc3mods_patch.sh"), "wb") as _f:
+        _f.write(_sh)
     # 2026-11-10d: the Building Architect converter (re/scripts/bat_growables.ps1, verify/batconvert). It runs on the
     # player's PC against their own Apps\BARender\BAT.DAT, so it ships unrun: the staged overlay holds no converted
     # buildings.

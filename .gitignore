@@ -16,6 +16,7 @@
 
 # 2) Root files we publish (our own work).
 !/.gitignore
+!/.gitattributes
 !/README.md
 !/LICENSE
 !/HANDOFF.md
@@ -104,6 +105,8 @@
 !/re/scripts/*.py
 !/re/scripts/*.ps1
 !/re/scripts/*.java
+# lxpatch (2026-11-14): the POSIX-sh twin of sc3mods_patch.ps1 (patch data only, no game code)
+!/re/scripts/*.sh
 
 # 6) re/analysis — Markdown only. Excludes the stray *.csv data dumps
 #    (functions_raw_1203.csv at top level, formats/gvf_keys.csv one level down).

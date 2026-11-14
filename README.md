@@ -20,6 +20,21 @@ Ready-to-use mods for your own copy of SimCity 3000 Unlimited, published as zips
 Steam copies both work.
 `sc3mods_patch.ps1 -Restore` goes back to stock. Each release has a `README.txt` with install steps, every option
 and what changed.
+**Linux and macOS (Wine, Lutris, CrossOver).** The Windows script needs PowerShell, so the release also has
+`sc3mods_patch.sh`, a plain `sh` script that makes the same edit to `SC3U.exe` and needs only tools every Linux and
+macOS install has (`sh`, `dd`, `od`, `wc`, `cp`, `mv`, `cut`, `tr`, `grep`, and `sha256sum` or `shasum`). Close the game, then run
+it from the game's `Apps` folder, the one with `SC3U.exe` and `sc3mods.dll` (or pass the folder with `--apps`):
+
+    cd "/path/to/SimCity 3000 Unlimited/Apps"
+    sh sc3mods_patch.sh              # patch, keeps SC3U.exe.orig
+    sh sc3mods_patch.sh --restore    # back to stock
+
+It accepts the same exes as the `.ps1` (GOG 2.0.0.3, GOG and Steam 2.0.949, signed copies of them) and refuses any other
+one without changing it. It checks the SHA-256 of its result before replacing the exe, the result is byte-identical to
+the `.ps1` output, and both scripts use the same `SC3U.exe.orig`, so either one can undo the other. Start the game
+through Wine as usual afterwards. On Windows the `.ps1` above is still the way. The script was tested on Debian 13
+(`dash`) and with Git Bash `sh`, not yet on macOS: see `verify/lxpatch/RESULTS.md`.
+
 Bitdefender flagged `sc3netmod.dll` up to 2026-11-10 (Gen:Variant.Draftor.8144, a false positive). From 2026-11-10b
 every mod DLL carries version information and scans clean.
 
