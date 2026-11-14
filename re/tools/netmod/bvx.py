@@ -92,7 +92,8 @@ def box_piece(desc):
 # boulevard comes in from W, the far side E closed, the road crosses N - S). They have no legacy edge piece: in the
 # edge-pattern mode (TABLE None, what bvlanes reads) box_piece returns the pattern string as the piece, and bvlanes
 # gives each cell its id from the BOX_NEW pool, the art from the pattern
-NEWPAT = ("ACIA", "ICIA", "ICAA")
+NEWPAT = ("ACIA", "ICIA", "ICAA",
+          "ICCI")       # task orthfix BVCORNER: the outer cell of a corner box (two closed sides, E and S at state 0)
 
 
 # ------------------------------------------------------------------------------------------------ hooks for runs()
@@ -367,6 +368,12 @@ def shapes():
         "BrT": {(x, z) for x in range(-9, 1) for z in range(3)} | {(0, z) for z in range(-8, 11)},
         "BxR1": {(x, z) for x in range(-9, 2) for z in range(3)} | {(0, z) for z in range(-8, 11)},
         "BxA1": {(x, z) for x in range(-9, 3) for z in range(3)} | {(x, z) for x in (0, 1) for z in range(-8, 11)},
+        # task orthfix BVCORNER (xsect 37 / 26): the boulevard ends in a corner box, the other road on one side only:
+        # a boulevard (N), an avenue N (the avenue clockwise next to the boulevard) or S (the mirror: right-hand lanes
+        # make it a kind of its own)
+        "BcB": {(x, z) for x in range(-9, 3) for z in range(3)} | {(x, z) for x in (0, 1, 2) for z in range(-9, 0)},
+        "BcAn": {(x, z) for x in range(-9, 2) for z in range(3)} | {(x, z) for x in (0, 1) for z in range(-8, 0)},
+        "BcAs": {(x, z) for x in range(-9, 2) for z in range(3)} | {(x, z) for x in (0, 1) for z in range(3, 11)},
     }
     return S
 
@@ -409,7 +416,8 @@ def cmd_check(a):
     fails = 0
     S = shapes()
     expect_runs = {"BxA": 1, "AvT": 1, "BvT": 1, "BxB": 2, "BbT": 2, "BxBAh": 2, "BxBAl": 2, "BxAlh": 1, "BxAhl": 1,
-                   "BrT": 1, "BxR1": 1, "BxA1": 1}                      # task avx32
+                   "BrT": 1, "BxR1": 1, "BxA1": 1,                      # task avx32
+                   "BcB": 2, "BcAn": 1, "BcAs": 1}                      # task orthfix BVCORNER
     ref = {}
     for name, cells in sorted(S.items()):
         for k in range(4):

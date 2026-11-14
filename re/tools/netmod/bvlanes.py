@@ -201,6 +201,9 @@ def box_lanes(x0, x1, z0, z1, arms):
                 m = min(n, len(tgt))                       # turn into as many of its lanes as fit
                 if opp not in arms and n >= 3:             # task avx32: a boulevard ending on a single road: its
                     m = max(m, 2)                          # middle lane merges into both turns (no dead lane)
+                other = side_of_h[(hdir[0], hdir[1])]      # task orthfix BVCORNER: the other turn's side
+                if opp not in arms and other not in arms:  # a corner: this turn is the only way on, every lane
+                    m = n                                  # takes it (the extra ones merge into the last target)
             srcs = a["in"][:m] if which == "r" else a["in"][::-1][:m]
             outs = tgt if which == "r" else tgt[::-1]
             for k, p in enumerate(srcs):
@@ -402,6 +405,29 @@ def end_scene(kind):
 END_KINDS = ("BrT", "BxR1", "BxA1")
 
 
+# task orthfix BVCORNER (2026-11-14, xsect 37 / 26): the boulevard ends in a corner box, the other road (a boulevard
+# BcB, an avenue on the N side BcAn or the S side BcAs) on one side only. Both sides beyond the box are closed; every
+# lane turns (box_lanes: a corner's only turn takes every lane)
+CORNER_KINDS = ("BcB", "BcAn", "BcAs")
+
+
+def corner_scene(kind):
+    from netmod import bvx as BX
+    road = BX.shapes()[kind]
+    w = 3 if kind == "BcB" else 2
+    side = 3 if kind == "BcAs" else 1
+    arms = {0: arm_bv_x(0, 0), side: arm_z(side, 0 if side == 1 else 3, 0, w)}
+    lanes = straights(-9, 0) + arm_road_lanes(side, 0 if side == 1 else 3, 0, w, 9 if w == 3 else 8, True)
+    lanes += box_lanes(0, w, 0, 3, arms)
+    med = []
+    if w == 2:
+        med.append(rect(AV_MED[0], AV_MED[1], -9, -0.12) if side == 1 else rect(AV_MED[0], AV_MED[1], 3.12, 12))
+    names = {"BcB": "boulevard corner (boulevard x boulevard)", "BcAn": "boulevard corner into an avenue (N)",
+             "BcAs": "boulevard corner into an avenue (S)"}
+    return {"name": names[kind], "road": road, "lanes": lanes, "view": (-3.5, -3.6, w + 3.5, 6.6), "medians": med,
+            "box": True}
+
+
 def scenes():
     out = [scene_cap(), junction_scene("X"), junction_scene("TN"), junction_scene("TS"), scene_narrow(),
            scene_narrow12()]
@@ -409,6 +435,7 @@ def scenes():
     out += [box_scene(k) for k in ("BxA", "AvT", "BvT", "BxB", "BbT")]
     out += [box_scene_asym(k) for k in ASYM]                   # task avx32: after the others, so ids / curves append
     out += [end_scene(k) for k in END_KINDS]                   # task avx32 (img12): after those
+    out += [corner_scene(k) for k in CORNER_KINDS]             # task orthfix BVCORNER: last, so ids / curves append
     return out
 
 
@@ -819,9 +846,11 @@ NOTES_BOX = [
 SHAPE0, SHAPE1 = 24000, 24999            # bvlanes curve shapes: 24000..24199 (protocol) + 24200..24999 (granted 2026-10-20)
 BV_JN_T, BV_JM_T = 20707, 20708          # T junction entry row / middle row (PLAN.md 2)
 BOX_OLD = (20900, 20901, 20902, 20903, 20904, 20905)
-BOX_NEW = tuple(range(20912, 20950)) + tuple(range(21920, 21950))   # task avx32: + the bvlanes grant 21920..21949
+BOX_NEW = (tuple(range(20912, 20950)) + tuple(range(21920, 21931)) +   # task avx32: + the bvlanes grant 21920..21930
+           tuple(range(22401, 22430)))                                   # task orthfix BVCORNER: + 22401..22429 (grant)
 ARM_IDS = (20910, 20911)
 AVX32_IDS = set(range(20933, 20950)) | set(range(21920, 21950))   # task avx32: allocated last (curve shapes append)
+ORTHFIX_IDS = set(range(22401, 22430))                           # task orthfix BVCORNER: after those
 CAPS = (20704, 20705, 20706)
 AVCORE_SHAPES = {23600: [[255, 0, 80], [223, 0, 80], [191, 0, 80], [159, 0, 80], [128, 0, 80], [96, 0, 80], [64, 0, 80],
                          [32, 0, 80], [0, 0, 80]],
@@ -1040,7 +1069,7 @@ def piece_specs(root=None, dbv=False):
     states[20703] = {0, 2}
     cv = Curves(root)
     specs, rep = {}, []
-    for pid in sorted(seen, key=lambda q: (q in AVX32_IDS, q)):     # task avx32: new pieces' curves after the rest
+    for pid in sorted(seen, key=lambda q: (q in AVX32_IDS or q in ORTHFIX_IDS, q in ORTHFIX_IDS, q)):   # avx32, orthfix
         cuts = sorted(seen[pid][0])
         own, lanes = set(), []
         plan = []
