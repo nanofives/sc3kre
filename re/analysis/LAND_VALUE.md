@@ -215,3 +215,71 @@ Readings from the resolved tables (workbook "All effects by building"):
 - Parks: every park type gets the 14310 rows for land value (+50 R), aura (radius 8, +2) and crime (radius 3, +6),
   but has its own pollution row (Small Park -5 air, Big Park -20 air...).
 - Schools, police, fire stations and hospitals add a little pollution (air 50-60, radius 10) and garbage.
+
+## 9. The city average, its three readers, and the 255 wrap (lvwrap, 2026-11-14)
+
+Simtropolis report: "land value past 255 turns very low". Cause found static, then reproduced and fixed in game.
+
+### The average
+
+- `0x1001deca` adds every per-cell value into the layer's sum `+0xc8` and, for cells with a zone type, the count
+  `+0xcc`, **before** the per-cell 1..255 clamp `[CONFIRMED @ 0x1001deca]`.
+- `0x1001d616` (once per land value cycle): `+0xc4 = sum`; count 0 -> `+0xc0 = 0`; sum < 0 -> 0; then
+  `div ecx` and `mov byte [esi+0xc0], al` at `0x1001d650`, no clamp; then sum and count are zeroed
+  `[CONFIRMED @ 0x1001d616, disassembly]`. A true average of 256 is stored as 0, 300 as 44.
+- `GetAverageValue` `0x1001b3b7` = `movzx eax, byte [ecx+0xa4]; ret`, slot `+0x44` of the land value interface
+  (vtable `0x1004c624`, interface at layer `+0x1c`, so `+0xa4` = layer `+0xc0`). Callers get it through city
+  `vt+0x188` (SIMCITY `0x10002bc6` = `mov eax, [ecx+0xf0]`).
+- iOS `goLandValueLayer::doDailySim` keeps the same average in a short (`this+0xe0`) and clamps it to `0xff`
+  `[iOS-HINT]`.
+
+### The three readers
+
+1. **Property tax, SIMMISC `0x100090a7`** `[CONFIRMED @ 0x100090a7, disassembly]`, `thiscall(budget, zone) ret 4`,
+   zone 0/1/2 = R/C/I:
+   - `avg = (budget+0x20)->vt+0x44()`;
+   - `n = (budget+0x30)->vt+0x28 / +0x2c / +0x30()` = valve layer (QI `0x40a42f1c`) `+0x40/+0x44/+0x48`, last month's
+     sum of footprint area x the building's valve 3000 / 5000 / 8000 amount (accumulated in SIMRCI `0x1002f5af`,
+     rotated in `0x1002efe8`);
+   - if `n > 0` and `avg < 5` (`byte 0x100494a8`) then `avg = 5`;
+   - `tax = ftol((rate * n / 100) * avg * 0.0143f)`, rate = byte `budget + zone*0x88 + 0x8c` (the tax rate, init 7),
+     factors `0x1004949c / a0 / a4` = 0.0143 for each zone.
+   Callers: `sc3_budget_layer_tick` `0x10007d88` (monthly income per zone), `0x10008c7a` (rest of the year,
+   x (12 - month)), `sc3_budgetui_refresh_summary` `0x10023fe1` (budget window). Frame: budget init `0x100067c7`
+   runs on `this - 4` of the tick frame (init `+0x10` city = tick `+0x14`), so init's `+0x1c` LandValueLayer is
+   `+0x20` here.
+2. **Graph "Valor del Terreno"** (Graficas series 11, fixed scale 260, `GRAPH_SERIES.md`): `0x1001d69b` pushes byte
+   `+0xc0` into the history object `+0xd0` every month (`vt+0x6c`, yearly and decade roll-ups on day 1); the layer
+   hands the series to the Graficas page on message `0x605` (`0x1001f5e5`, sink IID `0x5e8`). The history is saved
+   with the city, so **months recorded while the average wrapped stay wrapped in the save** after the fix.
+3. **Scenario `cmdGetLandValue`, SCENARIO `0x10007356`**: `(this+0x28)->vt+0x44()` into a script variable (scenario
+   init `0x10007bd5` stores the layer at `+0x24`, the same +4 frame shift). Scenario goals on land value saw the
+   wrapped value.
+
+Not readers of the average (checked): the R/C/I developers (`load_growth_table` `0x1000f6d8` / `0x10017649` /
+`0x10028864` cache the layer at `+0x84` / `+0xb4` / `+0x84`, their `vt+0x44` is on `FUN_1003ceec()`;
+`evaluate_tile` / `develop_lot` read cells, `vt+0x34`), the query report SIMMISC `0x1001068c` (cell value
+`vt+0x34`, `(cell + 0x80 + aura) / 20 * 2000`), SIMSERV `0x10001a04` (cell), the zone layer (`+0x250`) and RCI
+layer (`+0x5c`) fields (stored and released only). Per-cell values are 1..255, so no second wrap was found.
+
+### Measured (verify/lvwrap, Berlin, dev tree with the curves raised)
+
+To push the true average past 255 the lab tree's `SC3LandValue.INI` (netmod overlay `SYS.PAK`, which is the one the
+game opens when netmod is installed) had the three `*CityCenterEffect` curves set to 250 and `WaterEffect=70`.
+Stock Berlin is 88. The game's own `0x100090a7` was called after each store (sc3simrun LVWRAP log line):
+
+| true average | stored (stock) | R / C / I tax a month (stock) | stored (fix) | R / C / I tax a month (fix) |
+|---:|---:|---|---:|---|
+| 128 | 128 | 7,098 / 5,582 / 2,168 | 128 | 7,098 / 5,582 / 2,168 |
+| 259 | 3 | 1,606 / 1,399 / 574 | 255 | 11,506 / 10,251 / 4,226 |
+| 267..269 | 13 | 1,582 / 1,342 / 551 | 255 | 12,032 / 9,750 / 4,059 |
+
+Budget window, February 2068, residential tax so far 1,803 (stock) against 13,000 (fix), year estimate 21,636 against
+156,000. Pictures: `verify/lvwrap/owner_shots/AB_budget_ingresos.png`, `AB_graph_valor_terreno.png`.
+
+### The fix (sc3simrun LVWRAP)
+
+The 10 bytes at `0x1001d64c` (`xor edx,edx / div ecx / mov [esi+0xc0],al`) become `call lv_stub` + 5 nops; the stub
+does the same divide, caps the quotient at 255 and stores it (bytes `0x1001d646..0x1001d657` are checked first).
+`simrun.ini [lvwrap] mode=1` (default), `0` = stock bytes, `2` = observe (stock wrap kept, true average logged);
+env `SC3SIMRUN_LVWRAP=0/1/2`. A city whose true average is over 255 now pays tax as at 255, like iOS.
