@@ -615,7 +615,7 @@ static int dbv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
         for (cz = cz0; cz <= cz1; cz++)
             for (cx = cx0; cx <= cx1; cx++) {
                 const char *why = "";
-                int n = 0, clean = 0, nw = 0, ntry = 0;
+                int n = 0, clean = 0, nw = 0, ntry = 0, nxk = 0;    /* task diagfix: nxk DAVXNET cells kept */
                 dbv_unmask(&P);                                /* task dbvtouch: the last band's mask */
                 if (!dbv_full(&P, cx, cz) || dbv_full(&P, cx - 1, cz - 1)) continue;
                 while (dbv_full(&P, cx + n, cz + n) && n < DBV_MAX_ROWS) n++;
@@ -641,10 +641,17 @@ static int dbv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                     DWORD want = (P.cell[k].want & ~0xffUL) | ((P.cell[k].want + axis) & 3), cur = rb_at(&P.b, rx, rz);
                     dbv_claim(rx, rz);
                     if (keep) keep[(rz - z0) * P.b.w + (rx - x0)] = 1;
+                    if (dav_xnet(cur)) { nxk++; continue; }     /* task diagfix: a rail / highway crossing stays */
                     if ((((cur & 0xffff) << 8) | ((cur >> 16) & 3)) == want) continue;
                     pos[0] = rx << 8; pos[1] = rz << 8; pos[2] = 0;
                     ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, lay, pos, want, -1, 8, 0);
                     nw++;
+                }
+                if (nxk) {                                                   /* task diagfix: DAVXNET */
+                    InterlockedExchangeAdd(&g_dav_n_xnet, nxk);
+                    if (nw || !strcmp(who, "load"))
+                        logf("dbv: %s: band axis %d from canonical (%d,%d): %d rail / highway crossing cell(s) kept "
+                             "(DAVXNET)", who, axis, cx, cz, nxk);
                 }
                 if (ntry) InterlockedIncrement(&g_dbv_n_touch);              /* task dbvtouch */
                 if (P.nstub) InterlockedExchangeAdd(&g_dbv_n_stub, P.nstub);
