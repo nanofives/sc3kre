@@ -71,8 +71,11 @@
  *                                     enabled=1 (0 = stock rolls; env SC3SIMRUN_CHURN=0 too)
  *                                     [sirens] enabled=1 per_vehicle=1 chance_pct=20 cooldown_s=30 (SIRENS block;
  *                                     env SC3SIMRUN_SIRENS=0 = stock, SC3SIMRUN_SIREN_PERVEH / _PCT / _COOL per part)
+ *                                     [lvwrap] mode=1 (LVWRAP block: cap the city land value average at 255;
+ *                                     0 = stock, 2 = observe; env SC3SIMRUN_LVWRAP=0/1/2)
  * Exports (measurement): sc3simrun_animate(on) switches the scroll-frame rate at run time (returns the old state),
  *         sc3simrun_sirens(DWORD out[4]) = siren states recorded, cooldown blocks, siren-actor updates, removals.
+ *         sc3simrun_lvwrap(DWORD out[4]) = average stores, stores over 255, last true average, last cell count.
  *         sc3simrun_stats(DWORD out[6]) = scroll frames seen by the stub, agent ticks, frozen agent ticks, strip refills, producer ticks run on the revealed strip, producer ticks skipped.
  * Env:    SC3SIMRUN_LOG=<abs path>  SC3SIMRUN_TRACE=1 (20 Hz sampler + hold/pause caller log)
  *         SC3SIMRUN_RESUME=1 (test only: post 0xc2a35d80 once per unit of +0x140 after load)
@@ -263,6 +266,7 @@ static int g_car_margin = 5;                     /* sim rect = view box + this m
 
 static void churn_ini(const char *path);
 static void sirens_ini(const char *path);
+static void lvwrap_ini(const char *path);
 
 static void ini_read(void) {
     char path[MAX_PATH];
@@ -279,6 +283,7 @@ static void ini_read(void) {
     }
     churn_ini(path);
     sirens_ini(path);
+    lvwrap_ini(path);
 }
 
 /* ============================================================ FREEZE */
@@ -853,6 +858,169 @@ __declspec(dllexport) void __cdecl sc3simrun_sirens(DWORD *out) {
     out[3] = (DWORD)g_sir_stat[3];
 }
 
+/* ============================================================ LVWRAP
+ * Simtropolis 2026-11-14 ("land value past 255 turns very low"; re/analysis/LAND_VALUE.md, STATUS_lvwrap.md).
+ * Stock: SIMRCI 0x1001d616 stores the city land value average as one byte, `div ecx` then `mov [esi+0xc0], al`
+ * (0x1001d64c..0x1001d655), with no clamp. The sum (+0xc8) and count (+0xcc) come from 0x1001deca BEFORE the per-cell
+ * 1..255 clamp, so a true average of 256 is stored as 0, 300 as 44. GetAverageValue 0x1001b3b7 returns that byte to
+ * three readers: property tax SIMMISC 0x100090a7 (income per zone = rate% x valve supply / 100 x max(avg, MinAverageLV)
+ * x LVTo{Res,Com,Ind}TaxTransmogrifier/10000; SC3BudgetLayer.INI ships 35 and 35/45/50), the Valor del Terreno graph
+ * (0x1001d69b), scenario cmdGetLandValue (SCENARIO 0x10007356). A wrapped byte under 35 pays the floor: measured on
+ * Berlin, R tax 1,581 a month at true average 259 (byte 3) against 11,482 with the cap (verify/lvwrap/RESULTS.md). iOS (goLandValueLayer::doDailySim) clamps the same average to
+ * 0xff [iOS-HINT].
+ * Fix: the 10 bytes become `call lv_stub` + 5 nops; the stub does the same divide, caps the quotient at 255, stores it.
+ * [lvwrap] mode=1 (default, cap), 0 = stock bytes, 2 = observe (stub armed, stock wrap kept, the true average logged:
+ * the A/B control, since the game zeroes the count right after the store). Env SC3SIMRUN_LVWRAP=0/1/2 wins.
+ * Diagnostic (lab only): SC3SIMRUN_LVWRAP_TAX=1 (or _EVERY=1) also calls 0x100090a7 after a logged store and logs
+ * R/C/I tax and its inputs; without it a game only divides, caps and writes the LVWRAP average lines.
+ * Export sc3simrun_lvwrap(DWORD out[4]) = stores, stores over 255, last true average, last cell count. */
+
+static int g_lv_mode = 1;
+static volatile LONG g_lv_calls, g_lv_over;
+static volatile DWORD g_lv_raw, g_lv_count;
+static int g_lv_logged, g_lv_was_over = -1, g_lv_tell;
+
+/* Property tax per zone, the game's own SIMMISC 0x100090a7 (thiscall(budget, zone) ret 4, __int64), called on the
+   game thread right after the store so the log shows what that average pays. The budget pointer from city vt+0x15c
+   is accepted only if its +0x14 is the city and its +0x20 the land value interface (the frame 0x100090a7 reads). */
+typedef __int64 (__fastcall *PFN_LvTax)(BYTE *budget, void *edx, int zone);
+static void lv_tax_log(DWORD stored) {
+    BYTE *exe = (BYTE *)GetModuleHandleA(NULL), *app, *city, *b;
+    HMODULE misc = GetModuleHandleA("SIMMISC.DLL");
+    __int64 tax[3];
+    DWORD avg, n[3];
+    BYTE *valve;
+    int z;
+    __try {
+        app = *(BYTE **)(exe + 0xfa86c);
+        city = app ? *(BYTE **)(app + 0x48) : NULL;
+        if (!city || !misc) return;
+        b = ((BYTE *(__fastcall *)(BYTE *, void *))(*(DWORD **)city)[0x15c / 4])(city, NULL);
+        if (!b || *(BYTE **)(b + 0x14) != city || *(DWORD *)(b + 0x20) != *(DWORD *)(city + 0xf0)) {
+            logf("LVWRAP> tax: budget frame not recognised (budget %p) - not read", b);
+            return;
+        }
+        for (z = 0; z < 3; z++) tax[z] = ((PFN_LvTax)((BYTE *)misc + 0x90a7))(b, NULL, z);
+        logf("LVWRAP> property tax this month with average byte %lu: R %I64d  C %I64d  I %I64d  (rates %u/%u/%u%%)",
+             stored, tax[0], tax[1], tax[2], b[0x8c], b[0x8c + 0x88], b[0x8c + 0x110]);
+        /* the inputs 0x100090a7 reads: avg = LandValueLayer vt+0x44, n = valve vt+0x28/+0x2c/+0x30 (+0x40/+0x44/+0x48),
+           factor floats SIMMISC 0x1004949c/a0/a4 and floor byte 0x100494a8 as SC3BudgetLayer.INI set them at load */
+        avg = ((DWORD (__fastcall *)(BYTE *, void *))(**(DWORD ***)(b + 0x20))[0x44 / 4])(*(BYTE **)(b + 0x20), NULL);
+        valve = *(BYTE **)(b + 0x30);
+        for (z = 0; z < 3; z++)
+            n[z] = ((DWORD (__fastcall *)(BYTE *, void *))(*(DWORD **)valve)[(0x28 + 4 * z) / 4])(valve, NULL);
+        {
+            float *fac = (float *)((BYTE *)misc + 0x4949c);
+            DWORD flo = *((BYTE *)misc + 0x494a8);
+            double rc[3];
+            for (z = 0; z < 3; z++)
+                rc[z] = (double)((b[0x8c + 0x88 * z] * (int)n[z]) / 100 * (int)(n[z] && avg < flo ? flo : avg)) * fac[z];
+            logf("LVWRAP> tax inputs: avg %lu, floor %lu (MinAverageLV), factors %.4f/%.4f/%.4f, n R %lu C %lu I %lu;"
+                 " (rate*n/100)*max(avg,floor)*factor = %.0f / %.0f / %.0f", avg, flo, fac[0], fac[1], fac[2],
+                 n[0], n[1], n[2], rc[0], rc[1], rc[2]);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        logf("LVWRAP> tax: fault reading the budget - not read");
+    }
+}
+
+static int g_lv_tax = -1;                        /* diagnostic tax line: SC3SIMRUN_LVWRAP_TAX=1 or _EVERY=1 */
+
+static void __cdecl lv_after(BYTE *layer) {
+    if (g_lv_tax < 0)
+        g_lv_tax = GetEnvironmentVariableA("SC3SIMRUN_LVWRAP_TAX", NULL, 0) || GetEnvironmentVariableA("SC3SIMRUN_LVWRAP_EVERY", NULL, 0);
+    if (g_lv_tell && g_lv_tax) lv_tax_log(layer[0xc0]);
+    g_lv_tell = 0;
+}
+
+static void lvwrap_ini(const char *path) {
+    char env[8];
+    if (path[0]) g_lv_mode = (int)GetPrivateProfileIntA("lvwrap", "mode", 1, path);
+    if (GetEnvironmentVariableA("SC3SIMRUN_LVWRAP", env, sizeof(env)) && env[0] >= '0' && env[0] <= '2')
+        g_lv_mode = env[0] - '0';
+    if (g_lv_mode < 0 || g_lv_mode > 2) g_lv_mode = 1;
+}
+
+/* game thread, once per land value cycle: log the first 3 stores and every crossing of 255 */
+static void __cdecl lv_note(DWORD raw, DWORD count) {
+    int over = raw > 0xff;
+    g_lv_raw = raw; g_lv_count = count;
+    InterlockedIncrement(&g_lv_calls);
+    if (over) InterlockedIncrement(&g_lv_over);
+    if (g_lv_logged < 3 || over != g_lv_was_over) {
+        logf("LVWRAP> average %lu over %lu cells -> stored %lu (%s)", raw, count,
+             over ? (g_lv_mode == 1 ? 255UL : raw & 0xff) : raw,
+             !over ? "under 256, same as stock" : g_lv_mode == 1 ? "capped, stock would store the low byte" : "observe: stock wrap kept");
+        g_lv_logged++;
+        g_lv_was_over = over;
+        g_lv_tell = 1;
+    }
+    if (GetEnvironmentVariableA("SC3SIMRUN_LVWRAP_EVERY", NULL, 0)) g_lv_tell = 1;   /* lab: tax line every cycle */
+}
+
+/* replaces `xor edx,edx / div ecx / mov [esi+0xc0],al` at SIMRCI 0x1001d64c; eax = sum, ecx = count (non-zero),
+   esi = land value layer. Leaves eax = stored value, edx = remainder, as stock does (both dead after 0x1001d656). */
+static __declspec(naked) void lv_stub(void) {
+    __asm {
+        xor edx, edx
+        div ecx
+        push eax
+        push ecx
+        push edx
+        push ecx
+        push eax
+        call lv_note
+        add esp, 8
+        pop edx
+        pop ecx
+        pop eax
+        cmp g_lv_mode, 1
+        jne store
+        cmp eax, 0xff
+        jbe store
+        mov eax, 0xff
+    store:
+        mov byte ptr [esi + 0xc0], al
+        push eax
+        push ecx
+        push edx
+        push esi
+        call lv_after
+        add esp, 4
+        pop edx
+        pop ecx
+        pop eax
+        ret
+    }
+}
+
+static int lvwrap_arm(HMODULE rci) {
+    static const BYTE want[] = { 0x8b, 0x86, 0xc8, 0x00, 0x00, 0x00,     /* 0x1001d646 mov eax,[esi+0xc8] */
+                                 0x33, 0xd2, 0xf7, 0xf1,                 /* 0x1001d64c xor edx,edx / div ecx */
+                                 0x88, 0x86, 0xc0, 0x00, 0x00, 0x00,     /* 0x1001d650 mov [esi+0xc0],al */
+                                 0xeb, 0x07 };                           /* 0x1001d656 jmp 0x1001d65f */
+    BYTE *p = (BYTE *)rci + 0x1d646, *site = p + 6;
+    DWORD old;
+    if (IsBadReadPtr(p, sizeof(want)) || memcmp(p, want, sizeof(want))) {
+        logf("LVWRAP> SIMRCI+0x1d646 differs from shipped - NOT patched");
+        return 0;
+    }
+    if (!VirtualProtect(site, 10, PAGE_EXECUTE_READWRITE, &old)) return 0;
+    memset(site + 5, 0x90, 5);
+    *(DWORD *)(site + 1) = (DWORD)lv_stub - (DWORD)(site + 5);
+    site[0] = 0xe8;
+    /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
+    FlushInstructionCache(GetCurrentProcess(), site, 10);
+    return 1;
+}
+
+__declspec(dllexport) void __cdecl sc3simrun_lvwrap(DWORD *out) {
+    out[0] = (DWORD)g_lv_calls;
+    out[1] = (DWORD)g_lv_over;
+    out[2] = g_lv_raw;
+    out[3] = g_lv_count;
+}
+
 /* ============================================================ sampler */
 
 static DWORD WINAPI sampler(LPVOID param) {
@@ -884,6 +1052,12 @@ static DWORD WINAPI sampler(LPVOID param) {
         while (!(au = GetModuleHandleA("AUDIO.DLL"))) Sleep(5);
         logf("### SIRENS: %d patch sites armed (2 roll bytes + 4 AUDIO slots when all parts are on)", sirens_arm(strt, au));
     } else logf("### SIRENS: off (stock siren chance and the shared per-id siren state)");
+    if (g_lv_mode) {
+        HMODULE rci;
+        while (!(rci = GetModuleHandleA("SIMRCI.DLL"))) Sleep(5);
+        logf("### LVWRAP: mode=%d (%s), armed=%d", g_lv_mode, g_lv_mode == 1 ? "land value average capped at 255"
+             : "observe, stock wrap kept", lvwrap_arm(rci));
+    } else logf("### LVWRAP: off (stock land value average byte, wraps past 255)");
     while (!(simcity = GetModuleHandleA("SIMCITY.DLL"))) Sleep(5);
     if (g_anim_armed) {
         HMODULE strt;

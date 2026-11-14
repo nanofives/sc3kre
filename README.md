@@ -105,6 +105,10 @@ French, German, Italian, Dutch, Swedish) and follows the game's language.
 - Sirens no longer play on every emergency vehicle in view one after the other: only vehicles that rolled a siren
   sound one, the roll is 20% of the game's chance, and the same siren waits 30 s before it plays again
   (`simrun.ini [sirens]`: `per_vehicle`, `chance_pct`, `cooldown_s`).
+- Land value past 255: the game kept the city's average land value in one byte, so an average of 256 counted as 0
+  and property tax used the game's minimum land value (35) instead. In the test city residential tax was about
+  11,500 a month with the fix against about 1,600 without it. The average now stops at 255
+  (`simrun.ini [lvwrap] mode=0` = the game's behaviour). Months already in a saved graph stay as they were.
 - Salt water only at sea: all sea water reached from the map edge is salt, rivers and lakes stay fresh (the stock
   game drew straight lines in from the edges). New maps get it by themselves, an existing city when you tick
   "Recalculate salt water". It decides where pumps and desalination plants work.
