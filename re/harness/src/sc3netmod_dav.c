@@ -219,6 +219,34 @@ static int dav_two_on(void) {
 
 static int dav_is_mid_or_twin(WORD id) { return dav_is_mid(id) || dav_twin_piece(id) != 0; }   /* the revert pass */
 
+/* task diagfix (round 2026-11-14b fix 1, xsect cases 68 69 72 73 80): a diagonal avenue / boulevard drawn across a
+ * rail line or under a highway holds, on the rail / highway rows, the game's shared crossing pieces (69 road x rail,
+ * 15098 highway over road, 11258 road x highway, 67 power over road, ... and any ROAD piece the game keeps out of
+ * re-tiling, FUN_1001a7f7(1 = ROAD, id) as BV asks). DAV and DBV wrote their band pieces over them, which took the rail
+ * or highway off the cell (the line was cut). Stock does the same as a plain diagonal road (case 74 / 75): the crossing
+ * cells stay, the diagonal runs into them and goes on beyond. So such a cell still counts as band road (the band, its
+ * masks and its neighbours' pieces are as if it went on), but no DAV / DBV write touches it. One log line per pass
+ * that kept any. Off: SC3NETMOD_DAVXNET=0 (both blocks write over them, as before). */
+static int g_dav_xnet = -1;
+static BYTE g_dav_xnk[65536];                    /* per id: 0 not asked, 1 no, 2 a shared / protected crossing */
+static volatile LONG g_dav_n_xnet;
+static int dav_xnet(DWORD v) {
+    WORD id = (WORD)(v & 0xffff), b;
+    if (!v) return 0;
+    if (g_dav_xnet < 0) {
+        g_dav_xnet = !env_off("SC3NETMOD_DAVXNET");
+        logf("dav: DAVXNET %s (rail / highway crossing cells kept under diagonal avenues and boulevards, "
+             "SC3NETMOD_DAVXNET)", g_dav_xnet ? "on" : "off");
+    }
+    if (!g_dav_xnet) return 0;
+    if (!g_dav_xnk[id]) {
+        b = g_base[id] ? g_base[id] : id;
+        g_dav_xnk[id] = (b == 69 || b == 67 || b == 11258 || b == 15098 || b == 16006 || b == 16007 ||
+                         ((PFN_Prot)(g_rb_m + 0x1a7f7))(1, id)) ? 2 : 1;
+    }
+    return g_dav_xnk[id] == 2;
+}
+
 /* road test in axis space: axis 1 mirrors x */
 static int dav_road(RbBuf *b, int axis, int x, int z) { return rb_at(b, axis ? -x : x, z) != 0; }
 
@@ -1160,6 +1188,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                         if (P.cell[k].x == g_dav_pq[0] && P.cell[k].z == g_dav_pq[1]) g_dav_pr = ok;
                 if (!dry && psides) allsd |= bsd;                /* task avdiagbreak: DAVGROW */
                 if (ok && !dry && !g_dav_probe && !(psides && bsd)) {   /* DAVGROW: a cut band is decided wider */
+                    int nxk = 0;                                   /* task diagfix: DAVXNET cells kept */
                     nb++;
                     for (k = 0; k < n + na + nxw; k++) {
                         int cx, cz;
@@ -1177,12 +1206,19 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                         if (keep && (k < n || k >= n + na) && cx >= x0 && cz >= z0 && cx <= x1 && cz <= z1)
                             keep[(cz - z0) * P.b.w + (cx - x0)] = 1;
                         if (dbv_claimed(cx, cz)) continue;          /* task diagbv: DBV writes its own cells */
+                        if (dav_xnet(cur)) { nxk++; continue; }     /* task diagfix: a rail / highway crossing stays */
                         cut_wrote(&cg, cx, cz, want);               /* task avdiagbreak */
                         if ((((cur & 0xffff) << 8) | ((cur >> 16) & 3)) == want) continue;
                         pos[0] = cx << 8; pos[1] = cz << 8; pos[2] = 0;
                         ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, lay, pos, want, -1, 8, 0);
                         nw++;
                         if (k >= n && k < n + na && P.arm[k - n].end) InterlockedIncrement(&g_dav_n_stub);   /* davtouch */
+                    }
+                    if (nxk) {                                     /* task diagfix: DAVXNET */
+                        InterlockedExchangeAdd(&g_dav_n_xnet, nxk);
+                        if (nw || !strcmp(who, "load"))
+                            logf("dav: %s: band axis %d from (%d,%d): %d rail / highway crossing cell(s) kept (DAVXNET)",
+                                 who, axis, axis ? -x : x, z, nxk);
                     }
                     if (ntry) {                                    /* task davtouch */
                         InterlockedIncrement(&g_dav_n_touch);
@@ -1365,6 +1401,8 @@ static void dav_stats(void) {
          "straight avenue=%ld, windows grown=%ld (to the whole map %ld), kept with touching road=%ld, stub arms=%ld",
          g_dav_n_bands, g_dav_n_cells, g_dav_n_rev, g_dav_n_x, g_dav_n_avl, g_dav_n_grow, g_dav_n_full, g_dav_n_touch,
          g_dav_n_stub);   /* task avdiag, task avdiagbreak, task davtouch */
+    if (g_dav_n_xnet)                                                  /* task diagfix: DAVXNET */
+        logf("stats: dav/dbv rail / highway crossing cells kept=%ld", g_dav_n_xnet);
     if (g_dav_n_two)                                                   /* task avrbtchain: DAVTWO */
         logf("stats: dav two-way look bands=%ld, cells written=%ld", g_dav_n_two, g_dav_n_two_cells);
 
