@@ -235,15 +235,22 @@ Simtropolis report: "land value past 255 turns very low". Cause found static, th
 
 ### The three readers
 
-1. **Property tax, SIMMISC `0x100090a7`** `[CONFIRMED @ 0x100090a7, disassembly]`, `thiscall(budget, zone) ret 4`,
-   zone 0/1/2 = R/C/I:
+1. **Property tax, SIMMISC `0x100090a7`** `[CONFIRMED @ 0x100090a7, disassembly + runtime]`, `thiscall(budget, zone)
+   ret 4`, zone 0/1/2 = R/C/I:
    - `avg = (budget+0x20)->vt+0x44()`;
    - `n = (budget+0x30)->vt+0x28 / +0x2c / +0x30()` = valve layer (QI `0x40a42f1c`) `+0x40/+0x44/+0x48`, last month's
-     sum of footprint area x the building's valve 3000 / 5000 / 8000 amount (accumulated in SIMRCI `0x1002f5af`,
-     rotated in `0x1002efe8`);
-   - if `n > 0` and `avg < 5` (`byte 0x100494a8`) then `avg = 5`;
-   - `tax = ftol((rate * n / 100) * avg * 0.0143f)`, rate = byte `budget + zone*0x88 + 0x8c` (the tax rate, init 7),
-     factors `0x1004949c / a0 / a4` = 0.0143 for each zone.
+     sum of footprint area x the building's valve 3000 / 5000 / 8000 supply (accumulated by agent vtable
+     `0x1004cfc0` slot `+0x18` = SIMRCI `0x1002f5af`, rotated in `0x1002efe8`);
+   - if `n > 0` and `avg < floor` then `avg = floor`, floor = byte `0x100494a8`;
+   - `tax = ftol((int64)((rate * n / 100) * avg) * factor)` (integer `rate*n/100`, times avg, then float), rate =
+     byte `budget + zone*0x88 + 0x8c` (the tax rate, init 7), factor = float `0x1004949c / a0 / a4` for R / C / I.
+   - **The image defaults (factor 0.0143, floor 5) are not what runs.** `sc3_budget_read_ini` `0x100053bb` overwrites
+     them at load from `SC3BudgetLayer.INI [TuningParameters]`: factor = `LVToResTaxTransmogrifier` /
+     `LVToComTaxTransmogrifier` / `LVToIndTaxTransmogrifier` x 0.0001 (`0x1003c644`), floor = `MinAverageLV`
+     (clamped to 255) `[CONFIRMED @ 0x100053bb]`. The shipped INI has 35 / 45 / 50 and `MinAverageLV=35`, so the live
+     values are factor 0.0035 / 0.0045 / 0.0050 and floor 35 (read in game from those addresses, below).
+   - So tax is linear in `max(avg, 35)`: a wrapped byte under 35 pays as 35, which is 35/255 = 13.7% of the tax at
+     255 for the same `n`.
    Callers: `sc3_budget_layer_tick` `0x10007d88` (monthly income per zone), `0x10008c7a` (rest of the year,
    x (12 - month)), `sc3_budgetui_refresh_summary` `0x10023fe1` (budget window). Frame: budget init `0x100067c7`
    runs on `this - 4` of the tick frame (init `+0x10` city = tick `+0x14`), so init's `+0x1c` LandValueLayer is
@@ -266,16 +273,21 @@ layer (`+0x5c`) fields (stored and released only). Per-cell values are 1..255, s
 
 To push the true average past 255 the lab tree's `SC3LandValue.INI` (netmod overlay `SYS.PAK`, which is the one the
 game opens when netmod is installed) had the three `*CityCenterEffect` curves set to 250 and `WaterEffect=70`.
-Stock Berlin is 88. The game's own `0x100090a7` was called after each store (sc3simrun LVWRAP log line):
+Stock Berlin is 88. After each store sc3simrun (`SC3SIMRUN_LVWRAP_TAX=1`) called the game's own `0x100090a7` and
+logged its inputs read from the same addresses: floor 35, factors 0.0035 / 0.0045 / 0.0050, rates 2 / 3 / 3 %,
+`n` R 545k..792k. `(rate*n/100) * max(avg, 35) * factor` from those inputs equals the game's result to within 1
+in every store (`runs/d_check`, `d_observe`, `d_cap`).
 
-| true average | stored (stock) | R / C / I tax a month (stock) | stored (fix) | R / C / I tax a month (fix) |
-|---:|---:|---|---:|---|
-| 128 | 128 | 7,098 / 5,582 / 2,168 | 128 | 7,098 / 5,582 / 2,168 |
-| 259 | 3 | 1,606 / 1,399 / 574 | 255 | 11,506 / 10,251 / 4,226 |
-| 267..269 | 13 | 1,582 / 1,342 / 551 | 255 | 12,032 / 9,750 / 4,059 |
+| true average | stock: byte, R / C / I tax a month | fix: byte, R / C / I tax a month |
+|---:|---|---|
+| 128 | 128: 7,098 / 5,582 / 2,168 | 128: 7,098 / 5,582 / 2,168 |
+| 259 | 3: 1,581 / 1,420 / 574 | 255: 11,482 / 10,698 / 4,201 |
+| 270..271 | 15: 1,493 / 1,419 / 554 | 255: 10,682 / 10,695 / 4,049 |
 
-Budget window, February 2068, residential tax so far 1,803 (stock) against 13,000 (fix), year estimate 21,636 against
-156,000. Pictures: `verify/lvwrap/owner_shots/AB_budget_ingresos.png`, `AB_graph_valor_terreno.png`.
+`n` moves between months (R 598k..691k in the stores above), so stock and fix are compared per store, and the ratio
+of the two follows `35 / 255` only for equal `n`. Budget window, February 2068 (first A/B run): residential tax so far
+1,803 (stock) against 13,000 (fix). Pictures: `verify/lvwrap/owner_shots/AB_budget_ingresos.png`,
+`AB_graph_valor_terreno.png`.
 
 ### The fix (sc3simrun LVWRAP)
 
@@ -283,3 +295,4 @@ The 10 bytes at `0x1001d64c` (`xor edx,edx / div ecx / mov [esi+0xc0],al`) becom
 does the same divide, caps the quotient at 255 and stores it (bytes `0x1001d646..0x1001d657` are checked first).
 `simrun.ini [lvwrap] mode=1` (default), `0` = stock bytes, `2` = observe (stock wrap kept, true average logged);
 env `SC3SIMRUN_LVWRAP=0/1/2`. A city whose true average is over 255 now pays tax as at 255, like iOS.
+`SC3SIMRUN_LVWRAP_TAX=1` (lab only) adds the tax line and its inputs after each logged store.

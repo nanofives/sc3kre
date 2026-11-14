@@ -60,7 +60,7 @@ def main(argv):
     env = dict(os.environ)
     env.update({"SC3RESIZE_WINMEM": "0", "SC3RESIZE_LOG": str(log), "SC3RESIZE_FRAMEDUMP": str(fd) + "\\",
                 "SC3RESIZE_GRAPHTABS": "0", "SC3SIMRUN_LOG": str(slog), "SC3SIMRUN_LVWRAP": str(a.mode),
-                "SC3SIMRUN_LVWRAP_EVERY": "1"})
+                "SC3SIMRUN_LVWRAP_EVERY": "1", "SC3SIMRUN_LVWRAP_TAX": "1"})
     city = pathlib.Path(a.tree) / "Cities" / f"{a.city}.sc3"
     p, _ = sc3wait.launch_game(a.inst, str(city), env=env, tree=a.tree)
     os.environ["SC3_PID"] = str(p.pid)

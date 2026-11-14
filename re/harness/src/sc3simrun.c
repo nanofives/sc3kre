@@ -863,13 +863,16 @@ __declspec(dllexport) void __cdecl sc3simrun_sirens(DWORD *out) {
  * Stock: SIMRCI 0x1001d616 stores the city land value average as one byte, `div ecx` then `mov [esi+0xc0], al`
  * (0x1001d64c..0x1001d655), with no clamp. The sum (+0xc8) and count (+0xcc) come from 0x1001deca BEFORE the per-cell
  * 1..255 clamp, so a true average of 256 is stored as 0, 300 as 44. GetAverageValue 0x1001b3b7 returns that byte to
- * three readers: property tax SIMMISC 0x100090a7 (income per zone = rate% x valve total / 100 x avg x 0.0143, avg
- * floored at 5), the Valor del Terreno graph (0x1001d69b), scenario cmdGetLandValue (SCENARIO 0x10007356). Past 255
- * the tax income per zone falls to 5/255 of its value. iOS (goLandValueLayer::doDailySim) clamps the same average to
+ * three readers: property tax SIMMISC 0x100090a7 (income per zone = rate% x valve supply / 100 x max(avg, MinAverageLV)
+ * x LVTo{Res,Com,Ind}TaxTransmogrifier/10000; SC3BudgetLayer.INI ships 35 and 35/45/50), the Valor del Terreno graph
+ * (0x1001d69b), scenario cmdGetLandValue (SCENARIO 0x10007356). A wrapped byte under 35 pays the floor: measured on
+ * Berlin, R tax 1,581 a month at true average 259 (byte 3) against 11,482 with the cap (verify/lvwrap/RESULTS.md). iOS (goLandValueLayer::doDailySim) clamps the same average to
  * 0xff [iOS-HINT].
  * Fix: the 10 bytes become `call lv_stub` + 5 nops; the stub does the same divide, caps the quotient at 255, stores it.
  * [lvwrap] mode=1 (default, cap), 0 = stock bytes, 2 = observe (stub armed, stock wrap kept, the true average logged:
  * the A/B control, since the game zeroes the count right after the store). Env SC3SIMRUN_LVWRAP=0/1/2 wins.
+ * Diagnostic (lab only): SC3SIMRUN_LVWRAP_TAX=1 (or _EVERY=1) also calls 0x100090a7 after a logged store and logs
+ * R/C/I tax and its inputs; without it a game only divides, caps and writes the LVWRAP average lines.
  * Export sc3simrun_lvwrap(DWORD out[4]) = stores, stores over 255, last true average, last cell count. */
 
 static int g_lv_mode = 1;
@@ -885,6 +888,8 @@ static void lv_tax_log(DWORD stored) {
     BYTE *exe = (BYTE *)GetModuleHandleA(NULL), *app, *city, *b;
     HMODULE misc = GetModuleHandleA("SIMMISC.DLL");
     __int64 tax[3];
+    DWORD avg, n[3];
+    BYTE *valve;
     int z;
     __try {
         app = *(BYTE **)(exe + 0xfa86c);
@@ -898,13 +903,34 @@ static void lv_tax_log(DWORD stored) {
         for (z = 0; z < 3; z++) tax[z] = ((PFN_LvTax)((BYTE *)misc + 0x90a7))(b, NULL, z);
         logf("LVWRAP> property tax this month with average byte %lu: R %I64d  C %I64d  I %I64d  (rates %u/%u/%u%%)",
              stored, tax[0], tax[1], tax[2], b[0x8c], b[0x8c + 0x88], b[0x8c + 0x110]);
+        /* the inputs 0x100090a7 reads: avg = LandValueLayer vt+0x44, n = valve vt+0x28/+0x2c/+0x30 (+0x40/+0x44/+0x48),
+           factor floats SIMMISC 0x1004949c/a0/a4 and floor byte 0x100494a8 as SC3BudgetLayer.INI set them at load */
+        avg = ((DWORD (__fastcall *)(BYTE *, void *))(**(DWORD ***)(b + 0x20))[0x44 / 4])(*(BYTE **)(b + 0x20), NULL);
+        valve = *(BYTE **)(b + 0x30);
+        for (z = 0; z < 3; z++)
+            n[z] = ((DWORD (__fastcall *)(BYTE *, void *))(*(DWORD **)valve)[(0x28 + 4 * z) / 4])(valve, NULL);
+        {
+            float *fac = (float *)((BYTE *)misc + 0x4949c);
+            DWORD flo = *((BYTE *)misc + 0x494a8);
+            double rc[3];
+            for (z = 0; z < 3; z++)
+                rc[z] = (double)((b[0x8c + 0x88 * z] * (int)n[z]) / 100 * (int)(n[z] && avg < flo ? flo : avg)) * fac[z];
+            logf("LVWRAP> tax inputs: avg %lu, floor %lu (MinAverageLV), factors %.4f/%.4f/%.4f, n R %lu C %lu I %lu;"
+                 " (rate*n/100)*max(avg,floor)*factor = %.0f / %.0f / %.0f", avg, flo, fac[0], fac[1], fac[2],
+                 n[0], n[1], n[2], rc[0], rc[1], rc[2]);
+        }
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         logf("LVWRAP> tax: fault reading the budget - not read");
     }
 }
 
+static int g_lv_tax = -1;                        /* diagnostic tax line: SC3SIMRUN_LVWRAP_TAX=1 or _EVERY=1 */
+
 static void __cdecl lv_after(BYTE *layer) {
-    if (g_lv_tell) { g_lv_tell = 0; lv_tax_log(layer[0xc0]); }
+    if (g_lv_tax < 0)
+        g_lv_tax = GetEnvironmentVariableA("SC3SIMRUN_LVWRAP_TAX", NULL, 0) || GetEnvironmentVariableA("SC3SIMRUN_LVWRAP_EVERY", NULL, 0);
+    if (g_lv_tell && g_lv_tax) lv_tax_log(layer[0xc0]);
+    g_lv_tell = 0;
 }
 
 static void lvwrap_ini(const char *path) {
