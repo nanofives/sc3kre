@@ -75,6 +75,58 @@ static int bvnt_on(void) {
 }
 static volatile LONG g_bv_n_runs, g_bv_n_cells, g_bv_n_rev;
 
+/* task orthfix BVXING (2026-11-14, round brief ROUND_2026-11-14b_junctions.md, xsect cases 67 / 71): a boulevard that
+   crosses a rail line, a power line or passes under a highway. Stock draws the three roads over the crossing as three
+   Protected crossing pieces side by side (69 / 67 / 11258 / 15098, all at one state); BV used to stop at them, each side
+   read "3 roads going on" as a bad end, the column next to the crossing stayed stock and AVL left the crossing row
+   two-way. Now a run walks THROUGH a span of 1..BV_XSPAN crossing columns when a full boulevard column follows it: the
+   span columns are kind 8, the columns beside it end their median in a nose, and the crossing cells take BV's own
+   twins of the crossing piece: the two outer rows a one-way twin (lanes as AVL's avlc twins 21710.. / the boulevard
+   outer row 20700), the middle row a two-way twin with the boulevard middle row's lanes (14 / 241). The twins keep the
+   base's art, so the crossing looks as stock. A Protected cell keeps its piece on a rect retile, so a twin no run keeps
+   gets its base written back at its state. Line `bvr <piece> <base> <side>`: side 0..3 = an outer twin whose lanes run
+   toward world side <side> at state 0 (as avlc), 4 = the middle twin. Off: SC3NETMOD_BVXING=0. */
+#define BV_XSPAN 4
+#define BV_XMAX 24
+typedef struct { WORD piece, base; BYTE side; } BvX;
+static BvX g_bv_x[BV_XMAX];
+static int g_bv_nx, g_bv_xing = -1;
+/* task orthfix BVCORNER (xsect 26 / 37): a run may end in a corner box, the crossing avenue / boulevard on ONE side of
+   it only (bv_run1 used to refuse "an end on a corner", leaving the corner and its columns stock). The box is a T box
+   whose side without an arm is closed too (bvx_boxes reads 'C' there); its cells come from the bvxc table (bvlanes.py
+   corner kinds BcB / BcAn / BcAs, pieces 22401..). A table without those lines refuses the corner as before, and the
+   ragged-end fallback leaves that end stock. Candidate look (owner call pending): on with SC3NETMOD_BVCORNER=1. */
+static int g_bv_corner = -1;
+static int bv_corner_on(void) {
+    if (g_bv_corner < 0) {
+        g_bv_corner = env_on("SC3NETMOD_BVCORNER");      /* candidate look: opt-in until the owner's call */
+        logf("bv: boulevard ending in a corner box (orthfix BVCORNER) %s", g_bv_corner ? "on (SC3NETMOD_BVCORNER=1)" :
+             "off (candidate, SC3NETMOD_BVCORNER=1 turns it on)");
+    }
+    return g_bv_corner;
+}
+static int bv_xing_on(void) {
+    if (g_bv_xing < 0) {
+        g_bv_xing = !env_off("SC3NETMOD_BVXING");
+        logf("bv: boulevard over a rail / power line / under a highway (orthfix BVXING) %s, %d twin(s)",
+             g_bv_xing ? "on" : "off (SC3NETMOD_BVXING=0)", g_bv_nx);
+    }
+    return g_bv_xing && g_bv_nx;
+}
+static int bv_x_is_piece(WORD id) {
+    int k;
+    for (k = 0; id && k < g_bv_nx; k++) if (g_bv_x[k].piece == id) return 1;
+    return 0;
+}
+/* the twin of base b for the outer row travelling toward world side `dir` at cell state st (dir 4 = middle), 0 none */
+static WORD bv_x_want(WORD b, int st, int dir) {
+    int k;
+    for (k = 0; k < g_bv_nx; k++)
+        if (g_bv_x[k].base == b && (dir == 4 ? g_bv_x[k].side == 4 : g_bv_x[k].side < 4 && ((g_bv_x[k].side + st) & 3) == dir))
+            return g_bv_x[k].piece;
+    return 0;
+}
+
 enum { BV_OUTER, BV_MIDDLE, BV_NOSE, BV_NOSE2, BV_JN, BV_JM, BV_JF };
 static int bv_post_avl(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who, int *rbox);   /* task bvlanes */
 static int avl_post_set(int slot, int (*f)(BYTE *, int, int, int, int, const char *, int *));    /* task bvlanes */
@@ -85,6 +137,19 @@ static void bv_line(const char *path, const char *line) {
     unsigned long v[10];
     int k;
     if (!strncmp(line, "bvs ", 4)) { bvs_line(path, line); return; }                  /* task avslope */
+    if (!strncmp(line, "bvr ", 4)) {                                                  /* task orthfix BVXING */
+        if (sscanf(line + 4, "%lu %lu %lu", &v[0], &v[1], &v[2]) != 3 || !bv_variant(v[0]) || g_base[v[0]] != v[1] ||
+            v[2] > 4 || g_bv_nx >= BV_XMAX) {
+            logf("### bv: %s: bad crossing twin line (or not a variant of its base, or too many): '%s'", path, line);
+            return;
+        }
+        g_bv_x[g_bv_nx].piece = (WORD)v[0]; g_bv_x[g_bv_nx].base = (WORD)v[1]; g_bv_x[g_bv_nx].side = (BYTE)v[2];
+        g_bv_nx++;
+        logf("bv: %s: crossing twin %lu on base %lu, %s", path, v[0], v[1], v[2] == 4 ? "middle row (two-way)" :
+             v[2] == 0 ? "outer row, lanes toward N at state 0" : v[2] == 1 ? "outer row, lanes toward E at state 0" :
+             v[2] == 2 ? "outer row, lanes toward S at state 0" : "outer row, lanes toward W at state 0");
+        return;
+    }
     if (!strncmp(line, "bvp ", 4)) {
         if (sscanf(line + 4, "%lu %lu %lu %lu %lu %lu %lu", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6]) != 7) {
             logf("### bv: %s: bad line '%s'", path, line);
@@ -193,6 +258,7 @@ static int bv_is_piece(WORD id) {
     for (k = 0; k < 2; k++) for (j = 0; j < 6; j++) if (g_bv_at[k][j] == id) return 1;   /* task avends F3 */
     if (bvx_is_piece(id)) return 1;                       /* task bvx */
     if (bvs_is_piece(id)) return 1;                       /* task avslope: the sloped outer / middle */
+    if (bv_x_is_piece(id)) return 1;                      /* task orthfix BVXING: the crossing twins */
     return 0;
 }
 
@@ -233,6 +299,45 @@ static int bv_full(BvPass *p, int s, int w) {
            !bv_prot(p, s, w) && !bv_prot(p, s, w + 1) && !bv_prot(p, s, w + 2);              /* task avx32 (img16) */
 }
 
+/* task orthfix BVXING: is column s (rows w..w+2) a crossing column? The three cells hold one Protected crossing base
+   at one state (stock, AVL's one-way variant of it, or our twin; never another block's variant), the base's road runs
+   along the run, and twins for both outer directions and the middle are declared. -> the base, 0 not */
+static int avl_own(WORD id);                                             /* sc3netmod_avl.c */
+static WORD bv_xcol(BvPass *p, int s, int w) {
+    WORD b = 0, b0;
+    int k, st = -1, t0, t2;
+    if (!bv_xing_on()) return 0;
+    for (k = 0; k < 3; k++) {
+        DWORD v = rb_at(&p->b, bv_rx(p->axis, s, w + k), bv_rz(p->axis, s, w + k));
+        WORD id = (WORD)(v & 0xffff), bk;
+        if (!v || bv_cl(p, s, w + k)) return 0;
+        if (!bv_prot(p, s, w + k)) {
+            static volatile LONG nwarn;
+            if (bv_x_is_piece(id) && InterlockedIncrement(&nwarn) <= 4)
+                logf("### bv: crossing twin %u is not in ROAD_GRND_Protected (the stock tiler may retile it)", id);
+            return 0;
+        }
+        bk = id < 20000 ? id : g_base[id];
+        if (id >= 20000 && !bv_x_is_piece(id) && !avl_own(id)) return 0;
+        if (k && (bk != b || (int)((v >> 16) & 3) != st)) return 0;
+        b = bk; st = (int)((v >> 16) & 3);
+    }
+    /* rows w (canonical state 2) and w + 2 (state 0) run toward (state + axis + 3) & 3; both must have a twin. The
+       base's road runs along the run when an outer twin's lanes point along it */
+    t0 = (2 + p->axis + 3) & 3; t2 = (p->axis + 3) & 3;
+    b0 = b;
+    if (!bv_x_want(b0, st, t0) || !bv_x_want(b0, st, t2) || !bv_x_want(b0, st, 4)) return 0;
+    return b0;
+}
+/* the number of crossing columns from s on in direction dir (1 / -1), when a full boulevard column follows them;
+   0 none (or not followed by one) */
+static int bv_xspan(BvPass *p, int s, int w, int dir) {
+    int n;
+    if (!bv_xing_on()) return 0;
+    for (n = 0; n < BV_XSPAN && bv_xcol(p, s + dir * n, w); n++) ;
+    return n && bv_full(p, s + dir * n, w) ? n : 0;
+}
+
 static void bv_put(BvPass *p, int s, int w, WORD piece, int st) {
     if (p->n >= DAV_MAX_CELLS) return;
     p->cell[p->n].x = bv_rx(p->axis, s, w);
@@ -248,11 +353,18 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
                    int *bad_e) {
     int sb = sa, s, k, e, n, ncl = 0, endtyp[2], endkeep[2], endlo, endhi, normlo, normhi, teew[2] = { 0, 0 };
     int shortrun = 0, f3[2] = { 0, 0 };                                  /* task avends F2b / F3 */
+    int corner_e = -1;                                                   /* task orthfix BVCORNER */
     *why = "";
     *bad_e = -1;
     p->bja = p->bjb = -1;                                                /* task avx32 (img16 split) */
     p->natt = 0;                                                         /* task bvlanes */
-    while (bv_full(p, sb + 1, w0) && sb - sa < BV_MAX_RUN - 1) sb++;
+    for (;;) {                                           /* task orthfix BVXING: on through a crossing span */
+        int nx;
+        if (sb - sa >= BV_MAX_RUN - 1 - BV_XSPAN) break;
+        if (bv_full(p, sb + 1, w0)) sb++;
+        else if ((nx = bv_xspan(p, sb + 1, w0, 1)) > 0) sb += nx;
+        else break;
+    }
     *psb = sb;
     sa += cut_lo;                                                        /* task avx32 */
     sb -= cut_hi;
@@ -291,6 +403,8 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
             { *why = "road beside the boulevard is not a straight single road"; *bad_e = s - sa <= sb - s;
               p->bja = p->bjb = s; return 0; }
     }
+    for (s = sa; s <= sb && bv_xing_on(); s++)          /* task orthfix BVXING: crossing columns (no road beside) */
+        if (!kind[s - sa] && !bv_full(p, s, w0) && bv_xcol(p, s, w0)) kind[s - sa] = 8;
     /* ends: e 0 = the +s end (column sb), e 1 = the -s end (column sa) */
     for (e = 0; e < 2; e++) {
         int se = e ? sa : sb, st = e ? -1 : 1, got = 0, row = -1, first = -1, nclm = 0;
@@ -303,7 +417,11 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
         }
         if (got && nclm == got) { endtyp[e] = 5; endkeep[e] = -1; continue; }   /* task diagbv: 5 = bends into a DBV */
         if (!got && (kind[se - sa] & 4)) {                 /* task bvx: the run ends on an avenue / boulevard (T) */
-            if ((kind[se - sa] & 3) != 3) { *why = "an end on a corner (road on one side only)"; *bad_e = e; return 0; }
+            if ((kind[se - sa] & 3) != 3) {
+                if (!bv_corner_on() || !bvx_cells_on())
+                    { *why = "an end on a corner (road on one side only)"; *bad_e = e; return 0; }
+                corner_e = e;                                /* task orthfix BVCORNER: a corner box */
+            }
             for (k = 0; k < 3 && se - st * k >= sa && se - st * k <= sb && (kind[se - st * k - sa] & 4); k++) ;
             endtyp[e] = 4; endkeep[e] = -9; teew[e] = k;
         }
@@ -434,6 +552,13 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
             bv_put(p, s, w0 + 2, g_bv_p[BV_OUTER], 0);
             bv_put(p, s, w0 + 1, g_bv_p[hi && lo ? BV_NOSE2 : hi || lo ? BV_NOSE : BV_MIDDLE], lo && !hi ? 2 : 0);
         } else if (kd & 4) {                                /* task bvx: the box, below */
+        } else if (kd & 8) {                                /* task orthfix BVXING: the crossing twins */
+            DWORD v = rb_at(&p->b, bv_rx(p->axis, s, w0), bv_rz(p->axis, s, w0));
+            WORD id = (WORD)(v & 0xffff), b = id < 20000 ? id : g_base[id];
+            int st = (int)((v >> 16) & 3), cs = (st - p->axis) & 3;
+            bv_put(p, s, w0, bv_x_want(b, st, (2 + p->axis + 3) & 3), cs);
+            bv_put(p, s, w0 + 1, bv_x_want(b, st, 4), cs);
+            bv_put(p, s, w0 + 2, bv_x_want(b, st, (p->axis + 3) & 3), cs);
         } else {
             /* task bvlanes: a T's entry and middle rows carry their own one-way lanes; the T from +w is the T from -w
                turned half a circle */
@@ -447,7 +572,8 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
     }
     if (!bvx_boxes(p, sa, sb, w0, kind, endtyp[1] == 4, endtyp[0] == 4, endtyp[1] == 6 ? 1 + endkeep[1] : 0,
                    endtyp[0] == 6 ? 1 + endkeep[0] : 0))                  /* task bvx, avx32 */
-        { *why = "a box cell with no declared piece"; return 0; }
+        { *why = corner_e >= 0 ? "a corner box with no declared piece" : "a box cell with no declared piece";
+          *bad_e = corner_e; return 0; }                                 /* task orthfix BVCORNER: that end stock */
     return 1;
 }
 
@@ -558,7 +684,13 @@ static int bv_takes(BYTE *mgr, int x, int z) {
             const char *why = "";
             int sa = s, sb;
             if (!bv_full(&P, s, w0)) continue;
-            while (bv_full(&P, sa - 1, w0) && s - sa < BV_MAX_RUN - 1) sa--;
+            for (;;) {                                   /* task orthfix BVXING: back through a crossing span */
+                int nx;
+                if (s - sa >= BV_MAX_RUN - 1 - BV_XSPAN) break;
+                if (bv_full(&P, sa - 1, w0)) sa--;
+                else if ((nx = bv_xspan(&P, sa - 1, w0, -1)) > 0) sa -= nx;
+                else break;
+            }
             T.x = x; T.z = z; T.hit = 0;
             bv_parts(&P, sa, w0, &sb, &why, kind, bv_takes_part, &T);       /* task avx32: + ragged ends, splits */
             hit = T.hit;
@@ -616,7 +748,8 @@ static void bv_decide_part(void *ctx, BvPass *P, int sa, int sb, int w, const in
     for (k = 0; k < P->n; k++) {
         int cx = P->cell[k].x, cz = P->cell[k].z, pos[3];
         DWORD cur = rb_at(&P->b, cx, cz);
-        DWORD want = bvs_map(d->mgr, cx, cz, P->cell[k].want, g_bv_p);                  /* task avslope: on a slope */
+        DWORD want = bv_x_is_piece((WORD)(P->cell[k].want >> 8)) ? P->cell[k].want :          /* task orthfix BVXING */
+                     bvs_map(d->mgr, cx, cz, P->cell[k].want, g_bv_p);                  /* task avslope: on a slope */
         if ((((cur & 0xffff) << 8) | ((cur >> 16) & 3)) == want) continue;
         pos[0] = cx << 8; pos[1] = cz << 8; pos[2] = 0;
         ((PFN_Put)(g_rb_m + 0x8919))(d->mgr, 0, d->lay, pos, want, -1, 8, 0);
@@ -645,6 +778,7 @@ static int bv_decide(BvPass *P, BYTE *mgr, void *lay, int x0, int z0, int x1, in
                 const char *why = "";
                 int sb;
                 if (!bv_full(P, s, w) || bv_full(P, s - 1, w)) continue;
+                if (bv_xspan(P, s - 1, w, -1)) continue;     /* task orthfix BVXING: the run began before a crossing */
                 if (!bv_parts(P, s, w, &sb, &why, kind, bv_decide_part, &d)) {   /* task avx32: + ragged ends, splits */
                     if (!write && sb > s) {              /* task avslow: a refused run holding our pieces, cut */
                         int c, r, sd = 0, ours = 0;
@@ -717,6 +851,17 @@ static int bv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, cons
                 DWORD v = rb_at(&P.b, x, z);
                 int rect[6];
                 if (!v || !bv_is_piece((WORD)(v & 0xffff)) || keep[(z - z0) * P.b.w + (x - x0)]) continue;
+                if (bv_x_is_piece((WORD)(v & 0xffff))) {     /* task orthfix BVXING: Protected, a retile keeps it */
+                    int pos[3];
+                    pos[0] = x << 8; pos[1] = z << 8; pos[2] = 0;
+                    ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, lay, pos, ((DWORD)g_base[v & 0xffff] << 8) | ((v >> 16) & 3),
+                                                 -1, 8, 0);
+                    nrev++;
+                    bv_dirty(x, z);
+                    logf("bv: %s: (%d,%d) crossing twin %lu no longer in a run -> base %u", who, x, z, v & 0xffff,
+                         g_base[v & 0xffff]);
+                    continue;
+                }
                 rect[0] = x << 8; rect[1] = z << 8; rect[2] = 0; rect[3] = x << 8; rect[4] = z << 8; rect[5] = 0;
                 ((PFN_Retile)VT(mgr, 0xb0))(mgr, 0, rect, 3);
                 nrev++;

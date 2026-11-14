@@ -14,6 +14,13 @@
    "modes": "TCOI",
    "base": 39,
    "why": "A2: the bend cell of an avenue U-turn pair that also carries a road arm (owner's Big One (485,19), diagonal road 35 to the E): U-turn traffic in from the other U-turn cell (W at state 0), out to the band (S), the road two-way (N)"
+  },
+  {
+   "id": 22400,
+   "outline": "ACAI",
+   "modes": "ICTO",
+   "base": 39,
+   "why": "orthfix (xsect case 62, avenue narrowing into a road): the T cell of an avenue U-turn pair where a road goes on straight from the half that flows INTO the end (22001 is the mirror case, the half flows out there): at state 0 the band half enters across N, the U-turn leaves across W to the other U-turn cell, the road two-way across S, E closed; same outline as 22001, so the same box art (copied); ids 22400.. by orchestrator grant 2026-11-14"
   }
  ],
  "box": [],

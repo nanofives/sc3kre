@@ -1,0 +1,122 @@
+{
+ "piece": 20773,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 0,
+ "alt": [
+  0,
+  0,
+  0,
+  0
+ ],
+ "_comment": "boulevard.py (orthfix BVXING): avenue_lanes 21713 under BV's id, outer row of a boulevard crossing 67, road lanes toward side 3 at state 0",
+ "vehicle": {
+  "class": "car",
+  "speed": 64000,
+  "lanes": [
+   {
+    "from": [
+     255,
+     0,
+     80
+    ],
+    "to": [
+     0,
+     0,
+     80
+    ],
+    "uk_keep": true
+   },
+   {
+    "from": [
+     255,
+     0,
+     175
+    ],
+    "to": [
+     0,
+     0,
+     175
+    ],
+    "uk_keep": true
+   }
+  ]
+ },
+ "pedestrian": {
+  "walks": [
+   {
+    "from": [
+     15,
+     15
+    ],
+    "to": [
+     240,
+     15
+    ],
+    "path": 256
+   },
+   {
+    "from": [
+     240,
+     240
+    ],
+    "to": [
+     15,
+     240
+    ],
+    "path": 512
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     15,
+     15
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     15,
+     240
+    ],
+    "code": 0
+   },
+   {
+    "at": [
+     240,
+     15
+    ],
+    "code": 16
+   },
+   {
+    "at": [
+     240,
+     240
+    ],
+    "code": 16
+   }
+  ]
+ },
+ "connects": {
+  "road": {
+   "low": [
+    [
+     "x+",
+     "x-"
+    ]
+   ],
+   "high": [
+    [
+     "x-",
+     "x+"
+    ]
+   ]
+  }
+ },
+ "curves": []
+}

@@ -1,0 +1,120 @@
+{
+ "piece": 20780,
+ "states": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "flag": 0,
+ "alt": [
+  0,
+  0,
+  0,
+  0
+ ],
+ "_comment": "boulevard.py (orthfix BVXING): middle row of a boulevard crossing 15098, two-way: the boulevard middle row's lanes (bvl_20701, 14 / 241) on the road axis, the other network's lanes as avenue_lanes 21716",
+ "vehicle": {
+  "class": "car",
+  "speed": 64000,
+  "lanes": [
+   {
+    "from": [
+     255,
+     1024,
+     61
+    ],
+    "to": [
+     0,
+     1024,
+     61
+    ],
+    "path": 71425,
+    "exit": false,
+    "speed": 95999
+   },
+   {
+    "from": [
+     255,
+     1024,
+     145
+    ],
+    "to": [
+     0,
+     1024,
+     145
+    ],
+    "path": 71169,
+    "exit": false,
+    "speed": 95999
+   },
+   {
+    "from": [
+     241,
+     0,
+     0
+    ],
+    "to": [
+     241,
+     0,
+     255
+    ],
+    "uk_keep": true
+   },
+   {
+    "from": [
+     14,
+     0,
+     255
+    ],
+    "to": [
+     14,
+     0,
+     0
+    ],
+    "uk_keep": true
+   }
+  ],
+  "exits": [
+   {
+    "at": [
+     0,
+     1024,
+     61
+    ],
+    "code": 0,
+    "speed": 95999
+   },
+   {
+    "at": [
+     0,
+     1024,
+     145
+    ],
+    "code": 0,
+    "speed": 95999
+   }
+  ]
+ },
+ "pedestrian": {
+  "walks": [],
+  "exits": []
+ },
+ "connects": {
+  "road": [
+   [
+    "z-",
+    "z+"
+   ],
+   [
+    "x+",
+    "x-"
+   ],
+   [
+    "z+",
+    "z-"
+   ]
+  ]
+ },
+ "curves": []
+}

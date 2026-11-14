@@ -860,6 +860,14 @@ def compile_pack(stock, pack_dir, man):
         out["road_end_lines"].append(ln)
     for n, ln in enumerate(man.get("boulevard_slope_lines", [])):    # task avslope: sc3netmod BVS (BV) lines, raw
         tok = ln.split()                                             # bvs o <piece> <slope piece> <side>, bvs m <piece> <slope piece>
+        if tok[:1] == ["bvr"]:                                       # task orthfix BVXING: bvr <piece> <base> <side 0..3 | 4 middle>
+            if len(tok) != 4 or not all(t.isdigit() for t in tok[1:]) or int(tok[2]) not in (69, 67, 11258, 15098) or \
+                    int(tok[3]) > 4 or int(tok[1]) not in vids or vids[int(tok[1])]["net"] != "ROAD" or \
+                    vids[int(tok[1])]["base"] != int(tok[2]):
+                raise NetpackError("%s boulevard_slope_lines %d: '%s' is not `bvr <piece> <69|67|11258|15098> <side 0..3 | 4>` "
+                                   "with a ROAD variant of that crossing piece from this package" % (pname, n + 1, ln))
+            out["boulevard_slope_lines"].append(ln)
+            continue
         if tok[:1] == ["bvn"]:                                       # task avends F3: bvn <first kept row 0|1> <6 pieces>
             if len(tok) != 8 or tok[1] not in ("0", "1") or not all(t.isdigit() for t in tok[2:]) or \
                     any(int(t) not in vids or vids[int(t)]["net"] != "ROAD" for t in tok[2:]):
@@ -1314,6 +1322,7 @@ def merge(stock, packs):
     placed |= {int(ln.split()[2]) for c in comp for ln in c.get("boulevard_slope_lines", [])}   # task avslope: BVS
     placed |= {int(t) for c in comp for ln in c.get("boulevard_slope_lines", []) if ln.startswith("bvn ")
                for t in ln.split()[2:]}                                                           # task avends F3
+    placed |= {int(ln.split()[1]) for c in comp for ln in c.get("boulevard_slope_lines", []) if ln.startswith("bvr ")}   # task orthfix BVXING
     placed |= {m["piece"] for a in davs for m in a["middle"]}   # sc3netmod DAV places them (task diagave)
     placed |= {j["piece"] for a in davs for j in a.get("junction", [])}
     placed |= {cell[2] for a in davs for m in a.get("merge", []) for cell in m["cells"]}
