@@ -1,9 +1,9 @@
 {
  "netpack": 1,
  "name": "boulevard",
- "version": "0.3.0",
- "author": "netmod (task boulevard, bvlanes)",
- "description": "Boulevards: draw three parallel straight roads side by side (at least three columns) and sc3netmod's BV block makes them one boulevard. The outer roads are the carriageways (stock road look, yellow centre line), the middle road gives each one an extra lane and holds a grass median with avenue 11204's trees, about twice as wide as the stock avenue's. Single straight roads crossing it or meeting it from one side get junctions with crosswalks (the median ends in a nose); where all three roads stop the end column closes it with a round curb; where only one goes on, the boulevard tapers into it over its last three columns; where two neighbouring roads go on, it narrows back into the stock avenue. Lane lines are white dashes. Traffic (task bvlanes): 3 lanes each way, right-hand, one way per side; the narrowing meets the one-way avenue halves of avenue_lanes. Built by `boulevard.py build .` in this folder before install (art/ is made from the game's frames and is not shipped).",
+ "version": "0.4.0",
+ "author": "netmod (task boulevard, bvlanes, orthfix)",
+ "description": "Boulevards: draw three parallel straight roads side by side (at least three columns) and sc3netmod's BV block makes them one boulevard. The outer roads are the carriageways (stock road look, yellow centre line), the middle road gives each one an extra lane and holds a grass median with avenue 11204's trees, about twice as wide as the stock avenue's. Single straight roads crossing it or meeting it from one side get junctions with crosswalks (the median ends in a nose); where all three roads stop the end column closes it with a round curb; where only one goes on, the boulevard tapers into it over its last three columns; where two neighbouring roads go on, it narrows back into the stock avenue. Lane lines are white dashes. Traffic (task bvlanes): 3 lanes each way, right-hand, one way per side; the narrowing meets the one-way avenue halves of avenue_lanes. Task orthfix (0.4.0): a boulevard crossing a rail line, a power line or passing under a highway carries on through it (20769..20780: twins of the crossing pieces with the boulevard's one-way lanes; they draw as the stock crossing). Built by `boulevard.py build .` in this folder before install (art/ is made from the game's frames and is not shipped).",
  "game": {
   "Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"
  },
@@ -805,6 +805,126 @@
     "png_dir": "art/20768"
    },
    "trblkatt": "none"
+  },
+  {
+   "id": 20772,
+   "base": 67,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, crossing",
+    "ENGLISH": "Bulevar, cruce"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20773,
+   "base": 67,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, crossing",
+    "ENGLISH": "Bulevar, cruce"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20774,
+   "base": 67,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, crossing",
+    "ENGLISH": "Bulevar, cruce"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20769,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, crossing",
+    "ENGLISH": "Bulevar, cruce"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20770,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, crossing",
+    "ENGLISH": "Bulevar, cruce"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20771,
+   "base": 69,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, crossing",
+    "ENGLISH": "Bulevar, cruce"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20775,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, crossing",
+    "ENGLISH": "Bulevar, cruce"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20776,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, crossing",
+    "ENGLISH": "Bulevar, cruce"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20777,
+   "base": 11258,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, crossing",
+    "ENGLISH": "Bulevar, cruce"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20778,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, crossing",
+    "ENGLISH": "Bulevar, cruce"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20779,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, crossing",
+    "ENGLISH": "Bulevar, cruce"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 20780,
+   "base": 15098,
+   "network": "ROAD",
+   "name": {
+    "*": "Boulevard, crossing",
+    "ENGLISH": "Bulevar, cruce"
+   },
+   "trblkatt": "copy_base"
   }
  ],
  "lanes": [
@@ -1035,6 +1155,54 @@
   {
    "piece": 20768,
    "spec": "bvl_20768.lanes.json"
+  },
+  {
+   "piece": 20772,
+   "spec": "bvr_20772.lanes.json"
+  },
+  {
+   "piece": 20773,
+   "spec": "bvr_20773.lanes.json"
+  },
+  {
+   "piece": 20774,
+   "spec": "bvr_20774.lanes.json"
+  },
+  {
+   "piece": 20769,
+   "spec": "bvr_20769.lanes.json"
+  },
+  {
+   "piece": 20770,
+   "spec": "bvr_20770.lanes.json"
+  },
+  {
+   "piece": 20771,
+   "spec": "bvr_20771.lanes.json"
+  },
+  {
+   "piece": 20775,
+   "spec": "bvr_20775.lanes.json"
+  },
+  {
+   "piece": 20776,
+   "spec": "bvr_20776.lanes.json"
+  },
+  {
+   "piece": 20777,
+   "spec": "bvr_20777.lanes.json"
+  },
+  {
+   "piece": 20778,
+   "spec": "bvr_20778.lanes.json"
+  },
+  {
+   "piece": 20779,
+   "spec": "bvr_20779.lanes.json"
+  },
+  {
+   "piece": 20780,
+   "spec": "bvr_20780.lanes.json"
   }
  ],
  "auto_boulevards": [
@@ -1123,5 +1291,19 @@
   "avlj 20757 .I..",
   "avlj 20767 .O..",
   "avlj 20768 .I.."
+ ],
+ "boulevard_slope_lines": [
+  "bvr 20772 67 1",
+  "bvr 20773 67 3",
+  "bvr 20774 67 4",
+  "bvr 20769 69 1",
+  "bvr 20770 69 3",
+  "bvr 20771 69 4",
+  "bvr 20775 11258 1",
+  "bvr 20776 11258 3",
+  "bvr 20777 11258 4",
+  "bvr 20778 15098 2",
+  "bvr 20779 15098 0",
+  "bvr 20780 15098 4"
  ]
 }

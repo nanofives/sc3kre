@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 
 from netmod import avjunc_build as AB   # noqa: E402
 
-IDS = range(22000, 22100)
+IDS = set(range(22000, 22100)) | set(range(22400, 22420))   # orthfix 2026-11-14: + 22400..22419 (grant)
 SHAPE0, SHAPE_MAX = 26500, 26999
 JUNC = os.path.join(HERE, "examples", "avenue_junctions")
 
@@ -54,7 +54,7 @@ def cmd_build(a):
     T = json.load(open(os.path.join(a.pack, "avends_pieces.json")))
     for r in T.get("box", []) + T.get("ct", []):
         if r["id"] not in IDS:
-            raise SystemExit("piece %d outside 22000..22099" % r["id"])
+            raise SystemExit("piece %d outside 22000..22099 / 22400..22419" % r["id"])
     AB.SHAPE0, AB.SHAPE_MAX = SHAPE0, SHAPE_MAX
     game = LK.Game()
     plan = AB.CurvePlan(game)

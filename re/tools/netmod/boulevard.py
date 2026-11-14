@@ -40,6 +40,8 @@ MIN_COLS = 3             # boulevard columns (not junction, taper or cap columns
 TAPER_COLS = 3
 RAG_MAX = 12             # task avx32: the most columns a ragged end leaves to the stock tiler
 SEG_MAX = 16             # task avx32 (img16 split): the most pieces one run is tried as
+CORNER = os.environ.get("BV_CORNER", "1") != "0"   # task orthfix BVCORNER (xsect 26 / 37): a run may end in a
+                                                   # corner box (the crossing avenue / boulevard on one side only)
 MIN_RUN = 4              # columns of three parallel roads a run needs at all (orchestrator ruling 2026-10-17: an
                          # exactly-3x3 full road block belongs to bigrbt, whatever its arms)
 
@@ -143,7 +145,7 @@ def runs(road, have_cap=True, have_taper=True, claimed=frozenset(), band_ok=None
                         continue
                     if not beyond and se in wide:                   # task bvx: the run ends on an avenue / boulevard
                         sp = wide[se]
-                        if not (sp["n"] and sp["s"]):
+                        if not (sp["n"] and sp["s"]) and not CORNER:    # task orthfix BVCORNER: a corner box
                             fail("end at column %d: a corner (road on one side only)" % se, e)
                             ends[e] = ("bad", None, [])
                         else:
@@ -408,6 +410,51 @@ def lane_spec(vid):
     return sp
 
 
+# task orthfix BVXING (2026-11-14, xsect cases 67 / 71): twins of the Protected crossing pieces for a boulevard that
+# crosses a rail line (69), a power line (67) or passes under a highway (11258 / 15098). sc3netmod_bv.c `bvr` lines.
+# Per base: (outer twin A, outer twin B, middle twin, AVL's one-way twins they copy). The outer twins are avenue_lanes'
+# avlc twins under BV's ids (the boulevard outer row 20700 has the avenue half's lanes: 80 / 175, one way); the middle
+# twin keeps the base's other-network lanes and puts the boulevard middle row's two lanes (14 / 241, one each way, as
+# bvl_20701) on the base's road axis. No art: they draw as the stock crossing. Ids 20769..20789 (orchestrator grant).
+XING = {69: (20769, 20770, 20771, 21710, 21711), 67: (20772, 20773, 20774, 21712, 21713),
+        11258: (20775, 20776, 20777, 21714, 21715), 15098: (20778, 20779, 20780, 21716, 21717)}
+AVL_PACK = os.path.join(HERE, "examples", "avenue_lanes")
+
+
+def xing_specs():
+    """[(piece, base, side 0..3 | 4, spec)] of the crossing twins, from avenue_lanes' specs and avlc lines"""
+    from netmod.diagave import _describe
+    man = json.load(open(os.path.join(AVL_PACK, "manifest.json")))
+    side = {int(t[1]): int(t[3]) for t in (ln.split() for ln in man["avenue_lines"]) if t[0] == "avlc"}
+    out = []
+    for base, (pa, pb, pm, aa, ab) in sorted(XING.items()):
+        for p, a in ((pa, aa), (pb, ab)):
+            sp = json.load(open(os.path.join(AVL_PACK, "avl_%d.lanes.json" % a)))
+            sp["piece"] = p
+            sp["_comment"] = "boulevard.py (orthfix BVXING): avenue_lanes %d under BV's id, outer row of a boulevard " \
+                             "crossing %d, road lanes toward side %d at state 0" % (a, base, side[a])
+            out.append((p, base, side[a], sp))
+        sp = json.load(open(os.path.join(AVL_PACK, "avl_%d.lanes.json" % aa)))
+        road = [ln for ln in sp["vehicle"]["lanes"] if ln.get("uk_keep")]
+        keep = [ln for ln in sp["vehicle"]["lanes"] if not ln.get("uk_keep")]
+        y = road[0]["from"][1]
+        if road[0]["from"][0] != road[0]["to"][0]:          # road along x at state 0: as bvl_20701
+            mid = [{"from": [0, y, 14], "to": [255, y, 14]}, {"from": [255, y, 241], "to": [0, y, 241]}]
+        else:                                                # along z: bvl_20701 turned one state (lanekit.rot_pt)
+            mid = [{"from": [241, y, 0], "to": [241, y, 255]}, {"from": [14, y, 255], "to": [14, y, 0]}]
+        for ln in mid:
+            ln["uk_keep"] = True
+        sp["piece"] = pm
+        sp["vehicle"]["lanes"] = keep + mid
+        sp["pedestrian"] = {"walks": [], "exits": []}
+        sp["connects"] = {"road": _describe(base, 0)["connects"]["road"]}
+        sp["_comment"] = "boulevard.py (orthfix BVXING): middle row of a boulevard crossing %d, two-way: the boulevard " \
+                         "middle row's lanes (bvl_20701, 14 / 241) on the road axis, the other network's lanes as " \
+                         "avenue_lanes %d" % (base, aa)
+        out.append((pm, base, 4, sp))
+    return out
+
+
 def write_manifest(pack):
     """manifest.json + *.lanes.json of the package"""
     ps = pieces()
@@ -435,7 +482,15 @@ def write_manifest(pack):
             fn = "bv_%d.lanes.json" % vid
             json.dump(lane_spec(vid), open(os.path.join(pack, fn), "w", newline="\n"), indent=1)
             lanes.append({"piece": vid, "spec": fn})
-    man = {"netpack": 1, "name": "boulevard", "version": "0.3.0", "author": "netmod (task boulevard, bvlanes)",
+    xlines = []
+    for p, base, sd, sp in xing_specs():                     # task orthfix BVXING
+        variants.append({"id": p, "base": base, "network": "ROAD",
+                         "name": {"*": "Boulevard, crossing", "ENGLISH": "Bulevar, cruce"}, "trblkatt": "copy_base"})
+        fn = "bvr_%d.lanes.json" % p
+        json.dump(sp, open(os.path.join(pack, fn), "w", newline="\n"), indent=1)
+        lanes.append({"piece": p, "spec": fn})
+        xlines.append("bvr %d %d %d" % (p, base, sd))
+    man = {"netpack": 1, "name": "boulevard", "version": "0.4.0", "author": "netmod (task boulevard, bvlanes, orthfix)",
            "description": "Boulevards: draw three parallel straight roads side by side (at least three columns) and "
                           "sc3netmod's BV block makes them one boulevard. The outer roads are the carriageways (stock "
                           "road look, yellow centre line), the middle road gives each one an extra lane and holds a "
@@ -446,6 +501,9 @@ def write_manifest(pack):
                           "neighbouring roads go on, it narrows back into the stock avenue. Lane lines are white dashes. "
                           "Traffic (task bvlanes): 3 lanes each way, right-hand, one way per side; the narrowing meets "
                           "the one-way avenue halves of avenue_lanes. "
+                          "Task orthfix (0.4.0): a boulevard crossing a rail line, a power line or passing under a "
+                          "highway carries on through it (20769..20780: twins of the crossing pieces with the boulevard's "
+                          "one-way lanes; they draw as the stock crossing). "
                           "Built by `boulevard.py build .` in this folder before install (art/ is made from the game's "
                           "frames and is not shipped).",
            "game": {"Apps/SIMNTWRK.DLL": "693f65724a08f1bbc920c4ede1b6c1d5c78c8b95fce0164da10b03fbfe526f61"},
@@ -460,7 +518,8 @@ def write_manifest(pack):
            # task bvlanes: the narrowing's last column ends a one-way avenue band (AVENUE_LANES.md 5): its avenue
            # rows carry the half's traffic out of (O) / into (I) the piece across their E side at state 0
            "avenue_lines": ["avlj %d .O.." % (AVNARROW[(0, 1)] + 6), "avlj %d .I.." % (AVNARROW[(0, 1)] + 7),
-                            "avlj %d .O.." % (AVNARROW[(1, 2)] + 7), "avlj %d .I.." % (AVNARROW[(1, 2)] + 8)]}
+                            "avlj %d .O.." % (AVNARROW[(1, 2)] + 7), "avlj %d .I.." % (AVNARROW[(1, 2)] + 8)],
+           "boulevard_slope_lines": xlines}                   # task orthfix BVXING: raw BV lines (bvr)
     json.dump(man, open(os.path.join(pack, "manifest.json"), "w", newline="\n"), indent=1)
     print("manifest: %d variants, %d lane specs" % (len(variants), len(lanes)))
 
