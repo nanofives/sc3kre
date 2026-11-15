@@ -146,7 +146,7 @@ static int table_read(const char *path) {
         if (!strncmp(p, "avxm ", 5) || !strncmp(p, "avxn ", 5) || !strncmp(p, "avxk ", 5)) continue;   /* task avjunc */
         if (!strncmp(p, "bvp ", 4) || !strncmp(p, "bvc ", 4) || !strncmp(p, "bvt ", 4) ||
             !strncmp(p, "bva ", 4) || !strncmp(p, "bvs ", 4) || !strncmp(p, "bvn ", 4) ||
-            !strncmp(p, "bvr ", 4)) continue;   /* task boulevard, avslope, avends F3, orthfix BVXING */
+            !strncmp(p, "bvr ", 4) || !strncmp(p, "bvo ", 4)) continue;   /* task boulevard, avslope, avends F3, orthfix */
         if (!strncmp(p, "sle ", 4)) continue;            /* task slopeend: SLE lines, read by rbt_install */
         if (!strncmp(p, "rbt9 ", 5)) continue;           /* RBT9 lines, read by rbt_install (task bigrbt) */
         if (!strncmp(p, "bvxb ", 5) || !strncmp(p, "bvxa ", 5)) continue;   /* task bvx: read by rbt_install */
