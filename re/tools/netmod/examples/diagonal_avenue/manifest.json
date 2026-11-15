@@ -1488,6 +1488,174 @@
     "png_dir": "art/20505"
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 22430,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue bend",
+    "ENGLISH": "Curva de avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22430"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22431,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue bend",
+    "ENGLISH": "Curva de avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22431"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22432,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue bend",
+    "ENGLISH": "Curva de avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22432"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22433,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue bend",
+    "ENGLISH": "Curva de avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22433"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22434,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue bend",
+    "ENGLISH": "Curva de avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22434"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22435,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue bend",
+    "ENGLISH": "Curva de avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22435"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22436,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue bend",
+    "ENGLISH": "Curva de avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22436"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22437,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue bend",
+    "ENGLISH": "Curva de avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22437"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22438,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue bend",
+    "ENGLISH": "Curva de avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22438"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22439,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue bend",
+    "ENGLISH": "Curva de avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22439"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22440,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue bend",
+    "ENGLISH": "Curva de avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22440"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22441,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue bend",
+    "ENGLISH": "Curva de avenida diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22441"
+   },
+   "trblkatt": "copy_base"
   }
  ],
  "lanes": [
@@ -2350,6 +2518,206 @@
        3
       ]
      ]
+    },
+    {
+     "axis": 0,
+     "end": 7,
+     "cont": "A",
+     "cells": [
+      [
+       0,
+       1,
+       22435,
+       0
+      ]
+     ]
+    },
+    {
+     "axis": 0,
+     "end": 6,
+     "cont": "B",
+     "cells": [
+      [
+       2,
+       -1,
+       22435,
+       2
+      ]
+     ]
+    },
+    {
+     "axis": 0,
+     "end": 3,
+     "cont": "A",
+     "cells": [
+      [
+       0,
+       0,
+       22430,
+       0
+      ],
+      [
+       1,
+       0,
+       22431,
+       0
+      ],
+      [
+       1,
+       1,
+       22433,
+       0
+      ],
+      [
+       2,
+       0,
+       22432,
+       0
+      ],
+      [
+       2,
+       1,
+       22434,
+       0
+      ]
+     ]
+    },
+    {
+     "axis": 0,
+     "end": 2,
+     "cont": "B",
+     "cells": [
+      [
+       2,
+       0,
+       22430,
+       2
+      ],
+      [
+       1,
+       0,
+       22431,
+       2
+      ],
+      [
+       1,
+       -1,
+       22433,
+       2
+      ],
+      [
+       0,
+       0,
+       22432,
+       2
+      ],
+      [
+       0,
+       -1,
+       22434,
+       2
+      ]
+     ]
+    },
+    {
+     "axis": 1,
+     "end": 7,
+     "cont": "A",
+     "cells": [
+      [
+       0,
+       1,
+       22441,
+       1
+      ]
+     ]
+    },
+    {
+     "axis": 1,
+     "end": 6,
+     "cont": "B",
+     "cells": [
+      [
+       2,
+       -1,
+       22441,
+       3
+      ]
+     ]
+    },
+    {
+     "axis": 1,
+     "end": 3,
+     "cont": "A",
+     "cells": [
+      [
+       0,
+       0,
+       22436,
+       1
+      ],
+      [
+       1,
+       0,
+       22437,
+       1
+      ],
+      [
+       1,
+       1,
+       22439,
+       1
+      ],
+      [
+       2,
+       0,
+       22438,
+       1
+      ],
+      [
+       2,
+       1,
+       22440,
+       1
+      ]
+     ]
+    },
+    {
+     "axis": 1,
+     "end": 2,
+     "cont": "B",
+     "cells": [
+      [
+       2,
+       0,
+       22436,
+       3
+      ],
+      [
+       1,
+       0,
+       22437,
+       3
+      ],
+      [
+       1,
+       -1,
+       22439,
+       3
+      ],
+      [
+       0,
+       0,
+       22438,
+       3
+      ],
+      [
+       0,
+       -1,
+       22440,
+       3
+      ]
+     ]
     }
    ],
    "save_43": [
@@ -2407,7 +2775,11 @@
     21812,
     21814,
     21815,
-    21816
+    21816,
+    22431,
+    22434,
+    22437,
+    22440
    ],
    "crossing": [
     {

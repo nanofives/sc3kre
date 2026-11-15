@@ -259,6 +259,24 @@ static int dav_bvbend_on(void) {
     }
     return g_dav_bvbend;
 }
+/* task diagfix (round 2026-11-14b art family a, xsect 15; owner chose "taper + bend" 2026-11-14): DAVBEND135.
+ * A single road meeting a diagonal avenue's end row from the side of the carriageway that starts that row (top end:
+ * the road from -x, axis space; bottom end: from +x) is a 135-degree bend from a road into the avenue. Without it the
+ * road was masked (DAVTOUCH) and ended square against the U-turn cap. With it the end row and the row after it hold the
+ * package's bend set (`davm <axis> 2|3 ...`, pieces 22430..: the far carriageway closes, the near one turns into the
+ * road at 135 degrees, painted by verify/diagfix/paint_a.py); the road's cells stay stock. Only where the package
+ * declares a set for that axis and end. Off: SC3NETMOD_DAVBEND135=0. */
+static int g_dav_b135 = -1;
+static volatile LONG g_dav_n_b135;
+static int dav_b135_on(void) {
+    if (g_dav_b135 < 0) {
+        g_dav_b135 = !env_off("SC3NETMOD_DAVBEND135");
+        logf("dav: DAVBEND135 %s (a road into a diagonal avenue's end at 135 degrees: the end tapers and turns, "
+             "SC3NETMOD_DAVBEND135)", g_dav_b135 ? "on" : "off");
+    }
+    return g_dav_b135;
+}
+
 static int dav_bv_oneway(RbBuf *b, int x, int z) {
     DWORD v = rb_at(b, x, z);
     return v && dav_bvbend_on() && bv_is_piece((WORD)(v & 0xffff)) && avl_dir(x, z) >= 0;
@@ -368,9 +386,9 @@ static int g_dav_ns43;
 static void dav_mline(const char *path, const char *line) {
     unsigned long ax, end, cont, v, st;
     long dx, dz;
-    if (sscanf(line + 5, "%lu %lu %lu %ld %ld %lu %lu", &ax, &end, &cont, &dx, &dz, &v, &st) != 7 || ax > 1 || end > 1 ||
+    if (sscanf(line + 5, "%lu %lu %lu %ld %ld %lu %lu", &ax, &end, &cont, &dx, &dz, &v, &st) != 7 || ax > 1 || end > 7 ||
         cont < 1 || cont > 2 || dx < -4 || dx > 4 || dz < -4 || dz > 4 || !v || v > 0xffff || st > 3 || !g_base[v]) {
-        logf("### dav: %s: bad merge line or piece not a variant: '%s'", path, line);
+        logf("### dav: %s: bad merge line or piece not a variant: '%s'", path, line);   /* end 2 / 3: DAVBEND135 */
         return;
     }
     if (g_dav_nmrg >= DAV_MAX_MRG) { logf("### dav: %s: too many merge cells - ignored", path); return; }
@@ -484,8 +502,9 @@ static int dav_is_x(WORD id) {                       /* a crossing piece (varian
 }
 
 typedef struct { int x, z; BYTE pref; } DavCell;    /* x in real space; pref: ambiguous end cell, 1 = A, 2 = B */
-typedef struct { int x, z; BYTE o, end; } DavArm;    /* a straight road cell beside the avenue -> 29 in state o;
-                                                        task davtouch: end 1 = a one-cell stub -> 11225 in state o */
+typedef struct { int x, z; BYTE o, end; WORD piece; } DavArm;   /* a straight road cell beside the avenue -> 29 in
+                                                        state o; task davtouch: end 1 = a one-cell stub -> 11225 in
+                                                        state o; task diagfix: end 2 = a bend set's stub -> piece */
 typedef struct { int x, z; BYTE n, s1, s2, o, e; } DavJ;   /* a junction cell and its descriptor */
 
 #define DAV_MAX_ARMS 256
@@ -729,6 +748,8 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                 int nop = 0, opn[DAV_MAX_OPN][6];       /* task avdiag: median openings: near, median, far cell (real) */
                 int bsd = 0;                            /* task avdiagbreak: window sides this band reaches */
                 int tch = 0;                            /* task davtouch: the isolation test found touching road */
+                int nps = 0, psx[2], psz[2], pss[2];    /* task diagfix DAVBENDSTUB: stub cells to check after writing */
+                WORD psp[2];
                 const char *why = "";
                 P.nbad = 0;
                 if (!dav_full(&P.b, axis, x, z) || dav_full(&P.b, axis, x - 1, z - 1)) continue;
@@ -866,6 +887,45 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                     if (!side[k]) continue;
                     if (g_dav_no && (s3 == 1 || s3 == 2)) {        /* task avdiag: a median opening (twin diagave) */
                         int fc = s3 == 1 ? 2 : 0, end = s3 == 1 ? 1 : 3, d;
+                        if ((k == 0 && s3 == 1) || (k == rows - 1 && s3 == 2)) {   /* task diagfix: DAVBEND135 */
+                            int bend = 0, q2;                    /* the package's bend set for this axis and end */
+                            for (q2 = 0; q2 < g_dav_nmrg; q2++)
+                                if (g_dav_mrg[q2].axis == axis && g_dav_mrg[q2].end == (k ? 2 : 3)) bend = 1;
+                            if (bend && dav_b135_on() && nmg < 2 && rows >= 4) {
+                                /* candidate (opt-in): the road meets the carriageway whose staircase starts the end
+                                   row: the end's two rows hold the bend set (`davm <axis> 2|3 ...`: the far
+                                   carriageway closes, the near one turns into the road); the road stays the arm it
+                                   is, its cells keep their stock pieces */
+                                mg[nmg][0] = k ? 2 : 3; mg[nmg][1] = k ? 2 : 1; mg[nmg][2] = zz; mg[nmg][3] = aa; nmg++;
+                                /* DAVBENDSTUB (owner 2026-11-15): a one-cell road stub in the bend's inner corner
+                                   (`davm <axis> 6|7 ...` names the cell and its piece) is absorbed by the set: written
+                                   with that piece as an arm, instead of left to the stock tiler (a dead-end bulb) */
+                                for (q2 = 0; q2 < g_dav_nmrg; q2++) {
+                                    DavMrg *sq = &g_dav_mrg[q2];
+                                    int sx = aa + sq->dx, sz = zz + sq->dz, sn = 0, j2;
+                                    if (sq->axis != axis || sq->end != (k ? 6 : 7) || (MK(sx, sz) & 4)) continue;
+                                    if (!RD(sx, sz)) {                 /* the game's piece writer may add the stair */
+                                        if (nps < 2) {                 /* partner cell when the bend is written: */
+                                            psx[nps] = axis ? -sx : sx; psz[nps] = sz;   /* read it again after */
+                                            psp[nps] = sq->piece; pss[nps] = sq->state; nps++;
+                                        }
+                                        continue;
+                                    }
+                                    for (j2 = 0; j2 < 8; j2++) {               /* lone: no road but the band / road */
+                                        int nx = sx + DAV_DIR[j2][0], nzz = sz + DAV_DIR[j2][1];
+                                        if (RD(nx, nzz) && !(MK(nx, nzz) & 4) && !(nzz == zz && (k ? nx > aa + 2 : nx < aa)))
+                                            sn++;
+                                    }
+                                    if (sn) continue;
+                                    j2 = na;
+                                    dav_add_arm(&P, &na, axis, sx, sz, sq->state);
+                                    if (na > j2) { P.arm[j2].end = 2; P.arm[j2].piece = sq->piece; }
+                                }
+                                side[k] = 0;
+                                InterlockedIncrement(&g_dav_n_b135);
+                                continue;
+                            }
+                        }
                         if (k == 0 || k == rows - 1) {
                             ok = 0; why = "a road meets one carriageway in the avenue's end row";
                             if (s3 == 1) DBAD(aa - 1, zz); else DBAD(aa + 3, zz);                  /* task davtouch */
@@ -1166,7 +1226,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                 for (e = 0; e < 2 && ok && !two && g_dav_u[0]; e++) {            /* task avrbtchain: no roles if DAVTWO */
                     int merge_here = 0, best_k = -1, bs = 0, s;
                     if (bend[e] || xend[e] || (side[e ? rows - 1 : 0] & 3)) continue;
-                    for (j = 0; j < nmg; j++) if (mg[j][0] == (e ? 0 : 1)) merge_here = 1;
+                    for (j = 0; j < nmg; j++) if ((mg[j][0] & 1) == (e ? 0 : 1)) merge_here = 1;   /* diagfix: & 1 */
                     if (merge_here) continue;
                     for (k = 0; k < n; k++) {
                         int cx = P.cell[k].x, cz = P.cell[k].z;
@@ -1242,13 +1302,15 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                         if (k < n) { cx = P.cell[k].x; cz = P.cell[k].z; want = P.want[k]; }
                         else if (k < n + na) {
                             cx = P.arm[k - n].x; cz = P.arm[k - n].z;
-                            want = ((DWORD)(P.arm[k - n].end ? 11225 : 29) << 8) | P.arm[k - n].o;   /* davtouch: stub */
+                            want = ((DWORD)(P.arm[k - n].end == 2 ? P.arm[k - n].piece :          /* diagfix: bend stub */
+                                            P.arm[k - n].end ? 11225 : 29) << 8) | P.arm[k - n].o;   /* davtouch: stub */
                         } else {                                   /* the crossings' cells outside the band */
                             cx = P.xwx[k - n - na]; cz = P.xwz[k - n - na]; want = P.xww[k - n - na];
                             if (dav_mark(&P, cx, cz) & 4) continue;
                         }
                         cur = rb_at(&P.b, cx, cz);
-                        if (keep && (k < n || k >= n + na) && cx >= x0 && cz >= z0 && cx <= x1 && cz <= z1)
+                        if (keep && (k < n || k >= n + na || P.arm[k - n].end == 2) && cx >= x0 && cz >= z0 && cx <= x1 &&
+                            cz <= z1)                                       /* diagfix: a bend stub is ours, kept */
                             keep[(cz - z0) * P.b.w + (cx - x0)] = 1;
                         if (dbv_claimed(cx, cz)) continue;          /* task diagbv: DBV writes its own cells */
                         if (dav_xnet(cur)) { nxk++; continue; }     /* task diagfix: a rail / highway crossing stays */
@@ -1265,7 +1327,25 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                         pos[0] = cx << 8; pos[1] = cz << 8; pos[2] = 0;
                         ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, lay, pos, want, -1, 8, 0);
                         nw++;
-                        if (k >= n && k < n + na && P.arm[k - n].end) InterlockedIncrement(&g_dav_n_stub);   /* davtouch */
+                        if (k >= n && k < n + na && P.arm[k - n].end == 1) InterlockedIncrement(&g_dav_n_stub);   /* davtouch */
+                    }
+                    for (j = 0; j < nps; j++) {                    /* task diagfix DAVBENDSTUB: a stub the write made */
+                        DWORD sv = rb_read(mgr, lay, psx[j], psz[j], W, H);
+                        int pos2[3], j3, lone = 1;
+                        if (!sv || dav_is_mid((WORD)(sv & 0xffff))) continue;
+                        for (j3 = 0; j3 < 8 && lone; j3++) {       /* its neighbours: band cells and the road only */
+                            int nx = psx[j] + DAV_DIR[j3][0], nz2 = psz[j] + DAV_DIR[j3][1];
+                            DWORD nv = rb_read(mgr, lay, nx, nz2, W, H);
+                            if (nv && !(dav_mark(&P, nx, nz2) & 12)) lone = 0;
+                        }
+                        if (!lone) continue;
+                        pos2[0] = psx[j] << 8; pos2[1] = psz[j] << 8; pos2[2] = 0;
+                        ((PFN_Put)(g_rb_m + 0x8919))(mgr, 0, lay, pos2, ((DWORD)psp[j] << 8) | pss[j], -1, 8, 0);
+                        nw++;
+                        if (keep && psx[j] >= x0 && psz[j] >= z0 && psx[j] <= x1 && psz[j] <= z1)
+                            keep[(psz[j] - z0) * P.b.w + (psx[j] - x0)] = 1;
+                        logf("dav: %s: (%d,%d) one-cell stub in a 135-degree bend -> %u (DAVBENDSTUB)", who, psx[j], psz[j],
+                             psp[j]);
                     }
                     if (nxk) {                                     /* task diagfix: DAVXNET */
                         InterlockedExchangeAdd(&g_dav_n_xnet, nxk);
