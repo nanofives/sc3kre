@@ -1,7 +1,7 @@
 {
  "netpack": 1,
  "name": "diagonal_boulevard",
- "version": "0.2.0",
+ "version": "0.3.0",
  "author": "netmod (task diagbv)",
  "description": "Diagonal boulevards: draw three diagonal roads joined side by side (each one cell over: along x on the down-right diagonal, one cell up on the other) and sc3netmod's DBV block makes them one 3-wide boulevard, the straight boulevard's cross-section turned 45 degrees: the outer roads are the carriageways, the middle one gives each an extra lane and holds a grass median with avenue 11204's trees. Straight single roads crossing it, meeting it from one side or closing its end get junctions with crosswalks; it narrows into the diagonal avenue or tapers into one of its three roads, closes with a round curb where all three stop, and turns into the straight boulevard where its drags go on straight. Lane lines are white dashes. Built by `diagbv.py build .` in this folder before install (art/ is made from the game's frames and is not shipped). Needs sc3netmod.dll with the DBV block. Traffic (task bvlanes): 3 lanes each way, right-hand, one way per side, every turn at the junctions; own lane specs (bvl_*.lanes.json, dbvlanes.py / bvlanes.py).",
  "game": {
@@ -2553,6 +2553,174 @@
    "art": {
     "from": 35,
     "png_dir": "art/22469"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22662,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22662"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22663,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22663"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22664,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22664"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22665,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22665"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22666,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22666"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22667,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22667"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22668,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22668"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22669,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22669"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22670,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22670"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22671,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22671"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22672,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22672"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22673,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal a bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22673"
    },
    "trblkatt": "none"
   },
@@ -5763,6 +5931,80 @@
       4,
       1,
       22711,
+      0
+     ]
+    ],
+    "bendbvm": [
+     [
+      1,
+      -2,
+      22662,
+      0
+     ],
+     [
+      1,
+      -1,
+      22663,
+      0
+     ],
+     [
+      2,
+      -1,
+      22664,
+      0
+     ],
+     [
+      1,
+      0,
+      22665,
+      0
+     ],
+     [
+      2,
+      0,
+      22666,
+      0
+     ],
+     [
+      3,
+      0,
+      22667,
+      0
+     ],
+     [
+      1,
+      1,
+      22668,
+      0
+     ],
+     [
+      2,
+      1,
+      22669,
+      0
+     ],
+     [
+      3,
+      1,
+      22670,
+      0
+     ],
+     [
+      2,
+      2,
+      22671,
+      0
+     ],
+     [
+      3,
+      2,
+      22672,
+      0
+     ],
+     [
+      3,
+      3,
+      22673,
       0
      ]
     ]
