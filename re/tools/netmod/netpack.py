@@ -730,8 +730,10 @@ def compile_pack(stock, pack_dir, man):
         merges, mseen, mpieces = [], set(), set()
         for m in a.get("merge", []):                     # merges: one carriageway ends, the other goes on (davm lines)
             key = (m.get("axis"), m.get("end"), m.get("cont"))
-            if key[0] not in (0, 1) or key[1] not in (0, 1) or key[2] not in ("A", "B") or not m.get("cells"):
-                raise NetpackError("%s: merge %s: axis 0/1, end 0/1, cont A/B and cells required" % (where, key))
+            # end 2 / 3 (task diagfix DAVBEND135): the bottom / top end where a road meets the avenue at 135 degrees;
+            # end 6 / 7: that bend set's stub cell (DAVBENDSTUB)
+            if key[0] not in (0, 1) or key[1] not in range(8) or key[2] not in ("A", "B") or not m.get("cells"):
+                raise NetpackError("%s: merge %s: axis 0/1, end 0..7, cont A/B and cells required" % (where, key))
             if key in mseen:
                 raise NetpackError("%s: merge %s declared twice" % (where, key))
             mseen.add(key)
