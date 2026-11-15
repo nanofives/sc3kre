@@ -272,6 +272,7 @@ typedef struct {
     int bja, bjb;               /* task avx32 (img16 split): columns of the bad arm bv_run1 refused, -1 none */
     BYTE *xd;                   /* task orthfix BVDIAG: road cells a diagonal band passes through (window), NULL none */
     int dn[2][3];               /* task orthfix BVDIAG: a diagonal end's extra cells per row at the +s / -s end */
+    int ovon, ovw0, ovc[2][3];  /* task orthfix BVBEND: the run's band-overlap cut per row (+s / -s end), see bv_ovl */
 } BvPass;
 static int bvx_spans(BvPass *p, int sa, int sb, int w0, BYTE *kind, const char **why, int *bad_e);  /* task bvx */
 static int bvx_boxes(BvPass *p, int sa, int sb, int w0, const BYTE *kind, int lo_tee, int hi_tee, int lo_av,
@@ -316,7 +317,11 @@ static int bv_dgr(BvPass *p, int x, int z) {
     i = x - p->b.x0; j = z - p->b.z0;
     return p->xd && i >= 0 && j >= 0 && i < p->b.w && j < p->b.h && p->xd[j * p->b.w + i];
 }
-static int bv_dg(BvPass *p, int s, int w) { return bv_dgr(p, bv_rx(p->axis, s, w), bv_rz(p->axis, s, w)); }
+static int bv_dg(BvPass *p, int s, int w) {
+    if (p->ovon && w >= p->ovw0 && w <= p->ovw0 + 2 &&                    /* task orthfix BVBEND: the overlap */
+        (s >= p->ovc[0][w - p->ovw0] || s <= p->ovc[1][w - p->ovw0])) return 1;
+    return bv_dgr(p, bv_rx(p->axis, s, w), bv_rz(p->axis, s, w));
+}
 static int bv_rraw(BvPass *p, int s, int w) { return rb_at(&p->b, bv_rx(p->axis, s, w), bv_rz(p->axis, s, w)) != 0; }
 static int bv_road(BvPass *p, int s, int w) { return bv_rraw(p, s, w) && !bv_dg(p, s, w); }
 /* the xd mask of the pass window: walk from every diagonal cell along both 45-degree lines; road cells (not
@@ -402,6 +407,72 @@ static int bv_xspan(BvPass *p, int s, int w, int dir) {
     return n && bv_full(p, s + dir * n, w) ? n : 0;
 }
 
+/* task orthfix BVBEND (2026-11-15, xsect 41, verify/diagfix/ORTHFIX_ASKS_41.md): a diagonal avenue / boulevard
+   whose first rows ARE the boulevard's last cells (the boulevard bends 135 degrees into it). Those cells hold road
+   (BV's own pieces before), so BV took them for its run. A cell of row k is an OVERLAP cell when one of its 45-degree
+   lines, walked out of the boulevard's rows over road, reaches a diagonal cell and the band goes on past it, while the
+   line's other way out of the rows has no diagonal cell (a crossing band is bv_xd_build's). A run whose end region
+   holds overlap cells ends before them, per row (a staircase, no cap, the median nose on its last cell: end type 8);
+   the overlap is DAV's / DBV's bend set. Opt-in (SC3NETMOD_BVBEND=1) until diagfix's bend sets exist: without them DAV
+   and DBV refuse the bend once BV leaves the overlap (41 / 45 fall back to the stock ladder). */
+static int g_bv_bend = -1;
+static int bv_bend_on(void) {
+    if (g_bv_bend < 0) {
+        g_bv_bend = env_on("SC3NETMOD_BVBEND");          /* opt-in until DAV's / DBV's bend sets take the overlap */
+        logf("bv: boulevard ending in a diagonal band's first rows (orthfix BVBEND) %s",
+             g_bv_bend ? "on (SC3NETMOD_BVBEND=1)" : "off (opt-in: SC3NETMOD_BVBEND=1, needs the bend sets)");
+    }
+    return g_bv_bend;
+}
+static int bv_ovl(BvPass *p, int s, int w0, int k) {
+    int ds, dwi, i;
+    if (!bv_road(p, s, w0 + k)) return 0;
+    for (dwi = 0; dwi < 2; dwi++) {
+        int dw = dwi ? -1 : 1, steps = dw > 0 ? 3 - k : k + 1, back = dw > 0 ? k + 1 : 3 - k;
+        for (ds = -1; ds <= 1; ds += 2) {
+            int ok = 1;
+            for (i = 1; i < steps && ok; i++) if (!bv_rraw(p, s + ds * i, w0 + k + dw * i)) ok = 0;   /* road or band */
+            if (!ok || !bv_dg(p, s + ds * steps, w0 + k + dw * steps) ||
+                !bv_dg(p, s + ds * (steps + 1), w0 + k + dw * (steps + 1))) continue;
+            if (bv_dg(p, s - ds * back, w0 + k - dw * back)) continue;
+            return 1;
+        }
+    }
+    return 0;
+}
+/* the run sa..sb's end e (0 +s, 1 -s): trim it before the overlap. -> 1 trimmed (*ps = the new end column, the cut
+   kept in p->ovc for bv_dg), 0 not such an end */
+static int bv_ovl_trim(BvPass *p, int sa, int sb, int w0, int e, int *ps) {
+    int st = e ? -1 : 1, se = e ? sa : sb, k, j, f[3], lo = 0x7fffffff, hi = -0x7fffffff, any = 0;
+    if (!bv_diag_on() || !bv_bend_on()) return 0;
+    for (k = 0; k < 3; k++) {
+        f[k] = 0x7fffffff;
+        for (j = -3; j <= 2; j++) {                          /* from 3 columns inside the end to 2 beyond it */
+            int s = se + st * j;
+            if ((e ? s > sb : s < sa)) continue;
+            if (bv_ovl(p, s, w0, k)) { f[k] = s; any = 1; break; }
+            if (bv_dg(p, s, w0 + k)) { f[k] = s; break; }    /* the row meets the band's own cell first */
+        }
+    }
+    if (!any) return 0;
+    for (k = 0; k < 3; k++) {
+        if (f[k] == 0x7fffffff) return 0;                    /* every row meets the band */
+        if (f[k] - st < lo) lo = f[k] - st;
+        if (f[k] - st > hi) hi = f[k] - st;
+        for (j = 0; j <= 3; j++) {                           /* past the cut: overlap or diagonal, then nothing */
+            int s = f[k] + st * j;
+            if (!bv_rraw(p, s, w0 + k)) break;
+            if (!bv_dg(p, s, w0 + k) && !bv_ovl(p, s, w0, k)) return 0;
+        }
+    }
+    if (hi - lo > 2) return 0;
+    for (k = 0; k < 3; k++) p->ovc[e][k] = f[k];
+    p->ovon = 1;
+    p->ovw0 = w0;
+    *ps = e ? hi : lo;                                       /* the last column every row holds */
+    return 1;
+}
+
 /* task orthfix BVDIAG: a diagonal band crossing the run or leaving through one side while the boulevard goes on (xsect
    38 / 39): the columns from s on (dir) whose cells are diagonal or plain road (no road beside a plain outer cell), at
    most BV_XSPAN, followed by a full boulevard column. -> their number, 0 none. Such columns are kind 16: BV writes its
@@ -464,6 +535,7 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
     int corner_e = -1;                                                   /* task orthfix BVCORNER */
     *why = "";
     *bad_e = -1;
+    p->ovon = 0;                                                         /* task orthfix BVBEND: no cut from a last run */
     p->bja = p->bjb = -1;                                                /* task avx32 (img16 split) */
     p->natt = 0;                                                         /* task bvlanes */
     for (;;) {                                           /* task orthfix BVXING: on through a crossing span */
@@ -477,6 +549,12 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
     *psb = sb;
     sa += cut_lo;                                                        /* task avx32 */
     sb -= cut_hi;
+    for (k = 0; k < 3; k++) { p->ovc[0][k] = 0x7fffffff; p->ovc[1][k] = -0x7fffffff; }
+    {
+        int ns;
+        if (!cut_hi && bv_ovl_trim(p, sa, sb, w0, 0, &ns)) sb = ns;
+        if (!cut_lo && bv_ovl_trim(p, sa, sb, w0, 1, &ns)) sa = ns;
+    }
     n = sb - sa + 1;
     if (n < BV_MIN_COLS) {
         /* task orthfix BVDIAG: a stem of 2 full columns that ends on a diagonal band with extra cells on its stair (the
@@ -769,7 +847,9 @@ static int bv_parts(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE 
     seg[0][0] = seg[0][1] = 0;
     while (head < nseg) {
         int *base = seg[head++];
-        if (!bv_run_fb(p, sa, w0, psb, &w1, kind, base, cut, &sja, &sjb)) {
+        int okr = bv_run_fb(p, sa, w0, psb, &w1, kind, base, cut, &sja, &sjb);
+        p->ovon = 0;                                       /* task orthfix BVBEND: the cut belongs to that run only */
+        if (!okr) {
             if (!failed) first = w1;
             failed = 1;
             if (sja < 0) continue;
@@ -1042,6 +1122,7 @@ static int bv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, cons
     BYTE *mem, kind[BV_MAX_RUN];
     SIZE_T nbuf;
     int x, z, border, nruns = 0, nwall = 0, nrev = 0;
+    ZeroMemory(&P, sizeof(P));                                           /* task orthfix BVBEND: ovon / xd start clear */
     P.b.x0 = x0; P.b.z0 = z0; P.b.w = x1 - x0 + 1; P.b.h = z1 - z0 + 1;
     nbuf = (SIZE_T)P.b.w * P.b.h;
     mem = (BYTE *)VirtualAlloc(NULL, nbuf * 5 + DAV_MAX_CELLS * sizeof(BvCell), MEM_COMMIT, PAGE_READWRITE);
