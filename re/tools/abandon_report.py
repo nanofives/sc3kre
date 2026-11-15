@@ -43,6 +43,35 @@ def main(paths):
                 b = sa[18 + zi * 6:18 + zi * 6 + 6]
                 print("  simrun %s would %s blocked %s gentle-held %d" % (z, dict(zip(ZB, w)), dict(zip(ZB, b)), sa[36 + zi]))
             print("  simrun sandbox=%d gentle=%d share=%d" % (sa[39], sa[40], sa[41]))
+        shares(d)
+
+
+def bar(v, lo=-2000):
+    """the RCI bar as the HUD draws it, -1000..0 for a negative value (SIMRCI 0x10042e89)"""
+    return v * -1000 // lo
+
+
+def shares(d, lo=-2000, hi=2000):
+    cb, cp = d.get("cbucket") or {}, d.get("cpost") or {}
+    if not cb and not cp:
+        return
+    zones = sorted({k.split(":")[0] for k in list(cb) + list(cp)})
+    for z in zones:
+        draws = {int(k.split(":")[1]): v for k, v in cb.items() if k.startswith(z + ":")}
+        posts = {int(k.split(":")[1]): v for k, v in cp.items() if k.startswith(z + ":")}
+        if draws:
+            print("  %s negative-demand draws by raw valve bucket (bar): draws / stock fires" % z)
+            for b in sorted(draws):
+                print("    %6d..%6d (bar %5d..%5d): %6d / %4d" % (b, b + 99, bar(b), bar(b + 99), draws[b][0], draws[b][1]))
+        if posts:
+            print("  %s abandonments (c) by raw valve bucket: %s" % (z, json.dumps(dict(sorted(posts.items())))))
+        if draws:
+            tot = sum(v[1] for v in draws.values())
+            print("  %s share_pct -> line (bar) -> stock fires the line would hold, of %d" % (z, tot))
+            for sh in (0, 10, 20, 25, 30, 40, 50):
+                thr = lo + (hi - lo) * sh // 100
+                held = sum(v[1] for b, v in draws.items() if b >= thr)
+                print("    %3d%% -> %6d (bar %5d): %5d (%.0f%%)" % (sh, thr, bar(thr), held, 100.0 * held / tot if tot else 0))
 
 
 if __name__ == "__main__":

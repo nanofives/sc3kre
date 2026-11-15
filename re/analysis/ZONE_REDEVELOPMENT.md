@@ -194,6 +194,8 @@ valve minimum because filled demand no longer goes negative).
 abandonment"): at the three (c) roll calls, when the stock roll fires and the raw valve value (the RCI bar, not the
 net value the roll uses) is at or above `min + (max - min) * share_pct / 100`, the roll is made to miss. Below that
 line the stock roll is unchanged. With the valves at -2000..2000: 50 = stock, 25 = only below -1000 (the bar under
-half of its negative side), 0 = never.
+half of its negative side), 0 = never. Measured with 25 (`verify/abandon/RESULTS.md` M3): Berlin 2 years 332 -> 284
+industrial negative-demand abandonments, London 1 year 276 -> 259, none left with the bar above -500 (stock: 80 and
+30 there). Only industry went negative in the test cities.
 
 **Not changed:** the always-0 lower-value pickers (`0x100297fb`, `0x10018e45`), owner decision 2026-11-15.
