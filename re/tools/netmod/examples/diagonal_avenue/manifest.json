@@ -2048,6 +2048,734 @@
     "png_dir": "art/22387"
    },
    "trblkatt": "copy_base"
+  },
+  {
+   "id": 22610,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22610"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22611,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22611"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22612,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22612"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22613,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22613"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22614,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22614"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22615,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22615"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22616,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22616"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22617,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22617"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22618,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22618"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22619,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22619"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22620,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22620"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22621,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22621"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22622,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22622"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22623,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22623"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22624,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22624"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22625,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22625"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22626,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22626"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22627,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22627"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22628,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22628"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22629,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22629"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22630,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22630"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22631,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22631"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22632,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22632"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22633,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22633"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22634,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22634"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22635,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22635"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22636,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22636"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22637,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22637"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22638,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22638"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22639,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22639"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22640,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22640"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22641,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22641"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22642,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22642"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22643,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22643"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22644,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22644"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22645,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22645"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22646,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22646"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22647,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22647"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22648,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22648"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22649,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22649"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22650,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22650"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22651,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22651"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22652,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22652"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22653,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22653"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22654,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22654"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22655,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22655"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22656,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22656"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22657,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22657"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22658,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22658"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22659,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22659"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22660,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22660"
+   },
+   "trblkatt": "copy_base"
+  },
+  {
+   "id": 22661,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal avenue boulevard junction",
+    "ENGLISH": "Cruce de avenida y bulevar"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22661"
+   },
+   "trblkatt": "copy_base"
   }
  ],
  "lanes": [
@@ -2510,6 +3238,214 @@
   {
    "piece": 22609,
    "spec": "xing_22609.lanes.json"
+  },
+  {
+   "piece": 22610,
+   "spec": "xing_22610.lanes.json"
+  },
+  {
+   "piece": 22611,
+   "spec": "xing_22611.lanes.json"
+  },
+  {
+   "piece": 22612,
+   "spec": "xing_22612.lanes.json"
+  },
+  {
+   "piece": 22613,
+   "spec": "xing_22613.lanes.json"
+  },
+  {
+   "piece": 22614,
+   "spec": "xing_22614.lanes.json"
+  },
+  {
+   "piece": 22615,
+   "spec": "xing_22615.lanes.json"
+  },
+  {
+   "piece": 22616,
+   "spec": "xing_22616.lanes.json"
+  },
+  {
+   "piece": 22617,
+   "spec": "xing_22617.lanes.json"
+  },
+  {
+   "piece": 22618,
+   "spec": "xing_22618.lanes.json"
+  },
+  {
+   "piece": 22619,
+   "spec": "xing_22619.lanes.json"
+  },
+  {
+   "piece": 22620,
+   "spec": "xing_22620.lanes.json"
+  },
+  {
+   "piece": 22621,
+   "spec": "xing_22621.lanes.json"
+  },
+  {
+   "piece": 22622,
+   "spec": "xing_22622.lanes.json"
+  },
+  {
+   "piece": 22623,
+   "spec": "xing_22623.lanes.json"
+  },
+  {
+   "piece": 22624,
+   "spec": "xing_22624.lanes.json"
+  },
+  {
+   "piece": 22625,
+   "spec": "xing_22625.lanes.json"
+  },
+  {
+   "piece": 22626,
+   "spec": "xing_22626.lanes.json"
+  },
+  {
+   "piece": 22627,
+   "spec": "xing_22627.lanes.json"
+  },
+  {
+   "piece": 22628,
+   "spec": "xing_22628.lanes.json"
+  },
+  {
+   "piece": 22629,
+   "spec": "xing_22629.lanes.json"
+  },
+  {
+   "piece": 22630,
+   "spec": "xing_22630.lanes.json"
+  },
+  {
+   "piece": 22631,
+   "spec": "xing_22631.lanes.json"
+  },
+  {
+   "piece": 22632,
+   "spec": "xing_22632.lanes.json"
+  },
+  {
+   "piece": 22633,
+   "spec": "xing_22633.lanes.json"
+  },
+  {
+   "piece": 22634,
+   "spec": "xing_22634.lanes.json"
+  },
+  {
+   "piece": 22635,
+   "spec": "xing_22635.lanes.json"
+  },
+  {
+   "piece": 22636,
+   "spec": "xing_22636.lanes.json"
+  },
+  {
+   "piece": 22637,
+   "spec": "xing_22637.lanes.json"
+  },
+  {
+   "piece": 22638,
+   "spec": "xing_22638.lanes.json"
+  },
+  {
+   "piece": 22639,
+   "spec": "xing_22639.lanes.json"
+  },
+  {
+   "piece": 22640,
+   "spec": "xing_22640.lanes.json"
+  },
+  {
+   "piece": 22641,
+   "spec": "xing_22641.lanes.json"
+  },
+  {
+   "piece": 22642,
+   "spec": "xing_22642.lanes.json"
+  },
+  {
+   "piece": 22643,
+   "spec": "xing_22643.lanes.json"
+  },
+  {
+   "piece": 22644,
+   "spec": "xing_22644.lanes.json"
+  },
+  {
+   "piece": 22645,
+   "spec": "xing_22645.lanes.json"
+  },
+  {
+   "piece": 22646,
+   "spec": "xing_22646.lanes.json"
+  },
+  {
+   "piece": 22647,
+   "spec": "xing_22647.lanes.json"
+  },
+  {
+   "piece": 22648,
+   "spec": "xing_22648.lanes.json"
+  },
+  {
+   "piece": 22649,
+   "spec": "xing_22649.lanes.json"
+  },
+  {
+   "piece": 22650,
+   "spec": "xing_22650.lanes.json"
+  },
+  {
+   "piece": 22651,
+   "spec": "xing_22651.lanes.json"
+  },
+  {
+   "piece": 22652,
+   "spec": "xing_22652.lanes.json"
+  },
+  {
+   "piece": 22653,
+   "spec": "xing_22653.lanes.json"
+  },
+  {
+   "piece": 22654,
+   "spec": "xing_22654.lanes.json"
+  },
+  {
+   "piece": 22655,
+   "spec": "xing_22655.lanes.json"
+  },
+  {
+   "piece": 22656,
+   "spec": "xing_22656.lanes.json"
+  },
+  {
+   "piece": 22657,
+   "spec": "xing_22657.lanes.json"
+  },
+  {
+   "piece": 22658,
+   "spec": "xing_22658.lanes.json"
+  },
+  {
+   "piece": 22659,
+   "spec": "xing_22659.lanes.json"
+  },
+  {
+   "piece": 22660,
+   "spec": "xing_22660.lanes.json"
+  },
+  {
+   "piece": 22661,
+   "spec": "xing_22661.lanes.json"
   }
  ],
  "auto_diagonal_avenues": [
@@ -3469,7 +4405,51 @@
     22604,
     22605,
     22606,
-    22607
+    22607,
+    22610,
+    22612,
+    22613,
+    22614,
+    22615,
+    22616,
+    22617,
+    22618,
+    22619,
+    22620,
+    22622,
+    22623,
+    22625,
+    22626,
+    22627,
+    22628,
+    22629,
+    22630,
+    22631,
+    22632,
+    22633,
+    22635,
+    22636,
+    22638,
+    22639,
+    22640,
+    22641,
+    22642,
+    22643,
+    22644,
+    22645,
+    22646,
+    22648,
+    22649,
+    22651,
+    22652,
+    22653,
+    22654,
+    22655,
+    22656,
+    22657,
+    22658,
+    22659,
+    22661
    ],
    "crossing": [
     {
@@ -7369,6 +8349,1934 @@
        -2,
        22609,
        1
+      ]
+     ]
+    },
+    {
+     "id": 48,
+     "axis": 0,
+     "x0": -2,
+     "z0": -3,
+     "w": 9,
+     "h": 9,
+     "grid": "rr....---rrr....--.rrr....-rrrrrrrrrrrrrrrrrrrrrrrrrrr-....rrr.--....rrr---....rr",
+     "partner": [
+      -1,
+      0,
+      0
+     ],
+     "writes": [
+      [
+       0,
+       -1,
+       22610,
+       0
+      ],
+      [
+       0,
+       0,
+       22612,
+       0
+      ],
+      [
+       1,
+       -1,
+       22611,
+       0
+      ],
+      [
+       1,
+       0,
+       22613,
+       0
+      ],
+      [
+       1,
+       1,
+       22615,
+       0
+      ],
+      [
+       2,
+       0,
+       22614,
+       0
+      ],
+      [
+       2,
+       1,
+       22616,
+       0
+      ],
+      [
+       2,
+       2,
+       22618,
+       0
+      ],
+      [
+       3,
+       1,
+       22617,
+       0
+      ],
+      [
+       3,
+       2,
+       22619,
+       0
+      ],
+      [
+       3,
+       3,
+       22621,
+       2
+      ],
+      [
+       4,
+       2,
+       22620,
+       0
+      ],
+      [
+       4,
+       3,
+       22622,
+       0
+      ]
+     ]
+    },
+    {
+     "id": 49,
+     "axis": 1,
+     "x0": 0,
+     "z0": -1,
+     "w": 9,
+     "h": 9,
+     "grid": "rr.rrr---rrrrrr.--.rrrrr..-..rrrr......rrr......rrrr..-..rrrrr.--.rrrrrr---rrr.rr",
+     "partner": [
+      -1,
+      0,
+      0
+     ],
+     "writes": [
+      [
+       2,
+       1,
+       22610,
+       1
+      ],
+      [
+       2,
+       2,
+       22611,
+       1
+      ],
+      [
+       3,
+       1,
+       22612,
+       1
+      ],
+      [
+       3,
+       2,
+       22613,
+       1
+      ],
+      [
+       3,
+       3,
+       22614,
+       1
+      ],
+      [
+       4,
+       2,
+       22615,
+       1
+      ],
+      [
+       4,
+       3,
+       22616,
+       1
+      ],
+      [
+       4,
+       4,
+       22617,
+       1
+      ],
+      [
+       5,
+       3,
+       22618,
+       1
+      ],
+      [
+       5,
+       4,
+       22619,
+       1
+      ],
+      [
+       5,
+       5,
+       22620,
+       1
+      ],
+      [
+       6,
+       4,
+       22621,
+       3
+      ],
+      [
+       6,
+       5,
+       22622,
+       1
+      ]
+     ]
+    },
+    {
+     "id": 50,
+     "axis": 0,
+     "x0": -2,
+     "z0": -3,
+     "w": 9,
+     "h": 9,
+     "grid": "rr....---rrr....--.rrr....-..rrrrrrr...rrrrrr....rrrrr-....rrr.--....rrr---....rr",
+     "partner": [
+      -1,
+      0,
+      0
+     ],
+     "writes": [
+      [
+       0,
+       -1,
+       22623,
+       0
+      ],
+      [
+       0,
+       0,
+       22625,
+       0
+      ],
+      [
+       1,
+       -1,
+       22624,
+       0
+      ],
+      [
+       1,
+       0,
+       22626,
+       0
+      ],
+      [
+       1,
+       1,
+       22628,
+       0
+      ],
+      [
+       2,
+       0,
+       22627,
+       0
+      ],
+      [
+       2,
+       1,
+       22629,
+       0
+      ],
+      [
+       2,
+       2,
+       22631,
+       0
+      ],
+      [
+       3,
+       1,
+       22630,
+       0
+      ],
+      [
+       3,
+       2,
+       22632,
+       0
+      ],
+      [
+       3,
+       3,
+       22634,
+       2
+      ],
+      [
+       4,
+       2,
+       22633,
+       0
+      ],
+      [
+       4,
+       3,
+       22635,
+       0
+      ]
+     ]
+    },
+    {
+     "id": 51,
+     "axis": 1,
+     "x0": -4,
+     "z0": -5,
+     "w": 9,
+     "h": 9,
+     "grid": "rr....---rrr....--.rrr....-..rrr.......rrr......rrrr..-..rrrrr.--.rrrrrr---rrr.rr",
+     "partner": [
+      -1,
+      0,
+      0
+     ],
+     "writes": [
+      [
+       -2,
+       -3,
+       22623,
+       1
+      ],
+      [
+       -2,
+       -2,
+       22624,
+       1
+      ],
+      [
+       -1,
+       -3,
+       22625,
+       1
+      ],
+      [
+       -1,
+       -2,
+       22626,
+       1
+      ],
+      [
+       -1,
+       -1,
+       22627,
+       1
+      ],
+      [
+       0,
+       -2,
+       22628,
+       1
+      ],
+      [
+       0,
+       -1,
+       22629,
+       1
+      ],
+      [
+       0,
+       0,
+       22630,
+       1
+      ],
+      [
+       1,
+       -1,
+       22631,
+       1
+      ],
+      [
+       1,
+       0,
+       22632,
+       1
+      ],
+      [
+       1,
+       1,
+       22633,
+       1
+      ],
+      [
+       2,
+       0,
+       22634,
+       3
+      ],
+      [
+       2,
+       1,
+       22635,
+       1
+      ]
+     ]
+    },
+    {
+     "id": 52,
+     "axis": 0,
+     "x0": -2,
+     "z0": -3,
+     "w": 9,
+     "h": 9,
+     "grid": "rr....---rrr....--.rrr....-rrrrr....rrrrrr...rrrrrrr..-....rrr.--....rrr---....rr",
+     "partner": [
+      -1,
+      0,
+      0
+     ],
+     "writes": [
+      [
+       0,
+       -1,
+       22635,
+       2
+      ],
+      [
+       0,
+       0,
+       22633,
+       2
+      ],
+      [
+       1,
+       -1,
+       22634,
+       0
+      ],
+      [
+       1,
+       0,
+       22632,
+       2
+      ],
+      [
+       1,
+       1,
+       22630,
+       2
+      ],
+      [
+       2,
+       0,
+       22631,
+       2
+      ],
+      [
+       2,
+       1,
+       22629,
+       2
+      ],
+      [
+       2,
+       2,
+       22627,
+       2
+      ],
+      [
+       3,
+       1,
+       22628,
+       2
+      ],
+      [
+       3,
+       2,
+       22626,
+       2
+      ],
+      [
+       3,
+       3,
+       22624,
+       2
+      ],
+      [
+       4,
+       2,
+       22625,
+       2
+      ],
+      [
+       4,
+       3,
+       22623,
+       2
+      ]
+     ]
+    },
+    {
+     "id": 53,
+     "axis": 1,
+     "x0": 0,
+     "z0": -1,
+     "w": 9,
+     "h": 9,
+     "grid": "rr.rrr---rrrrrr.--.rrrrr..-..rrrr......rrr.......rrr..-....rrr.--....rrr---....rr",
+     "partner": [
+      -1,
+      0,
+      0
+     ],
+     "writes": [
+      [
+       2,
+       1,
+       22635,
+       3
+      ],
+      [
+       2,
+       2,
+       22634,
+       1
+      ],
+      [
+       3,
+       1,
+       22633,
+       3
+      ],
+      [
+       3,
+       2,
+       22632,
+       3
+      ],
+      [
+       3,
+       3,
+       22631,
+       3
+      ],
+      [
+       4,
+       2,
+       22630,
+       3
+      ],
+      [
+       4,
+       3,
+       22629,
+       3
+      ],
+      [
+       4,
+       4,
+       22628,
+       3
+      ],
+      [
+       5,
+       3,
+       22627,
+       3
+      ],
+      [
+       5,
+       4,
+       22626,
+       3
+      ],
+      [
+       5,
+       5,
+       22625,
+       3
+      ],
+      [
+       6,
+       4,
+       22624,
+       3
+      ],
+      [
+       6,
+       5,
+       22623,
+       3
+      ]
+     ]
+    },
+    {
+     "id": 54,
+     "axis": 0,
+     "x0": -2,
+     "z0": -3,
+     "w": 9,
+     "h": 9,
+     "grid": "rr....---rrr....--.rrr....-..rrrrrrr...rrrrrr...rrrrrr-....rrr.--....rrr---....rr",
+     "partner": [
+      -1,
+      0,
+      0
+     ],
+     "writes": [
+      [
+       0,
+       -1,
+       22623,
+       0
+      ],
+      [
+       0,
+       0,
+       22625,
+       0
+      ],
+      [
+       1,
+       -1,
+       22624,
+       0
+      ],
+      [
+       1,
+       0,
+       22626,
+       0
+      ],
+      [
+       1,
+       1,
+       22628,
+       0
+      ],
+      [
+       1,
+       2,
+       22435,
+       0
+      ],
+      [
+       2,
+       0,
+       22627,
+       0
+      ],
+      [
+       2,
+       1,
+       22629,
+       0
+      ],
+      [
+       2,
+       2,
+       22631,
+       0
+      ],
+      [
+       3,
+       1,
+       22630,
+       0
+      ],
+      [
+       3,
+       2,
+       22632,
+       0
+      ],
+      [
+       3,
+       3,
+       22634,
+       2
+      ],
+      [
+       4,
+       2,
+       22633,
+       0
+      ],
+      [
+       4,
+       3,
+       22635,
+       0
+      ]
+     ]
+    },
+    {
+     "id": 55,
+     "axis": 1,
+     "x0": -2,
+     "z0": -3,
+     "w": 9,
+     "h": 9,
+     "grid": "rr....---rrr....--.rrr....-..rrrr......rrr......rrrr..-..rrrrr.--.rrrrrr---rrr.rr",
+     "partner": [
+      -1,
+      0,
+      0
+     ],
+     "writes": [
+      [
+       0,
+       -1,
+       22623,
+       1
+      ],
+      [
+       0,
+       0,
+       22624,
+       1
+      ],
+      [
+       1,
+       -1,
+       22625,
+       1
+      ],
+      [
+       1,
+       0,
+       22626,
+       1
+      ],
+      [
+       1,
+       1,
+       22627,
+       1
+      ],
+      [
+       2,
+       0,
+       22628,
+       1
+      ],
+      [
+       2,
+       1,
+       22629,
+       1
+      ],
+      [
+       2,
+       2,
+       22630,
+       1
+      ],
+      [
+       3,
+       0,
+       22435,
+       1
+      ],
+      [
+       3,
+       1,
+       22631,
+       1
+      ],
+      [
+       3,
+       2,
+       22632,
+       1
+      ],
+      [
+       3,
+       3,
+       22633,
+       1
+      ],
+      [
+       4,
+       2,
+       22634,
+       3
+      ],
+      [
+       4,
+       3,
+       22635,
+       1
+      ]
+     ]
+    },
+    {
+     "id": 56,
+     "axis": 0,
+     "x0": -2,
+     "z0": -3,
+     "w": 9,
+     "h": 9,
+     "grid": "rr....---rrr....--.rrr....-rrrrrr...rrrrrr...rrrrrrr..-....rrr.--....rrr---....rr",
+     "partner": [
+      -1,
+      0,
+      0
+     ],
+     "writes": [
+      [
+       0,
+       -1,
+       22635,
+       2
+      ],
+      [
+       0,
+       0,
+       22633,
+       2
+      ],
+      [
+       1,
+       -1,
+       22634,
+       0
+      ],
+      [
+       1,
+       0,
+       22632,
+       2
+      ],
+      [
+       1,
+       1,
+       22630,
+       2
+      ],
+      [
+       2,
+       0,
+       22631,
+       2
+      ],
+      [
+       2,
+       1,
+       22629,
+       2
+      ],
+      [
+       2,
+       2,
+       22627,
+       2
+      ],
+      [
+       3,
+       0,
+       22435,
+       2
+      ],
+      [
+       3,
+       1,
+       22628,
+       2
+      ],
+      [
+       3,
+       2,
+       22626,
+       2
+      ],
+      [
+       3,
+       3,
+       22624,
+       2
+      ],
+      [
+       4,
+       2,
+       22625,
+       2
+      ],
+      [
+       4,
+       3,
+       22623,
+       2
+      ]
+     ]
+    },
+    {
+     "id": 57,
+     "axis": 1,
+     "x0": 0,
+     "z0": -1,
+     "w": 9,
+     "h": 9,
+     "grid": "rr.rrr---rrrrrr.--.rrrrr..-..rrrr......rrr......rrrr..-....rrr.--....rrr---....rr",
+     "partner": [
+      -1,
+      0,
+      0
+     ],
+     "writes": [
+      [
+       2,
+       1,
+       22635,
+       3
+      ],
+      [
+       2,
+       2,
+       22634,
+       1
+      ],
+      [
+       3,
+       1,
+       22633,
+       3
+      ],
+      [
+       3,
+       2,
+       22632,
+       3
+      ],
+      [
+       3,
+       3,
+       22631,
+       3
+      ],
+      [
+       3,
+       4,
+       22435,
+       3
+      ],
+      [
+       4,
+       2,
+       22630,
+       3
+      ],
+      [
+       4,
+       3,
+       22629,
+       3
+      ],
+      [
+       4,
+       4,
+       22628,
+       3
+      ],
+      [
+       5,
+       3,
+       22627,
+       3
+      ],
+      [
+       5,
+       4,
+       22626,
+       3
+      ],
+      [
+       5,
+       5,
+       22625,
+       3
+      ],
+      [
+       6,
+       4,
+       22624,
+       3
+      ],
+      [
+       6,
+       5,
+       22623,
+       3
+      ]
+     ]
+    },
+    {
+     "id": 58,
+     "axis": 1,
+     "x0": -2,
+     "z0": -3,
+     "w": 9,
+     "h": 9,
+     "grid": "rr....---rrr....--.rrr....-rrrrrrrrrrrrrrrrrrrrrrrrrrr-....rrr.--....rrr---....rr",
+     "partner": [
+      -1,
+      0,
+      0
+     ],
+     "writes": [
+      [
+       0,
+       -1,
+       22636,
+       1
+      ],
+      [
+       0,
+       0,
+       22638,
+       1
+      ],
+      [
+       1,
+       -1,
+       22637,
+       1
+      ],
+      [
+       1,
+       0,
+       22639,
+       1
+      ],
+      [
+       1,
+       1,
+       22641,
+       1
+      ],
+      [
+       2,
+       0,
+       22640,
+       1
+      ],
+      [
+       2,
+       1,
+       22642,
+       1
+      ],
+      [
+       2,
+       2,
+       22644,
+       1
+      ],
+      [
+       3,
+       1,
+       22643,
+       1
+      ],
+      [
+       3,
+       2,
+       22645,
+       1
+      ],
+      [
+       3,
+       3,
+       22647,
+       3
+      ],
+      [
+       4,
+       2,
+       22646,
+       1
+      ],
+      [
+       4,
+       3,
+       22648,
+       1
+      ]
+     ]
+    },
+    {
+     "id": 59,
+     "axis": 0,
+     "x0": 0,
+     "z0": -1,
+     "w": 9,
+     "h": 9,
+     "grid": "rr.rrr---rrrrrr.--.rrrrr..-..rrrr......rrr......rrrr..-..rrrrr.--.rrrrrr---rrr.rr",
+     "partner": [
+      -1,
+      0,
+      0
+     ],
+     "writes": [
+      [
+       2,
+       1,
+       22636,
+       0
+      ],
+      [
+       2,
+       2,
+       22637,
+       0
+      ],
+      [
+       3,
+       1,
+       22638,
+       0
+      ],
+      [
+       3,
+       2,
+       22639,
+       0
+      ],
+      [
+       3,
+       3,
+       22640,
+       0
+      ],
+      [
+       4,
+       2,
+       22641,
+       0
+      ],
+      [
+       4,
+       3,
+       22642,
+       0
+      ],
+      [
+       4,
+       4,
+       22643,
+       0
+      ],
+      [
+       5,
+       3,
+       22644,
+       0
+      ],
+      [
+       5,
+       4,
+       22645,
+       0
+      ],
+      [
+       5,
+       5,
+       22646,
+       0
+      ],
+      [
+       6,
+       4,
+       22647,
+       2
+      ],
+      [
+       6,
+       5,
+       22648,
+       0
+      ]
+     ]
+    },
+    {
+     "id": 60,
+     "axis": 1,
+     "x0": -2,
+     "z0": -3,
+     "w": 9,
+     "h": 9,
+     "grid": "rr....---rrr....--.rrr....-..rrrrrrr...rrrrrr....rrrrr-....rrr.--....rrr---....rr",
+     "partner": [
+      -1,
+      0,
+      0
+     ],
+     "writes": [
+      [
+       0,
+       -1,
+       22649,
+       1
+      ],
+      [
+       0,
+       0,
+       22651,
+       1
+      ],
+      [
+       1,
+       -1,
+       22650,
+       1
+      ],
+      [
+       1,
+       0,
+       22652,
+       1
+      ],
+      [
+       1,
+       1,
+       22654,
+       1
+      ],
+      [
+       2,
+       0,
+       22653,
+       1
+      ],
+      [
+       2,
+       1,
+       22655,
+       1
+      ],
+      [
+       2,
+       2,
+       22657,
+       1
+      ],
+      [
+       3,
+       1,
+       22656,
+       1
+      ],
+      [
+       3,
+       2,
+       22658,
+       1
+      ],
+      [
+       3,
+       3,
+       22660,
+       3
+      ],
+      [
+       4,
+       2,
+       22659,
+       1
+      ],
+      [
+       4,
+       3,
+       22661,
+       1
+      ]
+     ]
+    },
+    {
+     "id": 61,
+     "axis": 0,
+     "x0": -4,
+     "z0": -5,
+     "w": 9,
+     "h": 9,
+     "grid": "rr....---rrr....--.rrr....-..rrr.......rrr......rrrr..-..rrrrr.--.rrrrrr---rrr.rr",
+     "partner": [
+      -1,
+      0,
+      0
+     ],
+     "writes": [
+      [
+       -2,
+       -3,
+       22649,
+       0
+      ],
+      [
+       -2,
+       -2,
+       22650,
+       0
+      ],
+      [
+       -1,
+       -3,
+       22651,
+       0
+      ],
+      [
+       -1,
+       -2,
+       22652,
+       0
+      ],
+      [
+       -1,
+       -1,
+       22653,
+       0
+      ],
+      [
+       0,
+       -2,
+       22654,
+       0
+      ],
+      [
+       0,
+       -1,
+       22655,
+       0
+      ],
+      [
+       0,
+       0,
+       22656,
+       0
+      ],
+      [
+       1,
+       -1,
+       22657,
+       0
+      ],
+      [
+       1,
+       0,
+       22658,
+       0
+      ],
+      [
+       1,
+       1,
+       22659,
+       0
+      ],
+      [
+       2,
+       0,
+       22660,
+       2
+      ],
+      [
+       2,
+       1,
+       22661,
+       0
+      ]
+     ]
+    },
+    {
+     "id": 62,
+     "axis": 1,
+     "x0": -2,
+     "z0": -3,
+     "w": 9,
+     "h": 9,
+     "grid": "rr....---rrr....--.rrr....-rrrrr....rrrrrr...rrrrrrr..-....rrr.--....rrr---....rr",
+     "partner": [
+      -1,
+      0,
+      0
+     ],
+     "writes": [
+      [
+       0,
+       -1,
+       22661,
+       3
+      ],
+      [
+       0,
+       0,
+       22659,
+       3
+      ],
+      [
+       1,
+       -1,
+       22660,
+       1
+      ],
+      [
+       1,
+       0,
+       22658,
+       3
+      ],
+      [
+       1,
+       1,
+       22656,
+       3
+      ],
+      [
+       2,
+       0,
+       22657,
+       3
+      ],
+      [
+       2,
+       1,
+       22655,
+       3
+      ],
+      [
+       2,
+       2,
+       22653,
+       3
+      ],
+      [
+       3,
+       1,
+       22654,
+       3
+      ],
+      [
+       3,
+       2,
+       22652,
+       3
+      ],
+      [
+       3,
+       3,
+       22650,
+       3
+      ],
+      [
+       4,
+       2,
+       22651,
+       3
+      ],
+      [
+       4,
+       3,
+       22649,
+       3
+      ]
+     ]
+    },
+    {
+     "id": 63,
+     "axis": 0,
+     "x0": 0,
+     "z0": -1,
+     "w": 9,
+     "h": 9,
+     "grid": "rr.rrr---rrrrrr.--.rrrrr..-..rrrr......rrr.......rrr..-....rrr.--....rrr---....rr",
+     "partner": [
+      -1,
+      0,
+      0
+     ],
+     "writes": [
+      [
+       2,
+       1,
+       22661,
+       2
+      ],
+      [
+       2,
+       2,
+       22660,
+       0
+      ],
+      [
+       3,
+       1,
+       22659,
+       2
+      ],
+      [
+       3,
+       2,
+       22658,
+       2
+      ],
+      [
+       3,
+       3,
+       22657,
+       2
+      ],
+      [
+       4,
+       2,
+       22656,
+       2
+      ],
+      [
+       4,
+       3,
+       22655,
+       2
+      ],
+      [
+       4,
+       4,
+       22654,
+       2
+      ],
+      [
+       5,
+       3,
+       22653,
+       2
+      ],
+      [
+       5,
+       4,
+       22652,
+       2
+      ],
+      [
+       5,
+       5,
+       22651,
+       2
+      ],
+      [
+       6,
+       4,
+       22650,
+       2
+      ],
+      [
+       6,
+       5,
+       22649,
+       2
+      ]
+     ]
+    },
+    {
+     "id": 64,
+     "axis": 1,
+     "x0": -2,
+     "z0": -3,
+     "w": 9,
+     "h": 9,
+     "grid": "rr....---rrr....--.rrr....-..rrrrrrr...rrrrrr...rrrrrr-....rrr.--....rrr---....rr",
+     "partner": [
+      -1,
+      0,
+      0
+     ],
+     "writes": [
+      [
+       0,
+       -1,
+       22649,
+       1
+      ],
+      [
+       0,
+       0,
+       22651,
+       1
+      ],
+      [
+       1,
+       -1,
+       22650,
+       1
+      ],
+      [
+       1,
+       0,
+       22652,
+       1
+      ],
+      [
+       1,
+       1,
+       22654,
+       1
+      ],
+      [
+       1,
+       2,
+       22441,
+       1
+      ],
+      [
+       2,
+       0,
+       22653,
+       1
+      ],
+      [
+       2,
+       1,
+       22655,
+       1
+      ],
+      [
+       2,
+       2,
+       22657,
+       1
+      ],
+      [
+       3,
+       1,
+       22656,
+       1
+      ],
+      [
+       3,
+       2,
+       22658,
+       1
+      ],
+      [
+       3,
+       3,
+       22660,
+       3
+      ],
+      [
+       4,
+       2,
+       22659,
+       1
+      ],
+      [
+       4,
+       3,
+       22661,
+       1
+      ]
+     ]
+    },
+    {
+     "id": 65,
+     "axis": 0,
+     "x0": -2,
+     "z0": -3,
+     "w": 9,
+     "h": 9,
+     "grid": "rr....---rrr....--.rrr....-..rrrr......rrr......rrrr..-..rrrrr.--.rrrrrr---rrr.rr",
+     "partner": [
+      -1,
+      0,
+      0
+     ],
+     "writes": [
+      [
+       0,
+       -1,
+       22649,
+       0
+      ],
+      [
+       0,
+       0,
+       22650,
+       0
+      ],
+      [
+       1,
+       -1,
+       22651,
+       0
+      ],
+      [
+       1,
+       0,
+       22652,
+       0
+      ],
+      [
+       1,
+       1,
+       22653,
+       0
+      ],
+      [
+       2,
+       0,
+       22654,
+       0
+      ],
+      [
+       2,
+       1,
+       22655,
+       0
+      ],
+      [
+       2,
+       2,
+       22656,
+       0
+      ],
+      [
+       3,
+       0,
+       22441,
+       0
+      ],
+      [
+       3,
+       1,
+       22657,
+       0
+      ],
+      [
+       3,
+       2,
+       22658,
+       0
+      ],
+      [
+       3,
+       3,
+       22659,
+       0
+      ],
+      [
+       4,
+       2,
+       22660,
+       2
+      ],
+      [
+       4,
+       3,
+       22661,
+       0
+      ]
+     ]
+    },
+    {
+     "id": 66,
+     "axis": 1,
+     "x0": -2,
+     "z0": -3,
+     "w": 9,
+     "h": 9,
+     "grid": "rr....---rrr....--.rrr....-rrrrrr...rrrrrr...rrrrrrr..-....rrr.--....rrr---....rr",
+     "partner": [
+      -1,
+      0,
+      0
+     ],
+     "writes": [
+      [
+       0,
+       -1,
+       22661,
+       3
+      ],
+      [
+       0,
+       0,
+       22659,
+       3
+      ],
+      [
+       1,
+       -1,
+       22660,
+       1
+      ],
+      [
+       1,
+       0,
+       22658,
+       3
+      ],
+      [
+       1,
+       1,
+       22656,
+       3
+      ],
+      [
+       2,
+       0,
+       22657,
+       3
+      ],
+      [
+       2,
+       1,
+       22655,
+       3
+      ],
+      [
+       2,
+       2,
+       22653,
+       3
+      ],
+      [
+       3,
+       0,
+       22441,
+       3
+      ],
+      [
+       3,
+       1,
+       22654,
+       3
+      ],
+      [
+       3,
+       2,
+       22652,
+       3
+      ],
+      [
+       3,
+       3,
+       22650,
+       3
+      ],
+      [
+       4,
+       2,
+       22651,
+       3
+      ],
+      [
+       4,
+       3,
+       22649,
+       3
+      ]
+     ]
+    },
+    {
+     "id": 67,
+     "axis": 0,
+     "x0": 0,
+     "z0": -1,
+     "w": 9,
+     "h": 9,
+     "grid": "rr.rrr---rrrrrr.--.rrrrr..-..rrrr......rrr......rrrr..-....rrr.--....rrr---....rr",
+     "partner": [
+      -1,
+      0,
+      0
+     ],
+     "writes": [
+      [
+       2,
+       1,
+       22661,
+       2
+      ],
+      [
+       2,
+       2,
+       22660,
+       0
+      ],
+      [
+       3,
+       1,
+       22659,
+       2
+      ],
+      [
+       3,
+       2,
+       22658,
+       2
+      ],
+      [
+       3,
+       3,
+       22657,
+       2
+      ],
+      [
+       3,
+       4,
+       22441,
+       2
+      ],
+      [
+       4,
+       2,
+       22656,
+       2
+      ],
+      [
+       4,
+       3,
+       22655,
+       2
+      ],
+      [
+       4,
+       4,
+       22654,
+       2
+      ],
+      [
+       5,
+       3,
+       22653,
+       2
+      ],
+      [
+       5,
+       4,
+       22652,
+       2
+      ],
+      [
+       5,
+       5,
+       22651,
+       2
+      ],
+      [
+       6,
+       4,
+       22650,
+       2
+      ],
+      [
+       6,
+       5,
+       22649,
+       2
       ]
      ]
     }
