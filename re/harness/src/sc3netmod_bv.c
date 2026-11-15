@@ -300,9 +300,11 @@ static int bv_diag_on(void) {
 }
 static int dav_is_mid(WORD id);                                          /* sc3netmod_dav.c */
 static WORD dav_twin_piece(WORD id);
+static int dbv_is_piece(WORD id);                                        /* sc3netmod_dbv.c */
 static int bv_dgcell(DWORD v, int x, int z) {                            /* a diagonal band's own cell */
     WORD id = (WORD)(v & 0xffff);
-    return v && (dbv_claimed(x, z) || dav_is_mid(id) || dav_twin_piece(id) != 0);
+    /* DBV's claims hold the bands of its last pass only: a pass over a wide window (BVGROW) also needs its pieces */
+    return v && (dbv_claimed(x, z) || dbv_is_piece(id) || dav_is_mid(id) || dav_twin_piece(id) != 0);
 }
 static int bv_dgr(BvPass *p, int x, int z) {
     DWORD v;
@@ -476,7 +478,14 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
     sa += cut_lo;                                                        /* task avx32 */
     sb -= cut_hi;
     n = sb - sa + 1;
-    if (n < BV_MIN_COLS) return 0;
+    if (n < BV_MIN_COLS) {
+        /* task orthfix BVDIAG: a stem of 2 full columns that ends on a diagonal band with extra cells on its stair (the
+           sweep's 6-cell arms: xsect 42 / 44 east halves) is a boulevard too; anything else this short is not */
+        int dnx[3], ok2 = 0;
+        for (e = 0; e < 2 && n == 2 && !cut_hi && !cut_lo; e++)
+            if (bv_dend(p, e ? sa : sb, e ? -1 : 1, w0, dnx) >= 1) ok2 = 1;
+        if (!ok2) return 0;
+    }
     if (n < BV_MIN_RUN) {
         /* task avends F2b: one end bends into a diagonal boulevard (decided with the end types below) */
         int bend = 0;
@@ -485,7 +494,7 @@ static int bv_run1(BvPass *p, int sa, int w0, int *psb, const char **why, BYTE *
             for (k = 0; k < 3; k++) { g += bv_rraw(p, se, w0 + k); c += bv_rraw(p, se, w0 + k) && bv_cl(p, se, w0 + k); }
             if (g && c == g) bend = 1;
         }
-        for (e = 0; e < 2 && n == BV_TAPER && !bend && !cut_hi && !cut_lo; e++) {   /* task orthfix BVDIAG */
+        for (e = 0; e < 2 && n <= BV_TAPER && !bend && !cut_hi && !cut_lo; e++) {   /* task orthfix BVDIAG */
             int dnx[3];
             if (bv_dend(p, e ? sa : sb, e ? -1 : 1, w0, dnx) >= 0) bend = 2;
         }
