@@ -220,6 +220,8 @@ typedef struct {
     int nfor, forx[DBV_MAX_FOR], forz[DBV_MAX_FOR];       /* task dbvtouch: cells masked out of the read buffer */
     DWORD forv[DBV_MAX_FOR];
     int nstub;                  /* task dbvtouch: one-cell stub arms of the last accepted band */
+    int xout;                   /* task diagfix DBVX: a template could match but its window leaves the read buffer */
+    int xdbg, xbest, xbid, xbx, xbz, xba, xbzz;   /* task diagfix DBVX: SC3NETMOD_DBVXDBG nearest miss */
 } DbvPass;
 
 #define DBV_RX(p, cx, cz) ((p)->axis ? -(cz) - 1 : (cx))
@@ -507,6 +509,7 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
     p->n = 0;
     p->ragged = 0;                                                       /* task avrbtfix */
     p->nstub = 0;                                                        /* task dbvtouch */
+    p->xout = 0;                                                         /* task diagfix DBVX */
     memset(endrow, 0, n);
     memset(jbrow, 0, n);
     memset(jxrow, 0, n);
@@ -523,17 +526,37 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
             armx[na] = (RX) + dx_; armz[na] = (RZ) + dz_; armo[na] = o_; na++; \
             MARK((RX) + dx_, (RZ) + dz_) |= 4; } } while (0)
     /* ---- task diagfix DBVX: crossing templates, tried on rows with road beside and on the chain's end rows */
+    {
+        static int dbg = -1;
+        if (dbg < 0) dbg = env_on("SC3NETMOD_DBVXDBG");
+        p->xdbg = dbg;
+        p->xbest = 1 << 30;
+    }
     for (k = 0; k < n && nxm < 8 && g_dbvx_n && dbvx_on(); k++) {
         int z = z0 + k, a = LEFT(z), t2;
         if (k && k != n - 1 && !dbv_rd(p, a - 1, z) && !dbv_rd(p, a + 4, z)) continue;
         for (t2 = 0; t2 < g_dbvx_n && nxm < 8; t2++) {
             const DbvX *q = &g_dbvx[t2];
-            int i2, j2, ok = q->got == q->h && q->nw, dup = 0;
-            for (j2 = 0; j2 < q->h && ok; j2++)
-                for (i2 = 0; i2 < q->w && ok; i2++) {
+            int i2, j2, ok = q->got == q->h && q->nw, dup = 0, outside = 0;
+            int miss = 0, mx = 0, mz = 0;
+            for (j2 = 0; j2 < q->h && (ok || p->xdbg); j2++)
+                for (i2 = 0; i2 < q->w && (ok || p->xdbg); i2++) {
                     char g = q->grid[j2 * q->w + i2];
-                    if (g != '-' && (g == 'r') != (dbv_rd(p, a + q->x0 + i2, z + q->z0 + j2) != 0)) ok = 0;
+                    int cx2 = a + q->x0 + i2, cz2 = z + q->z0 + j2, rx2 = DBV_RX(p, cx2, cz2), rz2 = DBV_RZ(p, cx2, cz2);
+                    if (g == '-') continue;
+                    if (rx2 < p->b.x0 || rz2 < p->b.z0 || rx2 >= p->b.x0 + p->b.w || rz2 >= p->b.z0 + p->b.h) {
+                        if (g == 'r') outside = 1;               /* not read: a wider pass decides (as DAV's) */
+                        continue;
+                    }
+                    if ((g == 'r') != (dbv_rd(p, cx2, cz2) != 0)) {
+                        if (!miss) { mx = rx2; mz = rz2; }
+                        ok = 0; miss++;
+                    }
                 }
+            if (p->xdbg && miss && miss < p->xbest) {         /* SC3NETMOD_DBVXDBG: the nearest miss */
+                p->xbest = miss; p->xbid = q->id; p->xbx = mx; p->xbz = mz; p->xba = a; p->xbzz = z;
+            }
+            if (ok && outside) { p->xout = 1; continue; }
             if (!ok) continue;
             for (m = 0; m < nxm; m++) if (xmt[m] == t2) dup = 1;
             if (dup) continue;
@@ -546,6 +569,9 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
             }
         }
     }
+    if (p->xdbg && !nxm && p->xbest < (1 << 30))
+        logf("dbv: DBVXDBG band axis %d from canonical (%d,%d): no template; nearest %d (%d cell(s) off, first at real "
+             "(%d,%d)), anchor canonical (%d,%d)", p->axis, x0, z0, p->xbid, p->xbest, p->xbx, p->xbz, p->xba, p->xbzz);
     /* ---- ends */
     for (e = 1; e >= 0; e--) {
         int z_e = e ? z0 + n - 1 : z0, a_e = LEFT(z_e), kind, sgn = e ? 1 : -1, dx, dz;
@@ -985,13 +1011,16 @@ static int dbv_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
             for (cx = cx0; cx <= cx1; cx++) {
                 const char *why = "";
                 int n = 0, clean = 0, nw = 0, ntry = 0, nxk = 0;    /* task diagfix: nxk DAVXNET cells kept */
+                int okb;                                       /* task diagfix DBVX */
                 dbv_unmask(&P);                                /* task dbvtouch: the last band's mask */
                 if (!dbv_full(&P, cx, cz) || dbv_full(&P, cx - 1, cz - 1)) continue;
                 while (dbv_full(&P, cx + n, cz + n) && n < DBV_MAX_ROWS) n++;
                 for (k = 0; k < n; k++)
                     clean += !dbv_rd(&P, cx + k - 1, cz + k) && !dbv_rd(&P, cx + k + 4, cz + k);
                 if (clean < DBV_MIN_CLEAN) continue;
-                if (!dbv_band_t(&P, cx, cz, n, &why, &ntry)) {             /* task dbvtouch */
+                okb = dbv_band_t(&P, cx, cz, n, &why, &ntry);              /* task dbvtouch */
+                if (P.xout) { border = 1; dbv_clear(&P); continue; }      /* task diagfix DBVX: a wider read decides */
+                if (!okb) {
                     logf("dbv: %s: band axis %d from canonical (%d,%d), %d row(s) left to the stock tiler: %s%s", who, axis,
                          cx, cz, n, why, ntry ? " (DBVTOUCH: still refused with the touching road masked)" : "");
                     dbv_clear(&P);
