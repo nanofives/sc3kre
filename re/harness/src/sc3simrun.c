@@ -73,9 +73,14 @@
  *                                     env SC3SIMRUN_SIRENS=0 = stock, SC3SIMRUN_SIREN_PERVEH / _PCT / _COOL per part)
  *                                     [lvwrap] mode=1 (LVWRAP block: cap the city land value average at 255;
  *                                     0 = stock, 2 = observe; env SC3SIMRUN_LVWRAP=0/1/2)
+ *                                     [sandbox] enabled=0 (SANDBOX block: 1 = no zone-evaluator abandonment;
+ *                                     env SC3SIMRUN_SANDBOX=1/0)
+ *                                     [gentle] enabled=0 share_pct=25 (GENTLE block: negative-demand abandonment only
+ *                                     under that share of the valve range; env SC3SIMRUN_GENTLE=1/0, _GENTLE_SHARE)
  * Exports (measurement): sc3simrun_animate(on) switches the scroll-frame rate at run time (returns the old state),
  *         sc3simrun_sirens(DWORD out[4]) = siren states recorded, cooldown blocks, siren-actor updates, removals.
  *         sc3simrun_lvwrap(DWORD out[4]) = average stores, stores over 255, last true average, last cell count.
+ *         sc3simrun_abandon(DWORD out[42]) = abandonment counts (layout at the function).
  *         sc3simrun_stats(DWORD out[6]) = scroll frames seen by the stub, agent ticks, frozen agent ticks, strip refills, producer ticks run on the revealed strip, producer ticks skipped.
  * Env:    SC3SIMRUN_LOG=<abs path>  SC3SIMRUN_TRACE=1 (20 Hz sampler + hold/pause caller log)
  *         SC3SIMRUN_RESUME=1 (test only: post 0xc2a35d80 once per unit of +0x140 after load)
@@ -267,6 +272,7 @@ static int g_car_margin = 5;                     /* sim rect = view box + this m
 static void churn_ini(const char *path);
 static void sirens_ini(const char *path);
 static void lvwrap_ini(const char *path);
+static void abandon_ini(const char *path);
 
 static void ini_read(void) {
     char path[MAX_PATH];
@@ -284,6 +290,7 @@ static void ini_read(void) {
     churn_ini(path);
     sirens_ini(path);
     lvwrap_ini(path);
+    abandon_ini(path);
 }
 
 /* ============================================================ FREEZE */
@@ -1021,6 +1028,253 @@ __declspec(dllexport) void __cdecl sc3simrun_lvwrap(DWORD *out) {
     out[3] = g_lv_count;
 }
 
+/* ============================================================ SANDBOX + GENTLE (abandonment)
+ * GitHub issue #3 (2026-11-14), owner decisions 2026-11-15, task abandon (re/analysis/ZONE_REDEVELOPMENT.md section 5).
+ * The R/C/I evaluators (SIMRCI 0x10028f12 / 0x1000fd53 / 0x10017fc0) look at each lot once per ~30 game days. A standing
+ * building (state 1) is abandoned (re-placed as the same attrib in state 2, sc3_resdev_post_state_change 0x10029a38 /
+ * ind 0x100191fe with flag 2) by:
+ *   (a) radioactive cell, no roll;
+ *   (b) unpowered / not near transport / trip failed / no water at density > 1: rand(100) < NoServicePercentage / x;
+ *   (c) raw demand < 0: rand(-valve min) < -(net demand / x);
+ *   (d) land value under half the lot class minimum, no roll;
+ *   (p) industrial lot class 0x2454 over the ag air / water pollution limits, no roll.
+ * Industrial farms are removed (BuildingLayer vt+0x5c) instead in (a), (p), (d). x = the lot width in cells.
+ *
+ * SANDBOX ([sandbox] enabled=0 default; env SC3SIMRUN_SANDBOX=1/0 wins): no standing R/C/I building is abandoned or
+ *   removed by (a)-(d) and (p). The (b) and (c) rolls are made to miss (the game then carries on as after a miss);
+ *   the (a), (d), (p) posts and the three farm removals are skipped. Where the game would then re-post the building
+ *   for a changed garbage bit (bVar1), the skip makes that same re-post (state 1). Abandoned buildings already in the
+ *   city recover as stock. Disasters (SIMDSTR) are not touched.
+ * GENTLE ([gentle] enabled=0 default, share_pct=25; env SC3SIMRUN_GENTLE=1/0, SC3SIMRUN_GENTLE_SHARE=<pct>): the (c)
+ *   roll may fire only while the raw valve value (what the RCI bar shows) is below min + (max - min) * share_pct / 100.
+ *   At or above that line the roll misses; below it the stock roll runs unchanged. Valves read -2000..2000, so
+ *   share_pct 25 = value under -1000 = the bar under half of its negative side; 50 = stock; 0 = never.
+ * Every patched site is a `call rel32` (or the 14-byte farm removal) checked byte for byte before it is written; a
+ * site that differs is left stock and logged. Env SC3SIMRUN_ABANDON_LOG=1 logs every decision. */
+
+static int g_sbx_on = 0, g_gnt_on = 0, g_gnt_share = 25, g_ab_log = 0;
+static DWORD g_ab_delta;                          /* SIMRCI base - 0x10000000 */
+static volatile LONG g_ab_would[3][6], g_ab_block[3][6], g_ab_held[3];   /* zone R/C/I x branch a b c d p farm */
+static DWORD g_ab_last_sum;
+static const char *const k_ab_zone[3] = { "res", "com", "ind" };
+static const char *const k_ab_br[6] = { "(a) radioactive", "(b) no service", "(c) negative demand", "(d) low land value",
+                                        "(p) ag pollution", "farm removal" };
+
+static void abandon_ini(const char *path) {
+    char env[16];
+    if (path[0]) {
+        g_sbx_on = GetPrivateProfileIntA("sandbox", "enabled", 0, path) ? 1 : 0;
+        g_gnt_on = GetPrivateProfileIntA("gentle", "enabled", 0, path) ? 1 : 0;
+        g_gnt_share = (int)GetPrivateProfileIntA("gentle", "share_pct", 25, path);
+    }
+    if (GetEnvironmentVariableA("SC3SIMRUN_SANDBOX", env, sizeof(env))) g_sbx_on = env[0] == '1';
+    if (GetEnvironmentVariableA("SC3SIMRUN_GENTLE", env, sizeof(env))) g_gnt_on = env[0] == '1';
+    if (GetEnvironmentVariableA("SC3SIMRUN_GENTLE_SHARE", env, sizeof(env))) g_gnt_share = atoi(env);
+    if (GetEnvironmentVariableA("SC3SIMRUN_ABANDON_LOG", env, sizeof(env))) g_ab_log = env[0] == '1';
+    if (g_gnt_share < 0) g_gnt_share = 0;
+    if (g_gnt_share > 100) g_gnt_share = 100;
+}
+
+static void ab_summary(void) {                    /* at most once a minute, from the game thread */
+    DWORD t = GetTickCount();
+    int z;
+    if (t - g_ab_last_sum < 60000) return;
+    g_ab_last_sum = t;
+    for (z = 0; z < 3; z++)
+        logf("ABANDON> %s: would abandon a/b/c/d/p/farm %ld/%ld/%ld/%ld/%ld/%ld, sandbox blocked %ld/%ld/%ld/%ld/%ld/%ld, "
+             "gentle held (c) %ld", k_ab_zone[z], g_ab_would[z][0], g_ab_would[z][1], g_ab_would[z][2], g_ab_would[z][3],
+             g_ab_would[z][4], g_ab_would[z][5], g_ab_block[z][0], g_ab_block[z][1], g_ab_block[z][2], g_ab_block[z][3],
+             g_ab_block[z][4], g_ab_block[z][5], g_ab_held[z]);
+}
+
+/* the (b) and (c) roll call sites: cRZRandom::RandomUint32Uniform 0x10039a9a, frame read at the evaluator's ebp */
+typedef DWORD (__fastcall *PFN_AbRand)(void *rng, void *edx, DWORD range);
+typedef struct { DWORD call; BYTE zone, br; signed char net, dem, mn, mx, x; DWORD nosvc; BYTE pre[6], post[8]; } AB_ROLL;
+static const AB_ROLL g_ab_roll[6] = {      /* x 0 = ebx, else [ebp+x]; br 1 = (b), 2 = (c) */
+    { 0x1002951b, 0, 1, 0, 0, 0, 0, 0, 0x10058014, { 0xff,0x6a,0x64,0x8d,0x4e,0x48 }, { 0x8b,0xc8,0xa1,0x14,0x80,0x05,0x10,0x33 } },
+    { 0x10010353, 1, 1, 0, 0, 0, 0, 0, 0x1005753c, { 0xff,0x6a,0x64,0x8d,0x4e,0x48 }, { 0x8b,0xc8,0xa1,0x3c,0x75,0x05,0x10,0x33 } },
+    { 0x10018557, 2, 1, 0, 0, 0, 0, -0x40, 0x100576cc, { 0x69,0x6a,0x64,0x8d,0x4e,0x78 }, { 0x8b,0xc8,0xa1,0xcc,0x76,0x05,0x10,0x33 } },
+    { 0x1002939d, 0, 2, -0x38, -0x18, -0x50, -0x54, 0, 0, { 0x8d,0x4e,0x48,0xf7,0xd8,0x50 }, { 0x8b,0xc8,0x8b,0x45,0xc8,0x99,0xf7,0xfb } },
+    { 0x100101d5, 1, 2, -0x34, -0x18, -0x50, -0x54, 0, 0, { 0x8d,0x4e,0x48,0xf7,0xd8,0x50 }, { 0x8b,0xc8,0x8b,0x45,0xcc,0x99,0xf7,0xfb } },
+    { 0x10018630, 2, 2, -0x38, -0x24, -0x64, -0x68, -0x40, 0, { 0x8d,0x4e,0x78,0xf7,0xd8,0x50 }, { 0x8b,0xc8,0x8b,0x45,0xc8,0x99,0xf7,0x7d } },
+};
+static PFN_AbRand g_ab_rand;
+
+static DWORD __cdecl ab_roll(int i, void *rng, DWORD range, BYTE *bp, DWORD ebx) {
+    const AB_ROLL *s = &g_ab_roll[i];
+    DWORD v = g_ab_rand(rng, NULL, range), x = 1, ret = v;
+    LONG net = 0, dem = 0, mn = 0, mx = 0, thr = 0;
+    int fire, z = s->zone, what = 0;              /* what: 1 sandbox, 2 gentle held */
+    __try {
+        x = s->x ? *(DWORD *)(bp + s->x) : ebx;
+        if (!x) return v;                         /* the game would divide by it next: leave it to the game */
+        if (s->br == 1) fire = v < *(DWORD *)(s->nosvc + g_ab_delta) / x;
+        else {
+            net = *(LONG *)(bp + s->net); dem = *(LONG *)(bp + s->dem);
+            mn = *(LONG *)(bp + s->mn); mx = *(LONG *)(bp + s->mx);
+            fire = (LONG)v < -(net / (LONG)x);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return v; }
+    if (!fire) return v;
+    InterlockedIncrement(&g_ab_would[z][s->br]);
+    if (g_sbx_on) {
+        InterlockedIncrement(&g_ab_block[z][s->br]);
+        ret = s->br == 1 ? 0xffffffff : 0x7fffffff;   /* (b) `jae` unsigned, (c) `jge` signed: both now miss */
+        what = 1;
+    } else if (s->br == 2 && g_gnt_on) {
+        thr = mn + (LONG)((__int64)(mx - mn) * g_gnt_share / 100);
+        if (dem >= thr) { InterlockedIncrement(&g_ab_held[z]); ret = 0x7fffffff; what = 2; }
+    }
+    if (g_ab_log)
+        logf("ABANDON> %s %s: roll %lu x %lu -> %s", k_ab_zone[z], k_ab_br[s->br], v, x,
+             what == 1 ? "blocked (sandbox)" : what == 2 ? "held (gentle)" : "fires");
+    if (g_ab_log && s->br == 2) {
+        if (g_gnt_on) logf("ABANDON>   demand %ld, net %ld, valve %ld..%ld, gentle line %ld", dem, net, mn, mx, thr);
+        else logf("ABANDON>   demand %ld, net %ld, valve %ld..%ld", dem, net, mn, mx);
+    }
+    ab_summary();
+    return ret;
+}
+
+#define AB_RSTUB(n) static __declspec(naked) void ab_rstub_##n(void) { __asm push ebx __asm push ebp \
+    __asm push dword ptr [esp + 12] __asm push ecx __asm push n __asm call ab_roll __asm add esp, 20 __asm ret 4 }
+AB_RSTUB(0) AB_RSTUB(1) AB_RSTUB(2) AB_RSTUB(3) AB_RSTUB(4) AB_RSTUB(5)
+static void (*const g_ab_rstub[6])(void) = { ab_rstub_0, ab_rstub_1, ab_rstub_2, ab_rstub_3, ab_rstub_4, ab_rstub_5 };
+
+/* the (a) / (d) / (p) post call sites: post_state_change(bldg, coords*, flags | 2), thiscall, ret 0xc */
+typedef BYTE (__fastcall *PFN_AbPost)(void *dev, void *edx, void *bldg, void *coords, DWORD flags);
+typedef struct { DWORD call, target; BYTE zone, br; signed char bvar; BYTE pre[6], post[8]; } AB_POST;
+static const AB_POST g_ab_post[7] = {      /* bvar = the evaluator's "re-post" byte when the game checks it next, else 0 */
+    { 0x1002934f, 0x10029a38, 0, 0, 0,    { 0x02,0x50,0x57,0xff,0x75,0xf0 }, { 0xc7,0x45,0xd4,0x01,0x00,0x00,0x00,0xe9 } },
+    { 0x1002942a, 0x10029a38, 0, 3, 0x0b, { 0xc3,0x50,0x57,0xff,0x75,0xf0 }, { 0x80,0x65,0x0b,0x00,0x89,0x5d,0xd4,0xe9 } },
+    { 0x10010187, 0x10029a38, 1, 0, 0,    { 0x02,0x50,0x57,0xff,0x75,0xf0 }, { 0xc7,0x45,0xd4,0x01,0x00,0x00,0x00,0xe9 } },
+    { 0x10010262, 0x10029a38, 1, 3, 0x0b, { 0xc3,0x50,0x57,0xff,0x75,0xf0 }, { 0x80,0x65,0x0b,0x00,0x89,0x5d,0xd4,0xe9 } },
+    { 0x10018523, 0x100191fe, 2, 0, -1,   { 0x02,0x50,0x57,0xff,0x75,0xf0 }, { 0x80,0x65,0xff,0x00,0xeb,0xdd,0x80,0x7d } },
+    { 0x10018616, 0x100191fe, 2, 4, -1,   { 0x02,0x50,0x57,0xff,0x75,0xf0 }, { 0x80,0x65,0xff,0x00,0xeb,0xdd,0x83,0x7d } },
+    { 0x10018705, 0x100191fe, 2, 3, -1,   { 0xc3,0x50,0x57,0xff,0x75,0xf0 }, { 0x80,0x65,0xff,0x00,0x89,0x5d,0xe4,0xe9 } },
+};
+static PFN_AbPost g_ab_postfn[7];
+
+static BYTE __cdecl ab_post(int i, void *dev, void *bldg, void *coords, DWORD flags, BYTE *bp) {
+    const AB_POST *s = &g_ab_post[i];
+    int z = s->zone;
+    InterlockedIncrement(&g_ab_would[z][s->br]);
+    if (!g_sbx_on) return g_ab_postfn[i](dev, NULL, bldg, coords, flags);
+    InterlockedIncrement(&g_ab_block[z][s->br]);
+    if (g_ab_log) logf("ABANDON> %s %s: blocked (sandbox) at %lu,%lu", k_ab_zone[z], k_ab_br[s->br],
+                       ((DWORD *)coords)[0], ((DWORD *)coords)[1]);
+    ab_summary();
+    /* the game clears its re-post byte right after this call: make the re-post it would have made (state 1) */
+    if (s->bvar && bp[s->bvar]) return g_ab_postfn[i](dev, NULL, bldg, coords, (flags & ~3u) | 1);
+    return 0;
+}
+
+#define AB_PSTUB(n) static __declspec(naked) void ab_pstub_##n(void) { __asm push ebp \
+    __asm push dword ptr [esp + 16] __asm push dword ptr [esp + 16] __asm push dword ptr [esp + 16] __asm push ecx \
+    __asm push n __asm call ab_post __asm add esp, 24 __asm ret 12 }
+AB_PSTUB(0) AB_PSTUB(1) AB_PSTUB(2) AB_PSTUB(3) AB_PSTUB(4) AB_PSTUB(5) AB_PSTUB(6)
+static void (*const g_ab_pstub[7])(void) = { ab_pstub_0, ab_pstub_1, ab_pstub_2, ab_pstub_3, ab_pstub_4, ab_pstub_5, ab_pstub_6 };
+
+/* the industrial farm removals: mov ecx,[esi+0x9c] / push [ebp-0x10] / mov eax,[ecx] / call [eax+0x5c] (14 bytes)
+   become push [ebp-0x10] / call ab_fstub_n / 6 x nop. esi = the industrial developer. */
+typedef DWORD (__fastcall *PFN_AbRm)(void *layer, void *edx, void *bldg);
+static const DWORD g_ab_farm[3] = { 0x100184fd, 0x100185f0, 0x100186dc };
+static const BYTE k_ab_farm_bytes[14] = { 0x8b,0x8e,0x9c,0x00,0x00,0x00,0xff,0x75,0xf0,0x8b,0x01,0xff,0x50,0x5c };
+static const BYTE k_ab_farm_br[3] = { 0, 4, 3 };
+
+static void __cdecl ab_farm(int i, void *bldg, BYTE *dev) {
+    void *layer = *(void **)(dev + 0x9c);
+    InterlockedIncrement(&g_ab_would[2][5]);
+    if (!g_sbx_on) { ((PFN_AbRm)(*(void ***)layer)[0x5c / 4])(layer, NULL, bldg); return; }
+    InterlockedIncrement(&g_ab_block[2][5]);
+    if (g_ab_log) logf("ABANDON> ind farm removal in %s: blocked (sandbox)", k_ab_br[k_ab_farm_br[i]]);
+    ab_summary();
+}
+
+#define AB_FSTUB(n) static __declspec(naked) void ab_fstub_##n(void) { __asm push esi \
+    __asm push dword ptr [esp + 8] __asm push n __asm call ab_farm __asm add esp, 12 __asm ret 4 }
+AB_FSTUB(0) AB_FSTUB(1) AB_FSTUB(2)
+static void (*const g_ab_fstub[3])(void) = { ab_fstub_0, ab_fstub_1, ab_fstub_2 };
+
+/* abs32: the post bytes 3..6 are `mov eax, [abs32]`, which the loader relocates: compare it with the rebased global */
+static int ab_call_ok(BYTE *p, DWORD target, const BYTE *pre, const BYTE *post, DWORD abs32) {
+    if (IsBadReadPtr(p - 6, 19) || memcmp(p - 6, pre, 6) || p[0] != 0xe8) return 0;
+    if (abs32 ? memcmp(p + 5, post, 3) || *(DWORD *)(p + 8) != abs32 + g_ab_delta || p[12] != post[7]
+              : memcmp(p + 5, post, 8)) return 0;
+    return (DWORD)(p + 5) + *(DWORD *)(p + 1) == target + g_ab_delta;
+}
+
+static int ab_set_call(BYTE *p, void (*to)(void)) {
+    DWORD old;
+    if (!VirtualProtect(p + 1, 4, PAGE_EXECUTE_READWRITE, &old)) return 0;
+    *(DWORD *)(p + 1) = (DWORD)to - (DWORD)(p + 5);
+    /* no restore (task onramp): a restore can land mid-write in another mod on the same page */
+    FlushInstructionCache(GetCurrentProcess(), p + 1, 4);
+    return 1;
+}
+
+/* arms the sites each part needs; returns how many were patched, *want = how many it tried */
+static int abandon_arm(HMODULE rci, int *want) {
+    int i, n = 0;
+    g_ab_delta = (DWORD)rci - 0x10000000;
+    g_ab_rand = (PFN_AbRand)(0x10039a9a + g_ab_delta);
+    *want = 0;
+    for (i = 0; i < 6; i++) {
+        const AB_ROLL *s = &g_ab_roll[i];
+        BYTE *p = (BYTE *)(s->call + g_ab_delta);
+        if (!(g_sbx_on || (g_gnt_on && s->br == 2))) continue;
+        ++*want;
+        if (!ab_call_ok(p, 0x10039a9a, s->pre, s->post, s->br == 1 ? s->nosvc : 0)) {
+            logf("ABANDON> %s %s roll: SIMRCI+0x%05lX differs from shipped - NOT patched", k_ab_zone[s->zone], k_ab_br[s->br],
+                 s->call - 0x10000000);
+            continue;
+        }
+        n += ab_set_call(p, g_ab_rstub[i]);
+    }
+    if (!g_sbx_on) return n;
+    for (i = 0; i < 7; i++) {
+        const AB_POST *s = &g_ab_post[i];
+        BYTE *p = (BYTE *)(s->call + g_ab_delta);
+        ++*want;
+        if (!ab_call_ok(p, s->target, s->pre, s->post, 0)) {
+            logf("ABANDON> %s %s post: SIMRCI+0x%05lX differs from shipped - NOT patched", k_ab_zone[s->zone], k_ab_br[s->br],
+                 s->call - 0x10000000);
+            continue;
+        }
+        g_ab_postfn[i] = (PFN_AbPost)(s->target + g_ab_delta);
+        n += ab_set_call(p, g_ab_pstub[i]);
+    }
+    for (i = 0; i < 3; i++) {
+        BYTE *p = (BYTE *)(g_ab_farm[i] + g_ab_delta);
+        DWORD old;
+        ++*want;
+        if (IsBadReadPtr(p, 14) || memcmp(p, k_ab_farm_bytes, 14)) {
+            logf("ABANDON> ind farm removal %s: SIMRCI+0x%05lX differs from shipped - NOT patched", k_ab_br[k_ab_farm_br[i]],
+                 g_ab_farm[i] - 0x10000000);
+            continue;
+        }
+        if (!VirtualProtect(p, 14, PAGE_EXECUTE_READWRITE, &old)) continue;
+        p[0] = 0xff; p[1] = 0x75; p[2] = 0xf0;                 /* push dword ptr [ebp-0x10] */
+        p[3] = 0xe8; *(DWORD *)(p + 4) = (DWORD)g_ab_fstub[i] - (DWORD)(p + 8);
+        memset(p + 8, 0x90, 6);
+        FlushInstructionCache(GetCurrentProcess(), p, 14);    /* no restore (task onramp) */
+        n++;
+    }
+    return n;
+}
+
+/* measurement: out[0..17] would-abandon counts, zone-major (res a b c d p farm, com ..., ind ...), out[18..35] the same
+   for sandbox blocks, out[36..38] gentle holds per zone, out[39] sandbox on, out[40] gentle on, out[41] share_pct */
+__declspec(dllexport) void __cdecl sc3simrun_abandon(DWORD *out) {
+    int z, b;
+    for (z = 0; z < 3; z++) for (b = 0; b < 6; b++) {
+        out[z * 6 + b] = (DWORD)g_ab_would[z][b];
+        out[18 + z * 6 + b] = (DWORD)g_ab_block[z][b];
+    }
+    for (z = 0; z < 3; z++) out[36 + z] = (DWORD)g_ab_held[z];
+    out[39] = (DWORD)g_sbx_on; out[40] = (DWORD)g_gnt_on; out[41] = (DWORD)g_gnt_share;
+}
+
 /* ============================================================ sampler */
 
 static DWORD WINAPI sampler(LPVOID param) {
@@ -1058,6 +1312,18 @@ static DWORD WINAPI sampler(LPVOID param) {
         logf("### LVWRAP: mode=%d (%s), armed=%d", g_lv_mode, g_lv_mode == 1 ? "land value average capped at 255"
              : "observe, stock wrap kept", lvwrap_arm(rci));
     } else logf("### LVWRAP: off (stock land value average byte, wraps past 255)");
+    {   int n = 0, want = 0;
+        if (g_sbx_on || g_gnt_on) {
+            HMODULE rci;
+            while (!(rci = GetModuleHandleA("SIMRCI.DLL"))) Sleep(5);
+            n = abandon_arm(rci, &want);
+        }
+        if (g_sbx_on) logf("### SANDBOX: on, no R/C/I building abandoned or removed by the zone evaluators; %d of %d sites armed", n, want);
+        else logf("### SANDBOX: off (stock abandonment)");
+        if (g_gnt_on) logf("### GENTLE: on, share_pct=%d: the negative-demand roll only while the RCI valve is under min + range * %d%%%s",
+                           g_gnt_share, g_gnt_share, g_sbx_on ? " (Sandbox is on and wins)" : "");
+        else logf("### GENTLE: off (stock negative-demand roll)");
+    }
     while (!(simcity = GetModuleHandleA("SIMCITY.DLL"))) Sleep(5);
     if (g_anim_armed) {
         HMODULE strt;

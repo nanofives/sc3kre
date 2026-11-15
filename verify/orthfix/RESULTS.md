@@ -71,3 +71,15 @@ vs run10: 74 identical; 39 back to the opening box (identical to run9); 42 / 44 
 41 keeps its bend in both draw orders (`guard1/raw/R41_BxDA_L_rev_z4.png`). 39 with the diagonal drawn first
 (`guard1/raw/R39_BxDA_T1_rev_z4.png`) stays the stock ladder + stock junction: DAV's bend-1 refusal (the boulevard is
 not one-way yet in the main pass, the post-AVL pass checks avl_dir only), not from the guard. Picture `owner_shots/ba_39_guard.png`.
+
+## run12: DAVBVOUTER (child/orthfix e7fbe55 on main 8d2397f)
+
+39 drawn diagonal first gets the opening box (`post3/raw/R39_BxDA_T1_rev_z4.png`). 39 / 41 / 45 built in both orders
+in one game: reverse cells identical to sweep order (`order_cmp.py verify/orthfix/run11 39:2 41:4 45:6`). run12 vs
+run11: 77 identical. Off: `SC3NETMOD_DAVBVOUTER=0`.
+
+## run12: DAVBVOUTER (child/orthfix e7fbe55 on main 8d2397f)
+
+39 drawn diagonal first gets the opening box (`post3/raw/R39_BxDA_T1_rev_z4.png`). 39 / 41 / 45 built in both orders
+in one game: reverse cells identical to sweep order (`order_cmp.py verify/orthfix/run11 39:2 41:4 45:6`). run12 vs
+run11: 77 identical (build + final read). Off: `SC3NETMOD_DAVBVOUTER=0`.

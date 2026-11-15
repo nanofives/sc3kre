@@ -282,6 +282,24 @@ static int dav_bv_oneway(RbBuf *b, int x, int z) {
     return v && dav_bvbend_on() && bv_is_piece((WORD)(v & 0xffff)) && avl_dir(x, z) >= 0;
 }
 
+/* orthfix (xsect 39 drawn diagonal first): the straight cell a band bends into can hold BV's plain outer boulevard
+ * piece (one-way by itself) while AVL's band map has nothing there. dav_bv_oneway() asks avl_dir(), and AVL maps only
+ * its own bands: drawn boulevard first, the cell was a stock avenue AVL mapped before BV converted it; drawn diagonal
+ * first, AVL refused that band (the ladder beside it was two-way), so DAV refused the bend in the post-AVL pass, BV's
+ * opening box never came, and (after a post-pass accept alone) the next edit whose window reached the band reverted it.
+ * So both passes also accept BV's outer piece itself (only g_bv_p[0], no box / junction / nose piece).
+ * Off: SC3NETMOD_DAVBVOUTER=0. */
+static int g_dav_bvouter = -1;
+static int dav_bv_outer(RbBuf *b, int x, int z) {
+    DWORD v = rb_at(b, x, z);
+    if (g_dav_bvouter < 0) {
+        g_dav_bvouter = !env_off("SC3NETMOD_DAVBVOUTER");
+        logf("dav: a band bends into BV's outer boulevard piece without AVL's map (orthfix DAVBVOUTER, xsect 39) %s",
+             g_dav_bvouter ? "on" : "off (SC3NETMOD_DAVBVOUTER=0)");
+    }
+    return g_dav_bvouter && v && g_bv_p[0] && dav_bvbend_on() && (WORD)(v & 0xffff) == g_bv_p[0];
+}
+
 /* task diagfix (round 2026-11-14b fix 1, xsect cases 68 69 72 73 80): a diagonal avenue / boulevard drawn across a
  * rail line or under a highway holds, on the rail / highway rows, the game's shared crossing pieces (69 road x rail,
  * 15098 highway over road, 11258 road x highway, 67 power over road, ... and any ROAD piece the game keeps out of
@@ -1219,7 +1237,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                    in the post-AVL put-back, AVL's band map */
 #define BX(u) (e ? x + rows - 1 + (u) : x + 2 - (u))
 #define BZ(v) (e ? z + rows - 1 + (v) : z - (v))
-#define STRAIGHT_OK(cx_, cz_, away_) (g_dav_post ? avl_dir((cx_), (cz_)) >= 0 : (avl_band_ok((cx_), (cz_), (away_)) ||                                       dav_bv_oneway(&P.b, (cx_), (cz_))))     /* task diagfix: DAVBVBEND */
+#define STRAIGHT_OK(cx_, cz_, away_) (g_dav_post ? (avl_dir((cx_), (cz_)) >= 0 || dav_bv_outer(&P.b, (cx_), (cz_))) /* orthfix DAVBVOUTER */ : (avl_band_ok((cx_), (cz_), (away_)) ||                                       dav_bv_oneway(&P.b, (cx_), (cz_)) || dav_bv_outer(&P.b, (cx_), (cz_))))     /* task diagfix: DAVBVBEND; orthfix DAVBVOUTER */
                 for (e = 0; e < 2 && ok && (g_dav_u[0] || g_dav_nn || g_dav_nt); e++) {
                     int bx, bz, away;
                     if (bend[e] == 2) {                               /* along z, columns u 1 / 2 go on */

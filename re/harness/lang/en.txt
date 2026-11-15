@@ -564,6 +564,8 @@ resize.mt_dataview=Extra data layers
 # sc3resize.c
 resize.mt_features=Features
 # sc3resize.c
+resize.mt_gentle=Gentler abandonment
+# sc3resize.c
 resize.mt_graphs=Improved graphs
 # sc3resize.c
 resize.mt_keys=P and 1-4 keys
@@ -595,6 +597,10 @@ resize.mt_restore=Restore buildings
 resize.mt_saltcalc=Recalculate salt water
 # sc3resize.c
 resize.mt_saltfix=Salt water only at sea
+# sc3resize.c
+resize.mt_sandbox=Sandbox: no abandonment
+# sc3resize.c
+resize.mt_sim=Simulation
 # sc3resize.c
 resize.mt_simrun=Simulation tweaks
 # sc3resize.c
