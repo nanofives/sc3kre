@@ -76,3 +76,104 @@ Two different games, so only the anarchy row is a controlled result (it is zero 
 sc3simrun CHURN: `simrun.ini [churn]` `anarchy_res|com|ind` (default 0), `upgrade_X`, `density_X` (default -1 =
 the game's value), `enabled=1`; `SC3SIMRUN_CHURN=0` = stock. Each enabled site's operand is repointed at the
 mod's own DWORD after a byte check; log lines `CHURN>`.
+
+## 5. Abandonment: what takes a standing R/C/I building down (task abandon, 2026-11-15)
+
+GitHub issue #3 (Sandbox mode, gentler abandonment). Static read of the three evaluators branch by branch, then a
+live run (Berlin 256x256, speed 3, 179 game days, `re/tools/abandon_probe.py`, read-only Frida;
+`verify/abandon/probe_berlin_stock_1.json`). This corrects §2 above where they differ.
+
+### 5.1 The evaluator's inputs `[CONFIRMED @ 0x10028864 (members), live module of each slot]`
+
+Members are city layers, stored by the developer's init (res `0x10028864`, slot `+0xc`) from city slots
+(`cISC3City` CodeView names). Res and com use the same offsets; ind keeps its own (`0x10017649`).
+
+| res/com | ind | city slot | read in the evaluator | live target |
+|---|---|---|---|---|
+| `+0x6c` | `+0x9c` | `BuildingLayer` | `vt+0x5c(bldg)` removes a building (state-4 lots; ind farms) | |
+| `+0x70` | `+0xa0` | `PowerLayer` | `vt+0x34(x, z, &byte)` powered | SIMUTIL `0x10005e41` |
+| `+0x74` | `+0xa4` | `PlumbingLayer` | `vt+0x48(x, z)` watered byte (iOS `IsWatered`) | SIMUTIL `0x1000df02` |
+| `+0x78` | `+0xa8` | `SurfaceOccupantManager` | `vt+0x7c GetOccupantAtCell` | |
+| `+0x7c` | `+0xac` | demand valve 3000 / 5000 / 8000 (`0x10028c49`) | `vt+0x30` value, `+0x38` max, `+0x3c` min, `+0x20` id | |
+| `+0x80` | `+0xb0` | `ZoneLayer` (vtable `0x1004d1e0`) | slot 27 `IsNearTransport(coords, MaxDistFromTransport + ord)`, slot 30 `GetFilledDemand`, slot 25 `PlaceBuilding` | SIMRCI `0x100330b7`, `0x1003306d` |
+| `+0x84` | `+0xb4` | `LandValueLayer` | `vt+0x34` land value byte | |
+| `+0x88` | `+0xbc` | `TrafficLayer` | `vt+0x68(x, z)` trip result | SimTransit `0x10006965` |
+| `+0x8c` | `+0xc0` | `PollutionLayer` | `vt+0x54` radioactive (iOS `IsRadioactive`), `vt+0x6c` garbage (iOS `IsGarbageAccumulated`); ind also `vt+0x58/+0x5c` air / water | SIMECO `0x10008db8`, `0x10008eab` |
+| `+0x90` | `+0xc4` | `OrdinanceLayer` | `vt+0xc(0xa2bf1de5)`: +1 to MaxDistFromTransport when on | |
+
+**The `+0x88 vt+0x68` read is the trip result** `[CONFIRMED @ SimTransit 0x10006965, live slot target]`: grid
+`+0x7c` bit clear (no trip tried from the cell) returns 2, else grid `+0x80` bit set (trip succeeded) returns 0,
+else 1 (trip failed). iOS twin `goTrafficLayer::GetTripSuccess`. Branch (b) fires on `== 1`, a failed trip.
+
+### 5.2 Building state and the flag `[CONFIRMED live]`
+
+The building is the occupant's QI `0xe0faadc7` view (SIMGEOM vtable `0x1002bb80`); `vt+0x4c` (`0x10024d48`,
+byte `+0x1c`) is its state. `sc3_resdev_post_state_change` (`0x10029a38`, ind copy `0x100191fe`) calls ZoneLayer
+slot 25 `PlaceBuilding(attrib = bldg vt+0x60, coords, flags, rotation, 1)`: slot 26 (`0x10032dfc`) removes the
+occupants in the footprint and **creates a new occupant from the same attrib**, then sets `flags` on it
+(`vt+0x50`) and inserts it. So the flag is the new building's state, plus the `0x100` / `0x200` occupancy bits
+the caller carries (`0x100` = garbage, from pollution `vt+0x6c`).
+
+Measured, 400 posts, the cell re-read after each call (always a new object, always the same attrib):
+
+| flags | state before -> after | from | count |
+|---|---|---|---|
+| `2` | 1 -> 2 | (b), (c), (d) | 98 |
+| `1` | 4 -> 1 | construction finished: `rand(x * 100) < ConstructionTimeFactor` (`DAT_1005801c`) | 262 |
+| `1` | 2 -> 1 | abandoned building re-occupied (state-2 branch, the class picker returns the same class) | 25 |
+
+So **flag 2 = abandon**, not demolish: state 1 occupied, 2 abandoned, 4 under construction. The zone layer's
+`GetAbandonedTileCount` (slot 21, `+0x15c`) moved 64 -> 0 -> 3 over the run. An abandoned building comes back two
+ways: with power, transport, no failed trip, not radioactive and raw and net demand > 0, the class picker runs;
+the same class -> flag 1 (re-occupied), another class -> develop a new building (res `0x10029666`). Removal
+(`BuildingLayer vt+0x5c`) happens only to state-4 lots with no class record and to industrial farms (5.4).
+
+### 5.3 Residential `0x10028f12` and commercial `0x1000fd53`, state 1
+
+Identical code apart from frame offsets and one record byte. Order:
+
+| | test | action | status |
+|---|---|---|---|
+| (a) | radioactive (`+0x8c vt+0x54`) | flag 2, no roll | 1 |
+| (b) | unpowered, OR not `IsNearTransport`, OR trip failed (`== 1`), OR (not watered AND class density byte > 1) | `rand(100) < NoServicePercentage / x` -> flag 2 | 4 unpowered, 5 water, 6 transport or trip |
+| (c) | raw demand `vt+0x30 < 0` | `rand(-min) < -(net / x)` -> flag 2. net = demand - `GetFilledDemand` | 3 |
+| (d) | lot class known and land value < class minimum LV / 2 (record byte 2 res, byte 1 com: the parsers `0x10028ce0` / `0x1000fb21` store minLV there) | `pick_lower_value` (always 0, §2) -> flag 2 | 2 |
+| | else | redevelopment rolls of §2 (demand > 0 only) | |
+
+Sites (call `rel32`): res (a) `0x1002934f`, (b) roll `0x1002951b` / post `0x1002953b`, (c) roll `0x1002939d` /
+post `0x100293bc`, (d) post `0x1002942a`. Com (a) `0x10010187`, (b) `0x10010353` / `0x10010373`, (c) `0x100101d5`
+/ `0x100101f4`, (d) `0x10010262`. NoServicePercentage: res `DAT_10058014` (15), com `DAT_1005753c` (35).
+
+### 5.4 Industrial `0x10017fc0`, state 1
+
+Same (a)-(d) with ind tunables (`DAT_100576cc` NoServicePercentage 30), plus farms. A farm here = lot class
+`0x2454` whose attrib flags (QI `0x21183b00` `vt+0xbc`) have bits 8 and 10 set (`local_b`).
+
+| | farm | non-farm |
+|---|---|---|
+| (a) radioactive | removed (`+0x9c vt+0x5c`, site `0x10018508`) when CanSimRemove and no `0x200` bit | flag 2 (`0x10018523`) |
+| (b) no service | skipped | roll `0x10018557`, flag 2 (`0x1001857c`) |
+| (p) class `0x2454` and air > MaxAgAirPollution or water > MaxAgWaterPollution | removed (`0x100185fb`), status 7 | flag 2 (`0x10018616`), status 7 |
+| (c) negative demand | the roll is drawn, the post skipped | roll `0x10018630`, flag 2 (`0x10018656`) |
+| (d) low land value | removed (`0x100186e7`) | flag 2 (`0x10018705`) |
+
+### 5.5 The divisor x, and the demand roll
+
+x = the building's attrib `vt+0x40` (bldg `vt+0x60` -> attrib, QI `0xe075ef51` view, SIMGEOM vtable `0x1002b7b0`,
+slot `0x10023486` returns field `+0x24`) `[CONFIRMED @ SIMGEOM 0x10023486]`. CodeView names `cISC3OccupantAttrib`
+`+0x40` `SizeInCellsX` and `+0x44` `SizeInCellsZ` [CV-HINT: the SIMGEOM vtable's interface is not identified]. Live,
+x was 1, 2 or 3 and equal to `vt+0x44` on all 400 lots; iOS reads the same value as a `ushort` of the attrib.
+So **x is the lot width in cells**: (b) and (c) divide the chance by it, the construction / recovery roll
+multiplies its range by it, the density roll divides its range by it.
+
+(c), worked: chance per pass = `(-net / x) / (-min)`. The valves read min -2000 / max 2000 for R, C and I. The gate
+is the raw valve value (the HUD bar) but the roll uses net = value - filled demand, and filled demand can be
+negative: Berlin industry read value -1680 with filled -1602..-1687, so net sat at -10..+7 most of the run and the
+roll fired 87 times in 5,327 draws. Of the first 4,000 draws (days 0..40, the ones recorded one by one), 57
+fired, 56 of them before day 30, all at net -1680..-735. A city whose HUD
+shows strongly negative demand can abandon slowly or not at all once filled demand has caught up.
+
+### 5.6 Not abandonment inputs
+
+Crime: not read. Garbage: pollution `vt+0x6c` only toggles occupancy bit `0x100` (a re-post with the same state).
+Pollution: radioactivity (a) for all three, air / water only for farms (p). Disasters (SIMDSTR) are separate.
