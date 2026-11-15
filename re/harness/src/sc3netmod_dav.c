@@ -219,6 +219,16 @@ static int dav_two_on(void) {
 
 static int dav_is_mid_or_twin(WORD id) { return dav_is_mid(id) || dav_twin_piece(id) != 0; }   /* the revert pass */
 
+/* task diagfix (round 2026-11-14b milestone 4, xsect 39 / 41: 438 revert lines over the sweep): DAVBVBEND. A diagonal
+ * avenue that bends into a straight BOULEVARD (BV's pieces, one-way since bvlanes) was judged two ways in one edit: the
+ * main pass asks avl_band_ok, which only knows avenues and says no, so the band was refused and its 21 cells reverted
+ * (`(160,68) avenue piece 20505 no longer in a band -> stock retile`); the post-AVL pass asks avl_dir, whose map holds
+ * BV's one-way cells, says yes, and wrote the 21 cells back (`kept: 7 touching road cell(s) ... 21 written`). Every
+ * later edit anywhere in the window did both again, and BV, reading the junction cells half way through, flipped too
+ * (41's boulevard arm ended as stock 11204). Now (1) the main pass also accepts a bend whose straight cell holds a BV
+ * piece that AVL's kept map calls one-way (the post pass's own test), and (2) DAV never writes over a BV piece (the
+ * cells both bands hold stay BV's, as the post pass left them). Off: SC3NETMOD_DAVBVBEND=0. */
+static int bv_is_piece(WORD id);                                       /* sc3netmod_bv.c (included after this file) */
 
 /* task diagfix (round 2026-11-14b, xsect 27 / 28 yellow): DAVXAVL. A diagonal avenue crossing a straight avenue writes
  * the crossing template, whose cells on the straight avenue beside the box are stock 11204 (davxw lines). AVL then turns
@@ -238,6 +248,20 @@ static int dav_xavl_keep(DWORD want, DWORD cur) {
              g_dav_xavl ? "on" : "off");
     }
     return g_dav_xavl && avl_own(id);
+}
+static int g_dav_bvbend = -1;
+static volatile LONG g_dav_n_bvyield;
+static int dav_bvbend_on(void) {
+    if (g_dav_bvbend < 0) {
+        g_dav_bvbend = !env_off("SC3NETMOD_DAVBVBEND");
+        logf("dav: DAVBVBEND %s (bends into a one-way boulevard judged alike before and after AVL, BV's cells kept, "
+             "SC3NETMOD_DAVBVBEND)", g_dav_bvbend ? "on" : "off");
+    }
+    return g_dav_bvbend;
+}
+static int dav_bv_oneway(RbBuf *b, int x, int z) {
+    DWORD v = rb_at(b, x, z);
+    return v && dav_bvbend_on() && bv_is_piece((WORD)(v & 0xffff)) && avl_dir(x, z) >= 0;
 }
 
 /* task diagfix (round 2026-11-14b fix 1, xsect cases 68 69 72 73 80): a diagonal avenue / boulevard drawn across a
@@ -1071,7 +1095,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                    in the post-AVL put-back, AVL's band map */
 #define BX(u) (e ? x + rows - 1 + (u) : x + 2 - (u))
 #define BZ(v) (e ? z + rows - 1 + (v) : z - (v))
-#define STRAIGHT_OK(cx_, cz_, away_) (g_dav_post ? avl_dir((cx_), (cz_)) >= 0 : avl_band_ok((cx_), (cz_), (away_)))
+#define STRAIGHT_OK(cx_, cz_, away_) (g_dav_post ? avl_dir((cx_), (cz_)) >= 0 : (avl_band_ok((cx_), (cz_), (away_)) ||                                       dav_bv_oneway(&P.b, (cx_), (cz_))))     /* task diagfix: DAVBVBEND */
                 for (e = 0; e < 2 && ok && (g_dav_u[0] || g_dav_nn || g_dav_nt); e++) {
                     int bx, bz, away;
                     if (bend[e] == 2) {                               /* along z, columns u 1 / 2 go on */
@@ -1230,6 +1254,10 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                         if (dav_xnet(cur)) { nxk++; continue; }     /* task diagfix: a rail / highway crossing stays */
                         if ((k >= n + na || (dav_xm(&P, cx, cz) & 2)) && dav_xavl_keep(want, cur)) {   /* DAVXAVL */
                             InterlockedIncrement(&g_dav_n_xavl);
+                            continue;
+                        }
+                        if (cur && bv_is_piece((WORD)(cur & 0xffff)) && dav_bvbend_on()) {   /* task diagfix: DAVBVBEND */
+                            InterlockedIncrement(&g_dav_n_bvyield);
                             continue;
                         }
                         cut_wrote(&cg, cx, cz, want);               /* task avdiagbreak */
@@ -1453,6 +1481,8 @@ static void dav_stats(void) {
          g_dav_n_stub);   /* task avdiag, task avdiagbreak, task davtouch */
     if (g_dav_n_xavl)                                                  /* task diagfix: DAVXAVL */
         logf("stats: dav crossing cells left with AVL's one-way piece (DAVXAVL)=%ld", g_dav_n_xavl);
+    if (g_dav_n_bvyield)                                               /* task diagfix: DAVBVBEND */
+        logf("stats: dav cells left to BV (DAVBVBEND)=%ld", g_dav_n_bvyield);
     if (g_dav_n_dbvwin)                                                /* task diagfix: DAVDBVWIN */
         logf("stats: dav windows DBV judged first (DAVDBVWIN)=%ld", g_dav_n_dbvwin);
     if (g_dav_n_xnet)                                                  /* task diagfix: DAVXNET */
