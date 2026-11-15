@@ -128,6 +128,14 @@ def davx_lines(t):
     return out + b"".join(b"davxw %d %d %d %d %d\r\n" % (t["id"], *cell) for cell in t["writes"])
 
 
+def dbvx_lines(t):
+    """task diagfix DBVX: one diagonal-boulevard crossing template as sc3netmod table lines"""
+    out = b"dbvx %d %d %d %d %d\r\n" % (t["id"], t["x0"], t["z0"], t["w"], t["h"])
+    out += b"".join(b"dbvxg %d %d %s\r\n" % (t["id"], r, t["grid"][r * t["w"]:(r + 1) * t["w"]].encode())
+                    for r in range(t["h"]))
+    return out + b"".join(b"dbvxw %d %d %d %d %d\r\n" % (t["id"], *cell) for cell in t["writes"])
+
+
 def sha(b):
     return hashlib.sha256(b).hexdigest()
 
@@ -832,10 +840,15 @@ def compile_pack(stock, pack_dir, man):
         raise NetpackError("%s: at most one auto_boulevard_junctions entry (sc3netmod applies one set)" % pname)
     for n, a in enumerate(man.get("auto_diagonal_boulevards", [])):  # task diagbv: sc3netmod DBV block (diagbv.py)
         where = "%s auto_diagonal_boulevards %d" % (pname, n + 1)
-        for p in list(a["band"]) + [c[2] for cells in a["stamps"].values() for c in cells]:
+        for p in list(a["band"]) + [c[2] for cells in a["stamps"].values() for c in cells] + \
+                [w[2] for t in a.get("crossing", []) for w in t["writes"]]:                 # task diagfix: DBVX
             if p not in (29, 35) and (p not in vids or vids[p]["net"] != "ROAD"):
                 raise NetpackError("%s: piece %s must be a ROAD variant declared in this package (or 29 / 35)" % (where, p))
-        out["auto_diagonal_boulevards"].append({"band": list(a["band"]), "stamps": a["stamps"], "where": where})
+        for t in a.get("crossing", []):                                  # task diagfix: DBVX templates
+            if len(t["grid"]) != t["w"] * t["h"] or set(t["grid"]) - set("r.-") or t["w"] > 200:
+                raise NetpackError("%s: crossing %s: grid must be w x h of r . -" % (where, t.get("id")))
+        out["auto_diagonal_boulevards"].append({"band": list(a["band"]), "stamps": a["stamps"],
+                                                "crossing": a.get("crossing", []), "where": where})
     for n, ln in enumerate(man.get("highway_lines", [])):            # task hwcore: sc3netmod HWY block (raw lines)
         tok = ln.split()
         if tok[0] == "hwyp" and (len(tok) < 3 or int(tok[1]) not in vids or vids[int(tok[1])]["net"] != "HWAY"):
@@ -1305,7 +1318,8 @@ def merge(stock, packs):
                 b"".join(b"dbvb %d %d\r\n" % tuple(a["band"]) +
                          b"".join(b"dbvs %d %d %d %d %d\r\n" % ((DBV_KIND_NO[k],) + tuple(cell))
                                   for k, cells in sorted(a["stamps"].items(), key=lambda t: DBV_KIND_NO[t[0]])
-                                  for cell in cells)
+                                  for cell in cells) +
+                         b"".join(dbvx_lines(t) for t in a.get("crossing", []))       # task diagfix: DBVX
                          for a in c.get("auto_diagonal_boulevards", [])) + \
                 b"".join(b"%s\r\n" % ln.encode() for ln in c.get("highway_lines", [])) + \
                 b"".join(b"%s\r\n" % ln.encode() for ln in c.get("avenue_lines", [])) + \
@@ -1342,6 +1356,7 @@ def merge(stock, packs):
     placed |= {cell[2] for a in davs for t in a.get("crossing", []) for cell in t["writes"]}   # task diagx
     placed |= {b["piece"] for a in bvxs for b in a["box"]} | {b["piece"] for a in bvxs for b in a["arm"]}   # task bvx
     placed |= {p for a in dbvs for p in a["band"]} | {c[2] for a in dbvs for cs in a["stamps"].values() for c in cs}  # task diagbv
+    placed |= {w[2] for a in dbvs for t in a.get("crossing", []) for w in t["writes"]}   # task diagfix: DBVX
     for v in variants:
         if v["id"] not in placed:
             report["warnings"].append("%s: no rule RESULT places %d, so the tiler never builds it" % (v["where"], v["id"]))

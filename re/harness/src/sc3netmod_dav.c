@@ -473,7 +473,7 @@ static int dav_is_s43(WORD id) {
    diagave.py xbuild (recipe_crossings.json), offline twin diagave.py bands. A template is tried at every band row with road
    beside it; its window's road cells are not arms, do not count as touching, and a band end inside it has no stub,
    merge or bend. */
-#define DAVX_MAX 64
+#define DAVX_MAX 128                         /* task diagfix: 64 -> 128 (the 38 / 40 boxes made 68) */
 #define DAVX_MAX_W 2048
 #define DAVX_MAX_GRID 400
 #define DAVX_MAX_M 16                                  /* matched templates per band */
