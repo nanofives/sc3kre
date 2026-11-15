@@ -1,7 +1,7 @@
 {
  "netpack": 1,
  "name": "diagonal_avenue",
- "version": "0.7.0",
+ "version": "0.8.0",
  "author": "netmod (task diagave)",
  "description": "Diagonal avenues: draw two diagonal roads joined side by side (the second one cell over) and sc3netmod's DAV block makes them one avenue, four lanes wide. Stock diagonal 35 draws only the road half of its cell, so the middle cell of each row holds both roads: it becomes one of these middle pieces (two stock halves on one tile, both halves' lanes); the main one, 20500, has the median of avenue 11204 (grass and its trees, art table from 11204: road layer + tree layer) and the outer cells beside it become 20505 (stock 35 with the median-side tip as grass). Built by `diagave.py build .` in this folder before install (art/ is made from the game's frames and is not shipped). Junctions: a straight road crossing the avenue, meeting it from one side, or the avenue ending on it (pieces 20510..20519: road 29 with the avenue's halves as asphalt). Merges: where one carriageway ends and the other goes on as a single road, its outer curb tapers into the other one over three rows (pieces 20520..20524 when B ends, 20530..20534 when A ends); junctions carry crosswalks. Crossings (task diagx): another diagonal avenue or the straight avenue 11204 crossing it, or the avenue ending on one (pieces 20540..20594, templates from recipe_crossings.json).",
  "game": {

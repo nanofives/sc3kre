@@ -34,8 +34,8 @@
  */
 
 #define DBV_MIN_CLEAN 3
-#define DBV_KINDS 26                         /* task diagfix: 18 BEND135, 19 BEND135M, 20 BENDAV, 21 BENDAVM, 22 BENDBV,
-                                                23 JBVX, 24 JBVE, 25 JBVEO */
+#define DBV_KINDS 27                         /* task diagfix: 18 BEND135, 19 BEND135M, 20 BENDAV, 21 BENDAVM, 22 BENDBV,
+                                                23 JBVX, 24 JBVE, 25 JBVEO, 26 BENDBVM */
 #define DBV_MAX_STAMP 40
 #define DBV_MAX_USES 64
 #define DBV_MAX_ROWS 1024
@@ -46,7 +46,7 @@
 
 enum { DK_NONE = 0, DK_JROW_BOTH = 1, DK_JROW_A, DK_JROW_STEM, DK_JCOL_BOTH, DK_JCOL_A, DK_NARROW_C, DK_NARROW_A,
        DK_TAPER0, DK_TAPER1, DK_TAPER2, DK_CAP_SQ, DK_CAP_PART, DK_TAPER0S, DK_TAPER1S, DK_TAPER2S, DK_CAP_X4Z3,
-       DK_CAP_X4Z4, DK_BEND135, DK_BEND135M, DK_BENDAV, DK_BENDAVM, DK_BENDBV, DK_JBVX, DK_JBVE, DK_JBVEO, DK_BEND_X = 100, DK_BEND_Z, DK_STEM, DK_RAGGED, DK_BEND_ZT };     /* DK_RAGGED: task avrbtfix */
+       DK_CAP_X4Z4, DK_BEND135, DK_BEND135M, DK_BENDAV, DK_BENDAVM, DK_BENDBV, DK_JBVX, DK_JBVE, DK_JBVEO, DK_BENDBVM, DK_BEND_X = 100, DK_BEND_Z, DK_STEM, DK_RAGGED, DK_BEND_ZT };     /* DK_RAGGED: task avrbtfix */
 static int dbv_b135_on(void);                /* task diagfix: DBVBEND135 (defined before dbv_band) */
 static int dbv_bbv_on(void);                 /* task diagfix: DBVBBEND */
 
@@ -320,6 +320,21 @@ static int dbv_end_kind(DbvPass *p, int z_e, int a_e, int e, int nrows) {
             }
         if (!bvx) return DK_BENDBV;
     }
+    /* its x <-> z mirror (a boulevard along x into an axis-1 diagonal boulevard, seen in the turned frame): every cell
+       (dx, dz) of the test above at (dz + 3, dx), as `bendavm` mirrors `bendav` (stamp `bendbvm`, kind 26) */
+    for (d = -2, ok = 1; d <= 7 && ok; d++) ok = !DBV_RDE(4, d);
+    if (ok && !DBV_RDE(3, -1) && DBV_RDE(3, 4) && DBV_RDE(3, 5) && DBV_RDE(3, 6) && DBV_RDE(2, 3) && DBV_RDE(2, 4) &&
+        DBV_RDE(2, 5) && DBV_RDE(1, 2) && DBV_RDE(1, 3) && DBV_RDE(1, 4) && !DBV_RDE(0, 1) && !DBV_RDE(0, 2) &&
+        !DBV_RDE(2, -2) && !DBV_RDE(1, -3) && g_dbv_nst[DK_BENDBVM] && dbv_bbv_on()) {
+        int bvx = 0;
+        for (dz = 0; dz >= -2; dz--)
+            for (d = dz; d <= dz + 3; d++) {
+                int cx = DBV_CELLX(dz + 3, d), cz = DBV_CELLZ(dz + 3, d);
+                DWORD v = rb_at(&p->b, DBV_RX(p, cx, cz), DBV_RZ(p, cx, cz));
+                if (v && bv_is_piece((WORD)(v & 0xffff))) bvx = 1;
+            }
+        if (!bvx) return DK_BENDBVM;
+    }
     ok = nrows >= 3 + DBV_MIN_CLEAN && !DBV_RDE(1, -3);
     for (dz = -2; dz <= 0 && ok; dz++) ok = DBV_RDE(4, dz) && DBV_RDE(5, dz) && !DBV_RDE(dz - 1, dz);
     for (d = -1; d <= 6 && ok; d++) ok = !DBV_RDE(d, 1);
@@ -561,6 +576,9 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
             for (m = 0; m < nxm; m++) if (xmt[m] == t2) dup = 1;
             if (dup) continue;
             xmt[nxm] = t2; xma[nxm] = a; xmz[nxm] = z; nxm++;
+            if (p->xdbg)
+                logf("dbv: DBVXDBG band axis %d from canonical (%d,%d): template %u matched at canonical (%d,%d)%s",
+                     p->axis, x0, z0, q->id, a, z, outside ? " (window leaves the read buffer)" : "");
             for (j2 = 0; j2 < q->h; j2++) {
                 int zz = z + q->z0 + j2;
                 if (IN_CHAIN(zz)) jxrow[zz - z0] = 1;
@@ -637,6 +655,9 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
             if (kind == DK_BENDAVM)                            /* task diagfix: the avenue's two columns going on */
                 for (j = 4; j < 512 && (DBV_RDE(2, j) || DBV_RDE(3, j)); j++)          /* (m34l: "touches road") */
                     for (dx = 2; dx <= 3; dx++) if (DBV_RDE(dx, j)) MARK(DBV_CELLX(dx, j), DBV_CELLZ(dx, j)) |= 2;
+            if (kind == DK_BENDBVM)                            /* task diagfix: its mirror, the boulevard's columns */
+                for (j = 0; j < 3; j++)
+                    for (dz = 4 - j; dz < 512 && DBV_RDE(3 - j, dz); dz++) MARK(DBV_CELLX(3 - j, dz), DBV_CELLZ(3 - j, dz)) |= 2;
             if (kind == DK_BENDBV)                             /* task diagfix DBVBBEND: the boulevard's rows: path */
                 for (j = 0; j < 3; j++)
                     for (dx = 4 - j; dx < 512 && DBV_RDE(dx, -j); dx++) MARK(DBV_CELLX(dx, -j), DBV_CELLZ(dx, -j)) |= 2;
@@ -872,6 +893,9 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
                 int qx = c0x + dx, qz = c0z + dz;
                 if (dbv_rd(p, qx, qz) && !(MARK(qx, qz) & (32 | 2 | 4))) {
                     *why = "touches road";
+                    if (p->xdbg)
+                        logf("dbv: DBVXDBG band axis %d from canonical (%d,%d): real (%d,%d) touches written (%d,%d)",
+                             p->axis, x0, z0, DBV_RX(p, qx, qz), DBV_RZ(p, qx, qz), DBV_RX(p, c0x, c0z), DBV_RZ(p, c0x, c0z));
                     if (g_dbv_touch <= 0) return 0;
                     dbv_bad(p, qx, qz); tbad = 1;                        /* task dbvtouch: collect every touch */
                 }
