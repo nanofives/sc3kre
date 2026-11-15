@@ -12,8 +12,8 @@ of xsect's with a `final` read-back command).
 | 67 B x rail | refused: the column beside the rail stays stock 11204/29/11204, 1-row crossing band two-way | **converts** (one run of 13 columns through the rail, 39 cells written, rail 44 intact) | BVXING |
 | 71 B x highway | refused, same with 15098 | **converts** (one run through both 15098 rows, highway 15051 intact) | BVXING |
 | 62 avenue into a road | refused: `no avlt piece ... outline CAIA modes CTOI` | **converts**: `ends: U-turn / U-turn with a road`, end cell 22400.3 + U-turn 21701.1 | avlt 22400 |
-| 26 A x B corner, 37 B x B corner | refused: `an end on a corner` | candidate built (BVCORNER, opt-in), pictures next | owner call |
-| 63 four roads | refused: `road more than 3 wide` | options sheet `owner_shots/63_options.png` (A two avenues, B wide boulevard, C stock) | owner call |
+| 26 A x B corner, 37 B x B corner | refused: `an end on a corner` | **converts**: one paved corner box, square kerbed outer corner, every lane turns (owner 2026-11-14: "Square, as shown") | BVCORNER, boxes 22401..22420 |
+| 63 four roads | refused: `road more than 3 wide` | **converts** to two one-way avenues side by side, kerbs back to back (owner picked option A of `owner_shots/63_options.png`) | BVQUAD |
 
 Looks: the crossing cells of 67 / 71 keep the stock crossing art (yellow centre line on the three crossing cells), as
 the avenue cases 66 / 70 do with AVL's twins. 62 ends in the paved box cell of avenue_ends 22001 (same outline, art
@@ -40,4 +40,16 @@ Every case green before is still green. Pictures: `owner_shots/ba_<case>.png`, `
 
 `SC3NETMOD_BVXING=0` (crossings as before), `SC3NETMOD_BVCORNER=1` (corner candidate on). Start-log lines:
 `bv: boulevard over a rail / power line / under a highway (orthfix BVXING) on, 12 twin(s)`,
-`bv: boulevard ending in a corner box (orthfix BVCORNER) off (candidate, ...)`.
+`bv: boulevard ending in a corner box (orthfix BVCORNER) on`, `bv: four parallel roads as two avenues side by side (orthfix BVQUAD) on`.
+
+## Regression, run4 (default config: BVXING, 22400, BVQUAD, BVCORNER all on; child/orthfix 668b298)
+
+77 cases: **65 identical**, 12 listed as changed: the six fixes (26, 37, 62, 63, 67, 71) and the same five explained
+in run1 (46 read timing, 64 DAV re-tile by case 76, 74-77 no xsect final read). Every B case (08-11, 23-25, 35-45),
+every merge (57-65) and every other green case is identical in build and final cells. Pictures:
+`owner_shots/ba_sheet_run4_1.png`, `_2.png` (64's "after" shows the DAV re-tile, not this stream).
+run2 (corners as a candidate) and run3 (stopped when the owner approved the corners) are superseded by run4.
+
+Switches: `SC3NETMOD_BVXING=0`, `SC3NETMOD_BVQUAD=0`, `SC3NETMOD_BVCORNER=0`.
+Ship set: `dev/orthfix/ship/` (boulevard 0.4.0, boulevard_junctions with art 22401..22420, avenue_ends with art 22400;
+install commands in `SHIP.md`).
