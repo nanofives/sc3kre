@@ -109,6 +109,13 @@ French, German, Italian, Dutch, Swedish) and follows the game's language.
   and property tax used the game's minimum land value (35) instead. In the test city residential tax was about
   11,500 a month with the fix against about 1,600 without it. The average now stops at 255
   (`simrun.ini [lvwrap] mode=0` = the game's behaviour). Months already in a saved graph stay as they were.
+- Sandbox (off by default, "Sandbox: no abandonment" on the Turn mods on/off page, or `simrun.ini [sandbox]
+  enabled=1`): occupied residential, commercial and industrial buildings are not abandoned for radiation, missing
+  power, water or transport, failed trips, negative demand or low land value, and farms are not removed. Buildings
+  already abandoned still come back as in the game. Disasters are not affected.
+- Gentler abandonment (off by default, "Gentler abandonment" on the same page, or `simrun.ini [gentle] enabled=1
+  share_pct=25`): negative demand empties buildings only while the RCI bar is in the bottom `share_pct` percent of
+  its range (25 = below the middle of the negative half). Lower on the bar the game's own chance applies.
 - Salt water only at sea: all sea water reached from the map edge is salt, rivers and lakes stay fresh (the stock
   game drew straight lines in from the edges). New maps get it by themselves, an existing city when you tick
   "Recalculate salt water". It decides where pumps and desalination plants work.
