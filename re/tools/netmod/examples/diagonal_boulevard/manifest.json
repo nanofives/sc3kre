@@ -1883,6 +1883,230 @@
     "png_dir": "art/21919"
    },
    "trblkatt": "none"
+  },
+  {
+   "id": 22442,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22442"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22443,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22443"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22444,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22444"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22445,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22445"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22446,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22446"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22447,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22447"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22448,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22448"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22449,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22449"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22450,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22450"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22451,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22451"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22452,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22452"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22453,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22453"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22454,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22454"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22455,
+   "base": 43,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22455"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22456,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22456"
+   },
+   "trblkatt": "none"
+  },
+  {
+   "id": 22457,
+   "base": 35,
+   "network": "ROAD",
+   "name": {
+    "*": "Diagonal boulevard bend",
+    "ENGLISH": "Curva de bulevar diagonal"
+   },
+   "art": {
+    "from": 35,
+    "png_dir": "art/22457"
+   },
+   "trblkatt": "none"
   }
  ],
  "lanes": [
@@ -3361,6 +3585,106 @@
       3,
       3,
       21063,
+      0
+     ]
+    ],
+    "bend135": [
+     [
+      0,
+      0,
+      22442,
+      0
+     ],
+     [
+      1,
+      0,
+      22443,
+      0
+     ],
+     [
+      2,
+      0,
+      22444,
+      0
+     ],
+     [
+      3,
+      0,
+      22445,
+      0
+     ],
+     [
+      0,
+      -1,
+      22446,
+      0
+     ],
+     [
+      1,
+      -1,
+      22447,
+      0
+     ],
+     [
+      2,
+      -1,
+      22448,
+      0
+     ],
+     [
+      1,
+      -2,
+      22449,
+      0
+     ]
+    ],
+    "bend135m": [
+     [
+      3,
+      0,
+      22450,
+      0
+     ],
+     [
+      3,
+      1,
+      22451,
+      0
+     ],
+     [
+      3,
+      2,
+      22452,
+      0
+     ],
+     [
+      3,
+      3,
+      22453,
+      0
+     ],
+     [
+      2,
+      0,
+      22454,
+      0
+     ],
+     [
+      2,
+      1,
+      22455,
+      0
+     ],
+     [
+      2,
+      2,
+      22456,
+      0
+     ],
+     [
+      1,
+      1,
+      22457,
       0
      ]
     ]

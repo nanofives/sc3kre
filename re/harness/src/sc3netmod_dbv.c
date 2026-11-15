@@ -34,7 +34,7 @@
  */
 
 #define DBV_MIN_CLEAN 3
-#define DBV_KINDS 18
+#define DBV_KINDS 20                         /* task diagfix: 18 = DK_BEND135, 19 = DK_BEND135M */
 #define DBV_MAX_STAMP 40
 #define DBV_MAX_USES 64
 #define DBV_MAX_ROWS 1024
@@ -45,7 +45,8 @@
 
 enum { DK_NONE = 0, DK_JROW_BOTH = 1, DK_JROW_A, DK_JROW_STEM, DK_JCOL_BOTH, DK_JCOL_A, DK_NARROW_C, DK_NARROW_A,
        DK_TAPER0, DK_TAPER1, DK_TAPER2, DK_CAP_SQ, DK_CAP_PART, DK_TAPER0S, DK_TAPER1S, DK_TAPER2S, DK_CAP_X4Z3,
-       DK_CAP_X4Z4, DK_BEND_X = 100, DK_BEND_Z, DK_STEM, DK_RAGGED, DK_BEND_ZT };     /* DK_RAGGED: task avrbtfix */
+       DK_CAP_X4Z4, DK_BEND135, DK_BEND135M, DK_BEND_X = 100, DK_BEND_Z, DK_STEM, DK_RAGGED, DK_BEND_ZT };     /* DK_RAGGED: task avrbtfix */
+static int dbv_b135_on(void);                /* task diagfix: DBVBEND135 (defined before dbv_band) */
 
 /* task avends F2a (2026-11-09, round brief ROUND_2026-11-09_avends.md, twin diagbv.classify_end "bend-z-tee"): a bend
    into three straight columns whose second and third rows past the end also carry an avenue arm on ONE side (two rows,
@@ -251,6 +252,15 @@ static int dbv_end_kind(DbvPass *p, int z_e, int a_e, int e, int nrows) {
     if (rr[0] == R012 && rr[1] == (DM(0) | DM(1)) && rr[2] == (DM(0) | DM(1))) return DK_TAPER0S;
     if (rr[0] == R012 && rr[1] == (DM(1) | DM(2)) && rr[2] == (DM(1) | DM(2))) return DK_TAPER1S;
     if (rr[0] == R123 && rr[1] == (DM(2) | DM(3)) && rr[2] == (DM(2) | DM(3))) return DK_TAPER2S;
+    if (!rr[0] && !rr[1] && !DBV_RDE(-1, 0) && DBV_RDE(4, 0) && DBV_RDE(5, 0) && DBV_RDE(6, 0) && !DBV_RDE(4, -1) &&
+        !DBV_RDE(5, -1) && !DBV_RDE(6, -1) && !DBV_RDE(5, 1) && !DBV_RDE(6, 1) && g_dbv_nst[DK_BEND135] && dbv_b135_on())
+        return DK_BEND135;                                               /* task diagfix: DBVBEND135 */
+    /* the mirror (x <-> z): the drags' flat end seen in the turned frame (cap-x4z4's partial rows) with a straight road
+       going on down from its last cell; on the map, a diagonal boulevard on axis 1 with a road along x into its end */
+    if (rr[0] == (DM(0) | DM(1) | DM(2)) && rr[1] == (DM(0) | DM(1)) && rr[2] == DM(0) && rr[3] == DM(-1) &&
+        rr[4] == DM(-2) && DBV_RDE(3, 6) && !DBV_RDE(2, 5) && !DBV_RDE(4, 5) && !DBV_RDE(2, 6) && !DBV_RDE(4, 6) &&
+        !DBV_RDE(-1, 0) && !DBV_RDE(4, 0) && g_dbv_nst[DK_BEND135M] && dbv_b135_on())   /* a straight road, 3+ cells */
+        return DK_BEND135M;
     if (!rr[0] && DBV_RDE(-1, 0) && DBV_RDE(4, 0)) return DK_STEM;
     if (DBV_RDE(-1, 0) || DBV_RDE(4, 0)) return DK_NONE;
     /* task avrbtfix: caps need their stamp rows + one empty row (was: all six rows empty) */
@@ -301,8 +311,47 @@ static int dbv_capclean_on(void) {
     }
     return g_dbv_capclean;
 }
+/* task diagfix (round 2026-11-14b family a, xsect 19; owner chose "taper + bend" 2026-11-14): DBVBEND135. A single
+   straight road meeting a diagonal boulevard's end row from the side of the carriageway that starts that row (canonical
+   bottom end: from +x into d3; top end, turned: from -x into d0), nothing past the end row: the end's rows hold the
+   bend stamp (`dbvs 18 ...`, painted by verify/diagfix/paint_19.py: the far side closes, the median ends in a nose, the
+   near carriageway turns into the road); the road's cells stay stock. Without it that road touched the end and was
+   masked (DBVTOUCH), ending square against the cap. Off: SC3NETMOD_DBVBEND135=0. */
+static int g_dbv_b135 = -1;
+static int dbv_b135_on(void) {
+    if (g_dbv_b135 < 0) {
+        g_dbv_b135 = !env_off("SC3NETMOD_DBVBEND135");
+        logf("dbv: DBVBEND135 %s (a road into a diagonal boulevard's end at 135 degrees: the end tapers and turns, "
+             "SC3NETMOD_DBVBEND135)", g_dbv_b135 ? "on" : "off");
+    }
+    return g_dbv_b135;
+}
+
 static int dbv_is_cap(int kind) {
     return kind == DK_CAP_SQ || kind == DK_CAP_PART || kind == DK_CAP_X4Z3 || kind == DK_CAP_X4Z4 || kind == DK_RAGGED;
+}
+
+/* task diagfix (round 2026-11-14b, orthfix BOXCELLS.md, xsect 42): DBVBROW. A boulevard (three straight roads side by
+   side) crossing a diagonal boulevard has only its outermost row free of road above / below, so DBV made that one row a
+   junction arm (29 at (32,88), (33,88)) and claimed it: BV, which stops at the band since BVDIAG, could not give the
+   boulevard its end cells there. A row road that is one row of a run of 3+ rows beside the band (road at the same
+   side cell in the rows above / below) is not an arm: DBV masks it as a touching road (DBVTOUCH) and does not claim it.
+   Off: SC3NETMOD_DBVBROW=0. */
+static int g_dbv_brow = -1;
+static int dbv_brow_on(void) {
+    if (g_dbv_brow < 0) {
+        g_dbv_brow = !env_off("SC3NETMOD_DBVBROW");
+        logf("dbv: DBVBROW %s (a boulevard's row beside a diagonal boulevard is not a junction arm, SC3NETMOD_DBVBROW)",
+             g_dbv_brow ? "on" : "off");
+    }
+    return g_dbv_brow;
+}
+
+static int dbv_rd_any(DbvPass *p, int cx, int cz) {                /* task diagfix: road, or masked by DBVTOUCH */
+    int k, rx = DBV_RX(p, cx, cz), rz = DBV_RZ(p, cx, cz);
+    if (dbv_rd(p, cx, cz)) return 1;
+    for (k = 0; k < p->nfor; k++) if (p->forx[k] == rx && p->forz[k] == rz) return 1;
+    return 0;
 }
 
 /* the rule on one anchored chain (x0, z0, n rows), canonical; -> 1 accepted (cells in p->cell), 0 refused */
@@ -385,6 +434,8 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
             for (j = 1; j <= maxdz; j++)                       /* the claimed rows (the stamp writes them) */
                 for (dx = j - 1; dx <= j + 4; dx++)
                     if (DBV_RDE(dx, j)) MARK(DBV_CELLX(dx, j), DBV_CELLZ(dx, j)) |= 2;
+            if (kind == DK_BEND135)                            /* task diagfix: the road the bend turns into */
+                for (dx = 4; dx < 512 && DBV_RDE(dx, 0); dx++) MARK(DBV_CELLX(dx, 0), DBV_CELLZ(dx, 0)) |= 2;
         }
     }
     /* ---- row roads (W / E arms) */
@@ -401,6 +452,18 @@ static int dbv_band(DbvPass *p, int x0, int z0, int n, const char **why) {
         if (g_dbv_touch > 0 && ea && !re && !dbv_rd(p, a + 5, z) && !OUTSIDE(a + 4, z - 1) && !OUTSIDE(a + 5, z - 1) &&
             !OUTSIDE(a + 5, z + 1) && !OUTSIDE(a + 3, z - 1))
             re = se = 1;
+        if (dbv_brow_on()) {                                             /* task diagfix: DBVBROW */
+            int run, t;                     /* rows with road beside the band, following its edge (row z + t's
+                                               side cells are a - 1 + t / a + 4 + t), outside the band */
+#define BROAD(cx_, cz_) (dbv_rd_any(p, (cx_), (cz_)) && !ISBAND((cx_), (cz_)))  /* masked touches count as road */
+            for (run = 1, t = 1; t < 4 && BROAD(a - 1 - t, z - t); t++) run++;
+            for (t = 1; t < 4 && BROAD(a - 1 + t, z + t); t++) run++;
+            if (w && run >= 3) rw = sw = 0;
+            for (run = 1, t = 1; t < 4 && BROAD(a + 4 - t, z - t); t++) run++;
+            for (t = 1; t < 4 && BROAD(a + 4 + t, z + t); t++) run++;
+            if (ea && run >= 3) re = se = 0;
+#undef BROAD
+        }
         if ((w && !rw) || (ea && !re) || !(w || ea)) continue;
         na0 = na;
         if (w && ea) { ADDUSE(DK_JROW_BOTH, a, z, 0); ADDARMS(DK_JROW_BOTH, a, z, 0); }

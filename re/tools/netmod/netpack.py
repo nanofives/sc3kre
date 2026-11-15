@@ -77,7 +77,8 @@ SCHEMA_VERSION = 1
 SCHEMA_FILE = os.path.join(HERE, "netpack.schema.json")
 DBV_KIND_NO = {"jrow-both": 1, "jrow-A": 2, "jrow-stem": 3, "jcol-both": 4, "jcol-A": 5, "narrow-C": 6, "narrow-A": 7,
                "taper-0": 8, "taper-1": 9, "taper-2": 10, "cap-square": 11, "cap-part": 12, "taper-0s": 13,
-               "taper-1s": 14, "taper-2s": 15, "cap-x4z3": 16, "cap-x4z4": 17}   # task diagbv: = diagbv.KIND_NO, sc3netmod_dbv.c
+               "taper-1s": 14, "taper-2s": 15, "cap-x4z3": 16, "cap-x4z4": 17,
+               "bend135": 18, "bend135m": 19}   # task diagfix DBVBEND135   # task diagbv: = diagbv.KIND_NO, sc3netmod_dbv.c
 
 NETMOD = "mods/netmod"
 LEDGER = NETMOD + "/ledger.json"
