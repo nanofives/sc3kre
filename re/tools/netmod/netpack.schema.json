@@ -196,7 +196,7 @@
               "required": ["axis", "end", "cont", "cells"],
               "properties": {
                 "axis": {"type": "integer", "minimum": 0, "maximum": 1, "description": "0 the down-right diagonal, 1 the other one (x mirrored)."},
-                "end": {"type": "integer", "minimum": 0, "maximum": 7, "description": "0: the band's last row, the single road goes on down; 1: its first row, going on up; 2 / 3 (task diagfix DAVBEND135): the last / first row where a straight road meets the end at 135 degrees (the far carriageway closes, the near one turns into the road); 6 / 7: that bend set's one stub cell (DAVBENDSTUB)."},
+                "end": {"type": "integer", "minimum": 0, "maximum": 9, "description": "0: the band's last row, the single road goes on down; 1: its first row, going on up; 2 / 3 (task diagfix DAVBEND135): the last / first row where a straight road meets the end at 135 degrees (the far carriageway closes, the near one turns into the road); 6 / 7: that bend set's one stub cell (DAVBENDSTUB); 8 / 9 (DAVBBEND): the last / first three rows where a straight boulevard meets the end at 135 degrees (the end is a paved bend box that opens into the boulevard)."},
                 "cont": {"enum": ["A", "B"], "description": "The staircase that goes on as a single road."},
                 "cells": {"type": "array", "minItems": 1, "items": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "integer"}}, "description": "[dx, dz, piece, state]: the cell dx, dz from the end row's left cell (axis space) gets a ROAD variant of this package at that state."}
               }
@@ -304,7 +304,7 @@
           "stamps": {
             "type": "object",
             "additionalProperties": false,
-            "patternProperties": {"^(jrow-both|jrow-A|jrow-stem|jcol-both|jcol-A|narrow-C|narrow-A|taper-[012]s?|cap-square|cap-part|cap-x4z[34]|bend135m?)$": {
+            "patternProperties": {"^(jrow-both|jrow-A|jrow-stem|jcol-both|jcol-A|narrow-C|narrow-A|taper-[012]s?|cap-square|cap-part|cap-x4z[34]|bend135m?|bendavm?|bendbv)$": {
               "type": "array", "maxItems": 40,
               "items": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "integer"}}}},
             "description": "Per junction / end kind, the cells it writes: [dx, dz, piece, state] in its canonical frame (diagbv.py: row family relative to a band row's left cell, column family relative to the column road's d0 cell). Pieces are variants of this package, or 29 / 35."

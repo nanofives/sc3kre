@@ -375,7 +375,7 @@ static DWORD dav_junc_of(int n, int s1, int s2, int o, int e) {
    staircase that goes on) the cell (dx, dz) from the end row's left cell, in axis space, gets the piece at the state.
    `davs <piece>`: the piece saves as 43 (it holds both roads, stock 35 would draw one). */
 #define DAV_MERGE_ROWS 3                              /* single-road rows past the end row that the avenue writes */
-#define DAV_MAX_MRG 64
+#define DAV_MAX_MRG 128                             /* task diagfix: 64 -> 128 (DAVBBEND sets) */
 #define DAV_MAX_S43 32
 typedef struct { BYTE axis, end, cont; signed char dx, dz; WORD piece; BYTE state; } DavMrg;
 static DavMrg g_dav_mrg[DAV_MAX_MRG];
@@ -386,7 +386,7 @@ static int g_dav_ns43;
 static void dav_mline(const char *path, const char *line) {
     unsigned long ax, end, cont, v, st;
     long dx, dz;
-    if (sscanf(line + 5, "%lu %lu %lu %ld %ld %lu %lu", &ax, &end, &cont, &dx, &dz, &v, &st) != 7 || ax > 1 || end > 7 ||
+    if (sscanf(line + 5, "%lu %lu %lu %ld %ld %lu %lu", &ax, &end, &cont, &dx, &dz, &v, &st) != 7 || ax > 1 || end > 9 ||
         cont < 1 || cont > 2 || dx < -4 || dx > 4 || dz < -4 || dz > 4 || !v || v > 0xffff || st > 3 || !g_base[v]) {
         logf("### dav: %s: bad merge line or piece not a variant: '%s'", path, line);   /* end 2 / 3: DAVBEND135 */
         return;
@@ -410,6 +410,31 @@ static void dav_sline(const char *path, const char *line) {
 static int dav_is_mrg(WORD id) {
     int k;
     for (k = 0; k < g_dav_nmrg; k++) if (g_dav_mrg[k].piece == id) return 1;
+    return 0;
+}
+
+/* task diagfix (round 2026-11-14b art family a, xsect 41): DAVBBEND. A straight BOULEVARD (BV, three rows) meeting a
+ * diagonal avenue's end row and the two rows after it from the side of the carriageway that starts that row (top end:
+ * from -x, axis space; bottom end: from +x) is a 135-degree bend from the boulevard into the avenue (owner's family a
+ * look, "taper + bend"). Before, DAV read the boulevard's first two rows as a straight avenue it bends into (bend 1),
+ * BV took the band's first cells for its run and the lowest boulevard road ended square against the avenue's kerb.
+ * Now the band's first three rows (9 cells) hold the package's bend set (`davm <axis> 8|9 ...`: the avenue's end is a
+ * paved box with a rounded kerb that opens into the boulevard, its median ends in a nose; verify/diagfix/paint_41.py)
+ * and BV ends its run before them (orthfix BVBEND, end type 8, the median nose on its last cell: BV's). Only where the
+ * package declares a set for that axis and end, and only when none of the 9 cells holds a BV piece (BV without BVBEND
+ * keeps them: then DAV does as before). Off: SC3NETMOD_DAVBBEND=0. */
+static int g_dav_bb = -1;
+static int dav_bbend_on(void) {
+    if (g_dav_bb < 0) {
+        g_dav_bb = !env_off("SC3NETMOD_DAVBBEND");
+        logf("dav: DAVBBEND %s (a boulevard into a diagonal avenue's end at 135 degrees: the end is a paved bend box, "
+             "SC3NETMOD_DAVBBEND)", g_dav_bb ? "on" : "off");
+    }
+    return g_dav_bb;
+}
+static int dav_bb_set(int axis, int e) {                 /* the package declares the set for this axis and end */
+    int k;
+    for (k = 0; k < g_dav_nmrg; k++) if (g_dav_mrg[k].axis == axis && g_dav_mrg[k].end == (e ? 8 : 9)) return 1;
     return 0;
 }
 
@@ -739,11 +764,11 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
               dav_retry: {
                 int rows = 0, ok = 1, step, nw = 0, namb = 0, amb[DAV_MAX_AMB], combo, ncombo, best = -1, run, brun;
                 int bestcost = 0x7fffffff, na = 0, nj = 0, ncn = 0, ncs = 0, colN[DAV_MAX_COLS][2], colS[DAV_MAX_COLS][2];
-                int nmg = 0, mg[2][4], npath = 0, path[16][2], nmc = 0, mcx[16], mcz[16], bend[2], e;
+                int nmg = 0, mg[2][4], npath = 0, path[16][2], nmc = 0, mcx[32], mcz[32], bend[2], e;
                 int nxm = 0, xmt[DAVX_MAX_M], xma[DAVX_MAX_M], xmz[DAVX_MAX_M], nxw = 0, xend[2], t, xout = 0;
                 int two = 0, twx = 0, twz = 0;                    /* task avrbtchain: DAVTWO band, its straight cell */
                 int sok[2] = { 0, 0 }, sox[2], soz[2];          /* task avrbtchain: bends whose straight is one-way */
-                DWORD mcw[16];
+                DWORD mcw[32];                                   /* task diagfix: 16 -> 32 (two DAVBBEND sets) */
                 BYTE side[1024];
                 int nop = 0, opn[DAV_MAX_OPN][6];       /* task avdiag: median openings: near, median, far cell (real) */
                 int bsd = 0;                            /* task avdiagbreak: window sides this band reaches */
@@ -821,6 +846,20 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                     for (j = 0; j < 4 && !bend[e]; j++)          /* task diagbv: the end runs into a diagonal boulevard */
                         if (dbv_claimed(axis ? -BX(j) : BX(j), BZ(1))) bend[e] = 3;
                     if (bend[e]) continue;
+                    if (rows >= 6 && RD(BX(3), BZ(0)) && RD(BX(4), BZ(0)) && RD(BX(5), BZ(0)) && RD(BX(2), BZ(-1)) &&
+                        RD(BX(3), BZ(-1)) && RD(BX(4), BZ(-1)) && RD(BX(1), BZ(-2)) && RD(BX(2), BZ(-2)) &&
+                        RD(BX(3), BZ(-2)) && !RD(BX(1), BZ(1)) && !RD(BX(2), BZ(1)) && !RD(BX(3), BZ(1)) &&
+                        !RD(BX(4), BZ(1)) && !RD(BX(0), BZ(-3)) && !RD(BX(1), BZ(-3)) && dav_bb_set(axis, e) &&
+                        dav_bbend_on()) {                          /* task diagfix: DAVBBEND, a boulevard's three rows */
+                        int bvx = 0, kk, dd;
+                        for (kk = 0; kk < 3; kk++)
+                            for (dd = 0; dd < 3; dd++) {
+                                int ax_ = (e ? x + rows - 1 - kk : x + kk) + dd, zq_ = e ? z + rows - 1 - kk : z + kk;
+                                DWORD v_ = rb_at(&P.b, axis ? -ax_ : ax_, zq_);
+                                if (v_ && bv_is_piece((WORD)(v_ & 0xffff))) bvx = 1;
+                            }
+                        if (!bvx) { bend[e] = 4; continue; }
+                    }
                     if (rows >= 3 && RD(BX(3), BZ(0)) && RD(BX(2), BZ(-1)) && RD(BX(3), BZ(-1)) && !RD(BX(1), BZ(1)) &&
                         !RD(BX(2), BZ(1)) && !RD(BX(3), BZ(1)))
                         bend[e] = 1;
@@ -842,7 +881,8 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                 for (k = 0; k < rows && ok; k++) {
                     int aa = x + k, zz = z + k;
                     side[k] = 0;
-                    if (bend[0] == 1 && k <= 1 && RD(aa - 1, zz)) side[k] |= 4;     /* the straight avenue, not an arm */
+                    if (((bend[0] == 1 && k <= 1) || (bend[0] == 4 && k <= 2)) && RD(aa - 1, zz))   /* diagfix: 4 */
+                        side[k] |= 4;                                             /* the straight avenue, not an arm */
                     else if (RD(aa - 1, zz) && !(XC(aa - 1, zz) & 1) && !DCL(aa - 1, zz)) {   /* diagx, diagbv */
                         if (RD(aa - 2, zz) && !DOUT(aa - 1, zz + 1) && !DOUT(aa - 2, zz + 1) && !DOUT(aa - 2, zz - 1)) {
                             side[k] |= 1;
@@ -857,7 +897,8 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                             dav_add_stub(&P, &na, axis, aa - 1, zz, 1);
                         } else { ok = 0; why = "road beside the avenue is not a straight arm"; DBAD(aa - 1, zz); }
                     }
-                    if (bend[1] == 1 && k >= rows - 2 && RD(aa + 3, zz)) side[k] |= 4;
+                    if (((bend[1] == 1 && k >= rows - 2) || (bend[1] == 4 && k >= rows - 3)) && RD(aa + 3, zz))
+                        side[k] |= 4;                                             /* task diagfix: DAVBBEND */
                     else if (ok && RD(aa + 3, zz) && !(XC(aa + 3, zz) & 1) && !DCL(aa + 3, zz)) {
                         if (RD(aa + 4, zz) && !DOUT(aa + 3, zz - 1) && !DOUT(aa + 4, zz + 1) && !DOUT(aa + 4, zz - 1)) {
                             side[k] |= 2;
@@ -985,6 +1026,19 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                 for (step = -1; step <= 1 && ok; step += 2) {
                     int zr = step < 0 ? z : z + rows - 1, ar = step < 0 ? x : x + rows - 1, pat[2] = { 0, 0 }, cont = 0;
                     e = step > 0;
+                    if (bend[e] == 4) {                  /* task diagfix DAVBBEND: the set on the end's 3 rows, the */
+                        if (nmg < 2) {                   /* boulevard cells beside them are path (BV's, kept) */
+                            mg[nmg][0] = e ? 8 : 9; mg[nmg][1] = 1; mg[nmg][2] = zr; mg[nmg][3] = ar; nmg++;
+                        }
+                        for (k = 0; k < 3; k++)
+                            for (j = 1; j <= 2; j++) {
+                                int ak = e ? ar - k : ar + k, zk = e ? zr - k : zr + k, a2 = e ? ak + 2 + j : ak - j;
+                                if (!RD(a2, zk) || npath >= 16) continue;
+                                path[npath][0] = axis ? -a2 : a2; path[npath][1] = zk; npath++;
+                                *dav_markp(&P, axis ? -a2 : a2, zk) |= 32;
+                            }
+                        continue;
+                    }
                     if (bend[e]) {                       /* the straight cells: path; two virtual rows of both staircases */
                         int u, v;                        /* past the end hold the masks of a band that goes on */
                         for (v = -1; v <= 2; v++)
@@ -1102,7 +1156,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                         DavMrg *q = &g_dav_mrg[j];
                         int ax = mg[k][3] + q->dx, cz = mg[k][2] + q->dz, cx = axis ? -ax : ax;
                         if (q->axis != axis || q->end != mg[k][0] || q->cont != mg[k][1]) continue;
-                        if (!(dav_mark(&P, cx, cz) & 4) || nmc >= 16) { ok = 0; why = "merge cell is not band road"; break; }
+                        if (!(dav_mark(&P, cx, cz) & 4) || nmc >= 32) { ok = 0; why = "merge cell is not band road"; break; }
                         *dav_markp(&P, cx, cz) |= 64;
                         mcx[nmc] = cx; mcz[nmc] = cz; mcw[nmc] = ((DWORD)q->piece << 8) | q->state; nmc++;
                     }
