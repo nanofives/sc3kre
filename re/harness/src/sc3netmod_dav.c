@@ -219,6 +219,51 @@ static int dav_two_on(void) {
 
 static int dav_is_mid_or_twin(WORD id) { return dav_is_mid(id) || dav_twin_piece(id) != 0; }   /* the revert pass */
 
+/* task diagfix (round 2026-11-14b milestone 4, xsect 39 / 41: 438 revert lines over the sweep): DAVBVBEND. A diagonal
+ * avenue that bends into a straight BOULEVARD (BV's pieces, one-way since bvlanes) was judged two ways in one edit: the
+ * main pass asks avl_band_ok, which only knows avenues and says no, so the band was refused and its 21 cells reverted
+ * (`(160,68) avenue piece 20505 no longer in a band -> stock retile`); the post-AVL pass asks avl_dir, whose map holds
+ * BV's one-way cells, says yes, and wrote the 21 cells back (`kept: 7 touching road cell(s) ... 21 written`). Every
+ * later edit anywhere in the window did both again, and BV, reading the junction cells half way through, flipped too
+ * (41's boulevard arm ended as stock 11204). Now (1) the main pass also accepts a bend whose straight cell holds a BV
+ * piece that AVL's kept map calls one-way (the post pass's own test), and (2) DAV never writes over a BV piece (the
+ * cells both bands hold stay BV's, as the post pass left them). Off: SC3NETMOD_DAVBVBEND=0. */
+static int bv_is_piece(WORD id);                                       /* sc3netmod_bv.c (included after this file) */
+
+/* task diagfix (round 2026-11-14b, xsect 27 / 28 yellow): DAVXAVL. A diagonal avenue crossing a straight avenue writes
+ * the crossing template, whose cells on the straight avenue beside the box are stock 11204 (davxw lines). AVL then turns
+ * that straight band one-way (21700 ...), and DAV's post-AVL pass, which runs after AVL, wrote the template's 11204 back
+ * over AVL's pieces: case 27 ended with x 118..120 one-way and 121..122 stock two-way, the yellow centre line up to the
+ * box. Now a template cell that wants 11204 keeps an AVL piece that is a variant of 11204 at the same state.
+ * Off: SC3NETMOD_DAVXAVL=0. */
+static int avl_own(WORD id);                                           /* sc3netmod_avl.c */
+static int g_dav_xavl = -1;
+static volatile LONG g_dav_n_xavl;
+static int dav_xavl_keep(DWORD want, DWORD cur) {
+    WORD id = (WORD)(cur & 0xffff);
+    if (!cur || (want >> 8) != 11204 || g_base[id] != 11204 || ((cur >> 16) & 3) != (want & 3)) return 0;
+    if (g_dav_xavl < 0) {
+        g_dav_xavl = !env_off("SC3NETMOD_DAVXAVL");
+        logf("dav: DAVXAVL %s (crossing cells keep AVL's one-way 11204 variants, SC3NETMOD_DAVXAVL)",
+             g_dav_xavl ? "on" : "off");
+    }
+    return g_dav_xavl && avl_own(id);
+}
+static int g_dav_bvbend = -1;
+static volatile LONG g_dav_n_bvyield;
+static int dav_bvbend_on(void) {
+    if (g_dav_bvbend < 0) {
+        g_dav_bvbend = !env_off("SC3NETMOD_DAVBVBEND");
+        logf("dav: DAVBVBEND %s (bends into a one-way boulevard judged alike before and after AVL, BV's cells kept, "
+             "SC3NETMOD_DAVBVBEND)", g_dav_bvbend ? "on" : "off");
+    }
+    return g_dav_bvbend;
+}
+static int dav_bv_oneway(RbBuf *b, int x, int z) {
+    DWORD v = rb_at(b, x, z);
+    return v && dav_bvbend_on() && bv_is_piece((WORD)(v & 0xffff)) && avl_dir(x, z) >= 0;
+}
+
 /* task diagfix (round 2026-11-14b fix 1, xsect cases 68 69 72 73 80): a diagonal avenue / boulevard drawn across a
  * rail line or under a highway holds, on the rail / highway rows, the game's shared crossing pieces (69 road x rail,
  * 15098 highway over road, 11258 road x highway, 67 power over road, ... and any ROAD piece the game keeps out of
@@ -1050,7 +1095,7 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                    in the post-AVL put-back, AVL's band map */
 #define BX(u) (e ? x + rows - 1 + (u) : x + 2 - (u))
 #define BZ(v) (e ? z + rows - 1 + (v) : z - (v))
-#define STRAIGHT_OK(cx_, cz_, away_) (g_dav_post ? avl_dir((cx_), (cz_)) >= 0 : avl_band_ok((cx_), (cz_), (away_)))
+#define STRAIGHT_OK(cx_, cz_, away_) (g_dav_post ? avl_dir((cx_), (cz_)) >= 0 : (avl_band_ok((cx_), (cz_), (away_)) ||                                       dav_bv_oneway(&P.b, (cx_), (cz_))))     /* task diagfix: DAVBVBEND */
                 for (e = 0; e < 2 && ok && (g_dav_u[0] || g_dav_nn || g_dav_nt); e++) {
                     int bx, bz, away;
                     if (bend[e] == 2) {                               /* along z, columns u 1 / 2 go on */
@@ -1207,6 +1252,14 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
                             keep[(cz - z0) * P.b.w + (cx - x0)] = 1;
                         if (dbv_claimed(cx, cz)) continue;          /* task diagbv: DBV writes its own cells */
                         if (dav_xnet(cur)) { nxk++; continue; }     /* task diagfix: a rail / highway crossing stays */
+                        if ((k >= n + na || (dav_xm(&P, cx, cz) & 2)) && dav_xavl_keep(want, cur)) {   /* DAVXAVL */
+                            InterlockedIncrement(&g_dav_n_xavl);
+                            continue;
+                        }
+                        if (cur && bv_is_piece((WORD)(cur & 0xffff)) && dav_bvbend_on()) {   /* task diagfix: DAVBVBEND */
+                            InterlockedIncrement(&g_dav_n_bvyield);
+                            continue;
+                        }
                         cut_wrote(&cg, cx, cz, want);               /* task avdiagbreak */
                         if ((((cur & 0xffff) << 8) | ((cur >> 16) & 3)) == want) continue;
                         pos[0] = cx << 8; pos[1] = cz << 8; pos[2] = 0;
@@ -1292,6 +1345,30 @@ static int dav_pass(BYTE *mgr, int x0, int z0, int x1, int z1, int W, int H, con
    used to go straight to a whole-map pass (every edit near a long diagonal avenue on 1024 read the whole map). Now the
    window grows on the cut sides, by 64 cells and then doubling, until nothing is cut (the whole map at worst). Cut bands
    are not written in a cut window. Off: SC3NETMOD_DAVGROW=0 (straight to the whole map, as before). */
+/* task diagfix (round 2026-11-14b, xsect case 64 broken by building case 76): DAVDBVWIN. DBV runs first in an edit and
+   claims the cells of every diagonal boulevard it accepts in ITS window; DAV skips claimed cells. When DAV's window grows
+   (DAVGROW: a cut diagonal avenue) past DBV's, a diagonal boulevard there was never judged in this edit, and DAV read it
+   as a diagonal avenue with a touching third staircase (DAVTOUCH masks it) and wrote 28 avenue pieces over case 64's
+   boulevard: `dav: edit: band axis 0, 13 row(s) from (63,117) ... 28 written` (the xsect sweep log has it too). Now a
+   DAV window outside DBV's runs DBV over it first (DBV's own rules, claims and writes: what a whole-map pass gives).
+   g_dbv_win = the last window dbv_run judged (sc3netmod_dbv.c sets it). Off: SC3NETMOD_DAVDBVWIN=0. */
+static int g_dbv_win[4] = { 0, 0, -1, -1 };
+static int g_dav_dbvwin = -1;
+static volatile LONG g_dav_n_dbvwin;
+
+static void dav_dbv_cover(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) {
+    if (g_dav_dbvwin < 0) {
+        g_dav_dbvwin = !env_off("SC3NETMOD_DAVDBVWIN");
+        logf("dav: DAVDBVWIN %s (DBV judges a grown DAV window first, SC3NETMOD_DAVDBVWIN)", g_dav_dbvwin ? "on" : "off");
+    }
+    if (!g_dav_dbvwin || g_dav_probe || !g_dbv_out) return;
+    if (x0 >= g_dbv_win[0] && z0 >= g_dbv_win[1] && x1 <= g_dbv_win[2] && z1 <= g_dbv_win[3]) return;
+    InterlockedIncrement(&g_dav_n_dbvwin);
+    logf("dav: %s: window (%d,%d)-(%d,%d) is outside DBV's (%d,%d)-(%d,%d) - DBV judges it first (DAVDBVWIN)", who, x0, z0,
+         x1, z1, g_dbv_win[0], g_dbv_win[1], g_dbv_win[2], g_dbv_win[3]);
+    dbv_run(mgr, x0, z0, x1, z1, who);
+}
+
 static void dav_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) {
     int W = (*(int *)(mgr + 0x5c) >> 8) + 1, H = (*(int *)(mgr + 0x60) >> 8) + 1, M = 24, full, sides = 0, step = 64;
     int round;
@@ -1308,6 +1385,7 @@ static void dav_run(BYTE *mgr, int x0, int z0, int x1, int z1, const char *who) 
     if (z1 > H - 1) z1 = H - 1;
     for (round = 0; ; round++) {
         full = x0 == 0 && z0 == 0 && x1 == W - 1 && z1 == H - 1;
+        if (round > 0) dav_dbv_cover(mgr, x0, z0, x1, z1, who);           /* task diagfix: DAVDBVWIN */
         keep = (BYTE *)VirtualAlloc(NULL, (SIZE_T)(x1 - x0 + 1) * (z1 - z0 + 1), MEM_COMMIT, PAGE_READWRITE);
         if (!keep) return;
         sides = 0;
@@ -1401,6 +1479,12 @@ static void dav_stats(void) {
          "straight avenue=%ld, windows grown=%ld (to the whole map %ld), kept with touching road=%ld, stub arms=%ld",
          g_dav_n_bands, g_dav_n_cells, g_dav_n_rev, g_dav_n_x, g_dav_n_avl, g_dav_n_grow, g_dav_n_full, g_dav_n_touch,
          g_dav_n_stub);   /* task avdiag, task avdiagbreak, task davtouch */
+    if (g_dav_n_xavl)                                                  /* task diagfix: DAVXAVL */
+        logf("stats: dav crossing cells left with AVL's one-way piece (DAVXAVL)=%ld", g_dav_n_xavl);
+    if (g_dav_n_bvyield)                                               /* task diagfix: DAVBVBEND */
+        logf("stats: dav cells left to BV (DAVBVBEND)=%ld", g_dav_n_bvyield);
+    if (g_dav_n_dbvwin)                                                /* task diagfix: DAVDBVWIN */
+        logf("stats: dav windows DBV judged first (DAVDBVWIN)=%ld", g_dav_n_dbvwin);
     if (g_dav_n_xnet)                                                  /* task diagfix: DAVXNET */
         logf("stats: dav/dbv rail / highway crossing cells kept=%ld", g_dav_n_xnet);
     if (g_dav_n_two)                                                   /* task avrbtchain: DAVTWO */
