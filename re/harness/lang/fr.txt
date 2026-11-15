@@ -724,3 +724,11 @@ resize.mt_weather=Interrupteur météo
 resize.wx_label=Météo :
 # en: Rain and clouds
 resize.wx_rain=Pluie et nuages
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Gentler abandonment
+resize.mt_gentle=Abandon atténué
+# en: Sandbox: no abandonment
+resize.mt_sandbox=Bac à sable : sans abandon
+# en: Simulation
+resize.mt_sim=Simulation

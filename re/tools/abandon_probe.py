@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 r"""abandon_probe.py - what the R/C/I zone evaluators do to standing buildings (task abandon, 2026-11-15).
-Read-only Frida hooks: nothing in the game is written. Calls made from the hooks are getters the evaluators
+Read-only Frida hooks: nothing in the game is written, except the --tax lab option. Calls made from the hooks are getters the evaluators
 themselves call (occupant vt+0x4c / +0x60, attrib vt+0x40 / +0x44, GetOccupantAtCell, QueryInterface, Release).
 
 Hooks (SIMRCI unless noted; addresses are image VAs, rebased at run time):
@@ -11,12 +11,16 @@ Hooks (SIMRCI unless noted; addresses are image VAs, rebased at run time):
         attrib vt+0x40 / vt+0x44, and after the call the occupant now at the cell: same object or not, its state.
   0x10039a9a cRZRandom::RandomUint32Uniform, only from the (b) no-service and (c) negative-demand roll sites:
         reads the evaluator frame (net demand, raw demand, valve min / max, x, service bytes) and whether the
-        stock roll fires.
+        stock roll fires. Every draw is also binned by the raw valve value (100 wide): draws, fires, sum of net.
   Snapshot every --every seconds (on the game thread, inside the res evaluator): R / C / I valve value / min / max,
         filled demand, valve 7000 vt+0x2c (jobs), valve 3000 vt+0x28 (R population as Desempleo reads it),
-        residential iface vt+0x78, zone layer vt+0x54 (abandoned tiles).
+        residential iface vt+0x78, zone layer vt+0x54 (abandoned tiles), power iface vt+0x60 (unpowered tiles),
+        budget tax bytes +0x8c / +0x114 / +0x19c.
+  --tax N   LAB ONLY: at the first snapshot, write N into the three budget tax bytes (the R/C/I rates the budget
+            sliders set; order [UNCERTAIN], all three get the same value), to push demand below zero.
+  At the end, sc3simrun_abandon (if loaded) is read: the SANDBOX / GENTLE counters.
 
-  py -3.12 re/tools/abandon_probe.py SECONDS [--json OUT] [--every 10] [--events 400]   (SC3_PID = the game, running)
+  py -3.12 re/tools/abandon_probe.py SECONDS [--json OUT] [--every 10] [--events 400] [--tax N]   (SC3_PID = the game, running)
 """
 import json
 import os
@@ -41,8 +45,8 @@ function vc(o, off, ret, at, av) {
   if (!NF[k]) NF[k] = new NativeFunction(f, ret, ['pointer'].concat(at), {abi: 'thiscall', exceptions: 'propagate'});
   return NF[k].apply(null, [o].concat(av));
 }
-var MAXEV = %MAXEV%, EVERY = %EVERY%;
-var S = {days: 0, status: {res: {}, com: {}, ind: {}}, posts: {}, rolls: {}, ev: [], snaps: [], vt: {}, err: []};
+var MAXEV = %MAXEV%, EVERY = %EVERY%, TAX = %TAX%;
+var S = {cpost: {}, cbucket: {}, cdemand: [], days: 0, status: {res: {}, com: {}, ind: {}}, posts: {}, rolls: {}, ev: [], snaps: [], vt: {}, err: []};
 function err(e) { if (S.err.length < 20) S.err.push('' + e); }
 
 Interceptor.attach(A(sim, 0x1000aa4d), {onEnter: function () { S.days++; }});
@@ -67,6 +71,10 @@ function snap() {
   var vr = valve(vl, 3000); if (vr) { r.rpop = vc(vr, 0x28, 'int32', [], []); vc(vr, 8, 'uint32', [], []); }
   var res = vc(city, 0x17c, 'pointer', [], []); r.res78 = vc(res, 0x78, 'int32', [], []);
   r.abandoned_tiles = vc(zone, 0x54, 'uint32', [], []);
+  var pw = vc(city, 0x150, 'pointer', [], []); r.unpowered_tiles = vc(pw, 0x60, 'int32', [], []);
+  var bud = vc(city, 0x15c, 'pointer', [], []); r.tax = [bud.add(0x8c).readU8(), bud.add(0x114).readU8(), bud.add(0x19c).readU8()];
+  if (TAX >= 0 && !S.taxed) { S.taxed = {was: r.tax.slice(), now: TAX};
+    [0x8c, 0x114, 0x19c].forEach(function (o) { bud.add(o).writeU8(TAX); }); }
   vc(vl, 8, 'uint32', [], []);
   S.snaps.push(r);
 }
@@ -108,6 +116,9 @@ function occ_state(dev, ind, x, z) {
         this.k = site + ' flags=' + hex(flags);
         this.rec = null;
         S.posts[this.k] = (S.posts[this.k] || 0) + 1;
+        if (site.indexOf('c_negdemand') > 0) {   // raw valve value from the evaluator frame (res/com -0x18, ind -0x24)
+          var z = site.split(':')[0], dv = this.context.ebp.add(z === 'ind' ? -0x24 : -0x18).readS32();
+          var pk = z + ':' + (Math.floor(dv / 100) * 100); S.cpost[pk] = (S.cpost[pk] || 0) + 1; }
         if (S.ev.length >= MAXEV) return;
         var at = vc(b, 0x60, 'pointer', [], []), atvt = rva(at.readPointer());
         S.vt[hex(atvt)] = (S.vt[hex(atvt)] || 0) + 1;
@@ -135,7 +146,7 @@ ROLL[0x10018635] = {z: 'ind', b: 'c', net: -0x38, dem: -0x24, min: -0x64, max: -
 ROLL[0x10029520] = {z: 'res', b: 'b', x: 'ebx', pw: -3, tr: -5, trip: -9, wat: -0x20, den: -7};
 ROLL[0x10010358] = {z: 'com', b: 'b', x: 'ebx', pw: -2, tr: -5, trip: -9, wat: -0x20, den: -7};
 ROLL[0x1001855c] = {z: 'ind', b: 'b', x: -0x40, pw: -5, tr: -8, trip: -0xa, wat: -0x20, den: -9};
-S.cdemand = [];
+// cbucket: zone:raw-demand bucket of 100 -> [draws, fires, sum of net]
 Interceptor.attach(A(rci, 0x10039a9a), {
   onEnter: function (a) {
     var R = ROLL[rva(this.returnAddress)]; this.R = R; if (!R) return;
@@ -149,6 +160,8 @@ Interceptor.attach(A(rci, 0x10039a9a), {
         var net = bp.add(R.net).readS32(), q = -((net / x) | 0);
         fire = (v | 0) < q;
         k = R.z + ':c ' + (fire ? 'fires' : 'misses');
+        var dem = bp.add(R.dem).readS32(), bk = R.z + ':' + (Math.floor(dem / 100) * 100);
+        var cb = S.cbucket[bk] || (S.cbucket[bk] = [0, 0, 0]); cb[0]++; if (fire) cb[1]++; cb[2] += net;
         if (S.cdemand.length < 4000) S.cdemand.push([R.z, S.days, net, bp.add(R.dem).readS32(), bp.add(R.min).readS32(),
                                                        bp.add(R.max).readS32(), x, fire ? 1 : 0]);
       } else {
@@ -161,7 +174,11 @@ Interceptor.attach(A(rci, 0x10039a9a), {
       S.rolls[k] = (S.rolls[k] || 0) + 1;
     } catch (e) { err('roll ' + e); }
   }});
-rpc.exports = {snap: function () { return S; }};
+rpc.exports = {snap: function () {
+  var m = Process.findModuleByName('sc3simrun.dll'), e = m && m.findExportByName('sc3simrun_abandon');
+  if (e) { var o = Memory.alloc(42 * 4); new NativeFunction(e, 'void', ['pointer'])(o); S.simrun_abandon = [];
+           for (var i = 0; i < 42; i++) S.simrun_abandon.push(o.add(i * 4).readU32()); }
+  return S; }};
 """
 
 
@@ -170,10 +187,11 @@ def main(argv):
     out = argv[argv.index("--json") + 1] if "--json" in argv else None
     every = float(argv[argv.index("--every") + 1]) if "--every" in argv else 10.0
     maxev = int(argv[argv.index("--events") + 1]) if "--events" in argv else 400
+    tax = int(argv[argv.index("--tax") + 1]) if "--tax" in argv else -1
     pid = sc3io.game_pid()
     sc3pause.require_running(pid, "abandon_probe")
     s = frida.attach(pid)
-    sc = s.create_script(JS.replace("%MAXEV%", str(maxev)).replace("%EVERY%", str(every)))
+    sc = s.create_script(JS.replace("%MAXEV%", str(maxev)).replace("%EVERY%", str(every)).replace("%TAX%", str(tax)))
     sc.load()
     t0 = time.time()
     time.sleep(secs)
@@ -181,7 +199,7 @@ def main(argv):
     snap["seconds"] = round(time.time() - t0, 1)
     sc.unload()
     s.detach()
-    summary = {k: snap[k] for k in ("days", "status", "posts", "rolls", "vt", "err", "seconds")}
+    summary = {k: snap.get(k) for k in ("days", "status", "posts", "rolls", "vt", "err", "seconds", "taxed", "simrun_abandon", "cbucket", "cpost")}
     summary["snaps"] = snap["snaps"]
     print(json.dumps(summary, indent=1, sort_keys=True))
     if out:

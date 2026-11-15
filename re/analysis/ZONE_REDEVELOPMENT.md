@@ -177,3 +177,23 @@ shows strongly negative demand can abandon slowly or not at all once filled dema
 
 Crime: not read. Garbage: pollution `vt+0x6c` only toggles occupancy bit `0x100` (a re-post with the same state).
 Pollution: radioactivity (a) for all three, air / water only for farms (p). Disasters (SIMDSTR) are separate.
+
+## 6. Mods built on section 5 (sc3simrun, task abandon 2026-11-15)
+
+**SANDBOX** (`simrun.ini [sandbox] enabled=0`, env `SC3SIMRUN_SANDBOX`, row "Sandbox: no abandonment"): the six
+(b) / (c) roll calls (`0x1002951b`, `0x10010353`, `0x10018557`, `0x1002939d`, `0x100101d5`, `0x10018630`) go through a
+stub that calls `cRZRandom::RandomUint32Uniform` `0x10039a9a` and, when the stock roll would fire, returns a value that
+misses (`0xffffffff` for the unsigned (b) compare, `0x7fffffff` for the signed (c) compare); the game then carries on
+as after a miss. The seven (a) / (d) / (p) post calls are skipped; where the game would next re-post the building
+for a changed garbage bit (its byte at `[ebp+0xb]` res/com, `[ebp-1]` ind), the stub makes that re-post with state 1.
+The three 14-byte farm removals become `push [ebp-0x10]; call stub`. Measured: `verify/abandon/RESULTS.md` (0
+abandonments in 3 Berlin years and 1 Madrid year; population and jobs stay counted; industrial demand stays at the
+valve minimum because filled demand no longer goes negative).
+
+**GENTLE** (`[gentle] enabled=0 share_pct=25`, env `SC3SIMRUN_GENTLE`, `SC3SIMRUN_GENTLE_SHARE`, row "Gentler
+abandonment"): at the three (c) roll calls, when the stock roll fires and the raw valve value (the RCI bar, not the
+net value the roll uses) is at or above `min + (max - min) * share_pct / 100`, the roll is made to miss. Below that
+line the stock roll is unchanged. With the valves at -2000..2000: 50 = stock, 25 = only below -1000 (the bar under
+half of its negative side), 0 = never.
+
+**Not changed:** the always-0 lower-value pickers (`0x100297fb`, `0x10018e45`), owner decision 2026-11-15.

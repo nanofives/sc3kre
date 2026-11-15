@@ -724,3 +724,11 @@ resize.mt_weather=Väderbrytare
 resize.wx_label=Väder:
 # en: Rain and clouds
 resize.wx_rain=Regn och moln
+
+# ---- added by sc3lang.py merge (machine translation, needs native review)
+# en: Gentler abandonment
+resize.mt_gentle=Mildare förfall
+# en: Sandbox: no abandonment
+resize.mt_sandbox=Sandlåda: inget förfall
+# en: Simulation
+resize.mt_sim=Simulering

@@ -8867,6 +8867,7 @@ static int g_modtoggle = 1;   /* MODTOGGLE page C, SC3RESIZE_MODTOGGLE=0 off */
 #define MT_NOTE2    0x02F95B7B
 #define MT_H_CITY   0x02F95B7C   /* SALTFIX: "Esta ciudad" heading on page C */
 #define MT_SALT     0x02F95B7D   /* SALTFIX: "Recalcular agua salada" checkbox, applied on OK */
+#define MT_H_SIM    0x02F95B7E   /* SANDBOX / GENTLE: "Simulacion" heading over the default-off rows */
 #define MT_ROW0     0x02F95B80   /* one checkbox per k_mt_rows entry, 0x02F95B80.. */
 #define MP_MAXKIDS  96
 /* RELOCATE / PLOPOVER switches (block below). The hooks are installed unless the env turns BOTH off, and only the
@@ -9161,7 +9162,10 @@ static void lang_click(void *win) {
  *   [mods] <dll>=0     the DLL is not loaded
  *   [env]  NAME=0      the feature's existing off-switch is set in the environment (an env var already set wins)
  * Turning a row back on deletes its keys, so the file only ever lists what is off. sc3resize.dll itself has no row:
- * it hosts this page. Each feature row names the env switches its code already reads (atoi / v[0]=='0'). */
+ * it hosts this page. Each feature row names the env switches its code already reads (atoi / v[0]=='0').
+ * A row whose env starts with '+' is a feature that is OFF by default (task abandon 2026-11-15: sc3simrun SANDBOX and
+ * GENTLE): checked = [env] NAME=1, unchecked = no key. Those rows sit in the left column under "Simulacion", because
+ * the feature column is full (the city section must stay clear of Volver). */
 typedef struct { SC3TXT t; const char *dll; const char *env; } MT_ROW;   /* dll set = a [mods] row, else env = ';' list */
 static const MT_ROW k_mt_rows[] = {
     { { SC3KEY("resize.mt_bigcity"),   "Ciudades grandes",        "Big cities" },             "sc3bigcity.dll",    NULL },
@@ -9187,7 +9191,9 @@ static const MT_ROW k_mt_rows[] = {
     { { SC3KEY("resize.mt_sirens"),    "Arreglo de sirenas",      "Siren fix" },              NULL, "SC3SIMRUN_SIRENS" },
     { { SC3KEY("resize.mt_saltfix"),   "Agua salada solo en el mar", "Salt water only at sea" }, NULL, "SC3RESIZE_SALTFIX" },
     { { SC3KEY("resize.mt_terrpanel"), "Panel de terreno ampliado", "Larger terrain panel" }, NULL, "SC3RESIZE_TERRPANEL" },
-    { { SC3KEY("resize.mt_weather"),   "Interruptor de clima",    "Weather switch" },         NULL, "SC3RESIZE_WEATHER" } };
+    { { SC3KEY("resize.mt_weather"),   "Interruptor de clima",    "Weather switch" },         NULL, "SC3RESIZE_WEATHER" },
+    { { SC3KEY("resize.mt_sandbox"),   "Sandbox: sin abandono",   "Sandbox: no abandonment" }, NULL, "+SC3SIMRUN_SANDBOX" },
+    { { SC3KEY("resize.mt_gentle"),    "Abandono más suave",   "Gentler abandonment" },    NULL, "+SC3SIMRUN_GENTLE" } };
 #define MT_N ((int)(sizeof(k_mt_rows) / sizeof(k_mt_rows[0])))
 static int g_mt_on0[MT_N];   /* state shown when the page was built */
 
@@ -9197,6 +9203,7 @@ static int mt_state(const MT_ROW *r) {
     const char *s, *e;
     mp_ini(p, sizeof(p), "sc3mods.ini");
     if (r->dll) return GetPrivateProfileIntA("mods", r->dll, 1, p) != 0;
+    if (r->env[0] == '+') { GetPrivateProfileStringA("env", r->env + 1, "", v, sizeof(v), p); return v[0] == '1' && !v[1]; }
     for (s = r->env; s && *s; s = *e ? e + 1 : e) {
         int k;
         e = strchr(s, ';'); if (!e) e = s + lstrlenA(s);
@@ -9213,6 +9220,7 @@ static void mt_write(const MT_ROW *r, int on) {
     const char *s, *e;
     mp_ini(p, sizeof(p), "sc3mods.ini");
     if (r->dll) { WritePrivateProfileStringA("mods", r->dll, on ? NULL : "0", p); return; }
+    if (r->env[0] == '+') { WritePrivateProfileStringA("env", r->env + 1, on ? "1" : NULL, p); return; }
     for (s = r->env; s && *s; s = *e ? e + 1 : e) {
         int k;
         e = strchr(s, ';'); if (!e) e = s + lstrlenA(s);
@@ -9224,7 +9232,7 @@ static void mt_write(const MT_ROW *r, int on) {
 
 static int mt_is_ours(void *win, void *ch) {
     int i;
-    static const DWORD fixed[] = { MT_TITLE, MT_H_MODS, MT_H_FEAT, MT_NOTE, MT_NOTE2, MT_H_CITY, MT_SALT };
+    static const DWORD fixed[] = { MT_TITLE, MT_H_MODS, MT_H_FEAT, MT_NOTE, MT_NOTE2, MT_H_CITY, MT_SALT, MT_H_SIM };
     for (i = 0; i < (int)(sizeof(fixed) / sizeof(fixed[0])); i++) if (ch == mp_child(win, fixed[i])) return 1;
     for (i = 0; i < MT_N; i++) if (ch == mp_child(win, MT_ROW0 + i)) return 1;
     return 0;
@@ -9232,7 +9240,7 @@ static int mt_is_ours(void *win, void *ch) {
 
 static void mt_vis_all(void *win, int on) {
     int i;
-    static const DWORD fixed[] = { MT_TITLE, MT_H_MODS, MT_H_FEAT, MT_NOTE, MT_NOTE2, MT_H_CITY, MT_SALT };
+    static const DWORD fixed[] = { MT_TITLE, MT_H_MODS, MT_H_FEAT, MT_NOTE, MT_NOTE2, MT_H_CITY, MT_SALT, MT_H_SIM };
     for (i = 0; i < (int)(sizeof(fixed) / sizeof(fixed[0])); i++) mp_vis(mp_child(win, fixed[i]), on);
     for (i = 0; i < MT_N; i++) mp_vis(mp_child(win, MT_ROW0 + i), on);
 }
@@ -9247,7 +9255,14 @@ static int mt_build(void *fac, void *win, int es, DWORD col) {
         const MT_ROW *r = &k_mt_rows[i];
         g_mt_on0[i] = mt_state(r);
         if (r->dll) { n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 30, ym, 214, col); ym += 19; }
-        else        { n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 262, yf, 208, col); yf += 19; }
+        else if (r->env[0] != '+') { n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 262, yf, 208, col); yf += 19; }
+    }
+    ym += 6;   /* the default-off rows (env '+'): left column, under their own heading */
+    n += ho_add_label(fac, win, MT_H_SIM, SC3TR(es, "resize.mt_sim", "Simulación", "Simulation"), 18, ym, 200); ym += 20;
+    for (i = 0; i < MT_N; i++) {
+        const MT_ROW *r = &k_mt_rows[i];
+        if (r->dll || r->env[0] != '+') continue;
+        n += mp_checkbox(fac, win, MT_ROW0 + i, sc3lang_txt(es, &r->t), g_mt_on0[i], 30, ym, 214, col); ym += 19;
     }
     i = (ym > yf ? ym : yf) + 8;   /* 14 feature rows: keep the city section clear of Volver (local y 436) */
     n += ho_add_label(fac, win, MT_NOTE, SC3TR(es, "resize.mt_note", "Los cambios se aplican al reiniciar el juego.",
